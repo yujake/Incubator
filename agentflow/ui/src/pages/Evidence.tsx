@@ -27,6 +27,18 @@
  * - reviewed 按证明逐条显示：逐份证明的号与"签没签"在命题台账那一栏
  *   （`reviewed_paths`）；验证台账那一栏按验证号 / 命题号读，与 `VerificationRow` 现值对齐。
  *
+ * ## 列集按 origin / kind 分（2026-11-20，业主 lp-ball-13 现场）
+ *
+ * 命题台账不再是一套列全行通用（判据见 `tests/test_webui_ledger_columns.py`，
+ * 列 id 与条件在 `statementLedger.ts`）：
+ * - 判读格优先：档位 / 是否优化 / 类别 / 出处 / 现行性排在最前；
+ * - 引文回验只对文献行（且不是概念行）出现，理由进 tooltip；自产行不摆这一列；
+ * - 自产结果多两列「稿 / V 签」（文献命题写「不适用」）；
+ * - provenance（谁写的、台账编号、哪篇文献哪一页）不占列：挂在命题号的 tooltip
+ *   与「详情」里；
+ * - 现行性列：active 是补集兜底名，写 `—`；只有被取代 / 被证否 / 被放弃时才写
+ *   具体原因与所指编号。
+ *
  * ## 五元位与「优化」
  *
  * - 五元位每一位一格：第 1 位 numeric、第 2 位 proof、第 3 位 reviewed、
@@ -50,8 +62,20 @@ import { Nontriviality } from "../components/Nontriviality";
 import { formatUsd } from "../components/Money";
 import { PagedTable } from "../components/PagedTable";
 import { cell } from "../components/Table";
+import type { Column } from "../components/Table";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace } from "../live";
+import {
+  currentnessText,
+  gradeText,
+  kindText,
+  ledgerFields,
+  manuscriptText,
+  originText,
+  provenanceText,
+  vsignText,
+} from "../statementLedger";
+import type { LedgerField } from "../statementLedger";
 import type { ExperimentRow, RelationRow, StatementRow } from "../types";
 
 /** 状态那一格：人话（`status_word`）上屏，原始 token 进 tooltip；命题面另报三态。
@@ -261,18 +285,44 @@ function quoteStateOf(r: StatementRow | RelationRow): string {
   return r.quote_verified === false ? "mismatch" : "unchecked";
 }
 
-/** 引文那一格：五档各有自己的词（`no_evidence` 与"未查"欠的东西不同，不许合并）。 */
+/** 引文那一格：五档各有自己的词（`no_evidence` 与"未查"欠的东西不同，不许合并）。
+ *
+ * 自产结果结构上没有逐字引文（业主 2026-11-20 ③：「引文这个状态在自产定理里
+ * 肯定没有，不该作为展示格」）：混排表里它写「不适用」，词表外的值原样印。
+ * 回验理由不再单独占一列，挂在徽标的 tooltip 上。
+ */
 function quoteCell(r: StatementRow) {
+  if (r.origin === "own_result") {
+    return <span class="tri-reason">不适用（自产结果没有引文）</span>;
+  }
   if (r.proof_text === "" && quoteStateOf(r) === "unchecked") {
     return <span class="tri-reason">不适用（这一行没有逐字摘录）</span>;
   }
   const state = quoteStateOf(r);
   const got = QUOTE_WORDS[state];
   return got === undefined ? (
-    <span class="tri-reason">{state === "" ? "unknown" : state}</span>
+    <span class="tri-reason" title={r.quote_reason}>{state === "" ? "unknown" : state}</span>
   ) : (
-    <Badge kind={got.kind} text={got.text} />
+    <span title={r.quote_reason}>
+      <Badge kind={got.kind} text={got.text} />
+    </span>
   );
+}
+
+/** 正文那一格：短版优先、缺席退回全文（R93：盘上短版常为空，整列 `unknown` 像没读到）。 */
+function bodyCell(r: StatementRow) {
+  if (r.statement_text !== "") {
+    return r.statement_text;
+  }
+  if (r.statement_full !== "") {
+    return (
+      <>
+        {r.statement_full}
+        <span class="tri-reason">（短版没写；这是含假设的全文）</span>
+      </>
+    );
+  }
+  return <span class="tri-reason">（这一行没写正文）</span>;
 }
 
 /** 第 4 位那一格：按路径逐条印（`形式化：路径1 verified ｜ 路径2 pending`）。 */
@@ -316,6 +366,143 @@ function quoteScan(rows: RelationRow[]): {
     }
   }
   return { tally, notClean };
+}
+
+/** 命题台账的列定义表：列 id 与顺序由 `statementLedger.ledgerFields()` 给。
+ *
+ * 判读格在前（档位 / 优化 / 类别 / 出处 / 现行性）；provenance（谁写的、台账编号、
+ * 哪篇文献哪一页）不占列 —— 挂在命题号的 tooltip 与「详情」里（业主 2026-11-20 ②③④）。
+ * 引文那一列只在有文献行（且不是概念行）时出现；稿 / V 签只在自产行在场时出现。
+ */
+const STATEMENT_COLUMNS: Record<LedgerField, Column<StatementRow>> = {
+  stmt_id: {
+    key: "stmt_id",
+    title: "命题号",
+    render: (r) => (
+      <div>
+        <span class="mono" title={provenanceText(r)}>{cell(r.stmt_id)}</span>
+        <details class="ledger-detail">
+          <summary>详情</summary>
+          <div class="readings">{provenanceText(r)}</div>
+        </details>
+      </div>
+    ),
+  },
+  // 档位：空 ⇒ 「未判」（不是空白，也不是 unknown —— unknown 在同页专指"没读到"）。
+  grade: {
+    key: "grade_label",
+    title: "派生等级",
+    render: (r) => (
+      <span title={`grade=${r.grade === "" ? "（空）" : r.grade}（空档写「未判」）`}>
+        {gradeText(r)}
+      </span>
+    ),
+  },
+  // 是否优化，与 reviewed 并排、同一条证明一格。
+  // 三档词：已优化 / 未优化 / 未记录（缺格不许折成「未优化」）。
+  optimized: {
+    key: "optimized_paths",
+    title: "优化",
+    render: (r) => optimizedCell(r),
+  },
+  // 类别：盘上 `kind` 与读侧投影并列（差异用箭头 +「读侧投影」标出，投影不冒充原值）。
+  kind: {
+    key: "kind",
+    title: "类别",
+    render: (r) => (
+      <span class="mono" title={r.kind_projection_basis}>
+        {kindText(r)}
+      </span>
+    ),
+  },
+  // 出处：external_lit / own_result 译成人话，原始 token 进 tooltip。
+  origin: {
+    key: "origin",
+    title: "出处",
+    render: (r) => (
+      <span class="mono" title={`盘上的原始 origin=${r.origin === "" ? "（空）" : r.origin}`}>
+        {originText(r)}
+      </span>
+    ),
+  },
+  // 现行性：active 是补集兜底名 ⇒ 页面写 `—`；只有非 active 才印具体原因与所指编号。
+  current: {
+    key: "current_word",
+    title: "现行性",
+    render: (r) => (
+      <span title={r.current_detail === "" ? r.status_word : r.current_detail}>
+        {currentnessText(r)}
+      </span>
+    ),
+  },
+  nontriviality: {
+    key: "nontriviality_word",
+    title: "非平凡度",
+    render: (r) => (
+      <Nontriviality
+        word={r.nontriviality_word}
+        label={r.nontriviality_label}
+        meaning={r.nontriviality_meaning}
+        tri={r.nontriviality_tri}
+      />
+    ),
+  },
+  label: { key: "label", title: "标签", render: (r) => cell(r.label) },
+  // 五元位每一位一格：第 4 位按路径（二维），第 3 位按证明逐条。
+  bit_numeric: {
+    key: "bit_numeric",
+    title: "第 1 位·numeric（数值实验）",
+    render: (r) => bitCell(r.bit_numeric),
+  },
+  bit_proof: {
+    key: "bit_proof",
+    title: "第 2 位·proof（有证明）",
+    render: (r) => bitCell(r.bit_proof),
+  },
+  reviewed_paths: {
+    key: "reviewed_paths",
+    title: "第 3 位·reviewed（按证明）",
+    render: (r) => reviewedCell(r),
+  },
+  formal_paths: {
+    key: "formal_paths",
+    title: "第 4 位·formal（按路径）",
+    render: (r) => formalCell(r),
+  },
+  bit_audited: {
+    key: "bit_audited",
+    title: "第 5 位·audited（正式审查）",
+    render: (r) => bitCell(r.bit_audited),
+  },
+  body: {
+    key: "statement_text",
+    title: "正文",
+    render: (r) => bodyCell(r),
+  },
+  // 引文回验（五档）：只对文献行出现；理由进 tooltip，不再单独占一列。
+  quote: {
+    key: "quote_state",
+    title: "引文回验",
+    render: (r) => quoteCell(r),
+  },
+  // 自产结果才有的两格（文献命题写「不适用」，混排时也一眼看得出）。
+  manuscript: {
+    key: "manuscript_path",
+    title: "稿",
+    render: (r) => <span class="mono">{manuscriptText(r)}</span>,
+  },
+  vsign: {
+    key: "vsign_state",
+    title: "V 签",
+    render: (r) => (
+      <span class="mono" title={r.vsign_detail}>{vsignText(r)}</span>
+    ),
+  },
+};
+
+/** 这一批命题行的主表列集（按 origin / kind 算，不是一套列全行通用）。 */
+function statementColumns(rows: StatementRow[]): Array<Column<StatementRow>> {
+  return ledgerFields(rows).map((field) => STATEMENT_COLUMNS[field]);
 }
 
 export function Evidence() {
@@ -365,136 +552,13 @@ export function Evidence() {
         ) : ev.statements_tri === "not_applicable" ? (
           <span class="empty">还没有这张表（这个工作区里这一栏一次都没落过盘） —— 不是"读到了、里面是 0 行"。</span>
         ) : (
-          <PagedTable
-            rows={ev.statements}
-            empty="暂无命题（已读出）。"
-            columns={[
-              { key: "stmt_id", title: "命题号" },
-              {
-                // 一格 `T0`–`T4` / `不适用` / `未判`：显示词由后端 `nontriviality_word` 给
-                // （三个词只有一个判断点）。`label` 仍传：它是"有没有档位"那个判据，
-                // 也是旧后端（没有 word）时的兜底。
-                key: "nontriviality_word",
-                title: "非平凡度",
-                render: (r) => (
-                  <Nontriviality
-                    word={r.nontriviality_word}
-                    label={r.nontriviality_label}
-                    meaning={r.nontriviality_meaning}
-                    tri={r.nontriviality_tri}
-                  />
-                ),
-              },
-              {
-                // 状态：人话（`status_word`）上屏，原始 token 进 tooltip。
-                // 命题面另带 `lifecycle_state`（三态：活跃 / 完工 / 放弃，读不出来是空串）。
-                key: "status_word",
-                title: "状态",
-                render: (r) => statusCell(r),
-              },
-              { key: "kind", title: "类别", render: (r) => cell(r.kind) },
-              { key: "label", title: "标签", render: (r) => cell(r.label) },
-              {
-                // 归属（第 ⑧ 项）：这一行是谁写的。`by_role` 是读侧按 `created_by`
-                // 反查出的实例标签（`by_role_source` 说它从哪一格来）—— 两个 F 并发时
-                // 只有这一列分得开；空串 = 盘上那一行没记（老行），写「—」，不猜。
-                key: "by_role",
-                title: "写它的实例",
-                render: (r) => (
-                  <span class="mono">
-                    {r.by_role === "" ? "—（盘上没记）" : r.by_role}
-                    {r.by_role_source === "" ? "" : `（${r.by_role_source}）`}
-                  </span>
-                ),
-              },
-              {
-                // 派生等级（五元位现算：任一路径通过即正式定理）。它不是谁自报的，
-                // 所以与下面五格并排读：一个说多不平凡、一个说到没到定理。
-                key: "grade",
-                title: "派生等级",
-                render: (r) =>
-                  r.grade_label === "" ? (
-                    <span class="tri-reason">unknown（五元位算不出来）</span>
-                  ) : (
-                    r.grade_label
-                  ),
-              },
-              {
-                // 五元位第 1 位。数值实验那一位是四态
-                // （`pending` / `na` / `failed` / `verified`），不是布尔。
-                key: "bit_numeric",
-                title: "第 1 位·numeric（数值实验）",
-                render: (r) => bitCell(r.bit_numeric),
-              },
-              {
-                key: "bit_proof",
-                title: "第 2 位·proof（有证明）",
-                render: (r) => bitCell(r.bit_proof),
-              },
-              {
-                // 第 3 位按证明逐条签：一份证明一格（与第 4 位同一个样式）。
-                key: "reviewed_paths",
-                title: "第 3 位·reviewed（按证明）",
-                render: (r) => reviewedCell(r),
-              },
-              {
-                // 是否优化，与 reviewed 并排、同一条证明一格。
-                // 三档词：已优化 / 未优化 / 未记录（缺格不许折成「未优化」）。
-                key: "optimized_paths",
-                title: "优化",
-                render: (r) => optimizedCell(r),
-              },
-              {
-                // 五元位第 4 位：一份证明一行。
-                key: "formal_paths",
-                title: "第 4 位·formal（按路径）",
-                render: (r) => formalCell(r),
-              },
-              {
-                key: "bit_audited",
-                title: "第 5 位·audited（正式审查）",
-                render: (r) => bitCell(r.bit_audited),
-              },
-              {
-                // 正文（R93 体检）：盘上 `statement_text`（短版）常常是空的，而
-                // `statement_full`（含完整假设的那一版）有字 —— 直接印短版会让整列
-                // 全是 `unknown`，看着像"没读到"。两者的分工是"短版 / 含假设全文"
-                // （`schema.Statement` 的 docstring），不是"有 / 没有"，所以这里按
-                // "短版优先、缺席退回全文"读，并说清退的是哪一版。
-                key: "statement_text",
-                title: "正文",
-                render: (r) => {
-                  if (r.statement_text !== "") {
-                    return r.statement_text;
-                  }
-                  if (r.statement_full !== "") {
-                    return (
-                      <>
-                        {r.statement_full}
-                        <span class="tri-reason">（短版没写；这是含假设的全文）</span>
-                      </>
-                    );
-                  }
-                  return <span class="tri-reason">（这一行没写正文）</span>;
-                },
-              },
-              {
-                // 引文回验（五档）。比对对象是 `proof_text` 那一栏的逐字
-                // 摘录，概念行结构上就没有引文 ⇒ 那一档是不适用，不是"未查"。
-                // 五档：逐字通过 / 语义通过 / 不一致 / 未查 / 没有可复核的区间
-                // （最后一档是"说通过了、而盘上拿不出可复核的区间"，与"还没查"欠的
-                // 东西不同 —— 折平会让读的人去补一条不存在的工序）。
-                key: "quote_state",
-                title: "引文回验",
-                render: (r) => quoteCell(r),
-              },
-              {
-                key: "quote_reason",
-                title: "回验理由",
-                render: (r) => cell(r.quote_reason),
-              },
-            ]}
-          />
+          <div class="ledger-scroll">
+            <PagedTable
+              rows={ev.statements}
+              empty="暂无命题（已读出）。"
+              columns={statementColumns(ev.statements)}
+            />
+          </div>
         )}
       </Card>
 

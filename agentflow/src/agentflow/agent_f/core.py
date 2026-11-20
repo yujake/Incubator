@@ -646,7 +646,7 @@ def _merged_plan_round(fresh: Mapping[str, Any], base: Mapping[str, Any],
     `history` 里两轮同号是合法的（并发两轮各记自己那一轮）：`rounds` 才是权威计数，
     schema 对 `history[*].round` 的要求是单调不减，同号满足。
     """
-    merged: dict[str, Any] = {dict(fresh), dict(mine)}
+    merged: dict[str, Any] = {**dict(fresh), **dict(mine)}
     base_h = [dict(h) for h in (base.get("history") or [])]
     mine_h = [dict(h) for h in (mine.get("history") or [])]
     fresh_h = [dict(h) for h in (fresh.get("history") or [])]

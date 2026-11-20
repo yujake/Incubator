@@ -576,35 +576,39 @@ def _availability_reason(request_id: str, bad: Sequence[tuple[str, str]],
     """可读性闸的拒信：逐条点名"哪一槽是哪一档、为什么不能入"。
 
     三档不同的处置必须说清（否则 A 只能整批撤掉重来）：
-    - 没有判定 / `unknown`：这一条还没审过可读性 —— 去审（能读到就写 readable /
-      metadata_only；抽过但失败写 extract_failed），不要拿"没查"当"可读"；
+    - 没有判定 / `unknown`：这一条还没审过可读性 —— 去审（能读到正文才写 readable；
+      没有正文就写 metadata_only / extract_failed，然后判拒，不许判收）；
     - `extract_failed`：抽过但失败 —— 不入库，按受控理由码判拒（`rejected_low_quality`），
       候选行留着、原因写在行上；
-    - `metadata_only` 且没有定位符：仅题录可以入，但它必须指得出处（DOI 或 URL）；
-      2026-11-16（AR1）起它还必须有一条"试过、拿不到可读文本"的 `extract_failed`
-      尝试回执 —— 零读取尝试的仅题录由后面的 `_read_evidence_gate` 按同一档拒。
+    - `metadata_only`：仅题录（含「只有摘要」）—— 2026-11-20 起不再是入库券。
+      连定位符都没有的更不行：连题录都登记不了。
+
+    口径（业主 2026-11-20 逐字：「读内容才能判东西，这样的话保证通过的肯定有内容，
+    且能保证质量」）：没有正文就不许判收。只能把这一条留在候选记录里，写清
+    为什么没读到（判拒走 `lit.stage_reject`，理由码写清是没下到 / 抽不出 / 只有题录）。
     """
     scope = f"本次委托（{request_id}）" if request_id else "本委托"
     parts: list[str] = []
     if missing:
-        parts.append("还没有可读性判定：" + "、".join(str(s) for s in missing))
+        parts.append("还没有可读性判定（没有正文的证据）：" + "、".join(str(s) for s in missing))
     for slot, tier in bad:
         if tier == LAV.EXTRACT_FAILED:
-            parts.append(f"{slot} 是 extract_failed（抽过但失败）⇒ 不入库")
+            parts.append(f"{slot} 是 extract_failed（抽过但没拿到可读正文）⇒ 不许判收")
         elif tier == LAV.UNKNOWN:
-            parts.append(f"{slot} 是 unknown（没查过可读性）⇒ 不入库")
+            parts.append(f"{slot} 是 unknown（没查过可读性）⇒ 不许判收")
         elif tier == LAV.METADATA_ONLY:
-            parts.append(f"{slot} 是 metadata_only 但没有定位符（DOI/URL）⇒ 不入库")
+            parts.append(f"{slot} 是 metadata_only（只有题录/摘要，没有正文）⇒ 不许判收")
         else:
             parts.append(f"{slot} 的可读性判定 {tier!r} 不成立")
     return (
         f"{scope}的可读性判定过不了入库闸：{'；'.join(parts)} ⇒ **整批不许提交入库**。"
-        "口径（业主裁定 ③）：`extract_failed` 与 `unknown` 不许入库；仅题录可以入，"
-        "但必须指得出处。做法：抽过但失败的用 `lit.stage_reject`（`reason_code="
-        "`rejected_low_quality`，note 写清是乱码/无文本层）—— `lit.stage_reject` **不收**"
-        "可读性档位，档位只经 `lit.admit` 的 items[].availability 与抽读回执落盘；"
-        "没查的去抽读（`text.extract(path=<全文路径>, lit_id=\"cand:<槽位>\")` 再用 "
-        "`fs.read` 读那份 `.txt`），不要用 unknown 交差。"
+        "口径（业主 2026-11-20）：**没有正文就不许判收** —— 通过的那一批必须真的读到正文。"
+        "做法：能读到正文的，先 `search.download` 拿全文，再 "
+        "`text.extract(path=<全文路径>, lit_id=\"cand:<槽位>\")`、`fs.read` 那份 `.txt`，"
+        "然后 `lit.admit` 带 `availability=\"readable\"`；读不到正文的，"
+        "`lit.stage_reject`（`reason_code=\"rejected_low_quality\"` 或 `rejected_off_topic`，"
+        "note 写清为什么没读到：没下到 / 抽不出 / 只有题录或摘要）。"
+        "仅题录只能登记成题录并说明原因，不许判收、不许入库。"
     )
 
 
@@ -1484,14 +1488,20 @@ def list_candidates(
     # 可读性判定跟着行一起读出来（台账按槽位号查，槽位号全局唯一）：回读的那一眼于是
     # 同时看得见"这一条判过没有"与"这一条的可读性审过没有"—— 两件都是提交前要收的口径。
     tiers = LAV.tiers_by_slot(store.root)
+    receipts = LAV.receipts_by_slot(store.root)
     # 抽读回执只补"抽过但失败"这一档（机器判得出的事实）：A 还没报档位时，
     # 列表上就能看见"这一条有字节但抽不出可读文本"，而不是空白一个"未查"。
     # 成功那一侧不替 A 报 readable —— 抽出来可读 ≠ A 读过（读过要 fs.read）。
-    for slot, receipt in LAV.receipts_by_slot(store.root).items():
+    for slot, receipt in receipts.items():
         if slot not in tiers and _tier_of_receipt(receipt):
             tiers[slot] = _tier_of_receipt(receipt)
     for r in rows:
-        r["availability"] = tiers.get(str(r.get("slot") or ""), "")
+        slot = str(r.get("slot") or "")
+        r["availability"] = tiers.get(slot, "")
+        # 业主 2026-11-20 裁定 ③：逐条给 `content_read` 读数。它是现算的（抽读成功 +
+        # 非空 + 不是只有摘要 + `fs.read` 过），不是 A 自报；`false` 带着"为什么没读到"。
+        r["content_read"], r["content_read_why"] = LAV.content_read(
+            store.root, slot, r, tier=r["availability"], receipt=receipts.get(slot))
     return {
         "request_id": rid,
         "duplicate_rows": sum(len(g["slots"]) for g in dup_groups),
@@ -1518,6 +1528,9 @@ def _stage_list_note(waiting_count: int) -> str:
     是旧口径（业主 2026-11-16 裁定 AR1 之前的"零读可入"）。真口径在
     `litavail` 与 `_read_evidence_gate`：仅题录也必须先试过一次抽取（留下
     `extract_failed` 回执），零回执的仅题录按 `no_read_evidence` 整批拒、逐槽点名。
+
+    2026-11-20（业主：「读内容才能判东西」）：仅题录不再可入。这一段改成
+    "没有正文不许判收" —— 它同时是 A 唯一会逐趟读到的口径（`lit.stage_list` 的返回）。
     """
     return (
         "默认只返回当前委托的行（`request_id` = 最近一次暂存的那次委托）；"
@@ -1540,12 +1553,18 @@ def _stage_list_note(waiting_count: int) -> str:
         # `closing.py`、也不动禁改区的 `specs/a.py`：事实不变，只换落点。
         "A 的 `done=True` 只表示「这一条检索请求跑完了」，不等于「清表」；"
         "收工闸数的是**全表**，不是当前委托、也不是那一条检索请求。"
+        # 2026-11-20（ALITCONTENT）：业主逐字「读内容才能判东西，这样的话保证通过的
+        # 肯定有内容，且能保证质量」。没有正文就不许判收：仅题录（metadata_only）/
+        # 抽取失败 / 未下载 / 只有摘要，一律只能登记成题录并写清为什么没读到。
+        "**没有正文就不许判收**（业主 2026-11-20）：「通过」的每一条都必须真的读到正文。"
         "标 `readable` 之前先 `text.extract(path=<全文路径>, lit_id=\"cand:<槽位>\")` "
-        "抽出正文、再用 `fs.read` 读那份 `.txt` —— 没有这两步的事实，"
-        "`lit.admit` 会以 `no_read_evidence` 整批拒并逐槽点名；"
-        "报 `metadata_only` 也一样：**必须先试一次抽取**（留下 `extract_failed` 回执）"
-        "才允许按仅题录入库，零回执的仅题录会被同一道闸按零读取尝试整批拒掉"
-        "（要指得出处）。"
+        "抽出正文、再用 `fs.read` 读那份 `.txt`，`lit.admit` 才认；"
+        "`content_read` 那一格是机器现算的（抽读回执 + 版本 + `fs.read` + 不只摘要），"
+        "不是自报。"
+        "仅题录（`metadata_only`）、抽取失败（`extract_failed`）、没下载 / 只有摘要的候选："
+        "**不许判收、不许入库** —— 只能把题录留在候选记录里并写清为什么没读到"
+        "（`lit.stage_reject` + 受控理由码：没下到 / 抽不出 / 只有题录或摘要）。"
+        "摘要最多用于初排与去重，它不是正文：只抽到摘要的，按 `abstract_only` 拒。"
     )
 
 
@@ -1702,11 +1721,12 @@ def _read_evidence_gate(store: Store, rid: str, wanted: Sequence[str],
     - `readable`：这一条必须 `check_read == "ok"` —— 抽读回执在、回执绑的是这一条
       候选（身份三格 + `cand-<槽>.txt`）、抽读件还是那一版、A 用 `fs.read` 读过同一版。
       只抽不读 ⇒ `not_read`；抽过但失败 ⇒ `extract_failed`；没抽过 ⇒ `no_extract`。
-      三种都逐槽点名，而不是一句"请先读"。
-    - `metadata_only`：不是零读可入（AR1 / VC1 P0-1）。它必须有"试过、但拿不到
-      可读文本"的那条 `extract_failed` 回执；没有回执（`no_extract`）⇒ 拒；有字节且
-      抽出了正文（`ok` / `not_read` / `text_changed` …）⇒ 也拒（盘上有字节，仅题录是假话）。
-      `metadata_only` 不核候选身份：它证明的是"试过一次"，不是"读过"。
+      三种都逐槽点名，而不是一句"请先读"。2026-11-20 起还多一格：抽出来的文本如果
+      只比摘要多一点点（< `litavail.MIN_BODY_BEYOND_ABSTRACT`）⇒ `abstract_only`：
+      摘要不算读了内容（业主裁定 ②）。
+    - `metadata_only`：2026-11-20 起不再可入（业主裁定 ①：没有正文不许判收）。
+      它在这里一律落 `no_content`，理由码 `metadata_only` —— 留着这一档是为了让拒信
+      说得出"这一条只剩题录"，而不是把它折成"请先读"。
 
     返回 `None` = 放行；否则整笔受控拒（`no_read_evidence`，逐条给 `read_problems`）。
     """
@@ -1714,30 +1734,37 @@ def _read_evidence_gate(store: Store, rid: str, wanted: Sequence[str],
     problems: list[dict] = []
     for slot in wanted:
         tier = str(tiers.get(slot) or "")
+        receipt = receipts.get(slot)
         if tier == LAV.EXTRACT_FAILED:
             # 这一档由 `_availability_gate` 拦（它先跑）：这里不重复报同一个原因。
             continue
-        receipt = receipts.get(slot)
-        # 只有 readable 要核"读的是这一条候选"（P1-4）；metadata_only 只核"试过没有"。
+        # 只有 readable 要核"读的是这一条候选"（P1-4）；metadata_only 不核身份
+        # （它没有可读正文，身份由 `unjudged_no_content` 那一档点名）。
         expected = (LAV.candidate_digest(by_slot.get(slot) or {})
                     if tier == LAV.READABLE else None)
         state, why = LAV.check_read(store.root, slot, receipt, expected=expected)
         if tier == LAV.READABLE:
             if state != "ok":
                 problems.append({"slot": slot, "state": state, "why": why})
-        elif tier == LAV.METADATA_ONLY:
-            if state == "extract_failed":
                 continue
+            ok, body_why = LAV.content_read(store.root, slot, by_slot.get(slot) or {},
+                                            tier=tier, receipt=receipt)
+            if not ok:
+                problems.append({"slot": slot, "state": "abstract_only"
+                                 if "abstract_only" in body_why else "no_body",
+                                 "why": body_why})
+        elif tier == LAV.METADATA_ONLY:
+            problems.append({"slot": slot, "state": "no_content",
+                             "code": "metadata_only",
+                             "why": ("只有题录（没有正文）⇒ 不许判收：业主 2026-11-20 "
+                                     "「读内容才能判东西」。留在这条候选上写清为什么没读到，"
+                                     "然后把这一条判拒（`lit.stage_reject`）")})
+        else:
+            # `unknown` / 没有判定：`_availability_gate` 会拦；这里兜底报同一件事。
             if state == "no_extract":
-                why = ("零读取尝试：`data/lit_reads.jsonl` 里没有这一条。仅题录也要先试一次"
-                       "抽取 —— 拿不到可读文本（`extract_failed` 回执）才允许按仅题录入库")
-                state = "no_attempt"
-            elif state == "ok":
-                why = (f"这一条抽出了可读正文（{int((receipt or {}).get('chars') or 0)} 字），"
-                       "盘上有字节就不能报仅题录：读了报 readable，否则按受控理由码判拒")
-            else:
-                why = f"仅题录要求一条'试过、拿不到可读文本'的回执；这一条停在 {state}：{why}"
-            problems.append({"slot": slot, "state": state, "why": why})
+                why = "没有抽读记录（这一条没抽过正文）⇒ 不许判收"
+            problems.append({"slot": slot, "state": state or "no_content",
+                             "code": "no_fulltext", "why": why})
     if not problems:
         return None
     return {**base, "ok": False, "kind": "no_read_evidence", "whole_call_refused": True,
@@ -1748,38 +1775,102 @@ def _read_evidence_gate(store: Store, rid: str, wanted: Sequence[str],
 def _read_evidence_reason(rid: str, problems: Sequence[Mapping[str, Any]]) -> str:
     """读证据闸的拒信：逐槽点名"卡在哪一步"，再给两条正路。
 
-    为什么不写成"请先读再判"：A 需要知道的是这一槽停在"没抽""抽了没读"还是
-    "抽过失败"—— 三种的下一步不同（下载/抽、fs.read、判拒）。
-    2026-11-16（AR1）起 `metadata_only` 也在这道闸里：它不是"没查"的写法，是
-    "试过、拿不到可读文本"的写法 —— 连一次抽读回执都没有的仅题录，按同一档拒。
+    为什么不写成"请先读再判"：A 需要知道的是这一槽停在"没抽""抽了没读"
+    "抽过失败"还是"只抽到摘要"—— 四种的下一步不同（下载/抽、fs.read、判拒、换来源）。
+
+    2026-11-20（业主：「读内容才能判东西」）：仅题录不再是入库券。这条拒信不再教
+    "拿着 extract_failed 回执按 metadata_only 入库"—— 那条路已经封了；没有正文就
+    只能判拒、并把理由写在候选行上。
     """
     scope = f"本次委托（{rid}）" if rid else "本委托"
     parts = [f"{p.get('slot')}：{p.get('why')}" for p in problems]
     return (
-        f"{scope}的「读过」证据过不了入库闸：{'；'.join(parts)} ⇒ **整批不许提交入库**。"
-        "口径：`readable` 不是自报。判收成 readable 的每一条都要先抽读、再读：\n"
+        f"{scope}的「读过正文」证据过不了入库闸：{'；'.join(parts)} ⇒ **整批不许判收**。"
+        "口径（业主 2026-11-20）：**没有正文就不许判收**；摘要不算读了内容。"
+        "读到正文的那一条才算读过：\n"
         "① `search.download` 拿到全文的 `rel_path`（或盘上那份文件的路径）；\n"
         "② `text.extract(path=<路径>, lit_id=\"cand:<槽位>\")` —— 抽出的 `.txt` 与一条"
         "抽读回执会一起落盘（回执记着这一条候选的身份与抽读件版本）；\n"
-        "③ `fs.read` 那份 `.txt`（闸核的是你读的与抽读件是同一版）；\n"
+        "③ `fs.read` 那份 `.txt`（闸核的是你读的与抽读件是同一版，且抽出来的不只是摘要）；\n"
         "④ 然后再 `lit.admit`（`items[].availability=\"readable\"` + 那条候选自己的 "
         "`relevance`）。\n"
-        "只想录题录（`metadata_only`）的那一条：也要先走 ② 试一次抽读。抽不出来"
-        "（`no_text_layer` / 乱码 / 抽取报错）会留下一条 `extract_failed` 回执，"
-        "拿着它再报 `metadata_only` + DOI/URL 才能入库；**一次都没试过的仅题录会被"
-        "这一道闸按零读取尝试拒掉**。抽过但正文可读却不想读的，按 `extract_failed` 判 "
-        "`lit.stage_reject`（`reason_code=\"rejected_low_quality\"`）。"
+        "没有正文的那一条：把原因写清（没下到 / 抽不出 / 只有题录或摘要）后 "
+        "`lit.stage_reject`（`reason_code=\"rejected_low_quality\"` 或 `rejected_off_topic`）"
+        "—— 候选记录留着，报告里会列出「未入库 + 为什么」。"
     )
+
+
+#: `content_read=false` 而 relevance 写了内容性断言时用的受控码。
+CONTENT_CLAIM_WITHOUT_READ: str = "content_assertion_without_content"
+
+
+def _content_assertion_gate(store: Store, rid: str, wanted: Sequence[str],
+                            by_slot: Mapping[str, Mapping[str, Any]],
+                            tiers: Mapping[str, str],
+                            receipts: Mapping[str, Mapping[str, Any]],
+                            base: Mapping[str, Any]) -> dict | None:
+    """内容性断言闸（业主 2026-11-20 裁定 ③）：没读正文却写了正文里的东西 ⇒ 整批拒。
+
+    判据：`content_read=false`（抽读证据 / 摘要那条线任一不过）而 `relevance` 或
+    `new_content` 里出现内容性断言（定理名 / 不等式 / 具体数字，年份除外 ——
+    判定在 `litavail.content_assertion`）⇒ 这一条不许判收，理由码
+    `content_assertion_without_content`。
+
+    为什么它必须在可读性闸之前：两件事的下一步不同。可读性闸说"去拿正文"；这一闸说
+    "你写的那句话不是读出来的，要么撤回那句话、要么真去读" —— 后者正是 lp-ball-13
+    里 "Meyer–Pajor 1988 … 奠基性体积估计" 那种凭题名猜出来的内容断言。
+    """
+    problems: list[dict] = []
+    for slot in wanted:
+        row = by_slot.get(slot) or {}
+        read_ok, _why = LAV.content_read(store.root, slot, row,
+                                         tier=str(tiers.get(slot) or ""),
+                                         receipt=receipts.get(slot))
+        if read_ok:
+            continue
+        for field in ("relevance", "new_content"):
+            claim = LAV.content_assertion(str(row.get(field) or ""))
+            if not claim:
+                continue
+            problems.append({
+                "slot": slot, "field": field, "claim": claim,
+                "code": CONTENT_CLAIM_WITHOUT_READ,
+                "why": (f"`content_read=false`（没有读到正文）而 `{field}` 写了内容性断言 "
+                        f"{claim!r} ⇒ 那一句不是读出来的：撤回它，或先真的读到正文"
+                        "（`search.download` → `text.extract` → `fs.read`）再判收"),
+            })
+            break
+    if not problems:
+        return None
+    return {**base, "ok": False, "kind": CONTENT_CLAIM_WITHOUT_READ,
+            "whole_call_refused": True,
+            "reason": (
+                f"本次委托（{rid}）有 {len(problems)} 条**没读正文却写了内容性断言** ⇒ "
+                "整批不许判收："
+                + "；".join(f"{p['slot']} 的 `{p['field']}` 写了 {p['claim']!r}"
+                            for p in problems)
+                + "。口径（业主 2026-11-20）：`content_read=false` 时 relevance / "
+                  "new_content 里不许出现具体结果、定理名或数值 —— 只能写「为什么这条与"
+                  "本次检索相关」（题名/摘要就够的那一句）。"
+            ),
+            "content_assertions": problems, "call_size": 0, "admitted": []}
 
 
 def _availability_gate(rid: str, wanted: Sequence[str],
                        by_slot: Mapping[str, Mapping[str, Any]],
                        tiers: Mapping[str, str],
+                       receipts: Mapping[str, Mapping[str, Any]],
                        scoped: Sequence[Mapping[str, Any]],
                        base: Mapping[str, Any]) -> dict | None:
     """可读性覆盖闸（业主裁定 ②③）：要提交的每个槽位都要有判定，且那一档能入库。
 
-    `extract_failed` / `unknown` / 没有定位符的仅题录一律不许进 —— 整批拒、逐条点名。
+    2026-11-20 起"能入库"只剩 `readable` 这一档（`litavail.ADMITTABLE_TIERS`）：
+    没有正文（未下载 / 抽取失败 / 只有题录或只有摘要）一律不许判收 —— 业主逐字
+    「读内容才能判东西，这样的话保证通过的肯定有内容，且能保证质量」。
+
+    `extract_failed` / `unknown` / 没有定位符的仅题录 / 任何仅题录一律不许进 ——
+    整批拒、逐条点名，并把没判收的槽位按受控理由码落成 `unjudged_no_content`
+    （理由码：`no_fulltext` / `extract_failed` / `metadata_only`）。
     返回 `None` = 放行。判据只有 `litavail` 一处（四档词表与 `ADMITTABLE_TIERS`）。
     """
     unaudited = LAV.missing_tiers([by_slot[s] for s in wanted], tiers)
@@ -1788,7 +1879,6 @@ def _availability_gate(rid: str, wanted: Sequence[str],
         t = str(tiers.get(s) or "")
         if s not in tiers:
             continue
-        # 仅题录：可以入，但必须指得出处（`litavail.locator_of` 非空）。
         if t == LAV.METADATA_ONLY and not LAV.locator_of(by_slot[s]):
             bad_tiers.append((s, t))
             continue
@@ -1796,12 +1886,34 @@ def _availability_gate(rid: str, wanted: Sequence[str],
             bad_tiers.append((s, t))
     if not (unaudited or bad_tiers):
         return None
+    # 没判收的那几条：槽位 + 受控理由码 + 一句为什么（`content_read=false` 的读数同源）。
+    unjudged: list[dict] = []
+    for s in unaudited:
+        unjudged.append({"slot": s, "code": "no_fulltext",
+                         "why": "这一条还没有可读性判定（没有正文的证据）⇒ 不许判收"})
+    for s, t in bad_tiers:
+        receipt = receipts.get(s)
+        attempted = bool(receipt) and str(receipt.get("tier") or "") == LAV.EXTRACT_FAILED
+        why = (f"可读性是 `{t}`：没有正文（未下载 / 抽取失败 / 只有题录或摘要）"
+               "⇒ 不许判收；只能留在候选记录里写清为什么没读到")
+        if t == LAV.METADATA_ONLY and not LAV.locator_of(by_slot[s]):
+            why = ("仅题录且指不出处（没有 DOI/URL）⇒ 连题录都登记不了："
+                   "补一个定位符，或判拒")
+        unjudged.append({"slot": s, "tier": t,
+                         "code": LAV.not_admittable_reason(t, attempted=attempted),
+                         "why": why})
     return {**base, "ok": False,
             "kind": "availability_not_admissible" if bad_tiers else "missing_availability",
             "whole_call_refused": True,
             "reason": _availability_reason(rid, bad_tiers, missing=unaudited),
             "missing_availability": unaudited,
-            "availability_bad": [{"slot": s, "tier": t} for s, t in bad_tiers],
+            "availability_bad": [{"slot": s, "tier": t,
+                                  "code": LAV.not_admittable_reason(
+                                      t, attempted=bool(receipts.get(s))
+                                      and str((receipts.get(s) or {}).get("tier") or "")
+                                      == LAV.EXTRACT_FAILED)}
+                                 for s, t in bad_tiers],
+            "unjudged_no_content": unjudged,
             "counts": _decision_counts(scoped),
             "call_size": 0, "admitted": []}
 
@@ -1995,8 +2107,10 @@ def admission_plan(
     refused: list[dict] = []
     over_cap: list[dict] = []
     # 可读性判定（A 的逐条自审）按槽位读一次：台账是旁路文件（零 schema），
-    # 槽位号全局唯一，所以这里不需要按委托再过滤一遍。
+    # 槽位号全局唯一，所以这里不需要按委托再过滤一遍。抽读回执也只读一次：
+    # 内容性断言闸与读证据闸读的是同一份（两处各读一次会让同一份事实有两份口径）。
     tiers = LAV.tiers_by_slot(store.root)
+    reads = LAV.receipts_by_slot(store.root)
     # 索引建一次、逐槽复用：`overlap_check` 自己也会建，但那是"每条候选一遍全表"。
     lit_index = literature_index(store)
     for slot in wanted:
@@ -2033,7 +2147,8 @@ def admission_plan(
         if ov.get("duplicate"):
             if duplicate_branch_ok:
                 items.append({"slot": slot, "row": row, "overlap": ov, "new_content": nc,
-                              "title": row.get("title"), "existing_duplicate": True})
+                              "title": row.get("title"), "existing_duplicate": True,
+                              "content_read": True})
             else:
                 refused.append(_refusal(slot, row.get("title"), ov["reason"], "duplicate_doi", ov))
             continue
@@ -2047,7 +2162,8 @@ def admission_plan(
                                     "overlap_ok_false", ov))
             continue
         items.append({"slot": slot, "row": row, "overlap": ov, "new_content": nc,
-                      "title": row.get("title"), "existing_duplicate": False})
+                      "title": row.get("title"), "existing_duplicate": False,
+                      "content_read": True})
 
     call_size = len(items)
     base = {
@@ -2078,7 +2194,13 @@ def admission_plan(
         refused_gate = _readback_gate(store, rid, wanted, base)
         if refused_gate is not None:
             return refused_gate
-    refused_gate = _availability_gate(rid, wanted, by_slot, tiers, scoped, base)
+    # 内容性断言闸先跑：它判的是"这一句是不是读出来的"（业主 2026-11-20 裁定 ③），
+    # 与后面那道"有没有正文"（裁定 ①）是两件事，拒信要分得开。
+    refused_gate = _content_assertion_gate(store, rid, wanted, by_slot, tiers,
+                                           reads, base)
+    if refused_gate is not None:
+        return refused_gate
+    refused_gate = _availability_gate(rid, wanted, by_slot, tiers, reads, scoped, base)
     if refused_gate is not None:
         return refused_gate
     refused_gate = _read_evidence_gate(store, rid, wanted, tiers, by_slot, base)
@@ -2458,7 +2580,10 @@ def admit(
                      "overlap_score": ov.get("overlap_score"),
                      "overlap_kind": ov.get("overlap_kind"),
                      "overlap_with": ov.get("overlap_with"),
-                     "new_content": item.get("new_content")})
+                     "new_content": item.get("new_content"),
+                     # 业主 2026-11-20 裁定 ③：判收的每一条都带「读到了正文」这一格。
+                     # 走到这里的 items 都过了内容性断言闸 + 可读性闸 + 读证据闸。
+                     "content_read": True})
     rep = write_report(store, plan["request_id"], phase="draft") if write_report_file else None
     return {
         "ok": True,
@@ -2625,7 +2750,8 @@ def admit_all(
                          "overlap_score": ov.get("overlap_score"),
                          "overlap_kind": ov.get("overlap_kind"),
                          "overlap_with": ov.get("overlap_with"),
-                         "new_content": item.get("new_content")})
+                         "new_content": item.get("new_content"),
+                         "content_read": True})
     closed = clear_delegation(store, rid, actor=actor, mapping=done, only_slots=target)
     refused = list(plan.get("refused") or [])
     for slot, why in failures.items():

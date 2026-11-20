@@ -1754,7 +1754,7 @@ def lit_readback(reg, request_id: str):
     return res
 
 
-def lit_availability(store, request_id: str, slots, tier: str = "metadata_only") -> None:
+def lit_availability(store, request_id: str, slots, tier: str = "readable") -> None:
     """把可读性判定写进旁路台账（`data/lit_availability.jsonl`）。
 
     同上：这是测"别的闸"的用例的接缝 —— 逐条自审本身由
@@ -1765,6 +1765,12 @@ def lit_availability(store, request_id: str, slots, tier: str = "metadata_only")
     同形的尝试回执（真机那一条由 `text.extract(cand:<槽>)` 失败时写）—— 否则
     每个测"别的闸"的用例都会先被 `no_read_evidence` 挡在门外，测出来的不是它要
     测的那件事。
+
+    2026-11-20（ALITCONTENT）：默认档从 `metadata_only` 改成 `readable` ——
+    没有正文的候选已经不许判收（业主：「读内容才能判东西」），而本夹具的用途是
+    把"别的闸"的前置条件满足掉。`readable` 这一档要有抽读回执 + `fs.read` 观察 +
+    不是只有摘要，所以这里现造一份最小但完整的正文证据（真机那三样由
+    `text.extract` / `fs.read` 落）。
     """
     from agentflow import litavail as AV
     from agentflow import litread as LR
@@ -1775,3 +1781,35 @@ def lit_availability(store, request_id: str, slots, tier: str = "metadata_only")
             AV.record_read(store.root, request_id, str(slot),
                            LR.FULLTEXT_EXTRACT_FAILED,
                            source="fixture:no-bytes", note="text.extract.no_text_layer")
+        elif tier == AV.READABLE:
+            _fixture_readable(store, request_id, str(slot), AV)
+
+
+def _fixture_readable(store, request_id: str, slot: str, AV) -> None:
+    """给一槽造一份"读过正文"的最小证据（抽读回执 + 版本 + `fs.read` 观察）。
+
+    正文要比 `litavail.MIN_BODY_BEYOND_ABSTRACT` 长（摘要那条线之外还要有正文），
+    且抽读件名必须是 `cand-<槽位>.txt`（`check_read` 的绑定判据）。
+    """
+    import hashlib
+
+    from agentflow import fs_observation as OBS
+    from agentflow import litread as LR
+
+    row = next((r for r in store.rows("lit_candidates")
+                if str(r.get("slot") or "") == str(slot)), {})
+    body = ("Fixture full text body. This sentence stands in for the paper's own "
+            "arguments, proofs and examples so that the content gate has real text "
+            "beyond the abstract to look at. " * 12)
+    target = store.root / "downloads" / f"cand-{slot}.txt"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(body, encoding="utf-8")
+    version = OBS.version_of_path(target)
+    OBS.observed_gate().set(OBS.current_owner(), str(target),
+                            OBS.Observation(OBS.OBS_PRESENT, version))
+    AV.record_read(store.root, request_id, str(slot), LR.FULLTEXT_OK,
+                   source=f"downloads/cand-{slot}.txt",
+                   text=f"downloads/cand-{slot}.txt", text_abs=str(target),
+                   text_version=version, chars=len(body),
+                   sha256=hashlib.sha256(body.encode("utf-8")).hexdigest(),
+                   note="fixture:readable", candidate=AV.candidate_digest(row))

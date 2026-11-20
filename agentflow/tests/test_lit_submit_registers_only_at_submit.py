@@ -80,12 +80,18 @@ def _attempt(store: Store, slot: str, *, rid: str = RID) -> dict:
 
 
 def _judge(reg, store: Store, slots: list[str], *, rid: str = RID):
-    """判收（`qualified`：不注册、不发号），回执/可读性两张前置证据都补齐。"""
+    """判收（`qualified`：不注册、不发号），回执 / 可读性 / 正文三张前置证据都补齐。
+
+    2026-11-20（ALITCONTENT）：没有正文的候选不许判收，所以前沿从
+    `_attempt` + `metadata_only` 换成 `conftest.lit_availability` 造的 `readable`
+    （抽读回执 + 版本 + `fs.read` 观察 + 真正文）。
+    """
+    from conftest import lit_availability
+
     _readback(reg, rid)
-    for slot in slots:
-        _attempt(store, slot, rid=rid)
+    lit_availability(store, rid, slots)
     res = reg.call("lit.admit", request_id=rid, items=[
-        {"slot": s, "availability": AV.METADATA_ONLY} for s in slots])
+        {"slot": s, "availability": AV.READABLE} for s in slots])
     assert res.ok, res.error
     return res
 

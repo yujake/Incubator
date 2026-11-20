@@ -5,7 +5,7 @@
 ## 审计探针 D（改前红）
 
 `agent_b/register_statement.py` 的 `_same_statement_adjudication` 把
-`canonical_name` / `route` 写死成空串 ⇒ `secretary._record_statement_tx` 的洗名条件
+`canonical_name` / `route` 写死成空串 ⇒ `Secretary._record_statement_tx` 的洗名条件
 （`adj.checked ∧ adj.canonical_name`）永假 ⇒ 脏标签原样落盘。
 
 ## 判据

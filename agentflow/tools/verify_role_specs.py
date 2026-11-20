@@ -149,47 +149,48 @@ def live_tool_face(*, root: Path) -> tuple[dict | None, str]:
     except Exception as exc:  # noqa: BLE001 - 任何 import 失败都是"没查成"
         return None, f"装配不了工具层（{type(exc).__name__}: {exc}）⇒ 对账没做"
     try:
-        d = Path(tempfile.mkdtemp(prefix="role-specs-face-"))
-        st = Store(d)
-        st.init()
-        built = build_registry(store=st, workspace_root=d, strict=True)
-        reg = built.registry
-        roles = tuple(ROLES) + (S.CONDUCTOR_ROLE,)
-        names = sorted(reg.names())
-        by_role: dict[str, dict] = {}
-        for r in roles:
-            specs = [reg.get(n) for n in sorted(x.name for x in reg.for_role(r))]
+        with tempfile.TemporaryDirectory(prefix="role-specs-face-") as _td:
+            d = Path(_td)
+            st = Store(d)
+            st.init()
+            built = build_registry(store=st, workspace_root=d, strict=True)
+            reg = built.registry
+            roles = tuple(ROLES) + (S.CONDUCTOR_ROLE,)
+            names = sorted(reg.names())
+            by_role: dict[str, dict] = {}
+            for r in roles:
+                specs = [reg.get(n) for n in sorted(x.name for x in reg.for_role(r))]
+                se, ext, appr = _counts(specs)
+                by_role[r] = {
+                    "total": len(specs), "se": se, "ext": ext, "appr": appr,
+                    "names": {s.name for s in specs},
+                }
+            specs = [reg.get(n) for n in names]
             se, ext, appr = _counts(specs)
-            by_role[r] = {
-                "total": len(specs), "se": se, "ext": ext, "appr": appr,
-                "names": {s.name for s in specs},
+            side_by_name = {s.name: str(s.side_effect) for s in specs}
+            ext_by_name = {s.name: str(s.external) for s in specs}
+            forms: dict[str, int] = {}
+            for s in specs:
+                h = s.handler
+                if isinstance(h, functools.partial):
+                    key = "partial"
+                elif getattr(h, "__name__", "") == "<lambda>":
+                    key = "lambda"
+                elif getattr(h, "__closure__", None):
+                    key = "closure"
+                else:
+                    key = "function"
+                forms[key] = forms.get(key, 0) + 1
+            # Lean 关档 = 砍掉 formal.*（`leanscope.LEAN_ONLY_TOOL_MODULES` 只装不装那一件事）。
+            off = [s for s in specs if not s.name.startswith("formal.")]
+            off_se, off_ext, off_appr = _counts(off)
+            # A–H 八角色的交集（"共有面"）：写作面与 L 的"多出来那批"都由它派生。
+            eight = [by_role[r]["names"] for r in ("A", "B", "C", "D", "E", "F", "G", "H")]
+            shared = set.intersection(*eight) if eight else set()
+            leaks = {
+                r: len([n for n in by_role[r]["names"] if reg.get(n).side_effect in SIDE_EFFECTS_WRITE])
+                for r in ("C", "H", "V")
             }
-        specs = [reg.get(n) for n in names]
-        se, ext, appr = _counts(specs)
-        side_by_name = {s.name: str(s.side_effect) for s in specs}
-        ext_by_name = {s.name: str(s.external) for s in specs}
-        forms: dict[str, int] = {}
-        for s in specs:
-            h = s.handler
-            if isinstance(h, functools.partial):
-                key = "partial"
-            elif getattr(h, "__name__", "") == "<lambda>":
-                key = "lambda"
-            elif getattr(h, "__closure__", None):
-                key = "closure"
-            else:
-                key = "function"
-            forms[key] = forms.get(key, 0) + 1
-        # Lean 关档 = 砍掉 formal.*（`leanscope.LEAN_ONLY_TOOL_MODULES` 只装不装那一件事）。
-        off = [s for s in specs if not s.name.startswith("formal.")]
-        off_se, off_ext, off_appr = _counts(off)
-        # A–H 八角色的交集（"共有面"）：写作面与 L 的"多出来那批"都由它派生。
-        eight = [by_role[r]["names"] for r in ("A", "B", "C", "D", "E", "F", "G", "H")]
-        shared = set.intersection(*eight) if eight else set()
-        leaks = {
-            r: len([n for n in by_role[r]["names"] if reg.get(n).side_effect in SIDE_EFFECTS_WRITE])
-            for r in ("C", "H", "V")
-        }
     except Exception as exc:  # noqa: BLE001 - 装配期抛异常同样是"没查成"
         return None, f"装配注册表失败（{type(exc).__name__}: {exc}）⇒ 对账没做"
     return {

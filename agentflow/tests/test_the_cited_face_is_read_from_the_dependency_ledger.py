@@ -8,7 +8,7 @@
 
 ⇒ 被引面 不是 一张新表、也不是新列：`dependencies` 里 `source_stmt_id` 是
 被引方、`used_by` 是引用方，所以「谁引了我」= `source_stmt_id == 我` 的那些行的
-`used_by`。写侧一个字都不用改：B 登记时先拿号（`secretary._record_statement_tx`
+`used_by`。写侧一个字都不用改：B 登记时先拿号（`Secretary._record_statement_tx`
 的 `tx.alloc_id`）、再按那个号写依赖行（`Secretary._write_dep_steps`）。这一份
 判据钉住的正是这条链，而不是一个新入口。
 

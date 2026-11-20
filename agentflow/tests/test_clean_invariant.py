@@ -142,7 +142,7 @@ ONE_IMPLEMENTATION: dict[str, tuple[str, str]] = {
     "三态判定（在飞 / 待机 / 静默 / 未读到）": ("conductor.py", "agent_state"),
     "三态取最活跃那一档": ("conductor.py", "most_active_state"),
     "销号闸（谁可以销号）": ("conductor.py", "retire_blocking"),
-    "计时登记（挂机登记）": ("clock.py", "_register_parked"),
+    "计时登记（挂机登记）": ("clockevents.py", "_register_parked"),
     "TS 声明渲染（三条零交线共用）": ("webui/state.py", "type_decls"),
 }
 

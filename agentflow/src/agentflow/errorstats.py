@@ -331,6 +331,20 @@ ERROR_CATEGORIES: tuple[tuple[str, str], ...] = (
      "且 `data.refusal_code` 为空 ⇒ 框架按受控理由拒了这次调用，工具层却把它记成成功"
      "（判据读结构字段，不读 `data` 的自由文本；码位留空 —— 这一笔只有状态、没有受控码。"
      "有受控码的那一档按码表登记的类目记，例如 `target_not_silent`）"),
+    # ---- 2026-11-20（GUARDFIX）：框架内部错误单独一档。
+    #
+    # 为什么必须自成一类（业主口径「门和读数都要看得见」）：真机
+    # `projects/lp-ball-13` 里 `attack.step` 15 次全拒（`TypeError: unhashable type:
+    # 'dict'`，框架自己的 bug）、5 连拒之后 `no_progress_limit` 收工，而 errorstats 里
+    # 一个字都读不到"框架 bug"这件事 —— 它被折进 `validation_error`，与"模型的输入
+    # 不合格"同档。两类折成一档的代价不是难看，是没人会去修那一行。
+    #
+    # 追加在 ERROR_CATEGORIES 末尾（不是插在中间）：`_MATCH_ORDER` 的优先级是"类目表
+    # 靠前优先"，插中间会让老例子的主码换类目。
+    ("framework_error",
+     "框架内部错误：框架自己抛 TypeError / AttributeError / KeyError 那一族 ⇒ 这一笔的"
+     "失败不是模型交的东西不合格（换措辞重试没有用）；工具层按受控码 `framework_error`"
+     "报出去，拒信带落库事实与校验器逐条读数（判据读 `_guard` 的分档与 `CODE_TABLE`）"),
 )
 
 #: 扩面追加的 11 个角色侧类目 + `tool_refused_controlled`
@@ -355,8 +369,11 @@ SYSTEM_CATEGORIES: tuple[tuple[str, str], ...] = (
      "hook 没判成：`fail_open=True` 或秘书 `decision=判不了` ⇒ 判据自己没给出结论"
      "（fail-open 是设计好的降级，但它必须看得见：看不见就等于'判过了、没事'）"),
     ("closing_blocker",
-     "收工门拦下：`closing.check_closing` 的 blocker 逐条（如 `contradiction_disputed_source` / "
-     "`acceptance_missing_for_research`）⇒ 这一趟交不出去（判据与 Acceptance 页同一处，不另算）"),
+     "收工门拦下（现算预演）：`closing.check_closing` 的 blocker 逐条（如 "
+     "`contradiction_disputed_source` / `acceptance_missing_for_research`）⇒ 这一趟交不出去。"
+     "这是现算预演 —— 以此刻盘面看、现在收工会被什么拦；不是发生过的动作，"
+     "不计入错误动作的发生次数（每读一次现算一次，不累加；判据与 Acceptance 页同一处，"
+     "不另算）"),
 )
 
 #: 状态读数类目：它是快照（"现在积着什么"），不是"发生过几次" —— 所以既不进
@@ -405,6 +422,14 @@ ERROR_CATEGORY_NAMES: frozenset[str] = frozenset(cat for cat, _why in ERROR_CATE
 
 #: 哪些类目是系统侧（进 `system` 桶，不进角色合计）。
 SYSTEM_CATEGORY_NAMES: frozenset[str] = frozenset(cat for cat, _why in SYSTEM_CATEGORIES)
+
+#: 现算预演类目：这些数的单位不是"动作发生过几次"，而是"以此刻盘面看，现在收工会被什么拦"。
+#: `_read_closing` 每读一次现算一次（`closing.check_closing`），不累加、不随历史增长 ——
+#: 所以它与"发生次数"分不开时，页面会把 3 条 blocker 读成"M 想收工 3 次"（真机实读的误读）。
+#: 机器可读标记有两个落点，同出这一张表：`by_class()` 的行上带 `computed: true`
+#: （只有这一类带；其它类连这个键都没有），页面据它单独成组。不许只靠改文案：文案可以
+#: 被改写，而"这一栏能不能与发生次数混排"必须是网页与脚本都读得出来的一格。
+PREVIEW_CATEGORIES: frozenset[str] = frozenset({"closing_blocker"})
 
 #: 哪些类目是状态读数（进 `state_readings`，是快照、不进任何总数）。
 STATE_CATEGORY_NAMES: frozenset[str] = frozenset(cat for cat, _why in STATE_CATEGORIES)
@@ -483,13 +508,13 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     # 只是被拒的是"等"而不是"说"。单独成码是为了让"散文式 wait_for 又出现了"
     # 在读数上数得出来。
     ("waiter_not_resolvable", "not_in_roster",
-     "src/agentflow/clock.py::WAITER_NOT_RESOLVABLE（WAITER_NOT_RESOLVABLE / `_new_timer` 的等谁核对；"
+     "src/agentflow/clockbase.py::WAITER_NOT_RESOLVABLE（WAITER_NOT_RESOLVABLE / `_new_timer` 的等谁核对；"
      "拒信由 `waiter_refusal()` 拼）"),
     # 归 `controlled_refusal`：它不是"没查成"也不是"查无此人"，是"现在没有可等的东西"
     # （业主：「这个需要存在的计时器数大于等于1」）。与 `invalid_params` 同族：这次调用
     # 不成立，重写一次就能过（先起一条表，或按交差收工）。
     ("no_timers_to_wait", "controlled_refusal",
-     "src/agentflow/clock.py::no_timers_refusal（NO_TIMERS_TO_WAIT / `request_wait_any` 的前置判据；"
+     "src/agentflow/clockbase.py::no_timers_refusal（NO_TIMERS_TO_WAIT / `request_wait_any` 的前置判据；"
      "拒信由 `no_timers_refusal()` 拼）"),
     # ---- 直写兜底（口径：「不应该是提醒智能体要走秘书，而是自动将直写请求路由到
     # 秘书接管」）。路由不再计入 `direct_write`：那一档只留"兜底方也接不住"的野路。
@@ -548,7 +573,7 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     # 那一个码里，于是同一种输入在写侧与判档位侧拿到两个名字。
     ("empty_statement_text", "controlled_refusal",
      "src/agentflow/refusals.py::EMPTY_STATEMENT_TEXT（真身）/ src/agentflow/agent_b/register_statement.py::_RegisterStatement.register_statement（写侧产出）"
-     " / src/agentflow/secretary.py::Secretary.judge_statement（判档位那一侧的受控拒绝）"),
+     " / src/agentflow/secretary_tier_judge.py::TierJudgeMixin.judge_statement（判档位那一侧的受控拒绝）"),
     ("empty_proof_text", "controlled_refusal",
      "src/agentflow/refusals.py::EMPTY_PROOF_TEXT（真身）/ "
      "src/agentflow/agent_b/register_statement.py::_RegisterStatement._attach_proofs"
@@ -624,7 +649,8 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     # 能逐条断言"这个码真的在源码里"；② 人读出处时知道去哪一格看。判定本身读字段，
     # 不找字（理由见模块 docstring 第一节的三条假阳性）。
     ("name_taken", "roster_write_refused",
-     "src/agentflow/secretary.py::refusals_path（写口拒绝流水；`name_taken` 由 roster_add 产出）"),
+     "src/agentflow/secretary_roster_write.py::RosterWriteMixin._roster_add"
+     "（写口拒绝流水由 `secretary_ledger.refusals_path` 落盘；`name_taken` 由这里产出）"),
     ("文件不存在：", "tool_refused_path",
      "src/agentflow/tools/fs_tools.py::fs_read（ToolError 原文）"),
     ("路径不存在：", "tool_refused_path",
@@ -655,17 +681,19 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
      "src/agentflow/agent_v/core.py::AgentV.verify_proof"
      "（`kind=statement_missing`：没审、不留台账行）"),
     ("有缺陷要指出", "verdict_understated",
-     "src/agentflow/secretary.py::Secretary.note_decision"
-     "（`target.judge=v_reply_defect` 的判词档）"),
+     "src/agentflow/secretary_session.py::SessionMixin.note_decision"
+     "（`target.judge=v_reply_defect` 的判词档）/ "
+     "src/agentflow/secretary_prompts.py::_judge_system（v_reply_defect 档的判词题面）"),
     ("有毛病", "proof_defect_found",
-     "src/agentflow/verifications.py::VERDICTS（两态判词之一；行上 `unresolved_errors` 同族）"),
+     "src/agentflow/v_vocab.py::VERDICTS（两态判词之一；行上 `unresolved_errors` 同族）"),
     ("ProviderError", "external_unavailable",
      "src/agentflow/providers.py::ProviderError（检索 provider 每一路都失败时抛的那一个）"),
     ("fail_open", "hook_undecided",
-     "src/agentflow/secretary.py::Secretary.note_decision"
+     "src/agentflow/secretary_session.py::SessionMixin.note_decision"
      "（`fail_open` 那一格的唯一写点；hook 没判成 / 收录前判档炸了都经它留痕）"),
     ("判不了", "hook_undecided",
-     "src/agentflow/secretary.py::Secretary.note_decision（`decision=判不了` 那一档）"),
+     "src/agentflow/secretary_session.py::SessionMixin.note_decision（记录点）/ "
+     "src/agentflow/secretary_prompts.py::_judge_system（「判不了」在那里被定义成不成立的结论）"),
     ("contradiction_disputed_source", "closing_blocker",
      "src/agentflow/closing.py::_check_contradictions（blocker 的 code）"),
     ("acceptance_missing_for_research", "closing_blocker",
@@ -679,7 +707,7 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     ("cancelled", "task_stopped",
      "src/agentflow/schema.py::TASK_OUTCOMES（被叫停的终态；算不算错看 runs/stop-history.jsonl）"),
     ("repaired", "roster_repaired",
-     "src/agentflow/secretary.py::Secretary.roster_repair（补登记行的标记）"),
+     "src/agentflow/secretary_roster_write.py::RosterWriteMixin.roster_repair（补登记行的标记）"),
     # ---- 12 个「模型面拒因码」（受控拒绝的码）。
     #
     # 它们都是"框架按受控理由拒了模型这一次操作"的码：有的写在工具结果的
@@ -705,6 +733,9 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     ("public_is_not_a_conversation", "tool_refused_controlled",
      "src/agentflow/agent_loop.py::AgentLoop._public_face_refusal"
      "（公告栏点名某个代理 ⇒ 那不是一次对话）"),
+    ("broadcast_retired", "tool_refused_controlled",
+     "src/agentflow/agent_loop.py::_broadcast_retired_refusal"
+     "（广播通道退场：`message` / `handoff` 的写入口不再接受 `to=ALL`）"),
     ("formal_moved_to_l", "tool_refused_controlled",
      "src/agentflow/agent_e/_support.py::FORMAL_REASONS"
      "（历史理由码；E 不再产出它，但词表里留着，历史台账仍带着）"),
@@ -722,6 +753,19 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     ("proof_review_without_evidence", "tool_refused_controlled",
      "src/agentflow/v_vocab.py::CODE_WRITE"
      "（写入期闸：声称 `proof_review` 却没有证据 ⇒ 当场拒收）"),
+    # ---- 2026-11-20（GUARDFIX）：框架内部错误那一档。
+    #
+    # 为什么它必须进这张码表（业主口径「门和读数都要看得见」）：真机
+    # `projects/lp-ball-13` 里 `attack.step` 15 次全拒、5 连拒之后
+    # `no_progress_limit` 收工，而 errorstats 的类目里一个字都读不到"框架 bug"这件事 ——
+    # 它被折进 `validation_error`，与"模型的输入不合格"同档。码名就是工具层
+    # `meta.kind` 的字面量（`_guard` 的分档，`attack_tools.FRAMEWORK_ERROR_KIND`），
+    # 所以 `_step_text` 扫得到它、`_refusal_key` 也据此另立一个新键（连击不再与
+    # 校验失败混着数）。
+    ("framework_error", "framework_error",
+     "src/agentflow/tools/attack_tools.py::FRAMEWORK_ERROR_KIND"
+     "（`_guard` 的分档：TypeError / AttributeError / KeyError 一族 ⇒ 受控码，"
+     "拒信明说「这是框架侧的问题、换措辞重试没有用」并带落库事实与校验器的逐条读数）"),
 )
 
 #: 码 → 类目（由 `CODE_TABLE` 派生，只有这一处真身）。
@@ -927,7 +971,10 @@ class ErrorStats:
     def by_class(self) -> list[dict[str, Any]]:
         """按类的一行一条（页面"按类"那一段与 CLI 都用这一份）。
 
-        一条 = `{category, bucket, count, meaning, state, checked, reason, by_role}`。
+        一条 = `{category, bucket, count, meaning, state, checked, reason, by_role}`；
+        现算预演那几类（`PREVIEW_CATEGORIES`）多一格 `computed: true` —— 它们的 `count`
+        是"以此刻盘面看，现在收工会被几条拦"，不是"动作发生过几次"，所以不许与
+        "发生次数"混排；这一格是网页与脚本分开它们的唯一机器可读标记（其它类不带这个键）。
         `bucket ∈ {error, system, state, process}` —— 页面上分栏、排序时也只在自己那一栏
         里排：把三种单位混在一个降序表里，第一条永远是单位最大的那个，读的人会以为它最严重。
 
@@ -953,18 +1000,24 @@ class ErrorStats:
                     n = sum(per_role.values())
                 tri = dict(self.class_state.get(cat) or {})
                 span = dict(self.spans.get(cat) or {})
-                rows.append({"category": cat, "bucket": bucket, "count": int(n),
-                             "meaning": meaning.get(cat, ""), "by_role": per_role,
-                             "checked": bool(tri.get("checked", self.checked)),
-                             "state": str(tri.get("state") or ("checked" if self.checked
-                                                               else "unknown")),
-                             "reason": str(tri.get("reason") or ""),
-                             "first_ts": str(span.get("first") or ""),
-                             "last_ts": str(span.get("last") or ""),
-                             "this_run": int(span.get("this_run") or 0),
-                             "earlier": int(span.get("earlier") or 0),
-                             "no_ts": int(span.get("no_ts") or 0),
-                             "samples": [dict(s) for s in (self.samples.get(cat) or ())]})
+                row: dict[str, Any] = {
+                    "category": cat, "bucket": bucket, "count": int(n),
+                    "meaning": meaning.get(cat, ""), "by_role": per_role,
+                    "checked": bool(tri.get("checked", self.checked)),
+                    "state": str(tri.get("state") or ("checked" if self.checked
+                                                      else "unknown")),
+                    "reason": str(tri.get("reason") or ""),
+                    "first_ts": str(span.get("first") or ""),
+                    "last_ts": str(span.get("last") or ""),
+                    "this_run": int(span.get("this_run") or 0),
+                    "earlier": int(span.get("earlier") or 0),
+                    "no_ts": int(span.get("no_ts") or 0),
+                    "samples": [dict(s) for s in (self.samples.get(cat) or ())]}
+                if cat in PREVIEW_CATEGORIES:
+                    # 现算预演：不是"动作发生了 N 次"（见 PREVIEW_CATEGORIES 的注释）。
+                    # 只给这一类加这一格：其它类连键都不带，脚本才能凭"键在不在"分档。
+                    row["computed"] = True
+                rows.append(row)
         rows.sort(key=lambda r: (order.index(str(r["bucket"])), -int(r["count"]),
                                  str(r["category"])))
         return rows

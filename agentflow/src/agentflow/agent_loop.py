@@ -125,7 +125,9 @@ JSON_TAIL = (
     "只回一行 JSON（不要解释、不要 Markdown 围栏、不要前后缀）。形状取其一"
     "（键名与嵌套层级照抄，`<...>` 与 `{...}` 是占位符）。把下面这些行**连括号一起抄**、"
     "只把占位符换成你的内容：不要自己数括号、也不要自己加一层嵌套 —— "
-    "实测最常见的坏 JSON 就是最后多补一个 `}`：\n"
+    "实测最常见的坏 JSON 就是最后多补一个 `}`。收件人只写**具体实例**（名册名 / 绝对编号）"
+    "或 M 的本号：**广播已退场**，以前那种 `to=ALL` 现在会被受控拒绝（`broadcast_retired`），"
+    "改点具体的人：\n"
     '{"tool": "<工具名>", "args": {...}}\n'
     # 骨架里没有 `action` 这一格，也不教 `A-H`
     # 这种角色级寻址 —— `_do_summon` 只读 `role` + `task` + `params`（形状里没有填动作的
@@ -133,13 +135,13 @@ JSON_TAIL = (
     '{"summon": {"role": "<伙伴表里的角色名>", "task": "<一件可判定的活>", "params": {...}}}\n'
     '{"summon_many": {"targets": [{"role": "<伙伴表里的角色名>", "task": "<一件可判定的活>",'
     ' "instance": "<可选>"}], "why": "<为什么一次派这一批>"}}\n'
-    '{"message": {"to": "<伙伴或 ALL>", "subject": "...", "body": "..."}}\n'
+    '{"message": {"to": "<名册名或绝对编号，或 M 的本号>", "subject": "...", "body": "..."}}\n'
     # 骨架里的字段名用协议的首选名：`HANDOFF_PROTOCOL` 逐字写着"旧名仍然接受，但新写的
     # 一律用 `summary`" —— 骨架是每一步都发的那份文档、模型照抄它，两边口径相反却因为
     # 解码器三个名字都收而没有任何地方会报错。判据：
     # `tests/test_agent_loop.py::test_the_skeleton_teaches_the_preferred_handoff_field_names`
     # （骨架必须用 `summary`；且"旧名仍然接受"这半句兼容性也当场真调验证）。
-    '{"handoff": {"to": "<伙伴/M/ALL>", "summary": "<一句话描述>", "body": "<markdown 正文>",'
+    '{"handoff": {"to": "<名册名或绝对编号，或 M 的本号>", "summary": "<一句话描述>", "body": "<markdown 正文>",'
     ' "refs": ["<前序手稿编号>"], "revises": "<要订正的手稿号，可不填>"}}\n'
     '{"note": "一句话"}\n'
     '{"ask_user": {"question": "...", "options": ["..."]}}\n'
@@ -159,9 +161,22 @@ JSON_TAIL = (
     '{"final": "<结论>", "evidence": ["<你实际用到的 id>"]}'
 )
 
-#: 公共频道（公告栏）。`message.to` 写它 = 发给树上的人（说话，而不是派活）。
-#: 它是唯一的写法：旧数据里那个 legacy 写法只在 :func:`_legacy_all` 一处折算。
+#: 公共频道（公告栏）的历史写法。写入口已不再接受它（见 :func:`_broadcast_retired_refusal`）：
+#: 2026-11-16 工具面退场（`conductor.broadcast` 全面退场）、2026-11-20 通道面一起退
+#: （业主口径「确认没用的东西就删，不要保留」+「收件人必须是实例」）。
+#: 它今天只剩两件事：① 读旧数据时把历史行（`to=ALL` / legacy `#public`）折成同一个值
+#: （:func:`_legacy_all`，读侧折算不许删）；② 框架自己的通报仍可按这个值落盘
+#: （`send_message(by_framework=True)` 的叫停那一路，不经代理的收件人面）。
 ALL = "ALL"
+
+#: 广播通道退场的受控拒绝码（写入口 `message` / `handoff` 共用一份）。
+BROADCAST_RETIRED = "broadcast_retired"
+
+#: 那条拒信里的"那我该怎么办"（两个写入口逐字共用一份，避免两处各写一句）。
+_BROADCAST_RETIRED_HOW_TO_FIX = (
+    "改点具体的人（收件人必须是实例）：名册名（如 D1）或绝对编号（如 t-000123）；"
+    "要通知整棵树就逐层点下去（每层点它自己的直接子代理）；"
+    "要跟主控说话就写 M 的本号（M 是顶层发起方，不是角色桶）。")
 
 
 def _legacy_all(token: Any) -> str:
@@ -2000,6 +2015,13 @@ def message_source(record: Mapping[str, Any]) -> dict[str, str]:
     四种 kind（取值刻意少而稳，且都是盘上已有的字面量）：`subagent-settled`（框架投递的通报，`by_framework`
     为真，即 `_emit_settlement` 那一类）、`broadcast`（`channel == "public"`）、`user`（发信人是用户/主控以
     外的用户频道）、`message`（其余：角色之间的一条普通留言）。
+
+    `broadcast` 这一档 2026-11-20 起只剩读历史数据一种来源：广播通道退场之后，代理的
+    写入口（`message` / `handoff`）不再接受 `to=ALL`（受控拒绝 `broadcast_retired`）⇒
+    新写入不再产生 `channel="public"` 的代理留言。框架自己的通报（`by_framework=True`，
+    叫停那一路）走上面第一支、读数是 `subagent-settled`，不落进 `broadcast`。所以这一支
+    保留是为了旧行（`projects/*/sessions/*.jsonl` 里 2026-11-20 之前的 public 消息）读得出来，
+    不是给新写入用的。
     """
     channel = str(record.get("channel") or "")
     sender = str(record.get("from") or "")
@@ -3881,8 +3903,48 @@ def _is_all_recipient(token: Any) -> bool:
     return _legacy_all(token).upper() == ALL
 
 
+def _broadcast_retired_refusal(*, to: Any, shape: str) -> dict[str, Any]:
+    """写入口对 `to=ALL` 的受控拒绝（`{}` = 放行）。
+
+    这是广播通道退场后唯一一处产生 `broadcast_retired` 的判据：`message` 与 `handoff`
+    两个写入口都先问它，谁也不许自己写一份"收件人是不是广播"的比对（同
+    :func:`_is_all_recipient` 的口径，旧写法 `#public` / 小写 `all` 也算）。
+
+    为什么退：业主 2026-11-16 工具面「广播工具…全面退场」；2026-11-20 通道面一起退
+    （「确认没用的东西就删，不要保留」+「收件人必须是实例（按角色桶归属已废）」）。
+    新写入从此不再产生 `channel="public"` 的代理留言 —— 事件层那个
+    `kind="broadcast"` 读数因此只剩"读历史行"一种来源（见 :func:`message_source`）。
+
+    读侧一个字没动：`_legacy_all` 仍把旧写法折成 `ALL`，`read_messages` /
+    `message_source` 照旧读得出历史行（兼容不许破）。
+    """
+    if not _is_all_recipient(to):
+        return {}
+    error = (f"广播已退场（受控拒绝 `{BROADCAST_RETIRED}`）：`to={ALL}` 不再是一个收件人 —— "
+             "2026-11-16 工具面退场之后，这条通道面 2026-11-20 也退了。"
+             "这一条一个字节都没落盘（受控拒绝不是「稍后再试」）。")
+    base: dict[str, Any] = {
+        "ok": False, "to": str(to or ""), "refused": BROADCAST_RETIRED,
+        "addressing": {"checked": True, "how": BROADCAST_RETIRED,
+                       "refused": BROADCAST_RETIRED, "to": str(to or ""),
+                       "addressed_by": "",
+                       "why": "广播通道已退场：收件人必须是具体实例（名册名 / 绝对编号）或主控 M 的本号"},
+        "error": error, "how_to_fix": _BROADCAST_RETIRED_HOW_TO_FIX,
+    }
+    if shape == "handoff":
+        return {**base, "handoff": "未写成",
+                "note": ("这一条受控拒绝：手稿一行没写、留言一条没发"
+                         "（受控拒绝不是「稍后再试」）")}
+    return {**base, "message": "未发出", "receipt": "unknown"}
+
+
 def _known_recipient(token: Any) -> bool:
-    """收件人写法认不认（大小写不敏感；`ALL` 算"给所有人"）。"""
+    """收件人写法认不认（大小写不敏感；`ALL` 算"给所有人"）。
+
+    这一格只回答"写法认不认"（解码层用），不回答"能不能发"：`ALL` 认，但写入口会以
+    :func:`_broadcast_retired_refusal` 受控拒绝它 —— 两件事分开，拒信才带得动
+    "改点具体的人"那一句。
+    """
     want = str(token or "").strip()
     return _is_all_recipient(want) or want.upper() in {r.upper() for r in (*S.ROLES,
                                                                           S.CONDUCTOR_ROLE)}
@@ -10626,10 +10688,18 @@ class AgentLoop:
             washed_payload = secretary_note.pop("_washed_payload", None)
             wash_plan = secretary_note.pop("wash_proposal", None)
             face_note = secretary_note.pop("_recipient_face", None)
+            retired_note = secretary_note.pop("_broadcast_retired", None)
             accept_field, reject_field = _proposal_fields()
             dispatch_notify: dict[str, Any] | None = None
             wash_audit: dict[str, Any] | None = None
-            if secretary_note.get("wash", {}).get("refused"):
+            if isinstance(retired_note, Mapping):
+                # 广播通道退场（2026-11-20）：写入口的受控拒在秘书那一道之前就生效，
+                # 一个字节都没落（手稿一行没写、留言一条没发）。
+                result = {**dict(retired_note), "outcome": "refused", "washed": False}
+                run.notes.append(
+                    "广播通道已退场 ⇒ 这一步的收件人 `ALL` 被受控拒绝"
+                    "（broadcast_retired）：改点具体实例，或对 M 发")
+            elif secretary_note.get("wash", {}).get("refused"):
                 # 硬拒（只有"连派给谁/做什么都不全"这一格）：一行都不落（`draft/90` §1.2）。
                 # 其它"洗不动"（缺必填参数…）照旧交给闸门 —— 那一档还会落 `refused` 行
                 # 并可能转成"请主控代唤"，秘书抢在前面拒掉会把那条出路一起弄丢。
@@ -13666,6 +13736,14 @@ class AgentLoop:
         reply_to = str(payload.get("reply_to") or "")
         marker = payload.get("roster_addressing")
         written = str(marker.get("written") or "") if isinstance(marker, Mapping) else ""
+        # ---- 广播通道退场（2026-11-20）：`to=ALL` 在寻址之前就受控拒绝
+        #
+        # 为什么放在寻址之前：这一档不是"发给谁"的问题，是"这个收件面已经不存在了"。
+        # 先寻址会得到一个 `not_in_roster` 之类的伪读数（`ALL` 本来就不在名册上），
+        # 于是拒信说的不是真原因，模型拿到的改法也不对。
+        _retired = _broadcast_retired_refusal(to=written or to, shape="message")
+        if _retired:
+            return _retired
         # ---- 寻址：先问名册
         #
         # 判据只有一处（`roster_addresses`），"发给谁"的结论进读数 `addressing`
@@ -13786,6 +13864,12 @@ class AgentLoop:
     def _message_by_channel(self, payload: Mapping[str, Any], to: str,
                             reply_to: str) -> dict[str, Any]:
         """`ALL` / 用户 那一档：留言落 `send_message`（append-only），准入逐字不动。
+
+        2026-11-20（广播通道退场）：`ALL` 这一支在代理的写入口已经走不到 —— `_do_message`
+        在寻址之前就以 `broadcast_retired` 受控拒绝（`_broadcast_retired_refusal`）。
+        这一格保留两条读侧/框架路径：① `_message_legacy` 这条老管道（判据直接打它，
+        量的是旧行为逐字不变）；② 用户 / 主控 M 的私聊（`to` 是用户或 `M`，不是广播）。
+        框架自己的叫停通报不走这里（`conductor_tools` 直接调 `send_message`）。
 
         公共频道的可见面 = 发信人的直接子代理 ⇒ 发公聊必须带发信人的实例号，没有编号就受
         控拒绝（不许退回"全角色可见"—— 那等于随手一条公聊就是全树广播）。谁能走到这一支：只有
@@ -14022,6 +14106,17 @@ class AgentLoop:
         """
         if self.secretary is None or shape not in SECRETARY_OUTBOUND_SHAPES:
             return {}
+        # ---- 广播通道退场（2026-11-20，BCRETIRE）：`to=ALL` 在秘书那一道之前就拒。
+        #
+        # 为什么必须抢在 `optimize_outbound` 之前：同一份发往 `ALL` 的内容，若先过秘书
+        # 的内容面判据，会因"点名与否"落到两个不同的码上（点名 ⇒
+        # `public_is_not_a_conversation`，不点名 ⇒ 才轮到 `broadcast_retired`）——
+        # 而"这个收件面已经不存在了"与正文写了什么无关。拒因码因此只有一条。
+        if shape in ("handoff", "message"):
+            _retired = _broadcast_retired_refusal(to=str(payload.get("to") or ""),
+                                                  shape=shape)
+            if _retired:
+                return {"_broadcast_retired": _retired}
         out: dict[str, Any] = {}
         # 本实例自己的根：`optimize_outbound` 与 `assess_delegation` 两处兜底都读它，
         # 取一次（_attribute 是纯属性，读在 try 外不会把异常从 fail-open 里挤出去）。
@@ -14330,8 +14425,9 @@ class AgentLoop:
         """写一份交接手稿 + 把"编号 + 一句简要描述"发给收件人（`draft/37` §134）。
 
         两件事一起做，因为它们是同一件事的两半：手稿是「内容」，留言是「通知」；让模型分两步做就会出现"写了手稿但对方
-        不知道"（或反过来）的半截状态，而且用户点过名："就传个编号感觉有点尬，可以再附一句简要描述"。`to="ALL"` ⇒ 走公
-        共频道；存储是追加式账本 `manuscripts/handoffs.jsonl` 的一行（`draft/39` §C1：编号与那一行在同一把锁里分配）。
+        不知道"（或反过来）的半截状态，而且用户点过名："就传个编号感觉有点尬，可以再附一句简要描述"。`to=ALL`（广播）2026-11-20
+        已随通道面退场受控拒绝（`broadcast_retired`）：收件人必须是具体实例或主控 M 的本号；存储是追加式账本
+        `manuscripts/handoffs.jsonl` 的一行（`draft/39` §C1：编号与那一行在同一把锁里分配）。
 
         A 线：执笔权已经移交给本角色的秘书（`draft/53` §2.1 / `draft/55` §3.2）。用户口径（2026-10-06）："由于所有信息
         交互都由秘书过一遍手，所以 handoffs 的增改查能力都该给秘书，智能体只保留『查』的能力。"落法：循环形状
@@ -14356,6 +14452,13 @@ class AgentLoop:
         # 没有这一格（照旧按角色名 / M / ALL 写）时逐字走改前的路。
         _marker = payload.get("roster_addressing")
         written = str(_marker.get("written") or "") if isinstance(_marker, Mapping) else ""
+        # ---- 广播通道退场（2026-11-20）：`to=ALL` 在写任何东西之前受控拒绝
+        #
+        # 为什么必须在 `_handoff_address` 与 `handoff_add` 之前：半份状态（手稿写了、
+        # 人没收到 / 通知写了、手稿没写）比没写更贵；`to=ALL` 这一档连"收件人面"都不存在了。
+        _retired = _broadcast_retired_refusal(to=written or to, shape="handoff")
+        if _retired:
+            return _retired
         # `summary` 是这一形状的正名（它就是进留言的那一句话）；`brief` / `title` 是旧名，
         # 仍然接受 —— 旧调用点、旧提示词与模型的历史习惯都不至于因此写不进去。
         one_line = (str(payload.get("summary") or "").strip()
@@ -14370,7 +14473,9 @@ class AgentLoop:
         # 这一格只算一次（改前门口算一遍、写完再算一遍，两处一漂就会出现"回执里的
         # 收件人不是落库那个收件人"）。
         manuscript_to = str(_addr.get("manuscript_to") or to)
-        channel = ALL if _is_all_recipient(to) else manuscript_to
+        # 广播那一档已退场（`to=ALL` 在本方法开头就受控拒绝）⇒ 这一格只剩"写解析出来的
+        # 那个收件人"。改前的 `ALL if _is_all_recipient(to) else manuscript_to` 是死分支。
+        channel = manuscript_to
         if _gate:
             return {"handoff": "未写成", "ok": False, "to": channel,
                     "refused": _gate["refused"], "candidates": (_gate.get("candidates") or []),
@@ -14397,27 +14502,17 @@ class AgentLoop:
             else:
                 # 收件人的绝对编码（2026-10-26，Q2「发 / 收两栏要显示绝对编码」）：
                 # 从「解析处」一路带进行里，读侧只做展示，不许自己拼。
-                #   具体收件人 ⇒ `_handoff_address` 已经解析出来的那个实例的 `task_id`；
-                #   广播（`ALL`）⇒ 发信人此刻的直接子代理编号（`_callable_members` 这一份
-                #   名册读数的同一批人，不是另算一份）。记列表而不是 `"*"`：`"*"` 是一句
-                #   盘上对不了账的话，编号逐个可以在名册上核。
-                # 名册读不成 ⇒ 两格都不落（`None` / 空串）：缺这一格与"写了、但没有"必须分开。
-                _broadcast = _is_all_recipient(to)
-                _codes: list[str] | None = None
-                if _broadcast:
-                    _members, _why = _callable_members(
-                        self.secretary, owner=str(self.my_task_id or ""))
-                    _codes = (None if _why else
-                              sorted({str(m.get("task_id") or "") for m in _members
-                                      if str(m.get("kind") or "") == "child"
-                                      and not m.get("retired")
-                                      and str(m.get("task_id") or "")}))
+                #   具体收件人 ⇒ `_handoff_address` 已经解析出来的那个实例的 `task_id`。
+                # 广播那一档（`_broadcast = _is_all_recipient(to)` + 直接子代理编号列表）
+                # 2026-11-20 随广播通道退场一起删了：`to=ALL` 在本方法开头就受控拒绝
+                # （`_broadcast_retired_refusal`）⇒ 这个分支再也走不到，留着就是死分支。
+                # 历史上落过 `to_task_ids` 的旧行读侧不动（`manuscripts.read` 照旧渲染）。
                 rec = self.secretary.handoff_add(
                     to=manuscript_to, summary=one_line, body=str(payload.get("body") or ""),
                     refs=list(payload.get("refs") or []), sid=self.sid or "",
                     task_id=self.my_task_id,          # ← 同上（真机 593 行缺这一格）
-                    to_task_id="" if _broadcast else str(_addr.get("task_id") or ""),
-                    to_task_ids=_codes,
+                    to_task_id=str(_addr.get("task_id") or ""),
+                    to_task_ids=None,
                     note=str(payload.get("note") or ""))
         except Exception as exc:  # noqa: BLE001 - 执笔失败必须报错留痕，不许静默放行
             return {"handoff": "未写成", "ok": False,

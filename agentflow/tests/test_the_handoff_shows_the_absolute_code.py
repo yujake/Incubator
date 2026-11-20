@@ -149,47 +149,45 @@ def test_a_a_concrete_recipient_carries_its_task_id(tmp_path: pathlib.Path) -> N
     assert hand["to_task_id"] == env["f1"], hand["to_task_id"]
 
 
-# ====================================================================== b) 广播
-def test_b_broadcast_records_the_senders_direct_children(tmp_path: pathlib.Path) -> None:
-    """判据 b（正控）：`to=ALL` ⇒ `to_task_ids` 非空，且就是发信人此刻的直接子代理编号。
+# ====================================================================== b) 广播（已退场）
+def test_b_broadcast_is_retired_and_writes_no_row(tmp_path: pathlib.Path) -> None:
+    """判据 b（负控）：`to=ALL` ⇒ 受控拒 `broadcast_retired`，手稿一行都不写。
 
-    为什么记编号列表而不是 `*`：`*` 是一句盘上对不了账的话（"广播面"到底是谁，没有一个字
-    能核）；编号列表可以逐条在名册上对上，而"谁是直接子代理"本来就是名册答得出的那一问。
+    2026-11-20（BCRETIRE）：广播通道退场 ⇒ `_do_handoff` 里
+    `_broadcast = _is_all_recipient(to)` 那一支连同它的 `to_task_ids` 一起删了
+    （它只服务于新写入）。改前这条是正控（`to=ALL` 记发信人直接子代理的编号列表）；
+    现在它翻成负控 —— b 量的是"这条路已经关了"，旧行里 `to_task_ids` 的读侧渲染由 b2 守。
     """
     env = _env(tmp_path)
     res = _hand_off(env, {"to": "ALL"})
-    assert res.get("ok") is True, res
-    row = _last_row(env["ws"])
-    assert row["to"] == "ALL", row
-    codes = row.get("to_task_ids")
-    assert isinstance(codes, list) and codes, codes
-    # 名册上发信人此刻的直接子代理（非退役）：唯一一份名册读数，判据照它比
-    kids = sorted(str(r.get("task_id") or "")
-                  for r in env["sec"].roster_view(owner=env["me"])["rows"]
-                  if str(r.get("task_id") or "") and str(r.get("status") or "") != "retired")
-    assert codes == kids, (codes, kids)
-    assert set(codes) == {env["f1"], env["f2"]}, codes
-    # 具体收件人那一格不该被广播顶替（两种形状不许混）
-    assert "to_task_id" not in row, row.get("to_task_id")
-    hand = _label(env["ws"])
-    assert hand["to_label"] == "ALL（" + "、".join(kids) + "）", hand["to_label"]
-    assert hand["to_task_ids"] == kids, hand["to_task_ids"]
+    assert res.get("ok") is False, res
+    assert res.get("refused") == "broadcast_retired", res
+    assert "改点具体的人" in str(res.get("how_to_fix") or ""), res
+    assert MS.rows(env["ws"]) == [], ("受控拒绝不许留手稿行：", MS.rows(env["ws"]))
 
 
-def test_b2_a_broadcast_with_no_children_is_recorded_as_empty(
+def test_b2_a_legacy_broadcast_row_with_no_codes_still_renders(
         tmp_path: pathlib.Path) -> None:
-    """判据 b（第二档）：一个子代理都没有的广播 ⇒ 记空列表，读侧写「广播；无直接子代理」。
+    """判据 b（第二档·兼容）：旧行 `to=ALL` + 空 `to_task_ids` ⇒ 读侧照旧渲染成
+    「广播；无直接子代理」，不报错、不补号。
 
-    为什么空列表也要落盘：空列表是结论（查过了、名下真没有子代理），而缺键是
-    "这一格没记"。两者在页面上必须分开 —— 折平之后"新行没查"会冒充"确实没有"。
+    2026-11-20（BCRETIRE）：新写入不再产生这种行（b 守着）；这一格量的是读侧 ——
+    空列表是结论（查过了、名下真没有子代理），缺键是"这一格没记"，两者在页面上必须
+    分得开（折平之后"新行没查"会冒充"确实没有"）。
     """
     env = _env(tmp_path)
-    env["loop"].my_task_id = env["f1"]        # 叶子：它名下没有子代理
-    res = _hand_off(env, {"to": "ALL"})
-    assert res.get("ok") is True, res
-    row = _last_row(env["ws"])
-    assert row["to"] == "ALL" and row.get("to_task_ids") == [], row
-    assert _label(env["ws"])["to_label"] == "ALL（广播；无直接子代理）", _label(env["ws"])
+    legacy = {"id": "000000", "sender": ME_ROLE, "to": "ALL", "summary": "改前落的广播",
+              "body": "# B → ALL｜改前落的广播\n", "refs": [],
+              "created_at": "2026-10-25T09:00:00+08:00", "task_id": "t-legacy", "sid": SID,
+              "note": "", "sha256": "0" * 64, "bytes": 1, "format": "jsonl",
+              "path": "manuscripts/handoffs.jsonl#000000", "to_task_ids": []}
+    p = MS.handoffs_path(env["ws"])
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with p.open("a", encoding="utf-8", newline="\n") as fh:
+        fh.write(json.dumps(legacy, ensure_ascii=False, sort_keys=True) + "\n")
+    hand = _label(env["ws"])
+    assert hand["to"] == "ALL" and hand["to_task_ids"] == [], hand
+    assert hand["to_label"] == "ALL（广播；无直接子代理）", hand["to_label"]
 
 
 # ====================================================================== c) 旧行

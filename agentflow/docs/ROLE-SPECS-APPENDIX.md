@@ -1025,7 +1025,7 @@ python -m agentflow.agent_a   # 以及 agent_b … agent_h、agent_v、pipeline�
 
 | 入口 | 当次读数（尾部逐字） | 退出码 | 行数 |
 |---|---|---:|---:|
-| `agent_a` | `[agent_a 自检] 29/29 项通过` | **0** | 31 |
+| `agent_a` | `[agent_a 自检] 30/30 项通过` | **0** | 32 |
 | `agent_b` | `[agent_b 自检] 19/19 项通过` | **0** | 21 |
 | `agent_c` | `自检断言：46/46 通过` + `SELF-CHECK DONE（agent_c）：46 项通过 / 0 项失败` | **0** | 243 |
 | `agent_d` | `SELF-CHECK DONE（agent_d）` | **0** | 56 |
@@ -1043,6 +1043,8 @@ python -m agentflow.agent_a   # 以及 agent_b … agent_h、agent_v、pipeline�
 > 严格项：自检块多印或少印一段，正是"这套自检还在不在原位"的读数。
 >
 > **2026-10-27：两条 `[capabilities]` banner 不再在 import 期打印**（挪进 `capabilities.run_capability_audit()`，仍走 stderr）⇒ 每个入口的输出**少 2 行**，六格的旧值（58/37/42/47/85/48）按现读值重冻为 56/35/40/45/83/46；`agent_a` / `agent_b` / `agent_c` / `agent_v` / `llm` 五格本来就与这次移动无关，原值不变。
+>
+> **2026-11-20：只复核了 `agent_a` 一格，按现读值重冻为 `30/30` · 退出码 0 · 32 行**（其余十一格仍是 2026-10-26 当次读数，未复核）。原因：ALITCONTENT 把判收收紧成「必须有正文」（`litavail.ADMITTABLE_TIERS` 只剩 `readable`），自检里那条「补一句 relevance 就放行」的样本没有正文 ⇒ 改成两条一起钉：「没正文 ⇒ 受控拒 `availability_not_admissible`」+「读到正文 ⇒ 放行」；项数 29→30，全绿之后不再打印两行失败项，行数 33→32。
 
 ### 历史（2026-10-18 修复轮）：三行当时的读数与修前逐字
 

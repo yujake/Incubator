@@ -152,47 +152,47 @@ class _Builder:
         return actor_for(role, instance)
 
     def agent_a(self, store: Any, instance: str = "") -> Any:
-        """A（构造在 `specs/a.py::build`：要 providers 与下载器）。"""
+        """A（构造在 `specs/a.py::_build`：要 providers 与下载器）。"""
         return self._build("A", store, instance)
 
 
     def agent_b(self, store: Any, instance: str = "") -> Any:
-        """B（构造在 `specs/b.py::build`：要抽取器；B 的签名里没有 `llm`、没有 `actor`）。"""
+        """B（构造在 `specs/b.py::_build`：要抽取器；B 的签名里没有 `llm`、没有 `actor`）。"""
         return self._build("B", store, instance)
 
 
     def agent_c(self, store: Any, instance: str = "") -> Any:
-        """C（构造在 `specs/c.py::build`：只要 store / config / llm）。"""
+        """C（构造在 `specs/c.py::_build`：只要 store / config / llm）。"""
         return self._build("C", store, instance)
 
 
     def agent_d(self, store: Any, instance: str = "") -> Any:
-        """D（构造在 `specs/d.py::build`：构造期拿到同一个 C 实例，`peers=("C",)`）。"""
+        """D（构造在 `specs/d.py::_build`：构造期拿到同一个 C 实例，`peers=("C",)`）。"""
         return self._build("D", store, instance)
 
 
     def agent_e(self, store: Any, instance: str = "") -> Any:
-        """E（构造在 `specs/e.py::build`：要工作区根）。"""
+        """E（构造在 `specs/e.py::_build`：要工作区根）。"""
         return self._build("E", store, instance)
 
 
     def agent_f(self, store: Any, instance: str = "") -> Any:
-        """F（构造在 `specs/f.py::build`：构造期拿到同一个 E 实例，`peers=("E",)`）。"""
+        """F（构造在 `specs/f.py::_build`：构造期拿到同一个 E 实例，`peers=("E",)`）。"""
         return self._build("F", store, instance)
 
 
     def agent_g(self, store: Any, instance: str = "") -> Any:
-        """G（构造在 `specs/g.py::build`：要工作区根；actor 在 config 里）。"""
+        """G（构造在 `specs/g.py::_build`：要工作区根；actor 在 config 里）。"""
         return self._build("G", store, instance)
 
 
     def agent_h(self, store: Any, instance: str = "") -> Any:
-        """H（构造在 `specs/h.py::build`：只要 store / config / llm）。"""
+        """H（构造在 `specs/h.py::_build`：只要 store / config / llm）。"""
         return self._build("H", store, instance)
 
 
     def agent_v(self, store: Any, instance: str = "") -> Any:
-        """V（构造在 `specs/v.py::build`：要工作区根；模型缝由 `agent_v` 按角色取）。
+        """V（构造在 `specs/v.py::_build`：要工作区根；模型缝由 `agent_v` 按角色取）。
 
         为什么 V 也要走这条通用装配（而不是自己 new 一个）：`capabilities` 要求主控的
         出边恰好等于 `schema.ROLES`，且 `AgentV` 上真有那三个 handler —— 两处一致才叫
@@ -202,7 +202,7 @@ class _Builder:
 
 
     def agent_l(self, store: Any, instance: str = "") -> Any:
-        """L（Lean 形式化者；构造在 `specs/l.py::build`：要工作区根）。
+        """L（Lean 形式化者；构造在 `specs/l.py::_build`：要工作区根）。
 
         这里的薄壳不是重复：`_Builder.get` 按 `agent_<角色小写>` 取构造器，而
         `build_role_registry` 的工厂又调它 —— 少这一行时 `AgentRegistry` 里看得到 L、
@@ -550,7 +550,7 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
     # ---- E 的写脚本推理（`--experiment-reasoning`，业主裁定：「把 F 与 E 的接缝做好」）
     # E 的缝一直只有"插座"没有"线"：`agent_e/author_script.py` 在 `self.llm is None`
     # 时受控拒绝 `no_seam`，而 `self.llm` 的来源只有两个入口：
-    # ① `specs/e.py::build` 的 `llm=d.llm`（`_Builder._llm_for("E")`，而 `role_llm`
+    # ① `specs/e.py::_build` 的 `llm=d.llm`（`_Builder._llm_for("E")`，而 `role_llm`
     # 里没登记过 `"E"`）；② `agent_f/core.py` 的 `e` 属性里的 `llm=role_seam("E")`
     # （`llmseam` 的按角色表）。所以角色工厂与 `llmseam` 按角色表两处都写
     # （同一份缝对象）—— 只接一处时工具路径上 E 仍是 `llm=None`。

@@ -394,7 +394,7 @@ DUTIES: dict[str, dict[str, object]] = {
     "same_statement_search": {
         "code": "adjudicate_proposition",
         "where": "secretary.py",
-        "call": ("secretary.py::record_statement",
+        "call": ("secretary_statement.py::StatementMixin.record_statement",
                  "agent_b/register_statement.py 的 `_resolve_same_statement`"),
         "visibility": "conditional",
         "roles": ("B",),
@@ -411,7 +411,7 @@ DUTIES: dict[str, dict[str, object]] = {
     "judge_proposition_form": {
         "code": "judge_proposition_form",
         "where": "secretary.py",
-        "call": ("secretary.py::judge_proposition_form",
+        "call": ("secretary_identity_side.py::IdentitySideMixin.judge_proposition_form",
                  "manuscriptopen.py 的 `open_manuscript` 开稿前那一问",
                  "agent_b/register_statement.py 的 `_manuscript_form_refusal`"),
         "visibility": "conditional",
@@ -427,7 +427,7 @@ DUTIES: dict[str, dict[str, object]] = {
     "judge_dispatch_fit": {
         "code": "judge_dispatch_fit",
         "where": "secretary.py",
-        "call": ("secretary.py::assess_delegation（派活审阅那一笔）",),
+        "call": ("secretary_outbound.py::OutboundMixin.assess_delegation（派活审阅那一笔）",),
         "visibility": "conditional",
         # 只有 D 的 policy 写着「派活不合适时你的秘书会提醒你」—— 这一问只发生在
         # D 派活给 F 的那一刻（`dispatch_fit` 轴），别的角色不经过它。
@@ -494,20 +494,20 @@ NO_CALL_POINT_TODAY = {
     # 0 处签写口。本判据的 `_called_in_production` 是行级正则扫描，认不出反射形态
     # ⇒ 按它的口径这两条"生产面 0 处"；实际消费点写进登记项里，不是"没人用"。
     "actor_label": "只读身份值（这一签该由哪位收方秘书落，`secretary:F` / `secretary:B`）。"
-                   "调用点：`agent_v/core.py::_issue_and_land_unregistered` 经 "
+                   "调用点：`agent_v/core.py::AgentV._issue_and_land_unregistered` 经 "
                    "`getattr(sec, 'actor_label')` 反射读取（V 侧不得直接 import 写口，"
                    "`agent_v/**` 0 处签写口）—— 判据的行级扫描认不出反射调用，故登记在此",
     "land_unregistered_sign": "未在册 V 签的落点（手稿块 + 台账位；台账位这一路不翻）。"
-                              "调用点：`agent_v/core.py::_issue_and_land_unregistered` 经 "
+                              "调用点：`agent_v/core.py::AgentV._issue_and_land_unregistered` 经 "
                               "`getattr(sec, 'land_unregistered_sign')` 反射调用"
                               "（V 侧不得直接 import 写口，`agent_v/**` 0 处签写口）—— "
                               "判据的行级扫描认不出反射形态，故登记在此",
     # 2026-11-07（p253）：与上面两条同一类 —— 它是作为值递进去的，不是被调用的。
-    # 调用点：`secretary.py::amend_statement_meta` 里 `difficulty_judge=self.judge_abandon_difficulty`
+    # 调用点：`secretary_statement_meta.py::StatementMetaMixin.amend_statement_meta` 里 `difficulty_judge=self.judge_abandon_difficulty`
     # 绑进 `statementabandon.check_abandon_reason`（判据里没有 `symbol(` 那种形态，行级扫描认不出
     # 「方法被当参数传」这一档）。豁免里点名的那一问（这是不是真困难 / salvaged 是不是从原证明拆的）。
     "judge_abandon_difficulty": "difficulty 档放弃命题的秘书语义判定；调用点："
-                                "`secretary.py::amend_statement_meta` 以 "
+                                "`secretary_statement_meta.py::StatementMetaMixin.amend_statement_meta` 以 "
                                 "`difficulty_judge=self.judge_abandon_difficulty` 绑进 "
                                 "`statementabandon.check_abandon_reason` —— 判据的行级扫描只认 "
                                 "`symbol(` / `.symbol(` 两种调用形态，认不出「方法被当参数传」，故登记在此",

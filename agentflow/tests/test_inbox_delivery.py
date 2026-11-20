@@ -69,20 +69,25 @@ def test_a_message_to_a_role_without_a_reader_says_so(tmp_path: pathlib.Path):
     got_d = loop._do_message({"to": "D", "subject": "s", "body": "b"})
     assert got_d["receipt"] == "queued" and got_d["ok"] is True, got_d
     # 公聊那一档与名册无关：没有台账号 ⇒ 受控拒绝 `no_task_id`（在另一条裸 loop 上量，
-    # 与改前逐字相同）。S6-a（业主 T20/T21 附二 乙）：公聊的可见面 = 发信人的直接子代理。
+    # 与改前逐字相同）。2026-11-20（BCRETIRE）：代理的写入口不再收 `to=ALL`
+    # （`broadcast_retired`），这条老判据改从剩下的老管道（`_message_legacy`）量。
     bare = AgentLoop(role="M", session_root=ws, registry=None, seam=None,
                      conductor=cond, store=st, sid="rcpt", auto_secretary=False)
-    got_pub = bare._do_message({"to": ALL, "subject": "s", "body": "b"})
+    got_pub = bare._message_legacy({"subject": "s", "body": "b"}, ALL, "")
     assert got_pub["ok"] is False and got_pub["refused"] == "no_task_id", got_pub
     assert "可见面" in got_pub["error"], got_pub
+    shaped = bare._do_message({"to": ALL, "subject": "s", "body": "b"})
+    assert shaped["ok"] is False and shaped["refused"] == "broadcast_retired", shaped
 
 
 def test_an_invisible_wiring_table_never_becomes_an_optimistic_receipt(tmp_path: pathlib.Path):
     """负控（三态）：看不见接线表 ⇒ `unknown`，不许按乐观猜成 `queued`。
 
     名册不可用那一档（没有秘书 / 没有台账号）的私聊已经改成受控拒绝（fail-closed），
-    所以"看不见接线表"这一条读数从公共频道那一档量：给 `#public` 发一条，而看不见我名下
-    有多少直接子代理 ⇒ 回执 `unknown`。判据本体没换（`_receipt_for` 的三态），只换了入口。
+    所以"看不见接线表"这一条读数从公共频道那一格量：看不见我名下有多少直接子代理
+    ⇒ 回执 `unknown`。判据本体没换（`_receipt_for` 的三态），只换了入口。
+    2026-11-20（BCRETIRE）：`to=ALL` 的代理写入口已受控拒绝（`broadcast_retired`），
+    这一格改从剩下的老管道（`_message_legacy`）量；形状那一档另有一条"一律拒"的断言。
     """
     from agentflow.agent_loop import AgentLoop, ALL
 
@@ -92,7 +97,9 @@ def test_an_invisible_wiring_table_never_becomes_an_optimistic_receipt(tmp_path:
                      conductor=None, store=st, sid="rcpt2", auto_secretary=False)
     # 台账号只需要"有"：这一条量的是回执，不是名册（名册那一档另有判据）。
     loop.my_task_id = "t-invisible"
-    got = loop._do_message({"to": ALL, "subject": "s", "body": "b"})
+    shaped = loop._do_message({"to": ALL, "subject": "s", "body": "b"})
+    assert shaped["ok"] is False and shaped["refused"] == "broadcast_retired", shaped
+    got = loop._message_legacy({"subject": "s", "body": "b"}, ALL, "")
     assert got["receipt"] == "unknown", got
     assert "不许折成" in got["note"], got
 

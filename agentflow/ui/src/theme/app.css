@@ -636,6 +636,27 @@ h3 {
   margin: var(--sp-2) 0;
 }
 
+/* 命题台账（2026-11-20 LEDGERUI）：判读格优先之后列仍然不少，窄屏要能横向滚 ——
+   不许把最右那几列裁掉，那等于"看不见的判读格不算数"（与 `.err-scroll` 同一条理由）。 */
+.ledger-scroll {
+  overflow-x: auto;
+  margin: var(--sp-2) 0;
+}
+
+/* 列多的时候别把每一列压成两个字：给表一个下限宽度，剩下的交给上面那条横向滚。
+   下限按现盘 15 列（判读格 + 五元位 + 正文）的可读宽度取，不是"撑满屏幕"。 */
+.ledger-scroll table.grid {
+  min-width: 1080px;
+}
+
+/* 命题号下面那一段「详情」：provenance（谁写的 / 台账编号 / 收录时间 / 出处）挂在这里，
+   不占主表列（业主 2026-11-20：「为什么还要展示这东西是 B 秘书写的」）。 */
+.ledger-detail {
+  margin-top: var(--sp-1);
+  font-size: var(--fs-1);
+  color: var(--dsw-alias-label-tertiary);
+}
+
 /* 选择器一律带 `table.` 前缀：靠后的同分规则才压得住上面那条 `table.grid`（字号 13px、
  * 左对齐、7px 内边距、width 100%）。不带前缀的话，`.err-matrix th`（0,1,1）输给
  * `table.grid th`（0,1,2），于是数据右对齐、内边距、宽度全都不生效 —— 视觉上表头会

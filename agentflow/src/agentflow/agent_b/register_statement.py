@@ -3968,6 +3968,25 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             # 活着，而台账上那一行永远只有 conjecture。等级由五元位现算
             # （numeric=verified ⇒ strong_conjecture）。
             kind_now = "conjecture"
+        # ---- 命题的 kind 在这里判一次（唯一判据：`evidencebits.kind_at_registration`）----
+        #
+        # 为什么必须在写库之前判、而且只判一处：改前这一格是"调用方写什么就落什么"。
+        # 真机 lp-ball-13 的 6 行 `origin=external_lit`（Meyer–Pajor / Ball / Grząślewicz /
+        # Aliev / Oleszkiewicz / König）逐字都是 `kind="conjecture"` —— B 交来的那个词
+        # 被原样落进台账，于是报告把文献定理读成"我们自己的、还没证的猜想"。
+        # 判据本体在 `evidencebits.kind_at_registration`（按 origin + 正文形态判，
+        # 不按词表打分）：文献侧引来的命题落 `theorem`、定义/术语落原档、只有
+        # `own_result` 才可能是 `conjecture`。这里一个字都不另写一份。
+        #
+        # 位置：`origin` 已定稿（上面那两档受控拒）、普通数值档的改写也已经发生
+        # （它是 `own_result`，这一格原样放行），而概念 / 自产两处的判定都还没开始 ——
+        # 它们读到的必须是判完之后的那一个 `kind_now`。
+        kind_reading = _EB.kind_at_registration(
+            origin=str(origin), kind=kind_now,
+            # 正文形态：这一行有没有一段从文献摘下来的命题正文（逐字摘录 / 回验过的引文）。
+            cited_body=(bool(str(proof_text or "").strip())
+                        or quote_verified is True))
+        kind_now = str(kind_reading.get("kind") or kind_now)
         # ---- 概念行的两处口径（写入侧） --------------------
         #
         # 概念行的 `origin` 若一律写 `own_result`，文献里来的术语就被记成了"我们自己的
@@ -5072,8 +5091,12 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             #   - 册上已经有同一条命题（先立成猜想、现在来声明定理级）⇒ 这正是业主
             #     B-3 点名的"从猜想升成 theorem/lemma 的那一步" ⇒ `self_authored_needs_v`：
             #     此刻缺的不是"换个 kind"，是 V 的那一签。
-            _b2_hits = (str(origin) == "own_result" and not lit_id
-                        and quote_verified is not True
+            # 判据本体只有一处：`evidencebits.b2_scope_reading`（读侧
+            # `closing.type_ahead_of_grade_rows` 调的是同一个函数）。这里只加
+            # `kind` 那一件 —— `conjecture` 与 `concept` 本来就是这一档的合法起点。
+            _b2_hits = (bool(_EB.b2_scope_reading(
+                            origin=str(origin), source_lit_id=lit_id,
+                            quote_verified=quote_verified).get("in_scope"))
                         and kind_now not in CONJECTURE_START_KINDS)
             if _b2_hits and not bool((self_authored.get("reading") or {}).get("in_ledger")):
                 # ---- 责任路由 ----
@@ -5226,7 +5249,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         #
         # 判据三件一齐成立才算这一档：`origin="own_result"`（是我们自己的）+ 没有
         # `source_lit_id`（没有外部出处）+ `quote_verified` 不是 True（没有一条回验
-        # 通过的引文）。这时它凭什么一进门就叫 theorem / lemma / proposition？等级是
+        # 通过的引文）。三件住在唯一一处 `evidencebits.b2_scope_reading`，本文件与
+        # 读侧 `closing.type_ahead_of_grade_rows` 都调它（不再各写一遍）。这时它凭什么
+        # 一进门就叫 theorem / lemma / proposition？等级是
         # 五元位现算的（`evidencebits`），但 `kind` 是声明：一条还没被任何证据撑起来的
         # 声明按强档登记，下游（G 写正文、H 审校、收工门）读到的就是一句"这是定理"，
         # 而没有任何一格会说它的门第先于证据。
@@ -5238,8 +5263,13 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         # `concept` 在这一档之外：概念行不参与等级链（见 `evidencebits.derive_grade` 的
         # 短路那一支），它没有"强于猜想"这回事。V 已经签住的那些行也让路（共存口径见
         # 上面 B-3 那一闸的注释：那一签本身就是"它先立过猜想、走过复核"的证据）。
-        if (str(origin) == "own_result" and not lit_id
-                and quote_verified is not True
+        # 判据本体只有一处：`evidencebits.b2_scope_reading`（读侧
+        # `closing.type_ahead_of_grade_rows` 与上面 `_b2_hits` 那一处调的都是它）。
+        # 这里另外两件不属于 B-2 的射程，是写侧自己的让路条件（kind 起点 / 穷举签名 /
+        # 已有 V 签），所以留在这一处。
+        if (bool(_EB.b2_scope_reading(
+                    origin=str(origin), source_lit_id=lit_id,
+                    quote_verified=quote_verified).get("in_scope"))
                 and kind_now not in CONJECTURE_START_KINDS
                 # 2026-10-23：穷举证明的那一档让路 —— 它一进门就能叫定理，凭的是 E 的签名
                 # 与那份程序（业主：「纯数值实验直接把整个命题证掉了，那也能拿 proof 标识」），
@@ -5564,6 +5594,22 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                            "`Secretary.record_statement`。不许退回'B 自己写'那条后备路）"
                            + (f"；{self.secretary_problem}" if self.secretary_problem else ""),
                            manuscript_landed=_manuscript_landed)
+        # ---- 等级在登记这一刻算一次（唯一判据：`evidencebits.grade_at_registration`）----
+        #
+        # 判据本体在 `evidencebits`（`derive_grade` 现算 + 三态），这里只做一件事：
+        # 把它的结果写进这一行要落的那份五元位（`bits.grade` 是行上的等级载体 ——
+        # 顶层没有 `grade` 列，`schema.Statement` 也不打算有）。改写前这一格从不在这里
+        # 重算：等级是 `bits_of` 那一刻按当时的 `kind` 算的，而 `kind` 在下面几处还会
+        # 被动过（普通数值档 / 本节上面的判据），两者一旦分家，"写进去的等级"与
+        # "按现行 kind 算出来的等级"就是两个值，而没有任何东西会报。
+        #
+        # 算不出来（`checked=False`）时不动 `bits`：一条写不出来的五元位在
+        # `bits_shape_problems` 那一关会整笔拒收（`bits_compute_failed`），比在这里
+        # 塞一个 `unjudged` 进盘上再让校验端拒更早、更准。第三态由回执那一格承担
+        # （`_with_kind_grade_reading` 把同一个判据的读数放在 `grade` / `grade_why`）。
+        _grade_at_write = _EB.grade_at_registration(bits, kind=str(kind_now or ""))
+        if _grade_at_write.get("checked"):
+            bits["grade"] = str(_grade_at_write.get("grade") or "")
         payload = {
             "origin": origin, "kind": kind_now, "label": str(label or ""),
             # 「自己定义的新概念」这一声明要透传给秘书：秘书那一层按同一个
@@ -6719,11 +6765,13 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             # `ingest_manuscript(mode="register")` —— 提取、族表、逐格回执、两条不变量
             # 与两个新动作走同一份实现；`pointer` 读数由 ingest 原样带回（既有判据与
             # D 的直调都还读它）。
-            return self._note_conjecture_landing(
-                self.ingest_manuscript(
-                    manuscript=rel, mode="register", cells=(), conflict="refuse",
-                    reason="按手稿路径收录（D 只递指针）", provenance=line_range),
-                statement_full=statement_full, rel=rel)
+            return self._with_kind_grade_reading(
+                self._note_conjecture_landing(
+                    self.ingest_manuscript(
+                        manuscript=rel, mode="register", cells=(), conflict="refuse",
+                        reason="按手稿路径收录（D 只递指针）", provenance=line_range),
+                    statement_full=statement_full, rel=rel),
+                origin=str(origin or ""), kind=str(kind or ""))
         #: 判/落拆段的回传槽（NT2）：`_register_statement_impl` 在写台账之前把判出来的
         #: 读数填进来；这里收尾时落 `unrecorded` 痕迹并把 T0 读数放回执（给模型看）。
         _nt: dict = {}
@@ -6737,18 +6785,69 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             quote_mode=quote_mode, quote_span=quote_span,
             quote_call_sha256=quote_call_sha256, derived_from=derived_from,
             doc_id=doc_id, line_range=line_range, nontriviality=_nt)
-        return self._settle_registration_duty(
-            self._finish_filing_nontriviality(
-                self._note_conjecture_landing(
-                    self._mark_b_register(
-                        self._apply_declared_manuscript_kind(
-                            got, statement_full=statement_full,
-                            origin=str(origin or "external_lit"),
-                            kind=str(kind or "theorem"), proof_manuscript=proof_manuscript),
-                        proof_manuscript),
-                    statement_full=statement_full, rel=str(proof_manuscript or "")),
-                _nt),
-            rel=str(proof_manuscript or ""))
+        return self._with_kind_grade_reading(
+            self._settle_registration_duty(
+                self._finish_filing_nontriviality(
+                    self._note_conjecture_landing(
+                        self._mark_b_register(
+                            self._apply_declared_manuscript_kind(
+                                got, statement_full=statement_full,
+                                origin=str(origin or "external_lit"),
+                                kind=str(kind or "theorem"),
+                                proof_manuscript=proof_manuscript),
+                            proof_manuscript),
+                        statement_full=statement_full, rel=str(proof_manuscript or "")),
+                    _nt),
+                rel=str(proof_manuscript or "")),
+            origin=str(origin or ""), kind=str(kind or ""))
+
+    def _with_kind_grade_reading(self, out: dict, *, origin: str,
+                                 kind: str) -> dict:
+        """登记回执上补两格读数：这一笔的 `kind` 判据做了什么、等级落成什么。
+
+        ## 为什么读数要在回执上（而不是只活在行里）
+
+        改前这两件事在回执上都没有：`kind` 只是"调用方写什么就落什么"（于是 13 行
+        lp-ball-13 的文献定理全落成 `conjecture`，而回执上一格读数都不提这件事），
+        等级则从来没在登记那一笔出现过。回执是"登记那一刻"的凭证 ——
+        `kind_judgement.changed=True` 说明判据改写了调用方写的那个词（不许静默），
+        `grade` / `grade_why` 说明这一笔落成的等级（`unjudged` + `why` 是第三态）。
+
+        ## 判据只有一处
+
+        `kind` 由 `evidencebits.kind_at_registration` 判、等级由
+        `evidencebits.grade_at_registration` 算（两者的唯一实现都在 `evidencebits`）；
+        这一格只把结果搬进回执，不另算一份。判据的量在写侧（`_register_statement_impl`
+        的那一格），这里读的是行上那一份 —— 于是"判的"与"落下去的"分家会在
+        `kind_judgement.row_kind` 与 `grade_reading.stored_grade` 两处现形。
+
+        `out` 不是 dict（或这一笔整笔被拒）⇒ 原样返回：受控拒没有行可读，往拒信上
+        补读数只会让拒信的键集合变成第二个口径。
+        """
+        if not isinstance(out, dict) or out.get("ok") is False:
+            return out
+        row = out.get("row") if isinstance(out.get("row"), dict) else {}
+        row_kind = str(row.get("kind") or "")
+        origin_now = str(origin or row.get("origin") or "")
+        reading = _EB.kind_at_registration(
+            origin=origin_now, kind=kind,
+            cited_body=(bool(str(row.get("proof_text") or "").strip())
+                        or row.get("quote_verified") is True))
+        out["kind_judgement"] = {
+            "checked": bool(reading.get("checked")),
+            "kind": str(reading.get("kind") or ""),
+            "declared": str(reading.get("declared") or ""),
+            "changed": bool(reading.get("changed")),
+            "row_kind": row_kind,
+            "basis": str(reading.get("basis") or ""),
+            "why": str(reading.get("why") or ""),
+        }
+        grade = _EB.grade_at_registration(
+            dict(row.get("bits") or {}), kind=(row_kind or str(reading.get("kind") or "")))
+        out["grade"] = str(grade.get("grade") or "")
+        out["grade_why"] = str(grade.get("why") or "")
+        out["grade_reading"] = dict(grade)
+        return out
 
     def _note_conjecture_landing(self, out: dict, *, statement_full: str = "",
                                  rel: str = "") -> dict:

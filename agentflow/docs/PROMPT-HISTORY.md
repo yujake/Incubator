@@ -2904,3 +2904,104 @@
 #:   amendment（`analysis.register_report` 的 kind enum 追加 `proof_chain` —— 那是 C5
 #:   "proof_chain 分析报告永不登记"的修法，词表在 `schema.REPORT_KINDS`）；
 #:   `ROLE-GUIDE` / `SYSTEM-COMPONENTS` 重生成；warm 两档重跑（真调上游，cap 0.10）。
+#: p301 → p302（2026-11-20，BCRETIRE：广播通道退场 —— 只退通道面，读侧兼容一字节不动）：
+#:   业主口径：「确认没用的东西就删，不要保留」+「收件人必须是实例（按角色桶归属已废）」。
+#:   工具面 `conductor.broadcast` 2026-11-16 已退场；本笔把通道面一起退：
+#:   ① `message` / `handoff` / 收工 `notify` 的收件人选项去掉 `ALL`（`LOOP_PROTOCOL` 的形状
+#:      3 / 4 / 7 与规则那一条、`HANDOFF_PROTOCOL`、收工交接须知），改写成"具体实例
+#:      （名册名 / 绝对编号）或主控 M 的本号"，并写明「广播已退场：以前那种 to=ALL 现在会被
+#:      受控拒绝 `broadcast_retired`，改点人」；
+#:   ② `FACULTIES` 与官能表（「能讨论」「能互动」「耳朵」）不再把"公共频道"写成可用的沟通
+#:      手段（改成私聊 / 交接手稿 / 叫停由框架自己发）；
+#:   ③ `agent_loop.JSON_TAIL` 的骨架占位符从 `<伙伴或 ALL>` / `<伙伴/M/ALL>` 换成
+#:      `<名册名或绝对编号，或 M 的本号>`，骨架首行写入退场提示。
+#:   变化格：十一格全换（`LOOP_PROTOCOL` 是十一个角色共用段）。逐格旧值 → 新值：
+#:     A 6963db9c→574fa76c / B 7b2cbd80→19ca534a / C 8714395d→192fe32f /
+#:     D b433b897→d4b85e39 / E 94e6d38d→f94b0d1b / F fba23f8a→8fe2f678 /
+#:     G 6f502f63→93d4dd6d / H 91a7b32b→51314529 / L 94288b2b→16b70ad0 /
+#:     M dd78c8d7→0b6e13f7 / V d931f421→e91ae893。
+#:   十一格是 `temp/bcretire/recompute_digests.py`（导入 `tests/test_agent_prompts.py` 的
+#:   `_surface_digest`，先 import `tests/conftest.py` 钉住 Lean 开档 / 设置文件 / 机器事实）
+#:   现算，不是手抄；changed = ['A','B','C','D','E','F','G','H','L','M','V']（十一格全变）。
+#:   连带：`_FROZEN_PROMPT_DIGESTS` 十一格 + `_FROZEN_PROMPT_VERSION`（p302）+
+#:   `_VOLATILE_FACT_SETS` 末尾追加一格（facts 键集仍 15 格，count / keys_sha256 与 p301
+#:   同值 —— 本笔只换段文本，没有哪一格事实换过落点）；两份 golden 按现值重冻；
+#:   `ROLE-GUIDE` / `SYSTEM-COMPONENTS` 重生成；warm 两档重跑（真调上游，cap 0.10）。
+#: p302 → p303（2026-11-20，ALITER：A 的文献流水线改成无条件的下一步）：
+#:   业主口径（逐字）：「A拿好文献，只有接着派B才能转化成资产。这在A的协作里应该有写」
+#:   改前（`specs/a.py`）：boundary[0]「检索完请 B 整理：抽概念、建关系是他的活。」；
+#:   policy「…取回的这批如果**要被引用成断言**（报告里「这条结论凭什么」要追到出处），
+#:   **派 B 整理**：概念行与关系行…」⇒ 条件句把派 B 变成"看情况"：真机 lp-ball-13 的
+#:   14 篇 literature 全 admit、B 0 趟（lp-ball-11 同一形态：60 条 pending 收工）。
+#:   本笔：① boundary[0] 改成无条件的下一步（收进 `literature`（`admitted > 0`）之后，
+#:   下一步就是派 B 的 `run_once` 整理；不派 B 等于这批文献没转化成资产）；② policy 的
+#:   引用闸保留「引用要追出处」那半句，但写明它不是派 B 的前提；③ deliverable 把
+#:   「这批 literature 是否已派 B 收编」写进交付物；④ `search_literature` 的 summary 补
+#:   「收进 `literature` 的那批接着派 B 的 `run_once` 整理」。
+#:   变化格 = A / D / F / H / M（A 的 boundary 第一条被伙伴表逐字引用 ⇒ D/F/H/M 各换一次）。
+#:   同一棵树上并行路（ALITCONTENT）在 A 的 boundary 末尾加了一条第 7 项「没有正文就不许判收…」
+#:   ⇒ A 再换一次、D/F/H/M 伙伴表里的「（它的边界共 N 条）」6→7 各换一次；那条本路不认领，
+#:   但十一格是一份全表 ⇒ 冻结时按现算值一并落（与 p300 对 p299 / p301 对 p300 同一口径）。
+#:   B / C / E / G / L / V 逐字相同（版本行已归一）。
+#:   逐格旧值 → 新值：A 574fa76c→534a90a2 / D d4b85e39→7438446d / F 8fe2f678→ec69ae9a /
+#:   H 51314529→c1abed29 / M 0b6e13f7→417805a4。
+#:   十一格是 `temp/aliter/recompute_digests.py`（导入 `tests/test_agent_prompts.py` 的
+#:   `_surface_digest`，先 import `tests/conftest.py` 钉住 Lean 开档 / 设置文件 / 机器事实）
+#:   现算，不是手抄；changed = ['A','D','F','H','M']。
+#:   连带：`_FROZEN_PROMPT_DIGESTS` 五格 + `_FROZEN_PROMPT_VERSION`（p303）+
+#:   `_VOLATILE_FACT_SETS` 末尾追加一格（facts 键集仍 15 格，count / keys_sha256 与 p302
+#:   同值 —— 本笔只换段文本，没有哪一格事实换过落点）；两份 golden 按现值重冻；
+#:   `ROLE-GUIDE` / `SYSTEM-COMPONENTS` 重生成；读图行数；warm 两档重跑（真调上游，
+#:   cap 0.10）。判据：`tests/test_a_retrieval_hands_off_to_b.py`（渲染产物断言 + 反真空 +
+#:   引用闸正控）。`specs/a.py` 在 FC-27 auth-audit ⇒ `noai_gate --paths … --baseline`
+#:   已刷新（`reviewers=[]`，待人类走查）。
+#: p303 → p304（2026-11-20，BDUTY：B 的职责面重写成「登记快录 ＋ 二阶段逐个优化」，
+#:   并把 M 的派活时机接上）：
+#:   业主口径（逐字）：「B登记命题是快的（除非自己分析引文落稿，其它都是几乎自动录入 E,F 侧
+#:   成果），它的重要职责就是二阶段」。真源 `draft/179-证明优化两阶段录入口径（2026-11-02）.md`：
+#:   第一阶段 = 机械录入（F 的证明原文 ＋ F 的 V 签）；第二阶段 = 逐个优化：洗稿 → 重拿 V 签
+#:   → 精准替换（旧正文进 `proof_history`）→ 置逐份 `optimized=true`。业主 2026-11-02 同文：
+#:   「总之都要洗一遍。洗过的肯定能保证 V 签。所以二阶段只用看是否优化过」⇒ 第二阶段**只看
+#:   这一份优化过没有**（逐份 `optimized` 那格的三态）、**不再判签**；优化的对象是**证明正文**，
+#:   不是命题措辞（`draft/191` §5 记的是同一件事：那一版"逐条润色表述/统一术语"是错方向）。
+#:   现场（改前，真机 lp-ball-13）：13 条命题（7 概念 ＋ 6 猜想）的
+#:   `bits.evidence.optimized_by_proof` 里一条 true 都没有（6 条 `{"1": false}`、7 条缺格），
+#:   `tasks` 里 B 只跑过 1 趟（`t-000016`，done）—— 全文没有任何一处写「什么时候做二阶段」。
+#:   改前 → 改后（逐处）：
+#:   ① `specs/b.py` 的 `SPEC.brief.duty`：`文献整理：把新到的文献变成概念行与关系行，每条关系
+#:     都带可回验的引文。` → `文献整理：第一阶段是快录 —— E/F 侧交来的成果几乎自动录入（机械
+#:     录入：证明原文 ＋ 那一份已有的 V 签；只有「自己分析引文落稿」那一档要花力气）；你的主职
+#:     是第二阶段（逐个优化）—— 登记完一批，紧接着把这一批的证明稿逐个洗、重拿 V 签、精准替换。`
+#:     （职责那一格渲染成提示词第一行「你是 B 号角色，职责是：…」⇒ 二阶段是**职责档**，
+#:     不是一句时机）。
+#:   ② 同文件 boundary 补三条：二阶段的对象是证明正文不是命题措辞（洗稿 → 重签 → 精准替换 →
+#:     逐份 `optimized_by_proof` 记 true；「表述精炼 / 统一术语 / 与相邻命题去重」不是这份活；
+#:     入口看逐份 `optimized` 三态、不是再判一遍签，但替换那一刻仍要签盖住这一版）/
+#:     已拿签的稿只读（先 `own.open_polish_copy` 开副本，没盖上这一版的签不许替换）/
+#:     登记完一批 ⇒ 紧接着做这一批的二阶段（回执点名洗了几份、还剩几份）。
+#:   ③ 同文件 deliverable 从"只有登记面"改成两截（① 登记面・快录 ② 优化面・逐个优化）；
+#:     stance 补一条（「这一岗的价值在第二遍」＋「这一批洗完了吗」）。
+#:   ④ `specs/b_ingest_policy.py` 补两条：机械录入是快录、它交回之后紧接着二阶段（第二阶段只看
+#:     逐份 `optimized_by_proof[proof_no]` 的三态，true 不再动、false / not_recorded 都要洗一遍；
+#:     洗不洗不由"有没有签"决定，但打 true 那一刻要 `optimized_signature`）；一批录完的回执要点名
+#:     二阶段欠账。
+#:   ⑤ `specs/b_sign_policy.py` 补一条：第二阶段三步 —— 洗稿（在 `open_polish_copy` 的副本上）→
+#:     重拿 V 签 → `own.ingest_manuscript`（`conflict="overwrite"`）精准替换（旧正文进
+#:     `proof_history`、逐份 `optimized_by_proof` 记 true）；没签替换被拒（`no_sign` /
+#:     `sha_mismatch`），先签后换。
+#:   ⑥ `specs/m.py` 补一条派活时机：`B 交回机械录入的回执 ⇒ 下一步就是派它做这一批的第二阶段
+#:     （逐个优化），不要留到收工前`；入口只看逐份 `optimized`
+#:     （`readings.statements_unoptimized.rows[*].optimized`），不要拿"有没有签"当洗不洗的前提。
+#:   ⑦ `agent_skills.py` 的 B 手册：新增一条 `优化-登记完一批就逐个洗`（索引行进提示词，正文落
+#:     `skills/B/…`），并在 `登记-三件式与证据三态` 开头点明它是第一阶段、登记完一批紧接着做二阶段。
+#:   变化格 = B / M。A / D / E 的现值差异来自并行路的未提交改动（A 的 boundary 被伙伴表逐字
+#:   引用 ⇒ D / E 跟着换），本路不认领，冻结时按现算值一并落（与 p300 / p301 同一口径）。
+#:   连带：`_FROZEN_PROMPT_DIGESTS` 五格（A / B / D / E / M）+ `_FROZEN_PROMPT_VERSION`（p304）+
+#:   `_VOLATILE_FACT_SETS` 末尾追加一格（facts 键集仍 15 格，count / keys_sha256 与 p303 同值 ——
+#:   本笔只换段文本，没有哪一格事实换过落点）；两份 golden 按现值重冻（agent 面 11 条版本行 +
+#:   B 那一格 + A 的 `search_literature` summary —— 最后一条是并行路的未提交改动，本路不认领；
+#:   tool 面 0 行差异）；`ROLE-GUIDE` 重生成（`SYSTEM-COMPONENTS` 一致）；读图行数；
+#:   warm 两档重跑（真调上游，cap 0.10）。判据：`tests/test_b_second_stage_is_a_duty.py`
+#:   （a / a2 / a3 渲染产物断言 + b 派活时机 + c `optimized_signature` 语义链 + d 反真空四处）。
+#:   `specs/b.py` / `specs/b_ingest_policy.py` / `specs/b_sign_policy.py` / `specs/m.py` 都在
+#:   FC-27 auth-audit ⇒ `noai_gate --paths … --baseline` 已刷新（`reviewers=[]`，待人类走查）。

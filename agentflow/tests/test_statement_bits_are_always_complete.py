@@ -14,7 +14,7 @@
 
 | 位置 | 改前 | 症状 |
 |---|---|---|
-| `secretary._statement_from`（`bits=dict(body.get("bits") or {})`） | 调用方没交 `bits` ⇒ 落盘 `{}` | B 那一次走的是 `table.create(table="statements")`（`row` 里没有 `bits`），被路由到秘书正路 ⇒ 路由对了、内容少了一格 |
+| `Secretary._statement_from`（`bits=dict(body.get("bits") or {})`） | 调用方没交 `bits` ⇒ 落盘 `{}` | B 那一次走的是 `table.create(table="statements")`（`row` 里没有 `bits`），被路由到秘书正路 ⇒ 路由对了、内容少了一格 |
 | `evidencebits.bits_shape_problems({})` | 返回 `[]`（空表 = 没有形状问题） | `schema.Statement.validate` 那道闸对"整块没填"没有牙 |
 
 修法两半（「拒或补全」）：`_complete_statement_bits` 把缺的键补出来（没交 bits 就按这一行

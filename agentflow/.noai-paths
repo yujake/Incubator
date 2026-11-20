@@ -122,6 +122,7 @@ pyproject.toml                   [category: release-deploy] `[project]` 与 `[bu
 
 # 这是"认证/授权"在本框架里的平移：角色即权限面。
 # 权限面被悄悄放宽 ⇒ **测试全绿、上线即越权**（FC-27 的原话）。
+src/agentflow/tools/attack_tools.py  [category: auth-audit] `_guard` 的三档分派（`FRAMEWORK_ERROR_KIND` / `FRAMEWORK_FAULTS` / `validation_failure` / `framework_failure`）与五个写盘 handler 的 `LandingProbe` / `product_problems` 接线：它决定模型被拒时读到什么 —— 拒信把「框架 bug」说成「你交的东西不合格」、或者谎报「没有落库」，模型就照着假读数重试（真机 lp-ball-13：15 次调用 15 次同一个拒信、5 连拒之后 no_progress_limit 收工），而工具层不会报错，它只会「成功」返回一句看起来合理的拒信；同一笔里 `_budget_int` 把预算的裸 TypeError 改成逐字带键名的 ValueError。2026-11-20 业主裁定按 auth-audit 登记（GUARDFIX 路；reviewers 留空，登记不等于批准）
 src/agentflow/tools/table_tools.py  [category: auth-audit] `_rows` 对 `tasks` 表的行级可见面（`_caller_task_id` / `_TASKS_VISIBLE_CHILD_DEPTH` / `_visible_tasks`）：它决定一个角色能读到哪几行任务 —— 非 M 只看到自己、直接下级与自己的父，无台账号时受控拒绝。改它等于改「谁能看见谁的活」，而工具层不会报错，它只会「成功」返回一张看起来合法的表
 src/agentflow/tools/fs_tools.py     [category: auth-audit] 框架产物保留表 `RESERVED_ARTIFACT_TABLE` 与 D 的证明稿内容闸 `D_PROOF_BODY_RULE` 的真身：前者决定 `fs.write` / `fs.edit` 对 `f-proof-*` / `*-proof.md` 一类手稿名的拒写面，后者决定 D 写的证明稿正文能不能落盘 —— 合起来就是「谁能写证明稿」这条权限边界，与 table_tools（同在 auth-audit）同族；工具层不会报错，它只会「成功」写入一份看起来合法的稿子。2026-11-05 业主裁定登记
 src/agentflow/tools/__init__.py  [category: auth-audit] `ROLES` 的引入、`READ_ONLY_ROLES` 与 `SIDE_EFFECTS_WRITE`：只读角色（C/H）的权限面单一来源

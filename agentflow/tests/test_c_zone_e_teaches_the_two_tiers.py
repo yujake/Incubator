@@ -14,7 +14,7 @@
 - 穷举证明：三件套齐 + ②③ 落盘 + 手稿，V 三转「成立」之后由收方秘书落块；
   `evidence_kind` 按通道给 `proof`（不是 `proof_review` —— V 不能逐行走查一份
   程序），真身是 `verifications._grade_recomputed_from_signature` 与
-  `secretary._upgrade_evidence_kind` 两条落点共用的那条判据。
+  `Secretary._upgrade_evidence_kind` 两条落点共用的那条判据。
 
 而 E 的可见面（`specs/e.py` 的 policy 第四段 + `skills/E/穷举证明-拿签与上报收养.md`）
 只教了"穷举 → 派 V → 上报 D"这一条路，三件事一个字都没有：

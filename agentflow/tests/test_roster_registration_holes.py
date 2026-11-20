@@ -319,40 +319,39 @@ def test_a_handoff_to_a_roster_name_does_not_raise_key_error(
 
 # ---------------------------------------------------------------- 判据⑤
 
-def _all_goes_to_the_public_channel(out: dict[str, Any]) -> None:
-    """判据⑤：`to="ALL"` 的内部直调 ⇒ 落公共频道留言（不是逐项开板项的广播）。
+def _the_public_shape_is_refused(out: dict[str, Any]) -> None:
+    """判据⑤：`to="ALL"` 的代理写入口 ⇒ 受控拒 `broadcast_retired`，且拒信给出路。
 
-    只留一种写法之后 `ALL` 只有一种含义：公共频道。它落一条 `agent_message`
-    （`channel=公共频道`、带 `board_kind="bulletin"` 与回执三态），不按名册逐项开板项。
-    回执那一格照旧三态：这一趟名下没有子代理 ⇒ `no_reader`（"展开了"不等于"有人读"）。
+    2026-11-20（BCRETIRE）：广播通道退场 —— 收件人必须是具体实例或主控 M 的本号。
     """
-    assert str(out.get("refused") or "") == "", out
-    assert str(out.get("to") or "") == "ALL", out
-    assert str(out.get("message_sent") or "").startswith("m"), out
-    assert out.get("channel") == "公共频道", out
-    assert out.get("board_kind") == "bulletin", out
-    assert out.get("receipt") == "no_reader" and out.get("ok") is False, out
+    assert out.get("ok") is False, out
+    assert str(out.get("refused") or "") == "broadcast_retired", out
+    assert "改点具体的人" in str(out.get("how_to_fix") or ""), out
 
 
-def test_a_direct_all_call_lands_in_the_public_channel(tmp_path: pathlib.Path):
-    """判据⑤：两支内部直调都走公共频道（那个按名册逐项开板项的旧实现已删，不许补回）。
+def test_a_direct_all_call_is_refused_and_the_legacy_pipe_still_lands(
+        tmp_path: pathlib.Path):
+    """判据⑤：形状入口的 `to="ALL"` 受控拒绝；老管道（`_message_legacy`）仍是改前行为。
 
-    改前这两支各调一次一个全仓没有 `def` 的方法 ⇒ `AttributeError`（"没发出去"看起来像
-    "框架坏了"）。补回那个方法更糟：它会把"按角色名逐项展开"的老语义复活，与
-    `conductor.broadcast` 分叉。所以这里钉两件：① `to="ALL"` 只落公共频道留言；
-    ② 那个方法仍然不存在（负控：改回调用它必抛 `AttributeError`）。
+    改前的形态是两支都落公共频道（"内部直调广播"），而 `_message_my_children`
+    那个方法全仓没有 `def` ⇒ `AttributeError`。补回那个方法更糟：它会把"按角色名逐项
+    展开"的老语义复活，与 `conductor.broadcast` 分叉。所以这里钉三件：
+    ① `_do_message(to="ALL")` 受控拒（零落盘）；② `_message_legacy` 这条老管道照旧
+    落一条公共频道留言（判据直接打它，量的是旧行为逐字不变）；③ 那个方法仍然不存在。
     """
     env = _env(tmp_path)
     loop = env["loop"]
-    _all_goes_to_the_public_channel(loop._do_message({"to": "ALL", "subject": "题", "body": "文"}))
-    _all_goes_to_the_public_channel(
-        loop._message_legacy({"subject": "题", "body": "文"}, "ALL", ""))
-    # 两条都落成了公共频道留言（不是"发出去了"那种没有落点的读数）
+    _the_public_shape_is_refused(loop._do_message({"to": "ALL", "subject": "题", "body": "文"}))
+    legacy = loop._message_legacy({"subject": "题", "body": "文"}, "ALL", "")
+    assert str(legacy.get("refused") or "") == "", legacy
+    assert legacy.get("channel") == "公共频道", legacy
+    assert legacy.get("board_kind") == "bulletin", legacy
+    # 只落了老管道那一条：形状那一档零落盘
     events, _bad = SS.read_session(env["ws"], sid=SID)
     public = [e for e in events if e.get("kind") == "agent_message"]
-    assert len(public) == 2, events
-    assert [e.get("channel") for e in public] == ["public", "public"], public
-    assert [e.get("to") for e in public] == ["ALL", "ALL"], public
+    assert len(public) == 1, events
+    assert public[0].get("channel") == "public", public[0]
+    assert public[0].get("to") == "ALL", public[0]
     # 负控：改回调用不存在的方法 ⇒ AttributeError（这正是改前那一版的形态）
     assert not hasattr(AgentLoop, "_message_my_children")
     with pytest.raises(AttributeError):

@@ -80,13 +80,19 @@ def _stage(reg, n: int = N_TOTAL) -> list[str]:
 
 
 def _judge(reg, store: Store, slots: list[str]) -> None:
-    """判收这一批（`qualified`：不注册、不发号）；回执 + 回读两张前置证据都补齐。"""
+    """判收这一批（`qualified`：不注册、不发号）；回执 + 回读 + 正文三张前置证据都补齐。
+
+    2026-11-20（ALITCONTENT）：没有正文的候选已经不许判收，所以"前置证据"从
+    `metadata_only` + 一条抽取尝试回执换成 `conftest.lit_availability` 造的
+    `readable`（抽读回执 + 版本 + `fs.read` 观察 + 真正文）。这一份测的是批次粒度，
+    不是"哪些档能入"（后者由 `tests/test_a_admit_needs_read_content.py` 守）。
+    """
+    from conftest import lit_availability
+
     assert reg.call("lit.stage_list", request_id=RID).ok
-    for slot in slots:
-        AV.record_read(store.root, RID, str(slot), LR.FULLTEXT_EXTRACT_FAILED,
-                       source="fixture:no-bytes", note="text.extract.no_text_layer")
+    lit_availability(store, RID, slots)
     res = reg.call("lit.admit", request_id=RID, items=[
-        {"slot": s, "availability": AV.METADATA_ONLY} for s in slots])
+        {"slot": s, "availability": AV.READABLE} for s in slots])
     assert res.ok, res.error
 
 

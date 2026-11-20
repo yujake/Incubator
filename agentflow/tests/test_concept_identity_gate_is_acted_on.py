@@ -324,7 +324,7 @@ def test_d2_only_the_two_documented_callers_may_switch_the_judgment_off() -> Non
     """d（机械判据）：两个"关掉处置"的开关各只有一条登记过的来路。
 
     - `transition_sync=True`：只给 `conceptrows.sync_from_legacy`（过渡同步一号一行）；
-    - `d12_pending=True`：只给 `secretary._record_pending_concept`（D12 甲 的唯一入口）。
+    - `d12_pending=True`：只给 `Secretary._record_pending_concept`（D12 甲 的唯一入口）。
 
     这条不是形式主义：`write_concept_row` 的默认值就是强制处置，这两个开关是"照落/只报"
     的两条窄路。若哪一天别的调用点也传它们，概念轴就多出后门 —— 而盘上看起来一切正常。

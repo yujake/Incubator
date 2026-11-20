@@ -15,12 +15,13 @@
   `/api/evidence` 的 `statements[]` 的 `by_role` 逐字等于它、`by_role_source` 是
   `created_by`；
 - 类型：`TaskRow` / `StatementRow` 的声明里有这三格（单一来源 `readers.ts_fields()`）；
-- 页面：Artifacts 的 tasks 表读 `instance` 与 `seen_step`，Evidence 的命题表读
-  `by_role` / `by_role_source`，空值写「—」而不是编一个角色名。
+- 页面：Artifacts 的 tasks 表读 `instance` 与 `seen_step`，Evidence 的命题表把
+  `by_role` / `by_role_source` 放进详情 / tooltip（2026-11-20 业主裁定：provenance
+  不占主表列），空值写「—」而不是编一个角色名。
 
 反真空：把 tasks 行的 `instance` 拿掉（空串）⇒ 页面那一列的渲染分支是「—」，
 不是"角色名顶上去"；把 `created_by` 拿掉 ⇒ `by_role_source` 必须变化（不是永远
-`created_by`）。
+`created_by`）；把 Evidence 的详情读数拿掉 ⇒  authorship 判据必红。
 """
 from __future__ import annotations
 
@@ -35,6 +36,7 @@ REPO = pathlib.Path(__file__).resolve().parents[1]
 UI = REPO / "ui" / "src"
 ARTIFACTS_TSX = UI / "pages" / "Artifacts.tsx"
 EVIDENCE_TSX = UI / "pages" / "Evidence.tsx"
+LEDGER_TS = UI / "statementLedger.ts"
 
 
 def _workspace(tmp_path: pathlib.Path) -> pathlib.Path:
@@ -104,17 +106,28 @@ def _page_problems(source: str, *, which: str) -> list[str]:
             if needle not in code:
                 problems.append(f"Artifacts 的任务表没有 `{needle}`")
     else:
-        for needle in ('key: "by_role"', "by_role_source"):
-            if needle not in code:
-                problems.append(f"Evidence 的命题表没有 `{needle}`")
+        # 2026-11-20（LEDGERUI ③）：provenance 不占主表列 —— 但「谁写的、来源是哪一格」
+        # 仍必须在详情里读得到，所以判据从"有一列"改成"详情函数读了这两格，且主表没有那一列"。
+        if 'key: "by_role"' in code:
+            problems.append("Evidence 的命题表又把 provenance 摆回主表列了（应在详情里）")
+        if "provenanceText(" not in code:
+            problems.append("Evidence 的命题表没有 provenance 的详情读数")
+        detail = LEDGER_TS.read_text(encoding="utf-8")
+        for needle in ("row.by_role", "row.by_role_source"):
+            if needle not in detail:
+                problems.append(f"命题台账的详情没有读 `{needle}`")
     return problems
 
 
 def test_the_pages_show_the_instance_and_the_author() -> None:
-    """页面：两列都在；负控删掉其中一格 ⇒ 判据红。"""
+    """页面：实例列还在；命题表的 provenance 在详情里，并且负控必红。"""
     art = ARTIFACTS_TSX.read_text(encoding="utf-8")
     ev = EVIDENCE_TSX.read_text(encoding="utf-8")
     assert _page_problems(art, which="artifacts") == [], _page_problems(art, which="artifacts")
     assert _page_problems(ev, which="evidence") == [], _page_problems(ev, which="evidence")
     doctored = art.replace('key: "instance"', 'key: "role"', 1)
     assert _page_problems(doctored, which="artifacts"), "删掉实例列之后判据仍然绿"
+    # 反真空：把命题表那一段详情读数拿掉 ⇒  authorship 判据必须报。
+    stripped = ev.replace("provenanceText(", "cell(")
+    assert _page_problems(stripped, which="evidence"), (
+        "拿走 provenance 详情之后， authorship 判据仍然绿")

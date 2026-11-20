@@ -524,7 +524,24 @@ def _require_applicable_query(provider: str, topic: str, description: str) -> Qu
 
 
 class ProviderError(RuntimeError):
-    """provider 层统一异常：调用方只需捕获这一种即可处理全部检索失败。"""
+    """provider 层统一异常：调用方只需捕获这一种即可处理全部检索失败。
+
+    `status` 与 `kind` 是"为什么没查成"的结构化一格，不再是自由文本。
+    为什么必须带上它们：`MultiProvider` 与 A 的串行检索都只拿
+    `provider_error_kind` 给逐源读数分档；异常上不带这两格时，一个"每一路都
+    失败"的聚合异常只能是 `unknown`（真机 lp-ball-13 的 429 就落在这里），
+    于是"限流"这一档在 `sources[]` 上不存在，读账的人只能去读 `error` 的散文。
+    子类（`HttpError`）与聚合点各自把知道的那格填进来，分类口径仍只有一份
+    （`provider_error_kind`）。
+    """
+
+    def __init__(self, message: str, *, status: int | None = None,
+                 kind: str | None = None) -> None:
+        super().__init__(message)
+        #: 上游回的状态码；拿不到就是 None（连接失败、冷却期直接拒问都属于这一档）。
+        self.status = status
+        #: 受控原因档（`PROVIDER_ERROR_KINDS` 之一）；None = 交给状态码或异常类型去分。
+        self.kind = kind
 
 
 # --------------------------------------------------------------------------------------
@@ -967,9 +984,9 @@ def dedup_key_of(candidate: Candidate) -> str:
 class HttpError(ProviderError):
     """HTTP 层失败，携带状态码以便上层区分"限流"与"没这条记录"。"""
 
-    def __init__(self, message: str, status: int | None = None) -> None:
-        super().__init__(message)
-        self.status = status
+    def __init__(self, message: str, status: int | None = None,
+                 *, kind: str | None = None) -> None:
+        super().__init__(message, status=status, kind=kind)
 
 
 class RateLimiter:
@@ -1099,7 +1116,8 @@ def http_get_json(
                          kind="retry", where="providers.http_get_json",
                          waited_for=str(bucket))
         except urllib.error.URLError as exc:
-            last_error = HttpError(f"network error for {full}: {exc.reason}", None)
+            last_error = HttpError(f"network error for {full}: {exc.reason}", None,
+                                   kind="unreachable")
             if attempt >= retries:
                 raise last_error from exc
             delay = min(2.0**attempt, 20.0) * (0.8 + 0.4 * random.random())
@@ -1110,7 +1128,14 @@ def http_get_json(
                          kind="retry", where="providers.http_get_json",
                          waited_for=str(bucket))
         except (TimeoutError, json.JSONDecodeError, ValueError) as exc:
-            last_error = HttpError(f"bad response for {full}: {exc}", None)
+            # 三件事分开报：超时（等不到）、响应不是 JSON（被限流页/网关页顶替）、
+            # 其它取值错。折成同一个 `unknown` 时，"要不要重试"只能靠猜。
+            bad_kind = (
+                "timeout" if isinstance(exc, TimeoutError)
+                else "parse_failed" if isinstance(exc, json.JSONDecodeError)
+                else None
+            )
+            last_error = HttpError(f"bad response for {full}: {exc}", None, kind=bad_kind)
             # JSON 解析失败通常不是瞬时故障 —— 更可能是被限流页/网关错误页顶替了
             # 正常响应，再重试同一路径大概率还是拿到 HTML 而不是 JSON。所以给
             # 一次重试机会（应对偶发的截断），之后立刻放弃以省配额。
@@ -1300,11 +1325,17 @@ class OpenAlexProvider:
 
         # 缺陷 ⑰：这个源被限流过就只在冷却期内直接拒，不碰网络 ——
         # 让调用方立刻换下一个源，而不是把"已限流"再问一遍。
+        #
+        # 这一支的逐源读数必须落 `rate_limited`：冷却的唯一成因就是上游回过
+        # 限流（429/503），改前这里抛裸 `ProviderError` ⇒ 分类器只能给
+        # `unknown`。真机 lp-ball-13 的 step2/4/44 正好停在这一支（`sources[]`
+        # 上是 `openalex` + `error_kind=unknown`，`error` 正文才写着"正在限流冷却"）。
         _left = _provider_cooling(self.name)
         if _left > 0:
             raise ProviderError(
                 f"{self.name} 正在限流冷却（还要 {_left:.0f} 秒）：这一问不再打它，"
-                "请换一个源（这不是「上游没有这个主题的文献」）"
+                "请换一个源（这不是「上游没有这个主题的文献」）",
+                kind="rate_limited",
             )
         topic = (topic or "").strip()
         description = (description or "").strip()
@@ -1347,6 +1378,11 @@ class OpenAlexProvider:
         judged: list[Candidate] = []
         filtered_out = 0
         channel_errors: dict[str, str] = {}
+        #: 逐路的受控原因档（`provider_error_kind` 的产物）：聚合异常要带出去的
+        #: 就是这一份。只留 `str(exc)` 时，"为什么每一路都没成"只剩散文。
+        channel_error_kinds: dict[str, str] = {}
+        #: 逐路拿得到的状态码；全部一致时聚合成 `ProviderError.status`。
+        channel_error_statuses: list[int] = []
         for plan in plans:
             try:
                 works, plan = self._fetch_with_fallback(plan)
@@ -1355,6 +1391,10 @@ class OpenAlexProvider:
                 # 但"这一路失败了"本身必须留下读数（见循环后面那道全路失败的判据）：
                 # 改前它只留一句 warning，产物上表现为 `no_results`。
                 channel_errors[plan.channel] = str(exc)
+                channel_error_kinds[plan.channel] = provider_error_kind(exc)
+                _status = getattr(exc, "status", None)
+                if isinstance(_status, int) and _status > 0:
+                    channel_error_statuses.append(_status)
                 logger.warning("OpenAlex 查询路失败（sort=%s）：%s", plan.sort or "relevance", exc)
                 continue
             self.last_query_text[plan.channel] = _stringify(plan.template.get("search"))
@@ -1403,10 +1443,16 @@ class OpenAlexProvider:
             )
             # 缺陷 ⑰：记一段冷却 —— 下一个 query 不许立刻再回头试这个源。
             start_provider_cooldown(self.name)
+            # 聚合异常必须把"每一路为什么没成"带出去：调用方只拿得到这一个异常，
+            # 裸 `ProviderError` 会让逐源读数落 `unknown`（改前 429 就是这样被
+            # 记成"出错了但不知道怎么归类"的）。`kind` 按 `_aggregate_error_kind`
+            # 的优先级挑一档，逐路原文仍在下面的消息里逐条可读。
             raise ProviderError(
                 "OpenAlex 每一路都失败（"
                 + "；".join(f"{ch}: {err}" for ch, err in sorted(channel_errors.items()))
-                + "）⇒ 这一次没有查成（不是「没有结果」）"
+                + "）⇒ 这一次没有查成（不是「没有结果」）",
+                status=_single_status(channel_error_statuses),
+                kind=_aggregate_error_kind(channel_error_kinds.values()),
             )
 
         if mode == "broad":
@@ -2193,7 +2239,8 @@ class CrossrefProvider:
         if _left > 0:
             raise ProviderError(
                 f"{self.name} 正在限流冷却（还要 {_left:.0f} 秒）：这一问不再打它，"
-                "请换一个源（这不是「上游没有这个主题的文献」）"
+                "请换一个源（这不是「上游没有这个主题的文献」）",
+                kind="rate_limited",
             )
         topic = (topic or "").strip()
         description = (description or "").strip()
@@ -2375,7 +2422,8 @@ class DoajProvider:
         if _left > 0:
             raise ProviderError(
                 f"{self.name} 正在限流冷却（还要 {_left:.0f} 秒）：这一问不再打它，"
-                "请换一个源（这不是「上游没有这个主题的文献」）"
+                "请换一个源（这不是「上游没有这个主题的文献」）",
+                kind="rate_limited",
             )
         topic = (topic or "").strip()
         description = (description or "").strip()
@@ -2529,7 +2577,8 @@ class EuropePmcProvider:
         if _left > 0:
             raise ProviderError(
                 f"{self.name} 正在限流冷却（还要 {_left:.0f} 秒）：这一问不再打它，"
-                "请换一个源（这不是「上游没有这个主题的文献」）"
+                "请换一个源（这不是「上游没有这个主题的文献」）",
+                kind="rate_limited",
             )
         topic = (topic or "").strip()
         description = (description or "").strip()
@@ -2772,7 +2821,8 @@ class FixtureProvider:
         if _left > 0:
             raise ProviderError(
                 f"{self.name} 正在限流冷却（还要 {_left:.0f} 秒）：这一问不再打它，"
-                "请换一个源（这不是「上游没有这个主题的文献」）"
+                "请换一个源（这不是「上游没有这个主题的文献」）",
+                kind="rate_limited",
             )
         records = self._load()
         want = int(limit) if limit and limit > 0 else _default_limit(mode)
@@ -2930,20 +2980,97 @@ class ProviderStat:
         return f"ProviderStat({self.to_dict()!r})"
 
 
+#: `ProviderStat.error_kind` 的受控词表（`F-6` 那条轴；`D2` 把 403 与连接失败拆开）。
+#:
+#: 取值逐条：
+#: * `rate_limited` —— 429/503，或该源正在限流冷却期（`kind` 直接标这一档）；
+#: * `forbidden` —— 403：这条通道不许我们进（换源，原地重试无益）；
+#: * `auth_failed` —— 401：凭证没带或不对（与 403 的处置相反，所以不合并）；
+#: * `not_found` —— 404：定位不到这条记录；
+#: * `server_error` —— 5xx（503 已归限流那一档，沿用既有口径）；
+#: * `timeout` —— 等不到（连接或读取超时）；
+#: * `unreachable` —— 连接层失败（DNS 解析不了、拒连、链路断）；
+#: * `parse_failed` / `decode_failed` —— 回来的东西不是能用的 JSON / 文本；
+#: * `unknown` —— 出错了但归不了档。它不是"没问题"，也不是"没查成"。
+#:
+#: 另有一个参数化形态 `http_<三位数>`（其余 4xx），码在名字里。
+PROVIDER_ERROR_KINDS = (
+    "rate_limited",
+    "forbidden",
+    "auth_failed",
+    "not_found",
+    "server_error",
+    "timeout",
+    "unreachable",
+    "parse_failed",
+    "decode_failed",
+    "unknown",
+)
+
+#: 多路一起失败时，聚合异常按这个次序取第一个在场的档。
+#:
+#: 为什么限流排第一：它是唯一一个"同样的请求再来一次仍会被挡"的档 ——
+#: 调用方该做的是换源或等冷却，而不是换检索词。把 429 与别的失败混在一起时，
+#: 先把限流读出来；其余各路的原文仍在异常消息与 `last_channel_errors` 里逐条可读。
+_AGGREGATE_KIND_PRIORITY = (
+    "rate_limited", "forbidden", "auth_failed", "timeout", "unreachable",
+    "not_found", "server_error", "parse_failed", "decode_failed",
+)
+
+
+def _aggregate_error_kind(kinds: Iterable[str]) -> str:
+    """多路失败时给聚合异常挑一个受控原因档（挑不着就 `unknown`）。
+
+    为什么不在聚合点各自写一份"谁优先"：优先级是那一格的口径，写两处必然漂。
+    每一路各自的原因档仍留在 `channel_error_kinds` 里，这一格只回答
+    "这一次整体该怎么处置"。
+    """
+    seen = [str(k) for k in kinds if str(k or "").strip()]
+    for kind in _AGGREGATE_KIND_PRIORITY:
+        if kind in seen:
+            return kind
+    return seen[0] if seen else "unknown"
+
+
+def _single_status(statuses: Sequence[int]) -> int | None:
+    """聚合异常的状态码：只有各路一致时才写，混合状态如实给 None。
+
+    混合时给 None 而不是"随便挑一个"：`status` 回答的是"这一次上游回了几号"，
+    两路一个 429 一个 500 时它没有唯一答案；挑一个会让读账的人以为另一路也是
+    那个码。整体归哪一档由 `kind` 回答（它有自己的优先级）。
+    """
+    seen = {int(s) for s in statuses if isinstance(s, int) and s > 0}
+    return next(iter(seen)) if len(seen) == 1 else None
+
+
 def provider_error_kind(exc: BaseException) -> str:
     """把 provider 的异常归一到一个受控的原因档（`F-6`）。
 
-    `HTTPError` 按状态码分档（429 = 限流、401/403 = 鉴权、404 = 越权/找不到），
-    其余按异常类型分档。归一的意义就是条目的判据说的那件事：
-    "按『限流/被墙/解析失败/网络失败』这条轴答得出来"。
+    分档次序（口径只有这一处）：
+
+    1. 异常自己带着受控的 `kind`（`ProviderError.kind`）⇒ 用它。聚合点
+       （OpenAlex 的"每一路都失败"）与 HTTP 层的包装（连接失败/超时/响应坏）
+       拿不到状态码时，只能靠这一格 —— 改前它们什么都没带，429 因此落 `unknown`。
+    2. 否则按 `status` / `code` 分：429 与 503 是限流、403 是被挡、401 是没带
+       凭证、404 是没这条、5xx 是服务端错，其余落 `http_NNN`。
+    3. 再按异常类型：超时、连接失败（`unreachable`）、JSON/解码失败。
+
+    403 与 401 分开的理由：两者的处置相反 —— 403 是"这条通道不许我们进"
+    （换源，重试无益），401 是"凭证没带对"（补凭证）。折进同一个 `auth_failed`
+    时，读账的人分不出该做哪一件。
     """
+    explicit = getattr(exc, "kind", None)
+    if isinstance(explicit, str) and explicit in PROVIDER_ERROR_KINDS:
+        return explicit
     status = getattr(exc, "status", None)
     if status is None:
         status = getattr(exc, "code", None)
     if isinstance(status, int) and status > 0:
         if status == 429 or status == 503:
             return "rate_limited"
-        if status in (401, 403):
+        if status == 403:
+            return "forbidden"
+        if status == 401:
             return "auth_failed"
         if status == 404:
             return "not_found"
@@ -2953,7 +3080,7 @@ def provider_error_kind(exc: BaseException) -> str:
     if isinstance(exc, (TimeoutError, socket.timeout)):
         return "timeout"
     if isinstance(exc, urllib.error.URLError):
-        return "network_error"
+        return "unreachable"
     if isinstance(exc, json.JSONDecodeError):
         return "parse_failed"
     if isinstance(exc, UnicodeDecodeError):

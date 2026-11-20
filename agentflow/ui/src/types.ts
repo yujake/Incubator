@@ -686,6 +686,17 @@ export interface StatementRow {
   optimized_paths: OptimizedPath[];
   grade: string;
   grade_label: string;
+  kind_projected: string;
+  kind_projection_changed: boolean;
+  kind_projection_checked: boolean;
+  kind_projection_basis: string;
+  current_state: string;
+  current_word: string;
+  current_detail: string;
+  manuscript_state: string;
+  manuscript_path: string;
+  vsign_state: string;
+  vsign_detail: string;
   proof_no?: number;
   proof_sha256?: string;
   by_role: string;
@@ -1480,7 +1491,7 @@ export interface ErrorSignalSample {
   detail: string;
 }
 
-/** 出处：errors_readout() 的 data.classes[] —— 按类的一行（四种桶各排各的，不许混排）。 */
+/** 出处：errors_readout() 的 data.classes[] —— 按类的一行（四种桶各排各的，不许混排）。`computed` 只出现在现算预演那一类（`errorstats.PREVIEW_CATEGORIES`）的行上：它的 `count` 不是发生次数，页面与脚本靠这一格把它分开。 */
 export interface ErrorClassRow {
   category: string;
   bucket: string;
@@ -1496,6 +1507,7 @@ export interface ErrorClassRow {
   earlier: number;
   no_ts: number;
   samples: ErrorSignalSample[];
+  computed?: boolean;
 }
 
 /** 出处：errors_readout() 的 data —— 角色 × 类目的计数（只记出现过的格，缺格就是 0）。`total` 是**角色侧**总数；`system_total` 与 `state_readings_total` 各是另一组数，**三组刻意不相加**（三种单位：谁做错了 / 系统哪里坏了 / 现在积着什么）。 */
@@ -1554,6 +1566,7 @@ export interface ProofView {
   paper_theorem_envs: number | null;
   propositions_with_proof: number | null;
   ledger_theorem_kinds: number | null;
+  ledger_theorem_kinds_projected: number | null;
   signed: number | null;
   coverage_note: string;
   review_states: Record<string, number>;
@@ -1687,6 +1700,7 @@ export interface LedgerFacts {
   statement_ledger_rows: number | null;
   ledger_propositions: number | null;
   ledger_theorem_kinds: number | null;
+  ledger_theorem_kinds_projected: number | null;
   mapping_rows: number | null;
   statement_surplus: string[];
   mapping_state: string;

@@ -147,17 +147,13 @@ def test_the_admit_path_goes_through_the_check(store: Store) -> None:
     slots = _seed(store, slots=1)
     # 2026-11-16 裁定 ①②：提交路径还要回读回执与可读性判定。这一条测的是
     # "结算之后真的会核对一次"，所以把另两格按最小合法值满足掉。
-    # 2026-11-16 AR1 又把 `metadata_only` 收紧成"必须有一次读取尝试"：只写
-    # `metadata_only` 不再够，要补一条"抽过、但拿不到可读文本"的 `extract_failed`
-    # 回执（这正是不带全文的仅题录那一档的诚实读法）。
-    LS.note_readback(store, "r-000001", [{"slot": s} for s in slots])
-    from agentflow import litavail as AV
-    from agentflow import litread as LR
+    # 2026-11-20（ALITCONTENT）：没有正文的候选不许判收 ⇒ 用一个完整的 readable
+    # 前置证据（抽读回执 + 版本 + `fs.read` 观察 + 真正文）；由 conftest 的同一个
+    # 夹具造，别在这里另写一份。
+    from conftest import lit_availability
 
-    for s in slots:
-        AV.record_availability(store.root, "r-000001", s, AV.METADATA_ONLY)
-        AV.record_read(store.root, "r-000001", s, LR.FULLTEXT_EXTRACT_FAILED,
-                       note="判据：试过一次抽取，拿不到可读文本")
+    LS.note_readback(store, "r-000001", [{"slot": s} for s in slots])
+    lit_availability(store, "r-000001", slots)
     calls: list[dict[str, Any]] = []
     real = LS.settlement_mismatch
 

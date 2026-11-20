@@ -584,6 +584,16 @@ def _scan_ledger(
     theorem_kinds = {"theorem", "lemma", "proposition", "corollary"}
     thm_rows = [r for r in statements
                 if str((r or {}).get("kind") or "").strip().lower() in theorem_kinds]
+    # 读侧投影（KINDREAD）：原值那一格仍是盘上 `kind`，这个数按登记判据现算有效 kind。
+    from . import evidencebits as EB
+
+    def _effective_kind(row: Any) -> str:
+        try:
+            return str(EB.kind_projection(dict(row or {})).get("kind") or "")
+        except Exception:  # noqa: BLE001 - 投影算不出来退回盘上原值（不许整块没查成）
+            return str((row or {}).get("kind") or "")
+    thm_projected = sum(1 for r in statements
+                        if _effective_kind(r).strip().lower() in theorem_kinds)
     proof_envs = sum(1 for e in _env_events(corpus)
                      if e["name"] == "proof" and e["which"] == "begin")
     facts = {
@@ -592,6 +602,7 @@ def _scan_ledger(
         "statement_ledger_rows": len(statements),
         "ledger_propositions": len(propositions),
         "ledger_theorem_kinds": len(thm_rows),
+        "ledger_theorem_kinds_projected": thm_projected,
         "mapping_rows": int(reading.get("rows") or 0),
         "statement_surplus": list(reading.get("statement_surplus") or []),
         "mapping_state": str(reading.get("state") or ""),

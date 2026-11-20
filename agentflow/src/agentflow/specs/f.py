@@ -278,7 +278,7 @@ SPEC = AgentSpec(
             "（表述不同不等于不同命题）；拆开后每条命题只剩一份证明、一条路径，"
             "多证明机制一次都不会被触发。",
             # 作者只写内容，登记由收方读稿产生；与 V 读你的手稿再签字同一个逻辑。
-            # 手稿是 `agent_f/manuscript.py::proof_manuscript` 写的，那一节由
+            # 手稿是 `agent_f/manuscript.py::_Manuscript.proof_manuscript` 写的，那一节由
             # `render_dependency_section` 按 `steps[].cites` 现算渲染；F 手写
             # `reports/f-proof-*` 会撞 `fs` 保留表（`reserved_framework_artifact`）。
             # 所以这一条只教"你交 cites"：渲染是框架的活，格式仍在 `agentflow.depsection`。

@@ -96,6 +96,26 @@ def _source_failure_reading(errors: Sequence[str], sources: Sequence[dict]) -> s
     return ""
 
 
+def _keeps_failure_history(row: dict) -> bool:
+    """这一行上已有的 `last_error` 是不是失败原文（是 ⇒ 成功路径不许清掉它）。
+
+    判据的真身只有一处：`tools/search_tools.py::_keeps_failure_history`。
+    `search.register` 的 `_link_request` 与本文件的成功路径回答的是同一个问题，
+    不是两个问题 —— FIX429 把"成功登记不擦史"实现在工具层之后，`done=False`
+    的退避行仍会在本文件这一条路上被重新擦成 `None`（r-000004 就是这一形），
+    于是盘上出现"一处保留、一处擦"：两处看起来都合法，而"最近一次失败"被
+    后一条路径抹掉。
+
+    所以这里只做惰取转发，不复制那两行 `outcome`/`done` 判断 —— 复制出去就是
+    第二份规则，必然漂，而漂的表现是静默擦史（不会报错）。惰取而不是模块级
+    导入：与 `core.py::_not_sent_states` 同一条理由（不在导入期去碰工具层，
+    免得凭空多一条导入边）。
+    """
+    from ..tools.search_tools import _keeps_failure_history as shared
+
+    return bool(shared(row))
+
+
 def _wanted_request_ids(request_ids: Sequence[str] | None) -> list[str]:
     """调用方点名的那些委托号（去空、去重、保序）。"""
     out: list[str] = []
@@ -495,8 +515,21 @@ class _RunOnce:
                     # 有命中不等于"每个源都正常"：只要有一个源失败（或这一问没
                     # 发出去），`last_error` 就不许写 null —— 否则"两个源被限流、
                     # 第三个源交回一篇"与"三个源都正常"在盘上同形。
-                    fresh["last_error"] = _source_failure_reading(
-                        search_errors, result.sources) or None
+                    #
+                    # 反过来也成立（FIX429B）：这一轮没有源失败，也不等于"这一问
+                    # 从没失败过"。`last_error` 的语义是"最近一次失败"，一次成功
+                    # 只回答"这一问最终取回了东西"，不替历史作证。所以只有
+                    # 「本轮没有源失败」且「这一行上原有的 `last_error` 不是失败
+                    # 原文」时才许清成 None；否则逐字保留最近一次失败。
+                    # 判据与 `_link_request` 同源（`_keeps_failure_history`），
+                    # 不在这里另写一份：FIX429 修好工具层之后，r-000004 这种
+                    # `done=False` 的退避行仍会在这条路上被擦掉，正是判据分家的
+                    # 后果（两处都"看起来对"）。
+                    this_round = _source_failure_reading(search_errors, result.sources)
+                    if this_round:
+                        fresh["last_error"] = this_round
+                    elif not _keeps_failure_history(fresh):
+                        fresh["last_error"] = None
                 elif search_errors:
                     # DESIGN.md §5.3：搜索失败不等于这条请求结束。
                     # 如果这里就置 done，那么"租约到期重试"和"超过 max_attempts 才放弃"

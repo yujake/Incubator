@@ -216,7 +216,7 @@ HIT_SAMPLE_EXCLUDED: Mapping[str, str] = {
                 "它仍然预热、仍然有 write>0 的落地记录"),
 }
 
-#: 秘书那一档预热的是哪一类判断的提示词（`secretary.JUDGE_KINDS` 之一；
+#: 秘书那一档预热的是哪一类判断的提示词（`secretary_judge.JUDGE_KINDS` 之一；
 #: 稳定头的长度与类别无关，取一个确定性的即可）。
 SECRETARY_KIND = "duplicate_retry"
 

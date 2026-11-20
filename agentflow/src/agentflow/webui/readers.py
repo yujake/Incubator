@@ -1806,7 +1806,226 @@ def _statement_readings(root: Path, rows: list[dict]) -> list[dict[str, Any]]:
             grade = ""
         got["grade"] = grade
         got["grade_label"] = EB.GRADE_LABELS.get(grade, "")
+        # ---- 读侧投影（KINDREAD，2026-11-20）：盘上 kind 与"按登记判据该叫什么"并列 ----
+        # 历史行（写侧判据落地之前入库的文献定理）盘上写着 `conjecture`，物理改写
+        # 等于让"当时交上去的那个名字"消失。所以读模型只现算一个并列值：`kind` 永远是
+        # 盘上原值，`kind_projected` 由 `evidencebits.kind_projection` 给（它调的仍是
+        # 写侧那唯一一处判据 `kind_at_registration`）。判据算不出来时两格都留着原值，
+        # `kind_projection_checked=False` + basis 说明"这一问没判成"（三态，不折平）。
+        try:
+            projection = EB.kind_projection(row)
+        except Exception:  # noqa: BLE001 - 投影算不出来 ⇒ 没判成（不猜一个更强的词）
+            projection = {"checked": False, "kind": str(row.get("kind") or ""),
+                          "changed": False, "basis": "",
+                          "why": "读侧投影没算成（按盘上原值显示）"}
+        got["kind_projected"] = str(projection.get("kind") or "")
+        got["kind_projection_changed"] = bool(projection.get("changed"))
+        got["kind_projection_checked"] = bool(projection.get("checked"))
+        got["kind_projection_basis"] = str(projection.get("basis")
+                                            or projection.get("why") or "")
+        # ---- 现行性（业主 2026-11-20 ④）：active 是补集兜底名，页面不印「活跃」；
+        # 非 active 那一档要带具体原因与所指编号（取代者 / 反例实验 / 放弃理由）。
+        got.update(_currentness_reading(row, bits))
+        # ---- 自产结果才有的两格：有没有稿 / 稿上有无 V 签（文献命题没有自产稿）。
+        # 它们只在 origin=own_result 上行取值，其余行留空串（页面不摆那两列）。
+        got.update(_own_result_readings(root, row))
         out.append(got)
+    return out
+
+
+def _superseded_ref(row: Mapping[str, Any]) -> str:
+    """「被谁取代」那一个编号：行上有 `superseded_by` 就用它，否则读墓碑理由。
+
+    `statements` 没有 `superseded_by` 这一列（那是判词表 ReviewFinding 的字段），
+    台账里被老表墓碑同步过来的行把目标号写在 `quote_reason` 的「已并入 <号>」里
+    （`conceptrows._apply_merge_tombstone` 的唯一写法）。两处都读不出就返回空串，
+    调用方写「盘上没记被谁取代」，不编一个号。
+    """
+    direct = str(row.get("superseded_by") or "").strip()
+    if direct:
+        return direct
+    got = _SUPERSEDED_REF.search(str(row.get("quote_reason") or ""))
+    return got.group(1) if got else ""
+
+
+#: 老表墓碑同步留下的那一句：「已并入 000123（同步自老表的 merged_into）」。
+_SUPERSEDED_REF = re.compile(r"已并入\s*([0-9A-Za-z_-]+)")
+
+
+def _refutation_word(bits: Mapping[str, Any] | None) -> str:
+    """错误那一档的现行性词：已证否 + 它能指出的那个凭据（实验号 / 判词 / 证伪签）。
+
+    凭什么读 `bits.voided_by` 而不是另找一处：作废载荷是 `evidencebits.void` 写的
+    唯一落点（证据路三选一），本层只把它翻译成人话，不重判一次。
+    """
+    payload = dict(bits.get("voided_by") or {}) if isinstance(bits, Mapping) else {}
+    kind = str(payload.get("kind") or "")
+    if kind == "numeric_counterexample":
+        exp = str(payload.get("experiment_id") or "").strip()
+        return f"已证否（反例 实验 {exp}）" if exp else "已证否（反例没记实验号）"
+    if kind == "refutation_sign":
+        from .. import evidencebits as _EB
+
+        got = _EB.refutation_reading(bits or {})
+        sign = dict(got.get("sign") or {})
+        if got.get("checked") and sign:
+            return f"已证否（证伪签 {sign.get('ledger') or '（没记台账）'}）"
+        return "已证否（证伪签读不出来）"
+    if kind == "defect_ref":
+        ref = str(payload.get("defect_ref") or "").strip()
+        return f"已证否（判词 {ref}）" if ref else "已证否（判词凭据没记）"
+    if kind == "construction":
+        return "已证否（构造）"
+    return "已证否（盘上没记凭什么）"
+
+
+def _abandon_word(row: Mapping[str, Any]) -> str:
+    """放弃那一档的现行性词：已放弃 + 标记里那条理由（结构化时取 `abandon_basis`）。"""
+    from .. import statementabandon as _SA
+
+    got = _SA.parse_abandon(row.get("quote_reason"))
+    if not got.get("checked"):
+        return "已放弃（理由读不出来）"
+    reason = str(got.get("reason") or "")
+    structured = _SA.parse_abandon_reason(row.get("quote_reason"))
+    if structured.get("structured") and str(structured.get("abandon_basis") or ""):
+        reason = str(structured.get("abandon_basis") or "")
+    reason = " ".join(reason.split())
+    if len(reason) > 80:
+        reason = reason[:80] + "…"
+    return f"已放弃（{reason}）" if reason else "已放弃（理由读不出来）"
+
+
+def _currentness_reading(row: Mapping[str, Any],
+                         bits: Mapping[str, Any] | None = None) -> dict[str, str]:
+    """命题行的「现行性」呈现读数：`{current_state, current_word, current_detail}`。
+
+    为什么要有这一格（业主 2026-11-20 ④ 逐字：「为什么命题台账上还有一栏说状态
+    是否活跃？都登记上了什么叫活跃」）：`status=active` 是"没被取代、没被证否、
+    没被放弃"的补集兜底名。十三行全是它时，那一列一个字的信息都没有。
+
+    所以三态读数（`lifecycle.state_of_statement`，唯一入口）原样保留在
+    `current_state` 里给计算用；页面上印的那一格（`current_word`）只对非 active
+    行给词，active 行是空串（页面写 `—`）。三档结束各带它能指出的编号：
+
+    - `completed`（被取代）：`已取代（被 <编号>）`；
+    - `abandoned` 且 status 是错误那一档（`errorstate.ERROR_WORDS`）：
+      `已证否（反例 <实验号>）` / `已证否（证伪签 …）` / `已证否（判词 …）`；
+    - `abandoned` 其余：`已放弃（<理由>）`。
+
+    `current_detail` 是 hover 那一句：原始 status + 它的中文词 + 三态。
+    三态读数读不出来（status 不在词表里）⇒ 一句「判不了」，不折成活跃。
+    """
+    from .. import errorstate as _ES
+    from .. import lifecycle as _LC
+
+    out: dict[str, str] = {"current_state": "", "current_word": "", "current_detail": ""}
+    got = _LC.state_of_statement(row)
+    state = str(got.get("state") or "")
+    raw = str(row.get("status") or "")
+    word = STATEMENT_STATUS_WORDS.get(raw, raw)
+    out["current_state"] = state
+    if not got.get("checked"):
+        out["current_word"] = f"判不了（status={raw or '（空）'} 不在词表里）"
+        out["current_detail"] = str(got.get("why") or "")
+        return out
+    if state == _LC.ACTIVE:
+        # active = 补集兜底名：页面写 `—`，不印「活跃」。
+        out["current_detail"] = f"status={raw}（{word}）；三态=活跃：还在活跃集里"
+        return out
+    if state == _LC.COMPLETED:
+        ref = _superseded_ref(row)
+        out["current_word"] = (f"已取代（被 {ref}）" if ref
+                               else "已取代（盘上没记被谁取代）")
+        out["current_detail"] = f"status={raw}（{word}）；三态=完工（被后来的一条取代）"
+        return out
+    if raw in _ES.ERROR_WORDS:
+        out["current_word"] = _refutation_word(bits)
+        out["current_detail"] = f"status={raw}（{word}）；三态=放弃（错误那一档）"
+        return out
+    out["current_word"] = _abandon_word(row)
+    out["current_detail"] = f"status={raw}（{word}）；三态=放弃"
+    return out
+
+
+def _manuscript_paths(row: Mapping[str, Any]) -> list[str]:
+    """这一行记着的稿路径（只收看起来是工作区相对稿路径的那些值）。
+
+    为什么不是"有字就算"：`manuscripts` / `line_range.label` 这一族格子在真机上
+    也放引用（lp-ball-11 的 000006 写的是 `exp:000008` —— 一个实验引用，不是稿）。
+    把引用当路径会印出「稿没落盘（exp:000008）」，那是把"没有稿"说成了"稿丢了"。
+    所以只收同时满足三条的值：非空、不含冒号（引用前缀）、以 `.md` 结尾；工作区相对
+    路径正是这三条。顺序按 `manuscripts` 的插入序，再补 `line_range.label`。
+    """
+    out: list[str] = []
+
+    def _keep(raw: Any) -> None:
+        rel = str(raw or "").strip().replace("\\", "/")
+        if not rel or ":" in rel or not rel.endswith(".md"):
+            return
+        if rel not in out:
+            out.append(rel)
+
+    books = row.get("manuscripts")
+    if isinstance(books, Mapping):
+        for rel in books.values():
+            _keep(rel)
+    line = row.get("line_range")
+    if isinstance(line, Mapping):
+        _keep(line.get("label"))
+    return out
+
+
+def _own_result_readings(root: str | Path,
+                         row: Mapping[str, Any]) -> dict[str, str]:
+    """自产结果的两格：`{manuscript_state, manuscript_path, vsign_state, vsign_detail}`。
+
+    读的是"有没有稿"与"稿上有无 V 签"这两件对自产命题才有意义的事：
+
+    - 稿路径取 `statements.manuscripts` 的值（真机 `{"1": "reports/f-proof-<号>.md"}`），
+      缺这一格再退回 `line_range.label`（老行把稿路径写在那里）；两者都没有 ⇒ `none`，
+      有路径而盘上没有那份文件 ⇒ `missing`（"记了稿而稿丢了"与"没记稿"是两件事）；
+    - V 签走 `vsigns.signed_manuscripts(statement_id=...)`（签台账是唯一权威；
+      不重读稿里的签块 —— 两处读法会分家），三态：`signed` / `unsigned` / `unknown`。
+
+    非自产行四格都是空串（页面不摆那两列）。每一行读一次签表；自产行在真机上
+    是几十行量级，与同页 `nontriviality_of` 的逐行扫描同一条代价口径。
+    """
+    out: dict[str, str] = {"manuscript_state": "", "manuscript_path": "",
+                           "vsign_state": "", "vsign_detail": ""}
+    if str(row.get("origin") or "") != "own_result":
+        return out
+    root_p = Path(str(root))
+    candidates = _manuscript_paths(row)
+    existing = next((rel for rel in candidates if (root_p / rel).is_file()), "")
+    if existing:
+        out["manuscript_state"] = "found"
+        out["manuscript_path"] = existing
+    elif candidates:
+        out["manuscript_state"] = "missing"
+        out["manuscript_path"] = candidates[0]
+    else:
+        out["manuscript_state"] = "none"
+    sid = str(row.get("stmt_id") or "")
+    try:
+        from .. import vsigns as _VS
+
+        signed = _VS.signed_manuscripts(str(root_p), statement_id=sid)
+    except Exception as exc:  # noqa: BLE001 - 签表读不出来 = 这一格没查成，不是「没签」
+        out["vsign_state"] = "unknown"
+        out["vsign_detail"] = f"{type(exc).__name__}: {exc}"
+        return out
+    if not signed.get("checked"):
+        out["vsign_state"] = "unknown"
+        out["vsign_detail"] = str(signed.get("why") or "签表没查成")
+    elif signed.get("found"):
+        out["vsign_state"] = "signed"
+        latest = dict(signed.get("latest") or {})
+        at = str(latest.get("at") or "")
+        out["vsign_detail"] = (f"{int(signed.get('count') or 0)} 份签"
+                               + (f"，最近 {at}" if at else ""))
+    else:
+        out["vsign_state"] = "unsigned"
     return out
 
 
@@ -2852,6 +3071,7 @@ def _structure_block(root_p: Path, project: str) -> dict[str, Any]:
     paper = _paper_facts(project)
     empty_ledger = {"statement_envs": None, "proof_envs": None, "statement_ledger_rows": None,
                     "ledger_propositions": None, "ledger_theorem_kinds": None,
+                    "ledger_theorem_kinds_projected": None,
                     "mapping_rows": None, "statement_surplus": [], "mapping_state": ""}
     empty_checks = {kind: {"checked": False, "reason": "还没扫", "findings": 0, "counts": {}}
                     for kind in TEX.SCAN_KINDS}
@@ -2903,6 +3123,9 @@ def _structure_block(root_p: Path, project: str) -> dict[str, Any]:
               "statement_ledger_rows": facts.get("statement_ledger_rows"),
               "ledger_propositions": facts.get("ledger_propositions"),
               "ledger_theorem_kinds": facts.get("ledger_theorem_kinds"),
+              # 读侧投影之后的定理类条数（KINDREAD）：与上面那一格并列，
+              # 原值仍是盘上 `kind` 数出来的（两个数不同 = 历史行还没改）。
+              "ledger_theorem_kinds_projected": facts.get("ledger_theorem_kinds_projected"),
               "mapping_rows": facts.get("mapping_rows"),
               "statement_surplus": list(facts.get("statement_surplus") or []),
               "mapping_state": str(facts.get("mapping_state") or "")}
@@ -2916,7 +3139,8 @@ def _empty_proofs(reason: str) -> dict[str, Any]:
     return {"tri": TRI_UNREADABLE, "reason": reason,
             "source": _src("out/paper/ACCEPTANCE-CHECKS.json"),
             "paper_theorem_envs": None, "propositions_with_proof": None,
-            "ledger_theorem_kinds": None, "signed": None,
+            "ledger_theorem_kinds": None, "ledger_theorem_kinds_projected": None,
+            "signed": None,
             "coverage_note": "分母读不到 ⇒ 不给比例（0 不是「没有」）。",
             "review_states": {}, "rows": [],
             "vsign": {"tri": TRI_UNREADABLE, "reason": reason, "files": 0,
@@ -3061,6 +3285,7 @@ def _proofs_block(root_p: Path, store: Any, rep: Any,
             "source": _src("out/paper/ACCEPTANCE-CHECKS.json", label="C3"),
             "paper_theorem_envs": envs, "propositions_with_proof": with_proof,
             "ledger_theorem_kinds": ledger.get("ledger_theorem_kinds"),
+            "ledger_theorem_kinds_projected": ledger.get("ledger_theorem_kinds_projected"),
             "signed": signed, "coverage_note": note,
             "review_states": states, "rows": proof_rows[:PACKAGE_ROWS_MAX],
             "vsign": vsign,
@@ -6291,6 +6516,24 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # 缺格是 `not_recorded`，不是 `false`。页面那一列叫「优化」。
       ("optimized_paths", "OptimizedPath[]"),
       ("grade", "string"), ("grade_label", "string"),
+      # ---- 读侧投影（KINDREAD，2026-11-20）------------------------------------
+      # `kind` 仍是盘上原值（历史行不许物理改）；`kind_projected` 是按登记判据
+      # （`evidencebits.kind_at_registration`，写侧同一处）现算的并列值。
+      # `kind_projection_changed` 标两者是否不同 —— 页面必须把原值印在前面、
+      # 投影印在后面（不许把投影冒充原值，判据 `test_read_side_kind_projection.py`）。
+      # `kind_projection_checked=False` 是"这一问没判成"（origin 读不出来 /
+      # 引文行没有命题正文），`basis` 写着这次投影拿的来路与正文形态。
+      ("kind_projected", "string"), ("kind_projection_changed", "boolean"),
+      ("kind_projection_checked", "boolean"), ("kind_projection_basis", "string"),
+      # 现行性（业主 2026-11-20 ④）：`current_state` 是 lifecycle 三态（计算要用），
+      # `current_word` 是页面上印的那一句（active 行是空串 ⇒ 页面写 `—`；
+      # 非 active 行带具体原因与所指编号），`current_detail` 是 hover 那一句。
+      ("current_state", "string"), ("current_word", "string"),
+      ("current_detail", "string"),
+      # 自产结果才有的两格（业主 2026-11-20 ③）：有没有稿 / 稿上有无 V 签。
+      # 文献命题这四格是空串（页面不摆那两列）。
+      ("manuscript_state", "string"), ("manuscript_path", "string"),
+      ("vsign_state", "string"), ("vsign_detail", "string"),
       # 收录回执两格 —— 这一行现在这一份证明是哪一号、正文指纹是什么。
       # 它由"把正文补进在册那一行、补翻第 2 位"的那一笔
       # （`agent_b.register_statement._attach_proofs` 的 `proof_collected`）按盘上的
@@ -6889,13 +7132,15 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      (("role", "string"), ("code", "string"), ("source", "string"), ("ref", "string"),
       ("ts", "string"), ("detail", "string"))),
     ("ErrorClassRow",
-     "errors_readout() 的 data.classes[] —— 按类的一行（四种桶各排各的，不许混排）",
+     "errors_readout() 的 data.classes[] —— 按类的一行（四种桶各排各的，不许混排）。"
+     "`computed` 只出现在现算预演那一类（`errorstats.PREVIEW_CATEGORIES`）的行上："
+     "它的 `count` 不是发生次数，页面与脚本靠这一格把它分开",
      (("category", "string"), ("bucket", "string"), ("count", "number"),
       ("meaning", "string"), ("by_role", "Record<string, number>"),
       ("checked", "boolean"), ("state", "string"), ("reason", "string"),
       ("first_ts", "string"), ("last_ts", "string"), ("this_run", "number"),
       ("earlier", "number"), ("no_ts", "number"),
-      ("samples", "ErrorSignalSample[]"))),
+      ("samples", "ErrorSignalSample[]"), ("computed?", "boolean"))),
     ("ErrorStatsData",
      "errors_readout() 的 data —— 角色 × 类目的计数（只记出现过的格，缺格就是 0）。"
      "`total` 是**角色侧**总数；`system_total` 与 `state_readings_total` 各是另一组数，"
@@ -6936,7 +7181,10 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      (("tri", "Tri"), ("reason", "string"), ("source", "SourceRef"),
       ("paper_theorem_envs", "number | null"),
       ("propositions_with_proof", "number | null"),
-      ("ledger_theorem_kinds", "number | null"), ("signed", "number | null"),
+      ("ledger_theorem_kinds", "number | null"),
+      # 读侧投影之后的定理类条数（KINDREAD）：与上面那一格并列，原值不许被顶替。
+      ("ledger_theorem_kinds_projected", "number | null"),
+      ("signed", "number | null"),
       ("coverage_note", "string"), ("review_states", "Record<string, number>"),
       ("rows", "ProofRow[]"), ("vsign", "VsignView"), ("receipt", "ReceiptView"),
       ("c3", "C3View"))),
@@ -7003,6 +7251,9 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      (("statement_envs", "number | null"), ("proof_envs", "number | null"),
       ("statement_ledger_rows", "number | null"), ("ledger_propositions", "number | null"),
       ("ledger_theorem_kinds", "number | null"),
+      # 读侧投影（KINDREAD）：按 `evidencebits.kind_at_registration` 现算的定理类条数；
+      # 上面那一格仍是盘上 `kind` 数出来的原值（两个并列，投影不冒充原值）。
+      ("ledger_theorem_kinds_projected", "number | null"),
       ("mapping_rows", "number | null"), ("statement_surplus", "string[]"),
       ("mapping_state", "string"))),
     ("ClosingView",

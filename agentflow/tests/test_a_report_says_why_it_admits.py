@@ -195,35 +195,34 @@ def test_b_a_rejected_row_carries_receipt_verdict_and_reason(store: Store, reg) 
 
 
 def test_c_no_attempt_means_no_admission_and_metadata_only_is_not_a_loophole(
-        store: Store, reg) -> None:
-    """c. 零读取尝试 ⇒ `no_read_evidence` 整批拒、逐槽点名；`metadata_only` 同样不许过。
+        store: Store, reg, monkeypatch: pytest.MonkeyPatch) -> None:
+    """c. 没有正文 ⇒ 受控拒、逐槽点名；`metadata_only` 不是入库券（2026-11-20）。
 
-    反真空：把"这条读过没有"打桩成恒 `extract_failed`（"试过"）⇒ 同一笔就进得去，
-    于是上面那次拒绝不能来自配额 / 重叠 / 回读。
+    改前：零读取尝试的仅题录被 `no_read_evidence` 拒，有尝试回执的可以入；
+    改后：有没有尝试都不许判收 —— 拒在可读性闸上，理由码 `metadata_only`。
+
+    反真空：把这道闸打桩回旧口径（`ADMITTABLE_TIERS` 加回仅题录 + 读证据闸放行）
+    ⇒ 同一笔就进得去，于是上面那次拒绝不能来自配额 / 重叠 / 回读。
     """
     slots = _stage(reg, ["Never tried one", "Never tried two"])
     _readback(reg)
     items = [{"slot": s, "availability": AV.METADATA_ONLY} for s in slots]
     res = _admit(reg, items)
-    assert not res.ok, "零读取尝试的仅题录居然入库了"
-    assert res.meta["kind"] == "no_read_evidence", res.meta
-    assert "零读取尝试" in str(res.error), res.error
+    assert not res.ok, "没有正文的仅题录居然入库了"
+    assert res.meta["kind"] == "availability_not_admissible", res.meta
+    assert {row["code"] for row in res.meta["availability_bad"]} == {"no_fulltext"}, res.meta
     for slot in slots:
         assert slot in str(res.error), (slot, res.error)
-    assert {p["state"] for p in res.meta["read_problems"]} == {"no_attempt"}, res.meta
     assert [r for r in store.rows("literature")] == []
 
-    # 反真空：只把"有没有一次尝试"这一格打桩成恒真 ⇒ 同一笔能进
-    original = AV.check_read
-    try:
-        AV.check_read = lambda root, slot, receipt=None, **kw: ("extract_failed", "")
-        after = _admit(reg, items)
-        assert after.ok, (f"打桩成'试过'之后仍被拒 ⇒ 闸不是长在 `litavail.check_read` 上"
-                          f"（{after.error}）")
-        # Q1：判收不发号 —— 进库要等提交那一刻（打桩仍然要开着，提交时同一道闸再核一次）。
-        _submit(reg)
-    finally:
-        AV.check_read = original
+    # 反真空：把旧口径打回去（仅题录可入 + 读证据闸放行）⇒ 同一笔能进
+    monkeypatch.setattr(AV, "ADMITTABLE_TIERS", (AV.READABLE, AV.METADATA_ONLY))
+    monkeypatch.setattr(L, "_read_evidence_gate", lambda *a, **k: None)
+    after = _admit(reg, items)
+    assert after.ok, (f"打桩回旧口径之后仍被拒 ⇒ 闸不是长在 `litavail.ADMITTABLE_TIERS` 上"
+                      f"（{after.error}）")
+    # Q1：判收不发号 —— 进库要等提交那一刻（打桩仍然要开着，提交时同一道闸再核一次）。
+    _submit(reg)
     assert len(store.rows("literature")) == 2
 
 
@@ -278,26 +277,33 @@ def test_d_readable_reads_this_candidates_own_extract(store: Store, reg,
 # ====================================================================== f 仅题录（批准）
 
 
-def test_f_a_metadata_only_approval_shows_what_was_attempted(store: Store, reg) -> None:
-    """f. 仅题录被批准 ⇒ 报告也要写"没拿到可读字节 + 尝试过什么"（不是只有档位名）。"""
+def test_f_a_metadata_only_candidate_is_never_approved(store: Store, reg) -> None:
+    """f. 仅题录不再被批准（2026-11-20 业主：「读内容才能判东西」）。
+
+    改前：试过抽取、拿不到正文的仅题录可以「批准入库」，报告里写"尝试过什么"；
+    改后：它没有正文 ⇒ 判收一律受控拒、行留在候选（可判拒），报告里不会出现
+    「判定：批准入库」。这条判据守的就是"报告里不会再冒出这种批准"。
+    """
     slot = _stage(reg, ["Attempted but no bytes"])[0]
     _readback(reg)
     p = _write_source(store, slot, "ok \x00\x00 broken")
     failed = reg.call("text.extract", path=str(p.relative_to(store.root).as_posix()),
                       lit_id=f"cand:{slot}")
     assert not failed.ok, failed.meta
-    ok = _admit(reg, [{"slot": slot, "availability": AV.METADATA_ONLY}])
-    assert ok.ok, ok.error
-    _submit(reg)
+    res = _admit(reg, [{"slot": slot, "availability": AV.METADATA_ONLY}])
+    assert not res.ok, "没有正文的仅题录被批准了"
+    assert res.meta["kind"] == "availability_not_admissible", res.meta
+    assert res.meta["availability_bad"][0]["code"] == "metadata_only", res.meta
+    row = next(r for r in store.rows("lit_candidates") if r["slot"] == slot)
+    assert row["status"] == "pending", row
+    assert [r for r in store.rows("literature")] == []
 
-    text = pathlib.Path(L.report_path(store, RID)).read_text(encoding="utf-8")
-    assert "判定：批准入库" in text, text
-    assert "抽读档位 extract_failed（没拿到可读字节）" in text, text
-    assert "尝试过" in text and "text.extract.garbled_text" in text, text
-    # 可得性那一格仍是 A 报的 metadata_only（回执的 extract_failed 只作尝试证据，
-    # 不覆盖准入档位 —— 否则报告会写出一档"不许入库"的可得性）。
-    assert "可得性：仅题录（metadata_only）" in text, text
-    assert "可得性：有字节但抽取失败（extract_failed）" not in text, text
+    # 判拒之后报告只说"未入库 + 为什么"，绝不会有一条批准
+    assert reg.call("lit.stage_reject", slot=slot, reason_code="rejected_low_quality",
+                    note="PDF 无文本层，抽出来是乱码").ok
+    text = _report_text(store)
+    assert "判定：批准入库" not in text, text
+    assert "rejected_low_quality" in text and "乱码" in text, text
 
 
 # ====================================================================== e 同源

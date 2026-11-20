@@ -21,7 +21,7 @@ def _selftest() -> int:
     第 4 条都记着这件事；现在 `release_check.item_selftests` 用 `has_selftest` 判据把它报成 `unknown`）。
 
     覆盖范围（全部离线、确定性）：I7 优先级；自动链路"只暂存、入库 0 条 + 待裁 1 条"与
-    提交闸的两个方向（整批拒 / 逐条放行）；同一篇被第二问再检索到不新建行；队列空 / 全被租 /
+    提交闸的三个读数（整批拒 / 没正文受控拒 / 读到正文放行）；同一篇被第二问再检索到不新建行；队列空 / 全被租 /
     全在退避 / 全被放弃四态；补下载成功与失败（下载证据 `path` + `sha256` 随行落库）；下载
     关闭不伪装成功；搜索失败不置 done 且退避租约被遵守（"写了"必须升级成"写了且被读"）；
     空工作区上 `run()` 与 `run_once()` 都不抛。
@@ -195,10 +195,16 @@ def _selftest() -> int:
               _req(st, "r-0002")["result_lit_ids"] == []
               and _req(st, "r-0002")["claimed_by"] is None)
 
-        # ---- 1b) 提交闸的两个方向：整批提交被拦 / 逐条判决那条路放行。
-        # 只断言"被拦"的话，"闸永远关着"也能让这一格绿；两向一起才是判据。
+        # ---- 1b) 提交闸的三个读数：整批提交被拦 / 没正文受控拒 / 读到正文才放行。
+        # 只断言"被拦"的话，"闸永远关着"也能让这一格绿；三个一起才是判据。
+        # 2026-11-20 ALITCONTENT（业主逐字「读内容才能判东西」）：判收要求正文，
+        # `litavail.ADMITTABLE_TIERS` 只剩 `readable`。改前这一格用的样本是
+        # "仅题录 + 一次抽取失败的尝试" —— 它在新口径下正是被拒的那一档，于是
+        # "补一句 relevance 就放行"这个断言过期了（不是闸关死了）。今天这条路仍然
+        # 走得通，但样本必须真带一份读过的正文；而旧样本留下来当"没正文受控拒"的
+        # 负控 —— 两个方向一起才钉得住"闸不是永远关着的"。
         slot = str(first_cand.get("slot") or "")
-        check("待裁列表里拿得到一条的槽位号（下面两格要拿它过闸）", bool(slot), f"slot={slot!r}")
+        check("待裁列表里拿得到一条的槽位号（下面三格要拿它过闸）", bool(slot), f"slot={slot!r}")
         if slot:
             gate_red = LS.admission_plan(st, request_id="r-0002", slots=[slot],
                                          require_judged=True)
@@ -211,25 +217,59 @@ def _selftest() -> int:
                     if str(row.get("slot") or "") == slot:
                         row["relevance"] = "自检替身：逐条读过的记录 —— 这一条与本次检索同族"
                         tx.upsert("lit_candidates", row, note="selftest_relevance")
-            # AR1（2026-11-16）之后提交闸还读两格证据：可读性判定 + 一次读取尝试的回执。
-            # 这一条候选没有本地全文（自动链路不下载），所以按"仅题录"的诚实形态补：
-            # `metadata_only` + 一条 `extract_failed` 回执（"试过、拿不到可读文本"）。
+            from .. import fs_observation as OBS
             from .. import litavail as LAV
             from .. import litread as LR
 
+            cand_row = _first([r for r in st.rows("lit_candidates")
+                               if str(r.get("slot") or "") == slot])
+            # 负控（ALITCONTENT 新口径）：仅题录 + 一条抽取失败的回执 = 没有正文。
+            # 改前这条路被读成"补上 relevance 就放行"，现在必须受控拒、并点名这一槽
+            # 与理由码 —— 否则"读内容才能判东西"这条判据在自检里没有对象。
             LAV.record_availability(st.root, "r-0002", slot, LAV.METADATA_ONLY,
                                     note="selftest：仅题录（无本地全文）")
             LAV.record_read(st.root, "r-0002", slot, LR.FULLTEXT_EXTRACT_FAILED,
                             note="自检替身：试过一次抽取，拿不到可读文本")
+            gate_no_body = LS.admission_plan(st, request_id="r-0002", slots=[slot])
+            bad_avail = _first(gate_no_body.get("availability_bad") or [])
+            check("提交闸：没正文（仅题录 + 一次抽取失败）⇒ 受控拒 availability_not_admissible",
+                  gate_no_body.get("ok") is False
+                  and gate_no_body.get("kind") == "availability_not_admissible"
+                  and [i["slot"] for i in gate_no_body.get("unjudged_no_content") or []] == [slot]
+                  and bad_avail.get("code") == "metadata_only",
+                  f"kind={gate_no_body.get('kind')}")
+            # 正控：真读到正文的那一档。`litavail.content_read` 要四步缺一不可 ——
+            # 档位 readable、抽读回执绑这一条候选、抽读件还是那一版、`fs.read` 观察
+            # 台账里有同一版；这里照真机那三步（下载 → 抽读 → 读）逐条造出来，
+            # 而不是靠一句 relevance。正文比摘要长得多（摘要为空，整段都算正文）。
+            body = ("Selftest body: this candidate was downloaded, extracted and then read "
+                    "before it was judged. " * 24)
+            source = Path(st.root) / "downloads" / f"cand-{slot}.txt"
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text(body, encoding="utf-8")
+            version = OBS.version_of_path(source)
+            OBS.observed_gate().note_present(OBS.current_owner(), source)
+            LAV.record_availability(st.root, "r-0002", slot, LAV.READABLE,
+                                    note="自检替身：真抽到正文并读过（不是仅题录）")
+            LAV.record_read(st.root, "r-0002", slot, LR.FULLTEXT_OK,
+                            source="selftest:readable", text=str(source),
+                            text_abs=str(source), text_version=version, chars=len(body),
+                            sha256=hashlib.sha256(body.encode("utf-8")).hexdigest(),
+                            candidate=LAV.candidate_digest(cand_row),
+                            note="自检替身：抽读件与 fs.read 同版")
             gate_green = LS.admission_plan(st, request_id="r-0002", slots=[slot])
-            check("提交闸：补上 relevance 之后逐条判决那条路放行（闸不是永远关着的）",
+            admitted = gate_green.get("admitted") or []
+            check("提交闸：读到正文之后逐条判决那条路放行（闸不是永远关着的）",
                   gate_green.get("ok") is True
-                  and [i["slot"] for i in gate_green.get("admitted") or []] == [slot],
+                  and [i["slot"] for i in admitted] == [slot]
+                  and all(i.get("content_read") is True for i in admitted),
                   f"kind={gate_green.get('kind')}")
         else:
             check("提交闸：还有一条没判 ⇒ 整批一条都不许入库（kind=undecided_items）",
                   False, "没有槽位号 ⇒ 这一段没有对象")
-            check("提交闸：补上 relevance 之后逐条判决那条路放行（闸不是永远关着的）",
+            check("提交闸：没正文（仅题录 + 一次抽取失败）⇒ 受控拒 availability_not_admissible",
+                  False, "没有槽位号 ⇒ 这一段没有对象")
+            check("提交闸：读到正文之后逐条判决那条路放行（闸不是永远关着的）",
                   False, "没有槽位号 ⇒ 这一段没有对象")
 
         # ---- 2) 幂等（Q16 口径）：同一篇被第二问再检索到 ⇒ 不新建文献行，

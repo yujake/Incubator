@@ -304,13 +304,13 @@ def test_i_the_box_is_read_only_and_model_free() -> None:
 #: 改前各自手写「读一遍全表，再 `next(...)` 按号找」的那些函数。现在它们必须调
 #: `statementledger.by_id`（口径一）—— 恢复成自己扫全表 ⇒ 这一条当场红。
 MIGRATED_BY_ID: tuple[tuple[str, str], ...] = (
-    ("agentflow/secretary.py", "record_manuscript_dependency_face"),
-    ("agentflow/secretary.py", "amend_statement_meta"),
-    ("agentflow/secretary.py", "land_statement"),
-    ("agentflow/secretary.py", "_record_statement_tx"),
-    ("agentflow/secretary.py", "record_proof_deps"),
-    ("agentflow/secretary.py", "_proposition_owner"),
-    ("agentflow/secretary.py", "proof_text_manuscript_sign_gate"),
+    ("agentflow/secretary_handoff.py", "record_manuscript_dependency_face"),
+    ("agentflow/secretary_statement_meta.py", "amend_statement_meta"),
+    ("agentflow/secretary_statement_meta.py", "land_statement"),
+    ("agentflow/secretary_statement_tx.py", "_record_statement_tx"),
+    ("agentflow/secretary_deps.py", "record_proof_deps"),
+    ("agentflow/secretary_merge.py", "_proposition_owner"),
+    ("agentflow/secretary_evidence.py", "proof_text_manuscript_sign_gate"),
     ("agentflow/agent_b/register_statement.py", "_update_numeric_evidence"),
     ("agentflow/agent_b/register_statement.py", "_evidence_kind_on_disk"),
     ("agentflow/agent_b/register_statement.py", "_register_statement_impl"),
@@ -491,8 +491,8 @@ def test_k_every_index_site_goes_through_the_box() -> None:
 MIGRATED_TEXT: tuple[tuple[str, str], ...] = (
     ("agentflow/agent_b/register_statement.py", "_existing_statement_for"),
     ("agentflow/agent_b/register_statement.py", "_resolve_same_statement"),
-    ("agentflow/secretary.py", "_record_statement_tx"),
-    ("agentflow/secretary.py", "proof_text_manuscript_sign_gate"),
+    ("agentflow/secretary_statement_tx.py", "_record_statement_tx"),
+    ("agentflow/secretary_evidence.py", "proof_text_manuscript_sign_gate"),
 )
 
 
@@ -539,16 +539,16 @@ def test_l_every_exact_text_site_goes_through_the_box() -> None:
 # ===================================================== m 收口登记表（S3 池 / S4 关键词）
 #: 改前各自内联「active ∧ 命题性 ∧ 有号有正文」那三条过滤的函数；现在必须调 `pool`。
 MIGRATED_POOL: tuple[tuple[str, str], ...] = (
-    ("agentflow/secretary.py", "_ledger_pool"),
-    ("agentflow/secretary.py", "_same_proposition_candidate"),
-    ("agentflow/secretary.py", "_fail_closed_reason"),
+    ("agentflow/secretary_identity.py", "_ledger_pool"),
+    ("agentflow/secretary_merge.py", "_same_proposition_candidate"),
+    ("agentflow/secretary_merge.py", "_fail_closed_reason"),
     ("agentflow/agent_b/register_statement.py", "_resolve_same_statement"),
 )
 
 #: 改前保管关键词检索的那个私有方法（已删）：现在只有 `by_keywords` 一处实现，
 #: 唯一调用点是秘书的 `_identity_candidates`（挑词仍在本层、判定仍只经 `judge`）。
 KEYWORD_CALLERS: tuple[tuple[str, str], ...] = (
-    ("agentflow/secretary.py", "_identity_candidates"),
+    ("agentflow/secretary_identity.py", "_identity_candidates"),
 )
 
 

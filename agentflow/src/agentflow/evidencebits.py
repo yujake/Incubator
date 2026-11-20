@@ -135,6 +135,14 @@ GRADE_NOT_APPLICABLE = "not_applicable"
 #: `GRADE_TO_KIND` 加一格、把 `GRADE_ERROR` 挪到 `GRADES` 的第一格。
 GRADE_ERROR = "错误"
 
+#: 「这一格等级没判成」那一档（三态里的第三态：不是 `None`、也不是最弱那一档）。
+#:
+#: 为什么不折成 `conjecture`：`conjecture` 是一句关于真值的话（"还没证，但它是命题"），
+#: 而"五元位读不出来"是「没查成」—— 把没查成记成最弱那一档，等于让一条谁都没看过的行
+#: 在报告里冒充"猜想"（本仓反复踩过的三态折叠）。它也不进 `GRADES`：那条序列会排序、
+#: 会被算进"有几条定理"，而"没判成"没有强弱可言。
+GRADE_UNJUDGED = "unjudged"
+
 #: 等级由弱到强的「唯一」序（含「错误」）。要比较强弱就读它，
 #: 不要拿 `GRADES.index`：它认不出「错误」，会抛 `ValueError` 或落到某个默认值。
 #: 「错误」排在最前 = 业主那句「error 绝对是最低等级」的唯一落点。
@@ -147,6 +155,7 @@ GRADE_LABELS: dict[str, str] = {
     "theorem": "正式定理",
     GRADE_NOT_APPLICABLE: "不适用（概念行不参与等级）",
     GRADE_ERROR: "错误（证伪签）",
+    GRADE_UNJUDGED: "未判（等级算不出来）",
 }
 
 
@@ -1644,6 +1653,246 @@ def kind_from_bits(bits: Mapping[str, Any], *, kind: str = "") -> str:
     `kind="concept"` 经 :func:`derive_grade` 短路成 `not_applicable` ⇒ 这里返回空串。
     """
     return kind_from_grade(derive_grade(bits, kind=kind))
+
+
+#: 定义 / 术语 / 记号那一档的 `kind`（概念行不参与等级链，所以它也没有"定理还是猜想"）。
+#:
+#: 与 `secretary_decl.NOT_APPLICABLE_KINDS` 是同一件事的证据：命题形态闸对这两档短路
+#: （"它不是命题"）。这里不 import 那一份 —— 那条 import 会把判定面反向拉进秘书层。
+DEFINITION_KINDS: tuple[str, ...] = ("concept", "definition")
+
+#: 文献里来的命题登记时落的那一档（既有词表里表示"引来的定理"的那个取值）。
+CITED_STATEMENT_KIND = "theorem"
+
+#: 只有这两个取值会因"这一行是引来的"被改写（`conjecture` 与历史空串）。
+#:
+#: 别的取值（`theorem` / `lemma` / `proposition` / `definition` …）一个字都不动：
+#: 它们已经是作者写下的命题级判断，这一格没有资格替它改（与
+#: :data:`KIND_UPGRADABLE_FROM` 同一条纪律：只有"猜想"是能被证据/来路抬起来的起点）。
+CITED_REWRITABLE_KINDS: tuple[str, ...] = ("conjecture", "")
+
+
+def kind_at_registration(*, origin: Any, kind: Any = "",
+                         cited_body: bool = False) -> dict[str, Any]:
+    """登记那一刻这一行的 `kind`（唯一判据：按 `origin` + 正文形态判，不按词表打分）。
+
+    ## 它要分辨的两件事在盘上长得一样
+
+    「文献里的定理陈述」与「我们自己的猜想」都可能被写成 `kind="conjecture"`，而它们
+    说的是两句话：前者是"某篇文献里成立、我们只是引用"，后者是"我们提出、还没证"。
+    真机 lp-ball-13 的 6 行 `origin=external_lit` 全落成 `conjecture`（Meyer–Pajor、
+    Ball、Grząślewicz、König 这些文献定理都在里面）⇒ 报告把文献定理读成"我们的猜想"。
+
+    ## 判据（三条，按顺序；都不看词频、不算分）
+
+    1. 定义 / 术语 / 记号（:data:`DEFINITION_KINDS`）⇒ 原样保留：概念行不是命题，
+       没有"定理还是猜想"这一问（概念不参与等级链，见 :func:`derive_grade` 的短路）；
+    2. `origin="external_lit"` ⇒ 这一行是引来的命题 ⇒ :data:`CITED_STATEMENT_KIND`
+       （既有词表里的 `theorem`）。文献里的命题不是我们的猜想 ——
+       `conjecture` 只留给我们自己提出、还没证的那一档。只改
+       :data:`CITED_REWRITABLE_KINDS` 那两个取值（`conjecture` / 空串）；
+       作者写下的 `theorem` / `lemma` / `proposition` 一个字不动；
+    3. `origin="own_result"` ⇒ 原样保留：只有这一档才可能是我们自己的猜想；
+       无签的定理级声明由 B-2 那道闸（`must_start_as_conjecture`）管，不在这一格。
+
+    `cited_body` 是第 2 条要的正文形态读数：这一行带没带一段从文献摘下来的命题正文
+    （逐字摘录 / 回验过的引文）。没带 ⇒ 这一行判不了（`checked=False`）：引文侧一行
+    既没有命题正文、又不是定义档时，"它是不是文献里的定理陈述"在盘上无从判断 ——
+    这时保留调用方写的那个词，并把 `why` 写实，不替它猜一个更强的名字。
+
+    ## 返回
+
+    `checked` / `kind` / `declared` / `changed` / `basis` / `why`。
+    `changed=True` 时 `kind` 与 `declared` 不同：写侧必须把这一格记进回执 ——
+    静默改写等于让"交来的那个名字"与"行上的那个名字"分家，而没有任何读数会说它们不同。
+    """
+    declared = str(kind or "").strip()
+    got = str(origin or "").strip()
+    out: dict[str, Any] = {"checked": True, "kind": declared, "declared": declared,
+                           "changed": False, "basis": "", "why": ""}
+    if declared in DEFINITION_KINDS:
+        out["basis"] = (f"kind={declared!r} 落在定义 / 术语那一档 ⇒ 这一行不是命题："
+                        "「定理还是猜想」这一问不适用")
+        return out
+    if got == "external_lit":
+        if declared and declared not in CITED_REWRITABLE_KINDS:
+            out["basis"] = (f"kind={declared!r} 已经是一句命题级的判断（不是「我们的猜想」"
+                            "那一档）⇒ 作者写下的名字不动：这一格只把 `conjecture` / 空串"
+                            "那一档抬成引来的命题")
+            return out
+        if not cited_body:
+            out.update(
+                checked=False,
+                why=("`origin=external_lit` 而这一行没有可判的命题正文（没有逐字摘录、"
+                     "也没有回验过的引文）⇒「这是文献里的定理陈述」这一问没判成："
+                     f"保留调用方写的 kind={declared!r}，不替它猜一个更强的名字"))
+            return out
+        out.update(
+            kind=CITED_STATEMENT_KIND,
+            changed=CITED_STATEMENT_KIND != declared,
+            basis=("`origin=external_lit` 且这一行带着从文献摘下来的命题正文 ⇒ "
+                   "它是引来的命题（文献里的定理陈述不是我们的猜想："
+                   "`conjecture` 只留给我们自己提出、还没证的那一档）"))
+        return out
+    if got == "own_result":
+        out["basis"] = ("`origin=own_result` ⇒ 这一行是我们自己的：kind 是作者写下的判断，"
+                        "这一格不改（无签的定理级声明由 B-2 那道闸管）")
+        return out
+    out.update(
+        checked=False,
+        why=(f"origin 读不出来（{origin!r}）⇒ 这一行是引来的还是我们自己的判不了："
+             "kind 一个字不动，也不给依据"))
+    return out
+
+
+def cited_body_of_row(row: Mapping[str, Any]) -> bool:
+    """这一行带没带从文献摘下来的命题正文（`kind_at_registration` 的 `cited_body` 入参）。
+
+    与写侧 `register_statement` 那两处是同一句话：有非空的 `proof_text`，或者
+    `quote_verified` 恰好是 `True`。本函数只读这两个字段，不判它是不是定理 ——
+    判据本体仍只有 :func:`kind_at_registration` 一处。
+    """
+    return (bool(str(row.get("proof_text") or "").strip())
+            or row.get("quote_verified") is True)
+
+
+def kind_projection(row: Mapping[str, Any]) -> dict[str, Any]:
+    """读侧投影：按登记判据现算这一行此刻应有的 `kind`（只读，不写盘）。
+
+    ## 为什么要有这一层
+
+    :func:`kind_at_registration` 判的是"登记那一刻"该落什么；在它之前入库的历史行
+    （真机 lp-ball-13 的 6 行 `origin=external_lit` + `kind=conjecture` + 逐字引文）
+    盘上已经写着旧词。物理改写历史行等于让"当时交上去的那个名字"消失，所以读侧只
+    现算一个并列值，与盘上 `kind` 一起给出。判据本体仍只有一处 —— 本函数只做搬运：
+
+    - `origin` 与 :func:`bits_from_row` 同一个缺省（读不出来按 `own_result`）；
+    - `cited_body` 走 :func:`cited_body_of_row`（与写侧同一句话）。
+
+    ## 返回
+
+    `kind_at_registration` 的全部键（`checked` / `kind` / `declared` / `changed` /
+    `basis` / `why`），另加 `origin` / `cited_body` 两个入参读数 —— 读的人能看见
+    这次投影拿的是哪两个值，也能看出"没判成"与"判成没改"是两件事。
+    """
+    origin = str(row.get("origin") or "own_result")
+    declared = str(row.get("kind") or "")
+    cited = cited_body_of_row(row)
+    out = dict(kind_at_registration(origin=origin, kind=declared, cited_body=cited))
+    out["origin"] = origin
+    out["cited_body"] = cited
+    return out
+
+
+def grade_at_registration(bits: Any, *, kind: str = "") -> dict[str, Any]:
+    """登记那一刻这一行的等级（唯一判据：:func:`derive_grade` 现算 + 三态）。
+
+    ## 为什么要在登记那一刻记下来
+
+    "这一条到哪一档"是下游（引用门槛 / 报告 / 收工门）的第一个问题，而它在登记回执上
+    从来没有被写出来过：13 行 lp-ball-13 的登记回执里一格等级都没有。等级的唯一来源是
+    :func:`derive_grade`，所以这一格只做一件事 —— 在登记那一笔把它的结果记下来，并把
+    "算不出来"如实落成 :data:`GRADE_UNJUDGED`（不是 `None`、也不是最弱那一档）。
+
+    ## 三态
+
+    - `checked=True` ⇒ `grade` 是现算值；
+    - `checked=False` ⇒ `grade=unjudged` + `why`（`bits` 空着 / 不是对象 / 读不出来）：
+      没判成不许折成"最弱的那一档"；
+    - `mismatch=True` ⇒ 行上缓存的那个等级与现算不是同一个词（缓存可以留着，但它必须与
+      现算逐字相同才有资格当缓存 —— 见 :func:`bits_shape_problems`），`why` 写实。
+
+    返回键：`checked` / `grade` / `stored_grade` / `mismatch` / `why`。
+    """
+    out: dict[str, Any] = {"checked": False, "grade": GRADE_UNJUDGED,
+                           "stored_grade": "", "mismatch": False, "why": ""}
+    if not isinstance(bits, Mapping) or not bits:
+        out["why"] = ("这一行没有五元位（`bits` 空着 / 不是对象）⇒ 等级算不出来："
+                      "记 unjudged（不是 None，也不是最弱那一档）")
+        return out
+    try:
+        computed = derive_grade(bits, kind=kind)
+    except Exception as exc:  # noqa: BLE001 - 算不出来要如实说，不许折成某一档
+        out["why"] = (f"五元位算不出来（{type(exc).__name__}: {exc}）⇒ 记 unjudged："
+                      "没判成不是「猜想」，也不是「没有证据」")
+        return out
+    stored = str(bits.get("grade") or "")
+    out.update(checked=True, grade=computed, stored_grade=stored,
+               mismatch=bool(stored) and stored != computed)
+    if out["mismatch"]:
+        out["why"] = (f"行上缓存的那个等级是 {stored!r}，按五位现算是 {computed!r} ⇒ "
+                      "两者必须逐字相同（`bits_shape_problems`）：这份缓存作废，"
+                      f"以现算的 {computed!r} 为准")
+    return out
+
+
+#: B-2 的射程（业主 2026-10-22 裁定 D18：没有引文 / 自己编的命题必须从"猜想"注册）。
+#:
+#: 判据是三件一齐：`origin="own_result"`（这一行是我们自己的）+ 没有 `source_lit_id`
+#: （没有外部出处）+ `quote_verified` 不是 `True`（没有一条回验通过的引文）。
+#:
+#: 为什么收成这一格：写侧原先在 `agent_b/register_statement.py` 的两个调用点各写了一遍
+#: 这三件，读侧 `closing.type_ahead_of_grade_rows` 却只判 kind 与 grade、不判来路 ——
+#: 同一件事两套射程。真机 lp-ball-13 的 6 行文献定理（带 `source_lit_id`、引文回验通过）
+#: 在写侧从来进不了 B-2，读侧却把它们点名成"声明强于证据"。现在三处都调
+#: :func:`b2_scope_reading`：改射程只改这一格，不另写一份。
+B2_ORIGIN = "own_result"
+
+
+def b2_scope_reading(*, origin: Any, source_lit_id: Any = "",
+                     quote_verified: Any = None) -> dict[str, Any]:
+    """B-2 的射程读数：这一行是不是"我方自产、无外部出处、无回验通过的引文"。
+
+    ## 判据（三件一齐，逐件可读）
+
+    1. `origin` 逐字等于 `"own_result"`：缺 origin 的行由调用方按
+       :func:`bits_from_row` 的同一缺省读成 `own_result` 再传进来（那一处把缺失当自产，
+       这里不另立缺省，否则两处读的是两个来路）；
+    2. `source_lit_id` 归一（去空白）之后为空：有出处就不是我们杜撰的；
+    3. 没有一条回验通过的引文：调用方传的是"这一行有没有一条回验通过的引文"这个事实
+       —— 写侧给定稿后的 `quote_verified`（`enforce_quote_evidence` 的结论，`True`
+       本身就带着可复核的区间）；读侧给 :func:`quote_explains_itself`（`quote_state`
+       认的两档，同样只认拿得出位置的那一种）。两侧问的是同一句话，不是同一个裸字段：
+       一句 `quote_verified=true` 而拿不出位置的引文，读侧本来就不认它是"回验通过"
+       （`quote_state` ⇒ `no_evidence`），B-2 因此照样把它算在射程里。这里不另做一道
+       引文真伪判定 —— 引文真伪由 `quote_state` 那一格管。
+
+    ## 为什么读侧也要这一格
+
+    读侧 `closing.type_ahead_of_grade_rows` 自称是 B-2 的读侧一半，而它改前只判
+    "kind 超前于现算等级"：文献里引来的定理（`origin=external_lit` + 出处 + 回验）
+    本来就不在 B-2 的射程里，却会被这一格点名。收窄之后，读侧点名的每一行都满足与
+    写侧完全相同的三件 —— 两侧同源，同一份判据。
+
+    ## 返回
+
+    `checked` / `in_scope` / `missing` / `basis` / `origin` / `has_source_lit_id` /
+    `quote_verified_is_true`。`missing` 逐条写"哪一件不成立"（空表 = 三件一齐）；
+    `basis` 是给报告与探针读的一句人话，红与绿都写清凭什么。
+    """
+    got_origin = str(origin or "")
+    got_source = str(source_lit_id or "").strip()
+    verified = quote_verified is True
+    missing: list[str] = []
+    if got_origin != B2_ORIGIN:
+        missing.append(f"origin={got_origin!r} 不是 own_result（这一行不是我们自己的）")
+    if got_source:
+        missing.append(f"有 source_lit_id={got_source!r}（这一行有外部出处）")
+    if verified:
+        missing.append("quote_verified 是 True（这一行有一条回验通过的引文）")
+    in_scope = not missing
+    basis = ("B-2 的三件：origin=own_result ∧ 无 source_lit_id ∧ quote_verified 不是 True"
+             + (" ⇒ 这一行在射程内" if in_scope
+                else " —— 不成立的是：" + "；".join(missing)))
+    return {
+        "checked": True,
+        "in_scope": in_scope,
+        "missing": missing,
+        "basis": basis,
+        "origin": got_origin,
+        "has_source_lit_id": bool(got_source),
+        "quote_verified_is_true": verified,
+    }
 
 
 #: `kind` 能跟着证据走的起点与终点。

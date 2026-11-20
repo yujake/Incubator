@@ -817,6 +817,17 @@ _NON_TOOL_DOTTED_TOKENS: dict[str, str] = {
                            "基座 `build_registry()` 里没有，只在被派那一趟的循环注册表里现装）",
     "own.ingest_manuscript": "B 的动作被包成的那件 `own.*` 工具（同 `own.register_statement`："
                              "基座 `build_registry()` 里没有，只在被派那一趟的循环注册表里现装）",
+    # 2026-11-20（p304，BDUTY）：二阶段的补丁面点名了三处 —— 两处是 `own.*`（同上面三条：
+    # 角色级动作被现装成工具，基座注册表里没有），两处是 `evidencebits` 的读口（模块函数，
+    # 不是工具：B 用它读「这一份洗过没有」与「这一份有没有签盖住」）。
+    "own.open_polish_copy": "B 的动作被包成的那件 `own.*` 工具（同 `own.register_statement`："
+                            "基座 `build_registry()` 里没有，只在被派那一趟的循环注册表里现装；"
+                            "二阶段洗稿的第一步就是它 —— 已拿签的源稿只读，先开副本）",
+    "evidencebits.optimized_state": "模块函数不是工具：`evidencebits.optimized_state` 是**读口**"
+                                    "（逐份 optimized 的三态），B 用它判「这一份洗过没有」",
+    "evidencebits.optimized_signature": "模块函数不是工具：`evidencebits.optimized_signature` 是"
+                                        "打 `optimized=true` 之前那条核（这一份正文有没有签盖住），"
+                                        "B 读的是它的读数，不是调它",
 }
 
 #: "像工具名"的点号 token：反引号包着、两段都是小写标识符。
@@ -2259,7 +2270,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: `draft/117` / `draft/120` §五；逐批的旧叙述不在这里保留 —— 现行实现以树为准。
 #: 「换几格」本身是改动作用域的读数：改共用段 ⇒ 十格全换；只动某岗 `policy` / `document`
 #: ⇒ 只那一格换（伙伴表印的是 `duty` / `boundary`）。重算用
-#: `agentflow/temp/recompute_prompt_digests.py`（它钉上 `conftest.py` 的 `AGENTFLOW_LEAN_ENABLED=1`）。
+#: `scripts/recompute_prompt_digests.py`（它钉上 `conftest.py` 的 `AGENTFLOW_LEAN_ENABLED=1`）。
 # 2026-10-30（p220 → p221，业主批准动禁改区 · FC-27）：`specs/f.py` 的 policy 那一条
 # 把「V 报看不出来 时把它当成这一格还没被签」换成两态（成立 / 有毛病 + 各自该怎么办）
 # ⇒ 这一条只落在 F 自己的段上，十一格里只有 F 换值。逐格旧值 → 新值：
@@ -2687,7 +2698,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #   十一格是 `temp/fixbatch/digest2.py` 现算（导入本文件的 `_surface_digest`，先钉
 #   `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段），不是手抄。
 #   另一笔（`lit.stage_list` 的 `note` 加「`done=True` ≠ 清表」）是运行时返回值，不进任何段。
-_FROZEN_PROMPT_VERSION = "p301"
+_FROZEN_PROMPT_VERSION = "p304"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2956,17 +2967,17 @@ _FROZEN_PROMPT_VERSION = "p301"
 #:   B d21f8265… → 4a815263…；F 9e449b3e… → b6c803c1…；
 #:   A / C / D / E / G / H / L / M / V 逐字不动。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "6963db9ce3f898e160ab1062de61669b5ac2982f94fe861811ed9d832de9b6de",
-    "B": "7b2cbd802b39f547e7d3c1ba343fb04c2c25a23b83abddd7f2db3814ed5e504f",
-    "C": "8714395d743d47cf5b20d9eca674e83b230286307b59421244b5840e9f6b3fd4",
-    "D": "b433b897cc36e3c87f2131e4095b885183251a29db895f1bc289f26d7d3606eb",
-    "E": "94e6d38d97695c0e15f40573f88da66f4ccaf4d2ebc35e1142d2653d54bb0d25",
-    "F": "fba23f8a75d1cd10dbecc3ece85dc101dc1461799decf83d9c78b4630c6251f4",
-    "G": "6f502f63be7e4c6db77ac24248441e7c84eed616647e6fef6fc8f4027f216be1",
-    "H": "91a7b32b7bc7da04527cb8ae414650eff45b0382040a891e9695ab2628bb167e",
-    "V": "d931f421d6715cca68fcea6f966062e737ecf04f2a5672d9a78dbe60a948010d",
-    "L": "94288b2ba83f498aea8a6e41b57e384b1e807246030e42cb2dc929c5be899951",
-    "M": "dd78c8d7c7a39f7912582f1cef83331ef0542258b9a49a56e3b3306d1ab76b9d",
+    "A": "5144e9782819e306d7e3f4ab3e57448bb245ff5143090d9d38cd1848abbd13a7",
+    "B": "316e9508bf1a3919cadec8b3c4bc778e6d4679380062c5668785190991e216ed",
+    "C": "192fe32f807726e590892b9f2d75dab436f3213f7fdca7e298724893319403b6",
+    "D": "ab60b782533b86f7b358c82ae5ed13d89c010e64d76e9282fcccdf7ca339fbbc",
+    "E": "8dae5d11c2fdf2ada5afd5f18ba11d4115b759f138547a0e457f9658dc94ec37",
+    "F": "ec69ae9a25d0caaa72845a30d5c90e3c0010562f455af78b7bf6c6f1af37a30e",
+    "G": "93d4dd6d962e8df55ffa613ac6949445b286a53092d84a820be2153ef8acaac7",
+    "H": "c1abed29a91985e3c271a2ccfc648872158584902aad239a0888a9babc657dc3",
+    "V": "e91ae893705f5b4f3ffd5f98ddb120f07e460d14273f1877d85e3b39c63648bf",
+    "L": "16b70ad0fb7f6cc6885c758db4aca0c72d7ba8f2380fa841ebf867ab125bb90e",
+    "M": "d90338b8d1bd3866ac2bd86a8a56ce2a1e4e17fe9a63c212bf705745db05a6b6",
 }
 
 

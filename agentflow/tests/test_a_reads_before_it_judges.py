@@ -174,9 +174,14 @@ def test_b_extracted_but_not_read_is_still_not_read(store: Store, reg) -> None:
 # ====================================================================== c 仅题录的边界
 
 
-def test_c_metadata_only_is_only_for_candidates_without_bytes(store: Store, reg) -> None:
-    """c. `metadata_only` 不是零读可入（AR1）：没试过 ⇒ 拒；有字节却报仅题录 ⇒ 拒；
-    试过、拿不到可读文本（`extract_failed` 回执）⇒ 可以仅题录入库。"""
+def test_c_metadata_only_is_not_an_admission_ticket(store: Store, reg) -> None:
+    """c. 仅题录不再可入（2026-11-20 业主：「读内容才能判东西」）。
+
+    改前：零读取尝试拒绝、有 `extract_failed` 回执的仅题录可以入；
+    改后：有没有抽取尝试都不许判收 —— 没有正文就没有入库资格。有字节的那一条
+    可以改报 `readable`（先抽读 + `fs.read`，那是判据 b）；不改报就只能判拒，
+    并把"为什么没读到"写在候选行上。
+    """
     slots = _stage(reg, ["Has bytes", "No bytes"])
     _readback(reg)
     ext = _extract(store, reg, slots[0])
@@ -186,29 +191,32 @@ def test_c_metadata_only_is_only_for_candidates_without_bytes(store: Store, reg)
         {"slot": slots[0], "availability": AV.METADATA_ONLY},
         {"slot": slots[1], "availability": AV.METADATA_ONLY},
     ])
-    assert not res.ok, "一条抽读过、一条零尝试，居然都能按仅题录入库"
-    assert res.meta["kind"] == "no_read_evidence", res.meta
-    states = {p["slot"]: p["state"] for p in res.meta["read_problems"]}
-    assert states == {slots[0]: "ok", slots[1]: "no_attempt"}, res.meta
-    assert "零读取尝试" in str(res.error), res.error
+    assert not res.ok, "没有正文的仅题录居然都能判收"
+    assert res.meta["kind"] == "availability_not_admissible", res.meta
+    assert {row["code"] for row in res.meta["availability_bad"]} == {"no_fulltext"}, \
+        res.meta
     assert _lit_titles(store) == []
 
-    # 第二条真的试过一次抽取（乱码 ⇒ extract_failed 回执）⇒ 它在"拿不到可读文本"
-    # 这一档上留下证据，才允许按仅题录入库（有 DOI 定位符）。
+    # 第二条真的试过一次抽取（乱码 ⇒ extract_failed 回执）—— 它仍不许判收：
+    # 那条回执只说明"试过、拿不到正文"，不是入库券。
     p = _write_source(store, slots[1], "ok \x00\x00 broken")
     failed = reg.call("text.extract", path=str(p.relative_to(store.root).as_posix()),
                       lit_id=f"cand:{slots[1]}")
     assert not failed.ok and failed.meta["kind"] == "garbled_text", failed.meta
     assert AV.receipts_by_slot(store.root)[slots[1]]["tier"] == LR.FULLTEXT_EXTRACT_FAILED
 
-    ok = _admit(reg, [{"slot": slots[1], "availability": AV.METADATA_ONLY}])
-    assert ok.ok, ok.error
-    # 第一条（有字节却报仅题录）还在 pending：提交闸会因为它整批拒 ⇒ 先判拒。
-    assert reg.call("lit.stage_reject", slot=slots[0],
-                    reason_code="rejected_low_quality",
-                    note="有字节却报仅题录，按闸的读数判拒").ok
-    _submit(reg)
-    assert _lit_titles(store) == ["No bytes"]
+    res = _admit(reg, [{"slot": slots[1], "availability": AV.METADATA_ONLY}])
+    assert not res.ok and res.meta["kind"] == "availability_not_admissible", res.meta
+    assert res.meta["availability_bad"][0]["code"] == "metadata_only", res.meta
+
+    # 两条的出路都是受控判拒（行留着、理由在行上），不是判收
+    for slot, note in ((slots[0], "有字节但报仅题录，按闸的读数判拒"),
+                       (slots[1], "抽出来是乱码，拿不到可读正文")):
+        assert reg.call("lit.stage_reject", slot=slot,
+                        reason_code="rejected_low_quality", note=note).ok
+    assert len([r for r in store.rows("lit_candidates")
+                if r["status"] == "rejected"]) == 2
+    assert _lit_titles(store) == []
 
 
 # ====================================================================== d 逐条判断落读数
@@ -305,6 +313,10 @@ def test_f_negative_control_stubbing_the_read_state_lets_a_non_read_enter(
 
     monkeypatch.setattr(AV, "check_read",
                         lambda root, slot, receipt=None, **kw: ("ok", ""))
+    # 2026-11-20：`check_read` 只回答"抽读证据在不在/读没读"；"读到的是不是正文"
+    # （摘要那条线）由 `litavail.content_read` 再判一层。负控要打的是同一个判据的两层。
+    monkeypatch.setattr(AV, "content_read",
+                        lambda root, slot, row, *, tier="", receipt=None: (True, ""))
     after = _admit(reg, items)
     assert after.ok, (f"打桩成恒 ok 之后仍被拒 ⇒ 闸不是长在 `litavail.check_read` 上"
                       f"（{after.error}）")

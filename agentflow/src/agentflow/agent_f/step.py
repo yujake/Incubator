@@ -6,6 +6,7 @@ import copy
 from ._support import (AT, Any, Mapping, NO_PROGRESS_NOTE, PlanError, S, _budget_left,
                        _history_round, _step_outcome)
 from .. import lifecycle as L
+from .. import refusalfault as RF
 
 #: 收工读数里要原样带出去的那几格（键名与 `agent_f/delivery.py` 的 `summary` 同一份）。
 #:
@@ -664,7 +665,20 @@ class _Step:
         row["best_partial"] = self._compose_best_partial(subgoals, rounds_after)
         if row["status"] == "stalled" and not str(row["best_partial"]).strip():
             row["best_partial"] = NO_PROGRESS_NOTE
-        self._write_plan(row, base=base_row, note=f"f.step:{deploy['action']}")
+        try:
+            self._write_plan(row, base=base_row, note=f"f.step:{deploy['action']}")
+        except Exception as exc:  # noqa: BLE001 —— 先把拒因留痕，再原样上抛
+            # 2026-11-20（真机 lp-ball-13 的 P0-1 / 附带的审计痕迹丢失）：这一笔写回
+            # 正是可能炸掉的那一笔（`_merged_plan_round` 的一个 set 字面量让它每次都抛
+            # TypeError）。而 `history_row["refusal"]` 就挂在它里面 —— 写回一炸，
+            # "这一轮为什么被拒"在盘上一个字都没有。所以拒因要有自己的落点。
+            record = RF.record_step_refusal(self, row, history_row,
+                                            exc=exc, deploy=deploy)
+            try:
+                setattr(exc, "refusal_record", record)
+            except Exception:  # noqa: BLE001 —— 挂不上就算了，不许掩盖原异常
+                pass
+            raise
 
         out = {
             "plan_id": row.get("plan_id"),

@@ -443,80 +443,91 @@ def test_negctl_without_the_escalate_gate_the_wrong_parent_gets_it(
         test_escalate_to_a_non_parent_is_refused(tmp_path)
 
 
-# ============================================================ ④ #public 是公告栏，不是对话
+# ============================================================ ④ 广播通道已退场
 
 
-def _public_is_a_bulletin(env: dict[str, Any]) -> None:
+def _the_public_channel_is_retired(env: dict[str, Any]) -> None:
     """判据④的三条断言（正控与负控同形：负控就是让它们在同一夹具上失败）。"""
     loop, ws, cond = env["loop"], env["ws"], env["cond"]
 
-    # ① 点名 + 指令 ⇒ 受控拒绝，且一条都不落
+    # ① 点名的"公告" ⇒ 受控拒 `broadcast_retired`（不是公告栏判据了：频道本身没了），零落盘
     bad = loop._do_message({"to": ALL, "subject": "安排",
                             "body": "F1 请立刻把实验跑完，然后把结果回我"})
     assert bad.get("ok") is False, bad
-    assert str(bad.get("refused") or "") == "public_is_not_a_conversation", bad
-    assert "公告栏" in str(bad.get("error") or ""), bad.get("error")
-    assert _messages(ws) == [], ("公告栏里的指令竟然落盘了", _messages(ws))
+    assert str(bad.get("refused") or "") == "broadcast_retired", bad
+    assert "改点具体的人" in str(bad.get("how_to_fix") or ""), bad
+    assert _messages(ws) == [], ("受控拒绝竟然落盘了", _messages(ws))
     for tid in (env["pa"], env["f1"], env["f2"], env["uncle"]):
-        assert _board(cond, tid) == [], ("公告不许开板项", tid, _board(cond, tid))
+        assert _board(cond, tid) == [], ("受控拒绝不许开板项", tid, _board(cond, tid))
 
-    # ② 不点名的公告 ⇒ 照发，且记录上标着 `bulletin`（"公告"与"对话"在盘上分得开）
+    # ② 不点名的"公告" ⇒ 同样拒（没有"无害公告"豁免）；手稿那条通道也一样
     ok = loop._do_message({"to": ALL, "subject": "本轮口径",
                            "body": "文献已入册；实验按计划推进"})
-    assert ok.get("message_sent"), ok
-    assert ok.get("board_kind") == "bulletin", ok
-    recs = _messages(ws)
-    assert len(recs) == 1 and recs[0].get("board_kind") == "bulletin", recs
+    assert ok.get("ok") is False and ok.get("refused") == "broadcast_retired", ok
+    import agentflow.manuscripts as _MS
+    hand = loop._do_handoff({"to": ALL, "summary": "口径", "body": "正文"})
+    assert hand.get("ok") is False and hand.get("refused") == "broadcast_retired", hand
+    assert _messages(ws) == [] and _MS.rows(ws) == [], (ws, _messages(ws), _MS.rows(ws))
 
-    # ③ 公告不构成对话：它不进任何人的私聊面（进去的每一条 `channel` 都是 public）；
-    #    而名册外的人（叔伯）连公告栏都看不到（可见面 = 发信人的直接子代理）。
-    for role, tid in ((PARENT, env["pa"]), ("F", env["f1"])):
-        msgs, _ = read_messages(ws, role, sid=SID, parent_task_id=env["me"],
-                                parent_role=ME)
-        assert [m for m in msgs if str(m.get("channel")) != "public"] == [], (
-            role, "公告栏的消息不许出现在私聊面", msgs)
-    outsider, _ = read_messages(ws, "E", sid=SID, parent_task_id=env["uncle"],
-                                parent_role="E")
-    assert outsider == [], ("名册外的人看到了公告栏", outsider)
-
-
-def test_the_public_channel_is_a_bulletin_not_a_conversation(tmp_path: pathlib.Path):
-    """判据④：`#public` 保留为公告栏 —— 点名下指令被拒；不点名的公告标 `bulletin`。"""
-    _public_is_a_bulletin(_env(tmp_path))
+    # ③ 旧行（退场前落的 public 留言）读侧照旧：可见面仍按发信人的直接子代理判，
+    #    类别读数仍是 `broadcast` —— 兼容不许破（新写入已不产生这种行，① 守着）。
+    import agentflow.sessions as _SS
+    _SS.append(ws, {"kind": "agent_message", "msg_id": "m-old-1", "from": ME,
+                    "to": ALL, "subject": "旧公告", "body": "旧正文",
+                    "channel": "public", "board_kind": "bulletin",
+                    "from_task_id": env["me"]}, sid=SID)
+    mine, _ = read_messages(ws, "F", sid=SID, parent_task_id=env["me"], parent_role=ME)
+    old = [m for m in mine if str(m.get("msg_id")) == "m-old-1"]
+    assert old and old[0].get("visibility") == "instance", old
+    assert AL.message_source(old[0])["kind"] == "broadcast", old[0]
 
 
-def test_negctl_without_the_addressee_check_the_directive_is_posted(
+def test_the_public_channel_is_retired(tmp_path: pathlib.Path):
+    """判据④：`#public` / `ALL` 的写入口已退场 —— 受控拒、零落盘；旧行仍读得出。"""
+    _the_public_channel_is_retired(_env(tmp_path))
+
+
+def test_negctl_without_the_retirement_gate_the_directive_is_posted(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch):
-    """负控④：把"点名 + 指令"的判据摘掉 ⇒ 那条指令照样发出去 ⇒ 判据④必红。"""
+    """负控④：把退场那道拒摘掉 ⇒ 那条指令又会被发出去 ⇒ 判据④必红。
+
+    摘的是判据本体（`_broadcast_retired_refusal` 恒返回 `{}`）—— 于是回到改前的行为：
+    公告栏判据接着判，这条"点名 + 指令"仍会因为 `public_is_not_a_conversation` 被拒，
+    但不点名的公告会落盘；判据④ 的第一条（零落盘 + `broadcast_retired`）当场红。
+    """
     env = _env(tmp_path)
-    monkeypatch.setattr(AgentLoop, "_public_addressee", lambda self, payload: "")
-    got = env["loop"]._do_message({"to": ALL, "subject": "安排",
-                                   "body": "F1 请立刻把实验跑完，然后把结果回我"})
-    assert got.get("message_sent"), ("坏实现应当把这条指令发出去", got)
+    monkeypatch.setattr(AL, "_broadcast_retired_refusal", lambda **_kw: {})
+    got = env["loop"]._do_message({"to": ALL, "subject": "本轮口径",
+                                   "body": "文献已入册；实验按计划推进"})
+    assert got.get("message_sent"), ("坏实现应当把这条公告发出去", got)
     with pytest.raises(AssertionError):
-        _public_is_a_bulletin(env)
+        _the_public_channel_is_retired(env)
 
 
 # ============================================================ ⑤ 反真空：框架通报与用户插话
 
 
 def _a_framework_stop_notice_gets_through(env: dict[str, Any]) -> None:
-    """框架通报（`by_framework=True`）点了名、带指令语气⇒ 仍然照发、且全角色可见。
+    """框架通报走框架直路（`send_message(by_framework=True)`），不走代理的收件人面。
 
-    这一格守的是公告栏判据上的显式豁免：叫停那一路是框架代表主控发的全树通知，
-    它必然点名 + 用指令语气（"F1 请立刻收工"）—— 若被"点名 + 指令 ⇒ 受控拒绝"这条
-    判据当作"公告栏里的对话"拦下，听不到叫停的子孙会继续烧钱跑实验。豁免的落点是
-    `_message_by_channel` 里那一句（判据本体），摘掉它这条就红（负控在同文件里）。
+    2026-11-20（BCRETIRE）：叫停那一路是"框架代表主控发的全树通知"，它手上没有名册、
+    也不经模型的 `message` 形状（`conductor_tools` 直接调 `send_message`）⇒ 广播通道
+    退场不影响它。这一格钉两半：① 框架直路照旧全角色可见；② 形状入口即使带了
+    `by_framework=True` 也一律 `broadcast_retired`（模型写不出这一格，也不该写）。
     """
     loop, ws = env["loop"], env["ws"]
-    got = loop._do_message({"to": ALL, "subject": "叫停",
-                            "body": "F1 请立刻收工，别再跑实验", "by_framework": True})
-    assert got.get("message_sent"), ("框架通报被公告栏判据挡住了", got)
-    assert got.get("board_kind") == "bulletin", got
+    _mid, problem = AL.send_message(ws, sender="M", to=ALL, subject="叫停",
+                                    body="F1 请立刻收工，别再跑实验", sid=SID,
+                                    by_framework=True, from_task_id=env["me"])
+    assert not problem, problem
     # 可见面：`by_framework=True` ⇒ 连"不是它子代理"的角色也读得到（叫停那一档的形态）
     seen, _ = read_messages(ws, "E", sid=SID, parent_task_id=env["uncle"], parent_role="E")
     assert [m for m in seen if m.get("channel") == "public" and m.get("by_framework")], (
         "框架通报没有按『全角色可见』送到名册外的人手上", seen)
+    # 形状入口：即使载荷带了 `by_framework`，也一律受控拒绝
+    shaped = loop._do_message({"to": ALL, "subject": "叫停",
+                               "body": "F1 请立刻收工，别再跑实验", "by_framework": True})
+    assert shaped.get("refused") == "broadcast_retired", shaped
 
 
 def test_framework_notice_and_user_interjection_still_get_through(tmp_path: pathlib.Path):
@@ -569,22 +580,27 @@ def test_framework_notice_and_user_interjection_still_get_through(tmp_path: path
     assert other == [], ("插话漏给了非主控", other)
 
 
-def test_negctl_without_the_framework_exemption_the_stop_notice_is_refused(
-        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch):
-    """负控⑤b：把公告栏判据上的框架豁免摘掉 ⇒ 那条叫停通报被当成"对话"拒掉 ⇒ 红。
+def test_negctl_without_the_framework_flag_the_notice_is_not_tree_visible(
+        tmp_path: pathlib.Path):
+    """负控⑤b：把框架通报的 `by_framework` 摘掉 ⇒ 它退回"发信人的直接子代理"可见面。
 
-    摘的就是判据本体里那一格（`_public_framework_exempt`），不是换个措辞绕过去：
-    坏实现下同一条通报拿到 `public_is_not_a_conversation` 的拒信、盘上一行不落。
+    叫停能"全树可见"靠的是框架自己落的那一格（`by_framework=True`），不是"public 就全树"。
+    这一条量的是那格真的在起作用：同一份 public 行、不带框架标记 ⇒ 名册外的人读不到，
+    只有发信人的直接子代理读得到（这也正是 2026-11-20 之后旧行的形态）。
     """
     env = _env(tmp_path)
-    monkeypatch.setattr(AgentLoop, "_public_framework_exempt", lambda self, payload: False)
-    got = env["loop"]._do_message({"to": ALL, "subject": "叫停",
-                                   "body": "F1 请立刻收工，别再跑实验", "by_framework": True})
-    assert str(got.get("refused") or "") == "public_is_not_a_conversation", (
-        "坏实现应当把这条框架通报当成『公告栏里的指令』拒掉", got)
-    assert _messages(env["ws"]) == [], ("受控拒绝却落了盘", _messages(env["ws"]))
-    with pytest.raises(AssertionError):
-        _a_framework_stop_notice_gets_through(env)
+    _mid, problem = AL.send_message(env["ws"], sender="M", to=ALL, subject="叫停",
+                                    body="请自行收工", sid=SID,
+                                    from_task_id=env["me"])
+    assert not problem, problem
+    seen, _ = read_messages(env["ws"], "E", sid=SID, parent_task_id=env["uncle"],
+                            parent_role="E")
+    assert not [m for m in seen if m.get("channel") == "public"], (
+        "没有框架标记的 public 行不许对名册外的人可见", seen)
+    child, _ = read_messages(env["ws"], "F", sid=SID, parent_task_id=env["me"],
+                             parent_role=ME)
+    assert [m for m in child if m.get("channel") == "public"], (
+        "没有框架标记的 public 行仍是发信人直接子代理那一档", child)
 
 
 def test_negctl_a_vacuum_would_be_red(tmp_path: pathlib.Path,

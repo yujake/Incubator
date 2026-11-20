@@ -1002,6 +1002,10 @@ def _b_skills() -> tuple[Skill, ...]:
             tools=("table.get", "table.schema"),
             body="""# 登记一条命题
 
+> 这一份是**第一阶段（机械录入）**：E/F 交来的证明原文 ＋ 那一份已有的 V 签，几乎自动录入
+> （只有「自己分析引文落稿」那一档要花力气）。**登记完一批之后紧接着做第二阶段
+> （逐个优化）** —— 读 `skills/B/优化-登记完一批就逐个洗.md`，不要留到收工前。
+
 ## 三件式（缺哪件都不算登记完）
 
 1. **定理内容**：含**完整假设**的正文（`statement_full`）—— 省掉假设的命题会被下游
@@ -1194,6 +1198,74 @@ outcome 与理由（`diff.filled_not_requested` 恒空：没有一格越权写�
 
 `conjecture` / `pre_theorem` / `theorem` 是从**五元位现算**的，盘上那一格只是缓存。
 写了更漂亮的等级，判据照样按现算读 —— 白写。
+""",
+        ),
+        Skill(
+            # 业主 2026-11-20（逐字）：「B登记命题是快的（除非自己分析引文落稿，其它都是几乎
+            # 自动录入 E,F 侧成果），它的重要职责就是二阶段」；形状的真源是 `draft/179`
+            # （业主 2026-11-02：「逐个优化，优化后拿V签，用有V签的优化后的证明精准替换原证明
+            # 并将那条证明记为已优化」）。
+            # 为什么要独立一条手册而不是塞进「登记」那一份：它不是登记的一步，是另一阶段，
+            # 而且有自己的入口判据（逐份 optimized 那一格）与三步顺序（洗稿 → 重签 → 替换）。
+            slug="优化-登记完一批就逐个洗",
+            title="二阶段：登记完一批，逐个洗稿、重拿 V 签、精准替换",
+            summary="第一阶段快录；第二阶段逐个优化 —— 洗稿 → 重拿 V 签 → 精准替换 → 记 optimized",
+            when="一批命题登记完（机械录入的回执已交回）、或有人派你「把这批洗一遍」的时候",
+            actions=("B.open_polish_copy", "B.land_manuscript", "B.ingest_manuscript",
+                     "V.verify_proof"),
+            tools=("manuscripts.read", "table.get", "table.list"),
+            body="""# 二阶段：登记完一批，逐个洗稿、重拿 V 签、精准替换
+
+## 这一份管什么
+
+业主 2026-11-20（逐字）：
+
+> 「B登记命题是快的（除非自己分析引文落稿，其它都是几乎自动录入 E,F 侧成果），
+>   它的重要职责就是二阶段」
+
+**第一阶段（机械录入）是快录**：F / E 交来的证明原文 ＋ 那一份已有的 V 签，几乎自动进台账。
+**第二阶段（逐个优化）才是你的主职**：把**证明正文**洗到能保证质量。对象是正文，
+不是命题措辞 —— 这里做的是「洗稿 → 重拿 V 签 → 精准替换」，不是给一句话润色。
+
+## 什么时候做
+
+- 一批命题登记完、机械录入的回执交回之后 —— **紧接着**做这一批，不要留到收工前；
+- 有人派你「把这批洗一遍」的时候（派活里通常点名了这一批的 `stmt_id`）。
+
+## 做哪几份：只看这一格
+
+逐份读 `optimized_by_proof[证明号]`（读侧 `evidencebits.optimized_state` 的三态）：
+
+| 读到 | 做什么 |
+|---|---|
+| `true` | 不再动 |
+| `false` | 洗一遍（F 刚产出的那一版 / 文献侧机械录入的那一版） |
+| `not_recorded` | 洗一遍（存量行缺格 —— 缺格不等于洗过了） |
+
+**不再判签**：业主 2026-11-02「洗过的肯定能保证 V 签。所以二阶段只用看是否优化过」。
+洗不洗由这一格决定，不由「它有没有签」决定；但**打 true 那一刻**仍要签盖住这一版
+（判据只有 `evidencebits.optimized_signature` 一处）。
+
+## 三步（顺序不许颠倒）
+
+1. **洗稿**：源稿已经拿过签的，先 `B.open_polish_copy` 开一份 B 号副本
+   （`reports/b-proof-<B稿号>.md`；源稿一个字节不动、副本里的签块被清掉），在副本上洗。
+   「洗」的口径与「登记」那份手册的「消化」一节同一条：完整句、步骤间有衔接词、
+   难懂的一步展开 —— 读者是下游的 G（写正文）与 H（审校），不是原作者。
+2. **重拿 V 签**：派 `V.verify_proof`（`statement_id` ＋ `proof_manuscript=<副本>`），
+   签要盖在**洗过的那一版正文**上。要等就挂时钟（`clock.timer_start`），别空转。
+3. **精准替换**：`B.ingest_manuscript` 的 `mode="apply"`、`target_stmt_id=…`、
+   `cells=["proof_text"]`、`conflict="overwrite"` —— 这一份的正文被替换，
+   **旧正文按号进 `proof_history`**，`optimized_by_proof[证明号]` 记 true。
+
+**没有盖上这一版的签 ⇒ 替换被拒**（读数 `optimized_blocked` 给 `no_sign` / `sha_mismatch`）：
+先签后换，不许「先换了再补签」。同一份正文重送 V 会原样返回旧判词 —— 正文没变就别指望新签。
+
+## 交回什么
+
+交给派你的那一方：这一批**洗了几份 / 还剩几份**（逐份给证明号与 `optimized_blocked` 的原话）、
+每一份的副本路径与新签的落点。**「这一批录完了」不等于这一批的活完了** ——
+留到收工前再洗，等于让它一次都不发生。
 """,
         ),
         Skill(
@@ -2224,7 +2296,7 @@ def _f_skills() -> tuple[Skill, ...]:
   `## 依赖` 三列表（`引用` 取那一步的原话 / `命题号` / `用在哪一步`；路径号是第四列，由 B
   收录时分配、不进稿）。
   手写 `reports/f-proof-*` 会被 `reserved_framework_artifact` 拒 —— 那是框架渲染的产物；
-  真身是 `agent_f/manuscript.py::proof_manuscript` 的 `dependency_rows`（只从 `cites` 取）；
+  真身是 `agent_f/manuscript.py::_Manuscript.proof_manuscript` 的 `dependency_rows`（只从 `cites` 取）；
 - **递审只能点 `F.step` 返回的 `manuscript_path`**（`reports/f-proof-<你的稿号>.md`）：你自己用
   `fs.write` 写的论文章节稿（`reports/P1-*.md` / `reports/P2-*.md` / `notes/*.md` 这类）**不是手稿**
   —— 它不是框架渲染的、没有 `## 命题` / `## 证明` / `## 依赖` 这三节，V 的入口闸会整笔拒
@@ -2832,22 +2904,28 @@ def _a_skills() -> tuple[Skill, ...]:
 ## 八、判"这条文献符不符合需求"：**这是你的判断，且必须留痕**
 
 框架**不会**替你判相关性，也不会替你读正文。待新增列表里的每一条，你都要落一个判词（三态：**待裁 / 通过 / 拒**）。
-判之前有一条硬闸：**每一条候选都必须先抽读一次**——没有抽读回执的判定会被 `lit.admit` 整批拒
-（`no_read_evidence`，逐槽点名）。
+判之前有两条硬闸：**每一条候选都必须先抽读一次**——没有抽读回执的判定会被 `lit.admit` 整批拒
+（`no_read_evidence`，逐槽点名）；**没有正文就不许判收**（业主 2026-11-20「读内容才能判东西」）——
+抽到的是摘要不算正文，`metadata_only` / `extract_failed` / 没下载的一律只能判拒 + 写清为什么没读到。
 
 1. **取字节**：`search.download` 拿全文的 `rel_path`；
 2. **抽正文（必做，没有"跳过"这一档）**：`text.extract(path=<rel_path>, lit_id="cand:<槽位>")` —— `cand:` 前缀是
    "这一条候选"的写法。它把 `.txt` 落在 `out/texts/`，并在 `data/lit_reads.jsonl` 留一条**抽读回执**
    （字数 / 指纹 / 乱码判定）；那份账只有 `text.extract` 能写，你别手写；
 3. **读它**：`fs.read` 那份 `.txt`。**抽了不读也算没读**：闸核的是你读的与抽读件同一版；
+   只抽到摘要（正文除摘要外没剩多少字）也按 `abstract_only` 拒 —— 摘要最多用于初排/去重；
 4. **判**：`lit.admit` 的 items 里逐条给 `availability` 与那一句 `relevance`
    （质量如何、相关度如何、凭什么 —— 从正文里看出来的，不是抄题名）。不入的用
    `lit.stage_reject`（受控理由码 + 一句为什么）。
+   **`content_read` 是机器现算的读数**（抽读回执 + 版本 + `fs.read` + 不只摘要），不是你报的；
+   `content_read=false` 时 `relevance` / `new_content` 里写定理名、具体数值这类内容性断言
+   ⇒ 整批拒（`content_assertion_without_content`）—— 没读正文就只写"为什么与本次检索相关"。
 
 可读性四档（受控词，别自拼同义词）：`readable`（有字节、且抽得出可读文本）/
-`metadata_only`（**试过一次抽取也没拿到可读文本**，只剩书目元数据 —— 必须指得出处 DOI/URL）/
+`metadata_only`（**试过一次抽取也没拿到可读文本**，只剩书目元数据）/
 `extract_failed`（有字节但抽出来的不是可读文本：乱码 / 无文本层 ⇒ 按 `rejected_low_quality` 判拒）/
-`unknown`（没判过 ⇒ 不入库）。**前两档才准入**；`metadata_only` 不是"零读可入"的口子。
+`unknown`（没判过 ⇒ 不入库）。**只有 `readable` 准入**；`metadata_only` 只是"没有正文"的
+诚实读数，不是入库券：它只能留在候选记录里写清为什么没读到，然后判拒。
 
 ## 九、提交才注册：`lit.admit` 判收、`lit.admit_all` 收口（2026-11-16 Q1）
 

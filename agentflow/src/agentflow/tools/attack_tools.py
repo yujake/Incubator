@@ -23,6 +23,9 @@
 会直接逃出工具层，被 `tools/base.py` 兜成 `kind="unexpected"` —— 那是已知失败原因，不是
 "未预期的异常"，而调用方要靠 kind 决定"重试还是改输入"。现在分别落成
 `plan_error` / `validation_error` / `store_error`，未接线仍走 `kind="not_wired"`。
+2026-11-20 再补一档 `framework_error`：框架自己抛 `TypeError` / `AttributeError` /
+`KeyError` 那一族时，拒信必须说"这是框架侧的问题"，不许混进「校验失败」
+（真机 `projects/lp-ball-13` 的 15 连拒正是这一档被折平之后的形态）。
 守卫实现只有一份（本模块的 `_guard`），`graph_tools` 从本模块 import 它。
 """
 
@@ -30,7 +33,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 from functools import partial
-from typing import Any, Callable, Sequence
+from pathlib import Path
+from typing import Any, Callable, Mapping, Sequence
 
 from ..store import StoreError
 from .base import ParamError, ToolError, ToolRegistry, ToolResult, ToolSpec, fail, ok, tool
@@ -117,6 +121,25 @@ def check_budget(budget: dict | None) -> dict:
     }
 
 
+def _budget_int(budget: dict, key: str) -> int:
+    """取预算里的一个整数字段；取不出来 ⇒ 逐字点名那个键的 `ValueError`。
+
+    为什么不用 `int(budget[key])` 直接读（2026-11-20，真机 `projects/lp-ball-13` 的
+    P0-1 顺带）：`budget` 在 schema 里是 `{"type":"object"}` 无 properties，内层值从没
+    被校验过，于是 `int(None)` / `int([])` 抛的是裸 `TypeError`，被 `_guard` 折进
+    「校验失败」那一档 —— 而这一档现在专门留给模型输入不合格。输入不合格必须由显式
+    校验说出来：带着键名与收到的值，模型才知道改哪一格。
+    """
+    raw = budget.get(key)
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        raise ValueError(
+            f"`budget.{key}` 必须是整数，收到 {type(raw).__name__}（{raw!r}）—— "
+            f"四类键缺一不可：{list(_REQUIRED_BUDGET_KEYS)}"
+        ) from None
+
+
 def can_round(budget: dict | None, *, rounds_done: int, depth: int = 0) -> dict:
     """在给定预算与已做轮数下，能否再开一轮。
     返回里的 `allowed=False` 可能来自两个不同维度（轮数 / 深度），调用方必须看 `blocked_by` 再决定处置（见模块 docstring）。
@@ -136,8 +159,8 @@ def can_round(budget: dict | None, *, rounds_done: int, depth: int = 0) -> dict:
     if not chk["complete"]:
         return {**chk, "blocked_by": "incomplete"}
     assert budget is not None
-    mr = int(budget["max_rounds"])
-    md = int(budget["max_depth"])
+    mr = _budget_int(budget, "max_rounds")
+    md = _budget_int(budget, "max_depth")
     if rounds_done >= mr:
         return {
             **chk,
@@ -179,7 +202,7 @@ def can_derive(budget: dict | None, *, depth: int) -> dict:
     if not chk["complete"]:
         return {**chk, "allowed": False, "blocked_by": "incomplete"}
     assert budget is not None
-    md = int(budget["max_depth"])
+    md = _budget_int(budget, "max_depth")
     if depth + 1 > md:
         return {
             **chk,
@@ -325,7 +348,19 @@ def _plan_error_kind(exc: Exception) -> str:
     return exc.kind if isinstance(getattr(exc, "kind", None), str) and exc.kind else PLAN_ERROR_KIND
 
 
-def _guard(fn: Callable[[], Any]) -> ToolResult:
+#: 拒信的分档、落库事实、逐条诊断与审计痕迹都在 `refusalfault` 一个模块里
+#: （两处要用它：这里与 `agent_f/step.py`；口径也自成一件事）。
+#:
+#: 这里只做转发：`FRAMEWORK_ERROR_KIND` / `REFUSAL_AUDIT_MARKER` 是两处共用的两个名字，
+#: 判据本体（`FRAMEWORK_FAULTS` 那张类型表、落库读数、拒信正文）都在那边一句话说完。
+from ..refusalfault import (FRAMEWORK_ERROR_KIND, REFUSAL_AUDIT_MARKER,  # noqa: E402
+                            FRAMEWORK_FAULTS, LandingProbe, framework_failure,
+                            product_problems, validation_failure)
+
+
+def _guard(fn: Callable[[], Any], *,
+           problems: Callable[[], Sequence[str]] | None = None,
+           landing: Any = None, tool: str = "") -> ToolResult:
     """把已知的失败原因变成结构化失败，绝不让它逃成 `kind="unexpected"`。
 
     这是 `attack_tools` 与 `graph_tools` 共用的一份实现（FC-03：同一判据只有一份）；
@@ -345,21 +380,40 @@ def _guard(fn: Callable[[], Any]) -> ToolResult:
     - `ValueError` 分支的文案带具体原因（`e` 本身就是字段级报错，如
       `invalid literal for int() with base 10: 'abc'`）：只说"校验失败"没有可操作性，
       调用方要知道哪个字段读不动才能改输入。
+
+    ## 分档（2026-11-20，真机 `projects/lp-ball-13` 的 P0-1/P0-2/P0-3）
+
+    改前这一支只有一个 `except (ValueError, TypeError)`：框架自己的 `TypeError` 与
+    模型的输入不合格拿到同一句「校验失败」＋ 一句无条件的「这一笔没有落库」，而校验器
+    已经算出的逐条问题被顶掉。现在分成三档（判据本体在 `refusalfault`）：
+
+    1. `PlanError` ⇒ 受控 `plan_error`（原样，一个字没动）；
+    2. `FRAMEWORK_FAULTS` 那一族 ⇒ 受控 `framework_error`："这是框架侧的问题，不是你
+       交的东西不合格、换措辞重试没有用"，并带校验器的逐条读数与盘上落库事实；
+    3. `ValueError` / `TypeError` 落到这里 ⇒ `validation_error`：逐条问题 ＋ 可执行改法。
+
+    落库那一句只照 `landing`（`refusalfault.LandingProbe`：调用前后各读一次盘）说，
+    三态（已落库 / 没有 / 查不到），不再由异常路径直接断言"没有落库"。
+
+    参数：`problems`（一次只读重算，给校验器已算出的逐条问题；不传 ⇒ 这一档不带逐条
+    读数）、`landing`（`LandingProbe`：写盘的入口传）、`tool`（工具名，进 `meta`）。
     """
     try:
         return ok(fn())
+    except _plan_error_type() as e:
+        return fail(f"攻坚计划被拒绝：{e}", kind=_plan_error_kind(e), reason=str(e))
+    except FRAMEWORK_FAULTS as e:
+        text, meta = framework_failure(e, problems=problems, landing=landing, tool=tool)
+        return fail(text, **meta)
     except (ValueError, TypeError) as e:
         # 2026-10-17（子代理 tools 根因 C）：`budget` 在 schema 里是 `{"type":"object"}`
         # 无 properties ⇒ 内层值从没被校验；`int(None)` / `int([])` 抛 TypeError 穿过守卫。
+        # 2026-11-20（本档）：预算那几个键改成在 `can_round` / `can_derive` 里显式校验
+        # （`_budget_int`）⇒ 模型输入写坏是逐字带键名的 ValueError，不再是裸 TypeError；
+        # 这一支留 `TypeError` 只为负控（把类型表清空时它要能回到这一档）。
         # `PlanError` 是 `ToolError` 子类、不是 `ValueError`，所以这一支抓不到它。
-        # （不依赖这个事实：下面那一支排在 ToolError 之前，改基类也不会静默漂移。）
-        return fail(
-            f"校验失败：{e}（**这一笔没有落库**）",
-            kind="validation_error",
-            reason=str(e),
-        )
-    except _plan_error_type() as e:
-        return fail(f"攻坚计划被拒绝：{e}", kind=_plan_error_kind(e), reason=str(e))
+        text, meta = validation_failure(e, problems=problems, landing=landing, tool=tool)
+        return fail(text, **meta)
     except ToolError:
         # 工具层自己的异常（参数错 / 未接线）上抛，由 `ToolRegistry.call` 映射。
         raise
@@ -493,7 +547,9 @@ def _attack_create_plan(_need_store, store, problem, problem_key, for_question_i
                        budget=budget,
                        depth=depth,
                        parent_plan_id=parent_plan_id,
-                   )
+                   ),
+                   landing=LandingProbe(store),
+                   tool="attack.create_plan",
                )
     )
 
@@ -536,7 +592,9 @@ def _attack_abandon_plan(_need_store, store, plan_id, reason, basis="",
     return _need_store("attack.abandon_plan") or _guard(
         lambda: _agent_for(store).abandon_plan(
             plan_id, reason=reason, basis=basis, difficulty=difficulty,
-            salvaged=salvaged)
+            salvaged=salvaged),
+        landing=LandingProbe(store, plan_id),
+        tool="attack.abandon_plan",
     )
 
 @tool(
@@ -590,12 +648,22 @@ def _attack_step(_need_store, store, plan_id, product=None):
     `product` 是 2026-11-11 新增的可选入口（`attackround.HANDED_PRODUCT_SCHEMA`）：
     给了就把 F 写好的那一份交给 `AgentF.step` 走既有的产物校验与落稿路径；
     不给就原样调 `step(plan_id)` —— 老路一个字节没变。
+
+    2026-11-20（P0-2/P0-3）：这一支给 `_guard` 多两样读数 —— `landing`（调用前后各读
+    一次盘：拒信里"有没有落库"只许照它说）与 `problems`（校验器已经算出的逐条问题：
+    异常路径也要带出去，旧代码把它吞掉了）。
     """
+    missing = _need_store("attack.step")
+    if missing is not None:
+        return missing
+    landing = LandingProbe(store, plan_id)
+    # 老路（没交 product）没有可校验的那一份 ⇒ 这一档不带逐条读数（"没查"不许折成"0 条"）。
+    problems = partial(product_problems, product) if product is not None else None
     if product is None:
-        return _need_store("attack.step") or _guard(lambda: _agent_for(store).step(plan_id))
-    return _need_store("attack.step") or _guard(
-        lambda: _agent_for(store).step(plan_id, product=product)
-    )
+        return _guard(lambda: _agent_for(store).step(plan_id),
+                      problems=problems, landing=landing, tool="attack.step")
+    return _guard(lambda: _agent_for(store).step(plan_id, product=product),
+                  problems=problems, landing=landing, tool="attack.step")
 
 @tool(
     "attack.status",

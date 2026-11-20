@@ -872,8 +872,8 @@ def test_every_documented_shape_actually_parses(tmp_path: pathlib.Path):
     # task」之后，`<动作名>` / `A-H` 两条替换没有对象了，换掉它们的是 `role` / `task` 那两条。
     fixed = (JSON_TAIL.replace("{...}", "{}").replace("<工具名>", "table.list")
              .replace("<伙伴表里的角色名>", "A").replace("<一件可判定的活>", "把这一条走一遍")
-             .replace("<伙伴或 ALL>", "ALL").replace("<结论>", "做完了")
-             .replace("<伙伴/M/ALL>", "A").replace("<markdown 正文>", "正文")
+             .replace("<名册名或绝对编号，或 M 的本号>", "A").replace("<结论>", "做完了")
+             .replace("<markdown 正文>", "正文")
              .replace("<前面的编号>", "0000")
              .replace("...", "x"))
     parsed: list[str] = []

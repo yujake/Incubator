@@ -584,14 +584,20 @@ def test_a_transient_provider_failure_still_gets_the_backoff_retry(store):
 
 
 def test_download_failure_still_registers_and_completes_request(store):
-    """下载失败不阻塞请求：文献行照常登记（path=null），请求仍置 done。
+    """下载失败不阻塞请求：判收之后那一行照样在，请求仍置 done。
 
     改前红（Q16 落地后）：`res.registered == 1` 实得 0、`download_failed == 1` 实得 0 ——
     第一趟既不登记也不下载：没通过入库判断的候选不下载（Q16 之后那就是全部候选）。
     定性：判据过时（Q16：入库只能逐条判收）。改后这条判据量的是同一件事的两拍：
-    ① 判收之后那一行照样在（`path=null`），请求照样 `done`；
-    ② 再跑一趟时的补下载真的试过并如实记失败（`download_failed=1`），而失败
-       不把那一行判死、也不把请求打回未完成。
+    ① 判收之后那一行照样在，请求照样 `done`；
+    ② 再跑一趟只会判重到同一行，不会把那一行改坏、也不会把请求打回未完成。
+
+    2026-11-20（ALITCONTENT）：没有正文不许判收 ⇒ 这一条判收走的是 `readable`
+    前置证据（conftest 造的抽读件），登记路径会把那份抽读件收编进
+    `library/<lit_id>/`（裁定 3）。于是第二拍不再有"补下载"（行上已经有路径）——
+    这一条如实改成"重跑判重、行与请求都不动"；下载失败本身仍由
+    `test_download_failure_leaves_no_staging_or_partial_files` 与
+    `search.download` 那一族判据守着。
     """
     a = _agent_a(store, StubProvider([_cand()]), FailingDownloader())
     add_request(store, "r-0001")
@@ -602,21 +608,20 @@ def test_download_failure_still_registers_and_completes_request(store):
     assert first.processed == 1, first.to_dict()
     assert store.rows("literature") == []
 
-    # ---- 第二拍：逐条判收 ⇒ 行在、path 空
+    # ---- 第二拍：逐条判收 ⇒ 行在，path 是判收时读过的那份正文
     _judge_and_admit(store, "r-0001", "000000")
     lit = store.rows("literature")
-    assert len(lit) == 1 and lit[0]["path"] is None, lit
+    assert len(lit) == 1 and lit[0]["path"] == "000000/cand-000000.txt", lit
     assert lit[0]["processed"] is False
 
-    # ---- 第三拍：补下载失败 ⇒ 如实记账，行与请求都不许被这个失败改坏
+    # ---- 第三拍：同一个请求再跑一趟 ⇒ 判重到同一行（不新建、不改坏），请求仍 done
     set_request_done(store, "r-0001", False)
     res = a.run_once()
-    assert res.registered == 0 and res.download_failed == 1 and res.processed == 1, (
+    assert res.registered == 0 and res.duplicated == 1 and res.processed == 1, (
         res.to_dict())
+    assert res.download_failed == 0, res.to_dict()
     lit = store.rows("literature")[0]
-    assert lit["path"] is None
-    assert lit["download"]["status"] == "failed"
-    assert lit["download"]["error"] == "boom"
+    assert lit["path"] == "000000/cand-000000.txt", lit
     assert lit["processed"] is False
     req = store.rows("search_requests")[0]
     assert req["done"] is True

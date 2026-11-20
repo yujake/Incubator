@@ -57,6 +57,7 @@ reviewer 逐行走查）。而"这一条当时可不可读"是候选期的事实
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -68,16 +69,22 @@ __all__ = [
     "EXTRACT_FAILED",
     "LEDGER_NAME",
     "METADATA_ONLY",
+    "MIN_BODY_BEYOND_ABSTRACT",
+    "NOT_ADMITTABLE_REASONS",
     "READABLE",
     "READ_LEDGER_NAME",
     "TIER_LABELS",
     "UNKNOWN",
+    "body_beyond_abstract",
     "candidate_digest",
     "check_read",
+    "content_assertion",
+    "content_read",
     "describe_tier",
     "is_admissible",
     "availability_ledger_path",
     "locator_of",
+    "not_admittable_reason",
     "read_ledger_path",
     "read_receipts",
     "receipts_by_slot",
@@ -102,12 +109,35 @@ TIER_LABELS: dict[str, str] = {
     UNKNOWN: "未查",
 }
 
-#: 允许进入 `literature` 的那两档（业主裁定 ③：`extract_failed` 与 `unknown` 不许入库）。
+#: 允许进入 `literature` 的那一档（业主 2026-11-20 裁定，逐字：
+#: 「读内容才能判东西，这样的话保证通过的肯定有内容，且能保证质量」）。
 #:
-#: `metadata_only` 在列的理由见 `docs/` 与本次交付的 ④ 判断：仅题录是诚实的第三态
-#: （它指得出处、能被下游按 DOI 定位，只是没有正文），拦掉它会把"进了一条没有正文的记录"
-#: 换成"这一篇连记录都没有" —— 后者更坏。前提是它必须指得出处（`locator_of` 非空）。
-ADMITTABLE_TIERS: tuple[str, ...] = (READABLE, METADATA_ONLY)
+#: 改前这里是 `(READABLE, METADATA_ONLY)`：仅题录（试过一次、拿不到可读文本）也能入库。
+#: 那条口径让 lp-ball-13 的 12 条"只有题录、没有正文"的候选照样判收 —— 通过的东西里
+#: 一半没有内容。现在 `metadata_only` 只是"没有正文"的诚实读数，不再是一张入库券：
+#: 它只能留在候选列表里（写清为什么没读到），判收要走 `readable` + 抽读证据。
+ADMITTABLE_TIERS: tuple[str, ...] = (READABLE,)
+
+#: 没有正文时，拒信里用的受控理由码（与 `availability_bad[].code` 同一套）。
+#:
+#: 为什么分三档而不是一句"没有正文"：下一步不同 ——
+#:   no_fulltext    连一次抽读都没有过（先下载 / 先 `text.extract`）；
+#:   extract_failed 试过、抽不出可读文本（只能判拒或换来源）；
+#:   metadata_only  试过、只剩题录（同上，它不是入库券）。
+#: `metadata_only` 这一档的理由码由 `not_admittable_reason` 按"有没有抽取尝试"现算。
+NOT_ADMITTABLE_REASONS: dict[str, str] = {
+    METADATA_ONLY: "no_fulltext",
+    EXTRACT_FAILED: "extract_failed",
+    UNKNOWN: "no_fulltext",
+}
+
+#: 「读了正文」与「只读了摘要」之间那条线（字符数）。
+#:
+#: 摘要不算读了内容（业主 2026-11-20 裁定 ②）：把摘要当正文抽出来、`fs.read` 一遍，
+#: 机器读数上会显得"读过"。所以抽出来的文本里，除了摘要之外至少还要有这么多字，
+#: 才算读到了正文。500 的依据：真论文的正文比摘要长一个量级；而"摘要 + 一段
+#: 参考文献/页眉"这类假正文通常只多出几十个字。
+MIN_BODY_BEYOND_ABSTRACT: int = 500
 
 #: 台账落在工作区的哪个相对路径（零 schema：它是文件，不是表）。
 LEDGER_NAME = "lit_availability.jsonl"
@@ -171,7 +201,8 @@ def tiers_by_slot(root: Path | str) -> dict[str, str]:
 
 def record_availability(root: Path | str, request_id: str, slot: str, tier: str, *,
                         note: str = "", actor: str = "agent-A",
-                        relevance: str = "", read: Mapping[str, Any] | None = None) -> dict:
+                        relevance: str = "", read: Mapping[str, Any] | None = None,
+                        content_read: bool | None = None) -> dict:
     """写一条可读性判定（追加；`tier` 必须是四档之一）。
 
     这是"这一条审过"的唯一写点。写成别的取值当场抛 `ValueError`：自造档在写侧就炸，
@@ -181,6 +212,11 @@ def record_availability(root: Path | str, request_id: str, slot: str, tier: str,
     "质量如何、相关度如何、入不入库、为什么"）：前者的真身是候选行的 `relevance`
     （回读时抄一份到这里，report / 闸不必再回表拼），后者是抽读回执的摘要
     （字数 / 指纹 / 抽读件路径 / 它读的是哪一版）。两格都只是读数，不参与"档位合不合法"。
+
+    `content_read` 是 2026-11-20 业主裁定 ③ 新加的读数：这一条到底读没读到正文
+    （`litavail.content_read` 现算 —— 抽读成功、非空、且不是只有摘要）。`None` 表示
+    调用方没算（老调用点），此时按 `tier == readable` 记一个保守的 `False`：
+    "没算过"不许冒充"读过"。
     """
     tier_text = str(tier or "").strip()
     if tier_text not in AVAILABILITY_TIERS:
@@ -196,6 +232,7 @@ def record_availability(root: Path | str, request_id: str, slot: str, tier: str,
         "note": str(note or "").strip()[:400],
         "relevance": str(relevance or "").strip()[:400],
         "read": _read_digest(read),
+        "content_read": bool(content_read) if content_read is not None else False,
         "at": _now(),
         "actor": str(actor or ""),
     }
@@ -405,8 +442,137 @@ def _now() -> str:
 
 
 def is_admissible(tier: str) -> bool:
-    """这一档能不能进 `literature`（`extract_failed` / `unknown` 不能）。"""
+    """这一档能不能进 `literature`（现在只有 `readable` 能；见 `ADMITTABLE_TIERS`）。"""
     return str(tier or "") in ADMITTABLE_TIERS
+
+
+def not_admittable_reason(tier: str, *, attempted: bool = False) -> str:
+    """这一档不许入库时，拒信里给出的受控理由码（三档，见 `NOT_ADMITTABLE_REASONS`）。
+
+    `attempted=True` 表示抽读回执是一条 `extract_failed`（试过、拿不到可读文本）——
+    此时 `metadata_only` 的理由码从 `no_fulltext` 变成 `metadata_only`：两者下一步
+    不同（前者去下载/去抽，后者换来源或判拒）。
+    """
+    key = str(tier or "")
+    if key == METADATA_ONLY:
+        return "metadata_only" if attempted else "no_fulltext"
+    return NOT_ADMITTABLE_REASONS.get(key, "no_fulltext")
+
+
+#: `relevance` / `new_content` 里出现这些词或数字（年份除外）就算"内容性断言"。
+#:
+#: 业主 2026-11-20 裁定 ③：`content_read=false` 而 relevance 写了具体结果 / 定理名 /
+#: 数值 ⇒ 必红。这里只收机器判得出来、且不容易误伤的那三类：
+#:   ① 数学名词（定理 / 引理 / 命题 / 证明 / 不等式 / 估计 … 与它们的英文）；
+#:   ② 小数（`0.5` / `1.25`）—— 裸整数不算：它可能是条目标号、年份、卷号；
+#:   ③ 显式的公式记号（`≥` / `≤` / `=` / `<` / `>` 后面接数字或字母）。
+_CONTENT_WORDS = re.compile(
+    r"(定理|引理|命题|推论|证明|公式|不等式|估计|渐近|常数|界"
+    r"|theorem|lemma|proposition|corollary|proof|inequality|estimate|asymptotic|bound)",
+    re.IGNORECASE,
+)
+_FORMULA = re.compile(r"[≥≤=<>]\s*[A-Za-z0-9]")
+_DECIMAL = re.compile(r"(?<![\w.])\d+\.\d+(?![\w.])")
+
+
+def content_assertion(text: str) -> str:
+    """这一句里有没有"具体结果/定理名/数值"那种内容性断言；返回命中的那一段（没有 ⇒ 空串）。
+
+    刻意不判"相关性"这种模糊的话：`与本次检索相关（题名）` 不算内容性断言 —— 它是
+    "这一条为什么进候选"的理由，摘要/题名就够写。只有写了正文里才拿得到的东西
+    （定理名、不等式、具体小数）才算。裸整数与四位数年份刻意不算：前者常是条目标号，
+    后者只说明"哪一年"。
+    """
+    raw = str(text or "")
+    if not raw.strip():
+        return ""
+    hit = _CONTENT_WORDS.search(raw)
+    if hit:
+        return hit.group(0)
+    hit = _FORMULA.search(raw)
+    if hit:
+        return hit.group(0)
+    hit = _DECIMAL.search(raw)
+    if hit:
+        return hit.group(0)
+    return ""
+
+
+def _squash(text: str) -> str:
+    """去掉空白之后的文本（摘要与正文的长度比较用同一把尺子）。"""
+    return re.sub(r"\s+", "", str(text or ""))
+
+
+def body_beyond_abstract(text: str, summary: str) -> int:
+    """抽出来的文本里，除摘要之外还有多少字（业主裁定 ②：摘要不算读内容）。
+
+    判定：摘要在正文里出现 ⇒ 正文减掉那一段的长度；正文里找不到摘要（摘要被裁剪过、
+    或 provider 给的摘要与正文措辞不同）⇒ 整段正文都算"摘要之外"——这一档不虚高：
+    真只抽到摘要时它通常就是摘要本身，`body_beyond_abstract` 接近 0。
+    """
+    body = _squash(text)
+    abstract = _squash(summary)
+    if not abstract:
+        return len(body)
+    cut = body.find(abstract)
+    if cut < 0:
+        return len(body)
+    return len(body) - len(abstract)
+
+
+def _receipt_body(root: Path | str, receipt: Mapping[str, Any] | None) -> str:
+    """抽读回执指向的那份正文（读不到 ⇒ 空串：读不到正文不是"读过了"）。"""
+    if not receipt:
+        return ""
+    for key in ("text_abs", "text"):
+        raw = str(receipt.get(key) or "").strip()
+        if not raw:
+            continue
+        target = Path(raw)
+        if not target.is_absolute():
+            target = Path(root) / target
+        try:
+            return target.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+    return ""
+
+
+def content_read(root: Path | str, slot: str, row: Mapping[str, Any], *,
+                 tier: str = "", receipt: Mapping[str, Any] | None = None
+                 ) -> tuple[bool, str]:
+    """这一条算不算「读了正文」：返回 `(content_read, why)`（`why` 为空 = 读了）。
+
+    四步（缺一不可，与业主 2026-11-20 裁定 ①②③ 一一对应）：
+
+    1. A 报的档位必须是 `readable`（仅题录 / 抽取失败 / 未查都不算 —— 没有正文）；
+    2. 抽读证据过 `check_read`（抽读回执 + 候选身份 + 抽读件版本 + `fs.read` 观察台账）；
+    3. 抽出来的文本非空（`check_read` 已核 `chars > 0`，这里再核文件真读得出来）；
+    4. 除了摘要之外还有 `MIN_BODY_BEYOND_ABSTRACT` 字以上（摘要不算"读内容"）。
+
+    `content_read=false` 是读数，不是"判不了"：它带着 `why`，拒信与报告都写它。
+    """
+    text_tier = str(tier or "").strip()
+    if not text_tier:
+        text_tier = tiers_by_slot(root).get(str(slot or ""), "")
+    body = ""
+    if receipt is None:
+        receipt = receipts_by_slot(root).get(str(slot or ""))
+    attempted = bool(receipt) and str(receipt.get("tier") or "") == litread.FULLTEXT_EXTRACT_FAILED
+    if text_tier != READABLE:
+        return False, not_admittable_reason(text_tier, attempted=attempted)
+    state, why = check_read(root, str(slot or ""), receipt,
+                            expected=candidate_digest(row))
+    if state != "ok":
+        return False, state if not why else f"{state}: {why}"
+    body = _receipt_body(root, receipt)
+    if not body.strip():
+        return False, "empty_text: 抽读件读不出正文"
+    beyond = body_beyond_abstract(body, str(row.get("summary") or ""))
+    if beyond < MIN_BODY_BEYOND_ABSTRACT:
+        return (False, f"abstract_only: 抽出来的正文只比摘要多 {beyond} 字"
+                       f"（< {MIN_BODY_BEYOND_ABSTRACT}；摘要不算读内容）")
+    return True, ""
 
 
 def describe_tier(tier: str) -> str:

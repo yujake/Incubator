@@ -201,7 +201,7 @@ def test_a_grandchild_reports_its_state_not_unregistered(tmp_path: pathlib.Path,
     5 行（C1/F1 深度 2、B1/B2/E1 深度 3）读成「未登记」，只有直接子 D1 读对 ——
     因为 `branch` 只从owner 那一层的 `retire_ready` 取。这与 `draft/90` §1.4
     「必须看到 …工作状态」冲突：M 看得见孙代的名字，却看不出它在干什么。
-    修法在 `secretary._roster_targets`（逐层问它父那一层的 `retire_ready`，每个父只问一次）。
+    修法在 `Secretary._roster_targets`（逐层问它父那一层的 `retire_ready`，每个父只问一次）。
     """
     env = _env(tmp_path)
     d_tid, _d = _add_child(env, role="D", brief="D 那一支")

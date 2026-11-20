@@ -106,12 +106,22 @@ def _lit_titles(store: Store) -> list[str]:
     return [str(r.get("title") or "") for r in store.rows("literature")]
 
 
-def _attempt(store: Store, slot: str, *, rid: str = RID) -> dict:
-    """给一条"仅题录"候选补一条读取尝试回执（AR1：零读取尝试不再可入）。
+def _read(store: Store, reg, slot: str) -> None:
+    """抽读 + `fs.read`：2026-11-20 起"读过正文"是判收的唯一证据（摘要不算）。"""
+    body = ("Fixture full text body. This sentence stands in for the paper's own "
+            "arguments, proofs and examples so the content gate has text beyond the "
+            "abstract to look at. " * 12)
+    target = store.root / "downloads" / f"cand-{slot}.txt"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(body, encoding="utf-8")
+    ext = reg.call("text.extract", path=str(target.relative_to(store.root).as_posix()),
+                   lit_id=f"cand:{slot}")
+    assert ext.ok, ext.error
+    assert reg.call("fs.read", path=ext.unwrap()["path"]).ok
 
-    真机那一条由 `text.extract(cand:<槽>)` 失败时写（`extract_failed`）；夹具直接
-    `record_read` 是为了让本文件继续只测它自己那一道闸。
-    """
+
+def _attempt(store: Store, slot: str, *, rid: str = RID) -> dict:
+    """给一条"没有正文"的候选补一条读取尝试回执（AR1 的旧口径读数，留着给负控用）。"""
     return AV.record_read(store.root, rid, str(slot), LR.FULLTEXT_EXTRACT_FAILED,
                           source="fixture:no-bytes", note="text.extract.no_text_layer")
 
@@ -125,7 +135,7 @@ def test_a_submit_without_readback_is_refused_by_name(store: Store, reg) -> None
     改前读数（AH6）：A1 整趟 0 次 `lit.stage_list`，07:32:41 一次 `lit.admit` 10 条通过。
     """
     slots = _stage(reg, ["Readback one", "Readback two"])
-    items = [{"slot": s, "availability": AV.METADATA_ONLY} for s in slots]
+    items = [{"slot": s, "availability": AV.READABLE} for s in slots]
 
     res = _admit(reg, items)
     assert not res.ok, "没有回读记录居然提交成功了"
@@ -135,10 +145,10 @@ def test_a_submit_without_readback_is_refused_by_name(store: Store, reg) -> None
         assert slot in str(res.error), (slot, res.error)
     assert _lit_titles(store) == [], "被拒却写进了 literature"
 
-    # 回读之后（对着同一份清单）同一笔就过
+    # 回读之后（对着同一份清单）同一笔就过；2026-11-20 起每条还要真读过正文
     _readback(reg)
     for slot in slots:
-        _attempt(store, slot)
+        _read(store, reg, slot)
     ok = _admit(reg, items)
     assert ok.ok, ok.error
     assert len(ok.unwrap()["admitted"]) == 2, ok.unwrap()
@@ -181,8 +191,10 @@ def test_c_extract_failed_and_unknown_never_enter_the_library(store: Store, reg)
     assert not res.ok, "两档不许入的候选居然入库了"
     assert res.meta["kind"] == "availability_not_admissible", res.meta
     bad = {row["slot"]: row["tier"] for row in res.meta["availability_bad"]}
-    assert bad == {slots[0]: "extract_failed", slots[1]: "unknown"}, bad
-    assert "extract_failed" in str(res.error) and "unknown" in str(res.error), res.error
+    assert bad == {slots[0]: "extract_failed", slots[1]: "unknown",
+                   slots[2]: "metadata_only"}, bad
+    assert ("extract_failed" in str(res.error) and "unknown" in str(res.error)
+            and "metadata_only" in str(res.error)), res.error
     assert _lit_titles(store) == [], "一整批被拒却写进了 literature"
 
     # 抽过但失败的那一条按受控理由码判拒：行留着、理由写在行上（不是物理删）。
@@ -206,17 +218,22 @@ def test_c_extract_failed_and_unknown_never_enter_the_library(store: Store, reg)
 # ====================================================================== d 仅题录
 
 
-def test_d_metadata_only_with_a_locator_is_admitted(store: Store, reg) -> None:
-    """d. ④ 的判断：仅题录可以入，但它必须指得出处（DOI 或 URL）。
+def test_d_metadata_only_is_not_an_admission_ticket(store: Store, reg) -> None:
+    """d. 仅题录不许判收（2026-11-20 业主：「读内容才能判东西」）。
 
-    反方向也在这一条里：没有 DOI/URL 的仅题录 ⇒ `metadata_only_without_locator`。
+    改前：仅题录（带 DOI + 一条抽取尝试回执）可以入库；改后：它是"没有正文"的
+    读数，只能留在候选记录里写清为什么没读到，判收一律受控拒，理由码 `metadata_only`。
+    没有 DOI/URL 的那一档更早一层被拦：连题录都登记不了。
     """
     slots = _stage(reg, ["Locator paper"])          # 夹具给了 DOI
     _readback(reg)
     _attempt(store, slots[0])
-    ok = _admit(reg, [{"slot": slots[0], "availability": AV.METADATA_ONLY}])
-    assert ok.ok and len(ok.unwrap()["admitted"]) == 1, ok.unwrap()
-    assert AV.tiers_by_slot(store.root)[slots[0]] == AV.METADATA_ONLY
+    res = _admit(reg, [{"slot": slots[0], "availability": AV.METADATA_ONLY}])
+    assert not res.ok, "没有正文的仅题录居然被接受了"
+    assert res.meta["kind"] == "availability_not_admissible", res.meta
+    assert res.meta["availability_bad"][0]["code"] == "metadata_only", res.meta
+    row = next(r for r in store.rows("lit_candidates") if r["slot"] == slots[0])
+    assert row["status"] == "pending", row
 
     # 没有定位符的仅题录：手工落一行（`stage_add` 的 title 是必填，这里绕开工具面）
     with store.tx("lit_candidates", "counters", actor="t", note="no locator") as tx:
@@ -253,11 +270,11 @@ def _report_rows() -> list[dict]:
 def test_e_report_lists_availability_in_all_three_blocks(store: Store, reg) -> None:
     """e. 报告三块逐条列「可得性」（可读性四档）；`report_violations` 对缺栏 / 不许入的档位报违规。"""
     text = L.report_markdown(RID, _report_rows(), generated_at=TS,
-                             availability={"000000": AV.METADATA_ONLY,
+                             availability={"000000": AV.READABLE,
                                            "000001": AV.EXTRACT_FAILED,
                                            "000002": ""})
     # 三块各有一行可得性（已入库 / 未入库 / 待裁）
-    assert "可得性：仅题录（metadata_only）" in text, text
+    assert "可得性：可读全文（readable）" in text, text
     assert "可得性：有字节但抽取失败（extract_failed）" in text, text
     assert "可得性：未查（unknown）" in text, text
     admitted_block = text.split("## 已入库", 1)[1].split("## 待注册", 1)[0]
@@ -267,12 +284,12 @@ def test_e_report_lists_availability_in_all_three_blocks(store: Store, reg) -> N
         L.report_violations(text, phase="draft")
 
     # 反方向 ①：已入库的那一条没有可得性栏 ⇒ 违规
-    no_col = text.replace("  可得性：仅题录（metadata_only）\n", "")
+    no_col = text.replace("  可得性：可读全文（readable）\n", "")
     assert any("可得性" in v for v in L.report_violations(no_col, phase="draft")), \
         L.report_violations(no_col, phase="draft")
-    # 反方向 ②：已入库的那一条被标成 extract_failed ⇒ 违规（③ 的判据在报告侧也成立）
+    # 反方向 ②：已入库的那一条被标成 metadata_only ⇒ 违规（没有正文的档位不许入）
     wrong = L.report_markdown(RID, _report_rows(), generated_at=TS,
-                              availability={"000000": AV.EXTRACT_FAILED,
+                              availability={"000000": AV.METADATA_ONLY,
                                             "000001": AV.EXTRACT_FAILED,
                                             "000002": ""})
     assert any("不许入库" in v for v in L.report_violations(wrong, phase="draft")), \
@@ -301,7 +318,8 @@ def test_f_negative_control_stubbing_availability_lets_extract_failed_in(
     downloads = store.root / "downloads"
     downloads.mkdir(parents=True, exist_ok=True)
     (downloads / "stub-target.txt").write_text(
-        "A readable body that is long enough to be judged. " * 8, encoding="utf-8")
+        "A readable body that is long enough to be judged against the abstract. " * 40,
+        encoding="utf-8")
     ext = reg.call("text.extract", path="downloads/stub-target.txt",
                    lit_id=f"cand:{slots[0]}")
     assert ext.ok, ext.error
@@ -322,11 +340,11 @@ def test_g_negative_control_stubbing_the_receipt_lets_a_non_readback_submit_thro
         store: Store, reg, monkeypatch: pytest.MonkeyPatch) -> None:
     """g. 反真空：把回执打桩成"覆盖所有槽位" ⇒ 没回读也能提交（a 的判据必红）。"""
     slots = _stage(reg, ["Receipt stub paper"])
-    items = [{"slot": s, "availability": AV.METADATA_ONLY} for s in slots]
+    items = [{"slot": s, "availability": AV.READABLE} for s in slots]
     assert not _admit(reg, items).ok
 
     for slot in slots:
-        _attempt(store, slot)
+        _read(store, reg, slot)
     monkeypatch.setattr(L, "readback_receipt",
                         lambda store, rid: {"request_id": rid, "slots": list(slots)})
     after = _admit(reg, items)

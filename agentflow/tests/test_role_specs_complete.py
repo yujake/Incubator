@@ -47,9 +47,35 @@ DRAFT_NOQ = REPO / "docs" / "ROLE-SPECS-DRAFT-N-O-Q.md"
 #: 把子进程的 stdio 显式钉成 utf-8 ⇒ 读数是"判据要判的那件事"，与跑它的终端代码页无关；
 #: 这两个变量也正是四道门跑本门时用的环境（`temp/run_gates.py` 显式设了它们）。
 _GATE_ENV = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
-#: 与 `_GATE_ENV` 同源，但摘掉 `PYTHONPATH`：`test_the_cli_reports_unknown_when_the_package_cannot_be_imported`
-#: 要靠"子进程 import 不到 `agentflow`"来造 `unknown`（父进程的 `PYTHONPATH=src` 会被继承）。
-_GATE_ENV_NO_PYTHONPATH = {k: v for k, v in _GATE_ENV.items() if k != "PYTHONPATH"}
+#: 主动模拟"包不可导入"的子进程引导层 —— 只给
+#: `test_the_cli_reports_unknown_when_the_package_cannot_be_imported` 用。
+#:
+#: 那条负控要造的场景是 `import agentflow` 必失败。2026-11-20 之前它靠"从子进程环境里
+#: 摘掉 `PYTHONPATH`"来造 —— 那是把场景赌在机器状态上：业主批准
+#: `pip install -e D:\\Incubator\\agentflow` 之后，site-packages 里多了一格
+#: `__editable__.agentflow-1.0.0.pth`（实测内容就一行 `D:\\Incubator\\agentflow\\src`）
+#: ⇒ 同一个解释器无论 `PYTHONPATH` 是什么、cwd 在哪、`--root` 指向哪棵空树，
+#: `import agentflow` 都成功。实测摘掉 `PYTHONPATH` 之后门仍以 0 退出、打印 `[ok]`
+#: 与 11 个角色节的现场条数 —— 负控读到的就变成了"这台机器装没装包"，
+#: 而不是"包不可导入时门报不报 unknown"。
+#:
+#: 这里改成在子进程里主动关掉那一格：`sys.modules["agentflow"] = None` 之后，任何
+#: `import agentflow` / `from agentflow import ...` 都会被 import 机制以
+#: `ModuleNotFoundError: import of agentflow halted; None in sys.modules` 拒绝
+#: （`ModuleNotFoundError` 是 `ImportError` 的子类，`live_tool_face` 的 `except Exception`
+#: 两档都接得住）。这一格与机器上装没装、怎么装（editable / wheel / 没装）无关，
+#: 所以判据的读数只取决于"门在包不可导入时说了什么"。
+#:
+#: 只关 `agentflow` 这一格（不删 `sys.path`、不加 `-S`、不摘 `PYTHONPATH`）：其余 import
+#: 面与正控逐字相同 ⇒ 门失败的理由只可能是"拿不到包"，而不是顺带被弄坏的终端编码或
+#: 第三方库。引导层跑的是门脚本本身（`runpy.run_path(..., run_name="__main__")`），
+#: 退出码仍由门自己的 `SystemExit(main())` 决定，中间不吞返回值。
+_BLOCK_AGENTFLOW_IMPORT = (
+    "import sys, runpy; "
+    "sys.modules['agentflow'] = None; "
+    "sys.argv = sys.argv[1:]; "
+    "runpy.run_path(sys.argv[0], run_name='__main__')"
+)
 
 
 def _load_gate():
@@ -192,24 +218,43 @@ def test_the_cli_reports_unknown_when_the_package_cannot_be_imported(tmp_path):
 
     这条与 `H-8` 的"要不要让门依赖包可导入"那个取舍直接相关：选的是"依赖它、但依赖不上时如实报未知"——不静默退回"只判结构"。
 
-    实测（第一版写错）：`--root <空的 tmp>` 不足以让装配失败 ——`live_tool_counts` 会 `sys.path.insert(0, root/"src")`，
-    而父进程的`PYTHONPATH=src` 会被子进程继承（`agentflow` 于是仍然 import 得到）。判据要按事实造：必须把 `PYTHONPATH` 从子进程环境里摘掉。
+    造法（2026-11-20 改）：见 `_BLOCK_AGENTFLOW_IMPORT` —— 在子进程里把 `agentflow` 那一格停掉，
+    于是"不可导入"是被主动模拟出来的，与这台机器装没装包无关。改前靠"摘掉 `PYTHONPATH`"：
+    那在没装包的机器上碰巧够用（父进程的 `PYTHONPATH=src` 会被继承，摘掉之后子进程只能从
+    `<root>/src` 找包，而那份 tmp 树里没有），但 editable 安装之后 site-packages 里那格
+    `__editable__.agentflow-1.0.0.pth` 让 `agentflow` 在任何 cwd、任何 `PYTHONPATH` 下都 import
+    得到 ⇒ 门退 0 并打印 `[ok]`，这条负控红。把场景建在机器状态上，判据测的就不再是门。
 
-    `X-91.5-2`：摘掉 `PYTHONPATH` 的同时必须把 stdio 编码钉回来 ——这条断言读的是子进程打印的中文（"对账没做"），不钉的话在 GBK 控制台下父进程按 utf-8 解码得到乱码、断言红，
-    而它与"包装配不上"这件事无关⇒ 这里用 `_GATE_ENV_NO_PYTHONPATH`（同源、只少 `PYTHONPATH`）。
+    读数（本机实测，取证在 `temp/pipfix/`）：装包 + 模拟不可导入 ⇒ 2；装包 + 不模拟
+    （即改前那个形态）⇒ 0，这正是反真空读数：判据失去对象时必须红；不装包的等效场景
+    （`-S` 且无 `PYTHONPATH`，site-packages 整个不挂）⇒ 与装包 + 模拟的读数逐项相同。
+
+    `X-91.5-2`：断言读的是子进程打印的中文（"对账没做"），所以 stdio 编码照旧钉住
+    （`_GATE_ENV`）——它现在把 `PYTHONPATH` 一并继承：编码与"包能不能导入"是两件事，
+    后者由引导层负责，不再靠环境变量有没有。
     """
     root = tmp_path / "nowhere"
     (root / "docs").mkdir(parents=True)
     (root / "docs" / "ROLE-SPECS.md").write_text(DOC.read_text(encoding="utf-8"),
                                                  encoding="utf-8")
+    # 夹具前提：这份副本本身结构完整。否则"结构 incomplete"与"装配失败"两条路都会把
+    # verdict 落到 unknown（`main()` 在 live is None 时统一降级），判据就分不清它是被
+    # 哪一条推下去的 —— 这条负控只测后者。
+    assert G.check(root / "docs" / "ROLE-SPECS.md")["verdict"] == "ok"
     p = subprocess.run(
-        [sys.executable, str(REPO / "tools" / "verify_role_specs.py"), "--root", str(root)],
+        [sys.executable, "-c", _BLOCK_AGENTFLOW_IMPORT,
+         str(REPO / "tools" / "verify_role_specs.py"), "--root", str(root)],
         cwd=str(root), capture_output=True, text=True, encoding="utf-8",
-        errors="replace", timeout=120, env=_GATE_ENV_NO_PYTHONPATH,
+        errors="replace", timeout=120, env=_GATE_ENV,
     )
     assert p.returncode == 2, p.stdout + p.stderr
     assert "[unknown]" in p.stdout, p.stdout
     assert "对账没做" in p.stdout, p.stdout
+    # 反真空：unknown 必须来自"包 import 不到"那一支。"装配不了工具层"只由
+    # `live_tool_face()` 的 import 分支打印，而那个 `try` 里同时 import 了 `functools` /
+    # `tempfile` —— 所以再钉一次失败的那个模块名是 `agentflow`。
+    assert "装配不了工具层" in p.stdout, p.stdout
+    assert "agentflow" in p.stdout, p.stdout
 
 
 def test_every_capturing_subprocess_pins_the_stdio_encoding() -> None:
@@ -220,7 +265,7 @@ def test_every_capturing_subprocess_pins_the_stdio_encoding() -> None:
     `UnicodeEncodeError` 那一档就静默回来了，而它在门口径环境下照样绿。
 
     判据落在本文件自己的源码上（不靠人记得）：`capture_output=True` 的`subprocess.run(...)` 必须在同一个调用里出现
-    `_GATE_ENV`（`_GATE_ENV_NO_PYTHONPATH`是同一份约定的派生，名字里含它）或逐字写了 `PYTHONIOENCODING`。扫不到任何这样的调用 ⇒
+    `_GATE_ENV`（或由它派生的名字，前缀含 `_GATE_ENV`）或逐字写了 `PYTHONIOENCODING`。扫不到任何这样的调用 ⇒
     报"失去对象"（删掉子进程不等于编码被钉住了）。
     """
     src = Path(__file__).read_text(encoding="utf-8")

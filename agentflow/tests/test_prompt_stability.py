@@ -1532,6 +1532,41 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
               "summary 不再抄 kind 名单。本路只认领 C / F 两格；B / D / G / L / M 的现值"
               "差异来自并行路的未提交改动，本路不认领。"
               "facts 键集仍 15 格、落点一格没动 ⇒ count / keys_sha256 与 p300 同值。"},
+      {"version": "p302", "count": 15,
+       "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+       "note": "抬版本 p302（2026-11-20，BCRETIRE：广播通道退场）：`message` / `handoff` / "
+               "`notify` 的收件人选项去掉 `ALL`（改点具体实例或主控 M 的本号），并写明"
+               "「以前那种 to=ALL 现在会被受控拒 `broadcast_retired`」；FACULTIES 与官能"
+               "表里「公共频道」不再被当作可用的沟通手段。`LOOP_PROTOCOL` / "
+               "`HANDOFF_PROTOCOL` 是共用段 ⇒ 十一格全换。"
+               "本笔只换段文本，没有哪一格事实换过落点 ⇒ facts 键集仍 15 格，"
+               "count / keys_sha256 与 p301 同值。"},
+      {"version": "p303", "count": 15,
+       "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+       "note": "抬版本 p303（2026-11-20，ALITER：A 的文献流水线改成无条件的下一步）。"
+               "改前 A 的 policy 是条件句「取回的这批如果要被引用成断言才派 B 整理」⇒ "
+               "真机 lp-ball-13 的形态：14 篇 literature 全 admit、B 0 趟、A 继续往下走。"
+               "本笔把 A 的 boundary 改成「收进 literature（admitted > 0）之后，下一步就是"
+               "派 B 的 run_once 整理；不派 B 等于这批文献没转化成资产」，引用闸只说明"
+               "「引用要追出处」、不再是派 B 的前提；deliverable 与 search_literature 的"
+               "summary 同步。A 的 boundary 第一条会被伙伴表逐字引用 ⇒ D / F / H / M"
+               "四格的伙伴表一起换（变化格 = A / D / F / H / M；B / C / E / G / L / V 逐字"
+               "相同）。本笔只换段文本，没有哪一格事实换过落点 ⇒ facts 键集仍 15 格，"
+               "count / keys_sha256 与 p302 同值。"},
+      {"version": "p304", "count": 15,
+       "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+       "note": "抬版本 p304（2026-11-20，BDUTY：B 的职责面重写成「登记快录 ＋ 二阶段逐个优化」，"
+               "并把 M 的派活时机接上）。真源 `draft/179`（业主 2026-11-02 两阶段口径）＋"
+               "业主 2026-11-20 逐字「B登记命题是快的……它的重要职责就是二阶段」。"
+               "`specs/b.py` 的 duty 改成两截（第一阶段快录 / 主职是第二阶段逐个优化），"
+               "boundary 补三条（对象是证明正文不是命题措辞 / 已签稿只读先开副本 / 一批录完"
+               "紧接着做二阶段），deliverable 与 stance 各补优化面；`b_ingest_policy.py` 补"
+               "「第二阶段只看逐份 optimized 那一格、不再判签」与「录完回执点名二阶段欠账」；"
+               "`b_sign_policy.py` 补「洗稿 → 重拿 V 签 → 精准替换」三步；`specs/m.py` 补一条"
+               "派活时机（B 交回机械录入回执 ⇒ 下一步派二阶段）；`agent_skills` 的 B 手册新增"
+               "「优化-登记完一批就逐个洗」。变化格 = B / M（A / D / E 的现值差异来自并行路的"
+               "未提交改动，本路不认领，冻结时按现算值一并落）。本笔只换段文本，没有哪一格"
+               "事实换过落点 ⇒ facts 键集仍 15 格，count / keys_sha256 与 p303 同值。"},
 
 )
 

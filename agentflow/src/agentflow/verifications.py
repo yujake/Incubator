@@ -92,8 +92,8 @@ V 逐条给一档结论（:data:`CITATION_VERDICTS`：`consistent` / `weaker` / 
 # `v_*.py`，本文件只剩门面 —— 下面按模块再导出全部 177 个顶层名字，所以所有
 # `from .verifications import ...` 的调用点一个字都不用改。
 #
-# 打桩面没有变弱：测试 `monkeypatch.setattr(verifications, "X", ...)` 改的是本模块
-# 的全局字典，而搬走的代码对那 32 个名字的读全部写成 `verifications.X` —— 调用那
+# 打桩面没有变弱：测试 `monkeypatch.setattr(verifications, "<名字>", ...)` 改的是本模块
+# 的全局字典，而搬走的代码对那 32 个名字的读全部写成 `verifications.<名字>` —— 调用那
 # 一刻才查这张字典，所以单点打桩仍然到得了实现（判据见 `temp/versplit2/`）。
 
 # 下面这一段是搬家前的同一张 import 表，刻意留在门面上：它此前是"公开面"的一部分

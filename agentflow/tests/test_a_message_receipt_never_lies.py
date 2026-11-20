@@ -133,16 +133,15 @@ def test_a_message_to_a_roster_child_is_counted_and_readable(tmp_path: pathlib.P
 
 # ============================================================ 判据 3：公共频道同一判据
 
-def test_the_public_channel_uses_the_same_receipt_rule(tmp_path: pathlib.Path):
-    """正控 + 负控（同一判据，不特判频道）：公聊被拒的不进 `messages_sent`，落成的进。
+def test_the_public_channel_no_longer_produces_a_receipt(tmp_path: pathlib.Path):
+    """负控（同一判据，不特判频道）：公共频道那一档不再有"落成"，两档都一律受控拒绝。
 
-    ① 公告栏里点名某个名册成员并下指令 ⇒ 受控拒绝 `public_is_not_a_conversation`
-       ⇒ 一字不进 `messages_sent`，`messages_refused` 点名这条理由码；
-    ② 我名下有两个直接子代理 ⇒ 公聊有读者（`receipt="queued"`、`ok` 真）⇒ 进 `messages_sent`。
-
-    改前必红：①的第一条断言（`messages_sent == []`）在旧实现下是 `["#public"]`。
+    2026-11-20（BCRETIRE）：广播通道退场 ⇒ `to=ALL` / `#public` 在写入口受控拒绝
+    （`broadcast_retired`）⇒ 一字不进 `messages_sent`，`messages_refused` 点名这条理由码。
+    改前这一条是"被拒 + 落成"两档对照；"落成那一档"现在由判据 1（私聊 D→B）承担，
+    这一格只量"被拒的那一条不许被算成发出去了"（`_message_landed` 的 refused 那一支）。
     """
-    # ---- ① 被拒那一档
+    # ---- ① 点名 + 指令（改前：公告栏判据拒）⇒ 现在是退场那道闸先拒
     st2, cond2, reg2, ws2, me2, kids2, _o2 = TCP._tree(tmp_path / "public_refused")
     gate2 = TCP._Gate([_say({"message": {"to": "#public", "subject": "B1：把这件活做完",
                                         "body": "先跑表"}}),
@@ -152,12 +151,12 @@ def test_the_public_channel_uses_the_same_receipt_rule(tmp_path: pathlib.Path):
     assert got["problem"] == "", got
     run2 = loop2.run("在公告栏里点名", summoned_by="M", my_task_id=me2, depth=2)
     step2 = run2.steps[0]
-    assert step2.result.get("refused") == "public_is_not_a_conversation", step2.result
+    assert step2.result.get("refused") == "broadcast_retired", step2.result
     assert run2.messages_sent == [], run2.to_dict()
     assert [r["refused"] for r in run2.messages_refused] == \
-        ["public_is_not_a_conversation"], run2.messages_refused
+        ["broadcast_retired"], run2.messages_refused
 
-    # ---- ② 落成那一档
+    # ---- ② 不点名、不带指令的公告（改前：落成、receipt="queued"）⇒ 现在同样拒
     st, cond, reg, ws, me, _kids, _other = TCP._tree(tmp_path / "public_ok")
     gate = TCP._Gate([_say({"message": {"to": "#public", "subject": "口径",
                                         "body": "度数 = 去重后的邻居数"}}),
@@ -165,9 +164,11 @@ def test_the_public_channel_uses_the_same_receipt_rule(tmp_path: pathlib.Path):
     run = TCP._loop(cond, reg, ws, st, gate).run("把口径说给名下的人", summoned_by="M",
                                                  my_task_id=me, depth=2)
     first = run.steps[0].result
-    assert first.get("receipt") == "queued" and first.get("ok") is True, first
-    assert run.messages_sent == [ALL], run.to_dict()
-    assert run.messages_refused == [], run.to_dict()
+    assert first.get("refused") == "broadcast_retired", first
+    assert first.get("message_sent") in (None, ""), first
+    assert run.messages_sent == [], run.to_dict()
+    assert [r["refused"] for r in run.messages_refused] == ["broadcast_retired"], \
+        run.messages_refused
 
 
 # ============================================================ 判据 4：反真空

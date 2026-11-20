@@ -29,6 +29,20 @@ function plain(text: string): string {
   return text.split("**").join("");
 }
 
+/**
+ * 「台账定理类」那一格：盘上原值与读侧投影并列（KINDREAD，2026-11-20）。
+ *
+ * 历史行（写侧判据落地之前入库的文献定理）盘上还写着 `conjecture`，读侧只现算
+ * 一个并列值、不改盘 —— 所以两个数不同时把投影也印出来（原值在前），相同时不罗嗦。
+ * 不许只印投影：那等于拿投影冒充盘上的原值。
+ */
+function ledgerTheoremText(raw: number | null, projected: number | null): string {
+  if (projected === null || projected === raw) {
+    return formatCount(raw);
+  }
+  return `${formatCount(raw)}（投影后 ${formatCount(projected)}）`;
+}
+
 /** 一条命题的 review state（六态；不认识的词原样显示，不假装认识）。 */
 function stateBadge(state: string): ComponentChildren {
   if (state === "signed") {
@@ -200,7 +214,11 @@ export function Acceptance() {
             <div class="readings">
               正文定理类环境 <span class="mono">{formatCount(proofs.paper_theorem_envs)}</span> ·
               有证明的命题 <span class="mono">{formatCount(proofs.propositions_with_proof)}</span> ·
-              台账定理类 <span class="mono">{formatCount(proofs.ledger_theorem_kinds)}</span> ·
+              台账定理类{" "}
+              <span class="mono">
+                {ledgerTheoremText(proofs.ledger_theorem_kinds,
+                                  proofs.ledger_theorem_kinds_projected)}
+              </span> ·
               V 已签（阅签状态为 signed 的命题）{" "}
               <span class="mono">{formatCount(proofs.signed)}</span>
               <SourceLink source={proofs.source} label="验收表" />
@@ -360,7 +378,11 @@ export function Acceptance() {
               proof 环境 <span class="mono">{formatCount(structure.ledger.proof_envs)}</span> ·
               命题台账行 <span class="mono">{formatCount(structure.ledger.statement_ledger_rows)}</span> ·
               命题 <span class="mono">{formatCount(structure.ledger.ledger_propositions)}</span> ·
-              台账定理类 <span class="mono">{formatCount(structure.ledger.ledger_theorem_kinds)}</span> ·
+              台账定理类{" "}
+              <span class="mono">
+                {ledgerTheoremText(structure.ledger.ledger_theorem_kinds,
+                                  structure.ledger.ledger_theorem_kinds_projected)}
+              </span> ·
               对应表 <span class="mono">{formatCount(structure.ledger.mapping_rows)}</span> ·
               surplus <span class="mono">{structure.ledger.statement_surplus.length}</span>
             </div>

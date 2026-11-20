@@ -505,7 +505,7 @@ def test_negative_control_a_report_without_the_not_admitted_block_is_red(store):
                        title="Withdrawn one", reason_code="withdrawn_by_reviewer",
                        withdrawn_reason="内容不好", added_at=S.now_iso()).to_dict(),
     ]
-    good = L.report_markdown(RID, rows, availability={"000000": "metadata_only"})
+    good = L.report_markdown(RID, rows, availability={"000000": "readable"})
     assert L.report_violations(good) == []
     broken = good.split("## 未入库")[0]
     viol = L.report_violations(broken)
@@ -709,7 +709,7 @@ def test_a_twin_slot_is_a_reading_and_the_report_annotates_instead_of_hiding_it(
     assert listing["duplicate_groups"][0]["slots"] == [first_slot, twin_slot], listing
 
     text = L.report_markdown(RID, listing["rows"],
-                             availability={first_slot: "metadata_only"})
+                             availability={first_slot: "readable"})
     assert "## 已入库（1 篇）" in text and "## 未入库（1 篇）" in text, text
     assert "属重复登记" in text and f"`lit:{lit_id}`" in text, text
     assert L.report_violations(text) == [], L.report_violations(text)
@@ -735,3 +735,4 @@ def test_one_batch_never_merges_two_entries_even_for_the_same_paper(reg, store):
     listing = L.list_candidates(store, request_id=RID)
     assert listing["counts"]["pending"] == 2, listing["counts"]
     assert listing["duplicate_rows"] == 2, listing
+

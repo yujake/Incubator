@@ -152,6 +152,12 @@ PHRASE_ALLOWED: dict[str, dict[str, str]] = {
             "判据读它：这一行判的是兼容面还在不在（两种写法都收）",
         "tests/test_shape_vs_value_errors.py":
             "判据读它：`ALL` 与 legacy 字面量归一是这一组守的对象",
+        "tests/test_addressing_is_by_roster_name_not_by_role.py":
+            "判据读它：`_legacy_all('#public') == ALL` 是读侧兼容正控（2026-11-20 "
+            "广播退场后，它同时钉住「写入口拒绝、读侧照旧认旧数据」这两件事）",
+        "tests/test_broadcast_channel_is_retired.py":
+            "判据读它：退场判据逐字引用旧写法（`_legacy_all('#public') == ALL` 是读侧"
+            "兼容、`to=#public` 的受控拒绝是写侧）；不写出来就没有守的对象",
     },
     "F3_old_retire_gate": {
         "src/agentflow/agent_prompts.py":
@@ -192,8 +198,9 @@ PHRASE_ALLOWED: dict[str, dict[str, str]] = {
             "判据读它：`old = (...)` 是改前那一版提示词原文，负控拿它判『新提示词不等于旧的那一句』",
     },
     "F9_force_new_in_a_refusal": {
-        "src/agentflow/secretary.py":
-            "该删，已转持有方（secretary lane 持有该文件）：那一句是 force_new 的考古",
+        "src/agentflow/secretary_statement_tx.py":
+            "活陷阱：2026-10-26 改前拒信原话的考古 —— 它讲明为什么现在这条拒信不再给 "
+            "`force_new`（SECSPLIT 拆分后这段跟着实现搬到这里；删掉等于丢掉那次改口的出处）",
         "tests/test_duplicate_refusal_names_a_real_parameter.py":
             "判据读它：逐字引用旧拒信原话，断言新拒信里不再出现它（负控）",
     },
@@ -507,9 +514,6 @@ DANGLING_ALLOWED: dict[str, str] = {
     # 那两句点名的旧符号都写在版本账里，而账已整块搬进 `docs/PROMPT-HISTORY.md`
     # （本判据的测量面只收 `.py`，文档不在其中）：源码里一处命中都没有了，留着它反而会
     # 掩盖"这两句已经不在这个文件里"这个事实。
-    "src/agentflow/secretary.py":
-        "该删，已转持有方（secretary lane 持有该文件）：那一句的旧名已经不在树里"
-        "（NT2 之后判档归 `Secretary.judge_statement`、落行归 `Secretary.record_nontriviality`）",
     "src/agentflow/specs/h.py": "该删，已转持有方（FC-27 禁改区）",
     # 2026-11-17：那一档词表（`verifications` 的 `LEGACY_VERDICTS`）已按裁定 ④ 删掉，
     # 这一句是 F 的声明正文（模型按它行动）。补丁（把模块前缀去掉、只留旧值的说法）

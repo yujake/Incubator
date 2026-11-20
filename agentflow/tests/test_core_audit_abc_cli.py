@@ -531,6 +531,35 @@ def test_agent_a_selftest_negative_control_can_fail(monkeypatch, capsys) -> None
     assert "IndexError" not in out, out[-1200:]
 
 
+def test_agent_a_selftest_pins_the_submit_gate_in_both_directions(monkeypatch, capsys) -> None:
+    """提交闸的两个方向都要在自检里：读到正文 ⇒ 放行；没正文 ⇒ 受控拒。
+
+    2026-11-20 ALITCONTENT（业主逐字「读内容才能判东西」）之后，判收只剩 `readable`
+    一档，旧样本（仅题录 + 一次抽取失败的尝试）从"放行"变成"受控拒" —— 旧断言因此过期。
+    改后自检两条一起钉：正控证明闸不是永远关着的，负控证明没有正文进不来。
+
+    反真空：把判收口径打桩回旧档（`ADMITTABLE_TIERS` 加回 `metadata_only`）并放行读证据闸
+    ⇒ 没有正文的那一条会被接受 ⇒ 自检必须因此变红，且红的正是负控那一格（正控仍然绿）。
+    只桩一处不够：可读性闸仍会拒 —— 那恰好证明这一红是这一档口径给的，不是别的原因。
+    """
+    from agentflow import litavail as AV
+    from agentflow import litstage as LS
+
+    assert agent_a._selftest() == 0
+    out = capsys.readouterr().out
+    assert "[PASS] 提交闸：没正文（仅题录 + 一次抽取失败）⇒ 受控拒" in out, out[-1600:]
+    assert "[PASS] 提交闸：读到正文之后逐条判决那条路放行" in out, out[-1600:]
+
+    monkeypatch.setattr(AV, "ADMITTABLE_TIERS", (AV.READABLE, AV.METADATA_ONLY))
+    monkeypatch.setattr(LS, "_read_evidence_gate", lambda *a, **k: None)
+    assert agent_a._selftest() == 1
+    out = capsys.readouterr().out
+    fails = [line for line in out.splitlines() if "[FAIL]" in line]
+    assert len(fails) == 1, fails
+    assert "没正文" in fails[0], fails
+    assert "[PASS] 提交闸：读到正文之后逐条判决那条路放行" in out, out[-1600:]
+
+
 def test_agent_a_module_runs_as_a_script_with_nonempty_output() -> None:
     """`python -m agentflow.agent_a` 的可运行契约：退出码 0 且有真实输出。"""
     r = _run_module("agent_a")

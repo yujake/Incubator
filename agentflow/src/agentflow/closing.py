@@ -3737,13 +3737,28 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         rows = list(store.rows("statements"))
         verified = [r for r in rows if r.get("quote_verified") is not None]
         derived = [r for r in rows if str(r.get("derived_from") or "").strip()]
-        return len(rows), {"statements": [
-            {"id": str(r.get("stmt_id") or ""), "kind": str(r.get("kind") or ""),
-             "status": str(r.get("status") or ""),
-             "quote_verified": r.get("quote_verified"),
-             "from_literature": bool(str(r.get("source_lit_id") or ""))} for r in rows[:8]],
+        listed: list[dict[str, Any]] = []
+        for r in rows[:8]:
+            # 读侧投影（KINDREAD）：`kind` 是盘上原值，另给按登记判据现算的有效档与
+            # "是否不同"两格（收工读数与台账并排看，投影不冒充原值）。算不出来就按
+            # 盘上原值列出 —— 这一格是读数，不许因为投影坏了整条腿没查成。
+            try:
+                proj = EB.kind_projection(dict(r))
+                proj_kind = str(proj.get("kind") or "")
+                proj_changed = bool(proj.get("changed"))
+            except Exception:  # noqa: BLE001 - 见上
+                proj_kind, proj_changed = str(r.get("kind") or ""), False
+            listed.append({
+                "id": str(r.get("stmt_id") or ""), "kind": str(r.get("kind") or ""),
+                "kind_projected": proj_kind, "kind_projection_changed": proj_changed,
+                "status": str(r.get("status") or ""),
+                "quote_verified": r.get("quote_verified"),
+                "from_literature": bool(str(r.get("source_lit_id") or ""))})
+        return len(rows), {
+            "statements": listed,
             "with_quote_verdict": len(verified), "derived": len(derived),
-            "note": "文献来的要带 `quote_verified`（真/假/未查+理由），我方派生的要在 `derived_from` 里给出处"}
+            "note": ("文献来的要带 `quote_verified`（真/假/未查+理由），"
+                     "我方派生的要在 `derived_from` 里给出处")}
     if kind == "plan_progress_rows":
         # 「攻」那一格唯一认的口径：真的推进过的计划才算。
         #
@@ -6421,6 +6436,11 @@ def proposition_level_pollution(store: Any) -> dict[str, Any]:
 #: B-2 读侧判据认的那几个 kind（业主 2026-10-22：「没有引文 / 自己编的命题必须从
 #: 『猜想』注册」的读侧那一半）。`conjecture` 不在这里（它本来就该是猜想），
 #: `concept` 也不在（概念不参与等级链，`evidencebits.derive_grade` 对它短路）。
+#:
+#: 射程（哪几种来路的行才参与点名）不写在这里：它与写侧是同一份判据
+#: `evidencebits.b2_scope_reading`（`origin=own_result` + 无 `source_lit_id` +
+#: 没有一条回验通过的引文），三个调用点共用那一格。只判 kind 不判来路，就是
+#: 把文献里引来的定理也点名成"声明强于证据"。
 TYPE_AHEAD_OF_GRADE_KINDS: tuple[str, ...] = ("theorem", "lemma", "proposition")
 
 #: 那一档的受控名字（读的人按它去查这一条判据，报告里也印它）。
@@ -6428,12 +6448,28 @@ TYPE_AHEAD_OF_GRADE_CODE = "type_ahead_of_grade"
 
 
 def type_ahead_of_grade_rows(store: Any) -> dict[str, Any]:
-    """读侧判据（B-2 的另一半）：声明成定理/引理/命题，而现算等级只是猜想的那些行。
+    """读侧判据（B-2 的另一半）：我方自产、没有引文撑着的行里，声明成定理/引理/命题
+    而现算等级只是猜想的那些行。
 
-    判据三件：`kind ∈ TYPE_AHEAD_OF_GRADE_KINDS`、`evidencebits.derive_grade` 现算出来
-    是 `"conjecture"`、且这一行不是作废的（作废行的等级本来就清零，那不是这一档要
-    点名的事 —— 它由 `voided_by` 自己说）。命中就逐条点名（`stmt_id` / `kind` /
-    `grade` / `why`），`class` 一律是 `TYPE_AHEAD_OF_GRADE_CODE`。
+    判据按顺序判三件：
+
+    1. 这一行在 B-2 的射程里 —— `evidencebits.b2_scope_reading`：`origin=own_result`
+       + 没有 `source_lit_id` + 没有一条回验通过的引文。这是与写侧同一份判据
+       （`register_statement` 的 B-2 两处以它代替原先各写一遍的三件）；文献里引来的
+       定理（有出处、引文回验通过）本来就不在 B-2 的射程里，它不该被这一格点名；
+    2. 有效 `kind ∈ TYPE_AHEAD_OF_GRADE_KINDS`：有效档由
+       `evidencebits.kind_projection` 现算（读侧投影，2026-11-20）—— 它调的仍是
+       写侧唯一判据 `kind_at_registration`，历史行盘上的旧词不参与这一问；
+    3. `evidencebits.derive_grade` 现算出来是 `"conjecture"`。
+
+    命中就逐条点名（`stmt_id` / `kind` / `kind_projected` / `grade` / `why`），
+    `kind` 是盘上原值、`kind_projected` 是这一格判的有效档（两者不同时
+    `kind_projection_changed=True`）—— 投影不冒充原值。`class` 一律是
+    `TYPE_AHEAD_OF_GRADE_CODE`。射程外的行只进 `scope.out_of_scope` 的计数，
+    不参与点名（读数里留这个数，是为了"收窄了多少"看得见）。
+
+    作废行不单独跳过：`derive_grade` 对不是「它错了」的那一类作废把它清零回猜想，
+    这一格照样点名；作废这件事由 `voided_by` 自己说，不是这一格不点名的理由。
 
     为什么读侧还要再判一次（写入期已经有 `must_start_as_conjecture` 那道闸）：闸只
     管"从这一条路进来的新行"，而盘上还有三样东西它管不着 —— 历史行（闸落地之前写的）、
@@ -6449,15 +6485,41 @@ def type_ahead_of_grade_rows(store: Any) -> dict[str, Any]:
         return {"state": "unreadable", "reason": why, "checked": 0,
                 "rows": [], "checked_from": "statements"}
     flagged: list[dict[str, Any]] = []
+    in_scope = 0
+    out_of_scope = 0
     for sid, row in sorted(rows.items()):
-        kind = str(row.get("kind") or "")
+        # 缺 origin 的行按 `evidencebits.bits_from_row` 的同一缺省读（own_result）：
+        # 两处各立一个缺省，等于同一行在两个判据里有两个来路。第三件读的是引文读数
+        # （`quote_explains_itself`，与 `bits_from_row` 同一处），不是裸字段 ——
+        # 一句 `quote_verified=true` 而拿不出位置的引文，读侧本来就不认它是"回验通过"。
+        scope = EB.b2_scope_reading(
+            origin=str(row.get("origin") or "own_result"),
+            source_lit_id=row.get("source_lit_id"),
+            quote_verified=EB.quote_explains_itself(dict(row)))
+        if not scope.get("in_scope"):
+            out_of_scope += 1
+            continue
+        in_scope += 1
+        # 读侧投影（KINDREAD，2026-11-20）：这一格问的是"这一行实际上是什么档"，
+        # 所以 kind 走 `evidencebits.kind_projection` —— 它调的仍是写侧那唯一一处
+        # 判据（`kind_at_registration`），历史行的旧词不会被当成它的有效档。
+        # 盘上原值另存进 `kind` / `kind_projection_changed`，两个数并排（投影不冒充原值）。
+        declared_kind = str(row.get("kind") or "")
+        try:
+            projection = EB.kind_projection(dict(row))
+        except Exception:  # noqa: BLE001 - 投影算不出来退回盘上原值（这一格不许因此整块没查成）
+            projection = {"kind": declared_kind, "changed": False, "checked": False}
+        kind = str(projection.get("kind") or declared_kind)
         if kind not in TYPE_AHEAD_OF_GRADE_KINDS:
             continue
         try:
             bits = EB.bits_from_row(dict(row))
             grade = EB.derive_grade(bits, kind=kind)
         except Exception as exc:  # noqa: BLE001 - 算不出来要如实说，不许当成"没命中"
-            flagged.append({"stmt_id": sid, "kind": kind, "grade": "",
+            flagged.append({"stmt_id": sid, "kind": declared_kind,
+                            "kind_projected": kind,
+                            "kind_projection_changed": bool(projection.get("changed")),
+                            "grade": "",
                             "class": TYPE_AHEAD_OF_GRADE_CODE,
                             "why": ("这一行的五元位算不出来"
                                     f"（{type(exc).__name__}: {exc}）⇒ 等级没判成。"
@@ -6466,7 +6528,10 @@ def type_ahead_of_grade_rows(store: Any) -> dict[str, Any]:
         if grade != "conjecture":
             continue
         flagged.append({
-            "stmt_id": sid, "kind": kind, "grade": grade,
+            "stmt_id": sid, "kind": declared_kind,
+            "kind_projected": kind,
+            "kind_projection_changed": bool(projection.get("changed")),
+            "grade": grade,
             "class": TYPE_AHEAD_OF_GRADE_CODE,
             "why": (f"{kind} 是声明，而五元位现算出来只是 {grade}"
                     f"（proof={bool(bits.get('proof'))}、"
@@ -6483,6 +6548,15 @@ def type_ahead_of_grade_rows(store: Any) -> dict[str, Any]:
                       else "没有「声明强于证据」的行")),
         "checked": len(rows), "rows": flagged, "checked_from": "statements",
         "kinds": list(TYPE_AHEAD_OF_GRADE_KINDS),
+        # 射程读数（只报不判）：射程外的行有多少、按哪一份判据收窄的。
+        # 没有这一格时"这一格不点名"与"射程把整张表都筛掉了"看起来一样。
+        "scope": {
+            "predicate": "evidencebits.b2_scope_reading",
+            "in_scope": in_scope,
+            "out_of_scope": out_of_scope,
+            "basis": ("B-2 的三件：origin=own_result ∧ 无 source_lit_id ∧ "
+                      "没有一条回验通过的引文；射程外的行不参与点名"),
+        },
     }
 
 

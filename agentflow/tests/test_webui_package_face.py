@@ -62,7 +62,8 @@ def test_no_paper_is_not_applicable_not_zero(artifacts_ws: pathlib.Path) -> None
     assert _keys(pkg) == {"tri", "reason", "generated_at", "proofs", "structure", "closing"}
     assert _keys(pkg["proofs"]) == {
         "tri", "reason", "source", "paper_theorem_envs", "propositions_with_proof",
-        "ledger_theorem_kinds", "signed", "coverage_note", "review_states",
+        "ledger_theorem_kinds", "ledger_theorem_kinds_projected", "signed",
+        "coverage_note", "review_states",
         "rows", "vsign", "receipt", "c3"}
     assert _keys(pkg["structure"]) == {"tri", "reason", "source", "paper", "checks",
                                        "ledger", "findings"}

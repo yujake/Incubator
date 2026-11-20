@@ -101,35 +101,50 @@ def test_the_framework_notice_stays_visible_to_everyone(tmp_path: pathlib.Path):
 
 def test_a_public_message_without_a_task_id_is_refused_with_nothing_written(
         tmp_path: pathlib.Path):
-    """负控①：这一趟没有台账号 ⇒ 受控拒绝，且一行都不落。"""
+    """负控①：没有台账号 ⇒ 公共频道那一支受控拒绝，且一行都不落。
+
+    2026-11-20（广播通道退场，BCRETIRE）：代理的写入口（`message` 形状）连 `to=ALL`
+    都不再接受 —— 拒因码是 `broadcast_retired`，发生在可见面判据之前。这条老判据改在
+    剩下那一条管道上量（`_message_legacy` ⇒ `_message_by_channel`，逐字仍是改前的
+    行为）：没有台账号 ⇒ `no_task_id`。两档都不许落盘。
+    """
     st, cond, reg, ws, me = _env(tmp_path)
     loop = _loop(ws, st, cond, reg, task_id="")      # 没有台账号
-    got = loop._do_message({"to": ALL, "subject": "广播", "body": "随便说点什么"})
+    got = loop._message_legacy({"subject": "广播", "body": "随便说点什么"}, ALL, "")
     assert got.get("ok") is False and got.get("refused") == "no_task_id", got
     assert "可见面" in str(got.get("error") or ""), got
+    shaped = loop._do_message({"to": ALL, "subject": "广播", "body": "随便说点什么"})
+    assert shaped.get("ok") is False and shaped.get("refused") == "broadcast_retired", shaped
     events, _ = __import__("agentflow.sessions", fromlist=["x"]).read_session(ws, sid=SID)
     assert not [e for e in events if e.get("kind") == "agent_message"], events
     assert me and cond
 
 
 def test_the_receipt_says_who_will_read_it(tmp_path: pathlib.Path):
-    """正控③ + 反真空②：公聊的回执按"我名下有几个直接子代理"给三态。"""
+    """正控③ + 反真空②：公共频道那一支的回执按"我名下有几个直接子代理"给三态。
+
+    2026-11-20（BCRETIRE）：`to=ALL` 的代理写入口已受控拒绝（`broadcast_retired`），
+    回执三态这次从老管道（`_message_legacy`）量 —— 判据本体 `_receipt_for` 没换，
+    换的只是入口；形状那一档另有一条"一律拒"的断言。
+    """
     st, cond, reg, ws, me = _env(tmp_path)
     loop = _loop(ws, st, cond, reg, task_id=me)
-    none_yet = loop._do_message({"to": ALL, "subject": "广播", "body": "没人听"})
+    shaped = loop._do_message({"to": ALL, "subject": "广播", "body": "没人听"})
+    assert shaped.get("refused") == "broadcast_retired", shaped
+    none_yet = loop._message_legacy({"subject": "广播", "body": "没人听"}, ALL, "")
     assert none_yet["receipt"] == "no_reader", none_yet
     assert "没有直接子代理" in none_yet["note"], none_yet
 
     _child(cond, me, role="D", key="s6a@a")
     _child(cond, me, role="E", key="s6a@b")
-    some = loop._do_message({"to": ALL, "subject": "广播", "body": "有人听"})
+    some = loop._message_legacy({"subject": "广播", "body": "有人听"}, ALL, "")
     assert some["receipt"] == "queued", some
     assert "2 个直接子代理" in some["note"], some
 
     # 看不见子代理（没有 conductor 句柄）⇒ `unknown`，不许猜成 `queued`
     blind = _loop(ws, st, cond, reg, task_id=me)
     blind.conductor = None
-    unknown = blind._do_message({"to": ALL, "subject": "广播", "body": "判不了"})
+    unknown = blind._message_legacy({"subject": "广播", "body": "判不了"}, ALL, "")
     assert unknown["receipt"] == "unknown", unknown
     assert "不许折成" in unknown["note"], unknown
     assert st is not None

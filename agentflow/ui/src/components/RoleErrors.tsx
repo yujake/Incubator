@@ -98,6 +98,27 @@ export function classRows(view: RoleErrorsView): ErrorClassRow[] {
   );
 }
 
+/**
+ * 现算预演那一类（后端 `computed: true`）：它的数不是"动作发生了 N 次"，是"以此刻盘面看，
+ * 现在收工会被什么拦"（`closing.check_closing` 每读一次现算一次，不累加）。
+ *
+ * 为什么读标记而不按类目名写死：类目表会变，而"这一栏能不能与发生次数混排"是后端给的
+ * 一格读数；页面按名字认类目的话，改名那一天它会静默混回主表。
+ */
+export function previewClasses(view: RoleErrorsView): ErrorClassRow[] {
+  return classRows(view).filter((one) => one.computed === true);
+}
+
+/** 真·发生次数那一批：现算预演整类排除，于是它不会混进"条数"那一列。 */
+export function countedClasses(view: RoleErrorsView): ErrorClassRow[] {
+  return classRows(view).filter((one) => one.computed !== true);
+}
+
+/** 现算预演那几类的 blocker 条数合计（抬头"其中现算预演 N 条"要用它）。 */
+export function previewTotal(view: RoleErrorsView): number {
+  return previewClasses(view).reduce((n, one) => n + one.count, 0);
+}
+
 /** 逐类三态的合计（页面顶部那一行"X 类读到 / Y 类没查成 / Z 类不适用"）。 */
 export function classTally(view: RoleErrorsView): { checked: number; unknown: number; na: number } {
   let checked = 0;
@@ -142,8 +163,11 @@ function stateWord(one: ErrorClassRow): string {
  * "按类"那一段：一行一类，点开看这一类的 source 明细。
  *
  * 为什么这一段排在最前面：业主的原话是"一眼看出系统哪里在漏"，而"按角色"那张矩阵回答的
- * 是"谁出错了" —— 两种问法。这一段的顺序是**桶 → 条数**（后端 `by_class()` 排好的），
+ * 是"谁出错了" —— 两种问法。这一段的顺序是桶 → 条数（后端 `by_class()` 排好的），
  * 三种单位不会混在同一个降序里。
+ *
+ * 现算预演那一类（`computed: true`）不上这张表：它的数不是发生次数，所以单独一张表
+ * 放在最下面（见 `previewClasses`），计数列也换了名字 —— 两件事在读数上分开。
  */
 function ClassTable(props: {
   view: RoleErrorsView;
@@ -153,6 +177,8 @@ function ClassTable(props: {
   const { view, picked, onPick } = props;
   const [open, setOpen] = useState<string>("");
   const rows = classRows(view);
+  const counted = countedClasses(view);
+  const preview = previewClasses(view);
   if (rows.length === 0) {
     return (
       <div class="empty">
@@ -162,7 +188,7 @@ function ClassTable(props: {
     );
   }
   const out = [];
-  for (const one of rows) {
+  for (const one of counted) {
     const isOpen = open === one.category;
     const samples = one.samples ?? [];
     out.push(
@@ -220,21 +246,80 @@ function ClassTable(props: {
     }
   }
   return (
-    <div class="err-scroll">
-      <table class="grid err-matrix">
-        <thead>
-          <tr>
-            <th>类目</th>
-            <th>桶</th>
-            <th>条数</th>
-            <th>角色</th>
-            <th>这一趟 / 更早</th>
-            <th>三态</th>
-          </tr>
-        </thead>
-        <tbody>{out}</tbody>
-      </table>
-    </div>
+    <>
+      <div class="err-scroll">
+        <table class="grid err-matrix">
+          <thead>
+            <tr>
+              <th>类目</th>
+              <th>桶</th>
+              <th>条数</th>
+              <th>角色</th>
+              <th>这一趟 / 更早</th>
+              <th>三态</th>
+            </tr>
+          </thead>
+          <tbody>{out}</tbody>
+        </table>
+      </div>
+      {preview.length === 0 ? null : (
+        <>
+          <div class="section-title">现算预演（以此刻盘面看，现在收工会被什么拦）</div>
+          <div class="tri-reason">
+            {" "}
+            这一段不是"动作发生了 N 次"：后端给这些类目打了 <span class="mono">computed=true</span>，
+            它们是 <span class="mono">closing.check_closing</span> 每次读数现算一次的结果，
+            条数 = 此刻盘面上的 blocker 数。它与上面的发生次数单位不同，所以刻意
+            不并进同一张表（"这一趟 / 更早"那一列对它们没有意义，也就不画）。
+          </div>
+          <div class="err-scroll">
+            <table class="grid err-matrix">
+              <thead>
+                <tr>
+                  <th>类目</th>
+                  <th>标记</th>
+                  <th>此刻 blocker 条数</th>
+                  <th>三态</th>
+                </tr>
+              </thead>
+              <tbody>
+                {preview.map((one) => (
+                  <tr key={`preview-${one.category}`}>
+                    <th>
+                      <span class="mono">{one.category}</span>
+                    </th>
+                    <td>
+                      <Badge kind="badge-na" text="现算预演" />
+                    </td>
+                    <td class={one.count === 0 ? "mono err-zero" : "mono err-hot"}>
+                      {one.count}
+                    </td>
+                    <td class="tri-reason">{stateWord(one)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {preview.map((one) => (
+            <div key={`preview-detail-${one.category}`} class="err-detail">
+              <div class="tri-reason">
+                <span class="mono">{one.category}</span>：{one.meaning}
+              </div>
+              {(one.samples ?? []).length === 0 ? null : (
+                <ul class="list">
+                  {(one.samples ?? []).map((s) => (
+                    <li key={`${one.category}|${s.source}|${s.ref}|${s.ts}|${s.code}`}>
+                      <span class="mono">{sampleWhere(s)}</span>
+                      <span class="tri-reason"> — {s.detail}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
+        </>
+      )}
+    </>
   );
 }
 
@@ -422,6 +507,7 @@ export function RoleErrors() {
   const rows = matrixRows(view);
   const top = topCategories(view, TOP_LIMIT);
   const tally = classTally(view);
+  const previewSum = previewTotal(view);
   const boundary = view.data.run_boundary ?? "";
   const meanings = meaningsOf(gloss);
   const events = view.data.sources.events ?? {};
@@ -446,6 +532,11 @@ export function RoleErrors() {
         角色侧 <b class="mono">{view.data.total}</b>
         <span class="tri-reason"> · </span>
         系统侧 <b class="mono">{view.data.system_total}</b>
+        {previewSum === 0 ? null : (
+          <span class="tri-reason">
+            （其中现算预演 <span class="mono">{previewSum}</span> 条：不是发生次数）
+          </span>
+        )}
         <span class="tri-reason"> · </span>
         状态读数 <b class="mono">{view.data.state_readings_total}</b>
         <span class="tri-reason">

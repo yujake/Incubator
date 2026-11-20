@@ -36,6 +36,10 @@ EXPECTED: tuple[tuple[str, str, str], ...] = (
     ("not_caller", "src/agentflow/conductor.py", "Conductor.escalate"),
     ("public_is_not_a_conversation", "src/agentflow/agent_loop.py",
      "AgentLoop._public_face_refusal"),
+    # 2026-11-20（BCRETIRE）：广播通道退场 —— `message` / `handoff` 的写入口对 `to=ALL`
+    # 的受控拒绝（码只在 `_broadcast_retired_refusal` 一处产生）。
+    ("broadcast_retired", "src/agentflow/agent_loop.py",
+     "_broadcast_retired_refusal"),
     # 历史理由码：E 不再产出它，但它留在 `FORMAL_REASONS` 这张词表里（历史台账仍带着它）。
     ("formal_moved_to_l", "src/agentflow/agent_e/_support.py", "FORMAL_REASONS"),
     ("formal_not_in_e", "src/agentflow/agent_e/_support.py", "E_NO_FORMAL_REASON"),
@@ -79,7 +83,7 @@ def _string_constants(path: pathlib.Path) -> set[str]:
 
 def test_the_twelve_model_facing_codes_are_registered() -> None:
     """a：12 个码逐条在码表里，类目是新类目，出处点名的符号与 EXPECTED 逐字一致。"""
-    assert len(EXPECTED) == 12, f"清单本身的条数漂了：{len(EXPECTED)}"
+    assert len(EXPECTED) == 13, f"清单本身的条数漂了：{len(EXPECTED)}"
     bad: list[str] = []
     for code, rel, symbol in EXPECTED:
         category = ES.CODE_TO_CATEGORY.get(code)

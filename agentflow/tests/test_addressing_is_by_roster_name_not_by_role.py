@@ -244,29 +244,26 @@ def test_d_a_lone_role_code_still_works_and_is_marked_as_a_fallback(
 
 def test_e_the_public_channel_is_still_a_channel_not_a_person(
         tmp_path: pathlib.Path) -> None:
-    """判据 e（负控）：`to=#public`（旧数据写法）仍走频道语义，读数 `addressed_by=channel`。
+    """判据 e（负控）：`to=#public`（旧数据写法）不再是一个收件人 —— 写入口受控拒绝。
 
-    判据 e 量的仍是"频道不是人"：写法归一成唯一那个 `ALL` 之后落盘的 `to` 就是 `ALL`
-    （旧写法只在读侧折算，不再产生新写法）—— 所以输入仍喂旧写法，断言看归一后的结果。
-
-    改前红：红在读数那一格；改后的正控是"它仍然落 `agent_message`（公告栏），
-    而不是被寻址判据拦下来或被当成某个代理的私聊"。
+    2026-11-20（广播通道退场，BCRETIRE）：`#public` / `ALL` / `all` 在写入口一律
+    `broadcast_retired`（判据只有一处：`_broadcast_retired_refusal`）。"频道不是人"
+    这一点没变，而且更硬了：零写入、不给任何子代理开板项、不落进谁的私聊面。
+    读侧那一半（旧写法折成唯一那个 `ALL`）仍由 `_legacy_all` 承担 —— 兼容不许破。
     """
+    from agentflow.agent_loop import ALL, _legacy_all
+
     env = _env(tmp_path, same_role_children=2)
     loop, cond = env["loop"], env["cond"]
 
     got = loop._do_message({"to": "#public", "subject": "公告一句", "body": "正文"})
 
-    assert got.get("ok") is True, got
-    addr = _addressing(got)
-    assert str(addr.get("addressed_by") or "") == "channel", addr
-    assert str(addr.get("how") or "") == "outside_roster", addr
-    events = _messages(env["ws"])
-    assert len(events) == 1, events
-    assert str(events[0].get("to")) == "ALL", events[0]
-    assert str(events[0].get("channel")) == "public", events[0]
+    assert got.get("ok") is False and got.get("refused") == "broadcast_retired", got
+    assert _messages(env["ws"]) == [], ("受控拒绝却落了盘", _messages(env["ws"]))
     for kid in env["kids"]:
         assert _board(cond, kid) == [], ("公告栏不是私聊：不许给谁开板项", kid)
+    # 读侧正控：旧写法仍折成唯一那个规范值（"两种写法"早已收口）
+    assert _legacy_all("#public") == ALL
 
 
 # ---------------------------------------------------------------- 附) 政策教的写法真收

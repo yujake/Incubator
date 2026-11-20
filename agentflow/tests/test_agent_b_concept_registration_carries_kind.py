@@ -131,8 +131,18 @@ def test_a_concept_registration_does_not_carry_a_proof_text(store: Store):
 # ============================================================ ② 其它 kind 不变
 
 
-@pytest.mark.parametrize("kind", ["theorem", "lemma", "definition", "conjecture"])
-def test_other_kinds_land_with_the_same_grade_as_before(kind: str, store: Store):
+@pytest.mark.parametrize("kind,row_kind", [
+    ("theorem", "theorem"),
+    ("lemma", "lemma"),
+    ("definition", "definition"),
+    # 2026-11-20（KINDGRADE 口径，业主「都派修」）：文献里来的命题不是我们的猜想 ——
+    # `conjecture` 只留给 `origin=own_result`、还没证的那一档。所以引文侧交来的
+    # `conjecture` 落成 `theorem`（判据 `evidencebits.kind_at_registration`）。
+    # 这一条的正文断言（五个位逐字同档）一个字没动：它钉的是"kind 不混进等级"。
+    ("conjecture", "theorem"),
+])
+def test_other_kinds_land_with_the_same_grade_as_before(kind: str, row_kind: str,
+                                                       store: Store):
     """② 正控：非概念 kind 的落盘等级仍是 `conjecture`（与改前逐字相同）。
 
     `evidencebits.derive_grade` 只在 `concept` 那一支看 `kind`，所以把 `kind` 传进
@@ -142,6 +152,10 @@ def test_other_kinds_land_with_the_same_grade_as_before(kind: str, store: Store)
     2026-11-02（两阶段录入）：这一条原是 `pre_theorem`，因为引用命题的"第 3 位"
     曾被文献编号点亮。业主收口「汇总位不许把占位签读成已签」之后，引用侧只到第 2 位
     ⇒ 等级是「猜想」。四个 kind 仍然逐字同档（这正是本条要守的"kind 不混进来"）。
+
+    2026-11-20：`kind` 那一格不再逐字等于交来的词（引文侧的 `conjecture` 由
+    `evidencebits.kind_at_registration` 判成 `theorem`）—— 参数表因此多一列
+    `row_kind`，五个位那几条断言一个字未改。
     """
     _store_with_paper(store)
     payload = dict(REAL_R34D_CONCEPT)
@@ -154,12 +168,12 @@ def test_other_kinds_land_with_the_same_grade_as_before(kind: str, store: Store)
     out = _agent_b(store).register_statement(**payload)
     assert out.get("ok") is True, out
     (row,) = [r for r in _rows(store) if str(r.get("stmt_id")) == str(out.get("stmt_id"))]
-    assert str(row.get("kind")) == kind, row
+    assert str(row.get("kind")) == row_kind, row
     bits = dict(row.get("bits") or {})
     assert str(bits.get("grade")) == "conjecture", row
     assert str(bits.get("reviewed")) == "False", row
     assert str((bits.get("evidence") or {}).get("reviewed_source")) == "citation", row
-    assert EB.bits_shape_problems(bits, kind=kind) == [], row
+    assert EB.bits_shape_problems(bits, kind=row_kind) == [], row
 
 
 def test_theorem_and_definition_rows_get_byte_identical_evidence_bits(store: Store):

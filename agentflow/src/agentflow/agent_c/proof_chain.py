@@ -157,6 +157,91 @@ def _and_length(lengths: Sequence[int]) -> int:
 
 
 class _ProofChain:
+    def _md_chain(self, payload: Mapping[str, Any], summary: str,
+                  warnings: Sequence[str]) -> str:
+        """把链读数渲染成报告正文（`persist()` 要的那一份人读部分）。
+
+        为什么这一档必须有正文：`_report` 在 `ok=True` 时立刻登记，而 `persist()` 拒收
+        空 markdown —— 不渲染，这一档产出的报告就永远落不了库（同族另外四档各自渲染）。
+        正文与 payload 是同一份读数现算，不另存第二份真源；顺序全部取 payload 里已经
+        定好的序（组按证明号与组号，跳按走边顺序），两次运行逐字节一致。
+        """
+        node = payload.get("node") or {}
+        matched = str(payload.get("matched_by") or "")
+        lines = self._md_head("proof_chain", summary, warnings)
+        lines += ["## 目标", ""]
+        lines.append(
+            f"- 原样目标：`{payload.get('target') or ''}`"
+            + (f"（按 `{matched}` 命中）" if matched else "")
+            + f"；节点 `{node.get('stmt_id') or ''}`"
+            + (f" · {node.get('label')}" if node.get("label") else "")
+            + (f"（kind=`{node.get('kind')}`）" if node.get("kind") else ""))
+        lines += ["", "## 结论", ""]
+        lines.append(f"- 走到根（closed）：{'是' if payload.get('closed') else '否'}")
+        if payload.get("best_group") is not None:
+            lines.append(
+                f"- 候选路径 {payload.get('groups_total') or 0} 组；最短是第 "
+                f"{payload.get('best_proof_no') or 1} 条证明的第 {payload.get('best_group')} 组")
+        elif not (payload.get("groups_total") or 0):
+            lines.append("- 候选路径 0 组（没有依赖边；是根还是依赖没写，见下面那一行）")
+        else:
+            lines.append(f"- 候选路径 {payload.get('groups_total') or 0} 组；没有一组走到根")
+        if payload.get("unknown"):
+            lines.append("- 这一趟没查成（unknown）：有读不懂的 `used_by` 尾巴，逐条见下")
+        for key, label in (("roots", "根（无依赖，按口径就是根）"),
+                           ("unwritten", "依赖没写")):
+            got = payload.get(key) or []
+            if got:
+                lines.append(f"- {label}：" + "、".join(f"`{x}`" for x in got))
+        lines += ["", "## 候选路径（每条一行：第几条证明 · 第几组）", ""]
+        groups = payload.get("groups") or []
+        if not groups:
+            lines.append("（没有候选路径：这一条要么已经是根，要么依赖没写；理由见上面。）")
+            lines.append("")
+        else:
+            lines += ["| 证明号 | 组号 | 跳数 | 走到根 | 说明 |", "|---|---|---|---|---|"]
+            for g in groups[:20]:
+                why = str(g.get("why") or "").replace("|", "/")
+                lines.append(f"| {g.get('proof_no') or 1} | {g.get('group')} | {g.get('length')} | "
+                             f"{'是' if g.get('reached') else '否'} | {why or '—'} |")
+            if len(groups) > 20:
+                lines += ["", f"（另有 {len(groups) - 20} 组未列出，完整读数见 payload.groups。）"]
+            lines += ["", "## 逐组明细", ""]
+            for g in groups[:20]:
+                lines.append(f"### 第 {g.get('proof_no') or 1} 条证明 · 第 {g.get('group')} 组"
+                             f"（{g.get('length')} 跳，走到根={'是' if g.get('reached') else '否'}）")
+                lines.append("")
+                for h in g.get("hops") or []:
+                    via = str(h.get("via_dep_id") or "")
+                    lines.append(f"- `{h.get('node') or ''}`"
+                                 + (f" ← 依赖 `{via}`" if via else "")
+                                 + (f"（{h.get('status')}）" if h.get("status") else "")
+                                 + (f"：{h.get('why')}" if h.get("why") else ""))
+                blocked = [f for f in (g.get("failures") or []) if f.get("blocking")]
+                if blocked:
+                    lines.append("- 不通的分支：" + "；".join(
+                        f"`{f.get('node') or ''}`（{f.get('why') or f.get('status') or ''}）"
+                        for f in blocked[:10]))
+                lines.append("")
+        lines += ["## 形状与前沿", ""]
+        lines.append(
+            "- 形状读数："
+            + ("已算" if payload.get("path_shapes_checked") else "没算成")
+            + f"（{len(payload.get('path_shapes') or [])} 条候选路径）"
+            + (f"；{payload['path_shapes_note']}" if payload.get("path_shapes_note") else ""))
+        lines.append(
+            "- 前沿："
+            + ("已算" if payload.get("frontier_checked") else "没算成")
+            + f"（{len(payload.get('frontier') or [])} 个待接节点）"
+            + (f"；{payload['frontier_note']}" if payload.get("frontier_note") else ""))
+        bad = payload.get("bad_used_by") or []
+        if bad:
+            lines += ["", "## 读不懂的 `used_by` 尾巴", "",
+                      "这些边没有进依赖索引（也没有被折成任何证明号）：", ""]
+            lines += [f"- `{b}`" for b in bad]
+        lines.append("")
+        return "\n".join(lines)
+
     def proof_chain(self, target: str, *, max_depth: int = 6, k: int = 1,
                     weights: Mapping[str, float] | None = None):
         """`target` 的最短证明依赖链（按 `path_group` 分组；返回每组一条 + 挑最短那组）。
@@ -292,18 +377,21 @@ class _ProofChain:
                 summary = (f"{node.get('label') or node['stmt_id']}：**已经是根**"
                            "（无依赖；按口径：文献／原始概念／有 proof 证据／**经审核的自证定理**）"
                            "⇒ 这一条链**闭合**")
+                root_payload = {
+                    "checked": True, "target": str(target), "matched_by": matched_by,
+                    "groups": [], "best_group": None, "groups_total": 0,
+                    "best_proof_no": None, "proof_nos": [],
+                    "closed": True, "roots": [node["stmt_id"]],
+                    "bad_used_by": list(graph.bad_used_by),
+                    **shape_keys,
+                    "node": {"stmt_id": node["stmt_id"], "kind": node.get("kind"),
+                             "label": node.get("label")}}
+                tail_warnings = _bad_tail_warnings(graph)
                 return self._report(
                     "proof_chain", str(target), {"max_depth": max_depth, "k": k},
-                    summary=summary,
-                    payload={"checked": True, "target": str(target), "matched_by": matched_by,
-                             "groups": [], "best_group": None, "groups_total": 0,
-                             "best_proof_no": None, "proof_nos": [],
-                             "closed": True, "roots": [node["stmt_id"]],
-                             "bad_used_by": list(graph.bad_used_by),
-                             **shape_keys,
-                             "node": {"stmt_id": node["stmt_id"], "kind": node.get("kind"),
-                                      "label": node.get("label")}},
-                    warnings=_bad_tail_warnings(graph),
+                    summary=summary, payload=root_payload,
+                    markdown=self._md_chain(root_payload, summary, tail_warnings),
+                    warnings=tail_warnings,
                 )
             return self._report(
                 "proof_chain", str(target), {"max_depth": max_depth, "k": k},
@@ -359,7 +447,9 @@ class _ProofChain:
         return self._report(
             "proof_chain", str(target),
             {"max_depth": max_depth, "k": k, "weights": dict(weights or {})},
-            summary=summary, payload=payload, warnings=warnings, truncated=truncated,
+            summary=summary, payload=payload,
+            markdown=self._md_chain(payload, summary, warnings),
+            warnings=warnings, truncated=truncated,
             ok_=not (best is None and bool(bad_used)),
             error="dependency_unreadable" if (best is None and bool(bad_used)) else None)
 

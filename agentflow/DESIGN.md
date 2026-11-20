@@ -85,6 +85,8 @@
 
 **不变量**：`mode ∈ {broad, topical, precise}`；`mode == "broad"` 时 `content_description` 允许为空，`precise` 时**必须非空**；`done == true` ⟹ `result_lit_ids` 非空**或** `last_error` 非空（二者留一，说明"完成"包含"确认无结果"）。
 
+**`last_error` 的语义是"最近一次失败"**（失败原文，逐字），不是"最后一次写入"：一次成功只写 `outcome` / `result_lit_ids`，不替历史作证 —— 否则"这一问从没失败过"与"上一次失败、这一次成功了"在盘上同形。
+
 ### 1.2 `data/literature.json`
 
 ```jsonc

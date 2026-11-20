@@ -1830,6 +1830,33 @@ def _h_register(
     )
 
 
+def _keeps_failure_history(req: Mapping[str, Any]) -> bool:
+    """这一行上已有的 `last_error` 是不是一份失败读数（是 ⇒ 成功登记不许清掉它）。
+
+    为什么不猜文本、只看 `outcome` / `done`：`last_error` 在这一格上是两种东西 ——
+    失败原文（`run_once` 的退避支 / 放弃支写）与"命中 N 条、入库 0 条（待裁）"的
+    命中读数（`outcome=no_results` 那一支写）。用关键词去分辨它们，等于给
+    "这句话算不算失败"再造一份口径；而上面两档各自由写者决定，`outcome`
+    已经把答案写在行上了：
+
+    * `search_failed` / `gave_up`：schema 的校验要求这两档必须带 `last_error`，
+      所以那一格一定是失败原文；
+    * `outcome is None` 且 `done` 不为真：退避中的请求，写的是这一轮失败的原文；
+    * `ok`：已经成功过的行 —— 这次成功不负责清历史（重复登记时读数保持不变）；
+    * `no_results`：那一格是命中读数，不是失败，它随 `outcome=ok` 一起作废。
+
+    真机读数（lp-ball-13）：r-000002 seq162 的 429 与 r-000004 seq1724 的 429
+    都是被后面的 `search.register` 擦成 None 的；r-000003 的 429 史能活下来，
+    是因为 seq807 有一次人手 `table.update` 补写。
+    """
+    outcome = req.get("outcome")
+    if outcome in ("search_failed", "gave_up"):
+        return True
+    if outcome is None:
+        return req.get("done") is not True
+    return outcome == "ok"
+
+
 def _link_request(tx: Any, request_id: str | None, lit_id: str | None, warnings: list[str]) -> bool:
     """把 lit_id 追加到请求的 ``result_lit_ids``（保持升序去重）。
 
@@ -1853,8 +1880,16 @@ def _link_request(tx: Any, request_id: str | None, lit_id: str | None, warnings:
     # 4 条之后 R2（检索真的取回）仍只数到 1 条（`r-000001/2/5/7` 全是
     # `result_lit_ids` 非空 + `outcome=no_results`）。schema 的校验也要求
     # `outcome=ok` 时 `result_lit_ids` 非空 —— 这里刚刚 add 过，恒成立。
+    #
+    # 同一次写入的第二格是 `last_error`，改前无条件写 None —— 那是把
+    # "这一问从没失败过"与"这一问现在成功了"折成同一读数：真机上 r-000002
+    # seq162 的 429 就是这样被 seq960/966 的一次登记擦掉的（r-000004 同形）。
+    # 现在 `last_error` 的语义是"最近一次失败"：一次成功只写 `outcome`，
+    # 不替历史作证。保留与否的判据只有一处（`_keeps_failure_history`）。
+    keep_failure_history = _keeps_failure_history(req)
     req["outcome"] = "ok"
-    req["last_error"] = None
+    if not keep_failure_history:
+        req["last_error"] = None
     try:
         # 先校验再写：请求行可能处于"done=true 但三样凭据都没有"的历史脏状态，
         # 那种行本该由 rebuild/verify 处理，不该被本工具的写入顺手"修好"或炸掉。
@@ -2686,20 +2721,28 @@ def _h_lit_admit(
         # 一并写进判定行 —— 报告/闸不必再回表拼，人查时一行就能看出
         # "它凭什么被放行、读过多少字"。读不到表就不抄（档位照旧写，fail-closed）。
         rel_by_slot: dict[str, str] = {}
+        row_by_slot: dict[str, dict[str, Any]] = {}
         try:
             for row in ctx.store.rows("lit_candidates"):
                 slot = str(row.get("slot") or "")
                 if slot in avail:
                     rel_by_slot[slot] = str(row.get("relevance") or "")
+                    row_by_slot[slot] = dict(row)
         except Exception:  # noqa: BLE001 - 读者格失败不许把判定本身带坏
             rel_by_slot = {}
         read_by_slot = LAV.receipts_by_slot(ctx.store.root)
         try:
             for slot, tier in avail.items():
+                # `content_read` 是机器现算的读数（抽读成功 + 非空 + 不只摘要 + fs.read），
+                # 不是 A 自报：没算过就按 False 记 —— "没算"不许冒充"读过"。
+                read_ok, _read_why = LAV.content_read(
+                    ctx.store.root, slot, row_by_slot.get(slot) or {},
+                    tier=tier, receipt=read_by_slot.get(slot))
                 LAV.record_availability(ctx.store.root, rid_for_ledger, slot, tier,
                                         note="lit.admit", actor=ctx.actor,
                                         relevance=rel_by_slot.get(slot, ""),
-                                        read=read_by_slot.get(slot))
+                                        read=read_by_slot.get(slot),
+                                        content_read=read_ok)
         except (ValueError, OSError) as exc:
             return fail(f"可读性判定没写进台账：{exc}", kind="availability_ledger")
 
@@ -2745,6 +2788,8 @@ def _h_lit_admit(
                     missing_readback=got.get("missing_readback"),
                     missing_availability=got.get("missing_availability"),
                     availability_bad=got.get("availability_bad"),
+                    unjudged_no_content=got.get("unjudged_no_content"),
+                    content_assertions=got.get("content_assertions"),
                     read_problems=got.get("read_problems"))
     return ok({
         "ok": got["ok"],
@@ -2812,7 +2857,9 @@ def _h_lit_admit_all(
                     refused=got.get("refused"), undecided=got.get("undecided"),
                     missing_readback=got.get("missing_readback"),
                     missing_availability=got.get("missing_availability"),
-                    availability_bad=got.get("availability_bad"))
+                    availability_bad=got.get("availability_bad"),
+                    unjudged_no_content=got.get("unjudged_no_content"),
+                    content_assertions=got.get("content_assertions"))
     return ok({
         "ok": got["ok"],
         "kind": got["kind"],

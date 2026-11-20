@@ -2964,7 +2964,10 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                 "FakeClock（advance 后自动 fire_due）/ Timer / TimerBook（落盘 "
                 "out/clock/state.json）/ now / start_timer / start_alarm / "
                 "cancel_timer / timers / due_timers / fire_due / record_wake / "
-                "read_wakes / pending_wakes / consume_wakes / set_due_handler",
+                "read_wakes / pending_wakes / consume_wakes / set_due_handler"
+                "（2026-11-20 拆分后这些名字由本模块按原样再导出，真身分住在 "
+                "`clockbase` / `clockrun` / `clocktimer` / `clockbookindex` / `clockfire` 等"
+                "各自的登记行里；本模块只剩门面 —— 读实现请按那几行找）",
     # 2026-11-20（业主「还有超800的？派人拆」）：`clock.py` 6,777 行按依赖方向由底向上拆，
     # 这一条是拆出来的第一层。为什么仍是顶层模块：它是全套时钟模块的最底层，
     # 只 import 标准库与 `canonical`，上层（`clockrun` / `clocktimer` / `clockbook` /

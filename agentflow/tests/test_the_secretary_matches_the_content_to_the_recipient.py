@@ -106,13 +106,13 @@ def _register(loop: AgentLoop, me: str, kids: dict[str, str]) -> None:
 # ============================================================ 判据 1：真机那一条被拒
 
 def test_the_real_machine_handoff_is_refused_and_writes_nothing(tmp_path: pathlib.Path):
-    """真机那一条（`handoff(to=ALL)` + 正文里两件派活）⇒ 秘书拒，盘上 0 条手稿。
+    """真机那一条（`handoff(to=ALL)` + 正文里两件派活）⇒ 写入口就拒，盘上 0 条手稿。
 
-    改前必红：秘书照发 —— `projects/mp3-r3/manuscripts/handoffs.jsonl` 的 000000 就是那么
-    落盘的，`to=ALL` 而正文里写着给 A 与给 D 两件活。
-
-    拒信必须逐字给出拆分方案（"给 A 一条、给 D 一条"），理由码是既有的 `invalid_params`
-    （"这次调用本身不成立"）—— 这一版不新造理由码。
+    2026-11-20（广播通道退场，BCRETIRE）：这一条现在走不到秘书那一道了 ——
+    `_do_handoff` 在写任何东西之前就以 `broadcast_retired` 受控拒绝（`to=ALL` 已不是收件人）。
+    判据因此改成两半：① 拒因码是退场那一个、盘上 0 条；② 秘书那一侧的判断还在
+    （判据 4 把退场那道拒打桩掉之后，同一条内容仍被秘书按"两件派活"拒成 `invalid_params`
+    —— 两处判据都在，顺序是"先退场、后内容面"）。
     """
     st, cond, reg, ws, me, kids = _tree(tmp_path)
     loop = _loop(cond, reg, ws, st, [
@@ -126,38 +126,25 @@ def test_the_real_machine_handoff_is_refused_and_writes_nothing(tmp_path: pathli
     res = step.result
 
     assert res.get("ok") is False, res
-    assert res.get("outcome") == "refused", res
-    assert res.get("refused") == "invalid_params", res
-    assert res.get("refusal_reason") == "invalid_params", res
+    assert res.get("refused") == "broadcast_retired", res
     # 盘上 0 条：手稿一行没写（"这一条没发出去"必须是盘上的事实，不是一句声明）
     assert MS.rows(ws) == [], ("被拒的那一条不许留手稿：", MS.rows(ws))
-
-    err = str(res.get("error") or "")
-    assert "这一条里有 2 件派活" in err, err
-    assert "给 A" in err and "给 D" in err, err
-    assert "拆成 2 条" in err, err
-    assert "`handoff(to=A)`" in err and "`handoff(to=D)`" in err, err
-
-    # ---- 秘书台账（"未向 M 提醒"那一半的既有回流）：那一行带着它的判断与理由。
-    rows = [r for r in loop.secretary.decisions()
-            if (r.get("judge") or {}).get("targets") or "拆成" in str(r.get("reason") or "")]
-    assert rows, ("秘书发出口没有留下判断：", loop.secretary.decisions())
-    last = rows[-1]
-    assert last.get("decision") == "建议重排", last
-    assert last.get("judge", {}).get("fits") is False, last
-    assert list(last["judge"].get("targets") or []) == ["A", "D"], last
-    assert "拆成 2 条" in str(last.get("reason") or ""), last
+    # 拒信必须给出路（改点具体的人 / 对 M 发），而不是只报一个码
+    assert "改点具体的人" in str(res.get("how_to_fix") or ""), res
+    # 秘书根本没被叫到：这一条在写入口就挡下了（内容面判据在判据 4 里单独验）
+    assert [r for r in loop.secretary.decisions()
+            if (r.get("judge") or {}).get("targets")] == [], loop.secretary.decisions()
 
 
 # ============================================================ 判据 1b：公告栏里点名下指令
 
 def test_a_directive_in_the_bulletin_is_refused_on_the_handoff_path(tmp_path: pathlib.Path):
-    """`handoff(to=ALL)` 里点名某个名册成员并下指令 ⇒ 拒 `public_is_not_a_conversation` + 0 条。
+    """`handoff(to=ALL)` 里点名某个名册成员并下指令 ⇒ 同一条通道同样拒（退场那道闸先挡）。
 
-    这一档原先只在 `message` 那条路上有（`_message_by_channel` 的投递闸）；`handoff` 写的是
-    同一份内容、进的是同一个公共频道，却不过那道判据 —— 同一件事换个通道就绕过去了。
-    现在两条通道共用同一份判据（`_public_face_refusal`：码与措辞都只有一处），
-    这一条量的是 handoff 这一侧真的接上了它。
+    2026-11-20（BCRETIRE）：`to=ALL` 已在写入口受控拒绝（`broadcast_retired`），所以这一条
+    现在量的是"点名 + 指令的公告"也不再有任何出口 —— 改前它靠 `public_is_not_a_conversation`
+    挡，改后连频道都不存在了；两条判据都不许静默放行（0 条手稿）。秘书那一侧的对应判据
+    由判据 4 在打桩那一档单独验（它仍在，只是不再承担这一条的第一道）。
     """
     st, cond, reg, ws, me, kids = _tree(tmp_path)
     loop = _loop(cond, reg, ws, st, [
@@ -169,11 +156,8 @@ def test_a_directive_in_the_bulletin_is_refused_on_the_handoff_path(tmp_path: pa
     run = loop.run("公告", summoned_by="M", my_task_id=me, depth=2)
     res = run.steps[0].result
     assert res.get("ok") is False, res
-    assert res.get("refused") == "public_is_not_a_conversation", res
-    assert res.get("named") == "A1", res
-    assert "公告栏" in str(res.get("error") or ""), res.get("error")
+    assert res.get("refused") == "broadcast_retired", res
     assert MS.rows(ws) == [], ("被拒的那一条不许留手稿：", MS.rows(ws))
-    assert loop.secretary.decisions()[-1].get("decision") == "建议改派", loop.secretary.decisions()
 
 
 # ============================================================ 判据 2：单收件人照发（正控）
@@ -210,10 +194,11 @@ def test_one_dispatch_to_one_recipient_still_goes_out(tmp_path: pathlib.Path):
 # ============================================================ 判据 3：真公告照发（正控）
 
 def test_a_real_bulletin_still_goes_out(tmp_path: pathlib.Path):
-    """正控：`to=ALL`、不点名、不带指令语气的公告 ⇒ 照发（别把公告也堵死）。
+    """`to=ALL`、不点名、不带指令语气的"真公告" ⇒ 同样受控拒绝（没有"无害公告"这一档豁免）。
 
-    "公告"与"对话"的分界就是 `message` 那条路一直在用的同一份判据
-    （点名 + 指令语气才拒）；这里量的是：同一份判据在 `handoff` 上也不误伤公告。
+    改前这一条是正控（别把公告也堵死）；2026-11-20 广播通道整体退场之后，"公告"这个
+    收件面本身就不存在了 —— 判据翻成"它也被拒、盘上 0 条"，而不再是"照发"。
+    要给谁看就点谁（或对 M 发）；"逐层点下去"是唯一的全树通知路径。
     """
     st, cond, reg, ws, me, kids = _tree(tmp_path)
     loop = _loop(cond, reg, ws, st, [
@@ -225,27 +210,29 @@ def test_a_real_bulletin_still_goes_out(tmp_path: pathlib.Path):
     _register(loop, me, kids)
     run = loop.run("公告", summoned_by="M", my_task_id=me, depth=2)
     res = run.steps[0].result
-    assert res.get("ok") is True, res
-    rows = MS.rows(ws)
-    assert len(rows) == 1 and rows[0]["to"] == MS.ALL, rows
+    assert res.get("ok") is False, res
+    assert res.get("refused") == "broadcast_retired", res
+    assert MS.rows(ws) == [], ("退场之后不许再有 public 手稿：", MS.rows(ws))
 
 
 # ============================================================ 判据 4：反真空
 
 def test_the_content_face_check_is_not_vacuous(tmp_path: pathlib.Path,
                                                monkeypatch: Any):
-    """反真空：把秘书那一处判断打桩成恒放行 ⇒ 判据 1 当场红。
+    """反真空：两处判据各自都是真的，顺序是"先退场、后内容面"。
 
-    打的是 `Secretary.judge_recipient_face`（秘书发出口那一处判断的唯一入口）：
-    它恒返回"相符"之后，真机那一条会照发、盘上会多一行 —— 那正是改前的形态。
-    所以判据 1 量的确实是这一处判断，不是别的东西。
+    2026-11-20（BCRETIRE）之后，真机那一条在写入口就被 `broadcast_retired` 挡下
+    （判据 1），秘书那一道判据因此不再承担第一道 —— 但它必须还在。这里的做法是
+    一层一层摘：
+
+    ① 摘掉退场闸（`_broadcast_retired_refusal` 恒返回 `{}`）⇒ 同一条内容走到秘书，
+       被内容面判据拒成 `invalid_params`、盘上 0 行 —— 内容面判据是真的；
+    ② 再把 `Secretary.judge_recipient_face` 打桩成恒放行 ⇒ 同一份内容照发、盘上多一行
+       —— 所以 ① 拒的确实是这一处判断，不是别的东西。
     """
-    monkeypatch.setattr(SEC.Secretary, "judge_recipient_face",
-                        lambda self, shape, payload, *, face=None: {
-                            "checked": True, "fits": True, "refused": "",
-                            "refusal_reason": "", "reason": "打桩：恒放行",
-                            "targets": [], "named": "", "shape": shape, "to": "",
-                            "decision": ""})
+    from agentflow import agent_loop as AL
+
+    monkeypatch.setattr(AL, "_broadcast_retired_refusal", lambda **_kw: {})
     st, cond, reg, ws, me, kids = _tree(tmp_path)
     loop = _loop(cond, reg, ws, st, [
         {"handoff": {"to": "ALL", "summary": REAL_SUMMARY, "body": REAL_BODY}},
@@ -254,6 +241,23 @@ def test_the_content_face_check_is_not_vacuous(tmp_path: pathlib.Path,
     _register(loop, me, kids)
     run = loop.run("派活", summoned_by="M", my_task_id=me, depth=2)
     res = run.steps[0].result
-    assert res.get("ok") is True, ("坏实现应当把这一条发出去：", res)
-    assert len(MS.rows(ws)) == 1, ("坏实现下盘上必须多一行 —— 否则判据 1 不是在测这一处判断：",
-                                   MS.rows(ws))
+    assert res.get("ok") is False and res.get("refused") == "invalid_params", res
+    assert MS.rows(ws) == [], ("内容面判据应当把这一条拒在写之前：", MS.rows(ws))
+
+    # ② 再摘内容面判据 ⇒ 照发（改前那一版的完整形态）
+    st2, cond2, reg2, ws2, me2, kids2 = _tree(tmp_path / "stub")
+    monkeypatch.setattr(SEC.Secretary, "judge_recipient_face",
+                        lambda self, shape, payload, *, face=None: {
+                            "checked": True, "fits": True, "refused": "",
+                            "refusal_reason": "", "reason": "打桩：恒放行",
+                            "targets": [], "named": "", "shape": shape, "to": "",
+                            "decision": ""})
+    loop2 = _loop(cond2, reg2, ws2, st2, [
+        {"handoff": {"to": "ALL", "summary": REAL_SUMMARY, "body": REAL_BODY}},
+        {"final": "知道了"},
+    ])
+    _register(loop2, me2, kids2)
+    run2 = loop2.run("派活", summoned_by="M", my_task_id=me2, depth=2)
+    res2 = run2.steps[0].result
+    assert res2.get("ok") is True, ("坏实现应当把这一条发出去：", res2)
+    assert len(MS.rows(ws2)) == 1, ("坏实现下盘上必须多一行：", MS.rows(ws2))
