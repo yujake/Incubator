@@ -229,11 +229,6 @@ def _v_set_role_seam(llm: Any) -> None:
 default_llm = _v_role_seam
 set_default_llm = _v_set_role_seam
 
-
-class VerificationWiringError(RuntimeError):
-    """这次审校没查成：没有模型缝，或拿回来的结论不合法。不是 `有毛病`。"""
-
-
 #: 业主 2026-10-29：「temperature = 1.0（正常对话的数值）」——只给 V 的审阅调用。
 #:
 #: 为什么 V 用正常对话的温度而别的角色不动：V 的活是"读出这份证明站不站得住"，

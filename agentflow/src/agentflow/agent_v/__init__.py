@@ -19,8 +19,8 @@ H 是稿件级正式审查（五元位第 5 位），V 是证明级验证（第 
 from __future__ import annotations
 
 from ..specs.v import SPEC
-from .core import (DEFAULT_VERIFIER, AgentV, VerificationWiringError, _manuscript_facts,
+from .core import (DEFAULT_VERIFIER, AgentV, _manuscript_facts,
                    default_llm, selftest, set_default_llm)
 
-__all__ = ["AgentV", "SPEC", "VerificationWiringError", "DEFAULT_VERIFIER",
+__all__ = ["AgentV", "SPEC", "DEFAULT_VERIFIER",
            "_manuscript_facts", "default_llm", "selftest", "set_default_llm"]

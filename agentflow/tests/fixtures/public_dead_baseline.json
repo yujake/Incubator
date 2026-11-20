@@ -624,14 +624,6 @@
    "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 1 处提及"
   },
   {
-   "name": "VerificationWiringError",
-   "rel": "agent_v/core.py",
-   "kind": "ClassDef",
-   "categories": "import,all_export",
-   "action": "drop_reexport_or_wire",
-   "why": "生产侧零读者；现有引用类别：re-export / __all__"
-  },
-  {
    "name": "WARM_JOB_STATES",
    "rel": "webui/cacheface.py",
    "kind": "Assign",

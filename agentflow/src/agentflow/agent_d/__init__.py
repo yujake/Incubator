@@ -36,7 +36,7 @@ from __future__ import annotations
 from .core import AgentD
 from .core import (_selftest,
 )
-from ._support import (AgentBrief, AgentSpec, Any, CONFIDENCE_LABELS, CONFIDENCE_LEVELS, 
+from ._support import (AgentBrief, AgentSpec, Any, CONFIDENCE_LABELS, 
     C_API_MISSING_REASON, C_NO_EVIDENCE, EvidenceError, IX, Iterable, Mapping, Path, ROLES, RT, 
     S, SPEC, Sequence, Store, StoreError, ToolError, ToolRegistry, _C_AUTO, _NEGATION_MARKERS, 
     _OPPOSITE_PAIRS, _STOPWORDS, _TOKEN_SPLIT_RE, _UNSPECIFIED, _as_report_dict, _conf_label, 
