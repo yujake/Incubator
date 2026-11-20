@@ -1517,15 +1517,22 @@ _WRITE_PATH_HOOK_BASELINE.update(_write_path_hook_state())
 #: （全量红、单跑 12 passed）。与钩子基线同一条纪律：拍摄在导入期，逐条判据开始与
 #: 收尾都装回。判据见 `tests/test_the_clock_state_does_not_leak_between_tests.py`。
 from agentflow import clock as _CLK
+from agentflow import clockrun as _CLOCKRUN
 
 _CLOCK_BASELINE = _CLK.RealClock()
 _CLOCK_BASELINE_START = _CLOCK_BASELINE.read()
 
 
 def _apply_clock_baseline() -> None:
-    """把时钟单例装回会话基线（真时钟 + 进程启动读数）；不碰计时器簿记。"""
+    """把时钟单例装回会话基线（真时钟 + 进程启动读数）；不碰计时器簿记。
+
+    `_PROCESS_START` 写在 `clockrun` 上而不是 `clock` 上：`clock` 是门面（再导出），
+    `clock._PROCESS_START = ...` 只改到门面自己那一份快照，`process_started()` 读的是
+    `clockrun` 里那一份 —— 那样"装回基线"会静默地不生效（2026-11-20 拆 clock.py 时
+    的同一类陷阱，见 `clockrun` 模块头的"为什么同处一个模块"那一节）。
+    """
     _CLK.use(_CLOCK_BASELINE)
-    _CLK._PROCESS_START = _CLOCK_BASELINE_START
+    _CLOCKRUN._PROCESS_START = _CLOCK_BASELINE_START
 
 
 def _apply_write_path_hook_state(saved: dict) -> None:
