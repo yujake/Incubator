@@ -43,6 +43,8 @@ SCRIPTS_TOOLS = (
     "recompute_prompt_digests.py",
     "refreeze_goldens.py",
     "recompute_map_headline.py",
+    "check_wellformed.py",
+    "recon_b.py",
 )
 
 _DYNAMIC_LOADERS = {"spec_from_file_location", "import_module", "SourceFileLoader"}

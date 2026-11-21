@@ -2973,6 +2973,10 @@ def _exec_project(spec: RunSpec, args) -> int:
                 why = _summarize_drop_reasons(ex.get("drop_reasons"))
                 if why:
                     emit(tty.bullet("剔除原因：" + tty.paint(why, "yellow")))
+                # 逐条点名：只给一个数的话，被剔掉的那几条在盘上就没有载体，
+                # 事后无法拿原句回原文复核（真机曾因此把 29 条真引文判成幻觉）。
+                for line in P.drop_receipt_lines(ex):
+                    emit(tty.bullet(tty.paint("剔除点名：" + line, "yellow")))
             for err in (ex.get("errors") or [])[:5]:
                 emit(tty.bullet(tty.paint(json.dumps(err, ensure_ascii=False, default=str)[:150], "yellow")))
             mdl = ex.get("model") or {}

@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any, Iterable, Sequence
 
 from ._support import ARunResult, D, Path, S, T, X, make_lease, shutil, tempfile
+from .clear_stage import _finish
 from .. import litstage as L
 
 
@@ -235,7 +236,7 @@ class _RunOnce:
             if not _claim_pending(self.store, self.actor, wanted, result):
                 result.skipped_reason = "no_pending_delegation"
             _fill_pending(self.store, result)
-            return result
+            return _finish(self, result)
         claim = self._claim()
         # 取任务侧的审计信息先落进结果，再决定要不要早退 —— 否则
         # "有 high 在队里但全被租约占着 / 全在退避中"这类信息会随着 skipped_reason
@@ -255,7 +256,7 @@ class _RunOnce:
             if claim.pending == 0:
                 _claim_pending(self.store, self.actor, [], result)
             _fill_pending(self.store, result)
-            return result
+            return _finish(self, result)
         # I7：把"本轮取了哪条、它是什么优先级"暴露出来 —— 这是从外部唯一能
         # 观察到优先级真的生效的地方（文献表里看不出来）。
         result.request_id = req.get("request_id")
@@ -634,5 +635,7 @@ class _RunOnce:
 
         # 收工时再把全表待裁读一遍（跨委托）：这一轮的暂存会让本委托多出 pending，
         # 而旧委托的那几条也在同一份读数里 —— A 的下一步因此有完整的对象清单。
+        # `_finish` 在那之后再跑收尾自驱（清表 / 未消化理由）：真机 lp-ball-15 的
+        # `delegation_not_cleared` 就是"判完了、没清表"，而它只在出口处才看得出来。
         _fill_pending(self.store, result)
-        return result
+        return _finish(self, result)

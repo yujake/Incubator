@@ -177,6 +177,21 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
     `round` 保持原样（全局台账行号，老读数仍在用），不要拿它当趟内轮次。
     不给这两个参数（老调用点 / 夹具 / 直调本函数）⇒ `review_call=""`、
     `review_pass=None` ⇒ 读侧按历史形态计（`legacy_rows`），不参与新签判断。
+
+    ## `object_sha256` / `object_path`：被审的是盘上哪一份文件（2026-11-21，SIGNMAL）
+
+    两格回答的是"V 审的是哪一份文件"，与 `proof_sha256`（哪一版正文）不是同一把尺：
+
+    - `object_sha256` 是那份文件（`reports/f-proof-<号>.md` / `e-proof-*` / E 的报告）
+      的字节 sha256，64 位小写；`object_path` 是它的工作区相对路径；
+    - 给了才写（条件写入 ⇒ 老行逐字节不变），但生产 V 的两个写入口都必须给：
+      未在册那一支由 `record_pending_sign` 收，在册那一支（本函数）由
+      `agent_v/core.py` 的 `verify_proof` 现算传进来（`_manuscript_bytes_sha`）；
+    - 为什么必须给：签文件的 `passes` 逐票抄这一格（`sign_counting.ticket`），空串
+      会让那一份签说不清"审的是哪一份文件"——真机 `projects/lp-ball-15` 的
+      `2f77e321….json` 就是这么落出一份格式不合格的签（写侧格式闸见
+      `vsigns.sign_file_problems`：空串在点名了载体时由 `vsigns.issue` 用
+      `artifact_path` 的字节 sha 补上，非空而形状坏才受控拒）。
     """
     # 证明号先判：坏号在写任何东西之前就拒（不落台账、不改位）。
     no = proof_no_strict(proof_no)

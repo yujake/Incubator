@@ -101,6 +101,25 @@ def _safe_name(path: Path) -> str:
     return f"{stem}{path.suffix.lower()}"
 
 
+def _machine_summary(pages: int, *, name: str = "") -> str:
+    """`ingest_directory` 落进 `literature.summary` 的机器题录。
+
+    只写机器看得见的事实：这是一本"本地书架上的专著/教材"、共几页；`name` 是
+    可省的文件名回显。
+
+    ## 为什么文件名可省（WRITERESIDUE ③）
+
+    正文闸（`search_tools._content_claim_refusal` → `litavail.content_assertion`）
+    是 lexical 判据：它分不出"题名里的 theorem"与"从正文里读出来的定理"，也分不出
+    `A=B.pdf` 里的 `=B` 是文件名还是公式。文件名在 `title`（`src.stem`）、
+    `path`（library 下的相对名）、`download.source_path`（绝对来源）三处都还在，
+    所以被闸判成断言时省掉它不丢任何来路 —— 而它一旦留下，这一行就会带着一句
+    "不是读出来的"断言进库。
+    """
+    who = f"（{name}，{pages} 页）" if name else f"（{pages} 页）"
+    return f"本地书架上的专著/教材{who}"
+
+
 def list_books(root: Path | str, *, pattern: str = "*.pdf") -> list[Path]:
     """列出目录下的候选文件（排序后返回，保证每次跑的次序一样）。"""
     base = Path(root)
@@ -389,6 +408,26 @@ def ingest_directory(
             report.books.append(plan)
             continue
 
+        # ---- 正文闸（WRITERESIDUE ③）：机器题录也不许带"不是读出来的"内容性断言。
+        #
+        # 判据只有一份：`search_tools._content_claim_refusal`（它自己判
+        # `litavail.content_assertion`，受控码 `litstage.CONTENT_CLAIM_WITHOUT_READ`），
+        # 与 `search.register` / `table.create|update` 用的是同一处实现。
+        #
+        # 为什么 `read_ok=False`：这条路只有"抽过"（`fulltext_tier == ok`），没有
+        # `litavail.content_read` 要的那份证据（抽读回执 + 版本 + `fs.read` 观察台账 +
+        # 不只摘要）；按三态纪律不能把"抽过"冒充成"读过"。
+        #
+        # 判成断言时不是拒这本书（它有可读正文、必须能登记），而是按同一道闸的
+        # 第一条改法办：题录只写机器事实，不回显文件名（见 `_machine_summary`）。
+        from .tools import search_tools as _ST
+        summary = _machine_summary(plan.pages, name=name)
+        if _ST._content_claim_refusal(summary, read_ok=False,
+                                      port="search.ingest_local") is not None:
+            summary = _machine_summary(plan.pages)
+            plan.note = (f"{plan.note}；" if plan.note else "") + (
+                f"机器题录未回显文件名 {name!r}：它会被正文闸判成内容性断言")
+
         if dry_run:
             report.books.append(plan)
             continue
@@ -434,7 +473,7 @@ def ingest_directory(
                 lit_id=lit_id,
                 title=title,
                 type="M",
-                summary=f"本地书架上的专著/教材（{name}，{plan.pages} 页）",
+                summary=summary,
                 path=name,
                 processed=False,
                 source_request_ids=[req_id],

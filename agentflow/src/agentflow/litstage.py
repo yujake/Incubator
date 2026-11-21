@@ -66,6 +66,7 @@ from . import identity as IDENT
 from . import litavail as LAV
 from . import litread as LR
 from . import schema as S
+from . import sysguard as SG
 from . import textutil as T
 from .store import Store, lease_expired, make_lease
 
@@ -1159,6 +1160,23 @@ def claim_delegation(store: Store, request_id: str, *, actor: str,
     return out
 
 
+#: 清表写点自己写的那两格的必填判据（空表 = 合格）。
+#:
+#: 为什么在写口再判一遍：`cleared_at` / `clear_reason` 是框架自己产出的两格，
+#: 模型没有机会"发现清表没写全"（SIGNMAL 的形态）。此前 `reason` 与 `CLEAR_REASON`
+#: 同时为空时，行会带着空格子落盘，而收工闸那一条要到下一次收工才读得出来。
+#: 判据放在这里 = 写点当场受控拒，落盘之前就停。
+def _cleared_cells_problems(rows: Sequence[Mapping[str, Any]]) -> list[str]:
+    out: list[str] = []
+    for row in rows:
+        slot = str(row.get("slot") or "?")
+        if not str(row.get("cleared_at") or "").strip():
+            out.append(f"槽位 {slot} 的 cleared_at 是空的")
+        if not str(row.get("clear_reason") or "").strip():
+            out.append(f"槽位 {slot} 的 clear_reason 是空的")
+    return out
+
+
 def clear_delegation(store: Store, request_id: str, *, actor: str = "agent-A",
                      mapping: Sequence[Mapping[str, Any]] = (),
                      reason: str = "",
@@ -1199,7 +1217,39 @@ def clear_delegation(store: Store, request_id: str, *, actor: str = "agent-A",
             if not str(row.get("cleared_at") or "").strip():
                 row["cleared_at"] = at
                 row["clear_reason"] = str(reason or CLEAR_REASON)
+        in_scope = [r for r in rows
+                    if scope is None or str(r.get("slot") or "") in scope]
+        # 写点必填（SIGNMAL 形态）：这两格是框架自己写的，模型没有机会发现漏填。
+        problems = _cleared_cells_problems(in_scope)
+        if problems:
+            SG.record_reading(store.root, SG.refused(
+                "litstage.clear_delegation", code="clear_cells_incomplete",
+                where=f"data/lit_candidates.json（委托 {rid}）",
+                detail="；".join(problems),
+                how_to_fix=("清表的每一行都要带 cleared_at 与 clear_reason："
+                            "清表就是这两个格的写点，空一格等于这一次清表没有发生痕迹")))
+            raise LitStageError(
+                f"清表没写全（{len(problems)} 格是空的）⇒ 整笔不落盘："
+                + "；".join(problems[:3])
+                + "。`cleared_at` / `clear_reason` 由清表写点自己保证，"
+                  "空着落盘之后只有下一次收工才会被读出来",
+                kind="clear_incomplete",
+                detail={"request_id": rid, "problems": problems[:8],
+                        "slots": [str(r.get("slot") or "") for r in in_scope]})
         archived = _archive_rows(store, rid, rows)
+        if int(archived.get("count") or 0) != len(rows):
+            SG.record_reading(store.root, SG.refused(
+                "litstage.clear_delegation", code="clear_archive_mismatch",
+                where=f"data/lit_candidates/archive-{rid}.jsonl",
+                detail=f"归档写了 {archived.get('count')} 行，本委托是 {len(rows)} 行",
+                how_to_fix="归档必须覆盖本委托的整份行（含未判的 pending）："
+                           "少一行就等于那一条候选最后长什么样无从复核"))
+            raise LitStageError(
+                f"归档没写全（{archived.get('count')} 行 vs 本委托 {len(rows)} 行）"
+                "⇒ 清表整笔不落盘",
+                kind="clear_archive_incomplete",
+                detail={"request_id": rid, "archived": dict(archived),
+                        "rows": len(rows)})
         pairs: list[dict] = []
         for row in rows:
             if scope is not None and str(row.get("slot") or "") not in scope:

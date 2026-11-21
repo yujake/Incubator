@@ -22,6 +22,7 @@ from __future__ import annotations
 from . import clock
 from . import manuscripts as MS
 from . import schema as S
+from . import sysguard as SG
 
 from .secretary_addressing import (  # noqa: F401 — 这些名字由 secretary_addressing 定义
     _clip_text,
@@ -42,6 +43,23 @@ from .secretary_time import (  # noqa: F401 — 这些名字由 secretary_time �
 from .secretary_vocab import (  # noqa: F401 — 这些名字由 secretary_vocab 定义
     LIVE_TASK_STATUSES,
 )
+
+
+def retire_reason(branch: str, by_task_id: str) -> str:
+    """销号行的 `reason` 那一格在调用方没给时的补值（唯一一处算它）。
+
+    为什么补而不是拒：销号本身是"腾出名额"的动作，拒掉会把一次已经判定的退场
+    留在半路上（名字还在册），代价比"理由写得朴素"大。补出来的那一句必须可复核：
+    它点名就绪读数里的那一支（`branch`）与发起的号（`by_task_id`），于是读的人
+    知道这句不是模型编的，而是写点按此刻盘面折出来的。
+
+    这一句只用于落盘那一格；它不改变任何判据，也不改 `settle_retired_row` 的口径
+    （那里本来就有自己的兜底括号）。
+    """
+    why = str(branch or "").strip()
+    text = f"销号退场：{why}" if why else "销号退场：父决定销号"
+    by = str(by_task_id or "").strip()
+    return text + (f"（发起 {by}）" if by else "")
 
 
 class RetireMixin:
@@ -459,13 +477,31 @@ class RetireMixin:
                              f"（{killed.get('reason') or '没查成'}）⇒ 一个字节都没落盘，"
                              "重试即可（反方向会是『已销号却还会被叫醒』，不可逆）")],
                     "lifeline": killed}
+        # ---- 销号行那一格 `reason`（写点补值）
+        #
+        # `out/roster/<父>-retired.jsonl` 的 `reason` 是框架自己写的一格：模型没有机会
+        # 发现它空着（SIGNMAL 形态）。真机普查（2026-11-21）在 15 个工作区里读到 36 条
+        # `reason=""` 的销号行 —— 那些行当时完全合法地落盘了，因为写点接受空串。
+        # 处置：调用方给了就用；没给就按此刻已经读到的就绪分支在同一处补一句可复核的，
+        # 并把这一次补值记成读数（`retired_reason_derived`）。补值必须发生在写点，
+        # 读侧不许猜一个理由。
+        reason_text = str(reason or "").strip()
+        if not reason_text:
+            reason_text = retire_reason(branch, by_task_id)
+            SG.record_reading(self.root, SG.derived(
+                "secretary_retire.retire", code="retired_reason_derived",
+                where=f"out/roster/{owner}-retired.jsonl（{name} / {tid}）",
+                detail=(f"调用方没给 reason ⇒ 按就绪读数那一支补："
+                        f"{branch or '（空）'}"),
+                how_to_fix=("销号行必须带理由：调用方给 `reason`；没给时由写点按就绪分支"
+                            "补一句 —— 空理由的销号行在盘点时无法复核")))
         # ---- 落定台账那一行
         #
         # 顺序是判据本身：先落台账、再写名册。反过来先写名册时，台账那一笔要是炸了，
         # 盘上就是"名字已销、那一行还占着扇出名额"—— 重试会被"已经销号过"挡住，
         # 名额永远回不来。这个方向失败时两处都还没动（可重试），而它成功时
         # "销号即腾出名额"在盘上已经成立。
-        settled = self.settle_retired_row(tid, name=str(name), reason=str(reason))
+        settled = self.settle_retired_row(tid, name=str(name), reason=reason_text)
         if not settled.get("checked"):
             return {"ok": False, "action": "refused", "report": {},
                     "why": [(f"{name}（{tid}）的台账那一行没落定终态"
@@ -506,19 +542,19 @@ class RetireMixin:
                                                {"kind": "retire", "owner": owner, "name": str(name),
                                                 "task_id": tid, "task_ids": retired_ids,
                                                 "branch": branch, "by": str(by_task_id),
-                                                "reason": str(reason or ""),
+                                                "reason": reason_text,
                                                 "reading": reading, "at": at})
             wrote_index, why_i = append_jsonl(roster_index_path(self.root, owner),
                                               {"kind": "retire", "owner": owner, "name": str(name),
                                                "task_id": tid, "task_ids": retired_ids,
-                                               "reason": str(reason or ""), "at": at})
+                                               "reason": reason_text, "at": at})
             wrote_retired, why_x = True, ""
             for one in retired_ids:
                 ok_one, why_one = append_jsonl(retired_path(self.root, owner),
                                                {"owner": owner, "name": str(name),
                                                 "task_id": one,
                                                 "role": str(row.get("role") or ""), "at": at,
-                                                "reason": str(reason or ""),
+                                                "reason": reason_text,
                                                 "branch": branch})
                 if not ok_one:
                     wrote_retired, why_x = False, why_one

@@ -2645,43 +2645,12 @@ class AgentV:
         if (str(judgment.get("axis") or "") == "fault"
                 and str(judgment.get("fault_kind") or "") not in ("procedural", "style")):
             wash = self._wash_v_reply(reply, verdict, no, statement_id=sid)
-        _producer_hint, _producer_code = self._producer_context()
-        try:
-            row = VR.record_verification(self.workspace_root, statement_id=sid, proof_text=text,
-                                         verdict=verdict, verifier=self.actor,
-                                         submission_id=str(self.cfg.get("submission_id") or ""),
-                                         store=self.store, proof_no=no,
-                                         # 甲（2026-11-11）：产出方只由路径族判；
-                                         # 名册里的父角色只作对账（`roster_role`）。
-                                         producer_path=str(manuscript or ""),
-                                         producer_code=_producer_code,
-                                         roster_role=_producer_hint,
-                                         # `problem` 非空（依赖台账读不出来）要随行落盘：
-                                         # 否则读侧只看到空的 `citation_checks`，分不开
-                                         # "没查成"与"核过、没有引用"。
-                                         citation_gate=gate,
-                                         # B 段：两档语义判定随台账那一行落盘。
-                                         secretary_judge=judgment,
-                                         # C 段：洗过的转达文本（只有真洗出来时才写）。
-                                         washed_relay=wash,
-                                         # A 段：发签权在秘书手上 ⇒ 这一次不翻位。
-                                         flip=False,
-                                         review_pass=pass_no,
-                                         review_call=review_call,
-                                         # 2026-11-04（甲）：这一签的载体。落进台账行，
-                                         # 秘书翻位时 `sign_statement` 从行上读到它、
-                                         # 让 `vsigns.land` 把签块盖回同一份稿。
-                                         manuscript=manuscript)
-        except Exception as exc:  # noqa: BLE001 —— 台账写口的任何异常都落成红读数（D4）
-            # 台账写不进去（坏行 / 权限 / 磁盘 / 目录 / 写口自己抛的任何异常）⇒ 这是
-            # "没查成"，不是"签住了"。不接住它会让异常穿透到工具层，而那一层读不到
-            # "这一签没落地"这句话（2026-11-05 D4：改前只收 VerificationError / OSError）。
-            self._emit(f"verify_proof({sid})：台账写不进去（{type(exc).__name__}: {exc}）—— 没查成")
-            return {"ok": False, "checked": False, "reason": "ledger_unwritable",
-                    "detail": (f"台账写不进去（{type(exc).__name__}: {exc}）⇒ 这一格没查成"
-                               "（不落台账、不改位、必须重签）"),
-                    "emit": "", "judgment": judgment, "wash": wash,
-                    "gate": gate, "checks": checks}
+        row, _failed = self._write_review_row(
+            sid=sid, text=text, no=no, verdict=verdict, gate=gate,
+            judgment=judgment, wash=wash, pass_no=pass_no,
+            review_call=review_call, manuscript=manuscript)
+        if _failed:
+            return _failed
         axis = str(judgment.get("axis") or "")
         # ---- 2026-11-16（SG1 ⑤⑥⑦）：判出「有毛病」⇒ 落 V 稿并交给被审者 ----------
         #
@@ -2735,6 +2704,68 @@ class AgentV:
                 "issuance": issuance, "gate": gate, "checks": checks,
                 "v_review": v_review, "signed_delivery": signed_delivery,
                 "verdict": verdict}
+
+    def _write_review_row(self, *, sid: str, text: str, no: int,
+                          verdict: Mapping[str, Any], gate: Mapping[str, Any],
+                          judgment: Mapping[str, Any], wash: Mapping[str, Any],
+                          pass_no: int, review_call: str,
+                          manuscript: str) -> tuple[dict[str, Any], dict[str, Any]]:
+        """把这一转落成台账那一行（写不进去只落红读数，不改别的格）。
+
+        保证的不变式：台账写口的任何异常都被收成「没查成」的读数（`checked=False` +
+        `ledger_unwritable`），绝不穿透到工具层 —— 那一层读不到「这一签没落地」这句
+        话。返回 `(行, 失败读数)`；失败读数非空时调用方原样返回它（不落行、不改位、
+        必须重签）。
+        """
+        _producer_hint, _producer_code = self._producer_context()
+        try:
+            row = VR.record_verification(self.workspace_root, statement_id=sid, proof_text=text,
+                                         verdict=verdict, verifier=self.actor,
+                                         submission_id=str(self.cfg.get("submission_id") or ""),
+                                         store=self.store, proof_no=no,
+                                         # 甲（2026-11-11）：产出方只由路径族判；
+                                         # 名册里的父角色只作对账（`roster_role`）。
+                                         producer_path=str(manuscript or ""),
+                                         producer_code=_producer_code,
+                                         roster_role=_producer_hint,
+                                         # 2026-11-21（SIGNMAL）：在册这一支的台账行也要记
+                                         # 「被审的是盘上哪一份文件」—— 与未在册那一支同一个
+                                         # 值（那份稿的字节 sha，不是正文 sha）。改前这一格
+                                         # 缺 ⇒ 签文件三票的 `object_sha256` 是空串，落出一份
+                                         # 格式不合格的签（真机 lp-ball-15 的 2f77e321…）。
+                                         # `_manuscript_bytes_sha` 读不出来给空串 ⇒
+                                         # `record_verification` 条件写入、不写坏格。
+                                         object_sha256=_manuscript_bytes_sha(
+                                             self.workspace_root, str(manuscript or "")),
+                                         object_path=str(manuscript or ""),
+                                         # `problem` 非空（依赖台账读不出来）要随行落盘：
+                                         # 否则读侧只看到空的 `citation_checks`，分不开
+                                         # "没查成"与"核过、没有引用"。
+                                         citation_gate=gate,
+                                         # B 段：两档语义判定随台账那一行落盘。
+                                         secretary_judge=judgment,
+                                         # C 段：洗过的转达文本（只有真洗出来时才写）。
+                                         washed_relay=wash,
+                                         # A 段：发签权在秘书手上 ⇒ 这一次不翻位。
+                                         flip=False,
+                                         review_pass=pass_no,
+                                         review_call=review_call,
+                                         # 2026-11-04（甲）：这一签的载体。落进台账行，
+                                         # 秘书翻位时 `sign_statement` 从行上读到它、
+                                         # 让 `vsigns.land` 把签块盖回同一份稿。
+                                         manuscript=manuscript)
+        except Exception as exc:  # noqa: BLE001 —— 台账写口的任何异常都落成红读数（D4）
+            # 台账写不进去（坏行 / 权限 / 磁盘 / 目录 / 写口自己抛的任何异常）⇒ 这是
+            # "没查成"，不是"签住了"。不接住它会让异常穿透到工具层，而那一层读不到
+            # "这一签没落地"这句话（2026-11-05 D4：改前只收 VerificationError / OSError）。
+            self._emit(f"verify_proof({sid})：台账写不进去（{type(exc).__name__}: {exc}）—— 没查成")
+            return {}, {"ok": False, "checked": False, "reason": "ledger_unwritable",
+                    "detail": (f"台账写不进去（{type(exc).__name__}: {exc}）⇒ 这一格没查成"
+                               "（不落台账、不改位、必须重签）"),
+                    "emit": "", "judgment": judgment, "wash": wash,
+                    "gate": gate, "checks": checks}
+        return row, {}
+
 
     def _record_obligations(self, row: Mapping[str, Any]) -> dict[str, Any]:
         """把这一签落成义务（重送项的开 / 收口）；投递不在这里（V 回执层已退场）。

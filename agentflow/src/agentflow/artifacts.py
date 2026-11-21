@@ -48,9 +48,11 @@ from __future__ import annotations
 import hashlib
 import json
 import pathlib
+import re
 from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping, Sequence
 
+from . import sysguard as SG
 from .jsonlfile import read_jsonl
 
 #: 台账文件名（工作区根下）。与 `signatures.LEDGER_NAME` 同一层次。
@@ -104,13 +106,55 @@ def rel_path(root: Any, path: Any) -> str:
     return rel.as_posix()
 
 
-def sha256_of(path: pathlib.Path) -> str:
-    """磁盘当前内容的 sha256（十六进制小写）。字节级，不做任何归一化。"""
+def _fingerprint(path: pathlib.Path) -> tuple[str, int]:
+    """一次读盘同时算出 `(sha256, 字节数)`。
+
+    为什么合成一次读：台账里的 `sha256` 与 `bytes` 必须描述同一批字节。分两次取
+    （先 `sha256_of` 再 `stat`）时，中间被另一个写者换掉的文件会让两格各描述一版，
+    而读侧按 `sha256` 对拍永远看不出 `bytes` 已经不对（SIGNMAL 的同族形态：
+    框架自己写进台账的两格，落盘时没人保证它们说的是同一份内容）。
+    """
     digest = hashlib.sha256()
+    size = 0
     with path.open("rb") as fh:
         for chunk in iter(lambda: fh.read(1 << 20), b""):
             digest.update(chunk)
-    return digest.hexdigest()
+            size += len(chunk)
+    return digest.hexdigest(), size
+
+
+def sha256_of(path: pathlib.Path) -> str:
+    """磁盘当前内容的 sha256（十六进制小写）。字节级，不做任何归一化。"""
+    return _fingerprint(path)[0]
+
+
+#: 台账里框架自己算出来的那几格的形状判据（空串 = 合格）。
+#:
+#: 为什么在写口再判一遍：这些格没有一个是模型填的（`at` / `sha256` / `bytes` 都由
+#: 本模块现算），所以它们坏了就是框架坏了。此前 `record` 把它们原样写进去 ——
+#: 一个空 sha 或负数 `bytes` 会静静地留在台账里，而读侧只在对拍时看到"changed"。
+_SHA_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def entry_problems(entry: Mapping[str, Any]) -> list[str]:
+    """一条即将落盘的登记：框架自己写的那几格是不是都成形成实（空表 = 合格）。"""
+    out: list[str] = []
+    if not _SHA_RE.match(str(entry.get("sha256") or "")):
+        out.append(f"sha256 读到 {entry.get('sha256')!r}，不是 64 位小写十六进制")
+    size = entry.get("bytes")
+    if not isinstance(size, int) or isinstance(size, bool) or size < 0:
+        out.append(f"bytes 读到 {size!r}，必须是非负整数")
+    rel = str(entry.get("path") or "")
+    if not rel:
+        out.append("path 是空的")
+    elif pathlib.PurePosixPath(rel).is_absolute() or ".." in pathlib.PurePosixPath(rel).parts:
+        out.append(f"path 读到 {rel!r}，不是工作区相对路径")
+    at = str(entry.get("at") or "")
+    try:
+        datetime.fromisoformat(at)
+    except ValueError:
+        out.append(f"at 读到 {at!r}，不是可解析的 ISO 时刻")
+    return out
 
 
 #: 逐条登记的已知外部生产者（写入期口径）。
@@ -217,8 +261,8 @@ def record(
     entry = {
         "at": at or _now(),
         "path": rel,
-        "sha256": sha256_of(full),
-        "bytes": int(full.stat().st_size),
+        "sha256": "",
+        "bytes": 0,
         "producer": str(producer),
         "kind": str(kind or "file"),
         "task_id": str(task_id or ""),
@@ -234,6 +278,18 @@ def record(
         #: 台账按族筛产物时不必再从路径现拼；非稿产物的这一格是空串。
         "family": str(family or ""),
     }
+    # 写点即算：sha 与 bytes 从同一次读盘得出（见 `_fingerprint` 的 docstring）。
+    entry["sha256"], entry["bytes"] = _fingerprint(full)
+    problems = entry_problems(entry)
+    if problems:
+        SG.record_reading(root, SG.refused(
+            "artifacts.record", code="artifact_entry_bad",
+            where=f"{LEDGER_NAME}#{rel}",
+            detail="；".join(problems),
+            how_to_fix=("这一条登记的三个派生格（sha256 / bytes / at）都由本模块现算，"
+                        "坏了说明算它们的那一处坏了：先修算的那一处，不要绕过它手写台账")))
+        raise ArtifactError("这一条登记自己不成形 ⇒ 一个字节都没写："
+                            + "；".join(problems))
     p = ledger_path(root)
     try:
         p.parent.mkdir(parents=True, exist_ok=True)

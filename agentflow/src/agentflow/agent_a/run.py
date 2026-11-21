@@ -31,6 +31,10 @@ class _Run:
             total.pending_total = r.pending_total
             total.pending_by_delegation = list(r.pending_by_delegation)
             total.pending_note = r.pending_note
+            # 收尾自驱的两个读数也跟着最后一轮走：它们回答"现在盘上还剩什么"，
+            # 不是"这一趟做了几件事"的累计量（与待裁读数同一条理由）。
+            total.clear_stage = dict(r.clear_stage)
+            total.unprocessed_reasons = dict(r.unprocessed_reasons)
             if r.request_id:
                 total.request_id = r.request_id
                 total.priority = r.priority

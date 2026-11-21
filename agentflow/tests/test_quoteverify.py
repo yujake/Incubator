@@ -96,8 +96,13 @@ def test_empty_quote_is_unknown_not_verified():
     assert chk.reason == "empty_quote"
 
 
-def test_normalization_tolerates_case_and_whitespace_only():
-    """允许的差异仅限大小写/空白折叠；多页范围内的引文仍可命中。"""
+def test_normalization_tolerates_case_and_whitespace():
+    """允许的差异包含大小写与空白折叠；多页范围内的引文仍可命中。
+
+    归一化能消化的差异不止这两类（断行断词、连字、控制字符、括号内侧空白 ——
+    完整清单与正控在 `test_quote_projection_feeds_the_gate.py`）；这一条守的是
+    "最普通的那两类仍然要能过"。
+    """
     doc = _doc([P1, P2, P3])
     chk = check_quote(doc, "an ABELIAN group is a group in which the\n  commutative law holds.", PageRange(2, 3, "pp. 2-3"))
     assert chk.verified is True

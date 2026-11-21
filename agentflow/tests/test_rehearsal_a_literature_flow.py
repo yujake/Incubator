@@ -27,9 +27,9 @@
 | ④ | `lit.admit_all` 只对 `qualified` 行批量注册、`lit_id` 回填同一行 ⇒ qualified→admitted | 回执 `registered=1`；候选行 `status=admitted` 且 `lit_id` 有值；`literature` 恰好 1 行且号相同 |
 | ⑤ | 带号定稿 `reports/lit-<rid>.md`（入库组 `lit:NNNNNN`、拒组无号有理由、报告里不得出现 `cand:`） | 定稿的入库区带号、未入库区无号且有受控理由码；全文无 `cand:`；`report_violations(final)` 为空 |
 | ⑥ | 清表：归档 `data/lit_candidates/archive-<rid>.jsonl` + 逐行 `cleared_at` / `clear_reason`（不物理删） | 归档在盘上且槽位→号成对；两行都带 `cleared_at` / `clear_reason`；表里无 `pending` |
-| ⑦ | 收工闸：`closing` 第八格 `literature_pending`（blocker；读不到 ⇒ unknown） | 清表前 `fail` + `delegation_not_cleared`（`_presubmit_problems`）；清表后 `pass`（`_full_problems`，两条都走 M 的真工具回执 + `check_closing` 直读） |
+| ⑦ | 收工闸：`closing` 第八格 `literature_pending`（blocker；读不到 ⇒ unknown） | 清表后 `pass`（`_full_problems`，走 M 的真工具回执 + `check_closing` 直读）；"清表前 `fail` + `delegation_not_cleared`"那一半由 `…_criteria.py` 的 e 守（它把退场补交打桩掉 —— 2026-11-21 ACLEAR2 之后，判完不提交这个状态要靠那个桩才可达） |
 | ⑧ | `report_violations` 在两个渲染时刻各跑一次（拦门档） | 两个时刻的报告各自过同一份判据；"真的跑过"由 `…_criteria.py` 的两条负控证明（带槽位号 ⇒ 提交被拦；定稿缺号 ⇒ 清表被拦） |
-| ⑨ | 报告过期：判定后自动重渲染；已清表再生成 ⇒ `already_settled` | `_presubmit_problems`：判拒之后进度报告已重渲染（待裁 0、未入库 1）；已清表的委托再 `write_report` ⇒ `LitStageError(kind="already_settled")` |
+| ⑨ | 报告过期：判定后自动重渲染；已清表再生成 ⇒ `already_settled` | 判定后那一份重渲染由 `…_criteria.py` 的 `_presubmit_problems`（清表前那一刻，带打桩）与 e 守；已清表的委托再 `write_report` ⇒ `LitStageError(kind="already_settled")` |
 
 ## 产品就绪（诚实登记：这条链今天在 HEAD 上跑不完）
 
@@ -783,28 +783,51 @@ def test_the_full_a_flow_runs_from_the_cli_with_only_the_wire_replaced(
         assert caught.value.kind == "already_settled", caught.value.kind
 
 
-def test_before_clearing_the_gate_blocks_and_the_report_is_rerendered(
+def test_a_script_that_skips_the_submit_is_cleared_by_the_framework_at_exit(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """⑥(前)⑦(fail)⑨(重渲染)：判完但不提交 ⇒ 收工门拦、进度报告已跟着判定重渲染。
+    """⑥⑦⑨(退场补交)：剧本里摘掉 `lit.admit_all` ⇒ 框架在 A 这一拍退场时自己提交。
 
-    这条就是「打掉清表」那一条反真空：同一个 CLI 路、同一个缝，只把
-    `lit.admit_all` 从剧本里摘掉 —— 收工门必须从 pass 变 fail/blocker
-    （`delegation_not_cleared`：判完了、报告写过、但没收口）。它同时证明 ⑨ 的
-    前半句：`lit.admit` 先写了进度报告，判拒之后自动重渲染（待裁 0、未入库 1）——
-    若没有那次重渲染，报告会静默停在"待裁 1 条"。
+    ## 2026-11-21（ACLEAR2）之前这条是负控，之后它是正控
 
-    ## 它是负控（2026-11-19 裁定 ③）
+    改前："判完不提交"是一个可达状态 —— 全表判完（qualified + rejected）、行上没有
+    `cleared_at`、盘上没有归档，于是收工门第八格以 `delegation_not_cleared` 拦、rc=1。
+    真机 `projects/lp-ball-15` 证明那个状态真的会发生：A 的 221 步里 `own.run_once`
+    被调了 0 次，模型直接把判收做完就走，判完没清表的三个委托留到了收工门。
 
-    收工门第八格 `literature_pending` 红 ⇒ 权威结论 `fail` ⇒ 运行退出码 1
-    （改前这一趟是 rc=0：非权威读数不参与退出码）。
+    修法（ACLEAR 的同一份自驱，接线补在 `agent_loop.run()` 的退场段）之后，这一形
+    在产品里不再可达：只要这一拍退场，框架就自己 `lit.admit_all` 掉已判完的委托。
+    所以这条彩排改为钉修法本身的读数：只摘掉剧本里的提交，行上照样有
+    `cleared_at`、归档照样在盘上、收工门第八格 pass。
+
+    那一条负控没有丢：它搬到了
+    `test_rehearsal_a_literature_flow_criteria.py::test_skipping_the_submit_leaves_the_closing_gate_red`
+    —— 同一个 CLI 路、同一个缝，先把退场自交的接线打桩掉，再断言"不提交 ⇒ 门红"。
+    两份合起来才是完整的那一对：框架会补交；而没人补交时门照样拦。
     """
     got = _run(tmp_path, monkeypatch, lean="0", skip=("submit",))
-    assert got["rc"] == 1, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
-    problems = _presubmit_problems(got)
-    _expect(problems, got, label="⑥(前)⑦(fail)⑨(重渲染)")
-    honest = _honest_failure_problems(got, red=["literature_pending"],
-                                      codes=["delegation_not_cleared"])
-    assert not honest, "负控读数不对：\n- " + "\n- ".join(honest)
+    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    st = got["store"]
+    cands = _rows(st, "lit_candidates")
+    states = {str(r.get("slot")): str(r.get("status") or "") for r in cands}
+    assert states.get(SLOT_KEEP) == "admitted", states
+    assert states.get(SLOT_DROP) == "rejected", states
+    assert all(str(r.get("cleared_at") or "").strip() for r in cands), cands
+    archive = got["ws"] / "data" / "lit_candidates" / f"archive-{RID}.jsonl"
+    assert archive.is_file(), "退场补交了，归档却不在盘上"
+    assert len([ln for ln in archive.read_text(encoding="utf-8").splitlines()
+                if ln.strip()]) == len(cands), archive.read_text(encoding="utf-8")
+    lit = _rows(st, "literature")
+    assert len(lit) == 1, [(r.get("lit_id"), r.get("title")) for r in lit]
+    rep = CL.check_closing(st, checks=("literature_pending",))
+    assert rep.status["literature_pending"] == "pass", rep.to_dict()
+    # ⑨ 的前半句仍然可读：报告是判定之后重渲染出来的那一份（待裁 0 / 未入库 1），
+    # 且已入库那一条带着正式号（怎么渲染的由判据文件的 `_presubmit_problems` 守）。
+    final = _report(got["ws"], f"lit-{RID}.md")
+    assert final, f"⑨ 报告 `reports/lit-{RID}.md` 不在盘上"
+    assert "## 待裁（0 条）" in final, final[:600]
+    assert "## 未入库（1 篇）" in final, final[:600]
+    assert "`lit:" in final, final[:600]
+    assert "cand:" not in final, final[:600]
 
 
 def _presubmit_problems(got: dict[str, Any]) -> list[str]:

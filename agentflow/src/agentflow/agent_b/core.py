@@ -8,6 +8,7 @@ from __future__ import annotations
 from ._support import Any, BClaimOutcome, D, I, Mapping, NOTE_LIMIT, NO_EXTRACTOR_ERROR, REPROCESS_RESULTS, S, Sequence, Store, T, _passages, check_quote, lease_expired, make_lease
 from .. import quoteevidence as _QE   # D1：区间只有一个产出点
 from .. import conceptrows as _CR   # 并表过渡层：老表写完同步一份新标准（两处同号）
+from .. import sysguard as SG       # 写点读数（写口自己判、自己留痕）
 from ..store import StoreError      # 视图判不了时"再抛一次"（种子读失败必须被看见）
 from .run_once import _RunOnce
 from .reprocess_once import _ReprocessOnce
@@ -38,6 +39,65 @@ def _give_up_note(row: Mapping[str, Any], *, max_attempts: int) -> str:
         return (f"重试次数已用尽（`max_attempts`={max_attempts}），但没有留下任何失败原因"
                 "（认领之后、写下错误之前中断过）⇒ 已放弃。")
     return f"超过最大抽取尝试次数 {max_attempts}，已放弃。上一次错误：{last}"
+
+
+def _relation_derived_cells_problems(row: Mapping[str, Any]) -> list[str]:
+    """`relations` 写回这一笔的派生两格与 `quote` 是否同一份（空表 = 合格）。
+
+    为什么在写点判：`quote_normalized` / `dedup_key` 都是框架按 `quote` 现算的格，
+    模型看不到它们、也没有机会补。读侧对这两格是宽容的（`dedup._row_keys` 与
+    `verify` 都写 `quote_normalized or normalize_for_quote(quote)` 那种回退），
+    于是写点漏算不会有任何一处报错 —— 正是业主 2026-11-21 推论里"靠读侧宽容"
+    那一类。判据放在写点：要么写对，要么这一笔不写。
+    """
+    quote = str(row.get("quote") or "")
+    if not quote.strip():
+        return []
+    out: list[str] = []
+    want_norm = T.normalize_for_quote(quote)
+    if str(row.get("quote_normalized") or "") != want_norm:
+        out.append("quote_normalized 与 quote 不是同一份（派生格没跟着重算）")
+    want_key = D.relation_dedup_key(str(row.get("concept_group_key") or ""), quote)
+    if str(row.get("dedup_key") or "") != want_key:
+        out.append("dedup_key 与（概念组 + quote）不是同一份（判重键指向旧引文）")
+    return out
+
+
+def _quote_evidence_on_reprocess_write(
+        row: Mapping[str, Any], upd: Mapping[str, Any], *,
+        doc: Any, doc_problem: str) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    """reprocess 的 relations 写口：把这一笔交给 D1 的写侧断言（四档原样分派）。
+
+    ## 为什么要接（WRITERESIDUE ②）
+
+    `_finish_reprocess` 的 `tx.upsert("relations", row, ...)` 是 `relations` 的第二条
+    写路（第一条是 `table.create` / `table.update`）。改前它把 A 阶段交来的
+    `quote_verified=true` / `quote_span` 原样照收 —— A 阶段到写回之间只有"指纹没变"
+    这一层，它挡的是别人改行，挡不住"自报的区间不是从全文重算的"。判据本体只有一份
+    （`quoteevidence.enforce_quote_evidence`，四档 keep / mismatch / downgrade / refuse），
+    本函数只负责把这一行的五栏、引文、页码窗口与那一篇的全文端到它面前。
+
+    返回 `(摆好的五栏或 None, 读数)`：
+    - `None` = 这一笔根本没有说"引文已核过"（`quote_verified` 不是断言）；
+    - 读数 `ok is False` = `refuse` 档，调用方整笔不写（说不出核的是哪一段）；
+    - 其余三档（keep / mismatch / downgrade）由调用方把五栏写回这一笔。
+    """
+    from ..tools.table_tools import _QUOTE_ASSERT_KEYS, _QUOTE_FIELDS
+    if not any(key in upd for key in _QUOTE_ASSERT_KEYS):
+        return None, {}
+    fields = {key: upd.get(key, row.get(key)) for key in _QUOTE_FIELDS}
+    quote = str(upd.get("quote") if "quote" in upd else row.get("quote") or "")
+    page_range = upd.get("page_range") if "page_range" in upd else row.get("page_range")
+    hint = 0
+    if isinstance(page_range, Mapping):
+        try:
+            hint = int(page_range.get("start") or 0)
+        except (TypeError, ValueError):
+            hint = 0
+    return _QE.enforce_quote_evidence(
+        fields, quote=quote, doc=doc, page_range=page_range,
+        field=f"reprocess.relations.quote（lit:{row.get('lit_id') or '未给'}）",
+        doc_problem=doc_problem, hint_page=hint)
 
 
 class _Core:
@@ -873,6 +933,35 @@ class _Core:
             row["claimed_by"] = None
             row["lease_until"] = make_lease(self.lease_seconds)
             tx.upsert("reprocess_requests", row, note="reprocess_failed")
+    def _quote_docs_for_reprocess(
+            self, updates: Mapping[str, Mapping[str, Any]]
+    ) -> dict[str, tuple[Any, str]]:
+        """为 reprocess 里"在断言引文已核过"的那几行预取全文（事务外）。
+
+        取全文用 `table_tools._quote_doc_for_lit` —— 与 `table.*` 写口是同一份实现
+        （同一套两基准路径解析、同一个 `extract_text`），不另写一套读法。
+        返回 `{lit_id: (doc 或 None, 取不到的原因)}`；空 dict = 这一批没有引文断言。
+
+        为什么在事务外：抽取一本 PDF 可能几秒，而 `_finish_reprocess` 的锁只该覆盖
+        "判据 + 写回"（与 `_perform_reprocess` 把重活放锁外同一条纪律）。写回时若
+        发现 `lit_id` 与预取时不一致（别人改了这一行的来源），就用 `(None, 原因)`
+        走判据的降档 —— 不拿一份别的文献冒充这一行的证据。
+        """
+        from ..tools.table_tools import (_QUOTE_ASSERT_KEYS, TableContext,
+                                         _quote_doc_for_lit)
+        asserting = [(rid, upd) for rid, upd in updates.items()
+                     if any(key in upd for key in _QUOTE_ASSERT_KEYS)]
+        if not asserting:
+            return {}
+        wanted: list[str] = []
+        rows = {str(r.get("relation_id")): r for r in self.store.rows("relations")}
+        for rid, _upd in asserting:
+            lid = str((rows.get(str(rid)) or {}).get("lit_id") or "")
+            if lid not in wanted:
+                wanted.append(lid)
+        ctx = TableContext(store=self.store, actor=self.actor)
+        return {lid: _quote_doc_for_lit(ctx, lid) for lid in wanted}
+
     def _finish_reprocess(self, req: Mapping[str, Any], outcome: Mapping[str, Any]) -> dict:
         """收尾（短事务）：写入目标关系的新字段 + 请求的终局结果。
 
@@ -884,6 +973,15 @@ class _Core:
         若已被别人改过，就放弃写入并如实记下来 —— 宁可少改一次，也不要覆盖另一个
         B 实例刚写下的结果（那会是一次静默的丢失更新，store 的模块 docstring
         说的正是这件事）。
+
+        ## 引文回验（WRITERESIDUE ②）
+
+        这一条写口与 `table.*` 是 `relations` 的两条路：只要这一笔在断言"引文已核过"
+        （`quote_verified` / `quote_mode` / `quote_span` / `quote_call_sha256` 任一被
+        写），就必须由 `quoteevidence.enforce_quote_evidence` 当场分派四档 ——
+        `keep` 落真，`mismatch` 落 `False`，`downgrade` 落 `None` + 原因，
+        `refuse` 整笔不写。读数写进这一行的 `_reprocess.quote_evidence`，
+        被拒的那条进 `result_note` 与返回值的 `refused_targets`。
         """
         result_word = str(outcome.get("result") or "")
         if result_word not in REPROCESS_RESULTS:
@@ -891,9 +989,12 @@ class _Core:
             raise ValueError(f"I4 的结果必须是 {REPROCESS_RESULTS} 之一，收到 {result_word!r}")
         touched: list[str] = []
         stale: list[str] = []
+        refused: list[str] = []
+        updates = dict(outcome.get("updates") or {})
+        quote_docs = self._quote_docs_for_reprocess(updates)
         with self.store.tx("relations", "reprocess_requests", actor=self.actor, note="reprocess") as tx:
             live = {str(r.get("relation_id")): r for r in tx.rows("relations")}
-            for rid, upd in (outcome.get("updates") or {}).items():
+            for rid, upd in updates.items():
                 row = live.get(str(rid))
                 if row is None:
                     stale.append(f"{rid}（已不存在）")
@@ -903,24 +1004,69 @@ class _Core:
                     stale.append(f"{rid}（处理期间被改动）")
                     continue
                 upd = dict(upd)
+                # ---- 引文回验（第二写路）：这一笔若在说"引文已核过"，落盘前按四档分派。
+                lit_id = str(row.get("lit_id") or "")
+                doc, doc_problem = quote_docs.get(
+                    lit_id,
+                    (None, f"写回时 lit:{lit_id or '未给'} 的全文不在预取里"
+                           "（这一行的 lit_id 在处理期间被改过？）"))
+                fixed, reading = _quote_evidence_on_reprocess_write(
+                    row, upd, doc=doc, doc_problem=doc_problem)
+                if reading.get("ok") is False:
+                    refused.append(
+                        f"{rid}（{reading.get('code') or 'quote_evidence_refused'}："
+                        f"{reading.get('why') or '判据拒收'}）")
+                    continue
+                if fixed is not None:
+                    upd.update(fixed)
                 if "quote" in upd:
                     # dedup_key 是"概念组 + 引文哈希"的派生字段：改了 quote 必须重算，
                     # 否则索引键与内容漂移，后续判重会按旧键比较（静默失效）。
                     upd["dedup_key"] = D.relation_dedup_key(
                         str(row.get("concept_group_key") or ""), str(upd["quote"])
                     )
-                upd["_reprocess"] = {
+                    # 同一个输入还有一个派生格：`quote_normalized`（`table.*` 那条写路
+                    # 会重算它，这一条此前漏了 —— 读侧用 `or 现算` 兜着，于是没有任何
+                    # 地方报错）。补值只在写点算一次。
+                    upd["quote_normalized"] = T.normalize_for_quote(str(upd["quote"]))
+                merged = dict(row)
+                merged.update(upd)
+                if "quote" in upd:
+                    derived_problems = _relation_derived_cells_problems(merged)
+                    if derived_problems:
+                        refused.append(f"{rid}（relation_derived_cell_stale："
+                                       + "；".join(derived_problems) + "）")
+                        SG.record_reading(self.store.root, SG.refused(
+                            "agent_b.reprocess", code="relation_derived_cell_stale",
+                            where=f"data/relations.json#{rid}",
+                            detail="；".join(derived_problems),
+                            how_to_fix=("改 `quote` 的那一笔必须同时重算派生两格"
+                                        "（`quote_normalized` / `dedup_key`）："
+                                        "读侧会拿 `quote_normalized` 判重与去重自检，"
+                                        "旧值会让判重按旧引文比较")))
+                        continue
+                audit: dict[str, Any] = {
                     "reason": req.get("reason"),
                     "reprocess_id": req.get("reprocess_id"),
                     "result": result_word,
                     "at": S.now_iso(),
                 }
-                row.update(upd)
-                tx.upsert("relations", row, note=f"reprocess:{req.get('reason')}")
+                if reading:
+                    # 读数进这一行（可审计；与 `table.*` 的 `meta.quote_evidence` 同源）。
+                    audit["quote_evidence"] = reading
+                merged["_reprocess"] = audit
+                tx.upsert("relations", merged, note=f"reprocess:{req.get('reason')}")
                 touched.append(str(rid))
             note = str(outcome.get("note") or "")
             if stale:
                 note += f"\n未写入（目标已变，避免覆盖别人的写入）：{'、'.join(stale)}"
+            if refused:
+                note += (f"\n未写入（引文回验拒收，一个字节都没写）：{'、'.join(refused)}")
+            if refused and not touched:
+                # 一条都没写成时不许把结果报成 found / improved：那正是"把没做到
+                # 写成做成了"。行没动 ⇒ 结果就是 unchanged（原文里有没有，另说）。
+                result_word = "unchanged"
+                note += "\n（本次没有一条关系的更新落盘）"
             row = tx.find("reprocess_requests", reprocess_id=req.get("reprocess_id")) or dict(req)
             row["status"] = "done"
             row["result"] = result_word
@@ -936,6 +1082,7 @@ class _Core:
             "result": result_word,
             "touched_relation_ids": sorted(touched),
             "stale_targets": stale,
+            "refused_targets": refused,
             "note": row["result_note"],
         }
     @staticmethod

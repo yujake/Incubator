@@ -111,6 +111,15 @@ class ARunResult:
     #: 这一格是可照做的句子：几个委托、各剩几条、谁能清；0 也写成一句（不是空串）——
     #: "没有遗留"与"没报"必须分得开。
     pending_note: str = ""
+    #: 收尾自驱（清表）的读数（2026-11-21，真机 lp-ball-15 的 `delegation_not_cleared`）：
+    #: 这一拍自己把哪些"已判完、没清表"的委托 `lit.admit_all` 掉了，逐条带
+    #: 清了几条 / 注册了几条 / 归档在哪；还有没判完的、被受控拒的也逐条点名。
+    #: 读数形状见 `agent_a/clear_stage.py::_clear_stage_self_drive`。
+    clear_stage: dict = field(default_factory=dict)
+    #: 收尾自驱（未消化理由）的读数：这一拍给哪几条"确实消化过、processed 仍为假"
+    #: 的 `literature` 行写了 `unprocessed_reason`，以及哪几条不能写、为什么。
+    #: 口径见 `agent_a/clear_stage.py::_unprocessed_reason_self_drive`。
+    unprocessed_reasons: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -143,6 +152,8 @@ class ARunResult:
             "claimed_delegations": list(self.claimed_delegations),
             "claim_note": self.claim_note,
             "pending_note": self.pending_note,
+            "clear_stage": dict(self.clear_stage),
+            "unprocessed_reasons": dict(self.unprocessed_reasons),
         }
 @dataclass
 class ClaimOutcome:

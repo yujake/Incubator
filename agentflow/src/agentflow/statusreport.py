@@ -35,9 +35,9 @@ from typing import Any, Mapping
 # `statusreport.tasks_row_reading` 与三个 `BOARD_ITEM_*` 常量照旧可用（判据与
 # `webui/readers.py` 都按模块属性取它，判据靠整格 monkeypatch 做反真空）。
 from .boardrows import (
-    BOARD_ITEM_NOT_CLOSED, BOARD_ITEM_STATE_UNKNOWN, BOARD_ITEM_STATUS_MARK,
-    tasks_row_reading,
+    BOARD_ITEM_NOT_CLOSED, BOARD_ITEM_STATE_UNKNOWN, BOARD_ITEM_STATUS_MARK, tasks_row_reading,
 )
+from . import statusreading as SR
 
 #: 报告里逐张表的读数（顺序就是人读报告里的顺序）。
 REPORT_TABLES: tuple[str, ...] = (
@@ -344,6 +344,7 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
 
     report["quote_evidence"] = dict(CL.quote_evidence_reading(store))
     report["statement_body"] = dict(CL.statement_body_reading(store))
+    report["wellformed"] = SR.wellformed_reading(root)  # 畸形：只读数、不进闸门（MALFORM 路）
     report["next_steps"] = _next_steps(report)
     return report
 
@@ -709,14 +710,14 @@ def render_status_markdown(report: Mapping[str, Any]) -> str:
         f"- 集体插话：发出 {report['interjections']['sent']} 条、被读 {report['interjections']['seen_events']} 次；"
         f"其中改变做法 {report['interjections']['changed_action']} 次 / 未改变 "
         f"{report['interjections']['unchanged_action']} 次",
-        # EE-04：官能机械半进报告（同一份读数既写 .json 也写 .md —— 只写一边
-        # 等于"落盘了但没人看得见"）。
+        # EE-04：官能机械半进报告（同一份读数既写 .json 也写 .md —— 只写一边等于"落盘了但没人看得见"）。
         f"- 官能机械半：猜想卫生 {hygiene.get('verdict') or '（没读数）'}"
         f"（{len(hygiene.get('findings') or [])} 条读数）；"
         f"断言强度对账 {len(strength.get('overclaimed') or [])} 条 overclaim / "
         f"{len(strength.get('missing_evidence') or [])} 条判不了",
         "", "## 四、下一步（从读数派生，不是模型写的）", "",
     ]
+    lines.append(SR.wellformed_line(report.get("wellformed") or {}))
     lines += [f"- {s}" for s in (report.get("next_steps") or [])]
     return "\n".join(lines) + "\n"
 

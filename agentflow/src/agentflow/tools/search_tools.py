@@ -1703,7 +1703,8 @@ def _h_ingest_local(ctx: _Ctx, books_dir: str, pattern: str = "*.pdf",
     })
 
 
-def _content_claim_refusal(summary: str, *, read_ok: bool) -> Any:
+def _content_claim_refusal(summary: str, *, read_ok: bool,
+                           port: str = "search.register") -> Any:
     """正文闸：`content_read=false` 时 `summary` 里有内容性断言 ⇒ 受控拒（否则 `None`）。
 
     判据不在这里另写一份：哪些话算"内容性断言"是 `litavail.content_assertion`
@@ -1711,12 +1712,17 @@ def _content_claim_refusal(summary: str, *, read_ok: bool) -> Any:
     `litstage.CONTENT_CLAIM_WITHOUT_READ`。"读没读到正文"由调用方按
     `litavail.content_read` 现算后经 `read_ok` 交进来（两条入口：候选链现算真值、
     直写路恒 `False`）。
+
+    `port` 只决定拒信开头那句话写哪个写口（`signal` 用的名字），不改判据：
+    接这道闸的有三处 —— `search.register`（直写）、`table.create` / `table.update`
+    （落到 `literature` 时）、`locallib.ingest_directory`（机器题录）。三处判的是
+    同一条：`LAV.content_assertion` 命中且没有"读过正文"的机器读数。
     """
     claim = LAV.content_assertion(summary)
     if not claim or read_ok:
         return None
     return fail(
-        f"search.register 不收内容性断言：`content_read=false`（这一条直写路"
+        f"{port} 不收内容性断言：`content_read=false`（这一条直写路"
         f"没有可复核的'读过正文'证据）而 summary 里写了 {claim!r} ⇒ 那一句不是"
         "读出来的。改法二选一：① summary 只写题录性说明（题名 / 作者 / 这是一篇"
         "什么文献，以及'为什么与本次检索相关'）；② 要写正文里的东西，走候选链："

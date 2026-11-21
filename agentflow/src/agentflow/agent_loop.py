@@ -1527,6 +1527,20 @@ class LoopRun:
     auto_submitted: list[dict[str, Any]] = field(default_factory=list)
     auto_submitted_count: int | None = None
     still_unsubmitted: list[dict[str, Any]] = field(default_factory=list)
+    #: A 这一拍退场时的收尾自驱读数（ACLEAR2；唯一接线点见
+    #: `agent_a/clear_stage.drive_at_run_exit`）。
+    #:
+    #: 为什么它是 `LoopRun` 的一等字段：真机 `lp-ball-15` 的 A 221 步里
+    #: `own.run_once` 被调了 0 次（模型直接用 `lit.*` 把判收做完），ACLEAR 挂在
+    #: `run_once` 三个出口上的自驱一次都没触发，于是"判完没清表"的三个委托留到了
+    #: 收工门。挂到这一拍退场之后，"这一拍自己清了几条 / 哪个委托 / 归档在哪"
+    #: 必须与这次运行一起落盘（`runs/A-*.json`），否则下一趟读到的只是"表刚好干净了"。
+    #:
+    #: 空 dict = 这一趟不是 A（或那个接线被打桩掉）—— 与"查过了、没有要清的"
+    #: （`checked=True`）分得开；字段形状见 `agent_a/clear_stage.py` 里
+    #: `_clear_stage_self_drive` / `_unprocessed_reason_self_drive` 的返回说明。
+    clear_stage: dict[str, Any] = field(default_factory=dict)
+    unprocessed_reasons: dict[str, Any] = field(default_factory=dict)
     #: 这一趟每次派活产生了哪些子产出（`_call_productions` 的条目，按发生顺序）：
     #: `{kind, counted, task_id, role, step, status, outcome, handoff_id, outputs,
     #:   disposition, evidence?, recon_only?, waiver?}`。
@@ -1699,7 +1713,8 @@ class LoopRun:
         `mailbox_delivered` / `monitor_turns` / `wakes` / `wake_ids` / `wake_events` /
         `clock_pumps` / `clock_fired` / `park` / `handed_off` / `silent_children` /
         `silent_children_asked` / `cut_off_children` / `auto_submitted` /
-        `auto_submitted_count` / `still_unsubmitted` / `waiting_for` / `resumed_from` /
+        `auto_submitted_count` / `still_unsubmitted` / `clear_stage` /
+        `unprocessed_reasons` / `waiting_for` / `resumed_from` /
         `notify_rejections` / `final_refused_beats` / `handoffs` / `summons` / `summons_refused` /
         `messages_sent` / `messages_refused` / `productions` / `summons_total` /
         `summons_consumed` / `summons_continued` / `summons_waived` /
@@ -1765,6 +1780,10 @@ class LoopRun:
             "auto_submitted": [dict(x) for x in self.auto_submitted],
             "auto_submitted_count": self.auto_submitted_count,
             "still_unsubmitted": [dict(x) for x in self.still_unsubmitted],
+            # A 的收尾自驱（ACLEAR2）：与 `agent_run_end.notes` 那一句同源；
+            # 空 dict = 这一趟不是 A（不是「查过了没有要清的」）。
+            "clear_stage": dict(self.clear_stage),
+            "unprocessed_reasons": dict(self.unprocessed_reasons),
             "waiting_for": self.waiting_for, "resumed_from": self.resumed_from,
             "notify_rejections": self.notify_rejections,
             # 收工门的补救拍数：与 `notify_rejections` 并列 ——
@@ -5618,6 +5637,76 @@ def _stamp_open_finding_axis(loop) -> str:
             + "（这一趟没有可回写的 review.report 判词 ⇒ 按最新一条 open finding "
             "更新；阳性判词只走报告与签名链）")
 
+def _void_ack_items(cond: Any, *, root: str, task_id: str,
+                    item_ids: "list[str]") -> dict[str, Any]:
+    """把某节点名下那几条"已被停止翻成 block 的 ack 通知"作废（唯一落点）。
+
+    为什么只走 `conductor.void_items(revoke=False)`：那条口的 deaf 判据本来就要求
+    "收件人已销号 / 兜底表被永久抑制" —— 本函数只在 `Secretary.retire` 返回
+    `retired` 之后（或 `retire_integrity.dirty` 那一档，已销号）才被调用，正当性
+    由它自己核。
+
+    返回 `{"checked","voided","problems"}`：`checked=False` 只在"作废口抛了 / 没接"
+    那一档；逐条拒绝落进 `problems`（作废不可逆，拒了必须点名，不许折成"作废了"）。
+
+    为什么是模块级而不是方法：`tests/test_r9fix_auto_retire_ready.py` 用假 self 调
+    `AgentLoop._auto_retire_ready`（未绑定）—— 组装在方法里的辅助函数会让那条既有
+    判据在假 self 上 AttributeError，而那条判据守的是"只销静默节点"的口径。
+    """
+    port = getattr(cond, "void_items", None)
+    out: dict[str, Any] = {"checked": False, "voided": [], "problems": []}
+    if not callable(port):
+        out["problems"].append("这一版 conductor 没有 void_items 作废口")
+        return out
+    try:
+        got = dict(port(item_ids, by_task_id=root,
+                        why=(f"收工前自动收尾：{task_id} 已销号，名下这几条 ack 通知"
+                             "已被停止翻成 block（再没有人会处理；收件人已销号 ⇒ "
+                             "叫不醒）")) or {})
+    except Exception as exc:  # noqa: BLE001 —— 销了但作废失败要大声说
+        out["problems"].append(f"作废抛了（{type(exc).__name__}: {exc}）")
+        return out
+    out["checked"] = True
+    done = {str(x) for x in (got.get("voided") or [])}
+    refused = {str(x.get("id") or ""): str(x.get("why") or "")
+               for x in (got.get("refused") or [])}
+    out["voided"] = sorted(done)
+    for iid in item_ids:
+        if iid in done or "已经是终态" in refused.get(iid, ""):
+            continue
+        out["problems"].append(f"{iid} 没作废（{refused.get(iid) or '没给理由'}）")
+    return out
+
+
+def _void_dirty_ack_items(cond: Any, root: str, out: dict[str, Any]) -> None:
+    """`retire_integrity.dirty` 那一档：已销号、名下还有 block 通知 ⇒ 只作废。
+
+    什么时候会有这一档（RETIREFIX 复算，真机 lp-ball-15）：一个名册名可以绑多个
+    台账号（`Secretary.retire` 的 `_bound_agent_ids`），按其中一个号销号会顺带
+    销掉全部绑过的号 —— 其余号的 ack 通知没经过"逐节点"那一轮。不清它们，
+    `retire_integrity` 永远算 `dirty`（结构矛盾那一档）。
+    """
+    look = getattr(cond, "retire_integrity", None)
+    if not callable(look) or not callable(getattr(cond, "void_items", None)):
+        return
+    try:
+        got = dict(look(root) or {})
+    except Exception as exc:  # noqa: BLE001 —— 读不成要如实说（这一档不是"没有"）
+        out["problems"].append(
+            f"已销号但名下还有未消项的那一档没读成（{type(exc).__name__}: {exc}）")
+        return
+    for cell in (got.get("dirty") or []):
+        ids = _AR.dirty_voidables(cell)
+        if not ids:
+            continue
+        tid = str(cell.get("task_id") or "")
+        void = _void_ack_items(cond, root=root, task_id=tid, item_ids=ids)
+        out["voided"].extend(x for x in void["voided"] if x not in out["voided"])
+        out["problems"].extend(
+            f"{tid} 已销号，但 {p} ⇒ retire_integrity 会一直把它读成 dirty"
+            for p in void["problems"])
+
+
 @dataclass
 class AgentLoop:
     """一个角色的一次循环。跑完即弃（没有可复用的状态，避免两次运行互相污染）。"""
@@ -9079,28 +9168,43 @@ class AgentLoop:
 
     def _auto_retire_ready(self, cond: Any, root: str,
                            run: "AgentLoop.LoopRun | None" = None) -> dict[str, Any]:
-        """收工前替 M 把「静默且无未消项」的子树销掉（R9FIX-D5，方向：停前自动收尾）。
+        """收工前替 M 把「静默」的子树销掉（R9FIX-D5，方向：停前自动收尾）。
 
         ## 为什么是这一档（而不是给产品加一个"批量销号"工具）
 
         真机 lp-ball-9：`final` 被拒时名下有 44/49 个节点还在册，而 `retire_child`
         全程只调了 2 次；M 在 $1.00 保留线以内算过"44 个销号调用做不到"。
         批量销号要动工具面（新参数/新工具 ⇒ 冻结快照重冻 + 抬版本），代价远大于
-        这里要解决的问题；而"收工前把「已经静默、没有未消项」的子树收掉"不新增任何
-        入口 —— 它只是把 M 本来要逐个做的动作，在 `final` 那一步一次做完。
+        这里要解决的问题；而"收工前把已经静默的子树收掉"不新增任何入口 —— 它只是
+        把 M 本来要逐个做的动作，在 `final` 那一步一次做完。
 
         ## 判据（一条都不放宽）
 
-        只销 `retire_ready` 判 `waiting_no_children` 且 `items_open == 0` 的节点；
-        有未消项 / 还在飞 / 待机 / 有活跃子 / 有程序在跑 / 三态读不到 —— 一律不碰，
-        留给 M 按拒信逐条处置。销号仍是 `Secretary.retire`（唯一写口），从最深的开始，
-        所以父在子之后；循环到没有进展为止（最多 `autoretire.MAX_ROUNDS` 轮，防病态树）。
-        候选判据本身在 `autoretire.ready_now`（`closing.machine_feeders` 读同一份）。
+        只销 `retire_ready` 判 `waiting_no_children` 的节点。未消项那一格分两种
+        （RETIREFIX，2026-11-21；真机 lp-ball-15：`t-000047` 名下 1 条、`t-000122`
+        名下 2 条，全是 `expects="ack"` 的到点通知，收件人就是它们自己）：
 
-        返回读数：`checked` / `retired` / `kept` / `problems` / `rounds`。
+        - `items_open == 0` ⇒ 直接销（原口径）；
+        - 名下只剩 `expects="ack"`、且已被框架自己翻成 `block` 的通知 ⇒ 先销号，
+          再用既有的 `conductor.void_items(revoke=False)` 把这几条作废（那条口的
+          deaf 判据本来就要求"收件人已销号"）—— 作废留六格痕。为什么要这一步：
+          `block -> done` 是状态机倒退，收件人自己都 ack 不动，而销号闸又要求
+          "0 条未消项"，两条互锁（真机 lp-ball-15 的 final 闸就卡在这里）。
+        - `queued` / `seen` 的通知（收件人还来得及 ack）⇒ 不碰（业主「就做手，不兜底」）；
+          有一条 `expects="work"`（`b-register@` / `v-resubmit@` 那类交付项）⇒ 整节点
+          不碰；逐条读数缺一项 ⇒ 不碰；根（M）名下的项不碰。还在飞 / 待机 / 有活跃子 /
+          有程序在跑 / 三态读不到 —— 一律不碰，留给 M 按拒信逐条处置
+          （`Secretary.retire` 自己那几道闸原样说话）。
+
+        销号仍是 `Secretary.retire`（唯一写口），从最深的开始，所以父在子之后；
+        循环到没有进展为止（最多 `autoretire.MAX_ROUNDS` 轮，防病态树）。候选判据
+        本身在 `autoretire.ready_now` / `voidable_items`（`closing.machine_feeders`
+        读同一份）。
+
+        返回读数：`checked` / `retired` / `voided` / `kept` / `problems` / `rounds`。
         """
-        out: dict[str, Any] = {"checked": False, "retired": [], "kept": [],
-                               "problems": [], "rounds": 0}
+        out: dict[str, Any] = {"checked": False, "retired": [], "voided": [],
+                               "kept": [], "problems": [], "rounds": 0}
         sec = getattr(cond, "secretary", None)
         if sec is None or not callable(getattr(sec, "retire", None)):
             out["problems"].append("没有秘书 ⇒ 自动收尾没有写口（留给 M 逐条销）")
@@ -9115,18 +9219,38 @@ class AgentLoop:
             return out
         out["checked"] = True
         ordered = [str(t) for t in (order.get("order") or []) if str(t) and str(t) != root]
+        void_port = getattr(cond, "void_items", None)
+        # 先清"已销号 + 名下还有 block 通知"那一档（名册名复用 ⇒ 按一个号销号会顺带
+        # 销掉其余号，那几笔的通知不会经过下面的逐节点轮次）。收尾后再清一次。
+        _void_dirty_ack_items(cond, root, out)
         for _round in range(_AR.MAX_ROUNDS):
             out["rounds"] = _round + 1
-            # 判据只有一处（`autoretire.ready_now`）：静默且无未消项。`closing.machine_feeders`
+            # 判据只有一处（`autoretire.ready_now`）：静默。`closing.machine_feeders`
             # 读同一份（只读投影），所以"会销哪些"与"真的销了哪些"不会各说一套。
             now = _AR.ready_now(cond, root, ordered)
             out["problems"].extend(now["problems"])
             ready = dict(now["ready"])
+            info = dict(now["info"])
             progress = False
             for tid in ordered:              # 深 → 浅：父在子之后
-                if tid not in ready:
+                if tid not in ready and tid not in info:
                     continue
-                owner = str(ready[tid].get("owner") or root)
+                # 这一节点"销号后要作废"的未消项（空表 ⇒ 不是这一档）。
+                void_ids = _AR.voidable_items(info.get(tid) or {})
+                if tid not in ready and not void_ids:
+                    one = info.get(tid) or {}
+                    if (int(one.get("items_open") or 0) > 0
+                            and str(one.get("branch") or "") == "waiting_no_children"):
+                        out["kept"].append({"task_id": tid, "why": (
+                            f"名下有 {int(one['items_open'])} 条未消项"
+                            "（不是「已被停止翻成 block 的 ack 通知」⇒ 不许自动作废，留给 M）")})
+                    continue
+                if void_ids and not callable(void_port):
+                    out["kept"].append({"task_id": tid, "why": (
+                        "这一版 conductor 没有 void_items 作废口 ⇒ 名下只剩 ack 通知的"
+                        "节点也不销（只报不猜）")})
+                    continue
+                owner = str((ready.get(tid) or info.get(tid) or {}).get("owner") or root)
                 try:
                     name, why = sec.name_of(owner=owner, task_id=tid)
                 except Exception as exc:  # noqa: BLE001
@@ -9136,27 +9260,62 @@ class AgentLoop:
                 if not name:
                     out["kept"].append({"task_id": tid, "why": f"名册名没读到（{why}）"})
                     continue
+                reason = ("收工前自动收尾：静默且无未消项（R9FIX-D5）" if not void_ids else
+                          "收工前自动收尾：静默且名下只剩 ack 通知（销号后作废，RETIREFIX）")
                 try:
-                    got = sec.retire(
-                        owner=owner, name=name, by_task_id=root,
-                        reason="收工前自动收尾：静默且无未消项（R9FIX-D5）")
+                    got = sec.retire(owner=owner, name=name, by_task_id=root,
+                                     reason=reason)
                 except Exception as exc:  # noqa: BLE001 —— 一条销不成不许带走其余
                     out["kept"].append({"task_id": tid, "why":
                                         f"销号抛了（{type(exc).__name__}: {exc}）"})
                     continue
-                if str(got.get("action") or "") == "retired":
-                    out["retired"].append(tid)
-                    progress = True
-                else:
+                if str(got.get("action") or "") != "retired":
                     out["kept"].append({"task_id": tid,
                                         "why": "；".join(str(x) for x in (got.get("why") or []))
                                                or f"action={got.get('action') or '?'}"})
+                    continue
+                out["retired"].append(tid)
+                progress = True
+                if not void_ids:
+                    continue
+                void = _void_ack_items(cond, root=root, task_id=tid, item_ids=void_ids)
+                out["voided"].extend(void["voided"])
+                out["problems"].extend(
+                    f"{tid} 已销号，但 {p} ⇒ retire_integrity 会把它读成 dirty"
+                    for p in void["problems"])
             if not progress:
                 break
-        if run is not None and (out["retired"] or out["kept"]):
+        _void_dirty_ack_items(cond, root, out)
+        # 收尾后的那一读：把"同名的号已被顺带销掉"的条目从 `kept` 里划掉。不划掉的话
+        # 下面那句 run note 会把已经销号的节点点名成"没销"（真机 lp-ball-15：一个名册名
+        # 绑多个号 ⇒ 8 个号在别的号那笔销号里一起走了，仍留在 keep 里只是轮内快照过期）。
+        look = getattr(cond, "retire_integrity", None)
+        left: "set[str] | None" = None
+        if callable(look):
+            try:
+                final = dict(look(root) or {})
+            except Exception:  # noqa: BLE001 —— 读不成就不划（宁可多报，不许少报）
+                final = {}
+            if final.get("checked"):
+                left = {str(n.get("task_id") or "") for n in (final.get("nodes") or [])}
+                left |= {str(n.get("task_id") or "") for n in (final.get("dirty") or [])}
+        kept_seen: set[str] = set()
+        deduped: list[dict[str, str]] = []
+        for one in out["kept"]:
+            tid = str(one.get("task_id") or "")
+            if left is not None and tid not in left:
+                continue
+            if tid in kept_seen:
+                continue
+            kept_seen.add(tid)
+            deduped.append(one)
+        out["kept"] = deduped
+        if run is not None and (out["retired"] or out["voided"] or out["kept"]):
             run.notes.append(
-                f"收工前自动收尾：销掉 {len(out['retired'])} 个静默且无未消项的节点"
+                f"收工前自动收尾：销掉 {len(out['retired'])} 个静默节点"
                 + (f"（{'、'.join(out['retired'][:8])}）" if out["retired"] else "")
+                + (f"；顺带作废 {len(out['voided'])} 条只剩 ack 的通知"
+                   f"（{'、'.join(out['voided'][:8])}）" if out["voided"] else "")
                 + (f"；{len(out['kept'])} 个没销（留给 M 按拒信处置）" if out["kept"] else ""))
         return out
 
@@ -11171,6 +11330,47 @@ class AgentLoop:
         # 收口时刻（`runs/*.json` 的 `end_ts`）：与 `elapsed_sec` 同一刻算，两个读数同源 ——
         # 分两处取时间会让"跑了 12.3 秒"与 `end_ts - start_ts` 差出一截，而没人能说清差在哪。
         run.ended_at = S.now_iso()
+        # ---- A 的收尾自驱（ACLEAR2，2026-11-21）：这一拍退场时自己清表 + 写未消化理由。
+        #
+        # 为什么是"退场"这一处（先把取证结论写在这里，免得下一趟再猜）：
+        # 真机 `projects/lp-ball-15` 的 A 221 步里 `own.run_once` 被调了 0 次
+        # （同文件里 B 是 23 次）—— 模型直接用 `lit.*` 工具把判收做完，于是 ACLEAR 挂在
+        # `agent_a/run_once.py` 三个出口上的那一份自驱一次都没被触发，判完没清表的三个
+        # 委托（r-000003 / r-000004 / r-000008）就留到了收工门。
+        # 而这一处是这一拍一定会经过的唯一一个点：步循环里 `break` 有 19 处、
+        # `continue` 有 9 处（收工 / 判停两档 / 预算 / 用户叫停 / 等用户 / 上行 /
+        # 模型不可达与坏 JSON 上限 / 被闸拒的补救窗口用尽 …各走各的），没有任何一处
+        # 是"每一步都经过"的；而它们全都从 `break` 落到下面这段退场代码
+        # （`for ... else` 那一支也一样）。异常那一档连 `agent_run_end` 都没有 ——
+        # 它不是这一格能补的，而那一档在盘上本来就看得见。
+        #
+        # 为什么不接在 `lit.*` 的 handler 收尾：三件工具各自有 fail/ok 多条 return
+        # （`_h_lit_stage_reject` 还分单槽 / 批量两个实现），能包住它们的唯一一处是
+        # `tools/base.ToolRegistry.call`（FC-27 禁改区）；更重要的是"判完"往往由后一次
+        # `lit.*` 才成立，而"提交"常常是模型自己接着调 `lit.admit_all` —— 在 handler 里
+        # 抢先提交会把模型下一步挤成 `already_settled` 受控拒。退场时补，不抢模型的手。
+        #
+        # 复用 `agent_a/clear_stage.py` 的同一份判据（清哪几个委托、写不写理由都只有
+        # 一份实现，见 `drive_at_run_exit` 的 docstring），不在这里另写第二份。
+        # 包在 `calling_as` 里：自驱要按"这一趟是谁"读写（回读回执按实例隔离，
+        # 不挂身份就会拿另一个实例的回执当自己的）。
+        # 失败姿态：这一格坏了只落一条 note，不许把"停"带走（与 E 的自动提交同一条纪律）。
+        if self.role == "A":
+            try:
+                from .agent_a import clear_stage as _A_CLEAR_STAGE
+                from .conductor import calling_as as _calling_as
+
+                with _calling_as(str(self.my_task_id or ""), self.role,
+                                 parent_task_id=str(self.parent_task_id or ""),
+                                 parent_role=str(self.parent_role or ""),
+                                 session_root=str(self.session_root or ""),
+                                 sid=str(self.sid or ""),
+                                 instance=str(self.instance or "")):
+                    _A_CLEAR_STAGE.drive_at_run_exit(self, run)
+            except Exception as exc:  # noqa: BLE001 —— 收尾读数坏了不能把「停」带走
+                run.notes.append(
+                    f"A 的收尾自驱没跑成（{type(exc).__name__}: {exc}）⇒ 这一拍没有"
+                    "自己清表 / 写未消化理由（不是「没有要清的」）")
         # ---- 收工自动提交（业主 2026-11-11 裁定 ②）：E 这一趟退场时扫一遍它名下的
         # 拿签稿，把「已签、尚未提交」的写进 E 自己那一行 `tasks.artifacts`。
         #
@@ -11579,11 +11779,25 @@ class AgentLoop:
         if not state:
             return f"停止通知 {item_id} 的 ack 没记上：{why}"
         # ack 的时刻落在父那一行的落痕里（`item_close` 是受控词表，装不下时间戳）
+        #
+        # RETIREFIX（2026-11-21）：落痕里的子代号是「这条通知的收件人」（通知项的
+        # `parent_task_id`），不是"谁 ack 的"（`self.my_task_id`）。两者在名册名复用时
+        # 会不同（真机 lp-ball-15：通知项 t-000151 的收件人是 t-000147，而读到并 ack
+        # 它的是同名下另一趟 t-000128）—— 写错那一格时 `note_edge_release` 的
+        # "停止通知要 ack 才算传达到"永远对不上（它按被通知的那条边找 `stop-acked:<子>`），
+        # 于是那一条边永远不许消边、整支永远销不干净。
         note = getattr(cond, "note_stop_ack", None)
+        recipient = str(row.get("parent_task_id") or "")
         parent = str(getattr(self, "parent_task_id", "") or "")
-        if callable(note) and parent and str(self.my_task_id or ""):
+        if recipient:
             try:
-                note(parent, str(self.my_task_id), at=S.now_iso())
+                recip_row = look(recipient) or {}
+            except Exception:  # noqa: BLE001 —— 读不到收件人那一行 ⇒ 退回本行父（老口径）
+                recip_row = {}
+            parent = str((recip_row or {}).get("parent_task_id") or parent)
+        if callable(note) and parent and recipient:
+            try:
+                note(parent, recipient, at=S.now_iso())
             except Exception as exc:  # noqa: BLE001 —— 落痕失败不改"ack 过了"这个事实
                 return (f"停止通知 {item_id} 已 ack（第 {step} 步读到），"
                         f"但 ack 时刻没落痕：{type(exc).__name__}: {exc}")

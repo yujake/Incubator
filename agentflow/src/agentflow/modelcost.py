@@ -67,6 +67,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from .schema import USAGE_SCOPES
+from . import sysguard as SG
 from .tokenmeter import (Charge, TokenMeter, _micro, _settled_mark, marker_of,
                          row_with_idem_key)
 
@@ -518,6 +519,55 @@ def _find_by_marker(meter: Any, key: str) -> dict | None:
     return row_with_idem_key(_ledger_rows(meter), key)
 
 
+def resolve_call_index(meter: Any, scope_key: str, call_index: int | None) -> int:
+    """这一次调用的 `call_index`：给了就原样用；没给只在一处补，补不了就受控拒。
+
+    ## 为什么缺省值 0 必须去掉
+
+    `call_index` 参与幂等键（`idempotency_key(task_id, call_index)`）。缺省 0 的
+    后果不是"序号差点意思"，而是：同一个 task 的第二次调用忘记传序号时，算出的键
+    与第一次逐位相同 ⇒ `charge_once` 判成重放 ⇒ 这一笔花销静默不入账，而账本
+    完全自洽。它与 `scope` 曾经有缺省值是同一种病（见 `charge_reply` 的 docstring：
+    "缺省值是这条缺陷的成因本身"），只是这一格的形态是少一行账，不是归错档。
+
+    ## 补值的唯一确定情形
+
+    账本里这个命名空间一笔都没有（键 `idempotency_key(scope_key, 0)` 不存在）⇒
+    这是第一次调用，序号 0 是确定的，可以直接补，并记一条 `call_index_derived`
+    读数。除此之外一律受控拒：此刻既可能是"同一个 task 的下一笔"（该给 1、2、…），
+    也可能是"同一笔重放"（该给原来的序号）—— 猜哪一种都会有一边是静默的。
+    """
+    if call_index is not None:
+        idx = int(call_index)
+        if idx < 0:
+            raise ValueError(f"call_index 必须是非负整数，收到 {call_index!r}")
+        return idx
+    rows = _ledger_rows(meter)
+    if row_with_idem_key(rows, idempotency_key(scope_key, 0)) is not None:
+        root = getattr(getattr(meter, "store", None), "root", None)
+        if root is not None:
+            SG.record_reading(root, SG.refused(
+                "modelcost.charge_reply", code="call_index_missing",
+                where=f"data/usage_ledger.json（幂等命名空间 {scope_key}）",
+                detail="这一趟没给 call_index，而该命名空间账上已经有过账",
+                how_to_fix=("调用点必须传本笔的序号：新调用给下一个序号，"
+                            "重放给原来那个序号 —— 两件事在这里分不开，"
+                            "补 0 会把新调用判成重放（静默不入账）")))
+        raise ValueError(
+            "call_index 不能省：这个幂等命名空间账上已经有过账（"
+            f"{scope_key}）⇒ 省略会被补成 0，而 0 已经入过账 —— "
+            "新调用会被判成重放、这一笔花销静默不入账。请传本笔的序号"
+            "（新调用 = 下一个序号；重放 = 原来那个序号）")
+    root = getattr(getattr(meter, "store", None), "root", None)
+    if root is not None:
+        SG.record_reading(root, SG.derived(
+            "modelcost.charge_reply", code="call_index_derived",
+            where=f"data/usage_ledger.json（幂等命名空间 {scope_key}）",
+            detail="这一趟没给 call_index，而该命名空间账上还没有账 ⇒ 补 0",
+            how_to_fix="调用点仍应显式传序号：补值只在'第一笔'这一种情形下确定"))
+    return 0
+
+
 def _tokens_missing(reply: Any) -> bool:
     """上游回了个成功但不带 usage —— 那笔账只能记零，且必须显式说出来。"""
     return (
@@ -644,7 +694,7 @@ def _duplicate_result(prior: Any, scope: str) -> dict:
 
 def charge_reply(meter: TokenMeter | None, reply: Any, *, role: str = DEFAULT_ROLE,
                  task_id: str, scope: str, extra_note: str = "",
-                 call_index: int = 0, price: tuple[float, float] | None = None,
+                 call_index: int | None = None, price: tuple[float, float] | None = None,
                  now: str | None = None, idem_scope: str | None = None) -> dict:
     """把一次模型调用的花销经 `TokenMeter` 写进 `usage_ledger`，并如实报告结局。
 
@@ -728,7 +778,11 @@ def charge_reply(meter: TokenMeter | None, reply: Any, *, role: str = DEFAULT_RO
             "scope": scope,
         }
 
-    key = idempotency_key(idem_scope or task_id, call_index)
+    key_scope = idem_scope or task_id
+    # 序号在写点解析（唯一一处）：给了原样用，没给只在"该命名空间还没有账"时补 0，
+    # 其余情形受控拒 —— 缺省值 0 会让第二笔静默判成重放（见 resolve_call_index）。
+    call_index = resolve_call_index(meter, key_scope, call_index)
+    key = idempotency_key(key_scope, call_index)
     prior = _find_by_marker(meter, key)
     if prior is not None:
         return _duplicate_result(prior, scope)

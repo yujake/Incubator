@@ -85,6 +85,7 @@ V 签不直接进台账，进手稿，随 B 侧将手稿中的定理或命题收
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -189,6 +190,28 @@ PASSES_INCOMPLETE = "passes_incomplete"
 SIGN_COUNT_SHORT = "sign_count_short"
 SIGN_COUNT_UNREADABLE = "sign_count_unreadable"
 SIGN_COUNT_ANCHOR_NOT_LAST = "sign_count_anchor_not_last"
+
+#: 2026-11-21（SIGNMAL）：签文件格式闸的受控拒绝码 —— 「这一签的读数字段不是能用的形状」。
+#:
+#: 现场：真机 `projects/lp-ball-15` 的 `out/vsigns/2f77e321….json`。三个 `passes` 的
+#: `object_sha256` 全是空串（在册那一支的台账行从来没有这一格），而 `issue` 从
+#: `sign_counting.ticket` 原样照抄、一个字节都没核 ⇒ 一份格式不合格的签落了盘，
+#: 只能靠事后对账（`temp/reconB`：「pass#i object_sha256 不是 64 位 hex」）发现。
+#: 本模块此前只判「这一签该不该发」（门槛 / 对象 / 背书 / 系统计数），不判「这一份签
+#: 的读数字段能不能用」—— 那正是「判据抓到了、写侧没有拦」的缺口。
+#:
+#: 三态纪律：`ok=False` 只是「这一份签不合格式」，与「门槛不够」/「写盘失败」分开报。
+MALFORMED_SIGN_FILE = "malformed_sign_file"
+
+#: 那一条拒信的改法（逐字放在拒信里，不让调用方去别处找）。
+HOW_TO_FIX_MALFORMED_SIGN = (
+    "改法：① 每一票的 `proof_sha256` 必须是这一份正文的 64 位小写 sha256；"
+    "`object_sha256` 必须是「被审对象」（那份稿 / 那份报告）的 64 位小写字节 sha256 ——"
+    "两把尺不是同一把（见 `sign_counting.ticket`）；② 台账行在写的时候就要带上 "
+    "`object_sha256` / `object_path`（在册那一支走 "
+    "`record_verification(object_sha256=…, object_path=…)`，未在册那一支走 "
+    "`record_pending_sign(…)`）；③ 两格都不许空、不许缩写、不许填路径 —— 读的人按 "
+    "`object_sha256` 去找「被审的是哪一份文件」，空串等于这一票说不清自己审的是什么。")
 
 #: 认签时「这一签没有独立台账背书」的那几个码（业主 2026-11-05 晚：真假只看背书）。
 #:
@@ -2285,6 +2308,131 @@ def _system_count_update(root: Any, *, backing: Mapping[str, Any], key: str,
     return out, True
 
 
+def sign_file_problems(doc: Mapping[str, Any]) -> list[str]:
+    """这一份「要落盘的签」格式上哪儿不成立（纯读；空列表 = 可以落盘）。
+
+    ## 为什么写侧要有这道闸（2026-11-21，SIGNMAL）
+
+    现场：真机 `projects/lp-ball-15` 的 `out/vsigns/2f77e321….json` —— 三票的
+    `object_sha256` 都是空串。它不是谁写坏了，是在册那一支的台账行从来不带这一格
+    （`v_ledger_write.record_verification` 只在调用方给了才写；V 的在册写口没给），
+    `sign_counting.ticket` 原样抄过来，`issue` 原样落盘。事后对账
+    （`temp/reconB`）判它「pass#1/#2/#3 的 object_sha256 不是 64 位 hex」⇒ 不合格签。
+
+    这一格此前只判「这一签该不该发」（门槛 / 对象 / 背书 / 系统计数），不判「这一份签
+    的读数字段是什么形状」—— 于是坏形状只能等事后对账抓。本函数把它挪到写之前：
+    :func:`issue` 在 `_write_atomic` 之前调它，不合 ⇒ 受控拒 :data:`MALFORMED_SIGN_FILE`，
+    `out/vsigns/` 一个字节都不动，拒信里带 :data:`HOW_TO_FIX_MALFORMED_SIGN`。
+
+    ## 判什么
+
+    | 格 | 判据 | 为什么 |
+    |---|---|---|
+    | `artifact_sha` | 64 位小写 hex | 它同时是文件名（`_sha_key` 的同一把尺） |
+    | `passes` | 非空列表（一签至少一票） | 「0 票」不是签 |
+    | `proof_sha256` | 非空 ⇒ 64 位小写 hex，且逐字等于 `artifact_sha` | 签的是哪一版正文，一票都不许含糊 |
+    | `object_sha256` | 非空 ⇒ 64 位小写 hex | 被审的是哪一份文件：认领 / 对账按它找 |
+    | `review_call` | 非 legacy 的签，每一票都非空 | 同一趟送审才是同一组票（跨趟不拼票） |
+    | `review_pass` | 非 legacy 的签，每一票都是正整数 | 轮号是这一趟的身份，0 / 缺号不算票 |
+
+    ## 不在这里判的（已经有人判，别把别人的牙挡掉）
+
+    「每一票都得有 `verification_id` / `at` / `proof_sha256` 三格、且 `proof_sha256`
+    就是这一份正文」是 :func:`sign_object_gate` 的判据（`passes_incomplete`）。这里
+    只在值非空时判形状 —— 再判一遍"有没有"会把那道闸的反真空判据挡掉（打桩
+    `sign_object_gate` 之后本该写出来的坏签会被这一格接住，等于那道闸的牙被藏起来）。
+
+    `legacy=true` 的签（2026-11-02 之前没有 `review_call` 的历史行）只在
+    `review_call` / `review_pass` 两格上放宽：那两格在历史行上本来就不存在，
+    把它们当格式错等于追溯性地判旧签为假。别的格（两个 sha）对 legacy 一样判 ——
+    历史行的 `proof_sha256` 本来就在，`object_sha256` 缺的那一批是写侧没记，
+    不是旧形态（旧形态连 `passes` 都没有：`issue` 上线于 2026-11-01）。
+
+    命题号（`statement_id`）空是合法形态（业主 2026-11-05 晚：「没号」那一档走
+    pending 台账），所以本函数不要求它非空；非空时 :func:`sign_object_gate` 已经
+    按命题号形态判过一次。`artifact_path` 也不在射程内：直调 / 夹具那一档可以没有
+    手稿落点（签照发、块不盖），那是既有的受控形态。
+    """
+    problems: list[str] = []
+    key = str(doc.get("artifact_sha") or "")
+    if not _is_sha64(key):
+        problems.append(f"`artifact_sha` 不是 64 位小写 hex（收到 {key!r}）")
+    entries = [p for p in (doc.get("passes") or []) if isinstance(p, Mapping)]
+    if not entries:
+        problems.append("`passes` 是空的（一签至少一票）")
+    legacy = bool(doc.get("legacy"))
+    for i, one in enumerate(entries, 1):
+        want = str(one.get("proof_sha256") or "")
+        if want:
+            if not _is_sha64(want):
+                problems.append(f"第 {i} 票的 `proof_sha256` 不是 64 位小写 hex（收到 {want!r}）")
+            elif want != key:
+                problems.append(f"第 {i} 票的 `proof_sha256` 不是这一份正文的 sha"
+                                f"（{want[:12]}… ≠ {key[:12]}…）")
+        got = str(one.get("object_sha256") or "")
+        if got and not _is_sha64(got):
+            problems.append(f"第 {i} 票的 `object_sha256` 不是 64 位小写 hex（收到 {got!r}）")
+        if not legacy:
+            if not str(one.get("review_call") or "").strip():
+                problems.append(f"第 {i} 票没有 `review_call`")
+            n = one.get("review_pass")
+            if isinstance(n, bool) or not isinstance(n, int) or n < 1:
+                problems.append(f"第 {i} 票的 `review_pass` 不是正整数（收到 {n!r}）")
+    return problems
+
+
+def _is_sha64(value: Any) -> bool:
+    """64 位小写十六进制？（长度 + 字符集；`_sha_key` 的只读版，不抛、不改写大小写）"""
+    text = str(value or "")
+    return len(text) == 64 and all(ch in _HEX for ch in text)
+
+
+def complete_object_identity(doc: dict[str, Any], root: Any) -> list[str]:
+    """把每一票缺的 `object_sha256` / `object_path` 用 `artifact_path` 现算补上。
+
+    ## 为什么补而不是一律拒（2026-11-21，SIGNMAL）
+
+    真机那份畸形签的 `object_sha256` 是空，不是"写错"：在册那一支的台账行从来
+    没有这一格（`record_verification` 只在调用方给了才写）。空串在旧盘上真实存在，
+    所以对"空"这一档：value 能现算就补（补成与未在册那一支相同的值：那份稿的字节
+    sha）；这一签根本没有可记的对象（没点名 / 点了名而盘上没有那份文件）⇒ 空串是
+    真话，不拒；只有"点了名、文件在盘上而读不出来"才拒。
+
+    对非空但形状不对的 `object_sha256`：一个字节都不改、直接交给
+    :func:`sign_file_problems` 判拒（形状坏的可能是另一份对象，替它改写等于替它作证）。
+
+    三态：没有点名对象（`artifact_path` 为空）或点了名而盘上没有那份文件 ⇒ 不补也不拒，
+    空串是真话（这一签没有可记的对象；块会按 `land` 的读数记 `failed`）；点了名、文件
+    在盘上而读不出来 ⇒ 拒（那一签声称审了盘上一份文件，却说不清是哪一份）。
+
+    返回补不上的那几条问题（空列表 = 每一票都有能用的对象 sha，或者这一签没有对象）。
+    """
+    rel = str(doc.get("artifact_path") or "").strip().replace("\\", "/")
+    if not rel:
+        # 没有点名的对象：这一签本来就没有"被审的文件"，空串是真话（不补也不拒）。
+        return []
+    target = Path(str(root or "")) / rel
+    try:
+        if not target.is_file():
+            # 点了名而盘上没有这份文件：这一签没有可记的对象（块由 `land` 记 failed）。
+            return []
+        sha = hashlib.sha256(target.read_bytes()).hexdigest()
+    except OSError as exc:
+        return [f"`artifact_path`（`{rel}`）读不出字节 sha（{type(exc).__name__}: {exc}）"
+                " ⇒ 这一签说不清审的是哪一份文件"]
+    problems: list[str] = []
+    for i, one in enumerate([p for p in (doc.get("passes") or [])
+                             if isinstance(p, dict)], 1):
+        got = str(one.get("object_sha256") or "")
+        if got:
+            # 非空（含形状坏的）：原样留着，交给格式闸判 —— 不替它改写。
+            continue
+        one["object_sha256"] = sha
+        if not str(one.get("object_path") or "").strip():
+            one["object_path"] = rel
+    return problems
+
+
 def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
           artifact_path: str = "", ledger: str = "", statement_id: str = "",
           proof_no: int = 1, passes: Sequence[Mapping[str, Any]] = (),
@@ -2355,6 +2503,9 @@ def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
                            #: 这一笔被"未达门槛"拒掉（与"文件写不成"分开：前者是两道守卫
                            #: 不一致时的读数，后者是整笔失败）。
                            "refused_below_need": False,
+                           #: 2026-11-21（SIGNMAL）：格式闸拒了这一签时逐字的改法
+                           #: （空串 = 没被格式闸拒）。与 `code` 一起读。
+                           "how_to_fix": "",
                            #: 2026-11-17（系统计数）：门槛是框架从台账现数的读数（键无条件存在）。
                            "counting": {}, "counted_by": "", "count": 0, "legacy": False}
     # ---- 收方秘书这一格先验（零字节）：拒绝要发生在建目录之前 ----
@@ -2413,45 +2564,23 @@ def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
     # 未在册档取 `AgentV.actor`）；不给 ⇒ 历史值 "V"（老签文件与直调逐字不变）。
     envelope = {"kind": ENVELOPE_KIND, "to": who, "at": str(at or ""),
                 "issued_by": str(issuer or "").strip() or "V"}
-    doc: dict[str, Any] = {
-        "schema": SIGN_SCHEMA,
-        "artifact_sha": key,
-        "artifact_path": str(artifact_path or ""),
-        "artifact_sha_rule": ARTIFACT_SHA_RULE,
-        "ledger": str(ledger or ""),
-        "statement_id": str(statement_id or ""),
-        # 2026-11-11 业主裁定：`proof_no` 在 V 签侧退役 —— canonical 新签不写它
-        # （旧多证明写口 `proof_no>1` 的兼容写在下面，见 `doc["proof_no"]` 那一支）。
-        # 身份靠三样：正文 sha（`artifact_sha`）/ 手稿路径（`artifact_path`，稿号现读）/
-        # `statement_id`。老签文件里已有的 `proof_no` 读侧照旧读（`sign_of` /
-        # `credential_reading` / `_any_credential` 都按缺省 1 兼容）。
-        "verdict": "成立",
-        "streak": int(streak), "need": int(need),
-        #: 2026-11-17（业主：「是系统计数落签」）：`streak` 那个数是从哪来的，逐字写清。
-        #: `counted_by="sign_counting"` = 框架按同一 `review_call` 内 `review_pass=1..need`
-        #: 现数；`legacy:*` = 老形态（没有 `review_call` 的历史行 / 登记在册的单轮会审）
-        #: 按台账尾部复算 —— 老数据不许静默等价成新签。
-        "counted_by": str(_gate.get("counted_by") or ""),
-        "count": int(_gate.get("count") or 0),
-        "legacy": bool(_gate.get("legacy")),
-        # 逐转读数（「不是全文」：全文在台账，见 source_note）。
-        # 2026-11-17：新形态的票由框架从数过的那几行取（不是调用方递进来的那份清单）——
-        # 于是签文件自己带着 `review_call` / `review_pass` / `object_sha256` 三格身份。
-        "passes": ([dict(p) for p in (_gate.get("counted_passes") or [])]
-                   if not _gate.get("legacy")
-                   else [dict(p) for p in (passes or ())]),
-        "objections": [dict(o) for o in (objections or ())],
-        "source_note": PASSES_SOURCE_NOTE,
-        "at": str(at or ""),
-        #: 谁落签（2026-11-02）：收方秘书的身份值；直调那一档是
-        #: :data:`WRITTEN_BY_DIRECT`（历史值 `"secretary"` 只读、不再写）。
-        "written_by": who or WRITTEN_BY_DIRECT,
-        "envelope": envelope,
-    }
-    # 旧多证明写口（显式 `proof_no>1`）的兼容：旧读侧按号分组（`_recomputable` 的
-    # legacy 支 / `_any_credential`），这一支照写那一格；canonical（缺省 1）不写。
-    if int(proof_no or 1) != 1:
-        doc["proof_no"] = int(proof_no)
+    doc = _sign_document(key, artifact_path=artifact_path, ledger=ledger,
+                         statement_id=statement_id, streak=streak, need=need,
+                         gate=_gate, passes=passes, objections=objections,
+                         at=at, who=who, envelope=envelope, proof_no=proof_no)
+    # ---- 2026-11-21（SIGNMAL）：格式闸 —— 不合格式的签一个字节都不写 ----------
+    #
+    # 位置在 `_write_atomic` 之前、所有既有闸之后：前面几道判「该不该发」，这一道判
+    # 「发出去的这一份能不能用」。先补（空的 `object_sha256` 用 `artifact_path` 的字节
+    # sha 补上，与未在册那一支同一个值）；补不上（文件在盘上读不出）/ 非空而形状坏
+    # ⇒ 受控拒 `malformed_sign_file` + 改法；盘上零文件（连 `out/vsigns/` 都不建）。
+    # 理由见 :func:`sign_file_problems` / :func:`complete_object_identity`。
+    _format = complete_object_identity(doc, root) + sign_file_problems(doc)
+    if _format:
+        out.update(code=MALFORMED_SIGN_FILE, how_to_fix=HOW_TO_FIX_MALFORMED_SIGN,
+                   reason=("这一份签的读数字段不合格式 ⇒ 不落盘（`out/vsigns/` 一个字节都不写）："
+                           + "；".join(_format) + "。" + HOW_TO_FIX_MALFORMED_SIGN))
+        return out
     out["envelope"] = envelope
     path = sign_path(root, key)
     out["path"] = rel(path, root)
@@ -2483,6 +2612,60 @@ def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
     # 位置在归档之后：签是既成事实；提交记号写不成只落读数，不许把这一签带走。
     out["submission"] = _sign_submission(root, store=store, key=key, doc=doc)
     return out
+
+
+def _sign_document(key: str, *, artifact_path: str, ledger: str, statement_id: str,
+                   streak: int, need: int, gate: Mapping[str, Any],
+                   passes: Sequence[Mapping[str, Any]],
+                   objections: Sequence[Mapping[str, Any]], at: str, who: str,
+                   envelope: Mapping[str, Any], proof_no: int) -> dict[str, Any]:
+    """签名文件的正文（只由已经通过的那几道闸的读数拼成；不读盘、不写盘）。
+
+    保证的不变式：每一格身份都来自调用点已经核过的读数 —— `artifact_sha` 是闸认过的
+    那把钥匙，`counted_by` / `count` / `legacy` 三格是框架从台账现数的结果，票
+    （`passes`）在非 legacy 档取自数过的那几行而不是调用方递进来的清单。它不判任何
+    事：写不写、拦不拦由 :func:`issue` 的闸决定。
+    """
+    doc: dict[str, Any] = {
+        "schema": SIGN_SCHEMA,
+        "artifact_sha": key,
+        "artifact_path": str(artifact_path or ""),
+        "artifact_sha_rule": ARTIFACT_SHA_RULE,
+        "ledger": str(ledger or ""),
+        "statement_id": str(statement_id or ""),
+        # 2026-11-11 业主裁定：`proof_no` 在 V 签侧退役 —— canonical 新签不写它
+        # （旧多证明写口 `proof_no>1` 的兼容写在下面，见 `doc["proof_no"]` 那一支）。
+        # 身份靠三样：正文 sha（`artifact_sha`）/ 手稿路径（`artifact_path`，稿号现读）/
+        # `statement_id`。老签文件里已有的 `proof_no` 读侧照旧读（`sign_of` /
+        # `credential_reading` / `_any_credential` 都按缺省 1 兼容）。
+        "verdict": "成立",
+        "streak": int(streak), "need": int(need),
+        #: 2026-11-17（业主：「是系统计数落签」）：`streak` 那个数是从哪来的，逐字写清。
+        #: `counted_by="sign_counting"` = 框架按同一 `review_call` 内 `review_pass=1..need`
+        #: 现数；`legacy:*` = 老形态（没有 `review_call` 的历史行 / 登记在册的单轮会审）
+        #: 按台账尾部复算 —— 老数据不许静默等价成新签。
+        "counted_by": str(gate.get("counted_by") or ""),
+        "count": int(gate.get("count") or 0),
+        "legacy": bool(gate.get("legacy")),
+        # 逐转读数（「不是全文」：全文在台账，见 source_note）。
+        # 2026-11-17：新形态的票由框架从数过的那几行取（不是调用方递进来的那份清单）——
+        # 于是签文件自己带着 `review_call` / `review_pass` / `object_sha256` 三格身份。
+        "passes": ([dict(p) for p in (gate.get("counted_passes") or [])]
+                   if not gate.get("legacy")
+                   else [dict(p) for p in (passes or ())]),
+        "objections": [dict(o) for o in (objections or ())],
+        "source_note": PASSES_SOURCE_NOTE,
+        "at": str(at or ""),
+        #: 谁落签（2026-11-02）：收方秘书的身份值；直调那一档是
+        #: :data:`WRITTEN_BY_DIRECT`（历史值 `"secretary"` 只读、不再写）。
+        "written_by": who or WRITTEN_BY_DIRECT,
+        "envelope": envelope,
+    }
+    # 旧多证明写口（显式 `proof_no>1`）的兼容：旧读侧按号分组（`_recomputable` 的
+    # legacy 支 / `_any_credential`），这一支照写那一格；canonical（缺省 1）不写。
+    if int(proof_no or 1) != 1:
+        doc["proof_no"] = int(proof_no)
+    return doc
 
 
 def _sign_submission(root: Any, *, store: Any, key: str,

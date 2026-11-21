@@ -231,6 +231,23 @@ class _RunOnce:
             res.details.append({"lit_id": lit_id, "stage": "extract", "error": f"{type(e).__name__}: {e}"})
             return self._finish(res)
 
+        # ---- 抽取阶段被剔除的那几条：留一条可复核的点名
+        #
+        # 真机 lp-ball-15（2026-11-21）的 32 条「剔除引文无法回验」只活在滚过去的
+        # warning 里：引文截到 80 字、`lit=` 打的是 `pdf`（文件类型，不是书号），
+        # 而抽取器的 `last_report` 在内存里 —— 这条装配路（`host` → `B.run_once`）
+        # 没有任何调用方读它。于是那 32 条里 29 条真引文事后无从复核。
+        # 这一条 details 是盘上唯一能回答"被剔的是哪一本、哪一句、为什么"的东西；
+        # 只留一条（`details` 只有 20 格），里面点名前几条。
+        report = getattr(self.extractor, "last_report", None) or {}
+        if int(report.get("relations_dropped") or 0):
+            res.details.append({
+                "lit_id": lit_id, "stage": "extract",
+                "dropped": int(report.get("relations_dropped") or 0),
+                "drop_reasons": [str(x) for x in (report.get("drop_reasons") or [])],
+                "dropped_items": [dict(x) for x in (report.get("drop_items") or [])][:3],
+            })
+
         # ---- 引文校验（无锁；只依赖文档）
         # 逐字那一档先试文献 PDF；「没中再试工作区那份正文」（同一份 `check_quote`，
         # 只换材料）—— 审阅型项目的引文常常逐字取自 `out/paper/main.tex` 那份 LaTeX，

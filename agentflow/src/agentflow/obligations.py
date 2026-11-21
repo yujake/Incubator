@@ -658,6 +658,40 @@ def register_wake_key(label: str, proof_sha: str) -> str:
     return f"{REGISTER_WAKE_PREFIX}{sid}@{str(proof_sha or '').strip()}"
 
 
+def wake_state_of(row: Mapping[str, Any],
+                  wake_row: Mapping[str, Any] | None = None) -> str:
+    """这一条 `b-register@` 义务的"叫醒落在哪一支"（只读，三档）。
+
+    ## 为什么要这一格（RETIREFIX，2026-11-21，真机 `projects/lp-ball-15`）
+
+    三族义务的旧读法把「`b-register` 4 条而 `b-awake` 0 条」读成"叫醒那一侧缺读数"
+    —— 读错了。`b-awake@` 是「召唤」的幂等键（`_wake_registrar` 第 ④ 档：一个 B
+    都没有 ⇒ 新召一趟才落行），其余五档（`already` / `running` / `woken` /
+    `attached` / `addressed` / `role_addressed`）按设计不落 `b-awake@` 行。所以
+    "0 条 b-awake"的正确读法是"这一趟没有新召过 B"，不是"没叫醒"。那一趟的四个
+    签落地时刻，B 要么在飞（`t-000091` 的收件实例 `b-batch4-1` = `t-000014`，
+    14:46:31–16:14:54 在飞）、要么按实例地址投递（`t-000113` → `B1`）、要么按角色
+    地址留在板上（`t-000148` / `t-000170`，`instance` 空）—— 一条都不该有新召行。
+
+    这一格只回答"落在哪一支"，不回答"叫得醒还是叫不醒"（后者是当场的 `wake.state`，
+    在 V 的工具回执里，不落后台）：
+
+    - ``summoned``：有同键的 `b-awake@` 召唤行（新召了一趟，行上带任务号与时刻）；
+    - ``instance_addressed``：板上那条带收件实例（`instance` 非空）⇒ 按实例地址投递，
+      不新召（`_wake_registrar` ②）；
+    - ``role_addressed``：既无召唤行、也无实例地址 ⇒ 按角色地址留在板上
+      （③ 那一档，该角色任一实例起跑时领得到）。
+
+    判据只有这一处：`registration_digest` 的逐行读数与三族对账（`temp/reconB`）
+    都读它。它不写盘、不新开义务行 —— "叫醒"不欠动作，不许拿它冒充一条待办。
+    """
+    if str((wake_row or {}).get("task_id") or "").strip():
+        return "summoned"
+    if str(row.get("instance") or "").strip():
+        return "instance_addressed"
+    return "role_addressed"
+
+
 def _register_items(conductor: Any) -> list[dict[str, Any]]:
     """板上所有「必须收录」义务（读不成 ⇒ 空列表，由调用方的话说清）。
 
@@ -1661,8 +1695,15 @@ def registration_digest(root: str | Path, store: Any = None) -> dict[str, Any]:
     `summoned` 与每行的 `wake` 是 SGN1（2026-11-17）加的：义务"开在板上"与
     "有人被叫醒"是两件事，读数必须分得开 —— 改前这一格只数开项，于是
     "3 枚签 / 0 条义务 / B 一次没醒"在收工读数里长得像"没有欠收录"。
+
+    RETIREFIX（2026-11-21）再加一格 `wake_state`（逐行）与两个合计
+    （`instance_addressed` / `role_addressed`）：`summoned` 只数"新召了一趟"，
+    而"按实例地址投递"/"按角色地址留在板上"这两档不落 `b-awake@` 行 —— 只给
+    `summoned` 时，真机 lp-ball-15 的"4 条义务 / 0 条召唤"会被读成"叫醒缺读数"。
+    判据在 :func:`wake_state_of`（唯一一处）。
     """
     out: dict[str, Any] = {"checked": False, "open": 0, "unowned": 0, "summoned": 0,
+                           "instance_addressed": 0, "role_addressed": 0,
                            "rows": [], "problems": [], "reason": ""}
     conductor = _conductor(store)
     if conductor is None:
@@ -1686,11 +1727,16 @@ def registration_digest(root: str | Path, store: Any = None) -> dict[str, Any]:
         sid = key[len(REGISTER_PREFIX):].partition("@")[0]
         sha = register_sha_of(key)
         wake = wakes.get(register_wake_key(f"{sid}#p1", sha)) or {}
+        wake_state = wake_state_of(row, wake)
         out["open"] += 1
         if not owner and not instance:
             out["unowned"] += 1
-        if wake.get("task_id"):
+        if wake_state == "summoned":
             out["summoned"] += 1
+        elif wake_state == "instance_addressed":
+            out["instance_addressed"] += 1
+        else:
+            out["role_addressed"] += 1
         out["rows"].append({"task_id": str(row.get("task_id") or ""),
                             "key": key,
                             "owner": owner or "unknown",
@@ -1699,11 +1745,15 @@ def registration_digest(root: str | Path, store: Any = None) -> dict[str, Any]:
                             "role": str(row.get("role") or ""),
                             "wake": str(wake.get("task_id") or ""),
                             "wake_at": str(wake.get("started_at") or ""),
+                            "wake_state": wake_state,
                             "detail": str(row.get("detail") or "")[:200]})
     out["reason"] = (f"板上开着 {out['open']} 条收录义务"
                      + (f"（其中 {out['unowned']} 条负责人 unknown，等主控派人）"
                         if out["unowned"] else "")
-                     + (f"；其中 {out['summoned']} 条已经召唤过 B" if out["summoned"] else ""))
+                     + (f"；其中 {out['summoned']} 条已经召唤过 B" if out["summoned"] else "")
+                     + (f"；{out['instance_addressed'] + out['role_addressed']} 条按地址"
+                        "留在板上（不落召唤行，不是没叫醒）"
+                        if (out["instance_addressed"] or out["role_addressed"]) else ""))
     return out
 
 

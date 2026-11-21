@@ -7,6 +7,14 @@
 判定原则：
 - 用保守规范化后的子串匹配，不用相似度。相似度会放过"改了几个词"的引文，
   而需求要求的是"完全引用"。
+- 那份"保守规范化"只有一处实现：`textutil.quote_match_text`（写侧的
+  `llm._locate_verbatim` 与这里的 `check_quote` 共用同一个投影）。它消化的是
+  版式噪声 —— 断行、断词连字符、连字（ﬁ/ﬂ）、控制字符、括号内侧空白；它不删
+  标点、不做词干化、不容忍词序或数字差异。所以"同一段文字换了个排版"会命中，
+  "同一句话换了几个词"照样不命中（正控见
+  `tests/test_quote_projection_feeds_the_gate.py`）。为什么必须共用：2026-11-21
+  真机 lp-ball-15 里 32 条被剔除的引文有 29 条是真引文，而写侧用 NFKC、这一侧
+  用 NFC，两边各差一点，于是同一句话在一边过、在另一边不过。
 - 定位不到就不要声称校验过。页码未知时不做"全文搜索后就算通过"的默认放宽 ——
   那等于把"页码错了"这个真实缺陷掩盖掉。这里的选择是：先按声明的页码查，
   再按 ±widen 页查，最后只在显式允许时查全文，并且把用的是哪种窗口如实回报。
@@ -41,7 +49,7 @@ import logging
 from dataclasses import dataclass
 
 from .schema import PageRange
-from .textutil import normalize_for_quote
+from .textutil import quote_match_text
 
 logger = logging.getLogger(__name__)
 
@@ -147,13 +155,13 @@ def check_quote(
     if not pages:
         return QuoteCheck(None, reason="no_text_layer", tried=())
 
-    q = normalize_for_quote(quote)
+    q = quote_match_text(quote)
     if not q:
         return QuoteCheck(None, reason="empty_quote", tried=())
 
-    # 每页的规范化只算一次：声明窗口 / ±widen / 全文三趟扫的是同一批页，
-    # 而 `normalize_for_quote` 是纯函数、`pages` 是一份浅拷贝里的不可变字符串
-    # ⇒ 三趟共用一个按页号缓存的字典（原来的实现每趟都把同一页重新规范化一遍）。
+    # 每页的投影只算一次：声明窗口 / ±widen / 全文三趟扫的是同一批页，
+    # 而 `quote_match_text` 是纯函数、`pages` 是一份浅拷贝里的不可变字符串
+    # ⇒ 三趟共用一个按页号缓存的字典（原来的实现每趟都把同一页重新投影一遍）。
     norm_pages: dict[int, str] = {}
 
     def scan(start: int, end: int, label: str) -> QuoteCheck | None:
@@ -164,7 +172,7 @@ def check_quote(
         for p in range(lo, hi + 1):
             page = norm_pages.get(p)
             if page is None:
-                page = normalize_for_quote(pages[p - 1])
+                page = quote_match_text(pages[p - 1])
                 norm_pages[p] = page
             if q in page:
                 return QuoteCheck(True, matched_page=p, window=label, reason="substring_match")

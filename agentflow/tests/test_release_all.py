@@ -3728,6 +3728,23 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "statusreport.py": "M 的状态报告：`collect`（只读四类读数：台账增量/交接链/在飞卡点/超时与拒绝）"
                        "＋`render_status_markdown`＋`write_status_report`（落 "
                        "`out/review/STATUS-<ts>.{md,json}`）—— `draft/39` §4",
+    # 2026-11-21（COLFIX 路）：状态报告里「产物畸形」那一格的接线与措辞。
+    # 它不是对拍副本：MALFORM 路的读数面只在这里装配（`wellformed_reading` 的惰性
+    # import 与三态措辞），`statusreport.collect` 与 `render_status_markdown` 都只按名
+    # 转发它；拆出来只为把 `statusreport.py` 拉回 800 行软基线之内（业主口径：不许抬基线）。
+    "statusreading.py": "状态报告里产物畸形那一格的接线与措辞：`wellformed_reading`（惰性 import "
+                        "`wellformed`、只读转发）+ `wellformed_line`（三态分开，`info` 不进"
+                        "「要处置」那个数）—— `statusreport` 的两个入口都只转发它",
+    # 2026-11-21（COLFIX 路）：产物畸形统一判据按产物类型拆成的包（13 类 / 57 条规则）。
+    # 为什么必须是包而不是一个模块：原来那份 `wellformed.py` 2057 行，而规则本来就按
+    # `RULES[kind][name]` 分组 ⇒ 天然按 kind 拆；对外面不变（`from agentflow.wellformed
+    # import check_kind, check_workspace, RULES, Finding` 与 `__init__` 汇总前的调用点
+    # 零改动）。规则登记靠 `__init__` 一次性导入全部规则模块 —— 少导入一个，那一类就
+    # 一条规则都没接上，而输出上与「规则存在」完全一样。
+    "wellformed/": "产物畸形统一判据（MALFORM 路）：`check_workspace` / `check_kind` / `RULES` / "
+                   "`Finding` 的对外面 + 13 类产物各一个规则模块（vsigns / literature / relations / "
+                   "statements / candidates / tasks / ledger / sessions / manuscripts / proofs / "
+                   "acceptance / artifacts / roster），类框架（三态 / 现场 / 落点 / 驱动）各自独立",
     # `draft/39` §3.16（2026-10-05 用户裁定"批准 3、6、8；5 的表述是 F 禁止写的"）：
     # F 的"一轮真推理"形态与判据。它不是对拍副本：四种产物、策略工具箱、
     # 缝的两条合法出口、花钱前的确定性闸门、超预算的诚实阻塞只有这一份实现。
@@ -3974,13 +3991,18 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     # `closing.machine_feeders` 只读（`check_closing` 不写任何东西）。挂在任一角色/循环里
     # 都会让另一侧反向依赖；它只读（不写盘、不注册工具、零模型调用），判据能直接拿假
     # `cond` 核三态，所以必须是顶层模块。
-    "autoretire.py": "收工前自动收尾的只读判据（ROOTGATE-③，2026-11-19）：MAX_ROUNDS / "
-                     "ready_now（逐父读 `retire_ready`，只收 branch == "
-                     "\"waiting_no_children\" 且 items_open == 0）/ plan_retire（只读闭包："
-                     "父在它那些活跃子全成候选之后才就绪，轮数上限与 `_auto_retire_ready` "
-                     "同为 MAX_ROUNDS）/ project_retire（把 `retire_integrity` 的读数换成"
-                     "「收尾前自动收尾之后」的那一份）—— 纯读、零写盘、零工具注册；"
-                     "`agent_loop` 的 final 闸与 `closing.machine_feeders` 读同一份",
+    "autoretire.py": "收工前自动收尾的只读判据（ROOTGATE-③，2026-11-19；"
+                     "RETIREFIX 2026-11-21 补 voidable_items / dirty_voidables）："
+                     "MAX_ROUNDS / ready_now（逐父读 `retire_ready`，只收 branch == "
+                     "\"waiting_no_children\" 且 items_open == 0）/ voidable_items（名下只剩"
+                     "「已被停止翻成 block 的 ack 通知」那一档 —— 销号后由 "
+                     "`conductor.void_items` 作废；`expects=work` 与 `queued`/`seen` 一律不碰）"
+                     "/ dirty_voidables（已销号但名下还有那几条，只作废不用再销）/ "
+                     "plan_retire（只读闭包：父在它那些活跃子全成候选之后才就绪，轮数上限与 "
+                     "`_auto_retire_ready` 同为 MAX_ROUNDS）/ project_retire（把 "
+                     "`retire_integrity` 的读数换成「收尾前自动收尾之后」的那一份）—— 纯读、"
+                     "零写盘、零工具注册；`agent_loop` 的 final 闸与 `closing.machine_feeders` "
+                     "读同一份",
     # 2026-11-20（SECSPLIT 刀1，业主批准「secretary.py 六刀拆分」）：`secretary.py` 16,341 行
     # 按不变式由底向上拆，这三个是刀1 落下的底座。为什么仍是顶层模块：`Secretary` 还是
     # 那一个类（118 个 import 一个字不改，靠 `secretary.py` 再导出兜住），底座只被

@@ -414,6 +414,39 @@ def _literature_path_refusal(ctx: TableContext, *, table: str, rel: Any,
     return None
 
 
+def _literature_summary_refusal(*, table: str, summary: Any,
+                                op: str = "create") -> ToolResult | None:
+    """`literature.summary` 的正文闸（复用 `search.register` 那一份实现）。`None` = 放行。
+
+    ## 为什么这一格必须接（WRITERESIDUE ①）
+    `store.direct_write_refusal("literature")` 是空串（`test_docgate2_two_side_doors_are_closed.py`
+    明确它是放行的）⇒ 通用写口可以直写文献行。QUOTEWIRE 把正文闸接到了 `search.register`，
+    却没接这条 —— 真机 `lp-ball-14` 的 5 行 `metadata_only` 就是 `table.update` 把带内容性
+    断言的 summary 写进去的（`data/events.jsonl` 里 `note="tool:table.update"` 的 5 条，
+    `download.fulltext=metadata_only`、summary 里带着 `定理` / `不等式` / `公式`）。
+
+    ## 判据只有一份
+    这里不判"哪些话算内容性断言"：整句交给 `search_tools._content_claim_refusal`
+    （它自己调 `litavail.content_assertion`，受控码是 `litstage.CONTENT_CLAIM_WITHOUT_READ`），
+    本函数只做两件事 —— 限定表名、把 `read_ok` 按这条写路的真实读数交进去。
+
+    ## 为什么直写路的 `read_ok` 恒为 `False`
+    这条口没有任何"读过正文"的机器证据（没有抽读回执、没有 `fs.read` 观察台账；
+    `read_ok` 的真值只有候选链 `_registrar_from_candidate` 算得出来）。按三态纪律，
+    不能把"不知道"冒充成"读过"：要写内容性断言就走去候选链（`lit.add` →
+    `text.extract` → `fs.read` → `lit.admit`），否则 summary 只写题录性说明。
+
+    ## 只在这一笔真的写 summary 时判
+    `table.update` 只改 `processed` / `download` 时不碰这一闸 —— 存量行里的旧断言
+    不归这一笔管（`table.create` 看它自己的载荷）。
+    """
+    if table != "literature":
+        return None
+    from . import search_tools as ST
+    return ST._content_claim_refusal(str(summary or ""), read_ok=False,
+                                     port=f"table.{op}")
+
+
 def assert_request_id_in_space(new_id: str) -> str:
     """`r-NNNN` 的编号空间守卫（全项目唯一实现）。
     ## 为什么"转发给 `next_prefixed_id`"还不够
@@ -2084,6 +2117,14 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
     path_refused = _literature_path_refusal(ctx, table=table, rel=data.get("path"))
     if path_refused is not None:
         return path_refused
+    # ---- `literature.summary` 的正文闸（本路 ①，与 `search.register` 同一份实现）：
+    # 通用写口可以直写 literature（`direct_write_refusal("literature") == ""`），
+    # 所以正文闸必须也长在这里 —— 否则内容性断言绕过 `search.register` 从这里进库。
+    # 位置在预演校验之前：这一笔若会被拒，就不该先分配号或写半行。
+    summary_refused = _literature_summary_refusal(
+        table=table, summary=data.get("summary"), op="create")
+    if summary_refused is not None:
+        return summary_refused
     # ---- 引文回验（D1 写侧断言的接线）：这一行若在说"引文已核过"，落盘前当场回验；
     # 算得出区间就写实，算不出就按判据降档（读数进 meta），refuse 那一档整笔不写。
     # 位置在预演校验之前：预演看到的必须是这一笔真正要落的那份四栏。
@@ -2292,6 +2333,14 @@ def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, 
                                                instance=_who["instance"])
             if _owner_refused is not None:
                 return fail(_owner_refused[1], table=table, id=id, kind=_owner_refused[0])
+            # ---- `literature.summary` 的正文闸（与 `table.create` 同一处判据、同一份实现）：
+            # 只在 patch 真的写了 summary 时判 —— 只改 `processed` / `download` 不构成
+            # 新断言，存量行里的旧断言不归这一笔管（本路 ① 的口径）。
+            if table == "literature" and "summary" in patch:
+                summary_refused = _literature_summary_refusal(
+                    table=table, summary=merged_raw.get("summary"), op="update")
+                if summary_refused is not None:
+                    return summary_refused
             # ---- `literature.path` 写入前归一化（M4）：只在"这一笔真的写 path"时做
             # （patch 里没有 path ⇒ 盘上那一份原样保留）。存量坏行由业主另行处置，工具不
             # 替它悄悄改（"不擅自改存量"）；它若挡住这一笔，会由形状闸以可读的拒信点名。

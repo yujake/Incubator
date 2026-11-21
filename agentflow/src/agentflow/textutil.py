@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import re
 import unicodedata
+from collections.abc import Iterator
 from typing import Any, Iterable
 
 from .schema import PageRange
@@ -22,10 +23,6 @@ _PUNCT_RE = re.compile(
 )
 _WS_RE = re.compile(r"\s+")
 _CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
-#: 引文规范化要统一的三类字符（编译一次；见 :func:`normalize_for_quote`）。
-_QUOTE_HYPHEN_RE = re.compile(r"[\u2010-\u2015\u2212]")
-_QUOTE_APOSTROPHE_RE = re.compile(r"[\u2018\u2019\u201b]")
-_QUOTE_DQUOTE_RE = re.compile(r"[\u201c\u201d\u201f]")
 #: 分词用的字符段（CJK 连续段 与 拉丁/数字段），见 :func:`tokens`。
 _TOKEN_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+|[a-z0-9]+")
 #: slug 折叠用的连续连字符，见 :func:`slugify`。
@@ -60,27 +57,205 @@ def normalize(text: str | None) -> str:
 
 
 def normalize_for_quote(text: str | None) -> str:
-    """引文校验专用的保守规范化。
+    """引文校验专用的保守规范化（兼容名，等于 :func:`quote_match_text`）。
 
-    与 `normalize` 的区别：只允许空白折叠、大小写、连字符与引号归一化、全半角转换；
-    不删标点（因为删标点会让 "no, X" 与 "no X" 等价，从而放过错误的引文）。
+    与 `normalize` 的区别：这个投影比 `normalize` 保守（不删标点），但比它更擅长
+    消化版式噪声：断行、断词连字符、连字（ﬁ/ﬂ）、控制字符、括号内侧的空白
+    都是"同一段文字"的不同排版，不是不同的字。判据本身没变 —— 仍然是
+    "投影之后逐字是子串"，没有相似度、没有阈值、没有词序容忍。
     """
-    if not text:
-        return ""
-    t = unicodedata.normalize("NFC", text)
-    t = to_halfwidth(t)
-    t = t.lower()
-    # 统一各种连字符与引号
-    t = _QUOTE_HYPHEN_RE.sub("-", t)
-    t = _QUOTE_APOSTROPHE_RE.sub("'", t)
-    t = _QUOTE_DQUOTE_RE.sub('"', t)
-    t = _WS_RE.sub(" ", t)
-    return t.strip()
+    return quote_match_text(text)
 
 
 def is_cjk(text: str) -> bool:
     return bool(_CJK_RE.search(text or ""))
 
+
+# ------------------------------------------------------------------ 引文投影
+#
+# 这一段是"引文回验看到的文本"的唯一实现：写侧（`llm._locate_verbatim`，
+# 抽取时把模型给的 quote 投影回原文切片）与收工门（`quoteverify.check_quote`，
+# 关系落库前的逐字回验）都只调这里。为什么必须只有一份：
+#
+# 2026-11-21 真机 lp-ball-15 的日志里连续 32 条"剔除引文无法回验的关系"，
+# 逐条回原文核过之后 29 条是真引文（PDF 的断行 / 断词连字符 / 连字 /
+# 控制字符 / 页码与页眉插行），而两份实现各差一点：写侧用 NFKC 但不做断词，
+# 收工门连 NFKC 都不做（NFC）。于是"同一句话"在写侧过、在门里不过（或反过来），
+# 而两边都自洽 —— 只有把真引文判成幻觉这一档会说话。
+#
+# 判据强度：仍然是"同一份文本先做同一化，再要求逐字命中"。没有相似度、
+# 没有阈值、没有词序/数字容忍 —— 改词、颠倒语序、换数字照样红（正控见
+# `tests/test_quote_projection_feeds_the_gate.py`）。
+#
+# 归一到"版式"这一层，不做的事：不删标点（"no, X" 仍不等于 "no X"）、
+# 不做词干化、不忽略空白以外的字符差异。
+
+#: 投影里统一的字符（连字符族 → "-"，引号族 → 直引号）。
+_QUOTE_CHAR_MAP = {
+    **{code: "-" for code in range(0x2010, 0x2016)},
+    0x2212: "-",
+    0x2018: "'", 0x2019: "'", 0x201B: "'",
+    0x201C: '"', 0x201D: '"', 0x201F: '"',
+}
+#: 括号内侧的空白不算字：`) ] } >` 之前的、`( [ { <` 之后的空白都删掉。
+_QUOTE_OPENERS = "([{<"
+_QUOTE_CLOSERS = ")]}>,.;:!?"
+#: 断词连字符只接在这几种字符后面才算断词（字母另判），见 `_quote_layout`。
+_QUOTE_HYPHEN_AFTER = ")]}>"
+
+
+def _nfkc_clusters(text: str) -> Iterator[tuple[str, int, int]]:
+    """把 ``text`` 切成"必须一起做 NFKC 的簇"，逐簇产出 ``(规范化片段, 起, 止)``。
+
+    为什么不能逐字符做 NFKC：NFKC 是上下文相关的，而逐字符规范化会
+    把"规范化后等价"的两串判成不同。最典型的失败是组合记号：
+
+        text  = "Spe\\u0301ctrum"（s p e + 组合尖音符 …，PDF/LaTeX 常见的分解形）
+        quote = "Sp\\u00e9ctrum" （预组合的 é）
+        unicodedata.normalize("NFKC", text) == unicodedata.normalize("NFKC", quote)  # True！
+
+    但逐字符规范化后前者里的 ``e``+``´`` 仍是两个字符，后者是一个 ``é``，
+    于是一句真的引文会被判成幻觉、被剔除。
+
+    簇的边界用 ``NFC`` 探测"相邻两字符会不会合成"（合成后串变短/变不同），
+    这比列举 Unicode 组合类更通用：组合记号、Hangul Jamo 都能被它覆盖。
+    """
+    i = 0
+    n = len(text)
+    while i < n:
+        j = i + 1
+        # 只要"前一字符 + 当前字符"还能合成出别的东西，就必须留在同一个簇里。
+        while j < n and unicodedata.normalize("NFC", text[j - 1:j + 1]) != text[j - 1:j + 1]:
+            j += 1
+        yield unicodedata.normalize("NFKC", text[i:j]), i, j
+        i = j
+
+
+def _quote_layout(chars: list[str], spans: list[tuple[int, int]]
+                  ) -> tuple[str, list[tuple[int, int]]]:
+    """版式层的三条规则（都在字符流上做，删字符时同步删它们的区间）。
+
+    输入 ``chars`` 已经过统一映射（连字符族 → "-"、引号族 → 直引号）。
+
+    1. 断词连字符：`-` + 可选空白 + 字母 ⇒ 连字符与空白一起删。按同一个规则处理
+       引用侧与原文侧，于是 "Gen- \\neralized" ≡ "Generalized"，而 ")- rectifiable"
+       ≡ ")-rectifiable"（两边的连字符都按同一条规则处理，不会一边留一边不留）。
+       投影必须先映射再跑这条规则，否则"第二轮"会把上一轮由破折号映射来的 "-"
+       当成断词连字符再删一次 —— 那样投影就不幂等，写侧与门里各投影一次会得到
+       两个不同的串（`p{页}:norm` 的区间也会跟着错位）。
+    2. 括号内侧空白：右括号/收尾标点前的空白、左括号/开括号后的空白都删
+       （PDF 换行会凭空造出 `p\\n)`、`( deﬁned` 这种形态）。
+    3. 空白折叠与去首尾（"空格"是这条投影里唯一保留的分隔符）。
+    """
+    out_c: list[str] = []
+    out_s: list[tuple[int, int]] = []
+    i, n = 0, len(chars)
+    while i < n:
+        ch = chars[i]
+        # 断词连字符：两种情况才按"断词"处理 ——
+        #   ① 前面是字母且后面跟着空白（PDF 的行末断词："Gen- \neralized"）；
+        #   ② 前面是右括号且后面是字母（"…, m)-\nrectifiable" 这类术语里的连字符，
+        #      模型抄回来时会把换行拼掉、连字符留着："(Hm, m)-rectifiable"）。
+        # 不满足这两条的连字符原样保留，所以：公式里的减号（"2 −g2"，前面是空格）
+        # 不会被吃掉；"A—B" 这类破折号仍归一成 "a-b" 而不是被粘成 "ab"；
+        # 复合词里的真连字符（"well-known"）也留着。投影必须幂等，见 `_quote_layout`。
+        if ch == "-" and out_c:
+            prev = out_c[-1]
+            j = i + 1
+            while j < n and chars[j] == " ":
+                j += 1
+            spaced = j > i + 1
+            if (j < n and chars[j].isalpha()
+                    and ((prev.isalpha() and spaced) or prev in _QUOTE_HYPHEN_AFTER)):
+                i = j          # 连字符与中间的空白一起删；下一个字母留给下一轮
+                continue
+        if ch == " ":
+            nxt = chars[i + 1] if i + 1 < n else ""
+            prev = out_c[-1] if out_c else ""
+            # 首部空白 / 括号内侧空白 / 连续空白：都不进投影
+            if not out_c or nxt in _QUOTE_CLOSERS or prev in _QUOTE_OPENERS or prev == " ":
+                i += 1
+                continue
+        out_c.append(ch)
+        out_s.append(spans[i])
+        i += 1
+    # 尾部空白在循环里不会被写出来（只有"后面还有字"时才落一个空格），无需再截。
+    return "".join(out_c), out_s
+
+
+def project_quotes(text: str | None) -> tuple[str, list[tuple[int, int]]]:
+    """把一段文本投影成"引文比对用的那一串字"，并保留每个字的原文区间。
+
+    返回 ``(projected, spans)``，``spans[i] = (start, end)`` 是 ``projected[i]``
+    在 ``text`` 里对应的原始区间 ``text[start:end]``。插入的分隔空格是零宽区间
+    ``(start, start)``（它不对应原文任何字符，也不可能成为匹配的首字符）。
+
+    这两样一起返回，是为了让"定位"与"比对"用同一个投影：收工门只取第一项
+    （只看"在不在"），写侧还要第二项（把命中的那一段原文切片存进 quote）。
+    """
+    if not text:
+        return "", []
+    chars: list[str] = []
+    spans: list[tuple[int, int]] = []
+    pending_space = False
+    for piece, start, end in _nfkc_clusters(text):
+        for ch in piece.casefold():
+            # 软连字符是零宽格式字符：视觉上不存在，只标记"这里可断行"。
+            # 当空白处理会凭空插入一个空格（"abel\\u00adian" → "abel ian"），
+            # 于是 PDF 断词处的真引文永远匹配不上。
+            if ch == "\u00ad":
+                continue
+            if ch.isspace():
+                pending_space = True
+                continue
+            if unicodedata.category(ch) in ("Cc", "Cf"):
+                # 控制字符 / 格式字符：PDF 的符号字体常把它们当字形写进文本层
+                # （真机 lp-ball-15 的第 26 条里，公式的 ">" 被抽成了 U+0015）。
+                continue
+            if pending_space and chars:
+                chars.append(" ")
+                spans.append((start, start))
+            pending_space = False
+            # 统一映射放在这里（而不是版式层）：投影必须幂等，见 `_quote_layout`。
+            chars.append(_QUOTE_CHAR_MAP.get(ord(ch), ch))
+            spans.append((start, end))
+    return _quote_layout(chars, spans)
+
+
+def quote_match_text(text: str | None) -> str:
+    """引文比对用的投影（唯一判据的那一半）：只保留"同一段文字"的字面。
+
+    逐条规则见 :func:`project_quotes` 的 `_quote_layout` 一节。调用方拿它把
+    引文与原文投影到同一个坐标系里，然后做子串比较。
+    """
+    return project_quotes(text)[0]
+
+
+def locate_verbatim(text: str, quote: str) -> str | None:
+    """在 ``text`` 里定位 ``quote``，返回原文里的确切切片；定位不到返回 ``None``。
+
+    命中判据只有一条：两边经 :func:`project_quotes` 投影之后，``quote`` 的投影是
+    ``text`` 投影的子串。返回的是原文切片（用区间映射还原），所以调用方拿去
+    落盘的东西天然是 ``text`` 的子串 —— 不需要再相信谁。
+
+    先试原样子串（零成本且能保住"模型抄的就是原文里连续的这一片"），再走投影。
+    """
+    if not quote:
+        return None
+    if quote in text:
+        return quote
+    projected, spans = project_quotes(text)
+    quote_projected, _ = project_quotes(quote)
+    if not quote_projected:
+        return None
+    pos = projected.find(quote_projected)
+    if pos < 0:
+        return None
+    start = spans[pos][0]
+    # 末尾用区间右端而不是"起始下标 + 1"：一个投影字符可能来自多个原文字符，
+    # 用 +1 会把 "é"（来自 "e"+组合记号）或 "fi"（来自连字 ﬁ）切掉一半。
+    end = spans[pos + len(quote_projected) - 1][1]
+    return text[start:end]
 
 # ---------------------------------------------------------------- 关键词命中（唯一判据）
 #

@@ -409,6 +409,11 @@ PROCESS_CATEGORIES: tuple[tuple[str, str], ...] = (
     ("roster_repaired",
      "名册自愈补登记：收口兜底 `Secretary.roster_repair` 把漏登记的号补上（过程读数，不计错；"
      "判据读 `out/roster/*.jsonl` 的 `repaired=True`。82 是 2 条，恰好对应 2 条写口拒绝）"),
+    ("write_point_guarded",
+     "写点自保：框架自己在写口受控拒收或补值的次数（`out/sysguard/write-readings.jsonl`："
+     "`state=refused` 是这一笔没按原样写下去、`state=derived` 是写点在同一处补了一格）。"
+     "过程读数，不计错：它记的是'框架自己拦住了自己'，不是模型做错了什么；"
+     "某一项从来没出现过时是 0（文件不存在是'没有'），文件在却读不出来时才记 unknown"),
 )
 
 #: 全部类目（错误 ＋ 系统侧 ＋ 状态读数 ＋ 过程读数）。`primary_code` 的优先级按这一张表
@@ -767,6 +772,32 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
      "src/agentflow/refusalfault.py::FRAMEWORK_ERROR_KIND"
      "（`_guard` 的分档：TypeError / AttributeError / KeyError 一族 ⇒ 受控码，"
      "拒信明说「这是框架侧的问题、换措辞重试没有用」并带落库事实与校验器的逐条读数）"),
+    # ---- 2026-11-21（SYSGUARD）：系统自动产物的写点自保。
+    #
+    # 这一族码由各写点自己产出（受理侧拒收 / 同处补值），落 `out/sysguard/write-readings.jsonl`，
+    # 由本文件的写点自保那一支读取。判据读的是那一行的 `code` 列（结构字段），
+    # 不找文案 —— 与"扩面的 15 类"同一手法。
+    ("artifact_entry_bad", "write_point_guarded",
+     "src/agentflow/artifacts.py::entry_problems"
+     "（`record` 落盘前判框架自己算的三格：sha256 / bytes / at）"),
+    ("clear_cells_incomplete", "write_point_guarded",
+     "src/agentflow/litstage.py::_cleared_cells_problems"
+     "（清表写点：`cleared_at` / `clear_reason` 必填，缺一格整笔不落）"),
+    ("clear_archive_mismatch", "write_point_guarded",
+     "src/agentflow/litstage.py::clear_delegation"
+     "（归档必须覆盖本委托整份行，少一行整笔不落）"),
+    ("retired_reason_derived", "write_point_guarded",
+     "src/agentflow/secretary_retire.py::retire_reason"
+     "（销号行的 `reason`：调用方没给时由写点按就绪分支补一句）"),
+    ("relation_derived_cell_stale", "write_point_guarded",
+     "src/agentflow/agent_b/core.py::_relation_derived_cells_problems"
+     "（reprocess 写回：`quote_normalized` / `dedup_key` 必须与 `quote` 同源）"),
+    ("call_index_missing", "write_point_guarded",
+     "src/agentflow/modelcost.py::resolve_call_index"
+     "（`charge_reply` 的序号：账上已有账时省略 ⇒ 受控拒，不补 0）"),
+    ("call_index_derived", "write_point_guarded",
+     "src/agentflow/modelcost.py::resolve_call_index"
+     "（`charge_reply` 的序号：该命名空间第一笔时补 0，并记一条读数）"),
 )
 
 #: 码 → 类目（由 `CODE_TABLE` 派生，只有这一处真身）。
@@ -1397,6 +1428,7 @@ def _read_aux(root: Path) -> dict[str, Any]:
     verifications, ver_reading = _read_jsonl_dir(root, "verifications")
     refusals, ref_reading = _read_jsonl_dir(root, "out/roster/refusals")
     secretary, sec_reading = _read_jsonl_dir(root, "out/secretary")
+    sys_readings, sys_reading = _read_jsonl_dir(root, "out/sysguard")
     roster_rows, roster_reading = _read_jsonl_dir(root, "out/roster")
     statements, st_reading = _read_json_table(root, "data/statements.json")
     stop_rows, stop_reading = _read_stop_history(root)
@@ -1446,6 +1478,7 @@ def _read_aux(root: Path) -> dict[str, Any]:
         "roster": {"rows": roster_rows, "repaired": repaired, "reading": roster_reading},
         "roster_refusals": {"rows": refusals, "reading": ref_reading},
         "secretary": {"rows": secretary, "reading": sec_reading},
+        "write_readings": {"rows": sys_readings, "reading": sys_reading},
         "statements": {"rows": statements, "reading": st_reading},
         "stop_history": {"rows": stop_rows, "reading": stop_reading},
         "session_files": {"rows": [], "reading": {"checked": True, "names": session_names,
@@ -1463,7 +1496,7 @@ def _no_aux(reason: str) -> dict[str, Any]:
     reading = {"checked": False, "reason": reason}
     return {name: {"rows": [], "reading": dict(reading)}
             for name in ("verifications", "roster", "roster_refusals", "secretary",
-                         "statements", "stop_history", "closing")}
+                         "write_readings", "statements", "stop_history", "closing")}
 
 
 #: 工具层拒因的族表（`(类目, 认得它的原话)`）。顺序即优先级：同一段文字同时命中两族时
@@ -1992,6 +2025,19 @@ def error_action_stats_from(events: Iterable[Mapping[str, Any]] | None,
                 _bump_system("fail_open" if row.get("fail_open") else "判不了",
                              "hook_undecided")
 
+    # ---- 写点自保：框架自己在写口拒收 / 补值的次数（sysguard）
+    wr_reading = _aux_reading("write_readings")
+    if wr_reading.get("checked"):
+        for row in _aux_rows("write_readings"):
+            one_state = str(row.get("state") or "")
+            if one_state not in ("refused", "derived"):
+                continue
+            ctx.update(source=f"out/sysguard/{row.get('_file') or ''}",
+                       ref=str(row.get("point") or ""), ts=str(row.get("at") or ""),
+                       detail=str(row.get("detail") or ""))
+            _bump_system(str(row.get("code") or "write_point_guarded"),
+                         "write_point_guarded")
+
     # ---- 收工门（现算）：blocker 逐条
     cls_reading = _aux_reading("closing")
     for one in (cls_reading.get("blockers") or ()):
@@ -2038,6 +2084,7 @@ def error_action_stats_from(events: Iterable[Mapping[str, Any]] | None,
     _apply({"closing_blocker"}, cls_reading)
     _apply({"task_stopped"}, stop_reading)
     _apply({"roster_repaired"}, roster_reading)
+    _apply({"write_point_guarded"}, wr_reading)
     # `statements` 读不出来只影响归属（退回 `（未记作者）`），不影响计数 —— 所以
     # `proof_defect_found` 的三态仍由 `verifications` 决定，这一格在 `sources.statements` 里
     # 单独看得见（不把"作者没记"折成"这一类没查成"）。
@@ -2049,6 +2096,7 @@ def error_action_stats_from(events: Iterable[Mapping[str, Any]] | None,
         "roster": roster_reading,
         "roster_refusals": ref_reading,
         "secretary": sec_reading,
+        "write_readings": wr_reading,
         "statements": statements_reading,
         "stop_history": stop_reading,
         "closing": cls_reading,

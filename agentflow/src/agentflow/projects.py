@@ -37,6 +37,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -546,6 +547,35 @@ def list_projects(root: Path | str) -> list[dict[str, Any]]:
     return out
 
 
+def drop_receipt_lines(extraction: Mapping[str, Any], *, limit: int = 5) -> list[str]:
+    """把"抽取阶段剔除"的那几条点名成几行（回执的唯一实现）。
+
+    为什么需要它：`relations_dropped` 只回答"几条"，`drop_reasons` 只回答"为什么"，
+    而"是哪几条"原来只活在一行滚过去的日志里（引文还截到 80 字）。2026-11-21
+    真机 lp-ball-15 的 32 条剔除里 29 条是真引文 —— 事后想复核都无从下手，
+    因为盘上没有一处留着那句引文。这里把 `LLMExtractor.last_report["drop_items"]`
+    （原因 + 引文前段 + 概念名）点名出来，供 CLI 与 `tasks` 回执共用。
+
+    只点名前 `limit` 条：清单再长也不会有人逐条读，而总数与原因码另有读数。
+    """
+    rows = [dict(x) for x in (extraction.get("dropped_items") or []) if isinstance(x, Mapping)]
+    out: list[str] = []
+    for item in rows[: max(0, int(limit))]:
+        lit = str(item.get("lit_id") or "")
+        reason = str(item.get("reason") or "")
+        names = "→".join(str(n) for n in (item.get("concept_names") or [])[:2])
+        quote = str(item.get("quote") or "")
+        if len(quote) > 120:
+            quote = quote[:120] + "…"
+        who = f"lit:{lit} " if lit else ""
+        out.append(f"{who}{reason}" + (f" 「{names}」" if names else "") + f" quote={quote!r}")
+    total = int(extraction.get("relations_dropped") or 0)
+    if total > len(rows[: max(0, int(limit))]) and out:
+        out.append(f"（还有 {total - min(len(rows), int(limit))} 条未逐条列出，"
+                   "见 drop_reasons）")
+    return out
+
+
 def _open_extract_task(store: Store, project_name: str, input_key: str = "") -> str:
     """为"模型读书"这一步开一条真台账号（`t-NNNN`）并写下 `running` 行。
 
@@ -589,6 +619,9 @@ def _close_extract_task(store: Store, task_id: str, extraction: Mapping[str, Any
     三态：抽到东西 ⇒ `done/ok`；没 key / 一轮都没成功 ⇒ 仍然 `done`，但 `detail`
     里逐字写清"没抽到"与原因（抽取失败不是任务失败 —— 它的重试语义由 `last_mine_error`
     决定，下次还认这本书）。
+
+    抽取阶段被剔除的那几条也写进 `detail`（`drop_receipt_lines`）：日志行会滚掉，
+    而 `tasks.json` 是盘上的回执 —— 没有它，"剔掉了哪几条"就只剩一个计数。
     """
     from . import schema as S
     from .tokenmeter import TokenMeter
@@ -603,6 +636,9 @@ def _close_extract_task(store: Store, task_id: str, extraction: Mapping[str, Any
               f"读懂 {extraction.get('processed', 0)} 本"
               + (f"；有轮次失败：{err[:200]}" if err else "")
               + ("（一条都没抽到）" if got == 0 and not err else ""))
+    receipt = drop_receipt_lines(extraction)
+    if receipt:
+        detail += "；抽取阶段剔除 " + str(extraction.get("relations_dropped") or 0) + " 条（逐条点名）：" + "；".join(receipt)
     with store.tx("tasks", actor="cli") as tx:
         # 读取必须在锁内（`tx.rows` 而不是 `store.rows`）：`store.rows` 是无锁快照读，
         # 拿它读到的东西去写，中间就是一个窗口 —— 别的进程刚改过的那条行在这里看不见，
@@ -702,10 +738,17 @@ def extract_with_model(store: Store, *, books_limit: int | None = None,
     # 下面的 `quotes_failed` 是"活到落库那一步、但带页码窗口的回验没过"。
     dropped = 0
     drop_reasons: list[str] = []
+    dropped_items: list[dict[str, Any]] = []
     for r in rounds:
         rep = r.get("extractor_report") or {}
         dropped += int(rep.get("relations_dropped") or 0)
         drop_reasons.extend(str(x) for x in (rep.get("drop_reasons") or []))
+        lit = str(rep.get("lit_id") or "")
+        for raw_item in (rep.get("drop_items") or []):
+            if isinstance(raw_item, Mapping):
+                item = dict(raw_item)
+                item["lit_id"] = lit
+                dropped_items.append(item)
 
     out: dict[str, Any] = {
         "rounds": rounds,
@@ -721,6 +764,10 @@ def extract_with_model(store: Store, *, books_limit: int | None = None,
         # 两者相加才是"模型一共提了多少条关系"，而这个和必须能从输出里读出来。
         "relations_dropped": dropped,
         "drop_reasons": drop_reasons,
+        # 逐条点名（哪一本书的哪一句、为什么被剔）：只报计数的话，被剔掉的边
+        # 在盘上就没有任何可复核的载体。上限与抽取器那一侧一致（50 条）。
+        "dropped_items": dropped_items[:50],
+        "dropped_items_total": len(dropped_items),
         # 失败原因必须逐条留下：只报"失败 1 本"读不出下一步该做什么。
         "errors": [d for r in rounds for d in (r.get("details") or [])
                    if d.get("error") or d.get("skipped")],

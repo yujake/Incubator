@@ -275,18 +275,35 @@ def test_a_final_report_without_numbers_blocks_the_clearing(
 
 def test_skipping_the_submit_leaves_the_closing_gate_red(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """e：摘掉 `lit.admit_all`（判完不提交）⇒ 收工门红 + `delegation_not_cleared`。
+    """e：摘掉 `lit.admit_all`、并把框架那一手补交也打桩掉（判完不提交）⇒ 收工门红。
 
     这是"清表打掉"那一条：同一个 CLI 路、同一个缝，只把提交从剧本里摘掉 ——
     全表已经判完（qualified + rejected），但行上没有 `cleared_at`、也没有归档，
     所以第八格必须拦（blocker 不是读数）。清表之后它变 pass（彩排的正控）。
+
+    ## ACLEAR2 之后为什么要多打一个桩（2026-11-21）
+
+    ACLEAR2 把同一份收尾自驱接到了 A 这一拍退场（`agent_loop.run()` 的退场段）：
+    只摘掉剧本里的 `lit.admit_all`，框架会在 A 退场时自己把判完的委托提交掉
+    （真机 lp-ball-15 的 A 221 步里 `own.run_once` 是 0 次，正是这一形）。
+    于是"判完不提交"这个状态在产品里不再可达 —— 要让它可达、并且让这条负控
+    继续承重，只能把那一手补交打桩掉（`clear_stage.drive_at_run_exit` 是它的唯一
+    接线点）。打桩之后断言一个字没改：rc=1、`literature_pending` fail、
+    blocker 恰好是 `delegation_not_cleared`、行上没有 `cleared_at`、盘上没有归档。
     """
     _ready_or_xfail()
+    from agentflow.agent_a import clear_stage as CS
+
+    monkeypatch.setattr(CS, "drive_at_run_exit", lambda agent, run=None: {})
     got = _run(tmp_path, monkeypatch, skip=("submit",))
     _assert_authoritative_fail(got)
     rep = CL.check_closing(got["store"], checks=("literature_pending",))
     assert rep.status["literature_pending"] == "fail", rep.to_dict()
     assert "delegation_not_cleared" in _codes(rep), rep.to_dict()
+    rows = _by_slot(got)
+    assert not any(str(r.get("cleared_at") or "").strip() for r in rows.values()), rows
+    archive = got["ws"] / "data" / "lit_candidates" / f"archive-{RID}.jsonl"
+    assert not archive.is_file(), "打桩掉补交之后仍然写了归档 ⇒ 这条红不是「没提交」给的"
     # 这一趟的"提交前状态判据"本身是通的（判完、没清表）—— 所以收工门那格的红
     # 只可能来自"清表没发生"，不是来自"还有没判的"（那会是另一条 blocker）。
     assert not _presubmit_problems(got), (

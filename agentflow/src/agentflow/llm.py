@@ -29,7 +29,7 @@ import logging
 import re
 import unicodedata
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Final, Iterable, Iterator, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Final, Iterable, Protocol, runtime_checkable
 
 if TYPE_CHECKING:  # pragma: no cover - 仅供类型检查器
     # PageRange 由 schema.py 实现（他人负责）。放进 TYPE_CHECKING 是为了让
@@ -569,110 +569,23 @@ DEFAULT_PROMPT_TEMPLATE: Final[str] = """\
 """
 
 
-def _nfkc_clusters(text: str) -> Iterator[tuple[str, int, int]]:
-    """把 ``text`` 切成"必须一起做 NFKC 的簇"，逐簇产出 ``(规范化片段, 起, 止)``。
-
-    为什么不能逐字符做 NFKC：NFKC 是上下文相关的，而逐字符规范化会
-    把"规范化后等价"的两串判成不同。最典型的失败是组合记号：
-
-        text  = "Spe\\u0301ctrum"（s p e + 组合尖音符 …，PDF/LaTeX 常见的分解形）
-        quote = "Sp\\u00e9ctrum" （预组合的 é）
-        unicodedata.normalize("NFKC", text) == unicodedata.normalize("NFKC", quote)  # True！
-
-    但逐字符规范化后前者里的 ``e``+``´`` 仍是两个字符，后者是一个 ``é``，
-    于是一句真的引文会被判成幻觉并被剔除（``_ground_relations`` 的
-    ``quote_not_found``）——这正是本模块唯一自动幻觉防线最不能出的错，
-    而且它不出声：报告里只会多一条"疑似幻觉"的计数。
-
-    簇的边界用 ``NFC`` 探测"相邻两字符会不会合成"（合成后串变短/变不同），
-    这比列举 Unicode 组合类更通用：组合记号、Hangul Jamo 都能被它覆盖。
-    """
-    i = 0
-    n = len(text)
-    while i < n:
-        j = i + 1
-        # 只要"前一字符 + 当前字符"还能合成出别的东西，就必须留在同一个簇里。
-        while j < n and unicodedata.normalize("NFC", text[j - 1 : j + 1]) != text[j - 1 : j + 1]:
-            j += 1
-        yield unicodedata.normalize("NFKC", text[i:j]), i, j
-        i = j
-
-
-def _normalize_with_spans(text: str) -> tuple[str, list[tuple[int, int]]]:
-    """生成"折叠空白 + NFKC + 大小写折叠"后的文本，并保留每个字符的原文区间。
-
-    返回 ``(normalized, spans)``，其中 ``spans[i] = (start, end)`` 是
-    ``normalized[i]`` 在 ``text`` 中对应的原始字符区间 ``text[start:end]``。
-
-    为什么需要它：LLM 抄引文时最常见的差异是把 PDF 的换行抄成了空格
-    （PDF 抽取出来的句子常常带 ``\\n``）。§6.3 允许"空白折叠"这种差异，
-    所以这种引文在规范意义上是合格的。但如果原样存进 ``quote`` 字段，
-    它就不是 ``doc.text`` 的逐字子串了——§6.3 的字面要求会被破，也会让
-    "quote 必须是子串"这条本模块的红线失效。
-    用这张区间映射，可以把模型给的引文投影回原文的确切切片，
-    从而让存下去的 quote 同时满足"规范化后等价"与"字面上就是子串"。
-
-    为什么是"区间"而不是单独的起始下标：一个规范化后的字符可能来自多个
-    原始字符（``é`` ← ``e``+组合尖音符、``가`` ← 两个 Jamo），只记起始下标
-    会在算切片末尾时把这类字符截成半个，切出来的东西反而不是原文子串。
-    """
-    out: list[str] = []
-    spans: list[tuple[int, int]] = []
-    pending_space = False
-    for piece, start, end in _nfkc_clusters(text):
-        for sub in piece.casefold():
-            # 软连字符是零宽格式字符：它在视觉上不存在，只标记"这里可断行"。
-            # 早先的实现把它当成空白 ⇒ 凭空插入一个空格
-            # （"abel\u00adian" → "abel ian"），于是 PDF 断词处的真引文永远匹配不上，
-            # 被幻觉防线判成"编造的引文"剔除。正确处置是删掉它（不插入任何字符）：
-            # 引用里写的字面文本在原文里仍然逐字存在，只是中间少了一个不可见控制符。
-            if sub == "\u00ad":
-                continue
-            if sub.isspace():
-                pending_space = True
-                continue
-            if pending_space and out:
-                out.append(" ")
-                # 插入的空格不对应原文任何字符 ⇒ 零宽区间。它不可能成为匹配的
-                # 首字符（引文的首尾空白在规范化里被丢掉），所以这个区间不会被用来切片。
-                spans.append((start, start))
-            pending_space = False
-            out.append(sub)
-            spans.append((start, end))
-    return "".join(out), spans
-
-
 def _locate_verbatim(text: str, quote: str) -> str | None:
     """在 ``text`` 中定位 ``quote``，返回原文里的确切切片；定位不到返回 ``None``。
 
-    两级匹配（对应 §6.3 允许的差异范围）：
+    判据与收工门逐字相同（同一个 `textutil.project_quotes`）：投影之后
+    ``quote`` 是 ``text`` 的子串即命中，命中处经区间映射还原成原文切片。
 
-    1. 直接子串命中（最常见，零成本）；
-    2. 规范化后命中（空白折叠 / 大小写 / NFKC 全半角与连字符归一化，
-       并把软连字符当作零宽字符删除），再经区间映射还原成原文切片。
+    这一格以前是本模块自己的一份实现（NFKC + 空白折叠 + 去软连字符），而收工门
+    （`quoteverify.check_quote`）另有一份（NFC）—— 两份都自洽，于是同一句话在写侧过、
+    在门里不过。2026-11-21 真机 lp-ball-15 的 32 条剔除里，写侧与门给出不同判决的
+    那几条就是这么来的。现在只有一处真身，这里只转发。
 
     返回原文切片而不是原样返回 ``quote``，是本模块 fail-closed 设计的一半：
     调用方拿到的东西天然是 ``text`` 的子串，不需要再相信谁。
-
-    规范化必须整簇做 NFKC（见 :func:`_nfkc_clusters`）：逐字符做会把
-    "``e``+组合尖音符"与"``é``"判成两串，从而把真引文判成幻觉。
     """
-    if not quote:
-        return None
-    if quote in text:
-        return quote
-    norm_doc, spans = _normalize_with_spans(text)
-    norm_quote, _ = _normalize_with_spans(quote)
-    if not norm_quote:
-        return None
-    pos = norm_doc.find(norm_quote)
-    if pos < 0:
-        return None
-    start = spans[pos][0]
-    # 末尾用区间右端而不是"起始下标 + 1"：一个规范化字符可能来自多个原文
-    # 字符，用 +1 会把 "é"（来自 "e"+组合记号）切掉一半。
-    end = spans[pos + len(norm_quote) - 1][1]
-    return text[start:end]
+    from .textutil import locate_verbatim
+
+    return locate_verbatim(text, quote)
 
 
 def _strip_code_fence(raw: str) -> str:
@@ -909,6 +822,12 @@ class LLMExtractor:
     全部围绕"LLM 会怎么骗我们"来设计，见 ``_ground_relations``。
     """
 
+    #: 逐条留痕最多留几条（回执点名用）：再多也不会有人逐条读，
+    #: 但"只留计数"会让被剔掉的边彻底无从复核。总数另有 `relations_dropped`。
+    _MAX_DROP_ITEMS: Final = 50
+    #: 单条引文在留痕里保留多少字符：够在原文里重新定位即可。
+    _DROP_QUOTE_CHARS: Final = 400
+
     def __init__(
         self,
         client: Any,
@@ -969,6 +888,13 @@ class LLMExtractor:
         # last_report（例如无文本层提前返回的路径），不会 AttributeError。
         self._dropped_count: int = 0
         self._drop_reasons: list[str] = []
+        #: 被剔除的那几条的"名字"（原因 + 引文 + 概念名），不是只留一个计数。
+        #: 为什么必须逐条留：2026-11-21 真机 lp-ball-15 的日志里只有一行行
+        #: `quote=%r`（截到 80 字）的警告，盘上没有任何一处能回答"被剔的是哪一条、
+        #: 它到底在不在原文里" —— 于是 32 条里 29 条真引文没法被复核回来。
+        #: 这一格是给回执与事后对账用的；上限 `_MAX_DROP_ITEMS` 条、单条引文
+        #: 截到 `_DROP_QUOTE_CHARS` 字（够重新定位即可，不把整本书抄进台账）。
+        self._drop_items: list[dict[str, Any]] = []
         #: 最近一次抽取的审计信息（保留/剔除的计数与原因）。
         #: 之所以挂在实例上而不是只写日志：agent_b 的报告要统计
         #: "有多少条关系因引文无法回验被剔除"，这本身就是防幻觉的指标。
@@ -1083,6 +1009,7 @@ class LLMExtractor:
         if not doc.pages or not doc.text.strip():
             self._dropped_count = 0
             self._drop_reasons = []
+            self._drop_items = []
             self.last_report = {
                 "lit_id": lit_id,
                 "skipped": "no_text_layer",
@@ -1093,6 +1020,8 @@ class LLMExtractor:
                 "relations_kept": 0,
                 "relations_dropped": 0,
                 "drop_reasons": [],
+                "drop_items": [],
+                "drop_items_total": 0,
             }
             logger.info("LLMExtractor: 文献 %s 无文本层，跳过抽取（§6.3）", lit_id)
             return [], []
@@ -1102,13 +1031,15 @@ class LLMExtractor:
         relations: list[RelationDraft] = []
         dropped = 0
         reasons: list[str] = []
+        drop_items: list[dict[str, Any]] = []
         truncated = False
         failures: list[dict[str, Any]] = []
-        # 读数先清空：`_ground_relations` 是就地覆写这两个字段的，
+        # 读数先清空：`_ground_relations` 是就地覆写这几个字段的，
         # 不清的话"这一篇的剔除数"会带上上一篇的尾巴（同一个 extractor
         # 实例连续抽多篇是正常用法：B 的 run_once 就是这么循环的）。
         self._dropped_count = 0
         self._drop_reasons = []
+        self._drop_items = []
         for idx, (body, cut) in enumerate(bodies):
             truncated = truncated or cut
             try:
@@ -1123,6 +1054,8 @@ class LLMExtractor:
             relations.extend(self._ground_relations(payload, doc))
             dropped += self._dropped_count
             reasons.extend(self._drop_reasons)
+            # 逐条留痕也跨块累积（`_ground_relations` 每块会清自己的那一份）。
+            drop_items.extend(self._drop_items)
 
         if failures and not concepts and not relations:
             # 全灭：照旧抛（"这一篇没抽成"必须能被调用方看见并如实处置）。
@@ -1134,6 +1067,7 @@ class LLMExtractor:
         merged_relations = self._merge_relations(relations)[: self.max_relations]
         self._dropped_count = dropped
         self._drop_reasons = reasons
+        self._drop_items = drop_items[: self._MAX_DROP_ITEMS]
         self.last_report = {
             "lit_id": lit_id,
             "truncated": truncated,
@@ -1144,6 +1078,10 @@ class LLMExtractor:
             "relations_kept": len(merged_relations),
             "relations_dropped": dropped,
             "drop_reasons": list(reasons),
+            # 逐条点名（原因 + 引文 + 概念名）：`relations_dropped` 只回答"几条"，
+            # 这一格回答"哪几条" —— 没有它，被剔掉的边在盘上就无从复核。
+            "drop_items": [dict(x) for x in self._drop_items],
+            "drop_items_total": len(drop_items),
         }
         return merged_concepts, merged_relations
 
@@ -1283,6 +1221,7 @@ class LLMExtractor:
         raw_relations = payload.get("relations")
         self._dropped_count = 0
         self._drop_reasons: list[str] = []
+        self._drop_items = []
         if not isinstance(raw_relations, list):
             return []
 
@@ -1293,21 +1232,10 @@ class LLMExtractor:
                 logger.warning("LLMExtractor 达到 max_relations=%d，停止接收关系", self.max_relations)
                 break
             if not isinstance(item, dict):
-                self._record_drop("not_an_object")
+                self._record_drop("not_an_object", item=item)
                 continue
 
             quote_raw = str(item.get("quote") or "")
-            verbatim = _locate_verbatim(doc.text, quote_raw)
-            if verbatim is None:
-                # 幻觉或抄错 ⇒ 剔除。这就是防幻觉的关键一步。
-                self._record_drop("quote_not_found")
-                logger.warning(
-                    "剔除引文无法回验的关系（疑似幻觉）: lit=%s quote=%r",
-                    getattr(doc, "source_kind", "?"),
-                    quote_raw[:80],
-                )
-                continue
-
             names_raw = item.get("concept_names")
             names: list[str] = []
             if isinstance(names_raw, list):
@@ -1315,14 +1243,30 @@ class LLMExtractor:
                     text = str(n).strip()
                     if text and text not in names:
                         names.append(text)
+            verbatim = _locate_verbatim(doc.text, quote_raw)
+            if verbatim is None:
+                # 幻觉或抄错 ⇒ 剔除。这就是防幻觉的关键一步。
+                # 剔除必须留痕（`_drop_items`）：只留一个计数的话，事后没人能拿
+                # 那句引文回原文复核 —— 真引文被判成幻觉时就永远纠不回来。
+                self._record_drop("quote_not_found",
+                                  item=item, quote=quote_raw, names=names)
+                logger.warning(
+                    "剔除引文无法回验的关系（疑似幻觉）: lit=%s quote=%r",
+                    getattr(doc, "source_kind", "?"),
+                    quote_raw[:80],
+                )
+                continue
+
             if len(names) < 2:
                 # §6.1 第 5 步要求 concept_ids >= 2；只有一个概念时这条关系
                 # 表达不了任何"关系"，剔除比让它到下游被丢弃更省事。
-                self._record_drop("too_few_concepts")
+                self._record_drop("too_few_concepts",
+                                  item=item, quote=quote_raw, names=names)
                 continue
 
             if verbatim in seen_quotes:
-                self._record_drop("duplicate_quote")
+                self._record_drop("duplicate_quote",
+                                  item=item, quote=quote_raw, names=names)
                 continue
             seen_quotes.add(verbatim)
 
@@ -1339,9 +1283,31 @@ class LLMExtractor:
             )
         return out
 
-    def _record_drop(self, reason: str) -> None:
+    def _record_drop(self, reason: str, *, item: Any = None, quote: str = "",
+                     names: Iterable[str] | None = None) -> None:
+        """记一条剔除：计数 + 原因 + （尽可能）那一条的名字。
+
+        计数与原因回答"剔了几条、为什么"，`_drop_items` 回答"是哪几条" ——
+        后者是 2026-11-21 真机那 32 条里唯一能把真引文捞回来的东西：
+        盘上原来只有一行截到 80 字的日志，payload 不落盘。
+        """
         self._dropped_count += 1
         self._drop_reasons.append(reason)
+        if len(self._drop_items) >= self._MAX_DROP_ITEMS:
+            return
+        q = str(quote or "")
+        entry: dict[str, Any] = {
+            "reason": reason,
+            "quote": q[: self._DROP_QUOTE_CHARS],
+            "quote_chars": len(q),
+            "quote_truncated": len(q) > self._DROP_QUOTE_CHARS,
+            "concept_names": list(names or []),
+        }
+        if item is not None and not entry["concept_names"]:
+            # 连概念名都没有的坏条目（不是 dict / 缺字段）：留下原文片段，
+            # 否则这一条在读数里只剩一个原因码，仍然等于没点名。
+            entry["raw_excerpt"] = repr(item)[: self._DROP_QUOTE_CHARS]
+        self._drop_items.append(entry)
 
 
 class NullExtractor:

@@ -4274,6 +4274,61 @@ def _acceptance_budget_reading(store: Any) -> dict[str, Any]:
     return got
 
 
+def _literature_unprocessed_reasons(store: Any) -> dict[str, Any]:
+    """未消化 literature 行自己写的 `unprocessed_reason`（只读；三态）。
+
+    ## 为什么读点要加这一处（2026-11-21，真机 lp-ball-15）
+
+    收工门 `acceptance` 的"带着未消化队列收工"那一档，原先只认验收表那一行上的
+    `unprocessed_reason`。现场是：`literature` 里 `000018` 的 `processed` 为假，
+    而 B 早已把这一篇登记成 4 条 statements + 4 条 relations —— 它只是没走
+    `B.run_once` 的领取路径（`processed` 只在那里翻）。这一档要的"写清为什么
+    可以带着它收工"本来就只有 M 手写一条路，模型漏了就是红。
+
+    A 的收尾自驱（`agent_a/clear_stage.py`）现在会在拍尾给这种"确实消化过"的
+    行写 `unprocessed_reason`。读取端在这里认它：口径一个字不变 —— 仍然是
+    有理由 ⇒ 这一行 `unknown`（不是 pass），没理由 ⇒ 照旧 `fail`；
+    变的只是"理由可以写在哪一行"。
+
+    ## 三态
+
+    `checked=False` 是"没查成"（没有 store / 表读不出来），那时调用方不许把
+    `reason` 当成空串去解释成"没写理由"，也不许当成"有理由"；
+    `reason` 只有在每一条未消化行都有理由时才非空（缺一条就整份不算数：
+    部分理由不许冒充全部）；`missing` 逐条点名还缺哪几行。
+    """
+    out: dict[str, Any] = {"checked": False, "reason": "", "reasons": [],
+                           "missing": [], "why": ""}
+    if store is None:
+        out["why"] = "没有 store"
+        return out
+    try:
+        rows = [dict(r) for r in store.rows("literature")]
+    except Exception as exc:  # noqa: BLE001 - 读不到 ≠ 没有未消化
+        out["why"] = f"文献表读不出来（{type(exc).__name__}: {exc}）"
+        return out
+    out["checked"] = True
+    for row in rows:
+        if row.get("processed"):
+            continue
+        lit_id = str(row.get("lit_id") or "")
+        reason = str(row.get("unprocessed_reason") or "").strip()
+        if reason:
+            out["reasons"].append({"lit_id": lit_id,
+                                   "title": str(row.get("title") or ""),
+                                   "reason": reason})
+        else:
+            out["missing"].append({"lit_id": lit_id,
+                                   "title": str(row.get("title") or "")})
+    if out["missing"]:
+        out["why"] = ("这些未消化行上没有 `unprocessed_reason`："
+                      + "、".join(f"lit:{x['lit_id']}" for x in out["missing"]))
+        return out
+    out["reason"] = "；".join(f"`lit:{x['lit_id']}`：{x['reason']}"
+                             for x in out["reasons"])
+    return out
+
+
 def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
     """验收表的机器可判行：逐行现算，任一不满足 ⇒ `fail`。
 
@@ -4404,6 +4459,24 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                 _unprocessed_cache.update(
                     {"count": None, "reason": f"{type(exc).__name__}: {exc}"})
         return _unprocessed_cache
+
+    def _carried_reason(row: Mapping[str, Any]) -> tuple[str, str]:
+        """这一行"可以带着未消化队列收工"的理由从哪来：验收行优先，其次 literature 行。
+
+        返回 `(理由, 来源)`；来源是 `"row"` / `"literature_rows"` / `""`（都没有）。
+        为什么允许第二个来源：`processed` 只由 B 的 `run_once` 领取路径翻，B 手工
+        登记完的那几篇会永远停在"未消化"那一格（真机 lp-ball-15 的 `000018`）。
+        A 的收尾自驱把"确实消化过"的证据（statements / relations 条数）写成那几行
+        自己的 `unprocessed_reason`；这一格认它，但口径不变：有理由仍是 `unknown`，
+        不是 `pass`（理由的逐条位置见 `_literature_unprocessed_reasons`）。
+        """
+        reason = str(row.get("unprocessed_reason") or "").strip()
+        if reason:
+            return reason, "row"
+        got = _literature_unprocessed_reasons(store)
+        if got.get("checked") and str(got.get("reason") or "").strip():
+            return str(got["reason"]).strip(), "literature_rows"
+        return "", ""
 
     def _unprocessed_unmet(cid: str, name: str, count: int, *, own_row: bool) -> str:
         """`literature.unprocessed > 0` 且这一行没写理由时那句 unmet（两处调用共用一份文本）。
@@ -4615,9 +4688,10 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
         if kind == "unfinished_request_rows" and ok_row and not has_lit_queue_row:
             u = _unprocessed()
             count = u.get("count")
-            reason = str(row.get("unprocessed_reason") or "").strip()
+            reason, reason_source = _carried_reason(row)
             if isinstance(detail, dict):
                 detail["literature_unprocessed"] = count
+                detail["unprocessed_reason_source"] = reason_source or "none"
             if count is None:
                 why = (f"`literature.unprocessed` **读不到**（{u.get('reason')}）⇒ 「文献消化队列"
                        f"清没清零」判不了 ⇒ 这一行记 `unknown`，不记 `pass`")
@@ -4638,7 +4712,8 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                     why = (f"`literature.unprocessed` = {count} > 0 ⇒ 这一行记 `unknown`、"
                            f"不记 `pass`；可带着收工的理由已写在 `unprocessed_reason`：{reason}")
                     row_out.update({"state": "unknown", "ok": False, "unknown": True,
-                                    "reason": why, "unprocessed_reason": reason})
+                                    "reason": why, "unprocessed_reason": reason,
+                                    "unprocessed_reason_source": reason_source})
                     unknown_rows.append({"id": cid, "kind": kind, "unprocessed": int(count),
                                          "reason": why, "unprocessed_reason": reason})
                     rep.findings.append(Finding("acceptance", "acceptance_unprocessed_carried",
@@ -4656,9 +4731,10 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
         if kind == "literature_unprocessed_rows":
             u = _unprocessed()
             count = u.get("count")
-            reason = str(row.get("unprocessed_reason") or "").strip()
+            reason, reason_source = _carried_reason(row)
             if isinstance(detail, dict):
                 detail["literature_unprocessed"] = count
+                detail["unprocessed_reason_source"] = reason_source or "none"
             if count is None:
                 why = (f"`literature.unprocessed` **读不到**（{u.get('reason')}）⇒ "
                        "「文献消化队列清没清零」判不了 ⇒ 这一行记 `unknown`，不记 `pass`")
@@ -4673,7 +4749,8 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                 why = (f"`literature.unprocessed` = {count} > 0 ⇒ 这一行记 `unknown`、"
                        f"不记 `pass`；可带着收工的理由已写在 `unprocessed_reason`：{reason}")
                 row_out.update({"state": "unknown", "ok": False, "unknown": True,
-                                "reason": why, "unprocessed_reason": reason})
+                                "reason": why, "unprocessed_reason": reason,
+                                "unprocessed_reason_source": reason_source})
                 unknown_rows.append({"id": cid, "kind": kind, "unprocessed": int(count),
                                      "reason": why, "unprocessed_reason": reason})
                 rep.findings.append(Finding("acceptance", "acceptance_unprocessed_carried",
@@ -11044,12 +11121,15 @@ def machine_feeders(store: Any, *, root_task_id: str = "") -> dict[str, Any]:
 
     ## `retire` 是"收尾前自动收尾之后"的那一份（ROOTGATE-③，2026-11-19）
 
-    `final` 闸会在收工前替 M 把"静默且无未消项"的子树销掉（`_auto_retire_ready`）。
+    `final` 闸会在收工前替 M 把"静默"的子树销掉（`_auto_retire_ready`）。
     改前这里的 `retire` 读的是销号前的快照 ⇒ 最后一次 closing 必写"retire 不干净"，
     而 38 秒后框架自己清干净（真机 lp-ball-11：18:20:40–43 销了 20 个）。现在这一格
     走 :func:`autoretire.project_retire` 的只读投影（与 `_auto_retire_ready` 同一份
-    "静默且无未消项"判据）：会销哪些逐条写在 `retire.auto_retire.would_retire` 里，
-    `retire.complete` 是"销完之后干不干净"。有未消项时投影仍是不干净（反真空）。
+    判据）：会销哪些逐条写在 `retire.auto_retire.would_retire` 里，销完之后会作废
+    哪几条只剩 ack 的通知写在 `would_void` 里（RETIREFIX，2026-11-21：真机
+    lp-ball-15 的 `t-000047` / `t-000122` 就是被那 3 条 ack 通知挡住的两笔），
+    `retire.complete` 是"销完之后干不干净"。有要交付的未消项（`expects=work`）时
+    投影仍是不干净（反真空）。
     """
     root = str(root_task_id or "")
     out: dict[str, Any] = {"retire": None, "programs": None, "root": root, "why": "",

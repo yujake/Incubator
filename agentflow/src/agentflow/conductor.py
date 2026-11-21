@@ -7102,9 +7102,14 @@ class Conductor:
             item = item_state.get(item_id) or {}
             kid = item_state.get(child) or {}
             ended = str(kid.get("ended_at") or "")
+            # 读数与 `note_edge_release` 同一口径（RETIREFIX）：落痕记在"被通知的子"上，
+            # 或者（更早的写法）记在"读到并 ack 它的那个台账号"上 —— 后者由通知项自己的
+            # `seen_by` 指出来。两处读法必须一致，否则"门放行了、读数说没 ack"。
+            acked_at = str(acked_marks.get(child)
+                           or acked_marks.get(str(item.get("seen_by") or "")) or "")
             out.append({"edge": {"parent_task_id": str(parent_task_id),
                                  "child_task_id": child},
-                        "notified_at": at, "acked_at": str(acked_marks.get(child) or ""),
+                        "notified_at": at, "acked_at": acked_at,
                         "settled_at": ended, "item_id": item_id,
                         "item_state": str(item.get("item_state") or ""),
                         "timeout": bool(at and not ended)})
@@ -7143,6 +7148,12 @@ class Conductor:
             # S4-b（`draft/84` §2.2）：停止通知要 ack 才算传达到 —— 这条边如果被
             # 沿边下发过一条 notice，而那条通知还没 ack ⇒ 不许消边（负控：抹掉 ack ⇒ 拒）。
             # 只在"通知过"的边上要求（正常退役那些边没有通知项，照旧）。
+            #
+            # RETIREFIX（2026-11-21）：落痕的"子代号"有两种历史写法 —— `stop-acked:<被通知
+            # 的那条边的子>`（2026-11-21 之后的写侧，`_ack_stop_notice` 已改对）与更早的
+            # `stop-acked:<读到并 ack 它的那个台账号>`（名册名复用时两者不同：真机
+            # lp-ball-15 的通知项 t-000151 收件人是 t-000147，ack 它的是 t-000128）。
+            # 两种写法都证明"这一条通知被 ack 了"，所以两种都认；都不在 ⇒ 照旧拒。
             marks_now = [str(x) for x in (parent.get("inputs") or [])]
             pending = [m for m in marks_now
                        if m.startswith(f"{self._STOP_NOTIFIED_PREFIX}{child_task_id}@")]
@@ -7152,10 +7163,14 @@ class Conductor:
                 close = str((item or {}).get("item_close") or "")
                 acked_marks = {str(x)[len(self._STOP_ACKED_PREFIX):].split("@", 1)[0]
                                for x in marks_now if str(x).startswith(self._STOP_ACKED_PREFIX)}
-                if close != "acked" or child_task_id not in acked_marks:
+                # 通知项自己记着"谁读的"（`seen_by`）：那一格也认，理由见上面那一段。
+                reader = str((item or {}).get("seen_by") or "")
+                acked = (child_task_id in acked_marks
+                         or (reader and reader in acked_marks))
+                if close != "acked" or not acked:
                     return "", (f"{child_task_id} 的停止通知还没被确认（通知项 "
                                 f"{item_id or '未记'}：item_close={close!r}、"
-                                f"ack 落痕={'有' if child_task_id in acked_marks else '没有'}）"
+                                f"ack 落痕={'有' if acked else '没有'}）"
                                 "⇒ 不许消边：ack 才算传达到（`draft/84` §2.2）")
             marks = [str(x) for x in (parent.get("inputs") or [])]
             if mark in marks:
@@ -7216,8 +7231,9 @@ class Conductor:
         - `checked`：台账读到没有（读不成 ⇒ `False` + `reason`，绝不折成"干净"）；
         - `complete`：这一支是否全部销号（`nodes` 与 `dirty` 都空才算）；
         - `nodes`：还在册的节点，逐条给 `task_id` / `role` / `status` / `retired` /
-          `open_items` / `open_item_ids`（前 8 条）/ `state` / `state_label` /
-          `blocking` / `stalled` / `stalled_sec` ——
+          `open_items` / `open_item_ids`（前 8 条）/ `open_item_expects` 与
+          `open_item_states`（同一批前 8 条的逐条读数，RETIREFIX 加）/ `state` /
+          `state_label` / `blocking` / `stalled` / `stalled_sec` ——
           这就是拒信里那份清单；
         - `dirty`：已经销号、可名下还有未消项的节点（结构矛盾那一档，同样算不干净）；
         - `count` / `total`：还在册几个 / 这一支一共有几个节点（不含根自己）；
@@ -7297,14 +7313,16 @@ class Conductor:
                 seen.add(kid)
                 order.append(kid)
                 stack.append(kid)
-        open_items: dict[str, list[str]] = {}
+        open_items: dict[str, list[dict[str, str]]] = {}
         for row in rows:
             if not self._is_board_item(row):
                 continue
             if str(row.get("item_state") or "") == "done":
                 continue
             open_items.setdefault(str(row.get("parent_task_id") or ""), []).append(
-                str(row.get("task_id") or ""))
+                {"task_id": str(row.get("task_id") or ""),
+                 "expects": str(row.get("expects") or ""),
+                 "item_state": str(row.get("item_state") or "")})
         # 三态：整棵树一次算完（`agent_states` 是唯一实现；名册那一侧的事实只用到
         # "已销号"这一格 —— 收工闸说的"整棵树都已销号"就是 `_released_pairs` 那一条）。
         clock = clock_waiters(self.store.root)
@@ -7323,14 +7341,21 @@ class Conductor:
             pid = str(row.get("parent_task_id") or "")
             released = released_by_parent.get(pid) or set()
             retired = tid in released
-            mine = sorted(open_items.get(tid, ()))
+            mine = sorted(open_items.get(tid, ()), key=lambda x: x["task_id"])
             # 三态那一格只取一次：这个节点的 `state` / `state_label` / `stalled` /
             # `stalled_sec` 与 `blocking` 读的是同一格读数（原先每次 `three.get(tid)`
             # 再加一次 `or {}`，一个节点七遍）。判据一个字没动 —— `three` 在这之后只读。
             three_of = three.get(tid) or {}
             cell = {"task_id": tid, "role": str(row.get("role") or ""),
                     "status": str(row.get("status") or ""), "retired": bool(retired),
-                    "open_items": len(mine), "open_item_ids": mine[:8],
+                    "open_items": len(mine),
+                    "open_item_ids": [x["task_id"] for x in mine[:8]],
+                    # RETIREFIX（2026-11-21）：dirty 那一档的逐条读数。收尾前自动收尾
+                    # 只对"已被停止翻成 block 的 ack 通知"作废（`autoretire.dirty_voidables`），
+                    # 判据需要逐条的 `expects` / `item_state`；`open_item_ids` 仍只给前 8 条，
+                    # 条数对不上时那一侧一律不碰（fail-closed）。
+                    "open_item_expects": {x["task_id"]: x["expects"] for x in mine[:8]},
+                    "open_item_states": {x["task_id"]: x["item_state"] for x in mine[:8]},
                     "state": str(three_of.get("state") or AGENT_STATE_UNKNOWN),
                     "state_label": str(three_of.get("state_label") or ""),
                     # 疑似停滞：读数（拒信拿它说"其中 M 个已停滞"），不参与 complete。
@@ -7472,7 +7497,10 @@ class Conductor:
           且自身完全停止"说的是它自己，不是父 —— 见 `draft/92` §15.6 的订正）；
         - `branch="waiting_with_children"`：它不在跑，但它自己名下还有活跃子代理 ⇒ 不退役，父该看的是"它还在干什么活"。
         `reading` 里附一格 `items_open`（它名下未消的项有几条）—— 只报不拦（业主的算法里没有这一条；主控不加隐藏的
-        拦截条件，C2 的裁定）。
+        拦截条件，C2 的裁定）。RETIREFIX（2026-11-21）起另附三格 `items_open_ids`（逐条编号）/
+        `items_open_expects`（编号 → `expects`）/ `items_open_states`（编号 → `item_state`）：收尾前自动收尾要靠它们
+        判"这几条是不是框架自己在优雅停止时翻成 `block` 的 ack 通知"，而 `items_open` 那一个数判不出来
+        （`expects=work` 的义务项、`seen` 的通知、`block` 的通知在"几条"上是同一个数）。
         ## 交差那一档为什么不算"还在跑"
         交差账（`handoff_index`）上有它 ⇒ 业主 2026-10-27 第四条把它记为静默；同一份事实
         在 `agent_state` 第 ⑥ 步里也是"它不再自己跑"。两处必须同一口径，否则销号门上
@@ -7505,14 +7533,22 @@ class Conductor:
         hand = handoff_index(str(getattr(self.store, "root", "") or ""))
         handed = set(hand.get("by_task") or ()) if hand.get("checked") else set()
         active_by_parent: dict[str, int] = {}
-        items_by_parent: dict[str, int] = {}
+        #: RETIREFIX（2026-11-21）：未消项从"只数条数"改成"逐条带 `expects`"。
+        #: 为什么不多一个读数、也不改 `items_open` 的类型：`items_open` 是既有口径
+        #: （只报不拦，业主 C2），收尾前自动收尾要判的是另一件事 —— "这几条是不是
+        #: 只剩 ack 通知"，而那一格必须有逐条的 `expects` 才判得出（`b-register@`
+        #: 那种 `expects=work` 的义务项一个字节都不许被自动作废）。见 `autoretire`。
+        items_by_parent: dict[str, list[dict[str, str]]] = {}
         for r in rows:
             pid = str(r.get("parent_task_id") or "")
             if not pid:
                 continue
             if self._is_board_item(r):
                 if str(r.get("item_state") or "") != "done":
-                    items_by_parent[pid] = items_by_parent.get(pid, 0) + 1
+                    items_by_parent.setdefault(pid, []).append(
+                        {"task_id": str(r.get("task_id") or ""),
+                         "expects": str(r.get("expects") or ""),
+                         "item_state": str(r.get("item_state") or "")})
                 continue
             if (str(r.get("status") or "") in UNFINISHED_STATUSES
                     and str(r.get("task_id") or "") not in handed):
@@ -7533,7 +7569,15 @@ class Conductor:
                 branch = "waiting_no_children"
             ready.append({"task_id": tid, "role": str(r.get("role") or ""),
                           "branch": branch,
-                          "reading": {"items_open": items_by_parent.get(tid, 0)}})
+                          "reading": {"items_open": len(items_by_parent.get(tid, [])),
+                                      "items_open_ids": [x["task_id"] for x in
+                                                         items_by_parent.get(tid, [])],
+                                      "items_open_expects": {x["task_id"]: x["expects"]
+                                                             for x in
+                                                             items_by_parent.get(tid, [])},
+                                      "items_open_states": {x["task_id"]: x["item_state"]
+                                                            for x in
+                                                            items_by_parent.get(tid, [])}}})
         ready.sort(key=lambda x: x["task_id"])
         return {"checked": True, "ready": ready, "reason": ""}
 
