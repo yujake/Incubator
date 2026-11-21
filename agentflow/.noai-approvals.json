@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-21T15:44:09+08:00",
+  "generated_at": "2026-11-21T16:33:57+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -232,11 +232,11 @@
       "path": "src/agentflow/specs/a.py",
       "glob": "src/agentflow/specs/a.py",
       "category": "auth-audit",
-      "sha256": "47ef159257b91b876bfbbe4f178775cdd6e048953a4ecc134e3a40999105e12f",
+      "sha256": "ea394c9ac5a342adbf03a1318d59f6cae4716f21893e023e79681b9f27e37b33",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "SEEDREADME（p309 同版第二笔）：specs/m.py 加「用户点名 ⇒ 逐字记 RELIABLE-REFERENCES.json ⇒ 分批派 A 按清单收编 ⇒ 核 pending=0 ⇒ 未收编材料=0 ⇒ 派 B run_once」；specs/a.py 的候选链补「只对用户声明的文件建候选/收编，未声明被 not_declared_reference 受控拒」；agent 面 golden 按现值重冻（版本行 p309 + A/M 两格段文本）。reviewers=[]，登记不等于批准，待人类逐行走查。",
-      "changed_this_session": true,
+      "change_note": "CLEANFIX p311 收口：specs/a.py 的判收调用形改对（lit.admit(availability=…) → items=[{slot, availability}]，只动 duty 正文、不动动作/边界/写集）；golden 按 p311 重冻（十一格提示词逐字变的是版本行 + A 那一格）。reviewers=[]，登记不等于批准，待人类逐行走查。",
+      "changed_this_session": null,
       "reviewers": [],
       "audits": [],
       "also_hits": []
@@ -518,10 +518,10 @@
       "path": "tests/golden/agent_surface_snapshot.json",
       "glob": "tests/golden/agent_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "2471758b7e740af886fc37ab48e47ce6316ff291131d62b5203c76cab950d438",
+      "sha256": "f4f716f68b48a35d404550d909dfc605e4fbcac893f8c743aa0e374c8b115473",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "B2STAGE p310 收口：B 二阶段自驱（stage_two.py）；b.py 的 duty/边界搬进 b_ingest_policy 的 STAGE_TWO_* 以守 800 行软基线；golden 按 p310 重冻",
+      "change_note": "CLEANFIX p311 收口：specs/a.py 的判收调用形改对（lit.admit(availability=…) → items=[{slot, availability}]，只动 duty 正文、不动动作/边界/写集）；golden 按 p311 重冻（十一格提示词逐字变的是版本行 + A 那一格）。reviewers=[]，登记不等于批准，待人类逐行走查。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

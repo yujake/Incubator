@@ -3288,3 +3288,28 @@
 #:   二调命中 M+C+L，11/12 个目标有缓存落地记录）；`ROLE-GUIDE` 的 B / M 两节与 `READING-MAP` 开头读数按现盘重算；
 #:   `specs/b.py` / `specs/b_ingest_policy.py` / `specs/m.py` 在 FC-27 auth-audit ⇒
 #:   `noai_gate --paths … --baseline` 已刷新（reviewers=[]，待人类走查）。
+#: p310 → p311（2026-11-21，CLEANFIX：A 的判收调用形写错）。
+#:   现场（现树定向判据）：`tests/test_the_lean_off_render_is_scanned.py` 的
+#:   `test_param_shapes_in_the_lean_off_prompts_match_the_declarations` 红，原话
+#:   「A: lit.admit(availability=…) 的 availability 不在声明里（声明：['batch', 'items',
+#:   'new_content', 'overlap_ok', 'request_id', 'slots']）」。
+#:   根因：p309（SEEDCORPUS）那一笔在 `specs/a.py` 的「工作区里已有的文献不是「已入库」」
+#:   那一段写了一句 `lit.admit(availability="readable")` 逐条判 —— 那不是一个可执行的调用形：
+#:   ① 没有目标（`lit.admit` 要么给 `slots` / `items`，要么给 `batch`，都不给 ⇒ `no_target`）；
+#:   ② `availability` 不是顶层参数，它在 `items[]` 的逐条声明里（`_LIT_PARAMS_ADMIT_ITEM`，
+#:   落旁路台账 `data/lit_availability.jsonl` 的那一格）。改前那一句把「读正文才能判收」的
+#:   证据位教成了一次不成立的调用，模型照着写会被工具层拒。
+#:   改动：同一句改成逐条形
+#:   `lit.admit(items=[{"slot": "<槽位>", "availability": "readable"}])`（`items` 是声明里
+#:   的参数，内层键按提示词既有体例用 `:` 写，不是顶层 kwargs）。只动这一句，不改任何
+#:   动作 / 边界 / 工具面。
+#:   变化格 = A 一格（其余十格逐字未动，版本行已归一；现算见 `_FROZEN_PROMPT_DIGESTS`）。
+#:   同批的判据侧（不进提示词正文、不抬版本的那两笔）：`seedinject.py` 补进
+#:   `_AGENTFLOW_TOP_LEVEL_MODULES`；M 的 `lit.admit` / `lit.admit_all` / `lit.stage_reject`
+#:   三对跨面提及按既有先例登记进 `tests/_prompt_surface.py::EXEMPT`（owner_annotation：
+#:   同一句写明「出口只有 **A**」/「分批派 A 收编」），不删文案。
+#:   连带：`_FROZEN_PROMPT_VERSION` p310 → p311；`tests/golden/agent_surface_snapshot.json`
+#:   重冻（十一格提示词逐字变的是版本行 + A 那一格）；`tests/fixtures/prompt_cache_warm.json`
+#:   已重落（两档各一趟）；`ROLE-GUIDE` 的 A 一节按现盘重算。
+#:   `specs/a.py` 在 FC-27 auth-audit ⇒ `noai_gate --paths … --baseline` 已刷新
+#:   （reviewers=[]，待人类走查）。

@@ -286,7 +286,7 @@ SPEC = AgentSpec(
             "url: <盘上路径>, relevance: \"工作区里已有的本地文献，不是检索来的\"}])`，"
             "这一步只写候选表，`literature` 仍是 0 行；③ **判收** —— "
             "`text.extract(lit_id=\"cand:<槽位>\")` 抽正文、`fs.read` 读到那份 `.txt`、"
-            "`lit.admit(availability=\"readable\")` 逐条判，最后逐委托 `lit.admit_all` 提交"
+            "`lit.admit(items=[{\"slot\": \"<槽位>\", \"availability\": \"readable\"}])` 逐条判，最后逐委托 `lit.admit_all` 提交"
             "（提交才发号、才进 `literature`）。顺序不许换、也不许跳过建候选：拿非 dry 档把"
             "整目录一次性登记进库，等于把「盘上有文件」冒充成「判收过了」。"
             "**只有用户点名的才可入库**（业主 2026-11-21 裁定，默认 fail-closed）：M 会把用户"

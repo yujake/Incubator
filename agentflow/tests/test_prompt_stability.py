@@ -1642,6 +1642,15 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
                  "边界搬进 b_ingest_policy.py 的 STAGE_TWO_DUTY/STAGE_TWO_BOUNDARY 只为守 800 行"
                  "软基线；specs/m.py 那一句降为兜底；agent_skills.py 的 B 手册改成 self-drive）。"
                  "没有哪一格事实换过落点 ⇒ facts 键集仍 15 格，count / keys_sha256 与 p309 同值。"},
+         {"version": "p311", "count": 15,
+          "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+          "note": "抬版本 p311（2026-11-21，CLEANFIX：A 的 duty 里判收调用形写错）。"
+                  "specs/a.py 的「工作区里已有的文献不是已入库」那一段把 lit.admit 写成 "
+                  "lit.admit(availability=\"readable\")（没有目标、参数也不在顶层声明里），改成 "
+                  "items=[{\"slot\": ..., \"availability\": \"readable\"}] 的逐条形；同批的 "
+                  "seedinject 顶层模块登记与 M 的三条 lit.* 跨面豁免只动判据侧，不动任何角色段。"
+                  "变化格 = A 一格；没有哪一格事实换过落点 ⇒ facts 键集仍 15 格，count / "
+                  "keys_sha256 与 p310 同值。"},
 
 )
 

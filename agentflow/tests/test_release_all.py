@@ -4083,6 +4083,16 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                           "本人；造下一跳秘书只经装配口 `self._new_secretary(...)`",
     "secretary_surface.py": "读写面池（刀6）：surface_of / surface_alloc / surface_release / "
                             "surface_readings —— 一槽一主；退役即归还",
+    # 2026-11-21（SEEDCORPUS 批）：业主口径「下一回真机建工作区时，把这十几轮真机所有
+    # 下载成功且无乱码的文献都丢进新工作区（不直接入库）」。为什么必须是顶层模块而不是
+    # `tools/` 下的一件工具：它不注册工具、不碰工具面，只被三条建工作区的路径共用
+    # （`projects.create_project` 的开关、CLI 的 `--seed-literature`、`scripts/seed_corpus.py`
+    # 的投放动作）；放进任何角色包都会让「投种子」变成某个角色的一份实现，而它恰好是
+    # 那个角色（A）不许做的判断 —— 只放文件、不判收、不写台账。三条硬边界（只写文件 /
+    # 默认关 / 幂等）写在模块 docstring，判据在 `tests/test_seed_corpus.py`。
+    "seedinject.py": "文献种子投放（SEEDCORPUS）：seed_workspace / read_manifest / "
+                     "read_seed_reading / candidate_chain_lines —— 只把种子包复制进新工作区 "
+                     "library/ 并落 SEED-README.md，不打开 data/literature.json、不替 A 判收",
 }
 
 

@@ -2711,7 +2711,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #   十一格是 `temp/fixbatch/digest2.py` 现算（导入本文件的 `_surface_digest`，先钉
 #   `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段），不是手抄。
 #   另一笔（`lit.stage_list` 的 `note` 加「`done=True` ≠ 清表」）是运行时返回值，不进任何段。
-_FROZEN_PROMPT_VERSION = "p310"
+_FROZEN_PROMPT_VERSION = "p311"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2987,7 +2987,7 @@ _FROZEN_PROMPT_VERSION = "p310"
 #:   是因为"模型读到的 F 动作提示词"确实换了一份。这也说明这张表钉的是 system 段，
 #:   钉不住动作提示词那一面。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "4c261a743b0de5cd738924fd1178652d39e20cdba3337a63068f675a51986751",
+    "A": "00b62073a98257db832fe91499013523a0a027a193c874f39e4af4e8be93720a",
     "B": "5a7be6444dbf301c6ca14f54fbf52f3ee87ca658b0952790abf1f24a82126967",
     "C": "192fe32f807726e590892b9f2d75dab436f3213f7fdca7e298724893319403b6",
     "D": "b3773f151c8b9e196560d535a2cd8d08b30c1ca6b1b1f46283ba497961977406",

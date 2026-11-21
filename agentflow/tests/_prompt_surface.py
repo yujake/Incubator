@@ -155,6 +155,15 @@ EXEMPT: dict[tuple[str, str], Exemption] = {
     ("M", "doc.build_document"): Exemption("owner_annotation", "由 G 用 `doc.build_document`", 1, 1),
     ("M", "doc.paper_compile"): Exemption("owner_annotation", "只有 G 拿得到", 6, 6),
     ("M", "doc.write_mapping"): Exemption("owner_annotation", "G 调 `doc.write_mapping`", 1, 1),
+    # 2026-11-21（SEEDCORPUS / 收口 CLEANFIX）：M 的「两张表、两条队列、两个出口」那一段
+    # 逐字点名了 A 的三个 lit 工具（候选表 `lit_candidates` 的出口只有 A）。施事写在同一句里
+    # （「出口只有 A」/「分批派 A 收编」）⇒ owner_annotation，不是教 M 调它们。
+    # `lit.admit` 的次数是 2：一次独立出现，一次是 `lit.admit_all` 的前缀（`text.count` 的读数，
+    # 扫描器按 token 边界只算前者一次；两处属于同一句转述）。锚点字符串里的强调号原样保留
+    # （它要与渲染文本逐字相等）。
+    ("M", "lit.admit"): Exemption("owner_annotation", "出口只有 **A**", 2, 2),
+    ("M", "lit.admit_all"): Exemption("owner_annotation", "**逐委托** `lit.admit_all` 提交", 1, 1),
+    ("M", "lit.stage_reject"): Exemption("owner_annotation", "分批派 A 收编", 2, 2),
     ("M", "manuscripts.list"): Exemption("negation_note", "主控 M 没有这两件工具", 1, 1),
     ("M", "manuscripts.read"): Exemption("negation_note", "主控 M 没有这两件工具", 2, 2),
     ("M", "review.record_finding"): Exemption("partner_quote", "", 1, 1),

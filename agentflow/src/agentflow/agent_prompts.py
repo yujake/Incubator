@@ -28,7 +28,7 @@ from . import policy as POL
 from . import schema as S
 from . import specs as _SPECS_PKG
 from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDERS
-PROMPT_VERSION = "p310"
+PROMPT_VERSION = "p311"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：
