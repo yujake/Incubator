@@ -276,6 +276,20 @@ CHAIN_ONLY: dict[str, dict[str, str]] = {
         "does_not_prove": "真机里第二份证明由 F 自己交、由 B 的循环收（入口与判定面都不是产品那条）。",
         "superseded_by": "",
     },
+    "test_rehearsal_seedreh_workspace_ingest.py": {
+        "chain": "A · 工作区里的本地文献 → 判收 → 提交（发现 / 抽读 / 判收 / 清表）",
+        "reason": "直调 `build_for_role(\"A\")` 的注册表（`search.ingest_local` / `lit.*` / "
+                  "`text.extract` / `fs.read` 全是真工具），没有 CLI 入口、也没有 "
+                  "`LlmSeam.ask` —— 这一步的「模型」是判据自己，所以三格没有对象。"
+                  "两条反真空各打桩一次（`litavail.content_read` / `litread.fulltext_tier`），"
+                  "打桩只用于证明正控不是真空的。",
+        "proves": "工作区里现成的真 PDF 能不能走完「发现 → 候选 → 抽读+读 → 判收 → 提交」，"
+                  "以及乱码 / 仅题录 / 同 DOI 三条负控各落在哪个受控码上。",
+        "does_not_prove": "真机里 A 的模型会不会真的按这五步走（提示词面由 "
+                          "`test_a_retrieval_hands_off_to_b.py` 与真机趟数管）；"
+                          "三格的格②（caller_role）与格③（账本行）没有对象。",
+        "superseded_by": "",
+    },
 }
 
 

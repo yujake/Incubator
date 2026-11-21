@@ -12519,6 +12519,128 @@ class AgentLoop:
                     "reason": f"{want} 不在我名下的名册里（{problem}）⇒ 越界的不许查"}
         return self.secretary.roster_view(owner=tid, scope=scope)
 
+    def _in_flight_instances(self) -> dict[tuple[str, str], dict[str, Any]]:
+        """这一趟派出去、还没落定的 `(角色, 实例)` ⇒ `{state, task_id, waiting_on}`。
+
+        ## 为什么必须问句柄，不能问台账或名册
+
+        排队项在这两处都没有落点：`task_id` 是 `None`，要等前一波落定才建任务行，
+        名册登记也发生在建行之后。真机 `projects/lp-ball-14` 的双开就是从这里漏出去的：
+        M 在 01:12:07 重派三个同名实例时，台账上那三个 D 一行都没有（所以任何一个
+        "查台账"的判据都会读到"没派过"），唯一记得它们的是这一批的句柄。
+
+        两档分开，不折平：`running`（已派出、有编号）/ `queued`（分波排队，
+        `waiting_on` 里列出它前面那一波还在跑的编号 —— 那是"预期何时开"唯一说得准的形态，
+        因为耗时不可预测，而"等哪几个落定"是可判定的）。
+
+        空实例标签不收：空串 = 这个角色只有那一个实例，不构成"点名重派"。
+        """
+        out: dict[tuple[str, str], dict[str, Any]] = {}
+        for rec in list(self._child_handles):
+            handle = rec.get("handle")
+            if handle is None:
+                continue
+            calls = list(rec.get("calls") or ())
+            if str(rec.get("kind")) == "summon_many" and calls:
+                settled: dict[int, Any] = {}
+                taken = getattr(handle, "settled_by_index", None)
+                if callable(taken):
+                    settled = dict(taken() or {})
+                dispatched: dict[int, str] = {}
+                dispatched_fn = getattr(handle, "dispatched", None)
+                for row in (list(dispatched_fn() or ()) if callable(dispatched_fn) else []):
+                    if not isinstance(row, Mapping):
+                        continue
+                    try:
+                        dispatched[int(row.get("index"))] = str(row.get("task_id") or "")
+                    except (TypeError, ValueError):
+                        continue
+                waiting_on = [tid for k, tid in sorted(dispatched.items())
+                              if tid and k not in settled]
+                for i, call in enumerate(calls):
+                    if i in settled:
+                        continue
+                    key = (str(getattr(call, "role", "") or ""),
+                           str(getattr(call, "instance", "") or ""))
+                    if not key[0] or not key[1]:
+                        continue
+                    out.setdefault(key, {
+                        "state": ("running" if dispatched.get(i) else "queued"),
+                        "task_id": dispatched.get(i) or "",
+                        "waiting_on": list(waiting_on),
+                    })
+                continue
+            role = str(getattr(handle, "role", "") or "")
+            instance = str(getattr(handle, "instance", "") or "")
+            if not role or not instance:
+                continue
+            done = getattr(handle, "done", None)
+            if callable(done) and done():
+                continue
+            out.setdefault((role, instance), {
+                "state": "running",
+                "task_id": str(getattr(handle, "task_id", "") or ""),
+                "waiting_on": [],
+            })
+        return out
+
+    def _instance_name_clash(self, calls: Sequence[Any],
+                             named: Sequence[str]) -> list[dict[str, Any]]:
+        """这一批里点了"还在飞"的实例名的 target（判据见 `_do_summon_many`）。
+
+        两种形态都算冲突：同一批里同一个 `(角色, 实例)` 出现两次；或者那个名字
+        已经被这一趟还没落定的一项占着。
+        """
+        in_flight = self._in_flight_instances()
+        seen: set[tuple[str, str]] = set()
+        out: list[dict[str, Any]] = []
+        for call, name in zip(calls, named):
+            if not name:
+                continue
+            role = str(getattr(call, "role", "") or "")
+            key = (role, name)
+            if key in seen:
+                out.append({"role": role, "instance": name,
+                            "state": "duplicate_in_batch", "task_id": "", "waiting_on": []})
+                continue
+            seen.add(key)
+            got = in_flight.get(key)
+            if got:
+                out.append({"role": role, "instance": name,
+                            "state": str(got.get("state") or ""),
+                            "task_id": str(got.get("task_id") or ""),
+                            "waiting_on": list(got.get("waiting_on") or ())})
+        return out
+
+    def _same_instance_refusal(self, clash: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+        """把"同名重派"的命中渲染成受控拒（拒信必须点出它现在的状态与何时会开）。"""
+        lines: list[str] = []
+        for v in clash:
+            state = str(v.get("state") or "")
+            where = {
+                "queued": "还在排队（分波：前一波落定后会自动开跑）",
+                "running": "还在跑",
+                "duplicate_in_batch": "在这一批里出现了两次（同名实例只能有一个）",
+            }.get(state, "还在飞（状态读不出来）")
+            tid = str(v.get("task_id") or "")
+            waiting = "、".join(str(x) for x in (v.get("waiting_on") or ()) if str(x))
+            when = (f"；等 {waiting} 落定后自动开跑" if (state == "queued" and waiting) else "")
+            lines.append(f"- {v.get('role') or '?'} 的实例 {v.get('instance') or '?'}：{where}"
+                         + (f"（编号 {tid}）" if tid else "") + when)
+        detail = (
+            "这一批没有出去：有 target 点了一个还在飞（排队或运行中）的实例名。"
+            "它不是没落地，是还没轮到 —— 排队的那一个会在前一波落定后自己开跑。\n"
+            + "\n".join(lines) + "\n"
+            "改法：① 要它把这一件活做完 ⇒ 不要重派，等它回来（结局会在返场时投给你，"
+            "排队的那一个不需要第二次派活）；② 要另起一件新活 ⇒ 换一个新的 instance 标签。"
+        )
+        return {"summoned": [], "count": 0, "ok": False,
+                "outcome": "refused",
+                "refused": "dispatch_names_an_active_instance",
+                "refusal_reason": "invalid_params",
+                "error": detail, "detail": detail, "executed": False,
+                "violations": [dict(v) for v in clash]}
+
     def _do_summon_many(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """一次派一批活（并发）：走 `Conductor.run_plan`，按写集分波、同波并发。
 
@@ -12563,6 +12685,10 @@ class AgentLoop:
         briefs: list[str] = []
         tasks: list[str] = []
         blank: list[str] = []
+        #: 每个 target 显式点名的实例标签（与 `calls` 同序；空串 = 没点名）。
+        #: 只收显式那一格：`<角色>#N` 是这一批里的占位编号、跨批会重用 —— 拿它判
+        #: 「同名重派」会把两批互不相干的新活拦下来。
+        named: list[str] = []
         for t in targets:
             instance = str(t.get("instance") or "")
             if not instance and str(t.get("role")) in auto:
@@ -12581,6 +12707,7 @@ class AgentLoop:
                 continue
             if not t_action:
                 t_params["task"] = t_task
+            named.append(str(t.get("instance") or ""))
             calls.append(SC.TaskCall(role=str(t.get("role")), action=t_action,
                                      params=t_params, by=self.role,
                                      parent_task_id=owner,
@@ -12600,6 +12727,18 @@ class AgentLoop:
             return {"summoned": [], "ok": False, "count": 0,
                     "error": ("这批里有 target 没写清活（role="
                               + "、".join(blank) + "）：`task` 必填")}
+        # ---- 同名实例不许二次派活（WAVEFIX，2026-11-21）
+        #
+        # 现场（`projects/lp-ball-14`）：step 2 一次派 4 个，A 与三个 D 的写集在
+        # `search_requests` 相交 ⇒ 三个 D 排队 44 分钟；M 在 01:12:07 把「排队」
+        # 读成「没落地」，用同一批 instance 名（2d / 3d / lit-bridge）又派了一遍 ——
+        # 排队波在 01:31:26 自动开跑 ⇒ 同名实例双开（重叠 33s / 113s / 271s），
+        # 重复花 $0.1350、experiments 10/22 被 voided。
+        # 排队项在这之前没有任何结构性拦截：它没有 task 行（task_id=null），
+        # 名册登记也要等建行之后 ⇒ 唯一知道「它还在排队」的地方是这一批的句柄。
+        clash = self._instance_name_clash(calls, named)
+        if clash:
+            return self._same_instance_refusal(clash)
         # 父是谁要挂到上下文里（`run_plan` 的队列认领那一步从这里读）—— 不走形参，
         # 见 `conductor.consuming_as` 的理由（一批判据的替身函数不接受新形参）。
         from .conductor import consuming_as
@@ -12658,15 +12797,36 @@ class AgentLoop:
                 #   · 还没有编号 ⇒ 它还在排队（分波：前一波没落定，这一波不许开跑）。
                 # 折成一档会让「3 个在跑」与「1 个在跑、2 个排队」读成同一件事。
                 tid = dispatched.get(i) or ""
+                if tid:
+                    items.append({"role": call.role, "action": call.action,
+                                  "instance": call.instance,
+                                  "task_id": tid,
+                                  "status": "running", "outcome": None,
+                                  "refusal_reason": None,
+                                  "detail": ("还在跑：本步先不等（可抢占）；它回来之后"
+                                             "结局会在下一次返场时投给你"
+                                             "（不要重派：同名实例的二次派活会被受控拒）")})
+                    continue
+                # 排队项：除了"还没派出去"，还要交出"它前面挡着谁、什么时候会开"
+                # （WAVEFIX 的 ③）。改前这里只有一句"会在前一波落定后被派出去"，
+                # M 读成"没落地"就去重派了 —— 而那时排队项连 task 行都没有，
+                # 任何一个只查台账的判据都会同意它"没派过"。
+                waiting = [str(t) for k, t in sorted(dispatched.items())
+                           if t and k not in by_index]
+                expected = (f"等 {'、'.join(waiting)} 落定后自动开跑" if waiting
+                            else "前一波落定后自动开跑")
                 items.append({"role": call.role, "action": call.action,
                               "instance": call.instance,
-                              "task_id": tid or None,
-                              "status": ("running" if tid else "pending"), "outcome": None,
+                              "task_id": None,
+                              "status": "pending", "outcome": None,
                               "refusal_reason": None,
-                              "detail": ("还在跑：本步先不等（可抢占）；它回来之后"
-                                         "结局会在下一次返场时投给你" if tid else
-                                         "还在排队（分波：前一波还没落定）⇒ 还没派出去；"
-                                         "它会在前一波落定后被派出去，结局同样在返场时投给你")})
+                              "queued": True,
+                              "queued_behind": waiting,
+                              "expected_start": expected,
+                              "detail": ("还在排队（分波：前一波还没落定）⇒ 还没派出去；"
+                                         f"{expected}。它不是没落地，不要重派"
+                                         "（同名实例的二次派活会被受控拒），"
+                                         "结局会在返场时投给你")})
                 continue
             items.append({"role": call.role, "action": call.action, "instance": call.instance,
                           "task_id": r.task_id, "status": r.status, "outcome": r.outcome,
@@ -12689,10 +12849,22 @@ class AgentLoop:
             out["dispatched"] = [i["task_id"] for i in items if i.get("task_id")]
             out["running"] = [i["task_id"] for i in items
                               if i["status"] == "running" and i.get("task_id")]
+            queued_items = [i for i in items if i.get("queued")]
+            if queued_items:
+                # 排队项单独一格（WAVEFIX 的 ③）：`status=pending` + `queued=true`
+                # 说的是"还没轮到"，不是"没落地、要重派"。`expected_start` 给的是
+                # "等哪几个编号落定"——耗时不可预测，这个条件是可判定的。
+                out["queued"] = [{"role": i["role"], "instance": i["instance"],
+                                  "queued_behind": list(i.get("queued_behind") or ()),
+                                  "expected_start": str(i.get("expected_start") or "")}
+                                 for i in queued_items]
             out["how_to_get_the_rest"] = (
                 "这一批还没跑完，所以 `results` 里状态为 running 的那几项还没有结局。"
                 "它们回来之后，框架会在你下一次被问之前以【子代理返场】投给你"
                 "（不必再派一次，也不要因为 status=running 就重试）。"
+                "`queued=true` 的那几项是分波排队（还没轮到，不是没落地）：它们会在"
+                "`expected_start` 说的那一波落定后自动开跑，同样不要重派 —— "
+                "用同名 instance 再派一次会被受控拒（`dispatch_names_an_active_instance`）。"
                 "在那之前你仍拿得到回合：可以 watch 全树、guide 给指导、补派新活；"
                 "收工（final）会被拒到它们回齐。")
         # ---- 名册登记：读数在这里，写字不在这里（2026-10-21 收口）

@@ -15,6 +15,7 @@
 真机掉下去的地方。"""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -65,6 +66,13 @@ def _store(tmp_path: Path) -> Store:
     (tmp_path / "data").mkdir(exist_ok=True)
     (tmp_path / "source").mkdir(exist_ok=True)
     (tmp_path / "source" / "external.md").write_text(PAPER_MD, encoding="utf-8")
+    # 2026-11-21 起 `A.ingest_local` / `search.ingest_local` 的非 dry 档按用户声明核
+    # （fail-closed：没点名的不许入库）。这一组判的是"登记这条路本身"，所以把 source/
+    # 整目录声明成用户点名的可靠参考文献。
+    (tmp_path / "RELIABLE-REFERENCES.json").write_text(
+        json.dumps({"paths": ["source/"], "verbatim": "source/ 里都是可靠参考文献"},
+                   ensure_ascii=False),
+        encoding="utf-8")
     st = Store(tmp_path)
     st.init()
     return st

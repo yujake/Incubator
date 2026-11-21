@@ -243,3 +243,82 @@ def test_c2_reverting_the_scope_drops_the_old_delegation_from_run_once(
     assert set(getattr(res, "claimed_delegations", []) or []) != {RID_A, RID_B}, (
         "把作用域改回当前委托之后 run_once 仍认领了两个委托 —— b 不是打在作用域上")
     assert list(getattr(res, "claimed_delegations", []) or []) == [RID_B], res.to_dict()
+
+
+# ====================================================================== d 回执读数
+#
+# 2026-11-21（ASEARCH，真机 lp-ball-14）：4 个委托共 24 条候选留成 pending
+# （r-000011 15 / r-000012 2 / r-000013 4 / r-000014 3），而 A 交给召唤方的
+# `search_literature` 回执里一格待裁读数都没有（只活在 rounds[] 的嵌套值里，
+# 还会被 payload_preview 的 2000 字截掉）⇒ M 看不见、收工门却数得着。
+
+
+class _NoHits:
+    """确定性检索源替身：查了、0 命中（本组判据测的是回执，不是检索本身）。"""
+
+    name = "stub"
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def search(self, topic, mode, description="", limit=10):
+        self.calls += 1
+        return []
+
+
+def _receipt_problems(got: dict, rids: set[str]) -> list[str]:
+    """回执的待裁读数缺了什么（空 = 全表每一格都报到了）。"""
+    out: list[str] = []
+    for key in ("pending_total", "pending_by_delegation", "pending_scope_note"):
+        if key not in got:
+            out.append(f"回执里没有 `{key}`")
+    seen = {str(g.get("request_id")) for g in got.get("pending_by_delegation") or []}
+    out += [f"回执的分组里没有委托 {rid}" for rid in sorted(rids - seen)]
+    note = str(got.get("pending_scope_note") or "")
+    out += [f"回执的待裁说明里没有委托 {rid}" for rid in sorted(rids) if rid not in note]
+    return out
+
+
+def test_d_search_literature_receipt_reports_the_whole_table(store: Store) -> None:
+    """d. `search_literature` 的回执要带全表待裁（数字 + 分组 + 一句能照做的话）。"""
+    reg = build_for_role("A", store=store, workspace_root=store.root).registry
+    reg.bound_role = "A"
+    _stage(reg, RID_A, ["Old delegation paper"], doi_prefix="10.21")
+    _stage(reg, RID_B, ["Current delegation paper"], doi_prefix="10.22")
+    assert _pending_total(store) == 2, _pending_total(store)
+
+    agent = AgentA(store, providers=[_NoHits()], downloader=None,
+                   config={"download": False, "lease_seconds": 900,
+                           "max_attempts": 3, "retry_backoff_seconds": 0})
+    got = agent.search_literature(topic="cube slicing", mode="topical")
+    assert got.get("ok") and got.get("admitted"), got
+    assert got.get("pending_total") == 2, got
+    assert _receipt_problems(got, {RID_A, RID_B}) == [], got
+
+    # 反真空：把这三个键从回执里抽掉（= 改前的形状）⇒ 同一个检查必须点名报缺。
+    doctored = {k: v for k, v in got.items()
+                if k not in ("pending_total", "pending_by_delegation", "pending_scope_note")}
+    assert _receipt_problems(doctored, {RID_A, RID_B}) != [], (
+        "抽掉待裁读数之后检查仍说'全报到了' —— 这条判据是橡皮图章")
+
+
+def test_d2_run_once_receipt_says_pending_in_a_sentence(store: Store) -> None:
+    """d2. `run_once` 的回执除了数字，还要有一句待裁说明（0 也写，不是空串）。"""
+    reg = build_for_role("A", store=store, workspace_root=store.root).registry
+    reg.bound_role = "A"
+    _stage(reg, RID_A, ["Old delegation paper"], doi_prefix="10.21")
+
+    res = _agent_a(store).run_once()
+    data = res.to_dict()
+    assert data.get("pending_total") == 1, data
+    note = str(data.get("pending_note") or "")
+    assert note and RID_A in note, data
+
+    # 结清之后同一格要写成"0 条"这句话，而不是空串（'没有遗留'与'没报'必须分得开）。
+    slots = [str(r["slot"]) for r in store.rows("lit_candidates")
+             if str(r.get("request_id")) == RID_A]
+    _judge(reg, store, RID_A, slots)
+    _submit(reg, RID_A)
+    again = _agent_a(store).run_once().to_dict()
+    assert again.get("pending_total") == 0, again
+    assert "0 条" in str(again.get("pending_note") or ""), again

@@ -211,6 +211,12 @@ def _workspace(base: pathlib.Path) -> Store:
     (root / "books").mkdir(parents=True, exist_ok=True)
     (root / "books" / "notes.txt").write_text(TEXT, encoding="utf-8")
     (root / "empty_books").mkdir(parents=True, exist_ok=True)
+    # 2026-11-21 起非 dry 档按用户声明核（fail-closed：没点名的不许入库）。
+    # 这一组判的是 M→A→B 那条链本身，所以把 books/ 整目录声明成用户点名的可靠参考文献。
+    (root / "RELIABLE-REFERENCES.json").write_text(
+        json.dumps({"paths": ["books/"], "verbatim": "books/ 里都是可靠参考文献"},
+                   ensure_ascii=False),
+        encoding="utf-8")
     (root / "demo" / "fixtures").mkdir(parents=True, exist_ok=True)
     (root / "demo" / "fixtures" / "candidates.json").write_text("[]", encoding="utf-8")
     return st

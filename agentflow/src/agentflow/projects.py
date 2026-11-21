@@ -288,12 +288,19 @@ def _load_card(path: Path) -> dict:
 
 
 def create_project(ref: ProjectRef, *, now: str | None = None,
-                   force_nonempty: bool = False) -> dict:
+                   force_nonempty: bool = False,
+                   seed_literature: bool = False) -> dict:
     """按 `ref` 建/初始化工作区，并写一张项目卡。冷启动/收编才调用它。
 
     `force_nonempty=True` 只由 `adopt_project` 在"用户自己往文件夹里丢过东西"
     那一档传进来（口径）；它只是对 `Store.init` 那道
     "外来目录"守卫开一次口子，不改变本函数对文件的任何行为。
+
+    `seed_literature=True` 时（默认关）在建好骨架之后把历史真机种子投进
+    `library/seed/` 并落 `SEED-README.md`。投放只写文件、不写任何台账
+    （`data/literature.json` 保持 0 行）—— 判收是 A 的事，见
+    :mod:`agentflow.seedinject` 的模块 docstring。开关缺省关，普通建工作区
+    一个字节都不多投。
     """
     from . import schema as S
 
@@ -318,11 +325,18 @@ def create_project(ref: ProjectRef, *, now: str | None = None,
     card["cold_runs"] = sum(1 for r in runs if r.get("mode") == "cold")
     (ref.path / "project.json").write_text(
         json.dumps(card, ensure_ascii=False, indent=1, default=str) + "\n", encoding="utf-8", newline="\n")
+    if seed_literature:
+        # 放在骨架与项目卡之后：种子只是 library/ 下的文件，不是工作区的一部分；
+        # 先投种子会让 store.init 把它们当成"外来条目"（守卫会拒）。
+        from . import seedinject as SI
+
+        SI.seed_workspace(ref.path)
     return card
 
 
 def adopt_project(root: str | Path, *, name: str | None = None, now: str | None = None,
-                  allow_nonempty: bool = True) -> dict[str, Any]:
+                  allow_nonempty: bool = True,
+                  seed_literature: bool = False) -> dict[str, Any]:
     """把一个用户自己建的、里面已经有东西的文件夹收编成项目。
 
     业主的原话：「要知道有时候用户会自己在 projects 里建文件夹，然后把几个文件丢进去，
@@ -363,7 +377,8 @@ def adopt_project(root: str | Path, *, name: str | None = None, now: str | None 
                 "card": _load_card(path), "adopted": [], "created": False}
     # 收编/冷启动：骨架照铺；`force=True` 这一处只为"非空"开（用户自己的文件不动）
     card = create_project(ProjectRef(chosen, path, False, "cold", f"收编：{why}", "auto"),
-                          now=now, force_nonempty=_nonempty_ok(path, state))
+                          now=now, force_nonempty=_nonempty_ok(path, state),
+                          seed_literature=seed_literature)
     if before:
         card = _remember_user_files(path, before, now=now)
     return {"project": ProjectRef(chosen, path, True, "warm",
@@ -449,7 +464,8 @@ def seed_source_paper(project: str | Path, *, paper: str | Path,
 
 def create_review_project(root: str | Path, *, paper: str | Path,
                           name: str | None = None, now: str | None = None,
-                          force: bool = False) -> dict[str, Any]:
+                          force: bool = False,
+                          seed_literature: bool = False) -> dict[str, Any]:
     """正常地建一个审阅型项目：走 `resolve(start="cold")` 的守卫 + 骨架 + 铺那篇论文。
 
     与手抄的区别（这才是"打通"）：外来目录/已存在的目录在 `resolve` 那一层就被拒
@@ -458,7 +474,7 @@ def create_review_project(root: str | Path, *, paper: str | Path,
     """
     # 用户自己建的目录（里面已经有东西）也走这条路：`adopt_project` 收编它、
     # 把原有条目记进项目卡，再铺论文（口径）。
-    got = adopt_project(root, name=name, now=now)
+    got = adopt_project(root, name=name, now=now, seed_literature=seed_literature)
     proj = Path(got["project"]["path"])
     seeded = seed_source_paper(proj, paper=paper, force=force)
     return {"project": got["project"], "card": got["card"],
@@ -735,7 +751,8 @@ def run_project(root: Path | str, *, name: str | None = None, start: str = "auto
                 now: str | None = None, transport: Any = None,
                 text_store_dir: str | Path | None = None,
                 budget_usd_explicit: bool = False,
-                run_topic_fn: Any = None) -> dict:
+                run_topic_fn: Any = None,
+                seed_literature: bool = False) -> dict:
     """跑一个项目：解析工作区 → （冷启动则建）→ 登记本地书 → 端到端一次 → 记项目卡。
 
     `budget_usd_explicit=True` 表示这个额度是调用方（CLI 的 `--budget-usd`）显式给的：
@@ -746,6 +763,8 @@ def run_project(root: Path | str, *, name: str | None = None, start: str = "auto
     这一趟就已经花过钱了。所以"工作区已存在、还没花钱"那个时刻只在这个函数里。
 
     `run_topic_fn` 是给测试用的接缝（不传就用真的 `runflow.run_topic`）。
+    `seed_literature=True` 只在冷启动那一趟生效：把历史真机种子投进 `library/seed/`
+    （只放文件、不写台账），读数落在返回值的 `seed` 格里。默认关。
     返回 `{"project", "run", "result", "budget"}`；`result` 就是 `run_topic` 的那份字典
     （含 `exit_code` / `reason` / `artifacts` / `spent_usd_this_run`）。
     """
@@ -756,7 +775,18 @@ def run_project(root: Path | str, *, name: str | None = None, start: str = "auto
     ref = resolve(root, name, start=start)
     notes: list[str] = []
     if ref.mode == "cold":
-        create_project(ref, now=now)
+        create_project(ref, now=now, seed_literature=seed_literature)
+    # 种子读数只读地取：`create_project` 已经投过（只在新工作区投），这里再问一次是为了
+    # 拿到"这一次到底投成了没有"的读数 —— 投过时 `seed_workspace` 只回 already（幂等），
+    # 没投成时它会把问题原样带回来（不把坏种子折成"没有种子"）。
+    seed_reading: dict[str, Any] = {}
+    if seed_literature:
+        from . import seedinject as SI
+
+        attempt = SI.seed_workspace(ref.path) if ref.mode == "cold" else {}
+        seed_reading = SI.read_seed_reading(ref.path)
+        if attempt.get("problem"):
+            seed_reading["problem"] = attempt["problem"]
     # 项目卡只读一次：热启动原先"读一次查 card_unreadable、紧接着再读一次进 card"，
     # 两次之间没有任何写盘（`create_project` 只在冷启动那一支走），两次读的是同一份。
     card = _load_card(ref.path)
@@ -882,7 +912,7 @@ def run_project(root: Path | str, *, name: str | None = None, start: str = "auto
         json.dumps(card, ensure_ascii=False, indent=1, default=str) + "\n", encoding="utf-8", newline="\n")
 
     return {"project": ref.to_dict(), "run": record.to_dict(), "result": result,
-            "budget": budget_landing}
+            "budget": budget_landing, "seed": seed_reading}
 
 
 # --------------------------------------------------------------------------- #

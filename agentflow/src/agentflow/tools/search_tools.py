@@ -48,7 +48,7 @@ from .. import litread as LR
 from .. import providers as P
 from .. import schema as S
 from .. import textutil as T
-from ..litstage import LitStageError
+from ..litstage import CONTENT_CLAIM_WITHOUT_READ, LitStageError
 from ..store import Store, StoreError
 
 __all__ = [
@@ -1641,13 +1641,35 @@ def _h_ingest_local(ctx: _Ctx, books_dir: str, pattern: str = "*.pdf",
             "未配置 store：没有库就没有书架可登记（不是「目录里没有书」）。",
             kind="no_store", recorded=False,
         )
-    from ..locallib import ingest_directory
+    from ..locallib import (DECLARATION_NAME, ingest_directory,
+                            undeclared_workspace_books)
 
     base = Path(books_dir)
     target = base if base.is_absolute() else (ctx.workspace / base)
     if not target.is_dir():
         return fail(f"目录不在盘上：{target}", kind="io_error", recorded=False,
                     books_dir=str(target))
+    # 用户声明闸（2026-11-21 业主裁定，fail-closed）：只有用户提示词里点名的文件/目录
+    # 才可入库；没点名的一律只能当研究参考。`dry_run` 是发现档（零写入）⇒ 不拦；
+    # 非 dry 档是"直接写 literature 行"的那条路 ⇒ 一份未声明就整笔拒、零写入。
+    # 真身：`locallib.DECLARATION_NAME` / `locallib.is_declared`（M 落盘的那份清单）。
+    if not dry_run:
+        undeclared, decl_problem = undeclared_workspace_books(
+            ctx.store.root, target, pattern=pattern or "*.pdf")
+        if undeclared:
+            names = "、".join(undeclared[:5]) + ("…" if len(undeclared) > 5 else "")
+            why = f"声明读不出来（{decl_problem}）" if decl_problem else "这些文件未被用户点名"
+            return fail(
+                f"这不是一次可以入库的登记：{why}（{names}）。默认 fail-closed："
+                "没有声明 ⇒ 不许入库 —— 未点名的文件只能当研究参考（可读），不进 "
+                f"`literature`。处置：让 M 先把用户声明记下来（把用户提示词里点名的"
+                f"文件/目录逐字记进工作区根的 `{DECLARATION_NAME}`，形如 "
+                "{\"paths\": [\"a.pdf\", \"b/\"], \"verbatim\": \"<用户原话>\"}）；"
+                "清单为空就说明用户这一次没有点名，那这一批一份都不许收编。本次零写入。",
+                kind="not_declared_reference", recorded=False,
+                books_dir=str(target), undeclared=undeclared,
+                declaration=str(ctx.store.root / DECLARATION_NAME),
+                dry_run=False)
     try:
         report = ingest_directory(
             ctx.store, target, limit=limit, pattern=pattern or "*.pdf",
@@ -1681,6 +1703,30 @@ def _h_ingest_local(ctx: _Ctx, books_dir: str, pattern: str = "*.pdf",
     })
 
 
+def _content_claim_refusal(summary: str, *, read_ok: bool) -> Any:
+    """正文闸：`content_read=false` 时 `summary` 里有内容性断言 ⇒ 受控拒（否则 `None`）。
+
+    判据不在这里另写一份：哪些话算"内容性断言"是 `litavail.content_assertion`
+    （与 `litstage._content_assertion_gate` 同一函数），受控码也共用
+    `litstage.CONTENT_CLAIM_WITHOUT_READ`。"读没读到正文"由调用方按
+    `litavail.content_read` 现算后经 `read_ok` 交进来（两条入口：候选链现算真值、
+    直写路恒 `False`）。
+    """
+    claim = LAV.content_assertion(summary)
+    if not claim or read_ok:
+        return None
+    return fail(
+        f"search.register 不收内容性断言：`content_read=false`（这一条直写路"
+        f"没有可复核的'读过正文'证据）而 summary 里写了 {claim!r} ⇒ 那一句不是"
+        "读出来的。改法二选一：① summary 只写题录性说明（题名 / 作者 / 这是一篇"
+        "什么文献，以及'为什么与本次检索相关'）；② 要写正文里的东西，走候选链："
+        "`lit.add` → `text.extract` → `fs.read` → `lit.admit`"
+        "（那里 `content_read` 由机器现算，同一道闸会替你算）。本行未写入。",
+        kind=CONTENT_CLAIM_WITHOUT_READ,
+        field="summary", claim=claim, content_read=False,
+    )
+
+
 def _h_register(
     ctx: _Ctx,
     title: str,
@@ -1690,12 +1736,20 @@ def _h_register(
     doi: str | None = None,
     year: int | None = None,
     request_id: str | None = None,
+    *,
+    read_ok: bool = False,
 ) -> Any:
     """``search.register``：走 ``tx`` + ``alloc_id("lit")`` 建一条 literature 行。
 
     先判重再建行：命中已有行时复用它的代号，只追加 ``source_request_ids``。
     这不是"偷懒"——同一篇文献出现两个代号会污染全部下游溯源（``lit_id`` 是
     关系表、引文校验、报告引用的共同锚点）。
+
+    ``read_ok`` 是这一条"读没读到正文"的机器读数（由调用方按 ``litavail.content_read``
+    现算后交进来；不传 ⇒ ``False``，即"这一条直写路没有读过正文的证据"）。它只喂
+    正文闸：``content_read=false`` 时 ``summary`` 里不许出现内容性断言
+    （判据与 ``litstage`` 的 ALITCONTENT 同一实现：``litavail.content_assertion``
+    ＋同一个受控码 ``CONTENT_CLAIM_WITHOUT_READ``）。
     """
     if ctx.store is None:
         return fail("未配置 store：无法建行。请用 register(..., store=store) 构造工具。", kind="no_store")
@@ -1742,6 +1796,16 @@ def _h_register(
                 }
             )
 
+        # ---- 正文闸（与 `litstage` 的 ALITCONTENT 同一条判据、同一个受控码）------
+        # 业主 2026-11-20 裁定 ③：`content_read=false` 时 relevance / new_content 里
+        # 不许出现内容性断言。`search.register` 是直写 literature 的那条路，
+        # 它此前只校验 type_code / title / 判重 ⇒ 5 条 metadata_only 就是这样带着
+        # "该文用…给出 log Γ 的精确值"进了库（真机 lp-ball-14）。
+        clipped = T.clip(summary or "", 1200)
+        refused = _content_claim_refusal(clipped, read_ok=read_ok)
+        if refused is not None:
+            return refused
+
         lit_id = tx.alloc_id("lit")
         rel_path, size, sha = _adopt_file(ctx, lit_id, path, warnings)
 
@@ -1763,7 +1827,7 @@ def _h_register(
             lit_id=lit_id,
             title=title.strip(),
             type=code,
-            summary=T.clip(summary or "", 1200),
+            summary=clipped,
             path=rel_path,
             processed=False,  # B 负责置 true
             source_request_ids=[request_id] if request_id else [],
@@ -2358,10 +2422,18 @@ def _registrar_from_candidate(ctx: _Ctx, row: Mapping[str, Any]) -> dict:
     slot = str(row.get("slot") or "")
     receipt = None
     state = "no_extract"
+    read_ok = False
     if ctx.store is not None:
         receipt = LAV.receipts_by_slot(ctx.store.root).get(slot)
         state, _why = LAV.check_read(ctx.store.root, slot, receipt,
                                      expected=LAV.candidate_digest(row))
+        # "读没读到正文"只有一处实现（`litavail.content_read`：抽读成功 + 非空 +
+        # 不只摘要 + `fs.read` 读过同一版）。正文闸要的正是这个读数 —— 这里现算，
+        # 而不是把"抽过"（`state == "ok"`）当成"读过"。
+        read_ok, _body_why = LAV.content_read(ctx.store.root, slot, row,
+                                              tier=str(LAV.tiers_by_slot(
+                                                  ctx.store.root).get(slot) or ""),
+                                              receipt=receipt)
     source = str((receipt or {}).get("source") or "") if state == "ok" else ""
     res = _h_register(
         ctx,
@@ -2372,6 +2444,7 @@ def _registrar_from_candidate(ctx: _Ctx, row: Mapping[str, Any]) -> dict:
         doi=row.get("doi"),
         year=row.get("year"),
         request_id=str(row.get("request_id") or "") or None,
+        read_ok=read_ok,
     )
     if not res.ok:
         return {"lit_id": None, "reason": res.error}

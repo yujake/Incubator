@@ -6765,13 +6765,14 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             # `ingest_manuscript(mode="register")` —— 提取、族表、逐格回执、两条不变量
             # 与两个新动作走同一份实现；`pointer` 读数由 ingest 原样带回（既有判据与
             # D 的直调都还读它）。
-            return self._with_kind_grade_reading(
-                self._note_conjecture_landing(
-                    self.ingest_manuscript(
-                        manuscript=rel, mode="register", cells=(), conflict="refuse",
-                        reason="按手稿路径收录（D 只递指针）", provenance=line_range),
-                    statement_full=statement_full, rel=rel),
-                origin=str(origin or ""), kind=str(kind or ""))
+            return self._with_citation_fit_reading(
+                self._with_kind_grade_reading(
+                    self._note_conjecture_landing(
+                        self.ingest_manuscript(
+                            manuscript=rel, mode="register", cells=(), conflict="refuse",
+                            reason="按手稿路径收录（D 只递指针）", provenance=line_range),
+                        statement_full=statement_full, rel=rel),
+                    origin=str(origin or ""), kind=str(kind or "")))
         #: 判/落拆段的回传槽（NT2）：`_register_statement_impl` 在写台账之前把判出来的
         #: 读数填进来；这里收尾时落 `unrecorded` 痕迹并把 T0 读数放回执（给模型看）。
         _nt: dict = {}
@@ -6785,21 +6786,22 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             quote_mode=quote_mode, quote_span=quote_span,
             quote_call_sha256=quote_call_sha256, derived_from=derived_from,
             doc_id=doc_id, line_range=line_range, nontriviality=_nt)
-        return self._with_kind_grade_reading(
-            self._settle_registration_duty(
-                self._finish_filing_nontriviality(
-                    self._note_conjecture_landing(
-                        self._mark_b_register(
-                            self._apply_declared_manuscript_kind(
-                                got, statement_full=statement_full,
-                                origin=str(origin or "external_lit"),
-                                kind=str(kind or "theorem"),
-                                proof_manuscript=proof_manuscript),
-                            proof_manuscript),
-                        statement_full=statement_full, rel=str(proof_manuscript or "")),
-                    _nt),
-                rel=str(proof_manuscript or "")),
-            origin=str(origin or ""), kind=str(kind or ""))
+        return self._with_citation_fit_reading(
+            self._with_kind_grade_reading(
+                self._settle_registration_duty(
+                    self._finish_filing_nontriviality(
+                        self._note_conjecture_landing(
+                            self._mark_b_register(
+                                self._apply_declared_manuscript_kind(
+                                    got, statement_full=statement_full,
+                                    origin=str(origin or "external_lit"),
+                                    kind=str(kind or "theorem"),
+                                    proof_manuscript=proof_manuscript),
+                                proof_manuscript),
+                            statement_full=statement_full, rel=str(proof_manuscript or "")),
+                        _nt),
+                    rel=str(proof_manuscript or "")),
+                origin=str(origin or ""), kind=str(kind or "")))
 
     def _with_kind_grade_reading(self, out: dict, *, origin: str,
                                  kind: str) -> dict:
@@ -6847,6 +6849,92 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         out["grade"] = str(grade.get("grade") or "")
         out["grade_why"] = str(grade.get("why") or "")
         out["grade_reading"] = dict(grade)
+        return out
+
+    #: `citation_fit` 三档的读法；与 `why` 分开写，是因为 `why` 逐条点名是哪一篇 / 缺哪一侧特征，
+    #: 而这一句回答的是「这条读数该拿它怎么办」（模型在回执里读的就是这两句）。
+    _CITATION_FIT_NOTES: dict[str, str] = {
+        "fit": ("这条命题的正文与被引文献的题名 / 摘要至少共用一个实词（判据："
+                "`closing.claim_evidence_fit`，与收工门那一档同一份实现）。"),
+        "mismatch": ("这条命题的正文与被引文献的题名 / 摘要没有交集 ⇒ 按收工门那条判据，"
+                     "这条出处被写进断言时会判「引文可能跑题」。改法二选一：① 把该文献的题名级"
+                     "主题词写进命题正文（下游引 `lit:` 时核得上）；② 下游引它时改用这条命题的 "
+                     "`rel:` / `stmt:` 行 —— 逐字回验过的那一条就是它的凭据，篇名只是出处。"
+                     "不许拿一篇泛论给整批命题当万能凭据。"),
+        "unjudged": ("这条命题的正文与被引文献的题名 / 摘要里，至少一侧没有可判的英文实词 ⇒ "
+                     "判不了（这一档不是「对上了」）。文献侧命题若写成中文转述，把那篇文献的"
+                     "题名 / 原文术语写进命题正文或 `label`，再交一次；下游引 `lit:` 时同理，"
+                     "有逐字回验的 `rel:` 行就引那一行。"),
+    }
+
+    def _with_citation_fit_reading(self, out: dict) -> dict:
+        """登记回执上补一格 `citation_fit`：这条命题的正文与它的出处对不对得上。
+
+        ## 为什么登记那一刻要看得见这一格
+
+        收工门那条交接判据（`citation_fit`，见 `closing.py`）只从 `documents` 现算：
+        一条断言引 `lit:` 而正文与那篇文献的题名 / 摘要的实词没有交集 ⇒ 判跑题。
+        真机 lp-ball-14：`documents/000000` 的 claim-2 / 10 / 11 / 12 全挂在这一条上，
+        而那四条的落点（`rel:000001` / `rel:000004` / `rel:000006` / `rel:000008`）逐字
+        回验是通过的 —— 引文没有跑题，是命题 / 断言的写法与文献题名不在同一套术语里。
+        B 在登记那一刻看不到这个读数（改前回执上只有 `kind_judgement` / `grade`），
+        于是「一批命题都挂同一篇泛论」这件事要到收工门才现形，而那时已经改不动上游。
+
+        ## 判据只有一处
+
+        这里不另写一份交集：直接调 `closing.claim_evidence_fit`（收工门 `citation_fit`
+        与写稿期 `doc_tools.citation_coverage` 共用的那一份，`R003`）。本格只喂给
+        它「这一条命题 + 它的 `source_lit_id`」，再把三档读数搬进回执。
+
+        ## 三态
+
+        这一行没有 `source_lit_id`（自产 / 手稿侧命题的出处不是文献）⇒ `not_applicable`
+        —— 它不是「对上了」。`literature` 表读不出来 ⇒ `checked=False` + `verdict=unknown`
+        —— 没查成，绝不折成 fit。有一条文献侧命题就查一条，不猜、不缓存。
+
+        `out` 不是 dict（或这一笔整笔被拒）⇒ 原样返回：受控拒没有行可读，往拒信上补
+        读数只会让拒信的键集合变成第二个口径。
+        """
+        if not isinstance(out, dict) or out.get("ok") is False:
+            return out
+        row = out.get("row") if isinstance(out.get("row"), dict) else {}
+        lid = str(row.get("source_lit_id") or "").strip()
+        if not lid:
+            out["citation_fit"] = {
+                "checked": True, "lit_id": "", "verdict": "not_applicable", "why": [],
+                "words_in_claim": [],
+                "note": ("这一行没有 `source_lit_id`（自产 / 手稿侧命题的出处不是文献）"
+                         "⇒ 这一格不适用；它不是「对上了」。"),
+            }
+            return out
+        try:
+            rows = [dict(r) for r in self.store.rows("literature")]
+        except Exception as exc:  # noqa: BLE001 —— 读不到要如实说，不许折成 fit
+            out["citation_fit"] = {
+                "checked": False, "lit_id": lid, "verdict": "unknown", "why": [],
+                "words_in_claim": [],
+                "note": (f"`literature` 表读不出来（{type(exc).__name__}: {exc}）"
+                         "⇒ 这一格没查成（不是对上了）"),
+            }
+            return out
+        lit = next((r for r in rows if str(r.get("lit_id") or "") == lid), None)
+        text = str(row.get("statement_full") or row.get("statement_text")
+                   or row.get("label") or "")
+        from .. import closing as CL  # 惰性：与本文件其余惰性导入同一取法
+
+        one = CL.claim_evidence_fit(
+            {"text": text, "citations": [f"lit:{lid}"]},
+            exps={}, lits=({lid: lit} if lit is not None else {}))
+        verdict = str(one.get("verdict") or "unjudged")
+        out["citation_fit"] = {
+            "checked": True,
+            "lit_id": lid,
+            "title": str((lit or {}).get("title") or "")[:80],
+            "verdict": verdict,
+            "why": list(one.get("why") or []),
+            "words_in_claim": list(one.get("words_in_claim") or []),
+            "note": self._CITATION_FIT_NOTES.get(verdict, ""),
+        }
         return out
 
     def _note_conjecture_landing(self, out: dict, *, statement_full: str = "",

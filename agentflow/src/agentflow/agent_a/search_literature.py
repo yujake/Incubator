@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from ._support import Iterable, S
+from .. import litstage as L
 from ..refusals import refuse
 
 class _SearchLiterature:
@@ -138,6 +139,7 @@ class _SearchLiterature:
         # 一起会读成"这一次问了所有的源"。其余轮次的读数照旧逐轮留在 `rounds[]`。
         own_round = next((r for r in rounds if r.get("request_id") == rid), None)
         own_sources = list((own_round or {}).get("sources") or [])
+        scope = L.pending_all_delegations(self.store.rows("lit_candidates"))
         return {
             "ok": True,
             "admitted": True,
@@ -183,6 +185,9 @@ class _SearchLiterature:
             "attempts": int(row.get("attempts") or 0),
             "last_error": row.get("last_error"),
             "queue_pending": rounds[0].get("queue_pending") if rounds else 0,
+            "pending_total": int(scope.get("total") or 0),
+            "pending_by_delegation": list(scope.get("by_delegation") or []),
+            "pending_scope_note": L.pending_scope_note(scope),
             "rounds": rounds,
             "note": (
                 "这一条已经入队并跑过；`outcome=no_results` 是有效结论（查了、没有），"
@@ -191,5 +196,8 @@ class _SearchLiterature:
                 "点名源的那一态与按角色接线查的那一态都逐源报（改前第一态是空数组，"
                 "于是「两个源被限流」与「都 0 命中」同形）。"
                 "`providers_requested=None` 才是「没点名」，不许用 `sources` 空不空去推断。"
+                "`pending_total` / `pending_scope_note` 是**全表**待裁读数：不为 0 ⇒ 这一趟"
+                "还没收尾（逐条 `lit.admit` / `lit.stage_reject` → 逐委托 `lit.admit_all`），"
+                "交给召唤方的结论里要照抄还剩几条。"
             ),
         }

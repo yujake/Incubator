@@ -136,10 +136,17 @@ def _pending_scope(store: Any) -> dict:
 
 
 def _fill_pending(store: Any, result: ARunResult) -> None:
-    """把全表待裁读数落进这一轮的结果（每一轮都填；读不到就让它抛，不折成 0）。"""
+    """把全表待裁读数落进这一轮的结果（每一轮都填；读不到就让它抛，不折成 0）。
+
+    除了两个数字（`pending_total` / `pending_by_delegation`），还落一句人能照做的
+    `pending_note`：0 条也写成一句话 —— "没有遗留"与"没报"必须分得开（2026-11-21
+    ASEARCH：真机 lp-ball-14 的 24 条 pending 在交给召唤方的回执里一句话都没有）。
+    """
     scope = _pending_scope(store)
     result.pending_total = int(scope.get("total") or 0)
     result.pending_by_delegation = [dict(g) for g in scope.get("by_delegation") or []]
+    result.pending_note = (L.pending_scope_note(scope)
+                           or "全表待裁 0 条：候选已逐条判完、逐委托提交清表。")
 
 
 def _claim_pending(store: Any, actor: str, wanted: Sequence[str],

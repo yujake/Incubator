@@ -3026,3 +3026,228 @@
 #:   `scripts/lint_rules.py`（error 0）/ `tests/test_agent_prompts.py`（含
 #:   `test_the_prompt_version_moves_with_the_sections`）/ `test_prompt_cache_warm`
 #:   （warm 两档真跑，cap 0.10，23 passed）/ `test_reading_map*`。
+
+#: p305 → p306（2026-11-21，BQUOTE：B 登记回执新增 `citation_fit` 读数 —— 把「断言与它引的证据
+#:   对不上」从收工门才现形，挪到登记那一刻就看得见）：
+#:   现场 lp-ball-14（`projects/lp-ball-14/data/documents.json`）：doc:000000 的
+#:   claim-2 / 10 / 11 / 12 都引 `lit:000000`（Ball 1986《Cube Slicing in R n》），而
+#:   `closing.claim_evidence_fit` 判「断言的实词与被引文献的题名/摘要没有交集」；四条的实际
+#:   落点（rel:000001 / 000004 / 000006 / 000008）逐字回验是通过的 —— 引文没有跑题，是命题 /
+#:   断言的写法与文献题名不在同一套术语里。这一档此前只在 `closing` 与 `doc_tools.citation_coverage`
+#:   现算，B 登记那一刻看不到，于是「一批命题都挂同一篇泛论」要到收工门才现形。
+#:   改法（两件）：
+#:   ① `agent_b/register_statement.py` 的 `_with_citation_fit_reading` 把
+#:   `closing.claim_evidence_fit`（收工门 `citation_fit` / 写稿期 `citation_coverage` 共用的
+#:   唯一实现）喂给登记回执，新增 `citation_fit` = {checked, lit_id, title, verdict ∈
+#:   fit / mismatch / unjudged / not_applicable, why, words_in_claim, note}；没有
+#:   `source_lit_id` 的行走 `not_applicable`，`literature` 读不出来走 `checked=False`（没查成
+#:   不是对上了），整笔被拒时不补这一格（拒信的键集合不另立口径）。
+#:   ② `specs/b_ingest_policy.py` 的 `INGEST_POLICY` 加一条：每条文献侧命题 / 每条关系的引文
+#:   必须能支持它，`mismatch` / `unjudged` 都不是通过，对不上就改引文或改断言（自查方法：命题
+#:   里的术语与那篇文献实际讲的术语对一遍），不许拿一篇泛论给整批命题当万能凭据。
+#:   判据：`tests/test_b_sees_the_citation_fit_at_registration.py`（a 引对不点名 / b 引错点名 /
+#:   c 判不了 / d 没出处 not_applicable / e·e2 反真空）。变化格 = B 一格（本路）；A 那一格同时
+#:   换了值 —— 那是并行路 ASEARCH 的未提交改动（`specs/a.py` 的收尾义务与查询词纪律），本路
+#:   不认领，冻结时按现算值一并落（与 p300 / p301 / p304 同一口径）；其余九格逐字未动
+#:   （版本行已归一）。`specs/b_ingest_policy.py` 在 FC-27 auth-audit ⇒
+#:   `noai_gate --paths … --baseline` 已刷新（reviewers=[]，待人类走查）。
+
+#: p306（ASEARCH 分笔，2026-11-21；与同批 BQUOTE 共用版本号）：A 的检索链两个根因都在
+#:   提示词 / 回执面 —— 真机 lp-ball-14（逐字可复算：`projects/lp-ball-14/data/search_requests.json`、
+#:   `data/lit_candidates.json`）：
+#:   ① 14 条 search_requests 里 13 条 `no_results`、只有 1 条 ok；`no_result_topics` 8 条全是
+#:   题面式说法（`Ball cube slicing` / `Meyer Pajor sections` / `Koenig Koldobsky sections of the
+#:   cube` / `Koldobsky Fourier transform sections` / `central hyperplane sections of the l_p ball` /
+#:   `Brunn concavity sections centrally symmetric body` / `sectional isoperimetric inequality` /
+#:   `Fourier transform sections of the cube`）——A 的职责面（policy）从没写过「题面式说法不是
+#:   查询词 / `no_results` 之后必须换规范术语重查一次」；手册正文只有五条代换里的一条。这 8 条
+#:   每一条都查回了 15 条候选（不是"没有文献"，是没判）。
+#:   ② 4 个委托 24 条候选留成 pending（`r-000011` 15 / `r-000012` 2 / `r-000013` 4 /
+#:   `r-000014` 3）：A 建了委托却没逐条 `lit.admit` / `lit.stage_reject`、也没逐委托
+#:   `lit.admit_all` 清表，而 `search_literature` 的回执里一格待裁读数都没有（只活在
+#:   `rounds[]` 的嵌套值里，还会被 payload_preview 的 2000 字截掉）。
+#:   改法（本路四处）：
+#:   ① `specs/a.py` 的 policy 补查询词纪律：题面式说法不是查询词；`topic` 写成规范术语 +
+#:   关键词组合；`no_results` 之后必须换规范术语再查一次（换掉哪个词、换成哪个术语、两次
+#:   `topic` 各是什么都要留痕）。提示词引导，不做词表阈值。
+#:   ② 同文件 boundary 的「登记」那条尾部补收尾三步：`lit.stage_list(request_id="*")` 看全表
+#:   （不只当前委托）→ 本批候选逐条判收 / 判拒（`lit.stage_reject` 批量用 `slots`）→
+#:   逐委托 `lit.admit_all` 提交清表；交给召唤方的回执必须写「还剩几条待裁」（0 也要写）。
+#:   边界仍是 7 条（伙伴表只引第一条，`len` 也不变）⇒ D / E / F / H / M 的伙伴表一个字没动。
+#:   ③ `agent_skills.py` 的 A 手册 `找文献-换招法而不是换说法`：`summary` / `when` / 正文补
+#:   同样两条纪律与收尾四步（前置提示词的 SKILLS_INDEX 那一行也点名，正文落
+#:   `skills/A/找文献-换招法而不是换说法.md`）。
+#:   ④ `agent_a` 的回执：`ARunResult` 新增 `pending_note`（0 条也写成一句，不是空串）；
+#:   `search_literature` 返回顶层新增 `pending_total` / `pending_by_delegation` /
+#:   `pending_scope_note`，`specs/a.py` 的 returns 键表同步补三格（声明与真身对拍那一组判据）。
+#:   判据：`tests/test_a_search_discipline_is_on_its_face.py`（a 渲染提示词 / b 手册 / c 索引，
+#:   各带反真空：拿掉那两句、或把手册正文与 summary 换成探针 ⇒ 必红）与
+#:   `tests/test_lit_pending_scope_is_explicit.py` 新增 d / d2（回执带全表待裁；把三格抽掉 ⇒
+#:   同一个检查点名报缺；`run_once` 结清后 `pending_note` 写"0 条"）。
+#:   变化格 = A（5144e978… → bea3ab9d…，本路）；B 那一格是并行路 BQUOTE 的 `citation_fit`
+#:   读数（同一 p306 批，316e9508… → a9ea8bf9…）；其余九格逐字未动（版本行已归一）。
+#:   连带：`_FROZEN_PROMPT_VERSION` p305 → p306；`tests/test_prompt_stability.py` 的
+#:   `_VOLATILE_FACT_SETS` 追加 p306 一格（facts 键集仍 15 格，count / keys_sha256 与 p305
+#:   同值）；两份 golden 按现值重冻（agent 面 p306 版本行 + A/B 两格，tool 面 0 行差异）；
+#:   `ROLE-GUIDE` / `SYSTEM-COMPONENTS` 重生成后一致；`READING-MAP` 三格与 §3 大文件表按现盘
+#:   追平（p306 冻结时读数：393 个 `.py` / 311,584 行 / 72 个 >800；`agent_skills.py` 4,830 →
+#:   4,866，其中本路 +36、其后另有 +22 来自并行路的未提交改动；三格 72 / 95 / 2 一格未抬）。`specs/a.py` 在 FC-27 auth-audit ⇒
+#:   `noai_gate --paths … --baseline` 已刷新（reviewers=[]，待人类走查）。
+
+#: p306 → p307（2026-11-21，LITCELLFIX：收工门第八格点名它读的是哪张表；M 的派活文案不再
+#:   把「B 的二阶段」读成"禁止洗"）：现场 lp-ball-14 的两条连锁（`temp/mine14/MINE14-REPORT.md`
+#:   的 P0-2 与 ⑦）：① 门报 `literature_pending` fail，读数只有「全表还有 24 条待裁（跨 4 个
+#:   委托）」—— 两个表名一个都不出现，于是 M 在 `out/review/REPORT.md:59` 把它写成
+#:   「lit 000001–000005 无本地全文」（那是 `literature` 表的 5 行），派 B2 去改那 5 行的下载
+#:   判档：`lit_candidates` 一行没动、门一格没变。② 同一趟 M 三次派活都显式 forbid 洗稿
+#:   （它读的是 M 政策里「不要让 B 去润色 F 的证明」），而 B 今天的主职就是二阶段 ⇒
+#:   `statements_unoptimized=2`、17 条 `optimized=not_recorded`、`open_polish_copy` 0 次。
+#:   改法三件：① `closing._check_literature_pending` 的读数与拒信点名 `lit_candidates`、
+#:   逐委托条数与出口（`lit.admit` / `lit.stage_reject` / 逐委托 `lit.admit_all`），并把
+#:   `literature.processed`（B 的消化面，数在 `acceptance` 的 `literature_unprocessed`）单独
+#:   点名、写明两张表没有联动 —— 那一段话的唯一真身是 `closing.LITERATURE_QUEUES_NOTE`；
+#:   ② `specs/m.py` 的 policy 加一条「收工门报红先读它点名的表」并渲染同一句，把
+#:   「不要让 B 去润色 F 的证明」改成「界线是 V 签、不是洗不洗；洗过的版本仍要 V 签盖住这一版」
+#:   （保留不许绕过 V 签，删掉禁止洗）；③ `agent_skills.py` 的 M 手册新增「收工门报红的那两格
+#:   问的是两张表」并只指路（不抄第二份），指派那一条改写同一句。
+#:   变化格 = M 一格（M d90338b8… → 3166f646…）；其余十格逐字未动（版本行已归一；其余格的现值
+#:   差异来自并行路的未提交改动，本路不认领）。十一格是 `scripts/recompute_prompt_digests.py
+#:   --write` 现算（钉 `AGENTFLOW_LEAN_ENABLED=1`），不是手抄；`agent_skills.py` 那一侧只动
+#:   正文（索引只放 slug / summary / when）⇒ 不进摘要。
+#:   连带：`_FROZEN_PROMPT_VERSION` p306 → p307；`tests/test_prompt_stability.py` 的
+#:   `_VOLATILE_FACT_SETS` 追加 p307 一格（facts 键集仍 15 格，count / keys_sha256 与 p306
+#:   同值）；agent 面 golden 按现值重冻（M 一格）；`ROLE-GUIDE` 重生成后一致；`READING-MAP`
+#:   三格与 §3 大文件表按现盘追平（三格 72 / 95 / 2 一格未抬）。`specs/m.py` 在 FC-27
+#:   auth-audit ⇒ `noai_gate --paths … --baseline` 已刷新（reviewers=[]，待人类走查）。
+#:   判据：`tests/test_lit_pending_names_its_table.py`（a 读数点名表 / b 可见面两出口 / c 不再
+#:   禁止二阶段，各带反真空）。
+
+#: p307 → p308（2026-11-21，SEEDDOC：A 的可见面写清「工作区里已有的文献」那条候选链）。
+#:   病灶：SEEDREH 已把链建好并彩排通过（`temp/seedreh/SEEDREH-REPORT.md`：`search.ingest_local`
+#:   `dry_run=True` 发现 → `lit.stage_add` 建候选 → `text.extract` + `fs.read` →
+#:   `lit.admit(availability=readable)` → `lit.admit_all`），但 A 的可见面一个字都没写这条路：
+#:   `specs/a.py` 的 policy 只讲检索口径与判收闸，`agent_skills.py` 的 A 手册仍把
+#:   `A.ingest_local` 写成「收完 `literature` 会多出对应的行」（那是非 dry 档的登记语义，
+#:   也就是跳过判收的那一条）。下一趟真机把 25 份历史 PDF 投进工作区 `library/`
+#:   （`seed/literature/README.md`：未入库、未判收）时，A 只有两种省事的读法可抄 ——
+#:   把 `dry_run` 的发现读数当已入库、或用非 dry 档一次性登记；两种都不报错。
+#:   本路四处：
+#:   ① `specs/a.py` 的 policy 补一条：工作区里已有文献时三段一步都不能省 ——
+#:   `search.ingest_local(books_dir="library", dry_run=True)` 发现（`ingested` 只是预告，
+#:   零写入）→ 逐份 `lit.stage_add(request_id=…, entries=[{title, url: 盘上路径, relevance}])`
+#:   建候选（`literature` 仍 0 行）→ `text.extract(lit_id="cand:<槽位>")` + `fs.read` +
+#:   `lit.admit(availability="readable")` + 逐委托 `lit.admit_all` 提交；并写明没有正文的
+#:   （乱码 / 扫描件 / 只有题录）按 `no_read_evidence` 整批受控拒（逐槽点名
+#:   `extract_failed` / `metadata_only` / `no_fulltext`）、正确处置是 `lit.stage_reject`，
+#:   不许当已收编；也不许用非 dry 档把整目录一次性登记（那是兜底路、跳过判收）。
+#:   ② `agent_skills.py` 的 A 手册 `找文献-换招法而不是换说法`：§零 拆成 0.1（题面式说法不是
+#:   查询词，ASEARCH）与 0.2（工作区里已有的文献：发现 → 建候选 → 判收，本路）；正文是这条路
+#:   唯一的真身，写全三步、两条禁令与没有正文那一档。`summary` / `when` 同步点到 §0.2
+#:   （前置提示词的 SKILLS_INDEX 那一行也点名，且只有指针、不抄步骤细节）；`tools` 补
+#:   `search.ingest_local`（正文现在教它）。另在 `检索-先本地再联网` 第 4 步加一句
+#:   「别用非 dry 档一次性收编」并指到 §0.2（那条手册原来只写了登记语义）。
+#:   ③ 新判据 `tests/test_a_workspace_literature_is_not_already_registered.py`（9 条）：
+#:   a 渲染提示词里那条政策按 发现 → 建候选 → 抽读 → 判收 → 提交 的次序（整行取，不拿
+#:   「手段：可改 N 件」那行的字母序）；b 手册 §0.2 同序 + 受控理由码；c 索引行指到 §0.2
+#:   且不抄步骤细节（`entries=` / `cand:` 不许进索引）。反真空逐环打（把含 `dry_run=True` /
+#:   `lit.stage_add` / `lit.admit_all` 的那一句各抠掉 ⇒ a 必红），另有一条纯函数负控证明
+#:   顺序检查在比位置而不是在对关键词。改前红：`git archive HEAD` 导出到
+#:   `temp/seeddoc/before/tree`，同一份判据 8 failed / 1 passed（原话见
+#:   `temp/seeddoc/before/pytest_before.txt`）。
+#:   变化格 = A 一格（A bea3ab9d… → bbd0a784…）；其余十格与 p307 逐字相同（版本行已归一）。
+#:   十一格是 `scripts/recompute_prompt_digests.py --write` 现算（钉 `AGENTFLOW_LEAN_ENABLED=1`），
+#:   不是手抄。
+#:   连带：`_FROZEN_PROMPT_VERSION` p307 → p308；`tests/test_prompt_stability.py` 的
+#:   `_VOLATILE_FACT_SETS` 追加 p308 一格（facts 键集仍 15 格，count / keys_sha256 与 p307
+#:   同值）；两份 golden 按现值重冻（agent 面 A 的提示词行 + 版本行；tool 面 0 行差异）；
+#:   `ROLE-GUIDE` 重生成后一致（A 那一段多一条政策），`SYSTEM-COMPONENTS` 逐字一致；
+#:   `READING-MAP` 开头三格按现盘重算（394 个 `.py` / 312,724 行 / 72 个 >800，
+#:   `agent_loop.py` 16,125 行；三格 72 / 95 / 2 一格未抬）、§3 表三行按现算追平
+#:   （`agent_loop.py` 16125 / `cli.py` 6300 / `agent_skills.py` 4933）。
+#:   已知红（不是本路）：SEEDCORPUS 路新落的 `seedinject.py` 在读图里还没有位置 ⇒
+#:   `test_every_source_module_is_placed_somewhere_in_the_map` 红着；补一行
+#:   `| \`seedinject.py\` | … |` 即可（那是该模块作者那一格，本路不代写）。
+#:   warm 两档**已重落**（真调上游，两趟都用 cap 0.10，合计 $0.061005：关档 0.030670 /
+#:   开档 0.030335；读数在 `temp/seeddoc/warm_run_off.txt` / `warm_run_on.txt`）：
+#:   `tests/fixtures/prompt_cache_warm.json` 收到 p308 / 两档各一条完整趟
+#:   （`test_prompt_cache_warm.py` 23 passed）。动手前的已知红是 B 那一格
+#:   （`test_both_lean_tiers_are_recorded_and_fresh` 1 failed、只点 B；红因是并行路 BQUOTE
+#:   在 p307 批的改动与 p307 那次预热之间有时间差，不是本路）。抬版本会让**每个角色**的
+#:   `prompt_sha256` 一起换（版本那一行印在每一份 system 里）⇒ 两档各重落一遍；重落命令
+#:   逐字就是本仓文档那两条：`python scripts/warm_prompt_cache.py
+#:   --roles A,B,C,D,E,F,G,H,V,M,L,secretary` 与 `python scripts/warm_prompt_cache.py
+#:   --lean on --hit-sample M,C,L --roles A,B,C,D,E,F,G,H,V,M,L,secretary`。
+#:   `specs/a.py` 在 FC-27 auth-audit ⇒ `noai_gate --paths … --baseline` 已刷新
+#:   （reviewers=[]，待人类走查）。
+
+#: p308 → p309（2026-11-21，FACTSFIX：工作区事实看见 `library/` 与 `source/` 两个目录）。
+#:   病灶：`WORKSPACE_FACTS` 的 `LOCAL_MATERIALS` 段（`agent_prompts._pending_local_materials`）
+#:   只扫工作区 `source/`。业主下一趟的场景是 `--seed-literature` 把 25 份种子 PDF 投进
+#:   `library/`、`data/literature.json` 0 行（`SEEDDOC-REPORT.md` §⑤「触发仍缺一格」）——
+#:   只扫 `source/` 的话，A/M 的可见面里一个字都没有"library/ 有未入编的文献"，A 只能被
+#:   M/任务点名或自己 `fs.list` 才会想到去判收；而业主的 T5 口径正是"看 M 一上来会不会
+#:   注意到它们"。同一段原来还教"派 `A.ingest_local` 收编"，那一档（非 dry）会跳过判收。
+#:   本路两处：
+#:   ① `agent_prompts._pending_local_materials` 扩到两个目录（`source/` 与 `library/`），
+#:   每个目录各报三个数：盘上有几份文件、已在 `literature` 表里几份、盘上有而表里没有几份
+#:   （读数形如「`library/` 3 份未入编（盘上共 3 份文件，已入编 0 份；例：…）」）；并写死
+#:   一句「未入编的必须先走判收链」：`search.ingest_local(books_dir=…, dry_run=True)` 发现
+#:   → `lit.stage_add` 建候选 → `text.extract` + `fs.read` → `lit.admit` → `lit.admit_all`
+#:   提交；不许当已入库，也不许用非 dry 档整目录登记（那会跳过判收）。`LOCAL_MATERIALS`
+#:   那一格的注释同步写清"两个目录 + 三态"。
+#:   ② 三态不许折平：台账 `data/literature.json` 不在盘上 ⇒ 整段沉默（不编 0，保留改前口径）；
+#:   台账在盘上但读不出来 / 顶层形状不对 / 有一行不是对象 ⇒ 记「没查成」（并写明"这不是
+#:   「没有未入编」"）；目录不存在 ⇒ 该目录那一条不写（选这一种，不写"0 份"这类噪声）；
+#:   目录在但列不出来 ⇒ 同样记「没查成」。
+#:   判据：新 `tests/test_workspace_facts_cover_library_too.py`（11 条）——
+#:   a `library/` 3 份 / 表 0 行 ⇒ 渲染产物里出现「`library/` 3 份未入编」；b 3 份 / 已入编 2
+#:   ⇒ 报未入编 1（三个数都对）；c 台账不在盘上 ⇒ 沉默、坏台账 ⇒ 没查成（两档分开）；
+#:   另两条边界（目录不存在 / 两目录独立计数）与 25 份种子的预期读数；d 反真空：把扫描打桩
+#:   回只扫 `source/` ⇒ a 的那条检查必红。既有 `tests/test_workspace_local_materials_fact.py`
+#:   按新口径追平：`_line` 只读「工作区事实」那一段（M 的 policy 里也有一句"未收编的本地材料"，
+#:   整份提示词找会误当读数），夹具补用户声明（`RELIABLE-REFERENCES.json`，2026-11-21 的
+#:   非 dry 档入库闸），正控断言改点名 `search.ingest_local` / `dry_run=True` / 判收链。
+#:   改前红：新判据文件在改前树上 8 failed / 3 passed（3 条 passed 是改前就成立的沉默与边界，
+#:   它们必须保持绿）；原话在 `temp/factsfix/pytest_before_newfile.txt`，改后 11 passed。
+#:   变化格：本路的动态段在缺省事实（`workspace_root="D:/x"` 不存在）下不渲染，十一格的字面
+#:   未被本路改写；A / M 两格的现值差异来自同一时间窗里并行路的未提交改动，本路按
+#:   `scripts/recompute_prompt_digests.py --write` 的现算值一并冻结（不手抄）。
+#:   连带：`_FROZEN_PROMPT_VERSION` p308 → p309；`tests/test_prompt_stability.py` 的
+#:   `_VOLATILE_FACT_SETS` 追加 p309 一格（facts 键集仍 15 格，count / keys_sha256 与 p308
+#:   同值）；两份 golden 按现值重冻；`ROLE-GUIDE` / `SYSTEM-COMPONENTS` 重生成；
+#:   warm 两档按现版本重落；`READING-MAP` 三格与 §3 表按现盘追平（三格 72 / 95 / 2 一格未抬）。
+#:   —— 同一版号里的第二笔（SEEDREADME）：工作区里的参考材料「只有用户点名的才可入库」。
+#:   病灶：`seedinject._readme_text` 生成的工作区 `SEED-README.md`（以及种子包自己的
+#:   `seed/literature/README.md`）把第一步写成「`search.ingest_local`（`books_dir="library"`）
+#:   把盘上文件登记成候选」—— 那是**非 dry 档**的行为：它直接写 `literature` 行、跳过判收；
+#:   下一趟真机 A 照这份 README 做就会把 25 份种子当已入库（业主明令：不许直接入库）。
+#:   同一句还抄在种子包 README 里 —— 两处不是同一真身，改一处另一处不会变。
+#:   ① 文案（两处逐字同一句：生成器 `seedinject.candidate_chain_lines` /
+#:   `candidate_chain_warning` 是唯一真身，`seed/literature/README.md` 逐字含同样四行）：
+#:   ① `search.ingest_local(books_dir="library", dry_run=True)` = 只发现、零写入；
+#:   ② `lit.stage_add`（`url` = 发现读数里的盘上路径）建候选；③ `text.extract` → `fs.read`
+#:   （同版观察）→ `lit.admit`（`content_read` 才算过）→ `lit.admit_all`（逐委托提交、
+#:   回填号、清表）；④ 收进 `literature` 之后下一步派 B 的 `run_once` 整理；并逐字写
+#:   「非 dry 档跳过判收、不要用」。
+#:   ② 业主同一时刻的裁定（M 不自己判断哪份文献可靠）：① 只有用户提示词里**明确点名**的
+#:   才算可靠参考文献、才可入库；② 未点名的只能当研究参考（可读）、不可入库；③ 默认
+#:   fail-closed。落点：M 的 policy（`specs/m.py`）写「把用户点名的文件/目录逐字抄进工作区根
+#:   `RELIABLE-REFERENCES.json`（`{"paths": [...], "verbatim": "<用户原话>"}`，没点名 ⇒ 空列表）
+#:   → 分批派 A 且清单外的文件不许派 → 每批核 pending=0 → 未收编材料=0 → 之后派 B 的
+#:   `run_once`」；A 的 policy（`specs/a.py`）写「只对用户声明的文件建候选/收编，未声明被
+#:   `not_declared_reference` 受控拒」；机器闸落在 `locallib.undeclared_workspace_books`
+#:   （声明读取/匹配的唯一真身），工具 `search.ingest_local` 与动作 `A.ingest_local` 的非 dry
+#:   档共用它（dry_run 是发现档、不拦；工作区外的目录不受这份声明管 —— 见 locallib 的边界）；
+#:   `agent_prompts._pending_local_materials` 再报两个数：每个目录「已声明 M 份 / 未声明 K 份」
+#:   （另保留 FACTSFIX 的盘上 / 已入编 / 未入编三数）。
+#:   判据：`tests/test_seed_readme_says_the_chain.py`（a 生成产物 / b 两处同一真身 + 两条反真空）、
+#:   `tests/test_m_screens_reference_materials.py`（c 渲染提示词 + 反真空）、
+#:   `tests/test_undeclared_reference_is_refused.py`（a–g：未声明拒、三种声明写法、空/坏声明
+#:   fail-closed、混装整笔拒、dry_run 不拦、工作区外边界、动作同一道闸 + 反真空）。
+#:   改前红：同一批新判据在改前树上 5 failed / 1 passed，失败原话逐字点在
+#:   「还在说「把盘上文件登记成候选」」（`temp/seedreadme/pytest_before.txt`），改后全绿。
+#:   变化格 = A / M 两格（与 FACTSFIX 同一版号：那一笔的现算值一并落）。
+#:   连带：`_FROZEN_PROMPT_VERSION` p309（同上）；`RELIABLE-REFERENCES.json` / `SEED-README.md`
+#:   登记为 `test_reading_map` 的运行时产物；`READING-MAP` 给 `seedinject.py` 补一行位置
+#:   （SEEDCORPUS 留下的已知红）；`specs/a.py` / `specs/m.py` 在 FC-27 auth-audit ⇒
+#:   `noai_gate --paths … --baseline` 已刷新（reviewers=[]，待人类走查）。

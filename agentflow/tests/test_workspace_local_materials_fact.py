@@ -19,6 +19,7 @@ M 只能碰运气想起来 `fs.list source/`。这一格补上之后，事实就
 
 from __future__ import annotations
 
+import json
 import pathlib
 import shutil
 
@@ -50,25 +51,48 @@ def _ws(tmp_path: pathlib.Path, *, n_files: int = 2) -> tuple[Store, pathlib.Pat
     src.mkdir(parents=True, exist_ok=True)
     for i in range(n_files):
         (src / f"paper-{i}.pdf").write_bytes(_real_pdf(f"paper {i}"))
+    # 2026-11-21 业主裁定的用户声明闸：非 dry 档登记只收"用户点名的"文件。
+    # 这个夹具演的是"用户把几份 PDF 丢进工作区并点了名"，所以声明要一起落。
+    (ws / "RELIABLE-REFERENCES.json").write_text(
+        json.dumps({"paths": [f"paper-{i}.pdf" for i in range(n_files)],
+                    "verbatim": "这几份是我点名的可靠参考文献"}, ensure_ascii=False),
+        encoding="utf-8")
     return store, ws
 
 
 def _line(role: str, ws: pathlib.Path) -> str:
     reg = build_registry(store=Store(ws), workspace_root=ws).registry
     prompt = AP.system_prompt(role, registry=reg, workspace_root=str(ws))
-    for ln in prompt.splitlines():
-        if "未收编的本地材料" in ln:
-            return ln.strip()
+    # 只认「工作区事实」那一段里的本地材料 bullet：M 的 policy 里也有一句
+    # "未收编的本地材料"（它在说这一格怎么读），拿整份提示词找会误当读数。
+    lines = prompt.splitlines()
+    start = next((i for i, line in enumerate(lines) if line.startswith("工作区事实")), None)
+    if start is None:
+        return ""
+    for line in lines[start + 1:]:
+        if line.startswith("- "):
+            if "未收编的本地材料" in line:
+                return line.strip()
+            continue
+        if line.strip() == "":
+            continue
+        break
     return ""
 
 
 def test_unregistered_local_materials_are_visible_to_m(tmp_path: pathlib.Path) -> None:
-    """正控：M 的提示词里出现"未收编的本地材料"，且点名了收编的动作与参数。"""
+    """正控：M 的提示词里出现"未收编的本地材料"，且点名了发现入口与判收链。"""
     _store, ws = _ws(tmp_path, n_files=2)
     line = _line("M", ws)
     assert line, "工作区里明明有两份没收编的 PDF，M 的提示词里却没有这件事"
     assert "2 份" in line, line
-    assert "A.ingest_local" in line and "books_dir" in line, line
+    # 2026-11-21（FACTSFIX）：事实段必须写明判收链与"不许当已入库"；具体工具名只给 A
+    # （非 A 的提示词不点名自己调不到的工具），A 那一档的细节由新判据文件钉住。
+    prompt = AP.system_prompt(
+        "M", registry=build_registry(store=Store(ws), workspace_root=ws).registry,
+        workspace_root=str(ws))
+    assert "判收链" in prompt and "不许当已入库" in prompt, \
+        "本地材料那一段没写判收链 / 没写'不许当已入库'"
 
 
 def test_one_more_file_shows_up_individually(tmp_path: pathlib.Path) -> None:

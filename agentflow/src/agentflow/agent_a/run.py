@@ -30,6 +30,7 @@ class _Run:
             # "还剩几条"是状态量，不是这一趟做了几件事的累计量。
             total.pending_total = r.pending_total
             total.pending_by_delegation = list(r.pending_by_delegation)
+            total.pending_note = r.pending_note
             if r.request_id:
                 total.request_id = r.request_id
                 total.priority = r.priority

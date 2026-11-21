@@ -28,7 +28,7 @@ from . import policy as POL
 from . import schema as S
 from . import specs as _SPECS_PKG
 from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDERS
-PROMPT_VERSION = "p305"
+PROMPT_VERSION = "p309"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：
@@ -3083,7 +3083,9 @@ def role_prompt_registry(role: str, *, registry: Any = None,
     #: ⇒ 提示词里根本没有这件事，M 只能碰运气想起来 `fs.list source/`。
     #: 与 `toolchain_facts` 同一条既有裁定：事实必须进模型看得见的地方。
     #:
-    #: 三态：读得到 `data/literature.json` 才说话；读不到 ⇒ 返回空串（不说），不编一个 0。
+    #: 2026-11-21（FACTSFIX）：看两个目录（`source/` 与 `library/`），种子投的是后者。
+    #: 三态：读得到 `data/literature.json` 才报计数；台账不在盘上 ⇒ 返回空串（不说），
+    #: 不编一个 0；台账在盘上但读不出来、或目录列不出来 ⇒ 报"没查成"。
     # 它是动态段（返回空串 = 这一段这次不存在）—— 不能用 `{{变量}}`：
     # `promptkit._interpolate` 把"空值"当失败（"空值与缺失是两件事"），
     # 而这里最常见的正是"没有未收编的材料"。
@@ -3093,7 +3095,8 @@ def role_prompt_registry(role: str, *, registry: Any = None,
         # 闭包捕获 `workspace_root`：它是全局变量，`Scope.facts` 这一路是空的
         # （`system_prompt` 里是 `render(Scope(role=role))`）—— 我第一次就栽在这里，
         # 段注册了却永远返回空串（"没有这一行"）。
-        lambda _scope, _root=_ws_root: _pending_local_materials(_root)))
+        lambda _scope, _root=_ws_root: _pending_local_materials(
+            _root, str(getattr(_scope, "role", "") or ""))))
     reg.section(Section("AGENT_IDENTITY", SECTION_ORDERS["AGENT_IDENTITY"],
                         "你是 {{role}} 号角色，职责是：{{duty}}。\n"
                         "你在一套多智能体协同框架里工作：你只做自己职责内的事，"
@@ -3489,7 +3492,18 @@ def selftest() -> int:
 if __name__ == "__main__":
     import sys
     sys.exit(selftest())
-def _pending_local_materials(root: str) -> str:
+def _local_materials_not_checked(scan: dict[str, list[str]],
+                                 list_failed: list[str]) -> str:
+    """表读不出来时的读数：只有"有文件"的那几个目录才值得说"没查成"。"""
+    parts = [f"`{name}/`（{len(files)} 份）" for name, files in scan.items() if files]
+    parts += [f"`{name}/`（列不出来）" for name in list_failed]
+    if not parts:
+        return ""
+    return ("- **未收编的本地材料**：没查成 —— " + "、".join(parts)
+            + " 盘上有文件，但 `data/literature.json` 读不出来。"
+            "**这不是「没有未入编」**：台账修好之前不知道其中几份已在表里；"
+            "先跑 `agentflow verify` 定位，必要时 `agentflow rebuild`。")
+def _pending_local_materials(root: str, role: str = "") -> str:
     """工作区里"盘上有、但还没登记进 literature"的本地材料（一行；没有或读不到 ⇒ 空串）。
 
     业主 2026-10-16 的 T5 口径：「直接建工作区，把我下好的 PDF 丢在工作区，启动系统，
@@ -3497,40 +3511,105 @@ def _pending_local_materials(root: str) -> str:
     根目录/表清单/版本 ⇒ 提示词里没有这件事，M 只能碰运气想起来 `fs.list`。
     与 `toolchain_facts` 同一条既有裁定：事实必须进模型看得见的地方。
 
-    三态纪律：读不到 `data/literature.json` 就返回空串（不说），绝不编一个 `0` ——
-    "没读成"与"都收编了"是两件事。
+    2026-11-21（FACTSFIX）：两个目录都要看，不能只看 `source/`。业主下一趟用
+    `--seed-literature` 把 25 份种子 PDF 投进 `library/`（`data/literature.json` 仍 0 行）；
+    只扫 `source/` 的话，A/M 的可见面里一个字都没有"library/ 有未入编的文献"。
+    每个目录各报三个数：盘上有几份、已在 `literature` 表里几份、盘上有而表里没有几份，
+    并写明未入编的必须先走判收链（发现 → 建候选 → 抽读 → 判收 → 提交），不许当已入库。
+
+    三态纪律（不许折平）：
+    - `data/literature.json` 不在盘上（工作区没有这张表 / 被删）⇒ 整段沉默，不编一个 0；
+    - 目录不存在 ⇒ 该目录那一条不写（不写"0 份"，也不写"没有这个目录"那类噪声）；
+    - 台账在盘上但读不出来（坏 JSON / 顶层形状不对 / 行不是对象）⇒ 记"没查成"，
+      不许写成"没有未入编"；目录在但列不出来同样记"没查成"。
     """
     root = str(root or "").strip()
     if not root:
         return ""
     base = Path(root)
-    src = base / "source"
-    if not src.is_dir():
+    # 先看两个目录各有什么。目录不存在 ⇒ 这一条不写（scan 里没有它）。
+    scan: dict[str, list[str]] = {}
+    list_failed: list[str] = []
+    for name in ("source", "library"):
+        path = base / name
+        if not path.is_dir():
+            continue
+        try:
+            scan[name] = sorted(p.name for p in path.iterdir() if p.is_file())
+        except OSError:
+            list_failed.append(name)
+    if not scan and not list_failed:
         return ""
     known: set[str] = set()
     try:
         import json as _json
         payload = _json.loads((base / "data" / "literature.json").read_text(encoding="utf-8"))
-        rows = payload.get("rows") if isinstance(payload, dict) else payload
-        for row in rows or []:
-            for key in ("path", "title"):
-                val = str((row or {}).get(key) or "").strip()
-                if val:
-                    known.add(Path(val).name.lower())
-                    known.add(val.lower())
-    except Exception:                     # noqa: BLE001 - 读不到就是读不到（不说），不是"0 份"
+    except FileNotFoundError:
+        # 台账不在盘上不是"表里 0 行"：这一段沉默（与改前同一条口径）。
         return ""
-    try:
-        files = sorted(p.name for p in src.iterdir() if p.is_file())[:50]
-    except OSError:
+    except Exception:                     # noqa: BLE001 - 台账在、但读不出来 ⇒ 没查成
+        return _local_materials_not_checked(scan, list_failed)
+    if isinstance(payload, dict):
+        rows = payload.get("rows")
+    elif isinstance(payload, list):
+        rows = payload
+    else:
+        rows = None
+    if not isinstance(rows, list):
+        return _local_materials_not_checked(scan, list_failed)
+    for row in rows:
+        if not isinstance(row, dict):
+            # 一行不是对象 = 这张表读不出可信读数，不拿剩下的行凑一个数字。
+            return _local_materials_not_checked(scan, list_failed)
+        for key in ("path", "title"):
+            val = str(row.get(key) or "").strip()
+            if val:
+                known.add(Path(val).name.lower())
+                known.add(val.lower())
+    # 声明与"已入编"是两根轴：声明说"许不许入库"（只有用户点名的才可入库），
+    # 已入编说"进没进 literature"。真身是 `locallib.read_declaration` / `is_declared`。
+    from .locallib import is_declared, read_declaration
+    declarations, decl_problem = read_declaration(root)
+    parts: list[str] = []
+    for name in ("source", "library"):
+        files = scan.get(name) or []
+        pending = [n for n in files if n.lower() not in known]
+        if not pending:
+            continue
+        declared = [n for n in files if is_declared(f"{name}/{n}", declarations)]
+        head = "、".join(pending[:3]) + ("…" if len(pending) > 3 else "")
+        parts.append(f"`{name}/` {len(pending)} 份未入编（盘上共 {len(files)} 份文件，"
+                     f"已入编 {len(files) - len(pending)} 份；"
+                     f"已声明 {len(declared)} 份 / 未声明 {len(files) - len(declared)} 份；"
+                     f"例：{head}）")
+    if list_failed:
+        parts.append("、".join(f"`{name}/`" for name in list_failed)
+                     + " 存在但列不出来 —— 这一条没查成（不是「没有未入编」）")
+    if decl_problem:
+        parts.append(f"`RELIABLE-REFERENCES.json` 没查成（{decl_problem}）—— "
+                     "在它修好之前按「一份都没声明」处理（fail-closed）")
+    if not parts:
         return ""
-    pending = [n for n in files if n.lower() not in known]
-    if not pending:
-        return ""
-    head = "、".join(pending[:3]) + ("…" if len(pending) > 3 else "")
-    return (f"- **未收编的本地材料**：`source/` 下有 {len(pending)} 份还没进 `literature`"
-            f"（{head}）—— 派 `A.ingest_local`（参数 `books_dir=\"source\"`）收编；"
-            "它按内容 sha256 幂等，**重复收不会多出行**")
+    head = "- **未收编的本地材料**：" + "；".join(parts) + "。\n"
+    # 判收链上那几件工具只有 A 拿得到（`lit.*` / `search.ingest_local`）。给别的角色
+    # 抄一遍工具名，等于在它们的提示词里点名它们调不到的工具（判据
+    # `tests/test_the_rendered_prompt_names_only_its_own_tools.py`）；所以非 A 只说
+    # "由 A 走判收链"，工具名留给 A 自己那一格（A 的政策里也写着同一条链）。
+    declared_note = ("**只有用户点名的才可入库**：用户声明记在工作区根的 "
+                     "`RELIABLE-REFERENCES.json`（M 逐字抄用户原话），未点名的只能当研究"
+                     "参考、不可进 `literature`；非 dry 档遇到未声明文件会以 "
+                     "`not_declared_reference` 受控拒（零写入），那是 fail-closed，不是故障。")
+    if str(role or "") == "A":
+        chain = ("- 未入编的必须先走判收链：`search.ingest_local(books_dir=\"library\" 或 "
+                 "\"source\", dry_run=True)` 发现（只算不写）→ `lit.stage_add` 建候选 → "
+                 "`text.extract` + `fs.read` → `lit.admit` → `lit.admit_all` 提交；"
+                 "不许当已入库（`data/literature.json` 里没有行不等于判收过了），也不许用"
+                 "非 dry 档整目录登记 —— 那会跳过判收、把「盘上有文件」冒充成「判收过了」。")
+    else:
+        chain = ("- 未入编的必须先走判收链（由 A 负责：发现 → 建候选 → 抽读 → 判收 → "
+                 "提交），不许当已入库（`data/literature.json` 里没有行不等于判收过了）；"
+                 "拿非 dry 档整目录登记会跳过判收、不算收编。")
+    return head + chain + declared_note
 #: 只读判据：提示词里那几句口径必须与代码里的常量 / 词表对得上（对不上就返回一句人话）。
 #:
 #: 为什么要有它：这一段族的缺陷形态是"提示词写了一个代码里不成立的机制"，而两边的

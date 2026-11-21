@@ -517,6 +517,25 @@ blocker），但读错会派错人：`from_lit` 的活归 B 按文献侧原口�
 `not_recorded`，读 `evidencebits.optimized_state`）或 `statements_unoptimized.rows[*]` 里逐份的
 `optimized` —— 为 `true` 的不再动，`false` / `not_recorded` 的要洗。
 
+## 收工门报红的那两格问的是两张表：先看它点名的是哪一张
+
+`conductor.closing` 有两条容易混成一条的队列 —— 一条数待入库**候选**（`lit_candidates`），
+一条数已入库**文献**的消化位（`literature` 的 `processed`）。它们不是同一张表，
+出口也不是同一个角色。**两张表的区别与各自的出口逐字印在你的政策里**
+（真身 `closing.LITERATURE_QUEUES_NOTE`；同一句话也是收工门这一格的读数
+`readings.literature_pending.queues_note`）；本手册只讲怎么读，不再抄第二份。
+
+读格三步：
+
+1. 先读 `status` 里红的是哪一格，再读那一格 `readings.<格>.table` 与 `reason` 里点名的表名；
+2. 再读分组：`readings.literature_pending.by_delegation` 给你"哪几个委托、各几条"
+   （数的是全表，不只当前那一份）；
+3. 照 `queues_note` 点名的出口派活 —— 派错角色的活不会让那一格变绿。
+
+真机 `projects/lp-ball-14` 就是这么错的：门报 `literature_pending` fail（读数是 24 条
+候选、四个委托），`out/review/REPORT.md:59` 却写成「lit 000001–000005 无本地全文」（那是
+另一张表的 5 行），于是 B2 被派去改那 5 行 —— 候选一行没动，这一格一格没变。
+
 ## 手上真的没事了：交差，不空转
 
 活做完了、下一件也派不出来、计时器一条都不在跑 ⇒ **交差**（父那一侧记你「静默」，
@@ -678,7 +697,11 @@ blocker），但读错会派错人：`from_lit` 的活归 B 按文献侧原口�
   所以那两条路都不需要（既不是你直连的那条，也不是经 B 再转给 V 的那条）——
   **M 没有 V 签的编辑权，也没有获取 V 签的义务**。缺签的现场分两种：**命题已在册而缺 V 签
   ⇒ 那是 B 侧的问题，让 B 处理**（重送 / 补证 / 明确放弃，B 不许推给 F）；**F 产出但没签
-  ⇒ 那是 F 侧的工作异常**，经 D 让 F 先拿 V 签（谁产出谁送审），B 不处理、不润色无签的证明。
+  ⇒ 那是 F 侧的工作异常**，经 D 让 F 先拿 V 签（谁产出谁送审），**无签的证明 B 不处理**。
+  界线是 V 签，不是洗不洗：B 的二阶段本来就要对**证明正文**洗一遍（洗稿 → 重拿 V 签 →
+  精准替换），洗过的版本仍要 V 签盖住这一版才许替换 —— 所以派 B 做二阶段是正路，
+  洗稿不是绕过签的路（2026-11-21：真机 lp-ball-14 的派活把这条读成了「B 不许碰证明正文」，
+  B 的二阶段一次没发生 —— 读错的代价是动作不发生，不是读数难看）。
   **E 的穷举稿同理**：D 的携带单只带已签的那一份，没签的稿连 D 那一关都过不去 ——
   经 D 让 E 先把稿拿去签。
   **F、E 与 B 各有直连 V 的边**（谁直连谁、几条边，逐格看伙伴表 ——
@@ -2712,6 +2735,10 @@ def _a_skills() -> tuple[Skill, ...]:
    那两种情况在读数上分得开，**别把它们读成同一件事**。真要用别的类型，看它的 `pattern`。
    注意：收编出来的行 `type_code` 可能为空（"本地文件不判类型"），交回时**别把它当成
    一篇有来源类型标识的文献**。
+   ⚠️ **工作区里已经有一批文献（例如 `library/` 下散放的历史 PDF）时，别用非 dry 档
+   把它们一次性收编**：那一档是兜底（它把文件直接写成 `literature` 行、跳过判收）。
+   正路是 `dry_run=True` 发现 → `lit.stage_add` 建候选 → 判收链，顺序见
+   `找文献-换招法而不是换说法` 的 §0.2。
 
 ## 交回什么（判据）
 
@@ -2778,19 +2805,86 @@ def _a_skills() -> tuple[Skill, ...]:
         Skill(
             slug="找文献-换招法而不是换说法",
             title="查不到时换什么：四个旋钮、五条代换、三档缺口，以及引文图怎么走",
-            summary="检索式怎么变（题面→规范术语→对象→参考文献）、纳入/排除判据、交回时按三档写清缺口；攥住关键文献后用它走引文图",
-            when=("一次检索什么都没查到、只查到一堆自称证明了某定理的条目、要为一个方向做一轮系统调研，"
+            summary="检索式怎么变（题面式说法不是查询词→规范术语→对象→参考文献）；`no_results` 必须换规范术语重查一次；每趟收尾逐条判收/判拒、逐委托 `lit.admit_all` 清表；工作区里已有的文献先 `ingest_local(dry_run=True)` 发现 → `lit.stage_add` 建候选 → 判收链（手册 §0.2）",
+            when=("一次检索什么都没查到、一条 `no_results` 要按纪律换说法重查、或要收尾清待裁表时；"
+                  "工作区里已经投了一批历史文献（`library/` 下的 PDF、`SEED-README.md`）要逐份判收时；"
+                  "只查到一堆自称证明了某定理的条目、要为一个方向做一轮系统调研，"
                   "或**已经攥住一篇关键文献、想顺着引文往上/下游走**时"),
             actions=("A.search_literature", "A.shelf_search", "A.run_once", "A.walk_citations"),
             tools=("search.literature", "search.shelf", "search.local", "search.providers",
                    "search.register", "search.dedup_check", "search.walk_citations",
-                   "search.download", "text.extract", "lit.stage_add", "lit.stage_list",
+                   "search.download", "search.ingest_local", "text.extract",
+                   "lit.stage_add", "lit.stage_list",
                    "lit.admit", "lit.admit_all", "lit.stage_reject",
                    "table.get", "table.search", "fs.read", "manuscripts.read"),
             body="""# 查不到就换招法
 
 这一条补的是**方法面**（来源 `literature-survey` 里的"检索式、纳入/排除、缺口表"那三件）。
 顺序与"交回什么"在 `检索-先本地再联网` 那一条里，这里只讲**换什么**。
+
+## 零、两条入口纪律（2026-11-21）
+
+### 0.1 题面式说法不是查询词（ASEARCH）
+
+真机 lp-ball-14 的读数：14 条检索请求里 13 条 `no_results`，其中 8 条的 `topic` 是
+**题面式说法**（`Ball cube slicing` / `Meyer Pajor sections` / `Koenig Koldobsky sections
+of the cube` / `Koldobsky Fourier transform sections` / `central hyperplane sections of
+the l_p ball` / `Brunn concavity sections centrally symmetric body` /
+`sectional isoperimetric inequality` / `Fourier transform sections of the cube`）。
+它们每一条都查回了 15 条候选（不是"这个方向没有文献"），只是没有一条被逐条判过。
+
+1. **题面句不是查询词**：研究问题原句（哪怕全是英文术语）直接当 `topic`，上游只会把它
+   当一串词袋。先把它拆成"这个方向在文献里通行的名字"：**规范术语 + 关键词组合**（对象 +
+   性质 + 方法）。例：`Ball cube slicing` → `cube slicing`（Ball 1986 的题名就是这两个词）；
+   `Meyer Pajor sections` → `Meyer-Pajor` + `sections of convex bodies`；
+   `Koldobsky Fourier transform sections` → `Koldobsky` + `Fourier transform` + `sections`。
+2. **`no_results` 之后必须换规范术语再查一次**（同一个题面原样重试不算）。换什么：
+   - **去掉题面里的通用词**（of / and / in / the / central / sections 单独查不区分方向）；
+   - **加数学术语**：`hyperplane sections` / `central section` / `cross-sectional volume` /
+     `Brunn-Minkowski` / `isoperimetric inequality` / `unit cube` / `ℓ_p ball`；
+   - **加作者名或定理名**：`Ball` / `Meyer-Pajor` / `Koldobsky` / `König` / `Brunn`；
+   - **换 `mode`**（`precise` ⇄ `topical`）或**换 `providers`**（同一式换一个库 = 换一批语料）。
+3. **换法要留痕**：结论里逐次写「原 `topic` → 新 `topic` → 为什么换」；一条 `no_results`
+   只有在换过规范术语之后才算终局。收工门的 `no_result_topics` 就是核这件事的读数 ——
+   留在盘上的题面式说法会被逐条读出来。
+
+⚠️ 这一条是提示词口径，不是词表阈值：判"换没换"由写结论的人与收工门读，工具不打分。
+
+### 0.2 工作区里已有的文献不是「已入库」（SEEDDOC）
+
+真机的下一个工作区会在 `library/` 下投一批历史下载的 PDF（工作区根那份 `SEED-README.md`
+写着它们是什么；数量几十份），而 `data/literature.json` 是 0 行、没有 `lit_id`、也没有
+任何判收。**"盘上有文件"与"入库"是两件事**：前者只说明当时下载成功过、正文抽得出来。
+这条路的目标不是"把它们登记掉"，是"逐份判收"。
+
+按顺序做三步（顺序不许换）：
+
+1. **发现**：`search.ingest_local(books_dir="library", dry_run=True)`。它读同一个目录、
+   算同一份 sha256 / 页数 / 文本层，但**一个字节都不写**（`lit_candidates` / `literature` /
+   两个台账文件都不动）。读数里的 `count` 与 `books[]` 就是候选清单；`ingested` 是
+   "会登记"的预告，**不是**入库读数。
+2. **建候选**：逐份 `lit.stage_add(request_id=…, entries=[{title: …,
+   url: <发现读数里那一份的盘上路径>, relevance: "工作区里已有的本地文献，不是检索来的"}])`。
+   这一步只写候选表（`lit_candidates`），`literature` 仍是 0 行 —— 候选不是入库。
+   这一趟没有检索委托就立一个委托号（`r-<序号>`），判收与提交都挂在它名下。
+3. **判收链**（与检索回来的候选完全同一条，见 §八 / §九）：`lit.stage_list` 回读 →
+   `text.extract(lit_id="cand:<槽位>")` 抽正文 → `fs.read` 读到那份 `.txt` →
+   `lit.admit(items=[{slot, availability: "readable"}])` 逐条判 → 逐委托
+   `lit.admit_all` 提交。抽读与读是 `content_read` 的证据；**提交那一刻才发号**、
+   才进 `literature`。
+
+**不许做的两件事**（都不报错，所以只能靠纪律拦住）：
+
+- 拿发现读数当"已入库"：`dry_run` 的 `ingested` 只是预告，`literature` 一行没多；
+  凭它去派 B，B 什么也处理不到（它要的是 `lit_id`）。
+- 用非 dry 档把整目录一次性"登记"：那是兜底那条路，它把"盘上有文件"直接写成
+  `literature` 行、跳过了判收（本仓已给它补了正文闸，但跳过判收这件事仍在）。
+
+**没有正文的那几份**（乱码 / 扫描件 / 无文字层 / 只有题录）：`lit.admit` 会整批受控拒
+（`no_read_evidence`，逐槽点名 `extract_failed` / `metadata_only` / `no_fulltext`）——
+这正是"不许当已收编"的机器读数。处置：`lit.stage_reject`（`rejected_low_quality`）+
+写清为什么没读到（乱码要换来源；扫描件要先 OCR）；它们留在候选表的 `rejected` 档，
+不会进 `literature`。
 
 ## 一、四个旋钮（都在 `A.search_literature` 的参数上，不用新工具）
 
@@ -2940,6 +3034,15 @@ def _a_skills() -> tuple[Skill, ...]:
 3. **清表**：提交顺带给本委托每一行打 `cleared_at` + `clear_reason`（不物理删）。
    表没清完 ⇒ 收工门第八格 `literature_pending` 报 `fail`（待入库表还有 `pending`、或当前委托没清表都会拦），
    而"清表之后"才叫真正收工。
+4. **每一趟的收尾是「待裁表 0 条」，不是「报告交了」**（2026-11-21，ASEARCH）：`run_once`
+   回执里的 `pending_total` 是**跨委托的全表读数**，不为 0 ⇒ 这一趟还没收尾。依次做四件事，
+   一步都不能省：① `lit.stage_list(request_id="*", status="pending")` 看全表（不只当前委托）；
+   ② 本批候选**逐条**判收 / 判拒（`lit.stage_reject` 支持批量 `slots`，一次判拒多条）；
+   ③ **逐委托** `lit.admit_all(request_id=<委托号>)` 提交清表（只清当前那个不够）；
+   ④ 交给召唤方的回执里写「还剩几条待裁、分布在哪个委托上」—— **0 也要写**。
+   真机 lp-ball-14 现场：4 个委托共 24 条候选留成 `pending`（`r-000011` 15 / `r-000012` 2 /
+   `r-000013` 4 / `r-000014` 3），而 `search_literature` 的回执里一格待裁读数都没有 ⇒
+   主控看不见、收工门却数得着。
 
 **"我觉得读过"不是证据**：`data/lit_reads.jsonl` 的回执 + 那次 `fs.read` 才是 —— 十条候选一次写死 relevance
 的批量账，会在这道闸上被逐槽点名。

@@ -106,6 +106,11 @@ class ARunResult:
     claimed_delegations: list[str] = field(default_factory=list)
     #: 认领之后给调用方看的那一句：认领了谁、下一步怎么清（空 = 这一轮没认领）。
     claim_note: str = ""
+    #: 全表待裁的一句话读数（2026-11-21 ASEARCH：真机 lp-ball-14 的 24 条 pending
+    #: 在回执里没有一句话，M 只看到一个裸数字或什么都看不到）。`pending_total` 是数，
+    #: 这一格是可照做的句子：几个委托、各剩几条、谁能清；0 也写成一句（不是空串）——
+    #: "没有遗留"与"没报"必须分得开。
+    pending_note: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -137,6 +142,7 @@ class ARunResult:
             "pending_by_delegation": [dict(g) for g in self.pending_by_delegation],
             "claimed_delegations": list(self.claimed_delegations),
             "claim_note": self.claim_note,
+            "pending_note": self.pending_note,
         }
 @dataclass
 class ClaimOutcome:

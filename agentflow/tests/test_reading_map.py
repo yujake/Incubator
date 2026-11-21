@@ -73,6 +73,13 @@ _RUNTIME_PRODUCTS = frozenset({
     # `out/vsigns/<artifact_sha>.json` 的 token 含 `<`，按占位写法跳过；这里只登记归档这一个
     # 裸文件名，且仍由 `test_the_runtime_product_exemptions_are_not_stale` 反向核它不在盘上。
     "issued.json",
+    # 用户声明白名单（`locallib.DECLARATION_NAME`，2026-11-21 业主裁定）：落点是
+    # `<工作区>/RELIABLE-REFERENCES.json`，由 M 读用户提示词后逐字落盘 —— 仓库这一层
+    # 永远没有它（与 `ARTIFACTS.jsonl` 同一条道理：它是运行时产物，不是仓库文件）。
+    "RELIABLE-REFERENCES.json",
+    # 种子投放的标记文件（`seedinject.MARKER_NAME`）：落点是 `<工作区>/SEED-README.md`，
+    # 只在开 `--seed-literature` 建新工作区时出现 —— 仓库这一层没有它。
+    "SEED-README.md",
 })
 
 

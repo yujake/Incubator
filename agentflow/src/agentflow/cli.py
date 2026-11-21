@@ -417,7 +417,8 @@ def _marker_text(root: Path, *, by: str) -> str:
 
 
 def init_workspace(st: Store, root: Path, *, allow_foreign_entries: bool,
-                   cmd: str, force: bool = False) -> int:
+                   cmd: str, force: bool = False,
+                   seed_literature: bool = False) -> int:
     """`Store.init()` 的 CLI 外壳：把 `R-32` 那一档的拒绝翻成「照着改」的话。
 
     为什么要有这一层：`R-32` 的判据本身
@@ -427,9 +428,14 @@ def init_workspace(st: Store, root: Path, *, allow_foreign_entries: bool,
     `.agentflow-workspace`（`store.init` 自己明写的白名单出口），再照常 init；
     判据本体一个字没改（它在禁改区 `schema-migration` 里）。
 
+    `seed_literature=True`（默认关）只对"这一次真的是新建"生效：`data/` 已经在了就是
+    热启动，不投。投放只写 `library/` 与 `SEED-README.md`，不写任何 `data/*.json`
+    —— 见 :mod:`agentflow.seedinject`。
+
     返回退出码：0 = 建成了；2 = 拒绝了（文案里教那条开关）或没查成。
     两个值都有调用方（`main` 的 StoreError 那一档也是 2），所以不许折成布尔。
     """
+    fresh = not (Path(root) / "data").exists()
     if allow_foreign_entries:
         marker = Path(root) / WORKSPACE_MARKER
         if not marker.exists():
@@ -453,7 +459,28 @@ def init_workspace(st: Store, root: Path, *, allow_foreign_entries: bool,
                 f"那些文件不删、不改，只是从此算这个工作区的条目。",
                 "grey"), file=sys.stderr)
         return 2
+    if seed_literature:
+        if not fresh:
+            print(tty.paint(
+                f"[{cmd}] 这里已经是工作区（data/ 在盘上）⇒ 不投种子："
+                "种子只在新建工作区时投，热启动不重复投。", "grey"), file=sys.stderr)
+        else:
+            from . import seedinject as SI
+
+            got = SI.seed_workspace(Path(root))
+            _report_seed_landing(cmd, got)
     return 0
+
+
+def _report_seed_landing(cmd: str, got: dict) -> None:
+    """把一次种子投放的读数印成一行人话（只印读数，不改任何退出码）。"""
+    if got.get("problem"):
+        print(tty.paint(
+            f"[{cmd}] 种子文献没投成：{got['problem']}", "yellow"), file=sys.stderr)
+        return
+    print(tty.paint(
+        f"[{cmd}] 种子文献：{got.get('copied', 0)} 份投到 {got.get('destination')}"
+        f"（未入库、未判收；见 {got.get('marker')}）", "grey"))
 
 
 # ---------------------------------------------------------------- 子命令
@@ -473,7 +500,8 @@ def cmd_init(args) -> int:
     st = make_store(root)
     code = init_workspace(st, root,
                           allow_foreign_entries=bool(getattr(args, "allow_foreign_entries", False)),
-                          cmd="init", force=bool(args.force))
+                          cmd="init", force=bool(args.force),
+                          seed_literature=bool(getattr(args, "seed_literature", False)))
     if code != 0:
         return code
     print(f"[init] 已初始化：{st.data}")
@@ -1311,6 +1339,7 @@ START_FLAG_MODES: dict[str, tuple[str, ...]] = {
     "--no-ask": (MODE_ROLE,),
     "--stop-file": (MODE_ROLE,),
     "--allow-foreign-entries": (MODE_ROLE,),
+    "--seed-literature": (MODE_PROJECT, MODE_ROLE),
     "--sid": (MODE_ROLE, MODE_WEB),
     "--model": (MODE_TOPIC,),
     "--budget-usd": (MODE_TOPIC, MODE_ROLE, MODE_PROJECT),
@@ -1838,6 +1867,16 @@ def _print_plan(spec: RunSpec, args) -> int:
         lean_on, lean_src = SET.lean_enabled()
     except (ValueError, OSError) as exc:
         lean_on, lean_src = False, f"读不懂（{type(exc).__name__}）"
+    writes = [] if spec.mode == MODE_WEB else [
+        f"工作区 {workspace}" + ("（会新建）" if project and project.get("will_create")
+                                 else ""),
+        "out/run-N 六件产物" if spec.mode in (MODE_TOPIC, MODE_PROJECT) else "运行记录与会话事件",
+    ] + ([f"预算寄存器 budget.json（{spec.budget_usd:g}）"] if spec.budget_usd_given else [])
+    if (bool(getattr(args, "seed_literature", False))
+            and spec.mode in (MODE_PROJECT, MODE_ROLE)):
+        writes.append(
+            "library 种子文献 + SEED-README.md（只放文件、不写台账）"
+            + ("" if (project and project.get("will_create")) else "；只在新建工作区时投"))
     plan_out = {
         "mode": spec.mode,
         "task": spec.task,
@@ -1850,11 +1889,7 @@ def _print_plan(spec: RunSpec, args) -> int:
                  "now_source": str(lean_src),
                  "selfcheck": "没跑（试运行不启动检查器）"},
         "summons": _summons_text(spec),
-        "writes": [] if spec.mode == MODE_WEB else [
-            f"工作区 {workspace}" + ("（会新建）" if project and project.get("will_create")
-                                     else ""),
-            "out/run-N 六件产物" if spec.mode in (MODE_TOPIC, MODE_PROJECT) else "运行记录与会话事件",
-        ] + ([f"预算寄存器 budget.json（{spec.budget_usd:g}）"] if spec.budget_usd_given else []),
+        "writes": writes,
         "spend": "不花钱（试运行一次模型都不调）",
     }
     if spec.as_json:
@@ -2773,7 +2808,9 @@ def cmd_project(args) -> int:
                 print("[project] 没查成：`create` 要 `--paper <那篇外部论文>`"
                       "（它是这个项目的输入；不给就不知道该铺什么）", file=sys.stderr)
                 return 2
-            res = P.create_review_project(root, paper=args.paper, name=args.name)
+            res = P.create_review_project(
+                root, paper=args.paper, name=args.name,
+                seed_literature=bool(getattr(args, "seed_literature", False)))
             seeded = res["seeded"]
             for line in tty.panel(
                 f"建好项目：{res['project']['name']}",
@@ -2842,6 +2879,7 @@ def _exec_project(spec: RunSpec, args) -> int:
             now=getattr(args, "now", None),
             # 不给就由 `run_project` 用项目根下的 `.fulltext/`（T0-6 的默认）
             text_store_dir=getattr(args, "text_store_dir", None),
+            seed_literature=bool(getattr(args, "seed_literature", False)),
         )
     except P.BudgetNotLandable as exc:
         # 显式额度没落进寄存器 ⇒ 一个字节都不往下走（拿旧额度接着跑等于让它静默压过 flag）。
@@ -2871,6 +2909,19 @@ def _exec_project(spec: RunSpec, args) -> int:
         emit(line)
 
     ing = run.get("ingest") or {}
+    seed = res.get("seed") or {}
+    if seed:
+        emit("")
+        if seed.get("landed"):
+            emit(tty.bullet(
+                f"种子文献：{seed['count']} 份 / {seed['bytes']} 字节在 {seed['destination']}"
+                f"（未入库、未判收；见 SEED-README.md）"))
+        elif seed.get("problem"):
+            emit(tty.bullet(tty.paint(f"种子文献没投成：{seed['problem']}", "yellow")))
+        else:
+            emit(tty.bullet(tty.paint(
+                "种子文献：这一趟没投进来（种子只在新建工作区时投）",
+                "yellow")))
     if ing:
         counts = ing.get("counts") or {}
         emit("")
@@ -3501,7 +3552,8 @@ def _exec_role(spec: RunSpec, args) -> int:
     # `D5`：这条命令也会 init，所以它带的开关与 `init` 逐字相同（同一个助手、同一个名字）。
     if init_workspace(st, root,
                       allow_foreign_entries=bool(getattr(args, "allow_foreign_entries", False)),
-                      cmd="run-agent") != 0:
+                      cmd="run-agent",
+                      seed_literature=bool(getattr(args, "seed_literature", False))) != 0:
         return 2
     # 显式额度在这里落盘：工作区已经存在、还没花一分钱（见 `_land_budget` 的注释）。
     # `--json` 那一档把它打到 stderr，理由与下面那句第一屏相同（stdout 必须可解析）。
@@ -5347,6 +5399,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help="这个目录里已经有用户的投料（例如一篇 PDF），仍然按工作区初始化："
                          f"先落 {WORKSPACE_MARKER}（`store` 的白名单出口）再 init；"
                          "用户的文件不删不改。不给这个开关时，'有外来条目'那一档照旧拒绝")
+    sp.add_argument("--seed-literature", action="store_true",
+                    help="新建工作区时把历史真机下载的种子文献投进 library/"
+                         "（只放文件，不写台账；默认关。已有 data/ 的热启动不投）")
     sp.set_defaults(func=cmd_init)
 
     sp = sub.add_parser(
@@ -5499,6 +5554,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help="本次最多登记几本")
     _where.add_argument("--text-store-dir", default=None,
                         help="逐页正文的内容寻址落点（不给就按各模式的缺省）")
+    _where.add_argument("--seed-literature", action="store_true",
+                        help="新建工作区时把历史真机下载的种子文献投进 library/"
+                             "（只放文件，不写台账；默认关。只对 project / research 两档有意义）")
     _cost = sp.add_argument_group("花多少钱 / 开不开 Lean / 要不要盯")
     _cost.add_argument("--budget-usd", type=float, default=None, action=_BudgetUsdAction,
                        help="美元上限。显式给了就落盘到 <工作区>/budget.json（C4）；"
@@ -5650,6 +5708,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--now", default=None, help=argparse.SUPPRESS)
     sp.add_argument("--text-store-dir", default=None,
                     help="覆盖逐页正文的落点（不给就用 <项目根>/.fulltext，见 T0-6 的默认）")
+    sp.add_argument("--seed-literature", action="store_true",
+                    help="新建工作区时把历史真机下载的种子文献投进 library/"
+                         "（只放文件，不写台账；默认关。run/create 两档才有意义）")
     sp.set_defaults(func=cmd_project, budget_usd_given=False)
 
     # 证据面工具：核引用、盘 store（`migrate` 已退场，保留词位只为给替代指引）。
@@ -5742,6 +5803,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help="这个目录里已经有用户的投料（例如一篇 PDF），仍然按工作区初始化："
                          f"先落 {WORKSPACE_MARKER} 再 init（与 `init` 的开关逐字同一个）；"
                          "不给这个开关时，'有外来条目'那一档照旧拒绝")
+    sp.add_argument("--seed-literature", action="store_true",
+                    help="新建工作区时把历史真机下载的种子文献投进 library/"
+                         "（只放文件，不写台账；默认关。已有 data/ 的热启动不投）")
     sp.add_argument("--provider", default=None,
                     help="A 的检索后端，逗号分隔（openalex/crossref/doaj/europepmc/fixture）；"
                          "缺省按配置 `agent_a.providers`，再缺省 openalex —— 与 `run-a` 同口径。"

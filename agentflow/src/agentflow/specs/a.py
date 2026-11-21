@@ -87,7 +87,8 @@ ACTIONS: tuple[ActionSpec, ...] = (
             "outcome / claimed_request_ids / claimed_own / result_lit_ids / literature / "
             "query_description / providers_requested / role_providers / sources / "
             "sources_round / cost / registered / duplicated / downloaded / download_failed / "
-            "attempts / last_error / queue_pending / rounds / note）；"
+            "attempts / last_error / queue_pending / pending_total / pending_by_delegation / "
+            "pending_scope_note / rounds / note）；"
             "三个非成功档（`refuse(...)` / `outcome=query_not_applicable` / "
             "`outcome=rejected_by_gate`）各自返回更短的读数，键集与上面这一档不同"
         ),
@@ -226,7 +227,17 @@ SPEC = AgentSpec(
             "可撤可补、可再找一批；重叠高又无新内容就拒收；只拿到3篇也逐篇审。"
             "判收不是注册：`lit.admit` 只把这一条判成 `qualified`（有资格入库、**还没有号**），"
             "**提交** `lit.admit_all` 那一刻才批量注册、把号回填进同一行，并落无号快照与带号定稿两份报告；"
-            "提交顺带清表（每行 `cleared_at`），清表之后才叫收工。报告写清已入库与未入库（含理由）。",
+            "提交顺带清表（每行 `cleared_at`），清表之后才叫收工。报告写清已入库与未入库（含理由）。"
+            # 2026-11-21（ASEARCH）：真机 lp-ball-14 的 4 个委托共 24 条候选留成 pending
+            # （r-000011 15 / r-000012 2 / r-000013 4 / r-000014 3），没有一条被逐条判过。
+            # 收尾义务写在这里（边界那条不许涨条数：伙伴表只引第一条，条数是渲染读数）。
+            "**每一趟的收尾不是「报告交了」，是「待裁表清了」**：`run_once` 回执里的 "
+            "`pending_total` 是跨委托的全表读数，不为 0 ⇒ 这一趟还没收尾。收尾三步一步都不能省："
+            "① `lit.stage_list(request_id=\"*\", status=\"pending\")` 看全表（不只当前委托）；"
+            "② 本批候选**逐条**判收（`lit.admit`，每条带 `relevance` 与 `availability`）或判拒"
+            "（`lit.stage_reject`，批量用 `slots`）；③ **逐委托** "
+            "`lit.admit_all(request_id=<委托号>)` 提交清表。交给召唤方的回执里必须写"
+            "「还剩几条待裁、分布在哪个委托上」—— 0 也要写；不写就等于把未收尾说成收尾。",
             # 2026-11-20 业主裁定（逐字「读内容才能判东西，这样的话保证通过的肯定有内容，
             # 且能保证质量」）：判收的证据从"一句 relevance"收紧到"真的读到正文"。
             "没有正文就不许判收：`lit.admit` 只接受读过正文的候选 —— 正文由 `text.extract` "
@@ -245,7 +256,48 @@ SPEC = AgentSpec(
             "不必证明叫不醒（`why` 必填、逐字进留痕）。",
             "继续搜还是收手由预算与命中率决定：预算耗尽时必须收手并在结论里写明预算读数。"
             "检索的价值不在跑了几次，而在找到能改变判断的那几篇：命中后要写清它**支撑 / 推翻**了台账里的哪一条"
-            "（`stmt:` / `rel:` 号，写进结论与 `note`）；只登记元数据不说影响的，不算有价值。"
+            "（`stmt:` / `rel:` 号，写进结论与 `note`）；只登记元数据不说影响的，不算有价值。",
+            # 2026-11-21（ASEARCH）：真机 lp-ball-14 的 14 条检索请求里 13 条 no_results，
+            # 8 条 no_result_topics 是题面式说法（"Ball cube slicing" / "Meyer Pajor sections" /
+            # "central hyperplane sections of the l_p ball" / …）。纪律此前只活在手册正文里，
+            # A 的职责面（policy）一个字都没写。这一条是提示词引导，不做词表阈值。
+            "**题面式说法不是查询词**：把研究问题原句（「Ball cube slicing」这种题面）直接丢进 "
+            "`topic` 是题面、不是检索词 —— 它查不到不等于这个方向没有文献。`topic` 写成"
+            "**规范术语 + 关键词组合**：去掉题面里的通用词，换成那条路在文献里通行的数学术语 / "
+            "定理名 / 作者名（例：`cube slicing`、`hyperplane sections`、`central section`、"
+            "`ℓ_p ball`、`Meyer-Pajor`、`Koldobsky`、`Brunn-Minkowski`）。"
+            "**`no_results` 之后必须换规范术语再查一次**（同一个题面原样重试不算）：换掉哪个词、"
+            "换成哪个术语、两次的 `topic` 各是什么，逐次写进结论；一条 `no_results` 只有在换过"
+            "规范术语之后才算终局（收工门的 `no_result_topics` 就是核这件事的读数）。",
+            # 2026-11-21（SEEDDOC）：工作区里已经躺着历史文献时，A 的可见面此前一个字都没写
+            # 这条路 —— 下一趟真机把 25 份 PDF 投进 library/（未入库、未判收），A 只能自己
+            # 想怎么办；而两种最省事的错法（把发现读数当已入库、用非 dry 档一次性登记）
+            # 都不报错。候选链已由 SEEDREH 彩排通过（temp/seedreh/SEEDREH-REPORT.md），
+            # 这一段每一句都能指到实现：dry_run 的"只算不写"是 search.ingest_local 的
+            # description 原话，判收闸在 litstage / litavail（这一段是提示词引导，不加词表阈值，
+            # 也不动任何落库路径）。
+            "**工作区里已有的文献不是「已入库」**：`library/`（历史文献的投放处）或 `source/` "
+            "下已经躺着 `.pdf`、而 `data/literature.json` 里没有它们时，顺序是三段，"
+            "一步都不能省：① **发现** —— `search.ingest_local(books_dir=\"library\", "
+            "dry_run=True)` 只算 sha256 / 页数 / 文本层、一个字节都不写（读数里的 `ingested` "
+            "是「会登记」的预告，不是入库，别拿它当已收编；发现档不受声明限制，它本来就零写入）；"
+            "② **建候选** —— 按发现读数里的盘上路径，**只对用户声明里点名的那些**逐份 "
+            "`lit.stage_add(request_id=<委托号>, entries=[{title: …, "
+            "url: <盘上路径>, relevance: \"工作区里已有的本地文献，不是检索来的\"}])`，"
+            "这一步只写候选表，`literature` 仍是 0 行；③ **判收** —— "
+            "`text.extract(lit_id=\"cand:<槽位>\")` 抽正文、`fs.read` 读到那份 `.txt`、"
+            "`lit.admit(availability=\"readable\")` 逐条判，最后逐委托 `lit.admit_all` 提交"
+            "（提交才发号、才进 `literature`）。顺序不许换、也不许跳过建候选：拿非 dry 档把"
+            "整目录一次性登记进库，等于把「盘上有文件」冒充成「判收过了」。"
+            "**只有用户点名的才可入库**（业主 2026-11-21 裁定，默认 fail-closed）：M 会把用户"
+            "提示词里点名的文件/目录逐字记进工作区根的 `RELIABLE-REFERENCES.json`；清单外的"
+            "文件只能当研究参考（可读），不许进 `literature` —— `search.ingest_local` 非 dry 档"
+            "遇到未声明文件会以 `not_declared_reference` 受控拒（零写入）。那不是故障，是它在"
+            "拦「未声明入库」：让 M 先把用户声明记下来（或只把那份当研究参考读来用、不入库）。"
+            "**没有正文的不许当已收编**：乱码 / 扫描件 / 无文字层 / 只有题录的那几份，"
+            "`lit.admit` 会按 `no_read_evidence` 整批受控拒并逐槽点名（`extract_failed` / "
+            "`metadata_only` / `no_fulltext`）—— 那一格就是机器读数；正确处置是 "
+            "`lit.stage_reject` 写清为什么没读到，它们不进 `literature`。",
             "**引用闸**（不是派 B 的前提）：这批文献**要不要被引用成断言**由报告决定 —— "
             "报告里「这条结论凭什么」要追到出处时，凭据只认 B 整理出的概念行与关系行"
             "（`relations` 的 `kind`/`quote`）；引用与否都不改变「收进 `literature` 就派 B 收编」这一步。",

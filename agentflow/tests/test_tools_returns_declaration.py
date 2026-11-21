@@ -20,6 +20,7 @@ LLM 少看到有用的键，但不会让调用方读错。这条不对称关系�
 
 from __future__ import annotations
 
+import json
 import re
 import tempfile
 from dataclasses import replace
@@ -1544,10 +1545,12 @@ def registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ToolRegistry:
     _books = store.root / "books_probe"
     _books.mkdir(parents=True, exist_ok=True)
     (_books / "probe.txt").write_text("探针书。\n", encoding="utf-8")
-    # 登记本地目录的探针要有真目录（否则那一步是 `io_error` ⇒ "没查成"）：
-    _books = store.root / "books_probe"
-    _books.mkdir(parents=True, exist_ok=True)
-    (_books / "probe.txt").write_text("探针书。\n", encoding="utf-8")
+    # 2026-11-21 起非 dry 档按用户声明核（fail-closed：没点名的不许入库）：
+    # 这一条探针要见证 `search.ingest_local` 的成功支，所以把 books_probe/ 声明成用户点名的。
+    (store.root / "RELIABLE-REFERENCES.json").write_text(
+        json.dumps({"paths": ["books_probe/"], "verbatim": "books_probe/ 里都是可靠参考文献"},
+                   ensure_ascii=False),
+        encoding="utf-8")
     _acceptance = store.root / "out" / "paper" / "ACCEPTANCE.md"
     _acceptance.parent.mkdir(parents=True, exist_ok=True)
     _acceptance.write_text(

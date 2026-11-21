@@ -35,7 +35,7 @@ exit 2），不许当"可以交"；`machine_pass`（旧口径：八格全 pass�
 | `substance` | 实质产出：`documents` / `relations` / `experiments` / `review_findings` / `statements` 至少一张非空（全 0 ⇒ 不许报「可交付」；`tasks`/`usage_ledger` 不算） |
 | `acceptance` | 验收表的机器可判行（`out/paper/ACCEPTANCE-CHECKS.json`）：逐行现算，任一不满足 ⇒ `fail`；行读不懂 ⇒ 那一行 `unreadable`、整格 `unknown`（绝不 `pass`） |
 | `artifact_ledger` | 产物台账（`ARTIFACTS.jsonl`）与盘上一致：`missing`/`unreadable` ⇒ `fail`（真缺陷）；只有 `changed` ⇒ `pass` + 一条 warning（按路径取最后一条登记之后又被改写是常态；把它读成没查成会让任何有派活的跑批都收不了工） |
-| `literature_pending` | 待入库文献表（`lit_candidates`）：全表还有 `pending` ⇒ `fail` + blocker；当前委托提交后没清表（行上没有 `cleared_at`）⇒ `fail` + blocker；表读不到 ⇒ `unknown`（不是"没有待裁"）。业主口径：「清空待入库文献表及文献 → 真正收工」 |
+| `literature_pending` | 待入库候选表 `lit_candidates`（不是 `literature` 表的 `processed` 位 —— 那是 B 的消化面，数在 `acceptance` 的 `literature_unprocessed`）：全表还有 `pending` ⇒ `fail` + blocker（读数点名表名、委托与 ids、出口 = A 的 `lit.admit` / `lit.stage_reject` / 逐委托 `lit.admit_all`）；当前委托提交后没清表（行上没有 `cleared_at`）⇒ `fail` + blocker；表读不到 ⇒ `unknown`（不是"没有待裁"）。业主口径：「清空待入库文献表及文献 → 真正收工」 |
 
 维护规则：上面这张表必须与 :data:`DEFAULT_CHECKS` 逐条对应（一格一行、顺序相同）。
 判据 `tests/test_the_gate_table_lists_every_cell.py` 从本 docstring 里现扫表行、与
@@ -167,14 +167,90 @@ CONTRADICTION_TABLES: tuple[str, ...] = (
 LOAD_BEARING_TABLES: tuple[str, ...] = ("documents", "statements", "experiments")
 
 
+#: 同一个会话号的两种日期写法：ISO（`2026-11-21`）与紧凑（`20261121`）。
+#:
+#: 为什么读侧要认两种（2026-11-21 真机 lp-ball-14 的现场）：写侧把 `--sid` 逐字当文件名
+#: （`sessions.session_path` 只做 `f"{sid}.jsonl"`），真机启动传的是 ISO 日期 ⇒ 盘上是
+#: `sessions/2026-11-21.jsonl`；而不给号的那条路取 `sessions.session_id()`（`%Y%m%d`）⇒
+#: 只拼出 `20261121.jsonl`，于是「这一趟的会话」被判成「没有会话记录」，
+#: `user_pending` 从 pass 降成 na（`out/review/STATUS-*.json` 里那一格）。
+#: 口径只有这一处：两种写法都算候选（规范形是 ISO —— 真机真跑写出来的那一族全是它），
+#: 命中哪一份就把文件名记进这一格的读数（`session_file`）。
+_SID_ISO = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_SID_COMPACT = re.compile(r"^(\d{4})(\d{2})(\d{2})$")
+
+
+def session_id_spellings(sid: str | None) -> tuple[str, ...]:
+    """同一个会话号的候选文件名主干：规范形（ISO）在前，同一天另一种写法兜底。
+
+    - 日期形的号（`2026-11-21` / `20261121`）⇒ `("2026-11-21", "20261121")`；
+    - 别的号（`real11` / `r34c` / `s1`）⇒ 只有它自己 —— 不许把 `a-b` 当日期拆；
+    - `None`（缺省会话口径）⇒ 取 `sessions.session_id()` 当基号，再按上面两条展开。
+
+    「两种写法是同一个号」这条判断只在这里做一次：两处各拼一份文件名，改口径的人
+    只会改到一处 —— 2026-11-21 那次就是这么来的（写侧逐字、读侧按 `%Y%m%d`）。
+    """
+    from . import sessions as _SESS
+
+    text = (str(sid).strip() if sid is not None else "") or _SESS.session_id()
+    if _SID_ISO.match(text):
+        iso = text
+    else:
+        match = _SID_COMPACT.match(text)
+        if not match:
+            return (text,)
+        iso = f"{match.group(1)}-{match.group(2)}-{match.group(3)}"
+    compact = iso.replace("-", "")
+    return (iso, compact)
+
+
+def _session_candidates(session_root: Any, sid: str | None) -> tuple[Path, ...]:
+    """这一段的候选文件，顺序 = 优先读的那一份在前（同一份只出现一次，路径由 `sessions` 拼）。
+
+    - 显式给了号 ⇒ 逐字那一种写法在前（`--sid 2026-11-21` 先试 ISO，`--sid 20261121`
+      先试紧凑）：号就是那一段的名字，名字指向哪一份就读哪一份；
+    - `sid is None` ⇒ 规范形（ISO）在前：没有名字可依据时，按真机真跑的落盘形态排。
+    """
+    from . import sessions as _SESS
+
+    spellings = session_id_spellings(sid)
+    given = str(sid).strip() if sid is not None else ""
+    if given:
+        spellings = tuple(sorted(spellings, key=lambda s: s != given))
+    out: list[Path] = []
+    for spelling in spellings:
+        path = _SESS.session_path(session_root, spelling)
+        if path not in out:
+            out.append(path)
+    return tuple(out)
+
+
+def session_file_of(session_root: Any, sid: str | None) -> tuple[Path | None, tuple[Path, ...]]:
+    """这一段会话真正要读的那一份：`(路径, 全部候选)`；都不在盘上 ⇒ `(None, 候选)`。
+
+    选中的口径（三态纪律：命中哪一份要说得出，不许"反正读到了"）：
+
+    - 按 :func:`_session_candidates` 的优先顺序取第一份在盘上的 —— 显式给号时逐字优先，
+      缺省号时规范形（ISO）优先；
+    - 两种写法都在盘上（历史遗留的分叉：同一天被写成两份）⇒ 命中的那一份进读数，
+      另一份由调用方记进 `session_also_on_disk` —— 这一档只报事实，不替人挑；
+    - 两个都不在 ⇒ `None`，理由由调用方把候选文件名逐个点名（不许只说"没有会话记录"）。
+    """
+    candidates = _session_candidates(session_root, sid)
+    for path in candidates:
+        if path.is_file():
+            return path, candidates
+    return None, candidates
+
+
 def _session_record_exists(session_root: Any, sid: str | None) -> bool:
     """这一趟的会话记录在不在盘上（`user_pending` 的 na 判据点）。
 
-    单独成函数是为了让判据能在这一处打桩：`tests/test_emptycell_four_states.py` 把它
-    换成恒真 ⇒"没有会话记录 ⇒ na"那一条必须当场变红（判据没接线时它会静默变绿）。
+    两种写法都算"在"（见 :func:`session_id_spellings`）；单独成函数是为了让判据能在
+    这一处打桩：把它换成恒真 ⇒"没有会话记录 ⇒ na"那一条必须当场变红。
     """
-    from . import sessions as _SESS
-    return _SESS.session_path(session_root, sid).is_file()
+    path, _candidates = session_file_of(session_root, sid)
+    return path is not None
 
 
 def _record_not_applicable(rep: ClosingReport, name: str, why: str,
@@ -686,25 +762,89 @@ def _words_in(text: Any) -> set[str]:
     return {w.lower() for w in words if w.lower() not in _FIT_STOPWORDS}
 
 
+#: 元陈述的记账词：出现这些词的断言在讲「本库 / 本工作区的记录、覆盖、缺口」，
+#: 不是在讲文献内容。判据按结构特征认它（出现即命中，不做词频打分）。
+#: 命中时 `lit:` 这条腿不适用（被引的 lit 号是被描述的对象，不是证据）；
+#: `exp:` 与已回验 `rel:` 的数学腿照判 —— 元陈述不会因此被读成「对上了」。
+_FIT_RECORD_MARKERS: tuple[str, ...] = (
+    "本库", "本工作区", "台账", "记录",
+)
+
+#: `verifications` 只有在当表/目录引用时才算是记账词（`verifications/` / `verifications 下`
+#: 这一类）。英文正文里的 "numerical verifications of ..." 是普通名词，不该让一条真跑题的
+#: 引用因此落 `unjudged` —— 这一格是「不许放宽」在元陈述识别上的那一半。
+_FIT_RECORD_TABLE_RE = re.compile(r"verifications\s*(?:/|下|里|中|表|目录)")
+
+_CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+
+
+def _has_cjk(text: Any) -> bool:
+    """一段文本里有没有汉字（判「正文与题名是不是同一种语言」的结构特征）。"""
+    return bool(_CJK_RE.search(str(text or "")))
+
+
+def _cjk_dominant(text: Any) -> bool:
+    """这段文本是不是用中文正文写的（结构判定，不做词频打分）。
+
+    判据：至少有一段连续 4 个及以上的汉字 —— 连续四字是中文短语的结构特征，
+    英文正文里夹一个中文术语不会形成这样的游程。真机 lp-ball-14 的 claim-2 / 11
+    正是「中文正文 + 英文题名」：题名级英文实词代理在这种形态上必然失配。
+    """
+    return bool(re.search(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]{4,}",
+                          str(text or "")))
+
+
+def _is_record_statement(text: Any) -> bool:
+    """这条断言是不是「关于本库记录的元陈述」（D62 的补丁）。
+
+    结构特征：正文出现记账词（`本库` / `本工作区` / `台账` / `记录`），或出现
+    `verifications` 当表 / 目录引用（`verifications/` / `verifications 下`）——
+    数学断言不用这些词，它们只出现在「本库有什么记录、覆盖到哪、缺哪一块」这类陈述里。
+    出现即命中，不按词频打分。
+
+    命中时 `lit:` 那条腿不适用：被引的 lit 号是被描述的对象，不是证据
+    （真机 lp-ball-14 的 claim-10 / claim-12）。这不等于给断言放行 ——
+    `exp:` 与已回验 `rel:` 的腿照判，只有 `lit:` 的元陈述落 `unjudged`。
+    """
+    s = str(text or "")
+    if any(marker in s for marker in _FIT_RECORD_MARKERS):
+        return True
+    return bool(_FIT_RECORD_TABLE_RE.search(s))
+
+
 def claim_evidence_fit(
     claim: Mapping[str, Any],
     *,
     exps: Mapping[str, Mapping[str, Any]],
     lits: Mapping[str, Mapping[str, Any]],
+    rels: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """一条断言与它引的证据对不对口 —— 逐条判据的唯一实现（`D61`/`D62`）。
 
-两个调用方共用它，这是刻意的（`R003`：同一判据不许有第二份实现）：`citation_fit`（收工门那一档，读
-全库）与 `doc_tools.citation_coverage`（写稿那一刻的读数）—— 后者的由来是 T4 第 3 趟 `t4c`：
+三个调用方共用它，这是刻意的（`R003`：同一判据不许有第二份实现）：`citation_fit`（收工门那一档，
+读全库）与 `doc_tools.citation_coverage`（写稿那一刻的读数）—— 后者的由来是 T4 第 3 趟 `t4c`：
 `documents/0000` 的 5 条断言里 2 条把数学教育论文当出处，收工门的 `citation_fit` 点名了、M 调了
-5 次 `closing` 看到之后仍按 met=true 收工，而写稿期那条读数当时只报"引了几条"、不报"对不对口"。
+5 次 `closing` 看到之后仍按 met=true 收工，而写稿期那条读数当时只报"引了几条"、不报"对不对口"；
+`agent_b.register_statement` 的登记回执也读它（B 在登记那一刻要看见同一格）。
 
-判据分两条腿，都是特征交集（详见 `citation_fit` 的 docstring）：引 `exp:` 比整数特征，引 `lit:`
-比英文实词；两侧任一侧没有可判特征 ⇒ `unjudged`（"没查成"，绝不读成"对上了"）。同一份判据放到写稿
-那一刻，才有机会在收工前改掉。
+判据分三条腿，前两条是特征交集（详见 `citation_fit` 的 docstring），第三条是凭据本身：
+- 引 `exp:` 比整数特征；引 `lit:` 比英文实词；两侧任一侧没有可判特征 ⇒ `unjudged`；
+- 引 `rel:` 看那条关系自己的回验状态（`evidencebits.quote_state` 的唯一读口径）：
+  `verbatim` / `semantic`（`quote_verified is True` 且有可复核的 `quote_span`）⇒ 这条引文
+  算支持（真机 lp-ball-14 的 claim-2：正文中文、题名英文、实词不交，而 `rel:000001` 逐字
+  命中 p.2 —— 改前只比题名实词，把最强的那份证据漏掉了）；还没回验到区间 ⇒ `unjudged`。
+
+两种形态不许记 `mismatch`（判据的代理在这两种形态上不成立，不是"引文可能跑题"）：
+- 中文正文 + 英文题名：题名级英文实词代理必然失配 ⇒ `unjudged`，why 写明语言不同；
+- 元陈述（正文在讲本库 / 本工作区的记录、覆盖、缺口）：被引的 `lit` 是被描述的对象、
+  不是证据 ⇒ 这条 `lit` 腿不适用。`exp:` / 已回验 `rel:` 的腿照判，所以元陈述不会因此
+  被读成"对上了"，也不会因为被清点的那个 lit 号被读成"跑题"。
     """
-    claim_nums = _numbers_in(claim.get("text"))
-    claim_words = _words_in(claim.get("text"))
+    claim_text = claim.get("text")
+    claim_nums = _numbers_in(claim_text)
+    claim_words = _words_in(claim_text)
+    record_statement = _is_record_statement(claim_text)
+    relation_rows = rels or {}
     verdict = "unjudged"
     why: list[str] = []
     for cite in (claim.get("citations") or []):
@@ -728,14 +868,39 @@ def claim_evidence_fit(
                 verdict = "mismatch"
                 why.append(f"{cid}：断言里的数字 {sorted(claim_nums)[:6]} 与被引实验的 "
                            f"{sorted(ev_nums)[:6]} 没有交集 ⇒ 说的不是同一个界/参数")
+        elif cid.startswith("rel:"):
+            # 已回验的引文就是凭据：逐字 / 语义通过且留了区间 ⇒ 支持这条断言。
+            rel = relation_rows.get(cid[4:].split("#", 1)[0])
+            if rel is None:
+                why.append(f"{cid}：关系行不在册 ⇒ 不可判")
+                continue
+            state = EB.quote_state(rel)
+            if state in ("verbatim", "semantic"):
+                verdict = "fit"
+            elif verdict != "fit":
+                why.append(f"{cid}：这条关系还没回验到可复核的区间"
+                           f"（quote_state={state}）⇒ 不可判")
         elif cid.startswith("lit:"):
             lit = lits.get(cid[4:].split("#", 1)[0])
             if lit is None:
                 why.append(f"{cid}：文献行不在册 ⇒ 不可判")
                 continue
+            if record_statement:
+                # 元陈述里这条 lit 是被描述的对象（"本库对 lit:X 有记录"），不是证据。
+                if verdict != "fit":
+                    why.append(f"{cid}：元陈述（正文在讲本库记录，被引的 lit 是被描述的对象）"
+                               f"⇒ 题名实词代理不适用")
+                continue
             ev_words = _words_in(lit.get("title")) | _words_in(lit.get("summary"))
             if len(claim_words) < 2 or not ev_words:
                 why.append(f"{cid}：一侧没有实词特征 ⇒ 不可判")
+                continue
+            ev_text = f"{lit.get('title') or ''} {lit.get('summary') or ''}"
+            if ((_cjk_dominant(claim_text) and not _has_cjk(ev_text))
+                    or (_cjk_dominant(ev_text) and not _has_cjk(claim_text))):
+                # 中文正文与英文题名比实词必然失配：这是语言不同，不是引文跑题。
+                if verdict != "fit":
+                    why.append(f"{cid}：正文与题名语言不同，实词代理不适用 ⇒ 不可判")
                 continue
             if claim_words & ev_words:
                 verdict = "fit"
@@ -751,25 +916,31 @@ def claim_evidence_fit(
 def citation_fit(store: Any) -> dict[str, Any]:
     """逐条断言核「它引的证据是不是说的同一件事」（确定性、可复算，D61/D62）。
 
-判据分两条腿，都是特征交集：
+判据分三条腿：
 - 引 `exp:`：断言正文的整数集合 与 被引实验的 `claim` / `claim_key` / `search_bound` / `params` 里的
   整数集合，两边都非空时必须有交集（真机："n=3，界 2000" 引了 "n=4，界 1000" ⇒ 交集为空）；
 - 引 `lit:`：断言正文的英文实词集合 与 被引文献题名/摘要的实词集合，两边都非空时必须有交集
-  （真机：讲 Wiles 三条承重腿的断言引了「PRIMES is in P」⇒ 交集为空）。
+  （真机：讲 Wiles 三条承重腿的断言引了「PRIMES is in P」⇒ 交集为空）；
+- 引 `rel:`：那条关系自己的回验状态（`evidencebits.quote_state`）：`verbatim` / `semantic`
+  （`quote_verified is True` 且有可复核的 `quote_span`）⇒ 这条引文算支持。真机 lp-ball-14 的
+  claim-2 引 `rel:000001` 逐字命中 Ball p.2，而改前只比题名实词，把最强的那份证据漏掉了。
 
-三态：任一侧没有可判特征 ⇒ 记 `unjudged`（"没查成"，绝不读成"对上了"）。一条断言引了多条证据
-时，只要有一条"对得上"就算这一条对得上（不因一条跑题引文判死整条，也绝不放过"全都对不上"）。
+三态：任一侧没有可判特征 ⇒ 记 `unjudged`（"没查成"，绝不读成"对上了"）。中文正文与英文题名
+（实词代理必然失配）、以及关于本库记录的元陈述（被引的 `lit` 是被描述的对象）也记 `unjudged`
+并写明 why，不记 `mismatch` —— 这两种形态不是"引文跑题"。一条断言引了多条证据时，只要有一条
+"对得上"就算这一条对得上（不因一条跑题引文判死整条，也绝不放过"全都对不上"）。
     """
     docs = [dict(r) for r in store.rows("documents")]
     exps = {str(r.get("experiment_id") or ""): dict(r) for r in store.rows("experiments")}
     lits = {str(r.get("lit_id") or ""): dict(r) for r in store.rows("literature")}
+    rels = {str(r.get("relation_id") or ""): dict(r) for r in store.rows("relations")}
     checked: list[dict[str, Any]] = []
     for doc in docs:
         for claim in (doc.get("claims") or []):
             if not isinstance(claim, Mapping):
                 continue
             # 逐条判据只有一份实现（`claim_evidence_fit`，写稿期那条读数共用它）。
-            one = claim_evidence_fit(claim, exps=exps, lits=lits)
+            one = claim_evidence_fit(claim, exps=exps, lits=lits, rels=rels)
             checked.append({"doc_id": str(doc.get("doc_id") or ""),
                             "claim_id": str(claim.get("claim_id") or ""),
                             "citations": [str(c) for c in (claim.get("citations") or [])],
@@ -4899,14 +5070,22 @@ def closing_session_identity(root: Any, given: str | None) -> SessionIdentity:
 
     三态：
 
-    - `given is None` ⇒ 读缺省会话（`sessions/<今天>.jsonl`，运维口径、合法）；
+    - `given is None` ⇒ 读缺省会话（`sessions/<今天>.jsonl`，运维口径、合法）；今天那一份
+      在盘上时返回它的「实际号」（文件名的 stem），于是两种写法（`2026-11-21` /
+      `20261121`）都落到同一份文件上，读数里点名命中的文件名；
     - `given` 是空串（`NO_SESSION`）⇒ 没给号：点名"缺省会话"，`user_pending` 那一格
       「没查成」—— 不许折进 `None` 的"读缺省会话"（假绿）；
-    - 给了号、且那一段在盘上 ⇒ 读它，读数点名这个号；
-    - 给了号、盘上没有（或它根本不是会话号）⇒ 受控拒绝（退出码 2，门不跑）。
+    - 给了号、且那一段在盘上（逐字那一份，或同一天另一种写法那一份）⇒ 读它，
+      返回实际命中的号，读数点名这个号与文件名；
+    - 给了号、两种写法都不在盘上（或它根本不是会话号）⇒ 受控拒绝（退出码 2，门不跑），
+      理由里逐个点名找过的文件名。
 
     为什么"没给"落到 `NO_SESSION` 而不是 `None`：两个输入混用，缺省会话里没有提问
     就会被读成"没问过"。
+
+    为什么同一趟的两种写法都算"在盘上"：写侧把 `--sid` 逐字当文件名，而缺省号是
+    `%Y%m%d`（见 :func:`session_id_spellings` 上方那段现场）；只认逐字那一份时，
+    真机 `sessions/2026-11-21.jsonl` 会被读成"没有会话记录"（`user_pending` 降 na）。
 
     为什么这一份实现住在 `closing.py`：CLI 与 API 两个出口必须
     拒绝同一件事、用同一句话、给同一个码；两处各写一份 = 下一次改文案只改一边，
@@ -4915,10 +5094,17 @@ def closing_session_identity(root: Any, given: str | None) -> SessionIdentity:
     from . import sessions as SS
 
     if given is None:
+        default_path, default_candidates = session_file_of(root, None)
+        if default_path is not None:
+            return SessionIdentity(
+                default_path.stem,
+                f"缺省会话（`sid=None` ⇒ 命中 sessions/{default_path.name}；这是运维口径，"
+                "不是「这一趟」—— 要读某一趟就显式给号）", "", "")
         return SessionIdentity(
             None,
-            "缺省会话（`sid=None` ⇒ 读 sessions/<今天>.jsonl；这是运维口径，不是"
-            "「这一趟」—— 要读某一趟就显式给号）",
+            "缺省会话（`sid=None` ⇒ 候选 " + "、".join(
+                f"sessions/{p.name}" for p in default_candidates)
+            + "；这是运维口径，不是「这一趟」—— 要读某一趟就显式给号）",
             "", "")
     sid = str(given or "").strip()
     if not sid:
@@ -4937,7 +5123,9 @@ def closing_session_identity(root: Any, given: str | None) -> SessionIdentity:
     if root is None or not str(root):
         # 没有会话根：由 `_check_user_pending` 如实记「没查成」（不是"这个号不存在"）。
         return SessionIdentity(sid, f"{sid}（`--sid` 显式给的那一段）", "", "")
-    if not SS.session_path(root, sid=sid).is_file():
+    path, candidates = session_file_of(root, sid)
+    if path is None:
+        looked = "、".join(f"sessions/{p.name}" for p in candidates)
         known = [str(s.get("sid") or "") for s in SS.list_sessions(root)
                  if str(s.get("sid") or "")]
         hint = ("盘上有的会话号：" + "、".join(known[:5])
@@ -4945,11 +5133,14 @@ def closing_session_identity(root: Any, given: str | None) -> SessionIdentity:
                "这个工作区还没有任何会话记录"
         return SessionIdentity(
             "", "",
-            f"拒绝：没有会话 {sid!r}（sessions/{sid}.jsonl 不在盘上）"
+            f"拒绝：没有会话 {sid!r}（{looked} 都不在盘上）"
             f" ⇒ 不跑收工门（退出码 2，不出一份「八格全是没查成」的空读数）。{hint}",
             NO_SUCH_SESSION)
     return SessionIdentity(
-        sid, f"{sid}（`--sid` 显式给的那一段：sessions/{sid}.jsonl）", "", "")
+        path.stem,
+        f"{sid}（`--sid` 显式给的那一段 ⇒ 命中 sessions/{path.name}"
+        + ("" if path.stem == sid else f"，实际会话号 {path.stem}")
+        + "）", "", "")
 
 
 #: 收工判据的那一句话（三处（`to_dict` / 工具 / CLI）共用一份措辞，
@@ -9493,6 +9684,43 @@ def _mirror_run_evidence_row(rep: ClosingReport, reading: Mapping[str, Any]) -> 
     }
 
 
+#: 第八格读的那张表（待入库候选表）。表名只在这里写一次：这一格的读数与拒信、
+#: M 的政策（`specs/m.py`）与 M 的手册（`agent_skills._m_skills` 的收工那一条）
+#: 全部引用这个常量，不各写一份。
+LIT_PENDING_TABLE = "lit_candidates"
+#: 第八格不读的那一张（B 的消化面）：同一批文献的另一种队列，判据在 `acceptance`
+#: 的 `literature_unprocessed`（`literature` 表里 `processed` 不为真的行）。
+LIT_DIGEST_SURFACE = "literature.processed"
+
+#: 「两张表、两条队列、两个出口」那一段话的唯一真身。
+#:
+#: 为什么它必须存在（2026-11-21 真机 `projects/lp-ball-14`，MINE14 的 P0-2）：这一格报
+#: `fail` 时读的是 `lit_candidates` 里 24 条待裁候选（r-000011:15 / r-000012:2 /
+#: r-000013:4 / r-000014:3，全由 A2 的 t-000101 认领后只搜不裁），而 M 在
+#: `out/review/REPORT.md:59` 把它写成「lit 000001–000005 无本地全文」—— 那是
+#: `literature` 表的 5 行。于是 M 派 B2 去改那 5 行的下载判档（`table.update`
+#: `download.fulltext=metadata_only`），候选一行没动、门一格没变。次生后果：M 三次派活
+#: 都写了「不要洗稿」（它读的是「不要让 B 去润色 F 的证明」那条旧文案），B 的二阶段
+#: 一次没发生（`statements_unoptimized=2`、17 条 `optimized=not_recorded`、
+#: `open_polish_copy` 0 次）。
+#:
+#: 所以这一格不只报数字，还报表名与出口，并把另一张表单独点名、写明改它没用。
+#: 读的人（M）不需要记住收工门的实现，就能知道该把活派给谁。
+LITERATURE_QUEUES_NOTE = (
+    "两张表、两条队列、两个出口，别混成一张："
+    "① `lit_candidates`（待入库**候选**表）—— 这一格数的就是它；`pending` = 搜到了但还没"
+    "逐条判收/判拒的候选。出口只有 **A**：`run_once` 认领（不给 `request_ids` 就认领全部"
+    "有 pending 的委托）→ 逐条 `lit.admit` 判收 / `lit.stage_reject` 判拒 → **逐委托** "
+    "`lit.admit_all` 提交（批量注册 + 回填号 + 清表 `cleared_at`）。"
+    "② `literature`（已入库**文献**表）的 `processed` 位 —— 另一条队列，读数是 "
+    f"`{LIT_DIGEST_SURFACE}`（收工门在 `acceptance` 的 `literature_unprocessed` 那一行"
+    "数它），不在这一格的结果里。它是 B 的**消化面**（抽读 → 概念行 / 关系行）；"
+    "出口只有 **B**：派 B 把它那些行消化掉。"
+    "两张表之间没有联动：改②（比如把 5 行判成 `metadata_only`）不会让①少一条候选；"
+    "改①也不会让②的 `processed` 转真。所以读到这一格红，先看它点名的是哪张表。"
+)
+
+
 def _check_literature_pending(rep: ClosingReport, store: Any) -> None:
     """待入库文献表那一格（Q1）：表非空 ⇒ 不许收工；当前委托没清表 ⇒ 也不许收工。
 
@@ -9522,6 +9750,14 @@ def _check_literature_pending(rep: ClosingReport, store: Any) -> None:
     为什么 A 侧不用另加闸：`lit.admit_all` 的提交闸（0 pending）已经是 A 侧的硬闸，
     而它拒的时候 A 必须继续判；A 的 `done=True` 只表示"这一条检索请求跑完了"
     （真机 r-000008 就是带着 15 条 pending 收了 done=true）。收工是这一道。
+
+    这一格点名哪张表（2026-11-21，LITCELLFIX；真机 lp-ball-14 的 P0-2）：这一格读的是
+    :data:`LIT_PENDING_TABLE`（`lit_candidates`），不是 :data:`LIT_DIGEST_SURFACE`
+    （`literature` 表的 `processed` 位，B 的消化面，数在 `acceptance` 的
+    `literature_unprocessed`）。改前读数只说"全表还有 N 条待裁"，两个表名一个都不出现，
+    于是 M 把 24 条候选读成 `literature` 那 5 行、派 B 去改错了表。现在 `reading` 里有
+    `table` / `other_table` / `queues_note` 三格，拒信里也逐字点名表名、按委托的条数与
+    出口（:data:`LITERATURE_QUEUES_NOTE` 是那一段话的唯一真身）。
     """
     from . import litstage as L
 
@@ -9529,10 +9765,12 @@ def _check_literature_pending(rep: ClosingReport, store: Any) -> None:
         rep.status["literature_pending"] = "unknown"
         rep.findings.append(Finding(
             "literature_pending", "table_unreadable", "warning",
-            f"待入库文献表没读成（{reason}）⇒ 这一格记 unknown，不记 pass："
-            "「问不出来」与「没有待裁」是两件事；收工前请先让表读得动"))
+            f"待入库候选表 `{LIT_PENDING_TABLE}` 没读成（{reason}）⇒ 这一格记 unknown，"
+            "不记 pass：「问不出来」与「没有待裁」是两件事；收工前请先让表读得动"))
         rep.readings["literature_pending"] = {
             "checked": False, "pending": None, "reason": reason,
+            "table": LIT_PENDING_TABLE, "other_table": LIT_DIGEST_SURFACE,
+            "queues_note": LITERATURE_QUEUES_NOTE,
             "closed_delegations": None}
 
     if store is None:
@@ -9551,6 +9789,8 @@ def _check_literature_pending(rep: ClosingReport, store: Any) -> None:
         # 表里零行但归档里有委托（清表 + 归档已完成）⇒ 仍走下面的 `pass`：那是判过的结果。
         _record_not_applicable(rep, "literature_pending", why, {
             "checked": True, "pending": 0, "rows": [], "more": 0, "request_id": "",
+            "table": LIT_PENDING_TABLE, "other_table": LIT_DIGEST_SURFACE,
+            "queues_note": LITERATURE_QUEUES_NOTE,
             "by_delegation": {}, "pending_delegations": 0, "delegation_rows": 0,
             "cleared": False, "closed_delegations": 0, "who_can_clear": ""})
         return
@@ -9571,13 +9811,22 @@ def _check_literature_pending(rep: ClosingReport, store: Any) -> None:
         for r in waiting
     ]
     scope_note = L.pending_scope_note(scope)
+    # 按委托的条数（`r-000011:15、r-000012:2`）：读数与拒信都点名到委托号，
+    # 读的人不必回表里数一遍"这 24 条落在谁的手上"。
+    grouped = "、".join(
+        f"{str(g.get('request_id') or '（无委托号）')}:{int(g.get('pending') or 0)}"
+        for g in scope["by_delegation"])
     reading = {
         "checked": True,
+        "table": LIT_PENDING_TABLE,
+        "other_table": LIT_DIGEST_SURFACE,
+        "queues_note": LITERATURE_QUEUES_NOTE,
         "pending": len(waiting),
         "rows": names[:5],
         "more": max(0, len(waiting) - 5),
         "request_id": rid,
         "by_delegation": scope["by_delegation"],
+        "by_delegation_counts": grouped,
         "pending_delegations": len(scope["by_delegation"]),
         "delegation_rows": len(mine),
         "cleared": cleared,
@@ -9593,26 +9842,31 @@ def _check_literature_pending(rep: ClosingReport, store: Any) -> None:
         named = "、".join(f"{n['request_id']}/{n['slot']}《{n['title']}》" for n in names[:5])
         if len(names) > 5:
             named += f"（另有 {len(names) - 5} 条）"
-        reading["reason"] = (f"全表还有 {len(waiting)} 条待裁（跨 "
-                             f"{len(scope['by_delegation'])} 个委托）：{named}")
+        reading["reason"] = (
+            f"待入库候选表 `{LIT_PENDING_TABLE}` 还有 {len(waiting)} 条 `pending` 待裁，跨 "
+            f"{len(scope['by_delegation'])} 个委托（{grouped}）：{named}")
         rep.findings.append(Finding(
             "literature_pending", "undecided_candidates", "blocker",
-            f"待入库文献表非空：还有 {len(waiting)} 条 `pending`（跨委托，不只当前那一份）"
-            f"——前几条：{named}。{scope_note}"))
+            f"待入库候选表 `{LIT_PENDING_TABLE}` 非空：还有 {len(waiting)} 条 `pending`"
+            f"（跨委托，不只当前那一份）——前几条：{named}。{scope_note}"
+            + LITERATURE_QUEUES_NOTE))
     elif mine and not cleared:
         rep.status["literature_pending"] = "fail"
         reading["reason"] = (
-            f"委托 {rid} 的 {len(mine)} 行还没清表（没有 cleared_at）")
+            f"待入库候选表 `{LIT_PENDING_TABLE}` 里，委托 {rid} 的 {len(mine)} 行还没清表"
+            "（没有 cleared_at）")
         rep.findings.append(Finding(
             "literature_pending", "delegation_not_cleared", "blocker",
             f"委托 {rid} 的 {len(mine)} 行候选还没清表（`cleared_at` 空）⇒ 收工被拦："
             "报告与注册都做过之后，最后一步是 `lit.admit_all` 提交（清表 + 归档）；"
             "没有这一步，'这一次委托收工了'没有任何留痕。"
-            "谁能清：A 对本委托调一次 `lit.admit_all(request_id=<委托>)`"))
+            "谁能清：A 对本委托调一次 `lit.admit_all(request_id=<委托>)`"
+            + LITERATURE_QUEUES_NOTE))
     else:
         rep.status["literature_pending"] = "pass"
         reading["reason"] = (
-            f"没有待裁的行；归档里有 {len(archives)} 份收过工的委托")
+            f"待入库候选表 `{LIT_PENDING_TABLE}` 没有待裁的行；归档里有 "
+            f"{len(archives)} 份收过工的委托")
     rep.readings["literature_pending"] = reading
 
 
@@ -9735,6 +9989,14 @@ def _check_user_pending(rep: ClosingReport, session_root: Any,
     第四个状态（2026-11-20，EMPTYCELL）：那个会话记录文件整份不在盘上 ⇒ `na`
     （没有提问可判）。改前这一支落 `pass`，空工作区因此多一格真空通过。会话文件在、
     只是没有问题 ⇒ 仍 `pass`（真的判过了）；文件在而读不成 ⇒ `unknown`（不是 `na`）。
+
+    第五件事（2026-11-21，SIDMATCH 真机 lp-ball-14）：同一个号有两种日期写法
+    （`2026-11-21` / `20261121`，见 :func:`session_id_spellings`）。写侧逐字当文件名、
+    真机启动传 ISO 日期，而缺省号是 `%Y%m%d` ⇒ 只认逐字那一份时，`sessions/2026-11-21.jsonl`
+    被读成"不在盘上"，这一格从 pass 降成 `na`（把"查过了没问题"说成"没有可判对象"）。
+    现在两种写法都算候选，解析到哪一份就把 `session_file` / `session_id` /
+    `session_candidates` 记进 `readings["user_pending"]` —— 读的是哪一份必须说得出。
+    读不成（`read_session` 报出坏行/读不出来）⇒ `unknown`，不再落 `pass`。
     """
     if session_root is None:
         rep.status["user_pending"] = "unknown"
@@ -9752,25 +10014,62 @@ def _check_user_pending(rep: ClosingReport, session_root: Any,
         return
     # `sid` 必须跟着运行走（`draft/37` §58）：不带它时按默认会话读，
     # 而真机每一趟都有自己的 sid ⇒ 待答问题会被读成「没问过」。
+    #
+    # 号有两种日期写法（`2026-11-21` / `20261121`，见 `session_id_spellings`）：先解析成
+    # 盘上那一份，再把「实际命中的文件名」记进这一格的读数 —— 读的是哪一份必须说得出。
     from . import sessions as _SESS
-    _sess_path = _SESS.session_path(session_root, sid)
+    _candidates = _session_candidates(session_root, sid)
     if not _session_record_exists(session_root, sid):
         # 2026-11-20（EMPTYCELL）：这一格问"有没有还在等用户回答的问题"。
         # 会话记录整份不在盘上 ⇒ 没有提问可判（"没问过"不是"查过了没问题"）。
         # 改前这一支落 `pass`：空工作区的一格真空通过。会话在、只是没有问题 ⇒ 仍是 `pass`
-        # （真的判过了）；会话文件在但读不成 ⇒ 异常照旧落 `unknown`（不是 `na`）。
+        # （真的判过了）；会话文件在但读不成 ⇒ 下面那一支落 `unknown`（不是 `na`）。
         _record_not_applicable(rep, "user_pending", (
-            f"这一趟没有会话记录（{_sess_path} 不在盘上）⇒ 没有可判对象"
+            "这一趟没有会话记录（"
+            + "、".join(str(p) for p in _candidates)
+            + (" 不在盘上" if len(_candidates) == 1 else " 都不在盘上")
+            + "）⇒ 没有可判对象"
             "（没有待答问题可判），记 na（不是 pass，也不是 unknown）"), {
-                "pending": [], "answered": 0, "asked": 0})
+                "pending": [], "answered": 0, "asked": 0,
+                "session_file": "", "session_id": "",
+                "session_candidates": [p.name for p in _candidates]})
         return
-    pending = U.pending_questions(session_root, sid=sid)
-    replies = U.read_replies(session_root, sid=sid)
-    rep.readings["user_pending"] = {
-        "pending": [{"qid": q.qid, "role": q.role, "text": q.text[:80]} for q in pending],
-        "answered": len(replies),
-        "asked": len(pending) + len(replies),
+    _sess_path, _candidates = session_file_of(session_root, sid)
+    assert _sess_path is not None      # 上面那一条已经保证两种写法里至少有一份在盘上
+    _sess_stem = _sess_path.stem
+    _events, _problems = _SESS.read_session(session_root, sid=_sess_stem)
+    _reading = {
+        "session_file": _sess_path.name,
+        "session_id": _sess_stem,
+        "session_candidates": [p.name for p in _candidates],
+        # 同一天另一种写法也在盘上（历史遗留的分叉）⇒ 只报事实：本格读的是上面那一份。
+        "session_also_on_disk": [p.name for p in _candidates
+                                 if p != _sess_path and p.is_file()],
     }
+    if _problems:
+        # 2026-11-21（SIDMATCH）：文件在盘上、但读不成（非 UTF-8 / 坏行 / 权限）⇒
+        # `unknown`。不许折成 `na`：`na` 说"没有可判对象"，而这里对象在、只是没判成；
+        # 更不许折成 `pass`（改前 `read_jsonl` 把坏文件读成空事件 ⇒ 真空通过 ——
+        # 那正是这一格最贵的那类假绿）。
+        rep.status["user_pending"] = "unknown"
+        rep.readings["user_pending"] = dict(
+            _reading, pending=[], answered=0, asked=0, state="unreadable",
+            reason=(f"会话记录 {_sess_path.name} 在盘上但读不成（{len(_problems)} 处："
+                    f"{_problems[0]}）⇒ 这一格没查成（不是 na：有对象没判成；也不是 pass）"))
+        rep.findings.append(Finding(
+            "user_pending", "session_unreadable", "warning",
+            f"会话记录 {_sess_path.name} 读不成（{_problems[0]}）⇒ 待答问题没查成"
+            "（不是「没有问题」）"))
+        return
+    pending = U.pending_questions(session_root, sid=_sess_stem,
+                                  cache={_sess_stem: _events})
+    replies = U.read_replies(session_root, sid=_sess_stem)
+    rep.readings["user_pending"] = dict(
+        _reading,
+        pending=[{"qid": q.qid, "role": q.role, "text": q.text[:80]} for q in pending],
+        answered=len(replies),
+        asked=len(pending) + len(replies),
+    )
     if pending:
         rep.status["user_pending"] = "fail"
         rep.findings.append(Finding(

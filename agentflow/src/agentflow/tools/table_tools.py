@@ -242,6 +242,106 @@ def _fill_derived(table: str, data: dict, *, create: bool, patch: Mapping[str, A
         data["dedup_key"] = _dedup.relation_dedup_key(data.get("concept_group_key", ""), data.get("quote") or "")
 
 
+# ------------------------------------- `relations` 的引文回验接线（写侧断言）
+#
+# 判据本体只有一份：`quoteevidence.enforce_quote_evidence`（D1 写侧断言）。这一节
+# 只做两件本文件才有资格做的事：
+#   ① 把这一行指的文献全文端到判据面前（路怎么解析、文本怎么抽都复用既有实现）；
+#   ② 按判据返回的那四档（keep / mismatch / downgrade / refuse）分派到写口 ——
+#      keep/mismatch/downgrade 把判据算出来的四栏并进这一笔（降档要写 reason，
+#      读数进 `meta.quote_evidence`，不许静默），refuse 整笔不写。
+#
+# 为什么必须接在这里：真机 lp-ball-14 的 6 条关系（rel:000003–000008）是经
+# `table.create` / `table.update` 写的，而这两条通用写口此前不跑 `quoteverify`
+# ⇒ `quote_verified=true` 与"算得出 quote_span"在盘上是两件互不相干的事，
+# 收工门只能靠 B 逐行如实降档变绿。
+
+#: `relations` 上属于"引文回验"的那几栏（字段名与那张表逐字一致）。
+_QUOTE_FIELDS: tuple[str, ...] = (
+    "quote_verified", "quote_mode", "quote_span", "quote_call_sha256", "quote_reason",
+)
+
+#: 一次 `table.update` 的 patch 里出现这些键 = 这一笔在动"引文已核过"的断言
+#: （只改 `quote_reason` 不算：理由不构成新的断言，见 `enforce_quote_evidence`）。
+_QUOTE_ASSERT_KEYS: tuple[str, ...] = (
+    "quote_verified", "quote_mode", "quote_span", "quote_call_sha256",
+)
+
+
+def _quote_doc_for_lit(ctx: TableContext, lit_id: str) -> tuple[Any, str]:
+    """把 `relations.lit_id` 指的那一篇取成可回验的文档视图；取不到 ⇒ `(None, 为什么)`。
+
+    只负责"把材料端到判据面前"，不判任何一句话：路径解析用
+    `litread.resolve_literature_path`（与 B 的抽取同一套两基准口径），文本抽取用
+    `extract.extract_text`（与 B 的 `run_once` 同一份实现）。取不到全文不是异常，
+    是这一笔"没有可比的全文" —— 由判据降档并写清原因，而不是把写口打挂。
+    """
+    if not lit_id:
+        return None, "这一行没有 lit_id（指不出这条例子的来源文献）"
+    store = getattr(ctx, "store", None)
+    if store is None:
+        return None, "工具没有装配 store，取不到文献全文"
+    try:
+        row = next((r for r in store.rows("literature")
+                    if str(r.get("lit_id") or "") == str(lit_id)), None)
+    except Exception as exc:  # noqa: BLE001 - 文献表读不出来 = 这一笔没有可比的全文
+        return None, f"literature 读不出来（{type(exc).__name__}: {exc}）"
+    if row is None:
+        return None, f"literature 里没有 lit_id={lit_id}（来源不在册）"
+    rel = str(row.get("path") or "").strip()
+    if not rel:
+        return None, f"lit:{lit_id} 没有本地全文（path 为空）"
+    from .. import litread as _LR
+    resolved = _LR.resolve_literature_path(store.root, store.library, rel)
+    if resolved.path is None:
+        return None, f"lit:{lit_id} 的全文不在盘上（{resolved.reason or rel}）"
+    from ..extract import extract_text as _extract_text
+    try:
+        doc = _extract_text(resolved.path)
+    except Exception as exc:  # noqa: BLE001 - 抽不出来 = 这一笔没有可比的全文，走降档
+        return None, (f"lit:{lit_id} 的全文抽不出来（{type(exc).__name__}: {exc}）")
+    return doc, ""
+
+
+def _quote_evidence_on_relations_write(
+        ctx: TableContext, *, table: str, data: dict) -> tuple[ToolResult | None, dict]:
+    """`relations` 落盘前的引文回验；返回 `(受控拒或 None, 本次读数)`。
+
+    只在这一行在断言"引文已核过"（`quote_verified is True`）时才跑：`False` 是
+    "查过、不一致"，`None` 是"还没查"，两者都不是断言，判据也不改它们（三态纪律）。
+    这一笔算出来的四栏会写回 `data`；`refuse` 那一档返回受控拒（整笔不写）。
+    """
+    if table != "relations" or data.get("quote_verified") is not True:
+        return None, {}
+    lit_id = str(data.get("lit_id") or "")
+    doc, problem = _quote_doc_for_lit(ctx, lit_id)
+    page_range = data.get("page_range")
+    hint = 0
+    if isinstance(page_range, Mapping):
+        try:
+            hint = int(page_range.get("start") or 0)
+        except (TypeError, ValueError):
+            hint = 0
+    from .. import quoteevidence as _QE
+    fixed, reading = _QE.enforce_quote_evidence(
+        {key: data.get(key) for key in _QUOTE_FIELDS},
+        quote=str(data.get("quote") or ""), doc=doc, page_range=page_range,
+        field=f"relations.quote（lit:{lit_id or '未给'}）", doc_problem=problem,
+        hint_page=hint)
+    if reading.get("ok") is False:
+        return fail(
+            f"relations 写口拒了这一笔：{str(reading.get('why') or '')}"
+            "（判据是 `quoteevidence.enforce_quote_evidence` 四档里的 refuse："
+            "这一笔说不出'核的是哪一段'，本行一个字节都没写）",
+            table=table, kind="quote_evidence_refused",
+            code=str(reading.get("code") or "quote_evidence_refused"),
+            action=str(reading.get("action") or ""), quote_evidence=reading,
+        ), reading
+    for key in _QUOTE_FIELDS:
+        data[key] = fixed.get(key)
+    return None, reading
+
+
 # ------------------------------------------------- `literature.path` 的写侧两格
 
 
@@ -1984,6 +2084,13 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
     path_refused = _literature_path_refusal(ctx, table=table, rel=data.get("path"))
     if path_refused is not None:
         return path_refused
+    # ---- 引文回验（D1 写侧断言的接线）：这一行若在说"引文已核过"，落盘前当场回验；
+    # 算得出区间就写实，算不出就按判据降档（读数进 meta），refuse 那一档整笔不写。
+    # 位置在预演校验之前：预演看到的必须是这一笔真正要落的那份四栏。
+    quote_refused, quote_reading = _quote_evidence_on_relations_write(
+        ctx, table=table, data=data)
+    if quote_refused is not None:
+        return quote_refused
     explicit_id = data.get(idf)
     probe = str(explicit_id) if explicit_id not in (None, "") else _probe_id(table)
     try:
@@ -2016,7 +2123,8 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
     except (IdExhausted, StoreError) as e:
         return fail(f"{table} 建行失败：{e}", table=table, kind="store_error")
     return ok(new_id, table=table, id=new_id, id_field=idf, row=merged,
-              normalized=normalized)
+              normalized=normalized,
+              **({"quote_evidence": quote_reading} if quote_reading else {}))
 
 
 @tool(
@@ -2152,6 +2260,7 @@ def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, 
         return refused
 
     normalized: list[str] = []
+    quote_reading: dict = {}
     try:
         with ctx.store.tx(table, "counters", actor=ctx.actor, note=f"tool:table.update:{table}") as tx:
             current = tx.find(table, **{idf: id})
@@ -2197,6 +2306,15 @@ def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, 
                                                         rel=merged_raw.get("path"), id=id)
                 if path_refused is not None:
                     return path_refused
+            # ---- 引文回验（与 `table.create` 同一处接线、同一份判据）：这一笔在动
+            # "引文已核过"的断言（`quote_verified` / `quote_mode` / `quote_span` /
+            # `quote_call_sha256` 任一出现在 patch 里）才跑 —— 只改理由不构成新断言。
+            # 位置在 `_fill_derived` 之前：派生字段看到的是降档后的那一份。
+            if table == "relations" and any(key in patch for key in _QUOTE_ASSERT_KEYS):
+                quote_refused, quote_reading = _quote_evidence_on_relations_write(
+                    ctx, table=table, data=merged_raw)
+                if quote_refused is not None:
+                    return quote_refused
             _touch_timestamps(table, merged_raw, create=False, patch=patch)
             _fill_derived(table, merged_raw, create=False, patch=patch)
             try:
@@ -2206,7 +2324,8 @@ def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, 
             tx.upsert(table, merged, note="tool:table.update")
     except (IdExhausted, StoreError) as e:
         return fail(f"{table} 更新失败：{e}", table=table, id=id, kind="store_error")
-    return ok(id, table=table, id=id, id_field=idf, row=merged, normalized=normalized)
+    return ok(id, table=table, id=id, id_field=idf, row=merged, normalized=normalized,
+              **({"quote_evidence": quote_reading} if quote_reading else {}))
 
 
 @tool(

@@ -22,12 +22,18 @@
 2. 幂等靠内容 hash，不靠文件名：同一本书改名/换目录后重灌，仍然只能有一行。
    判据读的是 `download.sha256`（我们自己算的）而不是文件 mtime 或大小。
 3. 读不了就如实说读不了：抽取失败（没有文本层、损坏、加密）的那一本单独记一档
-   `unreadable`，不给它编一行"登记成功、内容为空"的记录。
+   `unreadable`，不给它编一行"登记成功、内容为空"的记录。2026-11-20 起这一档也是
+   判收闸：抽出来是乱码 / 没有文本层 / 全空页的文件不进 `literature`（判据是
+   `litread.fulltext_tier`，与 `text.extract` 拒写乱码同一份实现）；进了库的行则带上
+   `download.fulltext=ok` —— "这一行有没有可读正文"在行上读得出来，不靠下游再抽一次
+   才发现。口径出处：业主 2026-11-20「读内容才能判东西」，落点
+   `litavail.ADMITTABLE_TIERS=(readable,)`。
 
 ## 边界
 
 - 只认本机文件系统上的目录，不下载、不联网。
-- 不做 OCR：扫描版 PDF 会以"没有文本层"登记，`processed` 留给 B 去决定怎么处置。
+- 不做 OCR：扫描版 PDF 不会以"没有文本层"登记（那正是上面第 3 条挡掉的），
+  `counts.unreadable` 里能看到它、note 写着 `no_text_layer`；要收它就先 OCR 再登记。
 - `--limit` 是给真实跑用的预算闸门（一本书可能几百页、几十万字符），
   不是"只处理前 N 本"的语义糖：超出的书不会被登记，清单里逐本写明为什么。
 """
@@ -35,35 +41,49 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import shutil
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from . import dedup as D
 from . import interactions as I
+from . import litread as LR
 from . import schema as S
 from .extract import extract_text
 from .store import Store
 
 __all__ = [
     "BookPlan",
+    "DECLARATION_NAME",
     "IngestReport",
     "LocalHit",
+    "declaration_path",
     "excerpt_for",
     "ingest_directory",
+    "is_declared",
     "list_books",
     "local_fetch_fn",
+    "read_declaration",
     "search_fn_for_store",
     "selftest",
     "sha256_file",
+    "undeclared_workspace_books",
 ]
 
 #: 单本默认上限字节数（超过就跳过并说明），避免一次跑把 17 MB 的书整本喂进模型。
 DEFAULT_MAX_BYTES = 24 * 1024 * 1024
 
 _SAFE_RE = re.compile(r"[^0-9A-Za-z._\u4e00-\u9fff-]+")
+
+#: 工作区根上那份「用户点名了哪些可靠参考文献」的声明（M 落盘，A 只读）。
+#:
+#: 形状：`{"paths": ["a.pdf", "b/"], "verbatim": "<用户原话>"}`。它是唯一的入库
+#: 白名单：用户提示词里没点名的文件只能是研究参考，不许进 `literature`。
+DECLARATION_NAME = "RELIABLE-REFERENCES.json"
 
 
 def sha256_file(path: Path) -> str:
@@ -87,6 +107,120 @@ def list_books(root: Path | str, *, pattern: str = "*.pdf") -> list[Path]:
     if not base.is_dir():
         return []
     return sorted(p for p in base.glob(pattern) if p.is_file())
+
+
+# --------------------------------------------------------------------------- #
+# 用户声明：哪些文件是本次的「可靠参考文献」（入库白名单）
+# --------------------------------------------------------------------------- #
+#
+# 2026-11-21 业主裁定：M 不自己判断哪份文献可靠。只有用户提示词里明确点名的
+# 文件/目录才算可靠参考文献、才可入库；没点名的一律只能当研究参考（可读），不许进
+# `literature`。默认 fail-closed：没有声明 ⇒ 一律不许入库。
+#
+# 声明由 M 读用户提示词后逐字抄下来，落成工作区根的 `RELIABLE-REFERENCES.json`：
+# `{"paths": ["a.pdf", "b/"], "verbatim": "<用户原话>"}`。这份文件是唯一的白名单
+# 真身；A 不另判，`search.ingest_local` 与 `A.ingest_local` 的非 dry 档都按它核。
+#
+# 边界（有意为之）：声明只管工作区内的文件（工作区参考材料的投放处是 `source/`
+# 与 `library/`）。工作区外的目录是调用方自己的书架，路径写不进工作区相对的
+# `paths`，也就不受这份声明约束 —— 那是「人/A 主动点名一个外部目录」的显式动作，
+# 不在本白名单要挡的那条路上。
+
+
+def declaration_path(workspace_root: Path | str) -> Path:
+    """声明文件的落点（工作区根）。"""
+    return Path(workspace_root) / DECLARATION_NAME
+
+
+def _norm_rel(path_text: str) -> str:
+    """把一条声明/相对路径归一成 `a/b.pdf` 形状（去 `./`、反斜杠与首尾斜杠）。"""
+    text = str(path_text).replace("\\", "/").strip()
+    while text.startswith("./"):
+        text = text[2:]
+    return text.strip("/")
+
+
+def read_declaration(workspace_root: Path | str) -> tuple[tuple[str, ...], str]:
+    """读用户声明，返回 `(paths, problem)`。
+
+    三态：文件不在 ⇒ `((), "")`（= 没点名；调用方按 fail-closed 处理）；在盘上但
+    读不出来 / 形状不对 ⇒ `((), "一句人话")`（仍按"全未声明"处理，不折成"都声明了"）。
+    `verbatim` 只作留痕（用户原话），不参与匹配。
+    """
+    path = declaration_path(workspace_root)
+    if not path.is_file():
+        return (), ""
+    try:
+        blob = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return (), f"{DECLARATION_NAME} 读不出来：{type(exc).__name__}: {exc}"
+    if not isinstance(blob, dict) or not isinstance(blob.get("paths"), list):
+        return (), (f"{DECLARATION_NAME} 的形状不对（要 "
+                    "{\"paths\": [...], \"verbatim\": \"<用户原话>\"}）")
+    out: list[str] = []
+    for raw in blob["paths"]:
+        if not isinstance(raw, str):
+            continue
+        entry = _norm_rel(raw)
+        if entry:
+            out.append(entry)
+    return tuple(out), ""
+
+
+def is_declared(rel_path: str, declarations: Iterable[str]) -> bool:
+    """这一份（工作区相对路径）有没有被用户声明覆盖。
+
+    三种声明写法都认：整条路径（`source/a.pdf`）、裸文件名（`a.pdf`，用户只说
+    "a.pdf 是可靠参考文献"）、目录（`b/` 或 `b`，用户说 "b/ 里都是"）。大小写不敏感：
+    工作区可能在 Windows 上，大小写不该决定一份文献能不能入库。
+    """
+    rel = _norm_rel(rel_path)
+    if not rel:
+        return False
+    low = rel.casefold()
+    base = rel.rsplit("/", 1)[-1].casefold()
+    for raw in declarations:
+        entry = _norm_rel(raw)
+        if not entry:
+            continue
+        e = entry.casefold()
+        if e == low:
+            return True
+        if "/" not in e and e == base:
+            return True
+        if low.startswith(e + "/"):
+            return True
+    return False
+
+
+def _workspace_pairs(workspace_root: Path | str, root: Path | str,
+                     *, pattern: str = "*.pdf") -> list[tuple[str, Path]]:
+    """`root` 下、确实位于工作区内的文件：`[(工作区相对 posix 路径, 绝对路径)]`。"""
+    workspace = Path(workspace_root).resolve()
+    out: list[tuple[str, Path]] = []
+    for src in list_books(root, pattern=pattern):
+        try:
+            rel = src.resolve().relative_to(workspace).as_posix()
+        except (OSError, ValueError):
+            continue                       # 工作区外：不受这份声明约束（见本节边界）
+        out.append((rel, src))
+    return out
+
+
+def undeclared_workspace_books(workspace_root: Path | str, root: Path | str,
+                               *, pattern: str = "*.pdf") -> tuple[list[str], str]:
+    """`root` 下那些工作区内、但没被用户声明的文件 + 声明本身的问题。
+
+    空列表 = 这一批可以入库（要么全被声明覆盖，要么这些文件全在工作区外）。
+    `problem` 非空时声明读不出来 ⇒ 调用方仍应拒绝（fail-closed），只是拒信能说清
+    "是声明坏了"而不是"你没声明"。
+    """
+    pairs = _workspace_pairs(workspace_root, root, pattern=pattern)
+    if not pairs:
+        return [], ""
+    declarations, problem = read_declaration(workspace_root)
+    bad = [rel for rel, _src in pairs if not is_declared(rel, declarations)]
+    return bad, problem
 
 
 @dataclass
@@ -233,8 +367,27 @@ def ingest_directory(
 
         plan.pages = len(getattr(doc, "pages", []) or [])
         plan.has_text_layer = bool(getattr(doc, "has_text_layer", False))
-        if plan.pages == 0 or not str(getattr(doc, "text", "")).strip():
-            plan.note = "登记成功，但这一本没有可引用的正文（无文本层或全空页）"
+        # 正文闸（业主 2026-11-20 口径：判收必须有正文；`litavail.ADMITTABLE_TIERS`
+        # 只留 `readable`）。抽出来是乱码 / 没有文本层 / 全空页 ⇒ 这一份不进
+        # `literature`，如实记在 `unreadable` 那一档并把理由码写进 note。
+        #
+        # 判据只有一份：`litread.fulltext_tier` 是 `download.fulltext` 的四档真身，
+        # 它判乱码读的又是 `litread.garbled_text`（`text.extract` 拒写乱码读同一个函数）。
+        # 所以这里不另写"能不能读"的判据，只按它决定"这一份有没有可读正文"。
+        #
+        # 改前这一档照样登记（只在 note 里写一句"没有可引用的正文"）：乱码 PDF 于是
+        # 进了库、而 `download.fulltext` 一个键都没有 —— `litavail.tier_of_literature`
+        # 把它读成 `unknown`，下游拿不到正文，而"入库"这件事已经发生了。那是本地
+        # 登记这条路唯一绕过判收的地方。
+        tier = LR.fulltext_tier(bytes_on_disk=size,
+                                pages=getattr(doc, "pages", None),
+                                text=str(getattr(doc, "text", "") or ""))
+        if tier != LR.FULLTEXT_OK:
+            plan.status = "unreadable"
+            plan.note = (f"{tier}: 这一份没有可读正文，不进 literature"
+                         "（乱码要换来源；无文本层的扫描件要先 OCR）")
+            report.books.append(plan)
+            continue
 
         if dry_run:
             report.books.append(plan)
@@ -287,7 +440,7 @@ def ingest_directory(
                 source_request_ids=[req_id],
                 dedup_key=keys[0] if keys else "",
                 added_at=S.now_iso(),
-                download={
+                download=LR.with_fulltext({
                     "status": "ok",
                     "note": "本地文件（不是网络下载）；内容类型按扩展名与解析结果判定",
                     "pages": plan.pages,
@@ -295,7 +448,7 @@ def ingest_directory(
                     "bytes": size,
                     "sha256": sha,
                     "source_path": str(src),
-                },
+                }, LR.FULLTEXT_OK),
             ).to_dict()
             # `_keys` 是"这一行携带的全部去重键"（与 agent_a 写 literature 行时
             # 同一个诊断字段）；不落它，`dedup._row_keys` 就只能看到一个主键。

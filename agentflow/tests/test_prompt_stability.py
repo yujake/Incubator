@@ -1575,6 +1575,65 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
                "它进的是 F 的 attack 动作提示词（`_attack_prompt`）与读数正文，不进 "
                "system 段。本笔只换动作提示词正文，没有哪一格事实换过落点 ⇒ facts 键集"
                "仍 15 格，count / keys_sha256 与 p304 同值。"},
+      {"version": "p306", "count": 15,
+       "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+       "note": "抬版本 p306（2026-11-21，ASEARCH 收口；同一批还含并行路 BQUOTE 的 B 登记"
+               "回执 citation_fit 读数，两路的段变更按同一版号冻结）。本路：A 的 policy "
+               "补查询词纪律（题面式说法不是查询词 / no_results 之后换规范术语重查一次），"
+               "boundary 补收尾三步（逐条判收判拒 / 逐委托 lit.admit_all 清表 / 回执报"
+               "还剩几条待裁），A 手册同名两条纪律，agent_a 的回执加 pending_note 与"
+               "全表待裁三格。本笔只换段文本与回执读数，没有哪一格事实换过落点 ⇒ facts "
+               "键集仍 15 格，count / keys_sha256 与 p305 同值。"},
+       {"version": "p307", "count": 15,
+        "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+        "note": "抬版本 p307（2026-11-21，LITCELLFIX：收工门第八格的读数点名表 + M 的派活"
+                "文案不再禁止 B 的二阶段）。本路：closing 的 literature_pending 读数与拒信"
+                "点名 lit_candidates、逐委托条数与出口，并把 literature.processed（B 的"
+                "消化面）单独点名（真身 closing.LITERATURE_QUEUES_NOTE）；specs/m.py 的 "
+                "policy 加一条渲染同一句，并把「不要让 B 去润色 F 的证明」改写成「界线是 "
+                "V 签、不是洗不洗」；agent_skills 的 M 手册加「先看那一格读的是哪张表」并"
+                "只指路。变化格 = M 一格（其余十格的现值差异来自并行路的未提交改动，本路"
+                "不认领，冻结时按现算值一并落）。本笔只换段文本，没有哪一格事实换过落点 "
+                "⇒ facts 键集仍 15 格，count / keys_sha256 与 p306 同值。"},
+        {"version": "p308", "count": 15,
+         "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+         "note": "抬版本 p308（2026-11-21，SEEDDOC：A 的可见面写清「工作区里已有的文献」"
+                 "那条候选链）。本路：specs/a.py 的 policy 补一条（发现 ingest_local "
+                 "dry_run=True → 建候选 lit.stage_add → 判收链 text.extract / fs.read / "
+                 "lit.admit / lit.admit_all，以及没有正文时 no_read_evidence / no_fulltext "
+                 "那一档）；agent_skills 的 A 手册新增 §0.2（正文是真身，索引行只指路）并"
+                 "在「先本地再联网」那一条里加一句「别用非 dry 档一次性收编」。变化格 = A "
+                 "一格（其余十格与 p307 逐字相同）。本笔只换段文本，没有哪一格事实换过落点 "
+                 "⇒ facts 键集仍 15 格，count / keys_sha256 与 p307 同值。"},
+        {"version": "p309", "count": 15,
+         "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+         "note": "抬版本 p309（2026-11-21，FACTSFIX：工作区事实扩到 source/ 与 library/ "
+                 "两个目录，三态不折平）。本路：agent_prompts._pending_local_materials 不再"
+                 "只扫 source/，两个目录各报盘上份数 / 已入编份数 / 未入编份数，并写明未入编"
+                 "必须先走判收链、不许当已入库；台账不在盘上 ⇒ 沉默（不编 0），台账在盘上但"
+                 "读不出 / 目录列不出来 ⇒ 记「没查成」，目录不存在 ⇒ 该目录那一条不写。新判据 "
+                 "tests/test_workspace_facts_cover_library_too.py（11 条，含反真空）；"
+                 "tests/test_workspace_local_materials_fact.py 按新口径追平（夹具落用户声明、"
+                 "_line 只读工作区事实那一段）。变化格 = A / M 两格（A 与 M 的段变更里含并行路"
+                 "同一时间窗的未提交改动，本路按现算值一并冻结）。本笔只换动态事实段的渲染"
+                 "文本与版本行，没有哪一格事实换过落点 ⇒ facts 键集仍 15 格，count / "
+                 "keys_sha256 与 p308 同值。"},
+        # 同一版号（p309）里的第二笔：SEEDREADME（用户点名才可入库 / 声明文件 / 两处 README
+        # 同一真身）。它只换段文本，没有哪一格事实换过落点 ⇒ count / keys_sha256 与 p308 同值，
+        # 所以不另开一格（账本按 version 记账，同版号多笔在 note 里写清）。
+        {"version": "p309", "count": 15,
+         "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+         "note": "p309 同版第二笔（2026-11-21，SEEDREADME）：工作区参考材料「只有用户点名的"
+                 "才可入库」。seedinject 的 SEED-README 与种子包 README 改成同一真身（生成器 "
+                 "candidate_chain_lines/candidate_chain_warning；发现 dry_run=True 只发现 → "
+                 "lit.stage_add 建候选 → text.extract/fs.read/lit.admit/lit.admit_all 判收链 → "
+                 "派 B 的 run_once；并写「非 dry 档跳过判收、不要用」）；specs/m.py 写「用户点名"
+                 "⇒ 逐字抄进 RELIABLE-REFERENCES.json（paths+verbatim，没点名⇒空列表）⇒ 分批派 A"
+                 "且清单外不许派 ⇒ pending=0 ⇒ 未收编材料=0 → run_once」；specs/a.py 写「只对"
+                 "用户声明的文件建候选/收编，未声明被 not_declared_reference 受控拒」；机器闸在 "
+                 "locallib.undeclared_workspace_books（工具与动作共用），LOCAL_MATERIALS 再报"
+                 "已声明/未声明两数。变化格 = A / M 两格。本笔同样只换段文本 ⇒ facts 键集仍 "
+                 "15 格，count / keys_sha256 与 p308 同值。"},
 
 )
 

@@ -749,10 +749,11 @@ def citation_coverage(
 
         exps = {str(r.get("experiment_id") or ""): dict(r) for r in rows_of("experiments")}
         lits = {str(r.get("lit_id") or ""): r for r in lit_rows}
+        rels = {str(r.get("relation_id") or ""): r for r in rel_rows}
         for i, c in enumerate(claims, 1):
             if not isinstance(c, Mapping):
                 continue
-            one = CL.claim_evidence_fit(c, exps=exps, lits=lits)
+            one = CL.claim_evidence_fit(c, exps=exps, lits=lits, rels=rels)
             counters[one["verdict"]] = counters.get(one["verdict"], 0) + 1
             row = {"claim_id": str(c.get("claim_id") or f"claim-{i}"),
                    "citations": [str(x) for x in (c.get("citations") or [])],

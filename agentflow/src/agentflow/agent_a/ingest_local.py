@@ -21,6 +21,7 @@ provenance 三件事（`actor="agent-A"` / `submitted_by="unknown"` /
 from __future__ import annotations
 
 from ._support import Path
+from .. import litread as LR
 from ..refusals import refuse
 
 #: 与 `tools/search_tools.py::_h_ingest_local` 逐字相同的 provenance 三件事。
@@ -34,6 +35,29 @@ INGEST_ORIGIN_NOTE = "由 agent-A 从一个本地目录登记"
 
 #: 与工具同一条 provenance 说明（两处逐字相同；理由同上）。
 INGEST_PROVENANCE_NOTE = "A 不是检索请求的提交方；这条链如实写「谁登记的」"
+
+#: `locallib` 把"格式认得、但没有可读正文"那一档的 note 写成 `<tier>: ...`。
+#: 只收这两档：`extract_failed`（抽出来是乱码）与 `no_text_layer`（扫描件/全空页）。
+#: 其余 `unreadable`（`UnsupportedFormat` 一类）仍是"格式不认识"。
+_NO_READABLE_TIERS: tuple[str, ...] = (LR.FULLTEXT_EXTRACT_FAILED, LR.FULLTEXT_NO_TEXT_LAYER)
+
+
+def _unreadable_kind(books: list[dict]) -> str:
+    """没有一份登记成时，`unreadable` 那一档到底是"格式不认识"还是"没有可读正文"。
+
+    ## 为什么要分开（不是措辞洁癖）
+
+    两件事的下一步相反：`unsupported_format` 说的是"换 pattern / 换载体"；
+    `no_readable_content` 说的是"换来源，或先 OCR"（乱码 PDF 改 pattern 也还是乱码）。
+    改前两件事都报 `unsupported_format` —— 而 2026-11-20 起"没有正文不许入库"
+    这条闸挡下的正是后一种，量还不小（真机历史下载里就有乱码 PDF）。
+    """
+    notes = [str(b.get("note") or "") for b in books
+             if str(b.get("status") or "") == "unreadable"]
+    if any(n.startswith(_NO_READABLE_TIERS) for n in notes):
+        return "no_readable_content"
+    return "unsupported_format"
+
 
 class _IngestLocal:
     def ingest_local(self, *, books_dir: str, pattern: str = "*.pdf",
@@ -49,6 +73,11 @@ class _IngestLocal:
         `unreadable` 三个计数，不许把 `ok` 当"登记成功"。三处拒绝走 :func:`agentflow.refusals.refuse`
         （`draft/37` §88）：空目录名 / 目录不在 / 登记抛异常 —— 它们都是"这次调用本身不成立"，
         所以带受控的 `refusal_reason`；否则主控的台账会把它们记成 `ok`。
+
+        正文闸（业主 2026-11-20「读内容才能判东西」）：抽出来是乱码 / 没有文本层 / 全空页的
+        那一份不进 `literature` —— 它落在 `unreadable` 里、note 带受控理由码
+        （`extract_failed` / `no_text_layer`），此时 `kind=no_readable_content`（不是
+        `unsupported_format`：格式认得，缺的是正文）。登记成的行带 `download.fulltext=ok`。
         """
         raw = str(books_dir or "").strip()
         if not raw:
@@ -63,7 +92,28 @@ class _IngestLocal:
                           f"目录不在盘上：{target}（零写入 —— 这不是「目录里没有书」）",
                           books_dir=raw, resolved=str(target))
 
-        from ..locallib import ingest_directory
+        from ..locallib import DECLARATION_NAME, ingest_directory, undeclared_workspace_books
+
+        # 用户声明闸（2026-11-21 业主裁定，fail-closed）：只有用户提示词里点名的文件/目录
+        # 才可入库；没点名的一律只能当研究参考。动作与工具走同一份判据
+        # （`locallib.undeclared_workspace_books`），两处口径不许漂。
+        if not dry_run:
+            undeclared, decl_problem = undeclared_workspace_books(
+                getattr(self.store, "root", root), target, pattern=str(pattern or "*.pdf"))
+            if undeclared:
+                names = "、".join(undeclared[:5]) + ("…" if len(undeclared) > 5 else "")
+                why = f"声明读不出来（{decl_problem}）" if decl_problem else "这些文件未被用户点名"
+                return refuse(
+                    "not_declared_reference",
+                    f"这不是一次可以入库的登记：{why}（{names}）。默认 fail-closed："
+                    "没有声明 ⇒ 不许入库 —— 未点名的文件只能当研究参考（可读），不进 "
+                    "`literature`。处置：让 M 先把用户声明记下来（把用户提示词里点名的"
+                    "文件/目录逐字记进工作区根的 `" + DECLARATION_NAME + "`，形如 "
+                    "{\"paths\": [\"a.pdf\", \"b/\"], \"verbatim\": \"<用户原话>\"}）；"
+                    "清单为空就说明用户这一次没有点名，那这一批一份都不许收编。本次零写入。",
+                    books_dir=raw, resolved=str(target),
+                    undeclared=undeclared,
+                    declaration=str(Path(getattr(self.store, "root", root)) / DECLARATION_NAME))
 
         try:
             report = ingest_directory(
@@ -88,7 +138,7 @@ class _IngestLocal:
         if ingested or already:
             kind = ""
         elif unreadable:
-            kind = "unsupported_format"
+            kind = _unreadable_kind(books)
         elif skipped:
             kind = "skipped_by_limits"
         else:

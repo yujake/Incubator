@@ -1,0 +1,794 @@
+{
+ "format": "agentflow-seed-literature",
+ "version": 1,
+ "scope": "real-machine: lp-ball* / dct-min* / abelian-smoke*",
+ "criteria": {
+  "download_status": "ok",
+  "min_bytes": 1,
+  "source_kind": "pdf",
+  "min_chars": 200,
+  "replacement_chars_max": 0,
+  "min_long_words": 20,
+  "min_alpha_ratio": 0.25
+ },
+ "count": 25,
+ "total_bytes": 17845452,
+ "files": [
+  {
+   "path": "files/e52716c8c83e-a-cube-slice-that-is-not-a-zonoid.pdf",
+   "sha256": "e52716c8c83e9a0b31f2950cfb1a66ce11575a87c049ab5baf2338aa50f96201",
+   "bytes": 141767,
+   "title": "A cube Slice that is not a Zonoid",
+   "doi": "10.48550/arxiv.2305.18351",
+   "year": 2023,
+   "source": {
+    "workspace": "lp-ball-9",
+    "lit_id": "000012",
+    "path": "library/000012/a-cube-slice-that-is-not-a-zonoid-arxiv-2305-18351-pdf.pdf",
+    "abs_path": "D:\\Incubator\\projects\\lp-ball-9\\library\\000012\\a-cube-slice-that-is-not-a-zonoid-arxiv-2305-18351-pdf.pdf"
+   },
+   "extract": {
+    "chars": 25280,
+    "nonspace_chars": 20044,
+    "replacement_chars": 0,
+    "words": 3501,
+    "long_words": 1810,
+    "alpha_ratio": 0.8162,
+    "pages": 12,
+    "source_kind": "pdf"
+   },
+   "selection": "唯一一份",
+   "duplicates": []
+  },
+  {
+   "path": "files/64498329b65e-an-introduction-to-measure-theory.pdf",
+   "sha256": "64498329b65eea0145b3dec77ace89bc9f34df82ed4f35dd7c467125c2a3dfec",
+   "bytes": 1338765,
+   "title": "An Introduction to Measure Theory",
+   "doi": "10.1090/gsm/126",
+   "year": 2011,
+   "source": {
+    "workspace": "dct-min3-20261111",
+    "lit_id": "000004",
+    "path": "library/000004/tao-an-introduction-to-measure-theory-gsm-126-换第三份开放获取教材-找有干净文字层的原件以逐字定位-正测集上取-积.pdf",
+    "abs_path": "D:\\Incubator\\projects\\dct-min3-20261111\\library\\000004\\tao-an-introduction-to-measure-theory-gsm-126-换第三份开放获取教材-找有干净文字层的原件以逐字定位-正测集上取-积.pdf"
+   },
+   "extract": {
+    "chars": 486022,
+    "nonspace_chars": 397599,
+    "replacement_chars": 0,
+    "words": 68639,
+    "long_words": 39414,
+    "alpha_ratio": 0.8862,
+    "pages": 265,
+    "source_kind": "pdf"
+   },
+   "selection": "唯一一份",
+   "duplicates": []
+  },
+  {
+   "path": "files/e835f5f27173-an-isoperimetric-inequality-for-hyperplane-sections-of-a-con.pdf",
+   "sha256": "e835f5f2717355e4a9cf3c604a481d827c52e99adddde93944822ec9613d3529",
+   "bytes": 63316,
+   "title": "An Isoperimetric Inequality for Hyperplane Sections of a Convex Body",
+   "doi": "10.1023/a:1005114324605",
+   "year": 1999,
+   "source": {
+    "workspace": "lp-ball-13",
+    "lit_id": "000014",
+    "path": "library/000014/peri-1999-geometriae-dedicata-判收前先试一次全文抽取-抽不到也留-extract-failed-回执-才允许按仅题录入库.pdf",
+    "abs_path": "D:\\Incubator\\projects\\lp-ball-13\\library\\000014\\peri-1999-geometriae-dedicata-判收前先试一次全文抽取-抽不到也留-extract-failed-回执-才允许按仅题录入库.pdf"
+   },
+   "extract": {
+    "chars": 14401,
+    "nonspace_chars": 11489,
+    "replacement_chars": 0,
+    "words": 1776,
+    "long_words": 909,
+    "alpha_ratio": 0.8002,
+    "pages": 8,
+    "source_kind": "pdf"
+   },
+   "selection": "唯一一份",
+   "duplicates": []
+  },
+  {
+   "path": "files/5d236efcb7ea-critical-central-sections-of-the-cube.pdf",
+   "sha256": "5d236efcb7ea803dd7b7641b3d6f0f8fe5d8a2c9a6d0b2825c0becb5c7351611",
+   "bytes": 955094,
+   "title": "Critical central sections of the cube",
+   "doi": "10.48550/arxiv.2107.14778",
+   "year": 2021,
+   "source": {
+    "workspace": "lp-ball-12",
+    "lit_id": "000010",
+    "path": "library/000010/ambrus-2021-critical-central-sections-of-the-cube.pdf",
+    "abs_path": "D:\\Incubator\\projects\\lp-ball-12\\library\\000010\\ambrus-2021-critical-central-sections-of-the-cube.pdf"
+   },
+   "extract": {
+    "chars": 27743,
+    "nonspace_chars": 22484,
+    "replacement_chars": 0,
+    "words": 3445,
+    "long_words": 2026,
+    "alpha_ratio": 0.8029,
+    "pages": 12,
+    "source_kind": "pdf"
+   },
+   "selection": "同字节（sha256 相同）的多份：留抽读字数最多、工作区名靠前的一份",
+   "duplicates": [
+    {
+     "workspace": "lp-ball-8",
+     "lit_id": "000001",
+     "sha256": "5d236efcb7ea803dd7b7641b3d6f0f8fe5d8a2c9a6d0b2825c0becb5c7351611",
+     "bytes": 955094,
+     "chars": 27743,
+     "why_not_kept": "同字节的另一份（判重后只留一份）"
+    },
+    {
+     "workspace": "lp-ball-9",
+     "lit_id": "000001",
+     "sha256": "5d236efcb7ea803dd7b7641b3d6f0f8fe5d8a2c9a6d0b2825c0becb5c7351611",
+     "bytes": 955094,
+     "chars": 27743,
+     "why_not_kept": "同字节的另一份（判重后只留一份）"
+    }
+   ]
+  },
+  {
+   "path": "files/929d246e1f5b-cube-slicing-in-r-n.pdf",
+   "sha256": "929d246e1f5b47f2eec0047c2f052ef9a4717412afea746733bbaec5cda002d4",
+   "bytes": 520776,
+   "title": "Cube Slicing in R n",
+   "doi": "10.1090/s0002-9939-1986-0840631-0",
+   "year": 1986,
+   "source": {
+    "workspace": "lp-ball-14",
+    "lit_id": "000000",
+    "path": "library/000000/ball-1986-cube-slicing-in-r-n-ams-journals-路由的-pdf-直链-上一趟用的是-proc-路由-拿到的是落地页.pdf",
+    "abs_path": "D:\\Incubator\\projects\\lp-ball-14\\library\\000000\\ball-1986-cube-slicing-in-r-n-ams-journals-路由的-pdf-直链-上一趟用的是-proc-路由-拿到的是落地页.pdf"
+   },
+   "extract": {
+    "chars": 12496,
+    "nonspace_chars": 9368,
+    "replacement_chars": 0,
+    "words": 1466,
+    "long_words": 740,
+    "alpha_ratio": 0.7517,
+    "pages": 9,
+    "source_kind": "pdf"
+   },
+   "selection": "同字节（sha256 相同）的多份：留抽读字数最多、工作区名靠前的一份",
+   "duplicates": [
+    {
+     "workspace": "lp-ball-7",
+     "lit_id": "000005",
+     "sha256": "929d246e1f5b47f2eec0047c2f052ef9a4717412afea746733bbaec5cda002d4",
+     "bytes": 520776,
+     "chars": 12496,
+     "why_not_kept": "同字节的另一份（判重后只留一份）"
+    }
+   ]
+  },
+  {
+   "path": "files/52375fd6b18c-estimates-on-the-decay-of-the-laplacepolya-integral.pdf",
+   "sha256": "52375fd6b18cfb23123115e3052328fe9447c9125c58d90945b8485eef105880",
+   "bytes": 473586,
+   "title": "Estimates on the decay of the Laplace–Pólya integral",
+   "doi": "10.1112/blms.70157",
+   "year": 2025,
+   "source": {
+    "workspace": "lp-ball-12",
+    "lit_id": "000015",
+    "path": "library/000015/ambrus-gargyan-2025-laplace-polya-integral-decay-estimates.pdf",
+    "abs_path": "D:\\Incubator\\projects\\lp-ball-12\\library\\000015\\ambrus-gargyan-2025-laplace-polya-integral-decay-estimates.pdf"
+   },
+   "extract": {
+    "chars": 45812,
+    "nonspace_chars": 37920,
+    "replacement_chars": 0,
+    "words": 5153,
+    "long_words": 3071,
+    "alpha_ratio": 0.7671,
+    "pages": 20,
+    "source_kind": "pdf"
+   },
+   "selection": "唯一一份",
+   "duplicates": []
+  },
+  {
+   "path": "files/acb5dd61859c-generalized-integrals-and-convergence-theorems.pdf",
+   "sha256": "acb5dd61859cf92d6a50eed7d0151f0d9f4c5d46b7bfeb085e3833cf63e2720b",
+   "bytes": 313454,
+   "title": "Generalized Integrals and Convergence Theorems",
+   "doi": "10.1007/s00025-025-02402-9",
+   "year": 2025,
+   "source": {
+    "workspace": "dct-min4-20261111",
+    "lit_id": "000006",
+    "path": "library/000006/generalized-integrals-and-convergence-theorems.pdf",
+    "abs_path": "D:\\Incubator\\projects\\dct-min4-20261111\\library\\000006\\generalized-integrals-and-convergence-theorems.pdf"
+   },
+   "extract": {
+    "chars": 25653,
+    "nonspace_chars": 20899,
+    "replacement_chars": 0,
+    "words": 3543,
+    "long_words": 1930,
+    "alpha_ratio": 0.8649,
+    "pages": 12,
+    "source_kind": "pdf"
+   },
+   "selection": "唯一一份",
+   "duplicates": []
+  },
+  {
+   "path": "files/b53daf49eb45-hyperplane-projections-of-the-unit-ball-of-l-p-n.pdf",
+   "sha256": "b53daf49eb4562f097297ddf427d8e3e7e45d8aaffe44ecdd4b155a1bd37abaa",
+   "bytes": 119759,
+   "title": "Hyperplane projections of the unit ball of ℓ_p^n",
+   "doi": "10.1007/s00454-001-0066-3",
+   "year": 2002,
+   "source": {
+    "workspace": "lp-ball",
+    "lit_id": "000002",
+    "path": "library/downloads/lit-000002-barthe-naor-2002.pdf",
+    "abs_path": "D:\\Incubator\\projects\\lp-ball\\library\\downloads\\lit-000002-barthe-naor-2002.pdf"
+   },
+   "extract": {
+    "chars": 24064,
+    "nonspace_chars": 19325,
+    "replacement_chars": 0,
+    "words": 3068,
+    "long_words": 1589,
+    "alpha_ratio": 0.8073,
+    "pages": 12,
+    "source_kind": "pdf"
+   },
+   "selection": "同字节（sha256 相同）的多份：留抽读字数最多、工作区名靠前的一份",
+   "duplicates": [
+    {
+     "workspace": "lp-ball-10",
+     "lit_id": "000003",
+     "sha256": "b53daf49eb4562f097297ddf427d8e3e7e45d8aaffe44ecdd4b155a1bd37abaa",
+     "bytes": 119759,
+     "chars": 24064,
+     "why_not_kept": "同字节的另一份（判重后只留一份）"
+    },
+    {
+     "workspace": "lp-ball-7",
+     "lit_id": "000004",
+     "sha256": "b53daf49eb4562f097297ddf427d8e3e7e45d8aaffe44ecdd4b155a1bd37abaa",
+     "bytes": 119759,
+     "chars": 24064,
+     "why_not_kept": "同字节的另一份（判重后只留一份）"
+    }
+   ]
+  },
+  {
+   "path": "files/66cf70c235d2-maximal-perimeters-of-polytope-sections-and-origin-symmetry.pdf",
+   "sha256": "66cf70c235d261533c4c82cdcaf00d7319c27f293a0039886455e444fd4deac7",
+   "bytes": 398399,
+   "title": "Maximal Perimeters of Polytope Sections and Origin-Symmetry",
+   "doi": "10.1007/s00454-022-00401-z",
+   "year": 2022,
+   "source": {
+    "workspace": "lp-ball-6",
+    "lit_id": "000006",
+    "path": "library/000006/stephen-2022-maximal-perimeters-of-polytope-sections.pdf",
+    "abs_path": "D:\\Incubator\\projects\\lp-ball-6\\library\\000006\\stephen-2022-maximal-perimeters-of-polytope-sections.pdf"
+   },
+   "extract": {
+    "chars": 44917,
+    "nonspace_chars": 35980,
+    "replacement_chars": 0,
+    "words": 5293,
+    "long_words": 2648,
+    "alpha_ratio": 0.7676,
+    "pages": 23,
+    "source_kind": "pdf"
+   },
+   "selection": "唯一一份",
+   "duplicates": []
+  },
+  {
+   "path": "files/de5d051e7e09-measure-theory-and-integration-by-and-for-the-learner.pdf",
+   "sha256": "de5d051e7e09af3ac64abf13c826860686ebe74275f7aa7174f5c19530bc63d5",
+   "bytes": 2958073,
+   "title": "Measure Theory and Integration By and For the Learner",
+   "doi": "10.16929/sbs/2016.0005",
+   "year": 2017,
+   "source": {
+    "workspace": "dct-min3-20261111",
+    "lit_id": "000002",
+    "path": "library/000002/l-measure-theory-and-integration-by-and-for-the-learner-spas-books-2017-前两次换源均-h.pdf",
+    "abs_path": "D:\\Incubator\\projects\\dct-min3-20261111\\library\\000002\\l-measure-theory-and-integration-by-and-for-the-learner-spas-books-2017-前两次换源均-h.pdf"
+   },
+   "extract": {
+    "chars": 727681,
+    "nonspace_chars": 577263,
+    "replacement_chars": 0,
+    "words": 92390,
+    "long_words": 44163,
+    "alpha_ratio": 0.7965,
+    "pages": 726,
+    "source_kind": "pdf"
+   },
+   "selection": "唯一一份",
+   "duplicates": []
+  },
+  {
+   "path": "files/7a7ab07fb74f-measure-integration-real-analysis.pdf",
+   "sha256": "7a7ab07fb74f5394c3180da51875ec467a0d89627321c8b2624b6b9b9585fb4e",
+   "bytes": 3539121,
+   "title": "Measure, Integration & Real Analysis",
+   "doi": "10.1007/978-3-030-33143-6",
+   "year": 2020,
+   "source": {
+    "workspace": "dct-min3-20261111",
+    "lit_id": "000003",
+    "path": "library/000003/axler-measure-integration-and-real-analysis-open-access-textbook-r-000001-需要一本有文.pdf",
+    "abs_path": "D:\\Incubator\\projects\\dct-min3-20261111\\library\\000003\\axler-measure-integration-and-real-analysis-open-access-textbook-r-000001-需要一本有文.pdf"
+   },
+   "extract": {
+    "chars": 781264,
+    "nonspace_chars": 623023,
+    "replacement_chars": 0,
+    "words": 101324,
+    "long_words": 60398,
+    "alpha_ratio": 0.8529,
+    "pages": 426,
+    "source_kind": "pdf"
+   },
+   "selection": "唯一一份",
+   "duplicates": []
+  },
+  {
+   "path": "files/dc44da69df46-non-central-sections-of-convex-bodies.pdf",
+   "sha256": "dc44da69df463d5a1d26bc4def832725acbafa8471fd8f962c637558643eeb7c",
+   "bytes": 389032,
+   "title": "Non-central sections of convex bodies",
+   "doi": "10.1007/s11856-017-1532-9",
+   "year": 2017,
+   "source": {
+    "workspace": "lp-ball-7",
+    "lit_id": "000020",
+    "path": "library/000020/yaskin-zhang-2017-non-central-sections-of-convex-bodies-springer-pdf.pdf",
+    "abs_path": "D:\\Incubator\\projects\\lp-ball-7\\library\\000020\\yaskin-zhang-2017-non-central-sections-of-convex-bodies-springer-pdf.pdf"
+   },
+   "extract": {
+    "chars": 47463,
+    "nonspace_chars": 37901,
+    "replacement_chars": 0,
+    "words": 6324,
+    "long_words": 3212,
+    "alpha_ratio": 0.8151,
+    "pages": 28,
+    "source_kind": "pdf"
+   },
+   "selection": "唯一一份",
+   "duplicates": []
+  },
+  {
+   "path": "files/bd62474e88b1-non-central-sections-of-the-regular-n-simplex.pdf",
+   "sha256": "bd62474e88b1554336390d94b25fd93291aa39da848aef1ae1c909ab4f235800",
+   "bytes": 396062,
+   "title": "Non-central sections of the regular n-simplex",
+   "doi": "10.48550/arxiv.2312.01325",
+   "year": 2023,
+   "source": {
+    "workspace": "lp-ball-4",
+    "lit_id": "000000",
+    "path": "library/000000/k-nig-non-central-sections-of-the-regular-n-simplex-arxiv-2312-01325-openalex-给的.pdf",
+    "abs_path": "D:\\Incubator\\projects\\lp-ball-4\\library\\000000\\k-nig-non-central-sections-of-the-regular-n-simplex-arxiv-2312-01325-openalex-给的.pdf"
+   },
+   "extract": {
+    "chars": 76993,
+    "nonspace_chars": 57856,
+    "replacement_chars": 0,
+    "words": 6271,
+    "long_words": 3159,
+    "alpha_ratio": 0.6186,
+    "pages": 35,
+    "source_kind": "pdf"
+   },
+   "selection": "唯一一份",
+   "duplicates": []
+  },
+  {
+   "path": "files/f79129be94de-non-diagonal-critical-central-sections-of-the-cube.pdf",
+   "sha256": "f79129be94de37f18f12dae74555f9fcaced06f2e157b13b12fcdf7c0e53d3c7",
+   "bytes": 453619,
+   "title": "Non-diagonal critical central sections of the cube",
+   "doi": "10.1016/j.aim.2024.109524",
+   "year": 2024,
+   "source": {
+    "workspace": "lp-ball-12",
+    "lit_id": "000014",
+    "path": "library/000014/ambrus-gargyan-2024-non-diagonal-critical-central-sections-of-the-cube.pdf",
+    "abs_path": "D:\\Incubator\\projects\\lp-ball-12\\library\\000014\\ambrus-gargyan-2024-non-diagonal-critical-central-sections-of-the-cube.pdf"
+   },
+   "extract": {
+    "chars": 43178,
+    "nonspace_chars": 34799,
+    "replacement_chars": 0,
+    "words": 5136,
+    "long_words": 2765,
+    "alpha_ratio": 0.7603,
+    "pages": 22,
+    "source_kind": "pdf"
+   },
+   "selection": "唯一一份",
+   "duplicates": []
+  },
+  {
+   "path": "files/e370bf2a2c26-on-a-reverse-form-of-the-brascamp-lieb-inequality.pdf",
+   "sha256": "e370bf2a2c26022664492b90d7860493a992455066a0ef8b8aade4fe1f79fda6",
+   "bytes": 333946,
+   "title": "On a reverse form of the Brascamp-Lieb inequality",
+   "doi": "10.1007/s002220050267",
+   "year": 1998,
+   "source": {
+    "workspace": "lp-ball-10",
+    "lit_id": "000011",
+    "path": "library/000011/barthe-1998-on-a-reverse-form-of-the-brascamp-lieb-inequality-inventiones-l-p-尖锐.pdf",
+    "abs_path": "D:\\Incubator\\projects\\lp-ball-10\\library\\000011\\barthe-1998-on-a-reverse-form-of-the-brascamp-lieb-inequality-inventiones-l-p-尖锐.pdf"
+   },
+   "extract": {
+    "chars": 41282,
+    "nonspace_chars": 32187,
+    "replacement_chars": 0,
+    "words": 5998,
+    "long_words": 2707,
+    "alpha_ratio": 0.8654,
+    "pages": 27,
+    "source_kind": "pdf"
+   },
+   "selection": "唯一一份",
+   "duplicates": []
+  },
+  {
+   "path": "files/9ec6189b98ee-on-extremal-sections-of-subspaces-of-l-p.pdf",
+   "sha256": "9ec6189b98ee3fa3fb1c05aa6cd672a2867f4723d196bb9ead95cfb7680ac1cc",
+   "bytes": 490751,
+   "title": "On Extremal Sections of Subspaces of $$L_p$$",
+   "doi": "10.1007/s00454-019-00133-7",
+   "year": 2019,
+   "source": {
+    "workspace": "lp-ball-12",
+    "lit_id": "000000",
+    "path": "library/000000/eskenazis-2019-extremal-sections-lp.pdf",
+    "abs_path": "D:\\Incubator\\projects\\lp-ball-12\\library\\000000\\eskenazis-2019-extremal-sections-lp.pdf"
+   },
+   "extract": {
+    "chars": 41455,
+    "nonspace_chars": 32842,
+    "replacement_chars": 0,
+    "words": 4992,
+    "long_words": 2629,
+    "alpha_ratio": 0.7782,
+    "pages": 16,
+    "source_kind": "pdf"
+   },
+   "selection": "唯一一份",
+   "duplicates": []
+  },
+  {
+   "path": "files/daac9fe7d2e3-on-maximal-hyperplane-sections-of-the-unit-ball-of-l-p-n-for.pdf",
+   "sha256": "daac9fe7d2e3c13c0c605e1f47aa157e4696cce1afd87e9b33fd551526614360",
+   "bytes": 890285,
+   "title": "On maximal hyperplane sections of the unit ball of l_p^n for p>2",
+   "doi": "10.1007/s43036-024-00404-y",
+   "year": 2024,
+   "source": {
+    "workspace": "lp-ball",
+    "lit_id": "000000",
+    "path": "library/downloads/lit-000000-koenig-2024.pdf",
+    "abs_path": "D:\\Incubator\\projects\\lp-ball\\library\\downloads\\lit-000000-koenig-2024.pdf"
+   },
+   "extract": {
+    "chars": 78773,
+    "nonspace_chars": 59384,
+    "replacement_chars": 0,
+    "words": 7645,
+    "long_words": 3544,
+    "alpha_ratio": 0.6617,
+    "pages": 42,
+    "source_kind": "pdf"
+   },
+   "selection": "sha256 不同：留抽读字数最多的一份（共 6 份候选）",
+   "duplicates": [
+    {
+     "workspace": "lp-ball-10",
+     "lit_id": "000002",
+     "sha256": "daac9fe7d2e3c13c0c605e1f47aa157e4696cce1afd87e9b33fd551526614360",
+     "bytes": 890285,
+     "chars": 78773,
+     "why_not_kept": "同字节的另一份（判重后只留一份）"
+    },
+    {
+     "workspace": "lp-ball-13",
+     "lit_id": "000002",
+     "sha256": "daac9fe7d2e3c13c0c605e1f47aa157e4696cce1afd87e9b33fd551526614360",
+     "bytes": 890285,
+     "chars": 78773,
+     "why_not_kept": "同字节的另一份（判重后只留一份）"
+    },
+    {
+     "workspace": "lp-ball-6",
+     "lit_id": "000000",
+     "sha256": "daac9fe7d2e3c13c0c605e1f47aa157e4696cce1afd87e9b33fd551526614360",
+     "bytes": 890285,
+     "chars": 78773,
+     "why_not_kept": "同字节的另一份（判重后只留一份）"
+    },
+    {
+     "workspace": "lp-ball-7",
+     "lit_id": "000000",
+     "sha256": "daac9fe7d2e3c13c0c605e1f47aa157e4696cce1afd87e9b33fd551526614360",
+     "bytes": 890285,
+     "chars": 78773,
+     "why_not_kept": "同字节的另一份（判重后只留一份）"
+    },
+    {
+     "workspace": "lp-ball-12",
+     "lit_id": "000004",
+     "sha256": "bdbf949f5650bbfbb568be6b957b4030f88b49de05625ab23ebfffd81f6c4ddb",
+     "bytes": 412333,
+     "chars": 76340,
+     "why_not_kept": "抽读字数较少（76340 < 78773）"
+    }
+   ]
+  },
+  {
+   "path": "files/08359e313da3-on-the-volume-of-hyperplane-sections-of-a-d-cube.pdf",
+   "sha256": "08359e313da348ff28fea2486d12d158f23f11437f3a753f137f3dfa242e8d6c",
+   "bytes": 227622,
+   "title": "On the volume of hyperplane sections of a d-cube",
+   "doi": "10.1007/s10474-020-01057-y",
+   "year": 2020,
+   "source": {
+    "workspace": "lp-ball",
+    "lit_id": "000005",
+    "path": "library/downloads/lit-000005-aliev-2020.pdf",
+    "abs_path": "D:\\Incubator\\projects\\lp-ball\\library\\downloads\\lit-000005-aliev-2020.pdf"
+   },
+   "extract": {
+    "chars": 7541,
+    "nonspace_chars": 6015,
+    "replacement_chars": 0,
+    "words": 945,
+    "long_words": 500,
+    "alpha_ratio": 0.7799,
+    "pages": 5,
+    "source_kind": "pdf"
+   },
+   "selection": "同字节（sha256 相同）的多份：留抽读字数最多、工作区名靠前的一份",
+   "duplicates": [
+    {
+     "workspace": "lp-ball-13",
+     "lit_id": "000006",
+     "sha256": "08359e313da348ff28fea2486d12d158f23f11437f3a753f137f3dfa242e8d6c",
+     "bytes": 227622,
+     "chars": 7541,
+     "why_not_kept": "同字节的另一份（判重后只留一份）"
+    },
+    {
+     "workspace": "lp-ball-6",
+     "lit_id": "000003",
+     "sha256": "08359e313da348ff28fea2486d12d158f23f11437f3a753f137f3dfa242e8d6c",
+     "bytes": 227622,
+     "chars": 7541,
+     "why_not_kept": "同字节的另一份（判重后只留一份）"
+    },
+    {
+     "workspace": "lp-ball-7",
+     "lit_id": "000007",
+     "sha256": "08359e313da348ff28fea2486d12d158f23f11437f3a753f137f3dfa242e8d6c",
+     "bytes": 227622,
+     "chars": 7541,
+     "why_not_kept": "同字节的另一份（判重后只留一份）"
+    },
+    {
+     "workspace": "lp-ball-9",
+     "lit_id": "000017",
+     "sha256": "08359e313da348ff28fea2486d12d158f23f11437f3a753f137f3dfa242e8d6c",
+     "bytes": 227622,
+     "chars": 7541,
+     "why_not_kept": "同字节的另一份（判重后只留一份）"
+    }
+   ]
+  },
+  {
+   "path": "files/c2398a987031-paraconsistent-dominated-convergence.pdf",
+   "sha256": "c2398a9870319b8663813d887911718128f5eb644991c2ae8b0dda9a253aff66",
+   "bytes": 263234,
+   "title": "Paraconsistent Dominated Convergence",
+   "doi": "10.48550/arxiv.2607.15723",
+   "year": 2026,
+   "source": {
+    "workspace": "dct-min4-20261111",
+    "lit_id": "000005",
+    "path": "library/000005/paraconsistent-dominated-convergence.pdf",
+    "abs_path": "D:\\Incubator\\projects\\dct-min4-20261111\\library\\000005\\paraconsistent-dominated-convergence.pdf"
+   },
+   "extract": {
+    "chars": 31797,
+    "nonspace_chars": 26566,
+    "replacement_chars": 0,
+    "words": 4293,
+    "long_words": 2609,
+    "alpha_ratio": 0.9206,
+    "pages": 12,
+    "source_kind": "pdf"
+   },
+   "selection": "唯一一份",
+   "duplicates": []
+  },
+  {
+   "path": "files/d0a9f661eb23-plane-sections-of-convex-bodies-of-maximal-volume.pdf",
+   "sha256": "d0a9f661eb23abe7ed7a7f439567940612700a8b1a910a2b9957a34484bcf832",
+   "bytes": 135362,
+   "title": "Plane Sections of Convex Bodies of Maximal Volume",
+   "doi": "10.1007/s004540010070",
+   "year": 2001,
+   "source": {
+    "workspace": "lp-ball-6",
+    "lit_id": "000013",
+    "path": "library/000013/makai-vrecica-zivaljevic-2001-plane-sections-of-convex-bodies-of-maximal-volume.pdf",
+    "abs_path": "D:\\Incubator\\projects\\lp-ball-6\\library\\000013\\makai-vrecica-zivaljevic-2001-plane-sections-of-convex-bodies-of-maximal-volume.pdf"
+   },
+   "extract": {
+    "chars": 51289,
+    "nonspace_chars": 41904,
+    "replacement_chars": 0,
+    "words": 7149,
+    "long_words": 3682,
+    "alpha_ratio": 0.8452,
+    "pages": 17,
+    "source_kind": "pdf"
+   },
+   "selection": "唯一一份",
+   "duplicates": []
+  },
+  {
+   "path": "files/a7344ad13416-plane-sections-of-the-unit-ball-of-l-p.pdf",
+   "sha256": "a7344ad13416e8c3ffa43f67614d50bdf9b6008f2a10bd64acc7fc4e3b595fc5",
+   "bytes": 385104,
+   "title": "Plane sections of the unit ball of L_p",
+   "doi": "10.1007/bf01951566",
+   "year": 1988,
+   "source": {
+    "workspace": "lp-ball-13",
+    "lit_id": "000001",
+    "path": "library/000001/grz-lewicz-1988-plane-sections-of-the-unit-ball-of-l-p.pdf",
+    "abs_path": "D:\\Incubator\\projects\\lp-ball-13\\library\\000001\\grz-lewicz-1988-plane-sections-of-the-unit-ball-of-l-p.pdf"
+   },
+   "extract": {
+    "chars": 15414,
+    "nonspace_chars": 12241,
+    "replacement_chars": 0,
+    "words": 1953,
+    "long_words": 1089,
+    "alpha_ratio": 0.7994,
+    "pages": 7,
+    "source_kind": "pdf"
+   },
+   "selection": "同字节（sha256 相同）的多份：留抽读字数最多、工作区名靠前的一份",
+   "duplicates": [
+    {
+     "workspace": "lp-ball-6",
+     "lit_id": "000008",
+     "sha256": "a7344ad13416e8c3ffa43f67614d50bdf9b6008f2a10bd64acc7fc4e3b595fc5",
+     "bytes": 385104,
+     "chars": 15414,
+     "why_not_kept": "同字节的另一份（判重后只留一份）"
+    }
+   ]
+  },
+  {
+   "path": "files/290c7eb63abe-resilience-of-cube-slicing-in-lp.pdf",
+   "sha256": "290c7eb63abe42c0f00423d754866958f1906514cd834551c5bf5f33b1d3976a",
+   "bytes": 710811,
+   "title": "Resilience of cube slicing in ℓp",
+   "doi": "10.1215/00127094-2024-0004",
+   "year": 2024,
+   "source": {
+    "workspace": "lp-ball-11",
+    "lit_id": "000002",
+    "path": "library/000002/eskenazis-nayar-tkocz-resilience-of-cube-slicing-in-lp-candidate-for-topic-1-sta.pdf",
+    "abs_path": "D:\\Incubator\\projects\\lp-ball-11\\library\\000002\\eskenazis-nayar-tkocz-resilience-of-cube-slicing-in-lp-candidate-for-topic-1-sta.pdf"
+   },
+   "extract": {
+    "chars": 51416,
+    "nonspace_chars": 39727,
+    "replacement_chars": 0,
+    "words": 5560,
+    "long_words": 3168,
+    "alpha_ratio": 0.7442,
+    "pages": 22,
+    "source_kind": "pdf"
+   },
+   "selection": "唯一一份",
+   "duplicates": []
+  },
+  {
+   "path": "files/f69890810ecb-szarek-and-ball-made-simple.pdf",
+   "sha256": "f69890810ecb62cdb23aab11e3d32745c36e9a54f7a759ba234d1b2f3f1399b3",
+   "bytes": 401803,
+   "title": "Szarek and Ball made simple",
+   "doi": "10.48550/arxiv.2610.28384",
+   "year": 2026,
+   "source": {
+    "workspace": "lp-ball-3",
+    "lit_id": "000001",
+    "path": "library/000001/szarek-and-ball-made-simple-arxiv-2610-28384-试-arxiv-直链-pdf-争取拿到可读全文而不是出版方落地页.pdf",
+    "abs_path": "D:\\Incubator\\projects\\lp-ball-3\\library\\000001\\szarek-and-ball-made-simple-arxiv-2610-28384-试-arxiv-直链-pdf-争取拿到可读全文而不是出版方落地页.pdf"
+   },
+   "extract": {
+    "chars": 41412,
+    "nonspace_chars": 33954,
+    "replacement_chars": 0,
+    "words": 4992,
+    "long_words": 3112,
+    "alpha_ratio": 0.8218,
+    "pages": 26,
+    "source_kind": "pdf"
+   },
+   "selection": "唯一一份",
+   "duplicates": []
+  },
+  {
+   "path": "files/92378bba55bc-the-cross-section-body-plane-sections-of-convex-bodies-and-a.pdf",
+   "sha256": "92378bba55bc2f92f0cd86786358c740994d1f4a0dd1caf0607e0139fb8280f7",
+   "bytes": 1365231,
+   "title": "The cross-section body, plane sections of convex bodies and approximation of convex bodies, I",
+   "doi": "10.1007/bf00181417",
+   "year": 1996,
+   "source": {
+    "workspace": "lp-ball-7",
+    "lit_id": "000019",
+    "path": "library/000019/makai-martini-1996-i-springer-pdf.pdf",
+    "abs_path": "D:\\Incubator\\projects\\lp-ball-7\\library\\000019\\makai-martini-1996-i-springer-pdf.pdf"
+   },
+   "extract": {
+    "chars": 57170,
+    "nonspace_chars": 44605,
+    "replacement_chars": 0,
+    "words": 7371,
+    "long_words": 3640,
+    "alpha_ratio": 0.7873,
+    "pages": 30,
+    "source_kind": "pdf"
+   },
+   "selection": "唯一一份",
+   "duplicates": []
+  },
+  {
+   "path": "files/6c8afb33fc1a-the-geometry-of-minkowski-spaces-a-survey-part-i.pdf",
+   "sha256": "6c8afb33fc1a481de12d4ba8246229871b0b857d187385f10c55930c307af11d",
+   "bytes": 580480,
+   "title": "The geometry of Minkowski spaces — A survey. Part I",
+   "doi": "10.1016/s0723-0869(01)80025-6",
+   "year": 2001,
+   "source": {
+    "workspace": "lp-ball-11",
+    "lit_id": "000004",
+    "path": "library/000004/martini-swanepoel-weiss-minkowski-geometry-survey-candidate-for-topic-3.pdf",
+    "abs_path": "D:\\Incubator\\projects\\lp-ball-11\\library\\000004\\martini-swanepoel-weiss-minkowski-geometry-survey-candidate-for-topic-3.pdf"
+   },
+   "extract": {
+    "chars": 121668,
+    "nonspace_chars": 100420,
+    "replacement_chars": 0,
+    "words": 16442,
+    "long_words": 9863,
+    "alpha_ratio": 0.8495,
+    "pages": 56,
+    "source_kind": "pdf"
+   },
+   "selection": "唯一一份",
+   "duplicates": []
+  }
+ ]
+}

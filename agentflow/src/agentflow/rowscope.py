@@ -108,6 +108,50 @@ def row_isolated(role: Any, action: Any) -> bool:
     return (str(role or ""), str(action or "")) in ROW_MUTEX_ACTIONS
 
 
+# ---------------------------------------------------------------- 表的行面（跨角色）
+#
+#: 哪些表的哪些写入方之间「各写各的行」是可判定的（跨角色同波的唯一条件）。
+#:
+#: 这一张与 `ROW_MUTEX_ACTIONS` 是同一根轴的两层：那一张回答「同一个角色的两个实例
+#: 会不会改同一行」，这一张回答「两个不同角色在同一张表上会不会撞同一行」。
+#: 登记一条 = 「这两个写入方在这张表上任何时候写的都不是同一行」—— 不是「冲突不要紧」。
+#:
+#: 判据落点：`policy.estimate_write_conflict` 只在共享写集的每一张表都登记了双方时才
+#: 放行同波；任何一张共享表没登记，照旧按表级冲突分波（保守方向一个字没松）。
+#:
+#: 每条登记的证据（主键分配点 + 各方的写口）：
+#:
+#: - `search_requests` 的 `A` + `D`：
+#:   主键 `request_id` 在写事务内分配（`interactions.next_prefixed_id` 读的是事务快照，
+#:   而 `store.tx` 先拿这张表的锁），两个写入方不可能拿到同一个号、也不可能读到对方的
+#:   半成品。A 建的是「自己开的那一行」并回写它认领到的行（`search.literature` /
+#:   `search.register` 建行或回填，`AgentA._claim` 在表事务里置租约后回写终局）；
+#:   D 只建新行（`tools/research_tools.py` 的 `research.submit_gap` 与
+#:   `agent_d/adjudicate.py` 的矛盾轮次），从不回写已有请求行 —— 所以「A 回头改 D 建过的
+#:   那一行」成立，但那是 D 已经提交、此后不再碰的行，同一行上永远只有一个写入方在写。
+#:   （D 侧唯一回写已有请求行的代码在 `agent_d/core.py` 的 selftest 模拟里，actor="sim"，
+#:   不是动作面。）表级的两条跨行不变量也都落在同一个事务快照上：
+#:   `interactions.admit_search_request` 的 I7 在途配额与号段分配。
+#:
+#: 不登记的写面一律按表级冲突算：`literature` / `research_questions` / `experiments`
+#: 这些表还没有「只写自己那几行」的可判定结构（B 的按路径占用与 K14 的行级归属
+#: 分别由 `ROW_MUTEX_ACTIONS`、`OWNED_TABLES` 管，不在这张表里）。
+#:
+#: 已登记的残留风险（本批不动，报告里有读数）：通用写口 `table.update` 对
+#: `search_requests` 没有行级归属（`store.direct_write_refusal` 返空串），于是模型
+#: 理论上可以拿它去改对方建的那一行 —— 那一条不在本判据的可见面里，要堵它得给这张表
+#: 补 `owner_task` / `owner_instance`（schema 改动，FC-27）。本判据管的是动作面的写口
+#: （A 的 `search.*` 与 `_claim`，D 的 `research.submit_gap` 与 `adjudicate`）。
+ROW_DISJOINT_WRITERS: dict[str, frozenset[str]] = {
+    "search_requests": frozenset({"A", "D"}),
+}
+
+
+def row_disjoint(table: Any, role: Any) -> bool:
+    """这个写入方在这张表上是不是「只写自己那几行」（`ROW_DISJOINT_WRITERS` 的唯一读口）。"""
+    return str(role or "") in ROW_DISJOINT_WRITERS.get(str(table or ""), frozenset())
+
+
 # ---------------------------------------------------------------- 调用者身份
 
 

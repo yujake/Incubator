@@ -1198,10 +1198,40 @@ def estimate_write_conflict(a: Any, b: Any) -> bool:
     所以第 3 条只对「已知动作」生效；委派下去的实际写仍由写入面各自守：`experiments` /
     `documents` 的行级归属（`rowscope.write_refusal`）、手稿的按路径占用
     （`manuscriptids.claim_for_write`）、`review_findings` 的 K14 事务内重算。
+
+    ## 行面（WAVEFIX，2026-11-21；T23-6 裁定的「第二阶段」）
+
+    表级写集是角色级的，它回答的是「这两个角色有没有可能改同一张表」。真机
+    `projects/lp-ball-14` 暴露了它的代价：A（`{literature, search_requests}`）与
+    D（`{research_questions, search_requests}`）的交集只有 `search_requests`，
+    于是三个 D 被压到 A 那 63 分钟的文献跑之后排队 44 分钟。
+
+    这一档只放行一种情形：共享写集的每一张表都在 `rowscope.ROW_DISJOINT_WRITERS`
+    里登记了双方（这张表上「各写各的行」是可判定的，证据在那一处）。任何一张共享表
+    没登记 ⇒ 照旧分波。它不是「允许冲突」：它把判据从「表」下沉到「行」，而每一张
+    下沉的表都要能点名主键分配点与双方的写口；没点名的表一概不动。
     """
     if _same_role_other_instance(a, b):
         return False
-    return bool(_write_set(a) & _write_set(b))
+    shared = _write_set(a) & _write_set(b)
+    if not shared:
+        return False
+    return not _row_disjoint(shared, a, b)
+
+
+def _row_disjoint(shared: frozenset[str], a: Any, b: Any) -> bool:
+    """共享写集是否全部落在「行面可判定」的表上（判据见 `estimate_write_conflict`）。
+
+    条件是「每一张共享表都登记了双方」，不是「有一张登记了」：只要还有一张表是
+    表级未知的，那一张就足以让两个写入方撞行，而撞行不会报错。
+    """
+    from . import rowscope as _RS
+
+    ra, rb = _role_of(a), _role_of(b)
+    if not (isinstance(ra, str) and isinstance(rb, str)):
+        return False
+    return all(_RS.row_disjoint(table, ra) and _RS.row_disjoint(table, rb)
+               for table in shared)
 
 
 def _instance_of(x: Any) -> str:
@@ -1279,8 +1309,14 @@ def waves_of(calls: Sequence[Any], *, limit: int | None = None) -> list[list[int
                 continue
             # 每个已入波成员的写集在入波时算好（它与调用参数无关），
             # 否则每来一个调用就要把前面所有成员重算一遍。
-            if any(other_ws & ws and not _same_role_other_instance(call, other)
-                   for _, other, other_ws in wave):
+            # 一条成员要同时否定两个豁免才算冲突：同角色不同实例（K14），
+            # 或共享写集整张落在可判定的行面上（WAVEFIX）。任何一个成员冲突 ⇒ 换下一波。
+            if any(
+                (other_ws & ws)
+                and not _same_role_other_instance(call, other)
+                and not _row_disjoint(other_ws & ws, call, other)
+                for _, other, other_ws in wave
+            ):
                 continue
             wave.append((i, call, ws))
             placed = True

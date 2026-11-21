@@ -828,6 +828,11 @@ _NON_TOOL_DOTTED_TOKENS: dict[str, str] = {
     "evidencebits.optimized_signature": "模块函数不是工具：`evidencebits.optimized_signature` 是"
                                         "打 `optimized=true` 之前那条核（这一份正文有没有签盖住），"
                                         "B 读的是它的读数，不是调它",
+    # 2026-11-21（LITCELLFIX）：`closing.LITERATURE_QUEUES_NOTE` 点名的「已入库文献表的
+    # `processed` 位」—— 它是台账字段（literature 表的 processed 列），不是工具；模型照着
+    # 念读数不会拿到 `unknown_action`。这一条登记由本判据驱动（不登记就红）。
+    "literature.processed": "台账字段（literature 表的 processed 列），不是工具 —— "
+                            "`closing.LITERATURE_QUEUES_NOTE` 用它区分两条队列的出口",
 }
 
 #: "像工具名"的点号 token：反引号包着、两段都是小写标识符。
@@ -2698,7 +2703,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #   十一格是 `temp/fixbatch/digest2.py` 现算（导入本文件的 `_surface_digest`，先钉
 #   `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段），不是手抄。
 #   另一笔（`lit.stage_list` 的 `note` 加「`done=True` ≠ 清表」）是运行时返回值，不进任何段。
-_FROZEN_PROMPT_VERSION = "p305"
+_FROZEN_PROMPT_VERSION = "p309"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2974,8 +2979,8 @@ _FROZEN_PROMPT_VERSION = "p305"
 #:   是因为"模型读到的 F 动作提示词"确实换了一份。这也说明这张表钉的是 system 段，
 #:   钉不住动作提示词那一面。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "5144e9782819e306d7e3f4ab3e57448bb245ff5143090d9d38cd1848abbd13a7",
-    "B": "316e9508bf1a3919cadec8b3c4bc778e6d4679380062c5668785190991e216ed",
+    "A": "3c1602f9f96d06f2bc13bfb5510a560020629f4f875003937a499d69fa3163ab",
+    "B": "cdd0a8f5044977e1b0992f2e5c4476d397f2baa1a3b9fb214d8f03a1f777bae0",
     "C": "192fe32f807726e590892b9f2d75dab436f3213f7fdca7e298724893319403b6",
     "D": "ab60b782533b86f7b358c82ae5ed13d89c010e64d76e9282fcccdf7ca339fbbc",
     "E": "8dae5d11c2fdf2ada5afd5f18ba11d4115b759f138547a0e457f9658dc94ec37",
@@ -2984,7 +2989,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "H": "c1abed29a91985e3c271a2ccfc648872158584902aad239a0888a9babc657dc3",
     "V": "e91ae893705f5b4f3ffd5f98ddb120f07e460d14273f1877d85e3b39c63648bf",
     "L": "16b70ad0fb7f6cc6885c758db4aca0c72d7ba8f2380fa841ebf867ab125bb90e",
-    "M": "d90338b8d1bd3866ac2bd86a8a56ce2a1e4e17fe9a63c212bf705745db05a6b6",
+    "M": "813ed8a24bbe188b6d15031acaed235e90642dc16b388319117ff111c0093850",
 }
 
 
