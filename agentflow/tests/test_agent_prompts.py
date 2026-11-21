@@ -833,6 +833,14 @@ _NON_TOOL_DOTTED_TOKENS: dict[str, str] = {
     # 念读数不会拿到 `unknown_action`。这一条登记由本判据驱动（不登记就红）。
     "literature.processed": "台账字段（literature 表的 processed 列），不是工具 —— "
                             "`closing.LITERATURE_QUEUES_NOTE` 用它区分两条队列的出口",
+    # 2026-11-21（p310，B2STAGE）：二阶段改成 B 自驱，B 的职责档/边界与 M 的兜底句各点了
+    # 两处 —— 一处是 `own.*`（B 的角色级动作被现装成工具，基座注册表里没有；同
+    # `own.register_statement` 那一条），一处是回执里的字段路径（不是工具）。
+    "own.run_once": "B 的动作被包成的那件 `own.*` 工具（同 `own.register_statement`："
+                    "基座 `build_registry()` 里没有，只在被派那一趟的循环注册表里现装；"
+                    "p310 起它每一拍的回执就是二阶段的自驱入口 —— 别的角色只在伙伴表里读到这个名字）",
+    "stage_two.unwashed": "回执里的字段路径（`BRunResult.stage_two` 的 `unwashed` 格），不是工具 —— "
+                          "B 照它点名「这一批还有哪几条没洗」，模型照着念读数不会拿到 `unknown_action`",
 }
 
 #: "像工具名"的点号 token：反引号包着、两段都是小写标识符。
@@ -2703,7 +2711,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #   十一格是 `temp/fixbatch/digest2.py` 现算（导入本文件的 `_surface_digest`，先钉
 #   `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段），不是手抄。
 #   另一笔（`lit.stage_list` 的 `note` 加「`done=True` ≠ 清表」）是运行时返回值，不进任何段。
-_FROZEN_PROMPT_VERSION = "p309"
+_FROZEN_PROMPT_VERSION = "p310"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2979,17 +2987,17 @@ _FROZEN_PROMPT_VERSION = "p309"
 #:   是因为"模型读到的 F 动作提示词"确实换了一份。这也说明这张表钉的是 system 段，
 #:   钉不住动作提示词那一面。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "3c1602f9f96d06f2bc13bfb5510a560020629f4f875003937a499d69fa3163ab",
-    "B": "cdd0a8f5044977e1b0992f2e5c4476d397f2baa1a3b9fb214d8f03a1f777bae0",
+    "A": "4c261a743b0de5cd738924fd1178652d39e20cdba3337a63068f675a51986751",
+    "B": "5a7be6444dbf301c6ca14f54fbf52f3ee87ca658b0952790abf1f24a82126967",
     "C": "192fe32f807726e590892b9f2d75dab436f3213f7fdca7e298724893319403b6",
-    "D": "ab60b782533b86f7b358c82ae5ed13d89c010e64d76e9282fcccdf7ca339fbbc",
-    "E": "8dae5d11c2fdf2ada5afd5f18ba11d4115b759f138547a0e457f9658dc94ec37",
+    "D": "b3773f151c8b9e196560d535a2cd8d08b30c1ca6b1b1f46283ba497961977406",
+    "E": "54f94b2575ad6948ba48b3eb297e03a471779de70d856b065b8d701da8315b60",
     "F": "ec69ae9a25d0caaa72845a30d5c90e3c0010562f455af78b7bf6c6f1af37a30e",
     "G": "93d4dd6d962e8df55ffa613ac6949445b286a53092d84a820be2153ef8acaac7",
     "H": "c1abed29a91985e3c271a2ccfc648872158584902aad239a0888a9babc657dc3",
     "V": "e91ae893705f5b4f3ffd5f98ddb120f07e460d14273f1877d85e3b39c63648bf",
     "L": "16b70ad0fb7f6cc6885c758db4aca0c72d7ba8f2380fa841ebf867ab125bb90e",
-    "M": "813ed8a24bbe188b6d15031acaed235e90642dc16b388319117ff111c0093850",
+    "M": "3d9a8b8ea4bb1d326160eaa06e76cf6b5a28b6883970d3b1f9c202d324c85972",
 }
 
 

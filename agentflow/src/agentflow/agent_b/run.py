@@ -63,6 +63,11 @@ class _Run:
             # `details[*stage=resolve]` 里一条不少。
             if not total.path_base:
                 total.path_base = r.path_base
+            # 二阶段自驱的读数取最后一拍（每一拍都现算：`unwashed` 是"这一轮末尾
+            # 还剩哪几条没洗"的最新现场；开稿的逐条记录在最后一拍里已经包含前几拍
+            # 开过的 —— `skipped_open` 会点名它们）。
+            if r.stage_two and r.stage_two.get("checked"):
+                total.stage_two = dict(r.stage_two)
             n += 1
         out = total.to_dict()
         # 这一轮配额的「总」读数：`concepts_created` 只说得清"写了多少"，

@@ -365,13 +365,14 @@ def _h_extract(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = "",
 
 
 #: 判定"疑似乱码"的阈值（业主 2026-10-17 口径：「A 要保证转出来的纯文字稿不是乱码」）。
-#: 2026-11-16 起只有一份实现：`litread.garbled_text`。改前这里是 `_quality` 自己一份、
-#: `litread.fulltext_tier` 另一份，两边互不相认 —— 于是 `text.extract` 判"乱码"、
-#: 而文献行照样写着 `fulltext` 没有这一档（现场那两份 PDF 就是这样无声消失的）。
-#: 三条独立信号、「任何一条」命中就拒（宁可说"这份转不出干净文本"，也不把乱码写进 library/）：
-#:   · NUL 字符：PDF 文字层正常「不含」 NUL；出现即错位解码；
-#:   · 替换字符 U+FFFD：解码器自己都认不出那个字节 ⇒ 乱码；
-#:   · 控制字符占比：正常正文里控制字符几乎为 0（换行/制表除外）。
+#: 2026-11-16 起只有一份实现：`litread.assess_text`（`garbled_text` 是它的判据出口）。
+#: 2026-11-21（GARBLECHK）：阈值仍只在 `litread` 一处；这里的两个常量只是转发，
+#: 不再各自解释"乱码"。
+#:
+#: 三条噪声信号按占比判（NUL 不是"出现即错位解码"：PDF 文字层里少量 NUL 来自
+#: 没有 ToUnicode 映射的字形，正文照样可读 —— 真机 lp-ball-15 的 7 份文献就是
+#: 被旧口径的 `nul > 0` 误判的）。符号汤（抽得出字、但没有完整词）由同一份判据
+#: 的体量那一半拦下。
 GARBLED_REPLACEMENT_MAX = _LR.GARBLED_REPLACEMENT_MAX
 GARBLED_CONTROL_RATIO_MAX = _LR.GARBLED_CONTROL_RATIO_MAX
 

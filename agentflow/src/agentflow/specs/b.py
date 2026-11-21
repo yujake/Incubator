@@ -25,7 +25,7 @@ from ..agentspec import (
     BuilderDeps,
     _obj,
 )
-from .b_ingest_policy import INGEST_POLICY
+from .b_ingest_policy import INGEST_POLICY, STAGE_TWO_BOUNDARY, STAGE_TWO_DUTY
 from .b_sign_policy import SIGN_SUBMIT_POLICY
 
 #: 本角色的动作表。
@@ -416,12 +416,9 @@ PROOF_CHANNEL_NO_LEAN = (
 SPEC = AgentSpec(
     role='B',
     brief=    AgentBrief(
-        # 业主 2026-11-20：「B登记命题是快的（除非自己分析引文落稿，其它都是几乎自动录入 E,F 侧成果），
-        # 它的重要职责就是二阶段」⇒ 职责档两截：第一阶段快录、第二阶段主职（真源 `draft/179`，2026-11-02）。
-        duty=("文献整理：第一阶段是快录 —— E/F 侧交来的成果几乎自动录入"
-              "（机械录入：证明原文 ＋ 那一份已有的 V 签；只有「自己分析引文落稿」那一档要花力气）；"
-              "你的主职是第二阶段（逐个优化）—— 登记完一批，紧接着把这一批的证明稿逐个洗、"
-              "重拿 V 签、精准替换"),
+        # 二阶段的职责档与边界条文搬在 `specs/b_ingest_policy.py`（`STAGE_TWO_DUTY` /
+        # `STAGE_TWO_BOUNDARY`）—— 只为把本文件留在 800 行线内；渲染逐字不变。
+        duty=STAGE_TWO_DUTY,
         boundary=(
             "没有逐字引文支撑的关系不许产出。",
             "缺模型、缺正文、抽取失败都不许假装整理过。",
@@ -438,15 +435,16 @@ SPEC = AgentSpec(
             "补的是稿，不是往参数里贴一段正文）。",
             "quote_verified 是三态：true 逐字通过 / false 比对不一致 / null 还没查。不是 true 就必须写 quote_reason（哪里不一致、或者为什么还没查）。",
             # ---- 二阶段（逐个优化）是 B 的主职：业主 2026-11-20 定性、2026-11-02 定形。
-            # 对象是**证明正文**（`draft/191` §5 那次纠偏：不是润色表述 / 统一术语）。
+            # 2026-11-21（业主裁定「B 应该自动做，而不是 M 派」）：边界写成自驱动作 ——
+            # 入口是 `own.run_once` 回执里的 `stage_two.unwashed`（每一拍都现算、逐条点名），
+            # 不是"等回执/等派活"。同一个读数在 `agent_b/stage_two.py::_stage_two_self_drive`。
             "**第二阶段洗的是证明正文，不是命题措辞**：进来的是机械录入那一版，出去的是洗过、"
             "重拿过 V 签的那一版（三步与判据在 policy 那一节）；「表述精炼 / 统一术语 / 与相邻命题"
             "去重」不是这份活。",
             "**已拿签的稿只读**：要洗就先 `own.open_polish_copy` 开一份 B 号副本（源稿一个字节不动），"
             "在副本上洗；**没有盖上这一版的签不许替换**（签只认最新一版 —— 拿旧签去替换等于把没审过"
             "的正文说成审过了）。",
-            "**登记完一批 ⇒ 紧接着做这一批的第二阶段**：不要留到收工前、也不许把「先攒着最后一起洗」"
-            "当排期 —— 交回回执里要点名「这一批洗了几份 / 还剩几份没洗」，「这一批看过了」不算处置。",
+            STAGE_TWO_BOUNDARY,
         ),
         policy=(
             # 非 M 的父也拿得到这件工具，而 `conductor.board` 只给 M（他们看不到 `revocable` 格）

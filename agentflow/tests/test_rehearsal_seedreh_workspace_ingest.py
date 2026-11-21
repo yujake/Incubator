@@ -18,9 +18,11 @@
 ## 素材为什么用盘上现成的真机 PDF
 
 `agentflow/projects/` 下就是历史真机下载成功的文献（真字节）。造一份假 PDF 或手写
-`%PDF-1.4` 头会让"抽读"这一步变成"抽取器拒绝"，测的就不是这条链。乱码那一份也是真的：
-`projects/mp3/downloads/lit-000000-…-pdf.pdf` 有文本层、但抽出来含 NUL（`litread.garbled_text`
-判真），正是业主说的"000005 类"。
+`%PDF-1.4` 头会让"抽读"这一步变成"抽取器拒绝"，测的就不是这条链。乱码那一份是
+`tests/fixtures/garbled-symbol-layer.pdf`：有文本层、抽出来是一整页符号汤（没有
+NUL/控制字符，旧口径会把它当可读）—— 这正是"抽得出字、但读不了"的真乱码形态，
+负控要守的是它，而不是一份正文可读、只夹了几个 NUL 的论文（改前那两份就是被
+`nul > 0` 误判的）。
 
 ## 守什么
 
@@ -60,9 +62,8 @@ READABLE = (
     ROOT / "projects" / "mp3" / "library" / "000004"
     / "enveloping-algebras-of-krichever-novikov-algebras-are-not-no.pdf",
 )
-#: 真·乱码 PDF（有文本层，抽出来含 NUL ⇒ `extract_failed`）。
-GARBLED = (ROOT / "projects" / "mp3" / "downloads"
-           / "lit-000000-mathieu-weakly-noetherian-sierra-walton-pdf.pdf",)
+#: 真·乱码 PDF（有文本层，抽出来是符号汤、完整词 0 个 ⇒ `garbled`）。
+GARBLED = (ROOT / "tests" / "fixtures" / "garbled-symbol-layer.pdf",)
 
 #: 只有摘要的正文（< `litavail.MIN_BODY_BEYOND_ABSTRACT`）；刻意不含内容性断言词。
 ABSTRACT_ONLY = ("We study maximal hyperplane sections of the unit ball of l_p^n and "

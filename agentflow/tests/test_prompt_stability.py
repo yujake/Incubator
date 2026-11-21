@@ -1634,6 +1634,14 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
                  "locallib.undeclared_workspace_books（工具与动作共用），LOCAL_MATERIALS 再报"
                  "已声明/未声明两数。变化格 = A / M 两格。本笔同样只换段文本 ⇒ facts 键集仍 "
                  "15 格，count / keys_sha256 与 p308 同值。"},
+        {"version": "p310", "count": 15,
+         "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+         "note": "抬版本 p310（2026-11-21，B2STAGE：B 的二阶段改成自驱，不等 M 派）。本笔只换"
+                 "段文本与行为接线（agent_b/stage_two.py 的 _stage_two_self_drive 从 run_once "
+                 "的每个出口算一次 stage_two.unwashed、并自己开优化稿；specs/b.py 的 duty/"
+                 "边界搬进 b_ingest_policy.py 的 STAGE_TWO_DUTY/STAGE_TWO_BOUNDARY 只为守 800 行"
+                 "软基线；specs/m.py 那一句降为兜底；agent_skills.py 的 B 手册改成 self-drive）。"
+                 "没有哪一格事实换过落点 ⇒ facts 键集仍 15 格，count / keys_sha256 与 p309 同值。"},
 
 )
 

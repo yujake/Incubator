@@ -1579,6 +1579,95 @@ def _one(store: Store, slot: str) -> dict:
     )
 
 
+def _locator_name(row: Mapping[str, Any]) -> str:
+    """这一条候选指向的盘上文件名（`url` / `path` 的最后一段；没有就是空串）。"""
+    raw = str(row.get("url") or row.get("path") or "").strip().replace("\\", "/")
+    if raw.startswith("url:"):
+        raw = raw[4:].strip()
+    return raw.rsplit("/", 1)[-1] if raw else ""
+
+
+def _file_needles(row: Mapping[str, Any]) -> list[str]:
+    """一行候选在散文里可能被怎么称呼：全名、12 位内容前缀、缩写前缀（`9ec6...`）。"""
+    name = _locator_name(row)
+    if not name:
+        return []
+    needles = [name]
+    prefix = name.split("-", 1)[0]
+    if len(prefix) >= 8:
+        needles.append(prefix)
+    if len(prefix) >= 4:
+        needles.append(f"__ABBREV__{prefix[:4]}")
+    return needles
+
+
+def _reason_names_other_slot(note: str, slot: str,
+                             others: Sequence[Mapping[str, Any]]) -> bool:
+    """这一句是否点了别的槽位或别的文件（判拒理由串号的判据）。
+
+    真机 lp-ball-15 的 000011 / 000012 / 000014 三行写着逐字相同的一段话，
+    里面并列了三个槽位的读数 —— 一段话讲了三份文件，等于每行都没讲自己。
+    000003 / 000004 那两行则用缩写并列了两份文件（`290c...lp.pdf` 与
+    `9ec6...l-p.pdf`），所以这里连"4 位前缀 + 省略号"这种缩写也认。
+    """
+    text = str(note or "")
+    if not text:
+        return False
+    for other in others:
+        other_slot = str(other.get("slot") or "").strip()
+        if not other_slot or other_slot == slot:
+            continue
+        if re.search(rf"(?<!\d){re.escape(other_slot)}(?!\d)", text):
+            return True
+        for needle in _file_needles(other):
+            if needle.startswith("__ABBREV__"):
+                if re.search(rf"(?<![0-9a-fA-F]){re.escape(needle[10:])}"
+                             r"\s*(?:\.{2,}|…)", text):
+                    return True
+            elif needle in text:
+                return True
+    return False
+
+
+def _reject_reason(row: Mapping[str, Any], note: str, *,
+                   others: Sequence[Mapping[str, Any]] = (),
+                   receipts: Mapping[str, Mapping[str, Any]] | None = None,
+                   fallback: str = "") -> str:
+    """按这一槽自己的文件与抽读读数生成判拒理由（`reject_reason` 的唯一生成点）。
+
+    为什么不能直接把调用方给的 `note` 原样写进去：模型给的是"这一批为什么没过"，
+    它可以一段话写三份文件，于是三行候选拿到同一段话（真机 2026-11-21 就是这样）。
+    串号之后没有任何一行说得清"被拒的是哪一份、读数是多少"。
+
+    组成：这一槽的文件名 + 这一槽抽读回执里的读数（有回执才写）+ 调用方那一句。
+    不写槽位号：报告判据禁止临时号进报告（`report_violations` 会把带号的原件整笔
+    打回）；点了别的槽位/文件的原话也不搬进本行。
+    """
+    slot = str(row.get("slot") or "").strip()
+    name = _locator_name(row)
+    head = name
+    receipt = dict((receipts or {}).get(slot) or {})
+    tier = str(receipt.get("tier") or "")
+    quality = dict(receipt.get("quality") or {})
+    if quality:
+        fields = ("chars", "control_chars", "nul_bytes",
+                  "replacement_chars", "control_ratio")
+        parts = [f"{key}={quality.get(key)}" for key in fields
+                 if quality.get(key) is not None]
+        head += f"：text.extract.{tier or 'unknown'}"
+        if parts:
+            head += "，" + ", ".join(parts)
+    elif tier:
+        head += f"：text.extract.{tier}"
+    body = str(note or "").strip()
+    if body and (_reason_names_other_slot(body, slot, others)
+                 or re.search(rf"(?<!\d){re.escape(slot)}(?!\d)", body)):
+        body = ""
+    if head and body:
+        return f"{head}；{body}"
+    return head or body or str(fallback or "")
+
+
 def _terminal(store: Store, slot: str, *, code: str, note: str,
               slot_field: str, actor: str, tx_note: str,
               refresh_report: bool = True) -> dict:
@@ -1605,7 +1694,8 @@ def _terminal(store: Store, slot: str, *, code: str, note: str,
     而那些行早就判完了（真机 `lit-r-000008.md` 就是这个形态）。
     """
     with store.tx("lit_candidates", actor=actor, note=tx_note) as tx:
-        row = next((r for r in tx.rows("lit_candidates") if str(r.get("slot")) == str(slot)), None)
+        all_rows = list(tx.rows("lit_candidates"))
+        row = next((r for r in all_rows if str(r.get("slot")) == str(slot)), None)
         if row is None:
             raise LitStageError(f"待新增列表里没有槽位 {slot!r}", kind="unknown_slot",
                                 detail={"slot": slot})
@@ -1620,8 +1710,13 @@ def _terminal(store: Store, slot: str, *, code: str, note: str,
         row = dict(row)
         row["status"] = "rejected"
         row["reason_code"] = code
-        row[slot_field] = str(note or "").strip() or _code_label(code)
-        row["reject_reason"] = row[slot_field]
+        others = [r for r in all_rows if str(r.get("slot")) != str(slot)]
+        reason = _reject_reason(
+            row, str(note or "").strip() or _code_label(code),
+            others=others, receipts=LAV.receipts_by_slot(store.root),
+            fallback=_code_label(code))
+        row[slot_field] = reason
+        row["reject_reason"] = reason
         # 判拒之后它没有"有入库资格"这回事了：把判收那一格的残留清干净
         # （只清"这一行现在不是 admitted"时才安全，见上面的分支）。
         row["lit_id"] = None
@@ -2323,7 +2418,8 @@ def settlement_mismatch(store: Store | None, decisions: Iterable[Mapping[str, An
     }
 
 
-def apply_settlement(tx: Any, decisions: Iterable[Mapping[str, Any]]) -> list[dict]:
+def apply_settlement(tx: Any, decisions: Iterable[Mapping[str, Any]], *,
+                     root: Path | str | None = None) -> list[dict]:
     """把一批终态决定写回候选行（`tx` 由调用方给 —— 让它能与登记同处一个事务）。
 
     `decisions` 的每一项：`{slot, status, lit_id?, reason_code?, note?, overlap_*}`。
@@ -2380,7 +2476,11 @@ def apply_settlement(tx: Any, decisions: Iterable[Mapping[str, Any]]) -> list[di
                 if str(d.get(k) or "").strip():
                     row[k] = str(d[k]).strip()
         elif status == "rejected":
-            row["reject_reason"] = note or _code_label(code)
+            receipts = LAV.receipts_by_slot(root) if root else None
+            row["reject_reason"] = _reject_reason(
+                row, note or _code_label(code),
+                others=[r for s, r in rows.items() if s != slot],
+                receipts=receipts, fallback=_code_label(code))
         S.LitCandidate(**{k: row[k] for k in row
                           if k in S.LitCandidate.__dataclass_fields__}).validate()
         tx.upsert("lit_candidates", row, note=f"lit.settle:{status}")
@@ -2707,7 +2807,7 @@ def admit_all(
     lit_ids, failures, got_all = _register(plan, registrar)
     decisions = _decisions_from(plan, lit_ids, failures)
     with store.tx("lit_candidates", actor=actor, note="lit.admit_all") as tx:
-        apply_settlement(tx, decisions)
+        apply_settlement(tx, decisions, root=store.root)
         # FX3·甲：结算之后不再把批外的 pending 折成 rejected(not_screened) ——
         # 它们保持 pending 进下一批（收工闸按全表看，所以"没清完"仍会拦）。
         settled = [dict(r) for r in tx.rows("lit_candidates")

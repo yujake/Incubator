@@ -145,6 +145,15 @@ class BRunResult:
     #: "文件真的不在"与"在另一个基准下"同形。把基准记下来，这两种才分得开。
     #: `run` 汇总时保留第一条非空的（逐篇的来路在 `details[*stage=resolve]`）。
     path_base: str = ""
+    #: 二阶段的自驱读数：`run_once` 每一拍都自己算一次「这一批还有哪几条证明没洗」，
+    #: 并自己把该开的优化稿开出来（`open_optimization_drafts`）。它不等人派 ——
+    #: 第一阶段（快录）与第二阶段（逐个优化）之间没有"等回执"这一跳。
+    #:
+    #: 形状由 `agent_b/run_once.py::_stage_two_self_drive` 一处给：
+    #: `{checked, enabled, in_task, candidates, debt_count, debt, unwashed_count,
+    #:   unwashed, opened, skipped_open, skipped_no_draft, refused, next_action, why}`。
+    #: 空 dict = 这一拍没算（旧调用方拿到的返回形状因此逐字不变）。
+    stage_two: dict = field(default_factory=dict)
     details: list[dict] = field(default_factory=list)
 
     #: 「真消化」过几篇 = `processed` − `unreadable`。

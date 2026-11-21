@@ -173,7 +173,9 @@ def test_reject_needs_a_registered_reason_code(reg, store):
     got = L.reject(store, slots[0], "rejected_off_topic", "与本次检索无关")
     assert got["status"] == "rejected" and got["reason_code"] == "rejected_off_topic"
     row = L.list_candidates(store, request_id=RID, status="rejected")["rows"][0]
-    assert row["reject_reason"] == "与本次检索无关"
+    # 理由按槽位生成：调用方那一句保留（GARBLECHK 2026-11-21；没有文件时就是原话）。
+    reason = str(row["reject_reason"])
+    assert "与本次检索无关" in reason, reason
 
 
 def test_a_rejected_row_can_never_have_an_empty_reason(store):
@@ -302,8 +304,9 @@ def test_withdrawn_slot_stays_in_the_list_with_its_reason(reg, store):
     assert listing["count"] == 3, "撤掉之后那一槽从列表里消失了"
     row = [r for r in listing["rows"] if r["slot"] == slots[1]][0]
     assert row["status"] == "rejected", row
-    assert row["withdrawn_reason"] == "内容与本次检索无关"
-    assert row["reject_reason"] == "内容与本次检索无关", "三态这一侧也要说得出理由"
+    assert "内容与本次检索无关" in row["withdrawn_reason"], row
+    assert "内容与本次检索无关" in row["reject_reason"], (
+        "三态这一侧也要说得出理由", row)
     assert row["reason_code"] == "withdrawn_by_reviewer"
     assert row["title"] == "Withdraw me", "撤掉的槽位必须留着题名（记下删掉的是哪一篇）"
     # 计数里不再有第四态那一格可涨（它恒为 0：撤掉折进了 rejected）

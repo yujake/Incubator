@@ -64,42 +64,130 @@ FULLTEXT_TIERS: tuple[str, ...] = (
     FULLTEXT_EXTRACT_FAILED,
 )
 
-#: 判定"疑似乱码"的阈值（与 `tools/text_tools.py` 的 `_quality` 是同一份判据；
-#: `text_tools` 现在从这里取，两处不再各写一份）。
+#: 可读性判据的唯一真身：`text.extract` 拒写乱码读它，`fulltext_tier` 判
+#: `extract_failed` 读它，`scripts/seed_corpus.py --verify` 判种子也读它（改前
+#: 种子验证另有一份 `_reading_of` / `_judge`：两边对同一份 PDF 给出相反结论，
+#: 真机 lp-ball-15 的 7 份文献就是这样一边判拒、一边判 usable）。
 #:
-#: 三条独立信号，「任何一条」命中就算（宁可说"这份转不出干净文本"，也不把乱码当正文）：
-#:   · NUL 字符：PDF 文字层正常「不含」 NUL；出现即错位解码；
-#:   · 替换字符 U+FFFD：解码器自己都认不出那个字节 ⇒ 乱码；
-#:   · 控制字符占比：正常正文里控制字符几乎为 0（换行/制表除外）。
+#: 判两件事，缺一不可：
+#:   1. 噪声有没有越过"还能读"的界线（NUL / 替换字符 / 控制字符占比）；
+#:   2. 有没有正文（字数 / 完整英文词 / 字母占比）—— 排除符号汤与只有标题页的
+#:      扫描件。
+#:
+#: 为什么 NUL 不是"有就是乱码"（2026-11-21 实测，读数见
+#: `temp/garbledchk/readings.json`）：PDF 文字层里少量 NUL 来自没有 ToUnicode
+#: 映射的字形，正文照样可读。真读数：22 页论文 51416 字符里 77 个 NUL（0.15%）、
+#: 426 页教材 781264 字符里 339 个（0.04%）、56 页综述 121668 字符里 1 个；这三份的
+#: 完整英文词都在 2600 以上、字母占比 0.62 以上。改前 `nuls > 0` 把 25 份真种子
+#: PDF 里的 8 份判成乱码（真机 lp-ball-15 那一批拒了其中的 7 份）。真乱码是
+#: "成片"的：逐字节错位解码时 NUL 与不可打印字符大面积出现（实测随机字节解码后
+#: 控制字符占 11.07%），所以三条都按占比判，阈值与实测可读样本留出数倍余量。
 GARBLED_REPLACEMENT_MAX = 0
-GARBLED_CONTROL_RATIO_MAX = 0.02
+GARBLED_CONTROL_RATIO_MAX = 0.05
+GARBLED_NUL_RATIO_MAX = 0.005
+
+#: 正文的最低体量。它属"够不够一篇正文"，不属"是不是乱码"：一份干净的短文本
+#: 不是乱码，`garbled_text` 不因它拒写（`text.extract` 对 `.txt` 直通），但
+#: 种子验证与判收侧要的是整篇正文，于是把这一档如实报成 `too_short`。
+READABLE_MIN_CHARS = 200
+READABLE_MIN_LONG_WORDS = 20
+READABLE_MIN_ALPHA_RATIO = 0.25
 
 #: 控制字符（`ord < 32` 且不是换行/回车/制表）：交给正则的 C 层扫描。
 _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+#: 完整英文词（长度 >= 4 的那一档在 :func:`assess_text` 里再筛）。
+_WORDS = re.compile(r"[A-Za-z][A-Za-z'\-]+")
+_SPACES = re.compile(r"\s+")
 
 
-def garbled_text(text: str) -> tuple[bool, dict]:
-    """核一遍"这段文本能不能读"。返回 `(是否疑似乱码, 读数)`。
+def assess_text(text: str) -> dict:
+    """一份正文的读数与判定（可读性判据的唯一实现，四条读数与四档判定都在这里）。
 
-    这是"乱码"这件事的唯一判据：`text.extract` 拒写乱码读它，`fulltext_tier`
-    判 `extract_failed` 也读它 —— 两边互认的落点就是这里（改前 `text_tools._quality`
-    与 `litread.fulltext_tier` 互不相认：前者说"乱码"，后者照样记 `ok`）。
+    `state` 四档，调用方按自己的口径取用：
+
+    * `readable`：有体量、噪声在界内；
+    * `too_short`：干净但不够一篇正文 —— `text.extract` 不因此拒写一份短文本，
+      种子验证与判收侧据此判"不可用"；
+    * `garbled`：噪声越界或符号汤（`text.extract` 判 `garbled_text`、拒写）；
+    * `no_text_layer`：空白文本（扫描件；`text.extract` 另走 `no_text_layer` 一档）。
+
+    返回字典同时是 `text.extract` 的 `quality` 读数，所以旧的五个键
+    （`chars` / `nul_bytes` / `replacement_chars` / `control_chars` /
+    `control_ratio`）一个不少。
     """
     body = str(text or "")
     total = max(1, len(body))
+    nonspace = _SPACES.sub("", body)
+    words = _WORDS.findall(body)
+    long_words = [w for w in words if len(w) >= 4]
+    alpha = sum(1 for ch in nonspace if ch.isalpha())
     nuls = body.count("\x00")
     replacement = body.count("\ufffd")
     control = len(_CONTROL_CHARS.findall(body))
-    ratio = control / total
-    garbled = (nuls > 0 or replacement > GARBLED_REPLACEMENT_MAX
-               or ratio > GARBLED_CONTROL_RATIO_MAX)
-    return garbled, {
+    nul_ratio = nuls / total
+    control_ratio = control / total
+    alpha_ratio = round(alpha / len(nonspace), 4) if nonspace else 0.0
+    state, why = _verdict(
+        body=body, chars=len(body), nuls=nuls, nul_ratio=nul_ratio,
+        replacement=replacement, control_ratio=control_ratio,
+        long_words=len(long_words), alpha_ratio=alpha_ratio)
+    return {
+        "state": state,
+        "why": why,
         "chars": len(body),
+        "nonspace_chars": len(nonspace),
         "nul_bytes": nuls,
+        "nul_ratio": round(nul_ratio, 6),
         "replacement_chars": replacement,
         "control_chars": control,
-        "control_ratio": round(ratio, 5),
+        "control_ratio": round(control_ratio, 6),
+        "words": len(words),
+        "long_words": len(long_words),
+        "alpha_ratio": alpha_ratio,
     }
+
+
+def _verdict(*, body: str, chars: int, nuls: int, nul_ratio: float,
+             replacement: int, control_ratio: float, long_words: int,
+             alpha_ratio: float) -> tuple[str, str]:
+    """把读数折成四档之一 + 一句凭什么（阈值只在模块常量里，不在调用方）。"""
+    if not body.strip():
+        return "no_text_layer", "抽不到任何正文（空白）"
+    if nul_ratio > GARBLED_NUL_RATIO_MAX:
+        return "garbled", (
+            f"NUL 占 {nul_ratio:.4%}（> {GARBLED_NUL_RATIO_MAX:.2%}，{nuls} 个）"
+            "—— 成片的 NUL 是错位解码，不是个别字形缺映射")
+    if replacement > GARBLED_REPLACEMENT_MAX:
+        return "garbled", f"含 {replacement} 个 U+FFFD 替换字符（解码器认不出那个字节）"
+    if control_ratio > GARBLED_CONTROL_RATIO_MAX:
+        return "garbled", (
+            f"控制字符占 {control_ratio:.4%}（> {GARBLED_CONTROL_RATIO_MAX:.2%}）"
+            "—— 成片的不可打印字符是错位解码")
+    if chars < READABLE_MIN_CHARS:
+        return "too_short", (
+            f"抽取正文只有 {chars} 字符（< {READABLE_MIN_CHARS}）"
+            "—— 干净但不够一篇正文")
+    if long_words < READABLE_MIN_LONG_WORDS:
+        return "garbled", (
+            f"完整词只有 {long_words} 个（< {READABLE_MIN_LONG_WORDS}，"
+            "是符号/单字母串形态）")
+    if alpha_ratio < READABLE_MIN_ALPHA_RATIO:
+        return "garbled", (
+            f"字母占比 {alpha_ratio}（< {READABLE_MIN_ALPHA_RATIO}，"
+            "是符号/单字母串形态）")
+    return "readable", ""
+
+
+def garbled_text(text: str) -> tuple[bool, dict]:
+    """核一遍"这段文本是不是乱码"。返回 `(是否疑似乱码, 读数)`。
+
+    这是"乱码"这件事的唯一判据：`text.extract` 拒写乱码读它，`fulltext_tier`
+    判 `extract_failed` 也读它，种子验证读的是同一个 :func:`assess_text`。
+    短文本（`too_short`）不算乱码：短不等于坏，够不够整篇是另一件事。
+    """
+    reading = assess_text(text)
+    return reading["state"] == "garbled", reading
+
 
 #: `path_base` 的两个取值：这一条 `literature.path` 是按哪个基准解析出来的。
 BASE_LIBRARY = "library"

@@ -76,7 +76,7 @@ class _RunOnce:
         lit = claim.literature
         if lit is None:
             res.skipped_reason = claim.skipped_reason
-            return res
+            return self._finish(res)
 
         lit_id = lit["lit_id"]
         dl_status = (lit.get("download") or {}).get("status")
@@ -137,7 +137,7 @@ class _RunOnce:
             res.processed = 1
             res.details.append({"lit_id": lit_id, "stage": "acquire",
                                 "skipped": "availability=extract_failed"})
-            return res
+            return self._finish(res)
 
         unreadable_reason = None
         if dl_status == "content_mismatch":
@@ -180,7 +180,7 @@ class _RunOnce:
             res.unreadable += 1
             res.processed = 1
             res.details.append({"lit_id": lit_id, "stage": "acquire", "skipped": unreadable_reason})
-            return res
+            return self._finish(res)
 
         # ---- `R-56`：回退抽取器拒抽（判据与理由见 `__init__` 里那一段）。
         # 位置在"不可读"之后：没有文件的行该报 `no_local_file`（原因不同），
@@ -207,7 +207,7 @@ class _RunOnce:
             res.details.append({"lit_id": lit_id, "stage": "extract",
                                 "skipped": NO_EXTRACTOR_ERROR,
                                 "why": "规则回退抽取器会把碎片当概念/关系（R-56）"})
-            return res
+            return self._finish(res)
 
         try:
             doc = self.extract_text(path)
@@ -229,7 +229,7 @@ class _RunOnce:
                 tx.upsert("literature", row, note="extract_failed")
             res.failed += 1
             res.details.append({"lit_id": lit_id, "stage": "extract", "error": f"{type(e).__name__}: {e}"})
-            return res
+            return self._finish(res)
 
         # ---- 引文校验（无锁；只依赖文档）
         # 逐字那一档先试文献 PDF；「没中再试工作区那份正文」（同一份 `check_quote`，
@@ -628,4 +628,4 @@ class _RunOnce:
 
         # 配额的读数随结果一起出去（`B.run` 逐篇汇总 ⇒ 一轮的总读数）。
         res.concept_quota = quota.reading()
-        return res
+        return self._finish(res)

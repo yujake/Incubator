@@ -9,13 +9,17 @@
 
 1. 下载成功：`download.status == "ok"`、`bytes > 0`、文件真在 `library/` 下、
    盘上 sha256 与台账 sha256 一致、盘上字节数与台账 `bytes` 一致。
-2. 无乱码：对 PDF 真跑 `agentflow.extract.extract_text`（只读），然后看四个读数：
-   - 抽到的内容确实是 PDF（`source_kind == "pdf"`；HTML 落地页不算）；
-   - 抽取正文字符数 `chars >= 200`；
-   - U+FFFD 替换字符数 `== 0`；
-   - 长度 >= 4 的完整英文词 `>= 20`；
-   - 英文字母 / 非空白字符 `>= 0.25`（排除"全是符号 / 单字母串"的形态）。
-   全部过才算 usable；否则记 garbled / no_text_layer / skipped 并写明是哪一条不过。
+2. 无乱码：对 PDF 真跑 `agentflow.extract.extract_text`（只读），判定只用
+   `agentflow.litread.assess_text` 一份判据 —— 与流水线 `text.extract` 拒写乱码、
+   `fulltext_tier` 判 `extract_failed` 是同一处真身（改前本脚本自己一份，于是同一份
+   PDF 被这边判 usable、被流水线判 garbled）。四档里 `readable` 才算 usable：
+   - 噪声：NUL / U+FFFD / 控制字符按占比判（PDF 文字层里少量 NUL 属正常，
+     成片的才是错位解码；阈值与实测见 `litread` 的常量注释）；
+   - 正文：长度 >= 200、长度 >= 4 的完整英文词 >= 20、英文字母 / 非空白字符
+     >= 0.25（排除符号汤 / 单字母串）；`too_short` 是"干净但不够一篇正文"，
+     与 `garbled` 一样不进种子。
+   另外核 `source_kind == "pdf"`（HTML 落地页不算）与"有文本层"。
+   全部过才算 usable；否则记 garbled / no_text_layer / too_short 并写明是哪一条不过。
 3. 去重：`agentflow.dedup.literature_keys(title, year, doi)` 造键（DOI -> 标题+年 ->
    标题|*）。同一组里 sha256 相同优先（字节一致），否则取抽读字数最多的一份；
    理由逐组写进 `MANIFEST.json` 的 `selection` / `duplicates`。
@@ -46,7 +50,7 @@ import shutil
 import sys
 import unicodedata
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 _SRC = Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
@@ -54,6 +58,7 @@ if str(_SRC) not in sys.path:
 
 from agentflow import dedup as D  # noqa: E402
 from agentflow import extract as E  # noqa: E402
+from agentflow import litread as LR  # noqa: E402
 from agentflow import seedinject as SI  # noqa: E402
 from agentflow import settings as SET  # noqa: E402
 
@@ -61,15 +66,20 @@ EXIT_OK = 0
 EXIT_RED = 1
 EXIT_UNKNOWN = 2
 
-#: 判据本体（改这里等于改"哪份算种子"；报告里逐条引用）。
+#: 判据本体（改这里等于改"哪份算种子"；报告里逐条引用）。数值不在这里另写：
+#: 可读性那几条从 `agentflow.litread` 取 —— 与 `text.extract` 拒写乱码、判收侧的
+#: `fulltext_tier` 是同一份判据（改前这里自己一份 `_reading_of` / `_judge`，
+#: 于是同一份 PDF 被种子判 usable、被流水线判 garbled）。
 CRITERIA: dict[str, Any] = {
     "download_status": "ok",
     "min_bytes": 1,
     "source_kind": "pdf",
-    "min_chars": 200,
-    "replacement_chars_max": 0,
-    "min_long_words": 20,
-    "min_alpha_ratio": 0.25,
+    "min_chars": LR.READABLE_MIN_CHARS,
+    "replacement_chars_max": LR.GARBLED_REPLACEMENT_MAX,
+    "min_long_words": LR.READABLE_MIN_LONG_WORDS,
+    "min_alpha_ratio": LR.READABLE_MIN_ALPHA_RATIO,
+    "max_control_ratio": LR.GARBLED_CONTROL_RATIO_MAX,
+    "max_nul_ratio": LR.GARBLED_NUL_RATIO_MAX,
 }
 
 #: 真机血统（业主原话「这十几轮真机」）：只收这几个前缀的工作区。
@@ -86,35 +96,23 @@ def _sha256_of(path: Path) -> str:
 
 
 def _reading_of(text: str) -> dict[str, Any]:
-    """一份正文的四个读数（字数 / U+FFFD / 完整词 / 字母占比）。"""
-    words = re.findall(r"[A-Za-z][A-Za-z'\-]+", text)
-    long_words = [word for word in words if len(word) >= 4]
-    nonspace = re.sub(r"\s+", "", text)
-    alpha = sum(1 for ch in nonspace if ch.isalpha())
-    return {
-        "chars": len(text),
-        "nonspace_chars": len(nonspace),
-        "replacement_chars": text.count("\ufffd"),
-        "words": len(words),
-        "long_words": len(long_words),
-        "alpha_ratio": round(alpha / len(nonspace), 4) if nonspace else 0.0,
-    }
+    """一份正文的读数（与 `litread.assess_text` 是同一份判据，这里不另算）。"""
+    return LR.assess_text(text)
 
 
-def _judge(reading: dict[str, Any]) -> tuple[str, str]:
-    """把四个读数折成 usable / garbled + 一句凭什么。"""
-    if reading["chars"] < CRITERIA["min_chars"]:
-        return "garbled", f"抽取正文只有 {reading['chars']} 字符（< {CRITERIA['min_chars']}）"
-    if reading["replacement_chars"] > CRITERIA["replacement_chars_max"]:
-        return "garbled", f"含 {reading['replacement_chars']} 个 U+FFFD 替换字符"
-    if reading["long_words"] < CRITERIA["min_long_words"]:
-        return "garbled", (
-            f"完整词只有 {reading['long_words']} 个（< {CRITERIA['min_long_words']}）")
-    if reading["alpha_ratio"] < CRITERIA["min_alpha_ratio"]:
-        return "garbled", (
-            f"字母占比 {reading['alpha_ratio']}（< {CRITERIA['min_alpha_ratio']}，"
-            "是符号/单字母串形态）")
-    return "usable", ""
+def _judge(reading: Mapping[str, Any]) -> tuple[str, str]:
+    """把读数折成 usable / garbled / no_text_layer + 一句凭什么。
+
+    阈值一个都不在这里：`litread.assess_text` 已经按同一份判据给出 `state` 与
+    `why`。这里只做"种子口径"的翻译 —— `readable` 才算种子，`too_short` 是
+    "干净但不够一篇正文"，与 `garbled` 一样不可用。
+    """
+    state = str(reading.get("state") or "")
+    if state == "readable":
+        return "usable", ""
+    if state == "no_text_layer":
+        return "no_text_layer", str(reading.get("why") or "抽不到任何正文")
+    return "garbled", str(reading.get("why") or "判据判它不可读")
 
 def _resolve_pdf(project: Path, rel: str) -> Path:
     """台账里的 `path` 相对 `library/` 解析（不替它猜别的落点）。"""
@@ -365,8 +363,9 @@ def _seed_readme(manifest: dict[str, Any]) -> str:
         "## 口径",
         "",
         "- 下载成功：download.status == \"ok\"、bytes > 0、文件在盘上、sha256 与台账一致。",
-        "- 无乱码：extract_text 抽到的内容确实是 PDF、正文 >= 200 字符、0 个 U+FFFD、",
-        "  至少 20 个长度 >= 4 的完整英文词、英文字母占非空白字符 >= 0.25。",
+        "- 无乱码：extract_text 抽到的内容确实是 PDF；判定与流水线共用"
+        "`litread.assess_text` 一处真身（正文 >= 200 字符、完整英文词 >= 20、"
+        "字母占比 >= 0.25；NUL / U+FFFD / 控制字符按占比判，少量 NUL 属正常）。",
         "  HTML 落地页 / 扫描件（无文本层）不进种子：投放目录按 *.pdf 收编。",
         "- 去重：dedup.literature_keys（DOI -> 标题+年 -> 标题|*）。",
         "- 血统：默认只收 lp-ball* / dct-min* / abelian-smoke*（这十几轮真机）；",
@@ -484,7 +483,8 @@ def verify_seed(seed_dir: Path) -> dict[str, Any]:
         if not rec["chars_ok"]:
             rec["problems"].append(
                 f"抽读字数不符：{reading['chars']} != {rec['chars_manifest']}")
-        rec["replacement_ok"] = reading["replacement_chars"] == 0
+        rec["replacement_ok"] = (reading["replacement_chars"]
+                                 <= LR.GARBLED_REPLACEMENT_MAX)
         if not rec["replacement_ok"]:
             rec["problems"].append(f"含 {reading['replacement_chars']} 个 U+FFFD")
         if document.source_kind != CRITERIA["source_kind"]:

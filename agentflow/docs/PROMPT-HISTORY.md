@@ -3251,3 +3251,40 @@
 #:   登记为 `test_reading_map` 的运行时产物；`READING-MAP` 给 `seedinject.py` 补一行位置
 #:   （SEEDCORPUS 留下的已知红）；`specs/a.py` / `specs/m.py` 在 FC-27 auth-audit ⇒
 #:   `noai_gate --paths … --baseline` 已刷新（reviewers=[]，待人类走查）。
+#: p309 → p310（2026-11-21，B2STAGE：二阶段归 B 自驱，不等 M 派）。
+#:   业主裁定（逐字）：「B 应该自动做，而不是 M 派。」
+#:   现场（真机 projects/lp-ball-15，只读取证 15:0x）：B 的 `own.run_once` 19 次、
+#:   `own.register_statement` 19 次、`own.open_polish_copy` **0 次**；在册 3 条带证明
+#:   命题（stmt:000125 / 000127 / 000130，`proof_source=citation`）的
+#:   `bits.evidence.optimized_by_proof` 全是 `{"1": false}`。M 这一趟只调过
+#:   `conductor.state` 与 `fs.list` 各一次就挂机，而 `conductor.state` 的输出里
+#:   `statements_unoptimized` / `optimized` 一个键都没有 ⇒ 「M 先读数再派活」这条链在
+#:   真机上一次都没接通。写「主职是第二阶段」的那一句只是描述：B 把「本委托只做快录」
+#:   当成了停下理由。自驱是行为面的事，不是再给 M 加一句派活。
+#:   改动（行为面 + 提示词面）：
+#:   ① `agent_b/run_once.py`：每个出口都走 `_finish`（`agent_b/stage_two.py` 的
+#:      `_StageTwoSelfDrive`）⇒ 每一拍读
+#:      `closing.statements_optimization_candidates`（唯一口径），回执带 `stage_two.unwashed`
+#:      （逐条 `stmt_id` ＋ 证明号 ＋ 有没有开过稿），并把「有原稿、还没开过稿」的那几条
+#:      当场开出来（`open_optimization_drafts`，一轮 ≤ `OPTIMIZATION_ROUND_MAX`、幂等靠
+#:      `tasks.artifacts` 的来源记录；不在任务上下文时只点名、不写盘）。
+#:      `_stage_two_self_drive_enabled` 是反真空打桩点（关掉 ⇒ 只点名、不开稿）。
+#:      为什么另起 `stage_two.py`：`run_once.py` 加上那一段会越过 800 行软基线，
+#:      业主口径是不许抬基线 —— 拆的是"二阶段自驱"这个语义单元，不是按行数切。
+#:   ② `agent_b/_support.py` 的 `BRunResult` 加 `stage_two` 一格；`agent_b/run.py` 汇总最后一拍。
+#:   ③ 提示词：`specs/b.py` 的 `duty` 改成**动作**（「不必等 M 派」＋ `stage_two.unwashed`
+#:      入口）、边界改成「同一拍自驱，不许把本委托只做快录当停下理由」；
+#:      `specs/b_ingest_policy.py` 的同口径两条；`agent_skills.py` 的 B 手册 `when` 与正文
+#:      改成 self-drive（副本可能已被 `run_once` 开好）；`specs/m.py` 那一句降为**兜底**
+#:      （「先看它自己有没有接着做」）。
+#:   判据：`tests/test_b_stage_two_self_drives.py`（a 自驱开稿 / a2 幂等 / b 洗→签→替换
+#:   后 `optimized=true` ＋ `proof_history` / c 反真空打桩 / d 渲染产物**同一行**三个锚点 /
+#:   d2 把那一句抠掉必红）。
+#:   变化格 = A / B / D / E / M 五格（A/D/E 变的是伙伴表里 B 那一行；其余六格逐字未动，
+#:   现算见 `_FROZEN_PROMPT_DIGESTS`）。
+#:   连带：`_FROZEN_PROMPT_VERSION` p309 → p310；`tests/golden/agent_surface_snapshot.json`
+#:   重冻（十一格提示词逐字变的是版本行 + 上面五格）；`tests/fixtures/prompt_cache_warm.json`
+#:   已重落（两档各一趟：lean off 花 0.039695 美元 / lean on 花 0.038212 美元，
+#:   二调命中 M+C+L，11/12 个目标有缓存落地记录）；`ROLE-GUIDE` 的 B / M 两节与 `READING-MAP` 开头读数按现盘重算；
+#:   `specs/b.py` / `specs/b_ingest_policy.py` / `specs/m.py` 在 FC-27 auth-audit ⇒
+#:   `noai_gate --paths … --baseline` 已刷新（reviewers=[]，待人类走查）。

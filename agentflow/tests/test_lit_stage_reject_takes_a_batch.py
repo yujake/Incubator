@@ -116,7 +116,10 @@ def test_a_one_call_rejects_every_slot_it_names(store: Store, reg) -> None:
     for slot in slots:
         row = _row(store, slot)
         assert row["reason_code"] == REASON, (slot, row["reason_code"])
-        assert str(row["reject_reason"]).strip() == NOTE, (slot, row["reject_reason"])
+        # 2026-11-21（GARBLECHK）：判拒理由按槽位生成 —— 调用方那一句保留，但
+        # 每条只讲自己那份（真机 lp-ball-15 的三行曾逐字相同）。
+        reason = str(row["reject_reason"]).strip()
+        assert NOTE in reason, (slot, reason)
         # 逐条仍是「判过」那一档：`reason_code` 不是唯一的证据，受控码与那一句都要在。
         assert row["status"] == "rejected", (slot, row["status"])
 
@@ -135,7 +138,8 @@ def test_b_the_single_slot_form_still_returns_exactly_the_same_seven_cells(
                          "request_id", "batch"}, (
         "单槽形的返回格变了 —— 老读者（报告 / 归档 / A 的读数）读的就是这七格", data)
     assert data["slot"] == slots[0] and data["status"] == "rejected", data
-    assert data["reason_code"] == REASON and data["reason"] == NOTE, data
+    assert data["reason_code"] == REASON, data
+    assert NOTE in data["reason"], data
     assert data["request_id"] == RID, data
     states = _states(store)
     assert states[slots[0]] == "rejected", states
