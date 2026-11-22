@@ -44,10 +44,9 @@ KINDS: tuple[str, ...] = (
     "roster_retired",
 )
 
-#: 工作区里"必须有"的表。缺了它是"没查成"（一个 init 过的工作区每张表都会落空文件）。
-REQUIRED_KINDS: tuple[str, ...] = (
-    "literature", "relations", "statements", "lit_candidates", "tasks", "usage_ledger",
-)
+#: 工作区里"必须有"的表由 `reader.py` 的 `_Spec(required=True)` 逐条声明。
+#: （2026-11-22：这里曾有一份 `REQUIRED_KINDS` 副本，零读者且与那份声明重复，已删 ——
+#: "必须有"只能有一个真身。）
 
 
 @dataclass(frozen=True)

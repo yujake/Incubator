@@ -2778,7 +2778,33 @@ the l_p ball` / `Brunn concavity sections centrally symmetric body` /
 任何判收。**"盘上有文件"与"入库"是两件事**：前者只说明当时下载成功过、正文抽得出来。
 这条路的目标不是"把它们登记掉"，是"逐份判收"。
 
-收录的顺序与两条禁令在前置提示的边界里逐字给了（「收尾三步一步都不能省」与「工作区里已有的本地文献先 dry_run 发现 → 建候选 → 判收链」），这里不重复。本条只补一条**读数**上的差别：`ingest_local(dry_run=True)` 的 `ingested` 是「会登记」的预告，`literature` 一行没多 —— 凭它去派 B，B 什么也处理不到（它要的是 `lit_id`）。
+前置提示的政策行给了这条链的一句话版本；而**这一节是你现读的手册**，操作口径按这里做。
+顺序是死的，不许换（先发现、再建候选，候选的 url 才有出处）：
+
+1. **发现**：`search.ingest_local(books_dir="library", dry_run=True)`。它读同一个目录、
+   算同一份 sha256 / 页数 / 文本层，但**一个字节都不写**（候选表与两个台账都不动）。
+   读数里的 `count` 与 `books[]` 就是候选清单；`ingested` 是「会登记」的预告，**不是**
+   入库读数 —— `literature` 一行没多，凭它去派 B，B 什么也处理不到（它要的是 `lit_id`）。
+2. **建候选**：逐份 `lit.stage_add(request_id=…, entries=[{title: …, url: <发现读数里那一份的盘上路径>,
+   relevance: <凭什么>}])`。这一步只写候选表（`lit_candidates`），`literature` 仍是 0 行 ——
+   候选不是入库。这一趟没有检索委托就立一个委托号（`r-<序号>`），判收与提交都挂在它名下。
+3. **抽读**：`text.extract(lit_id="cand:<槽位>")` 抽正文，再用 `fs.read` 读回那份 `.txt`
+   —— 抽了不读也算没读（闸核的是你读的与抽读件同一版）。
+4. **判收**：`lit.admit(items=[{slot, availability: ...}])` 逐条判；不入的用
+   `lit.stage_reject`（受控理由码 + 一句为什么）。抽读与读是 `content_read` 的证据。
+5. **提交**：逐委托 `lit.admit_all` —— **提交那一刻才发号**、才进 `literature`。
+
+**不许做的两件事**（都不报错，所以只能靠纪律拦住）：
+
+- 拿发现读数当「已入库」：`dry_run` 的 `ingested` 只是预告，`literature` 一行没多；
+- 用非 dry 档把整目录一次性「登记」：那是兜底那条路，它把「盘上有文件」直接写成
+  `literature` 行、**跳过判收**（本仓已给它补了正文闸，但跳过判收这件事仍在）。
+
+**没有正文的那几份**（乱码 / 扫描件 / 无文字层 / 只有题录）：`lit.admit` 会整批受控拒
+（`no_read_evidence`，逐槽点名 `extract_failed` / `metadata_only` / `no_fulltext`）——
+这正是**不许当已收编**的机器读数。处置：`lit.stage_reject`（`rejected_low_quality`）+
+写清为什么没读到（乱码要换来源；扫描件要先 OCR）；它们留在候选表的 `rejected` 档，
+不会进 `literature`。
 
 ## 一、四个旋钮（都在 `A.search_literature` 的参数上，不用新工具）
 

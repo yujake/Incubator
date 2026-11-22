@@ -51,7 +51,6 @@ __all__ = [
     "CODE_SPEND_UNCHECKED",
     "CODE_SPEND_UNRECONCILED",
     "DEDUP_POINT",
-    "OPTIMIZED_POINT",
     "PROCESSED_POINT",
     "SKIP_PROCESSED_REASONS",
     "SPEND_POINT",
@@ -68,9 +67,8 @@ __all__ = [
     "spend_reconcile",
 ]
 
-#: 四个写点在读数里的名字（`sysguard` 台账的 `point` 列）。
+#: 三个写点在读数里的名字（`sysguard` 台账的 `point` 列）。
 PROCESSED_POINT = "agent_b.run_once.literature.processed"
-OPTIMIZED_POINT = "evidencebits.bits_shape_problems.optimized_by_proof"
 SPEND_POINT = "agent_loop.run.spend"
 DEDUP_POINT = "literature.dedup_key"
 

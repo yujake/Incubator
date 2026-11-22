@@ -2988,7 +2988,7 @@ def _selftest() -> int:
         (st.root / "RELIABLE-REFERENCES.json").write_text(
             json.dumps({"paths": ["library/", "selftest/"],
                         "verbatim": "自检夹具点名 selftest/"},
-                       ensure_ascii=False),
+                       ensure_ascii=False, default=str),
             encoding="utf-8", newline="\n")
         reg = ToolRegistry(name="selftest")
         # 绑定角色（`P-14`）：本自检要真的写表，而 `table.*` 的声明角色是 A/B/C/D ——

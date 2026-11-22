@@ -7706,7 +7706,10 @@ class Conductor:
                     "item_state": "", "released": True,
                     "release_trace": dict(trace_of.get(child) or {})})
         for row in rows:
-            if str(row.get("kind") or ""):
+            # 轴只许问秘书那一处（`secretary_axis.row_axis`，经 `Conductor._is_board_item` 转述）。
+            # 这里原先内联写 `if str(row.get("kind") or "")`：行为等价但绕过了唯一判据 ——
+            # 轴的定义一变（例如多一档 item_closed）这处不会跟着变，而没有判据会报。
+            if self._is_board_item(row):
                 continue
             tid = str(row.get("task_id") or "")
             pid = str(row.get("parent_task_id") or "")

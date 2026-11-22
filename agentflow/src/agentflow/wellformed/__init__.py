@@ -61,7 +61,7 @@ from .driver import WorkspaceReport, check_kind, check_workspace, workspace_read
 from .reader import _SPECS
 from .registry import RULES
 from .states import (EXIT_MALFORMED, EXIT_OK, EXIT_UNCHECKED, KINDS, MALFORMED, OK,
-                     REQUIRED_KINDS, SEVERITIES, STATES, UNCHECKED, CheckResult, Finding,
+                     SEVERITIES, STATES, UNCHECKED, CheckResult, Finding,
                      Malformation)
 
 __all__ = [
@@ -74,7 +74,6 @@ __all__ = [
     "MALFORMED",
     "Malformation",
     "OK",
-    "REQUIRED_KINDS",
     "RULES",
     "SEVERITIES",
     "STATES",

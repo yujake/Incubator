@@ -449,7 +449,7 @@ def item1_accounting(ctx: dict[str, Any]) -> dict[str, Any]:
                  f"   ← sessions/*.jsonl 的 kind=llm_call")
     if d_cnt == 0 and abs(d_usd) >= 1e-6:
         lines.append("    注意：条数对上、金额对不上 ⇒ 同一批调用的记账口径有差（逐条比对见 ②）")
-    item["metrics"]["reason"] = {"ledger_rows": by_scope["reason"], "ledger_usd": round(usd_by["reason"], 6),
+    item["metrics"]["reason"] = {"usage_ledger_rows": by_scope["reason"], "ledger_usd": round(usd_by["reason"], 6),
                                  "session_calls": llm_count, "session_usd": round(llm_usd, 6),
                                  "delta_rows": d_cnt, "delta_usd": round(d_usd, 6), "ok": ok_reason}
 
@@ -471,7 +471,7 @@ def item1_accounting(ctx: dict[str, Any]) -> dict[str, Any]:
                  f" / 子趟 {child_runs}" + (f" / 无 task_id {unassigned}" if unassigned else "") + "）"
                  f"  Δ {by_scope['summon'] - child_runs:+d}"
                  f"   ← data/usage_ledger.json#rows[].scope=summon / idem_key=settle-*")
-    item["metrics"]["summon"] = {"ledger_rows": by_scope["summon"], "zero_token_rows": zero,
+    item["metrics"]["summon"] = {"usage_ledger_rows": by_scope["summon"], "zero_token_rows": zero,
                                  "settle_rows": settle_idem, "child_runs": child_runs,
                                  "delta": by_scope["summon"] - child_runs, "ok": ok_summon}
 
@@ -500,7 +500,7 @@ def item1_accounting(ctx: dict[str, Any]) -> dict[str, Any]:
     if gaps:
         lines.append(f"    call_index 不连续：{'; '.join(gaps[:5])}")
     lines.append("    这一档是账本内自洽（弱对账）：没有独立第二来源，故不冒充「两处对上」")
-    item["metrics"]["extract"] = {"ledger_rows": by_scope["extract"], "usd": round(usd_by["extract"], 6),
+    item["metrics"]["extract"] = {"usage_ledger_rows": by_scope["extract"], "usd": round(usd_by["extract"], 6),
                                   "modelgw_rows": len(extract_rows) - bad_notes,
                                   "contiguous_groups": contiguous, "groups": len(groups),
                                   "weak": True, "ok": ok_extract}
@@ -519,7 +519,7 @@ def item1_accounting(ctx: dict[str, Any]) -> dict[str, Any]:
     lines.append(f"  旧口径对照：「llm_call 数 == 账本行数」⇒ {llm_count} vs {len(rows)}，"
                  f"差 {old_delta_rows} 行 / {usd(old_delta_usd)} —— 差额正是 summon "
                  f"{by_scope['summon']} + extract {by_scope['extract']}，不是「未归属的钱」")
-    item["metrics"]["old_caliber"] = {"llm_calls": llm_count, "ledger_rows": len(rows),
+    item["metrics"]["old_caliber"] = {"llm_calls": llm_count, "usage_ledger_rows": len(rows),
                                       "phantom_rows": old_delta_rows,
                                       "phantom_usd": round(old_delta_usd, 6)}
 
@@ -1960,12 +1960,12 @@ def _caliber_diff(items: list[dict[str, Any]]) -> dict[str, Any]:
     oc = a1.get("old_caliber") or {}
     out["accounting"] = {
         "old": {"rule": "llm_call 数 == 账本行数", "llm_calls": oc.get("llm_calls"),
-                "ledger_rows": oc.get("ledger_rows"), "phantom_rows": oc.get("phantom_rows"),
+                "usage_ledger_rows": oc.get("usage_ledger_rows"), "phantom_rows": oc.get("phantom_rows"),
                 "phantom_usd": oc.get("phantom_usd")},
         "new": {"rule": "reason + summon + extract 三类分别对",
-                "reason": (a1.get("reason") or {}).get("ledger_rows"),
-                "summon": (a1.get("summon") or {}).get("ledger_rows"),
-                "extract": (a1.get("extract") or {}).get("ledger_rows"),
+                "reason": (a1.get("reason") or {}).get("usage_ledger_rows"),
+                "summon": (a1.get("summon") or {}).get("usage_ledger_rows"),
+                "extract": (a1.get("extract") or {}).get("usage_ledger_rows"),
                 "three_total": (a1.get("total") or {}).get("three_scope_rows"),
                 "other_rows": (a1.get("total") or {}).get("other_rows")},
         "why": ("旧口径把 summon（0 token 结算）与 extract（不进会话流）当成差额；"
@@ -2149,7 +2149,7 @@ def build_report(root: Path, outdir: Path) -> tuple[dict[str, Any], str]:
     L.append("口径差异（旧 → 新；同一份盘上算出来的对照）")
     a = d["accounting"]
     L.append(f"  ① 旧「llm_call 数 == 账本行数」：{a['old']['llm_calls']} vs "
-             f"{a['old']['ledger_rows']}，差 {a['old']['phantom_rows']} 行 / "
+             f"{a['old']['usage_ledger_rows']}，差 {a['old']['phantom_rows']} 行 / "
              f"{usd(a['old']['phantom_usd'])}（会把这 {a['old']['phantom_rows']} 条当成问题）")
     L.append(f"     → 新：reason {a['new']['reason']} + summon {a['new']['summon']} + "
              f"extract {a['new']['extract']} = {a['new']['three_total']}，其它 "

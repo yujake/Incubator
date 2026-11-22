@@ -9288,11 +9288,15 @@ class AgentLoop:
                 if not name:
                     out["kept"].append({"task_id": tid, "why": f"名册名没读到（{why}）"})
                     continue
-                reason = ("收工前自动收尾：静默且无未消项（R9FIX-D5）" if not void_ids else
-                          "收工前自动收尾：静默且名下只剩 ack 通知（销号后作废，RETIREFIX）")
+                # 变量名刻意不叫 `reason`：本文件里局部的 `reason = …` 是
+                # `stop_reason` 的生产点扫描（`tests/test_run_agent_exit_code_table.py`
+                # 第 3 类）认的形态；这一句是「销号理由」，不是循环为什么停 ——
+                # 叫 `reason` 会让退出码表多出一条对不上的假档。
+                retire_reason = ("收工前自动收尾：静默且无未消项（R9FIX-D5）" if not void_ids else
+                                 "收工前自动收尾：静默且名下只剩 ack 通知（销号后作废，RETIREFIX）")
                 try:
                     got = sec.retire(owner=owner, name=name, by_task_id=root,
-                                     reason=reason)
+                                     reason=retire_reason)
                 except Exception as exc:  # noqa: BLE001 —— 一条销不成不许带走其余
                     out["kept"].append({"task_id": tid, "why":
                                         f"销号抛了（{type(exc).__name__}: {exc}）"})

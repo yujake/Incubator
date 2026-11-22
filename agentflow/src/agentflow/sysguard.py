@@ -146,7 +146,8 @@ def record_reading(root: Any, one: Reading) -> tuple[dict, str]:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8", newline="\n") as fh:
-            fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+            fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True,
+                                default=str) + "\n")
     except OSError as exc:
         return {}, f"写点读数没记成（{type(exc).__name__}: {exc}）"
     return row, ""

@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-22T09:37:27+08:00",
+  "generated_at": "2026-11-22T12:24:43+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -479,10 +479,10 @@
       "path": "src/agentflow/tools/table_tools.py",
       "glob": "src/agentflow/tools/table_tools.py",
       "category": "auth-audit",
-      "sha256": "1a9a3171148c4d41147abad3db30f01fec0ee065bfef2efc9e0ef972babf100a",
-      "authored": "unknown",
+      "sha256": "882d4843d6e92160fda34e379e79ab3c27e0bdbce1b4182b7bd9a168470ccf3a",
+      "authored": "ai-agent",
       "authored_basis": "inferred",
-      "change_note": "EOLGUARD 2026-11-22: R012 扩面提级 + 发布门 eol 步 + src 写盘点强制 LF（每个调用点只补 newline 关键字，无内容改动）；登记不等于批准，reviewers 留空",
+      "change_note": "EOLGUARD 2026-11-22 的 LF 收口继续；REDFIX-3（同日）: 自检夹具的 json.dumps 补 default=str（判据 test_json_dumps_has_a_default 点名 table_tools.py:2989；纯 JSON 载荷字节不变）。登记不等于批准，reviewers 留空。",
       "changed_this_session": true,
       "reviewers": [],
       "audits": [],

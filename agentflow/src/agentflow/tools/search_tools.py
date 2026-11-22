@@ -149,8 +149,8 @@ class _Ctx:
     def fixture_path(self) -> Path:
         """离线 fixture 的位置：配置 > 工作区。没有"仓库自带"的那一档（2026-11-22）。
 
-        DEMORETIRE 之前这里还退到 `providers.DEFAULT_FIXTURE_PATH`（= 仓库里的
-        `demo/fixtures/candidates.json`）；demo 退场后那个默认值删了，夹具必须由调用方
+        DEMORETIRE 之前这里还退到仓库里的 `demo/fixtures/candidates.json`
+        （`providers` 里那个默认夹具常量已随 demo 退场删掉）；夹具必须由调用方
         提供（配置 `fixture_path`，或放在工作区的 `fixtures/candidates.json`）。
         返回"最像真的那一个"：存在的那一条优先，否则第一条候选（调用方据此报"不存在"）。
         """
