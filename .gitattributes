@@ -1,29 +1,45 @@
-* -text
+# =============================================================================
+# D:\Incubator\.gitattributes —— 换行与二进制策略（GITHUBREADY 路，2026-11-22）
+#
+# 一句话：**文本一律 `text=auto eol=lf`；二进制/冻结件一律 `binary`。**
+#   · `text=auto eol=lf` ⇒ 入库时把 CRLF 归一成 LF，checkout 出来也一定是 LF；
+#     结果不再依赖任何人本机的 `core.autocrlf`（本机全局是 `true`，本仓库局部是
+#     `false` —— 两个值都不再影响入库字节）。
+#   · `binary` ⇒ Git 不碰它的字节（= `-text -diff -merge`）。
+#
+# 为什么要改（2026-11-22 实测，读数在 agentflow/temp/githubready/REPORT.md）：
+#   改前第一条是 `* -text`，等于"Git 对一切文件都不做换行归一化"，入库字节 =
+#   盘上字节。于是：
+#     ① index 里有 **168** 个文件存的就是 CRLF（167 个 .json + 1 个 .jsonl）——
+#        它们多是运行产物，被 Python 在 Windows 上的默认文本模式写成 CRLF 后
+#        **原样提交**；
+#     ② 另有 **142** 个文件 index 是 LF、盘上被改回 CRLF（118 .py / 10 .txt /
+#        6 .tsx / 1 .ts）⇒ `git status` 长期挂着一批"没改内容却算改动"的文件；
+#     ③ 还有 2 个 mixed。
+#   `* text=auto eol=lf` 是根治的**一半**（Git 侧）；另一半是写文件时显式给 LF
+#   （`open(..., "w", encoding="utf-8", newline="\n")` / `write_bytes`；仓库脚本用
+#   `agentflow/tools/write_lf.py::write_lf`）。机器判据是 `agentflow/scripts/lint_rules.py`
+#   的 R012（A 面=写盘 API、B 面=盘面 EOL），读数工具是 `agentflow/tools/eol_gate.py`
+#   （0=无漂移 / 1=有漂移 / 2=没查成），收口门 `tools/release_all.py` 的 `eol` 步调它。
+#
+# 复核（只看工作区不够，要看**存进 index 的**是哪一种）：
+#   git ls-files --eol | Select-String 'i/crlf'   # 应为 0 行
+#   git check-attr -a -- <路径>                    # 抽查单条属性
+# 存量归一（只改换行、不动内容；在四笔提交的最后一笔里做一次）：
+#   git add --renormalize .
+# =============================================================================
 
-# 2026-10-21 换行符策略（业主提示：文本模式写文件会把 \n 变成 CRLF；git 可用 eol 自动统一）
-#
-# 背景实测：仓库里 629 个文件 index/worktree 都是 LF，但 93 个 index 里存的是 CRLF
-# （工作区已被改成 LF、还没提交），16 个两头都是 CRLF，2 个是 mixed。根因有两个：
-#   ① `core.autocrlf=false` + 本文件此前只有 `* -text` ⇒ git 完全不做归一化；
-#   ② Python 文本模式写文件（`open(..., "w")` / `Path.write_text`）在 Windows 上会把 `\n` 写成 CRLF
-#      ⇒ 谁用默认模式改一次文件，LF 就被"修"回 CRLF（这解释了 CRLF 为什么反复出现）。
-#
-# 现在口径：
-#   · 源码与文档**在仓库里一律存 LF**（`text eol=lf`：入库归一成 LF、checkout 出来也是 LF，
-#     不再依赖各人的 `core.autocrlf`）；
-#   · **冻结快照与二进制一律不动**（`-text`）：`tests/golden/**` 与 `tests/fixtures/**`
-#     是按字节 sha256 冻结的，git 一旦替它换行，哈希就变，那批判据会红成一片；
-#   · 未列出的类型沿用顶部 `* -text`（即"git 别碰"）。
-#
-# 配套两条纪律（写进 DEVELOPMENT.md）：
-#   1. 写文件时**显式指定换行**：`open(..., "w", encoding="utf-8", newline="\n")`，
-#      或直接用 `write_bytes`（`Path.write_text` 在 Windows 上默认写 CRLF）；
-#   2. 收口时用 `git ls-files --eol` 复核"**存进去的**是哪一种"，别只看工作区。
+# ---- 默认：一切按文本处理，入库存 LF、checkout 出 LF -------------------------
+* text=auto eol=lf
 
+# ---- 显式列出的文本类型（与上面同效，写出来是为了让人一眼看见"这些是文本"）--
 *.py     text eol=lf
 *.pyi    text eol=lf
 *.md     text eol=lf
 *.txt    text eol=lf
+*.tex    text eol=lf
+*.json   text eol=lf
+*.jsonl  text eol=lf
 *.toml   text eol=lf
 *.cfg    text eol=lf
 *.ini    text eol=lf
@@ -31,18 +47,80 @@
 *.yaml   text eol=lf
 *.ps1    text eol=lf
 *.sh     text eol=lf
-*.bat    text eol=crlf
-*.cmd    text eol=crlf
-.gitignore       text eol=lf
-.gitattributes   text eol=lf
-agentflow/.noai-paths  text eol=lf
-
-# 冻结快照与夹具：按字节 sha256 冻结，git 不许替它换行（与 `* -text` 同效，显式写出来是为了让人看得见）
-agentflow/tests/golden/**    -text
-agentflow/tests/fixtures/**  -text
-*.tsx    text eol=lf
 *.ts     text eol=lf
+*.tsx    text eol=lf
 *.js     text eol=lf
 *.jsx    text eol=lf
 *.css    text eol=lf
 *.html   text eol=lf
+*.svg    text eol=lf
+.gitignore       text eol=lf
+.gitattributes   text eol=lf
+agentflow/.noai-paths  text eol=lf
+
+# ---- Windows 批处理必须是 CRLF（cmd.exe 对 LF 的 .bat 有已知坑）--------------
+*.bat    text eol=crlf
+*.cmd    text eol=crlf
+
+# ---- 二进制：Git 不碰字节 ----------------------------------------------------
+# 文档 / 图片
+*.pdf    binary
+*.docx   binary
+*.xlsx   binary
+*.pptx   binary
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.webp   binary
+*.ico    binary
+*.bmp    binary
+*.tif    binary
+*.tiff   binary
+# 字体
+*.woff   binary
+*.woff2  binary
+*.ttf    binary
+*.otf    binary
+*.eot    binary
+# 归档 / 安装包 / 可执行 / 编译产物
+*.zip    binary
+*.gz     binary
+*.tgz    binary
+*.tar    binary
+*.whl    binary
+*.exe    binary
+*.dll    binary
+*.so     binary
+*.dylib  binary
+*.pyd    binary
+*.lib    binary
+*.o      binary
+*.a      binary
+*.obj    binary
+*.pyc    binary
+*.pyo    binary
+*.olean  binary
+*.ltar   binary
+*.sqlite binary
+*.db     binary
+# 模型权重
+*.pth    binary
+*.pt     binary
+*.onnx   binary
+*.safetensors binary
+*.ckpt   binary
+# 音视频
+*.mp3    binary
+*.mp4    binary
+*.wav    binary
+
+# ---- 冻结件：按**字节** sha256 冻结，Git 一旦替它换行哈希就变 ----------------
+# tests/ 是"本机门"、不随仓库交付（`.gitignore` 有 `/agentflow/tests/`），
+# 但开发者本机把它们重新 add 回来时，这两条必须生效，否则 golden 会红一片。
+# 注意这是 `binary`（含 `-diff`）：冻结件本就不该用 diff 读，用 sha256 读。
+agentflow/tests/golden/**    binary
+agentflow/tests/fixtures/**  binary
+
+# ---- 生成物：不让 GitHub 的语种统计把打包后的前端算成主语言 ------------------
+agentflow/src/agentflow/web/static/assets/*  linguist-generated=true

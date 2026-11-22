@@ -4,10 +4,9 @@
 # 目的：**只排除「体积」与「机器产物」**，绝不排除 draft/、test/、agentflow/
 # 的源码（.py/.md/.json/.yaml/.toml）与文档（.pdf/.md）。
 #
-# 硬约束：仓库里不允许出现单个超过 5 MB 的文件，temp/ 下默认一个文件都不进来
-# （唯一的例外是文件末尾 §14 逐条登记的那批"被引用证据物"：判据在盘上查它们存不存在，
-# 不进仓就会让一份全新 clone 里的引用判据必然变红。逐条登记、最大的一个 89.4 KB，
-# 理由与生成器见 §14；本节那句"一个都不许进来"由那一条改准，不是被绕过）。
+# 硬约束：仓库里不允许出现单个超过 5 MB 的文件；`temp/` 整目录不进版本库
+# （2026-11-21 起不再放行任何"逐条 `!` 例外"：旧的 183 条 `!/temp/...` 已整块清掉，
+# 理由与逐条读数见 §14b。证据物要留档就走 `draft/` 归档，不在这里加 `!` 行）。
 # 这份清单为此逐条服务：建仓前实测 temp/ = 5,323 MB / 107,391 文件，
 # 另有 test/test1 下的 OCR 虚拟环境与模型权重合计约 271 MB。
 #
@@ -20,7 +19,8 @@
 #    为什么：5.3 GB / 10 万+ 文件，含 mathlib-pinned2(3.6 GB)、lean470(854 MB)、
 #    elantool、下载的 tarball、各次探针输出（audit_ws*/diag*ws/*-sources/...）。
 #    它是**一次性scratch**，不是源码：留档价值为零，进仓库只会让 clone/回退变慢。
-#    整目录排除（前导 / 锚定到仓库根，不会误伤别处的 temp 同名目录）。
+#    整目录排除（前导 / 锚定到仓库根，不会误伤别处的 temp 同名目录）：
+#    本节的 `/temp/*` 排内容、文件后半段那条 `/temp/` 排目录本身，两条合起来才是整目录。
 # -----------------------------------------------------------------------------
 /temp/*
 
@@ -174,19 +174,25 @@ desktop.ini
 /agentflow/out/
 
 # -----------------------------------------------------------------------------
-# 12. **刻意不给 `agentflow/temp/` 加忽略行**（2026-10-07，实测教训，逐字留在这里）
-#     我一开始加了 `/agentflow/temp/`，理由是"第 1 节的硬约束说 temp/ 下一个文件都不许进来"。
-#     **加完立刻测出副作用**：`scripts/noai_gate.py --git --since <基线>` 的命中数
-#     从 **29 掉到 28** —— 少的那一条正是 `temp/tools/coverage_zero_test.py`
-#     （它实际是 `agentflow/temp/tools/coverage_zero_test.py`；门会同时试
-#     "仓库根相对 / 项目根相对 / 裸文件名"三种候选，所以打印成前者）。
-#     也就是说：**这条忽略行把一个 FC-27 的输入藏起来了**。而 `AGENTS.md` 逐字警告过：
-#     "`--git` 取的是……以及**未跟踪的新文件**"、"把禁改区改动藏起来 ⇒ 门说 clean"。
-#     ⇒ **纪律：`.gitignore` 不许用来"清静"任何可能命中禁改区的目录**。
-#     "别把它们提交进去"这件事靠**不 `git add`** 就够了，不需要忽略 —— 忽略只会让门看不见。
-#     （`/agentflow/projects/` 与 `/agentflow/out/` 是我实测过"不改变命中数"才留下的：
-#      加上它们之后命中数仍是 28，即它们没有藏住任何一条；那一条 28→29 的差
-#      全部来自这一条被我撤掉的 temp 规则。）
+# 12. `agentflow/temp/` —— 保留忽略行；原来的"不许忽略"纪律怎么被收住（2026-11-21 收敛）
+#     这一节原来写的是「**刻意不给 `agentflow/temp/` 加忽略行**」，理由是 2026-10-07 实测
+#     `scripts/noai_gate.py --git --since <基线>` 的命中数从 29 掉到 28 —— 少的正是
+#     `agentflow/temp/tools/coverage_zero_test.py`，即"忽略行把一个 FC-27 的输入藏起来了"。
+#     而 2026-10-18 业主明令（见文件后半段）又加上了 `/agentflow/temp/`，两段并存
+#     ⇒ 这份文件此前自相矛盾，且那条忽略行今天仍生效（`git check-ignore -v` 指着它）。
+#     本路（CLEANGIT，2026-11-21）按"明令优先、但纪律不许被悄悄绕过"收敛为：
+#       · **保留 `/agentflow/temp/` 这条忽略行**（业主 2026-10-18 明令）；
+#       · 2026-10-07 那条纪律不取消，改写成"落地前必须量"：任何目录级忽略行都要先
+#         证明它藏不住 FC-27 的输入。本条逐条可核：
+#           - `agentflow/.noai-paths` 里**没有任何** `agentflow/temp/**` 条目
+#             （`Select-String -Path agentflow/.noai-paths -Pattern 'temp'` 零命中）；
+#           - 当年被藏住的 `agentflow/temp/tools/coverage_zero_test.py` 现盘上已不存在
+#             （`Test-Path` = False），没有可藏的东西；
+#           - 忽略规则对**已跟踪**文件本来就不生效 ⇒ 2026-11-16/18 被提交进去的 12 个
+#             temp 探针（cc3/cc4/rs/vf）不是被这条忽略行藏起来的；它们由 CLEANGIT 路
+#             `git rm --cached` 摘索引处理（盘上文件原样保留）。
+#     维护约定：这条忽略行只负责"别把 scratch 提交进去"；任何**可能命中 FC-27** 的东西
+#     都应当搬出 `agentflow/temp/`，而不是靠取消忽略来让它重新可见。
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
@@ -249,199 +255,23 @@ desktop.ini
 # -----------------------------------------------------------------------------
 /agentflow/settings.json
 
-# <<< CITED-TEMP-EVIDENCE:BEGIN >>>
-# 本节由本地生成器 `temp/_gen_cited_ignore.py` 产出（那个脚本是 scratch、不入库），
-# 规则一句话可复述：把上面 §1 的 `/temp/` 改成 `/temp/*`（只忽略内容、
-# 不忽略目录本身），再把被引用的每一条 `temp/<名>` 逐条写成 `!/temp/<名>`
-# （目录形态写两行：`!/temp/<名>/` 与 `!/temp/<名>/**`）。
-# 所谓被引用的口径就是判据自己的口径：`tests/test_r5_orchestration_cost.py` 的
-# `_TICKED_TEMP_PATH`（反引号里恰好一段的 `temp/...`）—— 那条判据查的是
-# 盘上有没有这个路径，所以只有它点名的那些必须真的在仓里。
-# 维护约定：引用新增/消失之后，按上面这条规则重算一遍（或重跑那个生成器）。
-!/temp/t0260-evidence/
-!/temp/t0260-evidence/**
-!/temp/AUDIT-A.json
-!/temp/B3-rest-evidence.md
-!/temp/B5a-evidence.md
-!/temp/B6-evidence.md
-!/temp/B6-workorder.md
-!/temp/B8a-evidence.md
-!/temp/BOUNDARY-RUNBOOK.md
-!/temp/C-T15.md
-!/temp/C-T16.md
-!/temp/C-T17.md
-!/temp/DECISION-PAGE-20260927.md
-!/temp/DRIFT-LIST.md
-!/temp/FINAL-FINDINGS.md
-!/temp/FIX11-PLAN.md
-!/temp/FIX15-WINDOW.md
-!/temp/FIX16-PLAN.md
-!/temp/FIX6-F1.md
-!/temp/FIX6-F4-before_tests_test_r4_roles_surface.py
-!/temp/FIX6-F4.md
-!/temp/FIXG4.md
-!/temp/G3-measure2.py
-!/temp/G46-evidence.md
-!/temp/HANDOVER.md
-!/temp/P21-retraction.md
-!/temp/REAUDIT-R2.json
-!/temp/REAUDIT10-R6.json
-!/temp/REAUDIT6-R3.json
-!/temp/REAUDIT6-R5.json
-!/temp/REAUDIT8-R5.json
-!/temp/T3-BENCH-B.md
-!/temp/VERIFY-B8a-G18.md
-!/temp/W1-WINDOW.md
-!/temp/_audit_coverage.py
-!/temp/_audit_web_drafts.py
-!/temp/_b5a_p4_before.txt
-!/temp/_check_line_ownership.py
-!/temp/_clean_deco.py
-!/temp/_d2_config_probe.py
-!/temp/_e5_replay2.ps1
-!/temp/_ev_store_inventory.py
-!/temp/_gen_digests.py
-!/temp/_line_A_brief.md
-!/temp/_line_B_brief.md
-!/temp/_line_C_brief.md
-!/temp/_live_readings_census.py
-!/temp/_m6_verify_verbatim.py
-!/temp/_m8_probe_lean.py
-!/temp/_mention_diff.py
-!/temp/_migrate_webui_cites.py
-!/temp/_migrate_webui_cites_manual.py
-!/temp/_negctl_hash.py
-!/temp/_oa_probe.py
-!/temp/_p40_m_tool_smoke.py
-!/temp/_page_fix_ab.py
-!/temp/_parent_verify_E2.txt
-!/temp/_probe_agent_construction.py
-!/temp/_probe_b_claim.py
-!/temp/_probe_fc05_messages.py
-!/temp/_probe_g35_patch_target.py
-!/temp/_probe_ledger_audits.py
-!/temp/_probe_openalex_mode.py
-!/temp/_probe_precise_desc.py
-!/temp/_push_incubator.ps1
-!/temp/_r009_fix.py
-!/temp/_r009_locate.py
-!/temp/_r009_strip.py
-!/temp/_r009_sweep.py
-!/temp/_r1a1_status_probe.py
-!/temp/_r2b_ocr_probe_after.txt
-!/temp/_r3_baseline.py
-!/temp/_r52_probe.py
-!/temp/_r61_recon.py
-!/temp/_reachability_probe.py
-!/temp/_score_prototype.py
-!/temp/_sign_fc27_web.ps1
-!/temp/_split_any.py
-!/temp/_stop_probe.py
-!/temp/_symbol_diff.py
-!/temp/_t14_topicality.py
-!/temp/_t5_split.py
-!/temp/_t7_verify.py
-!/temp/_user_end_verify.py
-!/temp/_verify_r2.py
-!/temp/_verify_w0.py
-!/temp/_w0_public_face.json
-!/temp/_w5_legacy_census.py
-!/temp/_web_lines.json
-!/temp/_web_matrix_evidence.py
-!/temp/_web_matrix_evidence.txt
-!/temp/_who_writes.py
-!/temp/audit-prompt-KIT.md
-!/temp/auditC-05-skip-bypass.txt
-!/temp/auditD-proof-selfreport.txt
-!/temp/auditE-lean-probe.json
-!/temp/auditE-quote-eval-probe.json
-!/temp/auditF-probe1.txt
-!/temp/auditF-probe2.txt
-!/temp/auditF-probe3.txt
-!/temp/auditF-probe4.txt
-!/temp/auditG-probe1.txt
-!/temp/auditG-probe2.txt
-!/temp/auditG-probe4.txt
-!/temp/axes-after-b3rest.json
-!/temp/axes-before-b3rest.json
-!/temp/b73-release-all.json
-!/temp/b_probe_citation_shapes.py
-!/temp/batchC-axes5-vacuous-monkeypatch.txt
-!/temp/batchE2-E-10.txt
-!/temp/batchE2-README.md.bak
-!/temp/batchG-g10.txt
-!/temp/batchL-probe.py
-!/temp/batchM-verify.py
-!/temp/batchR1c-evidence.md
-!/temp/batchR1c-pos2.py
-!/temp/batchR6ac-pristine-baseline.txt
-!/temp/batchS-agent_e.py.bak
-!/temp/diff-after-task2.json
-!/temp/diff-before-task2.json
-!/temp/eol-census.txt
-!/temp/eol-vs-before.txt
-!/temp/f7-before.txt
-!/temp/fc05-messages.txt
-!/temp/fix6_f5-after-an1.txt
-!/temp/fix6_f5-minimal.txt
-!/temp/fix6_f5-neg-R8-layouts.txt
-!/temp/fix6_f5-neg-V4-an4-line-refs.txt
-!/temp/fix6_f5-neg-V5-an5-old-doc.txt
-!/temp/fix6_f5-neg-V9-r7-dangling-refs.txt
-!/temp/fix6_f5-shape.txt
-!/temp/fix6_f5-smoke-pre.txt
-!/temp/g4-nospace.txt
-!/temp/g5-mp3.txt
-!/temp/i1-neg-after.txt
-!/temp/i1-neg-before.txt
-!/temp/ledger-audits.txt
-!/temp/ledger-stale.txt
-!/temp/live-collab-fanout-20260930-144422.txt
-!/temp/live-collab-fanout-20260930-145743.txt
-!/temp/network-and-key-status.md
-!/temp/network-collect.txt
-!/temp/noai-paths-format.txt
-!/temp/out_5a_after.json
-!/temp/out_5a_before.json
-!/temp/p21-probe.txt
-!/temp/post2-sha-before.json
-!/temp/probe_attack_graph.py
-!/temp/probe_g12_baseline.py
-!/temp/probe_g7_ming.py
-!/temp/pytest-network-run1.txt
-!/temp/r2-d1-probe.txt
-!/temp/r2-e6-out2.txt
-!/temp/r2-e6-out5.txt
-!/temp/r2-e6-out6.txt
-!/temp/r2-e6-out7.txt
-!/temp/r2-revise-bypass.txt
-!/temp/r58-gates.txt
-!/temp/r58-release-all.json
-!/temp/reaudit4B-d2-contract-keys.txt
-!/temp/reaudit5-R1b-attack.py
-!/temp/reaudit5-R1b-pos.py
-!/temp/reaudit5-R1b-solo.txt
-!/temp/reaudit6-R5-p4.txt
-!/temp/reaudit6-R5-p6.txt
-!/temp/reaudit7-R5-p3.py
-!/temp/reaudit8-R5-p8.py
-!/temp/reauditR3-A5-f1-probe.txt
-!/temp/release_all_final.json
-!/temp/residuals.tsv
-!/temp/run_gates.py
-!/temp/t14-topicality.json
-!/temp/t3-bench-b.jsonl
-!/temp/two-layer-count.txt
-!/temp/verify-audit-forge-after.txt
-!/temp/verify-audit-forge.txt
-!/temp/w1-noai-x9641-output.txt
-!/temp/w5_negctl_abort.py
-!/temp/w5_p1_probe.py
-!/temp/zone-backup-r3-src_agentflow_store.py
-!/temp/zone-backup-r4-src_agentflow_capabilities.py
-!/temp/zone-backup-r4-src_agentflow_tools_base.py
-!/temp/zone-backup-r4-src_agentflow_tools_verify_tools.py
-# <<< CITED-TEMP-EVIDENCE:END >>>
+# -----------------------------------------------------------------------------
+# 14b. （2026-11-21 删除）原「CITED-TEMP-EVIDENCE」183 条 `!/temp/...` 放行已整块清除
+#     原来那一块（无编号，紧跟在 §14 settings 之后）是某个本地生成器的产物：
+#     `temp/_gen_cited_ignore.py`（scratch、不入库），
+#     为"判据点名、且必须在仓里查到"的 temp 证据物逐条写 `!` 例外。删除前逐条复算过
+#     （探针 `agentflow/temp/cleangit/probe_dead_bangs.py` → 逐条读数 `dead-bangs.tsv`）：
+#       · 仓根 `temp/` 下**已跟踪文件 = 0**（`git ls-files -- temp`）⇒ 没有任何已跟踪文件
+#         需要被放行，而忽略规则对已跟踪文件本来就不生效；
+#       · `git check-ignore -v` 对这 183 个目标的"最后一条匹配规则"**183/183 全是后面
+#         那条 `/temp/`**（不是任何一条 `!`）⇒ 例外行在"谁被忽略"上一条也没生效；
+#       · 目标路径在现盘上 183/183 存在（旧清点报告"0/183 存在"是带时刻的旧读数）；
+#         即便存在，它们也是未跟踪且被 `/temp/` 忽略 —— 删例外不改变任何路径的结局。
+#     维护约定：**不要在这里逐条加 `!` 行**。判据要读的固定证据物应搬进
+#     `agentflow/tests/fixtures/`（那是入库面）；一次性证据物按 R2 留在 `temp/`，
+#     要留档就进 `draft/`（整目录已忽略）。若将来真要放行，先跑一遍上面的探针，
+#     证明"放行之后真有已跟踪文件需要它"。
+# -----------------------------------------------------------------------------
 
 # ---- 业主 2026-10-18 明令：这三处一律不许上传（本地证据 / 草稿 / 旧原型）
 /temp/
@@ -451,12 +281,47 @@ desktop.ini
 
 
 # ---- 2026-10-18 清理：这些是运行残留/示例，不再纳入仓库
+# 2026-11-21：`agentflow/example/` 的 39 个跟踪文件已 `git rm -r --cached`，整目录
+# 移到 `draft/archive-example/`（39/39 文件 sha256 逐一相同）；这一行保留，防它再长回来。
 /agentflow/release-all-sub-*/
 /agentflow/library/
 /agentflow/example/
-/agentflow/demo/run/
-/agentflow/demo/selftest/
-/agentflow/demo/sources/
+
+
+# ---- 2026-11-21 IGNOREFIX（**已过期**：`agentflow/demo/` 于 2026-11-22 整条退场，见本块末尾注）
+#      改前这里是三条整目录规则（`/agentflow/demo/run/`、`/agentflow/demo/selftest/`、
+#      `/agentflow/demo/sources/`，2026-10-18 按"运行残留/示例"写下的）。它们与索引直接矛盾：
+#      demo 下 34 个文件**已被跟踪**，这三条又让它们"被忽略"
+#      （改前：`git ls-files -i -c --exclude-standard -- agentflow/demo` = 34）⇒ 矛盾不只是
+#      读数难看：以后往同目录**新增**一个文件（改前 `git check-ignore -v --no-index
+#      agentflow/demo/sources/x.txt` 指着本节那行），`git add` 会静默跳过，demo 会从仓库里
+#      悄悄少东西 —— 而 demo 是**必要构件**，不是"示例残留"：
+#        · `tests/test_verify_snapshot.py:102` 把 `REPO/"demo"/"run"` 当三个"真工作区"之一，
+#          `tests/golden/verify_all_snapshot.json` 里冻着 `real:demo/run` 那一格 ⇒ 干净 clone
+#          里没有它，该判据的"夹具前提"当场红；
+#        · `src/agentflow/tools/ocr_tools.py:1176-1178` 从 `demo/selftest/` 读 `sample.pdf` /
+#          `blank.pdf` 做自检素材；
+#        · `src/agentflow/demo.py:481` 的 `FixtureDownloader` 从 `demo/sources/<name>` 取字节
+#          （`demo/fixtures/candidates.json` 里每条的 `pdf_url` 都是 `abfixture:<name>`）。
+#      收窄口径：demo 下**该忽略的只有自检临时工作区**（系统临时目录被沙箱拒绝时的退路，
+#      逐条点名在 `src/agentflow/agent_a/selftest.py:157`、`src/agentflow/agent_b/core.py:1366`、
+#      `src/agentflow/agent_c/__main__.py:52`）。它们是"跑一次就有"的工作区本体，没有判据读；
+#     且 `agentflow/.noai-paths` 里 demo 条目 = 0（`Select-String -Pattern 'demo'` 零命中）
+#      ⇒ 这条忽略在构造上藏不住 FC-27 命中。
+#      按 §12 的纪律量过：`git ls-files --others --ignored --exclude-standard -- agentflow/demo`
+#      改前/改后都是空 ⇒ 撤掉那三条没有让任何"原本看不见的未跟踪文件"露出来或藏起来，
+#      唯一的变化是"已跟踪"与"被忽略"不再自相矛盾。
+#      【2026-11-22 DEMORETIRE】上面那三条"工作区"引用的东西（`demo/run`、`demo/selftest`、
+#      `demo/sources`、`demo/fixtures`、`agentflow/demo.py`）**全部删了** —— 业主裁定 demo 整条
+#      线退场，索引里 35 个文件 `git rm --cached`、盘上目录一并删。这一段引用的
+#      `test_verify_snapshot.py:102` / `ocr_tools.py:1176-1178` / `demo.py:481` 因此都是历史。
+#      下面三行**保留**，但对象只剩"沙箱退路"：系统临时目录被拒时，三个自检会把工作区落到
+#      仓库内（`agentflow/agent_a/selftest.py:157`、`agentflow/agent_b/core.py:1366`、
+#      `agentflow/agent_c/__main__.py:52`）。实测 `git ls-files -- agentflow/demo` = 0、
+#      `.noai-paths` 里 demo 条目 = 0 ⇒ 这三行藏不住任何 FC-27 命中。
+/agentflow/demo/agent_a_selftest/
+/agentflow/demo/agent_b_selftest/
+/agentflow/demo/agentc_selftest_*/
 
 
 # -----------------------------------------------------------------------------
@@ -470,6 +335,48 @@ desktop.ini
 #     刻意不忽略整个 `agentflow/data/`：那一层的 `*.json` 是入库的空台账。
 # -----------------------------------------------------------------------------
 /agentflow/data/.locks/
+
+
+# -----------------------------------------------------------------------------
+# 16. `agentflow/tests/` —— 本机开发判据，**不随仓库交付**（2026-11-21 业主裁定）
+#     业主逐字：「D:\Incubator\agentflow\tests不该被提交git，这只是测试工具」。
+#     为什么：tests/ 是跑 pytest 用的开发门，不是产品交付物；干净 clone 里没有它，
+#     `import agentflow` / `agentflow --version` / 产品运行都不依赖它（只被注释引用）。
+#     已用 `git rm -r --cached agentflow/tests` 卸下跟踪（1,358 个文件），磁盘文件原样保留。
+#     三态纪律：`scripts/release_check.py` 第 1 项与 `tools/release_all.py` 的 `per-file`
+#     步在缺 tests/ 时记 `unknown` 并写原因（不是 pass，也不是崩）。
+#     按 §12 的纪律量过：`.noai-paths` 里已无任何 `tests/**` 条目（同一裁定下从两处清单
+#     同步摘除），所以这一行在构造上不可能藏住 FC-27 命中；实测见
+#     `agentflow/temp/testsuntrack/REPORT.md` 的 ③。
+# -----------------------------------------------------------------------------
+/agentflow/tests/
+
+
+# -----------------------------------------------------------------------------
+# 17. 构建产物 / 覆盖率 / 类型与格式检查缓存 / 补丁残留（2026-11-21 CLEANGIT 补）
+#     为什么补：这些是"跑一次工具就有"的机器产物，全部**可重建**，与 §2/§3 同类。
+#     · *.egg-info/：`pip install -e .` 的构建元数据。实测曾有 6 个文件被提交
+#       （`agentflow/src/agentflow.egg-info/{PKG-INFO,SOURCES.txt,...}`）；本路已
+#       `git rm --cached` 摘索引、盘上保留 —— 加这一条是让它们以后不再进场。
+#     · build/ · dist/：`python -m build` / `--sdist --wheel` 的落点（pyproject.toml）。
+#     · .coverage · htmlcov/：覆盖率门（`tools/coverage_zero_test.py` 那一链）跑一次的落点。
+#     · .mypy_cache/ · .ruff_cache/：类型/格式检查缓存，与已有 `.pytest_cache/` 同类
+#       （`tests/test_r5_orchestration_cost.py` 的跳过名单里就写着 `.mypy_cache`）。
+#     · *.tmp：`scripts/noai_gate.py` 写批准台账时用 `mkstemp(prefix=<name>., suffix='.tmp')`
+#       再 rename；进程被打断就会把 `<台账>.<随机>.tmp` 留在盘上 ⇒ 不忽略就会永久挂在
+#       `git status` 里。
+#     量过（`agentflow/temp/cleangit/REPORT-CLEANGIT.md` ③）：这 8 条落地后
+#     `git ls-files -i -c --exclude-standard` 里没有新增任何"被跟踪且被忽略"的文件；
+#     落地前 `git ls-files` 里匹配这 8 个模式的已跟踪文件也是 0。
+# -----------------------------------------------------------------------------
+*.egg-info/
+build/
+dist/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+*.tmp
 
 
 # ---- 2026-10-18 清理二批：残留工作区 / 截图 / 构建缓存

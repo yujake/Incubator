@@ -1,1 +1,0 @@
-An abelian group is a group in which the commutative law holds. Every subgroup of an abelian group is normal.

@@ -1,0 +1,30 @@
+# Incubator — development-only requirements. NOT needed to run `agentflow`.
+#
+# `agentflow/tests/` is a local development gate and is NOT shipped with the
+# repository (owner ruling 2026-11-21). These pins are for developer checkouts
+# that keep the suite on disk.
+
+-r requirements.txt
+
+# Test runner for the local dev gate. The suite is pytest-based; the `network`
+# and `browser` markers are deselected by default in agentflow/pyproject.toml.
+#   python -m pytest -q                  # offline
+#   python -m pytest -q -m network       # opt in to network tests
+pytest>=8.0
+
+# ---------------------------------------------------------------------------
+# NOT pip packages (deliberately listed so nobody goes looking for them):
+#
+#   * Lint is in-repo and standard-library-based:
+#       python agentflow/scripts/lint_rules.py      # R001–R012, exit 0/1/2
+#     There is no ruff / flake8 / eslint config in this repository.
+#
+#   * The web frontend is a Node + pnpm project, built separately:
+#       pnpm -C agentflow/ui install
+#       pnpm -C agentflow/ui build      # writes agentflow/src/agentflow/web/static/
+#     The built artifacts are committed, so Node is NOT needed to run
+#     `python -m agentflow web` or any Python gate.
+#
+#   * Playwright for the browser end-to-end gate is the package's own extra:
+#       pip install -e "agentflow[browser]" && playwright install
+# ---------------------------------------------------------------------------

@@ -1,0 +1,31 @@
+# Incubator — runtime requirements for the `agentflow` package.
+#
+# This file mirrors `agentflow/pyproject.toml` -> `[project].dependencies`.
+# The normal install is `pip install -e agentflow` (the package pulls these in
+# by itself); this file exists for two cases:
+#   * a `PYTHONPATH=agentflow/src python -m agentflow ...` setup with no install;
+#   * a plain `pip install -r requirements.txt` before an editable install.
+#
+# Recompute / verify from the repository root (D:\Incubator), never hand-copy:
+#   python -c "import tomllib,pathlib; d=tomllib.loads(pathlib.Path('agentflow/pyproject.toml').read_text(encoding='utf-8')); print('\n'.join(d['project']['dependencies']))"
+#
+# Runtime dependencies are deliberately minimal: the ledger, transactions,
+# contracts, retrieval and verification paths are standard library only.
+
+# Cross-process file locks. Every ledger-table write takes a real lock, so
+# concurrent roles cannot interleave a partial row.
+# Used by: src/agentflow/store.py, manuscripts.py, manuscriptids.py, secretary_*.py.
+filelock>=3.12
+
+# YAML parser for the preset layer only: `preset.yml` / `agent.cordis.yml`
+# (the DSH preset format). The core path never imports it.
+# Used by: src/agentflow/cli.py, src/agentflow/closing.py, the preset loader.
+PyYAML>=6.0
+
+# ---------------------------------------------------------------------------
+# Optional extras are NOT installed from this file. Install them through the
+# package so the extra's metadata is recorded:
+#   pip install -e "agentflow[pdf]"      # PyMuPDF>=1.24, pdfminer.six>=20231228, PyPDF2>=3.0
+#   pip install -e "agentflow[ocr]"      # easyocr (pulls torch; hundreds of MB)
+#   pip install -e "agentflow[browser]"  # playwright>=1.44 (only tests/test_webui_browser.py)
+# ---------------------------------------------------------------------------
