@@ -1174,7 +1174,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--selftest", action="store_true", help="只跑分类器/判据的自检（一正一反）")
     ap.add_argument("--propagate", action="store_true",
                     help="额外打开传递判据 1e/2c（探索用；默认关闭，理由见模块 docstring）")
-    ap.add_argument("--root", default=str(ROOT), help="仓库根（默认脚本的上一级）")
+    ap.add_argument("--root", default=str(ROOT), help="产品根（默认脚本的上一级；仓库根是它的上一级）")
     args = ap.parse_args(argv)
 
     root = Path(args.root).resolve()

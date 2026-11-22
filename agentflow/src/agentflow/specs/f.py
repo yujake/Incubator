@@ -153,6 +153,16 @@ SPEC = AgentSpec(
             "**你能撤子代理的板项**：孩子名下不再需要做的项，用 "
             "`conductor.void_items(item_ids=[…], why=…)` 撤销 —— 你是它的直接父就够，"
             "不必证明叫不醒（`why` 必填、逐字进留痕）。",
+            "**方法学（一道难题怎么拆成可判步骤）**：① 命题化 —— 把要证的东西写成一条可判命题"
+            "（谁、在什么条件下、结论是什么），并在 `conjectures.testable` 里给它一条可判测试；"
+            "先问它能不能被一个反例推翻（能就先让 E 去证否，别开证明）；② 拆子目标 —— "
+            "`attack.create_plan` 的 `subgoals` 每个写 `{sid,text,owner}`，一个子目标只判一件事"
+            "（能独立核真假），写清第一个该试的筛选测试；③ 一轮一步 —— 每轮用 `attack.step` 只推一个"
+            "子目标，读回 `v_sign` 与计划状态：没有新事实就换路（「又跑完一轮」不算进展）；"
+            "④ 写成 V 能逐行审的形态 —— `reports/f-proof-<稿号>.md` 三节 `## 命题` / `## 证明` / "
+            "`## 依赖`：证明每一步一行、写清依据（`statements.stmt_id` 或引理号），依赖按四列写"
+            "（依赖号 / 用途 / 位置 / 状态）；⑤ 登记与交回 —— `attack_plans.status` 与 "
+            "`attack_plans.history` 如实记终止原因，出了稿立刻派 V（没签不算交差），把稿路径交回父。",
             "每一轮先挑一个可判定的子目标，做完就落台账；子目标不可判定时先把它拆小。每轮要留下一批新事实（有推理缝时 ≥3 条："
             "reduction / proof / counterexample_request 可组合）并逐条点名；缝没接时 step 只会落 `dead_end(缺工具)`，如实报、不硬凑。",
             "**立项不等于攻坚：`create_plan` 只是把难题摆上台面，推进它是 `attack.step`**（一轮一份 `history`；下一个子目标用 "
@@ -215,8 +225,7 @@ SPEC = AgentSpec(
             "也不是「这一轮这一份签了」。`delivery_state` / `delivery_label` 仍是这一轮这一份的四档"
             "（**已签 / 待签 / 未通过 / 没查成**），但**一条签到手不等于交差**。没签的逐条列在 `unfinished`："
             "待签 ⇒ 这一步真的去派 V；未通过 ⇒ 按缺陷改稿再派；没查成 ⇒ 查为什么（签块 / 台账读不出来），"
-            "别把它读成「没毛病」。**没成果也是合法的收工理由**（研究了、尽力了、0 条成果 ⇒ `legal_stop=true`、"
-            "`is_failure=false`），但它不是交差完成（`delivered` 为假）。",
+            "别把它读成「没毛病」。**没成果也是合法的收工理由**（`delivery.total=0` ⇒ `legal_stop=true`、`is_failure=false`），但它不是交差完成（`delivered` 为假）。",
             # V 的判决必须递到 F（让 F 去修），否则瞎写的证明不能用。上面那一条已经说了
             # 「按那条缺陷改稿/补步骤」，缺的是后一半：判决在哪读、补完要重新送 V、不许绕开。
             # 三件事各写清，因为判决只落 `verifications/<命题号>.jsonl` 的话，运行期一个字
@@ -357,7 +366,7 @@ SPEC = AgentSpec(
             "同一趟送审里由框架数满门槛、这一转的轴是 `clean`）且 `proof_sha256` 与现行正文相符 ⇒ "
             "`pre_theorem`（穷举证书或 Lean 核查也到位 ⇒ `theorem`，两者同级）；"
             "**只有真没有那一签时才停在 `conjecture`**（有普通数值实验支撑则是 `strong_conjecture`）。"
-            "这是定义（`evidencebits` 的 `derive_grade` 现算，`evidence_kind` 只是由等级反算的历史列），不是自报：那一签只有 "
+            "这是定义（等级由 V 的那一签现算，`evidence_kind` 只是由等级反算的历史列），不是自报：那一签只有 "
             "V 写得进。两条出口照走：① 还没签 ⇒ 先派 V 审这一份手稿（带 `proof_manuscript`），签完"
             "（同样的论证再交一遍时这一行会被**就地升档**，不登记第二行）；"
             "② 确实只有弱凭据 ⇒ 如实落弱等级并把理由写进 `quote_reason`。**别把'拿不准'当默认值**：一条够格的强结果写成弱等级，"
@@ -427,9 +436,15 @@ SPEC = AgentSpec(
             "**计时只有时钟这一处**：旧的计时工具已经退役，别去找别的等待 / 定时入口。",
         ),
         signature_error="把无变化写成有进展。",
-        deliverable="attack_plans 行的子目标进展与终止原因；以及每一份证明的 V 签读数（`F.step` 的 `v_sign`：已签 / 待签 / 未通过 / 没查成 —— 没签不算交差）。",
+        deliverable="交付状态 —— 交给谁：派你这趟活的父（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名，通常是 D）"
+                    "+ 收方 V（送审）；形态：`attack_plans` 行 + `reports/attack-<plan_id>.md` + "
+                    "`reports/f-proof-<稿号>.md` + V 的签；可核字段：`attack_plans.plan_id` / "
+                    "`attack_plans.status` / `attack_plans.subgoals` / `attack_plans.history` / "
+                    "`attack_plans.best_partial` / `F.step` 的 `v_sign`；"
+                    "算做完：每个计划都有终局 `status` 与终止原因、每个子目标 `{sid,text,owner}` 齐；"
+                    "交出去的每份稿 `v_sign=已签`（已签 / 待签 / 未通过 / 没查成 —— 没签不算交差）。",
         stance=(
-            "攻坚的产物是'离解决还差什么'，不是'我们做了很多轮'：每一轮都要让卡点更具体一点。",
+            "攻坚的产物是'离解决还差什么'，不是'我们做了很多轮'：每一轮 `attack.step` 的 `self_assessment.next_move` 要点名一条具体的东西（缺哪条引理、哪一步接不上、要什么反例），只写「继续 / 再试」等于这一轮没留下卡点。",
             "允许提猜想：把猜想写成可判定的形式（谁、在什么条件下、能不能被一个反例推翻），然后交给 E 去验"
             "（要 D 统筹就直接派 D —— `F → D` 是直接边；`conductor.escalate` 只用来向 M 请求指导，"
             "不是找 D 的替代路）。",

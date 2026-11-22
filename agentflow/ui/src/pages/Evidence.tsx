@@ -55,6 +55,8 @@
  *   没有报告写「无」而不是留空。
  */
 import { api } from "../api";
+import { useState } from "preact/hooks";
+
 import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
 import { Consistency } from "../components/Consistency";
@@ -76,7 +78,31 @@ import {
   vsignText,
 } from "../statementLedger";
 import type { LedgerField } from "../statementLedger";
-import type { ExperimentRow, RelationRow, StatementRow } from "../types";
+import type { EvidenceView, ExperimentRow, RelationRow, StatementRow } from "../types";
+
+/** 这一栏**真实**有多少行（AUDIT F12 的分页读数：`rows_total[栏]`；全量档与数组等长）。 */
+function totalOf(ev: EvidenceView, key: string, shown: number): number {
+  const raw = ev.rows_total[key];
+  return typeof raw === "number" ? raw : shown;
+}
+
+/** 这一栏被首屏摘要切过时那一句（不许把"首屏画了 N 行"读成"一共 N 行"）。
+ *
+ * 空串 = 没切过（这一栏给全了）。判据 `${shown} < ${total}` 而不是看 `rows_mode`：
+ * 全量档里也可能某一栏本来就只有几行，那种情况一个字都不该多说。
+ */
+function rowsNote(ev: EvidenceView, key: string, shown: number): string {
+  const total = totalOf(ev, key, shown);
+  if (total <= shown) {
+    return "";
+  }
+  return `这一栏共 ${total} 行，首屏只画了前 ${shown} 行（摘要档）—— 点这张卡上面的「取全部」拉整表。`;
+}
+
+/** `rowsNote` 那一句的渲染（空串 ⇒ 什么都不画）。 */
+function PartialRows(props: { note: string }) {
+  return props.note === "" ? null : <div class="readings tri-reason">{props.note}</div>;
+}
 
 /** 状态那一格：人话（`status_word`）上屏，原始 token 进 tooltip；命题面另报三态。
  *
@@ -506,7 +532,12 @@ function statementColumns(rows: StatementRow[]): Array<Column<StatementRow>> {
 }
 
 export function Evidence() {
-  const face = useFace(() => api.getEvidence());
+  // 首屏摘要 vs 整表（AUDIT F12：真机上这一条端点回 2.1 MB / 2.6 s，一进页面就卡）。
+  // `false` ⇒ 首屏只要每栏前 `readers.SUMMARY_ROWS` 行（`?summary=1`）；`true` ⇒ 全量。
+  // 为什么保留"取全部"：摘要会切掉行，而所有字段与三态一个都没删 —— "要读全"必须是
+  // 一次点击就能做到的事，否则这一改就是把"慢"换成"看不全"。
+  const [full, setFull] = useState(false);
+  const face = useFace(() => api.getEvidence(full ? {} : { summary: true }));
 
   if (face.data === null) {
     return (
@@ -523,6 +554,19 @@ export function Evidence() {
   const ev = face.data;
   // 五档计数与「不是逐字 / 语义通过」的那批行由同一趟扫出来（每行只算一次引文状态）。
   const { tally, notClean } = quoteScan(ev.relations);
+  // 哪些栏被首屏摘要切过（按真实总行数与数组长度比，不按 `rows_mode` 猜）。
+  const cutColumns: string[] = [
+    ["命题", ev.statements.length, totalOf(ev, "statements", ev.statements.length)],
+    ["猜想", ev.conjectures.length, totalOf(ev, "conjectures", ev.conjectures.length)],
+    ["实验", ev.experiments.length, totalOf(ev, "experiments", ev.experiments.length)],
+    ["稿件", ev.documents.length, totalOf(ev, "documents", ev.documents.length)],
+    ["审校", ev.review_findings.length, totalOf(ev, "review_findings", ev.review_findings.length)],
+    ["关系", ev.relations.length, totalOf(ev, "relations", ev.relations.length)],
+    ["验证", ev.verifications.length, totalOf(ev, "verifications", ev.verifications.length)],
+    ["秘书", ev.secretary.length, totalOf(ev, "secretary", ev.secretary.length)],
+  ]
+    .filter(([, shown, total]) => Number(total) > Number(shown))
+    .map(([name]) => String(name));
 
   return (
     <>
@@ -535,6 +579,45 @@ export function Evidence() {
         <div class="readings">
           八张表；每一栏各有自己的三态。
         </div>
+        {/* 首屏摘要（AUDIT F12）：这一格必须说清"这一份是全量还是摘要、一共多少行"，
+            否则"命题台账 40 条"会把真实总数读没。四格读数全部来自后端的
+            `rows_mode` / `rows_limit` / `rows_offset` / `rows_total`。 */}
+        <div class="readings">
+          读数档{" "}
+          <span class="mono">{ev.rows_mode}</span>（每栏 {ev.rows_offset} 起，最多{" "}
+          <span class="mono">{ev.rows_limit === 0 ? "全部" : ev.rows_limit}</span> 行）·{" "}
+          {cutColumns.length === 0 ? (
+            <span>这一份是全量：每一栏给全了。</span>
+          ) : (
+            <span>
+              首屏摘要切过这几栏：<span class="mono">{cutColumns.join(" / ")}</span>
+              （每栏下面的「共 N 行」是真实总数）
+            </span>
+          )}{" "}
+          {full ? (
+            <button
+              class="btn"
+              type="button"
+              onClick={() => {
+                setFull(false);
+                face.reload();
+              }}
+            >
+              回到首屏摘要（快）
+            </button>
+          ) : (
+            <button
+              class="btn"
+              type="button"
+              onClick={() => {
+                setFull(true);
+                face.reload();
+              }}
+            >
+              取全部（整表，慢）
+            </button>
+          )}
+        </div>
         {ev.store_problems.length === 0 ? null : (
           <div class="readings">
             读盘问题 <span class="mono">{ev.store_problems.join("；")}</span>
@@ -544,9 +627,10 @@ export function Evidence() {
 
       <Card
         title="命题台账"
-        subtitle={`${ev.statements.length} 条`}
+        subtitle={`${ev.statements.length} 条 · 共 ${totalOf(ev, "statements", ev.statements.length)} 条`}
         right={<TriState tri={ev.statements_tri} label="statements" />}
       >
+        <PartialRows note={rowsNote(ev, "statements", ev.statements.length)} />
         {isUnreadable(ev.statements_tri) ? (
           <span class="empty">这一栏没查成（不是"0 条"）。</span>
         ) : ev.statements_tri === "not_applicable" ? (
@@ -567,6 +651,7 @@ export function Evidence() {
         subtitle={`${ev.conjectures.length} 条`}
         right={<TriState tri={ev.conjectures_tri} label="conjectures" />}
       >
+        <PartialRows note={rowsNote(ev, "conjectures", ev.conjectures.length)} />
         {isUnreadable(ev.conjectures_tri) ? (
           <span class="empty">这一栏没查成（不是"0 条"）。</span>
         ) : ev.conjectures_tri === "not_applicable" ? (
@@ -611,6 +696,7 @@ export function Evidence() {
         subtitle={`${ev.experiments.length} 条`}
         right={<TriState tri={ev.experiments_tri} label="experiments" />}
       >
+        <PartialRows note={rowsNote(ev, "experiments", ev.experiments.length)} />
         {isUnreadable(ev.experiments_tri) ? (
           <span class="empty">这一栏没查成（不是"0 条"）。</span>
         ) : ev.experiments_tri === "not_applicable" ? (
@@ -658,6 +744,7 @@ export function Evidence() {
         subtitle={`${ev.review_findings.length} 条`}
         right={<TriState tri={ev.review_findings_tri} label="review_findings" />}
       >
+        <PartialRows note={rowsNote(ev, "review_findings", ev.review_findings.length)} />
         {isUnreadable(ev.review_findings_tri) ? (
           <span class="empty">这一栏没查成（不是"0 条"）。</span>
         ) : ev.review_findings_tri === "not_applicable" ? (
@@ -689,6 +776,7 @@ export function Evidence() {
         subtitle={`${ev.documents.length} 份`}
         right={<TriState tri={ev.documents_tri} label="documents" />}
       >
+        <PartialRows note={rowsNote(ev, "documents", ev.documents.length)} />
         {isUnreadable(ev.documents_tri) ? (
           <span class="empty">这一栏没查成（不是"0 份"）。</span>
         ) : ev.documents_tri === "not_applicable" ? (
@@ -716,6 +804,7 @@ export function Evidence() {
         subtitle={`逐字 ${tally.verbatim} · 语义 ${tally.semantic} · 不一致 ${tally.mismatch} · 未查 ${tally.unchecked} · 没有可复核的区间 ${tally.no_evidence}`}
         right={<TriState tri={ev.relations_tri} label="relations" />}
       >
+        <PartialRows note={rowsNote(ev, "relations", ev.relations.length)} />
         {isUnreadable(ev.relations_tri) ? (
           <span class="empty">这一栏没查成 —— 那五个数不是 0，是没读到。</span>
         ) : ev.relations_tri === "not_applicable" ? (
@@ -764,6 +853,7 @@ export function Evidence() {
         subtitle={`${ev.verifications.length} 条 · reviewed 按证明逐条`}
         right={<TriState tri={ev.verifications_tri} label="verifications" />}
       >
+        <PartialRows note={rowsNote(ev, "verifications", ev.verifications.length)} />
         <div class="readings">
           这一栏是 V 的签名行：<span class="mono">verdict</span> 只有「成立」显绿，其余档显黄
           （不假装通过）；<span class="mono">unresolved_errors</span> 与「证明一致」那一格要一起读，
@@ -817,6 +907,7 @@ export function Evidence() {
         subtitle={`${ev.secretary.length} 条`}
         right={<TriState tri={ev.secretary_tri} label="secretary" />}
       >
+        <PartialRows note={rowsNote(ev, "secretary", ev.secretary.length)} />
         {isUnreadable(ev.secretary_tri) ? (
           <span class="empty">这一栏没查成（不是"0 条"）。</span>
         ) : ev.secretary_tri === "not_applicable" ? (

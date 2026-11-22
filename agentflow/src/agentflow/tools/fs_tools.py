@@ -2284,7 +2284,7 @@ def _selftest() -> int:
         # ---- 符号链接逃逸（环境不支持创建链接时跳过，并如实说明）
         print("\n[3] 负面：符号链接逃逸")
         outside = Path(_tempfile.mkdtemp(prefix="agentflow_fs_outside_")).resolve()
-        (outside / "secret.txt").write_text("外部机密", encoding="utf-8")
+        (outside / "secret.txt").write_text("外部机密", encoding="utf-8", newline="\n")
         link = sandbox / "escape_link"
         link_ok = False
         try:

@@ -215,12 +215,16 @@ class FetchResult:
         """把"失败的下载必须带上受控原因"变成构造期的硬约束（`F-6`）。
 
         为什么不能只在 `HttpDownloader` 里记得填：`FetchResult` 是下载层的
-        公共返回类型，任何下载器实现（`demo.FixtureDownloader`、测试里的假下载器）
-        都能造它。判据落在类型自己身上，才不依赖"每个实现都记得"。
-        这条约束没有例外：第一版把 `http_status is None` 当例外，于是
-        `demo.FixtureDownloader` 的两条失败路径合法地不带档 —— 那正是
+        公共返回类型，任何下载器实现（测试里的假下载器、调用方自己写的
+        `abfixture:` 一类本地下载器）都能造它。判据落在类型自己身上，才不依赖
+        "每个实现都记得"。这条约束没有例外：第一版把 `http_status is None` 当例外，
+        于是本地夹具下载器的两条失败路径合法地不带档 —— 那正是
         "合约改了、调用方没跟"的口子。`F-6` 的判据是"失败的下载必须答得出
         为什么"，没有"连 HTTP 层都没到就不算失败"的道理。
+
+        （2026-11-22 DEMORETIRE：正文原先点名 `demo.FixtureDownloader`；那个类随
+        `agentflow/demo/` 退场已删除，这里改成"本地夹具下载器"这一类说法 ——
+        约束本身与它无关。）
         """
         if not is_controlled_error_kind(self.kind):
             raise ValueError(

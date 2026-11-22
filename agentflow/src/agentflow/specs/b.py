@@ -25,7 +25,8 @@ from ..agentspec import (
     BuilderDeps,
     _obj,
 )
-from .b_ingest_policy import INGEST_POLICY, STAGE_TWO_BOUNDARY, STAGE_TWO_DUTY
+from .b_ingest_policy import (
+    B_METHOD_POLICY, INGEST_POLICY, MULTI_PROOF_POLICY, STAGE_TWO_BOUNDARY, STAGE_TWO_DUTY)
 from .b_sign_policy import SIGN_SUBMIT_POLICY
 
 #: 本角色的动作表。
@@ -307,8 +308,9 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "B", "ingest_manuscript",
         "**位置与格由你指定，工具按块回填**：给 `manuscript`（稿）、`target_stmt_id`（录到哪一条命题）"
         "与 `cells`（要填哪几格：statement_full / proof_text / dependencies / kind / numeric_evidence），"
-        "框架从稿里按块提取、只回填你点名的格。`target_stmt_id` 是权威：稿头 `- 命题号：` 与它不一致 ⇒ "
-        "受控拒 `manuscript_points_elsewhere`（**不重定向**）。要先用 `mode=preview` 看「会写哪几格 / 有没有冲突」，再 `mode=apply` 真正"
+        "框架从稿里按块提取、只回填你点名的格。`target_stmt_id` 是权威：**稿里没有命题号**"
+        "（2026-11-13 裁定，任何稿都没有那一行）—— 别从稿头找号；工具也**不重定向**："
+        "录到哪一条只由你给的 `target_stmt_id` 决定。要先用 `mode=preview` 看「会写哪几格 / 有没有冲突」，再 `mode=apply` 真正"
         "回填；`mode=register` 登记新命题（继承「按手稿路径收录」那条路，`target_stmt_id` 必须空）。"
         "**派生列永远不许指定**（label / evidence_kind / origin / line_range / bits / proof_no / "
         "proof_sha256 / proof_authors / stmt_id）：它们由框架洗、由签现算、或是写口回执。`mode=apply` "
@@ -329,6 +331,16 @@ ACTIONS: tuple[ActionSpec, ...] = (
             # 做得到的那一件；台账 note 那半句删掉 —— 台账那一笔的 note 是框架拼的，
             # 不读调用方这一格。
             "reason": {**_S, "description": "可选：一句话说明这一笔为什么录（落进返回值的 `caller_reason`，不参与判据）"},
+            # 2026-11-21（PA2 规矩 2）：`path_group` 是实现的真形参（`agent_b/ingest_manuscript.py`
+            # 的 `_path_group_parameter` 为它写了两个受控码），也是提示词在教的优化线坐标
+            # （`b_ingest_policy.STAGE_TWO_DUTY` 与 `closing._optimization_next_step` 都点名它），
+            # 但声明面此前漏了它 ⇒ 经参数门（`conductor._check_params` → `validate_params`，
+            # `additionalProperties: False`）照提示词写会被判未声明键。补声明，不改实现。
+            "path_group": {**_I, "minimum": 0,
+                           "description": "优化线显式点名的已存在路径号（≥1，只在 `mode=apply` 收）："
+                                          "换第 N 份正文走这条线；普通登记不传（0）。秘书在事务里核"
+                                          "「第 n 条路径在册、且这一份稿对得上它」，核不过 ⇒ 受控拒 "
+                                          "`path_not_found` / `path_mismatch`"},
         }, ("manuscript",)),
         "dict（ok / mode / manuscript / target / requested_cells / cells / diff / derived_write / write / refused / reason / caller_reason）—— `diff` 逐格拉平「请求格 vs 实填格」；`mode=register` 另带 `register` 与 `pointer` 读数",
         side_effect="write_local", handler_name="ingest_manuscript", external="none",
@@ -447,6 +459,9 @@ SPEC = AgentSpec(
             STAGE_TWO_BOUNDARY,
         ),
         policy=(
+            # 方法学那一条住 `specs/b_ingest_policy.py`（`B_METHOD_POLICY`，逐字不动）；
+            # 搬出理由与 `INGEST_POLICY` 相同 —— 只为把本文件留在 800 行线内。
+            *B_METHOD_POLICY,
             # 非 M 的父也拿得到这件工具，而 `conductor.board` 只给 M（他们看不到 `revocable` 格）
             # ⇒ 这一句是他们唯一的说明书。
             "**你能撤子代理的板项**：孩子名下不再需要做的项，用 "
@@ -481,7 +496,7 @@ SPEC = AgentSpec(
             "`verifications/<命题号>.jsonl` 里那一签**是 `signed`**，而 `signed` 要三条同时成立 ——"
             "① 这条命题的 `proof_text` 非空（没有被审的那份证明，「审过」无从谈起）；"
             "② 那一签盖的是**现行这一份正文**（`proof_sha256` 与现在这一版的 sha256 相符）；"
-            "③ 同一份正文上**框架判满它的门槛**（`SIGN_STREAK_NEED`）干净「成立」：引用核实全是 `consistent` / `weaker`，"
+            "③ 同一份正文上**框架判满它的门槛**（门槛的计数由框架按这一趟现数，你只读结果）干净「成立」：引用核实全是 `consistent` / `weaker`，"
             "且 findings 里没有未解决的 error。"
             "**只有 `signed` 才够 `pre_theorem`**：`holding`（轴是 clean、盖的也是现行这一版，但门槛还没到）"
             "与**单次「成立」**都不够，照它报会被写入期闸按 `proof_review_without_evidence` 整笔拒收"
@@ -492,7 +507,7 @@ SPEC = AgentSpec(
             "（签还没到位就再看 `review_standing`：`holding` 可以再走查；`rejected` 要**先改稿**、"
             "正文 sha 变了再送 —— 同一份正文重送会原样返回「打回站住」）；"
             "② 如实降到弱等级，并在 `quote_reason` 里写「还没有 V 的签名」—— 别把'拿不准'写成默认值。"
-            "**`evidence_kind` 只是历史列**：它由等级反算（`evidencebits` 的 `kind_from_grade`）落盘，判定面不读它；"
+            "**`evidence_kind` 只是历史列**：它由等级反算落盘，判定面不读它；"
             "你要说的是**等级**，别去挑那个历史列的名字。"
             "改命题的正文：把同一份内容**再交一次** `own.register_statement`。"
             "通用写口可改 `statements` 的**非正文三格**（含 `status` / `kind` / `quote_reason`），"
@@ -524,8 +539,8 @@ SPEC = AgentSpec(
             # 「自动录入」这一条的教法必须写清"谁指定什么、工具做什么"。
             "**收录是「你指定位置和格、工具按块回填」，不是工具替你决定录到哪一条**："
             "`own.ingest_manuscript` 的两个坐标都由你给 —— `target_stmt_id` 是**位置**"
-            "（录到哪一条命题；稿头 `- 命题号：` 与它不一致 ⇒ 受控拒 "
-            "`manuscript_points_elsewhere`，**工具不会把这一笔挪到别的行**），"
+            "（录到哪一条命题；**稿里没有命题号**（2026-11-13 裁定），别从稿头找，"
+            "**工具也不会把这一笔挪到别的行** —— 位置只由你给的这个号决定），"
             "`manuscript` 是**那一份稿**（路径号由收录时按已有路径数分配，同 sha 沿用；"
             "新写不产生 `-p<N>`）；"
             "`cells` 是**格**（闭集：`statement_full` / `proof_text` / `dependencies` / "
@@ -545,7 +560,7 @@ SPEC = AgentSpec(
             "（V 只对手稿负责，不需要知道这是概念）；签回来之后用 "
             "`own.ingest_manuscript(apply, cells=[\"proof_text\"], target_stmt_id=<概念号>)` "
             "按位置与格收录 —— 那一节就进 concept 行的 `proof_text`（「良定义证明」这一格）。"
-            "**概念没有等级轴**（等级现算函数 `derive_grade` 对 `kind=\"concept\"` 短路成 "
+            "**概念没有等级轴**（等级现算：`kind=\"concept\"` 一律 "
             "`not_applicable`）：不要给它报等级、也不要说它是哪一级定理；这一格要的是「良定义证明有没有 V 签」，不是「它在等级链上排第几」。没有签就先把稿送去签、"
             "签回来再收录，别把正文直接塞进 `proof_text`（写入期会清空并留读数）。",
             # 概念行的两道 origin 口径必须一次教全 —— 只教「文献术语要 external_lit」不够：
@@ -616,25 +631,9 @@ SPEC = AgentSpec(
             "它判`判不了`/`没查成`时这一格没有档位（那是「这一格没查成」，不是「合格」）；"
             "工具结果里带 `text_truncated` 时，判不了的原因是「输入被截断」（正文在 X 字处被切），"
             "不是「材料不足」——修法是把正文拆段重交。",
-            # 同一条定理的多种证明：机制早就在（`proofs` / `used_by="stmt:<号>#pN"` /
-            # `path_group` / `reviewed_by_proof` / 对应表的 `proof_no`），缺的是"用户要几种
-            # 证明时该落成什么形状"的口径，所以这一条是正向政策：写清形状，也写一句反向
-            # 判据（别拆成几条命题）。
-            "**同一条定理的多种证明只占一条 stmt，不占多条命题**：用户要「几种证明语言 / 几条独立"
-            "路径」时，目标是同一条命题的**多条证明路径**（`path_group` 1..N），不是 N 条独立命题。"
-            "登记时**逐份交稿**：**B 的稿号是自己的号段**（`reports/b-proof-<B稿号>.md`）——"
-            "**同一命题的第二份证明是另一份稿**（另一个 B 稿号），不是同一份稿的第 N 个版本，"
-            "新写也不产生 `-p<N>` 名字；路径号由你收录时分配（同一命题已有 N 条 ⇒ N+1，"
-            "同一份正文 sha 重复收录 ⇒ 沿用原号）。**不要用内联的 `proofs=[…]` 交正文**"
-            "（那条路没有稿、依赖面恒 0、签也没有落点）。**每条证明各自要 V 的签**："
-            "`bits.evidence.reviewed_by_proof` 按路径逐份记（`{\"1\": true, \"2\": false}`），"
-            "一份签了不代表另一份签了，也不许拿一份的签替另一份背书。每条证明用到的依赖按 "
-            "`used_by=\"stmt:<命题号>#pN\"` ＋ `path_group` 标明它属于哪条路径（`deps` 两维："
-            "外层 = 可选路径、内层 = 一条路径上的步骤），C 才能按不同的依赖面追出不同的证明路径。"
-            "论文对应表里同一条命题按证明路径占多行。"
-            "**反向判据：不要把同一条定理拆成多条命题** —— 表述不同（极大 p-子群版 / |G|=p^a·m 版 / "
-            "归纳版）不等于不同命题；拆开之后路径只剩一组，多证明机制一次都不会被触发。"
-            "判重先问「这是不是同一条」，再问「这是它的另一份证明吗」。",
+            # 同一条定理的多种证明那一条住 `specs/b_ingest_policy.py`（`MULTI_PROOF_POLICY`，
+            # 逐字不动）；搬出理由与 `INGEST_POLICY` 相同 —— 只为把本文件留在 800 行线内。
+            *MULTI_PROOF_POLICY,
             # 收录与识稿那十二条（E 两族 / 收录先查 / 只递指针 / `## 证明` 三态 / 手稿名五档 /
             # 签的两格读数 / 签块第 9 格 / 两根轴判不了 / 短证明 / 命题节走动作 /
             # 第一阶段快录与第二阶段只看 optimized 那一格 / 一批录完回执点名第二阶段欠账）住
@@ -683,16 +682,18 @@ SPEC = AgentSpec(
         signature_error="把规则抽取器的产出当成模型抽取的产出。",
         # 交付物两截都在：登记是快录（第一阶段），优化才是主职（第二阶段）。只写第一截，
         # 收工时就没人问「这一批洗完了吗」—— 真机 lp-ball-13 的 13 条命题一条 true 都没有。
-        deliverable=("① 登记面（第一阶段・快录）：`statements` 里的概念行"
-                     "（`kind=\"concept\"` —— 并表之后概念不再单独一张表）与 `relations` 行，"
-                     "每条关系带 quote / page_range / quote_verified；"
-                     "② 优化面（第二阶段・逐个优化）：这一批里**每一份证明**都带处置结论 —— "
-                     "洗过的给 `reports/b-proof-<B稿号>.md` 副本、盖在新正文上的 V 签、"
-                     "逐份 `optimized_by_proof[证明号]=true` 与进 `proof_history` 的旧正文；"
-                     "没洗完的给「还剩哪几份、卡在哪」（`optimized_blocked` 的原话带回去）。"),
+        deliverable=("交付状态 —— 交给谁：派你这趟活的那一方（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名）"
+                     "+ 送稿方（F / E / A 的回执随这一趟的返回值带回）；"
+                     "形态：`statements` 行（第一阶段・快录：概念行与命题行）+ `relations` 行 + "
+                     "`reports/b-proof-<B稿号>.md` 副本（第二阶段・逐个优化）；"
+                     "可核字段：`statements.stmt_id` / `statements.kind` / "
+                     "`statements.quote_verified` / `statements.proof_text` / "
+                     "`relations.quote` / `relations.page_range` / `relations.quote_verified`；"
+                     "算做完：每一份送来的证明都有处置结论 —— 洗过的给副本、盖在新正文上的 V 签，"
+                     "没洗完的逐份点名还剩哪几份、卡在哪；每条关系的 `quote_verified` 有值（true / false / 未核到，不许空）。"),
         stance=(
             "读到与已有概念冲突的表述时，先追到原文那一句，再判是同一个概念的两种说法，还是两个概念 —— 这是你的高观点：概念行的结构比条数重要。",
-            "抽取是给下游用的：你写下的定义要能让 D 直接拿去推理，而不是一句只能看着像定义的句子。",
+            "抽取是给下游用的：定义要写成 `statement_full` 那一句自足的话（条件、量词、指代都在句内），D 与 V 读到的就是同一句 —— 要靠翻上下文才读得懂的定义，等于没定义。",
             "发现正文里的论证本身有漏洞时，写进草稿本并公开说出去，不要悄悄按你的理解补全。",
             # 第二阶段是这一岗的价值所在：登记只是把原文搬进来，洗过的那一版才是下游能读的东西。
             "登记只是把原文搬进来；**这一岗的价值在第二遍** —— 把机械录入的那一版洗到读得懂、"

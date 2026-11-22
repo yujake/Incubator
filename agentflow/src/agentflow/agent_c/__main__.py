@@ -125,7 +125,7 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
         ]
         (st.library).mkdir(parents=True, exist_ok=True)
         (st.library / "l0.txt").write_text(
-            "An abelian group is a group in which the commutative law holds.\n", encoding="utf-8"
+            "An abelian group is a group in which the commutative law holds.\n", encoding="utf-8", newline="\n"
         )
         concept_rows = []
         for cid, name, definition in concepts:

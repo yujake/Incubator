@@ -2176,7 +2176,7 @@ class _Core:
             path = Path(root) / rel
             path.parent.mkdir(parents=True, exist_ok=True)
             fresh = (not path.exists()) or path.stat().st_size == 0
-            with path.open("a", encoding="utf-8") as fh:
+            with path.open("a", encoding="utf-8", newline="\n") as fh:
                 if fresh:
                     fh.write(self._report_header(plan))
                 fh.write(line.rstrip() + "\n")
@@ -2345,7 +2345,7 @@ class _Core:
             kept = self._registered_entry_text(root, rel)
             if kept is None:
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(new_text, encoding="utf-8")
+                path.write_text(new_text, encoding="utf-8", newline="\n")
             else:
                 out["entry_preserved"] = True
         except OSError as exc:
@@ -5163,7 +5163,7 @@ def selftest() -> int:
         "import json\n"
         "print('REPRO_RESULT: ' + json.dumps({'result':'supports','evidence_kind':'cross_check',"
         "'observations':{'n':10},'counterexample':None,'negation_kind':'not_proved'}))\n",
-        encoding="utf-8",
+        encoding="utf-8", newline="\n",
     )
 
     # 自检里的"工具层建计划"那一格用另一个 F 桶（`actor=`）：本自检在前面已经立了

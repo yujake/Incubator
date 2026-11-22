@@ -385,7 +385,7 @@ def _run_selftest_checks(check, counts: dict[str, int]) -> None:
     def put_script(name: str, body: str) -> str:
         p = root / name
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(body, encoding="utf-8")
+        p.write_text(body, encoding="utf-8", newline="\n")
         return name
 
     e = AgentE(st, workspace_root=root)

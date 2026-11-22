@@ -32,8 +32,8 @@
 （`summary` 是进留言的那一句话：`[手稿 NNNN] <summary>`；`body` 是 markdown 正文）。
 
 收件人的绝对编码另占两格：
-`to_task_id`（具体收件人 ⇒ 它的台账号）与 `to_task_ids`（`to=ALL` ⇒ 发信人此刻的
-直接子代理编号）。`task_id` 那一格本来就是发信人的台账号。两格都是「有就带上」：
+`to_task_id`（具体收件人 ⇒ 它的台账号）与 `to_task_ids`（历史写法 `to=ALL` 的旧行 ⇒
+发信人当时的直接子代理编号）。`task_id` 那一格本来就是发信人的台账号。两格都是「有就带上」：
 旧账里没有这两格，读侧照实写「旧账无号」，不许拿角色名拼一个编号出来
 （拼出来的那个数字看起来像证据，其实是猜）。
 
@@ -420,7 +420,7 @@ def write(root: str | Path, *, sender: str, recipient: str, title: str = "", bod
     正文为空。"空手稿"必须被拒：它是"我交接了"的假证据，而这一层存在的全部意义就是可溯源。
 
     `to_task_id` / `to_task_ids`：收件人的绝对编码，由调用方给
-    （具体收件人 ⇒ 它的台账号；`to=ALL` ⇒ 发信人此刻的直接子代理编号列表）。为什么是
+    （具体收件人 ⇒ 它的台账号；历史写法 `to=ALL` 的旧行 ⇒ 发信人当时的直接子代理编号列表）。为什么是
     调用方给而不是这里现算：这一层不知道名册，算出来只能是猜；而解析处
     （`agent_loop._do_handoff` → `_handoff_address`）手里本来就有那个实例的 `task_id`。
     "编号在写侧就落进行里"是这一条的全部要点 —— 读侧只做展示，不许自己拼。
@@ -453,7 +453,8 @@ def write(root: str | Path, *, sender: str, recipient: str, title: str = "", bod
         raise ValueError(f"发件人必须是 {sorted(set(S.ROLES) | {S.CONDUCTOR_ROLE})} 之一，收到 {sender!r}")
     if not valid_recipient(recipient):
         raise ValueError(f"收件人必须是 {sorted(set(S.ROLES) | {S.CONDUCTOR_ROLE, ALL})} 之一"
-                         f"（给所有人写 {ALL}），收到 {recipient!r}")
+                         f"（`{ALL}` 只是老数据的读侧写法：写入已退场，代理写入口会对它"
+                         f"受控拒绝 `broadcast_retired`），收到 {recipient!r}")
     if not one_line:
         raise ValueError(
             "summary 不能为空（它就是留言里那一句 `[手稿 NNNN] <summary>`）—— "
@@ -663,7 +664,7 @@ def _with_legacy(root: str | Path, ledger_rows: Iterable[Mapping[str, Any]],
 
 
 def list_all(root: str | Path, *, to: str = "", sender: str = "", limit: int = 50) -> list[dict[str, Any]]:
-    """列手稿（可按收件人/发件人过滤；`to=ALL` 也把广播给所有人的那批算进来）。
+    """列手稿（可按收件人/发件人过滤；`to=ALL` 只看老数据里的广播行 —— 写入已退场）。
 
     新格式（账本行）与旧格式（`.md` 文件）都列出来；旧的那些带 `format=md_legacy`。
     """
@@ -682,7 +683,7 @@ def query(root: str | Path, *, mid: str = "", to: str = "", sender: str = "",
           since: str = "", refs: str = "", limit: int = 50) -> tuple[list[dict[str, Any]], list[str]]:
     """脚本用的检索面（`scripts/manuscripts_query.py` 的唯一实现）。
 
-    过滤口径：`mid` 精确；`to`/`sender` 精确（`to=ALL` 只给广播）；`since` 按 ISO 时间字符串
+    过滤口径：`mid` 精确；`to`/`sender` 精确（`to=ALL` 只给老数据里的广播行）；`since` 按 ISO 时间字符串
     前缀比（`2026-10-05` 这种日期前缀就够用）；`refs` 是"引用了这个编号/对象"的子串匹配。
     返回 `(命中行, 坏行说明)` —— 坏行照样报出来（"读不出"不许被读成"没有"）。
     """

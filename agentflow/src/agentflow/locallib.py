@@ -53,15 +53,20 @@ from . import dedup as D
 from . import interactions as I
 from . import litread as LR
 from . import schema as S
+from . import sysresidue as _SR   # SYSRESIDUE ④：`_keys` / `dedup_key` 只有一处算（与 A、search 同源）
 from .extract import extract_text
 from .store import Store
 
 __all__ = [
     "BookPlan",
+    "DECLARATION_ABSENT",
     "DECLARATION_NAME",
+    "DECLARATION_READ",
+    "DECLARATION_UNREADABLE",
     "IngestReport",
     "LocalHit",
     "declaration_path",
+    "declaration_verdict",
     "excerpt_for",
     "ingest_directory",
     "is_declared",
@@ -84,6 +89,19 @@ _SAFE_RE = re.compile(r"[^0-9A-Za-z._\u4e00-\u9fff-]+")
 #: 形状：`{"paths": ["a.pdf", "b/"], "verbatim": "<用户原话>"}`。它是唯一的入库
 #: 白名单：用户提示词里没点名的文件只能是研究参考，不许进 `literature`。
 DECLARATION_NAME = "RELIABLE-REFERENCES.json"
+
+#: 声明判据的三态（`declaration_verdict` 的 `state`；唯一词表）。
+#:
+#: * `DECLARATION_READ` —— 声明在盘上、读得出来：这一档才有 `paths` 可匹配；
+#: * `DECLARATION_ABSENT` —— 声明不在盘上：用户没点名（fail-closed，一份都不许入库）；
+#: * `DECLARATION_UNREADABLE` —— 声明在盘上但读不出来 / 形状不对：没查成（unchecked），
+#:   既不能折成「用户没点名」，也不能折成「用户点名了」。
+#:
+#: 为什么单列这三个名字：调用方（`search.ingest_local` 与 `search.register`）都要按
+#: 三态给不同的读数与拒因；各写一份字面量迟早会漂，而漂了不会报错。
+DECLARATION_READ = "read"
+DECLARATION_ABSENT = "absent"
+DECLARATION_UNREADABLE = "unreadable"
 
 
 def sha256_file(path: Path) -> str:
@@ -140,10 +158,12 @@ def list_books(root: Path | str, *, pattern: str = "*.pdf") -> list[Path]:
 # `{"paths": ["a.pdf", "b/"], "verbatim": "<用户原话>"}`。这份文件是唯一的白名单
 # 真身；A 不另判，`search.ingest_local` 与 `A.ingest_local` 的非 dry 档都按它核。
 #
-# 边界（有意为之）：声明只管工作区内的文件（工作区参考材料的投放处是 `source/`
-# 与 `library/`）。工作区外的目录是调用方自己的书架，路径写不进工作区相对的
-# `paths`，也就不受这份声明约束 —— 那是「人/A 主动点名一个外部目录」的显式动作，
-# 不在本白名单要挡的那条路上。
+# 边界（2026-11-21 DGWIDE ④ 收紧）：声明只管工作区内的文件（工作区参考材料的投放处是
+# `source/` 与 `library/`）。工作区外的目录不再被当成"调用方自己的书架"放行：
+# 声明里的 `paths` 是工作区相对路径、表达不了外部路径，于是"这一批文件被用户点名了吗"
+# 这个问题在工作区外答不出来 —— 按 fail-closed 拒，与 `search.register` 对工作区外
+# `path` 的口径一致。要收外部书架，先把文件放进工作区并由用户点名（或者在候选链里
+# 按候选行 + 读过正文的准入依据走 `lit.admit`）。`dry_run` 是发现档，不受这条影响。
 
 
 def declaration_path(workspace_root: Path | str) -> Path:
@@ -212,34 +232,117 @@ def is_declared(rel_path: str, declarations: Iterable[str]) -> bool:
     return False
 
 
+def declaration_verdict(workspace_root: Path | str,
+                        rel_paths: Iterable[str] = ()) -> dict:
+    """把一批工作区相对路径对用户声明核一遍：声明判据的唯一实现。
+
+    ## 为什么要有这一格（DECLAREGATE，2026-11-21）
+
+    声明闸此前只长在 `search.ingest_local` 的非 dry 档（`undeclared_workspace_books`），
+    而 `search.register` 是另一条能把工作区文件收编进 `library/` 并写成 `literature`
+    行的直写口 —— 它一份声明都不核（真机 lp-ball-12 的 lit:000000 就是这样把
+    `downloads/` 里那份 PDF 收编进库的）。两条口要判的是同一条：这份文件被用户点名
+    了吗。所以判据只能有一份，放在这里；`undeclared_workspace_books`（ingest_local
+    的批量核）与 `search.register`（单份核）都从它上面走。
+
+    ## 三态
+
+    * 声明文件不在盘上 ⇒ `state=DECLARATION_ABSENT`（没点名；调用方按 fail-closed 拒）；
+    * 声明在盘上但读不出来 / 形状不对 ⇒ `state=DECLARATION_UNREADABLE`
+      （`checked=False`：这是「没查成」，拒信不许说成「你没声明」）；
+    * 读出来了 ⇒ `state=DECLARATION_READ`（`checked=True`），`undeclared` 逐条列出
+      没被点名的那些（空元组 = 全被点名覆盖）。`paths=[]`（用户这一次没点名）落在
+      这一档、`undeclared` 就是全部 —— 不是 `ABSENT`，两者不可折叠。
+
+    `rel_paths` 为空时只回答声明本身的状态（`undeclared=()`）：调用方要的若是
+    "声明读得出来吗"这一个问题，不必编一个假路径进来。
+    """
+    root = Path(workspace_root)
+    path = declaration_path(root)
+    declared, problem = read_declaration(root)
+    rels: list[str] = []
+    for raw in rel_paths:
+        rel = _norm_rel(raw)
+        if rel and rel not in rels:
+            rels.append(rel)
+    if problem:
+        state = DECLARATION_UNREADABLE
+    elif path.is_file():
+        state = DECLARATION_READ
+    else:
+        state = DECLARATION_ABSENT
+    return {
+        "state": state,
+        # `checked` 只回答「声明查成了没有」，不回答「这份文件能不能入库」。
+        "checked": state == DECLARATION_READ,
+        "declaration": str(path),
+        "paths": tuple(declared),
+        "undeclared": tuple(rel for rel in rels if not is_declared(rel, declared)),
+        "problem": problem,
+    }
+
+
 def _workspace_pairs(workspace_root: Path | str, root: Path | str,
                      *, pattern: str = "*.pdf") -> list[tuple[str, Path]]:
-    """`root` 下、确实位于工作区内的文件：`[(工作区相对 posix 路径, 绝对路径)]`。"""
+    """`root` 下、确实位于工作区内的文件：`[(工作区相对 posix 路径, 绝对路径)]`。
+
+    工作区外的文件不在这里被跳过了（2026-11-21 DGWIDE ④）：`undeclared_workspace_books`
+    先单独把它们捞出来、按 fail-closed 拒（声明表达不了工作区外的路径）；本函数只负责
+    "工作区内那一批"的路径换算，于是两个调用方（工具与动作）拿到的是同一份判据。
+    """
     workspace = Path(workspace_root).resolve()
     out: list[tuple[str, Path]] = []
     for src in list_books(root, pattern=pattern):
         try:
             rel = src.resolve().relative_to(workspace).as_posix()
         except (OSError, ValueError):
-            continue                       # 工作区外：不受这份声明约束（见本节边界）
+            continue                       # 工作区外：由 `_outside_workspace_books` 单独判
         out.append((rel, src))
+    return out
+
+
+def _outside_workspace_books(workspace_root: Path | str, root: Path | str,
+                             *, pattern: str = "*.pdf") -> list[Path]:
+    """`root` 下那些解析之后落不到工作区里的文件（含软链逃逸）。"""
+    workspace = Path(workspace_root).resolve()
+    out: list[Path] = []
+    for src in list_books(root, pattern=pattern):
+        try:
+            src.resolve().relative_to(workspace)
+        except (OSError, ValueError):
+            out.append(src)
     return out
 
 
 def undeclared_workspace_books(workspace_root: Path | str, root: Path | str,
                                *, pattern: str = "*.pdf") -> tuple[list[str], str]:
-    """`root` 下那些工作区内、但没被用户声明的文件 + 声明本身的问题。
+    """`root` 下那些没被用户声明的文件 + 声明本身的问题。
 
-    空列表 = 这一批可以入库（要么全被声明覆盖，要么这些文件全在工作区外）。
+    空列表 = 这一批可以入库（这些文件全被声明覆盖）。
     `problem` 非空时声明读不出来 ⇒ 调用方仍应拒绝（fail-closed），只是拒信能说清
     "是声明坏了"而不是"你没声明"。
+
+    ## 工作区外的文件按 fail-closed 拒（2026-11-21 DGWIDE ④）
+
+    改前这一档是"跳过"：`_workspace_pairs` 把工作区外的文件扔掉 ⇒ `undeclared` 为空
+    ⇒ 调用方读成"全被声明覆盖" ⇒ `search.ingest_local` / `A.ingest_local` 能把任意
+    外部目录整批收编进 `literature`。那是 DECLAREGATE 列出的第 ④ 条绕行口。
+    声明里的 `paths` 是工作区相对路径，表达不了工作区外的文件 ⇒ 与 `search.register`
+    的工作区外路径同口径：拒（不是"跳过"）。`dry_run`（发现档）不经过本函数，
+    所以"先发现、再定声明"的用法不受影响。
+
+    判据本体是 `declaration_verdict`（与 `search.register` 共用）；本函数只负责
+    "把目录里的文件分成工作区内/外两批"这一件事。
     """
+    outside = _outside_workspace_books(workspace_root, root, pattern=pattern)
+    if outside:
+        # 绝对路径原样点名：声明是工作区相对的，这些路径一条都表达不了。
+        return [str(p) for p in outside], ""
     pairs = _workspace_pairs(workspace_root, root, pattern=pattern)
     if not pairs:
         return [], ""
-    declarations, problem = read_declaration(workspace_root)
-    bad = [rel for rel, _src in pairs if not is_declared(rel, declarations)]
-    return bad, problem
+    verdict = declaration_verdict(workspace_root, [rel for rel, _src in pairs])
+    return list(verdict["undeclared"]), str(verdict["problem"] or "")
 
 
 @dataclass
@@ -282,12 +385,16 @@ class IngestReport:
     dry_run: bool = False
     limit: int | None = None
 
-    #: 固定四档，零值在场：把"没扫到"与"扫到了但跳过"分开。
+    #: 固定五档，零值在场：把"没扫到"与"扫到了但跳过"分开。
+    #:
+    #: `no_dedup_key`（SYSRESIDUE ④）：题名规范化之后没有可判重的内容 ⇒ 这一本
+    #: 不进 `literature`。它不是 `unreadable`（正文读不出来）也不是
+    #: `skipped_limit`（配额）—— 处置是"补一个能归一化的题名/DOI 再来"。
     STATUSES: tuple[str, ...] = ("ingested", "already_present", "skipped_limit",
-                                 "skipped_too_large", "unreadable")
+                                 "skipped_too_large", "unreadable", "no_dedup_key")
 
     def counts(self) -> dict[str, int]:
-        """按固定四档数一遍（零值也在场："没扫到"与"扫到了但跳过"分得开）。"""
+        """按固定五档数一遍（零值也在场："没扫到"与"扫到了但跳过"分得开）。"""
         out = {k: 0 for k in self.STATUSES}
         for b in self.books:
             out[b.status] = out.get(b.status, 0) + 1
@@ -432,6 +539,25 @@ def ingest_directory(
             report.books.append(plan)
             continue
 
+        # ---- SYSRESIDUE ④：两个去重格（`_keys` / `dedup_key`）与 A、`search.register`
+        # 同一处算（`sysresidue.literature_dedup_cells`），而且先判再搬文件 ——
+        # 改前这一支在键集为空时写空串、`search.register` 那一支写
+        # `title:<norm>|*`，两个口径各自自洽，读侧 `dedup._row_keys` 两处都收，
+        # 于是"同一本书两个主键"永远不会报错。没有主键的书现在不登记，
+        # 也一个字节都不搬进 `library/`（受控拒要在写任何东西之前）。
+        title = src.stem.replace("_", " ").strip() or name
+        keys, dedup_key = _SR.literature_dedup_cells(title, None, None)
+        cell_problems = _SR.dedup_cells_problems(
+            {"title": title, "year": None, "doi": None,
+             "dedup_key": dedup_key, "_keys": keys}, keys=keys)
+        if cell_problems:
+            plan.status = "no_dedup_key"
+            plan.note = ("dedup_key 是空串：题名规范化之后没有可判重的内容，"
+                         "这一本不进 literature（补一个能归一化的题名或 DOI 再来）")
+            _SR.note_dedup_refusal(store.root, where=name, problems=cell_problems)
+            report.books.append(plan)
+            continue
+
         lib.mkdir(parents=True, exist_ok=True)
         dest = lib / name
         if not dest.exists() or sha256_file(dest) != sha:
@@ -441,7 +567,6 @@ def ingest_directory(
                       actor=actor, note=note or "ingest local books") as tx:
             lit_id = tx.alloc_id("lit")
             req_id = I.next_prefixed_id(tx.rows("search_requests"), "request_id", "r")
-            title = src.stem.replace("_", " ").strip() or name
             tx.upsert(
                 "search_requests",
                 S.SearchRequest(
@@ -463,12 +588,8 @@ def ingest_directory(
                 ).to_dict(),
             )
             # 落库键：与 `dedup._row_keys` 读的是同一族（它读 `dedup_key` 与 `_keys`
-            # 两处），所以这里直接调 `dedup.literature_keys` 生成，不另写一份
-            # `title:...|*` 的口径 —— 抄第二份必然漂，而漂的形式是"同一本书两个
-            # 主键"：判重的键读侧看不见这一行，同一本书会被再登记一次。
-            # 本地藏书没有 DOI 与年份，所以键集只有标题那一档；标题规范化成空串
-            # 时键集为空，那就如实留空（不编一个匹配不到任何东西的假键）。
-            keys = D.literature_keys(title, None, None)
+            # 两处），而算法只有 `sysresidue.literature_dedup_cells` 一处
+            # （上面已经算好，判据也在上面过了一遍）。
             lit_row = S.Literature(
                 lit_id=lit_id,
                 title=title,
@@ -477,7 +598,7 @@ def ingest_directory(
                 path=name,
                 processed=False,
                 source_request_ids=[req_id],
-                dedup_key=keys[0] if keys else "",
+                dedup_key=dedup_key,
                 added_at=S.now_iso(),
                 download=LR.with_fulltext({
                     "status": "ok",

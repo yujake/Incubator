@@ -45,10 +45,13 @@ from typing import Any
 from . import conceptrows as CR
 from . import settings as SET
 from .locallib import (
+    DECLARATION_NAME,
+    declaration_verdict,
     ingest_directory,
     local_fetch_fn,
     memo_extract_fn,
     search_fn_for_store,
+    undeclared_workspace_books,
 )
 from .store import Store
 
@@ -56,6 +59,7 @@ __all__ = [
     "DEFAULT_PROJECTS_DIR",
     "ProjectRef",
     "RunRecord",
+    "books_declaration_refusal",
     "classify",
     "create_project",
     "list_projects",
@@ -510,6 +514,128 @@ def plan(root: Path | str, name: str | None = None, *, start: str = "auto",
     }
 
 
+#: 这一批"要登记的书"落不到工作区里时 `declaration_state` 的取值（与
+#: `search_tools._h_ingest_local` / `_declaration_refusal` 同一套词表：声明是工作区
+#: 相对路径，表达不了工作区外的文件 ⇒ 不折成"你没点名"，而是"声明表达不了它"）。
+BOOKS_OUTSIDE_WORKSPACE = "outside_workspace"
+
+
+def books_declaration_refusal(workspace_root: str | Path | None,
+                              books_dir: str | Path, *,
+                              pattern: str = "*.pdf",
+                              port: str = "projects.run_project") -> dict[str, Any] | None:
+    """核一批"要登记进库的书"有没有被用户点名：放行返回 `None`，拒返回受控读数。
+
+    ## 为什么这一格必须存在（BOOKPORT ①，2026-11-21）
+
+    `conductor.ensure_project(books_dir=…)`（`tools/conductor_tools.py`）与 CLI 的
+    `projects.run_project(books_dir=…)` 都直接调 `locallib.ingest_directory` ⇒ 一次声明
+    都不核就能造 `literature` 行。DECLAREGATE / DGWIDE 已经把 `search.register` /
+    `ingest_local` / A 的自动入库 / `table.create(literature)` 四条口接上声明判据；
+    DGWIDE 报告 §"还剩的写口"点名的就是这两条 —— 本函数是它们的同一个闸。
+
+    ## 判据只有一份
+
+    真身是 `locallib.undeclared_workspace_books`（它内部走 `declaration_verdict`：
+    `read_declaration` + `is_declared`）。本函数只做三件事：把目录交给它、把结论翻成
+    三态读数、拼受控拒信 —— 不重写匹配规则（大小写、目录写法、裸文件名那三条都在
+    `locallib` 里）。
+
+    ## 三态（与 `search.register` / `ingest_local` 逐字同口径）
+
+    * 这一批文件全被用户点名 ⇒ 放行（`None`）；
+    * 有文件没被点名 ⇒ `not_declared_reference`（整批拒，不是"挑几本登记"）；
+    * 声明在盘上但读不出来 ⇒ `declaration_unreadable` + `declaration_checked=False`
+      （没查成，不折成"你没声明"，也不折成"通过了"）；
+    * 这些文件落不到工作区里 ⇒ `declaration_state=outside_workspace`：声明的 `paths`
+      是工作区相对路径，表达不了工作区外的文件（与 DGWIDE ④ 同口径，fail-closed）。
+
+    ## 为什么目录不在盘上不算拒
+
+    `ingest_directory` 对不在盘上的目录只会扫到 0 本书 ⇒ 零行；那不是"未声明入库"，
+    也不是本闸能回答的问题（与 `search.ingest_local` 的 `io_error` 分得开）。
+    """
+    workspace = None if workspace_root is None else Path(workspace_root)
+    target = Path(books_dir)
+    how_to_fix = (
+        "要让这一批书入库，二选一：① 把用户点名的文件放进工作区（`library/` / "
+        "`source/` 一类投放处），由用户点名它们并逐字记进工作区根的 "
+        f"`{DECLARATION_NAME}`（形如 {{\"paths\": [\"a.pdf\", \"b/\"], "
+        "\"verbatim\": \"<用户原话>\"}），再重试同一批；② 走候选链"
+        "（`lit.stage_add` → `lit.admit`，准入依据是候选行 + 读过正文）。"
+        "没被点名的文件只能当研究参考（可读），不入库。"
+    )
+    if workspace is None:
+        return {
+            "kind": "not_declared_reference", "recorded": False,
+            "books_dir": str(target), "undeclared": [], "declaration": "",
+            "declaration_state": "no_workspace", "declaration_checked": False,
+            "problem": "", "why": "no_workspace", "how_to_fix": how_to_fix,
+            "message": (f"{port} 不登记这一批书：没有调用方工作区 ⇒ 用户声明读不到 "
+                        "⇒ 按 fail-closed 拒（没查成不是「用户点名了」）。本次零写入。"
+                        f"处置：{how_to_fix}"),
+        }
+    if not target.is_dir():
+        return None
+    undeclared, problem = undeclared_workspace_books(workspace, target, pattern=pattern)
+    if not undeclared and not problem:
+        return None
+    verdict = declaration_verdict(workspace)
+    state = str(verdict["state"])
+    try:
+        target.resolve().relative_to(workspace.resolve())
+        outside = False
+    except (OSError, ValueError):
+        outside = True
+    if outside:
+        state = BOOKS_OUTSIDE_WORKSPACE
+        why = BOOKS_OUTSIDE_WORKSPACE
+        reason = ("这一批书在工作区外，用户声明（工作区相对 paths）表达不了它"
+                  "（不是「目录里没有书」）")
+    elif problem:
+        why = "declaration_unreadable"
+        reason = f"声明读不出来（{problem}）"
+    else:
+        why = "not_declared"
+        reason = "这些文件未被用户点名"
+    names = "、".join(undeclared[:5]) + ("…" if len(undeclared) > 5 else "")
+    kind = ("declaration_unreadable" if why == "declaration_unreadable"
+            else "not_declared_reference")
+    message = (
+        f"{port} 不登记这一批书：{reason}（{names or '没有可登记的文件'}）。"
+        "默认 fail-closed：没有声明 ⇒ 不许入库 —— 未点名的文件只能当研究参考（可读），"
+        f"不进 `literature`。本次零写入（这一笔还没进事务、一个字节都没搬）。"
+        f"处置：{how_to_fix}"
+    )
+    return {
+        "kind": kind, "recorded": False, "books_dir": str(target),
+        "undeclared": list(undeclared), "declaration": str(verdict["declaration"]),
+        "declaration_state": state,
+        "declaration_checked": bool(verdict["checked"]) and not outside,
+        "problem": str(problem or ""), "why": why, "how_to_fix": how_to_fix,
+        "message": message,
+    }
+
+
+def _books_gate(workspace_root: str | Path | None,
+                books_dir: str | Path) -> tuple[dict[str, Any], str]:
+    """`run_project` 的 `books_dir` 声明闸：返回（受控读数，要打进 `run.notes` 的那一句）。
+
+    空读数 + 空串 = 这一批放行。拒绝时项目照常建、这一趟照常跑，只是这一批书一个字节
+    都没登记 —— 所以那一句必须进 `notes`（CLI 会把 `run.notes` 逐条打出来，否则"我给了
+    `--books-dir`"与"一本书都没进库"会在同一次输出里安静地并存）。
+    判据本身仍是 `books_declaration_refusal`（本函数只负责把读数与那句话配成一对）。
+    """
+    got = books_declaration_refusal(workspace_root, books_dir,
+                                    port="projects.run_project")
+    if got is None:
+        return {}, ""
+    note = ("本地书架没有被登记：这一批书没过用户声明闸"
+            f"（`{got['kind']}`，why={got['why']}）⇒ 本次零行、零字节；"
+            "详见返回值的 `books_declaration`。")
+    return got, note
+
+
 def _land_budget_register(path: Path, usd: float) -> dict[str, Any]:
     """把这一趟显式给的额度写进 `<项目根>/budget.json`，返回一份可打印的回执。
 
@@ -812,8 +938,22 @@ def run_project(root: Path | str, *, name: str | None = None, start: str = "auto
     `run_topic_fn` 是给测试用的接缝（不传就用真的 `runflow.run_topic`）。
     `seed_literature=True` 只在冷启动那一趟生效：把历史真机种子投进 `library/seed/`
     （只放文件、不写台账），读数落在返回值的 `seed` 格里。默认关。
-    返回 `{"project", "run", "result", "budget"}`；`result` 就是 `run_topic` 的那份字典
+    返回 `{"project", "run", "result", "budget", "seed", "books_declaration"}`；
+    `result` 就是 `run_topic` 的那份字典
     （含 `exit_code` / `reason` / `artifacts` / `spent_usd_this_run`）。
+
+    ## `books_dir` 要过用户声明闸（BOOKPORT ①，2026-11-21）
+
+    `--books-dir` 那一批书落进的是 `literature` 行（`locallib.ingest_directory`），所以它
+    与 `search.register` / `search.ingest_local` 是同一件事：只有用户点名的文件才可入库。
+    核的对象是被跑的那个工作区（`ref.path`）根上的 `RELIABLE-REFERENCES.json` ——
+    CLI 没有调用方工作区，声明只可能落在它要跑的那个工作区里。未被点名 / 声明读不出来 /
+    文件在工作区外 ⇒ 这一批整批不登记（受控拒，零行零字节），读数落在返回值的
+    `books_declaration` 格与 `run.notes` 里；项目本身照常建/照常跑（"这一批书不入库"
+    不等于"这一趟不跑"）。
+
+    `seed_literature` 不受这道闸影响：`--seed-literature` 投放的是文件、不写任何台账
+    （`data/literature.json` 保持 0 行），"投放不造行"不是入库。
     """
     from . import schema as S
     from .modelgw import spec_from_env
@@ -821,6 +961,12 @@ def run_project(root: Path | str, *, name: str | None = None, start: str = "auto
 
     ref = resolve(root, name, start=start)
     notes: list[str] = []
+    # ---- 用户声明闸（BOOKPORT ①）：位置在 `create_project` 之前 ⇒ 被拒时盘上零写入
+    # （一个 literature 行、一个 library/ 目录、一个字节都不动），与 `search.ingest_local`
+    # 的"本次零写入"是同一句承诺、同一处兑现。
+    books_refusal, books_note = _books_gate(ref.path, books_dir) if books_dir else ({}, "")
+    if books_note:
+        notes.append(books_note)
     if ref.mode == "cold":
         create_project(ref, now=now, seed_literature=seed_literature)
     # 种子读数只读地取：`create_project` 已经投过（只在新工作区投），这里再问一次是为了
@@ -851,7 +997,9 @@ def run_project(root: Path | str, *, name: str | None = None, start: str = "auto
 
     store = Store(ref.path)
     ingest: dict[str, Any] = {}
-    if books_dir:
+    # 声明闸拒了的那一批一个字节都不登记（`books_refusal` 非空 ⇒ 跳过整批）；
+    # 放行那一支与改前逐字一样。
+    if books_dir and not books_refusal:
         rep = ingest_directory(store, books_dir, limit=books_limit,
                                note=f"{ref.name} 登记本地藏书")
         ingest = rep.to_dict()
@@ -959,7 +1107,10 @@ def run_project(root: Path | str, *, name: str | None = None, start: str = "auto
         json.dumps(card, ensure_ascii=False, indent=1, default=str) + "\n", encoding="utf-8", newline="\n")
 
     return {"project": ref.to_dict(), "run": record.to_dict(), "result": result,
-            "budget": budget_landing, "seed": seed_reading}
+            "budget": budget_landing, "seed": seed_reading,
+            # 空 dict = 这一趟没有给 `books_dir`、或它过了声明闸（放行）；
+            # 非空 = 这一批书的受控拒读数（`kind` / `declaration_state` / `undeclared` …）。
+            "books_declaration": books_refusal}
 
 
 # --------------------------------------------------------------------------- #
@@ -1019,7 +1170,7 @@ def selftest() -> int:
 
         junk = root / "project7"
         junk.mkdir()
-        (junk / "别的东西.txt").write_text("x", encoding="utf-8")
+        (junk / "别的东西.txt").write_text("x", encoding="utf-8", newline="\n")
         try:
             resolve(root, "project7", start="auto")
             problems.append("存在但不是工作区时应当报错")

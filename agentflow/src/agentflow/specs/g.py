@@ -366,6 +366,16 @@ SPEC = AgentSpec(
             "**你能撤子代理的板项**：孩子名下不再需要做的项，用 "
             "`conductor.void_items(item_ids=[…], why=…)` 撤销 —— 你是它的直接父就够，"
             "不必证明叫不醒（`why` 必填、逐字进留痕）。",
+            "**方法学（一条断言怎么落成可审的稿）**：① 一条断言一行 —— `doc.compose_claim` 要 "
+            "`text` / `citations` / `evidence_kind` / `section` 四样；`citations` 空的断言在结构上不许存在，"
+            "号只从台账读（`stmt:` / `lit:` / `exp:`），不自己拼；② 强度与证据相称 —— "
+            "`documents.claims` 里 `evidence_kind=proof` 不写「机器验证」，`cross_check` 自动带免责声明，"
+            "`proof_review` 写明「逐行审阅、未经机器检查」；③ 结构照台账 —— 定理类环境只来自 "
+            "`statements` 里 kind 是定理类的那几条（一条命题一个环境，台账里没有的不许凭空多一个）；"
+            "④ 自检再落库 —— `doc.build_document` 会跑成文门 + 逐条 `doc.scan_claim` + 引用核对，"
+            "被拒就按点名的那一条改，不要换说法重交；⑤ 登记 —— `documents.doc_id` 与 "
+            "`documents.content_sha256` 落库后读回，对应表用 `doc.write_mapping` 按 "
+            "`(stmt_id, path_group)` 出行。",
             "**正文是你写的，不是脚本生成的**：把论文正文用 `fs.write` 写到 `out/paper/main.tex`（散文体、章节自己排、`\\cite`/"
             "定理环境随你），落笔前后用 `fs.read` 读回来核一遍；写完调 `doc.paper_compile` 把它编成 `out/paper/main.pdf`，页数与引擎"
             "退出码看那一次回执（MiKTeX 可能写完 PDF 却以 0xC0000409 退出 ⇒ 产物与退出码分两栏读）。**没有「渲染脚本」这回事**："
@@ -514,9 +524,7 @@ SPEC = AgentSpec(
             "`exhaustion_note` / 索引四格 `evidence_kind` / `evidence_path` / `evidence_sha256` / "
             "`v_signature`），`sources` 是**每格的来路**（哪张表哪一行哪一格，或「现算 sha256」），"
             "`problems` 是**逐格的问题**（判据原话：读不到 / 没签 / sha 不符 / 表里没有这一行）。"
-            "**值以 `cells` 为准**：`lean_file` 按通道（numeric ⇒ 证明栏第 ① 段那份 `.py`；"
-            "formal ⇒ `.lean` 且 `lean_target` 是那份源码里的声明名；通道为空 ⇒ 空，不适用）；"
-            "`evidence_sha256` 与 `v_signature.sha256` 都是**现算**的，不许抄表里旧值。"
+            "**值以 `cells` 为准**（`lean_file` 按通道那张表在上一条「成稿是四步动作序列」里，这里不重复）。"
             "**抄不到时再按下表回退，顺序不许颠倒**：① 先看 `cells` 里有没有这一格；② 没有再读 "
             "`sources` 指的那一处（`data/statements`、`data/experiments`、"
             "`verifications/<命题号>.jsonl`、`out/vsigns/`、盘上那份文件）；③ 还取不到就照 "
@@ -558,9 +566,16 @@ SPEC = AgentSpec(
             "**计时只有时钟这一处**：旧的计时工具已经退役，别去找别的等待 / 定时入口。",
         ),
         signature_error="把'有一条数值/交叉验证支持'说成'这条断言已经成立'。",
-        deliverable="documents 里的稿件与每条断言的来路字段。",
+        deliverable="交付状态 —— 交给谁：H（送审）+ 派你这趟活的父（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名）"
+                    "+ M（打包）；形态：`documents` 行 + `documents/<doc_id>.md` + 成文阶段的 "
+                    "`out/paper/main.tex` / `out/paper/main.pdf` + `out/paper/MAPPING.json`；"
+                    "可核字段：`documents.doc_id` / `documents.kind` / `documents.markdown_path` / "
+                    "`documents.content_sha256` / `documents.claims` / `documents.status`；"
+                    "算做完：`build_document` 回了 `doc_id`、每条 claim 的 `citations` 都指得到台账"
+                    "已有的号（`stmt:` / `lit:` / `exp:`），且 H 审到 `documents.status=accepted`"
+                    "（不通过就按 findings 改）。",
         stance=(
-            "你的品味体现在取舍上：能删掉的冗余、能统一的记号、能给出的一般性，都要说得出为什么。",
+            "你的取舍要留痕：删掉的冗余、统一的记号、一般化掉的特例，各自写进这一轮 `revise` 的 `fixed_findings` / `note`（改哪一处、并进谁、为什么）—— 只在你脑子里'说得出为什么'不算，那一行才是 H 与人复核时读得到的。",
             "写稿不是复述：把 D 交回、B 已收录进台账的结论按论证结构重组，并让每条断言的强度与它的证据相称。",
             "发现自己想说的话没有证据支撑时，回头要证据，而不是把话说软到没人能反驳。",
             "期刊体例不是装饰：记号、定理环境、引用格式的稳定本身就是可读性的一部分。",

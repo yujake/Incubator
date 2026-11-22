@@ -32,6 +32,19 @@
 多一个找不到的门槛）。真跑那一档一层都不许少 —— 负控见
 `tests/test_cache_warm_button_is_honest.py` 的 c 条。
 
+## 只读档下的那一档 200（AUDIT F6：文案对齐，行为不动）
+
+`agentflow web` 缺省只读（没开 `--allow-writes`）：`/api/` 下那六条写端点一律 403，
+而「这一条端点的试算档回 200」。这不是漏网，是那张矩阵自己的一档
+（`writes.authorize(read_only=True)`，见上面一段）：试算不写盘、不花钱、不起进程，
+它连"写"都没有，`--allow-writes` 挡的东西在它身上不存在。所以 F6 的处置是「改文案」
+（`server.py` / `cli.py` 的 `--allow-writes` 帮助、说明页 Help.tsx 都逐字写清"六条 403
++ 试算例外"），不是把试算也改成 403 —— 后者会让"先看要预热什么、花多少钱"这一步
+在只读档里彻底做不了，而它恰恰是最便宜、最该先做的一步。
+
+行为判据在 `tests/test_cache_warm_button_is_honest.py` 的 b 条（无写权限 + `dry_run=1`
+⇒ 200、只给计划、不落预热记录）；文案判据在 `tests/test_webfix3_remaining_six.py`。
+
 ## 三态跟踪（D-60 ③）
 
 真预热与 `POST /api/run` 同一个形状：detached 子进程 + 日志落

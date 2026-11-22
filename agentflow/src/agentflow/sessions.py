@@ -785,7 +785,7 @@ def selftest() -> int:
     check("按项目隔离：projB 没有会话", list_sessions(base / "projB") == [])
     # 注入一条坏行
     path = session_path(base / "projA")
-    with path.open("a", encoding="utf-8") as fh:
+    with path.open("a", encoding="utf-8", newline="\n") as fh:
         fh.write("{这不是 JSON\n")
     ev2, probs2 = read_session(base / "projA")
     check("坏行逐条报出（不是静默跳过）", len(ev2) == 2 and len(probs2) == 1, str(probs2))

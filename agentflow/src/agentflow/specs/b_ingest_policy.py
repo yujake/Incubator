@@ -50,7 +50,7 @@ INGEST_POLICY: tuple[str, ...] = (
     "`unreadable`（文件读不出来）。**缺节不等于「证明为空」**，也不许拿整份正文或 "
     "`## 依赖` 那一段顶替 —— 那一档按「稿不完整」受控拒。",
     # 2026-11-09（提示词-工具面一致性审计 L2-4）：族名早就教了，五档读数没教。
-    "**手稿名是五档读数，不是「像不像手稿」**（`manuscriptfamily` 的 `classify_manuscript`）："
+    "**手稿名是五档读数，不是「像不像手稿」**："
     "`reports/` 下的 `f-proof-` / `b-proof-` / `e-proof-` / `e-num-` 才是 `family`；"
     "同一个名字换到 `notes/` 或带 `-vN` ⇒ `legacy`（可列出、不可签、不可收录）；"
     "像手稿但号解析不出（如 `f-proof-abc`）⇒ `bad_name`；`RESEARCH.md` / `notes/A.md` "
@@ -85,8 +85,8 @@ INGEST_POLICY: tuple[str, ...] = (
     "**`## 命题` 不是定理陈述 ⇒ 让动作出受控拒，不要把这件「怎么办」写成给 D 的 handoff**"
     "（2026-11-13）：按稿收录时命题形态闸判不过 ⇒ 受控拒 `proposition_form_refused`，读数里"
     "带 `fix` / `next_step`。就照 `fix` 改（同一稿号、同一份稿原位重写 `## 命题`；`## 证明` "
-    "与 V 的签不动），再把这份稿重交一次。命题形态的判据在 B 的秘书"
-    "（`judge_proposition_form`），**D 对命题台账只有只读权限** —— 他没有这条判据，"
+    "与 V 的签不动），再把这份稿重交一次。命题形态的判据在 B 的秘书，"
+    "**D 对命题台账只有只读权限** —— 他没有这条判据，"
     "把「让 F 重落一版还是走改写重签」交给他裁不算处置。",
     # 业主 2026-11-20（逐字）：「B登记命题是快的（除非自己分析引文落稿，其它都是几乎自动
     # 录入 E,F 侧成果），它的重要职责就是二阶段」。真源 `draft/179` §二之一 / 二之二：
@@ -109,10 +109,13 @@ INGEST_POLICY: tuple[str, ...] = (
     # 2026-11-21：入口落到 B 自己的回执上（`run_once.stage_two.unwashed`）—— 有欠账就当场
     # 开稿洗，不再报给 M 等派（真机 lp-ball-15：19 次 run_once、`open_polish_copy` 0 次）。
     "**一批录完的回执要点名第二阶段的欠账（自驱入口）**：这一批洗了几份、还剩哪几份没洗"
-    "（逐份给证明号与 `optimized_blocked` 的原话）；`own.run_once` 的回执里 "
-    "`stage_two.unwashed` 逐条点名「还有哪几条没洗」—— **它不是空的就当场开稿洗**"
-    "（`own.open_polish_copy`），不是报给 M 等派。「这一批录完了」不等于这一批的活完了 —— "
-    "留到收工前再洗，等于让它一次都不发生。",
+    "—— 回执里 `stage_two.washed_count / proofs_total` 与 `unwashed` 就是这两格的读数"
+    "（`washed_count` 只数 optimized=true 的，`unwashed` 逐份给证明号与 `optimized_blocked` "
+    "的原话）；`own.run_once` 的回执里 `stage_two.unwashed` 逐条点名「还有哪几条没洗」—— "
+    "**它不是空的就当场开稿**（`own.open_polish_copy`），不是报给 M 等派。"
+    "**这一条没有闸**：洗不洗不会红，只停在 `stage_two.unwashed` 与收工门的 "
+    "`statements_unoptimized` 读数上（后者是 warning，不拦门）；「这一批录完了」不等于"
+    "这一批的活完了 —— 留到收工前再洗，等于让它一次都不发生。",
     # 2026-11-21（BQUOTE 路）：收工门那条「断言与它引的证据对不上」只在 documents 上现算，
     # B 登记那一刻看不到（真机 lp-ball-14：documents/000000 的 claim-2 / 10 / 11 / 12
     # 全因「引了 lit:000000 而正文与《Cube Slicing in R n》的实词无交集」被点名）。
@@ -134,20 +137,78 @@ INGEST_POLICY: tuple[str, ...] = (
 #: 同一个理由、同一条纪律（业主口径：不许抬体量软基线，拆文件/拆函数）。渲染逐字不变：
 #: `specs/b.py` 的 `AgentBrief.duty` 直接引用它。
 #: 业主 2026-11-21（逐字）：「B 应该自动做，而不是 M 派。」
+#:
+#: 2026-11-21（PA34，规矩 3/4）：职责档是**伙伴表逐字引用的那一行** —— A / D / E / F / M
+#: 都会读到它。所以它只说"这一岗做什么"，**不写 B 自己的自驱机制**（`own.run_once` 的
+#: 回执、`stage_two.unwashed`、开副本 / 送签 / 替换的调用形）：那些是 B 的内部入口，
+#: 别的角色没有对应动作、也读不到那一格；B 自己那一份在 policy 与边界里逐条写着（同一
+#: 事实一处真身）。这同时消掉"同一段机制在五个角色的伙伴表里各抄一份"。
 STAGE_TWO_DUTY: str = (
     "文献整理：第一阶段是快录 —— E/F 侧交来的成果几乎自动录入"
     "（机械录入：证明原文 ＋ 那一份已有的 V 签；只有「自己分析引文落稿」那一档要花力气）；"
-    "第二阶段（逐个优化）是你的主职，**而且不必等 M 派**：`own.run_once` 每一拍的回执里 "
-    "`stage_two.unwashed` 点名「这一批还有哪几条没洗」—— 看到它就当场做："
-    "`own.open_polish_copy` 开副本 → 在副本上洗 → 送 V 重拿签 → "
-    "`own.register_statement`（或 `own.ingest_manuscript` 的 `path_group≥1`）精准替换"
-    "（旧正文进 `proof_history`、`optimized_by_proof[证明号]=true`）")
+    "第二阶段（逐个优化）是你的主职，**自驱、不必等 M 派** —— "
+    "洗稿 → 重拿 V 签 → 精准替换（每一步的入口、判据与自驱入口写在 policy 那一节）。")
 
 #: 二阶段的边界那一条（同一口径的收口：同一拍自驱、不许把"本委托只做快录"当停下理由）。
 #: 与 `STAGE_TWO_DUTY` 同一条搬出理由；正文逐字是原来 `specs/b.py` 里那一条。
+#:
+#: 2026-11-21（COL2 合稿）：把 PA34 从职责档里拿掉的**调用形**搬回这里 —— 职责档是伙伴表
+#: 逐字引用的那一行（A/D/E/F/M 都读），边界只渲染给 B 自己。`own.run_once` 的回执 /
+#: `stage_two.unwashed` / `own.open_polish_copy` / 「不必等 M 派」四个锚点必须在**同一条**
+#: 边界句里（判据 `tests/test_b_stage_two_self_drives.py::test_d_the_prompt_carries_the_self_drive_as_an_action`
+#: 要求同一行；分散在职责、工具摘要、手册索引三处就是"描述"，真机 lp-ball-15 的 B 读到的
+#: 正是这种分散的描述，然后停在快录）。
 STAGE_TWO_BOUNDARY: str = (
-    "**登记完一批 ⇒ 同一拍紧接着做这一批的第二阶段（自驱，不等派）**：`own.run_once` 的"
+    "**登记完一批 ⇒ 同一拍紧接着做这一批的第二阶段（自驱、不必等 M 派）**：`own.run_once` 的"
     "回执里 `stage_two.unwashed` 逐条点名「这一批还有哪几条没洗」（stmt_id ＋ 证明号）；"
-    "它不是空的就当场开副本、洗、送 V、精准替换 —— **不许把「本委托只做快录」当停下理由**"
-    "（快录交回那一刻，二阶段就归你），也不许把「先攒着最后一起洗」当排期；回执里要写"
-    "「这一批洗了几份 / 还剩几份没洗」，「这一批看过了」不算处置。")
+    "它不是空的就当场 `own.open_polish_copy` 开副本、洗、送 V、精准替换 —— **不许把「本委托只做快录」当停下理由**"
+    "（快录交回那一刻，二阶段就归你）；不要把「先攒着最后一起洗」当排期（这是纪律，"
+    "不是闸：不洗只停在 `stage_two.unwashed` / `statements_unoptimized` 读数上，门不拿它拦）；"
+    "回执里写「这一批洗了几份 / 还剩几份没洗」就是照 `stage_two.washed_count` 与 "
+    "`unwashed` 抄，「这一批看过了」不算处置。")
+
+#: 方法学那一条（PA4 规矩 5：一条结果怎么登记成可复核的台账条目）。
+#:
+#: 2026-11-21（COL2 合稿）逐字从 `specs/b.py` 的 policy 首条搬到这里：搬出理由与
+#: `INGEST_POLICY` 完全相同（把 `b.py` 拉回 800 行线内），渲染位置与逐字文本一个字没动
+#: （`specs/b.py` 在 policy 开头用 `*B_METHOD_POLICY` 原样摊回）。
+B_METHOD_POLICY: tuple[str, ...] = (
+    "**方法学（一条结果怎么登记成可复核的台账条目）**：① 先定位再登记 —— 在原文里逐字找到那一句"
+    "（位置记进 `statements.quote_span` 与 `statements.page_range`），找不到就写「未核到」，"
+    "不许按记忆登记；② 三件式：命题行要有正文（`statements.statement_text` / "
+    "`statements.statement_full`）、证明（`statements.proof_text` 或 `proof_manuscript`）、"
+    "出处（`statements.source_lit_id` 与 `statements.page_range`）；关系行要有 "
+    "`relations.quote` 与 `relations.page_range`；③ 逐字回验：`statements.quote_verified` 与 "
+    "`relations.quote_verified` 只认回验得到的 true / false / 未核到 三态，不许自报「核过了」；"
+    "④ 洗稿走完整链：`own.open_polish_copy` 开副本 → 洗 → 派 V 重签 → 精准替换"
+    "（旧正文进 `proof_history`、`optimized_by_proof` 记 true），签没到就不许替换；"
+    "⑤ 自检：这一批每一份证明在 `statements.bits` 的 proof 位与 `optimized_by_proof` 各有一格结论，"
+    "没洗的在 `optimized_blocked` 点名卡在哪 —— 两样都空的那一份等于没处置。",
+)
+
+#: 同一条定理的多种证明那一条（`path_group` / 逐份交稿 / 逐份要签）。
+#:
+#: 2026-11-21（COL2 合稿）逐字从 `specs/b.py` 的 policy 搬到这里：搬出理由与 `INGEST_POLICY`
+#: 完全相同（把 `b.py` 拉回 800 行线内），渲染位置与逐字文本一个字没动（`specs/b.py` 在原来
+#: 那个位置上用 `*MULTI_PROOF_POLICY` 原样摊回）。
+MULTI_PROOF_POLICY: tuple[str, ...] = (
+    # 同一条定理的多种证明：机制早就在（`proofs` / `used_by="stmt:<号>#pN"` /
+    # `path_group` / `reviewed_by_proof` / 对应表的 `proof_no`），缺的是"用户要几种
+    # 证明时该落成什么形状"的口径，所以这一条是正向政策：写清形状，也写一句反向
+    # 判据（别拆成几条命题）。
+    "**同一条定理的多种证明只占一条 stmt，不占多条命题**：用户要「几种证明语言 / 几条独立"
+    "路径」时，目标是同一条命题的**多条证明路径**（`path_group` 1..N），不是 N 条独立命题。"
+    "登记时**逐份交稿**：**B 的稿号是自己的号段**（`reports/b-proof-<B稿号>.md`）——"
+    "**同一命题的第二份证明是另一份稿**（另一个 B 稿号），不是同一份稿的第 N 个版本，"
+    "新写也不产生 `-p<N>` 名字；路径号由你收录时分配（同一命题已有 N 条 ⇒ N+1，"
+    "同一份正文 sha 重复收录 ⇒ 沿用原号）。**不要用内联的 `proofs=[…]` 交正文**"
+    "（那条路没有稿、依赖面恒 0、签也没有落点）。**每条证明各自要 V 的签**："
+    "`bits.evidence.reviewed_by_proof` 按路径逐份记（`{\"1\": true, \"2\": false}`），"
+    "一份签了不代表另一份签了，也不许拿一份的签替另一份背书。每条证明用到的依赖按 "
+    "`used_by=\"stmt:<命题号>#pN\"` ＋ `path_group` 标明它属于哪条路径（`deps` 两维："
+    "外层 = 可选路径、内层 = 一条路径上的步骤），C 才能按不同的依赖面追出不同的证明路径。"
+    "论文对应表里同一条命题按证明路径占多行。"
+    "**反向判据：不要把同一条定理拆成多条命题** —— 表述不同（极大 p-子群版 / |G|=p^a·m 版 / "
+    "归纳版）不等于不同命题；拆开之后路径只剩一组，多证明机制一次都不会被触发。"
+    "判重先问「这是不是同一条」，再问「这是它的另一份证明吗」。",
+)

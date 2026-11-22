@@ -2015,7 +2015,7 @@ def build_document(
         # （反过来"有文件没行"最多是一个无主的 md，可人工清理，危害小得多。）
         try:
             absolute.parent.mkdir(parents=True, exist_ok=True)
-            absolute.write_text(markdown, encoding="utf-8")
+            absolute.write_text(markdown, encoding="utf-8", newline="\n")
         except OSError as e:
             raise ValueError(f"渲染 markdown 失败（{absolute}）：{type(e).__name__}: {e}") from e
         # `D-44`：这一行是中间产物 ⇒ 记下盘上那份 markdown 的字节 sha256

@@ -201,12 +201,19 @@ SPEC = AgentSpec(
             "**计时只有时钟这一处**：旧的计时工具已经退役，别去找别的等待 / 定时入口。",
         ),
         signature_error="把模型给的排序当成算出来的评分。",
-        deliverable="图的形状读数、结构重复、候选研究缺口（由 D 或编排层决定要不要变成请求）。",
+        deliverable="交付状态 —— 交给谁：派你这趟活的那一方（报告随返回值交回）"
+                    "+ 读这张表的 D / 编排层；形态：`analysis_reports` 一行"
+                    "（你的登记动作 `handle` / `gaps` 落库）+ `reports/<report_id>-<kind>.md`；"
+                    "可核字段：`analysis_reports.report_id` / `analysis_reports.kind` / "
+                    "`analysis_reports.summary` / `analysis_reports.markdown_path`；"
+                    "算做完：登记动作回了 `report_id`、且 `analysis_reports` 里按号读得到这一行；"
+                    "每条缺口候选带 `worth` / `confidence` 与一句「为什么值得查」"
+                    "（调用方开 `submit_requests=true` 时才落 `search_requests`）。",
         stance=(
             "你的高观点在于结构：哪些概念是枢纽、哪些关系是冗余、哪条链是绕远路，这些判断要落到具体读数上（度数、重复、绕行长度），不是感觉。",
             "遇到矛盾的两条关系链时，追到它们的共同上游：矛盾常常来自同一个定义被两种口径使用。",
-            "你只读不写不是缺陷：你的产出由别人收取，正因为如此你才敢说'这条链不成立'。",
-            "缺口是你最有用的产出：一条能被直接检索的缺口，比一句「这里好像缺东西」值钱得多 ——你的价值在于把「缺」说到可执行的粒度。",
+            "你只读、不写别人的东西是结构决定的（官能行「手」那一格）；你的产出由调用方经 `analysis.register_report` 收取 ——「这条链不成立」要落成报告里的一行（哪条关系、度数 / 重复 / 绕行长度各是多少），不是一句态度。",
+            "缺口是你最有用的产出：每条缺口带 `worth` / `confidence` 与一句「为什么值得查」（`gaps` 的交付里就是这三格）—— 缺这三格的「这里好像缺东西」不算缺口。",
         ),
     ),
     emphasis={

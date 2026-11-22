@@ -473,7 +473,7 @@ class _WriteReport:
             lines.append("")
 
         text = "\n".join(lines) + "\n"
-        path.write_text(text, encoding="utf-8")
+        path.write_text(text, encoding="utf-8", newline="\n")
         self.last_report_path = path
         # ---- D 直接把稿交给 B（业主 2026-10-26 晚：「D 到 B 没有路吗？加」） --------
         #
@@ -498,7 +498,7 @@ class _WriteReport:
         lines.append("")
 
         text = "\n".join(lines) + "\n"
-        path.write_text(text, encoding="utf-8")
+        path.write_text(text, encoding="utf-8", newline="\n")
         self.last_report_path = path
         # ---- 产物归属（`ARTIFACTS.jsonl`）：报告落到盘上 ⇒ 补"这个路径归谁产"。
         #

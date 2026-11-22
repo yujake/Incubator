@@ -84,12 +84,19 @@ cookie 只多一个响应头，`_token_ok` 的口径（`secrets.compare_digest`�
 把它们当第 3 层与第 4 层真的判（`writes.py::authorize`）。
 
 - 不开 `--allow-writes`（缺省）⇒ 写面是只读的：`/api/stop` / `/api/submit` /
-  `/api/settings` / `/api/budget` / `/api/run` / `/api/task` / `/api/cache/warm`
-  的写请求一律 403，且这一档一个字节都不往工作区写（连审计台账
-  `web-actions.jsonl` 也不写 —— 见 `writes._finish` 的只读分支）；
+  `/api/settings` / `/api/budget` / `/api/run` / `/api/task` / `/answer` 的写请求
+  一律 403，且这一档一个字节都不往工作区写（连审计台账
+  `web-actions.jsonl` 也不写 —— 见 `writes._finish` 的只读分支）。唯一的例外是
+  `POST /api/cache/warm` 的「试算」档（`dry_run=1`）：它只保留回环来源那一层
+  （`writes.authorize(read_only=True)`），不写盘、不花钱、不起进程 ⇒ 只读档也回 200；
+  它「真跑」那一档照样要 `--allow-writes`。这一点以前被写成"七条写端点一律 403"，
+  与实现相反 —— AUDIT F6 修的就是这句文案（试算本来就不该写盘，所以是文案错、
+  不是行为错）；
 - `--no-settings-write` 只关第 4 层：`POST /api/settings` 403，其余写端点照旧；
-- `POST /answer` 不在这道闸门后面（它的闸门是 `userio.answer_question`，
-  `draft/73` §2.5 的"现状，不动"），但它的审计也跟随 `allow_writes`（只读不落盘）。
+- `POST /answer` 也在这道闸门后面（2026-11-21 WEBFIX1 / 审计 F4）：它此前只靠
+  `userio.answer_question` 兜底，跨站页面不带 CSRF 也能把一条待答答掉并落盘。
+  现在 `handle_answer` 把请求句柄交给 `writes.answer()`，与其余写端点共用
+  `writes._gate`；只读档连会话事件也不写。
 
 `--help` 里逐字写着这三条（那两句"本批还没有接线：现在给不给都一样"与实现相反，
 `agentflow web --help` 早就说的是对的 —— 同一仓库两套 help 不许互相打脸）。
@@ -772,7 +779,15 @@ class WebHandler(BaseHTTPRequestHandler):
         del params, query
         from .. import sessions as SS
 
-        self._json(200, SS.run_index_report(self.root))
+        doc = dict(SS.run_index_report(self.root))
+        if str(doc.get("tri") or "") != "computed":
+            # AUDIT F10：`unreadable` / `not_applicable` 那一档必须说清"为什么恒这样、
+            # 怎么修"。真身在读侧 `readers.run_index_reason`（这一行只是转发）——
+            # 它住读侧，是因为那是"盘上事实怎么读"，判据要能脱离 HTTP 直接钉住它。
+            from . import readers as RD
+
+            doc["reason"] = RD.run_index_reason(self.root, doc)
+        self._json(200, doc)
 
     def handle_run_digest(self, params: Mapping[str, str],
                           query: Mapping[str, Sequence[str]]) -> None:
@@ -892,18 +907,23 @@ class WebHandler(BaseHTTPRequestHandler):
 
     def handle_answer(self, params: Mapping[str, str],
                       query: Mapping[str, Sequence[str]]) -> None:
-        """`POST /answer`：PRG（303 回首页）；qid 不待答 409；写失败 500。
+        """`POST /answer`：PRG（303 回首页）；闸门拒 403；qid 不待答 409；写失败 500。
 
         非 303 的正文由 `writes.answer()` 给（它自己转义过里面的用户文本），
         这里只把它嵌进错误页 —— 不重新渲染、也不二次转义。
 
+        `handler=self` 是同一道写面闸门的输入（审计 F4）：`writes.answer()` 用
+        它与其余写端点共用 `writes._gate`（回环来源 ⇒ CSRF ⇒ `allow_writes`）。
+        在这之前 `/answer` 只靠 `userio.answer_question` 兜底，跨站页面不带 CSRF
+        也能答掉一条待答；现在它和 `/api/task` 一样过闸门（拒时 403 + 同一份
+        `kind` / `how_to_fix`），盘上零写入。
+
         `audit_enabled` 取 :func:`agentflow.webui.writes.writes_allowed` 这同一个事实：
-        只读档不落 `web-actions.jsonl`（那是工作区根上的一个文件）。
-        `/answer` 本身不在这道闸门后面（它的闸门是 `userio.answer_question`），
-        所以这里传的是"本服务开没开写面"，不是"这条端点准不准写"。
+        只读档不落 `web-actions.jsonl`（那是工作区根上的一个文件）。闸门先回
+        403 `writes_off`，所以只读档连会话事件也不写。
         """
         del params, query
-        code, location, body = answer(self.root, self._form(),
+        code, location, body = answer(self.root, self._form(), handler=self,
                                       audit_enabled=writes_allowed(self))
         if code == 303:
             self._redirect(303, location)
@@ -1270,7 +1290,7 @@ def write_port_file(root: str | Path, port: int, url: str = "") -> str:
                                     "pid": os.getpid(),
                                     "at": time.strftime("%Y-%m-%dT%H:%M:%S%z")},
                                    ensure_ascii=False, default=str, indent=2) + "\n",
-                        encoding="utf-8")
+                        encoding="utf-8", newline="\n")
         return ""
     except Exception as exc:  # noqa: BLE001
         return f"{type(exc).__name__}: {exc}"
@@ -1360,12 +1380,16 @@ def run(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--json", action="store_true",
                     help="只打印一行 URL 的 JSON（便于起后台任务后拿到确切 URL）")
     # 裁定 T1 的两个开关。它们真的改变行为（`writes.authorize()` 的第 3 / 第 4 层）：
-    # 不给 `--allow-writes` ⇒ 写面只读，`/api/*` 的写端点一律 403，而且这一档
-    # 一个字节都不往工作区写（连审计台账也不写）。这两句曾写成"开关还没接线、
-    # 给不给都一样"，与实现相反 —— 那是被修掉的旧文案。
+    # 不给 `--allow-writes` ⇒ 写面只读，`/api/*` 下那六条写端点与 `/answer` 一律 403，
+    # 而且这一档一个字节都不往工作区写（连审计台账也不写）。这一格曾经写成
+    # "七条一律 403"—— 与实现相反：`POST /api/cache/warm` 的「试算」档（`dry_run=1`）
+    # 只走回环那一层、不写盘不花钱，只读档照样回 200（真跑仍要 `--allow-writes`）。
+    # AUDIT F6 修的是这句文案（不是行为 —— 试算本来就不该写盘）。
     ap.add_argument("--allow-writes", action="store_true",
-                    help="允许写面（缺省只读：不给 ⇒ /api/ 下七条写端点 403，"
-                         "且只读档不往工作区写任何文件）")
+                    help=("允许写面（缺省只读：不给 ⇒ /api/ 下六条写端点与 /answer 一律 403，"
+                          "且只读档不往工作区写任何文件；`POST /api/cache/warm` 的试算档"
+                          " dry_run=1 例外 —— 它只要求同源、不写盘不花钱，所以只读档也回 200，"
+                          "真跑才要本开关）"))
     ap.add_argument("--no-settings-write", action="store_true",
                     help="关掉设置写面（只关 POST /api/settings：那条 403，其余写端点照旧）")
     args = ap.parse_args(list(argv) if argv is not None else None)
@@ -1432,8 +1456,10 @@ def run(argv: Sequence[str] | None = None) -> int:
             # 这句曾说"只做到解析与透传，现在不改变任何行为"—— 与
             # `writes.authorize()` 的实现相反。现在照实说这一趟的写面是哪一档。
             print("（写面：" + ("已开 --allow-writes" if args.allow_writes
-                              else "只读（没开 --allow-writes）：/api/ 的写端点一律 403，"
-                                   "只读档不往工作区写任何文件")
+                              else "只读（没开 --allow-writes）：/api/ 下六条写端点与 /answer "
+                                   "一律 403，只读档不往工作区写任何文件；"
+                                   "`/api/cache/warm` 的试算档（dry_run=1）例外："
+                                   "只要同源、不写盘不花钱 ⇒ 200")
                   + "；设置写面：" + ("关（--no-settings-write）"
                                      if args.no_settings_write else "开") + "）", flush=True)
     if args.open:

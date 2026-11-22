@@ -730,7 +730,7 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
     (root / "library" / "paper.txt").write_text(
         "An abelian group is a group in which the commutative law holds.\n"
         "A field is a commutative division ring.\n",
-        encoding="utf-8",
+        encoding="utf-8", newline="\n",
     )
     literatures = [
         {

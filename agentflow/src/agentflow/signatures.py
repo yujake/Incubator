@@ -519,7 +519,7 @@ def append_signature(root: str | Path, record: Mapping[str, Any], *,
     snap_path = snap_dir / name
     # 规范字节串只有一处实现（`canonical`）：这里内联一份会让「唯一实现」那句
     # 与事实不符（理由与读数见 `line_hash`）。
-    snap_path.write_text(CANONICAL.canonical_json_text(snapshot) + "\n", encoding="utf-8")
+    snap_path.write_text(CANONICAL.canonical_json_text(snapshot) + "\n", encoding="utf-8", newline="\n")
 
     row = dict(record)
     row["evidence_path"] = rel

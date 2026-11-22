@@ -222,7 +222,7 @@ def main(argv: list[str] | None = None) -> int:
             "退出码 0=全过 / 1=有文件单独跑不过 / 2=没查成。"
         ),
     )
-    ap.add_argument("--root", default=None, help="仓库根（默认本文件的上两级）")
+    ap.add_argument("--root", default=None, help="产品根（默认本文件的上两级；仓库根是它的上一级）")
     ap.add_argument("--list", action="store_true", help="只打印每个文件要跑的命令，不执行")
     ap.add_argument("--timeout", type=float, default=600.0, help="单个文件的超时秒数（默认 600）")
     ap.add_argument("-q", "--quiet", action="store_true", help="只打印失败行与总判定")

@@ -33,13 +33,21 @@
 被跳过的项以名字进 `skipped` 列表与 `--json-out` 产出的报告，总判定按 `unknown` 记 ⇒ 退出码 2。
 这与编排层 `tools/release_all.py` 的口径逐字一致（那条有测试钉死）。
 
+## `tests/` 不随仓库交付 ⇒ 第 1 项是**本机开发门**
+
+业主 2026-11-21 裁定：`agentflow/tests` 只是测试工具，不入 git、不随仓库交付
+（`git rm -r --cached agentflow/tests`，磁盘文件保留；`.gitignore` 登记
+`/agentflow/tests/`）。所以第 1 项（全量测试）只能在**本机有 `tests/`** 时跑：
+缺这个目录时它记 `unknown` 并写明"本机开发门 / tests 不随仓库交付"——
+**不跑 pytest、不崩、也不静默记成 pass**。其余七项与 `tests/` 无关，照常判定。
+
 ## 八项
 
 | # | 项 | 判据 | 为什么它在发布门里 |
 |---|---|---|---|
-| 1 | 全量测试 | `pytest -q` 退出码 0，且 0 failed | 最基础的一层；但它单独不构成发布许可（见下） |
+| 1 | 全量测试（**本机开发门**） | 本机有 `tests/` 且 `pytest -q` 退出码 0、0 failed；缺 `tests/` ⇒ `unknown`（tests 不随仓库交付） | 最基础的一层；但它单独不构成发布许可（见下）。干净 clone 里没有 `tests/`，所以缺目录时只能记"没查成" |
 | 2 | 模块自检 | 自检块（`__main__`）存在且 `python -m agentflow.<x>` 退出码 0；没有自检块 ⇒ `unknown`（不是 fail、更不是 pass） | 自检覆盖的是"端到端能不能跑通"，而单测覆盖的是"判据对不对" —— 两者不重叠 |
-| 3 | 工具普查 | 工具数与角色工具数可复现；只读角色（C/H）的写工具泄漏 = 0 | 权限面是设计的一部分，且它默认是隐式的 —— 只有普查才让它成为事实 |
+| 3 | 工具普查 | 工具数与角色工具数可复现；只读角色（C/H/V）的**未登记**写工具 = 0（先减 `READONLY_CALL_EXCEPTIONS` 与 `UNIVERSAL_TOOLS`；判据只有 `tools.base.readonly_write_surface` 一处） | 权限面是设计的一部分，且它默认是隐式的 —— 只有普查才让它成为事实 |
 | 4 | 全库校验 | `verify_all` 的 error = 0 | 跨表不变量（悬空引用、依赖闭合、三态一致性）只有它查 |
 | 5 | linter | `scripts/lint_rules.py` 的 error = 0 | 形态类规则（第二份名单、静默失败、脚本无退出码） |
 | 6 | 禁 AI 区门 | `scripts/noai_gate.py --check-consistency` 一致，且本次改动集判定明确 | FC-27；`unknown` 必须显式暴露 |
@@ -98,7 +106,11 @@ SELFTEST_MODULES = (
 #: 把它们写在这里的价值是"变化时必须有人看一眼"，而不是"必须恰好这么多"。
 ROLE_TOOL_FLOOR: dict[str, int] = {"A": 18, "B": 16, "C": 15, "D": 30, "E": 18, "F": 28, "G": 28, "H": 20}
 
-READ_ONLY_ROLES = ("C", "H")
+#: 只读角色的权威名单**不在这里**：`agentflow.tools.READ_ONLY_ROLES`（C / H / V）。
+#: 本文件曾另写一份 `("C", "H")` —— 当时 tools 项的普查脚本已经从 `agentflow.tools`
+#: 读真身，所以那一行是**死常量**；但它仍是"同一件事的第二个落位"：读代码的人会以为
+#: 这一项只判 C/H。名单与数法都只许有一处，所以删掉。
+
 
 #: `item_selftests` 的四条判据。这是那一项判据的唯一出处：
 #: 模块 docstring 的八项表第 2 行必须与它逐条对应，`tests/test_release_check_items.py`
@@ -376,7 +388,30 @@ def _tail(text: str, n: int = 12) -> list[str]:
 
 
 def item_test_suite(rep: Report) -> Item:
-    it = rep.add(Item("tests", "全量测试（pytest -q）"))
+    it = rep.add(Item("tests", "本机开发门：全量测试（pytest -q；需本机有 tests/）"))
+    tests_dir = REPO_ROOT / "tests"
+    #: 三态纪律在"tests/ 不随仓库交付"这条裁定之后的落点：缺目录 ⇒ 没查成。
+    #: 不跑 pytest（跑了也只会得到 exit=5 / NO_TESTS_COLLECTED，那同样是 unknown，
+    #: 但读报告的人看不出"是缺目录还是目录里没用例"）—— 这里把真因写进 notes。
+    if not tests_dir.is_dir():
+        it.verdict = "unknown"
+        it.detail = {"tests_dir": str(tests_dir), "exists": False}
+        it.notes.append(
+            "**缺 tests/ ⇒ 本项没查成（unknown，不是 pass）**：`agentflow/tests` 只是"
+            "本机开发判据，不随仓库交付（业主 2026-11-21 裁定：不入 git）。"
+            "要跑这一项，请在本机检出/放回 `tests/`；干净 clone 里这一项永远是 unknown，"
+            "它不参与『八项都通过』的构成。"
+        )
+        return it
+    test_files = sorted(tests_dir.rglob("test_*.py"))
+    if not test_files:
+        it.verdict = "unknown"
+        it.detail = {"tests_dir": str(tests_dir), "exists": True, "test_files": 0}
+        it.notes.append(
+            f"`{tests_dir}` 在盘上但没有任何 `test_*.py` ⇒ **没有可跑的用例**"
+            "（没查成，不是 pass）。"
+        )
+        return it
     r = _run([sys.executable, "-m", "pytest", "-q"], cwd=REPO_ROOT)
     if not r["started"]:
         it.verdict = "unknown"
@@ -476,19 +511,48 @@ def item_selftests(rep: Report) -> Item:
 
 
 def item_tool_census(rep: Report) -> Item:
-    it = rep.add(Item("tools", "工具普查（数量可复现 + 只读角色 0 泄漏）"))
+    """第 3 项：工具普查。
+
+    ## 判据只有一处：`tools.base.readonly_write_surface`
+
+    "只读角色手里有没有未登记的写工具"这件事，本文件此前自己数了一遍
+    （`for_role` 面上凡是 `SIDE_EFFECTS_WRITE` 就算泄漏），而权威判据
+    （`tests/test_tools_readonly_roles.py`）与 `agentflow tools` 数的是
+    `面上写工具 − READONLY_CALL_EXCEPTIONS − UNIVERSAL_TOOLS`。干净树上两套数法
+    给出相反结论：C/H/V 自己的落库代理（6 件）与通用能力（10 件）都是逐条登记过、
+    设计允许的写面，却被这一项读成"写工具泄漏"而判 fail。这是**既有缺陷**
+    （CLEANCLONE 在 HEAD 上实测逐字同样红），不是哪一次改动引入的。
+
+    现在本项只读那一处实现的三档读数：`unregistered`（减掉两处登记之后剩下的）
+    非空才算泄漏；`registered` / `universal` 是登记过的放行，不算问题。
+    `role_filter_notes` 同理只读 `surface_note_problems`（它按
+    `ALLOWANCE_NOTE_MARKERS` 撇掉"按登记放行"那两句），不再按"有没有留痕"数。
+
+    空读数（`surfaces` 为空）判 `unknown` 而不是 `pass`：普查没读到任何只读角色
+    说明仪器没接上，不许让"一个都没查"长得像"查过了没问题"。
+    """
+    it = rep.add(Item("tools", "工具普查（数量可复现 + 只读角色未登记写工具 = 0）"))
     code = (
         "import json, tempfile, pathlib\n"
-        "from agentflow.tools import build_registry, ROLES, READ_ONLY_ROLES, SIDE_EFFECTS_WRITE\n"
+        "from agentflow.tools import build_registry, ROLES\n"
+        "from agentflow.tools.base import readonly_write_surface, surface_note_problems\n"
         "from agentflow.store import Store\n"
-        "d = pathlib.Path(tempfile.mkdtemp()); s = Store(d); s.init()\n"
-        "b = build_registry(store=s, workspace_root=d, strict=True)\n"
+        "d = pathlib.Path(tempfile.mkdtemp()); st = Store(d); st.init()\n"
+        "b = build_registry(store=st, workspace_root=d, strict=True)\n"
         "by_role = {r: len(b.registry.for_role(r)) for r in ROLES}\n"
-        "leaks = {r: [x.name for x in b.registry.for_role(r) if x.side_effect in SIDE_EFFECTS_WRITE]\n"
-        "         for r in READ_ONLY_ROLES}\n"
+        # 判据只有一处：readonly_write_surface 已经把"面写工具 − 例外表 − 通用表"算完，
+        # 这里只把三档读数序列化出来，不自己再数一遍（第二遍早晚与第一遍分家）。
+        "surfaces = {}\n"
+        "for role, surf in readonly_write_surface(b.registry).items():\n"
+        "    surfaces[role] = {'verdict': surf.verdict,\n"
+        "                      'registered': [n for n, _why in surf.registered],\n"
+        "                      'universal': list(surf.universal),\n"
+        "                      'unregistered': list(surf.unregistered)}\n"
+        "note_problems = surface_note_problems(b.registry)\n"
         "se = {}\n"
         "for x in b.registry._specs.values(): se[x.side_effect] = se.get(x.side_effect, 0) + 1\n"
-        "print(json.dumps({'total': len(b.registry), 'by_role': by_role, 'leaks': leaks,\n"
+        "print(json.dumps({'total': len(b.registry), 'by_role': by_role,\n"
+        "                  'surfaces': surfaces, 'note_problems': note_problems,\n"
         "                  'side_effects': se, 'skipped': b.skipped,\n"
         "                  'role_filter_notes': b.registry.role_filter_notes}, ensure_ascii=False))\n"
     )
@@ -516,21 +580,70 @@ def item_tool_census(rep: Report) -> Item:
         it.notes.append(f"普查输出解析失败：{e}")
         return it
     it.detail = data
-    problems: list[str] = []
-    if data["skipped"]:
-        problems.append(f"有模块被跳过：{data['skipped']}")
-    for role, leaks in data["leaks"].items():
-        if leaks:
-            problems.append(f"**只读角色 {role} 有写工具泄漏**：{leaks}")
-    for role, floor in ROLE_TOOL_FLOOR.items():
-        got = data["by_role"].get(role, 0)
-        if got < floor:
-            problems.append(f"角色 {role} 只有 {got} 个工具（下界 {floor}）⇒ 可能有工具静默没装上")
-    if data["role_filter_notes"]:
-        problems.append(f"有工具的 roles 声明把写工具给了只读角色（行为已被拦下，但声明要改）：{data['role_filter_notes']}")
+    if not (data.get("surfaces") or {}):
+        # 反真空：一份空的写面读数不等于"三个只读角色都没有写工具"。它意味着
+        # `readonly_write_surface` 什么都没读出来（仪器没接上），此时"没有未登记"
+        # 与"根本没读"长得一模一样 —— 那是本项目最忌的折叠，所以记 unknown。
+        it.verdict = "unknown"
+        it.notes.append(
+            "普查没读到任何只读角色的写面读数（`readonly_write_surface` 返回空）⇒ "
+            "这一次**没查成**（unknown，不是 pass）：仪器没接上时，『没有未登记写工具』"
+            "与『根本没读到』在报告上同形。"
+        )
+        return it
+    problems = _tool_census_problems(data)
     it.verdict = "pass" if not problems else "fail"
     it.notes.extend(problems)
+    it.notes.append(_tool_surface_summary(data))
     return it
+
+
+def _tool_census_problems(data: dict) -> list[str]:
+    """把 tools 普查读数翻成 fail 理由（纯函数，不重新数一遍）。
+
+    **唯一数法**是 `tools.base.readonly_write_surface`：它已经把
+    `READONLY_CALL_EXCEPTIONS[role]` 与 `UNIVERSAL_TOOLS` 从"面写工具"里减掉，
+    剩下的 `unregistered` 才是真泄漏。本函数只读那个产出，不再碰
+    `for_role` / `SIDE_EFFECTS_WRITE` —— 否则就是第三份数法，早晚与第一份分家。
+
+    声明面同理：只读 `surface_note_problems`（它撇掉"按登记放行"那两句），
+    不按 `role_filter_notes` "有没有留痕"数。
+    """
+    problems: list[str] = []
+    if data.get("skipped"):
+        problems.append(f"有模块被跳过：{data['skipped']}")
+    for role, surf in (data.get("surfaces") or {}).items():
+        leaks = list(surf.get("unregistered") or ())
+        if leaks:
+            problems.append(
+                f"**只读角色 {role} 有未登记的写工具（真泄漏）**：{leaks}"
+                "（已减掉 `READONLY_CALL_EXCEPTIONS` 与 `UNIVERSAL_TOOLS`；"
+                "数法只有 `tools.base.readonly_write_surface` 一处）"
+            )
+    by_role = data.get("by_role") or {}
+    for role, floor in ROLE_TOOL_FLOOR.items():
+        got = by_role.get(role, 0)
+        if got < floor:
+            problems.append(f"角色 {role} 只有 {got} 个工具（下界 {floor}）⇒ 可能有工具静默没装上")
+    for role, notes in sorted((data.get("note_problems") or {}).items()):
+        problems.append(
+            f"角色 {role} 的工具声明把写工具给了只读角色（行为已被 `for_role` 拦下，"
+            f"但声明要改）：{notes}"
+        )
+    return problems
+
+
+def _tool_surface_summary(data: dict) -> str:
+    """三档读数的一行人读版（`registered` / `universal` / `unregistered` 逐角色）。"""
+    parts: list[str] = []
+    for role, surf in (data.get("surfaces") or {}).items():
+        parts.append(
+            f"{role} {surf.get('verdict')}"
+            f"（已登记例外 {len(surf.get('registered') or ())} 件 / "
+            f"通用写工具 {len(surf.get('universal') or ())} 件 / "
+            f"未登记 {len(surf.get('unregistered') or ())} 件）"
+        )
+    return "只读角色写面（`tools.base.readonly_write_surface`）：" + "；".join(parts)
 
 
 def item_verify(rep: Report) -> Item:

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import pathlib
+import re
 import sys
 from typing import Any
 
@@ -29,6 +30,43 @@ if str(ROOT / "src") not in sys.path:
 
 ROLE_GUIDE = ROOT / "docs" / "ROLE-GUIDE.md"
 COMPONENTS_DOC = ROOT / "docs" / "SYSTEM-COMPONENTS.md"
+
+#: 生成文档里点名的判据文件形态（组件表第 6 格那一列，以及页首那种"重新生成就红"的指路）。
+TEST_REF_RE = re.compile(r"tests/test_[A-Za-z0-9_]+\.py")
+
+
+class DocReferenceError(RuntimeError):
+    """生成器拒绝把一条指向不存在判据文件的引用写进文档。"""
+
+
+def test_reference_problems(text: str, *, root: pathlib.Path | None = None) -> list[str]:
+    """`text` 里点名的每个 `tests/test_*.py` 中，不在盘上的那些（排好序）。
+
+    `tests/` 不随仓库交付（2026-11-21 业主裁定），所以目录不存在时整条检查跳过：
+    干净 clone 里两份文档照样能生成 —— 这条自检只依赖"文件存在性"，不读 tests 的内容，
+    也不把"没交付的判据"当成"文档坏了"（否则别人拿到仓库时文档会因为本机判据而失效）。
+    """
+    base = ROOT if root is None else root
+    if not (base / "tests").is_dir():
+        return []
+    return sorted({ref for ref in TEST_REF_RE.findall(text) if not (base / ref).is_file()})
+
+
+def assert_test_references_exist(name: str, text: str) -> None:
+    """生成侧的牙：判据文件不存在 ⇒ 报错，而不是把一条死链写进文档。
+
+    2026-11-21 DOCFIX2 在 `docs/SYSTEM-COMPONENTS.md` 里修掉五个从未在盘上的文件名
+    （`tests/test_store.py` / `test_schema_vocabulary.py` / `test_four_dynamic_checks_are_wired.py` /
+    `test_llmseam.py` / `test_webui_reads_nothing_else.py`）；那一格此前没有任何判据守着，
+    所以死链能长期绿着。这条自检让下一次重生成时当场报错，而不是安静地写出死链。
+    """
+    problems = test_reference_problems(text)
+    if problems:
+        raise DocReferenceError(
+            f"{name} 点名的判据文件不在盘上：{'、'.join(problems)} —— "
+            "把生成器里那一格改成现盘存在的 tests/*.py 再重生成（不要在文档里写死链）。"
+        )
+
 
 #: 角色的阅读顺序（M 永远最后，它是主控）。
 ROLES: tuple[str, ...] = ("A", "B", "C", "D", "E", "F", "G", "H", "V", "L", "M")
@@ -112,6 +150,18 @@ ARTIFACTS: dict[str, tuple[tuple[str, str, str], ...]] = {
 }
 
 #: 组件表：(名字, 模块, 一句话功能, 实现细节, 主要落点, 守着它的判据)。点名的符号由判据核存在性。
+#:
+#: 第 6 格（判据）登记的是现盘存在的 `tests/*.py`。这一格现在有两道防线：
+#: ① 生成侧：`render_components()` 末尾的 `assert_test_references_exist()` 逐个核
+#:    `is_file()`，不存在就抛 `DocReferenceError` 且两份文档都不写（`tests/` 不在盘上
+#:    时整条自检跳过 —— tests 不随仓库交付，干净 clone 里文档照样能生成）；
+#: ② 判据侧：`tests/test_system_docs_point_at_real_test_files.py` 用独立的正则扫两份
+#:    产物，塞假文件名必红。此前（2026-11-21 DOCFIX2 之前）没有这两道防线，
+#:    `test_release_all.py` 的 `_DOC_TEST_REF_DOCS` 只含 `DEVELOPMENT.md` / `README.md` /
+#:    `DESIGN-TOOLS.md` / `NOAI-REVIEW-REGISTER.md`，不含本文件生成的两份文档，于是
+#:    五个从未在盘上的旧名（`test_store.py` / `test_schema_vocabulary.py` /
+#:    `test_four_dynamic_checks_are_wired.py` / `test_llmseam.py` /
+#:    `test_webui_reads_nothing_else.py`）长期绿着。DOCFIX2 已把它们换成现盘真实的判据文件。
 COMPONENTS: tuple[tuple[str, str, str, str, str, str], ...] = (
     (
         "装配与运行入口",
@@ -165,7 +215,7 @@ COMPONENTS: tuple[tuple[str, str, str, str, str, str], ...] = (
         "tx() 一笔事务（alloc_id 与 upsert 与 delete，提交时追加事件）；_atomic_write（临时文件加改名）；"
         "_load 有进程内缓存（键为路径加 mtime 与大小，写完即清）；LOCK_ORDER 固定加锁顺序。",
         "写 data 下的表、events.jsonl、locks",
-        "tests/test_store.py、tests/test_store_load_cache.py",
+        "tests/test_store_concurrency.py、tests/test_store_load_cache.py",
     ),
     (
         "表结构与词表",
@@ -174,7 +224,7 @@ COMPONENTS: tuple[tuple[str, str, str, str, str, str], ...] = (
         "SCHEMA_VERSION、TABLES、各受控词表（VERDICTS 与 TASK_STATUSES 与 EVIDENCE_KINDS 与 GRADES 与 ITEM_STATES）、"
         "validate()（写入期校验，不过则整笔回滚）。",
         "被 store 与所有写侧读",
-        "tests/test_store.py、tests/test_schema_vocabulary.py",
+        "tests/test_schema.py、tests/test_vocab_census.py",
     ),
     (
         "工具层",
@@ -200,7 +250,8 @@ COMPONENTS: tuple[tuple[str, str, str, str, str, str], ...] = (
         "把谁能让谁干活落成可执行的判定：边存在吗、写集冲突吗、参数接缝对不对。",
         "check_edge（forbidden_edge 与 unknown_role 等受控拒绝码）、waves_of（按写集分波并发）、check。",
         "被 conductor.summon 与 summon_many 读",
-        "tests/test_policy.py、tests/test_four_dynamic_checks_are_wired.py",
+        "tests/test_policy.py、tests/test_depth_lock_is_six_and_fanout_is_not_depth.py、"
+        "tests/test_concurrency_is_unlimited_by_default.py",
     ),
     (
         "角色声明",
@@ -227,7 +278,8 @@ COMPONENTS: tuple[tuple[str, str, str, str, str, str], ...] = (
         "LlmSeam.ask 与 ask_json（带 system 与 tools）、ToolFace（ToolSpec 转 function-calling 形态）、"
         "_ROLE_SEAMS（逐角色默认缝，判据之间必须还原）。",
         "被 agent_loop 与各角色 core 读",
-        "tests/test_llmseam.py、tests/test_host_wiring.py",
+        "tests/test_llmseam_dotted_tool_names.py、tests/test_llmseam_charge_discipline.py、"
+        "tests/test_host_wiring.py",
     ),
     (
         "证据链（签）",
@@ -302,7 +354,8 @@ COMPONENTS: tuple[tuple[str, str, str, str, str, str], ...] = (
         "readouts.scan（一次读盘，四份读数共用）、errors 与 flow 与 cost 与 gates 四切面；"
         "webui 的 readers 与 writes（POST 端点，CSRF 与回环来源校验）。",
         "只读 data 与 out；写 out/review",
-        "tests/test_readouts_are_the_single_shape.py、tests/test_webui_reads_nothing_else.py",
+        "tests/test_readouts_are_the_single_shape.py、tests/test_webui_readers.py、"
+        "tests/test_webui_writes.py",
     ),
     (
         "命令行入口",
@@ -505,7 +558,9 @@ def render_role_guide() -> str:
     ]
     for role in ROLES:
         lines += _role_section(role, registry, specs[role])
-    return "\n".join(lines).rstrip() + "\n"
+    text = "\n".join(lines).rstrip() + "\n"
+    assert_test_references_exist(ROLE_GUIDE.name, text)
+    return text
 
 
 def render_components() -> str:
@@ -552,7 +607,9 @@ def render_components() -> str:
         "这份文件自己就是这条的产物（生成加比对）。",
         "",
     ]
-    return "\n".join(lines).rstrip() + "\n"
+    text = "\n".join(lines).rstrip() + "\n"
+    assert_test_references_exist(COMPONENTS_DOC.name, text)
+    return text
 
 
 def _write(path: pathlib.Path, text: str, *, check: bool) -> bool:
@@ -567,7 +624,12 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="生成 docs/ROLE-GUIDE.md 与 docs/SYSTEM-COMPONENTS.md")
     ap.add_argument("--check", action="store_true", help="只比对不写盘（不一致 => 退出码 1）")
     args = ap.parse_args(argv)
-    pairs = ((ROLE_GUIDE, render_role_guide()), (COMPONENTS_DOC, render_components()))
+    try:
+        pairs = ((ROLE_GUIDE, render_role_guide()), (COMPONENTS_DOC, render_components()))
+    except DocReferenceError as exc:
+        # 先渲染完两份再写盘：任何一份点名的判据文件不存在，两份都不写（不留半新半旧）。
+        print(f"  生成中止：{exc}")
+        return 1
     bad = []
     for path, text in pairs:
         same = _write(path, text, check=args.check)

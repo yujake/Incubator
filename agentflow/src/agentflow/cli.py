@@ -39,21 +39,78 @@ from .console import pin_utf8
 from .store import Store, StoreError
 from .verify import verify_all
 
-#: 不给 `--root` 时这个常量指向的仓库根：`src/agentflow/cli.py` 的 `parents[2]` = 仓库里的 `agentflow/`。
+#: 这个常量指向的产品根（= 仓库里的 `agentflow/`）：`src/agentflow/cli.py` 的 `parents[2]`。
+#:
+#: 它不是"缺省工作区"（那一格见 :func:`default_workspace_root`）。它只剩三个用处：
+#: 判断"这一趟是不是跑在代码检出目录上"（:func:`_warn_if_code_checkout`）、`doctor`
+#: 找 Lean/Mathlib 配置的基点、`web` 找"最近工作区"时把检出目录自己排除掉。
+#: 判据 `tests/test_cli_root_default_is_one_body.py::test_a_the_default_workspace_has_one_body`
+#: 钉着这句：`cli.py` 里"返回进程当前目录"的那一句只许出现一次（就是 `default_workspace_root`）。
 DEFAULT_ROOT = Path(__file__).resolve().parents[2]
 
-#: 工作区缺省 = 当前目录。
-#:
-#: 为什么不用 `DEFAULT_ROOT`（= 代码检出目录 `agentflow/`）：它是从
-#: `__file__` 算出来的 —— 于是"我在某个工作区里启动"这件事在结构上做不到：
-#: `cd projects/xxx` 之后 `run-agent M ...` 仍然把仓库根当成工作区，
-#: 会把受版本控制的 `data/tasks.json` / `data/events.jsonl` / `data/counters.json` /
-#: `data/usage_ledger.json` 写脏，还落下 `runs/` `sessions/` `skills/` `.agentflow-workspace`。
-#: CLI 的常理是"不给 --root 就用当前目录"；`--root` 仍可显式覆盖。
+
+def default_workspace_root() -> Path:
+    """不给 `--root` 时的工作区 = 进程当前目录 —— 唯一一处回答这个问题。
+
+    为什么不用 `DEFAULT_ROOT`（= 代码检出目录 `agentflow/`）：它是从
+    `__file__` 算出来的 —— 于是"我在某个工作区里启动"这件事在结构上做不到：
+    `cd projects/xxx` 之后 `run-agent M ...` 仍然把仓库根当成工作区，
+    会把受版本控制的 `data/tasks.json` / `data/events.jsonl` / `data/counters.json` /
+    `data/usage_ledger.json` 写脏，还落下 `runs/` `sessions/` `skills/` `.agentflow-workspace`
+    （实测两次，判据 `tests/test_cli_usage_side_fixes.py`）。pip 装成非 editable 时它还会
+    变成 `site-packages` 里的一格 —— "装在哪"不该等于"写到哪"。CLI 的常理是
+    "不给 --root 就用当前目录"；`--root` 仍可显式覆盖。
+
+    为什么这必须是一个函数（2026-11-21 CLIFIX ①）：2026-10-27 那次修复只把
+    `_root_of` 那一族命令改成了 cwd，`make_store` / `_target_workspace` / `stats` /
+    `status-report` 仍然各算一次 `DEFAULT_ROOT` —— 于是 `cd 我的项目; init`（cwd）与
+    紧接着的 `status`（代码检出目录）读的不是同一份盘，用户看到的是"建好了却看不见"。
+    两套缺省不是两个设计，是一次修复只修了一半；所以缺省只许从这里算。
+    """
+    return Path.cwd().resolve()
+
+
 def _root_of(args) -> Path:
-    """这一条命令的工作区根：`--root` 优先，否则当前目录。"""
+    """这一条命令的工作区根：`--root` 优先，否则 :func:`default_workspace_root`。"""
     given = getattr(args, "root", None)
-    return Path(given).resolve() if given else Path.cwd().resolve()
+    return Path(given).resolve() if given else default_workspace_root()
+
+
+def _root_default_sentence() -> str:
+    """`--root` 帮助里"缺省在哪"那半句：绝对路径现算，与上面那个函数同一个数。
+
+    为什么把绝对路径写进帮助：缺省曾经有两套（cwd / 代码检出目录），文档与 `--help`
+    各说一套 ⇒ 用户按其中一套去理解、按另一套去用。写死"缺省 = 当前目录"仍然要靠人
+    去猜"那是哪个绝对路径"，所以这里把现算值直接写出来；判据
+    `tests/test_cli_root_default_is_one_body.py::test_b_the_root_help_states_the_computed_default`
+    拿 `--help` 里的字符串与"真跑一次 `status` 打印出来的工作区"对拍。
+    """
+    return f"缺省 = 当前工作目录；本进程此刻是 {default_workspace_root()}"
+
+
+def _projects_dir_help(*, follows_root: bool) -> str:
+    """`--projects-dir` 的帮助：真实缺省 + 它与 `--root` 的真实关系（按命令现算）。
+
+    `follows_root=True` 只给 `start`：它有一条"给了 `--root` 却没给本旗标 ⇒
+    `<root>/projects`"的改写（`_spec_of_start` 里那一手）。`project` / `budget` 没有
+    这一条 —— 它们从来不看 `--root`，旧帮助写的"缺省 <root>/projects，与 start 同一条
+    口径"是假话（实测：`budget --status --project P` 不给 `--projects-dir` 时读的是
+    `projects.projects_dir(None)`，与 `--root` 无关）。
+
+    缺省的那三个绝对路径一律来自 `projects` 模块（`DEFAULT_PROJECTS_DIR` /
+    `ENV_PROJECTS_DIR`），不在这里另算一份；`--help` 只 import 常量，不读设置文件
+    （设置文件语法错时 `--help` 仍要能打出来）。
+    """
+    from . import projects as P
+
+    default = P.DEFAULT_PROJECTS_DIR.resolve()
+    head = ("projects 落点。给了 `--root` 而没给本旗标 ⇒ `<root>/projects`；"
+            "两处都不给 ⇒ " if follows_root else
+            "projects 落点。本命令不看 `--root`（它不参与这条推断）；不给本旗标 ⇒ ")
+    return (head + f"{default}"
+            "（由本包位置推出的工作区根下的 projects/，不是当前目录）。"
+            f"顺序：显式旗标 > 环境变量 {P.ENV_PROJECTS_DIR} > 设置文件的 "
+            "workspace.projects_dir > 上面那个缺省")
 
 
 def _warn_if_code_checkout(root: Path) -> None:
@@ -149,8 +206,9 @@ def make_store(root: Path | None = None) -> Store:
     （相对路径按进程当前目录解析），散在二十几处就会有一处忘了 resolve —— 于是同一个
     工作区两个句柄指向两个路径。守卫（能不能开、要不要 init）在各命令自己那一层。
     """
-    root = Path(root or DEFAULT_ROOT).resolve()
-    return Store(root)
+    # 缺省走 `default_workspace_root()`（不是 `DEFAULT_ROOT`）：这一行曾经是"两套
+    # 缺省"的第二套，`status` / `submit` 因此读代码检出目录，而 `init` 建在 cwd。
+    return Store(Path(root).resolve() if root else default_workspace_root())
 
 
 # ---------------------------------------------------------------- Lean 工具链开机自检
@@ -623,7 +681,10 @@ def _build_providers(cfg: dict, names: list[str], root: Path):
         elif n == "europepmc":
             out.append(P.EuropePmcProvider())
         elif n == "fixture":
-            out.append(P.FixtureProvider(root / "demo" / "fixtures" / "candidates.json"))
+            # 2026-11-22 DEMORETIRE：改前这里读 `<工作区>/demo/fixtures/candidates.json`
+            # （`agentflow/demo/` 的产物）。demo 退场后离线夹具的位置换成
+            # `<工作区>/fixtures/candidates.json` —— 文件由调用方提供，产品不再带默认素材。
+            out.append(P.FixtureProvider(root / "fixtures" / "candidates.json"))
         else:
             print(f"[warn] 未知 provider：{n}（跳过）", file=sys.stderr)
     return out
@@ -812,7 +873,8 @@ def cmd_verify(args) -> int:
 #:
 #: 这四条命令此前只是一条转发：实现在 `tools/legacy_cli/<名字>.py`，CLI 里留一行
 #: `_legacy_module(...).main(args)`。本版把那四个模块与转发一起删了；库里真正干活的
-#: 实现（`demo.run_demo` / `Store.rebuild` / ...）一件都没删。
+#: 实现（`Store.rebuild` 等）除 `demo` 外一件都没删 —— `demo` 的实现在 2026-11-22
+#: 的 DEMORETIRE 里也删了（`agentflow.demo` 整条线退场，见 `RETIRED_COMMANDS["demo"]`）。
 RETIRED_COMMANDS: dict[str, str] = {
     "rebuild": (
         "重建快照不再是 CLI 动词（它是数据维护动作，正常使用不该出现）。"
@@ -830,11 +892,14 @@ RETIRED_COMMANDS: dict[str, str] = {
         "（缺省 dry-run，`--apply` 才写）。"
     ),
     "demo": (
-        "离线演示的命令行这一层退场了，演示的真身仍在库里："
-        "python -c \"import sys; sys.path.insert(0, 'src'); "
-        "from pathlib import Path; from agentflow.demo import run_demo; "
-        "raise SystemExit(run_demo(Path('demo/run').resolve()))\""
-        "。只想看这台机器行不行，用不花钱的 `agentflow doctor`。"
+        "离线演示已彻底移除，不只是命令行这一层（2026-11-22 业主裁定 DEMORETIRE）："
+        "`agentflow.demo`、它的产物（`demo/run/`）与夹具（`demo/sources/`、"
+        "`demo/fixtures/`、`demo/selftest/`）一并退场，库里**不再有**可调用的替代实现。"
+        "替代做法：`agentflow doctor` 看这台机器行不行；端到端记录链路走 "
+        "`agentflow start` / `project run`（需要模型 key）。离线检索仍可用 "
+        "`--provider fixture`，候选清单放在 `<工作区>/fixtures/candidates.json`"
+        "（不再有仓库自带的那一份）。沿革见根 `README.md` 的 Latest Updates（2026-11-22 "
+        "DEMORETIRE）与 `docs/USER-GUIDE-CLI.md` §6.4。"
     ),
     "evidence migrate": (
         "内联正文迁移是一次性动作（`draft/30` §T0-7），迁完就没有对象了，移植期实现已删。"
@@ -1037,15 +1102,72 @@ def cmd_repair_backfill_grades(args) -> int:
 
 
 def cmd_demo(args) -> int:
-    """已退场（A4）：离线演示不再是 CLI 动词；演示的真身 `demo.run_demo` 仍在库里。
+    """已退场（A4），并已于 2026-11-22 彻底移除（DEMORETIRE）：`agentflow.demo` 不复存在。
 
-    保留这个 argparse 挂点只为说清"现在怎么跑演示"（库接口那条一行命令），
-    退出码 2（没查成）。删掉挂点会让调用方只看到 argparse 的 `invalid choice`。
+    保留这个 argparse 挂点只为说清"这条路去哪了、现在走什么"（明确错误 + 替代指引，
+    退出码 2 = 没查成）。删掉挂点会让调用方只看到 argparse 的 `invalid choice`。
 
     读写了哪些表或文件：不读不写（退场层一行都不碰盘）。
     实现方式一句话：`_retired("demo")`。
     """
     return _retired("demo")
+
+
+def _readonly_write_surface_lines(readings: Mapping[str, Any]) -> list[str]:
+    """把只读角色写面的三档读数排成人读的几行（判定一个字都不在这里做）。
+
+    ## 判定为什么不在这里
+
+    判定只由 `tools.base.readonly_write_surface` 的 `verdict` 与三档名单给。这一层
+    只负责排版 —— 若它自己再数一遍"哪些算写工具"，CLI 就会重新长出第二套数法，
+    而 SYSINTRO（2026-11-21）钉住的正是那种分叉：同一件事实，CLI 按"面里有没有
+    `write_local`"数、判据按"有没有登记"数，干净树上两套数法给出相反的结论。
+
+    ## 三档各自长什么样
+
+    - `ok(clean)`：这个只读角色的面上没有任何写工具（正常）；
+    - `ok(registered)`：面上的写工具全部来自两处登记（正常）；
+    - `!! 未登记写工具 N 件 [名字…]`：真问题 —— 这一档不许降级成一句软话，
+      它必须一眼可见（`!!` + 逐件名字 + 结论行再报一次）。
+    """
+    lines = ["只读角色写面（先减掉已登记的放行，再判有没有未登记的写工具）："]
+    leaks: list[str] = []
+    universal: set[str] = set()
+    for role in sorted(readings):
+        reading = readings[role]
+        universal.update(reading.universal)
+        if reading.verdict == "leak":
+            leaks.extend(f"{role}/{name}" for name in reading.unregistered)
+            head = (f"  {role}  !! 未登记写工具 {len(reading.unregistered)} 件"
+                    f" [{', '.join(reading.unregistered)}]")
+        elif reading.verdict == "clean":
+            head = f"  {role}  ok(clean)  这个角色的面上没有写工具"
+        else:
+            head = f"  {role}  ok(registered)"
+        tail: list[str] = []
+        if reading.registered:
+            tail.append(f"已登记例外 {len(reading.registered)} 件 "
+                        f"[{', '.join(name for name, _why in reading.registered)}]")
+        if reading.universal:
+            tail.append(f"通用写工具 {len(reading.universal)} 件")
+        if tail:
+            head += "；" + "；".join(tail)
+        lines.append(head)
+    if universal:
+        lines.append("  通用写工具（另一档登记：UNIVERSAL_TOOLS，只写通信/簿记表）："
+                     f"{len(universal)} 件 [{', '.join(sorted(universal))}]")
+    if leaks:
+        lines.append(
+            f"结论：!! 有泄漏 —— 未登记的写面工具 {len(leaks)} 件：{', '.join(leaks)}"
+            "（既不在 READONLY_CALL_EXCEPTIONS、也不是 UNIVERSAL_TOOLS 里的通用能力 ⇒ 真问题）"
+        )
+    else:
+        registered = sum(len(r.registered) for r in readings.values())
+        lines.append(
+            f"结论：ok(registered) —— {len(readings)} 个只读角色，未登记写工具 0 件"
+            f"（已登记例外共 {registered} 件；真泄漏只会出现在未登记那一档）"
+        )
+    return lines
 
 
 def cmd_tools(args) -> int:
@@ -1099,25 +1221,32 @@ def cmd_tools(args) -> int:
             flag = " ⚠需审批" if s.needs_approval else ""
             print(f"  {s.name:28} [{s.side_effect}]{flag}  {s.summary[:60]}")
     else:
-        # 只读角色的写工具泄漏必须一眼可见：它是"审校者手里有没有刀"的直接答案。
-        from agentflow.tools import READ_ONLY_ROLES, SIDE_EFFECTS_WRITE
-
         from agentflow import leanscope as _LEANSCOPE
+        from agentflow.tools.base import readonly_write_surface, surface_note_problems
 
+        # 只读角色的写面必须一眼可见：它是"审校者手里有没有刀"的直接答案。
+        # 数法只有一处 —— `tools.base.readonly_write_surface`：先减掉两处登记
+        # （`READONLY_CALL_EXCEPTIONS` 里逐条带理由的落库代理 / 自有凭据产物，
+        # 以及 `UNIVERSAL_TOOLS` 里的通用能力），剩下的才是"未登记"的写工具。
+        # 旧版在这里按"面里有没有 write_local"数，于是把 C/H/V 那 6 件登记过的代理
+        # 与 10 件通用能力一起印成 `!! 有泄漏` —— 把"登记过的放行"读成了"泄漏"
+        # （SYSINTRO 2026-11-21 的发现）。权威判据
+        # `tests/test_tools_readonly_roles.py` 读的是同一个函数，两处不可能再分叉。
         # 业主 2026-10-22：`TOOL_ROLES` 是声明词表（刻意完整，见 `tools/__init__` 的
         # 注释）；这一行是读数，所以按可见性过滤 —— 开关关着时不存在的角色不许在这里
         # 留一个 "L: 0 个工具" 的格子。
         by_role = {r: len(build.registry.for_role(r))
                    for r in _LEANSCOPE.visible_roles(TOOL_ROLES)}
         print(f"\n各角色工具数：{by_role}")
-        leaks = {
-            r: [s.name for s in build.registry.for_role(r) if s.side_effect in SIDE_EFFECTS_WRITE]
-            for r in READ_ONLY_ROLES
-        }
-        print(f"只读角色写工具泄漏：{leaks}（{'空 = 正常' if not any(leaks.values()) else '!! 有泄漏'}）")
-        if build.registry.role_filter_notes:
-            print(f"⚠️ 有工具的 roles 声明需要纠正（行为已被 for_role 拦下）：")
-            for r, notes in build.registry.role_filter_notes.items():
+        for line in _readonly_write_surface_lines(readonly_write_surface(build.registry)):
+            print(line)
+        # 留痕里"按登记放行"的那几条不是声明错误：与上面同一个口径，把两类分开再报。
+        # 不分开的话，干净树上会多印一条「有工具的 roles 声明需要纠正」，而那几条
+        # 留痕说的正是"已登记的放行"（SYSINTRO 那一批的第二处误报）。
+        problems = surface_note_problems(build.registry)
+        if problems:
+            print("⚠️ 有工具的 roles 声明需要纠正（行为已被 for_role 拦下）：")
+            for r, notes in problems.items():
                 print(f"  [{r}] {notes[0][:140]}")
         print("（用 --role A 查看具体清单）")
     return 0
@@ -1774,7 +1903,7 @@ def _target_workspace(spec: RunSpec, args) -> tuple[Path, dict | None]:
     这里一律按 `start="auto"` 解析：它回答的是"落点在哪"，不回答"要不要新建" ——
     后者归 `project_start`，而试运行那一档要的正是"别替我把新建这一步办了"。
     """
-    root = Path(spec.root or DEFAULT_ROOT).resolve()
+    root = Path(spec.root).resolve() if spec.root else default_workspace_root()
     if not spec.project_name:
         return root, None
     from . import projects as P
@@ -1813,6 +1942,21 @@ def _summons_text(spec: RunSpec) -> str:
                 + "、".join(r for r in visible if r != top))
     return (f"只跑 {top} 这一个循环；它按边可以召唤 "
             + ("、".join(r for r in visible if r != top) or "（没有出边）"))
+
+
+def _mode_word(spec: RunSpec) -> str:
+    """预检里"这一趟走哪条路"的那一个词：横幅与 `--dry-run --json` 的 `mode` 都读它。
+
+    为什么要有它（2026-11-21 CLIFIX ③）：改前横幅与 JSON 各算一次 ——
+    `--mode research` 的横幅写 `research（十角色循环）`，JSON 却写 `"mode": "role"`
+    （`RunSpec.research` 是另一格，`spec.mode` 仍是 `role`）。脚本照 `--json` 判模式会
+    读成"只跑一个角色"，而实际起的是十角色循环。一处算之后，
+    `--mode research` ⇒ 横幅 `research`、JSON `"research"`（判据
+    `tests/test_cli_root_default_is_one_body.py::test_c_the_mode_word_is_the_same_in_the_banner_and_the_json`）。
+
+    取值：`topic` / `project` / `role` / `research` / `web`（`research` 压过 `role`）。
+    """
+    return "research" if spec.research else spec.mode
 
 
 def _print_plan(spec: RunSpec, args) -> int:
@@ -1878,7 +2022,8 @@ def _print_plan(spec: RunSpec, args) -> int:
             "library 种子文献 + SEED-README.md（只放文件、不写台账）"
             + ("" if (project and project.get("will_create")) else "；只在新建工作区时投"))
     plan_out = {
-        "mode": spec.mode,
+        # 与横幅同一个词、同一次计算：`--json` 的 `mode` 不再是 `spec.mode` 的第二套说法。
+        "mode": _mode_word(spec),
         "task": spec.task,
         "workspace": str(workspace),
         "project": project or {},
@@ -1912,7 +2057,7 @@ def _print_plan(spec: RunSpec, args) -> int:
     print("")
     for line in tty.panel(
         "试运行：将要发生的一切（一个字节都不写、一次模型都不调）",
-        [("模式", ("research（十角色循环）" if spec.research else spec.mode)),
+        [("模式", _mode_word(spec) + ("（十角色循环）" if spec.research else "")),
          ("模型", f"{model_spec.model}（base={model_spec.base_url}）"),
          ("预算", budget_cell),
          ("Lean", lean_cell),
@@ -2037,6 +2182,18 @@ def _dispatch(spec: RunSpec, args) -> int:
     raise SystemExit(2)
 
 
+def _cache_write_record_wanted(spec: RunSpec, args) -> bool:
+    """这一趟要不要落 `runs/cache-active-<sid>.json`（审计 F5）。
+
+    只读档起网页（`web` 没开 `--allow-writes`）不落：那一档的承诺是"一个字节都不
+    往工作区写"，而 `cachectl.record_active_run` 会建 `runs/` 并写一个文件 ——
+    实测空目录起只读服务就多出 `runs/cache-active-<当天>.json`。其余各档照旧记
+    （真起跑那一趟需要这份读数给网页看"当前用哪一档"；写面开着的网页也照旧）。
+    """
+    return not (spec.mode == MODE_WEB
+                and not bool(getattr(args, "allow_writes", False)))
+
+
 def _announce_cache_line(spec: RunSpec, *, write_record: bool = True,
                          lean: bool | None = None, root: Path | None = None) -> None:
     """起跑前打一行缓存读数（只加读数：读不到 / 不新鲜都不拦跑、不改退出码）。
@@ -2048,9 +2205,11 @@ def _announce_cache_line(spec: RunSpec, *, write_record: bool = True,
     读的一方是 `cachectl.run_reading()`（它自己接住所有异常）：本函数因此只负责
     "印出来 + 选流"。`--json` 那一档走 stderr，免得一行人话把 stdout 的 JSON 弄坏。
 
-    `write_record=False` 是试运行那一档：读数照印，但不落 `runs/cache-active-*.json`
-    （见 `cachectl.run_reading` 的 `write_record`）。`lean` 给"将来会用的那一档"，
-    试运行里就是 `--lean` 的取值 —— 那一趟还没真起跑，不能拿本进程的开关冒充它。
+    `write_record=False` 是"这一趟不落 `runs/cache-active-*.json`"那一档（见
+    `cachectl.run_reading` 的 `write_record`）：试运行与"只读档起网页"都用它。
+    试运行时 `lean` 给"将来会用的那一档"（`--lean` 的取值）—— 那一趟还没真起跑，
+    不能拿本进程的开关冒充它；只读档起网页时盘上一个字节都不许写，所以连运行记录
+    一起跳过（审计 F5）。
     `root` 是这一趟的落点：不给时 `cachectl` 只能从进程命令行 `--root` 猜，于是
     `--project P` 那一趟的运行记录会写进外层工作区的 `runs/`（与数据分家）。
     """
@@ -2102,7 +2261,13 @@ def _run_spec(spec: RunSpec, args) -> int:
         # 只开网页那一档不给落点：它那一趟不初始化工作区，先写一个 `runs/` 会让
         # `projects.classify` 把一个只有 `runs/` 的目录读成 not_a_project（下一次
         # `--project P` 就会被守卫拒掉）。那里本来也没有"这一趟起跑"可记。
-        _announce_cache_line(spec, root=None if spec.mode == MODE_WEB else spec.root)
+        #
+        # 只读档（web 没开 --allow-writes）一个字节都不许往工作区写：`runs/cache-active-*.json`
+        # 这行运行记录也不写（审计 F5 —— 实测空目录起只读服务会多出
+        # `runs/cache-active-<当天>.json`）。判据在 `_cache_write_record_wanted`：
+        # 它与 `--dry-run` 同一档，读数照印、盘上不落；写面开了的那一档照旧记。
+        _announce_cache_line(spec, write_record=_cache_write_record_wanted(spec, args),
+                             root=None if spec.mode == MODE_WEB else spec.root)
         if spec.watch:
             return _with_watch(spec, args)
         return _dispatch(spec, args)
@@ -2590,7 +2755,9 @@ def cmd_artifacts(args) -> int:
     """
     from . import artifacts as A
 
-    root = args.root
+    # `args.root` 直接往下传的话，不给 `--root` 时 `ledger_path(None)` 会算出
+    # `<cwd>/None/ARTIFACTS.jsonl`（一个字面叫 None 的目录）—— 缺省必须走 `_root_of`。
+    root = _root_of(args)
     action = args.action
     targets = list(args.target or [])
 
@@ -3023,7 +3190,9 @@ def _exec_project(spec: RunSpec, args) -> int:
 #: 原先第 5 项是"离线自检"：`MENU` → `SHELL_ACTIONS["5"]` → `_shell_demo` → `main(["demo", "--keep"])`。
 #: `draft/41-H:55` 把它写成设计；`demo.py` 由 `tests/test_demo_end_to_end.py` 6 条钉住（`draft/48-09:890` 的"唯一不需要 key 的端到端路径"），真机面零实例见 `draft/48-09:893`。
 #: 淘汰与处置（`draft/44:95` L-04h、`draft/48-09:878-880`）：`demo.py` 不删、只从 `MENU` 摘掉入口，改为文档说明
-#: `python -m agentflow.cli demo`。教训：新增主入口 X 时只加子命令、没加菜单格 ⇒ 同批把 X 加进 `MENU`，
+#: `python -m agentflow.cli demo`。2026-11-22 DEMORETIRE 追加：`demo.py` 连同它的产物与
+#: 夹具整条线退场（`tests/test_demo_end_to_end.py` 一并删除，判据改成"命令退场"的行为断言），
+#: 所以"改为文档说明"那一档也过期了 —— 现在只剩 CLI 里这个受控退场挂点。教训：新增主入口 X 时只加子命令、没加菜单格 ⇒ 同批把 X 加进 `MENU`，
 #: 并写元判据断言 `"X" in MENU 文本`（判据在 `tests/test_r8_retired_entries.py`）。
 MENU: tuple[tuple[str, str, str], ...] = (
     ("1", "项目：列出 / 计划 / 运行（冷启动或热启动）", "project"),
@@ -3132,9 +3301,9 @@ def _shell_tools(ask, out) -> int:
 
 # `R8`-A-1 的退场点：这里原有 `def _shell_demo(ask, out) -> int:`（删于 2026-10-07）。
 # 它原先只做一件事：打三行提示，然后 `main(["demo", "--keep"])`。
-# `demo` 子命令原样保留（唯一不需要模型 key 的端到端路径，`tests/test_demo_end_to_end.py`
-# 6 条钉住；`draft/48-09:899` 逐字"不许删 `demo.py`"）⇒ 摘掉的只是交互台的入口，
-# 命令仍然可达（`python -m agentflow.cli demo`）。四块留痕见 `MENU` 上方那一段。
+# `demo` 子命令当时原样保留（`draft/48-09:899` 逐字"不许删 `demo.py`"）⇒ 摘掉的只是交互台的入口。
+# 2026-11-22 DEMORETIRE：`demo.py` 与 `agentflow/demo/` 已按业主裁定整条退场，`draft/48-09:899`
+# 那句"不许删"随之作废；`demo` 命令仍可达，但已是受控退场（exit 2 + 替代指引）。四块留痕见 `MENU` 上方那一段。
 
 
 #: 菜单按键 -> 处理函数。键就是 `MENU` 里那个按键。
@@ -4279,6 +4448,9 @@ def cmd_doctor(args) -> int:
     # 在 `provers` 那一档里是"可用"，在这里必须是 `unusable`：反控没失败）。
     # Mathlib 那一轴只有一处探测地址：把自检读数里的 `mathlib` 那一格原样交给
     # `toolchain_report`，于是"doctor 给的 Mathlib 读数"与"收工门/首屏那一格"读的是同一份。
+    # 这一格不是"缺省工作区"，是找 Lean/Mathlib 配置的基点：`doctor` 不读工作区，
+    # 它要的是"工程根 + 它上一级"这两个候选（见 `leantoolchain._mathlib_default_candidates`）。
+    # 缺省工作区归 `default_workspace_root()`，别把这两件事合流。
     sc = LT.lean_selfcheck_reading(root=Path(getattr(args, "root", None) or DEFAULT_ROOT))
     rep = TC.toolchain_report(mathlib_reading=(sc.get("mathlib") or None))
     rep["lean_selfcheck"] = sc
@@ -4451,7 +4623,9 @@ def cmd_web(args) -> int:
     子命令的实现；两者的名字因此不同。
     两个开关按裁定 T1 加（`--allow-writes` 题 C2、`--no-settings-write` 题 E1）。W3/W4 之后它们真的
     改变行为，两条都在 `writes.authorize()` 的矩阵里：`--allow-writes` 是第 3 层（不开 ⇒ `/api/` 下那六条写端点
-    403），`--no-settings-write` 是第 4 层（只关 `POST /api/settings`）。`getattr` 的默认值是为了让
+    403；`POST /api/cache/warm` 的试算档 `dry_run=1` 例外 —— 它只要回环来源、不写盘
+    不花钱，只读档也回 200，见 `writes.authorize(read_only=True)`），
+    `--no-settings-write` 是第 4 层（只关 `POST /api/settings`）。`getattr` 的默认值是为了让
     直接构造 `Namespace` 的老调用方（
     `tests/test_webui.py::test_the_cli_web_subcommand_forwards_to_the_module_entry`）照旧能跑：
     缺这两个字段就当"没给"。
@@ -4494,7 +4668,8 @@ def _exec_web(spec: RunSpec, args) -> int:
     host = str(getattr(args, "host", "127.0.0.1") or "127.0.0.1")
     token = str(getattr(args, "token", "") or os.environ.get("AGENTFLOW_WEB_TOKEN", ""))
     as_json = bool(getattr(args, "json", False))
-    root = Path(spec.root).resolve() if spec.root else _nearest_workspace(Path.cwd())
+    # `web` 的"最近工作区"从缺省工作区（cwd）开始找 —— 起点也只从那一处取。
+    root = Path(spec.root).resolve() if spec.root else _nearest_workspace(default_workspace_root())
     want_open = bool(getattr(args, "open", False))
     raw_port = getattr(args, "port", None)
 
@@ -4846,7 +5021,8 @@ def cmd_stats(args) -> int:
     from . import readouts as RO
 
     kind = str(getattr(args, "stats_cmd", None) or "errors")
-    root = Path(getattr(args, "root", None) or DEFAULT_ROOT).resolve()
+    # 缺省工作区只有一处算法（`_root_of`）：`stats` 曾经自己算 `DEFAULT_ROOT`。
+    root = _root_of(args)
     as_json = bool(getattr(args, "json", False))
 
     if kind == "errors" and not getattr(args, "readout", False):
@@ -4919,7 +5095,9 @@ def cmd_status_report(args) -> int:
     from . import statusreport as SR
     from .store import Store
 
-    root = Path(getattr(args, "root", None) or DEFAULT_ROOT).resolve()
+    # 与 `stats` 同一条口径：缺省工作区只由 `_root_of` 算（这一格曾经是
+    # `getattr(args, "root", None) or DEFAULT_ROOT`，于是 `status-report` 读的是检出目录）。
+    root = _root_of(args)
     if not root.is_dir():
         print(f"[unknown] 工作区不在盘上：{root} —— 没查成，不是「没有状态」", file=sys.stderr)
         return 2
@@ -5364,7 +5542,10 @@ def build_parser() -> argparse.ArgumentParser:
                                 description="面向数学研究的多智能体协同框架（正式版；A–H + 主控 M）",
                                 formatter_class=_GroupedHelpFormatter)
     p.add_argument("--root", default=None,
-                   help="工作区根（不给就用 DEFAULT_ROOT = 本仓库的 `agentflow/`）")
+                   help=(f"工作区根（{_root_default_sentence()}）。所有读写工作区的子命令"
+                         "同这一条缺省；写在子命令之前：`agentflow --root <工作区> …`。"
+                         "唯一例外是只开网页那一档（`web` / 不带任务的 `start --watch`）："
+                         "它找当前目录下最近的已初始化工作区（`_nearest_workspace`）"))
     p.add_argument("--config", default=None, help="配置文件路径（默认 <root>/config.yaml）")
     # 呈现层的两个开关。为什么做成顶层开关而不是每条命令各带一个：
     # "这次输出别带颜色"是终端的事，不是某个子命令的事；散在各处就会出现
@@ -5547,9 +5728,10 @@ def build_parser() -> argparse.ArgumentParser:
     _where = sp.add_argument_group("在哪干")
     # 顶层已经有 `--root`：这里再给一次，`default=SUPPRESS` 是关键 —— 否则子 parser 的
     # 缺省 None 会把用户写在子命令前面的 `--root` 覆盖掉（argparse 的已知形态）。
-    _where.add_argument("--root", default=argparse.SUPPRESS, help="工作区根（与顶层 --root 同义）")
+    _where.add_argument("--root", default=argparse.SUPPRESS,
+                        help=f"工作区根（与顶层 --root 同义：{_root_default_sentence()}）")
     _where.add_argument("--projects-dir", default=None,
-                        help="projects 落点（缺省：<root>/projects）")
+                        help=_projects_dir_help(follows_root=True))
     _where.add_argument("--start", default="auto", choices=["auto", "cold", "warm"],
                         help="项目冷/热启动（--mode cold/warm 也表达同一件事）")
     _where.add_argument("--out", default=None, help="产物目录（只对 topic 那一档有意义）")
@@ -5673,9 +5855,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--name", default=None,
                     help="项目名（缺省=自动取下一个 projectN；run 时也接受已有名字=热启动）")
     sp.add_argument("--projects-dir", default=None,
-                    help="projects 落点（缺省：由本包位置推出的工作区根下的 projects/；"
-                         "也可用环境变量 AGENTFLOW_PROJECTS_DIR 或设置文件的 "
-                         "workspace.projects_dir 覆盖）")
+                    help=_projects_dir_help(follows_root=False))
     sp.add_argument("--start", default="auto", choices=["auto", "cold", "warm"],
                     help="auto=看文件夹在不在（缺省）；cold=必须不存在；warm=必须已存在且初始化过")
     sp.add_argument("--books", default=None,
@@ -5869,7 +6049,7 @@ def build_parser() -> argparse.ArgumentParser:
                     help="项目名：读/写 <projects-dir>/<名字>/budget.json —— 与 "
                          "`start --project <名字>` 同一个落点。不给就按 --root / 当前目录")
     sp.add_argument("--projects-dir", default=None,
-                    help="projects 落点（缺省 <root>/projects，与 start 同一条口径）")
+                    help=_projects_dir_help(follows_root=False))
     sp.add_argument("--by", default="user", help="谁加的（写进追加历史，默认 user）")
     sp.add_argument("--note", default="", help="一句话说明（写进追加历史）")
     sp.add_argument("--fallback-usd", type=float, default=None,
@@ -5976,7 +6156,8 @@ def build_parser() -> argparse.ArgumentParser:
     _ssub = sp.add_subparsers(dest="stats_cmd", metavar="<统计量>")
     for _name, _kind_help in STATS_KINDS:
         _sp = _ssub.add_parser(_name, help=_kind_help)
-        _sp.add_argument("--root", default=argparse.SUPPRESS, help="工作区根（与顶层 --root 同义）")
+        _sp.add_argument("--root", default=argparse.SUPPRESS,
+                         help=f"工作区根（与顶层 --root 同义：{_root_default_sentence()}）")
         _sp.add_argument("--json", action="store_true", help="机器可读（JSON）")
         if _name in ("gates", "all"):
             # 只对 gates 有意义的两格：不给 ⇒ 依赖它们的那几格如实记 unknown（不是 pass）。
@@ -6013,7 +6194,10 @@ def build_parser() -> argparse.ArgumentParser:
     # 下面两句 help 逐字说明它们各管哪一面 —— 免得读 help 的人以为"缺省只读"是"还没接线"。
     sp.add_argument("--allow-writes", action="store_true",
                     help="允许写面（起一趟 / 插话 / 答问 / 叫停 / 改设置 / 改预算）；"
-                         "缺省只读，不开这一档时写端点一律 403")
+                         "缺省只读，不开这一档时 /api/ 下的写端点一律 403 ——"
+                         "唯一例外是 POST /api/cache/warm 的试算档（dry_run=1）："
+                         "它不写盘、不花钱、不起进程，只要求同源，所以只读档也回 200；"
+                         "真跑那一档才要本开关")
     sp.add_argument("--no-settings-write", action="store_true",
                     help="关掉设置写面（只关 POST /api/settings，其余写面照旧）")
     sp.set_defaults(func=cmd_web)

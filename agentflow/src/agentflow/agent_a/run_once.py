@@ -12,6 +12,7 @@ from typing import Any, Iterable, Sequence
 from ._support import ARunResult, D, Path, S, T, X, make_lease, shutil, tempfile
 from .clear_stage import _finish
 from .. import litstage as L
+from .. import sysresidue as _SR    # SYSRESIDUE ④：两个去重格（`_keys` / `dedup_key`）只有一处算
 
 
 def _candidate_identity(title: Any, doi: Any) -> tuple[str, str | None]:
@@ -63,6 +64,64 @@ def _hits_reading(hits: int, rows: Sequence[dict], *, registered: int) -> str:
     return (f"检索命中 {int(hits)} 条、入库 {int(registered)} 条、待裁 {waiting} 条"
             f"（待裁的还没逐条判过：没有 relevance 进不了库）；"
             f"未入库理由分布：{distribution}")[:480]
+
+
+def _auto_intake_declaration_refusal(store: Any, entry: dict) -> str:
+    """自动入库这一笔的声明判据；返回空串 = 放行，否则是一句可落盘的理由读数。
+
+    ## 为什么自动链路也要过这道判据（DGWIDE ②）
+
+    改前这条路在事务里直接 `tx.upsert("literature", rowd, note=f"provider:…")`：
+    声明闸（`search.register`）与候选链的准入依据（候选行 + 读过正文）它一条都不经过，
+    于是检索队列可以绕开"只有用户点名的文献才可入库"。现在它过与
+    `search.register` / `search.ingest_local` 同一份实现
+    （`locallib.declaration_verdict`），未声明 ⇒ 不写 `literature`。
+
+    ## 核对对象
+
+    这一笔要收编的字节是 `_stage_download` 留在 staging 里的那份文件
+    （`entry["download"]["_staged_path"]`，位于 `library/agentflow-stage-*`）。
+    它的工作区相对路径就是核对对象；题录/未下载（没有 staged 字节）⇒ 没有文件可核
+    ⇒ 与 `search.register(path=None)` 同口径拒。工作区外的 staged 路径 ⇒ 声明表达
+    不了它 ⇒ 拒。声明在盘上但读不出来 ⇒ 第三态（unchecked），不折成"未声明"。
+
+    ## 落在哪一档
+
+    拒因写进 `fail_by_slot`，由 `litstage.decisions_from_plan` 落成候选行的
+    `status="rejected"` + 受控 `reason_code="registration_failed"`
+    （= 登记路径没有给出 lit_id，字面属实），`reject_reason` 逐字带
+    `not_declared_reference` / `declaration_unreadable` 与"只当研究参考，不入库"。
+    同时 `tx.info("declaration_refusal", …)` 在事件流里留一条只读读数。
+    """
+    from .. import locallib as LL
+
+    if store is None:
+        return ("not_declared_reference：没有 store ⇒ 用户声明也读不到 "
+                "⇒ 这一条只当研究参考，不入库")
+    staged = str((entry.get("download") or {}).get("_staged_path") or "").strip()
+    rel = ""
+    if staged:
+        try:
+            rel = Path(staged).resolve().relative_to(Path(store.root).resolve()).as_posix()
+        except (OSError, ValueError):
+            return (f"not_declared_reference：这一笔的字节不在工作区里（{staged}）"
+                    "⇒ 用户声明表达不了它 ⇒ 这一条只当研究参考，不入库")
+    verdict = LL.declaration_verdict(store.root, [rel] if rel else [])
+    state = str(verdict["state"])
+    declaration = str(verdict["declaration"])
+    if state == LL.DECLARATION_UNREADABLE:
+        return (f"declaration_unreadable：工作区根的 `{declaration}` 读不出来"
+                f"（{verdict['problem']}）⇒ 声明状态是 unchecked（没查成，"
+                "不是「用户没点名」）⇒ 这一条只当研究参考，不入库")
+    if not rel:
+        return ("not_declared_reference：这一条没有用户点名的工作区文件"
+                f"（题录/未下载；声明在 `{declaration}`）"
+                "⇒ 只当研究参考，不入库")
+    undeclared = list(verdict["undeclared"])
+    if undeclared:
+        return (f"not_declared_reference：{rel} 没有被用户点名（声明在 "
+                f"`{declaration}`）⇒ 只当研究参考，不入库")
+    return ""
 
 
 def _source_failure_reading(errors: Sequence[str], sources: Sequence[dict]) -> str:
@@ -451,6 +510,36 @@ class _RunOnce:
                         lit_id_by_slot[slot] = existing_id
                         continue
 
+                    # ---- SYSRESIDUE ④：`_keys` 与 `dedup_key` 由一处算，且先判再发号 ——
+                    # 没有主键的行不许落库（改前这里自己拼 `title:<norm>|*`，与
+                    # `locallib` 的空串是两个口径；读侧 `dedup._row_keys` 两处都收，
+                    # 所以"同一篇文献两个键"永远不会报错）。
+                    keys, dedup_key = _SR.literature_dedup_cells(
+                        entry["title"], entry["year"], entry["doi"])
+                    table_problems = _SR.dedup_cells_problems(
+                        {"title": entry["title"], "year": entry["year"],
+                         "doi": entry["doi"], "dedup_key": dedup_key, "_keys": keys},
+                        keys=keys)
+                    if table_problems:
+                        fail_by_slot[slot] = _SR.CODE_DEDUP_KEY_MISSING
+                        _SR.note_dedup_refusal(self.store.root, where=str(slot),
+                                               problems=table_problems)
+                        result.details.append(
+                            {"slot": str(slot), "stage": "dedup_key",
+                             "refused": _SR.CODE_DEDUP_KEY_MISSING,
+                             "problems": list(table_problems)})
+                        continue
+                    # ---- 声明闸（2026-11-21 DGWIDE ②；业主裁定「只有用户点名的才可入库」）--
+                    # 自动链路（检索队列）也不能绕：与 `search.register` /
+                    # `search.ingest_local` 同一份判据（`locallib.declaration_verdict`）。
+                    # 位置在 `alloc_id` / `_attach_staged` 之前 ⇒ 被拒那一笔零落盘、字节不搬。
+                    declaration_refusal = _auto_intake_declaration_refusal(self.store, entry)
+                    if declaration_refusal:
+                        fail_by_slot[slot] = declaration_refusal
+                        tx.info("declaration_refusal", slot=str(slot),
+                                where="agent_a.run_once",
+                                reason=declaration_refusal[:400])
+                        continue
                     lit_id = tx.alloc_id("lit")
 
                     # 这里刻意不建 `<library>/<lit_id>/` 目录（`draft/28` §154 的 R-49）。
@@ -470,7 +559,6 @@ class _RunOnce:
                     elif st == "failed":
                         result.download_failed += 1
 
-                    keys = D.literature_keys(entry["title"], entry["year"], entry["doi"])
                     row = S.Literature(
                         lit_id=lit_id,
                         title=entry["title"],
@@ -479,7 +567,7 @@ class _RunOnce:
                         path=rel_path,
                         processed=False,  # B 负责置 true
                         source_request_ids=[req["request_id"]],
-                        dedup_key=keys[0] if keys else f"title:{T.normalize(entry['title'])}|*",
+                        dedup_key=dedup_key,
                         doi=D.normalize_doi(entry["doi"]),
                         year=entry["year"],
                         authors=entry["authors"],
@@ -507,7 +595,9 @@ class _RunOnce:
                 if plan is not None:
                     for slot in admit_slots:
                         if slot not in lit_id_by_slot:
-                            fail_by_slot[slot] = "登记路径没有给出 lit_id"
+                            # 具体原因优先（例如 `literature_dedup_key_missing`）：
+                            # 一句通用的"没有给出 lit_id"会把已经点名的理由盖掉。
+                            fail_by_slot.setdefault(slot, "登记路径没有给出 lit_id")
                     L.apply_settlement(
                         tx, L.decisions_from_plan(plan, lit_id_by_slot, fail_by_slot))
 

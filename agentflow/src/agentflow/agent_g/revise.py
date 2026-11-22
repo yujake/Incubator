@@ -215,7 +215,7 @@ class _Revise:
                 deps = DT.dependencies_for_doc(tx.rows("dependencies"), doc_id)
                 try:
                     target.parent.mkdir(parents=True, exist_ok=True)
-                    target.write_text(DT.render_markdown(payload, dependencies=deps), encoding="utf-8")
+                    target.write_text(DT.render_markdown(payload, dependencies=deps), encoding="utf-8", newline="\n")
                 except OSError as e:
                     raise DocumentError(
                         f"修订后重渲染失败（{target}）：{type(e).__name__}: {e}。"

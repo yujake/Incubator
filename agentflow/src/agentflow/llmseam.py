@@ -968,7 +968,9 @@ NOTIFY_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
         "to": {"type": "string",
-               "description": "交给谁：A–H / M / V，给所有人写 ALL"},
+               "description": ("交给谁：名册名（如 D1）/ 绝对编号（如 t-000123）/ 角色名，"
+                               "或主控 M 的本号；广播 `ALL` 已退场"
+                               "（会被受控拒绝 `broadcast_retired`）")},
         "summary": {"type": "string",
                     "description": "一句话：交给对方什么（它会被拼进那条留言）"},
         "body": {"type": "string",
@@ -986,7 +988,8 @@ NOTIFY_JSON_SCHEMA: dict[str, Any] = {
 #: （`agent_prompts` 循环协议第 2) 段逐字："主控（M）派活时留痕：这一句里可以带一张 `notify` 表"）。
 #:
 #: 与收工那一份 `NOTIFY_JSON_SCHEMA` 的差别只有一格：`to` 可以不填 ——
-#: `agent_loop._dispatch_notify` 会把它补成"被派的那个角色"（多目标补 `ALL`），
+#: `agent_loop._dispatch_notify` 会把它补成"被派的那个角色"（多目标补 `ALL`，
+#: 而写入口自 2026-11-20 起对 `ALL` 受控拒绝 `broadcast_retired`），
 #: 于是"给谁派了活"与"手稿发给谁"不会因为要填两遍而分家。所以这一份的 `required`
 #: 是 `summary` / `body`，不是 `["to", "summary", "body"]`。
 #:
@@ -999,7 +1002,9 @@ DISPATCH_NOTIFY_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
         "to": {"type": "string",
-               "description": ("交给谁（可省略：不填就是被派的那个角色；多目标写 ALL）")},
+               "description": ("交给谁（可省略：不填就是被派的那个角色；"
+                               "写名册名 / 绝对编号 / 角色名。"
+                               "广播 `ALL` 已退场，填它会被受控拒绝 `broadcast_retired`）")},
         "summary": {"type": "string",
                     "description": "一句话：派了什么活（它就是留言里那句）"},
         "body": {"type": "string",
@@ -1107,8 +1112,9 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
         "type": "object",
         "properties": {
             "to": {"type": "string",
-                   "description": "伙伴角色名 / `ALL`（公共频道：我名下所有子代理）/ "
-                                  "名册名（如 D1：我名下的子代理，或我父的名册名）"},
+                   "description": ("名册名（如 D1）/ 绝对编号（如 t-000123）/ 角色名，"
+                                   "或主控 M 的本号；广播 `ALL` 已退场"
+                                   "（会被受控拒绝 `broadcast_retired`）")},
             "subject": {"type": "string"},
             "body": {"type": "string"},
             "reply_to": {"type": "string"},
@@ -1125,7 +1131,9 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
         "type": "object",
         "properties": {
             "to": {"type": "string",
-                   "description": "交给谁：A–H / M / V；公共频道（我名下所有子代理）写 ALL"},
+                   "description": ("交给谁：名册名（如 D1）/ 绝对编号（如 t-000123）/ "
+                                   "角色名，或主控 M 的本号；广播 `ALL` 已退场"
+                                   "（会被受控拒绝 `broadcast_retired`）")},
             "summary": {"type": "string",
                         "description": "一句话：它就是留言里那句 `[手稿 NNNN] <summary>`"},
             "body": {"type": "string",

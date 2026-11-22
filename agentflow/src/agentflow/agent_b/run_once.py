@@ -5,6 +5,7 @@ from ._support import BRunResult, D, I, Iterable, NO_EXTRACTOR_ERROR, QUOTE_OUT_
 from .. import conceptrows as _CR   # 并表过渡层：老表写完同步一份新标准（两处同号）
 from .. import litread as _LR       # M2/M3/裁决 16：`path` 两基准解析 + `download.fulltext` 四档的唯一实现
 from .. import quoteevidence as _QE   # D1：三态判决 ⇒ 可复核的区间/理由/调用指纹
+from .. import sysresidue as _SR    # SYSRESIDUE ①：`processed` 那一格的必填证据（写点自保）
 from ..extract import DocumentText as _DT
 from pathlib import Path as _Path
 
@@ -129,9 +130,21 @@ class _RunOnce:
                 row["processed"] = True
                 row["claimed_by"] = None
                 row["lease_until"] = None
-                row["last_mine_error"] = (
-                    "availability=extract_failed: 抽过但失败（乱码/无文本层）⇒ 不再自动重抽；"
-                    "要重试请先用 `text.extract` 重判这一条的可读性")
+                # ---- SYSRESIDUE ①：`processed=True` 是系统自动产物，写点必须自己
+                # 保证"为什么算处理完"这一格（真机 lp-ball-15 的 lit:000018 就是
+                # 只有 false、没有理由、也没有任何一处核它）。理由的唯一来源是
+                # `sysresidue.SKIP_PROCESSED_REASONS`；这一支只报分支名。
+                problems = _SR.settle_processed(
+                    row, branch="extract_failed", mined=False,
+                    detail=_SR.skip_reason("extract_failed"),
+                    where=str(lit_id), root=self.store.root)
+                if problems:
+                    row["processed"] = False
+                    tx.upsert("literature", row, note="skipped_extract_failed:refused")
+                    res.details.append({"lit_id": lit_id, "stage": "acquire",
+                                        "refused": _SR.CODE_PROCESSED_WITHOUT_EVIDENCE,
+                                        "problems": list(problems)})
+                    return self._finish(res)
                 tx.upsert("literature", row, note="skipped_extract_failed")
             res.unreadable += 1
             res.processed = 1
@@ -168,7 +181,19 @@ class _RunOnce:
                 row["processed"] = True
                 row["claimed_by"] = None
                 row["lease_until"] = None
-                row["last_mine_error"] = unreadable_reason
+                # ---- SYSRESIDUE ①：这一支的理由是按盘上事实拼出来的
+                # （content_type_mismatch / metadata_only / file_missing 三种前缀），
+                # 由写点原样交给判据；理由为空时由 `sysresidue` 按分支补一句。
+                problems = _SR.settle_processed(
+                    row, branch="unreadable", mined=False, detail=unreadable_reason,
+                    where=str(lit_id), root=self.store.root)
+                if problems:
+                    row["processed"] = False
+                    tx.upsert("literature", row, note="unreadable:refused")
+                    res.details.append({"lit_id": lit_id, "stage": "acquire",
+                                        "refused": _SR.CODE_PROCESSED_WITHOUT_EVIDENCE,
+                                        "problems": list(problems)})
+                    return self._finish(res)
                 # ---- M3（2026-11-05）：这一支是"这一趟没抽"的落点，`download.fulltext`
                 # 要按「盘上事实」现算一次：没有字节 ⇒ `no_fulltext`；有字节（例如
                 # content_mismatch 存下来的落地页）⇒ 这一处没抽过文本 ⇒ 不算档（None），
@@ -640,6 +665,20 @@ class _RunOnce:
                                 "fulltext": tier, "pages": len(doc_pages)})
             # `R3-⑩`：真抽过了（抽取器返回了结果）⇒ 这一格 +1，与失败那一支同一个计数点。
             lit_row["mine_attempts"] = int(lit_row.get("mine_attempts") or 0) + 1
+            # ---- SYSRESIDUE ①：抽完这一档的证据不是"一句理由"，而是两个机器读数
+            # （`mine_attempts >= 1` + `download.fulltext` 落在四档词表里）。写点在这里
+            # 当场判：缺一个 ⇒ 这一篇不许以 `processed=True` 落盘（留在队列里重领），
+            # 并留一条读数 —— 改前这两格漏了也照样翻真，而下游没有任何一处会问。
+            problems = _SR.settle_processed(
+                lit_row, branch="mined", mined=True,
+                where=str(lit_id), root=self.store.root)
+            if problems:
+                lit_row["processed"] = False
+                tx.upsert("literature", lit_row, note="processed:refused")
+                res.details.append({"lit_id": lit_id, "stage": "processed",
+                                    "refused": _SR.CODE_PROCESSED_WITHOUT_EVIDENCE,
+                                    "problems": list(problems)})
+                return self._finish(res)
             tx.upsert("literature", lit_row, note="processed")
             res.processed = 1
 

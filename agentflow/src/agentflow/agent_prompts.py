@@ -20,15 +20,19 @@ from .agentspec import AgentBrief, builtin_registry
 from . import agent_skills
 from . import attackround as AR
 from . import capabilities as C
-from . import composition as _composition
 from . import judge as J
 from . import leanscope as _LEANSCOPE
 from . import persona as P
 from . import policy as POL
 from . import schema as S
 from . import specs as _SPECS_PKG
+#: A 的「检索式怎么给」那一段的正文（真身 = `specs/a.py::SEARCH_STYLE`）。
+#: 2026-11-22（PRESETRETIRE）：它此前由 `presets/a/blocks/search_style.md` 经预设机制
+#: 注册成 `A_SEARCH_STYLE` 段；预设退役之后正文回到 A 的声明文件，这里只是把它挂进
+#: 同一条渲染链（位置仍是 `SECTION_ORDERS["A_SEARCH_STYLE"]`，渲染逐字节不变）。
+from .specs.a import SEARCH_STYLE as _A_SEARCH_STYLE
 from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDERS
-PROMPT_VERSION = "p311"
+PROMPT_VERSION = "p315"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：
@@ -882,7 +886,7 @@ FACULTY_LOCAL: dict[tuple[str, str], str] = {
     ("L", "脑子"): "把一条自然语言证明拆成 Lean 能接的几步：哪一步是引理、哪一步是策略、哪一步接不上。",
     ("L", "能思辨"): "先问这条命题写下来还是不是原文那条：加强假设是最容易混过去的一种走偏。",
     ("E", "手"): "编脚本、跑脚本、把结果落成可复现的证据；数值判读由代码判，你不替它下结论。",
-    ("E", "能思辨"): "反例优先：与其再找一个支持例子，不如去找一个能推翻它的例子。",
+    ("E", "能思辨"): "反例优先：同一命题上，一条 `result=refutes` 的实验行比再补一条 `result=supports` 的值钱 —— 找不到反例才写 `supports`，读不出结论写 `inconclusive`。",
     ("E", "敢创新"): "构造反例、设计新实验都算创新；一条穷举证明的凭据只认那三件套（搜索空间 / 穷尽的判据 / 边界处理）与 V 的签字。",
     ("E", "有品味"): "哪种验证才算证据、验到什么程度算够：这是你的品味，要写出取舍理由。",
     ("F", "耳朵"): "D/E/C 的回信决定下一轮往哪打；预算耗尽时把'停在哪、下一步从哪继续'说清楚。",
@@ -1305,68 +1309,20 @@ RoleBrief = AgentBrief
 def brief_sections(role: str) -> list[tuple[str, int, str]]:
     """五格身份文本的唯一渲染口：`[(段名, order, 正文)]`。
 
-
-
-
-
-
-
-    为什么要有这么一个函数：`role_prompt_registry` 与 `composition._register_brief_blocks`
-
-
-
-    都要把这几格渲染成段 —— 两处各写一遍渲染就是两份实现（本仓反复登记过的形态）。
-
-
-
     这里只做"字段 → 段正文"这一层排版，内容来自 `ROLE_BRIEFS`
-
-
-
     （它本身是 `specs/<role>.py::SPEC.brief` 的视图 ⇒ 唯一真身仍在禁改区那一侧）。
 
+    2026-11-22（PRESETRETIRE）：此前还有第二个渲染口 —— 预设那条路
+    （`composition._register_brief_blocks`）也能把这几格渲染成段。预设机制退役之后
+    只剩本函数一个渲染口，于是"两处各写一遍渲染"那份风险从根上没有了。
 
-
-
-
-
-
-    空段口径（业主 2026-10-12 裁定 CS-16 ②）：空的一律不注册 —— 与
-
-
-
-    `composition._register_brief_blocks`（预设那条路，"空段不出现"）统一成同一条口径。
-
-
-
+    空段口径（业主 2026-10-12 裁定 CS-16 ②）：空的一律不注册。
     改前是不对称的：`STANCE` 无条件返回（M 的 `stance=()` ⇒ 它以空段出现在段清单里），
-
-
-
-    另三格只在非空时返回。这条不对称此前是照抄改前行为（接线批的判据是"十格读数逐格不变"），
-
-
-
-    现在按裁定统一：渲染出来的正文一个字不变（空段本来就不渲染），变的是段清单读数
-
-
-
-    （M 那一格少一个段名）。统一它同时消掉"同一个 Assembly 里两种空段口径"。
-
-
-
-
-
-
+    另三格只在非空时返回；按裁定统一之后渲染出来的正文一个字不变（空段本来就不渲染），
+    变的是段清单读数（M 那一格少一个段名），同时消掉"同一个 Assembly 里两种空段口径"。
 
     不含 `AGENT_IDENTITY`：那一段是模板（插值 `{{task_id}}` / `{{depth}}` / `{{children}}`
-
-
-
     这些当次事实），它的渲染跟着拥有那些事实的代码走，不在这条路上。
-
-
-
     """
     brief = ROLE_BRIEFS[role]
     base = SECTION_ORDERS["ROLE_BOUNDARY"]
@@ -1502,7 +1458,7 @@ def _props_of(spec: Any) -> tuple[str, ...]:
     params = getattr(spec, "params", None) or {}
     props = params.get("properties") if isinstance(params, Mapping) else None
     return tuple(sorted(str(k) for k in (props or {})))
-def _params_hint(spec: Any) -> str:
+def _params_hint(spec: Any, *, drop: tuple[str, ...] = ()) -> str:
     """参数说明：只列必填。可用键交给"被拒时那张表"。
 
 
@@ -1567,7 +1523,7 @@ def _params_hint(spec: Any) -> str:
         # 只在"第一次调用就被拒"时生效；一个一次成功、从不重试的工具，它的可选键等于没教。
         # 这里用 `?key` 的紧凑写法（一个键一个 token，不带描述），与"必填"分开：
         # 必填是硬条件，`?` 是可给可不给。
-        opt = [k for k in props if k not in req]
+        opt = [k for k in props if k not in req and k not in drop]
         if opt:
             bits.append("可选 " + "、".join("?" + k for k in opt))
     return "（" + "；".join(bits) + "）"
@@ -1587,7 +1543,10 @@ def actions_lines(role: str) -> list[str]:
     out: list[str] = []
     for spec in C.actions_for(role):
         returns = f"；产出：{spec.returns}" if spec.returns else ""
-        out.append(f"- {spec.action}：{spec.summary}{_params_hint(spec)}；"
+        # DANGLE ④：`PARAM_SEAMS` 里的键只服务替身夹具、实现侧刻意不收 ——
+        # 它们不进模型面的「可选 ?」那一行（声明本身留着，见 capabilities.PARAM_SEAMS）。
+        seams = tuple(p for (r, a, p) in C.PARAM_SEAMS if (r, a) == (role, spec.action))
+        out.append(f"- {spec.action}：{spec.summary}{_params_hint(spec, drop=seams)}；"
                    f"副作用 {spec.side_effect}{returns}")
     return out
 def _duty_of(role: str) -> str:
@@ -2995,7 +2954,6 @@ def role_prompt_registry(role: str, *, registry: Any = None,
                         #: （段名集合未变：没有哪一段正文引用 `{{v_rejections}}`），
                         #: 原值念在开场那条 user 消息里（`_opening_transcript`）。
                         v_rejections: str = "",
-                        preset_root: str | Path | None = None,
                         ) -> PromptRegistry:
     """按角色装配一份提示词注册表（段 + 变量），供 `render` 或审计使用。
 
@@ -3034,23 +2992,15 @@ def role_prompt_registry(role: str, *, registry: Any = None,
     _LEANSCOPE.require_visible(role, surface="agent_prompts.role_prompt_registry")
     brief = ROLE_BRIEFS[role]
     reg = PromptRegistry()
-    # ---- 预设那一层（`draft/103` §4.1b 的契约：预设决定"写死的块由哪段文件给"，
-    # 代码永远给现算的块）。三态纪律：预设坏 ⇒ 回落内置注册，并把"为什么回落"
-    # 记进 `prompt_audit["preset"]`（读数的算法见 `composition.preset_reading` ——
-    # 它涵盖两档：发现期的 `broken` 与组装期抛出的异常）；绝不半组装
-    # （`apply_preset` 一抛就把注册表整个丢掉重来）。
-    #
-    # 谁接管了哪一段由 `apply_preset` 的返回值给（`provided`），下面注册写死块时按它跳过 ——
-    # 因为 `promptkit` 对同名两次注册是注册期即抛（那是对的：两份文本抢一个段名时
-    # "哪一份是真的"必须有答案，而答案就是组装文件）。
-    provided: set[str] = set()
-    _preset = _composition.role_preset(role, root=preset_root)
-    if _preset is not None and not _preset.broken:
-        try:
-            provided = _composition.apply_preset(reg, _preset, role=role)
-        except Exception:  # noqa: BLE001 —— 坏预设回落（理由由 `preset_reading` 给出）
-            provided = set()
-            reg = PromptRegistry()      # 半组装必须整个丢掉：不许留半份提示词
+    # ---- 预设那一层已退役（2026-11-22，PRESETRETIRE）。
+    # 此前这里按角色发现 `agentflow/presets/<id>/preset.yml`、把组装行交给
+    # `composition.apply_preset`，让预设"接管"写死的块（A 的 `A_SEARCH_STYLE`）。
+    # 退役理由（业主裁定，逐字「presets 那条为什么单独做 A 不做别人，这肯定是陈旧东西，
+    # 整合进它该在的地方」）：随包预设只有 `a/` 一份，而别的角色的写死正文全部在
+    # `specs/<role>.py` 里 —— 那套"写死的块由哪段文件给"的机制没有一个第二个用户，
+    # 它的唯一效果就是 A 的一段正文住在数据文件里、与同族 policy 分家。
+    # 现在那段正文住 `specs/a.py::SEARCH_STYLE`，由本文件直接注册（见下面的
+    # `A_SEARCH_STYLE` 段）；`prompt_audit["preset"]` 这一格随之消失（它读的就是那套机制）。
     # 身份的两个槽位（`persona.py` 是它们唯一的注册入口）：无条件注册、文本今天为空
     # （空段会被丢掉 ⇒ 提示词一字不变）。它在这里的作用是给"某个角色换一份身份/加一句
     # 身份后缀"留下唯一入口 —— 部署这一份是遮蔽的靶子，换身份就是
@@ -3114,15 +3064,21 @@ def role_prompt_registry(role: str, *, registry: Any = None,
     _faculties = faculties_text(role, registry)
     for section in _block_sections(_faculties, _faculty_block_names(_faculties.count("\n\n") + 1)):
         reg.section(section)
-    # 五格身份文本（`brief_sections` 是它们唯一的渲染口）：预设接管的那些跳过
-    # （`provided` 来自组装文件；同名两次注册在 `promptkit` 里是注册期即抛）。
+    # 五格身份文本（`brief_sections` 是它们唯一的渲染口）。这一段此前还负责"预设接管的
+    # 那几格跳过"（`provided`）；预设退役之后没有第二个来源，五格直接注册。
     for _name, _order, _text in brief_sections(role):
-        if _name in provided:
-            continue
         reg.section(Section(_name, _order, _text))
     for section in _numbered_sections("TOOL", tools_lines(role, registry),
                                       SECTION_ORDERS["TOOL_GUIDANCE_BASE"]):
         reg.section(section)
+    # A 的「检索式怎么给」那一段（`specs/a.py::SEARCH_STYLE` 是唯一真身）。
+    # 位置 = `SECTION_ORDERS["A_SEARCH_STYLE"]`（2000：工具指引之后、证据契约之前）——
+    # 与预设时代同一个段名、同一个号，所以 A 的渲染逐字节不变。
+    # 只给 A 注册（别的角色没有这一段）：不注册比"注册一个空段"更严格 ——
+    # `Assembly.names` 连空段也列出来，注册空段会在十格读数里凭空多一个段名。
+    if role == "A":
+        reg.section(Section("A_SEARCH_STYLE", SECTION_ORDERS["A_SEARCH_STYLE"],
+                            _A_SEARCH_STYLE))
     for section in _block_sections(EVIDENCE_CONTRACT, _EVIDENCE_BLOCK_NAMES):
         reg.section(section)
     if role in PAPER_PACK_ROLES:
@@ -3357,38 +3313,14 @@ def system_prompt(role: str, **kw: Any) -> str:
     """渲染某个角色这一次的 system prompt。"""
     return _apply_no_lean_variant(role_prompt_registry(role, **kw).render(Scope(role=role)))
 def prompt_audit(role: str, **kw: Any) -> dict[str, Any]:
-    """这次提示词的审计读数：版本、哈希、长度、段名、变量名、预设。
-
-
-
-
-
-
+    """这次提示词的审计读数：版本、哈希、长度、段名、变量名。
 
     每次模型调用都要把这份读数落档 —— 没有它，
-
-
-
     "这次结论是哪个版本的提示词加上哪个模型的产物"就无法事后回答。
 
-
-
-
-
-
-
-    `preset` 那一格回答的是另一个问题："这一趟读的是哪一份组装文件、
-
-
-
-    它有没有坏到让内置那份顶上来"（`draft/103` §4.1b）。它由
-
-
-
-    `composition.preset_reading` 现算（含"读的时候就看到坏"与"组装时才坏"两档）。
-
-
-
+    2026-11-22（PRESETRETIRE）：这里此前还有一格 `preset`（"这一趟读的是哪一份
+    预设组装文件、它有没有坏到让内置那份顶上来"）。预设机制退役之后那一格没有
+    对象 —— 留一个恒为空壳的键，会让读数看起来还在回答一个已经不存在的问题。
     """
     reg = role_prompt_registry(role, **kw)
     assembly = reg.assemble(Scope(role=role))
@@ -3400,7 +3332,6 @@ def prompt_audit(role: str, **kw: Any) -> dict[str, Any]:
         "prompt_chars": len(text),
         "sections": list(assembly.names),
         "variables": sorted(assembly.variables),
-        "preset": _composition.preset_reading(role, root=kw.get("preset_root")),
     }
 def user_replies_digest(replies: Sequence[Mapping[str, Any]], limit: int = 6) -> str:
     """把用户的回答渲染成提示词里的一段（含"这条是迟到的"标记）。
@@ -3489,9 +3420,6 @@ def selftest() -> int:
         return 1
     print(f"SELF-CHECK DONE（{len(roles_covered())} 个角色各有非空提示词；工具与伙伴逐条在文内）")
     return 0
-if __name__ == "__main__":
-    import sys
-    sys.exit(selftest())
 def _local_materials_not_checked(scan: dict[str, list[str]],
                                  list_failed: list[str]) -> str:
     """表读不出来时的读数：只有"有文件"的那几个目录才值得说"没查成"。"""
@@ -3695,3 +3623,12 @@ def prompt_text_problems() -> list[str]:
     if "读到了正文" in PAPER_PACK and "不是" not in PAPER_PACK.split("读到了正文", 1)[0][-12:]:
         problems.append("PAPER_PACK 把 .tex 说成读到了正文 —— 那是 unreadable，不是抽到正文")
     return problems
+
+
+# `python -m agentflow.agent_prompts` ⇒ 十一格自检。块必须在文件末尾：它调用 `selftest()`，
+# 而 `selftest()` 经 `system_prompt` → `role_prompt_registry` 走到 `_pending_local_materials`。
+# 2026-11-22 之前这个块排在 `_pending_local_materials` 定义之前 ⇒ 模块一执行就 NameError
+# （`runpy` 在主模块作用域里执行，函数名此时还没绑定）。
+if __name__ == "__main__":
+    import sys
+    sys.exit(selftest())

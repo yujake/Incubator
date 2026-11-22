@@ -264,7 +264,7 @@ def _selftest() -> int:
     proof_dir = root / "proofs"
     proof_dir.mkdir(parents=True, exist_ok=True)
     (proof_dir / "selftest.lean").write_text(
-        "theorem selftest_proof : True := trivial\n", encoding="utf-8"
+        "theorem selftest_proof : True := trivial\n", encoding="utf-8", newline="\n"
     )
     proof = g.compose_claim(
         "由形式化检查器核验：Spec K(m) = [−m, m]。",

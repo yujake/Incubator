@@ -82,9 +82,6 @@ NO_LEAN_SKILL_REPLACEMENTS: tuple[tuple[str, str], ...] = (
      '  只有用户指定要验某一条时才对那一条执行，平时不派；',
      '稿件级审校 `H.review`）；形式化那一档本会话关着，这一格记「未核到」'
      '——要不要做由**用户**指定、指定之后由 **B** 逐条安排、回执由 B 带回；'),
-    # ⑥ V：与形式化那一档的关系，第一句
-    ('能机器核的（`L.check_formal` 过的那几条，形式化那一岗是 L）不是免除这一档：',
-     '形式化那一档本会话关着（记「未核到」），但那不是免除这一档：'),
     # ⑦ F（拆解）：工具清单里那一串（形式化不在 F 的工具面里、由 B 判断成本后逐条派，
     # 不排它、不替它立子目标 —— 写成"现有工具"会读起来像 F 可以把它拆进计划里）。
     ('（形式化不在你的工具面里：`L` 的形式化只能由用户指定，指定之后由 B 判断成本、逐条派 L；\n'
@@ -560,8 +557,8 @@ blocker），但读错会派错人：`from_lit` 的活归 B 按文献侧原口�
             title="被停住的活怎么接着做：逐条审批唤醒（block 板项）",
             summary=("`conductor.wake_blocked` 逐条审批：默认只看不写，approve=\"yes\" 才动；"
                      "唤醒不清板项，block 板项会一直挡收工"),
-            when=("板上有 `item_state=block` 的行（优雅停止停下来的活）、或者收工门点名"
-                  "「名下还有未消的板项」而那一项是 block 的时候"),
+            when=("**每趟收工之前都读一遍**：`conductor.board` 里只要有 `item_state=block` 的行"
+                  "（优雅停止停下来的活）就先读它；收工门点名「名下还有未消的板项」而那一项是 block 时必读"),
             actions=(),
             tools=("conductor.wake_blocked", "conductor.ack", "conductor.void_items",
                    "conductor.retire_child", "conductor.board", "conductor.closing"),
@@ -889,7 +886,7 @@ F 自己向框架要稿号（跑一轮时返回 `manuscript_id` 与 `manuscript_
 所以"签 0 个"在还没送审时不是故障，而是**这一轮还没到收录那一步**；反过来，把
 "稿上签了"当成"已经入账"才是故障（入账是 B 的收录）。
 
-### ④ 决定要证某条命题的那一刻就立项
+### ④b 决定要证某条命题的那一刻就立项
 
 决定要证某条命题的那一刻就立项（拿计划号、落稿），不要先把证明写成一份长草稿、再回头
 补手续。反过来做在两轮真机里连续失败：一次是稿名对不上、一次是 B 根本没被派活。
@@ -1124,6 +1121,10 @@ D 的研究手稿里「## 携带的证明手稿」四列表带过来的那一份
 —— **在册也给稿**；一个稿号一份文件一份证明，**不传 `proof_no`**）；工具结果里带 `proof_standing` 与
 `resign_required`，它点名「派 V 重新签」时照做。
 
+重抽取（`B.reprocess_once`）的入口与依据形状在 `reprocess_requests` 那张表与
+`H.judge_quote_semantics` 上（逐字对不上、但语义可能相同的时候先判语义）——
+这一档至今一条请求都没有发生过，手册先不单列。
+
 ## 收录：位置与格由你指定，工具按块回填
 
 业主 2026-11-09 的形态（逐字）：「自动录入是 B 秘书的一个工具，需 B 秘书指定录入位置
@@ -1134,17 +1135,20 @@ D 的研究手稿里「## 携带的证明手稿」四列表带过来的那一份
 | `own.land_manuscript` | 把一条**已登记**命题的这一版证明落成/就地重写成 `reports/b-proof-<号>.md`（只写文件、不写台账；一个稿号一份文件，新写不带 `-pN`） | `written` / `preserved`（同一份正文重放 ⇒ true，一个字节不动）/ `sha256`（签尺） |
 | `own.ingest_manuscript` | 按你给的**位置 + 格**从稿里提取并回填 | `cells`（逐格 outcome + 来源行号 + sha）/ `diff`（请求格 vs 实填格）/ `write`（写了哪几张表） |
 
-`own.ingest_manuscript` 的四个坐标：
+`own.ingest_manuscript` 的坐标（与动作声明的 `params` 同一份，一个不多一个不少）：
 
 - `manuscript`：稿的路径（只收 `reports/` 下 `f-proof-*` / `b-proof-*` / `e-proof-*` /
   `e-num-*`；`notes/` 与 `-v2` 是 legacy —— 可 preview、不可收录）；
-- `target_stmt_id`：**位置**（录到哪一条命题）。它是权威：稿头 `- 命题号：` 与它不一致
-  ⇒ 受控拒 `manuscript_points_elsewhere`，**工具不会替你换一行**；
+- `target_stmt_id`：**位置**（录到哪一条命题）。它是权威：**稿里没有命题号**（2026-11-13
+  裁定，任何稿都没有那一行）—— 别从稿头找号，工具也**不会替你换一行**（位置只由你给的这个号决定）；
 - `proof_no`：**已退役** —— 路径号由 B 收录时分配，产出侧不写证明号、稿名不带 `-pN`，
   这一格不传；
 - `cells`：**格**，闭集 `statement_full` / `proof_text` / `dependencies` / `kind` /
   `numeric_evidence`。`label` / `evidence_kind` / `origin` / `line_range` / `bits` /
-  `proof_no` / `proof_sha256` / `proof_authors` / `stmt_id` 是**派生列**，不许指定。
+  `proof_no` / `proof_sha256` / `proof_authors` / `stmt_id` 是**派生列**，不许指定；
+- `path_group`：**优化线的路径号**（只在 `mode=apply` 收，≥1）—— 换第 N 份已签正文走这条线，
+  普通登记不传（0）；秘书在事务里核「第 n 条路径在册、且这一份稿对得上它」，核不过 ⇒
+  受控拒 `path_not_found` / `path_mismatch`。
 
 三种模式：`preview`（只提取 + 预检，**零写入** —— 先看会写哪几格、有没有冲突）、
 `apply`（按格回填在册行；`conflict` 默认 `refuse`，想覆盖 `proof_text` 要显式
@@ -1233,7 +1237,7 @@ outcome 与理由（`diff.filled_not_requested` 恒空：没有一格越权写�
             slug="优化-登记完一批就逐个洗",
             title="二阶段：快录交回后自己接着洗稿、重拿 V 签、精准替换（不必等 M 派）",
             summary="第一阶段快录；第二阶段逐个优化 —— 洗稿 → 重拿 V 签 → 精准替换 → 记 optimized",
-            when="`own.run_once` 的回执里 `stage_two.unwashed` 非空的时候（每一拍都读得到；快录交回那一刻它就是你的活，不必等 M 派）",
+            when="读 `own.run_once` 的回执时**逐拍检查** `stage_two.unwashed`：非空就**先读这一份再做**（快录交回那一刻它就是你的活，不必等 M 派）",
             actions=("B.open_polish_copy", "B.land_manuscript", "B.ingest_manuscript",
                      "V.verify_proof"),
             tools=("manuscripts.read", "table.get", "table.list"),
@@ -1330,39 +1334,10 @@ outcome 与理由（`diff.filled_not_requested` 恒空：没有一格越权写�
 """,
         ),
         Skill(
-            slug="重抽取-什么时候提、怎么给依据",
-            title="重抽取（reprocess）：什么时候该提，依据怎么写",
-            summary="引文对不上、或一条关系该换一种读法时才提；请求要带 relation_ids 与为什么",
-            when="发现已有的抽取结果对不上原文、或一条关系的表述需要换一种读法时",
-            actions=("B.reprocess_once", "B.run_reprocess", "H.judge_quote_semantics"),
-            tools=("table.search", "table.list"),
-            body="""# 重抽取
-
-## 什么时候提
-
-- **引文对不上原文**（逐字与语义两档都不成立）；
-- **一条关系的表述该换一种读法**（例如把"交换性可放宽到有限环"读成"只在有限环成立"）；
-- **同一个概念被抽成了两条**（结构重复那一档）。
-
-反过来说：**只是"我想再读一遍"不该提** —— 那会白烧一轮抽取。
-
-## 怎么给依据（少一条都不算可受理）
-
-请求落 `reprocess_requests`：`relation_ids`（要点名，不是"那几条"）+
-`reason` ∈ 受控词表 + `note` 写清"哪里对不上、正确读法是什么"。
-B 的 `run_reprocess` 会领走它 —— **只在报告里写"这个关系该重抽"等于没提**。
-
-## 拿不准就先判语义
-
-"逐字不一样"不等于"意思不一样"：先用 `H.judge_quote_semantics` 判一次语义
-（它会留下 verdict + 那一次判定的调用记录）。判出来"语义相同"就不必重抽。
-""",
-        ),
-        Skill(
             slug="审美-太平凡的不收",
             title="挑进收录表要有审美：档位看「证明花的力气」（T0 到 T4，不拒收）",
-            summary="判据是这份证明花的力气（体量/步骤数/引了几条引理/工具与定理跨度/有没有绕远路），"
-                    "不是「它对不对」，也不是「有没有人用得上」",
+            summary="档位由你按五句语义定义判（T0 基础定理 … T4 天才洞察），判 T0 照收、不拒收；"
+                    "体量/步骤/引理/跨度/绕路只是机器摆的参考读数，不是判据",
             when="准备把一条定理/命题提交入库（`statements`），或不确定它够不够格的时候",
             actions=("B.register_statement", "B.run_once"),
             tools=("table.get", "table.search", "fs.read"),
@@ -1503,7 +1478,8 @@ T0 / T1 / T2 / T3 / T4；没拿到判定就是「没查成」，不是第六个�
 3. **关系改写不自己造判据**：被合并方换成 survivor 之后可能出现重复关系，
    那些行会喂给 `dedup.py` 的 `decide_relation` —— 判成 `duplicate` 的标
    `status="rejected"` ＋ `duplicate_of` 指向幸存关系（**保留行，删了就无从审计**）、
-   判成 `suspect` 的降级为 `suspect`，所有受影响概念的 `related_concepts`
+   判成 `suspect` 的降级为 `suspect`，所有受影响概念的邻接关系（`relations` 里
+   那些行；`related_concepts` 已随并表退役，新标准由 `relations` 现算）
    **整体重算**（派生而非增量）。所以你看执行结果时，`rejected_relation_ids` 那一格
    **不是错误**，是"并完之后自然重合的那些行被如实标记了"。
 """,
@@ -1724,13 +1700,9 @@ def _v_skills() -> tuple[Skill, ...]:
 每一次复核的产出只有一样东西：一份审稿意见 —— 两态结论（成立 / 有毛病）
 ＋ 逐条 findings（每条指到步号与依据）。它进 `verifications/<命题号>.jsonl` 那一行。
 
-**结论只有两态**：成立（没找到缺陷 —— 不要求你证明它正确）/ 有毛病（找到了缺陷，
-必须指到步号与原句）。『看不出错』就是成立；不存在『看不出来』这一档，也不存在
-『看不出对』这回事。
-
-**判词写死：`成立` = 零 finding。** `findings` 必须为空；有任何一条要改的（哪怕只是
-措辞建议、`level=info`）⇒ 判 `有毛病`，在 `defect_step` 指到那一步、在 `findings` 里
-写下那一条。拿不准、说不清 = 你在那一处看见了一条要改的，不是「大致看过」。
+**结论只有两态 / `成立` 的判据是零 finding / 拿不准要写成 finding** —— 这三条在
+前置提示的「这次运行的政策」里逐字给了（「结论只有两态」「判『成立』的唯一判据是零
+finding」「判『成立』不要求你证明它正确」那三条），这里不重复，按那份执行。
 
 为什么这么硬：秘书那一侧按「拿不准、说不清、只挑出一处小记号问题 ⇒ 也算有毛病」判；
 你写「成立 + 一条 info」，两边题面就打架，这条链永远签不出来。
@@ -1767,7 +1739,7 @@ def _v_skills() -> tuple[Skill, ...]:
 **被审必须是 `reports/f-proof*.md`；递来别的东西先退回**：你只审框架渲染的手稿
 （F 的 `reports/f-proof-<稿号>.md`；E/B 的框架稿同族 `reports/e-proof-*.md` /
 `reports/b-proof-*.md`）。调用方递来 `reports/P*.md` / `notes/*.md` 这类章节稿或草稿时，
-**先回一句「这不是手稿」并让它改用 `F.step` 的 `manuscript_path`** —— 不要去读那份章节稿
+**可以回一句「这不是手稿」并让它改用 `F.step` 的 `manuscript_path`（建议，不是判据）** —— 不要去读那份章节稿
 充当被审正文（入口闸会拒，白烧一次调用）；**入口闸拒了不要重试同一个路径**
 （真机里同一份章节稿被递了 5 次）：要么让调用方换稿，要么按拒信点名的那一份重来。
 
@@ -1902,8 +1874,10 @@ def _v_skills() -> tuple[Skill, ...]:
 
 ## 顺手核对两件事
 
-1. **假设轴**：证明里用到的前提，正文那条命题真的写了吗？（用了没写的条件
-   ⇒ 这不是证明，是另一条命题）；
+1. **假设轴**：三条最常出问题的地方 —— ①**条件被偷偷加强**（原文"有限生成"在论证里变成"有限"）；
+   ②**量词顺序**（`∀ε∃δ` 与 `∃δ∀ε` 是两条命题，换序之后常常变成假的）；③**退化/边界情形**
+   （空集、单点、零测、n=1 这些"显然"的地方往往是缺口）。用到在册命题的那一步，还要看
+   那一条**够不够格被引**：等级低于 `pre_theorem` ⇒ 不必再谈用法，直接判 `inadmissible`；
 2. **引文轴**：用到在册命题的那几步，逐条判 F 的用法与那条命题真正的条件/结论是不是一回事。
    六档（`verifications.CITATION_VERDICTS`，业主 2026-10-26 的口径是「正常写证明就是不会逐字的」）：
    `consistent`（措辞不同但条件与结论一致）/ `weaker`（只用到弱形式，能签但要点名）/
@@ -1917,39 +1891,6 @@ def _v_skills() -> tuple[Skill, ...]:
 
 引文轴这里的六档只判**引用关系**；文献引文的逐字/语义回验是 B 入库那一档的事（`quote_verified`），
 两者别混：证明里引一条在册命题不需要逐字，引一篇文献的原文才需要对得上。
-""",
-        ),
-        Skill(
-            slug="假设轴-前提是否真被满足",
-            title="假设轴：结论用的条件，原文真的给了吗",
-            summary="逐条核「这一步凭什么成立」：条件、量词、退化情形三样",
-            when="复核一条「看起来很强」的结论，或原文的假设写得含糊时",
-            # V 没有出边 ⇒ 够不到 `F.status`。
-            actions=("V.verify_proof",),
-            tools=("fs.read",),
-            body="""# 假设轴
-
-## 三条最常出问题的地方
-
-1. **条件被偷偷加强**：原文里"有限生成"在论证里变成了"有限"；
-2. **量词顺序**：`∀ε ∃δ` 与 `∃δ ∀ε` 是两条命题（换序之后常常变成假的）；
-3. **退化/边界情形**：空集、单点、零测、n=1 这些"显然"的地方往往是缺口。
-
-## 怎么做
-
-- 每一步问一句"**这一步凭什么**"：依据在证明里（前一步）还是在册子上（一条已登记的
-  命题 / 实验）？两处都找不到 ⇒ 那一步没有依据；
-- 找到一条被引用的册子行，就去看它**自己的假设**有没有被满足
-  （`table.get` 读那一行的 `statement_full`）—— 引用链上第一处不满足就是毛病所在；
-- 另有一格常被漏掉：那条行**够不够格被引**。等级低于 `pre_theorem`（`conjecture` /
-  `strong_conjecture` / 空）⇒ 不管用法一致不一致，这一条都判 `inadmissible`（引用核实六档之一，
-  它挡签）；先把那条补到 `pre_theorem`（V 签过），再来谈它撑不撑得住这一步；
-- 读不到证明全文时如实回 `reason`，不要凭题目猜内容。
-
-## 与形式化那一档的关系
-
-能机器核的（`L.check_formal` 过的那几条，形式化那一岗是 L）不是免除这一档：形式化证的
-可能是**被加强过的假设**，而那正是这一轴要抓的。
 """,
         ),
         Skill(
@@ -1977,7 +1918,8 @@ def _v_skills() -> tuple[Skill, ...]:
 2. **计算轴**：式子、估计、不等式、化简、边界与退化情形 —— 逐处过一遍。
 3. **逻辑轴**：蕴含方向、量词顺序、情形划分是否穷尽、依赖顺序有没有循环。
 
-三轴的结论写进这一次复核的 `detail`（**指到步号**），整体仍只有两态：
+三轴的结论写成这一次复核的 `findings`（每条**指到步号**）与你的回报；`detail` 是框架填的返回读数，
+不是你写的字段（传进参数面会被 `param_invalid` 拒）。整体仍只有两态：
 成立（没找到缺陷）/ 有毛病（指到那一步）。`成立` 要求 `findings` 为空；任意一轴上有
 一处要改的（含措辞建议），就是 `有毛病` 且 `defect_step` 必填。
 
@@ -2539,40 +2481,10 @@ sha**，换一份正文就是另一条义务），`expects=work` —— 业主 2
 状态、时间、理由缺一不可，只写状态的行仍按未签计）。**别让一条证明长期悬着** ——
 悬着不会自己消失，它只会一直挂在「有稿无签」那张单子上。
 
-### 换号（放弃原命题、另立一条）时把理由给清：四档
+### 换号（放弃原命题、另立一条）时把理由给清
 
-业主 2026-11-07：「换号需给清理由：1.命题有实质数学错误；2.证明过程中遇到难以逾越的困难。
-对于1，需在换号理由中指出错误；对于2，需指出困难，并将原先证明中可取之处拆出落成引理。」
-同一句话同步到 E 侧的数值证明路线时，又点名了两个理由：「1.发现反例；2.枚举空间过于宏大
-以致难以在合理成本内实现」。
-
-请 B 放弃、而你要给的理由正文，按这四档之一写（`table.update` 的 `abandon_kind` 与
-`abandon_basis`）：
-
-- **这一条命题本身有实质数学错误** ⇒ `abandon_kind="math_error"`，`abandon_basis` 写清
-  **错在第几步、错的是什么**，并给 `defect_ref` —— 一条 `verifications/<命题号>.jsonl#v-000001`
-  的引用，指到 V 判「有毛病」的那一行（闸会去核那一行真的在、真的判有毛病，且理由里的
-  步号与它的 `defect_step` 对得上）；
-- **证明遇到难以逾越的困难** ⇒ `abandon_kind="difficulty"`：`difficulty` 说清难在哪
-  （缺哪条引理 / 哪一步的界对不上 / 哪条假设用不上）。`salvaged`（每条 `{label, stmt_id}`；
-  那几条要在册、`status=active`、`kind="lemma"`）**可以先不指** —— 业主 2026-11-15 的语义是
-  "放弃之后按正常流程注册新命题去攻坚"（加强条件版 / 中间逻辑链 / 负面事实 / 其它，不机械）。
-  这正是一个好习惯：攻不动的那条命题可以放下，但已经证出来的那几步不该跟着埋掉 ——
-  事后按正常流程注册成引理、再在后续动作里记成这次放弃的可取之处，下一趟的人能直接引它；
-- **发现反例** ⇒ `abandon_kind="counterexample"`：给 `experiment_id` —— `experiments` 里那条
-  真跑过、`result="refutes"`、带非空反例、且检验的是**这一条**的实验，`abandon_basis` 里
-  写清**哪一个参数组让它假**（反例的证据是那一次实验，不是一句「我找到了反例」）；
-- **枚举空间过于宏大** ⇒ `abandon_kind="space_too_large"`：给 `space` —— 枚举参数与规模
-  （各维区间 `[lo, hi]` / 枚举例数，取 `numericproof._space_reading` 认的字段），
-  `abandon_basis` 里写清**为什么在合理成本内做不到**（「宏大」落在读数上，不是一句形容词）；
-- 两格空着换号（只写一段 `quote_reason` 散文）会被受控拒 `abandon_reason_missing`；
-  `salvaged` 指的是一条空壳（不在册 / 无证明 / 无经手人）⇒ `abandon_salvaged_not_reviewable`。
-  受控拒时盘上一个字节都不改。
-
-同一 label 再登记一条时，登记回执里会带 `supersedes`（原件理由的摘要：`stmt_id` +
-`abandon_kind` + 理由摘要）或 `superseded_without_reason`（原件是历史行、没有结构化理由）——
-那是**读数**，不拦你。理由最后落在 `quote_reason` 那一条标记里
-（`abandoned@<ISO8601>@<结构化理由>`），标记与时间戳都由系统按你给的那几格拼。
+四档、每档要的那一格、以及受控拒码，见本节上面「换号时把理由给清：四档」；执行口在 B
+（`B/登记-三件式与证据三态`），你只把理由交给它、不在自己这一份里再抄一遍。
 
 ## 形式化那一档（不是你的活，也不要主动去要）
 
@@ -2814,7 +2726,7 @@ def _a_skills() -> tuple[Skill, ...]:
         Skill(
             slug="找文献-换招法而不是换说法",
             title="查不到时换什么：四个旋钮、五条代换、三档缺口，以及引文图怎么走",
-            summary="检索式怎么变（题面式说法不是查询词→规范术语→对象→参考文献）；`no_results` 必须换规范术语重查一次；每趟收尾逐条判收/判拒、逐委托 `lit.admit_all` 清表；工作区里已有的文献先 `ingest_local(dry_run=True)` 发现 → `lit.stage_add` 建候选 → 判收链（手册 §0.2）",
+            summary="检索式怎么变（题面式说法不是查询词→规范术语→对象→参考文献）；`no_results` 建议换规范术语重查一次（读数不是闸）；每趟收尾逐条判收/判拒、逐委托 `lit.admit_all` 清表；工作区里已有的文献先 `ingest_local(dry_run=True)` 发现 → `lit.stage_add` 建候选 → 判收链（手册 §0.2）",
             when=("一次检索什么都没查到、一条 `no_results` 要按纪律换说法重查、或要收尾清待裁表时；"
                   "工作区里已经投了一批历史文献（`library/` 下的 PDF、`SEED-README.md`）要逐份判收时；"
                   "只查到一堆自称证明了某定理的条目、要为一个方向做一轮系统调研，"
@@ -2847,7 +2759,7 @@ the l_p ball` / `Brunn concavity sections centrally symmetric body` /
    性质 + 方法）。例：`Ball cube slicing` → `cube slicing`（Ball 1986 的题名就是这两个词）；
    `Meyer Pajor sections` → `Meyer-Pajor` + `sections of convex bodies`；
    `Koldobsky Fourier transform sections` → `Koldobsky` + `Fourier transform` + `sections`。
-2. **`no_results` 之后必须换规范术语再查一次**（同一个题面原样重试不算）。换什么：
+2. **`no_results` 之后建议换规范术语再查一次**（同一个题面原样重试不算；这是纪律、不是闸：收工门只给 `no_result_topics` 与 `no_result_repeated_topics` 两格读数）。换什么：
    - **去掉题面里的通用词**（of / and / in / the / central / sections 单独查不区分方向）；
    - **加数学术语**：`hyperplane sections` / `central section` / `cross-sectional volume` /
      `Brunn-Minkowski` / `isoperimetric inequality` / `unit cube` / `ℓ_p ball`；
@@ -2866,34 +2778,7 @@ the l_p ball` / `Brunn concavity sections centrally symmetric body` /
 任何判收。**"盘上有文件"与"入库"是两件事**：前者只说明当时下载成功过、正文抽得出来。
 这条路的目标不是"把它们登记掉"，是"逐份判收"。
 
-按顺序做三步（顺序不许换）：
-
-1. **发现**：`search.ingest_local(books_dir="library", dry_run=True)`。它读同一个目录、
-   算同一份 sha256 / 页数 / 文本层，但**一个字节都不写**（`lit_candidates` / `literature` /
-   两个台账文件都不动）。读数里的 `count` 与 `books[]` 就是候选清单；`ingested` 是
-   "会登记"的预告，**不是**入库读数。
-2. **建候选**：逐份 `lit.stage_add(request_id=…, entries=[{title: …,
-   url: <发现读数里那一份的盘上路径>, relevance: "工作区里已有的本地文献，不是检索来的"}])`。
-   这一步只写候选表（`lit_candidates`），`literature` 仍是 0 行 —— 候选不是入库。
-   这一趟没有检索委托就立一个委托号（`r-<序号>`），判收与提交都挂在它名下。
-3. **判收链**（与检索回来的候选完全同一条，见 §八 / §九）：`lit.stage_list` 回读 →
-   `text.extract(lit_id="cand:<槽位>")` 抽正文 → `fs.read` 读到那份 `.txt` →
-   `lit.admit(items=[{slot, availability: "readable"}])` 逐条判 → 逐委托
-   `lit.admit_all` 提交。抽读与读是 `content_read` 的证据；**提交那一刻才发号**、
-   才进 `literature`。
-
-**不许做的两件事**（都不报错，所以只能靠纪律拦住）：
-
-- 拿发现读数当"已入库"：`dry_run` 的 `ingested` 只是预告，`literature` 一行没多；
-  凭它去派 B，B 什么也处理不到（它要的是 `lit_id`）。
-- 用非 dry 档把整目录一次性"登记"：那是兜底那条路，它把"盘上有文件"直接写成
-  `literature` 行、跳过了判收（本仓已给它补了正文闸，但跳过判收这件事仍在）。
-
-**没有正文的那几份**（乱码 / 扫描件 / 无文字层 / 只有题录）：`lit.admit` 会整批受控拒
-（`no_read_evidence`，逐槽点名 `extract_failed` / `metadata_only` / `no_fulltext`）——
-这正是"不许当已收编"的机器读数。处置：`lit.stage_reject`（`rejected_low_quality`）+
-写清为什么没读到（乱码要换来源；扫描件要先 OCR）；它们留在候选表的 `rejected` 档，
-不会进 `literature`。
+收录的顺序与两条禁令在前置提示的边界里逐字给了（「收尾三步一步都不能省」与「工作区里已有的本地文献先 dry_run 发现 → 建候选 → 判收链」），这里不重复。本条只补一条**读数**上的差别：`ingest_local(dry_run=True)` 的 `ingested` 是「会登记」的预告，`literature` 一行没多 —— 凭它去派 B，B 什么也处理不到（它要的是 `lit_id`）。
 
 ## 一、四个旋钮（都在 `A.search_literature` 的参数上，不用新工具）
 
@@ -3017,8 +2902,9 @@ the l_p ball` / `Brunn concavity sections centrally symmetric body` /
    （字数 / 指纹 / 乱码判定）；那份账只有 `text.extract` 能写，你别手写；
 3. **读它**：`fs.read` 那份 `.txt`。**抽了不读也算没读**：闸核的是你读的与抽读件同一版；
    只抽到摘要（正文除摘要外没剩多少字）也按 `abstract_only` 拒 —— 摘要最多用于初排/去重；
-4. **判**：`lit.admit` 的 items 里逐条给 `availability` 与那一句 `relevance`
-   （质量如何、相关度如何、凭什么 —— 从正文里看出来的，不是抄题名）。不入的用
+4. **判**：`lit.admit` 的 items 里逐条给 `availability`（质量如何、相关度如何、凭什么
+   —— 从正文里看出来的，不是抄题名；**那一句 `relevance` 是 `lit.stage_add` 时写进候选行的**，
+   `lit.admit` 的 items 不收它 —— 传了会被参数门按未声明键拒）。不入的用
    `lit.stage_reject`（受控理由码 + 一句为什么）。
    **`content_read` 是机器现算的读数**（抽读回执 + 版本 + `fs.read` + 不只摘要），不是你报的；
    `content_read=false` 时 `relevance` / `new_content` 里写定理名、具体数值这类内容性断言
@@ -3033,9 +2919,10 @@ the l_p ball` / `Brunn concavity sections centrally symmetric body` /
 ## 九、提交才注册：`lit.admit` 判收、`lit.admit_all` 收口（2026-11-16 Q1）
 
 判收 ≠ 注册。`lit.admit` 只把这一条判成 `qualified`（有入库资格、**还没有号**），
-真正发文献号的是**提交**那一刻的 `lit.admit_all`。所以一条委托的收尾是这几步，顺序不许换：
+真正发文献号的是**提交**那一刻的 `lit.admit_all`。所以一条委托的收尾默认按这几步走（不是闸：调收与清表各有一道，顺序本身没有读数）：
 
-1. 逐条判：`lit.admit`（每条带 `relevance` 与 `availability`）或 `lit.stage_reject`（拒）；
+1. 逐条判：`lit.admit`（每条带 `availability`；`relevance` 在 `lit.stage_add` 时已落候选行，
+   items 里不再收它）或 `lit.stage_reject`（拒）；
    **还有待裁的条目时整批提交会被拒**，所以先把每一条判完；
 2. **提交**：`lit.admit_all` —— 先落**无号快照** `reports/lit-<请求号>.submitted.md`（号还没发，报告里也没有号），
    再批量注册、把 `lit_id` 回填到同一行，最后重渲染**带号定稿** `reports/lit-<请求号>.md`；
@@ -3048,7 +2935,7 @@ the l_p ball` / `Brunn concavity sections centrally symmetric body` /
    一步都不能省：① `lit.stage_list(request_id="*", status="pending")` 看全表（不只当前委托）；
    ② 本批候选**逐条**判收 / 判拒（`lit.stage_reject` 支持批量 `slots`，一次判拒多条）；
    ③ **逐委托** `lit.admit_all(request_id=<委托号>)` 提交清表（只清当前那个不够）；
-   ④ 交给召唤方的回执里写「还剩几条待裁、分布在哪个委托上」—— **0 也要写**。
+   ④ 回执里**建议**写「还剩几条待裁、分布在哪个委托上」（0 也写）—— 这不是判据：闸是收工门第八格 `literature_pending` 按表数。
    真机 lp-ball-14 现场：4 个委托共 24 条候选留成 `pending`（`r-000011` 15 / `r-000012` 2 /
    `r-000013` 4 / `r-000014` 3），而 `search_literature` 的回执里一格待裁读数都没有 ⇒
    主控看不见、收工门却数得着。
@@ -3093,8 +2980,10 @@ def _c_skills() -> tuple[Skill, ...]:
 
 ## 产出怎么落
 
-C 的**产出登记口只有 `analysis.register_report` 一处**（`C.handle` 那些是动作、不在你的
-工具面上 —— 只有派你的人 `summon` 得动它们；工具面上能落 `analysis_reports` 的只有这一件）。
+C 的**产出登记口有两处，落的是同一张表**：工具 `analysis.register_report`，以及**你自己的动作
+`C.handle`**（派活时它被包成 `own.handle` 出现在你的工具面上；按动作声明，报告 ok 时由它收口落盘
+`analysis_reports` 一行 + `reports/<rid>-<kind>.md`）。两处随便用哪一处都能落行；
+**只在对话里报一堆读数、没有落 `analysis_reports` 行，这一趟等于没有产出**。
 所以：先跑分析器、把读数算出来，再用 `analysis.register_report` 登记 —— 只在对话里报
 一堆读数、没有落 `analysis_reports` 行，这一趟等于没有产出。
 
@@ -3412,7 +3301,7 @@ D 自己不检索：`submit_gaps` 之后由 **A** 领跑（A 过 I7 准入闸门
   ⇒ 红并逐条点名；判据不判 F 自主写的计划）。
   ⚠️ 这里走的是**循环协议的形状**，不是工具清单里的某一件：**主控手上那件召唤工具不在你的面上**，
   别去工具清单里找它（照做的是**正文**，而正文里点名一个你没有的工具，只会白跑一步）。
-  而**创建计划的动作在 F 手上**，不在你的动作表里（你的十五个动作没有一个建计划；
+  而**创建计划的动作在 F 手上**，不在你的动作表里（你的动作表里没有一个建计划；
   `run_round` 串的是 ingest → … → research 的**一轮研究**）。第 10 趟 T5 实测：这一环
   整环为 0（`attack_plans` 空表），所以登记完猜想请**接着**把这一腿开出去，别停在那一行上。
 - **`run_round` 的 `report` 要一份 C 的分析报告（对象）**，不是一句话、不是字符串 ——
@@ -4274,8 +4163,8 @@ def _shared_skills() -> tuple[Skill, ...]:
             # 具体动作：点名会把"秘书职责"的名字泄漏给全部十个角色，而
             # `tests/test_secretary_prompt_alignment.py` 会按"登记该知道它的角色"
             # 逐字核，多一个都要人来裁。具体动作名写在正文里（正文不进提示词）。
-            when=("准备调一个**需要编号**的动作，而手上那个编号不是刚从读数里拿到的时候"
-                  "（哪些动作要编号、以及三个态怎么分，见正文）"),
+            when=("**手上任何一个编号不是刚从读数里拿到的、或刚拿到一次调用被拒**（`unknown_id` /"
+                  "`*_not_found` 这一类）时 —— 立刻读它；哪些动作要编号、三个态怎么分，见正文"),
             actions=("D.assess", "D.consider", "D.poll", "D.adjudicate", "D.propose_question",
                      "H.review", "F.step", "F.status"),
             tools=("fs.read", "fs.list"),
@@ -4690,9 +4579,6 @@ _BODY_CROSS_REFS: dict[tuple[str, str, str], str] = {
     # 不登记就会被 `_body_action_problems` 第 3 件事当场报出来。
     ("C", "矛盾-三态并指到那一对", "D.adjudicate"):
         "「C 只判、不改：矛盾问题的闭环由 D 的 `D.adjudicate` 收口（I2）」—— 指到别人",
-    # V 没有到 L 的边 ⇒ 这句里的 `L.check_formal` 仍然够不到，是"指到别人"那一档。
-    ("V", "假设轴-前提是否真被满足", "L.check_formal"):
-        "「能机器核的（`L.check_formal` 过的那几条）」—— 指到别人（形式化那一岗）产出的证据",
     # 这一句教 V 把递错稿的调用方退回，让调用方改用
     # `F.step` 的 `manuscript_path` —— V 没有到 F 的边，这是"指到别人"（调用方）。
     ("V", "产出-只产意见-签分两档", "F.step"):

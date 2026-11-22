@@ -2699,7 +2699,7 @@ def review_report(
     report = G.gate_report(ctx, own_errors=list(own_errors), reviewer=actor, round_no=round_no)
     markdown = G.render_review_report(report)
     absolute.parent.mkdir(parents=True, exist_ok=True)
-    absolute.write_text(markdown, encoding="utf-8")
+    absolute.write_text(markdown, encoding="utf-8", newline="\n")
     # ---- 产物归属（`ARTIFACTS.jsonl`）：审校报告已经落盘 ⇒ 补"这个路径归谁产"。
     #
     # 为什么在工具层而不是在读侧：读侧（`closing` 的 `review_files` 读数）只数文件，

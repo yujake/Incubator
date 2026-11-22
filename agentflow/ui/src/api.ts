@@ -12,6 +12,7 @@
  * 3. 写请求带 X-CSRF-Token（从 `<meta name="csrf-token">` 读；服务端每进程换一个）。
  */
 import type {
+  ActionsView,
   CacheView,
   RoleErrorsView,
   ErrorCategoryGlossary,
@@ -67,6 +68,17 @@ export const ENDPOINTS = {
   budget: "/api/budget",
   runTask: "/api/run",
   interject: "/api/task",
+  // 板项收口（写）：`POST /api/ack`。状态机在 `conductor.close_item` 那一处，
+  // 这条端点只是它的门面 —— 前端不判"能不能收口"，只把结论画出来。
+  ack: "/api/ack",
+  // 板项作废（写）：`POST /api/void`（BOARDACK，2026-11-21）。`/api/ack` 对
+  // `item_state=block` 的行只能回 409（迁移图里 `block → done` 是倒退，端点不许绕过），
+  // 而"唤醒 ⇒ 再 ack"仍会被 A5 的空口 ack 闸拦 ⇒ 停在 block 的项走这一条。
+  // 唯一实现是 `conductor.void_items_by_user`（作废本来就不走状态机）。
+  void: "/api/void",
+  // 撤销叫停（写）：`POST /api/stop/clear`。删开关的唯一写入口是
+  // `stopctl.clear_stop`（它同时通知别的进程"叫停被撤销了"）。
+  stopClear: "/api/stop/clear",
   live: "/api/live",
   usage: "/api/usage",
   statusReports: "/api/status-reports",
@@ -91,6 +103,10 @@ export const ENDPOINTS = {
   package: "/api/package",
   source: "/api/source",
   stream: "/api/stream",
+  // 网页操作台账（`<工作区>/web-actions.jsonl`）的**读**侧（AUDIT F11）：
+  // 写侧从 W3 起就在写（`writes.audit.record_action`），此前全仓没有读侧。
+  // 只读一条 —— 它没有配对的 POST。
+  actions: "/api/actions",
 } as const;
 
 export type EndpointName = keyof typeof ENDPOINTS;
@@ -219,8 +235,84 @@ export function sourcePath(opts: {
   return `${ENDPOINTS.source}?${q.toString()}`;
 }
 
-/** 请求失败时抛的那个东西：状态码 + 三态 + 人话理由（页面据此渲染 TriState）。 */
-export class ApiError extends Error {
+/**
+ * 两个"全量行"的面共用的分页参数（AUDIT F12：真机上 `/api/evidence` 2.1 MB /
+ * `/api/artifacts` 1.3 MB，一进页面就卡）。
+ *
+ * 三档，语义都在后端（`readers._page_window`）：
+ *
+ * - 什么都不给 ⇒ **全量**（既有行为；判据与命令行读的就是这一档）；
+ * - `summary: true` ⇒ 首屏摘要（每栏 `readers.SUMMARY_ROWS` 行）；
+ * - `limit` / `offset` ⇒ 显式窗口（`limit: 0` 也是全量）。
+ *
+ * 摘要档不删字段：每一栏的**真实**总行数在响应的 `rows_total[栏]` 里，`rows_mode`
+ * 说清这一份是哪一档 —— 页面因此不会把"首屏只给了 40 行"读成"一共就 40 行"。
+ */
+export interface RowPagingOptions {
+  summary?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+/** 把 `RowPagingOptions` 拼成查询串（空 = 空串，不带一个多余的 `?`）。 */
+function rowPagingQuery(opts: RowPagingOptions): string {
+  const q = new URLSearchParams();
+  if (opts.summary === true) {
+    q.set("summary", "1");
+  }
+  if (typeof opts.limit === "number") {
+    q.set("limit", String(opts.limit));
+  }
+  if (typeof opts.offset === "number" && opts.offset > 0) {
+    q.set("offset", String(opts.offset));
+  }
+  const tail = q.toString();
+  return tail === "" ? "" : `?${tail}`;
+}
+
+/** 证据链那一面的查询串（`?summary=1` / `?limit=` / `?offset=`；不给就是全量）。 */
+export function evidencePath(opts: RowPagingOptions = {}): string {
+  return `${ENDPOINTS.evidence}${rowPagingQuery(opts)}`;
+}
+
+/** 产物面那一面的查询串（多一个 `run_dir`；其余与 `evidencePath` 同一套）。 */
+export function artifactsPath(opts: RowPagingOptions & { runDir?: string } = {}): string {
+  const q = new URLSearchParams();
+  if (opts.runDir) {
+    q.set("run_dir", opts.runDir);
+  }
+  if (opts.summary === true) {
+    q.set("summary", "1");
+  }
+  if (typeof opts.limit === "number") {
+    q.set("limit", String(opts.limit));
+  }
+  if (typeof opts.offset === "number" && opts.offset > 0) {
+    q.set("offset", String(opts.offset));
+  }
+  const tail = q.toString();
+  return tail === "" ? ENDPOINTS.artifacts : `${ENDPOINTS.artifacts}?${tail}`;
+}
+
+/**
+ * 网页操作台账那一面的查询串（`GET /api/actions`，AUDIT F11）。
+ *
+ * 行序由后端定（`order="newest_first"`，最新的在最上面）；`limit` / `offset` 是分页
+ * 窗口，两个都非法时后端回 400 并把参数原样回显（与 `/api/run/{sid}/events` 同族）。
+ */
+export function actionsPath(opts: { limit?: number; offset?: number } = {}): string {
+  const q = new URLSearchParams();
+  if (typeof opts.limit === "number") {
+    q.set("limit", String(opts.limit));
+  }
+  if (typeof opts.offset === "number" && opts.offset > 0) {
+    q.set("offset", String(opts.offset));
+  }
+  const tail = q.toString();
+  return tail === "" ? ENDPOINTS.actions : `${ENDPOINTS.actions}?${tail}`;
+}
+
+/** 请求失败时抛的那个东西：状态码 + 三态 + 人话理由（页面据此渲染 TriState）。 */export class ApiError extends Error {
   readonly code: number;
   readonly tri: Tri;
   readonly reason: string;
@@ -522,8 +614,10 @@ export const api = {
     sid: string,
     opts: { sinceIndex?: number; limit?: number } = {},
   ): Promise<RunEventsView> => getJSON<RunEventsView>(runEventsPath(sid, opts)),
-  getEvidence: (): Promise<EvidenceView> => getJSON<EvidenceView>(ENDPOINTS.evidence),
-  getArtifacts: (): Promise<ArtifactsView> => getJSON<ArtifactsView>(ENDPOINTS.artifacts),
+  getEvidence: (opts: RowPagingOptions = {}): Promise<EvidenceView> =>
+    getJSON<EvidenceView>(evidencePath(opts)),
+  getArtifacts: (opts: RowPagingOptions & { runDir?: string } = {}): Promise<ArtifactsView> =>
+    getJSON<ArtifactsView>(artifactsPath(opts)),
   /**
    * 文献库那一面（`GET /api/literature`，2026-10-24 的 D-57）。
    *
@@ -578,8 +672,9 @@ export const api = {
    * 名册那一棵树（`GET /api/roster`，2026-10-21）。
    *
    * 一个 agent 一个节点：父是谁、子有哪些、每个成员的绝对编号／名册名／角色／深度，
-   * 外加收件箱那三格（未读 / 已读未 ack / 未消总数）。**只读**：这个端点在路由表里没有配对的 POST，所以这里
-   * 只有取数函数，没有写函数。
+   * 外加收件箱那三格（未读 / 已读未 ack / 未消总数）。`/api/roster` 本身仍是**只读**的
+   * （它没有配对的 POST）；收口收件箱里那一条走的是另一条写端点 `POST /api/ack`
+   * （`postAck`，2026-11-21 WEBFIX2 F7）—— 状态机在 `conductor.close_item`，不在前端。
    *
    * 三态：`answer === "unknown"` 是"这份读数没拿到"（名册目录不在、或读不出来），
    * **不是**"这个工作区没有子代理"—— 面板必须把这两档画成两句话。
@@ -618,6 +713,16 @@ export const api = {
    */
   getErrorCategories: (): Promise<ErrorCategoryGlossary> =>
     getJSON<ErrorCategoryGlossary>(ENDPOINTS.errorCategories),
+  /**
+   * 网页操作台账（`GET /api/actions`，AUDIT F11 的读侧）：最近 N 笔网页写操作。
+   *
+   * 每一行是写侧 `audit.record_action` 造的那十个键（时间 / 来源 / 端点 / 结果 /
+   * HTTP / 脱敏后的参数摘要），行序是最新的在前。三态：`tri="unreadable"` 是
+   * 「台账读不出来」（**不是**「没有操作」）；文件不在盘上是 `computed` + 0 行。
+   * 分页用 `limit` / `offset`，`has_more` 说清还有没有下一页。**只读**：没有写函数。
+   */
+  getActions: (opts: { limit?: number; offset?: number } = {}): Promise<ActionsView> =>
+    getJSON<ActionsView>(actionsPath(opts)),
 };
 
 /**
@@ -684,6 +789,65 @@ export async function postInterject(body: {
     confirm: "1",
     dry_run: body.dryRun === true ? "1" : "",
   });
+}
+
+
+/**
+ * 收口一条板项（`POST /api/ack`，2026-11-21 WEBFIX2 F7）。
+ *
+ * 参数只有两个：`task_id`（哪一条）与 `close`（`acked` / `completed` / `expired`）。
+ * `confirm: "1"` 由后端当硬要求（缺它 400，盘上零改动）。
+ *
+ * 能不能收口**不在这里判**：状态机在 `conductor.close_item`（迁移图 + 空口 ack 闸）。
+ * 后端回 409 时那句话就是状态机的原话（例如"已经到过 'block'（不许倒退）"），
+ * 页面照原样显示 —— 前端自己判一次就是第二份口径。
+ */
+export async function postAck(body: {
+  taskId: string;
+  close?: "acked" | "completed" | "expired";
+}): Promise<WriteResult> {
+  return await postJSON<WriteResult>(ENDPOINTS.ack, {
+    task_id: body.taskId,
+    close: body.close ?? "acked",
+    confirm: "1",
+  });
+}
+
+/**
+ * 作废一条板项（`POST /api/void`，2026-11-21 BOARDACK）。
+ *
+ * 什么时候用它、什么时候用「收口」：`/api/ack` 走的是板项状态机（`conductor.close_item`
+ * → `item_move` 迁移图 + 业主 A5 的空口 ack 闸），`item_state=block` 的行在迁移图里
+ * 没有出边 ⇒ 后端只能回 409（"已经到过 'block'（不许倒退）"）。而"唤醒 ⇒ 再 ack"
+ * 也不行：唤醒把 `seen_by` 清空，收口就撞上空口 ack 闸。
+ *
+ * 所以停在 `block` 的项（优雅停止留下的）走这一条：它把这一条记成"不再需要做"
+ * （`item_close=expired`），并写清**为什么**（`why` 必填、逐字进留痕）。
+ *
+ * 能不能作废**不在这里判**：唯一实现是 `conductor.void_items_by_user`
+ * （≡ `void_items(revoke=True, by_human=True)`）。后端回 409 时那句话就是它的原话。
+ */
+export async function postVoid(body: {
+  taskId: string;
+  why: string;
+}): Promise<WriteResult> {
+  return await postJSON<WriteResult>(ENDPOINTS.void, {
+    task_id: body.taskId,
+    why: body.why,
+    confirm: "1",
+  });
+}
+
+/**
+ * 撤销叫停（`POST /api/stop/clear`，2026-11-21 WEBFIX2 F9）。
+ *
+ * 为什么需要它：叫停之后那把开关会**一直留在盘上**（没有在跑的循环去消费它），
+ * 于是"又叫停、又想再起一趟"时那一趟第一步就被旧开关停掉 —— 白起一趟。
+ * 唯一写入口是 `stopctl.clear_stop`；盘上本来就没有开关时回 200 + `extra.cleared=false`
+ * （"你要的状态已经成立" ≠ "撤掉了"），页面把这两档分开说。
+ */
+export async function postStopClear(): Promise<WriteResult> {
+  return await postJSON<WriteResult>(ENDPOINTS.stopClear, { confirm: "1" });
 }
 
 

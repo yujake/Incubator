@@ -489,7 +489,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--timeout-sec", type=float, default=None, metavar="N",
                         help="单路超时兜底（秒）；默认不设。只用于某一路卡死，不用它掩盖慢")
     parser.add_argument("--root", default=None,
-                        help="仓库根（默认本文件的上两级）；与 lint_rules / noai_gate 同构")
+                        help="产品根（默认本文件的上两级；仓库根是它的上一级）；"
+                             "与 lint_rules / noai_gate 同构")
     return parser
 
 
@@ -584,7 +585,7 @@ def main(argv: list[str] | None = None) -> int:
             continue
         _write_text(command_path, _shell_join(argv) + "\n")
         try:
-            handle = log_path.open("w", encoding="utf-8")
+            handle = log_path.open("w", encoding="utf-8", newline="\n")
             process = subprocess.Popen(
                 argv,
                 cwd=str(root),

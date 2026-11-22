@@ -30,15 +30,19 @@
 `/api/task` 是"用户 → M 留言"那条通道（`handle_interject`），与上面三件走同一套
 闸门与审计；不给它另开一条写路径。
 
-`POST /answer` 的行为一个字不改（它由 A 线 `server.py` 的 `handle_answer` 调
-:func:`answer`）：它的闸门就是 `userio.answer_question`，`draft/73` §2.5 那一行
-逐字写着"现状，不动"。所以本模块只给它补审计（写一行 `web-actions.jsonl`），
-不改它的状态码、不改它的正文 —— `tests/test_webui.py` 那 21 条靠的就是这一点。
+`POST /answer` 走同一道闸门（2026-11-21 WEBFIX1 / 审计 F4）。在它之前的那一版里
+`/answer` 只靠 `userio.answer_question` 兜底：跨站页面带 `Origin: evil.example`、
+不带 CSRF 也能把一条待答答掉并落盘（实测 303 + `user_answer`；同形状打 `/api/task`
+是 403）。现在它由 A 线 `server.py` 的 `handle_answer` 把请求句柄交下来，和其余写
+端点一样过 `来源 ⇒ CSRF ⇒ allow_writes` 三层：拒时 403 + 同一份 `kind` /
+`how_to_fix`（`:func:`refusal_reading``），写成时仍是 303 / 409 / 500 那三个状态码。
 
 新端点的授权矩阵（裁定 C2）按 `draft/74` §4 的口径三层，次序即下面的检查次序：
 回环来源 ⇒ CSRF（`X-CSRF-Token`，与 `index.html` 里注入的每进程令牌比对）⇒
 `allow_writes`（`agentflow web --allow-writes`，已透传到句柄上）。
 `/api/settings` 另加一层 `settings_write`（`--no-settings-write` 关掉它）。
+四个写端点（`/api/stop` · `/api/run` · `/api/task` · `/answer`）共用一处
+:func:`_gate`，那一处再调 :func:`authorize` —— 判据只有一份。
 
 三态与状态码（失败不许折成 200）：
 
@@ -85,7 +89,8 @@ from .state import _clip, _e, _sid_ok, _text, answer_text_of, snapshot
 
 __all__ = ["HANDLERS", "MISSING_TYPES", "PENDING_ENDPOINTS", "ROUTES",
            "UNCHECKED_TYPES", "WRITES_OFF_REASON", "answer", "authorize",
-           "handle_budget", "handle_settings",
+           "handle_ack", "handle_budget", "handle_settings",
+           "handle_stop_clear", "handle_void",
            "handle_stop",
            "handle_submit", "type_decls", "writes_allowed"]
 
@@ -107,9 +112,9 @@ PENDING_ENDPOINTS: dict[str, str] = {}
 #: 所以 C 线加端点改的是这一行，不用去碰 A 线的文件（`draft/78 §3` 的接缝）。
 #:
 #: `/answer` 那一行仍指向 A 线 `WebHandler.handle_answer`（`server._invoke` 先找方法、
-#: 再找子表）：它的行为与状态码一个字都不许变（`tests/test_webui.py` 里 21 条钉着），
-#: 所以它不进 C 线的授权矩阵 —— `draft/73` §2.5 给它的闸门栏逐字是"现状，不动"。
-#: C 只给它补审计（`answer()` 里那一笔）。
+#: 再找子表）：路由名与实现处不变，但它与其余写端点走同一道授权闸门（F4）。
+#: 2026-11-21 之前它不进那张矩阵（`draft/73` §2.5 的"现状，不动"），于是跨站表单
+#: 能答掉待答；现在 `answer()` 的入口就是 `_gate(...)`。
 ROUTES: tuple[tuple[str, str, str], ...] = (
     ("POST", "/answer", "handle_answer"),
     ("POST", "/api/stop", "handle_stop"),
@@ -120,6 +125,17 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
     ("POST", "/api/budget", "handle_budget"),
     ("POST", "/api/run", "handle_start_run"),
     ("POST", "/api/task", "handle_interject"),
+    # 板项收口（WEBFIX2 · F7）：页面上"知道了 / 做完了"那一只手。
+    # 状态机不在这里（判据只有 `conductor.close_item` 一处），这一条只是它的门面。
+    ("POST", "/api/ack", "handle_ack"),
+    # 板项作废（BOARDACK，2026-11-21）：页面上"这一条不用再做了"那一只手。
+    # 为什么 `/api/ack` 不够：那 6 条 block 项在迁移图里没有出边（`block → done`
+    # 是倒退），而"唤醒 ⇒ 再 ack"仍被 A5 的空口 ack 闸拦（唤醒会清掉 seen_by）。
+    # 唯一实现是 `conductor.void_items_by_user`（≡ `void_items(revoke=True, by_human=True)`）。
+    ("POST", "/api/void", "handle_void"),
+    # 撤销叫停（WEBFIX2 · F9）：把那一把还挂在盘上的停机开关撤掉，
+    # 于是"叫停之后从网页再起一趟"不会白起。唯一写入口是 `stopctl.clear_stop`。
+    ("POST", "/api/stop/clear", "handle_stop_clear"),
 )
 
 #: 本模块还欠的 TS 接口（`(名字, 为什么还没有)`）；写面接口已全部生成 ⇒ 空。
@@ -279,7 +295,8 @@ def _csrf_ok(handler: Any) -> bool:
 
 def authorize(handler: Any, *, endpoint: str,
               need_settings: bool = False,
-              read_only: bool = False) -> tuple[bool, int, str]:
+              read_only: bool = False,
+              source_problem: str | None = None) -> tuple[bool, int, str]:
     """写面的授权矩阵（裁定 C2）：`(放行吗, 状态码, 理由)`。次序即 `draft/74` §4。
 
     1. 回环来源（跨站来源一律拒）；
@@ -290,6 +307,10 @@ def authorize(handler: Any, *, endpoint: str,
     为什么第 3 条要放在 CSRF 之后：`draft/74` §4 那一行逐字是"回环来源校验 →
     CSRF → `allow_writes` 开关"。次序不改变状态码（都是 403），改变的是理由，
     而理由要进审计台账 —— 审计读的是"为什么被拒"，写错一档就查不出来。
+
+    `source_problem` 是 :func:`_gate` 交下来的来源判据（缺省 `None` = 本函数自己读
+    一次）。为什么要这个口子：来源既要决定拒不拒，也是审计台账里"这次从哪来"那一
+    格；两处各读一次可能出现"按 A 拒、记成 B"，而那种错只有翻台账时才看得见。
 
     `read_only=True` 是 D-60 ② 那一档：请求自己声明"我不写盘、不花钱、不起进程"
     （缓存预热的 `dry_run=1`）。这一档只保留第 1 层，理由如下：
@@ -302,9 +323,10 @@ def authorize(handler: Any, *, endpoint: str,
 
     真跑那一档（`read_only=False`）一层都不许少：这是同一张矩阵的缺省形态。
     """
-    _source, why = _source_of(handler)
-    if why:
-        return False, 403, f"{endpoint}：{why}"
+    if source_problem is None:
+        _source, source_problem = _source_of(handler)
+    if source_problem:
+        return False, 403, f"{endpoint}：{source_problem}"
     if read_only:
         return True, 200, ""
     if not _csrf_ok(handler):
@@ -316,6 +338,23 @@ def authorize(handler: Any, *, endpoint: str,
     if need_settings and not bool(getattr(handler, "settings_write", True)):
         return False, 403, f"{endpoint}：设置写面被 --no-settings-write 关掉了"
     return True, 200, ""
+
+
+def _gate(handler: Any, *, endpoint: str,
+          need_settings: bool = False) -> tuple[bool, int, str, str]:
+    """写面的唯一一道闸门：`(放行吗, 状态码, 理由, 这次请求的来源)`。
+
+    它只做一件事：把来源读一次，交给 :func:`authorize` 判，再把同一份来源带回去
+    给审计。四个调用点（`/api/stop` · `/api/run` · `/api/task` · `/answer`）共用
+    这一处 —— 谁也不许自己再拼一份"看 Origin / 看 Host / 比对 CSRF"的判断。
+
+    判据（`:func:`authorize``）仍只有一份：`_gate` 是它的调用口，不是第二份实现。
+    """
+    source, problem = _source_of(handler)
+    allowed, code, why = authorize(handler, endpoint=endpoint,
+                                   need_settings=need_settings,
+                                   source_problem=problem)
+    return allowed, code, why, source
 
 
 # ====================================================================== 复用的小件
@@ -421,11 +460,10 @@ def handle_stop(handler: Any, params: Mapping[str, str],
     del params, query
     form = handler._form()
     root = Path(handler.root)
-    source, _why = _source_of(handler)
     reason = _one(form, "reason").strip() or SC.DEFAULT_REASON
     force = _flag(form, "force")
     seen = {"reason": reason, "force": force, "confirm": _flag(form, "confirm")}
-    allowed, code, why = authorize(handler, endpoint="POST /api/stop")
+    allowed, code, why, source = _gate(handler, endpoint="POST /api/stop")
     done = _replier(handler, "/api/stop", source, seen)
     if not allowed:
         return done(code, f"拒绝：{why}", False)
@@ -473,14 +511,13 @@ def handle_submit(handler: Any, params: Mapping[str, str],
     del params, query
     form = handler._form()
     root = Path(handler.root)
-    source, _why = _source_of(handler)
     topic = _one(form, "topic").strip()
     mode = _one(form, "mode").strip() or "topical"
     content = _one(form, "content")
     providers = [_text(x).strip() for x in (form.get("providers") or []) if _text(x).strip()]
     seen = {"topic": topic, "mode": mode, "content": content, "providers": providers,
             "confirm": _flag(form, "confirm")}
-    allowed, code, why = authorize(handler, endpoint="POST /api/submit")
+    allowed, code, why, source = _gate(handler, endpoint="POST /api/submit")
     done = _replier(handler, "/api/submit", source, seen)
     if not allowed:
         return done(code, f"拒绝：{why}", False)
@@ -539,7 +576,6 @@ def handle_settings(handler: Any, params: Mapping[str, str],
     del params, query
     form = handler._form()
     root = Path(handler.root)
-    source, _why = _source_of(handler)
     values: dict[str, dict[str, Any]] = {}
     for raw_key, vals in form.items():
         if "." not in str(raw_key):
@@ -553,8 +589,8 @@ def handle_settings(handler: Any, params: Mapping[str, str],
             values.setdefault(section, {}).setdefault(slot, {})[key] = text
         else:
             values.setdefault(section, {})[rest] = text
-    allowed, code, why = authorize(handler, endpoint="POST /api/settings",
-                                   need_settings=True)
+    allowed, code, why, source = _gate(handler, endpoint="POST /api/settings",
+                                       need_settings=True)
     done = _replier(handler, "/api/settings", source, values)
     if not allowed:
         return done(code, f"拒绝：{why}", False)
@@ -597,14 +633,13 @@ def handle_budget(handler: Any, params: Mapping[str, str],
     del params, query
     form = handler._form()
     root = Path(handler.root)
-    source, _why = _source_of(handler)
     action = (_one(form, "action").strip() or "add").lower()
     raw_usd = _one(form, "usd").strip()
     note = _one(form, "note")
     by = _one(form, "by").strip() or "web"
     seen = {"action": action, "usd": raw_usd, "note": note, "by": by,
             "confirm": _flag(form, "confirm")}
-    allowed, code, why = authorize(handler, endpoint="POST /api/budget")
+    allowed, code, why, source = _gate(handler, endpoint="POST /api/budget")
     done = _replier(handler, "/api/budget", source, seen)
     if not allowed:
         return done(code, f"拒绝：{why}", False)
@@ -726,14 +761,13 @@ def handle_start_run(handler: Any, params: Mapping[str, str],
     del params, query
     form = handler._form()
     root = Path(handler.root)
-    source, _why = _source_of(handler)
     task = _one(form, "task").strip()
     sid = _one(form, "sid").strip()
     resume = _flag(form, "resume")
     dry = _flag(form, "dry_run")
     seen = {"task": task, "sid": sid, "resume": resume, "dry_run": dry,
             "confirm": _flag(form, "confirm")}
-    allowed, code, why = authorize(handler, endpoint="POST /api/run")
+    allowed, code, why, source = _gate(handler, endpoint="POST /api/run")
     done = _replier(handler, "/api/run", source, seen)
     if not allowed:
         return done(code, f"拒绝：{why}", False)
@@ -759,11 +793,39 @@ def handle_start_run(handler: Any, params: Mapping[str, str],
                 True, ident=log, extra={"pid": pid, "log": log, "argv": argv})
 
 
+def _interject_sid_problem(sid: str) -> str:
+    """`/api/task` 的 sid 硬要求：返回拒绝理由，空串 = 放行（审计 F2）。
+
+    缺省 sid 的口径二选一，这里选"受控拒"：`sessions.session_path()` 的缺省是
+    `sid or session_id()`（当天日期），于是不带 sid 的插话会落进
+    `sessions/<当天日期>.jsonl` —— M 在自己的 `--sid` 段里读不到，而且那段空会话
+    会把页面的「当前会话」顶掉。"当前活跃会话"听起来更聪明，但多段会话并存时它
+    没有唯一答案，猜错一次就是一条没人读的插话；显式拒绝会明确告诉调用方给 sid
+    （页面本来就知道自己在看哪一段）。
+
+    sid 还必须是安全的文件名主干（`_sid_ok`：字母、数字与 `- _ .`，不许含 `..`）——
+    否则 `sessions/<sid>.jsonl` 会写到 `sessions/` 之外。
+    """
+    if not sid:
+        return ("插话必须给 sid —— 它回答的是「写进哪一段会话」。缺省不再落到当天"
+                "日期那一段：M 在自己的 --sid 段里读不到，而且那段空会话会把页面的"
+                "「当前会话」顶掉")
+    if not _sid_ok(sid):
+        return (f"sid 不是安全的会话号（{sid!r}）—— "
+                "只许字母、数字与 - _ .，且不许含 ..")
+    return ""
+
+
 def handle_interject(handler: Any, params: Mapping[str, str],
                 query: Mapping[str, Sequence[str]]) -> dict[str, Any]:
     """`POST /api/task`：往正在跑的那一趟插话（只有用户能发、只有 M 收）。
 
-    请求字段：`body`（要说的话）· `subject?` · `sid?` · `confirm=1` · `dry_run?`。
+    请求字段：`body`（要说的话）· `sid`（哪一段会话）· `subject?` ·
+    `confirm=1` · `dry_run?`。`sid` 是硬要求（审计 F2）：缺了不再落到
+    `sessions/<当天日期>.jsonl` —— 那是另一段会话，M 在自己的 `--sid` 段里读不到，
+    还会把页面的「当前会话」顶到那段空会话上。两种可选口径里这里选"受控拒"：
+    "当前活跃会话"在多段并存时没有唯一答案，猜错一次就是一条没人读的插话；拒绝
+    会明确告诉调用方去给 sid（页面本来就知道它在看哪一段）。
     送达方式由 `agent_loop.send_interjection` 定义：下一步开头单列一段【插话】，
     不打断当前步；写进会话事件流（`agent_interjection`），所以盘上可复查。
     """
@@ -773,14 +835,13 @@ def handle_interject(handler: Any, params: Mapping[str, str],
 
     form = handler._form()
     root = Path(handler.root)
-    source, _why = _source_of(handler)
     body = _one(form, "body").strip()
     subject = _one(form, "subject").strip() or "用户插话"
     sid = _one(form, "sid").strip()
     dry = _flag(form, "dry_run")
     seen = {"body": body, "subject": subject, "sid": sid, "dry_run": dry,
             "confirm": _flag(form, "confirm")}
-    allowed, code, why = authorize(handler, endpoint="POST /api/task")
+    allowed, code, why, source = _gate(handler, endpoint="POST /api/task")
     done = _replier(handler, "/api/task", source, seen)
     if not allowed:
         return done(code, f"拒绝：{why}", False)
@@ -788,11 +849,14 @@ def handle_interject(handler: Any, params: Mapping[str, str],
         return done(400, "拒绝：插话内容不能为空", False)
     if not _flag(form, "confirm"):
         return done(400, "拒绝：插话会改变正在跑的那一趟的做法，必须带 confirm=1", False)
+    sid_problem = _interject_sid_problem(sid)
+    if sid_problem:
+        return done(400, f"拒绝：{sid_problem}", False)
     if dry:
         return done(200, "试运行：没有写任何一条插话", True, extra={"dry_run": True})
     try:
         iid, problem = AL.send_interjection(root, sender=U.USER, subject=subject,
-                                            body=body, sid=(sid or None))
+                                            body=body, sid=sid)
     except Exception as exc:  # noqa: BLE001 - 写失败不许折成 200
         return done(500, f"没写成：{type(exc).__name__}: {exc}", False)
     if problem:
@@ -804,29 +868,325 @@ def handle_interject(handler: Any, params: Mapping[str, str],
 
 #: 两条"说话"的端点在下面才定义（它们的正文紧邻本段之上）⇒ 注册放在这里，
 #: 免得 `HANDLERS.update` 引用尚未绑定的名字。
+# ====================================================================== 板项收口 / 撤销叫停（WEBFIX2 F7 · F9）
+def _board_row(root: Path, task_id: str) -> dict[str, Any] | None:
+    """台账里那一行（读不成返回 `None`：这是"没读到"，由调用方如实说）。"""
+    try:
+        rows = Store(root).rows("tasks")
+    except (StoreError, OSError):
+        return None
+    for row in rows:
+        if str(row.get("task_id") or "") == task_id:
+            return dict(row)
+    return None
+
+
+def handle_ack(handler: Any, params: Mapping[str, str],
+               query: Mapping[str, Sequence[str]]) -> dict[str, Any]:
+    """`POST /api/ack`：把一条板项收口（`item_state=done`）—— 用户在网页上的那只"手"。
+
+    业主 2026-11-21 的现场：真机 `projects/lp-ball-15` 有 6 条未收口的 `notice` 板项，
+    而网页上没有任何入口能收口它们 —— 路由表里没有这一条，于是它们只能等某个代理
+    自己下一次醒来 ack。这一条补的就是那个入口（审计 F7）。
+
+    ## 状态机不在这里（这是本端点的全部纪律）
+
+    收口只有一条判定与写入点：`conductor.close_item(task_id, close=…)`
+    （`conductor.py::_set_item` → `item_move` 迁移图）。本模块不判"这一项能不能
+    ack"、不写行、也不自己推迁移 —— 它只把状态机给的结论转成回执，并回读那一行：
+
+    | 台账里落成的样子 | HTTP | `tri` |
+    |---|---|---|
+    | `item_state=done`（迁移图放行） | 200 | `computed` |
+    | 没到 `done`（空口 ack / 已到过 `block` / 不是板项 / 没这一项） | 409 | `not_applicable` |
+
+    为什么要回读：`close_item` 在"空口 ack（业主 A5：没 `seen` 就 ack）"那一档回的
+    不是空串而是 `"ack_unbacked"`（`conductor.py::_set_item` 第 2 条，`changed=False`），
+    只看"返回值非空"会把一次零写入读成"收口了"。所以这里取 `tasks` 里那一行的
+    `item_state` / `item_close` —— 与页面看到的是同一份事实。
+
+    请求字段：`task_id` · `close`（`acked` / `completed` / `expired`，缺省 `acked`；
+    闭集是 `schema.ITEM_CLOSES`）· `confirm=1`。
+    三态：没开写面 / CSRF 不对 / 跨站来源 ⇒ 403；缺 `confirm` / 参数不合法 ⇒ 400
+    （盘上一个字节不动）；状态机拒绝 ⇒ 409 并逐字给出它那句话；写抛异常 ⇒ 500。
+    """
+    del params, query
+    form = handler._form()
+    root = Path(handler.root)
+    task_id = _one(form, "task_id").strip()
+    close = _one(form, "close").strip() or "acked"
+    seen = {"task_id": task_id, "close": close, "confirm": _flag(form, "confirm")}
+    allowed, code, why, source = _gate(handler, endpoint="POST /api/ack")
+    done = _replier(handler, "/api/ack", source, seen)
+    if not allowed:
+        return done(code, f"拒绝：{why}", False)
+    if not _flag(form, "confirm"):
+        return done(400, ("拒绝：收口一条板项要 confirm=1 一次显式确认"
+                          "（它会让一条还在板上的事项从待办里消失）"), False)
+    if not task_id:
+        return done(400, "拒绝：task_id 不能为空 —— 要说清收口哪一条", False)
+    if close not in S.ITEM_CLOSES:
+        return done(400, f"拒绝：close 只认 {S.ITEM_CLOSES}（收到 {close!r}）", False)
+    try:
+        store = Store(root)
+        store.init()
+    except (StoreError, OSError) as exc:
+        return done(400, ("拒绝：这个工作区没有 data/（没 `agentflow init` 过），"
+                          f"没有台账可改 —— {type(exc).__name__}: {exc}"),
+                    False, tri=TRI_NOT_APPLICABLE)
+    from ..conductor import Conductor  # noqa: PLC0415 - 只在真收口时才装这一层
+
+    try:
+        state, problem = Conductor(store).close_item(task_id, close=close)
+    except Exception as exc:  # noqa: BLE001 - 结局说不清 ⇒ unreadable，不折成成功
+        return done(500, (f"没收口：{type(exc).__name__}: {exc}"
+                          "（事务未提交，盘上那份没被动过）"), False)
+    row = _board_row(root, task_id) or {}
+    item_state = str(row.get("item_state") or "")
+    if item_state != "done":
+        return done(409, (f"没收口 {task_id}：{problem or '状态机没有把它推到 done'}"
+                          f"（台账里现在是 item_state={item_state or '（空）'}）"), False,
+                    tri=TRI_NOT_APPLICABLE,
+                    extra={"task_id": task_id, "state_machine": state,
+                           "item_state": item_state,
+                           "item_close": str(row.get("item_close") or ""),
+                           "seen_by": str(row.get("seen_by") or "")})
+    extra = {"task_id": task_id, "item_state": item_state,
+             "item_close": str(row.get("item_close") or ""),
+             "seen_by": str(row.get("seen_by") or ""),
+             "kind": str(row.get("kind") or ""),
+             "expects": str(row.get("expects") or ""),
+             "detail": str(row.get("detail") or "")[:200]}
+    # 收口写的是 `tasks` 台账，不经过三个会话钩子 ⇒ 页面要刷新得靠这一帧。
+    try:
+        from . import sse as SSE  # noqa: PLC0415 - 避免导入期成环
+
+        SSE.notify_state(root)
+    except Exception:  # noqa: BLE001 - 推不出去不许把"已经收口了"改写成失败
+        extra["notify_problem"] = "state 帧没推出去（这一笔已经落盘）"
+    return done(200, f"已收口 {task_id}（item_state={item_state} · close={close}）",
+                True, ident=task_id, extra=extra)
+
+
+def handle_stop_clear(handler: Any, params: Mapping[str, str],
+                      query: Mapping[str, Sequence[str]]) -> dict[str, Any]:
+    """`POST /api/stop/clear`：撤掉盘上的停机开关 —— "撤销叫停"那只手（审计 F9）。
+
+    现场：叫停之后开关一直留在盘上（没有任何在跑的循环去消费它），于是"用户从网页
+    再起一趟"的那一趟第一步就被这把旧开关停掉 —— 白起一趟。而路由表里没有撤销入口
+    （`stopctl.clear_stop` 只有 CLI 一个调用者，`cli.py:4734`）。
+
+    ## 唯一写入口
+
+    删开关只有 `stopctl.clear_stop(root)` 一处（它同时通知 `set_stop_hook` 上的监听器
+    `action="cleared"`，于是别的正在跑的进程也会看到"叫停被撤销了"）。本模块不 unlink
+    那个文件、也不自己判"该不该撤"。
+
+    请求字段：`confirm=1`（与其余写端点同一条闸；撤错一次叫停的代价是"这一趟本来要停
+    却没停"，所以仍然要一次显式确认）。
+    三态：没开写面 / CSRF 不对 / 跨站来源 ⇒ 403；缺 `confirm` ⇒ 400；撤失败 ⇒ 500。
+    盘上本来就没有开关 ⇒ 200 + `extra.cleared=false`：那是"你要的状态已经成立"，
+    与"撤掉了"分开说（不许折成同一个"成功"，也不许折成失败）。
+    """
+    del params, query
+    form = handler._form()
+    root = Path(handler.root)
+    seen = {"confirm": _flag(form, "confirm")}
+    allowed, code, why, source = _gate(handler, endpoint="POST /api/stop/clear")
+    done = _replier(handler, "/api/stop/clear", source, seen)
+    if not allowed:
+        return done(code, f"拒绝：{why}", False)
+    if not _flag(form, "confirm"):
+        return done(400, ("拒绝：撤销叫停要 confirm=1 一次显式确认"
+                          "（撤错会让本该停的那一趟继续跑）"), False)
+    try:
+        before = SC.read_stop(root) or {}
+    except Exception:  # noqa: BLE001 - 读不成不猜：clear_stop 自己会再读一次
+        before = {}
+    try:
+        cleared = bool(SC.clear_stop(root))
+    except Exception as exc:  # noqa: BLE001 - 撤失败不许折成 200
+        return done(500, (f"没撤掉：{type(exc).__name__}: {exc}"
+                          "（盘上那一份没被动过）"), False)
+    now = SC.read_stop(root)
+    extra = {"cleared": cleared,
+             # 撤之前那一份原样带出去（谁按的、什么理由、什么时候）——
+             # 撤掉之后盘上已经读不到它了，这一格是这一笔唯一的留痕。
+             "cleared_switch": before,
+             "switch_present": now is not None,
+             "stop_path": str(SC.stop_path(root))}
+    try:
+        from . import sse as SSE  # noqa: PLC0415 - 同 handle_ack
+
+        SSE.notify_state(root)
+    except Exception:  # noqa: BLE001 - 推不出去不改写"已经撤掉了"
+        extra["notify_problem"] = "state 帧没推出去（这一笔已经落盘）"
+    if not cleared:
+        return done(200, ("盘上本来就没有停机开关 —— 当前没有叫停"
+                          "（这一下没有改动任何东西）"), True, extra=extra)
+    by = _text(before.get("by")) or "?"
+    reason = _text(before.get("reason")) or "?"
+    return done(200, (f"已撤销叫停（撤掉了 {by} 在 {reason} 上落的那把开关）"
+                      "—— 当前没有叫停，再起一趟不会被它停掉"), True, extra=extra)
+
+def handle_void(handler: Any, params: Mapping[str, str],
+                query: Mapping[str, Sequence[str]]) -> dict[str, Any]:
+    """`POST /api/void`：把一条不再需要做的板项作废（`item_close=expired`）。
+
+    现场（BOARDACK，2026-11-21）：真机 `projects/lp-ball-15` 有 6 条 `notice` 板项停在
+    `item_state=block`（优雅停止翻的），网页上收不了口。`/api/ack` 对这 6 条只能回 409
+    —— `conductor.py::ITEM_MOVES` 里 `("block","done")` 是 `back`（倒退），那一档
+    不许在端点这一层越过（越过就等于把迁移图与业主 A5 的空口 ack 闸一起放开）。
+
+    另一条合法路是"唤醒 ⇒ 再 ack"，实测也不通：唤醒把 `seen_by` 清空 ⇒ `close_item`
+    回 `ack_unbacked`（空口 ack）。而作废本来就不走状态机（`void_items` 边界 3：
+    作废描述的是"不会有人读"，不是"有人读过"）⇒ 这一条端点接的就是那条路。
+
+    ## 唯一写入口
+
+    `Conductor.void_items_by_user(item_ids=[…], why=…)`（≡ `void_items(revoke=True,
+    by_human=True)`）。本模块不判"这一项能不能撤"、不写行、不自己推迁移：只把
+    conductor 的结论转成回执，并回读那一行判成败（与 `/api/ack` 同一条纪律）。
+
+    | 台账里落成的样子 | HTTP | `tri` |
+    |---|---|---|
+    | `item_state=done` ＋ `item_close=expired`（作废落成） | 200 | `computed` |
+    | 已经终态（重复作废，一格不改） | 200 | `computed`（`extra.already_closed=true`） |
+    | 不是板项 / 没有这一项 / 读不成 | 409 或 500 | `not_applicable` / `unreadable` |
+
+    为什么"已经终态"是 200 而不是 409：用户要的状态（这一条不在待办里）已经成立，
+    与 `/api/stop/clear` 的 `cleared=false` 同一条三态口径（"已经是"≠"刚做成"），
+    用 `extra.already_closed` 把两档分开说。
+
+    请求字段：`task_id` · `why`（必填，逐字进那一行的 `inputs` 与事件 note）·
+    `confirm=1`。三态：没开写面 / CSRF 不对 / 跨站来源 ⇒ 403；缺 `confirm` /
+    缺 `why` / 空 `task_id` ⇒ 400（盘上一个字节不动）；conductor 拒 ⇒ 409 并把它的
+    原话带出来；写抛异常 ⇒ 500。
+    """
+    del params, query
+    form = handler._form()
+    root = Path(handler.root)
+    task_id = _one(form, "task_id").strip()
+    why = " ".join(_one(form, "why").split())
+    seen = {"task_id": task_id, "why": why, "confirm": _flag(form, "confirm")}
+    allowed, code, gate_why, source = _gate(handler, endpoint="POST /api/void")
+    done = _replier(handler, "/api/void", source, seen)
+    if not allowed:
+        return done(code, f"拒绝：{gate_why}", False)
+    if not _flag(form, "confirm"):
+        return done(400, ("拒绝：作废一条板项要 confirm=1 一次显式确认"
+                          "（作废不可逆：这一条会从待办里消失，且义务不再要求完成）"),
+                    False)
+    if not task_id:
+        return done(400, "拒绝：task_id 不能为空 —— 要说清作废哪一条", False)
+    if not why:
+        # 理由不是形式：`revoke:expired:` 那一格是事后复核"谁凭什么撤的"的唯一落点，
+        # 缺了它这一笔在盘点时无从复核（`void_reason_or_derived` 会补一句，但那是
+        # 给代理那条路的兜底，不是给人这条路的口径）。
+        return done(400, ("拒绝：why 不能为空 —— 作废要写清「为什么这一条不用再做了」"
+                          "（逐字进那一行的 inputs 留痕）"), False)
+    try:
+        store = Store(root)
+        store.init()
+    except (StoreError, OSError) as exc:
+        return done(400, ("拒绝：这个工作区没有 data/（没 `agentflow init` 过），"
+                          f"没有台账可改 —— {type(exc).__name__}: {exc}"),
+                    False, tri=TRI_NOT_APPLICABLE)
+    from ..conductor import Conductor  # noqa: PLC0415 - 只在真作废时才装这一层
+
+    try:
+        got = Conductor(store).void_items_by_user([task_id], why=why)
+    except Exception as exc:  # noqa: BLE001 - 结局说不清 ⇒ unreadable，不折成成功
+        return done(500, (f"没作废：{type(exc).__name__}: {exc}"
+                          "（事务未提交，盘上那份没被动过）"), False)
+    row = _board_row(root, task_id) or {}
+    item_state = str(row.get("item_state") or "")
+    extra = {"task_id": task_id, "item_state": item_state,
+             "item_close": str(row.get("item_close") or ""),
+             "expects": str(row.get("expects") or ""),
+             "expects_was": str(row.get("expects_was") or ""),
+             "kind": str(row.get("kind") or ""),
+             "voided": [str(x) for x in (got.get("voided") or ())],
+             "traces": [dict(t) for t in (got.get("traces") or ())],
+             "already_closed": False}
+    if not got.get("checked"):
+        return done(500, (f"没作废 {task_id}：{got.get('reason') or '台账读不成'}"
+                          "（不是「已经作废」）"), False, tri=TRI_UNREADABLE,
+                    extra=extra)
+    if item_state != "done":
+        refused = [dict(r) for r in (got.get("refused") or ())]
+        first = str((refused[0].get("why") if refused else "") or "")
+        return done(409, (f"没作废 {task_id}："
+                          f"{first or got.get('reason') or '作废没有落成'}"
+                          f"（台账里现在是 item_state={item_state or '（空）'}）"), False,
+                    tri=TRI_NOT_APPLICABLE, extra=extra)
+    if task_id not in (extra["voided"] or []):
+        # 走到这里 = 这一条在作废之前就已经是终态（conductor 那一档零写入）。
+        extra["already_closed"] = True
+        extra["reason_already"] = (
+            "这一条在作废之前就已经收口了（conductor 报「已经是终态」）⇒ 这一下没有改动任何格")
+    try:
+        from . import sse as SSE  # noqa: PLC0415 - 同 handle_ack
+
+        SSE.notify_state(root)
+    except Exception:  # noqa: BLE001 - 推不出去不许把"已经作废了"改写成失败
+        extra["notify_problem"] = "state 帧没推出去（这一笔已经落盘）"
+    if extra["already_closed"]:
+        return done(200, f"{task_id} 已经是收口状态（item_state={item_state}）—— 这一下没有改动",
+                    True, ident=task_id, extra=extra)
+    return done(200, (f"已作废 {task_id}（item_close=expired · 原 expects="
+                      f"{extra['expects_was'] or '（空）'}）—— 这一条不再欠动作"),
+                True, ident=task_id, extra=extra)
+
+
 HANDLERS.update({
     "handle_start_run": handle_start_run,
     "handle_interject": handle_interject,
+    "handle_ack": handle_ack,
+    "handle_void": handle_void,
+    "handle_stop_clear": handle_stop_clear,
 })
 
 
 # ====================================================================== 回答（既有写路径）
+def _answer_refusal(code: int, why: str) -> str:
+    """一次被写面闸门拒掉的回答 ⇒ 与 409 同形的错误卡片（不另造一套错误体）。
+
+    `kind` / `how_to_fix` 来自 :func:`refusal_reading`：那是写端点共用的分档词表
+    （`csrf_token` / `writes_off` / `foreign_origin` / …），页面上读到的分档与
+    `/api/*` 那些端点逐字相同；这一层只把这两格翻译成同一张 `.card.problem`。
+    """
+    kind, how_to_fix = refusal_reading(code, why)
+    return ('<div class="card problem"><div class="card-head">'
+            f'<span class="badge badge-fail">{code} · 写回答被拒</span></div>'
+            f'<div class="readings">{_e(why)}</div>'
+            f'<div class="readings">分档 <span class="mono">{_e(kind)}</span>；'
+            f"怎么办：{_e(how_to_fix)}</div>"
+            '<div class="readings"><a href="/">回首页</a></div></div>')
+
+
 def answer(root: Path, form: Mapping[str, Sequence[str]],
-           *, audit_enabled: bool = True) -> tuple[int, str, str]:
+           *, handler: Any, audit_enabled: bool = True) -> tuple[int, str, str]:
     """处理一次回答提交：返回 `(状态码, 重定向目标, HTML 正文)`。
 
-    三态纪律：qid 不在待答清单里 ⇒ 409（不是 200），并在页面上说清是哪一档：
-    已经被谁什么时候答过、还是根本没有这个号。写失败 ⇒ 500 并原样给出错误。
+    闸门（2026-11-21 WEBFIX1 / 审计 F4）：它与其余写端点走同一处 :func:`_gate`
+    （回环来源 ⇒ CSRF ⇒ `allow_writes`）。`handler` 是 A 线
+    `WebHandler.handle_answer` 交下来的请求句柄 —— 没有它就判不了来源与令牌，
+    所以它有实参、且没有缺省值。拒时 403 + :func:`_answer_refusal`（kind /
+    how_to_fix 与 `/api/*` 同一份词表），盘上零写入。
 
-    审计（裁定 D2）：每一次到达这里的提交（含 409 与 500 那两档）都追加一行
+    三态纪律：闸门放行之后，qid 不在待答清单里 ⇒ 409（不是 200），并在页面上
+    说清是哪一档：已经被谁什么时候答过、还是根本没有这个号。写失败 ⇒ 500 并
+    原样给出错误。
+
+    审计（裁定 D2）：每一次到达写面的提交（含 403 / 409 / 500 那三档）都追加一行
     `web-actions.jsonl`。为什么审计失败不改状态码：本函数的三个返回值是 A 线
     `handle_answer` 与 `tests/test_webui.py` 钉死的契约，"写成了但没审计上"
-    不该被折叠成"写失败"（那会把一次真实的落盘说成没发生）。所以审计失败走 stderr，
-    而 `/api/*` 那三条端点的回执把 `extra.audit` 如实带给调用方。
+    不该被折叠成"写失败"（那会把一次真实的落盘说成没发生）。所以审计失败走 stderr。
 
     `audit_enabled`：只读档（没开 `--allow-writes`）传 `False` ——
-    那时台账不落盘，这一笔只进 stderr。"只读"这个词必须守住：写
-    `<工作区>/web-actions.jsonl` 就是在别人的目录里新建文件。
+    那时闸门先回 403 `writes_off`，台账不落盘，这一笔只进 stderr。"只读"这个词
+    必须守住：写 `<工作区>/web-actions.jsonl` 就是在别人的目录里新建文件。
     """
     def one(name: str) -> str:
         """取表单里某个字段的第一个值（没有就给空串 —— 表单字段缺失是常态，不是错误）。"""
@@ -843,7 +1203,7 @@ def answer(root: Path, form: Mapping[str, Sequence[str]],
             sys.stderr.write(f"[webui] 只读档不落审计（/answer → http {code}）\n")
             return code, location, body
         _row, problem = audit.record_action(
-            root, endpoint="/answer", source="", params=params,
+            root, endpoint="/answer", source=source, params=params,
             result=f"http {code}",
             tri=TRI_COMPUTED if code == 303 else TRI_NOT_APPLICABLE,
             ok=code == 303, http=code)
@@ -852,6 +1212,11 @@ def answer(root: Path, form: Mapping[str, Sequence[str]],
             # ⇒ 唯一的出口是 stderr（服务端日志）。
             sys.stderr.write(f"[webui] 审计台账写失败（/answer）：{problem}\n")
         return code, location, body
+
+    # 先过闸门再读表单：未授权的尝试连"这条 qid 在不在"都不该问出来。
+    allowed, code, why, source = _gate(handler, endpoint="POST /answer")
+    if not allowed:
+        return done(code, "", _answer_refusal(code, why))
 
     qid = one("qid").strip()
     sid_in = one("sid").strip()

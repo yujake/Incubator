@@ -42,6 +42,7 @@
  *   不报"事件 N 条"那种总行数。
  */
 import type { ComponentChildren } from "preact";
+import { useState } from "preact/hooks";
 
 import { api } from "../api";
 import { Badge } from "../components/Badge";
@@ -52,7 +53,28 @@ import { blank, cell, plain } from "../components/Table";
 import { formatUsd } from "../components/Money";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace, useLive } from "../live";
-import type { AcceptanceCheck, LibraryView, LibraryWork } from "../types";
+import type { AcceptanceCheck, ArtifactsView, LibraryView, LibraryWork } from "../types";
+
+/** 这一栏**真实**有多少行（AUDIT F12 的分页读数：`rows_total[栏]`；全量档与数组等长）。 */
+function totalOf(art: ArtifactsView, key: string, shown: number): number {
+  const raw = art.rows_total[key];
+  return typeof raw === "number" ? raw : shown;
+}
+
+/** 这一栏被首屏摘要切过时那一句（与 `Evidence.tsx` 同一口径，两页各留一份实现
+ *  是因为它们读的是两个不同的视图类型；句子里的数字必须来自后端 `rows_total`）。 */
+function rowsNote(art: ArtifactsView, key: string, shown: number): string {
+  const total = totalOf(art, key, shown);
+  if (total <= shown) {
+    return "";
+  }
+  return `这一栏共 ${total} 行，首屏只画了前 ${shown} 行（摘要档）—— 点顶上那张「产物」卡里的「取全部」拉整表。`;
+}
+
+/** `rowsNote` 那一句的渲染（空串 ⇒ 什么都不画）。 */
+function PartialRows(props: { note: string }) {
+  return props.note === "" ? null : <div class="readings tri-reason">{props.note}</div>;
+}
 
 /** 长文截断（与后端 `webui/state.py` 的 `CLIP` 同一口径：两头留、中间省）。 */
 const CLIP = 400;
@@ -269,7 +291,10 @@ function libraryBody(view: LibraryView | null, problem: string): ComponentChildr
 }
 
 export function Artifacts() {
-  const face = useFace(() => api.getArtifacts());
+  // 首屏摘要 vs 整表（AUDIT F12）：`false` ⇒ `?summary=1`（每栏前 `readers.SUMMARY_ROWS` 行），
+  // `true` ⇒ 全量。字段与三态一个都没删，"要读全"是一次点击的事。
+  const [full, setFull] = useState(false);
+  const face = useFace(() => api.getArtifacts(full ? {} : { summary: true }));
   // 文献库是第二条端点：它与产物面是两份盘上的事实，各有各的三态 ——
   // 把它塞进 `ArtifactsView` 会让"产物面读不成"连带把文献库也画成没查成。
   const library = useFace(() => api.getLibrary());
@@ -289,6 +314,19 @@ export function Artifacts() {
   }
 
   const art = face.data;
+  // 哪些栏被首屏摘要切过（按真实总行数与数组长度比，不按 `rows_mode` 猜）。
+  const cutColumns: string[] = [
+    ["台账", art.ledger.length, totalOf(art, "ledger", art.ledger.length)],
+    ["对账", art.ledger_verify.length, totalOf(art, "ledger_verify", art.ledger_verify.length)],
+    ["交接", art.handoffs.length, totalOf(art, "handoffs", art.handoffs.length)],
+    ["验收", art.checks.length, totalOf(art, "checks", art.checks.length)],
+    ["产物", art.products.length, totalOf(art, "products", art.products.length)],
+    ["落点", art.experiment_spots.length,
+     totalOf(art, "experiment_spots", art.experiment_spots.length)],
+    ["任务", art.tasks.length, totalOf(art, "tasks", art.tasks.length)],
+  ]
+    .filter(([, shown, total]) => Number(total) > Number(shown))
+    .map(([name]) => String(name));
 
   return (
     <>
@@ -313,13 +351,52 @@ export function Artifacts() {
           第九张「实验产物的落点」。另有一张「台账（第二个独立读数）」读的是共享快照
           （与首页同一份），不是这一面的栏。
         </div>
+        {/* 首屏摘要（AUDIT F12）：这一格说清"这一份是全量还是摘要、一共多少行" ——
+            否则"任务产物 40 行"会把真实总数读没。四格读数全来自后端的
+            `rows_mode` / `rows_limit` / `rows_offset` / `rows_total`。 */}
+        <div class="readings">
+          读数档 <span class="mono">{art.rows_mode}</span>（每栏 {art.rows_offset} 起，最多{" "}
+          <span class="mono">{art.rows_limit === 0 ? "全部" : art.rows_limit}</span> 行）·{" "}
+          {cutColumns.length === 0 ? (
+            <span>这一份是全量：每一栏给全了。</span>
+          ) : (
+            <span>
+              首屏摘要切过这几栏：<span class="mono">{cutColumns.join(" / ")}</span>
+              （每栏下面的「共 N 行」是真实总数）
+            </span>
+          )}{" "}
+          {full ? (
+            <button
+              class="btn"
+              type="button"
+              onClick={() => {
+                setFull(false);
+                face.reload();
+              }}
+            >
+              回到首屏摘要（快）
+            </button>
+          ) : (
+            <button
+              class="btn"
+              type="button"
+              onClick={() => {
+                setFull(true);
+                face.reload();
+              }}
+            >
+              取全部（整表，慢）
+            </button>
+          )}
+        </div>
       </Card>
 
       <Card
         title={ARTIFACT_CARDS.ledger}
-        subtitle={`${art.ledger.length} 行 · 一致性比的是与「台账对账」那一栏同一路径的核对行`}
+        subtitle={`${art.ledger.length} / 共 ${totalOf(art, "ledger", art.ledger.length)} 行 · 一致性比的是与「台账对账」那一栏同一路径的核对行`}
         right={<TriState tri={art.ledger_tri} label="ledger" />}
       >
+        <PartialRows note={rowsNote(art, "ledger", art.ledger.length)} />
         {isUnreadable(art.ledger_tri) ? (
           <span class="empty">这一栏没查成（不是"0 行"）。</span>
         ) : art.ledger_tri === "not_applicable" ? (
@@ -365,9 +442,10 @@ export function Artifacts() {
 
       <Card
         title={ARTIFACT_CARDS.verify}
-        subtitle={`${art.ledger_verify.length} 行 · sha 原文不上屏，只报一致 / 不一致 / unknown`}
+        subtitle={`${art.ledger_verify.length} / 共 ${totalOf(art, "ledger_verify", art.ledger_verify.length)} 行 · sha 原文不上屏，只报一致 / 不一致 / unknown`}
         right={<TriState tri={art.ledger_verify_tri} label="verify_entries" />}
       >
+        <PartialRows note={rowsNote(art, "ledger_verify", art.ledger_verify.length)} />
         {isUnreadable(art.ledger_verify_tri) ? (
           <span class="empty">这一栏没查成（不是"全部对得上"）。</span>
         ) : art.ledger_verify_tri === "not_applicable" ? (
@@ -415,8 +493,10 @@ export function Artifacts() {
                 {ledger.commit_markers === null ? "unknown" : ledger.commit_markers}
               </span>{" "}
               行）· tasks 行数{" "}
-              <span class="mono">{ledger.tables === null ? "unknown" : ledger.tables}</span> · 落点{" "}
-              <span class="mono">{ledger.path}</span>
+              <span class="mono">{ledger.tables === null ? "unknown" : ledger.tables}</span> ·
+              读不出的行{" "}
+              <span class="mono">{ledger.corrupt_rows === null ? "unknown" : ledger.corrupt_rows}</span> 行
+              （坏行不计进「写入」那一格）· 落点 <span class="mono">{ledger.path}</span>
             </div>
             {ledger.events_note === "" ? null : (
               <div class="readings">{ledger.events_note}</div>
@@ -431,9 +511,10 @@ export function Artifacts() {
 
       <Card
         title={ARTIFACT_CARDS.handoffs}
-        subtitle={`${art.handoffs.length} 条 · 正文 sha 不再显示（没有第二份可比，业主不关心原文）`}
+        subtitle={`${art.handoffs.length} / 共 ${totalOf(art, "handoffs", art.handoffs.length)} 条 · 正文 sha 不再显示（没有第二份可比，业主不关心原文）`}
         right={<TriState tri={art.handoffs_tri} label="handoffs" />}
       >
+        <PartialRows note={rowsNote(art, "handoffs", art.handoffs.length)} />
         {isUnreadable(art.handoffs_tri) ? (
           <span class="empty">这一栏没查成（不是"0 条"）。</span>
         ) : art.handoffs_tri === "not_applicable" ? (
@@ -475,6 +556,7 @@ export function Artifacts() {
         }
         right={<TriState tri={art.checks_tri} label="checks" />}
       >
+        <PartialRows note={rowsNote(art, "checks", art.checks.length)} />
         {/* 这张卡按三态分档：
             没这份表 ⇒ 一句话说清它是谁写的、什么时候会有；有才画表 ——
             否则读者看到的是一屏"不适用"，而不是"这一趟没走到这一步"。 */}
@@ -561,6 +643,7 @@ export function Artifacts() {
           subtitle={`${art.run_dir} · 这六件只有盘上这一份，没有第二份可比 ⇒ 不显示 sha`}
           right={<TriState tri={art.products_tri} label="products" />}
         >
+          <PartialRows note={rowsNote(art, "products", art.products.length)} />
           {isUnreadable(art.products_tri) ? (
             <span class="empty">这一栏没查成（不是"六件都不在"）。</span>
           ) : art.products_tri === "not_applicable" ? (
@@ -608,6 +691,7 @@ export function Artifacts() {
         subtitle={`${art.experiment_spots.length} 个落点 · ${art.code_exp.length} 个实验脚本 · code/exp/ 与 out/experiments/<号>/`}
         right={<TriState tri={art.experiment_spots_tri} label="experiment_spots" />}
       >
+        <PartialRows note={rowsNote(art, "experiment_spots", art.experiment_spots.length)} />
         {/* 数值实验的产出分三处 ——
             `code/exp/` 下的脚本、`out/experiments/<号>/design.md`（这一步打算怎么验）、
             `out/experiments/<号>/exhaustion.md`（程序 / 程序设计 / 穷举论证三块，V 会审它）。
@@ -656,9 +740,10 @@ export function Artifacts() {
 
       <Card
         title={ARTIFACT_CARDS.tasks}
-        subtitle={`${art.tasks.length} 行`}
+        subtitle={`${art.tasks.length} / 共 ${totalOf(art, "tasks", art.tasks.length)} 行`}
         right={<TriState tri={art.tasks_tri} label="tasks" />}
       >
+        <PartialRows note={rowsNote(art, "tasks", art.tasks.length)} />
         {isUnreadable(art.tasks_tri) ? (
           <span class="empty">这一栏没查成（不是"0 行"）。</span>
         ) : art.tasks_tri === "not_applicable" ? (

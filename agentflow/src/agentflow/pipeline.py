@@ -572,7 +572,9 @@ def _build_agent_a(store: Store, cfg: Mapping[str, Any], log: dict) -> Any | Non
     providers = []
     for name in acfg.get("providers") or []:
         if str(name).lower() == "fixture":
-            providers.append(FixtureProvider(root / "demo" / "fixtures" / "candidates.json"))
+            # 2026-11-22 DEMORETIRE：离线夹具从 `<工作区>/demo/fixtures/` 挪到
+            # `<工作区>/fixtures/`（`agentflow/demo/` 已退场，不再有默认素材）。
+            providers.append(FixtureProvider(root / "fixtures" / "candidates.json"))
         elif str(name).lower() == "openalex":
             providers.append(OpenAlexProvider(mailto=(cfg.get("search") or {}).get("mailto") or None))
     if not providers:
@@ -674,7 +676,7 @@ def _seed(store: Store) -> None:
     # 让 replay 模式看到的数据形状与真实情况一致。
     md_dir = _reports_dir(store)
     md_dir.mkdir(parents=True, exist_ok=True)
-    (md_dir / "0000-paths.md").write_text("# C 报告（fixture）\n\n仅供 pipeline 自检使用。\n", encoding="utf-8")
+    (md_dir / "0000-paths.md").write_text("# C 报告（fixture）\n\n仅供 pipeline 自检使用。\n", encoding="utf-8", newline="\n")
 
 
 class _FakeA:

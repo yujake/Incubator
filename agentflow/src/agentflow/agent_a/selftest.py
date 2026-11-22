@@ -72,7 +72,7 @@ def _selftest() -> int:
         def download(self, url, dest_dir, hint):
             self.calls.append(str(url))
             p = Path(dest_dir) / f"{hint or 'file'}.txt"
-            p.write_text("selftest payload", encoding="utf-8")
+            p.write_text("selftest payload", encoding="utf-8", newline="\n")
             data = p.read_bytes()
             return FetchResult(ok=True, path=str(p), http_status=200, bytes=len(data),
                                sha256=hashlib.sha256(data).hexdigest(), error=None)
@@ -246,7 +246,7 @@ def _selftest() -> int:
                     "before it was judged. " * 24)
             source = Path(st.root) / "downloads" / f"cand-{slot}.txt"
             source.parent.mkdir(parents=True, exist_ok=True)
-            source.write_text(body, encoding="utf-8")
+            source.write_text(body, encoding="utf-8", newline="\n")
             version = OBS.version_of_path(source)
             OBS.observed_gate().note_present(OBS.current_owner(), source)
             LAV.record_availability(st.root, "r-0002", slot, LAV.READABLE,

@@ -109,8 +109,8 @@ export function Budget() {
       >
         <div class="readings">
           总预算 <span class="mono">{formatUsd(b.total_usd)}</span> · 已花{" "}
-          <Money usd={b.spent_usd} unknownCalls={0} />
-          {isUnreadable(b.spent_tri) ? (
+          <Money usd={b.spent_usd} unknownCalls={b.spent_unknown_usd_calls ?? 0} />
+          {b.spent_tri !== "computed" ? (
             <span class="tri-reason">{b.spent_reason}</span>
           ) : null}
         </div>

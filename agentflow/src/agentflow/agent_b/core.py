@@ -1328,7 +1328,7 @@ def _selftest() -> int:
     def _write_lit(st: Store, lit_id: str, name: str) -> None:
         d = st.library / lit_id
         d.mkdir(parents=True, exist_ok=True)
-        (d / f"{name}.txt").write_text(TEXT, encoding="utf-8")
+        (d / f"{name}.txt").write_text(TEXT, encoding="utf-8", newline="\n")
 
     def _add_lit(st: Store, lit_id: str, *, path: str | None, processed: bool = False,
                  claimed_by: str | None = None, lease_until: str | None = None,

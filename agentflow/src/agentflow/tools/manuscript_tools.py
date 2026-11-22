@@ -15,7 +15,7 @@
 |---|---|---|
 | `manuscripts.write` | 所有角色（含 M） | 交接前写一份（编号由脚本给），返回 `id` —— 它不是工具：走循环形状 `handoff` |
 | `manuscripts.read` | 全部可召唤角色 | 按编号读全文（留言里传的就是这个编号） |
-| `manuscripts.list` | 全部可召唤角色 | 列最近的手稿（可按收件人过滤，`to=ALL` 表示广播） |
+| `manuscripts.list` | 全部可召唤角色 | 列最近的手稿（可按收件人过滤；`to=ALL` 只看老数据里的广播行 —— 老行仍可读，写入已退场） |
 | `manuscripts.submission_reading` | 全部可召唤角色 | 读一份证明稿的提交状态（产出方 / 已签 / 已提交 / 时刻 / `via`） |
 
 ## 为什么主控 M 不在这张工具面上（口径，别改回去）
@@ -72,9 +72,9 @@ def manuscripts_read(store, id: str) -> ToolResult:
 
 @tool(
     "manuscripts.list",
-    "列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 广播）；交接前先看这里，别重复别人的结论。",
+    "列交接手稿（最近 50 份）。`to` 给角色名只看发给它的；`to=ALL` 只看老数据里的广播行（写入已退场：`broadcast_retired`）。交接前先看这里，别重复别人的结论。",
     {"type": "object",
-     "properties": {"to": {"type": "string", "description": "只看发给谁（A–H/M/ALL）"},
+     "properties": {"to": {"type": "string", "description": "只看发给谁（角色名；`ALL` 只匹配老数据里的广播行，写入已退场）"},
                     "sender": {"type": "string", "description": "只看谁写的"},
                     "limit": {"type": "integer", "minimum": 1, "maximum": 200}},
      "required": [], "additionalProperties": False},

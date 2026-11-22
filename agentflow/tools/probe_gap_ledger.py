@@ -6,9 +6,9 @@ ledger_* 检查项是否生效。
 
 用法：python tools/probe_gap_ledger.py [目标工作区]
 
-## 默认落点不在仓库里
+## 默认落点不在产品目录里
 
-产物落在仓外（`ROOT.parent / "temp"`，仓库根是 `agentflow/`），建不出来就退到
+产物落在产品目录外（`ROOT.parent / "temp"`；仓库根 = `agentflow/` 的上一级，即 `D:\Incubator`），建不出来就退到
 `tempfile.mkdtemp()`；口径照抄 `scripts/release_check.py::_artifact_path()` ——
 探针不能跑一次就往仓库里写产物，把"谁在写被审对象"这件事搅浑。落点会打印出来。
 

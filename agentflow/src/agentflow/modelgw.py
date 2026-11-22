@@ -9,8 +9,9 @@
 
 ## 为什么用标准库而不是 httpx / openai SDK
 
-`pyproject.toml` 的运行期依赖刻意保持极小（今天只有 `filelock` 与预设层用的 `pyyaml`；
-后者来自「就用 dsh 的格式」的口径，见 `presets.py`）：
+`pyproject.toml` 的运行期依赖刻意保持极小（今天只有 `filelock` 与 `pyyaml`；
+后者最初为预设层引入 —— 预设机制已于 2026-11-22 退役，见 `docs/PRESET-RETIREMENT.md`，
+现在只用于工作区级 `config.yaml`）：
 核心能在任何环境被复核。网关是最该保持这个性质的地方 —— 它必须能在客户的离线或
 受限网络里跑。于是 HTTP 用 `urllib.request`，JSON 用标准库，超时与重试自己实现。
 （这一层自己一个第三方库都不 import：`filelock` 与 `pyyaml` 都不在这条路径上。）

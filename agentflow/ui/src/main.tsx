@@ -16,6 +16,7 @@ import { useEffect, useState } from "preact/hooks";
 
 import { ConnectionBanner, LiveProvider, useLive } from "./live";
 import { CacheBanner } from "./components/PromptCache";
+import { Card } from "./components/Card";
 import { Acceptance } from "./pages/Acceptance";
 import { Artifacts } from "./pages/Artifacts";
 import { Budget } from "./pages/Budget";
@@ -43,13 +44,18 @@ export const ROUTES = [
 
 export type Route = (typeof ROUTES)[number];
 
-/** 把 `location.pathname` 读成一个路由（读不出来就回首页 —— 服务端已按 Q1 回退）。 */
-export function matchRoute(path: string): { route: Route; sid: string } {
+/** 把 `location.pathname` 读成一个路由（读不出来就回首页 —— 服务端已按 Q1 回退）。
+ *
+ * `path` 那一格把原样路径带出去：回首页这件事本身是对的（服务端把未知路径回退成
+ * 同一支外壳），但"回首页"不许等于"装作这一页存在" —— `Body` 用它判"是不是真的首页"。
+ */
+export function matchRoute(path: string): { route: Route; sid: string; path: string } {
   if (path.startsWith("/run/")) {
-    return { route: "/run/:sid", sid: decodeURIComponent(path.slice("/run/".length)) };
+    return { route: "/run/:sid", sid: decodeURIComponent(path.slice("/run/".length)),
+             path };
   }
   const hit = ROUTES.find((r) => r === path);
-  return { route: hit === undefined ? "/" : hit, sid: "" };
+  return { route: hit === undefined ? "/" : hit, sid: "", path };
 }
 
 /** 顶部导航：每一条都是 C4 表里的一个客户端路由（`/run/:sid` 由会话行进入）。 */
@@ -96,6 +102,10 @@ function Top() {
       <div class="sub">
         项目 <b class="mono">{project}</b> · 工作区根{" "}
         <span class="mono">{root}</span>
+        {/* AUDIT F8：根在 `serve()` 那一刻钉死，页面**没有**切换入口（裁定：没有入口
+            就不新增功能）。所以这里只如实说"怎么换"——停服务、换 `--root` 重启。
+            不摆任何按钮/下拉：一个点了没反应的切换控件比没有更坏。 */}
+        <span class="tri-reason">（启动时钉死；换工作区要重启服务并换 --root）</span>
       </div>
       <div class="sub">
         当前会话 <span class="mono">{sid}</span> · 当前轮{" "}
@@ -110,6 +120,31 @@ function Top() {
         ))}
       </nav>
     </header>
+  );
+}
+
+/** 没有这一页：客户端路由里没有这个路径。
+
+ * 为什么要有它（2026-11-21 USERGUIDE-WEB 的实测缺口）：服务端按 Q1 把未知路径回退成
+ * 同一支 SPA 外壳，于是 `/compliance` 这种猜出来的路径会安静地渲染成首页那一屏 ——
+ * 用户看到的是「对话」页，而不是"这一页不存在"。这里如实说，并把几处常被猜错的路径
+ * 指到它真身那一页：合规/收工门那一块在「验收」（`/acceptance` 的 B 块），
+ * 板项（任务板）在 `/live` 的名册卡与「产物」页的任务台账里。
+ */
+function UnknownPage(props: { path: string }) {
+  return (
+    <Card title="没有这一页">
+      <div class="readings">
+        路径 <span class="mono">{props.path}</span> 不在这一版的客户端路由里。
+        服务端把未知路径回退成同一支外壳（`draft/73` §1.3 的 Q1 口径）—— 所以这一格说的是
+        "这一页不存在"，不是"还在加载"。
+      </div>
+      <div class="readings">
+        常被猜错的几处：合规 / 收工门那一块在 <a href="/acceptance">验收</a>（B 块）；
+        板项（任务板）在 <a href="/live">/live</a> 页的名册卡与 <a href="/artifacts">/artifacts</a>
+        页的任务台账里 —— 这一版没有单独的 /board 路由。
+      </div>
+    </Card>
   );
 }
 
@@ -135,7 +170,11 @@ function Body() {
       */}
       <CacheBanner />
       <ConnectionBanner />
-      {renderPage(where.route, where.sid)}
+      {where.route === "/" && where.path !== "/" ? (
+        <UnknownPage path={where.path} />
+      ) : (
+        renderPage(where.route, where.sid)
+      )}
     </main>
   );
 }

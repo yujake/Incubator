@@ -180,6 +180,11 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
     # 只收「正式入库」的那一档，每条带「被哪些命题／哪一份证明用过」。只读一条：
     # 这一条端点没有任何写面（表里没有配对的 POST，也不需要 --allow-writes）。
     ("GET", "/api/literature", "handle_library"),
+    # 网页操作台账的读侧（AUDIT F11）：`<工作区>/web-actions.jsonl` 从 W3 起就有人在写
+    # （每一笔网页写操作一行，被拒的尝试也留一行），但全仓没有读侧 —— 于是写侧文件头
+    # 里那句「网页上那一栏『操作历史』」一直没有落地。这一条只读（不需要
+    # `--allow-writes`），行序是最新的在前，分页 `?limit=` / `?offset=`。
+    ("GET", "/api/actions", "handle_actions"),
 )
 
 #: 处理器的落点（`draft/78 §3` 的接缝之一）：键 = `ROUTES` 第三元素，
@@ -210,6 +215,12 @@ CHECKED_TYPES: tuple[str, ...] = (
     "CostReconciliation",
     "MachineView", "ArtifactRow", "LedgerVerifyRow", "HandoffRow", "SecretaryDecision",
     "AcceptanceCheck", "ReportStyle", "TaskRow", "VerificationRow",
+    # 服务与工作区（AUDIT F8）：五格在任何一个工作区上都在（根为空也是同一批键），
+    # 所以进受核对名单；行一级没有它。
+    "ServingWorkspace",
+    # 网页操作台账（AUDIT F11）：十格外壳在任何一档上都在（台账读不出来是 `tri`
+    # 的另一档，键集合同一批），所以进受核对名单；`ActionRow` 见 `UNCHECKED_TYPES`。
+    "ActionsView",
     # 这四面的顶层键在任何工作区上都在（寄存器缺席、账本为空、没有进程都只是
     # 三态里的另一档，不是"读不出键"），所以它们进受核对名单；行一级的类型见
     # `UNCHECKED_TYPES` 的理由。
@@ -249,6 +260,9 @@ UNCHECKED_TYPES: dict[str, str] = {
                    "⇒ 字段以 `schema.Document` 的 dataclass 为准，无真读数可对账",
     "ReviewFindingRow": "夹具没有造 review_findings 行（同上：真机 0 行）",
     "RelationRow": "夹具没有造 relations 行 ⇒ 以 `schema.Relation` 为准",
+    "ActionRow": "夹具不跑网页写面（`tests/conftest.py` 的夹具从不 POST 那七条写端点）"
+                 "⇒ `web-actions.jsonl` 不在夹具里、`rows[]` 是空数组；形状以写侧"
+                 "`webui/audit.record_action` 造的那一行（十个键）为准",
     "ConjectureRow": "夹具没有造 conjectures 行 ⇒ 以 `schema.Conjecture` 为准",
     "ExperimentRow": "夹具没有造 experiments 行 ⇒ 以 `schema.Experiment` 为准",
     "UsageRow": "夹具没有造 usage_ledger 行（真机 p9b/data/usage_ledger.json 有 37 行，"
@@ -906,6 +920,90 @@ def _digest_sign_reading(root: Path) -> dict[str, Any]:
     }
 
 
+def _is_step_count(value: Any) -> bool:
+    """`agent_run_end.steps` 的合法形状：非负整数（bool 不算；负数不算）。"""
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def _physical_runs(SS: Any, events: Sequence[Mapping[str, Any]], *, sid: str) -> list[dict]:
+    """同一份事件、摘掉收工行自报的 `steps` 之后再切一次趟 —— 得到「物理步数」。
+
+    为什么这么做而不是在这一层重写一遍归属/配对：`sessions.runs_in_session` 的
+    三档归属（task_id 精确 / 空编号按 role / 单趟兜底）是唯一实现；在这里再写一份
+    计数，两个数迟早会漂（`draft/191`：判据对齐设计，读数的来源也只能有一处）。
+    摘掉 `steps` 不改变任何配对与别的字段，只让 `steps` 退回逐条 `agent_step` 数。
+    """
+    stripped: list[Mapping[str, Any]] = []
+    for event in events:
+        if (str(event.get("kind") or "") == "agent_run_end"
+                and _is_step_count(event.get("steps"))):
+            copy = dict(event)
+            copy["steps"] = None
+            stripped.append(copy)
+        else:
+            stripped.append(event)
+    return SS.runs_in_session(stripped, sid=sid)
+
+
+def _digest_groups(root_p: Path, sid: str) -> tuple[
+        list[tuple[list[dict], list[dict], list[dict]]], list[str],
+        tuple[str, str] | None]:
+    """`run_digest` 的读盘那一段：返回 `(每段事件与两套 runs, problems, 早退档)`。
+
+    `runs` 与 `physical_runs` 是同一份事件切两遍（后者摘掉收工行自报的 `steps`，
+    见 :func:`_physical_runs`）；两者必须同长（配对规则不因 `steps` 而变）。
+
+    `early`：非 `None` 时 `(tri, reason)` —— 调用方直接 `{**face, tri, reason}` 返回。
+    三态在这里分档（删除事件流 = unreadable，没有事件流 / 空文件 = not_applicable）；
+    "整段会话都读不出来"（有 problems 而一条事件都没读到）落在 `unreadable`。
+    """
+    problems: list[str] = []
+    groups: list[tuple[list[dict], list[dict], list[dict]]] = []
+    if sid:
+        path = SS.session_path(root_p, sid)
+        if not path.is_file():
+            # 两档必须分开：这个工作区连 sessions/ 都没有 ⇒ "没有事件流"（用不着，
+            # 合法初态）；sessions/ 在、独独这一段不在 ⇒ "没查成"（被删 / 编号错了），
+            # 后者是裁定 ④c 要抓的"删掉事件流 ⇒ unreadable，不是 0"。
+            if not SS.sessions_dir(root_p).is_dir():
+                return [], [], (TRI_NOT_APPLICABLE,
+                                "这个工作区没有事件流（sessions/ 目录都不在）："
+                                "没有可现算的源，不是 0")
+            return [], [], (TRI_UNREADABLE,
+                            f"会话文件不在盘上：{path}"
+                            "（这是「没查成」，不是「这一趟没有事件」）")
+        events, bad = SS.read_session(root_p, sid=sid)
+        if not events and not bad:
+            return [], [], (TRI_NOT_APPLICABLE,
+                            f"会话文件在盘上但是空的（{path}）：还没写过事件，"
+                            "合法初态，不是没查成")
+        if bad:
+            problems.append(f"会话有 {len(bad)} 条坏行（读得出来的事件照常算）："
+                            + "；".join(bad[:3]))
+        groups.append((events, SS.runs_in_session(events, sid=sid),
+                       _physical_runs(SS, events, sid=sid)))
+    else:
+        cache: dict[str, tuple[list[dict], list[str]]] = {}
+        rows = SS.list_sessions(root_p, read_cache=cache)
+        if not rows:
+            return [], [], (TRI_NOT_APPLICABLE,
+                            "这个工作区没有事件流（sessions/ 下没有 .jsonl）："
+                            "没有可现算的源，不是 0")
+        for row in rows:
+            one_sid = str(row.get("sid") or "")
+            events, bad = cache.get(one_sid, ([], []))
+            if bad:
+                problems.append(f"会话 {one_sid} 有 {len(bad)} 条坏行（照常算读得出来的）："
+                                + "；".join(bad[:2]))
+            groups.append((events, SS.runs_in_session(events, sid=one_sid),
+                           _physical_runs(SS, events, sid=one_sid)))
+    if problems and not any(events for events, _rows, _phys in groups):
+        # 一句都没读出来（整段会话/整个工作区的文件都读不成）⇒ 计数栏是 None。
+        # 这是三态纪律里"没查成"那一档：把它折成 0 会让"读不出来"读成"一趟都没有"。
+        return [], problems, (TRI_UNREADABLE, "；".join(problems))
+    return groups, problems, None
+
+
 def run_digest(root: str | Path, sid: str = "") -> dict[str, Any]:
     """`GET /api/run-digest` 的读模型：从会话事件流现算的一份"趟次档案"。
 
@@ -929,7 +1027,15 @@ def run_digest(root: str | Path, sid: str = "") -> dict[str, Any]:
       `agent_run_end`，或文件尾）；
     - `unfinished`：没有收到 `agent_run_end` 的趟数（`end_index is None`）；
     - `start_ts` / `end_ts`：各趟 `start_ts` 的第一个 / `end_ts` 的最后一个（空串 = 没读到）；
-    - `steps`：`Σ runs[].steps`；
+    - `steps`：`Σ runs[].steps`（历史口径：收工行带 `steps` 时用自报值，否则用逐条
+      `agent_step` 数出来的值 —— 两个来源混在同一格）；
+    - `steps_physical` / `steps_self_reported`：「同一原型的两个数」（READFIX-E）。
+      `steps_physical` 是逐条 `agent_step` 数出来的（把收工行自报的 `steps` 摘掉再跑一次
+      `sessions.runs_in_session` —— 归属/配对规则与 `steps` 那一格逐句同源，不在这一层
+      另写一份计数）；`steps_self_reported` = `Σ agent_run_end.steps`（没有自报的趟由
+      `steps_self_reported_missing_runs` 点名，不是把它当 0 加进去）。
+      `steps_source`（self_report / physical）说 `steps` 这一格取自哪一档 ——
+      改前只给 `steps`，页面看不出 348 是自报的（物理 339），拿它对账会差 9；
     - `usd` / `unknown_usd_calls`：事件求和（`llm_call.usd` 归到各趟后的合计；
       `unknown_usd_calls` 是算不出价钱的调用次数）。没有一条算得出价钱的调用 ⇒ `None`；
     - `spend_usd` / `spend_missing_runs`：收工行自报账的合计（`agent_run_end.spend.usd`）
@@ -968,6 +1074,9 @@ def run_digest(root: str | Path, sid: str = "") -> dict[str, Any]:
         "tri": TRI_NOT_APPLICABLE, "reason": "", "scope": scope, "sid": sid,
         "runs": None, "unfinished": None, "start_ts": "", "end_ts": "",
         "steps": None, "usd": None, "unknown_usd_calls": None,
+        # READFIX-E：`steps` 的出处与两个分量（同一原型的两个数并排）。
+        "steps_source": "", "steps_physical": None, "steps_self_reported": None,
+        "steps_self_reported_missing_runs": None,
         "spend_usd": None, "spend_missing_runs": None,
         "dispatched": None, "dispatched_missing_runs": None,
         "verified": None, "signed_proofs": None,
@@ -979,55 +1088,23 @@ def run_digest(root: str | Path, sid: str = "") -> dict[str, Any]:
         "stop_reasons": {},
     }
 
-    problems: list[str] = []
-    groups: list[tuple[list[dict], list[dict]]] = []
-    if sid:
-        path = SS.session_path(root_p, sid)
-        if not path.is_file():
-            # 两档必须分开：这个工作区连 sessions/ 都没有 ⇒ "没有事件流"（用不着，
-            # 合法初态）；sessions/ 在、独独这一段不在 ⇒ "没查成"（被删 / 编号错了），
-            # 后者是裁定 ④c 要抓的"删掉事件流 ⇒ unreadable，不是 0"。
-            if not SS.sessions_dir(root_p).is_dir():
-                return {**face, "tri": TRI_NOT_APPLICABLE,
-                        "reason": ("这个工作区没有事件流（sessions/ 目录都不在）："
-                                   "没有可现算的源，不是 0")}
-            return {**face, "tri": TRI_UNREADABLE,
-                    "reason": (f"会话文件不在盘上：{path}"
-                               "（这是「没查成」，不是「这一趟没有事件」）")}
-        events, bad = SS.read_session(root_p, sid=sid)
-        if not events and not bad:
-            return {**face, "tri": TRI_NOT_APPLICABLE,
-                    "reason": (f"会话文件在盘上但是空的（{path}）：还没写过事件，"
-                               "合法初态，不是没查成")}
-        if bad:
-            problems.append(f"会话有 {len(bad)} 条坏行（读得出来的事件照常算）："
-                            + "；".join(bad[:3]))
-        groups.append((events, SS.runs_in_session(events, sid=sid)))
-    else:
-        cache: dict[str, tuple[list[dict], list[str]]] = {}
-        rows = SS.list_sessions(root_p, read_cache=cache)
-        if not rows:
-            return {**face, "tri": TRI_NOT_APPLICABLE,
-                    "reason": ("这个工作区没有事件流（sessions/ 下没有 .jsonl）："
-                               "没有可现算的源，不是 0")}
-        for row in rows:
-            one_sid = str(row.get("sid") or "")
-            events, bad = cache.get(one_sid, ([], []))
-            if bad:
-                problems.append(f"会话 {one_sid} 有 {len(bad)} 条坏行（照常算读得出来的）："
-                                + "；".join(bad[:2]))
-            groups.append((events, SS.runs_in_session(events, sid=one_sid)))
+    groups, problems, early = _digest_groups(root_p, sid)
+    if early is not None:
+        return {**face, "tri": early[0], "reason": early[1]}
 
-    if problems and not any(events for events, _rows in groups):
-        # 一句都没读出来（整段会话/整个工作区的文件都读不成）⇒ 计数栏是 None。
-        # 这是三态纪律里"没查成"那一档：把它折成 0 会让"读不出来"读成"一趟都没有"。
-        return {**face, "tri": TRI_UNREADABLE, "reason": "；".join(problems)}
-
-    runs = [run for _events, rows_ in groups for run in rows_]
+    runs = [run for _events, rows_, _phys in groups for run in rows_]
+    physical_runs = [run for _events, _rows, phys in groups for run in phys]
+    if len(physical_runs) != len(runs):
+        # 摘掉自报 `steps` 不该改变配对；真变了就明说"物理那一格没查成"，不拿
+        # 自报值冒充物理值（折平比缺一格更贵）。
+        face["steps_physical"] = None
+        problems.append("步数的物理读数没对上趟（摘掉自报 steps 之后趟数变了）"
+                        "⇒ steps_physical 记 unknown，不自报值顶替")
+        physical_runs = []
     # 只把"真的闭合了某一趟"的收工行算进档案：轮次之外的零散 end（没有对应 start）
     # 不是任何一趟的收工读数，把它算进来会让"派活 / 验签"多出没有主人的数。
     ends: list[dict] = []
-    for events, rows_ in groups:
+    for events, rows_, _phys in groups:
         closing = sorted({int(run["end_index"]) for run in rows_
                           if isinstance(run.get("end_index"), int)})
         ends.extend(events[index] for index in closing if 0 <= index < len(events))
@@ -1040,6 +1117,26 @@ def run_digest(root: str | Path, sid: str = "") -> dict[str, Any]:
                   if str(run.get("end_ts") or "")]
     face["end_ts"] = max(end_stamps) if end_stamps else ""
     face["steps"] = sum(int(run.get("steps") or 0) for run in runs)
+    # READFIX-E：同一原型的两个数并排（`steps` 那一格是"自报优先"的混合值）。
+    # 物理那一半来自同一份事件、同一套配对规则（见 `_physical_runs`）；自报那一半
+    # 逐趟去它自己的收工行取 `steps`（缺 ⇒ 该趟记进 missing，不当 0 加）。
+    if physical_runs:
+        face["steps_physical"] = sum(int(run.get("steps") or 0) for run in physical_runs)
+    reported: list[int] = []
+    for events, rows_, _phys in groups:
+        for run in rows_:
+            idx = run.get("end_index")
+            if not isinstance(idx, int) or not (0 <= idx < len(events)):
+                continue
+            event = events[idx]
+            if str(event.get("kind") or "") != "agent_run_end":
+                continue
+            if _is_step_count(event.get("steps")):
+                reported.append(int(event["steps"]))
+    face["steps_self_reported"] = (sum(reported) if reported
+                                   else (0 if n == 0 else None))
+    face["steps_self_reported_missing_runs"] = 0 if n == 0 else n - len(reported)
+    face["steps_source"] = "self_report" if reported else "physical"
 
     def _num(value: Any) -> bool:
         return isinstance(value, (int, float)) and not isinstance(value, bool)
@@ -2382,7 +2479,64 @@ def _spot_row(path: Path, root: Path, kind: str) -> dict[str, Any]:
             "tri": TRI_COMPUTED}
 
 
-def evidence_chain(root: str | Path, store: Any = None) -> dict[str, Any]:
+#: 首屏摘要默认每栏给多少行（`GET /api/evidence?summary=1` / `?artifacts` 同一条）。
+#:
+#: 为什么要有它（AUDIT F12：真机 56 MB 工作区上 `/api/evidence` 2.1 MB / 2.6 s、
+#: `/api/artifacts` 1.3 MB / 2.0 s，一进页面就卡）：这两面是"全量行 + 逐行注解"的
+#: 形状，行数随工作区线性涨。首屏只画得下几十行（前端本来就分页），把整本台账
+#: 先塞进浏览器是纯浪费。所以 HTTP 那一层可以要"摘要"：「每栏前 N 行」，另把
+#: 每栏的真实总行数留在 `rows_total` 里 —— 页面因此既快、又不会把"首屏只给了 N 行"
+#: 读成"一共就 N 行"。
+#:
+#: 为什么是 20（实测，`temp/webfix3/after-ro.json`，真机 lp-ball-15 那份副本）：
+#: `/api/evidence?limit=40` 是 586 KB、25 是 492 KB、20 是 457 KB、15 是 417 KB。
+#: 首屏的目标是 「< 500 KB」，而 25 那一档已经贴线（盘再长一点就超），所以取 20。
+#: 注意行数不是唯一成本：`experiments` 每行约 17 KB（9 行就 150 KB），而那几栏本来
+#: 就不到 20 行 ⇒ 再往下压 N 也压不掉它们。真正的下一刀在"逐行注解扫会话"那一步
+#: （冷调用约 3.6 s 几乎全在那里），不在这个 N 上 —— 写在这里，免得下一个人把
+#: "时间没怎么变"当成这一改没生效。
+#:
+#: 缺省仍是全量（`limit=0`）：读模型自己的既有调用方（判据、CLI、`/api/package`）
+#: 一个字节都不变 —— 分页是「调用方显式开口」才发生的事，不是偷偷收窄。
+SUMMARY_ROWS = 20
+
+#: `?limit=` 的上限（再多就不叫"首屏"了，而且它不该成为导出通道）。
+PAGE_ROWS_MAX = 500
+
+
+def page_columns(out: dict[str, Any], keys: Sequence[str], *,
+                 limit: int = 0, offset: int = 0) -> None:
+    """把 `out` 里那几栏行按 `(offset, limit)` 切一份，并把三格分页读数写回 `out`（就地）。
+
+    三格是「恒在」的（`limit=0` 也写），这样页面不必猜"这一份读数是全量还是摘要"：
+
+    - `rows_mode`：`"full"`（全量）/ `"page"`（切过）；
+    - `rows_limit` / `rows_offset`：这一次用的窗口（全量档 `0 / 0`）；
+    - `rows_total`：`{栏名: 这一栏「真实」有多少行}` —— 与 `len(out[栏])` 不是同一个数
+      （切过之后后者是"这一页几行"）。"首屏只给了 40 行、一共 190 行"这件事必须
+      有机器读数，否则页面只能把 40 当总数印上去。
+
+    为什么用 `rows_total` 一个 Record 而不是每栏一个 `<栏>_total`：十几个新键会把
+    `EvidenceView` / `ArtifactsView` 的键集合撑成一片噪声，而"哪一栏、共几行"本来
+    就是一个映射。三态不动：切行只改「给多少行」，不改任何一栏的 `tri`。
+    """
+    total: dict[str, int] = {}
+    for key in keys:
+        rows = out.get(key)
+        if not isinstance(rows, list):
+            total[key] = 0
+            continue
+        total[key] = len(rows)
+        if limit > 0:
+            out[key] = rows[offset:offset + limit]
+    out["rows_mode"] = "page" if limit > 0 else "full"
+    out["rows_limit"] = int(limit)
+    out["rows_offset"] = int(offset)
+    out["rows_total"] = total
+
+
+def evidence_chain(root: str | Path, store: Any = None, *,
+                   limit: int = 0, offset: int = 0) -> dict[str, Any]:
     """`GET /api/evidence` 的读模型：证据链八栏 + 三态。
 
     `statements` / `conjectures` / `experiments` / `documents` / `review_findings` /
@@ -2475,7 +2629,18 @@ def evidence_chain(root: str | Path, store: Any = None) -> dict[str, Any]:
     else:
         out["tri"] = TRI_COMPUTED
     out["reason"] = "；".join(problems) if problems else str(out["reason"] or "")
+    # 分页在「最后」：三格读数（`rows_mode` / `rows_limit` / `rows_offset` / `rows_total`）
+    # 恒在，而各栏的 `tri`、注解、三态判定一个都不动 —— 切行只改"给多少行"。
+    # `store_problems` 不切：它是坏行说明（几行到几十行），切了会让"哪几行坏了"缺页。
+    page_columns(out, _EVIDENCE_PAGE_COLUMNS, limit=limit, offset=offset)
     return out
+
+
+#: 证据面会被 `?limit=` / `?offset=` 切的那几栏（行级；`store_problems` 不在其中）。
+_EVIDENCE_PAGE_COLUMNS: tuple[str, ...] = (
+    "statements", "conjectures", "experiments", "documents", "review_findings",
+    "relations", "verifications", "secretary",
+)
 
 
 def _verifications_tri(root: Path, rows: list[dict], problems: list[str]) -> str:
@@ -2722,7 +2887,8 @@ def _handoff_rows(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
 
 def artifacts_face(root: str | Path, store: Any = None, *,
                    run_dir: str | Path | None = None,
-                   project_dir: str = "") -> dict[str, Any]:
+                   project_dir: str = "",
+                   limit: int = 0, offset: int = 0) -> dict[str, Any]:
     """`GET /api/artifacts` 的读模型：台账 + 交接 + 验收行 + 体例 + 秘书 + 六件产物 + 任务。
 
     - `ledger`：`artifacts.read_ledger`（行键 = `artifacts.FIELDS`：`at/path/sha256/bytes/`
@@ -2869,7 +3035,19 @@ def artifacts_face(root: str | Path, store: Any = None, *,
     else:
         out["tri"] = TRI_COMPUTED
         out["reason"] = ""
+    # 分页同 `evidence_chain`：三格分页读数恒在，行级的 `tri` 与一致性判定不动。
+    # 注意切行发生在「一致性 join 之后」（`ledger` 的 `sha_consistency` 取自同一份
+    # `ledger_verify`，两份都按同一个窗口切，逐行对得上）。
+    page_columns(out, _ARTIFACTS_PAGE_COLUMNS, limit=limit, offset=offset)
     return out
+
+
+#: 产物面会被 `?limit=` / `?offset=` 切的那几栏（行级）。`style` 是对象、`run_dir`
+#: 是一格路径，都不是行，不切。
+_ARTIFACTS_PAGE_COLUMNS: tuple[str, ...] = (
+    "ledger", "ledger_verify", "handoffs", "checks", "secretary", "products",
+    "experiment_spots", "code_exp", "tasks",
+)
 
 
 # ====================================================================== 5 收工门
@@ -3362,29 +3540,57 @@ def _gate_source(name: str, root_p: Path) -> dict[str, Any]:
 
 
 def _closing_gates(rep: Any, root_p: Path) -> dict[str, Any]:
-    """八格四态 + `machine_pass` 的两条来源。
+    """八格四态 + `machine_pass` 的三条来源 + 每格的 warning。
 
     不变式：`cells` 逐格取自 `readouts.gate_cells(rep)`（与 `readouts.gates_readout`
     同一份计数，本层不另数 —— 判据 `tests/test_the_gate_table_is_computed_once.py`
-    用反真空钉住这一点）；`machine_pass` 变假的两条来源（格没全 pass / blocker）各自
-    点名，两栏不许因为"另一栏空着"而合流，逻辑上到不了的形态显式记 `unknown`。
+    用反真空钉住这一点）；`machine_pass` 变假的三条来源各自点名，几栏不许因为
+    "另一栏空着"而合流，逻辑上到不了的形态显式记 `unknown`。
+
+    ## `na` 不叫「blocking」（READFIX-D-10）
+
+    改前 `blocking_cells = status != "pass"` 把 `na` 也点成"blocking"，而
+    `closing.closing_verdict` 的判据是 `fail` / `unknown` / 至少一格 `pass`，
+    `na` 不进分母、不拦权威结论（`closing.py` 的 `fail_cells` 那一段逐字）。
+    同一份 `gates` 里两栏对"na 拦不拦"说两句话，读的人会把「user_pending=na」
+    当成"它把门拦住了"。现在 `blocking_cells` 只收 `fail` / `unknown`，
+    `na_cells` 单列，`machine_pass_cause` 多一档 `na`（只由 na 造成 false 时）。
+
+    ## 每格的 warning（READFIX-B）
+
+    `artifact_ledger` 的口径是"`changed` ⇒ pass + warning"（`closing.py` 的 D9）。
+    改前 warning 只混在 `detail` 那一栏里，而 `status=pass` 的绿色 badge 一上屏，
+    "有 1 条被改写"就被盖住了。这里把同一批 finding 按 `level=="warning"` 收进
+    `warnings`（`{格名: [原话]}`），页面在绿 badge 旁边照样显它。
+
+    为什么 warning 不挂进 `cell` 本身：`cells` 必须与 `readouts.gate_cells` 逐字相等
+    （判据 `tests/test_the_gate_table_is_computed_once.py` 用反真空钉住"八格只有一份
+    实现"）。`source` 早就是"网页在共享读数之外补的呈现面"——warning 走同一条缝。
     """
     from .. import readouts as RD
 
     cells, counts = RD.gate_cells(rep)
+    warnings_of: dict[str, list[str]] = {}
+    for finding in (getattr(rep, "findings", []) or []):
+        if str(getattr(finding, "level", "") or "") != "warning":
+            continue
+        warnings_of.setdefault(str(getattr(finding, "check", "")), []).append(
+            str(getattr(finding, "detail", "") or ""))
     # `source` 是网页自己的呈现面（每格的原文落点），在共享读数之外补，
     # 不改格形状 —— 改了，两个出口的 `cells` 就不再逐字相等。
     for cell in cells:
-        cell["source"] = _gate_source(str(cell.get("name") or ""), root_p)
+        name = str(cell.get("name") or "")
+        cell["source"] = _gate_source(name, root_p)
     verdict = getattr(rep, "m_verdict", None) or {}
     #: `machine_pass` 是"八格全 pass 且没有 blocker"的合取（`closing.ClosingReport`），
-    #: 所以它变假有两条来源：格失败（fail / unknown / na 都不算 pass）与 blocker
-    #: （不进八格、却拦门，如 `statements_unsigned`）。84 的现场：counts={pass:6,fail:1,na:1}、
-    #: machine_pass=false、blockers=[] —— 只有格那一半。页面要能看出是哪一半（或两半），
-    #: 所以这里把两条来源分别点名，并给一个受控的合成词 `machine_pass_cause`。
+    #: 所以它变假有三条来源：`fail`/`unknown` 格、`na` 格（不是 pass，但不拦权威结论）、
+    #: 与 blocker（不进八格、却拦门，如 `statements_unsigned`）。84 的现场：
+    #: counts={pass:6,fail:1,na:1}、machine_pass=false、blockers=[] —— 两种格各占一份。
     blockers = [dict(f.to_dict()) for f in (getattr(rep, "blockers", []) or [])
                 if hasattr(f, "to_dict")]
-    blocking_cells = [dict(c) for c in cells if str(c.get("status") or "") != "pass"]
+    blocking_cells = [dict(c) for c in cells
+                      if str(c.get("status") or "") in ("fail", "unknown")]
+    na_cells = [dict(c) for c in cells if str(c.get("status") or "") == "na"]
     machine_pass = bool(getattr(rep, "machine_pass", False))
     if machine_pass:
         cause = "pass"
@@ -3394,8 +3600,11 @@ def _closing_gates(rep: Any, root_p: Path) -> dict[str, Any]:
         cause = "blockers"
     elif blocking_cells:
         cause = "cells"
+    elif na_cells:
+        # 只剩 na 格：machine_pass 按定义是假（na 不是 pass），但它们不拦权威结论。
+        cause = "na"
     else:
-        # 逻辑上到不了（machine_pass 的定义就是这两条的合取）；真到了也不许静默：
+        # 逻辑上到不了（machine_pass 的定义就是这三条的合取）；真到了也不许静默：
         # 页面会把这一档显成"缺陷读数"，而不是空白。
         cause = "unknown"
     return {"cells": cells, "counts": counts,
@@ -3409,10 +3618,15 @@ def _closing_gates(rep: Any, root_p: Path) -> dict[str, Any]:
             "closing_verdict": dict(getattr(rep, "verdict", {}) or {}),
             "verdict_at": str(verdict.get("at") or ""),
             "verdict_met": (bool(verdict.get("met")) if verdict else None),
-            # 两条来源分开点名：一个空 `blockers` 不等于"门没拦住"，
+            # 几条来源分开点名：一个空 `blockers` 不等于"门没拦住"，
             # 也不等于"格失败"—— 读的人必须能看出是哪一半把 machine_pass 打假的。
             "blockers": blockers,
             "blocking_cells": blocking_cells,
+            # `na` 单列：它让 machine_pass=false，但按 closing_verdict 不拦结论。
+            "na_cells": na_cells,
+            # 每格的 warning 原话（只收 level=="warning" 的 finding；空 = 没有）。
+            "warnings": {name: [w for w in items if w]
+                         for name, items in warnings_of.items()},
             "machine_pass_cause": cause}
 
 
@@ -3492,20 +3706,41 @@ def _closing_cost(store: Any, records: Sequence[Any], runs: Sequence[Any],
     spend_usd = round(sum(float(r.get("spend_usd") or 0) for r in runs), 6) if sessions_ok else None
     runs_without_spend = sum(1 for r in runs if r.get("spend_usd") is None)
     unattributed = SS.unattributed_usd_of(records, runs) if sessions_ok else None
+    # 账本那一格的三态（READFIX-D-5）：改前 `store.rows("usage_ledger")` 对"不在盘上"
+    # 回 []、对坏 JSON 抛异常被吞成 `ledger_usd=None` —— 缺文件那一档于是折成
+    # `ledger_usd=0` + `checked=True` + `reason=""`（"还没花过钱"与"没查成"长成一个样）。
     try:
-        usage_rows = list(store.rows("usage_ledger"))
-        ledger_usd = round(sum(float(r.get("usd") or 0) for r in usage_rows), 6)
-    except Exception:  # noqa: BLE001
-        usage_rows, ledger_usd = [], None
-    cost = {"checked": sessions_ok,
-            "reason": "" if sessions_ok else str(sessions_reason or "会话没查成"),
+        usage_rows, ledger_tri = _table_state(store, "usage_ledger")
+    except Exception:  # noqa: BLE001 - 读不成就是没查成（不是 0）
+        usage_rows, ledger_tri = [], TRI_UNREADABLE
+    ledger_usd = (round(sum(float(r.get("usd") or 0) for r in usage_rows), 6)
+                  if ledger_tri == TRI_COMPUTED else None)
+    if ledger_tri == TRI_COMPUTED:
+        ledger_reason = ""
+    elif ledger_tri == TRI_NOT_APPLICABLE:
+        ledger_reason = ("usage_ledger 不在盘上（还没写过）⇒ 账本那一格记 not_applicable，"
+                         "不是 0：这个工作区还没有花钱的账本")
+    else:
+        ledger_reason = ("usage_ledger 读不出来（坏 JSON / 坏表）⇒ 账本那一格记 unreadable，"
+                         "不是 0")
+    checked = bool(sessions_ok and ledger_tri == TRI_COMPUTED)
+    reason = "" if checked else "；".join(x for x in (
+        "" if sessions_ok else str(sessions_reason or "会话没查成"),
+        ledger_reason if ledger_tri != TRI_COMPUTED else "") if x)
+    cost = {"checked": checked,
+            "reason": reason,
             "event_usd": event_usd, "spend_usd": spend_usd,
             "spend_unknown_usd_calls": (sum(int(r.get("spend_unknown_usd_calls") or 0)
                                             for r in runs) if sessions_ok else None),
             "unattributed_usd": unattributed, "runs_without_spend": runs_without_spend,
             "ledger_usd": ledger_usd,
+            # 账本那一格的三态与原因（READFIX-D-5）：`checked=True` 不再能盖住
+            # "账本没读过"这件事 —— 页面读这两格把"还没写过"显出来。
+            "ledger_tri": ledger_tri,
+            "ledger_reason": ledger_reason,
             # 键名曾叫 `ledger_rows`，与验收辅助读数 / statements 台账行数同名不同物。
-            "usage_ledger_rows": (len(usage_rows) if ledger_usd is not None else None),
+            "usage_ledger_rows": (len(usage_rows)
+                                  if ledger_tri == TRI_COMPUTED else None),
             "source": _src("data/usage_ledger.json", label="usage_ledger")}
     # ---- 成本对账（2026-11-20，WEBCLEAN）：四个数并排却不给差额的解释
     # 真机 lp-ball-11 的现场：事件求和 2.422720 / 自报 2.271637 / 无人认领 0.151083 /
@@ -3706,7 +3941,10 @@ def package_face(root: str | Path, store: Any = None, *, project_dir: str = "",
                                       "can_close": None, "can_close_reason": reason,
                                       "closable": False, "verdict_at": "",
                                       "verdict_met": None,
-                                      "closing_verdict": None},
+                                      "closing_verdict": None,
+                                      "blockers": [], "blocking_cells": [],
+                                      "na_cells": [], "warnings": {},
+                                      "machine_pass_cause": "unknown"},
                             "machine": {"checked": False, "value": None, "reason": reason,
                                         "retire_checked": False, "retire_complete": False,
                                         "retire_projected": False, "retire_auto_retire": {},
@@ -3720,6 +3958,8 @@ def package_face(root: str | Path, store: Any = None, *, project_dir: str = "",
                                      "spend_usd": None, "spend_unknown_usd_calls": None,
                                      "unattributed_usd": None, "runs_without_spend": 0,
                                      "ledger_usd": None, "usage_ledger_rows": None,
+                                     "ledger_tri": TRI_UNREADABLE,
+                                     "ledger_reason": "整面没查成 ⇒ 账本那一格也没查成",
                                      "reconciliation": {
                                          "by_scope": {}, "extract_usd": None,
                                          "extract_entries": None, "event_llm_calls": None,
@@ -4033,12 +4273,52 @@ def machine_face(root: str | Path = "", *, env: Mapping[str, str] | None = None)
     out["settings"] = settings
     out["settings_tri"] = set_tri
     out["settings_reason"] = set_reason
+    # AUDIT F8：这一个服务在服务哪个工作区、以及"换不了"这件事（见 serving_reading）。
+    # 放在本机面而不是 `/api/state`：它是"服务进程的事实"，与"工作区里有什么"分处两根轴，
+    # 而 `/api/state` 的快照形状是既有公开面（加键要动另一条线的文件）。
+    out["serving"] = serving_reading(root)
     out["tri"] = TRI_UNREADABLE if problems else TRI_COMPUTED
     out["reason"] = "；".join(problems)
     return out
 
 
 # ====================================================================== 7 预算
+def serving_reading(root: str | Path) -> dict[str, Any]:
+    """这一个服务在服务哪个工作区 —— 以及"换不了"这件事（AUDIT F8 的裁定）。
+
+    ## 为什么是一条「读数」，而不是一个"切换工作区"的入口
+
+    业主的裁定逐字是：先取证页面上有没有切换入口；「没有入口就不要新增功能」，把
+    "root 在 `serve()` 钉死"这件事诚实写出来，并加判据"页面不出现假的切换 affordance"。
+
+    取证结论（`temp/webfix3/` 的报告里有逐条 grep）：`ui/src` 里「没有」任何切换工作区的
+    按钮 / 下拉 / 链接 —— `main.tsx` 与 `Home.tsx` 只是把 `snapshot.root` 印出来。
+    所以这一格给的是四件事实，让页面能如实说出口：
+
+    - `root`：这个服务在服务的那个绝对路径（与 `/api/state.root` 同一个值）；
+    - `pinned`：`True` —— 根在 `serve(root=…)` 那一刻定死，「运行期改不了」；
+    - `pinned_by`：钉死的那一处（`"serve()"`），让"要改哪里"可查；
+    - `switch_how`：真要换工作区时「怎么办」（停服务 + `--root` 重启）；
+    - `switch_in_page`：`False` —— 页面「没有」、也不该有切换入口。这一格是判据要的
+      "页面不出现假的切换 affordance"的机器读数：它是 API 说的，页面照着说。
+
+    为什么不做成"只读的 `?root=`"（AUDIT 的建议之一）：那会变成"一个页面看多个工作区"，
+    而写面仍然绑在起服务时那个根 —— 用户会在 A 工作区的页面上按下写着 B 的按钮。
+    半真半假的多工作区比"没有得换"更危险，所以这一批不做（裁定：没有入口就不新增功能）。
+    """
+    root_p = Path(str(root)).resolve() if str(root or "").strip() else None
+    return {
+        "root": str(root_p) if root_p is not None else "",
+        "pinned": True,
+        "pinned_by": "serve()",
+        "switch_in_page": False,
+        "switch_how": ("工作区根在服务启动那一刻钉死（`serve(root=…)`）。"
+                       "要换工作区：停掉这个服务，用 `agentflow --root <另一个工作区> web` "
+                       "重启（`--root` 是全局参数，必须写在 `web` 之前）。"
+                       "页面不提供切换入口 —— 那会是一个点了没反应的假按钮。"),
+    }
+
+
 def budget_face(root: str | Path) -> dict[str, Any]:
     """`GET /api/budget` 的读模型：总额度 / 已花 / 剩余 / 追加历史 + 两个归口。
 
@@ -4049,10 +4329,12 @@ def budget_face(root: str | Path) -> dict[str, Any]:
       寄存器里不记花销，两处记账必然漂移。
 
     三态：账本读不出来 ⇒ `spent_tri="unreadable"` 且 `spent_usd=None`
-    （不是 0 —— "没查成"与"一分钱没花"在本仓是两个词）；寄存器读不出来
-    ⇒ `tri="unreadable"` + `problem` 原样带出（`budget.reading` 那一档已经这么做了，
-    这一层只透传，不二次判断）。寄存器不在盘上 ⇒ `not_applicable`（还没设过预算，
-    合法初态），而不是"没查成"。
+    （不是 0 —— "没查成"与"一分钱没花"在本仓是两个词）；账本「不在盘上」（还没写过）
+    ⇒ `spent_tri="not_applicable"` + `spent_reason`（READFIX-D-6：改前这一档折成
+    `spent_tri=computed`、`entries=0`、`spent.usd=0.0`，于是"还没写过"被印成"花了 0"）。
+    寄存器读不出来 ⇒ `tri="unreadable"` + `problem` 原样带出（`budget.reading` 那一档
+    已经这么做了，这一层只透传，不二次判断）。寄存器不在盘上 ⇒ `not_applicable`
+    （还没设过预算，合法初态），而不是"没查成"。
 
     ## 储备线与"为什么停了"（2026-11-19 对齐）
 
@@ -4086,16 +4368,38 @@ def budget_face(root: str | Path) -> dict[str, Any]:
     by_role: dict[str, Any] = {}
     by_scope: dict[str, Any] = {}
     spent_problem = ""
+    spent_tri = TRI_NOT_APPLICABLE
+    unknown_usd_rows: int | None = None
     try:
-        meter = TokenMeter(Store(root_p))
-        spent = dict(meter.spent() or {})
-        by_role = dict(meter.by_role() or {})
-        by_scope = dict(meter.by_scope() or {})
+        store = Store(root_p)
+        rows, spent_tri = _table_state(store, "usage_ledger")
+        if spent_tri == TRI_COMPUTED:
+            meter = TokenMeter(store)
+            spent = dict(meter.spent() or {})
+            by_role = dict(meter.by_role() or {})
+            by_scope = dict(meter.by_scope() or {})
+            # 算不出价钱的行数（`usd` 不是数字）：改前页面把 `unknownCalls` 写死成 0，
+            # 于是"有几次算不出价钱"被印成"一次都没有"（READFIX-D-13）。
+            unknown_usd_rows = sum(
+                1 for row in rows
+                if not isinstance(row.get("usd"), (int, float))
+                or isinstance(row.get("usd"), bool))
+        elif spent_tri == TRI_NOT_APPLICABLE:
+            spent_problem = ("usage_ledger 不在盘上（还没写过）⇒ 已花那一格记 "
+                             "not_applicable，不是 0：这个工作区还没有花钱的账本")
+        else:  # TRI_UNREADABLE
+            spent_problem = ("usage_ledger 读不出来（坏 JSON / 坏表）⇒ 已花那一格记 "
+                             "unreadable，不是 0")
     except Exception as exc:  # noqa: BLE001 - 读数层：读不到就如实说没查成
+        spent_tri = TRI_UNREADABLE
+        spent = {}
+        by_role, by_scope = {}, {}
         spent_problem = (f"usage_ledger 读不出来：{type(exc).__name__}: {exc}"
                          "（已花那一栏记「没查成」，不记 0）")
     snap = B.paperwork_first_reading(root_p,
-                                     spent_usd=(float(spent["usd"]) if spent else None))
+                                     spent_usd=(float(spent["usd"])
+                                                if spent_tri == TRI_COMPUTED and spent
+                                                else None))
     # 无人认领的那笔钱按会话口径算（与 `/api/state` 的 `sessions[].unattributed_usd`
     # 和收工面 `closing.cost.unattributed_usd` 同一个函数：`sessions.unattributed_usd_of`）。
     # 为什么这一页也要给：预算页是"钱"的唯一落点，"账本说花了多少"与"会话说花了多少、
@@ -4114,11 +4418,16 @@ def budget_face(root: str | Path) -> dict[str, Any]:
         unattributed_problem = (f"会话读不出来（{type(exc).__name__}: {exc}）"
                                 "⇒ 无人认领那笔钱算不出来（不是 0）")
     snap.update({
-        "spent_tri": TRI_UNREADABLE if spent_problem else TRI_COMPUTED,
+        "spent_tri": spent_tri,
         "spent_reason": spent_problem,
-        "entries": int(spent.get("entries") or 0) if spent else None,
-        "tokens": int(spent.get("tokens") or 0) if spent else None,
-        "attempts": int(spent.get("attempts") or 0) if spent else None,
+        "entries": (int(spent.get("entries") or 0)
+                    if spent_tri == TRI_COMPUTED else None),
+        "tokens": (int(spent.get("tokens") or 0)
+                   if spent_tri == TRI_COMPUTED else None),
+        "attempts": (int(spent.get("attempts") or 0)
+                     if spent_tri == TRI_COMPUTED else None),
+        # 算不出价钱的行数：读不到账本 ⇒ null（不是 0）；读到 ⇒ 真数字。
+        "spent_unknown_usd_calls": unknown_usd_rows,
         "added_count": len(snap.get("added") or []),
         "by_role": by_role,
         "by_scope": by_scope,
@@ -4128,7 +4437,7 @@ def budget_face(root: str | Path) -> dict[str, Any]:
         "unattributed_reason": unattributed_problem,
         "unattributed_source": "sessions.unattributed_usd_of（会话口径）",
     })
-    if spent_problem and snap.get("tri") != TRI_UNREADABLE:
+    if spent_tri == TRI_UNREADABLE and snap.get("tri") != TRI_UNREADABLE:
         snap["tri"] = TRI_UNREADABLE
         snap["reason"] = "；".join(x for x in (str(snap.get("reason") or ""),
                                                spent_problem) if x)
@@ -4136,8 +4445,8 @@ def budget_face(root: str | Path) -> dict[str, Any]:
 
 
 # ====================================================================== 8 在飞
-def _tasks_running_of(root: Path) -> tuple[int | None, str]:
-    """`tasks` 台账里 `status == "running"` 的行数 —— 「在飞」的唯一口径（三态）。
+def _tasks_running_of(root: Path) -> tuple[int | None, str, str]:
+    """`tasks` 台账里 `status == "running"` 的行数 + 三态 + 原因。
 
     为什么只数 `running`（不数 `pending`）：业主的口径逐字是
     「在飞（tasks 里 running）」；`pending` 是「未收口的活」（`Roster.tsx` 已经把它
@@ -4148,19 +4457,26 @@ def _tasks_running_of(root: Path) -> tuple[int | None, str]:
     这一格只少了"挂机（parked）不算在飞"那一层细分，所以页面把它逐字标成
     「tasks 里 running」，不与名册卡上那个 `flying` 混用同一个名字。
 
-    三态：台账读不出来 ⇒ `(None, 原因)`（"没查成"，不是 0）；台账不在盘上
-    （还没写过）⇒ `(None, 原因)`（"还没写过"，也不是 0）；读到了 ⇒ `(真数字, "")`。
+    返回 `(行数, tri, 原因)`（READFIX-D-2：改前只回 `(None, 原因)`，调用方于是
+    分不清"台账坏了"与"还没写过"，而两种都只能靠 `reason` 那一句兜底 —— 面级
+    `tri` 仍是 computed）：
+    - 台账读不出来 ⇒ `(None, "unreadable", 原因)`（"没查成"，不是 0）；
+    - 台账不在盘上（还没写过）⇒ `(None, "not_applicable", 原因)`（也不是 0）；
+    - 读到了 ⇒ `(真数字, "computed", "")`。
     """
     from ..store import Store
 
     try:
         rows, tri = _table_state(Store(root), "tasks")
     except Exception as exc:  # noqa: BLE001 - 读不到就是没查成，不折成 0
-        return None, (f"tasks 台账读不出来（「在飞」那一格记「没查成」，不记 0）："
-                      f"{type(exc).__name__}: {exc}")
+        return None, TRI_UNREADABLE, (
+            f"tasks 台账读不出来（「在飞」那一格记「没查成」，不记 0）："
+            f"{type(exc).__name__}: {exc}")
     if tri == TRI_NOT_APPLICABLE:
-        return None, ("tasks 台账不在盘上（还没写过；「在飞」那一格是「读不到」，不是 0）")
-    return sum(1 for row in rows if str(row.get("status") or "") == "running"), ""
+        return None, TRI_NOT_APPLICABLE, (
+            "tasks 台账不在盘上（还没写过；「在飞」那一格是「读不到」，不是 0）")
+    return (sum(1 for row in rows if str(row.get("status") or "") == "running"),
+            TRI_COMPUTED, "")
 
 
 def _stale_loops_of(root: Path, running: Sequence[dict[str, Any]]) -> tuple[list[str], str]:
@@ -4211,14 +4527,19 @@ def live_face(root: str | Path) -> dict[str, Any]:
 
     - `tasks_running`：`tasks` 台账里 `status == "running"` 的行数（读不到 / 还没写过
       ⇒ `null` + `reason` 里说清是哪一档）—— 这才是「在飞」，与名册三态同源；
-    - `unclosed_loops`：`running` 的行数，即「未收尾的循环」（有 start 没 end）——
-      它「不是」在飞：没收到 end 只说明这一段记录没有收尾，不说明它还在跑。
+    - `unclosed_loops`：「未收尾的循环总数」 = `unclosed_running + unclosed_stale`
+      （READFIX-A：改前它只数 `running`，把 `stopctl.running_loops().stale_rows`
+      整批丢掉 ⇒ 真机 17 个 start − 10 个 end = 7 条未收尾，端点却回 0）；
+    - `unclosed_running` / `unclosed_stale`：总数拆成两档 —— 前者是"还可能在跑"
+      （`running` 且 `stale_loop=false`），后者是"已经不在跑"（宿主进程已死、
+      或顶趟已收尾的循环记录）。两档分开，页面才不必用一句话既说"没在跑"又说"没这回事"。
 
     每一行还带一格 `stale_loop`（判据同 `webui.state.mark_stale_loops`）：顶趟已收尾
-    ⇒ `true`，页面据此在行尾写"宿主进程已退出/被叫停，不是活着"。`answer` 也不再
+    ⇒ `true`，页面据此在行尾写"宿主进程已退出/被叫停，不是活着"。`stale_rows` 整栏
+    逐字透传 `stopctl`（它已经带 `why`）并同样标 `stale_loop=true`。`answer` 也不再
     被这种行顶成「有」：只剩 stale 行、又没有活进程 ⇒ `answer="没有"`。
 
-    行一律用 `stopctl` 自己的字典逐字透传（`running` / `live` / 历史行）：
+    行一律用 `stopctl` 自己的字典逐字透传（`running` / `stale_rows` / `live` / 历史行）：
     在这一层再抄一份字段表就是第二份形状定义，必然与那边漂移。
     """
     from .. import stopctl as SC
@@ -4227,10 +4548,12 @@ def live_face(root: str | Path) -> dict[str, Any]:
     problems: list[str] = []
     notes: list[str] = []
     loops: dict[str, Any] = {"running": [], "live": [], "unreadable_sessions": [],
-                             "answer": "没查成"}
+                             "stale_rows": [], "answer": "没查成"}
+    loops_ok = False
     try:
         got = SC.running_loops(root_p)
         loops = dict(got) if isinstance(got, Mapping) else loops
+        loops_ok = isinstance(got, Mapping)
     except Exception as exc:  # noqa: BLE001
         problems.append(f"stopctl.running_loops 读不出来：{type(exc).__name__}: {exc}")
     switch: dict[str, Any] = {}
@@ -4254,10 +4577,28 @@ def live_face(root: str | Path) -> dict[str, Any]:
     problems.extend(stale_problems)
     if stale_note:
         notes.append(stale_note)
+    # `stopctl` 已经把"登记的进程已经不在"的那批单列在 `stale_rows` 里（带 why）。
+    # 改前这一整个列表被丢掉，于是 7 条未收尾循环在 `/api/live` 上读成 0。
+    stale_rows = [dict(r) for r in (loops.get("stale_rows") or [])]
+    for row in stale_rows:
+        # 这一栏的定义就是"不是在飞"（进程已死 / 被强杀），行尾按 `stale_loop` 分档；
+        # 标成 True 才不会在页面上被画成"顶趟还在跑"。
+        row["stale_loop"] = True
     live_rows = [dict(r) for r in (loops.get("live") or [])]
-    tasks_running, tasks_note = _tasks_running_of(root_p)
+    tasks_running, tasks_tri, tasks_note = _tasks_running_of(root_p)
     if tasks_note:
         notes.append(tasks_note)
+    if tasks_tri == TRI_UNREADABLE:
+        problems.append(tasks_note)
+    # 「还可能在跑」= stopctl 的 `running` 里没被判成 stale 的那些；其余（stale_rows
+    # + running 里 stale_loop=true 的）都归"已经不在跑"那一档。总数 = 两档之和。
+    unclosed_running = (sum(1 for row in running if not row.get("stale_loop"))
+                        if loops_ok else None)
+    unclosed_stale = (sum(1 for row in running if row.get("stale_loop"))
+                      + len(stale_rows)) if loops_ok else None
+    unclosed_total = ((unclosed_running + unclosed_stale)
+                      if unclosed_running is not None and unclosed_stale is not None
+                      else None)
     answer = str(loops.get("answer") or "")
     if (answer == "有" and running and not live_rows
             and all(row.get("stale_loop") for row in running)):
@@ -4272,8 +4613,18 @@ def live_face(root: str | Path) -> dict[str, Any]:
         "root": str(root_p),
         "answer": answer,
         "tasks_running": tasks_running,
-        "unclosed_loops": len(running),
+        # 面级 tri 之外另给这一格的三态（READFIX-D-2）：tasks.json 坏 ⇒ face=unreadable；
+        # 还没写过 ⇒ face 仍 computed，但这一格是 `not_applicable` + `tasks_running_why`。
+        "tasks_running_tri": tasks_tri,
+        "tasks_running_why": tasks_note,
+        "unclosed_loops": unclosed_total,
+        "unclosed_running": unclosed_running,
+        "unclosed_stale": unclosed_stale,
+        "unclosed_loops_tri": TRI_COMPUTED if loops_ok else TRI_UNREADABLE,
+        "unclosed_loops_why": ("" if loops_ok else
+                               "stopctl.running_loops 读不出来 ⇒ 未收尾循环记「没查成」，不记 0"),
         "running": running,
+        "stale_rows": stale_rows,
         "live": live_rows,
         "unreadable_sessions": list(loops.get("unreadable_sessions") or []),
         "switch": switch,
@@ -4441,15 +4792,43 @@ def usage_face(root: str | Path) -> dict[str, Any]:
 
     「最近几笔」按文件顺序取尾部（`usage_ledger` 是 append-only 的 JSON 表）——
     不排序、不猜时间戳：那一列的名字由 `schema.UsageEntry` 定，这一层不改口径。
+
+    ## 三态（READFIX-D-4）
+
+    改前 `Store.rows("usage_ledger")` 对"表不在盘上"回 `[]`，于是这一面回
+    `spent.usd=0.0` / `entries=0` / `tri=computed` —— "还没写过"被印成"查过了，是 0"。
+    现在按表在不在盘上分三档：
+
+    - 不在盘上（还没写过）⇒ `tri="not_applicable"`、`entries=None`、`spent={}`，
+      `reason` 说清"不是 0"；
+    - 坏 JSON / 读不出 ⇒ `tri="unreadable"`，同样 `entries=None`、`spent={}`；
+    - 读到了 ⇒ `tri="computed"`（0 行也是真 0）。
+
+    `spent_unknown_usd_calls` 是"账本里有几行算不出价钱"（`usd` 不是数字）：改前页面
+    把 `unknownCalls` 写死成 0，读的人以为"一次都没有"（READFIX-D-13）。
     """
     from ..store import Store
     from ..tokenmeter import TokenMeter
 
     root_p = Path(str(root))
     try:
-        meter = TokenMeter(Store(root_p))
-        rows = Store(root_p).rows("usage_ledger")
+        store = Store(root_p)
+        rows, ledger_tri = _table_state(store, "usage_ledger")
+        if ledger_tri != TRI_COMPUTED:
+            why = ("usage_ledger 不在盘上（还没写过）⇒ 用量记 not_applicable，不是 0"
+                   if ledger_tri == TRI_NOT_APPLICABLE else
+                   "usage_ledger 读不出来（坏 JSON / 坏表）⇒ 用量记 unreadable，不是 0")
+            return {"tri": ledger_tri, "reason": why,
+                    "path": str(root_p / "data" / "usage_ledger.json"),
+                    "entries": None, "spent": {}, "by_role": {}, "by_scope": {},
+                    "retry_overhead": {}, "recent": [],
+                    "spent_unknown_usd_calls": None}
+        meter = TokenMeter(store)
         recent = [dict(r) for r in rows[-10:]]
+        unknown_usd_rows = sum(
+            1 for row in rows
+            if not isinstance(row.get("usd"), (int, float))
+            or isinstance(row.get("usd"), bool))
         return {
             "tri": TRI_COMPUTED, "reason": "",
             "path": str(root_p / "data" / "usage_ledger.json"),
@@ -4459,13 +4838,15 @@ def usage_face(root: str | Path) -> dict[str, Any]:
             "by_scope": dict(meter.by_scope() or {}),
             "retry_overhead": dict(meter.retry_overhead() or {}),
             "recent": recent,
+            "spent_unknown_usd_calls": unknown_usd_rows,
         }
     except Exception as exc:  # noqa: BLE001 - 读不到就是没查成，不许折成 0
         return {"tri": TRI_UNREADABLE,
                 "reason": f"usage_ledger 读不出来：{type(exc).__name__}: {exc}",
                 "path": str(root_p / "data" / "usage_ledger.json"),
                 "entries": None, "spent": {}, "by_role": {}, "by_scope": {},
-                "retry_overhead": {}, "recent": []}
+                "retry_overhead": {}, "recent": [],
+                "spent_unknown_usd_calls": None}
 
 
 # ====================================================================== 10 状态报告
@@ -4477,6 +4858,12 @@ def status_reports_face(root: str | Path) -> dict[str, Any]:
     """
     root_p = Path(str(root))
     out_dir = root_p / "out" / "review"
+    # 目录不在 ⇒ "还没写过"（not_applicable）：这时 `count` 是 None，不是 0
+    # （READFIX-D-9：改前印「共 0 份」，而盘上根本没有这个目录）。
+    if not out_dir.is_dir():
+        return {"tri": TRI_NOT_APPLICABLE,
+                "reason": "out/review 目录不在盘上（还没写过；不是「写了 0 份」）",
+                "dir": str(out_dir), "count": None, "reports": []}
     try:
         mds = sorted(out_dir.glob("STATUS-*.md"))
         jsons = {p.stem: p for p in out_dir.glob("STATUS-*.json")}
@@ -4501,6 +4888,100 @@ def status_reports_face(root: str | Path) -> dict[str, Any]:
     return {"tri": TRI_COMPUTED if reports else TRI_NOT_APPLICABLE,
             "reason": "" if reports else "out/review 下还没有 STATUS-* 报告（还没写过）",
             "dir": str(out_dir), "count": len(mds), "reports": reports}
+
+
+#: `run_index_reason()` 里给的"怎么修"那一条命令（`cli.py` 的子命令逐字，判据钉它）。
+RUN_INDEX_REBUILD_CMD = "agentflow project rebuild-run-index --workspace {root}"
+
+
+def run_index_reason(root: str | Path, doc: Mapping[str, Any]) -> str:
+    """`/api/run-index` 非 `computed` 那一档的 `reason`：为什么 + 是不是毛病 + 怎么修（AUDIT F10）。
+
+    这一格在真实工作区上「恒」 `unreadable`（索引只在顶趟收工成功 / `closing` 通关 /
+    显式 `rebuild-run-index` 时建）。原来的 `reason` 只说"索引不在盘上"，读到的人分不清
+    "常态"与"坏了"、也不知道下一步做什么 —— 三态纪律要求 `unreadable` 把这两句说出口。
+
+    为什么住在 `readers.py` 而不是那个端点的处理器里：`/api/run-index` 的处理器在
+    `webui/server.py`（A 线的 `WebHandler`），而"这一格为什么恒 unreadable"是「盘上
+    事实的读法」，属读侧；放在这里，判据可以脱离 HTTP 直接把函数钉住，处理器那边
+    只要一行转发（`server.py` 的 patch 见 `temp/webfix3/patches/`）。
+
+    两种档位分开说：`not_applicable`（一场会话都没有 ⇒ 没有可建的源）与
+    `unreadable`（有会话、但索引没建 / 读不出）。补进去的字是「纯追加」：
+    `sessions.run_index_report` 给的那一句原样留在最前面（既有判据按子串断言它）。
+    """
+    base = str(doc.get("reason") or "").strip()
+    tri = str(doc.get("tri") or "")
+    root_shown = str(Path(str(root)).resolve()) if str(root or "").strip() else ""
+    if tri == "not_applicable":
+        tail = (" —— 这个工作区一场会话都没有，所以没有可对账的源（不是「对上了」）。"
+                "跑过一趟之后（顶趟收工成功会顺手建索引）再回来看这一格。")
+    else:
+        tail = (
+            " —— 为什么会这样：索引只在**顶趟收工成功**（`stop_reason=final`）、"
+            "`agentflow closing` 通关、或显式重建时落盘（`sessions.rebuild_run_index` 没有"
+            "别的生产调用者）；工作区没走过这三步就一直没有 `index/run-index.json` ——"
+            "**这是常态，不是出错**，所以这一格在真机上几乎总是 `unreadable`。"
+            "怎么修（两步任选）：① 想现在就建：跑 `"
+            + RUN_INDEX_REBUILD_CMD.format(root=root_shown)
+            + "`（幂等，只写 `index/run-index.json` 与一行审计）；"
+            "② 不想建也行：未走完/被叫停的趟看同一页的「趟次档案」"
+            "（`GET /api/run-digest`，从 `sessions/*.jsonl` 现算，不读索引）——"
+            "Run 页的趟次本来就是回退现算的，索引那一格只负责对账。"
+        )
+    return (base + tail) if base else tail.lstrip(" ——")
+
+
+# ====================================================================== 11 网页操作台账（AUDIT F11）
+#: `/api/actions` 一页默认给多少行（`?limit=` 可改，上限 :data:`ACTIONS_PAGE_MAX`）。
+ACTIONS_PAGE_DEFAULT = 20
+#: `/api/actions` 一页的上限。
+ACTIONS_PAGE_MAX = 200
+
+
+def actions_face(root: str | Path, *, limit: int = ACTIONS_PAGE_DEFAULT,
+                 offset: int = 0) -> dict[str, Any]:
+    """`GET /api/actions` 的读模型：网页操作台账（`<工作区>/web-actions.jsonl`）的分页读数。
+
+    ## 为什么要有这一面（AUDIT F11）
+
+    台账从 W3 起就在写（`writes.audit.record_action`：每一笔网页写操作一行，
+    被拒的尝试也留一行），但「全仓没有读侧」 —— 「谁在什么时候从网页上按了什么、
+    成了没有」这个问题在页面上答不出来。写侧自己的文件头（`webui/audit.py` §一行形状）
+    就写着那一栏叫「操作历史」，于是这一条端点补的就是它。
+
+    读法只有一份实现：`audit.read_actions_state`（它已经带回三态与坏行说明）。这一层
+    只做两件事 —— 「倒序」与「分页」：
+
+    - 倒序：台账是追加写的，读的人先要看最近一笔（`order="newest_first"` 明说）；
+    - 分页：`limit` / `offset` 由调用方给（HTTP 层已经校验过非法值），`has_more` 说清
+      "还有没有下一页" —— 让页面不必自己拿 `total` 与 `offset+len` 去比（比错了就是
+      "看起来能翻页、翻过去是空的"）。
+
+    三态原样搬：台账读不出来 ⇒ `tri="unreadable"` 且 `rows=[]`（「不是」"没有操作"）；
+    文件不在盘上 ⇒ `computed` + 0 行（"这个工作区还没有人从网页上动过手"是一个算出来的
+    读数，合法初态）。坏行说明在 `problems` 里，不在 `reason` 里被吞掉。
+    """
+    from . import audit as A
+
+    got = A.read_actions_state(root)
+    rows = [r for r in (got.get("rows") or []) if isinstance(r, Mapping)]
+    total = len(rows)
+    window = list(reversed(rows))[offset:offset + limit]
+    return {
+        "tri": str(got.get("tri") or TRI_COMPUTED),
+        "reason": str(got.get("reason") or ""),
+        "path": str(got.get("path") or ""),
+        "problems": [str(x) for x in (got.get("problems") or [])],
+        "rows": window,
+        "total": total,
+        "limit": int(limit),
+        "offset": int(offset),
+        "has_more": offset + len(window) < total,
+        # 顺序是读数的一部分：页面若按"最新的在最上面"写死一句说明，就得有一个
+        # 机器读数能在它被改坏时响（判据钉这一格）。
+        "order": "newest_first",
+    }
 
 
 # ====================================================================== HTTP 外壳
@@ -4604,28 +5085,82 @@ def handle_run_events(handler: Any, params: Mapping[str, str],
     _json_of(handler, run_events(handler.root, sid, since_index=since, limit=limit))
 
 
+def _page_window(query: Mapping[str, Sequence[str]]) -> tuple[int, int, str]:
+    """读 `?limit=` / `?offset=` / `?summary=1` ⇒ `(limit, offset, 问题)`。
+
+    - `?summary=1` 是"首屏摘要"的别名：`limit=SUMMARY_ROWS`、`offset=0`（显式给了
+      `limit` 就按显式那个，两者不打架：后者更具体）；
+    - 都不给 ⇒ `limit=0`（「全量」，既有行为一字不变）；
+    - `limit` 钳在 `[0, PAGE_ROWS_MAX]`：超上限「不是」非法（按上限截断，与
+      `/api/run/{sid}/events` 同一条口径），负数 / 非整数才是非法；
+    - `offset` 必须 `>= 0`。
+
+    非法值由调用方回 400（`/api/*` 一律 JSON，裁定 Q1）—— 形状与
+    `handle_run_events` 那份 400 逐字同族。
+    """
+    limit, why_limit = _read_cursor(query, "limit", 0)
+    offset, why_offset = _read_cursor(query, "offset", 0)
+    problems = [w for w in (why_limit, why_offset) if w]
+    if limit is None or offset is None:
+        return 0, 0, "；".join(problems)
+    summary = _query_text(query, "summary").strip().lower() in {"1", "true", "on", "yes"}
+    if summary and _query_text(query, "limit").strip() == "":
+        limit = SUMMARY_ROWS
+    if limit > PAGE_ROWS_MAX:
+        limit = PAGE_ROWS_MAX
+    return limit, offset, "；".join(problems)
+
+
+def _bad_page(handler: Any, what: str, why: str,
+              query: Mapping[str, Sequence[str]]) -> None:
+    """分页参数不合法 ⇒ 400（JSON；把两个参数原样回显，读的人一眼看得出被拒的是哪个）。"""
+    handler._json(400, {  # noqa: SLF001 - 与 handler 是同一族的约定接口
+        "ok": False, "tri": TRI_NOT_APPLICABLE,
+        "reason": f"{what}：{why}",
+        "limit": _query_text(query, "limit"),
+        "offset": _query_text(query, "offset"),
+        "summary": _query_text(query, "summary"),
+    })
+
+
 def handle_evidence(handler: Any, params: Mapping[str, str],
                     query: Mapping[str, Sequence[str]]) -> None:
-    """`GET /api/evidence`：证据链七栏的 JSON。"""
-    del params, query
-    _json_of(handler, evidence_chain(handler.root))
+    """`GET /api/evidence`：证据链八栏的 JSON（可带 `?summary=1` / `?limit=` / `?offset=`）。
+
+    AUDIT F12：真机上这一条回 2.1 MB / 2.6 s，页面一进来就卡。分页参数只影响
+    "每栏给多少行"（`rows_mode` / `rows_limit` / `rows_offset` / `rows_total` 四格
+    说清是哪一档、一共多少行），三态与字段一个都不删 —— 契约判据 C 读的是
+    `evidence_chain()` 的缺省读数（全量），所以它逐字不变。
+    """
+    del params
+    limit, offset, why = _page_window(query)
+    if why:
+        _bad_page(handler, "/api/evidence 的分页参数不合法", why, query)
+        return
+    _json_of(handler, evidence_chain(handler.root, limit=limit, offset=offset))
 
 
 def handle_artifacts(handler: Any, params: Mapping[str, str],
                      query: Mapping[str, Sequence[str]]) -> None:
-    """`GET /api/artifacts`：产物面的 JSON（可带 `?run_dir=`）。
+    """`GET /api/artifacts`：产物面的 JSON（可带 `?run_dir=` 与分页三参）。
 
     读数走 `facecache.cached_face`（按盘失效，见 `webui/facecache.py`）：同一份盘、
-    同一组参数直接复用上一份读模型，响应顶层多一格 `cache`（`hit` / `key_sha` /
-    `built_at`）。`cache` 刻意不进 `artifacts_face` 的返回值 —— 那是读模型，
-    与 `ui/src/types.ts` 的 `ArtifactsView` 逐格对齐。
+    同一组参数（`run_dir` + `limit` + `offset`）直接复用上一份读模型，响应顶层多一格
+    `cache`（`hit` / `key_sha` / `built_at`）。`cache` 刻意不进 `artifacts_face` 的返回值
+    —— 那是读模型，与 `ui/src/types.ts` 的 `ArtifactsView` 逐格对齐。
     """
     del params
+    limit, offset, why = _page_window(query)
+    if why:
+        _bad_page(handler, "/api/artifacts 的分页参数不合法", why, query)
+        return
     vals = query.get("run_dir") or []
     run_dir = str(vals[0]) if vals else None
     face, cache = facecache.cached_face(
-        "artifacts", handler.root, {"run_dir": run_dir if run_dir is not None else ""},
-        lambda: artifacts_face(handler.root, run_dir=run_dir))
+        "artifacts", handler.root,
+        {"run_dir": run_dir if run_dir is not None else "",
+         "limit": int(limit), "offset": int(offset)},
+        lambda: artifacts_face(handler.root, run_dir=run_dir, limit=limit, offset=offset))
     _json_of(handler, {**face, "cache": cache})
 
 
@@ -4701,6 +5236,28 @@ def handle_machine(handler: Any, params: Mapping[str, str],
     """`GET /api/machine`：本机读数的 JSON。"""
     del params, query
     _json_of(handler, machine_face(handler.root))
+
+
+def handle_actions(handler: Any, params: Mapping[str, str],
+                   query: Mapping[str, Sequence[str]]) -> None:
+    """`GET /api/actions`：网页操作台账的分页读数（AUDIT F11 的读侧）。
+
+    `?limit=` 缺省 `ACTIONS_PAGE_DEFAULT`，`?offset=` 缺省 0；非法值回 400
+    （形状与 `/api/run/{sid}/events` 那份 400 同族）。只读：这一条端点不写盘、
+    不需要 `--allow-writes`（台账是写侧的事，读它不该要写权限）。
+    """
+    del params
+    limit, why_limit = _read_cursor(query, "limit", ACTIONS_PAGE_DEFAULT)
+    offset, why_offset = _read_cursor(query, "offset", 0)
+    problems = [w for w in (why_limit, why_offset) if w]
+    if limit == 0:
+        problems.append("limit 必须 >= 1（要 0 行的话没有一页可取）")
+    if problems or limit is None or offset is None:
+        _bad_page(handler, "/api/actions 的分页参数不合法", "；".join(problems), query)
+        return
+    if limit > ACTIONS_PAGE_MAX:
+        limit = ACTIONS_PAGE_MAX
+    _json_of(handler, actions_face(handler.root, limit=limit, offset=offset))
 
 
 def handle_budget_view(handler: Any, params: Mapping[str, str],
@@ -6233,6 +6790,11 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("runs", "number | null"), ("unfinished", "number | null"),
       ("start_ts", "string"), ("end_ts", "string"),
       ("steps", "number | null"),
+      # READFIX-E：`steps` 是"收工行自报优先"的混合值；两个分量与出处并排给，
+      # 读的人才能看出 348（自报）vs 339（物理）不是同一个数。
+      ("steps_source", "string"), ("steps_physical", "number | null"),
+      ("steps_self_reported", "number | null"),
+      ("steps_self_reported_missing_runs", "number | null"),
       # 两条独立的花销读数：`usd` 是事件求和，`spend_usd` 是收工行自报账；不互相顶替。
       ("usd", "number | null"), ("unknown_usd_calls", "number | null"),
       ("spend_usd", "number | null"), ("spend_missing_runs", "number | null"),
@@ -6270,7 +6832,12 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("review_findings", "ReviewFindingRow[]"), ("review_findings_tri", "Tri"),
       ("relations", "RelationRow[]"), ("relations_tri", "Tri"),
       ("verifications", "VerificationRow[]"), ("verifications_tri", "Tri"),
-      ("secretary", "SecretaryDecision[]"), ("secretary_tri", "Tri"))),
+      ("secretary", "SecretaryDecision[]"), ("secretary_tri", "Tri"),
+      # 分页四格（AUDIT F12：真机 2.1 MB 一进来就卡）。「恒在」（`limit=0` 也写），
+      # 于是页面不必猜"这一份是全量还是摘要"：`rows_mode="full"` ⇒ `rows_total` 与
+      # 各栏 `length` 相等；`"page"` ⇒ `rows_total[栏]` 才是真实总行数。
+      ("rows_mode", "string"), ("rows_limit", "number"),
+      ("rows_offset", "number"), ("rows_total", "Record<string, number>"))),
     ("ArtifactsView",
      "artifacts_face() —— 产物面（各栏另带 `<栏>_tri`）",
      (("tri", "Tri"), ("reason", "string"),
@@ -6285,7 +6852,10 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # 产物页补的那两处落点：`code/exp/` 与 `out/experiments/<号>/`。
       ("experiment_spots", "ExperimentSpot[]"), ("experiment_spots_tri", "Tri"),
       ("experiment_spots_reason", "string"), ("code_exp", "CodeExpFile[]"),
-      ("tasks", "TaskRow[]"), ("tasks_tri", "Tri"))),
+      ("tasks", "TaskRow[]"), ("tasks_tri", "Tri"),
+      # 分页四格（与 `EvidenceView` 同一口径，见那一处）。
+      ("rows_mode", "string"), ("rows_limit", "number"),
+      ("rows_offset", "number"), ("rows_total", "Record<string, number>"))),
     ("ExperimentSpot",
      "artifacts_face() 的 experiment_spots[] —— 实验产物的一个落点"
      "（`out/experiments/<号>/design.md` / `exhaustion.md` / `.log`；"
@@ -6344,7 +6914,28 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("lean_path", "string"), ("lean_version", "string"),
       ("mathlib", "Record<string, unknown>"), ("can_do_formal", "boolean | null"),
       ("settings", "SettingsReading"), ("settings_tri", "Tri"),
-      ("settings_reason", "string"))),
+      ("settings_reason", "string"),
+      # 服务与工作区（AUDIT F8 的裁定）：根在 `serve()` 钉死、页面没有切换入口 ——
+      # 这两件事实必须由 API 说出来，页面才不是"自己想不出办法"而是"如实说不能换"。
+      ("serving", "ServingWorkspace"))),
+    ("ServingWorkspace",
+     "serving_reading() —— 这一个服务在服务哪个工作区，以及“换不了”这件事"
+     "（根在 `serve()` 钉死；页面没有、也不该有切换入口）",
+     (("root", "string"), ("pinned", "boolean"), ("pinned_by", "string"),
+      ("switch_in_page", "boolean"), ("switch_how", "string"))),
+    ("ActionsView",
+     "actions_face() —— 网页操作台账（`<工作区>/web-actions.jsonl`）的分页读数"
+     "（AUDIT F11：写侧从 W3 起就在写，读侧在 F11 才落地）",
+     (("tri", "Tri"), ("reason", "string"), ("path", "string"),
+      ("problems", "string[]"), ("rows", "ActionRow[]"),
+      ("total", "number"), ("limit", "number"), ("offset", "number"),
+      ("has_more", "boolean"), ("order", "string"))),
+    ("ActionRow",
+     "actions_face() 的 rows[] —— 台账里的一行（写侧是 `webui/audit.record_action`）",
+     (("at", "string"), ("kind", "string"), ("endpoint", "string"),
+      ("source", "string"), ("params", "Record<string, unknown>"),
+      ("params_sha256", "string"), ("result", "string"), ("tri", "string"),
+      ("ok", "boolean"), ("http", "number"))),
     ("BudgetEntry",
      "budget.reading() 的 `added[]` 一行（`budget._write` 写进寄存器的那一笔）",
      (("kind", "string"), ("usd", "number"), ("by", "string"), ("at", "string"),
@@ -6360,6 +6951,8 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("spent_tri", "Tri"), ("spent_reason", "string"),
       ("entries", "number | null"), ("tokens", "number | null"),
       ("attempts", "number | null"), ("added_count", "number"),
+      # READFIX-D-13：账本里"算不出价钱"的行数（读不到账本 ⇒ null，不是 0）。
+      ("spent_unknown_usd_calls", "number | null"),
       ("by_role", "Record<string, UsageBucket>"),
       ("by_scope", "Record<string, UsageBucket>"),
       # 收工储备线（M 自设 $1.00）：`below_reserve` 为 null 只可能是"剩余算不出来"
@@ -6378,10 +6971,20 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "live_face() —— 未收尾的循环 / 活进程 / 停机开关与历史（行逐字来自 stopctl）",
      (("tri", "Tri"), ("reason", "string"), ("root", "string"), ("answer", "string"),
       # 两个并列的数 —— 「在飞」只数 tasks 里 running
-      # （与名册三态同源），「未收尾的循环」数的是 `running[]`（有 start 没 end）。
+      # （与名册三态同源），「未收尾的循环」数的是会话面 start/end 配对（含 stale_rows）。
       # 读不到 / 还没写过 ⇒ `null`（不是 0）。
-      ("tasks_running", "number | null"), ("unclosed_loops", "number"),
+      ("tasks_running", "number | null"),
+      # READFIX-D-2：这一格自己带三态与原因（tasks.json 坏 ⇒ unreadable；还没写过
+      # ⇒ not_applicable），不让面级 `tri=computed` 把"null"画成绿。
+      ("tasks_running_tri", "Tri"), ("tasks_running_why", "string"),
+      # READFIX-A：未收尾总数 + 两档拆分（仍在跑 / 已不在跑）。改前只有 `unclosed_loops`
+      # 且它只数 `stopctl.running`，把 `stale_rows` 整批丢掉了。
+      ("unclosed_loops", "number | null"),
+      ("unclosed_running", "number | null"), ("unclosed_stale", "number | null"),
+      ("unclosed_loops_tri", "Tri"), ("unclosed_loops_why", "string"),
       ("running", "LiveLoopRow[]"),
+      # `stopctl.running_loops().stale_rows` 逐字透传（带 `why`），并标 `stale_loop=true`。
+      ("stale_rows", "LiveLoopRow[]"),
       ("live", "LivePidRow[]"),
       ("unreadable_sessions", "string[]"),
       ("switch", "Record<string, unknown>"), ("switch_present", "boolean"),
@@ -6391,12 +6994,18 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("history", "Array<Record<string, unknown>>"),
       ("interrupts", "Array<Record<string, unknown>>"))),
     ("LiveLoopRow",
-     "stopctl.running_loops() 的 running[] —— 一条「未收尾的循环」（有 start 没 end；"
-     "`stale_loop` 由 `webui.state.mark_stale_loops` 现算）",
+     "stopctl.running_loops() 的 running[] / stale_rows[] —— 一条「未收尾的循环」"
+     "（有 start 没 end；`stale_loop` 由 `webui.state.mark_stale_loops` 现算，"
+     "`stale_rows[]` 那一档恒为 true）",
      (("role", "string"), ("sid", "string"), ("since", "string"),
-      # 顶趟已收尾 ⇒ 这一行是"被打断后剩下的循环记录"，
+      # 这两个由 `stopctl` 给（running 与 stale_rows 都有）；`task_id` 是绝对编号，
+      # `evidence` 说这一行的证据档（会话面 / 进程面）。
+      ("task_id", "string"), ("evidence", "string"),
+      # 顶趟已收尾 / 宿主进程已死 ⇒ 这一行是"被打断后剩下的循环记录"，
       # 不是活着的循环（页面据此写"宿主进程已退出/被叫停，不是活着"）。
-      ("stale_loop", "boolean"))),
+      ("stale_loop", "boolean"),
+      # 为什么判成不在跑（`stopctl.stale_rows[].why`；running 行没有这一格）。
+      ("why?", "string"))),
     ("LivePidRow",
      "stopctl.live_pids() 的一行 —— 登记在盘上且真的还活着的一个进程"
      "（`path` 是那一份登记文件的落点，`live_pids` 会给）",
@@ -6406,6 +7015,8 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "usage_face() —— usage_ledger 的汇总（总计 + 两个归口 + 重试开销 + 最近几笔）",
      (("tri", "Tri"), ("reason", "string"), ("path", "string"),
       ("entries", "number | null"), ("spent", "Record<string, unknown>"),
+      # READFIX-D-13：账本里"算不出价钱"的行数（读不到账本 ⇒ null，不是 0）。
+      ("spent_unknown_usd_calls", "number | null"),
       ("by_role", "Record<string, UsageBucket>"),
       ("by_scope", "Record<string, UsageBucket>"),
       ("retry_overhead", "Record<string, unknown>"),
@@ -6682,6 +7293,9 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "（`sha_consistency` 把 `status` 的五档折成 match / mismatch / unknown）",
      (("path", "string"), ("sha256", "string"), ("producer", "string"),
       ("at", "string"), ("sha256_now", "string"), ("status", "string"),
+      # `changed` 那一档的读侧分类（`artifacts.CHANGE_REASONS`）：为什么变了、
+      # 框架自己能否解释；不改变 `status`（五档仍是唯一判档）。
+      ("reason", "string"), ("explained", "boolean"),
       ("sha_consistency", "string"),
       ("by_role", "string"), ("by_role_source", "string"),
       ("by_task_id", "string"),
@@ -7275,11 +7889,18 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # 一份权威结论（ROOTGATE-②）：verdict + 八格逐格 + 红格的 why 都在这一格里，
       # 页面必须与 machine_pass / m_says_done 并列显示（旧后端没有这一格时是 null）。
       ("closing_verdict", "ClosingVerdict | null"),
-      # `machine_pass=false` 的两条来源分开点名 —— 只看
+      # `machine_pass=false` 的几条来源分开点名 —— 只看
       # `blockers=[]` 会把"格失败"读成"门没拦住"，只看 counts 又会漏掉不进八格的
       # blocker。`machine_pass_cause` 是受控词：pass / cells / blockers / blockers+cells
-      # / unknown（最后一档是"两条都空而 machine_pass 假"的缺陷读数）。
+      # / na / unknown（`na` 只由 na 格造成 false；最后一档是"几条都空而 machine_pass 假"
+      # 的缺陷读数）。
       ("blockers", "GateBlocker[]"), ("blocking_cells", "GateCell[]"),
+      # `na` 单列（READFIX-D-10）：它让 machine_pass=false，但不拦权威结论
+      # （`closing.closing_verdict` 的 fail 清单不收 na）。
+      ("na_cells", "GateCell[]"),
+      # READFIX-B：`pass` + warning 那一档（artifact_ledger 的 changed）：
+      # `{格名: [原话]}`，页面在绿 badge 旁边照样显它（不改 `cells` 的格形状）。
+      ("warnings", "Record<string, string[]>"),
       ("machine_pass_cause", "string"))),
     ("ClosingVerdict",
      "GateTable.closing_verdict —— `closing.closing_verdict` 的逐字读数"
@@ -7319,6 +7940,9 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("spend_unknown_usd_calls", "number | null"),
       ("unattributed_usd", "number | null"), ("runs_without_spend", "number"),
       ("ledger_usd", "number | null"), ("usage_ledger_rows", "number | null"),
+      # READFIX-D-5：账本那一格自己的三态与原因 —— "还没写过"（not_applicable）
+      # 与"读不出来"（unreadable）都不许折成 `ledger_usd=0` + `checked=true`。
+      ("ledger_tri", "Tri"), ("ledger_reason", "string"),
       # 四个数并排却不给差额的解释 = 读者只能说"三个对不上"（WEBCAP B10）。
       ("reconciliation", "CostReconciliation"),
       ("source", "SourceRef"))),
@@ -7474,6 +8098,9 @@ HANDLERS.update({
     "handle_chat": handle_chat,
     "handle_roster": handle_roster,
     "handle_obligations": handle_obligations,
+    # AUDIT F11：网页操作台账（只读，最新在前，分页）。
+    "handle_actions": handle_actions,
+    # `handle_library` 在文件末尾单独登记（那个处理器的正文也住在后面）。
 })
 
 def _roster_from_tasks(root_p: Path) -> dict[str, Any]:

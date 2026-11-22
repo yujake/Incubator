@@ -28,6 +28,30 @@
 - 心跳周期可注入（`Broadcaster(heartbeat_sec=...)` 与 `serve` 的开关），
   于是判据可以用 0.2 秒跑它，而不是等 15 秒。
 
+## 外部事实源（WEBFIX2 · F3）：为什么光有钩子不够
+
+上面那四个钩子都挂在本进程的写入口上。真机上 M 是另一个进程
+（`run-agent` 是 detached 子进程），它写的 `user_question` / `user_answer` /
+进度事件、它读到的那把 `.agentflow-stop`，都不经过本进程的任何一个钩子 ——
+于是改前实测：外部进程提一条问，开着的那条流 4 秒内 0 帧（`temp/webui-audit/sse-frames.txt`），
+用户要手动刷浏览器才看得见 M 在等什么。
+
+所以这一层另有一条外部事实源：每条流自己按 :data:`WATCH_SEC` 的节拍看一次盘上三处
+（`sessions/*.jsonl` 的尾部 / `.agentflow-stop` / `web-actions.jsonl`），变了就发帧。
+
+三条硬约束（都写在实现里，也都有判据）：
+
+1. 增量读，不做全表扫：每个周期只 `stat`（:func:`watch_face`），真正读的只有
+   "上次之后新增的那一段字节"（:class:`ExternalWatch` 记 `offset`）；一次最多读
+   :data:`WATCH_MAX_BYTES`，超了就只读尾部并如实发一条 `state`（不假装读全了）。
+2. 不开后台线程：轮询长在已有的那条流循环里（它本来就每 ≤0.2 s 醒来一次），
+   所以"状态一律从盘上派生、不做后台轮询线程"这条纪律没被破。
+3. 判据可打桩：所有"盘上现在是什么样"都从 :func:`watch_face` 读 —— 把它换成一个
+   常量，外部源就等于不存在（反真空：那时必须回到 0 帧）。
+
+帧与补发的边界：外部源发的帧不吃广播器的编号、也不进补发缓冲（与首帧同一条理由：
+它们没有被 `publish` 过，吃一个 id 会让下一次 `?since=` 跳过一段真实事件）。
+
 ## 三态
 
 `EVENT_KINDS` 是常量，不存在"读不出来"。这里的三态落在补发上：`since` 给了
@@ -49,21 +73,27 @@
 from __future__ import annotations
 
 import json
+import os
 import queue
 import threading
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Iterator, Mapping, Sequence
 
 from .. import sessions as SS
 from .. import stopctl as SC
 from .. import userio as U
+from .sse_external import WATCH_MAX_BYTES, WATCH_SEC
+from .sse_external import ExternalWatch, watch_face
 
 __all__ = [
-    "EVENT_KINDS", "HANDLERS", "PENDING_ENDPOINTS", "REPLAY_LIMIT", "Broadcaster",
-    "Subscription", "attach", "begin_serving", "close_all", "default_broadcaster",
-    "detach", "format_event", "handle_stream", "heartbeat_event", "hook_problems",
-    "publish", "reset_default_broadcaster", "serving", "subscribe",
+    "EVENT_KINDS", "ExternalWatch", "HANDLERS", "PENDING_ENDPOINTS", "REPLAY_LIMIT",
+    "WATCH_MAX_BYTES", "WATCH_SEC",
+    "Broadcaster", "Subscription", "attach", "begin_serving", "close_all",
+    "default_broadcaster", "detach", "format_event", "handle_stream", "heartbeat_event",
+    "hook_problems", "notify_state", "publish", "reset_default_broadcaster", "serving",
+    "subscribe", "watch_face",
 ]
 
 #: 后端会发的事件种类（C2 契约的后端一侧）。必须与 `ui/src/sse.ts` 的 `KINDS`
@@ -79,6 +109,10 @@ REPLAY_LIMIT = 128
 #: 订阅者的队列上限。慢客户端不许把服务端内存吃光；满了就丢最旧的（并记一条
 #: `dropped`——丢了多少是可读的，不是静默的）。
 QUEUE_LIMIT = 256
+
+#: 外部事实源的轮询周期与单次读上限：真身在 `webui/sse_external.py`（那一族搬出去
+#: 是为了不让本文件越过 800 行的体量软基线）。上面那两行 import 就是它们的转发，
+#: 于是调用方读到的仍是 `sse.WATCH_SEC` / `sse.WATCH_MAX_BYTES` —— 名字不搬家。
 
 #: `GET /api/stream` 那一条表项住在 `webui/readers.py` 的 `ROUTES` 里 —— 理由
 #: 是硬的：`routes.py` 的总表是 `自有 + READER_ROUTES + WRITE_ROUTES` 三个子表拼出来
@@ -104,9 +138,10 @@ _DEFAULT_LOCK = threading.Lock()
 _GENERATION = 0
 
 
-def begin_serving(*, heartbeat_sec: float = 15.0) -> Broadcaster:
+def begin_serving(*, heartbeat_sec: float = 15.0,
+                  watch_sec: float = WATCH_SEC) -> Broadcaster:
     """开一代新的默认广播器（`serve()` 起来时调）；返回它。"""
-    return reset_default_broadcaster(heartbeat_sec=heartbeat_sec)
+    return reset_default_broadcaster(heartbeat_sec=heartbeat_sec, watch_sec=watch_sec)
 
 
 def serving() -> bool:
@@ -231,17 +266,20 @@ class Subscription:
 
 class Broadcaster:
     """进程内的 SSE 广播器：一个环形缓冲（补发用）+ 若干订阅者。
-
     为什么是"进程内、无后台线程"：这个服务是单进程小服务（`ThreadingHTTPServer`），
     事件的来源就在同一个进程里（会话追加、回答落盘、检查点改写）。跨进程的那一半
-    （CLI 与驱动器同时写同一个工作区）由 `?since=` 的补发 + 前端的降级轮询承担 ——
-    不在这一层假装有一个跨进程的消息总线。
+    （CLI 与驱动器同时写同一个工作区）由 `GET /api/stream` 自己那一层的外部事实源承担
+    （:class:`ExternalWatch`：每条流在已有的循环里按 `watch_sec` 看一次盘，不开线程）——
+    所以这里仍然只有"一个广播器、没有后台线程"，而"外部进程写的东西页面上看得见"这件事
+    不再靠 `?since=` 的补发去猜。
     """
 
     def __init__(self, *, heartbeat_sec: float = 15.0, replay_limit: int = REPLAY_LIMIT,
-                 clock: Any = None) -> None:
+                 clock: Any = None, watch_sec: float = WATCH_SEC) -> None:
         self.heartbeat_sec = float(heartbeat_sec)
         self.replay_limit = int(replay_limit)
+        #: 外部事实源的轮询周期（`ExternalWatch` 那一层读它；0 = 关掉那条读数）。
+        self.watch_sec = max(0.0, float(watch_sec))
         self._clock = clock or _now_iso
         self._lock = threading.Lock()
         self._next_id = 1
@@ -332,6 +370,17 @@ class Broadcaster:
                 yield event_id, frame
 
 
+def notify_state(root: Any) -> int:
+    """发一条 `state` 帧（payload 与 `/api/stream` 首帧逐字同源）。
+
+    为什么要有它：写面里那两条端点（`/api/ack` · `/api/stop/clear`）写的是 `tasks`
+    台账与停机开关，不经过 `sessions.append` / `userio` / `stopctl` 的三个钩子 ——
+    于是"用户在网页上收口一条板项之后，页面自己刷新"这件事没有别的来源。
+    读模型是现算的，所以这一帧带的就是最新那份快照。
+    """
+    return default_broadcaster().publish("state", _snapshot_payload(root))
+
+
 def default_broadcaster() -> Broadcaster:
     """进程内那一个广播器（首次调用时建；`serve()` 与判据都读它）。"""
     global _DEFAULT  # noqa: PLW0603 - 进程内单例：一个服务一个广播器
@@ -341,15 +390,18 @@ def default_broadcaster() -> Broadcaster:
         return _DEFAULT
 
 
-def reset_default_broadcaster(*, heartbeat_sec: float = 15.0) -> Broadcaster:
+def reset_default_broadcaster(*, heartbeat_sec: float = 15.0,
+                              watch_sec: float = WATCH_SEC) -> Broadcaster:
     """换一个干净的默认广播器（判据用；`serve()` 起来时也换一个）。
 
     为什么要能换：心跳周期要可注入（判据用 0.2 秒跑），而"进程内单例"若不能换，
     判据就只能等 15 秒。它同时保证两条判据之间不互相看见对方的事件。
+    `watch_sec` 同理可注入：判据用 0.05 s 跑"外部进程写 → 帧出现"那一条，
+    更快之外与生产档没有别的差别（同一个 `ExternalWatch`）。
     """
     global _DEFAULT, _GENERATION  # noqa: PLW0603 - 进程内单例与起停代
     with _DEFAULT_LOCK:
-        _DEFAULT = Broadcaster(heartbeat_sec=heartbeat_sec)
+        _DEFAULT = Broadcaster(heartbeat_sec=heartbeat_sec, watch_sec=watch_sec)
         _GENERATION += 1
         return _DEFAULT
 
@@ -392,11 +444,11 @@ def subscribe() -> Subscription:
 #    还原回去 —— 判据用它保证一条用例装的钩子不会污染下一条，而 clock 的
 #    事件旁路也不会被第二次 `detach()` 当成自己的再摘一遍。
 #
-# `checkpoint` 这个 kind（检查点文件被改写 ⇒ 发事件）刻意不做：那需要一个
-# 轮询/watch 点，而"状态一律从盘上派生、不做后台轮询线程"是本服务的既有纪律
-# （`webui/__init__.py` 的纪律 1）。真要做，正确的位置是"写检查点的那一处"
-# （`agent_loop.save_run_checkpoint`）加一个与这里同形的钩子 —— 那属于驱动线的
-# 文件，不在本线。这条写在报告里，不偷偷起线程。
+# `checkpoint` 这个 kind（检查点文件被改写 ⇒ 发事件）刻意不做：它要的是"哪一趟的检查点
+# 变了"这条读数，而外部事实源这一层只证明"盘上有新字节"（它给的是 `state`，不是
+# `checkpoint`）。真要做，正确的位置是"写检查点的那一处"
+# （`agent_loop.save_run_checkpoint`）加一个与这里同形的钩子 —— 那属于驱动线
+# 的文件，不在本线。这条写在报告里，不偷偷补一个语义不对的帧。
 
 #: `attach()` 装上的四个闭包（`detach()` 与"幂等替换"的识别靠它）。
 _ATTACHED: dict[str, Any] = {}
@@ -570,6 +622,16 @@ def handle_stream(handler: Any, params: Mapping[str, str],
 
     心跳周期取默认广播器上那个可注入的值。
 
+    ## 外部事实源（WEBFIX2 · F3）
+
+    本进程的钩子只管得住本进程的写。M 是另一个进程，所以这条流自己在循环里按
+    `watch_sec` 的节拍看一眼盘上（见 :class:`ExternalWatch`）。两处次序是硬的：
+
+    - `baseline()` 在首帧快照之前跑：先快照后 baseline 会让"两条之间落盘的那一条"
+      既不在快照里、也不在增量里；
+    - `baseline()` 在 `subscribe()` 之后跑：两条之间的窗口里若真有一条事件，
+      钩子那一帧照发，增量至多再发一条 `state`（重复一帧是无害的，漏一帧不是）。
+
     这个端点只有 `?since=` 一格：`?sid=` 那一格曾说"只订
     这一段会话的事件"，而广播器从来没读过它 —— 那是假承诺，已删。分片要做的话，
     先按模块 docstring 末尾那条口径定义"哪些 kind 是会话级"。
@@ -584,6 +646,8 @@ def handle_stream(handler: Any, params: Mapping[str, str],
         since = 0
     bc = default_broadcaster()
     sub = bc.subscribe()
+    watch = ExternalWatch(handler.root)
+    watch.baseline()
     try:
         handler.send_response(200)
         handler.send_header("Content-Type", "text/event-stream; charset=utf-8")
@@ -614,13 +678,15 @@ def handle_stream(handler: Any, params: Mapping[str, str],
                                           "reason": why})
                 handler.wfile.write(miss)
         handler.wfile.flush()
-        # ② 循环：事件 / 心跳 / 收尾
+        # ② 循环：事件 / 外部事实源 / 心跳 / 收尾
         mine = _generation()
         beat = bc.heartbeat_sec
         # 每次迭代都要用到的两格：心跳周期在构造期定死（`Broadcaster.__init__` 之后再无人写它），
         # 所以"等多久取一次"与"多久发一次"在进循环之前算一次就够。
         drain_timeout = min(0.2, max(0.01, beat))
+        watch_sec = float(getattr(bc, "watch_sec", WATCH_SEC) or 0.0)
         last_beat = time.monotonic()
+        last_watch = last_beat
         while serving() and _generation() == mine:
             got = sub.drain(timeout=drain_timeout)
             for _event_id, frame in got:
@@ -629,6 +695,16 @@ def handle_stream(handler: Any, params: Mapping[str, str],
                 handler.wfile.flush()
             if sub.closed:
                 break
+            now = time.monotonic()
+            if watch_sec > 0 and (now - last_watch) >= watch_sec:
+                last_watch = now
+                # 外部进程写的那些帧：直接写进这条流（不吃广播器编号、不进补发缓冲 ——
+                # 与首帧同一条理由，见模块 docstring）。
+                extra = watch.poll()
+                if extra:
+                    for frame in extra:
+                        handler.wfile.write(frame)
+                    handler.wfile.flush()
             if time.monotonic() - last_beat >= beat:
                 handler.wfile.write(format_event(kind="heartbeat",
                                                  data=heartbeat_event()))

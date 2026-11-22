@@ -1161,8 +1161,14 @@ class _StubBackend:
         return self._text
 
 
-def _selftest() -> int:
-    """自检：真实探测后端 + 文本层判断 + （有后端才跑的）真实 OCR。"""
+def _selftest(sample: Path | None = None, blank: Path | None = None) -> int:
+    """自检：真实探测后端 + 文本层判断 + （有后端才跑的）真实 OCR。
+
+    素材由调用方传入（2026-11-22 DEMORETIRE）：改前这里按 `__file__` 推算仓库里的
+    `demo/selftest/{sample,blank}.pdf`；随 `agentflow/demo/` 退场，本模块不再自带素材、
+    也不再知道仓库布局。命令行入口读 `sys.argv[1]`（应有文本层）/ `sys.argv[2]`（应无
+    文本层）；没给够 ⇒ 打用法并以退出码 2（= 没查成，不是"自检通过"）。
+    """
     import sys
     import tempfile
 
@@ -1171,11 +1177,20 @@ def _selftest() -> int:
     except (AttributeError, ValueError):  # pragma: no cover
         pass
 
-    # 本文件在 src/agentflow/tools/ 下，比 providers.py 深一层：
-    # parents = [tools, agentflow, src, test1]，故 demo/ 在 parents[3]。
-    demo = Path(__file__).resolve().parents[3] / "demo" / "selftest"
-    sample = demo / "sample.pdf"
-    blank = demo / "blank.pdf"
+    if sample is None or blank is None:
+        print(
+            "用法：python -m agentflow.tools.ocr_tools <有文本层的 sample.pdf> "
+            "<无文本层的 blank.pdf>",
+            file=sys.stderr)
+        print(
+            "（2026-11-22 起自检素材由调用方传入：仓库不再自带 demo/selftest/）",
+            file=sys.stderr)
+        return 2
+    sample, blank = Path(sample), Path(blank)
+    for _p in (sample, blank):
+        if not _p.is_file():
+            print(f"没查成：自检素材不存在：{_p}", file=sys.stderr)
+            return 2
 
     registry = ToolRegistry(name="selftest-B")
     # 绑定角色（`P-14`）：`ocr.*` 的声明角色只有 B（`ocr.run` 是 write_local）。
@@ -1331,4 +1346,5 @@ def _selftest() -> int:
 
 
 if __name__ == "__main__":  # pragma: no cover - 手工自检入口
-    raise SystemExit(_selftest())
+    _args = [Path(a) for a in __import__("sys").argv[1:3]]
+    raise SystemExit(_selftest(*_args))

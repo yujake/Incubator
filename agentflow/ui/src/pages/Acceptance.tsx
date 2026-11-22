@@ -121,6 +121,14 @@ export function Acceptance() {
     reportPath: "out/review/REPORT.md",
     capUsd: usableCap,
   }));
+  // READFIX-C：`/api/acceptance` 一直有 3 条 `unknown` 验收格，而这一页只读
+  // `/api/package`，`api.getAcceptance` 全树没有调用者 —— 用户根本看不到那 3 条
+  // "没查成"。现在这一页单独读那一面，并把 `unchecked` 显式摆到屏上（不折进折叠区）。
+  const accFace = useFace(() => api.getAcceptance({
+    projectDir: ".",
+    reportPath: "out/review/REPORT.md",
+    capUsd: usableCap,
+  }));
 
   if (face.data === null) {
     return (
@@ -199,6 +207,56 @@ export function Acceptance() {
             </span>
           </span>
         </div>
+      </Card>
+
+      <Card
+        title="内容级验收（/api/acceptance）"
+        subtitle="五条判据 · 没查成（unknown）与真不过（fail）分开列"
+        tone={accFace.data !== null && isUnreadable(accFace.data.tri) ? "problem" : "plain"}
+        right={
+          accFace.data === null
+            ? (accFace.problem === "" ? null : <TriState tri="unreadable" reason={accFace.problem} label="内容级验收" />)
+            : <TriState tri={accFace.data.tri} label="内容级验收" reason={accFace.data.reason} />
+        }
+      >
+        {accFace.data === null ? (
+          <span class="readings">{accFace.problem === "" ? "正在读盘……" : accFace.problem}</span>
+        ) : (
+          <>
+            <div class="readings">
+              没查成（不是通过）：
+              <b class="mono">{accFace.data.unchecked.join("、") || "无"}</b>
+              （<span class="mono">{accFace.data.unchecked.length}</span> 条）· 真不过：
+              <b class="mono">{accFace.data.failed.join("、") || "无"}</b>
+              （<span class="mono">{accFace.data.failed.length}</span> 条）
+            </div>
+            {accFace.data.reason === "" ? null : (
+              <div class="tri-reason">{plain(accFace.data.reason)}</div>
+            )}
+            <table class="grid">
+              <thead>
+                <tr>
+                  <th>判据</th>
+                  <th>结论</th>
+                  <th>读数</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(accFace.data.criteria).sort().map(([key, value]) => (
+                  <tr key={key}>
+                    <td class="mono">{key}</td>
+                    <td>{reviewBadge(value)}</td>
+                    <td>{blank(plain(accFace.data?.details[key] ?? ""))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div class="readings">
+              口径：`failed` 是真不过，`unchecked` 是没查成 —— 两档不许折平；这一面与
+              下面 C 块的 `content` 同源，两个出口不许对"几条真不过"说两句话。
+            </div>
+          </>
+        )}
       </Card>
 
       <Card
@@ -503,24 +561,55 @@ export function Acceptance() {
                 <tr>
                   <th>格</th>
                   <th>四态</th>
+                  <th>warning</th>
                   <th>原话</th>
                   <th>原文</th>
                 </tr>
               </thead>
               <tbody>
-                {gates.cells.map((cell) => (
-                  <tr key={cell.name}>
-                    <td class="mono">{cell.name}</td>
-                    <td>{gateBadge(cell.status)}</td>
-                    <td>{blank(plain(cell.detail))}</td>
-                    <td><SourceLink source={cell.source} /></td>
-                  </tr>
-                ))}
+                {gates.cells.map((cell) => {
+                  const warnings = gates.warnings[cell.name] ?? [];
+                  return (
+                    <tr key={cell.name}>
+                      <td class="mono">{cell.name}</td>
+                      <td>{gateBadge(cell.status)}</td>
+                      {/* READFIX-B：`pass` + warning 那一档（artifact_ledger 的 changed）
+                          不许被绿 badge 盖住 —— warning 单列一栏、逐条摆出原话。 */}
+                      <td>
+                        {warnings.length === 0
+                          ? "—"
+                          : <Badge kind="badge-unknown" text={`warning ${warnings.length}`} />}
+                      </td>
+                      <td>{blank(plain(cell.detail))}</td>
+                      <td><SourceLink source={cell.source} /></td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
+            {gates.cells.filter((one) => (gates.warnings[one.name] ?? []).length > 0).map((one) => (
+              <div class="tri-reason" key={`warn-${one.name}`}>
+                <span class="mono">{one.name}</span> = {one.status}，但有 warning：
+                {(gates.warnings[one.name] ?? []).map((why, i) => <div key={i}>{plain(why)}</div>)}
+              </div>
+            ))}
 
-            {/* machine_pass=false 有两条来源 —— 格失败与 blocker。
-                空 blockers 不等于"门没拦住"，只看 counts 又会漏掉不进八格的 blocker。 */}
+            {/* `na` 不拦权威结论（closing.closing_verdict 的 fail 清单不收 na），
+                但它不是 pass ⇒ machine_pass 仍是 false。两栏必须分开说。 */}
+            {gates.na_cells.length === 0 ? null : (
+              <div class="readings">
+                不拦权威结论的 na 格：
+                <span class="mono">
+                  {gates.na_cells.map((one) => `${one.name}=na`).join("、")}
+                </span>
+                —— `na` 让 machine_pass=false，但 `closing_verdict` 不把它当 fail
+                （权威结论看 verdict / can_close，不看 machine_pass）。
+              </div>
+            )}
+
+            {/* machine_pass=false 有三条来源 —— fail/unknown 格、na 格、blocker。
+                空 blockers 不等于"门没拦住"，只看 counts 又会漏掉不进八格的 blocker；
+                na 格不拦权威结论，所以它单列、不混进上一行。 */}
             {gates.machine_pass_cause === "pass" ? (
               <div class="readings">机器口径成立：八格全 pass 且没有 blocker。</div>
             ) : (
@@ -534,6 +623,9 @@ export function Acceptance() {
                   : ""}
                 {gates.blockers.length > 0
                   ? `blocker ${gates.blockers.length} 条（清单在下面）；`
+                  : ""}
+                {gates.machine_pass_cause === "na"
+                  ? `只有 na 格（${gates.na_cells.map((one) => one.name).join("、")}）：na 不是 pass，但也不拦权威结论。`
                   : ""}
                 {gates.machine_pass_cause === "unknown"
                   ? "既没有格失败也没有 blocker —— 这是一条缺陷读数（不许静默）。"
@@ -583,6 +675,16 @@ export function Acceptance() {
               （<span class="mono">{formatCount(closing.cost.usage_ledger_rows)}</span> 行）
               <SourceLink source={closing.cost.source} label="台账" />
             </div>
+            {/* READFIX-D-5：账本那一格自己的三态。改前"账本不在盘上"折成
+                ledger_usd=0 + checked=true + reason=""，页面只剩一个 $0.000000。 */}
+            {closing.cost.ledger_tri !== "computed" ? (
+              <div class="tri-reason">
+                账本那一格：{closing.cost.ledger_tri} —— {plain(closing.cost.ledger_reason)}
+              </div>
+            ) : null}
+            {closing.cost.checked ? null : (
+              <div class="tri-reason">成本这一块没查全：{plain(closing.cost.reason)}</div>
+            )}
             {/* 四个数并排却不给差额的解释 = 读者只能说"三个对不上"（`draft/187` P4-1 / B10）。
                 差额 = 归口里 extract 那几笔（事件流里没有这些调用）；账本行数另不等于
                 事件里的调用数（一次调用可记 0..n 行）。 */}

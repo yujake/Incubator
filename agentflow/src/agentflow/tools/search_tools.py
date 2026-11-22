@@ -47,6 +47,7 @@ from .. import litavail as LAV
 from .. import litread as LR
 from .. import providers as P
 from .. import schema as S
+from .. import sysresidue as _SR   # SYSRESIDUE ④：`_keys` / `dedup_key` 与 A、locallib 同一处算
 from .. import textutil as T
 from ..litstage import CONTENT_CLAIM_WITHOUT_READ, LitStageError
 from ..store import Store, StoreError
@@ -68,7 +69,8 @@ PROVIDER_CATALOG: tuple[tuple[str, str], ...] = (
     ("crossref", "补充源：页码、container-title、publisher 等元数据补齐；摘要覆盖不如 OpenAlex"),
     ("doaj", "开放获取期刊文章（类型固定 J）；只覆盖 OA 期刊，范围窄"),
     ("europepmc", "生命科学领域覆盖好，其它领域仅作补充"),
-    ("fixture", "离线 fixture（读 demo/fixtures/candidates.json）：不联网、确定性，供离线跑通与测试"),
+    ("fixture", "离线 fixture（读调用方给的候选清单，缺省 `<工作区>/fixtures/candidates.json`）："
+                "不联网、确定性，供离线跑通与测试"),
 )
 
 #: 需要联网的 provider（探测时会发一次真实请求）。fixture 是本地文件，不算。
@@ -145,11 +147,12 @@ class _Ctx:
 
     @property
     def fixture_path(self) -> Path:
-        """离线 fixture 的位置：配置 > 工作区 > providers 模块自带的默认位置。
+        """离线 fixture 的位置：配置 > 工作区。没有"仓库自带"的那一档（2026-11-22）。
 
-        为什么要三级回退：``providers.FixtureProvider()`` 在 path 为 None 时用的就是
-        模块自带的默认路径，工具层若只认"工作区下的 demo/fixtures"，
-        在临时工作区（测试/CI）里会把一个本来可用的离线源误报为不可用。
+        DEMORETIRE 之前这里还退到 `providers.DEFAULT_FIXTURE_PATH`（= 仓库里的
+        `demo/fixtures/candidates.json`）；demo 退场后那个默认值删了，夹具必须由调用方
+        提供（配置 `fixture_path`，或放在工作区的 `fixtures/candidates.json`）。
+        返回"最像真的那一个"：存在的那一条优先，否则第一条候选（调用方据此报"不存在"）。
         """
         for p in self._fixture_candidates:
             if p.exists():
@@ -162,10 +165,7 @@ class _Ctx:
         cfg = self.provider_config.get("fixture_path")
         if cfg:
             out.append(Path(cfg))
-        out.append(self.workspace / "demo" / "fixtures" / "candidates.json")
-        default = Path(P.DEFAULT_FIXTURE_PATH)
-        if default not in out:
-            out.append(default)
+        out.append(self.workspace / "fixtures" / "candidates.json")
         return out
 
 
@@ -1658,17 +1658,32 @@ def _h_ingest_local(ctx: _Ctx, books_dir: str, pattern: str = "*.pdf",
             ctx.store.root, target, pattern=pattern or "*.pdf")
         if undeclared:
             names = "、".join(undeclared[:5]) + ("…" if len(undeclared) > 5 else "")
-            why = f"声明读不出来（{decl_problem}）" if decl_problem else "这些文件未被用户点名"
+            # 工作区外的目录：声明（工作区相对 `paths`）表达不了它 ⇒ 与
+            # `search.register` 对工作区外 `path` 同口径 fail-closed（DGWIDE ④）。
+            try:
+                Path(target).resolve().relative_to(Path(ctx.workspace).resolve())
+                outside = False
+            except (OSError, ValueError):
+                outside = True
+            if outside:
+                why = ("这个目录在工作区外，用户声明（工作区相对 paths）表达不了它"
+                       "（不是「目录里没有书」）")
+            else:
+                why = f"声明读不出来（{decl_problem}）" if decl_problem else "这些文件未被用户点名"
             return fail(
                 f"这不是一次可以入库的登记：{why}（{names}）。默认 fail-closed："
                 "没有声明 ⇒ 不许入库 —— 未点名的文件只能当研究参考（可读），不进 "
                 f"`literature`。处置：让 M 先把用户声明记下来（把用户提示词里点名的"
                 f"文件/目录逐字记进工作区根的 `{DECLARATION_NAME}`，形如 "
                 "{\"paths\": [\"a.pdf\", \"b/\"], \"verbatim\": \"<用户原话>\"}）；"
-                "清单为空就说明用户这一次没有点名，那这一批一份都不许收编。本次零写入。",
+                "清单为空就说明用户这一次没有点名，那这一批一份都不许收编。本次零写入。"
+                "要收工作区外的书架，先把那些文件放进工作区并由用户点名；"
+                "或者走候选链（`lit.stage_add` → `lit.admit`）。",
                 kind="not_declared_reference", recorded=False,
                 books_dir=str(target), undeclared=undeclared,
                 declaration=str(ctx.store.root / DECLARATION_NAME),
+                declaration_state=("outside_workspace" if outside else "read"),
+                declaration_checked=False if outside else True,
                 dry_run=False)
     try:
         report = ingest_directory(
@@ -1733,6 +1748,202 @@ def _content_claim_refusal(summary: str, *, read_ok: bool,
     )
 
 
+def _workspace_relative_target(ctx: _Ctx, raw_path: str) -> str | None:
+    """这一笔要收编的那份文件，在工作区里的相对 POSIX 路径；解析不到 ⇒ `None`。
+
+    解析的两基准与 `_adopt_file` 逐字同源：相对路径先按 `library/` 解释，不存在
+    再按 workspace 解释 —— 声明闸与写口必须对"这一笔指的是哪一份文件"给出同一个
+    答案，否则闸核的是 A、搬进库的是 B（那种错不会有任何地方报错）。
+
+    `None` 有两种来路（调用方都要按 fail-closed 拒）：路径解析失败，或解析到了
+    工作区之外 —— 声明里的 `paths` 是工作区相对路径，表达不了工作区外的文件。
+    """
+    if ctx.store is None:
+        return None
+    try:
+        p = Path(raw_path)
+        if not p.is_absolute():
+            candidate = ctx.store.library / p
+            p = candidate if candidate.exists() else (ctx.workspace / p)
+        rel = p.resolve().relative_to(Path(ctx.workspace).resolve())
+    except (OSError, ValueError):
+        return None
+    return rel.as_posix()
+
+
+def _no_target_refusal(ctx: _Ctx, *, port: str) -> Any:
+    """`path` 为空的题录直登：没有文件可核 ⇒ 同样按声明判据 fail-closed 拒。
+
+    ## 为什么这一档不再是"不适用"
+
+    DECLAREGATE 把 `path=None` 划在声明判据的适用面之外（"没有文件可核"），而业主
+    2026-11-21 的裁定把入库判据钉在用户点名上、不是"有没有文件可核"：没有文件
+    ⇒ 用户声明表达不了这一篇（声明里只有工作区相对的 `paths`）⇒ 答不出"用户点名了吗"
+    ⇒ fail-closed。真机 `lp-ball-12/14` 的 15 次直登里有 14 次正是这一档
+    （`temp/dgwide/recompute-15.txt`）。
+
+    ## 三态照旧
+
+    先只问声明本身的状态（`declaration_verdict(root)` 不传路径）：
+    声明在盘上但读不出来 ⇒ `declaration_unreadable` + `declaration_checked=False`
+    （这一笔没查成，不折成"你没声明"）；其余 ⇒ `not_declared_reference`。
+    放行只有一条路：带 `path=` 指向一份用户点名的工作区文件（或走候选链，
+    `lit.stage_add` → `lit.admit`）。
+    """
+    from ..locallib import (DECLARATION_NAME, DECLARATION_UNREADABLE,
+                            declaration_verdict)
+
+    how_to_fix = (
+        "要让这一篇入库，二选一：① 把用户点名的文件放进工作区，并在工作区根的 "
+        f"`{DECLARATION_NAME}` 里点名它，再带 `path=` 重试；② 走候选链 "
+        "（`lit.stage_add` → `lit.admit`；那条路的准入依据是候选行 + 读过正文）。"
+        "只登记题录、没有文件的那一篇只能当研究参考（可读），不入库。"
+    )
+    if ctx.store is None:
+        return fail(
+            f"{port} 不收没有文件的题录直登：没有配置 store ⇒ 用户声明也读不到 "
+            "⇒ 按 fail-closed 拒（没查成不是「用户点名了」）。本次零写入。",
+            kind="not_declared_reference", recorded=False, path=None,
+            declaration="", declaration_state="no_store",
+            declaration_checked=False, why="no_file_to_check",
+            how_to_fix=how_to_fix,
+        )
+    verdict = declaration_verdict(ctx.store.root)
+    declaration = str(verdict["declaration"])
+    state = str(verdict["state"])
+    if state == DECLARATION_UNREADABLE:
+        return fail(
+            f"{port} 这一笔没查成：工作区根的 `{DECLARATION_NAME}` 在盘上但读不出来"
+            f"（{verdict['problem']}）⇒ 声明状态是 unchecked（既不是「用户点名了」"
+            "也不是「用户没点名」）。这一笔又没有文件可核（题录直登）⇒ 在声明修好"
+            "之前不入库；修好声明再重试同一笔。本次零写入（还没进事务、文件没动）。",
+            kind="declaration_unreadable", recorded=False, path=None,
+            declaration=declaration, declaration_state=state,
+            declaration_checked=False, why="no_file_to_check",
+            problem=str(verdict["problem"] or ""),
+            how_to_fix=(f"把工作区根的 `{DECLARATION_NAME}` 改回合法形状"
+                        "（{\"paths\": [...], \"verbatim\": \"<用户原话>\"}），"
+                        "再重试同一笔。"),
+        )
+    return fail(
+        f"{port} 不收没有文件的题录直登：这一笔没有 `path` ⇒ 没有要收编的工作区"
+        "文件，用户声明表达不了它（声明里的 `paths` 是工作区相对路径）⇒ 默认 "
+        "fail-closed：只有用户点名的文件才可入库，这一篇只能当研究参考（可读），"
+        "不进 `literature`。本次零写入（这一笔还没进事务、没有文件被搬动）。"
+        f"处置：{how_to_fix}",
+        kind="not_declared_reference", recorded=False, path=None,
+        declaration=declaration, declaration_state=state,
+        declaration_checked=bool(verdict["checked"]),
+        undeclared=[], why="no_file_to_check", how_to_fix=how_to_fix,
+    )
+
+
+def _declaration_refusal(ctx: _Ctx, raw_path: str | None, *,
+                         port: str = "search.register") -> Any:
+    """声明闸（`search.register` / `table.create` 的写入口）：用户点名了这一笔吗。
+
+    ## 判据只有一份
+
+    真身是 `locallib.declaration_verdict`（`read_declaration` + `is_declared`）；
+    本函数只做三件事：把 `raw_path` 解成工作区相对路径、把结论翻成受控拒信、
+    在拒绝时保证"还没进事务、文件没动、零落盘"。`port` 只决定拒信开头写哪个写口，
+    不改判据（`table.create` 复用它时传 `port="table.create"`）。
+
+    ## 三态（与 `locallib` 同一套词表）
+
+    * 声明读得到、这份文件被点名 ⇒ 放行（返回 `None`）；
+    * 声明读得到、这份没被点名（含 `paths=[]`）⇒ 受控拒 `not_declared_reference`；
+    * 声明文件不在盘上 ⇒ 同一码、拒信说"用户没声明"（fail-closed）；
+    * 声明文件在盘上但读不出来 / 形状不对 ⇒ `declaration_unreadable`、
+      `declaration_checked=False`：这一笔没查成，不是"你没声明"（三态不许折叠）。
+
+    ## 适用面（2026-11-21 DGWIDE ① 收紧）：`path` 为空也拒
+
+    改前 `path` 为空（只登记题录、没有文件要收编）⇒ 本闸不适用、返回 `None`。
+    业主裁定「入库的判据是用户点名，不是有没有文件可核」之后，这条边界成了第 ① 条
+    绕行口：真机 15 次直登里 14 次是 `path=None`（DECLAREGATE §④）。现在：
+    没有文件 ⇒ 用户声明表达不了这一篇（声明的 `paths` 是工作区相对路径）⇒
+    `not_declared_reference` 受控拒，落"研究参考"档（可读、不入库）。
+    声明在盘上却读不出来 ⇒ 仍落第三态 `declaration_unreadable`（unchecked），
+    不折成"你没声明"。工作区外的 `path` 同样拒（声明表达不了它）。
+
+    ## 为什么拒绝必须发生在 `tx` 之前
+
+    `search.register` 的写有两处副作用：`tx.alloc_id("lit")` 与 `_adopt_file`
+    （把文件 `shutil.move` 进 `library/<lit_id>/`）。闸放在 `tx` 之前 ⇒ 拒信说的
+    "本行未写入 / 文件没动"就是盘上事实，而不是一句承诺。
+    """
+    text = str(raw_path or "").strip()
+    if not text:
+        return _no_target_refusal(ctx, port=port)
+    from ..locallib import (DECLARATION_ABSENT, DECLARATION_NAME,
+                            DECLARATION_UNREADABLE, declaration_verdict)
+
+    rel = _workspace_relative_target(ctx, text)
+    if rel is None:
+        return fail(
+            f"{port} 不收工作区外的文件：这一笔的 path 解析不到工作区里"
+            f"（{text!r}）⇒ 用户声明表达不了它（声明里的 `paths` 是工作区相对路径），"
+            "默认 fail-closed。处置：把用户点名的文件放在工作区里（`source/` / "
+            "`library/` 一类投放处）再登记，或走候选链（`lit.stage_add` → "
+            "`lit.admit`）。本次零写入（这一笔还没进事务、文件没动）。",
+            kind="not_declared_reference", recorded=False,
+            path=text, declaration_state="outside_workspace",
+            declaration_checked=False,
+            how_to_fix=("把要登记的那份文件放进工作区，并在工作区根的 "
+                        f"`{DECLARATION_NAME}` 里由用户点名它之后重试。"),
+        )
+
+    verdict = declaration_verdict(ctx.store.root, [rel]) if ctx.store is not None else None
+    if verdict is None:  # 调用方已挡掉 store=None；这一支只为静态完备
+        return None
+    declaration = str(verdict["declaration"])
+    state = str(verdict["state"])
+    how_to_fix = (
+        "让 M 先把用户声明记下来：把用户提示词里点名的文件/目录逐字记进工作区根的 "
+        f"`{DECLARATION_NAME}`（形如 {{\"paths\": [\"a.pdf\", \"b/\"], "
+        "\"verbatim\": \"<用户原话>\"}），再重试同一笔；用户没点名 ⇒ 这一份只能当"
+        "研究参考（可读），不入库。"
+    )
+    if state == DECLARATION_UNREADABLE:
+        return fail(
+            f"{port} 这一笔没查成：工作区根的 `{DECLARATION_NAME}` 在盘上但"
+            f"读不出来（{verdict['problem']}）⇒ 声明状态是 unchecked（既不是"
+            "「用户点名了」也不是「用户没点名」）。在它修好之前这一笔不入库："
+            "修好声明再重试同一笔。本次零写入（这一笔还没进事务、文件没动）。",
+            kind="declaration_unreadable", recorded=False,
+            path=rel, declaration=declaration,
+            declaration_state=state, declaration_checked=False,
+            problem=str(verdict["problem"] or ""),
+            how_to_fix=(f"把工作区根的 `{DECLARATION_NAME}` 改回合法形状"
+                        "（{\"paths\": [...], \"verbatim\": \"<用户原话>\"}），"
+                        "再重试同一笔。"),
+        )
+    undeclared = list(verdict["undeclared"])
+    if state == DECLARATION_ABSENT:
+        return fail(
+            f"{port} 不收这份文件：工作区根没有用户声明（`{DECLARATION_NAME}` "
+            f"不在盘上）⇒ {rel} 没有被用户点名。默认 fail-closed：没点名的不许入库 —— "
+            "它只能当研究参考（可读），不进 `literature`。本次零写入（这一笔还没进"
+            f"事务、文件没动）。处置：{how_to_fix}",
+            kind="not_declared_reference", recorded=False,
+            path=rel, declaration=declaration,
+            declaration_state=state, declaration_checked=bool(verdict["checked"]),
+            undeclared=undeclared, how_to_fix=how_to_fix,
+        )
+    if undeclared:
+        return fail(
+            f"{port} 不收这份文件：用户声明里没有它（{rel}）。默认 fail-closed："
+            "没点名的不许入库 —— 它只能当研究参考（可读），不进 `literature`。"
+            f"本次零写入（这一笔还没进事务、文件没动）。处置：{how_to_fix}",
+            kind="not_declared_reference", recorded=False,
+            path=rel, declaration=declaration,
+            declaration_state=state, declaration_checked=bool(verdict["checked"]),
+            undeclared=undeclared, how_to_fix=how_to_fix,
+        )
+    return None
+
+
 def _h_register(
     ctx: _Ctx,
     title: str,
@@ -1744,18 +1955,25 @@ def _h_register(
     request_id: str | None = None,
     *,
     read_ok: bool = False,
+    _from_candidate: bool = False,
 ) -> Any:
     """``search.register``：走 ``tx`` + ``alloc_id("lit")`` 建一条 literature 行。
 
-    先判重再建行：命中已有行时复用它的代号，只追加 ``source_request_ids``。
-    这不是"偷懒"——同一篇文献出现两个代号会污染全部下游溯源（``lit_id`` 是
-    关系表、引文校验、报告引用的共同锚点）。
+    先判重再建行：命中已有行时复用它的代号，只追加 ``source_request_ids`` ——
+    同一篇文献两个代号会污染全部下游溯源（``lit_id`` 是关系表、引文校验、报告引用的共同锚点）。
 
-    ``read_ok`` 是这一条"读没读到正文"的机器读数（由调用方按 ``litavail.content_read``
-    现算后交进来；不传 ⇒ ``False``，即"这一条直写路没有读过正文的证据"）。它只喂
-    正文闸：``content_read=false`` 时 ``summary`` 里不许出现内容性断言
-    （判据与 ``litstage`` 的 ALITCONTENT 同一实现：``litavail.content_assertion``
-    ＋同一个受控码 ``CONTENT_CLAIM_WITHOUT_READ``）。
+    ``read_ok`` 是这一条"读没读到正文"的机器读数（调用方按 ``litavail.content_read``
+    现算；不传 ⇒ ``False``）。它只喂正文闸：``content_read=false`` 时 ``summary`` 里
+    不许出现内容性断言（``litstage`` 的 ALITCONTENT 同一实现）。
+
+    ``_from_candidate`` 是"这一笔来自候选链"的结构事实（`lit.admit` / `lit.admit_all`
+    的 `_registrar_from_candidate` 传 `True`）：候选链的准入依据是候选行 + 读过正文，
+    不是"用户点名了哪个工作区文件" ⇒ 声明闸不适用。它是下划线参数、不在工具 schema
+    里，模型看不见也传不进来（工具入口是 `_search_register` 的固定签名）。
+
+    直登（`_from_candidate=False`）在进事务之前过与 `search.ingest_local` 同一道声明判据
+    （`_declaration_refusal` → `locallib.declaration_verdict`）：未声明 ⇒ `not_declared_reference`
+    受控拒、零写入；声明读不出来 ⇒ `declaration_unreadable`（`declaration_checked=false`）。
     """
     if ctx.store is None:
         return fail("未配置 store：无法建行。请用 register(..., store=store) 构造工具。", kind="no_store")
@@ -1771,7 +1989,34 @@ def _h_register(
         return fail("title 不能为空", kind="param_constraint")
 
     warnings: list[str] = []
-    keys = D.literature_keys(title, year, doi)
+    # ---- SYSRESIDUE ④：两个去重格由 `sysresidue.literature_dedup_cells` 一处算
+    # （改前这一支自己拼 `title:<norm>|*`，`locallib` 那一支写空串 —— 同一主键两个
+    # 口径，而读侧 `dedup._row_keys` 两处都收，于是漂了也不报错）。
+    keys, dedup_key = _SR.literature_dedup_cells(title, year, doi)
+    cell_problems = _SR.dedup_cells_problems(
+        {"title": title, "year": year, "doi": doi,
+         "dedup_key": dedup_key, "_keys": keys}, keys=keys)
+    if cell_problems:
+        _SR.note_dedup_refusal(ctx.store.root, where="search.register",
+                               problems=cell_problems)
+        return fail(
+            "search.register 不收没有去重主键的文献："
+            + "；".join(cell_problems)
+            + "。本行未写入。改法：给一个能归一化的 title（或 doi）；"
+            "`dedup_key` 由 `sysresidue.literature_dedup_cells` 一处算，"
+            "工具层不许自己拼一个形态。",
+            kind=_SR.CODE_DEDUP_KEY_MISSING, field="title",
+            keys=list(keys), dedup_key=dedup_key,
+        )
+
+    # ---- 声明闸（业主裁定 2026-11-21；与 `search.ingest_local` 同一道判据）--------
+    # 放在 `tx` 之前：这一笔一旦进事务就会 `alloc_id` 并 `_adopt_file`（把文件搬进
+    # `library/<lit_id>/`）—— 那两件都是不可撤的落盘。候选链（`_from_candidate`）不走
+    # 这道闸：它的准入依据是候选行 + 读过正文，不是"用户点名了哪个文件"。
+    if not _from_candidate:
+        refused = _declaration_refusal(ctx, path)
+        if refused is not None:
+            return refused
 
     with ctx.store.tx("literature", "search_requests", actor=ctx.actor, note="search.register") as tx:
         existing, hit_key = D.find_existing_literature(tx.rows("literature"), title, year, doi)
@@ -1837,7 +2082,7 @@ def _h_register(
             path=rel_path,
             processed=False,  # B 负责置 true
             source_request_ids=[request_id] if request_id else [],
-            dedup_key=keys[0] if keys else f"title:{T.normalize(title)}|*",
+            dedup_key=dedup_key,
             doi=D.normalize_doi(doi),
             year=year,
             authors=[],
@@ -2451,6 +2696,9 @@ def _registrar_from_candidate(ctx: _Ctx, row: Mapping[str, Any]) -> dict:
         year=row.get("year"),
         request_id=str(row.get("request_id") or "") or None,
         read_ok=read_ok,
+        # 候选链的准入依据是候选行 + 读过正文，不是"用户点名了哪个工作区文件" ⇒
+        # 声明闸不适用。这个参数是下划线参数、不在工具 schema 里，模型传不进来。
+        _from_candidate=True,
     )
     if not res.ok:
         return {"lit_id": None, "reason": res.error}
@@ -3541,7 +3789,7 @@ def register(
 def _selftest() -> int:
     """自检：真实探测 + 真实检索 + 离线判重 + 登记回环。
 
-    全部落在 ``tempfile`` 临时工作区里，不碰 test/test1/data 或 demo/run。
+    全部落在 ``tempfile`` 临时工作区里，不碰 test/test1/data 或仓库里的任何工作区。
     """
     import json
     import sys
@@ -3678,7 +3926,7 @@ def _selftest() -> int:
     print("[4] search.register 回环（离线；search.download 需要真实 URL，自检里不跑）")
     src = ws / "downloads" / "selftest-paper.txt"
     src.parent.mkdir(parents=True, exist_ok=True)
-    src.write_text("An abelian group is a group in which the commutative law holds.", encoding="utf-8")
+    src.write_text("An abelian group is a group in which the commutative law holds.", encoding="utf-8", newline="\n")
     res = registry.call(
         "search.register",
         title="Selftest paper about abelian groups",

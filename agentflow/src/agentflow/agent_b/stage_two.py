@@ -60,6 +60,10 @@ class _StageTwoSelfDrive:
         - `candidates`：`closing.statements_optimization_candidates` 的条数（含"还没原稿"的）；
         - `unwashed`：有正文、且至少一份没洗的命题逐条（`stmt_id` / `unoptimized_proofs` /
           `optimization_open` / `draft_available` / `next_step`）—— 这就是"还有几条没洗"；
+        - `washed_count` / `proofs_total`：回执里回答「洗了几份」的那两格读数
+          （全表有正文的证明份数 / 其中 `optimized=true` 的份数；不含已放弃与已退休的命题）。
+          它们是"累计洗过多少"，不是"这一拍洗了几份" —— 后者只有 `opened` 那一格回答
+          （这一拍开了几份稿），洗稿本身是文本判断，框架不替你做、也不拿它拦门；
         - `debt`：`unwashed` 里还没开过优化稿、且有原稿可开的那几条（这一拍要开的就是它）；
         - `opened` / `skipped_open` / `skipped_no_draft` / `refused`：沿用开稿那一笔的读数；
         - `next_action`：非空时是一句可执行的下一步（洗 → 送 V → 精准替换）。
@@ -71,6 +75,7 @@ class _StageTwoSelfDrive:
             "checked": False, "enabled": False, "in_task": False,
             "candidates": 0, "debt_count": 0, "debt": [],
             "unwashed_count": 0, "unwashed": [],
+            "proofs_total": 0, "washed_count": 0,
             "opened": [], "skipped_open": [], "skipped_no_draft": [], "refused": [],
             "next_action": "", "why": "",
         }
@@ -86,6 +91,10 @@ class _StageTwoSelfDrive:
             return out
         out["checked"] = True
         out["candidates"] = int(cand.get("count") or 0)
+        # DANGLE ③：回执里"洗了几份 / 还剩几份"两格读数（口径在
+        # `closing.statements_optimization_candidates`，全表累计，不是只数候选）。
+        out["proofs_total"] = int(cand.get("proofs_total") or 0)
+        out["washed_count"] = int(cand.get("washed_count") or 0)
         out["enabled"] = bool(self._stage_two_self_drive_enabled())
         # ---- 只把"有正文、还没洗"的命题算进这一格（候选面里"还没原稿"的那些不是等洗）
         unwashed: list[dict] = []
@@ -148,8 +157,10 @@ class _StageTwoSelfDrive:
             out["debt"] = [one for one in debt if one["stmt_id"] not in opened_ids]
             out["debt_count"] = len(out["debt"])
         out["why"] = (
-            "这一拍查过：%d 条候选里 %d 条有正文还没洗（逐条见 `unwashed`）；"
+            "这一拍查过：%d 条候选里 %d 条有正文还没洗（全表已洗 %d/%d 份；逐条见 "
+            "`unwashed`）；"
             "%s" % (out["candidates"], out["unwashed_count"],
+                    out["washed_count"], out["proofs_total"],
                     ("自己开了 %d 份优化稿、跳过 %d 条已开的、拒绝 %d 条；"
                      % (len(out["opened"]), len(out["skipped_open"]), len(out["refused"]))
                      if out["opened"] or out["skipped_open"] or out["refused"] else

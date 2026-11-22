@@ -3741,7 +3741,8 @@ def _decode_shape(data: Mapping[str, Any], *,
             role = str(marker.get("role") or "")
             if not role:
                 return "", {}, (f"收件人 {to!r} 既不是角色（{S.ROLES}）、也不是主控 "
-                                f"{S.CONDUCTOR_ROLE}、也不是 {ALL}（给所有人写 to=\"ALL\"）")
+                                f"{S.CONDUCTOR_ROLE}；名册名 / 绝对编号要在名册上下文里解析"
+                                f"（广播 `{ALL}` 已退场，会被受控拒绝 `{BROADCAST_RETIRED}`）")
             to = role
             roster_marker = marker
         summary = (str(value.get("summary") or "").strip()
@@ -4276,8 +4277,16 @@ def _recipient_for_channel(token: Any) -> str:
     return ALL if want.upper() == ALL else want.upper()
 
 
-def notify_shape_problem(notify: Any) -> str:
-    """`final.notify` 的形状检查（空串 = 合规）。只判形状，不判"该不该有这一栏"。"""
+def notify_shape_problem(notify: Any, *, address_of: Any = None) -> str:
+    """`final.notify` 的形状检查（空串 = 合规）。只判形状，不判"该不该有这一栏"。
+
+    `to` 的收件人面与 `message` / `handoff` 是同一处真身：角色名 / 主控 M 由
+    :func:`_known_recipient` 认，名册名 / 绝对编号由调用方给的 `address_of`
+    （真身 :func:`roster_addresses`，经 :func:`_decode_roster_outcome`）解析 ——
+    本函数不另写一份"这像不像一个名册名"的判据。`ALL`（广播）已退场：
+    它是受控拒绝 `broadcast_retired`，不是收件人（拒信与两个写入口逐字同一份
+    `_BROADCAST_RETIRED_HOW_TO_FIX`）。
+    """
     if not isinstance(notify, Mapping):
         return f"notify 必须是一个对象（字段：{list(NOTIFY_FIELDS)}），收到 {type(notify).__name__}"
     unknown = sorted(set(notify) - set(NOTIFY_FIELDS))
@@ -4286,10 +4295,20 @@ def notify_shape_problem(notify: Any) -> str:
                 "拼错的字段会被静默忽略，于是它与「没填」长得一样")
     to = str(notify.get("to") or "").strip()
     if not to:
-        return "notify.to 没填（要交给谁：A–H 或 M，给所有人写 ALL）"
+        return (f"notify.to 没填（要交给谁：名册名（如 D1）/ 绝对编号（如 t-000123）/ "
+                f"角色名（{list(S.ROLES)}），或主控 {S.CONDUCTOR_ROLE} 的本号；"
+                f"广播 `{ALL}` 已退场，填它会被受控拒绝 `{BROADCAST_RETIRED}`）")
+    if _is_all_recipient(to):
+        return (f"notify.to={to!r} 是广播（受控拒绝 `{BROADCAST_RETIRED}`）："
+                f"`to={ALL}` 已不是收件人 —— " + _BROADCAST_RETIRED_HOW_TO_FIX)
     if not _known_recipient(to):
-        return (f"notify.to={to!r} 不是角色（{list(S.ROLES)}）、也不是主控 {S.CONDUCTOR_ROLE}、"
-                f"也不是公共频道 {ALL}")
+        if address_of is None:
+            return (f"notify.to={to!r} 既不是角色（{list(S.ROLES)}）、也不是主控 "
+                    f"{S.CONDUCTOR_ROLE}；名册名 / 绝对编号要在名册上下文里解析")
+        refused, marker, problem = _decode_roster_outcome(to, address_of)
+        if refused is not None or not str(marker.get("role") or ""):
+            return (f"notify.to={to!r} 不是收件人：{problem or '名册上没有解析到角色'} "
+                    f"（广播 `{ALL}` 已退场，会被受控拒绝 `{BROADCAST_RETIRED}`）")
     if not str(notify.get("summary") or "").strip():
         return "notify.summary 没填（一句话：交给对方什么 —— 它会被拼进那条留言）"
     if not str(notify.get("body") or "").strip():
@@ -4301,18 +4320,27 @@ def notify_shape_problem(notify: Any) -> str:
     return ""
 
 
-def clean_notify(notify: Mapping[str, Any]) -> dict[str, Any]:
-    """把 `notify` 规范化（收件人归一成 `ALL` / 大写角色名、`refs` 转字符串数组）。
+def clean_notify(notify: Mapping[str, Any], *, address_of: Any = None) -> dict[str, Any]:
+    """把 `notify` 规范化（收件人归一成大写角色名、`refs` 转字符串数组）。
 
-    收件人那一格调的是与 `message` / `handoff` 同一个归一函数（`_recipient_for_channel`）——
-    三条通道共用一处判据，谁也不许自己判一遍"哪些写法算给所有人"。
+    收件人那一格调的是与 `message` / `handoff` 同一个归一函数（`_recipient_for_channel`），
+    名册名 / 绝对编号再经 :func:`_decode_roster_outcome`（真身 :func:`roster_addresses`）
+    翻成手稿台账认得的角色 —— 原写法与解析结果一起留在 `roster_addressing` 里，
+    由 `_do_handoff` 按原写法寻址到那个实例（与 `_decode_shape` 的 `handoff` 那一支
+    同一份读数格）。三条通道共用一处判据，谁也不许自己判一遍"哪些写法算给所有人"。
     """
     to = str(notify.get("to") or "").strip()
-    return {"to": _recipient_for_channel(to),
-            "summary": str(notify.get("summary") or "").strip(),
-            "body": str(notify.get("body") or ""),
-            "refs": [str(x) for x in (notify.get("refs") or [])],
-            "why": str(notify.get("why") or "").strip()}
+    out = {"to": _recipient_for_channel(to),
+           "summary": str(notify.get("summary") or "").strip(),
+           "body": str(notify.get("body") or ""),
+           "refs": [str(x) for x in (notify.get("refs") or [])],
+           "why": str(notify.get("why") or "").strip()}
+    if address_of is not None and not _known_recipient(to):
+        refused, marker, _problem = _decode_roster_outcome(to, address_of)
+        if refused is None and str(marker.get("role") or ""):
+            out["to"] = str(marker["role"])
+            out["roster_addressing"] = marker
+    return out
 
 
 def _notify_help(problem: str, *, attempt: int,
@@ -9681,6 +9709,82 @@ class AgentLoop:
                 return float(got[0]), str(got[1])
         return float(getattr(self.seam.spend, "usd", 0.0) or 0.0), "per_seam"
 
+    def _note_spend_reconcile(self, run: "AgentLoop.LoopRun") -> None:
+        """自报花销与两本实际账对一次（差多少、哪一本读不到），进写点读数。
+
+        ## 为什么写在这一刻
+
+        `run.spend` 刚被 `self.seam.spend.to_dict()` 定下来，而收工那一行
+        （`agent_run_end`）还没落盘 —— 会话事件那一本里"这一趟"仍是开着的，
+        归属规则（`sessions.runs_in_session`）照它算得出这一趟的事件求和。
+        改前这一格只有自报一个数：reconB 的会话口径残差 $0.387873 是在读侧
+        才第一次被算出来的（`sessions.unattributed_usd_of`），写点根本不知道
+        自己这一趟的账与账本不同。
+
+        ## 它不做两件事
+
+        - 不改自报值：那是模型/框架的账，写点只给第二个读数（差额、两本实际账）；
+        - 不当门：读数进 `errorstats` 的过程类读数 `write_point_guarded`。
+
+        三态：账本或会话事件有一本读不到 ⇒ `unchecked`（不是"对上了"）；
+        没有台账号 ⇒ 会话事件那一本无法按号归属，同样记 `unchecked`。
+        """
+        from . import sessions as _SS
+        from . import sysresidue as _SR
+
+        store = getattr(self, "store", None)
+        root = str(getattr(store, "root", "") or "") or str(self.session_root or "")
+        tid = str(getattr(self, "my_task_id", "") or "")
+        #: 对账是旁路：读不成只让这一项变 `unchecked`，不许把收工带走。
+        problems: list[str] = []
+        ledger_usd: float | None = None
+        ledger_calls: int | None = None
+        if store is None:
+            problems.append("没有 store ⇒ `usage_ledger` 那一本读不到")
+        else:
+            try:
+                mine_rows = [r for r in store.rows("usage_ledger")
+                             if str(r.get("task_id") or "") == tid]
+                ledger_usd = round(sum(float(r.get("usd") or 0.0) for r in mine_rows), 6)
+                ledger_calls = len(mine_rows)
+            except Exception as exc:  # noqa: BLE001 —— 对账是旁路，读不成记三态
+                problems.append(f"`usage_ledger` 没读成（{type(exc).__name__}: {exc}）")
+        events_usd: float | None = None
+        events_calls: int | None = None
+        if not tid:
+            problems.append("这一趟没有台账号 ⇒ 会话事件那一本无法按号归属（没查成）")
+        elif not self.session_root or not self.sid:
+            problems.append("没有会话根 / 会话号 ⇒ 会话事件那一本读不到")
+        else:
+            try:
+                events, read_problems = _SS.read_session(self.session_root, sid=self.sid)
+            except Exception as exc:  # noqa: BLE001 —— 同上
+                events, read_problems = [], [f"{type(exc).__name__}: {exc}"]
+            problems.extend(str(p) for p in read_problems)
+            try:
+                one_run = next(
+                    (r for r in _SS.runs_in_session(events, sid=str(self.sid or ""))
+                     if str(r.get("task_id") or "") == tid), None)
+            except Exception as exc:  # noqa: BLE001 —— 同上
+                one_run = None
+                problems.append(f"会话事件没能按趟归拢（{type(exc).__name__}: {exc}）")
+            if isinstance(one_run, Mapping):
+                raw_events_usd = one_run.get("usd")
+                if (isinstance(raw_events_usd, (int, float))
+                        and not isinstance(raw_events_usd, bool)):
+                    events_usd = float(raw_events_usd)
+                raw_events_calls = one_run.get("llm_calls")
+                if isinstance(raw_events_calls, int) and not isinstance(raw_events_calls, bool):
+                    events_calls = int(raw_events_calls)
+            elif not problems:
+                problems.append("会话事件里找不到这一趟（按台账号对不上）⇒ 没查成")
+        one = _SR.spend_reconcile(run.spend, ledger_usd=ledger_usd,
+                                  ledger_calls=ledger_calls, events_usd=events_usd,
+                                  events_calls=events_calls, problems=problems)
+        problem = _SR.record_spend_reading(root, one, where=tid)
+        if problem:
+            run.notes.append(f"花销核对读数没记成（自报值照旧）：{problem}")
+
     def _system_at_step(self, facts: Mapping[str, Any], system: str, *, step: int) -> str:
         """步边界上确认 system 逐字节没变（静态/动态分离之后的守门读数）。
 
@@ -10740,7 +10844,9 @@ class AgentLoop:
                 if notify and not notify_problem:
                     # 写手稿 + 转发都由脚本做（模型只填表）—— 这一条是用户口径里
                     # "用脚本生成交接文件并代为转发"的落点；执笔已移交本角色的秘书。
-                    hand = self._do_handoff(clean_notify(notify))
+                    # 收件人的名册写法在这里翻成角色（原写法进 `roster_addressing`），
+                    # 解析与 `message` / `handoff` 同一处真身（`roster_addresses`）。
+                    hand = self._do_handoff(clean_notify(notify, address_of=self._address_of))
                     step_result["notify_handoff"] = hand
                     if hand.get("ok"):
                         run.handoffs.append(str(hand.get("id") or ""))
@@ -11294,6 +11400,10 @@ class AgentLoop:
         self._settle_children_at_exit(run=run)
 
         run.spend = self.seam.spend.to_dict()
+        # ---- SYSRESIDUE ③：自报花销 vs 两本实际账的核对读数（只读数，不改自报值）。
+        # 位置就在自报值定下来这一刻：再晚一点收工那一行已经落盘，会话事件那一本
+        # 会把这一趟闭合掉；再早一点 `run.spend` 还没有值。
+        self._note_spend_reconcile(run)
         # ---- 提示词缓存的收工汇总（2026-10-19）：上游的
         # `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens` 从 2026-10-14 起就在
         # `SeamCall` 上，但从没汇总进任何 run 记录 ⇒ "提示词改完到底省了多少"
@@ -12279,7 +12389,8 @@ class AgentLoop:
         if notify is None:
             return "", self._derived_dispatch_notify(payload, targets)
         if not isinstance(notify, Mapping):
-            return notify_shape_problem(notify), self._derived_dispatch_notify(payload, targets)
+            return (notify_shape_problem(notify, address_of=self._address_of),
+                    self._derived_dispatch_notify(payload, targets))
         patched = dict(notify)
         if not str(patched.get("to") or "").strip():
             # 模型自己写的这一条缺省仍是"单目标 ⇒ 那个角色 / 多目标 ⇒ ALL"：
@@ -12287,8 +12398,16 @@ class AgentLoop:
             # `tests/test_forced_notify.py::test_a_multi_target_dispatch_defaults_the_handoff_to_the_public_channel`
             # 钉的就是这一格（与"派生支按目标拆条"并存，两支各说各的）。
             patched["to"] = targets[0] if len(targets) == 1 else "ALL"
-        problem = notify_shape_problem(patched)
+        problem = notify_shape_problem(patched, address_of=self._address_of)
         if problem:
+            if _is_all_recipient(str(patched.get("to") or "")):
+                # 广播那一档不退回"框架据派活派生"：那会把模型写的"发给所有人"
+                # 悄悄改成逐目标留痕，而它该看见的是同一份 `broadcast_retired`
+                # 受控拒绝（零落盘）。交给写入口，由 `_broadcast_retired_refusal`
+                # 给码 —— 与 final 那条 notify 的拒信同源。
+                clean = clean_notify(patched, address_of=self._address_of)
+                clean["note"] = "留痕来源：模型填的 notify"
+                return "", [clean]
             return problem, self._derived_dispatch_notify(payload, targets)
         from . import manuscripts as MS
 
@@ -12297,7 +12416,7 @@ class AgentLoop:
             if why:
                 return (f"notify.refs 里的 {ref!r} 立不住：{why}",
                         self._derived_dispatch_notify(payload, targets))
-        clean = clean_notify(patched)
+        clean = clean_notify(patched, address_of=self._address_of)
         clean["note"] = "留痕来源：模型填的 notify"
         return "", [clean]
 
@@ -12381,7 +12500,7 @@ class AgentLoop:
         if notify is None:
             return (f"没有 notify 表（`final` 要给一个 notify 对象，字段：{list(NOTIFY_FIELDS)}）"
                     "—— 除主控外每个角色收工都要留一份交接手稿，这是用户点名的强制项")
-        problem = notify_shape_problem(notify)
+        problem = notify_shape_problem(notify, address_of=self._address_of)
         if problem:
             return problem
         from . import manuscripts as MS
@@ -13962,16 +14081,19 @@ class AgentLoop:
     def _handoff_address(self, to: str) -> tuple[dict[str, Any], dict[str, Any]]:
         """交接手稿的收件人（`handoff` / 收工 `notify` 共用）：`(addr, gate)`。
 
-        为什么不能照抄 `message` 那一格：手稿通道的收件人面本来就是角色（`manuscripts/handoffs.jsonl` 的 `to` 是角色或
-        `ALL`：`handoff_query(to=…)` / `manuscripts.read` 的过滤都按它），名册上没有"手稿收件人"这个地址面（
+        为什么不能照抄 `message` 那一格：手稿通道的收件人面本来就是角色（`manuscripts/handoffs.jsonl` 的 `to` 是角色；
+        老行里还可能是历史写法 `ALL`，读侧照旧读得出）：`handoff_query(to=…)` / `manuscripts.read` 的过滤都按它），名册上没有"手稿收件人"这个地址面（
         `secretary.handoff_add` 写的时候就把非角色收件人拒掉：`ValueError: 收件人必须是 [A…M, V] 之一`）。
         | `to` 的写法 | 判据 |
         |---|---|
         | 名册名 / 绝对编号（解析成父或子） | 手稿写它的角色，通知投那个实例的板项 |
         | 角色名 | 手稿写那个角色；通知按协作边准入（`message_admission`） |
         | 角色名 = 我自己 | 自记一笔（不是代理之间的通信）⇒ 放行 |
-        | `ALL` / 用户 / 主控 | `outside_roster`（公告栏与频道外读者，不归名册管） |
+        | 空 / 用户 / 主控 | `outside_roster`（频道外读者，不归名册管） |
         | 解析不到的名册名 / 编号 | 受控拒绝 `handoff_is_role_addressed`（台账没有实例地址面） |
+
+        `ALL`（广播）不在上表：它在 `_do_handoff` 开头就由
+        :func:`_broadcast_retired_refusal` 受控拒绝（`broadcast_retired`），走不到这一格。
         为什么角色名那一档用协作边而不是名册：`notify`（每个终态都要有）正是靠它把"手稿编号 + 一句话"交给下一个角色；
         按名册拒掉会把整条交付链掐死，而"按角色名随便发"由协作边那份判据（`_address_of` / `message_admission`）守着。
         这一档也不是"名册校验通过"：读数里 `how="outside_roster"`，且 `delivery="role"`。
@@ -14025,9 +14147,11 @@ class AgentLoop:
             # 在上面已经放行了 —— 手稿通道不靠名册（这是业主 2026-10-22 明确保留的那条）。
             return {**delivery_addressing(base, addr), "how": "roster_unavailable"}, {}
         gate = {"refused": "handoff_is_role_addressed",
-                "error": (f"手稿的收件人只认角色或 ALL（台账的主键面），收到 {token!r} ⇒ 受控拒绝："
+                "error": (f"手稿的收件人只认角色（或能解析成角色的名册名 / 绝对编号），"
+                          f"收到 {token!r} ⇒ 受控拒绝："
                           "要给**某个实例**说话请用 `message`（`to` 写名册名或绝对编号）；"
-                          "要把手稿交给一个角色，`to` 写角色名。"),
+                          "要把手稿交给一个角色，`to` 写角色名。"
+                          f"广播 `{ALL}` 已退场（受控拒绝 `{BROADCAST_RETIRED}`）。"),
                 "addressing": {**base, **addr, "how": "handoff_is_role_addressed"}}
         return {**base, **addr, "how": "handoff_is_role_addressed"}, gate
 

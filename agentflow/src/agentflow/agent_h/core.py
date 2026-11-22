@@ -293,7 +293,7 @@ def _selftest() -> int:
                 "",
             ]
         ),
-        encoding="utf-8",
+        encoding="utf-8", newline="\n",
     )
     print(f"[2b] 被审正文：{_paper}（{_paper.stat().st_size} 字节，sha256="
           f"{_PC.file_digest(_paper)[:16]}…）")

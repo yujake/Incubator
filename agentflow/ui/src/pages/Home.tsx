@@ -183,6 +183,13 @@ export function Home() {
   // 一次写动作的结局（成功回执或失败异常）归一成一块：`ErrorBlock` 只在失败时
   // 把状态码 / 后端档名 / how_to_fix 一起摆出来（鲁棒 e）。
   const [feed, setFeed] = useState<ErrorFace | null>(null);
+  // 答完之后"它不会自己动"这件事（AUDIT F13）：记下刚答的那一条（会话号 + 问题），
+  // 于是页面能如实说「回答已记录」，并在那一趟**没在跑**时给出「继续」按钮。
+  // 为什么不是自动续跑：续跑就是 `POST /api/run`，会真花预算 —— 本页的另一条铁律是
+  // 「会花钱的两条（起一趟 / 续跑）走两次确认」（见下面那个 `ConfirmButton`）。
+  // 自动续跑 = 用户点一个"提交回答"的按钮，系统却在后台起一趟模型调用：那是把人
+  // 没按过的钱花掉。所以选「明示 + 按钮」：回答一定记下了，接着干与否由人按。
+  const [answered, setAnswered] = useState<{ sid: string; qid: string } | null>(null);
   // 只读档：写按钮直接禁用并写出理由（鲁棒 f）。
   const readOnly = live.writesAllowed === false;
   const writesWhy = readOnly ? live.writesReason : "";
@@ -228,9 +235,31 @@ export function Home() {
   // 这一段会话的循环还在不在盘上跑（`live_face.running` 的会话面）。
   // 刻意不叫 `running` 也不叫 `flying`：它读的既不是"代理三态"，也不是"名下有几件活"；
   // 它唯一决定的是这一句话走"插话"还是"续跑"（见上面那张表）。
+  // READFIX-A：`stale_rows` 也要看 —— 改前只看 `running`，于是"盘上还有 7 条未收尾的
+  // 循环记录、只是宿主进程已死"被写成「循环不在盘上」（假话）。
+  const loopRows = liveFace.data === null
+    ? []
+    : [...liveFace.data.running, ...liveFace.data.stale_rows];
+  const sidLoopRows = loopRows.filter((r) => r.sid === sid);
   const loopRunning = (liveFace.data === null ? [] : liveFace.data.running).some(
-    (r) => r.sid === sid,
+    (r) => r.sid === sid && !r.stale_loop,
   );
+  const loopWord = loopRunning
+    ? "在跑"
+    : sidLoopRows.length > 0
+      ? `不在跑（盘上还有 ${sidLoopRows.length} 条未收尾的循环记录，宿主进程已退出/被叫停）`
+      : "不在盘上（没有未收尾的循环记录）";
+  // 刚刚答过的那一条（AUDIT F13）：它自己那一段的循环还在不在盘上、原来那句话是什么。
+  // 为什么不拿当前选中的 `sid` 去顶：待答清单是**全局**的，用户完全可能在 A 段里
+  // 答掉 B 段的问题 —— 用 `sid` 会去叫醒错的那一段（与回答本身带自己 sid 同一条纪律）。
+  const answeredRunning =
+    answered === null
+      ? false
+      : (liveFace.data === null ? [] : liveFace.data.running).some((r) => r.sid === answered.sid);
+  const answeredTask =
+    answered === null
+      ? ""
+      : (snapshot.runs.find((r) => r.sid === answered.sid && r.role === "M")?.task ?? "");
   // 续跑要用**这一段原来那句话**（见文件头那张表下面那段）：先看台账那一栏，
   // 再退回对话里第一条属于用户的线。
   const topRun = snapshot.runs.find((r) => r.sid === sid && r.role === "M");
@@ -279,6 +308,9 @@ export function Home() {
       postAnswer({ qid: firstQ.qid, sid: firstQ.sid, custom: body, selected: [] })
         .then((got) => {
           done(faceOfOutcome(got));
+          if (got.ok) {
+            setAnswered({ sid: firstQ.sid, qid: firstQ.qid });
+          }
         })
         .catch(fail)
         .finally(() => {
@@ -326,6 +358,29 @@ export function Home() {
     postAnswer({ qid: q.qid, sid: q.sid, selected, custom: "" })
       .then((got) => {
         done(faceOfOutcome(got));
+        if (got.ok) {
+          setAnswered({ sid: q.sid, qid: q.qid });
+        }
+      })
+      .catch((exc: unknown) => {
+        setFeed(faceOfError(exc));
+      })
+      .finally(() => {
+        setBusy(false);
+      });
+  };
+
+  /** 答完之后按「继续」：只 `POST /api/run`（带原句 + resume），不再写收件箱。 */
+  const wakeAfterAnswer = (): void => {
+    if (answered === null || answeredTask === "") {
+      return;
+    }
+    setBusy(true);
+    setFeed(null);
+    postRun({ task: answeredTask, sid: answered.sid, resume: true })
+      .then((got) => {
+        done(faceOfWrite(got));
+        setAnswered(null);
       })
       .catch((exc: unknown) => {
         setFeed(faceOfError(exc));
@@ -368,6 +423,13 @@ export function Home() {
         </div>
         <div class="readings">
           工作区根 <span class="mono">{snapshot.root}</span>
+          {/* AUDIT F8 的裁定：页面上**没有**切换工作区的入口（取证见 temp/webfix3 的报告），
+              而根在 `serve()` 那一刻钉死 —— 所以这里如实说出"要换怎么换"，
+              不留一个点了没反应的假 affordance。 */}
+          <span class="tri-reason">
+            {" "}（这个服务启动时钉死；要换工作区请重启服务并换 <span class="mono">--root</span> ——
+            页面没有切换入口）
+          </span>
         </div>
         <div class="readings">
           当前会话{" "}
@@ -474,7 +536,7 @@ export function Home() {
 
       <Card
         title="说一句"
-        subtitle={`M 这一段的循环${loopRunning ? "在跑" : "不在盘上"} · ${pending.length} 条待回答（全局待答清单）`}
+        subtitle={`M 这一段的循环${loopWord} · ${pending.length} 条待回答（全局待答清单）`}
       >
         {pending.length === 0 ? (
           <span class="empty">暂无待回答的问题（合法初态）。</span>
@@ -539,6 +601,68 @@ export function Home() {
         <div class="readings">{MODE_WORDS[mode]}</div>
         {feed === null ? null : <ErrorBlock face={feed} />}
       </Card>
+
+      {/* 答完之后的那一格（AUDIT F13：用户会觉得"答了没反应"）。
+          两种当刻事实分开说，不许折成一句"已提交"：
+          · 那一段的循环还在盘上 ⇒ 回答会被它读到，不需要人再做什么；
+          · 它已经停了 ⇒ 回答**只在下一趟运行**被读到，页面必须说出口并给「继续」。
+          为什么不做自动续跑：续跑（`POST /api/run`）会真花预算，而"提交回答"不是一个
+          授权花钱的动作 —— 这一页的规矩是花钱的按钮走二次确认（见上面那个
+          `ConfirmButton`）。所以这里明示 + 按钮，让人自己决定按不按。 */}
+      {answered === null ? null : (
+        <Card
+          title="回答已记录"
+          subtitle={`会话 ${answered.sid} · 问题号 ${answered.qid}`}
+          tone={answeredRunning ? "plain" : "problem"}
+        >
+          <div class="readings">
+            <span class="mono">POST /answer</span> 已经把这条回答写进会话事件
+            （<span class="mono">user_answer</span>）—— 这一笔不会再丢，刷新页面它仍在盘上。
+          </div>
+          {answeredRunning ? (
+            <div class="readings">
+              这一段的循环还在盘上跑：它下一次走到读回答那一步就会读到，不需要人再点。
+            </div>
+          ) : (
+            <>
+              <div class="readings">
+                但这一段没有在跑的循环 ⇒ 回答只会在下一趟运行被读到，它现在不会
+                自己动。要现在让它接着干，按下面这个（会用原来那句话续跑，会花预算）：
+              </div>
+              <div class="readings">
+                <ConfirmButton
+                  action="继续（接着干）"
+                  impact={
+                    answeredTask === ""
+                      ? "读不到这一段原来的任务，续跑会让 --resume 以指纹不符拒掉"
+                      : `会用原来那句话续跑这一段（${answeredTask}）—— 会真花预算`
+                  }
+                  onConfirm={wakeAfterAnswer}
+                  disabled={busy || readOnly || answeredTask === ""}
+                  note={
+                    readOnly
+                      ? writesWhy
+                      : busy
+                        ? "正在提交……"
+                        : answeredTask === ""
+                          ? "这一段读不到原来的任务（snapshot.runs 里没有 M 的那一趟）⇒ 不猜，按钮点不动"
+                          : "会花预算：写面没开时按钮会先被禁用，不必按出 403"
+                  }
+                />
+                <button
+                  class="btn"
+                  type="button"
+                  onClick={() => {
+                    setAnswered(null);
+                  }}
+                >
+                  先不动，我自己起
+                </button>
+              </div>
+            </>
+          )}
+        </Card>
+      )}
 
       {snapshot.problems.length > 0 ? (
         <Card
@@ -636,7 +760,9 @@ export function Home() {
           <span class="mono">{snapshot.ledger.commit_markers === null ? "unknown" : snapshot.ledger.commit_markers}</span>{" "}
           行）· tasks 行数{" "}
           <span class="mono">{snapshot.ledger.tables === null ? "unknown" : snapshot.ledger.tables}</span>{" "}
-          · 落点 <span class="mono">{snapshot.ledger.path}</span>
+          · 读不出的行{" "}
+          <span class="mono">{snapshot.ledger.corrupt_rows === null ? "unknown" : snapshot.ledger.corrupt_rows}</span>{" "}
+          行（坏行不计进「写入」那一格）· 落点 <span class="mono">{snapshot.ledger.path}</span>
         </div>
         {snapshot.ledger.events_note === "" ? null : (
           <div class="readings">{snapshot.ledger.events_note}</div>

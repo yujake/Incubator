@@ -1436,27 +1436,119 @@ def rule_R009_decoration_in_comments(root: Path) -> list[Finding]:
 
 # ---------------------------------------------------------------- R012 行尾纪律
 
-
-#: 编排层（`scripts/` 与 `tools/`）—— R012 的扫描范围。
+#: R012 的 **A 面（写盘 API）**：哪些根按哪个档位判"文本写盘有没有控住行尾"。
 #:
-#: 为什么口径落在这里而不是全仓：这条纪律说的是产物（发布门上落下的证据文件），
-#: 而产物只有编排层会写。`src/` 里的 `write_text` 写的是工作区内的载荷，
-#: `tests/` 里的写的是 `tmp_path`（怎么换行都不影响任何门）。
-ORCHESTRATOR_FILES_REL = (SCRIPTS_REL, Path("tools"))
+#: 为什么 `src/` 也进面并且升 `error`（2026-11-22，EOLFIX/EOLGUARD 的现场）：这条纪律原先
+#: 只扫 `scripts/` + `tools/`（"产物只有编排层会写"）。现场推翻了那个前提：
+#: `src/agentflow/**` 的 62 个写盘点里，`Path.write_text` 缺省 `newline=None` ⇒ Windows
+#: 把每个 `\n` 翻成 `\r\n`，写出来的是**工作区载荷与交付物**（报告、章节、签、账本），
+#: 而 `.gitattributes` 的 `text eol=lf` 会在 `git diff` 时把它折平 ⇒ 漂移在 diff 里看不见，
+#: 下一次改那个文件时才红。`error` 的依据：它不是"很可能违规"，而是"已经有一个真实的
+#: 事故形态（143 条已跟踪文件被写成 CRLF）"。
+#:
+#: `tests/` 的 AST 面**只在发布档（`--strict`）跑**：1,356 个文件要 5 秒，日常档付不起；
+#: 而且它写的是 `tmp_path` 夹具，行尾不影响任何门。所以那里只给**一条聚合 warning**
+#: （不逐个报），tests 真正的行尾判据是下面 B 面的盘面读数（warning）——
+#: 新测试文件自身若是 CRLF，会被逐条点名。
+R012_WRITE_SURFACES: tuple[tuple[Path, str], ...] = (
+    (SCRIPTS_REL, "error"),
+    (Path("tools"), "error"),
+    (SRC_REL, "error"),
+)
+
+#: `tests/` 的 AST 聚合档位（只有 `--strict` 时才出这一条）。
+R012_TESTS_AST_LEVEL = "warning"
+
+#: R012 的 **B 面（盘面 EOL）**：这些根里"盘上 CRLF"的文件（已跟踪且 index=LF，或未跟踪的新文件）。
+#:
+#: 为什么 B 面必须存在：`tests/test_mechanical_rewrite_guards.py` 比的是**改过的**文件，
+#: 而 `i/lf w/crlf`（盘上 CRLF、折平后与 HEAD 同字节）对它是隐形的 —— 本轮实测 138 条
+#: （src 125 / ui 7 / demo 5 / scripts 1）。B 面把这一类直接读出来，并把 `tests/` 也纳入
+#: （`tests/` 被 `.gitignore` 忽略 ⇒ 新文件不会进 index，只有盘面读得到）。
+R012_EOL_SURFACES: tuple[tuple[Path, str], ...] = (
+    (SCRIPTS_REL, "error"),
+    (Path("tools"), "error"),
+    (SRC_REL, "error"),
+    (TESTS_REL, "warning"),
+)
+
+#: B 面认的文本后缀（与 `.gitattributes` 的 `text eol=lf` 那段同口径）。
+R012_EOL_SUFFIXES = frozenset({
+    ".py", ".pyi", ".md", ".txt", ".toml", ".cfg", ".ini", ".yml", ".yaml",
+    ".ps1", ".sh", ".ts", ".tsx", ".js", ".jsx", ".css", ".html",
+})
+
+#: 按字节 sha256 冻结的快照：入库就是 CRLF 也是对的，B 面一律不碰（也不许人碰）。
+R012_EOL_FROZEN = ("tests/fixtures", "tests/golden")
+
+#: 报错文案指向的落盘 helper（纪律的唯一"正确写法"，一处定义、两处引用）。
+R012_HELPER_HINT = ("仓库脚本一行式：`tools/write_lf.py::write_lf(path, text)`；"
+                    "产品代码（`src/agentflow/**` 不把 `tools/` 带出去）：显式 `newline=\"\\n\"` "
+                    "或 `write_bytes`")
 
 #: 逐条登记的豁免（相对仓库根）。只有登记了才不报，且每条必须能被反查：
-#: 文件不在盘上、或已经不再出现 `write_text` ⇒ 本规则报一条 `info` 提醒删登记
+#: 文件不在盘上、或已经不再出现文本写盘 ⇒ 本规则报一条 `info` 提醒删登记
 #: （登记过期与漏登记同样危险：前者让人以为"有人看过了"，后者让人以为"没问题"）。
 R012_NEWLINE_EXEMPTIONS: dict[str, str] = {
-    "tools/make_demo_dataset.py": (
-        "演示数据生成器：它写的是 `demo/run/data/*`（工作区载荷，不是发布门的产物），"
-        "内容有测试钉死；`G-42` 的适用面是门落下的证据文件，不是这一类"
-    ),
+    # 2026-11-22 起为空：原先唯一的登记是 `tools/make_demo_dataset.py`（写 `demo/run/data/*`
+    # 的演示载荷）。根治理由 EOLGUARD 做了：它的两处 `write_text` 都补了 `newline="\n"`，
+    # 于是"登记"不再对应任何违规 —— 留着它就是一张永远不生效的豁免表（比没有更坏：
+    # 它让人以为这里还有一条被人看着的例外）。机制本身保留：将来真有需要登记的，照旧逐条写。
 }
 
 #: `write_bytes` 自己给字节 ⇒ 天然不经过平台的换行转换；`write_text` 要走它就必须
 #: 显式给 `newline=` —— 见 `_r012_violations`。
 _BYTES_WRITERS = frozenset({"write_bytes"})
+
+#: 文本写盘的两种形态：`Path.write_text`，以及 `open`/`fdopen`/`Path.open` 的文本写模式。
+_OPEN_NAMES = frozenset({"open", "fdopen"})
+_TEXT_MODES = frozenset({"w", "a", "x", "w+", "a+", "x+", "r+",
+                         "wt", "at", "xt", "w+t", "a+t"})
+_MODE_LITERALS = frozenset(_TEXT_MODES | {"r", "rt", "rb", "wb", "ab", "xb",
+                                          "r+b", "w+b", "a+b", "rb+", "wb+", "ab+"})
+
+
+def _r012_call_kind(node: ast.Call) -> str:
+    """被调名的最后一段（`p.write_text` ⇒ `write_text`；`open` ⇒ `open`）。"""
+    if isinstance(node.func, ast.Attribute):
+        return node.func.attr
+    if isinstance(node.func, ast.Name):
+        return node.func.id
+    return "?"
+
+
+def _r012_literal(node: ast.expr) -> object:
+    return node.value if isinstance(node, ast.Constant) else object()
+
+
+def _r012_text_write_mode(node: ast.Call, kind: str) -> str | None:
+    """这次调用是不是"文本写盘"；是就返回模式串。
+
+    - `write_text` 恒是文本写（且只有写）；
+    - `open`/`fdopen`：内建形态的模式是第 2 个位置参数，方法形态（`path.open("a")`）是第 1 个；
+      模式里带 `b` 的不算（`write_bytes` 那条路根本不经过文本层）。
+    """
+    if kind == "write_text":
+        return "w"
+    if kind not in _OPEN_NAMES:
+        return None
+    is_method = isinstance(node.func, ast.Attribute)
+    mode: object = None
+    if is_method:
+        if node.args:
+            mode = _r012_literal(node.args[0])
+        if mode not in _MODE_LITERALS:
+            # 不是文件句柄（`fitz.open(...)` / `webbrowser.open(...)`）：第 1 个参数不是模式字面量
+            return None
+    else:
+        if len(node.args) >= 2:
+            mode = _r012_literal(node.args[1])
+        for kw in node.keywords:
+            if kw.arg == "mode":
+                mode = _r012_literal(kw.value)
+        if mode is None:
+            mode = "r"  # `open(p)` 缺省只读
+    return mode if isinstance(mode, str) and mode in _TEXT_MODES else None
 
 
 def _r012_takes_newline(node: ast.Call) -> bool:
@@ -1464,29 +1556,130 @@ def _r012_takes_newline(node: ast.Call) -> bool:
     return any(kw.arg == "newline" for kw in node.keywords)
 
 
-def _r012_violations(tree: ast.Module) -> list[ast.Call]:
-    """`write_text(...)` 而没有 `newline=` 的调用点。
+def _r012_violations(tree: ast.Module) -> list[tuple[ast.Call, str]]:
+    """文本写盘而没有 `newline=` 的调用点（连同被调名）。
 
     `open(..., newline=...)` 与 `write_bytes(...)` 不在判据里：前者显式控住了行尾，
     后者根本不经过文本层。
     """
-    bad: list[ast.Call] = []
+    bad: list[tuple[ast.Call, str]] = []
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+        if not isinstance(node, ast.Call):
             continue
-        name = node.func.attr
-        if name in _BYTES_WRITERS:
+        kind = _r012_call_kind(node)
+        if kind in _BYTES_WRITERS:
             continue
-        if name != "write_text":
+        if _r012_text_write_mode(node, kind) is None:
             continue
         if _r012_takes_newline(node):
             continue
-        bad.append(node)
+        bad.append((node, kind))
     return bad
 
 
-def rule_R012_write_text_newline(root: Path) -> list[Finding]:
-    """编排层里"不做行尾控制就写文本"的调用点。
+def _load_eol_gate():
+    """加载 `tools/eol_gate.py`（与发布门的 `eol` 步**同一份** `git ls-files --eol` 读数）。"""
+    p = Path(__file__).resolve().parents[1] / "tools" / "eol_gate.py"
+    if not p.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location("_eol_gate_for_lint", p)
+    if spec is None or spec.loader is None:
+        return None
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _r012_iter_text(root: Path, rel: Path) -> Iterator[Path]:
+    base = root / rel
+    if not base.exists():
+        return
+    for p in sorted(base.rglob("*")):
+        if not p.is_file() or "__pycache__" in p.parts:
+            continue
+        if p.suffix.lower() in R012_EOL_SUFFIXES:
+            yield p
+
+
+def _r012_is_frozen(rel: str) -> bool:
+    return any(rel == d or rel.startswith(d + "/") for d in R012_EOL_FROZEN)
+
+
+def _r012_eol_findings(root: Path) -> list[Finding]:
+    """B 面：盘面 CRLF 的读数（已跟踪 i/lf 的潜伏漂移 + 未跟踪的新文件）。"""
+    out: list[Finding] = []
+    mapping: dict[str, tuple[str, str]] | None = None
+    why = ""
+    gate = _load_eol_gate()
+    if gate is None:
+        why = "读不到 `tools/eol_gate.py`（B 面的 git 读数与发布门 `eol` 步共用它）"
+    else:
+        try:
+            mapping, why = gate.git_eol(root)
+        except Exception as exc:  # noqa: BLE001 - 读数失败必须显式记 unknown，不许静默
+            mapping, why = None, f"{type(exc).__name__}: {exc}"
+    if mapping is None:
+        out.append(Finding(
+            "R012", "warning", "<eol>", 0,
+            f"已跟踪面（`git ls-files --eol`）本次**没查成**（unknown，不是干净）：{why}。"
+            "下面只做了盘面扫描 —— 「入库即 CRLF」与「潜伏漂移」在缺 git 时无法区分",
+        ))
+    for rel_dir, level in R012_EOL_SURFACES:
+        if not (root / rel_dir).exists():
+            out.append(Finding(
+                "R012", "info", rel_dir.as_posix(), 0,
+                f"读不到 {rel_dir.as_posix()}/ ⇒ 这一面的行尾判据本次没查成（不是『干净』）",
+            ))
+            continue
+        for path in _r012_iter_text(root, rel_dir):
+            rel = path.relative_to(root).as_posix()
+            if _r012_is_frozen(rel):
+                continue
+            index_work = mapping.get(rel) if mapping is not None else None
+            try:
+                raw = path.read_bytes()
+            except OSError as exc:
+                out.append(Finding(
+                    "R012", "warning", rel, 0,
+                    f"读不出（{type(exc).__name__}: {exc}）⇒ 这个文件的行尾本次没查成（不是干净）",
+                ))
+                continue
+            if index_work is not None and index_work[0] == "crlf":
+                # 入库就是 CRLF：那是仓库对这份文件的选择，不是"盘上漂移"。
+                continue
+            pairs = raw.count(b"\r\n")
+            lone = raw.count(b"\r") - pairs
+            if not pairs and not lone:
+                continue
+            if index_work is not None:
+                index, work = index_work
+                out.append(Finding(
+                    "R012", level, rel, 0,
+                    f"盘上是 CRLF（{pairs} 对" + (f" + {lone} 个裸 CR" if lone else "")
+                    + f"），而 git index 是 `{index}`（HEAD=LF）⇒ 这是「折平后与 HEAD 同字节」的"
+                    "潜伏漂移：换行判据看不见它，下一次改这个文件时才会红。"
+                    f"用 LF 重写一遍即可清零；{R012_HELPER_HINT}",
+                ))
+            elif mapping is not None:
+                out.append(Finding(
+                    "R012", level, rel, 0,
+                    f"未跟踪的新文件带 CRLF（{pairs} 对" + (f" + {lone} 个裸 CR" if lone else "")
+                    + "）：`git` 不会替它归一，`git add` 之后入库就是 CRLF。"
+                    f"{R012_HELPER_HINT}",
+                ))
+            else:
+                out.append(Finding(
+                    "R012", level, rel, 0,
+                    f"盘上带 CRLF（{pairs} 对" + (f" + {lone} 个裸 CR" if lone else "")
+                    + "）；本次没有 git 读数，无法判断它入库是什么样（unknown 的一面）。"
+                    f"{R012_HELPER_HINT}",
+                ))
+    return out
+
+
+def rule_R012_write_text_newline(root: Path, *, strict: bool = False) -> list[Finding]:
+    """行尾纪律：**成因**（写盘 API 没控行尾）与**结果**（盘上 CRLF）两面都判。
 
     这条规则为什么存在（而不是一条注释）：`tools/release_all.py` 的注释引用了一条禁令 ——
     `禁止 Path.write_text()` —— 而 `RULES` 里当时没有任何一条叫它。也就是说：那条"被引用
@@ -1494,16 +1687,30 @@ def rule_R012_write_text_newline(root: Path) -> list[Finding]:
     而漂的方向永远是"没人再记得它"。
 
     真正的事故形态：`Path.write_text()` 在 Windows 上把每个 `\\n` 刷成 `\\r\\n`，于是"跑一次门"就把
-    被 git 跟踪的产物改脏 —— 改行尾会改 `sha256`，而禁改区批准台账钉住的对象正是 `sha256`。判据：
-    对 `scripts/` 与 `tools/` 下的每个 `.py`：AST 里出现 `X.write_text(...)` 而没有 `newline=` ⇒
-    `warning`。两种写法算合规：显式传 `newline=`，或改用 `write_bytes`（自己给字节）。为什么是
-    `warning` 而不是 `error`：放 `error` 会让发布门在任何一次漏改时立刻红 —— 与本文件 R009 对禁改
-    区的处置同一条理由："CI 里一条永远红的灯会被忽略"。`warning` 在 `--strict` 档可见
-    （`scripts/release_check.py::item_linter` 走严格档），且会被逐条打印出来。豁免不是"静默"：逐条
-    登记的豁免见 `R012_NEWLINE_EXEMPTIONS`；登记一旦指向不存在的文件或该文件不再出现
-    `write_text`，本规则报一条 `info` 提醒把它删掉 —— 登记过期与漏登记同样危险。"""
+    被 git 跟踪的产物改脏 —— 改行尾会改 `sha256`，而禁改区批准台账钉住的对象正是 `sha256`。
+
+    ## A 面：写盘 API（`R012_WRITE_SURFACES`）
+
+    对 `scripts/`、`tools/`、`src/agentflow/` 下的每个 `.py`：AST 里出现文本写盘
+    （`X.write_text(...)` / `open(..., "w")` 一类）而没有 `newline=` ⇒ 按该根的档位报
+    （三者都是 `error`）。两种写法算合规：显式传 `newline=`，或改用 `write_bytes`（自己给字节）。
+    `tests/` 只在 `--strict` 档给**一条聚合 warning**（理由见 `R012_WRITE_SURFACES` 的注释）。
+
+    ## B 面：盘面 EOL（`R012_EOL_SURFACES`）
+
+    盘上有 CRLF 的文本文件：
+
+    - 已跟踪且 `index=lf` ⇒ **潜伏漂移**（折平后与 HEAD 同字节，换行判据看不见），`error`（`src`/`scripts`/`tools`）；
+    - 未跟踪的新文件带 CRLF ⇒ 入库就会是 CRLF，同样按该根档位报；
+    - `index=crlf`（入库即 CRLF）⇒ 不报（那是仓库的选择）；
+    - `tests/` ⇒ `warning`（`tests/` 被 `.gitignore` 忽略，只有盘面读得到它）。
+    - `tests/fixtures/**`、`tests/golden/**` 是按字节 sha256 冻结的：不报、也不许折。
+
+    豁免不是"静默"：逐条登记的豁免见 `R012_NEWLINE_EXEMPTIONS`；登记一旦指向不存在的文件
+    或该文件不再出现文本写盘，本规则报一条 `info` 提醒把它删掉 —— 登记过期与漏登记同样危险。
+    """
     out: list[Finding] = []
-    for rel_dir in ORCHESTRATOR_FILES_REL:
+    for rel_dir, level in R012_WRITE_SURFACES:
         if not (root / rel_dir).exists():
             # 目录不存在 = 这一半没查成。报出来，不静默跳过。
             out.append(Finding(
@@ -1527,15 +1734,44 @@ def rule_R012_write_text_newline(root: Path) -> list[Finding]:
                 ))
                 continue
             lines = text.splitlines()
-            for node in _r012_violations(tree):
+            for node, kind in _r012_violations(tree):
                 snippet = lines[node.lineno - 1].strip()[:150] if 0 < node.lineno <= len(lines) else ""
                 out.append(Finding(
-                    "R012", "warning", rel, node.lineno,
-                    "`write_text(...)` 没有 `newline=` ⇒ Windows 上会把 `\\n` 刷成 `\\r\\n`，"
+                    "R012", level, rel, node.lineno,
+                    f"`{kind}(...)` 没有 `newline=` ⇒ Windows 上会把 `\\n` 刷成 `\\r\\n`，"
                     "产物的 `sha256` 会跟着变（`G-42`，`draft/22` §12.15.2）；"
-                    "改用 `open(..., newline=\"\")` 或 `write_bytes`",
+                    f"{R012_HELPER_HINT}",
                     snippet=snippet,
                 ))
+    # tests/ 的 AST 面：发布档才扫（5 秒），只给一条聚合 warning。
+    if strict and (root / TESTS_REL).exists():
+        n_files = 0
+        n_calls = 0
+        for path in _iter_py(root, TESTS_REL):
+            try:
+                tree = ast.parse(path.read_text(encoding="utf-8"))
+            except (OSError, SyntaxError, UnicodeDecodeError):
+                continue
+            bad = _r012_violations(tree)
+            if bad:
+                n_files += 1
+                n_calls += len(bad)
+        if n_calls:
+            out.append(Finding(
+                "R012", R012_TESTS_AST_LEVEL, TESTS_REL.as_posix(), 0,
+                f"`tests/` 下 {n_files} 个文件、{n_calls} 处文本写盘没有 `newline=`（聚合一条，不逐个报）："
+                "它们写的是 `tmp_path` 夹具，行尾不影响任何门，所以只给 warning；"
+                "但 `tests/` 里**新文件自身**若是 CRLF，上面的 B 面会逐条点名（warning）。"
+                f"要写仓库里的文本产物：{R012_HELPER_HINT}",
+            ))
+    elif not (root / TESTS_REL).exists():
+        out.append(Finding(
+            "R012", "info", TESTS_REL.as_posix(), 0,
+            "读不到 tests/（干净 clone 不随仓库交付）⇒ tests 的 AST 面本次没查成；"
+            "B 面也读不到它 —— 本机开发门才有这一面",
+        ))
+    # B 面：盘上 CRLF。
+    out.extend(_r012_eol_findings(root))
     # 登记不许过期（过期登记会让人以为"这一条有人看着"）
     for rel, why in sorted(R012_NEWLINE_EXEMPTIONS.items()):
         p = root / rel
@@ -1551,7 +1787,6 @@ def rule_R012_write_text_newline(root: Path) -> list[Finding]:
             ))
     return out
 
-
 RULES: tuple[tuple[str, object], ...] = (
     ("R001 except-pass", rule_R001_bare_except_pass),
     ("R002 None→空容器", rule_R002_none_folds_to_empty),
@@ -1564,7 +1799,7 @@ RULES: tuple[tuple[str, object], ...] = (
     ("R008 脚本无退出码", rule_R008_scripts_without_exit_code),
     ("R009 注释里的装饰", rule_R009_decoration_in_comments),
     ("R010 装置轴与代码不符", rule_R010_external_axis_mismatch),
-    ("R012 编排层写产物不控行尾", rule_R012_write_text_newline),
+    ("R012 行尾纪律（写盘 API + 盘面 EOL）", rule_R012_write_text_newline),
 )
 
 
@@ -1622,7 +1857,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     # "unrecognized arguments: --json" + 退出码 2 失败，而不是继续按"要一个路径"生效。
     ap = argparse.ArgumentParser(description="agentflow 机械可查规则（linter）",
                                  allow_abbrev=False)
-    ap.add_argument("--root", default=".", help="仓库根（默认当前目录）")
+    ap.add_argument("--root", default=".", help="产品根（默认当前目录；仓库根是它的上一级）")
     ap.add_argument("--json-out", default="", help="把结果写到该 JSON 路径")
     ap.add_argument("--strict", action="store_true", help="把 warning 也算失败")
     args = ap.parse_args(argv)

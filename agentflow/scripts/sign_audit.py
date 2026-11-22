@@ -23,7 +23,7 @@
 跑法：
 
     python scripts/sign_audit.py --root projects/paper-rewrite-98b
-    python scripts/sign_audit.py --root .                 # 扫 <root>/projects/* 或 <root>/agentflow/projects/*
+    python scripts/sign_audit.py --root .                 # 扫 <root>/projects/*（数据面缺省落点）
     python scripts/sign_audit.py --root projects/paper-rewrite-84 --json"""
 from __future__ import annotations
 
@@ -49,22 +49,22 @@ def _workspaces(root: Path) -> list[Path]:
     一个空的工作区（`data/statements.json` 是空表）与"这是仓库根"长得一样：
     `agentflow/` 自己就有一套空表。所以：
     ① 根自己就是一个有命题的工区 ⇒ 只看它；
-    ② 否则先看 `agentflow/projects/`、再看 `projects/`（本仓的数据面在
-       `agentflow/projects/`）；
+    ② 否则先看 `projects/`（数据面的缺省落点 = `projects.DEFAULT_PROJECTS_DIR`，
+       即工作区根下的 `projects/`；旧的 `agentflow/projects/` 已于 2026-11-21 退役）；
     ③ 都没有时才把根下「有命题」的子目录当工区（空表子目录不算 ——
        否则 `--root .` 会把 `agentflow/` 那套空表当成一个工区）。
     """
     if (root / "data" / "statements.json").is_file():
         if _statements(root):
             return [root]
-        for base in (root / "agentflow" / "projects", root / "projects"):
+        for base in (root / "projects",):
             if base.is_dir():
                 found = sorted(p for p in base.iterdir()
                                if (p / "data" / "statements.json").is_file())
                 if found:
                     return found
         return [root]
-    for base in (root / "agentflow" / "projects", root / "projects"):
+    for base in (root / "projects",):
         if not base.is_dir():
             continue
         found = sorted(p for p in base.iterdir()

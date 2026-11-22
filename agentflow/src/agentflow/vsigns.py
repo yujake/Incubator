@@ -1554,6 +1554,99 @@ def manuscript_body_matches(text: str, *, artifact_sha: Any) -> dict[str, Any]:
     return out
 
 
+# ---------------------------------------------------------------- 签块落盘后的重登记
+#
+# 现场（MALFORM 2026-11-21 普查，lp-ball-13/14/15 共 77 条）：`ARTIFACTS.jsonl` 里
+# 每一份证明稿的最后一条登记的 sha256 与盘上现版不相等。其中 38 条的解释是
+# 「签块晚于登记」—— 稿在被 `proofregistry` 登记之后，收方秘书才把 V 签块盖进去
+# （`write_manuscript_sign` / `refresh_manuscript_sign`），字节变了，而登记没有跟着
+# 重做。读侧只能事后猜（wellformed 的 info 档），写侧一句话都没留。
+#
+# 处置：签块真正写进手稿的那一刻（不是调用方之后想起来的时候），在同一处把这一份
+# 稿重新登记一条：`sha256` / `bytes` 由 `artifacts._fingerprint` 现算，`at` 就是这一笔
+# 的时刻。于是"最后一条登记"永远是签块落盘后的那一版，MALFORM 那一档 info 自然消失。
+#
+# 它不改任何判据：`artifacts.record` 的写点闸（`entry_problems`）照旧生效；重登记失败
+# 只落读数（`artifact_reregister_failed`），绝不把已经落地的签块带走。
+
+#: 上一条登记都读不到时，重登记那一条的 `kind`。
+MANUSCRIPT_ARTIFACT_KIND = "manuscript"
+#: 重登记的 `producer` 兜底：`artifacts.producer_is_known` 认 `agentflow.` 前缀。
+REREGISTER_PRODUCER = "agentflow.vsigns"
+
+
+def _last_artifact_of(root: Any, rel: str) -> dict[str, Any]:
+    """台账里这一路径的最后一条登记（没有 ⇒ 空表）。只读，不建不改。"""
+    from . import artifacts as A
+
+    records, _bad = A.read_ledger(root)
+    mine = [dict(r) for r in records if str(r.get("path") or "") == rel]
+    return mine[-1] if mine else {}
+
+
+def reregister_manuscript(root: Any, rel: str, *, why: str = "",
+                          at: str = "") -> dict[str, Any]:
+    """签块落盘后在同一处重登记这一份稿（写点即算 sha/bytes/at）。
+
+    返回 `{checked, registered, path, sha256, bytes, producer, why}`：
+    `registered=True` 表示台账里新追加了一条钉住现在这一版字节的登记；
+    `registered=False` 有两档，`why` 说清是哪一档 —— 台账最后一条已经是这一版
+    （不重复登记）／登记没写成（签块照旧在手稿里，这一格只落读数）。
+    """
+    out: dict[str, Any] = {"checked": True, "registered": False, "path": str(rel),
+                           "sha256": "", "bytes": 0, "producer": "", "why": ""}
+    from . import artifacts as A
+
+    path = Path(str(root or "")) / str(rel)
+    try:
+        # 写点即算：与 `artifacts.record` 同一把尺（哈希的读法只有 `_fingerprint` 一处）。
+        digest, size = A._fingerprint(path)
+    except OSError as exc:
+        out["why"] = f"读不出来（{type(exc).__name__}: {exc}）⇒ 重登记没做（签块不受影响）"
+        return out
+    out["sha256"], out["bytes"] = digest, size
+    last = _last_artifact_of(root, rel)
+    if last and str(last.get("sha256") or "") == digest:
+        out["registered"] = True
+        out["producer"] = str(last.get("producer") or "")
+        out["why"] = "台账最后一条已经是这一版（幂等：不重复登记）"
+        return out
+    entry = {
+        "producer": str(last.get("producer") or REREGISTER_PRODUCER),
+        "kind": str(last.get("kind") or MANUSCRIPT_ARTIFACT_KIND),
+        "task_id": str(last.get("task_id") or ""),
+        "instance": str(last.get("instance") or ""),
+        "identity_conflict": str(last.get("identity_conflict") or ""),
+        "family": str(last.get("family") or ""),
+        "note": ("签块落盘后重登记（" + str(why or "签块写进了这一份稿")
+                 + (f"；上一条登记 {str(last.get('at') or '?')}" if last else "；此前没有登记")
+                 + "）"),
+    }
+    try:
+        written = A.record(root, path=rel, at=(at or None), **entry)
+    except Exception as exc:  # noqa: BLE001 —— 重登记失败是读数，不许把签块带走
+        out["why"] = (f"重登记没写成（{type(exc).__name__}: {exc}）"
+                      "⇒ 手稿上的签块照旧，这一格只落读数")
+        try:
+            from . import sysguard as SG
+
+            SG.record_reading(root, SG.unchecked(
+                "vsigns.manuscript_reregister", code="artifact_reregister_failed",
+                where=f"ARTIFACTS.jsonl#{rel}",
+                detail=out["why"],
+                how_to_fix=("签块写完必须让 ARTIFACTS 的最后一条登记钉住这一版："
+                            "修 `artifacts.record` 那一侧，或用 `artifacts.record` 手工补一条"
+                            "（sha/bytes/at 必须由它现算）")))
+        except Exception:  # noqa: BLE001 —— 读数都写不出时只留上面那句 why
+            pass
+        return out
+    out.update(registered=True, producer=str(written.get("producer") or ""),
+               sha256=str(written.get("sha256") or digest),
+               bytes=int(written.get("bytes") or size))
+    out["why"] = f"签块落盘后重登记：sha256={out['sha256'][:12]}… bytes={out['bytes']}"
+    return out
+
+
 def write_manuscript_sign(root: Any, manuscript_path: Any, *,
                           proof_sha: Any, streak: Any, need: Any,
                           verdict: str = "成立", signer: str = "V", at: str = "",
@@ -1627,7 +1720,7 @@ def write_manuscript_sign(root: Any, manuscript_path: Any, *,
         return out
     tmp = path.with_name(path.name + ".sign.tmp")
     try:
-        tmp.write_text(new, encoding="utf-8")
+        tmp.write_text(new, encoding="utf-8", newline="\n")
         tmp.replace(path)
     except OSError as exc:
         out["state"] = "failed"
@@ -1643,6 +1736,10 @@ def write_manuscript_sign(root: Any, manuscript_path: Any, *,
     out.update(state="written", written=True,
                why=f"签块写进 `{rel}` 第 {out['line']} 行"
                    f"（连续 {int(streak or 0)}/{int(need or 0)}）")
+    # 同一处重登记：签块刚落进这一份稿，`ARTIFACTS.jsonl` 的最后一条必须钉住这一版
+    # （见 `reregister_manuscript` 的说明；失败只落读数，签块照旧在稿里）。
+    out["artifact"] = reregister_manuscript(
+        root, rel, why=f"V 签块写进 `{rel}` 第 {out['line']} 行")
     return out
 
 
@@ -1968,7 +2065,7 @@ def refresh_manuscript_sign(root: Any, *, artifact_sha: Any = "", statement_id: 
         return out
     tmp = path.with_name(path.name + ".refresh.tmp")
     try:
-        tmp.write_text(stamped, encoding="utf-8")
+        tmp.write_text(stamped, encoding="utf-8", newline="\n")
         tmp.replace(path)
     except OSError as exc:
         out.update(state=state, checked=False,
@@ -1982,6 +2079,9 @@ def refresh_manuscript_sign(root: Any, *, artifact_sha: Any = "", statement_id: 
         return out
     out["line"] = _sign_block_line(stamped)
     out["state"] = state
+    # 同一处重登记（与 `write_manuscript_sign` 同一口径）：刷块也改了字节。
+    out["artifact"] = reregister_manuscript(
+        root, rel, why=f"重判之后刷签块（{state}，第 {out['line']} 行）")
     if state == "demoted":
         out["why"] = (f"同 sha 的新行判「{want['verdict']}」（{want['ledger']}）"
                       f"⇒ `{rel}` 第 {out['line']} 行的签块降为未签（连续 0/{need}）")
@@ -4114,7 +4214,7 @@ def bind_pending_claim(root: Any, *, claim: Mapping[str, Any],
             lines[i] = json.dumps(row, ensure_ascii=False, default=str) + "\n"
         tmp = file_path.with_name(file_path.name + ".claim.tmp")
         try:
-            tmp.write_text("".join(lines), encoding="utf-8")
+            tmp.write_text("".join(lines), encoding="utf-8", newline="\n")
             tmp.replace(file_path)
         except OSError as exc:
             out.update(bound_files=list(written),

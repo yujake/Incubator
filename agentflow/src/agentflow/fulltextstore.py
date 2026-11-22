@@ -306,7 +306,7 @@ def selftest() -> int:
         outside = Path(tmp) / "elsewhere.json"
         outside.write_text(json.dumps({"store_version": STORE_VERSION, "text_pages": ["x"],
                                        "text_sha256": pages_text_sha256(["x"])}, default=str),
-                           encoding="utf-8")
+                           encoding="utf-8", newline="\n")
         _pages, why = load({"path": str(outside), "text_sha256": pages_text_sha256(["x"])})
         if "store_out_of_store" not in why:
             problems.append(f"负控 3 失败（越界引用未被抓）：{why!r}")

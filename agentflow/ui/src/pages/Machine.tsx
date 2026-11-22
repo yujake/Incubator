@@ -28,7 +28,10 @@ import { ConfirmButton } from "../components/ConfirmButton";
 import { Table, cell } from "../components/Table";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace } from "../live";
-import type { SettingsReading } from "../types";
+import type { ActionRow, SettingsReading } from "../types";
+
+/** 网页操作历史一页多少行（AUDIT F11；与 `readers.ACTIONS_PAGE_DEFAULT` 同一个数）。 */
+const ACTIONS_PAGE = 20;
 
 /** 设置窗口里的每一格（`段.键` 形状逐字对应后端 `handle_settings` 读的表单键）。 */
 const FIELDS: ReadonlyArray<{ key: string; hint: string }> = [
@@ -186,6 +189,10 @@ export function Machine() {
   const [values, setValues] = useState<Record<string, string>>({});
   const [writeResult, setWriteResult] = useState("");
   const [switchResult, setSwitchResult] = useState("");
+  // 网页操作台账（AUDIT F11）：分页窗口是这一页的状态；`useFace` 只按"流里来过事件"
+  // 重取，所以翻页之后要显式 `reload()`（与 Home 切会话同一条纪律）。
+  const [actionsOffset, setActionsOffset] = useState(0);
+  const actions = useFace(() => api.getActions({ limit: ACTIONS_PAGE, offset: actionsOffset }));
 
   if (face.data === null) {
     return (
@@ -203,6 +210,17 @@ export function Machine() {
   const settings = m.settings;
   const provers = m.provers;
   const mathlib = m.mathlib;
+  const serving = m.serving;
+  /** 翻操作历史的一页（`offset` 由后端钳，`has_more` 说清还有没有下一页）。 */
+  const html5ActionsGoto = (next: number): void => {
+    setActionsOffset(Math.max(0, next));
+    actions.reload();
+  };
+  /** 台账一行的参数摘要：只印键名与 sha 的一小截 —— 台账是摘要，不是正文备份。 */
+  const paramKeys = (row: ActionRow): string => {
+    const keys = Object.keys(row.params ?? {}).sort();
+    return keys.length === 0 ? "（没有参数）" : keys.join(" / ");
+  };
   // 开关的读数（三态）：`null` = 这一格没读成，不许折成"关"。
   const leanOn: boolean | null = typeof m.lean_enabled === "boolean" ? m.lean_enabled : null;
   // 「填了几格」这一格要问三处：impact 那一句、按钮的 `disabled`、note 那一句。
@@ -239,6 +257,26 @@ export function Machine() {
           <span class="mono">{settings.path === "" ? "unknown（落点没读到）" : settings.path}</span>
           ，在盘上 <span class="mono">{String(settings.exists)}</span>）。
         </div>
+      </Card>
+
+      <Card
+        title="服务与工作区"
+        subtitle="这一个服务在服务哪个工作区 —— 以及「换不了」这件事"
+      >
+        {/* AUDIT F8 的裁定：先取证页面上有没有切换入口 ⇒ 没有（ui/src 里没有任何
+            切换工作区的按钮/下拉/链接，见 temp/webfix3 的报告）。裁定是"没有入口就
+            不新增功能"，所以这里不摆控件，只把四件事实说清 —— 根是哪、谁钉的、
+            换不了、真要换怎么换。`serving.switch_in_page=false` 是这条裁定的机器读数。 */}
+        <div class="readings">
+          工作区根 <span class="mono">{serving.root === "" ? "unknown（没读到）" : serving.root}</span>
+        </div>
+        <div class="readings">
+          钉死{" "}
+          <span class="mono">{String(serving.pinned)}</span> · 钉在{" "}
+          <span class="mono">{serving.pinned_by}</span> · 页面里有切换入口{" "}
+          <span class="mono">{String(serving.switch_in_page)}</span>
+        </div>
+        <div class="readings">{serving.switch_how}</div>
       </Card>
 
       <Card
@@ -513,6 +551,120 @@ export function Machine() {
           }
         />
         {writeResult === "" ? null : <div class="readings">{writeResult}</div>}
+      </Card>
+
+      <Card
+        title="网页操作历史"
+        subtitle={
+          actions.data === null
+            ? "（还没读到）"
+            : `${actions.data.path === "" ? "落点没读到" : actions.data.path} · 共 ${actions.data.total} 行 · 最新的在最上面`
+        }
+        tone={actions.data !== null && isUnreadable(actions.data.tri) ? "problem" : "plain"}
+        right={
+          actions.data === null ? (
+            <TriState
+              tri="unreadable"
+              reason={actions.problem || "操作历史还没读到"}
+              label="操作历史"
+            />
+          ) : (
+            <TriState tri={actions.data.tri} label="操作历史" reason={actions.data.reason} />
+          )
+        }
+      >
+        {/* AUDIT F11：台账（`<工作区>/web-actions.jsonl`）从 W3 起就有人在写 ——
+            每一笔网页写操作一行，被拒的尝试也留一行 —— 但全仓没有读侧，于是
+            `writes.py` 与 `audit.py` 两处 docstring 都写着的「网页上那一栏操作历史」
+            一直没有落地。这一栏读的是 `GET /api/actions`（只读；最新在前；分页）。 */}
+        <div class="readings">
+          读 <span class="mono">GET /api/actions</span> → 工作区根下那本
+          <span class="mono">web-actions.jsonl</span>：每一条都记了
+          <span class="mono">at</span> / <span class="mono">source</span> /
+          <span class="mono">endpoint</span> / <span class="mono">result</span> /
+          <span class="mono">http</span>，参数只留脱敏摘要（密钥一族的键值一律
+          <span class="mono">***</span>）。
+        </div>
+        {actions.data === null ? (
+          <span class="readings">{actions.problem === "" ? "正在读盘……" : actions.problem}</span>
+        ) : (
+          <>
+            {isUnreadable(actions.data.tri) ? (
+              <span class="empty">
+                台账读不出来（不是「没有操作」）：{actions.data.reason}
+              </span>
+            ) : (
+              <Table
+                rows={actions.data.rows}
+                empty="还没有一条网页操作（读到了 0 行：这个工作区一次都没从网页上动过手，合法初态）。"
+                columns={[
+                  { key: "at", title: "时间", render: (r) => <span class="mono">{cell(r.at)}</span> },
+                  { key: "source", title: "谁（来源）", render: (r) => <span class="mono">{cell(r.source)}</span> },
+                  { key: "endpoint", title: "动作（端点）", render: (r) => <span class="mono">{cell(r.endpoint)}</span> },
+                  {
+                    key: "http",
+                    title: "HTTP",
+                    render: (r) => (
+                      <span class="mono">
+                        {cell(r.http)}{" "}
+                        <Badge
+                          kind={r.ok ? "badge-pass" : "badge-fail"}
+                          text={r.ok ? "成了" : "没成"}
+                        />
+                      </span>
+                    ),
+                  },
+                  { key: "result", title: "结果", render: (r) => <span class="mono">{cell(r.result)}</span> },
+                  {
+                    key: "params",
+                    title: "参数摘要（键名）",
+                    render: (r) => <span class="mono">{paramKeys(r)}</span>,
+                  },
+                  { key: "tri", title: "三态", render: (r) => <span class="mono">{cell(r.tri)}</span> },
+                ]}
+              />
+            )}
+            {actions.data.problems.length === 0 ? null : (
+              <div class="readings">
+                台账里有读不出来的行（不是静默跳过）：
+                {actions.data.problems.map((p, i) => (
+                  <div class="mono tri-reason" key={i}>{p}</div>
+                ))}
+              </div>
+            )}
+            <div class="readings">
+              <button
+                class="btn"
+                type="button"
+                disabled={actionsOffset === 0}
+                onClick={() => {
+                  html5ActionsGoto(actionsOffset - ACTIONS_PAGE);
+                }}
+              >
+                上一页
+              </button>{" "}
+              <button
+                class="btn"
+                type="button"
+                disabled={!actions.data.has_more}
+                onClick={() => {
+                  html5ActionsGoto(actionsOffset + ACTIONS_PAGE);
+                }}
+              >
+                下一页
+              </button>{" "}
+              <span class="mono">
+                第 {actions.data.total === 0 ? 0 : actionsOffset + 1}–
+                {actionsOffset + actions.data.rows.length} 行 / 共 {actions.data.total} 行
+              </span>
+              {" · "}
+              <span class="tri-reason">
+                `has_more={String(actions.data.has_more)}`（后端说的"还有没有下一页"，
+                不是页面拿 offset 猜的）
+              </span>
+            </div>
+          </>
+        )}
       </Card>
 
       <Card

@@ -56,7 +56,7 @@ const OPEN: CmdRow[] = [
   },
   {
     cmd: "python -m agentflow.cli --root <工作区> web --allow-writes",
-    why: "打开写面（缺省只读）：起一趟 / 插话 / 叫停 / 改设置 / 改预算 / 预热提示词缓存都走这一档；答问除外 —— POST /answer 是既有写路径，不进那张授权矩阵，缺省也放行",
+    why: "打开写面（缺省只读）：起一趟 / 插话 / 叫停 / 改设置 / 改预算 / 预热提示词缓存 / 收口板项 / 撤销叫停 / 答问都走这一档（2026-11-21 起答问也走同一道闸门）",
   },
   {
     cmd: "python -m agentflow.cli --root <工作区> web --no-settings-write",
@@ -236,7 +236,7 @@ const MISREADS: MisreadRow[] = [
   },
   {
     wrong: "写面默认关着，说明网页还接不了线",
-    right: "八条 POST 全在路由表里（/answer、/api/stop、/api/submit、/api/settings、/api/budget、/api/run、/api/task、/api/cache/warm）；缺省只读是因为服务端要 --allow-writes 才放行（/api/ 下那七条写端点如此；/answer 是既有写路径、缺省也放行），不是没接线。",
+    right: "十一条 POST 全在路由表里（/answer、/api/stop、/api/submit、/api/settings、/api/budget、/api/run、/api/task、/api/ack、/api/void、/api/stop/clear、/api/cache/warm）；缺省只读是因为服务端要 --allow-writes 才放行（/api/ 下那十条写端点与 /answer 都如此；唯一例外是 `dry_run=1` 的试算档 —— 它不写盘、不花钱、不起进程，只要求同源，所以只读档也回 200），不是没接线。",
   },
 ];
 
@@ -247,6 +247,21 @@ export function Help() {
         <div class="readings">
           面向数学研究的多智能体协同框架：十一个角色（A–H、V、L、M）各有分工，主控 M 决定派谁做什么。
 每一步都由模型决定、由框架执行并落盘；旁边九页读的就是那些盘上事实（加上本页一共十页）。
+        </div>
+        <div class="readings">
+          板项（任务板）在哪看：这一版没有单独的 /board 路由 —— 板项在 <b>/live</b> 页的名册卡里
+          （每个节点的收件箱三格 + 每一条旁边的「收口」与「作废」两个按钮），以及 <b>/artifacts</b> 页的任务台账里。
+        </div>
+        <div class="readings">
+          停在 <span class="mono">item_state=block</span> 的板项（优雅停止 / 预算叫停留下的）：
+          「收口」按不动它 —— 板项状态机里 <span class="mono">block → done</span> 是倒退，后端只会回
+          409（这是对的，不许绕过迁移图）。它们该走「作废」：写一句"为什么这一条不用再做了"
+          （逐字进那一行的 <span class="mono">inputs</span> 留痕），按下去就把这一条记成
+          <span class="mono">done + expired</span>（原 <span class="mono">expects</span> 挪进
+          <span class="mono">expects_was</span>，不再欠动作）。两句必须分清：<b>唤醒</b>
+          （主控那只"逐条审批唤醒"的手）只把项翻回
+          <span class="mono">queued</span>，不消项、也不让它变得可 ack（唤醒会清掉
+          <span class="mono">seen_by</span>，收口会撞上"空口 ack"那道闸）；<b>作废</b>才是收口。
         </div>
         <div class="readings">
           角色一句话：A 检索并登记文献 · B 抽概念建关系 · C 算图与计数（只读）·
@@ -283,7 +298,7 @@ export function Help() {
           </tbody>
         </table>
         <div class="readings">
-          写面现状：八条 POST 已全部接线 ——
+          写面现状：十一条 POST 已全部接线 ——
           <span class="mono">POST /answer</span>（答问）·
           <span class="mono">/api/stop</span>（叫停）·
           <span class="mono">/api/submit</span>（提交检索请求）·
@@ -291,14 +306,22 @@ export function Help() {
           <span class="mono">/api/budget</span>（改预算）·
           <span class="mono">/api/run</span>（起一趟）·
           <span class="mono">/api/task</span>（插话）·
+          <span class="mono">/api/ack</span>（收口一条板项：能不能收口由后端的板项状态机判，网页这一层不判）·
+          <span class="mono">/api/void</span>（作废一条不再需要做的板项：停在 block 的项只能走这一条 —— 原 expects 挪进 expects_was，理由逐字进留痕）·
+          <span class="mono">/api/stop/clear</span>（撤销叫停：撤掉盘上那把停机开关，再起一趟才不会被它停掉）·
           <span class="mono">/api/cache/warm</span>（预热提示词缓存）。没有「登记了还没落地」的写端点。
         </div>
         <div class="readings">
           授权次序是四层：回环来源 ⇒ CSRF 令牌 ⇒ <span class="mono">--allow-writes</span> ⇒
           （只有改设置才要）设置写面 —— 这四层管的是 <span class="mono">/api/</span>
-          下那七条写端点；<span class="mono">POST /answer</span> 是既有写路径，不进那张矩阵（只落审计）。
+          下那十条写端点；<span class="mono">POST /answer</span> 从 2026-11-21（审计 F4）起也走这四层 ——
+          此前它只靠 <span class="mono">userio</span> 兜底，跨站页面不带令牌也能把一条待答答掉。
+          只读档（没开 <span class="mono">--allow-writes</span>）下这十条里除试算档之外都回 403：
+          <span class="mono">POST /api/cache/warm</span> 的 <span class="mono">dry_run=1</span> 试算
+          只保留「回环来源」那一层（它不写盘、不花钱、不起进程 ⇒ 200），真跑那一档四层全要。
           每一次到达写端点的尝试（含被拒）都追加一行
-          <span class="mono">web-actions.jsonl</span>；<span class="mono">/api/</span>
+          <span class="mono">web-actions.jsonl</span>，那一栏在「本机」页的「网页操作历史」里读
+          （<span class="mono">GET /api/actions</span>）；<span class="mono">/api/</span>
           下未注册的路径回 404，那一类不算一次写尝试。
         </div>
       </Card>
@@ -594,7 +617,7 @@ export function Help() {
 
       <Card title="常用命令（真跑的那几条）">
         <div class="readings">
-          <span class="mono">--root &lt;工作区&gt;</span> 是全局参数，须写在子命令之前（缺省为本仓库的 agentflow/）。
+          <span class="mono">--root &lt;工作区&gt;</span> 是全局参数，须写在子命令之前（缺省为本仓库的产品根 agentflow/）。
         </div>
         <table class="table">
           <thead>

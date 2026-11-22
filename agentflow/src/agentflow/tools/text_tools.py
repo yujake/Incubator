@@ -160,7 +160,7 @@ def _extract_impl(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = ""
         target_dir0.mkdir(parents=True, exist_ok=True)
         name0 = f"{_safe_stem(name_hint or lit_id, p.stem)}.txt"
         out0 = target_dir0 / name0
-        out0.write_text(plain, encoding="utf-8")
+        out0.write_text(plain, encoding="utf-8", newline="\n")
         _mark_literature_tier(ctx, lit_id, "ok", note="text.extract: 纯文本原样入库")
         return ok({
             "path": str(out0.relative_to(ctx.workspace)).replace("\\", "/"),
@@ -224,7 +224,7 @@ def _extract_impl(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = ""
     target_dir.mkdir(parents=True, exist_ok=True)
     name = f"{_safe_stem(name_hint or lit_id, p.stem)}.txt"
     out_path = target_dir / name
-    out_path.write_text(body, encoding="utf-8")
+    out_path.write_text(body, encoding="utf-8", newline="\n")
     digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
     _mark_literature_tier(ctx, lit_id, "ok", note="text.extract: 抽出的文本可读")
     return ok({

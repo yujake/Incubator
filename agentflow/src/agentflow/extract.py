@@ -925,7 +925,7 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
         "<html><head><style>p{color:red}</style></head><body>"
         "<p>An abelian group is a group in which the commutative law holds.</p>"
         "<script>var x = 1;</script></body></html>",
-        encoding="utf-8",
+        encoding="utf-8", newline="\n",
     )
     hdt = extract_text(html_path)
     print(f"    html: source_kind={hdt.source_kind} text={hdt.text!r}")

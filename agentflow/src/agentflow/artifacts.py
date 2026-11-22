@@ -72,6 +72,23 @@ FIELDS: tuple[str, ...] = (
 #: （还在但读不出来）的处置完全不同，`changed`（被改过）又是第三种。
 STATUSES: tuple[str, ...] = ("ok", "changed", "missing", "unreadable", "not_a_file")
 
+#: `changed` 那一条为什么变了（读侧的第三根轴；`status` 一个字不动）。
+#:
+#: 为什么必须把它分开：`changed` 是个布尔，而盘上至少有两种完全不同的情形 ——
+#: ① 台账后面还有一条同路径的登记、且它钉的就是盘上现版（这条旧登记被顶替了，
+#: 那是正常的追加登记，不是"被改过"）；② 登记之后落了签块（手稿在被登记之后才被
+#: 收方秘书盖章，签块会改文件字节 —— MALFORM 普查里 77 条"最后一条 sha 不符"中有
+#: 38 条属这一档）。两档都是"可解释"，处置是"不用管"；剩下的 `rewritten_after_
+#: registration` 才是"登记之后有人改了内容"，那一档要人看。
+#:
+#: 三态不折平：分不出原因时给 `rewritten_after_registration`（保守侧），
+#: `explained=False` —— 那是"没找到解释"，不是"确认被改"。
+CHANGE_REASONS: tuple[str, ...] = (
+    "superseded_by_later_registration",
+    "signed_after_registration",
+    "rewritten_after_registration",
+)
+
 
 class ArtifactError(RuntimeError):
     """登记或核对不成立（越界路径 / 文件不存在 / 不是普通文件）。"""
@@ -328,23 +345,80 @@ def read_ledger(root: Any) -> tuple[list[dict], list[str]]:
     return read_jsonl(ledger_path(root))
 
 
+def _parse_at(value: Any) -> datetime | None:
+    """登记行的 `at` 解析成可比较的时刻；解析不出 ⇒ `None`（不猜）。"""
+    try:
+        return datetime.fromisoformat(str(value or ""))
+    except (TypeError, ValueError):
+        return None
+
+
+def _sign_block_at(path: pathlib.Path) -> dict[str, Any] | None:
+    """这一份稿是签载体时，签块的 `{signed, at}`；不是 / 读不出 ⇒ `None`。
+
+    判据只借 :func:`agentflow.vsigns.manuscript_sign_reading`（签块的唯一读法），
+    这里不再写第二份格式解析：签块的正文格式一改，两处解析必然分家。
+    """
+    if path.suffix != ".md" or not path.is_file():
+        return None
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    try:
+        from . import vsigns as VS
+
+        reading = VS.manuscript_sign_reading(text, manuscript_path=path.name)
+    except Exception:  # noqa: BLE001 —— 读法本身炸了 ⇒ 这一档没解释，不是"确认被改"
+        return None
+    if not reading.get("found"):
+        return None
+    return {"signed": bool(reading.get("signed")), "at": _parse_at(reading.get("at"))}
+
+
+def changed_reason(root: Any, entry: Mapping[str, Any], *, digest: str = "",
+                   later: Sequence[Mapping[str, Any]] = ()) -> tuple[str, bool]:
+    """一条 `changed` 登记的读侧分类：返回 `(理由码, 是否可解释)`。
+
+    `digest` 是盘上现版的 sha（调用方已经算过，这里不重读）；`later` 是台账里排在它
+    后面的那些登记（同一路径的追加登记就是"这条被顶替"的证据）。三个理由码见
+    :data:`CHANGE_REASONS`；`explained=True` 的两档处置是"不用管"，第三档才是
+    "登记之后有人改了内容"。
+    """
+    rel = str(entry.get("path") or "")
+    for row in later:
+        if str(row.get("path") or "") != rel:
+            continue
+        if digest and str(row.get("sha256") or "") == digest:
+            return "superseded_by_later_registration", True
+    at = _parse_at(entry.get("at"))
+    if at is not None and rel:
+        block = _sign_block_at(pathlib.Path(str(root)).resolve() / rel)
+        if block and block.get("signed") and block.get("at") is not None \
+                and block["at"] > at:
+            return "signed_after_registration", True
+    return "rewritten_after_registration", False
+
+
 def verify_entries(root: Any, records: Sequence[Mapping[str, Any]] | None = None) -> list[dict]:
     """逐条核对：台账钉的 sha256 与盘上现在这一版是不是同一版。
 
-    返回每条的 `{path, status, sha256, sha256_now, producer, at, note}`；
+    返回每条的 `{path, status, sha256, sha256_now, producer, at, note, reason, explained}`；
     `status` 取 :data:`STATUSES` 之一（没有布尔：`missing` 与 `unreadable` 与
-    `changed` 是三种不同的处置）。
+    `changed` 是三种不同的处置）。`reason` / `explained` 只对 `changed` 那一档有内容
+    （见 :data:`CHANGE_REASONS`）：它是"为什么变了"的读侧分类，不改变 `status`。
     """
     if records is None:
         records, _bad = read_ledger(root)
+    rows = [dict(r) for r in records]
     root_p = pathlib.Path(str(root)).resolve()
     out: list[dict] = []
-    for r in records:
+    for i, r in enumerate(rows):
         rel = str(r.get("path") or "")
         full = root_p / rel
         row = {"path": rel, "sha256": str(r.get("sha256") or ""),
                "producer": str(r.get("producer") or ""), "at": str(r.get("at") or ""),
-               "sha256_now": "", "status": "missing"}
+               "sha256_now": "", "status": "missing", "reason": "", "explained": False}
         if full.is_dir():
             row["status"] = "not_a_file"
         elif not full.exists():
@@ -355,6 +429,10 @@ def verify_entries(root: Any, records: Sequence[Mapping[str, Any]] | None = None
                 row["status"] = "ok" if row["sha256_now"] == row["sha256"] else "changed"
             except OSError:
                 row["status"] = "unreadable"
+        if row["status"] == "changed":
+            reason, explained = changed_reason(root_p, r, digest=row["sha256_now"],
+                                               later=rows[i + 1:])
+            row["reason"], row["explained"] = reason, explained
         out.append(row)
     return out
 
@@ -415,12 +493,17 @@ def summarize(root: Any) -> dict:
         by_producer[str(r.get("producer") or "")] = by_producer.get(str(r.get("producer") or ""), 0) + 1
         by_kind[str(r.get("kind") or "")] = by_kind.get(str(r.get("kind") or ""), 0) + 1
     status: dict[str, int] = {}
+    reasons: dict[str, int] = {}
     for v in verify_entries(root, records):
         status[v["status"]] = status.get(v["status"], 0) + 1
+        if v["status"] == "changed":
+            key = str(v.get("reason") or "")
+            reasons[key] = reasons.get(key, 0) + 1
     unregistered = {name: n for name, n in by_producer.items() if not producer_is_known(name)}
     return {"entries": len(records), "bad_lines": len(bad), "by_producer": by_producer,
             "unregistered": unregistered,
-            "by_kind": by_kind, "status": status, "problems": list(bad)}
+            "by_kind": by_kind, "status": status, "changed_reasons": reasons,
+            "problems": list(bad)}
 
 
 def render_markdown(root: Any, entries: Sequence[Mapping[str, Any]] | None = None) -> str:
@@ -466,13 +549,13 @@ def selftest() -> int:
 
     (base / "out").mkdir()
     f = base / "out" / "r.md"
-    f.write_text("内容一", encoding="utf-8")
+    f.write_text("内容一", encoding="utf-8", newline="\n")
     e = record(base, path="out/r.md", producer="G", kind="report", task_id="t-0001")
     check("登记成功且哈希是盘上的", e["sha256"] == sha256_of(f), e["sha256"][:16])
     check("核对为 ok", [v["status"] for v in verify_entries(base)] == ["ok"])
     check("归属查询给出生产者", [o["producer"] for o in owners_of(base, "out/r.md")] == ["G"])
 
-    f.write_text("内容二", encoding="utf-8")
+    f.write_text("内容二", encoding="utf-8", newline="\n")
     check("篡改后报 changed（不是 ok）", [v["status"] for v in verify_entries(base)] == ["changed"])
     f.unlink()
     check("删除后报 missing（不是 changed）", [v["status"] for v in verify_entries(base)] == ["missing"])
@@ -484,7 +567,7 @@ def selftest() -> int:
         except ArtifactError as exc:
             check(f"拒收：{tag}", "文件不存在" in str(exc) or "越出工作区" in str(exc), str(exc)[:60])
 
-    with ledger_path(base).open("a", encoding="utf-8") as fh:
+    with ledger_path(base).open("a", encoding="utf-8", newline="\n") as fh:
         fh.write("{这不是 JSON\n")
     recs, bad = read_ledger(base)
     check("坏行逐条报出", len(recs) == 1 and len(bad) == 1, str(bad))

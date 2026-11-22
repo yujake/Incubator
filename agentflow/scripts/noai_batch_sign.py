@@ -205,7 +205,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     ap.add_argument("--note", default="", help="写进台账的一句话（例如第几批）")
     ap.add_argument(
-        "--root", default=str(HERE.parent), help="仓库根（默认本脚本上一级）",
+        "--root", default=str(HERE.parent), help="产品根（默认本脚本上一级；仓库根是它的上一级）",
     )
     ap.add_argument(
         "--yes", action="store_true",

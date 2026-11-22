@@ -5,6 +5,10 @@
 ## 为什么需要它（而不是"照文档手敲六条命令"）
 
 正式版点名的清单是：全量测试 + 全部自检 + 验收测试 + verify + 工具普查 + linter。
+其中**全量测试是本机开发门**：`agentflow/tests` 不随仓库交付（业主 2026-11-21 裁定：
+tests 只是测试工具，不入 git），干净 clone 里没有这个目录。缺 `tests/` 时
+`release-check` 的第 1 项与 `per-file` 步都记 `unknown` 并写明原因 —— 不是 pass，
+也不是崩。其余门与 `tests/` 无关，照常判定。
 `scripts/release_check.py` 覆盖了其中五项（全量测试 / 全部自检 / verify / 工具普查 / linter），
 但没有验收测试这一项。两份东西合起来才等于点名的清单，而"照文档手敲"是发布流程里
 最容易被跳过的一步 —— 手敲的清单没有退出码，于是"少跑了一条"与"跑了都过了"在任何
@@ -107,6 +111,14 @@ class Step:
     #: 为什么要有这个字段而不是只写在标题里：标题会被 `[:56]` 截断（见汇总那一行），
     #: 而"这一步的绿不覆盖什么"恰恰是最容易被截掉的那半句。
     notes: tuple[str, ...] = ()
+    #: 本步是否要求**本机**存在 `tests/`（本机开发门）。
+    #:
+    #: 为什么要有这个字段：`tests/` 不随仓库交付（业主 2026-11-21 裁定，只对本机开发
+    #: 有用）。干净 clone 里 `per-file` 步若照常起 `tools/run_each_test_file.py`，
+    #: 它确实会返回 2（"没查成"）—— 但那要靠读子进程的 stderr 才知道是"缺 tests/"。
+    #: 在编排层直接判一次，结论同样是 `unknown`，理由却写在编排层自己的 notes 里，
+    #: 且**不把"缺目录"与"逐文件跑挂了"混成同一档**。
+    needs_tests_dir: bool = False
 
     def classify_code(self, code: int) -> str:
         return self.exit_map.get(code, "fail")
@@ -291,7 +303,7 @@ def _resolve_changed(since: str | None, changed_file: str, root: Path) -> Path |
 def build_steps(root: Path, acceptance_root: Path | None = None, *, changed_file: Path | None = None,
                 sub_json_dir: Path | None = None) -> list[Step]:
     """步骤表：2 个承接点名清单的步骤 + 1 个论文复现步骤 + 1 个前端步
-    + 3 个结构性门 = 7（`frontend` 排在 `per-file` 之后；逐条理由见下）。
+    + 3 个结构性门 = 8（`frontend` 排在 `per-file` 之后，`eol` 排在最后；逐条理由见下）。
 
     清单与步骤不是一一对应：点名的六项落在 2 个步骤里（`release-check` 覆盖 5 项 +
     `acceptance` 1 项），再加 `repro` 与 3 个结构性门。按"点名的六项"数步骤会漏掉
@@ -318,6 +330,13 @@ def build_steps(root: Path, acceptance_root: Path | None = None, *, changed_file
     它自带三态（`tools/frontend_gate.py`：`0=pass / 1=fail / 2=unknown`）：
     没装 node/pnpm、或构建环境起不来（例如本沙箱不允许 Node 用管道 stdio 起
     esbuild ⇒ `spawn EPERM`）⇒ 记 `unknown`，绝不是 `pass`。
+
+    第八个步骤 `eol` 守的是"入库是 LF、盘上被写成 CRLF"的潜伏漂移：这类文件折平后与
+    HEAD 逐字节相同，所以 `git diff` 与 `tests/test_mechanical_rewrite_guards.py` 都看不见
+    它们；`git ls-files --eol` 是唯一读得到的地方。它自带三态
+    （`tools/eol_gate.py`：`0=无漂移 / 1=有漂移 / 2=没查成`）：缺 git、不在仓库里、
+    `git ls-files --eol` 跑不通 ⇒ 记 `unknown`，不是 `pass` —— 把"没查成"记成通过，
+    正是这道门要防的事。
     """
     acc = acceptance_root or (root.parent / "test" / "test2")
     # 让 release-check 把它的逐项结构写成 JSON，编排层再读回来嵌进自己的 JSON。
@@ -339,6 +358,9 @@ def build_steps(root: Path, acceptance_root: Path | None = None, *, changed_file
             # `--since` / `--changed-file` 供上，取不到时仍如实报 unknown。
             exit_map=TRI_STATE_EXIT,
             json_out=release_check_json,
+            notes=("本步第 1 项（全量测试）是**本机开发门**：tests/ 不随仓库交付，"
+                   "干净 clone 里没有这个目录 ⇒ 那一项记 unknown 并写明原因，不是 pass；"
+                   "其余七项与 tests/ 无关，照常判定。",),
         ),
         Step(
             "acceptance", "验收测试（P1–P9，正式版 target=formal）",
@@ -381,7 +403,7 @@ def build_steps(root: Path, acceptance_root: Path | None = None, *, changed_file
                    "『最严（忽略工具名串）/ 本工具 / 别处登记的更宽读数』三个口径并列出来",),
         ),
         Step(
-            "per-file", "逐文件单跑测试（把顺序依赖/跨文件状态泄漏变成可判定的门）",
+            "per-file", "逐文件单跑测试（本机开发门，需本机有 tests/；把顺序依赖/跨文件状态泄漏变成可判定的门）",
             [sys.executable, str(root / "tools" / "run_each_test_file.py")],
             # 这一步很慢（每个 `tests/test_*.py` 各起一个 pytest 进程，量级与全量测试相同）。
             # 文件数不写死：当次由 `tools/run_each_test_file.py` 自己 rglob 出来
@@ -392,6 +414,9 @@ def build_steps(root: Path, acceptance_root: Path | None = None, *, changed_file
             # 会被记成 `unknown`（不是 pass），跳过了就得逐条解释。
             cwd=root, env=_env(), expect_seconds=1200,
             exit_map=TRI_STATE_EXIT,
+            needs_tests_dir=True,
+            notes=("本步是**本机开发门**（逐文件跑 tests/test_*.py）：tests/ 不随仓库交付，"
+                   "缺这个目录时 `run_step` 直接记 unknown 并写明原因，绝不当成 pass。",),
         ),
         Step(
             "frontend", "前端步（裁定 G2）：typecheck + 构建 + 入库产物新鲜度"
@@ -404,9 +429,28 @@ def build_steps(root: Path, acceptance_root: Path | None = None, *, changed_file
             # 反方向的错更要命：若这里写成 `{0: "pass", 1: "pass", 2: "pass"}` 之类的
             # 宽码表，"前端产物脱节"就永远不会让发布门变红（闸门被改宽而门照样亮绿）。
             exit_map=TRI_STATE_EXIT,
+            # 尾逗号不是格式洁癖：少了它，`notes=(...)` 是**字符串**而不是元组，
+            # 汇总处 `for note in step.notes` 会逐字符迭代 ⇒ 一段说明被印成
+            # 每行一个字符（`CLEANCLONE` §4 #4 在 HEAD 上实测到的形态）。
+            # `notes` 的契约是 `tuple[str, ...]`（见 `Step`），这里必须与契约同形。
             notes=("本步的 `unknown` 有两种真因，都不等于通过：① 本机没有 node/pnpm；"
                    "② 构建环境起不来（沙箱里 Node 用管道 stdio 起 esbuild ⇒ `spawn EPERM`）。"
-                   "读数在 `tools/frontend_gate.py` 的输出里逐条写明。"),
+                   "读数在 `tools/frontend_gate.py` 的输出里逐条写明。",),
+        ),
+        Step(
+            "eol", "行尾读数（`git ls-files --eol`：已跟踪而盘上 CRLF 的潜伏漂移；缺 git ⇒ unknown）",
+            [sys.executable, str(root / "tools" / "eol_gate.py"), "--root", str(root)],
+            cwd=root, env=_env(), expect_seconds=30,
+            # `tools/eol_gate.py` 自带三态（`0=无漂移 / 1=有漂移 / 2=没查成`）。
+            # 为什么不能用 PLAIN_EXIT：缺 git 时它返回 2，默认码表会把"没查成"判成
+            # `fail`（把 unknown 读成发现问题）；写成"2 也算 pass"则反过来把
+            # "没查成"读成通过。两条都不行，所以必须显式声明三态码表。
+            exit_map=TRI_STATE_EXIT,
+            # 尾逗号同理（见 `frontend` 那一步的注释）：`notes` 的契约是
+            # `tuple[str, ...]`，少了它这段说明会被汇总处逐字符打印。
+            notes=("`i/lf w/crlf` 是换行判据的隐形面：折平后与 HEAD 同字节 ⇒ `git diff` 看不见它，"
+                   "但它会在下一次改那个文件时变红。缺 git / 不在仓库里 ⇒ 退出码 2 ⇒ "
+                   "本步记 `unknown`（没查成，不是 pass）。",),
         ),
     ]
 
@@ -430,6 +474,14 @@ class StepCancelled(BaseException):
 
 
 def run_step(step: Step, timeout: float) -> Result:
+    # 本机开发门：`tests/` 不随仓库交付。缺目录 ⇒ 这一步**没查成**（unknown），
+    # 不是 pass、也不是 fail —— 与三态纪律一致，且理由由编排层自己给出。
+    if step.needs_tests_dir and not (step.cwd / "tests").is_dir():
+        reason = (
+            "本机开发门：缺 tests/（tests 不随仓库交付；业主 2026-11-21 裁定）"
+            "⇒ 这一步记 unknown（没查成），不是 pass。要跑它请在本机放回 tests/。"
+        )
+        return Result(step, "unknown", None, 0.0, [reason], notes=[reason])
     t0 = time.monotonic()
     started = False
     timed_out = False
@@ -541,7 +593,7 @@ def main(argv: list[str] | None = None) -> int:
         # `--json-out` 的前缀，不关掉缩写，旧写法会被 argparse 静默当成新名字。
         allow_abbrev=False,
     )
-    ap.add_argument("--root", default=None, help="正式版仓库根（默认本文件的上两级）")
+    ap.add_argument("--root", default=None, help="正式版产品根（默认本文件的上两级；仓库根是它的上一级）")
     ap.add_argument("--acceptance-root", default=None, help="验收程序所在目录（默认 <root>/../test/test2）")
     ap.add_argument("--json-out", default="", help="把结果写到该 JSON 路径")
     ap.add_argument("--skip", default="", help="跳过的步骤 key，逗号分隔（**跳过的会记成 unknown，不是 pass**）")

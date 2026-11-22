@@ -29,7 +29,7 @@ import { Money } from "../components/Money";
 import { ObligationsPanel } from "../components/Obligations";
 import { RosterPanel } from "../components/Roster";
 import { Table, buckets, cell } from "../components/Table";
-import { StopButtons } from "../components/Stop";
+import { ClearStopButton, StopButtons } from "../components/Stop";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace } from "../live";
 import type { LiveLoopRow, LivePidRow } from "../types";
@@ -44,6 +44,11 @@ export function Live() {
   // 三份同形接口、也不拿 `as unknown as` 把 `Record<string, unknown>[]` 打穿 ——
   // 那会绕开"生成物是唯一类型来源"这条纪律。
   const running: LiveLoopRow[] = l?.running ?? [];
+  // READFIX-A：`stopctl` 早就算出了 `stale_rows`（宿主进程已死 / 被强杀的未收尾循环），
+  // 改前 `live_face` 把它们整批丢掉，于是盘上 7 条未收尾、页面上却印「0」并且
+  // 断言"每一趟都收到了自己的 agent_run_end"。现在两档并排列出来。
+  const staleRows: LiveLoopRow[] = l?.stale_rows ?? [];
+  const loopRows: LiveLoopRow[] = [...running, ...staleRows];
   const pids: LivePidRow[] = l?.live ?? [];
   const history = l?.history ?? [];
   const interrupts = l?.interrupts ?? [];
@@ -56,7 +61,7 @@ export function Live() {
         subtitle={
           l === null
             ? ""
-            : `结论：在飞（tasks 里 running）= ${cell(l.tasks_running)} · 未收尾的循环 = ${cell(l.unclosed_loops)}`
+            : `结论：在飞（tasks 里 running）= ${cell(l.tasks_running)} · 未收尾的循环 = ${cell(l.unclosed_loops)}（仍在跑 ${cell(l.unclosed_running)} / 已不在跑 ${cell(l.unclosed_stale)}）`
         }
         tone={l !== null && isUnreadable(l.tri) ? "problem" : "plain"}
         right={
@@ -95,9 +100,35 @@ export function Live() {
               行尾那一格说这一行是什么：顶趟已收尾的行是"被打断后剩下的循环记录"，
               顶趟还在跑的行才可能是活着的。
             </div>
+            {/* READFIX-A：未收尾的总数拆成两档，并把 `stale_rows` 的来源写出来 ——
+                改前这里只数 `stopctl.running`，盘上 7 条死在 `stale_rows` 里的循环
+                在页面上根本不存在。 */}
+            <div class="readings">
+              这 {cell(l.unclosed_loops)} 条里：<b>仍在跑 {cell(l.unclosed_running)} 条</b>；
+              <b>已不在跑 {cell(l.unclosed_stale)} 条</b>
+              （会话记录里登记的进程已经退出、被强杀，或顶趟已收尾）。
+              两档由读数层分开给（`unclosed_running` / `unclosed_stale`），
+              下面那张表把两档都列出来 —— 已不在跑的行写"宿主进程已退出/被叫停，不是活着"。
+            </div>
+            {l.unclosed_loops_tri === "computed" ? null : (
+              <div class="tri-reason">未收尾循环：{l.unclosed_loops_tri} —— {l.unclosed_loops_why}</div>
+            )}
+            {l.tasks_running_tri === "computed" ? null : (
+              <div class="tri-reason">
+                「在飞（tasks 里 running）」这一格是 {l.tasks_running_tri}：{l.tasks_running_why}
+              </div>
+            )}
+            <div class="readings">
+              停机开关问的是「有没有活进程」：<b>{cell(l.answer)}</b>（有 / 没有 / 没查成）。
+              循环记录的多寡不改变这一格 —— 没有活进程时，再多的未收尾记录也不该读成「有」。
+            </div>
             <Table
-              rows={running}
-              empty="没有未收尾的循环（每一趟都收到了自己的 agent_run_end）。"
+              rows={loopRows}
+              empty={
+                l.unreadable_sessions.length === 0
+                  ? "没有未收尾的循环记录：读到的会话里每一条 agent_run_start 都有对应的 agent_run_end（读不出来的会话另列在上面）。"
+                  : "没有未收尾的循环记录；但有会话读不出来（见上）—— 所以不能断言每一趟都收到了 end。"
+              }
               columns={[
                 { key: "role", title: "角色", render: (r) => <Badge kind="badge-unknown" text={cell(r.role)} /> },
                 { key: "sid", title: "会话号", render: (r) => <span class="mono">{r.sid}</span> },
@@ -168,6 +199,9 @@ export function Live() {
           <b>要停就按下面那对按钮</b>（优雅停 / 强制停），「一趟详情」页里是同一对。
         </div>
         {l === null ? null : <StopButtons onDone={() => liveFace.reload()} />}
+        {/* 叫停之后想再起一趟时，得先把盘上的旧开关撤掉（WEBFIX2 F9）——
+            否则新起的那一趟第一步就被它停掉，白起一趟。 */}
+        {l === null ? null : <ClearStopButton onDone={() => liveFace.reload()} />}
         {l === null ? null : (
           <>
             <div class="readings">
@@ -263,7 +297,7 @@ export function Live() {
               合计{" "}
               <Money
                 usd={typeof usage.data.spent.usd === "number" ? usage.data.spent.usd : null}
-                unknownCalls={0}
+                unknownCalls={usage.data.spent_unknown_usd_calls ?? 0}
               />{" "}
               {Object.keys(usage.data.spent).length === 0 ? null : (
                 <span class="mono">

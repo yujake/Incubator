@@ -296,7 +296,13 @@ SPEC = AgentSpec(
             "**计时只有时钟这一处**：旧的计时工具已经退役，别去找别的等待 / 定时入口。",
         ),
         signature_error="把没跑成的检查写成 verified 或 failed（unknown 被折进另外两档，读者分不出命题可疑还是我们没验）。",
-        deliverable="code/formal/<声明名>.lean（盘上文件 + sha256）、检查器原话、真实退出码、三态结论。",
+        deliverable="交付状态 —— 交给谁：派你这趟活的父（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名）"
+                    "+ 收方 B（回执）；形态：`code/formal/<声明名>.lean` + 检查器原话 + `experiments` 行；"
+                    "可核字段：`experiments.method` / `experiments.code_path` / `experiments.code_hash` / "
+                    "`experiments.exit_code` / `experiments.verifier_output`；"
+                    "算做完：文件在盘上且 `experiments` 有一行 formal，三态结论（verified / failed / "
+                    "unknown）与检查器原话、`experiments.exit_code` 逐条对得上（没跑成写 unknown，"
+                    "不许折成 failed）。",
         stance=(
             "忠实比漂亮重要：宁可交一个「这里接不上」的缺口，也不交一个被悄悄加强过的定理。",
             "机器说通过只说明它核了你写下的那条；写下的是不是原文那条，是你的责任。",

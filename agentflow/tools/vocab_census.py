@@ -463,7 +463,7 @@ def main(argv: list[str] | None = None) -> int:
             "退出码 0=没有 / 1=有 / 2=没查成。"
         ),
     )
-    ap.add_argument("--root", default=None, help="仓库根（默认本文件的上两级）")
+    ap.add_argument("--root", default=None, help="产品根（默认本文件的上两级；仓库根是它的上一级）")
     ap.add_argument("--json", action="store_true", help="以 JSON 输出")
     args = ap.parse_args(list(argv) if argv is not None else None)
 

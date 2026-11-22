@@ -1540,6 +1540,16 @@ def bits_shape_problems(raw: Mapping[str, Any] | None, *,
             f"bits.grade 写的是 {claimed!r}，按五位现算是 {bits['grade']!r} —— "
             "等级不许自报（判据永远现算）：要么删掉这个键，要么让它等于现算值")
     problems.extend(bit_problems(bits))
+    # ---- SYSRESIDUE ②：`bits.evidence.optimized_by_proof` 这一格也要在写入期判。
+    #
+    # 判据本体在 `sysresidue.optimized_cells_problems`（这一格只转发，不抄第二份）：
+    # 表必须是"证明号 ⇒ 布尔"。改前这一格是个法外之地 —— `optimized_by_proof=False`
+    # （整格不是对象）会被读侧静默读成 `not_recorded`（与"存量行没有这一格"同形），
+    # 而 `"false"` 被 `bool()` 读成 True 则会把"没洗"记成"洗过"。写点自己判掉之后，
+    # 读侧不必再替它分这两种形态。
+    from . import sysresidue as _SR   # 惰性：本模块被 `sysresidue` 惰性导入，模块级会成环
+
+    problems.extend(_SR.optimized_cells_problems(raw))
     return problems
 
 

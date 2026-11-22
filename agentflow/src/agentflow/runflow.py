@@ -192,13 +192,13 @@ class CallRecord:
 def _write_json(path: Path, doc: Any) -> None:
     """写一件 JSON 产物（utf-8、不转义中文、末尾换行便于 diff）。"""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(doc, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(doc, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8", newline="\n")
 
 
 def _write_text(path: Path, text: str) -> None:
     """写一件文本产物。"""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    path.write_text(text, encoding="utf-8", newline="\n")
 
 
 def _budget_left(budget_usd: float, spent_usd: float) -> float:
@@ -1656,7 +1656,7 @@ def selftest() -> int:
         def _fetch(url: str, dest_dir: Path, filename_hint: str):
             path = Path(dest_dir) / "selftest.pdf"
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(body_text, encoding="utf-8")
+            path.write_text(body_text, encoding="utf-8", newline="\n")
             return {"ok": True, "path": str(path), "bytes": len(body_text), "error": None}
 
         def _extract(path: str):

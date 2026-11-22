@@ -599,6 +599,26 @@ def project_reading(root: str | Path) -> dict[str, Any]:
 #: `current.source` 的三个取值（给前端与判据同一份词表）。
 CURRENT_SOURCES: tuple[str, ...] = ("cli", "newest_session", "none")
 
+#: 只由"用户侧写进来"的事件种类。只含这些种类的会话不是"当前会话"：
+#: 它是别人写错地方的收据（F2 现场：`/api/task` 不带 sid 曾把一条
+#: `agent_interjection` 写进 `sessions/<当天日期>.jsonl`），没有任何一趟跑过。
+_USER_ONLY_KINDS = frozenset({"agent_interjection"})
+
+
+def _session_has_activity(events: Sequence[Mapping[str, Any]] | None,
+                          *, bad_lines: int = 0) -> bool:
+    """这一段会话里有没有"跑过 / 问答过"的痕迹（只有插话 ⇒ 不算）。
+
+    三态：`events=None`（调用方没把事件交下来）⇒ True，`没读到`不许折成`是空的`；
+    0 事件但有坏行 ⇒ True，那是"整份读不出来"，不是"空会话"；0 事件且没有坏行 ⇒
+    False（真的空文件）。
+    """
+    if events is None:
+        return True
+    if not events:
+        return bool(bad_lines)
+    return any(str(e.get("kind") or "") not in _USER_ONLY_KINDS for e in events)
+
 
 def current_reading(root: str | Path, sid: str = "", *,
                     sessions: Sequence[Mapping[str, Any]] = (),
@@ -613,6 +633,15 @@ def current_reading(root: str | Path, sid: str = "", *,
     `serve(sid=…)` 把这个号交给服务，快照照抄（`source="cli"`）；只有没人交代时
     （直接 `agentflow web`）才退回"最近一段"，并把这件事写进 `source`。
 
+    ## 退回"最近一段"时要跳过空会话（审计 F2 的读侧）
+
+    "最近"按 `last_ts` 挑，但只由用户侧事件（`agent_interjection`）组成的会话不参加
+    挑选（见 :func:`_session_has_activity`）。那种会话是一段写错落点的收据：它没有
+    任何一趟跑过，也没人读过它；把它印成「当前会话」会让页面顶上另一段会话的
+    待答 / 轮号 / 会话号（真机 lp-ball-15 实测：一条无主插话把 `current.sid` 从
+    `2026-11-21b` 顶成 `20261121`）。这是读侧的护栏，写侧另有受控拒（`/api/task`
+    必须给 sid）—— 两层都要有：历史盘上已经躺着这种会话，读侧不能靠写侧修好。
+
     `round` 只调本模块的 `round_of()`（命令行那个 `_current_round` 是它的薄转发），
     `events` 沿调用方已经解析好的那份传进去（`snapshot()` 已经读过一遍），
     于是这一格不额外读盘，也不会与命令行分叉。
@@ -626,7 +655,11 @@ def current_reading(root: str | Path, sid: str = "", *,
         # `sessions.list_sessions` 的顺序一致）。选了什么不藏：`source` 说清楚。
         best: Mapping[str, Any] | None = None
         for row in sessions:
-            if not _text(row.get("sid")):
+            row_sid = _text(row.get("sid"))
+            if not row_sid:
+                continue
+            if events_of is not None and not _session_has_activity(
+                    events_of.get(row_sid), bad_lines=int(row.get("bad_lines") or 0)):
                 continue
             if best is None or _text(row.get("last_ts")) >= _text(best.get("last_ts")):
                 best = row
@@ -655,7 +688,7 @@ def snapshot(root: str | Path, *, sid: str = "",
              writes_reason: str = "") -> dict[str, Any]:
     """把工作区盘上的事实读成一份快照（纯函数：只读盘，不缓存、不写任何东西）。
 
-    返回：`{"root", "generated_at", "project", "current", "sessions",
+    返回：`{"root", "generated_at", "tri", "project", "current", "sessions",
     "pending_questions", "runs", "orphans", "orphan_summary", "last_run", "ledger",
     "problems", "writes_allowed", "writes_reason"}`。
 
@@ -733,14 +766,18 @@ def snapshot(root: str | Path, *, sid: str = "",
     for one in pending_all:
         by_sid.setdefault(_text(one.get("sid")), []).append(one)
     for item in listed:
-        sid = _text(item.get("sid"))
-        if not _sid_ok(sid):
-            problems.append(f"会话号不安全，跳过：{sid!r}")
+        # 这里的循环变量必须叫 `row_sid`，不许叫 `sid`：它以前叫 `sid`，把函数参数
+        # `sid`（`serve(sid=…)` 交下来的那一个）遮蔽掉了，于是本函数末尾
+        # `current_reading(root_p, sid, …)` 拿到的是"文件名排在最后的那一段"，
+        # `--watch --sid` 被无视、`current.source` 还谎报 `cli`（审计 F1）。
+        row_sid = _text(item.get("sid"))
+        if not _sid_ok(row_sid):
+            problems.append(f"会话号不安全，跳过：{row_sid!r}")
             continue
-        events, bad = read_cache.get(sid, ([], []))
-        got = _scan(root_p, sid, events, bad, by_sid.get(sid, ()))
+        events, bad = read_cache.get(row_sid, ([], []))
+        got = _scan(root_p, row_sid, events, bad, by_sid.get(row_sid, ()))
         sessions.append({
-            "sid": sid,
+            "sid": row_sid,
             "path": _text(item.get("path")),
             "events_seen": got["events_seen"],
             "events_listed": item.get("events"),
@@ -764,7 +801,7 @@ def snapshot(root: str | Path, *, sid: str = "",
         pending.extend(got["pending"])
         runs.extend(got["runs"])
         orphans.extend(got["orphans"])
-        problems.extend(f"{sid}: {p}" for p in bad)
+        problems.extend(f"{row_sid}: {p}" for p in bad)
     # ---- 会话概览那一格的「待答」：与面板那份清单（`pending_questions`）数同一份列表。
     #
     # 这两处若"各算一遍"—— 每一段会话把自己那一片的
@@ -797,6 +834,10 @@ def snapshot(root: str | Path, *, sid: str = "",
     return {
         "root": str(root_p),
         "generated_at": _clock(),
+        # 三态头（READFIX-D-12）：`problems` 非空 ⇒ unreadable。改前这一格只存在于
+        # `readers.state_face`（`/api/state` 的处理器把它丢了），端点上没有三态头，
+        # 页面只能靠 `problems` 自己判 —— 现在端点响应里也带着它。
+        "tri": "unreadable" if problems else "computed",
         "project": project,
         "current": current,
         "sessions": sessions,
@@ -847,25 +888,68 @@ def _read_ledger(root: Path, problems: list[str]) -> dict[str, Any]:
 
     现在拆成三格（`upserts` / `commit_markers` / `events_note`）：
 
-    - `upserts`：写入笔数（= 非 commit 标记的行数）；
+    - `upserts`：写入笔数（= 非 commit 标记、且读得成 JSON 的行数）；
     - `commit_markers`：提交标记的行数；
     - `events`：保留这个名字（`types.ts` 与既有读者都认它），口径
       与 `upserts` 逐字相同 —— 它不再等于文件总行数。
 
-    守恒：`upserts + commit_markers == events.jsonl 的总行数`（一行都不丢，也不重复
-    计数）。读不成 JSON 的坏行（`op="corrupt"` 的占位行）按行计入 `upserts` ——
-    合计仍是总行数，坏行条数写进 `events_note`，不静默吞。
+    守恒：`upserts + commit_markers + corrupt_rows == events.jsonl 的总行数`
+    （一行都不丢，也不重复计数）。读不成 JSON 的坏行（`op="corrupt"` 的占位行）
+    单列在 `corrupt_rows` 里，不再计进 `upserts`：它不是一笔写入。有坏行时
+    `events_tri="unreadable"` 并把一句原因写进 `problems`（READFIX-D：改前坏行
+    计进 upserts、`tri` 仍 computed，等于把"文件坏了"读成"写完了"）。
+
+    三态（READFIX-D）：
+    - `events.jsonl` 不在盘上 ⇒ `upserts` / `commit_markers` 是 `None`、
+      `events_tri="not_applicable"`（还没写过，不是 0 笔）；
+    - 读不成 / 有坏行 ⇒ `events_tri="unreadable"` + `events_note` 与 `problems` 点名；
+    - `tasks` 表不在盘上（还没写过）⇒ `tables=None`、`tables_tri="not_applicable"`
+      （改前记 `0` 行：把"没写过"印成"0 行"）；读不成 ⇒ `tables_tri="unreadable"`
+      并进 `problems`；读到了 ⇒ 行数（0 也是真 0）。
     """
     out: dict[str, Any] = {"path": str(root / "data" / "events.jsonl"),
                            "events": None, "upserts": None, "commit_markers": None,
-                           "tables": None, "note": "", "tables_note": "", "events_note": ""}
+                           "corrupt_rows": None,
+                           "tables": None, "note": "", "tables_note": "",
+                           "events_note": "",
+                           "events_tri": None, "tables_tri": None}
+
+    def _tasks_count(st: Any) -> tuple[int | None, str]:
+        """`tasks` 表行数 + 三态（"在不在盘上"与"读没读成"分开，见 docstring）。"""
+        from ..schema import TABLES
+
+        rel = str((TABLES.get("tasks") or {}).get("file") or "")
+        data = Path(str(getattr(st, "data", Path("."))))
+        if bool(rel) and not (data / rel).is_file():
+            # 还没写过 ⇒ 行数记 unknown（None），不是 0 行：`Store.rows()` 对不在盘上的
+            # 表回的是空表文档，`len()` 是 0 —— 那一步正是把「没写过」印成「0 行」。
+            return None, "not_applicable"
+        return len(st.rows("tasks")), "computed"
+
     try:
         from ..store import Store
 
         st = Store(root)
+        # ---- `tasks` 行数先读：它与 events.jsonl 在不在无关（改前 events 缺就整段早退，
+        # 于是 `tables` 也是 None —— 两个不相干的读数被绑在一起）。
+        try:
+            out["tables"], out["tables_tri"] = _tasks_count(st)
+        except Exception as exc:  # noqa: BLE001 - 读不到就是没查成，不折成 0
+            out["tables_tri"] = "unreadable"
+            out["tables_note"] = (f"tasks 台账没查成 ⇒ 行数记 unknown（不是 0 行）："
+                                  f"{type(exc).__name__}: {exc}")
+            problems.append(out["tables_note"])
+        if out["tables_tri"] == "not_applicable":
+            out["tables_note"] = "tasks 台账不在盘上（还没写过；行数记 unknown，不是 0 行）"
+        elif not out["tables_note"]:
+            # `R4` ⑨：只写口径，不改语义 —— 这个数就是 `tasks` 台账的全量行数
+            # （不筛选、不减一）。它含顶趟行（`role=M` / `action=run` / `called_by=user`），
+            # 所以它比"子任务条数"大；读数旁边不写这句，读的人会把它当成子任务数。
+            out["tables_note"] = "含顶趟行；为 tasks 全量行数，非子任务条数"
         if not st.events_path.exists():
             out["note"] = "台账还没有（合法初态）"
             # 三态：文件不在 ⇒ 笔数与标记都是 unknown（不是 0 笔）。
+            out["events_tri"] = "not_applicable"
             out["events_note"] = ("台账文件不在盘上 ⇒ 写入笔数与 commit 标记都记 unknown"
                                   "（不是「一笔都没写」）")
             return out
@@ -877,23 +961,25 @@ def _read_ledger(root: Path, problems: list[str]) -> dict[str, Any]:
                 commits += 1
             elif op == "corrupt":
                 corrupt += 1
-        upserts = len(rows) - commits
+        # 坏行不是一笔写入 ⇒ 从 upserts 里扣掉、单列在 corrupt_rows（守恒式见 docstring）。
+        upserts = len(rows) - commits - corrupt
         out["upserts"] = upserts
         out["commit_markers"] = commits
+        out["corrupt_rows"] = corrupt
         # 同一个口径的另一个名字（见 docstring：`events` 不再等于文件总行数）。
         out["events"] = upserts
-        out["tables"] = len(st.rows("tasks")) if hasattr(st, "rows") else None
+        out["events_tri"] = "unreadable" if corrupt else "computed"
         note = (f"台账写入 {upserts} 笔（其中 commit 标记 {commits} 行）：每提交一次事务占两行"
                 "（一行事件 + 一行 commit 标记），所以两数相加 = events.jsonl 的总行数")
         if corrupt:
-            note += f"；另有 {corrupt} 行读不成 JSON（坏行，按行计入「写入」这一格）"
+            note += (f"；另有 {corrupt} 行读不成 JSON（坏行：不计进「写入」这一格，"
+                     f"单列 `corrupt_rows`，这一格记「没查成」）")
+            problems.append(f"台账有 {corrupt} 行读不成 JSON ⇒ 写入笔数记「没查成」"
+                            f"（{corrupt} 行没有计进 upserts）")
         out["events_note"] = note
-        # `R4` ⑨：只写口径，不改语义 —— 这个数就是 `tasks` 台账的全量行数
-        # （不筛选、不减一）。它含顶趟行（`role=M` / `action=run` / `called_by=user`），
-        # 所以它比"子任务条数"大；读数旁边不写这句，读的人会把它当成子任务数。
-        out["tables_note"] = "含顶趟行；为 tasks 全量行数，非子任务条数"
     except Exception as exc:  # noqa: BLE001 - 读数而已，读不到就如实说没查成
         out["note"] = f"台账没查成：{type(exc).__name__}: {exc}"
+        out["events_tri"] = "unreadable"
         out["events_note"] = "台账没查成 ⇒ 写入笔数与 commit 标记都记 unknown（不是 0）"
         problems.append(out["note"])
     return out
@@ -989,6 +1075,9 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
     ("StateSnapshot",
      "snapshot() —— 工作区盘上事实的只读投影（返回键逐字见它的 docstring）",
      (("root", "string"), ("generated_at", "string"),
+      # 三态头（READFIX-D-12）：`problems` 非空 ⇒ unreadable；改前它只存在于
+      # `readers.state_face`，`/api/state` 的响应里没有这一格。
+      ("tri", "Tri"),
       ("project", "ProjectReading"), ("current", "CurrentReading"),
       ("sessions", "SessionRow[]"), ("pending_questions", "PendingQuestion[]"),
       ("runs", "RunRow[]"), ("orphans", "OrphanRow[]"),
@@ -1051,9 +1140,13 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("ts", "string"), ("role", "string"))),
     ("LedgerReading",
      "snapshot() 的 `ledger` —— 台账（第二个独立读数）。`events` 与 `upserts` 同口径"
-     "（`D21`：它不再是 events.jsonl 的总行数），`commit_markers` 是其中提交标记的行数",
+     "（`D21`：它不再是 events.jsonl 的总行数），`commit_markers` 是其中提交标记的行数；"
+     "坏行单列 `corrupt_rows`（不计进 upserts），`events_tri` / `tables_tri` 是两个"
+     "三态头（READFIX-D：'没写过'与'读不到'都不许折成 0）",
      (("path", "string"), ("events", "number | null"), ("upserts", "number | null"),
-      ("commit_markers", "number | null"), ("tables", "number | null"),
+      ("commit_markers", "number | null"), ("corrupt_rows", "number | null"),
+      ("tables", "number | null"),
+      ("events_tri", "Tri"), ("tables_tri", "Tri"),
       ("note", "string"), ("tables_note", "string"), ("events_note", "string"))),
     ("ReportReading",
      "_read_report() —— 交付说明 `out/review/REPORT.md` 的读数（二元组 status/text 的字典口径）",

@@ -649,7 +649,7 @@ def write_readings(*, root: Path, face: dict) -> list[tuple[str, int]]:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="核对 docs/ROLE-SPECS.md 的结构完整性")
-    ap.add_argument("--root", default=None, help="仓库根（默认自动探测）")
+    ap.add_argument("--root", default=None, help="产品根（默认自动探测；仓库根是它的上一级）")
     ap.add_argument("--doc", default=None,
                     help=f"要核对的规格文档（仓库相对或绝对路径；默认 {DOC_REL.as_posix()}）")
     ap.add_argument("--roles", default=None,

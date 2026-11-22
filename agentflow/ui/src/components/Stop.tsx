@@ -12,11 +12,53 @@
  */
 import { useState } from "preact/hooks";
 
-import { postStop } from "../api";
+import { postStop, postStopClear } from "../api";
 import { ErrorBlock, faceOfError, faceOfWrite } from "./ErrorBlock";
 import type { ErrorFace } from "./ErrorBlock";
 import { ConfirmButton } from "./ConfirmButton";
 import { useLive } from "../live";
+
+/**
+ * 「撤销叫停」按钮（`POST /api/stop/clear`，2026-11-21 WEBFIX2 F9）。
+ *
+ * 为什么它必须与叫停按钮摆在一起：叫停之后那把开关会**一直留在盘上**
+ * （没有在跑的循环去消费它），于是用户"叫停 → 改主意 → 再起一趟"时，
+ * 新起的那一趟第一步就被旧开关停掉 —— 白起一趟，而页面上此前没有任何地方能撤掉它
+ * （`stopctl.clear_stop` 只有 CLI 一个调用者）。幂等：本来就没有开关时回 200 +
+ * `cleared=false`，回执那句会说"当前没有叫停"。
+ */
+export function ClearStopButton(props: { onDone?: () => void }) {
+  const live = useLive();
+  const [feed, setFeed] = useState<ErrorFace | null>(null);
+  const readOnly = live.writesAllowed === false;
+  const why = readOnly ? live.writesReason : "";
+  return (
+    <>
+      <div class="readings">
+        <ConfirmButton
+          action="撤销叫停"
+          impact="撤掉盘上那把停机开关，于是再起一趟不会被它停掉（上一趟已经停下的事实不变）"
+          onConfirm={() => {
+            setFeed(null);
+            postStopClear()
+              .then((got) => {
+                setFeed(faceOfWrite(got));
+                if (props.onDone !== undefined) {
+                  props.onDone();
+                }
+              })
+              .catch((exc: unknown) => {
+                setFeed(faceOfError(exc));
+              });
+          }}
+          disabled={readOnly}
+          note={readOnly ? why : "盘上本来就没有开关时也安全：回执会说「当前没有叫停」"}
+        />
+      </div>
+      {feed === null ? null : <ErrorBlock face={feed} />}
+    </>
+  );
+}
 
 export function StopButtons(props: { onDone?: () => void }) {
   const live = useLive();

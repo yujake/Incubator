@@ -168,6 +168,6 @@ def _inject_raw_document(st: Store, row: Mapping[str, Any]) -> None:
     p = st.data / "documents.json"
     doc = json.loads(p.read_text(encoding="utf-8"))
     doc["rows"] = [r for r in doc["rows"] if r.get("doc_id") != row["doc_id"]] + [dict(row)]
-    p.write_text(json.dumps(doc, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8")
+    p.write_text(json.dumps(doc, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8", newline="\n")
 from ..specs.h import SPEC  # noqa: E402,F401
 

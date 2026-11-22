@@ -64,6 +64,7 @@ export interface CurrentReading {
 export interface StateSnapshot {
   root: string;
   generated_at: string;
+  tri: Tri;
   project: ProjectReading;
   current: CurrentReading;
   sessions: SessionRow[];
@@ -148,13 +149,16 @@ export interface OrphanRow {
   role: string;
 }
 
-/** 出处：snapshot() 的 `ledger` —— 台账（第二个独立读数）。`events` 与 `upserts` 同口径（`D21`：它不再是 events.jsonl 的总行数），`commit_markers` 是其中提交标记的行数。 */
+/** 出处：snapshot() 的 `ledger` —— 台账（第二个独立读数）。`events` 与 `upserts` 同口径（`D21`：它不再是 events.jsonl 的总行数），`commit_markers` 是其中提交标记的行数；坏行单列 `corrupt_rows`（不计进 upserts），`events_tri` / `tables_tri` 是两个三态头（READFIX-D：'没写过'与'读不到'都不许折成 0）。 */
 export interface LedgerReading {
   path: string;
   events: number | null;
   upserts: number | null;
   commit_markers: number | null;
+  corrupt_rows: number | null;
   tables: number | null;
+  events_tri: Tri;
+  tables_tri: Tri;
   note: string;
   tables_note: string;
   events_note: string;
@@ -310,6 +314,10 @@ export interface RunDigestView {
   start_ts: string;
   end_ts: string;
   steps: number | null;
+  steps_source: string;
+  steps_physical: number | null;
+  steps_self_reported: number | null;
+  steps_self_reported_missing_runs: number | null;
   usd: number | null;
   unknown_usd_calls: number | null;
   spend_usd: number | null;
@@ -358,6 +366,10 @@ export interface EvidenceView {
   verifications_tri: Tri;
   secretary: SecretaryDecision[];
   secretary_tri: Tri;
+  rows_mode: string;
+  rows_limit: number;
+  rows_offset: number;
+  rows_total: Record<string, number>;
 }
 
 /** 出处：artifacts_face() —— 产物面（各栏另带 `<栏>_tri`）。 */
@@ -386,6 +398,10 @@ export interface ArtifactsView {
   code_exp: CodeExpFile[];
   tasks: TaskRow[];
   tasks_tri: Tri;
+  rows_mode: string;
+  rows_limit: number;
+  rows_offset: number;
+  rows_total: Record<string, number>;
 }
 
 /** 出处：artifacts_face() 的 experiment_spots[] —— 实验产物的一个落点（`out/experiments/<号>/design.md` / `exhaustion.md` / `.log`；`kind` 是 design / exhaustion / log）。 */
@@ -459,6 +475,44 @@ export interface MachineView {
   settings: SettingsReading;
   settings_tri: Tri;
   settings_reason: string;
+  serving: ServingWorkspace;
+}
+
+/** 出处：serving_reading() —— 这一个服务在服务哪个工作区，以及“换不了”这件事（根在 `serve()` 钉死；页面没有、也不该有切换入口）。 */
+export interface ServingWorkspace {
+  root: string;
+  pinned: boolean;
+  pinned_by: string;
+  switch_in_page: boolean;
+  switch_how: string;
+}
+
+/** 出处：actions_face() —— 网页操作台账（`<工作区>/web-actions.jsonl`）的分页读数（AUDIT F11：写侧从 W3 起就在写，读侧在 F11 才落地）。 */
+export interface ActionsView {
+  tri: Tri;
+  reason: string;
+  path: string;
+  problems: string[];
+  rows: ActionRow[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+  order: string;
+}
+
+/** 出处：actions_face() 的 rows[] —— 台账里的一行（写侧是 `webui/audit.record_action`）。 */
+export interface ActionRow {
+  at: string;
+  kind: string;
+  endpoint: string;
+  source: string;
+  params: Record<string, unknown>;
+  params_sha256: string;
+  result: string;
+  tri: string;
+  ok: boolean;
+  http: number;
 }
 
 /** 出处：budget.reading() 的 `added[]` 一行（`budget._write` 写进寄存器的那一笔）。 */
@@ -489,6 +543,7 @@ export interface BudgetView {
   tokens: number | null;
   attempts: number | null;
   added_count: number;
+  spent_unknown_usd_calls: number | null;
   by_role: Record<string, UsageBucket>;
   by_scope: Record<string, UsageBucket>;
   reserve_usd: number | null;
@@ -516,8 +571,15 @@ export interface LiveView {
   root: string;
   answer: string;
   tasks_running: number | null;
-  unclosed_loops: number;
+  tasks_running_tri: Tri;
+  tasks_running_why: string;
+  unclosed_loops: number | null;
+  unclosed_running: number | null;
+  unclosed_stale: number | null;
+  unclosed_loops_tri: Tri;
+  unclosed_loops_why: string;
   running: LiveLoopRow[];
+  stale_rows: LiveLoopRow[];
   live: LivePidRow[];
   unreadable_sessions: string[];
   switch: Record<string, unknown>;
@@ -526,12 +588,15 @@ export interface LiveView {
   interrupts: Array<Record<string, unknown>>;
 }
 
-/** 出处：stopctl.running_loops() 的 running[] —— 一条「未收尾的循环」（有 start 没 end；`stale_loop` 由 `webui.state.mark_stale_loops` 现算）。 */
+/** 出处：stopctl.running_loops() 的 running[] / stale_rows[] —— 一条「未收尾的循环」（有 start 没 end；`stale_loop` 由 `webui.state.mark_stale_loops` 现算，`stale_rows[]` 那一档恒为 true）。 */
 export interface LiveLoopRow {
   role: string;
   sid: string;
   since: string;
+  task_id: string;
+  evidence: string;
   stale_loop: boolean;
+  why?: string;
 }
 
 /** 出处：stopctl.live_pids() 的一行 —— 登记在盘上且真的还活着的一个进程（`path` 是那一份登记文件的落点，`live_pids` 会给）。 */
@@ -550,6 +615,7 @@ export interface UsageView {
   path: string;
   entries: number | null;
   spent: Record<string, unknown>;
+  spent_unknown_usd_calls: number | null;
   by_role: Record<string, UsageBucket>;
   by_scope: Record<string, UsageBucket>;
   retry_overhead: Record<string, unknown>;
@@ -854,6 +920,8 @@ export interface LedgerVerifyRow {
   at: string;
   sha256_now: string;
   status: string;
+  reason: string;
+  explained: boolean;
   sha_consistency: string;
   by_role: string;
   by_role_source: string;
@@ -1733,6 +1801,8 @@ export interface GateTable {
   closing_verdict: ClosingVerdict | null;
   blockers: GateBlocker[];
   blocking_cells: GateCell[];
+  na_cells: GateCell[];
+  warnings: Record<string, string[]>;
   machine_pass_cause: string;
 }
 
@@ -1805,6 +1875,8 @@ export interface CostView {
   runs_without_spend: number;
   ledger_usd: number | null;
   usage_ledger_rows: number | null;
+  ledger_tri: Tri;
+  ledger_reason: string;
   reconciliation: CostReconciliation;
   source: SourceRef;
 }

@@ -38,7 +38,7 @@ import difflib
 import inspect
 import json
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping, Sequence
 
 if TYPE_CHECKING:  # pragma: no cover - 仅供类型检查；运行期不导入（避免模块级耦合）
     from pathlib import Path
@@ -212,6 +212,134 @@ READONLY_CALL_EXCEPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
         ),
     ),
 }
+
+
+# ---------------------------------------------------------------- 只读角色写面读数（三档）
+
+#: `_role_surface` 写「已登记放行」留痕时用的那两句原话。
+#: 消费方（`cli tools` 的「声明需要纠正」告警行）必须把它们从"要改的声明"里撇掉 ——
+#: 它们描述的是"已经逐条登记过的放行"，不是"工具作者把写工具声明给了只读角色"。
+#: 落成常量而不是让每个消费方按"看着像"另写一份子串判断：文案一改，干净树上就会
+#: 重新冒出一条假的"声明需要纠正"，而没有任何判据会因此变红。
+_ALLOWANCE_NOTE_EXCEPTION = "按业主裁定「方案 1」放行了"
+_ALLOWANCE_NOTE_UNIVERSAL = "按通用能力放行了"
+
+#: 「已登记放行」留痕的两个前缀：`_role_surface` 生成它们、`surface_note_problems` 撇掉它们。
+ALLOWANCE_NOTE_MARKERS: tuple[str, ...] = (_ALLOWANCE_NOTE_EXCEPTION, _ALLOWANCE_NOTE_UNIVERSAL)
+
+
+@dataclass(frozen=True)
+class ReadonlyWriteSurface:
+    """一个只读角色工具面的写工具读数：三档，逐档都能打印。
+
+    ## 为什么要把它抽出来（SYSINTRO 2026-11-21 钉的缺陷）
+
+    "这个只读角色手里有没有刀"这同一件事，此前有两套数法：`cli tools` 按"面里有没有
+    `write_local`"数，而权威判据（`tests/test_tools_readonly_roles.py`）先减掉两处登记
+    （`READONLY_CALL_EXCEPTIONS` / `UNIVERSAL_TOOLS`）再断言。干净树上两套数法给出相反
+    的结论 —— 一件也没多，CLI 却印 `!! 有泄漏`，而 CLI 正是人看的第一读数。数法收成
+    这一处（`readonly_write_surface` 是唯一实现），CLI 与判据读同一个函数。
+
+    ## 三档（`verdict` 的取值）
+
+    - `"leak"`：面上有「未登记」的写工具 —— 真问题，CLI 打 `!!`；
+    - `"registered"`：面上的写工具全部来自两处登记之一 —— 正常，CLI 打 `ok(registered)`；
+    - `"clean"`：这个角色的面上没有任何写工具 —— 正常，CLI 打 `ok(clean)`。
+
+    `registered` 与 `universal` 刻意分两格、不合并：它们由两处互不重复的登记产生
+    （例外表是"只读角色自己的落库代理"逐条带理由；通用轴是"通用能力不按角色分配"，
+    判据是它只写通信/簿记表）。合并成一格会让"这件工具凭什么出现在只读角色面上"
+    在读数里少一个答案，而这两个答案的失效方式不一样。
+    """
+
+    role: str
+    #: 已登记例外：`((工具名, 登记理由), …)`，按工具名排序。
+    registered: tuple[tuple[str, str], ...] = ()
+    #: `UNIVERSAL_TOOLS` 里据实会写、且真的发到了这个角色面上的那几件（按名排序）。
+    universal: tuple[str, ...] = ()
+    #: 未登记的写工具（真泄漏；按名排序）。
+    unregistered: tuple[str, ...] = ()
+
+    @property
+    def write_tools(self) -> tuple[str, ...]:
+        """这个角色面上据实会写的全部工具（三档的并集，按名排序）。"""
+        return tuple(sorted(
+            [name for name, _why in self.registered] + list(self.universal) + list(self.unregistered)
+        ))
+
+    @property
+    def verdict(self) -> str:
+        """三档结论：`leak` / `registered` / `clean`（判据见类文档）。"""
+        if self.unregistered:
+            return "leak"
+        return "registered" if self.write_tools else "clean"
+
+
+def readonly_write_surface(
+    registry: ToolRegistry,
+    *,
+    roles: Iterable[str] | None = None,
+    exceptions: Mapping[str, Sequence[tuple[str, str]]] | None = None,
+    universal: Mapping[str, Any] | None = None,
+) -> dict[str, ReadonlyWriteSurface]:
+    """只读角色写面的唯一读数：`cli tools` 与权威判据都读它。
+
+    判据只有一条：把该角色 `for_role` 拿到的面上"据实会写"的工具，按来源分三档 ——
+    减去 `READONLY_CALL_EXCEPTIONS[role]`（逐条登记的落库代理 / 自有凭据产物）与
+    `UNIVERSAL_TOOLS`（通用能力：只写通信/簿记表，不按角色分配），剩下的才是
+    「未登记」的写工具。`for_role` 的剥离保证真实树上第三档应当恒空；它是 fail-closed
+    的读数，不是"重复一遍 for_role 的过滤"：哪一天剥离被绕开，这里就会把名字点出来。
+
+    `roles` / `exceptions` / `universal` 是给负控与反真空用的注入口（默认真表）：
+    `exceptions={}` 让"减例外"那一步什么都不减，于是三个已登记的代理会当场掉进
+    `unregistered` —— 判据用它证明自己不是靠一张写死的名单在装绿。
+
+    本函数不写盘、不改注册表，`role_filter_notes` 也不碰（那是 `for_role` 的返回值之外
+    的另一件事）。
+    """
+    from . import READ_ONLY_ROLES, SIDE_EFFECTS_WRITE, UNIVERSAL_TOOLS
+
+    who = tuple(READ_ONLY_ROLES if roles is None else roles)
+    table = READONLY_CALL_EXCEPTIONS if exceptions is None else exceptions
+    uni = UNIVERSAL_TOOLS if universal is None else universal
+    out: dict[str, ReadonlyWriteSurface] = {}
+    for role in who:
+        why_by_name = {name: why for name, why in table.get(role, ())}
+        registered: list[tuple[str, str]] = []
+        universal_write: list[str] = []
+        unregistered: list[str] = []
+        for spec in registry.for_role(role):
+            if spec.side_effect not in SIDE_EFFECTS_WRITE:
+                continue
+            if spec.name in why_by_name:
+                registered.append((spec.name, why_by_name[spec.name]))
+            elif spec.name in uni:
+                universal_write.append(spec.name)
+            else:
+                unregistered.append(spec.name)
+        out[role] = ReadonlyWriteSurface(
+            role=role,
+            registered=tuple(sorted(registered)),
+            universal=tuple(sorted(universal_write)),
+            unregistered=tuple(sorted(unregistered)),
+        )
+    return out
+
+
+def surface_note_problems(registry: ToolRegistry) -> dict[str, list[str]]:
+    """`role_filter_notes` 里「声明真的要改」的那一批（已登记放行不算）。
+
+    留痕有两个来源：`_role_surface` 重算出来的"某件写工具被剥掉了"（声明错误，要人改）
+    与"按登记放行了几件"（正常，是登记在干活）。后者不是问题，但它的文案里也带着
+    "放行了"这种字眼 —— 消费方若按"有没有这条留痕"数，干净树上会报"声明需要纠正"。
+    这里按 :data:`ALLOWANCE_NOTE_MARKERS` 把两类分开，两处共用同一份前缀常量。
+    """
+    out: dict[str, list[str]] = {}
+    for role, notes in registry.role_filter_notes.items():
+        keep = [m for m in notes if not any(mark in m for mark in ALLOWANCE_NOTE_MARKERS)]
+        if keep:
+            out[role] = keep
+    return out
 
 
 # ---------------------------------------------------------------- 参数接缝（工具 schema ↔ handler 签名）
@@ -1134,13 +1262,13 @@ class ToolRegistry:
             )
         if allowed_by_exception:
             notes.setdefault(role, []).append(
-                f"按业主裁定「方案 1」放行了 {len(allowed_by_exception)} 个**该角色自己的写入面**"
+                f"{_ALLOWANCE_NOTE_EXCEPTION} {len(allowed_by_exception)} 个**该角色自己的写入面**"
                 f"（落库代理 / 自有凭据产物）：{sorted(allowed_by_exception)}"
                 f"（写面钉死在 READONLY_CALL_EXCEPTIONS[{role!r}] 里）"
             )
         if allowed_by_universal:
             notes.setdefault(role, []).append(
-                f"按通用能力放行了 {len(allowed_by_universal)} 件写工具：{sorted(allowed_by_universal)}"
+                f"{_ALLOWANCE_NOTE_UNIVERSAL} {len(allowed_by_universal)} 件写工具：{sorted(allowed_by_universal)}"
                 f"（UNIVERSAL_TOOLS：通用能力不按角色分配，它们的写只落在通信/簿记类表 "
                 f"{sorted(BOOKKEEPING_TABLES)} 上；不靠 READONLY_CALL_EXCEPTIONS）"
             )

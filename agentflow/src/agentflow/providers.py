@@ -61,7 +61,6 @@ __all__ = [
     "PROVIDER_STAT_STATUSES",
     "provider_error_kind",
     "default_user_agent",
-    "DEFAULT_FIXTURE_PATH",
 ]
 
 logger = logging.getLogger(__name__)
@@ -81,12 +80,6 @@ DEFAULT_RETRIES = 3
 
 #: 摘要截断长度。摘要只用于人工/AI 快速判断相关性，不能挤占存储与 prompt 预算。
 SUMMARY_MAX_CHARS = 1200
-
-#: 离线 fixture 候选文件的默认位置（相对本文件推算，避免依赖 cwd）。
-#: 路径链：src/agentflow/providers.py -> src/agentflow -> src -> test1 -> demo/fixtures/candidates.json
-DEFAULT_FIXTURE_PATH = (
-    Path(__file__).resolve().parents[2] / "demo" / "fixtures" / "candidates.json"
-)
 
 #: 需要重试的 HTTP 状态码：限流与瞬时服务端故障。
 #: 限流最多原地等多久（秒）。超过它就不等、直接报 `rate_limited` 让调用方换源。
@@ -2787,7 +2780,13 @@ def _europepmc_urls(entry: Mapping[str, Any], doi: str | None) -> tuple[str | No
 
 
 class FixtureProvider:
-    """离线确定性 provider：从 JSON 文件读候选，供离线端到端测试使用。
+    """离线确定性 provider：从调用方给的 JSON 文件读候选，供离线跑通与测试使用。
+
+    没有默认路径（2026-11-22 DEMORETIRE）：改前 `path=None` 会退到仓库里那份
+    `demo/fixtures/candidates.json`；随 `agentflow/demo/` 退场，那个默认值一并删了。
+    调用方必须显式给出 `path`（CLI：`search.fixture_path` 配置，缺省
+    `<工作区>/fixtures/candidates.json`）。给不出路径 ⇒ 不猜、不兜底：登记一条
+    warning 并返回空候选，把"这一趟没有离线源"如实报给上层。
 
     设计取舍：不把缺失的 fixture 当作错误抛出。离线演示/CI 可能先跑
     fixture 之外的路径，一个缺失的素材文件不应该让整条流水线崩掉；因此这里
@@ -2804,7 +2803,8 @@ class FixtureProvider:
         strict: bool = False,
     ) -> None:
         self.name = name
-        self.path = Path(path) if path is not None else DEFAULT_FIXTURE_PATH
+        #: `None` = 调用方没给路径。这不是"用某个默认文件"，是"这个源今天没有输入"。
+        self.path = Path(path) if path is not None else None
         self.strict = strict
         self._cache: list[dict] | None = None
 
@@ -2845,6 +2845,12 @@ class FixtureProvider:
     def _load(self) -> list[dict]:
         if self._cache is not None:
             return self._cache
+        if self.path is None:
+            logger.warning(
+                "fixture provider 没有给路径（`fixture_path` 未配置），本次返回空候选 —— "
+                "自 2026-11-22 起不再有 `demo/fixtures/candidates.json` 这个默认位置")
+            self._cache = []
+            return self._cache
         if not self.path.exists():
             logger.warning("fixture 文件不存在，返回空候选：%s", self.path)
             self._cache = []
@@ -2875,9 +2881,6 @@ class FixtureProvider:
         raw["fixture_mode"] = mode
         raw["fixture"] = dict(record)
         pdf_url = _stringify(record.get("pdf_url")) or None
-        if pdf_url and "path" in record:
-            # 允许 fixture 用相对路径指向 demo 素材，便于完全离线地跑通"下载"这一步。
-            raw["fixture_local_path"] = _stringify(record.get("path"))
         return Candidate(
             title=title,
             year=_coerce_year(record.get("year")),

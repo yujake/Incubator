@@ -60,6 +60,22 @@
 ⑦ 会话归口：只有 `sessions/<sid>.jsonl`？跨项目 / 跨 sid 各几条？读口 problems 几条？
    unattributed 的 task 是否都在范围内。
 
+## 逐行读数（TRACEFIX 2026-11-21；不占七项的一格）
+
+七项的口径一个字没动，只是把此前"只计数"的三类升级成逐条：
+
+- ② 里逐趟结算对账：每一趟 `task · 自报 $X/N 次 → 实际 $Y/M 行 · Δ · why`。
+  有落痕（`settle-recon|…`）读落痕；旧盘用同一个判据 `conductor.settle_recon_of`
+  复算，并标 `recomputed`（不冒充"落过痕"）。合计与会话口径残差并排。
+- ⑥ 里边 / 作废的逐条落痕：每条开过 / 认过的边（哪条边、通知、谁 ack 的、终态、
+  认没认掉），以及"该有落痕却没有"的逐条点名（已终态但没有 `edge-released`、
+  通知过但没有 `stop-acked`、`item_close=expired` 却没有任何作废留痕）。
+- `per_row` 一节：MALFORM 的两类 —— relations/statements 说回验通过却无
+  `quote_span`（判据 `evidencebits.quote_state == no_evidence`，与收工门同一把尺），
+  `ARTIFACTS` 最后一条登记的 sha 与盘上不符（`artifacts.verify_entries` +
+  `CHANGE_REASONS` 的读侧分类：签块晚于登记 / 被后续登记顶替 / 真改过）。
+  每条带 文件 · 行号或 id · 逐字值 · 判定；读不到就 `unchecked`，不折成 0 条。
+
 ## 独立跑与降级
 
 脚本只依赖数据文件；产品代码是加分项，不是前置条件：
@@ -87,7 +103,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 HERE = Path(__file__).resolve()
-#: 仓库项目根（`agentflow/`）：本文件在 `<项目根>/scripts/recon_b.py`。
+#: 产品根（`agentflow/`）：本文件在 `<产品根>/scripts/recon_b.py`。
 REPO = HERE.parents[1]
 #: 默认输出目录仍是 `temp/reconB/out/`（提升之后路径不变，好让旧命令与旧证据对得上）。
 DEFAULT_OUTDIR = REPO / "temp" / "reconB" / "out"
@@ -96,6 +112,9 @@ SRC_DIR = REPO / "src" if (REPO / "src").is_dir() else None
 #: 产品模块（可缺）。`--no-product` 可强制走数据直读，用来验证降级路径。
 PRODUCT: dict[str, Any] = {
     "closing": None, "sessions": None, "obligations": None, "proofregistry": None,
+    #: TRACEFIX：落痕逐条读数（conductor.landed_traces / settle_recon_of）、
+    #: 两类 MALFORM 逐行读数（evidencebits.quote_state / artifacts.verify_entries）。
+    "conductor": None, "evidencebits": None, "artifacts": None,
     "errors": [], "imported": False,
 }
 
@@ -127,7 +146,8 @@ def bootstrap_product(force_off: bool = False) -> None:
         return
     if SRC_DIR and SRC_DIR.is_dir() and str(SRC_DIR) not in sys.path:
         sys.path.insert(0, str(SRC_DIR))
-    for name in ("closing", "sessions", "obligations", "proofregistry"):
+    for name in ("closing", "sessions", "obligations", "proofregistry",
+                 "conductor", "evidencebits", "artifacts"):
         try:
             mod = __import__(f"agentflow.{name}", fromlist=[name])
             PRODUCT[name] = mod
@@ -606,6 +626,11 @@ def item2_unattributed(ctx: dict[str, Any]) -> dict[str, Any]:
                          for p in per_session]
     for line in per_session_lines:
         lines.append(f"     会话 {line}")
+    # ---- 逐趟结算对账（TRACEFIX）：有落痕读落痕，旧盘用同一个判据复算（标 recomputed）
+    settle_lines, settle_metrics = _settle_trace_lines(
+        ctx, residual_usd=residual_usd, residual_calls=residual_calls,
+        claimed_usd=claimed_usd)
+    lines.extend(settle_lines)
 
     # 账本口径对照
     ledger = ctx["ledger"]
@@ -633,6 +658,7 @@ def item2_unattributed(ctx: dict[str, Any]) -> dict[str, Any]:
                                             "usd": round(underreport_usd, 6),
                                             "tasks": len(per_task)}},
         "per_task": per_task[:20], "per_session": per_session, "missing_self_report": missing_self,
+        "settle_traces": settle_metrics,
         "ledger_caliber": {"task_id_none_rows": len(none_rows), "by_scope": dict(none_by_scope),
                            "ledger_usd": round(ledger_usd, 6)},
     }
@@ -1468,10 +1494,336 @@ def item6_obligations(ctx: dict[str, Any]) -> dict[str, Any]:
             "`tests/test_sgn1_a_landed_sign_wakes_b.py` 的 a（新召 ⇒ 有行）与 d/e"
             "（已有 B ⇒ 无行）把这条二分法钉住")
 
+    # ---- 边 / 作废逐条落痕（TRACEFIX）：哪条边、谁 ack 的、认没认掉、为什么作废
+    trace_lines, trace_metrics = _landed_trace_lines(ctx)
+    lines.extend(trace_lines)
+    item["metrics"]["landed_traces"] = trace_metrics
+
     item["metrics"]["families"] = family_out
     item["state"] = "ok" if (not open_board and not any(f["stuck_on_terminal_account"]
                                                        for f in family_out.values())) else "warn"
     return item
+
+
+# ---------------------------------------------------------------- 落痕 / 逐行读数（TRACEFIX）
+
+#: 落痕逐条读数里每一档最多印几条（超出只给计数；JSON 里是全量）。
+TRACE_LINES_CAP = 40
+
+
+def _product_conductor(root: Path) -> tuple[Any, str]:
+    """只读的 `Conductor`（用 :class:`RoStore`：对项目根一个字节都不写）。"""
+    CON = PRODUCT.get("conductor")
+    if CON is None:
+        return None, "产品不可用（conductor 没导入）⇒ 落痕逐条读数没查成"
+    try:
+        return CON.Conductor(RoStore(root), backend="local"), ""
+    except Exception as exc:  # noqa: BLE001 —— 装配不起来是"没查成"
+        return None, f"conductor 装配不起来（{type(exc).__name__}: {exc}）⇒ 没查成"
+
+
+def _runs_by_task(root: Path) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    """`runs/*.json` 按 task 号归并自报花销（同一 task 多趟 ⇒ 相加）。
+
+    返回 `{task_id: {usd, calls, path, paths}}`；读不成 / 不是运行档的文件记 problems
+    （不静默丢）。它是"旧盘没有 `settle-recon` 落痕时"复算自报那一半的数据来源。
+    """
+    out: dict[str, dict[str, Any]] = {}
+    problems: list[str] = []
+    run_dir = root / "runs"
+    if not run_dir.is_dir():
+        return out, [f"{rel(root, run_dir)} 不在 ⇒ 自报那一半没有来源"]
+    for path in sorted(run_dir.glob("*.json")):
+        data, err = read_json(path)
+        if err:
+            problems.append(err)
+            continue
+        if not isinstance(data, Mapping):
+            continue
+        tid = str(data.get("task_id") or "")
+        spend = data.get("spend")
+        if not tid or not isinstance(spend, Mapping):
+            continue
+        usd = spend.get("usd")
+        if not isinstance(usd, (int, float)) or isinstance(usd, bool):
+            continue
+        one = out.setdefault(tid, {"usd": 0.0, "calls": 0, "path": "",
+                                   "paths": []})
+        one["usd"] = round(float(one["usd"]) + float(usd), 6)
+        calls = spend.get("calls")
+        if isinstance(calls, int) and not isinstance(calls, bool):
+            one["calls"] = int(one["calls"]) + calls
+        one["paths"].append(rel(root, path))
+        one["path"] = one["paths"][0]
+    return out, problems
+
+
+def _as_float(value: Any) -> float:
+    """读数里的数字格（字符串形态）转 float；"na" / "unread" / 空 ⇒ 0.0（只在合计里用）。"""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _settle_trace_lines(ctx: dict[str, Any], *, residual_usd: float,
+                        residual_calls: int,
+                        claimed_usd: float = 0.0) -> tuple[list[str], dict[str, Any]]:
+    """逐趟结算对账（有落痕读落痕；旧盘用同一个判据复算，标 `recomputed`）。
+
+    每一趟一行：`task · 自报 $X/N 次 → 实际 $Y/M 行 · Δ $±Z/±K · why`。
+    合计与②的会话口径残差并排放：两个数不相等时，差额归到"无自报的趟 / 有 task 但
+    没有运行档的调用"（各自计数），不硬凑成相等。
+    """
+    root: Path = ctx["root"]
+    CON = PRODUCT.get("conductor")
+    lines: list[str] = []
+    rows: list[dict[str, Any]] = []
+    problems: list[str] = []
+    if CON is None:
+        lines.append("逐趟结算对账：没查成（conductor 没导入）—— 不是「没有差额」")
+        return lines, {"checked": False, "reason": "conductor 没导入", "rows": []}
+    cond, why = _product_conductor(root)
+    if cond is not None:
+        got = cond.landed_traces()
+        if got.get("checked"):
+            rows.extend(dict(x) for x in got.get("settle") or [])
+        else:
+            problems.append(f"landed_traces 没查成（{got.get('reason')}）")
+    else:
+        problems.append(why)
+    traced = {str(x.get("task_id") or "") for x in rows}
+    runs, run_problems = _runs_by_task(root)
+    problems.extend(run_problems)
+    ledger = ctx["ledger"]
+    spent_tasks = sorted({str(r.get("task_id")) for r in ledger
+                          if str(r.get("scope") or "") == "reason"
+                          and str(r.get("task_id") or "")})
+    for tid in spent_tasks:
+        if tid in traced:
+            continue
+        one = CON.settle_recon_of(
+            task_id=tid, run_doc=({"spend": runs[tid]} if tid in runs else None),
+            run_path=str((runs.get(tid) or {}).get("path") or ""),
+            ledger_rows=ledger)
+        one["source"] = "recomputed"
+        rows.append(one)
+    rows.sort(key=lambda x: (str(x.get("task_id") or "")))
+    reported = sum(_as_float(x.get("reported_usd")) for x in rows
+                   if str(x.get("reported_usd") or "") not in ("", "na", "unread"))
+    actual = sum(_as_float(x.get("actual_usd")) for x in rows)
+    delta = round(actual - reported, 6)
+    lines.append(f"逐趟结算对账（{len(rows)} 趟；落痕 {len(traced)} 条 / 复算 "
+                 f"{len(rows) - len(traced)} 条）：自报合计 {usd(reported)}，"
+                 f"实际（scope=reason）合计 {usd(actual)}，Δ {usd(delta)}")
+    lines.append(f"  会话口径残差（②）={usd(residual_usd)} / {residual_calls} 次调用"
+                 f" —— 与逐趟 Δ 的差 {usd(residual_usd - delta)}"
+                 "（逐趟这一格只算 scope=reason；extract 不属于任何一趟的 LLM 循环）")
+    gap = round(claimed_usd - reported, 6)
+    lines.append(f"  自报来源核对：会话口径各趟自报合计 {usd(claimed_usd)}，逐趟复算能读到"
+                 f" {usd(reported)} ⇒ 差 {usd(gap)}"
+                 + ("（那些趟没有 `runs/*.json` 里带 task_id + spend 的运行档："
+                    "自报那一半没有来源，逐趟这一格不猜）" if abs(gap) >= 1e-6 else ""))
+    shown = 0
+    for one in rows:
+        reported_text = str(one.get("reported_usd") or "")
+        delta_text = str(one.get("delta_usd") or "")
+        notable = (not one.get("checked") or reported_text in ("", "na", "unread")
+                   or (delta_text and abs(_as_float(delta_text)) >= 1e-6))
+        if not notable:
+            continue
+        if shown < TRACE_LINES_CAP:
+            lines.append(
+                f"  {one.get('task_id') or '?'} · 自报 "
+                + (f"${_as_float(reported_text):.6f}/{one.get('reported_calls') or '?'} 次"
+                   if reported_text not in ("", "na", "unread") else reported_text)
+                + f" → 实际 {usd(_as_float(one.get('actual_usd')))}/{one.get('actual_rows')} 行"
+                + (f" · Δ {usd(_as_float(delta_text))}/{one.get('delta_calls')} 次"
+                   if delta_text else "")
+                + f" · {one.get('by_role') or 'role=?'} · {one.get('why') or ''}"
+                + ("" if one.get("source") == "trace" else
+                   f"（{one.get('source')}：这一趟没有落痕）"))
+        shown += 1
+    if shown > TRACE_LINES_CAP:
+        lines.append(f"  ……另有 {shown - TRACE_LINES_CAP} 趟有差 / 没查成，逐条见 JSON")
+    if shown == 0 and rows:
+        lines.append("  每一趟都逐分相等（Δ=0）⇒ 没有要认领的差额")
+    metrics = {"checked": True, "rows": rows, "reported_usd": round(reported, 6),
+               "actual_usd": round(actual, 6), "delta_usd": delta,
+               "traced": len(traced), "recomputed": len(rows) - len(traced),
+               "notable": shown, "problems": problems}
+    return lines, metrics
+
+
+def _landed_trace_lines(ctx: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
+    """边 / 板项作废的逐条落痕（`conductor.landed_traces` 的读数面）。"""
+    root: Path = ctx["root"]
+    lines: list[str] = []
+    cond, why = _product_conductor(root)
+    if cond is None:
+        lines.append(f"边 / 作废落痕：没查成（{why}）—— 不是「没有缺落痕」")
+        return lines, {"checked": False, "reason": why}
+    got = cond.landed_traces()
+    if not got.get("checked"):
+        lines.append(f"边 / 作废落痕：没查成（{got.get('reason')}）")
+        return lines, {"checked": False, "reason": got.get("reason")}
+    counts = dict(got.get("counts") or {})
+    lines.append(f"边落痕：{counts.get('edges', 0)} 条开过 / 认过的边"
+                 f"（哪条边 · 通知 · 谁 ack · 终态 · 认没认掉）")
+    for e in (got.get("edges") or [])[:TRACE_LINES_CAP]:
+        lines.append(
+            f"  {e.get('parent')}→{e.get('child')}  通知@{e.get('notified_at') or '-'}"
+            f"  ack@{e.get('acked_at') or '-'}"
+            + (f"(by {e.get('ack_by')})" if e.get("ack_by") else "(ack 落痕里没有谁读的)")
+            + f"  终态@{e.get('settled_at') or '-'}"
+            f"  released={'是' if e.get('released') else '否'}"
+            + (f"（trace: {e.get('release_trace', {}).get('acked_at') or '无 ack 时刻'}）"
+               if e.get("release_trace") else ""))
+    if len(got.get("edges") or []) > TRACE_LINES_CAP:
+        lines.append(f"  ……另有 {len(got.get('edges')) - TRACE_LINES_CAP} 条见 JSON")
+    by_kind: dict[str, list[dict[str, Any]]] = collections.defaultdict(list)
+    for one in got.get("missing") or []:
+        by_kind[str(one.get("kind") or "")].append(one)
+    for kind, title in (("edge-released", "已终态但父行没有 edge-released 落痕"),
+                        ("stop-acked", "通知过却没有任何 stop-acked 落痕"),
+                        ("void-trace", "item_close=expired 却没有任何作废留痕"),
+                        ("edge-readings", "边的读数没查成")):
+        rows = by_kind.get(kind) or []
+        if not rows:
+            continue
+        lines.append(f"该有落痕却没有：{title} —— {len(rows)} 条")
+        for one in rows[:TRACE_LINES_CAP]:
+            if kind == "void-trace":
+                where = f"板项 {one.get('item')}"
+            else:
+                where = f"{one.get('parent')}→{one.get('child')}"
+                if one.get("status"):
+                    where += f"（status={one.get('status')}）"
+            lines.append(f"  {where}：{one.get('why') or ''}")
+        if len(rows) > TRACE_LINES_CAP:
+            lines.append(f"  ……另有 {len(rows) - TRACE_LINES_CAP} 条见 JSON")
+    lines.append(f"板项作废 / 撤销落痕：{counts.get('voids', 0)} 条"
+                 "（哪一条 · 作废还是撤销 · 谁作的 · 原状态 · 逐字理由）")
+    for one in (got.get("voids") or [])[:TRACE_LINES_CAP]:
+        lines.append(f"  {one.get('item_id')}  mode={one.get('mode')}  by={one.get('by')}"
+                     f"  owner={one.get('owner')}  from={one.get('from')}→{one.get('to')}"
+                     f"  at={one.get('at')}  reason={one.get('reason')}"
+                     f"  （{one.get('source')}）")
+    if len(got.get("voids") or []) > TRACE_LINES_CAP:
+        lines.append(f"  ……另有 {len(got.get('voids')) - TRACE_LINES_CAP} 条见 JSON")
+    metrics = {"checked": True, "counts": counts,
+               "edges": got.get("edges") or [], "voids": got.get("voids") or [],
+               "missing": got.get("missing") or []}
+    return lines, metrics
+
+
+def per_row_readings(root: Path) -> dict[str, Any]:
+    """MALFORM 那两类的逐行读数（每条带 文件 · 行号/id · 逐字值 · 判定）。
+
+    判据不在这里重写：
+    - "说回验通过却给不出区间"用 `evidencebits.quote_state`（`closing` 的同一把尺），
+      `no_evidence` 那一档就是它；
+    - "ARTIFACTS 最后一条登记的 sha 与盘上不符"用 `artifacts.verify_entries` +
+      `artifacts.CHANGE_REASONS` 的读侧分类（`changed` 不再是一个布尔）。
+
+    三态：产品不可用 / 某张表读不到 ⇒ `checked=False` + `unchecked` 点名是哪一格；
+    不折成"0 条"。
+    """
+    EB = PRODUCT.get("evidencebits")
+    ART = PRODUCT.get("artifacts")
+    out: dict[str, Any] = {"checked": False, "state": "unknown",
+                           "quote_no_evidence": [], "artifact_sha_changed": [],
+                           "superseded": 0, "unchecked": [], "problems": []}
+    if EB is None or ART is None:
+        out["problems"].append("产品不可用（evidencebits / artifacts）⇒ 逐行读数没查成")
+        return out
+    out["checked"] = True
+    for name, id_key in (("relations", "relation_id"), ("statements", "stmt_id")):
+        rows, err = table(root, name)
+        if err:
+            out["unchecked"].append(f"{name}：{err}")
+            continue
+        for n, row in enumerate(rows, 1):
+            try:
+                state = EB.quote_state(row)
+            except Exception as exc:  # noqa: BLE001 —— 一行判不了 ⇒ 这一行没查成
+                out["problems"].append(f"{name}#{n}：{type(exc).__name__}: {exc}")
+                continue
+            if state != EB.QUOTE_NO_EVIDENCE:
+                continue
+            out["quote_no_evidence"].append({
+                "where": f"data/{name}.json#第{n}条", "file": f"data/{name}.json",
+                "row": n, "id": str(row.get(id_key) or row.get("statement_id") or ""),
+                "quote_verified": row.get("quote_verified"),
+                "quote_span": str(row.get("quote_span") or ""),
+                "quote_mode": str(row.get("quote_mode") or ""),
+                "verdict": "no_evidence",
+                "why": "quote_verified=true 而 quote_span 为空 ⇒ 说「逐字回验通过」却指不出核的是哪一段",
+            })
+    records, bad = ART.read_ledger(root)
+    out["problems"].extend(bad)
+    checks = ART.verify_entries(root, records)
+    last_index: dict[str, int] = {}
+    for i, row in enumerate(records):
+        if str(row.get("path") or ""):
+            last_index[str(row.get("path") or "")] = i
+    for i, (row, check) in enumerate(zip(records, checks)):
+        if check.get("status") != "changed":
+            continue
+        reason = str(check.get("reason") or "")
+        if last_index.get(str(row.get("path") or "")) != i:
+            # 后面还有同路径登记 ⇒ 这一条是被追加登记顶替的旧行（不是"最后一条"）。
+            out["superseded"] += 1
+            continue
+        out["artifact_sha_changed"].append({
+            "where": f"ARTIFACTS.jsonl#第{i + 1}行", "file": "ARTIFACTS.jsonl",
+            "line": i + 1, "id": str(row.get("path") or ""),
+            "registered_sha256": str(row.get("sha256") or ""),
+            "on_disk_sha256": str(check.get("sha256_now") or ""),
+            "registered_at": str(row.get("at") or ""),
+            "verdict": reason,
+            "explained": bool(check.get("explained")),
+            "why": {"signed_after_registration": "登记之后落了签块（可解释）",
+                    "superseded_by_later_registration": "后面还有更新的登记（可解释）",
+                    "rewritten_after_registration": "登记之后内容被改过（没有可解释的原因）",
+                    }.get(reason, reason),
+        })
+    out["state"] = "malformed" if (out["quote_no_evidence"]
+                                   or out["artifact_sha_changed"]) else "ok"
+    return out
+
+
+def _per_row_lines(reading: Mapping[str, Any]) -> list[str]:
+    """`per_row_readings` 的人读面（逐行，不折叠成计数）。"""
+    lines: list[str] = []
+    if not reading.get("checked"):
+        lines.append("逐行读数：没查成（" + "；".join(reading.get("problems") or [])
+                     + "）—— 那是「没读成」，不是「0 条」")
+        return lines
+    quote = list(reading.get("quote_no_evidence") or [])
+    lines.append(f"relations / statements 说回验通过却无 quote_span：{len(quote)} 条"
+                 f"（判据 `evidencebits.quote_state == no_evidence`，与收工门同一把尺）")
+    for one in quote[:TRACE_LINES_CAP]:
+        lines.append(f"  {one['where']}  {one['id'] or '（无号）'}  "
+                     f"quote_verified={one['quote_verified']!r}  "
+                     f"quote_span={one['quote_span']!r}  "
+                     f"quote_mode={one['quote_mode']!r}  → {one['verdict']}")
+    if len(quote) > TRACE_LINES_CAP:
+        lines.append(f"  ……另有 {len(quote) - TRACE_LINES_CAP} 条见 JSON")
+    changed = list(reading.get("artifact_sha_changed") or [])
+    lines.append(f"ARTIFACTS 最后一条登记的 sha 与盘上不符：{len(changed)} 条 / "
+                 f"{len({x['id'] for x in changed})} 个路径"
+                 f"（另有 {int(reading.get('superseded') or 0)} 条旧登记被后续登记顶替，可解释）")
+    for one in changed[:TRACE_LINES_CAP]:
+        lines.append(f"  {one['where']}  {one['id']}  登记 "
+                     f"{one['registered_sha256'][:12]}…（at {one['registered_at']}）  "
+                     f"盘上 {one['on_disk_sha256'][:12]}…  → {one['verdict']}"
+                     f"（{one['why']}）")
+    if len(changed) > TRACE_LINES_CAP:
+        lines.append(f"  ……另有 {len(changed) - TRACE_LINES_CAP} 条见 JSON")
+    for problem in reading.get("unchecked") or []:
+        lines.append(f"  没查成：{problem}")
+    return lines
 
 
 # ---------------------------------------------------------------- ⑦ 会话归口
@@ -1737,6 +2089,8 @@ def build_report(root: Path, outdir: Path) -> tuple[dict[str, Any], str]:
     warn_items = [it["id"] for it in items if it["state"] == "warn"]
 
     diff = _caliber_diff(items)
+    # 逐行读数（MALFORM 两类的升级）：不占七项的一格（七项的口径不变），但逐条列。
+    per_row = per_row_readings(root)
     report = {
         "schema": SCHEMA,
         "project": root.name,
@@ -1746,7 +2100,9 @@ def build_report(root: Path, outdir: Path) -> tuple[dict[str, Any], str]:
         "read_only": True,
         "product": {
             "imported": bool(PRODUCT.get("imported")),
-            "modules": {k: bool(PRODUCT.get(k)) for k in ("closing", "sessions", "obligations", "proofregistry")},
+            "modules": {k: bool(PRODUCT.get(k)) for k in ("closing", "sessions", "obligations",
+                                                         "proofregistry", "conductor",
+                                                         "evidencebits", "artifacts")},
             "errors": PRODUCT.get("errors") or [],
             "note": ("产品口径：closing.check_closing / closing.machine_feeders / "
                      "closing.nontriviality_reading / sessions.runs_in_session / "
@@ -1760,6 +2116,7 @@ def build_report(root: Path, outdir: Path) -> tuple[dict[str, Any], str]:
             "seven_items_present": len(items) == 7,
         },
         "items": items,
+        "per_row": per_row,
         "caliber_diff": diff,
     }
 
@@ -1783,6 +2140,10 @@ def build_report(root: Path, outdir: Path) -> tuple[dict[str, Any], str]:
         else:
             L.append(f"   → 这一项：{it['state']}")
         L.append("")
+    # ---- 逐行读数（MALFORM 两类的升级：文件 · 行号/id · 逐字值 · 判定）
+    L.append("逐行读数（MALFORM 两类：从「只计数」升级成逐条；判据与收工门 / 台账同一把尺）")
+    L.extend(_per_row_lines(per_row))
+    L.append("")
     # ---- 口径差异（旧 → 新）：同一份盘上，哪些数会变
     d = diff
     L.append("口径差异（旧 → 新；同一份盘上算出来的对照）")

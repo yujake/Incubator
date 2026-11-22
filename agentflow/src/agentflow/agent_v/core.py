@@ -4731,7 +4731,7 @@ def selftest() -> int:
             "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
             "|---|---|---|---|\n\n"
             "（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n",
-            encoding="utf-8")
+            encoding="utf-8", newline="\n")
         return rel
 
     agent = AgentV(None, workspace_root=root, secretary=_NoSecretary(), llm=_ScriptedSeam([

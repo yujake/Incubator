@@ -178,6 +178,244 @@ def _board_item_summary(row: Mapping[str, Any], *, cap: int = 200) -> str:
     text = " ".join(str(row.get("detail") or "").split())[:cap]
     return text or "（没有摘要）"
 
+
+# ---------------------------------------------------------------- 落痕的三种读法
+#
+# 现场（TRACEFIX 2026-11-21，真机 lp-ball-15 的 reconB 只读复算）：这三件事各自
+# "该有落痕却没有"，而缺的那一格没有任何逐条读数：
+#
+# 1. 召唤级结算只有一行 0 token 的 `settle-*`，「这一趟自报了多少、账上实际多少、
+#    差多少、为什么差」散在 `runs/<趟>.json` 与 `usage_ledger` 两处；
+# 2. 边释放只有 `edge-released:<子>#<n>` 一个布尔性痕迹，「谁 ack 的、哪条通知」不在行上；
+#    38 个已终态子代理一条 `edge-released` 都没有，也没有任何读数点名它们；
+# 3. 作废的原因是一句自由文本（`void:expired:<谁>:<理由>`），而调用方不给理由时
+#    那一格就是空的（`void:expired:<谁>:`）——"为什么作废"落不进板项。
+#
+# 处置：写点补三类结构化落痕（都写进既有那一行的 `inputs`，不动 schema），
+# 读侧在 `landed_traces()` 一处逐条读回来。格式是 `前缀|k=v|k=v`：`|` 分字段、
+# 第一个 `=` 分键值，值里的 `|` / 换行在写入前就换成空格（`_trace_value`）。
+
+#: 召唤级结算对账的落痕前缀（写在那一趟 `tasks` 行的 `inputs` 里）。
+SETTLE_RECON_PREFIX: str = "settle-recon|"
+#: 停止通知被 ack 的落痕（父行 `inputs`）：哪条边、谁读到的、哪条通知。
+EDGE_ACK_TRACE_PREFIX: str = "edge-ack|"
+#: 边被认掉时补的落痕：哪条边、ack 时刻、通知项、释放时刻。
+EDGE_RELEASE_TRACE_PREFIX: str = "edge-release|"
+#: 板项作废 / 撤销的统一留痕（两档都写，`mode` 分开；原因保证非空）。
+VOID_TRACE_PREFIX: str = "void-trace|"
+
+
+def void_reason_or_derived(reason_text: Any, *, item_id: str, by: str, owner: str,
+                           cur: str, revoke: bool) -> str:
+    """板项作废 / 撤销那一句"为什么"：调用方给了就逐字用，没给就按证据补一句。
+
+    为什么要写点补值：作废 / 撤销是不可逆的动作，板项上那一格空着，事后就答不出
+    "谁作的、为什么"。补值只发生在写点（读侧不许猜一个理由），并在调用处落一条
+    `void_reason_derived` 读数。
+    """
+    text = " ".join(str(reason_text or "").split())
+    if text:
+        return text
+    return (f"{'撤销' if revoke else '作废'}：调用方没给理由（写点按证据补）—— "
+            f"item={item_id}、by={by}、owner={owner or '（顶层）'}、from={cur}、"
+            f"mode={'revoke' if revoke else 'void'}")
+
+
+def _trace_value(value: Any, *, cap: int = 240) -> str:
+    """落痕里一格的值：换行 / `|` 换成空格（格式的边界字符不许进值），超长截断。"""
+    text = " ".join(str(value if value is not None else "").split())
+    text = text.replace("|", "/")
+    return text[:cap]
+
+
+def _trace_line(prefix: str, fields: Mapping[str, Any]) -> str:
+    """拼一条结构化落痕；空值不写（缺的那一格由读侧按"没读到"处理）。"""
+    parts = [f"{k}={_trace_value(v)}" for k, v in fields.items()
+             if str(v if v is not None else "") != ""]
+    return prefix + "|".join(parts)
+
+
+def _trace_fields(text: Any, prefix: str) -> dict[str, str]:
+    """把一条落痕拆回字典；前缀不符或不是本族 ⇒ 空表（不猜）。"""
+    line = str(text or "")
+    if not line.startswith(prefix):
+        return {}
+    out: dict[str, str] = {}
+    for part in line[len(prefix):].split("|"):
+        key, sep, value = part.partition("=")
+        if sep and key:
+            out[key] = value
+    return out
+
+
+def _trace_mark_of(row: Mapping[str, Any], prefix: str) -> dict[str, str]:
+    """这一行 `inputs` 里第一条本族落痕（没有 ⇒ 空表）。"""
+    for text in (row or {}).get("inputs") or ():
+        got = _trace_fields(text, prefix)
+        if got:
+            return got
+    return {}
+
+
+def settle_recon_of(*, task_id: Any, run_doc: Any = None, run_path: str = "",
+                    run_error: str = "", ledger_rows: Sequence[Mapping[str, Any]] = (),
+                    ledger_error: str = "") -> dict[str, Any]:
+    """结算对账的判据（纯函数：不读盘、不写盘；写点与读侧共用这一份）。
+
+    - 自报：`run_doc` 的 `spend` 块（这一趟自己的缝）。`run_path` 为空 ⇒ 这一趟不是
+      模型循环，自报不适用（`reported=None`，不是 0）；`run_error` 非空 ⇒ 自报读不出来
+      （`checked=False`，不是 0）。
+    - 实际：`ledger_rows` 里挂在这个 task 号下、`scope="reason"` 的行之和 ——
+      逐笔模型调用账。`summon`（这一笔结算自己）与 `extract`（另一条不进会话流的调用路）
+      都不属于"这一趟的 LLM 循环"，不计入差额。
+    - 为什么差：证据是账本行的 role / scope 分解（差额来自"记在同一 task 号上、
+      但不在这条缝的累计里"的行，最典型的是秘书 / 审阅子缝）。
+
+    返回 `{checked, task_id, task_role, source, reported_usd, reported_calls,
+    actual_usd, actual_rows, delta_usd, delta_calls, by_scope, by_role, why, mark}`
+    （数值格统一成字符串，与 `settle_trace_of` 的形状逐字相同）。写点
+    （`_charge_and_settle`）把 `mark` 写进那一行；读侧（`recon_b`）对没有落痕的旧盘
+    用同一个函数复算，`source` 写 `recomputed`（不冒充"落过痕"）。
+    """
+    tid = str(task_id or "")
+    out: dict[str, Any] = {
+        "checked": True, "task_id": tid, "task_role": "", "source": "recomputed",
+        "reported_usd": "", "reported_calls": None,
+        "actual_usd": "", "actual_rows": 0, "delta_usd": "", "delta_calls": None,
+        "by_scope": "", "by_role": "", "why": "", "mark": "",
+    }
+    if not tid:
+        out.update(checked=False, why="没有 task 号 ⇒ 结算对账没有挂点（不是「差 0」）")
+        return out
+    reported: float | None = None
+    reported_calls: int | None = None
+    if run_error:
+        out.update(checked=False, why=(f"自报读不出来（{run_path or 'runs/*.json'}："
+                                       f"{run_error}）⇒ 这一格没查成，不是 0"))
+    elif not run_path:
+        out["why"] = ("这一趟不是模型循环（没有 runs/*.json 自报）⇒ 自报不适用；"
+                      "账上这一 task 的 reason 行不属于这一趟的缝")
+    else:
+        spend = run_doc.get("spend") if isinstance(run_doc, Mapping) else None
+        usd = spend.get("usd") if isinstance(spend, Mapping) else None
+        if isinstance(usd, (int, float)) and not isinstance(usd, bool):
+            reported = float(usd)
+            calls = spend.get("calls")
+            if isinstance(calls, int) and not isinstance(calls, bool):
+                reported_calls = calls
+        else:
+            out.update(checked=False, why=(
+                f"自报里没有 `spend.usd`（{run_path}）⇒ 这一格没查成，不是 0"))
+    rows: list[Mapping[str, Any]] = []
+    if ledger_error:
+        out.update(checked=False, why=(
+            f"usage_ledger 读不成（{ledger_error}）⇒ 实际那一格没查成"))
+    else:
+        rows = [r for r in ledger_rows
+                if str(r.get("task_id")) == tid and str(r.get("scope")) == "reason"]
+    if not out["checked"]:
+        out["reported_usd"] = "unread"
+        out["actual_usd"] = "unread"
+        out["mark"] = _trace_line(SETTLE_RECON_PREFIX, {
+            "reported": "unread", "actual": "unread", "why": out["why"]})
+        return out
+    actual = round(sum(float(r.get("usd") or 0.0) for r in rows), 6)
+    by_scope: dict[str, int] = {}
+    by_role: dict[str, int] = {}
+    for r in rows:
+        by_scope[str(r.get("scope") or "")] = by_scope.get(str(r.get("scope") or ""), 0) + 1
+        by_role[str(r.get("role") or "")] = by_role.get(str(r.get("role") or ""), 0) + 1
+    out["actual_usd"] = f"{actual:.6f}"
+    out["actual_rows"] = len(rows)
+    out["by_scope"] = ",".join(f"{k}:{v}" for k, v in sorted(by_scope.items()))
+    out["by_role"] = ",".join(f"{k}:{v}" for k, v in sorted(by_role.items()))
+    delta_usd: float | None = None
+    delta_calls: int | None = None
+    if reported is None:
+        reported_text = "na"
+    else:
+        reported_text = f"{reported:.6f}"
+        delta_usd = round(actual - reported, 6)
+        if reported_calls is not None:
+            delta_calls = len(rows) - reported_calls
+        if abs(delta_usd) < 1e-6 and not delta_calls:
+            out["why"] = "自报与账上逐分相等（这一趟的缝数到了每一笔）"
+        else:
+            out["why"] = ("差额 = 本趟自报之外、记在同一 task 号上的 reason 行"
+                          "（按 role/scope 分解见左）；本趟自报只数自己那条缝，"
+                          "秘书 / 审阅子缝共用这个 task 号")
+    out["reported_usd"] = reported_text
+    out["reported_calls"] = reported_calls
+    out["delta_usd"] = "" if delta_usd is None else f"{delta_usd:.6f}"
+    out["delta_calls"] = delta_calls
+    out["mark"] = _trace_line(SETTLE_RECON_PREFIX, {
+        "reported": reported_text,
+        "reported_calls": ("" if reported_calls is None else reported_calls),
+        "actual": f"{actual:.6f}", "actual_rows": len(rows),
+        "delta_usd": out["delta_usd"],
+        "delta_calls": ("" if delta_calls is None else delta_calls),
+        "scope": out["by_scope"], "role": out["by_role"], "why": out["why"],
+    })
+    return out
+
+
+def settle_trace_of(row: Mapping[str, Any]) -> dict[str, Any]:
+    """一行代理的召唤级结算对账落痕（没有 ⇒ 空表）。纯解析，不读盘。"""
+    got = _trace_mark_of(row, SETTLE_RECON_PREFIX)
+    if not got:
+        return {}
+    return {"checked": got.get("reported", "") != "unread",
+            "task_id": str(row.get("task_id") or ""),
+            "task_role": str(row.get("role") or ""),
+            "source": "trace",
+            "reported_usd": got.get("reported", ""),
+            "reported_calls": got.get("reported_calls", ""),
+            "actual_usd": got.get("actual", ""),
+            "actual_rows": got.get("actual_rows", ""),
+            "delta_usd": got.get("delta_usd", ""),
+            "delta_calls": got.get("delta_calls", ""),
+            "by_scope": got.get("scope", ""), "by_role": got.get("role", ""),
+            "why": got.get("why", "")}
+
+
+def edge_ack_trace_of(row: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """父行上所有 `edge-ack|…` 落痕（逐条，不合并）。"""
+    out: list[dict[str, Any]] = []
+    for text in (row or {}).get("inputs") or ():
+        got = _trace_fields(text, EDGE_ACK_TRACE_PREFIX)
+        if got:
+            out.append(got)
+    return out
+
+
+def edge_release_trace_of(row: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """父行上所有 `edge-release|…` 落痕（逐条，不合并）。"""
+    out: list[dict[str, Any]] = []
+    for text in (row or {}).get("inputs") or ():
+        got = _trace_fields(text, EDGE_RELEASE_TRACE_PREFIX)
+        if got:
+            out.append(got)
+    return out
+
+
+def void_trace_of(row: Mapping[str, Any]) -> dict[str, Any]:
+    """一条板项的作废 / 撤销留痕（没有 ⇒ 空表；旧行退回 `revoke:expired:` 六格）。"""
+    got = _trace_mark_of(row, VOID_TRACE_PREFIX)
+    if got:
+        return {"item_id": str(row.get("task_id") or ""), "mode": got.get("mode", ""),
+                "by": got.get("by", ""), "owner": got.get("owner", ""),
+                "from": got.get("from", ""), "to": got.get("to", ""),
+                "close": got.get("close", ""), "at": got.get("at", ""),
+                "reason": got.get("reason", ""), "source": "void-trace"}
+    legacy = _parse_revoke_mark(_revoke_mark_of(row))
+    if legacy:
+        return {"item_id": str(row.get("task_id") or ""), "mode": "revoke",
+                "by": legacy.get("by", ""), "owner": legacy.get("owner", ""),
+                "from": legacy.get("from", ""), "to": legacy.get("to", ""),
+                "close": "expired", "at": legacy.get("at", ""),
+                "reason": legacy.get("reason", ""), "source": "revoke-mark"}
+    return {}
+
 # ---------------------------------------------------------------- 三态（在飞 / 待机 / 静默）
 #
 # 三种读数：1. 在工作叫「在飞」，2. 在等待（计时器）为「待机」，3. 已收工、无任务、
@@ -4676,6 +4914,22 @@ class Conductor:
     ITEM_AUTHORITY_PARENT = "parent"
     ITEM_AUTHORITY_CONDUCTOR = "conductor"
 
+    #: 第三档：人（网页上那只手）。它不在 `_item_authority` 的两句话里，也不是
+    #: 一个"第三种代理"——那两句话管的是代理（直接父 / M），而人是代理面的外面。
+    #:
+    #: 为什么必须单独一档（业主 2026-11-21 BOARDACK 取证）：`_item_authority` 自己
+    #: 把顶趟 M 名下的板项留给"人处置"（拒信逐字「两个顶趟之间不是这项的父子
+    #: 关系；这一条不许改（要改由人处置）」）。真机 `projects/lp-ball-15` 的 6 条
+    #: `block` 项里恰好有 2 条挂在顶趟 M（t-000001）名下 ⇒ 以 M 的名义撤不掉，而
+    #: 这两条又永远不会被收件人自己 ack（那一趟已经收工）。所以这一档不是给代理开的
+    #: 后门，它就是那句拒信指的那条路：`void_items_by_user` 是它唯一的入口。
+    ITEM_AUTHORITY_HUMAN = "human"
+
+    #: 人在留痕里的 `by` 值（六格留痕的第一格）。单列一格、不借 M 的号：
+    #: 事后读 `revoke:expired:by=…` 时，"谁按的"必须能区分「一个代理」与「人」——
+    #: 借号会让一笔人的决定读起来像一次代理越权（或者反过来）。
+    HUMAN_ACTOR = "user"
+
     #: 撤销时要不要另落一条通知行（缺省关掉）。
     #:
     #: 为什么关：撤销动作自身若再落 N 条新 `notice` 行（`kind="notice"`、done/expired），
@@ -4889,7 +5143,7 @@ class Conductor:
         return notice
 
     def void_items(self, item_ids: Sequence[str], *, by_task_id: str, why: str,
-                   revoke: bool = False) -> dict[str, Any]:
+                   revoke: bool = False, by_human: bool = False) -> dict[str, Any]:
         """把"永远不会再被收件人处理"的板项作废（`item_close="expired"`）。
 
         为什么必须有这一条：到点通知是 `expects="ack"` 的板项，父不许代 ack，而收件人
@@ -4931,6 +5185,20 @@ class Conductor:
         权限是这一档的全部正当性：兄弟 / 祖父 / 任何非直接父、非 M 的人改别人的项
         ⇒ 受控拒绝 `not_authorized`，一个格都不动。收件人自己那条路不受影响 ——
         他仍是 `ack_items`（`conductor.ack`），不是这里。
+
+        ## `by_human=True`：网页上「人」的那只手（BOARDACK，2026-11-21）
+
+        这一档只由 :meth:`void_items_by_user` 打开（网页端点的唯一入口）。它与
+        `revoke=True` 共用下面全部的写盘、留痕、提醒与 `expects` 清空口径，只换
+        "凭什么"那一格：人不判 `_item_authority`（那两句话管的是代理），改由
+        `ITEM_AUTHORITY_HUMAN` 记账。为什么必须留着这一档：`_item_authority` 把顶趟
+        M 名下的板项受控拒给"人处置"（见那里的 not_authorized 那一句），而真机
+        `lp-ball-15` 停在 `block` 的 6 条里就有 2 条挂在顶趟 M（t-000001）名下 ——
+        以 M 的名义一条都撤不掉，那 2 条也就不可能从任何代理那条路收口。
+
+        `by_task_id` 在这一档由调用方给成 `HUMAN_ACTOR`（`"user"`）：留痕的 `by=`
+        那一格必须能区分「一个代理按的」与「人按的」，借 M 的号会让一笔人的决定读成
+        一次代理越权。`revoke` 由调用方一并置真（人的正当性是决定，不是"叫不醒"）。
 
         ## 撤销要一并做完的两件（乙件 / 丙件）
 
@@ -4981,7 +5249,8 @@ class Conductor:
             for iid in ids:
                 row = rows.get(iid)
                 refusal, cur, authority = self._void_item_gate(
-                    iid=iid, row=row, rows=rows, by_task_id=by_task_id, revoke=revoke)
+                    iid=iid, row=row, rows=rows, by_task_id=by_task_id, revoke=revoke,
+                    by_human=by_human)
                 if refusal is not None:
                     out["refused"].append(refusal)
                     continue
@@ -5003,9 +5272,78 @@ class Conductor:
             out["reason"] = f"撤销 {len(out['voided'])} 条（留痕：{shown}）"
         return out
 
+    def void_items_by_user(self, item_ids: Sequence[str], *, why: str = "",
+                           by: str = "") -> dict[str, Any]:
+        """网页上「人」的那只手：把不再需要做的板项撤销（`item_close="expired"`）。
+
+        这一条只做三件事：把 `revoke=True`（正当性是决定，不是"叫不醒"）与
+        `by_human=True`（不判 `_item_authority`，记 `ITEM_AUTHORITY_HUMAN`）钉在一起，
+        再把留痕的 `by` 写成 `HUMAN_ACTOR`。逐项判据、写盘、六格留痕、提醒、
+        `expects` 清空一律走 :meth:`void_items` —— 这里不写第二份。
+
+        ## 为什么需要它（真机现场，2026-11-21 BOARDACK）
+
+        `projects/lp-ball-15` 有 6 条 `notice` 板项停在 `item_state=block`（优雅停止
+        `stopctl.block_remaining_tasks` 翻的）。收口只有两条合法路，两条都不通：
+
+        ```text
+        a) 唤醒 ⇒ 再 ack：wake_blocked 对其中 3 条判 resume（收件人 t-000047 / t-000122
+           已 done），1 条 no_owner（t-000170 无主），2 条 not_silent（顶趟 M 挂着计时器）。
+           而"唤醒之后再 ack"仍被 A5 拦：直写把 seen_by 清空 ⇒ close_item 回 ack_unbacked
+           （实测：唤醒 t-000055 之后 close_item ⇒ "还没有 seen … 空口 ack"）。
+        b) 作废：`void_items(revoke=True)` 以 M 的名义只撤得掉 4 条 —— 另外 2 条挂在顶趟 M
+           （t-000001）名下，`_item_authority` 逐字拒「要改由人处置」。
+        ```
+
+        ⇒ 那 2 条的正路就是"人"，而不是任何一个代理（含 M）。所以这一档记
+        `by="user"`、`authority="human"`：事后读 `revoke:expired:by=…` 能分清
+        "人按的"与"代理越权"。
+
+        ## 与"不许绕过状态机"的关系
+
+        作废本来就不走 `ITEM_MOVES`（那一张表描述的是"有人读过 / 办过"，作废恰恰是
+        "不会有人读"，见 `void_items` 的边界 3）—— 所以这一档不是给 block 项开一条
+        `block → done` 的迁移边；`/api/ack`（`close_item`）对 block 行照旧拒。
+        写前一律过 `schema.Task.validate`。
+
+        三态与 `void_items` 同一份：`checked` / `voided` / `refused` / `traces` /
+        `notified` / `notification_problems` / `reason`。读不成 ⇒ `checked=False`。
+        """
+        return self.void_items(
+            item_ids, by_task_id=(str(by or "").strip() or self.HUMAN_ACTOR),
+            why=why, revoke=True, by_human=True)
+
+    def _void_authority(self, rows: Mapping[str, Mapping[str, Any]], *,
+                        by_task_id: str, row: Mapping[str, Any],
+                        by_human: bool) -> dict[str, Any]:
+        """`void_items` 的权限读数：代理那一档走唯一判据，人那一档记 `human`。
+
+        - `by_human=False`（缺省，代理面：`conductor.void_items` 工具）⇒ 原样转发
+          :meth:`_item_authority`，一个字都不放宽（父 / M 两句话是那里的唯一来源）；
+        - `by_human=True` ⇒ 不查台账里的角色：人不是角色面里的代理，它凭什么由
+          端点那一层回答（网页写面：回环来源 ⇒ CSRF ⇒ `--allow-writes` ⇒
+          `confirm=1`，与 `/api/ack` 同一道闸门）。这里只把读数记成
+          `ITEM_AUTHORITY_HUMAN`，让留痕与 `traces` 里"凭什么"那一格说得清。
+
+        三态照旧：`checked` / `allowed` / `code` / `why` 四格一个不少 ——
+        `_void_item_gate` 只看这四格，不关心是哪一档填的。
+        """
+        if not by_human:
+            return self._item_authority(rows, by_task_id=by_task_id, row=row)
+        return {"checked": True, "allowed": True,
+                "mode": self.ITEM_AUTHORITY_HUMAN,
+                "by": str(by_task_id or ""),
+                "owner": str(row.get("parent_task_id") or ""),
+                "code": "",
+                "why": ("人（网页写面）按的：不判代理的父子 / 主控权限面，"
+                        "凭什么由端点那四道闸门回答（回环来源 · CSRF · --allow-writes · "
+                        "confirm=1）")}
+
     def _void_item_gate(self, *, iid: str, row: Mapping[str, Any] | None,
                         rows: Mapping[str, Mapping[str, Any]], by_task_id: str,
-                        revoke: bool) -> tuple[dict[str, Any] | None, str, dict[str, Any]]:
+                        revoke: bool,
+                        by_human: bool = False) -> tuple[dict[str, Any] | None, str,
+                                                        dict[str, Any]]:
         """`void_items` 的逐项前置判据。
 
         返回 `(refusal, cur, authority)`：`refusal` 非 None ⇒ 这一条不改，原样进
@@ -5024,7 +5362,8 @@ class Conductor:
         # 顺序刻意的：先判"你是谁、能不能动这一条"，再判"这一条该不该作废"。
         # 反过来（先判 deaf 再判权限）会让没有权限的人也能把一条项"推进到
         # 某个分支"，读数上分不清"它没权限"与"它没证明"。
-        authority = self._item_authority(rows, by_task_id=by_task_id, row=row)
+        authority = self._void_authority(rows, by_task_id=by_task_id, row=row,
+                                        by_human=by_human)
         if not authority.get("checked"):
             return {"id": iid,
                     "code": str(authority.get("code") or "unknown_actor"),
@@ -5112,18 +5451,45 @@ class Conductor:
             new["expects_was"] = str(row.get("expects") or "")
             new["expects"] = ""
         inputs = list(new.get("inputs") or [])
+        derived_reason = not " ".join(str(reason_text or "").split())
+        reason_for_row = void_reason_or_derived(
+            reason_text, item_id=iid, by=by_task_id, owner=owner, cur=cur,
+            revoke=revoke)
+        if derived_reason:
+            # 写点补值读数（TRACEFIX）：补值发生在写点，读的人要看得见这一笔是补的。
+            try:
+                from . import sysguard as SG
+
+                SG.record_reading(self.store.root, SG.derived(
+                    "conductor.void_items", code="void_reason_derived",
+                    where=f"tasks#{iid}",
+                    detail=f"调用方没给 why ⇒ 按证据补：{reason_for_row}",
+                    how_to_fix=("作废 / 撤销必须带理由：调用方传 `why`；没给时由写点"
+                                "按证据补一句 —— 理由空着的板项在盘点时无法复核")))
+            except Exception:  # noqa: BLE001 —— 补值读数写不出时只留行上那一句
+                pass
         if revoke:
             # 六格：谁（by）/ 归谁（owner）/ 为什么（reason）/ 原状（from）/
             # 新状（to）/ 何时（at）。append-only，事后读行就能复核这一笔。
             mark = (f"revoke:expired:by={by_task_id}:owner={owner or '（顶层）'}:"
-                    f"from={cur}:to=done:at={at}:reason={reason_text}")
+                    f"from={cur}:to=done:at={at}:reason={reason_for_row}")
             note = (f"item:expired:revoke:by={by_task_id}:"
                     f"owner={owner or '（顶层）'}:from={cur}:to=done:at={at}")
         else:
-            mark = f"void:expired:{by_task_id}:{reason_text}"
+            mark = f"void:expired:{by_task_id}:{reason_for_row}"
             note = "item:expired"
         inputs.append(mark)
-        new["inputs"] = inputs
+        # 统一留痕（TRACEFIX）：作废与撤销都写一条 `void-trace|…`，六格 + `mode` +
+        # 逐字理由。`revoke:expired:` 那一族的正文一个字不动（两处读侧按它解析），
+        # 这一条是给"为什么作废"一个机器可读的落点（`landed_traces()` 逐条读回）。
+        inputs.append(_trace_line(VOID_TRACE_PREFIX, {
+            "item": iid, "mode": ("revoke" if revoke else "void"),
+            "by": by_task_id, "owner": owner or "（顶层）", "from": cur, "to": "done",
+            "close": "expired", "at": at, "reason": reason_for_row,
+            "authority": str(authority.get("mode") or "")}))
+        # `inputs` 是集合类字段：schema 的不变量要求升序去重（两处读侧按前缀找留痕，
+        # 顺序不是语义，但重复与乱序会被 `check_array_invariants` 当场拒）。
+        new["inputs"] = sorted(set(str(x) for x in inputs))
         task = S.Task(**{k: v for k, v in new.items()
                          if k in S.Task.__dataclass_fields__})
         task.validate()
@@ -7053,7 +7419,20 @@ class Conductor:
                 if any(m.startswith(f"{self._STOP_ACKED_PREFIX}{child_task_id}@")
                        for m in marks):
                     return "", "已经记过（幂等：不写第二份）"
-                parent["inputs"] = sorted(set(marks) | {mark})
+                # 落痕（TRACEFIX）：`stop-acked:` 只说"这条边被 ack 了"，不说"谁读到的、
+                # 哪条通知"。通知项自己的 `seen_by` 就是读它那个台账号 —— 写进一条
+                # `edge-ack|…`（同一笔事务），读侧 `landed_traces()` 逐条读回。
+                notice = next((m for m in marks if m.startswith(
+                    f"{self._STOP_NOTIFIED_PREFIX}{child_task_id}@")), "")
+                item_id = notice.split("|", 1)[1] if "|" in notice else ""
+                acked_by = ""
+                if item_id:
+                    item = tx.find("tasks", task_id=item_id) or {}
+                    acked_by = str(item.get("seen_by") or "")
+                trace = _trace_line(EDGE_ACK_TRACE_PREFIX, {
+                    "parent": parent_task_id, "child": child_task_id,
+                    "at": str(at or ""), "by": acked_by, "item": item_id})
+                parent["inputs"] = sorted(set(marks) | {mark, trace})
                 task = S.Task(**{k: v for k, v in parent.items()
                                  if k in S.Task.__dataclass_fields__})
                 task.validate()
@@ -7157,28 +7536,45 @@ class Conductor:
             marks_now = [str(x) for x in (parent.get("inputs") or [])]
             pending = [m for m in marks_now
                        if m.startswith(f"{self._STOP_NOTIFIED_PREFIX}{child_task_id}@")]
-            if pending:
-                item_id = pending[-1].split("|", 1)[1] if "|" in pending[-1] else ""
-                item = tx.find("tasks", task_id=item_id) if item_id else None
-                close = str((item or {}).get("item_close") or "")
-                acked_marks = {str(x)[len(self._STOP_ACKED_PREFIX):].split("@", 1)[0]
-                               for x in marks_now if str(x).startswith(self._STOP_ACKED_PREFIX)}
-                # 通知项自己记着"谁读的"（`seen_by`）：那一格也认，理由见上面那一段。
-                reader = str((item or {}).get("seen_by") or "")
-                acked = (child_task_id in acked_marks
-                         or (reader and reader in acked_marks))
-                if close != "acked" or not acked:
-                    return "", (f"{child_task_id} 的停止通知还没被确认（通知项 "
-                                f"{item_id or '未记'}：item_close={close!r}、"
-                                f"ack 落痕={'有' if acked else '没有'}）"
-                                "⇒ 不许消边：ack 才算传达到（`draft/84` §2.2）")
+            notice = pending[-1] if pending else ""
+            item_id = notice.split("|", 1)[1] if "|" in notice else ""
+            notified_at = (notice[len(self._STOP_NOTIFIED_PREFIX):].split("@", 1)[1].split("|", 1)[0]
+                           if notice else "")
+            item = tx.find("tasks", task_id=item_id) if item_id else None
+            close = str((item or {}).get("item_close") or "")
+            acked_marks = {str(x)[len(self._STOP_ACKED_PREFIX):].split("@", 1)[0]
+                           for x in marks_now if str(x).startswith(self._STOP_ACKED_PREFIX)}
+            # 通知项自己记着"谁读的"（`seen_by`）：那一格也认，理由见上面那一段。
+            reader = str((item or {}).get("seen_by") or "")
+            acked = (child_task_id in acked_marks
+                     or (reader and reader in acked_marks))
+            acked_at = ""
+            for raw in marks_now:
+                text = str(raw)
+                if not text.startswith(self._STOP_ACKED_PREFIX):
+                    continue
+                who, _, stamp = text[len(self._STOP_ACKED_PREFIX):].partition("@")
+                if who == child_task_id or (reader and who == reader):
+                    acked_at = stamp
+            if pending and (close != "acked" or not acked):
+                return "", (f"{child_task_id} 的停止通知还没被确认（通知项 "
+                            f"{item_id or '未记'}：item_close={close!r}、"
+                            f"ack 落痕={'有' if acked else '没有'}）"
+                            "⇒ 不许消边：ack 才算传达到（`draft/84` §2.2）")
             marks = [str(x) for x in (parent.get("inputs") or [])]
             if mark in marks:
                 return "", "已经记过（幂等：不写第二份）"
+            # 落痕（TRACEFIX）：这条边是谁 ack 的、哪条通知、什么时候 —— 与
+            # `edge-released:` 同笔事务写一条 `edge-release|…`（`edge-released:` 的
+            # 格式被两处读侧按 `#` 切，一个字不动）。
+            trace = _trace_line(EDGE_RELEASE_TRACE_PREFIX, {
+                "parent": parent_task_id, "child": child_task_id,
+                "attempt": int(attempt), "notified": notified_at,
+                "acked_at": acked_at, "ack_by": reader, "item": item_id})
             # `inputs` 是集合类字段：schema 的不变量要求升序去重
             # （`check_array_invariants` 会当场拒；实测：直接 append 会报
             # "inputs 声明为集合但未升序去重"）⇒ 这里排一次序。
-            parent["inputs"] = sorted(set(marks) | {mark})
+            parent["inputs"] = sorted(set(marks) | {mark, trace})
             task = S.Task(**{k: v for k, v in parent.items()
                              if k in S.Task.__dataclass_fields__})
             task.validate()
@@ -7217,6 +7613,125 @@ class Conductor:
             return {"checked": False, "edges": [],
                     "reason": f"台账里没有 {parent_task_id!r}"}
         return {"checked": True, "edges": self._released_pairs(row), "reason": ""}
+
+    def landed_traces(self) -> dict[str, Any]:
+        """三处落痕的逐条读数：结算对账 / 边（ack 与释放）/ 板项作废（只读，不判门）。
+
+        ## 它回答的三件事（TRACEFIX 的现场）
+
+        - `settle`：每一趟的 `settle-recon|…` —— 自报多少、账上实际多少、差多少、为什么；
+        - `edges`：每一条开过或认过的边 —— 哪条边、哪条通知、谁 ack 的（通知项的
+          `seen_by`）、什么时候、认没认掉；
+        - `voids`：每一条 `item_close=expired` 的板项 —— 作废还是撤销、谁作的、
+          原来什么状态、逐字理由（旧行退回 `revoke:expired:` 的六格）。
+
+        `missing` 是"该有落痕却没有"的那一档，逐条点名：
+        - 已终态、父行却没有 `edge-released`（没有销号 / 销号没记边）；
+        - 通知过、却没有任何 `stop-acked`（那条边因此永远不许消边）；
+        - `item_close=expired`、却没有任何作废留痕（不知道谁作的、为什么）。
+
+        三态：台账读不成 ⇒ `checked=False` + `reason`；"没有这一档"是 `missing` 空表
+        （查过了、没有），两者不折平。它不写盘、不进任何门。
+        """
+        out: dict[str, Any] = {"checked": False, "settle": [], "edges": [], "voids": [],
+                               "missing": [], "counts": {}, "reason": ""}
+        try:
+            rows = [dict(r) for r in self._tasks()]
+        except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+            out["reason"] = f"tasks 台账读不成（{type(exc).__name__}: {exc}）⇒ 没查成"
+            return out
+        out["checked"] = True
+        by_id = {str(r.get("task_id") or ""): r for r in rows}
+        for row in rows:
+            one = settle_trace_of(row)
+            if one:
+                out["settle"].append(one)
+            void = void_trace_of(row)
+            if void:
+                out["voids"].append(void)
+        parents: list[str] = []
+        for row in rows:
+            tid = str(row.get("task_id") or "")
+            if not tid:
+                continue
+            inputs = [str(x) for x in (row.get("inputs") or [])]
+            if any(x.startswith((self._STOP_NOTIFIED_PREFIX, _EDGE_RELEASED_PREFIX))
+                   for x in inputs):
+                parents.append(tid)
+        released_of = {pid: {p["child_task_id"]
+                             for p in self._released_pairs(by_id.get(pid) or {})}
+                       for pid in parents}
+        for pid in parents:
+            got = self.stop_edge_readings(pid)
+            if not got.get("checked"):
+                out["missing"].append({"kind": "edge-readings", "parent": pid,
+                                       "why": f"边的读数没查成（{got.get('reason')}）"})
+                continue
+            trace_of = {t.get("child"): t
+                        for t in edge_release_trace_of(by_id.get(pid) or {})}
+            for e in got.get("edges") or []:
+                child = str((e.get("edge") or {}).get("child_task_id") or "")
+                item_id = str(e.get("item_id") or "")
+                row = {"parent": pid, "child": child, "item": item_id,
+                       "notified_at": str(e.get("notified_at") or ""),
+                       "acked_at": str(e.get("acked_at") or ""),
+                       "ack_by": str((by_id.get(item_id) or {}).get("seen_by") or ""),
+                       "settled_at": str(e.get("settled_at") or ""),
+                       "item_state": str(e.get("item_state") or ""),
+                       "released": child in (released_of.get(pid) or set()),
+                       "release_trace": dict(trace_of.get(child) or {})}
+                out["edges"].append(row)
+                if row["notified_at"] and not row["acked_at"]:
+                    out["missing"].append({
+                        "kind": "stop-acked", "parent": pid, "child": child,
+                        "item": item_id,
+                        "why": ("停止通知发出去了，但父行没有任何 stop-acked 落痕 ⇒ "
+                                "这条边永远不许消边（ack 才算传达到）")})
+        # 认过、却没有通知项的边（正常退役那一档）：也要逐条列出来 —— "哪条边已经
+        # 被认掉"本身就是一条落痕读数，不能因为"没有通知项"就从表里消失。
+        seen_edges = {(str(e.get("parent")), str(e.get("child"))) for e in out["edges"]}
+        for pid in parents:
+            trace_of = {t.get("child"): t
+                        for t in edge_release_trace_of(by_id.get(pid) or {})}
+            for pair in self._released_pairs(by_id.get(pid) or {}):
+                child = str(pair.get("child_task_id") or "")
+                if (pid, child) in seen_edges:
+                    continue
+                seen_edges.add((pid, child))
+                kid = by_id.get(child) or {}
+                out["edges"].append({
+                    "parent": pid, "child": child, "item": "",
+                    "notified_at": "", "acked_at": "", "ack_by": "",
+                    "settled_at": str(kid.get("ended_at") or ""),
+                    "item_state": "", "released": True,
+                    "release_trace": dict(trace_of.get(child) or {})})
+        for row in rows:
+            if str(row.get("kind") or ""):
+                continue
+            tid = str(row.get("task_id") or "")
+            pid = str(row.get("parent_task_id") or "")
+            if not tid or not pid:
+                continue
+            if str(row.get("status") or "") in UNFINISHED_STATUSES:
+                continue
+            if tid in (released_of.get(pid) or set()):
+                continue
+            out["missing"].append({
+                "kind": "edge-released", "parent": pid, "child": tid,
+                "status": str(row.get("status") or ""),
+                "why": ("已终态，父行却没有 edge-released 落痕 ⇒ 没有销号，"
+                        "或销号没记边（读侧无法把这条边认掉）")})
+        for row in rows:
+            if str(row.get("item_close") or "") != "expired":
+                continue
+            if void_trace_of(row):
+                continue
+            out["missing"].append({
+                "kind": "void-trace", "item": str(row.get("task_id") or ""),
+                "why": "item_close=expired，却没有任何作废 / 撤销留痕（谁作的、为什么都不知道）"})
+        out["counts"] = {"settle": len(out["settle"]), "edges": len(out["edges"]),
+                         "voids": len(out["voids"]), "missing": len(out["missing"])}
+        return out
 
     def retire_integrity(self, root_task_id: str) -> dict[str, Any]:
         """`root_task_id` 名下整棵树是不是已经全部销号（M 收工前的结构完整性闸）。
@@ -8716,6 +9231,35 @@ class Conductor:
             )
         return grant
 
+    def _settle_recon_reading(self, res: SummonResult, *, role: str) -> dict[str, Any]:
+        """这一趟的结算对账：自报 vs 实际、差多少、为什么（只读；判据在 `settle_recon_of`）。
+
+        这一层只做 IO：读这一趟的 `runs/<趟>.json`（自报）与 `usage_ledger`（实际），
+        然后交给模块级纯函数 :func:`settle_recon_of` —— 写点与读侧（`recon_b` 对旧盘
+        复算）用的是同一份判据，不在这里另算一遍。
+        """
+        tid = str(res.task_id or "")
+        payload = res.payload if isinstance(res.payload, Mapping) else {}
+        run_path = str(payload.get("llm_run_path") or "")
+        run_doc: Any = None
+        run_error = ""
+        if run_path:
+            full = Path(str(getattr(self.store, "root", "") or "")) / run_path
+            try:
+                run_doc = json.loads(full.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                run_error = f"{type(exc).__name__}: {exc}"
+        ledger_rows: Sequence[Mapping[str, Any]] = ()
+        ledger_error = ""
+        try:
+            ledger_rows = self.store.rows("usage_ledger")
+        except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+            ledger_error = f"{type(exc).__name__}: {exc}"
+        del role
+        return settle_recon_of(task_id=tid, run_doc=run_doc, run_path=run_path,
+                               run_error=run_error, ledger_rows=ledger_rows,
+                               ledger_error=ledger_error)
+
     def _charge_and_settle(self, res: SummonResult, *, role: str) -> SummonResult:
         """把这次召唤的花销记进权威账，再把账上的累计值写回 `tasks`。
 
@@ -8799,10 +9343,14 @@ class Conductor:
             return res
         self.budget.spend(res.tokens, res.usd)   # 即时视图（唯一消费者：stats/观测）
         if res.task_id:
-            self._set_usage(res.task_id, res.tokens, res.usd)
+            # 落痕：这一趟自报 vs 实际、差多少、为什么（读侧 `landed_traces()` 逐条读回）。
+            recon = self._settle_recon_reading(res, role=role)
+            self._set_usage(res.task_id, res.tokens, res.usd,
+                            trace=str(recon.get("mark") or ""))
         return res
 
-    def _set_usage(self, task_id: str, tokens: int, usd: float) -> None:
+    def _set_usage(self, task_id: str, tokens: int, usd: float, *,
+                   trace: str = "") -> None:
         """把账本上的花销写回 `tasks` 行，并打上"已结算"标记。
 
         为什么单独一个方法而不是在 `finish` 里写：一次召唤的花销只有跑完才知道，
@@ -8825,6 +9373,12 @@ class Conductor:
             inputs = [str(x) for x in (row.get("inputs") or [])]
             if _SETTLED_MARK not in inputs:
                 row["inputs"] = inputs + [_SETTLED_MARK]
+            # 结算对账落痕（`settle-recon|…`）：一次结算只该有一条，重放时按前缀替换，
+            # 不让同一趟因为重试攒出两条读数（`inputs` 是集合，但前缀可以不同）。
+            if trace:
+                base = [str(x) for x in (row.get("inputs") or [])
+                        if not str(x).startswith(SETTLE_RECON_PREFIX)]
+                row["inputs"] = sorted(set(base) | {trace})
             S.Task(**{k: v for k, v in row.items() if k in S.Task.__dataclass_fields__}).validate()
             tx.upsert("tasks", row, note="charge")
     # ---------------------------------------------------------------- 召唤
@@ -9743,7 +10297,7 @@ class Conductor:
             target = root / rel
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(json.dumps(doc, ensure_ascii=False, sort_keys=True, indent=1, default=str) + "\n",
-                              encoding="utf-8")
+                              encoding="utf-8", newline="\n")
         except (OSError, TypeError, ValueError) as e:  # noqa: BLE001 - 见 docstring
             self._log(f"任务产出摘要没写成：{type(e).__name__}: {e}", task_id=task_id)
             return ""

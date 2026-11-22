@@ -1642,7 +1642,7 @@ def _materialize(text: str, name: str, workdir: str | Path | None) -> tuple[Path
         base = Path(workdir)
         base.mkdir(parents=True, exist_ok=True)
     path = base / f"{_safe_stem(name)}.lean"
-    path.write_text(text, encoding="utf-8")
+    path.write_text(text, encoding="utf-8", newline="\n")
     return path, tmp
 
 

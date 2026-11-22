@@ -353,7 +353,7 @@ def main(argv: list[str] | None = None) -> int:
         prog="repo_survey",
         description="仓库体量巡检（只读）：不写盘、不改代码、不联网",
     )
-    ap.add_argument("--root", default=".", help="仓库根（默认当前目录）")
+    ap.add_argument("--root", default=".", help="产品根（默认当前目录；仓库根是它的上一级）")
     ap.add_argument("--src", default=str(SRC_REL), help=f"源码扫描面（默认 {SRC_REL.as_posix()}）")
     ap.add_argument("--tests", default=str(TESTS_REL), help=f"判据扫描面（默认 {TESTS_REL.as_posix()}）")
     ap.add_argument("--top", type=int, default=DEFAULT_TOP, help="每份清单取前几条（默认 10）")

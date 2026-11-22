@@ -90,8 +90,16 @@ DEFAULT_CHECKS: tuple[str, ...] = (
     "acceptance",
     # 第七格（EE-05，`draft/52` C4）：产物台账必须与盘上一致。
     # 「进格」是人的裁定（`draft/46-04` §2.10 ③ 原本把它列为独立裁定项）；
-    # 但判据强度按三态收窄：`changed` 记 `unknown`（登记之后被正常改写是常态），
-    # 只有 `missing`/`unreadable` 判 `fail`。
+    # 三档口径与 `artifact_ledger_reading` / `_check_artifact_ledger` 逐字一致：
+    # `missing`/`unreadable` ⇒ `fail`（真缺陷），只有 `changed` ⇒ `pass` + warning
+    # （D9，2026-10-09 业主裁定"收窄"：按路径取最后一条登记之后又被改写是常态，
+    # 旧口径把它读成 `unknown` 会让任何有派活的跑批都收不了工）；台账整份不在
+    # ⇒ `na`（没有可判对象，见 `_check_artifact_ledger`）。
+    # 2026-11-21（READFIX-B）：这一行此前写的是"`changed` 记 `unknown`"—— 那是 D9
+    # 之前的旧口径，与实现（`:1630` 的 pass+warning）自相矛盾。按 `draft/191`
+    # 「判据对齐设计」：现行设计是 pass + 可见的 warning（不是把正常改写判成没查成），
+    # 所以改的是这条注释，不是门强度；warning 同时进读数（见
+    # `artifact_ledger_reading` 的 `warning` 那一格）并由网页单列显示。
     "artifact_ledger",
     # 第八格（Q1，2026-11-16 业主口径）：待入库文献表非空 ⇒ 不许收工。
     # 业主逐字：「清空待入库文献表及文献 → 真正收工」。所以这一格问两件：
@@ -1633,6 +1641,18 @@ def artifact_ledger_reading(project_root: Path) -> tuple[int, dict[str, Any]]:
     }
     if bad_lines:
         detail["ledger_bad_lines"] = bad_lines[:3]
+    # READFIX-B：`changed` 的口径是 pass + warning。warning 必须进读数（不只混在
+    # `note`/页面 detail 里）—— 否则 `status=pass` 的绿 badge 一上屏就把
+    # "1 条被改写"盖住了。`None` 表示这一格没有 warning（不是"没读"）。
+    detail["warning"] = ({
+        "code": "artifact_ledger_changed_only",
+        "changed": changed,
+        "text": (f"有 {changed} 条产物的最后一次登记之后又被改写过（盘上还在，只是不是"
+                 "登记时那一版）⇒ 这一格仍记 `pass`，但这件事看得见：改写在研究流程里"
+                 "是常态（真机 t1u 的 23 条全是框架自己重写的 `out/tasks/*.json`），"
+                 "直接判 fail 会把正常产物读成坏。要判「交出去的那一版有没有被换过」"
+                 "⇒ 看 `anchor` / 编译回执那一维。"),
+    } if changed else None)
     return got, detail
 
 
@@ -2659,6 +2679,46 @@ def _manuscript_sign_reading(project_root: Path,
     return out
 
 
+def repeated_no_result_topics(requests: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """同一 `topic` 在一条 `no_results` 之后又被原样提交过的请求（机械读数）。
+
+    ## 它量什么、不量什么（DANGLE ②，2026-11-21）
+
+    文案说「`no_results` 之后必须换规范术语再查一次（同一个题面原样重试不算）」。
+    「换的是不是规范术语」是语义判断，机器判不了 —— 于是这里只量唯一可机械判的
+    那一半：「原样重提」这件事有没有发生（`topic` 去首尾/折叠空白后逐字相同）。
+    返回空列表不等于「换过规范术语」：它只说明「至少没有原样重试过」。
+
+    这一格是读数，不是闸：`retrieval_ok_rows` 那一档的 `got` 仍然只数 `outcome=ok`，
+    本函数的结果挂在 `detail.no_result_repeated_topics` 上，不参与 `min` 的比较。
+    """
+    rows = [dict(r) for r in requests]
+
+    def _key(row: Mapping[str, Any]) -> str:
+        return " ".join(str(row.get("topic") or "").split())
+
+    # 表内顺序不保证是时间顺序（归档/重放会重排）：按 timestamp 稳定排序后再看"之后"。
+    ordered = sorted(enumerate(rows), key=lambda pair: (str(pair[1].get("timestamp") or ""),
+                                                        pair[0]))
+    out: list[dict[str, Any]] = []
+    for pos, (_, row) in enumerate(ordered):
+        if str(row.get("outcome") or "") != "no_results":
+            continue
+        topic = _key(row)
+        if not topic:
+            continue
+        later = next((r for _, r in ordered[pos + 1:] if _key(r) == topic), None)
+        if later is None:
+            continue
+        out.append({
+            "topic": topic[:60],
+            "request_id": str(row.get("request_id") or ""),
+            "retried_as": str(later.get("request_id") or ""),
+            "retried_outcome": str(later.get("outcome") or ""),
+        })
+    return out
+
+
 def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[str, Any]]:
     """按受控档位现算一行验收读数 ⇒ `(条数, 明细)`。
 
@@ -3111,16 +3171,24 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         ok = [r for r in reqs if str(r.get("outcome") or "") == "ok"]
         empty = [r for r in reqs if str(r.get("outcome") or "") == "no_results"]
         questions = list(store.rows("research_questions"))
+        repeated = repeated_no_result_topics(reqs)
         return len(ok), {
             "search_requests": len(reqs), "ok": len(ok), "no_results": len(empty),
             "research_questions": len(questions),
             "ok_topics": [str(r.get("topic") or "")[:60] for r in ok[:8]],
             "no_result_topics": [str(r.get("topic") or "")[:60] for r in empty[:8]],
+            # 可机械判的那一半（DANGLE ②）：同一 topic 在 no_results 之后原样重提。
+            # 「换的是不是规范术语」语义上判不了 —— 这里只报"原样重试"这一种。
+            "no_result_repeated": len(repeated),
+            "no_result_repeated_topics": repeated[:8],
             "implicit_min": len(questions),
             "note": ("这一档数的是「查到了」：`no_results` 的请求不算。缺省阈值 = 立起来的研究问题"
                      "条数（每个问题至少要被一次成功取回服务过）。一条 `no_results` 是合法终局，"
                      "但按纪律它要用**规范术语**再查一次（题面式说法查不到不等于这个方向没有文献）"
-                     "—— `no_result_topics` 就是用来核这件事的读数"),
+                     "—— `no_result_topics` 就是用来核这件事的读数。"
+                     "`no_result_repeated_topics` 只量可机械判的那一半：同一个 `topic` 在 "
+                     "`no_results` 之后原样重提（空列表 ≠ 换过规范术语；换的词规范不规范，"
+                     "语义上判不了，这一档没有闸）"),
         }
     if kind == "document_body_rows":
         # 「有正文的稿件」那一档：有 sections 却每节都空 ⇒ 骨架，不是手稿。
@@ -7607,7 +7675,12 @@ def statements_optimization_candidates(store: Any) -> dict[str, Any]:
 
     out: dict[str, Any] = {"checked": False, "count": 0, "scanned": 0,
                            "rows": [], "by_prompt_class": {}, "by_origin": {},
-                           "problems": [], "reason": ""}
+                           "problems": [], "reason": "",
+                           # DANGLE ③（2026-11-21）：B 回执里"这一批洗了几份 / 还剩几份"
+                           # 的那两格读数。`proofs_total` = 全表（不含已放弃 / 已退休）
+                           # 有非空正文的证明份数；`washed_count` = 其中 optimized 为 true 的。
+                           # 都在下面"跳过已全洗的行"之前累加，所以完整、不是只数候选。
+                           "proofs_total": 0, "washed_count": 0}
     rows, why = _statement_rows(store)
     if rows is None:
         out["reason"] = why
@@ -7633,6 +7706,11 @@ def statements_optimization_candidates(store: Any) -> dict[str, Any]:
         proofs = [(int(no), str(text)) for no, text in _VR.proof_list(row)
                   if str(text).strip()]
         states = {no: _EB.optimized_state(row, no) for no, _text in proofs}
+        # DANGLE ③：全表读数要在"这一行全洗过 ⇒ 不候选"的 `continue` 之前累加，
+        # 否则洗过的那些命题会被漏掉，"洗了几份"永远读成 0。
+        out["proofs_total"] = int(out["proofs_total"]) + len(proofs)
+        out["washed_count"] = int(out["washed_count"]) + sum(
+            1 for state in states.values() if state == "true")
         unoptimized = [no for no, state in sorted(states.items())
                        if state in ("false", "not_recorded")]
         if proofs and not unoptimized:
@@ -9715,14 +9793,15 @@ def _check_artifact_ledger(rep: ClosingReport, store: Any, project_dir: str) -> 
         # 依据：真机 t1u 的 23 条 changed 全是框架自己幂等重写的 `out/tasks/*.json`
         # （per-task 摘要），旧口径把它们读成 `unknown` ⇒ 任何有派活的跑批都收不了工。
         # 判"交出去的那一版有没有被换过"是 `anchor` / 编译回执那一维的事。
+        # READFIX-B：warning 的原话取自读数本身（`artifact_ledger_reading` 的
+        # `warning.text`），两处不再各写一份文案。
         rep.status["artifact_ledger"] = "pass"
+        warning = (detail.get("warning") or {})
         rep.findings.append(Finding(
             "artifact_ledger", "artifact_ledger_changed_only", "warning",
-            f"有 {changed} 条产物的**最后一次登记**之后又被改写过（盘上还在，"
-            "只是不是登记时那一版）⇒ 这一格仍记 `pass`，但这件事看得见："
-            "改写在研究流程里是常态（真机上 23 条全是框架自己重写的 `out/tasks/*.json`），"
-            "直接判 fail 会把正常产物读成坏。要判「交出去的那一版有没有被换过」"
-            " ⇒ 看 `anchor` / 编译回执那一维",))
+            str(warning.get("text") or (
+                f"有 {changed} 条产物的最后一次登记之后又被改写过 ⇒ 这一格仍记 `pass`，"
+                "但这件事看得见（warning 在读数 `artifact_ledger.warning` 里）"))))
         return
     rep.status["artifact_ledger"] = "pass"
 
@@ -10809,6 +10888,22 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
             "statements_optimization_candidates",
             "statements_optimization_candidates_self_inconsistent", "warning",
             f"「未优化清单」这一格自相矛盾：{_p}"))
+    # ---- 文献入口那一格（DANGLE ①，2026-11-21）：哪些 `literature` 行没走过候选链 ----
+    #
+    # 与上面那几格同一套纪律：只落 `readings`、不产生 blocker、不动 `status` 与退出码
+    # ⇒ 门的强度一格没改。为什么要有：A 的文案说「不许跳过建候选」，而实现有两条入口
+    # （候选链 / `search.register` + 非 dry 的 `search.ingest_local` 直登），直登不核
+    # 「读过正文」。真机 lp-ball-14 的 5 条直登行全是只有题录（`content_read=false`），
+    # 没有任何一格看得见"它们没走候选链"。口径在 `litstage.intake_provenance`（唯一实现）。
+    from . import litstage as _LS
+    rep.readings["literature_intake"] = _run_reading(
+        rep, "literature_intake", _LS.intake_provenance, store)
+    _li = rep.readings["literature_intake"]
+    if not _li.get("checked"):
+        rep.findings.append(Finding(
+            "literature_intake", "literature_intake_unreadable", "warning",
+            f"「文献从哪条入口进来」那一格没查成（{_li.get('reason') or '没给原因'}）"
+            "⇒ 直登行数不出来（没查成不是「全都走过候选链」）"))
     # ---- D-54 ③ 那一格（业主 2026-11-04）：疑似把一条定理拆成多条独立命题 --------
     #
     # 与上面 `statements_unoptimized` 同档：只落 `readings`、不产生 blocker、不动

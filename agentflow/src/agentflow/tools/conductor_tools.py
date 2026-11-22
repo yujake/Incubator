@@ -774,6 +774,16 @@ def conductor_ensure_project(store, project_name: str = "", start: str = "auto",
     守卫的边界刻意很窄：只拒"当前工作区自己就是一个初始化过的项目、而调用方又没显式说项目落在哪"。显式给 `projects_dir`（或设`AGENTFLOW_PROJECTS_DIR`）时照旧工
     作 —— 那是操作者在说"我知道落在哪"。不这么定就会误伤既有判据：`tests/test_conductor_tools.py` 里那两条冷/热启动用例正是"在一个工作区里、把项目建到另一个显式
     指定的目录"。
+    ## `books_dir` 要过用户声明闸（BOOKPORT ①，2026-11-21）
+    这个参数交给 `locallib.ingest_directory` 会把目录里的书登记成 `literature` 行 ——
+    那是入库，不是"投文件"。所以它必须与 `search.register` / `search.ingest_local`
+    同一道判据：用户点名了才可入库。判据只有一份（`projects.books_declaration_refusal`
+    → `locallib.undeclared_workspace_books` → `declaration_verdict`），核的是调用方
+    工作区（`store.root`，也就是用户提示词与 `RELIABLE-REFERENCES.json` 的落点）。
+    未声明 / 声明读不出来 / 文件在工作区外 ⇒ 整批受控拒（`not_declared_reference` /
+    `declaration_unreadable`），拒在 `create_project` 之前 ⇒ 零写入；要接着建项目就
+    拿掉 `books_dir` 重试。真机读数：M 从未用过这个参数（`temp/bookport/entries.txt`），
+    所以这一收紧不改任何既有真机路径。
     """
     from .. import projects as P
     from .. import settings as SET
@@ -797,6 +807,25 @@ def conductor_ensure_project(store, project_name: str = "", start: str = "auto",
         )
 
     root = Path(projects_dir) if projects_dir else P.projects_dir(None)
+    # ---- 用户声明闸（BOOKPORT ①，2026-11-21）：`books_dir` 要造 `literature` 行
+    # （`locallib.ingest_directory`），所以它与 `search.register` / `search.ingest_local`
+    # 是同一件事 —— 只有用户点名的文件才可入库。判据真身是
+    # `projects.books_declaration_refusal`（→ `locallib.undeclared_workspace_books` →
+    # `declaration_verdict`），本处不另写一份。
+    #
+    # 核的对象是调用方工作区（`store.root`）：M 跑在用户说话的那个工作区里，用户声明
+    # 就记在那儿；`books_dir` 里的文件也必须落在它里面（工作区外的路径声明表达不了，
+    # 与 DGWIDE ④ 同口径）。要登记的是新项目的库，但"这一批书有没有被点名"这件事
+    # 只答得出一次 —— 在用户声明的那个工作区里答。
+    #
+    # 位置在 `create_project` 之前：拒信里那句"本次零写入"因此是盘上事实（不建目录、
+    # 不写一行）；照旧那一条的放行路径一个字节都没变。
+    if books_dir:
+        refusal = P.books_declaration_refusal(getattr(store, "root", None), books_dir,
+                                              port="conductor.ensure_project")
+        if refusal is not None:
+            payload = {k: v for k, v in refusal.items() if k != "message"}
+            return fail(refusal["message"], **payload)
     ref = P.resolve(root, project_name or None, start=start)
     state, why = P.classify(ref.path)
     created = False

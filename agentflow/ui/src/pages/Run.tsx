@@ -357,6 +357,15 @@ export function Run(props: RunProps) {
                 </span>
               </div>
             ) : null}
+            {/* AUDIT F10：`unreadable` 这一档在真机上**是常态**（索引只在顶趟收工成功 /
+                closing 通关 / 显式 rebuild 时建）。理由与"怎么修"由后端写进 `reason`
+                （`readers.run_index_reason`），这里必须**可见地**印出来 —— 只塞进
+                TriState 的 tooltip 等于没写（用户不会去悬停一个红色徽标）。 */}
+            {index.data.tri === "unreadable" ? (
+              <div class="readings tri-reason">
+                为什么 / 怎么修（后端给的那一句）：{index.data.reason}
+              </div>
+            ) : null}
             {index.data.drift.length > 0 ? (
               index.data.drift.map((d, i) => (
                 <div class="row drift" key={i}>
@@ -413,7 +422,12 @@ export function Run(props: RunProps) {
               <span class="mono">{formatCount(digest.data.unfinished)}</span>）
             </div>
             <div class="readings">
-              步数 <span class="mono">{formatCount(digest.data.steps)}</span> · 派了多少活{" "}
+              步数 <span class="mono">{formatCount(digest.data.steps)}</span>
+              （来源：{digest.data.steps_source === "self_report" ? "收工行自报优先" : "物理事件"}
+              —— 自报 <span class="mono">{formatCount(digest.data.steps_self_reported)}</span>
+              （<span class="mono">{formatCount(digest.data.steps_self_reported_missing_runs)}</span>
+              趟没带自报）/ 物理 <span class="mono">{formatCount(digest.data.steps_physical)}</span>
+              条 <span class="mono">agent_step</span>；两个数不互相顶替）· 派了多少活{" "}
               <span class="mono">{formatCount(digest.data.dispatched)}</span> · 验了几条{" "}
               <span class="mono">{formatCount(digest.data.verified)}</span> · 已签证明位{" "}
               <span class="mono">{formatCount(digest.data.signed_proofs)}</span> · 有效签（复算通过）{" "}
@@ -592,8 +606,10 @@ export function Run(props: RunProps) {
               （其中 commit 标记{" "}
               <span class="mono">{ledger.commit_markers === null ? "unknown" : ledger.commit_markers}</span> 行）·
               tasks 行数{" "}
-              <span class="mono">{ledger.tables === null ? "unknown" : ledger.tables}</span> · 落点{" "}
-              <span class="mono">{ledger.path}</span>
+              <span class="mono">{ledger.tables === null ? "unknown" : ledger.tables}</span> ·
+              读不出的行{" "}
+              <span class="mono">{ledger.corrupt_rows === null ? "unknown" : ledger.corrupt_rows}</span> 行
+              （坏行不计进「写入」那一格）· 落点 <span class="mono">{ledger.path}</span>
             </div>
             {ledger.events_note === "" ? null : (
               <div class="readings">{ledger.events_note}</div>

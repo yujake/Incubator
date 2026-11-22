@@ -447,6 +447,133 @@ def _literature_summary_refusal(*, table: str, summary: Any,
                                      port=f"table.{op}")
 
 
+def _literature_declaration_refusal(ctx: TableContext, *, table: str,
+                                    data: Mapping[str, Any], op: str) -> ToolResult | None:
+    """`table.create` 落到 `literature` 时的**用户声明闸**。`None` = 放行。
+
+    ## 为什么这一格必须接（2026-11-21 DGWIDE ③）
+
+    `store.direct_write_refusal("literature")` 是空串（`test_docgate2_two_side_doors_are_closed.py`
+    明确它是放行的）⇒ 通用写口可以自己造一行文献，一次声明都不核。DGWIDE 取证：
+    生产代码里没有任何模块用 `table.create(table="literature")` 造行（真机
+    `lp-ball-12/14` 的 `events.jsonl` 里 `tool:table.create` 落在 `literature` 上 0 次；
+    26 次 `tool:table.update` 全是对既有行的维护），而"这个口能造行"本身是模型可达的
+    ⇒ 按业主裁定「只有用户点名的才可入库」，造行这一笔必须过与 `search.register`
+    同一道判据（复用 `search_tools._declaration_refusal`，正文闸之后、预演校验之前）。
+
+    ## 为什么造行这一半只接 `create`、而 `update` 只在写 `path` 时接（BOOKPORT ② 之后）
+
+    `table.update` 不能造行（主键必须已存在，未知 id 走 `not_found`）；真机上它在
+    `literature` 上的全部用法都是既有行的维护（`summary` / `download` / `matched`）。
+    把声明闸一股脑套到 `update` 上会连"收编之后的行"一起误伤：声明点名的是原路径
+    （`source/a.pdf`），而收编后的行上写的是 `library/<lit_id>/a.pdf`（DECLAREGATE §⑥-3
+    已登记这条代价），于是任何维护性补写都会被拒 —— 那不是"没点名的不许入库"，
+    是"入库之后不许维护"。
+
+    所以 `update` 上只接**写 `path`** 那一笔（`ctx` 里的 `path` 指向哪份字节，仍是
+    "哪一份文件被允许进库"的问题）；身份格由 `_literature_identity_refusal` 挡
+    （BOOKPORT ②：那一半是"这一行是谁"，不是"哪份文件被点名"）。
+    """
+    if table != "literature":
+        return None
+    from . import search_tools as ST
+    intake = ST._Ctx(workspace=ctx.store.root, store=ctx.store)
+    return ST._declaration_refusal(intake, data.get("path"), port=f"table.{op}")
+
+
+#: `literature` 的**身份格**：`table.update` 一律不许改（理由与真机读数见
+#: `_literature_identity_refusal`）。刻意不写 `path`（那是"全文在哪"的指针，走声明闸）
+#: 与 `summary`（另有正文闸）；主键由 `primary_key_change` 更早拒。
+#: 名单里的 `year` 也在内：`sysresidue.literature_dedup_cells(title, year, doi)` 用它算键集。
+_LITERATURE_IDENTITY_FIELDS: tuple[str, ...] = (
+    "title", "doi", "year", "authors", "venue", "type", "language",
+)
+
+#: `literature` 的**派生去重格**（`sysresidue.literature_dedup_cells` 算出来的那两个）。
+#: `_keys` 不是 schema 字段而是诊断字段（`_build_row` 刻意保留它），所以单独列出来 ——
+#: 不列会让"改题名"从这一格绕过来（把 `dedup_key` 直接写成另一个键同样能让判重分家）。
+_LITERATURE_DERIVED_FIELDS: tuple[str, ...] = ("dedup_key", "_keys")
+
+
+def _literature_identity_refusal(*, table: str, patch: Mapping[str, Any],
+                                 idf: str) -> ToolResult | None:
+    """`table.update` 落到 `literature` 时，**身份格**一律不许改。`None` = 放行。
+
+    ## 为什么这一格必须接（BOOKPORT ②，2026-11-21）
+
+    `table.update` 不能造行（主键必须已存在），但它能把一行既有文献改写成另一篇：
+    `title` / `doi` / `year` / `authors` / `venue` / `type` / `language` 一起换掉之后，
+    盘上那一行还是同一个 `lit_id`，内容却已经是另一篇文献 —— 那不是"新增一行"，
+    但"这一行是谁"（入库判据回答的那个问题）已经被换掉了。两个派生去重格
+    （`dedup_key` / `_keys`）同理：它们是身份格的函数，单独写等于从旁边绕过来。
+
+    ## 按真机读数定（26 次 `table.update(literature)`，逐格统计见
+    `temp/bookport/update-cells.txt`）
+
+    | 格 | 次数 | 改前 → 改后 |
+    |---|---|---|
+    | `download` | 14 | 状态（失败的下载记录 → 成功/metadata_only） |
+    | `processed` | 7 | 状态（B 领取/处理）|
+    | `path` | 8 | 全是 `null` → `downloads/lit-…`（补上系统刚下到的字节）|
+    | `summary` | 1 | 正文（由 `_literature_summary_refusal` 管）|
+    | `pages` / `matched` | 各 1 | 状态 |
+    | `title` + `authors` | 各 1 | 同一笔：题名占位 `main` → 真题名（2026-10-13 的存量行）|
+    | `doi` | 0 | 从未改过 |
+
+    ⇒ 真实用法里**没有一笔是"换一篇文献"**；身份格的写入只出现在"机器占位 → 人工补齐"
+    这一档，而那一档的正路是收编口（`search.register` / 候选链 `lit.admit`）——
+    它们的身份格来自文件或 provider 记录。
+
+    ## 为什么身份格必须由系统保证（"第二个写者"会写坏什么）
+
+    `literature` 的两个去重格 `dedup_key` / `_keys` 由 `sysresidue.literature_dedup_cells`
+    从 `title` + `year` + `doi` 算（唯一实现，三个写点共用），而 `_fill_derived` 只补
+    `relations` 的派生格 —— `table.update` 改身份格**不会**重算它们。于是改完 title 之后
+    行上的 `dedup_key` 仍指向旧题名：`verify` 不一定报，`dedup._row_keys` 读到的键与
+    这一行的身份对不上，"同一篇文献只有一个主键"这条不变量静默失效。这是"系统产物
+    系统保证每格"的机械含义：身份格只有一个写者（收编口 + 它自己的派生格），通用写口
+    不是第二个。
+
+    ## 边界
+
+    * `path` 不在这张拒绝名单里：它是"全文在哪"的指针而不是书目身份，真机 8 次全是
+      `null` → 下载落地（`verify` 也点名用 `table.update(patch={'path': …})` 修
+      `library/` 前缀的存量写法）。它走的是**另一道**闸：与 `table.create` 同一个用户
+      声明判据（`_literature_declaration_refusal`）—— 指到未声明的文件照样拒。
+    * 两个派生去重格（`dedup_key` / `_keys`）一并拒（见 `_LITERATURE_DERIVED_FIELDS`）：
+      它们是身份格的函数，单独写等于绕过身份格这一半。
+    * `summary` 不在这里（正文闸 `_literature_summary_refusal` 管）。
+    * 主键仍在更前面被 `primary_key_change` 拒；这里排除它，免得抢那条更准的读数。
+    * 状态格（`processed` / `download` / `matched` / `pages` / 租约那几格）原样放行 ——
+      真机 26 次里有 24 次是它们。
+    """
+    if table != "literature":
+        return None
+    offending = sorted(str(k) for k in (patch or {})
+                       if str(k) != idf
+                       and (str(k) in _LITERATURE_IDENTITY_FIELDS
+                            or str(k) in _LITERATURE_DERIVED_FIELDS))
+    if not offending:
+        return None
+    how_to_fix = (
+        "这一行的身份格不是通用写口能改的。二选一：① 这一行指错了文献（题名/DOI/作者/"
+        "年份不是这一篇）⇒ `table.delete` 之后按用户点名的文件重新登记"
+        "（`search.register(path=…)`），或走候选链 `lit.stage_add` → `lit.admit`"
+        "（登记器按 provider 记录写身份格）；② 缺全文想补 `path` ⇒ 走 "
+        "`search.retry_pending` / `search.download`（它们自己写 `path` 与 `download`）。"
+        "状态格（`processed` / `download` / `matched` / `pages` / `summary`）照旧可写。"
+    )
+    return fail(
+        f"table.update 不改 `literature` 的身份格：{offending}。"
+        "这些格由收编口从文件或 provider 记录写，而本口的 `title` / `year` / `doi` 一改，"
+        "行上的 `dedup_key` / `_keys`（`sysresidue.literature_dedup_cells` 算的）不会跟着"
+        "重算 ⇒ 同一篇文献会有两个主键，且改写之后这一行还是同一个 `lit_id` 却是另一篇"
+        f"文献。本行一个字节都没写。处置：{how_to_fix}",
+        table=table, kind="identity_cell_refused", recorded=False,
+        fields=offending, how_to_fix=how_to_fix,
+    )
+
+
 def assert_request_id_in_space(new_id: str) -> str:
     """`r-NNNN` 的编号空间守卫（全项目唯一实现）。
     ## 为什么"转发给 `next_prefixed_id`"还不够
@@ -2117,6 +2244,13 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
     path_refused = _literature_path_refusal(ctx, table=table, rel=data.get("path"))
     if path_refused is not None:
         return path_refused
+    # ---- `literature` 造行的用户声明闸（2026-11-21 DGWIDE ③）：与 `search.register`
+    # 同一道判据（`search_tools._declaration_refusal` → `locallib.declaration_verdict`）。
+    # `path=None` 也拒（没有用户点名的文件 ⇒ 只能当研究参考）；正文闸在它之后仍在。
+    declaration_refused = _literature_declaration_refusal(
+        ctx, table=table, data=data, op="create")
+    if declaration_refused is not None:
+        return declaration_refused
     # ---- `literature.summary` 的正文闸（本路 ①，与 `search.register` 同一份实现）：
     # 通用写口可以直写 literature（`direct_write_refusal("literature") == ""`），
     # 所以正文闸必须也长在这里 —— 否则内容性断言绕过 `search.register` 从这里进库。
@@ -2257,6 +2391,19 @@ def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, 
     `literature.path` 的两格（M4，2026-11-05）见 `table.create` 的同名一段：归一化只在
     这一笔真的写了 path 时做（patch 里没有 path ⇒ 存量原样保留，不替业主改盘）。
 
+    ## `literature` 的两道写侧判据（2026-11-21 BOOKPORT ②）
+
+    1. 身份格不许改（`_literature_identity_refusal`）：`title` / `doi` / `year` /
+       `authors` / `venue` / `type` / `language` 一出现就受控拒
+       （`identity_cell_refused`）。理由与 26 次真机读数见那个函数的 docstring ——
+       一句话：`dedup_key` / `_keys` 由 `title` + `year` + `doi` 算而本口不重算，
+       "第二个写者"会把"同一篇文献只有一个主键"写坏；且改完还是同一个 `lit_id`
+       却是另一篇文献（那是绕过"只有用户点名的才可入库"的改写，不是维护）。
+    2. 写 `path` 要过用户声明闸（`_literature_declaration_refusal`，与 `table.create`
+       同一份判据）：指针指向未声明的文件 ⇒ `not_declared_reference`。状态格
+       （`processed` / `download` / `matched` / `pages` / 租约那几格）与 `summary`
+       （正文闸）照旧可写。
+
     ## 换号理由那七格（业主 2026-11-07 裁定）
     `abandon_kind` / `abandon_basis` / `defect_ref` / `difficulty` / `salvaged` /
     `experiment_id` / `space` 不是可写的列：它们是"放弃命题"这件事的理由形状。`statements`
@@ -2333,6 +2480,13 @@ def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, 
                                                instance=_who["instance"])
             if _owner_refused is not None:
                 return fail(_owner_refused[1], table=table, id=id, kind=_owner_refused[0])
+            # ---- `literature` 身份格的写侧判据（BOOKPORT ②）：本口不改"这一行是谁"。
+            # 位置在归属判据之后、正文闸之前：归属是更基本的前提（改别人的行先拒），
+            # 主键与"行不存在"这两档更准的读数已经在前面给过。
+            identity_refused = _literature_identity_refusal(
+                table=table, patch=patch, idf=idf)
+            if identity_refused is not None:
+                return identity_refused
             # ---- `literature.summary` 的正文闸（与 `table.create` 同一处判据、同一份实现）：
             # 只在 patch 真的写了 summary 时判 —— 只改 `processed` / `download` 不构成
             # 新断言，存量行里的旧断言不归这一笔管（本路 ① 的口径）。
@@ -2355,6 +2509,15 @@ def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, 
                                                         rel=merged_raw.get("path"), id=id)
                 if path_refused is not None:
                     return path_refused
+            # ---- `literature.path` 也过用户声明闸（BOOKPORT ②，与 `table.create` 同一份）：
+            # 指针指向哪份字节是入库判据管的（`path` 不在身份格名单里，但它必须指到
+            # 用户点名的文件）。位置在归一化之后：核查的是**要落盘**的那一份路径。
+            if table == "literature" and "path" in patch:
+                decl_refused = _literature_declaration_refusal(
+                    ctx, table=table, data={"path": merged_raw.get("path")},
+                    op="update")
+                if decl_refused is not None:
+                    return decl_refused
             # ---- 引文回验（与 `table.create` 同一处接线、同一份判据）：这一笔在动
             # "引文已核过"的断言（`quote_verified` / `quote_mode` / `quote_span` /
             # `quote_call_sha256` 任一出现在 patch 里）才跑 —— 只改理由不构成新断言。
@@ -2795,6 +2958,7 @@ def register(
 
 def _selftest() -> int:
     """端到端自检：真建库、真走 registry、真校验正/负用例。返回 0 表示全过。"""
+    import json
     import shutil
     import tempfile
     from pathlib import Path
@@ -2816,6 +2980,16 @@ def _selftest() -> int:
     try:
         st = Store(tmp)
         st.init()
+        # 2026-11-21 DGWIDE ③：`table.create(table="literature")` 造行也按用户声明核。
+        # 自检要真的走到 `literature` 的建行成功支 ⇒ 先铺一份用户点名的投放处，
+        # 并让那一行指向 library/ 下真实存在的文件（否则 verify 会报 file_missing）。
+        (st.library / "selftest").mkdir(parents=True, exist_ok=True)
+        (st.library / "selftest" / "lit-probe.pdf").write_bytes(b"%PDF-1.4 selftest")
+        (st.root / "RELIABLE-REFERENCES.json").write_text(
+            json.dumps({"paths": ["library/", "selftest/"],
+                        "verbatim": "自检夹具点名 selftest/"},
+                       ensure_ascii=False),
+            encoding="utf-8", newline="\n")
         reg = ToolRegistry(name="selftest")
         # 绑定角色（`P-14`）：本自检要真的写表，而 `table.*` 的声明角色是 A/B/C/D ——
         # 取一个非只读角色（C 是只读，拿不到写工具）。
@@ -2886,7 +3060,7 @@ def _selftest() -> int:
                 "title": "Abelian groups and fields",
                 "type": "J",
                 "summary": "群与域的交换性",
-                "path": None,
+                "path": "selftest/lit-probe.pdf",
                 "processed": True,
             },
         )
@@ -2974,7 +3148,8 @@ def _selftest() -> int:
                        patch={"question_id": S.format_id(9)})
         check("改主键被拒", not bad.ok and "不允许修改主键" in (bad.error or ""), f"error={bad.error}")
         bad = reg.call("table.create", table="literature",
-                       row={"title": "", "type": "J", "summary": "s", "path": None})
+                       row={"title": "", "type": "J", "summary": "s",
+                            "path": "selftest/bad.pdf"})
         check("空 title 校验失败返回 fail 而不是抛异常",
               not bad.ok and "校验失败" in (bad.error or ""), f"error={bad.error}")
         bad = reg.call("table.create", table="research_questions",
@@ -3056,7 +3231,8 @@ def _selftest() -> int:
         r = reg.call(
             "table.create",
             table="literature",
-            row={"title": "第二篇", "type": "M", "summary": "备胎", "path": None, "processed": False},
+            row={"title": "第二篇", "type": "M", "summary": "备胎",
+                 "path": "selftest/lit-probe.pdf", "processed": False},
         )
         lit1 = r.data
         reg.call("table.update", table="search_requests", id=req_id,

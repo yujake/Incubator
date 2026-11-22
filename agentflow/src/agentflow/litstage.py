@@ -676,6 +676,81 @@ def literature_index(store: Store) -> list[dict]:
     return out
 
 
+def intake_provenance(store: Store | None) -> dict:
+    """文献行的入口读数：这一行是不是走过「候选 → 判收」那条链。
+
+    ## 为什么要有这一格（DANGLE ①，2026-11-21）
+
+    A 的文案写着「顺序不许换、也不许跳过建候选」（`specs/a.py` 的工作区文献那一段），
+    而实现里 `literature` 有两条入口：
+
+    - 候选链（`lit.stage_add` → `lit.admit` → `lit.admit_all`）—— 只有这一条带
+      `no_read_evidence` 那一档（判收必须先 `text.extract` + `fs.read` 读到正文）；
+    - 直登（`search.register`，以及 `search.ingest_local` 的非 dry 档）—— 只核
+      去重键 / 用户声明 / 「有没有可读正文」，不核「读过正文」。
+
+    于是「跳过建候选」不会红。这一格把两条入口的差值做成读数：`direct` 是
+    `literature` 里那些 `lit_id` 在 `lit_candidates` 一行都找不到的行 ——
+    读数不是闸：它不拒任何写入、不改任何门的强度，只让"绕过候选链"这件事在收工
+    输出上显形（文案改成"这是读数"之后，与这一格对得上）。
+
+    三态：`store` 没有 / 表读不出来 ⇒ `checked=False` + `reason`（没查成不是「全是直登」
+    也不是「全都走过候选」）。旧工作区在候选表引入之前就有文献行，它们会全部落在
+    `direct` 里 —— 这是如实的：它们确实没有候选链的判收留痕。
+
+    `direct_without_fulltext` 是 direct 里更危险的那一档：没有 `download.fulltext=ok`
+    （题录 / `skipped` / `failed` / 没有 `path`）—— 真机 `lp-ball-14` 的 5 条直登行
+    全是这一档（`search.register` 只登记题录时写的 `content_read=false`）。
+    """
+    out: dict = {
+        "checked": False, "reason": "",
+        "literature": None, "via_candidates": None, "direct": None,
+        "direct_ids": [], "direct_more": 0,
+        "direct_with_fulltext": None, "direct_without_fulltext": None,
+        "direct_without_fulltext_ids": [],
+        "note": ("`direct` = `literature` 里 `lit_id` 在 `lit_candidates` 一行都没有的行"
+                 "（`search.register` / 非 dry 的 `search.ingest_local` 那条入口）。"
+                 "这是读数，不是闸：框架不拒直登，`no_read_evidence` 只长在候选链的 "
+                 "`lit.admit` 上。"),
+    }
+    if store is None:
+        out["reason"] = "没有 store"
+        return out
+
+    def _has_fulltext(row: Mapping[str, Any]) -> bool:
+        dl = dict(row.get("download") or {})
+        if str(dl.get("fulltext") or "") == "ok":
+            return True
+        if str(dl.get("status") or "") in ("failed", "skipped"):
+            return False
+        if str(dl.get("error") or ""):
+            return False
+        return bool(str(row.get("path") or "").strip())
+
+    try:
+        lit = [dict(r) for r in store.rows("literature")]
+        cands = [dict(r) for r in store.rows("lit_candidates")]
+    except Exception as exc:  # noqa: BLE001 —— 读不出来就三态，不折成 0
+        out["reason"] = f"{type(exc).__name__}: {exc}"
+        return out
+    judged = {str(r.get("lit_id") or "") for r in cands if str(r.get("lit_id") or "")}
+    direct = [r for r in lit if str(r.get("lit_id") or "") not in judged]
+    direct_ids = [str(r.get("lit_id") or "") for r in direct]
+    no_ft = [r for r in direct if not _has_fulltext(r)]
+    out.update({
+        "checked": True,
+        "literature": len(lit),
+        "via_candidates": len(lit) - len(direct),
+        "direct": len(direct),
+        "direct_ids": direct_ids[:12],
+        "direct_more": max(0, len(direct_ids) - 12),
+        "direct_with_fulltext": len(direct) - len(no_ft),
+        "direct_without_fulltext": len(no_ft),
+        "direct_without_fulltext_ids": [str(r.get("lit_id") or "") for r in no_ft][:12],
+    })
+    return out
+
+
 #: 一次 `admission_plan` 里共享的重叠索引（见 :func:`overlap_check` 的同名参数）。
 #:
 #: ## 为什么是 ContextVar 而不是给 `overlap_check` 加一个必给的参数

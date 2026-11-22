@@ -1612,7 +1612,7 @@ class Store:
             return
         p = self.migration_ledger_path
         p.parent.mkdir(parents=True, exist_ok=True)
-        with open(p, "a", encoding="utf-8") as f:
+        with open(p, "a", encoding="utf-8", newline="\n") as f:
             for rec in lines:
                 f.write(json.dumps(rec, ensure_ascii=False, default=str) + "\n")
 

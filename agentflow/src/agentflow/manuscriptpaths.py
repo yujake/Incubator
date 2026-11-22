@@ -502,7 +502,7 @@ def stamp_verification_path_group(*, root: Any, statement_id: str, body_sha: str
         if changed and not bad:
             tmp = path.with_suffix(path.suffix + ".tmp")
             try:
-                tmp.write_text("".join(lines), encoding="utf-8")
+                tmp.write_text("".join(lines), encoding="utf-8", newline="\n")
                 tmp.replace(path)
             except OSError as exc:
                 out["problems"].append(f"{path.name} 写不进去（{type(exc).__name__}: {exc}）")

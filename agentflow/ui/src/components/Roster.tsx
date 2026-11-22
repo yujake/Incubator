@@ -82,11 +82,13 @@
 import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 
-import { api } from "../api";
-import { useFace } from "../live";
+import { api, postAck, postVoid } from "../api";
+import { useFace, useLive } from "../live";
 import { ACTIVE_TEXT, STATE_TEXT, asAgentState, buildRosterTree, kidsStateText, stalledTag, stateSummary, taskLine } from "../rosterTree";
 import type { TreeRow } from "../rosterTree";
-import type { RosterChild, RosterInbox, RosterNode, RosterTask, RosterUnrostered, RosterView } from "../types";
+import type { RosterChild, RosterInbox, RosterInboxItem, RosterNode, RosterTask, RosterUnrostered, RosterView } from "../types";
+import { ErrorBlock, faceOfError, faceOfWrite } from "./ErrorBlock";
+import type { ErrorFace } from "./ErrorBlock";
 import { Badge } from "./Badge";
 import { Card } from "./Card";
 import { TriState, isUnreadable } from "./TriState";
@@ -249,8 +251,12 @@ function UnrosteredLine(props: { children: RosterUnrostered[] }) {
 /** 收件箱那一格：读不到就是"未读到"（不是 0 条）。
  *
  * 三格分开（D13）：`unread` = 还没被读进任何一步（queued/claimed）；
- * `seen_not_acked` = 读了、还缺 ack。合成一个数会把 `seen` 也算成"积压"——
- * 那个数因此在正常流程下只涨不落（`close_item` 全仓只有一个调用者）。
+ * `seen_not_acked` = 读了、还缺 ack。合成一个数会把 `seen` 也算成"积压"。
+ *
+ * 2026-11-21（WEBFIX2 F7）：`seen_not_acked` 那一格此前**只涨不落** —— `close_item`
+ * 全仓只有一个生产调用者（`agent_loop._ack_stop_notice`，只 ack 停止通知），
+ * 网页上没有入口，于是真机 `projects/lp-ball-15` 积了 6 条未收口的 notice。
+ * 下面每一条旁边那个「收口」按钮就是那只手（`POST /api/ack`）。
  */
 function inboxBadge(inbox: RosterInbox) {
   if (inbox.tri !== "computed" || inbox.open_total === null) {
@@ -266,6 +272,154 @@ function inboxBadge(inbox: RosterInbox) {
       kind={unread > 0 ? "badge-fail" : "badge-pending"}
       text={`未读 ${unread} · 已读未 ack ${seen}`}
     />
+  );
+}
+
+/** 收件箱里那一条的「收口」按钮（`POST /api/ack`，2026-11-21 WEBFIX2 F7）。
+ *
+ * 判据不在这里：按钮只发 `task_id` 与 `close=acked`，能不能收口由后端的状态机
+ * （`conductor.close_item` / `item_move` 迁移图）判；被拒时那句话照原样显示
+ * （例如 `block` 项会回 409「已经到过 'block'（不许倒退或重复迁移）」）。
+ * 收口成功之后后端会发一条 `state` 帧，全站的面跟着重取 —— 这里不再自己 reload。
+ * 只读档（没开 `--allow-writes`）直接禁用按钮，理由写在旁边（不许让人按出 403）。
+ */
+function AckButton(props: { item: RosterInboxItem }) {
+  const live = useLive();
+  const [feed, setFeed] = useState<ErrorFace | null>(null);
+  const [busy, setBusy] = useState(false);
+  const readOnly = live.writesAllowed === false;
+  const fire = (): void => {
+    setFeed(null);
+    setBusy(true);
+    postAck({ taskId: props.item.task_id, close: "acked" })
+      .then((got) => {
+        setFeed(faceOfWrite(got));
+      })
+      .catch((exc: unknown) => {
+        setFeed(faceOfError(exc));
+      })
+      .finally(() => {
+        setBusy(false);
+      });
+  };
+  return (
+    <span class="roster-ack">
+      {" "}
+      <button
+        type="button"
+        class="btn btn-small"
+        disabled={readOnly || busy}
+        title={
+          readOnly
+            ? live.writesReason
+            : "把这一条推到 done（收口由后端的状态机判，网页只递 task_id）"
+        }
+        onClick={fire}
+      >
+        {busy ? "收口中……" : "收口"}
+      </button>
+      {readOnly ? (
+        <span class="readings">（{live.writesReason}）</span>
+      ) : null}
+      {feed === null ? null : <ErrorBlock face={feed} />}
+    </span>
+  );
+}
+
+/** 收件箱里那一条的「作废」按钮（`POST /api/void`，2026-11-21 BOARDACK）。
+ *
+ * 为什么收件箱需要第二只手：`/api/ack` 走板项状态机，而真机 `projects/lp-ball-15`
+ * 积的那 6 条 notice 停在 `item_state=block`（优雅停止 `stopctl.block_remaining_tasks`
+ * 翻的）。迁移图里 `block → done` 是倒退 ⇒ 收口只能回 409；"唤醒 ⇒ 再 ack"也不行
+ * （唤醒清掉 `seen_by`，收口撞 A5 的空口 ack 闸）。它们真正该走的是**作废**
+ * （`item_close=expired`）：这一趟已经不做了，项不再欠动作。
+ *
+ * 判据仍然不在前端：这一下只发 `task_id` + `why` + `confirm`，能不能作废由
+ * `conductor.void_items_by_user` 判；被拒时后端那句话照原样显示。
+ *
+ * 两次点击是刻意的（与 `ConfirmButton` 同一条纪律）：第一下只"上膛"，第二下才真发 ——
+ * 作废不可逆。`why` 必填（后端缺它 400）：留痕的第一格就是"人凭什么撤的"。
+ * 只读档（没开 `--allow-writes`）直接禁用按钮，理由写在旁边（不许让人按出 403）。
+ */
+function VoidButton(props: { item: RosterInboxItem }) {
+  const live = useLive();
+  const [feed, setFeed] = useState<ErrorFace | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [armed, setArmed] = useState(false);
+  const [why, setWhy] = useState("");
+  const readOnly = live.writesAllowed === false;
+  const ready = why.trim() !== "";
+  const fire = (): void => {
+    setFeed(null);
+    setBusy(true);
+    postVoid({ taskId: props.item.task_id, why: why.trim() })
+      .then((got) => {
+        setFeed(faceOfWrite(got));
+      })
+      .catch((exc: unknown) => {
+        setFeed(faceOfError(exc));
+      })
+      .finally(() => {
+        setBusy(false);
+        setArmed(false);
+      });
+  };
+  if (!armed) {
+    return (
+      <span class="roster-void">
+        <button
+          type="button"
+          class="btn btn-small"
+          disabled={readOnly || busy}
+          title={
+            readOnly
+              ? live.writesReason
+              : "作废这一条（不再需要做）：它能收口 block 项 —— 收口由后端判，网页只递 task_id 与理由"
+          }
+          onClick={() => {
+            setArmed(true);
+          }}
+        >
+          作废
+        </button>
+        {readOnly ? <span class="readings">（{live.writesReason}）</span> : null}
+        {feed === null ? null : <ErrorBlock face={feed} />}
+      </span>
+    );
+  }
+  return (
+    <span class="roster-void">
+      <input
+        type="text"
+        class="input"
+        value={why}
+        placeholder="为什么这一条不用再做了（逐字进留痕）"
+        disabled={busy}
+        onInput={(ev) => {
+          setWhy(ev.currentTarget.value);
+        }}
+      />
+      <button
+        type="button"
+        class="btn btn-small btn-armed"
+        disabled={!ready || busy}
+        title={ready ? "确认作废这一条（不可逆）" : "先写清理由：why 必填"}
+        onClick={fire}
+      >
+        {busy ? "作废中……" : "确认作废"}
+      </button>
+      <button
+        type="button"
+        class="btn btn-small"
+        disabled={busy}
+        onClick={() => {
+          setArmed(false);
+        }}
+      >
+        取消
+      </button>
+      {feed === null ? null : <ErrorBlock face={feed} />}
+    </span>
   );
 }
 
@@ -310,6 +464,8 @@ function InboxBlock(props: { inbox: RosterInbox }) {
             状态 {it.state === "" ? "unknown" : it.state} · 谁发的 {it.called_by === "" ? "unknown" : it.called_by}
           </span>
           <span class="roster-brief">{it.detail === "" ? "（正文没读到）" : it.detail}</span>
+          <AckButton item={it} />
+          <VoidButton item={it} />
         </div>
       ))}
     </>

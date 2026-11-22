@@ -711,7 +711,7 @@ def _write_run_log(target: Path, *, claim: str, claim_key: str, script_path: str
             f"{run.get('stdout') or ''}"
             "----- stderr -----\n"
             f"{run.get('stderr') or ''}",
-            encoding="utf-8")
+            encoding="utf-8", newline="\n")
         return None
     except OSError as e:
         return f"{type(e).__name__}: {e}"

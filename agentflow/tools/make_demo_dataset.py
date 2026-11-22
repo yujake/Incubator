@@ -151,7 +151,7 @@ def build(dest: Path) -> Path:
     for lid, title, ltype, fname, text in LITS:
         d = lib / lid
         d.mkdir(parents=True, exist_ok=True)
-        (d / fname).write_text(text + "\n", encoding="utf-8")
+        (d / fname).write_text(text + "\n", encoding="utf-8", newline="\n")
 
     # 声明哪几张表由并表过渡层决定（`concepts` 落刀之后不在 schema 里，
     # 声明它会以"未知表"当场失败）。写概念行走 `CR.upsert_legacy_shaped`：
@@ -226,7 +226,7 @@ def build(dest: Path) -> Path:
                 "question": 0, "report": 0}
     (st.data / "counters.json").write_text(
         json.dumps({"schema_version": S.SCHEMA_VERSION, "counters": counters}, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
+        encoding="utf-8", newline="\n",
     )
     return dest
 

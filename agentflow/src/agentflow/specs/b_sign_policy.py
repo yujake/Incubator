@@ -33,8 +33,7 @@ SIGN_SUBMIT_POLICY: tuple[str, ...] = (
     # 真源 `draft/179`（业主 2026-11-02）：「逐个优化，优化后拿V签，用有V签的优化后的
     # 证明精准替换原证明并将那条证明记为已优化」。顺序不许颠倒（先签后换）：
     # 「先换了再补签」盘上就已经是一版没审过的正文。
-    "**第二阶段（逐个优化）的三步：洗稿 → 重拿 V 签 → 精准替换**：源稿已经拿过签的，"
-    "先 `own.open_polish_copy` 开一份 B 号副本（源稿一个字节不动），在副本上洗；"
+    "**第二阶段（逐个优化）的三步：洗稿 → 重拿 V 签 → 精准替换**：源稿已经拿过签的，先开副本（`own.open_polish_copy`，源稿一个字节不动、细则见边界那一条）；"
     "洗完照上面那条送 V（`V.verify_proof`：`statement_id` ＋ `proof_manuscript`），"
     "签到位之后再用 `own.ingest_manuscript(mode=\"apply\", target_stmt_id=…, "
     "cells=[\"proof_text\"], conflict=\"overwrite\")` 做**精准替换** —— 旧正文按号进 "

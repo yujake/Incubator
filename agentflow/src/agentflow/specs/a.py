@@ -1,10 +1,17 @@
-"""角色 A 的声明：动作表 + 边 + 写集 + 职责与门面。
+"""角色 A 的声明：动作表 + 边 + 写集 + 职责与门面 + 检索式教法。
 
 这一份是权限面的真身：`capabilities.py` 从它派生 `CAPABILITIES` / `ALLOWED_EDGES` /
 `WRITE_SETS`，`agent_a` 包只是把它再导出一次。
 所以本文件在 `.noai-paths` 里受保护（改它等于改权限面 ⇒ 需要 2 名人审）；
 与派生表逐格一致的判据见 `tests/test_agent_spec_reconciliation.py` 与
 `tests/test_capabilities_two_layer.py`。
+
+`SEARCH_STYLE` 是「A 的检索式怎么给」那一段的正文（段名 `A_SEARCH_STYLE`，号由
+`promptkit.SECTION_ORDERS` 集中分配）。它 2026-11-22 从 `presets/a/blocks/search_style.md`
+逐字搬来：预设那套「写死的块由哪段文件给」的机制只有 A 一个用户（别的角色都在本文件
+一族里写死），所以退役机制、正文回到它该在的地方 —— 与 A 的 policy / boundary 同族。
+判据 `tests/test_presets_retired.py::test_a_search_style_is_registered_from_the_spec`
+钉住它仍进 A 的提示词，且别的角色一个字都不多。
 """
 from __future__ import annotations
 
@@ -25,12 +32,44 @@ from ..agentspec import (
     _obj,
 )
 
+#: A 的「检索式怎么给」那一段的正文（段名 `A_SEARCH_STYLE`，order 2000：工具指引之后、
+#: 证据契约之前）。它是一条一条真机读数换来的做法，与 `SPEC.brief.policy` 那一族是同一类
+#: 东西（写给模型的正文），所以住在 A 的声明文件里，而不是外挂一份数据文件。
+#:
+#: 落点只有一处：`agent_prompts.role_prompt_registry` 在 A 那一档把它注册成独立段。
+#: 它不进 `SPEC.brief.policy`：policy 那几格渲染在 order 500、带「这次运行的政策：」的
+#: 抬头，而这一段是 order 2000 的独立块 —— 搬进 policy 会改渲染出来的字节（位置与抬头
+#: 都变），而这一笔的验收是「十一格逐字节不变」。
+#:
+#: 正文逐字搬自 `agentflow/presets/a/blocks/search_style.md`（884 字节，尾随一个换行由
+#: 渲染层以前用 `strip("\n")` 去掉；这里常量本身就是去掉之后的 883 字节）。
+#: 那段正文此前只对 A 生效（随包预设只有 `a/` 这一份），所以它一直是 A 的私有教法，
+#: 不是一套可替换的部署面。
+SEARCH_STYLE: str = (
+    "你这一岗的检索式怎么给（每一条都有真机读数支撑，不是风格偏好）：\n"
+    "\n"
+    "- 后端以英文文献为主：`topic` 里要带英文关键词。纯中文题面会被挡在门外，返回\n"
+    "  `query_not_applicable` —— 那个码的意思是「这一问没发出去」，不是「没有这篇文献」。\n"
+    "  把英文检索式写进 `description` 也能让它适用。\n"
+    "- `topic` 要短：按题名找原文就只给题名（必要时加年份），不要把作者与一串关键词串成长句 ——\n"
+    "  precise 那一档带关键词后置过滤，词袋越长越容易被整批滤掉（实测：同一后端，短题名一次命中\n"
+    "  9 条，长串 5 次里 4 次 `no_results`）。找不到再换 topical，或换关键词重试。\n"
+    "- 判「不相关」与判「不存在」是两件事：你可以说这一条候选没进结果，不许说这篇文献不存在。"
+)
+
 #: 本角色的动作表（从 `capabilities.py` 逐字搬来）。
 ACTIONS: tuple[ActionSpec, ...] = (
     ActionSpec(
         "A", "run_once",
         "领取一条待办检索请求并跑完（搜索 + 登记文献 + 下载）",
-        _obj({}),
+        # 2026-11-21（PA2 规矩 2）：`request_ids` 是实现的真形参（`AgentA.run_once(self, *,
+        # request_ids=None)` → `_claim_pending` 用它点名要认领的委托），也是产品自己的
+        # 收工门拒信在教的那一格（`closing._check_literature_pending` / `litstage.
+        # pending_scope_note` 逐字写「不给 `request_ids` 就认领全部有 pending 的委托」），
+        # 但声明面此前漏了它 ⇒ 经参数门照那句话写会被判未声明键。补声明，不改实现。
+        _obj({"request_ids": {**_ARR_S, "description": (
+            "只认领这几个委托号（`lit_candidates` 里还有 `pending` 的那几个）；"
+            "不给 ⇒ 认领全部有 pending 的委托（队列里没有可领的检索请求时这一格也生效）")}}),
         "ARunResult（`to_dict()` 的键：processed / registered / duplicated / downloaded / "
         "outcome / request_id / queue_pending / report_path …；`claimed` 只是属性、不在 "
         "`to_dict()` 里）",
@@ -234,10 +273,14 @@ SPEC = AgentSpec(
             "**每一趟的收尾不是「报告交了」，是「待裁表清了」**：`run_once` 回执里的 "
             "`pending_total` 是跨委托的全表读数，不为 0 ⇒ 这一趟还没收尾。收尾三步一步都不能省："
             "① `lit.stage_list(request_id=\"*\", status=\"pending\")` 看全表（不只当前委托）；"
-            "② 本批候选**逐条**判收（`lit.admit`，每条带 `relevance` 与 `availability`）或判拒"
+            "② 本批候选**逐条**判收（`lit.admit(items=[{\"slot\": …, \"availability\": …}])` —— "
+            "`availability` 逐条给；那句 `relevance` 是 `lit.stage_add` 时写进候选行的，"
+            "`lit.admit` 的 items 不收它，传了会被参数门按未声明键拒）或判拒"
             "（`lit.stage_reject`，批量用 `slots`）；③ **逐委托** "
-            "`lit.admit_all(request_id=<委托号>)` 提交清表。交给召唤方的回执里必须写"
-            "「还剩几条待裁、分布在哪个委托上」—— 0 也要写；不写就等于把未收尾说成收尾。",
+            "`lit.admit_all(request_id=<委托号>)` 提交清表。**回执里建议写**"
+            "「还剩几条待裁、分布在哪个委托上」（0 也写）—— 这只是给召唤方的摘要，"
+            "**不是判据**：真正的闸是收工门第八格 `literature_pending` 按 `lit_candidates` "
+            "表数，`run_once` 的 `pending_total` 是跨委托的全表读数。",
             # 2026-11-20 业主裁定（逐字「读内容才能判东西，这样的话保证通过的肯定有内容，
             # 且能保证质量」）：判收的证据从"一句 relevance"收紧到"真的读到正文"。
             "没有正文就不许判收：`lit.admit` 只接受读过正文的候选 —— 正文由 `text.extract` "
@@ -266,9 +309,11 @@ SPEC = AgentSpec(
             "**规范术语 + 关键词组合**：去掉题面里的通用词，换成那条路在文献里通行的数学术语 / "
             "定理名 / 作者名（例：`cube slicing`、`hyperplane sections`、`central section`、"
             "`ℓ_p ball`、`Meyer-Pajor`、`Koldobsky`、`Brunn-Minkowski`）。"
-            "**`no_results` 之后必须换规范术语再查一次**（同一个题面原样重试不算）：换掉哪个词、"
-            "换成哪个术语、两次的 `topic` 各是什么，逐次写进结论；一条 `no_results` 只有在换过"
-            "规范术语之后才算终局（收工门的 `no_result_topics` 就是核这件事的读数）。",
+            "**`no_results` 之后建议换规范术语再查一次**（同一个题面原样重试不算）：换掉哪个词、"
+            "换成哪个术语、两次的 `topic` 各是什么，逐次写进结论。**这一条是纪律，不是闸**："
+            "收工门只给 `no_result_topics`（每个 `no_results` 的题面）与 "
+            "`no_result_repeated_topics`（同一题面原样重提的那几条，机械可判）；"
+            "「换的是不是规范术语」语义上判不了，所以一条 `no_results` 不会因为没换词而红。",
             # 2026-11-21（SEEDDOC）：工作区里已经躺着历史文献时，A 的可见面此前一个字都没写
             # 这条路 —— 下一趟真机把 25 份 PDF 投进 library/（未入库、未判收），A 只能自己
             # 想怎么办；而两种最省事的错法（把发现读数当已入库、用非 dry 档一次性登记）
@@ -277,8 +322,8 @@ SPEC = AgentSpec(
             # description 原话，判收闸在 litstage / litavail（这一段是提示词引导，不加词表阈值，
             # 也不动任何落库路径）。
             "**工作区里已有的文献不是「已入库」**：`library/`（历史文献的投放处）或 `source/` "
-            "下已经躺着 `.pdf`、而 `data/literature.json` 里没有它们时，顺序是三段，"
-            "一步都不能省：① **发现** —— `search.ingest_local(books_dir=\"library\", "
+            "下已经躺着 `.pdf`、而 `data/literature.json` 里没有它们时，默认走这三段："
+            "① **发现** —— `search.ingest_local(books_dir=\"library\", "
             "dry_run=True)` 只算 sha256 / 页数 / 文本层、一个字节都不写（读数里的 `ingested` "
             "是「会登记」的预告，不是入库，别拿它当已收编；发现档不受声明限制，它本来就零写入）；"
             "② **建候选** —— 按发现读数里的盘上路径，**只对用户声明里点名的那些**逐份 "
@@ -287,8 +332,12 @@ SPEC = AgentSpec(
             "这一步只写候选表，`literature` 仍是 0 行；③ **判收** —— "
             "`text.extract(lit_id=\"cand:<槽位>\")` 抽正文、`fs.read` 读到那份 `.txt`、"
             "`lit.admit(items=[{\"slot\": \"<槽位>\", \"availability\": \"readable\"}])` 逐条判，最后逐委托 `lit.admit_all` 提交"
-            "（提交才发号、才进 `literature`）。顺序不许换、也不许跳过建候选：拿非 dry 档把"
-            "整目录一次性登记进库，等于把「盘上有文件」冒充成「判收过了」。"
+            "（提交才发号、才进 `literature`）。**这一条是默认路径，不是闸**："
+            "非 dry 的 `search.ingest_local` 与 `search.register` 是另外两条直登口 —— "
+            "它们只核用户声明（`not_declared_reference`）与「有没有可读正文」，"
+            "**不核「读过正文」**（`no_read_evidence` 只长在 `lit.admit` 上）；"
+            "绕过去不会报错，只会落在收工门读数 `readings.literature_intake` 里"
+            "（`direct` 是没走过候选链的行，`direct_without_fulltext` 是其中只有题录的那几条）。"
             "**只有用户点名的才可入库**（业主 2026-11-21 裁定，默认 fail-closed）：M 会把用户"
             "提示词里点名的文件/目录逐字记进工作区根的 `RELIABLE-REFERENCES.json`；清单外的"
             "文件只能当研究参考（可读），不许进 `literature` —— `search.ingest_local` 非 dry 档"
@@ -382,12 +431,15 @@ SPEC = AgentSpec(
             "别把 `unknown` 读成 `off_topic`。",
         ),
         signature_error="把一条候选被丢掉说成这篇文献不存在。",
-        deliverable="search_requests 里每一条请求的终局（outcome）与 result_lit_ids；"
-                    "收进 `literature` 的那批必须已经派 B 的 `run_once` 收编"
-                    "（概念行与关系行落在哪、B 回来的读数是什么）。",
+        deliverable="交付状态 —— 交给谁：派你这趟活的那一方（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名，它是主控就写 M）"
+                    "与收方 B；形态：`search_requests` 行 + `literature` 行；"
+                    "可核字段：`search_requests.outcome` / `search_requests.result_lit_ids` / "
+                    "`search_requests.done` / `literature.lit_id`；"
+                    "算做完：本条请求的 `outcome` 已终局（不是 pending）、`result_lit_ids` 里每个号都 "
+                    "能在 `literature` 里读到，且这批已派 B 收编、B 回执给出概念行与关系行的条数。",
         stance=(
-            "你的眼睛最先该落在'来源'上：同一篇文献在不同库里的元数据不一致时，先把差异记下来，再决定采信哪一份 —— 这正是判重口径存在的理由。",
-            "检索不是把关键词丢出去：先说清'我要找的是哪一类东西、它长什么样'，再决定查什么、怎么判相关。",
+            "你的眼睛最先该落在'来源'上：同一篇文献在不同库里的元数据不一致时，把差异（哪一格、两边各写了什么）写进草稿本那一行，并在同一行写清采信哪一份、凭哪个字段 —— 判重的键只保证同一篇只有一个键，采信理由只能由你留下。",
+            "检索不是把关键词丢出去：每条候选落 `lit.stage_add` 时，`relevance` 那一格就是答案 —— 写清它为什么算'我要找的那一类东西'；写不出这一句的候选，不该进表。",
             "被丢掉一条候选时，把'为什么丢'写进草稿本；那是别人复核你检索质量时唯一的线索。",
         ),
     ),
