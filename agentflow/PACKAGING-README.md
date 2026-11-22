@@ -1,6 +1,6 @@
 # agentflow（包级 README）
 
-这是 `agentflow` 包的**打包用** README：`pyproject.toml` 的 `readme = "README.md"`
+这是 `agentflow` 包的**打包用** README：`pyproject.toml` 的 `readme = "PACKAGING-README.md"`
 读的就是这一份（setuptools 不允许指向项目根之外的文件，见 pyproject 里的注释）。
 面向使用者的权威说明在**仓库根**的 `README.md`，两者内容不重复。
 

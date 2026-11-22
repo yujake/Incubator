@@ -224,7 +224,7 @@ theorem           = V 签 ∧ 机器可核（Lean 形式化 或 穷举证书，�
 ### 5.3 怎么读这两张表（存量 362 条非概念行 / 169 条不一致）
 
 - 非概念行 362 条；历史档位与"按五元位现算的等级反算名"对不上，有两种读数
-  （只读盘点见 `temp/grade_audit.py`，它同时打印两种）：
+  （当时的一次性探针 `temp/grade_audit.py` 已不在盘上（`temp/` 不入库），两种口径见下）：
   - **存量口径**（第 2 位按 `proof_text` 非空读、不做读侧降档）：**169 条** =
     `cross_check→heuristic` 106、`cross_check→proof_review` 30、
     `heuristic→proof_review` 25、`proof_review→heuristic` 6、
@@ -328,7 +328,9 @@ python -X utf8 tests/_two_axes.py
 python -m pytest -q tests/test_two_axes_grade_and_kind.py
 
 # 只读存量审计（不写 projects/）：历史档位 vs 现算等级的 169/168 分布与降档清单
-python -X utf8 temp/grade_audit.py
+# ⚠️ 这一段当时跑的是 `temp/grade_audit.py` —— 一次性探针随 `temp/` 不入库，现盘上已不在
+# （2026-11-21 CLEAN-ALIGN 复算 `Test-Path temp/grade_audit.py` = False）。169/168 是**当次读数**，
+# 不是可复跑的判据；现行口径只认下面两条命令。
 
 # 刷新现场快照（`projects/` 被 .gitignore 排除，判据读的是这份快照）
 python -X utf8 tests/_two_axes.py --refresh-scene

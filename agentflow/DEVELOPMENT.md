@@ -1,4 +1,4 @@
-# DEVELOPMENT —— agentflow 项目开发规范
+# DEVELOPMENT —— Incubator 仓库 / agentflow 产品 的开发规范
 
 > ⚠️ **权威性（2026-10-18 标注，2026-10 拆分后重写）**：本条目的职责**只有一件事** —— 告诉你
 > "要改代码，先读哪几节"。**判据本身不在本文**：规范在 [`docs/DEVELOPMENT-SPEC.md`](docs/DEVELOPMENT-SPEC.md)，
@@ -35,8 +35,19 @@
 - 改**工具层** ⇒ SPEC §2 第 ③ 层 + §6.3；
 - 改 **Web / 用户端** ⇒ SPEC §2 第 ⑧ 层 + `tests/test_webui_contracts.py`；
 - 改**禁 AI 区里的任何文件** ⇒ [`AGENTS.md`](AGENTS.md)（**最短、最硬**；命中即停，需 2 名 reviewer）；
+- 要**写仓库里的文本产物**（报告 / 章节 / 台账 / 生成物） ⇒ SPEC **§19 写盘纪律**（一律 LF：
+  仓库脚本用 `tools/write_lf.py::write_lf`，产品代码显式 `newline="\n"`；
+  收口读数 `python tools/eol_gate.py --root .`）；
 - 要**当前读数** ⇒ SPEC §0.2（不要相信任何抄在散文里的数字）。
 - **判断该不该这么改** ⇒ SPEC **§15 优先级**（读数让位于能力、最小改法让位于治本；含四条禁止形态）
+
+## 判据（`tests/`）不随仓库交付
+
+业主 2026-11-21 裁定：`agentflow/tests` 只是测试工具，**不入 git**、不随仓库交付。
+干净 clone 里没有这个目录，而 `import agentflow` / `agentflow --version` / 产品运行都不依赖它。
+所以发布门里的全量测试是**本机开发门**：`scripts/release_check.py` 第 1 项、
+`tools/release_all.py` 的 `release-check` 与 `per-file` 步在本机没有 `tests/` 时
+记 `unknown` 并写明原因（**不是 pass**，也不是崩）；其余门与 `tests/` 无关，照常判定。
 
 ## 一句话记住
 

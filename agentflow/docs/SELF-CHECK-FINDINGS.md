@@ -198,13 +198,17 @@ python -m pytest -q tests/test_agent_c.py tests/test_agent_e.py tests/test_verif
 # 相邻受影响面（编号宽度 / Lean 开关 / E 的形式化路径 / C 的服务面 / 发布门的模块自检）
 python -m pytest -q tests/test_agent_split_is_one_action_one_file.py tests/test_id_width.py \
   tests/test_lean_switch.py tests/test_lean_modes_matrix.py tests/test_core_audit_efgh.py \
-  tests/test_agent_c_service.py tests/test_agent_e_formal_path.py tests/test_agent_e_formal_reasons.py \
+  tests/test_agent_c_service.py tests/test_agent_e_formal_reasons.py \
   tests/test_agent_e_run_log.py
 ⇒ 159 passed, 1 skipped, 1 warning in 71.63s
 
 python -m pytest -q tests/test_release_check_items.py
 ⇒ 25 passed in 33.46s
 ```
+
+> 注（2026-11-21 CLEAN-ALIGN 复算）：上面那一行原写有 `tests/test_agent_e_formal_path.py`，
+> 该文件已在 `3d1b4b91`（2026-10-23 WIP）里删除、现盘上不存在，故从命令里摘掉；
+> 本节的读数是 **2026-10-18 当次**的原文，不影响结论。
 
 > 注：任务里给的那个 V 的测试文件名在本仓**不存在**（不要照抄成路径）；V 的判据实际住在
 > `tests/test_verifier_role.py`（按"文件名不对就按实际存在的那几个跑"执行），

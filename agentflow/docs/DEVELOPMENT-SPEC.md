@@ -1,4 +1,4 @@
-# DEVELOPMENT-SPEC —— agentflow 开发规范（判据面）
+# DEVELOPMENT-SPEC —— Incubator 仓库的开发规范（判据面）
 
 > ⚠️ **权威性**：本文是「开发规范」，属**当前规格**，是"怎么做才算对"的**判据**。
 > 与代码冲突时**以代码为准**；若代码与本文冲突，是**本文的 bug**（处置见 §12）。
@@ -59,7 +59,7 @@
 与它的负控 `test_the_documented_readings_criterion_is_not_vacuous`（把一块读数打回过期值，
 判据必须红 —— 这是"判据本身不是橡皮图章"的证明）。
 
-**linter 的当次三栏（日常档）**：`error 0 / warning 17 / info 45`（观测 2026-11-20，
+**linter 的当次三栏（日常档）**：`error 0 / warning 18 / info 45`（观测 2026-11-21，
 复跑 `python -B scripts/lint_rules.py`；下面这段 21 / 19 是 2026-11-17 的历史读数 —— 2026-11-17 的 R003 登记 —— `session_ids_with_questions`
 在 `sessions.py` / `userio.py` 各一份属刻意分层，登记进 `SAME_NAME_ALLOWED` ⇒ 那一对不再报
 `warning`（21→19），同一登记让 R003 多出一条 info（44→45）。此后同一天的 SYSCT1（`adc44a8a`）
@@ -86,12 +86,12 @@ LIVE-READINGS:BEGIN
 # 量法说明：前 11 个键与 `tests/test_release_all.py::measured_readings()` 逐键同名同量法。
 # 判据不认的键（拼错）与判据要的键缺失，都会被同一处报出来 —— 所以加键要同时改判据。
 lint_rules_rules        = 12   # `len(RULES)`；复跑 `python -B scripts/lint_rules.py` 摘要行的"规则 N 条"。其中 R004/R006 已退休、编号保留，`RETIRED_RULES` 里逐条给了去向
-lint_rules_warning      = 17   # `python -B scripts/lint_rules.py`（日常档）末行 warning 栏（2026-11-20 复跑 17；2026-11-17 复跑 21 —— 那天的 R003 登记 `session_ids_with_questions` 为刻意分层 ⇒ 21→19，同日 SYSCT1 新增 `sign_counting.read_rows` 与 `manuscripts.read_rows` 同名一条 R003 ⇒ 19→21；当次逐条清单以 linter 输出为准，不在这条注释里复述）
+lint_rules_warning      = 18   # `python -B scripts/lint_rules.py`（日常档）末行 warning 栏（2026-11-21 复跑 18 —— 2026-11-21 的 SYSGUARD/SYSRESIDUE 两路新增 `sysresidue.py` 一条 R002 warning（`is None` 之后返回空容器那一处已写理由，仍是 warning 一档）；2026-11-20 复跑 17；2026-11-17 复跑 21 —— 那天的 R003 登记 `session_ids_with_questions` 为刻意分层 ⇒ 21→19，同日 SYSCT1 新增 `sign_counting.read_rows` 与 `manuscripts.read_rows` 同名一条 R003 ⇒ 19→21；当次逐条清单以 linter 输出为准，不在这条注释里复述）
 lint_rules_info         = 45   # 同一档的 info 栏（2026-11-20 复跑仍是 45）
-lint_rules_strict_warning = 93 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（2026-11-20 复跑 93；2026-11-17 复跑 89；日常档那条 R007 info 在这一档拆成逐模块 warning，另加 R003 `read_rows` 那一对）
+lint_rules_strict_warning = 94 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（2026-11-22 00:5x 复跑 94：PRESETRETIRE 退役 `composition.py` / `presets.py` 两个模块，它们各带一条 R007 ⇒ 96 → 94，两个值都当场复跑过（把两个文件拷回 `src/` 再跑一遍 96，删掉再跑 94）；00:25 那次 97、00:0x 那次 96 —— 两次之间树上有并行路落的改动，那 1 条差额不逐个归因，逐条清单以 `--strict` 输出为准；2026-11-21 复跑 96；2026-11-20 复跑 93；2026-11-17 复跑 89；日常档那条 R007 info 在这一档拆成逐模块 warning，另加 R003 `read_rows` 那一对）
 lint_rules_strict_info  = 44   # 同一档的 info 栏（2026-11-20 复跑 44）
-noai_paths_glob         = 50   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`（2026-11-20 收口后复跑：49 → 50，attack_tools 的 auth-audit 登记行落盘）
-noai_paths_unique       = 47   # 上述条目行按第一栏去重：`(... | ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count`（同上：46 → 47）
+noai_paths_glob         = 46   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`（2026-11-21：tests/golden 四条随 tests 不入 git 一并摘除，50 → 46；2026-11-20 收口后曾是 49 → 50，attack_tools 的 auth-audit 登记行落盘）
+noai_paths_unique       = 43   # 上述条目行按第一栏去重：`(... | ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count`（同上：tests/golden 四条摘除，47 → 43）
 noai_paths_categories   = 7    # `.noai-paths` 里 `[category: …]` 的分组数
 tools_star_tools_py     = 19   # `(Get-ChildItem src/agentflow/tools -Filter '*_tools.py').Count`
 schema_tables           = 17   # `python -c "import sys;sys.path.insert(0,'src');import agentflow.schema as s;print(len(s.TABLES))"`
@@ -109,14 +109,14 @@ cli_tools_role_h       = 47
 cli_tools_role_v       = 29
 cli_tools_role_l       = 39
 cli_tools_role_m       = 41
-webui_modules           = 11   # `(Get-ChildItem src/agentflow/webui -Filter '*.py').Count`
-webui_routes            = 35   # `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes as r;print(len(r.ROUTES))"`（2026-11-19 按现盘复跑追平：34 → 35）
-webui_routes_get        = 27   # 同上，按 `x[0] == 'GET'` 计数（2026-11-19 按现盘复跑追平：26 → 27）
-webui_routes_post       = 8    # 同上，按 `x[0] == 'POST'` 计数
-webui_routes_reader     = 18   # `len(r.READER_ROUTES)`（同上那条复跑命令的第四个数；只读面子表）
-webui_routes_writer     = 9    # `len(r.WRITE_ROUTES)`（同上那条复跑命令的第五个数；写面子表）
+webui_modules           = 12   # `(Get-ChildItem src/agentflow/webui -Filter '*.py').Count`（2026-11-21 追平：11 → 12，多的是 WEBFIX2 的 `sse_external.py`）
+webui_routes            = 39   # `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes as r;print(len(r.ROUTES))"`（2026-11-21 23:49 按现盘追平：38 → 39，`writes.py` 又加了一条 POST 写端点；当日早先 35 → 38 是同批只读面/写面各一条）
+webui_routes_get        = 28   # 同上，按 `x[0] == 'GET'` 计数（2026-11-21：27 → 28）
+webui_routes_post       = 11   # 同上，按 `x[0] == 'POST'` 计数（2026-11-21：8 → 10 → 11）
+webui_routes_reader     = 19   # `len(r.READER_ROUTES)`（同上那条复跑命令的第四个数；只读面子表，2026-11-21：18 → 19，多的是 `/api/actions`）
+webui_routes_writer     = 12   # `len(r.WRITE_ROUTES)`（同上那条复跑命令的第五个数；写面子表，2026-11-21：9 → 11 → 12）
 webui_event_kinds       = 6    # `python -c "...from agentflow.webui import sse;print(len(sse.EVENT_KINDS))"`
-webui_test_files        = 53   # `(Get-ChildItem tests -Filter 'test_webui*.py').Count`（2026-11-20 按现盘复跑追平：52 → 53，收口第三批之后；2026-11-20 那次是 45 → 52，WEBCLEAN 收口之后；2026-11-19 那次是 36 → 45；2026-11-14 那次是 +test_webui_cli_landing_alignment.py ⇒ 35 → 36）
+webui_test_files        = 54   # `(Get-ChildItem tests -Filter 'test_webui*.py').Count`（2026-11-21 23:58 按现盘复跑追平：53 → 54；再往前 52 → 53 是 2026-11-20 收口第三批之后，45 → 52 是同日 WEBCLEAN 收口之后，36 → 45 是 2026-11-19，35 → 36 是 2026-11-14 的 +test_webui_cli_landing_alignment.py）。**这一格是活读数**：`tests/test_release_all.py` 的 `webui_readings()` 现算盘上条数、`live_reading_problems()` 逐键比对，写死旧值必红；`tests/` 按业主裁定不入 git（`.gitignore` 忽略、索引清空）⇒ 它跟的是**工作树**，不是索引 —— 2026-11-21 那句"刻意不抬"的旧口径（把它当"入库交付物口径"钉死）已作废，别再照它写
 LIVE-READINGS:END
 ```
 
@@ -385,26 +385,39 @@ LIVE-READINGS:END
 - **入口文件**：
   - 命令行入口是 `web` 子命令：`python -m agentflow.cli --help` 里逐字
     「`web   起用户端网页（本地小服务：待回答面板 / 运行态 / 事件回放）`」；
-  - 服务端 `src/agentflow/webui/` —— **11 个模块**（`__init__.py` / `__main__.py` /
-    `routes.py` / `server.py` / `state.py` / `writes.py` / `readers.py` / `sse.py` / `audit.py` /
-    `cacheface.py` / `facecache.py`）；
+  - 服务端 `src/agentflow/webui/` —— **12 个模块**（`__init__.py` / `__main__.py` /
+    `routes.py` / `server.py` / `state.py` / `writes.py` / `readers.py` / `sse.py` / `sse_external.py` /
+    `audit.py` / `cacheface.py` / `facecache.py`）；
     复跑 `(Get-ChildItem src/agentflow/webui -Filter '*.py').Count`，键 `webui_modules`；
-  - 端点清单的唯一来源是 `webui/routes.py` 的 `ROUTES`：**35 条**（GET **27** / POST **8**；
-    按读写二分 `READER_ROUTES` **18** / `WRITE_ROUTES` **9**，余 **8** 条是 A 线自有端点与外壳/静态：
+  - 端点清单的唯一来源是 `webui/routes.py` 的 `ROUTES`：**39 条**（GET **28** / POST **11**；
+    按读写二分 `READER_ROUTES` **19** / `WRITE_ROUTES` **12**，余 **8** 条是 A 线自有端点与外壳/静态：
     `/`、`/index.html`、`/run/{sid}`、`/static/{file...}`、`/api/run-index`、`/api/run-digest`、
     `/api/errors`、`/api/errors/categories` —— 这 8 条读的是 A 线自己的页面 / 静态 / 派生读数，
-    不属于 B 线只读面）。2026-11-19 实测，复跑
+    不属于 B 线只读面）。2026-11-21 23:49 实测，复跑
     `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes as r;print(len(r.ROUTES),sum(1 for x in r.ROUTES if str(x[0]).upper()=='GET'),sum(1 for x in r.ROUTES if str(x[0]).upper()=='POST'),len(r.READER_ROUTES),len(r.WRITE_ROUTES))"`
-    ⇒ `35 27 8 18 9`；键 `webui_routes` / `webui_routes_get` / `webui_routes_post` /
+    ⇒ `39 28 11 19 12`；键 `webui_routes` / `webui_routes_get` / `webui_routes_post` /
     `webui_routes_reader` / `webui_routes_writer`；
+  - **写端点清单不写死在这份文档里**：唯一名单是 `webui/writes.py` 的 `ROUTES`（现 12 条：
+    POST 11 条 + GET 1 条 `/api/cache`；其中 `/api/` 下的 POST 是 10 条，`/answer` 是 1 条）。复跑
+    `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import writes as w;print(len(w.ROUTES),sum(1 for x in w.ROUTES if str(x[0]).upper()=='POST'))"`
+    ⇒ `12 11`。正文、help 页与用户手册都只写"清单见 `ROUTES`"，**不再抄"六条 / 七条 / 八条"这类固定条数**
+    —— 2026-11-21 一天里写面就从 8 条涨到 12 条（`/api/ack`、`/api/void`、`/api/stop/clear`、
+    `/api/cache` 逐条进表），凡是把条数抄死在散文里、又没写明"以 `ROUTES` 为准"的句子，
+    当天就变成了假话；
   - 事件种类在 `webui/sse.py` 的 `EVENT_KINDS`：**6** 个
     （`state` / `question` / `answered` / `checkpoint` / `stop` / `heartbeat`）。复跑
     `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import sse;print(len(sse.EVENT_KINDS))"`，
     键 `webui_event_kinds`；
   - 静态产物在 **`src/agentflow/web/static/`**：外壳 `static/index.html`（1760 B）+
-    `static/assets/index.CfghTOkg.js`（212635 B）+ `static/assets/index.BKU7S_4o.css`（26692 B）；
-    （2026-11-20 20:58 实测（FIXC 按现盘重建之后；上一次 A2FIX 那一版是 `index.CkvHTnif.js`），复跑 `(Get-ChildItem src/agentflow/web -Recurse -File | Select-Object Name,Length)`；
-    文件名带构建哈希 ⇒ 重建前端就会换名；这三个名字 / 字节数与盘上不一致时
+    `static/assets/index.E982ZhKl.js`（235357 B）+ `static/assets/index.D8bpVw-o.css`（26775 B）；
+    （2026-11-21 23:58:34 实测 —— FINALBUILD 的最后一次前端重建，`tsc --noEmit` rc=0 之后
+    `vite build`；同一棵未再改动的 `ui/src` 在 23:59:43 又被独立重建了一次（BOARDACK 复跑），
+    两次产物**逐字节相同** ⇒ 盘上 mtime 是 23:59:43，名字与字节就是上面这三个。
+    上一版 23:30 那一支是 `index.BX71CFjf.js` 232741 B / `index.BKU7S_4o.css`
+    26692 B，再上一版 WEBFIX3 是 `index.zxqG6--g.js`。复跑
+    `(Get-ChildItem src/agentflow/web -Recurse -File | Select-Object Name,Length)`；
+    `outDir` 带 `emptyOutDir: true` ⇒ 每次重建都清空目录，盘上**只有**这三件，
+    旧哈希文件不会被留下；文件名带构建哈希 ⇒ 重建前端就会换名；这三个名字 / 字节数与盘上不一致时
     `tests/test_release_all.py` 的静态资产判据会红 —— 按盘上事实改这一处，别在别处另抄一份）；
     `src/agentflow/web/` 根一层是**源码/生成器**（`__init__.py` 1645 B、`assets.py` 23428 B、
     `emit_theme.py` 3172 B、`emit_types.py` 6086 B）。**所以运行期不需要 `node_modules`**，
@@ -419,21 +432,28 @@ LIVE-READINGS:END
   - 另外两条形态被单独钉住：**静态路由与目录穿越**（`GET /static/<file>` 只服务
     `web/static/` 之下的文件，穿越一律 404、**不回落 `index.html`**）、
     **`/api/*` 未知路径不许吐 HTML**（给 API 客户端一段 HTML 比 404 更坏）；
-  - 判据文件共 **53** 个（`test_webui*.py`）；复跑
+  - 判据文件共 **54** 个（`test_webui*.py`）；复跑
     `(Get-ChildItem tests -Filter 'test_webui*.py').Count`，键 `webui_test_files`
-    （2026-11-20 按现盘复跑实测：53（收口第三批之后；同日 WEBCLEAN 收口时是 52，2026-11-19 是 45）；这一格随并行施工变 —— 本节第一次量到的是 10，
+    （2026-11-21 23:58 按现盘复跑实测：54（53 → 54；再往前 53 是 2026-11-20 收口第三批之后，
+    WEBCLEAN 收口时是 52，2026-11-19 是 45；这一格随并行施工变 —— 本节第一次量到的是 10，
     2026-10-23 是 15，之后每落一条 `test_webui*.py` 就加一；所以散文只钉当次数，
-    53 个文件名不逐个抄进来，免得名单本身成为第二份会漂的口径）。
+    54 个文件名不逐个抄进来，免得名单本身成为第二份会漂的口径）。
+    **这一格是活读数，不是历史快照**：判据 `tests/test_release_all.py` 的 `webui_readings()`
+    现算盘上条数、`live_reading_problems()` 逐键比对，写死旧值必红；`tests/` 按业主裁定
+    不入 git（`.gitignore` 忽略、索引清空）⇒ 它跟的是**工作树**而不是索引。2026-11-21 早先那句
+    "刻意不抬这一格"（把它当"入库交付物口径"钉死）已作废 —— 这里与 `LIVE-READINGS` 块同源、一起改；
 - **已知边界**（照实写，**不许写成"已解决"**）：
   1. `draft/35` 的七层里**没有这一层**（整份文件里 `webui` / `web/` / `Web 端` **0 命中**，
      复跑 `Select-String -Path 'draft\35-… .md' -Pattern 'webui|web/|Web 端'`）——
      它是业主后加的，本文是它第一次被写进分层表；
   2. Web 面另有一份草稿 `draft/114` 记着"九页 / 十条只读面 / 五条写端点"，
      **它与今天盘上的读数不是一个口径**（`ui/src/pages/` 的页数、`READER_ROUTES` 的条数、
-     `WRITE_ROUTES` 的条数各自按上面的命令量）—— 引用草稿前先跑命令；
+     `WRITE_ROUTES` 的条数各自按上面的命令量）—— 引用草稿前先跑命令。**写端点的条数尤其别引草稿**：
+     名单只看 `webui/writes.py` 的 `ROUTES`（复跑命令见上面那条"写端点清单不写死"的条目）；
   3. `--allow-writes` / `--no-settings-write` 两个开关**已接线**（裁定 T1 的 W3 / W4）：
-     判据在 `webui/writes.py` 的 `authorize()` —— `--allow-writes` 是第 3 层（不开 ⇒
-     所有写端点一律 **403**），`--no-settings-write` 是第 4 层（只关 `POST /api/settings`）。
+     判据在 `webui/writes.py` 的 `authorize()`（`_gate()` 调它）—— `--allow-writes` 是第 3 层
+     （不开 ⇒ 写端点一律 **403**；唯一例外是 `POST /api/cache/warm` 的 `dry_run=1` 试算档，
+     它只保留回环来源那一层），`--no-settings-write` 是第 4 层（只关 `POST /api/settings`）。
      复跑 `python -m agentflow.cli web --help`（2026-10-21 实测）：help 文本逐字写着这两条行为，
      那句"W3 / W4 才真正生效"**已经不在** help 里了 ⇒ 别再把它写成"还没接线"；
   4. 静态产物的字节数是**构建产物**，重建前端就会变 —— 它们**不是**规格，
@@ -529,8 +549,8 @@ python -m agentflow.cli tools --json          # 同一份装配的机器可读�
 
 | 数 | 量的是什么 | 当次值 |
 |---|---|---:|
-| **清单 glob 数** | `.noai-paths` 的**条目行**数（**同一个文件可以登记两次**） | **50** |
-| **唯一路径数** | 上述 glob 去重后的路径数 | **47** |
+| **清单 glob 数** | `.noai-paths` 的**条目行**数（**同一个文件可以登记两次**） | **46** |
+| **唯一路径数** | 上述 glob 去重后的路径数 | **43** |
 | **台账条目数** | `.noai-approvals.json` 里**有 hash 记录的路径**数 = **需要签字的行数** | **不写定值**（每签一个字就变） |
 | **禁改区类别数** | `.noai-paths` 的 `[category: …]` 分组数 | **7** |
 | **欠签** | 台账条目 × 2 名 reviewer（`REQUIRED_APPROVALS_ON_HIT = 2`） | **不写定值**（每签一个字就变） |
@@ -538,9 +558,9 @@ python -m agentflow.cli tools --json          # 同一份装配的机器可读�
 **前两格与类别数**的复跑命令逐字如下（它们就是 `LIVE-READINGS` 的 `noai_paths_*` 三个键）：
 
 ```powershell
-(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count                  # ⇒ 48
+(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count                  # ⇒ 46
 (Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:' |
-  ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count           # ⇒ 45
+  ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count           # ⇒ 43
 (Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:' |
   ForEach-Object { if ($_.Line -match '\[category:\s*([a-z\-]+)\]') { $matches[1] } } |
   Select-Object -Unique).Count                                                          # ⇒ 7
@@ -639,9 +659,9 @@ agentflow/
 │   └── pipeline.py            固定顺序流水线（前三阶段的编排；旧机制，主路径是 `run-agent`）
 ├── ui/                        前端源码（Vite；`pyproject` 之外的独立子工程，构建产物落到 `src/agentflow/web/static/`）
 ├── scripts/                   发布门 / 门禁 / linter（份数与清单按 `(Get-ChildItem scripts/*.py).Count` 当次读；**不是运行期依赖**）
-├── tests/                     pytest（份数按 `(Get-ChildItem tests -Filter 'test_*.py').Count` 当次读 —— **这一格老得最快**；离线套件，联网套件用 `-m network`）
+├── tests/                     pytest（**本机开发门，不随仓库交付**：业主 2026-11-21 裁定不入 git，干净 clone 里没有这个目录；份数按 `(Get-ChildItem tests -Filter 'test_*.py').Count` 当次读 —— **这一格老得最快**；离线套件，联网套件用 `-m network`）
 ├── tools/                     开发期工具与探针（份数按命令当次读；其中 `release_all.py`、`coverage_zero_test.py`、`run_each_test_file.py`、`verify_role_specs.py`、`vocab_census.py` 是**发布门/判据本体**）
-└── data/ library/ demo/       运行期数据（`data/` 的 JSON 份数 = `schema_tables` + `counters.json`，按 §0.2 那两行命令当次读）
+└── data/ library/             运行期数据（`data/` 的 JSON 份数 = `schema_tables` + `counters.json`，按 §0.2 那两行命令当次读；`demo/` 已随 2026-11-22 DEMORETIRE 删除）
 ```
 
 ### [规范] §4.2 模块职责边界（**一句话判据**）
@@ -1182,7 +1202,7 @@ C 预算）都踩到同一坑。"
 | # | 必须提交的证据 | 判据（"是/否"） |
 |---:|---|---|
 | 1 | **复跑命令 + 真实输出**（不是"我跑过了"） | 提交说明里含代码块，且是**粘贴的输出**（含 `exit code`） |
-| 2 | 若改了 `src/` ⇒ `python -m pytest -q` 的**完整末行** | 末行形如 `NNN passed, M failed, K deselected in Xs` |
+| 2 | 若改了 `src/` ⇒ `python -m pytest -q` 的**完整末行**（**本机开发门**：需本机有 `tests/`；tests 不随仓库交付。本机缺 `tests/` 时如实写"该证据未取"，不许伪造末行） | 末行形如 `NNN passed, M failed, K deselected in Xs` |
 | 3 | 若改了某角色 ⇒ 该角色的**自检**退出码 | `python -m agentflow.agent_<x>`；退出码 0 |
 | 4 | 若改了工具 ⇒ **工具普查**（工具数 / 角色工具数 / 只读泄漏） | `python -m agentflow.cli tools` 的输出（**三个数当次读**；泄漏那一行今天**不是空表**，见 §2.1 ③） |
 | 5 | 若改了表/字段 ⇒ `verify` 的 **error = 0** | `python -m agentflow.cli verify` |
@@ -1269,7 +1289,7 @@ required_approvals: 2（尚未取得）
 
 | 事项 | 去向 |
 |---|---|
-| 哪些路径是禁 AI 区（当次 **50** 条条目 / **47** 条唯一路径 / 7 个分组；口径与复跑命令见 §3.5） | **`.noai-paths`** |
+| 哪些路径是禁 AI 区（当次 **46** 条条目 / **43** 条唯一路径 / 7 个分组；口径与复跑命令见 §3.5） | **`.noai-paths`** |
 | 命中之后要做什么（停 / 人编写或人逐行走查 / 2 名 reviewer / 机器执行） | **`AGENTS.md`** 的"命中之后要做什么" |
 | 退出码语义（`0=clean` / `1=requires_human` / `2=unknown`，**`unknown ≠ clean`**） | **`AGENTS.md`** 的"退出码"节 + `scripts/noai_gate.py` |
 | 实际判定 | `python scripts/noai_gate.py --paths <改动的文件…>`（或 `--git`、`--stdin`、`--json`、`-q`） |
@@ -1303,12 +1323,12 @@ python -c "import sys,pathlib;sys.path.insert(0,'.');from tools.release_all impo
 
 | 步骤 key | 覆盖用户点名的哪一项 |
 |---|---|
-| `release-check` | 全量测试 + 全部自检 + verify + 工具普查 + linter（+ 禁 AI 区门 / 契约版本 / 源码树可导入） |
+| `release-check` | 全量测试 + 全部自检 + verify + 工具普查 + linter（+ 禁 AI 区门 / 契约版本 / 源码树可导入）。**全量测试是本机开发门**：tests/ 不随仓库交付，缺目录 ⇒ 该项 `unknown` |
 | `acceptance` | **验收测试**（`test/test2/run_acceptance.py`，`AGENTFLOW_TARGET=formal`） |
 | `repro` | 论文独立复现 —— 用户要求的证据 |
 | `role-specs` | 角色规格结构完整性（`tools/verify_role_specs.py`，见 §10.3） |
 | `coverage` | 零测试公开函数的**风险分档**清单（`tools/coverage_zero_test.py`；**发布门的口径是 `--level 2`** ⇒ 等级 ≤ 2 的零测试函数必须为 0、退出码 0；等级 3/4 不在门里，只列清单） |
-| `per-file` | **逐文件单跑门**（`tools/run_each_test_file.py`）：把"全量绿掩盖单文件红/顺序依赖"变成可判定的结论 |
+| `per-file` | **逐文件单跑门**（`tools/run_each_test_file.py`）：把"全量绿掩盖单文件红/顺序依赖"变成可判定的结论。**需本机有 tests/**；缺目录 ⇒ 该步 `unknown`（tests 不随仓库交付） |
 | `frontend` | **前端步**（裁定 G2）：`tools/frontend_gate.py` 的 typecheck + 构建 + **入库产物新鲜度** —— 它守的是"入库的前端产物与源码脱节"，自带三态 `0/1/2` |
 
 **两条刻意的取舍**（改它们等于改门的强度，所以这些文件在禁改区里）：
@@ -1327,7 +1347,7 @@ python -c "import sys,pathlib;sys.path.insert(0,'.');from tools.release_all impo
 
 | # | 项 | 跑什么 | 通过判据 | 该失败时的 `verdict` |
 |---:|---|---|---|---|
-| 1 | **全量测试** | `pytest -q` | 退出码 0，且 **0 failed**、**0 errors** | `fail`；收集错误/超时 ⇒ **`unknown`**（"pytest 因为收集错误没跑起来既不是'通过'也不是'失败'"） |
+| 1 | **全量测试（本机开发门）** | `pytest -q`（需本机有 `tests/`） | 退出码 0，且 **0 failed**、**0 errors** | `fail`；收集错误/超时 ⇒ **`unknown`**；**缺 `tests/` ⇒ `unknown`**（tests 不随仓库交付，见 `scripts/release_check.py` 的 `item_test_suite`） |
 | 2 | **模块自检** | 各 agent + `pipeline` 各自 `python -m agentflow.X` | 全部退出码 0 | `fail`（任一 `exit_code != 0` 或未启动或超时） |
 | 3 | **工具普查** | 自建脚本调 `build_registry` | 工具数与角色工具数**可复现**；只读角色写工具泄漏逐条可解释 | `fail`；脚本起不来 ⇒ `unknown` |
 | 4 | **全库校验** | `verify_all` | **error = 0** | `fail`；跑不起来 ⇒ `unknown` |
@@ -1398,7 +1418,7 @@ python tools\verify_role_specs.py            # 退出码 0=完整 / 1=有缺失 
 
 | FC | 约束（简写） | 落地位置 | 可判定判据 | 状态 |
 |---|---|---|---|---|
-| **FC-27** | 禁 AI 区必须显式列出 + 独立准入门槛 | **`.noai-paths`**（当次 **50** 条条目 / **47** 条唯一路径 / 7 个分组，见 §3.5）+ **`AGENTS.md`** 的 `NOAI-MANIFEST` 区块 + **`scripts/noai_gate.py`**（`REQUIRED_APPROVALS_ON_HIT = 2`，退出码 0/1/2）；`tests/test_noai_gate.py` 当次 124 passed（复跑 `python -m pytest tests/test_noai_gate.py --collect-only -q -p no:cacheprovider`，键 `noai_gate_pytest_collected`）；`release_check.py` 第 6 项 | ① 两处**逐条一致**（实测退出码 0）；② 命中要求 2 批准（实测 `--paths src/agentflow/schema.py` → 退出码 1 + `required_approvals=2`）；③ 负控用例**在** `tests/test_noai_gate.py` 里（该文件当次 **0 skipped** ⇒ 负控真的在跑） | **已落地**。⚠️ 发布门上它**仍报红**，红的原因是"**禁改区命中待 2 名 reviewer 签字**"（制度要求；台账当次的 `reviewers` 元素总数**不写定值**，每签一个字就变），不是代码坏 |
+| **FC-27** | 禁 AI 区必须显式列出 + 独立准入门槛 | **`.noai-paths`**（当次 **46** 条条目 / **43** 条唯一路径 / 7 个分组，见 §3.5；2026-11-21 tests/golden 四条随 tests 不入 git 一并摘除）+ **`AGENTS.md`** 的 `NOAI-MANIFEST` 区块 + **`scripts/noai_gate.py`**（`REQUIRED_APPROVALS_ON_HIT = 2`，退出码 0/1/2）；`tests/test_noai_gate.py` 当次 124 passed（复跑 `python -m pytest tests/test_noai_gate.py --collect-only -q -p no:cacheprovider`，键 `noai_gate_pytest_collected`）；`release_check.py` 第 6 项 | ① 两处**逐条一致**（实测退出码 0）；② 命中要求 2 批准（实测 `--paths src/agentflow/schema.py` → 退出码 1 + `required_approvals=2`）；③ 负控用例**在** `tests/test_noai_gate.py` 里（该文件当次 **0 skipped** ⇒ 负控真的在跑） | **已落地**。⚠️ 发布门上它**仍报红**，红的原因是"**禁改区命中待 2 名 reviewer 签字**"（制度要求；台账当次的 `reviewers` 元素总数**不写定值**，每签一个字就变），不是代码坏 |
 
 ---
 
@@ -1590,7 +1610,7 @@ python scripts/warm_prompt_cache.py --lean on `
 | ①-b 十个角色的 prompt **被下一次命中过**（实证 `hit>0`） | 10/10；秘书 `landed=False` 但读数自洽 | 删掉一个已落地角色的行 ⇒ 不再判落地 |
 | ② 第二次调用命中（样本只有 2 个：`M` / `C`） | `hit>0` 且 `hit/(hit+miss)>0` | 把样本那一行的 `hit` 改成 0 ⇒ 红 |
 | ③ 同一角色两次调用的 `prompt_sha256` 相同 | 每一行都同摘要 + 两次独立渲染逐字节相同 | **把 `budget_left` 塞回 system**（改前那个形态）⇒ 红，并报出"从第几个字符起不同"与段名 `TASK_BUDGET` / `TASK_NOTEBOOK` |
-| ④ 读数不许烂 | 盘上记的 `prompt_sha256` = 今天重算的 | 提示词一改（`agent_prompts.py` / `specs/*` / 预设）⇒ 红，处置是"重跑 §14.5 那条命令"，**不是**改测试 |
+| ④ 读数不许烂 | 盘上记的 `prompt_sha256` = 今天重算的 | 提示词一改（`agent_prompts.py` / `specs/*`）⇒ 红，处置是"重跑 §14.5 那条命令"，**不是**改测试 |
 | ⑤ 诊断读数与本节一致 | 工具面不在前缀里 / 每个跨 run 伙伴（H、M）各自两行都 ≥90% | 探针口径被改（例如 task_id 没变），或滚存把唯一一趟诊断挤掉 ⇒ 红。另有滚存判据：塞到 `MAX_RUNS_KEPT + 2` 趟、旧诊断最旧 ⇒ 仍读得到；把"每趟都带诊断"摘掉，或把 M 从固定伙伴里摘掉 ⇒ 同一刀红 |
 
 `③` 的负控是这一节最要紧的一条：它证明这条判据守的是**"提示词不许抖"**，
@@ -1861,7 +1881,7 @@ T4 需要天才般的洞察力、思维链极长或偏离主流的构造。`secr
 
 - 补充：`webui/writes.py` 是"这个服务此刻许不许写"的唯一判据，页面上的禁用态与后端的拒绝必须同源。
 - **落点**：`src/agentflow/webui/readers.py::roster_face`、`src/agentflow/webui/readers.py::CHAT_PUBLIC`、`src/agentflow/webui/readers.py::library_face`、`src/agentflow/webui/readers.py::handle_library`、`src/agentflow/webui/readers.py::ADMISSION_BASIS_CANDIDATE`、`src/agentflow/webui/readers.py::PROBLEM_ADMISSION_UNDECIDABLE`、`src/agentflow/webui/cacheface.py::warm_job`、`src/agentflow/webui/cacheface.py::WARM_JOB_STATES`、`src/agentflow/webui/cacheface.py::handle_cache_status`、`src/agentflow/webui/writes.py::writes_allowed`、`src/agentflow/webui/writes.py::WRITES_OFF_REASON`、`src/agentflow/webui/server.py::handle_errors`、`src/agentflow/webui/server.py::handle_errors_categories`、`src/agentflow/webui/state.py::type_decls`、`src/agentflow/errorstats.py::ALL_CATEGORIES`、`src/agentflow/errorstats.py::ERROR_CATEGORY_NAMES`、`src/agentflow/errorstats.py::PROCESS_CATEGORIES`、`src/agentflow/errorstats.py::process_categories`
-- **判据**：`tests/test_webui_three_state_reading.py::test_active_is_computed_from_the_definition_not_copied_from_a_lying_cell`、`tests/test_webui_three_state_reading.py::test_an_unread_tally_says_unreadable_with_the_reason_and_never_a_zero`、`tests/test_webui_readers.py::test_every_face_carries_tri_and_reason`、`tests/test_library_face_only_counts_admitted_works.py::test_c_a_missing_or_broken_table_is_unknown_and_never_zero`、`tests/test_chat_lines_carry_the_absolute_id.py::test_every_line_carries_the_absolute_id_keys`、`tests/test_chat_lines_carry_the_absolute_id.py::test_a_line_without_an_id_says_so_instead_of_pretending`、`tests/test_chat_page_shows_who_and_which_id.py::test_the_chat_page_really_reads_the_id_and_its_source`、`tests/test_cache_warm_button_is_honest.py::test_a_a_service_without_the_write_switch_says_so_and_the_page_disables`、`tests/test_the_root_is_named_m.py::test_the_root_state_is_the_same_three_state_as_every_other_node`、`tests/test_the_root_is_named_m.py::test_the_real_workspace_root_is_m`；现算：`readers._ROSTER_FALLBACK_KEYS` = 8、`errorstats.ALL_CATEGORIES` = 45、`errorstats.PROCESS_CATEGORIES` = 5 （2026-11-01 扩面：15 类新增 —— 角色侧 11 / 系统侧 3 / 状态读数 1，于是 ALL 从 26 到 43、过程读数从 3 到 5；老 26 类逐格 diff=0；2026-11-04 追记：`tool_refused_controlled` 一类随「受控拒绝在 errorstats 上不可见」那条修复进 `ERROR_CATEGORIES` ⇒ ALL 43 → 44 —— 上句「26 到 43」是 2026-11-01 那次的读数；2026-11-20 追记：`framework_error` 一类随「框架 bug 不许伪装成模型的校验失败」那条修复进 `ERROR_CATEGORIES` ⇒ ALL 44 → 45） 另：2026-10-27 更正一处旧口径 —— 这里此前写的是 `readouts.ROSTER_DATA_KEYS`（值 9），而那个常量与 `readouts.roster_readout` 一起只存在于旧口径里，全树已经没有了。今天名册面的读侧在 `webui/readers.py::roster_face`，它给 18 个顶层键；`_ROSTER_FALLBACK_KEYS` 是"老后端缺哪几格时按它兜底"的那 8 个键，不是名册读数的全部键数。
+- **判据**：`tests/test_webui_three_state_reading.py::test_active_is_computed_from_the_definition_not_copied_from_a_lying_cell`、`tests/test_webui_three_state_reading.py::test_an_unread_tally_says_unreadable_with_the_reason_and_never_a_zero`、`tests/test_webui_readers.py::test_every_face_carries_tri_and_reason`、`tests/test_library_face_only_counts_admitted_works.py::test_c_a_missing_or_broken_table_is_unknown_and_never_zero`、`tests/test_chat_lines_carry_the_absolute_id.py::test_every_line_carries_the_absolute_id_keys`、`tests/test_chat_lines_carry_the_absolute_id.py::test_a_line_without_an_id_says_so_instead_of_pretending`、`tests/test_chat_page_shows_who_and_which_id.py::test_the_chat_page_really_reads_the_id_and_its_source`、`tests/test_cache_warm_button_is_honest.py::test_a_a_service_without_the_write_switch_says_so_and_the_page_disables`、`tests/test_the_root_is_named_m.py::test_the_root_state_is_the_same_three_state_as_every_other_node`、`tests/test_the_root_is_named_m.py::test_the_real_workspace_root_is_m`；现算：`readers._ROSTER_FALLBACK_KEYS` = 8、`errorstats.ALL_CATEGORIES` = 46、`errorstats.PROCESS_CATEGORIES` = 6 （2026-11-01 扩面：15 类新增 —— 角色侧 11 / 系统侧 3 / 状态读数 1，于是 ALL 从 26 到 43、过程读数从 3 到 5；老 26 类逐格 diff=0；2026-11-04 追记：`tool_refused_controlled` 一类随「受控拒绝在 errorstats 上不可见」那条修复进 `ERROR_CATEGORIES` ⇒ ALL 43 → 44 —— 上句「26 到 43」是 2026-11-01 那次的读数；2026-11-20 追记：`framework_error` 一类随「框架 bug 不许伪装成模型的校验失败」那条修复进 `ERROR_CATEGORIES` ⇒ ALL 44 → 45；2026-11-21 追记：SYSRESIDUE 那一笔把「系统自己写的读数有没有人核」落成过程类读数 `write_point_guarded` ⇒ PROCESS 5 → 6、ALL 45 → 46） 另：2026-10-27 更正一处旧口径 —— 这里此前写的是 `readouts.ROSTER_DATA_KEYS`（值 9），而那个常量与 `readouts.roster_readout` 一起只存在于旧口径里，全树已经没有了。今天名册面的读侧在 `webui/readers.py::roster_face`，它给 18 个顶层键；`_ROSTER_FALLBACK_KEYS` 是"老后端缺哪几格时按它兜底"的那 8 个键，不是名册读数的全部键数。
 
 ### [规范] §16.13 C13 清洁与判据基础设施族：死函数台账、绿灯不造假、仓库不更脏
 
@@ -2116,7 +2136,7 @@ python -m agentflow.cli tools
 **现场读数**（2026-11-06 01:17–07:52）：
 
 - 01:17 的第一版脚本 `temp/_add_amendments.py`：对 `contract_diff_edits` 的**每一组**都 `amendments.append(...)`，`reason` 只从一张四元表里取，取不到就写「按实现现算追平（2026-11-05 那批改动）」；业主原话：**一次加了 69 条 amendment**，等于把所有契约差异都赦免，当场回滚。
-- 01:18 的第二版 `temp/_add_amendments2.py` 才加上"已有 amendment 覆盖的跳过"；01:19 的 `temp/_add_amendments4.py` 改成只从 `temp/_contract_out.txt` 里判据打印的「可粘贴的账骨架」取 `json` 块（脚本先打印 `骨架条数`），逐条填 `reason`。
+- 01:18 的第二版 `temp/_add_amendments2.py` 才加上"已有 amendment 覆盖的跳过"；01:19 的 `temp/_add_amendments4.py` 改成只从 `temp/_contract_out.txt` 里判据打印的「可粘贴的账骨架」取 `json` 块（脚本先打印 `骨架条数`），逐条填 `reason`。（这三个一次性脚本已清出 `temp/`，现盘上没有 —— 2026-11-21 CLEAN-ALIGN 复算。）
 - 最终基线仍是 **49 条** amendment：`temp/_msg_closeout_freeze.txt` 逐字「账本仍 49 条 —— 只重记，不多记」；那 3 条是 `table.create` / `table.update` / `verify.verify_proof` 的 `returns`。
 - 可复跑的反面读数：今天同一表达式 `contract_diff_edits(frozen, current)`（不带 amendments 过滤）读到 **68 组 / 87 条 edit**；把 68 组都写进赦免表，等于把整份差异都判成"合法演进"。
 
@@ -2245,5 +2265,67 @@ python -m agentflow.cli tools
 | §18.4 的"批量化" | 部分有判据 | 两条判据只守"每条 amendment 只赦免自己的 edits、reason 非空"；它们守不住"脚本一次把 68 组全插进去"这个**动作形态** |
 
 §18.5 / §18.7 / §18.8 / §18.9 四条都能指到具体测试文件与函数，见各条的**判据**格；§18.4 是部分有判据（见上表最后一行）。
+
+---
+
+## [规范] §19 ⭐ 写盘纪律（LF）：换行翻译是平台行为，不是代码行为
+
+> 2026-11-22 立（EOLFIX 现场：143 条已跟踪文件被写成 CRLF；根因是缺省 `Path.write_text`）。
+> 本节只说**怎么做才算对**与**哪条机器判据守它**，不抄任何计数 —— 读数用下面两条命令现跑。
+
+### §19.1 规则一：仓库里的文本产物一律 LF
+
+判据只有一条：**落盘的那个字节序列里 `\r` 只能来自调用方给的文本，不能来自平台**。
+
+三种合规写法（按落点选）：
+
+| 落点 | 写法 | 为什么 |
+|---|---|---|
+| 仓库脚本 / 探针（`tools/`、`temp/`） | `tools/write_lf.py::write_lf(path, text)` | 一行式；`write_bytes(text.encode())`，不经过文本层 |
+| 产品代码（`src/agentflow/`，交付物不把 `tools/` 带出去） | 显式 `newline="\n"`（`write_text` / `open` / `Path.open`） | 与 `write_lf` 同效：`newline="\n"` 关掉平台的 `\n → os.linesep` 翻译 |
+| 需要自己控制字节 | `Path.write_bytes(data)` | 根本不经过文本层 |
+
+**为什么不能省**：`Path.write_text(text, encoding="utf-8")` 缺省 `newline=None` ⇒ 文本层把每个
+`\n` 翻成 `os.linesep`。Windows 的 `os.linesep` 是 `\r\n`，于是"跑一次脚本"就把被 git 跟踪的
+产物改脏；行尾一变 `sha256` 跟着变，而 FC-27 批准台账钉住的对象正是 `sha256`。更隐蔽的是
+`.gitattributes` 的 `text eol=lf` 会在 `git diff` 时把工作区的 CRLF 折平 ⇒ 这类漂移**在 diff
+里看不见**，直到下一次改那个文件才红。
+
+### §19.2 规则二：`tests/` 的 AST 面与盘面分开、档位不同
+
+- `tests/` 不随仓库交付（见 `DEVELOPMENT.md`「判据不随仓库交付」），所以它的**写盘 API 面**只在
+  发布档（`scripts/lint_rules.py --strict`）聚合一条 `warning` —— 1,356 个文件要 5 秒，日常档付不起，
+  而且它写的是 `tmp_path` 夹具；
+- `tests/` 的**盘面**（盘上 CRLF）日常档就判，级别 `warning`：`tests/` 被 `.gitignore` 忽略 ⇒
+  新文件不会进 index，只有盘面读得到它。
+- `tests/fixtures/**` 与 `tests/golden/**` 是按字节 sha256 冻结的：判据不报、也**不许**折。
+
+### §19.3 规则三：收口要读"入库是什么"，不只看"盘上能跑"
+
+盘上折平后与 HEAD 相同的文件（`i/lf w/crlf`）是换行判据的隐形面。收口时读一次：
+
+```bash
+python tools/eol_gate.py --root .          # 0=无漂移 / 1=有漂移（逐条列出）/ 2=没查成
+git ls-files --eol | grep 'i/lf.*w/crlf'   # 同一件事的原始读数
+```
+
+发布门里这一步是 `tools/release_all.py` 的 `eol` 步（`tools/eol_gate.py`，三态码表）：
+**缺 git / 不在仓库里 / `git ls-files --eol` 跑不通 ⇒ 记 `unknown`（退出码 2），不是 `pass`**。
+
+### §19.4 判据（本节不是散文）
+
+| 判据 | 守什么 |
+|---|---|
+| `scripts/lint_rules.py::rule_R012_write_text_newline` | A 面：`write_text` / 文本模式 `open` 没有 `newline=`（`scripts`/`tools`/`src` = error；`tests` 发布档一条聚合 warning）；B 面：盘上 CRLF（已跟踪 `i/lf` 的潜伏漂移 = error，`tests` 的 = warning；未跟踪新文件同样报） |
+| `tests/test_lint_rules_r012_newline.py` | 判据本身：正控（命中）、负控（同形只换关键字 ⇒ 不命中）、CRLF 负控（`src` error / `tests` warning）、豁免不许静默、真仓库读数 |
+| `tools/eol_gate.py` 的 `main` | 收口读数：`i/lf w/crlf/mixed` 逐条列出；缺 git ⇒ `unknown` |
+| `tools/write_lf.py` 的 `main` | 一行式 helper 自检：LF 落盘无 `\r`、不替调用方"修" CRLF |
+
+### §19.5 已知边界（写清楚，不冒充全覆盖）
+
+- `temp/` 下的探针脚本不在产品面（它们不随仓库交付），不在 A 面射程；写仓库文件时仍应走 `write_lf`。
+- 绝对路径的写入点（写到工作区之外的路径、平台配置目录）同样会被 A 面判——判的是"会不会翻译行尾"，不是"写到哪"。
+- B 面只认 `.gitattributes` 里声明 `text eol=lf` 的那些后缀；冻结件与 `-text` 文件按字节契约不动。
+
 
 

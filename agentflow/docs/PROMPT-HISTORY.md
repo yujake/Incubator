@@ -3313,3 +3313,302 @@
 #:   已重落（两档各一趟）；`ROLE-GUIDE` 的 A 一节按现盘重算。
 #:   `specs/a.py` 在 FC-27 auth-audit ⇒ `noai_gate --paths … --baseline` 已刷新
 #:   （reviewers=[]，待人类走查）。
+#: p311 → p312（2026-11-21，PA4·规矩 5：交付状态与方法学）。业主 `draft/192` 规矩 5 逐字：
+#:   「提示词要明确期望的交付状态是什么样的，不是只教规矩，要教怎么做数学（特别是那些真正
+#:   做数学的角色）」。
+#:   改前读数（真机 `projects/lp-ball-13/14/15` 的 `runs/*.json`，逐条见
+#:   `agentflow/temp/pa4/REPORT.md`）：V 有 19 趟收工拿「没有 notify 表」（交付物只写台账
+#:   文件，没写交给谁）；`notify` 的 `to` 写成台账号被拒 5 次；E 被 `verify.run_experiment`
+#:   拒 4 次（缺 `script_path` / `certificate` 只对穷举有效 / `refutes` 没带 `counterexample`）；
+#:   F 的 `attack.create_plan` 被拒在 `subgoals[0]` 缺 `sid`/`text`/`owner`；B / D / G 各有
+#:   数次 `table.list` 点了不存在的列（`exp_id` / `manuscript_id` / `exhaustive`）；
+#:   C 在 `projects/mp3` 的 `analysis_reports` 是 0 行（`statements` 6 行）——算完了没登记。
+#:   改动：① 十一个角色的 `deliverable` 一律改成四要素
+#:   「交给谁 / 形态 / 可核字段 / 算做完」——可核字段写 `表.字段`，判据按 `schema.TABLES`
+#:   现查（编一个字段名当场红）；② 五个做数学的角色（D/E/F/G/B）的 policy 各加一条以
+#:   「方法学」开头的五步拆解，每步都带一个活锚点（表.字段 / 该角色的工具 / 在册动作），
+#:   并分别命中「命题化 / 可判 / 实验读结果 / V 能逐行审的证明形态 / 台账登记」。
+#:   ③ 判据：`tests/test_the_delivery_state_is_checkable.py`（a：十一格四要素；b：五格方法学；
+#:   反真空：抠任一要素 / 步 / 锚点必红）。④ `test_the_prompt_never_names_a_tool_that_does_not_exist`
+#:   把 `表.字段` 从「像工具名的 token」里按 `schema.TABLES` 现算排除（拼错的表名仍红）。
+#:   变化格 = 十一格全换（`deliverable` 进每一格；五个角色的 policy 另变；版本行已归一）。
+#:   连带：`_FROZEN_PROMPT_VERSION` p311 → p312、`_FROZEN_PROMPT_DIGESTS` 十一格重算；
+#:   `tests/golden/agent_surface_snapshot.json` 重冻（提示词那一栏逐字变）；
+#:   `tools/write_system_docs.py` 重生成 `ROLE-GUIDE` / `SYSTEM-COMPONENTS`。
+#:   未重落：`tests/fixtures/prompt_cache_warm.json`（本批不起真机；它盘上那一趟还是更早的
+#:   一版（`prompt_version` 一格自己写着号码），
+#:   `tests/test_prompt_cache_warm.py` 的 freshness 一条在改前就已红，两档重落命令见
+#:   `docs/DEVELOPMENT-SPEC.md` §14.3，须由能发请求的一侧执行）。
+#:   `specs/*.py` 在 FC-27 auth-audit ⇒ `noai_gate --paths … --baseline` 已刷新
+#:   （reviewers=[]，待人类走查）。
+#:   （同版第二笔 · PA1·规矩 1：提示词与工具面对得上）业主 `draft/192`
+#:   规矩 1 逐字：「不教没实现的东西，不教已退场的东西，已实现的重要工具和逻辑都要教」。
+#:   改前读数（十一格渲染面 + skills 正文，`tests/test_pa1_prompt_and_tool_face_agree.py`
+#:   与 `temp/pa1/` 的普查脚本现算）：
+#:   ① 已退场却仍在教：**2 处** ——
+#:      a) `specs/m.py` 的 handoff 那一条逐字写着「交给主控写 `M`、给所有人写
+#:         `to=\"ALL\"`；编号由脚本分配」，而写入口 2026-11-20（BCRETIRE）起对 `to=ALL`
+#:         受控拒绝 `broadcast_retired`（`agent_loop._broadcast_retired_refusal`），
+#:         那一步一个字节都不落盘。共用段（`HANDOFF_PROTOCOL`）说的是「广播 `ALL` 已退场」，
+#:         M 的政策与它相反 —— 模型读哪一句就分叉。判据旧读数为什么没红：
+#:         `test_prompt_never_teaches_a_handoff_target_the_decoder_rejects` 问的是**解码器**
+#:         `_decode_shape` 收不收 `ALL`（读侧兼容，它收），没问**写入口**收不收。
+#:      b) `agent_skills.py` 的 B 手册「去重-两个说法一个概念-先判再合并」逐字写着
+#:         「所有受影响概念的 `related_concepts` **整体重算**」，而 `related_concepts`
+#:         随 S1r 并表退役（`concepts` 已从 `schema.TABLES` 移除；`conceptrows._to_legacy`
+#:         明写「新标准里那件事由 `relations` 表管」，投影恒给 `[]`）。
+#:   ② 教了不存在的：**0 处**（生产那一张注册表 123 件渲染出的全文里，反引号点号 token
+#:      除真工具 / `own.<动作>` / 表.列（`schema.TABLES`）/ 逐条登记的「不是工具」表之外
+#:      没有别的；唯一新登记的是 `meta.next_line`（`fs.read` 返回的 meta 字段路径）——
+#:      旧判据用不带 `fs.*` 的残缺注册表，看不见它）。
+#:   ③ 重要工具没教：**0 件**（真机 `projects/lp-ball-1*` 的 `agent_step.payload.name`
+#:      聚合后，十一格各自的 ≥25 次动作逐条都在该格渲染面上；自己的动作按短名在动作表里。
+#:      唯一缺口是 `V1` 这种把名册名当工具名的畸形调用，不是工具）。
+#:   改动（两处，都在允许面上）：
+#:   ① `specs/m.py`：「交给主控写 `M`、给所有人写 `to=\"ALL\"`；编号由脚本分配」⇒
+#:      「交给主控写 `M`；编号由脚本分配」（退场的收件人整句删；要通知多人怎么说由
+#:      共用段 HANDOFF_PROTOCOL 那一句负责，同一事实只写一处）。
+#:   ② `agent_skills.py`：「所有受影响概念的 `related_concepts` **整体重算**（派生而非增量）」
+#:      ⇒「所有受影响概念的邻接关系（`relations` 里那些行；`related_concepts` 已随并表退役，
+#:      新标准由 `relations` 现算）**整体重算**（派生而非增量）」。
+#:   判据（先红后绿 + 反真空）：新 `tests/test_pa1_prompt_and_tool_face_agree.py` 六条 ——
+#:   a 退场名扫描（禁令句豁免：同一句里有「已退场/受控拒/不是/只读兼容…」就不算教它；
+#:   改前红原话逐字两条：`B 的手册教了已退场的 related_concepts` / `M 的渲染面教了已退场的
+#:   给所有人写 to=ALL`；改后 6 passed）；b 生产注册表点号 token（塞 `fake.tool_name` 必红）；
+#:   c 真机高频动作覆盖（从 E 的渲染面删掉 `verify.run_experiment` 必红）。同一笔改
+#:   `test_m_prompt_has_no_stale_design.py` 第 27 条：改前**要求** M 提示词里有
+#:   `to=\"ALL\"`（旧设计），改成「禁止给所有人写 + 要读得到逐条写给人」。
+#:   变化格 = M 一格（B 的手册正文只落盘、不进十一格）。本笔的 M 格已随 p312 的现算值一并
+#:   冻结（同一批 PA4 的冻结跑在本笔 `specs/m.py` 改动之后，`recompute_prompt_digests.py`
+#:   现读 M 一致）；没有哪一格事实换过落点 ⇒ facts 键集仍 15 格，count / keys_sha256 与
+#:   p311 同值。
+#:   连带：`_PROMPT_VERSION_HISTORY` 追加 p312 第二笔；`docs/READING-MAP.md` 开头三格按
+#:   现盘重算（418 个 `.py`、319,433 行；`agent_surface_snapshot` 与 `ROLE-GUIDE` 由同一批
+#:   PA4 重生成，本笔不再重冻）；`tests/fixtures/prompt_cache_warm.json` 未重落（同批 PA4
+#:   已记：盘上那一趟还是更早的一版、freshness 在改前就已红；本批不起真机）。
+#:   `specs/m.py` 在 FC-27 auth-audit ⇒ `noai_gate --paths agentflow/src/agentflow/specs/m.py
+#:   --baseline` 已刷新（reviewers=[]，登记 ≠ 批准，待人类走查）。
+#:   只报不改（不在本路允许面 / 另有一路在改）：`agent_loop.py:3744` / `:4289`、
+#:   `llmseam.py:971`、`manuscripts.py:456` 的拒信/参数说明仍在教「给所有人写 ALL」；
+#:   `tools/manuscript_tools.py:18/75/77` 的 `manuscripts.list` 说明仍写「`ALL` 广播」
+#:   （读侧老行仍读得出，但写面已退场）。三处都是「写入口教了一个会被拒的收件人」同族。
+#: p312 → p313（2026-11-21，提示词对齐四路合稿冻结：PA34·规矩 3+4 ＋ PA2·规矩 2 ＋
+#:   DANGLE·规矩 2 的另一半 ＋ COL2 合稿；p312 那一笔的 PA4·规矩 5 与 PA1·规矩 1 在同一版里，
+#:   见上一节）。这一节是**一次冻结**：四个角色面的理由分四段写，版本号只抬这一格。
+#:   业主 draft/192 规矩 3 逐字「不教模型根本无需关心的东西」、规矩 4 逐字「不教矛盾的协作关系」。
+#:   这一笔把"越界知识"与"矛盾的派活"从模型可见面里拿掉，并让同一事实只剩一处真身：
+#:   ① 收件人指称：A / B / E / F / G / H / L 的 deliverable 里「`notify` 的 `to` 格写它的
+#:      角色号」改成「写它的名册名 / 绝对编号 / 角色名」。这些 deliverable 会被伙伴表逐字
+#:      引到 M 的提示词里；2026-10-24 的名册口径（test_addressing_is_by_roster_name_not_by_role）
+#:      与 test_m_prompt_has_no_stale_design 第 19 条都不许教角色代号当收件人。
+#:   ② B 的 duty（specs/b_ingest_policy.py::STAGE_TWO_DUTY）：去掉 `own.run_once` 回执 /
+#:      `stage_two.unwashed` / 开副本 / 洗 / 替换这些**B 的自驱入口** —— duty 会被伙伴表
+#:      逐字抄进 A / D / E / F / M 五个角色的提示词；机制留在 B 的 policy 与
+#:      `STAGE_TWO_BOUNDARY`（一处真身）。B 的 deliverable 同时去掉 `optimized_by_proof` /
+#:      `optimized_blocked` 两个字段名（语义保留）。
+#:   ③ V 的 duty（specs/v.py）：去掉发签计数层 `sign_counting`；"框架从台账现数、落签由收方
+#:      秘书"这层留在 V 自己的 policy（tests/test_roleclean3_old_paths_are_gone.py 也要求 V 面
+#:      保留这一句）。B / E / F / M 的伙伴表随之不再读到计数实现。
+#:   ④ 实现名清理：B 的 policy 去掉 `SIGN_STREAK_NEED` / `derive_grade` / `kind_from_grade` /
+#:      `judge_proposition_form` / `manuscriptfamily` / `classify_manuscript`（`signed` /
+#:      `holding` / 三条凭据条件 / 五档手稿名这些**结果**原样保留）；F 的 policy 去
+#:      `derive_grade`；V 的 policy 去 `classify_manuscript`。
+#:   ⑤ M 不再派 F、也不再读 `F.status`：`M→F` 没有边、`attack.status` 不在 M 的工具面上；
+#:      改读 `data/attack_plans.json` 的 `history`（或 `conductor.watch` 的 `recent_steps`），
+#:      "猜想要交给 F 攻坚"改写成「由 D 派 F.create_plan / F.step」。
+#:   ⑥ D 不再说"用 message 发给 G / H"：`D↔H` 没有协作边（message_admission 拒绝），
+#:      E 直发、G / H 的口径交回召唤者；D 面里「命题台账只读」三份抄本收成一处真身 + 指路。
+#:   判据：新增 tests/test_pa34_role_faces_do_not_teach_foreign_mechanism_or_false_route.py
+#:   （a 机制归属 / b 假派活边 + 前提 / c 一处真身 / d 反真空总控）；定向回归
+#:   test_b_second_stage_is_a_duty / test_b_proof_review_threshold_is_signed /
+#:   test_secretary_prompt_alignment / test_roleclean3_old_paths_are_gone / test_v_* /
+#:   test_prompt_action_names_exist / test_c_prompt_teaches_only_what_c_can_do 共 56 passed。
+#:   变化格 = 全部十一格（B / V / M / D 自己的段 + A / C / E / G / H / L 的伙伴表）；本笔只换
+#:   段文本，没有哪一格事实换过落点 ⇒ facts 键集仍 15 格，count / keys_sha256 与 p312 同值。
+#:   连带：`_FROZEN_PROMPT_VERSION` p312 → p313、`_FROZEN_PROMPT_DIGESTS` 十一格现算
+#:   （temp/pa34/recompute_digests.py，不手抄）；golden agent_surface_snapshot 与
+#:   ROLE-GUIDE / SYSTEM-COMPONENTS 由同一批重生成。
+#:   FC-27：specs/b.py / b_ingest_policy.py / d.py / f.py / m.py / v.py 与 golden 均被本笔改到
+#:   ⇒ `noai_gate --baseline` 需在收口时统一刷新（登记 reviewers=[]，登记 ≠ 批准，待人类走查）。
+#:   （同版第二笔 · PA2·规矩 2：提示词与判据对得上）业主 draft/192 规矩 2 逐字：「提示词与判据
+#:   对得上，不会往错的路上教，不会把正确动作说成错误的」。判据
+#:   `tests/test_teach2_prompts_match_judges.py`（a–d 四条，各配反真空）现算出的四处真缺口：
+#:   ① A 的 policy 教 `lit.admit(items=[{"slot": .., "relevance": ..}])`，而 `lit.admit` 的
+#:      items 只收 slot / new_content / overlap_ok / availability（`additionalProperties:
+#:      False`）⇒ 照教法写必 `param_invalid`；`relevance` 的真落点是 `lit.stage_add` 的
+#:      entries。改调用形，不改实现。
+#:   ② A 的 `run_once` 声明面漏了实现的真形参 `request_ids`（`AgentA.run_once(*,
+#:      request_ids=None)` 用它点名认领哪些委托；产品自己的收工门拒信在教它）⇒ 经参数门
+#:      照拒信写会被判未声明键。补声明（`specs/a.py` 的 `ACTIONS`）。
+#:   ③ B 的 `ingest_manuscript` 声明面漏了实现的真形参 `path_group`（`_path_group_parameter`
+#:      给它写了 `path_not_found` / `path_mismatch` 两个受控码，提示词与
+#:      `closing._optimization_next_step` 都在点名它）⇒ 补声明（`specs/b.py` 的 `ACTIONS`）。
+#:   ④ 假闸：B 的 policy 与 `b_ingest_policy` 教「受控拒 `manuscript_points_elsewhere`」，
+#:      而那一支已随 2026-11-13 裁定（稿里没有命题号，任何稿都没有那一行）删除 —— 源码里
+#:      那个码一次都不产出。删那一句（位置只由 `target_stmt_id` 决定这一条保留）。
+#:   判据 b 的扫描面从"工具名"扩到"`own.<动作>(kw=…)` 的顶层键 + `items=[{…}]` 的内层键"；
+#:   判据 d 新增 `_INTERNAL_ONLY` 登记（实现侧独有形参、提示词一个字都不教它们，且过期即红）。
+#:   （同版第三笔 · DANGLE·规矩 2 的另一半：教了却没有闸的六类悬空指令）逐条把"必须"改成
+#:   "建议 / 纪律 + 点名真闸"或补上读数：① A 的「三步顺序一步都不能省」（真闸只对候选链
+#:   成立，直登口 `search.register` / 非 dry `ingest_local` 是另外两条，改为默认路径 +
+#:   收工门读数 `readings.literature_intake`）；② A 的「`no_results` 之后必须换规范术语」
+#:   （语义判不了，改为纪律 + `no_result_topics` / `no_result_repeated_topics` 两格读数，
+#:   逐字「换规范术语再查一次」保留）；③ B 的「同一拍洗」与「不许把攒着当排期」（没有闸：
+#:   不洗只停在 `stage_two.unwashed` / `statements_unoptimized` 读数上）；④ 动作面广告了
+#:   `capabilities.PARAM_SEAMS` 里刻意不收的 `?sleep`（声明与接缝表留着，模型面不再广告）；
+#:   ⑤ A 的回执「必须写还剩几条待裁」（回执是自由文本，真闸是收工门第八格 `literature_pending`；
+#:   逐字「还剩几条待裁」保留）；⑥ V 的「先回一句这不是手稿」+「入口闸会拒」（入口不拒，给的是
+#:   `checked=false` + `reason=bad_manuscript_path`，真机 dct-min 12 次照读不误）。判据
+#:   `tests/test_dangle_dangling_instructions_have_a_judge.py`（六类各一条 + 反真空：把改前
+#:   逐字塞回去必红）。
+#:   （同版第四笔 · COL2 合稿：四路收成一致态）四路（PA4/PA1/PA2/PA34）原先各自抬了一格又
+#:   被中途终止，本笔把它们收成一致态并**只冻结这一版**：
+#:   ① 收件人写法收敛成一句 —— 「名册名 / 绝对编号 / 角色名，或主控 M 的本号；广播
+#:      `to="ALL"` 已退场（受控拒绝 `broadcast_retired`）」。十一格 deliverable、
+#:      `HANDOFF_PROTOCOL`、`llmseam` 四张 schema 的 `to.description`、`manuscript_tools` 的
+#:      summary / 参数说明、`agent_loop` 的 notify / handoff 拒信、`manuscripts.write` 的
+#:      `ValueError` 逐处同口径；ADDR 路把 `notify_shape_problem` / `clean_notify` 接到
+#:      `roster_addresses` 那一处真身（名册名 / 绝对编号解析成角色，`ALL` 由形状闸就拒）。
+#:   ② B 的二阶段自驱句回到**边界**（`b_ingest_policy.STAGE_TWO_BOUNDARY`，只渲染给 B）：
+#:      `own.run_once` 回执里的 `stage_two.unwashed`、`own.open_polish_copy`、「不必等 M 派」
+#:      三个锚必须在**同一句**里（判据 `test_b_stage_two_self_drives.py` 的 d/d2 要求同一行）。
+#:      PA34 把它们从职责档拿掉是对的（职责档被伙伴表逐字抄进 A/D/E/F/M），但它同时把"动作"
+#:      降成了"描述" ⇒ 搬回边界，不是删掉。
+#:   ③ `specs/b.py` 821 → 798 行：PA4 的方法学条与「同一条定理多种证明」条逐字搬进
+#:      `b_ingest_policy.B_METHOD_POLICY` / `MULTI_PROOF_POLICY`（渲染顺序与逐字文本未动）
+#:      ⇒ 三格 `>800` 的 73 → **72**（只降不抬）。
+#:   判据读数：新五份（PA1 / PA2 / PA34 / PA4 规矩 5 / DANGLE）＋ `test_notify_addressing_is_one_body.py`
+#:   与既有的 B 自驱、A 检索纪律、V 手稿载体、param-hint 预算、`tests/_prompt_surface.py` 的
+#:   扫描全绿；`test_prompt_param_hints.py` 的 tools_lines 预算没抬（`manuscripts.list` 的
+#:   summary 按 ADDR 的语义压回预算内）。
+#:   连带：`_FROZEN_PROMPT_DIGESTS` 十一格按 p313 现算（`scripts/recompute_prompt_digests.py
+#:   --write`；A/B/C/D/E/F/G/H/L/V 十格变、M 一格逐字未动）；两份 golden 重冻
+#:   （`test_agent_surface_snapshot.py --write` = 11 角色 / 67 动作；
+#:   `test_tool_surface_snapshot.py --write` = 126 工具 / 11 角色 / 13 条 CLI 输出）；
+#:   `ROLE-GUIDE` 重生成（`SYSTEM-COMPONENTS` 一致）；warm 两档真跑（cap 0.10）重落
+#:   `tests/fixtures/prompt_cache_warm.json`；`docs/READING-MAP.md` 开头三格按现盘重算
+#:   （`scripts/recompute_map_headline.py --write`）并补 `sysguard.py` / `sysresidue.py` 的位置行。
+#:   `_VOLATILE_FACT_SETS` 不记 facts 迁移：键集仍 15 格、count / keys_sha256 与 p312 同值
+#:   （这一版换的是段文本与声明面，没有哪一格事实换过落点）。
+#:   FC-27：`specs/*.py` / `agent_skills.py` / `agent_prompts.py` / golden / `llmseam.py` /
+#:   `manuscripts.py` / `tools/manuscript_tools.py` 均被本版改到 ⇒ `noai_gate --baseline`
+#:   在收口时统一刷新（登记 reviewers=[]，登记 ≠ 批准，待人类走查）。
+#:   （p313 这一批的版本号就是这一个：这一批全部属于 p313 —— 十一格摘要、两份 golden、
+#:   ROLE-GUIDE 与 warm 两档都按 p313 重冻，四路一次冻结，没有第二笔。）
+
+#: p313 → p314（2026-11-21，SKILLFIX：skills 侧修补 —— 规矩 6 的落盘笔）。
+#:   口径来源：`draft/192-提示词对齐七条.md` 规矩 6 逐字「要确认各角色的 skills 都在教正确的
+#:   东西，且与基础前置提示词互补，且确实有应用场景会被用上」。审计与补丁在
+#:   `temp/pa5/REPORT.md` / `temp/pa5/apply_patch.py`；本路只落盘，不重做审计。
+#:   ① 删一条（场景至今不存在）：`B/重抽取-什么时候提、怎么给依据` —— 15 个 lp-ball 工作区
+#:   `reprocess_requests` 全 0 行、`own.reprocess_once` / `own.run_reprocess` /
+#:   `H.judge_quote_semantics` 各 0 次、正文 0 读。删的是手册，能力与判据都留着（动作表里
+#:   三条仍在），并在 `B/登记` 的「消化」末尾留一句入口指路（不另开一节）。
+#:   ② 并一条（重复）：`V/假设轴-前提是否真被满足`（0 读）的三问并进 `V/复核`（77 读）的
+#:   「顺手核对两件事 · 假设轴」，`specs/v.py` 的 policy 同一笔把「那三份手册」改成
+#:   「那两份」（否则那一句指向一份已不存在的手册）。`_BODY_CROSS_REFS` 的 V 豁免与
+#:   `NO_LEAN_SKILL_REPLACEMENTS` 第 ⑥ 条同时清掉（不删 validate() 会红）。
+#:   ③ 四处语义错（改前句不在、改后句在）：`C/结构` 说 `C.handle` 不在工具面上、只有一处
+#:   登记口（事实：`specs/c.py:89` 说它就是登记口，`unmapped_actions()` 把它注入成
+#:   `own.handle`）；`V/自足` 让人把三轴结论写进只读返回键 `detail`（参数面
+#:   `additionalProperties:false` ⇒ 传入即 `param_invalid`，改成 `findings` + 回报）；
+#:   `D/一轮` 的「十五个动作」（`CAPABILITIES["D"]` 实为 14，改成不抄数字）；`B/审美` 的
+#:   summary 还写着 2026-10-29 已废的「看力气」判据（改成按五句语义定义判，与正文、
+#:   `secretary_prompts.py:79-93` 一致）。
+#:   ④ 三条零读取的触发点改成动作：`M/唤醒`（block 板项 26 条而 `conductor.wake_blocked`
+#:   0 次 ⇒ when 改成「每趟收工之前都读一遍」；它的 `actions=()` 不是漏绑 ——
+#:   `CAPABILITIES["M"]` 本就是空，执行口 `conductor.wake_blocked` 在 tools 上）、
+#:   `B/优化`（`own.ingest_manuscript` 53 次而 `own.open_polish_copy` 0 次 ⇒ when 改成
+#:   「逐拍检查 `stage_two.unwashed`」）、`shared/取数`（shared 三条全 0 读，而正文讲的
+#:   正是真机被拒最多的空号 / `*_not_found` 那一类 ⇒ when 改成「编号不对或刚被拒一次」）。
+#:   其余零读取条目逐条判过、保留（读数与理由在 `temp/skillfix/` 的处置表：场景动作有次数、
+#:   或方法论不被提示词覆盖、或 L 在 lean_off 下未核到）。
+#:   判据：新增 `tests/test_skillfix_skills_semantics_and_index.py`（a 四处锚点逐处
+#:   改前不在 / 改后在；b 删并两条不在目录与索引、索引行集合 == `skills_for(role)`；
+#:   c 删手册不删能力 + `M/唤醒` 的空绑定有读数；d 四处逐处反真空）。改前三份 src
+#:   换回去重跑同一组锚点四处全红（`temp/skillfix/p_red_before.py`）。
+#:   变化格 = 全部十一格：`shared/取数` 的 when 进每个角色的索引；M 另有唤醒那一行、
+#:   B 另有审美摘要与索引行、C/D/V 是正文；A/E/F/G/H/L 只因共用索引里那一行变。
+#:   没有哪一格事实换过落点 ⇒ facts 键集仍 15 格，count / keys_sha256 与 p313 同值。
+#:   连带：`_FROZEN_PROMPT_VERSION` p313 → p314、`_FROZEN_PROMPT_DIGESTS` 十一格现算
+#:   （`scripts/recompute_prompt_digests.py --write`，十一格全变）；
+#:   `tests/golden/agent_surface_snapshot.json` 重冻（11 角色 / 67 动作）；
+#:   `tests/golden/tool_surface_snapshot.json` 重算 0 行差异（本路不碰工具面）；
+#:   `ROLE-GUIDE` 重生成（249,620 字符，`SYSTEM-COMPONENTS` 一致）；
+#:   warm 两档真跑（cap 0.10，合计 $0.056105：关档 $0.027534 / 开档 $0.028571）重落
+#:   `tests/fixtures/prompt_cache_warm.json`（`test_prompt_cache_warm.py` 23 passed）；
+#:   `docs/READING-MAP.md` 开头三格按现盘重算（418 个 `.py` / 320,362 行 / 72 个 >800）
+#:   并改 §3 的 `agent_skills.py` 行（4948 → 4859、45 条 → 50 条）。
+#:   FC-27：`specs/v.py`（auth-audit）与 `tests/golden/agent_surface_snapshot.json`
+#:   （eval-criteria）被本笔改到 ⇒ `noai_gate --baseline` 只对这两条重登记
+#:   （reviewers=[]，登记 ≠ 批准，待人类逐行走查）。
+#:   已知红（不是本路，收口时已复绿）：21:2x 时 `test_repo_survey_does_not_get_worse.py` 的
+#:   函数那一格读到 96（基线 95）—— 第 96 个是并行路 `projects.py::run_project` 170 → 201 行；
+#:   把本路三份 src 改前件换回去重跑仍是 (72, 96, 2) ⇒ 不是本路抬的。那条路 21:28 收口后
+#:   复跑 72 / 95 / 2、6 passed；基线没动、判据没放宽。同刻 lint 的 3 个 R009 error 也落在
+#:   那条路 21:15–21:20 改/新建的三个文件里，收口后复跑 error 0。
+#: p314 → p315（2026-11-21，FINALIZE 路：规矩 7 精简 ＋ stance 14 句改写，两笔同轮一次抬版）。
+#:   一、规矩 7 精简（真身 `temp/pa6/patch_pa6.py`）：`--check` 现盘 13/13 anchored ⇒
+#:   `--apply` 后 13/13 全部命中、0 失败（7 个文件、13 个 hunk），源文件净 -1526 字。
+#:   逐条：① V 的 `有毛病` 从「尽量给 `defect_step`」改成「必填，给不出就在 `findings` 里
+#:   逐字写「步号给不出：核到第几段为止」」（P01，与 policy#3 的「必须」对齐）；
+#:   ② V「只要求你确实找过」→「只要求 `findings` 为空」（P02）；③ V 的技能
+#:   `产出-只产意见-签分两档` §一 340 → 221 字，只留「为什么这么硬」（P03）；
+#:   ④ M「处置有三条手段，按需选」→「按 `conductor.watch` 读到的状态选」（P04）；
+#:   ⑤ M「该用几条用几条」→「三条里至少动一条，只回「我看过了」不算处置」（P05）；
+#:   ⑥ F「研究了、尽力了、0 条成果也是合法收工」→「`delivery.total=0` ⇒
+#:   `legal_stop=true`、`is_failure=false`」（P06）；⑦ D「合理成本内做不到」→
+#:   「哪一组参数到了什么规模、所以跑不完（与 `space` 的数对得上）」（P07）；⑧ B 的送审
+#:   手续 104 → 93 字，指回边界那一句（P08）；⑨ G 的 policy#22 208 → 60 字，指回
+#:   policy#21 的通道表（P09）；⑩ A 的技能 `找文献-换招法而不是换说法` 1270 → 204 字，
+#:   只留「`ingested` 是预告不是入库」这一条读数差别（P10）；⑪ V 的 policy#4 开头 145 → 58 字
+#:   （P11）；⑫ M 的「F 产出但没签 / E 的穷举稿同理」157 → 107 字，合成一句（P12）；
+#:   ⑬ M 的结尾重述 133 → 34 字（P13）。五处抽检（`temp/pa6/verify_semantics.py`）全 PASS：
+#:   被删句的语义载体在渲染产物的 policy / 边界段里逐字仍在。
+#:   二、stance 14 句（PA6 报告 §4）：6 句两不沾（C#3 / C#4 / G#1 / H#2 / B#2 / V#2）与
+#:   8 句「落点在、写法是比喻」（A#1 / A#2 / D#4 / E#1 / E#3 / F#1 / H#5 / V#1）逐句改写成
+#:   可核说法 —— 每句保留原意，落点换成条文格里真有的那一格：
+#:   · A#1 差异 → 草稿本那一行（一步一读的那一份）＋ 采信理由与字段；
+#:   · A#2 → `lit.stage_add` 的 `relevance` 那一格（写不出就不该进表）；
+#:   · B#2 → `statement_full` 那一句自足的话（条件 / 量词 / 指代都在句内）；
+#:   · C#3 → 「这条链不成立」落成 `analysis.register_report` 报告里的一行（关系 + 度数 /
+#:     重复 / 绕行长度）；
+#:   · C#4 → `worth` / `confidence` 与「为什么值得查」三格（缺三格不算缺口）；
+#:   · D#4 → 改主意落一行 `research.write_note`（写清上一轮依据哪条读数不成立）；
+#:   · E#1 → 同一命题上 `result=refutes` 优先于再补 `result=supports`（三值
+#:     `refutes` / `supports` / `inconclusive` 是台账的全部结论）；
+#:   · E#3 → 跑不过 / 没读到读数落 `result=inconclusive`，跑没跑成另按 boundary 落
+#:     `failed` / `unknown`；
+#:   · F#1 → 每一轮 `attack.step` 的 `self_assessment.next_move` 要点名一条具体的东西；
+#:   · G#1 → 删并写进这一轮 `revise` 的 `fixed_findings` / `note`（改哪一处、并进谁、为什么）；
+#:   · H#2 → 「不在场的人读不懂」只落成三类 finding，各带 `file` / `line` / `ref`；
+#:   · H#5 → 去掉「以研究生身份读」那层身份句（不是读数），只留六类逐条点名到句；
+#:   · V#1 → 每条 finding 落成「第几步 + 缺哪条依据」（`defect_step` + `findings`）；
+#:   · V#2 → 跨步骤那一跳只能在整篇里看见，看见就落一条带 `defect_step` 的 finding。
+#:   E#1 那句在 `specs/e.py` 的 `local_notes[能思辨]` 与 `agent_prompts.py` 的
+#:   `FACULTY_LOCAL[(E, 能思辨)]` 各有一份逐字副本 ⇒ 三处同轮改成同一句（不同步就成了
+#:   「同一份提示词两处说法不一」）。没删语义：14 句里没有一句是把义务去掉，去掉的只是
+#:   「说得出为什么」「品味」「身份」这类没有落点的写法。
+#:   三、连带：`_FROZEN_PROMPT_VERSION` p314 → p315、`_FROZEN_PROMPT_DIGESTS` 十一格现算
+#:   （`scripts/recompute_prompt_digests.py --write`：A / B / C / D / E / F / G / H / V / M
+#:   十格换值，L 一格逐字未动 —— 本批没有一句落在 L 的面上）；
+#:   `tests/golden/agent_surface_snapshot.json` 重冻（11 角色 / 67 条动作；diff 只有 11 个
+#:   `roles.*.prompt`，其中 L 只差版本行）；`tests/golden/tool_surface_snapshot.json`
+#:   重算 0 行差异（本路不碰工具面）；`ROLE-GUIDE` 重生成（250,245 字符；
+#:   `SYSTEM-COMPONENTS` --check 一致，8,601 字符）；
+#:   warm 两档真跑（cap 0.10，各档一次）：关档 $0.062701（11 个目标有缓存落地记录，L 按设计
+#:   不在这一档）、开档 $0.050772（12 个目标；二调样本 M / C / L 命中，合计 $0.113473）重落
+#:   `tests/fixtures/prompt_cache_warm.json`（两条 `prompt_version=p315`、`verdict=warmed`；
+#:   `test_prompt_cache_warm.py` 23 passed）；
+#:   `docs/READING-MAP.md` 开头三格按现盘重算（418 个 `.py` / 320,319 行 / 72 个 >800、
+#:   `agent_loop.py` 16,463 行）并改 §3 的 `agent_skills.py` 行（4,859 → 4,828，条数仍 50）。
+#:   四、判据侧两处连带（都由判据自己驱动，不是放宽）：`tests/test_agent_prompts.py` 的
+#:   `_NON_TOOL_DOTTED_TOKENS` 补登记 `self_assessment.next_move`（`attack.step` 入参对象的
+#:   字段路径，不是工具）、删掉已随 P09 退役的 `v_signature.sha256`（那一路径不再出现在任何
+#:   一格的提示词里 ⇒ 反真空要求摘掉）。
+#:   五、FC-27：`specs/{a,b,c,d,e,f,g,h,v}.py` 与 `agent_skills.py`（auth-audit）、
+#:   `tests/golden/agent_surface_snapshot.json`（eval-criteria）、`agent_prompts.py`
+#:   （auth-audit）被本笔改到 ⇒ `noai_gate --baseline` 只对本笔的改动集重登记
+#:   （`reviewers=[]`，登记 ≠ 批准，待人类逐行走查）。
+#:   没有哪一格事实换过落点 ⇒ facts 键集仍 15 格，count / keys_sha256 与 p314 同值；
+#:   `_VOLATILE_FACT_SETS` 末尾追加的那一格按 p315 记。

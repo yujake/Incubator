@@ -175,7 +175,9 @@ python -m agentflow.formalgw --toolchain
 `ModelSpec.key_source` 取 `env` / `settings` / 空串，`redacted()` 与网页 Machine 页都回显它
 （来源不是密钥）。为什么需要它：没有这一格时，"我以为它在 config 里"与"它其实来自一个残留的
 环境变量"在其余所有读数上完全一样（`configured` 都是 `True`、请求都发得出去）。
-单跑一行的读数：`pwsh -File temp/_key_source_check.ps1`（不回显 key）。
+单跑一行的读数：网页 Machine 页的 `key_source` 那一格（读侧 `src/agentflow/webui/readers.py` 的
+machine 面）。2026-11-21 CLEAN-ALIGN 更正：这里原先写的是 `pwsh -File temp/_key_source_check.ps1`
+—— 那是一次性探针，随 `temp/` 不入库、现盘上已不在（复算 `Test-Path temp/_key_source_check.ps1` = False）。
 
 **安全阀（`api_key` 落盘的代价）**：① 真正的 `agentflow/settings.json`
 **被 git 忽略**（`.gitignore` 第 13 节逐字写着理由）；② 入库的只是示例，

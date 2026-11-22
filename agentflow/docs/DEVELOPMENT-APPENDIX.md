@@ -1,4 +1,4 @@
-# DEVELOPMENT-APPENDIX —— agentflow 开发规范（历史面）
+# DEVELOPMENT-APPENDIX —— Incubator 仓库的开发规范（历史面）
 
 > ⚠️ **本文不构成判据。** 它只回答"当时是什么样、为什么会这样"。
 > 判据在 [`DEVELOPMENT-SPEC.md`](DEVELOPMENT-SPEC.md)（规范面）；
@@ -53,13 +53,13 @@
 
 | 位置 | 当时的实测 |
 |---|---|
-| `agentflow/`（仓库根） | `.noai-paths` `.noai-approvals.json` `AGENTS.md` `config.yaml` `DESIGN.md` `DESIGN-TOOLS.md` `DESIGN-INTERACTIONS.md` `DESIGN-ROLES.md` `DESIGN-CONDUCTOR.md` `pyproject.toml` `README.md` `DEVELOPMENT.md` `NOAI-REVIEW-REGISTER.md`（`README.md` 已于 2026-10-18 挪到仓库根 `D:\Incubator/README.md`） |
+| `agentflow/`（产品根） | `.noai-paths` `.noai-approvals.json` `AGENTS.md` `config.yaml` `DESIGN.md` `DESIGN-TOOLS.md` `DESIGN-INTERACTIONS.md` `DESIGN-ROLES.md` `DESIGN-CONDUCTOR.md` `pyproject.toml` `DEVELOPMENT.md` `NOAI-REVIEW-REGISTER.md` |
 | `agentflow/src/agentflow/` | 包根一层 **79 个 `.py`** + **9 个角色包**（观测 2026-10-13：`paper_package` 整条退场后复算 ⇒ `(Get-ChildItem src/agentflow/*.py).Count` 与"目录数减去 `specs`/`tools`/`web`/`__pycache__`"）。同一批文件在 `agentflow/` 内部按少一层前缀的形式引用（`src/agentflow/gates.py`）。2026-10-13 那一趟：删 `paperbuild.py` / `renderanchor.py`（三维锚那一层），加 `papercompile.py` |
 | `agentflow/src/agentflow/tools/` | **16 个文件** = 14 个 `*_tools.py` + `base.py` + `__init__.py`（观测 2026-10-04；`manuscript_tools.py` 是交接手稿的读面）。2026-09-30 更正：本节原先漏列 `conjecture_tools.py` 与 `conductor_tools.py` |
 | `agentflow/scripts/` | 共 **6** 个 `.py`（观测 2026-10-05）：`__init__.py` `lint_rules.py` `manuscripts_query.py` `noai_gate.py` `release_check.py` `usage_ledger_audit.py` |
 | `agentflow/docs/` | 共 **14** 个文件，且这一层没有非 `.md` 的文件（观测 2026-09-30） |
 | `agentflow/tests/` | `test_*.py` 的**份数按命令当次读**（观测 2026-09-30 ⇒ 162）+ `conftest.py` + `demo_dataset_helper.py`。**全量实测是"区间 + 观测时刻"**：当时从 `draft/35` §12 转记的读数是 `3071 passed, 1 failed, 3 skipped, 1 xfailed`（观测 2026-09-30 23:52）—— 唯一那条失败是起子进程跑 `release_all` 的用例撞上 600s 上限 |
-| 运行期数据 | `agentflow/data/`（份数按命令当次读；观测 2026-10-02 ⇒ 18 个 JSON；并表后 2026-10-10 ⇒ **16 张表 ⇒ 17 个 JSON**，`concepts.json` 已随表退役）、`agentflow/library/`、`agentflow/demo/`。注：**`D:\Incubator\agentflow` 自己不是 git 仓库**；`.git` 在**上一级** `D:\Incubator` |
+| 运行期数据 | `agentflow/data/`（份数按命令当次读；观测 2026-10-02 ⇒ 18 个 JSON；并表后 2026-10-10 ⇒ **16 张表 ⇒ 17 个 JSON**，`concepts.json` 已随表退役）、`agentflow/library/`。`agentflow/demo/` 已于 2026-11-22（DEMORETIRE）整条删除，不再是运行期数据面。注：**`D:\Incubator\agentflow` 自己不是 git 仓库**；`.git` 在**上一级** `D:\Incubator` |
 
 **"预留并如实标注"清单**（当时点名要预留的那几项；这是**历史**，不是待办）：
 

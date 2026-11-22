@@ -131,8 +131,12 @@ agentflow start --mode research --task "…" --project octa-rehearsed-r2 --budge
 - `--host` 缺省 `127.0.0.1`（只听本机）；这条路的 `--port` 缺省仍是 `8788`，`--port 0` 让系统挑
   （老命令 `web` 的端口改成"从 8700 起自动挑 + 自动换号"，工作区也自己找，见 §5.0）；
   `--token` 也可以走环境变量 `AGENTFLOW_WEB_TOKEN`。写面缺省**只读**：`--allow-writes` 才放开
-  `/api/` 下那六条写端点（`POST /answer` 是既有写路径，缺省也放行），`--no-settings-write`
-  只关 `POST /api/settings`。
+  `/api/` 下那七条写端点（`/api/stop` · `/api/run` · `/api/task` · `/api/submit` · `/api/settings` ·
+  `/api/budget` · `/api/cache/warm`）。**`POST /answer` 与它们同走一道闸门**：来源 ⇒ CSRF ⇒ 写面
+  （2026-11-21 WEBFIX1 / 审计 F4 之后，它不再是"不进授权矩阵、缺省也放行"的例外）；跨站来源或
+  缺 `X-CSRF-Token` 一律 403，只读档同样 403（理由 `writes_off`），插话（`/api/task`）缺 `sid` ⇒ 400。
+  `--no-settings-write` 只关 `POST /api/settings`。唯一保留的例外是 `POST /api/cache/warm` 的
+  `dry_run=1` 试算档：只保留「回环来源」一层（不写盘、不花钱、不起进程 ⇒ 只读档也回 200）。
 
 ---
 
@@ -350,7 +354,7 @@ Ctrl-C 停止。
 | `incubate` | 孵化：把一趟研究开起来、管起来 | `init`、`start`、`stop`、`status`、`answer`、`inbox`、`submit`、`interject` |
 | `inspect` | 查看：只读的读数与检查 | `status-report`、`stats`、`evidence`、`artifacts`、`analyze`、`tools`、`cache`、`budget`、`doctor`、`verify` |
 | `run` | 跑：流水线与角色循环，以及它们的维护 | `topic`（= 旧 `run`）、`pipeline`、`run-a`、`run-b`、`run-agent`、`repair`、`rebuild`、`project`、`closing` |
-| `serve` | 服务：网页与离线演示 | `web`、`demo` |
+| `serve` | 服务：网页（离线演示 `demo` 已退场，成员名只留作受控退场挂点） | `web`、`demo` |
 
 写法是 `agentflow <入口> <成员> [旗标]`，例如：
 
@@ -392,7 +396,8 @@ agentflow run topic --topic "Saxl 猜想"      # 与 agentflow run --topic … �
 例外是四条移植期工具：`repair` / `rebuild` / `demo` / `evidence migrate` 的实现在
 2026-11-20（业主批准 A4）连同 `tools/legacy_cli/` 一起删了。命令名仍留在 CLI 里，
 但只做**受控退场**：明确错误 + 替代指引，退出码 `2`（没查成）—— 不是静默消失，
-也不是 `0` 那种"跑过了没问题"。仍在的那一半：`agentflow repair --backfill-grades`
+也不是 `0` 那种"跑过了没问题"。其中 `demo` 在 2026-11-22（DEMORETIRE）连**库层实现、
+产物与夹具**也删了，所以它的指引不再指向任何库入口。仍在的那一半：`agentflow repair --backfill-grades`
 （按现行 V 签重算 `evidence_kind`，缺省 dry-run）。
 
 ### 7.3 `stats` 的四张读数
