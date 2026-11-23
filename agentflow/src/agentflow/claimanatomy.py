@@ -1037,7 +1037,7 @@ def _overclaim_markers() -> tuple[str, ...]:
     except Exception:  # noqa: BLE001 - 见下：同值兜底 + 有测试断言两者是同一对象
         # 为什么可以忽略：这是纯判据层在"工具层不可导入"这一种环境下的降级路径。
         # 兜底值与 doc_tools 的字面量逐字相同，且
-        # `tests/test_claimanatomy.py::test_overclaim_markers_are_not_a_second_copy`
+        # `tests/test_claimanatomy.py::test_overclaim_markers_and_disclaimer_are_not_a_second_copy`
         # 断言两边是同一个元组 —— 所以这里的降级不会造出第二份清单。
         return (
             "已证明", "证明了", "严格证明", "定理成立", "由此得证",

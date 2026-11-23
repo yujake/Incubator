@@ -27,7 +27,7 @@
 
 于是补丁一落地，写口自动改落 `error`、读口自动只认 `error`（另一词变成"不认识的状态"
 ⇒ 读不出来，而不是静默读成"不是错"）。判据
-`tests/test_one_concept_two_readings.py::test_the_word_follows_the_vocabulary` 钉住这一跳。
+`tests/test_one_concept_two_readings.py::test_h_the_word_follows_the_vocabulary` 钉住这一跳。
 
 ## 三态与三个冲突码
 

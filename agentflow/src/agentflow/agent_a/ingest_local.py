@@ -8,7 +8,7 @@
 一份口径，不是两份：与工具同调 `locallib.ingest_directory` —— 判重键（内容 sha256）、
 provenance 三件事（`actor="agent-A"` / `submitted_by="unknown"` /
 `origin_note="由 agent-A 从一个本地目录登记"`）与幂等语义全部来自那一份实现；判据
-`tests/test_intake_actions.py::test_the_action_and_the_tool_agree_on_provenance_and_idempotence`
+`tests/test_intake_actions.py::test_a_ingest_local_is_idempotent_and_agrees_with_the_tool`
 钉住"两者对同一个目录给出同一份读数"。
 
 它不假装能做的事：不支持的扩展名不会被硬塞进来（`.tex` 在 `extract` 的支持面之外：

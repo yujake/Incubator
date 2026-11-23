@@ -95,7 +95,7 @@ AXES = ("数学", "体例", "工程", "证据")
 
 
 #: 15 个门号 —— 硬编码成元组是刻意的：它是"15 道门都在跑"这句话的机器可读形式。
-#: `tests/test_gates.py::test_every_gate_id_from_the_spec_exists` 逐条比对。
+#: `tests/test_gates.py::test_gates_declares_all_fifteen_ids` 逐条比对。
 GATE_IDS: tuple[str, ...] = tuple(f"G{i}" for i in range(1, 16))
 
 
@@ -463,7 +463,7 @@ def _looks_like_path(text: str) -> bool:
 
     切法复用 :func:`_strip_line_suffix`（同一处切法；本仓库已经有过
     "两处 `file:line` 切法不一致"的教训，不许再出现第三套）。
-    切完再判形态，于是 `code/p1.py:12` 与 `PROOF-…​.lean:1` 走同一条路，
+    切完再判形态，于是 `code/p1.py` 的第 12 行与 `PROOF-…​.lean:1` 走同一条路，
     而 `claim-1:3`（claim_id + 行号，G3 允许的自指形态）切完是 `claim-1`
     ⇒ 被下面那条 `claim` 形态排除，仍然不会被当成路径。
     """
@@ -862,7 +862,7 @@ def _check_citation_resolution(
 
 
 def gate_g2(ctx: GateContext) -> GateResult:
-    """G2 引用解析门（照搬 `r75_verify_vol.py:39-64`）：每个引用可解析。
+    """G2 引用解析门（照搬外部项目 `r75_verify_vol.py` 的 39–64 行；本仓没有这一份）。
 
     判据（§8.4）："每个 `材料/路径` 引用可解析（含通配符）；裸文件名也能在包内解析。"
     失败处置：阻断交付（且必须返回非零退出码 —— 照 `:74`）。
@@ -1011,7 +1011,7 @@ def gate_g3(ctx: GateContext) -> GateResult:
 
 
 def gate_g4(ctx: GateContext) -> GateResult:
-    """G4 账本对账门（照搬 `readme_integrity.py:55-88`）。
+    """G4 账本对账门（照搬外部项目 `readme_integrity.py` 的 55–88 行；本仓没有这一份）。
 
     判据（§8.4）："索引/README 点名的文件存在、卷内文件全被列出、
     声明的字数在容差内、声明的标签在正文存在。" 失败处置：阻断。
@@ -1088,7 +1088,7 @@ def gate_g4(ctx: GateContext) -> GateResult:
 
 
 def gate_g5(ctx: GateContext) -> GateResult:
-    """G5 禁词/手糊门（照搬 `series_banned_words.py:16-20` + `STYLE/RUBRIC.md:50-53`）。
+    """G5 禁词/手糊门（照搬外部项目 `series_banned_words.py` 的 16–20 行；本仓没有这一份 + `STYLE/RUBRIC.md:50-53`）。
 
     判据（§8.4）："中文 15 词表 + 英文 12 连词表；命中带上下文供人工裁。"
     失败处置：命中须逐条裁并记录（允许"元叙述"例外，`:22`）。
@@ -1166,7 +1166,7 @@ def gate_g5(ctx: GateContext) -> GateResult:
 
 
 def gate_g6(ctx: GateContext) -> GateResult:
-    """G6 虚证门（照搬 `check_yan_anchors.py:38-46` + `check_yan_scripts_local.py:38-50`）。
+    """G6 虚证门（照搬外部项目 `check_yan_anchors.py` 的 38–46 行 + `check_yan_scripts_local.py` 的 38–50 行；本仓都没有这两份）。
 
     判据（§8.4）："每个数值/经验断言点名的脚本与数据文件必须存在且在包内。"
     失败处置：阻断。
@@ -1266,7 +1266,7 @@ def gate_g6(ctx: GateContext) -> GateResult:
 
 
 def gate_g7(ctx: GateContext) -> GateResult:
-    """G7 台账完整门（照搬 `build_yan_ledger.py:46-58`）。
+    """G7 台账完整门（照搬外部项目 `build_yan_ledger.py` 的 46–58 行；本仓没有这一份）。
 
     判据（§8.4）："每个 `[验]`/数值断言都在台账里有一行，且带『位置 + 逐字断言 +
     类别』。" 失败处置：阻断；禁止"仅泛证"（把路径直接写进正文，`:15`）。

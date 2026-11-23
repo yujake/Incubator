@@ -432,7 +432,7 @@ class RetireMixin:
         # 为什么级联那条路不会被它误伤：级联是"先深后浅"，轮到 A1 时 B1 的名册项已经
         # 标了 retired（`retire` 先写台账、再写名册，两处都落完才返回），所以这里读到的
         # `retired` 为真、`rows` 为空、放行。判据见
-        # `tests/test_cascade_retire_closes_the_tree.py::test_a_the_cascade_path_does_not_trip_the_orphan_gate`。
+        # `tests/test_cascade_retire_closes_the_tree.py::test_h_the_cascade_path_does_not_trip_the_orphan_gate`。
         left = self._children_left_behind(tid)
         if not left.get("checked"):
             return {"ok": False, "action": "refused", "report": {},

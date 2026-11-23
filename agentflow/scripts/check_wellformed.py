@@ -84,8 +84,23 @@ def _render_text(report: WF.WorkspaceReport) -> list[str]:
     return lines
 
 
+def _pin_utf8() -> None:
+    """钉住 stdout/stderr 的编码。
+
+    不钉的后果（本机实测 2026-11-22）：GBK 控制台打印 `⇒` / 中文读数会抛
+    UnicodeEncodeError，进程以 1 结束 —— 而那正好是"有畸形"的码，于是
+    "打印不出来"被读成"查出了畸形"；`--json` 那一支还会让父进程按 utf-8 解码失败。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
     """入口：解析参数、跑判据、按三态返回退出码。"""
+    _pin_utf8()
     parser = argparse.ArgumentParser(
         description="查一个工作区的产物有没有畸形（只读；0=全 ok / 1=有畸形 / 2=没查成）")
     parser.add_argument("--root", default="",

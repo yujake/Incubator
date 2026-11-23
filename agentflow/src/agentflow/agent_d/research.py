@@ -45,7 +45,7 @@ class _Research:
                     # `verdict["sufficient"]` = `analyze_gaps` 的三条可核实判据一条都没触发 ⇒ `answered`
                     # （终态）；仍不足 ⇒ 留 `researching`（下一步回到 `submit_gaps`，由它写成 `needs_evidence`）。
                     # 为什么必须在这里写：`researching → answered` 这条边早在
-                    # `research_tools.LEGAL_TRANSITIONS` 里，但缺口这条路上没有代码走它 ⇒ `pipeline.py:428`
+                    # `research_tools.LEGAL_TRANSITIONS` 里，但缺口这条路上没有代码走它 ⇒ `pipeline.py::run_pipeline`
                     # 与 `agent_d/core.py`（`_adjudicate_ready_contradictions`）那两道"已下结论就跳过"的过滤
                     # 永远不生效（真机 118 行 `research_questions` 里 `answered` 0 行）。不用 `confidence`
                     # 当门槛：置信度衡量证据强度，`sufficient` 衡量"有没有触发'不足'的判据"，两者不是一回事。

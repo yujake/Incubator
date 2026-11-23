@@ -24,6 +24,10 @@ python scripts/manuscripts_query.py <工作区> --bits          # 附五元位�
 `data/statements.json` / `data/experiments.json` 里取出对应行，用 `evidencebits` 现算
 五位与派生等级。没有那两处引用的手稿写"（没有可算的命题引用）" —— "没有引用"与
 "引用算不出来"必须分得开（三态纪律）。
+
+账本落点是 `<工作区>/work/handoffs.jsonl`（2026-11-22 起）。旧布局把账本放在
+`manuscripts/handoffs.jsonl`，不再支持：新落点不在而旧账本在盘上时，本脚本明确
+报「旧布局（不再支持）」，不把它折成「没有命中」。
 """
 from __future__ import annotations
 
@@ -107,8 +111,9 @@ def _format_bits(snap: list[dict]) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="查交接手稿（manuscripts/handoffs.jsonl）")
-    ap.add_argument("workspace", help="工作区根（含 manuscripts/ 与 data/）")
+    ap = argparse.ArgumentParser(
+        description=f"查交接手稿（{MS.HANDOFFS_DIR}/{MS.HANDOFFS_NAME}；旧布局不再支持）")
+    ap.add_argument("workspace", help="工作区根（含 work/、manuscripts/ 与 data/）")
     ap.add_argument("--id", default="", help="按编号读一份（打成全文）")
     ap.add_argument("--to", default="", help="按收件人过滤（ALL 只给广播）")
     ap.add_argument("--from", dest="sender", default="", help="按发件人过滤")
@@ -123,6 +128,10 @@ def main(argv: list[str] | None = None) -> int:
     if not ws.is_dir():
         print(f"[unknown] 工作区不在盘上：{ws} —— 没查成，不是「没有手稿」", file=sys.stderr)
         return 2
+    # 旧布局（账本还在 `manuscripts/handoffs.jsonl`）：明确报出来，不折成「没有命中」。
+    legacy = MS.legacy_layout_note(ws)
+    if legacy:
+        print(f"[warn] {legacy}", file=sys.stderr)
     got, problems = MS.query(ws, mid=args.id, to=args.to, sender=args.sender,
                              since=args.since, refs=args.refs, limit=args.limit)
     snaps = {str(r.get("id") or ""): five_bit_snapshot(ws, r) for r in got} if args.bits else {}
@@ -139,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
         for p in problems:
             print(f"  - {p}", file=sys.stderr)
     if not got:
-        print(f"（没有命中：{ws}/manuscripts/{MS.HANDOFFS_NAME}"
+        print(f"（没有命中：{ws}/{MS.HANDOFFS_DIR}/{MS.HANDOFFS_NAME}"
               + (f"，过滤器 id={args.id} to={args.to}" if (args.id or args.to) else "") + "）")
         return 0
     for rec in got:

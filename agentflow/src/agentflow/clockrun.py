@@ -426,7 +426,7 @@ def using_workspace(workspace: str | Path):
 #: `calling_as`（`conductor.py:2234`）只包住 `registry.call`（`agent_loop.py:9616`），
 #: 于是装配期起的程序取不到号：真机 `projects/mp3-r4` 的 `tm-000001`
 #: （`note="toolchain._version_of"`、`task_id=""`、`role=""`）正是
-#: `agent_loop.py:6740` 拼提示词那一步起的。这不是少一格读数：`is_my_program`（`clock.py`
+#: `agent_loop.py::AgentLoop.run` 拼提示词那一步起的。这不是少一格读数：`is_my_program`（`clock.py`
 #: 的同名函数）把空归属一律判成"不是我的" ⇒ `program.stop` 对那一族结构性不可停。
 #: 这一格回答的是"这一趟是谁"，不是"这一次工具调用是谁"（工具路径上两者同号）。
 #:

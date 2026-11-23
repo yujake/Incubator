@@ -469,7 +469,7 @@ class StatementTxMixin:
             # 值写进行里，白名单差分就看不见这一格：值已经在盘上、Δ 为空 ⇒ 那一笔
             # 再也不会拒，闸退化成摆设。2026-11-19 的现场就是这样：把
             # `manuscripts` 从白名单里拿掉，`register_statement` 仍回 `ok=True`
-            # （`tests/test_manuscripts_are_per_path.py::test_e`）。
+            # （`tests/test_manuscripts_are_per_path.py::test_e_the_write_whitelist_is_what_lets_the_per_path_record_land`）。
             #
             # 所以这一臂只补"没有回执可写"的那一档：E 的 `e-num-*` 数值稿没有证明
             # 正文 ⇒ `write_proof_receipt` 不进来（它的 `_body_present` 恒假），

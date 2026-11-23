@@ -116,13 +116,11 @@ DYNAMIC_SECTION_WHITELIST: frozenset[str] = frozenset()
 #:
 #: 落点逐条（只点名字、不点行号：行号会漂）：
 #:
-#: - 模板那一侧全部在 `agent_prompts.role_prompt_registry` 里：`AGENT_IDENTITY`
-#:   （段序 0）:`agent_prompts.py:8666`（`{{summoned_by}}` / `{{task_id}}`）、
-#:   `:8670`（`{{depth}}`）、`:8674`（`{{parent_task_id}}`）、`:8686`（`{{children}}`）；
-#:   `TASK_FRAME`（段序 4200）:`agent_prompts.py:8894`（`{{task}}`）、`:8898`（`{{inbox}}`）、
-#:   `:8902`（`{{board}}`）、`:8906`（`{{user_replies}}`）、`:8910`（`{{notebook}}`）、
-#:   `:8914`（`{{budget_left}}`）；`WORKSPACE_FACTS`（段序 10000）:`agent_prompts.py:9206`
-#:   （`{{workspace_root}}`）。
+#: - 模板那一侧全部在 `agent_prompts.role_prompt_registry` 里
+#:   （`agent_prompts.py::role_prompt_registry`）：`AGENT_IDENTITY`（段序 0）含
+#:   `{{summoned_by}}` / `{{task_id}}` / `{{depth}}` / `{{parent_task_id}}` / `{{children}}`；
+#:   `TASK_FRAME`（段序 4200）含 `{{task}}` / `{{inbox}}` / `{{board}}` / `{{user_replies}}` /
+#:   `{{notebook}}` / `{{budget_left}}`；`WORKSPACE_FACTS`（段序 10000）含 `{{workspace_root}}`。
 #: - 值那一侧在 `agent_loop.run` 的 `facts = dict(...)`（`agent_loop.py:3610`）算一次，
 #:   凡"这一次运行的事实"都在这张表里被重新算 ⇒ 它们都是"另一段前缀"。
 #: - 现在的载体：每步会变的两格仍在 `_prompt` 尾部现读（`agent_loop.py:3106-3112`）；

@@ -36,7 +36,7 @@ def _hold_runs(
       `R-mk-infinite-94` 的 000034：v1 clean / v2 fault / v3–v5 clean 曾经凑成 3/3 签）;
     - 不带 `review_call` 的老行（2026-11-02 之前"一次调用只判一轮、靠台账尾部凑次数"
       的形态）：按旧口径读（fault 清零之后还能再攒）—— 这是历史兼容，不是新签的路
-      （`tests/test_v_sign_gate_streak.py::test_a2` 钉着它）。
+      （`tests/test_v_sign_gate_streak.py::test_a2_a_non_hold_in_the_middle_zeroes_the_streak` 钉着它）。
 
     为什么用 `review_call` 当判据而不是"一律作废"：老行没法归到某一次送审上，把旧读数
     按新规矩重算会把历史工作区的读数整体翻掉（那不是这次修正要动的东西）。

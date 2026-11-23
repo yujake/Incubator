@@ -312,9 +312,16 @@ def _slugify(title: str) -> str:
 
 
 def _seed_readme(manifest: dict[str, Any]) -> str:
-    """种子包根上的 README：怎么用、为什么不能直接入库、谁判收、怎么复算。"""
+    """种子包根上的 README：怎么用、为什么不能直接入库、谁判收、怎么复算。
+
+    投放落点与判收链不在这里手抄：落点是 `seedinject.SEED_SUBDIR`（输入区 `reference/`），
+    链与禁令是 `seedinject.candidate_chain_lines` / `candidate_chain_warning` 的返回值
+    （与工作区里那份 `reference/SEED-README.md` 同一真身）。手抄一份的形态是：
+    `--build` 一跑就把 README 改回旧口径，而判据只守着另一处。
+    """
     count = int(manifest.get("count") or 0)
     total = int(manifest.get("total_bytes") or 0)
+    landing = SI.SEED_SUBDIR
     return "\n".join([
         "# 文献种子包（历史真机下载）",
         "",
@@ -326,7 +333,8 @@ def _seed_readme(manifest: dict[str, Any]) -> str:
         "种子口径只回答两件事：下载真的成功了、正文真的抽得出来。它不回答",
         "「与当前研究相关吗」「该不该收录」。入库（分配 lit_id、写 literature 行）",
         "是 A 的判收动作，业主明令这批种子不直接入库。所以投放只把文件放进",
-        "工作区的 library/，绝不写 data/literature.json 或任何台账。",
+        f"工作区的**输入区** `{landing}/`，绝不写 data/literature.json 或任何台账；",
+        "更不会碰已登记书架 `library/`（那里只放被 literature 行引用到的文件）。",
         "",
         "## 怎么投放",
         "",
@@ -338,15 +346,22 @@ def _seed_readme(manifest: dict[str, Any]) -> str:
         "",
         "    agentflow init --root <新工作区> --seed-literature",
         "",
-        "投放只做三件事：把 files/ 里的 PDF 原样复制到 <工作区>/library/、",
-        "在工作区根落一份 SEED-README.md、别的什么都不写。已有 data/ 的热启动不投。",
+        f"投放只做三件事：把 files/ 里的 PDF 原样复制到 <工作区>/{landing}/、",
+        f"在同一目录落一份 SEED-README.md、别的什么都不写。已有 data/ 的热启动不投。",
+        "",
+        "用户要说\"这个文件夹里的都是可靠参考文献\"时，把下面这份声明落到工作区根：",
+        "",
+        "```json",
+        SI.declaration_text().rstrip("\n"),
+        "```",
         "",
         "## 谁判收",
         "",
         "A。A 必须走候选链，不许把这批文件当已入库：",
         "",
-        "1. `search.ingest_local`（books_dir=\"library\"）把盘上文件登记成候选；",
-        "2. `lit.stage_add` → `extract` → `fs.read` → `lit.admit` → `lit.admit_all` 逐条判收。",
+        *SI.candidate_chain_lines(landing),
+        "",
+        SI.candidate_chain_warning(),
         "",
         "判收之后才有 lit_id，B 才处理得到它们。",
         "",

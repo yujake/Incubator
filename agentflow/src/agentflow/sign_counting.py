@@ -15,7 +15,7 @@
 
 不数：不数任何调用方递进来的整数。`within_call` / `len(judged)` / 台账尾部
 那三个数（`agent_v/core.py` 的 `pass_no`、`3437`/`3791` 的 `len(judged)`、
-`secretary.py:4951-4959` 的台账尾数）在改前各自决定过发不发签；改后它们只是读数。
+`sign_counting.py::legacy_tail` 读的旧盘台账尾数）在改前各自决定过发不发签；改后它们只是读数。
 决定只有一个来源：本模块从盘上那本台账现数出来的 `count`。
 
 不落：本模块一个字节都不写（纯读）。写签是 :func:`vsigns.issue`，落签是收方

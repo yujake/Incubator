@@ -490,7 +490,7 @@ class WebHandler(BaseHTTPRequestHandler):
         ## 为什么必须读（WinError 10053 实测）
 
         `do_POST` 在"路由没命中"那一支直接回 404，从不碰正文；而 `http.client`
-        发请求时分两次 `send()` —— 先发头块、再发正文（`http/client.py::_send_output`
+        发请求时分两次 `send()` —— 先发头块、再发正文（`http.client._send_output`
         里 `self.send(msg)` 之后才 `for chunk in chunks: self.send(chunk)`）。
         多任务负载下客户端可能在这两次之间被换下 CPU，服务器于是"只看到头就回 404、
         把连接关掉"；随后到达的正文落在已关闭的连接上 ⇒ 本机发 RST，客户端
