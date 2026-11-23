@@ -25,6 +25,13 @@ EXIT_UNCHECKED = 2
 #: Finding 的严重度。`error` 是形状/词表/指向的硬伤；`warning` 是应当看得见但可能
 #: 有正当来由的读数（例如旧工作区把 `path` 存成工作区相对路径）；`info` 是"有读数、
 #: 但已有解释"（例如手稿登记之后才落的签块让 ARTIFACTS 的 sha 落后一格）。
+#:
+#: 2026-11-22：这里曾有一档 `LEGACY = "legacy"`（B2a 给"旧布局读得通、不判畸形"立的
+#: 严重度名：进读数、不改三态）。业主 2026-11-22 裁定「旧工作区不必兼容」之后那一档
+#: 连同常量一起删了 —— 旧布局（`reports/` / `documents/` / `manuscripts/handoffs.jsonl`
+#: 与 `library/<lit_id>/` 两种旧落点）现在报 `error`、翻 `malformed`、退出码 1
+#: （严重度只有一个决定点：`layout.UNSUPPORTED_SEVERITY`）。不许把 `legacy` 加回来：
+#: 加回来等于把"旧工作区还能用"这条已撤销的裁定悄悄恢复成默认值。
 SEVERITIES: tuple[str, ...] = ("error", "warning", "info")
 
 #: 本工具覆盖的产物类别。名字就是 CLI 的 `--kind` 取值。
@@ -42,6 +49,14 @@ KINDS: tuple[str, ...] = (
     "acceptance",
     "artifacts",
     "roster_retired",
+    # 2026-11-22（B2b-1）：落点布局。它不是"一份产物"而是一棵树 —— 落点是整棵树的属性
+    # （同一份 `x.md` 在 `reports/` 下是旧落点、在 `work/A/` 下是草稿），所以它有自己的一档
+    # 类别与自己的读法（`reader._SPECS["layout"]` 的 `path-tree`，规则见 `layout.py`）。
+    "layout",
+    # 2026-11-22（PAPER-PKG-FIX）：论文包。同一条 `path-tree` 读法，两条规则：
+    # `appendix.tex` 必须是片段且被 `main.tex` `\input`；有台账渲染物而研究台账全空
+    # ⇒ 点名（`paperpackage.py`）。这一档只报，不进收工门。
+    "paper_package",
 )
 
 #: 工作区里"必须有"的表由 `reader.py` 的 `_Spec(required=True)` 逐条声明。

@@ -13,8 +13,13 @@
 | 层 | 落点 | 是什么 |
 |---|---|---|
 | 草稿本 | `<工作区>/notes/<角色>.md` | 角色自己的思考（「不交接」） |
-| 领域对象 | `<工作区>/documents/<doc_id>.md`（`documents` 表） | 论文/手稿本体（进台账、要审校） |
-| 「交接手稿」 | `<工作区>/manuscripts/handoffs.jsonl`（一行一份） | 「写给某个同伴（或所有人）的工作交接」：我做了什么、依据是什么、你要做什么、我还卡在哪 |
+| 领域对象 | `<工作区>/manuscripts/<角色>/<doc_id>.md`（`documents` 表） | 论文/手稿本体（进台账、要审校） |
+| 「交接手稿」 | `<工作区>/work/handoffs.jsonl`（一行一份） | 「写给某个同伴（或所有人）的工作交接」：我做了什么、依据是什么、你要做什么、我还卡在哪 |
+
+2026-11-22（B2b-2）：账本从旧布局 `manuscripts/handoffs.jsonl` 挪到新家 `work/handoffs.jsonl` ——
+`manuscripts/` 从此只放正文手稿（`manuscripts/<角色>/`），交接账本不是手稿。
+旧路径不再读（业主裁定「旧工作区不必兼容」）：`manuscripts/handoffs.jsonl` 在盘上，
+而新落点 `work/handoffs.jsonl` 不在时，读侧由 :func:`legacy_layout_note` 明确报「旧布局（不再支持）」，不折成空。
 
 ## 为什么是一行一份的追加式 JSONL
 
@@ -37,9 +42,9 @@
 旧账里没有这两格，读侧照实写「旧账无号」，不许拿角色名拼一个编号出来
 （拼出来的那个数字看起来像证据，其实是猜）。
 
-旧格式（`<编号>-<From>to<To>.md`）仍然读得回来（`read` / `list_all` 有旧文件回退），
-但不计入 `manuscript_rows`：新口径数的是"行"，旧文件在读数明细里另列一栏
-（既不假装没有，也不冒充新格式）。
+旧格式（`<编号>-<From>to<To>.md`）不再回读（业主 2026-11-22 裁定「旧工作区不必兼容」）：
+`read` / `list_all` / `query` 都没有回退到旧文件，旧 `.md` 交接也不再计入任何读数 ——
+盘上还在时由 :func:`legacy_layout_note` 逐字报「旧布局（不再支持）」。
 """
 from __future__ import annotations
 
@@ -55,17 +60,19 @@ from filelock import FileLock, Timeout
 from . import jsonlfile as JF
 from . import schema as S
 
-#: 手稿目录（工作区根下）。
+#: 正文手稿根（工作区根下；正文按角色分目录 `manuscripts/<角色>/`）。
+#: 2026-11-22 起交接账本不在这里（见 `HANDOFFS_DIR`）。
 MANUSCRIPTS_DIR = "manuscripts"
+#: 交接账本的目录（工作区根下）。它不是手稿：一份交接 = 一行账本，收件人是角色。
+HANDOFFS_DIR = "work"
 #: 追加式账本：一行一份交接（新格式的唯一真相）。
 HANDOFFS_NAME = "handoffs.jsonl"
 #: 编号锁（分配号与追加行在同一把锁里）。
 LOCK_NAME = ".lock"
 #: 给所有人的收件人写法（用户口径：`toALL`）。
 ALL = "ALL"
-#: 旧格式文件名（`0007-DtoF.md` / `0011-AtoALL.md`）：只读回退用，不再写。
-#: 号身认"当前宽度或旧四位"（编号宽度在 `schema.ID_DIGITS` 一处定义；
-#: 宽度改过，旧文件必须照样读得进来）。
+#: 旧格式文件名（`0007-DtoF.md` / `0011-AtoALL.md`）的形态：只用于报「旧布局不再支持」，
+#: 不再读回任何内容（业主 2026-11-22：「旧工作区不必兼容」）。
 NAME_RE = re.compile(rf"^({S.ID_OR_LEGACY_PATTERN})-([A-Za-z]+)to([A-Za-z]+)\.md$")
 #: 一行的必填字段（缺一 ⇒ 这一行不是一份可溯源的交接）。
 REQUIRED_FIELDS: tuple[str, ...] = ("to", "summary", "body")
@@ -76,11 +83,39 @@ KIND_REVISION = "revision"
 
 
 def dir_of(root: str | Path) -> Path:
-    return Path(root) / MANUSCRIPTS_DIR
+    """交接账本的目录（`<工作区>/work`）—— 不是正文手稿目录。"""
+    return Path(root) / HANDOFFS_DIR
 
 
 def handoffs_path(root: str | Path) -> Path:
     return dir_of(root) / HANDOFFS_NAME
+
+
+def legacy_layout_note(root: str | Path) -> str:
+    """旧布局的明确读数（空串 = 没有旧布局；非空 = 逐字说「旧布局（不再支持）」）。
+
+    判据只有一条：新家 `work/handoffs.jsonl` 不在、而旧家 `manuscripts/handoffs.jsonl` 在。这不是
+    "没有交接"（空账本是合法初态），是"账本还在旧地方"—— 两种形态必须分得开。
+    读侧只认新路径；旧文件一个字节也不读（业主 2026-11-22 裁定）。
+    """
+    if handoffs_path(root).exists():
+        return ""
+    old_dir = Path(root) / MANUSCRIPTS_DIR
+    old = old_dir / HANDOFFS_NAME
+    if old.exists():
+        return (f"旧布局（不再支持）：`{MANUSCRIPTS_DIR}/{HANDOFFS_NAME}` 在盘上，"
+                f"而新落点 `{HANDOFFS_DIR}/{HANDOFFS_NAME}` 不在 —— 账本不迁移、"
+                "也不回读（2026-11-22 业主裁定）")
+    # 更老的逐文件格式（`0007-DtoF.md`）：同样不再读，单独点名（不折成"没有交接"）。
+    try:
+        legacy_md = sorted(p.name for p in old_dir.glob("*.md") if NAME_RE.match(p.name))
+    except OSError:
+        legacy_md = []
+    if legacy_md:
+        return (f"旧布局（不再支持）：`{MANUSCRIPTS_DIR}/` 下有 {len(legacy_md)} 份逐文件"
+                f"格式的交接（如 `{legacy_md[0]}`）；新落点是 `{HANDOFFS_DIR}/{HANDOFFS_NAME}`"
+                "（2026-11-22 业主裁定：不读、不迁移）")
+    return ""
 
 
 def ensure_dir(root: str | Path) -> Path:
@@ -106,17 +141,10 @@ def valid_sender(token: str) -> bool:
 def name_for(mid: str, sender: str, recipient: str) -> str:
     """旧格式的文件名 `<编号>-<From>to<To>.md`（`toALL` 表示所有人）。
 
-    新格式不再产生文件名；这个函数留着是因为旧工作区的手稿要按同一个规则读回来
-    （`read` 的旧文件回退），命名规则只有这一份实现。
+    新格式不再产生文件名；旧 `.md` 交接不再回读（业主 2026-11-22 裁定「旧工作区不必兼容」）。
+    这个函数留着只为命名规则只有这一份实现（判据造旧布局夹具时按它起名），不参与任何读路径。
     """
     return f"{mid}-{sender}to{recipient}.md"
-
-
-def parse_name(path: str | Path) -> dict[str, str] | None:
-    m = NAME_RE.match(Path(path).name)
-    if not m:
-        return None
-    return {"id": m.group(1), "sender": m.group(2), "recipient": m.group(3)}
 
 
 #: `handoffs.jsonl` 的解析缓存：`路径 -> ((mtime_ns, size), 行, 坏行说明)`。
@@ -132,14 +160,13 @@ _ROWS_CACHE_MAX: int = 64
 
 #: 旧格式（`*.md`）文件清单的缓存：`目录 -> ((mtime_ns, size), [(id, 路径, 字段)])`。
 #:
-#: 它与上面那格是两件事：账本行变了不一定多出/少掉一个旧文件（追加一行不动目录），
-#: 目录变了也不一定动了账本。所以键是"目录自己的"盘上读数，而且与解析缓存
-#: 走同一条失效路径（`_forget_cache`）—— 本进程一写就两格一起清。
+#: 2026-11-22 起这一格恒空：`_legacy_files()` 不再读旧文件（业主裁定「旧工作区不必兼容」），
+#: 所以没有任何地方会往里写。它只为 `_forget_cache` 的接口形状留着，不参与任何读路径。
 _LEGACY_CACHE: dict[str, tuple[tuple[int, int], list[tuple[str, Path, dict[str, str]]]]] = {}
 
 
 def _forget_cache(root: str | Path) -> None:
-    """把这个工作区的两格缓存一起清掉（账本解析 + 旧文件清单，只清这一个工作区）。"""
+    """把这个工作区的两格缓存一起清掉（账本解析 + 旧文件清单那一格；后者恒空，只清这一个工作区）。"""
     _ROWS_CACHE.pop(str(handoffs_path(root)), None)
     _LEGACY_CACHE.pop(str(dir_of(root)), None)
 
@@ -174,34 +201,18 @@ def rows(root: str | Path) -> list[dict[str, Any]]:
 
 
 def _legacy_files(root: str | Path) -> list[tuple[str, Path, dict[str, str]]]:
-    """旧格式文件（`<编号>-<From>to<To>.md`）⇒ `(id, 路径, 解析出的字段)`，按编号排序。
+    """旧格式文件（`<编号>-<From>to<To>.md`）不再读（业主 2026-11-22 裁定）。
 
-    清单按目录自己的 `(mtime_ns, size)` 缓存（见 `_LEGACY_CACHE`）：目录里多一个/
-    少一个 `.md`，mtime 就变 ⇒ 下一次重扫。交回的列表是副本。
+    保留这个函数只为让"旧格式在盘上"这件事有一个可判的名字：它永远返回空表，
+    旧文件由 :func:`legacy_layout_note` 单独报「旧布局（不再支持）」。折成"没有旧文件"
+    与"有但不读"在读数上必须分得开 —— 所以调用点不许把这张空表当成"盘上很干净"。
     """
-    d = dir_of(root)
-    try:
-        st = d.stat()
-    except OSError:
-        _LEGACY_CACHE.pop(str(d), None)
-        return []
-    stamp = (int(st.st_mtime_ns), int(st.st_size))
-    hit = _LEGACY_CACHE.get(str(d))
-    if hit is not None and hit[0] == stamp:
-        return list(hit[1])
-    out: list[tuple[str, Path, dict[str, str]]] = []
-    for p in sorted(d.glob("*.md")):
-        got = parse_name(p)
-        if got:
-            out.append((got["id"], p, got))
-    if len(_LEGACY_CACHE) >= _ROWS_CACHE_MAX:
-        _LEGACY_CACHE.clear()
-    _LEGACY_CACHE[str(d)] = (stamp, out)
-    return list(out)
+    del root
+    return []
 
 
 def _legacy_row(root: str | Path, mid: str, path: Path, got: Mapping[str, str]) -> dict[str, Any]:
-    """把一个旧格式文件读成一行（`format=md_legacy` 显式标出来，免得冒充新格式）。"""
+    """旧格式行的形状（只留给既有判据引用；读侧不再产出它）。"""
     text = path.read_text(encoding="utf-8", errors="replace")
     title = ""
     for line in text.splitlines():
@@ -217,7 +228,7 @@ def _legacy_row(root: str | Path, mid: str, path: Path, got: Mapping[str, str]) 
 
 
 def _scan_ids(root: str | Path) -> list[str]:
-    """盘上出现过的全部编号（账本行 + 旧文件，两处取并集 —— 任何一处漏读都不该导致撞号）。
+    """账本里出现过的全部编号（旧格式文件不再回读：它们不占号，见 :func:`legacy_layout_note`）。
 
     ## 为什么要按数值排序
 
@@ -231,8 +242,6 @@ def _scan_ids(root: str | Path) -> list[str]:
         mid = str(rec.get("id") or "")
         if mid.isdigit() and S.id_width(mid) in (S.ID_DIGITS, 4):
             ids.add(mid)
-    for mid, _p, _got in _legacy_files(root):
-        ids.add(mid)
     return sorted(ids, key=lambda x: (int(x) if x.isdigit() else -1, x))
 
 
@@ -258,7 +267,7 @@ def _mid_forms(mid: Any) -> tuple[str, ...]:
 
 
 def row_of(root: str | Path, mid: str) -> dict[str, Any] | None:
-    """按编号取一行（新格式优先；找不到再回退到旧文件；都没有 ⇒ `None`）。"""
+    """按编号取一行（只认账本；旧格式文件不再回读、不再回退 —— 业主 2026-11-22 裁定）。"""
     wants = _mid_forms(mid)
     if not wants or not wants[0]:
         return None
@@ -271,13 +280,6 @@ def row_of(root: str | Path, mid: str) -> dict[str, Any] | None:
         hit = by_id.get(want)
         if hit is not None:
             return hit
-    d = dir_of(root)
-    if d.is_dir():
-        for want in wants:
-            for p in sorted(d.glob(f"{want}-*.md")):
-                got = parse_name(p)
-                if got:
-                    return _legacy_row(root, want, p, got)
     return None
 
 
@@ -383,7 +385,7 @@ def ref_problem(root: str | Path, ref: str) -> str:
 
     两条合法写法：
 
-    - 四位手稿编号（`"0007"`）⇒ 必须在盘上存在（行或旧文件）；
+    - 四位手稿编号（`"0007"`）⇒ 必须在账本里有那一行（旧格式文件不再回读，不算"在盘上"）；
     - `前缀:编号`（`stmt:0007` / `exp:0002` / `lit:0004` / `rel:0011` / `q:0000` / `c:0000`）
       ⇒ 必须在对应台账里存在。
 
@@ -502,7 +504,7 @@ def write(root: str | Path, *, sender: str, recipient: str, title: str = "", bod
                 "body": full_body, "refs": refs_list, "created_at": created_at,
                 "task_id": task_id, "sid": sid, "note": str(note or ""),
                 "sha256": hashlib.sha256(blob).hexdigest(), "bytes": len(blob),
-                "path": f"{MANUSCRIPTS_DIR}/{HANDOFFS_NAME}#{mid}",
+                "path": f"{HANDOFFS_DIR}/{HANDOFFS_NAME}#{mid}",
                 "format": "jsonl",
             }
             if revises_id:
@@ -653,7 +655,7 @@ def read(root: str | Path, mid: str) -> dict[str, Any] | None:
 
 def _with_legacy(root: str | Path, ledger_rows: Iterable[Mapping[str, Any]],
                  ) -> list[dict[str, Any]]:
-    """账本行 + 旧格式文件（同号以账本行为准），按号排序 —— `list_all` / `query` 共用。"""
+    """账本行（旧格式文件不再回读：`_legacy_files()` 恒空），按号排序 —— `list_all` / `query` 共用。"""
     out: list[dict[str, Any]] = [dict(r) for r in ledger_rows]
     seen = {str(r.get("id") or "") for r in out}
     for mid, path, parsed in _legacy_files(root):
@@ -666,7 +668,8 @@ def _with_legacy(root: str | Path, ledger_rows: Iterable[Mapping[str, Any]],
 def list_all(root: str | Path, *, to: str = "", sender: str = "", limit: int = 50) -> list[dict[str, Any]]:
     """列手稿（可按收件人/发件人过滤；`to=ALL` 只看老数据里的广播行 —— 写入已退场）。
 
-    新格式（账本行）与旧格式（`.md` 文件）都列出来；旧的那些带 `format=md_legacy`。
+    只列账本行；旧格式（`.md` 文件）不再回读、不再列出（业主 2026-11-22 裁定）。
+    盘上还有旧 `.md` 交接时由 :func:`legacy_layout_note` 报「旧布局（不再支持）」。
     """
     out = _with_legacy(root, rows(root))
     if to:

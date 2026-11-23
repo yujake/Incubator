@@ -51,8 +51,23 @@ from . import statementledger as SL   # 命题台账的查口（全表→索引�
 #: 依赖段的段标题（固定，逐字）。
 SECTION_HEADING = "## 依赖"
 
-#: F 的证明手稿落点（工作区相对目录；唯一真身在 `manuscriptfamily.MANUSCRIPT_DIR`）。
-MANUSCRIPT_DIR = _MFAM.MANUSCRIPT_DIR
+#: F 的证明手稿落点（工作区相对目录；唯一真身在 `manuscriptfamily.dir_of`）。
+#: 2026-11-22：正文本按角色分目录 ⇒ F 的是 `manuscripts/F/`，不是 `reports/`。
+MANUSCRIPT_DIR = _MFAM.dir_of("f-proof")
+#: D 的研究稿落点（`manuscripts/D/`；跨趟 `RESEARCH.md` 与逐问题 `<qid>-research.md`）。
+#: 唯一真身在 `manuscriptfamily.RESEARCH_DIR`（改前那里写 `manuscripts/G/`，连带这里
+#: 读的是 G 的手稿目录）。2026-11-22 业主裁定：研究稿是交付正文 ⇒ 按角色分目录。
+D_REPORT_DIR = _MFAM.RESEARCH_DIR
+#: D 研究稿的旧落点（`manuscripts/G/`）。只用于「旧布局不再支持」的读数，不回退：
+#: 真机工作区里若还留着 `manuscripts/G/RESEARCH.md`，读侧必须把它点名，而不是静默地
+#: 当成"D 没有报告"（见 :func:`legacy_d_report_paths`）。
+D_REPORT_DIR_LEGACY = _MFAM.LEGACY_RESEARCH_DIR
+#: D 研究稿的两代旧落点：`manuscripts/G/`（改前这一处读的）与 `reports/`（角色分目录
+#: 之前的统一报告根）。两代都只报不读 —— 少报一代就等于把"稿在旧目录"读成"D 没有报告"。
+D_REPORT_DIRS_LEGACY: tuple[str, ...] = (D_REPORT_DIR_LEGACY, "reports")
+#: 四族手稿各自的目录（判「框架渲染的稿」时逐目录比，不再只认一个根）。
+_ALL_MANUSCRIPT_DIRS: tuple[str, ...] = tuple(
+    _MFAM.dir_of(name) for name in _MFAM.FAMILY_ORDER)
 #: 按命题号命名的那一种（登记取到号之后的名字；前缀从表派生）。
 MANUSCRIPT_STMT_PREFIX = _MFAM.prefix_of("f-proof")
 #: 按计划号命名的那一种（立项那一轮还没有命题号时用的是它，也是兜底读盘认的第二个名）。
@@ -302,7 +317,8 @@ def is_framework_manuscript(rel: Any) -> bool:
     是另一件事（只有 F 的稿走 `- 依赖面洗稿：` 那一行，见 :func:`needs_wash`）。
     """
     parts = [p for p in str(rel or "").replace("\\", "/").split("/") if p not in ("", ".")]
-    if len(parts) < 2 or parts[0].casefold() != MANUSCRIPT_DIR.casefold():
+    parent = "/".join(parts[:-1]).casefold()
+    if len(parts) < 2 or parent not in {d.casefold() for d in _ALL_MANUSCRIPT_DIRS}:
         return False
     name = parts[-1].casefold()
     if not name.endswith(".md"):
@@ -318,7 +334,8 @@ def needs_wash(rel: Any) -> bool:
     而 E 那两族的作者与洗稿义务在 E 的写侧（`exhaustionreport`）。
     """
     parts = [p for p in str(rel or "").replace("\\", "/").split("/") if p not in ("", ".")]
-    if len(parts) < 2 or parts[0].casefold() != MANUSCRIPT_DIR.casefold():
+    parent = "/".join(parts[:-1]).casefold()
+    if len(parts) < 2 or parent != MANUSCRIPT_DIR.casefold():
         return False
     return parts[-1].casefold().startswith(MANUSCRIPT_STMT_PREFIX)
 
@@ -1430,18 +1447,47 @@ CARRIED_LIMIT = 50
 
 
 def d_report_paths(root: Any) -> list[str]:
-    """D 的研究报告相对路径（跨趟手稿排在前，其余按名字排序）。"""
+    """D 的研究报告相对路径（跨趟手稿排在前，其余按名字排序）。
+
+    只读新落点 `manuscripts/D/`（`D_REPORT_DIR`）。旧布局 `manuscripts/G/` 不是回退
+    路径 —— 那边的文件由 :func:`legacy_d_report_paths` 单独点名（只报不读）。
+    """
     base = Path(str(root or ""))
     out: list[str] = []
-    d = base / MANUSCRIPT_DIR
+    d = base / D_REPORT_DIR
     for name in D_REPORT_NAMES:
         if (d / name).is_file():
-            out.append(f"{MANUSCRIPT_DIR}/{name}")
+            out.append(f"{D_REPORT_DIR}/{name}")
     if d.is_dir():
         for p in sorted(d.glob(f"*{D_WORKING_SUFFIX}")):
-            rel = f"{MANUSCRIPT_DIR}/{p.name}"
+            rel = f"{D_REPORT_DIR}/{p.name}"
             if rel not in out:
                 out.append(rel)
+    return out
+
+
+def legacy_d_report_paths(root: Any) -> list[str]:
+    """D 的研究稿旧布局（`manuscripts/G/` 与 `reports/`）里现存的那些文件（只报，不读）。
+
+    为什么要有这一格：2026-11-22 裁定之后 D 的研究稿住 `manuscripts/D/`，旧目录不再读
+    （布局不兼容）。但真机工作区里可能真有一份 `manuscripts/G/RESEARCH.md`（或更早的
+    `reports/RESEARCH.md`）—— 静默地读成「D 没有报告」会让 B 去盘上撞一份稿（或让整张
+    携带单失效），那比明说更坏。所以这一格把旧文件逐条点名；`read_carried_manuscript`
+    把它们放进读数的 `legacy_reports` 与 `why`，调用方据此说「旧布局不再支持，请挪到
+    `manuscripts/D/`」。
+    """
+    base = Path(str(root or ""))
+    out: list[str] = []
+    for rel_dir in D_REPORT_DIRS_LEGACY:
+        d = base / rel_dir
+        for name in D_REPORT_NAMES:
+            if (d / name).is_file():
+                out.append(f"{rel_dir}/{name}")
+        if d.is_dir():
+            for p in sorted(d.glob(f"*{D_WORKING_SUFFIX}")):
+                rel = f"{rel_dir}/{p.name}"
+                if rel not in out:
+                    out.append(rel)
     return out
 
 
@@ -1684,9 +1730,9 @@ def render_carried_section(rows: Iterable[Mapping[str, Any]],
     if not count:
         lines.append("")
         lines.append("（这一趟没有可携带的证明手稿：不是省略，是确实没有 —— 盘上没有"
-                     "任何一条按稿号命名的 `reports/f-proof-<稿号>.md`（稿号由 F 自己发，"
+                     f"任何一条按稿号命名的 `{_MFAM.dir_of('f-proof')}/f-proof-<稿号>.md`（稿号由 F 自己发，"
                      "与命题号、计划号无关），也没有一份"
-                     "已签的 `reports/e-proof-<实验号>.md`。）")
+                     f"已签的 `{_MFAM.dir_of('e-proof')}/e-proof-<实验号>.md`。）")
     if str(note or "").strip():
         lines.append("")
         lines.append(str(note).strip())
@@ -1772,6 +1818,9 @@ def read_carried_manuscript(root: Any, *, statement_ids: Iterable[Any] = (),
     调用方也必须受控拒绝而不是降级去盘上自己找（`depsection.REFUSED_ADDRESS`）。
     `address` / `item` / `list_report` / `list_line` / `list_sha256` 五格是"按哪条清单、
     第几项、什么地址"的读数。
+
+    `legacy_reports` 是旧布局（`manuscripts/G/`）里现存的 D 研究稿路径（只报不读）——
+    它是空表才表示"盘上没有旧布局残留"；非空时 `why` 也会点名「旧布局不再支持」。
     """
     import hashlib
 
@@ -1781,6 +1830,8 @@ def read_carried_manuscript(root: Any, *, statement_ids: Iterable[Any] = (),
                            "named": False, "address": "", "item": 0,
                            "list_report": "", "list_line": 0, "list_sha256": "",
                            "proof_no": 0, "matched_by": "", "manuscript_id": "",
+                           #: 旧布局（`manuscripts/G/`）里的 D 研究稿（只报不读；空表 = 没有残留）。
+                           "legacy_reports": [],
                            #: 跨族同号、无法唯一定位时的读数（空 dict = 没有这一档）。
                            "ambiguous": {}}
     if not root_text:
@@ -1788,6 +1839,14 @@ def read_carried_manuscript(root: Any, *, statement_ids: Iterable[Any] = (),
         return out
     base = Path(root_text)
     tried: list[dict[str, Any]] = out["tried"]
+    #: 旧布局残留：不读，但必须在读数里点名（静默 = 把"稿在旧目录"读成"D 没有报告"）。
+    legacy = legacy_d_report_paths(root_text)
+    out["legacy_reports"] = legacy
+    legacy_note = ("" if not legacy else
+                   "；另外盘上还有旧布局的 D 研究稿（" + "、".join(legacy)
+                   + "）—— 旧布局不再支持（`manuscripts/G/` 与 `reports/` 都不再读；"
+                   "D 的研究稿现在在 `" + D_REPORT_DIR + "/`），请挪过去再交；"
+                   "这一趟没有读它")
     #: 键 ⇒ 清单里的那一行。三个键空间：命题号（`stmt:`）、`mss:<族>-<号>`（新写法）、
     #: `mss:<号>`（老写法，族已从载体路径补上时也落成带族键；补不上才落裸键）。
     index: dict[str, dict[str, Any]] = {}
@@ -1882,7 +1941,8 @@ def read_carried_manuscript(root: Any, *, statement_ids: Iterable[Any] = (),
             first = unreadable[0]
             _hit(first, matched_by="")
             out["why"] = ("D 的携带单点了名，而清单里的地址一条都读不到："
-                          + "；".join(str(t.get("why") or "") for t in tried[-len(unreadable):]))
+                          + "；".join(str(t.get("why") or "") for t in tried[-len(unreadable):])
+                          + legacy_note)
             return out
     if ambiguous is not None:
         # 裸号命中了、但那一号在单上跨族出现 ⇒ 不许猜（也不许折成"单里没有这一笔"让
@@ -1897,16 +1957,18 @@ def read_carried_manuscript(root: Any, *, statement_ids: Iterable[Any] = (),
                       "families": list(ambiguous.get("families") or []),
                       "paths": list(ambiguous.get("paths") or []),
                       "why": out["why"]})
+        out["why"] += legacy_note
         return out
     if not candidates:
         out["why"] = ("D 的报告里没有「携带的证明手稿」那一节（或那一节是空的）"
                       + ("；查过：" + "、".join(str(t.get("report") or "") for t in tried)
-                         if tried else "；工作区里连一份 D 报告都没有"))
+                         if tried else "；工作区里连一份 D 报告都没有") + legacy_note)
     elif statement_ids:
         out["why"] = (f"D 的携带单里有 {len(index)} 条手稿，没有一条对得上这一笔的命题号"
-                      f"{[str(x) for x in statement_ids][:4]}")
+                      f"{[str(x) for x in statement_ids][:4]}" + legacy_note)
     else:
-        out["why"] = (f"D 的携带单里有 {len(index)} 条手稿，按正文 sha 一条都没对上这一笔")
+        out["why"] = (f"D 的携带单里有 {len(index)} 条手稿，按正文 sha 一条都没对上这一笔"
+                      + legacy_note)
     return out
 
 def manuscript_proof_no(text: str) -> int:
@@ -2214,11 +2276,11 @@ def manuscript_uncitable_finding(
                 step=step)
         return citation_finding(
             stmt_id=str(sid), where=where_text, kind=REFUSED_LEVEL_UNREADABLE,
-            expected=(f"盘上有一份这一条命题的手稿（`reports/f-proof-<号>.md`；"
+            expected=(f"盘上有一份这一条命题的手稿（`{_MFAM.dir_of('f-proof')}/f-proof-<号>.md`；"
                       f"V 只读手稿：正文与签都在稿上）"),
             got=(f"盘上没有这一条命题的手稿（找过：{item.get('tried') or '（没记）'}）"
                  "⇒ 读不到它的正文，也读不到它的签"),
-            fix=("先把这一条命题的证明落成一份手稿（`reports/f-proof-<号>.md`，"
+            fix=(f"先把这一条命题的证明落成一份手稿（`{_MFAM.dir_of('f-proof')}/f-proof-<号>.md`，"
                  "`## 命题` / `## 证明` / `## 依赖` 三节），再引它；"
                  "V 不从台账读正文"),
             step=step)

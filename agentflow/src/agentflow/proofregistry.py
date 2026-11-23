@@ -525,12 +525,12 @@ def _find_registered_text(root: Any, *, family: Any, statement_id: Any = "",
     prefix = _MF.PREFIX.get(str(family or ""), "")
     if not prefix:
         return {}
-    base = Path(str(root or "")) / _MF.MANUSCRIPT_DIR
+    base = Path(str(root or "")) / _MF.dir_of(str(family or ""))
     if not base.is_dir():
         return {}
     want_rel = str(exclude or "").strip()
     for path in sorted(base.glob(f"{prefix}*.md")):
-        rel = f"{_MF.MANUSCRIPT_DIR}/{path.name}"
+        rel = f"{_MF.dir_of(str(family or ''))}/{path.name}"
         if rel == want_rel:
             continue
         try:

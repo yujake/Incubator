@@ -181,7 +181,7 @@ class _StageTwoSelfDrive:
         return (
             f"这一批还有 {len(todo)} 条没洗（stmt_id: "
             + "、".join(str(one.get("stmt_id") or "") for one in todo)
-            + f"）。从 stmt:{sid} 的 #p{nos} 起逐份做：在 `reports/b-proof-*.md` 副本上"
+            + f"）。从 stmt:{sid} 的 #p{nos} 起逐份做：在 `manuscripts/B/b-proof-*.md` 副本上"
             "把证明正文洗清楚（`fs.edit`）→ 派 V（`V.verify_proof` 带 `statement_id` + "
             "`proof_manuscript`）重拿签 → 签到位用 `own.register_statement` 交带稿的正文"
             "（或 `own.ingest_manuscript(mode=\"apply\", path_group≥1)`）精准替换："

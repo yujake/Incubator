@@ -501,7 +501,7 @@ def well_definedness_reading(root: Any, row: Mapping[str, Any], *,
         why = (f"V 对 {source['manuscript'] or '这一版正文'} #p{source['proof_no']} 的最近结论"
                f"不是「成立」（state={sign_state}）⇒ 良定义证明被打了回来")
         next_step = (
-            "按 V 的打回意见改 b-稿（`reports/b-proof-<号>.md`）→ 重派 V 拿签 → "
+            "按 V 的打回意见改 b-稿（`manuscripts/B/b-proof-<号>.md`）→ 重派 V 拿签 → "
             "`ingest_manuscript(cells=[\"proof_text\"])` 重收录")
     else:
         why = ("这一行还没有良定义证明正文（`proof_text` 空）⇒ 等 B 落 b-稿、V 签回来、"
@@ -509,7 +509,7 @@ def well_definedness_reading(root: Any, row: Mapping[str, Any], *,
                else f"正文在，但 V 的签没到（state={sign_state or 'unsigned'}）⇒ "
                     "这一行不算有已签的良定义证明")
         next_step = (
-            "B 落 b-稿（`reports/b-proof-<号>.md`）→ 派 V 拿签 → "
+            "B 落 b-稿（`manuscripts/B/b-proof-<号>.md`）→ 派 V 拿签 → "
             "`ingest_manuscript(cells=[\"proof_text\"])`" if not body.strip() else
             "派 V 拿签（签盖在现在这一版正文上）→ `ingest_manuscript(cells=[\"proof_text\"])`")
     return {"state": state, "body_chars": len(body.strip()),

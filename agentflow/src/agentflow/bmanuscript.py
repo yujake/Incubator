@@ -60,7 +60,7 @@ from . import manuscriptform as _MF
 from . import vsigns as _VS
 
 #: 手稿落点（与 F/E 同一个目录；唯一来源在 `manuscriptform`）。
-MANUSCRIPT_DIR = _MF.MANUSCRIPT_DIR
+MANUSCRIPT_DIR = _MF.dir_of("b-proof")
 #: 文件名前缀（`reports/b-proof-<B稿号>.md`；B 自己那条号段发的号）。
 PREFIX = _MF.PREFIX[_MF.FAMILY_B]
 
@@ -479,7 +479,7 @@ def land_rewrite(root: Any, *, statement_id: Any, statement_full: Any,
     out["refused"] = out["code"]
     if got.get("ok"):
         if out["preserved"] and out["signed"]:
-            out["why"] = ("`reports/b-proof-<号>.md` 已经是这一份正文的已签版 ⇒ "
+            out["why"] = (f"`{out['path']}` 已经是这一份正文的已签版 ⇒ "
                           "一个字节都不动（签跟着正文走）")
         else:
             out["why"] = f"B 的改写手稿已写成：{out['path']}"
@@ -522,6 +522,8 @@ def read_rewrite(root: Any, rel: Any) -> dict[str, Any]:
     raw = str(rel or "").strip().replace("\\", "/")
     out: dict[str, Any] = {"ok": False, "state": "outside", "path": raw, "text": "",
                            "proof_body": "", "proof_state": "", "why": ""}
+    # 读数条件（不是模型面）：本函数在 `src/` 里没有产品调用方（只有判据直调），
+    # 下面这句拒信不上任何工具面 —— 所以 `reports/...` 旧名留在这里不构成教法。
     if not is_relpath(raw):
         out["why"] = f"{raw!r} 不是 B 的改写手稿形态（`reports/b-proof-<号>.md`）"
         return out
@@ -540,3 +542,4 @@ def read_rewrite(root: Any, rel: Any) -> dict[str, Any]:
     out["proof_state"] = str(reading.get("state") or "")
     out.update(ok=True, state="present", why="")
     return out
+

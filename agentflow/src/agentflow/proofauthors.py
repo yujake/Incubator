@@ -17,7 +17,7 @@ statements 行上没有作者，这类判断就只能记 `author_not_recorded`�
 ## 只认两种来源（读不出来就记"作者未记录"，不猜）
 
 1. 调用方显式交 `proof_authors`（B 自己写的那一份走这条：`["B"]`）；
-2. 从登记时读到的来源路径推：`reports/` ⇒ F，`out/paper/` ⇒ G，`documents/` ⇒ B。
+2. 从登记时读到的来源路径推：`reports/` ⇒ F，`out/package/` ⇒ G，`documents/` ⇒ B。
 
 `origin="own_result"` 与 `created_by` 都不是作者证据：前者 F 与 B 都会交，
 后者是登记口（恒为 `secretary-<角色>`）。唯一的例外是运行期读法认
@@ -40,16 +40,25 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from . import manuscriptfamily as _MFAM
 from . import schema as _S
 
 #: 角色词表：唯一来源是 `schema.ROLES`（不在这里抄第二份，R005）。
 ROLES = tuple(_S.ROLES)
 
 #: 来源路径前缀 ⇒ 写它的角色。次序即优先级（同一份 payload 里出现多个时取第一个）。
+#:
+#: 目录从 `manuscriptfamily` 派生（正文按角色分目录）；退役的 `reports/` /
+#: `documents/` 不再认 —— 那两个前缀在盘上已经不会写新文件，认了只会把"读不出来源"
+#: 掩盖成"读到了"。
 SOURCE_RULES: tuple[tuple[str, str], ...] = (
-    ("reports/", "F"),
-    ("out/paper/", "G"),
-    ("documents/", "B"),
+    (f"{_MFAM.dir_of('f-proof')}/", "F"),
+    (f"{_MFAM.dir_of('b-proof')}/", "B"),
+    (f"{_MFAM.dir_of('e-proof')}/", "E"),
+    (f"{_MFAM.dir_of('e-num')}/", "E"),
+    (f"{_MFAM.RESEARCH_DIR}/", "D"),
+    (f"{_MFAM.LEGACY_RESEARCH_DIR}/", "G"),
+    ("out/package/", "G"),
 )
 
 #: 从 payload 里找来源路径的键（按次序取第一个能认出来的）。

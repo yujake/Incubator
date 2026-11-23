@@ -3,7 +3,8 @@
 
 ## 这一格修的是什么（`agentflow/temp/inv7/INV7-REPORT.md`，`projects/lp-ball-7`）
 
-F 在 10:02:18 已经把 `reports/f-proof-000001.md` 登记进盘（稿头有正文 sha /
+F 在 10:02:18 已经把旧落点 `reports/f-proof-000001.md`（当时正文还写在 `reports/` 下）
+登记进盘（稿头有正文 sha /
 命题指纹 / 版本行 ⇒ `proofregistry.parse_entry` 认它是登记条目），`v_sign` 那一格
 也如实读成 `unsigned`（「这一份正文还没有一份能算数的签」）。可同一拍的
 `delivery` 却读成 `total=0` / `proof_count=0` / `still_unsubmitted=[]` /
@@ -46,7 +47,7 @@ M 的读数都从它取数 —— 一处分家就三处一起红（判据
   三档都需要产出者的动作，所以都进待办（三态纪律：不把「没查成」折成「没事」）；
 - 等待时长：从登记时刻算（稿头 `- 登记时间：` 优先，否则台账那一行的 `at`），
   唯一取时口 `clock.now()`（假时钟也走它）；
-- 纯读：只列 `reports/`、只算 sha、只读签与台账；一个字节都不写盘。
+- 纯读：只列各族自己的正文目录（`manuscripts/F|B|E/`）、只算 sha、只读签与台账；一个字节都不写盘。
 """
 from __future__ import annotations
 
@@ -275,7 +276,8 @@ def manuscript_cell_text(row: Mapping[str, Any]) -> str:
 
 def scan_registered(root: Any, *, family: Any = None,
                     families: Any = None) -> dict[str, Any]:
-    """扫 `reports/` 下要签的各族稿，只留「已登记」的那些（纯读）。
+    """扫各族自己的正文目录（`manuscripts/F|B|E/`，目录真身 `manuscriptfamily.dir_of`）
+    下要签的稿，只留「已登记」的那些（纯读）。
 
     `family` 给一个族名（`f-proof`）就只扫它；`families` 给一串；都不给 ⇒ 扫
     所有要签的族（`sign_families()`）。返回 `{checked, rows, problems, why}`；
@@ -289,8 +291,8 @@ def scan_registered(root: Any, *, family: Any = None,
     from .. import proofregistry as _PR
     from .. import vsigns as _VS
 
+    f_dir = _MFAM.dir_of("f-proof")
     out = _empty()
-    base = Path(str(root or "")) / _MFAM.MANUSCRIPT_DIR
     if not str(root or "").strip():
         out.update(checked=False,
                    why="没有工作区根 ⇒ 已登记稿这一格没查成（不是「没有稿」）")
@@ -313,29 +315,30 @@ def scan_registered(root: Any, *, family: Any = None,
         out.update(checked=False, why="没有可扫的稿族 ⇒ 已登记稿这一格没查成")
         return out
     try:
-        if base.is_dir():
-            paths = sorted({p for _fam, prefix in pairs
-                            for p in base.glob(f"{prefix}*.md")})
-        else:
-            paths = []
+        # 2026-11-22（B2b-2）：一族一个目录（`manuscripts/F|B|E/`）；不再共用一个根。
+        paths: list[tuple[str, Path]] = []
+        for fam, prefix in pairs:
+            d = Path(str(root)) / _MFAM.dir_of(fam)
+            if d.is_dir():
+                paths.extend((fam, p) for p in sorted(d.glob(f"{prefix}*.md")))
     except OSError as exc:  # noqa: BLE001 —— 列不出来 = 没查成
         out.update(checked=False,
-                   why=(f"`{_MFAM.MANUSCRIPT_DIR}/` 列不出来（{type(exc).__name__}: {exc}）"
+                   why=(f"`{f_dir}/` 列不出来（{type(exc).__name__}: {exc}）"
                         " ⇒ 已登记稿这一格没查成（不是「一份都没有」）"))
         return out
     owners, ledger_problem = _owners_index(root)
     if owners is None:
         # 台账整本读不出来 ⇒ 产出者与登记都没查成（fail-closed：不许当成「没有稿」）。
         out.update(checked=False,
-                   why=(ledger_problem or f"`{_MFAM.MANUSCRIPT_DIR}/` 这一格没查成")
+                   why=(ledger_problem or f"`{f_dir}/` 这一格没查成")
                    + " ⇒ 已登记稿这一格没查成（不是「没有稿」）")
         return out
     if ledger_problem:
         out["problems"].append(ledger_problem)
     rows: list[dict[str, Any]] = []
     by_family: dict[str, int] = {}
-    for path in paths:
-        rel = f"{_MFAM.MANUSCRIPT_DIR}/{path.name}"
+    for _fam_of_path, path in paths:
+        rel = f"{_MFAM.dir_of(_fam_of_path)}/{path.name}"
         try:
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as exc:
@@ -367,7 +370,7 @@ def scan_registered(root: Any, *, family: Any = None,
                      "why": str(got.get("why") or "")})
     out["rows"] = rows
     detail = "、".join(f"{fam}×{n}" for fam, n in sorted(by_family.items()))
-    out["why"] = (f"`{_MFAM.MANUSCRIPT_DIR}/` 下 {len(paths)} 份 "
+    out["why"] = (f"正文本目录下 {len(paths)} 份 "
                   f"{'/'.join(fam for fam, _p in pairs)} 的稿里有 {len(rows)} 份"
                   "「已登记」" + (f"（{detail}）" if detail else ""))
     return out
@@ -542,3 +545,5 @@ def unsubmitted_reading(root: Any, *, producer: Any = None, owner: Any = None,
     else:
         out["why"] = str(scan.get("why") or "没有「已登记、V 签还没到」的稿")
     return out
+
+

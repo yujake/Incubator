@@ -43,7 +43,7 @@ class _Core:
         self.last_tool_errors: list[dict] = []
 
         #: 稿件 markdown 落在工作区的哪个子目录（相对路径的默认值）。
-        self.docs_subdir = str(self.cfg.get("docs_subdir", "documents"))
+        self.docs_subdir = str(self.cfg.get("docs_subdir", "manuscripts/G"))
         self.tools = (
             tools
             if tools is not None
@@ -249,7 +249,7 @@ def _selftest() -> int:
         return 1
     line("[1b] 审计读数：本自检夹具的 selfreported_proof 命中 = 0（proof 行的依据可读）")
 
-    g = AgentG(st, config={"docs_subdir": "documents"}, log=None)
+    g = AgentG(st, config={"docs_subdir": "manuscripts/G"}, log=None)
     # `names()` 是注册面（含 G 调不到的写侧工具），`call_surface("G")` 才是可调用面。
     # 下一段打印两次读的是同一份可调用面（一次要列表、一次要长度）⇒ 只取一次。
     surface = g.tools.call_surface("G")
@@ -394,3 +394,6 @@ def _selftest() -> int:
     line("=" * 72)
     line("SELF-CHECK DONE（agent_g）")
     return 0
+
+
+

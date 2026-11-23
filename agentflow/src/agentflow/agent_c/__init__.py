@@ -13,7 +13,8 @@ high"：`score_breakdown` 逐项列出每个信号的输入值与贡献值。
 
 报告形态：登记表 + 文件双份（§2.2）。`AnalysisReport.payload` 是机器可读部分（代号链、
 评分明细），`markdown` 是人读的部分；`persist()` 把两者分别落到
-`reports/<report_id>-<kind>.md` 与 `analysis_reports` 表。
+`work/C/<report_id>-<kind>.md`（2026-11-22 起；旧落点 `reports/` 已退役）与
+`analysis_reports` 表。
 
 服务面（I1 / I3 / I5）四类分析器是批处理。`neighbors` / `relations_between` /
 `contradictions` / `structural_duplicates` 每个结果都带 `checked` 三态位（`False` = 没查，

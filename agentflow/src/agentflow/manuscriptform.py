@@ -3,8 +3,8 @@
 
 ## 业主口径
 
-    F 落证明手稿（`reports/f-proof-<号>.md`）与 B 优化证明落稿
-    （`reports/b-proof-<号>.md`）在形式上必须完全统一。
+    F 落证明手稿（`manuscripts/F/f-proof-<号>.md`）与 B 优化证明落稿
+    （`manuscripts/B/b-proof-<号>.md`）在形式上必须完全统一。
 
 改前两族各有一份实现，两份页头一开始就不一样（F 写 `- 计划：`、B 写 `- 标签：`），
 而"漂"这件事没有任何一条测试会报 —— 它只会在读稿的那一侧表现成"这份稿不是这一族"。
@@ -58,8 +58,8 @@ from .manuscriptwrite import (  # 落盘事务的三件零件
     _atomic_write, _refusal, _signed_version_reading,
 )
 
-#: 手稿落点（与 `manuscriptfamily.MANUSCRIPT_DIR` 同一处）。
-MANUSCRIPT_DIR = _MFAM.MANUSCRIPT_DIR
+#: 手稿落点（与 `manuscriptfamily.MANUSCRIPT_ROOT` 同一处）。
+MANUSCRIPT_DIR = _MFAM.MANUSCRIPT_ROOT
 
 #: 两族的族名（渲染时只影响标题里的角色名，命名时只影响前缀）。
 FAMILY_F = "F"
@@ -69,12 +69,23 @@ FAMILIES: tuple[str, ...] = (FAMILY_F, FAMILY_B)
 #: 本模块的角色名 ⇒ 表里的族名（命名与解析都只走表；这里只做一层翻译）。
 _FAMILY_OF: dict[str, str] = {FAMILY_F: "f-proof", FAMILY_B: "b-proof"}
 
+
+def dir_of(family: Any) -> str:
+    """族 ⇒ 它唯一允许的目录（`F` ⇒ `manuscripts/F`；表里没有的 ⇒ 空串）。
+
+    本模块的调用方用角色族名（`FAMILY_F` / `FAMILY_B`），而目录的真身在
+    `manuscriptfamily.DIR_OF`（按 `f-proof` / `b-proof` 建键）。这一层只做翻译，
+    不另写拼法：`dir_of("F") == manuscriptfamily.dir_of("f-proof") == "manuscripts/F"`。
+    """
+    fam = str(family or "").strip()
+    return _MFAM.dir_of(_FAMILY_OF.get(fam, fam))
+
 #: 「一个稿号一份稿」：这两族的新写路径不带 `-pN` 后缀。
 #:
 #:     「同稿号多个版本是错误的，一个稿号就相当于是该稿的文件名，不再细分 version 几，
 #       应该在改正文时 edit 它。于是拿 V 签冻结后交哪份是明确的（一个稿号只有一份）。」
 #:
-#: 落在结构上：落点永远 `reports/<族>-proof-<稿号>.md`；改正文就地改那一份
+#: 落在结构上：落点永远 `manuscripts/<角色>/<族>-proof-<稿号>.md`；改正文就地改那一份
 #: （`proofregistry` 的 `mode=rewritten` 只动 `## 证明` 与头部的元信息，不换名、
 #: 不涨 `proof_no`；稿头也没有 `- 证明号：` 那一行）。产出侧三族都按这一条，
 #: `-pN` 与稿头那一行只留在读侧（盘上已存在的旧文件）。
@@ -89,8 +100,12 @@ PLAN_PREFIX = {FAMILY_F: f"{PREFIX[FAMILY_F]}plan-"}
 
 #: 稿头里那几行元信息的前缀定义在文件顶部 import 之前（理由见那里）。
 
-#: 转正只收工作区相对路径里的这两种根（`notes/` 草稿本、`reports/` 正式落点）。
-PROMOTE_SOURCE_ROOTS: tuple[str, ...] = ("notes", "reports")
+#: 转正只收工作区相对路径里的这几种根：`notes/`（草稿本）、`work/<角色>/`
+#: （草稿区）与 `manuscripts/<角色>/`（已经是按角色分目录的正文，转正是"改稿号"
+#: 不是"改落点"）。两个新根的目录名从 `manuscriptfamily` 派生，不在这里写字面量；
+#: 退役的 `reports/` 不再收（旧布局不再支持，业主 2026-11-22）。
+PROMOTE_SOURCE_ROOTS: tuple[str, ...] = (
+    "notes", _MFAM.MANUSCRIPT_ROOT, _MFAM.WORK_ROOT)
 
 # ---------------------------------------------------------------- 拒信码（唯一来源）
 #
@@ -176,7 +191,7 @@ def name_reading(family: Any, *, statement_id: Any = "", plan_id: Any = "",
     """这一族、这个号 ⇒ 约定路径（工作区相对）；认不出就受控拒绝。
 
     `manuscript_id` 是这一族自己的手稿号：给了它，这一族的稿只按
-    `reports/<前缀><稿号>.md` 命名（产出侧不拼证明号后缀），命题号 / 计划号都不参与。
+    `manuscripts/<角色>/<前缀><稿号>.md` 命名（产出侧不拼证明号后缀），命题号 / 计划号都不参与。
     F 与 B 两族都走这一格（「B侧稿和F侧稿的维护方法一致」）。`statement_id` 与
     `plan_id` 仍保留给老盘上的只读兼容（`b-proof-<命题号>` / `f-proof-plan-*`）。
 
@@ -222,7 +237,9 @@ def name_reading(family: Any, *, statement_id: Any = "", plan_id: Any = "",
             name = f"{PLAN_PREFIX.get(fam) or (prefix + 'plan-')}{pid}"
         else:
             name = prefix.removesuffix("-")
-        rel = f"{MANUSCRIPT_DIR}/{name}.md"
+        # 候选名也落在这一族自己的目录里（`manuscripts/F|B/`）—— 这里只是把"认不出"
+        # 的那一份交给解析器拒，不产生第二套扁平拼法（`manuscripts/<名>.md`）。
+        rel = f"{dir_of(fam) or _MFAM.MANUSCRIPT_ROOT}/{name}.md"
     parsed = _VS.parse_manuscript_name(rel)
     out.update(name=str(parsed.get("name") or name), path=rel,
                manuscript_id=str(parsed.get("manuscript_id") or ""),
@@ -248,8 +265,9 @@ def name_reading(family: Any, *, statement_id: Any = "", plan_id: Any = "",
         want_id = f"plan-{pid}"
     else:
         out.update(code=BAD_MANUSCRIPT_NAME,
-                   why=("没有给手稿号 ⇒ 这一份稿认不出落点（F 的稿按 `reports/"
-                        "f-proof-<稿号>.md` 命名，命题号 / 计划号都不参与）"))
+                   why=(f"没有给手稿号 ⇒ 这一份稿认不出落点（F 的稿按 "
+                        f"`{dir_of(FAMILY_F) or MANUSCRIPT_DIR}/f-proof-<稿号>.md` 命名，"
+                        "命题号 / 计划号都不参与）"))
         return out
     if str(out["manuscript_id"]) != want_id:
         out.update(code=BAD_MANUSCRIPT_NAME,
@@ -662,7 +680,8 @@ def commit_manuscript(
                      "e-proof": "E", "e-num": "E"}.get(_reg_family, "") or "M"
         _reg_entry, _reg_problem = A.record_or_problem(
             root, path=new_rel, producer=(str(producer or "").strip() or _reg_role),
-            kind=f"{_reg_family}-manuscript" if _reg_family else "manuscript",
+            kind=(f"{_MFAM.prefix_of(_reg_family)}manuscript"
+                  if _reg_family else "manuscript"),
             task_id=str(task_id or ""), instance=str(instance or ""),
             note=f"手稿 `{new_rel}`（manuscriptform.commit_manuscript）")
         if _reg_problem:

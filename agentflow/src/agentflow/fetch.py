@@ -272,8 +272,8 @@ def slugify(text: str, max_length: int = 80) -> str:
     本函数曾经自带一套规则：``[^a-z0-9]+`` ⇒ 把 CJK 一并当分隔符剥掉，
     空结果回退 ``"download"``。而 ``textutil.slugify`` 保留 CJK、回退
     ``"untitled"``。同名不同契约的直接后果是同一个标题在两条生产路径上
-    得到不同文件名：``agent_a.py:279`` 用 ``T.slugify`` 造下载提示名，
-    本模块（``fetch.py:676/680``）又用自己的规则重新削一遍 ——
+    得到不同文件名：``agent_a/core.py:450`` 用 ``T.slugify`` 造下载提示名，
+    本模块（合并前另有一套规则）又用自己的规则重新削一遍 ——
     ``'On the Structure of Groups 群论'`` 在提示名里带 ``-群论``，
     落盘时却变成 ``on-the-structure-of-groups``，中文标题整块消失。
     两份判据必然漂移，而漂移在这里是静默的（只是文件名不同，没有任何报错）。

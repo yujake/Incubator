@@ -4,8 +4,9 @@
 ## 这一层回答三个问题（三块共用，别各写一份）
 
 1. 这份稿的产出方是谁：事实来源只有手稿路径的族前缀
-   （`reports/f-proof-*` ⇒ F；`reports/e-proof-*` / `e-num-*` ⇒ E；
-   `reports/b-proof-*` ⇒ B）—— :func:`producer_of`。它再拿
+   （`manuscripts/F/f-proof-*` ⇒ F；`manuscripts/E/e-proof-*` / `work/E/e-num-*` ⇒ E；
+   `manuscripts/B/b-proof-*` ⇒ B；`reports/*` 是退役布局 ⇒ 产出方 `unknown`）
+   —— :func:`producer_of`。它再拿
    `capabilities.ALLOWED_EDGES` 现算「V 的父名单」做校验（不写死一张字面量表）。
 2. 这份稿提交了没有、怎么提交的：
    :func:`submission_reading` 把三处 join 起来 —— 路径族、V 的颁发表
@@ -173,7 +174,7 @@ def _task_tokens(tasks: Sequence[Mapping[str, Any]]) -> tuple[dict[str, dict[str
 
 
 def _families_for_mid(root: Any, mid: str) -> list[str]:
-    """盘上这一号出现在哪几族（`reports/<前缀><号>.md`）⇒ 族的清单（纯读、不猜）。
+    """盘上这一号出现在哪几族（`manuscripts/<角色>/<前缀><号>.md`）⇒ 族的清单（纯读、不猜）。
 
     给 :func:`resolve_submission` 的 `families` 用：老记号没写族时，"这一号在盘上
     只有一族"才允许按它读；两族以上 ⇒ 不猜（跨族同号）。列不出来 ⇒ 空列表 ——
@@ -181,36 +182,37 @@ def _families_for_mid(root: Any, mid: str) -> list[str]:
     """
     if not mid:
         return []
-    base = Path(str(root)) / _MFAM.MANUSCRIPT_DIR
+    base = Path(str(root))
     families: list[str] = []
     for family in _MFAM.FAMILY_ORDER:
         prefix = _MFAM.prefix_of(family)
+        d = base / _MFAM.dir_of(family)
         try:
-            paths = sorted(base.glob(f"{prefix}{mid}*.md")) if base.is_dir() else []
+            paths = sorted(d.glob(f"{prefix}{mid}*.md")) if d.is_dir() else []
         except OSError:
             paths = []
         for path in paths:
-            if _manuscript_id_of(f"{_MFAM.MANUSCRIPT_DIR}/{path.name}") == mid:
+            if _manuscript_id_of(f"{_MFAM.dir_of(family)}/{path.name}") == mid:
                 families.append(family)
                 break
     return families
 
 
 def _find_rel_for_mid(root: Any, mid: str) -> str:
-    """按稿号在 `reports/` 下找那份稿（一个稿号 = 一份文件；多份 ⇒ 空串，不挑一份）。"""
+    """按稿号在 `manuscripts/<角色>/` 下找那份稿（一个稿号 = 一份文件；多份 ⇒ 空串，不挑一份）。"""
     if not mid:
         return ""
     hits: list[str] = []
     base = Path(str(root))
     for family in _MFAM.FAMILY_ORDER:
         prefix = _MFAM.prefix_of(family)
-        d = base / _MFAM.MANUSCRIPT_DIR
+        d = base / _MFAM.dir_of(family)
         try:
             paths = sorted(d.glob(f"{prefix}{mid}*.md")) if d.is_dir() else []
         except OSError:
             paths = []
         for path in paths:
-            rel = f"{_MFAM.MANUSCRIPT_DIR}/{path.name}"
+            rel = f"{_MFAM.dir_of(family)}/{path.name}"
             if _manuscript_id_of(rel) == mid:
                 hits.append(rel)
     uniq = sorted(set(hits))

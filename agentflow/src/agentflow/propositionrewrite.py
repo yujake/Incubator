@@ -256,7 +256,8 @@ def rewrite_proposition(*, store: Any, root: Any, manuscript: Any,
     _reg_role = {"f-proof": "F", "b-proof": "B",
                  "e-proof": "E", "e-num": "E"}.get(family, "") or "M"
     _reg_entry, _reg_problem = A.record_or_problem(
-        root, path=rel, producer=_reg_role, kind=f"{family}-manuscript",
+        root, path=rel, producer=_reg_role,
+        kind=f"{_MFAM.prefix_of(family)}manuscript",
         task_id=str(task_id or ""),
         note=f"手稿 `{rel}` 的 `## 命题` 原位重写（propositionrewrite）")
     if _reg_problem:

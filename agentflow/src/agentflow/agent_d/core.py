@@ -24,6 +24,14 @@ from .run_round import _RunRound
 from .propose_question import _ProposeQuestion
 from .write_report import _WriteReport
 
+#: D 的交付正文落点（2026-11-22 业主裁定：正文按角色分目录 ⇒ `manuscripts/<角色>/`）。
+#:
+#: 一处真身：写者（`AgentD.__init__`）、装配（`pipeline.run_research_gaps` 的
+#: `d_cfg`）、读侧（`closing._reports_subdir_of` / `report_files` 那一格）都从这里取。
+#: 改前同一件事有三个答案（`manuscripts/G` / `reports` / `reports`）：D 的报告落哪
+#: 取决于从哪个入口跑 —— `manuscripts/G` 更是把 D 的正文写进了 G 的手稿目录。
+REPORTS_SUBDIR_DEFAULT = "manuscripts/D"
+
 
 class _Core:
     def __init__(
@@ -83,7 +91,7 @@ class _Core:
         #: L3 是否强制下钻（默认关闭：L3 贵，只在证据互相矛盾或"要写结论但没有一条
         #: 可核验的引文"时才下钻 —— 这正是 §4.3 说的"按需"）。
         self.force_l3 = bool(self.cfg.get("force_l3", False))
-        self.reports_subdir = str(self.cfg.get("reports_subdir", "reports"))
+        self.reports_subdir = str(self.cfg.get("reports_subdir", REPORTS_SUBDIR_DEFAULT))
         #: 每份 C 报告最多提几个问题；报告 kind -> 允许提取的 kind（便于只跑一类）
         self.enabled_kinds = tuple(self.cfg.get("enabled_kinds") or S.REPORT_KINDS)
         #: ingest 去重开关：同一 origin 已经提过就不再提（跨轮次幂等）
@@ -928,7 +936,7 @@ class _Core:
             # 通道名 = `actor` 之后那个冒号后面剩下的部分；没有冒号 ⇒ 缺口那一支（缺省通道）。
             channel = who.split(":", 1)[1] if ":" in who else "gap"
             by_channel[channel] = by_channel.get(channel, 0) + 1
-            # 归属优先读结构化字段（`for_question_id`，`schema.py:226-228`）；
+            # 归属优先读结构化字段（`for_question_id`，`schema.py:317-319`）；
             # 只有老行（那个字段还是空的）才回落到描述文本里的 `[q:NNNN]`。
             # 为什么要有这条回落：并表/加字段之前落下的行没有那个键，
             # 而"读不到"与"不属于任何问题"必须分得开（三态纪律）——
@@ -1563,7 +1571,7 @@ def _selftest() -> int:
                 request="查询 阿贝尔群 与 域 之间的关系",
                 summary="找到 2 条高信息量路径，1 条的引文通过校验，另 1 条存在互相矛盾的表述。",
                 payload={"paths": []},
-                markdown_path="reports/0000-paths.md",
+                markdown_path="work/C/0000-paths.md",
                 created_at=S.now_iso(),
             ).to_dict(),
             note="seed",
@@ -1742,3 +1750,5 @@ def _selftest() -> int:
     print("=" * 72)
     print("SELF-CHECK DONE（agent_d）")
     return 0
+
+

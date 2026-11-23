@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-manuscripts 那一类：`reports/` 里手稿头的名字、标题、命题类型与签块身份。
+manuscripts 那一类：`manuscripts/<角色>/` 里手稿头的名字、标题、命题类型与签块身份。
 """
 
 from __future__ import annotations
@@ -14,27 +14,37 @@ from .registry import _Ctx, _local_finding, _rule
 from .states import Finding
 
 
-# ---- manuscripts：`reports/` 里的稿头
+# ---- manuscripts：`manuscripts/<角色>/` 里的稿头
 
 
-def _manuscript_name(name: str) -> bool:
-    """这个名字像不像四族手稿（不像的 `.md` 不归这一档管）。"""
-    info = MFAM.classify_manuscript(f"{MFAM.MANUSCRIPT_DIR}/{name}")
+def _manuscript_name(rel: str) -> bool:
+    """这条工作区相对路径像不像四族手稿（不像的 `.md` 不归这一档管）。
+
+    入参是真实路径（`manuscripts/F/f-proof-000001.md`），不是文件名：目录是身份
+    的一部分（`manuscriptfamily.classify_manuscript` 只认各族的角色目录），用文件名
+    再拼一次 `manuscripts/<名>.md` 会把每一份稿都读成历史档。
+    """
+    info = MFAM.classify_manuscript(rel)
     return str(info.get("tier") or "") in (MFAM.TIER_FAMILY, MFAM.TIER_LEGACY,
                                            MFAM.TIER_BAD)
 
 
-def _proof_name(name: str) -> bool:
-    """这个名字是不是"证明稿"（`e-num` 是数值实验稿，没有证明段）。"""
-    info = MFAM.classify_manuscript(f"{MFAM.MANUSCRIPT_DIR}/{name}")
-    if str(info.get("tier") or "") not in (MFAM.TIER_FAMILY, MFAM.TIER_LEGACY):
+def _proof_name(rel: str) -> bool:
+    """这条路径是不是"证明稿"（`e-num` 是数值实验稿，没有证明段）。
+
+    只收 `tier=family` 的（名字与角色目录都对）：目录不对的那一份由 `manuscripts.name`
+    报成历史档（info），不该再按"证明稿"去判它的两节正文 —— 否则一个放错目录的名字
+    会额外伪造一条"没有 `## 证明`"的畸形。
+    """
+    info = MFAM.classify_manuscript(rel)
+    if str(info.get("tier") or "") != MFAM.TIER_FAMILY:
         return False
     return str(info.get("name_family") or "").endswith("-proof")
 
 
 @_rule("manuscripts", "name")
 def _rule_ms_name(ctx: _Ctx) -> list[Finding]:
-    """像手稿却是 `bad_name` / `legacy`（名字解析不出、或不在 `reports/`）。"""
+    """像手稿却是 `bad_name` / `legacy`（名字解析不出、或不在该族的角色目录）。"""
     out: list[Finding] = []
     info = MFAM.classify_manuscript(ctx.rel)
     tier = str(info.get("tier") or "")

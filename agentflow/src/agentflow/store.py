@@ -77,7 +77,12 @@ LOCK_ORDER: tuple[str, ...] = (
     "review_findings",
     "tasks",
     "usage_ledger",
-    "eval_results",
+    # `eval_results` 那一格随表退役（2026-11-22，`schema.RETIRED_TABLES`）：
+    # 表不在 `TABLES` 里，就没有"这张表的锁"这回事 —— 留着它会让
+    # `tx("eval_results")` 过未知表那一关、拿一把没人争的锁，然后在读行时才报错
+    # （与 `concepts` 并表时删掉那一格同一个理由：那不是"退干净"）。
+    # 历史代码把 `eval_results` 声明进 `tx(...)` 仍然是合法的（引用的锁集合读它），
+    # 由 `tx()` 自己把退役表从取锁集合里滤掉。
     "counters",
 )
 
@@ -193,8 +198,19 @@ _KNOWN_NON_REPLAY_OPS: frozenset[str] = frozenset({"commit", "info", "corrupt"})
 #:
 #: `start` 若在 `init()` 之前就写了 `runs/cache-active-*.json`，守卫会把自己的文件
 #: 当外来条目，全新空目录永远 init 不了。`runs/` 因此必须进白名单。
+#:
+#: 为什么 `reference/` 必须在白名单里（2026-11-22 业主裁定）：它是**用户提供的参考材料
+#: 的投放处** —— 用户把 PDF 放进 `<工作区>/reference/`、再说一句"这个文件夹里的都是
+#: 可靠参考文献"，这是设计内的输入形态；`--seed-literature` 也把历史种子投在这里
+#: （`seedinject.SEED_SUBDIR`，只放文件、不写台账）。若它不在白名单，用户先建了
+#: `reference/` 再 `init`，守卫会把这个输入目录当成"别人的目录"拒绝 —— 那是把正常用法
+#: 误判成数据风险。它不改变 `library/` 的身份：`library/` 仍是**已登记书架**，
+#: 只有带 `literature` 行（`path` 指向它）的文件才该在那里。
 _WORKSPACE_ROOT_ENTRIES: frozenset[str] = frozenset(
-    {"data", "library", "projects", ".agentflow-workspace", "runs"}
+    {"data", "library", "projects", "reference", ".agentflow-workspace", "runs",
+     # 2026-11-22（B2b-2）：草稿区与正文手稿的新根。`init` 自己会建 `work/`；
+     # `manuscripts/` 是正文落点（`manuscripts/<角色>/`）的父目录。
+     "work", "manuscripts"}
 )
 
 
@@ -418,12 +434,12 @@ def direct_write_refusal(table: str) -> str:
 #: ## 可路由（三张表，六条入口）
 #: | 表 | 兜底方 | 意图 | 入口 | 出处 |
 #: |---|---|---|---|---|
-#: | `statements` | secretary | register（新建 / 改 / 升档） | `Secretary.record_statement` | src/agentflow/secretary.py:2990 |
+#: | `statements` | secretary | register（新建 / 改 / 升档） | `Secretary.record_statement` | src/agentflow/secretary_statement.py::record_statement |
 #: | `dependencies` | literal | register | `doc.register_dependency` | src/agentflow/tools/doc_tools.py:1876 |
 #: | `lit_candidates` | literal | add | `lit.stage_add` | src/agentflow/litstage.py:290（`stage_entries`） |
 #: | `lit_candidates` | literal | withdraw | `lit.stage_withdraw` | src/agentflow/litstage.py:493（`withdraw`） |
 #: | `lit_candidates` | literal | reject | `lit.stage_reject` | src/agentflow/litstage.py:510（`reject`） |
-#: | `lit_candidates` | literal | admit | `lit.admit` | src/agentflow/litstage.py:808（`admit`） |
+#: | `lit_candidates` | literal | admit | `lit.admit` | src/agentflow/litstage.py::admit |
 #:
 #: `secretary` = 由秘书那条路接管（它有"谁可以交命题内容"的判据，路由不替它放宽）；
 #: `literal` = 由那条正路的实现本身接管（没有第三层，就是工具层调的那一个函数）。
@@ -451,7 +467,7 @@ def direct_write_refusal(table: str) -> str:
 #:   `Store.tx` 的提交块逐笔拒（本表管不到它）。
 DIRECT_WRITE_ROUTES: tuple[tuple[str, str, str, str, str], ...] = (
     ("statements", "secretary", "register", "Secretary.record_statement",
-     "src/agentflow/secretary.py:2990（record_statement）"),
+     "src/agentflow/secretary_statement.py::StatementMixin.record_statement"),
     ("dependencies", "literal", "register", "doc.register_dependency",
      "src/agentflow/tools/doc_tools.py:1876（register_dependency）"),
     ("lit_candidates", "literal", "add", "lit.stage_add",
@@ -461,7 +477,7 @@ DIRECT_WRITE_ROUTES: tuple[tuple[str, str, str, str, str], ...] = (
     ("lit_candidates", "literal", "reject", "lit.stage_reject",
      "src/agentflow/litstage.py:510（reject）"),
     ("lit_candidates", "literal", "admit", "lit.admit",
-     "src/agentflow/litstage.py:808（admit）"),
+     "src/agentflow/litstage.py::admit"),
 )
 
 #: 兜底方的两种身份（`DIRECT_WRITE_ROUTES` 第 2 列的全部取值）。
@@ -496,9 +512,28 @@ def routable_direct_write_tables() -> tuple[str, ...]:
     return tuple(seen)
 
 
+REFUSED_RETIRED = "retired_table"
+
+
+def _refuse_retired_write(table: str) -> None:
+    """要写一张**已退役**的表 ⇒ 受控拒（`StoreError`）。
+
+    为什么判据落在 `Tx` 的三个写口（`upsert` / `delete` / `mark_dirty`）而不是
+    每个调用方：`Tx` 是所有写者的必经之路（工具层的 `table.create` / `table.update`、
+    F/B 的动作、迁移、夹具都从这里落盘）。判据只此一处，于是"退役之后不再有新行"
+    是结构性的，不靠谁记得别再写。
+    """
+    spec = S.retired_table(table)
+    if spec is None:
+        return
+    raise StoreError(
+        f"{REFUSED_RETIRED}：表 {table!r} 已退役（{spec.get('retired_at') or ''}）—— "
+        f"{spec.get('why') or ''}。写侧一律拒；{spec.get('how') or ''}"
+    )
+
+
 class Tx:
     """一次事务。通过 `tx.rows(t)` 拿行、`tx.mark_dirty(t)` 声明要写回。"""
-
     def __init__(self, store: "Store", tables: tuple[str, ...], actor: str, note: str = ""):
         self._store = store
         self.tables = tables
@@ -536,6 +571,7 @@ class Tx:
         """按主键插入或整行替换一条记录。"""
         if table not in self.tables:
             raise StoreError(f"事务未声明表 {table}")
+        _refuse_retired_write(table)
         id_field = S.TABLES[table]["id_field"]
         key = row.get(id_field)
         if key is None:
@@ -580,6 +616,7 @@ class Tx:
         """
         if table not in self.tables:
             raise StoreError(f"事务未声明表 {table}（声明了 {self.tables}）")
+        _refuse_retired_write(table)
         idf = key_field or S.TABLES[table]["id_field"]
         rows = self.rows(table)
         for i, r in enumerate(rows):
@@ -607,6 +644,7 @@ class Tx:
         """
         if table not in self.tables:
             raise StoreError(f"事务未声明表 {table}（声明了 {self.tables}）")
+        _refuse_retired_write(table)
         key = str(row.get(key_field) or "").strip()
         if not key:
             raise StoreError(
@@ -634,6 +672,7 @@ class Tx:
         """
         if table not in self.tables:
             raise StoreError(f"事务未声明表 {table}（声明了 {self.tables}）")
+        _refuse_retired_write(table)
         self._dirty.add(table)
 
     # ---- ID 分配（锁内进行，与建行同事务）
@@ -916,6 +955,10 @@ class Store:
             )
         self.data.mkdir(parents=True, exist_ok=True)
         self.library.mkdir(parents=True, exist_ok=True)
+        # 2026-11-22（B2b-2）：草稿区是工作区的一级目录，`init` 就建出来 ——
+        # 否则 `work/` 只会在第一次落草稿时出现，而"新工作区没有 work/"这件事
+        # 会被读成"落点不存在"（与 `runs/` 同一条理由，见 `_WORKSPACE_ROOT_ENTRIES`）。
+        (self.root / "work").mkdir(parents=True, exist_ok=True)
         self.locks.mkdir(parents=True, exist_ok=True)
         try:
             with self._writer_lock(timeout=60.0):
@@ -1210,6 +1253,9 @@ class Store:
             return doc
         spec = S.TABLES.get(table)
         if spec is None:
+            retired = S.retired_table(table)
+            if retired is not None:
+                return self._read_retired_doc(table, retired)
             moved = _MOVED_TABLES.get(table)
             if moved is not None:
                 # 受控错 + 指路：这张表并走了，不是"表名写错了"。
@@ -1239,6 +1285,48 @@ class Store:
         self._check_version(doc, spec["file"])
         if cache:
             self._load_cache[table] = (str(p), key, doc)
+        return doc
+
+    def _read_retired_doc(self, table: str, spec: Mapping[str, Any]) -> dict:
+        """读一份**已退役**表的历史文件（读侧宽容；写侧在更早一层就拒了）。
+
+        ## 三态落在这里，不是落在每个调用方
+        - 文件**不在**盘上（新工作区）⇒ 空表 + `retired=True`。这不是 "unknown"，
+          也不是 "pass"：文档本身带着 `retired` 与 `retired_why`，读数面据此说
+          「已退役」，而不是把它读成"这张表是空的、所以没问题"；
+        - 文件在（历史工作区）⇒ 按原形状读回来（行照旧读得出来），同样带
+          `retired=True`；**不报畸形**（`wellformed` 那一侧看到它也不该红）；
+        - 文件在但坏（不是 JSON / 版本不符）⇒ 照旧 `StoreError`，不折成空表。
+
+        为什么允许"读得到行"而不是一律返回空表：`verify` / `doc_tools` /
+        `agent_g.revise` 都还在读它（`verify` 甚至会按口径查"同口径两个值"的冲突）。
+        表退役 = **不再有新行**，不是"历史行不许被审计"。返回空表才会把
+        "历史工作区里真有几行"静默抹掉，那正是三态纪律禁止的折平。
+        """
+        p = self.data / str(spec["file"])
+        key = _stat_key(p)
+        marker = {
+            "retired": True,
+            "retired_why": str(spec.get("why") or ""),
+            "retired_how": str(spec.get("how") or ""),
+        }
+        if key is None:
+            return {**S.empty_table(), **marker}
+        hit = self._load_cache.get(table)
+        if hit is not None and hit[0] == str(p) and hit[1] == key:
+            return hit[2]
+        try:
+            doc = json.loads(p.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            raise StoreError(
+                f"{spec['file']} 不是合法 JSON（{e}）。这张表已退役"
+                f"（{spec.get('why')}），历史文件仍要能读；修好它或从备份恢复，"
+                "不要用空表覆盖（那会抹掉历史行）"
+            ) from e
+        self._check_version(doc, str(spec["file"]))
+        if isinstance(doc, dict):
+            doc = {**doc, **marker}
+        self._load_cache[table] = (str(p), key, doc)
         return doc
 
     def _load(self, table: str) -> dict:
@@ -1296,11 +1384,21 @@ class Store:
     # ---------------------------------------------------------------- 事务
     @contextmanager
     def tx(self, *tables: str, actor: str = "unknown", note: str = "", timeout: float = 30.0) -> Iterator[Tx]:
-        """多表事务。按 LOCK_ORDER 固定顺序加锁；任一表校验失败则整笔不落盘。"""
-        unknown = [t for t in tables if t not in LOCK_ORDER]
+        """多表事务。按 LOCK_ORDER 固定顺序加锁；任一表校验失败则整笔不落盘。
+
+        退役表（`schema.RETIRED_TABLES`）可以声明、但**不取锁**：它们不在
+        `LOCK_ORDER` 里，也没有写路径（`Tx.upsert` 拒）。所以声明它们的唯一意义是
+        "这一笔要读那份历史文件"（`doc.build_document`/`agent_g.revise` 的
+        `check_citations` 就是这种用法）。不滤掉的话，历史调用点会在
+        `tx(...)` 第一句就撞「未知表」—— 那不是退役，那是把调用方炸掉。
+        """
+        retired = [t for t in tables if S.retired_table(t) is not None]
+        unknown = [t for t in tables
+                   if t not in LOCK_ORDER and S.retired_table(t) is None]
         if unknown:
             raise StoreError(f"未知表：{unknown}")
-        ordered = tuple(sorted(set(tables) | {"counters"}, key=LOCK_ORDER.index))
+        ordered = tuple(sorted({t for t in tables if t not in retired} | {"counters"},
+                               key=LOCK_ORDER.index))
         held: list[FileLock] = []
         try:
             self.locks.mkdir(parents=True, exist_ok=True)
@@ -1315,7 +1413,7 @@ class Store:
                     ) from e
                 held.append(lk)
 
-            t = Tx(self, ordered, actor, note)
+            t = Tx(self, ordered + tuple(retired), actor, note)
             yield t
 
             # ---- 提交：先全部校验，再在写者锁内落盘与追加事件。任一失败 => 什么都不写。
@@ -2122,10 +2220,31 @@ class Store:
 
         这是防路径穿越的最后一道闸：即使有人手工把 `path` 改成 `../../etc/passwd`，
         这里也会拒绝，而不是去读那个文件。
+
+        ## 只认扁平落点（2026-11-22 业主裁定：旧工作区不必兼容）
+
+        `literature.path` 只有一种合法形态：`<内容 hash 前缀>-<名>` —— 扁平，落在
+        `library/` 下（`locallib.library_landing_name`；`search_tools._adopt_file` 与
+        `search.ingest_local` 共用）。分目录的旧形态（`<lit_id>/<名>`，真机
+        lp-ball-13 的 4 行、lp-ball-15 的 1 行）与多带一层 `library/` 前缀的写法
+        （`table.update` 事故留下的 `library/000001/x.pdf`）**不再读**：遇到就明说
+        「旧布局（不再支持）」，不静默返回、也不折成空 —— 折平会让"路径写旧了"读成
+        "文件不见了"，而两者该有不同的处置。
         """
         if not rel:
             return None
-        candidate = (self.library / rel).resolve()
+        text = str(rel).replace("\\", "/").strip()
+        while text.startswith("./"):
+            text = text[2:]
+        first = text.split("/", 1)[0]
+        if text.startswith(S.LIT_PATH_PREFIX) or (("/" in text) and first.isdigit()):
+            raise StoreError(
+                f"旧布局（不再支持）：文献路径 {rel!r} 是分目录 / 带 `library/` 前缀的旧写法；"
+                "2026-11-22 起只认扁平落点 `library/<内容 hash 前缀>-<名>`"
+                "（改法：把文件按扁平名放进 `library/`，并把该行 `path` 改成扁平名）")
+        if not text:
+            return None
+        candidate = (self.library / text).resolve()
         try:
             candidate.relative_to(self.library.resolve())
         except ValueError:

@@ -151,7 +151,7 @@ def _review_write_lock(root: str | Path):
 
     罩的是"读索引 → 发号 → 落正文 → 追加索引"这一整段，不是单独某一次写。
     只罩写文件不够：两个进程都能读到同一份旧索引，于是各自发号、各自写一份正文
-    （取号点必须在锁内 —— `manuscripts.py:489-490` 的同一形态）。
+    （取号点必须在锁内 —— `manuscripts.py::write` 的同一形态）。
 
     目录先建出来：索引、正文与 `<索引>.lock` 都落在这一层（`filelock` 不会替我们建
     父目录 —— 真机上第一次落 V 稿时 `verifications/reviews/` 还不存在）。

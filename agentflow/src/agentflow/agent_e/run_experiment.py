@@ -517,7 +517,7 @@ class _RunExperiment:
             # stdout 摘要"是刻意的（噪声），但 P4/P5 要求"每条带 code_hash + 退出码 +
             # 原始输出，且能重跑得到同一读数"。摘要不进 notes，原始输出落文件；
             # 文件名用实验号 —— 同一脚本跑两次（不同种子）输出不同，按脚本哈希命名会撞。
-            log_rel = f"out/experiments/{eid}.log"
+            log_rel = f"out/exp-logs/{eid}.log"
             log_error = _write_run_log(self.workspace_root / log_rel, claim=claim,
                                        claim_key=claim_key, script_path=script_path,
                                        chash=chash, run=run)

@@ -51,17 +51,17 @@
 
 from __future__ import annotations
 
-# 13 个规则模块必须在包初始化时全部导入：`RULES[kind][name]` 由 `@_rule` 在导入那一刻登记 ——
+# 14 个规则模块必须在包初始化时全部导入：`RULES[kind][name]` 由 `@_rule` 在导入那一刻登记 ——
 # 少导入一个模块，那一类产物的规则就一条都没接上，而输出上"规则存在"与"规则接上了"完全一样
 # （判据把某条规则打桩掉仍能翻绿，正是因为它真的被登记过）。
 from . import acceptance, artifacts, candidates, ledger, literature  # noqa: F401
-from . import manuscripts, proofs, relations, roster, sessions, signs  # noqa: F401
-from . import statements, tasks  # noqa: F401
+from . import layout, manuscripts, paperpackage, proofs, relations  # noqa: F401
+from . import roster, sessions, signs, statements, tasks  # noqa: F401
 from .driver import WorkspaceReport, check_kind, check_workspace, workspace_reading
 from .reader import _SPECS
 from .registry import RULES
-from .states import (EXIT_MALFORMED, EXIT_OK, EXIT_UNCHECKED, KINDS, MALFORMED, OK,
-                     SEVERITIES, STATES, UNCHECKED, CheckResult, Finding,
+from .states import (EXIT_MALFORMED, EXIT_OK, EXIT_UNCHECKED, KINDS, MALFORMED,
+                     OK, SEVERITIES, STATES, UNCHECKED, CheckResult, Finding,
                      Malformation)
 
 __all__ = [

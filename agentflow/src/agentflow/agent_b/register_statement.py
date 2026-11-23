@@ -455,9 +455,10 @@ def _rewrite_note(reading: Mapping) -> str:
     state = str(got.get("state") or "")
     call = ("`V.verify_proof`（`statement_id` 必填；要审第几条证明就带 "
             "`proof_no`；`proof_manuscript` 必须给 —— 在册也要给稿，V 只从稿的 "
-            "`## 证明` 读正文、签块也落回稿，如 F 的 `reports/f-proof-<稿号>.md` / "
-            "B 的改写稿 `reports/b-proof-<命题号>.md`）；稿号由 F 自己发，与命题号、"
-            "计划号无关。")
+            f"`## 证明` 读正文、签块也落回稿，如 F 的 "
+            f"`{_MFAM.DIR_OF['f-proof']}/f-proof-<稿号>.md` / "
+            f"B 的改写稿 `{_MFAM.DIR_OF['b-proof']}/b-proof-<B稿号>.md`）；"
+            "稿号由 F 自己发，与命题号、计划号无关。")
     where = ("读数是读侧现算的（`verifications.review_standing`：拿现行正文的 sha 与"
              "台账里那一签比）；台账那一行不删、旧签仍然可查，只是不再算数。")
     if state == "signed":
@@ -588,7 +589,8 @@ def _needs_v_reason(*, sid: str, sha12: str, state: str, verification_id: str = 
     _land_step = (
         "① 先让 B 显式落稿（`AgentB.land_manuscript`；工具名 "
         "`own.land_manuscript` 的薄壳待 T1 那批接线，现在还没注册）"
-        f"：把这一版落成 reports/b-proof-{sid_txt}.md（登记不再顺手落稿，"
+        f"：把这一版落成 `{_MFAM.DIR_OF['b-proof']}/b-proof-<B稿号>.md`"
+        "（B 稿号由落稿那一步发，不拿命题号拼；登记不再顺手落稿，"
         "被拒的登记盘上零新增）；")
     if state == "stale":
         return (
@@ -596,7 +598,7 @@ def _needs_v_reason(*, sid: str, sha12: str, state: str, verification_id: str = 
             "⇒ 整笔不写。改稿是正确动作，建议：请重新拿 V 签 —— "
             + _land_step
             + f"② 派 V 用 verify.verify_proof(statement_id=\"{sid_txt}\", proof_no=1, "
-            f"proof_manuscript=\"reports/b-proof-{sid_txt}.md\") 审这一份 "
+            f"proof_manuscript=\"{_MFAM.DIR_OF['b-proof']}/b-proof-<B稿号>.md\") 审这一份 "
             "（在册也要给稿：V 的正文只从「## 证明」读，签块也落回这份稿）；"
             "③ 签到位后带这份稿重交 own.register_statement（正文换进去，旧正文进 "
             "proof_history；签文件落在 out/vsigns/<新正文sha>.json，kind 自动抬成 theorem）。"
@@ -609,7 +611,7 @@ def _needs_v_reason(*, sid: str, sha12: str, state: str, verification_id: str = 
             "建议：请拿 V 签 —— "
             + _land_step
             + f"② 派 V 用 verify.verify_proof(statement_id=\"{sid_txt}\", proof_no=1, "
-            f"proof_manuscript=\"reports/b-proof-{sid_txt}.md\") 审这一份 "
+            f"proof_manuscript=\"{_MFAM.DIR_OF['b-proof']}/b-proof-<B稿号>.md\") 审这一份 "
             "（在册也要给稿：V 的正文只从「## 证明」读，签块也落回这份稿）；"
             "③ 签到位后把这份稿随 own.register_statement 交上来（带 proof_manuscript）。"
             "禁令：不给 proof_manuscript 的内联正文现在过不了 V"
@@ -620,7 +622,7 @@ def _needs_v_reason(*, sid: str, sha12: str, state: str, verification_id: str = 
             "⇒ 整笔不写。建议：按 findings 改完再送，不要原样重送 —— 先把证明改好，"
             + _land_step
             + f"② 再派 V 用 verify.verify_proof(statement_id=\"{sid_txt}\", proof_no=1, "
-            f"proof_manuscript=\"reports/b-proof-{sid_txt}.md\") 重审 "
+            f"proof_manuscript=\"{_MFAM.DIR_OF['b-proof']}/b-proof-<B稿号>.md\") 重审 "
             "（在册也要给稿：V 只从「## 证明」读正文、签块也只落回稿）。"
             "禁令：原样重送不会改变结论；不给稿的内联正文现在过不了 V"
             "（`proof_text_needs_a_manuscript`）。")
@@ -630,7 +632,7 @@ def _needs_v_reason(*, sid: str, sha12: str, state: str, verification_id: str = 
             "建议：先让 B 显式落稿（`AgentB.land_manuscript`；`own.land_manuscript` "
             "工具面待 T1 接线）把这一版落成可签的稿（盘上还没有的话），"
             f"再派 V 用 verify.verify_proof(statement_id=\"{sid_txt}\", proof_no=1, "
-            f"proof_manuscript=\"reports/b-proof-{sid_txt}.md\") 审这一份 "
+            f"proof_manuscript=\"{_MFAM.DIR_OF['b-proof']}/b-proof-<B稿号>.md\") 审这一份 "
             "（在册也要给稿：V 只从「## 证明」读正文、签块也只落回稿），"
             "签到位后签块由收方秘书落回稿 —— 不必改稿、不必再交登记。")
     return (
@@ -1375,7 +1377,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
     #: 命题形态闸没放行时，B 回给产出方的可执行改法（2026-11-13，W2 真机）。
     #:
-    #: 真机现场（`projects/octahedron-20261113`，B→D 的 `manuscripts/handoffs.jsonl#000013`）：
+    #: 真机现场（`projects/octahedron-20261113`，B→D 的 `work/handoffs.jsonl#000013`）：
     #: B 核到 V 的签已通过，而稿的 `## 命题` 节是一段修订说明（「按 V u-000005 的唯一缺陷
     #: 修订第 7 步……其余八步一字不动；同一份稿就地重写后重送 V」）⇒ 它停在动作外面，
     #: 把"让 F 重落一版还是走改写重签"甩给 D。V 的签已经花掉，而 D 手上没有命题形态的
@@ -3828,7 +3830,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         if _green.get("checked") and not _green.get("ok"):
             return _refuse(
                 "numeric_manuscript_refused",
-                "这一笔递的是 E 的普通数值手稿（`reports/e-num-<实验号>.md`），而它读不成："
+                f"这一笔递的是 E 的普通数值手稿（`{_MFAM.DIR_OF['e-num']}/e-num-<实验号>.md`），"
+                "而它读不成："
                 + "；".join(str(p) for p in (_green.get("problems") or []))
                 + "。整笔不写：普通数值通道只从「手稿里的命题 + 实验行的 code_path」取内容，"
                 "取不到就不许拿别的东西顶替",
@@ -3903,7 +3906,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 "那一档（自产还要 `quote_reason` / `line_range` / `doc_id`）；"
                 "② 要登记的是概念的良定义证明（业主 2026-10-09：“proof 里就证"
                 "这个概念为什么是良定义的”）⇒ 先 `own.land_manuscript` 把它落成 "
-                "`reports/b-proof-<号>.md` → 派 V 拿签 → 签回来之后用 "
+                f"`{_MFAM.DIR_OF['b-proof']}/b-proof-<B稿号>.md` → 派 V 拿签 → 签回来之后用 "
                 "`own.ingest_manuscript(apply, cells=[\"proof_text\"])` 按位置与格收录"
                 "（2026-11-10 业主裁定 甲：概念与一般手稿同一条链，只是稿由 B 产出）。"
                 "这一笔整笔不写（`statements` 零新行、盘上零新文件）。",
@@ -4919,9 +4922,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             return _refuse(
                 "proof_manuscript_required",
                 ("这一笔要写证明正文 / 依赖面，却没有带 `proof_manuscript` ⇒ 整笔不写。"
-                 "正文必须由一份稿承载：先落一份 `reports/f-proof-<稿号>.md`（稿号由 F "
-                 "自己发，与命题号、计划号无关；B 的改写稿是 "
-                 "`reports/b-proof-<命题号>.md`），三节 "
+                 f"正文必须由一份稿承载：先落一份 `{_MFAM.DIR_OF['f-proof']}/f-proof-<稿号>.md`"
+                 "（稿号由 F 自己发，与命题号、计划号无关；B 的改写稿是 "
+                 f"`{_MFAM.DIR_OF['b-proof']}/b-proof-<B稿号>.md`），三节 "
                  "`## 命题` / `## 证明` / `## 依赖` 写全，再把这一份稿原文传进 "
                  "`proof_manuscript`。签行里记过 `manuscript` 也不能替代这一格："
                  "这一笔带了哪份稿，必须是本笔当场说得出的。"))
@@ -5127,9 +5130,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             return _refuse(
                 str(self_authored["refused"]),
                 str(self_authored.get("reason") or "")
-                + ("；这一笔的稿没有落盘（`reports/b-proof-"
-                   f"{stmt_id_now or '<命题号>'}.md` 上没有新增文件）—— 被拒的登记"
-                   "盘上零新增。改法：先走 B 的显式落稿（`AgentB.land_manuscript`；"
+                + (f"；这一笔的稿没有落盘（`{_MFAM.DIR_OF['b-proof']}/` 下没有新增"
+                   " b-稿）—— 被拒的登记盘上零新增。改法：先走 B 的显式落稿"
+                   "（`AgentB.land_manuscript`；"
                    "`own.land_manuscript` 工具面待 T1 接线，现在还没注册），"
                    "派 V 审这一份（`verify.verify_proof` 带 "
                    "`proof_manuscript`），签块由收方秘书 `secretary:B` 落回稿，"
@@ -5494,9 +5497,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 return _refuse(
                     str(_pg["refused"]),
                     str(_pg.get("reason") or "")
-                    + ("；这一笔的稿没有落盘（`reports/b-proof-"
-                       f"{stmt_id_now or '<命题号>'}.md` 上没有新增文件）—— 被拒的登记"
-                       "盘上零新增。改法：先走 B 的显式落稿（`AgentB.land_manuscript`；"
+                    + (f"；这一笔的稿没有落盘（`{_MFAM.DIR_OF['b-proof']}/` 下没有新增"
+                       " b-稿）—— 被拒的登记盘上零新增。改法：先走 B 的显式落稿"
+                       "（`AgentB.land_manuscript`；"
                        "`own.land_manuscript` 工具面待 T1 接线）→ "
                        "派 V 审这份稿 → 签到位后带这份稿重交登记。"),
                     proof_gate=dict(_pg.get("reading") or {}),
@@ -5553,7 +5556,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 return _refuse(
                     "citation_manuscript_not_landed",
                     "引文侧登记：b-稿没有写成（不是「已经有一份相同的」就是「写不进去」）⇒ "
-                    "整笔不写。改法：确认工作区 `reports/` 可写、号源可用，再重交这一笔",
+                    f"整笔不写。改法：确认工作区 `{_MFAM.DIR_OF['b-proof']}/` 可写、"
+                    "号源可用，再重交这一笔",
                     manuscript_landed=False, citation_manuscript=dict(_cited))
         if _rewrite_body:
             b_manuscript = self._land_b_manuscript(
@@ -5572,7 +5576,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                     "这一笔过了全部内容/签闸，而 B 的改写稿没有落成"
                     f"（{str(b_manuscript.get('why') or '未说明原因')}）⇒ "
                     "台账整笔不写、稿也没有落盘。改法：确认 "
-                    f"`reports/b-proof-{stmt_id_now}.md` 可写、且没有被另一版已签"
+                    f"`{_MFAM.DIR_OF['b-proof']}/b-proof-<B稿号>.md` 可写、且没有被另一版已签"
                     "正文占住；再重交这一笔（同一份正文重放是幂等的）",
                     b_manuscript=dict(b_manuscript),
                     manuscript_landed=False)
@@ -6731,7 +6735,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             return _refuse(
                 self.F_CALLER_REFUSED,
                 ("F 交来的命题不能直接走 `B.register_statement`：请把它登记成手稿条目"
-                 "（`reports/f-proof-<稿号>.md` —— 稿号由 F 自己发，与命题号、计划号"
+                 f"（`{_MFAM.DIR_OF['f-proof']}/f-proof-<稿号>.md` —— 稿号由 F 自己发，"
+                 "与命题号、计划号"
                  "无关；新命题会过 F 秘书的形态闸），"
                  "B 在 V 签之后按正文 sha 收录。这条派活路径不再绕开手稿登记"))
         rel = _pointer_manuscript_rel(proof_manuscript)
@@ -6757,8 +6762,10 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                     ("D 交稿只递指针：这一笔没有给手稿路径（`proof_manuscript` 读到 "
                      f"{str(proof_manuscript or '')[:60]!r}）⇒ 整笔不写。改法：只递指针 —— "
                      "`proof_manuscript` 给那份稿的工作区相对路径"
-                     "（`reports/e-proof-<实验号>.md` / `reports/e-num-<实验号>.md` / "
-                     "`reports/f-proof-*.md`），再给命题号 / 实验号与出处；"
+                     f"（`{_MFAM.DIR_OF['e-proof']}/e-proof-<实验号>.md` / "
+                     f"`{_MFAM.DIR_OF['e-num']}/e-num-<实验号>.md` / "
+                     f"`{_MFAM.DIR_OF['f-proof']}/f-proof-*.md`），"
+                     "再给命题号 / 实验号与出处；"
                      "命题正文、证明正文、kind、evidence_kind 都由 B 从那份稿里读"))
         if rel and not str(statement_full or "").strip():
             # 2026-11-10（T1，设计 §2.8）：pointer 支改为委托
@@ -7104,8 +7111,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 + "。这一格由 B 从稿里读，不许调用方在参数里另贴一段",
                 proof_body_state=_proof_state), "", ""
         # 2026-11-09（T2 收编，设计 3.2 第 2 处）：族判定只读 `manuscriptfamily.classify_manuscript`。
-        # `notes/` 的手稿形名字读成 legacy（不可签、不可收录）；`reports/b-proof-*`
-        # 不再落到 unrecognized，而是 b-proof 族（可签、可收录）。
+        # `notes/` 与旧盘 `reports/` 的手稿形名字都读成 legacy（目录不是该族的角色目录
+        # ⇒ 不可签、不可收录）；判据只看那一张表，这里不另写目录表。
         _family_reading = _MFAM.classify_manuscript(rel)
         _tier = str(_family_reading.get("tier") or "")
         if _tier == _MFAM.TIER_LEGACY:
@@ -7114,7 +7121,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 f"按手稿路径收录：`{rel}` 是历史档（{_family_reading.get('code')}）"
                 f"⇒ 不可收录、也不可签。规范名是 "
                 f"{_family_reading.get('canonical') or '（拼不出）'}；"
-                "要收录请先把它落成规范名（`reports/<族>-<号>[-p<N>].md`）"), "", ""
+                f"要收录请先把它落成规范名"
+                f"（`{_MFAM.MANUSCRIPT_ROOT}/<角色>/<族>-<号>.md`）"), "", ""
         if _tier == _MFAM.TIER_BAD:
             return _refuse(
                 _MFAM.CODE_BAD,
@@ -7133,8 +7141,11 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         else:
             return _refuse(
                 "pointer_manuscript_unrecognized",
-                f"按手稿路径收录：认不出 `{rel}` 是哪一族手稿（E 的 `reports/e-proof-*` / "
-                "`reports/e-num-*`，F 的 `reports/f-proof-*`，B 的 `reports/b-proof-*`）"
+                f"按手稿路径收录：认不出 `{rel}` 是哪一族手稿"
+                f"（E 的 `{_MFAM.DIR_OF['e-proof']}/e-proof-*` / "
+                f"`{_MFAM.DIR_OF['e-num']}/e-num-*`，F 的 "
+                f"`{_MFAM.DIR_OF['f-proof']}/f-proof-*`，B 的 "
+                f"`{_MFAM.DIR_OF['b-proof']}/b-proof-*`）"
                 "⇒ 整笔不写。这一格不猜：认不出族的稿没有「该从哪一节读什么」的契约"), "", ""
         declared = str(reading.get("declared_kind") or "")
         prov_label = ""
@@ -7637,9 +7648,26 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         按 canonical 处理"（那是优化线还没有显式路径号时的老口径）。
         """
         sid = str(stmt_id or "")
+        # 旧盘只读兼容（第一档）：旧工作区的签行 / 行上稿路径可能还是
+        # `reports/<族>-proof-<命题号>.md` —— 新布局（`manuscripts/<角色>/`）已不再写
+        # 这个根。这一档只回答"这个旧名算不算同一条命题的稿"，不产生新路径。
+        # 为什么保留：删了它，旧盘上那几笔改稿会被读成"另一份稿"，改稿判据静默改口
+        # （读不到 ≠ 没有，三态纪律）。
         for family in ("f", "e", "b"):
             if sid and rel == f"reports/{family}-proof-{sid}.md":
                 return True, "canonical_name"
+        # 正文按角色分目录之后（2026-11-22 业主裁定）正本稿名是
+        # `manuscripts/<角色>/<族>-proof-<命题号>.md`；上面那一档只认退役的
+        # `reports/` 根，于是同一份"这条命题自己的稿"在新布局下会被读成"另一份稿"
+        # ⇒ 落到"新路径"那一支去问秘书"是不是同种证法"。没有模型缝的场合
+        # （自检 / 零模型回归）那一问必然判不了 ⇒ 整笔按 `proof_kind_unjudged`
+        # 拒收，而这一笔本来只是改在册正文（2026-11-23 全量跑里的
+        # `test_b_stage_two_self_drives::test_b` 与
+        # `test_b_rewrite_without_v_sign_says_resign::test_b` 就是这一档）。
+        # 这与上面逐字同一条判据（正本稿名），只是跟上新落点；旧名那一档不删。
+        for family, role_dir in (("f", "F"), ("e", "E"), ("b", "B")):
+            if sid and rel == f"manuscripts/{role_dir}/{family}-proof-{sid}.md":
+                return True, "canonical_name_role_dir"
         try:
             from .. import vsigns as _VS
 
@@ -7657,6 +7685,10 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 str(doc.get("manuscript") or doc.get("object_path") or ""))
             if rec:
                 return rec == rel, "canonical_verification"
+        # 旧盘只读兼容（最后一档）：上面几条都对不上时，旧盘上的 `reports/b-proof-*`
+        # 按"B 的改写载体（canonical）"处理 —— 那是优化线还没有显式路径号之前的口径。
+        # 为什么保留：旧工作区里的 B 改写稿还在这个根下（新布局写 `manuscripts/B/`），
+        # 删了它那些稿会被判成"另一条新路径"，同一份证明可能在盘上多出一份。
         return rel.startswith("reports/b-proof-"), "b_proof_prefix"
 
     def _existing_statement_for(self, full: str) -> dict | None:
@@ -8083,8 +8115,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         family="b-proof")`），不再由命题号拼。同一命题的下一版要落回它自己那份稿：
         按 `statements` 行的逐路径记录找回已有那份（`bmanuscript.manuscript_id_for_statement`；
         稿里没有命题号，业主 2026-11-13，落稿那一刻会写这一格），找不到才发新号。
-        老盘上的 `reports/b-proof-<命题号>.md` 仍在原处就地重写
-        （不新写第二个名字）—— 那是只读兼容的既存量，改名会把它变成第二份稿。
+        老盘上的 `reports/b-proof-<命题号>.md` 在盘上时复用它那个号（`mid` 取命题号），
+        新稿写进 `manuscripts/B/`；旧文件不动（只读兼容的既存量：谁搬谁删不是这一步的事）。
+        为什么复用而不是另发号：同一份证明在盘上只该有一份稿，另发号会变成两份。
 
         `path_group >= 1`（两条路径各一份 B 改写稿）时，载体按
         「路径」认：调用方（`land_manuscript`）已经用 `manuscript_id_for_path` 认过，
@@ -8126,7 +8159,10 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             if not mid and found.get("found"):
                 mid = str(found.get("manuscript_id") or "")
             if not mid:
-                # 老盘上的名字（`reports/b-proof-<命题号>.md`）：就地重写，不新写第二个名字。
+                # 旧盘只读兼容：老工作区里那份 `reports/b-proof-<命题号>.md` 仍在盘上 ⇒
+                # 复用它那个号（mid 取命题号），新稿按新布局写进 `manuscripts/B/`；
+                # 旧文件不动（谁搬谁删不是这一步的事，就地改它等于绕过新落点）。
+                # 为什么保留：不复用号，同一份证明会在新根下另发一号 ⇒ 盘上变成两份稿。
                 _legacy = f"reports/b-proof-{str(statement_id or '').strip()}.md"
                 if (Path(str(root)) / _legacy).is_file():
                     mid = str(statement_id or "").strip()
@@ -8467,8 +8503,10 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 f"手稿名 {rel!r} 认不出号（{shape.get('why')}）⇒ 整笔不读不写")
         if tier == _MFAM.TIER_UNRECOGNIZED:
             return family, tier, _MFAM.CODE_NOT_MANUSCRIPT, (
-                f"`{rel}` 不在手稿族里（只收 `reports/` 下的 "
-                "`f-proof-*` / `b-proof-*` / `e-proof-*` / `e-num-*`）")
+                f"`{rel}` 不在手稿族里（正文只收 "
+                f"`{_MFAM.MANUSCRIPT_ROOT}/<角色>/` 下的 "
+                "`f-proof-*` / `b-proof-*` / `e-proof-*`，"
+                f"数值草稿只收 `{_MFAM.DIR_OF['e-num']}/` 下的 `e-num-*`）")
         if tier == _MFAM.TIER_LEGACY and str(mode) != "preview":
             return family, tier, "manuscript_legacy_name", (
                 f"`{rel}` 是历史档（{shape.get('code')}）⇒ 可列出、可 preview，"

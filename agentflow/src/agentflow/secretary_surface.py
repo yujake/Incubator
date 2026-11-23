@@ -115,7 +115,20 @@ class SurfaceMixin:
     @_roster_guarded
     def surface_release(self, *, owner: str, name: str, slot: str) -> tuple[str, str]:
         """归还一个槽位：先归档面里的东西，再写 `release`；归档失败 ⇒ `archive_failed`
-        （槽位停在"待释放"、不入池）。返回 `(落成的状态, 问题)`。"""
+        （槽位停在"待释放"、不入池）。返回 `(落成的状态, 问题)`。
+
+        ## 归还之后那个目录不留（2026-11-22 NAMEFIX-B1 ②）
+
+        改前：面里有东西 ⇒ 归档之后又 `mkdir` 一个空目录放回盘上；面里没东西 ⇒
+        那个空目录本来就在。于是每归还一次就多留一个空槽位目录 —— 真机 26 个工作区
+        实测 772 个槽位目录里 585 个是空的（`lp-ball-10`：46 个 alloc 对 46 个 release，
+        46 个空目录全是这么留下的）。空目录不是"面"，它只是目录垃圾：槽位回池之后
+        没有任何读者需要它；下一次 `surface_alloc` 自己会 `mkdir`（那一步是必须的 ——
+        子代理拿到的 `fs.*` 根就是那个目录，见 `agent_loop` 切根那一支）。
+
+        所以：归还成功后把空目录删掉（`rmdir` 只删空的；删不掉不影响归还）。
+        归档失败那一支不动目录（槽位停在"待释放"，面里的东西还在原地）。
+        """
         src = surface_dir(self.root, owner, slot)
         dst = archive_dir(self.root, owner, name)
         state = "空闲"
@@ -129,7 +142,6 @@ class SurfaceMixin:
                 import shutil
 
                 shutil.move(str(src), str(dst))
-                src.mkdir(parents=True, exist_ok=True)
             except Exception as exc:  # noqa: BLE001 —— 没归档干净就不许放回池
                 state, why = "待释放", f"{type(exc).__name__}: {exc}"
                 append_jsonl(surfaces_path(self.root, owner),
@@ -141,6 +153,12 @@ class SurfaceMixin:
                                  "name": str(name), "at": _now_iso()})
         if not ok:
             return "待释放", f"池事件没写成：{why2}"
+        # 归还成功了才回收目录：槽位在池里是"空闲"，而"空闲"不需要盘上有一个目录。
+        try:
+            if src.is_dir() and not any(src.iterdir()):
+                src.rmdir()
+        except OSError:
+            pass                      # 删不掉（占用 / 权限）只是留一个空目录，不影响归还
         return state, ""
 
     def surface_of(self, *, owner: str, task_id: str) -> dict[str, Any]:

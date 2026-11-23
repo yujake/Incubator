@@ -29,8 +29,45 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
 
-#: 规范手稿所在的那一层目录（目录是身份的一部分：名字对了、目录不对 ⇒ `legacy`）。
-MANUSCRIPT_DIR = "reports"
+#: 正文手稿的根（2026-11-22 业主裁定：正文按角色分目录 `manuscripts/<角色>/`）。
+#:
+#: 目录是身份的一部分：名字对了、目录不对 ⇒ `legacy`。一族的目录由 :data:`DIR_OF`
+#: 给出（`f-proof` ⇒ `manuscripts/F` 等）；`e-num` 不再是正文手稿（读数进
+#: `experiments` 表、草稿在 `work/E/`），但 B 仍按同一条读口从那里取 `## 命题`。
+MANUSCRIPT_ROOT = "manuscripts"
+
+#: 草稿区根（`work/<角色>/`）。
+WORK_ROOT = "work"
+
+#: 族 ⇒ 它唯一允许的目录（族与根一一对应：同一族不得同时出现在两个根下）。
+DIR_OF: Mapping[str, str] = MappingProxyType({
+    "f-proof": f"{MANUSCRIPT_ROOT}/F",
+    "b-proof": f"{MANUSCRIPT_ROOT}/B",
+    "e-proof": f"{MANUSCRIPT_ROOT}/E",
+    "e-num": f"{WORK_ROOT}/E",
+})
+
+#: 兼容旧读口：正文根的名字（不再是任何一族的落点目录，只是父目录）。
+MANUSCRIPT_DIR = MANUSCRIPT_ROOT
+
+#: 三族正文手稿的目录（`f-proof` / `b-proof` / `e-proof`）；`e-num` 不在里面。
+MANUSCRIPT_DIRS: tuple[str, ...] = tuple(
+    dict.fromkeys(DIR_OF[fam] for fam in ("f-proof", "b-proof", "e-proof")))
+
+#: D 的研究稿落点（`manuscripts/D/`）：跨趟的 `RESEARCH.md` 与逐问题的
+#: `<qid>-research.md`。它不是手稿族（没有 `<kind>-<号>` 的签载体语义），但同一张
+#: 「正文按角色分目录」的表里必须有它 —— 它是交付正文（G 的论文要引它，业主
+#: 2026-11-22 裁定），不是草稿。
+#:
+#: 改前这里写 `manuscripts/G/`（G 的手稿目录），而写侧（`agent_d`）早已改成
+#: `manuscripts/D/`：同一条链"文档说 D、读侧说 G"的断点就在这一格。
+RESEARCH_DIR = f"{MANUSCRIPT_ROOT}/D"
+
+#: D 研究稿的旧落点（改前误写在 G 的手稿目录里）。只用于「旧布局不再支持」的
+#: 读数，不是回退路径。注意 `manuscripts/G/` 仍是 G 的论文目录（`tools.doc_tools`
+#: 的 `default_subdir`），所以这里只认 D 的那两种名字（`RESEARCH.md` /
+#: `<qid>-research.md`），不把 G 的稿件当 D 的报告。
+LEGACY_RESEARCH_DIR = f"{MANUSCRIPT_ROOT}/G"
 
 #: 四族的固定顺序（拼名、遍历、报错都按它，避免"字典序"成为第二份口径）。
 FAMILY_ORDER: tuple[str, ...] = ("f-proof", "b-proof", "e-proof", "e-num")
@@ -85,9 +122,9 @@ class FamilySpec:
 #: 唯一判定表：四族 + `legacy` 读档。
 #:
 #: 各列的含义：
-#: - `prefix` / `directories` / `id_pattern`：身份（`reports/` 是唯一允许目录；
-#:   `f-proof` 的号可以是 `plan-<数字>`）。证明号不是身份列：产出侧一个稿号 =
-#:   一份文件 = 一份证明，写路径不拼 `-pN`；
+#: - `prefix` / `directories` / `id_pattern`：身份（每族的 `directories` 是唯一允许目录：
+#:   证明稿 `manuscripts/<角色>/`、`e-num` 的草稿 `work/E/`；`f-proof` 的号可以是 `plan-<数字>`）。
+#:   证明号不是身份列：产出侧一个稿号 = 一份文件 = 一份证明，写路径不拼 `-pN`；
 #: - `needs_sign`：要不要 V 的签（`e-num` 走绿色通道）；
 #: - `allowed` / `default`：可请求格与缺省格（`statement_full` 只在 register 可写）；
 #: - `derived`：写口顺带写的列（五元位 / 证明号 / 正文 sha / 签后升档的 kind / proofs）；
@@ -97,7 +134,7 @@ class FamilySpec:
 #:   `experiment_id` 读 `exp:<实验号>`）。
 FAMILIES: Mapping[str, FamilySpec] = MappingProxyType({
     "f-proof": FamilySpec(
-        family="f-proof", prefix="f-proof-", directories=(MANUSCRIPT_DIR,),
+        family="f-proof", prefix="f-proof-", directories=(DIR_OF["f-proof"],),
         id_pattern=r"\d{4,6}|plan-\d+", needs_sign=True,
         tier=TIER_FAMILY,
         allowed=("statement_full", "proof_text", "dependencies", "kind"),
@@ -108,7 +145,7 @@ FAMILIES: Mapping[str, FamilySpec] = MappingProxyType({
         line_range_origin="manuscript_path",
     ),
     "b-proof": FamilySpec(
-        family="b-proof", prefix="b-proof-", directories=(MANUSCRIPT_DIR,),
+        family="b-proof", prefix="b-proof-", directories=(DIR_OF["b-proof"],),
         id_pattern=r"\d{4,6}", needs_sign=True,
         tier=TIER_FAMILY,
         allowed=("proof_text", "dependencies", "kind"),
@@ -119,7 +156,7 @@ FAMILIES: Mapping[str, FamilySpec] = MappingProxyType({
         line_range_origin="manuscript_path",
     ),
     "e-proof": FamilySpec(
-        family="e-proof", prefix="e-proof-", directories=(MANUSCRIPT_DIR,),
+        family="e-proof", prefix="e-proof-", directories=(DIR_OF["e-proof"],),
         id_pattern=r"\d{4,6}", needs_sign=True,
         tier=TIER_FAMILY,
         allowed=("statement_full", "proof_text", "dependencies", "kind"),
@@ -130,7 +167,7 @@ FAMILIES: Mapping[str, FamilySpec] = MappingProxyType({
         line_range_origin="experiment_id",
     ),
     "e-num": FamilySpec(
-        family="e-num", prefix="e-num-", directories=(MANUSCRIPT_DIR,),
+        family="e-num", prefix="e-num-", directories=(DIR_OF["e-num"],),
         id_pattern=r"\d{4,6}", needs_sign=False,
         tier=TIER_FAMILY,
         allowed=("statement_full", "numeric_evidence"),
@@ -180,9 +217,10 @@ def _spec(family: Any) -> FamilySpec:
 def _split_rel(rel: Any) -> tuple[str, str]:
     """工作区相对路径 ⇒ `(目录, 去掉 .md 的文件名)`（路径分隔符统一成 `/`）。
 
-    目录取 `rsplit` 之前的那一段。`reports/b-proof-000001.md` ⇒ `("reports", "b-proof-000001")`；
-    `b-proof-000001.md`（没有目录）⇒ `("", "b-proof-000001")`。判据只认目录恰好是
-    `reports` 这一种，深层目录（`a/reports/...`）不算。
+    目录取 `rsplit` 之前的那一段。`manuscripts/B/b-proof-000001.md` ⇒
+    `("manuscripts/B", "b-proof-000001")`；`b-proof-000001.md`（没有目录）⇒
+    `("", "b-proof-000001")`。目录身份由 :func:`classify_manuscript` 按 `spec.directories`
+    判（退役的 `reports/` ⇒ `tier=legacy`），这里只切分、不做落点判定。
     """
     raw = str(rel or "").strip().replace("\\", "/")
     while raw.startswith("./"):
@@ -266,7 +304,7 @@ def _shape_of_name(name: str) -> dict[str, Any]:
 
 
 def _canonical_of(name_family: str, manuscript_id: str, proof_no: int) -> str:
-    """历史名 ⇒ 它对应的规范名（`reports/<族>-<号>.md`）；拼不出 ⇒ 空串。
+    """历史名 ⇒ 它对应的规范名（`manuscripts/<角色>/<族>-<号>.md`）；拼不出 ⇒ 空串。
 
     对齐之后规范名只有一种：不带 `-pN`（`proof_no` 这一格留作签名，不参与拼名）。
     """
@@ -288,8 +326,8 @@ def classify_manuscript(rel: Any) -> dict[str, Any]:
     返回键：`tier` / `family` / `name_family` / `id` / `proof_no` / `code` / `why` /
     `checked` / `name` / `directory` / `canonical`。
 
-    - `reports/<四族规范名>` ⇒ `tier=family`，`family` 是族名；
-    - 同一个名字换到别的目录（`notes/`、`out/`）⇒ `tier=legacy`（名字对、目录不对）；
+    - `manuscripts/<角色>/<四族规范名>` ⇒ `tier=family`，`family` 是族名；
+    - 同一个名字换到别的目录（退役的 `reports/`、`notes/`、`out/`）⇒ `tier=legacy`（名字对、目录不对）；
     - `-vN` ⇒ `tier=legacy`，`proof_no=0`；
     - `f-proof-abc` ⇒ `tier=bad_name`（像手稿、号解析不出）；
     - `RESEARCH.md` / `notes/A.md` ⇒ `tier=unrecognized`。
@@ -318,7 +356,7 @@ def classify_manuscript(rel: Any) -> dict[str, Any]:
             canonical = _canonical_of(family, str(shape["manuscript_id"]),
                                       int(shape["suggested_no"]))
             why = (f"名字是 {family} 的规范名，但目录 {directory or '(根)'!r} 不是 "
-                   f"`{MANUSCRIPT_DIR}/` ⇒ 读成历史档：可列出、可 preview、不可签、不可收录；"
+                   f"`{spec.directories[0]}/` ⇒ 读成历史档：可列出、可 preview、不可签、不可收录；"
                    f"规范名是 {canonical or '（拼不出）'}")
     elif tier == TIER_LEGACY:
         canonical = _canonical_of(family, str(shape["manuscript_id"]),
@@ -344,7 +382,7 @@ def classify_name(name: Any) -> dict[str, Any]:
     """只按文件名判五档（fs 保留表用）：目录不参与。
 
     为什么与 `classify_manuscript` 分开：`tools/fs_tools.py` 的保留表在 `fs.write` 那一刻只拿到
-    文件名（它判"这个名字该不该被拒写"），而"目录是不是 `reports/`"是收录/签的那一层
+    文件名（它判"这个名字该不该被拒写"），而"目录是不是 `manuscripts/<角色>/`"是收录/签的那一层
     才有的坐标。`notes/b-proof-000001.md` 在这里是 `family`（名字过表），在
     `classify_manuscript` 里是 `legacy`（目录不对）—— 两处都拒写，但读法不同，不许折平。
     """
@@ -405,8 +443,8 @@ def sign_carrier(rel: Any) -> dict[str, Any]:
     """这一份稿是不是「签的载体」。
 
     判据：`tier=family`、族要签（`f-proof` / `b-proof` / `e-proof`）、目录是
-    `reports/`，且它是一份真文件的名字（末段 `.md`，见 :func:`_is_file_name`）——
-    `reports/f-proof-000000`（缺扩展名）不是载体。三类读法因此与旧的两条正则不同：
+    该族自己的目录（`manuscripts/F|B|E/`），且它是一份真文件的名字（末段 `.md`，见
+    :func:`_is_file_name`) —— `manuscripts/F/f-proof-000000`（缺扩展名）不是载体。三类读法因此与旧的两条正则不同：
 
     - `-v2` / `notes/b-proof-*` ⇒ `ok=False`、码 `legacy_manuscript_name`；
     - `e-num` ⇒ `ok=False`（绿色通道不签）；
@@ -427,7 +465,7 @@ def sign_carrier(rel: Any) -> dict[str, Any]:
                        why=(f"`{str(rel or '').strip()}` 缺 `.md` 扩展名 ⇒ 不是一份真文件的"
                             "名字：签的载体只认真文件名（pending 载体同一把尺）"))
             return out
-        out.update(ok=True, why=f"`{name}` 是 {family} 的签载体（reports/ 下的规范名）")
+        out.update(ok=True, why=f"`{name}` 是 {family} 的签载体（`{dir_of(family)}/` 下的规范名）")
         return out
     if tier == TIER_FAMILY and family == "e-num":
         out.update(code=CODE_NUMERIC_NOT_SIGN,
@@ -452,7 +490,7 @@ def is_sign_carrier(rel: Any) -> bool:
     """`sign_carrier(rel)["ok"]` 的布尔读法（判据只走那一个函数）。
 
     这是载体判定（族 + 目录 + 真文件名），不是「名字属于签的族」这种形状判定：
-    `reports/f-proof-000000`（缺 `.md`）在 :func:`classify_manuscript` 里是
+    `manuscripts/F/f-proof-000000`（缺 `.md`）在 :func:`classify_manuscript` 里是
     `tier=family`，但它不是载体 —— `vsigns.is_sign_carrier` 与这里同源，缺 `.md`
     在两边都是 False。
     """
@@ -461,7 +499,7 @@ def is_sign_carrier(rel: Any) -> bool:
 
 def relpath(family: Any, id: str = "", proof_no: int = 1, *,
             strict: bool = True) -> str:
-    """族 + 号 ⇒ 拼名（`reports/<前缀><号>.md`）。
+    """族 + 号 ⇒ 拼名（`manuscripts/<角色>/<前缀><号>.md`）。
 
     产出侧只有一种形式：一个稿号 = 一份文件 = 一份证明，名字里没有证明号后缀。
     给 `proof_no >= 2` ⇒ 受控拒绝（`strict=True` 时 `ValueError`）。
@@ -505,7 +543,13 @@ def relpath(family: Any, id: str = "", proof_no: int = 1, *,
         return _fail(
             f"一个稿号 = 一份文件 = 一份证明：新写路径不设证明号后缀，"
             f"收到 proof_no={proof_no!r}（族 {spec.family}）")
-    return f"{MANUSCRIPT_DIR}/{spec.prefix}{got_id}.md"
+    return f"{DIR_OF[spec.family]}/{spec.prefix}{got_id}.md"
+
+
+def dir_of(family: Any) -> str:
+    """族 ⇒ 它唯一允许的目录（`f-proof` ⇒ `manuscripts/F`；`legacy` 没有目录 ⇒ 空串）。"""
+    got = FAMILIES.get(str(family or "").strip())
+    return str(got.directories[0]) if got and got.directories else ""
 
 
 def allowed_cells(family: Any) -> tuple[str, ...]:
@@ -546,3 +590,4 @@ def line_range_origin(family: Any) -> str:
 def prefix_of(family: Any) -> str:
     """族 ⇒ 文件名前缀（`legacy` 没有前缀，返回空串）。"""
     return str(_spec(family).prefix)
+

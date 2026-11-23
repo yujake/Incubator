@@ -530,7 +530,7 @@ def _c_attachment(acc: ReviewAcceptance, store: Any, report_path: str) -> None:
     ## 报告路径必须按工作区根解析
 
     这一格曾经用 `Path(report_path).is_file()` 直接判 —— 而模型给的报告路径是
-    「相对工作区」的（`out/review/REPORT.md`，见 PAPER_PACK 的第九节口径），
+    「相对工作区」的（`out/report/REPORT.md`，见 PAPER_PACK 的第九节口径），
     于是它在真机上判成"报告不在盘上 ⇒ 没查成"，而报告就在盘上（`unknown` 会挡住
     `passed`）。现在与另外三处共用同一个解析口。
     """
@@ -594,12 +594,15 @@ def _auxiliary(acc: ReviewAcceptance, store: Any, project_dir: str) -> None:
 
     project_dir = resolve_under_workspace(store, project_dir)
 
-    base = Path(project_dir) if project_dir else None
     aux: dict[str, Any] = {}
-    tex = base / "out" / "paper" / "main.tex" if base is not None else None
+    # 正文 / PDF 的落点只有一个来源：`papercompile.package_dir`（2026-11-22 从
+    # `out/paper/` 挪到 `out/package/`）。这里抄旧字面量会让这两格永远空 ——
+    # 空与"没有主稿"在页面上长得一样，而那正是这一批要消掉的误读。
+    pkg = PC.package_dir(project_dir) if project_dir else None
+    tex = (pkg / PC.TEX_NAME) if pkg is not None else None
     aux["tex_sha256"] = (hashlib.sha256(tex.read_bytes()).hexdigest()[:12]
                          if tex is not None and tex.is_file() else "")
-    pdf = base / "out" / "paper" / "main.pdf" if base is not None else None
+    pdf = (pkg / PC.PDF_NAME) if pkg is not None else None
     aux["pdf_pages"] = None
     if pdf is not None and pdf.is_file():
         try:  # 页数只作辅助：读不出来就 None，不许编一个数

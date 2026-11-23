@@ -227,10 +227,10 @@ class AnalysisReport:
             ) from exc
 
         who = actor or self.created_by or "agent-C"
-        out_dir = Path(reports_dir) if reports_dir else (Path(st.root) / "reports")
+        out_dir = Path(reports_dir) if reports_dir else (Path(st.root) / "work" / "C")
         with st.tx("analysis_reports", actor=who, note=f"analysis_report:{self.kind}") as tx:
             rid = tx.alloc_id("report")
-            rel_name = f"reports/{rid}-{self.kind}.md"
+            rel_name = f"work/C/{rid}-{self.kind}.md"
             abs_path = out_dir / f"{rid}-{self.kind}.md"
             _atomic_write_text(abs_path, self.markdown)
             row = S.AnalysisReport(
@@ -272,3 +272,5 @@ class AnalysisReport:
                 f"`agentflow artifacts record {rel_name} --producer {_producer or 'C'}`）")
         return {"report_id": rid, "markdown_path": rel_name, "abs_path": str(abs_path)}
 from ..specs.c import SPEC  # noqa: E402,F401
+
+

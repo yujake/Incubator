@@ -615,7 +615,7 @@ REGISTER_PREFIX = "b-register@"
 #: E 的穷举证据稿不在这一档（它走 `bits.proof` 那条通道）。
 #: 从表派生（f-proof / b-proof 两族）。
 REGISTRATION_CARRIERS: tuple[str, ...] = tuple(
-    f"{_MFAM.MANUSCRIPT_DIR}/{_MFAM.prefix_of(name)}"
+    f"{_MFAM.dir_of(name)}/{_MFAM.prefix_of(name)}"
     for name in ("f-proof", "b-proof"))
 
 #: 这一条义务的负责人角色（收口是 B 的动作）。
@@ -1490,13 +1490,17 @@ def sweep_registrations(*, store: Any, root: str | Path, limit: int = 50,
     if store is None:
         out["reason"] = "没有 store ⇒ 这一格没查成（不是「没有欠收录的稿」）"
         return out
-    reports = Path(str(root or "")) / "reports"
+    base = Path(str(root or ""))
     files: list[Path] = []
     for prefix in REGISTRATION_CARRIERS:
-        name = prefix.rsplit("/", 1)[-1]
-        if not reports.is_dir():
+        # `REGISTRATION_CARRIERS` 的每一项是「角色目录 + 族前缀」
+        # （`manuscripts/F/f-proof-`）：目录与前缀一起决定扫哪里，不许丢目录
+        # 再去 `reports/` 下 glob（旧布局已退役，2026-11-22）。
+        rel_dir, _sep, name = prefix.rpartition("/")
+        directory = base / rel_dir
+        if not directory.is_dir():
             continue
-        files.extend(sorted(reports.glob(f"{name}*.md")))
+        files.extend(sorted(directory.glob(f"{name}*.md")))
     out["checked"] = True
     for path in files:
         if len(out["opened"]) + len(out["existing"]) >= max(1, int(limit)):

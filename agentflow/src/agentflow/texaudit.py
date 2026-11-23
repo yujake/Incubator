@@ -65,6 +65,10 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 from . import papermapping as PM
+# 读盘与展开（`_read_text` / `_rel` / `_Corpus`）2026-11-22 整段搬到 `texcorpus.py`：
+# 那一层只管"盘上的正文长什么样"，与"哪一类该怎么判"是两件事。搬的理由见那个模块的
+# docstring（本文件当时顶在 800 行软基线上，业主口径：不许抬体量软基线）。
+from .texcorpus import _Corpus, _read_text, _rel
 
 #: 这一层认的七类（工具层 `review.scan` 的 `kinds` 枚举唯一来源）。
 SCAN_KINDS: tuple[str, ...] = (
@@ -181,121 +185,6 @@ def _detail(kind: str, *, checked: bool, reason: str = "", scanned: Sequence[str
 def _severity_of_char(char_kind: Any) -> str:
     """六类字符的分档（`nbsp` 只是断行，其余五类都是要改的错）。"""
     return "warning" if str(char_kind) == "nbsp" else "error"
-
-
-# ---------------------------------------------------------------- 读盘
-
-
-def _read_text(path: Path) -> tuple[str | None, str]:
-    """读一份 UTF-8 文本；读不成返回 `(None, 理由)`（绝不返回空串冒充空文件）。"""
-    try:
-        raw = path.read_bytes()
-    except OSError as exc:
-        return None, f"{path.name} 读不出来（{type(exc).__name__}: {exc}）"
-    if b"\x00" in raw:
-        return None, f"{path.name} 是二进制文件（含 NUL 字节）⇒ 它没有可数的正文"
-    try:
-        return raw.decode("utf-8"), ""
-    except UnicodeDecodeError as exc:
-        return None, f"{path.name} 不是 UTF-8 文本（{exc}）⇒ 它没有可数的正文"
-
-
-def _rel(path: Path, root: Path | None) -> str:
-    """读数里的 `file` 一律是工作区相对路径（posix 分隔符，与 `fs.*` 同一条）。"""
-    if root is None:
-        return path.name
-    try:
-        return path.resolve().relative_to(root).as_posix()
-    except (ValueError, OSError):
-        return path.name
-
-
-class _Corpus:
-    """这一次要扫的正文：`main.tex` + 它递归 `\\input` 进来的文件（按文档顺序切片段）。
-
-    为什么要有这样一个对象：五类里有四类（cites/refs/proofs/duplicates）都要"按文档顺序、
-    带文件与行号"地看同一份展开后的正文。每类自己展开一遍 = 同一件事四处口径。
-    """
-
-    def __init__(self, root: Path | None, files: Sequence[Path]):
-        self.root = root
-        self.files = list(files)
-        self.segments: list[tuple[str, str, int]] = []   # (相对名, 片段, 起始行偏移)
-        self.problems: list[dict] = []
-        self.main: Path | None = None
-        self.package: Path | None = None
-        self.main_text = ""
-        #: 两条派生读数各只算一次（proofs 与 ledger_match 共用同一份正文）。
-        self._statement_names: tuple[str, ...] | None = None
-        self._events: list[dict] | None = None
-
-    def pkg_prefix(self) -> str:
-        """论文包相对工作区根的前缀（`out/paper/`）—— 读数里的 `file` 要带它。
-
-        `papermapping._collect_tex_segments` 给的是"相对包根"的名字（`main.tex`、
-        `mapping-appendix.tex`），而 H 拿到读数之后要按那个路径去改稿 —— 所以这一层
-        把它补成工作区相对（`out/paper/main.tex`）。补错的表现很隐蔽：H 会去改一个
-        同名但不在包里的文件，或者干脆找不到。
-        """
-        if self.package is None or self.root is None:
-            return ""
-        prefix = _rel(self.package, self.root)
-        return "" if prefix in ("", ".") else prefix.rstrip("/") + "/"
-
-    def qualify(self, rel: str) -> str:
-        """包内相对名 → 工作区相对名。"""
-        prefix = self.pkg_prefix()
-        if not prefix or not rel or rel.startswith(prefix):
-            return rel
-        return prefix + rel
-
-    def load(self) -> None:
-        """把文件展开成片段；读不成 / `\\input` 指不到都记进 `problems`（不静默丢）。"""
-        self.main = next((p for p in self.files if p.name == PM.PC.TEX_NAME), None)
-        if self.main is not None:
-            body, why = _read_text(self.main)
-            if body is None:
-                self.problems.append({"file": _rel(self.main, self.root), "why": why})
-                return
-            self.main_text = body
-            self.package = self.main.parent
-            segments, _read_files, probs = PM._collect_tex_segments(  # noqa: SLF001 —— 生产实现
-                self.package, self.main, body)
-            self.segments = [(self.qualify(rel), seg, off) for rel, seg, off in segments]
-            for prob in probs:
-                self.problems.append({
-                    "file": str(prob.get("where") or ""),
-                    "why": str(prob.get("detail") or ""),
-                })
-            return
-        # 没有 `main.tex`：逐份扫（不跟 `\input` —— 没有包根，跟了就是猜路径）
-        for path in self.files:
-            body, why = _read_text(path)
-            if body is None:
-                self.problems.append({"file": _rel(path, self.root), "why": why})
-                continue
-            self.segments.append((_rel(path, self.root), PM.strip_tex_comments(body), 0))
-
-    @property
-    def statement_names(self) -> tuple[str, ...]:
-        """定理类环境名（含印成 Theorem/Lemma/… 的自定义宏）。"""
-        if self._statement_names is None:
-            text = self.main_text or "\n".join(seg for _r, seg, _o in self.segments)
-            self._statement_names = PM.statement_env_names(text)
-        return self._statement_names
-
-    def hits(self, pattern: re.Pattern[str]) -> list[tuple[str, int, str, str]]:
-        """逐片段跑一条正则：`(文件, 行号, 命中原文, 最后一组)`。"""
-        out: list[tuple[str, int, str, str]] = []
-        last = pattern.groups
-        for rel, seg, offset in self.segments:
-            line = offset + 1
-            cursor = 0
-            for m in pattern.finditer(seg):
-                line += seg.count("\n", cursor, m.start())
-                cursor = m.start()
-                out.append((rel, line, m.group(0).strip(), m.group(last) if last else ""))
-        return out
 
 
 # ---------------------------------------------------------------- 七类
@@ -692,7 +581,8 @@ def scan_tex(
             project_path = None
     files = [Path(str(p)) for p in (files or ())]
     if not files and project_path is not None:
-        candidate = project_path / "out" / "paper" / PM.PC.TEX_NAME
+        # 正文缺省落点只认真身（`PC.package_dir` = `out/package`）；此前读退役目录 `out/paper` ⇒ 审计空跑。
+        candidate = PM.PC.package_dir(project_path) / PM.PC.TEX_NAME
         if candidate.is_file():
             files = [candidate]
     corpus = _Corpus(base, files)

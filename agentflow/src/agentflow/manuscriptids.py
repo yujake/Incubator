@@ -533,7 +533,7 @@ def next_manuscript_id(root: Any, *, family: Any = FAMILY_F, owner: Any = "",
             raise ManuscriptIdError(
                 f"手稿号段（{ID_DIGITS} 位，族 {family}）已用尽（上限 {MAX_ID}）。"
                 "请勿静默升位宽 —— 那会破坏所有历史手稿号的解析；"
-                "要么手工归档 `reports/` 里的旧稿，要么由人裁定新号段。"
+                f"要么手工归档 `{_MFAM.MANUSCRIPT_DIR}/` 里的旧稿，要么由人裁定新号段。"
             )
         allocated = format_id(nxt)
         counters[key] = nxt + 1

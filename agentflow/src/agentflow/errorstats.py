@@ -1395,7 +1395,7 @@ def _read_closing(root: Path) -> dict[str, Any]:
         # `statements_unsigned_without_v_or_abandon`。读数会因此
         # 静默变成"另一个工作区"的结论，所以这里显式 resolve。
         store = Store(Path(root).resolve())
-        rep = CL.check_closing(store, project_dir=".", report_path="out/review/REPORT.md")
+        rep = CL.check_closing(store, project_dir=".", report_path="out/report/REPORT.md")
     except Exception as e:  # noqa: BLE001 读不出来与"没有 blocker"必须分得开
         reading.update(reason=f"收工门算不出来（{type(e).__name__}: {e}）")
         return reading

@@ -68,7 +68,7 @@ NOT_SIGNED = "refutation_not_signed"
 SIGN_MISSING = "refutation_sign_missing"
 UNKNOWN_PROOF_PATH = "refutation_unknown_proof_path"
 
-#: 证伪论证稿的族：B 写的证伪稿（`reports/b-proof-<B稿号>.md`）。
+#: 证伪论证稿的族：B 写的证伪稿（`manuscripts/B/b-proof-<B稿号>.md`）。
 #: 别的族一律拒：F 的稿是"P 不成立"的「证明」，B 的稿才是「证伪论证」（引前者）。
 DRAFT_FAMILY = "b-proof"
 
@@ -126,7 +126,7 @@ def _by_id(store: Any, statement_id: str) -> tuple[dict[str, Any] | None, str, b
 
 
 def _manuscript_reading(rel: str) -> dict[str, Any]:
-    """这一条路径能不能当证伪论证稿：`reports/` 下过族表、且族是 `b-proof`。
+    """这一条路径能不能当证伪论证稿：过族表、族是 `b-proof`、且在该族的角色目录下。
 
     只判形态（族 / 目录 / 真文件名），不判内容 —— 内容是下面 `_draft_reading` 的事。
     """
@@ -144,7 +144,7 @@ def _manuscript_reading(rel: str) -> dict[str, Any]:
     if out["tier"] != _MFAM.TIER_FAMILY:
         out["why"] = (f"`{rel}` 不是框架手稿（族={out['family'] or '—'}，"
                       f"档={out['tier'] or '—'}）⇒ 证伪通道只收 "
-                      f"`reports/{DRAFT_FAMILY}-<稿号>.md`")
+                      f"`{_MFAM.relpath(DRAFT_FAMILY, '<稿号>')}`")
         return out
     if out["family"] != DRAFT_FAMILY:
         out["why"] = (f"`{rel}` 是 `{out['family']}` 族 ⇒ 证伪论证稿必须是 "

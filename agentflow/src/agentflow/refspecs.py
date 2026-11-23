@@ -51,7 +51,7 @@ CODE_TARGET_MISSING = "ref_target_missing"
 CODE_UNCHECKED = "ref_unchecked"
 CODE_AMBIGUOUS = "ref_ambiguous_manuscript"
 
-#: 三类目标：store 表 / 追加式账本 jsonl / `reports/` 文件族。
+#: 三类目标：store 表 / 追加式账本 jsonl / `manuscripts/<角色>/` 文件族。
 KIND_TABLE = "table"
 KIND_LEDGER = "ledger"
 KIND_FILE = "file"
@@ -81,17 +81,17 @@ class RefSpec:
 #: 唯一词表。键就是前缀（不含冒号）。
 #:
 #: - 台账行：目标在 `data/<table>.json`，id 是 4-6 位十进制（新号 6 位，旧号 4 位读侧兼容）；
-#: - 账本行：`manu` 在 `manuscripts/handoffs.jsonl`，`verif` 在 `verifications/<命题号>.jsonl`
+#: - 账本行：`manu` 在 `work/handoffs.jsonl`，`verif` 在 `verifications/<命题号>.jsonl`
 #:   （pending 在 `verifications/pending/<sha>.jsonl`），行号用 `#` 锚；
-#: - 文件族：`mss` 在 `reports/<family>-<id>.md`，family 是四族之一（`f-proof` 的号可为
-#:   `plan-<数字>`）。
+#: - 文件族：`mss` 在 `manuscripts/<角色>/<family>-<id>.md`，family 是四族之一
+#:   （`f-proof` 的号可为 `plan-<数字>`）；目录由 `manuscriptfamily.dir_of` 决定。
 #:
 #: 存在性判据（按 `kind`，实现只在 `ref_reading` 一处）：
 #: - table：`data/<target>.json` 的 `rows[*][id_field]` 与目标号相等（4/6 位互认）；
-#: - ledger + manu：`manuscripts/handoffs.jsonl` 的 `id` 与目标号相等；
+#: - ledger + manu：`work/handoffs.jsonl` 的 `id` 与目标号相等；
 #: - ledger + verif：`verifications/<target>.jsonl`（或 pending 路径）里
 #:   `verification_id` 与 `#` 锚相等；
-#: - file + mss：`reports/` 下存在 `<family>-<id>.md`。
+#: - file + mss：`manuscripts/<角色>/` 下存在 `<family>-<id>.md`。
 #: 任何一种读不到（文件不在 / JSON 坏 / 有坏行且目标没找到）都落到 `unchecked`，
 #: 不折成 `missing`。
 REF_NAMESPACES: tuple[RefSpec, ...] = (
@@ -103,12 +103,12 @@ REF_NAMESPACES: tuple[RefSpec, ...] = (
     RefSpec("c", KIND_TABLE, "conjectures", "conjecture_id", "c:<4-6 位>", r"\d{4,6}"),
     RefSpec("doc", KIND_TABLE, "documents", "doc_id", "doc:<4-6 位>", r"\d{4,6}"),
     RefSpec("eval", KIND_TABLE, "eval_results", "eval_id", "eval:<4-6 位>", r"\d{4,6}"),
-    RefSpec("manu", KIND_LEDGER, "manuscripts/handoffs.jsonl", "id",
+    RefSpec("manu", KIND_LEDGER, "work/handoffs.jsonl", "id",
             "manu:<4-6 位>", r"\d{4,6}"),
     RefSpec("verif", KIND_LEDGER, "verifications/<命题号>.jsonl", "verification_id",
             "verif:<命题号>#<v-id>（pending: verif:pending/<64hex>#<u-id>）",
             r"\d{4,6}|pending/[0-9a-f]{64}"),
-    RefSpec("mss", KIND_FILE, "reports/<family>-<id>.md", "",
+    RefSpec("mss", KIND_FILE, "manuscripts/<角色>/<family>-<id>.md", "",
             "mss:<family>-<id>（family=f-proof/b-proof/e-proof/e-num）",
             r"(?:f-proof|b-proof|e-proof|e-num)-(?:\d{4,6}|plan-\d+)"),
 )
@@ -132,7 +132,11 @@ _MANUSCRIPT_NAME_RE: MappingProxyType = MappingProxyType({
 })
 
 #: legacy 里"路径后还有一截"的分隔（`reports/x.md#V签` / `reports/x.md「## 命题 1」…`）。
-_PATH_TAIL_RE = re.compile(r"^(reports|notes)/([^\s（「：，；、]+?\.md)(.*)$")
+#:
+#: 三类目录都认：`manuscripts/<角色>/`（新落点）、`notes/`（草稿本）、`reports/`（退役
+#: 旧布局 —— 仍要能读成 `mss:`，否则历史证据会被判成非法引用）。
+_PATH_TAIL_RE = re.compile(
+    r"^(manuscripts/[A-Za-z]+|reports|notes)/([^\s（「：，；、]+?\.md)(.*)$")
 
 
 def _text(value: Any) -> str:
@@ -210,3 +214,4 @@ def _manuscript_from_name(name: str) -> tuple[str, str]:
             return family, str(match.group("id"))
         return "", ""
     return "", ""
+

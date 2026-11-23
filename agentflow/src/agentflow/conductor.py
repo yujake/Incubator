@@ -473,12 +473,18 @@ AGENT_STATE_LABELS: dict[str, str] = {AGENT_STATE_FLYING: "在飞",
 #: （停滞不等于静默 —— 见 `agent_state` 的 ⑩ 条与 `retire_blocking` 的单飞那一档）。
 STALLED_AFTER_SEC: float = 600.0
 
-#: 步进落痕的目录（相对工作区根）：`out/steps/<台账号>.json`，一个代理一个文件。
+#: 步进落痕的目录（相对工作区根）：`out/steps/<台账号>.jsonl`，一个代理一个文件。
 #:
 #: 为什么另起一格而不是写进 `tasks` 台账：台账是"一次召唤一行"的终态账（FC-20 先到先得），
 #: 它没有"最近一步"这一列，而且每一步都去改它会把同一条行上的并发写放大成锁竞争。
-#: 一件比它便宜得多的事实（最近一步是什么时候）不值得付那个价：一个几十字节的文件、
-#: 一次原子替换，读侧一次目录遍历就够。
+#: 一件比它便宜得多的事实（最近一步是什么时候）不值得付那个价：一行几十字节的追加，
+#: 读侧一次目录遍历就够。
+#:
+#: 2026-11-22（NAMEFIX-B1 ①）：这一格原来写的是 `<台账号>.json` 且每步覆盖，
+#: 于是名字叫 `steps` 而盘上只有"最后一次步号指针"（lp-ball-15 实测 42 个文件、全是
+#: 106 字节一行）。改成 `.jsonl` 逐行追加之后，"steps" 这个名字与盘上的东西终于一致：
+#: 一行 = 一步，整个文件 = 这个台账号的步轨迹。读侧（:func:`step_beats`）只取最后
+#: 一行，并且照旧读旧的 `.json` 指针（老工作区里那些还在）。
 STEPS_DIR: tuple[str, ...] = ("out", "steps")
 
 #: 三态的强弱次序（只用于"一个代理接过好几件活 / 一整支子树"这类聚合读数）。
@@ -565,6 +571,14 @@ def handoff_index(workspace: str | Path) -> dict[str, Any]:
     处理，而不许折成"它交过差"：销号不可逆，把"没查成"读成"可以销"是错的方向。
     真正判不出来时 `agent_state` 落到"在飞"（保守方向 = 不销），见它的第 ⑥ 步。
 
+    ## 真机上它恒为空（2026-11-22 B2e）
+    写侧从未启用（`clock.HANDOFF_LEDGER_STATE == "unused"`：55 个工作区 0 份
+    `out/clock/handoffs.json`、0 条 `decision=handoff`）。于是这里读到的 `count` 在真机上
+    恒为 0 —— 那是"这条通道没开"，不是"没有子代理交差"。父侧真正在用的静默读数是
+    `agent_state` 的第 ⑩ 步（`conductor.py:1269`：台账终态 + 零计时器 ⇒ silent；
+    真机 33 次 `conductor.state` 读数里 137 次静默全部由它给出）。读侧三态一个字不动：
+    账读不成仍报 `checked=False`；将来写侧启用，这一格自动有行、调用方不用改。
+
     返回 `{"checked", "by_task", "rows", "count", "reason"}`；`by_task` 每格原样是
     交差账里的那一行（`handoff_id` / `task_id` / `parent_task_id` / `role` / `reason`
     / `at` / `timers` / `children`，父收过的那条另有 `seen_by`）。
@@ -593,14 +607,24 @@ def steps_dir(workspace: str | Path) -> Path:
     return Path(str(workspace or "")) / STEPS_DIR[0] / STEPS_DIR[1]
 
 
+def step_log_path(workspace: str | Path, task_id: str) -> Path:
+    """一个台账号的步轨迹文件（`<工作区>/out/steps/<台账号>.jsonl`）。"""
+    return steps_dir(workspace) / f"{str(task_id or '')}.jsonl"
+
+
 def stamp_step(workspace: str | Path, *, task_id: str, role: str = "", step: int = 0,
                sid: str = "", at: str = "") -> tuple[str, str]:
-    """把一个代理"刚走了这一步"落成盘上的一个文件；返回 `(路径, 问题)`。
+    """把一个代理"刚走了这一步"追加到它的步轨迹里；返回 `(路径, 问题)`。
 
-    写的是 `<工作区>/out/steps/<台账号>.json`：`{"task_id", "role", "step", "at", "sid"}`。
-    每一次覆盖同一个文件（它不是历史，是"最近一次"的读数），并用一次原子替换落盘
-    （先写 `.tmp` 再 `Path.replace`）—— 半份 JSON 在读侧会变成一个坏文件，而"读不成"
-    在那一边只能按"不知道"处理，于是停滞读数会因为一次撕裂的写而丢掉一格。
+    写的是 `<工作区>/out/steps/<台账号>.jsonl`，一行一步：
+    `{"task_id", "role", "step", "at", "sid"}`。追加，不覆盖 —— 名字叫 `steps`，
+    盘上就该是一段轨迹，而不是"最后一次步号"（2026-11-22 NAMEFIX-B1 ① 的改法；
+    改前每步覆盖同一个 `.json`，lp-ball-15 里 42 个文件全是 106 字节一行）。
+
+    为什么一次 `open("ab")` 一次写（而不是先写 `.tmp` 再替换）：替换式写只能留下
+    最后一行，而这里要留全轨迹。追加的风险是"半行"：一行 <200 字节、单次 `write`
+    到 O_APPEND 打开的文件里，读侧遇到半行会把它记进 `problems` 并取"最后一条
+    读得成的行"（见 :func:`_step_beat_row`）—— 于是撕裂的写只丢那一行，不丢整格。
 
     谁调它：`AgentLoop` 的步边界（每一步一次）。为什么不是"结束时写一次"：这一格
     要回答的正是"它现在还在走吗"，结束时才写的读数永远回答成"没在走"。
@@ -616,14 +640,13 @@ def stamp_step(workspace: str | Path, *, task_id: str, role: str = "", step: int
         return "", "没有工作区根 ⇒ 这一步没有落痕"
     row = {"task_id": tid, "role": str(role or ""), "step": int(step),
            "at": str(at or S.now_iso()), "sid": str(sid or "")}
-    target = steps_dir(root) / f"{tid}.json"
-    tmp = target.with_name(target.name + ".tmp")
+    target = step_log_path(root, tid)
+    line = (json.dumps(row, ensure_ascii=False, sort_keys=True, default=json_default)
+            + "\n").encode("utf-8")
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
-        tmp.write_text(json.dumps(row, ensure_ascii=False, sort_keys=True,
-                                  default=json_default) + "\n",
-                       encoding="utf-8", newline="\n")
-        tmp.replace(target)
+        with target.open("ab") as fh:      # 追加：一行一步，不覆盖前面的步
+            fh.write(line)
     except OSError as exc:  # noqa: BLE001 —— 写不成只影响这一格的可信度
         return "", f"步进落痕没写成（{type(exc).__name__}: {exc}）"
     return str(target), ""
@@ -682,6 +705,11 @@ def step_beats(workspace: str | Path, *, threshold_sec: float = STALLED_AFTER_SE
     - 目录在、读不出来 ⇒ `checked=False` + `reason`：调用方按"不知道"处理，
       绝不折成"没有停滞"（也不折成"停滞了"）；
     - 单个文件坏 ⇒ 进 `problems`、那个代理没有格子（同上：没有证据就不下结论）。
+
+    ## 两代落痕同读（2026-11-22 NAMEFIX-B1 ①）
+    `.jsonl`（新：一行一步的轨迹，取最后一行）+ `.json`（旧：覆盖式的"最后一步"指针）。
+    旧工作区里两种都可能有；同一台账号两边都有时取 `at` 更晚的那一条（不是按文件名
+    后缀挑），这样"升级那一刻盘上那一份"不会被读成另一步。
     """
     from datetime import datetime, timezone   # 惰性：只在这一格用
 
@@ -704,20 +732,16 @@ def step_beats(workspace: str | Path, *, threshold_sec: float = STALLED_AFTER_SE
         now_dt = now_dt.replace(tzinfo=timezone.utc)
     out["now"] = now_text
     try:
-        files = sorted(target.glob("*.json")) if target.is_dir() else []
+        files = (sorted(list(target.glob("*.json")) + list(target.glob("*.jsonl")))
+                 if target.is_dir() else [])
     except OSError as exc:  # noqa: BLE001 —— 读不成是"没查成"
         out["reason"] = f"步进落痕目录读不成（{type(exc).__name__}: {exc}）"
         return out
     rows: list[dict[str, Any]] = []
     by_task: dict[str, dict[str, Any]] = {}
     for path in files:
-        try:
-            got = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as exc:  # noqa: BLE001 —— 一个坏文件不许带走整张表
-            out["problems"].append(f"{path.name} 读不成（{type(exc).__name__}: {exc}）")
-            continue
-        if not isinstance(got, Mapping):
-            out["problems"].append(f"{path.name} 不是对象 ⇒ 这一格没读成")
+        got = _step_beat_row(path, out["problems"])
+        if got is None:
             continue
         tid = str(got.get("task_id") or path.stem)
         if not tid:
@@ -731,11 +755,49 @@ def step_beats(workspace: str | Path, *, threshold_sec: float = STALLED_AFTER_SE
         row = {"task_id": tid, "role": str(got.get("role") or ""),
                "step": got.get("step"), "at": str(got.get("at") or ""),
                "sec": round(float(sec), 3), "sid": str(got.get("sid") or "")}
-        rows.append(row)
-        by_task[tid] = row
+        prev = by_task.get(tid)
+        if prev is None or float(row["sec"]) < float(prev["sec"]):
+            # 同一台账号两代落痕都在 ⇒ 取"离现在更近"的那一步（更小 = 更近）。
+            by_task[tid] = row
+    rows = [by_task[k] for k in sorted(by_task)]
     out.update({"checked": True, "by_task": by_task, "rows": rows,
                 "count": len(rows), "reason": ""})
     return out
+
+
+def _step_beat_row(path: Path, problems: list[str]) -> dict[str, Any] | None:
+    """一个步进落痕文件里"最近一步"那一行（`.jsonl` 取最后一行；`.json` 是旧的一行指针）。
+
+    为什么坏行只记问题、不丢整格：轨迹是追加出来的，一次撕裂的写只该丢掉那一行；
+    已经读到的更早那一行仍是"这个台账号最近一步"的有效证据。整个文件一行都读不成
+    ⇒ 返回 `None`（那个代理没有格子 —— 没有证据就不下结论）。
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:  # noqa: BLE001 —— 一个坏文件不许带走整张表
+        problems.append(f"{path.name} 读不成（{type(exc).__name__}: {exc}）")
+        return None
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    if not lines:
+        problems.append(f"{path.name} 是空的 ⇒ 这一格没读成")
+        return None
+    best: dict[str, Any] | None = None
+    bad = 0
+    for line in lines:
+        try:
+            got = json.loads(line)
+        except ValueError:
+            bad += 1
+            continue
+        if not isinstance(got, Mapping):
+            bad += 1
+            continue
+        best = dict(got)          # 后面的行覆盖前面的 ⇒ 最后一条读得成的就是最近一步
+    if bad:
+        problems.append(f"{path.name} 有 {bad} 行读不成（取最后一条读得成的）")
+    if best is None:
+        problems.append(f"{path.name} 没有一行读得成 ⇒ 这一格没读成")
+    return best
 
 
 def clock_waiters(workspace: str | Path) -> dict[str, Any]:
@@ -778,7 +840,9 @@ def clock_waiters(workspace: str | Path) -> dict[str, Any]:
                            # 分成两次读会让同一份三态看到两个时刻的盘。
                            "handoff_checked": False, "handoff_by_task": {},
                            "handoff_reason": "",
-                           # 步进落痕那一格（停滞读数：`out/steps/<台账号>.json`）。
+                           # 步进落痕那一格（停滞读数：`out/steps/<台账号>.jsonl` 轨迹，
+                           # 最后一行才是最近一步；它不是指针文件 —— 早先每步覆盖同一个
+                           # `.json` 的读法已不成立，见 `stamp_step`）。
                            # 理由与上面两条相同：三态与停滞要看到同一个时刻的盘。
                            "stall_checked": False, "stall_by_task": {},
                            "stall_reason": "", "stall_problems": [],
@@ -1087,7 +1151,8 @@ def agent_state(*, row: Mapping[str, Any] | None,
     pending_total = clock.get("pending_total")
     still_pending = (bool(rows) if pending_total is None
                      else int(pending_total or 0) > 0)
-    # 停滞那一格（`out/steps/<台账号>.json`）：纯读数，输入是 `wait["stall"]`，
+    # 停滞那一格（`out/steps/<台账号>.jsonl` 轨迹：最后一行是最近一步，不是指针文件）：
+    # 纯读数，输入是 `wait["stall"]`，
     # 这一层不读盘、不取时钟（与"纯函数"同一条纪律）。
     raw_stall = clock.get("stall")
     stall = dict(raw_stall) if isinstance(raw_stall, Mapping) else {}
@@ -2873,7 +2938,7 @@ def _occupies_fanout_slot(row: Mapping[str, Any]) -> bool:
     而闸门拒绝在写 running 行之前就返回了。所以：`outcome == "refused"` 且行上没有受理
     标记 ⇒ 闸门拒掉、根本没跑 ⇒ 不占名额；其余一切（`running` / `ok` / `failed` /
     `cancelled`、以及跑过又拒的）⇒ 占名额
-    （负控：`tests/test_fanout_admission.py::test_ran_and_failed_child_still_counts`）。
+    （负控：`tests/test_fanout_admission.py::test_a_legacy_refused_row_keeps_the_old_verdict`）。
 
     不用 `_SETTLED_MARK` 当主判据：那是事后的记账写回打的标记，记账一炸那一行就缺标记
     ⇒ "跑了又拒"被当成"没跑" ⇒ 扇出少算；受理标记在受理那一刻就落盘，与收尾成败无关
@@ -4437,8 +4502,8 @@ class Conductor:
         #   记录可能是 D1 那一号，不可能是别的号 —— 把整片都判成读不全会让同一个父名下
         #   每一个还活着的号都叫不醒（`draft/145` §3.4 的反真空那一半）。
         # 至于"整行读不出来"（半行 / 非法 JSON）那一档：它进 `bad`、回执里逐字带着，
-        # 但不冻结别的号（`tests/test_a_retired_name_is_never_woken.py::w12` 与
-        # `test_an_unreadable_retired_list_is_not_an_empty_one.py::w14` 的反真空钉住
+        # 但不冻结别的号（`tests/test_a_retired_name_is_never_woken.py::test_w12_an_unreadable_roster_is_not_folded_into_not_retired` 与
+        # `tests/test_an_unreadable_retired_list_is_not_an_empty_one.py::test_w14_an_unreadable_retired_list_never_wakes` 的反真空钉住
         # 的正是这一格；"整份读不出来"是另一档，见上面 `file_problem`）。
         unknown: list[str] = []
         for who, msg in files:
@@ -6578,6 +6643,10 @@ class Conductor:
         就是这里要的归属键）。这里把它折成父代理读得懂的三格：`count`（交了几个）、
         `silent`（因此被记为静默的那些编号）、`rows`（原样）。三态：读不成 =>
         `checked=False`（不是"没人交差"）。
+
+        真机上这份账恒为空（写侧未启用，见 `handoff_index` 的取证段）⇒ `silent` 恒为
+        `[]`。父代理"看到谁静默"靠的是 `agent_state` 第 ⑩ 步，不是这一格；这里保留
+        三态与形状，是为了将来写侧启用时口径不用再分叉。
         """
         got = CLK.read_handoffs(str(getattr(self.store, "root", "") or ""),
                                 parent_task_id=str(parent_task_id or ""))
@@ -8048,6 +8117,8 @@ class Conductor:
         # 交差账（唯一读口）：账上有它 ⇒ 不算"还在跑"（业主 2026-10-27 第四条把它记为
         # 静默；与 `agent_state` 第 ⑥ 步同一份事实）。读不成 ⇒ 空集：维持既有判法
         # （"在飞"是保守方向 = 不退役）。
+        # 真机上这份账恒为空（写侧未启用，见 `handoff_index` 的取证段）⇒ `handed` 恒为空集；
+        # 判法一个字不变 —— 终态行本来就不算 active，"等它自己落终态"仍是可退役的来路。
         hand = handoff_index(str(getattr(self.store, "root", "") or ""))
         handed = set(hand.get("by_task") or ()) if hand.get("checked") else set()
         active_by_parent: dict[str, int] = {}
@@ -10306,59 +10377,6 @@ class Conductor:
             return ""
         return rel
 
-    def _write_completion_manuscript(self, row: Mapping[str, Any], *, task_id: str, status: str,
-                                     outcome: str | None, detail: str, error: str | None,
-                                     payload: Any) -> None:
-        """动作驱动的一趟结束时，按已发生的事实代写一份交接手稿（`draft/39` §6.6 F1）。
-
-        写什么：任务号 / 角色.动作 / 状态与结论 / 详情 / 产物路径 / 参数摘要；
-        `to` = 召唤者（`called_by`），`note` 明写"框架据动作结果派生"。
-        纪律三条：
-        ① 不重复：同一 `task_id` 下已经有该角色的行（循环驱动那一趟自己填的 `notify`）⇒ 跳过；
-        ② 不带走向：留痕失败只进日志，绝不改变任务的终态（与会话记录/产物登记同一条纪律）；
-        ③ `cancelled` 不写：没干完的活不是"交接"（这一条由调用方保证）。
-        """
-        root = getattr(self.store, "root", ".")
-        role = str(row.get("role") or "")
-        caller = str(row.get("called_by") or "")
-        if not role or not caller:
-            return
-        from . import manuscripts as _MS
-
-        try:
-            if _MS.rows_for_task(root, task_id, sender=role):
-                return
-            action = str(row.get("action") or "")
-            verdict = str(outcome or status or "")
-            one_line = f"{action}：{verdict}" + (f"（{detail[:60]}）" if detail else "")
-            lines = [f"## 这一趟干了什么", "",
-                     f"- 任务号：`{task_id}`", f"- 角色.动作：{role}.{action}",
-                     f"- 状态：`{status}` / 结论：`{verdict}`"]
-            if detail:
-                lines.append(f"- 详情：{detail[:400]}")
-            if row.get("refusal_reason"):
-                lines.append(f"- 拒绝理由：`{row['refusal_reason']}`")
-            if error:
-                lines.append(f"- 错误：{str(error)[:300]}")
-            arts = list(row.get("artifacts") or [])
-            if arts:
-                lines += ["", "## 产物", ""] + [f"- `{a}`" for a in arts[:10]]
-            params = dict(row.get("params") or {})
-            if params:
-                lines += ["", "## 参数摘要",
-                          f"```json\n{json.dumps(params, ensure_ascii=False, default=str)[:600]}\n```"]
-            if payload is not None:
-                lines += ["", "## 返回值摘要",
-                          f"```json\n{json.dumps(payload, ensure_ascii=False, default=str)[:600]}\n```"]
-            lines += ["", "## 这一行是怎么来的",
-                      "这一趟是**动作驱动**（框架代跑 Python 技能），没有模型收工那一刻，"
-                      "所以框架按动作结果派生这一行：内容全部取自 `tasks` 那一行与它的返回值。"]
-            _MS.write(root, sender=role, recipient=caller, summary=one_line,
-                      body="\n".join(lines) + "\n", task_id=task_id,
-                      note="留痕来源：框架据动作结果派生（动作驱动的一趟没有 final 可填）")
-        except Exception as e:  # noqa: BLE001 - 留痕不是判据本身，绝不许带走终态
-            self._log(f"交接留痕没写成：{type(e).__name__}: {e}", task_id=task_id)
-
     def finish(
         self,
         task_id: str,
@@ -10493,7 +10511,7 @@ class Conductor:
         #
         # 2026-10-06 改（`draft/39` §6.49 的 D64，用户裁定）：这里不再代写交接手稿。
         # 原来的理由（`draft/39` §6.6 F1）是"动作驱动的趟没有 final 可填，账本会缺这一格"；
-        # 真机把它证伪了：T1–T5 五趟的 `manuscripts/handoffs.jsonl` 里 92 / 96 / 118 / 62 / 94
+        # 真机把它证伪了：T1–T5 五趟的 `work/handoffs.jsonl` 里 92 / 96 / 118 / 62 / 94
         # 行全是框架派生的模板，`refs` 逐行全空、正文是"从/到/一句话/时间/引用"的填空 ——
         # 用户的原话是「handoffs 里面没有几条有效信息全在强调纪律」。
         # 这类行的信息与 `tasks` / `out/tasks/*.json` 逐字重复 ⇒ 它的落点是那里，不是交接账本。
@@ -11172,7 +11190,7 @@ class Conductor:
         判据只有一份：`capabilities.audit_task_ledger`。为什么收在那里 ——
         `verify_all`（全库离线审计）与 `verify_tasks`（刚跑完一次 run 的即时自检）
         问的是同一个问题，两处各写一份判据必然漂移，而漂移的形态是
-        "其中一处永远说没问题"。`tests/test_conductor.py::test_task_ledger_audit_matches_verify_all`
+        "其中一处永远说没问题"。`tests/test_conductor.py::test_task_ledger_audit_critical_codes_match_verify_all`
         钉住两者的码集合相等（`DEVELOPMENT.md` §10 点名的那条）。
         """
         with self._lock:

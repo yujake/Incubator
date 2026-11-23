@@ -86,7 +86,7 @@ VIA_CLOSING = "closing_auto_submit"
 # 跨族是常态，单号做身份会把两族的稿折成一份。这里的三个纯函数是 `mss:` 记号那一侧
 # 的身份读法：记号头怎么拆、字典键怎么拼、从读数里按 (族, 号) 取哪一枚。
 def _family_of_carrier(rel: Any) -> str:
-    """载体路径 ⇒ 族（`reports/e-num-000000.md` ⇒ `e-num`）；认不出 ⇒ 空串（不猜）。
+    """载体路径 ⇒ 族（`work/E/e-num-000000.md` ⇒ `e-num`）；认不出 ⇒ 空串（不猜）。
 
     老记号 `mss:<号>` 没有族那一格，族只能从它的 `path=` 读出来。名字不是手稿形
     （`notes/foo.md`）或根本没有 `path=` ⇒ 空串 —— 那时"族唯一确定"不成立。
@@ -137,7 +137,7 @@ def resolve_submission(records: Any, *, family: Any = "", manuscript_id: Any = "
 
     `family=""` 是"调用方只知道稿号"：这时按读数里出现过的族唯一性裁定（只有一族 ⇒
     用它；两族以上 ⇒ `ambiguous`）。`families` 是调用点已知的"这一号在盘上 / 候选里
-    出现在哪几族"（`submission_reading` 扫 `reports/`、E 收工用候选清单）—— 老记号
+    出现在哪几族"（`submission_reading` 按 `manuscriptfamily.dir_of` 扫各族目录、E 收工用候选清单）—— 老记号
     没有族时，它让"这枚记号属于哪一族"有据可判；多于一族就不猜。
 
     读数的 `why` 逐字点名「跨族同号」（`ambiguous` 那一档），调用方原样往上带。
@@ -250,7 +250,7 @@ def submission_token(*, manuscript_id: Any, family: Any = "", path: Any = "",
     头写 `mss:<族>-<号>`（`mss:e-num-000000`）：四族各有自己的号段、都从 `000000`
     起 ⇒ 单号做身份会把两族的稿折成一份。族名取 `manuscriptfamily.FAMILY_ORDER`
     那一套（与 `refvocab` / 携带单同一形）。`family` 没给或认不出时退到载体的
-    路径族（`path=reports/e-num-000000.md` ⇒ `e-num`）；两条都认不出才写老形
+    路径族（`path=work/E/e-num-000000.md` ⇒ `e-num`）；两条都认不出才写老形
     `mss:<号>` —— 读侧仍认老形，但新写一律带族（只要族认得出来）。
 
     为什么要一格带四样东西（稿号 + 正文 sha + 签 sha + 文件字节 sha + 时刻）：
@@ -435,7 +435,7 @@ def submission_candidates(root: Any) -> dict[str, Any]:
 
     - 签：`out/vsigns/<正文sha>.json`（逐份）—— 用 `vsigns.credential_reading`
       读并复算（文件在不算签：复算不过就不是签）；`issued.json` 只是派生归档，不拿它下结论；
-    - 稿：签文件自己写下的 `artifact_path` + `reports/` 下 F 族前缀的 `*.md`（前缀从
+    - 稿：签文件自己写下的 `artifact_path` + `manuscripts/F/` 下 F 族前缀的 `*.md`（前缀从
       `manuscriptfamily` 派生，不在这里再写一份；还没签的稿也要能读成「未签 ⇒ 不入提交单」）。
 
     ## 判据（业主 2026-11-11 追加裁定：一个稿号 = 一份文件）
@@ -528,14 +528,14 @@ def submission_candidates(root: Any) -> dict[str, Any]:
             one["at"] = str(doc.get("at") or "")
     # ---- 还没签的稿也要点名（判据 c：「未签 ⇒ 不入提交单」必须读得到）----
     # 前缀从 `manuscriptfamily` 派生（唯一真身）：本文件不再写 `f-proof-` 这个字面量。
-    reports = root_p / _VS.SIGN_CARRIER_DIR
+    reports = root_p / _MFAM.dir_of(FAMILY_F)
     try:
         report_paths = (sorted(reports.glob(f"{_MFAM.prefix_of(FAMILY_F)}*.md"))
                         if reports.is_dir() else [])
     except OSError as exc:  # noqa: BLE001 —— 列不出来 = 这一半没查成
         report_paths = []
         out["problems"].append(
-            f"`{_VS.SIGN_CARRIER_DIR}/` 列不出来（{type(exc).__name__}: {exc}）"
+            f"`{_MFAM.dir_of(FAMILY_F)}/` 列不出来（{type(exc).__name__}: {exc}）"
             " ⇒ 未签的稿这一半没查成")
     for path in report_paths:
         rel = _VS.rel(path, root)

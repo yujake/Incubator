@@ -52,6 +52,10 @@ def _state_of(findings: Sequence[Finding], reasons: Sequence[str]) -> str:
     `info` 的 Finding 不把整类翻成 malformed：它是"有读数、且已有解释"的那一档
     （例如手稿登记之后才落的签块让 ARTIFACTS 的 sha 落后一格）。把它算畸形，会让
     "签块落盘"这条正常路径把每一份签过的稿都读成畸形。`info` 仍逐条列出，看得见。
+
+    2026-11-22：这里曾有一段"`legacy` 同理（旧形态、读得通、不是畸形）"的说明。
+    业主裁定「旧工作区不必兼容」之后 `legacy` 那一档删掉了：旧布局现在报 `error`、
+    照常翻 `malformed`（那个决定只剩 `layout.UNSUPPORTED_SEVERITY` 一格）。
     """
     if any(f.severity in ("error", "warning") for f in findings):
         return MALFORMED
@@ -142,6 +146,20 @@ def _check_text_file(kind: str, root: Path, path: Path) -> CheckResult:
                        notes=notes, reasons=reasons)
 
 
+def _check_tree(kind: str, root: Path) -> CheckResult:
+    """整棵树一类的检查（`path-tree`：规则自己摊开文件清单）。
+
+    为什么另立一个形态而不是塞进 `md-dir`：布局是整棵树的属性 —— `reports/x.md` 与
+    `manuscripts/A/x.md` 是两份同名字节，判词却相反，而"它旁边的目录叫什么"不是单份文件
+    能回答的。所以这一类只建一个 `_Ctx`（`path=None`、`rel=""`），把清单交给规则，
+    findings 的 `where` 由规则逐份填（见 `layout._rule_layout`）。
+    """
+    ctx = _Ctx(kind, root, None, "", None)
+    findings, reasons, notes = _run_rules(ctx)
+    return CheckResult(kind, _state_of(findings, reasons), ".", findings,
+                       notes=notes, reasons=reasons)
+
+
 def _merge(kind: str, results: Sequence[CheckResult]) -> CheckResult:
     """把一批同类的单文件结果并成一条（三态取"最坏"：malformed > unchecked > ok）。"""
     findings = [f for r in results for f in r.findings]
@@ -158,11 +176,12 @@ def _files_for(spec: _Spec, root: Path) -> list[Path]:
     if spec.mode.endswith("-dir"):
         if not target.is_dir():
             return []
+        pattern = spec.pattern or "*"
         if spec.mode == "json-dir" or spec.mode == "jsonl-dir":
-            names = sorted(p for p in target.glob(spec.pattern or "*")
+            names = sorted(p for p in target.glob(pattern)
                            if p.is_file() and p.name not in spec.skip)
             return names
-        return sorted(p for p in target.glob("*.md") if p.is_file())
+        return sorted(p for p in target.glob(spec.pattern or "*.md") if p.is_file())
     return [target] if target.is_file() else []
 
 
@@ -189,6 +208,8 @@ def check_kind(kind: str, root: str | Path) -> CheckResult:
                                reasons=[f"缺 {spec.rel}（工作区没 init 过？）⇒ 没查成"])
         return CheckResult(kind, OK, spec.rel,
                            notes=[f"没有 {spec.rel}（这一类产物不存在，不是没查成）"])
+    if spec.mode == "path-tree":
+        return _check_tree(kind, root_p)
     if spec.mode == "json-rows":
         return _check_json_rows(kind, root_p, target, spec=spec)
     if spec.mode == "jsonl":
@@ -203,7 +224,7 @@ def check_kind(kind: str, root: str | Path) -> CheckResult:
             kind, OK, spec.rel, notes=[f"{spec.rel} 里没有 {kind} 文件"])
     # md-dir
     matcher = _proof_name if kind == "proof_reports" else _manuscript_name
-    picked = [p for p in _files_for(spec, root_p) if matcher(p.name)]
+    picked = [p for p in _files_for(spec, root_p) if matcher(_rel(root_p, p))]
     results = [_check_text_file(kind, root_p, p) for p in picked]
     return _merge(kind, results) if results else CheckResult(
         kind, OK, spec.rel, notes=[f"{spec.rel} 里没有这一类手稿"])

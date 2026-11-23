@@ -70,9 +70,13 @@ __all__ = [
     "excerpt_for",
     "ingest_directory",
     "is_declared",
+    "library_landing",
+    "library_landing_name",
+    "library_name_of",
     "list_books",
     "local_fetch_fn",
     "read_declaration",
+    "strip_landing_hash",
     "search_fn_for_store",
     "selftest",
     "sha256_file",
@@ -117,6 +121,129 @@ def _safe_name(path: Path) -> str:
     """把源文件名清洗成 library/ 下安全的相对名（保留扩展名）。"""
     stem = _SAFE_RE.sub("_", path.stem).strip("_") or "book"
     return f"{stem}{path.suffix.lower()}"
+
+
+# --------------------------------------------------------------------------- #
+# 唯一落点：`library/<内容 hash 前缀-名>`（B2a，2026-11-22 业主裁定）
+# --------------------------------------------------------------------------- #
+#
+# ## 为什么需要它（`draft/195` #7 / #17 / #18 / #51）
+#
+# `library/` 曾有三个写者、两套布局：
+#   * `search_tools._adopt_file` → `library/<lit_id>/<名>`（分目录）
+#   * `locallib.ingest_directory` → `library/<名>`（扁平）
+#   * `seedinject` 曾直接铺 `library/` 根（SEEDFIX 之后落 `reference/`）
+# 改前读侧 `store.library_path` 只做拼接，两套都读得通 ⇒ 盘上两套并存而没有任何判据会报
+# （真机 lp-ball-13 是 `<id>/<名>`、lp-ball-15 是顶层 24 份扁平 + 1 个 `<id>/` 子目录）。
+#
+# 所以写侧只留一处落点实现（本节的 `library_landing_name` / `library_landing`），
+# 两个写者（`_adopt_file` 与 `ingest_directory`）都调它；旧布局不再支持（2026-11-22
+# 业主裁定「旧工作区不必兼容」：`store.library_path` 受控拒「旧布局（不再支持）」，
+# `wellformed` 的 `literature.layout` 把它报成 `error`，不是 `legacy` 档）。
+
+#: 落点名里内容 hash 的位数（`sha256[:12]`）。真机 lp-ball-15 那 24 份扁平文件同形；
+#: 12 位十六进制 = 48 bit，同一目录里两份不同内容撞上前缀可以忽略；真撞上时
+#: `library_landing` 会加长前缀，绝不覆盖既有文件。
+LANDING_HASH_CHARS = 12
+
+#: 落点名里允许的 hash 前缀长度（8..64）。短于 8 位的碰撞概率不再可忽略。
+_LANDING_HASH_MIN_CHARS = 8
+
+
+def library_landing_name(source: Path | str, sha256_hex: str, *,
+                         hash_chars: int = LANDING_HASH_CHARS) -> str:
+    """新收编的一份字节在 `library/` 下的落点名（library 相对、扁平、带内容 hash 前缀）。
+
+    ## 唯一落点（2026-11-22 B2a）
+
+    `literature.path` 存的是"相对 `library/` 的一段路径"。本函数把它定成
+    一个路径段：`<sha256 前 12 位>-<清洗过的原名>`（例：
+    `08359e313da3-on-the-volume-of-hyperplane-sections-of-a-d-cube.pdf`）。于是
+    "新写的形态唯一"是一条可判的形状（`path` 里不含 `/`），不靠人认。
+
+    为什么名字由内容决定、不由 `lit_id` 决定：
+
+    * `lit_id` 每次登记都会重新分配，而同一份字节两次收编（两个人各下一份、
+      或者本机重灌一次）应当落到同一个名字上 —— 同名即同内容，不用读表去判；
+    * 每个 `lit_id` 一个目录会在库里留下空目录（`draft/28` R-49：真机 98 行里
+      留下 60 个空目录，目录树看起来 98 篇、实际 38 个文件）；
+    * `locallib` 与真机 lp-ball-15 的多数文件本来就是扁平形态 ⇒ 新写跟着多数走，
+      迁移面积最小（旧 `<lit_id>/<名>` 不再支持：不搬、也不读）。
+
+    旧布局 `library/<lit_id>/<名>` 不再由任何写者产出；它也不再读得通：`store.library_path`
+    受控拒「旧布局（不再支持）」，`wellformed` 的 `literature.layout` 规则把它报成 `error`
+    （不是 `legacy` 档，见 `wellformed/literature.py`）。
+
+    `sha256_hex` 必须是 64 位十六进制（写者是刚算过这份字节的，不许"不知道也写个名"）。
+    """
+    digest = str(sha256_hex or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", digest):
+        raise ValueError(
+            f"内容 hash 必须是 64 位小写十六进制（收到 {sha256_hex!r}）—— "
+            "落点名由内容决定，没有 hash 就没有落点名")
+    if not _LANDING_HASH_MIN_CHARS <= int(hash_chars) <= 64:
+        raise ValueError(
+            f"hash_chars 必须落在 {_LANDING_HASH_MIN_CHARS}..64（收到 {hash_chars!r}）")
+    return f"{digest[:int(hash_chars)]}-{_safe_name(Path(source))}"
+
+
+#: 落点名里的内容 hash 前缀（`library_landing_name` 那一截；`strip_landing_hash` 认它）。
+_LANDING_PREFIX_RE = re.compile(r"^[0-9a-f]{%d,64}$" % _LANDING_HASH_MIN_CHARS)
+
+
+def library_name_of(source: Path | str) -> str:
+    """源文件名 → 它在 library/ 落点里的「名」部分（清洗过、不含内容 hash 前缀）。
+
+    落点名是 `<内容 hash 前缀>-<这个名>`。读侧要拿盘上的源文件名去比 `literature.path`
+    （`agent_prompts._pending_local_materials` 判"这份材料入编了没有"），而清洗规则
+    必须与写侧同一处 —— 所以它是本模块的公开面，不是给调用方再抄一份正则。
+    """
+    return _safe_name(Path(source))
+
+
+def strip_landing_hash(landing: str) -> str:
+    """落点名去掉内容 hash 前缀：`<12..64 位 hex>-<名>` ⇒ `<名>`；不是落点名就原样返回。
+
+    反过来的一件事（`library_landing_name` 加上去、这里剥下来）放在同一模块：
+    前缀有多长、由谁负责加，只有这一处知道。碰上 `library_landing` 最后的"加长前缀 +
+    源文件短哈希"那一档（64 位 hex + `-<8 位>-<名>`）时，这里只剥第一段，于是返回的
+    名字里还带着那段短哈希 —— 那一档本就是"同一目录里撞了极近内容"的罕见形态，
+    读侧认不出它是可接受的（它仍然是一份旧形态读数，不会因此把别的材料读成已入编）。
+    """
+    text = str(landing or "")
+    head, sep, rest = text.partition("-")
+    if sep and rest and _LANDING_PREFIX_RE.match(head):
+        return rest
+    return text
+
+
+def library_landing(library: Path | str, source: Path | str,
+                    sha256_hex: str) -> tuple[str, Path]:
+    """一条新收编的字节的落点：`(library 相对落点名, 绝对落点)`，同名不同内容绝不覆盖。
+
+    这是两个写者共用的那一个函数（`search_tools._adopt_file` 与
+    `ingest_directory`）：落点名只由 `library_landing_name` 一处给，本函数只多做两件事 ——
+    ① 既有文件内容相同 ⇒ 直接复用那个名字（幂等：同一份字节不搬第二份）；
+    ② 内容不同而 12 位前缀撞上 ⇒ 16 → 32 → 64 位逐步加长，最后带源文件短哈希，
+    一个既有文件都不覆盖（覆盖会毁掉已经建立的引文定位）。
+
+    它不建目录、不搬字节：谁写（`copy2` / `move`）谁负责 `dest.parent.mkdir(...)`。
+    """
+    want = str(sha256_hex or "").strip().lower()
+    base = Path(library)
+    src = Path(source)
+    for chars in (LANDING_HASH_CHARS, 16, 32, 64):
+        rel = library_landing_name(src, want, hash_chars=chars)
+        dest = base / rel
+        if not dest.exists():
+            return rel, dest
+        if dest.is_file() and sha256_file(dest) == want:
+            return rel, dest
+    # 连 64 位全 hash + 同名都撞上（同一份目录里有另一份内容极近的文件）：带上
+    # 「源文件 + 内容」的短哈希，仍然不覆盖任何既有字节。
+    tail = hashlib.sha256(f"{src}|{want}".encode("utf-8")).hexdigest()[:8]
+    rel = f"{want}-{tail}-{_safe_name(src)}"
+    return rel, base / rel
 
 
 def _machine_summary(pages: int, *, name: str = "") -> str:
@@ -423,6 +550,58 @@ def _known_hashes(store: Store) -> dict[str, str]:
     return out
 
 
+def _read_body(src: Path, size: int) -> tuple[Any, str]:
+    """抽一次正文并判"这一份有没有可读正文"：返回 `(doc, 拒因)`，拒因为空串 = 可登记。
+
+    判据只有一份：`litread.fulltext_tier` 是 `download.fulltext` 的四档真身，它判乱码
+    读的又是 `litread.garbled_text`（`text.extract` 拒写乱码读同一个函数）。所以这里不
+    另写"能不能读"的判据，只按它决定"这一份有没有可读正文"。
+
+    改前这一档照样登记（只在 note 里写一句"没有可引用的正文"）：乱码 PDF 于是进了库、
+    而 `download.fulltext` 一个键都没有 —— `litavail.tier_of_literature` 把它读成
+    `unknown`，下游拿不到正文，而"入库"这件事已经发生了。那是本地登记这条路唯一绕过
+    判收的地方。
+
+    抽不出来 / 没有可读正文时也把 `doc` 交回去（可能为 `None`）：`pages` 是这一本的机器
+    读数，`unreadable` 那一档的清单里也要看得见"抽到了几页" —— 读不了不是没抽过。
+    """
+    try:
+        doc = extract_text(str(src))
+    except Exception as exc:  # noqa: BLE001 —— 读不了就是读不了，如实记一档
+        return None, f"{type(exc).__name__}: {exc}"
+    tier = LR.fulltext_tier(bytes_on_disk=size,
+                            pages=getattr(doc, "pages", None),
+                            text=str(getattr(doc, "text", "") or ""))
+    if tier != LR.FULLTEXT_OK:
+        return doc, (f"{tier}: 这一份没有可读正文，不进 literature"
+                     "（乱码要换来源；无文本层的扫描件要先 OCR）")
+    return doc, ""
+
+
+def _summary_for_row(pages: int, name: str, note: str) -> tuple[str, str]:
+    """机器题录过一次正文闸：返回 `(summary, 追加后的 note)`（WRITERESIDUE ③）。
+
+    判据只有一份：`search_tools._content_claim_refusal`（它自己判
+    `litavail.content_assertion`，受控码 `litstage.CONTENT_CLAIM_WITHOUT_READ`），
+    与 `search.register` / `table.create|update` 用的是同一处实现。
+
+    为什么 `read_ok=False`：这条路只有"抽过"（`fulltext_tier == ok`），没有
+    `litavail.content_read` 要的那份证据（抽读回执 + 版本 + `fs.read` 观察台账 +
+    不只摘要）；按三态纪律不能把"抽过"冒充成"读过"。
+
+    判成断言时不是拒这本书（它有可读正文、必须能登记），而是按同一道闸的第一条改法办：
+    题录只写机器事实，不回显文件名（见 `_machine_summary`）。
+    """
+    from .tools import search_tools as _ST
+    summary = _machine_summary(pages, name=name)
+    if _ST._content_claim_refusal(summary, read_ok=False,
+                                  port="search.ingest_local") is not None:
+        summary = _machine_summary(pages)
+        note = (f"{note}；" if note else "") + (
+            f"机器题录未回显文件名 {name!r}：它会被正文闸判成内容性断言")
+    return summary, note
+
+
 def ingest_directory(
     store: Store,
     root: Path | str,
@@ -459,8 +638,11 @@ def ingest_directory(
 
     for idx, src in enumerate(list_books(root, pattern=pattern)):
         size = src.stat().st_size
-        name = _safe_name(src)
         sha = sha256_file(src)
+        # 落点名只有一处实现（`library_landing_name`，与 `search_tools._adopt_file`
+        # 共用）：扁平 `<内容 hash 前缀>-<名>`。计划里报的就是它实际会落到的名字，
+        # 不是另起一个"书名"—— 两个名字并存正是这一批要消掉的那种名实不符。
+        name = library_landing_name(src, sha)
         plan = BookPlan(source=str(src), library_name=name, bytes=size, sha256=sha,
                         status="ingested")
 
@@ -483,57 +665,20 @@ def ingest_directory(
 
         # 先解析一次正文：没有文本层的书仍然登记，但要把这件事写在行上，
         # 而不是等 B 去发现（B 发现时它记的是 last_mine_error，那是运行记录）。
-        try:
-            doc = extract_text(str(src))
-        except Exception as exc:  # noqa: BLE001 —— 读不了就是读不了，如实记一档
+        # 判据（抽不出 / 乱码 / 无文本层 / 全空页）在 `_read_body` 一处，这里只处置。
+        doc, body_problem = _read_body(src, size)
+        if doc is not None:
+            plan.pages = len(getattr(doc, "pages", []) or [])
+            plan.has_text_layer = bool(getattr(doc, "has_text_layer", False))
+        if body_problem:
             plan.status = "unreadable"
-            plan.note = f"{type(exc).__name__}: {exc}"
-            report.books.append(plan)
-            continue
-
-        plan.pages = len(getattr(doc, "pages", []) or [])
-        plan.has_text_layer = bool(getattr(doc, "has_text_layer", False))
-        # 正文闸（业主 2026-11-20 口径：判收必须有正文；`litavail.ADMITTABLE_TIERS`
-        # 只留 `readable`）。抽出来是乱码 / 没有文本层 / 全空页 ⇒ 这一份不进
-        # `literature`，如实记在 `unreadable` 那一档并把理由码写进 note。
-        #
-        # 判据只有一份：`litread.fulltext_tier` 是 `download.fulltext` 的四档真身，
-        # 它判乱码读的又是 `litread.garbled_text`（`text.extract` 拒写乱码读同一个函数）。
-        # 所以这里不另写"能不能读"的判据，只按它决定"这一份有没有可读正文"。
-        #
-        # 改前这一档照样登记（只在 note 里写一句"没有可引用的正文"）：乱码 PDF 于是
-        # 进了库、而 `download.fulltext` 一个键都没有 —— `litavail.tier_of_literature`
-        # 把它读成 `unknown`，下游拿不到正文，而"入库"这件事已经发生了。那是本地
-        # 登记这条路唯一绕过判收的地方。
-        tier = LR.fulltext_tier(bytes_on_disk=size,
-                                pages=getattr(doc, "pages", None),
-                                text=str(getattr(doc, "text", "") or ""))
-        if tier != LR.FULLTEXT_OK:
-            plan.status = "unreadable"
-            plan.note = (f"{tier}: 这一份没有可读正文，不进 literature"
-                         "（乱码要换来源；无文本层的扫描件要先 OCR）")
+            plan.note = body_problem
             report.books.append(plan)
             continue
 
         # ---- 正文闸（WRITERESIDUE ③）：机器题录也不许带"不是读出来的"内容性断言。
-        #
-        # 判据只有一份：`search_tools._content_claim_refusal`（它自己判
-        # `litavail.content_assertion`，受控码 `litstage.CONTENT_CLAIM_WITHOUT_READ`），
-        # 与 `search.register` / `table.create|update` 用的是同一处实现。
-        #
-        # 为什么 `read_ok=False`：这条路只有"抽过"（`fulltext_tier == ok`），没有
-        # `litavail.content_read` 要的那份证据（抽读回执 + 版本 + `fs.read` 观察台账 +
-        # 不只摘要）；按三态纪律不能把"抽过"冒充成"读过"。
-        #
-        # 判成断言时不是拒这本书（它有可读正文、必须能登记），而是按同一道闸的
-        # 第一条改法办：题录只写机器事实，不回显文件名（见 `_machine_summary`）。
-        from .tools import search_tools as _ST
-        summary = _machine_summary(plan.pages, name=name)
-        if _ST._content_claim_refusal(summary, read_ok=False,
-                                      port="search.ingest_local") is not None:
-            summary = _machine_summary(plan.pages)
-            plan.note = (f"{plan.note}；" if plan.note else "") + (
-                f"机器题录未回显文件名 {name!r}：它会被正文闸判成内容性断言")
+        # 判据与改法都在 `_summary_for_row` 一处（与 `search.register` 同一实现）。
+        summary, plan.note = _summary_for_row(plan.pages, name, plan.note)
 
         if dry_run:
             report.books.append(plan)
@@ -559,7 +704,10 @@ def ingest_directory(
             continue
 
         lib.mkdir(parents=True, exist_ok=True)
-        dest = lib / name
+        # 落点由 `library_landing` 一处给（同名不同内容会加长 hash 前缀，绝不覆盖）：
+        # 本路与 `search_tools._adopt_file` 是同一个落点函数，不是两份实现。
+        landing, dest = library_landing(lib, src, sha)
+        dest.parent.mkdir(parents=True, exist_ok=True)
         if not dest.exists() or sha256_file(dest) != sha:
             shutil.copy2(src, dest)
 
@@ -595,7 +743,7 @@ def ingest_directory(
                 title=title,
                 type="M",
                 summary=summary,
-                path=name,
+                path=landing,
                 processed=False,
                 source_request_ids=[req_id],
                 dedup_key=dedup_key,

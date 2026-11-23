@@ -30,6 +30,7 @@ from . import dedup as D
 from . import evidencebits as EB
 from . import interactions as IX
 from . import litread as LR
+from . import manuscriptfamily as MFAM
 from . import schema as S
 from . import signatures as SIG
 from . import statementledger as SL  # 命题台账的查口（按号 / 按关键词，只读、零模型）
@@ -2036,6 +2037,8 @@ def _check_13(rep, store) -> None:
     # error：哨兵 `concept:primitive` 会把依赖它的每一条读数顶高（真机 mp3：1143 条）。
     #
     # 口径只一处（:func:`concept_rows_with_proof_text`）：判据的负控摘的就是它。
+    # 读数条件（不是模型面）：这一条只进 `verify_all` 的离线审计报告（CLI / 自检人读面），
+    # 下面那句 `reports/...` 旧名不构成"教模型写旧落点"。
     for row in concept_rows_with_proof_text(statements, root=store.root, store=store):
         rep.issues.append(Issue(
             "error", "statements", row["stmt_id"] or None, CONCEPT_PROOF_TEXT_CODE,
@@ -2052,10 +2055,23 @@ def _check_13(rep, store) -> None:
         ))
 
 
-#: 报告面：工作区里 `reports/` 下那一层 markdown。D 的跨趟研究手稿（`reports/RESEARCH.md`）
-#: 与工作稿（`reports/<qid>-research.md`）、F 的攻坚台账（`reports/attack-<plan_id>.md`）
-#: 都住在这里 —— 它们是自由文本，不进 `schema.TABLES`，所以单行自洽校验管不到。
-REPORTS_DIR = "reports"
+#: 报告面：工作区里按角色分目录的正文（`manuscripts/<角色>/`）那一层 markdown。
+#:
+#: 2026-11-22 起正文按角色分目录（业主裁定），所以本读口只读这五处，目录表全部从
+#: :mod:`agentflow.manuscriptfamily` 派生（族→目录的唯一真身）：F/B/E 三族的手稿目录
+#: （`MANUSCRIPT_DIRS`）、D 的研究稿（`RESEARCH_DIR`）、G 的论文（`LEGACY_RESEARCH_DIR`
+#: 这一格就是 `manuscripts/G/`；它同时是 D 研究稿"改前误写"的旧落点，但作为 G 自己的
+#: 角色目录照常扫）。`reports/` 不在表里：它已退役，只由 :func:`_legacy_report_files`
+#: 点名（旧布局，不再支持），不参与正常扫描。
+#:
+#: 为什么要从表派生而不是写死字符串：报告面与手稿族是同一条"正文按角色分目录"的链；
+#: 两边各写一份目录表，改一边就会静默漏扫另一边（本读口曾写死已退役的 `reports/`，
+#: 而判据夹具已按 `manuscripts/<角色>/` 落稿 —— 那条红就是两边不同口径）。
+REPORT_SCAN_DIRS: tuple[str, ...] = tuple(dict.fromkeys(
+    (*MFAM.MANUSCRIPT_DIRS, MFAM.RESEARCH_DIR, MFAM.LEGACY_RESEARCH_DIR)))
+
+#: 退役目录（`reports/`）的 finding 码：旧布局只点名，不读内容。
+CODE_REPORT_LEGACY = "report_legacy_layout"
 
 #: 报告面里"引到某一行某一格"的记号：`前缀:编号.字段名`（如 `exp:000000.counterexample`）。
 #:
@@ -2070,6 +2086,24 @@ _FIELD_REF_RE = re.compile(
 )
 
 
+def _legacy_reports_root() -> str:
+    """退役目录名（`reports/`）的唯一真身：`wellformed.layout.REPORTS_DIR`。
+
+    本文件不写这个字面量：旧布局的判词（`UNSUPPORTED` / `CODE_REPORTS_RETIRED`）都在
+    `wellformed.layout` 那一层，读口只借它的名字来点名，不另立一份口径。函数内 import
+    是为了不在 `verify` 的模块级把 `wellformed` 整包（它连着 closing）拉进来。
+    """
+    from .wellformed.layout import REPORTS_DIR
+    return REPORTS_DIR
+
+
+def _legacy_report_files(root: Path) -> list[Path]:
+    """`reports/` 下现存的 markdown（旧布局：只点名，不读内容）。"""
+    legacy_dir = root / _legacy_reports_root()
+    return (sorted(p for p in legacy_dir.glob("*.md") if p.is_file())
+            if legacy_dir.is_dir() else [])
+
+
 def _check_14(rep, store) -> None:
     """`verify_all` 的第 14 段：报告面里的字段级引用必须落在真有的键上。
 
@@ -2078,11 +2112,27 @@ def _check_14(rep, store) -> None:
     【立这一格的直接由头】纪律说"引之前先看清那一行有哪些键"，这一格在作者忘掉时说话 ——
     它不是为某一次具体的误判立的，是为"引用一个不存在的落点"这一类立的。
     为什么报 warning 而不是 error（与 `dangling_citation` 的分界）：`documents` 里的 `citations` 是声明过的引用（作者填了那个字段就是声明"这是引用"）；而这里扫的是自由 markdown —— 作者也可能在描述某一格的缺失。把"提到"折成"引错"会冤枉人，本格的用处是让人看见，不是阻断收工。写入期的硬条件仍在 `Experiment.validate` 那一层（`result=refutes` 必须有反例）。
-    三态口径（同 `checked` 其余各键）：工作区没有 `reports/*.md` ⇒ 不写这个键（不适用，不是"查过、干净"）；有、读得出来 ⇒ 写整数；有、读不出来 ⇒ 写 `None` 并报一条 warning（没查成）。
+    三态口径（同 `checked` 其余各键）：工作区没有 `manuscripts/<角色>/*.md` ⇒ 不写这个键（不适用，不是"查过、干净"）；有、读得出来 ⇒ 写整数；有、读不出来 ⇒ 写 `None` 并报一条 warning（没查成）。旧布局 `reports/` 不参与本格：它的文件单列成 `report_legacy_layout` 的点名，不读、不计数。
     """
     root = Path(getattr(store, "root", ".") or ".")
-    reports = root / REPORTS_DIR
-    files = sorted(p for p in reports.glob("*.md") if p.is_file()) if reports.is_dir() else []
+    legacy_root = _legacy_reports_root()
+    legacy_files = _legacy_report_files(root)
+    files: list[Path] = []
+    for rel_dir in REPORT_SCAN_DIRS:
+        d = root / rel_dir
+        if d.is_dir():
+            files.extend(sorted(p for p in d.glob("*.md") if p.is_file()))
+    if not files and not legacy_files:
+        return
+
+    for legacy_path in legacy_files:
+        rel = legacy_path.relative_to(root).as_posix()
+        rep.issues.append(Issue(
+            "warning", legacy_root, rel, CODE_REPORT_LEGACY,
+            f"{rel} 是旧布局（不再支持）：`{legacy_root}/` 已退役，本格只点名、不读它的内容"
+            f" ⇒ 报告/手稿正文请挪到 `{MFAM.MANUSCRIPT_ROOT}/<角色>/`"
+            f"（D 的研究稿是 `{MFAM.RESEARCH_DIR}/`）。",
+        ))
     if not files:
         return
 
@@ -2091,13 +2141,13 @@ def _check_14(rep, store) -> None:
     # 表 → {号: 行}。按需建、按表缓存：一份报告引几十条时不必逐条重读盘。
     id_index: dict[str, dict[str, dict]] = {}
     for report_path in files:
-        rel = f"{REPORTS_DIR}/{report_path.name}"
+        rel = report_path.relative_to(root).as_posix()
         try:
             text = report_path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as exc:
             unreadable += 1
             rep.issues.append(Issue(
-                "warning", "reports", rel, "report_unreadable",
+                "warning", MFAM.MANUSCRIPT_ROOT, rel, "report_unreadable",
                 f"{rel} 读不出来（{type(exc).__name__}: {exc}）⇒ 这一份报告的字段级引用"
                 "**一处都没核**。这是「没查成」，不是「查过、没问题」。",
             ))
@@ -2114,7 +2164,7 @@ def _check_14(rep, store) -> None:
             row = id_index[table].get(code)
             if row is None:
                 rep.issues.append(Issue(
-                    "warning", "reports", rel, "report_ref_dangling",
+                    "warning", MFAM.MANUSCRIPT_ROOT, rel, "report_ref_dangling",
                     f"{rel} 里引了 `{m.group(0)}`，而 `{table}` 里没有号 {code} 这一行 "
                     "⇒ 这条引用悬空（读者顺着它找不到任何东西）",
                 ))
@@ -2122,7 +2172,7 @@ def _check_14(rep, store) -> None:
             if field in row:
                 continue
             rep.issues.append(Issue(
-                "warning", "reports", rel, "report_field_ref_missing",
+                "warning", MFAM.MANUSCRIPT_ROOT, rel, "report_field_ref_missing",
                 f"{rel} 里引了 `{m.group(0)}`，而 `{table}` 里 {code} 那一行**没有 "
                 f"`{field}` 这个键**（那一行有的是：{sorted(row)}）⇒ "
                 "引一个不存在的落点比不引更坏：它看起来是可复核的。"

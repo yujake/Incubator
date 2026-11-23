@@ -66,6 +66,10 @@ class _Revise:
             doc = tx.find("documents", doc_id=doc_id)
             if doc is None:
                 raise DocumentError(f"稿件 {doc_id} 不存在 ⇒ 不能修订一份不存在的稿件")
+            # ---- `kind=research` 那一行归 D 的写口（`doc_tools.record_research_report`）：
+            # 改它等于改别人的交付正文，而 `kind` 不变、S-07 照样数成"D 的一份报告"。
+            # 判据与 `refresh_markdown` 共用同一处（`revise_gates.ensure_not_research_row`）。
+            RG.ensure_not_research_row(doc_id=doc_id, doc=doc, action="revise")
             # ---- 行级归属（K11 / GD-02，2026-11-19）：别人的稿不归我改。
             #
             # 判据只问一件事：这一行指名到了另一个实例吗？指名了、而我这一趟也带
@@ -225,7 +229,7 @@ class _Revise:
                 # `D-44`：重画之后，中间产物自己的 sha 也跟着换一版 —— 记在同一笔事务里。
                 # 不记的话，读侧会把每一次正常改稿都报成"内容已变"（噪音会把真信号淹掉）。
                 # 甲（2026-11-11）：同一条事件里记「正文」那一份的 sha（paper =
-                # `out/paper/main.tex`，其它 kind = markdown 自己）。这是"改稿"这件事
+                # `out/package/main.tex`，其它 kind = markdown 自己）。这是"改稿"这件事
                 # 在 `documents` 登记行上的唯一读数 —— 不新造第二份账。
                 artifact = DT.record_markdown_artifact(
                     tx, doc_id, rel, target,
@@ -233,7 +237,7 @@ class _Revise:
                 )
             else:
                 # 没有 markdown_path 的行（历史行）仍然要给正文读数：正文就是
-                # `out/paper/main.tex`（paper）或空（其它 kind）。这里只记读数、
+                # `out/package/main.tex`（paper）或空（其它 kind）。这里只记读数、
                 # 不改任何数据行（与 `note_markdown_artifact` 同一条纪律）。
                 artifact = {
                     "body_path": str(body_rel or ""), "body_sha256": "",
@@ -295,7 +299,7 @@ class _Revise:
             "markdown_path": rel,
             "rendered_path": rendered,
             # ---- 甲（2026-11-11）：这一版「正文」的读数（哪份文件为准见
-            # `DT.body_artifact_of`：paper ⇒ out/paper/main.tex；其它 kind ⇒ markdown）。
+            # `DT.body_artifact_of`：paper ⇒ out/package/main.tex；其它 kind ⇒ markdown）。
             # `content_sha256` 仍是"这一版内容"的规范哈希，两者不互相冒充。
             "body_path": artifact.get("body_path") or "",
             "body_sha256": artifact.get("body_sha256") or "",

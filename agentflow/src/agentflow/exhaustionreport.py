@@ -65,10 +65,10 @@ from . import proofregistry as _PR
 
 #: ②③ 的落点（唯一口径）：`out/experiments/<实验号>/exhaustion.md`。
 #:
-#: 为什么是 `out/experiments` 而不是 `code/exp`：同一趟实验的原始输出已经落在
-#: `out/experiments/<实验号>.log`（`agent_e._support._write_run_log`），
-#: 把它与 E 写的读数放在同一个父目录下，读的人按实验号找一次就够；
-#: 而 `code/` 是"可执行的东西"那一格，报告不是程序。
+#: 为什么是 `out/experiments` 而不是 `code/exp`：`code/` 是"可执行的东西"那一格，
+#: 报告不是程序。同一趟实验的原始输出日志是另一个落点（2026-11-22 起搬到
+#: `out/exp-logs/<实验号>.log`，写点仍是 `agent_e._support._write_run_log`，一个
+#: 实验号一份 `.log` 文件）；报告这一份不搬，仍按实验号分目录落在这里。
 REPORT_DIR = "out/experiments"
 #: 报告文件名（与论文对应表 `exhaustion_note` 那一格认的形态一致）。
 REPORT_NAME = "exhaustion.md"
@@ -409,17 +409,20 @@ def land_report(root: str | Path, *, experiment_id: Any, claim: Any, claim_key: 
 # 于是 E 的"V 签"只剩两条退路：`experiments.observations.e_signature`（E 自己
 # 写的 `signed_by="V"`，那是自报）与 V 的台账行（那是"审过"，不是"签在稿上"）。
 #
-# 这一节补的是"与 F 同形的那一份手稿"：同目录（`reports/`）、同 `## 命题` / `## 证明` /
+# 这一节补的是"与 F 同形的那一份手稿"：同目录（`manuscripts/E/`）、同 `## 命题` / `## 证明` /
 # `## 依赖` 三节、同一把 sha 尺（`proofregistry.proof_sha(## 证明 的正文)`）。
 # 差别只有一处、而且是必须的：正文不是散文，是 `numericproof.compose_proof_column`
 # 那一段（2026-11-08 起只有 ③ 穷举论证；① 程序在 `experiments.code_path`、② 程序设计在
 # `observations["design"]`）—— 它正是 B 登记时 `proof_text` 要收的那一串，
 # 于是"稿上被签的那一份"与"台账里登记的那一份"逐字相同。
 
-#: E 的证明手稿落在哪（与 F 的证明手稿同一个目录：`reports/`）。
+#: E 的证明手稿落在哪：`manuscripts/E/`（正文手稿按角色分目录，2026-11-22 裁定）。
 #: 2026-11-09（T2 收编）：目录与两个前缀都从 `manuscriptfamily` 派生（设计 3.2 第 7 处）。
-MANUSCRIPT_DIR = _MFAM.MANUSCRIPT_DIR
-#: 文件名前缀（`reports/e-proof-<实验号>.md`）。
+PROOF_DIR = _MFAM.dir_of("e-proof")
+#: 普通数值那一档的落点：`work/E/`（它不是正文手稿 —— 读数进 `experiments` 表，
+#: 文件是草稿；B 仍按同一条读口从它取 `## 命题`）。
+NUMERIC_DIR = _MFAM.dir_of("e-num")
+#: 文件名前缀（`manuscripts/E/e-proof-<实验号>.md`）。
 #:
 #: 为什么不叫 `f-proof-`：`depsection.is_framework_manuscript` 用它认"F 那一份"，
 #: 而 E 的稿不是 F 渲染的（洗稿元信息那一格也不同）—— 两个前缀让"谁写的稿"在路径上
@@ -431,8 +434,8 @@ MANUSCRIPT_PREFIX = _MFAM.prefix_of("e-proof")
 # 业主逐字：「E侧普通数值实验也需写报告，即命题+数值实验结果，和F侧命题+证明一致，
 # E侧普通数值实验不用过V」＋「乙」（② 程序设计挪进 `observations["design"]`）。
 # 于是手稿分两族、不混用：
-#   · `reports/e-proof-<实验号>.md`：穷举档（命题 + 程序 + 穷举论证 + V 签）；
-#   · `reports/e-num-<实验号>.md`：普通数值档（命题 + 数值结果；程序只引用
+#   · `manuscripts/E/e-proof-<实验号>.md`：穷举档（命题 + 程序 + 穷举论证 + V 签）；
+#   · `work/E/e-num-<实验号>.md`：普通数值档（命题 + 数值结果；程序只引用
 #     `experiments.code_path` 那一格，不抄进正文；不过 V）。
 # 为什么另起一族而不是复用 `e-proof-`：两族的内容契约不同（`## 证明` vs
 # `## 数值结果`）、签不签不同（V 会审 vs 不过 V）—— 同名会让读侧按"有没有 V 签"去猜
@@ -458,12 +461,17 @@ MANUSCRIPT_DEPENDENCY_HEADER = (
 )
 
 
+def _dir_of_prefix(prefix: str) -> str:
+    """前缀 ⇒ 它那一族的落点目录（`e-proof` ⇒ `manuscripts/E`；`e-num` ⇒ `work/E`）。"""
+    return PROOF_DIR if prefix == MANUSCRIPT_PREFIX else NUMERIC_DIR
+
+
 def _manuscript_relpath_of(experiment_id: Any, prefix: str) -> str:
-    """`reports/<前缀><实验号>.md`；实验号不合法 ⇒ 空串（不猜位置）。"""
+    """`<族目录>/<前缀><实验号>.md`；实验号不合法 ⇒ 空串（不猜位置）。"""
     eid = str(experiment_id or "").strip()
     if not _ID_RE.match(eid):
         return ""
-    return f"{MANUSCRIPT_DIR}/{prefix}{eid}.md"
+    return f"{_dir_of_prefix(prefix)}/{prefix}{eid}.md"
 
 
 def experiment_id_of(rel: Any) -> str:
@@ -487,7 +495,7 @@ def experiment_id_of(rel: Any) -> str:
 
 
 def proof_manuscript_relpath(experiment_id: Any) -> str:
-    """穷举那一档的老盘稿名（`reports/e-proof-<实验号>.md`）；实验号不合法 ⇒ 空串。
+    """穷举那一档的老盘稿名（`manuscripts/E/e-proof-<实验号>.md`）；实验号不合法 ⇒ 空串。
 
     2026-11-11（业主裁定 ① 同一条口径推到 E）之后 E 的稿名不再由实验号拼 ——
     每一族有自己的号段（`manuscriptids.FAMILY_COUNTERS`）。本函数只为老盘上的
@@ -498,7 +506,7 @@ def proof_manuscript_relpath(experiment_id: Any) -> str:
 
 
 def numeric_manuscript_relpath(experiment_id: Any) -> str:
-    """普通数值那一档的老盘稿名（`reports/e-num-<实验号>.md`；2026-11-08 新族）。
+    """普通数值那一档的老盘稿名（`work/E/e-num-<实验号>.md`；2026-11-08 新族）。
 
     与 :func:`proof_manuscript_relpath` 同一条说明：新写路径按 E 自己的稿号命名，
     本函数只为老盘的既存量保留。
@@ -530,7 +538,7 @@ def find_manuscript_relpath(root: str | Path | None, experiment_id: Any, *,
 
     ## 为什么不能按名字里的数字找（2026-11-11 业主裁定：E 侧同一把尺）
 
-    改前 E 的稿名是 `reports/e-proof-<实验号>.md`，于是"这一条实验的稿"= "名字里那个
+    改前 E 的稿名是 `manuscripts/E/e-proof-<实验号>.md`，于是"这一条实验的稿"= "名字里那个
     数字等于实验号的那份文件"。E 的稿号独立之后，名字里那个数字是 E 的号段，与实验号
     没有关系 —— 再按数字比就会把别人的稿当成自己的（与 B 侧 `b-proof-000016` 被当成
     000014 的稿同一个形态）。
@@ -549,13 +557,14 @@ def find_manuscript_relpath(root: str | Path | None, experiment_id: Any, *,
         return out
     want = "e-proof" if str(family) == "e-proof" else "e-num"
     prefix = MANUSCRIPT_PREFIX if want == "e-proof" else NUMERIC_PREFIX
-    base = Path(str(root)) / MANUSCRIPT_DIR
+    wanted_dir = _dir_of_prefix(prefix)
+    base = Path(str(root)) / wanted_dir
     if not base.is_dir():
-        out.update(checked=True, why=f"`{MANUSCRIPT_DIR}/` 不存在 ⇒ 还没有任何 E 稿")
+        out.update(checked=True, why=f"`{wanted_dir}/` 不存在 ⇒ 还没有任何 E 稿")
         return out
     hits: list[tuple[str, str]] = []
     for path in sorted(base.glob(f"{prefix}*.md")):
-        rel = f"{MANUSCRIPT_DIR}/{path.name}"
+        rel = f"{wanted_dir}/{path.name}"
         if not is_manuscript_relpath(rel, prefix=prefix):
             continue
         try:
@@ -567,7 +576,7 @@ def find_manuscript_relpath(root: str | Path | None, experiment_id: Any, *,
     out["candidates"] = [rel for rel, _mid in hits]
     if not hits:
         out.update(checked=True,
-                   why=(f"`{MANUSCRIPT_DIR}/{prefix}*.md` 里没有一份稿头写着 "
+                   why=(f"`{wanted_dir}/{prefix}*.md` 里没有一份稿头写着 "
                         f"exp:{eid} ⇒ 这一条实验还没有 {want} 稿"))
         return out
     rel, mid = hits[0]
@@ -612,11 +621,12 @@ def is_manuscript_relpath(value: Any, *, prefix: Any = "") -> bool:
     if not raw or raw.startswith("/") or ":" in raw:
         return False
     parts = raw.split("/")
-    if ".." in parts or len(parts) != 2:
+    wanted_dir = _dir_of_prefix(want)
+    if ".." in parts or "/".join(parts[:-1]) != wanted_dir:
         return False
-    if parts[0] != MANUSCRIPT_DIR or not parts[1].endswith(".md"):
+    if not parts[-1].endswith(".md"):
         return False
-    name = parts[1][: -len(".md")]
+    name = parts[-1][: -len(".md")]
     if not name.startswith(want):
         return False
     return bool(_ID_RE.match(name[len(want):]))
@@ -794,7 +804,7 @@ def land_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
 
     ## 稿号
 
-    E 的稿名不再由实验号拼（`reports/e-proof-<实验号>.md` 与 B 侧
+    E 的稿名不再由实验号拼（`manuscripts/E/e-proof-<实验号>.md` 与 B 侧
     `b-proof-<命题号>` 是同一种耦合）。现在 E 的稿号由
     `manuscriptids.next_manuscript_id(root, family="e-proof")` 发（`counters.emanuscript`
     一条独立号段），稿名只回答"这是第几份 E 证明稿"。稿与实验的对应关系记在稿头
@@ -901,7 +911,7 @@ def land_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
         problems.append(f"手稿写成了，但 `{MANUSCRIPT_PROOF_HEADING}` 那一节读不出正文：{rel}")
     # ---- 产物归属：手稿已落盘。登记失败进读数（`problems`），不让它静默消失。
     _reg_problem = _record_product(
-        root, rel=rel, kind="e-proof-manuscript",
+        root, rel=rel, kind=f"{_MFAM.prefix_of('e-proof')}manuscript",
         producer=str(facts.get("owner") or "E"),
         instance=facts.get("instance"), family="e-proof",
         identity_conflict=(facts.get("identity") or {}).get("conflict")
@@ -946,7 +956,7 @@ def read_proof_manuscript(root: str | Path | None, rel: Any) -> dict[str, Any]:
     raw = str(rel or "").strip().replace("\\", "/")
     if not raw or not is_manuscript_relpath(raw):
         out["problems"] = [
-            f"手稿落点不合口径（{raw!r}）：要的是 {MANUSCRIPT_DIR}/{MANUSCRIPT_PREFIX}"
+            f"手稿落点不合口径（{raw!r}）：要的是 {PROOF_DIR}/{MANUSCRIPT_PREFIX}"
             "<实验号>.md 这一形态的相对路径"]
         return out
     target, why = _resolve(root, raw)
@@ -1197,7 +1207,7 @@ def land_numeric_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
         problems.extend(list(got.get("problems") or []))
     # ---- 产物归属：手稿已落盘。登记失败进读数（`problems`），不让它静默消失。
     _reg_problem = _record_product(
-        root, rel=rel, kind="e-num-manuscript",
+        root, rel=rel, kind=f"{_MFAM.prefix_of('e-num')}manuscript",
         producer=str(facts.get("owner") or "E"),
         instance=facts.get("instance"), family="e-num",
         identity_conflict=(facts.get("identity") or {}).get("conflict")
@@ -1236,7 +1246,7 @@ def read_numeric_manuscript(root: str | Path | None, rel: Any) -> dict[str, Any]
     raw = str(rel or "").strip().replace("\\", "/")
     if not raw or not is_numeric_manuscript_relpath(raw):
         out["problems"] = [
-            f"手稿落点不合口径（{raw!r}）：要的是 {MANUSCRIPT_DIR}/{NUMERIC_PREFIX}"
+            f"手稿落点不合口径（{raw!r}）：要的是 {NUMERIC_DIR}/{NUMERIC_PREFIX}"
             "<实验号>.md 这一形态的相对路径"]
         return out
     target, why = _resolve(root, raw)
@@ -2036,3 +2046,4 @@ def environment_reading(*, exit_code: Any = None, runtime_sec: Any = None,
     if text:
         bits.append(text)
     return "；".join(bits)
+

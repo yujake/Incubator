@@ -5,32 +5,49 @@
 
 这两件事各有一份"读侧真相"，而它们此前分处两端、各自漂过：
 
-1. `literature.path` 有两个写入坐标系：`search_tools._adopt_file` 写着
-   「相对路径优先按 `library/` 解释（表里存的就是这个坐标系），不存在再按 workspace
-   解释」，而抽取入口 `agent_b.run_once` 只走 `store.library_path`（只认 `library/`）
-   ⇒ 一条按工作区相对写下的 `library/000001/…` 被解析成 `library/library/000001/…`。
-   写入侧的归一化不在这里（`schema.literature_path_problem` 与 `table_tools` 的
-   归一化属 FC-27、人审）：本模块只负责让存量行读得回来 —— 历史行仍然带着那个前缀
-   躺在盘上，读侧不认它就会把那篇文献判成 `file_missing`，而"文件真的不在"与
-   "在另一个基准下"在读数上同形。
+1. `literature.path` 只有一个读侧口径（2026-11-22 业主裁定「旧工作区不必兼容」）：
+   扁平落点 `<内容 hash 前缀>-<名>`，相对 `library/`（`locallib.library_landing_name`）。
+   唯一真身是 `store.Store.library_path` —— 它同时是写侧落地闸与工具面的读口。
+   本模块的 :func:`resolve_literature_path` 是它在抽取 / 回验 / 审计那几条路上的
+   同一条判据：同一种形态、同一个基准、同一句拒词。
 2. `download.fulltext` 的四个档只有写点、没有清除点：全仓只有
    `search_tools._mark_candidate_locator` 写过一个 `no_fulltext_this_time`，
    而 `status=ok` 的行照样一直挂着它。（2026-11-16 裁定 16 后第三档之外多了
    `extract_failed`：「抽过但失败」从此有落点；`garbled_text` 是乱码的唯一判据，
    `fulltext_tier` 与 `text.extract` 两边互认。）
 
+## 2026-11-22 之后：只有扁平落点（旧形态明确"不再支持"）
+
+改前这里是双基准：先 `library/`，再为以 `library/` 开头的串回退 workspace。
+而 `store.library_path` 在同一时刻已经严格（旧形态 ⇒ 「旧布局（不再支持）」）——
+于是同一份 `literature.path`，一条读路拒、另一条收：写侧说"这个写法不合法"，
+B 却照旧把那份文件抽成了概念；5 个测试文件用旧分目录夹具仍然"绿"，因为它们
+测的是宽容的那条路（B2a 实测）。业主裁定「旧工作区不必兼容」之后，那个回退分支
+整段删掉：它只服务过旧前缀形态（`library/…`），而那一形态正是写入闸拒的形态。
+
+三态纪律在这里的具体形态（不静默）：
+
+* 旧形态（`<lit_id>/<名>`、带 `library/` 前缀）⇒ `path is None` + `reason` 逐字带
+  「旧布局（不再支持）」，`candidates` 为空 —— 不折成 `file_missing`（"路径写旧了"
+  与"文件不见了"处置相反），也不返回一个解析得到的路径（那就等于继续支持它）。
+* 越界（绝对路径 / `..` 绕出 `library/`）⇒ `path is None` + `reason` 说越界。
+* 扁平形态、文件不在 ⇒ `path is None` + `candidates` 里有那一条绝对路径 +
+  `reason` 以 `file_missing` 开头。
+
+`root` 形参保留（几条调用方原样传）：工作区根不再参与解析 —— 唯一基准是 `library/`。
+
 两边各写一份判据，迟早会出现第三种口径。所以这里只收两件事的实现：
 
-* :func:`resolve_literature_path`：先 `library/` 后 workspace（只对以
-  `library/` 开头的串启用回退；其余串按老口径只认 `library/`），两条路都把结果
-  钉在工作区之内 —— 放宽的是"文件在哪"，不是"能读到工作区外面去"。口径与
-  `search_tools._lit_file` 同一套（它是读侧的先例）。
+* :func:`resolve_literature_path`：按 `store.Store.library_path` 的同一套形态判据
+  解析（扁平相对 `library/` 钉在工作区之内）；两条读路给同一个结论这件事由
+  `tests/test_litread_and_library_path_give_the_same_answer.py` 逐形态对拍钉住 ——
+  任何一侧让步（把这里改回双基准 / 把 store 的旧形态判据摘掉）那条判据当场红。
 * :func:`fulltext_tier` / :func:`with_fulltext`：三档现算（`ok` /
   `no_text_layer` / `no_fulltext`），以及"写入与清除成对"的那一半 ——
   有字节但这一处还没抽过文本时不算档（返回 `None`），由 :func:`with_fulltext`
   把旧标签清掉，而不是猜一个档位或把上次的标签留着。
 
-三态纪律在这里的具体形态：`None` 不是"没有全文"，是"这一处判不了"。
+`None` 不是"没有全文"，是"这一处判不了"。
 把它折成 `no_fulltext` 会让 `status=ok` 的行重新出现"有字节却没有全文"的自相矛盾；
 把它折成 `ok` 则会让扫描件被记成可引用。两者都是把"没查成"说成了结论。
 """
@@ -189,15 +206,22 @@ def garbled_text(text: str) -> tuple[bool, dict]:
     return reading["state"] == "garbled", reading
 
 
-#: `path_base` 的两个取值：这一条 `literature.path` 是按哪个基准解析出来的。
+#: `path_base` 的取值：这一条 `literature.path` 是按哪个基准解析出来的。
+#: 2026-11-22 起只剩 `library` 一个——唯一的合法基准。
 BASE_LIBRARY = "library"
+#: 历史读数：改前那条 workspace 回退分支留下的基准名。现在不再产出
+#: （回退只服务过旧前缀形态，而旧形态现在明确"不再支持"）。名字留着有两个理由：
+#: `verify.py` 还拿它比一次（那次比较现在恒假 —— 拒绝发生在解析之前），
+#: 以及历史报告里的 `path_base=workspace` 要读得懂。任何新代码都不许再产出它。
 BASE_WORKSPACE = "workspace"
 
-#: 只有以它开头的串才允许按 workspace 基准回退（见模块 docstring）。
-#: 取值不在这里另写一遍：`schema.LIT_PATH_PREFIX` 是"这一格不该带它"的唯一声明
-#: （写入闸拒的就是这个前缀）—— 读侧要认的正是同一串，两处各写一个 `"library/"`
-#: 早晚会漂。
+#: 旧前缀形态的识别串：写入闸（`schema.LIT_PATH_PREFIX`）拒的就是这个前缀，
+#: 读侧要认的正是同一串 —— 两处各写一个 `"library/"` 早晚会漂。
 WORKSPACE_PREFIX = LIT_PATH_PREFIX
+
+#: 旧布局的判词（逐字）。与 `store.Store.library_path` 的拒信同一句：
+#: 同一种形态，两条读路说同一句话 —— 否则"这个写法不合法"与"文件不见了"又会同形。
+OLD_LAYOUT_NOTE = "旧布局（不再支持）"
 
 
 @dataclass(frozen=True)
@@ -205,9 +229,12 @@ class ResolvedLiteraturePath:
     """一条 `literature.path` 的解析结果。
 
     `path is None` 时三个字段是这样分工的：`base` 为空串（没有解析出来），
-    `candidates` 是试过的绝对路径（1 个或 2 个），`reason` 是写进
-    `last_mine_error` 的那句 `file_missing` —— 两个候选都必须在里面
-    （只写一个会让"另一个基准下其实有文件"这件事在读数上消失）。
+    `candidates` 是试过的绝对路径（0 个或 1 个；旧形态与越界给 0 个），
+    `reason` 是写进 `last_mine_error` / 审计读数的那句话 ——
+
+    * 旧形态 ⇒ 逐字带 :data:`OLD_LAYOUT_NOTE`（不是 `file_missing`：处置相反）；
+    * 越界 ⇒ 「文献路径越出 library/」（与 `store.Store.library_path` 同一句）；
+    * 扁平形态但文件不在 ⇒ 以 `file_missing` 开头，候选绝对路径在里面。
     """
 
     path: Path | None
@@ -221,8 +248,51 @@ class ResolvedLiteraturePath:
         return self.path is not None
 
 
+def _normalized(rel: str | None) -> str:
+    """`literature.path` 的形态判据输入：与 `store.Store.library_path` 逐字同一套归一。
+
+    `\\` ⇒ `/`（Windows 上两种写法是同一个路径）、去两端空白、反复剥 `./`。
+    为什么归一化只有这一处：下面 :func:`old_layout_note` 与 store 的判据都吃它的输出，
+    两处各写一遍"剥几层 `./`"必然分家（`././000000/x.pdf` 就是一个例子）。
+    """
+    text = str(rel or "").replace("\\", "/").strip()
+    while text.startswith("./"):
+        text = text[2:]
+    return text
+
+
+def old_layout_note(rel: str | None) -> str:
+    """旧形态的拒词（空串 = 不是旧形态）。判据与 `Store.library_path` 同一套。
+
+    两种旧形态（2026-11-22 业主裁定「旧工作区不必兼容」，都不再读）：
+
+    * `<lit_id>/<名>` —— 分目录（首段是数字）。真机 lp-ball-13 的 4 行、
+      lp-ball-15 的 1 行是这一档；
+    * `library/<…>` —— 多带一层库根（`table.update` 事故留下
+      `library/000001/x.pdf`）。写入闸（`schema.literature_path_problem`）拒的
+      就是这个前缀，读侧不能比写入闸宽。
+
+    为什么首段数字能认"分目录"：`literature.path` 的合法形态是一个路径段
+    （`locallib.library_landing_name` 保证不含 `/`），所以"带 `/` 且首段像编号"
+    只可能是旧分目录；剩下的 `downloads/x.pdf` 一类首段不是数字，仍是合法坐标系
+    （另一件事，不在这里管）。这个判据与 `Store.library_path` 逐字相同，
+    漂了会被 `tests/test_litread_and_library_path_give_the_same_answer.py` 当场抓住。
+    """
+    text = _normalized(rel)
+    if not text:
+        return ""
+    first = text.split("/", 1)[0]
+    if text.startswith(WORKSPACE_PREFIX) or (("/" in text) and first.isdigit()):
+        return (
+            f"{OLD_LAYOUT_NOTE}：文献路径 {rel!r} 是分目录 / 带 `library/` 前缀的旧写法；"
+            "2026-11-22 起只认扁平落点 `library/<内容 hash 前缀>-<名>`"
+            "（改法：把文件按扁平名放进 `library/`，并把该行 `path` 改成扁平名）"
+        )
+    return ""
+
+
 def _library_candidate(library: Path, rel: str) -> Path | None:
-    """按 `library/` 基准解析；越出 `library/` 的写法在这里被拒。"""
+    """按 `library/` 基准解析；越出 `library/` 的写法在这里被拒（`None`）。"""
     try:
         cand = (library / rel).resolve()
     except OSError:
@@ -234,68 +304,57 @@ def _library_candidate(library: Path, rel: str) -> Path | None:
     return cand
 
 
-def _workspace_candidate(root: Path, rel: str) -> Path | None:
-    """按 workspace 基准解析，并把结果钉在工作区之内。
-
-    为什么"仍在工作区内"是硬条件：表里的 `path` 来自下载器与检索器，不是可信输入。
-    放宽回退的是"文件可能在两个坐标系里"，不是"可以读到工作区外面去"。
-    """
-    base = Path(root).resolve()
-    try:
-        cand = (base / rel).resolve()
-        cand.relative_to(base)
-    except (OSError, ValueError):
-        return None
-    return cand
-
-
 def _missing_reason(rel: str, candidates: Sequence[Path]) -> str:
-    """`file_missing` 的逐字原因：试过几个基准就写几个绝对路径，一个都不许省。"""
+    """`file_missing` 的逐字原因：候选绝对路径一个都不许省。"""
     paths = [str(p) for p in candidates]
     if not paths:
         return f"file_missing: 没有可解析的候选（path={rel!r}）"
-    if len(paths) == 1:
-        return f"file_missing: {paths[0]}"
-    return (f"file_missing: 两处都找不到（library 基准 {paths[0]}；"
-            f"workspace 基准 {paths[1]}）")
+    return f"file_missing: {paths[0]}"
 
 
 def resolve_literature_path(root: Path | str, library: Path | str,
                             rel: str | None) -> ResolvedLiteraturePath:
-    """把一条 `literature.path` 解析成盘上的文件，并说明用的是哪个基准。
+    """把一条 `literature.path` 解析成盘上的文件（唯一基准：`library/`）。
 
-    顺序：先 `library/` 基准；它不存在、且串以 `library/` 开头时才试 workspace
-    基准。两个条件缺一不可 —— 不加前缀条件会让 `downloads/x.pdf` 这类本来就按
-    workspace 写的旧行改变解析口径，而那是另一件事（`search_tools._lit_file`
-    那一侧的口径）。
+    与 `store.Store.library_path` 是同一套形态判据（那是唯一真身）：
+    合法形态只有扁平落点；旧形态（分目录 / `library/` 前缀）⇒ 明确
+    「旧布局（不再支持）」，不静默返回、也不折成 `file_missing`。
 
-    返回的 `base` 是读数：`library` / `workspace` / 空串。哪一基准解析的必须能读出来，
-    否则"工作区相对"与"library 相对"两种历史写法在下游看起来完全一样。
+    `root` 形参保留但不再参与解析（工作区基准那条路已删：它只服务过旧前缀形态）。
+    留着它是因为三条调用方（`agent_b/run_once`、`verify`、`table_tools`）与
+    `litavail.tier_of_literature` 都原样传"工作区根 + 库根"两个位置参数 ——
+    改签名会让它们各自再拼一次，而"路径怎么拼"正是本模块要收口的东西。
+
+    返回的三档见 :class:`ResolvedLiteraturePath`。不抛异常：调用方里有几条
+    （审计、引文回验）要把"这一篇读不到"降成一档读数，而不是把写口/审计打挂 ——
+    旧形态的结论由 `reason` 逐字说出来，不是靠调用方去 catch。
     """
     rel_text = str(rel or "").strip()
     if not rel_text:
         return ResolvedLiteraturePath(path=None, base="", candidates=(), reason="")
 
+    # ① 旧形态 ⇒ 明确"不再支持"。放在任何解析之前：它连"文件在不在"都不该问，
+    #    否则那份文件会被读回来，"不再支持"就成了空话。
+    note = old_layout_note(rel_text)
+    if note:
+        return ResolvedLiteraturePath(path=None, base="", candidates=(), reason=note)
+
+    text = _normalized(rel_text)
+    if not text:
+        # `./` / `././` 一类：归一之后没有路径段（`store.library_path` 同样返回 None）。
+        return ResolvedLiteraturePath(path=None, base="", candidates=(), reason="")
+
     library_dir = Path(library)
-    tried: list[Path] = []
-    lib_cand = _library_candidate(library_dir, rel_text)
-    if lib_cand is not None:
-        tried.append(lib_cand)
-        if lib_cand.is_file():
-            return ResolvedLiteraturePath(path=lib_cand, base=BASE_LIBRARY,
-                                          candidates=tuple(tried), reason="")
-
-    rel_posix = rel_text.replace("\\", "/")
-    if rel_posix.startswith(WORKSPACE_PREFIX):
-        ws_cand = _workspace_candidate(Path(root), rel_text)
-        if ws_cand is not None:
-            tried.append(ws_cand)
-            if ws_cand.is_file():
-                return ResolvedLiteraturePath(path=ws_cand, base=BASE_WORKSPACE,
-                                              candidates=tuple(tried), reason="")
-
-    return ResolvedLiteraturePath(path=None, base="", candidates=tuple(tried),
-                                  reason=_missing_reason(rel_text, tried))
+    cand = _library_candidate(library_dir, text)
+    if cand is None:
+        # 越界：与 `store.Store.library_path` 的拒信同一句（"路径非法"不是"文件不在"）。
+        return ResolvedLiteraturePath(path=None, base="", candidates=(),
+                                      reason=f"文献路径越出 library/：{rel_text!r}")
+    if cand.is_file():
+        return ResolvedLiteraturePath(path=cand, base=BASE_LIBRARY,
+                                      candidates=(cand,), reason="")
+    return ResolvedLiteraturePath(path=None, base="", candidates=(cand,),
+                                  reason=_missing_reason(text, (cand,)))
 
 
 def bytes_on_disk(path: Path | str | None) -> int:

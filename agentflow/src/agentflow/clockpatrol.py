@@ -177,7 +177,8 @@ def _first_sentence(text: Any, *, limit: int = 160) -> str:
 
 # 停滞那一段的阈值从哪来：读口给的那一格（`stalled` 里 `threshold_sec`）。本模块刻意不写
 # 自己的 N —— 判据的真身在 `conductor.agent_state`（`STALLED_AFTER_SEC` 加
-# `out/steps/<台账号>.json` 那一刻），报醒只负责把它的 `stalled_sec` 与阈值念出来。
+# `out/steps/<台账号>.jsonl` 轨迹的最后一行那一刻 —— 是轨迹，不是每步覆盖的指针文件），
+# 报醒只负责把它的 `stalled_sec` 与阈值念出来。
 # 两处各写一个 N 的代价很具体：同一个子在巡查里"停滞"、在页面读数里"没停滞"。
 
 

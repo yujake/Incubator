@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import time
 
+from ..locallib import library_landing, sha256_file
 from ._support import Any, ClaimOutcome, Iterable, Path, S, Store, T, X, lease_expired, make_lease, shutil
 from .run_once import _RunOnce
 from .run import _Run
@@ -481,13 +482,19 @@ class _Core:
         if base.get("url_source"):
             out["url_source"] = base["url_source"]
         return out
-    def _attach_staged(self, lit_id: str, dl: dict) -> tuple[str | None, dict]:
-        """把 staging 里的字节搬进 `<library>/<lit_id>/`，返回 `(相对路径, 清洗过的 download)`。
+    def _attach_staged(self, dl: dict) -> tuple[str | None, dict]:
+        """把 staging 里的字节搬进 `library/` 的唯一落点，返回 `(相对路径, 清洗过的 download)`。
 
         一处实现、两处使用（新建行与补下载共用）：搬文件的判据只有一个 ——
         `status ∈ ("ok", "content_mismatch")` 且有 staged 字节。`content_mismatch`
         的字节照样落盘：它是证据（能看到对方返回了什么），只是下游不许拿它当文献抽取；
         丢掉证据会让"为什么下载不到"变成不可查的问题。
+
+        落点名由 `locallib.library_landing` 一处给（与 `search_tools._adopt_file` /
+        `locallib.ingest_directory` 共用）：`library/<内容 sha256 前 12 位>-<清洗过的名>`。
+        本函数刻意不接 `lit_id`：落点与号无关，同一份字节两次落库到同一个名字上；
+        同一内容已在库里 ⇒ 不搬第二份、也不覆盖。旧布局 `library/<lit_id>/<名>` 不再由
+        任何写者产出。
 
         搬失败（例如目录不可写）⇒ `status="failed"`、`rel_path=None` ——
         绝不让"没搬成"被下游读成"下到了"。
@@ -498,19 +505,23 @@ class _Core:
         if not (staged and Path(staged).exists() and st in ("ok", "content_mismatch")):
             return None, out
         try:
-            rel_dir = self.store.library / lit_id
-            rel_dir.mkdir(parents=True, exist_ok=True)
-            target = rel_dir / Path(staged).name
-            # 同盘 os.replace 原子；跨盘回退到 move
-            shutil.move(str(staged), str(target))
+            src = Path(staged)
+            # 落点名由内容决定：hash 从要搬的那份字节现算（不靠 download 记录里的自述）。
+            sha = sha256_file(src)
+            landing, target = library_landing(self.store.library, src, sha)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            # 同内容复用：这份字节已在库里 ⇒ 不搬第二份、不覆盖既有文件（幂等）。
+            if not (target.exists() and sha256_file(target) == sha):
+                # 同盘 os.replace 原子；跨盘回退到 move
+                shutil.move(str(src), str(target))
         except Exception as e:  # 建目录/搬文件失败 => 降级为"未下载"，但不丢元数据
             # 两个动作放在同一个 try 里是判据逼出来的：只包 move 时，
-            # "`<library>/<lit_id>` 位置上是个文件"会让 `mkdir` 抛出并把整轮 A 带崩 ——
+            # 落点父目录建不出来会让 `mkdir` 抛出并把整轮 A 带崩 ——
             # 而正确的语义是"这一篇没拿到"，不是"整个检索挂了"。
             out["status"] = "failed"
             out["error"] = f"move_failed: {type(e).__name__}: {e}"
             return None, out
-        return f"{lit_id}/{target.name}", out
+        return landing, out
 
 
 class AgentA(_RunOnce, _Run, _SearchLiterature, _IngestLocal, _ShelfSearch, _WalkCitations, _Core):

@@ -7,7 +7,7 @@ G 产出论文时需附上对应表，说明每条定理、引理、命题、例
 ## 三个落点、一份内容（都在论文包里）
 
 论文包就是 `main.tex` / `main.pdf` 所在那一个目录（`papercompile.package_dir`，通常是
-`out/paper/`）。下面三份都住在包里，包外那一份不算数：
+`out/package/`）。下面三份都住在包里，包外那一份不算数：
 
 - `<论文包>/MAPPING.json`：机器读，唯一真身。本模块是它唯一的读侧（解析 + 校验）；
 - `<论文包>/MAPPING.md`：人读，由 json 生成（`render_mapping_markdown`）。不许手写第二份；
@@ -37,7 +37,7 @@ G 产出论文时需附上对应表，说明每条定理、引理、命题、例
 而指向包外的相对路径同样过不了"换一台机器也能复核"这一关（两者都判红）。
 
 `lean_file` 是唯一收「项目根相对路径」的那一格：
-L 的产物落在 `code/formal/`（`agent_l._support.FORMAL_DIR`），而论文包是 `out/paper/`，
+L 的产物落在 `code/formal/`（`agent_l._support.FORMAL_DIR`），而论文包是 `out/package/`，
 全仓没有任何一步把前者拷进后者 —— 只认包内相对路径时，那条真实存在的源码永远填不进
 这一格（三个落点各说各话）。所以这一格两个根都解析：先按包内找，找不到再按项目根找。
 字段名保持 `lean_file`（不改名：表头、解析与两份渲染产物都不动），但它的语义是
@@ -277,7 +277,7 @@ APPENDIX_TITLE = "附录：产出对应表"
 #: 一个中文字；所以这句说明用英文写死，两种语言共用同一个界标 —— 界标一旦按语言分叉，
 #: 读侧（`_appendix_block`）就得知道该找哪一种，而它只拿得到正文文本。
 APPENDIX_BEGIN = ("% ==== MAPPING-APPENDIX BEGIN"
-                  " (rendered from out/paper/MAPPING.json; do not edit by hand) ====")
+                  " (rendered from out/package/MAPPING.json; do not edit by hand) ====")
 APPENDIX_END = "% ==== MAPPING-APPENDIX END ===="
 
 #: 附录里每一行的机器可读注释
@@ -865,7 +865,7 @@ class _RowCheck:
 
 
 def package_dir(project_root: str | Path) -> Path:
-    """论文包目录（`<项目根>/out/paper`，与 `papercompile` 同一处——不另写一份路径）。"""
+    """论文包目录（`<项目根>/out/package`，与 `papercompile` 同一处——不另写一份路径）。"""
     return PC.package_dir(project_root)
 
 
@@ -3092,7 +3092,16 @@ def write_appendix(project_root: str | Path) -> Path:
     rows, _problems = parse_rows(payload)
     frag = appendix_path(root)
     frag.parent.mkdir(parents=True, exist_ok=True)
-    frag.write_bytes((render_appendix(rows, project_root=root) + "\n").encode("utf-8"))
+    body = render_appendix(rows, project_root=root) + "\n"
+    # 生产者侧的硬不变量（2026-11-22，PAPER-PKG-FIX）：附录只写「片段」。渲染器若哪天
+    # 退回"整篇 ctexart 文档"，这里在落盘前就拒 —— 真机两份 `appendix.tex` 都是整篇
+    # 独立文档、都没被 `\input`（`temp/paperpkg/REPORT.md` M11）。不许写出去再靠读侧点名。
+    if "\\documentclass" in body:
+        raise ValueError(
+            "附录渲染结果里有 `\\documentclass` ⇒ 它不是片段，拒绝落盘："
+            "附录必须是能被 `main.tex` `\\input` 的一段（写侧只产出片段，"
+            "整篇独立文档这条路径已删除）")
+    frag.write_bytes(body.encode("utf-8"))
     tex = package_dir(root) / PC.TEX_NAME
     if tex.is_file():
         text = tex.read_text(encoding="utf-8")
@@ -4318,7 +4327,7 @@ def mapping_reading(project_root: str | Path, *,
         problems = [_problem(
             "mapping_package_missing",
             f"论文包里没有对应表：{json_path} —— 有正文却没有表，是没产出（不是没查成）；"
-            f"G 要先写 `out/paper/{MAPPING_JSON_NAME}`，再渲染 md 与附录，最后才编 PDF")]
+            f"G 要先写 `out/package/{MAPPING_JSON_NAME}`，再渲染 md 与附录，最后才编 PDF")]
         for stray in _stray_mapping_copies(project, workspace):
             problems.append(_problem(
                 "mapping_missing",
@@ -4469,3 +4478,4 @@ def mapping_reading(project_root: str | Path, *,
             "；另有 " + str(len(cells["stale"])) + " 行的台账那两格与台账现在的读数不一致"
             "（表写完之后台账又动过，或者表被手改过）—— 重跑一次 `doc.write_mapping`")
     return reading
+

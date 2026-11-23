@@ -15,23 +15,24 @@ from typing import Any
 
 
 def entries_on_disk(root: Any) -> list[dict[str, Any]]:
-    """扫 `reports/` 下的证明手稿，返回逐份的登记条目（纯读）。"""
+    """扫三族正文目录（`manuscripts/F|B|E/`）下的证明手稿，返回逐份的登记条目（纯读）。"""
     from . import manuscriptform as _MF
     from .proofregistry import parse_entry
 
-    base = Path(str(root or "")) / _MF.MANUSCRIPT_DIR
+    base = Path(str(root or ""))
     out: list[dict[str, Any]] = []
-    if not base.is_dir():
-        return out
     for family, prefix in ((_MF.FAMILY_F, _MF.PREFIX[_MF.FAMILY_F]),
                            (_MF.FAMILY_B, _MF.PREFIX[_MF.FAMILY_B])):
-        for path in sorted(base.glob(f"{prefix}*.md")):
+        d = base / _MF.dir_of(family)
+        if not d.is_dir():
+            continue
+        for path in sorted(d.glob(f"{prefix}*.md")):
             try:
                 text = path.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError):
                 continue
             got = parse_entry(text)
-            rel = f"{_MF.MANUSCRIPT_DIR}/{path.name}"
+            rel = f"{_MF.dir_of(family)}/{path.name}"
             if not got.get("checked"):
                 continue
             out.append({"family": family, "path": rel, "label": str(got.get("label") or ""),
@@ -55,7 +56,7 @@ def proof_revisions(store: Any) -> dict[str, Any]:
 
     out: dict[str, Any] = {"checked": False, "propositions": [], "problems": [],
                            "registrations": 0, "proof_versions": 0,
-                           "checked_from": f"{_MF.MANUSCRIPT_DIR}/*proof-*.md",
+                           "checked_from": "manuscripts/F|B/*proof-*.md",
                            "reason": ""}
     root = str(getattr(store, "root", "") or "")
     if not root:
@@ -106,7 +107,7 @@ def proof_revisions(store: Any) -> dict[str, Any]:
     out["registrations"] = sum(int(p["registrations"]) for p in out["propositions"])
     out["proof_versions"] = sum(int(p["proof_count"]) for p in out["propositions"])
     if not out["propositions"]:
-        out["reason"] = ("查过了：`reports/` 下没有一份带登记条目的证明手稿 ⇒ "
+        out["reason"] = ("查过了：`manuscripts/<角色>/` 下没有一份带登记条目的证明手稿 ⇒ "
                          "这个读数不是「命题登记一次、证明改 N 次」的那种形态")
     else:
         out["reason"] = (f"查过了：{len(out['propositions'])} 条手稿登记、"
@@ -123,3 +124,4 @@ def registration_note() -> str:
     """提示词里那一句（正面表述：改证明不需要重新登记）。"""
     return ("你登记一条**新命题**时，你的秘书会先看它是否写清了「从什么条件导出什么结论」；"
             "已经在登记里的命题**重写证明**时不再过这一步 —— 改证明不需要重新登记。")
+

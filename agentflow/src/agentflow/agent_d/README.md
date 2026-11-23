@@ -5,7 +5,7 @@
 
 - 声明在 [`../specs/d.py`](../specs/d.py)：14 个动作、出边 `A/B/C/E/F`、写集
   `research_questions` + `search_requests`。实现类 `agent_d:AgentD`。
-- 跨趟交付物是 `reports/RESEARCH.md`（七节：成果概述 / 定义与已知 / 已确定的结论 /
+- 跨趟交付物是 `manuscripts/D/RESEARCH.md`（七节：成果概述 / 定义与已知 / 已确定的结论 /
   尝试与失败 / 例子与反例 / 未解问题 / 下一步）—— 下一趟接手的人先读它。
 - **谁读**：改研究循环的人；D 的动作数最多，每个动作一个文件。
 
@@ -21,12 +21,13 @@
 | `assess.py` | 动作 `assess`：判证据是否就绪（决定要不要向 A 要检索） |
 | `submit_gaps.py` | 动作 `submit_gaps`：把缺口提交成检索请求 |
 | `research.py` | 动作 `research`：回答一个证据就绪的问题 |
-| `write_report.py` | 动作 `write_report`：把研究结果渲染成 markdown（缺省 `reports/<qid>-research.md`） |
+| `write_report.py` | 动作 `write_report`：把研究结果渲染成 markdown（缺省 `manuscripts/D/<qid>-research.md`；旧落点 `reports/` 已退役） |
 | `probe_c.py` | 动作 `probe_c`：按问题向 C 点菜并记录问答 |
 | `consider.py` | 动作 `consider`：重新考虑一个问题（可能提到 researching） |
 | `adjudicate.py` | 动作 `adjudicate`：裁决一条矛盾问题（I2 闭环） |
 | `trace_question.py` | 动作 `trace_question`：把问题溯源到 L1/L2/L3 证据 |
 | `trace_l3.py` | 动作 `trace_l3`：按需下钻到文献正文那一段 |
+| `_support.py` | 包内共用的小工具（与其它角色同形） |
 
 ## 怎么用
 

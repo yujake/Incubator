@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import pathlib
 import threading
 from datetime import datetime, timezone
@@ -36,8 +35,12 @@ from typing import Any, Callable, Iterable, Mapping
 from filelock import FileLock
 
 from .jsonlfile import read_jsonl, read_jsonl_state
+#: 会话号的写法与落点单独一个模块（`sessionnames`）：本模块只往那边取，
+#: 再把名字 re-export 给既有调用方（`sessions.session_id()` / `sessions.ENV_SESSION`）。
+from .sessionnames import (ENV_SESSION, SESSIONS_DIR_NAME, is_legacy_sid,
+                           legacy_session_files, session_id, session_path,
+                           sessions_dir)
 
-SESSIONS_DIR_NAME = "sessions"
 #: 趟次索引的落点目录名（工作区根下）。
 #:
 #: 为什么另起一个目录而不塞进 `runs/`：`runs/` 是 `agent_loop` 写检查点
@@ -56,7 +59,6 @@ RUN_INDEX_NAME = "run-index.json"
 #: （drift）的样子报出来，而它其实没被人手改过。抬版本号之后它走"版本不认识"那一档
 #: （`tri=unreadable`、`drift=[]`），处置是「重建」，不是抓人。
 RUN_INDEX_VERSION = 2
-ENV_SESSION = "AGENTFLOW_SESSION"
 
 #: 提问 / 回答那两种事件的 kind。字面量与 `userio.ASK_KIND` / `userio.ANSWER_KIND`
 #: 逐字相同（`userio.py:85`），但不从那里导入：`userio` 是 `sessions` 的下游
@@ -69,23 +71,6 @@ ANSWER_EVENT_KIND = "user_answer"
 def _file_lock(path: str) -> FileLock:
     """跨进程写锁（同一工作区上 CLI 与驱动器可能同时在写同一份会话）。"""
     return FileLock(path, timeout=30.0)
-
-
-def sessions_dir(root: Any) -> pathlib.Path:
-    """`<项目根>/sessions/`（只算路径，不建目录）。"""
-    return pathlib.Path(str(root)) / SESSIONS_DIR_NAME
-
-
-def session_id() -> str:
-    """本次会话号：环境变量优先，否则当天日期（UTC+8 由调用环境决定，这里用本地时区）。"""
-    env = str(os.environ.get(ENV_SESSION) or "").strip()
-    if env:
-        return env
-    return datetime.now(timezone.utc).astimezone().strftime("%Y%m%d")
-
-
-def session_path(root: Any, sid: str | None = None) -> pathlib.Path:
-    return sessions_dir(root) / f"{sid or session_id()}.jsonl"
 
 
 #: 每个会话文件一把进程内写锁（并发写者的交错就在这里被挡住）。
@@ -228,6 +213,8 @@ def _iter_sessions(root: Any,
         return []
     got: list[tuple[pathlib.Path, list[dict], list[str]]] = []
     for p in sorted(d.glob("*.jsonl")):
+        if is_legacy_sid(p.stem):
+            continue          # 旧紧凑写法：不读（`legacy_session_files` 负责点名）
         events, problems = read_session(root, p.stem)
         got.append((p, events, problems))
         if read_cache is not None:
@@ -273,9 +260,13 @@ def read_all_sessions(root: Any) -> tuple[list[dict], dict[str, Any]]:
     if not folder.is_dir():
         reading.update(checked=True, reason="没有 sessions 目录（按 0 条读）")
         return ([], reading)
-    paths = sorted(p for p in folder.glob("*.jsonl") if p.is_file())
+    paths = sorted(p for p in folder.glob("*.jsonl")
+                   if p.is_file() and not is_legacy_sid(p.stem))
+    legacy = legacy_session_files(root_path)
     if not paths:
-        reading.update(checked=True, reason="sessions 目录里没有 .jsonl")
+        reading.update(checked=True,
+                       reason=("sessions 目录里没有 .jsonl" if not legacy
+                               else f"只有旧写法的会话文件（不再支持）：{legacy[:5]}"))
         return ([], reading)
     records: list[dict] = []
     bad = 0
@@ -797,3 +788,4 @@ def selftest() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(selftest())
+

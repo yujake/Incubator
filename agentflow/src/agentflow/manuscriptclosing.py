@@ -132,14 +132,15 @@ def signed_candidates(root: Any, *, families: Sequence[str],
         if str(doc.get("at") or "") > str(one["at"] or ""):
             one["at"] = str(doc.get("at") or "")
     report_paths: list[Path] = []
-    reports = root_p / _MFAM.MANUSCRIPT_DIR
     for family in wanted:
+        reports = root_p / _MFAM.dir_of(family)
         try:
             got = sorted(reports.glob(f"{_MFAM.prefix_of(family)}*.md"))
         except OSError as exc:  # noqa: BLE001
             got = []
             out["problems"].append(
-                f"`reports/` 列不出 {family} 的稿（{type(exc).__name__}: {exc}）"
+                f"`{_MFAM.dir_of(family)}/` 列不出 {family} 的稿"
+                f"（{type(exc).__name__}: {exc}）"
                 " ⇒ 未签的那一半没查成")
         report_paths.extend(got)
     for path in sorted(set(report_paths)):

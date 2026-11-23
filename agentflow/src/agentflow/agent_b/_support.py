@@ -34,7 +34,11 @@ assert QUOTE_OUT_OF_DECLARED_RANGE in Path(quoteverify.__file__).read_text(
 #: `proof_manuscript` 收"路径"时允许的两个根（与 `agent_f.manuscript.PROMOTE_SOURCE_ROOTS`
 #: 同一个口径：`notes/` 是草稿本、`reports/` 是正式落点）。别的根一律当"正文"处理，
 #: 不按路径读盘 —— 这一格不许变成"从任意路径读一个文件当证明"。
-_MANUSCRIPT_PATH_ROOTS: tuple[str, ...] = ("notes", "reports")
+#: `proof_manuscript` 允许落在的根：`notes/`（作者草稿）+ 新布局的两个角色根
+#: （`manuscripts/<角色>/` 正文、`work/<角色>/` 草稿）。`reports/` 仍收形状：
+#: 旧布局的指针要能被认成"一个指针"，随后由读侧报「旧布局（不再支持）」，
+#: 而不是被当成一段内联正文（那会把路径静默写成 `proof_text`）。
+_MANUSCRIPT_PATH_ROOTS: tuple[str, ...] = ("notes", "reports", "manuscripts", "work")
 
 
 def _norm_manuscript_rel(value: Any) -> str:
@@ -46,7 +50,8 @@ def _is_manuscript_rel(rel: str) -> bool:
     """这一格看起来是不是一个工作区相对路径（而不是一份正文）。
 
     判据只认形状：单行（正文必然带换行）、带 `/`、以 `.md` 结尾、落在
-    `notes/` 或 `reports/` 下、没有盘符 / 不以 `/` 开头 / 不含 `..`。
+    `notes/` 或 `manuscripts/<角色>/` · `work/<角色>/` 下、没有盘符 / 不以 `/` 开头 /
+    不含 `..`。
     """
     text = _norm_manuscript_rel(rel)
     if not text or "\n" in text or "\r" in text:
@@ -58,7 +63,10 @@ def _is_manuscript_rel(rel: str) -> bool:
     parts = [p for p in text.split("/") if p not in ("", ".")]
     if len(parts) < 2 or any(p == ".." for p in parts):
         return False
-    return parts[0] in set(_MANUSCRIPT_PATH_ROOTS)
+    top = parts[0].casefold()
+    if top in ("manuscripts", "work"):
+        return len(parts) >= 3
+    return top in set(_MANUSCRIPT_PATH_ROOTS)
 
 
 _PASSAGE_RE = re.compile(r"[^.!?。！？\n]+[.!?。！？]?", re.UNICODE)
@@ -149,7 +157,7 @@ class BRunResult:
     #: 并自己把该开的优化稿开出来（`open_optimization_drafts`）。它不等人派 ——
     #: 第一阶段（快录）与第二阶段（逐个优化）之间没有"等回执"这一跳。
     #:
-    #: 形状由 `agent_b/run_once.py::_stage_two_self_drive` 一处给：
+    #: 形状由 `agent_b/stage_two.py::_StageTwoSelfDrive._stage_two_self_drive` 一处给：
     #: `{checked, enabled, in_task, candidates, debt_count, debt, unwashed_count,
     #:   unwashed, opened, skipped_open, skipped_no_draft, refused, next_action, why}`。
     #: 空 dict = 这一拍没算（旧调用方拿到的返回形状因此逐字不变）。

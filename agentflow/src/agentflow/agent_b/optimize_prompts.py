@@ -51,7 +51,7 @@ PROMPTS: dict[str, dict[str, Any]] = {
             "本身**（假设、结论、量词一个都不动），**不许新增没有证过的步骤**，也不许把"
             "「显然」当成理由。"),
         "inputs": (
-            "你手上是 `reports/b-proof-<B稿号>.md`：`## 命题`（原命题，只读）+ "
+            "你手上是 `manuscripts/B/b-proof-<B稿号>.md`：`## 命题`（原命题，只读）+ "
             "`## 证明`（原证明的逐字复制版）+ `## 依赖`（引用了哪些在册命题）。"
             "源稿的 V 签已经被清掉 —— 这一份是未签的新稿，改完要重新派 V。"),
         "done_when": _DONE_COMMON,
@@ -99,7 +99,7 @@ PROMPTS: dict[str, dict[str, Any]] = {
             "再做设计」⇒ 这一档先不发提示词。"),
         "inputs": (
             "概念行的定义正文（`statement_full`）+ 它原来那份良定义论证（若有，住在"
-            "`proof_text` / `reports/b-proof-<号>.md`）。概念没有等级轴，判据不是"
+            "`proof_text` / `manuscripts/B/b-proof-<号>.md`）。概念没有等级轴，判据不是"
             "「够不够定理」，而是「这个定义立不立得住」。"),
         "done_when": (
             "同上三件（正文改了 / V 签在新正文 sha 上 / 收录记成 optimized=true）—— "

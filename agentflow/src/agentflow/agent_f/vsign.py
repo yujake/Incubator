@@ -190,7 +190,7 @@ def next_step_hint(reading: Mapping[str, Any], *,
     改前这一句在"有号"时把任务写成「`stmt:<号>`」，没号才点稿路径 —— 于是同一趟活
     在 F 眼里有两个身份，而命题号那一半是收方（B）在收录时才发的号：F 拿着它
     去指认"要审哪一份"，等于把收录的产物当成自己的攻坚目标。
-    现在只认稿路径：F 交出去的永远是 `reports/f-proof-<稿号>.md`（另一份证明是 `-p<N>`），
+    现在只认稿路径：F 交出去的永远是 `manuscripts/F/f-proof-<稿号>.md`（另一份证明是 `-p<N>`），
     正文 sha 由签那一侧现算。判据：`tests/test_f_does_not_work_for_a_statement_number.py`。
     """
     state = str(reading.get("state") or "")

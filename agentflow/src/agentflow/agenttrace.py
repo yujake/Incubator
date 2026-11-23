@@ -456,7 +456,7 @@ def artifact_readings(store: Any, row: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _last_handoff(handoffs: Sequence[Mapping[str, Any]], row: Mapping[str, Any]) -> dict[str, Any]:
-    """`manuscripts/handoffs.jsonl` 里 `task_id` 对得上的最后一行（摘要）。
+    """`work/handoffs.jsonl` 里 `task_id` 对得上的最后一行（摘要）。
 
     没有手稿是 `checked=True` + `found=False`（"它没交过手稿"）；目录/文件读不成
     由调用方给 `checked=False`（`handoffs=None`），这里不猜。

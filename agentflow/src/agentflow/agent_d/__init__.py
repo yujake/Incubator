@@ -33,7 +33,7 @@ LLM 的位置：`llm=None` 时全部走确定性回退（模板化措辞 + 证�
 """
 from __future__ import annotations
 
-from .core import AgentD
+from .core import AgentD, REPORTS_SUBDIR_DEFAULT
 from .core import (_selftest,
 )
 from ._support import (AgentBrief, AgentSpec, Any, CONFIDENCE_LABELS, 
@@ -49,6 +49,7 @@ from ..specs.d import SPEC
 
 __all__ = [
     "AgentD",
+    "REPORTS_SUBDIR_DEFAULT",
     "EvidenceError",
     "analyze_gaps",
     "install_d_tools",

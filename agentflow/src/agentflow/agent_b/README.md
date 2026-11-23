@@ -6,7 +6,12 @@
 
 - 声明在 [`../specs/b.py`](../specs/b.py)（禁改区族），两段 policy 分住在
   `b_ingest_policy.py` / `b_sign_policy.py`。10 个动作、出边 `C/D/H/L/V`、
-  写集 `conjectures/literature/relations/reprocess_requests/statements`。
+  写集 `conjectures/dependencies/literature/relations/reprocess_requests/statements`。
+  （`dependencies` 是 2026-11-22 WRITESETFIX 补进写集的：那 6 条依赖行不是本目录直接写的
+  —— 是 B 的秘书经 [`../secretary_deps.py`](../secretary_deps.py) 的 `_write_dep_steps`
+  落 `tx.upsert("dependencies", …)`，actor 写作 `secretary-<角色>`；而 G 的写集里也有
+  这张表 ⇒ 改前 `B×G` 这一对从来没被并发轴算成冲突。判据
+  `tests/test_write_sets_match_their_write_points.py`。）
 - 实现类 `agent_b:AgentB`；**谁读**：改 B 的人（尤其是改收录/签发口径的人）。
 
 ## 文件
@@ -40,5 +45,7 @@ python -c "import sys;sys.path.insert(0,'src');from agentflow import specs;print
 ## 邻居
 
 上游：**A**（文献行）、**F/E**（证明稿与实验稿）、**V**（签）。下游：**C**（关系分析）、
-**D**（研究问题）、**H**（语义判引文）、**L**（形式化）。B 是"谁能写 `statements`"的唯一角色：
+**D**（研究问题）、**H**（语义判引文）、**L**（形式化）、**V**（**送签** —— `B→V` 是手稿
+拿签的主路径：B 把稿交出去，V 判、落签信封，收方秘书把签块盖回手稿与命题行；
+改前这一格漏了 V，2026-11-22 ROLEDOC-1 更正）。B 是"谁能写 `statements`"的唯一角色：
 通用写口一律拒写这两张表（`store.direct_write_refusal`），所以别处不要把命题写进台账。

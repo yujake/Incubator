@@ -11,7 +11,7 @@
 
 1. 只放行"由 finding 触发"的表述改动（:func:`trigger_reading`）；
 2. 新表述必须再过命题表述闸 —— 判据本体只有一处
-   （`Secretary.judge_proposition_form`，`src/agentflow/secretary.py:3804`），本模块经
+   （`Secretary.judge_proposition_form`，`src/agentflow/secretary_identity_side.py:58`），本模块经
    `proofoutcomes.form_gate_reading` 跑同一道闸（三态解释也是同一份）；
 3. 不申请新稿号：本模块不碰 `manuscriptids`、不换路径、不新落文件 ——
    稿号与稿路径由调用方（`proofregistry.register_or_rewrite`）逐字沿用；

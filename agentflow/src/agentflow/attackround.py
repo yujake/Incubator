@@ -140,7 +140,7 @@ HANDED_PRODUCT_SCHEMA: dict[str, Any] = {
         "type": "object",
         "description": (
             "写好的证明 / 归约可以直接交进来：给 `kind` 与对应的正文，框架照既有的产物"
-            "校验逐条核过，再替你落成 `reports/f-proof-<你的稿号>.md`（`## 依赖` 由"
+            "校验逐条核过，再替你落成 `manuscripts/F/f-proof-<你的稿号>.md`（`## 依赖` 由"
             "`cites` 渲染，你不必手抄）。不给这一格 ⇒ 照旧由框架这一轮自己产出。"),
         "properties": {
             "kind": {

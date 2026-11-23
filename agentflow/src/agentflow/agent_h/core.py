@@ -272,7 +272,7 @@ def _selftest() -> int:
     # ---- 论文正文（业主 2026-10-24 裁定：H 审的是论文，`documents` 只是它的登记行）
     #
     # 自检此前只种 `documents` 行，于是"H 的输入是哪一份正文"这件事根本没有出现过。
-    # 现在审校对象是 `out/paper/main.tex`（退到 `main.pdf` 的文本层）：没有正文时
+    # 现在审校对象是 `out/package/main.tex`（退到 `main.pdf` 的文本层）：没有正文时
     # `review` 会如实回"没有可审的论文"（`verdict="unreviewable"`）—— 那是正确行为，
     # 但自检要验的是"干净稿件必须被接受"，所以这里先把正文写下来，把那两句断言逐字
     # 放进正文（行号就是按正文定位的，正文里没有那句话就定不到）。
@@ -369,7 +369,7 @@ def _selftest() -> int:
     try:
         from ..agent_g import AgentG
 
-        AgentG(st, config={"docs_subdir": "documents"}).revise(
+        AgentG(st, config={"docs_subdir": "manuscripts/G"}).revise(
             "0002",
             new_claims=[dict(c) for c in clean["claims"]],
             note="自检：由 G（稿件的所有者）按审校意见改稿",
@@ -503,3 +503,4 @@ def _selftest() -> int:
     print("=" * 72)
     print("SELF-CHECK DONE（agent_h）")
     return 0
+

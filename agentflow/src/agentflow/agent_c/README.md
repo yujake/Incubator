@@ -5,8 +5,14 @@
 
 - 声明在 [`../specs/c.py`](../specs/c.py)：10 个动作、**出边为空**、写集只有
   `analysis_reports` + `search_requests`、`read_only=True`。
-- 结构上拿不到写工具；它落库只经 `handle` 那一个登记口（外加 `gaps(submit_requests=true)`
-  落检索请求）。实现类 `agent_c:AgentC`。
+- 结构上拿不到**通用**写工具（`table.*` 只有读的那几件：count / get / list / schema / search）；
+  落库只有两个面，都在 `capabilities.READ_ONLY_WRITE_EXCEPTIONS["C"]` 里逐条登记：
+  ① `analysis_reports` —— 动作 `handle` 的产出登记口 `_support.AnalysisReport.persist()`
+  **与**工具面里的 `analysis.register_report` 走的是**同一个** `persist()`（那件工具是
+  `tools.base.READONLY_CALL_EXCEPTIONS["C"]` 的受控例外，只写这一张表）；
+  ② `search_requests` —— `gaps(submit_requests=true)` 落的检索请求。
+  （改前本行写"结构上拿不到写工具 / 落库只经 handle"，漏了 `analysis.register_report`；
+  2026-11-22 ROLEDOC-1 更正。）实现类 `agent_c:AgentC`。
 - **谁读**：改分析口径的人；C 的每个动作都是"一个动作一个文件"。
 
 ## 文件
@@ -40,6 +46,10 @@ python -c "import sys;sys.path.insert(0,'src');from agentflow import specs;print
 
 ## 邻居
 
-上游：**B**（`relations` 行是分析输入）。下游：**D**（把 C 的报告消化成研究问题）。
-C 的报告落 `<ws>/reports/<report_id>-<kind>.md` 与 `analysis_reports` 一行；它不写
+上游（能召唤 C 的，`capabilities.ALLOWED_EDGES` 现算）：**B / D / F / G / L / M** ——
+数据上游是 **B** 的 `relations` 行（以及 G 的稿、D 的研究问题）。
+（改前本行只写"上游：B"，漏了 **M** 与 **D** —— 还有 F / G / L；2026-11-22 ROLEDOC-1 更正。）
+下游：**D**（把 C 的报告消化成研究问题）。
+C 的报告落 `<ws>/work/C/<report_id>-<kind>.md` 与 `analysis_reports` 一行（2026-11-22 起；
+旧落点 `reports/` 已退役，不再写）；它不写
 `statements` / `literature` —— 那是 B 与 A 的表。

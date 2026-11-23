@@ -430,7 +430,7 @@ def open_manuscript(root: Any, *, role: str, family: str, proposition: str,
 
     _reg_entry, _reg_problem = A.record_or_problem(
         root, path=rel, producer=(str(producer or "").strip() or who),
-        kind=f"{fam}-manuscript",
+        kind=f"{_MFAM.prefix_of(fam)}manuscript",
         task_id=str(task_id or ""), instance=str(instance or ""),
         note=f"手稿骨架 `{rel}`（manuscriptopen.open_manuscript）")
     if _reg_problem:
@@ -501,7 +501,7 @@ def write_allowed(*, rel: Any, role: Any, root: Any, store: Any = None) -> dict[
         out.update(code=NOT_CANONICAL,
                    why=(f"`{shape['rel']}` 不是规范落点（"
                         f"{str(canonical.get('why') or '目录不对 / 历史后缀')}）⇒ 先把它"
-                        f"落成 `reports/{_MFAM.prefix_of(fam)}<六位号>.md` 再改"))
+                        f"落成 `{_MFAM.dir_of(fam)}/{_MFAM.prefix_of(fam)}<六位号>.md` 再改"))
         return out
     try:
         issued = int(_MID.peek_manuscript_counter(root, family=fam)) - 1
@@ -666,7 +666,7 @@ def write_section(root: Any, *, role: str, rel: Any, section: str, body: Any,
     _reg_rel = str(reading.get("rel") or out["path"])
     _reg_entry, _reg_problem = A.record_or_problem(
         root, path=_reg_rel, producer=str(role or ""),
-        kind=f"{fam}-manuscript" if fam else "manuscript",
+        kind=(f"{_MFAM.prefix_of(fam)}manuscript" if fam else "manuscript"),
         task_id=str(task_id or ""),
         note=f"手稿 `{_reg_rel}` 的 `## {name}` 节改写（manuscriptopen.write_section）")
     if _reg_problem:

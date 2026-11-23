@@ -486,7 +486,7 @@ def proof_text_manuscript_sign_gate(store: Any, *, proof_text: Any,
                        reason=("这一份正文（sha {sha}…）在 V 的台账里有签，但那一签是"
                                "内联审出来的（台账行上没有 `manuscript`）—— 内联签没有"
                                "载体，签块 / `## 依赖` / 按号寻址三样都落不了盘。正路：先把"
-                               "正文落成一份稿（`reports/f-proof-*.md` / `notes/*.md`）→ "
+                               "正文落成一份稿（`manuscripts/F/f-proof-*.md`）→ "
                                "派 V 用 `verify.verify_proof` 带 `proof_manuscript` 审那一份"
                                "稿 → 签块落回稿 → 再入库。").format(sha=sha[:12]))
             return out
@@ -496,7 +496,7 @@ def proof_text_manuscript_sign_gate(store: Any, *, proof_text: Any,
             return out
         out.update(ok=False, refused=PROOF_TEXT_NEEDS_MANUSCRIPT_SIGN,
                    reason=("这一份正文（sha {sha}…）一次都没有被 V 签过 ⇒ 不能进台账。"
-                           "正路：先把正文落成一份稿（`reports/f-proof-*.md` / `notes/*.md`）"
+                           "正路：先把正文落成一份稿（`manuscripts/F/f-proof-*.md`）"
                            "→ 派 V 用 `verify.verify_proof` 带 `proof_manuscript` 审那一份稿"
                            "→ 签块落回稿 → 再入库。").format(sha=sha[:12]))
         return out

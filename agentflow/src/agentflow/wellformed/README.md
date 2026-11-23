@@ -21,12 +21,14 @@
 | `registry.py` | `RULES[kind][name]` 规则表（判据可以逐条打桩做反真空） |
 | `states.py` | `ok` / `malformed` / `unchecked` 的取值、`Finding`、退出码 |
 | `reader.py` / `predicates.py` | 读盘与共用谓词 |
-| `acceptance.py` | 验收行（`out/paper/ACCEPTANCE-CHECKS.json`）的形状 |
+| `acceptance.py` | 验收行（`out/package/ACCEPTANCE-TARGETS.json`）的形状 |
 | `artifacts.py` | `ARTIFACTS.jsonl` 的 sha 对拍与登记 |
 | `candidates.py` | `lit_candidates`（待裁文献） |
 | `ledger.py` | `data/*.json` 的行与列类型 |
 | `literature.py` | `literature` 行与全文可得性 |
 | `manuscripts.py` | 稿件与证明稿的稿头 |
+| `paperpackage.py` | 论文包：`appendix.tex` 必须是片段、论文包必须有台账托着（PAPER-PKG-FIX） |
+| `layout.py` | 落点布局：`manuscripts/<角色>/` · `work/<角色>/` · 旧落点（已退役）—— 一份分类，读写两侧共用 |
 | `proofs.py` | 证明台账 / 实验行 |
 | `relations.py` | 关系行（"说回验通过却给不出区间"这一类） |
 | `roster.py` | 名册与销号行（`out/roster/*-retired.jsonl`） |

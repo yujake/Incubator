@@ -56,14 +56,32 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-__all__ = ["research_base", "signs_reading", "writing_gate"]
+from . import manuscriptfamily as _MFAM
+
+__all__ = ["RESEARCH_LEDGER_TABLES", "empty_ledger_reading", "research_base", "signs_reading",
+           "writing_gate"]
+
+
+#: 「论文必须建立在这份工作区的台账上」判的那几张表：全空 ⇒ 这篇论文没有可依据的台账。
+#:
+#: 为什么不是 `schema.TABLES` 的 16 张全算：`tasks` / `usage_ledger` 是运行账 —— 一趟
+#: 什么都没产出的跑批也有任务行与用量行；把这两张算进"有没有台账"，空台账就永远读不出来。
+#: 这里要回答的是"有没有研究成果"，不是"有没有跑过"。
+RESEARCH_LEDGER_TABLES: tuple[str, ...] = (
+    "research_questions", "search_requests", "literature", "relations", "conjectures",
+    "experiments", "attack_plans", "documents", "dependencies", "statements",
+    "review_findings", "analysis_reports", "lit_candidates",
+)
 
 
 #: 三态（见模块 docstring）。`unreadable` 不是"没有成果"。
 RESEARCH_BASE_STATES: tuple[str, ...] = ("ready", "insufficient", "unreadable")
 
-#: 「有稿无签」清单扫的那一处（与 `vsigns.SIGN_CARRIER_DIR` 同源：签的载体住在 `reports/`）。
-_MANUSCRIPT_DIR = "reports"
+#: 「有稿无签」清单扫的那三处（与 `vsigns.SIGN_CARRIER_DIR` 同源：签的载体住在
+#: `manuscripts/F|B|E/`；2026-11-22 起正文本按角色分目录）。三格的唯一真身是
+#: `manuscriptfamily.MANUSCRIPT_DIRS`（由 `DIR_OF` 现派生）—— 这里只做 re-export，
+#: 落点换名时这条读侧跟着换，不另写一份字面量。
+_MANUSCRIPT_DIRS: tuple[str, ...] = _MFAM.MANUSCRIPT_DIRS
 
 #: 签落在哪里（只用于拒信里的人话；真身是 `vsigns.SIGNS_DIR`）。
 _SIGNS_DIR = "out/vsigns"
@@ -95,6 +113,51 @@ def _rows(store: Any, table: str) -> tuple[list[Mapping[str, Any]] | None, str]:
         return list(store.rows(table)), ""
     except Exception as exc:  # noqa: BLE001 - 表坏了不许让"成文门"变成崩溃
         return None, f"读 {table} 台账失败：{type(exc).__name__}: {exc}"
+
+
+def empty_ledger_reading(store: Any) -> dict[str, Any]:
+    """这一份工作区的「研究台账」是不是全空（`data/*` 全 0 行且 `events.jsonl` 0 字节）。
+
+    真机 `p5-polish` 的形态（`temp/paperpkg/REPORT.md` B2）：`data/*` 全是
+    `{"schema_version":1,"rows":[]}`、`events.jsonl` 0 字节，而同一目录里躺着 51,285 B
+    `main.tex` 与 14 页 PDF。论文没有一行台账托着 —— 这种"论文包"今天不许再生成：
+    写口（`fs.write` 的成文门 / `doc.build_document` / `doc.write_mapping`）在落笔前
+    用本读数拒，拒信点名哪几张表是空的，而不是只说一句"研究成果不足"。
+
+    三态：`checked=False` = 有表读不到（那不是"全空"，不许折成空）；`is_empty=True`
+    = 本研究台账的每一张表都是 0 行、`events.jsonl` 0 字节；`is_empty=False` = 有行。
+    """
+    counts: dict[str, int] = {}
+    unreadable: list[str] = []
+    for table in RESEARCH_LEDGER_TABLES:
+        rows, why = _rows(store, table)
+        if rows is None:
+            unreadable.append(f"{table}（{why}）")
+        else:
+            counts[table] = len(rows)
+    events_bytes: int | None = None
+    events_path = getattr(store, "events_path", None) if store is not None else None
+    if events_path is None:
+        unreadable.append("events.jsonl（没有 events_path 可读）")
+    else:
+        try:
+            events_bytes = Path(events_path).stat().st_size
+        except OSError as exc:
+            unreadable.append(f"events.jsonl（{type(exc).__name__}: {exc}）")
+    empty = sorted(t for t, n in counts.items() if n == 0)
+    checked = not unreadable
+    is_empty = bool(checked and empty and len(empty) == len(counts) and events_bytes == 0)
+    if not checked:
+        reason = "台账读不全 ⇒ 判不了「是不是空台账」：" + "；".join(unreadable)
+    elif is_empty:
+        reason = (f"台账全空：data/ 下这 {len(counts)} 张研究表都是 0 行"
+                  f"（{'、'.join(empty)}），`events.jsonl` {events_bytes} 字节")
+    else:
+        reason = (f"台账有 {len(counts) - len(empty)} 张表非空"
+                  f"（空：{'、'.join(empty) or '无'}；`events.jsonl` {events_bytes} 字节）")
+    return {"checked": checked, "is_empty": is_empty, "counts": counts,
+            "empty_tables": empty, "events_bytes": events_bytes,
+            "unreadable": unreadable, "reason": reason}
 
 
 def claim_statement_scope(claims: Any) -> list[str]:
@@ -199,10 +262,14 @@ def signs_reading(store: Any, *, root: Any = None,
     pending: list[str] = []
     pending_total: list[str] = []
     carriers = 0
-    reports = Path(str(base_root)) / _MANUSCRIPT_DIR
-    if reports.is_dir():
+    carriers_from: list[str] = []
+    for rel_dir in _MANUSCRIPT_DIRS:
+        reports = Path(str(base_root)) / rel_dir
+        if not reports.is_dir():
+            continue
+        carriers_from.append(rel_dir)
         for path in sorted(reports.glob("*.md")):
-            rel = f"{_MANUSCRIPT_DIR}/{path.name}"
+            rel = f"{rel_dir}/{path.name}"
             if not _VS.is_sign_carrier(rel):
                 continue
             carriers += 1
@@ -235,8 +302,8 @@ def signs_reading(store: Any, *, root: Any = None,
         why=(f"`{_SIGNS_DIR}/` 里签 {len(entries)} 份"
              + (f"（全工作区 {len(all_entries)} 份，只算我引的 {len(scope)} 条命题）"
                 if scope else "")
-             + f"；`{_MANUSCRIPT_DIR}/` 里签载体 {carriers} 份，其中 {len(pending)} 份"
-             "还没有签"),
+             + f"；`{'、'.join(carriers_from) or '（无正文本目录）'}/` 里签载体 {carriers} 份，"
+             f"其中 {len(pending)} 份还没有签"),
     )
     return out
 
@@ -276,7 +343,15 @@ def writing_gate(store: Any, *, root: Any = None,
 
     放行条件（业主 2026-11-17，两条任一）：≥1 条有效地基（`proof_text` 非空或
     `quote_verified=true`），或 ≥1 份 V 签（`out/vsigns/`）。这不是"一刀切禁止成文"。
+
+    2026-11-22（PAPER-PKG-FIX）：拒信里多一格 `empty_ledger`（:func:`empty_ledger_reading`）。
+    `data/` 下研究台账全空、`events.jsonl` 0 字节时，拒信逐张点名哪几张表是空的 ——
+    真机 `p5-polish` 那种"有 51 KB 正文与 14 页 PDF、台账一行都没有"的包，今天在写口就
+    不许再生成；出路是先把台账/证据落下来，而不是把正文写得更长。
     """
+    ledger = empty_ledger_reading(store)
+    empty_note = (f"{ledger['reason']} ⇒ 论文包不许生成：先落台账/证据，再出稿。"
+                  if ledger.get("is_empty") else "")
     scope = claim_statement_scope(claims)
     if claims is not None and not scope:
         # 这份成文一条命题都没引（只引文献 / 关系）：凭据门对它没有对象 —— 它没有
@@ -300,10 +375,11 @@ def writing_gate(store: Any, *, root: Any = None,
         got = _gate_readings(base, signing)
         return {
             "checked": True, "refuse": True, "kind": "no_evidence_chain",
-            "reason": (f"研究成果不足以成文：{got['signs']}、{got['pending']}、"
+            "reason": (f"{empty_note}研究成果不足以成文：{got['signs']}、{got['pending']}、"
                        f"{got['base']}。缺的是：{got['missing']}。⇒ 先拿签/先补地基，"
                        "再来成文。这一趟一个字节都没写"),
             "details": {"created": False, "written": False, "research_base": base,
+                        "empty_ledger": ledger,
                         "signing": signing, "scope": [],
                         "next_steps": [*_GATE_NEXT_STEPS, *(base.get("next_steps") or [])],
                         "credential_scope": "none"},
@@ -336,6 +412,7 @@ def writing_gate(store: Any, *, root: Any = None,
                 "base": base, "signing": signing}
     got = _gate_readings(base, signing)
     reason = (
+        empty_note +
         f"研究成果不足以成文：{got['signs']}、{got['pending']}、{got['base']}。"
         f"缺的是：{got['missing']}。"
         "⇒ **先拿签/先补地基，再来成文**：① 有稿无签 ⇒ 让产出方把稿送去 V 审"
@@ -347,6 +424,7 @@ def writing_gate(store: Any, *, root: Any = None,
     return {
         "checked": True, "refuse": True, "kind": "no_evidence_chain", "reason": reason,
         "details": {"created": False, "written": False, "research_base": base,
+                    "empty_ledger": ledger,
                     "signing": signing,
                     "next_steps": [*_GATE_NEXT_STEPS, *(base.get("next_steps") or [])]},
         "base": base, "signing": signing,

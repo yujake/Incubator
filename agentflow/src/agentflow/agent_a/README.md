@@ -4,9 +4,12 @@
 **典型误根**：把"一条候选被丢掉"说成"这篇文献不存在"。
 
 - 声明在 [`../specs/a.py`](../specs/a.py)（禁改区族）：6 个动作、出边只有 `B`、
-  写集 `literature` + `search_requests`、可召唤。
+  写集 `lit_candidates` + `literature` + `search_requests`、可召唤。
+  （`lit_candidates` 是 2026-11-22 WRITESETFIX 补进写集的：候选行的暂存 / 判收 / 提交
+  三步都写它，唯一写口是 [`../litstage.py`](../litstage.py)；写集是并发轴的读数，
+  漏一张表就漏算冲突，判据 `tests/test_write_sets_match_their_write_points.py`。）
 - 实现类是 `agent_a:AgentA`；本目录只放"怎么做"，不重复声明。
-- **谁读**：要改 A 的人。模型读的是渲染后的提示词与 `skills/`，不是本文件。
+- **谁读**：要改 A 的人。模型读的是渲染后的提示词（含随提示词渲染的 skills 手册），不是本文件。
 
 ## 文件
 
@@ -38,6 +41,9 @@ python -c "import sys;sys.path.insert(0,'src');from agentflow import specs;print
 
 ## 邻居
 
-派它的是 **M**（或 D 经 M 的路）⇒ 它交给 **B** 收编；检索失败要如实落 `search_requests` 的
+派它的是 **M**，以及**直接边** **D** / **F** / **H**（`capabilities.ALLOWED_EDGES` 现算：
+`D→A` 的研究起手检索、`F→A` 的攻坚取源、`H→A` 的引文核实 —— 这三条**不是**"经 M 转手"；
+2026-11-22 ROLEDOC-1 更正了本文件改前那句"只由 M 或 D 经 M 派"）⇒ 它交给 **B** 收编；
+检索失败要如实落 `search_requests` 的
 `outcome` 与 `last_error`，不许把"没查成"写成"没有"。判据见
 `tests/test_a_*.py` 与 `tests/test_user_quickstart.py` 的离线 A 路径。

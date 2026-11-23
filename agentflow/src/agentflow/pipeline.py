@@ -37,8 +37,9 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 from . import conceptrows as CR   # 并表过渡期：夹具/自检走这一处写口
+from . import manuscriptfamily as _MFAM  # 落点根（`work/`）的唯一真身
 from . import schema as S
-from .agent_d import AgentD, install_d_tools
+from .agent_d import REPORTS_SUBDIR_DEFAULT, AgentD, install_d_tools
 from .store import Store
 from .tools import research_tools as RT
 
@@ -82,7 +83,12 @@ def _as_report_dict(report: Any) -> dict:
 
 
 def _reports_dir(store: Store) -> Path:
-    return Path(store.root) / "reports"
+    """C 的分析报告落点（`work/<角色>/`，与 `agent_c.AnalysisReport.persist` 同一条）。
+
+    改前这里写退役的 `reports/`（2026-11-22 起正文/报告按角色分目录）：自检种子写进
+    旧目录 ⇒ replay 模式下 C 的报告文件与登记行指向两处，读侧按新落点读不到。
+    """
+    return Path(store.root) / _MFAM.WORK_ROOT / "C"
 
 
 def _conductor_for_c(store: Store, agent_c: Any) -> Any:
@@ -260,7 +266,9 @@ def run_pipeline(
     # ---------- 0. 装配 D
     reports_dir_cfg = cfg.get("agent_d") or {}
     d_cfg = dict(reports_dir_cfg)
-    d_cfg.setdefault("reports_subdir", "reports")
+    # 与写者（`AgentD.__init__`）和读侧（`closing._reports_subdir_of`）同一个真身；
+    # 缺省再不是退役的 `reports/`（2026-11-22 业主裁定：正文 `manuscripts/D`）。
+    d_cfg.setdefault("reports_subdir", REPORTS_SUBDIR_DEFAULT)
     if not resume:
         d_cfg["dedup_by_origin"] = False
     # `auto_build_c` 必须在装配 D 之前读出来：D 需要知道"有没有 C 可以点菜"。
@@ -667,7 +675,7 @@ def _seed(store: Store) -> None:
                          "score_breakdown": {"quote_verified": 0.0}},
                     ],
                 },
-                markdown_path="reports/0000-paths.md",
+                markdown_path=f"{_MFAM.WORK_ROOT}/C/0000-paths.md",
                 created_at=S.now_iso(),
             ).to_dict(),
             note="seed",
@@ -813,7 +821,7 @@ def _selftest() -> int:
         agent_c=None,   # replay：从 analysis_reports 读
         agent_a=None,   # 不跑检索
         agent_b=None,
-        d_report_path=root / "reports" / "pipeline-research.md",
+        d_report_path=root / "manuscripts" / "D" / "pipeline-research.md",
     )
     print(f"[1] mode={out['mode']} report_ids={out['report_ids']} rounds={len(out['rounds'])}")
     for rd in out["rounds"]:
@@ -841,7 +849,7 @@ def _selftest() -> int:
         agent_c=None,
         agent_a=None,
         agent_b=None,
-        d_report_path=root / "reports" / "pipeline-research-resume.md",
+        d_report_path=root / "manuscripts" / "D" / "pipeline-research-resume.md",
     )
     after = len(st.rows("research_questions"))
     print(f"[4] 续跑（resume=True）：问题 {before} -> {after}（应为 0 新增，origin 去重）"
@@ -852,7 +860,7 @@ def _selftest() -> int:
     for p in (
         root / "data" / "research_questions.json",
         root / "data" / "analysis_reports.json",
-        root / "reports" / "0000-paths.md",
+        _reports_dir(st) / "0000-paths.md",
         Path(out["d_report_path"]),
     ):
         print(f"    {'OK ' if p.exists() else 'MISSING'} {p.relative_to(root)}")
@@ -879,7 +887,7 @@ def _selftest() -> int:
             gap_rounds=1,
             agent_a=None,
             agent_b=None,
-            d_report_path=st2b.root / "reports" / "auto-research.md",
+            d_report_path=st2b.root / "manuscripts" / "D" / "auto-research.md",
         )
         from_c = any(
             n.startswith("C:") for r in st2b.rows("research_questions")
@@ -914,7 +922,7 @@ def _selftest() -> int:
         agent_c=None,
         agent_a=fake_a,
         agent_b=fake_b,
-        d_report_path=root3 / "reports" / "loop-research.md",
+        d_report_path=root3 / "manuscripts" / "D" / "loop-research.md",
     )
     for rd in out3["rounds"]:
         print(f"    --- 第 {rd['round']} 轮 --- 提交={rd['submitted']} A={rd['a']}")

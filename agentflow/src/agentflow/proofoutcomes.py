@@ -117,6 +117,7 @@ def manuscript_artifact(out: dict[str, Any], root: Any, *, rel: Any, family: Any
     正文尺（「## 证明」的 sha 与整份文件的 sha 不相等是对的）。
     """
     from . import artifacts as A
+    from . import manuscriptfamily as _MFAM
 
     name = {"F": "f-proof", "B": "b-proof"}.get(str(family or ""), str(family or ""))
     role = {"f-proof": "F", "b-proof": "B", "e-proof": "E", "e-num": "E"}.get(name, "") or "M"
@@ -137,7 +138,8 @@ def manuscript_artifact(out: dict[str, Any], root: Any, *, rel: Any, family: Any
             tid = ""
     _entry, problem = A.record_or_problem(
         root, path=rel, producer=(who or role),
-        kind=f"{name}-manuscript" if name else "manuscript",
+        kind=(f"{_MFAM.prefix_of(name)}manuscript"
+              if name in _MFAM.FAMILIES else "manuscript"),
         task_id=tid, instance=inst, family=name,
         note=f"手稿 `{rel}`（proofregistry.register_or_rewrite，mode={mode}）")
     if not problem:

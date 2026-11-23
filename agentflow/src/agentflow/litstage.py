@@ -22,12 +22,14 @@
   三态（待裁 / 通过 / 拒）不变：`qualified` 是"通过"在注册之前的那一格，
   `judged_state` 把它读成"判过（判定是入库）"，所以提交闸不会把它当待裁。
 - 提交（`admit_all`）分两个渲染时刻：先落 无号快照
-  `reports/lit-<rid>.submitted.md`（"交报告"那一刻的原件，入库组不带号），
+  `work/A/lit-<rid>.submitted.md`（"交报告"那一刻的原件，入库组不带号），
   再批量注册、把 `lit_id` 回填到同一行，最后重渲染 带号定稿
-  `reports/lit-<rid>.md`。回填不是字符串替换：`report_markdown` 是纯函数，
+  `work/A/lit-<rid>.md`。回填不是字符串替换：`report_markdown` 是纯函数，
   注册之后再渲染一次即可（见 `write_report`）。
 - 清表 = 给本委托的每一行打 `cleared_at` + `clear_reason`（不物理删：
-  审计要留），同时把整份行落归档 `data/lit_candidates/archive-<rid>.jsonl`。
+  审计要留），同时把整份行落归档 `data/archive/lit_candidates/archive-<rid>.jsonl`
+  （2026-11-22 NAMEFIX-B1 ③ 起的新落点；旧工作区里改名前的
+  `data/lit_candidates/archive-<rid>.jsonl` 读侧照旧认）。
   清表之后本委托不可再生成报告（受控拒 `already_settled`）；
   `current_request_id` 在表为空时回落到归档里最新的一份（槽位号最大那一行消失时不至于
   "说不清这是哪一次委托"）。
@@ -145,15 +147,15 @@ OVERLAP_HIGH_JACCARD: float = 0.60
 #:   title_jaccard —— 按标题词集 Jaccard 算出来的重叠度（0..1，见 `title_jaccard`）
 OVERLAP_KINDS: tuple[str, ...] = ("doi_exact", "title_jaccard")
 
-#: 委托报告的落点（相对工作区根）：`reports/lit-<request_id>.md`。
+#: 委托报告的落点（相对工作区根）：`work/A/lit-<request_id>.md`。
 #:
 #: 为什么是文件而不是只放在工具返回值里（这是交付物）：
 #: 下一次委托的 D/H 要用它 —— 而"D/H 读一个工具调用的返回值"这件事在结构上做不到
-#: （它们是另外的角色、另外的循环）。写在 `reports/` 下之后，任何带 `fs.read` 的角色
+#: （它们是另外的角色、另外的循环）。写在 `work/A/` 下之后，任何带 `fs.read` 的角色
 #: 都读得到，它也就成了台账之外唯一一份"这次检索进了哪几篇、挡了哪几篇与为什么"的证据。
-REPORT_DIR: str = "reports"
+REPORT_DIR: str = "work/A"
 
-#: 「交报告」那一刻的无号快照：`reports/lit-<request_id>.submitted.md`。
+#: 「交报告」那一刻的无号快照：`work/A/lit-<request_id>.submitted.md`。
 #:
 #: 为什么要有两份而不是一份 + 字符串替换：`report_markdown` 是纯函数（行进去、文本出来），
 #: 所以"回填"= 注册之后再渲染一次。快照留档给出"回填前后同事实、只差号"这条判据的对照物
@@ -161,10 +163,25 @@ REPORT_DIR: str = "reports"
 #: "占位符被题名注入"与"盘中短暂存在脏报告"两个坑。
 REPORT_SNAPSHOT_SUFFIX: str = ".submitted.md"
 
+#: 归档目录（相对工作区根）：`data/archive/lit_candidates/`，一委托一个 `archive-<rid>.jsonl`。
+#:
+#: 2026-11-22（NAMEFIX-B1 ③）：改前它叫 `data/lit_candidates/`，与表
+#: `data/lit_candidates.json` 同名不同物（目录里是归档分片，表是待裁候选）——
+#: 任何"读 data/lit_candidates 的人"都要先猜自己拿到的是目录还是表。所以：
+#: 写侧只写新路径（`data/archive/lit_candidates/`），读侧两代都认（老工作区里
+#: 旧的 `data/lit_candidates/` 还在，收工门与 `latest_archived_request` 照旧读得到）。
+ARCHIVE_DIR: tuple[str, ...] = ("data", "archive", "lit_candidates")
+
+#: 旧归档目录（只读兼容，不再写）：改名前的落点。
+LEGACY_ARCHIVE_DIR: tuple[str, ...] = ("data", "lit_candidates")
+
+#: 归档路径在人话里怎么写（错误信息 / 报告 / 读数里出现的那个相对路径）。
+ARCHIVE_REL: str = "/".join(ARCHIVE_DIR)
+
 #: 「清表」那一刻写进行上的理由（`clear_reason`）：它说明清的是哪一次动作，
 #: 而不是"这一行从来没被处理过"（后者正是 `cleared` 历史档的语义，已退场）。
 CLEAR_REASON: str = ("本委托已交报告并批量注册：清表（行保留、不物理删；"
-                     "原件与映射在 data/lit_candidates/archive-<request_id>.jsonl）")
+                     f"原件与映射在 {ARCHIVE_REL}/archive-<request_id>.jsonl）")
 
 #: 「待新增文献列表」现行的决策词表：三态（
 #: 「待裁 / 入库 / 拒收」，注册即待裁）。
@@ -1068,16 +1085,33 @@ def pending_scope_note(reading: Mapping[str, Any], *, exclude: str = "") -> str:
 
 
 def _archive_dir(root: Any) -> Path:
-    """归档目录：`<工作区>/data/lit_candidates/`（与 `data/lit_availability.jsonl` 同族）。"""
-    return Path(root) / "data" / "lit_candidates"
+    """归档目录（写侧落点）：`<工作区>/data/archive/lit_candidates/`。
+
+    `data/archive/lit_candidates/` 与表 `data/lit_candidates.json` 不再同名 ——
+    旧目录 `data/lit_candidates/` 由 :func:`_archive_read_dirs` 只读兼容。
+    """
+    return Path(root).joinpath(*ARCHIVE_DIR)
+
+
+def _legacy_archive_dir(root: Any) -> Path:
+    """旧归档目录（只读）：`<工作区>/data/lit_candidates/`（改名前的落点）。"""
+    return Path(root).joinpath(*LEGACY_ARCHIVE_DIR)
+
+
+def _archive_read_dirs(root: Any) -> list[Path]:
+    """读侧要看的归档目录（新在前、旧在后）：读的人不用关心这份委托是哪一代写的。"""
+    return [_archive_dir(root), _legacy_archive_dir(root)]
 
 
 def archive_path(store: Store, request_id: str) -> Path:
-    """一次委托的整份归档：`data/lit_candidates/archive-<request_id>.jsonl`。
+    """一次委托的整份归档（新写落点）：`data/archive/lit_candidates/archive-<request_id>.jsonl`。
 
     一委托一文件、JSONL、零 schema（先例 `data/lit_availability.jsonl` / `data/lit_reads.jsonl`）。
     它回答的是"这次委托的每一条候选最后长什么样、其中哪一条变成了哪一篇"——
     报告的未入库组按业主口径没有号、也没有槽位，所以这条链只能靠归档。
+
+    2026-11-22（NAMEFIX-B1 ③）之前写的是 `data/lit_candidates/archive-…`：目录与表同名，
+    读的人分不清。写侧只写这里；读侧仍会去旧目录找（见 :func:`_archive_read_dirs`）。
     """
     return _archive_dir(store.root) / f"archive-{str(request_id or '').strip()}.jsonl"
 
@@ -1103,9 +1137,11 @@ def _archive_rows(store: Store, request_id: str,
                    for r in ordered)
     path = archive_path(store, rid)
     _atomic_write(path, body)
-    return {"path": path.as_posix(),
-            "rel_path": f"data/lit_candidates/{path.name}",
-            "count": len(ordered)}
+    try:
+        rel = path.relative_to(Path(str(store.root))).as_posix()
+    except ValueError:   # 根算不出来（相对根 / 怪形状）⇒ 按模块常量报，不编一个绝对路径
+        rel = f"{ARCHIVE_REL}/{path.name}"
+    return {"path": path.as_posix(), "rel_path": rel, "count": len(ordered)}
 
 
 def latest_archived_request(root: Any) -> str:
@@ -1113,13 +1149,14 @@ def latest_archived_request(root: Any) -> str:
 
     "最新"按文件 mtime 取，不按号大小：号是六位十进制、跨工作区复制时会重排，
     而 mtime 记的是"哪一份是刚刚写下去的"。
+
+    两代归档目录同读（2026-11-22 NAMEFIX-B1 ③）：老工作区里那份写在旧目录
+    `data/lit_candidates/`，新写落 `data/archive/lit_candidates/` —— 同一个口径下
+    混着读，取两处里最新的那一份。
     """
     if root in (None, ""):
         return ""
-    folder = _archive_dir(Path(root))
-    if not folder.is_dir():
-        return ""
-    files = [p for p in folder.glob("archive-*.jsonl") if p.is_file()]
+    files = _archive_files(root)
     if not files:
         return ""
     newest = max(files, key=lambda p: p.stat().st_mtime_ns)
@@ -1127,24 +1164,36 @@ def latest_archived_request(root: Any) -> str:
     return rid[len("archive-"):] if rid.startswith("archive-") else ""
 
 
+def _archive_files(root: Any) -> list[Path]:
+    """两代归档目录里的全部 `archive-*.jsonl`（读不成 ⇒ 空表；三态由调用方另判）。"""
+    out: list[Path] = []
+    for folder in _archive_read_dirs(root):
+        if not folder.is_dir():
+            continue
+        out.extend(p for p in folder.glob("archive-*.jsonl") if p.is_file())
+    return out
+
+
 def archived_request_ids(root: Any) -> list[str]:
     """归档里出现过的全部委托号（升序；没有归档 ⇒ 空表）。
 
     收工门那一格用它数"这个工作区里已经有几份收过工的委托"（`closed_delegations`）——
     "0 步"与"读不到"因此分得开：空表是读数，读目录抛错由调用方折成 unknown。
+
+    两代归档目录同读（2026-11-22 NAMEFIX-B1 ③）：改名只改写侧，老工作区里的
+    `data/lit_candidates/archive-*.jsonl` 照旧算"收过工"。
     """
     if root in (None, ""):
         return []
-    folder = _archive_dir(Path(root))
-    if not folder.is_dir():
-        return []
     out: list[str] = []
-    for p in sorted(folder.glob("archive-*.jsonl")):
-        if not p.is_file():
-            continue
+    seen: set[str] = set()
+    for p in _archive_files(root):
         rid = p.stem
-        out.append(rid[len("archive-"):] if rid.startswith("archive-") else rid)
-    return out
+        rid = rid[len("archive-"):] if rid.startswith("archive-") else rid
+        if rid and rid not in seen:
+            seen.add(rid)
+            out.append(rid)
+    return sorted(out)
 
 
 def is_settled(store: Store, request_id: str) -> bool:
@@ -1315,7 +1364,7 @@ def clear_delegation(store: Store, request_id: str, *, actor: str = "agent-A",
         if int(archived.get("count") or 0) != len(rows):
             SG.record_reading(store.root, SG.refused(
                 "litstage.clear_delegation", code="clear_archive_mismatch",
-                where=f"data/lit_candidates/archive-{rid}.jsonl",
+                where=str(archived.get("rel_path") or f"{ARCHIVE_REL}/archive-{rid}.jsonl"),
                 detail=f"归档写了 {archived.get('count')} 行，本委托是 {len(rows)} 行",
                 how_to_fix="归档必须覆盖本委托的整份行（含未判的 pending）："
                            "少一行就等于那一条候选最后长什么样无从复核"))
@@ -1668,7 +1717,7 @@ def _stage_list_note(waiting_count: int) -> str:
         "就整批拒绝（`lit.admit` 逐条判收不受它拦）。"
         "判收（`lit.admit`）**不发号**：正式文献号由 `lit.admit_all` 在提交那一刻"
         "批量注册并回填，随后清表（`cleared_at` 打上、整份行归档在 "
-        "data/lit_candidates/archive-<request_id>.jsonl）。"
+        f"{ARCHIVE_REL}/archive-<request_id>.jsonl）。"
         # 2026-11-19（FIXBATCH ②）：这一句原先只活在收工门
         # （`closing._check_literature_pending` 的 docstring）里 —— 那是收工那一刻才
         # 跑到、模型读不到的地方。真机 lp-ball-11：`search_requests` 七条全部
@@ -1815,7 +1864,7 @@ def _terminal(store: Store, slot: str, *, code: str, note: str,
     不行 —— 那一行的号已经发出去，改它等于抹掉"这一篇进过库"。
 
     报告过期（Q1 第 ⑨ 条）：判完一条就把已经存在的那份报告重渲染一次
-    （`reports/lit-<rid>.md` 存在才写）。不这么做，报告会静默停在"待裁 15 条"，
+    （`work/A/lit-<rid>.md` 存在才写）。不这么做，报告会静默停在"待裁 15 条"，
     而那些行早就判完了（真机 `lit-r-000008.md` 就是这个形态）。
     """
     with store.tx("lit_candidates", actor=actor, note=tx_note) as tx:
@@ -2867,7 +2916,7 @@ def admit_all(
        `admission_plan(on_over_cap="truncate", from_qualified=True)`：
        DOI 重复 / 高重叠无 `new_content` / 不可读 的逐条拒收；
        超配额的落 `rejected(over_cap)`；
-    2. 交报告：渲染这一批的无号快照 `reports/lit-<rid>.submitted.md`（入库组不带号）。
+    2. 交报告：渲染这一批的无号快照 `work/A/lit-<rid>.submitted.md`（入库组不带号）。
        已存在就不覆盖（重跑幂等：注册前崩掉时那份原件不该被"注册后的行"洗掉）；
     3. 过 `report_violations(snapshot, phase="submitted")` —— 报告判据是提交动作的
        一部分；
@@ -2875,9 +2924,9 @@ def admit_all(
        拿回 `{slot: lit_id}`；再在同一个事务里 `apply_settlement` 把
        `qualified → admitted` 与 `lit_id` 回填到同一行（映射就在行上，
        不需要单独映射表）；
-    5. 重渲染带号定稿 `reports/lit-<rid>.md`：只收"已提交过的行"（这一批 + 更早已清的
+    5. 重渲染带号定稿 `work/A/lit-<rid>.md`：只收"已提交过的行"（这一批 + 更早已清的
        批次），未判的 pending 不进定稿 —— 定稿不允许有待裁块（那是交付物，不是进度）；
-    6. 清这一批：归档 `data/lit_candidates/archive-<rid>.jsonl`（整份委托，含未判行）+
+    6. 清这一批：归档 `data/archive/lit_candidates/archive-<rid>.jsonl`（整份委托，含未判行）+
        只给这一批的行打 `cleared_at` / `clear_reason`（不物理删，审计要留）。
        没提交的 pending 行不落 `cleared_at` ⇒ 收工闸的 `delegation_not_cleared` 仍红。
 
@@ -2892,8 +2941,8 @@ def admit_all(
     if is_settled(store, rid):
         raise LitStageError(
             f"委托 {rid} 已经定稿并清表（归档在 "
-            f"data/lit_candidates/archive-{rid}.jsonl）⇒ 受控拒 `already_settled`："
-            f"重看读 reports/lit-{rid}.md 与那份归档；要重新判请开一次新委托",
+            f"{ARCHIVE_REL}/archive-{rid}.jsonl）⇒ 受控拒 `already_settled`："
+            f"重看读 {REPORT_DIR}/lit-{rid}.md 与那份归档；要重新判请开一次新委托",
             kind="already_settled", detail={"request_id": rid})
     rows = [fold_legacy(r) for r in _rows(store)
             if str(r.get("request_id") or "") == rid]
@@ -3017,12 +3066,12 @@ def admit_all(
 
 
 def report_path(store: Store, request_id: str) -> Path:
-    """报告落点：`<工作区>/reports/lit-<request_id>.md`（下一次委托的 D/H 直接 `fs.read`）。"""
+    """报告落点：`<工作区>/work/A/lit-<request_id>.md`（下一次委托的 D/H 直接 `fs.read`）。"""
     return Path(store.root) / REPORT_DIR / f"lit-{request_id}.md"
 
 
 def report_snapshot_path(store: Store, request_id: str) -> Path:
-    """「交报告」那一刻的无号原件：`<工作区>/reports/lit-<rid>.submitted.md`。"""
+    """「交报告」那一刻的无号原件：`<工作区>/work/A/lit-<rid>.submitted.md`。"""
     return Path(store.root) / REPORT_DIR / f"lit-{request_id}{REPORT_SNAPSHOT_SUFFIX}"
 
 
@@ -3071,7 +3120,7 @@ def _refresh_report_if_present(store: Store, request_id: str) -> dict | None:
 
     "已经在盘上"是判据：A 没交过报告时不要凭空造一份（报告是交付物，
     不是每一次判定的副产品）；而交过之后不重渲染，它就会静默停在
-    "待裁 15 条"（真机 `projects/lp-ball-2/reports/lit-r-000008.md` 就是那个形态：
+    "待裁 15 条"（真机 `projects/lp-ball-2/work/A/lit-r-000008.md` 就是那个形态：
     盘上的行 07:45 已经判拒，报告还写着 15 条待裁）。
 
     已清表的委托不重渲染（`is_settled` ⇒ 那份是定稿，改它等于改交付物）。
@@ -3231,11 +3280,11 @@ def report_markdown(request_id: str, rows: Sequence[Mapping[str, Any]],
 
     ## 两个渲染时刻（业主 Q1 口径）
 
-    - `phase="submitted"`：交报告那一刻的原件（`reports/lit-<rid>.submitted.md`）。
+    - `phase="submitted"`：交报告那一刻的原件（`work/A/lit-<rid>.submitted.md`）。
       `## 已入库` 一块列的是"有入库资格"的那些条，一个号都没有（`lit_id` 是
       提交之后才由系统批量发出来的）。这一份是"回填"的对照物：注册之后重渲染的
       定稿与它应当同事实、只差号；
-    - `phase="final"`：定稿（`reports/lit-<rid>.md`）。`## 已入库` 每条带
+    - `phase="final"`：定稿（`work/A/lit-<rid>.md`）。`## 已入库` 每条带
       `` `lit:NNNNNN` ``（回填后的正式号），`## 未入库` 每条只留文献信息与理由；
     - `phase="draft"`：进度（`lit.admit` / `reject` 之后的中间态）。`## 已入库`
       列已注册的行（通常 0 条），`## 待注册` 列判收未注册的那些（无号）。
@@ -3358,7 +3407,7 @@ _PHASE_LABELS: dict[str, str] = {
     "draft": "进度（**未定稿**）—— 判完之后由 `lit.admit_all` 提交：先落无号原件、"
              "批量注册后重渲染定稿；本份里的「待注册」组提交之后才有正式号",
     "submitted": "**交报告**（原件）—— 入库组按「有入库资格」列出、**不带号**；"
-                 "系统在提交后批量注册并把正式文献号回填到 reports/lit-<委托>.md",
+                 f"系统在提交后批量注册并把正式文献号回填到 {REPORT_DIR}/lit-<委托>.md",
     "final": "**定稿**（已回填正式文献号）—— 入库组每条带 `lit:NNNNNN`，"
              "未入库组只留文献信息与理由（无号）",
 }
@@ -3387,7 +3436,7 @@ def _report_writer_of(store: Store, request_id: str) -> str:
 
 def write_report(store: Store, request_id: str, *, rows: Sequence[Mapping[str, Any]] | None = None,
                  generated_at: str = "", phase: str = "draft") -> dict:
-    """把委托报告写到 `reports/lit-<request_id>.md`（`phase="submitted"` 写无号原件）。
+    """把委托报告写到 `work/A/lit-<request_id>.md`（`phase="submitted"` 写无号原件）。
 
     两个渲染时刻（业主 Q1）：`submitted` 落 `lit-<rid>.submitted.md`（交报告的原件），
     `final` 落 `lit-<rid>.md`（注册回填之后的定稿），`draft` 也落正式路径但报告头逐字
@@ -3409,9 +3458,9 @@ def write_report(store: Store, request_id: str, *, rows: Sequence[Mapping[str, A
                             kind="bad_phase")
     if is_settled(store, rid):
         raise LitStageError(
-            f"委托 {rid} 已经定稿并清表（归档在 data/lit_candidates/archive-{rid}.jsonl）"
+            f"委托 {rid} 已经定稿并清表（归档在 {ARCHIVE_REL}/archive-{rid}.jsonl）"
             "⇒ 受控拒 `already_settled`：定稿报告不再重渲染（重渲染会得到一份 0 篇的空报告；"
-            "进度版更不许覆盖定稿）。要看就读 reports/lit-<委托>.md 与那份归档",
+            f"进度版更不许覆盖定稿）。要看就读 {REPORT_DIR}/lit-<委托>.md 与那份归档",
             kind="already_settled", detail={"request_id": rid})
     body_rows = list(rows) if rows is not None else [
         r for r in _rows(store) if str(r.get("request_id") or "") == rid]
@@ -3697,3 +3746,4 @@ def _relevance_violations(admitted_text: str) -> list[str]:
             "这一条只记读数，不拦门"
         ]
     return []
+

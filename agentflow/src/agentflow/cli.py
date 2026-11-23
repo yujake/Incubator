@@ -487,8 +487,8 @@ def init_workspace(st: Store, root: Path, *, allow_foreign_entries: bool,
     判据本体一个字没改（它在禁改区 `schema-migration` 里）。
 
     `seed_literature=True`（默认关）只对"这一次真的是新建"生效：`data/` 已经在了就是
-    热启动，不投。投放只写 `library/` 与 `SEED-README.md`，不写任何 `data/*.json`
-    —— 见 :mod:`agentflow.seedinject`。
+    热启动，不投。投放只写输入区 `reference/`（含其中的 `SEED-README.md`），不写任何
+    `data/*.json`，也不往已登记书架 `library/` 里放文件 —— 见 :mod:`agentflow.seedinject`。
 
     返回退出码：0 = 建成了；2 = 拒绝了（文案里教那条开关）或没查成。
     两个值都有调用方（`main` 的 StoreError 那一档也是 2），所以不许折成布尔。
@@ -538,7 +538,7 @@ def _report_seed_landing(cmd: str, got: dict) -> None:
         return
     print(tty.paint(
         f"[{cmd}] 种子文献：{got.get('copied', 0)} 份投到 {got.get('destination')}"
-        f"（未入库、未判收；见 {got.get('marker')}）", "grey"))
+        f"（输入区，未入库、未判收；见 {got.get('marker')}）", "grey"))
 
 
 # ---------------------------------------------------------------- 子命令
@@ -1183,12 +1183,12 @@ def cmd_tools(args) -> int:
 
     root = _root_of(args)
     st = make_store(root)
-    # 只读普查不建工作区：无条件 `st.init()` 的话，
-    # `cd src && python -m agentflow.cli tools` 会去 `src/` 里建 data/ 并被"外来条目"拒掉
-    # （`test_role_specs_complete` 那条对账会当场红）。工具面是声明，不需要磁盘。
-    # 目录已经是工作区时才 init（那一步是幂等的），否则裸注册表照常能列出全部工具。
-    if (root / "data").is_dir():
-        st.init()
+    # 只读普查不建工作区：工具面是声明，`build_registry` 装配期一个 Store 属性都不碰
+    # （实测：给它一个没 init 过的句柄，装配结果与 init 过完全一样），所以这里刻意不
+    # `st.init()`。那一步会 mkdir `library/` + `work/` 并 touch `data/events.jsonl`
+    # —— 在产品根上跑一次 `agentflow tools` 就留下一片工作区目录
+    # （ROOT-DIRS-FIX 2026-11-23 钉死的写副作用）。判据守着这件事：
+    # `tests/test_cli_tools_side_effect.py`，谁把 init 加回来它当场红。
     # 角色清单必须来自 `TOOL_ROLES`（= 可被召唤的 A–H + 主控 M），不许在这里写死。
     # 写死一个子集的话，本命令会一边报告"工具总数"、一边只列几个角色的工具数 ——
     # 而"角色即权限面"恰恰是靠这条命令变成可打印的事实的。
@@ -2019,7 +2019,7 @@ def _print_plan(spec: RunSpec, args) -> int:
     if (bool(getattr(args, "seed_literature", False))
             and spec.mode in (MODE_PROJECT, MODE_ROLE)):
         writes.append(
-            "library 种子文献 + SEED-README.md（只放文件、不写台账）"
+            "reference 种子文献 + reference/SEED-README.md（只放文件、不写台账）"
             + ("" if (project and project.get("will_create")) else "；只在新建工作区时投"))
     plan_out = {
         # 与横幅同一个词、同一次计算：`--json` 的 `mode` 不再是 `spec.mode` 的第二套说法。
@@ -2747,10 +2747,13 @@ def cmd_artifacts(args) -> int:
     三态（与全仓同一条纪律）：0 = 查过、都对得上；1 = 查过了、有变了的产物；
     2 = 没查成（路径不给 / 越界 / 文件不存在 / 核对里有读不出来的）。
 
-    `record` 是唯一写的动作，而且先核文件后写台账 —— 一条钉不住内容的登记
+    `record` 写一行归属，而且先核文件后写台账 —— 一条钉不住内容的登记
     不是弱证据，是假证据（见 `agentflow.artifacts` 的模块 docstring）。
 
-    读写：读 `artifacts` 台账与盘上文件的哈希；`record` 写一行归属，其余五个 action 只读。
+    读写：读 `artifacts` 台账与盘上文件的哈希。写有两处，都在显式 opt-in 之后：
+    `record` 写一行归属；`report` 带 `--out` 会写文件（缺的上级目录一并建出来）。
+    不带 `--out` 的 `report` 只打印、不碰盘；其余四个 action（`list` / `verify` /
+    `owners` / `unowned`）只读。
     实现方式一句话：`artifacts` 模块（登记、哈希、归属查询各一处实现）。
     """
     from . import artifacts as A
@@ -2984,7 +2987,7 @@ def cmd_project(args) -> int:
                 [("落点", res["project"]["path"]),
                  ("只读基线", ", ".join(seeded["source"])),
                  ("可改正文", seeded["manuscript"] or "(还没写：G 的活)")],
-                body=[seeded["note"] or "论文已铺好：source/ 只读，out/paper/main.tex 可改。",
+                body=[seeded["note"] or "论文已铺好：source/ 只读，out/package/main.tex 可改。",
                       "下一步：`agentflow --root <工作区> run-agent M --task …` 派活。"],
                 tone="green",
             ):
@@ -3082,13 +3085,24 @@ def _exec_project(spec: RunSpec, args) -> int:
         if seed.get("landed"):
             emit(tty.bullet(
                 f"种子文献：{seed['count']} 份 / {seed['bytes']} 字节在 {seed['destination']}"
-                f"（未入库、未判收；见 SEED-README.md）"))
+                "（输入区，未入库、未判收；见 reference/SEED-README.md）"))
         elif seed.get("problem"):
             emit(tty.bullet(tty.paint(f"种子文献没投成：{seed['problem']}", "yellow")))
         else:
             emit(tty.bullet(tty.paint(
                 "种子文献：这一趟没投进来（种子只在新建工作区时投）",
                 "yellow")))
+        # 书架卫生读数：`library/` 里多出没有登记行的文件 = 已登记书架结构异常。
+        # 三态：`None` 是"没查成"（台账读不出来），不折成"书架干净"。
+        untracked = seed.get("library_unregistered")
+        if untracked:
+            emit(tty.bullet(tty.paint(
+                f"⚠️ library/ 里有 {len(untracked)} 份文件没有任何 literature 行引用"
+                f"（例：{', '.join(untracked[:3])}）—— 已登记书架只放已登记的；"
+                "种子该落 reference/，判收之后才进 library/", "yellow")))
+        elif untracked is None:
+            emit(tty.bullet(tty.paint(
+                "⚠️ library/ 的书架卫生没查成（data/literature.json 读不出来）", "yellow")))
     if ing:
         counts = ing.get("counts") or {}
         emit("")
@@ -5089,7 +5103,7 @@ def cmd_status_report(args) -> int:
     为什么它不是"问 M 一句"：`ask_user` 那条路是反向的（让 M 停下来等人），
     而用户中途想知道情况时，正确的形态是旁路观测 —— 读盘 → 出报告，谁都不停。
 
-    读写：只读全部台账与手稿；写 `out/review/STATUS-<ts>.{md,json}`（报告本体，不写任何表）。
+    读写：只读全部台账与手稿；写 `out/report/STATUS-<ts>.{md,json}`（报告本体，不写任何表）。
     实现方式一句话：`statusreport.write_status_report`（本层只打读数与下一步）。
     """
     from . import statusreport as SR
@@ -5199,6 +5213,28 @@ def _nontriviality_line(nt: Mapping[str, Any]) -> str:
         + f"；T3/T4 {nt.get('high_tier_total', 0)} 条）")
 
 
+#: `agentflow closing` 缺省读的报告（相对项目根）。
+#:
+#: 2026-11-22（`draft/197` §十四 ①）：M 按新教法把交付说明写到 `out/report/REPORT.md`，
+#: 而这里的缺省此前还指退役目录 `out/review/REPORT.md` ⇒ 新布局下 `report_shape`
+#: 永远报"报告没写"（是门读错了地方，不是报告没交）。
+#: 单独成常量：反真空判据要把它改回旧布局再跑一遍，证明"新布局被认"不是恒绿。
+DEFAULT_REPORT_REL = "out/report/REPORT.md"
+
+
+def _is_retired_report_path(given: str) -> bool:
+    """显式给的报告路径是不是退役布局 `<…>/out/review/…`（唯一判据）。
+
+    只认路径分段 `out` 紧跟 `review`：这是退役目录的路径身份，不做字符串包含
+    （`out/review-notes/` 之类不会被误判）。旧布局不再支持（业主 2026-11-22
+    「旧工作区不必兼容」）—— 调用方显式指到它时必须受控拒绝：既不许静默替他改读
+    新路径，也不许照旧去读退役目录，两种做法都会让"你指了旧目录"这件事从读数里消失。
+    """
+    parts = [p.lower() for p in Path(str(given)).parts]
+    return any(parts[i] == "out" and parts[i + 1] == "review"
+               for i in range(len(parts) - 1))
+
+
 def cmd_closing(args) -> int:
     """跑收工门。退出码：0 可交付 / 1 被拦住 / 2 没查成。
 
@@ -5225,7 +5261,7 @@ def cmd_closing(args) -> int:
       两个输入混用就会把"没问过"与"问了还没答"读成同一个值。
     ## 退出码由 M 的判据定、机器读数也参与
     「是否收工不要用机械判据，由 M 制定的目标是否达成为准」⇒ 退出码（0 可交付 / 1 被拦住 /
-    2 没查成）跟着 M 的判据走：运行内 M 交判据那一次已经把它落到 `out/review/m-verdicts.jsonl`，
+    2 没查成）跟着 M 的判据走：运行内 M 交判据那一次已经把它落到 `out/report/m-verdicts.jsonl`，
     这里缺省读那一份；`--goal-met` / `--goal-not-met` 是"人/CI 代述 M 的说法"的显式入口。
     没有判据 ⇒ 2（"没人判过"既不是"可以交"也不是"被拦住"）。0 要两边都说行：M 判了达成
     且机器读数也过（八格全 pass、没有 blocker）—— 机器说不行时退出码不许是 0。
@@ -5239,7 +5275,7 @@ def cmd_closing(args) -> int:
     "没交付"），但打一句黄字并进 `data/events.jsonl` 的审计。`--no-index` 关掉这一笔
     （只想看门过没过的人不写盘）。
 
-    读写：只读台账（statements / relations / experiments / documents / review_findings …）与 `out/paper/`、`out/review/` 下的产物；不写任何表。
+    读写：只读台账（statements / relations / experiments / documents / review_findings …）与 `out/package/`、`out/report/` 下的产物；不写任何表。
     退出码 0 时另写 `<工作区>/index/run-index.json`（派生数据）与 `data/events.jsonl` 的一行
     `op=info` 审计；`--no-index` 或退出码非 0 时不写任何文件。
     实现方式一句话：`closing.check_closing` 现算八格，本层只排版、翻退出码、通关之后建索引。
@@ -5251,8 +5287,17 @@ def cmd_closing(args) -> int:
     root = _root_of(args)
     st = Store(root)
     project = args.project_dir or ""
-    report = args.report or (str(Path(project) / "out" / "review" / "REPORT.md")
+    report = args.report or (str(Path(project) / DEFAULT_REPORT_REL)
                              if project else "")
+    # 显式给了退役布局 ⇒ 受控拒绝（与"会话号不在盘上"同一档：门不跑、退出码 2）。
+    # 不许静默把它归一成新路径，也不许照旧去读 `out/review/` —— 那会把"调用方指了
+    # 旧目录"这件事折成一句看起来正常的读数（draft/197 §十四 ①）。
+    if args.report and _is_retired_report_path(args.report):
+        print(tty.bullet(
+            f"报告路径 {args.report} 用的是退役布局 `out/review/` —— 旧布局不再支持"
+            "（draft/197 §十四 ①）：门不跑（exit 2），也没有替你改指新路径。"
+            f"新落点是 `<项目根>/{DEFAULT_REPORT_REL}`：改指它再跑一次"))
+        return 2
     identity = CL.closing_session_identity(root, getattr(args, "sid", None))
     if identity.problem:
         # 受控拒绝：连"读哪一场"都定不下来时不许跑门 —— 跑出来那张表每一格都是
@@ -5585,7 +5630,7 @@ def build_parser() -> argparse.ArgumentParser:
                          f"先落 {WORKSPACE_MARKER}（`store` 的白名单出口）再 init；"
                          "用户的文件不删不改。不给这个开关时，'有外来条目'那一档照旧拒绝")
     sp.add_argument("--seed-literature", action="store_true",
-                    help="新建工作区时把历史真机下载的种子文献投进 library/"
+                    help="新建工作区时把历史真机下载的种子文献投进输入区 reference/"
                          "（只放文件，不写台账；默认关。已有 data/ 的热启动不投）")
     sp.set_defaults(func=cmd_init)
 
@@ -5741,7 +5786,7 @@ def build_parser() -> argparse.ArgumentParser:
     _where.add_argument("--text-store-dir", default=None,
                         help="逐页正文的内容寻址落点（不给就按各模式的缺省）")
     _where.add_argument("--seed-literature", action="store_true",
-                        help="新建工作区时把历史真机下载的种子文献投进 library/"
+                        help="新建工作区时把历史真机下载的种子文献投进输入区 reference/"
                              "（只放文件，不写台账；默认关。只对 project / research 两档有意义）")
     _cost = sp.add_argument_group("花多少钱 / 开不开 Lean / 要不要盯")
     _cost.add_argument("--budget-usd", type=float, default=None, action=_BudgetUsdAction,
@@ -5893,7 +5938,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--text-store-dir", default=None,
                     help="覆盖逐页正文的落点（不给就用 <项目根>/.fulltext，见 T0-6 的默认）")
     sp.add_argument("--seed-literature", action="store_true",
-                    help="新建工作区时把历史真机下载的种子文献投进 library/"
+                    help="新建工作区时把历史真机下载的种子文献投进输入区 reference/"
                          "（只放文件，不写台账；默认关。run/create 两档才有意义）")
     sp.set_defaults(func=cmd_project, budget_usd_given=False)
 
@@ -5988,7 +6033,7 @@ def build_parser() -> argparse.ArgumentParser:
                          f"先落 {WORKSPACE_MARKER} 再 init（与 `init` 的开关逐字同一个）；"
                          "不给这个开关时，'有外来条目'那一档照旧拒绝")
     sp.add_argument("--seed-literature", action="store_true",
-                    help="新建工作区时把历史真机下载的种子文献投进 library/"
+                    help="新建工作区时把历史真机下载的种子文献投进输入区 reference/"
                          "（只放文件，不写台账；默认关。已有 data/ 的热启动不投）")
     sp.add_argument("--provider", default=None,
                     help="A 的检索后端，逗号分隔（openalex/crossref/doaj/europepmc/fixture）；"
@@ -6097,9 +6142,11 @@ def build_parser() -> argparse.ArgumentParser:
         "closing",
         help=f"跑收工门（draft/37 §16 P3 的 {len(_CL.DEFAULT_CHECKS)} 格；退出码 0/1/2）")
     sp.add_argument("--project-dir", default="",
-                    help="项目根目录（正文与编译回执在 <它>/out/paper/；不给 ⇒ 论文那一格是「没查成」）")
+                    help="项目根目录（正文与编译回执在 <它>/out/package/；不给 ⇒ 论文那一格是「没查成」）")
     sp.add_argument("--report", default="",
-                    help="报告路径（不给且没给 --project-dir ⇒ 报告形状那一格是「没查成」）")
+                    help=("报告路径（缺省 `<项目根>/" + DEFAULT_REPORT_REL + "`；不给且没给"
+                          " --project-dir ⇒ 报告形状那一格是「没查成」。显式指退役布局"
+                          " `out/review/` ⇒ 受控拒绝，退出码 2）"))
     sp.add_argument("--sid", default=_CL.NO_SESSION, metavar="SID",
                     help="这一趟的会话号（「待答问题」那一格读 sessions/<SID>.jsonl 那一段）；"
                          "不给 ⇒ 这一次调用没有会话身份（该格「没查成」），"
@@ -6121,7 +6168,7 @@ def build_parser() -> argparse.ArgumentParser:
                     help="通关之后不建趟次索引（只想看门过没过的人不写盘：连"
                          "`data/events.jsonl` 的审计也不落）")
     # M 的判据（业主 2026-10-09：「是否收工不要用机械判据，由 M 制定的目标是否达成为准」）：
-    # 缺省 = 读运行内落盘的那一份（`out/review/m-verdicts.jsonl`）；显式给这里三个
+    # 缺省 = 读运行内落盘的那一份（`out/report/m-verdicts.jsonl`）；显式给这里三个
     # 开关就按命令行这一份判（人/CI 代述 M 的说法时用）。都不给又没有落盘的那一份
     # ⇒ 退出码 2（「没人判过」），不是 0 也不是 1。
     sp.add_argument("--goal", default="", help="（M 的判据）这一趟的目标，一句话")
@@ -6137,9 +6184,9 @@ def build_parser() -> argparse.ArgumentParser:
     # 项目状态报告（`draft/39` §4）：只读 + 零模型调用 —— 用户中途想知道情况时用它，
     # 而不是去问 M 一句（那条路会让 M 停下来等人，正好与"不打断协作"相反）。
     sp = sub.add_parser("status-report",
-                        help="项目状态报告（只读台账与手稿；落 out/review/STATUS-<ts>.{md,json}）")
+                        help="项目状态报告（只读台账与手稿；落 out/report/STATUS-<ts>.{md,json}）")
     sp.add_argument("--since", default="", help="只统计这个 ISO 时间前缀之后的读数（如 2026-10-05）")
-    sp.add_argument("--out", default="", help="报告落哪个目录（缺省 <工作区>/out/review）")
+    sp.add_argument("--out", default="", help="报告落哪个目录（缺省 <工作区>/out/report）")
     # B 格：这一轮新加的开关 ⇒ 外层四格。这条命令真正的机器可读那一份一直是它落盘的
     # `STATUS-<ts>.json`（路径就在 data.text 的读数里），`--json` 给的是外层四格 +
     # 那段人读的原文，免得脚本去猜文件名的通配符。

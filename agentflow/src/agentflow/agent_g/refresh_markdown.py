@@ -1,6 +1,7 @@
 """角色 G 的动作 `refresh_markdown`。"""
 from __future__ import annotations
 
+from . import revise_gates as RG
 from ._support import DT, DocumentError
 
 class _RefreshMarkdown:
@@ -10,12 +11,18 @@ class _RefreshMarkdown:
         为什么需要它：依赖是稿件写完之后才登记的（`used_by="doc:0001#claim-1"`
         必须等 doc_id 存在），而渲染层要把依赖表画出来。没有这一步，
         盘上的 markdown 会永远显示"0 条依赖"——一份与库不一致的稿件。
+
+        `kind=research` 的行不在本动作的面上：那一行的正文是 D 的交付物、由 D 的
+        写口（`doc_tools.record_research_report`）带携带单与审计节写出来，
+        而 `render_markdown` 渲染不出那两节 ⇒ 重画就是换掉 D 的正文。
+        受控拒的判据与 `revise` 共用一处（`revise_gates.ensure_not_research_row`）。
         """
         doc = next(
             (r for r in self.store.rows("documents") if str(r.get("doc_id")) == str(doc_id)), None
         )
         if doc is None:
             raise DocumentError(f"稿件 {doc_id} 不存在")
+        RG.ensure_not_research_row(doc_id=doc_id, doc=doc, action="refresh_markdown")
         rel = doc.get("markdown_path")
         if not rel:
             return None

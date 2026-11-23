@@ -11,9 +11,9 @@ from pathlib import Path as _Path
 
 
 class _RunOnce:
-    #: 工作区里那份「正文」的候选落点（审阅型项目：`out/paper/main.tex` 是可改稿，
+    #: 工作区里那份「正文」的候选落点（审阅型项目：`out/package/main.tex` 是可改稿，
     #: `source/main.tex` 是只读基线）。逐字档先试它 —— 理由见 `_manuscript_doc`。
-    MANUSCRIPT_RELS: tuple[str, ...] = ("out/paper/main.tex", "source/main.tex")
+    MANUSCRIPT_RELS: tuple[str, ...] = ("out/package/main.tex", "source/main.tex")
 
     def _manuscript_doc(self) -> tuple[object | None, str, str]:
         """工作区那份正文的文本视图：返回 `(doc, 用的是哪一份, 读不出来的原因)`。
@@ -42,7 +42,7 @@ class _RunOnce:
             if not text.strip():
                 continue
             return _DT(text=text, pages=[text], source_kind="tex"), rel, ""
-        return None, "", "工作区里没有 out/paper/main.tex 也没有 source/main.tex"
+        return None, "", "工作区里没有 out/package/main.tex 也没有 source/main.tex"
 
     def run_once(self) -> BRunResult:
         """处理至多一篇未处理文献，返回本轮的完整审计结果。
@@ -275,7 +275,7 @@ class _RunOnce:
 
         # ---- 引文校验（无锁；只依赖文档）
         # 逐字那一档先试文献 PDF；「没中再试工作区那份正文」（同一份 `check_quote`，
-        # 只换材料）—— 审阅型项目的引文常常逐字取自 `out/paper/main.tex` 那份 LaTeX，
+        # 只换材料）—— 审阅型项目的引文常常逐字取自 `out/package/main.tex` 那份 LaTeX，
         # 而 PDF 的页码是估算的，于是"真逐字"被推到第二档去花模型钱（还可能判错）。
         mdoc, mrel, mwhy = self._manuscript_doc()
         verified_rels: list[dict] = []

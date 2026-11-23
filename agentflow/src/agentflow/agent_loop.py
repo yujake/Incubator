@@ -27,6 +27,7 @@ import hashlib
 import inspect
 import json
 import re
+import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -1090,17 +1091,29 @@ def _dump_invalid_reply(root: str, sid: str | None, step: int, text: str,
     `projects/paper-rewrite-78c` 一次就有 14 个坏步落在 13 个文件名上（`B` 与 `V`
     都在第 7 步坏过、`D` 与 `B` 都在第 9 步坏过）—— 事后要归因只能靠事件的 `raw_reply`
     里的前 200 字猜，而这正是"证据被剪掉"的那个形态。
+
+    没有工作区时不退回进程 cwd（OUTPROBE，2026-11-22）：`Path(root or ".")` 会把
+    证据写进"跑这一趟的那个目录"，而跑测试时那个目录是仓库根 `agentflow/` ⇒ 每跑一次
+    `pytest`，`agentflow/out/invalid/*.txt` 就多几份（删了又出现）。三态纪律的落点：
+    "没解析出来"这条证据不能丢（这是本函数存在的理由），但它不属于工作区时就落到系统
+    临时目录下的固定位置，并把绝对路径回给事件 —— 读者一眼看出它不在工作区里。
     """
     safe_sid = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(sid or "run")) or "run"
     safe_role = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(role or "")) or "run"
     rel = f"out/invalid/{safe_sid}-{safe_role}-step{step}.txt"
+    base = str(root or "").strip()
+    if base:
+        path = Path(base) / rel
+        reported = rel
+    else:
+        path = Path(tempfile.gettempdir()) / "agentflow-invalid" / Path(rel).name
+        reported = str(path)
     try:
-        path = Path(root or ".") / rel
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text or "", encoding="utf-8", newline="\n")
     except OSError:
         return ""
-    return rel
+    return reported
 
 
 #: 开场那条 user 消息要念的事实（`_opening_transcript` 的入参键）——一处列名。
@@ -4410,7 +4423,8 @@ def _summon_key(action: str, params: Mapping[str, Any]) -> str:
 # `agent_step.productions`）、处置 `consumed` / `waived` / `unknown` / `unconsumed`、汇总读数 `LoopRun.summons_total` 等（落进
 # `agent_run_end`）。判据口径（业主 2026-10 修正）：「处理」不是白名单（那三条只是举例，正表会误杀没列举到的
 # 合法形态），而是效应证据 —— 这次 summon 之后父在任何一步留下可查的效应、且指到那条子产出（`task_id` /
-# 产物路径 / 台账 id）即算处理；"可查"用负表判（`_is_effect_evidence` 只排除只读侦察与无效步）⇒「列举」只在文档里。
+# 产物路径 / 台账 id）即算处理；"可查"用负表判、并要它真的落成（`_is_effect_evidence` 排除只读侦察、无效步
+# 与受控拒绝）⇒「列举」只在文档里。
 
 #: 一条子产出的处置（受控词表）。`unconsumed` 就是这条规矩要抓的那一格。
 #:
@@ -4573,8 +4587,9 @@ def _waiver_declarations(run: "LoopRun",
     return waivers, problems
 
 
-def _is_effect_evidence(shape: str, payload: Mapping[str, Any]) -> bool:
-    """这一步有没有留下可查的效应 —— 判据是负表，不是白名单。
+def _is_effect_evidence(shape: str, payload: Mapping[str, Any],
+                        result: Mapping[str, Any]) -> bool:
+    """这一步有没有留下可查的效应 —— 判据是负表，不是白名单；且必须真的落成了。
 
     为什么是负表（业主 2026-10 的修正，逐字）："处理"的真实形态远不止三条 —— 写进台账、改计划、立/改猜想、写
     报告、据以改派别的角色、用它的读数做判断、把它交给 H 审、把它折进收工结论……一张正表（"只有这三种算"）会
@@ -4583,12 +4598,35 @@ def _is_effect_evidence(shape: str, payload: Mapping[str, Any]) -> bool:
     所以这里只排除两档：「只读侦察」（`RECON_ONLY_TOOLS`，业主逐字「`fs.list`/`status_report` 这类只读侦察不
     算」—— 它没有改变任何东西，不是效应）；`invalid` 步（它连一次真的调用都不是）。其余一律算「效应候选」，
     真正的判据落在那句"它有没有指到那条子产出"上 ⇒ "列举"只活在文档里，不活在判据里。
+
+    为什么还要看结果（2026-11-23，REAL-FIX-6 挖出的产品洞）：只按形状判会把受控拒绝读成效应 —— 父写
+    `reports/verdict.md` 被 `reports_is_retired` 拒掉（`ok=False`、零字节落盘），改前照样记成 `consumed`、
+    `unconsumed=0`。"试过写"不是"处理了"：一次没有落成的调用什么都没留下，父手上那条子产出仍然没人读。
+    每一种形状读它自己的"落成了没有"真身，不在这里另造第二份判据：
+    `tool` 看 `ok`（工具层唯一的成功信号）；`summon`/`summon_many` 用 `_summon_landed`（被拒 / 两段式请示 /
+    取消都不算，派出去但子代理跑坏了算）；`message` 用 `_message_landed`（拒信不算，`receipt="no_reader"`
+    那种"落盘了但没人读"仍算）；`handoff` 看 `ok`；`final` 看收工闸有没有拒；其余带 `ok` 的形状看 `ok`。
+    `roster` 是只读查询（结果里只有 `checked`/`rows`，没有 `ok`）⇒ 与只读侦察同档，不算效应。
     """
     if shape == "invalid":
         return False
     if shape == "tool":
-        return str(payload.get("name") or "") not in RECON_ONLY_TOOLS
-    return True
+        if str(payload.get("name") or "") in RECON_ONLY_TOOLS:
+            return False
+        return result.get("ok") is True
+    if shape in ("summon", "summon_many"):
+        return _summon_landed(result)
+    if shape == "message":
+        return _message_landed(result)
+    if shape == "final":
+        # 收工落成时这一步没有 `ok`（它只在那几道闸之后才走到）。被拒的两支分别写
+        # `ok=False`（还有子代理没回来）与 `final_refused`（结构完整性闸）。
+        if result.get("ok") is False:
+            return False
+        return not (result.get("refused") or result.get("final_refused"))
+    if shape == "roster":
+        return False
+    return result.get("ok") is True
 
 
 def _effect_label(shape: str, payload: Mapping[str, Any]) -> str:
@@ -4680,7 +4718,8 @@ def summon_consumption(run: "LoopRun") -> dict[str, Any]:
     出（`task_id` / 产物路径 / 台账 id）就算处理了（`disposition="consumed"`）。业主点名的形态只是举例：写进台账（
     `table.create/update`、`register_*`）、改计划、立/改猜想、写报告（`fs.write`）、再派活、交给 H 审、用它做判断、折
     进 final ……任何一条都算；效应由 `_is_effect_evidence` 用负表判（只排除只读侦察（`fs.list` / `status_report` 这类）
-    与 `invalid` 步）。
+    与 `invalid` 步），并且要求那一步真的落成了（受控拒绝不算 —— 2026-11-23：一次被拒的 `fs.write` 什么都没写，
+    不能拿它当"父处理了子产出"）。
     两端：如实声明不处理（`disposition="waived"`）—— 显式写一条 `not_consumed`（
     `{"task_id": …, "code": <受控理由码>, "why": "<一句话理由>"}`），理由码必须在 `NOT_CONSUMED_CODES` 里、理由不许是
     空串（自造码 / 空码 / 空理由都不算，负控 ④）；判不了（`disposition="unknown"`）—— 后续某一步留下了
@@ -4713,7 +4752,7 @@ def summon_consumption(run: "LoopRun") -> dict[str, Any]:
             # "拒绝并说明"那条通路就当场失去意义（负控 ④ 当场抓出过这个形态）。
             scan = {k: v for k, v in step_payload.items() if k != "not_consumed"}
             text = json.dumps(scan, ensure_ascii=False, default=str)
-            effect = _is_effect_evidence(s.shape, step_payload)
+            effect = _is_effect_evidence(s.shape, step_payload, s.result)
             refs = [str(t) for t in (p.get("outputs") or [])
                     if str(t) and str(t) in text]
             if not refs:
@@ -5205,7 +5244,7 @@ def _sign_gate_e(store: Any, root: str, cands: Mapping[str, Mapping[str, Any]],
         out["problems"].append({
             "where": f"实验 {eid}",
             "what": ("这一条实验没有落任何 E 稿（`e-num` / `e-proof`）⇒ 普通数值"
-                     "实验也必须有稿（业主 2026-11-08）：先补 `reports/e-num-"
+                     "实验也必须有稿（业主 2026-11-08）：先补 `work/E/e-num-"
                      f"{eid}.md`；这一族无签是正常的"),
         })
 
@@ -5249,14 +5288,14 @@ CLOSING_NOT_AUTHORITATIVE_CODE = "closing_not_authoritative"
 
 #: 「这一趟不设门」的显式声明落点（项目根相对）。它必须带理由 ——
 #: 一个可以由模型随手写、又不写理由的豁免，等于没有这道闸。
-NO_GATE_DECLARATION_NAME = "out/review/NO-GATE.json"
+NO_GATE_DECLARATION_NAME = "out/report/NO-GATE.json"
 
 
 def closing_gate_consulted(loop: "AgentLoop") -> dict[str, Any]:
     """这一趟跑过 `conductor.closing` 没有（唯一判据；反真空用例只打这一处桩）。
 
     读的是循环自己记下的成功调用（`AgentLoop._closing_gate_readings`），
-    不是盘上的判据文件：`out/review/m-verdicts.jsonl` 只在 M 给了 `goal_met` 时才写，
+    不是盘上的判据文件：`out/report/m-verdicts.jsonl` 只在 M 给了 `goal_met` 时才写，
     而"跑了门、看了读数、判了不交"同样是跑过 —— 这一格问的是有没有把门问过。
     """
     calls = [dict(x) for x in (getattr(loop, "_closing_gate_readings", None) or [])]
@@ -5393,17 +5432,17 @@ def closing_final_authority(
              "（按裁定 ①：运行中途拿这份读数来看是允许的，它不参与退出码；"
              "但**交 final 的那一刻**必须换成权威的那一份。）"),
         how_to_fix=("重跑一次 `conductor.closing`，把两个参数都带上：`project_dir` 给项目根"
-                    "（这个工作区就是根 ⇒ `\".\"`；给 `out/paper` 会把 `out/paper` 再拼一次），"
-                    "`report_path` 给报告路径（`out/review/REPORT.md`）。"
+                    "（这个工作区就是根 ⇒ `\".\"`；给 `out/package` 会把 `out/package` 再拼一次），"
+                    "`report_path` 给报告路径（`out/report/REPORT.md`）。"
                     "拿到权威读数之后，按它的 `failed` / `unknowns` 逐条处置，再发 final。"
-                    "若这一趟应当明确不设门：写 `out/review/NO-GATE.json`"
+                    "若这一趟应当明确不设门：写 `out/report/NO-GATE.json`"
                     "（`{\"no_gate\": true, \"reason\": \"…为什么这一趟不需要收工门…\"}`）再发 final。"),
     )
     return out
 
 
 def no_gate_declaration(project_root: Any) -> dict[str, Any]:
-    """这一趟有没有显式声明"不设门"（`out/review/NO-GATE.json`）。
+    """这一趟有没有显式声明"不设门"（`out/report/NO-GATE.json`）。
 
     三态：文件不在 ⇒ `declared=False`（不豁免）；读不懂 / 没写理由 / `no_gate` 不是
     `true` ⇒ 同样 `declared=False`，但理由写清"为什么不认这份声明"（静默豁免是本仓
@@ -5430,14 +5469,35 @@ def no_gate_declaration(project_root: Any) -> dict[str, Any]:
     return out
 
 
+def _retired_paper_package_files(project_root: str | Path) -> list[str]:
+    """退役目录 `out/paper/` 里现存的论文包文件（只报，不读、不算有包）。
+
+    论文包的新落点是 :func:`papercompile.package_dir`（`<项目根>/out/package`）；
+    旧目录 `out/paper` 不再被任何读路径认成"有论文包"。但"写在退役目录里"这件事不许
+    静默消失 —— 返回的相对路径同时供 `retired_paper_package` / `_files` / `_count`
+    与 `retired_note` 使用（唯一探针：删掉它，那几条读数一起消失）。
+    """
+    from . import papercompile as _PC
+
+    old = Path(str(project_root)) / "out" / "paper"
+    return [f"out/paper/{name}" for name in (_PC.TEX_NAME, _PC.PDF_NAME)
+            if (old / name).is_file()]
+
+
 def closing_gate_requirement(loop: "AgentLoop") -> dict[str, Any]:
     """这一趟的项目要不要过收工门（研究型 / 有门的项目才要）。
 
     判据（三态）：
 
     - 有 `research_questions` 行 ⇒ 研究型；
-    - 盘上有 `out/paper/ACCEPTANCE-CHECKS.json`（验收表）或 `out/paper/main.tex` /
+    - 盘上有 `out/package/ACCEPTANCE-TARGETS.json`（验收表）或 `out/package/main.tex` /
       `main.pdf`（论文包）⇒ 有门的项目；
+    - 只有退役目录 `out/paper/ACCEPTANCE-TARGETS.json` ⇒ 不算有门（旧布局不再支持，
+      2026-11-22 `draft/197` §十四 ②），但读数里留 `retired_acceptance_checks` 与一句
+      "按未写读"：不许把旧目录的残留静默读成"从来没有表"；
+    - 只有退役目录 `out/paper/main.tex` / `main.pdf` ⇒ 同样不算有论文包（旧布局不再支持），
+      但读数里留 `retired_paper_package`（含命中的文件名与个数）与一句"按未写读"：
+      "没写论文"与"论文写在退役目录里"必须分得开；
     - 两者都不是 ⇒ `required=False`（非研究型；这一道闸对它没有对象）；
     - 读不出来 / 没有工作区根 ⇒ `checked=False`：这一格没查成。它是软闸，
       不据此拦收工（硬的那一道是销号完整性；"判不了"不许折成"干净"这件事在这里
@@ -5453,9 +5513,35 @@ def closing_gate_requirement(loop: "AgentLoop") -> dict[str, Any]:
                    why="没有工作区根 ⇒ 判不了这一趟的项目有没有门（不据此拦）")
         return out
     base = Path(root)
-    out["acceptance_checks"] = (base / "out" / "paper" / "ACCEPTANCE-CHECKS.json").is_file()
-    out["paper_package"] = any((base / "out" / "paper" / name).is_file()
-                               for name in ("main.tex", "main.pdf"))
+    # 2026-11-22（`draft/197` §十四 ②）：验收表的新落点就是
+    # `out/package/ACCEPTANCE-TARGETS.json`（本函数判据注释写的一直是它）；这一行此前读
+    # 退役目录 `out/paper` ⇒ 新布局下 `acceptance_checks` 永远为假，"要不要跑收工门"的
+    # required 判定被静默放松（业主最恨的"判据/门静默失真"）。
+    # 落点常量只认一处（`closing.ACCEPTANCE_TARGETS_NAME`）：两处各写一份就是下一次分叉。
+    from . import closing as _CL  # 局部导入：closing 的依赖面大，模块级导入容易绕出环
+
+    checks_rel = str(_CL.ACCEPTANCE_TARGETS_NAME)
+    out["acceptance_checks"] = (base / checks_rel).is_file()
+    out["acceptance_checks_path"] = str(base / checks_rel)
+    # 旧目录有表、新落点没有 ⇒ 按"未写"读（旧布局不再支持），但必须记下来：
+    # 不许让"旧目录里那张表"在读数里消失 —— 那等于把旧布局的残留读成"从来没有表"。
+    out["retired_acceptance_checks"] = (
+        base / "out" / "paper" / Path(checks_rel).name).is_file()
+    # 2026-11-22（`draft/197` §十四 ② 的同族）：论文包的新落点是
+    # `papercompile.package_dir()`（`<项目根>/out/package`）。这一行此前读退役目录
+    # `out/paper` ⇒ 新布局里只有 `out/package/main.tex` 时 `paper_package` 恒为假，
+    # "要不要跑收工门"的第三个信号被静默放松。落点只认一处：`papercompile` 的常量。
+    from . import papercompile as _PC  # 局部导入：与上面 `_CL` 同一条理由（防环）
+
+    _pkg = _PC.package_dir(base)
+    out["paper_package"] = any((_pkg / name).is_file()
+                               for name in (_PC.TEX_NAME, _PC.PDF_NAME))
+    # 旧目录 `out/paper` 里的论文包同样只作"退役证据"读数（不回退、不算有包）：
+    # "没写论文"与"写在退役目录里"必须分得开 —— 后者不许静默读成前者。
+    _retired_pkg = _retired_paper_package_files(base)
+    out["retired_paper_package"] = bool(_retired_pkg)
+    out["retired_paper_package_files"] = _retired_pkg
+    out["retired_paper_package_count"] = len(_retired_pkg)
     store = getattr(loop, "store", None)
     if store is None:
         out.update(checked=False,
@@ -5470,14 +5556,33 @@ def closing_gate_requirement(loop: "AgentLoop") -> dict[str, Any]:
         return out
     out["required"] = bool(out["researched"] or out["acceptance_checks"]
                            or out["paper_package"])
-    out["why"] = ("研究型 / 有门的项目（"
-                  + "、".join(name for name, on in (
-                      ("有研究问题", out["researched"]),
-                      ("有验收表", out["acceptance_checks"]),
-                      ("有论文包", out["paper_package"])) if on)
-                  + "）⇒ final 前要先跑 `conductor.closing`"
-                  if out["required"] else
-                  "非研究型、也没有门（没有研究问题 / 验收表 / 论文包）⇒ 不要求跑收工门")
+    # 旧目录有验收表/论文包而新落点没有：required 不因它变真（旧布局不再支持），但这句话
+    # 必须出现在读数里 —— "没写"与"写在退役目录、门看不见"是两件事，后者不许静默。
+    retired_notes: list[str] = []
+    if out["retired_acceptance_checks"] and not out["acceptance_checks"]:
+        retired_notes.append(
+            f"；旧目录有验收表（`out/paper/{Path(checks_rel).name}`）而新落点"
+            f" `{checks_rel}` 没有 ⇒ 按「验收表没写」读（旧布局不再支持："
+            f"验收表要写到 {checks_rel}）")
+    if out["retired_paper_package"] and not out["paper_package"]:
+        pkg_rel = "/".join(_PC.PACKAGE_REL)
+        named = "、".join(f"`{name}`" for name in _retired_pkg)
+        retired_notes.append(
+            f"；旧目录有论文包（{named}，共 {len(_retired_pkg)} 个文件）而新落点"
+            f" `{pkg_rel}/{_PC.TEX_NAME}` / `{_PC.PDF_NAME}` 没有 ⇒ 按「论文包没写」读"
+            f"（旧布局不再支持：论文包要写到 {pkg_rel}/）")
+    retired_note = "".join(retired_notes)
+    out["retired_note"] = retired_note
+    if out["required"]:
+        out["why"] = ("研究型 / 有门的项目（"
+                      + "、".join(name for name, on in (
+                          ("有研究问题", out["researched"]),
+                          ("有验收表", out["acceptance_checks"]),
+                          ("有论文包", out["paper_package"])) if on)
+                      + "）⇒ final 前要先跑 `conductor.closing`")
+    else:
+        out["why"] = "非研究型、也没有门（没有研究问题 / 验收表 / 论文包）⇒ 不要求跑收工门"
+    out["why"] += retired_note
     return out
 
 
@@ -6306,12 +6411,13 @@ class AgentLoop:
         return str(getattr(self.store, "root", "") or "")
 
     def _stamp_step(self, *, step: int) -> str:
-        """把"这一步开始了"落成盘上的步进落痕（停滞读数的写侧）。返回问题（空串 = 写成了）。
+        """把"这一步开始了"追加到盘上的步轨迹里（停滞读数的写侧）。返回问题（空串 = 写成了）。
 
-        写的是 `<工作区>/out/steps/<台账号>.json`（一个代理一个文件，每步原子替换）。
-        为什么不在收工时写一次、也不写进台账：理由在 `conductor.STEPS_DIR` 与
-        `conductor.stamp_step` 的 docstring 里（台账没有"最近一步"这一列，而每步改它
-        会把锁竞争放大成代价；这一格只要一个几十字节的事实）。
+        写的是 `<工作区>/out/steps/<台账号>.jsonl`（一个代理一个文件，一行一步、追加 ——
+        名字叫 steps，盘上就是轨迹；2026-11-22 NAMEFIX-B1 ① 之前是每步覆盖同一个 `.json`，
+        于是 42 个任务只有 42 个"最后一次步号"）。为什么不在收工时写一次、也不写进台账：
+        理由在 `conductor.STEPS_DIR` 与 `conductor.stamp_step` 的 docstring 里（台账没有
+        "最近一步"这一列，而每步改它会把锁竞争放大成代价；这一格只要一行几十字节的事实）。
 
         三态：没有 conductor / 没有台账号 ⇒ 空串（这一趟本来就不在台账里，没有
         可读的行要标停滞）；写不成 ⇒ 那一句问题（不是"写成了"）。
@@ -9439,7 +9545,7 @@ class AgentLoop:
         #
         # 软硬的分界（"软硬合适"）：
         #   - 只有"确实知道它是研究型 / 有门的项目"才拦（`required`）—— 非研究型直接放行；
-        #   - 显式声明 `out/review/NO-GATE.json`（`no_gate: true` + 非空理由）⇒ 放行；
+        #   - 显式声明 `out/report/NO-GATE.json`（`no_gate: true` + 非空理由）⇒ 放行；
         #   - 判不了（`checked=False`）⇒ 不拦，但读数与理由留在 `closing_gate` 里
         #     （"判不了"不许读成"干净"，也不叠一条 fail-closed 的拒——硬闸是销号完整性）；
         #   - 跑过门之后，"门说了什么"不影响这道闸：过没过由 M 判（工具里 `can_close`
@@ -9461,9 +9567,9 @@ class AgentLoop:
                 "M 在 final 里把「跑收工门」列成待办然后交 final，正是真机 "
                 "`projects/lp-ball-2` 的形态（AH2b：全表 0 次调用）。"
                 "处置：现在调 `conductor.closing`（给 `goal_met` 与 `basis`，"
-                "让判据落到 `out/review/m-verdicts.jsonl`），按它回的 `failed` / "
+                "让判据落到 `out/report/m-verdicts.jsonl`），按它回的 `failed` / "
                 "`unknowns` 逐条处置（或明确说清为什么不认），然后再发 final。"
-                "若这一趟应当明确不设门：写 `out/review/NO-GATE.json`"
+                "若这一趟应当明确不设门：写 `out/report/NO-GATE.json`"
                 "（`{\"no_gate\": true, \"reason\": \"…为什么这一趟不需要收工门…\"}`）"
                 "再发 final —— 非研究型项目本来就不会被这一道拦")
             reading["why"] = why
@@ -9831,8 +9937,11 @@ class AgentLoop:
         """
         bad_result = {"problem": call.problem, "detail": _clip(call.detail, 600),
                       "raw_reply": _clip(call.text, 600)}
-        dump = _dump_invalid_reply(self.workspace_root, self.sid, step,
-                                    call.text or "", self.role)
+        # 证据的根：工作区优先，其次这一趟的会话根（子代理循环可能没有单独的工作区，
+        # 但会话根一定在）。不许落到进程 cwd —— 那会把证据写进跑这一趟的目录，
+        # 跑测试时就是仓库根（见 `temp/outprobe/REPORT.md` 的 R1）。
+        dump = _dump_invalid_reply(self.workspace_root or self.session_root, self.sid, step,
+                                   call.text or "", self.role)
         if dump:
             bad_result["raw_reply_path"] = dump
         run.steps.append(LoopStep(step, "invalid", {}, bad_result,
@@ -14085,7 +14194,7 @@ class AgentLoop:
     def _handoff_address(self, to: str) -> tuple[dict[str, Any], dict[str, Any]]:
         """交接手稿的收件人（`handoff` / 收工 `notify` 共用）：`(addr, gate)`。
 
-        为什么不能照抄 `message` 那一格：手稿通道的收件人面本来就是角色（`manuscripts/handoffs.jsonl` 的 `to` 是角色；
+        为什么不能照抄 `message` 那一格：手稿通道的收件人面本来就是角色（`work/handoffs.jsonl` 的 `to` 是角色；
         老行里还可能是历史写法 `ALL`，读侧照旧读得出）：`handoff_query(to=…)` / `manuscripts.read` 的过滤都按它），名册上没有"手稿收件人"这个地址面（
         `secretary.handoff_add` 写的时候就把非角色收件人拒掉：`ValueError: 收件人必须是 [A…M, V] 之一`）。
         | `to` 的写法 | 判据 |
@@ -14852,7 +14961,13 @@ class AgentLoop:
         """
         if self.role != S.CONDUCTOR_ROLE or self.store is None:
             return ""
-        out_dir = Path(self.session_root) / "out" / "review"
+        # 2026-11-22（MIGRATION-LEFTOVER）：状态报告的缺省落点也只认一处真身
+        # （`statusreport.status_report_paths` 的缺省 = `out/report`）。此前这里
+        # glob 退役目录 `out/review` ⇒ 模型刚落的新落点报告看不见，框架会再补一份
+        # （`tests/test_the_status_report_is_guaranteed.py` 的负控因此红）。
+        from . import statusreport as SR
+
+        out_dir = SR.status_report_paths(self.session_root)[0].parent
         started = time.time() - float(getattr(run, "elapsed_sec", 0.0) or 0.0)
         try:
             fresh = [p for p in out_dir.glob("STATUS-*")
@@ -14862,8 +14977,6 @@ class AgentLoop:
         if fresh:
             return ""
         try:
-            from . import statusreport as SR
-
             _, md, js = SR.write_status_report(self.store, self.session_root)
         except Exception as exc:  # noqa: BLE001 —— 补落失败要留痕，不许静默
             return f"状态报告补落失败（{type(exc).__name__}: {exc}）⇒ 这一格仍然没有落盘读数"
@@ -14941,7 +15054,7 @@ class AgentLoop:
         两件事一起做，因为它们是同一件事的两半：手稿是「内容」，留言是「通知」；让模型分两步做就会出现"写了手稿但对方
         不知道"（或反过来）的半截状态，而且用户点过名："就传个编号感觉有点尬，可以再附一句简要描述"。`to=ALL`（广播）2026-11-20
         已随通道面退场受控拒绝（`broadcast_retired`）：收件人必须是具体实例或主控 M 的本号；存储是追加式账本
-        `manuscripts/handoffs.jsonl` 的一行（`draft/39` §C1：编号与那一行在同一把锁里分配）。
+        `work/handoffs.jsonl` 的一行（`draft/39` §C1：编号与那一行在同一把锁里分配）。
 
         A 线：执笔权已经移交给本角色的秘书（`draft/53` §2.1 / `draft/55` §3.2）。用户口径（2026-10-06）："由于所有信息
         交互都由秘书过一遍手，所以 handoffs 的增改查能力都该给秘书，智能体只保留『查』的能力。"落法：循环形状
@@ -15366,9 +15479,9 @@ class LlmBackend:
             child_surface = ""
         # S1n-c：这一趟用哪一个注册表 —— 有面且有工厂 ⇒ 按面造一个
         # （面就是这一趟的 `fs.*` 根，业主 T23 的"面 = 新的根"）；否则共用那个。
-        # 2026-10-22 真机缺陷（p3-verify2 收官趟，`manuscripts/handoffs.jsonl` 的 000017/000018）：
+        # 2026-10-22 真机缺陷（p3-verify2 收官趟，`work/handoffs.jsonl` 的 000017/000018）：
         # 父给 G 切了一个空的槽（`out/surfaces/t-000025/S01`），于是 G 的 `fs.*` 根就是那个空目录，
-        # 连 `out/paper/main.tex` 都读不到（两条读法都 `path_denied`），`doc.paper_compile` 只能报
+        # 连 `out/package/main.tex` 都读不到（两条读法都 `path_denied`），`doc.paper_compile` 只能报
         # `paper_no_source` ⇒ 论文那一格永远 unknown。
         # 口径：空面不算切面。切面是为了"把这一趟要用的那一块切进来"，一个空目录切进去，
         # 等于把这一趟的手脚绑住；它与"面读不到就不切"是同一条纪律的两种情形。
@@ -16449,7 +16562,7 @@ def _surface_root_decision(surface: str) -> tuple[str, bool]:
     """这一趟该不该把 `fs.*` 的根切到面上：返回（要用的面；空串 = 不切）与"是否因空而退回"。
 
     口径（2026-10-22 真机）：空面不算切面。切面是为了"把这一趟要用的那一块切进来"；
-    切一个空目录进去等于把这一趟的手脚绑住（真机上 G 因此读不到 `out/paper/main.tex`）。
+    切一个空目录进去等于把这一趟的手脚绑住（真机上 G 因此读不到 `out/package/main.tex`）。
     面读不到（路径不存在 / 不是目录）与面是空的同属"不切"这一档，但两者都留痕，
     不许静默退回项目根冒充"面切过了"。
     """
@@ -16465,3 +16578,4 @@ def _surface_root_decision(surface: str) -> tuple[str, bool]:
     except OSError:
         return "", True
     return text, False
+

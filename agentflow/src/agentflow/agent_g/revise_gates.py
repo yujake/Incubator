@@ -12,13 +12,22 @@
 
 `tx_rows` 是事务内的读表口（`tx.rows`）：检查与随后写 `documents` / `review_findings`
 看到同一份快照。这条约束没有放宽成"事务外先读一次"。
+
+第四道（本文件末尾那一节）不是 `revise` 独有的：`kind=research` 那一行是 D 的交付正文，
+G 的两个改稿入口（`revise` / `refresh_markdown`）都调同一个 `ensure_not_research_row`。
 """
 from __future__ import annotations
 
 import json
 from collections.abc import Collection
 
+from .. import manuscriptfamily as _MFAM
+from .. import schema as S
 from ._support import Any, DT, DocumentError, Mapping, Sequence
+
+#: G 的稿件正文目录（`manuscripts/G/`）：与 `doc_tools.build_document` 的
+#: `default_subdir` 同一条口径（根取 `manuscriptfamily` 的真身，不写旧 `documents/`）。
+DOC_BODY_DIR = f"{_MFAM.MANUSCRIPT_ROOT}/G"
 
 
 def checked_claims(
@@ -115,7 +124,7 @@ def ensure_known_claim_id(
         f"修订 doc:{doc_id} 被拒：new_claims 里给的 claim_id={given!r} 不在本稿现行号里"
         f"（拒因码 unknown_claim_id）。本稿现行号（{len(known_ids)} 条）：{listing}。"
         "要改哪一条就把那一条的号**原样**交回 —— 号从 "
-        f"`documents/{doc_id}.md` 正文里的 `**claim-N**` 读（或读 "
+        f"`{DOC_BODY_DIR}/{doc_id}.md` 正文里的 `**claim-N**` 读（或读 "
         "`documents.claims[*].claim_id`）。要新增一条就别给 claim_id，脚本会分配；"
         "回执里的 `appended_claim_ids` 报的是归一化之后的号，不是请求号。"
     )
@@ -181,3 +190,80 @@ def ensure_finding_target_revised(
         f"要标 fixed 就先把 {claim_id} 同号交回 new_claims、并真的改掉它；"
         "只把 finding 的状态标成 fixed、断言原样不动，不算修好。"
     )
+
+
+# ------------------------------------------------ ④ research 行：改稿的两个入口都拒
+
+
+#: G 的改稿入口撞上 `kind=research` 那一行时的拒因码。
+#:
+#: 与 `rowscope` 那几档同一种形态（码在前、出路在后）：`row_not_yours` 那族说的是
+#: "这一行归别人"，这里说的是"这一行归另一个角色的写口"。
+RESEARCH_ROW_NOT_G_WRITABLE = "research_row_not_g_writable"
+
+#: 拒信里那半句"出路"：D 的写口只有一个，点名点到函数名（模型照着它派活）。
+RESEARCH_ROW_OWNER_ROAD = (
+    "**让 D 重写它** —— 派 `D.write_report`（它由 `doc_tools.record_research_report` "
+    "落在同一个 `markdown_path` 上、`revision` 前进一格）"
+)
+
+
+def ensure_not_research_row(
+    *, doc_id: str, doc: Mapping[str, Any], action: str,
+) -> None:
+    """`kind=research` 那一行是 D 的交付正文 ⇒ G 的改稿入口受控拒（不改，也不静默放过）。
+
+    ## 为什么 G 一个字节都不许碰它
+
+    `documents(kind=research)` 那一行的「建」已经只有一个入口
+    （`doc_tools.record_research_report`，写侧 `agent_d.write_report`）。那条路刻意
+    不走 `render_markdown`：正文里带携带单与审计节，而 `render_markdown` 渲染不出
+    那两节（见 `record_research_report` docstring 第 2 条）。于是 G 的改稿两条路都会
+    把 D 的正文换成一份台账稿：
+
+    - `revise` 在事务里 `tx.upsert("documents", …)`，然后按 `markdown_path`
+      `render_markdown` 重画那份正文（`revise.py` 里"修订后重渲染"那一段）；
+    - `refresh_markdown` 更直接：只做 `render_markdown` + `write_text`（不改数据行）。
+
+    而行上的 `kind` 一个字都不会变 —— 读侧 `agent_d._support.report_landing_reading`
+    （S-07）数的正是 `kind == "research"` 的行、不看路径（`schema.RESEARCH_DOC_KIND`
+    是那一格的唯一判别键）。所以覆盖之后这一行照样算"D 交回的一份报告"，
+    正文却已经不是 D 写的了 —— 读侧判别键被改写而读数看不出来。
+
+    这就是"只收了一侧"的形态：建那一侧有自己的准入判据（`doc.build_document` 不造
+    research 行），改这一侧却只要一个 `doc_id` —— 两个入口都没问过 `kind`。宁可让 G 撞
+    一次受控拒，也不许出现"行还是 research、正文已经是 G 的台账稿"。
+
+    ## 拒信里为什么要带上这一行的读数
+
+    只回一句"不许改"的话，模型只能猜自己撞到了什么，下一步照样会去改参数重试
+    （真机 `lp-ball-13` 的 5 连拒就是这么来的）。所以拒信点明：这一行是哪一份稿、
+    `revision` 多少、几条断言、正文在哪个路径上 —— 并且明说那个路径一个字节没动
+    （两个入口都在写之前就抛），于是"原文要怎么看"不用猜。
+
+    出路不给第二条：这份稿归 D。G 要写自己的稿，走 `doc.build_document`
+    （kind 取 `note` / `survey` / `paper`）。
+    """
+    kind = str(doc.get("kind") or "")
+    if kind != S.RESEARCH_DOC_KIND:
+        return
+    rel = str(doc.get("markdown_path") or "").strip().replace("\\", "/")
+    body = f"`{rel}`" if rel else "（这一行没有 `markdown_path`）"
+    title = str(doc.get("title") or "").strip()
+    if len(title) > 60:
+        title = title[:60] + "…"
+    raise DocumentError(
+        f"{RESEARCH_ROW_NOT_G_WRITABLE}：`{action}` 不改 doc:{doc_id} —— 它是 "
+        f"`kind={kind}` 那一行（title={title!r}，"
+        f"revision={int(doc.get('revision') or 0)}，"
+        f"{len(doc.get('claims') or [])} 条断言，正文 {body}）。"
+        "那一行的正文是 D 的交付物（写侧 `D.write_report` → "
+        "`doc_tools.record_research_report`），带携带单与审计节 —— "
+        "`render_markdown` 渲染不出那两节，所以这条路按 `markdown_path` 重画"
+        "就等于把 D 的正文换成一份台账稿；而行上的 `kind` 不变，"
+        "S-07（`report_landing_reading`）照样把它数成「D 交回的一份报告」。"
+        f"出路：{RESEARCH_ROW_OWNER_ROAD}；"
+        "你要写自己的稿就走 `doc.build_document`（kind 取 note / survey / paper）。"
+        f"原文照旧在盘上：{body} 一个字节没动（拒在写之前）。"
+    )
+

@@ -364,7 +364,7 @@ class DepsMixin:
         ## 为什么需要第二个入口（同一个写入方，同一套判据）
         `record_statement` 只看得见这一笔交上来的 `proof_text`（#p1）。第 2 份及以后的
         证明是 `B.register_statement` 在 `_attach_proofs` 里挂到既有行上的，那一笔只动
-        `statements`（B 的写集里没有 `dependencies`）⇒ 那几份证明引用的东西原先一条都
+        `statements`（`dependencies` 现在也在 B 的写集里，见 `specs/b.py`；那一笔仍不写它）⇒ 那几份证明引用的东西原先一条都
         不进依赖图，`used_by="stmt:#pN"` 因此一次都没被写出来过（真机 sylow3：
         依赖 0 行、`proof_no` 全 1）。这一格是那条路的补写口：判据（扫引用 / 悬空边点名 /
         "四选一"来源）全部复用 `_scan_proof_deps` 与 `_resolve_write_steps`，一行都没有

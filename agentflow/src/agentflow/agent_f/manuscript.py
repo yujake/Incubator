@@ -4,7 +4,7 @@
 只做两件不写台账的事：
 
 1. `AgentF.proof_manuscript(...)`：把这一轮的论证写成一份手稿文件。稿名只按 F 自己的
-   稿号（`reports/f-proof-<稿号>.md`；一个稿号 = 一份文件 = 一份证明）。稿号由
+   稿号（`manuscripts/F/f-proof-<稿号>.md`；一个稿号 = 一份文件 = 一份证明）。稿号由
    :mod:`agentflow.manuscriptids` 发（`data/counters.json` 的 `manuscript` 号段），
    不用命题号、也不用计划号 —— 命题号是 B 收录时现取的，计划号只管继续/放弃/更改。
    两份都含那一节固定格式的 `## 依赖`（三列必填，见 `agentflow.depsection.COLUMN_KEYS`；
@@ -173,8 +173,10 @@ def proof_body_text(product: Mapping[str, Any]) -> str:
 
 class _Manuscript:
     """F 的证明手稿（依赖段 ＋ 只读预览）＋ 提示词里那份"可引用的在册命题"。"""
-    #: 手稿落点（工作区相对）：与 `_Core.REPORT_DIR` 同一个目录（`reports/`）。
-    MANUSCRIPT_DIR = "reports"
+    #: 手稿落点（工作区相对）：`manuscripts/F/`（2026-11-22 起正文按角色分目录；
+    #: 注意它不是 `_Core.REPORT_DIR`（`work/F/`，那是攻坚台账的目录）。唯一真身是
+    #: `manuscriptfamily.dir_of("f-proof")`。
+    MANUSCRIPT_DIR = _MF.dir_of("f-proof")
     #: 依赖段里"引用（F 的原话）"那一格最多占多少字（超出截断，并写明截断了）。
     QUOTE_CHARS = 80
     #: 一条在册命题在提示词里最多占多少字（超出截断，并写明截断了）。
@@ -398,7 +400,7 @@ class _Manuscript:
 
         ## 命名（2026-11-10 业主裁定：「F 的稿自己维护一套号源，不依赖命题号和计划号」）
 
-        稿名只由手稿号决定：`reports/f-proof-<稿号>.md`。命题号是 B 收录时现取的，
+        稿名只由手稿号决定：`manuscripts/F/f-proof-<稿号>.md`。命题号是 B 收录时现取的，
         计划号只管继续/放弃/更改 —— 两者都不进稿名。
         `manuscript_id` 由调用方给（同一份稿改稿给同一个号）；不给 ⇒ 向
         :func:`manuscriptids.next_manuscript_id` 要一个新号（绝不覆盖盘上已有的稿）。
@@ -487,7 +489,7 @@ class _Manuscript:
         # ---- A1：这一份"预写"不许擦掉已经登记的那一条 ------------------------------
         #
         # 生产路径的次序是"先写稿、后登记"（死结 1 的修法），而登记条目就住在同一个
-        # 规范路径上（`reports/f-proof-<稿号>.md`）⇒ 每一轮
+        # 规范路径上（`manuscripts/F/f-proof-<稿号>.md`）⇒ 每一轮
         # `commit_manuscript` 都会把上一轮写进去的登记元信息（`- 正文sha：` / 命题指纹 /
         # `- 版本：`）连同 `- 标签：` 一起覆盖掉，于是 `register_or_rewrite` 每轮都读成
         # "新命题"（实测 3 轮 `modes=[registered×3]`、形态闸 3 次、`proof_no=[1,1,1]`）。
@@ -549,7 +551,7 @@ class _Manuscript:
         旧口径是「登记成功（拿到命题号）就改名」——它把两个号绑死：稿名从
         `f-proof-plan-<计划号>.md` 变成 `f-proof-<命题号>.md`，于是同一份稿在收录前后
         是两个名字，签块第 9 格、D 的携带单、按号找稿的读方全都要跟着搬。
-        现在的口径：稿号是稿号，`reports/f-proof-<稿号>.md` 从写到收录始终是同一个
+        现在的口径：稿号是稿号，`manuscripts/F/f-proof-<稿号>.md` 从写到收录始终是同一个
         名字；命题号由 B 收录时现取，只落在 `statements` 那一行上（记 `manuscript_id`）。
 
         `published` 恒为 `False`（这一笔没有改名）；`why` 把原因写死，读的人不必猜。
@@ -686,7 +688,7 @@ class _Manuscript:
                            text: str = "",
                            delete_source: bool = False,
                            write_dependencies: Any = None) -> dict[str, Any]:
-        """把盘上已经存在的一份攻坚稿转成 `reports/f-proof-<稿号>.md`（实现见模块级函数）。
+        """把盘上已经存在的一份攻坚稿转成 `manuscripts/F/f-proof-<稿号>.md`（实现见模块级函数）。
 
         这是 `publish_manuscript` 的盘上稿入口：这一件读盘上那一份（`notes/…`），
         把它搬到F 自己的稿号下（没给号 ⇒ 向号源要一个）；签块跟着搬、第 9 格手稿号
@@ -704,7 +706,7 @@ class _Manuscript:
                         proof_no: int = 1) -> str:
         """这一份手稿的落点（工作区相对）—— 与 `proof_manuscript` 写的是同一处。
 
-        只按 F 自己的稿号命名：`reports/f-proof-<稿号>.md`。命题号与计划号都不参与
+        只按 F 自己的稿号命名：`manuscripts/F/f-proof-<稿号>.md`。命题号与计划号都不参与
         命名（业主 2026-11-10 裁定）；号形不对 ⇒ 空串（受控，不拼一个看起来像号的路径）。
 
         `proof_no>=2` 只保留给老盘读/重写兼容（`reports/f-proof-<号>-p2.md` 那一族
@@ -754,13 +756,13 @@ class _Manuscript:
 # 业主口径（2026-11-10）：「F 的稿自己维护一套号源，不依赖命题号和计划号。」
 # `publish_manuscript` 不再改名；盘上已经存在的一份稿（`notes/F-conj000000-proof.md`
 # 一类，F 自己 `fs.write` 写的攻坚稿）要变成正式稿时，搬到F 自己的稿号下：
-# `reports/f-proof-<稿号>.md`（没给号 ⇒ 向 `manuscriptids` 要一个，绝不覆盖别人的稿）。
+# `manuscripts/F/f-proof-<稿号>.md`（没给号 ⇒ 向 `manuscriptids` 要一个，绝不覆盖别人的稿）。
 #
 # 2026-11-04（业主裁定）：转正实现只有一份（`manuscriptform.promote_formal`），F 与 B
 # 两族由 `family=` 参数区分 —— 本模块这一个只做转发。
 
 #: 转正只收工作区相对路径里的这两种根：`notes/`（草稿本，攻坚手稿）与 `reports/`
-#: （正式落点）。唯一的实现在 `manuscriptform`。
+#: （旧盘上的正式稿；新落点是 `manuscripts/F/`，`reports/` 已退役）。唯一的实现在 `manuscriptform`。
 PROMOTE_SOURCE_ROOTS: tuple[str, ...] = _MF.PROMOTE_SOURCE_ROOTS
 
 
@@ -768,7 +770,7 @@ def promote_manuscript(root: Any, *, manuscript_id: str = "", source: str = "",
                        text: str = "", delete_source: bool = False,
                        store: Any = None,
                        write_dependencies: Any = None) -> dict[str, Any]:
-    """把盘上已经存在的一份稿转成 `reports/f-proof-<稿号>.md`（转发，判据只在一处）。
+    """把盘上已经存在的一份稿转成 `manuscripts/F/f-proof-<稿号>.md`（转发，判据只在一处）。
 
     `manuscript_id` 是F 自己的稿号；不给 ⇒ 向 :func:`manuscriptids.next_manuscript_id`
     要一个新号（转正是"这份草稿第一次拿到正式稿号"，不是"按命题号改名"）。
@@ -786,3 +788,4 @@ def promote_manuscript(root: Any, *, manuscript_id: str = "", source: str = "",
         root, family=_MF.FAMILY_F, manuscript_id=mid, source=source,
         text=text, delete_source=delete_source, store=store,
         write_dependencies=write_dependencies)
+

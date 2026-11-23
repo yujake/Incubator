@@ -66,7 +66,7 @@ REGISTER_NAME = "budget.json"
 #: 硬上限 $5 —— 预算不是"还剩 20%"，而是"下一个模型调用就可能扣到零"。比例线在
 #: 小预算趟里永远触发得太晚（$0.4 的 20% 是 $0.08，一次重证就没了）；而这一档要买的
 #: 是"写两份文件"这点工夫，它有一个与趟大小无关的下限。$1 是保守取值：两份文件
-#: （`out/paper/ACCEPTANCE-CHECKS.json` + `out/review/REPORT.md`）不需要模型写满一页，
+#: （`out/package/ACCEPTANCE-TARGETS.json` + `out/report/REPORT.md`）不需要模型写满一页，
 #: 但"从容写完、还能自检一遍"要留出不止一次调用的余量。
 PAPERWORK_RESERVE_USD = 1.0
 
@@ -78,8 +78,8 @@ PAPERWORK_RESERVE_USD = 1.0
 #: 判据 `tests/test_m_lands_the_paperwork_before_the_budget_runs_out.py` 逐字钉住
 #: 两次渲染里都出现了它，并用"删掉这一句 ⇒ 同一判据必红"做反真空。
 PAPERWORK_FIRST_RULE = (
-    "预算余量低于阈值时，先把收工必需物落盘（`out/paper/ACCEPTANCE-CHECKS.json` 与 "
-    "`out/review/REPORT.md`），再回去继续攻证明；宁可少证一条，不许交不出验收表"
+    "预算余量低于阈值时，先把收工必需物落盘（`out/package/ACCEPTANCE-TARGETS.json` 与 "
+    "`out/report/REPORT.md`），再回去继续攻证明；宁可少证一条，不许交不出验收表"
 )
 
 

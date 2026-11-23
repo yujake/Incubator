@@ -5,7 +5,7 @@
 
 旧的一路要求项目里自带一对脚本（`code/make_paper.py` + `code/compile_paper.py`），
 用它们"从台账机械地渲染出 LaTeX、再编译、再核锚"。业主裁定那些是古早废案：正文由
-智能体（G）自己写进 `out/paper/main.tex`（散文体、章节自排），框架不要求任何"渲染
+智能体（G）自己写进 `out/package/main.tex`（散文体、章节自排），框架不要求任何"渲染
 脚本"，也不再核锚。
 
 要求"项目自带渲染脚本"这件事本身就是病灶：从零研究的工作区没有那对脚本，于是模型
@@ -14,8 +14,11 @@
 
 ## 现在这一层管什么（只此一件）
 
-`compile_paper(project_root)`：找 `out/paper/main.tex` → 起 LaTeX 引擎（两遍）→
-写 `main.pdf` 与框架自己写的 `COMPILE-RECEIPT.json`（这份 PDF 是从哪一份 tex 编出来的）。
+`compile_paper(project_root)`：找 `out/package/main.tex` → 起 LaTeX 引擎（两遍）→
+写 `main.pdf`、框架自己写的 `COMPILE-RECEIPT.json`（这份 PDF 是从哪一份 tex 编出来的）
+与「这一次」的编译日志 `compile-<YYYYmmdd-HHMMSS>.log`（引擎 stdout；stderr 另落
+`compile-<…>.stderr.log`）。日志一次编译一份、不追加，最后一行是机器可读的
+`result: {…}`，它说的与盘上产物必须一致。
 
 四条刻意的口径：
 
@@ -45,15 +48,28 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-__all__ = ["ENGINE_ENV", "ENGINES", "PDF_NAME", "RECEIPT_NAME", "TEX_NAME", "compile_paper",
-           "file_digest", "package_dir", "read_receipt", "receipt_matches_tex"]
+__all__ = ["ENGINE_ENV", "ENGINES", "LOG_PREFIX", "LOG_SUFFIX", "PDF_NAME", "RECEIPT_NAME",
+           "STDERR_LOG_SUFFIX", "TEX_NAME", "compile_log_path", "compile_paper", "file_digest",
+           "package_dir", "read_receipt", "receipt_matches_tex"]
 
 #: 论文包在项目根下的落点（与旧路的落点一致，习惯不变）。
-PACKAGE_REL = ("out", "paper")
+PACKAGE_REL = ("out", "package")
 TEX_NAME = "main.tex"
 PDF_NAME = "main.pdf"
 #: 编译回执：框架写（旧路里它由项目脚本写，那是退场的一部分）。
 RECEIPT_NAME = "COMPILE-RECEIPT.json"
+#: 单次编译日志的名字（一次编译一份，不追加、不拼接）。
+#:
+#: 旧路（已退场的项目脚本 `code/compile_paper.py`）写 `compile.log`：`open("a")` 追加、
+#: `stderr=STDOUT` 混流，最多 46 个 `pass` 标记 = 23 次编译拼在一个文件里，且末 6 行是
+#: 「pdflatex did not succeed」而同一目录躺着 21 页 PDF。名字说「这次编译的日志」，内容
+#: 是「历次编译的流水账」—— 读的人只能读错（`temp/paperpkg/REPORT.md` M10）。
+#: 现在日志名带时间戳：读一份就是读一次编译；`compile.log` 这个旧名不再产生、也不被读。
+LOG_PREFIX = "compile-"
+LOG_SUFFIX = ".log"
+#: 引擎 stderr 的落点（与 stdout 日志分开：混在一个文件里就分不清哪一行是引擎的
+#: 错误、哪一行是 LaTeX 自己转录的 `.log` 输出）。
+STDERR_LOG_SUFFIX = ".stderr.log"
 
 #: 引擎候选（按这个顺序取第一个在 PATH 上的）。
 ENGINES: tuple[str, ...] = ("pdflatex", "xelatex", "lualatex")
@@ -77,7 +93,7 @@ def file_digest(path: str | Path) -> str:
 
 
 def package_dir(project_root: str | Path) -> Path:
-    """论文包目录（`<项目根>/out/paper`）。"""
+    """论文包目录（`<项目根>/out/package`）。"""
     return Path(project_root).joinpath(*PACKAGE_REL)
 
 
@@ -180,9 +196,69 @@ def _tail(raw: bytes | str | None, limit: int = 1500) -> str:
     return text[-limit:] if len(text) > limit else text
 
 
+def _decode_any(raw: bytes | str | None) -> str:
+    """原始输出解码（日志正文用：保留全文，不截尾）。"""
+    if raw is None:
+        return ""
+    return raw.decode("utf-8", "replace") if isinstance(raw, bytes) else str(raw)
+
+
+def compile_log_path(out: str | Path, *,
+                     now: _dt.datetime | None = None) -> Path:
+    """这一次编译的日志落点：`compile-<YYYYmmdd-HHMMSS>.log`（本次唯一，不追加）。
+
+    同一秒内连编两次时加 `-2` / `-3` 后缀，仍然"一次编译一份"—— 不许退回追加。
+    """
+    stamp = (now or _dt.datetime.now()).strftime("%Y%m%d-%H%M%S")
+    base = Path(out)
+    path = base / f"{LOG_PREFIX}{stamp}{LOG_SUFFIX}"
+    n = 1
+    while path.exists():
+        n += 1
+        path = base / f"{LOG_PREFIX}{stamp}-{n}{LOG_SUFFIX}"
+    return path
+
+
+def _write_compile_log(out: Path, *, engine: str, tex_digest: str,
+                       passes: list[dict[str, Any]],
+                       result: dict[str, Any]) -> tuple[Path, Path]:
+    """写这一次编译的日志；返回 `(stdout 日志, stderr 日志或空 Path)`。
+
+    stdout 与 stderr 分两个文件：合流正是旧 `compile.log` 让人读错的第二半
+    （引擎的「did not succeed」与 LaTeX 自己的 `.log` 转录长得一样）。主日志的
+    最后一行是机器可读的结论（`result: {...}`），它说的与盘上产物必须一致：
+    `pdf_fresh=false` 就是"这一次没编出 PDF"。
+    """
+    log = compile_log_path(out)
+    lines = [
+        "# agentflow.papercompile 单次编译日志（一次编译一份；不追加、不拼接）",
+        f"# engine: {engine or '（没有可用引擎）'}",
+        f"# tex_sha256: {tex_digest}",
+    ]
+    for item in passes:
+        lines.append(f"===== {item['engine'] or engine} pass {item['pass']} =====")
+        body = str(item.get("stdout") or "").rstrip()
+        lines.append(body if body else "（stdout 为空）")
+    if not passes:
+        lines.append("===== 没有起引擎 =====")
+    lines.append("result: " + json.dumps(result, ensure_ascii=False, sort_keys=True,
+                                           default=str))
+    log.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+
+    err_text = "\n".join(
+        f"===== {item['engine'] or engine} pass {item['pass']} stderr =====\n"
+        f"{str(item.get('stderr') or '').rstrip()}"
+        for item in passes if str(item.get("stderr") or "").strip())
+    if not err_text.strip():
+        return log, Path()
+    err = log.with_name(log.stem + STDERR_LOG_SUFFIX)
+    err.write_text(err_text + "\n", encoding="utf-8", newline="\n")
+    return log, err
+
+
 def compile_paper(project_root: str | Path, *, timeout_sec: float = DEFAULT_TIMEOUT_SEC,
                   engine: str = "", runs: int = 2) -> dict[str, Any]:
-    """把 `<项目根>/out/paper/main.tex` 编成 `main.pdf`，并写回执。返回三态读数。
+    """把 `<项目根>/out/package/main.tex` 编成 `main.pdf`，并写回执。返回三态读数。
 
     返回 `{tri, ok, reason, tex, pdf, engine, exit_codes, runs, pages, pdf_bytes,
     receipt_path, pdf_fresh, engine_stderr_tail, engine_stdout_tail, problems}`。
@@ -207,6 +283,7 @@ def compile_paper(project_root: str | Path, *, timeout_sec: float = DEFAULT_TIME
                 "tex": str(tex), "pdf": str(pdf), "engine": "", "exit_codes": [],
                 "runs": 0, "pages": None, "pdf_bytes": None, "pdf_fresh": False,
                 "receipt_path": str(out / RECEIPT_NAME),
+                "compile_log": "", "compile_stderr_log": "",
                 "engine_stderr_tail": "", "engine_stdout_tail": "", "problems": problems}
 
     #: 编译前的产物快照：用来回答"盘上那份 PDF 是这一趟编出来的，还是上一次留下的"。
@@ -217,6 +294,8 @@ def compile_paper(project_root: str | Path, *, timeout_sec: float = DEFAULT_TIME
     out.mkdir(parents=True, exist_ok=True)
     codes: list[int] = []
     note = ""
+    #: 本次每一遍引擎调用的原始输出（单次日志的正文；stderr 另落一个文件）。
+    passes: list[dict[str, Any]] = []
     if not chosen:
         note = "没找到 LaTeX 引擎（" + "/".join(ENGINES) + " 都不在 PATH 上）"
         problems.append(note)
@@ -238,17 +317,27 @@ def compile_paper(project_root: str | Path, *, timeout_sec: float = DEFAULT_TIME
                     codes.append(int(got.returncode))
                     stderr_tail = _tail(got.stderr)
                     stdout_tail = _tail(got.stdout)
+                    passes.append({"pass": len(codes), "engine": Path(chosen).stem,
+                                   "exit_code": int(got.returncode),
+                                   "stdout": got.stdout.decode("utf-8", "replace"),
+                                   "stderr": got.stderr.decode("utf-8", "replace")})
                     prog.finish(outcome="exited", exit_code=int(got.returncode))
                 except subprocess.TimeoutExpired as exc:
                     codes.append(-1)
                     stderr_tail = _tail(getattr(exc, "stderr", None)) or stderr_tail
                     stdout_tail = _tail(getattr(exc, "stdout", None)) or stdout_tail
+                    passes.append({"pass": len(codes), "engine": Path(chosen).stem,
+                                   "exit_code": -1,
+                                   "stdout": _decode_any(getattr(exc, "stdout", None)),
+                                   "stderr": _decode_any(getattr(exc, "stderr", None))})
                     note = f"引擎超过 {timeout_sec}s 没返回（这一步没编完）"
                     prog.finish(outcome="timed_out", note=note)
                     break
                 except (OSError, subprocess.SubprocessError) as exc:
                     codes.append(-1)
                     note = f"{type(exc).__name__}: {exc}"
+                    passes.append({"pass": len(codes), "engine": Path(chosen).stem,
+                                   "exit_code": -1, "stdout": "", "stderr": note})
                     prog.finish(outcome="failed", note=note)
                     break
 
@@ -264,6 +353,22 @@ def compile_paper(project_root: str | Path, *, timeout_sec: float = DEFAULT_TIME
     if not fresh and pdf.is_file() and not note:
         note = (f"{pdf.name} 在盘上但**不是这一趟写的**（它的修改时间早于这次编译开始）"
                 "⇒ 这一次没编出 PDF，别把旧的那一份当成本次读数")
+    tri = "computed" if fresh else "unknown"
+    reason = note or (f"由本次源码编出（{chosen}，{pages} 页）" if fresh
+                      else "没编出 PDF（引擎没给出任何产物）")
+    # ---- 单次编译日志（一次编译一份）：末行 `result:` 的每一格都必须与盘上产物一致。
+    # 写不进去不改变三态（日志是读数，不是产物闸）：如实记进 `problems`。
+    result_payload = {"tri": tri, "engine": chosen or "", "runs": len(codes),
+                      "exit_codes": codes, "pdf": str(pdf.name),
+                      "pdf_fresh": fresh, "pages": pages, "pdf_bytes": size,
+                      "reason": reason}
+    try:
+        log_path, stderr_log_path = _write_compile_log(
+            out, engine=chosen, tex_digest=file_digest(tex),
+            passes=passes, result=result_payload)
+    except OSError as exc:
+        log_path, stderr_log_path = Path(), Path()
+        problems.append(f"编译日志没写成：{type(exc).__name__}: {exc}")
     receipt = {
         "tex_sha256": file_digest(tex),
         "pdf_sha256": file_digest(pdf) if fresh else "",
@@ -277,6 +382,9 @@ def compile_paper(project_root: str | Path, *, timeout_sec: float = DEFAULT_TIME
         "written_by": "agentflow.papercompile（框架内置编译）",
         # 引擎自己说的话（截尾）：产物与退出码之外，第三份"为什么"的读数。
         "stderr_tail": stderr_tail,
+        # 这一次编译的日志（不是历史拼接）：读一份就是读一次；stderr 另落一个文件。
+        "compile_log": log_path.name if log_path else "",
+        "compile_stderr_log": stderr_log_path.name if stderr_log_path else "",
     }
     receipt_path = out / RECEIPT_NAME
     try:
@@ -296,21 +404,23 @@ def compile_paper(project_root: str | Path, *, timeout_sec: float = DEFAULT_TIME
         from . import artifacts as A
 
         _entry, _reg_problem = A.record_or_problem(
-            root, path=f"out/paper/{PDF_NAME}", producer="agentflow.papercompile",
+            root, path=f"out/package/{PDF_NAME}", producer="agentflow.papercompile",
             kind="paper-pdf",
             note=f"由 {chosen} 编出（exit_codes={codes}，{pages} 页）")
         if _reg_problem:
-            problems.append(f"{_reg_problem}；PDF 本身已在盘上（out/paper/{PDF_NAME}）")
+            problems.append(f"{_reg_problem}；PDF 本身已在盘上（out/package/{PDF_NAME}）")
 
     base = {"tex": str(tex), "pdf": str(pdf), "engine": chosen,
             "exit_codes": codes, "runs": len(codes), "pdf_fresh": fresh,
             "receipt_path": str(receipt_path),
+            "compile_log": str(log_path), "compile_stderr_log": str(stderr_log_path),
             "engine_stderr_tail": stderr_tail, "engine_stdout_tail": stdout_tail,
             "problems": problems}
     if fresh:
         return {"tri": "computed", "ok": True,
-                "reason": note or f"由本次源码编出（{chosen}，{pages} 页）",
+                "reason": reason,
                 "pages": pages, "pdf_bytes": size, **base}
     return {"tri": "unknown", "ok": False,
-            "reason": note or "没编出 PDF（引擎没给出任何产物）",
+            "reason": reason,
             "pages": None, "pdf_bytes": None, **base}
+

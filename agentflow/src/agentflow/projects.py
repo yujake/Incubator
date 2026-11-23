@@ -301,11 +301,11 @@ def create_project(ref: ProjectRef, *, now: str | None = None,
     那一档传进来（口径）；它只是对 `Store.init` 那道
     "外来目录"守卫开一次口子，不改变本函数对文件的任何行为。
 
-    `seed_literature=True` 时（默认关）在建好骨架之后把历史真机种子投进
-    `library/seed/` 并落 `SEED-README.md`。投放只写文件、不写任何台账
-    （`data/literature.json` 保持 0 行）—— 判收是 A 的事，见
-    :mod:`agentflow.seedinject` 的模块 docstring。开关缺省关，普通建工作区
-    一个字节都不多投。
+    `seed_literature=True` 时（默认关）在建好骨架之后把历史真机种子投进输入区
+    `reference/`（含其中的 `SEED-README.md`）。投放只写文件、不写任何台账
+    （`data/literature.json` 保持 0 行），也不往已登记书架 `library/` 里放文件 ——
+    判收是 A 的事，见 :mod:`agentflow.seedinject` 的模块 docstring。开关缺省关，
+    普通建工作区一个字节都不多投。
     """
     from . import schema as S
 
@@ -331,8 +331,9 @@ def create_project(ref: ProjectRef, *, now: str | None = None,
     (ref.path / "project.json").write_text(
         json.dumps(card, ensure_ascii=False, indent=1, default=str) + "\n", encoding="utf-8", newline="\n")
     if seed_literature:
-        # 放在骨架与项目卡之后：种子只是 library/ 下的文件，不是工作区的一部分；
-        # 先投种子会让 store.init 把它们当成"外来条目"（守卫会拒）。
+        # 放在骨架与项目卡之后：种子只是输入区 reference/ 下的文件，不是工作区的一部分；
+        # 先投种子会让 store.init 判态时多看到一个目录（种子的落点已在白名单里，
+        # 但"先建骨架再投料"这个顺序与用户的投料形态一致）。
         from . import seedinject as SI
 
         SI.seed_workspace(ref.path)
@@ -417,7 +418,7 @@ def _now() -> str:
 
 def seed_source_paper(project: str | Path, *, paper: str | Path,
                       force: bool = False) -> dict[str, Any]:
-    """把一篇外部论文铺进项目：`source/` = 只读基线，`out/paper/main.tex` = 可改副本。
+    """把一篇外部论文铺进项目：`source/` = 只读基线，`out/package/main.tex` = 可改副本。
 
     为什么要有这一条（「打通正常的创建项目逻辑」）：`create_project` 只铺
     工作区骨架，没有任何受支持的路径把"那篇论文"放进项目 —— 于是 T1 的夹具是手搓的，
@@ -426,7 +427,7 @@ def seed_source_paper(project: str | Path, *, paper: str | Path,
     口径三条：
     1. 只读基线不许被覆盖：`source/main.*` 已在盘上时拒绝（`force=True` 才覆盖）——
        它是"前后对比"的分母，覆盖它等于把这一趟的判据毁掉；
-    2. 可改正文只从基线复制：给了同目录的 `.tex` 就复制成 `out/paper/main.tex`；
+    2. 可改正文只从基线复制：给了同目录的 `.tex` 就复制成 `out/package/main.tex`；
        只给 PDF 时不替它编正文（如实说"可改正文还没写"），那是 G 的活；
     3. 返回读数 `{project, source, manuscript, note}` —— 铺了哪些、没铺什么、为什么。
     """
@@ -439,11 +440,17 @@ def seed_source_paper(project: str | Path, *, paper: str | Path,
     if not src.is_file():
         raise FileNotFoundError(f"论文不在盘上：{src}")
     src_dir = proj / "source"
-    pkg_dir = proj / "out" / "paper"
+    # 可改正文的落点只认一处真身（2026-11-22 MIGRATION-LEFTOVER：此前这里写 `out/paper`，
+    # 而同一函数的 docstring 与返回读数、以及收工门 `paper` 那一格早已是 `out/package`
+    # ⇒ 铺出来的副本落在退役目录里，门看不见）。
+    from . import papercompile as PC
+
+    pkg_dir = PC.package_dir(proj)
+    man_rel = f"{'/'.join(PC.PACKAGE_REL)}/{PC.TEX_NAME}"
     pdf_dst = src_dir / f"main{src.suffix.lower() or '.pdf'}"
     tex_src = src.with_suffix(".tex")
     tex_dst = src_dir / "main.tex"
-    man_dst = pkg_dir / "main.tex"
+    man_dst = pkg_dir / PC.TEX_NAME
     clashes = [p for p in (pdf_dst, tex_dst if tex_src.is_file() else None, man_dst)
                if p is not None and p.exists()]
     if clashes and not force:
@@ -460,10 +467,10 @@ def seed_source_paper(project: str | Path, *, paper: str | Path,
         shutil.copy2(tex_src, tex_dst)
         shutil.copy2(tex_src, man_dst)
         out["source"].append("source/main.tex")
-        out["manuscript"] = "out/paper/main.tex"
+        out["manuscript"] = man_rel
     else:
         out["note"] = ("给的是一份 PDF、同目录没有 .tex ⇒ 只铺了只读基线；"
-                       "可改正文要由 G 自己写进 out/paper/main.tex（这一步不替它编正文）")
+                       f"可改正文要由 G 自己写进 {man_rel}（这一步不替它编正文）")
     return out
 
 
@@ -936,8 +943,8 @@ def run_project(root: Path | str, *, name: str | None = None, start: str = "auto
     这一趟就已经花过钱了。所以"工作区已存在、还没花钱"那个时刻只在这个函数里。
 
     `run_topic_fn` 是给测试用的接缝（不传就用真的 `runflow.run_topic`）。
-    `seed_literature=True` 只在冷启动那一趟生效：把历史真机种子投进 `library/seed/`
-    （只放文件、不写台账），读数落在返回值的 `seed` 格里。默认关。
+    `seed_literature=True` 只在冷启动那一趟生效：把历史真机种子投进输入区
+    `reference/`（只放文件、不写台账），读数落在返回值的 `seed` 格里。默认关。
     返回 `{"project", "run", "result", "budget", "seed", "books_declaration"}`；
     `result` 就是 `run_topic` 的那份字典
     （含 `exit_code` / `reason` / `artifacts` / `spent_usd_this_run`）。
