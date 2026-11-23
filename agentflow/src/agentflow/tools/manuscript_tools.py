@@ -7,8 +7,10 @@
 清晰。」
 
 实现本体只有一份：`agentflow.manuscripts`（编号分配 + 追加式账本 + 读回）；存储是
-`manuscripts/handoffs.jsonl`（一行一份交接，`draft/39` §C1 起；旧格式 `.md` 仍读得
-回来）。这里只是把它包成工具，让「每个角色」（含只读的 C/H —— 交接手稿不是领域表，与
+`work/handoffs.jsonl`（一行一份交接，`draft/39` §C1 起）。旧格式 `.md`（`0007-DtoF.md`
+一类）与旧布局 `manuscripts/handoffs.jsonl` 都不再读（业主 2026-11-22 裁定「旧工作区
+不必兼容」）—— 盘上还在时 `manuscripts.legacy_layout_note()` 逐字报「旧布局（不再支持）」。
+这里只是把它包成工具，让「每个角色」（含只读的 C/H —— 交接手稿不是领域表，与
 `notes/<角色>.md` 同族）都能用。三件工具：
 
 | 工具 | 谁用 | 作用 |
@@ -39,12 +41,15 @@ _READ_ROLES: tuple[str, ...] = tuple(S.ROLES)
 
 @tool(
     "manuscripts.read",
-    "按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。",
+    "按编号读一份交接手稿的全文；没有这份就如实说没有，不是空文本",
     {"type": "object",
      "properties": {"id": {"type": "string", "description": "手稿编号（四位，如 0007）"}},
      "required": ["id"], "additionalProperties": False},
     side_effect="read",
     roles=_READ_ROLES,
+    scenario="留言给了手稿编号时；它是交接手稿，正文在 manuscripts/<角色>/",
+    example="读 0007；不存在时拒信会指去 manuscripts.list 看现有编号",
+    example_code='manuscripts.read(id="0007")',
     # `returns` 与实跑分家过一次（`draft/124` §17）：实跑返回整份手稿行（含 `body` 等
     # 六格），声明只列了 `text`。`returns` 只是台账/冻结快照的契约（模型面看不到它），
     # 但两边必须同形。
@@ -72,7 +77,7 @@ def manuscripts_read(store, id: str) -> ToolResult:
 
 @tool(
     "manuscripts.list",
-    "列交接手稿（最近 50 份）。`to` 给角色名只看发给它的；`to=ALL` 只看老数据里的广播行（写入已退场：`broadcast_retired`）。交接前先看这里，别重复别人的结论。",
+    "列最近的交接手稿（可按收件人、作者过滤）；交接前先看，别重复别人的结论",
     {"type": "object",
      "properties": {"to": {"type": "string", "description": "只看发给谁（角色名；`ALL` 只匹配老数据里的广播行，写入已退场）"},
                     "sender": {"type": "string", "description": "只看谁写的"},
@@ -80,10 +85,19 @@ def manuscripts_read(store, id: str) -> ToolResult:
      "required": [], "additionalProperties": False},
     side_effect="read",
     roles=_READ_ROLES,
+    scenario="接手别人做过的一摊之前，先看留下了什么",
+    example="列发给自己的最近手稿；to=ALL 只匹配老广播行",
+    example_code='manuscripts.list(to="A")',
     returns="{'count','items':[{id,sender,to,summary,path,created_at}]}",
 )
 def manuscripts_list(store, to: str = "", sender: str = "", limit: int = 50) -> ToolResult:
-    """工具体：列手稿。"""
+    """工具体：列手稿。
+
+    TOOLFACE-SHARD4（业主 2026-11-22 三段格式）：`summary` 里原来那句
+    「`to=ALL` 只看老数据里的广播行（写入已退场：`broadcast_retired`）」按「实现细节
+    只留注释」搬到这里 —— 广播写入退场后的受控码是 `broadcast_retired`（本轮只是
+    读老行，不写新行）；模型面只留「`ALL` 只匹配老广播行」这条用法。
+    """
     root = getattr(store, "root", None)
     if root is None:
         raise ToolError("manuscripts.list 需要一个带 root 的 store")
@@ -93,18 +107,23 @@ def manuscripts_list(store, to: str = "", sender: str = "", limit: int = 50) -> 
 
 @tool(
     "manuscripts.submission_reading",
-    "读一份证明稿的提交状态（产出方 / 已签 / 已提交 / 时刻 / via：E/F 走收工自动提交、"
-    "B 走收录）；「未提交」与「没查成」分开报。",
+    "读一份证明稿的提交状态：产出方、已签、已提交、时刻与 via；未提交与没查成分开报",
     {"type": "object",
      "properties": {
          "manuscript": {"type": "string",
-                        "description": "证明稿的工作区相对路径（`reports/f-proof-*.md` / `e-proof-*` / `e-num-*` / `b-proof-*`）"},
+                        "description": "证明稿的工作区相对路径（`manuscripts/F/f-proof-*.md` / "
+                                       "`manuscripts/B/b-proof-*` / `manuscripts/E/e-proof-*` / "
+                                       "`work/E/e-num-*`；旧落点 `reports/*-proof-*.md` 是"
+                                       "不再支持的旧布局，仍读得出）"},
          "manuscript_id": {"type": "string",
                            "description": "六位稿号；与路径二选一（给了路径就以路径为准）"},
      },
      "required": [], "additionalProperties": False},
     side_effect="read",
     roles=_READ_ROLES,
+    scenario="想确认某份证明稿签没签、进没进论文时",
+    example="按正文路径读；证明稿在 manuscripts/<角色>/ 下",
+    example_code='manuscripts.submission_reading(manuscript="manuscripts/F/f-proof-000007.md")',
     returns="{'checked','manuscript','manuscript_id','producer_role','producer_code',"
             "'state','submitted_at','via','signed','signed_sha','sign_sha','sign_at',"
             "'token','task_id','task_role','problems','why'}",

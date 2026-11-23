@@ -82,7 +82,11 @@ ARTIFACTS: dict[str, tuple[tuple[str, str, str], ...]] = {
         ("`data/search_requests.json`", "写", "领跑一条请求、把结局与错误写回该行（claimed / outcome / last_error）"),
         ("`data/literature.json`", "写", "登记文献行（按内容 sha256 幂等）"),
         ("`library/<编号>.pdf` 与 `library/<编号>.txt`", "写", "下载的原文与抽取出的纯文字稿"),
-        ("`data/concepts.json` 与 `data/relations.json`", "不写", "抽概念、建关系是 B 的活"),
+        # 2026-11-22 DOCREG：`concepts` 表早已并进 `statements`（`SCHEMA_VERSION=2` 的
+        # 全部含义），`data/concepts.json` 在新工作区里根本不存在 —— 再把它写成
+        # "A 不写的那份文件"等于让读者去找一个盘上没有的文件。
+        ("`data/statements.json`（概念行住它的 `kind=\"concept\"` 那一档）与 `data/relations.json`",
+         "不写", "抽概念、建关系是 B 的活"),
     ),
     "B": (
         ("`data/statements.json`", "写", "登记命题（含 kind / grade；概念行也住这张表的 `kind=\"concept\"` 那一档）"),
@@ -99,7 +103,9 @@ ARTIFACTS: dict[str, tuple[tuple[str, str, str], ...]] = {
     "D": (
         ("`data/research_questions.json`", "写", "立问题、追进度、记失败原因"),
         ("`data/conjectures.json`", "只读", "读产出侧记进来的命题；D 不立项临时命题，也没有 `register_conjecture` 这个动作（2026-11-13 裁定）"),
-        ("`data/attack_plans.json` 与 `attack_rounds.json`", "写", "攻坚计划与每轮进展（经 `attack.*` 工具）"),
+        # 2026-11-22 DOCREG：盘上没有 `attack_rounds.json` 这份文件 —— 每轮进展住在
+        # `attack_plans` 行里的 `rounds` 那一格（`attackround.py` 只解析一轮，不落文件）。
+        ("`data/attack_plans.json`（含 `rounds` 每轮进展）", "写", "攻坚计划与每轮进展（经 `attack.*` 工具）"),
         # D 只提供想法，证明的落稿与拿签归 F：`out/proofs/` 是 D 的
         # 攻坚过程记录，不是证明稿的落点 —— 这一格与新口径逐字一致（判据
         # `tests/test_system_docs_are_generated.py::test_the_attack_record_permission_...`）。
@@ -115,7 +121,11 @@ ARTIFACTS: dict[str, tuple[tuple[str, str, str], ...]] = {
         ("`data/statements.json`", "只读", "读被判定的东西；改判档不由 E 做"),
     ),
     "F": (
-        ("`reports/f-proof-*.md`", "写",
+        # 2026-11-22（B2b-2 的落点迁移）：证明稿按角色分目录落在 `manuscripts/F/`，
+        # 旧落点 `reports/` 只被读侧当"老盘上的稿"认（`fs_tools._f_manuscript_dirs`）。
+        # 判据 `tests/test_system_docs_are_generated.py::test_the_attack_record_permission_...`
+        # 第 ③ 条钉的就是这一格与 V 那一格的逐字路径。
+        ("`manuscripts/F/f-proof-*.md`", "写",
          "证明正文（框架渲染：`## 命题` / `## 证明` / `## 依赖`；由 `F.step` 的 proof 动作落）"),
         ("`data/conjectures.json`", "写", "落稿那一刻把「我提出过这条」记进猜想台账（`attack.step` / `conjectureledger.register`）"),
         ("`data/statements.json`", "只读", "确认要证的是哪一条"),
@@ -133,7 +143,7 @@ ARTIFACTS: dict[str, tuple[tuple[str, str, str], ...]] = {
     ),
     "V": (
         ("`data/verifications/<命题号>.jsonl`", "写", "每次审校一行（判决 / 发现项 / 引用核实 / 批注）"),
-        ("`reports/f-proof-*.md`（以及 `e-proof-*.md` / `b-proof-*.md`）", "只读", "被审的证明正文"),
+        ("`manuscripts/F/f-proof-*.md`（以及 `manuscripts/E/e-proof-*.md` / `manuscripts/B/b-proof-*.md`）", "只读", "被审的证明正文"),
         ("`data/statements.json`", "只读", "被审命题的档位与依赖"),
     ),
     "L": (
@@ -162,6 +172,9 @@ ARTIFACTS: dict[str, tuple[tuple[str, str, str], ...]] = {
 #:    五个从未在盘上的旧名（`test_store.py` / `test_schema_vocabulary.py` /
 #:    `test_four_dynamic_checks_are_wired.py` / `test_llmseam.py` /
 #:    `test_webui_reads_nothing_else.py`）长期绿着。DOCFIX2 已把它们换成现盘真实的判据文件。
+#:    2026-11-22 ARCHIVE2：上面点名的 `DESIGN-TOOLS.md` / `NOAI-REVIEW-REGISTER.md` 两份
+#:    已按业主指令退役到 `draft/archive-*`；`_DOC_TEST_REF_DOCS` 按现盘重钉为
+#:    `DEVELOPMENT.md` / `README.md` / `docs/SYSTEM-INTRO.md`（新成员承接同一作用）。
 COMPONENTS: tuple[tuple[str, str, str, str, str, str], ...] = (
     (
         "装配与运行入口",
@@ -196,7 +209,8 @@ COMPONENTS: tuple[tuple[str, str, str, str, str, str], ...] = (
         "角色之间的传话与登记：名册、板项、转发链、秘书审稿。",
         "roster_view（在飞 / 待机 / 静默三态）、relay_out（逐跳转发，只有链尾读正文）、child_counts、"
         "judge（那次模型调用带稳定头 system）、apply_settlement（结算落盘加回读核对）。",
-        "读 data/tasks.json 与 roster.jsonl；写 relay.jsonl 与板项行",
+        "读 data/tasks.json 与 roster.jsonl；写 relay.jsonl 与板项行；"
+        "面池 out/surfaces/<父>/<槽> 是子代理的沙箱根（归还不留空目录）",
         "tests/test_secretary.py、tests/test_guide_goes_down_the_secretary_chain.py",
     ),
     (
@@ -334,7 +348,8 @@ COMPONENTS: tuple[tuple[str, str, str, str, str, str], ...] = (
         "文献从候选到入库的流水线：待新增列表三态、提交闸、重复登记、同槽补 relevance。",
         "admission_plan（require_judged：没判完整批一条都不许入库）、overlap_check（同槽补 relevance）、"
         "apply_settlement（结算加提交后回读核对）。",
-        "写 data/literature.json 与 data/lit_candidates.json",
+        "写 data/literature.json 与 data/lit_candidates.json；"
+        "归档写 data/archive/lit_candidates/（改名前的 data/lit_candidates/ 只读兼容）",
         "tests/test_pending_list_is_three_state.py、tests/test_literature_match.py",
     ),
     (
@@ -372,7 +387,7 @@ COMPONENTS: tuple[tuple[str, str, str, str, str, str], ...] = (
         "把这一趟发生了什么读出来：会话记录、错误动作分类、成本。",
         "read_all_sessions（唯一会话读口）、compute_run_index（一次读盘算索引）；"
         "errorstats 的 error_action_stats 与 error_action_stats_from（吃已读记录）。",
-        "只读 out/sessions 与 events.jsonl",
+        "只读 sessions/（工作区根）与 data/events.jsonl",
         "tests/test_run_index.py、tests/test_one_session_reader.py",
     ),
 )

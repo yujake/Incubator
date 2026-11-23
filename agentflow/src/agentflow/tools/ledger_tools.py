@@ -68,8 +68,7 @@ def _index_of(holder: LI.LedgerHolder) -> LI.LedgerIndex:
 
 @tool(
     "ledger.resolve",
-    "按号 / 按标签关键字查命题台账，返回候选节点（命题号 / 类别 / 状态 / 等级 / 标签），"
-    "不是树。找不到时明确说『没有这个号 / 没有命中』。选根之后再用 ledger.expand 展开。",
+    "按号或标签关键字在命题台账里选根：返回候选节点（号 / 类别 / 状态 / 等级 / 标签），不是树；找不到会明说。",
     {"type": "object",
      "properties": {
          "query": {"type": "string", "minLength": 1,
@@ -82,6 +81,10 @@ def _index_of(holder: LI.LedgerHolder) -> LI.LedgerIndex:
         "{'query','checked','mode','found','hits_total','scanned',"
         "'candidates':[{'stmt_id','kind','status','grade','label'}],'why','reason'}"
     ),
+
+    scenario="不知道要展开哪一条、手上只有一个标签或关键词时，先选根。",
+    example="按标签找根 → found / hits_total / candidates（含 stmt_id）。",
+    example_code="ledger.resolve(query=\"交换环\")",
 )
 def ledger_resolve(holder: LI.LedgerHolder, query: str) -> ToolResult:
     """工具体：选根（候选节点列表，不含证明正文、也不是树）。"""
@@ -98,10 +101,16 @@ def ledger_resolve(holder: LI.LedgerHolder, query: str) -> ToolResult:
     return ok(got, **got)
 
 
+# TOOLFACE-CLEAN（业主 2026-11-22：实现只留在代码注释里）
+# 原文（旧 summary）：「从选定节点起按 depth 层上下展开局部树：每个节点带相对关系 / 号 /
+# 类别 / 内容 / 等级 / 依赖面（全路径按证明路径分组）/ 被引面（一层），并有界、可增量。」
+# 搬走的实现细节：`dependency_face` 里的全路径按证明路径分组（`path_no` / `path_group`），
+# `cited_face` 只展开一层；有界与增量在 `ledgerindex.LedgerIndex.expand` 里（`node_budget` /
+# `char_budget` / `frontier`）。模型面只说「依赖面与被引面」。
+# 判据：`tests/test_tool_face_three_segments.py` ①②③。
 @tool(
     "ledger.expand",
-    "从选定节点起按 depth 层上下展开局部树：每个节点带相对关系 / 号 / 类别 / 内容 / 等级 /"
-    " 依赖面（全路径按证明路径分组）/ 被引面（一层），并有界、可增量。depth 必填、由你决定。",
+    "从选定节点起按 depth 层上下展开局部树：每个节点带关系、内容、等级、依赖面与被引面；有界、可增量；depth 必填。",
     {"type": "object",
      "properties": {
          "node": {"type": "string", "minLength": 1,
@@ -111,7 +120,14 @@ def ledger_resolve(holder: LI.LedgerHolder, query: str) -> ToolResult:
          "direction": {"type": "string", "enum": list(LI.DIRECTIONS),
                        "description": "展开方向：up（依赖谁）/ down（谁引用它）/ both（默认）"},
      },
-     "required": ["node"], "additionalProperties": False},
+     # ①（LEDGER-RETURNS-FIX，2026-11-22）：`depth` 进 `required`，与 summary /
+     # `depth` 的参数说明 / handler 三处对齐。改前只有 `node`，而模型面的参数提示是把
+     # `required` 之外的键渲染成「可选 ?q」的（`agent_prompts._params_hint`）⇒ 同一行
+     # 同时写着「depth 必填」与「可选 ?depth、?direction」（实测原文：
+     # `（必填 node；可选 ?depth、?direction）`）。handler 的 `_MISSING_DEPTH` 一支
+     # 保留：它是直调（绕过工具层 schema 校验）时的兜底，也是「绝不静默用默认值」
+     # 这条业务规则的真身 —— 判据 `tests/test_the_ledger_tree_is_expanded_on_demand.py`。
+     "required": ["node", "depth"], "additionalProperties": False},
     side_effect="read",
     roles=_ROLES,
     returns=(
@@ -123,6 +139,10 @@ def ledger_resolve(holder: LI.LedgerHolder, query: str) -> ToolResult:
         "'budget_used':{'nodes','added','edges','chars','node_budget','char_budget',"
         "'depth_max'},'added_nodes','already_known','why'}"
     ),
+
+    scenario="选好根之后要看它上下游一段链条时用它；只选根用 ledger.resolve。",
+    example="从 stmt 看上下两层 → nodes / edges / frontier（超预算时 truncated）。",
+    example_code="ledger.expand(node=\"stmt:000123\", depth=2, direction=\"both\")",
 )
 def ledger_expand(holder: LI.LedgerHolder, node: str = "",
                   depth: Any = None, direction: str = "both") -> ToolResult:

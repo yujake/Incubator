@@ -299,7 +299,7 @@ def _agent_for(store: Any):
     改前这里只传 `store`，`AgentF.actor` 恒为默认的 `"agent-F"` ⇒ 走工具路径的
     每一笔写盘（`claims.owner` / `events.actor` / `attack_plans.created_by` /
     `ARTIFACTS.producer`）都只剩角色字面量，两个 F 实例在盘上分不开
-    （AUDIT-F 的最硬证据：`tools/attack_tools.py:271-290` + `agent_f/core.py:631`）。
+    （AUDIT-F 的最硬证据：本文件拆分前那五个写盘 handler 的旧实现 + `agent_f/core.py:631`）。
 
     现在身份由唯一来源 `identity.resolve_identity` 给：台账号 / 实例标签从
     `conductor.calling_as` 的挂点读（`AgentLoop._do_tool` 与 `LlmBackend.call`
@@ -441,7 +441,7 @@ def _plan_error_type() -> type:
 
 @tool(
     "attack.check_budget",
-    "检查攻坚预算是否完整、是否还允许再开一轮（四类键缺一不可）。",
+    "检查攻坚预算是否齐全、能否再开一轮（四类键缺一不可）。",
     {
            "type": "object",
            "properties": {
@@ -462,6 +462,9 @@ def _plan_error_type() -> type:
     # `blocked_by` 是"被谁挡住的"（预算不完整 / 已终结 / 该换下一层）。
     returns="{'checked','complete','missing','allowed','reason','blocked_by'}",
     tags=("attack", "budget"),
+    scenario="每轮开跑前问一句「还能不能再开一轮」；缺键先补齐。",
+    example="四类键齐、已跑 2 轮 → allowed + 余量；缺键 → allowed=false 并点名缺哪类。",
+    example_code="attack.check_budget(budget={\"max_rounds\": 5, \"max_parallel_subgoals\": 2, \"max_persist_attempts\": 3, \"max_depth\": 2}, rounds_done=2, depth=1)",
 )
 def _attack_check_budget(budget, rounds_done=0, depth=0):
     """attack.check_budget 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
@@ -486,8 +489,14 @@ def _attack_check_budget(budget, rounds_done=0, depth=0):
            },
     side_effect="none",
     roles=_READ_ROLES,
-    returns="{'picked', 'subgoal', 'reason'}",
+    # ③（LEDGER-RETURNS-FIX，2026-11-22）：错误支多一格 `kind`（`unknown_subgoal_status`）——
+    # 模型靠它区分「输入写错」与「确实没有待办」（`tests/test_attack_subgoal_status_vocab.py`）。
+    returns="{'picked', 'subgoal', 'reason', 'kind'}；最后一格只在状态不在词表时出现"
+            "（值 unknown_subgoal_status，此时 picked=false、subgoal=null）",
     tags=("attack",),
+    scenario="手头有多个子目标、不知道先推哪个时用它。",
+    example="三个子目标里有一个已开工 → picked 指向它，卡住的排最后。",
+    example_code="attack.pick_next_subgoal(subgoals=[{\"sid\": \"s1\", \"text\": \"先证引理 L2\", \"status\": \"todo\"}, {\"sid\": \"s2\", \"text\": \"再证主定理\", \"status\": \"in_progress\"}, {\"sid\": \"s3\", \"text\": \"补边界情形\", \"status\": \"blocked\"}])",
 )
 def _attack_pick_next_subgoal(subgoals):
     """attack.pick_next_subgoal 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
@@ -497,10 +506,11 @@ def _attack_pick_next_subgoal(subgoals):
     """
     return _guard(lambda: pick_next_subgoal(subgoals))
 
+# TOOLFACE-CLEAN 片6 原文（已从三段搬走）：「零落行」—— 拒绝时一行都不写是内部的落库事实（`AgentF.create_plan` 只抛错、事务未提交）；模型要知道的是「整笔拒」。
 @tool(
     "attack.create_plan",
     (
-            "为一个难题立项（预算四类键缺一不可；每条子目标必须给 testable，没写就整笔拒 subgoal_without_testable、一行都不落）。同 problem_key 有未终结计划 ⇒ 回已有 plan_id。"
+            "为难题立项：预算四类键缺一不可；子目标要带 sid/text/owner 且 testable 非空，缺则整笔拒；同 problem_key 有未终结计划回已有 plan_id。"
             ),
     {
            "type": "object",
@@ -529,6 +539,9 @@ def _attack_pick_next_subgoal(subgoals):
              "（四条分支键集合相同；被拒那一支配 missing / kind / error / refusal_reason，"
              "而 status / subgoals 是空读数）"),
     tags=("attack", "plan"),
+    scenario="难题要拆子目标、要预算封顶时立项；只查现状用 attack.status。",
+    example="立一条带子目标的计划 → created + plan_id；同 key 再立回已有的那一条。",
+    example_code="attack.create_plan(problem=\"证明 R(3,4)=9\", problem_key=\"ramsey-r34\", subgoals=[{\"sid\": \"s1\", \"text\": \"穷举 n<10\", \"owner\": \"F\", \"testable\": \"脚本跑出 9 且无反例\"}], budget={\"max_rounds\": 5, \"max_parallel_subgoals\": 2, \"max_persist_attempts\": 3, \"max_depth\": 2})",
 )
 def _attack_create_plan(_need_store, store, problem, problem_key, for_question_id=None, subgoals=None, budget=None, depth=0, parent_plan_id=None):
     """attack.create_plan 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
@@ -553,15 +566,13 @@ def _attack_create_plan(_need_store, store, problem, problem_key, for_question_i
                )
     )
 
+# TOOLFACE-CLEAN 片6 原文（已从三段搬走）：「status→abandoned ＋ history 落一行」—— 计划行上的状态位与 history 字段是内部存储布局（`AgentF.abandon_plan` 改 status、把这一次追加进 history）；模型要知道的是「状态改为已放弃、留一条变更记录」。
 @tool(
     "attack.abandon_plan",
     (
             # 业主 2026-11-13（更正后）：plan 级理由三档 —— math_error / difficulty /
             # 不再需要；「需要调整」不是理由，是"不再需要放弃原 plan + 新开一条"的组合操作。
-            "明确放弃一条计划（理由三档：math_error / difficulty / 不再需要；"
-            "「需要调整」不是理由，是组合操作）：status→abandoned ＋ history 落一行；"
-            "math_error 要给 basis 点出错误，difficulty 另给 difficulty＋salvaged；"
-            "已终态（finish/已放弃/stalled/有支持未证）的不许再放弃。"
+            "放弃一条计划（math_error/difficulty/不再需要）：math_error 给 basis，difficulty 另给 difficulty＋salvaged。"
             ),
     {
            "type": "object",
@@ -585,6 +596,9 @@ def _attack_create_plan(_need_store, store, problem, problem_key, for_question_i
     returns=("{'ok','kind','error','refusal_reason','plan_id','status','reason',"
              "'abandoned','history_len','at'}"),
     tags=("attack", "plan"),
+    scenario="真放弃才用它；已终态（finish/已放弃/stalled/有支持未证）不许再放弃。",
+    example="math_error 放弃 → abandoned + 变更记录；已 finish 的再放弃被拒，要调整就放弃后重开。",
+    example_code="attack.abandon_plan(plan_id=\"plan-000001\", reason=\"difficulty\", basis=\"卡在引理 L3 的界估计\", difficulty=\"缺一条可用的尾界\", salvaged=[{\"label\": \"引理 L2\", \"stmt_id\": \"000042\"}])",
 )
 def _attack_abandon_plan(_need_store, store, plan_id, reason, basis="",
                          difficulty="", salvaged=None):
@@ -597,14 +611,14 @@ def _attack_abandon_plan(_need_store, store, plan_id, reason, basis="",
         tool="attack.abandon_plan",
     )
 
+# TOOLFACE-CLEAN 片6 原文（已从三段搬走）：「按 owner 分派」—— `owner` 是内部派发概念（`agent_f/step.py` 按 owner 字段挑执行者）；模型要知道的是「按角色分派」。
 @tool(
     "attack.step",
     (
             # 摘要只留一句指路（压缩批次的体量口径按全 cohort 算，见
             # `tests/test_tool_descriptions_are_compressed.py`）：完整教法在 `product`
             # 那一格的 description 与 `specs/f.py` 的 policy 里，不在这儿铺开。
-            "推进攻坚计划一轮：按 owner 分派（E 实验/A 检索/B 重抽取/F 自推），C/D 无推理入口 ⇒ 记 no_change。"
-            "交证明用 `product`。"
+            "推进攻坚计划一轮：按角色分派（E 实验 / A 检索 / B 重抽取 / F 自推），C/D 无推理入口记 no_change；交证明用 `product`。"
             ),
     {
            "type": "object",
@@ -638,6 +652,9 @@ def _attack_abandon_plan(_need_store, store, plan_id, reason, basis="",
              "'auto_submit','auto_submitted','auto_submitted_count','still_unsubmitted',"
              "'delivery_state_plan','delivery_label_plan','self_assessment'}"),
     tags=("attack", "loop"),
+    scenario="计划已立、要推进一轮时用它；只读现状用 attack.status。",
+    example="交一份证明 → 落 manuscripts/F/f-proof-<稿号>.md（旧落点 reports/ 不再支持），回交付与收工读数。",
+    example_code="attack.step(plan_id=\"plan-000001\", product={\"kind\": \"proof\", \"proposition\": \"对任意正整数 n，R(3,4)=9。\", \"steps\": [{\"text\": \"由定义直接得到。\", \"cites\": [\"stmt:000042\"]}]})",
 )
 def _attack_step(_need_store, store, plan_id, product=None):
     """attack.step 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
@@ -682,6 +699,9 @@ def _attack_step(_need_store, store, plan_id, product=None):
     # 2026-11-03（p233）：`delivery`（逐条交差读数，`agent_f/delivery.py`）补进声明。
     returns="{'checked','plan_id','delivery','problem','problem_key','for_question_id','status','rounds','budget','budget_left','depth','parent_plan_id','subgoals','subgoal_counts','best_partial','history_len','history_tail','created_at','updated_at','reason','stale_blocked'}",
     tags=("attack",),
+    scenario="每轮开跑前 / 收工前看一眼计划到哪了。",
+    example="开跑前看计划 → 子目标状态 + 预算余量 + 最近几条变更。",
+    example_code="attack.status(plan_id=\"plan-000001\")",
 )
 def _attack_status(_need_store, store, plan_id):
     """attack.status 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
@@ -693,7 +713,7 @@ def _attack_status(_need_store, store, plan_id):
 
 @tool(
     "attack.list_plans",
-    "列出全部攻坚计划（可按 problem_key 过滤）。",
+    "列出攻坚计划（可按 problem_key 过滤）；F 只列自己名下，D/G/H 读口不收窄。",
     {
            "type": "object",
            "properties": {
@@ -708,6 +728,9 @@ def _attack_status(_need_store, store, plan_id):
     # plan_id/problem_key/status/rounds/max_rounds/subgoals/depth 的摘要视图。
     returns="{'checked','total','plans','reason'}",
     tags=("attack",),
+    scenario="不记得 plan_id、或想知道还有几条在飞时用它。",
+    example="列未终结的计划 → total + plans[]；include_terminal=true 连已终结的一起列。",
+    example_code="attack.list_plans(problem_key=\"ramsey-r34\", include_terminal=True)",
 )
 def _attack_list_plans(_need_store, store, problem_key=None, include_terminal=True):
     """attack.list_plans 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
@@ -768,9 +791,3 @@ def register(
     for _fn, _deps in _TOOL_FUNCTIONS:
         registry.register(replace(_fn.__tool_spec__,
                                   handler=partial(_fn, *[_bound[k] for k in _deps])))
-
-
-
-
-
-

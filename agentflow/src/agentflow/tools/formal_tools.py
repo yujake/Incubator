@@ -119,13 +119,11 @@ def _record_tool(store: Any, root: Any, *, statement_id: str, code_path: str,
     ))
 
 
+# TOOLFACE-CLEAN 片6 原文（已从三段搬走）：「自检不是 usable」—— `usable` 是 L 的检查器自检三态（`leantoolchain`）里的内部状态名；模型要知道的是「没有可用检查器」。
 @tool(
     "formal.formalize",
     (
-        "把一条命题写成 Lean 源码、落盘到 `code/formal/<声明名>.lean`，再交给检查器真跑一次。"
-        "结论三态：verified（检查器说通过）/ failed（检查器说不通过）/ unknown（没查成，"
-        "带原因：自检不是 usable / 没有检查器 / 超时）。返回里带 `path` / `sha256` / "
-        "`exit_code` / `verifier_output` —— 只写「通过」而没有这三样的不算数"
+        "把命题写成 Lean 源码落 `code/formal/<名>.lean` 并真跑：三态 verified/failed/unknown，带 path/sha256/exit_code/检查器原话。"
     ),
     {
         "type": "object",
@@ -175,18 +173,20 @@ def _record_tool(store: Any, root: Any, *, statement_id: str, code_path: str,
     ),
     tags=("formal", "lean", "write"),
     external="exec",
+    scenario="要把一条命题交给机器核时用它；本机没有可用检查器 ⇒ unknown 并给原因。",
+    example="落源码并真跑 → verified + path / sha256；没过则 failed 并给检查器原话；没有检查器则 unknown。",
+    example_code="formal.formalize(claim=\"对任意自然数 n，n + 0 = n。\", source=\"theorem add_zero_probe (n : Nat) : n + 0 = n := by simp\")",
 )
 def _formal_formalize(_store, _root, **kw: Any) -> Any:  # pragma: no cover - 装配期替换
     """`formal.formalize` 的声明占位（真正的 handler 由 `register` 绑定）。"""
     return _formalize_tool(_store, _root, **kw)
 
 
+# TOOLFACE-CLEAN 片6 原文（已从三段搬走）：「前置自检不是 usable 时如实回 unknown 并给原因：不起检查器、不抛栈」—— 自检闸、`_refusal` 与不起子进程都是内部流程（`agent_l/check_formal.py`）；模型要知道的是「本机没有可用检查器 ⇒ unknown，不是不通过」。
 @tool(
     "formal.check_formal",
     (
-        "把一段 Lean 源码（`source`）或工作区里的 `.lean`（`script_path`）交给检查器真跑一次。"
-        "前置自检不是 usable 时如实回 unknown 并给原因：不起检查器、不抛栈。"
-        "查了没通过（compile_error / uses_sorry / extra_axioms / decl_mismatch）与没查成是两件事"
+        "把 `source` 或工作区 `.lean`（`script_path`）交给检查器真跑一次；不通过（如 uses_sorry）与没查成（unknown）是两件事。"
     ),
     {
         "type": "object",
@@ -223,20 +223,20 @@ def _formal_formalize(_store, _root, **kw: Any) -> Any:  # pragma: no cover - �
     ),
     tags=("formal", "lean"),
     external="exec",
+    scenario="机器上要有可用的 Lean（且开关开着）；否则回 unknown，不是不通过。",
+    example="核 `LProbe.add_zero_probe`（namespace 前缀拼全名）→ verified/compile_error/extra_axioms/decl_mismatch。",
+    example_code="formal.check_formal(claim=\"0 + n = n\", source=\"theorem add_zero_probe (n : Nat) : 0 + n = n := by simp\", declaration_name=\"add_zero_probe\")",
 )
 def _formal_check_formal(_store, _root, **kw: Any) -> Any:  # pragma: no cover - 装配期替换
     """`formal.check_formal` 的声明占位（真正的 handler 由 `register` 绑定）。"""
     return _check_formal_tool(_store, _root, **kw)
 
 
+# TOOLFACE-CLEAN 片6 原文（已从三段搬走）：「登记成 `experiments` 表的一行」与「把现跑得到的 status / verified / checker / output_sha256 写进那一行」—— 表名与写列是内部存储布局（`agent_l/record.py` 的 `tx.upsert("experiments", …)`）；模型要知道的是「登记一条 formal 实验记录」。
 @tool(
     "formal.record",
     (
-        "把一次形式化检查登记成 `experiments` 表的一行（`method=\"formal\"`）：先按 "
-        "`statement_id` 读台账里那条命题的正文，再对 `code_path` 的 `.lean` **现跑一次**"
-        "检查器，把现跑得到的 status / verified / checker / output_sha256 写进那一行。"
-        "调用方给的读数只用于对账：与现跑不一致 ⇒ 受控拒绝 `reading_mismatch`，一行都不写。"
-        "它**不动** `statements`：形式化 ≠ 审过，命题升档仍然要 V 的那一签"
+        "形式化检查落一条 formal 实验：按 `statement_id` 读命题，对 `code_path` 的 `.lean` 现跑（sha256＋原话）；读数不符就拒；不动 statements。"
     ),
     {
         "type": "object",
@@ -304,6 +304,9 @@ def _formal_check_formal(_store, _root, **kw: Any) -> Any:  # pragma: no cover -
     ),
     tags=("formal", "lean", "write", "experiment"),
     external="exec",
+    scenario="L 核完一条命题、要把这次检查落账时用它；它不升档。",
+    example="登记一次 checked 的形式化 → 记一行 formal 实验；status 与现跑不符 → 拒。",
+    example_code="formal.record(statement_id=\"000042\", code_path=\"code/formal/add_zero_probe.lean\", status=\"verified\", verified=True, checker=\"lean 4.7.0\")",
 )
 def _formal_record(_store, _root, **kw: Any) -> Any:  # pragma: no cover - 装配期替换
     """`formal.record` 的声明占位（真正的 handler 由 `register` 绑定）。"""

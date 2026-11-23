@@ -40,6 +40,19 @@ import json
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping, Sequence
 
+#: 工具面三段的真身（只依赖标准库 ⇒ 提示词层也能安全 import 同一份渲染）。
+from ..toolface import (
+    FACE_EXAMPLE_MAX,
+    FACE_LABELS,
+    FACE_SCENARIO_MAX,
+    FACE_SEP,
+    FACE_SUMMARY_MAX,
+    face_budget_problems,
+    face_segments,
+    face_text,
+    face_units,
+)
+
 if TYPE_CHECKING:  # pragma: no cover - 仅供类型检查；运行期不导入（避免模块级耦合）
     from pathlib import Path
 
@@ -93,6 +106,23 @@ EXTERNAL = ("none", "egress", "exec")
 #: 字符串（空串 = 你确认过它没有可声明的返回形态），"别忘了写"由 `DEVELOPMENT.md` §4.3 第 1 项的
 #: census 观察；修掉它只需给那三个替身补 `returns=`（不涉行为）。
 REQUIRED_NON_EMPTY_FIELDS: tuple[str, ...] = ("name", "summary", "params")
+
+# ---------------------------------------------------------------- 工具面三段
+#
+# 业主 2026-11-22 指令（逐字）：「角色不需要知道工具的具体实现，只需要知道工具能干什么
+# 以及怎么用工具，具体实现的描述仅可保留在代码注释」。落到工具面上就是**三段**：
+#
+#   ① 能力（`summary`）   这个工具做什么、产出什么、边界在哪；
+#   ② 场景（`scenario`）  什么时候该用它（而不是别的那一件）；
+#   ③ 案例（`example` + `example_code`） 一条真实调用 + 它会回什么。
+#
+# 三段**都不许**出现实现细节：内部模块名 / 私有函数名 / 算法名 / 内部存储布局
+# （哪张表、哪个中间文件、"它其实调了 X"）。那些只留在 handler 的代码注释里 ——
+# 模型读的是能力与用法，读实现既用不上，又会把"设计"误当成"契约"。
+#
+# 渲染与字数口径的真身在 `agentflow/toolface.py`（提示词、function-calling、本层
+# 三处读者共用它）；名字在文件头的 import 块里再导出，免得"改一处、另两处没跟上"。
+
 
 #: 沙箱可用性（三态）。`DEVELOPMENT.md` §3 纪律 1：把"没声明沙箱"与"声明了正在用"折叠成同一个布尔，
 #: 正是三态纪律禁止的形态。`True` = 已声明可用（起进程/出网由它承接）；`False` = 已声明不可用（这才是
@@ -194,8 +224,8 @@ READONLY_CALL_EXCEPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
     # 手稿（`vsigns.land`；V 这边没有直接写稿的口）。没有这一件，V 的判定就无处可落 ——
     # 而"审了没处记"与"没审"在读数上分不开。
     # 边界（这句是这一条例外的全部内容）：V 只写自己维护的那张表与自己的凭据产物，不改别人的东西。
-    # 它不写任何数据表的正文或结论（`WRITE_SETS["V"]` 仍是空集）；命题行上五元位第 3 位那一格由
-    # V 的秘书经 `verifications.sign_statement` 在同一趟里翻（那是秘书的写，不在本工具的表写集里，
+    # 它不写任何数据表的正文或结论（`WRITE_SETS["V"]` 仍是空集）；命题行上五元位第 3 位那一格
+    # 由 B 收录时按正文 sha 认领（V 不写 `statements`，所以不在本工具的表写集里，
     # `TOOL_WRITE_SETS["verify.verify_proof"] == frozenset()` 记的就是这个事实）；它不改别人的稿
     # （`fs.write` / `fs.edit` 不在 V 的工具面上），也不写 `experiments`。
     # 判据：`tests/test_v_writes_only_its_own_ledger.py`（正控真跑一次落台账；负控 C/H 与"改别人的表"
@@ -207,7 +237,8 @@ READONLY_CALL_EXCEPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
             "（out/vsigns/<正文 sha>.json、收方秘书按台账落回送审手稿的签块）——"
             "判定必须有落点，否则「审了没处记」与「没审」在读数上分不开。"
             "它不改别人的东西：不写 statements / experiments 的正文与结论、"
-            "不改别人的稿（命题行上第 3 位那一格由 V 的秘书按台账翻，不在这件工具的表写集里）。"
+            "不改别人的稿（命题行上第 3 位那一格由 B 收录时翻，不在这件工具的表写集里；"
+            "V 不写 statements）。"
             "`for_role('V')` 仍把其余一切写工具剥掉；这一件是 V 面上唯一的例外",
         ),
     ),
@@ -696,6 +727,20 @@ class ToolSpec:
     #: "人写下来的那一份声明"（`tool()` 装饰器的同名关键字参数 `external`
     #: 也落到这个字段上）。
     declared_external: str = "none"
+    #: ② 场景（< 50 字）：什么时候该用这一件、什么时候用别的那一件。
+    #:
+    #: 与 `summary` 分开的理由（业主 2026-11-22 三段格式）：`summary` 只回答
+    #: 「这工具做什么」，场景回答「我此刻该不该用它」。合成一段的后果是压缩判据
+    #: （`cohort ≤ 0.75`，只量 `summary`）既量不准能力、又逼着人把场景压掉。
+    scenario: str = ""
+    #: ③ 案例的散文部分（< 100 字）：一条真实场景 + 它会回什么。
+    #: 代码在 `example_code`（那一格逐字不压缩、也不计字数）。
+    example: str = ""
+    #: ③ 案例的代码块：与真身签名逐字一致（参数名 / 键名不许改写）。
+    #:
+    #: 不压它的理由：模型抄这一段就能调对；改一个键名，抄下去就是一次 `unknown_param`。
+    #: 它不进任何字数统计（业主口径：代码不计），所以压它只丢信息、不换空间。
+    example_code: str = ""
 
     def __post_init__(self) -> None:
         """装配期自检：六件套齐全 + 两根轴的取值受控。
@@ -800,6 +845,9 @@ class ToolSpec:
         return {
             "name": self.name,
             "summary": self.summary,
+            "scenario": self.scenario,
+            "example": self.example,
+            "example_code": self.example_code,
             "params": dict(self.params),
             "side_effect": self.side_effect,
             "effect": self.effect,
@@ -828,6 +876,9 @@ def tool(
     returns: str = "",
     tags: Iterable[str] = (),
     external: str = "none",
+    scenario: str = "",
+    example: str = "",
+    example_code: str = "",
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """把普通函数标记成工具。`handler` 直接就是被装饰的函数。
 
@@ -837,6 +888,13 @@ def tool(
 
     `external` 见 :class:`ToolSpec`，必须人写：本装饰器里没有任何一处
     从函数体推断副作用（AST 推断已被否决）。
+
+    ## 三段（业主 2026-11-22）：`summary` / `scenario` / `example` + `example_code`
+
+    写在这里的三段是**模型可见面**（提示词的工具面与 function-calling 的
+    description 同源），所以三段里都不许写实现：内部模块名、私有函数名、算法、
+    内部存储布局都只写进 handler 的 docstring 或它旁边的注释 —— 那才是
+    「具体实现」该待的地方（本文件的模块 docstring 与 `FACE_LABELS` 那段是同一口径）。
     """
 
     def deco(fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -850,6 +908,9 @@ def tool(
             returns=returns,
             tags=tuple(tags),
             declared_external=external,
+            scenario=scenario,
+            example=example,
+            example_code=example_code,
         )
         fn.__tool_spec__ = spec  # type: ignore[attr-defined]
         return fn
@@ -1342,7 +1403,7 @@ class ToolRegistry:
         for s in specs:
             flag = " ⚠需审批" if s.needs_approval else ""
             lines.append(f"- {s.name}({', '.join((s.params.get('properties') or {}).keys())}){flag}")
-            lines.append(f"    {s.summary}")
+            lines.append(f"    {face_text(s)}")
             if s.returns:
                 lines.append(f"    返回：{s.returns}")
         return "\n".join(lines)

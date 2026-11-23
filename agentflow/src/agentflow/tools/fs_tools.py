@@ -32,6 +32,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Iterable, Iterator, Mapping
 
 from .. import fs_observation as OBS
+from .. import papercompile as PC
 from .base import ToolError, ToolRegistry, ToolResult, ToolSpec, fail, ok, tool
 
 #: 与 `table_tools` 一致：文件 CRUD 对 A/B/C/D 全开。
@@ -154,7 +155,7 @@ class FsContext:
 
     root: Path
     actor: str = "tool"
-    #: 这一趟的台账（2026-11-17 DOCGATE2 ②）：`out/paper/**` 的写口要问一次
+    #: 这一趟的台账（2026-11-17 DOCGATE2 ②）：`out/package/**` 的写口要问一次
     #: `researchbase.writing_gate`（成文门的唯一实现），而那道门读的是 `statements`
     #: 台账与 `out/vsigns/`。装配期注入（`tools/__init__.py` 的 deps 里本来就有
     #: `store`）；只绑 root 装配的旧入口（脚本 / 单测）拿到 `None`，那时本模块没有
@@ -251,8 +252,9 @@ def _resolve(ctx: FsContext, raw: Any) -> Path:
 #
 # 目录不是判据（2026-10-27，D6）：F 曾把证明手稿写进 `notes/`（文件名没改、只换目录），
 # 改前那条闸（要求路径在 `reports/` 下）整条失效。所以判据里不再有"目录"这一层：同一个
-# 文件名在哪个目录下都是同一份框架产物。`reports/` 仍是最推荐的落点
-# （`depsection.MANUSCRIPT_DIR`、D 的 `reports_subdir` 缺省都是它），但不再是豁免条件。
+# 文件名在哪个目录下都是同一份框架产物。规范落点 2026-11-22 起是 `manuscripts/<角色>/`
+# （草稿 `work/<角色>/`）；`reports/` 已退役，表里那几行旧落点规则仍留着（旧落点换哪个
+# 目录都不该能手写），但它不再是推荐落点。
 #
 # 框架账本区：文件口不许把表口架空（2026-10-26，P3）。真机实证（Q10 审计，零模型钱）：
 # `fs.write(path="data/usage_ledger.json", overwrite=True)` 把账本从 10.51 美元整份抹成
@@ -308,9 +310,15 @@ RESERVED_MAPPING_MESSAGE = (
     "（`doc.mapping_cells` 给每一格该填的值与来路）。"
 )
 
-#: 手稿 / 报告的推荐落点目录名（`depsection.MANUSCRIPT_DIR`、D 的 `reports_subdir`
-#: 缺省都是它）。它只出现在拒信里当指路，不参与判据：判据只看文件名（见
-#: :func:`_reserved_artifact_rule` 与 D6 那段注释）。
+#: 退役目录的名字（2026-11-22 起 `reports/` 退役）。它只剩两个用处：
+#:
+#: 1. 拼保留表里那一族旧落点规则的锚（`prefix:{_RESERVED_DIR}/f-proof-` 等）与
+#:    `proofshape:` 的目录段 —— 旧落点换到哪个目录都不该能手写，规则本身仍要对；
+#: 2. `_cites_an_f_manuscript` 找 F 的稿时**也看这一处**（与 `manuscripts/F/` 并列：
+#:    老盘上的稿还在 `reports/` 下，只查新落点会把那里面的真引用判成"没有"）。
+#:
+#: 它不是推荐落点：新落点是草稿 `work/<角色>/`、正文 `manuscripts/<角色>/`。
+#: 拒信里不许再出现"把稿写到这里"的指路（P2，2026-11-22：`temp/smoke/REPORT.md` §2.7）。
 _RESERVED_DIR = "reports"
 
 #: D 的"证明稿形状"规则（2026-11-04 业主裁定：证明的落稿与拿签不属于 D）。
@@ -329,9 +337,119 @@ D_OTHER_PROOF_PREFIXES: tuple[str, ...] = (
     f"prefix:{_RESERVED_DIR}/e-proof-",
 )
 
+#: 2026-11-23（RESERVED-D-FIX）：D 的"别人的三族"在任何落点都拒 —— 名字级规则，
+#: 与 D 自己那两行（`D_PROOF_PATH_RULES`）同一口径：名字是判据、目录不是（2026-10-27 D6）。
+#:
+#: 为什么必须补：`RESERVED_PATH_HINT` 那句「D 另拒 `b-proof-`/`e-proof-`/`e-num-`」写的是
+#: 名字，而表里 D 的那三行只锚旧落点 `reports/` ⇒ 实测 `fs.write(role="D",
+#: path="manuscripts/D/b-proof-000001.md")` 是 `ok=True`（e-proof / e-num 同）。文件落在 D
+#: 自己的目录里，落点闸也放行，于是这一格是"教法说拒、实际放行"（B2FIX-FACE 实测，
+#: `agentflow/temp/b2fixface/REPORT.md` §3.1）。
+#:
+#: 为什么不是 `prefix:manuscripts/D/<族>-`：那只是把这一个新落点再锚一遍，
+#: `notes/<族>-*` 这种"换个目录"的绕行口今天就会漏 —— D6 当年就是只锚目录才漏的。
+#: 旧落点那三行继续留在表里（老盘上的稿仍按同一条判据拒），这三行是名字级的补充，
+#: 不是替代：两批行各给一条读数（旧落点是"退役目录之外那句族级拒信"的来源）。
+D_OTHER_FAMILY_RULES: tuple[str, ...] = (
+    "prefix:b-proof-",
+    "prefix:e-proof-",
+    "prefix:e-num-",
+)
+
 #: D 的攻坚过程记录目录（2026-11-04 裁定）：可以写 `## 思路` / `## 依赖面参考`，
 #: 不能带 `## 证明` 节 —— 那不是"过程记录"，那是一份可提交的证明稿。
 D_ATTACK_RECORD_DIR = "out/proofs/"
+
+# ---------------------------------------------------------------- 新落点（2026-11-22 E-ANCHOR）
+#
+# B2b-2 把产出切到「正文 `manuscripts/<角色>/`、草稿 `work/<角色>/`」之后，保留表里
+# 那一族的行锚还停在旧落点（`reports/<族>-`）—— 于是 `fs.write("manuscripts/E/e-proof-<号>.md")`
+# 以 E 的身份 `ok=True`：一份框架渲染 + 要 V 签的稿可以由产出者自己手写进盘（号段、
+# `## 命题` / `## 证明` / `## 依赖` 三节与 V 的签都在渲染那一步）。这一节把行锚补到
+# 「族自己的目录」那一个位置（`manuscriptfamily.DIR_OF` 是唯一真身），一族人一行；旧落点那几行
+# 一个字不动 —— 老盘上的稿仍按同一条判据拒，而且它们是「`reports/` 退役闸之外那句
+# 族级拒信」的读数来源。
+#
+# 为什么不是一条 `manuscripts/*/.*-proof-.*` 的大正则：
+#   · A / B 的 `manuscript:` 行已经按名字判，但名字档的拒信是「手稿形名字」；族级行
+#     要保的是「这一族只有框架能写」那句，两者是两档，拒信也不许互相顶掉；
+#   · `work/<角色>/` 是草稿面 —— A / B 对别人的草稿族要拒、E 对自己的 `work/E/e-num-`
+#     要放（判据 b 的正控）。大正则会把这两件事一起折平。
+def _new_landing_rule(family: str) -> str:
+    """族 ⇒ 它在新落点上的路径前缀规则（`prefix:<族目录>/<族>-`）。
+
+    目录的唯一真身是 `manuscriptfamily.DIR_OF`（`f-proof` ⇒ `manuscripts/F`、
+    `e-num` ⇒ `work/E`），这里不另立第二份目录表。延迟 import 与
+    `_manuscript_name_matches` 同一条理由：本模块被 `tools` 包在导入期拉起，
+    这里不制造导入期环。
+    """
+    from ..manuscriptfamily import dir_of
+
+    return f"prefix:{dir_of(family)}/{family}-"
+
+
+#: A / B 要拒的四族新落点（三族正文 + `e-num` 草稿）。A / B 为什么也有 `e-num`：
+#: `work/E/e-num-*` 在 E 自己那一侧是草稿正控（可写），对 A / B 却是"别人的族"——
+#: 手写它等于替 E 落稿（旧落点 `reports/e-num-` 那一行是同一句话）。
+NEW_LANDING_FAMILY_RULES: tuple[str, ...] = tuple(
+    _new_landing_rule(fam) for fam in ("f-proof", "b-proof", "e-proof", "e-num"))
+
+#: E 自己那一族的新落点（`manuscripts/E/e-proof-`）：E 自己也不许手写。
+#: 与 A / B 的 `NEW_LANDING_FAMILY_RULES` 分开：那几行是"别人的族"这一档，
+#: 这一行是"你自己那一族也是框架产物"（2026-11-17 甲类点名的口径推到产出侧）。
+#: `work/E/e-num-*` 刻意不在这里：那是 E 的草稿面（`land_numeric_manuscript` 的落点，
+#: 读数进 `experiments` 表），本路口径下 E 写自己的草稿保持可写（判据 b 的正控）。
+#: 报告 ⑤ 留开的另一格（G 的论文正文）已由 2026-11-22 G-ANCHOR 补上，见下一节。
+E_OWN_PROOF_PATH_RULES: tuple[str, ...] = (_new_landing_rule("e-proof"),)
+
+#: E 自己那一族在**两处落点**上的规则（旧落点 `reports/e-proof-` + 新落点
+#: `manuscripts/E/e-proof-`）。表里那两行各归各的批次（旧落点来自 AU2b 甲类、新落点来自
+#: E-ANCHOR），这里只是把"哪条规则用哪句拒信"收成一处：E 撞上自己那一族时，出路必须是
+#: E 自己的产出链（`E_OWN_PROOF_MESSAGE`：跑 `verify.run_experiment`、草稿 `work/E/`、
+#: 记录进表），而不是 F / D 的规矩。
+#:
+#: 2026-11-22（REFUSAL-TEXT-2 ①）：改前分派只认 `E_OWN_PROOF_PATH_RULES`（新落点），
+#: 旧落点 `reports/e-proof-*` 掉进通用那句「用 F 的 proof 动作 / D 的交付动作」——
+#: E 写自己的稿，读到的是别人的规矩。这一组不参与建表（表里那两行已经在了），只参与分派。
+E_OWN_PROOF_FAMILY_RULES: tuple[str, ...] = (
+    f"prefix:{_RESERVED_DIR}/e-proof-", *E_OWN_PROOF_PATH_RULES)
+
+#: F / M 缺的那几族新落点行（2026-11-22 F-M-ANCHOR）：A / B 有四族
+#: （`NEW_LANDING_FAMILY_RULES`），F / M 一族都没有 —— 它们只有旧落点与名字级的行。
+#: 缺的正是"别人的族"那一档：`b-proof` / `e-proof` / `e-num` 的产出角色分别是 B / E / E
+#: （`manuscriptproducers.PRODUCER_OF_FAMILY`），F 与 M 手写它们与 A / B 手写它们同形
+#: （族属于产出角色，不属于"谁最像作者"）。
+#:
+#: 为什么这三族里**没有 `f-proof`**：F 的证明稿本来就有按名字判的两行（`prefix:f-proof-`
+#: 与 `suffix:-proof.md`，D6 口径：名字才是判据，换个目录也拒），它们在**任何**目录下
+#: 都接得住 `manuscripts/F/f-proof-*`；再补一条路径级的同族行只是第二份判断，还会把
+#: `tests/test_fs_reserved_framework_artifacts.py::test_n_d_stubbing_the_filename_rule_out_turns_a_and_b_red`
+#: 的读数改掉（那一条把文件名规则打桩成空，期望 `manuscripts/F/f-proof-x.md` 放行
+#: ⇒ 那个格子的绿必须来自文件名规则本身）。实测：加了 `prefix:manuscripts/F/f-proof-`
+#: 那一行之后它转红（本条选择就是那条读数定的）。
+F_M_OTHER_FAMILY_RULES: tuple[str, ...] = tuple(
+    _new_landing_rule(fam) for fam in ("b-proof", "e-proof", "e-num"))
+
+# ---------------------------------------------------------------- G 的论文正文（2026-11-22 G-ANCHOR）
+#
+# `manuscripts/G/<doc_id>.md` 是 `doc.build_document` 在写 `documents` 行时渲染的那一份
+# markdown（重画走 `G.refresh_markdown`，改稿走 `G.revise`，两条都走同一个渲染函数）。
+# 它与 `manuscripts/E/e-proof-*` 是同一件事：产出者本人也不是豁免 —— 手写它等于跳过
+# 渲染链（`documents` 行、`content_sha256`、断言与依赖表都挂在渲染那一步），而盘上那份
+# 文件看起来完全合法。
+#
+# 教法与锚同一笔改：只加锚会造出「教法说能写、拒信说你不能」两个窗口。`tools/doc_tools.py`
+# 里教 G 手写正文的两处文案（`build_document` 的覆盖守卫拒信、`out_path` 参数的
+# description）已同一笔改成「主稿由 `doc.build_document` 渲染；你只改它要的输入」。
+# 那两处都不在十一格提示词摘要里（参数 description 不进 system prompt：
+# `agent_prompts.tools_lines` 只印 summary 与键名），所以本笔不动 p317。
+G_MANUSCRIPT_DIR = "manuscripts/G"
+
+#: G 那一族的行锚（路径级：`manuscripts/G/` 下每一份 `.md` 都是渲染产物）。
+#: 目录不写第二份真身：判据 `tests/test_fs_g_anchor_new_landing.py::
+#: test_the_rule_follows_the_producer` 现读 `doc_tools.build_document` 的
+#: `default_subdir` 与这一格对拍。
+G_MANUSCRIPT_PATH_RULES: tuple[str, ...] = (f"prefix:{G_MANUSCRIPT_DIR}/",)
 
 #: 保留路径表：`(角色, 规则)` 逐行，判据的唯一落点。规则四档，每档只比较一个字符串：
 #:
@@ -356,10 +474,16 @@ D_ATTACK_RECORD_DIR = "out/proofs/"
 #: 这张表是判据的唯一落点：清空它（判据的反真空那一条就是这么打桩的）⇒
 #: 下面那条闸对任何路径都不再生效，于是"保留路径被拒绝"这件事必须由一条会红
 #: 的判据证明，而不是靠这段注释自证。
-RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = (
+_BASE_RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = (
     # 框架账本区（路径级；角色 `*` = 无豁免）。顺序在抛错上也有意义：先账本、后手稿。
     ("*", "exact:data"),
     ("*", "prefix:data/"),
+    # 2026-11-22（DATAHYGIENE）：嵌套工作区的表目录。
+    # 真机形态：根工作区是 `D:\Incubator`，项目工作区在 `projects/<p>/`；改前
+    # `fs.write("projects/<p>/data/x.json")` 一路放行（`prefix:data/` 只锚根上那一份），
+    # 换个工作区就能污染表目录 —— 而表目录只该由表工具写。
+    # 判据是"布局"级的，不是"路径里出现 data"（`out/data/notes.md` 仍放行，判据 c 正控）。
+    ("*", "wsdata:projects"),
     ("*", "exact:locks"),
     ("*", "prefix:locks/"),
     ("*", "suffix:events.jsonl"),
@@ -377,7 +501,8 @@ RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = (
     # 2026-11-04：换名绕过（真机 `notes/F-conj000000-proof.md`，14,376 B）。保留表原先
     # 只认 `prefix:f-proof-`，而攻坚稿的名字可以是 `F-conj000000-proof.md` —— 同一个
     # 产物换个名字就绕过去了。`suffix:-proof.md` 把"证明稿"这个形状收进来：F / M 的
-    # 框架证明稿不许手写（`reports/` 只是推荐落点，名字才是判据）。
+    # 框架证明稿不许手写（落点不是判据：`reports/` 已退役，新落点 `manuscripts/<角色>/`；
+    # 名字才是判据）。
     ("F", "suffix:-proof.md"),
     # 2026-11-07（解耦落地 / A3）：`reports/f-proof-*` 这一类落点**只有框架能写**。
     # 改前保留表只登记了 F / D / M，于是 A 与 B 用 `fs.write("reports/f-proof-000001.md")`
@@ -385,11 +510,12 @@ RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = (
     # 而 B 的收录按 sha 认领会把它当成真稿。
     #
     # 2026-11-07（B 类收口：A3 收过头了）：A / B 那几行从"文件名形态、全树拦"收回
-    # **规范落点**（`reports/` 这一族，规则里带 `/` ⇒ 按整条相对路径判，见
+    # 规范落点（`reports/` 这一族 —— 当日口径；2026-11-22 起 `reports/` 已退役，这几行
+    # 现在锚的是旧落点、老盘上的稿仍拒。规则里带 `/` ⇒ 按整条相对路径判，见
     # `_artifact_rule_matches`）。为什么收回：`notes/` 是 A/B 的正常产出面 —— 按名字
     # 全树拦会把 `notes/f-proof-x.md` 这样一份普通笔记判成框架产物（判据
     # `test_c_legit_landing_spots_are_untouched` 的两向读数）。而"像 F 登记条目"的风险
-    # 只在 B 的寻址面：`depsection` 只按 `reports/` 找稿，`notes/` 下同名的那份到不了
+    # 只在 B 的寻址面：`depsection` 当日只按 `reports/` 找稿，`notes/` 下同名的那份到不了
     # 认领那一步。F / D / M 的既有口径**一个字节没动**（D6：作者/收方那一侧换个目录
     # 仍是同一个框架产物；那一档的真机现场是 F 把稿写进了 `notes/`）。
     ("A", f"prefix:{_RESERVED_DIR}/f-proof-"),
@@ -399,6 +525,11 @@ RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = (
     # 同样是框架渲染的 —— 与 e-proof 一样，A / B 不许手写（否则"B 的绿色通道按族名认稿"
     # 这条判据会被一份手写稿喂假内容）。
     ("A", f"prefix:{_RESERVED_DIR}/e-num-"),
+    # 2026-11-22（E-ANCHOR）：B2b-2 把产出切到新落点之后，族目录也换了。上面四行是
+    # 旧落点（老盘上的稿仍拒），这四行是同一批族在新落点的锚（一族人一行，来源见
+    # `NEW_LANDING_FAMILY_RULES`）。位置在 `manuscript:*` 之前：族级拒信（"这一族只有
+    # 框架能写"）比名字级拒信（"这是手稿形名字"）更具体；两档的既有拒信逐字不变。
+    *[("A", rule) for rule in NEW_LANDING_FAMILY_RULES],
     # 2026-11-10（D5）：同一个"手稿形名字"换个目录/换个历史后缀就能绕过上面那四行。真机
     # 98b：B 用 `fs.write` 直写 `notes/b-proof-000003-v2.md` / `-000004-v2.md` ⇒ 绕过
     # `proofregistry.register_or_rewrite`（唯一写口），"同一命题只住一份稿"失效、v2 从未
@@ -406,14 +537,20 @@ RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = (
     # tier ∈ {family, legacy} ⇒ 拒；号解析不出的 `notes/f-proof-x.md` 是 bad_name、普通
     # 笔记是 unrecognized ⇒ 仍放行（2026-11-07 那次收窄的负控不许被这一档误伤）。
     ("A", f"{MANUSCRIPT_RULE_KIND}:*"),
-    # 2026-11-11（甲）：B 这五行照旧拒 `fs.write` / `fs.delete` / `fs.move`，但 `fs.edit`
-    # 对自己号段、未签的 `reports/b-proof-<六位号>.md` 有一格窄豁免
-    # （`_b_polish_edit_allowed`；业主 ④ 的后半句「之后 B 在那份 B 稿上改正文」）。
+    # 2026-11-11（甲）/ 2026-11-22（B-POLISH-RE）：B 这五行照旧拒 `fs.write` /
+    # `fs.delete` / `fs.move`，但 `fs.edit` 对自己号段、未签的
+    # `manuscripts/B/b-proof-<六位号>.md` 有一格窄豁免（`_b_polish_edit_allowed`；
+    # 业主 ④ 的后半句「之后 B 在那份 B 稿上改正文」）。旧落点 `reports/b-proof-*`
+    # **不再**是豁免对象（旧布局不再支持；由 `_b_polish_old_layout_refusal` 明确报）。
     # 豁免不写进表里，理由见那一节注释；这里一个字都没改。
     ("B", f"prefix:{_RESERVED_DIR}/f-proof-"),
     ("B", f"prefix:{_RESERVED_DIR}/b-proof-"),
     ("B", f"prefix:{_RESERVED_DIR}/e-proof-"),
     ("B", f"prefix:{_RESERVED_DIR}/e-num-"),
+    # 2026-11-22（E-ANCHOR）：与 A 那四行同源（`NEW_LANDING_FAMILY_RULES`）—— 旧落点是
+    # 老盘、新落点是现盘，两批都拒；B 自己那一族也在这四行里（`manuscripts/B/b-proof-`），
+    # 所以"B 写自己的 b-proof"由族级行接住，而不是落到 `manuscript:*` 的名字档。
+    *[("B", rule) for rule in NEW_LANDING_FAMILY_RULES],
     ("B", f"{MANUSCRIPT_RULE_KIND}:*"),
     # 2026-11-17（AU2b 甲类：保留表名单不全 —— 真权限缺口）：A3 那一批只登记了 A / B。
     # 真机实测 E / G / L 用 `fs.write` 写 `reports/f-proof-000001.md` 全部 `ok=True`；
@@ -434,9 +571,22 @@ RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = (
     ("E", f"prefix:{_RESERVED_DIR}/f-proof-"),
     ("E", f"prefix:{_RESERVED_DIR}/b-proof-"),
     ("E", f"prefix:{_RESERVED_DIR}/e-proof-"),
+    # 2026-11-22（E-ANCHOR）：E 自己的那一族在新落点也照拒 —— 改前旧落点那一行只认
+    # `reports/e-proof-`，`manuscripts/E/e-proof-*` 没有任何一行接住（实测 E 用
+    # `fs.write` 写它 `ok=True`）。框架渲染 + 号段 + V 签都挂在
+    # `exhaustionreport.land_manuscript` 上（开稿口发号 → 三节正文 → V 签），
+    # 所以"产出者本人"也不是豁免条件。规则与拒信见 `E_OWN_PROOF_PATH_RULES`。
+    *[("E", rule) for rule in E_OWN_PROOF_PATH_RULES],
     ("G", f"prefix:{_RESERVED_DIR}/f-proof-"),
     ("G", f"prefix:{_RESERVED_DIR}/b-proof-"),
     ("G", f"prefix:{_RESERVED_DIR}/e-proof-"),
+    # 2026-11-22（G-ANCHOR）：G 自己的论文正文（`manuscripts/G/<doc_id>.md`）也是框架
+    # 渲染的产物 —— 上面三行只锚旧落点上"别人的证明族"，`manuscripts/G/` 那一族没有任何
+    # 一行接住（改前实测 G 用 `fs.write` 写它 `ok=True`）。框架那条链是
+    # `doc.build_document`（写 `documents` 行 + 渲染 markdown）→ `G.revise` /
+    # `G.refresh_markdown`（同一份渲染函数的改稿与重画）；手写等于把行、内容哈希与
+    # 依赖表一起跳过。规则与拒信见 `G_MANUSCRIPT_PATH_RULES` / `G_MANUSCRIPT_MESSAGE`。
+    *[("G", rule) for rule in G_MANUSCRIPT_PATH_RULES],
     ("L", f"prefix:{_RESERVED_DIR}/f-proof-"),
     ("L", f"prefix:{_RESERVED_DIR}/b-proof-"),
     ("L", f"prefix:{_RESERVED_DIR}/e-proof-"),
@@ -459,10 +609,19 @@ RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = (
     #   · e-proof / e-num 是 E 的两族（`exhaustionreport.land_manuscript` /
     #     `land_numeric_manuscript`，两族各自过开稿口）；
     # 手写任何一族都等于把"框架渲染 + 号段 + 签"三件事跳过去，而工具层只会说"成功"。
-    # 规则带 `/`（规范落点 `reports/`）：D 在 `notes/` 下写普通草稿仍是它的正常面。
+    # 这三行锚的是旧落点 `reports/`：老盘上的稿仍按同一条判据拒，它们也是"退役目录之外
+    # 那句族级拒信"的读数来源。
+    #
+    # 2026-11-23（RESERVED-D-FIX）：改前"别的角色三族"只登记了旧落点，而两个写口的
+    # `path` 说明早就写着「D 另拒 `b-proof-`/`e-proof-`/`e-num-`」—— 教法比表宽一整个
+    # 落点，实测 `manuscripts/D/b-proof-000001.md` 以 D 的身份 `ok=True`（e-proof / e-num
+    # 同）。修法是与 D 自己那两行同一口径的名字级规则（`D_OTHER_FAMILY_RULES`）：
+    # 名字是判据、目录不是（D6）；只补 `prefix:manuscripts/D/<族>-` 等于给"下一个落点"
+    # 再留一个口。旧落点那三行一个字不动。
     ("D", f"prefix:{_RESERVED_DIR}/b-proof-"),
     ("D", f"prefix:{_RESERVED_DIR}/e-proof-"),
     ("D", f"prefix:{_RESERVED_DIR}/e-num-"),
+    *[("D", rule) for rule in D_OTHER_FAMILY_RULES],
     # 每问题工作稿仍由 `D.write_report` 渲染（携带单在同一处生成）：手写 `*-research.md`
     # 等于把携带单跳过，B 那一侧就会读到"没有可携带的稿"（与"自足"同形）。
     ("D", "suffix:-research.md"),
@@ -470,7 +629,22 @@ RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = (
     ("M", "suffix:-proof.md"),
     ("M", "contains:RESEARCH"),
     ("M", "suffix:-research.md"),
-    # 2026-11-17（DOCGATE2 ③）：`reports/<谁>-proof-<号>.md` 的新建档**只有框架能写**。
+    # 2026-11-22（F-M-ANCHOR / FIXTURE-MANUSCRIPTS-2）：A / B / E / G 那一批把行锚搬到了新落点
+    # （`NEW_LANDING_FAMILY_RULES` / `E_OWN_PROOF_PATH_RULES` / `G_MANUSCRIPT_PATH_RULES`），
+    # F 与 M 没跟：它们只有旧落点或**名字级**的行（`prefix:f-proof-` / `suffix:-proof.md`），
+    # 于是族级新落点 `manuscripts/{B,E}/<族>-proof-*` 没有任何一行接住 —— 落点闸先说话
+    # （`not_your_role_directory`），判据量不到它想量的那句「这一族只有框架能写」。
+    # 读数（`tests/test_docgate2_two_side_doors_are_closed.py` 的 f）：F 写
+    # `manuscripts/B/b-proof-000001.md`、F 写 `manuscripts/E/e-proof-000002.md`、
+    # M 写 `manuscripts/{B,E}/…` 这四条改前都落在落点闸那一档。
+    #
+    # 一族人一行，目录从 `manuscriptfamily.DIR_OF` 现读（`_new_landing_rule`），不另立目录表；
+    # 哪三族、以及为什么没有 `f-proof`：见 `F_M_OTHER_FAMILY_RULES` 上面那段。
+    # 位置在各角色既有行之后：F / M 写自己那一族仍先命中名字级那两行（拒信逐字不变）。
+    *[("F", rule) for rule in F_M_OTHER_FAMILY_RULES],
+    *[("M", rule) for rule in F_M_OTHER_FAMILY_RULES],
+    # 2026-11-17（DOCGATE2 ③）：旧落点 `reports/<谁>-proof-<号>.md` 的新建档**只有框架能写**
+    # （新落点的同形稿由 2026-11-22 的族级行接住；这一行只补旧落点那个形状）。
     #
     # 这张表是按角色分行的，于是"角色表没登记到"的那几格一直敞着（真机口径的探针
     # `temp/docgate1/PROOF-third-path.txt` 实测）：
@@ -483,34 +657,128 @@ RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = (
     # 元信息与 V 的那份签都挂在渲染那一步上）。所以补的是**形状级**的一行：对任何角色
     # （含没挂角色）成立，顺序排在按角色分行的那些行之后（已有拒信逐字不变）。
     #
-    # 为什么只收 `reports/` 与 `-proof-` 形状：`notes/` 是 A/B 与产出侧的正常产出面
+    # 为什么这一行只收旧落点 `reports/` 与 `-proof-` 形状：`notes/` 是 A/B 与产出侧的正常产出面
     # （2026-11-07 收窄的负控：`notes/f-proof-x.md` 这类号解析不出的普通笔记仍放行），
     # 而 `e-num` 不是证明稿族（2026-11-08 业主裁定，不顺手扩到没点名的格）。
     (MANUSCRIPT_ONLY_ROLE, f"{PROOF_SHAPE_RULE_KIND}:{_RESERVED_DIR}"),
 )
 
+
+# ---------------------------------------------------------------- 族名的逐角色矩阵（2026-11-23 PERM-MATRIX-FIX）
+#
+# 业主裁决（2026-11-23）：以 `manuscriptproducers.PRODUCER_OF_FAMILY` 为唯一真身 ——
+# 对每个族，**产出角色**写自己的族名稿不在这一条的下手面上；**其余角色在任何落点**写该族名稿
+# ⇒ `reserved_framework_artifact`。既有豁免保留：A/B 的四个族级锚（它们代收/代写的那两个
+# 角色面）、G 的 `manuscripts/G/` 锚、D 的 research 稿（不是族名稿）。
+#
+# 为什么规则串是 `prefix:<族>-`（名字级、不带 `/`）：与 D 那三格同口径（2026-10-27 D6：
+# 名字是判据、目录不是）。改前那一批缺口全是"只锚了一个落点"造成的：
+#
+#   E 写 `manuscripts/E/{f,b}-proof-*`   ⇒ rule=None, ok=True（E 的行只锚旧落点 `reports/`）
+#   L 写 `manuscripts/L/{f,b,e}-proof-*` ⇒ rule=None, ok=True（L 的行同样只锚旧落点）
+#   E/G/L/M 写 `notes/{f,b,e,e-num}-*`   ⇒ rule=None, ok=True（`notes/` 没有任何一行接住）
+#   F/M 写自己目录里"别人的族名"       ⇒ rule=None, ok=True（只有产出者目录那几行路径规则）
+#
+# 这几格的形状与 D 修掉的那三格完全相同（同一个文件名在 `reports/` 之外没人接），所以修法也
+# 相同：一族人一组**名字级**规则，由族 ⇒ 产出角色的那张表生成，不按目录逐个补。
+#
+# 为什么 A / B 不在生成面里：A / B 的族级锚是名字档（`manuscript:*`，按
+# `manuscriptfamily.classify_name` 的 tier 判），而 2026-11-07 的裁定明确 `notes/` 下
+# 号解析不出的笔记（`bad_name`）对 A/B 不算框架产物 —— 给它们补 `prefix:<族>-` 会把那条
+# 负控一起吃掉（`tests/test_fs_reserved_ledger_paths.py` 的 c 组、
+# `tests/test_fs_manuscript_names_are_reserved.py` 的 d 组）。A / B 的四族全拒由
+# `manuscript:*` + 旧落点那几行给，行为与本笔之前逐字一致（判据 b 的正控）。
+#: 族名矩阵的落点角色：本表里按角色分行的全部角色（A / B 除外，理由见上面那段）。
+FAMILY_NAME_RULE_ROLES: tuple[str, ...] = ("D", "E", "F", "G", "L", "M")
+
+
+def _family_name_rows() -> tuple[tuple[str, str], ...]:
+    """非产出角色 × 每一族的名字级规则（一族人一组；`PRODUCER_OF_FAMILY` 是唯一真身）。
+
+    返回的每一行都是 `(<角色>, "prefix:<族>-")`：族名写在文件名最前面、不带目录，于是
+    `manuscripts/<别人>/`、`work/<别人>/`、`notes/` 以及下一个新落点都接得住。
+
+    族的顺序读 `manuscriptfamily.FAMILY_ORDER`（不是字典序，也不是本文件再抄一份）；
+    族 ⇒ 产出角色现读 `manuscriptproducers.PRODUCER_OF_FAMILY`。产出角色自己那一族不生成
+    规则 —— 它自己那一族的既有锚（F 的 `prefix:f-proof-`、B 的族级行、E 的
+    `E_OWN_PROOF_PATH_RULES`）一个字不动，本笔既不放开也不追加。
+    """
+    from ..manuscriptfamily import FAMILY_ORDER
+    from ..manuscriptproducers import PRODUCER_OF_FAMILY
+
+    rows: list[tuple[str, str]] = []
+    for family in FAMILY_ORDER:
+        producer = str(PRODUCER_OF_FAMILY[family])
+        for role in FAMILY_NAME_RULE_ROLES:
+            if role != producer:
+                rows.append((role, f"prefix:{family}-"))
+    return tuple(rows)
+
+
+def _with_family_name_rows(table: tuple[tuple[str, str], ...]) -> tuple[tuple[str, str], ...]:
+    """把生成的族名行插在逐角色那批**之前**、`+` 形状行**之后**（两处顺序都有理由）。
+
+    - 在 `+` 之前：`+` 那一档是"没有族归属的证明稿形状"（旧落点 `reports/x-proof-*.md`；
+      `reports/` 目录 2026-11-22 起退役，这一行仍按旧盘的同形拒写），按角色
+      分行的族级行必须先说话 —— 既有拒信逐字不变（`test_docgate2` 的 h 组）。
+    - 在其余按角色分行的行之前：**名字比目录更具体**（D6）。反例是 G 写
+      `manuscripts/G/f-proof-*`：若 `prefix:manuscripts/G/` 那一行先说，拒信会讲"这是 G 的
+      论文正文"（错族，出路指 G 自己）；族名行先说才指 F。同一条也管 D 的
+      `reports/<族>-` 与 E 的 `manuscripts/E/e-proof-`（拒信换成更具体的族级那一句）。
+    - 已经在表里的行不重复插（D 的三族名字级行、F/M 的 `prefix:f-proof-` 都已在表上）：
+      重复行会让"摘掉这一族 ⇒ 退回放行"那类反真空打桩摘不干净（摘掉两行里的一行，
+      另一行照样接住）。
+    """
+    ledger = tuple(row for row in table if row[0] in ("*", _ARTIFACT_PATH_ROLE))
+    shape = tuple(row for row in table if row[0] == MANUSCRIPT_ONLY_ROLE)
+    roles = tuple(row for row in table
+                  if row[0] not in ("*", _ARTIFACT_PATH_ROLE, MANUSCRIPT_ONLY_ROLE))
+    present = set(roles)
+    extra = tuple(row for row in _family_name_rows() if row not in present)
+    return ledger + extra + roles + shape
+
+
+#: 保留表（判据的唯一落点）= 上面那张按角色分行的表 + 按族表生成的族名矩阵。
+#: 生成块不改任何既有行；反真空打桩点仍是这张表本身（`_reserved_artifact_rule` 只读它）。
+RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = _with_family_name_rows(
+    _BASE_RESERVED_ARTIFACT_TABLE)
+
 #: 受控码：这一笔写的是框架渲染的产物（不是自由手稿）。
 RESERVED_ARTIFACT_KIND = "reserved_framework_artifact"
 
 #: 拒信（逐字）：说清"这是什么"与"该走哪个动作"，而不是只说"不许"。
-#: 末尾那句指路是 `_RESERVED_DIR` 唯一的用途（推荐落点），它不构成豁免条件。
+#: 末尾那三条出路与 `REPORTS_RETIRED_HOW_TO_FIX` 同一套（草稿 / 正文 / 记录进表）；
+#: `_RESERVED_DIR` 不在这句里出现 —— 它已退役，拒信不许把人引回旧落点
+#: （P2，2026-11-22：SMOKE 路 `temp/smoke/REPORT.md` §2.7）。
+#:
+#: `{producer}`（2026-11-22 REFUSAL-24）：这一族真正的产出角色。改前这句写死
+#: 「用 F 的 proof 动作 / D 的交付动作」—— b-proof / e-proof / e-num 三族撞上来时，
+#: 模型被指向 F 或 D，而它们的真产出方是 B / E（见 :func:`_producer_refusal`）。
 RESERVED_ARTIFACT_MESSAGE = (
-    "这一份是框架渲染的产物（证明手稿 / 研究手稿），不许手写 —— "
-    "用 F 的 proof 动作（它会渲染 `## 依赖` 节）/D 的交付动作（它会渲染携带单）"
-    f"；推荐落点是 {_RESERVED_DIR}/，但换到别的目录同样受这一道闸管"
+    "拒绝 {path}：这一份是框架渲染的产物（证明手稿 / 研究手稿），不许手写 —— "
+    "这一族的产出角色是 **{producer}**：要落稿就派 {producer} 走它的产出动作"
+    "（号段、`## 依赖` 节与 V 的签都挂在渲染那一步）；"
+    "换个目录同样受这一道闸管（判据是文件名，不是目录）。你自己要写的："
+    "草稿写 `work/<你的角色>/`、正文写 `manuscripts/<你的角色>/`、"
+    "记录型内容进表（`search_requests` / `experiments` / `attack_plans` / `review_findings`）。"
 )
 
-#: `manuscript:` 那一档的拒信（2026-11-10，D5）：名字本身就是判据，所以要指两条真出路
-#: （B 的落稿动作 / F 的转正动作）与一条禁令（不许自己起 `-v2` 这类新名）。
+#: `manuscript:` 那一档的拒信（2026-11-10，D5）：名字本身就是判据，所以要指对这一族
+#: 真正的产出角色与一条禁令（不许自己起 `-v2` 这类新名）。
 #: 与 `RESERVED_ARTIFACT_MESSAGE` 分开：那一句说的是"框架渲染的产物"，这一句说的是
 #: "手稿形名字" —— 后者也拦 `notes/` 下还没成为正式稿的名字，指路必须是"先落成规范名"。
+#:
+#: `{producer}`（2026-11-22 REFUSAL-24）：改前这句不管名字属于哪一族都指「B 的
+#: `land_manuscript` / F 的 `promote_manuscript`」—— e 两族撞上来时被指去 B/F，而
+#: 它们的产出方是 E。第二份证明的口径也按 `manuscriptfamily` 现行写法改：`-pN` 已不是
+#: 手稿名的一部分（`manuscriptfamily.py:198-200`），第二份证明是另开一份稿（新的稿号）。
 MANUSCRIPT_NAME_MESSAGE = (
     "拒绝 {path}：这是一个手稿形名字（`manuscriptfamily.classify_name` 判成 family/legacy），"
     "手稿不许手写 —— 写下去等于绕过 `proofregistry.register_or_rewrite` 这个唯一写口，"
     "「同一命题只住一份稿」会失效（`-v2` 这类历史名写下去也收不进台账）。"
-    "改法：B 走 `AgentB.land_manuscript`（`own.land_manuscript`）；F 走 "
-    "`promote_manuscript`；同一命题的第二份证明用规范后缀 `-p<N>`，"
-    "不许自己起 `-v2` 这类新名。"
+    "改法：这一族的产出角色是 **{producer}** —— 要落稿就派 {producer} 走它的产出动作"
+    "（稿落 `{landing}/`，号与 `## 依赖` 节由渲染那一步给）；同一命题的第二份证明"
+    "另开一份稿（新的稿号），不许自己起 `-v2` 这类新名。"
 )
 
 #: `proofshape:` 那一档的拒信（2026-11-17 DOCGATE2 ③）：这一档说的不是"你不是这一族"，
@@ -519,19 +787,57 @@ MANUSCRIPT_NAME_MESSAGE = (
 #: 危害句与 `test_fs_other_roles_cannot_hand_write_manuscripts` 同一句：B 的收录按 sha
 #: 认领，一份手写稿会被当成真稿。
 PROOF_MANUSCRIPT_ONLY_MESSAGE = (
-    "拒绝 {path}：`reports/<谁>-proof-<号>.md` 这一类落点**只有框架能写** —— "
+    "拒绝 {path}：`<谁>-proof-<号>.md` 这一类手稿名**只有框架能写**（正文在新落点 "
+    "`manuscripts/<产出角色>/` 下；名字才是判据，换到哪个目录都同一条）—— "
     "号段、洗稿元信息（`## 依赖` 节 / 五元位）与 V 的那份签都挂在产出侧渲染那一步上"
     "（F 的 proof 动作、B 的 `own.land_manuscript`、E 的 `exhaustionreport`）。"
     "手写一份会让 B 的收录按 sha 认领把它当成真稿：盘上那份文件看起来完全合法，"
     "而台账里没有任何一条产出记录。要落稿就派产出方，别自己起一个号。"
 )
 
-#: D 的证明稿路径拒信（2026-11-04）：指路必须具体到"派 F"，而不是"走你的渲染动作"——
-#: D 没有渲染证明稿的动作，它有的是"派 F 落稿、由 F 带 V 的签"。
+#: E 自己那一族的拒信（2026-11-22 E-ANCHOR）：与 `PROOF_MANUSCRIPT_ONLY_MESSAGE` 同一句
+#: 判据（这一族只有框架能写），但出路必须指 E 自己的产出链 —— E 不是"派产出方"，它自己
+#: 就是产出方：跑一次穷举实验，稿由框架落。共读 `E_OWN_PROOF_FAMILY_RULES`（表上那两行的
+#: 规则串：旧落点 `reports/e-proof-` 与 新落点 `manuscripts/E/e-proof-`），所以"哪条规则
+#: 用哪句话"只有一处对应。2026-11-22（REFUSAL-TEXT-2 ①）：旧落点那一行也走这一句 ——
+#: 改前它掉进通用那句（「用 F 的 proof 动作 / D 的交付动作」），E 写自己的稿却读到别人的规矩。
+E_OWN_PROOF_MESSAGE = (
+    "拒绝 {path}：E 的穷举证明稿是框架渲染的产物 —— `verify.run_experiment` 落实验行时"
+    "由 `exhaustionreport.land_manuscript` 开稿（号段由开稿口发；`## 命题` / `## 证明` / "
+    "`## 依赖` 三节都在那一步写），`## 证明` 那一节还要 V 的签。手写它等于把开稿、号段与 "
+    "V 签一起跳过，而 B 的收录按 sha 认领会把这份手写稿当成真稿。"
+    "要出这一份只有一条正路：跑 E 的穷举实验（`verify.run_experiment`；稿是回执里的 "
+    "`proof_manuscript`，不是入参）。你自己要写的：普通数值稿落草稿 "
+    "`work/E/e-num-<号>.md`、其余草稿写 `work/E/`，正文写 `manuscripts/E/`"
+    "（`e-proof-` 这一族除外），记录型内容进表（`search_requests` / `experiments` / "
+    "`attack_plans` / `review_findings`）。"
+)
+
+#: G 的论文正文拒信（2026-11-22 G-ANCHOR）：与 `E_OWN_PROOF_MESSAGE` 是同一件事
+#: （产出者本人也不是豁免），出路必须指 G 自己的渲染链 —— G 就是产出方：落新稿
+#: `doc.build_document`、改已有稿 `G.revise`、重画文件 `G.refresh_markdown`（后两条与
+#: `doc.build_document` 共用 `doc_tools.render_markdown`）。共读
+#: `G_MANUSCRIPT_PATH_RULES`（表上那一行的规则串），所以"哪条规则用哪句话"只有一处对应。
+G_MANUSCRIPT_MESSAGE = (
+    "拒绝 {path}：G 的论文正文是框架渲染的产物 —— `doc.build_document` 写 `documents` "
+    "行时把它渲染出来（断言、依赖表与 `content_sha256` 都在那一步钉住），改稿走 "
+    "`G.revise`、重画走 `G.refresh_markdown`（同一个渲染函数）。手写它等于把这三步一起"
+    "跳过：盘上那份 markdown 看起来完全合法，而库里那一行与它对不上（甚至根本没有那一行）。"
+    "你要改的是它的**输入**：断言（`claims`）与分节（`sections`）—— 落新稿调 "
+    "`doc.build_document`（`claims` / `sections` / `open_problems` 都是它的入参），"
+    "改已有稿调 `G.revise`（`new_claims` 按同号替换原断言、`fixed_findings` 改发现状态），"
+    "别手写正文。"
+)
+
+#: D 的证明稿路径拒信（2026-11-04）：指路必须具体到"派产出方"，而不是"走你的渲染动作"——
+#: D 没有渲染证明稿的动作，它有的是"派产出方落稿、由它带 V 的签"。
+#:
+#: `{producer}`（2026-11-22 REFUSAL-24）：改前这句写死「派 F」—— 它对 f-proof 是对的，
+#: 但 D 撞上 b-proof / e-proof / e-num 时同样落到这一句（`D_OTHER_PROOF_PREFIXES`），
+#: 于是 B / E 的族被指给 F。现在按族注入（见 :func:`_producer_refusal`）。
 D_PROOF_LANDING_MESSAGE = (
-    "拒绝 {path}：证明的落稿与拿签不属于 D —— 要落稿就派 F："
-    "用 `F.create_plan` 立项（`problem_key` 用猜想的 `conjecture_id`）、`F.step` 推进，"
-    "由 F 落成 `reports/f-proof-<号>.md` 并带 V 的签。"
+    "拒绝 {path}：证明的落稿与拿签不属于 D —— 这一族的产出角色是 **{producer}**："
+    "要落稿就派 {producer}（由它开稿、推进，并落成 `{landing}/{family}-<号>.md` 带 V 的签）。"
     "D 只提供想法（`## 思路` / `## 依赖面参考`）与收获（数值实验结果、理论攻坚的成果）。"
 )
 
@@ -539,17 +845,81 @@ D_PROOF_LANDING_MESSAGE = (
 D_ATTACK_RECORD_MESSAGE = (
     "拒绝 {path}：`out/proofs/` 是攻坚过程记录，不是证明稿的落点 —— 这一份里有一节 "
     "`## 证明`，那是一份可提交的证明稿。要落稿就派 F（`F.create_plan` → `F.step`，"
-    "由它落 `reports/f-proof-<号>.md` 并带 V 的签）；这里只写 `## 思路` / `## 依赖面参考`。"
+    "由它落 `manuscripts/F/f-proof-<号>.md` 并带 V 的签）；这里只写 `## 思路` / `## 依赖面参考`。"
 )
+
+
+# ---------------------------------------------------------------- 拒信按族指到真产出角色
+#
+# 2026-11-22（REFUSAL-24）：三条拒信（通用 / D 的「派谁」/ 手稿名档）原来各写死一两个
+# 角色，b-proof / e-proof / e-num 三族撞上来时被指给 F 或 D，而它们的真产出方是 B / E。
+# 这里把"这一格属于哪一族"与"这一族该找谁"收成两处：族 ⇒ 角色表读唯一真身
+# `manuscriptproducers.PRODUCER_OF_FAMILY`（不在本文件另抄一份），三条模板只留
+# `{producer}` / `{landing}` / `{family}` 占位，填充只经 :func:`_producer_refusal` 这一处。
+#
+# 为什么 `g-manuscript` 不在这张表里：它不是 `manuscriptfamily` 的四族之一 ——
+# G 的论文正文由 G 自己的拒信（`G_MANUSCRIPT_MESSAGE`）直指 G，不经过这一节；
+# 三条模板也从不命中 `manuscripts/G/`（那个目录的落点闸先说话）。
+
+def _refusal_family(rel: str, rule: str) -> str:
+    """这一格属于哪一族（拒信指路按族读，不按"谁撞上来的"读）。
+
+    名字优先：`manuscriptfamily.classify_name` 的 `name_family` 只按文件名判，目录不参与
+    —— 于是 `reports/`、`notes/`、`manuscripts/<角色>/` 三处落点都能读出同一个族。
+    名字认不出时退回规则串里的族前缀（`prefix:reports/b-proof-` 等）；`suffix:-proof.md`
+    这类形状规则没有族名，按它指向的 F 证明稿族读（`f-proof`）—— 与改前那句写死
+    「派 F」的读数一致，不是新猜法。
+    """
+    from ..manuscriptfamily import FAMILY_ORDER, classify_name
+
+    got = str(classify_name(str(rel or "")).get("name_family") or "")
+    if got in FAMILY_ORDER:
+        return got
+    needle = str(rule or "").partition(":")[2].replace("\\", "/")
+    for family in FAMILY_ORDER:
+        if needle.endswith(f"/{family}-") or f"/{family}-" in needle:
+            return family
+    return "f-proof"
+
+
+def _producer_of_family(family: str) -> str:
+    """族 ⇒ 真产出角色（现读 `manuscriptproducers.PRODUCER_OF_FAMILY`，未知族不猜）。
+
+    现读而不是 import 期绑死：那张表就是唯一真身，判据把它改错一格来量这一句
+    （`tests/test_fs_refusals_name_the_family_producer.py` 的反真空）。
+    """
+    from ..manuscriptproducers import PRODUCER_OF_FAMILY
+
+    return str(PRODUCER_OF_FAMILY[family])
+
+
+def _producer_refusal(template: str, rel: str, family: str) -> str:
+    """把族注入拒信模板 —— **唯一一处格式化**（三条模板共用，不再各写一份 if/else）。
+
+    `producer` 来自 `PRODUCER_OF_FAMILY`，`landing` 来自 `manuscriptfamily.dir_of`
+    （`f-proof` ⇒ `manuscripts/F`、`e-num` ⇒ `work/E`），都是现读真身。
+    """
+    from ..manuscriptfamily import dir_of
+
+    return template.format(
+        path=rel,
+        family=family,
+        producer=_producer_of_family(family),
+        landing=dir_of(family),
+    )
 
 #: 内容闸的模型可见口径（2026-11-05）。这一句是 `fs.write` / `fs.edit` 的 summary 与
 #: D 的正文拒信共读的那一处事实 —— 判据（`tests/test_fs_summary_matches_reserved_table.py`
 #: 的 `test_the_summary_and_the_content_gate_agree_case_by_case`）同时读它、两条 summary
 #: 与 `_d_proof_body_refusal` 的实际判定：三处不许各写一份（summary 单独写"照拒"而不写
 #: 例外、或实现单独放宽而不改这句，都会红）。
+#:
+#: 2026-11-22（FIX-REFUSAL-TEXT）：例外里点名的落点跟到 `manuscripts/F/`（F 的正文自
+#: 2026-11-22 起住那儿）。改前这句还写旧落点 `reports/` —— 于是模型照 summary 去引
+#: 新落点、被内容闸判"没有引用"，同一句话教的和判的是两处。
 D_PROOF_BODY_RULE = (
     "D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 "
-    "`RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256"
+    "`RESEARCH.md` 引 `manuscripts/F/f-proof-<号>.md` 或其 sha256"
 )
 
 #: 其余任何路径上"D 自己写的 `## 证明` 节"的拒信（2026-11-05 业主裁定：教法说任何路径，
@@ -558,16 +928,31 @@ D_PROOF_BODY_RULE = (
 D_PROOF_BODY_MESSAGE = (
     "拒绝 {path}：这一份里有一节 `## 证明` —— 那不是随手记一笔，是一份可提交的证明稿，"
     "而证明的落稿与拿签不属于 D。" + D_PROOF_BODY_RULE + "。"
-    "要落稿就派 F（`F.create_plan` → `F.step`，由它落 `reports/f-proof-<号>.md` 并带 V 的签）；"
-    "你自己只写 `## 思路` / `## 依赖面参考`。"
+    "要落稿就派 F（`F.create_plan` → `F.step`，由它落 `manuscripts/F/f-proof-<号>.md` 并带 "
+    "V 的签）；你自己只写 `## 思路` / `## 依赖面参考`。"
 )
 
 #: 研究手稿里"自己写的 `## 证明` 节"的拒信（2026-11-04 补充裁定：D 的研究手稿是收录者/
 #: 引用者）。detail 逐字给出去处：引用 F 的稿或转载它的 sha，不要自己落稿。
+#: 2026-11-22（FIX-REFUSAL-TEXT）：点名的落点从旧 `reports/` 换成 `manuscripts/F/` ——
+#: 拒信教的那条路必须是内容闸真认的那条（`_cites_an_f_manuscript` 两处都认，按文件名）。
 D_RESEARCH_PROOF_MESSAGE = (
     "拒绝 {path}：D 的研究手稿是收录者/引用者，不是证明的作者 —— 这一份里有一节 "
-    "`## 证明`，而它既没有引用盘上 F 的 `reports/f-proof-<号>.md`，也没有转载那份稿的 "
-    "sha256。证明要 F 落稿拿签，你只引用它的 `reports/f-proof-<号>.md`（或带 sha）。"
+    "`## 证明`，而它既没有引用盘上 F 的 `manuscripts/F/f-proof-<号>.md`，也没有转载那份稿的 "
+    "sha256。证明要 F 落稿拿签，你只引用它的 `manuscripts/F/f-proof-<号>.md`（或带 sha）。"
+)
+
+#: 研究手稿的同一档，但**判不了**（2026-11-22 FIX-REFUSAL-TEXT 三态化）。
+#: 为什么要单立一句：`_cites_an_f_manuscript` 返回 `None` 时（F 的稿目录读不出、或某一份
+#: 的字节读不出），说"你没有引用"是在说谎 —— 模型会去补一条它明明写对了的引用，然后被
+#: 同一个理由再拒一次（本路要断的正是这个环）。这一句要把它引到"先确认那份稿在不在"，
+#: 而不是"你没写对"。
+D_RESEARCH_PROOF_UNREAD_MESSAGE = (
+    "拒绝 {path}：这一份里有一节 `## 证明`，而这一笔**判不出**它是不是引用了盘上 F 的稿 —— "
+    "F 的稿目录（`manuscripts/F/`，含旧盘上的那一份）读不出来，或点名的那一份读不出字节，"
+    "所以「没有引用」这个结论我拿不到。这不是说你写错了：先 `fs.read` 看一眼那份 "
+    "`manuscripts/F/f-proof-<号>.md` 在不在 —— 在就把它的路径（或该文件字节的 sha256）逐字"
+    "写进这一节再交一次；不在就说明稿还没落，派 F 落稿拿签，你只引用。"
 )
 
 #: 受控码：这一笔写的是框架账本区（表 / 事件日志 / 锁），不是角色产物。
@@ -638,6 +1023,19 @@ def _path_rule_matches(rule: str, rel: str) -> bool:
         return low.startswith(want)
     if kind == "suffix":
         return low == want or low.endswith("/" + want)
+    if kind == "wsdata":
+        # `<want>/<一个工作区名>/data/...`：多项目根布局（`projects/<p>/data/`）。
+        #
+        # 为什么另立一档而不是把 `prefix:data/` 改成"含 data 段"：`out/data/notes.md`
+        # 是角色的正常落点（判据 c 的那条正控），按"路径里出现 data/"判会误伤它。
+        # 这一档只在**工作区布局**那一个位置上认 `data/`：根是 `<want>`，紧接一个
+        # 工作区名，再下一段恰好是 `data` —— 与 `projects/<p>/` 的实际布局同形。
+        # 2026-11-22（DATAHYGIENE）：真机 `projects/lp-ball-15/data/lp_ball_3d_final.json`
+        # 这一类"野表"就是脚本在**项目工作区自己的** data/ 里造出来的；而根工作区
+        # （`D:\Incubator`）跑 M 时，`fs.write("projects/<p>/data/x.json")` 在改前
+        # 一路放行 —— 那等于换个工作区就能污染表目录。
+        parts = [p for p in low.split("/") if p]
+        return len(parts) >= 4 and parts[0] == want and parts[2] == "data"
     return False
 
 
@@ -718,9 +1116,10 @@ def _artifact_rule_matches(rule: str, rel: str) -> bool:
     三档：`manuscript:` 那档按名字过表；`proofshape:` 那档按"目录 + 名字形状"判；
     其余两档只看规则串里有没有 `/`：
 
-    - **带 `/`**：按整条相对路径判（`_path_rule_matches`）—— 这一档是"规范落点"
+    - **带 `/`**：按整条相对路径判（`_path_rule_matches`）—— 这一档是路径级规则
       （2026-11-07：A / B 的手稿写权限只收在 `reports/` 这一族上；`notes/` 是它们的
-      正常产出面，不该按文件名全树拦）；
+      正常产出面，不该按文件名全树拦。2026-11-22 起 `reports/` 已退役，这几行锚的是
+      旧落点；新落点由 `NEW_LANDING_FAMILY_RULES` 的族级行接）；
     - **不带 `/`**：按文件名判（`_rule_matches`）—— 2026-10-27 D6 的既有口径：
       作者/收方那一侧换个目录仍是同一个框架产物（真机 `notes/f-proof-…` 就是这么进盘的）。
 
@@ -754,10 +1153,24 @@ def _reserved_artifact_rule(rel: str, role: str) -> str | None:
     角色为 :data:`MANUSCRIPT_ONLY_ROLE` 的行（`+`）对**任何**角色都读（含 `role=""`：
     没挂角色上下文不等于"谁都可以写"）—— 它们在表里排在最后，所以按角色分行的规则
     命中时拒信与口径逐字不变（2026-11-17 DOCGATE2 ③）。
+
+    没有角色上下文（`role=""`，脚本 / 判据直调）读**全部按角色分行的行**（2026-11-22
+    F-M-ANCHOR）：上面那条纪律原先只落了一半 —— `+` 那一档对 `role=""` 也读，可按角色
+    分行的行一行都不读，于是 `fs.write("manuscripts/F/f-proof-000000.md")` 在没挂角色时
+    没有任何手稿行可命中，只剩落点闸把它拒成 `not_your_role_directory`（真机探针
+    `temp/docgate1/PROOF-third-path.txt` ③ 那一格；判据
+    `tests/test_docgate2_two_side_doors_are_closed.py::test_f_a_write_without_a_role_context_is_refused_too`）。
+    口径统一成一句：**没有"我是谁"⇒ 按最严的一档读**（任何一族的行都成立）—— 不带身份
+    不是豁免，它只是没有辩护人。`*`（账本区）与 `@`（路径级产物）两档在前面由
+    :func:`_reserved_ledger` / :func:`_reserved_artifact_path` 各判一次，这里不重复收。
     """
     owner = str(role or "")
-    rules = [rule for who, rule in RESERVED_ARTIFACT_TABLE
-             if who == owner or who == MANUSCRIPT_ONLY_ROLE]
+    if owner:
+        rules = [rule for who, rule in RESERVED_ARTIFACT_TABLE
+                 if who == owner or who == MANUSCRIPT_ONLY_ROLE]
+    else:
+        rules = [rule for who, rule in RESERVED_ARTIFACT_TABLE
+                 if who not in ("*", _ARTIFACT_PATH_ROLE)]
     if not rules:
         return None
     parts = [p for p in str(rel or "").replace("\\", "/").split("/") if p not in ("", ".")]
@@ -772,8 +1185,50 @@ def _reserved_artifact_rule(rel: str, role: str) -> str | None:
     return None
 
 
-#: 一份研究手稿里"引用/转载 F 的稿"的两种写法（只认盘上真有的那几份）。
-_F_MANUSCRIPT_REF = re.compile(r"reports[/\\]f-proof-[A-Za-z0-9_.\-]+\.md", re.IGNORECASE)
+#: 一份研究手稿里"引用/转载 F 的稿"的写法：正文根（`manuscripts/<角色>/`）与退役的旧落点
+#: （`reports/`）都认，别的一概不认（`notes/f-proof-x.md` 这类普通笔记不是引用）。
+#:
+#: 2026-11-22（FIX-REFUSAL-TEXT）：改前这里只认 `reports/`。而 F 的正文从 2026-11-22 起落
+#: `manuscripts/F/`（`manuscriptfamily.dir_of("f-proof")`），拒信也照着新落点教 —— 于是
+#: 模型**照着拒信写**（引 `manuscripts/F/f-proof-<号>.md`）反而再被拒一次：那条正则认不出
+#: 它，`_cites_an_f_manuscript` 报"没有引用"。这正是本路要断的那个环。
+#:
+#: 2026-11-22（REFUSAL-TEXT-2 ②）：改前这里是模块级常量，把 `reports` 与 `manuscripts/F`
+#: 各写死一份（真身分别是 `_RESERVED_DIR` 与 `manuscriptfamily.dir_of("f-proof")`）——
+#: 落点再变一次就漂，而漂了没有任何一处会报错（拒信反而说"你没引用"）。现在改成两个
+#: 现读函数：每次调用从真身取，`_RESERVED_DIR` / 族表一变，读面跟着变。
+def _f_manuscript_dirs() -> tuple[str, ...]:
+    """F 的稿在盘上的两处落点：新落点（族表真身）+ 退役的旧落点（`_RESERVED_DIR`）。
+
+    两处都查 —— 只查新落点会把老工作区里的真引用判成"没有"；只查旧落点会把新落点
+    上的真引用判成"没有"（2026-11-22 FIX-REFUSAL-TEXT 的那个环）。
+
+    现读而不是 import 期冻结：真身只有一处（`manuscriptfamily.dir_of`），这里不写第二份 ——
+    判据把 `dir_of` 打桩到别的目录来量这一条（`tests/test_fs_refusal_texts_point_at_the_right_role.py`
+    的 ② 组）。
+    """
+    from ..manuscriptfamily import dir_of   # 延迟 import：本模块被 tools 包在导入期拉起
+
+    return (dir_of("f-proof"), _RESERVED_DIR)
+
+
+def _f_manuscript_ref() -> re.Pattern[str]:
+    """一段正文里"引用盘上 F 的稿"的写法：新落点（任意角色目录）与退役旧落点。
+
+    名字才是身份（一份稿的名字就是它的身份，目录只说明它放在哪），所以新落点这一支
+    认 `manuscripts/<角色>/f-proof-…`，不把角色目录段写死成 `F`。
+
+    根与退役目录都现读真身（`manuscriptfamily.MANUSCRIPT_ROOT` 与 `_RESERVED_DIR`）；
+    改前这里写死 `manuscripts` / `reports` 两个字面量 —— 与真身各成第二份，落点再变就漂。
+    """
+    from ..manuscriptfamily import MANUSCRIPT_ROOT
+
+    root = re.escape(MANUSCRIPT_ROOT)
+    legacy = re.escape(_RESERVED_DIR)
+    return re.compile(rf"(?:{root}[/\\][A-Za-z]+|{legacy})[/\\]f-proof-[A-Za-z0-9_.\-]+\.md",
+                      re.IGNORECASE)
+
+
 _SHA256_HEX = re.compile(r"\b[0-9a-f]{64}\b", re.IGNORECASE)
 
 
@@ -805,36 +1260,94 @@ def _is_research_manuscript(rel: str) -> bool:
     return name.casefold() == "research.md"
 
 
-def _cites_an_f_manuscript(root: Path | None, content: Any) -> bool:
+def _f_manuscript_candidates(root: Path) -> tuple[list[tuple[str, Path]], bool]:
+    """盘上现存的 F 证明稿：`[(工作区相对路径, 绝对路径)]`，以及"有没有目录读不出"。
+
+    第二个返回值就是三态里 unknown 那一档的来源：`True` = 至少一处读不出（判不了），
+    `False` = 两处都列过（"没有"就是查过了没有）。
+
+    为什么要把它单独拆出来（2026-11-22 FIX-REFUSAL-TEXT）：改前是
+    `directory.glob(...) if directory.is_dir() else []` —— `is_dir()` 在"目录不存在"与
+    "目录存在但读不出"两种情形下都给假，于是后一种被折成"零候选"，拒信随后说
+    "你没有引用"。而"没查成"与"查过了没有"在盘上是两件事，拒信里也必须分开。
+
+    "目录不存在"仍算查过（新工作区里 F 还没落过稿是正常形态，不是读不出）。
+    """
+    found: list[tuple[str, Path]] = []
+    unreadable = False
+    for top in _f_manuscript_dirs():
+        directory = Path(root) / top
+        try:
+            entries = list(os.scandir(directory))
+        except FileNotFoundError:
+            continue                      # 这一处没有目录 = 查过，零候选
+        except NotADirectoryError:
+            continue                      # 同名文件占了这个名字 = 同样零候选
+        except OSError:                   # noqa: BLE001 —— 读不出 = 判不了，不是"没有"
+            unreadable = True
+            continue
+        for entry in entries:
+            name = str(entry.name)
+            low = name.casefold()
+            if not (low.startswith("f-proof-") and low.endswith(".md")):
+                continue
+            try:
+                if not entry.is_file():
+                    continue
+            except OSError:               # noqa: BLE001 —— 逐条判不了 ⇒ 整体判不了
+                unreadable = True
+                continue
+            found.append((f"{top}/{name}", Path(entry.path)))
+    return found, unreadable
+
+
+def _cites_an_f_manuscript(root: Path | None, content: Any) -> bool | None:
     """内容有没有引用盘上 F 的证明稿：点名它的路径，或带上那份文件的 sha256。
 
-    三态纪律：`root` 拿不到（直接调 handler 的旧入口）⇒ 判"没有引用"而不是猜有；
-    目录读不出来 ⇒ 也判"没有引用" —— 这条闸只在"能证明这是引用"时放行。
+    **三态**（2026-11-22 FIX-REFUSAL-TEXT 改；返回值不是 bool，是 `bool | None`）：
+
+    - `True` —— 找到了：点名的那份真在盘上（新落点与旧落点两处，见
+      :func:`_f_manuscript_dirs`；按**文件名**认，一份稿的名字就是它的身份，目录只说明
+      它放在哪），或带的是那份文件字节的 sha256；
+    - `False` —— **查过**，没有引用：两处都列得出来，逐份比完没命中；
+    - `None` —— **判不了**：`root` 拿不到（直接调 handler 的旧入口）/ F 的稿目录读不出 /
+      有候选读不出字节。改前这一档被折成 `False`，于是"没查成"与"查过了没有"在拒信里
+      长成同一句 —— 模型去补一条它明明写对了的引用，然后被同一个理由再拒一次。
+
+    放不放行仍按"能证明这是引用才放行"：`None` 与 `False` 一样不放行，但**拒信必须分开
+    说**（`False` ⇒ `D_RESEARCH_PROOF_MESSAGE`，`None` ⇒ `D_RESEARCH_PROOF_UNREAD_MESSAGE`）。
     """
     if root is None:
-        return False
+        return None
     text = str(content or "")
-    named = {m.group(0).replace("\\", "/").casefold() for m in _F_MANUSCRIPT_REF.finditer(text)}
+    named = {m.group(0).replace("\\", "/").casefold() for m in _f_manuscript_ref().finditer(text)}
     shas = {m.group(0).casefold() for m in _SHA256_HEX.finditer(text)}
     if not named and not shas:
-        return False
-    directory = Path(root) / _RESERVED_DIR
-    try:
-        candidates = sorted(directory.glob("f-proof-*.md")) if directory.is_dir() else []
-    except OSError:  # noqa: BLE001 —— 读不到目录 = 判不出"这是引用"，按不放行处理
-        return False
-    for candidate in candidates:
-        if f"{_RESERVED_DIR}/{candidate.name}".casefold() in named:
+        return False                      # 正文里连引用形状都没有 ⇒ 查过，没有
+    # 按文件名比：引用写 `manuscripts/F/f-proof-000001.md`、稿在老盘 `reports/` 下，仍是
+    # 同一份（迁移前后都认得出）；反向也一样。
+    named_names = {_basename_of(rel) for rel in named}
+    candidates, unreadable = _f_manuscript_candidates(Path(root))
+    for rel, path in candidates:
+        if _basename_of(rel) in named_names:
             return True
         if not shas:
             continue
         try:
-            digest = hashlib.sha256(candidate.read_bytes()).hexdigest().casefold()
-        except OSError:  # noqa: BLE001 —— 这一份读不出来不影响别的候选
+            digest = hashlib.sha256(path.read_bytes()).hexdigest().casefold()
+        except OSError:  # noqa: BLE001 —— 这一份的字节读不出 = 判不了它是不是被引的那份
+            unreadable = True
             continue
         if digest in shas:
             return True
-    return False
+    return None if unreadable else False
+
+
+def _basename_of(rel: Any) -> str:
+    """一条工作区相对路径的文件名（大小写不敏感，与保留表同一口径）。"""
+    parts = [p for p in str(rel or "").replace("\\", "/").split("/") if p not in ("", ".")]
+    return (parts[-1] if parts else "").casefold()
+
 
 
 def _d_proof_body_scope_refused(rel: str, content: Any, root: Path | None) -> bool:
@@ -844,7 +1357,9 @@ def _d_proof_body_scope_refused(rel: str, content: Any, root: Path | None) -> bo
 
       · 任何路径都拒 —— 换目录、换个"更像笔记"的名字都不是豁免条件；
       · 唯一例外：研究手稿（`RESEARCH.md`）里那一节是引用/转载盘上 F 的稿
-        （点名 `reports/f-proof-<号>.md`，或带那份文件字节的 sha256）。
+        （点名 `manuscripts/F/f-proof-<号>.md`（新落点）或老盘上的 `reports/f-proof-<号>.md`，
+        或带那份文件字节的 sha256）。判不了的时候（`_cites_an_f_manuscript` 返回 `None`）
+        按"不放行"处理 —— 拒信会把"判不了"与"没有引用"分开说。
       · `out/proofs/` 里连这个例外都没有：那是攻坚过程记录，明确不许带证明正文。
 
     这个谓词单独一层是为了让"任何路径"这一步可被打桩（判据的反真空：把它换回
@@ -855,7 +1370,7 @@ def _d_proof_body_scope_refused(rel: str, content: Any, root: Path | None) -> bo
     low = str(rel or "").replace("\\", "/").casefold()
     if low.startswith(D_ATTACK_RECORD_DIR):
         return True
-    if _is_research_manuscript(rel) and _cites_an_f_manuscript(root, content):
+    if _is_research_manuscript(rel) and _cites_an_f_manuscript(root, content) is True:
         return False
     return True
 
@@ -865,9 +1380,11 @@ def _d_proof_body_refusal(rel: str, role: str, content: Any,
     """D 的写入里"这一节是可提交的证明稿"的受控拒（2026-11-04 起，2026-11-05 扩到任何路径）。
 
     只对角色 D 生效；判据在 :func:`_d_proof_body_scope_refused`（任何路径，
-    例外只有 `RESEARCH.md` 里引用 F 的稿）。拒信按落点分三档，指路都是"要落稿就派 F"：
+    例外只有 `RESEARCH.md` 里引用 F 的稿）。拒信按落点分四档，指路都是"要落稿就派 F"：
       · `out/proofs/`：攻坚过程记录，不是落稿点；
-      · 研究手稿（`RESEARCH.md`）：没有引用/转载 F 的稿；
+      · 研究手稿（`RESEARCH.md`）：**查过**没有引用/转载 F 的稿；
+      · 研究手稿（`RESEARCH.md`）：**判不了**（F 的稿目录读不出 / 那份字节读不出）——
+        「没查成」不许说成「你没有引用」（2026-11-22 FIX-REFUSAL-TEXT）；
       · 其余任何路径：D 的正文里出现 `## 证明`。
     返回值是 :func:`fail` 的结果（不在这一档 ⇒ None）。
     """
@@ -879,7 +1396,10 @@ def _d_proof_body_refusal(rel: str, role: str, content: Any,
     if low.startswith(D_ATTACK_RECORD_DIR):
         message = D_ATTACK_RECORD_MESSAGE
     elif _is_research_manuscript(rel):
-        message = D_RESEARCH_PROOF_MESSAGE
+        # 三态逐档换文案：`False`=查过没有引用，`None`=判不了。改前两档共用一句
+        # "既没有引用…也没有 sha256"，于是"读不出目录"被说成"你没引用"。
+        cites = _cites_an_f_manuscript(root, content)
+        message = D_RESEARCH_PROOF_UNREAD_MESSAGE if cites is None else D_RESEARCH_PROOF_MESSAGE
     else:
         message = D_PROOF_BODY_MESSAGE
     return fail(message.format(path=rel), path=rel,
@@ -915,17 +1435,27 @@ def _manuscript_frozen(rel: str, role: str,
                 sign_sha=str(got.get("sign_sha") or ""))
 
 
-# ---- 2026-11-11（甲）：B 的唯一一格窄豁免 ------------------------------------
+# ---- 2026-11-11（甲）：B 的唯一一格窄豁免（2026-11-22 改认新落点） ------------
 #
 # 业主裁定 ④ 的后半句（逐字：「之后 B 在那份 B 稿上改正文」）：`B.open_polish_copy` 已经把
-# 副本开出来了（`reports/b-proof-<B 稿号>.md`），但 B 改不动它 ——
-# `RESERVED_ARTIFACT_TABLE` 里 B 那两行（`prefix:reports/b-proof-` 与 `manuscript:*`）
-# 把"手稿形名字"一律拒写。口子窄到不能再窄：只对角色 B；只对
-# `reports/b-proof-<六位号>.md`（`_B_POLISH_RE` 锚定整条相对路径，`f-proof-` /
+# 副本开出来了（现落点 `manuscripts/B/b-proof-<B 稿号>.md`），但 B 改不动它 ——
+# `RESERVED_ARTIFACT_TABLE` 里 B 那一族（`prefix:reports/b-proof-` 与
+# `prefix:manuscripts/B/b-proof-`）把"手稿形名字"一律拒写。口子窄到不能再窄：只对角色 B；
+# 只对 `manuscripts/B/b-proof-<六位号>.md`（`_B_POLISH_RE` 锚定整条相对路径，`f-proof-` /
 # `e-proof-` / `e-num-` / `-pN` / 别的目录都不在内）；只对 `fs.edit`（write / delete /
 # move 仍由保留表拒）；该稿必须未签（只走 `manuscriptfreeze.freeze_reading`，`signed` /
 # `edited_after_sign` / `unchecked` 照拒、`kind` 照旧；`unchecked` 按只读处理）；
 # 号必须是 B 自己号段已发出的（`FAMILY_COUNTERS["b-proof"]`，读不出来就不放行）。
+#
+# **2026-11-22（B-POLISH-RE）**：B2b-2 把产出切到「正文 `manuscripts/<角色>/`」之后，写者
+# `open_polish_copy` 已按 `manuscriptids.canonical_rel(..., family="b-proof")` 落
+# `manuscripts/B/b-proof-<号>.md`，而这条窄豁免仍只锚旧落点 `reports/b-proof-` ——
+# 写者已迁、豁免没迁：B 在自己**新落点**的优化稿上 `fs.edit` 被保留表拒
+# （`reserved_framework_artifact`）；反过来，**旧落点**因为 `freeze_reading` 对 legacy
+# 名字返回 `is_manuscript=True`（`reports/b-proof-*` 的名字仍是 b-proof 族）而被静默放行
+# （真机老盘 `reports/b-proof-*.md` 还在）。本笔按「旧布局不再支持」裁定：豁免改认新落点；
+# 旧落点不再豁免，并由 `_b_polish_old_layout_refusal` **明确报**「旧布局不再支持」——
+# 不是静默放行，也不是掉进保留表那句笼统的「框架渲染的产物」。
 #
 # 为什么豁免不写成 `RESERVED_ARTIFACT_TABLE` 的一行：那张表的语义是"命中了哪条拒写
 # 规则"（四个写口共用一处结论），塞成一行会让 `_reserved_artifact_rule` 的返回值分叉、
@@ -935,7 +1465,23 @@ _B_POLISH_FAMILY = "b-proof"
 
 #: B 的窄豁免认的路径形（整条工作区相对路径；大小写不敏感与保留表同一口径 ——
 #: Windows 上大小写不同的两个写法是同一份文件）。**不含** `-pN`：一份号一份文件。
-_B_POLISH_RE = re.compile(r"^reports/b-proof-(?P<mid>\d{6})\.md$", re.IGNORECASE)
+#: 2026-11-22：落点从 `reports/b-proof-` 迁到 `manuscripts/B/b-proof-`（写者
+#: `open_polish_copy` 读 `manuscriptids.canonical_rel`，与 `manuscriptfamily.dir_of`
+#: 同源：`manuscripts/B`）。
+_B_POLISH_RE = re.compile(r"^manuscripts/B/b-proof-(?P<mid>\d{6})\.md$", re.IGNORECASE)
+
+#: 旧落点的同一形状（2026-11-22 前 B 的优化副本落在这里）。它**不在**豁免里：
+#: 只用来把"旧盘上还有 polish 稿要改"这一档报成明确的「旧布局不再支持」。
+_B_POLISH_OLD_RE = re.compile(r"^reports/b-proof-(?P<mid>\d{6})\.md$", re.IGNORECASE)
+
+#: 旧落点那一档的拒信（受控码沿用 `reports/` 退役闸那一个，不新造码）：
+#: 出路是重新开一份新落点的优化副本，不是就地改旧盘上的那一份。
+B_POLISH_OLD_LAYOUT_MESSAGE = (
+    "拒绝 {path}：旧布局不再支持 —— B 的优化副本已改落 "
+    "`manuscripts/B/b-proof-<B稿号>.md`（旧布局，2026-11-22 起不再支持）。"
+    "老盘上这一份不就地改：重新调 `B.open_polish_copy(statement_id=…)` 开一份新副本，"
+    "在那份新落点的副本上改正文。"
+)
 
 
 def _b_proof_id_is_issued(root: Path | None, manuscript_id: str) -> bool:
@@ -959,6 +1505,30 @@ def _b_proof_id_is_issued(root: Path | None, manuscript_id: str) -> bool:
         return False
 
 
+def _b_polish_rel(rel: str) -> str:
+    """工作区相对路径的规范写法（反斜杠与开头的 `./` 抹平；大小写仍按正则的 IGNORECASE）。"""
+    raw = str(rel or "").strip().replace("\\", "/")
+    while raw.startswith("./"):
+        raw = raw[2:]
+    return raw
+
+
+def _b_polish_old_layout_refusal(rel: str, role: str) -> ToolResult | None:
+    """B 改**旧落点** polish 稿 ⇒ 明确「旧布局不再支持」（None = 不是这一档）。
+
+    为什么需要它：`reports/b-proof-*` 的名字仍过 b-proof 族表，`freeze_reading` 对
+    legacy 名字返回 `is_manuscript=True` —— 旧正则会把它当豁免对象，于是"旧落点上就地改"
+    被静默放行。旧落点迁走之后这句话必须变成一条**明确拒信**（业主 2026-11-22：
+    旧布局不再支持），而不是继续悄悄通过。只认旧落点的同一形状；别的旧路径照旧走保留表。
+    """
+    if str(role or "") != "B":
+        return None
+    if _B_POLISH_OLD_RE.match(_b_polish_rel(rel)) is None:
+        return None
+    return fail(B_POLISH_OLD_LAYOUT_MESSAGE.format(path=rel), path=rel,
+                kind=REPORTS_RETIRED_KIND, role="B")
+
+
 def _b_polish_edit_allowed(rel: str, role: str, root: Path | None) -> bool:
     """B 的 `fs.edit` 是不是落在那一格窄豁免上（五道闸逐条见上面那段注释）。
 
@@ -967,9 +1537,7 @@ def _b_polish_edit_allowed(rel: str, role: str, root: Path | None) -> bool:
     """
     if str(role or "") != "B" or root is None:
         return False
-    raw = str(rel or "").strip().replace("\\", "/")
-    while raw.startswith("./"):
-        raw = raw[2:]
+    raw = _b_polish_rel(rel)
     matched = _B_POLISH_RE.match(raw)
     if matched is None:
         return False
@@ -983,6 +1551,224 @@ def _b_polish_edit_allowed(rel: str, role: str, root: Path | None) -> bool:
     if got.get("frozen") or str(got.get("state") or "") != "unsigned":
         return False
     return _b_proof_id_is_issued(root, matched.group("mid"))
+
+
+# ---------------------------------------------------------------- 落点闸（2026-11-22 B2b-1）
+#
+# 业主 2026-11-22 裁定（`draft/194` §二/§三）：「**草稿区不能叫 report 这个名字，换名且按角色
+# 整理**」。这一批**只立闸与规则、不搬目录**（搬目录是 B2b-2），于是写侧从今天起只认两个新落点：
+#
+#   · 正文 `manuscripts/<角色>/…`、草稿 `work/<角色>/…` —— 第二段必须是**调用者自己的**角色目录；
+#   · `reports/` 退役 —— 写进去一律拒，并给三条出路（草稿 / 正文 / 记录进表）。
+#
+# ## 为什么判"落点"而不是按扩展名拦
+#
+# 按扩展名拦在这一族上一次就失效过：2026-10-27（D6）F 把证明稿写进 `notes/`，文件名一个字没改、
+# 只换了目录，那条"路径必须在 `reports/` 下"的闸整条没命中。落点判据管的是"这一段路径属于谁的面"，
+# 名字与扩展名都在它下面：
+#   · 同一份 `x.md` 在 `reports/` 下是旧落点、在 `work/A/` 下是草稿、在 `manuscripts/A/` 下是正文
+#     —— 扩展名三者完全相同，能分开它们的只有目录；
+#   · 退役面里不止 `.md`：真机 `reports/` 690 份里既有 `.md` 也可能有 `.json`/`.tex` 草稿，
+#     而 `m-review.md` 与 `summary.md` 这类"普通报告名"按扩展名根本认不出来；
+#   · 反方向同样重要：`.md` 在 `out/` / `notes/` / `code/` 下是合法产出面（判据 b 的正控），
+#     按扩展名拦会把这些一起误伤 —— 而误伤会让模型换着写法重试到 `no_progress_limit`。
+#
+# ## 三态
+#
+# 路径解析不出角色 / 不在那三个目录里（`code/` / `out/` / `notes/` / 根上的文件）⇒
+# `wellformed.layout.layout_of` 给 `UNRELATED`，这一档整条不生效（走既有逻辑，**不折平**）。
+# 落点分类只有一份真身（`wellformed/layout.py`）：写侧与读侧读同一份，第二份分类早晚会与第一份
+# 给同一个路径两个答案，而那两个答案之间没有任何东西会报错。
+
+#: 受控码：写的是退役目录 `reports/`。
+REPORTS_RETIRED_KIND = "reports_is_retired"
+
+#: 受控码：`manuscripts/` 或 `work/` 下的第二段不是调用者自己的角色目录。
+LANDING_ROLE_KIND = "not_your_role_directory"
+
+#: `reports/` 的拒信与出路（业主 2026-11-22 的三条出路逐字：草稿 / 正文 / 记录进表）。
+REPORTS_RETIRED_HOW_TO_FIX = (
+    "草稿写 `work/<你的角色>/`、正文写 `manuscripts/<你的角色>/`、"
+    "记录型内容进表（`search_requests` / `experiments` / `attack_plans` / `review_findings`）"
+)
+
+REPORTS_RETIRED_MESSAGE = (
+    "拒绝 {path}：这个目录已退役（2026-11-22 业主裁定：草稿区不能叫 report 这个名字，"
+    "换名且按角色整理）—— 它下面混过四种东西：正文（证明稿 / 研究稿）、检索与实验记录、"
+    "攻坚计划、审读意见。正是这个混放让「名说报告、实为四种」这件事在盘上看不出来。"
+    "出路三条：" + REPORTS_RETIRED_HOW_TO_FIX + "。"
+    "已经写在旧目录里的那些由系统统一搬迁（不要自己 `fs.move` 挪）。"
+)
+
+#: 角色目录的拒信（三种现场共用一句开头，`{observed}` 说清是哪一种）。
+LANDING_ROLE_MESSAGE = (
+    "拒绝 {path}：`{top}/` 下面第一段必须是**你自己的**角色目录，{observed}。"
+    "正文落 `manuscripts/<你的角色>/`、草稿落 `work/<你的角色>/`（角色名：{roles}）。"
+)
+
+#: 交接账本的拒信（它住在 `manuscripts/` 或 `work/` 的根上，第二段不是角色名）。
+LANDING_LEDGER_MESSAGE = (
+    "拒绝 {path}：`{name}` 是交接账本（一行一份、收件人是角色、编号在同一把锁里分配），"
+    "**不是手稿**，也不经 `fs.*` 写 —— 写它会让编号与那一行分家。它的新落点是 "
+    "`work/{name}`，由框架自己的落盘路径追加。"
+)
+
+
+#: 落点闸的开关（业主 2026-11-22 裁定：**闸与教法必须同一批窗口翻转**）。
+#:
+#: 默认 **开 = 拒写**（环境变量缺省 ⇒ 受控拒；显式 `AGENTFLOW_STRICT_LANDING=0` 才回到
+#: "只记读数"档）。翻转的时序理由：这一批立闸时，教 `reports/` 的那些字还在 —— `specs/` 94 处 +
+#: `agent_skills.py` 60 处 + `agent_prompts.py` 17 处（B4/p317 那一批才改）。闸先生效而教法
+#: 后改 ⇒ A/M 照旧写 `reports/` ⇒ 被拒 ⇒ 每一趟都在同一个格子上空转，所以那一个窗口缺省
+#: 只**记下"本该拒"**、写照旧放行。**B4 已把教法改完（p317）**：现盘渲染面里教 `reports/` 的
+#: 字为 0 ⇒ 缺省翻成拒，闸与教法停在同一个窗口的两端。
+#:
+#: 退档方式（取证 / 老盘过渡时用）：`AGENTFLOW_STRICT_LANDING=0`（`0` / `false` / `no` / `off`
+#: 都算关，空串按缺省 = 开）。那一档下"本该拒"的几条进 :func:`landing_readings`。
+#: 读侧（`wellformed` 的 `layout` 一类）**不受这个开关管**：它只报读数，任何时候都能跑。
+STRICT_LANDING_ENV = "AGENTFLOW_STRICT_LANDING"
+
+#: 只记读数那一档的缓冲上限（一个进程里最多留下多少条"本该拒"的现场）。
+LANDING_READINGS_MAX = 200
+
+#: 只记读数那一档的缓冲：`[{path, role, verdict, code}]`（关闸时**只记不拒**）。
+_LANDING_READINGS: list[dict[str, str]] = []
+
+
+def strict_landing() -> bool:
+    """落点闸此刻是不是"拒写"档（默认 True = 拒；显式 `=0` 才是只记读数）。
+
+    每一笔调用现读环境变量，不在 import 期缓存：测试与"合稿时同一个窗口打开"都要能
+    不重启进程地翻转它。
+
+    缺省为什么是"拒"而不是"只记读数"：教 `reports/` 的字已在 B4/p317 清零（渲染面 0 行），
+    教法与闸不能再停在两个窗口里 —— 缺省放行会让"写侧已拒"这句话变成假的。
+    `0` / `false` / `no` / `off` 是显式的退档，只为取证与老盘过渡；空串 = 缺省 = 拒。
+    """
+    raw = os.environ.get(STRICT_LANDING_ENV)
+    if raw is None:
+        return True
+    text = str(raw).strip().casefold()
+    if not text:
+        return True
+    return text not in ("0", "false", "no", "off")
+
+
+def landing_readings() -> dict[str, Any]:
+    """只读：关闸那一刻"本该拒"的现场（按码计数 + 最近几条原文）。
+
+    为什么要有这一格：缺省关闸时，写进去的那些 `reports/` 草稿在盘上留下的只是
+    "有一份旧落点文件"（读侧 `legacy` 那一档记得住）；但"模型当年是想写哪一档、被哪条
+    规则拦下"只有这一格说得出来。没有它，"关着的时候什么在发生"就等于没有读数。
+
+    两套码分开给，因为它们是两个词表：`by_code` 是读侧判词的码（`layout_*`，与
+    `wellformed --kind layout` 的 finding code 同一套）、`by_kind` 是写侧受控码
+    （`reports_is_retired` / `not_your_role_directory`，与拒信的 `kind` 同一套）。
+    合成一个键会让"两边对得上吗"这件事查不出来。
+    """
+    by_code: dict[str, int] = {}
+    by_kind: dict[str, int] = {}
+    for row in _LANDING_READINGS:
+        by_code[row["code"]] = by_code.get(row["code"], 0) + 1
+        by_kind[row["kind"]] = by_kind.get(row["kind"], 0) + 1
+    return {
+        "strict": strict_landing(),
+        "would_refuse": len(_LANDING_READINGS),
+        "by_code": by_code,
+        "by_kind": by_kind,
+        "by_verdict": {v: sum(1 for r in _LANDING_READINGS if r["verdict"] == v)
+                       for v in sorted({r["verdict"] for r in _LANDING_READINGS})},
+        "recent": [dict(r) for r in _LANDING_READINGS[-10:]],
+    }
+
+
+def clear_landing_readings() -> int:
+    """清空那一格（判据与探针用），返回清掉几条。"""
+    n = len(_LANDING_READINGS)
+    _LANDING_READINGS.clear()
+    return n
+
+
+def _note_landing(rel: str, role: str, landing: Any, kind: str) -> None:
+    """把一条"本该拒"记进缓冲（有上限；只影响读数，不影响任何判定）。"""
+    _LANDING_READINGS.append({"path": str(rel or ""), "role": str(role or ""),
+                              "verdict": str(getattr(landing, "verdict", "") or ""),
+                              "code": str(getattr(landing, "code", "") or ""),
+                              "kind": str(kind or "")})
+    if len(_LANDING_READINGS) > LANDING_READINGS_MAX:
+        del _LANDING_READINGS[:len(_LANDING_READINGS) - LANDING_READINGS_MAX]
+
+
+def _landing_denied(rel: str, role: str, landing: Any, *, kind: str, message: str,
+                    how_to_fix: str, **extra: Any) -> ToolResult | None:
+    """落点闸的单一出口：先记读数，再决定拒还是放行（关闸 ⇒ None）。
+
+    三个现场（退役目录 / 角色目录 / 交接账本）都走这里，所以"关着的时候记了什么"
+    与"开着的时候拒了什么"保证是同一批判词 —— 开关只改**动作**，不改**判据**。
+    `message` 进来时已经是逐字的那一份（三个现场的格式化参数各不相同）。
+    """
+    _note_landing(rel, role, landing, kind)
+    if not strict_landing():
+        return None
+    return fail(message, path=rel, kind=kind, role=str(role or ""),
+                how_to_fix=how_to_fix, **extra)
+
+
+def _landing_refusal(rel: str, role: str) -> ToolResult | None:
+    """落点闸的结论（None = 放行）：`reports/` 退役 + `manuscripts/work` 的角色归属。
+
+    为什么要从 :func:`wellformed.layout.layout_of` 现读分类而不是在这里再写一份目录表：
+    "哪些一级目录受管、第二段算不算角色、`projects/<p>/` 前缀要不要抹"这三件事读侧也要读
+    （`wellformed` 的 `layout` 规则），第二份副本漂移之后不会有人报错。延迟 import 的方向是
+    `tools → wellformed`（工具层依赖只读层），与 `_manuscript_name_matches` 延迟 import
+    `manuscriptfamily` 同一条。
+
+    `role` 为空（脚本 / 判据直调，没有角色挂点）在这一档**不是豁免**：手稿保留表那条
+    `MANUSCRIPT_ONLY_ROLE` 早就立过同一条纪律 —— "没挂角色上下文"不等于"谁都可以写"。
+
+    开关（:data:`STRICT_LANDING_ENV`）：本函数算的是**判据**，动作由 :func:`_landing_denied`
+    决定 —— 缺省**拒写**（B4/p317 起闸与教法同窗）；显式 `=0` 才回到"只记读数"档
+    （理由见那个常量的注释）。退档时本函数恒返回 None，但"本该拒"的那几条已经进了
+    :func:`landing_readings`。
+    """
+    from ..wellformed.layout import (CANONICAL, HANDOFFS_NAME, REPORTS_DIR, ROLE_NAMES,
+                                     WORK_DIR, WRITE_GATED_DIRS, canonical_role, layout_of)
+
+    landing = layout_of(rel)
+    top_dir = str(landing.top or "").casefold()
+    me = canonical_role(role)
+    if top_dir == REPORTS_DIR.casefold():
+        return _landing_denied(rel, role, landing, kind=REPORTS_RETIRED_KIND,
+                               message=REPORTS_RETIRED_MESSAGE.format(path=rel),
+                               how_to_fix=REPORTS_RETIRED_HOW_TO_FIX)
+    if top_dir not in {name.casefold() for name in WRITE_GATED_DIRS}:
+        # `code/` / `out/` / `notes/` / 根上的文件：不是这一档的事，走既有逻辑（不折平）。
+        return None
+    if landing.verdict == CANONICAL and me and landing.role == me:
+        return None  # 自己的角色目录：这一档放行（其余各档照旧判）
+    seen = str(landing.role_seen or "")
+    if seen.casefold() == HANDOFFS_NAME.casefold():
+        return _landing_denied(
+            rel, role, landing, kind=LANDING_ROLE_KIND,
+            message=LANDING_LEDGER_MESSAGE.format(path=rel, name=seen),
+            how_to_fix=f"交接账本由框架写（新落点 `{WORK_DIR}/{HANDOFFS_NAME}`）；你写不了它")
+    if not me:
+        observed = "而这一笔没有角色上下文（脚本 / 判据直调）⇒ 没有「你的目录」"
+    elif landing.role and landing.role != me:
+        observed = f"而第二段是 `{landing.role}` 的角色目录（你是 `{me}`）"
+    elif seen:
+        observed = f"而第二段读到 `{seen}`，它不是角色名"
+    else:
+        observed = "而这一段路径里没有第二段"
+    return _landing_denied(
+        rel, role, landing, kind=LANDING_ROLE_KIND,
+        message=LANDING_ROLE_MESSAGE.format(path=rel, top=landing.top or seen,
+                                             observed=observed,
+                                             roles="/".join(ROLE_NAMES)),
+        how_to_fix=(f"正文写 `manuscripts/{me or '<你的角色>'}/…`、"
+                    f"草稿写 `work/{me or '<你的角色>'}/…`"),
+        role_dir=(landing.role or ""),
+    )
 
 
 def _reserved_refusal(rel: str, role: str, content: Any = None,
@@ -1016,13 +1802,21 @@ def _reserved_refusal(rel: str, role: str, content: Any = None,
     frozen = _manuscript_frozen(rel, role, root)
     if frozen is not None:
         return frozen
-    # ---- 2026-11-11（甲）：B 的唯一一格窄豁免 ------------------------------------
+    # ---- 2026-11-11（甲）/ 2026-11-22（B-POLISH-RE）：B 的窄豁免与旧落点退场 ------
     #
     # 位置是刻意的：在冻结闸之后（已签的稿先被冻结那一套拒，`kind=manuscript_frozen`），
     # 在保留表之前（B 自己那两行仍管 `fs.write` / `fs.delete` / `fs.move` 与所有别的形状）。
     # `edit=False`（其余三个写口）⇒ 这一分支整条不生效。
-    if edit and _b_polish_edit_allowed(rel, role, root):
-        return None
+    #
+    # 2026-11-22：旧落点 `reports/b-proof-<号>.md` **不再**是豁免对象。它那一个形状要先被
+    # 点名（`_b_polish_old_layout_refusal` ⇒「旧布局不再支持」），否则会掉进保留表那句
+    # 笼统的「框架渲染的产物」—— 旧盘上还有 polish 稿时，B 读到的应当是"重新开副本"。
+    if edit:
+        retired = _b_polish_old_layout_refusal(rel, role)
+        if retired is not None:
+            return retired
+        if _b_polish_edit_allowed(rel, role, root):
+            return None
     if _reserved_ledger(rel):
         return fail(
             RESERVED_LEDGER_MESSAGE.format(path=rel),
@@ -1030,27 +1824,56 @@ def _reserved_refusal(rel: str, role: str, content: Any = None,
         )
     rule = _reserved_artifact_rule(rel, role)
     if rule is not None:
+        # 2026-11-22（REFUSAL-24）：族只解析一次，三条"指路"拒信共用同一处格式化 ——
+        # 模板里不再各写一份"该找 F / B / E"。
+        family = _refusal_family(rel, rule)
         if str(role or "") == "D" and (rule in D_PROOF_PATH_RULES
-                                       or rule in D_OTHER_PROOF_PREFIXES):
-            return fail(D_PROOF_LANDING_MESSAGE.format(path=rel), path=rel,
+                                       or rule in D_OTHER_PROOF_PREFIXES
+                                       or rule in D_OTHER_FAMILY_RULES):
+            return fail(_producer_refusal(D_PROOF_LANDING_MESSAGE, rel, family), path=rel,
                         kind=RESERVED_ARTIFACT_KIND, role="D")
+        if str(role or "") == "E" and rule in E_OWN_PROOF_FAMILY_RULES:
+            # 2026-11-22（E-ANCHOR）：产出者本人也不是豁免 —— E 写自己的 e-proof 新落点
+            # 与别的角色写它同一条判据，只是出路要指到 E 自己的产出链（跑穷举实验），
+            # 不是"派产出方"（E 就是产出方）。
+            # 2026-11-22（REFUSAL-TEXT-2 ①）：旧落点 `reports/e-proof-*` 走同一句 ——
+            # 改前它掉进通用那句（F / D 的规矩），E 读到的是别人的出路。
+            return fail(E_OWN_PROOF_MESSAGE.format(path=rel), path=rel,
+                        kind=RESERVED_ARTIFACT_KIND, role="E")
+        if str(role or "") == "G" and rule in G_MANUSCRIPT_PATH_RULES:
+            # 2026-11-22（G-ANCHOR）：同一件事推到 G —— 它的论文正文由
+            # `doc.build_document` 渲染，手写（`fs.write` 与 `fs.edit` 都一样）等于跳过
+            # 渲染链。出路指它自己的三条动作，不指"换个路径写"。
+            return fail(G_MANUSCRIPT_MESSAGE.format(path=rel), path=rel,
+                        kind=RESERVED_ARTIFACT_KIND, role="G")
         if rule.partition(":")[0] == MANUSCRIPT_RULE_KIND:
-            # 2026-11-10（D5）：名字本身就是判据，拒信必须给两条落稿正路（B 的 land /
-            # F 的 promote）并点名 `-v2` 这条禁令；与"框架渲染的产物"那句分开。
-            return fail(MANUSCRIPT_NAME_MESSAGE.format(path=rel), path=rel,
+            # 2026-11-10（D5）：名字本身就是判据，拒信必须给对落稿正路并点名 `-v2`
+            # 这条禁令；与"框架渲染的产物"那句分开。2026-11-22（REFUSAL-24）：正路按
+            # 名字所属的族给（e 两族指 E，不再指 B / F）。
+            return fail(_producer_refusal(MANUSCRIPT_NAME_MESSAGE, rel, family), path=rel,
                         kind=RESERVED_ARTIFACT_KIND, role=str(role or ""))
         if rule.partition(":")[0] == PROOF_SHAPE_RULE_KIND:
             # 2026-11-17（DOCGATE2 ③）：这一类落点只有框架能写（对任何角色、含没挂角色）。
             return fail(PROOF_MANUSCRIPT_ONLY_MESSAGE.format(path=rel), path=rel,
                         kind=RESERVED_ARTIFACT_KIND, role=str(role or ""))
         return fail(
-            RESERVED_ARTIFACT_MESSAGE,
+            _producer_refusal(RESERVED_ARTIFACT_MESSAGE, rel, family),
             path=rel, kind=RESERVED_ARTIFACT_KIND, role=str(role or ""),
         )
-    return _d_proof_body_refusal(rel, role, content, root)
+    denied = _d_proof_body_refusal(rel, role, content, root)
+    if denied is not None:
+        return denied
+    # ---- 2026-11-22（B2b-1）落点闸：排在所有既有档之后 -----------------------------
+    #
+    # 位置是刻意的，两侧都有理由：
+    #   · 排在既有档之后 ⇒ 更具体的拒信先说话（"派 F" / "派产出方" / `## 证明` 那一条），
+    #     它们的措辞与受控码一个字都不变（那一批判据照旧绿）；
+    #   · 排在最后而不是各自写口里 ⇒ 四个写口（`fs.write`/`fs.edit`/`fs.delete`/`fs.move`）
+    #     依旧只有 `_reserved_refusal` 这一个结论点，不新长第二个名字。
+    return _landing_refusal(rel, role)
 
 
-# ---------------------------------------------------------------- 成文门（`out/paper/**`）
+# ---------------------------------------------------------------- 成文门（`out/package/**`）
 #
 # 2026-11-17 DOCGATE2 ②：DOCGATE1 把成文门装到了两个 `doc.*` 动作上（`researchbase.
 # writing_gate`），但 `fs.write` 仍是同一条链上开着的侧门 —— 真机口径的探针
@@ -1059,27 +1882,38 @@ def _reserved_refusal(rel: str, role: str, content: Any = None,
 # （同一份实现、同一句拒信、同一个受控码），不是另立一套"论文稿能不能写"。
 
 #: 成文产物所在的两级目录名（任意深度：工作区根与 `projects/<p>/` 下都算）。
-PAPER_DIR_PARTS: tuple[str, str] = ("out", "paper")
-
-#: `out/paper/` 下由 M / 框架写的机器可判产物：它们不是"正文"，不进成文门。
 #:
-#: 为什么要豁免这两份（业主 2026-11-17：`budget.PAPERWORK_FIRST_RULE` 逐字是
-#: 「预算余量低于阈值时，先把收工必需物落盘（`out/paper/ACCEPTANCE-CHECKS.json` 与
-#: `out/review/REPORT.md`），再回去继续攻证明；宁可少证一条，不许交不出验收表」）：
+#: 2026-11-22（MIGRATION-LEFTOVER）：字面量退役，改读真身 `papercompile.PACKAGE_REL`
+#: （`out/package`）。此前这里还写 `out/paper`，而正文的写者早已按新落点落盘 ⇒ 这道门
+#: 在新落点上整条不生效（真机侧门：`fs.write('out/package/main.tex')` 零签直接落盘，
+#: 判据见 `tests/test_docgate2_two_side_doors_are_closed.py` 的 b / b′）。
+PAPER_DIR_PARTS: tuple[str, str] = PC.PACKAGE_REL
+
+#: `out/package/`（原 `out/paper/`）下由 M / 框架写的机器可判产物：它们不是"正文"，不进成文门。
+#:
+#: 为什么要豁免这两份（业主 2026-11-17；2026-11-22 PAPER-PKG-FIX 的现文是
+#: 「预算余量低于阈值时，先把收工必需物落盘（`out/package/ACCEPTANCE-TARGETS.json` 与
+#: `out/report/REPORT.md`），再回去继续攻证明；宁可少证一条，不许交不出验收表」）：
+#: 这是业主原话的逐字引用（当时旧落点），现在的落点是 `out/package` 与 `out/report`。
 #: 把收工必需物挡在成文门后面，会让"这一步没写成论文"长成"整趟交不出验收表" ——
 #: 那是比"零签成文"更坏的一档，而且它恰好发生在预算见底的那种趟里。验收表与编译回执
 #: 说的是"这一趟的读数"，不是"这份稿的正文"；正文那一侧仍由这道门全管
 #: （`main.tex` / `*.md` / `*.bib` 一个都不是豁免）。
-PAPER_MACHINE_ARTIFACTS: tuple[str, ...] = ("acceptance-checks.json", "compile-receipt.json")
+PAPER_MACHINE_ARTIFACTS: tuple[str, ...] = ("acceptance-targets.json", "compile-receipt.json")
+#: 附录不是独立落点（PAPER-PKG-FIX）：`appendix.tex` 只能是能被 `main.tex` `\input`
+#: 的片段。整篇 `\documentclass` 文档当附录 = 真机两份包里的那一类（都没进 PDF），
+#: 写口直接拒 —— 删掉这条路径，不是生成后再判。
+STANDALONE_APPENDIX_NAME = "appendix.tex"
+APPENDIX_FRAGMENT_FORBIDDEN = "\\documentclass"
 
 
 def _is_paper_artifact(rel: str) -> bool:
-    """`rel` 是否落在成文产物层（`out/paper/` 下的文件；大小写不敏感）。
+    """`rel` 是否落在成文产物层（`out/package/` 下的文件；大小写不敏感）。
 
     只看已解析的相对路径（`_rel(ctx, target)` 给的就是它）：`..` / 反斜杠 /
-    大小写三种换写在这里都已经被抹平，所以 `notes/../out/paper/x` 与 `OUT/PAPER/x`
-    都是同一份成文产物。任意深度都算：真机工作区里项目根可能是工作区根本身，也可能
-    是 `projects/<p>/`，两种都在这一层下面。
+    大小写三种换写在这里都已经被抹平，所以 `notes/../out/package/x` 与
+    `OUT/PACKAGE/x` 都是同一份成文产物。任意深度都算：真机工作区里项目根可能是
+    工作区根本身，也可能是 `projects/<p>/`，两种都在这一层下面。
 
     :data:`PAPER_MACHINE_ARTIFACTS` 那两份是唯一的例外（M 的验收表与框架的编译回执）：
     它们是读数，不是正文 —— 理由见那个常量的注释。
@@ -1277,7 +2111,7 @@ def _iter_entries(base: Path, *, recursive: bool) -> Iterator[Path]:
 def _include_match(pattern: str | None, rel: str) -> bool:
     """`include` 的 glob 语义。
 
-    - 带 `/` 的模式按整条相对路径匹配（`reports/*.md`）；
+    - 带 `/` 的模式按整条相对路径匹配（`manuscripts/*.md`）；
     - 不带 `/` 的按文件名匹配，等价于 `rg -g '*.py'` 的直觉。
     用 `fnmatchcase` 而不是 `fnmatch`：后者会在 Windows 上按 `normcase` 折叠大小写，
     于是同一个模式在 Windows/macOS/Linux 上筛出不同的文件集 —— 那种"平台相关的
@@ -1321,6 +2155,10 @@ def _obj(props: Mapping[str, Any], required: Iterable[str] = ()) -> dict:
     returns="{'entries','path','total','returned','truncated'}；entries[] 每项是 "
     "{'name','path','is_dir','is_file','is_symlink','size','mtime'}。",
     tags=("fs", "read"),
+
+    scenario="不确定路径写得对不对时先列一次；更深再递归。",
+    example="列 manuscripts/F 下的稿 → entries + total / returned / truncated。",
+    example_code="fs.list(path=\"manuscripts/F\", recursive=False, limit=100)",
 )
 @_guard
 def fs_list(ctx: FsContext, *, path: str = ".", recursive: bool = False, limit: int = LIST_LIMIT_DEFAULT) -> ToolResult:
@@ -1351,7 +2189,7 @@ def fs_list(ctx: FsContext, *, path: str = ".", recursive: bool = False, limit: 
 
 @tool(
     "fs.read",
-    "读文本文件；二进制拒绝，超限截断并标注。分段读：`start_line`（1 起）＋ `max_lines`，`meta.next_line` 是下一段起点（EOF 为 null）。",
+    "读文本文件；二进制拒绝，超限截断并标注。可分段读。",
     _obj(
         {
             "path": {"type": "string", "description": "相对工作区根的路径"},
@@ -1372,6 +2210,10 @@ def fs_list(ctx: FsContext, *, path: str = ".", recursive: bool = False, limit: 
             "start_line / lines_read / total_lines / next_line / had_errors / sha256 / routed_from。"
             "start_line / lines_read / total_lines / next_line / had_errors / sha256。",
     tags=("fs", "read"),
+
+    scenario="先扫一眼开头；长文按段读，别把全文灌进上下文。",
+    example="从第 1 行读 200 行 → data + meta.next_line（EOF 为 null）。",
+    example_code="fs.read(path=\"manuscripts/F/f-proof-000001.md\", start_line=1, max_lines=200)",
 )
 @_guard
 def fs_read(ctx: FsContext, *, path: str, max_bytes: int = READ_DEFAULT_BYTES,
@@ -1564,18 +2406,66 @@ def _atomic_write_bytes(target: Path, payload: bytes) -> None:
 #: 一个字节的信息没丢：表仍是唯一判据，summary 留一句指针指到 `path`。
 #: `tests/test_fs_summary_matches_reserved_table.py` 读的仍是"表 ↔ summary"同一处口径，
 #: 它点名的那几格（证明稿形状 / `*-research.md` / `RESEARCH.md` / 内容闸 / 派 F）全留在 summary。
+#:
+#: 2026-11-22（HINT-TAIL）：G 的论文正文（`manuscripts/G/` 下的 `.md`，G-ANCHOR 补的那一行）
+#: 也在这张矩阵里 —— 表补了行、说明面没跟上 ⇒ 读工具面的人漏掉第五族。这一笔只补文案，
+#: 判据仍是 `RESERVED_ARTIFACT_TABLE`；参数 description 不进 `tools_lines`（那一段只印
+#: summary 与参数键名）⇒ 十一格提示词摘要不变、`PROMPT_VERSION` 不抬（p318）。
+#: 行锚不在这里再写一份：`manuscripts/G/` 的唯一真身是 `G_MANUSCRIPT_DIR`。
+#:
+#: 2026-11-22（REFUSAL-TEXT-2 ③④）：
+#: ③ 「`e-num-` 只对 D 拒」那句会被读反（读成"只有 D 不能写"），而实测（探针
+#:    `temp/refusaltext2/probe_before.py`）是：E 的草稿 `work/E/e-num-*` 可写（E 的正控），
+#:    A/B 换目录也拒，D 只拒旧落点 `reports/e-num-`（`notes/e-num-*` 放行）。改成点明
+#:    "`work/E/e-num-*` 只有 E 自己能写；别的角色一律拒"—— 期望值从表与落点闸现算，不写死。
+#: ④ `fs.edit` 的 `path` 说明原是一句「相对工作区根的路径」，矩阵只接在 `fs.write` 上 ⇒
+#:    两个写口的说明面不一致。现在两件共用这一个常量（同一份矩阵，不抄第二份）。
+#:
+#: 2026-11-23（RESERVED-D-FIX）：这一批改两件，同一句文案与表必须同一批翻 ——
+#:   · 表：D 的"别人的三族"从旧落点规则补成名字级（`D_OTHER_FAMILY_RULES`），
+#:     于是下面那句「D 另拒 `b-proof-`/`e-proof-`/`e-num-`」逐字为真（改前实测
+#:     `manuscripts/D/b-proof-000001.md` 以 D 的身份 `ok=True`）；
+#:   · 文案：F/M 的证明稿拒写面在表里有（`prefix:f-proof-` / `suffix:-proof.md`），
+#:     这句却没点名 ⇒ 补一句「F/M 自己也不许手写证明稿（`f-proof-`/`*-proof.md`）」。
+#: 参数 description 不进 `tools_lines`（那一段只印 summary 与参数键名）⇒ 十一格提示词
+#: 摘要不变、`PROMPT_VERSION` 不抬（与 CMP1 / HINT-TAIL 同一条口径）。
+#:
+#: 2026-11-23（PERM-MATRIX-FIX）：整句重写成一张**逐族逐角色**的矩阵，与表同一批翻：
+#:   · 表：四族 × 非产出角色补成名字级（`_family_name_rows()`，族 ⇒ 角色读
+#:     `PRODUCER_OF_FAMILY`）—— 改前 E/L 在自己新落点与 `notes/` 上、F/M 在自己目录里
+#:     写别人的族名都还是 `ok=True`（探针 `temp/permmatrix/matrix_before.log`，28 格）；
+#:   · 文案：改前只点名 A/B / E/G/L / D / F/M 的证明稿那几档，「表里有、文案没点名」的
+#:     五处（`MAPPING*` 三份 · D/M 的 `*-research.md` · M 的 `RESEARCH` · F/M 别人的三族 ·
+#:     D 自己的 `f-proof-`/`*-proof.md`）一并补上；账本区（`data/` 等）也点名。
+#: 判据：`tests/test_fs_producer_matrix_any_landing.py`（a–d，含 hint ↔ 表逐格互推）。
 RESERVED_PATH_HINT = (
-    "相对工作区根的路径。保留面（`reserved_framework_artifact`）：`reports/` 下 A/B 拒 "
-    "`f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），E/G/L 拒前三族"
-    "（`e-num-` 只对 D 拒），D 另拒 `b-proof-`/`e-proof-`/`e-num-`。"
+    "相对工作区根的路径。你自己要写的：正文落 `manuscripts/<你的角色>/`、草稿落 "
+    "`work/<你的角色>/`、记录型内容进表；旧布局（2026-11-22 起不再支持）。"
+    "保留面（`reserved_framework_artifact`）：以下都按**名字**判，换目录同样拒。"
+    "① 四族手稿名 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-`（产出角色 F / B / E / E）——"
+    "除 E 自己的 `e-num-` 一族（草稿落 `work/E/e-num-*`，只有 E 自己能写）之外，**任何角色"
+    "手写都拒**，产出角色自己那一族也一样（F 的 `f-proof-`、B 的 `b-proof-`、E 的 "
+    "`e-proof-` 都由各自的动作渲染）。逐角色：A/B/D/F/G/L/M 四族全拒；E 拒 "
+    "`f-proof-`/`b-proof-`/`e-proof-` 三族（`e-num-` 是它自己的族）。"
+    "`notes/` 下号解析不出的笔记（如 `notes/f-proof-x.md`）对 A/B 不算 —— 那是它们的正常"
+    "产出面；D 另拒 `b-proof-`/`e-proof-`/`e-num-` 与自己的 `f-proof-`/`*-proof.md`。"
+    "② 研究稿：`*-research.md` 对 D/M 拒（D 的每问题研究稿由 `D.write_report` 渲染、"
+    "带携带单）；`RESEARCH` 名对 M 拒（D 的 `manuscripts/D/RESEARCH.md` 是它的交付物）。"
+    "③ 论文对应表三份 `MAPPING.json`/`MAPPING.md`/`mapping-appendix.tex` 对**任何角色**拒"
+    "（`doc.write_mapping` 从同一批行渲染）。"
+    "④ 账本区 `data/`、`locks/`、`events.jsonl` 对任何角色拒（框架自己走 `Store`）。"
+    "⑤ G 的论文正文（`manuscripts/G/` 下的 `.md`）G 自己也不许手写"
+    "（由 `doc.build_document` 渲染，改稿走 `G.revise`、重画走 `G.refresh_markdown`）。"
 )
 
 
+# TOOLFACE-CLEAN（业主 2026-11-22：实现只留在代码注释里）
+# 原文（旧 summary）：「写文件（原子落盘）」。落盘手法：先写同目录临时文件、再原子替换；模型只需要知道「写成功 / 被拒」，具体怎么落盘不影响它下一次怎么调。
+# 判据：`tests/test_tool_face_three_segments.py` 钉住这条 needle（'原子落盘'）
+# 仍在注释里、且不在模型可见面上。
 @tool(
     "fs.write",
-    "写文本文件（原子落盘）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；"
-    "`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`，D 可写 `RESEARCH.md`；"
-    + D_PROOF_BODY_RULE + " —— 要落稿就派 F。各族另拒面见 `path` 说明。",
+    "写文本文件（UTF-8）；覆盖要显式 overwrite=true。证明稿 / 研究稿的拒写面按你的角色，见 path。",
     _obj(
         {
             # 逐角色 × 逐族的保留面从 summary 搬到这里（2026-11-17 CMP1）：summary 是
@@ -1594,9 +2484,13 @@ RESERVED_PATH_HINT = (
     returns=(
         "{'path','bytes','sha256','created'}"
         "；失败：ok=False + kind(reserved_framework_artifact/reserved_framework_ledger/"
-        "path_denied/exists/too_large/not_observed/stale_version) + data=None"
+        "path_denied/exists/too_large/not_observed/stale_version/standalone_appendix) + data=None"
     ),
     tags=("fs", "write"),
+
+    scenario="落稿 / 记草稿 / 写回执先看 path 的拒写面；该别人落的稿别手写。",
+    example="把整理好的笔记落成草稿 → path / bytes / sha256 / created。",
+    example_code="fs.write(path=\"work/A/notes.md\", content=\"# 笔记\\n\", overwrite=True)",
 )
 @_guard
 def fs_write(ctx: FsContext, *, path: str, content: str, overwrite: bool = False) -> ToolResult:
@@ -1616,12 +2510,26 @@ def fs_write(ctx: FsContext, *, path: str, content: str, overwrite: bool = False
     denied = _reserved_refusal(_rel(ctx, target), _caller_role(), content=content, root=ctx.root)
     if denied is not None:
         return denied
-    # ---- 成文门（2026-11-17 DOCGATE2 ②）：`out/paper/**` 是成文产物层，`fs.write` 不许再是
+    # ---- 成文门（2026-11-17 DOCGATE2 ②）：`out/package/**` 是成文产物层，`fs.write` 不许再是
     # 绕过 `researchbase.writing_gate` 的那条侧门。位置在保留表之后（`MAPPING.*` 三份仍回
     # 它们自己那句拒信）、在任何写入之前（零字节落盘）。
     writing = _paper_writing_refusal(ctx, _rel(ctx, target))
     if writing is not None:
         return writing
+    # 附录只收片段：整篇 `\documentclass` 文档不是附录（写进去也不会被 `\input` 印出来）。
+    # 范围只到**论文包族**（`_is_paper_artifact`）：`notes/appendix.tex` 这类非论文包路径
+    # 不归这道闸管（业主 2026-11-23 拍板：P3c 收窄到 `out/package` 及论文包族）。
+    rel_now = _rel(ctx, target)
+    if (_is_paper_artifact(rel_now)
+            and PurePosixPath(rel_now).name.casefold() == STANDALONE_APPENDIX_NAME
+            and APPENDIX_FRAGMENT_FORBIDDEN in content):
+        return fail(
+            "`appendix.tex` 里有 `\\documentclass` ⇒ 它是整篇独立文档，不是附录片段；"
+            "这一条在写口就拒（一个字节都没写）。附录有两种合法写法：写进 `main.tex`，"
+            "或用框架渲染的 `mapping-appendix.tex`（`doc.write_mapping` 自动 `\\input`）。",
+            path=rel_now, kind="standalone_appendix", written=False,
+            next_steps=["fs.write(path=\"out/package/main.tex\") 里写附录那一节",
+                        "doc.write_mapping（渲染 mapping-appendix.tex 并补 \\input）"])
     if target.exists() and target.is_dir():
         raise ToolError(f"{_rel(ctx, target)} 是目录，不能当文件写"
                         "；建议：写文件请带文件名（`fs.write(path=\"…/文件名\")`），"
@@ -1687,12 +2595,13 @@ def fs_write(ctx: FsContext, *, path: str, content: str, overwrite: bool = False
 
 @tool(
     "fs.edit",
-    "定点替换文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；"
-    "拒写口径同 fs.write（含 `## 证明` 那档）；D 可写 `RESEARCH.md`；"
-    "B 仅对自己未签的 `reports/b-proof-<六位号>.md` 有一格（write/delete/move 仍拒）。",
+    "定点替换：old_string → new_string，默认必须唯一、一次一处；可给 sha256 防改旧版；改前先 fs.read 一次，没读过的文件会被拒。",
     _obj(
         {
-            "path": {"type": "string", "description": "相对工作区根的路径"},
+            # 2026-11-22（REFUSAL-TEXT-2 ④）：与 `fs.write` 共用同一份矩阵（`RESERVED_PATH_HINT`）。
+            # 改前这里只有一句「相对工作区根的路径」，矩阵只接在 `fs.write` 上 ⇒ 两个写口的
+            # 说明面不一致（读 `fs.edit` 的人看不到保留面）。不抄第二份：常量只有一处。
+            "path": {"type": "string", "description": RESERVED_PATH_HINT},
             "old_string": {"type": "string", "description": "要被替换的那段原文（逐字，默认必须唯一）"},
             "new_string": {"type": "string", "description": "替换成什么（空串 = 删掉这一段）"},
             "sha256": {"type": "string", "description": "可选：调用方读到文件时的 sha256；不符即拒（防「我拿的是旧版」）"},
@@ -1709,9 +2618,13 @@ def fs_write(ctx: FsContext, *, path: str, content: str, overwrite: bool = False
         "{'path','sha256_before','sha256_after','replacements','bytes_before','bytes_after','note'}"
         "；失败：ok=False + kind(reserved_framework_artifact/reserved_framework_ledger/"
         "path_denied/not_found/too_large/not_utf8/empty_old_string/not_found_old_string/"
-        "ambiguous/sha_mismatch/not_observed/stale_version) + data=None"
+        "ambiguous/sha_mismatch/not_observed/stale_version/standalone_appendix) + data=None"
     ),
     tags=("fs", "write", "edit"),
+
+    scenario="大文件改一处用它（改动量与输出量成正比）；整份重写用 fs.write。",
+    example="先 fs.read 拿到原文与 sha256，再改这一处 → replacements / sha256_after。",
+    example_code="fs.edit(path=\"manuscripts/A/notes.md\", old_string=\"旧句。\", new_string=\"新句。\", note=\"收紧措辞\")",
 )
 @_guard
 def fs_edit(ctx: FsContext, *, path: str, old_string: str, new_string: str,
@@ -1735,7 +2648,7 @@ def fs_edit(ctx: FsContext, *, path: str, old_string: str, new_string: str,
     # 与 `fs.write` 共用 `_reserved_refusal` 这一个入口（账本区 + 手稿两半都在里面），
     # 不是两份表、也不是每个口各判一遍。`root` 供"研究手稿里那一节是不是引用 F"的判据用；
     # `edit=True` 是 2026-11-11（甲）那格窄豁免的唯一开关（只对 B / 自己号段 / 未签 /
-    # `reports/b-proof-<六位号>.md`）。
+    # `manuscripts/B/b-proof-<六位号>.md`；旧落点 `reports/b-proof-*` 不再豁免）。
     denied = _reserved_refusal(rel, _caller_role(), root=ctx.root, edit=True)
     if denied is not None:
         return denied
@@ -1815,6 +2728,18 @@ def fs_edit(ctx: FsContext, *, path: str, old_string: str, new_string: str,
     denied = _d_proof_body_refusal(rel, _caller_role(), after_text, ctx.root)
     if denied is not None:
         return denied
+    # 附录只收片段（与 `fs.write` 同一道闸、同一个受控码）：判的是**落盘那一份**
+    # （`after_text`）—— 判 `new_string` 会漏掉"整份里本来就有"的那一档，判 after 才封得住。
+    if (_is_paper_artifact(rel)
+            and PurePosixPath(rel).name.casefold() == STANDALONE_APPENDIX_NAME
+            and APPENDIX_FRAGMENT_FORBIDDEN in after_text):
+        return fail(
+            "`appendix.tex` 只收片段：改完之后整份里还有 `\\documentclass` ⇒ 它是整篇独立文档，"
+            "不是附录片段；这一条在写口就拒（一个字节都没写）。出路同样有两条：写进 `main.tex`，"
+            "或用框架渲染的 `mapping-appendix.tex`（`doc.write_mapping` 自动 `\\input`）。",
+            path=rel, kind="standalone_appendix", written=False,
+            next_steps=["fs.write(path=\"out/package/main.tex\") 里写附录那一节",
+                        "doc.write_mapping（渲染 mapping-appendix.tex 并补 \\input）"])
     after_bytes = after_text.encode("utf-8")
     _atomic_write_bytes(target, after_bytes)
     # 改完之后重新观察"改后版本"（DSH `FSL:850`、`TFS:810`）——
@@ -1852,13 +2777,17 @@ def fs_edit(ctx: FsContext, *, path: str, old_string: str, new_string: str,
     # "文件本来就不存在"由 meta.found 与 meta.deleted 区分。
     returns="data=是否真的删掉了（**布尔标量，无键集合**）；meta.found 区分本来就没有的情况。",
     tags=("fs", "write"),
+
+    scenario="清自己的临时产物用它；别人的稿与台账不要删。",
+    example="删掉一份草稿 → data=true / false（meta.found 区分本来没有）。",
+    example_code="fs.delete(path=\"work/A/draft.md\")",
 )
 @_guard
 def fs_delete(ctx: FsContext, *, path: str, recursive: bool = False) -> ToolResult:
     """删除。
 
     默认只删文件：删目录必须显式 `recursive=true`。这条不是洁癖 ——
-    `fs.delete("reports")` 与 `fs.delete("reports/old.md")` 在参数上只差几个字符，
+    `fs.delete("notes")` 与 `fs.delete("notes/old.md")` 在参数上只差几个字符，
     而后果差一个目录树；要求显式开关，就等于要求调用方在参数里表达出"我知道这是目录"。
     工作区根被无条件拒绝：删掉它等于删掉整个项目的数据。
 
@@ -1912,6 +2841,10 @@ def fs_delete(ctx: FsContext, *, path: str, recursive: bool = False) -> ToolResu
     # 键名从一个真实调用读出（`fs_move`）：只有 src/dst 两个键。
     returns="{'src','dst'}",
     tags=("fs", "write"),
+
+    scenario="草稿定稿改名、换目录用它；跨角色目录别挪。",
+    example="把草稿改名定稿 → src / dst。",
+    example_code="fs.move(src=\"work/A/draft.md\", dst=\"manuscripts/A/notes.md\")",
 )
 @_guard
 def fs_move(ctx: FsContext, *, src: str, dst: str) -> ToolResult:
@@ -1933,7 +2866,7 @@ def fs_move(ctx: FsContext, *, src: str, dst: str) -> ToolResult:
         denied = _reserved_refusal(_rel(ctx, target), _caller_role(), root=ctx.root)
         if denied is not None:
             return denied
-    # ---- 成文门（2026-11-17 DOCGATE2 ②）：只判**目标**。把一个文件搬进 `out/paper/` 等于
+    # ---- 成文门（2026-11-17 DOCGATE2 ②）：只判**目标**。把一个文件搬进 `out/package/` 等于
     # 在那里造一份正文（先写到 `notes/`、再搬一次，正是绕过 `fs.write` 那道门的写法）；
     # 搬出去不是"成文"，不判。
     writing = _paper_writing_refusal(ctx, _rel(ctx, d))
@@ -1967,14 +2900,26 @@ def fs_move(ctx: FsContext, *, src: str, dst: str) -> ToolResult:
 
 @tool(
     "fs.stat",
-    "查看路径的大小/类型/修改时间；文件另给 sha256。",
+    "查看路径的大小 / 类型 / 修改时间；文件另给 sha256。",
     _obj({"path": {"type": "string"}}, required=("path",)),
     side_effect="read",
     roles=TOOL_ROLES,
     # 键名从一个真实调用读出（`fs_stat`）。`mtime_epoch` 与 `link_target` 都在
     # 同一次返回里出现过；`link_target` 对非符号链接是 null（键仍在）。
-    returns="{'path','exists','is_dir','is_file','is_symlink','size','mtime','mtime_epoch','sha256','link_target'}",
+    # ④（LEDGER-RETURNS-FIX，2026-11-22）：分支收缩必须写进声明。路径不存在时
+    # 实现只回 `path` / `exists` 两格（`exists=false`），其余八格不出现 —— 那是
+    # 「查过、确实没有」这个完整答案，不是「没查成」。不写这一句时，声明读起来像
+    # 「总是全键」，照着读 `size` / `sha256` 的调用方会在这一支上拿到 KeyError。
+    # 判据：`tests/test_tools_returns_declaration.py`（存在支逐键）+ 本路
+    # `temp/ledgerreturns/probe_four.py`（不存在支逐格）。
+    returns="{'path','exists','is_dir','is_file','is_symlink','size','mtime','mtime_epoch',"
+    "'sha256','link_target'}；路径不存在时只回 'path' 与 'exists' 两格"
+    "（exists=false，其余八格不出现）",
     tags=("fs", "read"),
+
+    scenario="写之前查在不在、改之前拿 sha256 防改旧版。",
+    example="查一份稿的指纹 → size / mtime / sha256。",
+    example_code="fs.stat(path=\"manuscripts/F/f-proof-000001.md\")",
 )
 @_guard
 def fs_stat(ctx: FsContext, *, path: str) -> ToolResult:
@@ -2007,12 +2952,12 @@ def fs_stat(ctx: FsContext, *, path: str) -> ToolResult:
 
 @tool(
     "fs.search",
-    "在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。",
+    "在工作区文本文件里按正则搜内容，返回「文件:行号: 行内容」。",
     _obj(
         {
             "pattern": {"type": "string", "minLength": 1, "description": "Python re 语法（与 ripgrep 的 Rust regex 基本兼容）"},
             "path": {"type": "string", "default": ".", "description": "搜索起点"},
-            "include": {"type": "string", "description": "文件名或相对路径 glob，如 *.py / reports/*.md"},
+            "include": {"type": "string", "description": "文件名或相对路径 glob，如 *.py / manuscripts/*.md"},
             "limit": {"type": "integer", "minimum": SEARCH_LIMIT_MIN, "maximum": SEARCH_LIMIT_MAX, "default": SEARCH_LIMIT_DEFAULT},
         },
         required=("pattern",),
@@ -2024,6 +2969,10 @@ def fs_stat(ctx: FsContext, *, path: str) -> ToolResult:
     returns="{'matches','lines','path','pattern','total','truncated','scanned','skipped'}；"
     "matches[] 每项是 {'path','line','text'}，lines[] 每项是 '文件:行号: 行内容' 字符串。",
     tags=("fs", "read", "search"),
+
+    scenario="不记得哪份文件写了某句时用它；知道路径就直接 fs.read。",
+    example="找某句出现在哪 → matches + scanned / skipped。",
+    example_code="fs.search(pattern=\"proof_text_needs_a_manuscript\", path=\"manuscripts\", include=\"*.md\")",
 )
 @_guard
 def fs_search(
@@ -2176,7 +3125,7 @@ def register(
     都不必再关心"root 是不是相对的"（相对 root 会随进程 cwd 漂移，
     表现为"同一个调用在不同工作目录下写到不同地方"，是最难复现的一类 bug）。
 
-    `store`（2026-11-17 DOCGATE2 ②）：这一趟的台账。`out/paper/**` 的写口要问
+    `store`（2026-11-17 DOCGATE2 ②）：这一趟的台账。`out/package/**` 的写口要问
     `researchbase.writing_gate`（成文门），而那道门读 `statements` 与 `out/vsigns/`。
     装配期由 `tools/__init__.py` 的 deps 注入（`build_registry(store=…)` 一定带它）；
     只绑 root 的旧入口（脚本 / 单测）拿到 `None`，那一档没有台账可问

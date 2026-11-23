@@ -732,9 +732,15 @@ def _coerce_holder(graph: Any, store: Any) -> _GraphHolder:
 # ---------------------------------------------------------------- 工具注册
 
 
+# TOOLFACE-CLEAN（业主 2026-11-22：实现只留在代码注释里）
+# 原文（旧 summary）：「从 store 三张表构建概念图索引，返回规模与完整性读数。」
+# 搬走的实现细节：建图读的是 store 的 statements（概念行合成视图）/ relations / literature
+# 三张表，由 `RelationGraph.from_store` 一次装成内存索引（纯读、不写盘；读不成抛
+# `StoreError` 而不是给一张空图）。模型面只说「读成概念图」。
+# 判据：`tests/test_tool_face_three_segments.py` ①②③。
 @tool(
     "graph.build",
-    "从 store 三张表构建概念图索引，返回规模与完整性读数。",
+    "把已登记的命题与关系读成概念图，返回规模、完整性与覆盖读数。",
     {
         "type": "object",
         "properties": {},
@@ -751,6 +757,10 @@ def _coerce_holder(graph: Any, store: Any) -> _GraphHolder:
         "'group_count','isolated_concepts','isolated_count','degree_top','status_counts',"
         "'quote_verified_counts','concepts_missing_from_table'}"
     ),
+
+    scenario="第一次查图、或怀疑图与台账不同步时先建一次；日常读数用 graph.stats。",
+    example="空库上也给零规模摘要 → concept_count / relation_count / isolated_count。",
+    example_code="graph.build()",
 )
 def graph_build(holder, ) -> ToolResult:
     def _build() -> dict:
@@ -767,9 +777,14 @@ def graph_build(holder, ) -> ToolResult:
 
     return _guard(_build)
 
+# TOOLFACE-CLEAN（业主 2026-11-22：实现只留在代码注释里）
+# 原文（旧 summary）：「返回图统计摘要与热度前列（不重建索引；未建图时按需构建一次）。」
+# 搬走的实现细节：「未建图时按需构建一次」是 `_GraphHolder.get()` 的惰性建图（同一进程内
+# 只建一次、复用内存索引）；热度按 `g.counts()` 的 occurrences 降序取前 top_n。
+# 判据：`tests/test_tool_face_three_segments.py` ①②③。
 @tool(
     "graph.stats",
-    "返回图统计摘要与热度前列（不重建索引；未建图时按需构建一次）。",
+    "返回图的规模统计与热度前列概念；不重建图，图还没建时顺手建一次。",
     {
         "type": "object",
         "properties": {"top_n": {"type": "integer", "minimum": 1, "maximum": 100}},
@@ -783,6 +798,10 @@ def graph_build(holder, ) -> ToolResult:
         "'group_count','isolated_concepts','isolated_count','degree_top','status_counts',"
         "'quote_verified_counts','concepts_missing_from_table'}"
     ),
+
+    scenario="要看全局、找最该先看的概念时用它；要某个概念的邻居用 graph.neighbors。",
+    example="取热度前 5 → hot + concept_count / relation_count / isolated_count。",
+    example_code="graph.stats(top_n=5)",
 )
 def graph_stats(holder, top_n: int = 10) -> ToolResult:
     def _stats() -> dict:
@@ -800,9 +819,7 @@ def graph_stats(holder, top_n: int = 10) -> ToolResult:
 
 @tool(
     "graph.neighbors",
-    "返回邻居概念代号（升序）与度数。"
-    f"邻居列表**有界**（默认 max_neighbors={MAX_NEIGHBORS_DEFAULT}）：超限时 "
-    "truncated=True 并说明只给前几个，绝不静默截断。",
+    "返回邻居概念代号（升序）与度数。邻居列表**有界**（默认 max_neighbors=200）：超限时 truncated=True 并说明只给前几个，绝不静默截断。",
     {
         "type": "object",
         "properties": {
@@ -821,6 +838,10 @@ def graph_stats(holder, top_n: int = 10) -> ToolResult:
         "{'concept_id','name','degree','total_neighbors','returned_neighbors',"
         "'truncated','reasons','neighbors':[{'concept_id','name','relation_count','relation_ids'}]}"
     ),
+
+    scenario="看一个概念的关系邻域时用它；两概念之间的关系用 graph.relations_between。",
+    example="看 0003 的邻居 → degree / neighbors / truncated（超限只给前 200 个）。",
+    example_code="graph.neighbors(concept_id=\"0003\", max_neighbors=200)",
 )
 def graph_neighbors(holder, concept_id: str, max_neighbors: int | None = None) -> ToolResult:
     def _neighbors() -> dict:
@@ -857,9 +878,14 @@ def graph_neighbors(holder, concept_id: str, max_neighbors: int | None = None) -
     except _UnknownConceptError as e:
         return fail(str(e), known_concepts=list(e.known_concepts))
 
+# TOOLFACE-CLEAN（业主 2026-11-22：实现只留在代码注释里）
+# 原文（旧 summary）：「返回同时含两个概念的全部关系（按引文校验/状态/信息量确定性排序）。」
+# 搬走的实现细节：排序键是 `relation_sort_key` —— 先 quote_verified（true 在前）、再 status、
+# 最后「信息量」`relation_info_len` = description + statement 的字符数（越小越优先）。
+# 模型面只说「顺序确定」。判据：`tests/test_tool_face_three_segments.py` ①②③。
 @tool(
     "graph.relations_between",
-    "返回同时含两个概念的全部关系（按引文校验/状态/信息量确定性排序）。",
+    "返回同时连接两个概念的全部关系（含引文与状态），顺序确定。",
     {
         "type": "object",
         "properties": {
@@ -876,6 +902,10 @@ def graph_neighbors(holder, concept_id: str, max_neighbors: int | None = None) -
         "'relations':[{'relation_id','concept_ids','description','statement','quote',"
         "'status','quote_verified','lit_id','page_range'}]}"
     ),
+
+    scenario="判断两个概念之间到底有没有关系、有几条时用它；看邻域用 graph.neighbors。",
+    example="查 0003 与 0011 之间 → count / relations（每条带 relation_id / status / quote_verified）。",
+    example_code="graph.relations_between(a=\"0003\", b=\"0011\")",
 )
 def graph_relations_between(holder, a: str, b: str) -> ToolResult:
     def _between() -> dict:

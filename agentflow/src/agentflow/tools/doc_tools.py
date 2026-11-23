@@ -36,6 +36,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 from .. import claimanatomy as CA
+from .. import litread as _LR
 from .. import numericproof as NP
 from .. import papercompile as PC
 from .. import papermapping as PM
@@ -218,7 +219,7 @@ def resolve_out_path(
     
     `D.write_report` 原先自己写 `Path(out_path)` —— 相对路径于是按「进程当前目录」解析。T2 第 1 趟真机：主控传 
     `out_path="out\\review\\D-analysis.md"`（工作区内的合法落点），文件却写到了 
-    `agentflow/out/review/D-analysis.md`（工作区根相对）（进程 cwd），「整个交付物静默离开工作区」，而那一趟记的是 
+    `agentflow/out/report/D-analysis.md`（工作区根相对）（进程 cwd），「整个交付物静默离开工作区」，而那一趟记的是 
     `outcome=ok`。同一条规则不能有两份实现（那正是"两份判据必然漂移"），所以它在这里公开，由角色方法直接复用。
     """
     raw = str(out_path) if out_path else f"{default_subdir}/{doc_id}.md"
@@ -458,6 +459,22 @@ def _doc_citation_problem(raw: str, rows_of: Callable[[str], Iterable[Mapping[st
 #: 这里只写"哪一个是正式论文"——不另抄一份词表（抄了就会漂）。
 FORMAL_PAPER_KIND = "paper"
 
+#: G 能「建」的稿件 kind（`doc.build_document` 的模型面 enum）：`schema.DOC_KINDS` 去掉
+#: D 的研究稿那一档 `research`。
+#:
+#: 为什么不是 `list(S.DOC_KINDS)`：`kind=research` 是读侧的判别键（`agent_d._support`
+#: 的 `report_landing_reading` 数 `kind=research` 的行、「不看路径」；探针见
+#: `temp/teachpatch-dresearch/REPORT.md` §④）—— G 的 build 面能造它，就等于让
+#: "这一行是不是 D 的报告"可被伪造，而伪造不会被任何读数抓住（探针实测：G 造出来的
+#: 那一行会让 `report_landing_reading` 的 `landed` 记 1）。research 行只由 D 的
+#: `write_report` → `record_research_report` 落。
+#:
+#: `doc.list_documents` 的 kind 仍是 `list(S.DOC_KINDS)`：那一格是「读面」（"这张表里
+#: 有什么"），而 D / H / F 也拿这个工具 —— 遮住 `research` 会让 D 的工具面与 D 的
+#: 教法（研究稿落 `kind=research`）当场打架。写面收口、读面派生。
+BUILDABLE_DOC_KINDS = tuple(k for k in S.DOC_KINDS if k != S.RESEARCH_DOC_KIND)
+
+
 
 def check_citations(
     rows_of: Any, claims: Sequence[Mapping[str, Any]], *,
@@ -575,18 +592,27 @@ def check_citations(
                             unpinned_docs.append(raw_s)
                 continue
             if table not in id_sets:
-                field = str(S.TABLES[table]["id_field"])
+                # 2026-11-22（DATAHYGIENE）：`eval_results` 已退役（不在 `TABLES` 里、
+                # 在 `RETIRED_TABLES` 里）。这里不许 `S.TABLES[table]` ——
+                # 那会让一条历史 `eval:` 引用以 `KeyError: 'eval_results'` 的形态
+                # 变成 `kind="unexpected"` 的工具故障，而不是受控的
+                # `dangling_citation`。行仍然读（store 的读侧宽容），形状从退役登记取：
+                # 有那份历史文件 ⇒ 引用可能命中；没有 ⇒ 照旧报悬空。
+                spec = S.TABLES.get(table) or S.RETIRED_TABLES.get(table) or {}
+                field = str(spec.get("id_field") or "")
                 id_sets[table] = {str(r.get(field)) for r in rows_of(table)}
             if ref and ref in id_sets[table]:
                 resolved += 1
             else:
+                _idf = str((S.TABLES.get(table) or S.RETIRED_TABLES.get(table) or {})
+                           .get("id_field") or "")
                 missing.append(
                     {
                         "claim_id": cid,
                         "citation": raw_s,
                         "kind": kind,
                         "ref": ref,
-                        "why": f"{table} 表里没有 {S.TABLES[table]['id_field']}={ref!r}",
+                        "why": f"{table} 表里没有 {_idf}={ref!r}",
                     }
                 )
     return {
@@ -600,6 +626,47 @@ def check_citations(
         "doc_whole": whole_docs,
         "doc_unpinned": unpinned_docs,
     }
+
+
+def _literature_fulltext_state(
+    row: Mapping[str, Any], library_root: str | Path | None
+) -> tuple[bool, str]:
+    """这一行 `literature` 在盘上有没有全文 ⇒ `(算不算, 不算的那一句理由)`。
+
+    ## 改前：直接拼库根
+
+    改前判据是 `(Path(library_root) / rel).exists()` —— 只要文件在就算"真有全文"。
+    于是两种旧写法（分目录 `<号>/<名>`、带 `library/` 前缀）只要盘上有文件，
+    就会被算进 `literature_with_fulltext`，而同一份 `path` 在写侧/审计与另外四条读路
+    （`search.shelf` / `ocr.*` / `webui` 下载读数 / `wellformed`）已经被
+    `store.library_path` 拒成「旧布局（不再支持）」。这一格是交付物
+    "证据够不够"的读数：宽的那一侧会让旧布局冒充"真有全文"。
+
+    ## 改后：与唯一真身同一套判据
+
+    `litread.resolve_literature_path` 与 `store.Store.library_path` 是同一套形态判据
+    （由 `tests/test_litread_and_library_path_give_the_same_answer.py` 钉住），
+    所以这里不再自己拼路径：
+
+    - 扁平落点 + 文件在 ⇒ `True`；
+    - 旧形态 ⇒ `False`，理由逐字带 :data:`litread.OLD_LAYOUT_NOTE`（「旧布局（不再支持）」）；
+    - 扁平落点但文件不在 ⇒ `False`，理由是 `file_missing`（状态说 ok 而文件没了，
+      是另一种"没查成"，同样不许算成"有"）；
+    - 没给 `library_root` ⇒ `True`（只按 `download.status` 算），并在 `note` 里说清
+      "没看盘" —— 三态：「没看」不等于「看过了、没有」。
+    """
+    dl = row.get("download") if isinstance(row.get("download"), dict) else {}
+    if str(dl.get("status") or "") != "ok":
+        return False, "`download.status` 不是 ok"
+    rel = str(row.get("path") or "")
+    if not rel:
+        return False, "`path` 为空（这一行没记全文落点）"
+    if library_root is None:
+        return True, ""
+    got = _LR.resolve_literature_path("", library_root, rel)
+    if got.path is not None:
+        return True, ""
+    return False, (got.reason or f"`{rel}` 在 `library/` 下读不到")
 
 
 def citation_coverage(
@@ -671,22 +738,20 @@ def citation_coverage(
     # ⇒ 真能逐字回验的只有 2 篇，而交付物因此退化成了"证据不足的报告"）。
     #
     # 判据：`download.status == "ok"` 且 `path` 在盘上真的存在（两件都要：
-    # 状态说 ok 而文件没了，那是另一种"没查成"）。读不到盘就不编（-1）。
-    # 判据：`download.status == "ok"` 且 `path` 在盘上真的存在（两件都要：
-    # 状态说 ok 而文件没了，那是另一种"没查成"）。没给 `library_root` 时只按状态算，
+    # 状态说 ok 而文件没了，那是另一种"没查成"）。判据只有一份：
+    # `_literature_fulltext_state`（形态走 `litread.resolve_literature_path`，
+    # 与唯一真身 `store.library_path` 同一套）；没给 `library_root` 时只按状态算，
     # 并在 `note` 里说清"没看盘"（三态：不把"没看"折成"有"）。
-    def _has_fulltext(r: dict) -> bool:
+    n_fulltext = 0
+    fulltext_refusals: list[tuple[str, str]] = []
+    for r in lit_rows:
+        counted, why = _literature_fulltext_state(r, library_root)
+        if counted:
+            n_fulltext += 1
+            continue
         dl = r.get("download") if isinstance(r.get("download"), dict) else {}
-        if str(dl.get("status") or "") != "ok":
-            return False
-        rel = str(r.get("path") or "")
-        if not rel:
-            return False
-        if library_root is None:
-            return True
-        return (Path(library_root) / rel).exists()
-
-    n_fulltext = sum(1 for r in lit_rows if _has_fulltext(r))
+        if str(dl.get("status") or "") == "ok":
+            fulltext_refusals.append((str(r.get("lit_id") or ""), why))
 
     try:
         n_questions = len(list(rows_of("research_questions")))
@@ -790,6 +855,35 @@ def citation_coverage(
             f"`download.status` 分布见各行）—— 元数据级出处可以引，但每条结论要在正文里"
             "写明它只有元数据支撑（该写「未核到」就写「未核到」，别让元数据看起来像读过全文）"
         )
+    if fulltext_refusals:
+        # 旧布局 / 越界 / 文件不在三档必须分开报：三者的下一步动作不同
+        # （改行 / 改行 / 补字节）。折成一句"没有全文"会让动作分不清 ——
+        # 与 `store.library_path` 的两档拒信同一条纪律。
+        legacy_rows = [(lid, why) for lid, why in fulltext_refusals
+                       if _LR.OLD_LAYOUT_NOTE in why]
+        escape_rows = [(lid, why) for lid, why in fulltext_refusals
+                       if _LR.OLD_LAYOUT_NOTE not in why and "越出" in why]
+        gone_rows = [(lid, why) for lid, why in fulltext_refusals
+                     if _LR.OLD_LAYOUT_NOTE not in why and "越出" not in why]
+        if legacy_rows:
+            gaps.append(
+                f"有 {len(legacy_rows)} 篇文献的 `path` 是**旧布局（不再支持）**"
+                f"（例：{('、'.join(lid or '?' for lid, _ in legacy_rows[:3]))}）"
+                "⇒ 不计入「有全文」（与唯一真身 `store.library_path` 同一套判据）；"
+                "改法：把文件按扁平名放进 `library/`，并把该行 `path` 改成扁平名"
+            )
+        if escape_rows:
+            gaps.append(
+                f"有 {len(escape_rows)} 篇文献的 `path` 越出 `library/`"
+                f"（例：{('、'.join(lid or '?' for lid, _ in escape_rows[:3]))}）"
+                "⇒ 不计入「有全文」（工作区外的文件不算这一行的全文）"
+            )
+        if gone_rows:
+            gaps.append(
+                f"有 {len(gone_rows)} 篇文献 `download.status=ok` 而盘上那份文件不在"
+                f"（例：{('、'.join(lid or '?' for lid, _ in gone_rows[:3]))}）"
+                "⇒ 不计入「有全文」（状态说 ok 与字节在盘是两件事）"
+            )
     if questions_vs_claims["short"] > 0:
         gaps.append(
             f"库里立了 {n_questions} 条研究问题，而这份稿件只有 {with_cites} 条带引文的断言"
@@ -806,6 +900,14 @@ def citation_coverage(
             "别让『引了一条不相关的』冒充『有出处』"
         )
 
+    note = ("只报数、不拦：引用的**存在性**由 `check_citations` 判（fail-closed）；"
+            "这一格是把「引了什么 / 库里有什么」放到写稿那一刻看得见。"
+            "`own` 里的号都是这份稿子真的写了的前缀引用（`doc:` 收在 `doc` 那一格）")
+    if library_root is None:
+        # 三态：没看盘 ≠ 看过了、没有。这一句是那一格"没查成"的读数（不是缺陷，
+        # 但也绝不能被读成"库里的每一篇都真有全文"）。
+        note += ("；`library_root` 没给 ⇒ 「有全文」那一格只按 `download.status` 算"
+                 "（没看盘）")
     return {
         "own": own,
         "counts": counts,
@@ -818,9 +920,7 @@ def citation_coverage(
         "questions_vs_claims": questions_vs_claims,
         "suggest_lit": suggest_lit,
         "suggest_rel": suggest_rel,
-        "note": ("只报数、不拦：引用的**存在性**由 `check_citations` 判（fail-closed）；"
-                 "这一格是把「引了什么 / 库里有什么」放到写稿那一刻看得见。"
-                 "`own` 里的号都是这份稿子真的写了的前缀引用（`doc:` 收在 `doc` 那一格）"),
+        "note": note,
     }
 
 
@@ -848,7 +948,7 @@ def classify_proof_location(loc: object, known_ids: Iterable[Any]) -> tuple[str,
         return "self_ref", rel
     if head in known:
         return "self_ref", head
-    # 有"点号 + 1–6 位字母数字后缀"就当文件名（`real.lean:3` / `x.py` / `p1.py:12`）。
+    # 有"点号 + 1–6 位字母数字后缀"就当文件名（`real.lean:3` / `x.py` / `p1.py` 第 12 行）。
     looks_like_file = re.search(r"[.][A-Za-z0-9]{1,6}", rel) is not None
     if is_xref_form and not looks_like_file:
         return "cross_ref", head
@@ -1154,7 +1254,7 @@ def compose_claim(
     #     （"只有数值支撑的结论不得出现在摘要/主结果，必须降为 Remark"）；
     #   * 其余（`heuristic` 或空）⇒ 一个都不写 —— 没有依据就是没有依据。
     # 三态：正解是"有依据的写、没依据的不写"，不是"给每条补一个默认值"—— 后者会把"从没
-    # 问过"伪造成"待精化"（`docs/SCHEMA-MIGRATION-PROPOSAL-claims.md` §3.2）。调用方显式
+    # 问过"伪造成"待精化"（`draft/archive-SCHEMA-MIGRATION-PROPOSAL-claims.md`（已退役）§3.2）。调用方显式
     # 给了就以调用方为准（上面那个循环已经写进去了，这里不覆盖）。
     if status is None and evidence_kind == "proof":
         claim["status"] = "证"
@@ -1478,7 +1578,7 @@ def render_markdown(
 # ---------------------------------------------------------------- 中间产物自己的 sha（`D-44`）
 #
 # 业主 2026-10-24：「只对论文负责是正确的，documents等都是中间产物」＋
-# 「H 审论文（out/paper/main.tex / pdf），documents 只是它的登记行」。
+# 「H 审论文（out/package/main.tex / pdf），documents 只是它的登记行」。
 #
 # 于是 `documents` 这一行是中间产物，它指向的 markdown 只是 `render_markdown` 的一份呈现。
 # 这一节记的是"写这一行时盘上那份 markdown 的字节 sha256"：
@@ -1501,8 +1601,8 @@ ARTIFACT_EVENT = "documents.markdown_sha256"
 
 #: 「这一行的正文以哪份文件为准」的唯一口径（甲，2026-11-11）。
 #:
-#: 业主口径（`draft` 与本批施工单）：H 审的是论文正文 `out/paper/main.tex`，
-#: `documents` 只是它的登记行。所以 kind="paper" 的行，正文 = `out/paper/main.tex`；
+#: 业主口径（`draft` 与本批施工单）：H 审的是论文正文 `out/package/main.tex`，
+#: `documents` 只是它的登记行。所以 kind="paper" 的行，正文 = `out/package/main.tex`；
 #: 其它 kind（note / survey）没有 tex，正文就是它自己的
 #: `markdown_path` 那份渲染产物。
 #:
@@ -1511,13 +1611,13 @@ ARTIFACT_EVENT = "documents.markdown_sha256"
 #: 把文件 sha 塞进去会让 `verify.content_hash_mismatch` 与整条签名链同时失效
 #: （D-44 的现场，见上一节）。文件 sha 继续走「同一条」 `ARTIFACT_EVENT` 读数，
 #: 不新造第二份账。
-BODY_TEX_REL = "out/paper/main.tex"
+BODY_TEX_REL = "out/package/main.tex"
 
 
 def body_artifact_of(root: Any, doc: Mapping[str, Any]) -> tuple[str, Path | None]:
     """这一行的「正文」是哪个文件 ⇒ `(工作区相对路径, 绝对路径或 None)`。
 
-    口径见 :data:`BODY_TEX_REL`：paper ⇒ `out/paper/main.tex`（即使它还没落盘，
+    口径见 :data:`BODY_TEX_REL`：paper ⇒ `out/package/main.tex`（即使它还没落盘，
     也返回这个落点 —— "正文还不在盘上"本身必须是一条可读的读数，不能退回
     markdown 冒充正文）；其它 kind ⇒ 自己的 `markdown_path`。
     """
@@ -1540,7 +1640,7 @@ def note_markdown_artifact(store: Any, doc_id: Any, rel: Any, absolute: Any, *,
     就把两件事分清了：这里只追加一条 info 事件，一个字段都不写。
 
     `body` 由调用方按 :func:`body_artifact_of` 算好传进来（甲）：正文那一份可能是
-    `out/paper/main.tex`（paper），也可能就是 rel 自己（其它 kind）。
+    `out/package/main.tex`（paper），也可能就是 rel 自己（其它 kind）。
     """
     doc = next((dict(r) for r in store.rows("documents")
                 if str(r.get("doc_id")) == str(doc_id)), None)
@@ -1561,7 +1661,7 @@ def record_markdown_artifact(tx: Any, doc_id: Any, rel: Any, absolute: Any,
 
     ## 甲（2026-11-11）：正文那一份的 sha 同一条事件里记
     `body_rel` / `body_absolute` 是"这一行的正文以哪份文件为准"的落点
-    （:func:`body_artifact_of`）。paper 行的正文是 `out/paper/main.tex`，
+    （:func:`body_artifact_of`）。paper 行的正文是 `out/package/main.tex`，
     不是这份 `render_markdown` 产物；两份的 sha 各占一格，互不冒充。
     文件还没落盘时 `body_sha256` 留空 + `body_problem` 说清 ——
     "正文还不在盘上"是一条「读数」，不许退回 markdown 冒充它。
@@ -1595,7 +1695,7 @@ def record_markdown_artifact(tx: Any, doc_id: Any, rel: Any, absolute: Any,
     }
     tx.info(ARTIFACT_EVENT, **reading, note=(
         "中间产物（documents 行指向的 markdown）与「正文」（paper 行 = "
-        "`out/paper/main.tex`；其它 kind = markdown 自己）写盘那一刻的字节 sha256；"
+        "`out/package/main.tex`；其它 kind = markdown 自己）写盘那一刻的字节 sha256；"
         "只作人工追溯，不作任何收工门判据"
     ))
     return reading
@@ -1724,7 +1824,7 @@ def document_artifact_readings(store: Any, doc_ids: Sequence[str] | None = None)
                 "这一行没有被记过中间产物的 sha（改动之前写的行）⇒ 判不了它有没有变过"
                 if got is None else reason
             ),
-            # ---- 甲：正文那一份（paper = `out/paper/main.tex`，其它 kind = markdown）
+            # ---- 甲：正文那一份（paper = `out/package/main.tex`，其它 kind = markdown）
             "body_path": body_rel,
             "body_sha256_recorded": body_recorded,
             "body_sha256_now": body_now,
@@ -1847,6 +1947,26 @@ def _document_owner(store: Any, actor: Any) -> dict:
     return _IDENT.resolve_identity(store, "G", actor=str(actor or ""))
 
 
+#: 覆盖守卫的拒信（`out_path` 指到一份既有、又不属于任何 `documents` 行的文件时）。
+#:
+#: 为什么放在模块级而不是函数里：`build_document` 在 `src_functions_gt200_lines` 那一格
+#: 的边界上（三格不许抬，见 `scripts/check_three_cells.py`），而这段教法与 `out_path` 的
+#: description 是同一句话 —— 同一句话只写一处，函数体也别为它长出七八行。
+#:
+#: 2026-11-22（G-ANCHOR）：末句从「要写主稿请用 `fs.edit` / `fs.write`」改成「主稿由
+#: `doc.build_document` 渲染…别手写正文」——保留表补了 `("G", "prefix:manuscripts/G/")`，
+#: 教法与锚必须同一笔改，否则两个窗口（模型照着教法写、被新锚拒）。
+OUT_PATH_CLOBBER_MESSAGE = (
+    "拒绝覆盖 {path}（已存在，{size} 字节，且它不是任何 documents 行的 "
+    "`markdown_path`）：这个参数是生成 markdown 的落点，不是主稿 —— "
+    "把它指到 `out/package/main.tex` 会把论文本体换成一份台账稿，"
+    "而那是不可逆的（真机实测：26 KB 正文被覆盖成 4 KB，那一趟就此作废）。"
+    "主稿由 `doc.build_document` 渲染（改已有稿走 `G.revise` / `G.refresh_markdown`），"
+    "你只改它要的输入（claims / sections），别手写正文；要生成稿件就换一个没被占用的路径"
+    "（缺省是 `<工作区>/manuscripts/G/<doc_id>.md`）。"
+)
+
+
 def build_document(
     store: Any,
     kind: str,
@@ -1858,7 +1978,7 @@ def build_document(
     out_path: Any = None,
     workspace_root: Any = None,
     actor: str = "agent-G",
-    default_subdir: str = "documents",
+    default_subdir: str = "manuscripts/G",
 ) -> dict:
     """写一行 `documents`，并把 markdown 渲染到工作区内。返回落库后的行 dict。
     顺序刻意如此：先逐条机械检查 → 再核引用是否存在 → 再分配 ID → 再渲染 → 最后提交。这样任何一条不合规的断言、任何一条指向不存在对象的引用，都不会换来一个"半成品稿件 + 一个已经烧掉的
@@ -1874,6 +1994,14 @@ def build_document(
     """
     if kind not in S.DOC_KINDS:
         raise ValueError(f"kind 必须是 {S.DOC_KINDS} 之一，收到 {kind!r}")
+    # `kind=research` 是 D 的研究稿那一档（写侧 `agent_d.write_report` → `record_research_report`）：
+    # 工具面的 enum 已经把它摘掉了（`BUILDABLE_DOC_KINDS`），这一句是给脚本模式 / 直接调
+    # handler 的那条路留的同一道闸 —— 两处说同一件事，绕开模型面也造不出 D 的那一行。
+    if kind == S.RESEARCH_DOC_KIND:
+        raise ValueError(
+            f"kind={S.RESEARCH_DOC_KIND!r} 只由 D 的研究稿写侧产生（`agent_d.write_report` → "
+            "`doc_tools.record_research_report`），`doc.build_document` 不造 research 稿 —— "
+            "G 的稿件用 note / survey / paper 三档")
     if not str(title or "").strip():
         raise ValueError("title 不能为空")
     root = Path(workspace_root).resolve() if workspace_root else Path(store.root).resolve()
@@ -1958,7 +2086,7 @@ def build_document(
         rel, absolute = resolve_out_path(root, out_path, doc_id, default_subdir)
         # ---- 覆盖守卫（`draft/37` §91 的真机读数：一次调用把交付物覆盖成生成物）
         #
-        # T1 第 5 趟：主控传 `out_path="out/paper/main.tex"`（它把"生成 markdown 的落点"
+        # T1 第 5 趟：主控传 `out_path="out/package/main.tex"`（它把"生成 markdown 的落点"
         # 当成了"论文本体该写在哪"，而那个参数当时没有任何描述），于是这一动作把
         # 26,155 字节的论文正文整份覆盖成 3,992 字节的台账稿（`render_markdown` 的产物）。
         # 后果不可逆：那一趟此后 28 步都在试图把正文从 `source/` 拼回来，
@@ -1972,12 +2100,7 @@ def build_document(
         if absolute.exists() and rel not in ours:
             size = absolute.stat().st_size
             raise DocToolError(
-                f"拒绝覆盖 {rel}（已存在，{size} 字节，且它不是任何 documents 行的 "
-                "`markdown_path`）：这个参数是生成 markdown 的落点，不是主稿 —— "
-                "把它指到 `out/paper/main.tex` 会把论文本体换成一份台账稿，"
-                "而那是不可逆的（真机实测：26 KB 正文被覆盖成 4 KB，那一趟就此作废）。"
-                "要写主稿请用 `fs.edit` / `fs.write`；要生成稿件就换一个没被占用的路径"
-                "（缺省是 `<工作区>/<documents>/<doc_id>.md`）。",
+                OUT_PATH_CLOBBER_MESSAGE.format(path=rel, size=size),
                 kind="out_path_would_clobber",
                 details={"created": False, "out_path": rel, "bytes": size,
                          "is_registered_markdown": False},
@@ -2022,7 +2145,7 @@ def build_document(
         # （唯一口径 `artifacts.sha256_of`，不接收任何传进来的值）。
         # 必须写在文件落盘之后：改前的现场就是"记的 sha 与盘上那份对不上"。
         # 它是人工追溯用的读数，不作任何收工门判据（见 `record_markdown_artifact`）。
-        # 甲（2026-11-11）：同一条事件里再记"正文"那一份（paper = out/paper/main.tex）。
+        # 甲（2026-11-11）：同一条事件里再记"正文"那一份（paper = out/package/main.tex）。
         _body_rel, _body_abs = body_artifact_of(root, payload)
         record_markdown_artifact(tx, doc_id, rel, absolute,
                                  body_rel=_body_rel, body_absolute=_body_abs)
@@ -2047,6 +2170,202 @@ def build_document(
                      "problem": _reg_problem},
         )
     return payload
+
+
+#: `record_research_report` 的事件注记（口径只有一处：写侧与判据都读它）。
+RESEARCH_REPORT_NOTE = "D 的初步研究报告（写侧 agent_d.write_report，kind=research）"
+
+
+def record_research_report(
+    store: Any,
+    *,
+    rel: str,
+    text: str,
+    title: str,
+    claims: Sequence[Mapping[str, Any]] = (),
+    sections: Sequence[Mapping[str, Any]] = (),
+    open_problems: Sequence[str] = (),
+    actor: str = "agent-D",
+) -> dict:
+    """给 D 已经渲染好的一份研究稿落一行 `documents`（kind=`research`），与文件同一笔事务。
+
+    ## 为什么它不住在 `agent_d/write_report.py` 里
+
+    `documents` 的写口只有这一份文件（`doc.build_document` / `doc.register_dependency`），
+    并发轴的写点扫描（`tests/test_write_sets_match_their_write_points.py`）按文件把
+    `documents` 算给这份文件的通道。把第二处 `tx.upsert("documents", …)` 写进
+    `agent_d/` 会让"实际写点"与 `WRITE_SETS["D"]` 当场分家（而 `WRITE_SETS` 的真身在
+    `specs/d.py`，本笔按授权不动它）—— 于是写口留在这里、由 D 调它，读侧与判据
+    只需要认"`documents` 里 `kind=research` 那一行"。
+
+    ## 顺序（与 `build_document` 同上一条纪律）
+
+    行与文件在同一笔事务里：先 `upsert` 行、再写盘（写失败 ⇒ 事务回滚 ⇒ 不会留下
+    "有行没文件"的悬空指针）。反过来"有文件没行"由读侧如实说成「没有台账行」。
+
+    ## 与 `build_document` 刻意不同的三处（都不是省略，是判据不同）
+
+    1. 不走成文门（`researchbase.writing_gate`）。那扇门问"有没有签/地基"，是
+       *成文* 的门；D 的研究稿恰恰要能写"这一趟一条签都没有、所以没有结论"——
+       真机 `lp-ball-6` 的形态（`documents 1` / `vsigns 0`）在这里不是缺陷，是读数。
+    2. 不渲染 markdown。正文由 `writer` 自己渲染好了传进来（它带携带单与审计节，
+       `render_markdown` 渲染不出那两节）。本函数只写它、并记它的字节 sha。
+    3. 不核 `citations` 指向的对象是否存在（`check_citations`）。D 的断言引的是
+       `rel:` / `lit:` / `stmt:` / `exp:`，而那些代号是 `write_report` 从
+       `trace_question` 的返回值里抄回来的（同一趟刚读过），不是模型编的；
+       真机口径见 `agent_d.write_report` 调 `trace_question` 之后读的 `claims`
+       （`ev.get("claims")`：代号与那批关系行是同一趟返回的）。
+
+    ## 三态
+
+    * `rel` / `text` 形态不成立（绝对路径、`..`、空正文）⇒ `ValueError`，一个字节不写；
+    * 盘上那份文件读不到（刚写完又被删）⇒ `sha256` 留空 + `problem` 写原因（读数，不上抛）；
+    * 同一路径第二次调用 ⇒ 复用那一行的 `doc_id` 并 `revision += 1`（一个稿号 = 一份文件；
+      重写同一份不是"多一份稿"，也不是"同一版"）。
+    """
+    root = Path(str(getattr(store, "root", "") or "")).resolve()
+    rel_text = str(rel or "").strip().replace("\\", "/")
+    if not rel_text:
+        raise ValueError("record_research_report 需要 `rel`（工作区相对路径）")
+    if rel_text.startswith("/") or ":" in rel_text or ".." in rel_text.split("/"):
+        raise ValueError(
+            f"record_research_report 的 `rel` 必须是工作区内的相对路径，收到 {rel!r}"
+            "（越界写盘是沙箱契约问题，不是排版问题）")
+    if not str(text or "").strip():
+        raise ValueError("record_research_report 的 `text` 不能为空：一份空的报告不该有台账行")
+    if not str(title or "").strip():
+        raise ValueError("record_research_report 的 `title` 不能为空")
+    absolute = root / rel_text
+    _ident = {}
+    try:
+        from .. import identity as _IDENT
+
+        _ident = _IDENT.resolve_identity(store, "D", actor=str(actor or "agent-D"))
+    except Exception:  # noqa: BLE001 —— 身份读不出来只是归属格空着，不该挡住报告落库
+        _ident = {}
+    with store.tx("documents", actor=actor, note=RESEARCH_REPORT_NOTE) as tx:
+        prev = next((dict(r) for r in tx.rows("documents")
+                     if str(r.get("markdown_path") or "").replace("\\", "/") == rel_text
+                     and str(r.get("kind") or "") == S.RESEARCH_DOC_KIND), None)
+        doc_id = str((prev or {}).get("doc_id") or "") or tx.alloc_id("doc")
+        row = S.Document(
+            doc_id=doc_id,
+            kind=S.RESEARCH_DOC_KIND,
+            title=str(title),
+            markdown_path=rel_text,
+            sections=[{"heading": str(s.get("heading") or ""),
+                       "body": str(s.get("body") or "")} for s in (sections or ())],
+            claims=[dict(c) for c in (claims or ())],
+            open_problems=[str(x) for x in (open_problems or ())],
+            status="draft",
+            review_rounds=0,
+            revision=int((prev or {}).get("revision") or 0) + 1,
+            created_at=str((prev or {}).get("created_at") or "") or S.now_iso(),
+            updated_at=S.now_iso(),
+            created_by=str(_ident.get("actor") or actor or "agent-D"),
+        )
+        row.owner_task = str(_ident.get("task_id") or "")
+        row.owner_instance = str(_ident.get("instance") or "")
+        from .. import signatures as SIG
+
+        # 内容哈希与 `build_document` 同一个口径（算的是这一行本身，不含它自己那一格）。
+        row.content_sha256 = SIG.content_sha256_of(row.to_dict())
+        row.validate()
+        payload = row.to_dict()
+        tx.upsert("documents", payload)
+        try:
+            absolute.parent.mkdir(parents=True, exist_ok=True)
+            absolute.write_text(str(text), encoding="utf-8", newline="\n")
+        except OSError as e:
+            raise ValueError(f"写研究稿失败（{absolute}）：{type(e).__name__}: {e}") from e
+        _body_rel, _body_abs = body_artifact_of(root, payload)
+        artifact = record_markdown_artifact(
+            tx, doc_id, rel_text, absolute, body_rel=_body_rel, body_absolute=_body_abs)
+    out = dict(payload)
+    #: 盘上那份字节的 sha 读数（`D-44` 的同一口径）。键名带 `_` 前缀：它不是行的一格，
+    #: 只给调用方带进自己的返回值/日志。
+    out["_artifact"] = artifact
+    return out
+
+
+def _check_dependency_sources(
+    tx: Any,
+    *,
+    status: str,
+    source_lit_id: str | None,
+    source_experiment_id: str | None,
+    source_stmt_id: str | None,
+) -> None:
+    """在事务里用真实数据核"被依赖的那一端"（`register_dependency` 的那块装配）。
+
+    `schema.Dependency.validate` 只能检查"`status='closed'` 时字段非空" —— 它看不见
+    `literature` / `experiments` / `statements` 表，所以"那个 lit_id / 那个命题号真的
+    存在吗"必须在这里用事务里的行核一遍。本函数不生产任何值：核不过就抛
+    `ValueError`（拒信逐条说清是哪一档），核过了就返回 `None`。
+
+    ## 严格规矩 A（业主 2026-10-22：「转写是提示词侧点一下就行……其它要严格」）
+    `source_stmt_id` 必须按"实际收录过的序号"回填：任何 status 都核，不再只在
+    `status='closed'` 时核（一条 `dangling` 边指着一个不存在的号同样是坏数据：
+    它在盘上长得像"这条结论依赖某条命题"，而那条命题根本不存在）。
+
+    三态，各给一条能行动的理由，绝不当成通过：
+      ① 那个号不在 `statements` 里 ⇒ 不存在；
+      ② 在册但状态不是 `active` ⇒ 没 closed（`pending_definition` / `disputed` /
+         `refuted` / `superseded` 都不是依据；口径直接读
+         `schema.STATEMENT_UNUSABLE_STATUSES`，不在这里另立第二份名单）；
+      ③ `statements` 读不出来 ⇒ 没查成（读不到绝不等价于"核过了"，也不等价于
+         "库里没有这一条"）。
+    为什么必须在写入期核：verify 的依赖闭合审计只看得到盘上已经有的行，一条回填错的
+    序号进了库之后，"这条结论靠什么站着"就已经答错了，而报告照样亮绿。
+    """
+    if source_stmt_id is not None:
+        try:
+            stmt_rows = list(tx.rows("statements"))
+        except Exception as exc:  # noqa: BLE001 —— 读不到要如实说，不许当成通过
+            raise ValueError(
+                f"source_stmt_id={source_stmt_id!r} 没查成：statements 表读不出来"
+                f"（{type(exc).__name__}: {exc}）⇒ 拒绝写入。三态纪律：'读不到'不是"
+                "'核过了'，也不是'库里没有这一条'—— 先用 `agentflow verify` 定位"
+                "（必要时 `agentflow rebuild` 重建），再登记这条边"
+            ) from None
+        # 按号定位走查口（口径一）；`stmt_rows` 是事务里刚读出来的那一批行。
+        anchor = SL.by_id(rows=stmt_rows, stmt_id=source_stmt_id)["row"] or None
+        if anchor is None:
+            raise ValueError(
+                f"source_stmt_id={source_stmt_id!r} 不存在：statements 表里没有这一行"
+                f"（表里现有 {len(stmt_rows)} 条命题）。依赖边必须按实际收录过的序号"
+                "回填，不许指一个还没进库的号 —— 指一条不存在的命题，"
+                "'这条结论靠什么站着'就答不出来（`draft/97` §15.0 的第四种来源）"
+            )
+        anchor_status = str(anchor.get("status") or "").strip()
+        if anchor_status != "active":
+            shown = anchor_status or "（空）"
+            raise ValueError(
+                f"source_stmt_id={source_stmt_id!r} 没 closed：那一行的 "
+                f"statements.status={shown!r}，只有在册可用的 'active' 才算已闭合"
+                f"（这几档都不是依据：{S.STATEMENT_UNUSABLE_STATUSES}）。"
+                "要么先让那条命题走到 active，要么这条边不许写成依赖它 —— "
+                "拿一条待补定义/有争议/被证否/被取代的命题当依据，是一条空头支票"
+            )
+    if status == "closed":
+        if source_lit_id is not None and not any(
+            str(r.get("lit_id")) == source_lit_id for r in tx.rows("literature")
+        ):
+            raise ValueError(
+                f"status='closed' 但 literature 表里没有 lit_id={source_lit_id!r}。"
+                "**schema 查不出这一点**（它只能查'字段非空'）—— 依赖闭合必须由 G 用真实数据核："
+                "引用一篇不存在的文献，等于把外部结论当成了自己的结论（FC-23）"
+            )
+        if source_experiment_id is not None and not any(
+            str(r.get("experiment_id")) == source_experiment_id for r in tx.rows("experiments")
+        ):
+            raise ValueError(
+                f"status='closed' 但 experiments 表里没有 experiment_id={source_experiment_id!r}。"
+                "依赖闭合必须核到**已入库**的来源（FC-23）"
+            )
+        # `source_stmt_id` 那一档的核已经提到事务开头（规矩 A：任何 status 都核，
+        # 三态分开命名）—— 这里刻意不留第二份判据：同一件事两处实现，漂移时
+        # 没有任何东西会红。
 
 
 def register_dependency(
@@ -2083,6 +2402,12 @@ def register_dependency(
     `statements` 读得出来吗。三条读数各自有拒绝理由（"不存在" / "没 closed" / "没查成"），
     而不是一句"依赖不合法"；读不到绝不当成通过。判据在
     `tests/test_dependency_strictness.py`。
+    ## TOOLFACE-SHARD4（业主 2026-11-22 三段格式）：从模型面搬下来的原文
+    摘要里原来那句「`closed` 前核 `lit_id`/`experiment_id`/`stmt_id` 已入库；
+    `dangling`/`external_unavailable` 必须写 `status_reason`」讲的是三道实现判据
+    （逐 id 的存在性核对 + 状态词表 + 拒信理由），按「实现只留注释」留在这里；
+    上面「为什么 closed 必须指向已入库来源」那两段就是它的本体，模型面只留
+    「来源已在册」这条能力边界与参数名（`source_stmt_id` / `path_group`）。
     """
     if not str(used_by or "").strip():
         raise ValueError("used_by 不能为空（依赖必须挂到某个具体的使用点，如 'doc:0001#claim-3'）")
@@ -2161,68 +2486,16 @@ def register_dependency(
         "dependencies", "literature", "experiments", "statements",
         actor=actor, note="register_dependency"
     ) as tx:
-        # ---- 严格规矩 A（业主 2026-10-22：「转写是提示词侧点一下就行……其它要严格」）
-        # `source_stmt_id` 必须按"实际收录过的序号"回填：任何 status 都核，不再只在
-        # `status='closed'` 时核（一条 `dangling` 边指着一个不存在的号同样是坏数据：
-        # 它在盘上长得像"这条结论依赖某条命题"，而那条命题根本不存在）。
-        #
-        # 三态，各给一条能行动的理由，绝不当成通过：
-        #   ① 那个号不在 `statements` 里 ⇒ 不存在；
-        #   ② 在册但状态不是 `active` ⇒ 没 closed（`pending_definition` / `disputed` /
-        #      `refuted` / `superseded` 都不是依据；口径直接读
-        #      `schema.STATEMENT_UNUSABLE_STATUSES`，不在这里另立第二份名单）；
-        #   ③ `statements` 读不出来 ⇒ 没查成（读不到绝不等价于"核过了"，也不等价于
-        #      "库里没有这一条"）。
-        # 为什么必须在写入期核：verify 的依赖闭合审计只看得到盘上已经有的行，一条回填错的
-        # 序号进了库之后，"这条结论靠什么站着"就已经答错了，而报告照样亮绿。
-        if source_stmt_id is not None:
-            try:
-                stmt_rows = list(tx.rows("statements"))
-            except Exception as exc:  # noqa: BLE001 —— 读不到要如实说，不许当成通过
-                raise ValueError(
-                    f"source_stmt_id={source_stmt_id!r} 没查成：statements 表读不出来"
-                    f"（{type(exc).__name__}: {exc}）⇒ 拒绝写入。三态纪律：'读不到'不是"
-                    "'核过了'，也不是'库里没有这一条'—— 先用 `agentflow verify` 定位"
-                    "（必要时 `agentflow rebuild` 重建），再登记这条边"
-                ) from None
-            # 按号定位走查口（口径一）；`stmt_rows` 是事务里刚读出来的那一批行。
-            anchor = SL.by_id(rows=stmt_rows, stmt_id=source_stmt_id)["row"] or None
-            if anchor is None:
-                raise ValueError(
-                    f"source_stmt_id={source_stmt_id!r} 不存在：statements 表里没有这一行"
-                    f"（表里现有 {len(stmt_rows)} 条命题）。依赖边必须按实际收录过的序号"
-                    "回填，不许指一个还没进库的号 —— 指一条不存在的命题，"
-                    "'这条结论靠什么站着'就答不出来（`draft/97` §15.0 的第四种来源）"
-                )
-            anchor_status = str(anchor.get("status") or "").strip()
-            if anchor_status != "active":
-                shown = anchor_status or "（空）"
-                raise ValueError(
-                    f"source_stmt_id={source_stmt_id!r} 没 closed：那一行的 "
-                    f"statements.status={shown!r}，只有在册可用的 'active' 才算已闭合"
-                    f"（这几档都不是依据：{S.STATEMENT_UNUSABLE_STATUSES}）。"
-                    "要么先让那条命题走到 active，要么这条边不许写成依赖它 —— "
-                    "拿一条待补定义/有争议/被证否/被取代的命题当依据，是一条空头支票"
-                )
-        if status == "closed":
-            if source_lit_id is not None and not any(
-                str(r.get("lit_id")) == source_lit_id for r in tx.rows("literature")
-            ):
-                raise ValueError(
-                    f"status='closed' 但 literature 表里没有 lit_id={source_lit_id!r}。"
-                    "**schema 查不出这一点**（它只能查'字段非空'）—— 依赖闭合必须由 G 用真实数据核："
-                    "引用一篇不存在的文献，等于把外部结论当成了自己的结论（FC-23）"
-                )
-            if source_experiment_id is not None and not any(
-                str(r.get("experiment_id")) == source_experiment_id for r in tx.rows("experiments")
-            ):
-                raise ValueError(
-                    f"status='closed' 但 experiments 表里没有 experiment_id={source_experiment_id!r}。"
-                    "依赖闭合必须核到**已入库**的来源（FC-23）"
-                )
-            # `source_stmt_id` 那一档的核已经提到事务开头（规矩 A：任何 status 都核，
-            # 三态分开命名）—— 这里刻意不留第二份判据：同一件事两处实现，漂移时
-            # 没有任何东西会红。
+        # ---- 证据/依赖面校验：一次受理、逐条核（规矩 A 与 FC-23 的两道闸都在
+        # `_check_dependency_sources` 里：任何 status 都核 `source_stmt_id` 三态，
+        # `closed` 再核 literature / experiments 的真实存在）。
+        _check_dependency_sources(
+            tx,
+            status=status,
+            source_lit_id=source_lit_id,
+            source_experiment_id=source_experiment_id,
+            source_stmt_id=source_stmt_id,
+        )
         dep_id = tx.alloc_id("dep")
         row = S.Dependency(
             dep_id=dep_id,
@@ -2301,7 +2574,7 @@ def guard_result(fn: Any) -> Any:
 
 @tool(
     "doc.scan_claim",
-    "机械检查一条断言：有无引用、证据等级是否被夸大、否定是否分类。",
+    "机械检查一条断言：有无引用、证据等级是否被夸大、否定是否分类",
     {
            "type": "object",
            "properties": {"claim": {"type": "object"}},
@@ -2310,6 +2583,10 @@ def guard_result(fn: Any) -> Any:
            },
     side_effect="none",
     roles=_ROLES,
+    scenario="断言交给 G 落稿之前，先自己查一遍",
+    example="查一条断言：findings 逐条给证据，error_count 为 0 才算过",
+    example_code=('doc.scan_claim(claim={"text": "p 群可解", "citations": ["lit:000001"], '
+                  '"evidence_kind": "heuristic", "section": "2"})'),
     # 2026-10-15 补齐：这五格实跑都在返回里，而声明里没有。
     # 为什么这件事要紧（`draft/124` §15.2 的更正）：`returns` 只是台账/冻结快照的
     # 声明契约（`tools/base.py:674-679`：description 不带 returns，模型面看不到它）。
@@ -2331,7 +2608,7 @@ def _doc_scan_claim(claim):
 @tool(
     "doc.compose_claim",
     (
-            "构造一条合规断言：`cross_check` 自动补「不构成证明」声明；无引用 / 否定未分类 / 过度声称 / 作废无原因在构造时就抛错。可带生命周期字段。"
+            "构造一条合规断言：`cross_check` 自动补「不构成证明」声明；无引用 / 否定未分类 / 过度声称 / 作废无原因在构造时就抛错。可带生命周期字段"
             ),
     {
            "type": "object",
@@ -2361,14 +2638,23 @@ def _doc_scan_claim(claim):
            },
     side_effect="none",
     roles=_ROLES,
-    # 键名逐个从实现读出（`compose_claim`）：必有的 8 个键列在这里；
-    # §8.3 的字段（kind/status/proof_location/numeric_evidence/counterexamples/
-    # allowed_use/scope_caveat/revision_hash/errata_ids/freeze_reason/frozen）
-    # 给了才写 —— 所以它们不进这份键集合（否则就成了"承诺了却不保证给"）。
+    scenario="要把一条结论写成能过审的断言时",
+    example="写一条 cross_check 断言：返回合规 claim，免责声明已带上",
+    example_code=('doc.compose_claim(text="p 群可解", citations=["lit:000001"], '
+                  'evidence_kind="cross_check", section="2")'),
+    # 键名逐个从实现读出（`compose_claim`）：必有的 10 个键列在这里；
+    # ②（LEDGER-RETURNS-FIX，2026-11-22）：`status` / `allowed_use` 是派生格
+    # （`evidence_kind=proof ⇒ status='证'`；`cross_check ⇒ status='验' +
+    # allowed_use='Remark only'`），改前声明一个字都没提 —— 而这两格正是 G14 降级闸与
+    # `agent_g.hard_to_prove` 读的那两格。其余 §8.3 字段（kind/proof_location/
+    # numeric_evidence/counterexamples/freeze_reason/frozen/errata_ids）给了才透出，
+    # 仍不进键集合（否则就成了"承诺了却不保证给"）。
     returns=(
             "{'claim_id','section','text','evidence_kind','citations','is_negative',"
-            "'negation_kind','disclaimer','revision_hash','scope_caveat'}"
-            "（合规的 claim dict）；带 §8.3 字段时原样透出。"
+            "'negation_kind','disclaimer','revision_hash','scope_caveat','status','allowed_use'}"
+            "（合规的 claim dict）；末两格由 evidence_kind 派生：proof ⇒ status='证'，"
+            "cross_check ⇒ status='验' 与 allowed_use='Remark only'（不用调用方写）；"
+            "其余 §8.3 字段给了才透出。"
             "失败：ok=False + kind=validation_error + message（含 issue code）"
             ),
     tags=("document", "compose"),
@@ -2383,7 +2669,7 @@ def _doc_compose_claim(**kw):
 
 @tool(
     "doc.list_documents",
-    "只读列举稿件（代号/类型/标题/状态/审校轮次/断言数）。",
+    "只读列举稿件（代号/类型/标题/状态/审校轮次/断言数）",
     {
            "type": "object",
            "properties": {
@@ -2394,6 +2680,9 @@ def _doc_compose_claim(**kw):
            },
     side_effect="read",
     roles=_ROLES,
+    scenario="查有哪些稿、哪份待审或待改时（旧 documents/ 目录已退役）",
+    example="按状态过滤；返回 count 与逐份稿件",
+    example_code='doc.list_documents(status="in_review")',
     returns="{'count','documents':[{'doc_id','kind','title','status','review_rounds','claim_count','markdown_path'}]}",
     tags=("document", "read"),
 )
@@ -2407,14 +2696,11 @@ def _doc_list_documents(_not_wired, store, status=None, kind=None):
 
 @tool(
     "doc.build_document",
-    (
-            "写一行 documents 并渲染 markdown 到工作区内（机械检查 + 核对每条 citation 指向的对象存在，两闸都过才落库；out_path "
-            "越界拒绝）。"
-            ),
+    "把 claims 与 sections 渲染成主稿并登记这份稿件；正文由它渲染，别手写；零签零地基时整笔拒",
     {
            "type": "object",
            "properties": {
-            "kind": {"type": "string", "enum": list(S.DOC_KINDS)},
+            "kind": {"type": "string", "enum": list(BUILDABLE_DOC_KINDS)},
             "title": {"type": "string"},
             "claims": {
                 "type": "array",
@@ -2475,16 +2761,23 @@ def _doc_list_documents(_not_wired, store, status=None, kind=None):
             "open_problems": {"type": "array", "items": {"type": "string"}},
             "out_path": {"type": "string", "description":
                          "生成 markdown 的落点（工作区内相对路径；缺省 "
-                         "`<工作区>/<documents>/<doc_id>.md`）。它是这份稿件的渲染产物，"
-                         "不是论文本体：指到 `out/paper/main.tex` 会把论文正文换成台账稿"
+                         "`<工作区>/manuscripts/G/<doc_id>.md`）。它是这份稿件的渲染产物，"
+                         "不是论文本体：指到 `out/package/main.tex` 会把论文正文换成台账稿"
                          "（真机实测：26 KB → 4 KB，不可逆）⇒ 既有的、不属于任何 "
-                         "`documents` 行的文件一律拒绝覆盖；要改主稿请用 `fs.edit`"},
+                         "`documents` 行的文件一律拒绝覆盖；**主稿由 `doc.build_document` "
+                         "渲染**（改已有稿走 `G.revise`、重画走 `G.refresh_markdown`），"
+                         "你只改它要的输入（claims / sections），别手写正文"},
            },
            "required": ["kind", "title", "claims"],
            "additionalProperties": False,
            },
     side_effect="write_local",
     roles=_WRITER_ROLES,
+    scenario="要交手稿或进展稿、且已有签或地基时：正文落 manuscripts/G/，别指到论文包",
+    example="已有签或地基时落一份进展稿，回 doc_id 与落点；零签零地基则整笔拒",
+    example_code=('doc.build_document(kind="note", title="进展", claims=[{"text": "p 群可解", '
+                  '"citations": ["lit:000001"], "evidence_kind": "heuristic", "section": "2"}], '
+                  'sections=[{"heading": "结果", "body": "..."}])'),
     # 键名从一个真实调用读出（`build_document`）：落库后的 documents 行
     # （`S.Document` 全字段，12 个）。
     returns=(
@@ -2510,6 +2803,15 @@ def _doc_build_document(_not_wired, store, workspace, actor, kind=None, title=No
 
     注入值（_not_wired, store, workspace, actor）由装配期用 `partial` 绑定，
     所以模型看到的签名与搬移前逐字相同。
+
+    TOOLFACE-SHARD4（业主 2026-11-22 三段格式）：模型面上原来那句
+    「写一行 documents 并渲染 markdown 到工作区内（机械检查 + 核对每条 citation
+    指向的对象存在，两闸都过才落库；out_path 越界拒绝）」讲的是实现（哪张表 /
+    两道闸），按「实现只留注释」搬到这里。模型面今天只说能力（渲染主稿、登记稿件、
+    正文别手写）与用法（正文落 manuscripts/G/、别指到论文包）；`out_path` 指到
+    `out/package/main.tex` 会把论文正文换成一份台账稿（真机实测 26 KB → 4 KB，
+    不可逆），所以既有的、不属于任何 `documents` 行的文件一律拒绝覆盖 —— 那一条
+    仍逐字写在 `out_path` 的参数说明里（它是用法：模型要选对落点）。
     """
     if store is None:
         return _not_wired()
@@ -2544,11 +2846,8 @@ def _doc_build_document(_not_wired, store, workspace, actor, kind=None, title=No
 
 @tool(
     "doc.register_dependency",
-    (
-            "登记外部依赖（FC-23）：`closed` 前核 `lit_id`/`experiment_id`/`stmt_id` 已入库；`dangling`"
-            "/`external_unavailable` 必须写 `status_reason`。`source_stmt_id` = 依赖的我方命题；`"
-            "path_group` = 证明路径号（组内都要、组间任一）。"
-            ),
+    ("登记外部依赖（FC-23）：来源已在册；source_stmt_id 指我方命题，"
+     "path_group 标证明路径（组内都要、组间任一）"),
     {
            "type": "object",
            "properties": {
@@ -2576,6 +2875,10 @@ def _doc_build_document(_not_wired, store, workspace, actor, kind=None, title=No
            },
     side_effect="write_local",
     roles=_WRITER_ROLES,
+    scenario="一条证明用到外部结果、要对外部依赖面记账时",
+    example="登记一条已闭合的文献依赖（来源要在册）；返回登记后的依赖行",
+    example_code=('doc.register_dependency(used_by="stmt:000004", kind="theorem", '
+                  'label="Hölder 不等式", source_lit_id="000001", status="closed")'),
     # 键名从一个真实调用读出（`register_dependency`）：落库后的 dependencies 行
     # （`S.Dependency` 全字段，2026-10-09 加 `source_stmt_id` 与 `path_group` 后 14 个；
     # 2026-10-15 补 `source_claim_id` / `source_doc_id` —— 它们是"这条依赖的「来源」"
@@ -2726,12 +3029,12 @@ def _paper_documents_count(workspace: Any, store: Any) -> tuple[int | None, str]
 
 def _paper_compile(workspace: Path | None, project: str, timeout_sec: float,
                    *, store: Any = None) -> Any:
-    """`doc.paper_compile`：把 `<项目根>/out/paper/main.tex` 编成 `main.pdf`（框架内置编译）。
+    """`doc.paper_compile`：把 `<项目根>/out/package/main.tex` 编成 `main.pdf`（框架内置编译）。
 
     它「不跑项目脚本」。旧路那一整套（`paper_render` / `paper_anchor` / `paper_build` /
     `paper_state` 四条工具 + `G.paper_package` 动作）随业主 2026-10-13 的裁定退场：
     「paper_package 里那些东西都是古早废案了，我们要智能体写文章」——
-    正文由智能体自己写进 `out/paper/main.tex`，框架只负责把它编成 PDF 并留下回执
+    正文由智能体自己写进 `out/package/main.tex`，框架只负责把它编成 PDF 并留下回执
     （现状与理由逐条写在 `draft/117`，实现只有一处：`agentflow.papercompile`）。
 
     ## 2026-11-04（业主裁定）：论文包必须先有 `documents` 行
@@ -2742,12 +3045,18 @@ def _paper_compile(workspace: Path | None, project: str, timeout_sec: float,
     而 H 的审校对象是 `documents` 行；没有行 ⇒ H 永远不审 ⇒ 论文包没有第三方。
     这一条不改 `papercompile.compile_paper`（它是纯编译器，判据夹具直调它不建表）；
     位置在工具层，与 `doc.write_mapping` 的成文门同一条纪律。
+
+    ## TOOLFACE-SHARD4（业主 2026-11-22 三段格式）：从模型面搬下来的原文
+    摘要里原来那句「引擎写完 PDF 却异常退出时，产物与退出码分两栏带回」是
+    编译器的内部读数形态（`papercompile` 拿 `pdf_fresh` / `exit_codes` 两栏分开报），
+    按「实现只留注释」留在本 docstring；模型面只留能力（编成 PDF、留回执、只编译）
+    与返回值里的 `pages` / `exit_codes` / `pdf_fresh` 三个键名。
     """
     root = _paper_root(workspace, project)
     if not isinstance(root, Path):
         return root
     # 没有正文就先报 `paper_no_source`（保持原有三态：先看正文，再看登记）。
-    if (root / "out" / "paper" / PC.TEX_NAME).is_file():
+    if (root / "out" / "package" / PC.TEX_NAME).is_file():
         count, why = _paper_documents_count(workspace, store)
         if count is None:
             return fail(
@@ -2773,6 +3082,8 @@ def _paper_compile(workspace: Path | None, project: str, timeout_sec: float,
         "engine_stderr_tail": got["engine_stderr_tail"],
         "engine_stdout_tail": got["engine_stdout_tail"],
         "problems": got["problems"],
+        "compile_log": got["compile_log"],
+        "compile_stderr_log": got["compile_stderr_log"],
     }
     if got["tri"] == "not_applicable":
         return fail(f"还没有可编的正文：{got['reason']}", kind="paper_no_source", **body)
@@ -2789,6 +3100,8 @@ def _paper_compile(workspace: Path | None, project: str, timeout_sec: float,
         "engine_stderr_tail": got["engine_stderr_tail"],
         "engine_stdout_tail": got["engine_stdout_tail"],
         "problems": got["problems"],
+        "compile_log": got["compile_log"],
+        "compile_stderr_log": got["compile_stderr_log"],
     })
 
 
@@ -2842,26 +3155,52 @@ def _signature_clause(facts: Mapping[str, Any] | None = None) -> str:
 
 
 def _credential_sentence(facts: Mapping[str, Any] | None = None) -> str:
-    """凭据那一句：有程序就填那份 `.py`（签不签穷举由 :func:`_signature_clause` 说）。"""
+    """凭据那一句：有程序就填那份 `.py`（签不签穷举由 :func:`_signature_clause` 说）。
+
+    TOOLFACE-SHARD4（业主 2026-11-22 三段格式）：三段各有字数上限（`summary` < 100），
+    所以这一句只留「怎么填」；「不要求 E 先签成穷举」那半句与逐格判据仍在同族的
+    `lean_file` / `numeric_evidence` / `exhaustion_note` 参数说明里（字数不限的那一面），
+    判据 `tests/test_doc_write_mapping_declaration_matches_papermapping.py` 的 D7 读它。
+    """
     got = MAPPING_DECLARATION_FACTS if facts is None else facts
-    return (f"凭据按通道：证明栏第 ① 段那份 `{got['credential_program_suffix']}` "
-            f"存在就填它（{_signature_clause(got)}）")
+    return f"凭据：证明栏有程序就填那份 `{got['credential_program_suffix']}`"
 
 
 def _duty_sentence(facts: Mapping[str, Any] | None = None) -> str:
-    """附加义务那一句：哪几格、只压在哪几类行上。"""
+    """附加义务那一句：只压在哪几类行上（压哪几格见 `rows` 的参数说明）。
+
+    TOOLFACE-SHARD4：原来这半句把四格（`numeric_evidence` / `exhaustion_note` /
+    索引四格 / 正文指回 E）与定理类行名单一起摊在 `summary` 里，30+ 字只够讲清
+    「哪几格」；段落有上限之后，逐格义务留在 `numeric_evidence` / `exhaustion_note`
+    的参数说明（`_MAPPING_ROW_PARAMS`）与 `returns` 里，这里只回答「压在哪几类行」。
+    定理类行的四个 kind 名单（事实源 `additional_duty_kinds`）也只住在那一面 ——
+    摘要在 100 字以内，名单摊进来就顶破上限。
+    """
+    # 签名保留 `facts`：判据 D8/D9 拿事实源的变异版本重渲染，同一件事只有一处口径。
     got = MAPPING_DECLARATION_FACTS if facts is None else facts
-    kinds = " / ".join(got["additional_duty_kinds"])
-    return ("附加义务按档位：`numeric_evidence` / `exhaustion_note` / 索引四格 / "
-            f"正文指回 E 只压定理类行（{kinds}）")
+    if not got.get("additional_duty_kinds"):
+        raise ValueError("事实源缺 additional_duty_kinds：附加义务压哪几类行没有来源")
+    return "附加义务只压定理类行"
 
 
-def _file_tiers_sentence(facts: Mapping[str, Any] | None = None) -> str:
-    """`file` 的落点那一句（档数按事实条数现算）。"""
+def _file_tier_lines(facts: Mapping[str, Any] | None = None) -> str:
+    """`file` 的逐档落点（详版；进 `rows.file` 的参数说明，字数不限）。"""
     got = MAPPING_DECLARATION_FACTS if facts is None else facts
     tiers = got["file_tiers"]
     body = "；".join(line for _, line in tiers)
     return f"`file` 有{_NUM_CN[len(tiers)]}种落点：{body}"
+
+
+def _file_tiers_sentence(facts: Mapping[str, Any] | None = None) -> str:
+    """`file` 的落点那一句（摘要版：档数按事实条数现算，明细见 rows.file）。
+
+    TOOLFACE-SHARD4：逐档原文（`理论定理行写论文包内的相对路径` 那三句）住
+    :func:`_file_tier_lines`（进参数说明）；`summary` 只留「按行档位分几档」。
+    判据 D10 逐句仍读 `rows.file` 的说明，D11 读这一句在不在 `summary` 里。
+    """
+    got = MAPPING_DECLARATION_FACTS if facts is None else facts
+    tiers = got["file_tiers"]
+    return f"`file` 落点按行档位分{_NUM_CN[len(tiers)]}档"
 
 
 def _empty_cells_sentence(facts: Mapping[str, Any] | None = None) -> str:
@@ -2885,6 +3224,7 @@ def _mapping_declaration_texts(
     signature = _signature_clause(got)
     credential = _credential_sentence(got)
     duty = _duty_sentence(got)
+    tier_lines = _file_tier_lines(got)
     tiers = _file_tiers_sentence(got)
     empty = _empty_cells_sentence(got)
     blank_rule = ("通道为空（证明栏 ① 段既没有程序也没有 Lean 源码）时两格必须留空，"
@@ -2892,13 +3232,17 @@ def _mapping_declaration_texts(
                   if got["empty_channel_requires_blank"] else
                   "通道为空时两格可以填")
     return {
+        # TOOLFACE-SHARD4（业主 2026-11-22 三段格式）：`summary` 有 100 字上限，所以
+        # 原来那句「先写表、再写正文、最后 paper_compile；md 与附录由 json 渲染，别手写」
+        # 里的实现（三份产物由 json 渲染出来）搬进这份 docstring；模型面只留三段：
+        # 能力（写哪三份、md/附录别手写）+ 凭据怎么填 + 附加义务压哪几类行 + `file`
+        # 分几档。逐档明细与逐格义务在下面 `file` / `lean_file` / `numeric_evidence` /
+        # `exhaustion_note` 的参数说明里（参数说明不属于三段，字数不限）。
         "summary": (
-            "写论文对应表三份（out/paper/MAPPING.json + MAPPING.md + "
-            "mapping-appendix.tex，并把 \\input 一行放进正文）。先写表、再写正文、"
-            "最后 paper_compile；md 与附录由 json 渲染，别手写。" + credential + "；"
-            + duty + "。" + tiers + "。"
+            "写论文对应表三份（out/package 的 json、md、附录），md 与附录别手写。"
+            + credential + "。" + duty + "。" + tiers
         ),
-        "file": "该条完整证明/实验所在的文件。" + tiers + "。",
+        "file": "该条完整证明/实验所在的文件。" + tier_lines + "。",
         "lean_file": (
             "机器核验凭据（这一格说的是「这条命题是百分百真的」），按证明通道填："
             "numeric（证明栏第 ① 段是程序）以及例子/实验（证明栏第 ① 段是程序，"
@@ -3174,7 +3518,7 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None,
 
     `doc.write_mapping` 是"先有对应表，再写正文"那条顺序的写入口（业主 2026-10-22）：
     `papermapping` 的三份产物此前没有任何调用方，而判据要求 md 与附录与渲染器逐字相同
-    ⇒ 手抄不可达。它只写 `out/paper/` 下的三份（`write_local`），不起子进程。
+    ⇒ 手抄不可达。它只写 `out/package/` 下的三份（`write_local`），不起子进程。
 
     `doc.mapping_cells`（业主 2026-11-04）是那三份的读侧：G 不必再从台账里翻
     "这一行该填什么"，直接调它取逐格的值、逐格来源与逐格问题。`side_effect="read"`、
@@ -3184,7 +3528,7 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None,
         ToolSpec(
             name="doc.mapping_cells",
             summary="取对应表那一行该填的每一格（值 + 每格来源 + 逐格问题）；"
-                    "先调它，拿不到的格才按通道手填。",
+                    "先调它，拿不到的格才按通道手填",
             params={
                 "type": "object",
                 "properties": {
@@ -3212,6 +3556,9 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None,
             side_effect="read",
             declared_external="none",
             roles=("G",),
+            scenario="写对应表之前，先按命题号把这一行的格取回来",
+            example="按命题号取一行；拿不到的格会在 problems 里点名",
+            example_code='doc.mapping_cells(project="projects/p1", statement_id="000004")',
             returns=_mapping_declaration_texts()["mapping_cells_returns"],
             tags=("document", "paper", "mapping", "read"),
         )
@@ -3219,7 +3566,7 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None,
     registry.register(
         ToolSpec(
             name="doc.paper_compile",
-            summary="把 out/paper/main.tex 编成 out/paper/main.pdf 并写回执；正文你自己 fs.write，这一条只做编译。引擎写完 PDF 却异常退出时，产物与退出码分两栏带回。",
+            summary="把 out/package/main.tex 编成 main.pdf 并留回执；只编译，不写正文",
             params={
                 "type": "object",
                 "properties": {
@@ -3234,15 +3581,21 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None,
             side_effect="write_local",
             declared_external="exec",
             roles=("G",),
+            scenario="论文正文写完之后要出 PDF 时",
+            example="编译一份论文包；返回页数、引擎退出码与回执路径",
+            example_code='doc.paper_compile(project="projects/p1")',
             returns=(
                 "{'tri','ok','reason','tex','pdf','engine','exit_codes','runs','pages',"
                 "'pdf_bytes','receipt_path','pdf_fresh','engine_stderr_tail',"
-                "'engine_stdout_tail','problems'}；"
+                "'engine_stdout_tail','problems','compile_log','compile_stderr_log'}；"
                 "tri ∈ not_applicable（还没有 main.tex，先写正文）/ unknown（没引擎、超时、"
                 "这一次没编出 PDF —— `pdf_fresh=false` 就是「盘上那份是上一次编的」那一档）/ "
                 "computed（**这一趟**拿到 PDF —— 页数与退出码如实带上，两栏不互相冒充）；"
                 "`engine_stdout_tail` / `engine_stderr_tail` 是引擎自己说的话（截尾）—— "
                 "编不过时先读它，别只看退出码；"
+                "`compile_log` / `compile_stderr_log` 是这一趟编译的日志文件名（在 "
+                "`out/package/` 下，`compile-<ts>.log` / `.stderr.log`）—— 要看整份日志就按 "
+                "这两个键打开；"
                 "失败：ok=False + kind=paper_no_source（还没写正文）/ "
                 "paper_compile_failed（编译没成）"
             ),
@@ -3269,7 +3622,14 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None,
                                                              store=store),
             side_effect="write_local",
             roles=("G",),
+            scenario="论文正文已就绪、要落对应表供读者追溯时",
+            example="按行写表；返回三份落点与 state（pass / fail / unknown）",
+            example_code=('doc.write_mapping(project="projects/p1", rows=[{"kind": "theorem", '
+                          '"label": "thm:main", "env_no": 1, "ledger_id": "stmt:000004", '
+                          '"proof_no": 1, "file": "proofs/thm.tex"}])'),
             returns=_mapping_declaration_texts()["returns"],
             tags=("document", "paper", "write"),
         )
     )
+
+

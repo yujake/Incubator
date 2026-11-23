@@ -122,7 +122,7 @@ def _next_request_id(rows: list[dict]) -> str:
     本函数原先自带一份"取 max+1"的副本（`interactions.next_prefixed_id` 的同族逻辑，但没有前缀守卫、也没有任何上限保护），于是同一个
     `search_requests` 表有两个取号器：`table.create` / CLI / C / D / F 各走各的，号段语义互相冲突。更糟的是副本连
     `interactions.next_prefixed_id` 那次真实事故的教训都没带上 ——它接受了任意前缀形态而不做校验。
-    现在：取号规则只有一份实现（`interactions.next_prefixed_id`，`interactions.py:1134`），前缀守卫 / 形态 / 冲突跳过
+    现在：取号规则只有一份实现（`interactions.next_prefixed_id`，`interactions.py:1287`），前缀守卫 / 形态 / 冲突跳过
     全部由它负责；`P-4` 之后上限也在它里面，末尾的 `assert_request_id_in_space` 是第二道守卫（覆盖"别人自己拼了一个号传进来"的情形）。
     `P-4` 的翻译：`next_prefixed_id` 越界时抛具名的 `IdSpaceExhausted`（继承 `ValueError`），这里精确翻成工具层的 
     `ToolError` —— 不翻的话它会冒到`ToolRegistry.call` 被兜成 `kind='unexpected'`，于是"空间用尽（已知、可处理）"与"工
@@ -147,7 +147,7 @@ def _questions(store: Any) -> list[dict]:
 
 @tool(
     "research.list_gaps",
-    "列出研究问题台账（D 的工作台），按 priority(high>medium>low)、question_id 稳定排序。",
+    "列出研究问题台账（你的工作台），按优先级与编号稳定排序；可只看某一状态。",
     {
         "type": "object",
         "properties": {
@@ -162,6 +162,9 @@ def _questions(store: Any) -> list[dict]:
     # 过滤值（没过滤时为 None）—— 它不会缺席。
     returns="{'questions','count','status_filter'}；每题带 waiting_request_ids 以便判断是否在等",
     tags=("research", "list"),
+    scenario="每轮开工先看这一张：哪些问题在等证据、哪些该收口。",
+    example="只看 needs_evidence → questions / count / status_filter。",
+    example_code="research.list_gaps(status=\"needs_evidence\", limit=50)",
 )
 def research_list_gaps(store: Any, status: str | None = None, limit: int = 50) -> ToolResult:
     """列出研究问题。
@@ -184,9 +187,14 @@ def research_list_gaps(store: Any, status: str | None = None, limit: int = 50) -
     return ok({"questions": rows, "count": len(rows), "status_filter": status})
 
 
+# TOOLFACE-CLEAN（业主 2026-11-22：实现只留在代码注释里）
+# 原文（旧 summary）：「…（建 search_requests 行 + request_id 进该问题等待集）」。
+# 实现要点：落点 `search_requests` 一行 + 该问题行 `waiting_request_ids`；取号
+# `interactions.next_prefixed_id`、在途闸门 `admit_search_request`、去重台账
+# `data/research_request_ledger.json`，三件事同一事务。判据：`test_tool_face_three_segments.py`。
 @tool(
     "research.submit_gap",
-    "把某研究问题的知识缺口提交给 A（建 search_requests 行 + request_id 进该问题等待集）。",
+    "把某研究问题的知识缺口提成一条查询请求交给 A，并把该请求记进这个问题的等待集。",
     {
         "type": "object",
         "properties": {
@@ -208,6 +216,9 @@ def research_list_gaps(store: Any, status: str | None = None, limit: int = 50) -
         "'reason','open_requests'}"
     ),
     tags=("research", "gap", "ask-A"),
+    scenario="证据不足、需要新文献时用它；同一问题已有在途请求会被挡下（duplicated）。",
+    example="为一个问题提检索 → request_id / duplicated / waiting_request_ids；被挡时 reason 说明原因。",
+    example_code="research.submit_gap(question_id=\"0001\", topic=\"非交换环 交换性\",\n    mode=\"topical\", description=\"关键词命中为 0\")",
 )
 def research_submit_gap(
     store: Any,
@@ -312,7 +323,7 @@ def research_submit_gap(
                 # dataclass 的默认值碰巧等于它）：闸门算出来的口径与写进行里的那个值
                 # 必须是同一个，否则"谁排前面"会有两个答案。
                 priority=str(gate.get("priority") or "medium"),
-                # `for_question_id` 是这一行的结构化归属（`schema.py:226-228`："该请求
+                # `for_question_id` 是这一行的结构化归属（`schema.py:317-319`："该请求
                 # 是为哪个研究问题服务的"）。从前不写它，消费方只能拿 `content_description`
                 # 里的 `[q:NNNN]` 做正则（CS-2/CS-3）；这里 `question_id` 现成，填它零成本。
                 for_question_id=str(question_id),
@@ -381,6 +392,9 @@ def research_submit_gap(
     # 键名从一个真实调用读出（`research_write_note`）。
     returns="{'question_id','notes_length','appended'}",
     tags=("research", "note"),
+    scenario="每轮有了判断就记一条：覆盖会毁掉时间序列，追加才留得下判断史。",
+    example="记下第 1 轮的判断 → notes_length / appended。",
+    example_code="research.write_note(question_id=\"0001\", note=\"第 1 轮：只找到 1 条未校验引文的关系\")",
 )
 def research_write_note(store: Any, question_id: str, note: str) -> ToolResult:
     """追加研究笔记。
@@ -413,7 +427,7 @@ def research_write_note(store: Any, question_id: str, note: str) -> ToolResult:
 
 @tool(
     "research.poll_waiting",
-    "复查等待中的查询请求：请求是否结束、result_lit_ids 是否都被 B 消化；返回就绪/未就绪分组。",
+    "复查等待中的查询请求：请求是否结束、结果文献是否都被 B 消化；返回就绪/未就绪分组。",
     {"type": "object", "properties": {}, "additionalProperties": False},
     side_effect="read",
     roles=("D",),
@@ -421,6 +435,9 @@ def research_write_note(store: Any, question_id: str, note: str) -> ToolResult:
     # {'ready','waiting','total'} 一类的分档计数。
     returns="{'ready','waiting','counts'}；纯确定性判断，不调用 LLM、不写盘",
     tags=("research", "poll"),
+    scenario="提交缺口后隔一会儿再问一次：就绪了才能把问题拉回 researching。",
+    example="看还差什么 → counts / ready / waiting（各自带 reason）。",
+    example_code="research.poll_waiting()",
 )
 def research_poll_waiting(store: Any) -> ToolResult:
     """检查等待中的请求。
@@ -514,9 +531,13 @@ LEGAL_TRANSITIONS: dict[str, tuple[str, ...]] = {
 }
 
 
+# TOOLFACE-CLEAN（业主 2026-11-22：实现只留在代码注释里）
+# 原文（旧 summary）：「改研究问题的状态（按 schema 状态机校验，非法迁移与非法状态一律 fail）。」
+# 实现要点：词表与终审在 `agentflow.schema`（`QUESTION_STATUSES` + `ResearchQuestion.validate()`），
+# 迁移表本文件 `LEGAL_TRANSITIONS`。判据：`tests/test_tool_face_three_segments.py`。
 @tool(
     "research.set_status",
-    "改研究问题的状态（按 schema 状态机校验，非法迁移与非法状态一律 fail）。",
+    "改研究问题的状态；状态迁移受控，非法迁移与非法状态一律拒（不静默接受）。",
     {
         "type": "object",
         "properties": {
@@ -533,6 +554,9 @@ LEGAL_TRANSITIONS: dict[str, tuple[str, ...]] = {
     # 这样"从哪来、到哪去"在返回里就自证，不必回读表。
     returns="{'question_id','from','to','waiting_request_ids'}",
     tags=("research", "status"),
+    scenario="要收口或退场时用它：dropped 必须写理由；answered / dropped 是终态。",
+    example="推成 dropped 并写理由 → question_id / from / to。",
+    example_code="research.set_status(question_id=\"0001\", status=\"dropped\", notes=\"证据互相矛盾，判不下去\")",
 )
 def research_set_status(store: Any, question_id: str, status: str, notes: str | None = None) -> ToolResult:
     """改状态。
@@ -646,6 +670,10 @@ def install(registry: Any, store: Any) -> list[str]:
                 roles=spec.roles,
                 returns=spec.returns,
                 tags=spec.tags,
+                # 三段（业主 2026-11-22）：重建 ToolSpec 时漏掉这三格 ⇒ 注册表里的三段是空的。
+                scenario=spec.scenario,
+                example=spec.example,
+                example_code=spec.example_code,
             )
         )
         names.append(spec.name)

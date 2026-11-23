@@ -38,9 +38,10 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, Sequence, runtime_checkable
 
-from .base import ToolRegistry, ToolSpec, fail, ok, tool
+from .base import ToolError, ToolRegistry, ToolSpec, fail, ok, tool
 from ..extract import ExtractError, extract_text, page_count
-from ..store import Store
+from .. import litread as LR
+from ..store import Store, StoreError
 
 __all__ = [
     "OcrError",
@@ -364,22 +365,69 @@ class _Ctx:
 
 
 def _resolve(ctx: _Ctx, raw: str) -> Path:
-    """把工具收到的路径解析成绝对路径。
+    """把工具收到的路径解析成绝对路径（相对路径的唯一基准：``store.library_path``）。
 
-    相对路径按"工作区 → library/"两级解释：B 手里的 ``literature.path`` 是
-    library/ 下的相对路径，而 A 手里的下载路径是工作区相对的。两级都认，
-    调用方就不必自己拼路径（少一次出错的机会）。
+    ## 改前是两级候选表（2026-11-22 业主裁定「旧工作区不必兼容」后整段删掉）
+
+    改前这里是 ``[工作区 / p, store.library / p]`` 的候选表，理由是"B 手里的
+    ``literature.path`` 是 library/ 下的相对路径，而 A 手里的下载路径是工作区相对的
+    —— 两级都认，调用方就不必自己拼"。那段宽容让两种旧形态都读得到（分目录
+    ``<lit_id>/<名>``、带 ``library/`` 前缀的 ``library/…``），而 ``store.library_path``
+    在同一天已经严格：同一份 ``literature.path``，写侧/审计拒、OCR 收，于是 B 能把
+    "这个写法不合法"的那一份文件抽出正文。现在只认一处真身，旧形态 ⇒ 受控拒绝
+    （``legacy_layout``），不折成 "文件不存在"（两种处置相反）。
+
+    绝对路径原样返回：它是调用方已经算好的位置（``_target_path`` 按 ``lit_id``
+    查出来的是 ``store.library_path`` 给的绝对路径，夹具/真机也可能直接给绝对路径），
+    不是 ``literature.path`` 的形态，所以不在这里重新判一遍坐标系。
     """
     p = Path(raw)
     if p.is_absolute():
         return p
-    candidates = [ctx.workspace / p]
-    if ctx.store is not None:
-        candidates.append(ctx.store.library / p)
-    for cand in candidates:
-        if cand.exists():
-            return cand
-    return candidates[0]
+    if ctx.store is None:
+        raise ToolError(
+            "没有装配 store：相对路径只能按唯一真身 `store.library_path` 解析"
+            "（即 `library/` 基准），这里不猜第二个基准。请给绝对路径，或装配 store。",
+            tool="ocr",
+            detail={"kind": "no_store", "path": str(raw)},
+        )
+    try:
+        inside = ctx.store.library_path(str(raw))
+    except StoreError as exc:
+        text = str(exc)
+        # 两种拒绝分开报：旧布局（这一行的写法不再支持）与越界（工作区外的文件
+        # 不算这一行的全文）处置不同 —— 折成一个 kind 就等于让 B 又得去猜。
+        kind = ("legacy_layout" if LR.OLD_LAYOUT_NOTE in text
+                else "path_outside_library")
+        raise ToolError(
+            f"{text}（OCR 读到这个相对路径时不按第二个基准读回来："
+            "相对路径的唯一基准是 `library/`）",
+            tool="ocr",
+            detail={"kind": kind, "path": str(raw)},
+        ) from exc
+    if inside is None:
+        raise ToolError(
+            f"路径是空的（{raw!r}）⇒ 这一格判不了（不是「文件没问题」）",
+            tool="ocr",
+            detail={"kind": "file_missing", "path": str(raw)},
+        )
+    return inside
+
+
+def _resolve_target(ctx: _Ctx, raw: str) -> tuple[Path | None, Any]:
+    """``_resolve`` 的受控失败版：``(路径, None)`` 或 ``(None, fail(...))``。
+
+    为什么要这一层：``_resolve`` 拒绝旧形态时抛的是 ``ToolError``，而 ``base.call``
+    会把它折成 ``kind="tool_error"`` —— 那是一个"工具坏了"的类别，不是"这一行写旧了"。
+    调用方（B）要凭 ``kind`` 决定下一步（改这一行的 path vs 去找文件），所以把
+    ``_resolve`` 给的 ``detail.kind`` 原样抬到工具返回值的 ``kind`` 上。
+    """
+    try:
+        return _resolve(ctx, raw), None
+    except ToolError as exc:
+        detail = dict(exc.detail or {})
+        kind = str(detail.pop("kind", "path_refused"))
+        return None, fail(str(exc), kind=kind, **detail)
 
 
 def _rasterize(page: Any, dpi: int) -> Any:
@@ -485,7 +533,8 @@ def _target_path(ctx: "_Ctx", path: str, lit_id: str) -> tuple[str, dict | None]
     「2026-10-16（亲测 B 时加的）」：这两件工具的必填键是 `path`，而 B 整个域都按
     `lit_id` 说话（`literature` 行）—— 我第一次凭感觉敲的就是编号，吃了一个"缺少必填参数"。
     按业主口径（"第一次凭感觉敲红的，真实智能体也会困惑"）⇒ 让「第一猜能 work」：
-    给编号时去 `literature` 行里找回它那一份全文（`store.library_path` 优先，退回工作区相对路径）。
+    给编号时去 `literature` 行里找回它那一份全文（`store.library_path`，唯一真身；
+    它拒的旧形态原样交给 `_resolve` 受控拒绝 —— 这里不再退回"工作区相对路径"那条基准）。
 
     三态：「两者都没给」 ⇒ 可读拒绝（"这一格判不了"，不是"文件没问题"）；
     编号不认得 ⇒ 拒绝并列出「盘上有哪些编号」（照 `search.walk_citations` 那件好样板）。
@@ -532,7 +581,7 @@ def _target_path(ctx: "_Ctx", path: str, lit_id: str) -> tuple[str, dict | None]
             abs_path = store.library_path(rel)
             if abs_path.exists():
                 return str(abs_path), None
-        except Exception:  # noqa: BLE001 - 落回工作区相对路径
+        except Exception:  # noqa: BLE001 - 不在这里判坐标系：原样交给 `_resolve`（唯一基准）
             pass
     return rel, None
 
@@ -542,7 +591,9 @@ def _h_detect_text_layer(ctx: _Ctx, path: str = "", lit_id: str = "") -> Any:
     path, bad = _target_path(ctx, path, lit_id)
     if bad is not None:
         return fail(bad["error"], **{k: v for k, v in bad.items() if k != "error"})
-    p = _resolve(ctx, path)
+    p, refused = _resolve_target(ctx, path)
+    if refused is not None:
+        return refused
     if not p.exists():
         return fail(f"文件不存在：{p}", kind="file_missing", path=str(p))
     if not p.is_file():
@@ -735,7 +786,9 @@ def _h_run(
     path, bad = _target_path(ctx, path, lit_id)
     if bad is not None:
         return fail(bad["error"], **{k: v for k, v in bad.items() if k != "error"})
-    p = _resolve(ctx, path)
+    p, refused = _resolve_target(ctx, path)
+    if refused is not None:
+        return refused
     if not p.exists():
         return fail(f"文件不存在：{p}", kind="file_missing", path=str(p))
 
@@ -964,9 +1017,15 @@ def _pick_workspace(
     return Path(store.root) if store is not None else Path.cwd()
 
 
+# TOOLFACE-CLEAN（业主 2026-11-22：实现只留在代码注释里）
+# 原文（旧 summary）：「真实探测 OCR 后端（easyocr / pytesseract / none）是否可用，逐条
+# 给理由与修复建议；不下载 easyocr 模型。」（原句的「真实探测」带星号强调，注释里按 R009 去掉）
+# 搬走的实现细节：「真实探测」指 `_probe_rows` 真的 import 两个后端并起
+# `tesseract --version`（结果按 refresh 缓存；它不构造 easyocr Reader，所以不下载模型）。
+# 判据：`tests/test_tool_face_three_segments.py` ①②③。
 @tool(
     "ocr.backends",
-    "**真实探测** OCR 后端（easyocr / pytesseract / none）是否可用，逐条给理由与修复建议；不下载 easyocr 模型。",
+    "逐条探测 OCR 后端是否可用（easyocr / pytesseract / none），给理由与修复建议；不下载模型。",
     {
            "type": "object",
            "properties": {"refresh": {"type": "boolean"}},
@@ -985,6 +1044,10 @@ def _pick_workspace(
             "backends[] 每项是 {'name','available','reason','produces_text','checks','install_hint'}"
             ),
     tags=("ocr", "probe"),
+
+    scenario="OCR 失败或要选后端之前先看这一件；它只报可用性，不识别。",
+    example="看本机能不能 OCR → backends / any_ocr_backend_available / selected_for_auto。",
+    example_code="ocr.backends(refresh=True)",
 )
 def _ocr_backends(ctx, refresh=False):
     """ocr.backends 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
@@ -994,9 +1057,13 @@ def _ocr_backends(ctx, refresh=False):
     """
     return _h_backends(ctx, refresh)
 
+# TOOLFACE-CLEAN（业主 2026-11-22：实现只留在代码注释里）
+# 原文（旧 summary）：「（复用 extract_text，pages == [] 即无文本层）」。内部复用关系与判空口径留在这里；模型面只留「有没有文本层」这条能力与它是不是三态。
+# 判据：`tests/test_tool_face_three_segments.py` 钉住这条 needle（'复用 extract_text'）
+# 仍在注释里、且不在模型可见面上。
 @tool(
     "ocr.detect_text_layer",
-    "判断 PDF 有没有**文本层**（复用 extract_text，pages==[] 即无）；无文本层是「**无法校验**」不是「**校验失败**」。",
+    "判断 PDF 有没有**文本层**；无文本层是「**无法校验**」不是「**校验失败**」。",
     {
            "type": "object",
            "properties": {
@@ -1016,6 +1083,10 @@ def _ocr_backends(ctx, refresh=False):
             "失败：ok=False + kind(no_target/unknown_lit_id/lit_without_path/file_missing/not_a_file/extract_error)"
             "（unknown_lit_id 会把盘上有的编号一起给出来）",
     tags=("ocr", "detect"),
+
+    scenario="抽不出文字时先判它是不是扫描件；判完是扫描件就走 ocr.run。",
+    example="判一份 PDF（`path` 填登记产生的扁平名）→ has_text_layer / pages / pages_with_text / suggested_next。",
+    example_code="ocr.detect_text_layer(path=\"<扁平名>\")",
 )
 def _ocr_detect_text_layer(ctx, path="", lit_id=""):
     """ocr.detect_text_layer 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
@@ -1025,9 +1096,16 @@ def _ocr_detect_text_layer(ctx, path="", lit_id=""):
     """
     return _h_detect_text_layer(ctx, path, lit_id)
 
+# TOOLFACE-CLEAN（业主 2026-11-22：实现只留在代码注释里）
+# 原文（旧 summary）：「对指定页（缺省全部页）做 OCR；auto 按 easyocr→pytesseract 选第一个
+# 可用者，都不可用时 fail 并给安装建议（不返回空文本）。可给已登记文献编号。」
+# 搬走的实现细节：auto 的候选链就是 `AUTO_CHAIN`（easyocr → pytesseract，逐个试到第一个
+# 可用），由 `_select_backend` 落实；`_h_run` 逐页 OCR 并在 `pages[]` 里留每页读数
+# （`text_layer_chars` / `error` / `elapsed_s`），没拿到正文时不写空文本。
+# 判据：`tests/test_tool_face_three_segments.py` ①②③。
 @tool(
     "ocr.run",
-    "对指定页（缺省全部页）做 OCR；auto 按 easyocr→pytesseract 选第一个可用者，都不可用时 fail 并给安装建议（不返回空文本）。可给已登记文献编号。",
+    "对指定页（缺省全部页）做 OCR；backend=auto 自动挑第一个可用后端，都不可用就 fail 并给安装建议，不返回空文本；可给已登记文献编号。",
     {
            "type": "object",
            "properties": {
@@ -1066,6 +1144,10 @@ def _ocr_detect_text_layer(ctx, path="", lit_id=""):
             ),
     tags=("ocr", "run"),
     external="egress",
+
+    scenario="扫描件或图片没有文字层时用它；有文字层的 PDF 让 A 抽取更快。",
+    example="OCR 第 2、3 页（`path` 填登记产生的扁平名）→ backend / pages_processed / pages[].text / total_chars。",
+    example_code="ocr.run(path=\"<扁平名>\", pages=[2, 3], backend=\"auto\")",
 )
 def _ocr_run(ctx, path="", pages=None, backend="auto", languages=None, dpi=200, max_pages=20,
              lit_id=""):
@@ -1102,7 +1184,7 @@ def register(
     
     - ``backends``：后端列表。顺序即 ``auto`` 的优先级；不传时用默认的
     ``[EasyOcrBackend(), PytesseractBackend(), NullBackend()]``。注入是给离线测试与将来换后端（如 RapidOCR）
-    用的。- ``store``：只用于解析路径（相对路径会依次按工作区、``library/`` 试）与推导默认工作区；OCR 本身不读也不写任何表。- 
+    用的。- ``store``：只用于解析路径（相对路径只按唯一真身 ``store.library_path`` 解，即 ``library/`` 基准；旧形态受控拒绝）与推导默认工作区；OCR 本身不读也不写任何表。- 
     ``workspace``：工作区根目录；别名 ``workspace_root`` / ``root`` 也接受（装配器用这两个名字注入）。- 副作用等级逐个如实声明（不
     要用一句"三个都是 read"概括，见模块 docstring 最后一节）：``ocr.backends`` 是 ``write_local``（会在 
     ``~/.EasyOCR/model``建目录、会起 ``tesseract --version``），``ocr.run`` 是 ``network``（easyocr 

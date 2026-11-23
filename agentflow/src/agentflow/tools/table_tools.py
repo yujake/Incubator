@@ -71,6 +71,15 @@ class TableContext:
 
 def _spec_of(table: str) -> dict:
     if table not in S.TABLES:
+        retired = S.retired_table(table)
+        if retired is not None:
+            # 退役表：不是"表名写错了"，是"这张表不许再写" —— 拒信要说清是哪一种，
+            # 否则模型会按"未知表"那条路去猜表名（`eval_results` 明明是它认识的名字）。
+            raise ToolError(
+                f"表 {table!r} 已退役（{retired.get('retired_at') or ''}）："
+                f"{retired.get('why') or ''}。表工具读不了也写不了它。"
+                f"{retired.get('how') or ''}"
+            )
         raise ToolError(f"未知表名 {table!r}；可用：{list(ALL_TABLES)}")
     return S.TABLES[table]
 
@@ -87,7 +96,8 @@ def _has_field(table: str, name: str) -> bool:
     return name in _field_names(table)
 
 
-def _rows(ctx: TableContext, table: str) -> list[dict]:
+def _rows(ctx: TableContext, table: str, *,
+          raw_out: list[dict] | None = None) -> list[dict]:
     """无锁快照读。
 
     只读工具用它是对的（理由见模块 docstring），但它拿到的是某一瞬间的副本：
@@ -106,8 +116,20 @@ def _rows(ctx: TableContext, table: str) -> list[dict]:
     """
     _spec_of(table)  # 提前校验表名，给出比 KeyError 更清楚的错误
     rows = ctx.store.rows(table)
+    if raw_out is not None:
+        # 收窄**之前**的那一份快照（同一个 `rows` 对象）：`table.list` 要靠
+        # 「盘上几行 − 可见面几行」算出 `hidden_by_scope`，而两份读数必须来自同一
+        # 瞬间 —— 事后再读一次表，中间有人写了一行，那个差就不是"被收窄掉的行"了。
+        # 只给需要它的读口传（`table.list` / `table.count` / `table.search`）。
+        raw_out.extend(rows)
     if table == "tasks":
-        return _visible_tasks(rows, role=_caller_role(), task_id=_caller_task_id())
+        role, me = _caller_role(), _caller_task_id()
+        # 实例标签只解析一次（`_caller_instance` 会读台账 + 名册）：逐行解析会把一次
+        # 解析放大成 N 次。读不到 ⇒ 空串 ⇒ 板项的实例档不成立（父台账号那一档照旧）。
+        # M 不看地址（`_visible_tasks` 对它是全表）⇒ 省掉那一次台账 + 名册读。
+        instance = ("" if role == S.CONDUCTOR_ROLE
+                    else _caller_instance(ctx.store, role=role, me=me))
+        return _visible_tasks(rows, role=role, task_id=me, instance=instance)
     if _RS.owned(table):
         who = _RS.caller()
         return _RS.scope_rows(table, rows, role=who["role"], task_id=who["task_id"],
@@ -125,6 +147,76 @@ def _row_scope_reading(table: str) -> str:
         return "workspace（别的角色读这张表的全部行：证据是公共的；写权仍按归属判）"
     who_label = who["instance"] or who["task_id"] or "（没有身份 ⇒ 只看得到角色级老行）"
     return f"own-instance（{who_label} 这一支笔的行 + 角色级老行）"
+
+
+# ---------------------------------------------------------------- `tasks` 的收窄三态
+#
+#: `tasks` 读侧收窄的三态（进 `meta.row_scope`，**取值就是这三个 token**）。
+#:
+#: 为什么 `tasks` 需要这一格，而 `experiments` / `documents` 只需要一句文案：
+#: 后两张表对"别的角色"是整表可读的（`_row_scope_reading` 的 `workspace`），收窄只发生在
+#: "同一个角色的另一个实例"这一档，读的人至少知道自己是哪个角色。`tasks` 的收窄是
+#: **对整个非 M 角色面**成立的（`_visible_tasks`），而返回里改前只有 `rows` / `total`：
+#: `rows=0 / total=0` 既可能是"表里真的没有行"，也可能是"行全在我的可见面之外" ——
+#: 读的人只能猜。今天这三态加 `hidden_by_scope`（见 `_tasks_scope_meta`）把两件事分开。
+#:
+#: 取值刻意是**裸 token**（不带括号文案）：判据要按等号读它，文案另放
+#: `meta.row_scope_detail`（要点名依据，又要能被机器判，这两件事必须分开）。
+#: `experiments` / `documents` 的旧文案（`_row_scope_reading`）逐字不动 —— 那是既成契约，
+#: 本批只给 `tasks` 补这一格，不顺手动别人的口径。
+ROW_SCOPE_WORKSPACE = "workspace"
+ROW_SCOPE_VISIBLE_OWN = "visible-own"
+ROW_SCOPE_UNKNOWN = "unknown"
+
+#: `workspace` 那一档的 detail：`tasks` 上只有主控 M 是"直通"（`_visible_tasks` 对它是全表）。
+_ROW_SCOPE_WORKSPACE_DETAIL = (
+    "主控 M：看得见整张 `tasks`（`_visible_tasks` 对 M 不过滤）⇒ 一行都没藏")
+
+#: `visible-own` 那一档的四档依据（`row_scope_detail` 的前半句，实例标签另拼）。
+#: 与 `_is_visible_task_row` 逐条对应：写在这里只是措辞，判据仍只有那一处。
+_ROW_SCOPE_VISIBLE_OWN_BASIS = (
+    "自己那一行 + 直接下级（`parent_task_id` = 我且 `kind` 为空的实例行）"
+    "+ 我的父那一行 + 开给我的板项（`parent_task_id` = 我，或 `instance` = 我的实例标签）")
+
+#: 身份判不了（非 M 而没有台账号）时的 detail：这是"没查成"，不是"表里没有行"。
+_ROW_SCOPE_UNKNOWN_IDENTITY_DETAIL = (
+    "判不了：这一次调用没有台账号（身份解析失败）⇒ `tasks` 的收窄可见面算不出来，"
+    "本次没查成（不按全表兜底）。补上台账号再读；看直接下级用 `trace.children`")
+
+#: 表读不到时的 detail：同上，但缺的是那张表本身。
+_ROW_SCOPE_UNKNOWN_TABLE_DETAIL = (
+    "判不了：`tasks` 台账读不成（表文件坏了 / 读不动）⇒ 收窄可见面算不出来，"
+    "不是「表里没有行」")
+
+#: `_tasks_scope_meta` 的 `target` 缺省值：没给目标行 ⇒ 走「整表被收窄掉几行」的聚合口径
+#: （`table.list` / `table.count` / `table.search` 用这一档）。
+#: 刻意不用 `None` 当缺省值：`None` 在这里是一种**读数**（`table.get` 的「目标行不在盘上」），
+#: 与「这个读口不问某一行」必须分得开 —— 两者折成同一个值，`table.get` 的 0 就会与
+#: `table.list` 的聚合差混在一起，而那正是本批要分开的东西。
+_NO_TARGET: Any = object()
+
+#: `table.get` 的 `meta.why`：把三态读数翻成一句人话（读数本身仍只由 `_tasks_scope_meta`
+#: 一处产生；这里只做措辞，不另立判据）。
+#:
+#: 为什么单行读口需要这句话：`found=false` 只回答"你拿不到"，回答不了"为什么拿不到"。
+#: 同一句话在 `table.list` 上不存在，因为那里的 `hidden_by_scope` 是条数（"你被藏了 N 行"），
+#: 读者自己就能看出方向；到了 `get` 上它只有 1 / 0，没有这句话时 1 与 0 的差别要靠猜。
+_TASKS_GET_HIDDEN_WHY = (
+    "存在但不在你的可见面（自己/直接下级/父/开给我的板项）")
+_TASKS_GET_ABSENT_WHY = (
+    "盘上没有这个号（不是被收窄掉：收窄后的可见面里也不会有它）")
+_TASKS_GET_UNKNOWN_WHY = (
+    "判不了（身份或台账读不成）⇒ 本次没查成，不能按「没有这一行」处置")
+
+
+def _tasks_get_why(scope: str, hidden: int | None) -> str:
+    """`table.get` 的 `meta.why`：按三态读数选一句话（三档一一对应，没有第四种说法）。"""
+    if scope == ROW_SCOPE_WORKSPACE:
+        return "主控 M 直通整张 `tasks`（`_visible_tasks` 对 M 不过滤）⇒ 盘上没有这个号"
+    if scope == ROW_SCOPE_UNKNOWN or hidden is None:
+        return _TASKS_GET_UNKNOWN_WHY
+    return _TASKS_GET_HIDDEN_WHY if hidden else _TASKS_GET_ABSENT_WHY
+
 
 
 def _build_row(table: str, raw: Mapping[str, Any]) -> tuple[Any, dict]:
@@ -400,6 +492,11 @@ def _literature_path_refusal(ctx: TableContext, *, table: str, rel: Any,
     try:
         ap = store.library_path(rel)
     except StoreError as e:
+        # 「旧布局（不再支持）」要原样带出：它是口径，不是"越界"（越界有自己的措辞）。
+        text = str(e)
+        if "旧布局" in text:
+            return fail(text, table=table, path=rel, kind="validation",
+                        **({"id": id} if id is not None else {}))
         return fail(f"literature.path 解析越出 library/：{e}", table=table, path=rel,
                     kind="validation", **({"id": id} if id is not None else {}))
     if ap is not None and ap.exists() and not ap.is_file():
@@ -1146,7 +1243,7 @@ def _caller_role() -> str:
 
     为什么从 `conductor.current_caller_role()` 现读：工具的形状里没有"我是谁"这一格
     （`TableContext.actor` 是装配期绑的常量 "tool"，不是发起人）。`conductor.calling_as`
-    在 `AgentLoop._do_tool` 里包住每一次工具调用（agent_loop.py:6169），所以生产路径上
+    在 `AgentLoop._do_tool` 里包住每一次工具调用（`agent_loop.py::AgentLoop._do_tool`），所以生产路径上
     这一格总是有值；只读工具、脚本与单测里没有挂点 ⇒ 空串。
     这个值只「转交」给兜底方（"谁要求写这一条命题"），不替兜底方放宽它的判据：
     秘书那条路有"只有 B 能交命题内容"的规矩，路由把它原样传过去。
@@ -1179,11 +1276,48 @@ def _caller_task_id() -> str:
         return ""
 
 
-#: `tasks` 读侧的可见面：自己 + 直接下级 + 自己的父（父是向上的一格，不漏下去）。
+def _caller_instance(store: Store | None, *, role: str, me: str) -> str:
+    """这一次工具调用者的「实例标签」（`tasks` 板项投递式寻址的收件地址读法）。
+
+    ## 为什么不能只读 `identity.current_instance()`
+
+    那只是"召唤时点名的标签"，而实例身份有四个来源、优先次序是
+    「名册名 > 召唤标签 > `tasks.instance` > 台账号」（`identity.resolve_identity`
+    的模块 docstring）。真机上三种来源确实分叉过：`projects/lp-ball-12` 的
+    `t-000092` / `t-000119` 台账行 `instance` 是空串、`t-000229` 的 `tasks.instance`
+    是 `digest2`，而它们各自名册名是 `B2` / `B1` / `B3` —— 也正是它们收下的那三条
+    板项行上写的收件实例。只读 `tasks.instance` 会让这三条对收件人永远读不到。
+
+    所以这里与 `conductor._instance_of_task`（`ack_items` / `open_items_of` 的判据）
+    和 `obligations._row_instance` 走同一条读法：`identity.resolve_identity` 是唯一
+    来源；台账号兜底（`source == "task_id"`）「不算」实例标签（拿它当地址会让同一个
+    实例换个号就收不到自己的项）。
+
+    读不到（没有 store / 台账读不成 / 没有实例标签）⇒ 空串 = 这一档判不了 ⇒
+    实例档不成立（fail-closed；父台账号那一档一个字都不受影响）。
+    """
+    if store is None or not str(me or ""):
+        return ""
+    try:
+        from .. import identity as _IDENT
+
+        got = dict(_IDENT.resolve_identity(store, str(role or ""), task_id=str(me)))
+    except Exception:  # noqa: BLE001 - 读不成 = 这一趟没有实例标签（不是"实例是空"）
+        return ""
+    if str(got.get("source") or "") == "task_id":
+        return ""
+    return str(got.get("instance") or "").strip()
+
+
+#: `tasks` 读侧的可见面：自己 + 直接下级 + 自己的父（父是向上的一格，不漏下去）
+#: + 开给我的板项（`parent_task_id == 我` 或 `instance == 我的实例标签` 两种寻址写法）。
 #: 为什么不是"自己整棵子树"：普通代理只能追一层（业主 2026-10-24 原话），给子树
 #: 等于让 `table.list("tasks")` 变回那条绕过路径。为什么留父那一行：它是"我这一趟
 #: 从哪来"，本来就在提示词里（`{{parent_task_id}}`），读它不增加任何可见面。
-_TASKS_VISIBLE_CHILD_DEPTH = 1
+#:
+#: 这一层深度**写死**在 `_is_visible_task_row` 的"直接下级"那一支里（`parent_task_id == 我`
+#: 且 `kind == ""`）。改前它旁边还有一个"可见深度"常量，零读者（深度从来没从它读），
+#: 2026-11-22（VISIBILITY-FIX ④）按"零读者 ⇒ 退役"删掉，行为一个字节没变。
 
 # ---------------------------------------------------------------- `tasks` 的写侧判据
 #
@@ -1283,8 +1417,99 @@ def _tasks_write_refusal(*, table: str, row: Mapping[str, Any],
     return None
 
 
-def _is_board_item_for_me(row: Mapping[str, Any], *, me: str, role: str) -> bool:
+#: 通用写口改 / 删 `tasks` 行时的受控码：**目标行不是你的**。
+#:
+#: 与上面三条分开（不是第四个同族码）：那三条判**载荷**（你要把项种给谁 / 你要把行
+#: 写成什么状态），这一条判**盘上那一行归谁** —— 两件事，两个码。
+TASKS_ROW_NOT_YOURS = "tasks_row_is_not_yours"
+
+
+def _tasks_row_is_mine(row: Mapping[str, Any], *, me: str) -> bool:
+    """这一行 `tasks` 是不是"我自己那一行"（`tasks` 写侧的归属判据，唯一一处）。
+
+    为什么不用读侧的 `_is_visible_task_row`：读侧还有"父那一行 / 直接下级的实例行 /
+    开给我的板项"三档 —— 那三档是**看得见**，不是**能动**。写侧只认 `task_id == 我`：
+    父改子、子改父都是"替别人收工"；板项收口唯一的路是 `Conductor._set_item`
+    （工具面 `conductor.ack`），不是通用写口 —— 所以"开给我的板项"能读、不能改/删。
+    """
+    mine = str(me or "")
+    return bool(mine) and str(row.get("task_id") or "") == mine
+
+
+def _tasks_write_target_refusal(*, table: str, target: Mapping[str, Any] | None,
+                                op: str = "update") -> ToolResult | None:
+    """改 / 删 `tasks` 行之前的**目标行**判据：返回 None = 放行，否则受控拒绝。
+
+    ## 改前（洞②与洞③的同一个根因）
+
+    `table.update` 交给 `_tasks_write_refusal` 的是 `dict(patch)` —— 判的是"你要改成
+    什么"，不是"你要改哪一行" ⇒ `table.update(tasks, id=任意行, patch={"detail": …})`
+    全放行。`table.delete` 更彻底：三个写口里只有它**一处都没调** `_tasks_write_refusal`
+    （`_RS.write_refusal` 对 `tasks` 立即返回 None，表级那道闸也不开这张表）⇒ 任何角色
+    可删任意任务行。归属是**盘上那一行的事实**，所以判据必须在事务里、拿到 `target`
+    之后生效（与 `rowscope.write_refusal` 同型：那边判的也是 `current` 不是载荷）。
+
+    `op` 只用于措辞（`update` / `delete`）：两条路判的是同一件事 ——
+    "这一笔动的是谁那一行"。`target is None` 不在这里拒：那一档由调用方自己的
+    `not_found` 说（这里不抢那句话）。
+    """
+    if str(table) != "tasks":
+        return None
+    me = _caller_task_id()
+    where = f"table.{str(op or 'update')}"
+    if not me:
+        return fail(
+            (f"{TASKS_ROW_NOT_YOURS}：`{where}(table=\"tasks\")` 需要知道是哪一趟代理在动这一行"
+             " —— 这一次没有调用上下文（没有台账号）⇒ 拒。"),
+            table="tasks", kind=TASKS_ROW_NOT_YOURS)
+    if target is None:
+        return None
+    if _tasks_row_is_mine(target, me=me):
+        return None
+    tid = str(target.get("task_id") or "")
+    parent = str(target.get("parent_task_id") or "")
+    return fail(
+        (f"{TASKS_ROW_NOT_YOURS}：`{where}(table=\"tasks\")` 要动的是 {tid!r}"
+         f"（`parent_task_id` = {parent!r}），不是你这一趟（{me}）那一行 ⇒ 拒。"
+         "任务台账的每一行只有它自己那一趟能动：父 / 直接下级 / 开给别人的板项看得见，"
+         "不等于动得了。派活走 `conductor.summon` / `conductor.post_task`，"
+         "收口走 `conductor.ack`（状态机是 `Conductor._set_item` 那一处）。"),
+        table="tasks", id=tid, kind=TASKS_ROW_NOT_YOURS)
+
+
+def _is_board_item_for_me(row: Mapping[str, Any], *, me: str, role: str,
+                          instance: str = "") -> bool:
     """这一行板项（`kind` 非空）是不是"开给我这一趟的"（`tasks` 读侧的 owner 档）。
+
+    ## 两种寻址写法都认（2026-11-22，BOARD-ADDR-FIX）
+
+    板项行的收件地址在盘上有两种写法，写侧两条路都在用：
+
+    ① 「展开式」：`parent_task_id` = 收件人的台账号（D89）。历史行几乎全是这一种，
+       同一条判据在 `Conductor.open_items_by_parent` / `_item_authority` /
+       `open_item(..., parent_task_id=…)` 的每个调用点上。
+    ② 「投递式」：`parent_task_id = None` + `instance` = 收件实例标签（K9）。两个写点：
+       - opener 在收件人「不在飞」时写（`obligations.ensure_resubmit` /
+         `obligations.ensure_registration` 的 `open_item(parent_task_id=None,
+         recipient_instance=…)`）；
+       - 角色地址的项被投递那一刻由 `Conductor._set_item` 领取（`state="seen"` 时把
+         投递实例写进 `instance` 的那一支）。
+
+    改前这里只比 `parent_task_id == 我` ⇒ ② 的行对收件人「读不到」：真机
+    `projects/lp-ball-10` 的 B1（台账号 `t-000086`）对自己的义务项 `t-000091`
+    （`instance=B1`、`parent_task_id=None`）调 `table.get` 是 `found=false`
+    （`temp/boardaddr/REPORT.md` ① 有该 run 的 `steps[28]`）。
+
+    ## `instance` 怎么比（逐字相等；取证见 `temp/boardaddr/REPORT.md` ②）
+
+    - 全仓只有一种比法：`conductor.open_items_for`（`row_inst == want`）、
+      `open_items_of`（`== instance`）、`ack_items`（`addressed == mine_instance`）、
+      `rowscope.visible`（`got["instance"] == my_instance`）「都是逐字 `==`」；
+      没有任何一处对实例标签做 `lower()` / `casefold()` / 角色前缀剥离；
+    - 盘上实际标签是自由文本（`B1` / `B2` / `b-reg-p12-1` / `register-ap-proof` /
+      `b-batch4-1`），大小写与连字符都有意义 ⇒ 两边 `.strip()` 之后逐字相等；
+    - `instance` 与 `role` 两格必须同时成立（行上的 `role` 是收件角色）：号撞上而
+      角色不同只可能是写错行 / 号复用。行上 `role` 为空（历史行）⇒ 不拦。
 
     ## 2026-11-17（INV2 钉死的第二处；证据 `temp/inv2/REPORT.md` §2.3）
 
@@ -1292,34 +1517,97 @@ def _is_board_item_for_me(row: Mapping[str, Any], *, me: str, role: str) -> bool
     后果不是"少看一条"，而是"义务的收件人看不见自己的义务正文"：真机
     `projects/lp-ball-6` 上 B 的 `table.get(tasks, "t-000079")` 回 `found=false`
     （`table.list(tasks)` 只回 2 行），它只能去 `fs.search` 翻 `events.jsonl` 的原文。
-
-    为什么"owner" = `parent_task_id == 我`：板项行那一格的口径就是"收件人的台账号"
-    （D89），同一条判据在 `Conductor.open_items_by_parent`（按 `parent_task_id` 归到
-    收件人）、`Conductor._item_authority`（`owner = row["parent_task_id"]`）与
-    `open_item(..., parent_task_id=…)` 的每个调用点上（`clock` 的收件人、`guide` 的
-    链尾、`post_task` 的自己、`obligations` 选出的 owner）。
-
-    `role` 再核一次（行上的 `role` 是"收件角色"）：号撞上而角色不同只可能是写错行 /
-    号复用，这两种都不该因为"号相同"就把别人的活交给我。行上 `role` 为空（历史行）
-    ⇒ 不拦：那一格当时没写，不是"写给了别人"。
     """
     if not str(row.get("kind") or ""):
         return False
-    if str(row.get("parent_task_id") or "") != str(me or ""):
+    mine = str(me or "")
+    by_parent = bool(mine) and str(row.get("parent_task_id") or "") == mine
+    my_instance = str(instance or "").strip()
+    by_instance = bool(my_instance) and str(row.get("instance") or "").strip() == my_instance
+    if not (by_parent or by_instance):
         return False
     row_role = str(row.get("role") or "")
     return not row_role or not role or row_role == role
 
 
+class _TasksNoIdentity(ToolError):
+    """读 `tasks` 却没有台账号（身份判不了）—— 只是给读口一个可捕的**那一档**。
+
+    为什么要有单独一类而不是直接用 `ToolError`：`table.list` 在身份判不了时**仍然**要给出
+    `meta.row_scope="unknown"`（否则"没查成"与"表里没有行"在读的人那里又折成同一件事），
+    而注册表的通用兜底（`base.py` 的 `except ToolError` → `fail(kind="tool_error")`）没有
+    这一格可带。读口捕这一档，再把 `_scope_meta(...)` 的读数放进 `fail(...)` 的 meta。
+
+    读数**不在异常里自带一份**：三态只有一个出口（`_tasks_scope_meta`）。异常自带一份
+    等于同一格有两个来源 —— 打桩打掉一处、另一处还在，判据就测不到它该测的东西。
+    """
+
+
+def _tasks_no_identity_error() -> ToolError:
+    """读 `tasks` 却没有台账号时的受控错误（`table.list` / `table.get` 共用的同一句话）。
+
+    做成函数而不是两处各写一遍：`get` 与 `list` 在"没身份"这一档必须给出**同一句话**
+    —— 两个读口两套措辞，读的人会以为它们是两条规矩。
+
+    返回的是 `_TasksNoIdentity`（`ToolError` 的子类）：普通调用方照旧只把它当
+    `ToolError` 捕，而 `table.list` / `table.count` / `table.search` 那一支会顺手把
+    `_scope_meta(...)` 的读数（`unknown`）带进 `fail(...)` 的 meta。
+    """
+    return _TasksNoIdentity(
+        "tasks 全表只有主控 M 能读；非主控角色必须带着自己的台账号来读，"
+        "而这一次调用没有台账号 ⇒ 本次没查成（不按全表兜底）。"
+        "看自己的直接下级用 trace.children；要看更深的分支请向 M 请求："
+        "conductor.escalate(need=\"深看请求：…\", kind=\"other\")"
+    )
+
+
+def _tasks_parent_of(rows: Iterable[Mapping[str, Any]], me: str) -> str:
+    """「我」那一行的父号（同号多行取最后一行，与原先 `by_id` 的后者覆盖前者同口径）。
+
+    为什么要遍历全表而不是只看手边这一行：父那一行是「我从哪来」的锚点，而它只能从
+    **我自己那一行**读出来。在手边只有一行（`table.get` 改前传的 `[row]`）时，这个函数
+    恒得空串 ⇒ 「父那一行」那一档永不成立 —— 那正是洞①。
+    """
+    parent = ""
+    for r in rows:
+        if str(r.get("task_id") or "") == str(me or ""):
+            parent = str(r.get("parent_task_id") or "")
+    return parent
+
+
+def _is_visible_task_row(row: Mapping[str, Any], *, role: str, me: str,
+                         parent: str, instance: str = "") -> bool:
+    """这一行 `tasks` 该不该给「我」看 —— `table.list` 与 `table.get` 共用的**唯一判据**。
+
+    四档（与 `_visible_tasks` 的口径逐条对应，不另写一份）：
+    - 主控 M：全表；
+    - 自己那一行 / 自己的父那一行；
+    - 我的直接下级（`parent_task_id == 我` 且 `kind == ""` 的实例行）；
+    - 开给我的板项（`_is_board_item_for_me`：`parent_task_id == 我` 或
+      `instance == 我的实例标签` 两种寻址写法）。
+
+    `table.get` 必须走这一处而不是把目标行切片再喂给 `_visible_tasks`：后者要从全部行里
+    找"我自己那一行"才能算出父号，切片上永远找不到（洞①的根因）。
+    """
+    if str(role or "") == S.CONDUCTOR_ROLE:
+        return True
+    tid = str(row.get("task_id") or "")
+    if tid == str(me or "") or (parent and tid == str(parent)):
+        return True
+    if str(row.get("parent_task_id") or "") == str(me or "") and not str(row.get("kind") or ""):
+        return True
+    return _is_board_item_for_me(row, me=me, role=role, instance=instance)
+
+
 def _visible_tasks(rows: Iterable[Mapping[str, Any]], *, role: str,
-                   task_id: str) -> list[dict[str, Any]]:
+                   task_id: str, instance: str = "") -> list[dict[str, Any]]:
     """`tasks` 的读侧过滤（业主 2026-10-24 裁定的执行点）。
 
     四条口径：
     - 主控 M：全表（它能想追几层追几层；全树的正路是 `conductor.watch`）；
     - 非 M 且有台账号：自己那一行 + 直接下级（`parent_task_id` 等于我、且
       `kind == ""` 的实例行）+ 自己的父那一行 + 开给我的板项
-      （`_is_board_item_for_me`）；
+      （`_is_board_item_for_me`，两种寻址写法都认）；
     - 非 M 且没有台账号：受控拒绝。不许"没挂身份就按全表读"——那正是这次要关的
       那条路（`table.get` / `table.list` / `table.search` / `table.count` 都经
       `_rows`，所以关在这一处就够）。
@@ -1328,35 +1616,211 @@ def _visible_tasks(rows: Iterable[Mapping[str, Any]], *, role: str,
     `parent_task_id` 口径是"收件人的编号"（D89），把它们当子代理会让"我的直接下级"
     多出一批通报项（与 `Conductor._children_of` 同一条出身过滤）。但"不算下级"不等于
     "收件人也不该看见"——反过来，那一行正是它这一趟要处置的活。所以两件事分开：
-    实例轴只给 `kind == ""`（可见面一个字没放宽），板项轴只给 `parent_task_id == 我`
-    的那几行（别人的板项照旧看不见）。
+    实例轴只给 `kind == ""`（可见面一个字没放宽），板项轴只给收件人自己的那几行
+    （`parent_task_id == 我` 或 `instance == 我的实例标签`；别人的板项照旧看不见）。
+
+    每一行的判定只走 `_is_visible_task_row`（与 `table.get` 同一处）：这里只负责
+    "把父号算出来、再逐行问它"，不另写一套条件 —— 两个读口各写一套正是洞①的形态。
+    `instance` 由调用方（`_rows`）用 `_caller_instance` 只解析一次再传进来：逐行解析
+    会把一次名册读放大成 N 次。
     """
     if str(role or "") == S.CONDUCTOR_ROLE:
         return [dict(r) for r in rows]
     me = str(task_id or "")
     if not me:
-        raise ToolError(
-            "tasks 全表只有主控 M 能读；非主控角色必须带着自己的台账号来读，"
-            "而这一次调用没有台账号 ⇒ 本次没查成（不按全表兜底）。"
-            "看自己的直接下级用 trace.children；要看更深的分支请向 M 请求："
-            "conductor.escalate(need=\"深看请求：…\", kind=\"other\")"
-        )
-    # 先用一趟只取"我自己那一行"的父号（同号多行取最后一行，与原先 by_id 的
-    # "后者覆盖前者"同一口径；这里不再为整张表逐行 `dict(...)` 拷一份 —— 那份副本
-    # 只被 `mine.get("parent_task_id")` 读一次），再把"我 / 我的父 / 我的实例下级"
-    # 一趟挑出来。输出仍是入参行序，`keep` 的成员集合与原先逐元素相同。
-    parent = ""
-    for r in rows:
-        if str(r.get("task_id") or "") == me:
-            parent = str(r.get("parent_task_id") or "")
-    keep = {me}
-    if parent:
-        keep.add(parent)
-    return [dict(r) for r in rows
-            if str(r.get("task_id") or "") in keep
-            or (str(r.get("parent_task_id") or "") == me and not str(r.get("kind") or ""))
-            or _is_board_item_for_me(r, me=me, role=role)]
+        raise _tasks_no_identity_error()
+    # 先落成一份列表：父号那一趟要遍历全部行，筛选那一趟还要再走一遍（入参可能是生成器）。
+    # 只做浅拷贝，不为每行 `dict(...)` 造副本。
+    table_rows = list(rows)
+    parent = _tasks_parent_of(table_rows, me)
+    return [dict(r) for r in table_rows
+            if _is_visible_task_row(r, role=role, me=me, parent=parent,
+                                    instance=instance)]
 
+
+def _visible_task_row(row: Mapping[str, Any], *, role: str, task_id: str,
+                      all_rows: Iterable[Mapping[str, Any]], instance: str = "") -> bool:
+    """`table.get` 的可见面：按**目标行本身**判（与 `table.list` 同一判据、同一真身）。
+
+    洞①的修法：改前这里是 `_visible_tasks([row], …)` —— 把"目标行"当成"全表"喂进去，
+    于是 `_visible_tasks` 找不到"我自己那一行"，父号恒空 ⇒ 父那一行永远 `found=false`
+    （而 `table.list` 上它是可见的：同一判据在两个读口上给出两个答案）。
+    现在父号从 `all_rows`（整张表的快照）里算，判据本身复用 `_is_visible_task_row`。
+    """
+    role_s = str(role or "")
+    me = str(task_id or "")
+    if role_s == S.CONDUCTOR_ROLE:
+        return True
+    if not me:
+        raise _tasks_no_identity_error()
+    return _is_visible_task_row(row, role=role_s, me=me,
+                                parent=_tasks_parent_of(all_rows, me),
+                                instance=instance)
+
+
+def _visible_own_detail(instance: str) -> str:
+    """`visible-own` 那一档的 detail：四档依据 + 这一次实例标签的读数。
+
+    实例标签读不到是**一档要明说的读数**（板项的"投递式"寻址那一半算不出来），
+    不是"实例是空"：写清楚它，读的人才知道自己为什么少看见几条。
+    """
+    label = (f"我的实例标签是 {instance!r}" if str(instance or "")
+             else "实例标签没读到 ⇒ 板项只认 `parent_task_id` 那一档")
+    return f"{_ROW_SCOPE_VISIBLE_OWN_BASIS}；{label}"
+
+
+def _tasks_target_row(rows: Iterable[Mapping[str, Any]], *, id_field: str,
+                      id: str) -> Mapping[str, Any] | None:
+    """按主键在**收窄之前**的那份快照里找目标行 —— 「有但看不见」与「没有这一行」的唯一分界。
+
+    为什么不能拿"收窄前 − 收窄后"的差来判目标行：那个差是**整表**被藏了几行，与目标是
+    哪一行无关（孩子去读兄弟的号时，它等于"表里所有别人的行"）。单行读口要回答的是
+    "目标行在不在盘上"：在盘上却读不到 ⇒ 存在但不可见；盘上找不到 ⇒ 真没有。
+    这是 `table.get` 的 `found=false` 唯一允许问存在性的地方（反真空判据就钉在这一处：
+    把它打桩成恒 `None`，`hidden_by_scope=1` 那一档必须变红）。
+
+    只按主键相等找（与改前 `for row in table_rows: if row.get(idf) != id` 同口径），
+    不在这里做任何可见性判断 —— 那是 `_is_visible_task_row` 的事，两件事分开才能
+    各自被打桩、各自被证伪。
+    """
+    for row in rows:
+        if row.get(id_field) == id:
+            return row
+    return None
+
+
+def _tasks_target_hidden(target: Mapping[str, Any] | None, *,
+                         table_rows: Sequence[Mapping[str, Any]],
+                         role: str, me: str, instance: str) -> int:
+    """单行口径的 `hidden_by_scope`：`1` = 目标行在盘上但不可见，`0` = 盘上没有这一行。
+
+    `None`（判不了）不从这里产生：它只在 `_tasks_scope_meta` 的 `unknown` 那一档出现
+    （身份 / 台账读不成），因为那时可见面本身算不出来 —— 让这个函数再返回 `None`
+    等于同一格有两个来源。
+
+    可见性仍只问 `_is_visible_task_row`（与 `table.list` / `table.get` 的正路同一处）：
+    这里只决定"问哪一行"，不另写一套判据。目标行不可见时调用方已经拿不到它
+    （`table.get` 的正路先过了同一判据），所以这一次复算只是为了让读数自己站得住
+    —— 打桩掉正路那一处，读数也不会跟着说谎。
+    """
+    if target is None:
+        return 0
+    if str(role or "") == S.CONDUCTOR_ROLE:
+        return 0
+    me_s = str(me or "")
+    visible = _is_visible_task_row(target, role=str(role or ""), me=me_s,
+                                   parent=_tasks_parent_of(table_rows, me_s),
+                                   instance=str(instance or ""))
+    return 0 if visible else 1
+
+
+def _tasks_scope_meta(ctx: TableContext, *,
+                      rows: Sequence[Mapping[str, Any]] | None = None,
+                      narrowed: int | None = None,
+                      role: str | None = None, me: str | None = None,
+                      instance: str | None = None,
+                      target: Any = _NO_TARGET,
+                      with_why: bool = True) -> dict[str, Any]:
+    """`tasks` 的收窄三态读数（`meta.row_scope` / `row_scope_detail` / `hidden_by_scope`）。
+
+    ## 三态
+    - `workspace`：主控 M（`tasks` 上唯一"看整表"的角色）⇒ `hidden_by_scope=0`；
+    - `visible-own`：非 M 且台账号读得到 ⇒ 按 `_is_visible_task_row` 的四档收窄，
+      `hidden_by_scope` 见下（两种口径）；
+    - `unknown`：判不了 —— 非 M 而**没有台账号**（身份解析失败），或 `tasks` 台账读不成。
+      `hidden_by_scope=None`（不是 0）：那一格写 0 会把"没查"说成"一行都没藏"。
+
+    ## `hidden_by_scope` 的两种口径（由 `target` 选，同一处真身）
+
+    1. **聚合口径**（`target` 没给，`table.list` / `count` / `search` 用）：
+       `hidden_by_scope = 盘上行数 − 可见行数`，回答"整页被收窄掉几行"。
+    2. **单行口径**（`target` 给了，`table.get` 的两个分支都用它）：
+       `hidden_by_scope = 1 / 0`，回答"**这一行**是不是盘上有、你看不见"。
+       目标行不在盘上（`target is None`）⇒ 0；在盘上而不可见 ⇒ 1。
+       `table.get` 取到行时目标行可见 ⇒ 恒 0。
+
+    为什么 `table.get` 的成功分支也要走单行口径：同一个 `hidden_by_scope` 在一支钩子里
+    是"这一行藏没藏"、在另一支里是"整表藏了几行"，读的人就分不出这个 1 是在说谁 ——
+    而那正是本批要消掉的那种"两套口径"。整表藏了几行仍由 `table.list` / `count` 给。
+
+    `with_why` 只对单行口径有效：`found=false` 要一句"为什么没拿到"，`found=true` 上
+    那句话没有位置（写上去就会是一句假话）。
+
+    为什么单行读口不能沿用聚合差：那个差恒等于"表里所有别人的行"，与目标行无关。
+    孩子去读兄弟的号时，聚合差是"我被藏了 N 行"，而它真正要问的是"我读的**这一行**
+    是藏起来了还是没有" —— 两个问题在 `found=false` 上折成同一个读数，就等于没修
+    （真机里模型正是靠这一格决定要不要去 `conductor.escalate` 的）。
+
+    ## 为什么 `hidden_by_scope` 用同一份快照算
+    `rows` 由调用方从 `_rows(..., raw_out=...)` 里带过来（收窄**之前**的那一份）。
+    看不见的行数与可见面必须来自同一瞬间：分两次读表，中间别人写一行，那个差就
+    不是"被收窄掉的行数"了。`target` 也必须来自同一份快照（`table.get` 在收窄前
+    那份里按主键找），否则"盘上有没有这一行"与"可见面"来自两个瞬间。
+
+    ## 它不回答什么
+    它只按**可见面**数，不按 `filter` 数：`total` 是"过滤 + 收窄"之后的数，而
+    `hidden_by_scope` 问的是"收窄藏了几行" —— 两格各自回答一个问题，混在一起
+    就又回到"读的人只能猜"。
+    """
+    target_mode = target is not _NO_TARGET
+
+    def _reading(scope: str, detail: str, hidden: int | None) -> dict[str, Any]:
+        """三态共用的一个出口：`target` 档另带 `why`（`table.get` 才需要那一句）。
+
+        `why` 只在单行口径里出现：聚合口径的读者看到的是条数，方向自己就看得出来；
+        单行口径只有 1 / 0，没有一句"为什么"时仍要靠猜。
+        """
+        out: dict[str, Any] = {"row_scope": scope,
+                               "row_scope_detail": detail,
+                               "hidden_by_scope": hidden}
+        if target_mode and with_why:
+            out["why"] = _tasks_get_why(scope, hidden)
+        return out
+
+    role_s = _caller_role() if role is None else str(role)
+    if role_s == S.CONDUCTOR_ROLE:
+        return _reading(ROW_SCOPE_WORKSPACE, _ROW_SCOPE_WORKSPACE_DETAIL, 0)
+    me_s = _caller_task_id() if me is None else str(me)
+    if not me_s:
+        return _reading(ROW_SCOPE_UNKNOWN, _ROW_SCOPE_UNKNOWN_IDENTITY_DETAIL, None)
+    try:
+        table_rows = list(rows) if rows is not None else list(ctx.store.rows("tasks"))
+    except Exception:  # noqa: BLE001 - 读不成 = 判不了（不是「表里没有行」）
+        return _reading(ROW_SCOPE_UNKNOWN, _ROW_SCOPE_UNKNOWN_TABLE_DETAIL, None)
+    if instance is None:
+        instance = _caller_instance(ctx.store, role=role_s, me=me_s)
+    if target_mode:
+        hidden = _tasks_target_hidden(target, table_rows=table_rows, role=role_s,
+                                      me=me_s, instance=str(instance or ""))
+    else:
+        if narrowed is None:
+            narrowed = len(_visible_tasks(table_rows, role=role_s, task_id=me_s,
+                                          instance=instance))
+        hidden = max(0, len(table_rows) - int(narrowed))
+    return _reading(ROW_SCOPE_VISIBLE_OWN, _visible_own_detail(str(instance or "")), hidden)
+
+
+def _scope_meta(ctx: TableContext, table: str, *,
+                rows: Sequence[Mapping[str, Any]] | None = None,
+                narrowed: int | None = None,
+                role: str | None = None, me: str | None = None,
+                instance: str | None = None,
+                target: Any = _NO_TARGET,
+                with_why: bool = True) -> dict[str, Any]:
+    """`meta` 里「这一页为什么少了几行」的读数（本模块唯一出口，四个读口共用）。
+
+    - `tasks`：三态 `row_scope` + `row_scope_detail` + `hidden_by_scope`（`_tasks_scope_meta`）；
+      给了 `target` 就走单行口径（`table.get`：1/0；`found=false` 那一档另带 `why`）；
+    - 有行级归属的表（`experiments` / `documents`）：沿用 `_row_scope_reading` 的旧文案；
+    - 别的表：空（这些表不收窄，没有可说的；给一格恒空的值只会让读的人去猜它的意思）。
+    """
+    if table == "tasks":
+        return _tasks_scope_meta(ctx, rows=rows, narrowed=narrowed,
+                                 role=role, me=me, instance=instance,
+                                 target=target, with_why=with_why)
+    if _RS.owned(table):
+        return {"row_scope": _row_scope_reading(table)}
+    return {}
 
 
 def _direct_write_intent(table: str, op: str, payload: Mapping[str, Any]) -> str:
@@ -2026,7 +2490,7 @@ def _with_proof_routes(table: str, row: Mapping[str, Any]) -> dict[str, Any]:
 
 @tool(
     "table.list",
-    "列出某张表的行（等值过滤 + 分页）与过滤后的总数。`statements` 行另带 route / proof_routes（算不出来由 proof_routes_problem 说明）。",
+    "列出表行（等值过滤 + 分页）与过滤后总数；`statements` 行另带 route / proof_routes（算不出见 proof_routes_problem）。",
     _obj(
         {
             "table": _TABLE_PROP,
@@ -2044,6 +2508,10 @@ def _with_proof_routes(table: str, row: Mapping[str, Any]) -> dict[str, Any]:
     returns="{'table','rows','total','returned','limit','offset'}；meta 里重复关键计数便于断言。"
             "给了 `fields` 时 meta 多一格 `fields`（本次投影的字段名，按请求顺序）；"
             "不给就没有这一格（不适用，不是空串）。",
+    scenario="想浏览或翻页看某张表里有什么、按字段等值筛一批行时用它；按词找行用 table.search。",
+    example="看命题表里 status=active 的前 5 条，只回号与标题；返回本页 rows 与过滤后 total。",
+    example_code='table.list(table="statements", filter={"status": "active"}, limit=5, '
+                 'fields=["stmt_id", "label"])',
     tags=("table", "crud"),
 )
 def table_list(
@@ -2067,7 +2535,16 @@ def table_list(
     problem = _projection_problem(table, fields, derived=True)
     if problem:
         return fail(problem, table=table, kind="param_error")
-    matched = _match_filter(_rows(ctx, table), filter)
+    # 收窄之前的那一份快照由 `raw_out` 带出（同一个 `rows` 对象）：
+    # `hidden_by_scope` = 盘上行数 − 可见行数，两格必须来自同一瞬间。
+    raw_rows: list[dict] = []
+    try:
+        narrowed = _rows(ctx, table, raw_out=raw_rows)
+    except _TasksNoIdentity as e:
+        # 身份判不了：照旧 fail-closed（不按全表兜底），但要把 `unknown` 那一格带出去 ——
+        # 否则「没查成」与「表里没有行」在读的人那里还是同一句话。
+        return fail(str(e), tool="table.list", kind="tool_error", **_scope_meta(ctx, table))
+    matched = _match_filter(narrowed, filter)
     page = matched[offset : offset + limit]
     # 默认路径（`fields is None`）逐字保留改前的样子：整行 + `statements` 的派生格。
     rows = [_with_proof_routes(table, row) for row in page]
@@ -2092,13 +2569,14 @@ def table_list(
         limit=limit,
         **({"fields": list(fields)} if fields is not None else {}),
         # 行级归属（K11）：收窄过就说一声（「这一页为什么少了几行」不该靠猜）。
-        **({"row_scope": _row_scope_reading(table)} if _RS.owned(table) else {}),
+        # `tasks` 在这一格上给三态 + `hidden_by_scope`（见 `_tasks_scope_meta`）。
+        **_scope_meta(ctx, table, rows=raw_rows, narrowed=len(narrowed)),
     )
 
 
 @tool(
     "table.get",
-    "按主键取一行；不存在时 ok=True、data=None（meta.found=False）。`statements` 行另带 route / proof_routes（算不出来会说明）。",
+    "按主键取一行；不存在时 ok=True、data=None（meta.found=False）。`statements` 行另带 route / proof_routes（算不出时说明）。",
     _obj({"table": _TABLE_PROP, "id": {
         "type": "string",
         "description": (f"主键值（{S.ID_DIGITS} 位十进制字符串如 `000000`，"
@@ -2110,6 +2588,9 @@ def table_list(
     # 决定（concepts 12 个字段、literature 又是另一套），不是本工具的形状。
     # "到底有没有"由 meta.found 表达。
     returns="data=行对象或 None（**形状由表 schema 决定，本工具不承诺固定键集合**）；meta.found 表达到底有没有。",
+    scenario="知道号、想读那一行的全貌时用它；要一批行用 table.list。",
+    example="按号读一条命题；返回该行，没有这一行时 data 是 None、meta.found 是 false。",
+    example_code='table.get(table="statements", id="000004")',
     tags=("table", "crud"),
 )
 def table_get(ctx: TableContext, *, table: str, id: str) -> ToolResult:
@@ -2125,38 +2606,77 @@ def table_get(ctx: TableContext, *, table: str, id: str) -> ToolResult:
     # 行级归属（K11）：按主键点名取一行时，「不是你的行」与「没有这一行」必须分开说 ——
     # 折成 `found=False` 会让调用方把「别人的实验」读成「没做过这个实验」。
     who = _RS.caller()
-    for row in ctx.store.rows(table):
-        if row.get(idf) != id:
-            continue
-        # `tasks` 的可见面必须与 `table.list` 同一条判据（`_rows` → `_visible_tasks`）：
-        # K11 把这里从 `_rows(ctx, table)` 换成直读 `store.rows` 之后，按主键点名
-        # 绕过了 `_visible_tasks` —— `table.get(tasks, 别人那一行的号)` 会答 `found=true`，
-        # 而 `table.list` 里并没有它（「非主控只能看一层」这条门在 get 上是漏的）。
+    # `tasks` 的可见面必须与 `table.list` 同一条判据（`_rows` → `_visible_tasks`）：
+    # K11 把这里从 `_rows(ctx, table)` 换成直读 `store.rows` 之后，按主键点名
+    # 绕过了 `_visible_tasks` —— `table.get(tasks, 别人那一行的号)` 会答 `found=true`，
+    # 而 `table.list` 里并没有它（「非主控只能看一层」这条门在 get 上是漏的）。
+    # 2026-11-22（VISIBILITY-FIX ①）：判据改为**按目标行本身**判，且父号从整张表的
+    # 快照里算（`_visible_task_row`）。改前这里把 `[row]` 单行切片喂给 `_visible_tasks`，
+    # 那一份永远找不到"我自己那一行" ⇒ 父那一行在 `get` 上恒 `found=false`，而
+    # `list` 上可见 —— 同一判据两个答案（洞①）。父行档今天必须与 `list` 同集。
+    table_rows = ctx.store.rows(table)
+    # `tasks` 的两种身份都只解析一次（循环里逐行解析 = 把一次台账/名册读放大成 N 次）。
+    task_role = task_me = task_instance = ""
+    if table == "tasks":
+        task_role, task_me = _caller_role(), _caller_task_id()
+        if task_role != S.CONDUCTOR_ROLE:
+            task_instance = _caller_instance(ctx.store, role=task_role, me=task_me)
+    # 目标行只在**收窄之前**的那份快照上按主键找一次（`_tasks_target_row`）：
+    # 找到了却不可见 ⇒ 「有但看不见」；找不到 ⇒ 「真没有」。改前这两档都落到同一个
+    # `ok(None, found=False)` 且不带任何读数，调用方分不出该补身份重试（前一种）
+    # 还是该收工（后一种）。
+    target = _tasks_target_row(table_rows, id_field=idf, id=id)
+    if target is not None:
         # 这一档与 list 一致：看不见 = 「没有这一行」（不是 `row_not_visible`，
         # 那条受控码是给有行级归属的表用的）。
-        if table == "tasks" and not _visible_tasks(
-                [row], role=_caller_role(), task_id=_caller_task_id()):
-            # 落到函数末尾那一个 `ok(None, found=False)` 出口（不另写一处 ok 站）：
-            # 判据 `test_invisible_ok_sites_do_not_grow_silently` 按"隐形的 ok(...) 站
-            # 数"守这一栏，多一个出口就要多登记一条 —— 这两档本来就是同一句话。
-            break
-        if _RS.owned(table) and not _RS.visible(table, row, role=who["role"],
-                                                task_id=who["task_id"],
-                                                instance=who["instance"]):
-            return fail(
-                (f"{_RS.ROW_NOT_VISIBLE}：`{table}` 里确实有主键 {id}，但它归另一支笔"
-                 "（同一角色的另一个实例）⇒ 这次调用读不到它。"
-                 "这不是「没有这一行」：要全表读数请用别的角色/框架侧的审计口，"
-                 "要自己那一行请在写它的那一趟里读。"),
-                table=table, id=id, id_field=idf, found=True, kind=_RS.ROW_NOT_VISIBLE)
-        return ok(_with_proof_routes(table, row), table=table, id=id, id_field=idf,
-                  found=True, row_scope=_row_scope_reading(table))
-    return ok(None, table=table, id=id, id_field=idf, found=False)
+        invisible_tasks = (table == "tasks"
+                           and not _visible_task_row(
+                               target, role=task_role, task_id=task_me,
+                               all_rows=table_rows, instance=task_instance))
+        if not invisible_tasks:
+            if _RS.owned(table) and not _RS.visible(table, target, role=who["role"],
+                                                    task_id=who["task_id"],
+                                                    instance=who["instance"]):
+                return fail(
+                    (f"{_RS.ROW_NOT_VISIBLE}：`{table}` 里确实有主键 {id}，但它归另一支笔"
+                     "（同一角色的另一个实例）⇒ 这次调用读不到它。"
+                     "这不是「没有这一行」：要全表读数请用别的角色/框架侧的审计口，"
+                     "要自己那一行请在写它的那一趟里读。"),
+                    table=table, id=id, id_field=idf, found=True, kind=_RS.ROW_NOT_VISIBLE)
+            return ok(_with_proof_routes(table, target), table=table, id=id, id_field=idf,
+                      found=True,
+                      # 收窄读数与 `table.list` 同一处（`_scope_meta`）：`tasks` 上改前这里
+                      # 落的是 `_row_scope_reading("tasks")` = 空串（tasks 不是归属表）⇒
+                      # 按主键点名取到的那一行反而没有"这一行在什么可见面里"的读数。
+                      # 两个读口各说一套正是本批要关掉的形态。
+                      # 同一条判据下 `hidden_by_scope` 走单行口径（取到的这一行可见 ⇒ 0）：
+                      # 不传 `target` 会退成"整表藏了几行"，同一个键在 `get` 的两支里
+                      # 就是两个意思。`with_why=False`：`why` 只解释"为什么没拿到"。
+                      **_scope_meta(ctx, table, rows=table_rows, role=task_role,
+                                    me=task_me, instance=task_instance,
+                                    target=target, with_why=False))
+        # 目标行在盘上但不在我的可见面：落到函数末尾那一个 `ok(None, found=False)` 出口
+        # （不另写一处 ok 站）：判据 `test_invisible_ok_sites_do_not_grow_silently` 按
+        # "隐形的 ok(...) 站数"守这一栏，多一个出口就要多登记一条 —— 这两档本来就是
+        # 同一句话，区别只在 `meta` 的读数上。
+    return ok(None, table=table, id=id, id_field=idf, found=False,
+              # `found=false` 必须自带"为什么"：`row_scope` 给可见面档位，
+              # `hidden_by_scope` 给这一行是「藏起来了(1)」还是「压根没有(0)」，
+              # `why` 把两者翻成一句话（三档口径见 `_tasks_scope_meta`）。
+              # 非 `tasks` 表不带这三格（`_scope_meta` 对它们是空 / 旧文案）。
+              **_scope_meta(ctx, table, rows=table_rows, role=task_role,
+                            me=task_me, instance=task_instance, target=target))
 
 
+# TOOLFACESHARD2（2026-11-22，工具面分片2 · 接 TOOLFACE-CLEAN「实现只留在代码注释里」）
+# 原文（旧 summary）：「主键由台账分配（整格别写），校验通过才落盘」。发号走哪本账
+# （`_allocate_id`：`counters` 号段 `tx.alloc_id` / 前缀号 `_next_process_id`）、
+# 校验先用占位号预演（`_probe_id`）、落盘是 `tx.upsert` 整行写回 —— 三件都是实现；
+# 模型面只需要「主键别写、校验过了才写入」。
+# 判据：`tests/test_tool_face_three_segments.py`（逐件三段字数 + 实现名只在注释里）。
 @tool(
     "table.create",
-    "新建一行：主键由台账分配（整格别写），校验通过才落盘。",
+    "新建一行：主键别写（自动分配），字段校验通过才写入。",
     _obj(
         {
             "table": _TABLE_PROP,
@@ -2174,6 +2694,10 @@ def table_get(ctx: TableContext, *, table: str, id: str) -> ToolResult:
              "`literature.path`（空列表 = 一个字节都没动）。"
              "被兜底接管那一档 data 是对象：{backstop, routed_to, routed_from, state, "
              "what_happened, row, id, requested_id, dropped_keys, refused_by_backstop}"),
+    scenario="要往某张表加一条新记录时用它；改已有的行用 table.update。",
+    example="新提一个研究问题，只写问题本身；返回新分配的号。",
+    example_code='table.create(table="research_questions", '
+                 'row={"question": "紧性与可数紧性何时等价？"})',
     tags=("table", "crud", "write"),
 )
 def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> ToolResult:
@@ -2302,12 +2826,13 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
               **({"quote_evidence": quote_reading} if quote_reading else {}))
 
 
+# TOOLFACE-CLEAN（业主 2026-11-22：实现只留在代码注释里）
+# 原文（旧 param space）：「取 numericproof._space_reading 的既有字段」。规模读数的内部函数名属实现；模型要知道的是「可以直接给区间 / 枚举例数 / 那一行那三格」。
+# 判据：`tests/test_tool_face_three_segments.py` 钉住这条 needle（'_space_reading'）
+# 仍在注释里、且不在模型可见面上。
 @tool(
     "table.update",
-    "`statements` 改 status/kind/quote_reason，正文走登记。放弃命题四档：math_error + "
-    "defect_ref、difficulty（`salvaged` 可空）、"
-    "counterexample + experiment_id、space_too_large + "
-    "space；都另给 abandon_basis，缺即拒。",
+    "改一行：`statements` 只可改 status/kind/quote_reason（正文走登记）；放弃命题按四档给证据与理由，缺即拒。",
     _obj(
         {
             "table": _TABLE_PROP,
@@ -2359,7 +2884,7 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
                 "description": "space_too_large 档必填：枚举参数与规模。可直接给各维区间"
                                "（`[lo, hi]`）/ 枚举例数，也可给实验行那三格"
                                "（`observations` / `certificate` / `search_bound`）—— 取 "
-                               "`numericproof._space_reading` 的既有字段；自由文本或读不出"
+                               "那一行那三格的既有规模字段；自由文本或读不出"
                                "规模 ⇒ 拒。"},
         },
         required=("table", "id", "patch"),
@@ -2372,6 +2897,9 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
              "（空列表 = 一个字节都没动）。"
              "被兜底接管那一档 data 是对象（同上：backstop / state / what_happened / row / "
              "refused_by_backstop …）。"),
+    scenario="改正文字段、状态或放弃理由时用它；正文不在这里改。",
+    example="把一篇文献标成已消化；返回改后的整行与本次自动整理过的字段。",
+    example_code='table.update(table="literature", id="000000", patch={"processed": True})',
     tags=("table", "crud", "write"),
 )
 def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, Any],
@@ -2439,6 +2967,8 @@ def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, 
     # ---- `tasks` 台账的写侧判据（D12）：与 `table.create` 同一处判据、同一组理由码。
     # 这一格堵的是同一形状的第二个口子：update 可以把一行直接改成 `item_state="done"`，
     # 而那条路的语义是"绕过状态机伪造收口"，与 create 写的 done 是同一件事。
+    # 注意这一笔判的是**载荷**（patch 写了什么）；"这一笔动的是谁那一行"由事务内
+    # `_tasks_write_target_refusal` 判（洞②：改前只判载荷 ⇒ 改别人的行全放行）。
     tasks_refused = _tasks_write_refusal(table=table, row=dict(patch or {}), op="update")
     if tasks_refused is not None:
         return tasks_refused
@@ -2454,6 +2984,14 @@ def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, 
             current = tx.find(table, **{idf: id})
             if current is None:
                 return fail(f"{table} 里没有主键 {id}", table=table, id=id, found=False, kind="not_found")
+            # ---- `tasks` 的**目标行**判据（洞②）：先取到盘上那一行，再判"它归不归我"。
+            # 位置在事务内、拿到 `current` 之后（与下面 K11 的 `_RS.write_refusal` 同型）：
+            # 归属是行上的事实，不在 `patch` 里 —— 改前判的是 `dict(patch)`，于是
+            # `table.update(tasks, id=别人那一行, patch={"detail": …})` 全放行。
+            tasks_target_refused = _tasks_write_target_refusal(
+                table=table, target=current, op="update")
+            if tasks_target_refused is not None:
+                return tasks_target_refused
             # 主键是行的身份。允许"顺手改主键"等于允许把 delete+create 伪装成 update，
             # 而所有外键都指向旧代号 —— 那样会一次性造出一片悬空引用。
             if idf in patch and patch[idf] != id:
@@ -2550,6 +3088,9 @@ def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, 
     # 引用者清单在 meta.references 里（被拒时是原因，放行时是将会悬空的清单）。
     returns=("data=是否真的删掉了（布尔标量）；meta.references 列出引用者（被拒时是原因，"
              "放行时是将会悬空的清单）。被兜底接管那一档 data 是对象（同上）。"),
+    scenario="删一条确实要作废、也没被引用的行；有引用先把引用删掉。",
+    example="删一条多余的关系；返回是否真删掉了，被引用时列出引用者。",
+    example_code='table.delete(table="relations", id="000012")',
     tags=("table", "crud", "write"),
 )
 def table_delete(ctx: TableContext, *, table: str, id: str) -> ToolResult:
@@ -2581,6 +3122,14 @@ def table_delete(ctx: TableContext, *, table: str, id: str) -> ToolResult:
             row = tx.find(table, **{idf: id})
             if row is None:
                 return ok(False, table=table, id=id, found=False, deleted=False)
+            # ---- `tasks` 的删除闸（洞③）：改前这里**零闸** —— `_RS.write_refusal` 对
+            # `tasks` 立即返回 None，表级那道直写闸也不开这张表 ⇒ 任何角色可删任意任务
+            # 行（探针实测把 M 的顶层行与兄弟行都删掉了）。判据与 update 同一处
+            # （`_tasks_write_target_refusal`，判的是盘上这一行归谁），所以"只允它自己
+            # 那一趟删自己那一行"，跨行删除只留 conductor 的受控口（框架自己走 `tx`）。
+            tasks_refused = _tasks_write_target_refusal(table=table, target=row, op="delete")
+            if tasks_refused is not None:
+                return tasks_refused
             # ---- 行级归属（K11）：删别人那一行 ⇒ 受控拒（与 update 同一处判据）。
             _who = _RS.caller()
             _owner_refused = _RS.write_refusal(table, row, op="delete",
@@ -2639,6 +3188,9 @@ def table_delete(ctx: TableContext, *, table: str, id: str) -> ToolResult:
     # 豁免清单成员：data 是整数行数（标量），声明不出键集合。
     # 依据在实现里逐字写着（`table_count` 的 docstring："计数不该受 limit 影响"）。
     returns="data=整数行数（**标量，无键集合**）。",
+    scenario="只要数量、不要行本身时用它；计数不受 limit 影响。",
+    example="数一数还有多少条待办任务；返回一个整数。",
+    example_code='table.count(table="tasks", filter={"item_state": "queued"})',
     tags=("table", "crud"),
 )
 def table_count(ctx: TableContext, *, table: str, filter: Mapping[str, Any] | None = None) -> ToolResult:
@@ -2647,24 +3199,36 @@ def table_count(ctx: TableContext, *, table: str, filter: Mapping[str, Any] | No
         _spec_of(table)
     except ToolError as e:
         return fail(str(e), table=table, kind="unknown_table")
-    n = len(_match_filter(_rows(ctx, table), filter))
+    raw_rows: list[dict] = []
+    try:
+        narrowed = _rows(ctx, table, raw_out=raw_rows)
+    except _TasksNoIdentity as e:
+        return fail(str(e), tool="table.count", kind="tool_error", **_scope_meta(ctx, table))
+    n = len(_match_filter(narrowed, filter))
     return ok(n, table=table, total=n, filtered=bool(filter),
-              **({"row_scope": _row_scope_reading(table)} if _RS.owned(table) else {}))
+              **_scope_meta(ctx, table, rows=raw_rows, narrowed=len(narrowed)))
 
 
+# TOOLFACE-CLEAN（业主 2026-11-22：实现只留在代码注释里）
+# 原文（旧 summary）：「（从 dataclass 与 schema 反射）」。字段与词表是反射出来的内部机制；模型面只需要知道「它一次给出全部字段与词表」。
+# 判据：`tests/test_tool_face_three_segments.py` 钉住这条 needle（'反射得到'）
+# 仍在注释里、且不在模型可见面上。
 @tool(
     "table.schema",
     # 张数必须现算（2026-10-07 修，R6 的 `draft/63 §3-2`）：这里原写死"返回 6 张表"，
     # 而 `ALL_TABLES` 的真身是 17 —— 模型看到的摘要因此是假的，且全仓没有任何判据
     # 看着那句话（改前实测：`grep "返回 6 张表"` 在 tests/scripts/tools 里零命中）。
     # 现算的判据在 `tests/test_tool_summary_readings.py`（含"写死 6 必红"的负控）。
-    f"返回 {len(ALL_TABLES)} 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。",
+    f"返回 {len(ALL_TABLES)} 张表的字段名/类型/是否必填/默认值，以及全部受控词表。",
     _obj({"table": {"type": "string", "maxLength": 60}}),
     side_effect="read",
     roles=TOOL_ROLES,
     # 键名从实现读出（`table_schema` 的 ok(...)）：tables 里每个表名 → {fields,
     # primary_key, vocabularies}，键名是表名（所以不能写进键集合）。
     returns="{'tables','vocabularies'}；tables 的键是表名，值是 {'fields','primary_key','vocabularies'}。",
+    scenario="不知道某张表有哪些字段、某格能填什么值时先查它。",
+    example="查命题表的字段与候选值；返回该表字段表与全部词表。",
+    example_code='table.schema(table="statements")',
     tags=("table", "meta"),
 )
 def table_schema(ctx: TableContext, table: str | None = None) -> ToolResult:  # noqa: ARG001
@@ -2735,6 +3299,14 @@ def table_schema(ctx: TableContext, table: str | None = None) -> ToolResult:  # 
         }
     if _only and not tables:
         # 未知表 ⇒ 「可读拒信」（带在册表名），别让调用方读成"这张表没有字段"。
+        retired = S.retired_table(_only)
+        if retired is not None:
+            # 退役表不是"表名写错了"：受控码与拒信分开，否则模型会去猜表名/以为要补登记。
+            return fail(
+                f"表 {_only!r} 已退役（{retired.get('retired_at') or ''}）："
+                f"{retired.get('why') or ''}。表工具读不了也写不了它；"
+                f"{retired.get('how') or ''}",
+                kind="retired_table", table=_only)
         return fail(
             f"没有名为 {_only!r} 的表；在册的是 {sorted(S.TABLES)}",
             kind="unknown_table", table=_only)
@@ -2750,15 +3322,19 @@ def table_schema(ctx: TableContext, table: str | None = None) -> ToolResult:  # 
 # 声明面与实现必须逐句对得上，否则模型会照着一句假的默认面去用工具。
 # 重冻与版本：三份冻结面已按各自做法重冻（快照用 `--write`、契约基线补
 # `contract_amendments`），并抬了 `PROMPT_VERSION`（summary 进 `tools_lines`）。
+# TOOLFACE-CLEAN（业主 2026-11-22：实现只留在代码注释里）
+# 原文（旧 param query）：「经 textutil.normalize 归一后包含」。归一化函数住哪属实现；模型要知道的是「全半角 / 大小写 / 标点 / 空白不敏感」这条用法。
+# 判据：`tests/test_tool_face_three_segments.py` 钉住这条 needle（'textutil.normalize'）
+# 仍在注释里、且不在模型可见面上。
 @tool(
     "table.search",
-    "子串匹配；statements 只搜 `label`/`statement_full`，其余按标量字符串字段。",
+    "子串匹配；statements 只搜 `label`/`statement_full`，其余搜标量字符串字段。",
     _obj(
         {
             "table": _TABLE_PROP,
             "query": {"type": "string", "minLength": 1,
                       "description": "要查找的子串（不做正则解释）。statements 表按内容面匹配："
-                                     "label / statement_full 经 textutil.normalize 归一后包含"
+                                     "label / statement_full 做归一化后包含"
                                      "（全半角 / 大小写 / 标点 / 空白不敏感）；归一后为空 ⇒ 受控拒绝"},
             "fields": {"type": "array", "items": {"type": "string"},
                        "description": "限定扫描字段；省略时：statements 表 = label / statement_full"
@@ -2782,6 +3358,9 @@ def table_schema(ctx: TableContext, table: str | None = None) -> ToolResult:  # 
     returns="{'table','query','fields','rows','total','returned'}；meta.matched_fields 的键是主键、值是命中的字段名。"
             "给了 `select` 时 meta 多一格 `select`（本次投影的字段名，按请求顺序）；"
             "不给就没有这一格（不适用，不是空串）。",
+    scenario="只记得一个词、想找出哪些行提到它时用它；按字段筛用 table.list。",
+    example="在命题里找提到「紧」的行；返回命中的 rows 与每行命中的字段。",
+    example_code='table.search(table="statements", query="紧", limit=20)',
     tags=("table", "read"),
 )
 def table_search(
@@ -2857,7 +3436,12 @@ def table_search(
         needle = query.casefold()
     hits: list[dict] = []
     matched: dict[str, list[str]] = {}
-    for row in _rows(ctx, table):
+    raw_rows: list[dict] = []
+    try:
+        scanned_rows = _rows(ctx, table, raw_out=raw_rows)
+    except _TasksNoIdentity as e:
+        return fail(str(e), tool="table.search", kind="tool_error", **_scope_meta(ctx, table))
+    for row in scanned_rows:
         if statement_surface:
             if not str(row.get("stmt_id") or ""):
                 continue  # 台账行没有号就没有身份（与查口同一口径）
@@ -2887,7 +3471,7 @@ def table_search(
         matched_fields=matched,
         truncated=len(hits) > len(page),
         **({"select": list(select)} if select is not None else {}),
-        **({"row_scope": _row_scope_reading(table)} if _RS.owned(table) else {}),
+        **_scope_meta(ctx, table, rows=raw_rows, narrowed=len(scanned_rows)),
     )
 
 

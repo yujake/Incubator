@@ -40,6 +40,7 @@ from . import modelcost as MC
 from . import modelgw as MG
 from . import sessions as SS
 from .agent_prompts import PROMPT_VERSION
+from .toolface import face_text as _face_text
 
 #: 本缝的用途归口（`schema.USAGE_SCOPES` 之一）。写死一处，避免调用点各写一个。
 SEAM_SCOPE = "reason"
@@ -1422,7 +1423,9 @@ def build_tool_face(role: str, registry: Any) -> ToolFace:
                                  "description": "一句话说明为什么这一步（可选）"})
         functions.append({"type": "function", "function": {
             "name": san,
-            "description": str(getattr(spec, "summary", "") or real),
+            # 三段（能力 / 场景 / 例 + 代码）由 `toolface.face_text` 一处渲染，
+            # 与提示词那一侧（`agent_prompts.tools_lines`）逐字同源。
+            "description": _face_text(spec) or real,
             "parameters": {**params, "type": "object", "properties": props},
         }})
     for san, target, schema in META_FUNCTIONS:

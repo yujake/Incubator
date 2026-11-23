@@ -428,7 +428,8 @@ def _target_probe(workspace: str, kind: str, ref: str) -> dict[str, Any]:
 #    不在这里写第二份判据；
 # 2. 三态：每一类各有 `checked` / `reason`，查不成的写"条数读不到"，绝不折成 0；
 # 3. 停滞不另定阈值：阈值与"最近一步"都在 `agent_state` 那一侧（`STALLED_AFTER_SEC` /
-#    `out/steps/<台账号>.json`），这里只把它的 `stalled_sec` 与阈值一起念出来。
+#    `out/steps/<台账号>.jsonl` 轨迹的最后一行 —— 是轨迹，不是指针文件），这里只把它的
+#    `stalled_sec` 与阈值一起念出来。
 
 
 def _borrowed_conductor(store: Any) -> Any:
@@ -446,7 +447,7 @@ def _stalled_cell(nodes: Sequence[Mapping[str, Any]],
     """① 停滞子：直接读 `retire_integrity` 节点上那两格（`stalled` / `stalled_sec`）。
 
     判据本体只有一处：`conductor.agent_state`（经 `retire_integrity` 的 `agent_states`
-    一次算完整棵树），输入是 `out/steps/<台账号>.json` 那一刻与阈值
+    一次算完整棵树），输入是 `out/steps/<台账号>.jsonl` 轨迹最后一行那一刻与阈值
     `conductor.STALLED_AFTER_SEC`。这里不写第二份 —— 不在 clock 里另算一遍"最近一步
     多久以前"，也不自己定一个 N。
 
@@ -903,14 +904,11 @@ def _periodic_payload(periodic: C.Periodic) -> dict[str, Any]:
 
 @tool(
     "clock.now",
-    "读系统时钟：现在几点（墙钟 + 单调计数）、这一趟跑了多久、有没有等我消费的唤醒标记、"
-    "等待账与'主时钟控制了所有计时类工作没有'的机器读数（waits_outside_clock）。"
-    "读不到时 status=unknown、wall/monotonic 都是 null（绝不折成 0）。"
-    "所有角色都能用。",
+    '读系统时钟：现在几点（墙钟 + 单调计数）、这一趟跑了多久、有没有待消费的唤醒通知，以及计时类工作是否都归主时钟管；读不到时如实报 unknown、时间为 null',
     {"type": "object",
      "properties": {
          "include_wakes": {"type": "boolean",
-                           "description": "是否一并读唤醒标记（缺省是）"},
+                           "description": "是否一并读唤醒通知（缺省是）"},
          "include_waits": {"type": "boolean",
                            "description": "是否一并读等待账与原始等待普查（缺省是）"},
      },
@@ -928,6 +926,9 @@ def _periodic_payload(periodic: C.Periodic) -> dict[str, Any]:
              "'programs','programs_checked','programs_outside_clock',"
              "'programs_outside_where','programs_files_scanned'}"),
     tags=("clock", "time", "read"),
+    scenario='想知道现在几点、跑了多久，或核对有没有等待漏在时钟外时用它',
+    example='读一次时钟：回 wall / monotonic / elapsed_sec 与 waits_outside_clock',
+    example_code='clock.now(include_wakes=True, include_waits=True)',
 )
 def clock_now(store: Any, root: Any, *, include_wakes: bool = True,
               include_waits: bool = True) -> ToolResult:
@@ -1032,14 +1033,13 @@ def clock_now(store: Any, root: Any, *, include_wakes: bool = True,
     })
 
 
+# TOOLFACE-CLEAN（业主 2026-11-22：实现只留在代码注释里）
+# 原文（旧 summary）：到点后「落一条 notice 板项给收件人（detail 逐字是『时间到：目的｜等了多久（起于…，到于…）』），并同时置一条唤醒标记」。这是时钟与板项之间的内部接线：模型要知道的是「到点会收到一条带目的的消息」。
+# 判据：`tests/test_tool_face_three_segments.py` 钉住这条 needle（'notice 板项'）
+# 仍在注释里、且不在模型可见面上。
 @tool(
     "clock.timer_start",
-    "起一个一次性计时器：after_sec（多少秒之后）与 wait_for（等谁收口）二选一，外加一句"
-    "目的 reason。到点后时钟自动落一条 notice 板项给收件人（detail 是"
-    "\"时间到：目的｜等了多久（起于…，到于…）\"），并同时置一条唤醒标记。"
-    "不自动重排：检查完成后要再起一次；周期性巡查用 clock.periodic_start。"
-    "目的忘了填不报错（读数带 purpose_missing=true 并追问），补一句走 clock.timer_purpose。"
-    "所有角色都能用。",
+    '起一个一次性计时器：after_sec 秒后、或等 wait_for 收口时，给收件人一条消息（目的 + 等了多久）。不自动重排，要再起一次；缺目的不拒但读数会追问',
     {"type": "object",
      "properties": {
          "after_sec": {"type": "number", "minimum": 0.001, "maximum": 315360000,
@@ -1065,6 +1065,9 @@ def clock_now(store: Any, root: Any, *, include_wakes: bool = True,
              "'parked_sec','parked_steps','parked_calls','purpose','purpose_missing',"
              "'purpose_prompt'}"),
     tags=("clock", "timer", "communication"),
+    scenario='过一会儿要回来复查、或要等谁收口时；周期性巡查用 periodic_start',
+    example='20 分钟后提醒自己复查：回 timer_id / due_at / remaining_sec',
+    example_code='clock.timer_start(after_sec=1200, reason="复查 E 的实验")',
 )
 def clock_timer_start(store: Any, root: Any, conductor: Any,
                       *, after_sec: float | None = None, reason: str = "",
@@ -1094,13 +1097,13 @@ def clock_timer_start(store: Any, root: Any, conductor: Any,
     return ok(_start_payload(timer), timer_id=timer.timer_id)
 
 
+# TOOLFACE-CLEAN（业主 2026-11-22：实现只留在代码注释里）
+# 原文（旧 summary）：「到点动作与 clock.timer_start 相同（一条 notice 板项 + 一条唤醒标记）」。同一套内部接线（板项 + 唤醒标记），模型面只留「到点动作相同、差别只在时间怎么给」。
+# 判据：`tests/test_tool_face_three_segments.py` 钉住这条 needle（'唤醒标记'）
+# 仍在注释里、且不在模型可见面上。
 @tool(
     "clock.alarm_start",
-    "定一个一次性闹钟：到 at（ISO 时刻）时叫醒收件人。到点动作与 timer_start 相同"
-    "（一条 notice 板项 + 一条唤醒标记），差别只在时间怎么给。可另给 wait_for："
-    "到点或等到谁，先到者报醒。定一个具体时刻叫醒自己就用这一件（不是睡一轮）；"
-    "撤掉一条没到点的用 clock.timer_cancel(timer_id=…)。目的忘了填同样不报错"
-    "（读数带 purpose_missing=true）。所有角色都能用。",
+    '定一个一次性闹钟：到 at（ISO 时刻）叫醒收件人，可另给 wait_for，先到者报醒；撤未到点的用 timer_cancel',
     {"type": "object",
      "properties": {
          "at": {"type": "string", "minLength": 1,
@@ -1124,6 +1127,9 @@ def clock_timer_start(store: Any, root: Any, conductor: Any,
              "'parked_sec','parked_steps','parked_calls','purpose','purpose_missing',"
              "'purpose_prompt'}"),
     tags=("clock", "alarm", "communication"),
+    scenario='要在某个具体时刻被叫醒、而不是「过多少秒」时用它',
+    example='明早 9 点叫醒自己：回 timer_id / due_at / remaining_sec',
+    example_code='clock.alarm_start(at="2026-11-23T09:00:00+08:00", reason="开工")',
 )
 def clock_alarm_start(store: Any, root: Any, conductor: Any, *, at: str,
                       reason: str = "", wait_for: str = "",
@@ -1151,10 +1157,7 @@ def clock_alarm_start(store: Any, root: Any, conductor: Any, *, at: str,
 
 @tool(
     "clock.periodic_start",
-    "起一条周期性巡查：每 every_sec 秒报醒一次，直到 clock.periodic_stop 或 until_sec 到或"
-    "被等对象收口。M 的巡视就是这一类：every_sec=1200 + purpose=周期性巡查"
-    "（等 20 分钟 + 周期性巡查，别写成\"睡 20 分钟\"）。到点消息逐字是"
-    "\"巡查时间到：目的｜每 20 分钟一次（第 N 次）\"。目的忘了填不报错。",
+    '起一条周期性巡查：每 every_sec 秒报醒一次，直到 periodic_stop、until_sec 到或被等对象收口；报醒带目的与第几次',
     {"type": "object",
      "properties": {
          "every_sec": {"type": "number", "minimum": 0.001, "maximum": 315360000,
@@ -1177,6 +1180,9 @@ def clock_alarm_start(store: Any, root: Any, conductor: Any, *, at: str,
              "'last_fired_at','remaining_sec','until_sec','wait_for','wait_for_resolved',"
              "'wait_state','stopped_at','last_message','clock_status','patrol_checklist'}"),
     tags=("clock", "periodic", "communication"),
+    scenario='主控的定时巡视用这一类；只提醒一次用 timer_start',
+    example='每 20 分钟巡查一次：回 periodic_id / next_at 与报醒样例',
+    example_code='clock.periodic_start(every_sec=1200, purpose="周期性巡查")',
 )
 def clock_periodic_start(store: Any, root: Any, conductor: Any, *, every_sec: float,
                          purpose: str = "", until_sec: float | None = None,
@@ -1214,8 +1220,7 @@ def clock_periodic_start(store: Any, root: Any, conductor: Any, *, every_sec: fl
 
 @tool(
     "clock.periodic_stop",
-    "停一条周期性巡查（到点后不再报醒）。已停的返回 stopped=false + 它当前的状态"
-    "（查过了，不是第二次停成功）。所有角色都能用。",
+    '停一条周期性巡查（到点后不再报醒）。已停的返回 stopped=false 与当前状态（查过了，不是第二次停成功）',
     {"type": "object",
      "properties": {
          "periodic_id": {"type": "string", "minLength": 1, "maxLength": 64,
@@ -1229,6 +1234,9 @@ def clock_periodic_start(store: Any, root: Any, conductor: Any, *, every_sec: fl
     returns=("{'checked','periodic_id','stopped','state','stopped_reason','reason',"
              "'periodic','running_count','clock_status'}"),
     tags=("clock", "periodic", "communication"),
+    scenario='巡查不再需要时停掉它；一次性计时器用 timer_cancel',
+    example='停巡查：回 stopped 与它当前状态；已停过是 stopped=false',
+    example_code='clock.periodic_stop(periodic_id="pd-000001", reason="不需要了")',
 )
 def clock_periodic_stop(store: Any, root: Any, *, periodic_id: str,
                         reason: str = "") -> ToolResult:
@@ -1261,10 +1269,7 @@ def clock_periodic_stop(store: Any, root: Any, *, periodic_id: str,
 
 @tool(
     "clock.timer_purpose",
-    "给一条已经受理的等待补上目的（同一个编号，不是新建一条）。"
-    "起表时忘了写目的就走这一件：补上之后到点那条报醒里就有目的可念，"
-    "purpose_missing 转 false。计时器（tm-…）与周期性巡查（pd-…）都认。"
-    "所有角色都能用。",
+    '给一条已受理的等待补上目的（同一个编号，不新建）。补上后到点报醒里有目的可念，purpose_missing 转 false；计时器与巡查都认',
     {"type": "object",
      "properties": {
          "entry_id": {"type": "string", "minLength": 1, "maxLength": 64,
@@ -1278,6 +1283,9 @@ def clock_periodic_stop(store: Any, root: Any, *, periodic_id: str,
     returns=("{'checked','entry_id','filled','state','purpose','purpose_missing',"
              "'reason','entry','clock_status'}"),
     tags=("clock", "timer", "communication"),
+    scenario='起表时漏写目的就用它补；别为补目的另起一条',
+    example='给 tm- 那条补目的：回 filled 与新的 purpose / purpose_missing',
+    example_code='clock.timer_purpose(entry_id="tm-000001", purpose="等 D 交稿")',
 )
 def clock_timer_purpose(store: Any, root: Any, *, entry_id: str,
                         purpose: str) -> ToolResult:
@@ -1318,10 +1326,7 @@ def clock_timer_purpose(store: Any, root: Any, *, entry_id: str,
 
 @tool(
     "clock.timer_list",
-    "列出计时器：待发 / 已到点 / 已取消，各带 due_at、remaining_sec（读不到时钟时为 null）"
-    "与到点项编号；同时列周期性巡查（`periodics` / `periodic_count`）、挂机等待者"
-    "（`waiters` / `waiters_parked`）与唤醒标记的读数。挂机等待者回答「谁在等、等什么」，"
-    "所以这一件也是「这一拍会不会被挂起」的读口。所有角色都能用。",
+    '列出计时器（待发 / 已到点 / 已取消，各带 due_at 与剩余秒数）、周期性巡查、挂机等待者与待消费的唤醒通知；读不成时 checked=false',
     {"type": "object",
      "properties": {
          "include_done": {"type": "boolean",
@@ -1334,6 +1339,9 @@ def clock_timer_purpose(store: Any, root: Any, *, entry_id: str,
              "'periodic_count','waiters','waiters_parked','pending_count','fired_count',"
              "'cancelled_count','pending_wakes','wakes_checked','observed_events','reason'}"),
     tags=("clock", "timer", "read"),
+    scenario='想知道谁在等、这一拍会不会被挂起时用它',
+    example='列还在跑的等待：回 timers / periodics / waiters 三组读数',
+    example_code='clock.timer_list(include_done=False)',
 )
 def clock_timer_list(store: Any, root: Any, *, include_done: bool = True) -> ToolResult:
     """读计时器与唤醒标记。读不成 => checked=False（不是"没有计时器"）。
@@ -1405,10 +1413,7 @@ def clock_timer_list(store: Any, root: Any, *, include_done: bool = True) -> Too
 
 @tool(
     "clock.timer_cancel",
-    "取消一条还没到点的计时器/闹钟（到点后不再触发）。已到点或已取消的返回 "
-    "cancelled=false + 它当前的状态（查过了，不是第二次取消）。编号是 tm- 那一种；"
-    "周期性巡查不归这一件（它用 clock.periodic_stop(periodic_id=pd-…)）。"
-    "所有角色都能用。",
+    '取消一条还没到点的计时器或闹钟。已到点或已取消的返回 cancelled=false 与当前状态；巡查不归它（用 periodic_stop）',
     {"type": "object",
      "properties": {
          "timer_id": {"type": "string", "minLength": 1, "maxLength": 64,
@@ -1420,6 +1425,9 @@ def clock_timer_list(store: Any, root: Any, *, include_done: bool = True) -> Too
     returns=("{'checked','timer_id','cancelled','state','reason','timer',"
              "'pending_count','clock_status'}"),
     tags=("clock", "timer", "communication"),
+    scenario='那条等待已经不需要、要在到点前撤掉时用它',
+    example='撤 tm- 那条：回 cancelled 与取消前状态；没有这条不是失败',
+    example_code='clock.timer_cancel(timer_id="tm-000001")',
 )
 def clock_timer_cancel(store: Any, root: Any, *, timer_id: str) -> ToolResult:
     """取消计时器。找不到不是失败（三态：查过了、没有这一条）。"""
@@ -1454,13 +1462,7 @@ def clock_timer_cancel(store: Any, root: Any, *, timer_id: str) -> ToolResult:
 
 @tool(
     "clock.wait_any",
-    "等待任意计时器返回：手上没事了，谁先回来都行，回来叫我。"
-    "这是显式意图（不是「有计时器」这一件事本身）：记下之后循环这一拍不调模型；"
-    "到任一计时器返回或我等的人说了话，就把「目的 + 现场等了多久 + 时间到 + 对方说的话」"
-    "发给你。手上有活要接着做就别起这个意图 —— 计时器不会阻塞动作。"
-    "已无事可做且一条计时器都没有时起这个意图，等于交差（框架向父代理报告）——"
-    "读数里的 requested=true / waiting=false 说的就是这一档（要求过等、而没有可等的东西），"
-    "它不是「没在等」。所有角色都能用。",
+    '记一条「等任意计时器返回」的意图：谁先回来都行，记下后这一拍不调模型；手上还有活就别起。零计时器时它会拒（no_timers_to_wait），先起一条表或按交差收工（父代理记为静默）',
     {"type": "object",
      "properties": {
          "purpose": {"type": "string", "maxLength": 200,
@@ -1474,6 +1476,9 @@ def clock_timer_cancel(store: Any, root: Any, *, timer_id: str) -> ToolResult:
              "'pending','pending_count','woke','woke_count','intents','reason',"
              "'clock_status'}"),
     tags=("clock", "timer", "communication"),
+    scenario='确认无事可做、手上只剩等待时用它；还有活要干就别用',
+    example='已有计时器时等任一条回来：回 requested / waiting / pending；零计时器会被拒（no_timers_to_wait）',
+    example_code='clock.wait_any(purpose="等任一下级回来")',
 )
 def clock_wait_any(store: Any, root: Any, *, purpose: str = "") -> ToolResult:
     """记一条「等待任意计时器返回」的意图，并把这一格的读数交回去。
@@ -1593,11 +1598,7 @@ def _program_note(mine: Sequence[Mapping[str, Any]], unowned: Sequence[Mapping[s
 
 @tool(
     "program.list",
-    "列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / "
-    "已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。"
-    "空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。"
-    "这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。"
-    "所有角色都能用。",
+    '列出我这一趟起的程序（缺省只列还在跑的）：program / pid / 起于何时 / 已跑多久 / 对应计时器与目的，外加 alive。空归属的旧账单列，不算我的',
     {"type": "object",
      "properties": {
          "include_done": {"type": "boolean",
@@ -1610,6 +1611,9 @@ def _program_note(mine: Sequence[Mapping[str, Any]], unowned: Sequence[Mapping[s
              "'unowned_count','unowned_shown','unowned_running','others','others_running',"
              "'include_done','retire_ready','note','reason'}"),
     tags=("clock", "program", "read"),
+    scenario='交差或销号前自查还有没有程序在跑（retire_ready=false 就是还有）',
+    example='自查我名下的程序：回 programs / alive 与 retire_ready',
+    example_code='program.list(include_done=False)',
 )
 def program_list(store: Any, root: Any, *, include_done: bool = False) -> ToolResult:
     """我名下的程序读数（三态：簿记读不成 => checked=False，不是"没有程序在跑"）。"""
@@ -1745,15 +1749,13 @@ def _program_stop_session(workspace: str | Path, *, task_id: str, role: str,
     return "" if not problem else f"没落成（{problem}）"
 
 
+# TOOLFACE-CLEAN（业主 2026-11-22：实现只留在代码注释里）
+# 旧 summary 的实现细节，逐字搬到这里（模型面只留能力与用法）：
+# 旧 summary 的实现：停成功后把那条程序计时器按 outcome="killed" 收口（`C.PROGRAM_STOP_RESULTS` 四档）；
+# 模型面只留「停掉 + 在等它的人会收到唤醒」这两件事。
 @tool(
     "program.stop",
-    "停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条"
-    "程序计时器按 outcome=\"killed\" 收口，并唤醒正在等它的人。"
-    "只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。"
-    "已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名"
-    "还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。"
-    "给 timer_id 停一条，给 all_programs=true 停我名下全部。"
-    "只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。",
+    '停掉我这一趟起的程序：先给宽限窗口收尾，过窗才真杀，并唤醒正在等它的人。只碰自己起的；已结束幂等、杀不动报 timeout',
     {"type": "object",
      "properties": {
          "timer_id": {"type": "string", "minLength": 1, "maxLength": 64,
@@ -1771,6 +1773,9 @@ def _program_stop_session(workspace: str | Path, *, task_id: str, role: str,
              "'already_exited','timeout','not_mine','not_found','count','items',"
              "'still_alive','woken','note','session_event','reason','clock_status'}"),
     tags=("clock", "program", "communication"),
+    scenario='程序要停下才能交差或销号时；给 timer_id 停一条，all_programs 全停',
+    example='停我名下全部：回 stopped / killed / timeout；别人的报 not_mine',
+    example_code='program.stop(all_programs=True, reason="交差前收尾")',
 )
 def program_stop(store: Any, root: Any, *, timer_id: str = "",
                  all_programs: bool = False, reason: str = "") -> ToolResult:
@@ -1916,12 +1921,19 @@ def register(registry: ToolRegistry, *, store: Any = None, root: Any = None,
     C.set_target_probe(_target_probe)
     # 异常清单的读口（业主 2026-10-26）：巡查到点那句报醒要带当拍现算的四类异常。
     C.set_patrol_probe(_patrol_probe)
+    # 这一次装配有没有拿到真的工作区（显式 root / 显式 workspace_root / store.root）。
+    # `_resolve_root` 在三个都没有时会退到进程 cwd —— 那是一个"猜"：把它设成进程缺省，
+    # 同一进程里别的代码（`program_span` 起程序计时器）就会把账写进 cwd，跑测试时
+    # 那个 cwd 是仓库根 ⇒ `agentflow/out/clock/state.json` 删了又出现（OUTPROBE，
+    # 2026-11-22）。三态纪律：没有工作区 ⇒ 留空，程序计时器如实记 `_PROGRAM_UNBOOKED`
+    # （"没登记"看得见），绝不拿 cwd 冒充工作区。
+    given = root or workspace_root or getattr(store, "root", None)
     workspace = _resolve_root(root if root else workspace_root, store)
     _bind(workspace, store, conductor)
     # 进程缺省工作区：`program_span` 落在工具层之下（agent_e / cancellation /
     # papercompile …），那里拿不到 `AgentLoop.workspace_root` —— 挂上这一个，
     # 程序计时器才写得进同一本 `<工作区>/out/clock/state.json`。
-    C.set_default_workspace(workspace)
+    C.set_default_workspace(workspace if given else None)
     _install_append_hook()
     bound: dict[str, Any] = {
         "store": store,

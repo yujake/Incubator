@@ -86,10 +86,18 @@ def _persist_analysis_report(
     }
 
 
+# TOOLFACE-CLEAN（业主 2026-11-22：实现只留在代码注释里）
+# 原文（旧 summary）：「把你自己产出的分析登记进 `analysis_reports`（`kind` 取参数里那张
+# 受控词表，别抄旧名单）—— 只读角色唯一写入口，不登记=没发生。」（原句有两处星号强调，
+# 注释里按 R009 去掉星号，字面意思不变）
+# 搬走的实现细节：落点是 `analysis_reports` 表（正文另写一份
+# `work/C/<report_id>-<kind>.md`）；唯一写实现是 `agent_c._support.AnalysisReport.persist`
+# （先写 markdown，再在同一事务里 `tx.alloc_id("report")` 取号写登记行）。
+# 模型面只说「登记成一条可查的报告」，判据：`tests/test_tool_face_three_segments.py` ①②③。
 @tool(
     "analysis.register_report",
     (
-        "把**你自己产出的**分析登记进 `analysis_reports`（`kind` 取参数里那张受控词表，别抄旧名单）—— 只读角色唯一写入口，不登记=没发生。"
+        "把你自己产出的分析登记成一条可查的报告（档位 + 一句话结论 + 正文）；不登记=没发生。"
     ),
     {
         "type": "object",
@@ -122,6 +130,13 @@ def _persist_analysis_report(
     returns=("{'checked','report_id','markdown_path','kind','summary','created_by'}"
              "（`checked=False` = 没接线/参数非法 ⇒ 那一行没有登记）"),
     tags=("analysis", "write", "register"),
+
+    scenario="算完图或缺口、要在回复之外留一份可回查的分析时用它；只登记自己的产出。",
+    example="登记一份「最热门概念」分析 → report_id / markdown_path / created_by。",
+    example_code=(
+        "analysis.register_report(kind=\"hottest\", summary=\"0003 被引 12 次，最热\", "
+        "markdown=\"# 热度\\n- 0003：12 次\\n\", payload={\"top\": \"0003\"})"
+    ),
 )
 def _analysis_register_report_tool(_not_wired_fn, store, actor, **kw: Any):
     """`analysis.register_report` 的工具体（注入值由装配期 `partial` 绑定）。"""

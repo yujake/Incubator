@@ -30,7 +30,9 @@ from .. import litread as _LR
 from ..store import Store
 from . import ToolResult, ToolSpec, fail, ok, tool
 # 复用 OCR 那件「第一猜」归一器（`path` 或「文献编号」都收，三态齐全）
-from .ocr_tools import _Ctx as _OcrCtx, _pick_workspace, _target_path
+from .ocr_tools import (
+    _Ctx as _OcrCtx, _pick_workspace, _resolve_target, _target_path,
+)
 
 PAGE_MARKER = "===== page {n} ====="
 
@@ -114,6 +116,57 @@ def _mark_literature_tier(ctx: _Ctx, lit_id: str, tier: str, *, note: str = "") 
         return ""
 
 
+def _extract_target(ctx: _Ctx, rel: str) -> tuple[Path | None, ToolResult | None]:
+    """把 `_target_path` 归一出的路径落到盘上：相对路径的唯一基准是 `store.library_path`。
+
+    ## 改前是什么（2026-11-22 业主裁定「旧工作区不必兼容」后删掉）
+
+    改前这里在 `_target_path` 之后还有一段「先试工作区」：
+
+    ```python
+    if not p.is_absolute():
+        cand = ctx.workspace / p
+        p = cand if cand.exists() else p
+    ```
+
+    那一段让两种读法都成立：
+
+    - `path="library/<名>"`（带 `library/` 前缀的旧形态）⇒ 读到工作区里的那一份；
+    - `path="downloads/<名>"`（A 的下载中间态）⇒ 读到工作区里的那一份；
+    - 两边都不在时 `p` 还是相对路径 ⇒ 按「进程当前目录」再赌一次。
+
+    而同一份 `literature.path` 在写侧/审计与另外四条读路（`search.shelf` /
+    `ocr.*` / `webui` 下载读数 / `wellformed`）已经按唯一真身 `store.library_path`
+    拒旧形态 ⇒ 这里比它们宽，`text.extract` 就成了把旧布局"读回来"的后门。
+
+    ## 改后
+
+    相对路径走 `ocr_tools._resolve_target`（与 `ocr.*` 同一套判据，只有一份）：
+    扁平名 ⇒ `store.library_path`；旧形态（分目录 `<号>/名` / 带 `library/` 前缀）
+    ⇒ 受控拒 `kind="legacy_layout"`（理由逐字「旧布局（不再支持）」）；越界 ⇒
+    `kind="path_outside_library"`；没装配 store ⇒ `kind="no_store"`。绝对路径原样
+    （那是调用方已经算好的位置：`search.download` 的 `path` 就是绝对路径）。
+
+    「相对路径按 `library/` 解」这件事必须说出来而不是猜：扁平名不在库时，
+    若工作区里恰好有一份同名文件，拒绝理由会点名"这是工作区文件 ⇒ 请给绝对路径"
+    —— 三态（读到了 / 旧布局 / 文件不在）不折平，也不静默换基准。
+    """
+    ocr_ctx = _OcrCtx(workspace=ctx.workspace, store=ctx.store)
+    p, refused = _resolve_target(ocr_ctx, rel)
+    if refused is not None:
+        return None, refused
+    if not p.exists():
+        alt = ctx.workspace / str(rel)
+        hint = ""
+        if not Path(rel).is_absolute() and alt.exists():
+            hint = (f"；注意：相对路径的唯一基准是 `library/`。`{alt}` 是工作区里的"
+                    "文件（下载中间态等），要读它请把绝对路径直接给 `path`")
+        return None, fail(f"文件不存在：{p}{hint}", kind="file_missing", path=str(p))
+    if not p.is_file():
+        return None, fail(f"不是普通文件：{p}", kind="not_a_file", path=str(p))
+    return p, None
+
+
 def _extract_impl(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = "",
                   pages: Sequence[int] | None = None, max_pages: int = 200,
                   name_hint: str = "") -> ToolResult:
@@ -131,14 +184,9 @@ def _extract_impl(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = ""
     if bad is not None:
         return fail(str(bad.get("error") or "没有可抽的目标"),
                     **{k: v for k, v in bad.items() if k != "error"})
-    p = Path(rel)
-    if not p.is_absolute():
-        cand = ctx.workspace / p
-        p = cand if cand.exists() else p
-    if not p.exists():
-        return fail(f"文件不存在：{p}", kind="file_missing", path=str(p))
-    if not p.is_file():
-        return fail(f"不是普通文件：{p}", kind="not_a_file", path=str(p))
+    p, refused = _extract_target(ctx, rel)
+    if refused is not None:
+        return refused
 
     # 2026-10-17：「纯文本文件直接当正文」（幂等）—— 对 `.txt` 来说"抽成纯文本"就是它自己；
     # 这也让声明判据的探针（夹具给的是一份 `.txt`）真跑得成，而不是靠"键名读自源码"打补丁。
@@ -384,9 +432,16 @@ def _quality(text: str) -> tuple[bool, dict[str, Any]]:
     """
     return _LR.garbled_text(text)
 
+# TOOLFACE-CLEAN（业主 2026-11-22：实现只留在代码注释里）
+# 原文（旧 summary）：「把 PDF 文字层转成同名 `.txt` 写进 `library/`（原 PDF 不动；页间插
+# `===== page N =====`，疑似乱码不写）。扫描件走 OCR（没有就交 B）；别人只读那份 `.txt`。」
+# 搬走的实现细节：抽取本身是 `extract.extract_text`（纯文本文件直接原样入库）；页标记由本
+# 模块拼正文时插；可读性判定只有一份 `litread.assess_text`，失败档经
+# `_mark_literature_tier` 写进那一行文献的可读性。模块 docstring 已有与 `ocr.run` 的分工。
+# 判据：`tests/test_tool_face_three_segments.py` ①②③。
 @tool(
     "text.extract",
-    "把 PDF 文字层转成同名 `.txt` 写进 `library/`（原 PDF 不动；页间插 `===== page N =====`，疑似乱码不写）。扫描件走 OCR（没有就交 B）；别人只读那份 `.txt`。",
+    "把 PDF 自带的文字层转成同名 `.txt` 写进 `library/`（原 PDF 不动，页间插 `===== page N =====`，疑似乱码不写）。",
     {
         "type": "object",
         "properties": {
@@ -411,6 +466,10 @@ def _quality(text: str) -> tuple[bool, dict[str, Any]]:
         "extract_error/no_text_layer/garbled_text)"
     ),
     tags=("text", "extract", "offline"),
+
+    scenario="电子排版 PDF 先用它（离线、不要后端）；扫描件没有文字层，改走 OCR。",
+    example="抽一份 PDF（`path` 填登记产生的扁平名）→ path / pages / chars / sha256（乱码时 ok=False + kind）。",
+    example_code="text.extract(path=\"<扁平名>\", max_pages=200)",
 )
 def _text_extract(ctx, path="", lit_id="", out_dir="", pages=None, max_pages=200):
     """`text.extract` 的工具体（注入值由装配期用 `partial` 绑定）。"""

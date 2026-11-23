@@ -745,6 +745,9 @@ def _agent_for(store: Any, root: str | Path | None):
             "io_error = 工作区内这个文件读不到（不存在 / 是目录 / 被占用 / ACL 拒绝）"
             ),
     tags=("experiment", "reproducibility"),
+    scenario="登记实验前算一次脚本指纹；复现时比对同一格。",
+    example="算一个脚本的指纹 → path + code_hash（前 16 位）。",
+    example_code="verify.code_hash(path=\"code/exp/repro.py\")",
 )
 def _verify_code_hash(_hash_of, path):
     """verify.code_hash 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
@@ -770,6 +773,9 @@ def _verify_code_hash(_hash_of, path):
     # 的 description 不带 returns，模型面看不到它），不拼进任何模型可见文本。
     returns="{'checked','available','available_names','reason','probe_errors','looked_in','sources','lean_enabled','lean_enabled_source','can_do_formal','note'}",
     tags=("experiment", "formal"),
+    scenario="要判断这台机器有没有可用的证明检查器时先问它。",
+    example="探测本机 → available[] + checked；探测本身没做成时 checked=false 并给原因。",
+    example_code="verify.detect_verifier()",
 )
 def _verify_detect_verifier():
     """verify.detect_verifier 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
@@ -779,11 +785,11 @@ def _verify_detect_verifier():
     """
     return ok(detect_verifier())
 
+# TOOLFACE-CLEAN 片6 原文（已从三段搬走）：「登记 Experiment 行」—— `Experiment` 是内部的记录类型、落点是 `experiments` 表（`agent_e/run_experiment.py`）；模型要知道的是「登记一条实验记录」。
 @tool(
     "verify.run_experiment",
     (
-            "登记 Experiment 行；穷举 `reports/e-proof-<实验号>.md`（要 V 签），"
-            "普通数值 `reports/e-num-<实验号>.md`（不需 V 签）。"
+            "登记一条实验记录；穷举 `manuscripts/E/e-proof-<实验号>.md`（要 V 签），普通数值 `work/E/e-num-<实验号>.md`（不需 V 签）。"
             ),
     {
            "type": "object",
@@ -938,6 +944,9 @@ def _verify_detect_verifier():
             ),
     tags=("experiment", "evidence"),
     external="exec",
+    scenario="要新增一条数值证据（而不是形式化核验）时用它。",
+    example="跑穷举脚本 → 原始读数落 out/exp-logs/<号>.log，穷举三件套落 out/experiments/<号>/。",
+    example_code="verify.run_experiment(claim=\"R(3,4)=9\", claim_key=\"ramsey-r34\", script_path=\"code/exp/repro.py\", method=\"exhaustive_search\", certificate={\"kind\": \"enumeration_bound\"}, search_bound={\"space\": \"n<10\"}, design=\"按 n 递增搜\", enumeration=\"对称性剪枝不丢解\", exhaustive=True)",
 )
 def _verify_run_experiment(_need_store, _run_experiment_tool, claim, claim_key, script_path, params=None, method="numeric", for_question_id=None, timeout=600, certificate=None, search_bound=None, design=None, enumeration=None, exhaustive=None, search_space=None, kind=None):
     """verify.run_experiment 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
@@ -981,8 +990,7 @@ def _verify_run_experiment(_need_store, _run_experiment_tool, claim, claim_key, 
 @tool(
     "verify.evidence_for",
     (
-            "查一条命题（claim_key）或研究问题（for_question_id）已有的实验证据；都不给 ⇒ checked=False（**没查 ≠ "
-            "查了没有**）。"
+            "查一条命题（claim_key）或研究问题（for_question_id）已有的实验证据；都不给 ⇒ checked=False（**没查 ≠ 查了没有**）。"
             ),
     {
            "type": "object",
@@ -1000,6 +1008,9 @@ def _verify_run_experiment(_need_store, _run_experiment_tool, claim, claim_key, 
             "三条返回路径的键集合**完全相同**，由 tests/test_tools_audit_fixes.py 逐字核对）"
             ),
     tags=("experiment", "evidence"),
+    scenario="动笔引用一条实验结果之前，先查它到底有什么证据。",
+    example="按 claim_key 查 → experiments + best_evidence_kind；都不给 ⇒ checked=False。",
+    example_code="verify.evidence_for(claim_key=\"ramsey-r34\")",
 )
 def _verify_evidence_for(_need_store, _read_rows, store, claim_key=None, for_question_id=None):
     """verify.evidence_for 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
@@ -1029,6 +1040,9 @@ def _verify_evidence_for(_need_store, _read_rows, store, claim_key=None, for_que
     roles=_ROLES,
     returns="{'checked','total','returned','truncated','experiments','scope','reason'}",
     tags=("experiment",),
+    scenario="想知道按序登记过哪些实验、或某命题的全部实验时用它。",
+    example="列最近 20 条 → total / returned / truncated + experiments。",
+    example_code="verify.list_experiments(claim_key=\"ramsey-r34\", limit=20)",
 )
 def _verify_list_experiments(_need_store, _read_rows, store, claim_key=None, limit=None):
     """verify.list_experiments 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
@@ -1058,11 +1072,14 @@ def _verify_list_experiments(_need_store, _read_rows, store, claim_key=None, lim
 _ROLES_V = ("V",)
 
 
+# TOOLFACE-CLEAN（业主 2026-11-22：实现只留在代码注释里）
+# 原文（旧 summary）：「写 verifications/<命题号>.jsonl」。结论落在哪个中间文件属实现；模型要知道的是「结论可回查、按命题号取」。
+# 判据：`tests/test_tool_face_three_segments.py` 钉住这条 needle（'verifications/'）
+# 仍在注释里、且不在模型可见面上。
 @tool(
     "verify.verify_proof",
     (
-            "把一份证明按写成后的样子整体重读：两态结论 + 问题指到步号，写 verifications/<命题号>.jsonl。"
-            "在册也要给 `proof_manuscript`；只给 `proof_text` 会被拒。"
+            "把一份证明按写成后的样子整体重读：两态结论 + 问题指到步号，落一条可回查的验证记录。在册也要给 `proof_manuscript`；只给 `proof_text` 会被拒。"
             ),
     {
            "type": "object",
@@ -1110,13 +1127,14 @@ _ROLES_V = ("V",)
             "proof_manuscript": {"type": "string", "description":
                                  "**证明手稿**（工作区相对路径、盘上那一份文件）。命题已登记时"
                                  "必须给：签块（`- V 签：`）盖回这一份稿、依赖面从它的 "
-                                 "`## 依赖` 段读、稿按号寻址（约定命名 "
-                                 "`reports/f-proof-<命题号>.md`；`notes/…` 等别的相对路径也收，"
+                                 "`## 依赖` 段读、稿按号寻址（正文落点是 "
+                                 "`manuscripts/F/f-proof-<命题号>.md`；`notes/…` 等别的相对路径也收，"
                                  "只要是文件且有一节非空的 `## 证明`）。给稿时正文以稿为准，"
                                  "`proof_text` 只作对 sha 的核对。命题还没在册时也用它："
                                  "给了它就可以不给 `statement_id`，签到位后签块由收方秘书"
-                                 "落回这一份稿（E 的 `reports/e-proof-<实验号>.md`、B 的 "
-                                 "`reports/b-proof-<命题号>.md` 同一个入口）。没给稿的在册送审"
+                                 "落回这一份稿（E 的 `manuscripts/E/e-proof-<实验号>.md`、B 的 "
+                                 "`manuscripts/B/b-proof-<命题号>.md` 同一个入口）。旧落点 "
+                                 "`reports/` 是退役布局，不再支持（老盘上的稿仍读得出）。没给稿的在册送审"
                                  "一律受控拒绝（`proof_text_needs_a_manuscript`）"},
            },
            # 2026-11-02：不再要求 `statement_id` —— 未在册那一档不给号、给手稿路径；
@@ -1209,6 +1227,9 @@ _ROLES_V = ("V",)
             "「这一档没查成」，不是「没有引用」）"
             ),
     tags=("verification", "proof"),
+    scenario="送审前整体重读；在册命题也给稿，别只交正文。",
+    example="在册命题带稿送审 → 两态结论 + 问题指到步号 + 签落回那份稿。",
+    example_code="verify.verify_proof(statement_id=\"000042\", proof_manuscript=\"manuscripts/F/f-proof-000042.md\", proof_text=\"1. …\")",
 )
 def _verify_verify_proof(_need_store, _agent_v, statement_id="", proof_text=None,
                         readonly_facts=None, proof_no=None, proof_manuscript=None):
@@ -1253,6 +1274,9 @@ def _verify_verify_proof(_need_store, _agent_v, statement_id="", proof_text=None
             "（problems 是坏行说明 —— 照实列出，不静默跳过）"
             ),
     tags=("verification",),
+    scenario="查一条命题审过几次、结论分别是什么时用它。",
+    example="按命题号列台账 → total + items；坏行照实列进 problems。",
+    example_code="verify.list_verifications(statement_id=\"000042\", limit=10)",
 )
 def _verify_list_verifications(_agent_v, statement_id=None, limit=None):
     """verify.list_verifications 的工具体（注入值 _agent_v 由装配期用 `partial` 绑定）。"""
@@ -1283,6 +1307,9 @@ def _verify_list_verifications(_agent_v, statement_id=None, limit=None):
             "（三条返回路径键集合相同；`source` 为空 = 台账里没有这个命题的证明全文）"
             ),
     tags=("verification",),
+    scenario="要重读 V 当时审的那一份正文（而不是盘上现稿）时用它。",
+    example="读回被审全文 → proof_text + sha256 + last_verdict。",
+    example_code="verify.read_proof(statement_id=\"000042\")",
 )
 def _verify_read_proof(_need_store, _agent_v, statement_id):
     """verify.read_proof 的工具体（注入值由装配期用 `partial` 绑定）。"""

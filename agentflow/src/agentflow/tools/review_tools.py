@@ -1,9 +1,9 @@
 """H 的工具：审校。
 
 ## 审校对象是论文，不是台账行（业主 2026-10-24 裁定）
-「只对论文负责是正确的，documents 等都是中间产物」＋「H 审论文（`out/paper/main.tex` /
+「只对论文负责是正确的，documents 等都是中间产物」＋「H 审论文（`out/package/main.tex` /
 pdf），documents 只是它的登记行」。所以 `review.review_document` 的输入正文来自
-`read_paper_body`：`<项目根>/out/paper/main.tex` 优先，退到 `main.pdf` 的文本层；正文带
+`read_paper_body`：`<项目根>/out/package/main.tex` 优先，退到 `main.pdf` 的文本层；正文带
 行号（`_line_of` 因此能定位），本次审的那一份正文的 sha256 记进读数。两者都没有 ⇒
 `checked=False` + `verdict="unreviewable"`，不落发现、不动状态：没审到不是"审过、没问题"。
 `documents` 那一行仍只是中间产物 —— 审完只改它的 `status`，台账行缺失时论文照审。
@@ -185,7 +185,7 @@ _SEMANTIC_NOT_WIRED_REASON = (
 #: "理由里刻意不写行号"是与它同一条纪律的另一面。
 #:
 #: 2026-10-24 起行号来源有了：`review_document` 先把被审的论文正文读进来
-#: （`read_paper_body`：`out/paper/main.tex`，退到 `main.pdf` 的文本层），
+#: （`read_paper_body`：`out/package/main.tex`，退到 `main.pdf` 的文本层），
 #: 那份正文连同它的行号一起进 `scan_document` ⇒ `_line_of` 能把每条发现的逐字引文
 #: 定位到正文的某一行。此前这里写的是"审校是纯函数、只读 `documents` 那一行，
 #: 没有行号来源" —— 那句话在业主裁定「H 审论文，`documents` 只是它的登记行」之后
@@ -328,10 +328,10 @@ def _locate_quote(text: str, quote: Any) -> int | None:
 # ---------------------------------------------------------------- 被审对象：论文正文
 #
 # 业主 2026-10-24 裁定（逐字）：「只对论文负责是正确的，documents等都是中间产物」，
-# 并已确认：「H 审论文（out/paper/main.tex / pdf），documents 只是它的登记行」。
+# 并已确认：「H 审论文（out/package/main.tex / pdf），documents 只是它的登记行」。
 #
 # 所以本模块的审校对象是论文正文，不是 `documents` 那一行：
-#   * 正文优先读 `<项目根>/out/paper/main.tex`；没有 tex 就退到 `main.pdf` 抽出的文本；
+#   * 正文优先读 `<项目根>/out/package/main.tex`；没有 tex 就退到 `main.pdf` 抽出的文本；
 #   * 两者都没有（或读不出来、或读出来是空的）⇒ 三态里的第三态：
 #     `checked=False` + 逐字理由，不许折成 `accepted`（"没审到"不是"审过、没问题"）；
 #   * 正文连同它的行号一起进 `scan_document`（`_line_of` 因此有行号来源）；
@@ -339,7 +339,7 @@ def _locate_quote(text: str, quote: Any) -> int | None:
 #     本次审的正文 sha256 记进读数（`paper_body`）与本轮 `reason`，可追溯。
 #
 # 论文包的落点不在这里另写一份：`papercompile.package_dir` / `TEX_NAME` / `PDF_NAME`
-# 就是"论文包在哪、正文叫什么"的唯一声明面（`draft/142` 之后 `out/paper/` 是那个包）。
+# 就是"论文包在哪、正文叫什么"的唯一声明面（`draft/142` 之后 `out/package/` 是那个包）。
 
 #: 被审正文的来源档（读数 `paper_body["source"]` 的取值域；空串 = 没读到正文）。
 #: 两个来源档必须分得开：同一句话在 tex 与 pdf 抽取文本里的行号本来就不是一回事。
@@ -1450,6 +1450,12 @@ def record_finding(
     actor: str = "agent-H",
 ) -> dict:
     """把「H 自己读出来的」一条发现落成 `review_findings` 行（业主 2026-10-18 裁定）。
+
+    TOOLFACE-SHARD4（业主 2026-11-22 三段格式）：模型面原来那句「落成
+    `review_findings` 行（只读角色的产出通道）」里的表名按「实现只留注释」留在这里
+    （本 docstring 首句就是它）；模型面只留能力（把你读出来的一条发现记下来、
+    `evidence` 必填）与参数面（`kind` / `target` / `line` 等填写格式）。
+
     ## 这是哪一条洞的修法（读数先于修法）
     `projects/mp3` 末节第 5 条那一类「面外操作」在 H 这一侧的同族形态是：`review_document` / `verify_fixes` 落的发现「全
     部来自机械扫描」（`scan_document`），而 H 自己读出来的那一条（「G8 回执没给退出码」「正文引用的那份材料盘上没有」）「没有任何落点」 —— 它只能写在回
@@ -1739,7 +1745,7 @@ def _unreviewable_review(
             f"{paper_view.get('reason') or '没有可审的论文'}。"
             "⇒ 本次**没有判 pass**：一条发现都没落、`documents` 的状态一个字都没动"
             "（没审到不是『审过、没问题』）。下一步：让 G 先把正文写进 "
-            "`out/paper/main.tex`（或编出带文本层的 `main.pdf`），再让 H 审。"
+            "`out/package/main.tex`（或编出带文本层的 `main.pdf`），再让 H 审。"
         ),
         "paper_body": dict(paper_view),
     }
@@ -1761,9 +1767,9 @@ def review_document(
     """审一份论文：把机械发现落成 `ReviewFinding` 行，并更新 `documents.status`。
     返回 ``{"doc_id","checked","round","new_findings","duplicate_skipped","reopened","error_count","warning_count","info_count","dep_check","semantic_check","coverage","status","status_updated","status_error","signature","signature_error","verdict","reason","paper_body"}``。
     ## 审的是论文，不是台账行（业主 2026-10-24 裁定）
-    「只对论文负责是正确的，documents 等都是中间产物」＋「H 审论文（`out/paper/main.tex` /
+    「只对论文负责是正确的，documents 等都是中间产物」＋「H 审论文（`out/package/main.tex` /
     pdf），documents 只是它的登记行」。所以本函数的输入正文来自 `read_paper_body`：
-    `<项目根>/out/paper/main.tex` 优先，退到 `main.pdf` 的文本层。那份正文连同它的行号
+    `<项目根>/out/package/main.tex` 优先，退到 `main.pdf` 的文本层。那份正文连同它的行号
     一起交给 `scan_document`（`_line_of` 因此能把发现的逐字引文定位到正文某一行）。
     - 两者都没有（或读不出来 / 抽出来是空的）⇒ `checked=False`、`verdict="unreviewable"`，
       一个字都不写盘（不落发现、不动状态）：没审到不是"审过、没问题"；
@@ -1776,6 +1782,12 @@ def review_document(
     ## 三态：`dependencies` 没查 ⇒ 不许判 accepted
     `dep_check.checked is False` 时 verdict 是 `"unverified"`，文档状态停在`in_review` —— 「依赖都闭合」这句
     话在没有查过的情况下不许说出口。
+    ## TOOLFACE-SHARD4（业主 2026-11-22 三段格式）：从模型面搬下来的原文
+    摘要里原来那句「机械发现落成 ReviewFinding（带 evidence）并更新文档状态；只写
+    review_findings 与 documents.status，不改 claims」讲的是内部类型与存储落点
+    （`ReviewFinding` / `review_findings` / `documents.status` / `claims`），按
+    「实现只留注释」留在这里；模型面只留能力（审稿、落发现、更新状态）与边界
+    （只加发现、不改断言）。三段落的落库细节见下面「三段式」那一段。
     """
     doc_id = str(doc_id)
     # ---- 被审对象：论文正文（这一路输入此前根本不存在 ⇒ 原来那句"没有行号来源"成立）
@@ -2621,13 +2633,13 @@ def list_findings(
 #: 报告与稿件分开放，且按被审对象命名，于是"这份报告审的是哪一版"靠文件名
 #: 就能对上 —— 再加上报告头里的内容 hash，"行号失效"这件事才不可能悄悄发生。
 #:
-#: 2026-10-13 从 `reports` 挪进 `out/review`（业主：「review 只是任务的一种，
-#: 咋产出中稳定产出 review 文件夹呢？」）：`out/review/` 已经是 M 的交付说明
+#: 2026-10-13 从 `reports` 挪进 `out/report`（业主：「review 只是任务的一种，
+#: 咋产出中稳定产出 review 文件夹呢？」）：`out/report/` 已经是 M 的交付说明
 #: （`REPORT.md`）、体例声明（`REPORT-STYLE.json`）、状态报告（`STATUS-*`）与
 #: M 判据（`m-verdicts.jsonl`）的落点 —— 审校报告住进同一个目录，"这一趟审过什么"
 #: 就有「一个」可数的面（收工门那一档 `review_files` 数的就是它）。
 #: 落点由框架定、不由模型挑：模型挑路径时，"稳定产出"这件事就只能靠运气。
-DEFAULT_REPORT_SUBDIR = "out/review"
+DEFAULT_REPORT_SUBDIR = "out/report"
 
 
 def review_report(
@@ -2653,7 +2665,7 @@ def review_report(
     这一轮犯的错』一节（G15）：`own_errors` 是必填参数；`None` ⇒ 抛（"没写"不等于"没犯错"），`[]` ⇒ 合法（显式声明零错误）。 3. 零发现自
     证（G13）：每道报"零发现"的门都必须带"我用了什么过程、数出了什么数字" —— 由 `gates.GateResult` 的构造期校验保证， G13 再独立复核一遍。
     ## 它写哪里、写什么
-    只写一个 markdown 文件（默认 `<workspace>/out/review/<doc_id>-review.md`），不碰任何数据表、不碰 `claims`。这
+    只写一个 markdown 文件（默认 `<workspace>/out/report/<doc_id>-review.md`），不碰任何数据表、不碰 `claims`。这
     是 `AgentH` 落库代理的一个入口，因此它属于"能被显式拒绝的写工具"那一类（`include_writers=True` 才装配）。
     三态：`dependencies` 省略 = 从库里读该稿件的依赖（查过）；显式 `None` = 没查（`dep_check.checked=False`）。
     """
@@ -2783,7 +2795,7 @@ TEXT_INTEGRITY_KINDS: tuple[str, ...] = (
 
 #: `cjk` 那一档的码位域。为什么不是一个区间：业主那句是「CJK 统一表意
 #: （U+4E00–9FFF 等）」，而真论文里最先出现的那一批恰恰在「等」里 ——
-#: 实测 `projects/paper-rewrite-80/out/paper/main.tex:936` 那 9 个字符里只有 6 个
+#: 实测 `projects/paper-rewrite-80/out/package/main.tex:936` 那 9 个字符里只有 6 个
 #: 落在 U+4E00–9FFF，另外 3 个是全角标点（U+FF08 `（` / U+FF0C `，` / U+FF09 `）`）。
 #: 只认统一表意 ⇒ 那一行只报 6 个，而「9 个」这个读数是业主自己数出来的口径
 #: （判据 `tests/test_h_can_audit_text_integrity.py` 的 g1 钉的就是它）。
@@ -3044,7 +3056,7 @@ def scan_text_integrity(root: Any, paths: Any, *, limit: Any = None) -> dict:
 
 @tool(
     "review.scan_document",
-    "全量机械审校一份稿件（引用/证据等级/否定分类/依赖闭合），每条发现带 evidence。",
+    "全量机械审校一份稿件（引用/证据等级/否定分类/依赖闭合），每条发现带 evidence",
     {
            "type": "object",
            "properties": {
@@ -3060,6 +3072,9 @@ def scan_text_integrity(root: Any, paths: Any, *, limit: Any = None) -> dict:
     # 因此"自己去库里读依赖"这条路径只在 `review_document` 里存在。
     side_effect="none",
     roles=_ROLES,
+    scenario="只想看读数、不落任何东西（不改状态也不改断言）时",
+    example="扫一份稿件；verdict 与每条发现的证据一起返回",
+    example_code='review.scan_document(doc={"doc_id": "000001", "claims": [], "sections": []})',
     returns=(
             "{'checked','doc_id','findings','error_count','warning_count','info_count',"
             "'dep_check','verdict','reason','coverage','semantic_check'}；verdict ∈ {rejected, unverified, "
@@ -3081,7 +3096,7 @@ def _review_scan_document_tool(doc, dependencies=_UNSPECIFIED):
 
 @tool(
     "review.list_findings",
-    "只读列举审校发现（可按稿件/状态/级别过滤），含 evidence。",
+    "只读列举审校发现（可按稿件/状态/级别过滤），含 evidence",
     {
            "type": "object",
            "properties": {
@@ -3093,6 +3108,9 @@ def _review_scan_document_tool(doc, dependencies=_UNSPECIFIED):
            },
     side_effect="read",
     roles=_ROLES,
+    scenario="查上一轮还剩哪些 open 发现时",
+    example="列某份稿的 open 发现；返回 count 与逐条发现",
+    example_code='review.list_findings(doc_id="000001", status="open")',
     returns="{'count','findings':[{'finding_id','doc_id','kind','level','target','message','evidence','status'}]}",
     tags=("review", "read"),
 )
@@ -3110,9 +3128,7 @@ def _review_list_findings_tool(_not_wired, store, doc_id=None, status=None, leve
 
 @tool(
     "review.review_document",
-    (
-            "审一份稿件：机械发现落成 ReviewFinding（带 evidence）并更新文档状态；只写 review_findings 与 documents.status，不改 claims。"
-            ),
+    "审一份论文：把机械发现记下来并更新稿件状态；只加发现，不改断言",
     {
            "type": "object",
            "properties": {
@@ -3125,6 +3141,9 @@ def _review_list_findings_tool(_not_wired, store, doc_id=None, status=None, leve
            },
     side_effect="write_local",
     roles=_WRITER_ROLES,
+    scenario="收到一份稿、要出这一轮的审校结论时",
+    example="审第 1 轮：返回 verdict、新发现数与状态",
+    example_code='review.review_document(doc_id="000001", round_no=1)',
     returns="{'doc_id','new_findings','duplicate_skipped','error_count','warning_count','verdict','status','signature','signature_error','coverage','checked','dep_check','info_count','reason','reopened','round','semantic_check','status_error','status_updated','paper_body','open_findings'}",
     tags=("review", "write"),
 )
@@ -3144,7 +3163,7 @@ def _review_review_document_tool(_not_wired, store, actor, semantic_judge, **kw)
 @tool(
     "review.verify_fixes",
     (
-            "复审：对上一轮每条 finding 重跑对应检查，判 fixed / 仍 open 并逐条列出仍 open 的；收不收尾由你判断 —— 给 `close_as=\"unresolved_review\"` 才把稿件置该终态并交人复核（轮数上限已撤除，没有任何计数器会替你收尾）。"
+            "复审上一轮每条发现：重跑检查判已修还是仍开；收不收尾由你给 close_as（不给就不收尾，没有计数器替你收）"
             ),
     {
            "type": "object",
@@ -3166,6 +3185,9 @@ def _review_review_document_tool(_not_wired, store, actor, semantic_judge, **kw)
            },
     side_effect="write_local",
     roles=_WRITER_ROLES,
+    scenario="G 说改完了，要核它是不是真修好时",
+    example="复审第 2 轮；仍开着的逐条列出，不收尾就不给 close_as",
+    example_code='review.verify_fixes(doc_id="000001", round_no=2)',
     returns="{'doc_id','round','resolved','still_open','unresolved_findings','verdict','not_rechecked','dep_check','error_count','finding_updates','info_count','reason','semantic_check','status','status_error','status_updated','warning_count','paper_body'}",
     tags=("review", "write"),
 )
@@ -3190,7 +3212,7 @@ def _review_verify_fixes_tool(_not_wired, store, actor, semantic_judge=None, **k
 @tool(
     "review.report",
     (
-            "产出完整审校报告：报告头钉住**被审版本 hash**、每道门带零发现自证数字、必含『**我这一轮犯的错**』一节；只写报告文件。"
+            "产出完整审校报告（钉被审版本 hash、每道门带零发现自证、含『我这一轮犯的错』）；只写报告文件"
             ),
     {
            "type": "object",
@@ -3226,6 +3248,9 @@ def _review_verify_fixes_tool(_not_wired, store, actor, semantic_judge=None, **k
            },
     side_effect="write_local",
     roles=_WRITER_ROLES,
+    scenario="这一轮审完要交一份可复核的报告时",
+    example="报告落 out/report/000001-review.md（旧 reports/ 已退役）；own_errors 必填",
+    example_code='review.report(doc_id="000001", own_errors=[])',
     returns=(
             "{'doc_id','round','report_path','revision_hash','verdict','gates_total',"
             "'pass_count','fail_count','unknown_count','not_applicable_count',"
@@ -3249,7 +3274,7 @@ def _review_report_tool(_not_wired, store, actor, semantic_judge, **kw):
 @tool(
     "review.record_finding",
     (
-            "把**你自己读出来的**一条发现落成 `review_findings` 行（只读角色的产出通道）。机械扫描（`review_document`）覆盖不到的用它；`evidence` 必填。"
+            "把**你自己读出来的**一条发现记下来（机械扫描覆盖不到的用它）；`evidence` 必填"
             ),
     {
            "type": "object",
@@ -3281,6 +3306,10 @@ def _review_report_tool(_not_wired, store, actor, semantic_judge, **kw):
            },
     side_effect="write_local",
     roles=_WRITER_ROLES,
+    scenario="机器扫不出、但你看出来的问题时",
+    example="记一条 scope_drift；同一条重复登记只回既有号",
+    example_code=('review.record_finding(doc_id="000001", kind="scope_drift", target="section:2", '
+                  'message="越出命题范围", evidence="正文第 3 节与命题不符")'),
     returns=("{'checked','created','duplicate_skipped','finding_id','doc_id','kind',"
              "'level','round','status'}（`created=False` = 与已有发现去重命中，"
              "返回既有 `finding_id`，不制造重复行）"),
@@ -3298,9 +3327,8 @@ def _review_record_finding_tool(_not_wired, store, actor, **kw):
 @tool(
     "review.scan_text_integrity",
     (
-        "扫一批文本里的异常字符（CJK 正文/控制符/零宽/替换符/双向/不换行空格），"
-        "逐条给 文件:行:列 与码位；读不成如实报 checked=False（不许读成"
-        "『零命中』），计数不受 limit 影响。目录递归 .tex/.md/.txt/.bib。"
+        "扫文本里的异常字符（CJK 混入、控制符、零宽、替换符、双向、不换行空格），"
+        "逐条给位置与码位；读不成如实报 checked=False，不是零命中"
     ),
     {
         "type": "object",
@@ -3322,6 +3350,9 @@ def _review_record_finding_tool(_not_wired, store, actor, **kw):
     },
     side_effect="read",
     roles=("H",),
+    scenario="怀疑正文或草稿混进不可见字符时（manuscripts/、work/）",
+    example="扫一个目录；读不成如实报 checked=False，不是零命中",
+    example_code='review.scan_text_integrity(paths=["out/package"])',
     returns="{'checked','reason','scanned','findings','counts','detail'}",
     tags=("review", "read", "gate"),
 )
@@ -3350,9 +3381,8 @@ _WIRED_KINDS: tuple[str, ...] = TEX.SCAN_KINDS
 @tool(
     "review.scan",
     (
-        "把一份稿件的机械读数一次拿全（七类 kinds 任选）：异常字符 / \\cite 对 \\bibitem / "
-        "\\input 目标 / \\ref 对 \\label / theorem 对 proof / 重复声明 / 正文与台账的数。"
-        "只读、只给读数；七类各自的三态在 detail[]，没查成的在 bad[]。"
+        "一次拿全论文的机械读数（七类任选）：字符、引用、input、ref、定理配对、重名、"
+        "正文对台账。只读、只给读数；没查成的类在 bad[] 里点名"
         ),
     {
         "type": "object",
@@ -3372,12 +3402,12 @@ _WIRED_KINDS: tuple[str, ...] = TEX.SCAN_KINDS
                 "items": {"type": "string"},
                 "description": (
                     "工作区内的相对路径（文件或目录；目录递归 .tex/.md/.txt/.bib）。"
-                    "缺省 = project 的 out/paper/main.tex（给了 project 才缺省）"),
+                    "缺省 = project 的 out/package/main.tex（给了 project 才缺省）"),
             },
             "project": {
                 "type": "string",
                 "description": (
-                    "论文项目根（工作区相对；`out/paper/main.tex` 在它下面）。"
+                    "论文项目根（工作区相对；`out/package/main.tex` 在它下面）。"
                     "只有 ledger_match 必须给它；不给 ⇒ 那一类如实报没查成"),
             },
             "limit": {
@@ -3393,6 +3423,9 @@ _WIRED_KINDS: tuple[str, ...] = TEX.SCAN_KINDS
     },
     side_effect="read",
     roles=("H",),
+    scenario="审论文之前要一组机器读数时，别自己数",
+    example="查定理配对与正文对台账；没查成的类在 bad 里点名",
+    example_code='review.scan(kinds=["proofs", "ledger_match"], project="projects/p1")',
     returns=(
         "{'checked','kinds','findings','counts','bad','detail','scanned','reason'}；"
         "findings[] 每项九键 {'kind','severity','file','line','column','text','why','ref',"
@@ -3527,6 +3560,8 @@ def register(
     for _fn, _deps in _WRITE_TOOL_FUNCTIONS:
         registry.register(replace(_fn.__tool_spec__,
                                   handler=partial(_fn, *[_bound[k] for k in _deps])))
+
+
 
 
 

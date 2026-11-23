@@ -22,8 +22,13 @@ A 的思维链只该花在"判断该调哪个工具、该用哪个检索词"上�
 ## 文件落点（为什么这样定）
 - ``search.download`` 下到 ``<workspace>/downloads/`` —— 中间态：文件名由 ``fetch`` 层
   slug 化并去重，下载器保证"不覆盖已有文件"。
-- ``search.register`` 把文件收编进 ``<store.library>/<lit_id>/``：``schema.Literature.path``
-  必须是 library/ 下的相对路径，绝对路径会被 ``Literature.validate()`` 直接拒绝。收编失败
+- ``search.register`` 把文件收编进 ``<store.library>/<内容 hash 前缀-名>``（扁平、
+  唯一落点；落点名由 ``locallib.library_landing`` 一处给，与 ``search.ingest_local``
+  共用）：``schema.Literature.path`` 必须是 library/ 下的相对路径，绝对路径会被
+  ``Literature.validate()`` 直接拒绝。旧 ``<store.library>/<lit_id>/<名>`` 布局
+  读侧也不再支持（2026-11-22 业主裁定「旧工作区不必兼容」；``wellformed`` 把它
+  报成 ``literature_layout_legacy`` 的 ``error``），读口只有 ``store.library_path``
+  一处真身。收编失败
   时行照建、``path`` 置 ``null`` 并给 warning —— "知道有这篇但拿不到全文"本身就是有价值的
   结果（DESIGN.md §2.4）。
 """
@@ -236,43 +241,81 @@ def _shelf_extract() -> Any:
 def _lit_file(ctx: _Ctx, rel: str) -> Path | None:
     """把一条 literature 行的 `path` 解析成盘上的文件；读不到 ⇒ `None`。
 
-    ## 为什么需要它（2026-10-28，阶段 ③ 第 2A 步撞出来的真缺陷）
+    ## 唯一真身：`store.library_path`（2026-11-22 业主裁定「旧工作区不必兼容」）
 
-    同一个字段 `literature.path` 有两个读取口径，而它们此前不一致：
+    改前这里有一段 workspace 回退（`except StoreError:` ⇒ 按工作区基准再拼一次）。
+    它 2026-10-28 是有理由的：`_adopt_file` 当时承认两个坐标系（"先 `library/`，
+    不存在再按 workspace 解释"），而真机 `projects/paper-rewrite-78` 有 4 行被
+    `table.update` 改写成 `downloads/lit-*.pdf`，文件真在盘上而书架只数到 1 本
+    （`have_path=5` / `missing_files=4` / `count=1`）。那时放宽的是"文件在哪"。
 
-    * 写入侧早就有两个坐标系 —— `_adopt_file` 逐字写着「相对路径优先按
-      `library/` 解释（表里存的就是这个坐标系），不存在再按 workspace 解释
-      （例如 `downloads/xxx.pdf`）」；
-    * 读取侧（`search.shelf` / `search.local`）只走 `store.library_path`，
-      也就是只认 `library/`。
+    裁定之后 `literature.path` 只有一种合法形态（扁平落点、相对 `library/`，
+    `locallib.library_landing_name` 写、`store.library_path` 判），`_adopt_file`
+    也不再产出第二个坐标系。所以回退整段删掉：它只服务过旧写法，而旧写法
+    （`<lit_id>/<名>`、带 `library/` 前缀、`downloads/…` 工作区相对路径）现在
+    明确"不再支持"。留着它就是同一份 `path` 写侧拒、读侧收 —— `litread` 与
+    `store.library_path` 已经在 2026-11-22 对齐过同一条口径，这里不比它们宽。
 
-    后果在真机上可量：projects/paper-rewrite-78 有 4 行被 `table.update`
-    改写成了 `downloads/lit-*.pdf`（事件日志 `tool:table.update` 四处），
-    文件真的在盘上，而书架只数到 1 本（`have_path=5` / `missing_files=4`
-    / `count=1`）—— 那几篇的正文既取不到、也就无法做逐字引文回验，而
-    没有任何一处会报错。
-
-    所以这里按写入侧同一套约定解析（先 `library/`，再 workspace），并且
-    两条路都把结果钉在工作区之内（`resolve()` 之后要求仍在根下）：
-    放宽的是"文件在哪"，不是"能读到工作区外面去"。
+    三态：`path` 是旧形态 ⇒ `None`（不读），但不算"文件不在" —— 旧形态与
+    缺失是两种处置（改哪一行 vs 找哪一份文件）。逐行的受控读数由
+    `_lit_blocked_note()` 在 `search.shelf` / `search.local` 的 `note` 里点名。
+    越界（`../`、绝对路径绕出 `library/`）同样 `None`：`store.library_path` 是
+    那道闸，这里不另开一条。
     """
     if not rel or ctx.store is None:
         return None
     try:
         inside = ctx.store.library_path(rel)
     except StoreError:
-        # 越出 library/ 的写法（`../` 之类）在这里被拒，但不代表它在
-        # workspace 那份坐标系里也非法 —— 下面那条路同样有边界检查。
-        inside = None
-    if inside is not None and inside.is_file():
-        return inside
-    base = Path(ctx.workspace)
-    try:
-        cand = (base / rel).resolve()
-        cand.relative_to(base.resolve())
-    except (OSError, ValueError):
+        # 旧形态 / 越界：唯一真身已经拒了。这里不许再拼第二个基准 ——
+        # 那正是 2026-11-22 删掉的那段回退（它让旧写法照样被读回来）。
         return None
-    return cand if cand.is_file() else None
+    return inside if (inside is not None and inside.is_file()) else None
+
+
+def _lit_blocked_note(ctx: _Ctx, rows: Iterable[Mapping[str, Any]]) -> str:
+    """读不到的行的受控读数：逐行点名 `lit_id=path`（空串 = 这一批里没有）。
+
+    两种"读不到"要分开说，因为处置相反：
+
+    * 旧布局（不再支持）—— 改这一行的 `path`（把文件按扁平名放回 `library/`）；
+    * 越界（`../` / 绝对路径绕出 `library/`）—— 这一份根本不是这一行的全文。
+
+    为什么要有它：`_lit_file` 对这几种形态返回 `None`，于是行落进 `missing_files`。
+    那是"读不到"没错，但理由丢了。工具面的 `note` 是已声明的键，逐条点名，
+    模型与读报告的人都不必去猜"这一条为什么不在书架上"。
+    """
+    legacy: list[str] = []
+    outside: list[str] = []
+    for row in rows:
+        rel = str(row.get("path") or "").strip()
+        if not rel:
+            continue
+        who = f"{row.get('lit_id') or '?'}={rel}"
+        if LR.old_layout_note(rel):
+            legacy.append(who)
+            continue
+        if ctx.store is not None:
+            try:
+                ctx.store.library_path(rel)
+            except StoreError:
+                outside.append(who)
+    parts: list[str] = []
+    if legacy:
+        parts.append(
+            f"另有 {len(legacy)} 条 `path` 是旧布局（不再支持）：" + "、".join(legacy)
+            + " —— 旧写法（分目录 `<lit_id>/<名>` 或带 `library/` 前缀）2026-11-22 起不再读"
+            "（业主裁定「旧工作区不必兼容」）。它们被算进 `missing_files`，理由不是"
+            "「文件不在」，而是「这一行的 path 写法不再支持」：要离线引用请把文件按"
+            "扁平名 `library/<内容 hash 前缀>-<名>` 放回、并把这一行的 `path` 改成扁平名。")
+    if outside:
+        parts.append(
+            f"另有 {len(outside)} 条 `path` 越出 `library/`：" + "、".join(outside)
+            + " —— 唯一真身 `store.library_path` 拒了它（`../` 或绝对路径绕出库根），"
+            "工作区外的文件不是这一行的全文；它们同样算进 `missing_files`。")
+    if not parts:
+        return ""
+    return "；" + "；".join(parts)
 
 
 def _shelf_row(ctx: _Ctx, row: Mapping[str, Any]) -> dict[str, Any] | None:
@@ -433,14 +476,15 @@ def _h_shelf(ctx: _Ctx, limit: int | None = None, lit_id: str = "", query: str =
             "note": (
                 "这是**离线**来源：这些文件的正文就在工作区里，"
                 "可以用 search.local 按主题取逐字摘录。"
-                "`missing_files` 是「行上写了 path、但文件不在盘上」的条数 —— "
+                "`missing_files` 是「行上写了 path、但按唯一真身 `store.library_path`"
+                "读不到那一份」的条数 —— 旧布局（不再支持）、越界、文件不在都算在里面；"
                 "它不是 0 时，那些书**取不到正文**，不要当它们存在。"
                 "`coverage` 是**整张文献表**的全文覆盖率（与本次的 query/lit_id/limit 无关）："
                 "`with_fulltext`/`total` 是「离线能引用几成」，`rate` 在 total=0 时是 null；"
                 "`no_location` 是「我们连可取全文的地址都没有 ⇒ **没去取**」——"
                 "它**不是**「这篇不存在」，两者必须分开读："
                 "有地址但还没取的篇落进 `missing`，不落进 `no_location`。"
-            ),
+            ) + _lit_blocked_note(ctx, rows),
         }
     )
 
@@ -521,7 +565,7 @@ def _h_local(ctx: _Ctx, query: str, limit: int = 5, max_chars: int = 1200,
                 "并带 lit_id 与页码 —— 引文回验比的就是这段原文。"
                 "`skipped_no_file` / `unreadable` / `no_text_layer` 是"
                 "「这一本没查到」的三个不同理由：它们不等于「这本书里没有这个主题」。"
-            ),
+            ) + _lit_blocked_note(ctx, rows),
         }
     )
 
@@ -1403,7 +1447,7 @@ def _h_retry_pending(ctx: _Ctx, limit: int = RETRY_PENDING_DEFAULT_LIMIT, lit_id
             item["error"] = res.error
             landing_page = bool(res.ok and res.kind == "content_type_mismatch")
             if res.ok and not landing_page:
-                rel_path, size, sha = _adopt_file(ctx, lid, str(res.path or ""), [])
+                rel_path, size, sha = _adopt_file(ctx, str(res.path or ""), [])
                 if rel_path:
                     item.update(outcome="got", path=rel_path, bytes=size, sha256=sha,
                                 note="字节已进 library/、path 已写回 ⇒ 现在可离线引用。")
@@ -1568,13 +1612,21 @@ def _h_dedup_check(ctx: _Ctx, title: str, year: int | None = None, doi: str | No
     return ok(data)
 
 
-def _adopt_file(ctx: _Ctx, lit_id: str, raw_path: str | None, warnings: list[str]) -> tuple[str | None, int, str | None]:
-    """把本地文件收编进 ``library/<lit_id>/``，返回 ``(相对路径, 字节数, sha256)``。
+def _adopt_file(ctx: _Ctx, raw_path: str | None, warnings: list[str]) -> tuple[str | None, int, str | None]:
+    """把本地文件收编进 ``library/``，返回 ``(相对路径, 字节数, sha256)``。
 
     三种情形分别处理：
     1. 已在 ``library/`` 内 ⇒ 原地保留（可能已被 B 引用过，移动会打断追溯）；
-    2. 在 library 之外（如 ``downloads/``）⇒ 移动进 ``library/<lit_id>/``；
+    2. 在 library 之外（如 ``downloads/``）⇒ 搬进唯一落点；
     3. 文件不存在 ⇒ ``path`` 置 ``None`` 并记 warning，不编造路径。
+
+    ## 落点（2026-11-22 B2a，业主裁定：先改写者）
+
+    第 2 种的落点名不由本函数决定：走 `locallib.library_landing`（与
+    `locallib.ingest_directory` 共用的同一个函数）⇒ 新写一律扁平
+    ``library/<内容 hash 前缀-名>``。本函数刻意不接 lit_id：落点与号无关，
+    同一份字节两次收编落到同一个名字上。旧布局 ``library/<lit_id>/<名>`` 只在第 1 种
+    情形里作为存量原样读回（读兼容），不再由这里产出。
     """
     if not raw_path:
         return None, 0, None
@@ -1606,24 +1658,26 @@ def _adopt_file(ctx: _Ctx, lit_id: str, raw_path: str | None, warnings: list[str
     except ValueError:
         pass  # 不在 library 内 → 需要收编
 
-    target_dir = lib / lit_id
+    # 落点只有一处实现（`locallib.library_landing`，与 `ingest_directory` 共用）：
+    # 扁平 `library/<内容 hash 前缀-名>`；同名不同内容会加长前缀，绝不覆盖。
+    from ..locallib import library_landing
+    sha = _sha256_of(p)
     try:
-        target_dir.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        warnings.append(f"无法创建 {target_dir}，path 置空：{exc}")
+        landing, target = library_landing(lib, p, sha)
+        target.parent.mkdir(parents=True, exist_ok=True)
+    except (OSError, ValueError) as exc:
+        warnings.append(f"无法确定 library/ 落点（{type(exc).__name__}: {exc}），path 置空")
         return None, 0, None
-
-    target = target_dir / p.name
-    if target.exists():
-        # 同名文件已存在：加短哈希后缀，绝不覆盖（覆盖会毁掉已经建立的引文定位）
-        target = target_dir / f"{p.stem}-{T.short_hash(str(p), 8)}{p.suffix}"
+    if target.exists() and _sha256_of(target) == sha:
+        # 这份字节已在库里（内容相同）⇒ 不搬第二份、也不覆盖；原文件留在原处
+        # （不在 library 里的那份不是我们的，删不删由它的主人定）。
+        return landing, target.stat().st_size, sha
     try:
         shutil.move(str(p), str(target))
     except Exception as exc:  # noqa: BLE001 - 跨盘/权限/占用都可能失败
         warnings.append(f"收编文件失败（{type(exc).__name__}: {exc}），path 置空；原文件仍在 {p}")
         return None, 0, None
-    rel = f"{lit_id}/{target.name}"
-    return rel, target.stat().st_size, _sha256_of(target)
+    return landing, target.stat().st_size, sha
 
 
 def _h_ingest_local(ctx: _Ctx, books_dir: str, pattern: str = "*.pdf",
@@ -1870,7 +1924,8 @@ def _declaration_refusal(ctx: _Ctx, raw_path: str | None, *,
     ## 为什么拒绝必须发生在 `tx` 之前
 
     `search.register` 的写有两处副作用：`tx.alloc_id("lit")` 与 `_adopt_file`
-    （把文件 `shutil.move` 进 `library/<lit_id>/`）。闸放在 `tx` 之前 ⇒ 拒信说的
+    （把文件 `shutil.move` 进 `library/` 的唯一落点 `<内容 hash 前缀-名>`）。
+    闸放在 `tx` 之前 ⇒ 拒信说的
     "本行未写入 / 文件没动"就是盘上事实，而不是一句承诺。
     """
     text = str(raw_path or "").strip()
@@ -2011,8 +2066,9 @@ def _h_register(
 
     # ---- 声明闸（业主裁定 2026-11-21；与 `search.ingest_local` 同一道判据）--------
     # 放在 `tx` 之前：这一笔一旦进事务就会 `alloc_id` 并 `_adopt_file`（把文件搬进
-    # `library/<lit_id>/`）—— 那两件都是不可撤的落盘。候选链（`_from_candidate`）不走
-    # 这道闸：它的准入依据是候选行 + 读过正文，不是"用户点名了哪个文件"。
+    # `library/<内容 hash 前缀-名>`）—— 那两件都是不可撤的落盘。
+    # 候选链（`_from_candidate`）不走这道闸：它的准入依据是候选行 + 读过正文，
+    # 不是"用户点名了哪个文件"。
     if not _from_candidate:
         refused = _declaration_refusal(ctx, path)
         if refused is not None:
@@ -2058,7 +2114,7 @@ def _h_register(
             return refused
 
         lit_id = tx.alloc_id("lit")
-        rel_path, size, sha = _adopt_file(ctx, lit_id, path, warnings)
+        rel_path, size, sha = _adopt_file(ctx, path, warnings)
 
         dl: dict[str, Any]
         if rel_path:
@@ -2188,7 +2244,7 @@ def _link_request(tx: Any, request_id: str | None, lit_id: str | None, warnings:
     ids.add(lit_id)
     req["result_lit_ids"] = S.sorted_unique(ids)
     # 有文献挂在请求上 ⇒ 这一问的终局是「取回了东西」（`outcome=ok`），不是
-    # 「零命中」。这一格与 demo 路径（`demo.py:366-380`）同一条口径：
+    # 「零命中」。这一格与 demo 路径（`demo.py` 第 366–380 行；该模块已于 2026-11-22 退役）同一条口径：
     # 回填 `result_lit_ids` 与写终局必须同时发生 —— 改前这里只写 ids，而
     # `run_once` 在判收之前已经把 `outcome=no_results` + 过期 `last_error`
     # （「入库 0 条、待裁 N 条」）留在盘上，于是真机上 `lit.admit_all` 收完
@@ -2254,6 +2310,9 @@ def _pick_workspace(
             "'summary','default_provider'}；"
             "providers[] 每项是 {'name','available','status','reason','latency_s','evidence'}"
             ),
+    scenario="开检索前先确认今天哪个源能用；连续失败时先看这里。",
+    example="无参数探测：回每源的 available/status/reason 与可用、未探测计数。",
+    example_code="search.providers()",
     tags=("search", "provider"),
     external="egress",
 )
@@ -2293,6 +2352,9 @@ def _search_providers(ctx):
             "失败：ok=False + kind(no_store/table_unreadable) + counted=False"
             "（**没数成**，不是「书架是空的」）"
             ),
+    scenario="写引文前先看书架：只有在架上的文献能离线逐字引用。",
+    example="列全架：回 books[]（lit_id/path/sha 前 12 位）与整表覆盖率 coverage。",
+    example_code='search.shelf(query="cube")',
     tags=("search", "offline", "shelf"),
 )
 def _search_shelf(ctx, limit=None, lit_id="", query=""):
@@ -2328,6 +2390,9 @@ def _search_shelf(ctx, limit=None, lit_id="", query=""):
             "失败：ok=False + kind(no_store/table_unreadable) + searched=False"
             "（**没做成检索**，不是「没有命中」）"
             ),
+    scenario="要一条能回验的逐字引文（带页码），而不是书目条目。",
+    example="按主题查：回 hits[] 的 lit_id/page/excerpt/score；读不了的书另计数。",
+    example_code='search.local(query="cube slicing", limit=3)',
     tags=("search", "offline", "local"),
 )
 def _search_local(ctx, query, limit=5, max_chars=1200, lit_id="", max_books=None):
@@ -2342,13 +2407,16 @@ def _search_local(ctx, query, limit=5, max_chars=1200, lit_id="", max_books=None
                )
     )
 
+# TOOLFACE-SHARD3（片 3）：旧 summary 里两段细则搬到这里（模型面只留用法）。
+# - 失败档处置：「换源 > 重试，`all_sources_failed` 走完」写进 A 手册 §六；
+# - 候选绑定的内部接线：给了 `cand` ⇒ 失败与拿到落地页（`ok=True` +
+#   `content_type_mismatch`）都落一条 `extract_failed` 回执（`_record_download_attempt`
+#   → 候选行的 read_receipt），于是 `lit.admit` 能按仅题录判收；不给 `cand` 不变。
+# 判据：`tests/test_tool_face_three_segments.py`（模型面不含实现名 / 注释里仍在）。
 @tool(
     "search.download",
-    "把候选的 `pdf_url` 下到 downloads/（同名不覆盖；给 sha256）。**失败先读 `fetch_kind`**"
-    "（各档处置见 A 手册 §六：换源 > 重试，`all_sources_failed` 走完）。"
-    "`content_type_mismatch` ⇒ 落地页，别当全文。给 `cand=<槽位>` ⇒ 这一趟绑那条候选："
-    "失败**与拿到落地页**（`ok=True`+`content_type_mismatch`）都留一条 `extract_failed` 回执"
-    " ⇒ 可按仅题录判收；不给 `cand` 不变。",
+    "把候选的 `pdf_url` 下到 downloads/（回 sha256）。失败给 source 与 `fetch_kind`；"
+    "`content_type_mismatch` 是落地页。",
     {
            "type": "object",
            "properties": {
@@ -2377,6 +2445,9 @@ def _search_local(ctx, query, limit=5, max_chars=1200, lit_id="", max_books=None
             "成功但 `content_warning=content_type_mismatch`（落地页 HTML）：ok=True 照旧给路径/字节，"
             "同时 read_receipt 非空（note=search.download.content_type_mismatch）"
             ),
+    scenario="候选有 pdf_url、要拿全文；下成功后它回的 path 才能交给登记。",
+    example="下一份：回 path/bytes/sha256；失败按 fetch_kind 处置（见 A 手册 §六），给了 cand 还留一条回执。",
+    example_code='search.download(url="https://arxiv.org/pdf/2401.00001", hint="cube slicing", cand="c004")',
     tags=("search", "download"),
     external="egress",
 )
@@ -2392,9 +2463,16 @@ def _search_download(ctx, url, hint="paper", max_bytes=DEFAULT_MAX_DOWNLOAD_BYTE
                )
     )
 
+# TOOLFACE-SHARD3（业主 2026-11-22 三段格式，片 3）：从模型面搬下来的实现细节。
+# 原文（旧 summary）：「不联网：按三级硬键（DOI → 标题+年 → 仅标题带年容差）说明
+# 『会不会被判成已有的某篇』，并给出会命中的键。」
+# 判重口径的真身在 `dedup.find_existing_literature`：三级硬键（① DOI 精确 →
+# ② 标题+年份精确 → ③ 仅标题，年份容差 ±2，兜预印本/正式版漂移），没有模糊档；
+# 相似标题只进 `near_misses` 供人复核，不是判重依据。
+# 判据：`tests/test_tool_face_three_segments.py`（模型面不含实现名 / 注释里仍在）。
 @tool(
     "search.dedup_check",
-    "**不联网**：按三级硬键（DOI → 标题+年 → 仅标题带年容差）说明『会不会被判成已有的某篇』，并给出会命中的键。",
+    "**不联网**：按 DOI / 题名+年判断会不会被判成已有的某篇；命中时给出会命中的键与既有那一行。",
     {
            "type": "object",
            "properties": {
@@ -2415,6 +2493,9 @@ def _search_download(ctx, url, hint="paper", max_bytes=DEFAULT_MAX_DOWNLOAD_BYTE
             "'store_read_error'}；"
             "失败：ok=False + kind(no_store/table_unreadable) + checked=False（**没有做成判重**，不是「没有重复」）"
             ),
+    scenario="登记或入库前问一句：库里是不是已经有这一篇。",
+    example="同 DOI 再问一次：回 would_be_duplicate=true、matched_key 与 existing。",
+    example_code='search.dedup_check(title="Cube slicing in R^n", year=1986, doi="10.1007/BF02764936")',
     tags=("search", "dedup"),
 )
 def _search_dedup_check(ctx, title, year=None, doi=None):
@@ -2428,9 +2509,8 @@ def _search_dedup_check(ctx, title, year=None, doi=None):
 
 @tool(
     "search.retry_pending",
-    "把「有元数据、没全文」的文献逐条再取一次（每行一次、按源冷却退避）：四结局 got / failed / "
-    "no_location / cooled_down。**下载失败 ≠ 这篇不存在**；没有地址的如实记 no_location，"
-    "冷却中的源跳过而不是判失败。",
+    "把「有元数据、没全文」的行逐条再取一次（每行一次、冷却中的源跳过）："
+    "四结局 got / failed / no_location / cooled_down。",
     {
            "type": "object",
            "properties": {
@@ -2457,6 +2537,9 @@ def _search_dedup_check(ctx, title, year=None, doi=None):
             "失败：ok=False + kind(no_store/table_unreadable) + counted=False"
             "（**没数成**，不是「没有要重取的行」）"
             ),
+    scenario="书架有大片空缺，或上一轮下载失败后要补全文。",
+    example="补一轮：counts 给四档计数；没地址的行记 no_location，不等于这篇不存在。",
+    example_code="search.retry_pending(limit=20)",
     tags=("search", "download", "retry"),
     external="egress",
 )
@@ -2464,9 +2547,22 @@ def _search_retry_pending(ctx, limit=RETRY_PENDING_DEFAULT_LIMIT, lit_id=""):
     """search.retry_pending 的工具体（注入的 ctx 由装配期用 `partial` 绑定）。"""
     return _h_retry_pending(ctx, limit, lit_id)
 
+# TOOLFACE-CLEAN（业主 2026-11-22：实现只留在代码注释里）
+# 原文（旧 param dry_run）：「只算 hash 与清单，不写盘、不进事务」。「不进事务」是内部写入口的性质；模型要知道的是「不写盘」。
+# 判据：`tests/test_tool_face_three_segments.py` 钉住这条 needle（'不进事务'）
+# 仍在注释里、且不在模型可见面上。
+# TOOLFACE-SHARD3（片 3）：旧 summary 尾巴「provenance 如实写「由 A 登记」，不借
+# 「人直接提供」」压缩成面上那一句「不借「人直接提供」」（`tests/fixtures/
+# tool_declaration_baseline.json` 的 needle 要求它留在面上），provenance 的内部形状搬到这里。
+# provenance 三件事的真身（`locallib.ingest_directory`）：
+# 事务 `actor="agent-A"`、请求行 `submitted_by="unknown"`、正文写「由 agent-A 从一个
+# 本地目录登记」—— 借 `human` 会把"这篇文献从哪来"说成假话。另有用户声明闸：
+# 非 dry_run 只收工作区里被用户点名的文件（声明落 `RELIABLE-REFERENCES.json`），
+# 未声明整笔拒、零写入。
 @tool(
     "search.ingest_local",
-    "**不联网**：把本地 PDF 登记进书架（按内容 sha256 幂等；dry_run 只算不写）。provenance 如实写「由 A 登记」，不借「人直接提供」。",
+    "**不联网**：把本地 PDF 登记进书架（按内容 sha256 幂等；dry_run 只算不写）。"
+    "只收用户点名的文件，不借「人直接提供」。",
     {
            "type": "object",
            "properties": {
@@ -2476,7 +2572,7 @@ def _search_retry_pending(ctx, limit=RETRY_PENDING_DEFAULT_LIMIT, lit_id=""):
             "limit": {"type": "integer", "minimum": 1, "maximum": 1000},
             "max_bytes": {"type": "integer", "minimum": 1024, "maximum": 2_000_000_000},
             "dry_run": {"type": "boolean",
-                        "description": "只算 hash 与清单，不写盘、不进事务"},
+                        "description": "只算 hash 与清单，不写盘"},
            },
            "required": ["books_dir"],
            "additionalProperties": False,
@@ -2490,6 +2586,9 @@ def _search_retry_pending(ctx, limit=RETRY_PENDING_DEFAULT_LIMIT, lit_id=""):
             "'request_id','pages','has_text_layer'}；失败：ok=False + kind(no_store/io_error) "
             "+ recorded=False（**没登记成**，不是「目录里没有书」）"
             ),
+    scenario="用户把 PDF 放进 reference/ 并点名后，把它们收进书架。",
+    example="先 dry_run 看清单：回 books[] 的 library_name/status 与 ingested 等计数。",
+    example_code='search.ingest_local(books_dir="reference", pattern="*.pdf", dry_run=True)',
     tags=("search", "offline", "ingest"),
 )
 def _search_ingest_local(ctx, books_dir, pattern="*.pdf", limit=None, max_bytes=25165824, dry_run=False):
@@ -2503,9 +2602,23 @@ def _search_ingest_local(ctx, books_dir, pattern="*.pdf", limit=None, max_bytes=
                                max_bytes, dry_run)
     )
 
+# TOOLFACE-SHARD3（业主 2026-11-22 三段格式，片 3）：从模型面搬下来的实现细节。
+# 原文（旧 summary）：「登记文献（literature 行，processed=false）：先判重，命中复用
+# lit_id；未命中则 alloc_id('lit') 并收编进 library/<lit_id>/。」
+# 落点与内部形状（模型面只说「library/ 扁平 `<sha 前 12 位>-<名>`」这一句用法）：
+# - 行落在 `literature` 表，`processed=False` 由本工具置、之后由 B 置 true；
+# - 未命中时 `tx.alloc_id("lit")` 发号（同一事务内构造行、`validate()` 不过则整笔回滚）；
+# - 文件收编走 `_adopt_file` → `locallib.library_landing`：新写一律扁平
+#   `library/<sha256[:12]>-<名>`（同名不同内容加长前缀、绝不覆盖）；旧布局
+#   `library/<lit_id>/<名>` 只在"文件已在 library/ 内"时作存量读回，不再产出；
+# - 判重命中支与新建支返回同一套 13 键（`G-23`），调用方不必先判 `created`；
+# - 两道闸：直写路过声明闸（未声明的路径 ⇒ `not_declared_reference`、零写入）、
+#   正文闸（`content_read=false` 时 summary 不许有内容性断言）。
+# 判据：`tests/test_tool_face_three_segments.py`（模型面不含实现名 / 注释里仍在）。
 @tool(
     "search.register",
-    "登记文献（literature 行，processed=false）：先判重，命中复用 lit_id；未命中则 alloc_id('lit') 并收编进 library/<lit_id>/。",
+    "登记一篇文献：先判重，命中就复用既有 lit_id；文件收编进 library/（扁平 "
+    "`<sha 前 12 位>-<名>`），登记行交给 B 处理。",
     {
            "type": "object",
            "properties": {
@@ -2532,6 +2645,13 @@ def _search_ingest_local(ctx, books_dir, pattern="*.pdf", limit=None, max_bytes=
             "'path','dedup_key','type_code','processed','download','warnings'}"
             "（created=false 表示判重命中，复用了既有 lit_id；两支键集合相同）"
             ),
+    scenario="用户点名的工作区文件入库时用它；检索来的候选走 lit.stage_add → lit.admit。",
+    example="带本地文件登记（summary 只写题录）：回 created/lit_id/path 与 download。",
+    example_code=(
+        'search.register(title="Cube slicing in R^n", type_code="J", '
+        'summary="题录：立方体截面综述", path="downloads/cube.pdf", '
+        'doi="10.1007/BF02764936", year=1986)'
+    ),
     tags=("search", "register"),
 )
 def _search_register(ctx, title, type_code, summary, path=None, doi=None, year=None, request_id=None):
@@ -2610,7 +2730,8 @@ def _mark_candidate_locator(ctx: _Ctx, lit_id: str, row: Mapping[str, Any]) -> b
         if got is None:
             return False
         dl = dict(got.get("download") or {})
-        # 字节数按 `_lit_file` 的两基准口径现算（与 `search.shelf` 同一个读法）。
+        # 字节数按 `_lit_file` 的唯一真身（`store.library_path`）现算
+        #（与 `search.shelf` 同一个读法；旧布局 ⇒ 0 字节，不按工作区基准另读一份）。
         on_disk = LR.bytes_on_disk(_lit_file(ctx, str(got.get("path") or "")))
         tier = LR.fulltext_tier(bytes_on_disk=on_disk, pages=None)
         if tier is None:
@@ -2666,9 +2787,9 @@ def _registrar_from_candidate(ctx: _Ctx, row: Mapping[str, Any]) -> dict:
     而登记路径原来一律 `path=None` ⇒ 一条判成 `readable` 的候选进库之后仍然
     `path=null`，B 只能写 `no_local_file`，"读过"这件事在库里一个字都不剩。
     所以：这一条真的读过（`litavail.check_read == "ok"`）时，把抽读回执里的
-    源文件交给登记路径收编（`_adopt_file` 会搬进 `library/<lit_id>/`），回执的档位
-    写进 `download.fulltext=ok`。没读过的照旧 `path=None`：行上不会凭空多出一份
-    没人读过的文件。
+    源文件交给登记路径收编（`_adopt_file` 会搬进 `library/<内容 hash 前缀-名>`），
+    回执的档位写进 `download.fulltext=ok`。没读过的照旧 `path=None`：行上不会凭空
+    多出一份没人读过的文件。
     """
     slot = str(row.get("slot") or "")
     receipt = None
@@ -3248,10 +3369,17 @@ _LIT_PARAMS_ENTRY = {
 }
 
 
+# TOOLFACE-SHARD3（业主 2026-11-22 三段格式，片 3）：从模型面搬下来的实现细节。
+# 原文（旧 summary）：「……否则标题词集 Jaccard（阈值 0.60）≥ 阈值 ⇒ 必须给
+# new_content 才许入库。」
+# 重叠口径的真身：`litstage` 的 overlap 判据 —— DOI 归一后完全相同 ⇒ 重复；
+# 否则标题词集 Jaccard ≥ 0.60 判"重叠度高"，此时必须给 new_content（或 overlap_ok）。
+# 阈值只有一处实现，工具层只把结论翻成读数；模型面只需要「重叠高就要说清新的内容」。
+# 判据：`tests/test_tool_face_three_segments.py`（模型面不含实现名 / 注释里仍在）。
 @tool(
     "lit.overlap_check",
-    "**不联网**：这一条与本地库重叠多少？DOI 完全相同 ⇒ 视为重复；否则标题词集 Jaccard"
-    "（阈值 0.60）≥ 阈值 ⇒ 必须给 new_content 才许入库。",
+    "**不联网**：这一条与本地库重叠多少？DOI 相同算重复；题名高度相近时要给 "
+    "new_content 才许入库。",
     {
         "type": "object",
         "properties": {
@@ -3268,6 +3396,9 @@ _LIT_PARAMS_ENTRY = {
         "'requires_new_content','reason'}；"
         "失败：ok=False + kind(no_store/store_error) + checked=False（**重叠没查**，不是「没有重叠」）"
     ),
+    scenario="候选入库前查重：重叠高的那条必须说清「要的新内容」。",
+    example="问一条：回 duplicate / overlap_score / requires_new_content / overlap_with。",
+    example_code='lit.overlap_check(title="Cube slicing in R^n", doi="10.1007/BF02764936")',
     tags=("lit", "stage", "overlap"),
 )
 def _lit_overlap_check(ctx, title, doi=None):
@@ -3277,11 +3408,8 @@ def _lit_overlap_check(ctx, title, doi=None):
 
 @tool(
     "lit.stage_add",
-    "把广搜结果追加进本次委托的待新增列表（一次任意条，超过 10 条也允许）："
-    "同一委托内同一篇只占一个槽 —— 命中未判的那一槽就把 relevance/摘要补进去"
-    "（updated[]），不发新号；槽位号只增不复用、注册即待裁。逐条入库是 lit.admit"
-    "（每条要带 relevance）；判完一批就由 lit.admit_all 点名那一批的槽提交，"
-    "剩下的未判槽保持 pending 进下一批。",
+    "把广搜结果追加进本次委托的待新增列表（单次最多 500 条；同一委托内同一篇只占一个槽，"
+    "补 relevance 就更新原槽）。",
     {
         "type": "object",
         "properties": {
@@ -3306,6 +3434,12 @@ def _lit_overlap_check(ctx, title, doi=None):
         "失败：ok=False + kind(no_store/no_delegation/bad_delegation/empty_batch/bad_batch/"
         "bad_entry/store_error) 之一 + 明细"
     ),
+    scenario="刚检索完，先把候选放进待审列表，再逐条判。",
+    example="追加一条：回 staged[] 新槽；同一篇已在列表就回 updated[] 原槽。",
+    example_code=(
+        'lit.stage_add(request_id="r-NNNNNN", entries=[{"title": "Cube slicing in R^n", '
+        '"year": 1986, "relevance": "截面体积上界"}])'
+    ),
     tags=("lit", "stage", "add"),
 )
 def _lit_stage_add(ctx, request_id, entries, batch=None):
@@ -3313,12 +3447,14 @@ def _lit_stage_add(ctx, request_id, entries, batch=None):
     return _h_lit_stage_add(ctx, request_id, entries, batch)
 
 
+# TOOLFACE-CLEAN（业主 2026-11-22：实现只留在代码注释里）
+# 原文（旧 summary）：「（词表真身在 litstage.CANDIDATE_DECISIONS）」。三态词表的落点属实现；模型面已经把三档逐条写出来了，不需要知道常量住哪。
+# 判据：`tests/test_tool_face_three_segments.py` 钉住这条 needle（'CANDIDATE_DECISIONS'）
+# 仍在注释里、且不在模型可见面上。
 @tool(
     "lit.stage_list",
-    "查待新增列表：默认只看当前委托（列表按委托重置）。status 按三态筛："
-    "`pending` 待裁 / `admitted` 入库 / `rejected` 拒收（词表真身在 `litstage.CANDIDATE_DECISIONS`）；"
-    "盘上的历史档 `cleared` / `withdrawn` 读成 `rejected` + 受控理由码，按老名字也查得到那几条。"
-    "撤掉的空槽位照样在列表里（`rejected` + 理由，序号不复用）。",
+    "查待新增列表（默认当前委托）：`pending` 待裁 / `admitted` 入库 / "
+    "`rejected` 拒收；`cleared`/`withdrawn` 读成 `rejected`。",
     {
         "type": "object",
         "properties": {
@@ -3339,7 +3475,7 @@ def _lit_stage_add(ctx, request_id, entries, batch=None):
         "'duplicate_groups','gaps','rows','total_all_delegations','note'}；"
         "duplicate_rows = 落在「同一身份多个槽位」里的行数（只报数，counts 不折算）；"
         "duplicate_groups[] 每项给身份与槽位表两格（键名 key / slots；没有重复时是空数组）；"
-        "counts 的键是 `litstage.CANDIDATE_DECISIONS` 三档，另有两个历史档键"
+        "counts 的键是三态那三档，另有两个历史档键"
         "（恒为 0 —— 它们已读成 rejected）；"
         "rows[] 每项是 {'slot','batch','status','title','request_id','doi','provider','year',"
         "'type_code','summary','url','added_at','relevance','lit_id','admitted_at',"
@@ -3348,6 +3484,9 @@ def _lit_stage_add(ctx, request_id, entries, batch=None):
         "'availability'}（最后一格是四档可读性判定；空串 = 还没审）；"
         "失败：ok=False + kind(no_store/bad_status/no_delegation/store_error)"
     ),
+    scenario="看还剩哪些没判、哪些已入库或拒收；撤掉的空槽也在列表里。",
+    example="筛待裁：回 rows[] 逐槽与 counts 三档；历史档按老名字也查得到。",
+    example_code='lit.stage_list(request_id="r-NNNNNN", status="pending")',
     tags=("lit", "stage", "list"),
 )
 def _lit_stage_list(ctx, request_id=None, batch=None, status=None):
@@ -3357,10 +3496,8 @@ def _lit_stage_list(ctx, request_id=None, batch=None, status=None):
 
 @tool(
     "lit.stage_withdraw",
-    "撤掉某一槽：落 `rejected` + 受控理由码 `withdrawn_by_reviewer` + 一句说明；"
-    "序号不变、不物理删除。撤掉是终态判断：只是缺 relevance 时别撤 —— 用 "
-    "lit.stage_add 带 relevance 重进同一篇即补进原槽；撤了之后再登记会另占一个新槽，"
-    "报告上同一篇会同时出现在已入库与未入库两块。",
+    "撤掉某一槽：落 `rejected` + 理由码 `withdrawn_by_reviewer`，序号不变、不物理删。"
+    "只是缺 relevance 时别撤，补进原槽即可。",
     {
         "type": "object",
         "properties": {
@@ -3377,6 +3514,9 @@ def _lit_stage_list(ctx, request_id=None, batch=None, status=None):
         "{'slot','status','reason_code','reason','title','request_id','batch'}；"
         "失败：ok=False + kind(no_store/bad_reason_code/unknown_slot/not_pending/store_error)"
     ),
+    scenario="这条不该收、又不能留待裁时用它收口（终态判断）。",
+    example="撤一槽并写一句理由：回 slot/status/reason_code 与那一行 title。",
+    example_code='lit.stage_withdraw(slot="s-0007", reason_code="withdrawn_by_reviewer", note="与本次主题无关")',
     tags=("lit", "stage", "withdraw"),
 )
 def _lit_stage_withdraw(ctx, slot, reason_code, note=""):
@@ -3386,10 +3526,8 @@ def _lit_stage_withdraw(ctx, slot, reason_code, note=""):
 
 @tool(
     "lit.stage_reject",
-    "审内容后拒收：落 `rejected` + 受控理由码（rejected_off_topic / rejected_low_quality / "
-    "overlap_without_new_content / duplicate_doi）+ 一句说明；行保留、不物理删除。"
-    "**一次可判拒多个槽位**（`slots=[…]`，按委托分批用）：有效的照常落盘，无效的受控拒并"
-    "逐条点名，不许一条坏的把整批作废。",
+    "审内容后拒收：落 `rejected` + 受控理由码 + 一句说明；行保留不物理删。"
+    "一次可判拒多个槽位，无效的逐条点名。",
     {
         "type": "object",
         "properties": {
@@ -3422,6 +3560,9 @@ def _lit_stage_withdraw(ctx, slot, reason_code, note=""):
         "失败：ok=False + kind(no_store/bad_reason_code/unknown_slot/not_pending/no_target/"
         "all_refused/store_error) 之一 + 明细"
     ),
+    scenario="读过正文、判定这篇不该收（跑题 / 低质 / 重叠）时。",
+    example="批量判拒：rejected[] 逐条落盘，refused[] 点名无效槽。",
+    example_code='lit.stage_reject(slots=["s-0003", "s-0004"], reason_code="rejected_off_topic", note="与立方体截面无关")',
     tags=("lit", "stage", "reject"),
 )
 def _lit_stage_reject(ctx, slot=None, reason_code="", note="", slots=None):
@@ -3431,9 +3572,8 @@ def _lit_stage_reject(ctx, slot=None, reason_code="", note="", slots=None):
 
 @tool(
     "lit.admit",
-    "正式入库（逐条）：第一道判据是这一条要有 relevance（没写就拒，missing_relevance），"
-    "然后才是条数上限（单次 ≤10、单委托累计 ≤10）与重叠检查；超限整笔拒绝。"
-    "不清空列表（结算属于 lit.admit_all）。",
+    "正式入库（逐条）：每条要给 availability；候选行必须有 relevance"
+    "（在 lit.stage_add 写，items 不收它）；单次 ≤10、单委托累计 ≤10，超限整笔拒。",
     {
         "type": "object",
         "properties": {
@@ -3467,6 +3607,12 @@ def _lit_stage_reject(ctx, slot=None, reason_code="", note="", slots=None):
         "no_target/no_readback/missing_availability/availability_not_admissible/"
         "bad_availability/availability_ledger) + 读数"
     ),
+    scenario="待审列表里的一条已判收，逐条放行用它；整批走 lit.admit_all。",
+    example="放行一槽（带 availability）：回 admitted[] 的 lit_id 与 refused[]。",
+    example_code=(
+        'lit.admit(slots=["s-0007"], items=[{"slot": "s-0007", "availability": "readable", '
+        '"new_content": "截面体积的新上界"}])'
+    ),
     tags=("lit", "admit"),
 )
 def _lit_admit(ctx, slots=None, items=None, request_id=None, batch=None, new_content="",
@@ -3477,12 +3623,8 @@ def _lit_admit(ctx, slots=None, items=None, request_id=None, batch=None, new_con
 
 @tool(
     "lit.admit_all",
-    "提交一批（一个委托可有多批）：`slots` 点名这一次覆盖哪些槽（默认=本委托已判定的全部）。"
-    "**这一批内**每条都必须判过（三态落定），没判完就整批一条都不许入库、拒信逐条点名并给做法"
-    "（逐条判收走 lit.admit、判拒走 lit.stage_reject）；批外未判的槽保持 pending（待裁）进下一批。"
-    "本批通过的判收行在这一刻批量注册、回填正式号（≤10 条/委托）、写这一批的双阶段报告"
-    "（reports/lit-<request_id>.md，已入库 / 未入库 / 待裁三块），并清掉本批的行（不物理删）。"
-    "没点名的未判槽不受影响。",
+    "提交一批：批内有一条没判完就整批不入库（逐条点名做法）；通过的批量登记、"
+    "写报告并清掉本批，未点名的槽保持待裁进下一批。",
     {
         "type": "object",
         "properties": {
@@ -3521,6 +3663,9 @@ def _lit_admit(ctx, slots=None, items=None, request_id=None, batch=None, new_con
         "unknown_slot/undecided_items/nothing_to_submit/no_readback/"
         "missing_availability/availability_not_admissible/report_violations)"
     ),
+    scenario="一批判完就整体提交入库并出报告；剩下的 pending 进下一批。",
+    example="提交本批：回 admitted[]/pending_total 与报告 work/A/lit-<r>.md（reports/ 已退役）。",
+    example_code='lit.admit_all(request_id="r-NNNNNN", slots=["s-0001", "s-0002"])',
     tags=("lit", "admit", "report"),
 )
 def _lit_admit_all(ctx, request_id=None, new_content="", slots=None):
@@ -3682,8 +3827,13 @@ def register(
     specs= [
         ToolSpec(
             name="search.literature",
-            summary="按 topic/mode 检索文献候选，每条带 dedup_key 与 is_new（不必再判重）。mode=precise 时必须给 "
-            "description。",
+            # TOOLFACE-SHARD3（片 3）：`dedup_key` / `is_new` 是返回键（模型要读），不是实现；
+            # 判重真身 `dedup.find_existing_literature` 只在 handler 注释里出现。
+            summary="按 topic/mode 检索文献候选，每条已带判重结论（is_new），不必再跑判重；"
+            "mode=precise 必须给 description。",
+            scenario="扩库的起点：还没有这篇文献的任何线索时，用它广搜或按描述精检。",
+            example="广搜一个主题：回 candidates[] 与 new/existing/unknown 三个计数。",
+            example_code='search.literature(topic="cube slicing", mode="topical", limit=10)',
             params={
                 "type": "object",
                 "properties": {
@@ -3739,7 +3889,11 @@ def register(
         ),
         ToolSpec(
             name="search.walk_citations",
-            summary="由一篇**已登记**的文献出发走一步引文图：backward = 它引了谁、forward = 谁引了它。候选不带判重标注，登记走 `search.dedup_check` / register。",
+            summary="由一篇**已登记**的文献走一步引文图：backward 是它引了谁、forward 是谁引了它；"
+            "候选不带判重标注，登记前先 search.dedup_check。",
+            scenario="手上已有一篇、想顺藤摸瓜找它引的或被引的文献。",
+            example="走一步回溯：回 candidates[]（只含书目）与 count；lit_id 不在表里会明说。",
+            example_code='search.walk_citations(lit_id="0007", direction="backward", limit=20)',
             params={
                 "type": "object",
                 "properties": {
