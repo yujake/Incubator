@@ -161,7 +161,7 @@ STEP_VOLATILE_FACTS: Mapping[str, str] = {
         "（1）也可能被父代理唤起（2..N）⇒ 跨趟会变。"
     ),
     "parent_task_id": (
-        "`AgentLoop._resolve_parent`（`agent_loop.py:3544`）：父的台账号每趟不同；"
+        "`AgentLoop._resolve_parent`（`agent_loop.py::AgentLoop._resolve_parent`）：父的台账号每趟不同；"
         "顶层发起时是空串（渲染成一句缺省）。"
     ),
     "summoned_by": (
@@ -185,7 +185,7 @@ STEP_VOLATILE_FACTS: Mapping[str, str] = {
         "用户答过的问题是盘上的活账 ⇒ 换一趟活一般就多/少了回答。"
     ),
     "workspace_root": (
-        "`AgentLoop.run` 的 `workspace_root`（`agent_loop.py:3614`）：换个项目/工作区就换一个"
+        "`AgentLoop.run` 的 `workspace_root`（`agent_loop.py::AgentLoop.run` 的入参）：换个项目/工作区就换一个"
         "根目录 ⇒ 它此前在 `WORKSPACE_FACTS`（段序 10000，system 的倒数第二段）里，"
         "是 cross-run 前缀的最后一处断点。"
     ),

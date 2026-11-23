@@ -801,7 +801,7 @@ git check-ignore -v agentflow/tests/whatever.py                                 
 | 包内源码语法自检 | 419 个文件 / 0 语法错误 / exit 0 | `python -m agentflow doctor --selfcheck` | 2026-11-21 23:20 |
 | 工具面（Lean 关） | 123 件 / 17 模块 | `python -m agentflow --root . tools`（不设 `AGENTFLOW_LEAN_ENABLED`） | 同上 |
 | 工具面（Lean 开） | 126 件 / 18 模块 | `$env:AGENTFLOW_LEAN_ENABLED='1'; python -m agentflow --root . tools` | 同上 |
-| `.noai-paths` | 70 条目 / 67 唯一路径 / 7 分组 | `(Select-String -Path agentflow/.noai-paths -Pattern '^\S+\s+\[category:').Count` 等 | 2026-11-23 |
+| `.noai-paths` | 71 条目 / 68 唯一路径 / 7 分组 | `(Select-String -Path agentflow/.noai-paths -Pattern '^\S+\s+\[category:').Count` 等 | 2026-11-23 |
 | 禁改区两处一致性 | 一致（exit 0） | `python scripts/noai_gate.py --check-consistency` | 同上 |
 | lint（日常档） | `error 6 / warning 18 / info 45`，exit 1（并行改动下这个数会继续变） | `python scripts/lint_rules.py` | 2026-11-21 23:23 |
 | 体量三格 | 72 / 95 / 2（基线 75 / 95 / 2，只许降） | `python tools/repo_survey.py --root .` | 同上 |

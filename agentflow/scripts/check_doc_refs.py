@@ -3,11 +3,17 @@
 
 ## 它扫什么
 
-三类源文件（`--root` 缺省 = 本文件上一级，即 `agentflow/`）：
+四类源文件（`--root` 缺省 = 本文件上一级，即 `agentflow/`）：
 
 - `src/agentflow/**/*.py`（源码注释与 docstring 里的指路）；
+- `tests/**/*.py`（判据与夹具的注释 / docstring —— 2026-11-23 纳入；
+  在此之前全仓 72% 的行号引用在这里，没有任何门在看）；
 - `docs/*.md`；
 - 根目录 `*.md`（`README-PRODUCT.md` / `DEVELOPMENT.md` / `AGENTS.md` 等）。
+
+`tests/fixtures/**` 里的 `.md` / `.json` / `.tsv` 是语料（各判据的输入），不扫：
+它们不是“长期指路”的对象；`tests/fixtures/**` 里也没有 `.py`，所以上一条的
+`tests/**/*.py` 本来就不含它。
 
 `temp/`、`__pycache__`、`.pytest_cache` 不扫：它们不是“长期指路”的对象
 （`AGENTS.md` R2：一次性探针放 `temp/`，不入库、允许被清）。
@@ -34,6 +40,21 @@
   那里面的反引号既可能是符号，也可能是状态值、字典键、动作名（实测 36 个“缺符号”
   里绝大多数是后者），它的正确判据是“同一句写出出处 + 清单登记的 .py 文本里找得到”，
   已在 `tests/test_noai_gate.py::test_python_manifest_referenced_symbols_exist` 里。
+
+## 语料 / 夹具里的“假指路”（逐条登记，不放过）
+
+`tests/` 里有一类“长得像指路、但不是指路”的串：路径解析判据的输入（`code/p1.py:12`）、
+临时树里刚造出来的假文件名（`probe.py::supply`、`tests/test_a.py::test_1`）、负控靶子
+（`_STALE_REFS` 里那几条改前的错引用）、历史读数原文。它们必须保持原样 —— 改成真路径
+就把判据的输入改了。这类串逐条登记在 `_CORPUS_LINE_REFS` / `_CORPUS_SYMBOL_REFS`
+（键 = 写它的文件 + 指针原文，值 = 为什么是语料；符号形态拆成「路径 / 符号」两段，
+键里不写 `.py::` 字面量 —— 本文件自己也在「代码字符串指针」那条判据的扫描面里），
+本文件只对它报 info。
+
+为什么是“逐条登记”而不是“找不到就放过”：后者会把真死引用一起放过（同一把尺在
+`tests/` 里扫出的第一条真死引用就混在这批假路径里）。登记过期（那条语料已经不在盘上）
+也报死 —— 与 `tests/test_every_pointer_string_in_code_resolves.py::_FIXTURE_ONLY`
+的等额纪律同源：豁免面必须是一条会过期的可见登记。
 
 ## 什么算“死引用”
 
@@ -97,6 +118,98 @@ _SYMBOL_REF = re.compile(
 _PATTERN_MARKS = ("<", ">", "{", "}", "*", "?")
 #: 占位文件名（`tests/x.py::test_...` 一类）：不是要解析的真实路径。
 _PLACEHOLDER_STEMS = {"x", "y", "p1", "file"}
+
+#: 语料 / 夹具里的“假指路”：两张表，键里都不写 `.py::` 字面量。
+#:
+#: 这些串不是指路，是判据的输入：路径解析示例、临时树里刚造的文件名、负控靶子、
+#: 历史读数原文。它们必须逐字保持原样（改成真路径 = 改判据的输入），所以只能在这里
+#: 逐条登记 —— 与“找不到就放过”的区别是：只有登记过的串被放过，新写下的假路径
+#: 仍然报死；登记过期（那条语料不在盘上了）也报死（`_Checker.finish`）。
+#:
+#: 行号形态：键 =（写它的文件, 指针原文）。
+_CORPUS_LINE_REFS: dict[tuple[str, str], str] = {
+    ("tests/test_claimanatomy.py", "code/p1.py:12"):
+        "夹具：`proof_location` 的路径解析示例（G1 吃的是行号后缀，不是本仓文件）",
+    ("tests/test_cli_upgrade_c1_c8.py", "broken.py:1"):
+        "夹具：临时树里刚造的 `broken.py`，断言的是拒信逐字带出这个位置",
+    ("tests/test_cli_upgrade_c1_c8.py", "broken.py:42"):
+        "夹具：同上（同一份临时树的第 42 行）",
+    ("tests/test_coverage_claimanatomy.py", "code/p1.py:12"):
+        "夹具：同 `test_claimanatomy.py` 的那份 `proof_location` 语料",
+    ("tests/test_coverage_gates.py", "code/p1.py:12"):
+        "语料：G1 五档路径里“相对路径”那一档的输入 / 期望串",
+    ("tests/test_coverage_gates.py", "30/p1.py:9"):
+        "语料：`_strip_line_suffix` 对 `C:/out12:30/p1.py:9` 的期望串（绝对路径被截出来的子串）",
+    ("tests/test_g8_receipt.py", "code/p1.py:12"):
+        "夹具：G8 回执判据的 `proof_location` 语料",
+    ("tests/test_gates.py", "code/p1.py:12"):
+        "夹具：收工门判据的 `proof_location` 语料",
+    ("tests/test_mechanical_rewrite_guards.py", "x.py:123"):
+        "语料：“通用判据”的示意写法（不是具体文件）",
+    ("tests/test_readonly_output_channel.py", "code/p1.py:12"):
+        "夹具：只读输出通道判据的 `proof_location` 语料",
+    ("tests/test_wiring_readouts.py", "b.py:2"):
+        "夹具：`program_census` 的 `where` 值（假文件名 + 假行号，断言原样透传）",
+    ("tests/test_r5_orchestration_cost.py", "interactions.py:1134"):
+        "负控串：`_STALE_REFS` 逐字记着改前那四处错引用（判据要求它们不许再出现在"
+        "被点名的文件里）—— 它本身就是历史靶子",
+    ("tests/test_r5_orchestration_cost.py", "src/agentflow/webui/server.py:491"):
+        "出处：`temp/pytest-all` 这个旧 run 目录的来历（历史读数位置），不是现行指路",
+}
+
+#: 符号形态：键 =（写它的文件, 路径, 符号）。
+#:
+#: 为什么拆成三段、不写成 `文件.py::符号` 字面量：`scripts/check_doc_refs.py` 自己也在
+#: `tests/test_every_pointer_string_in_code_resolves.py` 的“代码字符串指针”扫描面里，
+#: 写成字面量会被那条判据当成一条新指针（它没有真身、会红）。
+_CORPUS_SYMBOL_REFS: dict[tuple[str, str, str], str] = {
+    ("tests/test_clean_invariant.py", "probe.py", "Thing._helper"):
+        "夹具：临时树里造的 `probe.py` 类方法名（示例形态）",
+    ("tests/test_clean_invariant.py", "probe.py", "_nobody_calls_me"):
+        "夹具：临时树里造的零提及私有函数（死代码判据的靶子）",
+    ("tests/test_clean_invariant.py", "probe.py", "supply"):
+        "夹具：临时树里的“唯一定义”（正控）",
+    ("tests/test_clean_invariant.py", "probe.py", "gone_target"):
+        "夹具：临时树里的“目标已经不见了”（负控）",
+    ("tests/test_clean_invariant.py", "probe.py", "vanished"):
+        "夹具：临时树里被删掉的定义（负控）",
+    ("tests/test_every_pointer_string_in_code_resolves.py", "probe.py", "_nobody_calls_me"):
+        "夹具登记表自身的键：`_FIXTURE_ONLY` 记的那条指针是测试造的",
+    ("tests/test_every_pointer_string_in_code_resolves.py", "probe.py", "supply"):
+        "夹具登记表自身的键：同上（临时树里的唯一定义）",
+    ("tests/test_every_pointer_string_in_code_resolves.py", "probe.py", "gone_target"):
+        "夹具登记表自身的键：同上（靶子没了）",
+    ("tests/test_every_pointer_string_in_code_resolves.py", "probe.py", "vanished"):
+        "夹具登记表自身的键：同上（定义被删）",
+    ("tests/test_every_pointer_string_in_code_resolves.py", "agent_d.py", "install_d_tools"):
+        "夹具登记表自身的键：`_FIXTURE_ONLY` 记的假文档行（`tools_problems` 的正控）",
+    ("tests/test_every_pointer_string_in_code_resolves.py", "tests/test_a.py", "test_1"):
+        "夹具登记表自身的键：分文件跑批时拼出来的假测试文件名",
+    ("tests/test_every_pointer_string_in_code_resolves.py", "tests/test_a.py", "test_2"):
+        "夹具登记表自身的键：同上",
+    ("tests/test_every_pointer_string_in_code_resolves.py", "tests/test_b.py", "test_3"):
+        "夹具登记表自身的键：同上",
+    ("tests/test_every_pointer_string_in_code_resolves.py", "demo.py", "real_symbol"):
+        "夹具登记表自身的键：`check_doc_refs.self_test()` 在临时树里造的 `demo.py` 正控",
+    ("tests/test_every_pointer_string_in_code_resolves.py", "demo.py", "ghost_symbol"):
+        "夹具登记表自身的键：`check_doc_refs.self_test()` 的负控（临时树里没有这个符号）",
+    ("tests/test_every_pointer_string_in_code_resolves.py", "mod.py", "also_never_defined"):
+        "夹具：反真空用例里 `bad.py` 的字符串（docstring 里那一条，断言它不被收）",
+    ("tests/test_every_pointer_string_in_code_resolves.py", "mod.py", "hello"):
+        "夹具：反真空用例的“好指针”（临时树里造的 `mod.py`）",
+    ("tests/test_every_pointer_string_in_code_resolves.py", "mod.py", "never_defined"):
+        "夹具：反真空用例的“坏符号”",
+    ("tests/test_every_pointer_string_in_code_resolves.py", "nowhere.py", "hello"):
+        "夹具：反真空用例的“坏文件”",
+    ("tests/test_sysclean_design_side_is_current.py", "agent_d.py", "install_d_tools"):
+        "夹具：假文档表里那一行（喂给 `tools_problems` 的正控，不是盘上真引用）",
+    ("tests/test_the_full_suite_runner_splits_deterministically.py", "tests/test_a.py", "test_1"):
+        "夹具：分文件跑批的假测试文件名（只用于拼 argv）",
+    ("tests/test_the_full_suite_runner_splits_deterministically.py", "tests/test_a.py", "test_2"):
+        "夹具：同上",
+    ("tests/test_the_full_suite_runner_splits_deterministically.py", "tests/test_b.py", "test_3"):
+        "夹具：同上",
+}
 
 _EXIT_OK = 0
 _EXIT_DEAD = 1
@@ -271,6 +384,8 @@ class _Checker:
         self.scanned: list[pathlib.Path] = []
         self.line_live = 0
         self.line_live_symbolized = 0
+        #: 这一趟真的撞上的语料登记（用于 `finish()` 的反向等额：登记过期要报死）。
+        self.corpus_hits: set[tuple[str, str]] = set()
 
     def symbols_of(self, path: pathlib.Path) -> _Symbols:
         got = self._symbols.get(path)
@@ -329,6 +444,12 @@ class _Checker:
             raise FileNotFoundError(f"`src/agentflow` 或 `docs` 不在：{self.root}")
         files = [p for p in sorted(src.rglob("*.py"))
                  if not any(part in _SKIP_PARTS for part in p.parts)]
+        # `tests/**/*.py`：判据与夹具的注释 / docstring 也长期指路（2026-11-23 纳入）。
+        # 只收 `.py`；`tests/fixtures/**` 的 `.md` / `.json` / `.tsv` 是语料，不是指路。
+        tests = self.root / "tests"
+        if tests.is_dir():
+            files += [p for p in sorted(tests.rglob("*.py"))
+                      if not any(part in _SKIP_PARTS for part in p.parts)]
         files += sorted(docs.glob("*.md"))
         files += sorted(p for p in self.root.glob("*.md") if p.is_file())
         if since:
@@ -380,6 +501,33 @@ class _Checker:
             else:
                 self._scan_doc(text, src, show_info)
 
+    def finish(self, since: str) -> None:
+        """扫描之后的两件事：语料登记的反向等额（只在全量扫描时做）。
+
+        `--since` 是子集扫描：没改的语料文件本来就不在面里，按“登记过期”报死会是假红。
+        `--root` 换到一棵没有 `tests/` 的树（自检 / 别的仓库）同理：文件都不在，跳过。
+        """
+        if since:
+            return
+        stale: list[tuple[str, str, str]] = []
+        for (rel_src, ref), why in _CORPUS_LINE_REFS.items():
+            if (rel_src, ref) not in self.corpus_hits:
+                stale.append((rel_src, ref, why))
+        for (rel_src, raw, symbol), why in _CORPUS_SYMBOL_REFS.items():
+            if (rel_src, raw, symbol) not in self.corpus_hits:
+                stale.append((rel_src, f"{raw}::{symbol}", why))
+        for rel_src, whole, why in stale:
+            src = self.root / rel_src
+            if not src.is_file():
+                continue
+            try:
+                text = src.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                text = ""
+            line = text[:text.find(whole)].count("\n") + 1 if whole in text else 0
+            self.add("dead", "corpus", src, line, whole, "stale-corpus-entry",
+                     f"语料登记过期：这处假指路已经不在盘上（{why}）")
+
     def _emit(self, severity: str, kind: str, src: pathlib.Path, line: int, ref: str,
               reason: str, detail: str, suggestion: str, show_info: bool) -> None:
         if severity == "info" and not show_info:
@@ -403,6 +551,11 @@ class _Checker:
             raw = match.group("path")
             line_no = self._line_of(text, match.start())
             rec = (src, line_no, match.group(0))
+            key = (self.rel(src), match.group(0))
+            if key in _CORPUS_LINE_REFS:
+                self.corpus_hits.add(key)
+                self._emit("info", "line", *rec, "corpus", _CORPUS_LINE_REFS[key], "", show_info)
+                continue
             if any(mark in raw for mark in _PATTERN_MARKS):
                 self._emit("info", "line", *rec, "pattern",
                            f"{raw} 是模式写法，不是具体文件", "", show_info)
@@ -439,6 +592,12 @@ class _Checker:
 
     def _symbol_ref(self, raw: str, symbol: str, src: pathlib.Path, line_no: int,
                     whole: str, after: str = "") -> None:
+        key = (self.rel(src), raw, symbol)
+        if key in _CORPUS_SYMBOL_REFS:
+            self.corpus_hits.add(key)
+            self.add("info", "symbol", src, line_no, whole, "corpus",
+                     _CORPUS_SYMBOL_REFS[key], "")
+            return
         stem = pathlib.PurePosixPath(raw).stem
         truncated = symbol.endswith("_") and after[:1] in (".", "…", "`", "")
         if (any(mark in raw for mark in _PATTERN_MARKS) or after[:1] in ("*", "…")
@@ -471,6 +630,7 @@ def run(root: pathlib.Path, since: str = "", show_info: bool = False) -> _Checke
     """跑一遍检查（不打印）；异常表示“没查成”，由入口折成退出码 2。"""
     checker = _Checker(root)
     checker.scan(checker.source_files(since), show_info)
+    checker.finish(since)
     return checker
 
 
@@ -489,7 +649,8 @@ def _summary(checker: _Checker) -> dict:
 
 def _render(checker: _Checker, show_info: bool) -> list[str]:
     summary = _summary(checker)
-    lines = [f"扫描 {summary['scanned_files']} 个文件（src/agentflow/**/*.py + docs/*.md + *.md）",
+    lines = [f"扫描 {summary['scanned_files']} 个文件"
+             "（src/agentflow/**/*.py + tests/**/*.py + docs/*.md + *.md）",
              f"死引用 {summary['dead']} 条；info {summary['info']} 条"
              + (f"；没查成 {summary['unchecked']} 处" if summary["unchecked"] else "")]
     dead = [f for f in checker.findings if f["severity"] == "dead"]
