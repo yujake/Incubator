@@ -124,3 +124,6 @@ agentflow/tests/fixtures/**  binary
 
 # ---- 生成物：不让 GitHub 的语种统计把打包后的前端算成主语言 ------------------
 agentflow/src/agentflow/web/static/assets/*  linguist-generated=true
+
+# demo/ 是"真机工作区的逐字节副本"：行尾必须保持原样，否则 main.tex 的 tex_sha256 复算不上
+demo/** -text

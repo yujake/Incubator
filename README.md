@@ -54,6 +54,7 @@ Two roots, on purpose. The git root is this directory (`D:\Incubator`, GitHub
 
 | Layer | Name | Where it appears |
 |---|---|---|
+| [`agentflow/docs/README.md`](agentflow/docs/README.md) | **the order to read in**: newcomer / run it / change code / design / limits / glossary — one hop from here |
 | Repository | **Incubator** | git root, GitHub repo name, `.git`, `git clone https://github.com/yujake/Incubator.git`, `README.md`, `AGENTS.md` |
 | Product / Python package / CLI | **agentflow** | `agentflow/`, `pyproject.toml` (`name = "agentflow"`), `python -m agentflow`, `pip install -e agentflow`, `agentflow --help` |
 | Python import | `agentflow` | `import agentflow`, `from agentflow import cli` |
@@ -91,11 +92,12 @@ authority** and makes every step land on an append-only ledger.
   **F** multi-round attack, **G** manuscript writing, **H** review (read-only), **V** proof
   verification (read-only), **L** Lean formalization, and **M**, the conductor. **67 actions**
   are declared across them, **56** of which are summonable.
-- **Seventeen ledger tables.** Statements, concepts and relations, literature and pending
+- **Sixteen ledger tables.** Statements, concepts and relations, literature and pending
   candidates, conjectures, research questions, attack plans, experiments, manuscripts,
-  dependencies, review findings, analysis reports, requests, tasks, usage and eval results —
+  dependencies, review findings, analysis reports, requests, tasks and usage —
   each a JSON snapshot, plus one append-only `data/events.jsonl` from which every snapshot can be
-  rebuilt.
+  rebuilt. A seventeenth table, `eval_results`, was retired on 2026-11-22 — it never
+  had a writer.
 - **A hard closing gate.** Eight cells are computed from the ledger (never typed by hand); each
   reports `pass` / `fail` / `unknown` / `na`, and the gate reduces them to a tri-state verdict
   (`pass` / `fail` / `unknown`) with exit codes `0` / `1` / `2`.
@@ -160,7 +162,7 @@ each is computed from the ledger and reports one of four states — `pass`, `fai
 | 3 | `report_shape` | the report has the three attachments (sources / basis / version sha) and the declared form |
 | 4 | `user_pending` | no question is still waiting on a human answer |
 | 5 | `substance` | at least one substantive table is non-empty (tasks and usage do not count) |
-| 6 | `acceptance` | every machine-checkable row of `out/paper/ACCEPTANCE-CHECKS.json` holds |
+| 6 | `acceptance` | every machine-checkable row of `out/package/ACCEPTANCE-CHECKS.json` holds |
 | 7 | `artifact_ledger` | `ARTIFACTS.jsonl` agrees with what is on disk |
 | 8 | `literature_pending` | the pending-literature table has no `pending` rows and was cleared |
 
@@ -259,20 +261,20 @@ The main trunk, in one picture:
 ```mermaid
 flowchart LR
   U["User: one sentence task"] --> CLI["cli.py start"]
-  CLI --> ST["Store(root)<br/>17 tables + events.jsonl"]
+  CLI --> ST["Store(root)<br/>16 tables + events.jsonl"]
   CLI --> HOST["host.wired_llm_conductor"]
   HOST --> M["Conductor M (AgentLoop.run)"]
   M -->|conductor.summon / summon_many| T["tasks rows + roster"]
   T --> SUB["sub-role AgentLoop.run"]
   SUB -->|deterministic handlers| ST
-  SUB --> OUT["manuscripts/ · reports/ · out/ · verifications/"]
+  SUB --> OUT["manuscripts/ · work/ · out/ · verifications/"]
   M -->|before final: must ask once| GATE["closing gate<br/>8 cells → verdict"]
   GATE --> M
   M --> END["agent_run_end + runs/*.json + exit code"]
 ```
 
 The full, implementation-linked architecture — every layer, all eleven role cards, all
-seventeen tables, the run lifecycle, the gate's four states, and the evidence/signature chain —
+sixteen tables, the run lifecycle, the gate's four states, and the evidence/signature chain —
 is in **[`agentflow/docs/SYSTEM-INTRO.md`](agentflow/docs/SYSTEM-INTRO.md)**. It is a map, not a
 spec: code and judges outrank it.
 
@@ -455,22 +457,28 @@ does not write outside it.
 <ws>/
   data/          ledger snapshots (one JSON per table) + events.jsonl
   source/        inputs (papers, drafts) — read only
+  reference/     user-supplied references and the seed drop zone (not the shelf)
   code/          experiment scripts and Lean sources produced by the roles
-  library/       extracted text of retrieved documents
-  manuscripts/   handoff records between roles
-  reports/       research reports, attack plans, proof manuscripts
-  documents/     manuscript bodies
+  library/       the registered shelf — flat files, only what `literature` rows point at
+  manuscripts/   manuscript bodies, one directory per role: <role>/<kind>-<no>.md
+  work/          drafts, one directory per role: <role>/<kind>-<no>.md
+                 plus handoffs.jsonl — the handoff ledger (not a manuscript)
   verifications/ V's ledgers (in-register and pending)
-  out/           paper/, review/, experiments/, vsigns/, roster/, sysguard/
+  out/           package/, report/, exp-logs/, vsigns/, roster/, sysguard/
   runs/          per-run params/results, checkpoints, stop switch
   sessions/      one append-only event log per session
-  skills/        per-role skill documents
-  notes/         per-role drafts (not handed off)
+  notes/         per-role notes (not handed off)
 ```
 
 `source/` is **input** (never modified), `out/` is **output**, `data/` is the **record**,
 `sessions/` is the **trace**, and `runs/` is the **control plane** (pid registrations, the stop
 switch, stop history). `python -m agentflow --root <ws> status` is the cheapest way to see it.
+
+Layouts written before 2026-11-22 are **no longer read**: `reports/`, `documents/`,
+`manuscripts/handoffs.jsonl`, `out/paper` / `out/review` / `out/experiments`, and the
+old `library/<id>/` subdirectory form now report "old layout (unsupported)" instead of
+being silently accepted. Read such a workspace with the code of its era — the current
+code refuses it, and it does not migrate it.
 
 ### Troubleshooting
 
@@ -551,11 +559,11 @@ gate**: it is not part of the delivery surface (owner ruling 2026-11-21), so a c
 
 `agentflow/docs/INDEX.md` is the authoritative map: which document is the current spec, which is
 history, and which is design rationale. Code and judges outrank all of them. Start with these
-eight, in this order:
+nine, in this order:
 
 | Document | Read it for |
 |---|---|
-| [`agentflow/docs/SYSTEM-INTRO.md`](agentflow/docs/SYSTEM-INTRO.md) | the system overview: eight layers, all eleven roles, seventeen tables, one run's lifecycle, the gate and evidence chains, current boundaries — every number with its recompute command |
+| [`agentflow/docs/SYSTEM-INTRO.md`](agentflow/docs/SYSTEM-INTRO.md) | the system overview: eight layers, all eleven roles, sixteen tables, one run's lifecycle, the gate and evidence chains, current boundaries — every number with its recompute command |
 | [`agentflow/docs/INDEX.md`](agentflow/docs/INDEX.md) | which document is current / historical / rationale, and how to recompute the readings |
 | [`agentflow/docs/USER-GUIDE-CLI.md`](agentflow/docs/USER-GUIDE-CLI.md) | the CLI manual, from install to resuming, with real exit codes |
 | [`agentflow/docs/USER-GUIDE-WEB.md`](agentflow/docs/USER-GUIDE-WEB.md) | the web manual: pages, endpoints, CSRF, status codes |
@@ -670,11 +678,11 @@ This section is the set of readings a machine checks. Every number here has a ju
 change a number without changing the source and a test goes red. **Readings, not specifications.**
 
 ```text
-agentflow/.noai-paths            禁改区清单（**46** 条 glob / **43** 条唯一路径，**7** 个分组；2026-11-21 tests/golden 四条随 tests 不入 git 一并摘除）
+agentflow/.noai-paths            禁改区清单（**70** 条 glob / **67** 条唯一路径，**7** 个分组；2026-11-21 tests/golden 四条随 tests 不入 git 一并摘除）
 agentflow/src/agentflow/tools/   **19** 个 `*_tools.py`（工具层按角色装配，见 `python -m agentflow tools`）
 ```
 
-- **17 tables** — `len(schema.TABLES)`.
+- **16 tables** — `len(schema.TABLES)`; a seventeenth, `eval_results`, is retired (`schema.RETIRED_TABLES`, no writer).
 - **11 roles** = ten specialists (A–H, V, L) + conductor M — `len(schema.ROLES)`, `schema.CONDUCTOR_ROLE`.
 - **67 actions / 56 summonable** — `sum(len(v) for v in capabilities.CAPABILITIES.values())` and
   `sum(len(capabilities.actions_for(r)) for r in capabilities.ALLOWED_EDGES["M"])`.
