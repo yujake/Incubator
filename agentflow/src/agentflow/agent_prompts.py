@@ -33,7 +33,7 @@ from . import toolface as _TF
 #: 同一条渲染链（位置仍是 `SECTION_ORDERS["A_SEARCH_STYLE"]`，渲染逐字节不变）。
 from .specs.a import SEARCH_STYLE as _A_SEARCH_STYLE
 from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDERS
-PROMPT_VERSION = "p325"
+PROMPT_VERSION = "p326"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：
@@ -1282,7 +1282,7 @@ def paper_pack_for(role: str) -> str:
 #:   - FC-27 清单（`AGENTS.md` 的 `NOAI-MANIFEST` 区块）逐字称 `specs/a.py` 是
 #:     「角色 A 的声明真身（M3 起）」；
 #:   - `capabilities` 的四张表（`CAPABILITIES` / `WRITE_SETS` / `ALLOWED_EDGES` /
-#:     `NON_SUMMONABLE`）全部由 `specs/*.py` 派生（`capabilities.py:950/1271/1362/1369`）
+#:     `NON_SUMMONABLE`）全部由 `specs/*.py` 派生（`capabilities.py::CAPABILITIES` / `capabilities.py::WRITE_SETS` / `capabilities.py::ALLOWED_EDGES` / `capabilities.py::NON_SUMMONABLE`）
 #:     ⇒ 身份与权限面同源，不会再出现"权限面改了、身份文本没跟"的形态；
 #:   - `agentspec.AgentBrief` 的 docstring 逐字：「与 `agent_prompts.RoleBrief` 逐字对应；
 #:     M3 之后由本模块拥有」。

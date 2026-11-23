@@ -84,6 +84,7 @@ src/agentflow/quoteverify.py         [category: prover-bridge] `check_quote` 引
 # 而已有的 relations 仍指向旧键 —— 图书馆不会报错，只会悄悄裂成两份。
 src/agentflow/dedup.py           [category: provenance-dedup] `normalize_doi` / `literature_keys` / `title_key`：来源标识的归一化 —— 归一化规则偏移即"同一篇文献两个主键"
 src/agentflow/providers.py       [category: provenance-dedup] `normalize_doi` / `dedup_key_of` / `map_type_code`：provider 原始记录 → 统一候选键 —— 这里错则跨库同一篇文献无法合并
+src/agentflow/fetch.py           [category: provenance-dedup] 下载通道 `HttpDownloader` 的 `_download_via` / `_consume`（`_ShortBody` 短包判据）与 `DEFAULT_USER_AGENT`：它决定"什么东西被下载进来、超时怎么算、短包算不算成功" —— 下进来的字节是哪一份、算不算完整的一份，正是 provenance-dedup 的入口；改它不会让任何判据变红，下载照样"成功"返回
 
 
 [category: schema-migration] 四、schema 迁移（存储布局与 ID 分配）

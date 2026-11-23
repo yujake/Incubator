@@ -3946,3 +3946,32 @@ ewtheorem / 论文写作只是推荐）一字未动。
 #:   warm 两档真跑（上游已热）：关 **$0.056115** / 开 **$0.061446**，两档 verdict=warmed。
 #:   五、口径：**p325 只冻这一次**；本笔之后不再为渲染面冻版。
 #:   本笔 = p325。
+
+#: p325 → p326（2026-11-23，只 M 一格：M 成文预留 policy/手册 + state 墙钟与预算 returns + 引用改符号）
+#:   一、先核树（六处现盘 sha 前缀，逐条记下以便复核）：`specs/m.py` **aa9e86ccd24b** ·
+#:   `agent_skills.py` **0b99dec81f9c** · `agent_prompts.py` **63ddc73f2564** ·
+#:   `tools/conductor_tools.py` **595937319411** · `conductor.py` **fbbbb57a040f** ·
+#:   `tools/search_tools.py` **300ae60d421f**；另 `verify.py` 1da3ff967f06 / `capabilities.py`
+#:   37481268e21c（FC-27 登记用）。符号面逐条核过：`_url_source_of` / `url_source`（search_tools）、
+#:   `wall_clock_reading`（conductor.py）、`conductor.state` 的 returns 带 `wall_clock` / `budget`。
+#:   冻前版本仍是 p325 ⇒ p326 没被人写过。
+#:   二、驱动面：**只有 M 一格变**（`scripts/recompute_prompt_digests.py` 现算 M 0751256649d6；
+#:   其余十格与 p325 逐字相同）。**以现盘重算为准**，没有套用任何 patch 里的格值。
+#:   注：指令里把 `0751256649d6` 写在箭头左侧（当作旧值），实测它是**现算出来的新值**、
+#:   冻结的旧值是 `2b5996615e91` —— 漂移集合（只有 M）与指令一致，只是这一格的箭头两侧写反了。
+#:   三、来源：① M 的成文预留 policy（`specs/m.py`）+ M 手册同句（`agent_skills.py`）；
+#:   ② `conductor.state` 加 `wall_clock` / `budget` 两格读数（`conductor_tools.py` 的 returns）；
+#:   ③ `conductor.wall_clock_reading`（`conductor.py`）；④ `agent_prompts` 的引用改成符号形态；
+#:   ⑤ `tools/search_tools.py` 的 `lit.stage_add` 加 `url_origin`、`search.download` 带 `url_source`
+#:   （C1FIX-URISRC 之后的手术式改动）。
+#:   四、连带：`PROMPT_VERSION` p325 → p326；`_FROZEN_PROMPT_DIGESTS` 十一格按现值重写
+#:   （`--write` 12 处）；`check_all --only prompt_digests` 绿（ok 1 / FAIL 0 / SKIP 0）；
+#:   **两份 golden 都重冻**（`tool_surface_snapshot` 126 工具 / 11 角色 / 13 条 CLI ——
+#:   `conductor.state` 的 returns 与 `lit.stage_add` 的 `url_origin`；`agent_surface_snapshot`
+#:   11 角色 / 67 条动作 —— `roles.M.prompt`）；`_VOLATILE_FACT_SETS` 追加 p326 一格
+#:   （count=15、`keys_sha256=21314a39…` 与 p325 同值，现算核对）；
+#:   `tools/write_system_docs.py` 重跑（`ROLE-GUIDE.md` 205,447 → **205,682** 字符、
+#:   `SYSTEM-COMPONENTS.md` 一致）；warm 两档真跑（上游已热）：关 **$0.071859** /
+#:   开 **$0.076580**，两档 verdict=warmed。
+#:   五、口径：**p326 只冻这一次**；本笔之后不再为渲染面冻版。
+#:   本笔 = p326。
