@@ -21,7 +21,7 @@ path       工作区相对路径（posix 分隔符；绝对路径与越界路径
 sha256     产出时磁盘内容的 sha256（字节级，不做归一化）
 bytes      字节数
 producer   生产者（角色名 / 工具名 / "M"）
-kind       产物类别（自由文本：script / report / paper / task-result / …）
+kind       产物类别（受控词表 `ARTIFACT_KINDS`；词表外的新写照落但记 `kind_unknown=true`）
 task_id    这次产出属于哪一次召唤（可空）
 exit_code  产生它的那次执行的退出码（可空；"没跑过"就不许填 0）
 note       人读的补充（可空）
@@ -52,6 +52,7 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping, Sequence
 
+from . import manuscriptfamily as MF
 from . import sysguard as SG
 from .jsonlfile import read_jsonl
 
@@ -64,9 +65,73 @@ LEDGER_NAME = "ARTIFACTS.jsonl"
 #: 「未归因的原因」。老行没有这两格照旧读（读侧容忍缺字段）；新行有它，于是
 #: 「两个人同一角色各产了一件」在台账上按 `instance` 分得开，而不是只剩 `producer=角色`。
 FIELDS: tuple[str, ...] = (
-    "at", "path", "sha256", "bytes", "producer", "kind", "task_id", "exit_code", "note",
-    "instance", "identity_conflict", "family",
+    "at", "path", "sha256", "bytes", "producer", "kind", "kind_unknown", "task_id",
+    "exit_code", "note", "instance", "identity_conflict", "family",
 )
+
+#: `ARTIFACTS.jsonl` 的 `kind` 受控词表（2026-11-22 B2d）。
+#:
+#: ## 它凭什么长这样
+#:
+#: 基线不是拍脑袋：`projects/*` 的 34 个真机工作区、5,249 行台账的真实并集是 17 个取值
+#: （`paper` 2,985 / `task-result` 832 / `e-num-manuscript` 444 / `f-proof-manuscript` 262 /
+#: `experiment-log` 222 / `note` 218 / `script` 105 / `b-proof-manuscript` 58 /
+#: `research-report` 50 / `document-note` 20 / `status-report` 13 / `status-report-readout` 13 /
+#: `review-report` 10 / `report` 7 / `analysis-report-gaps` 6 / `analysis-report-hottest` 3 /
+#: `analysis-report-cold` 1）。词表在此之上补进"代码里已经声明、历史只是还没跑到"的取值
+#: （`paper-pdf` / `experiment-report` / `e-proof-manuscript` / 泛化的 `manuscript` /
+#: 其余 `analysis-report-*` 与 `document-*`）—— 还没落过不等于自造。
+#:
+#: ## 分档只为人读，不是第二套判据
+#:
+#: 判据只有"在不在 `ARTIFACT_KINDS` 里"一条。分组回答"这个取值属于哪一类产物"，
+#: 供文档与读数分栏；它不参与任何校验（把分组也写成判据，等于同一件事两处实现）。
+#:
+#: ## 不合并的三对（证据）
+#:
+#: - `report` ≠ `review-report`：`report`（7 行）的 `path` 全是 `out/SCRIPTS.md`、
+#:   `producer=M`、`note` 逐字「A4/R-52：把 artifacts report 台账渲染」—— 它是台账自身的
+#:   渲染表；`review-report`（10 行）是 H 的 `out/report/<doc>-review.md` 审校报告。
+#: - `paper` ≠ `paper-pdf`：`paper`（2,985 行）由外部 `paper-generator` 逐文件登记
+#:   （同一工作区里 `out/package/` 下每个文件各一行）；`paper-pdf` 是 `papercompile` 对
+#:   编出来的那一份 PDF 的登记。一个是"包里的每个文件"，一个是"编译产物本身"。
+#: - `note` ≠ `document-note`：`note` 是 `notes/<角色>.md`（`agent_loop.write_note` 的草稿本）；
+#:   `document-note` 是 `documents` 表 `kind=note` 那一行指向的 markdown 成稿
+#:   （`doc_tools` 渲染后登记）。前者是过程笔记，后者是交付物。
+ARTIFACT_KIND_GROUPS: dict[str, tuple[str, ...]] = {
+    #: 框架自己落的系统产物（任务结果 / 状态报告 / 台账渲染）。
+    "system": ("task-result", "status-report", "status-report-readout", "report"),
+    #: 手稿（`manuscriptfamily.FAMILY_ORDER` 四族 + 无族时的泛称）。
+    #:
+    #: 族那一半从 `manuscriptfamily` 现派生（`<族前缀>manuscript`）：族 / 前缀的
+    #: 唯一真身是那张表（`prefix_of`），这里不写第二份 —— 否则表里改一个前缀、
+    #: 台账的 `kind` 仍收旧名，而两处都不会报错。
+    "manuscript": ("manuscript",) + tuple(
+        f"{MF.prefix_of(family)}manuscript" for family in MF.FAMILY_ORDER),
+    #: 报告与成稿文档（C 的分析报告按 `schema.REPORT_KINDS` 派生；
+    #: documents 的 markdown 按 `schema.DOC_KINDS` 派生）。
+    "report": ("research-report", "review-report", "experiment-report",
+               "analysis-report-hottest", "analysis-report-paths", "analysis-report-cold",
+               "analysis-report-gaps", "analysis-report-proof_chain",
+               "document-survey", "document-paper", "document-note"),
+    #: 运行日志。
+    "log": ("experiment-log",),
+    #: 其它：过程笔记 / 外部论文包里的文件 / 代码脚本 / 缺省值。
+    "other": ("note", "paper", "paper-pdf", "script", "file"),
+}
+
+#: 全部受控取值（由分组派生；加值只改上面那一张表）。
+ARTIFACT_KINDS: tuple[str, ...] = tuple(
+    kind for kinds in ARTIFACT_KIND_GROUPS.values() for kind in kinds)
+
+#: `kind` 的三态（读侧）。三态不许折平：
+#:
+#: - `canonical`：取值在词表里；
+#: - `legacy`：取值不在词表里，且这一行没有 `kind_unknown` 这一格 —— 词表生效前
+#:   落的历史行。读侧照读，不许判成畸形；
+#: - `unknown`：取值不在词表里，且这一行有 `kind_unknown` 这一格 —— 词表生效后的
+#:   新写。它照旧落盘（产物不许因为"类别没登记"就消失），但行上带着受控标记、读数里点名。
+KIND_STATES: tuple[str, ...] = ("canonical", "legacy", "unknown")
 
 #: `verify_entries` 的四种状态。刻意不是布尔：`missing`（不在了）与 `unreadable`
 #: （还在但读不出来）的处置完全不同，`changed`（被改过）又是第三种。
@@ -238,6 +303,24 @@ def producer_is_known(producer: str) -> bool:
     return name.startswith(("tool:", "agentflow."))
 
 
+def kind_is_known(kind: Any) -> bool:
+    """这个取值在 `ARTIFACT_KINDS` 里吗（写侧唯一判据；词表外不拒收）。"""
+    return str(kind or "") in ARTIFACT_KINDS
+
+
+def kind_state(entry: Mapping[str, Any]) -> str:
+    """读侧三态：`canonical` / `legacy` / `unknown`（定义见 :data:`KIND_STATES`）。
+
+    判据只有两条：取值在不在词表里、这一行有没有 `kind_unknown` 这一格。
+    `kind_unknown` 的值不参与判态（标记与取值不一致时由
+    `summarize()["kind_flag_mismatch"]` 点名，不在这里悄悄改读法）。
+    """
+    kind = str(entry.get("kind") or "")
+    if kind_is_known(kind):
+        return "canonical"
+    return "unknown" if "kind_unknown" in entry else "legacy"
+
+
 def record(
     root: Any,
     *,
@@ -282,6 +365,11 @@ def record(
         "bytes": 0,
         "producer": str(producer),
         "kind": str(kind or "file"),
+        #: 受控标记（B2d）：词表外的类别照旧落盘（外部产出不许因为"类别没登记"就
+        #: 从台账里消失），但行上必须留下这个受控标记，且 `summarize()` 进读数。
+        #: 它与 `producer` 的"未登记是可见、不是否决"同一条纪律；区别只在
+        #: `kind` 是数据契约里的一格，而 producer 是自由的外部名字。
+        "kind_unknown": not kind_is_known(kind or "file"),
         "task_id": str(task_id or ""),
         # 本模块其余坏输入走 `ArtifactError`；这一格也只经 `_exit_code_of` 收成 int，
         # 不静默吞坏值。
@@ -479,19 +567,35 @@ def list_artifacts(root: Any, *, producer: str | None = None,
 
 
 def summarize(root: Any) -> dict:
-    """台账汇总：条数 / 生产者计数 / 未登记的生产者 / 类别计数 / 坏行数 / 四态计数。
+    """台账汇总：条数 / 生产者计数 / 未登记的生产者 / 类别计数 / 三类 kind 状态 / 坏行数 / 四态计数。
 
     `unregistered` 是读数（不是闸门）：台账里出现过、但既不是角色/主控、
     也不是 `tool:<名>`/`agentflow.<模块>`、也不在 `REGISTERED_EXTERNAL_PRODUCERS` 里的
     生产者名 —— 各几条。它让"出现了一个没人登记的生产者"当场看得见；否则那种名字
     只会让 `by_producer` 悄悄多一根分面轴。
+
+    `kind_states` / `unknown_kinds` / `kind_flag_mismatch` 是同一形态的读数：
+    词表外的类别照旧写（不许丢行），但"这一类没登记"必须在汇总里看得见，
+    并分得清是历史行（`legacy`，读侧照读）还是新写（`unknown`，行上带受控标记）。
     """
     records, bad = read_ledger(root)
     by_producer: dict[str, int] = {}
     by_kind: dict[str, int] = {}
+    kind_states: dict[str, int] = {state: 0 for state in KIND_STATES}
+    unknown_kinds: dict[str, int] = {}
+    kind_flag_mismatch = 0
     for r in records:
         by_producer[str(r.get("producer") or "")] = by_producer.get(str(r.get("producer") or ""), 0) + 1
         by_kind[str(r.get("kind") or "")] = by_kind.get(str(r.get("kind") or ""), 0) + 1
+        state = kind_state(r)
+        kind_states[state] = kind_states.get(state, 0) + 1
+        if state != "canonical":
+            odd = str(r.get("kind") or "")
+            unknown_kinds[odd] = unknown_kinds.get(odd, 0) + 1
+        #: 标记与取值不一致（写了 `kind_unknown=false` 却又不在词表里）：读法不变，
+        #: 但要有人看见写侧那一笔标记算错了。
+        if state == "unknown" and r.get("kind_unknown") is not True:
+            kind_flag_mismatch += 1
     status: dict[str, int] = {}
     reasons: dict[str, int] = {}
     for v in verify_entries(root, records):
@@ -502,7 +606,9 @@ def summarize(root: Any) -> dict:
     unregistered = {name: n for name, n in by_producer.items() if not producer_is_known(name)}
     return {"entries": len(records), "bad_lines": len(bad), "by_producer": by_producer,
             "unregistered": unregistered,
-            "by_kind": by_kind, "status": status, "changed_reasons": reasons,
+            "by_kind": by_kind, "kind_states": kind_states,
+            "unknown_kinds": unknown_kinds, "kind_flag_mismatch": kind_flag_mismatch,
+            "status": status, "changed_reasons": reasons,
             "problems": list(bad)}
 
 
@@ -531,7 +637,15 @@ def render_markdown(root: Any, entries: Sequence[Mapping[str, Any]] | None = Non
             f"{e.get('bytes')} | `{str(e.get('sha256') or '')[:16]}` | {st} |"
         )
     lines += ["", f"共 {len(entries)} 条；`现状` 列由 `verify_entries` 现算（"
-                  "`ok` / `changed` / `missing` / `unreadable` / `not_a_file`）。", ""]
+                  "`ok` / `changed` / `missing` / `unreadable` / `not_a_file`）。"]
+    odd = [(kind_state(e), str(e.get("kind") or "")) for e in entries
+           if kind_state(e) != "canonical"]
+    if odd:
+        lines.append("")
+        lines.append("**词表外的类别**（`ARTIFACT_KINDS` 之外）："
+                     + "；".join(f"{state}: `{kind}`" for state, kind in odd[:20])
+                     + ("（另有更多，见 `summarize()['unknown_kinds']`）" if len(odd) > 20 else ""))
+    lines.append("")
     return "\n".join(lines)
 
 

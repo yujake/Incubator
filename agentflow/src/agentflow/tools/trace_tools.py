@@ -155,7 +155,7 @@ def _chain_line(step_no: int, brief: dict) -> str:
 
 @tool(
     "trace.relation",
-    "L1 溯源：由关系代号取回引文/陈述/页码/引文校验三态，概念代号翻成概念名、附文献元数据。",
+    'L1 溯源：由关系代号取回引文 / 陈述 / 页码 / 引文校验三态，概念代号翻成名字并附文献元数据；永不读文献正文',
     {
         "type": "object",
         "properties": {"relation_id": {"type": "string", "minLength": 4, "maxLength": S.ID_DIGITS}},
@@ -170,6 +170,9 @@ def _chain_line(step_no: int, brief: dict) -> str:
         "'concept_group_key','duplicate_of','created_at','contains_fulltext'}"
         "（contains_fulltext 是**常量 False**：L1 永不读文件，它不是每次调用的检查结论）"
     ),
+    scenario='要一条关系的原文与出处时用；要看概念全貌用 trace.concept',
+    example='取一条关系的引文与出处：回 quote / status / quote_verified',
+    example_code='trace.relation(relation_id="000123")',
 )
 def trace_relation(_g, relation_id: str) -> ToolResult:
     g, err = _g("trace.relation")
@@ -192,7 +195,7 @@ def trace_relation(_g, relation_id: str) -> ToolResult:
 
 @tool(
     "trace.concept",
-    "L2 溯源：由概念代号取回定义 + 它参与的全部关系的表述（不下钻文献正文）。",
+    'L2 溯源：由概念代号取回定义 + 它参与的全部关系的表述，不读文献正文',
     {
         "type": "object",
         "properties": {
@@ -207,6 +210,9 @@ def trace_relation(_g, relation_id: str) -> ToolResult:
     returns=(
         "{'level','concept','counts','neighbors','relations','relation_count','contains_fulltext','note'}"
     ),
+    scenario='要一个概念的定义与它牵连的关系时；要单条关系用 relation',
+    example='取概念的定义与全部关系：回 concept / relations / relation_count',
+    example_code='trace.concept(concept_id="000123")',
 )
 def trace_concept(_g, concept_id: str, with_relations: bool = True) -> ToolResult:
     g, err = _g("trace.concept")
@@ -258,9 +264,86 @@ def trace_concept(_g, concept_id: str, with_relations: bool = True) -> ToolResul
     data["relation_count"] = len(rels)
     return ok(data)
 
+# ---------------------------------------------------------------- L3 的 null 契约
+#
+# `returns=` 承诺的 16 个键在每一条 ok 分支上都必须给（三态：拿不到给 null，
+# 不静默缺键）。其中五格是"文件事实"，早期分支本来没有：
+#   · abs_path        —— no_path（没登记路径）/ path_rejected（路径被
+#                        store.library_path 拒绝）两档为 None：没有解析出来的
+#                        绝对路径，不是"路径是空串"；
+#   · source_kind     —— 抽取后端（pdf/txt/md/html/xml）；没走到抽取为 None：
+#                        "不知道走了哪条路" ≠ "没有格式"；
+#   · page_count      —— 抽取到的页数；没打开文件（缺失/不是普通文件/抽取失败）
+#                        为 None："页数未知" ≠ "零页"（0 只在 no_text_layer：
+#                        文件打开了，但一页文本都没抽到）；
+#   · encoding        —— 只有文本类后端才有；PDF/无文本层/抽取失败一律 None
+#                        （"没有按文本解码"），不写空串；
+#   · chars_returned  —— 本次真的返回了多少字符；没有正文可返回就是 0（计数事实，
+#                        与 text == "" 同义），不是"未填"。
+# 这些格子原先只在成功支给 ⇒ no_path / path_rejected / file_missing / not_a_file /
+# extract_failed 五条分支静默少键，调用方分不清"这一格不适用"与"工具忘了填"。
+
+
+#: 早期分支的 note：事实 + 该分支上逐格为 null 的键 + "为什么"。
+#: 为什么放模块级：`note` 是模型看得到的读数（"null 是这一格没有事实可报，不是忘了填"），
+#: 而这句话在五条早期分支上是同一套口径 —— 放在函数里会让每条分支各抄一遍。
+#: 元组是 `(模板, 为 null 的键, 为什么)`；`{detail}` 只给"被拒绝 / 抽取失败"那两条
+#: 拼原始原因。`chars_returned=0` 不在这里逐条写死，由 `_l3_note` 统一追加。
+_L3_NOTE: dict[str, tuple[str, tuple[str, ...], str]] = {
+    "no_path": (
+        "文献表里 path 为空：该文献未下载或下载失败，因此没有正文可读。请让 A 补下载。",
+        ("abs_path", "source_kind", "page_count", "encoding"),
+        "没有路径可解析、没有文件可打开",
+    ),
+    "path_rejected": (
+        "路径被拒绝：{detail}",
+        ("abs_path", "source_kind", "page_count", "encoding"),
+        "路径没解析到可读文件",
+    ),
+    "file_missing": (
+        "文献表登记了路径，但磁盘上没有这个文件（可能被移动/删除）。",
+        ("source_kind", "page_count", "encoding"),
+        "文件不在，没打开",
+    ),
+    "not_a_file": (
+        "该路径不是普通文件（可能是目录）。",
+        ("source_kind", "page_count", "encoding"),
+        "没打开成文件",
+    ),
+    "extract_module_missing": (
+        "文本抽取模块不可用：{detail}",
+        ("source_kind", "page_count", "encoding"),
+        "没走到抽取",
+    ),
+    "extract_failed": (
+        "抽取失败：{detail}",
+        ("source_kind", "page_count", "encoding"),
+        "抽取失败，没有可报的后端/页数",
+    ),
+    "no_text_layer": (
+        "该文件没有文本层（疑似扫描版）：不是'读到了空文本'，而是"
+        "'没有可读文本'。需要 OCR 才能得到正文，因此本次没有正文片段可给。",
+        ("encoding",),
+        "没有按文本解码",
+    ),
+}
+
+
+def _l3_note(kind: str, detail: str = "") -> str:
+    """按分支拼 `note`：事实 + 逐格点名 null 的为什么 + `chars_returned=0` 的读数。
+
+    三态：`None` = 这一格没有事实可报（不是 0、不是空串）；`chars_returned=0`
+    是"本次真的返回了 0 个字符"这个计数事实，不是"未填"。
+    """
+    text, nulls, why = _L3_NOTE[kind]
+    text = text.format(detail=detail)
+    return (text.rstrip("。") + "。" + " / ".join(nulls) + f" 为 null（{why}）；"
+            "chars_returned=0（没有正文可返回）。")
+
+
 @tool(
     "trace.literature",
-    "L3 溯源（按需、贵）：文献元数据 + 本地文件是否存在 + 正文片段；无文本层如实报告。",
+    "L3 溯源（按需、贵）：文献元数据 + 本地文件是否存在 + 正文片段；无文本层如实报告",
     {
         "type": "object",
         "properties": {
@@ -280,8 +363,16 @@ def trace_concept(_g, concept_id: str, with_relations: bool = True) -> ToolResul
         "（不含 status/text/pages_returned/truncated 的早期分支**不存在了**："
         "这四项在每一条 ok 分支上都必须给，否则调用方区分不了'没有正文'与'工具忘了填'）"
     ),
+    scenario='要文献正文片段或核对本地文件时；只取元数据别用它',
+    example='取一篇文献的正文片段：回 text / file_exists；扫描版报 no_text_layer',
+    example_code='trace.literature(lit_id="000123", pages=[1, 2], max_chars=4000)',
 )
 def trace_literature(_g, store, lit_id: str, pages: list[int] | None = None, max_chars: int = 4000) -> ToolResult:
+    """L3：一条文献的元数据 + 磁盘事实 + 正文片段。
+
+    16 个声明键在每一条 ok 分支上都在；五格文件事实的 null 口径见上方
+    `L3 的 null 契约` 那段注释。
+    """
     g, err = _g("trace.literature")
     if err is not None:
         # 顺序很关键：先查 `meta.get("in_table")` 会把"没有 store 也没有 graph"报成
@@ -307,6 +398,14 @@ def trace_literature(_g, store, lit_id: str, pages: list[int] | None = None, max
         # 与"工具忘了填"。放在 base 里 = 不可能漏。
         "pages_returned": [],
         "truncated": False,
+        # 下面五格也是 `returns=` 的承诺（2026-11-22：此前只在成功支给，早期分支静默缺键）。
+        # 三态口径见上方 `L3 的 null 契约` 那段注释：拿不到事实 ⇒ 如实空值（不是 0 / 空串），
+        # 原因由 `_l3_note` 逐格写进 note。
+        "abs_path": None,
+        "source_kind": None,
+        "page_count": None,
+        "encoding": None,
+        "chars_returned": 0,
     }
     if store is None:
         return fail(
@@ -325,12 +424,12 @@ def trace_literature(_g, store, lit_id: str, pages: list[int] | None = None, max
                 "file_exists": False,
                 "has_text_layer": False,
                 "text": "",
-                "note": "文献表里 path 为空：该文献未下载或下载失败，因此没有正文可读。请让 A 补下载。",
+                "note": _l3_note("no_path"),
             }
         )
     try:
         abs_path = store.library_path(rel_path)
-    except Exception as exc:  # StoreError：路径越出 library/
+    except Exception as exc:  # StoreError：越出 library/，或旧布局（2026-11-22 起两种都拒）
         return ok(
             {
                 **base,
@@ -338,7 +437,7 @@ def trace_literature(_g, store, lit_id: str, pages: list[int] | None = None, max
                 "file_exists": False,
                 "has_text_layer": False,
                 "text": "",
-                "note": f"路径被拒绝（越出 library/）：{exc}",
+                "note": _l3_note("path_rejected", str(exc)),
             }
         )
     assert abs_path is not None  # rel_path 非空时 library_path 必返回 Path
@@ -351,7 +450,7 @@ def trace_literature(_g, store, lit_id: str, pages: list[int] | None = None, max
                 "file_exists": False,
                 "has_text_layer": False,
                 "text": "",
-                "note": "文献表登记了路径，但磁盘上没有这个文件（可能被移动/删除）。",
+                "note": _l3_note("file_missing"),
             }
         )
     if not abs_path.is_file():
@@ -363,7 +462,7 @@ def trace_literature(_g, store, lit_id: str, pages: list[int] | None = None, max
                 "file_exists": False,
                 "has_text_layer": False,
                 "text": "",
-                "note": "该路径不是普通文件（可能是目录）。",
+                "note": _l3_note("not_a_file"),
             }
         )
 
@@ -379,7 +478,7 @@ def trace_literature(_g, store, lit_id: str, pages: list[int] | None = None, max
                 "file_exists": True,
                 "has_text_layer": False,
                 "text": "",
-                "note": f"文本抽取模块不可用：{exc}",
+                "note": _l3_note("extract_module_missing", str(exc)),
             }
         )
     try:
@@ -393,7 +492,7 @@ def trace_literature(_g, store, lit_id: str, pages: list[int] | None = None, max
                 "file_exists": True,
                 "has_text_layer": False,
                 "text": "",
-                "note": f"抽取失败：{type(exc).__name__}: {exc}",
+                "note": _l3_note("extract_failed", f"{type(exc).__name__}: {exc}"),
             }
         )
 
@@ -411,10 +510,7 @@ def trace_literature(_g, store, lit_id: str, pages: list[int] | None = None, max
                 "page_count": 0,
                 "text": "",
                 "truncated": False,
-                "note": (
-                    "该文件没有文本层（疑似扫描版）：不是'读到了空文本'，而是"
-                    "'没有可读文本'。需要 OCR 才能得到正文，因此本次没有正文片段可给。"
-                ),
+                "note": _l3_note("no_text_layer"),
             }
         )
 
@@ -465,7 +561,7 @@ def trace_literature(_g, store, lit_id: str, pages: list[int] | None = None, max
 
 @tool(
     "trace.chain",
-    "把一条关系代号链的每一步表述串起来，缺号如实列出。",
+    '把一条关系代号链的每一步表述串起来，缺号如实列出；并区分「链条断了」与「没图可查」',
     {
         "type": "object",
         "properties": {
@@ -481,6 +577,9 @@ def trace_literature(_g, store, lit_id: str, pages: list[int] | None = None, max
         "；**没有图可查**时 ok=False + kind=no_graph + checked=False（与"
         "'查了、链条确实断裂'的 ok=True+checked=True+missing 非空严格区分）"
     ),
+    scenario='要按顺序读一条论证链的每一步时用它',
+    example='串起三个关系号：回 steps / chain_text；缺号进 missing',
+    example_code='trace.chain(relation_ids=["000101", "000102", "000103"])',
 )
 def trace_chain(_g, relation_ids: list[str]) -> ToolResult:
     g, err = _g("trace.chain")
@@ -523,10 +622,7 @@ def trace_chain(_g, relation_ids: list[str]) -> ToolResult:
 
 @tool(
     "trace.children",
-    "看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、"
-    "被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。"
-    "非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明"
-    "「更深要看请向 M 请求」以及那条上行调用的原文。",
+    '看我自己直接下级此刻在做什么：状态、最近 N 步、被拒次数与类目、产出是否真落盘、最近一次交接摘要。非主控只给一层',
     {
         "type": "object",
         "properties": {
@@ -550,6 +646,9 @@ def trace_chain(_g, relation_ids: list[str]) -> ToolResult:
              "'children','count','deeper','session'}；每个子任务里有 "
              "{'task_id','role','status','outcome','recent_steps','subtask_refusals',"
              "'products','last_handoff'}"),
+    scenario='要了解直接下级进展时；要更深就把请求交给主控',
+    example='看我的直接下级：回 children 与 count；非主控只有一层',
+    example_code='trace.children(depth=1, window=5)',
 )
 def trace_children(store, root, *, task_id: str = "", depth: int = 1,
                    window: int = 5) -> ToolResult:

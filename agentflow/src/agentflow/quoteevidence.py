@@ -86,11 +86,11 @@ NO_SOURCE_MARKERS: tuple[str, ...] = (
     "无出处可核", "查无来源",
 )
 
-#: 背书位置的第一种写法（裁定给的例子）：`manuscripts/handoffs.jsonl#NNNN`。
-BACKING_HANDOFF = re.compile(r"manuscripts/handoffs\.jsonl\s*#\s*\d+")
+#: 背书位置的第一种写法（裁定给的例子）：`work/handoffs.jsonl#NNNN`。
+BACKING_HANDOFF = re.compile(r"work/handoffs\.jsonl\s*#\s*\d+")
 
-#: 背书位置的第二种写法：`out/paper/main.tex` 的某一节（文件 + 定位标记两件都要）。
-BACKING_PAPER = re.compile(r"out/paper/main\.tex")
+#: 背书位置的第二种写法：`out/package/main.tex` 的某一节（文件 + 定位标记两件都要）。
+BACKING_PAPER = re.compile(r"out/package/main\.tex")
 _PAPER_LOCATOR = re.compile(
     r"(§\s*\d|第\s*[0-9一二三四五六七八九十]+\s*节|sec:|section|#L?\d+|\\section)")
 
@@ -122,11 +122,11 @@ def manuscript_backing(text: Any) -> str:
 
     只认三种写法（业主裁定逐字给的那三条路线，不多认一种）：
 
-    - `manuscripts/handoffs.jsonl#NNNN`：交接手稿账本的第几行；
-    - `out/paper/main.tex` + 一处定位（`§3` / `第 2 节` / `sec:` / `#L12`）：正文的哪一节；
+    - `work/handoffs.jsonl#NNNN`：交接手稿账本的第几行；
+    - `out/package/main.tex` + 一处定位（`§3` / `第 2 节` / `sec:` / `#L12`）：正文的哪一节；
     - `stmt:` + 编号：命题台账里那一行。
 
-    为什么"文件在场"不算：`out/paper/main.tex` 有几百行，只写文件名指不到"哪一处"，
+    为什么"文件在场"不算：`out/package/main.tex` 有几百行，只写文件名指不到"哪一处"，
     与"没有背书"在复核时是一样的（读的人仍然要在整篇里找）。
     """
     body = str(text or "")
@@ -137,7 +137,7 @@ def manuscript_backing(text: Any) -> str:
     if BACKING_PAPER.search(body):
         locator = _PAPER_LOCATOR.search(body)     # 定位标记只搜一次（命中才拼进背书位置）
         if locator:
-            return f"out/paper/main.tex{locator.group(0)}"
+            return f"out/package/main.tex{locator.group(0)}"
     return ""
 
 
@@ -455,8 +455,8 @@ def enforce_quote_evidence(fields: Mapping[str, Any], *, quote: str = "",
             why=("quote_reason 走了「无来源可核」那一档，却没有指出我方手稿里的哪一处 ⇒ "
                  "整笔不写。这一档不是「查不到所以算了」：说得出无来源还写上去，"
                  "凭的只能是我方手稿的背书 —— 欠了它就等于把一句没有来路的断言放进了台账。"
-                 "三条正路（给一处就够）：① `manuscripts/handoffs.jsonl#NNNN`；"
-                 "② `out/paper/main.tex` 的某一节（如 `out/paper/main.tex§3`）；"
+                 "三条正路（给一处就够）：① `work/handoffs.jsonl#NNNN`；"
+                 "② `out/package/main.tex` 的某一节（如 `out/package/main.tex§3`）；"
                  "③ `stmt:` + 编号。给不出背书就别写这一档：把 quote_verified 说成"
                  "「还没查」并写清为什么，或者干脆不登记这一行"))
         return out, reading
@@ -563,7 +563,7 @@ def evidence_fields(check: Any, *, doc: Any = None, quote: str = "",
                     note: str = "", doc_problem: str = "") -> dict[str, Any]:
     """把一次 `QuoteCheck` 翻成落盘的四栏（三态原样透传，不折平）。
 
-    `note` 是调用方自己的来路说明（"命中的是 `out/paper/main.tex`，不是 PDF"）——
+    `note` 是调用方自己的来路说明（"命中的是 `out/package/main.tex`，不是 PDF"）——
     两种证据不许混成一种，所以它排在 reason 最前面。`doc_problem` 只在"没有文档可比"
     时才进理由（调用方用来说明为什么没有全文）。
     """

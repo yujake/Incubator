@@ -1,28 +1,38 @@
-"""把历史真机下载的文献种子投进新工作区：只放文件，不写台账。
+"""把历史真机下载的文献种子投进新工作区的输入区：只放文件，不写台账。
 
-## 为什么要有这一层
+## 为什么落点是 `reference/` 而不是 `library/`（2026-11-22 业主裁定）
 
-业主 2026-11-21 口径（逐字）：「下一回真机建工作区时，把这十几轮真机所有下载成功且
-无乱码的文献都丢进新工作区（不直接入库）」。于是这一层只做一件事：把
-`agentflow/seed/literature/` 里那份已经审过字节与可读性的种子包原样复制进新工作区的
-`library/`，并在工作区根落一份 `SEED-README.md` 说明它们是什么、不是什么。
+`library/` 是已登记书架：`literature.path` 就是 `library/` 下的相对名
+（`store.library_path` 把一切路径强制解析在 `library/` 内）。
+把未登记的种子 PDF 直接铺在 `library/` 根，等于让 25 份没有 `literature` 行的文件
+占住已登记书架的位置 —— A 侧维护的文献库结构因此异常。业主逐字：
+「为什么你直接往library里塞文献？这会导致A侧维护的文献库结构异常」。
+
+所以种子落在工作区根的输入区 `reference/`（用户提供的参考材料投放处），
+`SEED-README.md` 也落在 `reference/` 里 —— 它不是工作区根的条目（根上的条目要过
+`store._WORKSPACE_ROOT_ENTRIES` 白名单，`reference` 已登记为"用户输入落点"）。
+"允许入库"由用户声明回答，不由投放动作回答：用户（或 M 按用户原话）把
+`{"paths": ["reference/"]}` 记进工作区根的 `RELIABLE-REFERENCES.json`，
+再由 A 逐份判收进 `library/`。投放、声明、判收是三件事，各有各的落点。
 
 ## 三条硬边界（每一条都有判据）
 
-1. 只写文件，不写台账：`seed_workspace` 只碰 `library/` 与 `SEED-README.md`，
-   不打开、不创建 `data/literature.json`，也不碰任何 `data/*.json`。
+1. 只写文件，不写台账：`seed_workspace` 只碰 `reference/`（含其中的
+   `SEED-README.md`），不打开、不创建 `data/literature.json`，也不碰任何 `data/*.json`。
    理由：业主明令「不直接入库」。直接写台账等于替 A 判收，而 A 的收录判据是
    这条流水线里唯一该判收的地方。
-2. 默认关：`projects.create_project` / CLI 的 `--seed-literature` 缺省都是关，
-   普通建工作区一个字节都不多投。
-3. 幂等：`SEED-README.md` 在就是投过了；再投只返回读数，不重复复制。
+2. 不写已登记书架：`library/` 里只能有被 `literature` 行的 `path` 引用的文件。
+   投放落点在 `reference/`；判据 `unregistered_library_files` 会把"书架上的游离文件"
+   读出来（含反真空：把落点打桩回 `library/` ⇒ 判据必红）。
+3. 默认关：`projects.create_project` / CLI 的 `--seed-literature` 缺省都是关，
+   普通建工作区一个字节都不多投。幂等：`reference/SEED-README.md` 在就是投过了。
 
 ## 种子包在哪、长什么样
 
-默认落点由工程根推出来（`settings.WORKSPACE_ROOT / seed / literature`），
-也可以用环境变量 `AGENTFLOW_SEED_LITERATURE_DIR` 指到别处（判据用这个换临时种子）。
-种子包由 `scripts/seed_corpus.py --build` 生成，`--verify` 按 `MANIFEST.json`
-逐份复算 sha256 与抽读字数。本模块只按 manifest 读，不自己判"哪份算好文献"。
+默认落点由工程根推出来（`settings.PROJECT_ROOT / seed / literature`），也可以用环境变量
+`AGENTFLOW_SEED_LITERATURE_DIR` 指到别处（判据用这个换临时种子）。种子包由
+`scripts/seed_corpus.py --build` 生成，`--verify` 按 `MANIFEST.json` 逐份复算 sha256
+与抽读字数。本模块只按 manifest 读，不自己判"哪份算好文献"。
 """
 
 from __future__ import annotations
@@ -36,20 +46,25 @@ from typing import Any
 from . import settings as SET
 
 __all__ = [
+    "DECLARATION_NAME",
+    "DECLARATION_VERBATIM",
     "ENV_SEED_DIR",
     "FILES_DIR",
     "FORMAT",
-    "LIB_SUBDIR",
     "MANIFEST_NAME",
     "MARKER_NAME",
+    "MARKER_REL",
     "SEED_REL",
+    "SEED_SUBDIR",
     "VERSION",
     "candidate_chain_lines",
     "candidate_chain_warning",
+    "declaration_text",
     "default_seed_dir",
     "read_manifest",
     "read_seed_reading",
     "seed_workspace",
+    "unregistered_library_files",
 ]
 
 #: 种子包落点（相对工程根）。
@@ -62,14 +77,39 @@ MANIFEST_NAME = "MANIFEST.json"
 FILES_DIR = "files"
 MARKER_NAME = "SEED-README.md"
 
-#: 投到工作区里的位置。放 `library/` 根：工作区是新建的，书架本来就是空的；种子文件名带
-#: sha256 前缀，与之后按 lit_id 命名的书天然分得开。
-LIB_SUBDIR = "library"
+#: 投到工作区里的位置：输入区（不是已登记书架 `library/`）。
+#:
+#: 为什么是 `reference/` 而不是 `library/`：见模块 docstring。为什么不是 `source/`：
+#: `source/` 在代码与提示词里是审阅型工作区的只读基线（`source/main.tex`，
+#: `agent_prompts.PAPER_PACK` / `closing._leg_reading`），把研究型工作区的输入也叫
+#: `source/` 会让"只读基线"与"待判收的参考材料"同名；`reference/` 只表达"用户提供的
+#: 参考材料"，与审阅基线不撞名。
+SEED_SUBDIR = "reference"
+
+#: 标记文件的工作区相对路径（`reference/SEED-README.md`）。
+MARKER_REL = f"{SEED_SUBDIR}/{MARKER_NAME}"
+
+#: 用户声明的真身文件名（与 `locallib.DECLARATION_NAME` 同一个名字；判据对拍两处）。
+DECLARATION_NAME = "RELIABLE-REFERENCES.json"
+
+#: 给种子写声明时用的用户原话（业主 2026-11-22 口径：信任这个文件夹里的都是可用参考）。
+DECLARATION_VERBATIM = (
+    "reference/ 里的文件都是用户提供的可靠参考文献，可入库；"
+    "其它地方的文件只作参考、不可入库"
+)
 
 FORMAT = "agentflow-seed-literature"
 VERSION = 1
 
 _SHA_LEN = 64
+
+#: `library/` 里允许存在、但不由 `literature` 行引用的瞬态目录前缀（A 的下载 staging）。
+#: 它由 `agent_a.run_once` 在 `library/` 下建、跑完就删；崩溃时可能留下 —— 那是残留，
+#: 不是"书架上多了一本书"，所以判据把它单独放过（不放进"游离文件"里报）。
+_TRANSIENT_LIBRARY_PREFIXES: tuple[str, ...] = ("agentflow-stage-",)
+
+#: 投放中途崩掉留下的半份文件（先写临时名、改名落地；见 `seed_workspace`）。
+_TEMP_SUFFIX = ".seedtmp"
 
 
 def default_seed_dir() -> Path:
@@ -78,6 +118,16 @@ def default_seed_dir() -> Path:
     if raw:
         return Path(raw)
     return SET.PROJECT_ROOT / SEED_REL
+
+
+def declaration_text() -> str:
+    """给这批种子落用户声明时的默认模板（`RELIABLE-REFERENCES.json` 的全文）。
+
+    只生成文本、不写盘：声明是用户的话，由用户（或 M 逐字抄用户原话）落到工作区根。
+    投放替用户写声明 = 把"用户点名过"这件事冒充成投放的副作用，所以这里只给模板。
+    """
+    return json.dumps({"paths": [f"{SEED_SUBDIR}/"], "verbatim": DECLARATION_VERBATIM},
+                      ensure_ascii=False, indent=1, default=str) + "\n"
 
 
 def _is_sha256(text: Any) -> bool:
@@ -147,7 +197,7 @@ def _sha256_of(path: Path) -> str:
     return digest.hexdigest()
 
 
-def candidate_chain_lines(books_dir: str = LIB_SUBDIR) -> tuple[str, ...]:
+def candidate_chain_lines(books_dir: str = SEED_SUBDIR) -> tuple[str, ...]:
     """种子文件收编成文献行的正确链（两处 README 的唯一真身）。
 
     改前的文案把第一步写成「把盘上文件登记成候选」—— 那对应的是非 dry 档：它直接
@@ -155,10 +205,10 @@ def candidate_chain_lines(books_dir: str = LIB_SUBDIR) -> tuple[str, ...]:
     步只发现、零写入，候选由 `lit.stage_add` 建；判收与提交在 `lit.admit` /
     `lit.admit_all` 上。
 
-    为什么返回逐行文本：工作区根的 `SEED-README.md` 与种子包自己的 README 必须是同一句。
-    一处说「登记成候选」、另一处说「走候选链」，模型照哪一处做取决于它先读到哪一份 ——
-    所以生成器这里是唯一真身，`seed/literature/README.md` 逐字含同样四行（判据
-    `tests/test_seed_readme_says_the_chain.py` 按本函数的返回值比对）。
+    为什么返回逐行文本：工作区里的 `reference/SEED-README.md` 与种子包自己的 README
+    必须是同一句。一处说「登记成候选」、另一处说「走候选链」，模型照哪一处做取决于它
+    先读到哪一份 —— 所以生成器这里是唯一真身，`seed/literature/README.md` 逐字含同样
+    四行（判据 `tests/test_seed_readme_says_the_chain.py` 按本函数的返回值比对）。
     """
     return (
         "1. **发现（只发现、零写入）**：`search.ingest_local(books_dir=\"" + books_dir + "\", "
@@ -166,9 +216,9 @@ def candidate_chain_lines(books_dir: str = LIB_SUBDIR) -> tuple[str, ...]:
         "页数 / 文本层，`lit_candidates` / `literature` / 两个台账一个字节都不写；"
         "读数里的 `count` / `books[]` 就是候选清单（`ingested` 是「会登记」的预告，不是入库）。",
         "2. **建候选（只对用户点名的那些）**：用户提示词里点名的文件/目录由 M 逐字记在工作区"
-        "根的 `RELIABLE-REFERENCES.json`（`{\"paths\": [\"a.pdf\", \"b/\"], \"verbatim\": "
-        "\"<用户原话>\"}`）；**只有清单里的才可入库**，清单外的只能当研究参考。逐份 "
-        "`lit.stage_add(request_id=<委托号>, entries=[{title: …, "
+        "根的 `RELIABLE-REFERENCES.json`（种子这一批的模板是 `{\"paths\": [\"" + books_dir +
+        "/\"], \"verbatim\": \"…\"}`）；**只有清单里的才可入库**，清单外的只能当研究参考。"
+        "逐份 `lit.stage_add(request_id=<委托号>, entries=[{title: …, "
         "url: <发现读数里那一份的盘上路径>, relevance: \"工作区里已有的本地文献，不是检索来的\"}])` "
         "—— 这一步只写候选表，`literature` 仍是 0 行。",
         "3. **判收**：`lit.stage_list` 回读 → `text.extract(lit_id=\"cand:<槽位>\")` 抽正文 → "
@@ -190,7 +240,7 @@ def candidate_chain_warning() -> str:
 
 
 def _readme_text(manifest: dict[str, Any], seeded: list[dict[str, Any]]) -> str:
-    """生成工作区根的 `SEED-README.md`：说清是什么、不是什么、谁判收、怎么复算。"""
+    """生成 `reference/SEED-README.md`：说清是什么、不是什么、谁判收、怎么复算。"""
     total = sum(int(item["bytes"]) for item in seeded)
     lines = [
         "# SEED-README",
@@ -199,7 +249,7 @@ def _readme_text(manifest: dict[str, Any], seeded: list[dict[str, Any]]) -> str:
         "",
         "## 它们是什么",
         "",
-        f"- {len(seeded)} 份 PDF，共 {total} 字节，落在 `{LIB_SUBDIR}/`。",
+        f"- {len(seeded)} 份 PDF，共 {total} 字节，落在 `{SEED_SUBDIR}/`（工作区的**输入区**）。",
         "- 来源：`agentflow/seed/literature/`（清单 `MANIFEST.json`）。",
         "- 每份都满足种子口径：`download.status == \"ok\"`、`bytes > 0`、盘上文件存在、",
         "  台账 sha256 与盘上 sha256 一致、内容确实是 PDF、`extract.extract_text`",
@@ -209,21 +259,36 @@ def _readme_text(manifest: dict[str, Any], seeded: list[dict[str, Any]]) -> str:
         "",
         "## 它们不是什么（重要）",
         "",
-        "- 未入库：`data/literature.json` 仍是 0 行，没有为它们分配 lit_id、摘要或处置。",
+        "- **未入库、也不在已登记书架上**：`library/` 是已登记书架（`literature.path` 就指向它），",
+        "  本批文件一份都没有进去；`data/literature.json` 仍是 0 行，没有 lit_id、摘要或处置。",
         "- 未判收：种子口径只证明「下载成功且抽得出来」，不证明「与本研究相关、可收录」。",
         "- 不是已验证全文：清单里的抽读字数只是筛选读数，不是收录判据。",
+        "",
+        "## 怎么声明（用户信任这个文件夹）",
+        "",
+        "只有用户点名过的文件才可入库。这一批的默认声明模板（落成工作区根的 "
+        f"`{DECLARATION_NAME}`，`verbatim` 用用户原话）：",
+        "",
+        "```json",
+        declaration_text().rstrip("\n"),
+        "```",
+        "",
+        f"声明里写 `{SEED_SUBDIR}/` 就是把整个输入区点名；**没有声明 ⇒ 一份都不许入库**",
+        "（非 dry 档会以 `not_declared_reference` 受控拒，零写入）。",
         "",
         "## 怎么用",
         "",
         "这批文件不是已入库的文献，A 必须走候选链（顺序与工具名如下，一步都不能省）：",
         "",
-        *candidate_chain_lines(LIB_SUBDIR),
+        *candidate_chain_lines(SEED_SUBDIR),
         "",
         candidate_chain_warning(),
         "",
         "收进 `literature` 之后才有 lit_id，B 的 `run_once` 才处理得到它们。",
         "",
         "谁判收：A（收录判据的唯一入口）。本投放动作不替 A 判收，也不替 A 建候选。",
+        "收编进 `library/` 是 A 判收之后的事（登记行上才有 `path`）；本批文件不会以",
+        "未登记的身份留在书架上。",
         "",
         "## 怎么复算",
         "",
@@ -244,28 +309,122 @@ def _readme_text(manifest: dict[str, Any], seeded: list[dict[str, Any]]) -> str:
         title = str(entry.get("title") or "").strip()
         doi = str(entry.get("doi") or "").strip()
         tail = f" doi={doi}" if doi else ""
-        lines.append(f"- `{LIB_SUBDIR}/{Path(str(entry['path'])).name}` — {title}{tail}")
+        lines.append(f"- `{SEED_SUBDIR}/{Path(str(entry['path'])).name}` — {title}{tail}")
     lines.append("")
     return "\n".join(lines)
 
 
+def _read_literature_rows(workspace: Path) -> list[dict[str, Any]] | None:
+    """只读地读 `library/` 的登记面：`literature` 行的 `path` 集合来源。
+
+    `None` = 没查成（表在盘上但读不出来 / 形状不对），与"0 行"分得开 —— 判据不许把
+    "没查"折成"书架是空的"。
+    """
+    path = workspace / "data" / "literature.json"
+    if not path.is_file():
+        # 没这张表的工作区：登记面是 0 行（不是"没查成"）。判据据此把盘上文件全算游离
+        # —— fail-closed 的方向。
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    rows = payload.get("rows") if isinstance(payload, dict) else payload
+    if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+        return None
+    return rows
+
+
+def _norm_library_rel(raw: Any) -> str:
+    """把一行 `literature.path` 归一成 `library/` 内的相对名（去 `library/` 前缀与 `./`）。"""
+    text = str(raw or "").replace("\\", "/").strip()
+    while text.startswith("./"):
+        text = text[2:]
+    text = text.strip("/")
+    if text.startswith("library/"):
+        text = text[len("library/"):]
+    return text
+
+
+def unregistered_library_files(project: Path | str, *,
+                               literature_rows: list[dict[str, Any]] | None = None
+                               ) -> list[str] | None:
+    """`library/` 里没有任何 `literature` 行引用的文件（工作区相对路径，排序）。
+
+    这是"已登记书架只放已登记的"这条不变量的唯一实现：`library/` 是 A 侧维护的文献库，
+    盘上多出一份没有登记行的 PDF，就等于书架结构异常（2026-11-22 业主指出的那次事故：
+    25 份未登记种子直接铺在 `library/` 根）。
+
+    返回 `None` = 没查成（台账读不出来 / 形状不对）。空列表 = 书架干净。
+    瞬态文件不报：`library/agentflow-stage-*` 下的下载暂存（跑完即删，崩溃残留不是
+    "多了一本书"）与 `.seedtmp` 半份文件。
+    """
+    workspace = Path(project)
+    library = workspace / "library"
+    if not library.is_dir():
+        return []
+    rows = literature_rows if literature_rows is not None else _read_literature_rows(workspace)
+    if rows is None:
+        return None
+    referenced: set[Path] = set()
+    for row in rows:
+        rel = _norm_library_rel(row.get("path"))
+        if not rel:
+            continue
+        try:
+            referenced.add((library / rel).resolve())
+        except OSError:
+            continue
+    out: list[str] = []
+    for path in library.rglob("*"):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(library)
+        if rel.parts and rel.parts[0].startswith(_TRANSIENT_LIBRARY_PREFIXES):
+            continue
+        if path.name.endswith(_TEMP_SUFFIX):
+            continue
+        try:
+            resolved = path.resolve()
+        except OSError:
+            out.append(rel.as_posix())
+            continue
+        if resolved not in referenced:
+            out.append(rel.as_posix())
+    return sorted(out)
+
+
 def seed_workspace(project: Path | str, *, seed_dir: Path | str | None = None,
                    force: bool = False) -> dict[str, Any]:
-    """把种子包投进一个工作区；只写 `library/` 与 `SEED-README.md`。
+    """把种子包投进一个工作区的输入区；只写 `reference/`（含其中的 `SEED-README.md`）。
 
     返回读数（`enabled` / `copied` / `skipped` / `destination` / `marker` /
     `seed_dir` / `already` / `problem` / `files`）。`problem` 非空时 `copied` 一定为 0：
     清单坏了就不投，也不落 README（否则下次重试会被"已投过"挡住）。
+
+    两条拒投（都返回 `problem`、零写入）：
+    - 工作区根上已经有旧的 `SEED-README.md`（改前的形态：README 在根、种子在
+      `library/`）⇒ 这是旧工作区，不许在这上面再投一遍（两种形态混在一起，
+      读的人分不清哪一批在书架上）。旧工作区按 `docs/USER-GUIDE-CLI.md` 重新建。
+    - 种子包清单坏了 ⇒ 不投。
     """
     workspace = Path(project)
     seed = Path(seed_dir) if seed_dir else default_seed_dir()
-    marker = workspace / MARKER_NAME
-    destination = workspace / LIB_SUBDIR
+    destination = workspace / SEED_SUBDIR
+    marker = destination / MARKER_NAME
     out: dict[str, Any] = {
         "enabled": True, "copied": 0, "skipped": 0,
         "destination": str(destination), "marker": str(marker),
         "seed_dir": str(seed), "already": False, "problem": "", "files": [],
     }
+    legacy_marker = workspace / MARKER_NAME
+    if legacy_marker.is_file() and not force:
+        out["problem"] = (
+            f"这是改前形态的工作区（根上有 `{MARKER_NAME}`，种子在 `library/` 里）："
+            "不再往它上面投 —— 两种形态混在一起会污染已登记书架。"
+            f"新落点是 `{MARKER_REL}`（输入区）。要重新投放，按 "
+            "`docs/USER-GUIDE-CLI.md` 的命令序列在**新工作区**上做。")
+        return out
     manifest, problem = read_manifest(seed)
     if manifest is None:
         out["problem"] = problem
@@ -295,8 +454,8 @@ def seed_workspace(project: Path | str, *, seed_dir: Path | str | None = None,
             out["skipped"] += 1
             seeded.append(entry)
             continue
-        # 先写临时名再改名：中途崩掉不会在 library 里留下半份文件。
-        temp = target.with_name(target.name + ".seedtmp")
+        # 先写临时名再改名：中途崩掉不会在输入区里留下半份文件。
+        temp = target.with_name(target.name + _TEMP_SUFFIX)
         temp.write_bytes(data)
         if _sha256_of(temp) != digest:
             temp.unlink(missing_ok=True)
@@ -310,17 +469,23 @@ def seed_workspace(project: Path | str, *, seed_dir: Path | str | None = None,
         out["problem"] = "；".join(problems) or "种子清单里一份可用文件都没有"
         return out
     marker.write_text(_readme_text(manifest, seeded), encoding="utf-8", newline="\n")
-    out["files"] = [str(Path(LIB_SUBDIR) / Path(str(entry["path"])).name) for entry in seeded]
+    out["files"] = [str(Path(SEED_SUBDIR) / Path(str(entry["path"])).name) for entry in seeded]
     if problems:
         out["problem"] = "；".join(problems)
     return out
 
 
 def read_seed_reading(project: Path | str) -> dict[str, Any]:
-    """只读地读一个工作区里有没有种子：不算哈希、不写字节。"""
+    """只读地读一个工作区里有没有种子：不算哈希、不写字节。
+
+    除种子读数外还报两件"书架卫生"的读数：
+    - `legacy_root_marker`：根上有没有改前形态的 `SEED-README.md`（旧工作区）；
+    - `library_unregistered`：`library/` 里没有 `literature` 行引用的文件
+      （`None` = 台账读不出来，没查成）。非空 ⇒ 已登记书架上有多余的东西。
+    """
     workspace = Path(project)
-    marker = workspace / MARKER_NAME
-    destination = workspace / LIB_SUBDIR
+    destination = workspace / SEED_SUBDIR
+    marker = destination / MARKER_NAME
     files = sorted(p for p in destination.glob("*.pdf") if p.is_file()) if destination.is_dir() else []
     return {
         "landed": bool(files) and marker.is_file(),
@@ -328,4 +493,6 @@ def read_seed_reading(project: Path | str) -> dict[str, Any]:
         "bytes": sum(p.stat().st_size for p in files),
         "marker": str(marker),
         "destination": str(destination),
+        "legacy_root_marker": (workspace / MARKER_NAME).is_file(),
+        "library_unregistered": unregistered_library_files(workspace),
     }

@@ -1708,7 +1708,7 @@ def _tool_axes(declared: tuple[str, str, bool]) -> tuple[str, str, bool]:
 # `D-8`（更正，观测时刻 2026-09-26 19:0x）：这里原来是一大片 `文件:行号`，那些行号全部过期了，
 # 而且与 `.noai-paths` 第 35-45 行逐字论证过的纪律相反（"理由里刻意写符号名不写行号"：行号易失，
 # 实测 `normalize_doi` 在几十分钟内就从 26 行漂到 44 行）。所以这里只写符号名（`<Class>.<method>`），
-# 由 `tests/test_capabilities_two_layer.py::test_action_handler_names_exist_as_class_methods` 逐个
+# 由 `tests/test_capabilities_two_layer.py::test_every_handler_name_exists_as_a_class_method` 逐个
 # 断言"这个名字真的存在于对应模块的那个类里"（符号名比行号强：改行号它不响，删了那个方法它必响）。
 # 动作声明的真身是 `specs/<角色>.py` 的 `ACTIONS`（M3 起），本表只做派生。
 
@@ -2273,6 +2273,8 @@ def _tool_write_set_from_source(tool: str) -> frozenset[str] | None:
 #: 有同名顶层函数，`_tool_write_set_from_source` 三个都算得出来。
 #: 留着这张表是因为"算不出"必须是显式登记的一格，而不是静默跳过 ——
 #: 静默跳过会让将来新加的工具全部落在判据之外，而门照样绿（`P16`）。
+#: 下面的说明文只在 `assert_capabilities` 的断言消息里出现（模型读不到）：
+#: 读数条件，不是教法面 —— 所以 `reports/...` 旧名留在这里不构成"教模型写旧落点"。
 _NO_WRITE_SET_SOURCE: dict[str, str] = {
     "analysis.register_report": (
         "写发生在 `agent_c._support.AnalysisReport.persist()`（C 落盘的**唯一**实现："
@@ -2656,15 +2658,21 @@ def assert_capabilities(
     # 进路 ⇒ 否则成孤儿（键集判据与 ① 都看不见）；③ 从主控出发在边图上可达每一个角色 ⇒ 换掉旧等式
     # （`ALLOWED_EDGES["M"] == frozenset(S.ROLES)`）之后"够不到某个角色"仍有人守。
     # 角色名在这里是判据的一部分（判据必须能独立说出"哪一条不对"），它们不是边表的第二份定义 —— 边表
-    # 真身是 `specs/m.py` 的 `edges`。历次业主裁定：2026-10-13「补 M 到 B」· 2026-10-18「给 M 开 V 出边」·
-    # 2026-10-20「撤掉 M→V」⇒ 今天的受限集合是 {F, V}（V 走 `M→B→V` 两跳）。
-    _INDIRECT_FROM_M = frozenset({"F", "V"})
+    # 真身是 `specs/m.py` 的 `edges`。历次业主裁定：2026-10-10「M 不许直接控制 F / V」· 2026-10-13「补 M 到 B」·
+    # 2026-10-18「给 M 开 V 出边」· 2026-10-20「撤掉 M→V」· 2026-10-22「L 只由 B 派（M→L 不许，与 F / V 同一族）」
+    # ⇒ 今天的受限集合是 {F, L, V}（F 走 `M→D→F`、V 走 `M→B→V`、L 走 `M→B→L`）。
+    # L 这一格 2026-11-22（PROMPTFIX）：裁定文本一直写在 `specs/l.py` 的 `LATER_EDGES` 里，
+    # 但代码层这条反真空此前只登记 F / V ⇒ 「M 不含 L」只由
+    # `tests/test_l_collab_surface_is_exactly_this.py` 守，两处强度不同。补进本集合之后，
+    # 给 `specs/m.py` 加一条 L 会在导入期就红，不必等那条判据。
+    _INDIRECT_FROM_M = frozenset({"F", "L", "V"})
     _m_edges = frozenset(ALLOWED_EDGES.get(S.CONDUCTOR_ROLE) or ())
     assert not (_m_edges & _INDIRECT_FROM_M), (
         f"ALLOWED_EDGES[{S.CONDUCTOR_ROLE!r}] 含 {sorted(_m_edges & _INDIRECT_FROM_M)}："
-        "F 按 2026-10-10 的裁定只能间接由父代理转达（F 走 D）——"
-        "主控直接派它仍是被明确设限的那一件事"
-        "（B 已于 2026-10-13、V 已于 2026-10-18 由业主加回，见 `specs/m.py`）"
+        "F / L / V 按业主裁定只能间接由父代理转达（F 走 D、V 走 B、L 走 B）——"
+        "主控直接派它们仍是被明确设限的那一件事"
+        "（B 已于 2026-10-13 由业主加回 M 的出边；V 于 2026-10-18 加回、2026-10-20 撤掉；"
+        "L 于 2026-10-22 新设且从未进 M 的出边 —— 三格的当前真身都是 `specs/m.py` 的 `edges`）"
     )
     for _role in sorted(_INDIRECT_FROM_M):
         _inbound = sorted(frm for frm, tos in ALLOWED_EDGES.items()

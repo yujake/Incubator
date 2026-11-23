@@ -167,6 +167,17 @@ class _Core:
         env = dict(os.environ)
         env.setdefault("PYTHONIOENCODING", "utf-8")
         env.setdefault("PYTHONUTF8", "1")
+        # ---- 实验脚本的数据目录守卫（B2f）。真机：lp-ball-15 的 4 个野表是脚本在
+        # 子进程里 `open("data/…","w")` 写的，`fs.write` 的闸管不到子进程。
+        # 只给这一支的子进程设，本进程一行不碰：钩子由子进程启动期的
+        # `_experiment_guard/sitecustomize.py` 读下面那个环境变量决定装不装。
+        # PYTHONPATH 必须 prepend（保留原有值）：sitecustomize 只在能 import 到时才跑。
+        _guard_dir = Path(__file__).resolve().parents[1] / "_experiment_guard"
+        if (_guard_dir / "sitecustomize.py").is_file():
+            _old_pythonpath = env.get("PYTHONPATH") or ""
+            env["PYTHONPATH"] = str(_guard_dir) + (
+                os.pathsep + _old_pythonpath if _old_pythonpath else "")
+            env["AGENTFLOW_EXPERIMENT_GUARD"] = str(self.workspace_root / "data")
         t0 = time.monotonic()
         from .. import clock as _CLK
 
