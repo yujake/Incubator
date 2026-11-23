@@ -16,16 +16,30 @@
 - ``1`` —— 查过了，有缺失（哪一节缺哪一项，逐条打印）。
 - ``2`` —— 没查成（文档不存在 / 读不到 / 一个角色节都没匹配到）。
 `2` 绝不是 `0`：文档被改名或路径写错时，脚本不能"因为什么都没读到所以通过"。
-用法：python tools/verify_role_specs.py python tools/verify_role_specs.py --json python tools/verify_role_specs.py
---roles N,O,Q --doc docs/ROLE-SPECS-DRAFT-N-O-Q.md
+
+## 写入口的档位纪律（APPENDIX-REGEN，2026-11-23）
+
+生成物里的每一个标签都写着 `AGENTFLOW_LEAN_ENABLED=1`，而产品缺省是关
+（`settings.DEFAULT_LEAN_ENABLED = False`）：若按当前进程环境装配，默认 shell 里跑
+`--write` 就会写出"关档数字 + 开档标签"。所以 `--write` 在装配前先过
+`ensure_declared_lean_tier()`：没声明档位就自设成开档，显式声明关档就受控拒
+（退出码 2，一个字都不写）；装配出来之后再核一次"Lean 专属模块真的装上了"
+（`declared_tier_problems()`），核不过同样拒写。`--only` 让并发的路只写自己负责的那份
+生成物 —— 顺手按另一档重写别人正改着的文档，与写错数字是同一类事故。
+
+用法：python tools/verify_role_specs.py python tools/verify_role_specs.py --json
+python tools/verify_role_specs.py --write python tools/verify_role_specs.py --write --only appendix
+python tools/verify_role_specs.py --roles N,O,Q --doc docs/ROLE-SPECS-DRAFT-N-O-Q.md
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 DOC_REL = Path("docs") / "ROLE-SPECS.md"
@@ -136,7 +150,8 @@ def live_tool_face(*, root: Path) -> tuple[dict | None, str]:
 
     返回的键：`total` / `modules` / `loaded` / `names` / `roles` / `counts_by_role` /
     `by_role`（每个角色的 `total` / `se` / `ext` / `appr` / `names`）/ `se` / `ext` / `appr` /
-    `forms` / `leaks` / `shared_names` / `shared_total` / `lean_off`（`total` / `se` / `ext` / `appr`）。
+    `forms` / `leaks` / `shared_names` / `shared_total` / `lean_off`（`total` / `se` / `ext` / `appr`）/
+    `lean_off_modules`（装配期按关档跳过的模块名；写入口用它核"这一份面是哪一档"）。
     """
     try:
         sys.path.insert(0, str(root / "src"))
@@ -208,6 +223,9 @@ def live_tool_face(*, root: Path) -> tuple[dict | None, str]:
         "shared_names": sorted(shared),
         "shared_total": len(shared),
         "lean_off": {"total": len(off), "se": off_se, "ext": off_ext, "appr": off_appr},
+        # 装配期按关档跳过的模块（`RegistryBuild.lean_off`）。它是"这一份面属于哪一档"的
+        # 直接读数：写入口拿它核声明，不靠标题里那些标签自证。
+        "lean_off_modules": list(built.lean_off),
         "modules_declared": len(_MODULES),
     }, ""
 
@@ -418,6 +436,92 @@ _DEV_SPEC_REL = Path("docs") / "DEVELOPMENT-SPEC.md"
 _APPENDIX_REL = Path("docs") / "ROLE-SPECS-APPENDIX.md"
 _LIVE_KEY_RE = re.compile(r"^(cli_tools_[a-z_]+)(\s*)=(\s*)(\d+)(.*)$")
 
+#: 生成物声明的那一档：附录每节第一行与正文 §R0 标题里写的就是这个环境变量与值。
+#: 它不是"建议"，是那些数字的装配前提 —— 用别的档装配出来的数字配这些标签，就是假读数。
+DECLARED_LEAN_ENV = "AGENTFLOW_LEAN_ENABLED"
+DECLARED_LEAN_VALUE = "1"
+
+
+def _lean_switch(*, root: Path) -> tuple[tuple[bool, str] | None, str]:
+    """现读一次开关梯子（`settings.lean_enabled()`，全仓唯一那条梯子）。
+
+    返回 `((值, 来源), "")`；读不到 / 读不懂时 `(None, 原因)` —— 与 `live_tool_face`
+    同一条三态纪律：没查成不许折成"开着"或"关着"。
+    """
+    try:
+        sys.path.insert(0, str(root / "src"))
+        from agentflow import settings as SET
+    except Exception as exc:  # noqa: BLE001 - import 失败就是"没查成"
+        return None, f"读不到开关梯子 `settings`（{type(exc).__name__}: {exc}）"
+    try:
+        value, source = SET.lean_enabled()
+    except Exception as exc:  # noqa: BLE001 - 词表外的值由 lean_enabled 自己抛
+        return None, f"Lean 开关读不懂（{type(exc).__name__}: {exc}）"
+    return (bool(value), str(source)), ""
+
+
+def ensure_declared_lean_tier(*, root: Path, pin: bool = True) -> tuple[bool, str]:
+    """把这一趟装配钉到生成物声明的那一档；做不到就返回受控拒理由。
+
+    三档结论（`pin` 只在负控里关掉，产品路径永远是 `True`）：
+
+    - 已经是开档（来源 env / settings）⇒ 放行；
+    - 这一趟没有声明任何档位（来源为空 = 产品缺省 `False`）⇒ 自设
+      `AGENTFLOW_LEAN_ENABLED=1` 再读一次，读成开档才放行 —— 默认 shell 里跑 `--write`
+      因此也能得到与标签相符的生成物；
+    - 显式声明关档（来源 env / settings 且值为假）或读不懂 ⇒ 受控拒：生成物的标签声明的是
+      开档，拿关档装配出来的数字去配那些标签就是假读数。宁可一个字都不写。
+
+    为什么"显式关档"不静默覆盖成开档：那会把一次有意的声明折成"没声明"，于是"我明明
+    关了它，生成物却写着开档"这件事在读数上消失。要重生成就显式给 `=1`。
+    """
+    got, why = _lean_switch(root=root)
+    if got is None:
+        return False, f"{why} ⇒ 拒绝写（这一趟装配的是哪一档判不了）"
+    value, source = got
+    if value:
+        return True, f"已经是开档（来源 {source or '缺省'}）"
+    if source:
+        return False, (
+            f"这一趟显式声明的是关档（来源 {source}），而生成物的标签声明的是开档"
+            f"（`{DECLARED_LEAN_ENV}={DECLARED_LEAN_VALUE}`）⇒ 拒绝写："
+            "关档装配出来的数字配开档标签就是假读数。要重生成就先显式设 "
+            f"`{DECLARED_LEAN_ENV}={DECLARED_LEAN_VALUE}`。"
+        )
+    if not pin:
+        return False, (
+            "这一趟没有声明档位（产品缺省是关），而生成物声明的是开档 ⇒ 拒绝写"
+            "（负控档：不自设就是这一支）"
+        )
+    os.environ[DECLARED_LEAN_ENV] = DECLARED_LEAN_VALUE
+    got2, why2 = _lean_switch(root=root)
+    if got2 is None:
+        return False, (f"自设 `{DECLARED_LEAN_ENV}={DECLARED_LEAN_VALUE}` 之后仍读不出开关"
+                       f"（{why2}）⇒ 拒绝写")
+    value2, source2 = got2
+    if not value2:
+        return False, (
+            f"自设 `{DECLARED_LEAN_ENV}={DECLARED_LEAN_VALUE}` 之后开关仍读成关"
+            f"（来源 {source2 or '缺省'}）⇒ 拒绝写（自设没有生效，不能假装装配对了档）"
+        )
+    return True, f"自设 `{DECLARED_LEAN_ENV}={DECLARED_LEAN_VALUE}`（原读数：关，来源 缺省）"
+
+
+def declared_tier_problems(face: dict) -> list[str]:
+    """装配结果必须真的来自声明的那一档：Lean 专属模块一个都不许被按关档跳过。
+
+    这是写入口的第二道闸（防真空）：开关那一格说"开"不等于装配时真的装了 ——
+    装配期把 `formal_tools` 放进 `lean_off` 就说明这一份面是关档的。核不过就不写，
+    免得"标签说开档、数字是关档"从另一条路回来。
+    """
+    problems: list[str] = []
+    off = [str(m) for m in (face.get("lean_off_modules") or ())]
+    if off:
+        problems.append(f"装配期按关档跳过了模块 {off}")
+    if not any(str(n).startswith("formal.") for n in face.get("names", ())):
+        problems.append("装配结果里一件 `formal.*` 都没有")
+    return problems
+
 
 def _pairs_text(counter: dict[str, int], order: tuple[str, ...]) -> str:
     return " / ".join(f"{k} {int(counter.get(k, 0))}" for k in order)
@@ -623,19 +727,29 @@ def refresh_dev_spec(text: str, face: dict) -> tuple[str, int]:
     return "\n".join(out) + ("\n" if text.endswith("\n") else ""), hits
 
 
-def write_readings(*, root: Path, face: dict) -> list[tuple[str, int]]:
-    """把三份文档的数值槽重写成 `face` 的现算值；返回 `[(相对路径, 改了几处)]`。
+#: `--write` 的三个落点：(短名, 相对路径, 重写函数)。
+#: 短名给 `--only` 用：并发的每一条路只写自己负责的生成物，别因为"顺手"就把别人
+#: 正改着的那份文档按另一档重写一遍。
+_WRITE_TARGETS: tuple[tuple[str, Path, Callable[[str, dict], tuple[str, int]]], ...] = (
+    ("role-specs", DOC_REL, refresh_role_specs),
+    ("appendix", _APPENDIX_REL, refresh_appendix),
+    ("dev-spec", _DEV_SPEC_REL, refresh_dev_spec),
+)
+
+
+def write_readings(*, root: Path, face: dict,
+                   only: tuple[str, ...] | None = None) -> list[tuple[str, int]]:
+    """把生成物的数值槽重写成 `face` 的现算值；返回 `[(相对路径, 改了几处)]`。
 
     幂等：同一份 `face` 跑两遍，第二遍每一项都是 0 处改动。
     只碰数值槽与那几节第一行的观测日期，散文与历史留痕一个字不动。
+
+    `only` 给短名（见 `_WRITE_TARGETS`），`None` = 三份都写。缺省行为与改前一致；
+    并发的路用 `--only` 把写面收到自己负责的那一份上。
     """
-    docs = [
-        (DOC_REL, refresh_role_specs),
-        (_APPENDIX_REL, refresh_appendix),
-        (_DEV_SPEC_REL, refresh_dev_spec),
-    ]
+    docs = [t for t in _WRITE_TARGETS if only is None or t[0] in only]
     changed: list[tuple[str, int]] = []
-    for rel, fn in docs:
+    for _name, rel, fn in docs:
         path = root / rel
         if not path.is_file():
             continue
@@ -657,11 +771,20 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--json", action="store_true", help="以 JSON 输出")
     ap.add_argument(
         "--write", action="store_true",
-        help=("把三份文档里的数值槽重写成这一次的现算值（幂等）：正文 §R0 标题与 11 个 `.4` 标题、"
+        help=("把生成物里的数值槽重写成这一次的现算值（幂等）：正文 §R0 标题与 11 个 `.4` 标题、"
               "附录 §R0.1/§R0.2 标题/§R0.3 五格/§S3 第 1 行/11 节五格与两张清单、"
               f"`{_DEV_SPEC_REL.as_posix()}` 的 `cli_tools_*` 键。只碰数值槽与观测日期，"
-              "散文与历史留痕一个字不动。写完照常跑一次门并返回它的退出码 —— "
+              "散文与历史留痕一个字不动。装配前先钉到生成物声明的那一档（Lean 开）："
+              "没声明档位就自设，显式声明关档就受控拒（退出码 2，一个字都不写）。"
+              "写完照常跑一次门并返回它的退出码 —— "
               "写完之后仍然红，说明有判据要的东西不在数值槽里（例如 §R0 表少一行）。"),
+    )
+    ap.add_argument(
+        "--only", action="append", default=None,
+        choices=[name for name, _rel, _fn in _WRITE_TARGETS],
+        help=("只重写其中一份生成物（可重复）：role-specs / appendix / dev-spec。缺省三份都写。"
+              "并发的路各写各的生成物时用它，别顺手把别人正改着的文档按另一档重写一遍。"
+              "只对 --write 有意义。"),
     )
     ap.add_argument(
         "--no-live", action="store_true",
@@ -682,12 +805,31 @@ def main(argv: list[str] | None = None) -> int:
     doc = Path(args.doc) if args.doc else DOC_REL
     if not doc.is_absolute():
         doc = root / doc
+    if args.only and not args.write:
+        # `--only` 是个"缩小写面"的开关；不给 `--write` 时它什么都不会写，却会让人
+        # 以为"只检查了其中一份"——那是一次静默的空操作，按没查成处理。
+        print("[unknown] --only 只对 --write 有意义：不给 --write 时它一份都不会写", file=sys.stderr)
+        return 2
     if args.write:
+        # 装配之前先钉档：生成物的标签声明的是 Lean 开，而产品缺省是关。
+        # 不钉的话，默认 shell 里跑 --write 就是"关档数字 + 开档标签"。
+        tied, tier_why = ensure_declared_lean_tier(root=root)
+        if not tied:
+            print(f"[refused] {tier_why}", file=sys.stderr)
+            return 2
+        print(f"[write] Lean 档：{tier_why}", file=sys.stderr)
         face, why = live_tool_face(root=root)
         if face is None:
             print(f"[unknown] {why}", file=sys.stderr)
             return 2
-        for rel, hits in write_readings(root=root, face=face):
+        # 第二道闸：开关说"开"不等于装配时真的装了 —— 装配面自己得是声明的那一档。
+        tier_problems = declared_tier_problems(face)
+        if tier_problems:
+            print("[refused] 装配出来的不是生成物声明的那一档 ⇒ 一个字都不写："
+                  + "；".join(tier_problems), file=sys.stderr)
+            return 2
+        for rel, hits in write_readings(root=root, face=face,
+                                       only=tuple(args.only) if args.only else None):
             # 走 stderr：`--write` 与 `--json` 同时给时，stdout 只许留那份 JSON
             # （外壳四格 / 下游 `json.loads` 都不接受前面多一行人话）。
             print(f"[write] {rel}: {hits} 处", file=sys.stderr)

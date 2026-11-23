@@ -1,7 +1,7 @@
 # USER-GUIDE-CLI.md —— CLI 侧用户说明书
 
 > **这份文件只管命令行。** 网页那一侧（页面、`/api/*`、写面开关）见
-> [`USER-GUIDE.md`](USER-GUIDE.md)；`--json` 的逐字段契约见 [`CLI-CONTRACT.md`](CLI-CONTRACT.md)；
+> [`USER-GUIDE-WEB.md`](USER-GUIDE-WEB.md)；`--json` 的逐字段契约见 [`CLI-CONTRACT.md`](CLI-CONTRACT.md)；
 > 哪份文档算数见 [`INDEX.md`](INDEX.md)。
 >
 > **本文每一条命令都在 2026-11-21 实跑过**，输出是当次原文（过长的截断处标 `…`）。
@@ -194,8 +194,11 @@ python -m agentflow --root $WS init
 EXIT=0
 ```
 
-落下来的东西（`data/` 是 17 张表各一份 JSON 快照 + 一份追加日志 `events.jsonl`，
-`library/` 是文献库）：
+落下来的东西（`data/` 是 16 张在用表各一份 JSON 快照 + 一份追加日志 `events.jsonl`，
+`library/` 是文献库。下面那份 `init` 输出是 **2026-11-21 的实跑记录**：那时
+`eval_results` 还没退役，所以它还出现在清单里；今天 `init` 只建 16 张，
+`eval_results` 进了 `schema.RETIRED_TABLES`（旧工作区那份文件仍读得出来、带
+`retired=true`，写侧一律拒））：
 
 ```text
 D:\...\ws\data\{analysis_reports,attack_plans,conjectures,counters,dependencies,
@@ -206,13 +209,20 @@ D:\...\ws\data\events.jsonl
 D:\...\ws\library\
 ```
 
+**旧工作区不再兼容（2026-11-22 业主裁定）**：本文写的都是**新布局** —— 正文 `manuscripts/<角色>/`、
+草稿 `work/<角色>/`、交接账本 `work/handoffs.jsonl`、产物 `out/package/` · `out/report/` ·
+`out/exp-logs/`。早于这一版的旧布局（`reports/`、`documents/`、`manuscripts/handoffs.jsonl`、
+`out/paper`、`out/review`、`out/experiments`、`library/<id>/`）**不再支持**：新代码对它报
+「旧布局（不再支持）」，不静默读、不折成空、也不迁移。**要看旧工作区的读数，用当时的代码读** ——
+拿新代码去读 `projects/lp-ball-*` 那批历史工作区，得到的就是这条读数；那不是数据坏了，是「它还是旧布局」。
+
 ### 1.1 三个开关
 
 | 开关 | 干什么 | 什么时候用 |
 |---|---|---|
 | `--force` | 覆盖已有数据（**危险**） | 只在这个目录的数据确认可以丢时 |
 | `--allow-foreign-entries` | 目录里已经有你的东西（PDF、笔记），仍然按工作区初始化 | 第一次把工作区建在自己的资料目录里 |
-| `--seed-literature` | 把历史真机下载的种子文献投进 `library/`（**只放文件，不写台账**） | 想要一批现成的文献种子时 |
+| `--seed-literature` | 把历史真机下载的种子文献投进**输入区** `reference/`（**只放文件，不写台账**） | 想要一批现成的文献种子时 |
 
 **外来目录默认拒绝**（这条守卫是刻意的：在别人的目录里凭空建出整套 `data/`+`library/`
 是不可逆的）：
@@ -237,8 +247,8 @@ EXIT=0
 
 ```text
 $ python -m agentflow --root $WS-seed init --seed-literature
-[init] 种子文献：25 份投到 D:\...\ws-seed\library
-（未入库、未判收；见 D:\...\ws-seed\SEED-README.md）
+[init] 种子文献：25 份投到 D:\...\ws-seed\reference
+（输入区，未入库、未判收；见 D:\...\ws-seed\reference\SEED-README.md）
 [init] 已初始化：D:\...\ws-seed\data
 EXIT=0
 
@@ -246,8 +256,20 @@ $ python -m agentflow --root $WS-seed status      # 只看 literature 那一行
 │ literature         │    0 │ processed=0 downloaded=0 │
 ```
 
-**`library/` 里 25 个 PDF、`literature` 表 0 行** —— 这就是"只放文件、不写台账"的读数：
-种子不是证据，A 仍然要逐篇判收才会有台账行。
+**`reference/` 里 25 个 PDF、`library/` 里一个都没有、`literature` 表 0 行** —— 这就是
+"只放文件、不写台账"的读数：种子不是证据，A 仍然要逐篇判收才会有台账行。
+`library/` 是**已登记书架**（`literature.path` 就指向它），种子不往那里放 ——
+未登记的文件占着书架位置会让 A 侧维护的文献库结构异常。
+
+**落声明**：用户说"这个文件夹里的都是可靠参考文献"时，把下面这份落成工作区根的
+`RELIABLE-REFERENCES.json`（`verbatim` 用用户原话；没有声明 ⇒ 一份都不许入库，
+非 dry 档会以 `not_declared_reference` 受控拒）：
+
+```json
+{"paths": ["reference/"], "verbatim": "reference/ 里的文件都是用户提供的可靠参考文献，可入库；其它地方的文件只作参考、不可入库"}
+```
+
+判收仍由 A 走候选链（`reference/SEED-README.md` 里逐字写着四步）。
 
 ### 1.2 `projects/` 落在哪（**先看这一节再跑 `start`**）
 
@@ -399,9 +421,9 @@ EXIT=0
 
 ### 2.4 `--seed-literature`：投放历史文献种子
 
-与 `init --seed-literature` 是同一件事：**只把 PDF 放进 `<工作区>/library/`，不写台账**
-（见 §1.1 的 25 份 / `literature` 0 行那条读数）。只对 `project` / `research` 两档、
-且只在**新建**工作区时生效；`data/` 已经在了的热启动不投。
+与 `init --seed-literature` 是同一件事：**只把 PDF 放进 `<工作区>/reference/`（输入区），
+不写台账**（见 §1.1 的 25 份 / `library/` 空 / `literature` 0 行那条读数）。只对
+`project` / `research` 两档、且只在**新建**工作区时生效；`data/` 已经在了的热启动不投。
 
 ```powershell
 python -m agentflow --root $WS start --mode research --project seed-run --sid guide-s3 `
@@ -416,6 +438,42 @@ EXIT=0
 
 > 注意：`--dry-run` 的横幅**不单列"要投几份种子"**（只在真跑时打
 > `[init] 种子文献：25 份投到 …`）。想先确认份数，用 `init --seed-literature` 在一个空目录上试（§1.1）。
+
+#### 2.4.1 重新投放的命令序列（复制即用）
+
+改前投到 `library/` 的那批工作区**不就地修**（`projects/lp-ball-16` 是错误投放形态的现场，
+只读留证）。重投在**新工作区**上做，命令在 `agentflow/` 下跑：
+
+```powershell
+# 0) 选一个新的空工作区路径（不要指向已有证据的那个工作区）
+$WS = "D:\Incubator\agentflow\temp\ws-seed"
+
+# 1) 删旧工作区（仅当这个路径确实是要重投的那一个）
+if (Test-Path $WS) { Remove-Item -Recurse -Force $WS }
+
+# 2) 建工作区并把 25 份种子投进输入区 reference/
+python -m agentflow --root $WS init --seed-literature
+
+# 3) 复算种子包（sha256 / 字节 / 抽读字数；任何一份不符 ⇒ 退出码 1）
+python scripts/seed_corpus.py --verify
+
+# 4) 核对三件事：library/ 空 · reference/ 25 份 · 三张台账 0 行
+(Get-ChildItem "$WS\library" -Recurse -File | Measure-Object).Count    # 期望 0
+(Get-ChildItem "$WS\reference" -Filter *.pdf).Count                   # 期望 25
+python -m agentflow --root $WS status | Select-String 'literature|lit_candidates|search_requests'
+
+# 5) 落声明（用户说"reference/ 里都是可靠参考文献"时；verbatim 用用户原话）
+@'
+{"paths": ["reference/"], "verbatim": "reference/ 里的文件都是用户提供的可靠参考文献，可入库；其它地方的文件只作参考、不可入库"}
+'@ | Set-Content -Encoding utf8NoBOM "$WS\RELIABLE-REFERENCES.json"
+
+# 6) 起跑（M 会把声明当白名单，A 走 reference/SEED-README.md 里的判收链）
+python -m agentflow --root $WS start --mode research --project seed-run --task "…"
+```
+
+投完的读数是：`reference/` 25 份 + `reference/SEED-README.md`；`library/` 一个文件都没有；
+`literature` / `lit_candidates` / `search_requests` 三张表 0 行。种子进入 `library/` 只发生在
+A 判收之后（那时才有 `literature` 行与 `path`）。
 
 ### 2.5 真跑要什么（本文**没有**真跑）
 
@@ -654,7 +712,11 @@ $ python -m agentflow --root $WS status-report
 EXIT=0
 ```
 
-它**只读**台账与手稿，写的是 `out/review/STATUS-<ts>.{md,json}`（不写任何表）。
+它**只读**台账与手稿，写的是 `out/report/STATUS-<ts>.{md,json}`（不写任何表）。
+
+> 上面那段实跑是 **2026-11-21 的原文**，当时落的是旧布局的 `out\review\`；现在落 `out\report\`。
+> 旧名不回填 —— 盘上已有的 `out\review\STATUS-*` 属于旧布局（按「不再支持」读）。
+
 `--since 2026-11-21` 只看那之后；`--out` 换落点；`--json` 给外层四格。
 
 ### 3.7 `run-digest`：**CLI 没有这条命令**
@@ -868,7 +930,8 @@ python -m agentflow project run --name guide-proj --projects-dir "$WS\projects" 
 EXIT=0
 ```
 
-落下来的：`data/`、`library/`、`project.json`、`.agentflow-workspace`。
+落下来的：`data/`、`library/`、`project.json`、`.agentflow-workspace`
+（开 `--seed-literature` 时还有输入区 `reference/`，里面是种子 PDF 与 `SEED-README.md`）。
 
 ### 5.4 钱：`budget`
 
@@ -1054,7 +1117,7 @@ python -m agentflow --root $WS doctor
 | 9 | `python -m agentflow --root $WS init` | 0 | `[init] 已初始化：…\ws\data` |
 | 10 | `python -m agentflow --root $WS-foreign init` | **2** | `[init] 拒绝 init：…有 1 个不属于我们的条目：['我的笔记.txt']` |
 | 11 | `… init --allow-foreign-entries` | 0 | `[init] 已初始化：…\ws-foreign\data` |
-| 12 | `python -m agentflow --root $WS-seed init --seed-literature` | 0 | `[init] 种子文献：25 份投到 …\library` |
+| 12 | `python -m agentflow --root $WS-seed init --seed-literature` | 0 | `[init] 种子文献：25 份投到 …\reference` |
 | 13 | `… --root $WS-seed status` | 0 | `literature │ 0 │ processed=0 downloaded=0` |
 | 14 | `cd $WS; … status`（**无** `--root`） | 0 | `工作区 D:\...\ws`（CLIFIX ① 之后缺省 = 当前目录；改前这里是 `D:\Incubator\agentflow`） |
 | 15 | `… status --root $WS`（旗标在后） | **2** | `unrecognized arguments: --root …` |

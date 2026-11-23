@@ -1,6 +1,6 @@
 # CLI 契约：`inspect` 那一组的 `--json`
 
-> 面向上游脚本（以及将来的网页）的机器可读契约。人读的用法见 `docs/USER-GUIDE.md`
+> 面向上游脚本（以及将来的网页）的机器可读契约。人读的用法见 [`USER-GUIDE-CLI.md`](USER-GUIDE-CLI.md)（原 `USER-GUIDE.md` 已归档，见 `INDEX.md` §3.2）
 > 的 CLI 一节；命令分层与新旧对照表见 `agentflow --help-legacy`。
 
 ## 0. 为什么有这一层

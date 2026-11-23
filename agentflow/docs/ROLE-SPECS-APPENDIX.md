@@ -24,8 +24,8 @@
 > 复跑前置：`cd D:\Incubator\agentflow` 且
 > `$env:PYTHONPATH='src'; $env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'`。
 > 三类内容分家：**规格**在正文（判据）／**实测**在此（会过期，过期就重跑）／**历史**在
-> `PROPOSALS.md`、`ROLE-SPECS-DRAFT-*.md` 等（只解释"为什么是现在这样"）。
-> 权威地图：[`INDEX.md`](INDEX.md)。自检失败项的缺陷台账：[`SELF-CHECK-FINDINGS.md`](SELF-CHECK-FINDINGS.md)。
+> `draft/archive-docs/PROPOSALS.md`、`ROLE-SPECS-DRAFT-*.md` 等（只解释"为什么是现在这样"）。
+> 权威地图：[`INDEX.md`](INDEX.md)。自检失败项的缺陷台账：`draft/archive-SELF-CHECK-FINDINGS.md`（2026-11-22 已退役）。
 
 ---
 
@@ -1071,7 +1071,7 @@ SELF-CHECK FAILED
   [FAIL] 五元位第 3 位 owner 是 V
 ```
 
-> **修复轮（2026-10-18）的处理**（逐条依据见 [`SELF-CHECK-FINDINGS.md`](SELF-CHECK-FINDINGS.md)）：
+> **修复轮（2026-10-18）的处理**（逐条依据见 `draft/archive-SELF-CHECK-FINDINGS.md`（2026-11-22 已退役））：
 > **F-1/F-2/F-3**（C）判为**断言/夹具过期并已对齐** —— `rows[0]` 是"产出即登记"（CS-10 ②）之前的写法；
 > I3 断言写死 `≤3` / 夹具写死 20 条在途，是 `interactions.DEFAULTS` 按裁定 C9 改成 30 / 200 之前的口径；
 > 另有一处夹具混用四位概念号与六位关系号（`schema.ID_DIGITS` 已改六位）。
@@ -1163,6 +1163,6 @@ $env:PYTHONPATH='src'; $env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'
 > #6（`46/46`，采集当天实测是 `43/46`）、#10（G 退出码 1）全部过期**，已按上表替换。
 > **修复轮（同日）之后 #6 的 `46/46` 重新成立**，但成立的原因不同：采集当天是"断言过期导致的红"，
 > 修复轮把 F-1/F-2/F-3 对齐到当前口径（CS-10 ② / 裁定 C9 / 六位编号）后才绿 —— 见
-> [`SELF-CHECK-FINDINGS.md`](SELF-CHECK-FINDINGS.md)。
+> `draft/archive-SELF-CHECK-FINDINGS.md`（2026-11-22 已退役）。
 > 判据类的命令（`pytest -q` 全量、`noai_gate`、`verify`、`demo`）本轮**没有跑全**，
 > 表中如实标"未复跑"，不拿旧读数充当今天的读数。

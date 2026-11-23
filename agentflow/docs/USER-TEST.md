@@ -51,7 +51,7 @@ REPRO_RESULT: {"anchor": "written", "touched_main_tex": false}
 > 再调工具 **`doc.paper_compile`**（只给 G）编出 `out/paper/main.pdf`，并读**框架自己写**的
 > 回执 **`out/paper/COMPILE-RECEIPT.json`** 核 `tex_sha256`（是不是盘上那份 `main.tex`
 > 的摘要）与 `pages`；交付论文那一档还要两份验收表（`ACCEPTANCE.md` /
-> `ACCEPTANCE-CHECKS.json`，**M** 写）。构件这个工作区的那支临时脚本
+> `ACCEPTANCE-TARGETS.json`，**M** 写）。构件这个工作区的那支临时脚本
 > （`D:\Incubator\temp\_p53_new_ws.py`）**仍然在按旧路往工作区里写 `code/` 那一对脚本**
 > —— 它不在交付物里、这一轮没有跟着改；所以上面这一段记录**照原样保留**（它是当时真跑出来的）。
 
@@ -111,7 +111,7 @@ python -B -m agentflow.cli --root projects\user-test-1 web --port 0 --json
 
 ```powershell
 cd D:\Incubator\agentflow
-$task = Get-Content -Raw docs\USER-TEST-TASK.txt
+$task = Get-Content -Raw ..\draft\archive-docs\USER-TEST-TASK.txt
 python -B -m agentflow.cli --root projects\user-test-1 run-agent M --task $task `
     --budget-usd 2.0 --wall-clock-sec 3600 --sid user1 --max-steps 45
 ```
@@ -132,7 +132,7 @@ python -B -m agentflow.cli --root projects\user-test-1 run-agent M --task $task 
 （`llm_call` 事件数停在原地，不烧钱）；网页面板里出现那条问题；
 `agentflow inbox`（**不带 `--sid`**）也看得到它并标着会话号 `user1`。
 
-> **为什么这一趟应当会问**：`docs\USER-TEST-TASK.txt` 是**本轮真机用的那一份任务**
+> **为什么这一趟应当会问**：`..\draft\archive-docs\USER-TEST-TASK.txt` 是**本轮真机用的那一份任务**
 > （逐字副本，11 条），它的第 8 条明确写着"关键取舍用 ask_user 问一次，然后停下等回答"。
 > 所以它**不问就收工**本身是一条发现（模型行为层面），不是清单写错了 —— 把它记下来。
 > 也可以换成你自己的任务，但那样"它会不会问"就不确定了。
@@ -145,8 +145,8 @@ python -B -m agentflow.cli --root projects\user-test-1 run-agent M --task $task 
 >
 > | 任务文件 | 它长什么样 | 拿它量什么 |
 > |---|---|---|
-> | `docs\USER-TEST-TASK-QUOTE-FORMAL.txt` | 13 条，**把该怎么派活全写明了**（动作名、参数、报告九节都在里面） | **对照基线**：15 号那趟就是这种"手把手"问法跑通的 |
-> | `docs\USER-TEST-TASK-NAIVE.txt` | 5 段，**一个动作名/工具名/步骤都不给** —— 只说"我要什么"、两件不放心的事、预算、"哪些没查成要说清"、"拿不准来问我" | **主控自己分析并派发**这件事：能不能不靠手把手的步骤把活派对。派不动，就是要加强的地方 |
+> | `..\draft\archive-docs\USER-TEST-TASK-QUOTE-FORMAL.txt` | 13 条，**把该怎么派活全写明了**（动作名、参数、报告九节都在里面） | **对照基线**：15 号那趟就是这种"手把手"问法跑通的 |
+> | `..\draft\archive-docs\USER-TEST-TASK-NAIVE.txt` | 5 段，**一个动作名/工具名/步骤都不给** —— 只说"我要什么"、两件不放心的事、预算、"哪些没查成要说清"、"拿不准来问我" | **主控自己分析并派发**这件事：能不能不靠手把手的步骤把活派对。派不动，就是要加强的地方 |
 >
 > ```powershell
 > cd D:\Incubator\agentflow
@@ -155,7 +155,7 @@ python -B -m agentflow.cli --root projects\user-test-1 run-agent M --task $task 
 > # toolchain.lean_bin，值可以是可执行文件或它所在的目录；见 docs/FORMAL-TOOLCHAIN.md §6）；
 > # 下面这一行是"只想临时指一次"的写法（环境变量优先级高于设置文件）：
 > $env:AGENTFLOW_LEAN_BIN = "_env\lean470\lean-4.7.0-windows\bin"
-> $task = Get-Content -Raw docs\USER-TEST-TASK-NAIVE.txt      # 或换上一行的详细版
+> $task = Get-Content -Raw ..\draft\archive-docs\USER-TEST-TASK-NAIVE.txt      # 或换上一行的详细版
 > python -B -m agentflow.cli --root projects\user-test-1 run-agent M --task $task `
 >     --budget-usd 10 --wall-clock-sec 14400 --sid real16 --max-steps 150
 > ```
@@ -217,7 +217,7 @@ python -B -m agentflow.cli --root projects\user-test-1 answer q0001 --sid user1 
 
 ```powershell
 cd D:\Incubator\agentflow
-$task = Get-Content -Raw docs\USER-TEST-TASK.txt   # 新终端里要重新设一次
+$task = Get-Content -Raw ..\draft\archive-docs\USER-TEST-TASK.txt   # 新终端里要重新设一次
 python -B -m agentflow.cli --root projects\user-test-1 run-agent M --task $task `
     --sid user1 --resume --max-steps 45 --budget-usd 2.0
 ```
@@ -288,7 +288,7 @@ python -B -m agentflow.cli --root . closing --project-dir . --report out\review\
 
 ```powershell
 cd D:\Incubator\agentflow
-$task = Get-Content -Raw docs\USER-TEST-TASK.txt
+$task = Get-Content -Raw ..\draft\archive-docs\USER-TEST-TASK.txt
 python -B -m agentflow.cli --root projects\user-test-1 run-agent M --task $task `
     --sid unattended1 --no-ask --max-steps 45 --budget-usd 2.0
 ```

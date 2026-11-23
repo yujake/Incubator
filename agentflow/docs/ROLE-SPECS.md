@@ -3,7 +3,7 @@
 > 🧭 **导航 1/6 —— 本文件只放规格**：谁是哪个角色、职责与"明确不负责"、状态机、预算与终止、三态、不变式、接口。它是**判据**。
 > 🧭 **导航 2/6 —— 实测附录** → [`ROLE-SPECS-APPENDIX.md`](ROLE-SPECS-APPENDIX.md)：§R0.1–R0.3、各角色 `.4` 工具面明细、全部 `.10` 自检实测、`M.4.2`/`M.4.3`、`M.8` 补核、S1–S3。**读数带日期、不构成判据**。
 > 🧭 **导航 3/6 —— 权威地图** → [`INDEX.md`](INDEX.md)：哪份算数、哪份只作依据；**新增文档必须在那里登记一行**。
-> 🧭 **导航 4/6 —— 三类内容分家**：**规格**（本文件，随代码同步改）／**实测附录**（带日期、会过期，冲突以代码为准）／**历史**（`PROPOSALS.md`、`ROLE-SPECS-DRAFT-*.md` 等，只解释"为什么是现在这样"）。
+> 🧭 **导航 4/6 —— 三类内容分家**：**规格**（本文件，随代码同步改）／**实测附录**（带日期、会过期，冲突以代码为准）／**历史**（`draft/archive-docs/PROPOSALS.md`、`ROLE-SPECS-DRAFT-*.md` 等，只解释"为什么是现在这样"）。
 > 🧭 **导航 5/6 —— 数字口径**：会变的**分份数不手抄**，一律写「现读：`python -m agentflow.cli tools --role X`」；本文件保留的每一个读数旁都带复跑命令。
 > 🧭 **导航 6/6 —— 冲突与分层**：与代码冲突以**代码**为准，冲突本身是**本文的 bug**（见 `docs/DEVELOPMENT-SPEC.md` §12；`DEVELOPMENT.md` 已缩成入口指针，本文原先指的「§10」在那里已不存在）。系统分层 = **八层**，第 8 层是 **Web / 用户端**（见 §0.8）：它**不属于任何角色的权限面**。
 > 📌 **现行设计基线** → [`DESIGN-BASELINE.md`](DESIGN-BASELINE.md)：现行 **51 条**（B01–B51）＋**六层权威序**（§1，业主逐字裁定 > 实现+判据 > `specs/` 声明 > 生成物 > 本文件 > 设计理由）。本文与它冲突时，先按那份 §2 判级（甲乙丙丁），再回来改本文。
@@ -534,7 +534,7 @@ python -c "import sys;sys.path.insert(0,'src');from agentflow import agent_promp
 | 121 | `conductor.review_child` | 细看一个活跃子代理：给它的绝对编码，返回 `conductor.patrol` 里那一项的全部信息（同一份实现），外加整棵名册树（带绝对编码，从里面挑号）。号不合法时受控拒绝并点名哪些号合法（`legal_codes` 上限 20 条 + `legal_total` 总数）：台账里没有 ⇒ `not_in_roster`；有但不活跃（已收工 / 已销号）⇒ `not_active` 并点明它在哪一档。 | `read` | 否 | M | **code** | {'checked','ok','legal','code','item','tree','refused','reason','legal_codes','legal_total','target_state','target_state_label'}；item 的形状与 `conductor.patrol` 的 items 里那一项逐键相同（不合法时是空表） | `tests/test_m_patrol_reads_every_active_child.py` | 与 `conductor.patrol` **同一份实现**（`_patrol_reading`）：`item` 与 patrol 的那一项逐键相同；非法号受控拒绝（`not_in_roster` / `not_active`）并点名 `legal_codes`（上限 `LEGAL_CODES_LIMIT=20`）与 `legal_total` |
 | 122 | `conductor.patrol_verdict` | 对一个活跃子代理下结论：`verdict="pass"`（过）或 `verdict="guide"`（指导意见，`text` 必填）。`guide` 走的就是 `conductor.guide` 那条沿秘书链逐级转发的路（正文只到链尾），回执原样带出（`relay_id` / `delivered_to` / `hops`）；`pass` 在转发台账所在的那同一本账里落一条痕。号不合法或它此刻不活跃 ⇒ 受控拒绝并点名合法号与它在哪一档；被拒的结论不落成「巡过了」。 | `write_local` | **是** | M | **code**,**verdict**；text | {'checked','ok','status','verdict','code','state','target_state','target_state_label','refused','reason','error','chain','chain_text','delivered_to','hops','item_id','relay_id','trace','trace_problem','legal_codes','legal_total','text'}；status 是 passed / delivered / refused / unknown 之一；guide 的回执（relay_id / delivered_to / hops / item_id）原样带出 | `tests/test_m_patrol_reads_every_active_child.py` | 业主口径 ①：`guide` 走的就是 `conductor.guide` 那条**既有秘书链**（同一个 handler `conductor_guide`：`Conductor.resolve_chain` 逐跳校验 + 逐级转发 + 只有链尾开板项，回执原样带出 `relay_id`/`delivered_to`/`hops`），**不是第二份投递路**；② 轮查是规范动作（见上一条），本工具是那四步里的「逐个给 `pass`/`guide`」；③ `pass` 在 `out/secretary/relay.jsonl` 落痕（`kind=patrol_verdict`，与转发同一本账）；对不活跃的号受控拒绝并点名它在哪一档 |
 | 123 | `search.retry_pending` | 把「有元数据、没全文」的文献逐条再取一次（每行一次、按源冷却退避）：四结局 got / failed / no_location / cooled_down。**下载失败 ≠ 这篇不存在**；行上没有可重取地址的如实记 no_location（没去取），冷却中的源跳过而不判失败 | `write_local` | **是** | A | （无）；limit, lit_id | `{checked,scanned,attempted,counts,rows,stopped,coverage_before,coverage_after,note}`；counts 是 `{got,failed,no_location,cooled_down}`；rows[] 每项是 `{lit_id,outcome,source,url,kind,http_status,path,bytes,sha256,error,cooldown_left_sec,note}`；coverage_before / coverage_after 与 `search.shelf` 的 coverage 同形 | `tests/test_the_retry_pending_path_is_honest.py` | 阶段 ③ 2B（2026-10-28，`draft/173` §3 方案 B）：真机那趟 `literature` 32 行里 27 行只有元数据（`download.url` 记着定位链接、note 逐字「要全文请按它重取」），而 A 当时只能一条条手工 `search.download` + `search.register`，10 次里 404/429/400 各两次 ⇒ 四种结局各是一种**处置**：got = 现在可离线引用；failed = 试过没拿到（`kind` 记受控档）；no_location = 没地址 ⇒ 没去取；cooled_down = 源在冷却 ⇒ 跳过（下次还能取）。`failed` 是刻意加的第四档：把 404 折进 no_location 就是把「下载失败」写成「这篇不存在」。冷却表与 `providers` 共用，键是主机归一的源（如 `wiley.com`）或行上记的 provider |
-| 124 | `review.scan_text_integrity` | 扫一批文本里的异常字符（六档：cjk / control / zero_width / replacement / bidi / nbsp），逐条给 `path` / `line` / `column` / `char` / `codepoint` / `kind` / `excerpt`；读不成如实报 `checked=false` + 理由（不折成「零命中」）；`counts` 是盘上的真总数，不受 `limit` 影响。目录递归 `.tex` / `.md` / `.txt` / `.bib` | `read` | 否 | H | **paths**；limit | `{'checked','reason','scanned','findings','counts','detail'}`；findings[] 每项 `{path,line,column,char,codepoint,kind,excerpt}`；counts 是 `{cjk,control,zero_width,replacement,bidi,nbsp}`（六档全在，零也写出来）；detail[] 每项 `{path,checked,reason,files,counts,returned}` | `tests/test_h_can_audit_text_integrity.py` | 2026-10-30 新增（业主 2026-10-30 逐字：「需要保证后续写论文不出现异常字符，给 H 加个工具审」）：① `roles=("H",)` —— 审校者的尺子不只给作者，也不给另外两个只读角色 C / V（判据 g5）；② `cjk` 那一档的码位域是「统一表意（含扩展 A / 兼容 / 部首）+ CJK 标点 + 全角形式」：真论文 `main.tex:936` 那 9 个字符里只有 6 个在 U+4E00–9FFF，另外 3 个是全角标点（`（` `，` `）`），只认统一表意就会少报（判据 g1 钉的是 9）；③ `cjk` 只在 `.tex` / `.md` 里报 —— 代码与注释里出现中文是另一回事，`.txt` / `.bib` 同理（那几档照旧扫 control / zero_width 等五档）；④ 路径闸门与 `fs_tools._resolve` 同形（只收相对路径，`resolve()` 之后仍须在工作区根之下）：只读不等于无边界；⑤ 二进制判据是两条（含 NUL 字节，或解不出 UTF-8）—— 只看解码会把「恰好是合法 UTF-8 的二进制」解成乱码字符，然后报出一串假 `control` |
+| 124 | `review.scan_text_integrity` | 扫一批文本里的异常字符（六档：cjk / control / zero_width / replacement / bidi / nbsp），逐条给 `path` / `line` / `column` / `char` / `codepoint` / `kind` / `excerpt`；读不成如实报 `checked=false` + 理由（不折成「零命中」）；`counts` 是盘上的真总数，不受 `limit` 影响。目录递归 `.tex` / `.md` / `.txt` / `.bib` | `read` | 否 | H | **paths**；limit | `{'checked','reason','scanned','findings','counts','detail'}`；findings[] 每项 `{path,line,column,char,codepoint,kind,excerpt}`；counts 是 `{cjk,control,zero_width,replacement,bidi,nbsp}`（六档全在，零也写出来）；detail[] 每项 `{path,checked,reason,files,counts,returned}` | `tests/test_h_can_audit_text_integrity.py` | 2026-10-30 新增（业主 2026-10-30 逐字：「需要保证后续写论文不出现异常字符，给 H 加个工具审」）：① `roles=("H",)` —— 审校者的尺子不只给作者，也不给另外两个只读角色 C / V（判据 g5）；② `cjk` 那一档的码位域是「统一表意（含扩展 A / 兼容 / 部首）+ CJK 标点 + 全角形式」：真论文 `main.tex:936` 那 9 个字符里只有 6 个在 U+4E00–9FFF，另外 3 个是全角标点（`（` `）`），只认统一表意就会少报（判据 g1 钉的是 9）；③ `cjk` 只在 `.tex` / `.md` 里报 —— 代码与注释里出现中文是另一回事，`.txt` / `.bib` 同理（那几档照旧扫 control / zero_width 等五档）；④ 路径闸门与 `fs_tools._resolve` 同形（只收相对路径，`resolve()` 之后仍须在工作区根之下）：只读不等于无边界；⑤ 二进制判据是两条（含 NUL 字节，或解不出 UTF-8）—— 只看解码会把「恰好是合法 UTF-8 的二进制」解成乱码字符，然后报出一串假 `control` |
 | 125 | `review.scan` | 把一份稿件的机械读数一次拿全（七类 `kinds` 任选）：异常字符 / `\cite` 对 `\bibitem` / `\input` 目标 / `\ref` 对 `\label` / theorem 对 proof / 重复声明 / 正文与台账的数。只读、只给读数；七类各自的三态在 `detail[]`，没查成的在 `bad[]` | `read` | 否 | H | `kinds`；paths；project；limit | `{'checked','kinds','findings','counts','bad','detail','scanned','reason'}`；findings[] 每项九键 `{kind,severity,file,line,column,text,why,ref,codepoint}`；detail[] 每项 `{kind,checked,reason,scanned,counts,returned}`；counts 是 `{files,findings,by_kind,by_severity,facts}` | `tests/test_h_scan_is_one_entry.py`、`tests/test_texaudit.py` | 2026-11-01 新增（业主逐字「继续，且将H的所有机械扫描工具统一成一个方便H使用（注意调整工具和提示词）」）：① 它是 H 的**唯一**统一入口，七类的判据与口径全在 `texaudit.py`（同一份正文只数一遍）；② 旧 7 件**一件不删**：`review.scan_text_integrity` 是 `tests/test_paper_language_english.py` 的第二把尺子（动返回形状就拆了那条对拍）、`review.scan_document` 是写路径 `review_document` 的判据实现；③ `findings[]` 九键恒定（不适用给如实空值）—— `test_tools_returns_declaration.py` 的「同一数组元素顶层键不一致」那条会抓；④ 这七类**不落 finding 台账**：`schema.FINDING_KINDS` 里没有它们（实测 7/7 被 `review.record_finding` 的参数门拒），所以读数只进 `review.report` 的 markdown —— 要落库得先扩词表（FC-27，另立项）；⑤ 口径两条实测教训：引用命令是六个（只认 `\ref` 会静默漏报悬空 `\eqref`）、没被引用过的标签只进 `facts.unused_labels`（真稿 703 个标签里 229 个没被引，报出来就是 229 条假阳性）；⑥ `ledger_match` 只回五个数 + `statement_surplus`，不发明「proof 环境数 == 台账定理类数」（真稿上那两个数是 18 与 7，而真问题是 5 个孤儿环境） |
 | 126 | `ledger.resolve` | 按号 / 按标签关键字查命题台账，返回**候选节点**（命题号 / 类别 / 状态 / 等级 / 标签），**不是树**；找不到时明确说「没有这个号 / 没有命中」（空列表会被读成「还没查」）。按号走 `statementledger.by_id`、按标签走 `by_keywords`（既有两条口径，不另写一套）；概念行就是 `statements` 里的一行，同一套口径 | `read` | 否 | C | **query** | `{'query','checked','mode','found','hits_total','scanned','candidates':[{'stmt_id','kind','status','grade','label'}],'why','reason'}` | `tests/test_the_ledger_tree_is_expanded_on_demand.py` | 2026-11-10 新增（`draft/181` 的 B 批，业主「C 的建树不是全建，是选定一个节点……按某层数展开」）：选根与展开是两件事，所以它**不返回树**；候选不含证明正文（与展开节点的七样分开）。`roles=("C",)`；工具体在 `tools/ledger_tools.py`，索引与两条邻接在 `ledgerindex.py` |
 | 127 | `ledger.expand` | 从选定节点起按 `depth` 层上下展开**局部树**：每个节点带七样（相对关系 / 命题号 / **类别** / 内容（不含证明）/ 等级 / 依赖面（**全路径**按证明路径分组、断链标 broken）/ 被引面（**一层**）），另有 `edges` / `frontier` / `truncated` / `budget_used`；同一问第二次只给增量（`added_nodes` / `already_known`）。`depth` **必填、由调用方决定**（不填 ⇒ 缺参数提示 + 可照抄例子，不静默用默认值） | `read` | 否 | C | **node**；depth（必填）、direction | `{'checked','node','depth','direction','nodes':[{'stmt_id','kind','status','grade','label','statement_full','proof_no','proof_nos','relation','dependency_face','cited_face'}],'edges':[{'from','to','dir','dep_id','path_no','path_group','used_at','used_at_known','status','to_is_statement','external_root'}],'frontier':[{'stmt_id','kind','label','distance','directions'}],'truncated','reasons','budget_used':{'nodes','added','edges','chars','node_budget','char_budget','depth_max'},'added_nodes','already_known','why'}` | `tests/test_the_ledger_tree_is_expanded_on_demand.py` | 2026-11-10 新增（同上）：「污染面」是一种查询模式（`direction="down"` 从被判错的命题往下看），**不是一件工具**；`doc:` / `relation:` / `experiment:` 与三种 `source_*` 是外部根、不建节点；概念与命题平权（不读 `relations` 表、不开特例分支）；同一 `node` + 同一 `depth` 的第二次调用只给增量（无句柄） |
@@ -690,7 +690,7 @@ A 的"没有结果"逐个列：
 ### A.10 自检入口
 
 **命令**：`$env:PYTHONPATH='src'; python -m agentflow.agent_a`。**当次（2026-10-18）**：`[agent_a 自检] 24/24 项通过`；**退出码 0**。
-明细（覆盖/未覆盖对照、失败项）见附录「A.10–M.10」与 [`SELF-CHECK-FINDINGS.md`](SELF-CHECK-FINDINGS.md)。
+明细（覆盖/未覆盖对照、失败项）见附录「A.10–M.10」与 `draft/archive-SELF-CHECK-FINDINGS.md`（2026-11-22 已退役）。
 
 ## B —— 文献整理
 
@@ -802,7 +802,7 @@ B 的"没有结果"逐个列：
 ### B.10 自检入口
 
 **命令**：`$env:PYTHONPATH='src'; python -m agentflow.agent_b`。**当次（2026-10-18）**：`[agent_b 自检] 19/19 项通过`；**退出码 0**。
-明细（覆盖/未覆盖对照、失败项）见附录「A.10–M.10」与 [`SELF-CHECK-FINDINGS.md`](SELF-CHECK-FINDINGS.md)。
+明细（覆盖/未覆盖对照、失败项）见附录「A.10–M.10」与 `draft/archive-SELF-CHECK-FINDINGS.md`（2026-11-22 已退役）。
 
 ## C —— 只读图分析
 
@@ -921,7 +921,7 @@ C 的产出有两类，状态语义完全不同。
 
 **命令**：`$env:PYTHONPATH='src'; python -m agentflow.agent_c`。**当次（2026-10-18，F-1/F-2/F-3/F-7 修后复跑）**：`自检断言：46/46 通过` + `SELF-CHECK DONE（agent_c）：46 项通过 / 0 项失败`；**退出码 0**。
 汇总行与退出码**同源**（任一 `[FAIL]` ⇒ `SELF-CHECK FAILED` ⇒ 退出码 1）；判据在 `tests/test_selfcheck_exit_codes.py`（子进程 + 注入失败负控）。
-明细（覆盖/未覆盖对照、失败项）见附录「A.10–M.10」与 [`SELF-CHECK-FINDINGS.md`](SELF-CHECK-FINDINGS.md)。
+明细（覆盖/未覆盖对照、失败项）见附录「A.10–M.10」与 `draft/archive-SELF-CHECK-FINDINGS.md`（2026-11-22 已退役）。
 
 ## D —— 研究
 
@@ -1054,7 +1054,7 @@ C 的产出有两类，状态语义完全不同。
 ### D.10 自检入口
 
 **命令**：`$env:PYTHONPATH='src'; python -m agentflow.agent_d`。**当次（2026-10-18）**：`SELF-CHECK DONE（agent_d）`；**退出码 0**。
-明细（覆盖/未覆盖对照、失败项）见附录「A.10–M.10」与 [`SELF-CHECK-FINDINGS.md`](SELF-CHECK-FINDINGS.md)。
+明细（覆盖/未覆盖对照、失败项）见附录「A.10–M.10」与 `draft/archive-SELF-CHECK-FINDINGS.md`（2026-11-22 已退役）。
 
 ## E —— 数值实验
 
@@ -1162,7 +1162,7 @@ C 的产出有两类，状态语义完全不同。
 把开关打开（`AGENTFLOW_LEAN_ENABLED=1`，形式化路径真的走检查器）后：`SELF-CHECK DONE（agent_e）：27 项通过 / 0 项失败`，**退出码 0**。
 「未查 1 段」是形式化路径在开关关闭时**没走检查器**：那一段改判"当场拒绝、不留行、理由给出 V 的替代路线"，记成"未查"（没查 ≠ 通过 ≠ 失败）。
 判据：`tests/test_selfcheck_exit_codes.py`（子进程 + 注入失败负控）。
-明细（覆盖/未覆盖对照、失败项）见附录「A.10–M.10」与 [`SELF-CHECK-FINDINGS.md`](SELF-CHECK-FINDINGS.md)。
+明细（覆盖/未覆盖对照、失败项）见附录「A.10–M.10」与 `draft/archive-SELF-CHECK-FINDINGS.md`（2026-11-22 已退役）。
 
 ## F —— 多轮难题攻坚
 
@@ -1297,7 +1297,7 @@ C 的产出有两类，状态语义完全不同。
 ### F.10 自检入口
 
 **命令**：`$env:PYTHONPATH='src'; python -m agentflow.agent_f`。**当次（2026-10-18）**：`SELF-CHECK DONE（agent_f）：失败 0 项`；**退出码 0**。
-明细（覆盖/未覆盖对照、失败项）见附录「A.10–M.10」与 [`SELF-CHECK-FINDINGS.md`](SELF-CHECK-FINDINGS.md)。
+明细（覆盖/未覆盖对照、失败项）见附录「A.10–M.10」与 `draft/archive-SELF-CHECK-FINDINGS.md`（2026-11-22 已退役）。
 
 ## G —— 论文撰写
 
@@ -1429,7 +1429,7 @@ C 的产出有两类，状态语义完全不同。
 ### G.10 自检入口
 
 **命令**：`$env:PYTHONPATH='src'; python -m agentflow.agent_g`。**当次（2026-10-18）**：`SELF-CHECK DONE（agent_g）`；**退出码 0**。
-明细（覆盖/未覆盖对照、失败项）见附录「A.10–M.10」与 [`SELF-CHECK-FINDINGS.md`](SELF-CHECK-FINDINGS.md)。
+明细（覆盖/未覆盖对照、失败项）见附录「A.10–M.10」与 `draft/archive-SELF-CHECK-FINDINGS.md`（2026-11-22 已退役）。
 
 ## H —— 审校（只读）
 
@@ -1553,7 +1553,7 @@ C 的产出有两类，状态语义完全不同。
 ### H.10 自检入口
 
 **命令**：`$env:PYTHONPATH='src'; python -m agentflow.agent_h`。**当次（2026-10-18）**：`SELF-CHECK DONE（agent_h）`；**退出码 0**。
-明细（覆盖/未覆盖对照、失败项）见附录「A.10–M.10」与 [`SELF-CHECK-FINDINGS.md`](SELF-CHECK-FINDINGS.md)。
+明细（覆盖/未覆盖对照、失败项）见附录「A.10–M.10」与 `draft/archive-SELF-CHECK-FINDINGS.md`（2026-11-22 已退役）。
 
 ## V —— 证明级验证（只读）
 
@@ -1677,7 +1677,7 @@ C 的产出有两类，状态语义完全不同。
 
 **命令**：`$env:PYTHONPATH='src'; python -m agentflow.agent_v`。**当次（2026-10-18，F-5/F-6 修后复跑）**：`SELF-CHECK DONE（agent_v）：17 项通过 / 0 项失败`；**退出码 0**。
 台账编号是**六位**（`v-000001`；发号点 `verifications.next_verification_id` 走 `schema.format_id`，旧四位号读侧兼容）；五元位第 3 位的 owner **就是 V**（`evidencebits.BIT_OWNERS["reviewed"] == "V"`，实际签名者 `reviewed_by.verifier == "agent-V"`）。
-明细（覆盖/未覆盖对照、失败项）见附录「A.10–M.10」与 [`SELF-CHECK-FINDINGS.md`](SELF-CHECK-FINDINGS.md)。
+明细（覆盖/未覆盖对照、失败项）见附录「A.10–M.10」与 `draft/archive-SELF-CHECK-FINDINGS.md`（2026-11-22 已退役）。
 
 ## L —— Lean 形式化者（只在 Lean 开关打开时存在）
 
@@ -1788,7 +1788,7 @@ C 的产出有两类，状态语义完全不同。
 | 循环/上限 | 值 | 出处 | 用尽时 |
 |---|---|---|---|
 | 形式化这一路的**模型调用** | **0 次**（形式化是"给源码 + 起检查器"，不是"问模型"） | `agent_l/core.py` 的构造期注释逐字："与 E 同一条纪律：形式化这一路一次模型调用都没有" | — |
-| 单次检查器超时 | `timeout_sec` 缺省 **600 s**（`cfg["timeout"]` 可覆盖；每次调用也可显式给） | `agent_l/core.py::self.default_timeout` | ⇒ `timeout`（**`unknown`**，不是 `failed`） |
+| 单次检查器超时 | `timeout_sec` 缺省 **600 s**（`cfg["timeout"]` 可覆盖；每次调用也可显式给） | `agent_l/core.py::_Core.__init__`（`self.default_timeout`） | ⇒ `timeout`（**`unknown`**，不是 `failed`） |
 | 自检 | 五步（解析 / 版本 / 正样例 / 反控 / Mathlib 与图论）；同一实例只问一次（`_lean_reading_now` 缓存） | `leantoolchain.selfcheck`；`agent_l/core.py` | 不是 `usable` ⇒ 整趟 `unknown`；同一条失败**只报一行** |
 | 失败说明的长度 | 压成一行，上限 400 字符 | `agent_l/_support.one_line` | 真机读数（8 次 `check_formal` 全撞同一件事）就是这条的来历：理由太长时模型每次只读到开头 |
 | 终止条件 | 三态之一落地即终止；**`unknown` 也是终止** —— 不重试同一条错误 | `agent_l/_support.THREE_STATES` | 不重试 |
@@ -1834,7 +1834,7 @@ C 的产出有两类，状态语义完全不同。
 `record` 只写 `experiments` 一行，**不动 `statements`**。命题的 `evidence_kind` 升到 `proof` 需要两件事同时成立：
 L 的形式化（第 4 位）**与** V 的逐行走查签字（`evidencebits.BIT_OWNERS["reviewed"] == "V"`，第 3 位）。
 「L 自己把命题写成熟定理」在结构上不成立，但**不是靠写集**：真拦点是 `store.direct_write_refusal("statements")`（通用写口一律拒）与秘书的 `not_statement_writer`（只有 B 能经那一格落）；写集只是并发读数。
-**已知不一致（如实记在这里，不靠改文档掩盖）**：`evidencebits.py:109` 的 `BIT_OWNERS["formal"]` 今天**仍写着 `E`**，而实际写者是 L（`record` 落的那一行）；
+**已知不一致（如实记在这里，不靠改文档掩盖）**：`evidencebits.py::BIT_OWNERS` 的 `BIT_OWNERS["formal"]` 今天**仍写着 `E`**，而实际写者是 L（`record` 落的那一行）；
 这一格是"第 4 位归谁"的声明，它与 `specs/l.py` / `formal_tools._ROLES_L` 的真身不一致 —— 该由人裁定改哪一处，本文只报读数。
 
 ### L.8 不变式
@@ -2067,7 +2067,7 @@ L 的形式化（第 4 位）**与** V 的逐行走查签字（`evidencebits.BIT
   F 走 `M→D→F`；V 按 2026-10-20 的裁定 M 不再直连，而 V 的入口是 `F` / `B` / `E` 三个
   （`E→V` 2026-10-23 加））。
 - **入参从哪来**：
-  - `plan: Sequence[TaskCall]`（`scheduler.TaskCall`，`scheduler.py:46`）—— **由调用方给**；
+  - `plan: Sequence[TaskCall]`（`scheduler.TaskCall`，`scheduler.py::TaskCall`）—— **由调用方给**；
   - `Policy`（人 + 调用方配）；
   - `registry: Mapping[str, Any]`（`LocalBackend` 的接线；**必须显式给**，
     不给 ⇒ `not_wired`）；

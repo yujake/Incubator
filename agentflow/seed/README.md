@@ -21,7 +21,7 @@
 # 复算：按 MANIFEST.json 逐份重算 sha256 / 字节 / 抽读字数 / U+FFFD；任何一份不符 ⇒ 退出码 1
 python scripts/seed_corpus.py --verify
 
-# 投放：新建工作区时加显式开关（默认关；只复制文件 + 落 SEED-README.md，不写台账）
+# 投放：新建工作区时加显式开关（默认关；只复制文件到输入区 + 落 SEED-README.md，不写台账）
 python -m agentflow.cli --root D:\Incubator\temp\ws init --seed-literature
 python -m agentflow.cli --root D:\Incubator\temp\ws start --mode cold --task "…" --seed-literature
 ```
@@ -31,6 +31,10 @@ python -m agentflow.cli --root D:\Incubator\temp\ws start --mode cold --task "�
 - **种子不等于已入库**：`data/literature.json` 一行都不会被写。A 必须走候选链判收，
   顺序与工具名逐字见 [`literature/README.md`](literature/README.md)（那份文件与生成器
   逐字对拍，别顺手改它）。
+- **投放落点是工作区根的输入区 `reference/`，不是已登记书架 `library/`**：
+  `library/` 里只放被 `literature` 行引用到的文件；种子进去了就是书架结构异常
+  （业主 2026-11-22：「为什么你直接往library里塞文献？这会导致A侧维护的文献库结构异常」）。
+  `SEED-README.md` 也落在 `reference/` 里。
 - 只收 `*.pdf`；HTML 落地页 / 扫描件（无文本层）/ 抽读乱码的不进种子。
 - 去重口径是 `dedup.literature_keys`（DOI → 标题+年 → 标题|*）；逐份理由在 `MANIFEST.json`。
 

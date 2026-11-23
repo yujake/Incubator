@@ -11,7 +11,7 @@
 > 落库时按现读校正了 B19 / B22–B24 三处读数（`conductor.broadcast` 退场少一件工具、Q1 的
 > `literature_pending` 成为收工门第 8 格），其余 48 条逐字保留。
 > **条数**：现行 **51** 条（B01–B51）。另：已作废条款 11 条、部分作废 14 条、分不清 4 条（§4 是
-> AU3 当时的台账指针，计数保留当时口径；其中 `USER-GUIDE.md:405,674` 已在 2026-11-17 按现盘修正），
+> AU3 当时的台账指针，计数保留当时口径；其中 `draft/archive-docs/USER-GUIDE.md:405,674` 已在 2026-11-17 按现盘修正），
 > 逐条见 `temp/au3/DOC-STALENESS-LEDGER.md`；裁定时间线见 `temp/au3/ADJUDICATION-TIMELINE.md`。
 >
 > **路径约定**：本文的路径一律以**仓库根 `D:\Incubator`** 为基准（`agentflow/...` 是项目根，
@@ -35,8 +35,8 @@
 | 2 | **实现 + 判据** | `src/agentflow/**`、`tests/**` | `DESIGN-ROLES.md:3-9` 自述「与代码冲突时以代码为准」；`AGENTS.md:104,121` 说权限面的判据守「两层一致」 |
 | 3 | **声明层** | `src/agentflow/specs/<角色>.py`（`ACTIONS` / `SPEC`） | `ROLE-SPECS.md:344-350` 自述「三处说法不一致时以 `specs/` 为准」。`capabilities.py` 的四张表是它的派生层 |
 | 4 | **生成物** | `docs/ROLE-GUIDE.md`、`docs/SYSTEM-COMPONENTS.md` | `tools/write_system_docs.py` 生成，**不许手改** |
-| 5 | **手写规格散文** | `docs/ROLE-SPECS.md`、`docs/ROLE-SPECS-APPENDIX.md`、`docs/USER-GUIDE.md` | 本次审计对象。**已确认有 11 条整条作废、14 条半条作废** |
-| 6 | **设计理由文档** | `agentflow/DESIGN-ROLES.md` | 自己写着**「不是行为规格」「只引理由，不引行为」**（2026-10-18 自注）。按它判"实现错了"是最常见的一类假异常 |
+| 5 | **手写规格散文** | `docs/ROLE-SPECS.md`、`docs/ROLE-SPECS-APPENDIX.md`、`draft/archive-docs/USER-GUIDE.md`（归档件） | 本次审计对象。**已确认有 11 条整条作废、14 条半条作废** |
+| 6 | **设计理由文档** | `draft/archive-DESIGN-ROLES.md`（原 `agentflow/DESIGN-ROLES.md`；2026-11-22 按业主指令退役，见 `INDEX.md` §3.2） | 自己写着**「不是行为规格」「只引理由，不引行为」**（2026-10-18 自注）。按它判"实现错了"是最常见的一类假异常 |
 | — | **不算裁定** | `docs/READING-MAP.md`、各文档里的工具条数/行数/字节数 | 读数，不是规格。`AGENTS.md:83` 已定「数字是读数不是规格」 |
 
 **一句话**：AU2 若引 `DESIGN-ROLES.md`、`ROLE-SPECS.md` 的散文当"设计"，**先过本基线的 §3**；
@@ -73,7 +73,7 @@
 | **甲** | 若有人说「F 的出边应为 `A B C E V`（`ROLE-SPECS.md:187`），代码是 `A C D E V`」 | 反了 —— 代码跟的是 **2026-11-07 业主裁定**，文档过时 ⇒ 是**丁**不是甲。**真正的甲要长这样**：把 `F→B` 加回去（违反 2026-11-07 逐字裁定） |
 | **乙** | `ROLE-SPECS.md:1536` 说 V 有 **9** 件通用写工具、`:1561` 与 `:1608` 说 **10** 件 | 同一份文档自相矛盾，而裁定只定了「escalate 是 `write_local`」（2026-11-06），没定"散文里该写几件" ⇒ 交业主/作者裁 |
 | **丙** | `capabilities.WRITE_SETS["B"]` / `["E"]` / `["F"]` 都含 `conjectures`，而 `ROLE-SPECS.md:277-288` 三行都没写 | 猜想台账是 2026-11-07/08 之后加的，`83d322f1`（2026-11-15）只记了"conjectures 写集搬家"，**没有一条逐字裁定说"写集要含 conjectures"** ⇒ 要人确认这是有意的登记还是漏记 |
-| **丁** | `USER-GUIDE.md:405,674`「收工门**八格**」的**旧组成**（含 `paper`） | 2026-11-14 裁定 `paper` 退出收工判定；2026-11-16 Q1 加 `literature_pending` 之后仍是八格、但**成员不同**（`paper` 不在门里）⇒ 旧组成是丁；2026-11-17 原文已按现盘修正 |
+| **丁** | `draft/archive-docs/USER-GUIDE.md:405,674`「收工门**八格**」的**旧组成**（含 `paper`） | 2026-11-14 裁定 `paper` 退出收工判定；2026-11-16 Q1 加 `literature_pending` 之后仍是八格、但**成员不同**（`paper` 不在门里）⇒ 旧组成是丁；2026-11-17 原文已按现盘修正 |
 
 ---
 
@@ -226,10 +226,10 @@ M  （空）
 
 **B23 — `paper` 改落 `readings.paper`（verdict 四档），由 `M` 判断时机，不进 `machine_pass`。**
 「退出收工判定」不是「这一格不用查」：读收回执/PDF 过期这类事实**仍要报**，只是不再让 `machine_pass` 为假。
-出处：同 B22；`28707d01`（把 `paper` 移出格的最后一处断言）；`tests/test_closing_gate.py:966`。
+出处：同 B22；`28707d01`（把 `paper` 移出格的最后一处断言，该断言已于 2026-11-22 随 `paper` 格退役删除，见 `closing.py::RETIRED_CHECKS`）。
 
 **B24 — 论文段的完成定义 = 八格全过且没有 blocker（`paper` 仍不在门里）。**
-出处：`c2cead2b`（2026-11-16，业主逐字『apply补丁，预算批准』）；`tests/test_paper_pack_names_blockers_verbatim.py:10`。
+出处：`c2cead2b`（2026-11-16，业主逐字『apply补丁，预算批准』）；`tests/test_paper_pack_names_blockers_verbatim.py` 的模块 docstring「三处（改前都写成另一个名字）」一节。
 注意 `statements_unsigned` / `mapping_not_written` **不落在八格里**；`paper_pdf_is_stale` 只是 `readings.paper` 的读数。
 
 **B25 — 每格三态，`unknown` **绝不是**通过。**
@@ -271,12 +271,12 @@ M  （空）
 `unresolved_review` 作为终态保留，但**不再由计数器触发**；**不提供任何轮次读数**
 （没有 `round_budget` / `remaining` / `capped` 这类字段）。
 裁定 **2026-11-15**，业主逐字：「撤掉这个上限，一切由智能体自行决定，不做读数」。
-出处：`99f6a08f`；`src/agentflow/tools/review_tools.py:2142`；`src/agentflow/specs/h.py:40`；
-`src/agentflow/capabilities.py:1346`；`agent_skills.py:1436`。唯一受控值 `close_as="unresolved_review"`。
+出处：`99f6a08f`；`src/agentflow/tools/review_tools.py::_sign_accepted_revision`、`src/agentflow/specs/h.py::ACTIONS`；
+`src/agentflow/capabilities.py::_KNOWN_TOOL_ONLY_PARAMS`、`agent_skills.py::_b_skills`。唯一受控值 `close_as="unresolved_review"`。
 
 **B32 — 命令行 `--budget-usd 0` = **不设上限**（与 `--wall-clock-sec 0` 同口径）；
 额度是**累计**上限，可以略微越界（最后一步已发出的费用收不回），越界只是读数不是错误。**
-出处：`docs/USER-GUIDE.md:177-185`（2026-10-27 修）。
+出处：`draft/archive-docs/USER-GUIDE.md:177-185`（2026-10-27 修）。
 
 **B33 — 并发 plan 上限 2（机械拦截）。**
 裁定 **2026-11-13**（业主 Q3+Q4）。
@@ -359,7 +359,7 @@ B30 的 `max_concurrency`（瞬时任务并发）是**三个不同的闸**，别
 **B48 — 三态纪律：把"没查成"与"查过了没问题"折平，是本仓反复踩的坑。**
 退出码三态：`0 = clean` / `1 = 已知问题` / `2 = 没查成`；`unknown` **绝不是** `clean`。
 命令行侧另有六档（0–5），但那是**运行结局**，与这里的 `noai_gate` 三态不是一回事。
-出处：`AGENTS.md:146-156`；`USER-GUIDE.md:630-641`；本机现读 `EXIT_CODE_BY_STOP` 值域 `{0..5}`。
+出处：`AGENTS.md:146-156`；`draft/archive-docs/USER-GUIDE.md:630-641`；本机现读 `EXIT_CODE_BY_STOP` 值域 `{0..5}`。
 
 **B49 — 判据不许为了守它而保留过时设计（过时的判据可以动掉）。**
 裁定 **2026-11-12**，业主逐字：「不要为了守判据就保留过时设计，过时的判据可以动掉」。
@@ -389,7 +389,7 @@ ROLE-SPECS.md:1466,1472,1476-1478  H 的 review_rounds 上限         ← 2026-1
 ROLE-SPECS.md:1616           「V 只能召唤 F」                      ← 2026-11-05「V 不应该有出边」
 ROLE-SPECS.md:1617           「V 只能被 B/F 召唤」                 ← 2026-10-23 加 E→V（现 B/E/F）
 ROLE-SPECS-APPENDIX.md:871   unresolved_review = 到轮数上限         ← 2026-11-15
-USER-GUIDE.md:405,674        「收工门八格」的旧组成（含 paper）     ← 2026-11-14 paper 退出；2026-11-17 按 Q1 改成八格（含 literature_pending）
+draft/archive-docs/USER-GUIDE.md:405,674        「收工门八格」的旧组成（含 paper）     ← 2026-11-14 paper 退出；2026-11-17 按 Q1 改成八格（含 literature_pending）
 ```
 
 **半作废 14 条**（哪半句死、哪半句活，逐句在台账 §1–§4）：
@@ -413,7 +413,7 @@ ROLE-SPECS-APPENDIX.md:915   V 的 10 件 write_local（另处写 11）
 
 **分不清 4 条**（缺一次现算，不是设计问题）：
 `ROLE-SPECS.md:125`（Issue.code 去重数）、`:329-342`（web 面 4 个读数）、
-`USER-GUIDE.md:180-181`（各模式缺省预算）、`:220-318`（网页页数/端点/读面）。
+`draft/archive-docs/USER-GUIDE.md:180-181`（各模式缺省预算）、`:220-318`（网页页数/端点/读面）。
 缺的具体命令写在台账 §5。
 
 ---

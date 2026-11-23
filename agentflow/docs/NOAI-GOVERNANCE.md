@@ -9,7 +9,9 @@
 > 本文件讲**机制本身**：门怎么判、为什么这么判、以及它**做不到**什么。
 > 配套的两份人读文档是：
 > - `AGENTS.md`（给 AI 编码者的硬约束，含 `NOAI-MANIFEST` 清单区块）；
-> - `NOAI-REVIEW-REGISTER.md`（本轮逐文件复核登记表：谁该读哪些符号、批准栏）。
+> - `draft/archive-NOAI-REVIEW-REGISTER.md`（2026-09-24 那一轮的逐文件复核登记表：谁该读哪些符号、
+>   批准栏）。**2026-11-22 按业主指令退役到 `draft/`**（`docs/INDEX.md` §3.2 有理由）——
+>   它与本节并列，但不再参与今天的批准流程；批准面读 `.noai-approvals.json`。
 >
 > 机器可读的三份是：`.noai-paths`（禁改区清单）、`.noai-approvals.json`（hash 台账）、
 > `scripts/noai_gate.py`（门，退出码 0/1/2）。

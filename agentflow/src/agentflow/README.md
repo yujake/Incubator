@@ -22,11 +22,11 @@
 | **工具面**（模型能调什么） | `tools/` 下 19 个 `*_tools.py` + `base.py`（装配、只读过滤、调用期权限判据）。见 [`tools/README.md`](tools/README.md) |
 | **台账与存储** | `store.py`（锁 / 原子写 / 事务 / 事件日志 / ID / rebuild）、`schema.py`（表与校验）、`events` 相关在 `jsonlfile.py` / `sessions.py` |
 | **派生读数的校验** | `verify.py`（不变量审计）、`closing.py`（收工门）、`gates.py` / `judges.py` / `judge.py` / `obligations.py` |
-| **产物健全性** | `wellformed/`（19 个 `.py`：台账、稿件、签、roster、acceptance 各一档）。见 [`wellformed/README.md`](wellformed/README.md) |
+| **产物健全性** | `wellformed/`（21 个 `.py`：台账、稿件、签、roster、acceptance 各一档）。见 [`wellformed/README.md`](wellformed/README.md) |
 | **稿件族** | `manuscript*.py`（14 个：形态、号、冻结、收编、退役、提交…） |
 | **命题族** | `statement*.py`（6 个）与 `claimanatomy.py` / `claims.py` |
 | **证明族** | `proof*.py`（6 个）、`v_*.py`（18 个，V 的逐项判据） |
-| **秘书（跨角色消息与名册）** | `secretary*.py`（36 个）+ `interactions.py`（冻结契约与闸门） |
+| **秘书（跨角色消息与名册）** | `secretary*.py`（37 个）+ `interactions.py`（冻结契约与闸门） |
 | **时间与预算** | `clock*.py`（17 个）、`budget.py` / `modelcost.py` / `tokenmeter.py` |
 | **模型调用** | `llmseam.py`（统一的缝）、`modelgw.py` / `modelclient.py` / `llm.py` |
 | **提示词** | `agent_prompts.py`（版本账在 `docs/PROMPT-HISTORY.md`；写死的正文含 A 的检索式教法 `specs/a.py::SEARCH_STYLE`）、`agent_skills.py`、`promptkit.py`（段与号段） |

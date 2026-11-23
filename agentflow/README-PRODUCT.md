@@ -18,8 +18,8 @@
 - **人（运维 / 开发者）** —— 要装它、跑它、改它、发布它。
 - **模型（编码 agent）** —— 进门先读 [`AGENTS.md`](AGENTS.md)（FC-27 禁改区），
   再读 [`DEVELOPMENT.md`](DEVELOPMENT.md)（改代码前先读哪几节）。
-  角色模型的提示词**不来自本文件**：那是 `src/agentflow/specs/*.py` 的声明与工作区里的
-  `skills/`，本文件不重复它们。
+  角色模型的提示词**不来自本文件**：那是 `src/agentflow/specs/*.py` 的声明与随提示词
+  渲染的 skills 手册（`agent_skills.index_block`，2026-11-22 起不再落工作区），本文件不重复它们。
 
 ## 这个目录里有什么
 
@@ -27,12 +27,12 @@
 |---|---|---|
 | `src/agentflow/` | 产品代码（包本体）。见 [`src/agentflow/README.md`](src/agentflow/README.md) | 人 |
 | `tests/` | 判据（pytest）。**本机开发门，不随仓库交付**：干净 clone 里没有这个目录；逐文件说明见本机的 `tests/README.md`（不入库） | 人 |
-| `docs/` | 规格、设计理由、历史、验收剧本。**哪份算数看 [`docs/INDEX.md`](docs/INDEX.md)**（本目录刻意不放 README：`docs/*.md` 每一份都必须在 INDEX 里登记，多一份 README 就会让那条判据红） | 人 + 生成物（`ROLE-GUIDE.md` / `SYSTEM-COMPONENTS.md` 由 `tools/write_system_docs.py` 现算） |
+| `docs/` | 规格、设计理由、历史、验收剧本。**先读 [`docs/README.md`](docs/README.md)（管顺序：新手/跑/改/查设计/看限制）**，**哪份算数看 [`docs/INDEX.md`](docs/INDEX.md)**（`docs/*.md` 每一份都必须在 INDEX 里登记 —— 新增时两处都要登记） | 人 + 生成物（`ROLE-GUIDE.md` / `SYSTEM-COMPONENTS.md` 由 `tools/write_system_docs.py` 现算） |
 | `scripts/` | 长期工具（门、审计、重冻、种子）。见 [`scripts/README.md`](scripts/README.md) | 人 |
 | `tools/` | 发布门的编排与一次性探针。见 [`tools/README.md`](tools/README.md) | 人 |
 | `data/` | 默认工作区（`--root` 缺省就指这里）的**空台账**，入库。见 [`data/README.md`](data/README.md) | `agentflow.cli init` |
 | `seed/` | 文献种子包（历史真机下载成功、抽读无乱码的 PDF）。见 [`seed/README.md`](seed/README.md) | `scripts/seed_corpus.py` |
-| `specs/` | 角色声明（duty/policy/boundary/动作表）。**预设机制已于 2026-11-22 退役**：A 的检索式教法住在 `specs/a.py::SEARCH_STYLE`，来龙去脉见 [`docs/PRESET-RETIREMENT.md`](docs/PRESET-RETIREMENT.md) | 人（FC-27 禁改区） |
+| `src/agentflow/specs/` | 角色声明（duty/policy/boundary/动作表）。**预设机制已于 2026-11-22 退役**：A 的检索式教法住在 `specs/a.py::SEARCH_STYLE`，来龙去脉见 [`docs/PRESET-RETIREMENT.md`](docs/PRESET-RETIREMENT.md) | 人（FC-27 禁改区） |
 | `ui/` | 用户端前端工程（Preact + Vite）。见 [`ui/README-DEV.md`](ui/README-DEV.md) | 人 + 生成物（`src/types.ts` / `src/theme/generated/theme.css`） |
 | `src/agentflow/web/` | 用户端的样式令牌、两份生成器，以及**入库的构建产物** `static/`（clone 下来不装 node 也能起网页）。见 [`src/agentflow/web/README.md`](src/agentflow/web/README.md) | 人 + `pnpm -C ui build` |
 | `src/agentflow.egg-info/` | `pip install -e .` 的元数据。**不要手改**：重装即覆盖 | `pip` |
@@ -40,8 +40,8 @@
 | — | `example/` 已退役（2026-11-21 仓库清洁：取消跟踪，原件在 `draft/archive-example/`） | — |
 | `AGENTS.md` | FC-27 禁 AI 区（唯一主题），与 `.noai-paths` 逐条一致 | 人 |
 | `DEVELOPMENT.md` | 改代码先读哪几节（入口指针） | 人 |
-| `DESIGN*.md`（五份） | **当初为什么这么设计**，不是行为规格 | 人 |
-| `NOAI-REVIEW-REGISTER.md` | FC-27 逐条审计台账（历史证据） | 人 |
+| — | `DESIGN*.md`（五份）已退役（2026-11-22 业主指令）：原件在 `draft/archive-DESIGN-*.md`，映射与理由见 [`docs/INDEX.md`](docs/INDEX.md) §3.2；现行设计基线读 [`docs/DESIGN-BASELINE.md`](docs/DESIGN-BASELINE.md) | — |
+| — | `NOAI-REVIEW-REGISTER.md` 已退役（2026-11-22 业主指令）：原件在 `draft/archive-NOAI-REVIEW-REGISTER.md`；FC-27 的现行面读 [`docs/NOAI-GOVERNANCE.md`](docs/NOAI-GOVERNANCE.md) + `.noai-approvals.json` | — |
 | `pyproject.toml` / `requirements.txt` | 打包与依赖（Python ≥ 3.11） | 人 |
 | `config.yaml` / `settings.example.json` | 配置样例；真 `settings.json` 被忽略（可含 key） | 人 |
 | `.noai-paths` / `.noai-approvals.json` | 禁改区清单 / 批准台账（两份都是禁改区，见 AGENTS.md） | 门与签字流程 |
@@ -82,8 +82,8 @@ python scripts/lint_rules.py
 
 - **上游（本仓库内）**：仓库根的 [`../AGENTS.md`](../AGENTS.md)（agent 的工作方式规矩 R1–R4）；
   离线演示 `demo/` 已整条退场（2026-11-22 DEMORETIRE，见下"边界"一节），
-  要看产物长什么样请读一个真机工作区的 `out/` / `reports/`（本地、不入库）。
-- **下游（运行时）**：每个工作区 `<ws>/` 自己是一套：`data/` 台账、`reports/`、`out/`、`sessions/`。
+  要看产物长什么样请读一个真机工作区的 `out/` / `manuscripts/` / `work/`（本地、不入库；`reports/` 已于 2026-11-22 退役）。
+- **下游（运行时）**：每个工作区 `<ws>/` 自己是一套：`data/` 台账、`manuscripts/` 正文、`work/` 草稿与交接账本（`work/handoffs.jsonl`）、`out/` 产物、`sessions/` 会话。
   产品代码**不写工作区以外的地方**。
 - **不入库的邻居**：`../draft/`（业主裁定与施工单，本地草稿）、`../projects/`（真机运行数据）、
   `../test/`、`../temp/`、`../_env/`（Lean 工具链）。它们都在 `.gitignore` 里，
@@ -91,7 +91,8 @@ python scripts/lint_rules.py
 
 ## 边界（别在这里找的东西）
 
-- **没有 `docs/README.md`**：见上表那一行的理由；文档地图是 `docs/INDEX.md`。
+- **`docs/README.md` 与 `docs/INDEX.md` 分工**：README 管**顺序**（拿到 docs/ 先读哪份），
+  INDEX 管**权威性**（哪份算数、哪份是历史、读数怎么复算）。
 - **`example/`、`temp/` 被 `.gitignore` 覆盖**
   （2026-10-18 业主清理），但因为早已跟踪，`git ls-files` 仍会列出它们。
   ⇒ **往这些目录里新增文件（包括 README）不会进版本库**，除非显式 `git add -f`。

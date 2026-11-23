@@ -7,15 +7,22 @@
 > **本文与另外两份的关系**：
 > - [`../DEVELOPMENT.md`](../DEVELOPMENT.md) —— **入口**（一页，指路：改代码前先读哪三节）；
 > - **本文** —— **规范**（判据都在这；每节首行标 `[规范]`）；
-> - [`DEVELOPMENT-APPENDIX.md`](DEVELOPMENT-APPENDIX.md) —— **历史**（取样记录、FC 覆盖矩阵、
->   已知不一致清单；每节首行标 `[附录·历史]`，**不构成判据**）。
+> - [`../draft/archive-docs/DEVELOPMENT-APPENDIX.md`](../../draft/archive-docs/DEVELOPMENT-APPENDIX.md) ——
+>   **历史**（取样记录、FC 覆盖矩阵、已知不一致清单；每节首行标 `[附录·历史]`，**不构成判据**）。
+>   **2026-11-22 DOCS-CLEANUP 归档**（`INDEX.md` §3.2 有理由）：它自述"每一个数字都是当时读数、
+>   本轮一律未复跑"，描述的不是今天的行为 ⇒ 移出交付面，落点在 `draft/archive-docs/`。
 >
 > **配套文档**：
 > - [`ROLE-SPECS.md`](ROLE-SPECS.md) —— 各角色（A–H + V）与主控（M）的详细规格；
 >   节数与必备子节由 `python tools/verify_role_specs.py` 当次产出（本文不抄定值）
-> - [`PROPOSALS.md`](PROPOSALS.md) —— **已裁决的缺口与提案**（`P-` 要人做 / `G-` 已接受但**必须继续可见** / `N-` 不是缺陷）
+> - [`../draft/archive-docs/PROPOSALS.md`](../../draft/archive-docs/PROPOSALS.md) —— **已裁决的缺口与提案**
+>   （`P-` 要人做 / `G-` 已接受但**必须继续可见** / `N-` 不是缺陷）。**2026-11-22 DOCS-CLEANUP 归档**
+>   （`INDEX.md` §3.2 有理由：它自述"记的是登记当时的状态，不是当前状态"）；编号仍是测试
+>   docstring 的引用命名空间，落点改为归档件。
 > - [`NOAI-GOVERNANCE.md`](NOAI-GOVERNANCE.md) —— FC-27 门的机制与人工批准流程
-> - [`../NOAI-REVIEW-REGISTER.md`](../NOAI-REVIEW-REGISTER.md) —— FC-27 **人读侧**登记表
+> - [`../draft/archive-NOAI-REVIEW-REGISTER.md`](../../draft/archive-NOAI-REVIEW-REGISTER.md) ——
+>   FC-27 **人读侧**登记表（2026-09-24 那一轮）。**2026-11-22 已按业主指令退役到 `draft/`**
+>   （`INDEX.md` §3.2 有退役理由）；今天的批准面读 `.noai-approvals.json` + `NOAI-GOVERNANCE.md`
 > - [`../AGENTS.md`](../AGENTS.md) —— **只**覆盖禁 AI 区 FC-27 这一节，不重复本文内容
 > - [`INDEX.md`](INDEX.md) —— 上述文档的索引与"按角色怎么读"
 > - `../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md` ——
@@ -46,7 +53,7 @@
    只写在 §0.2 的 `LIVE-READINGS` 块里，正文只写**命令 + 键名**。
    理由见 §1.1：同一个数字抄在几处，读者分不出哪一处是当次值、哪一处是历史快照。
 2. **历史不许当当前值**：带 `S1` / `S2` / `当时` / `观测 YYYY-MM-DD` / `原写` 这些字样的句子
-   是**历史读数**，一律住在 `DEVELOPMENT-APPENDIX.md`，且**不构成判据**。
+   是**历史读数**，一律住在 `draft/archive-docs/DEVELOPMENT-APPENDIX.md`，且**不构成判据**。
 3. **"没查成"必须写"没查成"**（三态纪律，见 §5 纪律 1）：`unknown` / 未复跑 ✅ 允许；
    把"没查"写成某个数 ❌ 一律是缺陷（§8-P16）。
 
@@ -59,8 +66,11 @@
 与它的负控 `test_the_documented_readings_criterion_is_not_vacuous`（把一块读数打回过期值，
 判据必须红 —— 这是"判据本身不是橡皮图章"的证明）。
 
-**linter 的当次三栏（日常档）**：`error 0 / warning 18 / info 45`（观测 2026-11-21，
-复跑 `python -B scripts/lint_rules.py`；下面这段 21 / 19 是 2026-11-17 的历史读数 —— 2026-11-17 的 R003 登记 —— `session_ids_with_questions`
+**linter 的当次三栏（日常档）**：`error 0 / warning 28 / info 46`（观测 2026-11-23 05:2x，
+复跑 `python -B scripts/lint_rules.py`；2026-11-22 这一天并行施工的几条路各带进几条
+R002/R003/R009，实测过 22 / 46 —— 其中 **1 条 R009 的 error** 落在
+`tests/test_library_has_one_landing.py`（SEEDFIX 那条路新增的判据文件），不属本笔；
+本笔（B5）改过的文件在 linter 输出里 0 条）；2026-11-23 05:1x 复跑时那 1 条 R009 error 落在 `tests/test_agent_skills.py:717` —— 本路（NUMBERS-FINALIZE）只改 4 份文档、未碰 `tests/`；下面这段 21 / 19 是 2026-11-17 的历史读数 —— 2026-11-17 的 R003 登记 —— `session_ids_with_questions`
 在 `sessions.py` / `userio.py` 各一份属刻意分层，登记进 `SAME_NAME_ALLOWED` ⇒ 那一对不再报
 `warning`（21→19），同一登记让 R003 多出一条 info（44→45）。此后同一天的 SYSCT1（`adc44a8a`）
 新增 `sign_counting.py`，它的 `read_rows`（读任意一本 jsonl 台账、坏行照报）与
@@ -86,15 +96,15 @@ LIVE-READINGS:BEGIN
 # 量法说明：前 11 个键与 `tests/test_release_all.py::measured_readings()` 逐键同名同量法。
 # 判据不认的键（拼错）与判据要的键缺失，都会被同一处报出来 —— 所以加键要同时改判据。
 lint_rules_rules        = 12   # `len(RULES)`；复跑 `python -B scripts/lint_rules.py` 摘要行的"规则 N 条"。其中 R004/R006 已退休、编号保留，`RETIRED_RULES` 里逐条给了去向
-lint_rules_warning      = 18   # `python -B scripts/lint_rules.py`（日常档）末行 warning 栏（2026-11-21 复跑 18 —— 2026-11-21 的 SYSGUARD/SYSRESIDUE 两路新增 `sysresidue.py` 一条 R002 warning（`is None` 之后返回空容器那一处已写理由，仍是 warning 一档）；2026-11-20 复跑 17；2026-11-17 复跑 21 —— 那天的 R003 登记 `session_ids_with_questions` 为刻意分层 ⇒ 21→19，同日 SYSCT1 新增 `sign_counting.read_rows` 与 `manuscripts.read_rows` 同名一条 R003 ⇒ 19→21；当次逐条清单以 linter 输出为准，不在这条注释里复述）
-lint_rules_info         = 45   # 同一档的 info 栏（2026-11-20 复跑仍是 45）
-lint_rules_strict_warning = 94 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（2026-11-22 00:5x 复跑 94：PRESETRETIRE 退役 `composition.py` / `presets.py` 两个模块，它们各带一条 R007 ⇒ 96 → 94，两个值都当场复跑过（把两个文件拷回 `src/` 再跑一遍 96，删掉再跑 94）；00:25 那次 97、00:0x 那次 96 —— 两次之间树上有并行路落的改动，那 1 条差额不逐个归因，逐条清单以 `--strict` 输出为准；2026-11-21 复跑 96；2026-11-20 复跑 93；2026-11-17 复跑 89；日常档那条 R007 info 在这一档拆成逐模块 warning，另加 R003 `read_rows` 那一对）
-lint_rules_strict_info  = 44   # 同一档的 info 栏（2026-11-20 复跑 44）
-noai_paths_glob         = 46   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`（2026-11-21：tests/golden 四条随 tests 不入 git 一并摘除，50 → 46；2026-11-20 收口后曾是 49 → 50，attack_tools 的 auth-audit 登记行落盘）
-noai_paths_unique       = 43   # 上述条目行按第一栏去重：`(... | ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count`（同上：tests/golden 四条摘除，47 → 43）
+lint_rules_warning      = 28   # `python -B scripts/lint_rules.py`（日常档）末行 warning 栏（2026-11-23 04:5x 复跑 28；03:32 那趟是 24；A-3-EXEC 同日 03:08 按现盘追平 22 → 24，此前 2026-11-22 16:0x 是 22 —— B5 收尾时实测；再往前 2026-11-21 复跑 18、2026-11-20 复跑 17、2026-11-17 复跑 21；当次逐条清单以 linter 输出为准，不在这条注释里复述）
+lint_rules_info         = 46   # 同一档的 info 栏（2026-11-22 16:0x 复跑 46；2026-11-20 复跑 45）
+lint_rules_strict_warning = 105 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（2026-11-23 04:5x 复跑 105；03:33 那趟是 101；A-3-EXEC 同日 03:08 按现盘追平 98 → 101；此前 2026-11-22 16:0x 是 98：B5 收尾时实测（并行路同批落的几条 R002/R003/R009 把 94 抬到 98）；00:5x 那次 94、00:25 那次 97；逐条清单以 `--strict` 输出为准；2026-11-21 复跑 96；2026-11-20 复跑 93；2026-11-17 复跑 89；日常档那条 R007 info 在这一档拆成逐模块 warning，另加 R003 `read_rows` 那一对）
+lint_rules_strict_info  = 45   # 同一档的 info 栏（2026-11-22 16:0x 复跑 45；2026-11-20 复跑 44）
+noai_paths_glob         = 70   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`（2026-11-23 04:5x 复跑 70；00:2x 那趟是 47：`src/agentflow/closing.py` 按 eval-criteria 登记进清单，46 → 47；此前 2026-11-21：tests/golden 四条随 tests 不入 git 一并摘除，50 → 46；2026-11-20 收口后曾是 49 → 50，attack_tools 的 auth-audit 登记行落盘）
+noai_paths_unique       = 67   # 上述条目行按第一栏去重：`(... | ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count`（2026-11-23 04:5x 复跑 67；00:2x 那趟是 44：`closing.py` 是新路径，43 → 44；tests/golden 四条摘除那次是 47 → 43）
 noai_paths_categories   = 7    # `.noai-paths` 里 `[category: …]` 的分组数
 tools_star_tools_py     = 19   # `(Get-ChildItem src/agentflow/tools -Filter '*_tools.py').Count`
-schema_tables           = 17   # `python -c "import sys;sys.path.insert(0,'src');import agentflow.schema as s;print(len(s.TABLES))"`
+schema_tables           = 16   # `python -c "import sys;sys.path.insert(0,'src');import agentflow.schema as s;print(len(s.TABLES))"`（2026-11-22 16:0x 复跑 16：DATAHYGIENE 退役 `eval_results`（`RETIRED_TABLES` 那一档），17 → 16）
 noai_gate_pytest_collected = 124 # `python -m pytest tests/test_noai_gate.py --collect-only -q -p no:cacheprovider` 的 `N tests collected`
 cli_tools_total        = 126  # `python -m agentflow.cli tools` 首行"工具总数：N"（含 store 的完整装配口径；Lean 关档少三件 `formal.*`，本块钉的是 Lean 开档）
 cli_tools_modules      = 18  # 同一行"已装模块 N"
@@ -116,7 +126,7 @@ webui_routes_post       = 11   # 同上，按 `x[0] == 'POST'` 计数（2026-11-
 webui_routes_reader     = 19   # `len(r.READER_ROUTES)`（同上那条复跑命令的第四个数；只读面子表，2026-11-21：18 → 19，多的是 `/api/actions`）
 webui_routes_writer     = 12   # `len(r.WRITE_ROUTES)`（同上那条复跑命令的第五个数；写面子表，2026-11-21：9 → 11 → 12）
 webui_event_kinds       = 6    # `python -c "...from agentflow.webui import sse;print(len(sse.EVENT_KINDS))"`
-webui_test_files        = 54   # `(Get-ChildItem tests -Filter 'test_webui*.py').Count`（2026-11-21 23:58 按现盘复跑追平：53 → 54；再往前 52 → 53 是 2026-11-20 收口第三批之后，45 → 52 是同日 WEBCLEAN 收口之后，36 → 45 是 2026-11-19，35 → 36 是 2026-11-14 的 +test_webui_cli_landing_alignment.py）。**这一格是活读数**：`tests/test_release_all.py` 的 `webui_readings()` 现算盘上条数、`live_reading_problems()` 逐键比对，写死旧值必红；`tests/` 按业主裁定不入 git（`.gitignore` 忽略、索引清空）⇒ 它跟的是**工作树**，不是索引 —— 2026-11-21 那句"刻意不抬"的旧口径（把它当"入库交付物口径"钉死）已作废，别再照它写
+webui_test_files        = 56   # `(Get-ChildItem tests -Filter 'test_webui*.py').Count`（2026-11-23 03:32 复跑 56；A-3-EXEC 同日 03:1x 按现盘追平 54 → 56；再往前 2026-11-21 23:58 是 53 → 54，52 → 53 是 2026-11-20 收口第三批之后，45 → 52 是同日 WEBCLEAN 收口之后，36 → 45 是 2026-11-19，35 → 36 是 2026-11-14 的 +test_webui_cli_landing_alignment.py）。**这一格是活读数**：`tests/test_release_all.py` 的 `webui_readings()` 现算盘上条数、`live_reading_problems()` 逐键比对，写死旧值必红；`tests/` 按业主裁定不入 git（`.gitignore` 忽略、索引清空）⇒ 它跟的是**工作树**，不是索引 —— 2026-11-21 那句"刻意不抬"的旧口径（把它当"入库交付物口径"钉死）已作废，别再照它写
 LIVE-READINGS:END
 ```
 
@@ -141,7 +151,7 @@ LIVE-READINGS:END
 | 档 | 长什么样 | 住哪 | 谁能改 |
 |---|---|---|---|
 | **当次值** | `LIVE-READINGS` 块里的 `名字 = 数字` | 本文 §0.2 | 跑一遍块里的命令，随手改 |
-| **历史读数** | 带 `S1` / `S2` / `当时` / `观测 2026-…` / `原写` | `DEVELOPMENT-APPENDIX.md` | 只许加，不许改（改它等于伪造历史） |
+| **历史读数** | 带 `S1` / `S2` / `当时` / `观测 2026-…` / `原写` | `draft/archive-docs/DEVELOPMENT-APPENDIX.md` | 只许加，不许改（改它等于伪造历史） |
 | **区间读数** | `N1–N2（<UTC+8 观测时刻> 观测）` | 本文正文（只在无法钉住的量上） | 每次观测重写一行 |
 
 ---
@@ -204,9 +214,9 @@ LIVE-READINGS:END
 
 | 字面量 | 量法（复跑命令） |
 |---|---|
-| 动作总数 **67** | `python -c "import sys;sys.path.insert(0,'src');from agentflow import capabilities as c;print(c.two_layer_reconciliation()['total'])"`（2026-11-09 T1 收口：B 的「稿 → 签 → 录入」拆成两个显式动作 `land_manuscript` / `ingest_manuscript` ⇒ 64 → 66；2026-11-11 业主裁定：B 补 `open_polish_copy`（优化副本是冻结后的补救入口，此前不在动作表 ⇒ 冻结后不可达）⇒ 66 → 67） |
-| 可召唤动作数 **56** | 同上，再算 `sum(len(c.actions_for(r)) for r in c.ALLOWED_EDGES['M'])`（2026-11-09 T1 收口：B 新增两条可召唤动作 ⇒ 54 → 56；2026-11-11 B 的 `open_polish_copy` ⇒ 56 → 57；此前 2026-10-22 加 `G.write_mapping` ⇒ 54 → 55；2026-10-20 撤 `M→V` ⇒ 57 → 54） |
-| 子命令数 **29** | `python -m agentflow.cli --help`（数子命令那一栏；判据直接读 `build_parser()` 的 choices。2026-10-24 加 `stats` 那一组 ⇒ 27 → 28；2026-10-27 加 `interject`（给主控 M 插话）⇒ 28 → 29） |
+| 动作总数 **67** 个 | `python -c "import sys;sys.path.insert(0,'src');from agentflow import capabilities as c;print(c.two_layer_reconciliation()['total'])"`（2026-11-09 T1 收口：B 的「稿 → 签 → 录入」拆成两个显式动作 `land_manuscript` / `ingest_manuscript` ⇒ 64 → 66；2026-11-11 业主裁定：B 补 `open_polish_copy`（优化副本是冻结后的补救入口，此前不在动作表 ⇒ 冻结后不可达）⇒ 66 → 67） |
+| 可召唤动作数 **56** 个 | 同上，再算 `sum(len(c.actions_for(r)) for r in c.ALLOWED_EDGES['M'])`（2026-11-09 T1 收口：B 新增两条可召唤动作 ⇒ 54 → 56；2026-11-11 B 的 `open_polish_copy` ⇒ 56 → 57；此前 2026-10-22 加 `G.write_mapping` ⇒ 54 → 55；2026-10-20 撤 `M→V` ⇒ 57 → 54） |
+| 子命令数 **29** 个 | `python -m agentflow.cli --help`（数子命令那一栏；判据直接读 `build_parser()` 的 choices。2026-10-24 加 `stats` 那一组 ⇒ 27 → 28；2026-10-27 加 `interject`（给主控 M 插话）⇒ 28 → 29） |
 
 **两条使用规矩**（与 §1.1 同源）：
 1. **引用任何计数前先在这张表里找它**：找到"有判据"⇒ 可以信当次值；
@@ -275,7 +285,7 @@ LIVE-READINGS:END
 > `draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md` §2
 > 「分层：七层，每层只有一份判据」；**那一份里没有 ⑧ 这一层**（业主 2026-10 裁定补上）。
 > 所以本文的分层表比 `draft/35` **多一层** —— 这是**刻意的增量**，不是抄写错误。
-> 两处冲突时以本文为准；`draft/35` 里那句"七层"是**历史**（`DEVELOPMENT-APPENDIX.md` 的 A1 同理）。
+> 两处冲突时以本文为准；`draft/35` 里那句"七层"是**历史**（`draft/archive-docs/DEVELOPMENT-APPENDIX.md` 的 A1 同理）。
 
 **系统的形状可以概括成"声明在上、实现在下、判据各一份"**。下面每一层给四件事：
 **职责 / 入口文件 / 契约与判据 / 已知边界**。路径一律**相对工作区根**（`agentflow/` 之下）。
@@ -352,7 +362,7 @@ LIVE-READINGS:END
 - **契约与判据**：`llmseam` 的每次调用都落 `usage_ledger`（唯一写入方是
   `tokenmeter.TokenMeter.charge`）；`tests/test_llmseam_charge_discipline.py`、
   `tests/test_agent_loop.py`。
-- **已知边界**：**无真实 provider key ⇒ LLM 路径未端到端跑过**（`DEVELOPMENT-APPENDIX.md`
+- **已知边界**：**无真实 provider key ⇒ LLM 路径未端到端跑过**（`draft/archive-docs/DEVELOPMENT-APPENDIX.md`
   的 A6 / FC-14）。这条不许写成"已落地端到端"。
 
 **⑥ 接线面**
@@ -361,7 +371,7 @@ LIVE-READINGS:END
   `projects.py`（一个项目一个文件夹）。
 - **契约与判据**：**未接线 ⇒ 不进登记表**（不假装"没接线"是"跑过了"）；
   `tests/test_doc_code_consistency.py` 逐格对拍子命令数（§1.2 那格）。
-- **已知边界**：`cli.py` 的 `--role choices` 曾经写死 A–D（`DEVELOPMENT-APPENDIX.md` 的 D2），
+- **已知边界**：`cli.py` 的 `--role choices` 曾经写死 A–D（`draft/archive-docs/DEVELOPMENT-APPENDIX.md` 的 D2），
   已修；**判断这件事的方法是 `python -m agentflow.cli tools --role E` 的退出码**，不是读注释。
 
 **⑦ 质量面**
@@ -409,12 +419,15 @@ LIVE-READINGS:END
     `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import sse;print(len(sse.EVENT_KINDS))"`，
     键 `webui_event_kinds`；
   - 静态产物在 **`src/agentflow/web/static/`**：外壳 `static/index.html`（1760 B）+
-    `static/assets/index.E982ZhKl.js`（235357 B）+ `static/assets/index.D8bpVw-o.css`（26775 B）；
-    （2026-11-21 23:58:34 实测 —— FINALBUILD 的最后一次前端重建，`tsc --noEmit` rc=0 之后
-    `vite build`；同一棵未再改动的 `ui/src` 在 23:59:43 又被独立重建了一次（BOARDACK 复跑），
-    两次产物**逐字节相同** ⇒ 盘上 mtime 是 23:59:43，名字与字节就是上面这三个。
-    上一版 23:30 那一支是 `index.BX71CFjf.js` 232741 B / `index.BKU7S_4o.css`
-    26692 B，再上一版 WEBFIX3 是 `index.zxqG6--g.js`。复跑
+    `static/assets/index.D_vFOdu4.js`（242065 B）+ `static/assets/index.D8bpVw-o.css`（26775 B）；
+    （2026-11-22 18:3x 实测 —— WEBUI-PATHS-2 路的前端重建：Acceptance 页不再自算
+    `reportPath`（报告缺省归 `cli.DEFAULT_REPORT_REL`）、`types.ts` 重生成之后，
+    `tsc --noEmit` rc=0、`vite build` 一次成功；
+    CSS 与上一版逐字节相同（`index.D8bpVw-o.css` 26775 B），JS 换名是因为页面代码变了。
+    上一支是 16:44 那次（`index.Cmy8M3Nu.js`，242101 B），再上一支是 15:40 那次（`index.Bx--8D_-.js`），
+    再上一支是 B3 正名那一版的 `index.DTvFDX4Q.js`（那一版只在 15:23 的产物里，
+    已被那次重建清掉 —— 字节数按它当时的盘上事实，本文不另抄一份），再上一版
+    FINALBUILD 是 `index.E982ZhKl.js`，WEBFIX3 是 `index.zxqG6--g.js`。复跑
     `(Get-ChildItem src/agentflow/web -Recurse -File | Select-Object Name,Length)`；
     `outDir` 带 `emptyOutDir: true` ⇒ 每次重建都清空目录，盘上**只有**这三件，
     旧哈希文件不会被留下；文件名带构建哈希 ⇒ 重建前端就会换名；这三个名字 / 字节数与盘上不一致时
@@ -432,12 +445,12 @@ LIVE-READINGS:END
   - 另外两条形态被单独钉住：**静态路由与目录穿越**（`GET /static/<file>` 只服务
     `web/static/` 之下的文件，穿越一律 404、**不回落 `index.html`**）、
     **`/api/*` 未知路径不许吐 HTML**（给 API 客户端一段 HTML 比 404 更坏）；
-  - 判据文件共 **54** 个（`test_webui*.py`）；复跑
+  - 判据文件共 **56** 个（`test_webui*.py`）；复跑
     `(Get-ChildItem tests -Filter 'test_webui*.py').Count`，键 `webui_test_files`
     （2026-11-21 23:58 按现盘复跑实测：54（53 → 54；再往前 53 是 2026-11-20 收口第三批之后，
     WEBCLEAN 收口时是 52，2026-11-19 是 45；这一格随并行施工变 —— 本节第一次量到的是 10，
     2026-10-23 是 15，之后每落一条 `test_webui*.py` 就加一；所以散文只钉当次数，
-    54 个文件名不逐个抄进来，免得名单本身成为第二份会漂的口径）。
+    56 个文件名不逐个抄进来，免得名单本身成为第二份会漂的口径）。
     **这一格是活读数，不是历史快照**：判据 `tests/test_release_all.py` 的 `webui_readings()`
     现算盘上条数、`live_reading_problems()` 逐键比对，写死旧值必红；`tests/` 按业主裁定
     不入 git（`.gitignore` 忽略、索引清空）⇒ 它跟的是**工作树**而不是索引。2026-11-21 早先那句
@@ -471,7 +484,7 @@ LIVE-READINGS:END
 |---|---|---|---|---|
 | **人**（本项目的负责者） | 全部；尤其是**禁 AI 区**与**发布门** | `DEVELOPMENT.md`（入口）→ 本节 §3.2 → §5（六条硬纪律）→ §9（提交与评审）→ §10（发布检查） | `ROLE-SPECS.md` §0（公共约定） | — |
 | **AI 编码者**（你） | 全部；**并且必须先用证据反驳评审者**（§9.2） | `AGENTS.md`（**禁 AI 区**，最短、最硬）→ §5（六条硬纪律）→ §8（禁止模式清单）→ §6（DoD） | `ROLE-SPECS.md` 里**你要改的那个角色**那一节 | 不读 §8 就动手；改了禁 AI 区却自称"顺手改一下" |
-| **审计者** | 用 §6 的 checklist 与 §10 的门的**通过判据**逐条质问 | §6（DoD）→ §10（发布检查）→ §11（FC 状态口径）→ `DEVELOPMENT-APPENDIX.md` A6（FC 覆盖矩阵） | `ROLE-SPECS.md` 对应角色的 §"不变式"与 §"三态与失败模式" | 把"未核实"读成"已通过"（§11 的状态口径是**三档**：已落地 / 部分 / 未落地） |
+| **审计者** | 用 §6 的 checklist 与 §10 的门的**通过判据**逐条质问 | §6（DoD）→ §10（发布检查）→ §11（FC 状态口径）→ `draft/archive-docs/DEVELOPMENT-APPENDIX.md` A6（FC 覆盖矩阵） | `ROLE-SPECS.md` 对应角色的 §"不变式"与 §"三态与失败模式" | 把"未核实"读成"已通过"（§11 的状态口径是**三档**：已落地 / 部分 / 未落地） |
 
 ### [规范] §3.2 阅读顺序（一张图）
 
@@ -488,7 +501,8 @@ DEVELOPMENT-SPEC.md §2   八层里你要改的那一层（职责 / 入口 / 判
    ↓
 docs/ROLE-SPECS.md       你改的那个角色的规格（工具面 / 状态机 / 预算 / 三态 / 不变式）
    ↓
-DESIGN-*.md              设计理由（**不构成判据**；与代码冲突时以代码为准）
+draft/archive-DESIGN-*.md  设计理由（**不构成判据**；2026-11-22 按业主指令移出交付面，
+                            原件名 `DESIGN-*.md`，映射见 `INDEX.md` §3.2）
 ```
 
 **"改代码前先读哪三节"**（`DEVELOPMENT.md` 也逐字给这三条）：**§5（六条纪律）→ §8（禁止模式）→ §6（DoD）**。
@@ -500,14 +514,15 @@ DESIGN-*.md              设计理由（**不构成判据**；与代码冲突时
 2. **本文**（规范）
 3. **`ROLE-SPECS.md`**（角色规格）
 4. `AGENTS.md`（仅禁 AI 区，**与 `.noai-paths` 同级权威**，两处必须逐条一致）
-5. `DESIGN.md` / `DESIGN-TOOLS.md` / `DESIGN-INTERACTIONS.md` / `DESIGN-ROLES.md` /
-   `DESIGN-CONDUCTOR.md`（**设计理由**；它们描述"为什么"，不描述"现在是什么"；份数按
-   `(Get-ChildItem DESIGN*.md).Count` 当次读）
+5. **设计理由**（原五份 `DESIGN*.md`）：**2026-11-22 按业主指令退役到
+   `draft/archive-DESIGN-*.md`**（`INDEX.md` §3.2 逐条给理由）。它们在交付面上不再存在，
+   所以这一层只剩一句话：**读它们是理解取舍，不描述"现在是什么"** —— 不引"行为"，
+   也不按它们判"实现错了"。现行设计基线见 `DESIGN-BASELINE.md`（B01–B51）。
 6. `README.md`（**已知过期**；它的两处读数有判据盯着，其余以代码为准）
 7. `../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md`
    （**现状导读**：逐项带"相对工作区根"的路径。**不构成判据** —— 它排在本清单最后一位，
    冲突时以代码与本文为准。⚠️ 它的 §2 是**七层**，本文是**八层**，见 §2 开头）
-8. `DEVELOPMENT-APPENDIX.md`（**历史**；不构成判据，只用来回答"当时是什么样、为什么"）
+8. `draft/archive-docs/DEVELOPMENT-APPENDIX.md`（**历史**；不构成判据，只用来回答"当时是什么样、为什么"）
 
 ### [规范] §3.4 盘点方法（怎么量本仓的"现在长什么样"）
 
@@ -549,8 +564,8 @@ python -m agentflow.cli tools --json          # 同一份装配的机器可读�
 
 | 数 | 量的是什么 | 当次值 |
 |---|---|---:|
-| **清单 glob 数** | `.noai-paths` 的**条目行**数（**同一个文件可以登记两次**） | **46** |
-| **唯一路径数** | 上述 glob 去重后的路径数 | **43** |
+| **清单 glob 数** | `.noai-paths` 的**条目行**数（**同一个文件可以登记两次**） | **70** |
+| **唯一路径数** | 上述 glob 去重后的路径数 | **67** |
 | **台账条目数** | `.noai-approvals.json` 里**有 hash 记录的路径**数 = **需要签字的行数** | **不写定值**（每签一个字就变） |
 | **禁改区类别数** | `.noai-paths` 的 `[category: …]` 分组数 | **7** |
 | **欠签** | 台账条目 × 2 名 reviewer（`REQUIRED_APPROVALS_ON_HIT = 2`） | **不写定值**（每签一个字就变） |
@@ -558,12 +573,12 @@ python -m agentflow.cli tools --json          # 同一份装配的机器可读�
 **前两格与类别数**的复跑命令逐字如下（它们就是 `LIVE-READINGS` 的 `noai_paths_*` 三个键）：
 
 ```powershell
-(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count                  # ⇒ 46
+(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count                  # ⇒ 70 条条目
 (Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:' |
-  ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count           # ⇒ 43
+  ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count           # ⇒ 67 条唯一路径
 (Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:' |
   ForEach-Object { if ($_.Line -match '\[category:\s*([a-z\-]+)\]') { $matches[1] } } |
-  Select-Object -Unique).Count                                                          # ⇒ 7
+  Select-Object -Unique).Count                                                          # ⇒ 7 个分组
 ```
 
 **后两格**（台账条目数 / 欠签）由 `python scripts/noai_gate.py --check-approvals` 当次产出：
@@ -610,7 +625,7 @@ python -m agentflow.cli tools --json          # 同一份装配的机器可读�
 > 要加一层前缀 —— 例：`schema.py` ⇒ `agentflow/src/agentflow/schema.py`、
 > `tools/` ⇒ `agentflow/src/agentflow/tools/`。
 > **份数一律不写定值**：包根一层的 `.py` 清单与份数用
-> `(Get-ChildItem src/agentflow/*.py).Count` 当次读（完整清单见 `DEVELOPMENT-APPENDIX.md` 的 A2，
+> `(Get-ChildItem src/agentflow/*.py).Count` 当次读（完整清单见 `draft/archive-docs/DEVELOPMENT-APPENDIX.md` 的 A2，
 > 那是 2026-10-13 的一次历史快照）。
 
 ```
@@ -618,13 +633,13 @@ agentflow/
 ├── AGENTS.md                  禁 AI 区（人类专属区）硬约束 —— 改它=改门
 ├── .noai-paths                机器可读的禁改区 glob 清单（与 AGENTS.md 逐条一致）
 ├── DEVELOPMENT.md             ← 入口（指路）
-├── DESIGN*.md                 设计理由（**份数按命令当次读**：`(Get-ChildItem DESIGN*.md).Count`；不构成判据）
+├── （无 DESIGN*.md）          ← 2026-11-22 按业主指令退役到 `draft/archive-DESIGN-*.md`（INDEX §3.2）
 ├── README.md                  ⚠️ 已知部分过期；两处读数有判据盯着
 ├── config.yaml                全部阈值（"所有阈值都在这里，不在代码里"）
 ├── pyproject.toml             构建 + pytest 配置（**在禁 AI 区里**）
 ├── docs/                      规格文档（份数按 `(Get-ChildItem docs -Filter '*.md').Count` 当次读）
 │   ├── DEVELOPMENT-SPEC.md    ← 本文（规范）
-│   ├── DEVELOPMENT-APPENDIX.md ← 历史（不构成判据）
+│   ├── （无 DEVELOPMENT-APPENDIX.md / PROPOSALS.md）← 2026-11-22 DOCS-CLEANUP 归档到 `draft/archive-docs/`（INDEX §3.2）
 │   ├── PROMPT-HISTORY.md      ← 提示词版本账（每抬一格 `PROMPT_VERSION` 追加一段）：抬版本时往本文件末尾写，判据 `tests/test_the_prompt_history_is_the_only_ledger.py` 钉「末节标题 == `PROMPT_VERSION`」
 │   └── …
 ├── src/agentflow/             包（包根一层的 `.py` 清单与份数见本节上方那条命令）
@@ -649,7 +664,7 @@ agentflow/
 │   ├── settings.py            ★ 机器级设置的一处定义（本机工具链落点 / Mathlib 根 / 模型 key / `workspace.projects_dir`）
 │   ├── llmseam.py             ★ 统一的模型缝：一次调用 = 一条审计记录
 │   ├── projects.py            ★ 项目工作区（一个项目一个文件夹）
-│   ├── verify.py              ★ 全库不变量校验（`Issue(...)` 的调用点/字面量/去重条数**按命令当次读**；量法见 `DEVELOPMENT-APPENDIX.md` A2 那一格里那条 `ast` 命令）
+│   ├── verify.py              ★ 全库不变量校验（`Issue(...)` 的调用点/字面量/去重条数**按命令当次读**；量法见 `draft/archive-docs/DEVELOPMENT-APPENDIX.md` A2 那一格里那条 `ast` 命令）
 │   ├── agentspec.py           ★ 声明类型与受控词表的真身（`AgentSpec` / `ActionSpec` / `AgentRegistry`；`SIDE_EFFECTS` / `EFFECT` / `EXTERNAL`）
 │   ├── specs/                 ★ 逐角色声明（M3 起）：`<角色>.py` 的 `ACTIONS` + `SPEC` 是 `capabilities` 四张表的唯一真身（FC-27 `auth-audit`）
 │   ├── agent_a/ … agent_h/ · agent_l/ · agent_v/   角色包（**每个角色一个包**：一个动作一个文件 + core.py + _support.py + __main__.py；V 只读，只有 core.py + __init__.py + __main__.py；L 只在 Lean 开关打开时装配）
@@ -735,14 +750,14 @@ agentflow/
 "布尔无法区分'未校验'与'校验失败'，而这两者需要**完全不同的处置**
 （前者装 OCR / 补数据，后者改引文 / 剔除）。本项目在**四处**（引文、OCR、D 溯源、
 C 预算）都踩到同一坑。"
-`DESIGN-CONDUCTOR.md` 逐字补充了后果：
+`draft/archive-DESIGN-CONDUCTOR.md` 逐字补充了后果：
 "每一次的后果都是**下游把'我们没查'读成了'查了没有'**。"
 
 **③ 可判定判据**（三条全中才算过）：
 
 | 判据 | 怎么查 |
 |---|---|
-| 代码里**没有** `if not chk.verified:` 这种把 `None` 与 `False` 合并的写法 | `grep -n 'if not .*verified' src/agentflow/`；**当前无专用 lint 规则**（R001–R012 里没有它；`DEVELOPMENT-APPENDIX.md` 的 A6 里 FC-01 那一行记着同一件事） |
+| 代码里**没有** `if not chk.verified:` 这种把 `None` 与 `False` 合并的写法 | `grep -n 'if not .*verified' src/agentflow/`；**当前无专用 lint 规则**（R001–R012 里没有它；`draft/archive-docs/DEVELOPMENT-APPENDIX.md` 的 A6 里 FC-01 那一行记着同一件事） |
 | 每个受控 `reason` 词表**至少含一个"未执行"值** | 逐个人工核对；例：`REFUSAL_REASONS` 含 `not_wired`；`DOWNLOAD_STATUSES` 含 `skipped` |
 | 统计输出**分三个计数** | `grep -n 'quote_verified\|quote_unverified\|quote_unknown' src/agentflow/store.py`；`ARunResult` 的 `verified/failed/unknown` |
 
@@ -769,7 +784,7 @@ C 预算）都踩到同一坑。"
 **② 为什么**（`LESSONS.md` FC-03 逐字）：
 "`"agent-D"` vs `"D"`、`download.status` 的受控词表、`title:...|*` 通配键
 —— 本项目同族问题出现 **3 次**。"
-后果（`DESIGN-CONDUCTOR.md` 逐字）：
+后果（`draft/archive-DESIGN-CONDUCTOR.md` 逐字）：
 "两处各写一份名单，就会出现'schema 认为合法的角色，工具层不认'这种**没有任何报错**的分裂。"
 `LESSONS.md` §8.3 更狠的一句：
 "**跨模块约定必须只有一处定义（FC-03）在测试代码里同样成立 —— 测试代码也是代码，
@@ -832,7 +847,7 @@ C 预算）都踩到同一坑。"
 | ✅ **正例** | `conductor.py` 的 `SubagentBackend` | 恒 `raise NotWiredError` ⇒ `refused/not_wired`（docstring 逐字列出两条诚实的路并选后者） |
 | ✅ **正例** | `conductor.py` 的 `LocalBackend` | 对 `("class", cls)` **明确拒绝**："自动 new 只能靠猜，而猜错会静默少做事" |
 | ✅ **正例** | `tools/ocr_tools.py` 的 `ocr.run` | 都不可用时 **fail** 并给安装建议（"绝不返回空文本假装成功"） |
-| ❌ **反例** | `tools/search_tools.py` 的 `except Exception: return []` | 与同一文件 `:591-598` 的严格 fail-closed **自相矛盾**（同一函数里两种口径） |
+| ❌ **反例** | `tools/search_tools.py` 的 `except Exception: return []` | 与同一文件 `tools/search_tools.py::_resolve_provider` 的严格 fail-closed **自相矛盾**（同一函数里两种口径） |
 | ❌ **反例** | `tools/trace_tools.py` 的 `_g()` | 无 store 无 graph 时返回空图 ⇒ `trace.chain` 仍 `return ok(...)`（唯一一个"成功"的静默空结果） |
 | ❌ **反例** | `tools/doc_tools.py` / `review_tools.py` / `attack_tools.py` / `verify_tools.py` | 「未接线」判据有 **4 份**实现（`_not_wired()` × 2 + `_need_store()` × 2） |
 
@@ -877,8 +892,8 @@ C 预算）都踩到同一坑。"
 | ✅ **正例** | `schema.py` 的 `Experiment.validate` | 五条硬约束（含 `verifier_subject_key`） |
 | ✅ **正例** | `verify.py` 的 `evidence_kind_overclaim` / `proof_claim_rests_on_weaker_evidence` / `proof_claim_with_unclosed_dependency` | 三条 error 级检查 |
 | ✅ **正例** | `agent_e._selftest` | 主动用"想自称 proof 的脚本"验证降级 + notes 留痕 |
-| ❌ **反例（历史）** | `DEVELOPMENT-APPENDIX.md` A7 的 D 清单族 | 复核产物用了 `PROVED_HERE` 标签 —— 复核者自己犯了 FC-22 |
-| ⚠️ **未落地** | `schema.py` **无** `negation_kind` 对"计算类"的强制（只有 `proof` 的强制） | 见 `DEVELOPMENT-APPENDIX.md` A6 的 FC-25 行 |
+| ❌ **反例（历史）** | `draft/archive-docs/DEVELOPMENT-APPENDIX.md` A7 的 D 清单族 | 复核产物用了 `PROVED_HERE` 标签 —— 复核者自己犯了 FC-22 |
+| ⚠️ **未落地** | `schema.py` **无** `negation_kind` 对"计算类"的强制（只有 `proof` 的强制） | 见 `draft/archive-docs/DEVELOPMENT-APPENDIX.md` A6 的 FC-25 行 |
 
 ### [规范] §5.5 纪律 5：拒绝 ≠ 失败（`outcome="refused"` 是一次**成功**执行）
 
@@ -886,7 +901,7 @@ C 预算）都踩到同一坑。"
 `status="done", outcome="refused"` + 受控 `refusal_reason`；
 **不许**记成 `failed`。**拒绝也必须落台账**。
 
-**② 为什么**（`DESIGN-CONDUCTOR.md` 逐字）：
+**② 为什么**（`draft/archive-DESIGN-CONDUCTOR.md` 逐字）：
 "**`refused` 是一次成功的执行** —— 框架**正确地说了"不"**。把它写成 `failed`
 会让'策略拦住了'与'代码崩了'混在一起，而这两件事需要完全不同的处置。"
 "**拒绝也落台账**：不写这一行，'我们拒绝了它'这件事就**无可审计**。"
@@ -948,7 +963,7 @@ C 预算）都踩到同一坑。"
 | ✅ **正例** | `capabilities.assert_capabilities()`（**导入期**） | "能力表一旦与实现漂移，症状不是崩溃而是**静默的越权/并发损坏**。让它 import 时就炸，是唯一'不可能忘记跑'的校验点" |
 | ❌ **反例** | `dedup.literature_keys` 的 `title:<norm>\|*` 第三级键 | 生成后**在匹配时被过滤掉** ⇒ "忽略年份"是死代码 |
 | ❌ **反例** | `interactions.related_relation_ids`（升序） | 为满足"升序"不变量**丢掉了跳序**，只能从 `origin` 字符串反解 |
-| ⚠️ **部分落地** | `schema.ARRAY_FIELD_KINDS` | 已落地"未声明数组字段即 `verify` 报 `undeclared_array_field`"；`Relation.chain` 的保序字段见 `DEVELOPMENT-APPENDIX.md` A6 的 FC-05 行 |
+| ⚠️ **部分落地** | `schema.ARRAY_FIELD_KINDS` | 已落地"未声明数组字段即 `verify` 报 `undeclared_array_field`"；`Relation.chain` 的保序字段见 `draft/archive-docs/DEVELOPMENT-APPENDIX.md` A6 的 FC-05 行 |
 
 ---
 
@@ -988,7 +1003,7 @@ C 预算）都踩到同一坑。"
 | 6 | `[ ]` 若是"有语义的顺序" ⇒ 与升序集合字段**成对存在**（`related_relation_ids`（升序）+ `chain`（保序）） | 审计者 | FC-05 判据② |
 | 7 | `[ ]` 保序字段有 **round-trip 测试**（写→读→相等） | **`tests/test_fc05_contract.py`** | `test_relation_chain_preserves_order_round_trip` |
 | 8 | `[ ]` `docs/ROLE-SPECS.md` 对应角色的 §状态机 与 §三态 更新 | 文档维护者 | — |
-| 9 | `[ ]` 更新 `DESIGN*.md` 的字段表（**可选**，但若改了必须与代码一致） | 文档维护者 | §12 的处置流程 |
+| 9 | `[ ]` 设计理由文档（**已退役到 `draft/archive-DESIGN-*.md`，2026-11-22 业主指令**）若仍被引用，那句话必须与代码一致 | 文档维护者 | §12 的处置流程 |
 
 ### [规范] §6.3 新增/修改**工具**
 
@@ -1187,8 +1202,8 @@ C 预算）都踩到同一坑。"
 | P13 | 按**后缀名**或 **HTTP 200** 判断"拿到的东西是对的" | 同一实测案例同时否证两条朴素策略 | `LESSONS.md` N19 / N20（`.pdf` URL 返回的是 HTML） | 内容类型校验（`content_type_mismatch`）+ 下游**必须消费**它 | 人工 |
 | P14 | **只改代码不补"防止用错方式修好"的断言** | 有两条修复路径时，错的那条会让断言变绿而语义变坏 | `LESSONS.md` N9；3 个现成正例：`test_precise_results_are_on_topic`、`test_agent_b_still_processes_normal_downloads`、`test_valid_download_statuses_are_accepted` | 再写一条断言把错路径**堵死** | 人工 |
 | P15 | 让**告警噪音化** | "假报警会训练人忽略告警"，"文化性损伤，几乎不可逆" | `LESSONS.md` N13 / P7 | 分级（error/warning/info）+ "已知缺陷"降级 + 上线前量触发率 | 人工 |
-| **P16** | ⭐ **让判据"真空通过"**：受检对象的声明**解析不出东西**，而判据把"解析不出"当成"没有问题"（空集永远是子集） | 这比"判据太松"更贵：它不是"某条判据漏了"，而是**"这条判据在大多数对象上根本没执行"**，而报告里它一直是绿的 | **实测**：`returns=` 的"声明 vs 实现"判据的正则只抓单引号键，于是不带引号的 `returns=` 被抽成**空集** ⇒ `declared - actual == {}` **永远成立** ⇒ 该判据在**多数工具上从来没跑过**（`PROPOSALS.md` **G-4**；当次比例见那一节） | ① **解析失败必须是一个可判定的结论**（三态：`parsed` / `empty_declaration` / `unparseable`），不许折叠成空集；② 给每条判据配一条**反真空断言**（"受检集合非空"或"被跳过的对象数 ≤ 一个写下来的 N"）；③ 解析器要**结构化**（顶层键 + 每个键的列表项键），并在测试里**双向**比对 | 测试（`tests/test_tools_returns_declaration.py`） |
-| **P17** | ⭐ **注释与 docstring 里的装饰**：Markdown 强调（成对的星号）、未配对的残留星号、emoji | 源码不经过渲染器：写在里面的星号到了读者眼里只是星号 —— "强调"没被传达，传达的是"这段文字是被生成出来的"。这类标记会**扩散**：下一段注释照抄上一段的写法，几十个文件后就成了默认风格 | 立项前的普查（含成对星号 / 残留星号 / emoji 三类计数，逐条见 `draft/28` §176 与 `PROPOSALS.md` 的 P17，**本文不抄定值**）：**禁改区外**曾两次归零、两次被并行施工重新积起来；**禁改区内**仍是**人**的待办（AI 不得改，见 §9.4） | 要强调就把它写进句子；要粗体/插图就写进 `docs/` 与 `draft/`（那里的 markdown 真的会被渲染）。代码跨度里的 `**`（`2**20`、`a/**/b`、`handler(**params)`）是字面语法，判据先摘掉再判 | **R009**：区外 `error`；禁改区内只报一条汇总 `info`（区内只有人能改，报 `error` 等于造一条永远红的灯，见 P15） |
+| **P16** | ⭐ **让判据"真空通过"**：受检对象的声明**解析不出东西**，而判据把"解析不出"当成"没有问题"（空集永远是子集） | 这比"判据太松"更贵：它不是"某条判据漏了"，而是**"这条判据在大多数对象上根本没执行"**，而报告里它一直是绿的 | **实测**：`returns=` 的"声明 vs 实现"判据的正则只抓单引号键，于是不带引号的 `returns=` 被抽成**空集** ⇒ `declared - actual == {}` **永远成立** ⇒ 该判据在**多数工具上从来没跑过**（`draft/archive-docs/PROPOSALS.md` **G-4**；当次比例见那一节） | ① **解析失败必须是一个可判定的结论**（三态：`parsed` / `empty_declaration` / `unparseable`），不许折叠成空集；② 给每条判据配一条**反真空断言**（"受检集合非空"或"被跳过的对象数 ≤ 一个写下来的 N"）；③ 解析器要**结构化**（顶层键 + 每个键的列表项键），并在测试里**双向**比对 | 测试（`tests/test_tools_returns_declaration.py`） |
+| **P17** | ⭐ **注释与 docstring 里的装饰**：Markdown 强调（成对的星号）、未配对的残留星号、emoji | 源码不经过渲染器：写在里面的星号到了读者眼里只是星号 —— "强调"没被传达，传达的是"这段文字是被生成出来的"。这类标记会**扩散**：下一段注释照抄上一段的写法，几十个文件后就成了默认风格 | 立项前的普查（含成对星号 / 残留星号 / emoji 三类计数，逐条见 `draft/28` §176 与 `draft/archive-docs/PROPOSALS.md` 的 P17，**本文不抄定值**）：**禁改区外**曾两次归零、两次被并行施工重新积起来；**禁改区内**仍是**人**的待办（AI 不得改，见 §9.4） | 要强调就把它写进句子；要粗体/插图就写进 `docs/` 与 `draft/`（那里的 markdown 真的会被渲染）。代码跨度里的 `**`（`2**20`、`a/**/b`、`handler(**params)`）是字面语法，判据先摘掉再判 | **R009**：区外 `error`；禁改区内只报一条汇总 `info`（区内只有人能改，报 `error` 等于造一条永远红的灯，见 P15） |
 | **P18** | ⭐ **编排层写产物不控行尾**（`Path.write_text()` 不带 `newline=`） | `write_text` 在 Windows 上把 `\n` 刷成 `\r\n` ⇒ 产物的 `sha256` 与"盘上那一版"对不上，而禁改区批准台账钉住的正是 `sha256` | `tools/release_all.py` 的注释引用过一条禁令 `G-42：禁止 Path.write_text()`，而当时 `RULES` 里只有 R001–R011 —— **那条"被引用的禁令"在门里查不到**（实测）：读者以为有机器防线，实际只有一段散文 | 写产物的两种合规写法：`open(..., newline="")` 或 `write_bytes`；逐条登记的豁免见 `scripts/lint_rules.py::R012_NEWLINE_EXEMPTIONS`（登记过期会被反向报出来） | **R012**（`warning`；`scripts/release_check.py::item_linter` 走严格档，会逐条打印） |
 
 ---
@@ -1289,7 +1304,7 @@ required_approvals: 2（尚未取得）
 
 | 事项 | 去向 |
 |---|---|
-| 哪些路径是禁 AI 区（当次 **46** 条条目 / **43** 条唯一路径 / 7 个分组；口径与复跑命令见 §3.5） | **`.noai-paths`** |
+| 哪些路径是禁 AI 区（当次 **70** 条条目 / **67** 条唯一路径 / 7 个分组；口径与复跑命令见 §3.5） | **`.noai-paths`** |
 | 命中之后要做什么（停 / 人编写或人逐行走查 / 2 名 reviewer / 机器执行） | **`AGENTS.md`** 的"命中之后要做什么" |
 | 退出码语义（`0=clean` / `1=requires_human` / `2=unknown`，**`unknown ≠ clean`**） | **`AGENTS.md`** 的"退出码"节 + `scripts/noai_gate.py` |
 | 实际判定 | `python scripts/noai_gate.py --paths <改动的文件…>`（或 `--git`、`--stdin`、`--json`、`-q`） |
@@ -1394,7 +1409,7 @@ python tools\verify_role_specs.py            # 退出码 0=完整 / 1=有缺失 
 
 **它为什么不在 `release_check.py` 里**（如实说明，而不是遗漏）：
 `scripts/release_check.py` 本身在 FC-27 禁改区，**给它加一项要人审**
-（`PROPOSALS.md` 的 P-2/P-3 是同一类待办）。
+（`draft/archive-docs/PROPOSALS.md` 的 P-2/P-3 是同一类待办）。
 所以这道门目前是一个**并列的、可单独复跑**的门，并在 `tests/test_role_specs_complete.py`
 里有负控（"删掉一节 ⇒ 必须报 `incomplete`""文档被改名 ⇒ 必须报 `unknown` 而不是 `ok`"；
 **用例数以 `--collect-only` 为准**），以及一条**文档 ↔ 实测普查对账**：
@@ -1412,27 +1427,33 @@ python tools\verify_role_specs.py            # 退出码 0=完整 / 1=有缺失 
 > - **未核实** = 没查，或查了但证据不足。
 >
 > **一条 FC 只允许一个状态**。逐条的落地位置、判据、状态**全表**在
-> `DEVELOPMENT-APPENDIX.md` 的 A6（那是 2026-09-26 的一次快照，**不构成判据**；
+> `draft/archive-docs/DEVELOPMENT-APPENDIX.md` 的 A6（那是 2026-09-26 的一次快照，**不构成判据**；
 > 要当前值就按 A6 表里的判据当场跑）。
 > 本文只保留**唯一一条**必须留在这里的 FC —— 因为它的判据就是 §9.4 与本节。
 
 | FC | 约束（简写） | 落地位置 | 可判定判据 | 状态 |
 |---|---|---|---|---|
-| **FC-27** | 禁 AI 区必须显式列出 + 独立准入门槛 | **`.noai-paths`**（当次 **46** 条条目 / **43** 条唯一路径 / 7 个分组，见 §3.5；2026-11-21 tests/golden 四条随 tests 不入 git 一并摘除）+ **`AGENTS.md`** 的 `NOAI-MANIFEST` 区块 + **`scripts/noai_gate.py`**（`REQUIRED_APPROVALS_ON_HIT = 2`，退出码 0/1/2）；`tests/test_noai_gate.py` 当次 124 passed（复跑 `python -m pytest tests/test_noai_gate.py --collect-only -q -p no:cacheprovider`，键 `noai_gate_pytest_collected`）；`release_check.py` 第 6 项 | ① 两处**逐条一致**（实测退出码 0）；② 命中要求 2 批准（实测 `--paths src/agentflow/schema.py` → 退出码 1 + `required_approvals=2`）；③ 负控用例**在** `tests/test_noai_gate.py` 里（该文件当次 **0 skipped** ⇒ 负控真的在跑） | **已落地**。⚠️ 发布门上它**仍报红**，红的原因是"**禁改区命中待 2 名 reviewer 签字**"（制度要求；台账当次的 `reviewers` 元素总数**不写定值**，每签一个字就变），不是代码坏 |
+| **FC-27** | 禁 AI 区必须显式列出 + 独立准入门槛 | **`.noai-paths`**（当次 **70** 条条目 / **67** 条唯一路径 / 7 个分组，见 §3.5；2026-11-21 tests/golden 四条随 tests 不入 git 一并摘除）+ **`AGENTS.md`** 的 `NOAI-MANIFEST` 区块 + **`scripts/noai_gate.py`**（`REQUIRED_APPROVALS_ON_HIT = 2`，退出码 0/1/2）；`tests/test_noai_gate.py` 当次 124 passed（复跑 `python -m pytest tests/test_noai_gate.py --collect-only -q -p no:cacheprovider`，键 `noai_gate_pytest_collected`）；`release_check.py` 第 6 项 | ① 两处**逐条一致**（实测退出码 0）；② 命中要求 2 批准（实测 `--paths src/agentflow/schema.py` → 退出码 1 + `required_approvals=2`）；③ 负控用例**在** `tests/test_noai_gate.py` 里（该文件当次 **0 skipped** ⇒ 负控真的在跑） | **已落地**。⚠️ 发布门上它**仍报红**，红的原因是"**禁改区命中待 2 名 reviewer 签字**"（制度要求；台账当次的 `reviewers` 元素总数**不写定值**，每签一个字就变），不是代码坏 |
 
 ---
 
-## [规范] §12 `DESIGN*.md` 与代码的关系（**总则**）
+## [规范] §12 设计理由文档与代码的关系（**总则**）
 
-`DESIGN*.md` 描述的是**设计与理由**，**不是现状**（份数按 `(Get-ChildItem DESIGN*.md).Count` 当次读）。
+> **2026-11-22 业主裁定**：五份 `DESIGN*.md`（以及 `NOAI-REVIEW-REGISTER.md`）是老文件，
+> 不留在 `agentflow/` 下 ⇒ 已退役到 `draft/archive-<原名>`（`INDEX.md` §3.2 逐条给理由）。
+> 下面这张表**保留**，因为它是"读设计理由时会犯的四类错"的口径 —— 表里点名的那几处
+> 现在应读 `draft/archive-DESIGN-*.md`（正文逐字未改，行号与节号照旧）。
+> **本仓交付面上不再有"设计理由文档"这一层需要维护**；现行设计基线是 `DESIGN-BASELINE.md`。
+
+原 `DESIGN*.md` 描述的是**设计与理由**，**不是现状**。
 已知的类别性偏差与处置：
 
 | 类别 | 例子 | 处置 |
 |---|---|---|
-| 设计里"待决"的问题，代码里已经有实现 | `DESIGN-CONDUCTOR.md` §8 问题 2（跨会话恢复"不自动续跑"）—— `verify.task_still_running`（warning）已落地；问题 1（`M` 是否做 LLM 推理）**已落定**：`M` 与其余角色同一个 `agent_loop`，动作表为空 | **以代码为准**；设计文档改不改由人决定 |
-| 设计里"本轮不做"，代码里已经做了 | `DESIGN-CONDUCTOR.md` §8 待决问题 3（`WRITE_SETS` 粒度"本轮是表级"）—— 代码**确实是表级** | — |
-| 设计里给的数字，代码里不同 | `DESIGN-CONDUCTOR.md` 的 `Policy` 默认值与 `policy.py` 的默认值 **逐字一致** | 一致即不必动；不一致时**以代码为准** |
-| 接口签名 | 例：`DESIGN-ROLES.md` §2.1 的 `run_experiment(..., timeout)` 只是示意（省略号）；实际还有 `kind` / `design` / `enumeration` / `exhaustive` / `search_space` / `imports` / `certificate` 等十余格，且多数是 keyword-only | **以代码为准**：读签名用 `inspect.signature`，别按散文抄 |
+| 设计里"待决"的问题，代码里已经有实现 | `draft/archive-DESIGN-CONDUCTOR.md` §8 问题 2（跨会话恢复"不自动续跑"）—— `verify.task_still_running`（warning）已落地；问题 1（`M` 是否做 LLM 推理）**已落定**：`M` 与其余角色同一个 `agent_loop`，动作表为空 | **以代码为准**；设计文档改不改由人决定 |
+| 设计里"本轮不做"，代码里已经做了 | `draft/archive-DESIGN-CONDUCTOR.md` §8 待决问题 3（`WRITE_SETS` 粒度"本轮是表级"）—— 代码**确实是表级** | — |
+| 设计里给的数字，代码里不同 | `draft/archive-DESIGN-CONDUCTOR.md` §3 的 `Policy` 块写 `max_concurrency=4` / `max_tasks_per_run=200` / `wall_clock_sec=900`，而 `policy.Policy` 退役当日（2026-11-22）复跑是 `None` / `5000` / `14400` | **以代码为准**；这处不一致正是它 2026-11-22 退役的证据之一（`INDEX.md` §3.2） |
+| 接口签名 | 例：`draft/archive-DESIGN-ROLES.md` §2.1 的 `run_experiment(..., timeout)` 只是示意（省略号）；实际还有 `kind` / `design` / `enumeration` / `exhaustive` / `search_space` / `imports` / `certificate` 等十余格，且多数是 keyword-only | **以代码为准**：读签名用 `inspect.signature`，别按散文抄 |
 
 **本文与代码冲突时的处置流程**：① 先按 §9.2 用证据确认是谁错了；② 若错在本文 ⇒
 改本文（并把那一格数字换成"命令 + 键名"，见 §1.1）；③ 若错在代码 ⇒ 按 §6 的 DoD 改代码 +
@@ -1490,7 +1511,7 @@ python tools\verify_role_specs.py            # 退出码 0=完整 / 1=有缺失 
 不是缓存 —— 换一个温度会让上游的前缀缓存按"同一条前缀"照旧命中，命中与否只取决于
 system 的字节是否相同。
 
-请求体的唯一组装置是 `modelgw.ModelGateway._payload`（`src/agentflow/modelgw.py:739-764`）：
+请求体的唯一组装置是 `modelgw.ModelGateway._payload`（`src/agentflow/modelgw.py::ModelGateway._payload`）：
 `model` / `messages`（system 一条 + user 一条）/ `temperature` / `stream` / 推理强度 /
 `tools`。没有任何缓存注解可写 —— 上游自己为"没命中的那部分"建索引，下一次同前缀就命中。
 
@@ -1503,11 +1524,11 @@ system 的字节是否相同。
 
 | 跳 | 落点 |
 |---|---|
-| 上游 `usage.prompt_cache_hit_tokens` / `prompt_cache_miss_tokens` | `modelgw.py:878-888` 读进 `ModelReply.cache_hit_tokens` / `cache_miss_tokens`（三态：`None` = 上游没给） |
-| 一次调用的审计记录 | `llmseam.py:477-478` 转成 `SeamCall` 两格（`to_dict()` 也带，`llmseam.py:150-151`） |
-| 每一步 | `promptstability.prompt_cache_record`（`promptstability.py:478` = `def` 所在行）⇒ `agent_step.prompt_cache`（`agent_loop.py:3785` / `:3876` / `:4176` 三处 `"prompt_cache": dict(step_cache)`） |
-| 一趟的汇总 | `promptstability.summarize_prompt_cache`（`promptstability.py:556`）⇒ `LoopRun.prompt_cache`（`agent_loop.py:4275` 的 `run.prompt_cache = …`；字段声明在 `:997`、`to_dict()` 在 `:1178`） |
-| 收工两个落点 | `agent_run_end`（`agent_loop.py:4345` 的 `SS.append(...)` 事件，`prompt_cache` 那一格在 `:4358`）与检查点 payload 的第 9 个键（`agent_loop.py:7115` 的 `"prompt_cache": dict(prompt_cache or {})`，判据 `promptstability.checkpoint_prompt_cache_problem`） |
+| 上游 `usage.prompt_cache_hit_tokens` / `prompt_cache_miss_tokens` | `modelgw.py::ModelGateway._once` 读进 `ModelReply.cache_hit_tokens` / `cache_miss_tokens`（三态：`None` = 上游没给） |
+| 一次调用的审计记录 | `llmseam.py::LlmSeam.ask` 转成 `SeamCall` 两格（`to_dict()` 也带，`llmseam.py::SeamCall.to_dict`） |
+| 每一步 | `promptstability.prompt_cache_record`（`promptstability.py::prompt_cache_record`）⇒ `agent_step.prompt_cache`（`agent_loop.py::AgentLoop.run` 三处 `"prompt_cache": dict(step_cache)`） |
+| 一趟的汇总 | `promptstability.summarize_prompt_cache`（`promptstability.py::summarize_prompt_cache`）⇒ `LoopRun.prompt_cache`（`agent_loop.py::AgentLoop.run` 的 `run.prompt_cache = …`；字段声明在 `agent_loop.py::LoopRun.prompt_cache`、`to_dict()` 在 `agent_loop.py::LoopRun.to_dict`） |
+| 收工两个落点 | `agent_run_end`（`agent_loop.py::AgentLoop.run` 的 `SS.append(...)` 事件，`prompt_cache` 那一格在 `agent_loop.py::AgentLoop.run`）与检查点 payload 的第 9 个键（`agent_loop.py::save_run_checkpoint` 的 `"prompt_cache": dict(prompt_cache or {})`，判据 `promptstability.checkpoint_prompt_cache_problem`） |
 
 **`write` 这一格是推导量，不是上游字段**：上游没有"写"计数，本仓把它定义为
 `write = prompt_cache_miss_tokens`（`write_source="derived:miss"`）。它说的是
@@ -1575,7 +1596,7 @@ python scripts/warm_prompt_cache.py --lean on `
 
 > ⚠️ **上面那段的三条对今天的树已经不成立（2026-10-21 实测的三处更正，逐条带取法）**：
 > ① **秘书的调用形状当天就改了**：`secretary.Secretary.judge` 现在把稳定头走 `system=`
-> 通道 —— `secretary.py:1269-1271` 是 `self.seam.ask_json(_judge_material(context),
+> 通道 —— `secretary_judge.py::JudgeMixin._judge_core` 里是 `self.seam.ask_json(_judge_material(context),
 > system=_judge_system(kind), …)`，"`ask_json(prompt)` 没有 system 参数"这句**已过期**；
 > 盘上的读数容器里秘书那一行的 `system_chars` 也**不再是 0**（取法：
 > `python -c "import json;d=json.load(open('tests/fixtures/prompt_cache_warm.json',encoding='utf-8'));print([(r['role'],r.get('system_chars')) for r in d['runs'][-1]['rows']])"`

@@ -5,9 +5,9 @@
 > `webui/readers.py` 的 `ROUTES`；2026-11-22 00:11 现算是**写面 12 条（POST 11 +
 > GET 1 `/api/cache`）／读面 19 条**，现算命令与完整名单见 §3 开头）、
 > 403/400/409 分别是什么意思、哪些事网页上还做不了。
-> 命令行那一侧见 [`USER-GUIDE-CLI.md`](USER-GUIDE-CLI.md)；通用用户手册见
-> [`USER-GUIDE.md`](USER-GUIDE.md)；`--json` 逐字段契约见 [`CLI-CONTRACT.md`](CLI-CONTRACT.md)；
-> 哪份文档算数见 [`INDEX.md`](INDEX.md)。
+> 命令行那一侧见 [`USER-GUIDE-CLI.md`](USER-GUIDE-CLI.md)；`--json` 逐字段契约见
+> [`CLI-CONTRACT.md`](CLI-CONTRACT.md)；哪份文档算数见 [`INDEX.md`](INDEX.md)
+> （原先那份合并版 `USER-GUIDE.md` 已于 2026-11-22 归档到 `draft/archive-docs/`，见 `INDEX.md` §3.2）。
 >
 > **本文里的每一个状态码与响应片段都是临时实例上真发出来的**，两轮：
 >
@@ -175,7 +175,7 @@ GET /api/state   -> 401 {"ok": false, "path": "/api/state", "tri": "not_applicab
 
 `Ctrl-C`（控制台里；代码把 `KeyboardInterrupt` 当正常停止路径吞掉，退出码 0）。
 端口与 URL 记在工作区的 `webui.json` 里，下次不给 `--port` 时复用它；**被强杀的实例不写
-这个文件**（这一档来自代码 `webui/server.py:1530` —— 本文的临时实例都是被强杀的，
+这个文件**（这一档来自代码 `webui/server.py::run` —— 本文的临时实例都是被强杀的，
 所以没有正面实跑到"正常收尾"那一支）。
 
 ---
@@ -557,6 +557,70 @@ sha 原文（`sha256` / `sha256_now`）在数据里，**页面只显示一致不
 "这次是现算的"并回退到从事件流现算（另一条读数 `/api/run-digest`）。
 `drift` 非空才是"索引与事件对不上"的信号（那时页面显红）。
 
+### 2.11 这一批新读数怎么读（2026-11-22；四个「别误读」）
+
+这一节只讲 2026-11-22 之后页面上**多出来**的几格。它们都挂在原有卡片里，没有新开页面。
+
+**① 产物台账的「类别」：词表外 ≠ 读坏了（`kind_state` / `kind_unknown` / `unknown_kinds`）**
+
+`/artifacts` 的「产物台账」卡里，「类别」那一列现在带三态徽标，数据来自
+`GET /api/artifacts` 的三格新读数（`kind_states` / `unknown_kinds` / `kind_flag_mismatch`）：
+
+| 徽标 | `kind_state` | 意思 | 该怎么读 |
+|---|---|---|---|
+| 没有徽标 | `canonical` | 取值在 `ARTIFACT_KINDS` 词表里 | 正常 |
+| 灰色虚线「历史行」 | `legacy` | 词表生效**前**落的老行 | **照读**，不是缺陷、没有待办 |
+| 红色「词表外」 | `unknown` | 词表生效**后**新写、行上带 `kind_unknown=true` | 写侧用了词表外的取值，要人看 |
+
+**别把它读成"台账坏了"**：三档都照常读、照常显示行；`kind` 永远是盘上的原值
+（读侧不改写历史）。真正要动的是红色那一档（新写应当在词表内）。
+`kind_flag_mismatch > 0` 是第三种情况：行上写了 `kind_unknown=false`、取值却不在词表里
+（写侧那一笔标记算错了）—— 读法不变，但值得看一眼。
+
+**② 验收页的「签不背书这一行」：签真 ≠ 签到了这一行（`sign_does_not_back_the_row`）**
+
+`/acceptance` 的 A 块「V 签」那一段多了一枚黄色徽标
+`sign_does_not_back_the_row（不算签）`，计数来自 `GET /api/package` 的
+`proofs.vsign.sign_does_not_back_row`：
+
+- 它的意思是：**签文件是真的、`statement_id` 也对得上，但这一行结构上不可能持有那份正文**
+  （典型：概念行 + 非 `b-proof` 稿）。真机 `projects/lp-ball-15` 的第 4 份签就是这个形态。
+- 它**不算签**：不进 `proofs.vsign.signed`，所以「V 已签 N 条」里不会有它；
+- 它也**不折进 `unbacked`**（那是"签文件自己复算不上"，另一档病因）；
+- 徽标是**黄色**不是红色：凭据本身没坏、V 也没做错，但读的人绝不能把它读成「已签」；
+- 计数是 `null` 时是「那一格没查成」，**不是 0**。
+
+**③ 文献库卡的「种子」：`reference/` 是种子区，`library/` 是已登记书架（SEEDFIX）**
+
+`/artifacts` 的「文献库」卡下面多一行（`GET /api/literature` 的 `data.seed`）：
+
+- `种子：reference/ 里 N 份` —— 种子投在 **`reference/`**（不是 `library/`）；
+- `已登记书架 library/：` 后面三档：
+  - 绿色「没有未登记的文件」= `library_unregistered=[]`（干净）；
+  - 黄色「N 份未登记」= 书架上有文件**没有任何 `literature` 行引用** —— 这是结构异常
+    （真机事故：25 份未登记种子直接铺在 `library/` 根），悬停能看到那几份文件名；
+  - 灰色「没查成」= `null`（`literature` 台账读不出来 ⇒ 没得比），**不是"干净"**。
+- 这一行在「文献库 0 条」时也会显示 —— 那次事故现场页面正好只有"0 条"。
+
+**④ 本机页的「库表档案」：退役 ≠ 0 行，未启用 ≠ 做完了（DATAHYGIENE）**
+
+`/machine` 多了一张「库表档案（已退役 / 未启用）」卡（`GET /api/machine` 的 `tables`）：
+
+- 灰色「已退役」：`eval_results` —— 全仓 0 个写点、51 个工作区全 0 行 ⇒ **从来没有产出方**。
+  历史工作区里那份文件仍在盘上，读侧认得出、行照读，但**"0 行"不是"评测过 0 条"**；
+- 黄色「未启用（0 行 ≠ 做完了）」：`reprocess_requests` —— 写点 / 消费点 / 闸都在，
+  只是从来没有一条请求真的跑过。于是收工门 `unfinished_request_rows`（上限 0）永远是 0，
+  那是**"这条队列没启用"**，不是"请求闭环做完了"。
+- 「登记面读不出来」时整卡记 `checked=false`，**不是"没有退役表"**。
+
+**⑤ 名册的「疑似停滞」：落痕是 `.jsonl` 轨迹（NAMEFIX-B1）**
+
+名册节点上那枚「疑似停滞 N 分钟」的悬停现在写明读数出处：
+`out/steps/<台账号>.jsonl` 的**最后一行**的 `at`。这个目录是**一行一步、追加**的轨迹
+（`conductor.step_beats`），不是"最后一次步号"的指针文件；旧工作区里残留的
+`out/steps/<号>.json` 不是这个读数读的东西。停滞**不改三态**（它仍然是 `flying`），
+也绝不因此销号。
+
 ---
 
 ## 3. 写端点：怎么打、回什么
@@ -751,7 +815,7 @@ POST /api/cache/warm  dry_run=1 & confirm=1          # 只读档也放行（这�
 
 真预热（不给 `dry_run`）：过完整四层 + `confirm=1`，起 detached 子进程，回执 `state=running`
 （这一档**本文没有实跑** —— 它会真花钱；`state` / `confirm` / `_spawn_warm` 的行为来自
-`webui/cacheface.py:398-464` 与实跑到的试算档）。
+`webui/cacheface.py::handle_cache_warm` 与实跑到的试算档）。
 **试算那一档只保留"回环来源"这一层**（没有 CSRF、没有 `--allow-writes` 也放行）——
 这是刻意的：它不写盘、不花钱、不起进程。注意 `confirm=1` **两档都要**：
 缺它时回执那句写的是「真预热会真的花钱，必须带 confirm=1」（试算也照这句拒）。

@@ -18,8 +18,10 @@
 | `run_each_test_file.py` | 发布门的 `per-file` 步：逐文件跑测试，把"顺序依赖 / 跨文件状态泄漏"变成可判定的门。**需本机有 `tests/`**：tests 不随仓库交付（业主 2026-11-21 裁定），缺目录 ⇒ `unknown` |
 | `coverage_zero_test.py` | 发布门的 `coverage` 步：按 AST 分档找出"零直接测试"的公开函数 |
 | `frontend_gate.py` | 发布门的 `frontend` 步：类型检查 + 构建 + 产物新鲜度 |
+| `eol_gate.py` | **发布门的 `eol` 步**（`release_all` 的最后一步）：读 `git ls-files --eol`，抓「入库是 LF、盘上被写成 CRLF」的潜伏漂移（折平后与 HEAD 同字节 ⇒ diff 与换行判据都看不见这条）；三态 `0/1/2`，缺 git / 不在仓库里 ⇒ `unknown`，不是 pass |
 | `verify_role_specs.py` | 核对 `docs/ROLE-SPECS.md` 的结构完整性（逐节子节、引用是否存在） |
 | `write_system_docs.py` | 生成 `docs/ROLE-GUIDE.md` 与 `docs/SYSTEM-COMPONENTS.md`（两份生成物） |
+| `write_lf.py` | **写盘一律 LF 的落盘函数** `write_lf()`：先 `encode` 再 `write_bytes`，不经过文本层、平台不翻译换行；`python tools/write_lf.py` 跑自检。lint 的 `R012` 报错文案指到这里，产品代码不 import 它 |
 | `vocab_census.py` | 受控词表普查（lint R011 的实现本体） |
 | `repo_survey.py` | 仓库体量巡检（只读）：多大、哪里在长、注释够不够 |
 | `make_demo_dataset.py` | 造一个"够丰富"的演示数据集，用于端到端验证 C/D/pipeline |
@@ -40,6 +42,12 @@ python tools/release_all.py --skip coverage
 # 单跑某一道门
 python tools/verify_role_specs.py --root . --json
 python tools/frontend_gate.py
+
+# eol 门：0 = 无潜伏漂移 / 1 = 有（逐条列出）/ 2 = 没查成
+python tools/eol_gate.py --root .
+
+# 写盘 LF 的自检（0 = 盘上字节里没有 CR）
+python tools/write_lf.py
 
 # 生成两份给人读的文档（改了角色声明之后）
 python tools/write_system_docs.py

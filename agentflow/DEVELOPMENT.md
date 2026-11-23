@@ -2,7 +2,8 @@
 
 > ⚠️ **权威性（2026-10-18 标注，2026-10 拆分后重写）**：本条目的职责**只有一件事** —— 告诉你
 > "要改代码，先读哪几节"。**判据本身不在本文**：规范在 [`docs/DEVELOPMENT-SPEC.md`](docs/DEVELOPMENT-SPEC.md)，
-> 历史在 [`docs/DEVELOPMENT-APPENDIX.md`](docs/DEVELOPMENT-APPENDIX.md)。
+> 历史在 [`draft/archive-docs/DEVELOPMENT-APPENDIX.md`](../draft/archive-docs/DEVELOPMENT-APPENDIX.md)
+> （2026-11-22 DOCS-CLEANUP 归档，理由见 [`docs/INDEX.md`](docs/INDEX.md) §3.2）。
 > 与代码冲突时**以代码为准**；若代码与规范冲突，是**规范的 bug**（处置见 SPEC §12）。
 > 「哪份文档算数」的权威地图见 [`docs/INDEX.md`](docs/INDEX.md)。
 >
