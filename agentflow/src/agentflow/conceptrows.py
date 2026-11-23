@@ -518,8 +518,24 @@ def well_definedness_reading(root: Any, row: Mapping[str, Any], *,
             "next_step": next_step, "why": why}
 
 
+def page_range_of(value: Any) -> S.PageRange:
+    """`page_range` 的入参归一：`PageRange` / dict / 别的 ⇒ `PageRange`。
+
+    写侧只在这一点归一：概念行的页码有三个来源（抽取草稿的 `page`、关系行上
+    回验过的 `page_range`、以及调用方手里的 dict），三者都要落到
+    `Statement.page_range` 这一格上。各写一份转换就会在"空 dict / 老行 /
+    字符串"这三种形态上分家，而分家的表现是"有的行有页码、有的行没有"。
+    """
+    if isinstance(value, S.PageRange):
+        return value
+    if isinstance(value, Mapping):
+        return S.PageRange.from_dict(dict(value))
+    return S.PageRange()
+
+
 def concept_statement(*, stmt_id: str, label: str, definition: str = "", aliases: Iterable[str] = (),
                       source_lit_id: str = "", proof_text: str = "", doc_id: str = "",
+                      page_range: Any = None,
                       actor: str = "agent-B", origin: str = "",
                       self_authored: bool = False,
                       sign: Mapping[str, Any] | None = None) -> Any:
@@ -549,6 +565,16 @@ def concept_statement(*, stmt_id: str, label: str, definition: str = "", aliases
     口径与判据在 :func:`concept_origin_problem` / :func:`resolve_concept_origin`：
     有 `source_lit_id` ⇒ `external_lit`；没有 ⇒ `own_result`（定义就在这一行上）。
     显式声明 `own_result` 必须带 `self_authored=True`。
+
+    ## `page_range`：概念行也要有"定义在第几页"
+
+    概念行的 `page_range` 与命题行同一格、同一把尺（`start` 或 `label` 至少一个
+    非空）：`external_lit` 的概念是从文献里摘的，判据（`reviewaccept.
+    statement_source_problem`）对它要页码，写入口就必须有落点。这一格此前在
+    构造口上根本不存在（参数表里没有它），于是抽取路径写出的概念行恒为空 ——
+    而同一批关系行带着回验过的页码。现在由调用方把页码交进来（抽起草稿的
+    `page`，或该概念所属关系行的 `page_range`），本函数只归一、不编造：
+    没给就是"不知道"，读侧会逐条点名。
     """
     definition = str(definition or "")
     proof_text = str(proof_text or "")
@@ -588,6 +614,7 @@ def concept_statement(*, stmt_id: str, label: str, definition: str = "", aliases
         stmt_id=stmt_id, origin=resolved, kind="concept", label=str(label or ""),
         statement_text=definition, statement_full=definition,
         proof_text=proof_text, source_lit_id=str(source_lit_id or "") or None,
+        page_range=page_range_of(page_range),
         quote_verified=None, quote_reason=reason, evidence_kind="heuristic",
         aliases=[str(a) for a in (aliases or []) if str(a).strip()],
         status=("pending_definition" if pending else "active"),
@@ -804,7 +831,8 @@ def tables_for_concept_write(*extra: str) -> tuple[str, ...]:
 
 
 def upsert_legacy_shaped(tx: Any, row: Mapping[str, Any], *,
-                         actor: str = "agent-B", note: str = "legacy_shaped") -> dict[str, Any] | None:
+                         actor: str = "agent-B", note: str = "legacy_shaped",
+                         page_range: Any = None) -> dict[str, Any] | None:
     """一条老形状的概念行 ⇒ 新标准写一份（老表还在时顺带镜像，同一个号）。
 
     这一格是给夹具、探针与自检用的（生产的写侧有自己的秘书那一套）：
@@ -821,7 +849,7 @@ def upsert_legacy_shaped(tx: Any, row: Mapping[str, Any], *,
         return None
     if LEGACY_TABLE in S.TABLES:
         tx.upsert(LEGACY_TABLE, dict(row), note=note)
-    return sync_from_legacy(tx, row, actor=actor)
+    return sync_from_legacy(tx, row, actor=actor, page_range=page_range)
 
 
 def mirror_gaps(store: Any) -> dict[str, Any]:
@@ -890,6 +918,7 @@ def write_concept(tx: Any, *, stmt_id: str, label: str, definition: str = "",
                   aliases: Iterable[str] = (), source_lit_id: str = "", proof_text: str = "",
                   doc_id: str = "", actor: str = "agent-B", mirror: bool = False,
                   origin: str = "", self_authored: bool = False,
+                  page_range: Any = None,
                   out: dict[str, Any] | None = None) -> dict[str, Any]:
     """在已开的事务里写一条概念行（经秘书那一笔：新标准那一行 + 可选的老表镜像）。
 
@@ -919,7 +948,8 @@ def write_concept(tx: Any, *, stmt_id: str, label: str, definition: str = "",
     return _concept_secretary(tx).write_concept_row(
         tx, stmt_id=stmt_id, label=label, definition=definition, aliases=aliases,
         source_lit_id=source_lit_id, doc_id=doc_id, origin=origin,
-        self_authored=self_authored, mirror=mirror, proof_text=proof_text, out=out)
+        self_authored=self_authored, mirror=mirror, proof_text=proof_text,
+        page_range=page_range, out=out)
 
 
 def _concept_secretary(tx: Any) -> Any:
@@ -988,7 +1018,8 @@ def _apply_merge_tombstone(row: dict[str, Any], legacy_row: Mapping[str, Any]) -
 
 
 def sync_from_legacy(tx: Any, legacy_row: Mapping[str, Any], *,
-                     actor: str = "agent-B") -> dict[str, Any] | None:
+                     actor: str = "agent-B",
+                     page_range: Any = None) -> dict[str, Any] | None:
     """把一条老表行同步成新标准那一行（同号）—— 写侧搬运的通用一格。
 
     为什么需要它（这是过渡期最容易漏的一格）：B 的 pipeline 里有好几处是"改一条老行"
@@ -1015,6 +1046,11 @@ def sync_from_legacy(tx: Any, legacy_row: Mapping[str, Any], *,
     （算好 `status` / `quote_reason` 传进去，由秘书那一格写进同一行）。
     `actor` 只为兼容既有调用点留在签名里：写侧身份现在由秘书从 `tx.actor` 读
     （见 :func:`_concept_secretary`），`created_by` 因此记的是"谁经这一笔写的"。
+
+    `page_range` 是"定义在第几页"这一格：老表的行里没有它，所以由调用方按
+    本次抽取的来路交进来（草稿的 `page` / 该概念所属关系行的页码）。它只在
+    "新标准那一行的页码还是空的"时补写（fill-if-empty 住在
+    `write_concept_row`）；老表那一份镜像不动，老行与已填过的行都不受影响。
     """
     cid = str(legacy_row.get("concept_id") or "")
     if not cid:
@@ -1039,7 +1075,8 @@ def sync_from_legacy(tx: Any, legacy_row: Mapping[str, Any], *,
         return secretary.write_concept_row(
             tx, stmt_id=cid, label=label, definition=definition, aliases=aliases,
             source_lit_id=source_lit, status=str(tomb.get("status") or ""),
-            quote_reason=str(tomb.get("quote_reason") or ""), transition_sync=True)
+            quote_reason=str(tomb.get("quote_reason") or ""), transition_sync=True,
+            page_range=page_range)
     # 改既有那一行：只动"从老表推得出来的那几格"，新标准独有的那几格由秘书那一格
     # 原样保留（`existing` 传进去，它只改 label / 正文 / aliases / source_lit）。
     status = ""
@@ -1066,12 +1103,13 @@ def sync_from_legacy(tx: Any, legacy_row: Mapping[str, Any], *,
     return secretary.write_concept_row(
         tx, stmt_id=cid, label=label, definition=definition, aliases=aliases,
         source_lit_id=source_lit, existing=existing,
-        status=status, quote_reason=quote_reason)
+        status=status, quote_reason=quote_reason, page_range=page_range)
 
 
 def upsert(store: Any, *, label: str, definition: str = "", stmt_id: str = "",
            aliases: Iterable[str] = (), source_lit_id: str = "", proof_text: str = "",
-           doc_id: str = "", actor: str = "agent-B") -> dict[str, Any]:
+           doc_id: str = "", actor: str = "agent-B",
+           page_range: Any = None) -> dict[str, Any]:
     """写一条概念行：新标准先写，老表照旧镜像（同号）。
 
     返回 `{"checked", "stmt_id", "mirrored", "tables", "reason"}`。
@@ -1124,7 +1162,8 @@ def upsert(store: Any, *, label: str, definition: str = "", stmt_id: str = "",
             sid = str(stmt_id or "").strip() or tx.alloc_id(S.TABLES["statements"]["id_kind"])
             write_concept(tx, stmt_id=sid, label=name, definition=definition, aliases=aliases,
                           source_lit_id=source_lit_id, proof_text=proof_text, doc_id=doc_id,
-                          actor=actor, mirror=bool(legacy.get("present")))
+                          actor=actor, mirror=bool(legacy.get("present")),
+                          page_range=page_range)
     except Exception as exc:  # noqa: BLE001 —— 落盘失败必须回三态，不许半笔
         return {"checked": False, "stmt_id": "", "mirrored": False, "tables": [],
                 "concept_action": "refused", "concept_identity": {},

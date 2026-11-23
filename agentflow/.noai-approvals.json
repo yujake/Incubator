@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-23T18:34:32+08:00",
+  "generated_at": "2026-11-24T02:18:53+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -765,10 +765,10 @@
       "path": "src/agentflow/tools/search_tools.py",
       "glob": "src/agentflow/tools/search_tools.py",
       "category": "auth-audit",
-      "sha256": "5ad5fe48841b7b806d844230f314856080c1743d69d974fd308c5a0f54a3a9b6",
+      "sha256": "9cc7a93708c120b90facf1ad389ff34dcbbf9038748f1a2f78b8583d1a4bf587",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "B2R5-FIX：search_tools.py 的注释指路（RESERVED_ARTIFACT_TABLE）与两处 json.dumps 补 default=str；specs/m.py 的 M policy 去掉任务名（真机 sylow-1 → 真机读数），判据 test_m_plans_before_it_proves.test_the_policy_is_a_general_habit_not_a_task_script 守。登记≠批准：reviewers 留空，待 2 名 reviewer 走查。",
+      "change_note": "SEED-LANDING-FIX ①：_adopt_file 按 locallib.keeps_original 选 copy2/move（投放处与被声明覆盖的字节只复制）；落点仍由 locallib.library_landing 一处给。登记≠批准，reviewers 留空。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

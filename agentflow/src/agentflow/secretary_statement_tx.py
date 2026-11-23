@@ -654,6 +654,10 @@ class StatementTxMixin:
                     self_authored=(self_authored
                                    or (resolved_origin == "own_result"
                                        and not str(origin or "").strip())),
+                    # 概念行也要"定义在第几页"这一格：这一支的页码由调用方随
+                    # 这一条概念一起交（`concepts[].page_range`）；不交就是
+                    # 不知道，读侧会逐条点名。
+                    page_range=c.get("page_range"),
                     mirror=bool(legacy.get("present")))
                 identity_actions.append({
                     "name": name, "concept_action": "created",

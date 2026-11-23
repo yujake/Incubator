@@ -8,6 +8,35 @@ from .. import quoteevidence as _QE   # D1：三态判决 ⇒ 可复核的区间
 from .. import sysresidue as _SR    # SYSRESIDUE ①：`processed` 那一格的必填证据（写点自保）
 from ..extract import DocumentText as _DT
 from pathlib import Path as _Path
+from typing import Any, Mapping
+
+
+def _page_range_of(value: Any) -> Any:
+    """`page_range` 的入参归一：`PageRange` / dict / 别的 ⇒ `PageRange` 或 `None`。
+
+    概念行的页码有两个来路（概念草稿的 `page`、该概念所属关系行的
+    `page_range`），关系行那一侧既可能是 `schema.PageRange`（`_ground_relations`
+    的产物）也可能是 dict（替身抽取器 / 旧夹具）。归一只有这一处 —— 各写一份
+    转换就会在"dict / 对象"这两种形态上分家，表现是"有的概念有页码、有的没有"。
+    """
+    if isinstance(value, S.PageRange):
+        return value
+    if isinstance(value, Mapping):
+        return S.PageRange.from_dict(dict(value))
+    return None
+
+
+def _page_range_of_page(page: Any) -> Any:
+    """`concepts[].page`（1-based 整数）⇒ 单页区间；没有 / 不是正数 ⇒ `None`。
+
+    不兜底到第 1 页：概念行的这一格是"定义在第几页"，编一个数会让读侧静默通过，
+    而空着会被审稿验收逐条点名（宁可被点名，不许假绿）。
+    """
+    try:
+        no = int(page)
+    except (TypeError, ValueError):
+        return None
+    return S.PageRange(no, no, f"p. {no}") if no >= 1 else None
 
 
 class _RunOnce:
@@ -318,6 +347,27 @@ class _RunOnce:
             verified_rels.append({"rel": rel, "check": chk, "note": hit_note,
                                   "doc": hit_doc})
 
+        # ---- 概念的定义页：关系行上已经有回验过的 `page_range`
+        #
+        # 同一批抽取产出的概念行与关系行此前各走各的：关系行带页码（`_ground_relations`
+        # 就要求并回验它），概念行那一格却连参数都没有 ⇒ 文献来的概念行恒为空，
+        # 而读侧（审稿验收）对 `external_lit` 的概念逐条报"缺 page_range"。
+        # 这里按名字建一份"关系行上的页"：优先逐字回验通过的那一条，其次任意一条
+        # （页码标错但引文为真的那一档仍比"没有页码"更可核）。
+        page_by_name: dict[str, dict[str, Any]] = {}
+        for _item in verified_rels:
+            _pr = _page_range_of(getattr(_item["rel"], "page_range", None))
+            if _pr is None:
+                continue
+            _verified = _item["check"].verified is True
+            for _n in (getattr(_item["rel"], "concept_names", []) or []):
+                _key = T.normalize(str(_n))
+                if not _key:
+                    continue
+                _prev = page_by_name.get(_key)
+                if _prev is None or (_verified and not _prev["verified"]):
+                    page_by_name[_key] = {"page_range": _pr, "verified": _verified}
+
         # ---- 提交（锁内，短）
         # 声明哪几张表由过渡层决定（`concepts` 落刀之后不再存在 ⇒ 声明它会以"未知表"失败）。
         with self.store.tx(*_CR.tables_for_concept_write("literature", "relations"),
@@ -325,22 +375,42 @@ class _RunOnce:
             concept_rows = _CR.view_tx(tx, shape="legacy")["rows"]
             relation_rows = tx.rows("relations")
             touched: set[str] = set()
+            #: 已经补过页码的概念号：同一条概念在一个批里被多条关系提到时不重复写
+            #: （fill-if-empty 在秘书那一格，但"要不要为它再开一笔写"在这边决定）。
+            page_applied: set[str] = set()
+            #: 建行时没有页码、这一批里也没补上的概念号（收尾读数用）。
+            missing_page_cids: set[str] = set()
+
+            def _page_for_name(name: str) -> Any:
+                got = page_by_name.get(T.normalize(str(name)))
+                return got["page_range"] if got else None
 
             def _merge_aliases(existing: dict, name: str,
-                               aliases: Iterable[str] | None) -> None:
+                               aliases: Iterable[str] | None,
+                               page_range: Any = None) -> None:
                 # 合并别名（需求未要求，但别名不合并会导致后续同义名重复建概念）
                 current = existing.get("aliases") or []
                 normalized_name = existing.get("normalized_name") or ""
                 merged = S.sorted_unique(list(current) + [name] + list(aliases or []))
                 merged = [a for a in merged if T.normalize(a) != normalized_name]
-                if merged == current:
+                changed = merged != current
+                if changed:
+                    existing["aliases"] = merged
+                    existing["updated_at"] = S.now_iso()
+                cid = str(existing.get("concept_id") or "")
+                # 页码是第二件要办的事：这条概念先前落成空页码（旧写侧没有那一格），
+                # 而这一趟的关系行带着回验过的页 ⇒ 补进去（只补空，不覆盖）。
+                need_page = page_range is not None and cid not in page_applied
+                if not changed and not need_page:
                     return
-                existing["aliases"] = merged
-                existing["updated_at"] = S.now_iso()
                 # 一处调用同时办两件事：老表还在时先写老表那一份，再同步新标准
                 # （同一个号）；老表已退役 ⇒ 只写新标准。见 conceptrows。
                 _CR.upsert_legacy_shaped(tx, existing, actor=self.actor,
-                                         note="alias_merge")
+                                         note="alias_merge",
+                                         page_range=page_range if need_page else None)
+                if need_page:
+                    page_applied.add(cid)
+                    missing_page_cids.discard(cid)
 
             def _refuse_concept(name: str, why: str) -> str:
                 res.concepts_refused += 1
@@ -353,11 +423,12 @@ class _RunOnce:
                 })
                 return ""
 
-            def resolve_concept(name: str, definition: str = "", aliases: Iterable[str] | None = None) -> str:
+            def resolve_concept(name: str, definition: str = "", aliases: Iterable[str] | None = None,
+                                page_range: Any = None) -> str:
                 nonlocal concept_rows
                 existing = D.find_concept(concept_rows, name, list(aliases or []))
                 if existing is not None:
-                    _merge_aliases(existing, name, aliases)
+                    _merge_aliases(existing, name, aliases, page_range)
                     res.concepts_reused += 1
                     return existing["concept_id"]
                 # 2026-11-08（D2 后门）：先判同一性、再发号。`conceptrows.upsert`
@@ -380,7 +451,7 @@ class _RunOnce:
                         return _refuse_concept(
                             name, ("闸判 same 却指不到一条可并的在册概念行（stmt:"
                                    f"{same_as} 在事务快照里读不到）⇒ 受控拒：不新建、不合并"))
-                    _merge_aliases(target, name, aliases)
+                    _merge_aliases(target, name, aliases, page_range)
                     res.concepts_reused += 1
                     res.details.append({
                         "lit_id": lit_id, "stage": "concept_identity",
@@ -429,8 +500,15 @@ class _RunOnce:
                 # `sync_from_legacy` 把这一格带进新标准那一行 ⇒ 记成
                 # `origin="external_lit"`。真机 mp3 的 1142/1143 条概念行都有文献出处，
                 # 却因为写死 `own_result` 被读成"我们自己的结果"（本批缺陷一第二处）。
-                _CR.upsert_legacy_shaped(tx, d, actor=self.actor, note="created")
+                _CR.upsert_legacy_shaped(tx, d, actor=self.actor, note="created",
+                                         page_range=page_range)
                 res.concepts_created += 1
+                if page_range is None:
+                    # 建行时没有定义页：先记下，这一批后面的关系行若带着回验过的页
+                    # 会把它补上（`_merge_aliases` 那一支 discard）；收尾时还留在这个
+                    # 集合里的才是"这一趟真的写不出来的页码"。它不拦这一笔
+                    # （概念本身是对的），但必须数得出来 —— 读侧对同一批行会逐条点名。
+                    missing_page_cids.add(cid)
                 # 新建那一档不再另落一条 `concept_identity` 读数：`details` 是有限读数面
                 # （`to_dict` 截前 20 条），一条概念一条 identity 行会把配额拒绝那几条
                 # 挤出去（"静默丢"的形态）。新建是默认处置，`concepts_created` 已经数得清；
@@ -439,7 +517,10 @@ class _RunOnce:
 
             # 1) 显式概念草稿先建（它们带定义，是概念的权威来源）
             for cd in concepts:
-                resolve_concept(cd.name, cd.definition, cd.aliases)
+                # 页码优先取草稿自己给的那一页（定义就在那儿），没有再退回
+                # 关系行上的页（这条概念在哪一页被逐字提到）。
+                _page = _page_range_of_page(getattr(cd, "page", 0)) or _page_for_name(cd.name)
+                resolve_concept(cd.name, cd.definition, cd.aliases, page_range=_page)
 
             # 2) 关系：解析概念 → 判重 → 写入
             written: list[str] = []
@@ -452,7 +533,7 @@ class _RunOnce:
                         {"lit_id": lit_id, "stage": "relation", "skipped": "fewer_than_two_concepts", "names": names}
                     )
                     continue
-                resolved = [resolve_concept(n) for n in names]
+                resolved = [resolve_concept(n, page_range=_page_for_name(n)) for n in names]
                 if any(not cid for cid in resolved):
                     # 有概念被配额拒了 ⇒ 这条关系「这一轮」写不了（它要指着一个不存在的号）。
                     # 不许静默丢：逐条点名 + 计数。剩下的按业主的口径"下一轮或写进报告"——
@@ -682,6 +763,10 @@ class _RunOnce:
             tx.upsert("literature", lit_row, note="processed")
             res.processed = 1
 
+        # 收尾读数：这一批新建的概念里，"建行时没有页码、这一批也没补上"的条数。
+        # 与读侧的 `page_range_missing_by_kind` 指向同一批行 —— 写侧先看见，
+        # 不用等到收工门才发现"概念行整批没有出处页码"。
+        res.concepts_page_missing = len(missing_page_cids)
         # 配额的读数随结果一起出去（`B.run` 逐篇汇总 ⇒ 一轮的总读数）。
         res.concept_quota = quota.reading()
         return self._finish(res)

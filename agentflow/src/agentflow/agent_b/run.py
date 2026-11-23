@@ -40,6 +40,7 @@ class _Run:
                 "concepts_created",
                 "concepts_reused",
                 "concepts_refused",
+                "concepts_page_missing",
                 "relations_deferred",
                 "relations_added",
                 "relations_duplicate",

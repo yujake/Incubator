@@ -63,13 +63,16 @@ __all__ = [
     "DECLARATION_NAME",
     "DECLARATION_READ",
     "DECLARATION_UNREADABLE",
+    "DROP_ZONES",
     "IngestReport",
     "LocalHit",
     "declaration_path",
     "declaration_verdict",
     "excerpt_for",
+    "in_drop_zone",
     "ingest_directory",
     "is_declared",
+    "keeps_original",
     "library_landing",
     "library_landing_name",
     "library_name_of",
@@ -184,7 +187,24 @@ def library_landing_name(source: Path | str, sha256_hex: str, *,
     if not _LANDING_HASH_MIN_CHARS <= int(hash_chars) <= 64:
         raise ValueError(
             f"hash_chars 必须落在 {_LANDING_HASH_MIN_CHARS}..64（收到 {hash_chars!r}）")
-    return f"{digest[:int(hash_chars)]}-{_safe_name(Path(source))}"
+    want = int(hash_chars)
+    name = _safe_name(Path(source))
+    # 幂等（2026-11-24 SEED-LANDING-FIX ②）：名字里已经带着「这份内容」的 hash 前缀
+    # （`<8..64 位 hex>-<名>`）时不再加第二个。种子包里的文件名本来就是这个形状
+    # （`scripts/seed_corpus.py --build` 按内容 hash 起名），而 `seedinject` 原样搬进
+    # 投放处 ⇒ 收编时再拼一次就得到
+    # `11dc1a689516-11dc1a689516-harris-sylow-theorems.pdf`（真机 sylow-3 现场），
+    # 该名字与投放处那份不同名，读侧"这份材料入编了没有"就对不上。
+    #
+    # 前缀比这次要的短（12 位撞了、要加长到 16/32/64）⇒ 替换那一段，不叠加：
+    # 叠成 `<16 位>-<12 位>-名` 会让名字里出现两段关于同一份内容的 hash。
+    head, sep, rest = name.partition("-")
+    low = head.lower()
+    if sep and rest and _LANDING_PREFIX_RE.match(low) and digest.startswith(low):
+        if len(low) >= want:
+            return name
+        return f"{digest[:want]}-{rest}"
+    return f"{digest[:want]}-{name}"
 
 
 #: 落点名里的内容 hash 前缀（`library_landing_name` 那一截；`strip_landing_hash` 认它）。
@@ -407,6 +427,72 @@ def declaration_verdict(workspace_root: Path | str,
         "undeclared": tuple(rel for rel in rels if not is_declared(rel, declared)),
         "problem": problem,
     }
+
+
+# --------------------------------------------------------------------------- #
+# 收编时原件留不留：投放处与被声明的字节只许复制（2026-11-24 裁定）
+# --------------------------------------------------------------------------- #
+#
+# ## 裁定（SEED-LANDING-FIX ①）
+#
+# 收编（`search.register` / 候选链 `lit.admit_all`）不许把投放处里的字节搬走：
+# 用户的声明（`RELIABLE-REFERENCES.json`）说的是"投放处里那几份文件是可靠参考文献"，
+# 这些话是 M 逐字抄下来的用户原话 —— 唯一有权改它的是 M（按用户原话），A 不能改。
+# 所以只要收编会把文件从投放处搬走，"声明里那些路径还在不在盘上"这条判据就必然变红
+# （`scripts/check_declaration.py` 的 `declared_empty` / `reference_count`），
+# 而唯一的"修法"只能是让声明跟着搬 —— 那是让系统的动作去改写用户的话。
+#
+# 代价对比：复制多占一份字节（种子批 892 979 字节，25 份种子包 17 MB），换来
+# `reference/` 与 `library/` 各留一份、声明面永远可核；而"移动 + 声明跟着变"要
+# 改 user 声明、还要把 gate 从"盘上在不在"改成"台账记没记"（弱判据，台账可手写）。
+# 兄弟路径 `ingest_directory` 本来就是 `shutil.copy2` —— 两条收编路的语义由此统一。
+#
+# 不搬的范围（两条，缺一条就有绕行口）：
+#   * 投放处里的（`DROP_ZONES`）—— 连候选链也照此办（候选链不核声明）；
+#   * 被用户声明覆盖的（`is_declared`）—— 声明可以点名任何位置，不只是投放处。
+# 之外（框架自己的下载暂存 `downloads/` 等）仍按"收编即搬"处理：那些字节是这一趟
+# 自己写的中间产物，留在原处会变成"既不在书架、也不在投放处"的游离文件。
+
+#: 投放处的名字：`reference/` 是新落点（`seedinject.SEED_SUBDIR`），`source/` 是旧名
+#: （也是审阅型工作区的只读基线）。与 `scripts/check_declaration.py` 的 `DROP_ZONES`
+#: 是同一份口径，由 `tests/test_the_declared_seed_stays_in_its_drop_zone.py` 钉住。
+DROP_ZONES: tuple[str, ...] = ("reference", "source")
+
+
+def _workspace_rel(workspace_root: Path | str, path: Path | str) -> str:
+    """`path` 的工作区相对 posix 路径；不在工作区内 / 解析不了 ⇒ 空串。"""
+    try:
+        root = Path(workspace_root).resolve()
+        rel = Path(path).resolve().relative_to(root)
+    except (OSError, ValueError):
+        return ""
+    return rel.as_posix()
+
+
+def in_drop_zone(workspace_root: Path | str, path: Path | str) -> bool:
+    """`path` 在不在工作区的投放处（`DROP_ZONES` 的某一格）里。"""
+    rel = _workspace_rel(workspace_root, path)
+    if not rel or "/" not in rel:
+        return False
+    top = rel.split("/", 1)[0].casefold()
+    return top in {zone.casefold() for zone in DROP_ZONES}
+
+
+def keeps_original(workspace_root: Path | str, source: Path | str) -> bool:
+    """收编这份字节时，原件要不要留在原处（`True` ⇒ 复制；`False` ⇒ 搬走）。
+
+    唯一实现：`search_tools._adopt_file` 按它选 `copy2` / `move`。两种 `True` 的由来
+    （投放处 / 被声明覆盖）与"为什么不是移动"写在上面那节注释里；本函数只回答这一格，
+    不判"许不许入库"（那是 `declaration_verdict` 的事，两者不可互相替代：
+    一份未声明、但落在投放处的字节也不许被搬走）。
+    """
+    rel = _workspace_rel(workspace_root, source)
+    if not rel:
+        return False
+    declared, _problem = read_declaration(workspace_root)
+    if declared and is_declared(rel, declared):
+        return True
+    return in_drop_zone(workspace_root, source)
 
 
 def _workspace_pairs(workspace_root: Path | str, root: Path | str,

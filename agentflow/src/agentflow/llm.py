@@ -122,6 +122,16 @@ class ConceptDraft:
     definition: str
     aliases: list[str]
     source_lit_id: str
+    #: 这个定义在来源里的页码（1-based；0 = 抽取器没给 / 给得不合法）。
+    #:
+    #: 抽取提示词本来就要求 ``concepts[].page``（见 ``DEFAULT_PROMPT_TEMPLATE``
+    #: 的输出格式）
+    #: —— 概念行的出处要落到 ``statements.page_range`` 那一格，而定义在第几页
+    #: 只有抽取那一刻知道。这一格在草稿上丢掉过一次（解析时只取 name /
+    #: definition / aliases），结果是文献来的概念行永远写不出页码，而关系行
+    #: 却带着同一批页码 ⇒ 读侧逐条报"缺 page_range"。草稿带上它，
+    #: ``agent_b.run_once`` 才有东西可往 ``conceptrows.concept_statement`` 上接。
+    page: int = 0
 
 
 @dataclass(frozen=True)
@@ -440,6 +450,9 @@ class RuleExtractor:
                                 definition=definition,
                                 aliases=[],
                                 source_lit_id=lit_id,
+                                # 规则抽取器是从第几页的那句话里认出这条定义的，
+                                # 页码就在手上（`mined` 的第 3 格同源）。
+                                page=page_idx + 1,
                             )
                         )
                     mined.append((name, definition, page_idx + 1, sentence))
@@ -1050,7 +1063,7 @@ class LLMExtractor:
                 logger.warning("LLMExtractor: 文献 %s 第 %d/%d 块抽取失败：%s",
                                lit_id, idx + 1, len(bodies), exc)
                 continue
-            concepts.extend(self._build_concepts(payload, lit_id))
+            concepts.extend(self._build_concepts(payload, lit_id, doc))
             relations.extend(self._ground_relations(payload, doc))
             dropped += self._dropped_count
             reasons.extend(self._drop_reasons)
@@ -1115,6 +1128,10 @@ class LLMExtractor:
                 definition=merged,
                 aliases=aliases,
                 source_lit_id=prev.source_lit_id or d.source_lit_id,
+                # 跨块合并：页码取"先给出的那一块"（同一本书里同一个概念在
+                # 多块出现时，第一次出现的那一页就是定义所在页的概率最高；
+                # 取后者会让后面的块把前面的定义页顶掉）。
+                page=prev.page or d.page,
             )
         return list(out.values())
 
@@ -1140,9 +1157,14 @@ class LLMExtractor:
     # -- 内部：构建与回验 --------------------------------------------------- #
 
     def _build_concepts(
-        self, payload: dict[str, Any], lit_id: str
+        self, payload: dict[str, Any], lit_id: str, doc: "DocumentText | None" = None
     ) -> list[ConceptDraft]:
-        """把 ``concepts`` 数组转成 draft，顺手丢掉空名条目。"""
+        """把 ``concepts`` 数组转成 draft，顺手丢掉空名条目。
+
+        ``doc`` 只用来把 ``page`` 收束到本文档的页数内 —— 抽不到合法页码时
+        记 0（"没给"），不按第 1 页兜底：概念行上的页码是"定义在第几页"，
+        编一个数比空着更坏（空着会在审稿验收里被逐条点名，编的数会静默通过）。
+        """
         raw = payload.get("concepts")
         if not isinstance(raw, list):
             return []
@@ -1165,9 +1187,27 @@ class LLMExtractor:
                     definition=str(item.get("definition") or "").strip(),
                     aliases=aliases,
                     source_lit_id=lit_id,
+                    page=self._coerce_page_no(item.get("page"), doc),
                 )
             )
         return out
+
+    @staticmethod
+    def _coerce_page_no(raw: Any, doc: "DocumentText | None" = None) -> int:
+        """模型给的 ``concepts[].page`` ⇒ 合法页码；给不出 / 不合理 ⇒ 0（"没给"）。
+
+        与 :meth:`_coerce_page_range` 的差别是失败时不兜底：那一格缺失时会
+        退化成"整篇"（为了让引文校验还有机会命中），而概念的定义页退化不了 ——
+        盯死第 1 页会把假页码写进概念行。这一格只认 ``1..len(pages)`` 里的数。
+        """
+        try:
+            page = int(raw)
+        except (TypeError, ValueError):
+            return 0
+        total = max(1, len(getattr(doc, "pages", ()) or ()))
+        if page < 1 or page > total:
+            return 0
+        return page
 
     def _coerce_page_range(self, raw: Any, doc: "DocumentText") -> Any:
         """把 LLM 给的 ``page_range`` 收束到合法区间；缺失时退化为首末页。

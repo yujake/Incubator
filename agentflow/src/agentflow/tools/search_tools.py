@@ -2098,16 +2098,30 @@ def _adopt_file(ctx: _Ctx, raw_path: str | None, warnings: list[str]) -> tuple[s
 
     三种情形分别处理：
     1. 已在 ``library/`` 内 ⇒ 原地保留（可能已被 B 引用过，移动会打断追溯）；
-    2. 在 library 之外（如 ``downloads/``）⇒ 搬进唯一落点；
+    2. 在 library 之外（如 ``reference/`` / ``downloads/``）⇒ 收编进唯一落点；
     3. 文件不存在 ⇒ ``path`` 置 ``None`` 并记 warning，不编造路径。
 
-    ## 落点（2026-11-22 B2a，业主裁定：先改写者）
+    ## 收编是"复制"还是"搬"（2026-11-24 SEED-LANDING-FIX ① 裁定）
 
-    第 2 种的落点名不由本函数决定：走 `locallib.library_landing`（与
-    `locallib.ingest_directory` 共用的同一个函数）⇒ 新写一律扁平
-    ``library/<内容 hash 前缀-名>``。本函数刻意不接 lit_id：落点与号无关，
-    同一份字节两次收编落到同一个名字上。旧布局 ``library/<lit_id>/<名>`` 只在第 1 种
-    情形里作为存量原样读回（读兼容），不再由这里产出。
+    判据只有一处：`locallib.keeps_original`。**投放处（`reference/` / `source/`）里的
+    字节、以及被用户声明覆盖的字节，只复制、原件留在原处**；其余（框架自己的下载暂存
+    `downloads/` 等）仍按"收编即搬"处理。
+
+    为什么不能搬走投放处的那一份（sylow-3 现场）：候选链的 `lit.admit_all` 会把抽读
+    回执的源文件（=`reference/<sha12>-<名>`）交给登记路收编，`shutil.move` 一搬，
+    `reference/` 就空了；而用户的声明 `RELIABLE-REFERENCES.json` 里写的是
+    `paths: ["reference/…"]`（M 逐字抄的用户原话，A 不许改）⇒
+    `scripts/check_declaration.py` 的 `declared_empty` 报"声明点了但盘上没有"、
+    `reference_count` 报"空投放处"。复制让"声明的 paths 还在盘上"这件事由实现保证，
+    而不是靠把 gate 改宽成"看不到也算过"。兄弟路径 `ingest_directory` 本来就是
+    `shutil.copy2`，两条收编路由此同一个语义。
+
+    落点（2026-11-22 B2a，业主裁定：先改写者）：第 2 种的落点名不由本函数决定，走
+    `locallib.library_landing`（与 `locallib.ingest_directory` 共用的同一个函数）⇒
+    新写一律扁平 ``library/<内容 hash 前缀-名>``（名字里已有同一内容 hash 前缀时不再
+    重复加，见 `locallib.library_landing_name` 的幂等规则）。本函数刻意不接 lit_id：
+    落点与号无关，同一份字节两次收编落到同一个名字上。旧布局 ``library/<lit_id>/<名>``
+    只在第 1 种情形里作为存量原样读回（读兼容），不再由这里产出。
     """
     if not raw_path:
         return None, 0, None
@@ -2141,7 +2155,7 @@ def _adopt_file(ctx: _Ctx, raw_path: str | None, warnings: list[str]) -> tuple[s
 
     # 落点只有一处实现（`locallib.library_landing`，与 `ingest_directory` 共用）：
     # 扁平 `library/<内容 hash 前缀-名>`；同名不同内容会加长前缀，绝不覆盖。
-    from ..locallib import library_landing
+    from ..locallib import keeps_original, library_landing
     sha = _sha256_of(p)
     try:
         landing, target = library_landing(lib, p, sha)
@@ -2153,9 +2167,21 @@ def _adopt_file(ctx: _Ctx, raw_path: str | None, warnings: list[str]) -> tuple[s
         # 这份字节已在库里（内容相同）⇒ 不搬第二份、也不覆盖；原文件留在原处
         # （不在 library 里的那份不是我们的，删不删由它的主人定）。
         return landing, target.stat().st_size, sha
+    # 复制还是搬走：唯一判据是 `locallib.keeps_original`（投放处/被声明的字节只复制）。
+    keep = keeps_original(ctx.store.root, p)
     try:
-        shutil.move(str(p), str(target))
+        if keep:
+            shutil.copy2(str(p), str(target))
+        else:
+            shutil.move(str(p), str(target))
     except Exception as exc:  # noqa: BLE001 - 跨盘/权限/占用都可能失败
+        if keep:
+            # 复制失败可能留下半份目标：当场清掉，别让它占住落点名（下一次会被判成
+            # "同名不同内容"而被迫加长前缀）。
+            try:
+                target.unlink()
+            except OSError:  # 清不掉也不能盖住真正的失败原因（下面那条 warning 才是）
+                pass
         warnings.append(f"收编文件失败（{type(exc).__name__}: {exc}），path 置空；原文件仍在 {p}")
         return None, 0, None
     return landing, target.stat().st_size, sha
@@ -2405,7 +2431,8 @@ def _declaration_refusal(ctx: _Ctx, raw_path: str | None, *,
     ## 为什么拒绝必须发生在 `tx` 之前
 
     `search.register` 的写有两处副作用：`tx.alloc_id("lit")` 与 `_adopt_file`
-    （把文件 `shutil.move` 进 `library/` 的唯一落点 `<内容 hash 前缀-名>`）。
+    （把文件收编进 `library/` 的唯一落点 `<内容 hash 前缀-名>`；投放处/被声明的字节
+    只复制，其余搬走 —— 见 `locallib.keeps_original`）。
     闸放在 `tx` 之前 ⇒ 拒信说的
     "本行未写入 / 文件没动"就是盘上事实，而不是一句承诺。
     """
@@ -2546,8 +2573,8 @@ def _h_register(
         )
 
     # ---- 声明闸（业主裁定 2026-11-21；与 `search.ingest_local` 同一道判据）--------
-    # 放在 `tx` 之前：这一笔一旦进事务就会 `alloc_id` 并 `_adopt_file`（把文件搬进
-    # `library/<内容 hash 前缀-名>`）—— 那两件都是不可撤的落盘。
+    # 放在 `tx` 之前：这一笔一旦进事务就会 `alloc_id` 并 `_adopt_file`（收编进
+    # `library/<hash 前缀-名>`；投放处/被声明的字节只复制，原件留原处）—— 不可撤。
     # 候选链（`_from_candidate`）不走这道闸：它的准入依据是候选行 + 读过正文，
     # 不是"用户点名了哪个文件"。
     if not _from_candidate:
@@ -3268,7 +3295,9 @@ def _registrar_from_candidate(ctx: _Ctx, row: Mapping[str, Any]) -> dict:
     而登记路径原来一律 `path=None` ⇒ 一条判成 `readable` 的候选进库之后仍然
     `path=null`，B 只能写 `no_local_file`，"读过"这件事在库里一个字都不剩。
     所以：这一条真的读过（`litavail.check_read == "ok"`）时，把抽读回执里的
-    源文件交给登记路径收编（`_adopt_file` 会搬进 `library/<内容 hash 前缀-名>`），
+    源文件交给登记路径收编（`_adopt_file` 收编进 `library/<内容 hash 前缀-名>`；
+    源文件在投放处/被声明覆盖时**只复制**，原件留在原处 —— 2026-11-24 裁定，
+    见 `locallib.keeps_original`），
     回执的档位写进 `download.fulltext=ok`。没读过的照旧 `path=None`：行上不会凭空
     多出一份没人读过的文件。
     """

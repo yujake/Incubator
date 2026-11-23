@@ -85,6 +85,9 @@ STRUCTURAL_DIRS: frozenset[str] = frozenset({
 })
 
 #: 投放处的候选名字（`reference/` 是新布局，`source/` 是文档里仍在用的旧名）。
+#: 与 `locallib.DROP_ZONES` 是同一份口径（收编时"投放处里的字节只复制"读的就是那一份；
+#: 两处由 `tests/test_the_declared_seed_stays_in_its_drop_zone.py` 钉在一起 —— 一漂，
+#: 声明门与收编路就会对同一份文件给两个答案）。
 DROP_ZONES: tuple[str, ...] = ("reference", "source")
 
 #: 问"有没有书需要声明"时要扫的地方 = 结构目录去掉投放处（投放处里的书正是要被点名的）。

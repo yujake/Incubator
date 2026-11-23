@@ -22,6 +22,7 @@ from __future__ import annotations
 from . import propositionkey as _PK
 from . import schema as S
 from pathlib import Path
+from typing import Any
 
 from .secretary_decl import (  # noqa: F401 — 这些名字由 secretary_decl 定义
     STATEMENT_WRITE_TABLES,
@@ -39,6 +40,19 @@ from .secretary_port import (  # noqa: F401 — 这些名字由 secretary_port �
 from .secretary_vocab import (  # noqa: F401 — 这些名字由 secretary_vocab 定义
     CONCEPT_IDENTITY_UNJUDGED,
 )
+
+
+def _page_range_has_content(value: Any) -> bool:
+    """`page_range` 里"真的有页码"没有：`start` 或非空 `label`（与读侧同一把尺）。
+
+    写侧补页码的判据（fill-if-empty）与读侧 `reviewaccept.statement_source_problem`
+    对"缺页码"的定义必须是同一句：两边分家时，写侧会以为"已经有了"而不再补，
+    读侧照旧逐条报缺 —— 那批行就永远修不好。
+    """
+    page = value.to_dict() if isinstance(value, S.PageRange) else value
+    if not isinstance(page, dict):
+        return False
+    return bool(page.get("start") or str(page.get("label") or "").strip())
 
 
 class ConceptMixin:
@@ -145,6 +159,9 @@ class ConceptMixin:
                                           doc_id=str(body.get("doc_id") or ""),
                                           origin=concept_origin,
                                           self_authored=(concept_origin == "own_result"),
+                                          # 定义还没到，但定义页可能已经知道（调用方
+                                          # 从文献抽到术语时就带着页）⇒ 有就记，没有就空。
+                                          page_range=body.get("page_range"),
                                           mirror=bool(legacy.get("present")), out=out,
                                           d12_pending=True)
         d12 = bool(out.get("d12_pending"))
@@ -182,7 +199,8 @@ class ConceptMixin:
                              sid: str, name: str, full: str,
                              alias_list: list[str], lit: str, doc_id: str,
                              origin: str, self_authored: bool,
-                             proof_text: str) -> tuple[dict[str, Any], str]:
+                             proof_text: str,
+                             page_range: Any = None) -> tuple[dict[str, Any], str]:
         """这一笔要写进 `statements` 的那份行数据，以及它的来路（`create` / `sync`）。
 
         `existing is None` = 新建：良定义证明这一格只在 V 签回来时保留正文（判据是既有
@@ -204,6 +222,7 @@ class ConceptMixin:
                                         aliases=alias_list, source_lit_id=lit,
                                         doc_id=doc_id, actor=f"secretary-{self.role}",
                                         origin=origin, self_authored=self_authored,
+                                        page_range=page_range,
                                         # 概念行不新写第二份判据：有没有签由上面那一读
                                         # 决定，构造口只按 `sign.state` 留 / 清。
                                         proof_text=proof_text, sign=sign
@@ -220,6 +239,13 @@ class ConceptMixin:
         data["statement_full"] = full
         data["aliases"] = alias_list
         data["source_lit_id"] = lit or None
+        # 页码只在"这一行还是空的"时补：同一份抽取里，概念草稿与关系行都能
+        # 给出定义页，而同步会遇到"先前落成空页码的行"（旧写侧没有这一格）。
+        # 不覆盖已填的值 —— 后到的关系页可能只是"这个概念在哪一页被提到"，
+        # 拿它顶掉草稿给的定义页是把更准的读数换成更粗的。
+        if page_range is not None and not _page_range_has_content(
+                data.get("page_range")):
+            data["page_range"] = CR.page_range_of(page_range).to_dict()
         if not dict(data.get("bits") or {}):
             # 老行本来没有五元位（这次才是它第一次经秘书的手）⇒ 补上一份；
             # 已经有了的那一份不整份重算（签名那一族的凭据会被同步抹掉）。
@@ -243,6 +269,7 @@ class ConceptMixin:
                           existing: Mapping[str, Any] | None = None,
                           status: str = "", quote_reason: str = "",
                           proof_text: str = "",
+                          page_range: Any = None,
                           out: dict[str, Any] | None = None,
                           transition_sync: bool = False,
                           d12_pending: bool = False) -> dict[str, Any]:
@@ -265,6 +292,14 @@ class ConceptMixin:
            `out["label_washed"]` —— 静默改名是不许的；
         3. 概念同一性：`_same_concept_candidate`（`propositionkey.same_concept` 的唯一调用点），
            判词进 `out["concept_identity"]`。
+
+        ## `page_range`（"定义在第几页"）
+
+        概念行与命题行同一格：`external_lit` 的概念是从文献里摘的，读侧判据要
+        页码（`reviewaccept.statement_source_problem`）。这一格由调用方按本次
+        抽取的来路交进来（草稿的 `page` / 该概念所属关系行的 `page_range`）；
+        新建那一支直接落，改既有行那一支只补空、不覆盖（见
+        `_concept_row_payload`）。本层不编页码：没交就是"不知道"。
 
         ## 判到"同一个概念"时按 `concept_identity_action` 折算
 
@@ -303,7 +338,8 @@ class ConceptMixin:
         data, creator = self._concept_row_payload(
             existing=existing, sid=sid, name=name, full=full,
             alias_list=alias_list, lit=lit, doc_id=doc_id, origin=origin,
-            self_authored=self_authored, proof_text=proof_text)
+            self_authored=self_authored, proof_text=proof_text,
+            page_range=page_range)
         if str(status or "").strip():
             data["status"] = str(status)
         if str(quote_reason or "").strip():

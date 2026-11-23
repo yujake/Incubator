@@ -140,6 +140,12 @@ class BRunResult:
     #: 长得一样（静默丢弃那一档要堵的就是它）。
     concepts_refused: int = 0
     relations_deferred: int = 0
+    #: 这一趟新建的概念行里"没有页码"的条数（`external_lit` 的概念缺
+    #: `statements.page_range`）。写侧的"留读数"：页码从草稿的 `page` /
+    #: 关系行的 `page_range` 继承进来之后它应当恒 0；一旦不为 0，说明这一批
+    #: 概念的定义页在抽取那一刻就没拿到 —— 读侧（审稿验收的
+    #: `page_range_missing_by_kind`）会对同一批行逐条点名，两个读数指向同一件事。
+    concepts_page_missing: int = 0
     #: 配额的读数（`conceptrows.ConceptQuota.reading()`：`limit` / `written` /
     #: `refused` / `refused_count` / `why`）。空 dict = 这一趟没走到建概念那一步。
     concept_quota: dict = field(default_factory=dict)

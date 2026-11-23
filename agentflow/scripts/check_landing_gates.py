@@ -43,6 +43,12 @@ unsupported = `manuscripts/handoffs.jsonl` —— 旧账本不再被数成"交�
   是 `store` 自己写的；
 - `lit_reads.jsonl` / `lit_readbacks.jsonl` / `lit_availability.jsonl` / `lit_candidates/`
   是抽读与可得性那一路的台账（`litavail.py` / `litstage.py` 写）；
+- `archive/` 是退役/清表归档目录（`litstage.ARCHIVE_DIR`：清表之后整份委托落在
+  `data/archive/lit_candidates/archive-<request_id>.jsonl`）。它不是"模型随手扔在台账
+  目录里的产物"，而是框架自己的归档落点 —— 与 `lit_candidates/` 同一条口径（写侧在
+  `litstage`，这里登记它，不按内容再判一次；判它里面每一行长什么样是 `litstage` 的
+  读侧规矩）。2026-11-24 之前它没登记 ⇒ 真机 sylow-3 的落点门报
+  "非表 1 份：archive/"（诊断 defect ③）；
 - `research_request_ledger.json` 是 `research_tools.py` 的去重台账，它刻意不是 schema 表
   （`LEDGER_FILE`，`verify.py` 也按这个名字核）。
 
@@ -97,6 +103,11 @@ KNOWN_DATA_SIDECARS: dict[str, str] = {
     "counters.json": "编号空间计数器（`store` 的 `ID_COUNTERS` 落盘处）",
     ".locks": "表锁目录（`store.locks`）",
     "lit_candidates": "候选分目录（`litstage` 落，按候选号分文件）",
+    # 2026-11-24（SEED-LANDING-FIX ③）：`litstage` 的清表归档落点。真机 sylow-3 的
+    # `data/archive/lit_candidates/archive-r-000001.jsonl` 被改前这一项读成
+    # "不在任何台账里的非表项（archive/）" ⇒ 落点门红，而它是框架自己写的归档。
+    "archive": ("退役/清表归档目录（`litstage.ARCHIVE_DIR`：清表后整份委托落在 "
+                "`data/archive/lit_candidates/archive-<request_id>.jsonl`）"),
     "research_request_ledger.json": ("研究请求去重台账（`research_tools.LEDGER_FILE`；"
                                      "刻意不是 schema 表）"),
     "lit_reads.jsonl": "抽读台账（`litavail` 落）",
