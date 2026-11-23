@@ -678,7 +678,7 @@ This section is the set of readings a machine checks. Every number here has a ju
 change a number without changing the source and a test goes red. **Readings, not specifications.**
 
 ```text
-agentflow/.noai-paths            禁改区清单（**70** 条 glob / **67** 条唯一路径，**7** 个分组；2026-11-21 tests/golden 四条随 tests 不入 git 一并摘除）
+agentflow/.noai-paths            禁改区清单（**71** 条 glob / **68** 条唯一路径，**7** 个分组；2026-11-21 tests/golden 四条随 tests 不入 git 一并摘除）
 agentflow/src/agentflow/tools/   **19** 个 `*_tools.py`（工具层按角色装配，见 `python -m agentflow tools`）
 ```
 
