@@ -2961,6 +2961,10 @@ def empty_batch_reason(*, request_id: str, target: Sequence[str],
     （`lit.admit` 单数）不写定稿、不清表、不归档 ⇒ 它必须传自己那一句，否则
     回执会谎报"报告与归档都已落盘、行都已清表"。分档与词表仍只有这一处实现。
     """
+    # 四个受控前缀从词表里拆出来：`EMPTY_REASONS` 是唯一定义点，回执正文不再各写
+    # 一份字面量（两处写法一旦漂移，`reason` 的前缀就对不上词表，而没有任何东西会红）。
+    (no_pending, already_cleared,
+     all_rejected, nothing_admitted) = EMPTY_REASONS
     slots = [str(s or "") for s in target]
     n = len(slots)
     rows = [dict(by_slot.get(s) or {}) for s in slots]
@@ -2974,16 +2978,16 @@ def empty_batch_reason(*, request_id: str, target: Sequence[str],
         tail = ("报告与归档都已落盘、这一批的行都已清表 —— 没有要入库的，"
                 "别再对同一批调一次。")
     if n == 0:
-        return (f"no_pending_candidates：本次点名的 0 个槽（委托 {request_id} 没有可收的"
+        return (f"{no_pending}：本次点名的 0 个槽（委托 {request_id} 没有可收的"
                 f"候选 / 待判槽）⇒ 这一次没有可收的东西（{counts}）。要收文献先 "
                 "`lit.stage_add` 建候选，再逐条 `lit.admit` / `lit.stage_reject`，最后才提交。")
     if already >= n:
-        return (f"already_cleared：本次点名的 {n} 个槽在这一次调用之前就都清过表了"
+        return (f"{already_cleared}：本次点名的 {n} 个槽在这一次调用之前就都清过表了"
                 f"（幂等：这一批早交过）（{counts}）。{tail}")
     if rejected >= n:
-        return (f"all_rejected：本次点名的 {n} 个槽全是判拒的（含撤回 / 超配额那一档）"
+        return (f"{all_rejected}：本次点名的 {n} 个槽全是判拒的（含撤回 / 超配额那一档）"
                 f"（{counts}）。{tail}")
-    return (f"nothing_admitted：本次点名的 {n} 个槽都过了提交闸，但没有一条过得了入库闸"
+    return (f"{nothing_admitted}：本次点名的 {n} 个槽都过了提交闸，但没有一条过得了入库闸"
             f"（重叠 / 重复 / 不可读 / 登记失败，逐条见 `refused[]`）（{counts}）。{tail}")
 
 

@@ -3975,3 +3975,24 @@ ewtheorem / 论文写作只是推荐）一字未动。
 #:   开 **$0.076580**，两档 verdict=warmed。
 #:   五、口径：**p326 只冻这一次**；本笔之后不再为渲染面冻版。
 #:   本笔 = p326。
+
+#: p326 → p327（2026-11-23，只 B、M 两格：把任务名从政策/手册里去掉，证据语义保留）
+#:   一、先核树：`specs/b.py` **38389b92c859**（与指令给的值逐字对上）· `specs/m.py` **85f76eb54360** ·
+#:   `agent_skills.py` **4eb5b85fb52b**；冻前版本仍是 p326 ⇒ p327 没被人写过。
+#:   二、驱动面：**只 B、M 两格漂**（`scripts/recompute_prompt_digests.py` 现算 B ccc9c4de /
+#:   M da883296，与指令给的现算值逐字相同；其余九格与 p326 逐字相同）。**以现盘重算为准**。
+#:   三、来源（4 处文案）：① `specs/m.py` 的 policy 与 `agent_skills.py` 的 M 手册：把「真机 sylow-1」
+#:   改成「真机读数」（证据语义保留）；② `agent_skills.py` 的 B 手册：把「真机 sylow4」改成
+#:   「一次真机读数」；③ `specs/b.py` 的 `label` 说明：举例「Sylow 三定理」→「第一同构定理」，
+#:   反面教材「真机 sylow4」→「一次真机读数」。
+#:   四、连带：`PROMPT_VERSION` p326 → p327；`_FROZEN_PROMPT_DIGESTS` 十一格按现值重写
+#:   （`--write` 12 处）；`check_all --only prompt_digests` 绿（ok 1 / FAIL 0 / SKIP 0）；
+#:   **`agent_surface_snapshot` 重冻**（11 角色 / 67 条动作，只换 `roles.B.prompt` 与 `roles.M.prompt`）；
+#:   `tool_surface_snapshot` **未重冻、判据当场绿**（`specs/b.py` 的 `label` 说明属动作声明，
+#:   不进 126 件工具声明面）；`_VOLATILE_FACT_SETS` 追加 p327 一格（count=15、
+#:   `keys_sha256=21314a39…` 与 p326 同值）；`tools/write_system_docs.py` 重跑（`ROLE-GUIDE.md`
+#:   205,682 → 预期 205,676）；warm 两档真跑（上游已热）。
+#:   五、FC-27：`specs/b.py` / `specs/m.py` 由内容路各自跑过 `--baseline`（b.py
+#:   `38389b92c859`）；本笔没有再动这两个文件，故不重复登记。
+#:   六、口径：**p327 只冻这一次**；之后不再为渲染面冻版。
+#:   本笔 = p327。

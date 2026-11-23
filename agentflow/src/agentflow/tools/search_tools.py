@@ -1357,7 +1357,7 @@ def _unrecorded_url_warning(slot: str, url: str) -> str:
 # 它不是文献库的事实，而是"这一行的地址从哪来"这一步的痕迹；`schema.LitCandidate` 加
 # 一格要动 schema 版本与磁盘契约（FC-27 的 schema-migration），而这张台账只要
 # "按地址追加一行、按地址读回来"。`data/` 下的文件对任何角色的 `fs.*` 写口一律拒
-# （`fs_tools.RESERVED_LEDGER_PREFIXES` 的 `prefix:data/`），所以模型伪造不了它。
+# （`fs_tools.RESERVED_ARTIFACT_TABLE` 里 `("*", "prefix:data/")` 那一行），所以模型伪造不了它。
 
 #: 台账落点（与 `litavail` 的 `data/lit_availability.jsonl` 同层同形：追加式 JSONL）。
 _URL_ORIGIN_LEDGER_NAME: str = "lit_url_origins.jsonl"
@@ -1469,7 +1469,8 @@ def record_provider_urls(ctx: _Ctx, candidates: Iterable[Any]) -> int:
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8", newline="") as fh:
             for row in rows:
-                fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+                fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True,
+                                    default=str) + "\n")
     except OSError:
         # 台账写不进去只是"这次没有来源读数"（读侧按 unknown 处理），不许让检索失败
         return 0
@@ -1524,7 +1525,8 @@ def _record_staged_origins(ctx: _Ctx, plans: Sequence[Mapping[str, Any]], *,
                        "declared": str(plan.get("declared") or ""),
                        "request_id": str(request_id or ""), "actor": ctx.actor,
                        "at": S.now_iso()}
-                fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+                fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True,
+                                    default=str) + "\n")
     except OSError:
         # 台账写不进去：下一次下载会按 `unknown` 读（透明化少一档，但不改变下载行为）
         return 0
