@@ -4,7 +4,7 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（2026-11-23 A-3-EXEC 按现盘重算 `scripts/recompute_map_headline.py`；含同日并行路的未提交改动）：**
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **426 个 `.py`、330,023 行**，**72 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，16,706 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **426 个 `.py`、330,349 行**，**72 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，16,706 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > **2026-11-21 COL2 合稿路（p313 一次冻结，观测 19:4x）：三格 418 / 319,694 / 72。**
 > `>800` 的 **73 → 72**：`specs/b.py` 821 → **798**（PA4 的方法学条与「同一条定理多种证明」
 > 条**逐字搬进** `specs/b_ingest_policy.py` 的 `B_METHOD_POLICY` / `MULTI_PROOF_POLICY`，
@@ -1191,7 +1191,7 @@
 | `secretary_addressing.py` | 575 | 秘书的寻址与父子计数（U08 前半） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_axes.py` | 316 | 秘书的四本判定旁支台账：append / rows / of / path（U30） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_axis.py` | 235 | 秘书的行轴与活口（唯一判据，U08 尾段） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
-| `secretary_concept.py` | 603 | 秘书的概念行：一个概念一行（U24） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_concept.py` | 639 | 秘书的概念行：一个概念一行（U24） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_decl.py` | 144 | 秘书的共享声明面：命题 / 档位 / 证明 / 概念几个轴共用的键与形状 | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_deps.py` | 753 | 秘书的依赖面：不少一环（U23） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_evidence.py` | 701 | 秘书的证据升档与正文签闸（U22 证据侧） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
@@ -1215,7 +1215,7 @@
 | `secretary_sign.py` | 795 | 秘书的签：决定 ≠ 落地（U26） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_statement.py` | 499 | 秘书的登记外壳与形状闸（U22 外壳） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_statement_meta.py` | 556 | 秘书的元数据改写与两个新终态（U22 元数据侧） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
-| `secretary_statement_tx.py` | 706 | 秘书的登记事务：一笔全落或一字节不落（U22 事务侧） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_statement_tx.py` | 710 | 秘书的登记事务：一笔全落或一字节不落（U22 事务侧） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_surface.py` | 489 | 秘书的读写面池：一槽一主（U07） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_tier_judge.py` | 605 | 秘书的档位判据：力气读数 + 指路（U25 前半） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_tier_ledger.py` | 586 | 秘书的档位读侧：折叠与三态（U25 中段） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
