@@ -51,11 +51,15 @@
 （`refspecs` 的 regex 与 `_id_forms` 那一族）在词表那一侧 —— 于是"一个号有几种写法"
 永远只有一处，两个文件的边界就是"数据 vs 读它"。
 
-## 为什么是纯模块
+## 为什么是"纯模块"（只多一个零 I/O 的真身表）
 
-两个文件都不 import 任何 `agentflow` 模块（尤其不 import `agent_*`），也不改既有文件。
-`:func:`parse_ref` 的命名空间表是字面量；一致性由测试钉（`tests/test_ref_vocabulary_is_one_table.py`
-逐条对 `schema.CITATION_PREFIXES` 与 `manuscripts.OBJECT_REFS` 比对），模块本身不制造导入边。
+两个文件都不 import 任何 `agent_*` / `tools` 模块，也不改既有文件。唯一的
+`agentflow` import 是 :mod:`agentflow.manuscriptfamily`（族 / 目录的唯一判定表，
+纯函数、零 I/O、只依赖标准库）—— 手稿目录必须从它派生，否则"正文住哪儿"会有两份
+口径（2026-11-22 之前这里写死 `reports/`，于是 `mss:` 在盘上有稿时也恒读成
+`unchecked`）。:func:`parse_ref` 的命名空间表仍是字面量；一致性由测试钉
+（`tests/test_ref_vocabulary_is_one_table.py` 逐条对 `schema.CITATION_PREFIXES`
+与 `manuscripts.OBJECT_REFS` 比对），模块本身不制造 `agent_*` 导入边。
 """
 from __future__ import annotations
 
@@ -65,6 +69,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from . import manuscriptfamily as _MFAM
 from .refspecs import (
     CODE_AMBIGUOUS, CODE_BAD_ADDRESS, CODE_OK, CODE_TARGET_MISSING, CODE_UNCHECKED,
     CODE_UNKNOWN_NAMESPACE, KIND_FILE, KIND_LEDGER, KIND_TABLE, RefSpec,
@@ -131,7 +136,8 @@ def _legacy_canonical(raw: str) -> tuple[str, str]:
     - 裸交接号 `0007` / `7` ⇒ `manu:000007`；
     - `verifications/000001.jsonl#v-000003` ⇒ `verif:000001#v-000003`（真机那一形）；
     - `verifications/pending/<sha>.jsonl#u-000001` ⇒ `verif:pending/<sha>#u-000001`；
-    - `reports/<family>-<id>.md`（可带 `#…` 或中文散文尾巴）⇒ `mss:<family>-<id>`；
+    - `manuscripts/<角色>/<family>-<id>.md`（可带 `#…` 或中文散文尾巴）⇒ `mss:<family>-<id>`；
+    - `reports/<family>-<id>.md`（退役旧布局的路径写法）⇒ `mss:<family>-<id>`；
     - `notes/<family>-<id>.md` ⇒ `mss:<family>-<id>`（并说明 `notes/` 不是规范目录）；
     - `documents:<号>` / `document:<号>` ⇒ `doc:<号>`；
     - `conjecture:<号>` ⇒ `c:<号>`；
@@ -171,7 +177,8 @@ def _legacy_canonical(raw: str) -> tuple[str, str]:
         return f"mss:{match.group(1).zfill(6)}", (
             "`mss:<号>` 没写族；存在性按唯一族裁定，多族命中会报 ambiguous")
 
-    # 5) `reports/…md` / `notes/…md`（可带 `#…` 或中文散文尾巴）。
+    # 5) 路径写法：`manuscripts/<角色>/…md`（新落点）/ `notes/…md`（草稿本）/
+    #    `reports/…md`（退役旧布局，仍读成 mss: 以便复核历史证据）。
     #    先把反斜杠归一：历史里有 `reports\drafts\…` 这种 Windows 写法。
     match = _PATH_TAIL_RE.match(text.replace("\\", "/"))
     if match is not None:
@@ -183,7 +190,10 @@ def _legacy_canonical(raw: str) -> tuple[str, str]:
             return "", ""
         why = f"`{directory}/…md` 是路径写法；规范形是 `mss:{family}-{ident}`"
         if directory == "notes":
-            why += "（`notes/` 不是签/收录的规范目录，存在性按 `reports/` 下的规范名核）"
+            why += (f"（`notes/` 不是签/收录的规范目录，存在性按 "
+                    f"`{_MFAM.dir_of(family)}/` 下的规范名核）")
+        elif directory == "reports":
+            why += "（`reports/` 是退役旧布局；存在性按 `manuscripts/<角色>/` 核）"
         if tail:
             why += f"；路径后还有 `{_text(tail)[:24]}`，已忽略"
         return f"mss:{family}-{ident}", why
@@ -226,7 +236,8 @@ def parse_ref(text: Any) -> dict[str, Any]:
 
     namespace, sep, rest = canonical.partition(":")
     spec = REF_SPECS.get(namespace)
-    if not sep and re.match(r"^(reports|notes)/", raw.replace("\\", "/")):
+    if not sep and re.match(r"^(?:manuscripts/[A-Za-z]+|reports|notes)/",
+                            raw.replace("\\", "/")):
         return _bad(out, CODE_BAD_ADDRESS,
                     f"引用 {raw!r} 像一条路径，但认不出族/号；"
                     "要引证明稿请写 `mss:<family>-<id>`（family=f-proof/b-proof/e-proof/e-num）")
@@ -394,11 +405,20 @@ def _jsonl_rows(path: Path) -> tuple[bool, list[dict[str, Any]], int, str]:
 
 
 def _handoff_rows(root: Path, cache: dict[Any, Any]) -> dict[str, Any]:
-    """`manuscripts/handoffs.jsonl` 的行 ⇒ `{checked, rows, bad_lines, why}`。"""
+    """`work/handoffs.jsonl` 的行 ⇒ `{checked, rows, bad_lines, why}`。
+
+    2026-11-22（B2b-2）：账本从 `manuscripts/` 挪到 `work/`；旧路径不再读。
+    旧路径在盘上而新路径不在 ⇒ `why` 逐字写「旧布局（不再支持）」，不折成"没有"。
+    """
     key = ("handoffs",)
     if key in cache:
         return cache[key]
-    ok, rows, bad, why = _jsonl_rows(root / "manuscripts" / "handoffs.jsonl")
+    ok, rows, bad, why = _jsonl_rows(root / "work" / "handoffs.jsonl")
+    if not ok:
+        old = root / "manuscripts" / "handoffs.jsonl"
+        if old.is_file():
+            why = (f"旧布局（不再支持）：`{old}` 在盘上，而新落点 "
+                   "`work/handoffs.jsonl` 不在 —— 账本不迁移、也不回读（2026-11-22 业主裁定）")
     got = {"checked": ok, "rows": rows, "bad_lines": bad, "why": why}
     cache[key] = got
     return got
@@ -442,37 +462,65 @@ def _verification_rows(root: Path, target: str, cache: dict[Any, Any]) -> dict[s
 
 
 def _manuscript_index(root: Path, cache: dict[Any, Any]) -> dict[str, Any]:
-    """`reports/` 下的证明稿索引 ⇒ `{checked, by_family, bad_names, why}`。"""
+    """三族正文目录（`manuscripts/F|B|E/`）+ `e-num` 的 `work/E/` ⇒ 在盘证明稿索引。
+
+    目录不写字面量：逐族取 `manuscriptfamily.dir_of(family)`（族 → 目录的唯一真身）。
+    一个目录都不在盘上 ⇒ `checked=False`（读不到 ≠ 没有这一份稿）；有至少一个在盘上
+    ⇒ `checked=True`，目标不在就是 `missing`（三态不折平）。
+    """
     key = ("mss",)
     if key in cache:
         return cache[key]
-    base = root / "reports"
-    if not base.is_dir():
-        got = {"checked": False, "by_family": {}, "bad_names": 0,
-               "why": "`reports/` 不在盘上（读不到 ≠ 没有这一份稿）"}
-        cache[key] = got
-        return got
     by_family: dict[str, dict[str, str]] = {family: {} for family in _MANUSCRIPT_FAMILIES}
     bad = 0
-    try:
-        paths = sorted(base.glob("*.md"))
-    except OSError as exc:
+    scanned: list[str] = []
+    for family in _MANUSCRIPT_FAMILIES:
+        rel_dir = _MFAM.dir_of(family)
+        if not rel_dir:
+            continue
+        base = root / rel_dir
+        try:
+            if not base.is_dir():
+                continue
+        except OSError:
+            continue
+        scanned.append(rel_dir)
+        try:
+            paths = sorted(base.glob("*.md"))
+        except OSError as exc:
+            got = {"checked": False, "by_family": {}, "bad_names": 0,
+                   "why": f"`{rel_dir}/` 读不出来（{type(exc).__name__}: {exc}）"}
+            cache[key] = got
+            return got
+        for path in paths:
+            family_of, ident = _manuscript_from_name(path.name)
+            if not family_of:
+                # 只有"像手稿族、但号形不对"的名字才算坏名（`f-proof-abc.md`）；
+                # `RESEARCH.md` / `attack-000000.md` 不是手稿，不该阻止"目标确实不在"的判定。
+                if _looks_like_family(path.name):
+                    bad += 1
+                continue
+            by_family[family_of][ident] = f"{rel_dir}/{path.name}"
+    if not scanned:
+        want = "、".join(f"`{_MFAM.dir_of(f)}/`" for f in _MANUSCRIPT_FAMILIES
+                        if _MFAM.dir_of(f))
         got = {"checked": False, "by_family": {}, "bad_names": 0,
-               "why": f"`reports/` 读不出来（{type(exc).__name__}: {exc}）"}
+               "why": (f"{want} 都不在盘上（读不到 ≠ 没有这一份稿）")}
         cache[key] = got
         return got
-    for path in paths:
-        family, ident = _manuscript_from_name(path.name)
-        if not family:
-            # 只有"像手稿族、但号形不对"的名字才算坏名（`f-proof-abc.md`）；
-            # `RESEARCH.md` / `attack-000000.md` 不是手稿，不该阻止"目标确实不在"的判定。
-            if _looks_like_family(path.name):
-                bad += 1
-            continue
-        by_family[family][ident] = f"reports/{path.name}"
     got = {"checked": True, "by_family": by_family, "bad_names": bad, "why": ""}
     cache[key] = got
     return got
+
+
+# ---------------------------------------------------------------- 攻坚台账（A-0c-1）
+#
+# 这一族的实现住 `attackledger.py`（2026-11-22 从本模块搬出：留在本文件里会越过 800 行
+# 软基线，处置是拆模块、不抬基线）。这里只回引公开名，于是 `refvocab` 的索引照旧认这一族，
+# 既有调用点（`refvocab.attack_ledger_reading` 等）一个都不用改。
+from .attackledger import (  # noqa: E402 - 回引紧跟在它的"为什么"之后，不搬到文件头
+    ATTACK_LEDGER_DIRS, attack_ledger_reading, attack_ledger_verdict, attack_plan_id_of,
+)
 
 
 def _finish(parsed: dict[str, Any], *, state: str, code: str, why: str,
@@ -564,7 +612,7 @@ def ref_reading(text: Any, *, root: Any = "", cache: dict[Any, Any] | None = Non
                            checked=True, found=True)
         if got["bad_lines"]:
             return _finish(parsed, state=STATE_UNCHECKED, code=CODE_UNCHECKED,
-                           why=(f"`manuscripts/handoffs.jsonl` 有 {got['bad_lines']} 行读不出来 ⇒ "
+                           why=(f"`work/handoffs.jsonl` 有 {got['bad_lines']} 行读不出来 ⇒ "
                                 "目标没找到也不能断言没有"),
                            checked=False, found=None)
         return _finish(parsed, state=STATE_MISSING, code=CODE_TARGET_MISSING,
@@ -607,7 +655,7 @@ def ref_reading(text: Any, *, root: Any = "", cache: dict[Any, Any] | None = Non
                                checked=True, found=True)
             return _finish(parsed, state=STATE_MISSING, code=CODE_TARGET_MISSING,
                            why=(f"引用 {parsed['raw']!r} 指向的 "
-                                f"`reports/{family}-{ident}.md` 不在盘上"),
+                                f"`{_MFAM.relpath(family, ident)}` 不在盘上"),
                            checked=True, found=False)
         hits = [(one, by_family[one][ident]) for one in _MANUSCRIPT_FAMILIES
                 if ident in by_family.get(one, {})]
@@ -622,11 +670,13 @@ def ref_reading(text: Any, *, root: Any = "", cache: dict[Any, Any] | None = Non
                            checked=True, found=None)
         if got["bad_names"]:
             return _finish(parsed, state=STATE_UNCHECKED, code=CODE_UNCHECKED,
-                           why=(f"`reports/` 有 {got['bad_names']} 个文件名认不出族/号 ⇒ "
+                           why=(f"`{_MFAM.MANUSCRIPT_ROOT}/<角色>/` 有 "
+                                f"{got['bad_names']} 个文件名认不出族/号 ⇒ "
                                 "目标没找到也不能断言没有"),
                            checked=False, found=None)
         return _finish(parsed, state=STATE_MISSING, code=CODE_TARGET_MISSING,
-                       why=(f"引用 {parsed['raw']!r} 指向的证明稿不在 `reports/` 下"),
+                       why=(f"引用 {parsed['raw']!r} 指向的证明稿不在 "
+                            f"`{_MFAM.MANUSCRIPT_ROOT}/<角色>/` 下"),
                        checked=True, found=False)
 
     # 词表自洽时走不到这里；走到了就是词表加了 kind 而这里没接。
@@ -674,3 +724,4 @@ def explain(reading: Any) -> str:
     if state == STATE_AMBIGUOUS or state == STATE_BAD:
         return f"{raw}：{why}"
     return f"{raw}：{why}（目标不存在）"
+

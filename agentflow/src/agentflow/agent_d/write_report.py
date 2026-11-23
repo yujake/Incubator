@@ -33,17 +33,56 @@ def _entry_family(rel: Any) -> str:
     return str(_MFAM.classify_manuscript(str(rel or "")).get("name_family") or "")
 
 
+def _l3_title(t: Any) -> str:
+    """L3 条目的书名 —— 连同"为什么没有题名"一起渲染（绝不留成 `《》`）。
+
+    ## 为什么必须按嵌套那一格取（真身）
+
+    `trace.literature`（外部真身）把文献元数据放在嵌套的 `literature` 里
+    （`tools/trace_tools.py::_literature_brief`：`lit_id` / `in_table` / `title` /
+    `year` / …），条目顶层根本没有 `title`。改前这一行读的是顶层键
+    （`t.get("title")`）⇒ 外部工具成功时书名恒为空、渲染成 `《》`
+    （真机探针读数：`top_level_title=null`）。`《》` 不是一个诚实的空 ——
+    读者会把它读成"这本书没有名字"，而真相是"这一格没取到"。
+
+    降级替身 `agent_d/core.py::_local_literature` 恰好相反：只有顶层 `title`，
+    没有 `literature`。两种真身都认（嵌套优先），谁也甭想被当成"没有名字"。
+
+    ## 三态（第三态必须带 `why`，不许静默成空）
+
+    * 取到题名 ⇒ `《题名》`；
+    * 文献行在、那一格的 `title` 空/缺 ⇒ `（无题名：文献这一条的 title 为空；source=…）`；
+    * 连文献元数据都没取到（工具没跑成 / 文献表里没这条）⇒ `（无题名：<哪一档>；source=…）`。
+
+    判据 `tests/test_d_report_l3_title_comes_from_the_literature_key.py`：反真空那一条
+    把取法改回顶层 `title` ⇒ 有题名的夹具必红。
+    """
+    item = t if isinstance(t, Mapping) else {}
+    lit = item.get("literature")
+    lit = lit if isinstance(lit, Mapping) else {}
+    title = _digest(lit.get("title"), 80) or _digest(item.get("title"), 80)
+    if title:
+        return f"《{title}》"
+    if lit or item.get("found") is True:
+        why = "文献这一条的 `title` 为空"
+    elif item.get("found") is False:
+        why = "文献表里没有这条"
+    else:
+        why = "工具没跑成，没有取到文献元数据"
+    return f"（无题名：{why}；source={item.get('source') or '未知'}）"
+
+
 class _WriteReport:
     def write_report(self, out_path: str | Path | None = None) -> str:
         """汇总成较详细的初步研究报告（结构照 §4.5），返回写出的路径。
         每个问题一节：``问题 → 为什么值得研究（引用 C 的证据）→ 现有证据（L1/L2 的逐字引用 + 代号链）→ 缺口与已提交的查询 → 初步分析 →结论与置信度 → 后续建议``。
         报告末尾额外给一节审计信息（每条判据的中间值、用了真身还是降级替身、工具错误），因为"结论可复核"是本系统的核心诉求 —— 一份说不出自己依据的报告，读者只能选择全信或全不信。
         ## `out_path` 相对谁解析（`draft/37` §118：T2 第 1 趟的真机读数）
-        缺省落点是 `<工作区>/<reports_subdir>/<qid>-research.md`（`reports_subdir`来自配置，缺省 `reports`）。传进来的「相对」
+        缺省落点是 `<工作区>/<reports_subdir>/<qid>-research.md`（`reports_subdir`来自配置，缺省 `manuscripts/D`；传进来的「相对」
         `out_path` 一律按「工作区根」解析 —— 原先是 `Path(out_path)` 直接写，于是按进程当前目录解析：
         ```text
         T2 第 1 趟：主控传 out_path="out\\review\\D-analysis.md"（工作区内的合法落点）
-        ⇒ 文件写到 agentflow/out/review/D-analysis.md（工作区根相对；进程 cwd）
+        ⇒ 文件写到 agentflow/out/report/D-analysis.md（工作区根相对；进程 cwd）
         ⇒ 交付物静默离开工作区，而台账记的是 outcome=ok、报告里写着"执行完成"
         ```
         规则与工具层的写盘同一个实现（`doc_tools.resolve_out_path`）：越界（绝对路径跳出去、`..`）一律拒 —— 工作区边界是沙箱契约，不是建议。返回值是「绝对」
@@ -236,7 +275,7 @@ class _WriteReport:
                     lines.append(f"  ⚠️ 链条断裂：关系表里找不到 {pc['missing']}")
             for t in (ev or {}).get("l3") or []:
                 lines.append(
-                    f"- L3 下钻 `L{t.get('lit_id')}`《{_digest(t.get('title'), 80)}》："
+                    f"- L3 下钻 `L{t.get('lit_id')}`{_l3_title(t)}："
                     f"文件存在={t.get('file_exists')}，"
                     # 外部 trace_tools 用 has_text_layer，降级替身用 text_available；
                     # 两者都认，缺失时如实写 None 而不是假装 False。
@@ -498,7 +537,26 @@ class _WriteReport:
         lines.append("")
 
         text = "\n".join(lines) + "\n"
-        path.write_text(text, encoding="utf-8", newline="\n")
+        # ---- 台账行（2026-11-22 `A-0c-2` CONTRACT-DRESEARCH）：D 的研究稿在
+        # `documents` 里有一行（kind=`research`），行与这一份最终版正文同一笔事务落盘。
+        #
+        # ## 为什么位置在"交付/汇报两节补齐之后"
+        # 台账行要指向读者会打开的那一份（同一个路径取最后一条登记，正是台账的读法）；
+        # 中间那一版（只有携带单、没有交付读数）从来不进台账 —— 与下面产物归属那一笔
+        # 同一个时点。
+        #
+        # ## 为什么由 `doc_tools.record_research_report` 写、而不是在这里 `tx.upsert`
+        # `documents` 的写通道只有 `tools/doc_tools.py` 那一份（写点扫描
+        # `tests/test_write_sets_match_their_write_points.py` 按文件把 `documents` 算给
+        # 它的通道）；在这里再开第二处写点会让"实际写点"与 `WRITE_SETS["D"]` 当场分家，
+        # 而写集的真身在 `specs/d.py`（本笔按授权不动）。
+        #
+        # ## 三态
+        # 行写不进去 ⇒ 这次调用按失败报（与下面产物归属同一条口径：报告留在盘上，
+        # 那是"写成了、没台账"，不是"没写成"）—— 绝不 return 一个"看着成功"的路径。
+        doc_row = self._record_report_document(_rel, text, rows=rows, analyses=analyses,
+                                               path=path)
+        self.last_report_doc = doc_row
         self.last_report_path = path
         # ---- 产物归属（`ARTIFACTS.jsonl`）：报告落到盘上 ⇒ 补"这个路径归谁产"。
         #
@@ -518,6 +576,139 @@ class _WriteReport:
                 f"{_problem}。报告已写盘（{path}），但这条路径没有产物归属登记 "
                 "⇒ 这次调用按失败报（补登记：`agentflow artifacts record <路径> --producer D`）")
         return str(path)
+
+    # ---------------------------------------------------------------- 台账行（A-0c-2）
+
+    def _report_title(self, rows: list) -> str:
+        """这一份报告的题名（台账那一格不能为空，也不该编）。
+
+        `research_questions` 一行都没有时如实说"本轮没有研究问题" —— 一个"0 个问题的
+        研究报告"若题名写成"D 初步研究报告"，读台账的人会以为它覆盖了什么问题。
+        """
+        n = len(rows or ())
+        return ("D 初步研究报告（本轮没有研究问题）" if not n
+                else f"D 初步研究报告（{n} 个研究问题）")
+
+    def _report_document_payload(self, rows: list, analyses: Mapping
+                                 ) -> tuple[list[dict], list[dict], list[str]]:
+        """报告 ⇒ `documents` 那三格 `(claims, sections, open_problems)`（证据不足就不编）。
+
+        ## 断言从哪来（FC-02：没有引用的断言不许进稿件）
+
+        每条断言 = 一条形成了结论的研究问题：正文取它的 `conclusion`（空则 `analysis`），
+        `citations` 取这一趟溯源（`research()` 的返回值）里真的取到的代号 ——
+        `rel:<关系号>`（链条 / 表述）与 `lit:<文献号>`（L3 下钻）。
+
+        一条结论若溯源里一个代号都没有 ⇒ 不落断言，改写进 `open_problems` 说明为什么。
+        编一条 `citations` 等于把"我推理出来的"说成"台账里查到的"；而 FC-02 正是
+        `documents.claims` 这一格存在的全部理由。
+
+        ## 没做 / 没结论的问题写在哪
+
+        `open_problems` 承载的正是"D 这份稿还有哪些没立住"：于是"一份零断言的报告"也是
+        一份说得清自己的报告（`schema.Document.validate` 只对 `kind=research` 开这个口，
+        且要求 `open_problems` 非空 —— 空断言 + 空清单仍被拒收）。
+
+        ## `evidence_kind` 为什么统一是 `heuristic`
+
+        报告的结论是"在关系/文献上做的推理"，没有一条经过形式化检查。若哪一天 D 的结论
+        压在 `proof` 级证据上，那也该由产出侧（E / F）在命题台账里说 —— 不在这里冒充。
+        """
+        claims: list[dict] = []
+        sections: list[dict] = []
+        open_problems: list[str] = []
+        for row in rows or ():
+            one = dict(row) if isinstance(row, Mapping) else {}
+            qid = str(one.get("question_id") or "")
+            heading = f"{qid}. {one.get('question') or '（问题正文为空）'}"
+            res = (analyses or {}).get(qid)
+            res = dict(res) if isinstance(res, Mapping) else {}
+            body = ""
+            for key in ("conclusion", "analysis"):
+                got = str(res.get(key) or "").strip()
+                if got:
+                    body = _digest(got, 400)
+                    break
+            if not body:
+                sections.append({"heading": heading, "body": (
+                    f"本轮未进入研究步骤（status={one.get('status')}）⇒ 没有分析、没有结论")})
+                open_problems.append(
+                    f"{qid}：本轮未进入研究步骤（status={one.get('status')}）⇒ 未形成结论，"
+                    "不落断言（这份报告对它只交了问题本身，不是「查过了、没有证据」）")
+                continue
+            sections.append({"heading": heading, "body": body})
+            citations = self._report_citations(res)
+            if not citations:
+                open_problems.append(
+                    f"{qid}：有结论/分析而溯源里没有一条可引的关系或文献 ⇒ 不落成断言"
+                    "（FC-02：没有引用的断言不许进稿件；这里不编一个代号）")
+                continue
+            claims.append({
+                "claim_id": f"q-{qid or 'unknown'}",
+                "section": heading,
+                "text": body,
+                "evidence_kind": "heuristic",
+                "citations": citations,
+            })
+        if not (rows or ()):
+            open_problems.append(
+                "本轮没有研究问题（`research_questions` 0 行）⇒ 这份报告没有可断言的内容"
+                "（那是「没有题」，不是「都研究过了」）")
+        return claims, sections, open_problems
+
+    @staticmethod
+    def _report_citations(res: Mapping) -> list[str]:
+        """一条研究记录的溯源代号 ⇒ `rel:` / `lit:` 引用（保序去重；一个都没有 ⇒ `[]`）。
+
+        来源只有 `research()` 返回的那个 `evidence` 字典 —— 它是读台账得来的：
+        `chain_ids` / `claims[].relation_id` 指的是 `relations` 行，`l3[].lit_id` 指的是
+        `literature` 行。概念号（`l2[].concept_id`）不在这里：`c:` 不是
+        `schema.CITATION_PREFIXES` 认得的前缀，硬塞进去会让 `check_citations` 判它悬空。
+        """
+        ev = res.get("evidence")
+        ev = ev if isinstance(ev, Mapping) else {}
+        out: list[str] = []
+
+        def _add(text: str) -> None:
+            if text and text not in out:
+                out.append(text)
+
+        for rid in ev.get("chain_ids") or ():
+            _add(f"rel:{str(rid).strip()}" if str(rid).strip() else "")
+        for one in ev.get("claims") or ():
+            rid = str((one if isinstance(one, Mapping) else {}).get("relation_id") or "").strip()
+            _add(f"rel:{rid}" if rid else "")
+        for one in ev.get("l3") or ():
+            lid = str((one if isinstance(one, Mapping) else {}).get("lit_id") or "").strip()
+            _add(f"lit:{lid}" if lid else "")
+        return out
+
+    def _record_report_document(self, rel: str, text: str, *, rows: list,
+                                analyses: Mapping, path: Path) -> dict:
+        """把这一份报告落成 `documents` 的一行（`kind=research`），与文件同一笔事务。
+
+        写口在 `doc_tools.record_research_report`（`documents` 的写通道只有那一份文件，
+        见那里的说明）；这里只负责把"报告里到底立了什么"算成三格（断言 / 章节 / 未决）。
+
+        失败 ⇒ 抛（调用方按失败报）：报告已经在盘上，那是"写成了、没台账"，不是"没写成"，
+        而下游按台账找"D 交了什么"会把后者读成"没有台账行"—— 这句差别必须由异常说出来，
+        不许 return 一个看着成功的路径。
+        """
+        from ..tools.doc_tools import record_research_report
+
+        claims, sections, open_problems = self._report_document_payload(rows, analyses)
+        try:
+            return record_research_report(
+                self.store, rel=rel, text=text, title=self._report_title(rows),
+                claims=claims, sections=sections, open_problems=open_problems,
+                actor=str(self.actor or "agent-D"),
+            )
+        except Exception as exc:  # noqa: BLE001 —— 任何失败都要点名，不许静默降级
+            raise RuntimeError(
+                f"研究报告已写盘（{path}），但 `documents` 那一行没落成"
+                f"（{type(exc).__name__}: {exc}）⇒ 这次调用按失败报："
+                "下游按台账找「D 交了什么」会读成「没有台账行」"
+                "（处置：重跑一次 `write_report`，同一路径会复用/推进那一行）") from exc
 
     def _carried_manuscripts(self) -> tuple[list[dict], str]:
         """D 交研究手稿给 B 时"一并带上的证明手稿" ⇒ `(携带行, 附注)`。

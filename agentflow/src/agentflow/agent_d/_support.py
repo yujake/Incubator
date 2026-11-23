@@ -567,57 +567,86 @@ _REPORT_LANDING_CALIBER = (
 
 
 def report_landing_reading(store) -> dict:
-    """S-07 的读数：D 的 `write_report` "有调用、但台账里没有落点"（只读）。
-    ## 为什么只做读数（`44 J-01` 的裁定，逐字的意思）
-    D 的研究报告落不进 `analysis_reports`：`schema.REPORT_KINDS` 里全是 C 的分析器档位（现读五档，2026-11-20 起含 `proof_chain`；没有"研究报告"这一档），而
-    `WRITE_SETS["D"]` 里也没有那张表 ⇒ 给 D 的报告"找个落点"要么扩 `REPORT_KINDS`、要么新开一张表，两件都是"改硬契约"（前者是禁改区字段、后者要人裁）。
-    - 有调用：`tasks` 里 `role="D"` 且 `action="write_report"` 的终态行数（真的被调过几次）；- 无落点：能给这份报告当落点的台账表 —— 按 
-    `capabilities.WRITE_SETS["D"]` 与`schema.REPORT_KINDS` 现算，结构性为 0（不是"这次没写"，是"没有那张表"）；- 三态：
-    `checked=False` + `reason` = 这一格没读成（表读不出来）。
-    "没有落点"这件事必须看得见：真机读数（`44 S-07`）是 45 次 `write_report`只落磁盘、表 0 行 —— 而那在今天的读数面上没有任何地方会说（下游以为"D 没产报告"）。
+    """S-07 的读数：D 的 `write_report` 落了盘、台账里有没有一行（只读）。
+
+    ## 2026-11-22 之后（`A-0c-2` CONTRACT-DRESEARCH）：落点有了
+
+    改前这一格是"结构性为 0"：`schema.REPORT_KINDS` 里全是 C 的分析器档位，
+    `WRITE_SETS["D"]` 里也没有 `analysis_reports` ⇒ 给 D 的报告"找个落点"要改硬契约
+    （`44 J-01` 的裁定是"只加读数、不改契约"）。真机读数（`44 S-07`）因此是
+    45 次 `write_report` 只落磁盘、表 0 行，而下游把"有产物无台账"读成"D 没产报告"。
+
+    业主授权"改硬契约先斩后奏"之后，落点落在 `documents`：`kind=research` 的那一行
+    （写侧 `agent_d.write_report` → `doc_tools.record_research_report`；
+    词表真身 `schema.DOC_KINDS` / `schema.RESEARCH_DOC_KIND`）。于是这一格从
+    "结构性为 0"变成真的去数：
+
+    * `landing_tables`：能给 D 的报告当落点的表 —— 由"`RESEARCH_DOC_KIND` 在 `DOC_KINDS` 里"
+      现算（不是写死 `["documents"]`：把词表那一档摘掉，这一格必须当场变回 `[]`）；
+    * `landed`：`documents` 里 `kind=research` 的行覆盖的不同路径数（一份报告 = 一个
+      路径）；`landed_rows` 是行数（同一路径重写推进 `revision`，不是多一份报告）；
+    * `kind_writable`：词表那一档在不在（`False` ⇒ 结构上仍然落不进表）；
+    * 三态：`tasks` / `documents` / 词表读不出来 ⇒ `checked=False` + `reason`
+      （"没查成"既不折成"没有落点"，也不折成"落得很干净"）。
+
     ## 口径（2026-10-02 主控现场更正）
-    数的是 `store.rows("tasks")`（台账的落盘行），不是全量召唤流水；权威读数是`sessions/*.jsonl` 里的 `events` 重放。返回里的 `caliber` 逐
-    字写这件事 ——跨口径比大小是错的用法。
+
+    `calls` 数的是 `store.rows("tasks")`（台账的落盘行），不是全量召唤流水；权威读数是
+    `sessions/*.jsonl` 里的 `events` 重放。返回里的 `caliber` 逐字写这件事 ——
+    跨口径比大小是错的用法（`landed > calls` 完全可能：一次调用写多份 / tasks 行被裁掉）。
     """
+    def _fail(reason: str, *, calls: int = 0, tables: list | None = None,
+              writable: bool = False) -> dict:
+        return {"checked": False, "reason": reason, "calls": calls, "landed": 0,
+                "landed_rows": 0, "landing_tables": tables or [],
+                "kind_writable": writable, "caliber": _REPORT_LANDING_CALIBER}
+
     try:
         rows = list(store.rows("tasks"))
     except Exception as exc:  # noqa: BLE001 - 读不出来如实报，不折成"没有调用"
-        return {"checked": False, "reason": f"tasks 读不出来：{type(exc).__name__}: {exc}",
-                "calls": 0, "landed": 0, "landing_tables": [], "kind_writable": False,
-                "caliber": _REPORT_LANDING_CALIBER}
+        return _fail(f"tasks 读不出来：{type(exc).__name__}: {exc}")
     calls = [r for r in rows
              if str(r.get("role") or "") == "D"
              and str(r.get("action") or "") == "write_report"
              and str(r.get("status") or "") in ("done", "failed", "cancelled")]
-    tables: list[str] = []
-    try:
-        from .. import capabilities as _C
-
-        tables = sorted(str(t) for t in (_C.WRITE_SETS.get("D") or ()))
-    except Exception:  # noqa: BLE001 - 声明读不到就不声称"没有落点"
-        tables = []
     try:
         from .. import schema as _S
 
-        kinds = tuple(getattr(_S, "REPORT_KINDS", ()) or ())
-    except Exception:  # noqa: BLE001 - 同上
-        kinds = ()
-    # 能给 D 的报告当落点的表：写集里有它、且它的 kind 词表放得下研究报告
-    landing = [t for t in tables
-               if t == "analysis_reports" and kinds and "hottest" in kinds and len(kinds) > 1]
+        kind = str(getattr(_S, "RESEARCH_DOC_KIND", "research"))
+        kinds = tuple(getattr(_S, "DOC_KINDS", ()) or ())
+    except Exception as exc:  # noqa: BLE001 - 词表读不到就不声称"能落 / 不能落"
+        return _fail(f"`schema` 的 kind 词表读不出来（{type(exc).__name__}: {exc}）"
+                     "⇒ 这一格没查成", calls=len(calls))
+    writable = kind in kinds
+    tables = ["documents"] if writable else []
+    try:
+        docs = [dict(r) for r in store.rows("documents")]
+    except Exception as exc:  # noqa: BLE001 - 同上：读不出来是"没查成"
+        return _fail(f"documents 读不出来：{type(exc).__name__}: {exc}",
+                     calls=len(calls), tables=tables, writable=writable)
+    mine = [r for r in docs if str(r.get("kind") or "") == kind]
+    paths = sorted({str(r.get("markdown_path") or "").strip().replace("\\", "/")
+                    for r in mine if str(r.get("markdown_path") or "").strip()})
+    note = (
+        f"D 的 `write_report` 现在有落点：`documents` 里 `kind={kind}` 的那一行"
+        f"（写侧 `agent_d.write_report` → `doc_tools.record_research_report`，"
+        f"行与那份 markdown 同一笔事务）。这一格数的是台账里的行，不是盘上的文件 ——"
+        f"`report_files` 数文件、这一格数行，两者对不上本身就是一条读数。"
+        if writable else
+        f"`schema.DOC_KINDS` 里没有 {kind!r} ⇒ D 的报告在台账里**没有落点**"
+        "（结构性，不是「这次没写」）：盘上的 markdown 仍在，但下游按台账读不到它。")
     return {
-        "checked": bool(tables) and bool(kinds),
-        "reason": "" if (tables and kinds) else "声明读不到（写集或 kind 词表）⇒ 这一格没读成",
+        "checked": True,
+        "reason": "",
         "caliber": _REPORT_LANDING_CALIBER,
         "calls": len(calls),
-        "landed": 0,                      # 结构性：今天没有一张表能收 D 的报告
-        "landing_tables": landing,
-        "kind_writable": False,           # `REPORT_KINDS` 里没有"研究报告"这一档（全是 C 的分析器档位）
+        "landed": len(paths),
+        "landed_rows": len(mine),
+        "landing_tables": tables,
+        "kind_writable": writable,
+        "paths": paths[:8],
         "task_ids": [str(r.get("task_id") or "") for r in calls[:10]],
-        "note": ("D 的 `write_report` 只落磁盘（`reports/` 下的文件）：`schema.REPORT_KINDS` "
-                 "里的档位全是 C 的分析器产出（现读五档），`WRITE_SETS[\"D\"]` 里也没有 `analysis_reports` "
-                 "⇒ 台账里没有它的落点（`44 J-01`：扩 kind 或新开表都属改硬契约，不裁）。 "
-                 "这份读数就是让\"有调用、无落点\"这件事**看得见**。"),
+        "note": note,
     }
 
 

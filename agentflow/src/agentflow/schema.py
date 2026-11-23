@@ -27,6 +27,20 @@ from typing import Any, Iterable, Literal, Mapping
 #: `store.rebuild`：它接受上一版的事件（`known_old`），把 `concepts` 那一段
 #: 折进 `statements` 再写快照（折叠内核在 `migrate_concepts`，改号逐条落
 #: `out/migrate-map.jsonl`）。
+#:
+#: `2` 仍然是当前版本（2026-11-22 `A-0c-2` CONTRACT-DRESEARCH 加 `DOC_KINDS=research`
+#: **没有**抬它，理由要能复算）：
+#:
+#: 1. **方向的差别**：`F-7` 管的是"旧数据被按新语义解释"。这一笔里新代码读每一行老
+#:    `documents` 行都逐字不变（`kind` 词表只加了一个新取值，老取值的语义与校验一个
+#:    字节没动，也没有新增/改义字段）⇒ 新读旧不需要翻译；
+#: 2. **抬的代价是立刻的、全局的**：读期 fail-closed 会让盘上每一个 v2 工作区
+#:    （`projects/**` 实测 60+ 份 `data/*.json`）与 `tests/` 里 54 处硬写
+#:    `"schema_version": 2` 的夹具当场拒读，而 `rebuild` 是唯一出路；
+#: 3. **剩下的那一点风险照实登记**：反过来（老二进制重放含 `research` 行的新事件）会
+#:    在 `store` 的重放校验里被判 `schema_rejected` 跳过一行 —— 那份 markdown 与事件
+#:    都还在盘上、可人工补，而"当前代码读不了当前盘"是不可接受的。业主若要老二进制
+#:    硬失败而不是静默跳过，下一笔再把版本抬到 3（那时要同时改 54 处夹具）。
 SCHEMA_VERSION = 2
 
 # ---------------------------------------------------------------- 枚举 / 受控词表
@@ -1447,7 +1461,34 @@ SUBGOAL_OWNERS = ("F", "A", "B", "C", "D", "E", "G")
 #: `reproduction_report` 已于 2026-11-13 按业主裁定删除（0 行 / 无读点 / 无写入口）：
 #: 「独立复现报告」若真要做，要的是一个接线条目（谁产出、谁审、落在哪张表），
 #: 而不是一条永远不可能出现的词表取值。
-DOC_KINDS = ("survey", "paper", "note")
+#:
+#: `research`（2026-11-22 `A-0c-2` CONTRACT-DRESEARCH，业主授权"改硬契约先斩后奏"）：
+#: **D 的研究稿**（`manuscripts/D/RESEARCH.md` / `manuscripts/D/<qid>-research.md`，
+#: 写侧 `agent_d.write_report`）。为什么它是 `documents` 的一种、而不是新开一张表：
+#:
+#: 1. 它是**交付正文**（业主 2026-11-22：G 的论文要引它；同日的 D-DIR 裁定又说
+#:    "过程笔记才是 `work/D/`"）—— 而"交付正文"在盘上就是 `documents` 那一行的语义
+#:    （`markdown_path` 指向真文件 + `sections` + `claims` + `content_sha256`）；
+#: 2. 它天然要 `claims[].citations`（D 的结论引 `rel:` / `lit:` / `stmt:` / `exp:`），
+#:    而"没有引用的断言不许存在"（FC-02）正是 `documents.claims` 已经有的机械判据；
+#: 3. `refvocab` 的 `doc:<号>` / `closing.document_rows` / G 的 `doc.build_document`
+#:    （`doc:` 引用）都是现成读口 —— 新开一张表等于再造一套"稿子怎么被引用"。
+#:
+#: 代价（照实写，别让下一个人以为这是免费的）：它是**唯一**来源 ——
+#: `specs/g.py` 与 `tools/doc_tools.py` 的工具面 enum 都从本元组派生，于是 G 的
+#: `doc.build_document` / `doc.list_documents` 的可选 kind 多了一档（工具面 + golden
+#: 快照同笔重生成）；D 的写集（`specs/d.py::SPEC.write_set`）里还没有 `documents`，
+#: 本笔把写点落在 `doc_tools.record_research_report`（`documents` 的既有写通路）。
+DOC_KINDS = ("survey", "paper", "note", "research")
+
+#: D 的研究稿在 `documents.kind` 上的取值（**唯一**来源是上面那个元组）。
+#:
+#: 为什么不直接写字面量 `"research"`：读侧（`manuscriptretire` 的第五源、
+#: `closing` 的读数、`agent_d` 的 S-07 读数）都要问"这一行是不是 D 的报告"。
+#: 字面量散在四处时，改一个字就会让某处静默读成"不是"。
+RESEARCH_DOC_KIND = "research"
+assert RESEARCH_DOC_KIND in DOC_KINDS, "RESEARCH_DOC_KIND 必须真的在 DOC_KINDS 里"
+
 DOC_STATUSES = ("draft", "in_review", "revised", "accepted", "rejected", "unresolved_review")
 
 #: 一次审核的裁决。空串 = 还没审过。
@@ -1555,6 +1596,78 @@ STATEMENT_STATUSES = ("active", "disputed", "refuted", "superseded", "pending_de
 #: 它不是"还没签，先用着"）。
 STATEMENT_UNUSABLE_STATUSES = ("disputed", "refuted", "superseded", "pending_definition",
                                "abandoned")
+
+#: `statements.kind` 的受控词表（2026-11-22 B2d）。
+#:
+#: ## 两根轴，各有各的名字（不许互相冒充）
+#:
+#: - `kind`  = **命题的种类**：它长什么样（定理 / 引理 / 命题 / 推论 / 猜想 / 例子 /
+#:   定义 / 概念）；
+#: - `grade` = **证据等级**：我们凭什么信它（`conjecture` / `strong_conjecture` /
+#:   `pre_theorem` / `theorem` / `error` / `not_applicable`；不落盘，由
+#:   `evidencebits.derive_grade` 从五元位现算）。
+#:
+#: 所以 `kind="theorem"` 而 `grade="conjecture"` 不是自相矛盾：文献里引来的定理陈述
+#: （`origin=external_lit` + 逐字回文）**就是**定理这个种类，而我们对它的证据只有
+#: 引文回验、没有自己的证明/形式化 ⇒ 等级是猜想。反过来 `grade="theorem"` 也不许
+#: 改写作者写下的种类（`evidencebits.kind_following_grade` 只把 `conjecture` 往
+#: `theorem` / `lemma` 抬，且要签）。真机 lp-ball-15 实测 13 条 `kind=theorem`：
+#: 10 条 `external_lit` + `grade=conjecture`（文献定理）、3 条 `own_result` +
+#: `grade=pre_theorem`（我方有证明、过 V 签、未机器核验）。
+#:
+#: ## 为什么现在设词表
+#:
+#: 改前它只要求非空（"自由文本"），于是模型自造一个种类在数据面上不可见；而它早已
+#: 是几处判据的输入：同一性合并只并命题性的那几档、`pending_definition` 只给 concept、
+#: `derive_grade` 对 concept 短路、稿头交叉核对按词表判强弱。词表外的新写在写盘前
+#: **受控拒**（`statement_kind_problem`）；历史行按 `created_at` 豁免，读侧照读
+#: （`evidencebits.statement_kind_reading` 记 `legacy`）。
+#:
+#: 与 `secretary_decl.PROPOSITION_KINDS` / `NOT_APPLICABLE_KINDS` 是同一份名单：
+#: 那两格是秘书层的历史落位，本表是数据契约的真身。`tests/test_b2d_kind_vocabularies.py`
+#: 钉住两边逐字相等 —— 两处各写一份、漂移时没有任何地方会红，是本仓反复禁止的形态。
+STATEMENT_PROPOSITION_KINDS: tuple[str, ...] = (
+    "theorem", "lemma", "proposition", "corollary", "conjecture", "example")
+#: 不做力气判档的那两档（`secretary_decl.NOT_APPLICABLE_KINDS` 的同一份名单）。
+#: 注意 `derive_grade` 的短路只有 `concept` 一档（`definition` 的既有口径见该函数 docstring：
+#: 它照常参与等级链，判据 `test_agent_b_concept_registration_carries_kind.py` 钉着）。
+STATEMENT_NON_PROPOSITION_KINDS: tuple[str, ...] = ("concept", "definition")
+STATEMENT_KINDS: tuple[str, ...] = (STATEMENT_PROPOSITION_KINDS
+                                    + STATEMENT_NON_PROPOSITION_KINDS)
+
+#: `kind` 词表生效的那一天（历史行按 `created_at` 老于它豁免）。
+#:
+#: 为什么界线的判据是 `created_at`：`Statement.validate()` 既在写盘前跑，也在
+#: `store.rebuild()` 重放历史时跑，而 rebuild 会把 validate 抛异常的行**静默跳过**。
+#: 一条历史行若写着词表外的种类，硬拒等于下一次重建时把它丢掉 —— 那是改历史，
+#: 不是收紧新写。所以"新写拒、旧行读"只能按 created_at 分。
+STATEMENT_KIND_VOCAB_SINCE = "2026-11-22"
+
+
+def statement_kind_problem(kind: Any, *, created_at: Any = "") -> str:
+    """`kind` 的受控判据（空串 = 合格）。三态，不许折平：
+
+    | 档 | 条件 | 处置 |
+    |---|---|---|
+    | 词表内 | `kind ∈ STATEMENT_KINDS` | 合格 |
+    | 历史行 | 词表外，且 `created_at` 早于 :data:`STATEMENT_KIND_VOCAB_SINCE` | 读侧照读（`legacy`），不拒 |
+    | 新写 | 词表外，且 `created_at` 不早于生效日 | 拒（`ValueError`，一个字节都不落） |
+
+    没有 `created_at` 的行按历史行放行：官方两个写点
+    （`Secretary.record_statement` 与 `table.create`）都会补 `created_at`，
+    而 rebuild 读到的老行可能没有它 —— 在这一格硬拒会变成"重建时静默丢行"。
+    """
+    text = str(kind or "").strip()
+    if not text:
+        return "kind 不能为空（受控词表：" + " / ".join(STATEMENT_KINDS) + "）"
+    if text in STATEMENT_KINDS:
+        return ""
+    at = str(created_at or "").strip()
+    if at and at[:10] >= STATEMENT_KIND_VOCAB_SINCE:
+        return (f"kind={text!r} 不在受控词表 {STATEMENT_KINDS} 里 —— "
+                "`kind` 是命题的种类（它长什么样），不是自由文本；"
+                "证据等级是另一根轴（`bits` 现算的 grade），不要写进 kind")
+    return ""
 
 # ---------------------------------------------------------------- 断言的语义词表
 #
@@ -2035,6 +2148,23 @@ class AttackPlan:
     created_at: str = ""
     updated_at: str = ""
     created_by: str = "agent-F"
+    #: 这条计划名下的攻坚台账（`work/F/attack-<plan_id>.md`）在盘上的工作区相对路径。
+    #: 2026-11-22（A-0c-1，`draft/201`）新加：此前台账里没有这一格，F 的攻坚稿落在盘上
+    #: 却回指不到（"文件在盘上、台账里没有"）。
+    #:
+    #: `None` 与 `""` 是两件事，不许折平：
+    #: - `None` = 这一行没有记过（2026-11-22 之前写下的老行，以及刚立项、一轮都没落的行）；
+    #: - `""` = 记过、结论是"没有对应稿"。
+    #: 两者对读侧的效果相同（都回答"没有可回指的稿"），但落盘形态不同就是不同的审计事实：
+    #: "没记"是缺信息，"记了、没有"是结论。
+    #:
+    #: 读侧不许按 `plan_id` 反推 `attack-<plan_id>.md`：真机上两个方向都有不匹配
+    #: （`lp-ball-6` 7 行 / 8 文件；`dct-min2` 18 行 / 11 文件 —— 7 条计划一轮都没落稿）。
+    #: 反推等于给台账造第二个真身。
+    #:
+    #: 必须追加在尾部：字段顺序既是位置参数构造的顺序，也是 `to_dict()` 落盘的键序
+    #: （同族先例见 `SearchRequest.submitted_instance` 上那条注释）。
+    report_path: str | None = None
 
     def validate(self) -> None:
         require_id(self.plan_id, "plan_id")
@@ -2048,6 +2178,35 @@ class AttackPlan:
             raise ValueError("rounds 不能为负")
         if self.depth < 0:
             raise ValueError("depth 不能为负")
+        # ---- 攻坚台账的回指（A-0c-1，`draft/201`）：`report_path` 要么没记（None），
+        # 要么就是这一条计划自己的那一份台账的工作区相对路径。
+        #
+        # 为什么这里要判"文件名必须是 `attack-<自己的 plan_id>.md`"：这一格的唯一用途是
+        # 回指，记成别的计划那一份不会让读侧报错 —— 它只会让 `manuscriptretire` /
+        # `refvocab` 把"A 计划的稿"认成"B 计划的"，而两边都自洽。回指面指错行比没有
+        # 回指面更坏：没有时读侧会说"没有台账行"，指错时读侧会肯定地说出错的那一行。
+        if self.report_path is not None:
+            if not isinstance(self.report_path, str):
+                raise ValueError(
+                    "report_path 必须是字符串或 None，收到 "
+                    f"{type(self.report_path).__name__}")
+            rel = self.report_path.strip().replace("\\", "/")
+            if rel != self.report_path:
+                raise ValueError(
+                    "report_path 必须是已归一的相对路径（去首尾空白、`/` 分隔），"
+                    f"收到 {self.report_path!r}")
+            if rel:
+                if rel.startswith("/") or ".." in rel.split("/"):
+                    raise ValueError(
+                        "report_path 必须是工作区相对路径（不许绝对路径或含 `..`），"
+                        f"收到 {rel!r}")
+                if not rel.endswith(".md"):
+                    raise ValueError(f"report_path 必须指向一份 `.md`，收到 {rel!r}")
+                want = f"attack-{self.plan_id}.md"
+                if rel.rsplit("/", 1)[-1] != want:
+                    raise ValueError(
+                        f"report_path 的文件名必须是 {want!r}（这条计划自己的攻坚台账），"
+                        f"收到 {rel!r} —— 记成别的计划那一份会让回指指错行")
         # ---- 三维预算必须完整（FC-18）
         need = ("max_rounds", "max_parallel_subgoals", "max_persist_attempts", "max_depth")
         missing = [k for k in need if k not in (self.budget or {})]
@@ -2208,8 +2367,20 @@ class Document:
             p = self.markdown_path.replace("\\", "/")
             if p.startswith("/") or ":" in p or ".." in p.split("/"):
                 raise ValueError(f"markdown_path 必须是工作区内的相对路径，收到 {self.markdown_path!r}")
-        if not self.claims:
-            raise ValueError("claims 不能为空 —— 一份没有任何断言的稿件不是稿件")
+        #: 断言为空只对 D 的研究稿开一个口（2026-11-22 `A-0c-2`）：一份报告可以是
+        #: 「这一趟什么都没研究成」（真机 `lp-ball-6`：`documents 1` 而 `vsigns 0`）——
+        #: 那时**不许**为了过校验编一条断言，但必须把"为什么没有断言"写进
+        #: `open_problems`。空断言 + 空 open_problems 仍是拒收：那是"交了一张白纸"，
+        #: 读的人分不出它和"什么都没交"。
+        _blank_report = (
+            self.kind == RESEARCH_DOC_KIND
+            and any(str(x or "").strip() for x in (self.open_problems or ()))
+        )
+        if not self.claims and not _blank_report:
+            raise ValueError(
+                "claims 不能为空 —— 一份没有任何断言的稿件不是稿件"
+                f"（唯一例外：kind={RESEARCH_DOC_KIND!r} 的研究稿，且 `open_problems`"
+                " 逐条写清了这一趟为什么没有断言）")
         seen: set[str] = set()
         for i, c in enumerate(self.claims):
             if not isinstance(c, dict):
@@ -2415,9 +2586,12 @@ class Statement:
     成立"与"在什么假设下成立"是两件事，省掉假设的命题会被下游当成无条件成立（这正是 FC-23 在命题级的同一种
     病）；`proof_text`（逐字摘录）—— `quote_verified` 的比对对象就是它，没有逐字原文"引文回验"无从做起；
     `origin`（`external_lit` / `own_result`）—— 报告的"我们补的"与"原文的"要分栏，靠
-    `source_lit_id` 推不出来；`kind`（theorem / lemma / …）刻意不是受控词表 —— 它不参与任何判据分支（只看
-    `origin` / `status` / `evidence_kind` / `bits`），而论文里的命题种类比 `DEP_KINDS` 宽，给它词表会立刻
-    产生五六个死取值（R011 的债）；它有非空要求。
+    `source_lit_id` 推不出来；`kind`（theorem / lemma / …）2026-11-22 起是**受控词表**
+    （:data:`STATEMENT_KINDS`）：它是"命题的种类"这一轴（它长什么样），与"我们凭什么信它"
+    那一轴（`bits` 现算的 `grade`）正交。改前它刻意不是词表（"它不参与任何判据分支"），
+    但那个前提已经不成立（同一性合并 / `pending_definition` / `derive_grade` / 稿头
+    交叉核对都按 kind 分支）；历史行里词表外的取值照读（`evidencebits.statement_kind_reading`
+    记 `legacy`），新写词表外 ⇒ 受控拒（:func:`statement_kind_problem`）。
     ## `quote_verified` 是三态，不是布尔：`True` = 逐字比对通过 / `False` = 比对过、不一致 / `None` = 没校验。
     三态纪律的老规矩：`None` 绝不是 `False`，也绝不是 `True`（`quoteverify.QuoteCheck` 的 `verified` 就是
     同一套三态）。所以只要不是 `True`，就必须在 `quote_reason` 里说清"为什么"—— 包括"还没查"。
@@ -2426,7 +2600,8 @@ class Statement:
     stmt_id: str
     #: `external_lit`（从文献摘的）或 `own_result`（我们自己得的）。见 `STATEMENT_ORIGINS`。
     origin: str = ""
-    #: 命题种类（theorem / lemma / proposition / …）。自由文本，非空即可（理由见类 docstring）。
+    #: 命题种类（theorem / lemma / …）。受控词表 `STATEMENT_KINDS`；语义见类 docstring。
+    #: 词表外的新写受控拒；历史行按 `created_at` 豁免、读侧记 `legacy`。
     kind: str = "theorem"
     #: 人话标签（如 "Theorem 1.5"）。可空 —— 有些命题在原文里没有编号。
     label: str = ""
@@ -2489,8 +2664,9 @@ class Statement:
                 f"origin 必须是 {STATEMENT_ORIGINS} 之一，收到 {self.origin!r} —— "
                 "它是必填的：一条命题是抄来的还是我们自己证的，决定它在报告里进哪一栏"
             )
-        if not self.kind.strip():
-            raise ValueError("kind 不能为空（theorem / lemma / proposition…）")
+        _kind_problem = statement_kind_problem(self.kind, created_at=self.created_at)
+        if _kind_problem:
+            raise ValueError(_kind_problem)
         if self.evidence_kind not in EVIDENCE_KINDS:
             raise ValueError(f"evidence_kind 必须是 {EVIDENCE_KINDS} 之一，收到 {self.evidence_kind!r}")
         if self.status not in STATEMENT_STATUSES:
@@ -3383,8 +3559,18 @@ EVAL_REQUIRED_FIELDS = (
 class EvalResult:
     """一条带完整口径的评测结果（FC-24）。
 
+    ## 2026-11-22：这张表已退役（`TABLES` 里没有 `eval_results`）
+
+    行类型与 `EVAL_REQUIRED_FIELDS` **刻意保留**：它们是 `eval_results` 这张表
+    「曾经长什么样」的声明，读侧宽容要用它 —— 历史工作区里的
+    `data/eval_results.json` 仍按这一份形状校验（`store` 读侧按
+    `RETIRED_TABLES` 认它、`validate_table` 走 `row_from_dict` 的同一条分支）。
+    但**没有任何写点**：`TABLES` 里没有它、`store.tx` 拒它、`table.*` 拒它，
+    `init()` 也不再建这份文件。理由与取证见 `RETIRED_TABLES` 那一格。
+
     渲染层 gate：任何引用它的断言，其 citation 必须能解析到一条字段齐全的记录；
-    缺字段的数字不许进入对外报告。
+    缺字段的数字不许进入对外报告。（这条口径本身没有失效，它跟着行类型一起
+    留在只读一侧；没有产出方，所以今天没有任何一个数字能被它放行。）
     """
 
     eval_id: str
@@ -3534,7 +3720,6 @@ ARRAY_FIELD_KINDS: dict[str, dict[str, str]] = {
     "review_findings": {},
     "tasks": {"artifacts": "set", "inputs": "set"},
     "usage_ledger": {},
-    "eval_results": {},
     # 待新增文献列表：没有任何数组字段 —— 空 dict 是"这张表没有
     # 数组字段"这个事实本身，不是"忘了登记"。登记它是必须的：未登录的表会让
     # `verify` 的 `undeclared_array_field` 在将来有人加一个 list 字段时失去对象。
@@ -3670,13 +3855,119 @@ TABLES: dict[str, dict] = {
     "review_findings": {"file": "review_findings.json", "row": ReviewFinding, "id_field": "finding_id", "id_kind": "finding"},
     "tasks": {"file": "tasks.json", "row": Task, "id_field": "task_id", "id_kind": "task"},
     "usage_ledger": {"file": "usage_ledger.json", "row": UsageEntry, "id_field": "usage_id", "id_kind": "usage"},
-    "eval_results": {"file": "eval_results.json", "row": EvalResult, "id_field": "eval_id", "id_kind": "eval"},
+    # `eval_results` **不在这里**：2026-11-22 退役（见 `RETIRED_TABLES`）。
+    # 它曾在这里（`id_kind="eval"`）；退役后新工作区不再生成这份文件，
+    # 历史工作区里的那一份由读侧按 `RETIRED_TABLES` 认它并报"已退役"。
     # 待新增文献列表：一次检索的候选先进这里，审完才入 literature。
     # `slot` 吃的是编号空间（`ID_COUNTERS["candidate"]`）：它必须只增不复用
     # （撤掉的槽位照样占着号），而"不复用"这件事只能由发号器保证 —— 手写序号迟早会重用。
     "lit_candidates": {"file": "lit_candidates.json", "row": LitCandidate,
                        "id_field": "slot", "id_kind": "candidate"},
 }
+
+
+# ---------------------------------------------------------------- 退役表（只读一侧）
+#
+# 一张表怎么"退干净"，四件事缺一不可：
+#   ① 不在 `TABLES` 里 ⇒ `init()` 不再建文件、`table.*` 不认它、`store.tx` 拒它；
+#   ② 在 `RETIRED_TABLES` 里留名 ⇒ 历史工作区里那份文件**不是**"畸形/未知"，
+#      读侧认得出它并报"已退役"（三态：读到旧表 ≠ unknown、≠ pass）；
+#   ③ 行类型与口径字段留在只读一侧 ⇒ 历史文件仍按原形状校验，不因为表没了就变成
+#      "谁也读不懂的一坨 JSON"；
+#   ④ 引用面（`CITATION_PREFIXES` / `refspecs`）跟着摘 ⇒ 退役之后它不再是合法的
+#      写入面 / 引用前缀（"半套"就是把前缀留着、表却没了）。
+#
+# 为什么不做成 `TABLES` 里的一个 `retired: True` 旗标：那样每一处 `for table in
+# TABLES` 都得自己记得"跳过退役的"（`init` / `verify` / `doc_tools` / 迁移……），
+# 漏一处就是一个静默的半退役形态。清单分家之后，"在表里"与"在退役名单里"互斥，
+# 由 `retired_tables()` 与导入期断言对账。
+
+#: 已退役的表：名字 → 文件 / 行类型 / 主键 / 为什么退 / 历史文件怎么读。
+#:
+#: `eval_results`（2026-11-22 退役，业主已批"派人做"）：
+#:   · **全仓 0 个写点** —— 产品代码里没有任何 `upsert`/`insert` 指向它
+#:     （AST 实扫；判据 `tests/test_eval_results_has_no_producer.py` 的正控扫的就是它）；
+#:   · **51 个工作区全是 0 行**（`projects/*/data/eval_results.json` 逐个 parse，
+#:     `rows` 全空；同一次普查里 `reprocess_requests` 也是 51/0）；
+#:   · 它只活在"登记 + 读口"里：`verify` / `doc_tools.citation_coverage` / `refspecs`
+#:     都只是读它，读到的永远是 0 行 ⇒ 那些读数从来没有信息量，却让"评测这一档"
+#:     看起来被审计过（`docs/REPRO-eval-results-no-producer.md` 的既有结论）。
+#:   · 为什么退役而不是补产出方：FC-24 的口径字段是真要求，但"谁来产出"这件事
+#:     一直没有主；留着一张没人写的表，等于把"没有产出方"伪装成"评测 0 行"。
+RETIRED_TABLES: dict[str, dict] = {
+    "eval_results": {
+        "file": "eval_results.json",
+        "row": EvalResult,
+        "id_field": "eval_id",
+        "retired_at": "2026-11-22",
+        "why": "全仓 0 个写点 + 51 个工作区全 0 行 ⇒ 从来没有产出方；"
+               "只留读口会让『没有评测』读成『评测 0 行』",
+        "how": "历史工作区里这份文件仍在盘上：读侧按 `RETIRED_TABLES` 认它、"
+               "返回 `retired=true`（行照旧读得出来），不报畸形、不报未知表；"
+               "`init()` 不再生成它，`table.*` / `store.tx` 一律拒写。"
+               "要恢复评测这一档：先补产出方与验收判据，再把这一格搬回 `TABLES`"
+               "（两处都在本文件，导入期断言会逼人同时改；`docs/REPRO-eval-results-no-producer.md` 有复算命令）",
+    },
+}
+
+
+def retired_table(name: Any) -> dict | None:
+    """这张表是不是已退役（是 ⇒ 那一格；否 ⇒ None）。
+
+    唯一读口：`store` 的读侧宽容、`table_tools` 的拒信、判据都调它，别各自
+    `S.RETIRED_TABLES.get(...)` 抄一遍（"同一判据两个落位"是本仓反复踩的形态）。
+    """
+    return RETIRED_TABLES.get(str(name or ""))
+
+
+def retired_tables() -> frozenset[str]:
+    """全部已退役的表名（判据与读数用；反真空打桩的对象就是它）。"""
+    return frozenset(RETIRED_TABLES)
+
+
+# ---------------------------------------------------------------- 已登记但未启用的表
+#
+# 与 `RETIRED_TABLES` 的分界（这一格存在的全部理由）：
+#   · 退役 = **没有产出方**（写代码根本不存在）⇒ 表从 `TABLES` 摘掉；
+#   · 未启用 = **产出方与消费方都在、闸也在，只是从来没有一趟真的跑过**
+#     ⇒ 表留着，但把"未启用"写成机器可读的登记面，而不是靠一句注释。
+#
+# `reprocess_requests`（2026-11-22 判"未启用"，不是退役）：
+#   · 写点：F 的 `submit_reprocess_request`（`agent_f/core.py`，I4 闸门后落一行）
+#     + B 的 `reprocess_once` / `reprocess_claim` / `reprocess_failed`（认领、失败、
+#     完成各一笔）—— 两侧都是人写过的代码路径，整条线是通的；
+#   · 读数：51 个工作区 0 行（与 `eval_results` 同一次普查），`counters.json` 里
+#     连 `p` 号段都没有 ⇒ 从来没有一条请求被提交过；
+#   · 变数：2026-11-22 收口第 2 笔（`221f9ab2`）把 B 侧"重抽取"那条 skill 删了
+#     （52→50 条 skill）⇒ 今天 B **不会被告知**去认领这条队列，而 F 的声明里
+#     仍教它提交 ⇒ 一条真提交会永久 pending，把 `unfinished_request_rows` 顶红。
+#   · 为什么判"未启用"而不是退役：退役要同时摘掉 F 的动作、B 的动作、I4 闸门与
+#     两份 role spec（`specs/*` 在 p316 冻结、`interactions.py` 在 FC-27）——
+#     只摘一半就是"留下半套"，比留着更坏；而那几处今天都不在本笔的允许改动面里。
+#     所以本笔只做两件事：① 把"未启用"登记成下面这一格（单一落点）；
+#     ② 让收工门的读数说清"这条队列未启用"，而不是把它读成"没人做"。
+#   待办（需要 p316 之后的一次协调批）：要么恢复 B 的 skill，要么把 F 的
+#   `submit_reprocess_request` 与 `admit_reprocess_request` 一起摘掉 —— 二选一，
+#   不许让"F 教着提交、B 不再被告知"这个不对称继续存在。
+NOT_ENABLED_TABLES: dict[str, dict] = {
+    "reprocess_requests": {
+        "since": "2026-11-22",
+        #: 谁会写它（登记面，不是实现；实现指针写在下面 `producers` / `consumers`）。
+        "producers": ("agent-F:submit_reprocess_request",),
+        "consumers": ("agent-B:reprocess_once",),
+        "evidence": "51 个工作区 0 行、`counters.json` 无 `p` 号段；"
+                    "B 侧 skill 已于 2026-11-22 退役（52→50）",
+        "to_enable": "恢复 B 的『重抽取』skill（或改由别的角色认领），"
+                     "并跑一条真请求把 `unfinished_request_rows` 走到 0；"
+                     "否则整条线一起退役（F 的动作 + I4 闸门 + 两份 role spec 同批摘）",
+    },
+}
+
+
+def not_enabled_table(name: Any) -> dict | None:
+    """这张表是不是"已登记、未启用"（是 ⇒ 那一格；否 ⇒ None）。"""
+    return NOT_ENABLED_TABLES.get(str(name or ""))
+
 
 #: 编号空间计数器覆盖的表（search_requests 用 r-NNNNNN，reprocess_requests 用 p-NNNNNN，
 #: 都不占用编号空间 —— 它们是过程记录，而编号空间留给知识实体）。
@@ -3700,7 +3991,11 @@ ID_COUNTERS = {
     "stmt": "stmt_id",
     "finding": "finding_id",
     "usage": "usage_id",
-    "eval": "eval_id",
+    # `eval` 那一档随表退役（2026-11-22）：表没了而类别还在的话，`verify` 的
+    # 计数器那一段会反查不到表、每次审计都报一条 `counter_table_missing` ——
+    # 那是"已经不存在的表"，不是缺陷。`counters.json` 里不会有 `eval` 这一格
+    # （实测 51 个工作区全是 0 次发号、一格都没有），残留值也无害
+    # （`verify` 只遍历这张表，未知类别根本不看，如 `concept` 那 9 个工作区）。
     # 待新增文献列表的槽位号：与其余知识实体同样吃编号空间 ——
     # "序号不复用"必须由发号器保证（见 `TABLES["lit_candidates"]` 的注释）。
     "candidate": "slot",
@@ -3898,6 +4193,13 @@ CITATION_PREFIXES: dict[str, str] = {
     "rel": "relations",
     "lit": "literature",
     "exp": "experiments",
+    # `eval` **留着**（2026-11-22：表退役，引用前缀不摘）。这一格是读侧宽容的一部分：
+    # ① `verify` 的 `_BRANCH_KINDS` 在导入期与 `CITATION_PREFIXES` 逐字对账
+    #    （`assert set(CITATION_KINDS) == set(_BRANCH_KINDS)`），摘掉前缀会让
+    #    `verify.py`（FC-27）当场导入失败 —— 而"退役一张表"不该把审计器本身炸掉；
+    # ② 历史文档里若真出现过 `eval:`，它仍要能解析：命中的是 `RETIRED_TABLES` 里的
+    #    那份历史文件，读到行 ⇒ 解析成功，读不到 ⇒ `missing`，**不是** `unknown`。
+    # 所以 `assert_citation_prefix_contract` 接受"目标是一张退役表"（见那一格）。
     "eval": "eval_results",
     "doc": "documents",
     "stmt": "statements",
@@ -3917,8 +4219,10 @@ def assert_citation_prefix_contract() -> None:
     """引用前缀声明面与 `TABLES` 的对账。导入期自动跑一次。
 
     判据三条：
-    1. 每个前缀指向的表名真的在 `TABLES` 里 —— 否则那是个"谁也核不了"的前缀，症状是写入期与审计期对同一个
-       字符串给出不同结论；
+    1. 每个前缀指向的表名真的在 `TABLES` **或 `RETIRED_TABLES`** 里 —— 否则那是个
+       "谁也核不了"的前缀，症状是写入期与审计期对同一个字符串给出不同结论。
+       退役表收在这里是刻意的（`eval` 那一格）：表退役了，历史文档里的引用仍要能
+       解析到那份历史文件；读到行 ⇒ ok，读不到 ⇒ missing，**不是 unknown**；
     2. `stmt` 必须在表里、且指向 `statements` —— 这条写法一旦被摘掉，
        "哪几条正文断言压在这条命题上"就重新变成判不了，而 `closing` 那一格只会退回一句边界文字；
     3. 前缀形态：首字符是字母、其余是小写 ASCII 字母或数字。`citations` 按第一个冒号切前缀、代号里的 `#`
@@ -3926,9 +4230,10 @@ def assert_citation_prefix_contract() -> None:
     写成函数再在导入期调用，而不是把断言摊在模块级：函数可被测试再次调用，于是"往本表里塞一个指向不存在
     表的前缀 ⇒ 必须红"这条负控才是可写的。
     """
-    unknown = sorted(t for t in CITATION_PREFIXES.values() if t not in TABLES)
+    known_targets = set(TABLES) | set(RETIRED_TABLES)
+    unknown = sorted(t for t in CITATION_PREFIXES.values() if t not in known_targets)
     assert not unknown, (
-        f"CITATION_PREFIXES 指向了 TABLES 里没有的表：{unknown} ⇒ "
+        f"CITATION_PREFIXES 指向了 TABLES / RETIRED_TABLES 里都没有的表：{unknown} ⇒ "
         "这些前缀没有任何读取面能核它的存在性（写入期与审计期会分家）"
     )
     assert CITATION_PREFIXES.get("stmt") == "statements", (
@@ -4108,6 +4413,45 @@ def assert_id_space_contract() -> None:
     )
 
 
+def assert_table_registry_contract() -> None:
+    """三份表清单互相对账。导入期自动跑一次。
+
+    判据四条，一条对应一种"半套退役"：
+    1. `TABLES` 与 `RETIRED_TABLES` 不许有交集 —— 同一张表既在写又在退役名单里，
+       症状是 `init()` 建它而 `tx()` 拒它（或反之），两种读数都"看起来正常"；
+    2. `NOT_ENABLED_TABLES` 的键必须都在 `TABLES` 里 —— "未启用"是"表在、线没跑过"，
+       不是"表没了"；表没了就该进退役名单，否则那一格是一条谁也读不到的登记；
+    3. 退役表不许同时是"未启用表" —— 两格说的是相反的事；
+    4. 退役登记要能读出它自己那一份文件与行类型（`file` / `row` / `id_field`），
+       且 `id_field` 真的是那个行类型上的字段 —— 否则读侧宽容拿不到形状。
+
+    写成函数再在导入期调用（不是把断言摊在模块级）的理由与
+    `assert_process_id_contract` 同一句：函数可被测试再次调用，于是"往两张清单里
+    各塞一个同名表 ⇒ 必须红"这条负控才是可写的。
+    """
+    assert not (set(TABLES) & set(RETIRED_TABLES)), (
+        f"这些表同时在 TABLES 与 RETIRED_TABLES 里：{sorted(set(TABLES) & set(RETIRED_TABLES))}"
+        " ⇒ 一张表不能既「在写」又「退役」：`init()` 会建它而 `tx()` 拒它，"
+        "两边的读数都会看起来正常。二选一。"
+    )
+    stray = sorted(set(NOT_ENABLED_TABLES) - set(TABLES))
+    assert not stray, (
+        f"NOT_ENABLED_TABLES 里有不在 TABLES 里的表：{stray} ⇒ "
+        "“未启用”说的是“表在、整条线没跑过”，不是“表没了”；表没了请进 RETIRED_TABLES。"
+    )
+    assert not (set(NOT_ENABLED_TABLES) & set(RETIRED_TABLES)), (
+        "同一张表不许既是“未启用”又是“已退役”：两格说的正好相反"
+    )
+    for name, spec in sorted(RETIRED_TABLES.items()):
+        for key in ("file", "row", "id_field"):
+            assert str(spec.get(key) or ""), f"退役表 {name} 的登记缺 {key!r}"
+        assert spec["id_field"] in getattr(spec["row"], "__dataclass_fields__", {}), (
+            f"退役表 {name} 的 id_field={spec['id_field']!r} 不是 "
+            f"{spec['row'].__name__} 上的字段 ⇒ 读侧宽容拿不到形状"
+        )
+
+
+assert_table_registry_contract()
 assert_id_space_contract()
 assert_process_id_contract()
 assert_citation_prefix_contract()
@@ -4118,8 +4462,15 @@ def empty_table() -> dict:
 
 
 def validate_table(table: str, doc: dict) -> None:
-    """校验一张表的整体结构。抛 ValueError，不返回布尔值 —— 让错误尽早炸出来。"""
-    if table not in TABLES:
+    """校验一张表的整体结构。抛 ValueError，不返回布尔值 —— 让错误尽早炸出来。
+
+    退役表（`RETIRED_TABLES`）也收：历史工作区里那份文件仍按**退役时那一份形状**
+    校验（行类型在 `row_from_dict` 里同一条分支），这是"读侧宽容"的另一半 ——
+    表退役不等于历史文件变成"谁也读不懂的 JSON"。写侧永远走不到这里
+    （`store.tx` 与 `table.*` 在更早一层就拒了退役表）。
+    """
+    spec = TABLES.get(table) or RETIRED_TABLES.get(table)
+    if spec is None:
         raise ValueError(f"未知表名：{table}")
     if not isinstance(doc, dict):
         raise ValueError(f"{table} 快照必须是对象")
@@ -4129,7 +4480,6 @@ def validate_table(table: str, doc: dict) -> None:
     if not isinstance(rows, list):
         raise ValueError(f"{table}.rows 必须是数组")
 
-    spec = TABLES[table]
     id_field = spec["id_field"]
     seen_ids: set[str] = set()
     # ---- 幂等键的唯一性（"被索引的唯一键"在本栈里的落点）

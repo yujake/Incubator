@@ -647,6 +647,13 @@ def _merged_plan_round(fresh: Mapping[str, Any], base: Mapping[str, Any],
     schema 对 `history[*].round` 的要求是单调不减，同号满足。
     """
     merged: dict[str, Any] = {**dict(fresh), **dict(mine)}
+    # `report_path`（A-0c-1）不是"这一轮的增量"，是「盘上真有一份台账」的地址：
+    # 我方这一轮没落稿（空串/缺格）而事务内重读到的那一行已经有地址 ⇒ 保留那个地址。
+    # 否则并发下"后提交的那一轮没落稿"会把别人已经落过的回指抹掉 ——
+    # 症状正是本路要治的那一个：盘上有稿、台账里又没有了。
+    if (not str(mine.get("report_path") or "").strip()
+            and str(fresh.get("report_path") or "").strip()):
+        merged["report_path"] = str(fresh.get("report_path") or "")
     base_h = [dict(h) for h in (base.get("history") or [])]
     mine_h = [dict(h) for h in (mine.get("history") or [])]
     fresh_h = [dict(h) for h in (fresh.get("history") or [])]
@@ -1612,7 +1619,7 @@ class _Core:
         #
         # 改前 `max_persist_attempts` 在 F 侧零消费者：`RoundError` 一次就把子目标标成
         # `blocked` + `in_flight=True`，而 `step` 的选目标过滤会摘掉 `in_flight` 的子目标
-        # ⇒ 一次不成形的回答 = 这条路永久封存（下轮永不再选，`step.py:181`）。
+        # ⇒ 一次不成形的回答 = 这条路永久封存（下轮永不再选，`step.py:383-389`）。
         # 预算里明明写着"同一个子目标最多尝试几次"，那个数却没人读。
         #
         # 现在：不成形 ⇒ 把 `exc` 的原话带回提示词重问（同一轮里，不额外占预算轮次），
@@ -1817,7 +1824,7 @@ class _Core:
            逐条点名"第几步引了哪个不在册的 id"，并给出本轮合法 id 清单；
         ③ 过了才 `_apply_round`（写稿 → 秘书洗依赖面 → 登记 → 回读 V 签）。
 
-        受控拒的两支都不写盘：`_apply_round` 一步都没进，`reports/f-proof-*` 不出现，
+        受控拒的两支都不写盘：`_apply_round` 一步都没进，`manuscripts/F/f-proof-*` 不出现，
         `statements` / `attack_plans` 的 history 只留这一轮的拒绝读数（`refusal`）。
         """
         from .. import attackround as AR
@@ -2142,8 +2149,8 @@ class _Core:
     # ---------------------------------------------------------------- 产物出口（P3-6）
 
     #: 攻坚台账的落点（工作区相对）。与 `specs/f.py` 的 policy 逐字一致
-    #: （"每推进一条引理就写进 `reports/attack-<plan_id>.md`（一条一行：状态 / 依据 / 下一步）"）。
-    REPORT_DIR = "reports"
+    #: （"每推进一条引理就写进 `work/F/attack-<plan_id>.md`（一条一行：状态 / 依据 / 下一步）"）。
+    REPORT_DIR = "work/F"
 
     def report_path(self, plan: Mapping[str, Any]) -> str:
         """这一份计划的攻坚台账路径（工作区相对）。"""
@@ -2335,7 +2342,7 @@ class _Core:
             path = Path(root) / rel
             # ---- A1：洗过的那一份写回盘时，也不许擦掉已登记的那一条 ---------------
             #
-            # `rel` 就是手稿登记的规范路径（`reports/f-proof-<稿号>.md`；2026-11-10 起
+            # `rel` 就是手稿登记的规范路径（`manuscripts/F/f-proof-<稿号>.md`；2026-11-10 起
             # 它只由 F 自己的稿号决定，命题号 / 计划号都不进这个名字）⇒ 直接
             # `write_text` 会把上一轮写进去的登记元信息（正文 sha / 命题指纹 / 版本）
             # 连同 `- 标签：` 一起盖掉，于是下一笔 `register_or_rewrite` 又读成"新命题"
@@ -2374,7 +2381,7 @@ class _Core:
         绕过了通用写口那道闸。现在 F 不再持有 `statements` 的写权限 —— 但它也不再把
         「命题 + 证明」交给 B 登记（改前那个说法在 2026-11-07 裁掉 `F -> B` 直连边之后
         就不成立了）：这一格收口到 :meth:`_hand_proof`，只调 `proofregistry` 落 F 自己的
-        手稿（`reports/f-proof-<稿号>.md`），`statements` 那一行由 B 在 V 签之后读稿收录
+        手稿（`manuscripts/F/f-proof-<稿号>.md`），`statements` 那一行由 B 在 V 签之后读稿收录
         （F 只向上走 D，D 携带给 B）。五元位、依赖边、非平凡度、洗定理名都在 B 那一笔里完成。
 
         等级怎么定（2026-10-19 晚改：改前写死 `heuristic`）按 `_proof_tier` 现算：
@@ -2396,7 +2403,7 @@ class _Core:
         这一笔不写 `dependencies`：业主 2026-10-24 的最终形态是"作者只写内容，登记由
         收方读稿产生"，F 是作者 —— 依赖边由收方（B 读这一份手稿）落，与 V 读稿签字同构。
         这一步的用处是：稿在登记时已经在手上，而登记不再改它的名（2026-11-10：
-        稿名只按 F 自己的稿号，`reports/f-proof-<稿号>.md`；命题号由 B 收录时现取）。
+        稿名只按 F 自己的稿号，`manuscripts/F/f-proof-<稿号>.md`；命题号由 B 收录时现取）。
         改前这一句还写着"登记拿到命题号之后由 `publish_manuscript` 把它改名为
         `reports/f-proof-<命题号>.md`"—— 那是被停掉的旧口径，收方现在按稿号读盘。
         """
@@ -3052,7 +3059,7 @@ class _Core:
 
         - 手稿登记里没有这个稿号的条目 ⇒ 登记：过 F 秘书的形态闸一次（写前闸已经判过的
           那一档复用 `form_reading`，同一段字节不重复判），
-          落 `reports/f-proof-<稿号>.md`（稿号由 `manuscriptids` 发，与命题号/计划号无关）；
+          落 `manuscripts/F/f-proof-<稿号>.md`（稿号由 `manuscriptids` 发，与命题号/计划号无关）；
         - 已有同 label 的条目 ⇒ 重写：只换 `## 证明` 那一节（顺手按 cites 重渲
           `## 依赖`），不涨 `proof_no`、正文 sha256 重算；不过闸、不登记、不新增
           statements 行（`## 命题` 那一节逐字节不动）；
@@ -3106,7 +3113,7 @@ class _Core:
         #    （与 `_resolve_manuscript_id` 同一个判据；改证明不换稿）；
         # ③ 都没有 ⇒ 向 F 自己的号源要一个（"allocated"）。
         # 补完之后递给 `register_or_rewrite` 的 `manuscript_id` 永远非空 ⇒ 路径只由
-        # `manuscriptids.canonical_rel` 决定（`reports/f-proof-<稿号>.md`），
+        # `manuscriptids.canonical_rel` 决定（`manuscripts/F/f-proof-<稿号>.md`），
         # 计划名那一支在 F 的新写路径上不可达。
         from .. import manuscriptids as _MID_HAND
 
@@ -3391,7 +3398,7 @@ class _Core:
     def _output_body(self, statement_id: str, plan_id: str = "") -> dict:
         """这一条成果的「现行正文」（签盖的就是它）与手稿落点。
 
-        次序：① 按命题号命名的那份手稿（`reports/f-proof-<号>.md`，框架发布的那一份）
+        次序：① `statements.manuscript_id` 指的那份手稿（`manuscripts/F/f-proof-<稿号>.md`，框架发布的那一份）
         → ② `statements` 行的 `proof_text` → ③ 行里 `proofs` 清单的最后一份。
         三条都读不到 ⇒ `text=""`，签那一格会读成「没查成」（不是「待签」）。
         """
@@ -3787,8 +3794,8 @@ class _Core:
             #
             # 改前的次序是 `_proof_outlet` 在前、`proof_manuscript` 在后，而手稿按"已登记
             # 的命题号"命名 ⇒ 登记那一刻稿还没写 ⇒ 收方（B 读稿登记依赖面）永远读不到东西，
-            # 那一份 `reports/f-proof-*.md` 在真机上 0 份。现在两段：
-            #   ① 先按 F 自己的稿号写一份（`reports/f-proof-<稿号>.md`）：稿在盘上、
+            # 那一份旧落点的 `reports/f-proof-*.md` 在真机上 0 份。现在两段：
+            #   ① 先按 F 自己的稿号写一份（`manuscripts/F/f-proof-<稿号>.md`）：稿在盘上、
             #      正文在手上；改同一份稿沿用同一个稿号（`_resolve_manuscript_id`）；
             #   ② 收录拿到命题号时不改稿名（`publish_manuscript` 已停用改名）——
             #      命题号只落在 statements 行上。
@@ -4187,7 +4194,7 @@ class _Core:
                       f"已交 best_partial {len(product.get('best_partial') or [])} 条")
             evidence = []
             status = "blocked"
-        # ---- P3-6 的第二半：这一段进 `reports/attack-<plan_id>.md`（一条一行），
+        # ---- P3-6 的第二半：这一段进 `work/F/attack-<plan_id>.md`（一条一行），
         # 并把落点写进 `detail` —— M 读 `attack.status` 就看得见"产物在哪"。
         if kind == "counterexample_request":
             basis = (f"新子目标 {evidence[0]}"
@@ -4296,7 +4303,11 @@ class _Core:
             # 这一轮那一份的四档（`delivery_state` / `delivery_label` 仍是「当轮」的读数）。
             "delivery_state": str((v_sign.get("reading") or {}).get("state") or ""),
             "delivery_label": str((v_sign.get("reading") or {}).get("label") or ""),
-            "report_path": str(written["path"]),
+            # 只有真写成才有地址：写失败时盘上没有那一份，给一个路径就是假地址。
+            # 这一格有两个消费者：`step.py` 把它抄进 `history[*]`、并经同一事务写进
+            # 计划行上的 `report_path`（A-0c-1 的回指面）。两个消费者读的是同一个读数 ——
+            # 写侧若在这里给假地址，"台账说稿在哪"与"稿真在不在"就分家了。
+            "report_path": str(written["path"]) if written.get("ok") else "",
             # 2026-11-05（缺陷乙）：被受控拒绝时的那几格（空 dict = 这一轮没被拒）。
             # `next_step` 是可粘贴的下一步（点名动作与参数形状），`streak` 是
             # 同一个 `problem_key` 下同形拒绝的累计次数 —— 两者都会随 history 落盘。
@@ -4306,7 +4317,7 @@ class _Core:
             "waiting_on": [str(g["sid"]) for g in new_goals],
             "new_subgoals": new_goals,
             # ---- 证明手稿（业主 2026-10-24 最终形态）：只有 `proof` 那一支有内容。
-            # `manuscript_path` 是落点（F 自己的稿号：`reports/f-proof-<稿号>.md`），
+            # `manuscript_path` 是落点（F 自己的稿号：`manuscripts/F/f-proof-<稿号>.md`），
             # `manuscript` 是全文（D/B 可以直接把它交给
             # `B.register_statement(proof_manuscript=...)`，不必再读盘）；
             # `deps_preview` 是只读预览（依赖段解析、档位门与三态读数，一行都不写盘）；
@@ -5303,5 +5314,7 @@ def selftest() -> int:
     print("=" * 72)
     print(f"SELF-CHECK {'DONE' if failures == 0 else 'FAILED'}（agent_f）：失败 {failures} 项")
     return failures
+
+
 
 

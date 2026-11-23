@@ -122,7 +122,7 @@ class _Step:
 
         可选。F 已经写好的那一份（`proof` / `reduction`）可以直接放进来：走
         `_handed_product_round` —— 既有的产物校验一条都不放宽，过了就照现有路径落成
-        `reports/f-proof-<稿号>.md`（`## 依赖` 由 `cites` 渲染，F 不必手抄），
+        `manuscripts/F/f-proof-<稿号>.md`（`## 依赖` 由 `cites` 渲染，F 不必手抄），
         返回值里给 `manuscript_path` / `manuscript_id`。校验不过 ⇒ 受控拒，逐条点名。
 
         不给（`None`）⇒ 与加这一格之前逐字同形：`_deploy` 按 owner 分派，
@@ -665,6 +665,17 @@ class _Step:
         row["best_partial"] = self._compose_best_partial(subgoals, rounds_after)
         if row["status"] == "stalled" and not str(row["best_partial"]).strip():
             row["best_partial"] = NO_PROGRESS_NOTE
+        # ---- 攻坚台账的回指（A-0c-1，`draft/201`）：这一轮真落了稿 ⇒ 把它的
+        # 工作区相对路径写进计划行的 `report_path`，与下面那一笔 history 写回
+        # 同一个事务（同一个 `store.tx`）。
+        #
+        # 为什么值必须来自 `deploy["report_path"]` 而不是在这里拼 `work/F/attack-<号>.md`：
+        # 那是"按名字反推"—— 落点由写侧当场算（旧盘上真身是 `reports/attack-*.md`，
+        # 现在由 `_Core.REPORT_DIR` 决定），拼一次就是给同一个事实造第二个真身。
+        # 为什么只在这一处写：`report_path` 是「盘上有一份」的地址，不是这一轮的增量；
+        # 写侧失败时 `deploy["report_path"]` 是空串，行上保留原值（没落稿 ≠ 撤回旧回指）。
+        if str(deploy.get("report_path") or "").strip():
+            row["report_path"] = str(deploy["report_path"])
         try:
             self._write_plan(row, base=base_row, note=f"f.step:{deploy['action']}")
         except Exception as exc:  # noqa: BLE001 —— 先把拒因留痕，再原样上抛
