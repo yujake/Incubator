@@ -36,6 +36,7 @@ A 的思维链只该花在"判断该调哪个工具、该用哪个检索词"上�
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shutil
 import time
@@ -744,8 +745,33 @@ def _probe_provider(ctx: _Ctx, name: str) -> dict:
 
 
 def _h_providers(ctx: _Ctx) -> Any:
-    """``search.providers``：列出可用 provider（真实探测可用性）。"""
-    rows = [_probe_provider(ctx, name) for name in _known_names(ctx)]
+    """``search.providers``：列出可用 provider（真实探测可用性）。
+
+    ## 协作式截止的检查点（C1FIX-TOOLS ③，2026-11-23）
+
+    每一个源探测之前问一次截止（`raise_if_timed_out`），到点就在那里停住、抛受控
+    超时（`PROVIDERS_TIMEOUT`），由 `agent_loop` 换成 DSH 形状的超时结果 —— 与
+    `search.literature` 在"每个源那一次调用之前"设检查点同一条口径。
+
+    为什么必须接（真机 C-1 证据）：`projects/sylow-1` 的 session
+    （`sessions/2026-11-22e.jsonl`，13:36:17，role=A）落了一条
+    `state=deadline_passed_unobserved` 的读数 —— `PROVIDERS_TIMEOUT after 30000ms`，
+    而实际用了 39328ms：表里声明了 30 秒，处理函数却一次都没看那口钟，于是四个源
+    依次探测把这一步拖到 39 秒，结果照收。声明了截止而不看，比没有截止更糟：侧信道
+    上写着"30 秒"，模型与编排读到的却是"这一件限过时"。
+
+    为什么检查点放在"每个源之前"而不是函数开头：开头那一处只能挡住"整件根本没开始"，
+    而这一件的耗时是逐源叠加的（每个源一次网络探测，`_PROBE_TIMEOUT` 8 秒 × 4 个源）。
+    放在每个源之前，到点就停在已经探完的那几个之后 —— 不重探、也不假装探完。
+    """
+    rows = []
+    for name in _known_names(ctx):
+        # 到点即停（受控超时，不"照收"）：`ToolTimedOut` 会被 `agent_loop` 认成
+        # 本工具自己的那口钟响了（`tool_timeout.OBSERVED`），结果被换成超时结果。
+        from ..tool_timeout import raise_if_timed_out
+
+        raise_if_timed_out()
+        rows.append(_probe_provider(ctx, name))
     available = [r["name"] for r in rows if r["available"] is True]
     unavailable = [r["name"] for r in rows if r["available"] is False]
     unverified = [r["name"] for r in rows if r["available"] is None]
@@ -956,6 +982,10 @@ def _h_literature(
         source_refusals = sorted(r["name"] for r in source_rows if r["refused"])
 
     candidates = list(candidates or [])
+    # C1FIX-URISRC ①：把这次 provider **真的报回来**的地址记账。`lit.stage_add` 判
+    # "自报 provider" 与 `search.download` 判 "这地址是不是 provider 给的" 都只认这一份 ——
+    # 它是"候选行上的地址有出处"的唯一机器证据（模型自己写的地址永远不在里面）。
+    record_provider_urls(ctx, candidates)
     rows, read_error = _literature_rows(ctx)
     # "有 store"不等于"读到了表"：表坏了的时候也没查成，
     # 于是所有候选的 is_new 必须是 None（未知），而不是 True（新的）。
@@ -1142,6 +1172,395 @@ def _download_candidate(ctx: _Ctx, slot: str) -> tuple[dict | None, Any]:
     return dict(row), None
 
 
+# --------------------------------------------------------------------------- 下载地址的来源
+#
+# C1FIX-DL ②（2026-11-23）：真机 `projects/sylow-1`（sid `2026-11-22e`，role=A）17 次
+# `search.download` 里 4 次是猜文件名 —— `kconrad…/sylowthm.pdf`、`…/sylow.pdf`（两次）、
+# `fm.mizar.org/…/sylow.pdf`，4 次全 404；而真名是 `sylowpf.pdf`（产品下载器下它
+# ok=True / 200 / 279,580 B）。这不是模型"不爱用候选"，而是工具面允许它自拼：
+# `url` 是必填项，`cand` 只用来记回执，两者之间没有任何一致性校验。
+#
+# 于是这里补上"下载地址的来源"这一层：`cand` 给了 ⇒ 唯一合法来源是候选行记录的地址
+# （`pdf_url` → `landing_url` → `url`）；自拼的地址受控拒（`url_not_from_candidate`，
+# 一个请求都不发、也不写回执 —— 它没"试过"）。`cand` 没给 ⇒ 只能软标"自拼地址"，
+# 因为"下一段任意 URL"本身是合法用法（真机那两次 `api.openalex.org` 抓 JSON 正是这一支）。
+
+#: 候选行上"记录过的下载地址"的字段，按优先级从高到低。
+#:
+#: 为什么有 `url` 这一格：盘上的 `lit_candidates` 只有 `url`（`litstage.stage_entries`
+#: 把候选的 `pdf_url` 折进它，见 `litstage._top_up`）；`pdf_url` / `landing_url` 两格是
+#: 前向兼容 —— `literature` 行上确有它们（`_LOCATION_FIELDS`），候选行将来若原样留存
+#: 也应当被认。
+_CANDIDATE_URL_FIELDS: tuple[str, ...] = ("pdf_url", "landing_url", "url")
+
+
+def _candidate_urls(row: Mapping[str, Any]) -> list[str]:
+    """候选行上记录的全部地址（去重、保序、跳过空串）。"""
+    out: list[str] = []
+    for name in _CANDIDATE_URL_FIELDS:
+        url = str(row.get(name) or "").strip()
+        if url and url not in out:
+            out.append(url)
+    return out
+
+
+def _url_key(url: str) -> tuple[str, str, str, str]:
+    """把一个地址折成"同一份文件"的比较键：scheme / host:port / path / query。
+
+    刻意抹平的三件事都不改变"下到的是哪一份"：`http` ↔ `https`（同一台站的两个入口）、
+    主机名大小写、路径末尾的斜杠。不抹平 query：`?article=1022&context=ebooks`
+    换一个数就是另一份文件。
+    """
+    parts = urllib.parse.urlsplit(str(url or "").strip())
+    scheme = (parts.scheme or "").lower()
+    if scheme in ("http", "https"):
+        scheme = "http(s)"
+    host = (parts.hostname or "").lower()
+    try:
+        port = parts.port
+    except ValueError:  # 畸形端口串（`urlsplit` 认了、`port` 抛）
+        return (scheme, host, parts.path, parts.query)
+    if port in (80, 443, None):
+        port = None
+    netloc = f"{host}:{port}" if port else host
+    path = urllib.parse.unquote(parts.path).rstrip("/")
+    return (scheme, netloc, path, parts.query)
+
+
+def _same_url(left: str, right: str) -> bool:
+    """两个地址是不是同一份（口径见 :func:`_url_key`）。空串与任何东西都不相等。"""
+    if not str(left or "").strip() or not str(right or "").strip():
+        return False
+    return _url_key(left) == _url_key(right)
+
+
+def _url_source_of(row: Mapping[str, Any], url: str) -> str:
+    """这个地址在候选行上记在哪一格：`candidate_pdf_url` / `candidate_landing_url` /
+    `candidate_url`（都不匹配 ⇒ `candidate_other`，正常不会出现）。"""
+    for name in _CANDIDATE_URL_FIELDS:
+        if _same_url(url, str(row.get(name) or "")):
+            return f"candidate_{name}"
+    return "candidate_other"
+
+
+def _resolve_candidate_download_url(
+    row: Mapping[str, Any], submitted: str
+) -> tuple[str, str, Any]:
+    """`cand` 路径的地址裁决：返回 `(采用的地址, url_source, 受控拒或 None)`。
+
+    三种结局，各自对应现场的一种形状：
+
+    * 候选行有记录地址、调用方给的地址是记录里的一个（或没给）⇒ 用记录里的地址，
+      `url_source=candidate_*`。这就是"必须从候选行取 URL"那条口径的落点。
+    * 候选行有记录地址、调用方给的是别的地址 ⇒ 受控拒 `url_not_from_candidate`，
+      并把记录里的地址原样回给模型（真机 4 次猜文件名全 404，就是因为没有这一道）。
+    * 候选行没有记录地址 ⇒ 只能用调用方给的（`url_source=unrecorded`）：
+      这时"自拼"不是"与记录矛盾"，而是"记录里没有" —— 拒它会挡掉真机那条
+      "暂存只带题录、全文另找"的正路（`projects/sylow-1` 的 slot 000055 就是这样）。
+      调用方也没给 ⇒ 受控拒 `url_not_from_candidate`（不知道该下哪一个）。
+    """
+    recorded = _candidate_urls(row)
+    slot = str(row.get("slot") or "")
+    submitted = str(submitted or "").strip()
+    if not recorded:
+        if not submitted:
+            return "", "", fail(
+                "这一条候选没有记录地址，调用方也没给 url ⇒ 不知道该下哪一个"
+                "（不是「这一条试过、拿不到全文」）",
+                kind="url_not_from_candidate", cand=slot, candidate_urls=[],
+            )
+        return submitted, "unrecorded", None
+    if submitted:
+        for url in recorded:
+            if _same_url(submitted, url):
+                return url, _url_source_of(row, url), None
+        return "", "", fail(
+            f"url 不在候选 {slot} 记录的地址里（这是自拼地址）⇒ 拒绝下载："
+            f"记录的地址是 {recorded}。请改用记录里的 pdf_url（或干脆只给 "
+            f"`cand=\"{slot}\"`，由工具从候选行取）；一次下载试一个「猜出来的文件名」"
+            "只会烧掉一次请求（真机 4 次自拼全部 404）。",
+            kind="url_not_from_candidate", cand=slot, candidate_urls=recorded,
+            url=submitted,
+        )
+    return recorded[0], _url_source_of(row, recorded[0]), None
+
+
+def _unbound_url_source(ctx: _Ctx, url: str) -> str:
+    """没给 `cand` 时，这个地址是不是某条候选记录过的（三态：不许折成布尔）。
+
+    `candidate_record`：任一条候选行的记录地址就是它 ⇒ 不是自拼；
+    `self_constructed`：读到了候选表、里面没有它 ⇒ 自拼地址（软警示，不拒）；
+    `unknown`：没配 store / 表读不出来 ⇒ 判不了（既不警示也不背书）。
+    """
+    if ctx.store is None:
+        return "unknown"
+    try:
+        rows = list(ctx.store.rows("lit_candidates"))
+    except Exception:  # noqa: BLE001 - 读不到不等于"里面没有"
+        return "unknown"
+    for row in rows:
+        for recorded in _candidate_urls(row):
+            if _same_url(url, recorded):
+                return "candidate_record"
+    return "self_constructed"
+
+
+def _self_constructed_url_warning(url: str) -> str:
+    """自拼地址的那一句可读警示（`cand` 没给、且不在任何候选记录里）。"""
+    return (
+        f"url_source=self_constructed：这个 url 不在任何候选行的记录地址里、`cand` 也没给 ⇒ "
+        f"它是自拼地址：{url}。"
+        "真机 C-1（`projects/sylow-1` / `2026-11-22e`）17 次 `search.download` 里 4 次是"
+        "这类猜出来的文件名，4 次全 404（真名是 `sylowpf.pdf`，而候选的 `pdf_url` 里本来"
+        "就有它）。要判收请先把候选暂存（`lit.stage_add` 带 pdf_url）再用 "
+        "`search.download(cand=\"<槽>\")` 取记录里的地址；确实是外部地址就照常下。"
+    )
+
+
+def _unrecorded_url_warning(slot: str, url: str) -> str:
+    """候选行没有记录地址时的那一句（地址不是与记录矛盾，而是记录里没有）。"""
+    return (
+        f"url_source=unrecorded：候选 {slot} 这一行没有记录地址（暂存时没带 pdf_url），"
+        f"这次用的是外部地址 {url} ⇒ 核对不了它是不是候选里的那条直链。"
+        "下次暂存时把 pdf_url 一并给上，下载就能按候选记录走。"
+    )
+
+
+# --------------------------------------------------------------------------- 候选行地址的来源
+#
+# C1FIX-URISRC ①（2026-11-23）：C1FIX-DL 加的「地址来源」层堵的是"同一候选、另给一个
+# 自拼地址"；但它认「候选行记录过的地址」为合法来源，而候选行的 `url` 正是模型自己经
+# `lit.stage_add` 写进去的 —— 于是"先把自己拼的地址洗进候选行、再用 `cand=` 取它"
+# 这条路一道闸都不经过。真机 `projects/sylow-1` 那 4 次猜文件名就是这条路：模型不是
+# "绕过了候选"，而是把猜出来的名字写成了一个候选。
+#
+# 这一层把"候选行上这个地址是从哪来的"记下来，并让 `search.download` 的收据带上它：
+#   `provider`          `search.literature` 这次真的报过这个地址（唯一"有出处"的一档）
+#   `webpage`           模型自报"从网页正文里读到的"（合法用法，但框架核不了）
+#   `self_constructed`  模型自己在 `lit.stage_add` 里写的（没声明时按这一档 —— 事实如此）
+#   `unknown`           这一行没有来源记录（自动链路暂存 / 本功能上线前的行 / 通用写口路线）
+#
+# ## 为什么不能只信模型自报
+# 自报的 `provider` 正是洗白通道要的那句话：模型尽可以把自己拼的地址标成 provider 给的。
+# 所以 `provider` 这一档以**框架自己记的 provider 返回地址**为准：`search.literature`
+# 把每条候选的 `pdf_url` / `landing_url` 追加进 `data/lit_url_origins.jsonl`，
+# `lit.stage_add` 拿自报的那一档去对；对不上就受控拒（`url_origin_unverified`）——
+# 说谎是这里唯一没有正当用法的形态。
+#
+# ## 为什么 `self_constructed` / `webpage` 不上硬闸
+# 模型从网页正文里读到一条真实 PDF 链接是合法正路（`text.extract` 之后从正文里挑链接），
+# 它必然不在 provider 的返回里；硬闸会把它和"自拼"一起挡掉。所以这两档只做透明化
+# （收据点名 + 警示）：让模型每次都看到"这地址是你自己写的，不是 provider 给的"。
+# 硬闸只落在"谎报 provider"这一档。
+#
+# ## 台账为什么是 `data/` 下的文件而不是表
+# 它不是文献库的事实，而是"这一行的地址从哪来"这一步的痕迹；`schema.LitCandidate` 加
+# 一格要动 schema 版本与磁盘契约（FC-27 的 schema-migration），而这张台账只要
+# "按地址追加一行、按地址读回来"。`data/` 下的文件对任何角色的 `fs.*` 写口一律拒
+# （`fs_tools.RESERVED_LEDGER_PREFIXES` 的 `prefix:data/`），所以模型伪造不了它。
+
+#: 台账落点（与 `litavail` 的 `data/lit_availability.jsonl` 同层同形：追加式 JSONL）。
+_URL_ORIGIN_LEDGER_NAME: str = "lit_url_origins.jsonl"
+_URL_ORIGIN_DIR: str = "data"
+
+#: 模型可以在 `lit.stage_add` 的 entry 上自报的三档（`entries[].url_origin`）。
+URL_ORIGINS: tuple[str, ...] = ("provider", "webpage", "self_constructed")
+#: 自报 `provider` 而这次没有任何 provider 返回过它 —— 谎报档（写侧拒、读侧也拒）。
+URL_ORIGIN_UNVERIFIED: str = "declared_provider_unverified"
+#: 这一行没有来源记录。三态纪律：判不了就是判不了，**不许**折成 `provider`。
+URL_ORIGIN_UNKNOWN: str = "unknown"
+
+#: 台账里 `kind` 的两档：provider 报来的地址 / 模型写进候选行的地址。
+_ORIGIN_KIND_PROVIDER: str = "provider_url"
+_ORIGIN_KIND_STAGED: str = "staged_url"
+
+
+def url_origin_ledger_path(ctx: _Ctx) -> Path:
+    """这张工作区的地址来源台账路径（与 `store.root` 同一层：`register` 的 workspace 缺省就是它）。"""
+    return Path(ctx.workspace) / _URL_ORIGIN_DIR / _URL_ORIGIN_LEDGER_NAME
+
+
+def _origin_records(ctx: _Ctx) -> list[dict]:
+    """把台账读成一列记录（坏行跳过，不把"读坏了"折成"有一条记录"）。
+
+    文件不存在 ⇒ 空清单（"还没有任何来源记录"，与"读不到"不同：读不到也不抛 ——
+    这一层的读侧本来就是判来源，读坏了只能判 `unknown`，判不了不许冒充 provider）。
+    """
+    path = url_origin_ledger_path(ctx)
+    if not path.is_file():
+        return []
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        # 读不出来 ⇒ 后面按 `unknown` 处理（fail-closed 的方向：不冒充 provider）
+        return []
+    out: list[dict] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        try:
+            got = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(got, dict):
+            out.append(got)
+    return out
+
+
+def _origin_index(ctx: _Ctx) -> dict[tuple[str, str, str, str], dict]:
+    """`地址键 -> 来源读数` 的视图（后写的覆盖先写的）。
+
+    两遍：先折 staged 记录，再把 provider 记录盖上去 —— provider 是**证据**，
+    它压过任何自报（"模型先自报 webpage、之后 provider 真报了这个地址"时，后者才是
+    这条地址的真实出处；反之 provider 记过之后又被一次不带声明的重进覆盖，就会把
+    一条有出处的地址读成自拼的）。
+    """
+    records = _origin_records(ctx)
+    index: dict[tuple[str, str, str, str], dict] = {}
+    for rec in records:
+        url = str(rec.get("url") or "").strip()
+        if not url or str(rec.get("kind") or "") != _ORIGIN_KIND_STAGED:
+            continue
+        index[_url_key(url)] = {
+            "url_origin": str(rec.get("url_origin") or URL_ORIGIN_UNKNOWN),
+            "declared": str(rec.get("declared") or ""),
+            "source": f"lit.stage_add（{str(rec.get('at') or '?')}）",
+        }
+    for rec in records:
+        url = str(rec.get("url") or "").strip()
+        if not url or str(rec.get("kind") or "") != _ORIGIN_KIND_PROVIDER:
+            continue
+        index[_url_key(url)] = {
+            "url_origin": "provider",
+            "provider": str(rec.get("provider") or ""),
+            "source": f"search.literature（{str(rec.get('at') or '?')}）",
+        }
+    return index
+
+
+def _origin_of(index: Mapping[Any, dict], url: str) -> tuple[str, str]:
+    """这个地址的来源：`(档位, 细节)`。没有记录 ⇒ (`unknown`, 空串)。"""
+    found = index.get(_url_key(str(url or "").strip()), {})
+    return (str(found.get("url_origin") or URL_ORIGIN_UNKNOWN),
+            str(found.get("provider") or found.get("declared") or ""))
+
+
+def record_provider_urls(ctx: _Ctx, candidates: Iterable[Any]) -> int:
+    """把 `search.literature` 这一次真的报回来的地址记进台账（返回写了几条）。
+
+    只记 `pdf_url` / `landing_url` 两格：它们是 provider 给的"去哪拿全文"，
+    也正是 `_resolve_candidate_download_url` 认的那两格。记不上不抛（检索结果是主产出，
+    台账只是来源读数）：抛了会把一次成功的检索变成失败。
+    """
+    rows: list[dict] = []
+    for cand in candidates or ():
+        label = str(getattr(cand, "provider", "") or "")
+        for name in ("pdf_url", "landing_url"):
+            url = str(getattr(cand, name, "") or "").strip()
+            if not url:
+                continue
+            rows.append({"kind": _ORIGIN_KIND_PROVIDER, "url": url,
+                         "provider": label, "at": S.now_iso()})
+    if not rows:
+        return 0
+    path = url_origin_ledger_path(ctx)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8", newline="") as fh:
+            for row in rows:
+                fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+    except OSError:
+        # 台账写不进去只是"这次没有来源读数"（读侧按 unknown 处理），不许让检索失败
+        return 0
+    return len(rows)
+
+
+def _stage_origin_plan(ctx: _Ctx, items: Sequence[Mapping[str, Any]]) -> tuple[
+        list[dict], list[dict], list[dict]]:
+    """逐条算出暂存记录的来源；返回 `(要记的, 谎报 provider 的, 词表外的自报)`。
+
+    `url_origin` 不填 ⇒ 按 `self_constructed` 记（模型把地址写进了候选行，这是事实，
+    不是指控）；填了 `provider` 而台账里没有 provider 报过这个地址 ⇒ 进第二张表
+    （由调用方受控拒）；填了词表外的值 ⇒ 进第三张表（schema 的 enum 已挡，直调也挡）。
+    """
+    index = _origin_index(ctx)
+    plans: list[dict] = []
+    unverified: list[dict] = []
+    bad: list[dict] = []
+    for raw in items:
+        url = str(raw.get("url") or raw.get("pdf_url") or "").strip()
+        declared = str(raw.get("url_origin") or "").strip()
+        if declared and declared not in URL_ORIGINS:
+            bad.append({"title": str(raw.get("title") or ""), "url": url,
+                        "url_origin": declared})
+            continue
+        if not url:
+            continue
+        origin, _detail = _origin_of(index, url)
+        if declared == "provider" and origin != "provider":
+            unverified.append({"title": str(raw.get("title") or ""), "url": url})
+            continue
+        plans.append({
+            "url": url,
+            "declared": declared,
+            "url_origin": "provider" if origin == "provider" else (declared or "self_constructed"),
+        })
+    return plans, unverified, bad
+
+
+def _record_staged_origins(ctx: _Ctx, plans: Sequence[Mapping[str, Any]], *,
+                           request_id: str) -> int:
+    """把这一次暂存的"地址 + 来源"逐条追加进台账（返回写了几条）。"""
+    if not plans:
+        return 0
+    path = url_origin_ledger_path(ctx)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8", newline="") as fh:
+            for plan in plans:
+                row = {"kind": _ORIGIN_KIND_STAGED, "url": str(plan.get("url") or ""),
+                       "url_origin": str(plan.get("url_origin") or URL_ORIGIN_UNKNOWN),
+                       "declared": str(plan.get("declared") or ""),
+                       "request_id": str(request_id or ""), "actor": ctx.actor,
+                       "at": S.now_iso()}
+                fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+    except OSError:
+        # 台账写不进去：下一次下载会按 `unknown` 读（透明化少一档，但不改变下载行为）
+        return 0
+    return len(plans)
+
+
+def _origin_warning(origin: str, url: str, slot: str) -> str:
+    """`search.download` 收据里那一句来源说明（`provider` 不产生警示 —— 没消息就是好消息）。
+
+    三档各有各的下一步：`self_constructed` ⇒ 换用 provider 给的地址；
+    `webpage` ⇒ 照下，但别把"网页里读到的链接"说成"provider 给的"；
+    `unknown` ⇒ 这一行不是经 `lit.stage_add` 记的来源（自动链路 / 老行），下载照下。
+    """
+    where = f"候选 {slot} 的" if slot else ""
+    if origin == "provider":
+        # 有出处 ⇒ 没有消息就是好消息（收据不拿一行噪声去换一句"这确实是真的"）
+        return ""
+    if origin == "webpage":
+        return (
+            f"url_origin=webpage：{where}地址 {url} 是你在 `lit.stage_add` 里自报「从网页正文里"
+            "读到的」。框架核不了它（它不在任何 provider 这次返回的 pdf_url/landing_url 里）——"
+            "能下就照下，但**别**把它说成「provider 给的」。"
+        )
+    if origin == URL_ORIGIN_UNKNOWN:
+        return (
+            f"url_origin=unknown：{where}地址 {url} 没有来源记录（这不是经 `lit.stage_add` 记的 "
+            "provider 地址 —— 自动链路暂存的行、本功能上线前的行、或通用写口写的行都会落到这一档）。"
+            "下载照下；要一条可复核的来源，请重新 `search.literature` 拿 pdf_url 再暂存一次。"
+        )
+    return (
+        f"url_origin=self_constructed：{where}地址 {url} 是你在 `lit.stage_add` 里自己写的"
+        "（这次没有任何 provider 返回过它）—— 它不是「候选记录的地址」担保的那一份。"
+        "能下就照下，但别把它当「provider 确认过的直链」；真机 4 次猜文件名全 404 就是这个形状。"
+    )
+
+
 def _record_download_attempt(ctx: _Ctx, slot: str, row: Mapping[str, Any], *,
                              url: str, fetch_kind: str) -> dict | None:
     """把一次失败的下载记成一条"试过、拿不到可读文本"的回执（`extract_failed`）。
@@ -1176,14 +1595,70 @@ def _h_download(ctx: _Ctx, url: str, hint: str = "paper", max_bytes: int = DEFAU
     拿不到可读全文时写一条 `extract_failed` 回执（档位与理由见
     :func:`_record_download_attempt`），于是"下载就失败、连文件都没有"或"下到的是
     10MB 落地页 HTML"的候选也能按仅题录入库（业主口径：`metadata_only` 是"试过一次、
-    拿不到可读文本"，下载尝试也算一次尝试）。不给 `cand` ⇒ 行为逐字不变。
+    拿不到可读文本"，下载尝试也算一次尝试）。不给 `cand` ⇒ 除下面那条软警示外行为不变。
+
+    ## 地址从哪来（C1FIX-DL ②，2026-11-23）
+
+    给了 `cand` ⇒ 地址的唯一合法来源是候选行记录的那个（`:func:`_resolve_candidate_download_url``：
+    `pdf_url` → `landing_url` → `url`）；`url` 给了一个记录里没有的地址 ⇒ 受控拒
+    `url_not_from_candidate`（不发出任何请求、也不写回执：猜出来的地址不算"试过"）。
+    `url` 空着也合法（这时就用记录里的那一个）—— 但那条路要等工具面把 `url` 从
+    `required` 里放开（p326 patch，见 `temp/c1fixdl/patch-p326-search-download.diff`）。
+
+    没给 `cand` ⇒ 扫一遍候选表，地址不在任何记录里就打一条 `url_source=self_constructed`
+    的软警示（真机 4 次自拼文件名全 404 的那个形状），但不拒：
+    "下一段外部 URL"本身是合法用法（真机那两次 `api.openalex.org` 抓 JSON 就是它）。
+
+    来源读数落在哪：成功的 `data` 里不新开字段（`returns=` 是 p325 冻住的那一面，
+    新键会让"实跑返回了、声明里没提"的判据变红）—— 除干净成功外，来源写在已声明的
+    `warnings` 里，前缀是 `url_source=…`；失败时另在 `meta` 的 `url_source` 上给一份
+    （失败 meta 本来就不进 `returns=`，与 `fetch_kind` / `cand` 同档）。
+
+    ## 候选行上的地址是从哪来的（C1FIX-URISRC ①，2026-11-23）
+
+    给了 `cand`、且用的是候选行记录的地址 ⇒ 再读一层来源台账（`:func:`_origin_index``）：
+    `provider`（`search.literature` 真报过这个地址）⇒ 不加任何警示；
+    `self_constructed`（模型自己在 `lit.stage_add` 里写的）/ `webpage`（模型自报从网页里
+    读到的）/ `unknown`（这一行没有来源记录）⇒ 在 `warnings` 里点名，前缀 `url_origin=`，
+    **照下**（前两档都有正当用法）；`declared_provider_unverified` ⇒ 受控拒。
+    不给 `cand` 的那条路不查这一层：地址是本次调用给的，与候选行无关（C1FIX-DL 的
+    `url_source` 已经覆盖它），所以那时 `url_origin` 留空串 = "这条路径不查来源"。
     """
     slot = _download_slot(cand)
     row: dict | None = None
+    url_source = ""
+    url_origin = ""
+    url_warnings: list[str] = []
     if slot:
         row, bad = _download_candidate(ctx, slot)
         if bad is not None:
             return bad
+        url, url_source, bad = _resolve_candidate_download_url(row, url)
+        if bad is not None:
+            return bad
+        if url_source == "unrecorded":
+            # 候选没有记录地址 ⇒ 地址是外部给的，核对不了（不是"与记录矛盾"）。
+            url_warnings.append(_unrecorded_url_warning(slot, url))
+        else:
+            # 地址取自候选行 ⇒ 查这个地址本身是从哪来的（洗白通道的落点）。
+            url_origin, _detail = _origin_of(_origin_index(ctx), url)
+            if url_origin == URL_ORIGIN_UNVERIFIED:
+                return fail(
+                    f"候选 {slot} 的地址 {url} 自报「provider 给的」，但这次没有任何 provider "
+                    "返回过它 ⇒ 不能拿候选行当出处（候选行不是地址的来源）。请把 "
+                    "`lit.stage_add` 的 `url_origin` 改成 `self_constructed` / `webpage`"
+                    "（照实说 —— 照实就照下），或先 `search.literature` 拿到 provider 的 "
+                    "pdf_url 再暂存。",
+                    kind="url_origin_unverified", cand=slot, url=url,
+                    url_origin=url_origin, candidate_urls=_candidate_urls(row),
+                )
+            warning = _origin_warning(url_origin, url, slot)
+            if warning:
+                url_warnings.append(warning)
+    else:
+        url_source = _unbound_url_source(ctx, url)
+        if url_source == "self_constructed":
+            url_warnings.append(_self_constructed_url_warning(url))
     dest = ctx.downloads_dir
     downloader, effective = _downloader_for(ctx, int(max_bytes))
     try:
@@ -1192,7 +1667,8 @@ def _h_download(ctx: _Ctx, url: str, hint: str = "paper", max_bytes: int = DEFAU
         receipt = (_record_download_attempt(ctx, slot, row, url=url, fetch_kind="download_error")
                    if slot and row is not None else None)
         return fail(f"下载异常：{type(exc).__name__}: {exc}", kind="download_error", url=url,
-                    cand=slot, read_receipt=receipt)
+                    cand=slot, url_source=url_source, url_origin=url_origin,
+                    read_receipt=receipt, warnings=list(url_warnings))
 
     if not res.ok:
         # 「2026-10-16（把 A 做成会应变的智能体）」：这里要把「下载层那一档」
@@ -1211,11 +1687,14 @@ def _h_download(ctx: _Ctx, url: str, hint: str = "paper", max_bytes: int = DEFAU
             kind="download_failed",
             fetch_kind=res.kind,
             url=url,
+            url_source=url_source,
+            url_origin=url_origin,
             http_status=res.http_status,
             bytes=res.bytes,
             elapsed_s=elapsed,
             cand=slot,
             read_receipt=receipt,
+            warnings=list(url_warnings),
         )
 
     path = Path(res.path) if res.path else None
@@ -1249,7 +1728,7 @@ def _h_download(ctx: _Ctx, url: str, hint: str = "paper", max_bytes: int = DEFAU
         "content_warning": res.error,
         "cand": slot,
         "read_receipt": receipt,
-        "warnings": [],
+        "warnings": list(url_warnings),
     }
     if res.error:
         data["warnings"].append(
@@ -2917,14 +3396,54 @@ def _h_lit_stage_add(
 
     `request_id` 「必须给」（业主 2026-10-20 第 1 条：列表按委托重置）—— 换一个
     `request_id` 就是"从空列表开始下一次委托"，旧委托的行不删、也不参与本次筛选。
+
+    ## `entries[].url` 的来源（C1FIX-URISRC ①，2026-11-23）
+
+    这一件是「模型把地址写进候选行」的那个入口，所以它也是唯一能记下"这个地址从哪来"
+    的地方（`schema.LitCandidate` 没有这一格，且那张表是 FC-27 的 schema-migration）：
+    每个带 `url` 的 entry 都按 `url_origin` 逐条记进 `data/lit_url_origins.jsonl`，
+    `search.download(cand=…)` 再用它给收据点名。
+
+    三档自报（`provider` / `webpage` / `self_constructed`，词表外当场拒）：
+
+    * `provider`：`search.literature` 这次真的报过这个地址（框架自己记的台账为准）。
+      **自报 `provider` 而台账里没有 ⇒ 整笔受控拒 `url_origin_unverified`** ——
+      这是本层唯一的硬闸：谎报出处是这里唯一没有正当用法的形态。拒之前一行都不写
+      （先把"出处"洗进候选行、再让下载认它，这条路必须在写侧断掉）。
+    * `webpage` / `self_constructed`：照实说就照收（从网页正文里读到真实 PDF 链接是
+      合法用法，框架核不了，所以只做透明化、不做硬闸）；不填按 `self_constructed` 记。
     """
     from ..litstage import stage_entries
 
     try:
-        got = stage_entries(ctx.store, entries, request_id=request_id, batch=batch,
+        # 复制一次再判：`entries` 可能是生成器，而下面要判来源、`stage_entries` 还要再读一遍。
+        items = [dict(entry) for entry in entries]
+    except (LitStageError, StoreError, ValueError, TypeError) as exc:  # noqa: BLE001
+        return _stage_fail(exc)
+    plans, unverified, bad_origins = _stage_origin_plan(ctx, items)
+    if bad_origins:
+        return fail(
+            "entries[].url_origin 只能是 "
+            f"{list(URL_ORIGINS)} 之一：{bad_origins}（自造一档读不出「这地址从哪来」，"
+            "与「没填」同形）",
+            kind="bad_url_origin", entries=bad_origins[:8],
+        )
+    if unverified:
+        return fail(
+            f"这 {len(unverified)} 条自报 `url_origin=provider`，但这一次没有任何 provider "
+            f"返回过它们的 url：{unverified[:8]}。候选行不是地址的出处 —— 先把地址标成 "
+            "provider 再让 `search.download` 认它，正是「自拼地址洗进候选行」那条路，"
+            "所以整笔拒（一行都没写）。照实填 `self_constructed` / `webpage`，"
+            "或先 `search.literature` 拿到 provider 的 pdf_url 再暂存。",
+            kind="url_origin_unverified", entries=unverified[:8],
+            count=len(unverified),
+        )
+    try:
+        got = stage_entries(ctx.store, items, request_id=request_id, batch=batch,
                             actor=ctx.actor)
     except (LitStageError, StoreError, ValueError, TypeError) as exc:  # noqa: BLE001
         return _stage_fail(exc)
+    _record_staged_origins(ctx, plans, request_id=str(got["request_id"]))
     return ok({
         "request_id": got["request_id"],
         "batch": got["batch"],
@@ -3361,6 +3880,13 @@ _LIT_PARAMS_ENTRY = {
         "type_code": {"type": "string", "enum": list(S.LIT_TYPES)},
         "summary": {"type": "string", "maxLength": 4000},
         "url": {"type": "string", "maxLength": 1000},
+        "url_origin": {"type": "string", "enum": list(URL_ORIGINS),
+                       "description": "这个 url 是从哪来的（照实填）："
+                                      "provider = 从 search.literature 这次返回的 "
+                                      "pdf_url/landing_url 原样抄来；webpage = 从网页正文里读到"
+                                      "的链接；self_constructed = 自己拼的。不填按 "
+                                      "self_constructed 记；填 provider 而这次没有 provider "
+                                      "返回过它 ⇒ 整笔受控拒（url_origin_unverified）"},
         "relevance": {"type": "string", "maxLength": 400,
                       "description": "一句「它为什么与本次检索相关」，委托报告要用"},
     },

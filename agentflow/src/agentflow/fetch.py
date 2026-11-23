@@ -54,8 +54,25 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
-#: 默认礼貌标识；调用方可通过配置覆盖（如加入真实联系邮箱）。
-DEFAULT_USER_AGENT = "agentflow/0.1 (research prototype; contact: local)"
+#: 默认 User-Agent：浏览器式标识（C1FIX-DL ①，2026-11-23）。
+#:
+#: 改前是 `agentflow/0.1 (research prototype; contact: local)`，看起来"礼貌"，实测的
+#: 后果是被 403 挡在门外。业主的对照实验（同一 Python 栈，2026-11-23 15:0x）：
+#:
+#:   * urllib 默认 UA        → `https://sciendo.com/pdf/10.2478/v10037-007-0018-3` = 403
+#:   * urllib + 浏览器 UA     → 同一 URL = 200 / 4000B 读成功
+#:
+#: 真机同形：`projects/sylow-1`（sid `2026-11-22e`，role=A）13:36:39 与 13:47:33 两次
+#: 同一 URL 都是 `http_403`（`fetch_kind=http_403`，`bytes=0`）。
+#:
+#: 所以默认必须是浏览器式：学术站点的 403 多半是"挡脚本"，不是"没权限" —— 而这两种
+#: 原因的正确处置相反（前者换 UA 就过，后者只能换源）。调用方仍可用配置覆盖
+#: （`config.yaml` 的 `download.user_agent`）；身份可识别性由 `From`/联系邮箱一类需求
+#: 靠 `extra_headers` 表达，不该拿"看起来像脚本"换 403。
+DEFAULT_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
 
 #: 默认单文件上限 200 MB。学术 PDF 极少超过这个量级，超过多半是被劫持/扫到了别的东西。
 DEFAULT_MAX_BYTES = 200 * 1024 * 1024
@@ -66,6 +83,24 @@ DEFAULT_CHUNK_SIZE = 256 * 1024
 #: 连接/读取超时分开设置：连接慢通常意味着网络问题，读取慢可能只是文件大。
 DEFAULT_CONNECT_TIMEOUT = 20.0
 DEFAULT_READ_TIMEOUT = 120.0
+
+#: 读阶段的停滞预算下限倍数（C1FIX-DL ③，2026-11-23）。
+#:
+#: `read_timeout` 原先一个数字干两件事：既是 socket 超时、又被当成"单块该多快"。
+#: 真机读数说明 120 秒对"一个字节都没来"太紧：`projects/sylow-1`（sid `2026-11-22e`）
+#: 13:45:19 的 `judsonbooks.org/aata-files/aata-20220728.pdf`（约 30MB）在 131 秒时
+#: 被记成 `read_failed`，而它既没 4xx 也没断连 —— 只是中途停了一下。30MB 的 PDF
+#: 在慢源上停两分钟是常态，所以"停滞"的判定阈值必须比 120 秒宽：至少两倍名义值
+#: （首个字节要给对方准备文档的时间；后续块由实测进度自适应放宽，见
+#: `_next_stall_budget`）。
+READ_STALL_MIN_SLACK = 2.0
+
+#: 超过这个长度，停滞预算再按"每这么多字节放宽一倍"继续放大（`Content-Length` 已知时才生效）。
+READ_STALL_SCALE_BYTES = 8 * 1024 * 1024
+
+#: 停滞预算的上限：再大的文件也不许把一个读块吊过 5 分钟
+#: （上限比"死链要快速失败"让步：真死链在连接期就死了，见 `_download_via` 的两档）。
+MAX_READ_TIMEOUT = 300.0
 
 #: 默认最小请求间隔（秒），与 providers 层一致。
 DEFAULT_MIN_INTERVAL = 1.0
@@ -486,6 +521,140 @@ def _bind_do_open(handler: Any, factory: Callable[..., Any]) -> Callable[..., An
 
 
 # --------------------------------------------------------------------------------------
+# 读阶段的停滞预算：慢但活着 vs 死链
+# --------------------------------------------------------------------------------------
+
+
+def read_stall_budget(declared_bytes: int | None, base_read_timeout: float) -> float:
+    """一次 `read()` 最多可以"一个字节都不来"地等多久（秒）—— 按 `Content-Length` 放宽。
+
+    这就是 C1FIX-DL ③ 的判据本体：真机那两次 `read_failed` / `network_error: timed out`
+    （13:45:19 的 30MB Judson 教材、13:49:08 与 13:53:11 的 UTFPR 仓库）都不是"链接死了"，
+    而是"源慢/中途停"，用一个固定的 120 秒去判它必然误杀大文件。
+
+    口径（三条，都由判据钉住）：
+
+    1. 至少 `READ_STALL_MIN_SLACK` 倍名义值 —— 首个字节要留出对方准备文档的时间；
+    2. `Content-Length` 已知且超过 `READ_STALL_SCALE_BYTES` 时，再按"每这么多字节放宽一倍"
+       线性放大（30MB 的 PDF 因此拿到 300 秒而不是 240 秒）；
+    3. 封顶 `MAX_READ_TIMEOUT` —— 再大也不吊死一个读块。
+
+    `declared_bytes is None`（上游没给长度）⇒ 只吃第 1 条：不知道多大就不该假装知道。
+    """
+    base = max(0.0, float(base_read_timeout))
+    factor = READ_STALL_MIN_SLACK
+    if declared_bytes and declared_bytes > READ_STALL_SCALE_BYTES:
+        factor = max(factor, float(declared_bytes) / READ_STALL_SCALE_BYTES)
+    return min(MAX_READ_TIMEOUT, base * factor)
+
+
+def _next_stall_budget(budget: float, waited: float, base_read_timeout: float) -> float:
+    """这一块慢但来了 ⇒ 把后续块的预算抬到实测的 2 倍（只增不减、封顶）。
+
+    为什么要"分块计时"而不是只按 `Content-Length`：长度经常拿不到（chunked 响应），
+    而且同一个源在不同时刻的速率差一个数量级。实测一块用了 0.9 秒 ⇒ 下一块给它
+    1.8 秒，比拿一个全局数字去猜更接近现场。
+
+    这条函数就是"慢但活着"与"死链"的分界线：块到了 ⇒ 抬预算继续读；块没到
+    （`TimeoutError`）且一个字节都没收到 ⇒ 判死链、不重试（见 `_consume` /
+    `_download_via`）。摘掉它（让它原样返回）⇒ 慢速源会在后面某一块被判死 —— 判据
+    `tests/test_fetch_reads_a_slow_source_to_the_end.py` 的反真空用例正是打在这一条上。
+    """
+    raised = max(float(budget), float(waited) * 2.0,
+                 float(base_read_timeout) * READ_STALL_MIN_SLACK)
+    return min(MAX_READ_TIMEOUT, raised)
+
+
+class _ReadStalled(Exception):
+    """读响应中途停滞（`TimeoutError`），但已经收到过字节 ⇒ 源是活的，只是慢。
+
+    为什么用异常而不是在 `_consume` 里直接返回失败：字节已经进了临时文件，
+    "换一个更大的预算重来一次"只能由外层（`_download_via` 的重试循环）决定 ——
+    重试预算只有一个主人。见 `_download_via` 对它的处置（至多再试一次）。
+    """
+
+    def __init__(self, *, written: int, budget: float, cause: BaseException) -> None:
+        super().__init__(str(cause))
+        self.written = int(written)
+        self.budget = float(budget)
+        self.cause = cause
+
+
+class _ReadDead(Exception):
+    """读响应死了：`TimeoutError` 且一个字节都没收到 ⇒ 死链（不重试、快速上报）。
+
+    与 `_ReadStalled` 同一条理由：临时文件还开着，清理必须等 `with os.fdopen(...)`
+    退出（Windows 上删一个开着的文件会 `PermissionError`，删不掉就留下一个 `.part`）——
+    所以这里只带出那句话，清理与返回由 `_consume` 外层的 `except` 做。
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+
+
+class _ShortBody(Exception):
+    """短包：`Content-Length` 说 N 字节，EOF 时只到了 M < N 字节。
+
+    为什么这一格必须存在（C1FIX-DL ③ 的复算现场，2026-11-23 15:2x，真机那条 URL）：
+
+        `https://judsonbooks.org/aata-files/aata-20220728.pdf`
+        Content-Length: 1,658,383；下载器最后落盘 442,368 字节，首 8 字节 `%PDF-1.5`，
+        而改前这一趟记的是 `ok=True`。
+
+    改前的"成功"判据只有 `written != 0`（`F-5` 只挡住了 0 字节那一档）：一份 43 万字节的
+    半截 PDF 与一份完整的 158 万字节 PDF 在返回值上完全同形，下游抽取照跑。
+    慢源重试（本路的 ③）会提高撞上这一格的概率，所以这一格与 ③ 是同一笔账：
+    不补它，等于把一次响亮的 `read_failed` 换成一份安静的错误文件。
+    """
+
+    def __init__(self, *, written: int, declared: int) -> None:
+        super().__init__(f"short body: {written}/{declared}")
+        self.written = int(written)
+        self.declared = int(declared)
+
+
+def _response_socket(response: Any) -> Any:
+    """尽力取到响应背后的 socket；假响应（测试/注入的 opener）上返回 `None`。
+
+    为什么走属性链而不是 `response.fp.raw._sock` 一条路写死：标准库在
+    `http.client.HTTPResponse` 上给的是 `fp = BufferedReader(SocketIO)`，
+    而注入的 opener 可能返回别的形状。取不到就返回 `None`（调用方当"切不动"处理），
+    绝不因为"这不是标准库的对象"把一个已经成功的下载翻成失败。
+    """
+    node: Any = response
+    for _ in range(5):
+        if node is None:
+            return None
+        sock = getattr(node, "_sock", None)
+        if sock is not None and hasattr(sock, "settimeout"):
+            return sock
+        nxt = getattr(node, "raw", None)
+        if nxt is None:
+            nxt = getattr(node, "fp", None)
+        if nxt is None or nxt is node:
+            return None
+        node = nxt
+    return None
+
+
+def _apply_read_timeout(response: Any, budget: float) -> bool:
+    """把读阶段的 socket 超时切到 `budget`；切不动（假响应/已关闭）⇒ `False`。
+
+    为什么必须在拿到响应头之后再切一次：连接类里的超时是建连时定的，而
+    `Content-Length` 只有读完响应头才知道。这一处是"按内容长度放宽"真正落到
+    socket 上的唯一位置（`_ConnectThenRead*Connection.connect` 设的那一份是起点）。
+    """
+    sock = _response_socket(response)
+    if sock is None:
+        return False
+    try:
+        sock.settimeout(float(budget))
+        return True
+    except OSError:
+        return False
+
+
+# --------------------------------------------------------------------------------------
 # 镜像规则
 # --------------------------------------------------------------------------------------
 
@@ -729,6 +898,11 @@ class HttpDownloader:
         last_status: int | None = None
         last_error: str | None = None
         last_kind: str = "unknown_error"
+        #: 停滞后升级用的预算（`None` = 按 `Content-Length` 现算）。
+        stall_budget: float | None = None
+        #: "慢但活着"只再试一次（与 `tls_timeout` 同一条纪律）：源慢不是抖动，
+        #: 重试三次只会把 30MB 再传三遍。
+        stall_retried = False
 
         for attempt in range(self.retries + 1):
             self._limiter.acquire(host)
@@ -741,7 +915,28 @@ class HttpDownloader:
                         raise urllib.error.HTTPError(
                             url, status, f"HTTP {status}", response.headers, None
                         )
-                    return self._consume(response, status, url, dest, filename_hint)
+                    return self._consume(response, status, url, dest, filename_hint,
+                                         stall_budget=stall_budget)
+            except _ReadStalled as exc:
+                # 慢但活着：一块都没来 ⇒ 死链（`_consume` 已经就地判死、不会走到这里）；
+                # 收到了字节之后才停 ⇒ 源是活的，换一个更大的预算再来一次。
+                last_kind = "timeout"
+                last_error = (
+                    f"timeout: 慢源（已收 {exc.written} 字节后停滞；本块预算 "
+                    f"{exc.budget:.0f}s）: {exc.cause}"
+                )
+                self.stats["read_stalls"] = self.stats.get("read_stalls", 0) + 1
+                if stall_retried or attempt >= self.retries:
+                    break
+                stall_retried = True
+                stall_budget = _next_stall_budget(exc.budget, exc.budget, self.read_timeout)
+                delay = _backoff_delay(attempt)
+                logger.warning(
+                    "下载 %s 在收到 %d 字节后停滞（%s）⇒ 源是活的、只是慢："
+                    "%.1fs 后按 %.2fs 的预算再试一次（慢源只再试一次，不按 retries 重试）",
+                    url, exc.written, exc.cause, delay, stall_budget,
+                )
+                self._sleep(delay)
             except _http_client.HTTPException as exc:
                 # URL 里的空格/控制字符让 urllib 在
                 # `putrequest` 抛 `http.client.InvalidURL`（`HTTPException` 子类）——它不在
@@ -846,6 +1041,8 @@ class HttpDownloader:
         url: str,
         dest: Path,
         filename_hint: str,
+        *,
+        stall_budget: float | None = None,
     ) -> FetchResult:
         """流式落盘。任何异常都转成 ``FetchResult(ok=False)``，绝不向上抛。
 
@@ -859,6 +1056,17 @@ class HttpDownloader:
         被归成 `write_failed` —— 读账的人会去查磁盘，而问题在网络。
         现在的结构是：`response.read()` 在内层 try 里单独兜，
         `read_failed` 只可能来自读；外层 `except OSError` 只可能是落盘失败。
+
+        ## 慢但活着 vs 死链（C1FIX-DL ③）
+
+        读块是逐块计时的（`started` / `waited`）：
+
+        * 块到了、但比名义 `read_timeout` 慢 ⇒ 源是活的，按实测把后续预算抬上去
+          （`_next_stall_budget` + `_apply_read_timeout`），继续读；
+        * 块没到（`TimeoutError`）且一个字节都没收到 ⇒ 死链：如实记 `timeout`，
+          原地返回、不重试（`_download_via` 那一支的重试预算是给"活着的慢源"的）；
+        * 块没到、但已经收到过字节 ⇒ 慢源停住了：抛 `_ReadStalled` 交外层换更大的
+          预算再试一次（临时文件由 `_cleanup` 先删掉）。
         """
         headers = getattr(response, "headers", None)
         raw_ctype = headers.get("Content-Type") if headers is not None else None
@@ -879,6 +1087,11 @@ class HttpDownloader:
                 error=f"too_large_declared: {declared} > {self.max_bytes}",
             )
 
+        # 读阶段预算：长度已知就按长度放宽；外层已经为"慢源"升过级就用它。
+        budget = (float(stall_budget) if stall_budget is not None
+                  else read_stall_budget(declared, self.read_timeout))
+        _apply_read_timeout(response, budget)
+
         extension = infer_extension(url, content_type)
         target = self._target_path(dest, filename_hint, url, extension)
 
@@ -890,21 +1103,44 @@ class HttpDownloader:
             with os.fdopen(fd, "wb") as handle:
                 while True:
                     # 读响应单独兜：这里的异常是网络的事，不是磁盘的事。
+                    started = time.monotonic()
                     try:
                         chunk = response.read(self.chunk_size)
+                    except TimeoutError as exc:
+                        if written == 0:
+                            # 一个字节都没来 ⇒ 死链（不是"慢"）：不重试、立刻上报。
+                            # 清理放在外层：`with os.fdopen(...)` 里删不掉开着的文件。
+                            raise _ReadDead(
+                                f"timeout: 死链 —— 一块数据都没来（首块预算 {budget:.2f}s，"
+                                f"共尝试 {self.stats.get('attempts', 0)} 次）：{exc}"
+                            ) from exc
+                        raise _ReadStalled(written=written, budget=budget, cause=exc) from exc
                     except Exception as exc:
                         self._cleanup(temp_path)
                         return FetchResult(
                             ok=False, kind="read_failed", http_status=status, bytes=written,
                             error=f"read_failed: {type(exc).__name__}: {exc}",
                         )
+                    waited = time.monotonic() - started
                     if not chunk:
                         break
+                    if waited > self.read_timeout:
+                        # 慢但活着：这一块比名义预算慢，但字节到了 ⇒ 抬预算继续读。
+                        budget = _next_stall_budget(budget, waited, self.read_timeout)
+                        _apply_read_timeout(response, budget)
+                        self.stats["slow_chunks"] = self.stats.get("slow_chunks", 0) + 1
                     written += len(chunk)
                     if written > self.max_bytes:
                         raise DownloadError(f"too_large_stream: > {self.max_bytes} bytes")
                     digest.update(chunk)
                     handle.write(chunk)
+                if declared is not None and 0 < written < declared:
+                    # 短包（C1FIX-DL ③ 的现场读数带出来的第二个缺陷）：上游说
+                    # `Content-Length: 1658383`，实际只给了 442368 字节就 EOF。
+                    # 改前这一格记 ok=True（"字节到了，又不是 0"）⇒ 盘上是一份
+                    # 看起来正常的半截 PDF，下游抽取照跑、结论链照写。
+                    # 判据：`declared` 是上游自己报的总长，收不满就是没下完。
+                    raise _ShortBody(written=written, declared=declared)
                 handle.flush()
                 os.fsync(handle.fileno())
             os.replace(temp_path, target)
@@ -916,6 +1152,24 @@ class HttpDownloader:
                 ok=False, kind="too_large_stream", http_status=status,
                 bytes=written, error=str(exc),
             )
+        except _ShortBody as exc:
+            # 短包：文件此刻已关闭（`with` 已退出）⇒ 能删掉，别留一份半截 PDF。
+            self._cleanup(temp_path)
+            return FetchResult(
+                ok=False, kind="read_failed", http_status=status, bytes=written,
+                error=(f"read_failed: 短包 —— 上游声明 {exc.declared} 字节，"
+                       f"实际只收到 {exc.written} 字节就 EOF（连接被提前关掉，"
+                       "或对方在这条连接上只给了一段）"),
+            )
+        except _ReadDead as exc:
+            # 死链：临时文件此刻已关闭（`with` 已退出）⇒ 能删掉。
+            self._cleanup(temp_path)
+            return FetchResult(
+                ok=False, kind="timeout", http_status=status, bytes=0, error=str(exc),
+            )
+        except _ReadStalled:
+            self._cleanup(temp_path)
+            raise
         except OSError as exc:
             # 走到这里只剩下"落盘"这一类（读已经在上面单独兜住了）。
             self._cleanup(temp_path)
