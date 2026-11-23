@@ -579,7 +579,7 @@ export function Run(props: RunProps) {
 
       <Card
         title="交付说明"
-        subtitle="out/review/REPORT.md"
+        subtitle="out/report/REPORT.md（`cli.DEFAULT_REPORT_REL`）"
         right={<TriState tri={v.report.status} label="交付说明" />}
       >
         {v.report.status === "ok" ? (

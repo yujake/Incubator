@@ -164,7 +164,7 @@ export interface LedgerReading {
   events_note: string;
 }
 
-/** 出处：_read_report() —— 交付说明 `out/review/REPORT.md` 的读数（二元组 status/text 的字典口径）。 */
+/** 出处：_read_report() —— 交付说明 `out/report/REPORT.md` 的读数（二元组 status/text 的字典口径）。 */
 export interface ReportReading {
   status: ReportTri;
   text: string;
@@ -250,7 +250,7 @@ export interface CheckpointCacheView {
   why: string;
 }
 
-/** 出处：run_view() 的 `report` —— 交付说明 `out/review/REPORT.md` 的读数。 */
+/** 出处：run_view() 的 `report` —— 交付说明 `out/report/REPORT.md` 的读数。 */
 export interface ReportReadingView {
   status: ReportTri;
   text: string;
@@ -384,6 +384,7 @@ export interface ArtifactsView {
   handoffs_tri: Tri;
   checks: AcceptanceCheck[];
   checks_tri: Tri;
+  checks_path: string;
   style: ReportStyle;
   style_tri: Tri;
   secretary: SecretaryDecision[];
@@ -398,13 +399,16 @@ export interface ArtifactsView {
   code_exp: CodeExpFile[];
   tasks: TaskRow[];
   tasks_tri: Tri;
+  kind_states: Record<string, number>;
+  unknown_kinds: Record<string, number>;
+  kind_flag_mismatch: number;
   rows_mode: string;
   rows_limit: number;
   rows_offset: number;
   rows_total: Record<string, number>;
 }
 
-/** 出处：artifacts_face() 的 experiment_spots[] —— 实验产物的一个落点（`out/experiments/<号>/design.md` / `exhaustion.md` / `.log`；`kind` 是 design / exhaustion / log）。 */
+/** 出处：artifacts_face() 的 experiment_spots[] —— 实验产物的一个落点（报告是 `out/experiments/<号>/exhaustion.md`，原始输出日志是另一个目录里的`out/exp-logs/<号>.log`；`kind` 是 exhaustion / log）。 */
 export interface ExperimentSpot {
   kind: string;
   path: string;
@@ -476,6 +480,34 @@ export interface MachineView {
   settings_tri: Tri;
   settings_reason: string;
   serving: ServingWorkspace;
+  tables: TableArchiveView;
+}
+
+/** 出处：table_archive_reading() —— 库表档案：`schema.RETIRED_TABLES`（已退役）与`schema.NOT_ENABLED_TABLES`（已登记未启用）两档的登记面。`checked=false` ⇒ 登记面读不出来（不是「没有退役表」）。 */
+export interface TableArchiveView {
+  checked: boolean;
+  reason: string;
+  retired: TableRetiredRow[];
+  not_enabled: TableNotEnabledRow[];
+}
+
+/** 出处：table_archive_reading() 的 retired[] —— 一张已退役的表（`RETIRED_TABLES` 的一格）。 */
+export interface TableRetiredRow {
+  name: string;
+  file: string;
+  retired_at: string;
+  why: string;
+  how: string;
+}
+
+/** 出处：table_archive_reading() 的 not_enabled[] —— 一张已登记未启用的表（`NOT_ENABLED_TABLES` 的一格：表在、线没跑过）。 */
+export interface TableNotEnabledRow {
+  name: string;
+  since: string;
+  producers: string[];
+  consumers: string[];
+  evidence: string;
+  to_enable: string;
 }
 
 /** 出处：serving_reading() —— 这一个服务在服务哪个工作区，以及“换不了”这件事（根在 `serve()` 钉死；页面没有、也不该有切换入口）。 */
@@ -622,7 +654,7 @@ export interface UsageView {
   recent: Array<Record<string, unknown>>;
 }
 
-/** 出处：status_reports_face() 的一行 —— `out/review/STATUS-<ts>.{md,json}` 的一份。 */
+/** 出处：status_reports_face() 的一行 —— `out/report/STATUS-<ts>.{md,json}` 的一份。 */
 export interface StatusReportRow {
   name: string;
   stem: string;
@@ -906,6 +938,8 @@ export interface ArtifactRow {
   instance: string;
   identity_conflict: string;
   family: string;
+  kind_unknown?: boolean;
+  kind_state: string;
   by_role: string;
   by_role_source: string;
   by_task_id: string;
@@ -980,10 +1014,12 @@ export interface SecretaryDecision {
   by_task_id_tri: string;
 }
 
-/** 出处：out/paper/ACCEPTANCE-CHECKS.json 的一行（真机 8 行 C1–C8；`closing.ACCEPTANCE_CHECKS_NAME`）。阈值是 `min` / `max` / `na` 三选一：`min` 档问「做得够不够」（`got >= min`），`max` 档问「剩下多少没做」（`got <= max`，真机 60/99 份工作区里有这种行），`na` 档是「这一档对这个项目不适用」（三态，不是通过也不是失败）⇒ 三格都写成可选，谁都不冒充必填。 */
+/** 出处：验收表的一行（路径的单一口径是 `closing.ACCEPTANCE_TARGETS_NAME`；真机 8 行 C1–C8）。阈值是 `min` / `max` / `na` 三选一：`min` 档问「做得够不够」（`got >= min`），`max` 档问「剩下多少没做」（`got <= max`，真机 60/99 份工作区里有这种行），`na` 档是「这一档对这个项目不适用」（三态，不是通过也不是失败）⇒ 三格都写成可选，谁都不冒充必填。B3（2026-11-22）：`kind` 是盘上原值（可能是旧名），`kind_reading` 是读侧正名（交接手稿那一档 = `handoff_rows`），旧名行另带 `kind_deprecated`（弃用标记）。 */
 export interface AcceptanceCheck {
   id: string;
   kind: string;
+  kind_reading: string;
+  kind_deprecated?: string;
   min?: number | null;
   max?: number | null;
   na?: boolean;
@@ -995,7 +1031,7 @@ export interface AcceptanceCheck {
   by_task_id_tri: string;
 }
 
-/** 出处：out/review/REPORT-STYLE.json 的 `sections`（真机四节名字）。 */
+/** 出处：out/report/REPORT-STYLE.json 的 `sections`（真机四节名字）。 */
 export interface ReportStyle {
   sections: string[];
 }
@@ -1336,6 +1372,19 @@ export interface LibraryData {
   undecidable: number | null;
   uses_tri: Tri;
   uses_reason: string;
+  seed: LibrarySeed;
+}
+
+/** 出处：library_face() 的 data.seed —— 种子读数（`seedinject.read_seed_reading` 的工作区相对形态）：种子在 `reference/`，`library_unregistered` 是书架上没有`literature` 行引用的文件（`null` = 没查成）。 */
+export interface LibrarySeed {
+  landed: boolean;
+  count: number;
+  bytes: number;
+  destination: string;
+  marker: string;
+  legacy_root_marker: boolean;
+  library_unregistered: string[] | null;
+  reason: string;
 }
 
 /** 出处：library_face() 的 data.works[] —— 一条「正式入库」的文献（`admitted` 恒为 true：判不出的不进这个数组，而判据只有 `lit_candidates.status=admitted` 那一格）。`download_state` 是 download 那一格与盘上文件核对的三态（present / absent / unreadable），`uses` 是反查出来的「被谁用过」。 */
@@ -1682,6 +1731,8 @@ export interface VsignView {
   orphan_signs: string[];
   ledger_present: boolean | null;
   ledger_path: string;
+  sign_states: Record<string, number>;
+  sign_does_not_back_row: number | null;
   note: string;
   source: SourceRef;
 }
@@ -1703,7 +1754,7 @@ export interface ReceiptView {
   source: SourceRef;
 }
 
-/** 出处：package_face() 的 proofs.c3 —— `out/paper/ACCEPTANCE-CHECKS.json` 的 C3 行。 */
+/** 出处：package_face() 的 proofs.c3 —— 验收表（`closing.ACCEPTANCE_TARGETS_NAME`）的 C3 行。 */
 export interface C3View {
   id: string;
   name: string;
@@ -1725,7 +1776,7 @@ export interface StructureView {
   findings: StructureFinding[];
 }
 
-/** 出处：StructureView.paper —— `out/paper/main.tex` 的体量与编译回执。 */
+/** 出处：StructureView.paper —— `out/package/main.tex` 的体量与编译回执。 */
 export interface PaperFacts {
   tex_path: string;
   exists: boolean;
@@ -1784,6 +1835,7 @@ export interface ClosingView {
   undelivered: ReceiptView;
   cost: CostView;
   runtime: RuntimeView;
+  unsigned_signs: UnsignedSignBacking;
   content: ContentAcceptance;
 }
 
@@ -1921,6 +1973,15 @@ export interface ContentAcceptance {
   failed: string[];
   unchecked: string[];
   passed: boolean;
+  note: string;
+}
+
+/** 出处：ClosingView.unsigned_signs —— 「签不背书这一行」那一档（黄；只数、不判）。 */
+export interface UnsignedSignBacking {
+  checked: boolean;
+  count: number | null;
+  class: string;
+  stmt_ids: string[];
   note: string;
 }
 

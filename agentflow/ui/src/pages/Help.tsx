@@ -238,6 +238,10 @@ const MISREADS: MisreadRow[] = [
     wrong: "写面默认关着，说明网页还接不了线",
     right: "十一条 POST 全在路由表里（/answer、/api/stop、/api/submit、/api/settings、/api/budget、/api/run、/api/task、/api/ack、/api/void、/api/stop/clear、/api/cache/warm）；缺省只读是因为服务端要 --allow-writes 才放行（/api/ 下那十条写端点与 /answer 都如此；唯一例外是 `dry_run=1` 的试算档 —— 它不写盘、不花钱、不起进程，只要求同源，所以只读档也回 200），不是没接线。",
   },
+  {
+    wrong: "各角色的操作手册落在工作区的 skills/ 目录，要去盘上翻",
+    right: "手册随提示词渲染（系统内）：每个角色的操作手册正文直接进它的提示词，工作区里没有 skills/ 目录 —— 模型不用、也不该去盘上找它。盘上读得到的是那些台账与产物（本页其余各条讲的就是它们）。",
+  },
 ];
 
 export function Help() {

@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from .. import sessions as SS
+from ..cli import DEFAULT_REPORT_REL as _DEFAULT_REPORT_REL
 
 __all__ = ["snapshot", "answer_text_of", "option_view", "project_reading",
            "current_reading", "TOP_RUN_TASK_ID", "top_run", "top_run_closed",
@@ -42,8 +43,13 @@ __all__ = ["snapshot", "answer_text_of", "option_view", "project_reading",
 
 #: 页面里 JSON 摘要的截断长度（读数页不该被一条超长 payload 撑爆）。
 CLIP = 400
-#: 交付说明的落点（工作区相对路径，`docs`/`agent_prompts` 的口径）。
-REPORT_REL = ("out", "review", "REPORT.md")
+#: 交付说明的落点（工作区相对路径，真身 `cli.DEFAULT_REPORT_REL`）。
+#:
+#: 2026-11-22（`draft/197` §十四 ①）：此前这里写着 `("out", "review", "REPORT.md")`，
+#: 而写侧已按新教法落到 `out/report/REPORT.md` ⇒ 回放页的「交付说明」永远是假
+#: "还没写"。真身只认 `cli` 那一份（`agentflow closing` 的缺省读的是同一个常量）；
+#: 页面不另算一份缺省，迁移就只需要改一处。
+REPORT_REL = tuple(Path(_DEFAULT_REPORT_REL).parts)
 #: 会话号允许的字符集（它会被拼进文件名，必须挡目录穿越）。
 _SID_OK = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.")
 
@@ -986,11 +992,15 @@ def _read_ledger(root: Path, problems: list[str]) -> dict[str, Any]:
 
 
 def _read_report(root: Path) -> tuple[str, str]:
-    """读交付说明 `out/review/REPORT.md`：返回 `(状态, 文本)`。
+    """读交付说明（`REPORT_REL`，真身 `cli.DEFAULT_REPORT_REL`）：返回 `(状态, 文本)`。
 
     状态是 `ok` / `missing` / `unknown` 三态：`missing` = 不在盘上（合法初态），
     `unknown` = 在盘上但读不出来（那是「没查成」，不许显示成空报告）。
     前端 `ReportReading`（生成物 `ui/src/types.ts`）就是这两栏的字典口径。
+
+    落点不在这里抄字面量：`REPORT_REL` 从 `cli.DEFAULT_REPORT_REL` 派生，
+    所以回放页与 `agentflow closing` 读的是同一份缺省（2026-11-22 迁移前这里
+    还指着退役目录 `out/review/`，页面因此把新落点上写好的交付说明读成"没写"）。
     """
     path = root.joinpath(*REPORT_REL)
     try:
@@ -1149,7 +1159,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("events_tri", "Tri"), ("tables_tri", "Tri"),
       ("note", "string"), ("tables_note", "string"), ("events_note", "string"))),
     ("ReportReading",
-     "_read_report() —— 交付说明 `out/review/REPORT.md` 的读数（二元组 status/text 的字典口径）",
+     "_read_report() —— 交付说明 `out/report/REPORT.md` 的读数（二元组 status/text 的字典口径）",
      (("status", "ReportTri"), ("text", "string"))),
     # 裁定 5a：这里曾经还有一对 `CheckpointSpend` / `Checkpoint`（W0 留的、没有
     # reader 的两条声明）。B 线的 `readers.py` 里声明的 `CheckpointView` / `CheckpointSpendView`

@@ -113,12 +113,13 @@ export function Acceptance() {
   // 只有"读成一个有限数字"才算给了上限：`Number("abc")` 是 NaN，而后端的
   // `float("NaN")` 不抛 —— 那一格会从"没查成"变成一条假的"没过"。
   const usableCap = cap !== null && Number.isFinite(cap) ? cap : null;
-  // `project_dir` / `report_path` 必须传：不传时 `_auxiliary` 的 tex / pdf / 回执
-  // 三格按构造永远空/unknown（块 1 的缺陷）。`"."` 按后端 `resolve_under_workspace`
-  // 解析成工作区根，不是进程 cwd。
+  // `project_dir` 必须传：不传时 `_auxiliary` 的 tex / pdf / 回执三格按构造永远
+  // 空/unknown（块 1 的缺陷）。`"."` 按后端 `resolve_under_workspace` 解析成工作区根，
+  // 不是进程 cwd。**`report_path` 不由页面传**（2026-11-22，`draft/197` §十四 ①）：
+  // 缺省的真身在 `cli.DEFAULT_REPORT_REL`（`out/report/REPORT.md`），页面抄一份
+  // 就会在迁移当天把 `report_shape` 读成"报告没写"（改前正是抄了 `out/review/`）。
   const face = useFace(() => api.getPackage({
     projectDir: ".",
-    reportPath: "out/review/REPORT.md",
     capUsd: usableCap,
   }));
   // READFIX-C：`/api/acceptance` 一直有 3 条 `unknown` 验收格，而这一页只读
@@ -126,7 +127,6 @@ export function Acceptance() {
   // "没查成"。现在这一页单独读那一面，并把 `unchecked` 显式摆到屏上（不折进折叠区）。
   const accFace = useFace(() => api.getAcceptance({
     projectDir: ".",
-    reportPath: "out/review/REPORT.md",
     capUsd: usableCap,
   }));
 
@@ -316,6 +316,25 @@ export function Acceptance() {
             {proofs.vsign.note === "" ? null : (
               <div class="readings tri-reason">{proofs.vsign.note}</div>
             )}
+            {/* RECONFIX2（2026-11-22）：`sign_does_not_back_the_row` 的落点。
+                它是一档受控读数（不是第二个签数）：签真、地址真，但这一行结构上
+                不可能持有这份正文（概念行 + 非 b-proof 稿）。黄色 —— 它不是红
+                （凭据本身没坏、V 也没做错），但绝不能读成「已签」：它不进 signed，
+                也不折进 unbacked（那是「签自己复算不上」，另一档病因）。 */}
+            <div class="readings">
+              <Badge
+                kind="badge-pending"
+                text="sign_does_not_back_the_row（不算签）"
+                title="签真、地址真，但这一行结构上不可能持有这份正文 ⇒ 不算签；不折进 unbacked（那一档是凭据自己复算不上）"
+              />{" "}
+              签不背书这一行：{" "}
+              <span class="mono">
+                {proofs.vsign.sign_does_not_back_row === null
+                  ? "没查成（不是 0）"
+                  : proofs.vsign.sign_does_not_back_row}
+              </span>{" "}
+              份 —— 它不进「已签」，也不进「复算不上」。
+            </div>
             {proofs.vsign.reason === "" ? null : (
               <div class="readings">{proofs.vsign.reason}</div>
             )}
@@ -593,6 +612,33 @@ export function Acceptance() {
                 {(gates.warnings[one.name] ?? []).map((why, i) => <div key={i}>{plain(why)}</div>)}
               </div>
             ))}
+
+            {/* READOUT-FIX（2026-11-22）：`sign_does_not_back_the_row` 在收工读数里的独立一档。
+                它不是「没送过 V」（改前就归在那一档里，那是误读），也不是 `unbacked` 或
+                「已签」：签在、判决地址也对得上，只是签不背书这一行。黄色 —— 凭据本身
+                复算通过、V 没做错，错的是这一行不持有那份正文。 */}
+            <div class="readings">
+              <Badge
+                kind="badge-pending"
+                text="签不背书这一行（不算签）"
+                title="签在、判决地址对得上，但这一行结构上不可能持有这份正文 ⇒ 不算签；它与「没送过 V」是两档，也不折进 unbacked"
+              />{" "}
+              独立一档（不并进「没送过 V」）：
+              {closing.unsigned_signs.count === null ? (
+                <span class="mono">没查成（不是 0）</span>
+              ) : (
+                <>
+                  <span class="mono">{formatCount(closing.unsigned_signs.count)}</span>
+                  {" 条命题"}
+                  {closing.unsigned_signs.stmt_ids.length === 0
+                    ? ""
+                    : `（${closing.unsigned_signs.stmt_ids.join("、")}）`}
+                </>
+              )}
+            </div>
+            {closing.unsigned_signs.count === null ? null : (
+              <div class="readings tri-reason">{closing.unsigned_signs.note}</div>
+            )}
 
             {/* `na` 不拦权威结论（closing.closing_verdict 的 fail 清单不收 na），
                 但它不是 pass ⇒ machine_pass 仍是 false。两栏必须分开说。 */}

@@ -6,7 +6,7 @@
  * - `api.getLive()` → `LiveView`：**现在有没有人在跑**。会话面（某角色起了没收到工）
  *   与进程面（登记着且真活着的 pid）是两条判据，缺一路都会漏；停机开关与近几条
  *   停机/中断历史一并给出（"我按过停没有、谁按的"只有盘上那份说得清）。
- * - `api.getStatusReports()` → `StatusReportsView`：`out/review/STATUS-*` 最近几份
+ * - `api.getStatusReports()` → `StatusReportsView`：`out/report/STATUS-*` 最近几份
  *   （`statusreport` 一直在写，这一条是它的读者）。
  * - `api.getUsage()` → `UsageView`：用量台账的汇总（总计 + 按角色 + 按归口）。
  *

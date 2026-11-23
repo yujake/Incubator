@@ -53,7 +53,14 @@ import { blank, cell, plain } from "../components/Table";
 import { formatUsd } from "../components/Money";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace, useLive } from "../live";
-import type { AcceptanceCheck, ArtifactsView, LibraryView, LibraryWork } from "../types";
+import type {
+  AcceptanceCheck,
+  ArtifactRow,
+  ArtifactsView,
+  LibrarySeed,
+  LibraryView,
+  LibraryWork,
+} from "../types";
 
 /** 这一栏**真实**有多少行（AUDIT F12 的分页读数：`rows_total[栏]`；全量档与数组等长）。 */
 function totalOf(art: ArtifactsView, key: string, shown: number): number {
@@ -96,6 +103,138 @@ function bound(row: AcceptanceCheck, which: "min" | "max"): string {
   }
   const value = which === "min" ? row.min : row.max;
   return typeof value === "number" ? String(value) : "—";
+}
+
+/** 判据类型那一格：读数**正名**在前，盘上写下的旧名（若有）并列在后。
+ *
+ * B3（2026-11-22）：交接手稿那一档的读数键正名是 `handoff_rows`；老表的
+ * `manuscript_rows` 是它的旧名（deprecated，同值）。两个名字的映射只有一处真身
+ * （`closing.LEG_KIND_RENAMES`），后端已经算在 `kind_reading` / `kind_deprecated` 里，
+ * 页面不另写一份 —— 否则改一次名要改两处，迟早一处漂。
+ */
+function kindText(row: AcceptanceCheck): ComponentChildren {
+  const word = row.kind_reading === undefined || row.kind_reading === ""
+    ? row.kind
+    : row.kind_reading;
+  if (row.kind_deprecated === undefined || row.kind_deprecated === "") {
+    return <span class="mono">{word}</span>;
+  }
+  return (
+    <span class="mono" title={`${row.kind_deprecated}（盘上写的是旧名：${row.kind}）`}>
+      {word}（旧名 {row.kind}）
+    </span>
+  );
+}
+
+/** 验收表在盘上的位置（`ArtifactsView.checks_path`：后端从
+ *  `closing.ACCEPTANCE_TARGETS_NAME` 读、印工作区相对路径）。
+ *
+ * 为什么页面不写死字面量：这一份 2026-11-22 刚从 `out/paper/` 挪到 `out/package/` ——
+ * 页面抄一份就会在改名当天变成假话。空串只在后端没读到位置时出现（那是"没读到"，
+ * 不是"没有这份表"），所以给它一句能读的话，而不是留空。 */
+function checksPath(art: ArtifactsView): string {
+  return art.checks_path === "" ? "（验收表落点没读到）" : art.checks_path;
+}
+
+/** 台账那一行的类别（B2d，2026-11-22）：`kind` 是盘上原值，`kind_state` 是读侧三态。
+ *
+ * 三档的处置刻意不同，颜色也跟着不同：
+ * - `canonical`：取值在 `ARTIFACT_KINDS` 词表里 —— 只印类别，不加徽标；
+ * - `legacy`：词表生效前落的老行（**照读**，不是缺陷）⇒ 灰色虚线徽标，没有待办；
+ * - `unknown`：词表生效后新写、行上带 `kind_unknown=true` ⇒ 红色徽标：写侧用了
+ *   词表外的取值，是要人看的那一档。
+ * 判据只有 `artifacts.kind_state` 一处（后端算好放进 `kind_state`），页面不按取值猜。
+ */
+function kindBadge(row: ArtifactRow): ComponentChildren {
+  const word = row.kind === "" ? "(空)" : row.kind;
+  if (row.kind_state === "unknown") {
+    return (
+      <Badge
+        kind="badge-fail"
+        text={`${word}（词表外）`}
+        title="词表（ARTIFACT_KINDS）之外的类别，且这一行带 kind_unknown 标记 ⇒ 词表生效后的新写用了自造取值：台账照写，但这一档要人看"
+      />
+    );
+  }
+  if (row.kind_state === "legacy") {
+    return (
+      <Badge
+        kind="badge-na"
+        text={`${word}（历史行）`}
+        title="词表生效前落的老行（行上没有 kind_unknown 这一格）⇒ 照读，不是缺陷、没有待办"
+      />
+    );
+  }
+  return <span class="mono">{word}</span>;
+}
+
+/** 台账类别三态的那一句（B2d）：三个数分别来自后端现算的 `kind_states`。
+ *
+ * 为什么要单列一句：三态徽标只在行上、一屏几十行里看不到"这张表里有几行是词表外
+ * 的新写"；而"词表外新写"是唯一要人动的那一档（历史行照读、不欠任何动作）。
+ */
+function kindStatesNote(art: ArtifactsView): ComponentChildren {
+  const canonical = art.kind_states["canonical"] ?? 0;
+  const legacy = art.kind_states["legacy"] ?? 0;
+  const unknown = art.kind_states["unknown"] ?? 0;
+  const odd = Object.entries(art.unknown_kinds)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([kind, n]) => `${kind === "" ? "(空)" : kind}×${n}`)
+    .join("、");
+  return (
+    <div class="readings">
+      类别三态：词表内 <span class="mono">{canonical}</span> 行 · 历史行（词表生效前，
+      照读）<span class="mono">{legacy}</span> 行 · 词表外新写{" "}
+      <span class="mono">{unknown}</span> 行
+      {unknown > 0 ? "（要人看：写侧用了 ARTIFACT_KINDS 之外的取值）" : ""}
+      {art.kind_flag_mismatch > 0 ? (
+        <>
+          {" "}
+          · 标记与取值不一致{" "}
+          <span class="mono">{art.kind_flag_mismatch}</span> 行（写了 kind_unknown=false
+          却不在词表里）
+        </>
+      ) : null}
+      {odd === "" ? null : (
+        <>
+          {" "}
+          · 词表外的取值：<span class="mono">{odd}</span>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** 种子那一行（SEEDFIX，2026-11-22）：种子投 `reference/`，`library/` 只放已登记的。
+ *
+ * 三个数各自三态，绝不折平：
+ * - `count` 是 `reference/` 里那批种子的份数（0 = 还没投过，合法初态）；
+ * - `library_unregistered` 是 `library/` 里**没有** `literature` 行引用的文件：
+ *   非空 ⇒ 书架结构异常（黄色，要人看）；`[]` ⇒ 干净；`null` ⇒ 台账读不出来（没查成）。
+ */
+function seedLine(seed: LibrarySeed): ComponentChildren {
+  return (
+    <div class="readings">
+      种子：<span class="mono">{seed.destination}</span> 里{" "}
+      <span class="mono">{seed.count}</span> 份
+      {seed.count > 0 ? `（${seed.bytes} 字节）` : "（还没投过种子）"}
+      {seed.landed ? "" : " · 标记文件不在盘上"} · 已登记书架{" "}
+      <span class="mono">library/</span>：{" "}
+      {seed.library_unregistered === null ? (
+        <Badge kind="badge-unknown" text="未登记文件：没查成（不是「干净」）" />
+      ) : seed.library_unregistered.length === 0 ? (
+        <Badge kind="badge-pass" text="没有未登记的文件" />
+      ) : (
+        <Badge
+          kind="badge-pending"
+          text={`${seed.library_unregistered.length} 份未登记`}
+          title={`library/ 里这些文件没有任何 literature 行引用：${seed.library_unregistered.join("、")}`}
+        />
+      )}
+      {seed.legacy_root_marker ? " · 根上还有改前的 SEED-README.md" : ""}
+      {seed.reason === "" ? "" : ` · ${seed.reason}`}
+    </div>
+  );
 }
 
 /** 这一面读数的九张卡：栏序 = `draft/74 §3.4` 那七栏 + 后来补的两栏，标题的唯一来源。
@@ -339,8 +478,8 @@ export function Artifacts() {
         <div class="readings">
           台账 <span class="mono">ARTIFACTS.jsonl</span> · 交接{" "}
           <span class="mono">manuscripts/handoffs.jsonl</span> · 验收表{" "}
-          <span class="mono">out/paper/ACCEPTANCE-CHECKS.json</span> · 体例{" "}
-          <span class="mono">out/review/REPORT-STYLE.json</span> · 秘书{" "}
+          <span class="mono">{checksPath(art)}</span> · 体例{" "}
+          <span class="mono">out/report/REPORT-STYLE.json</span> · 秘书{" "}
           <span class="mono">out/secretary/</span> 下的 <span class="mono">*.jsonl</span>
           {" "}· 实验落点 <span class="mono">out/experiments/&lt;号&gt;/</span> 与{" "}
           <span class="mono">code/exp/</span>
@@ -402,41 +541,46 @@ export function Artifacts() {
         ) : art.ledger_tri === "not_applicable" ? (
           <span class="empty">还没有这张表（这一栏一次都没落过盘） —— 不是"读到了、里面是 0 行"。</span>
         ) : (
-          <PagedTable
-            rows={art.ledger}
-            empty="暂无产物台账行。"
-            columns={[
-              { key: "path", title: "路径" },
-              { key: "producer", title: "谁产出的" },
-              { key: "kind", title: "类别" },
-              {
-                // 这一格取同一路径的核对行读数，
-                // 没有对应核对行 ⇒ unknown（没得比），不是"不一致"。
-                key: "sha_consistency",
-                title: "与盘上这一份",
-                render: (r) => (
-                  <Consistency
-                    value={r.sha_consistency}
-                    note="台账钉住的那一份与盘上现在这一份（这一路径没有核对行 ⇒ 没得比）"
-                  />
-                ),
-              },
-              {
-                key: "bytes",
-                title: "字节",
-                // 走取值器：有值时逐字不变（`cell(number)` 就是 `String(number)`），
-                // 这一格没有时才从字面量 `undefined` 变成 `unknown`。
-                render: (r) => cell(r.bytes),
-              },
-              { key: "task_id", title: "任务" },
-              { key: "at", title: "登记时间", render: (r) => cell(r.at) },
-              // 这里不列「退出码」：台账的格式里有 `exit_code`
-              // 这一栏（`artifacts.FIELDS`），但真机上登记的都是 `out/tasks/` 下那些
-              // "任务结果文件"——那种东西没有退出码，整列恒 `unknown`
-              // （本机实测：t1-review-2 的 6 行全是）。退出码真正的落点是「证据链 →
-              // 实验」那一张表（`experiments.exit_code`，那里是真读数）。
-            ]}
-          />
+          <>
+            <PagedTable
+              rows={art.ledger}
+              empty="暂无产物台账行。"
+              columns={[
+                { key: "path", title: "路径" },
+                { key: "producer", title: "谁产出的" },
+                // 类别那一格带三态徽标（`kind_state`：canonical / legacy / unknown）——
+                // 后端判、页面印；判据见 `artifacts.kind_state`，这里不按取值猜。
+                { key: "kind", title: "类别", render: (r) => kindBadge(r) },
+                {
+                  // 这一格取同一路径的核对行读数，
+                  // 没有对应核对行 ⇒ unknown（没得比），不是"不一致"。
+                  key: "sha_consistency",
+                  title: "与盘上这一份",
+                  render: (r) => (
+                    <Consistency
+                      value={r.sha_consistency}
+                      note="台账钉住的那一份与盘上现在这一份（这一路径没有核对行 ⇒ 没得比）"
+                    />
+                  ),
+                },
+                {
+                  key: "bytes",
+                  title: "字节",
+                  // 走取值器：有值时逐字不变（`cell(number)` 就是 `String(number)`），
+                  // 这一格没有时才从字面量 `undefined` 变成 `unknown`。
+                  render: (r) => cell(r.bytes),
+                },
+                { key: "task_id", title: "任务" },
+                { key: "at", title: "登记时间", render: (r) => cell(r.at) },
+                // 这里不列「退出码」：台账的格式里有 `exit_code`
+                // 这一栏（`artifacts.FIELDS`），但真机上登记的都是 `out/tasks/` 下那些
+                // "任务结果文件"——那种东西没有退出码，整列恒 `unknown`
+                // （本机实测：t1-review-2 的 6 行全是）。退出码真正的落点是「证据链 →
+                // 实验」那一张表（`experiments.exit_code`，那里是真读数）。
+              ]}
+            />
+            {kindStatesNote(art)}
+          </>
         )}
       </Card>
 
@@ -564,31 +708,42 @@ export function Artifacts() {
           <span class="empty">这一栏没查成（不是"0 行"）。</span>
         ) : art.checks.length === 0 ? (
           <span class="readings">
-            这一趟没有 <span class="mono">out/paper/ACCEPTANCE-CHECKS.json</span> ——
+            这一趟没有 <span class="mono">{checksPath(art)}</span> ——
             它是收工那一步（G 的收工门 / `closing`）写给论文包看的机器可判行，
             还没走到那一步就没有它（不是"0 行"，也不是没查成）。
           </span>
         ) : (
-          <PagedTable
-            rows={art.checks}
-            empty="验收表还没写（合法初态：这一趟还没声明机器可判行）。"
-            columns={[
-              { key: "id", title: "编号" },
-              { key: "name", title: "名字" },
-              { key: "kind", title: "判据类型" },
-              {
-                key: "min",
-                title: "下限",
-                render: (r) => bound(r, "min"),
-              },
-              {
-                key: "max",
-                title: "上限",
-                render: (r) => bound(r, "max"),
-              },
-              { key: "note", title: "备注" },
-            ]}
-          />
+          <>
+            {/* B3：这一栏的判据类型是**读数键**，交接手稿那一档的正名是 handoff_rows。
+                老表的 manuscript_rows 是旧名（deprecated，同值）—— 它数的是
+                `manuscripts/handoffs.jsonl` 的行数，不是论文手稿份数。 */}
+            <div class="readings">
+              读数键：「交接手稿份数」那一档的正名是 <span class="mono">handoff_rows</span>；
+              盘上老表里的 <span class="mono">manuscript_rows</span> 是它的旧名
+              （deprecated，同值；数的是 <span class="mono">manuscripts/handoffs.jsonl</span>
+              的行数，不是论文手稿份数）。
+            </div>
+            <PagedTable
+              rows={art.checks}
+              empty="验收表还没写（合法初态：这一趟还没声明机器可判行）。"
+              columns={[
+                { key: "id", title: "编号" },
+                { key: "name", title: "名字" },
+                { key: "kind", title: "判据类型", render: (r) => kindText(r) },
+                {
+                  key: "min",
+                  title: "下限",
+                  render: (r) => bound(r, "min"),
+                },
+                {
+                  key: "max",
+                  title: "上限",
+                  render: (r) => bound(r, "max"),
+                },
+                { key: "note", title: "备注" },
+              ]}
+            />
+          </>
         )}
       </Card>
 
@@ -601,13 +756,13 @@ export function Artifacts() {
         }
         right={<TriState tri={art.style_tri} label="REPORT-STYLE" />}
       >
-        {/* 体例是 M 在收工前自己声明的那一份（`out/review/REPORT-STYLE.json`）。
+        {/* 体例是 M 在收工前自己声明的那一份（`out/report/REPORT-STYLE.json`）。
             它缺席 = "M 还没声明"，不是"没读到"—— 这一档要在页面上说出来。 */}
         {isUnreadable(art.style_tri) ? (
           <span class="empty">这一栏没查成（不是"0 节"）。</span>
         ) : art.style.sections.length === 0 ? (
           <span class="readings">
-            M 还没声明交付说明的体例（<span class="mono">out/review/REPORT-STYLE.json</span>
+            M 还没声明交付说明的体例（<span class="mono">out/report/REPORT-STYLE.json</span>
             不在盘上）。它在收工前由主控写；写完这一栏会逐节列出来。
           </span>
         ) : (
@@ -634,7 +789,7 @@ export function Artifacts() {
             是 <span class="mono">agentflow project run</span> 那条流水线落在
             <span class="mono">out/run-N/</span> 下的运行产物。本项目是审阅型，
             没有那个目录 —— 这一趟的产物看上面的台账、交接手稿与
-            <span class="mono">out/paper/</span>。
+            <span class="mono">out/package/</span>。
           </div>
         </Card>
       ) : (
@@ -816,6 +971,10 @@ export function Artifacts() {
         }
       >
         {libraryBody(library.data, library.problem)}
+        {/* SEEDFIX：种子与"已登记书架"两个读数。放在 `libraryBody` 之后是因为
+            那三档空态会提前 return —— 而"文献库 0 条"恰恰是最该看见 seed 的时候
+            （真机那次 25 份未登记种子铺在 library/ 根，页面照样只显示"0 条"）。 */}
+        {library.data === null ? null : seedLine(library.data.data.seed)}
       </Card>
     </>
   );

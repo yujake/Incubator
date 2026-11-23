@@ -24,7 +24,7 @@
 | 端点 | 既有闸门（出处） |
 |---|---|
 | `POST /api/stop` | `stopctl.request_stop_detail`（`stopctl.py:65`）· 强制停再走 `stopctl.kill_registered`（`stopctl.py:392`） |
-| `POST /api/submit` | `interactions.next_prefixed_id`（`interactions.py:1233`）＋ `store.tx`（`store.py:890`）＋ `SearchRequest.validate`（`schema.py:243`） |
+| `POST /api/submit` | `interactions.next_prefixed_id`（`interactions.py:1287`）＋ `store.tx`（`store.py:1379`）＋ `SearchRequest.validate`（`schema.py:343`） |
 | `POST /api/settings` | `settings.write_settings`（见 `settings.py`）—— 它自己就是那条唯一写入口 |
 
 `/api/task` 是"用户 → M 留言"那条通道（`handle_interject`），与上面三件走同一套
@@ -974,7 +974,7 @@ def handle_stop_clear(handler: Any, params: Mapping[str, str],
 
     现场：叫停之后开关一直留在盘上（没有任何在跑的循环去消费它），于是"用户从网页
     再起一趟"的那一趟第一步就被这把旧开关停掉 —— 白起一趟。而路由表里没有撤销入口
-    （`stopctl.clear_stop` 只有 CLI 一个调用者，`cli.py:4734`）。
+    （`stopctl.clear_stop` 只有 CLI 一个调用者，`cli.py:4920`）。
 
     ## 唯一写入口
 

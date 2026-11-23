@@ -652,9 +652,16 @@ export function stalledTag(node: RosterNode): { text: string; title: string } | 
     : (mins === null ? "（后端没给停滞秒数）" : `最近一步在 ${mins} 分钟之前`);
   const head = "疑似停滞（最近 N 分钟没有新步）";
   const tail = sec === null ? "；秒数没读到" : `；已经 ${mins} 分钟（stalled_sec=${sec}）`;
+  // NAMEFIX-B1（2026-11-22）：落痕是 `out/steps/<台账号>.jsonl`（一行一步、追加的
+  // 轨迹；`conductor.step_beats` 取最后一行）。改前盘上只有一个"最后一次步号"的
+  // 指针文件 `.json` —— 名字叫 steps 而盘上没有步。悬停把这句钉在字面上，
+  // 免得读的人按老形状去盘上翻。
+  const trail = node.task_id === ""
+    ? ""
+    : `；读数：out/steps/${node.task_id}.jsonl 最后一行的 at（一行一步的轨迹，不是指针文件）`;
   return {
     text: mins === null ? "疑似停滞" : `疑似停滞 ${mins} 分钟`,
-    title: `${head}${tail}；${why}。这一格不改三态：它仍然在 running 行上，也不能据此销号`,
+    title: `${head}${tail}；${why}${trail}。这一格不改三态：它仍然在 running 行上，也不能据此销号`,
   };
 }
 

@@ -280,6 +280,86 @@ export function Machine() {
       </Card>
 
       <Card
+        title="库表档案（已退役 / 未启用）"
+        subtitle="这一档今天该怎么读 —— 不是「这个工作区里有什么」"
+        right={<TriState tri={m.tables.checked ? "computed" : "unreadable"} label="库表档案" reason={m.tables.reason} />}
+      >
+        {/* DATAHYGIENE（2026-11-22）：两档登记面都住在 `schema`（单一落点），
+            这一页只印它们的读数。为什么要上屏：
+            · `eval_results` 已**退役**（全仓 0 个写点、51 个工作区全 0 行）——
+              若把它当空表读，「没有评测」会被读成「评测 0 行」；
+            · `reprocess_requests` **未启用**（写点/消费点/闸都在，只是从没有一条
+              请求跑过）—— 收工门 `unfinished_request_rows`（上限 0）于是永远是 0，
+              那是「这条队列没启用」，不是「闭环做完了」。
+            两档颜色不同：退役 = 灰（不用管），未启用 = 黄（要人决定启用或整条退役）。 */}
+        {m.tables.checked !== true ? (
+          <div class="empty">
+            {m.tables.reason === "" ? "库表档案没读成（不是「没有退役表」）" : m.tables.reason}
+          </div>
+        ) : (
+          <>
+            {m.tables.retired.length === 0 ? (
+              <div class="readings">没有已退役的表。</div>
+            ) : (
+              <Table
+                rows={m.tables.retired}
+                empty="没有已退役的表。"
+                columns={[
+                  {
+                    key: "name",
+                    title: "表",
+                    render: (r) => (
+                      <span>
+                        <span class="mono">{r.name}</span>{" "}
+                        <Badge
+                          kind="badge-na"
+                          text="已退役"
+                          title="写侧一律拒；历史工作区里的那份文件仍按 RETIRED_TABLES 认得出、行照读 —— 它不再产出，所以「0 行」不是「评测过 0 条」"
+                        />
+                      </span>
+                    ),
+                  },
+                  { key: "file", title: "文件", render: (r) => <span class="mono">{r.file}</span> },
+                  { key: "retired_at", title: "退役于" },
+                  { key: "why", title: "为什么退", render: (r) => r.why },
+                  { key: "how", title: "历史文件怎么读", render: (r) => r.how },
+                ]}
+              />
+            )}
+            {m.tables.not_enabled.length === 0 ? (
+              <div class="readings">没有「已登记、未启用」的表。</div>
+            ) : (
+              <Table
+                rows={m.tables.not_enabled}
+                empty="没有「已登记、未启用」的表。"
+                columns={[
+                  {
+                    key: "name",
+                    title: "表",
+                    render: (r) => (
+                      <span>
+                        <span class="mono">{r.name}</span>{" "}
+                        <Badge
+                          kind="badge-pending"
+                          text="未启用（0 行 ≠ 做完了）"
+                          title="写点与消费点都在、闸也在，只是从来没有一条请求真的跑过 ⇒ 这一档的 0 是「没启用」，不是「全做完了」"
+                        />
+                      </span>
+                    ),
+                  },
+                  { key: "since", title: "判于" },
+                  { key: "producers", title: "谁会写它", render: (r) => r.producers.join("、") },
+                  { key: "consumers", title: "谁会读它", render: (r) => r.consumers.join("、") },
+                  { key: "evidence", title: "证据" },
+                  { key: "to_enable", title: "要启用怎么做" },
+                ]}
+              />
+            )}
+          </>
+        )}
+      </Card>
+
+      <Card
         title="证明检查器"
         subtitle={`checked=${field(provers, "checked")}`}
         tone={provers.checked === false ? "problem" : "plain"}
