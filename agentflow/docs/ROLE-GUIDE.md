@@ -913,7 +913,7 @@
 | `doc.build_document` | 把 claims 与 sections 渲染成主稿并登记这份稿件；正文由它渲染，别手写；零签零地基时整笔拒 | `write_local` | `kind`、`title`、`claims` |
 | `doc.compose_claim` | 构造一条合规断言：`cross_check` 自动补「不构成证明」声明；无引用 / 否定未分类 / 过度声称 / 作废无原因在构造时就抛错。可带生命周期字段 | `none` | `text`、`citations`、`evidence_kind`、`section` |
 | `doc.list_documents` | 只读列举稿件（代号/类型/标题/状态/审校轮次/断言数） | `read` | （无） |
-| `doc.mapping_cells` | 取对应表那一行该填的每一格（值 + 每格来源 + 逐格问题）；先调它，拿不到的格才按通道手填 | `read` | `project` |
+| `doc.mapping_cells` | 取对应表那一行该填的每一格（值 + 每格来源 + 逐格问题）；先调它，自有证明行的索引四格由框架现读现填，你别手填；填了也会被盖 | `read` | `project` |
 | `doc.paper_compile` | 把 out/package/main.tex 编成 main.pdf 并留回执；只编译，不写正文 | `write_local` | `project` |
 | `doc.register_dependency` | 登记外部依赖（FC-23）：来源已在册；source_stmt_id 指我方命题，path_group 标证明路径（组内都要、组间任一） | `write_local` | `used_by`、`kind`、`label` |
 | `doc.scan_claim` | 机械检查一条断言：有无引用、证据等级是否被夸大、否定是否分类 | `none` | `claim` |

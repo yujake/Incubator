@@ -3307,6 +3307,17 @@ def _mapping_declaration_texts(
     }
 
 
+#: `doc.mapping_cells` 的工具面摘要（唯一渲染处；`summary` 有 100 字上限）。
+#:
+#: 只留「做什么 + 自有证明行那四格归谁填」：逐格来源与空串含义仍在 `returns` 与参数说明
+#: （字数不限的那一面）。引用 `papermapping.OWN_PROOF_CELLS_NOTE` 而不是另写一句 ——
+#: 教法与写侧必须是同一句话（修前这里/运行时各说一套：工具面对非数值定理行说"索引四格
+#: 不适用"，写侧却已 `fill_evidence_cells` 现读现填）。
+def _mapping_cells_summary() -> str:
+    return ("取对应表那一行该填的每一格（值 + 每格来源 + 逐格问题）；先调它，"
+            + PM.OWN_PROOF_CELLS_NOTE)
+
+
 #: 声明文案的导入期快照：`_MAPPING_ROW_PARAMS` 的四个描述从它取。
 #: 写成模块级常量（而不是把 `_MAPPING_ROW_PARAMS` 做成函数）是因为
 #: `capabilities._resolve_const` 按源码 AST 解析嵌套的 `items` 常量 —— 函数调用会让
@@ -3527,8 +3538,7 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None,
     registry.register(
         ToolSpec(
             name="doc.mapping_cells",
-            summary="取对应表那一行该填的每一格（值 + 每格来源 + 逐格问题）；"
-                    "先调它，拿不到的格才按通道手填",
+            summary=_mapping_cells_summary(),
             params={
                 "type": "object",
                 "properties": {

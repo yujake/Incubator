@@ -130,7 +130,7 @@ D 的报告是目录（新成果＋索引），F 的证明 / E 的报告是
 |---|---|---|
 | 正文是哪一档 | `evidence_kind` | `report`（E 的报告）/ `proof`（F 的证明） |
 | 正文在哪 | `evidence_path` | 相对仓库根（`out/experiments/000000/exhaustion.md`） |
-| 正文的指纹 | `evidence_sha256` | 那份文件字节的 sha256 |
+| 正文的指纹 | `evidence_sha256` | 那份对象正文的 sha256：E 的报告是文件字节；F/B 的证明取 `## 证明` 那一节（与 V 签的 `正文sha` 同一把尺，稿头与签块不算正文） |
 | V 的签 | `v_signature` | `{"verdict": "成立", "sha256": <被签那一份的 sha256>}` |
 
 这四格的列义只有一份（`numericproof.INDEX_*`），判据也只有一份
@@ -140,6 +140,14 @@ D 的报告是目录（新成果＋索引），F 的证明 / E 的报告是
 不许出现第二份口径，否则会出现"B 认、G/H 不认"的分家。
 四格只进 `MAPPING.json`（机器读那一份）：md 与附录的列已经排满，加列会让旧附录整份对不上，
 而那两份的用途是给人看"哪一行对应哪一份文件"，不是给 B 取对象。
+
+自有证明那几行由写侧现填（2026-11-22 真机 sylow-4：四行「已签」的
+`evidence_path` 全是空串 ⇒ 表在盘上指不到正文）。`fill_evidence_cells` 在落盘之前按台账
+现读：`evidence_kind=proof`、`evidence_path` = `statements.manuscripts[证明号]`、
+`evidence_sha256` = `bits.evidence.reviewed_sha_by_proof[证明号]`（V 签住的那一份正文；
+现读那份稿的 `## 证明` 再核一遍才填）、`v_signature` = 同一份 sha + 「成立」。G 手填的
+这四格会被这一次现读盖掉。`citation` 行不填：它没有 V 签，`v_signature` 无从取 —— 空着
+绝不被读成「已签」。
 
 ### 台账那两格（让「论文说定理 / 台账说猜想 / V 签没签」自己暴露）
 
@@ -1662,6 +1670,150 @@ def fill_ledger_cells(ledger_root: str | Path,
     return out
 
 
+#: 自有证明行的索引四格由谁填：写侧（`fill_evidence_cells`）现读现填，G 手填的值会被盖掉。
+#:
+#: 为什么填在写侧而不是让 G 抄：这四格说的是"台账那一行指到哪一份稿 / V 签的是哪一份正文"，
+#: 是台账自己的事实（`statements.manuscripts[证明号]` 与 `bits.evidence.reviewed_sha_by_proof`），
+#: G 只能抄。抄错一位（例如把稿的文件字节 sha 当成正文 sha）没有任何东西会报错 —— 而
+#: `temp/realrun-sylow/read_package.py` 第 ⑦ 项真读到的正是这个形态：四行"已签"的自有证明
+#: 全是空 `evidence_path`，表在盘上"指不到"任何一份正文。
+#:
+#: 这句话同时是教法（`doc.mapping_cells` 的工具面摘要与逐格 `sources` 都引这一份）：
+#: 修前工具面对非数值定理行说"索引四格只对数值实验定理那一行判 ⇒ 这一行不适用"，
+#: 写侧却已经现读现填 —— 弟子面与契约差一句，G 会以为自己该手填。
+OWN_PROOF_CELLS_NOTE = "自有证明行的索引四格由框架现读现填，你别手填；填了也会被盖"
+
+#: 拿不到自有已签证明的那一档（citation / 未签 / 例子 / 实验）怎么读空串：不是"框架会填"，
+#: 是这一档没有"正文在哪"这一问；空着绝不冒充「已签」。带"不适用"三个字是刻意的 ——
+#: `doc.mapping_cells` 的 `returns` 口径与判据按这三个字认「这一档没有这一格」。
+NOT_OWN_PROOF_CELLS_NOTE = ("这一行不是「自有 + 已签 + 定理类」的证明 ⇒ 索引四格不适用"
+                            "（空着不冒充已签）")
+def _proof_manuscript_rel(ledger_row: Mapping[str, Any] | None, proof_no: int,
+                          workspace_root: Path) -> tuple[str, str]:
+    """这一号证明的载体稿 `(工作区相对路径, 不填的理由)`。
+
+    先按台账行上的逐路径稿记录取（`statements.manuscripts[证明号]`；老行的 `manuscript_id`
+    兜底由 `manuscriptpaths.source_manuscript_rel` 判，它要求那一份稿的 `## 证明` 与这一行
+    的某一份正文 sha 对得上）。旧盘的证明对象可能是 body-only 文件（没有 `## 证明`），
+    那时退回行上那一格原文；调用方随后按"文件正文的 sha 必须等于 V 签的 sha"再核一次 ——
+    指到别的稿上过不了那一核，所以这里可以退。对不上就不填，不拿别的稿顶上。
+    """
+    if not isinstance(ledger_row, Mapping):
+        return "", "台账里没有这一行"
+    from . import manuscriptpaths as MPP   # 惰性：只在这一格用到（避免 import 期牵连）
+    scoped = dict(ledger_row)
+    scoped["proof_no"] = int(proof_no)
+    got = MPP.source_manuscript_rel(workspace_root, scoped)
+    rel = str(got.get("rel") or "").strip().replace("\\", "/") if got.get("found") else ""
+    if not rel:
+        # 退回行上那一格原文：`source_manuscript_rel` 要求稿带 `## 证明`（手稿形态），
+        # 而旧盘的证明对象可能是 body-only 文件。调用方随后按"文件正文的 sha 必须等于
+        # V 签的 sha"再核一次 —— 指到别的稿上过不了那一核，所以这里可以退。
+        per, _problems = MPP._per_path_manuscripts(ledger_row)
+        rel = str(per.get(int(proof_no)) or "").strip().replace("\\", "/")
+    if not rel:
+        return "", str(got.get("why") or "行上点不出这一号证明的稿")
+    if Path(rel).is_absolute() or ":" in rel or ".." in rel.split("/"):
+        return "", f"稿路径不是工作区相对路径：{rel!r}"
+    return rel, ""
+
+
+def evidence_cells_for_row(row: Row,
+                           ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None,
+                           workspace_root: str | Path) -> dict[str, Any]:
+    """这一行该填的索引四格（空表 = 不填 / 不适用；纯读，不猜）。
+
+    填哪一档（业主 2026-10-23 夜的四格 + 2026-11-22 真机 sylow-4 的现场）：
+
+    - 只填"自有证明 + 已签（判决：成立）"的定理类行：`proof_source="own"`、
+      `reviewed` 是「已签（判决：成立）」；
+    - `evidence_kind` = `proof`（受控词表 `numericproof.INDEX_KINDS`）；
+    - `evidence_path` = 台账那一行上这一号证明的稿（`statements.manuscripts[证明号]`）；
+    - `evidence_sha256` = 那一份稿 `## 证明` 的 sha（`bits.evidence.reviewed_sha_by_proof`
+      里 V 签住的那一份；写之前再拿盘上那份稿现算一遍，对不上就不填）；
+    - `v_signature` = `{"verdict": "成立", "sha256": <同一份 sha>}`。
+
+    不填的档（各有理由，空着不等于"已签"）：
+
+    - `citation` 行：没有 V 签（`reviewed` 是「未通过」），四格里的 `v_signature` 无从取；
+    - 数值通道的行：正文是 E 的报告（`exhaustion_note`），索引四格另有口径
+      （`mapping_cells` 那一支按 `exhaustion_note` 填），这里不替它改指一份稿；
+    - 例子 / 实验行：不是"被证明的命题"，没有"正文在哪"这一问；
+    - 台账读不到 / 稿不在盘上 / 稿的正文与 V 签的 sha 对不上：空着，由读侧当缺口报。
+    """
+    if str(row.proof_source or "").strip() != PROOF_SOURCE_OWN:
+        return {}
+    state, verdict = _split_reviewed(row.reviewed)
+    if state != "signed" or verdict != NP.THIRD_PARTY_VERDICT_OK:
+        return {}
+    if str(row.kind or "").strip() not in STATEMENT_ENV_KINDS:
+        return {}
+    resolved = resolve_ledger_id(row.ledger_id, ledger)
+    if not resolved["ok"] or str(resolved.get("table") or "") != "statements":
+        return {}
+    target = ledger_row(ledger, "statements", str(resolved["row_id"]))
+    if not isinstance(target, Mapping):
+        return {}
+    no = _int_or_none(row.proof_no)
+    if no is None or int(no) < 1:
+        return {}
+    try:
+        if is_numeric_row(row, ledger):
+            return {}
+    except Exception:  # noqa: BLE001 —— 通道读不出来 ⇒ 不填（不编一个"像是"的值）
+        return {}
+    root = Path(workspace_root)
+    rel, _why = _proof_manuscript_rel(target, int(no), root)
+    if not rel:
+        return {}
+    signed = str(EB.reviewed_sha_by_proof(target).get(int(no)) or "").strip().lower()
+    body = str(_proof_body_sha_of(target, int(no)) or "").strip().lower()
+    if not signed or not body or signed != body:
+        return {}
+    try:
+        text = (root / rel).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return {}
+    if str(V._sign_sha(text) or "").strip().lower() != signed:
+        return {}
+    return {NP.INDEX_KIND_FIELD: NP.INDEX_KIND_PROOF,
+            NP.INDEX_PATH_FIELD: rel,
+            NP.INDEX_SHA_FIELD: signed,
+            NP.INDEX_SIGN_FIELD: {"verdict": NP.THIRD_PARTY_VERDICT_OK, "sha256": signed}}
+
+
+def fill_evidence_cells(ledger_root: str | Path,
+                        rows: Iterable[Row], *,
+                        ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None = None
+                        ) -> list[Row]:
+    """把自有证明行的索引四格现读现填（纯读、不改盘；`write_mapping` 的唯一填充口）。
+
+    与 `fill_ledger_cells` 同一条纪律：这两格/四格说的是台账的事实，不是提交方的声称，
+    所以 G 手填的值会被这一次现读盖掉。三态：拿不到就保持原样（不填一个像样的空值）——
+    读侧会把空的当缺口，空着绝不被读成「签过了」。
+
+    反真空：判据 `tests/test_mapping_evidence_cells.py` 把本函数打桩成恒等 ⇒ 自有证明行
+    的四格必须回到空串（"绿"真的靠这一处填充，而不是靠构造里恰好带着值）。
+    """
+    known = ledger if ledger is not None else read_ledger_tables(ledger_root)
+    root = Path(ledger_root)
+    out: list[Row] = []
+    for row in rows:
+        try:
+            cells = evidence_cells_for_row(row, known, root)
+        except Exception:  # noqa: BLE001 —— 填不出来就空着；写表不许被这一格拦崩
+            cells = {}
+        if not cells:
+            out.append(row)
+            continue
+        out.append(replace(row,
+                           evidence_kind=str(cells[NP.INDEX_KIND_FIELD]),
+                           evidence_path=str(cells[NP.INDEX_PATH_FIELD]),
+                           evidence_sha256=str(cells[NP.INDEX_SHA_FIELD]),
+                           v_signature=dict(cells[NP.INDEX_SIGN_FIELD])))
+    return out
+
+
 def file_state(package_root: str | Path, rel: Any) -> dict[str, Any]:
     """`file` 那一栏在论文包里是什么状态。
 
@@ -3035,11 +3187,19 @@ def write_mapping(project_root: str | Path, rows: Iterable[Row], *,
     `ledger_kind` / `reviewed` 会被这一次现读盖掉 —— 这两格是"台账说是什么"，
     不是"提交方声称是什么"；填错了没有东西会报错，现读才有。
 
+    D-34 的索引四格也有同一档缺口：自有证明（`proof_source="own"`）的那几行，G 交来的
+    表里 `evidence_path` 常常是空的（真机 sylow-4：四行"已签"全指不到盘上任何一份稿）。
+    于是落盘之前再走一次 `fill_evidence_cells`：`evidence_kind=proof`、`evidence_path` =
+    台账那一行上这一号证明的稿、`evidence_sha256` = 那份稿 `## 证明` 的 sha（与 V 签的
+    `正文sha` 同一把尺 —— 稿头/签块不算正文）、`v_signature` = 同一份 sha + 判决。
+    G 手填的那四格同样会被这一次现读盖掉。
+
     `workspace_root` 是台账（`data/`）与审校台账（`verifications/`）所在的那一层；
     不给就按 `project_root` 读（单项目工作区里两者是同一个目录）。
     """
-    items = fill_ledger_cells(workspace_root if workspace_root is not None else project_root,
-                              list(rows))
+    ledger_root = workspace_root if workspace_root is not None else project_root
+    items = fill_ledger_cells(ledger_root, list(rows))
+    items = fill_evidence_cells(ledger_root, items)
     json_path, md_path = mapping_paths(project_root)
     payload = {"rows": [row.to_dict() for row in items]}
     json_path.parent.mkdir(parents=True, exist_ok=True)
@@ -3739,7 +3899,9 @@ def mapping_cells(project_root: str | Path, *,
       按问题类别归位到格（:func:`_cell_of_problem`）—— 于是"工具说齐、判据说拒"在结构上
       不可能：同一份 `problems` 一半来自这些判据本身；
     - 索引四格：`NT.evidence_index_problems`（它再转发 `numericproof.resolve_index`；
-      同样只对数值实验定理那一档判）。
+      报告那一档只对数值实验定理那一行判）；自有 + 已签 + 定理类的行由写侧现读现填
+      （`fill_evidence_cells`），这里把同一份值交回去，`sources` 写明"框架现读现填、
+      你别手填"；其余行四格空着并说清为什么（空 != 已签）。
 
     ## 三态与"不许猜"
 
@@ -3748,8 +3910,10 @@ def mapping_cells(project_root: str | Path, *,
     - 拿不到的格不进 `cells`（不留一个像样的空值），在 `problems` 里点名缺哪格、为什么；
     - 通道为空的那两格是"不适用"：进 `cells` 的是空串，`sources` 写明"不适用（可留空）"——
       空串在这里是判据说过的取值，不是"缺失"的冒充；
-    - `evidence_sha256` / `v_signature.sha256` 一律现算（`numericproof.object_sha256`），
-      与表里抄的值不符时由 `NT.evidence_index_problems` 报"抄来的数与盘上不符"。
+    - `evidence_sha256` / `v_signature.sha256` 一律现算（报告那一档是
+      `numericproof.index_object_sha256` 的字节尺；自有证明那一档是同一份 `## 证明`
+      正文 sha，与 V 签同一把尺），与表里抄的值不符时由 `NT.evidence_index_problems`
+      报"抄来的数与盘上不符"。
 
     ## 认行的三种写法
 
@@ -4035,11 +4199,33 @@ def mapping_cells(project_root: str | Path, *,
             miss(field_name, "找不到那条 E 的读数（见 `numeric_evidence` 那一格）"
                              " ⇒ 索引四格都无从取")
     else:
-        for field_name in (NP.INDEX_KIND_FIELD, NP.INDEX_PATH_FIELD, NP.INDEX_SHA_FIELD,
-                           NP.INDEX_SIGN_FIELD):
-            put(field_name, "",
-                "索引四格只对数值实验定理那一行判（`numerictheorem.evidence_index_problems`）"
-                " ⇒ 这一行不适用")
+        # 自有 + 已签 + 定理类的行：索引四格由写侧现读现填（`fill_evidence_cells`）——
+        # 这里把框架落盘时会写下去的那四格直接交回去（G 不用抄，抄了也会在落盘前被盖）。
+        # 其余行（citation / 未签 / 例子 / 实验）四格空着：空 != 已签，`sources` 说清为什么。
+        own: dict[str, Any] = {}
+        try:
+            own = evidence_cells_for_row(row, ledger, workspace)
+        except Exception:  # noqa: BLE001 —— 读不出来 ⇒ 当"这一档没有"，走下面那一档
+            own = {}
+        if own:
+            where = {
+                NP.INDEX_KIND_FIELD:
+                    "受控词表 `numericproof.INDEX_KINDS`（这一号证明的正文是 proof）",
+                NP.INDEX_PATH_FIELD:
+                    "台账 `statements.manuscripts[证明号]` 指的那一份稿",
+                NP.INDEX_SHA_FIELD:
+                    "台账 `bits.evidence.reviewed_sha_by_proof[证明号]`（V 签住的那一份 "
+                    "`## 证明` 正文，与写侧同一把尺）",
+                NP.INDEX_SIGN_FIELD:
+                    "同一份正文的 sha + V 的判决（`fill_evidence_cells` 落盘时也写这一份）",
+            }
+            for field_name, source in where.items():
+                put(field_name, own[field_name],
+                    f"{OWN_PROOF_CELLS_NOTE}；来源：{source}")
+        else:
+            for field_name in (NP.INDEX_KIND_FIELD, NP.INDEX_PATH_FIELD, NP.INDEX_SHA_FIELD,
+                               NP.INDEX_SIGN_FIELD):
+                put(field_name, "", NOT_OWN_PROOF_CELLS_NOTE)
 
     if fresh_sha and NP.INDEX_SIGN_FIELD not in cells:
         signed = NP.latest_third_party_sign(workspace, statement_id=sid,

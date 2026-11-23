@@ -3996,3 +3996,23 @@ ewtheorem / 论文写作只是推荐）一字未动。
 #:   `38389b92c859`）；本笔没有再动这两个文件，故不重复登记。
 #:   六、口径：**p327 只冻这一次**；之后不再为渲染面冻版。
 #:   本笔 = p327。
+
+#: p327 → p328（2026-11-24，只 G 一格：按档分 sha 口径 + 四格现填 + 弟子面教法句）
+#:   一、先核树：`src/agentflow/numericproof.py` **5cd5a1aed47f** · `src/agentflow/papermapping.py`
+#:   **b241f986b3b3** · `src/agentflow/tools/doc_tools.py` **d14c8f8946e6**（与 288 的登记
+#:   `d14c8f89…` 逐字对上）；冻前版本仍是 p327（EVIDENCE-CONSISTENCY 的临时应用已还原）。
+#:   二、驱动面：**只有 G 一格漂**（`scripts/recompute_prompt_digests.py` 现算 G a6c0a138；
+#:   其余十格与 p327 逐字相同）。**以现盘重算为准**，没有套用任何 patch 里的格值。
+#:   三、来源：① `numericproof` 的按档分 sha 口径（不同证据档位按不同口径算 sha）；
+#:   ② `papermapping.fill_evidence_cells` 的四格现填（`mapping_cells` 那一行该填的格）；
+#:   ③ `tools/doc_tools.py` 的弟子面教法句（`doc.mapping_cells` 的说明文字）。
+#:   四、连带：`PROMPT_VERSION` p327 → p328；`_FROZEN_PROMPT_DIGESTS` 十一格按现值重写
+#:   （`--write` 12 处）；`check_all --only prompt_digests` 绿（ok 1 / FAIL 0 / SKIP 0）；
+#:   **两份 golden 都重冻**（`tool_surface_snapshot` 126 工具 / 11 角色 / 13 条 CLI ——
+#:   `doc.mapping_cells.summary` 与 `cli["--role G"]`；`agent_surface_snapshot` 11 角色 / 67 动作 ——
+#:   11 条 prompt 的版本行都变）；`_VOLATILE_FACT_SETS` 追加 p328 一格（count=15、
+#:   `keys_sha256=21314a39…` 与 p327 同值）；`tools/write_system_docs.py` 重生成
+#:   （`ROLE-GUIDE` 与 `ROLE-SPECS` 里印着的旧摘要要跟上）；warm 两档真跑。
+#:   五、FC-27：`tools/doc_tools.py` 已由 288 按 `d14c8f89…` 登记；本笔没有再动它 ⇒ 不重复登记。
+#:   六、口径：**p328 只冻这一次**；之后不再为渲染面冻版。
+#:   本笔 = p328。

@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-24T02:18:53+08:00",
+  "generated_at": "2026-11-24T06:27:40+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -648,10 +648,10 @@
       "path": "src/agentflow/tools/doc_tools.py",
       "glob": "src/agentflow/tools/doc_tools.py",
       "category": "auth-audit",
-      "sha256": "224652470193644a7a52e29bcf1ab493f218c84e6ecfbca55519bd2efc7f48e0",
+      "sha256": "d14c8f8946e6b6c3a80a02cdefae70ecea0094702e8aba25a5b5078da6a8e6ec",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "FC27-EXPAND-TOOLS 路：两处清单逐条追加 14 个 tools/*_tools.py 与 policy.py 共 15 条（auth-audit）；登记不等于批准（reviewers 留空）",
+      "change_note": "EVIDENCE-CONSISTENCY 2026-11-24：doc.mapping_cells 的工具面摘要改成教法句（自有证明行四格由框架现读现填，别手填），并把摘要渲染收进 _mapping_cells_summary()；只登记不批准，reviewers=[]。",
       "changed_this_session": true,
       "reviewers": [],
       "audits": [],

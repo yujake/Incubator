@@ -1094,12 +1094,18 @@ def find_exhaustion_record(experiments: Sequence[Mapping[str, Any]],
 #: | 格 | 键 | 口径 |
 #: |---|---|---|
 #: | 证据是哪一档 | :data:`INDEX_KIND_FIELD` | :data:`INDEX_KIND_PROOF`（F 的证明）/ :data:`INDEX_KIND_REPORT`（E 的报告） |
-#: | 对象的相对路径 | :data:`INDEX_PATH_FIELD` | 相对仓库根（`out/experiments/000000/exhaustion.md` / `proofs/000004-p1.md`） |
-#: | 对象的指纹 | :data:`INDEX_SHA_FIELD` | 那份对象的字节 sha256（不是归一化之后的文本） |
-#: | V 的签 | :data:`INDEX_SIGN_FIELD` | `{"verdict": "成立", "sha256": <被签那一份的 sha256>}` |
+#: | 对象的相对路径 | :data:`INDEX_PATH_FIELD` | 相对仓库根（`out/experiments/000000/exhaustion.md` / `manuscripts/B/b-proof-000004.md`） |
+#: | 正文的指纹 | :data:`INDEX_SHA_FIELD` | 按档分口径（:func:`index_object_sha256`）：`report` = 那份文件的字节 sha256；`proof` = 那份稿 `## 证明` 正文的 sha256（与 V 签同一把尺） |
+#: | V 的签 | :data:`INDEX_SIGN_FIELD` | `{"verdict": "成立", "sha256": <被签那一份正文的 sha256>}` |
 #:
 #: 四格只有这一份口径：`papermapping` 的对应表行、B 的入库闸（:func:`filing_problems`）、
 #: 以及 D 的提示词都从这里取名字，不各写一套。
+#:
+#: 为什么指纹要按档分：proof 档的载体是一份手稿，而 `- V 签：…` 那一行是签完之后写回稿里
+#: 的 —— 写回之后整份文件的字节 sha 就变了，按字节核等于"每一份签过的稿都对不上自己"。
+#: V 签住的是 `## 证明` 那一段（`verifications/<号>.jsonl` 的 `proof_sha256`），索引也只能
+#: 用同一把尺（2026-11-24 EVIDENCE-CONSISTENCY：修前 proof 档按字节核，真机 sylow-4 四行
+#: 「已签」全被判 found=False）。report 档的 E 报告签后不再改写，字节尺就是正文尺。
 INDEX_KIND_FIELD = "evidence_kind"
 INDEX_PATH_FIELD = "evidence_path"
 INDEX_SHA_FIELD = "evidence_sha256"
@@ -1117,13 +1123,40 @@ def object_sha256(path: Any) -> str:
     """一份对象字节的 sha256（算在字节上，不算在归一化之后的文本上）。
 
     与 `verifications.text_sha` 的分工：那个算的是"一段证明正文"（字符串），这个算的是
-    "盘上那一份文件"。索引里的 `evidence_sha256` 与 `v_signature` 的 `sha256` 都用这一份口径，
-    否则"签名时那一份"与"现在盘上那一份"会因为换行形态不同而永远对不上。
+    "盘上那一份文件"。`report` 档的索引指纹（`evidence_kind="report"`）与
+    `v_signature.sha256` 的对象认领都用这一份口径，否则"签名时那一份"与"现在盘上那一份"
+    会因为换行形态不同而永远对不上。
+
+    `proof` 档不用这一把尺：手稿的签块是签后写回稿里的，字节每签一次就变一次 ——
+    那一档的尺是 `## 证明` 正文（:func:`index_object_sha256` 按 kind 分派，唯一实现）。
     """
     import hashlib
     from pathlib import Path
 
     return hashlib.sha256(Path(str(path)).read_bytes()).hexdigest()
+
+
+def index_object_sha256(path: Any, kind: Any) -> str:
+    """索引四格里 `evidence_sha256` 那一格按哪一把尺算（按档分口径的唯一实现）。
+
+    | 档 | 尺 |
+    |---|---|
+    | `report`（E 的报告） | 盘上那份文件的字节 sha256（:func:`object_sha256`） |
+    | `proof`（F/B 的证明） | 那份稿 `## 证明` 正文的 sha256（:func:`proofregistry.proof_sha`，与 V 签同一把尺） |
+
+    两档为什么不能用同一把尺（2026-11-24 EVIDENCE-CONSISTENCY 的现场）：proof 档的载体是
+    一份手稿，V 的签块（`- V 签：…；正文sha=…`）是签完之后写回稿里的 —— 写回那一刻整份
+    文件的字节就换了。按字节核，索引里存的正文 sha 永远对不上盘上的文件，于是"已签"的
+    四行全部 `found=False`（真机 sylow-4 实测：正文 sha `08de50eb…` vs 文件字节 `a6b516…`）。
+    V 台账里同时记着两把尺（`object_sha256` = 签时整份稿的字节、`proof_sha256` =
+    `## 证明` 那一节），能跨"签块写回"这件事稳定成立的是后者。
+
+    旧盘的 body-only 证明文件（没有 `## 证明` 那一节）由 `proof_sha` 显式回退成整份正文；
+    按 LF 落盘时它与字节 sha 同值，所以历史索引不会因为这一改而集体变红。
+    """
+    if str(kind or "").strip() == INDEX_KIND_PROOF:
+        return _PR.proof_sha(Path(str(path)).read_text(encoding="utf-8"))
+    return object_sha256(path)
 
 
 def index_entry_of(row: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -1181,14 +1214,20 @@ def index_problems(entry: Mapping[str, Any] | None) -> list[str]:
 
 
 def resolve_index(root: Any, entry: Mapping[str, Any] | None) -> dict[str, Any]:
-    """顺索引取对象：四格齐 ⇒ 读盘 ⇒ 算 sha256 ⇒ 与索引和签里那两份 sha 各比一次。
+    """顺索引取对象：四格齐 ⇒ 读盘 ⇒ 按档算指纹 ⇒ 与索引和签里那两份 sha 各比一次。
 
     返回 `{"checked","found","path","sha256","verdict","problems","why"}`：
 
     - `checked=False` ⇒ 这一格没查成（没给工作区根 / 路径解析不了 / 读不出来），不是"没有对象"；
     - `checked=True, found=False` ⇒ 查过了：索引指不到对象，或对象与指纹对不上；
-    - `checked=True, found=True` ⇒ `sha256` 是盘上那一份的字节 sha256，且它同时等于
-      `evidence_sha256` 与 `v_signature.sha256`（判据 ④）。
+    - `checked=True, found=True` ⇒ `sha256` 是盘上那一份按档算出来的正文指纹，且它同时
+      等于 `evidence_sha256` 与 `v_signature.sha256`（判据 ④）。
+
+    指纹按档分口径（唯一实现 :func:`index_object_sha256`）：`report` 档 = 文件字节 sha256；
+    `proof` 档 = 那份稿 `## 证明` 正文的 sha256（与 V 签同一把尺）。修前两档都按文件字节核，
+    于是 proof 档在"签块写回稿里"之后必然判 found=False —— 那不是"对象被换过"，是尺用错了。
+    `sha256` 的语义因此是"这一档用来对签的那一份指纹"，调用方别再把它当成"文件字节"用
+    （`report` 档两者同值；`proof` 档不是）。
 
     这是"顺索引取对象"的唯一实现：B 的入库闸与对应表的五档拦门都走它（打桩它，
     两条负控必须同时红 —— 判据 ⑥）。
@@ -1227,24 +1266,37 @@ def resolve_index(root: Any, entry: Mapping[str, Any] | None) -> dict[str, Any]:
         out["why"] = out["problems"][0]
         return out
     try:
-        got_sha = object_sha256(target)
-    except OSError as exc:
+        got_sha = index_object_sha256(target, got["kind"])
+    except (OSError, UnicodeDecodeError) as exc:
         out["problems"] = [f"索引指的那份对象读不出来：{got['path']}"
                            f"（{type(exc).__name__}: {exc}）"]
         out["why"] = out["problems"][0]
         return out
     out["sha256"] = got_sha
     if got_sha != got["sha256"]:
-        out["problems"] = [
-            f"索引里的 {INDEX_SHA_FIELD} 与盘上那份对象不符：索引记 "
-            f"{got['sha256'][:12]}…，盘上算得 {got_sha[:12]}… ⇒ 对象被换过 / 索引写的是别的版本"]
+        if got["kind"] == INDEX_KIND_PROOF:
+            out["problems"] = [
+                f"索引里的 {INDEX_SHA_FIELD} 与那份稿的 `## 证明` 正文不符：索引记 "
+                f"{got['sha256'][:12]}…，现算得 {got_sha[:12]}… ⇒ 正文被改过 / "
+                "索引写的是别的版本（proof 档的指纹是 `## 证明` 那一段，与 V 签同一把尺，"
+                "不是文件字节）"]
+        else:
+            out["problems"] = [
+                f"索引里的 {INDEX_SHA_FIELD} 与盘上那份对象不符：索引记 "
+                f"{got['sha256'][:12]}…，盘上算得 {got_sha[:12]}… ⇒ 对象被换过 / 索引写的是别的版本"]
         out["why"] = out["problems"][0]
         return out
     if got["sign_sha256"] != got_sha:
-        out["problems"] = [
-            f"V 的签与对象 sha 不符：{INDEX_SIGN_FIELD} 签的是 "
-            f"{got['sign_sha256'][:12]}…，而盘上那份对象是 {got_sha[:12]}… ⇒ "
-            "这一签盖的不是这一份（判据 ④）"]
+        if got["kind"] == INDEX_KIND_PROOF:
+            out["problems"] = [
+                f"V 的签与那份稿的 `## 证明` 正文不符：{INDEX_SIGN_FIELD} 签的是 "
+                f"{got['sign_sha256'][:12]}…，而正文现算是 {got_sha[:12]}… ⇒ "
+                "这一签盖的不是这一份（判据 ④）"]
+        else:
+            out["problems"] = [
+                f"V 的签与对象 sha 不符：{INDEX_SIGN_FIELD} 签的是 "
+                f"{got['sign_sha256'][:12]}…，而盘上那份对象是 {got_sha[:12]}… ⇒ "
+                "这一签盖的不是这一份（判据 ④）"]
         out["why"] = out["problems"][0]
         return out
     if got["verdict"] != THIRD_PARTY_VERDICT_OK:
@@ -1254,8 +1306,10 @@ def resolve_index(root: Any, entry: Mapping[str, Any] | None) -> dict[str, Any]:
         out["why"] = out["problems"][0]
         return out
     out["found"] = True
+    body = ("那份稿的 `## 证明` 正文" if got["kind"] == INDEX_KIND_PROOF
+            else "盘上那份对象")
     out["why"] = (f"顺索引取到 {got['kind']} 那一份对象 {got['path']}"
-                  f"（sha256 {got_sha[:12]}…，与 {INDEX_SHA_FIELD} 和 "
+                  f"（{body}的 sha256 {got_sha[:12]}…，与 {INDEX_SHA_FIELD} 和 "
                   f"{INDEX_SIGN_FIELD} 两处都相符）")
     return out
 
@@ -1291,17 +1345,28 @@ def find_index_entry(rows: Sequence[Mapping[str, Any]], *, program: Any = "",
     - 正文是一份证明（F 侧）：手上这一份的内容就是对象 ⇒ 按内容 sha 认
       （目录里 `evidence_sha256` 等于这一份正文的 sha256）。
 
+    认内容 sha 时两把尺都试：整份文本的 sha256，与 `## 证明` 那一节（`proof_sha`）——
+    后者是 proof 档索引的现行口径（:func:`index_object_sha256`）。手上的 `proof_text`
+    若是一份手稿（带 `## 命题` / `## 证明` 小标题），整份 sha 与那一节 sha 不同，
+    只认前者会让"明明在目录里"的那一行认不出来。
+
     先认 F 那一档（内容相同即同一份，不看顺序），再认 E 那一档（按程序路径）。
     """
     want_prog = norm_rel(program)
     text = str(proof_text or "")
-    wants = set()
+    wants: set[str] = set()
     if text:
         import hashlib
-        wants.add(hashlib.sha256(text.encode("utf-8")).hexdigest())
+
+        def _whole_sha(value: str) -> str:
+            return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+        wants.add(_whole_sha(text))
+        wants.add(_PR.proof_sha(text))
         relaxed = norm_text(text)
         if relaxed != text:
-            wants.add(hashlib.sha256(relaxed.encode("utf-8")).hexdigest())
+            wants.add(_whole_sha(relaxed))
+            wants.add(_PR.proof_sha(relaxed))
     items = [dict(r) for r in (rows or ()) if isinstance(r, Mapping)]
     # `index_entry_of` 每行只取一次：先认内容 sha、再认程序路径，两趟看的是同一份
     # 归一结果（原先每趟各重算一遍）。
@@ -1879,6 +1944,24 @@ def statement_id_for_body(statements: Sequence[Mapping[str, Any]],
     return ""
 
 
+def _sign_object_sha_for_index(entry: Mapping[str, Any] | None,
+                               indexed: Mapping[str, Any] | None) -> str:
+    """F 侧认签时要不要把索引取到的那个 sha 当"对象字节 sha"递进去。
+
+    - `report` 档 ⇒ 递：E 的报告签后不再改写，V 台账行的 `object_sha256` 就是这份字节，
+      按它认签是"签的是不是这一份文件"；
+    - `proof` 档 ⇒ 不递（返回空串）：手稿的签块是签完之后写回稿里的，现在的文件字节
+      必然不等于签时那一份的字节 —— 把 `## 证明` 正文的 sha 当对象 sha 递进去，只会与
+      V 台账里那个"签时整份稿"的 `object_sha256` 对不上，把一份真签判成"签的是旧版"。
+      这一档的认签键是 V 台账行的 `proof_sha256`（`## 证明` 正文，与索引同一把尺）。
+
+    这是"按哪种口径认签"的唯一判断点（判据读它与 `third_party_problems` 的入参）。
+    """
+    if str(index_entry_of(entry)["kind"]) == INDEX_KIND_PROOF:
+        return ""
+    return str((indexed or {}).get("sha256") or "")
+
+
 def filing_problems(*, origin: Any, evidence_kind: Any, proof_text: Any,
                     experiments: Sequence[Mapping[str, Any]] = (),
                     root: Any = None, statements: Sequence[Mapping[str, Any]] = (),
@@ -1902,10 +1985,11 @@ def filing_problems(*, origin: Any, evidence_kind: Any, proof_text: Any,
       调 :func:`exhaustion_backing`（与收工门同一份判据）—— V 的台账里存在一行、
       `object_sha256` == 这份 E 报告的 sha、verdict=成立、且签的就是现在这一份 ⇒ 放行；
       有毛病 / 没审过 / 签的是旧版 / 没查成 ⇒ 拒，拒信点名"缺 V 的会审签名"与
-      是哪一种（`defect_step` 也写在里面）。F 侧那一路没有 E 报告，仍按证明栏/索引的
-      sha 认（:func:`third_party_problems`）。E 的 `observations.e_signature` 是 E 自己
-      盖的章，两条路都不算第三方；缺了这几个参数 ⇒ 这一格没查成 ⇒ 也拒（三态纪律：
-      没查成不许折成通过）；
+      是哪一种（`defect_step` 也写在里面）。F 侧那一路没有 E 报告，按 V 台账行的
+      `proof_sha256`（`## 证明` 正文，与索引同一把尺）认（:func:`third_party_problems`；
+      `object_sha256` 不递 —— 理由见 :func:`_sign_object_sha_for_index`）。E 的
+      `observations.e_signature` 是 E 自己盖的章，两条路都不算第三方；缺了这几个参数
+      ⇒ 这一格没查成 ⇒ 也拒（三态纪律：没查成不许折成通过）；
     - 都没有 ⇒ 最多到 :data:`SUPPORTED_ONLY_KIND`。
 
     `manuscript`（2026-11-08）：B 这一笔递进来的那份手稿的路径。`reports/e-proof-<号>.md`
@@ -1990,13 +2074,14 @@ def filing_problems(*, origin: Any, evidence_kind: Any, proof_text: Any,
                 ("；" + "；".join(parsed["problems"]) if parsed["problems"] else "") +
                 "。F 侧的证明要 proof：让 D 的报告（论文对应表）为它写一行索引 —— "
                 "evidence_kind=\"proof\"、evidence_path（那份证明在仓库里的相对路径）、"
-                "evidence_sha256（它的字节 sha256）、v_signature（verdict + 被签那一份的 sha）；"
+                "evidence_sha256（`## 证明` 那一段的 sha256，与 V 签同一把尺）、"
+                "v_signature（verdict + 被签那一份正文的 sha）；"
                 "索引指得到、且 V 的签盖的就是那一份，这一条才登记成 proof。"
                 f"补不齐就最多是 {SUPPORTED_ONLY_KIND}（{SUPPORTED_ONLY_LABEL}）"
             ]
         sid = statement_id_for_body(statements, statement_full)
         return third_party_problems(text, root=root, statement_id=sid,
-                                    object_sha256=want_object)
+                                    object_sha256=_sign_object_sha_for_index(entry, indexed))
     if parsed["problems"]:
         # ⑥：缺 ③ / 缺程序路径 / 还是旧三段式 ⇒ 不许 proof，且逐字点名缺哪一块。
         return [
