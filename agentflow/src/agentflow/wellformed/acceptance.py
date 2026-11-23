@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-acceptance 那一类：`out/paper/ACCEPTANCE-CHECKS.json` 的行形状与不适用理由。
+acceptance 那一类：`out/package/ACCEPTANCE-TARGETS.json`（原 `out/paper/`）的行形状与不适用理由。
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from .registry import _Ctx, _local_finding, _rule
 from .states import Finding
 
 
-# ---- acceptance：`out/paper/ACCEPTANCE-CHECKS.json`
+# ---- acceptance：`out/package/ACCEPTANCE-TARGETS.json`（落点真身 `closing.ACCEPTANCE_TARGETS_NAME`）
 
 
 @_rule("acceptance", "shape")

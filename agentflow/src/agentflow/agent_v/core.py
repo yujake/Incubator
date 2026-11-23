@@ -37,8 +37,9 @@ V 只产审稿意见：在册档发不发签由 V 的秘书决定（连续 3 次
 
 跨两次送审绝不累计：一次 `verify_proof` = 同一次调用内连判 `SIGN_STREAK_NEED` 轮，每一
 趟从第 1 轮重数；台账每一行带 `review_pass`（这一趟的第几轮）与 `review_call`（这一趟
-的调用 id）；秘书的发签地板（`sign_issuance.within_call`）只看这一趟的轮数，台账尾部的
-历史连续数（`consecutive_holds` / `legacy_rows`）只作历史读数；旧台账没有
+的调用 id）；秘书的发签门槛 = `sign_counting` 现数（系统计次：同一 `review_call` 内
+`review_pass=1..need` 连续 clean 的轮数）—— 调用方自报的 `within_call` 只是读数；台账
+尾部的历史连续数（`consecutive_holds` / `legacy_rows`）只作历史读数；旧台账没有
 `review_call` / `review_pass` 的行 = 历史形态，读得出、但不按新规则重算成签。
 
 秘书的语义判定只有两档：拿不准、只挑出一处小记号问题、只说"我没逐行验证"——统统算
@@ -1091,13 +1092,14 @@ def _decide_registered_manuscript_identity(*, statement_id: str,
                     why=("行上没有 `manuscript_id`（"
                          + (identity["problem"] or "这一格是空的")
                          + "）⇒ 退回老口径「稿名里的号 == 命题号」"))
-    if mid != sid and not rel.startswith("reports/e-proof"):
+    if mid != sid and not rel.startswith(f"{_MFAM.dir_of('e-proof')}/e-proof-"):
         return {
             "ok": False, "identity": identity, "kind": "bad_manuscript_name",
             "reason": "bad_manuscript_name",
             "detail": (f"`{rel}` 的稿号是 {mid}，而这一签要给 stmt:{sid} ⇒ "
                        "不审、不落签：签盖的必须是这一条命题自己的那一份稿"
-                       "（`reports/{f,b,e}-proof-<命题号>.md`）。这一条走的是退回口径："
+                       f"（`{_MFAM.MANUSCRIPT_ROOT}/<角色>/{{f,b,e}}-proof-<命题号>.md`）。"
+                       "这一条走的是退回口径："
                        f"行上没有 `manuscript_id`（{identity['problem'] or '这一格是空的'}）；"
                        f"{path_note}——收录那一笔要把它写上（B 收录时记 F 自己的稿号）"),
         }
@@ -1432,8 +1434,9 @@ class AgentV:
         "这一签已经在台账上了"（连续次数不用再加一票），并在判发之后由它自己调
         `sign_statement(append_ledger=False)` 翻位。
 
-        `within_call`（2026-11-02 定稿）是这一趟送审内的第几轮：给了它，秘书那一侧
-        的地板只看这个数，台账尾部的历史连续数只作读数 —— 跨两次送审绝不累计。
+        `within_call` 是调用方自报的读数（这一趟送审内的第几轮）：2026-11-17 起它不参与
+        判定 —— 秘书那一侧的门槛由 `sign_counting` 从台账现数（同一 `review_call` 内
+        `review_pass=1..need` 连续 clean），台账尾部的历史连续数只作历史读数。
         `review_call` 是这一趟的调用 id，随发签读数落到签文件的 `passes` 里
         （"三票同源"可读）。
 
@@ -1562,10 +1565,11 @@ class AgentV:
 
         ## 2026-11-02 定稿：这一趟的轮数只在这一趟里数（跨送审绝不累计）
         每一趟都有一个新的 `review_call`；三行台账的 `review_pass` 是 1 / 2 / 3。
-        发签地板（`sign_issuance.within_call`）只看这个趟内数；台账尾部历史连续数
-        （旧台账的 `legacy_rows`）只作历史读数，不参与新签判断。于是"上一趟留了 2 行
-        clean、这一趟第 1 轮 clean"不再凑成一张签 —— 业主逐字：「不允许跨两次送审
-        累计成功数」。
+        发签门槛 = `sign_counting` 现数（系统计次，2026-11-17：同一 `review_call` 内
+        `review_pass=1..need` 连续 clean 的轮数）；调用方自报的 `within_call` 只是读数。
+        台账尾部历史连续数（旧台账的 `legacy_rows`）只作历史读数，不参与新签判断。于是
+        "上一趟留了 2 行 clean、这一趟第 1 轮 clean"不再凑成一张签 —— 业主逐字：「不允许
+        跨两次送审累计成功数」。
 
         ## 已经签过的命题不再送审（2026-10-31）
 
@@ -2015,7 +2019,7 @@ class AgentV:
         if not text.strip():
             out["reason"] = "no_proof_text"
             out["detail"] = ("这一条没有可签的载体：既没有手稿（`proof_manuscript`），"
-                             "也没有可审的正文 ⇒ 先落一份稿再送（`reports/…` 或 "
+                             "也没有可审的正文 ⇒ 先落一份稿再送（`manuscripts/<角色>/…` 或 "
                              "`notes/…` 皆可，三节 `## 命题` / `## 证明` / `## 依赖`）")
             return out
 
@@ -2561,9 +2565,10 @@ class AgentV:
         "第 2 转忘了落台账"或"第 3 转跳过了秘书"）。
 
         2026-11-02 定稿：`pass_no` 是这一趟送审内的第几轮，`review_call` 是这一趟的
-        调用 id。两格一起落进台账（`review_pass` / `review_call`），并作为 `within_call`
-        递给秘书的发签地板 —— 台账尾部历史连续数不再参与这一趟的签发判断
-        （业主：「不允许跨两次送审累计成功数」）。
+        调用 id。两格一起落进台账（`review_pass` / `review_call`）—— 门槛由
+        `sign_counting` 从台账现数（同一 `review_call` 内 `review_pass=1..need` 连续
+        clean）；`pass_no` 作为 `within_call` 递给秘书只是调用方自报的读数。台账尾部
+        历史连续数不再参与这一趟的签发判断（业主：「不允许跨两次送审累计成功数」）。
 
         返回 `{"ok": True, "row": 台账行, "judgment": 秘书判定, "wash": 洗稿读数,
         "issuance": 发签决定, "gate": 引用闸, "checks": 逐条引用结论}`；
@@ -2686,8 +2691,9 @@ class AgentV:
             # 只有"判过了、轴是 clean"这一档才问"这一签发不发"
             # （其余几档都是终局或没查成，见 `_terminal_issuance`）。
             # p247：这里不再看 `verdict == "成立"` —— 轴只由秘书给，V 的判词只是陈述。
-            # 2026-11-02 定稿：把"这一趟的第几轮"作为地板递给秘书 —— 前两轮必不签，
-            # 第三轮 clean 才签；台账历史行不参与（跨送审绝不累计）。
+            # 2026-11-17：门槛由 `sign_counting` 从台账现数 —— 前两轮数不满、第三轮
+            # clean 才签；"这一趟的第几轮"（`pass_no`）递给秘书只作读数。台账历史行
+            # 不参与（跨送审绝不累计）。
             issuance = self._decide_sign_issuance(sid, text, no, verdict, row=row,
                                                   within_call=pass_no,
                                                   review_call=review_call)
@@ -3067,9 +3073,9 @@ class AgentV:
             "detail": (
                 f"命题 {sid} 已登记，而{why} ⇒ 不审、不落签。在册命题也要手稿："
                 "签要落在稿上（`- V 签：` 那一行签块）、依赖面从稿的 `## 依赖` 段读、"
-                "稿要能被按号寻址（`reports/{f,e,b}-proof-<号>.md`）—— 内联正文这三样都"
+                "稿要能被按号寻址（`manuscripts/<角色>/{f,e,b}-proof-<号>.md`）—— 内联正文这三样都"
                 "做不到，所以它不能单独过审。处置：先落一份按号命名的稿（"
-                "`reports/f-proof-<号>.md`；`notes/…` 这种认不出裸稿号的稿先走转正，"
+                "`manuscripts/F/f-proof-<号>.md`；`notes/…` 这种认不出裸稿号的稿先走转正，"
                 "落成按号命名的那一份），三节按 `## 命题` / `## 证明` / `## 依赖` 写；"
                 "写完再带 `proof_manuscript=<那个路径>` 送审。这一趟的正文不必再传："
                 "V 从稿里取那一段（参数里同时给 `proof_text` 只作对 sha 的核对）。"
@@ -3179,9 +3185,9 @@ class AgentV:
             return {"failed": True, "kind": "bad_manuscript_name",
                     "reason": "bad_manuscript_name",
                     "detail": (f"`{rel}` 的稿名认不出裸稿号（只收 "
-                               "`reports/{f,e,b}-proof-<号>.md`：第 9 格 `手稿号` 与 B 的"
+                               "`manuscripts/<角色>/{f,e,b}-proof-<号>.md`：第 9 格 `手稿号` 与 B 的"
                                "收录认签都按它）⇒ 这一格没审、不落签。处置：把这份稿"
-                               "转正成按号命名的那一份（`reports/f-proof-<命题号>.md`，"
+                               "转正成按号命名的那一份（`manuscripts/F/f-proof-<稿号>.md`，"
                                "`notes/…` 稿走转正那一步）再来；认不出号的签块 B 不认，"
                                "签了也白签")}
         if not _carrier.get("ok"):
@@ -3365,7 +3371,7 @@ class AgentV:
             # 不给"按任意路径读一盘"的口子。
             if b_manuscript:
                 _ok_path = _BM.is_relpath(rel)
-                _what = "B 的改写手稿（`reports/b-proof-*.md`）"
+                _what = f"B 的改写手稿（`{_MFAM.MANUSCRIPT_ROOT}/B/b-proof-*.md`）"
             else:
                 _ok_path = bool(
                     rel.startswith(f"{_DS.MANUSCRIPT_DIR}/{_DS.MANUSCRIPT_STMT_PREFIX}")
@@ -3447,7 +3453,7 @@ class AgentV:
                 + (f"（在册命题的完整正文：{statement_full.strip()[:400]}）"
                    if str(statement_full or "").strip() else "（命题还没在册）")
                 + "：你只按下面这份证明正文本身重读；审过之后签会落回这一份手稿"
-                  "（`reports/b-proof-<命题号>.md` 里的签块），B 带这份稿入库时读到它。")
+                  f"（`{_MFAM.MANUSCRIPT_ROOT}/B/b-proof-<稿号>.md` 里的签块），B 带这份稿入库时读到它。")
         else:
             _facts = ("这一条命题还没给命题号（V 只读手稿，不查台账；命题正文读不到）："
                       "你只按下面这份证明正文本身重读；签会落进这一份手稿，"
@@ -4309,7 +4315,7 @@ class AgentV:
             record = ("看过、没签：这一趟只给了内联正文、没给 `proof_manuscript` ⇒ "
                       "没有可落签的载体 —— 签块、`## 依赖` 段、按号命名的稿这三样都只在"
                       "文件上，内联正文一样都做不到，所以这一签不签发、台账里也不留 "
-                      "sign 行。要签就把这份正文落成一份稿（`reports/…` 或 `notes/…` 皆可，"
+                      f"sign 行。要签就把这份正文落成一份稿（`{_MFAM.MANUSCRIPT_ROOT}/<角色>/…` 或 `notes/…` 皆可，"
                       "三节 `## 命题` / `## 证明` / `## 依赖`），再带 `proof_manuscript` 送审。"
                       f"这一趟的判定（{got.get('verdict') or '（无结论）'}，"
                       f"{len(list(got.get('passes') or []))} 转）只作读数，不构成签。")
@@ -4494,7 +4500,7 @@ class AgentV:
                        "穷举型证据的会审跑完了（七项读数在 `exhaustion_review` / "
                        "`checks` / `missing` 里），判定只作读数、不构成签，"
                        "也不落任何 pending 台账行。要签就让 E 带 "
-                       "`proof_manuscript=reports/e-proof-<实验号>.md` 送审："
+                       f"`proof_manuscript={_MFAM.relpath('e-proof', '<实验号>')}` 送审："
                        "签块由收方秘书落回那一份稿，B 收录时从稿上读到。"),
         })
         self._emit(f"verify_proof(未在册)：{out['kind']}（{out['reason']}）")

@@ -123,7 +123,14 @@ def _manuscript_for(ws: Path, sid: str, no: int,
     cands: list[str] = []
     if sid and all(ch.isalnum() or ch in "_-" for ch in sid):
         for pattern in (f"reports/*proof*{sid}*.md", f"notes/*proof*{sid}*.md",
-                        f"out/*proof*{sid}*.md"):
+                        f"out/*proof*{sid}*.md",
+                        # 正文按角色分目录之后（2026-11-22 业主裁定）正本稿名的唯一
+                        # 落点是 `manuscripts/<角色>/<族>-proof-<号>.md`。少这一档时
+                        # `sign_audit` 对"没有台账行、只有稿"的那些命题会读成
+                        # 「没有正文、也没有手稿路径 ⇒ unsigned」——七表夹具里
+                        # `borrowed` 那一格就是这样整格消失的（不是"没有借光"，是
+                        # 没找到稿）。
+                        f"manuscripts/*/*proof*{sid}*.md"):
             cands.extend(str(p.relative_to(ws)).replace("\\", "/")
                          for p in sorted(ws.glob(pattern)))
     cands = list(dict.fromkeys(cands))
@@ -143,7 +150,10 @@ def _manuscript_for(ws: Path, sid: str, no: int,
 
 
 def _block_files(ws: Path) -> Iterable[Path]:
-    for sub in ("reports", "notes", "out"):
+    # `manuscripts/<角色>/` 是 2026-11-22 之后签载体（稿头签块）的唯一落点：
+    # 少了它，`view_conflict`（块自称 3/3、台账那一转判 fault）在七表夹具里
+    # 一个都扫不到 —— 与 `_manuscript_for` 缺同一档是同一处根因。
+    for sub in ("reports", "notes", "out", "manuscripts"):
         base = ws / sub
         if base.is_dir():
             for path in sorted(base.rglob("*proof*.md")):

@@ -9,7 +9,8 @@
 
 1. 框架 bug 伪装成"你交的东西不合格"：F 15 次调用 15 次同一个拒信，只会换措辞重试，
    5 连拒之后 `no_progress_limit` 收工，而真正要修的框架那一行一次都没被说出来；
-2. 拒信谎报落库：同一秒 `reports/f-proof-000001.md` 已经落了盘，拒信却说没有 ——
+2. 拒信谎报落库：同一秒 `reports/f-proof-000001.md` 已经落了盘（旧布局；新落点是
+   `manuscripts/<角色>/`，2026-11-22 起），拒信却说没有 ——
    模型据此以为一个字节都没写，于是重交同一份稿（其中一份其实是合格的）；
 3. 诊断被吞：校验器已经算出的逐条问题（行 501/560/789 各 8 条）被一句 TypeError 顶掉；
 4. 审计痕迹丢失：`history[*].refusal` 挂在那一笔写回上，写回一炸就一起没了。
@@ -64,14 +65,51 @@ REFUSAL_AUDIT_MARKER = "f.step:refusal"
 # ---------------------------------------------------------------- 落库事实（只读）
 
 
+def _md_files(folder: Path, *, one_level: bool = False) -> dict[str, tuple[int, int]]:
+    """一个目录下 `*.md` 的 (大小, mtime_ns) 快照（只读；目录不在 ⇒ 空）。
+
+    `one_level=True` 时按 `<folder>/<角色>/*.md` 收，键是相对 `folder` 的路径
+    （`F/f-proof-000000.md`）—— 正文按角色分目录之后，一份稿的落点是
+    `manuscripts/<角色>/<名字>.md`，只扫顶层会把所有角色的稿都读成"没落库"。
+    """
+    got: dict[str, tuple[int, int]] = {}
+    if not folder.is_dir():
+        return got
+    pattern = "*/*.md" if one_level else "*.md"
+    try:
+        paths = sorted(folder.glob(pattern))
+    except OSError:
+        return got
+    for p in paths:
+        try:
+            if p.is_file():
+                st = p.stat()
+                key = p.relative_to(folder).as_posix() if one_level else p.name
+                got[key] = (int(st.st_size), int(st.st_mtime_ns))
+        except OSError:
+            continue
+    return got
+
+
 def disk_state(store: Any, plan_id: str = "") -> dict[str, Any]:
-    """这一笔调用前后的盘上读数（只读）：计划台账那一行 ＋ `reports/` 下的稿。
+    """这一笔调用前后的盘上读数（只读）：计划台账那一行 ＋ 新落点的稿 ＋ 旧布局的稿。
+
+    落点（2026-11-22 业主裁定：正文按角色分目录）：
+
+    - `manuscripts/<角色>/*.md` —— 新落点，这是"这一笔有没有落库"要看的文件证据；
+    - `reports/*.md` —— 旧布局，只作为兼容读数出现（键名逐条标 `（旧布局）`），
+      它不再决定"有没有落库"。
+
+    为什么必须改：改前只盯 `reports/`，而 F 的稿已搬到 `manuscripts/F/` ⇒ 拒信里
+    "有没有落库"的文件那一半证据是死的（表那一半还在，于是只在"这一笔只动了文件
+    没动表"时谎报「前后一模一样」）。
 
     三态：`checked=False` 表示没读到（原因在 `why` 里）—— 调用方据此说"查不到有没有
     落库"，不许把它折成"没有落库"（那正是 MINE-LOOP 报告 §P0-2 的形态）。
     """
     out: dict[str, Any] = {"checked": True, "why": "", "plans": None,
-                           "rounds": None, "history": None, "reports": {}}
+                           "rounds": None, "history": None,
+                           "manuscripts": {}, "reports": {}}
     reasons: list[str] = []
     try:
         rows = [dict(r) for r in store.rows("attack_plans")]
@@ -86,15 +124,15 @@ def disk_state(store: Any, plan_id: str = "") -> dict[str, Any]:
                 != REFUSAL_AUDIT_MARKER)
     except Exception as e:  # noqa: BLE001 —— 读不到就如实说，不许折成"没有"
         reasons.append(f"读不到 attack_plans：{type(e).__name__}: {e}")
+    root = Path(str(getattr(store, "root", "") or ""))
     try:
-        folder = Path(str(getattr(store, "root", "") or "")) / "reports"
-        if folder.is_dir():
-            for p in sorted(folder.glob("*.md")):
-                if p.is_file():
-                    got = p.stat()
-                    out["reports"][p.name] = (int(got.st_size), int(got.st_mtime_ns))
+        out["manuscripts"] = _md_files(root / "manuscripts", one_level=True)
     except Exception as e:  # noqa: BLE001
-        reasons.append(f"读不到 reports/：{type(e).__name__}: {e}")
+        reasons.append(f"读不到 manuscripts/<角色>/：{type(e).__name__}: {e}")
+    try:
+        out["reports"] = _md_files(root / "reports")
+    except Exception as e:  # noqa: BLE001
+        reasons.append(f"读不到 reports/（旧布局）：{type(e).__name__}: {e}")
     if reasons:
         out["checked"] = False
         out["why"] = "；".join(reasons)
@@ -107,6 +145,9 @@ def landing_reading(before: Mapping[str, Any], after: Mapping[str, Any], *,
 
     `landed` 三态：`True`（盘上确实多了东西）/ `False`（前后一模一样）/
     `None`（没读成 —— 不许折成 `False`）。
+
+    文件证据分两栏：`manuscripts/<角色>/` 是新落点（决定 `landed`）；
+    `reports/` 是旧布局（逐条标出来，好让"还写在退役目录"这件事看得见）。
     """
     if not before.get("checked") or not after.get("checked"):
         return {"checked": False, "landed": None, "facts": [],
@@ -119,14 +160,17 @@ def landing_reading(before: Mapping[str, Any], after: Mapping[str, Any], *,
         b, a = before.get(key), after.get(key)
         if b is not None and a is not None and a > b:
             facts.append(f"计划 {plan_id or '（没给 plan_id）'} 的 {label} {b} → {a}")
-    reports_before = before.get("reports") or {}
-    reports_after = after.get("reports") or {}
-    for name, got in sorted(reports_after.items()):
-        old = reports_before.get(name)
-        if old is None:
-            facts.append(f"reports/{name} 新落了盘（{got[0]} B）")
-        elif tuple(old) != tuple(got):
-            facts.append(f"reports/{name} 被改写（{old[0]} B → {got[0]} B）")
+    for key, where, legacy in (("manuscripts", "manuscripts", False),
+                               ("reports", "reports", True)):
+        files_before = before.get(key) or {}
+        files_after = after.get(key) or {}
+        for name, got in sorted(files_after.items()):
+            old = files_before.get(name)
+            tag = f"{where}/{name}" + ("（旧布局）" if legacy else "")
+            if old is None:
+                facts.append(f"{tag} 新落了盘（{got[0]} B）")
+            elif tuple(old) != tuple(got):
+                facts.append(f"{tag} 被改写（{old[0]} B → {got[0]} B）")
     return {"checked": True, "landed": bool(facts), "facts": facts,
             "why": ("盘上前后两次读数一样（没有这一笔的写）" if not facts
                     else "盘上前后两次读数的对比")}
@@ -136,7 +180,8 @@ class LandingProbe:
     """这一笔调用前后各读一次盘（只读），供拒信说清"有没有落库"。
 
     为什么拒信必须照盘上的事实说：旧拒信无条件写「这一笔没有落库」，而同一秒
-    `reports/f-proof-000001.md` 已经落盘 —— 模型据此以为自己一个字节都没写。
+    `reports/f-proof-000001.md`（旧布局；现在是 `manuscripts/F/f-proof-000001.md`）
+    已经落盘 —— 模型据此以为自己一个字节都没写。
     """
 
     def __init__(self, store: Any, plan_id: str = "") -> None:

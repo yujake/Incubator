@@ -140,8 +140,12 @@
 3. 计时器不阻塞动作：计时器只是账上的一条，循环该调模型就调模型（`agent_loop._park_gate`
    的判据是"有没有 `wait_any` / 是不是真的无事可做"，不是"有没有计时器"）。
    显式要求"等待任意计时器返回"走 `request_wait_any(...)`，读数 `wait_any_reading(...)`。
-4. 交差与静默：无事可做且一条计时器都没有 ⇒ `record_handoff(...)` 记下这次交差
-   （父代理据此把它记为静默），父侧的读数是 `read_handoffs(workspace, parent_task_id=…)`。
+4. 交差与静默：这一格未启用（2026-11-22 B2e 取证：55 个工作区 0 份
+   `out/clock/handoffs.json`）。`record_handoff(...)` 与 `read_handoffs(...)` 的实现、
+   读侧三态都在，但写侧唯一入口被 `no_timers_to_wait` 关着 ⇒ 真机不会产这个文件；
+   父侧读静默走的是 `conductor.agent_state` 第 ⑩ 步（台账终态 + 零计时器 ⇒ 静默），
+   不是这份账。机器可读状态是 `HANDOFF_LEDGER_STATE`（`"unused"`，读数
+   `handoff_ledger_reading()`）—— 别把"会产的文件"当它的读法。
    不变量（有活跃子代理 ⇒ 必有一条等它的计时器）由父代理派活时自动起表保证
    （`conductor` 的 summon 落点）并由 `conductor.child_wait_invariant` 判定。
 
@@ -424,6 +428,10 @@ from .clockprogram import (  # noqa: F401 — 再导出，保持公开面不变
 # `clockwaitany.py`，这里按原样再导出 —— 所有 `from .clock import ...` 的调用点
 # 一个字都不用改，依赖方向是 `clock` → `clockwaitany`（单向）。
 from .clockwaitany import (  # noqa: F401 — 再导出，保持公开面不变
+    HANDOFF_LEDGER_ENABLE_AT,
+    HANDOFF_LEDGER_PARENT_READ,
+    HANDOFF_LEDGER_STATE,
+    HANDOFF_LEDGER_WHY,
     HANDOFF_REL,
     HANDOFF_SUBJECT,
     WAIT_ANY_REL,
@@ -431,6 +439,7 @@ from .clockwaitany import (  # noqa: F401 — 再导出，保持公开面不变
     _load_handoffs,
     _load_wait_any,
     cancel_wait_any,
+    handoff_ledger_reading,
     handoff_path,
     mark_handoff_seen,
     read_handoffs,

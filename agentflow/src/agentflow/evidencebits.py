@@ -72,7 +72,8 @@ from typing import Any, Iterable, Mapping
 
 #: 引文"通过"的两档（`schema.QUOTE_MODES` 的唯一来源就是它，这里只转发一次引用）。
 from . import quoteevidence as _QE
-from .schema import NUMERIC_EVIDENCE_KEYS, QUOTE_MODES
+from .schema import (NUMERIC_EVIDENCE_KEYS, QUOTE_MODES, STATEMENT_KINDS,
+                     STATEMENT_KIND_VOCAB_SINCE)
 
 
 def _sign_sha(proof_text: Any) -> str:
@@ -1591,6 +1592,12 @@ def derive_grade(bits: Mapping[str, Any], *, kind: str = "") -> str:
     概念根本没有真值可言（它只有"良定义没良定义"）。所以这一档单独给一个值
     （`GRADE_NOT_APPLICABLE`），它不在 `GRADES` 里 —— 不参与排序、不算进定理计数。
 
+    `definition` 不在这条短路里（尽管它在 `DEFINITION_KINDS` /
+    `NOT_APPLICABLE_KINDS` 里、也不做力气判档）：`tests/test_agent_b_concept_registration_carries_kind.py`
+    钉住"同一条内容只换 theorem / definition ⇒ 五个位逐字相同"，
+    即定义行照常参与等级链。B2d 不改这条既有口径 —— 两处各说各话是历史事实，
+    动它要另开一批并同时改那条判据。
+
     ## 证伪签是这条链之前的一道否决（业主 2026-11-13）
     `bits.evidence.refutation_sign` 存在且合规 ⇒ 直接 `GRADE_ERROR`（「错误」）。
     它先于 `voided_by` 的清零、也先于五元位的抬档：一条另有真签 / 形式化 / 穷举的
@@ -1791,6 +1798,59 @@ def kind_projection(row: Mapping[str, Any]) -> dict[str, Any]:
     out = dict(kind_at_registration(origin=origin, kind=declared, cited_body=cited))
     out["origin"] = origin
     out["cited_body"] = cited
+    #: 读侧的第二根读数：`kind` 这一格本身属于词表内 / 历史行 / 新写越界哪一档。
+    #: 它与 `kind_at_registration` 的投影并列，不是同一件事：投影回答"按来路它该叫什么"，
+    #: 这一格回答"盘上这个名字受不受词表管、是不是历史值"。
+    out["kind_axis"] = statement_kind_reading(row)
+    return out
+
+
+#: `statements.kind` 的三态（读侧，2026-11-22 B2d）。与 `schema.statement_kind_problem`
+#: 的写侧三态一一对应：`canonical` = 词表内；`legacy` = 词表生效前落的历史值（照读）；
+#: `unknown` = 词表生效后写的词表外值（写侧本该拒，读到它就是绕过了 `Statement.validate`）。
+STATEMENT_KIND_STATES: tuple[str, ...] = ("canonical", "legacy", "unknown")
+
+
+def statement_kind_reading(row: Mapping[str, Any]) -> dict[str, Any]:
+    """读侧判 `kind` 属于哪一档（`canonical` / `legacy` / `unknown`），不改盘、不猜。
+
+    ## 为什么读侧要单独有一格
+
+    写侧（`schema.Statement.validate`）对词表外的新写受控拒，但历史台账里可能已经有
+    自由文本值（`draft/195` #48 的取证：真正的历史并集只有词表内的值，但读侧不能依赖
+    "历史上恰好没出现过"）。物理改写历史行等于让"当时交上去的那个名字"消失，所以
+    读侧只注记：`legacy=True`，照读，不判畸形。
+
+    判据只有两条：`kind` 在不在 `schema.STATEMENT_KINDS` 里、`created_at` 早不早于
+    `schema.STATEMENT_KIND_VOCAB_SINCE`。与写侧同一对输入、同一个界线常量 ——
+    两处各写一份界线，漂移时不会有任何地方红。
+
+    返回键：`checked` / `kind` / `state` / `known` / `legacy` / `kind_legacy` /
+    `vocab` / `since` / `why`。`legacy` 与 `kind_legacy` 是同一格的两个名字（后者是
+    本批约定的读数键，前者是短名）；两者恒等，不制造第二套口径。
+    """
+    kind = str(row.get("kind") or "").strip()
+    at = str(row.get("created_at") or "").strip()
+    out: dict[str, Any] = {
+        "checked": True, "kind": kind, "state": "canonical", "known": True,
+        "legacy": False, "kind_legacy": False, "vocab": STATEMENT_KINDS,
+        "since": STATEMENT_KIND_VOCAB_SINCE, "why": "",
+    }
+    if kind in STATEMENT_KINDS:
+        out["why"] = f"kind={kind!r} 在受控词表里"
+        return out
+    if at and at[:10] >= STATEMENT_KIND_VOCAB_SINCE:
+        out.update(
+            state="unknown", known=False,
+            why=(f"kind={kind!r} 不在受控词表里，而这一行的 created_at={at!r} "
+                 f"不早于词表生效日 {STATEMENT_KIND_VOCAB_SINCE} ⇒ 新写越界"
+                 "（写侧本该受控拒；能读到它说明这一笔绕过了 `Statement.validate`）"))
+        return out
+    shown = at or "（空）"
+    out.update(
+        state="legacy", known=False, legacy=True, kind_legacy=True,
+        why=(f"kind={kind!r} 不在受控词表里，而这一行的 created_at={shown!r} "
+             f"早于词表生效日 {STATEMENT_KIND_VOCAB_SINCE} ⇒ 历史行：照读，不当畸形"))
     return out
 
 

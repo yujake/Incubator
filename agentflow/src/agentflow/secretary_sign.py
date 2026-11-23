@@ -168,12 +168,16 @@ class SignMixin:
         """这一签发不发（发签决定权在 V 的秘书；2026-11-16 裁定 ①②③）。
 
         ## 判据只有一层：同一趟送审内的连续 clean 达到门槛
-        `verifications.review_standing` 现算的读数只作历史回放；真正的地板是
-        `within_call`（这一趟送审内的第几轮）。`within_call >= need` 且这一签的轴是
-        clean ⇒ 由秘书直接发签，不再问模型（裁定 ③ 删掉了那次"模型点头"）。
-        次数不够 ⇒ `不签发`，同样不问模型（省一次调用，也不给它推翻门槛的机会）。
+        `verifications.review_standing` 现算的读数只作历史回放。门槛 = `sign_counting`
+        现数（系统计次，2026-11-17 业主裁定）：同一 `review_call` 内 `review_pass=1..need`
+        连续 clean 的台账轮数（:func:`sign_counting.count_registered` 从台账现读；跨送审
+        不累计、同号重放不增加）。`within_call` 只是调用方自报的读数 —— 它多了 / 少了一轮
+        都不改变发不发签。门槛够了且这一签的轴是 clean ⇒ 由秘书直接发签，不再问模型
+        （裁定 ③ 删掉了那次"模型点头"）。次数不够 ⇒ `不签发`，同样不问模型（省一次调用，
+        也不给它推翻门槛的机会）。
 
-        不给 `within_call`（旧直调路径 / 夹具）⇒ 保持历史台账地板；那一档仍要求
+        不给 `within_call`、行上也没有 `review_call`（旧直调路径 / 夹具）⇒ 保持历史台账
+        地板（`sign_counting.legacy_tail`：台账尾部连续 clean 的条数）；那一档仍要求
         秘书有判断面（"没有秘书就不发签"的装配纪律），但那条纪律不是模型判定，
         也不改变本方法"地板过了即发"的规则。
 
@@ -402,7 +406,8 @@ class SignMixin:
             return out
         # ---- 2026-11-16 裁定 ①②③：地板过了 ⇒ 系统自动发签 ----------------------
         #
-        # 第三轮秘书判 clean（`within_call == need`）就是发签的唯一条件。原先这里还有
+        # 系统计数够门槛（`sign_counting` 数到 `count >= need`，且这一签的轴是 clean）
+        # 就是发签的唯一条件；调用方自报的轮数（`within_call`）只作读数。原先这里还有
         # 一次"问模型签发 / 不签发"（`SIGN_ISSUANCE_VERDICTS` 的消费处），已按裁定 ③
         # 删除：发签不由模型点头，签名由秘书直接落进稿里。
         out.update(checked=True, issue=True, decision=SIGN_ISSUE,

@@ -133,6 +133,17 @@ def row_isolated(role: Any, action: Any) -> bool:
 #:   不是动作面。）表级的两条跨行不变量也都落在同一个事务快照上：
 #:   `interactions.admit_search_request` 的 I7 在途配额与号段分配。
 #:
+#: - `documents` 的 `D` + `G`（2026-11-23 D-POLICY-ROW；业主口径「D 只写自己那一行」）：
+#:   D 的唯一写口是 `doc_tools.record_research_report`（`agent_d/write_report.py` 调它），
+#:   只落 `kind=research` 那一行（`doc_id` 在事务内分配；同一路径重写只推进 `revision`，
+#:   写的还是那一行）；G 的两条写路都不碰这一档 —— `doc.build_document` 对
+#:   `kind=research` 当场拒（不造 D 的稿），`revise` / `refresh_markdown` 在写之前就对
+#:   research 行受控拒（`agent_g/revise_gates.ensure_not_research_row`），`revise` 另有
+#:   行级归属（别人的稿 `row_not_yours`）。所以两边在这张表上写的行集合不相交。
+#:   这一格刻意只有 D 与 G：H 也写 `documents`（审校状态那几格），但它写的不是「自己
+#:   那一行」（审任何一份稿都会改那一行）⇒ H 不登记，D×H / G×H 照旧表级冲突
+#:   （保守方向一个字没松）。
+#:
 #: 不登记的写面一律按表级冲突算：`literature` / `research_questions` / `experiments`
 #: 这些表还没有「只写自己那几行」的可判定结构（B 的按路径占用与 K14 的行级归属
 #: 分别由 `ROW_MUTEX_ACTIONS`、`OWNED_TABLES` 管，不在这张表里）。
@@ -144,6 +155,7 @@ def row_isolated(role: Any, action: Any) -> bool:
 #: （A 的 `search.*` 与 `_claim`，D 的 `research.submit_gap` 与 `adjudicate`）。
 ROW_DISJOINT_WRITERS: dict[str, frozenset[str]] = {
     "search_requests": frozenset({"A", "D"}),
+    "documents": frozenset({"D", "G"}),
 }
 
 

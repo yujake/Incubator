@@ -33,9 +33,17 @@
    口径出处：`agentflow.closing.DEFAULT_CHECKS`（八格）、`closing.closing_verdict`
    与 `closing.tri_state_exit_code`（ROOTGATE-①，2026-11-19「要修根因」）。
 
-④ 签：只认 `out/vsigns/<sha>.json`（3 个 passes；每个 pass 带
+④ 签：只认 `out/vsigns/<sha>.json`（按角色档 need：E=1、F/B=3；每个 pass 带
    `review_call` / `review_pass` / `object_sha256` / `at`）。`issued.json` 只作索引，
    不许当签。同一对象不得既「已签」又「无签文件」——索引与文件双向对账。
+
+   票数与 `need` 不写死 3：need 是角色档的函数（E 的合法穷举签是 `need=1` /
+   `passes=1`，`v_vocab.EXHAUSTION_SIGN_STREAK_NEED`，业主 2026-11-17；F / B 是
+   `SIGN_STREAK_NEED=3`）。读法：签文件点名的角色（`written_by` / `envelope.to` /
+   `counted_by=legacy:single_round_review`）→ 这一签那几票回指的台账行上的机械会审
+   标记（`review_scope=single_round` / `secretary_judge.source=exhaustion_report`）
+   → 签自报门槛反推（写清「角色未点名」）→ 兜底按 F/B 的 3。`E` 类 need=1 的签判合格，
+   `F/B` 类 passes=3 判合格、passes=2 判不合格。
 
    逐票回指台账那一格按签的类型分流（2026-11-21 RECONFIX，此前只认 pending 一本）：
    - 在册签（号 `v-…`）⇒ `verifications/<命题号>.jsonl`（核它在、3 票都在里面、
@@ -115,6 +123,10 @@ PRODUCT: dict[str, Any] = {
     #: TRACEFIX：落痕逐条读数（conductor.landed_traces / settle_recon_of）、
     #: 两类 MALFORM 逐行读数（evidencebits.quote_state / artifacts.verify_entries）。
     "conductor": None, "evidencebits": None, "artifacts": None,
+    #: RECONFIX2：need 分档的真身（`v_vocab.EXHAUSTION_SIGN_STREAK_NEED` / `SIGN_STREAK_NEED`）。
+    "v_vocab": None,
+    #: SCRIPTS-OLD-PATH：交接账本落点/旧布局读数的真身（`manuscripts.legacy_layout_note`）。
+    "manuscripts": None,
     "errors": [], "imported": False,
 }
 
@@ -124,10 +136,10 @@ CALIBER = "修正后口径（业主 2026-11-19；ROOTGATE-① / FIX186-B / 162�
 CELL_SOURCE = {
     "contradictions": "data/dependencies.json#rows[].status · data/statements.json#rows[].status · data/documents.json#rows[].status",
     "load_bearing": "data/statements.json#rows[].evidence_kind · data/documents.json#rows[].claims · data/experiments.json",
-    "report_shape": "out/review/REPORT.md（附件三件套 origin=own_result / 依据 / sha）",
+    "report_shape": "out/report/REPORT.md（附件三件套 origin=own_result / 依据 / sha）",
     "user_pending": "data/research_questions.json#rows[].status · sessions/<sid>.jsonl 的 question/answer 事件",
     "substance": "data/{documents,relations,experiments,review_findings,statements}.json#rows",
-    "acceptance": "out/paper/ACCEPTANCE-CHECKS.json#checks · out/paper/ACCEPTANCE.md",
+    "acceptance": "out/package/ACCEPTANCE-TARGETS.json#checks",
     "artifact_ledger": "ARTIFACTS.jsonl · 盘上路径",
     "literature_pending": "data/lit_candidates.json#rows[].status / cleared_at",
 }
@@ -147,7 +159,7 @@ def bootstrap_product(force_off: bool = False) -> None:
     if SRC_DIR and SRC_DIR.is_dir() and str(SRC_DIR) not in sys.path:
         sys.path.insert(0, str(SRC_DIR))
     for name in ("closing", "sessions", "obligations", "proofregistry",
-                 "conductor", "evidencebits", "artifacts"):
+                 "conductor", "evidencebits", "artifacts", "v_vocab", "manuscripts"):
         try:
             mod = __import__(f"agentflow.{name}", fromlist=[name])
             PRODUCT[name] = mod
@@ -694,10 +706,10 @@ def _cell_readings(ctx: dict[str, Any]) -> dict[str, Any]:
                            "waiting_user": sum(1 for r in qs if str(r.get("status") or "") in
                                                ("waiting_user", "pending_user", "open", "asked")),
                            "statuses": dict(collections.Counter(str(r.get("status") or "") for r in qs))}
-    acc_path = ctx["root"] / "out" / "paper" / "ACCEPTANCE-CHECKS.json"
+    acc_path = ctx["root"] / "out" / "package" / "ACCEPTANCE-TARGETS.json"
     acc, acc_err = read_json(acc_path)
     checks = (acc or {}).get("checks") if isinstance(acc, Mapping) else None
-    out["acceptance"] = {"path": "out/paper/ACCEPTANCE-CHECKS.json",
+    out["acceptance"] = {"path": "out/package/ACCEPTANCE-TARGETS.json",
                          "exists": acc_path.is_file(), "error": acc_err,
                          "rows": len(checks or []),
                          "na_rows": sum(1 for r in (checks or []) if isinstance(r, Mapping) and r.get("na") is True)}
@@ -717,8 +729,8 @@ def _cell_readings(ctx: dict[str, Any]) -> dict[str, Any]:
         "without_cleared_at": sum(1 for r in lit if not r.get("cleared_at")),
         "statuses": dict(collections.Counter(str(r.get("status") or "") for r in lit)),
     }
-    report = ctx["root"] / "out" / "review" / "REPORT.md"
-    out["report_shape"] = {"path": "out/review/REPORT.md", "exists": report.is_file(),
+    report = ctx["root"] / "out" / "report" / "REPORT.md"
+    out["report_shape"] = {"path": "out/report/REPORT.md", "exists": report.is_file(),
                            "bytes": report.stat().st_size if report.is_file() else 0}
     claims = sum(len(r.get("claims") or []) for r in docs)
     out["load_bearing"] = {"documents_claims": claims,
@@ -770,7 +782,7 @@ def item3_eight_cells(ctx: dict[str, Any]) -> dict[str, Any]:
             rep = CL.check_closing(
                 store,
                 project_dir=str(root),
-                report_path=str(root / "out" / "review" / "REPORT.md"),
+                report_path=str(root / "out" / "report" / "REPORT.md"),
                 sid=sid,
                 retire=feed.get("retire"),
                 programs=feed.get("programs"),
@@ -818,7 +830,7 @@ def item3_eight_cells(ctx: dict[str, Any]) -> dict[str, Any]:
                                   "source": CELL_SOURCE.get(name, "")})
         summary = {"verdict": "unknown", "exit_code": 2, "can_close": None, "machine_pass": None,
                    "m_says_done": (lambda rows: (bool(rows[-1].get("met")) if rows else None))(
-                       read_jsonl(root / "out" / "review" / "m-verdicts.jsonl")[0]),
+                       read_jsonl(root / "out" / "report" / "m-verdicts.jsonl")[0]),
                    "counts": dict(collections.Counter(c["status"] for c in product_cells)),
                    "blockers": [], "retire": {}, "programs": {},
                    "reason": degraded_reason, "closing_verdict": None,
@@ -868,8 +880,6 @@ def item3_eight_cells(ctx: dict[str, Any]) -> dict[str, Any]:
 
 # ---------------------------------------------------------------- ④ 签
 
-# ---------------------------------------------------------------- ④ 签
-
 #: 签的两种类型。类型由「那一行台账的号」决定，两本的落点不同：
 #:   registered（`v-…`）⇒ `verifications/<命题号>.jsonl`
 #:       （一份命题一本，`v_paths.verification_ledger_path`；号在文件内递增，
@@ -880,6 +890,147 @@ def item3_eight_cells(ctx: dict[str, Any]) -> dict[str, Any]:
 REGISTERED = "registered"
 PENDING = "pending"
 BACKING_LABEL = {REGISTERED: "在册签", PENDING: "未在册签"}
+
+#: 送审角色 → 落签那一方（`vsigns.SECRETARY_OF` 的三个值；写侧由 `Secretary.actor_label` 给）。
+_ROLE_OF_SECRETARY = {"secretary:E": "E", "secretary:F": "F", "secretary:B": "B"}
+
+#: 角色档 → 过审门槛（need）的登记值。真身是产品那两个常量（`v_vocab`）：
+#: `EXHAUSTION_SIGN_STREAK_NEED`（E=1，2026-11-17 业主裁定）与 `SIGN_STREAK_NEED`
+#: （F/B=3）。产品可导入时 :func:`tier_need` 现读；导入不了才用这里（读数里写 `fallback:`）。
+_NEED_FALLBACK: dict[str, int] = {"E": 1, "F": 3, "B": 3, "F/B": 3}
+_TIER_CONST: dict[str, str] = {"E": "EXHAUSTION_SIGN_STREAK_NEED",
+                               "F": "SIGN_STREAK_NEED",
+                               "B": "SIGN_STREAK_NEED",
+                               "F/B": "SIGN_STREAK_NEED"}
+
+
+def _product_module(name: str) -> Any:
+    """按需导入一个产品模块（`PRODUCT` 的既有降级约定：读不到 ⇒ None，不中止）。"""
+    mod = PRODUCT.get(name)
+    if mod is not None:
+        return mod
+    try:
+        mod = __import__(f"agentflow.{name}", fromlist=[name])
+    except Exception as exc:  # noqa: BLE001 —— 产品树不稳定：读不到就降级
+        PRODUCT["errors"].append(f"import agentflow.{name}: {type(exc).__name__}: {exc}")
+        return None
+    PRODUCT[name] = mod
+    return mod
+
+
+def tier_need(role: Any) -> int:
+    """这一个角色档的过审门槛（need）。E 档 1；F / B 档 `SIGN_STREAK_NEED`（3）。
+
+    数值不在本脚本里发明：先读产品 `v_vocab` 的两个常量（真身）；导入不了才退回
+    `_NEED_FALLBACK` 的登记值 —— 那一条降级由 :func:`sign_need_reading` 的 `source`
+    逐字写出来（`fallback:…`），不静默等价。
+    """
+    key = str(role or "").strip().upper()
+    const = _TIER_CONST.get(key)
+    if const is None:
+        return 0
+    mod = _product_module("v_vocab")
+    got = getattr(mod, const, None) if mod is not None else None
+    try:
+        need = int(got)
+    except (TypeError, ValueError):
+        need = 0
+    if need >= 1:
+        return need
+    return int(_NEED_FALLBACK.get(key) or 0)
+
+
+def tier_need_source(role: Any) -> str:
+    """need 这个数是从哪读来的（`v_vocab.<常量>` / `fallback:<常量>`）。"""
+    key = str(role or "").strip().upper()
+    const = _TIER_CONST.get(key)
+    if const is None:
+        return ""
+    mod = _product_module("v_vocab")
+    if mod is not None and getattr(mod, const, None) is not None:
+        return f"v_vocab.{const}"
+    return f"fallback:{const}"
+
+
+def sign_role_of(sign: Mapping[str, Any]) -> tuple[str, str]:
+    """签文件自己点名的送审角色 ⇒ (role, 读法)；没点名 ⇒ ("", "")。
+
+    两处都是写侧本来就落的格：`written_by`（`vsigns.issue(by=…)` 写
+    `secretary:E|F|B`）与信封 `envelope.to`。`counted_by=legacy:single_round_review`
+    是 `sign_counting` 只在「登记在册的单轮会审」那一档写的读数（E 的机械会审）——
+    它比 role 字母更硬，所以排在前面。
+    """
+    if str(sign.get("counted_by") or "") == "legacy:single_round_review":
+        return "E", "counted_by=legacy:single_round_review"
+    env = sign.get("envelope")
+    env_to = str(env.get("to") or "") if isinstance(env, Mapping) else ""
+    for where, value in (("written_by", sign.get("written_by")),
+                         ("envelope.to", env_to)):
+        role = _ROLE_OF_SECRETARY.get(str(value or "").strip())
+        if role:
+            return role, f"sign.{where}={value}"
+    return "", ""
+
+
+def sign_need_reading(sign: Mapping[str, Any],
+                      ledger_rows: tuple[Mapping[str, Any], ...] | list[Any] = ()
+                      ) -> dict[str, Any]:
+    """这一簽该按哪一档 need 判 ⇒ `{role, need, source, why, checked}`（读法写在 `source`）。
+
+    顺序即优先级（每一档都指得回盘上的格）：
+
+    1. `counted_by=legacy:single_round_review` / `written_by` / `envelope.to`
+       ⇒ 签文件自己点名的角色（`secretary:E|F|B`）；
+    2. 这一签那几票回指的台账行上有 `review_scope="single_round"` 或
+       `secretary_judge.source="exhaustion_report"` ⇒ E（机械会审是 E 的判词来路）；
+    3. 签自报的 `need` 恰好等于某一档的门槛、且 `passes` 数也等于它 ⇒ 按自报门槛反推
+       （写清「角色未点名」—— 这一档比 1/2 弱，但在盘上仍有据）；
+    4. 都没有 ⇒ 按 F/B 的严格档（3）：宁可判不合格，也不把「角色读不出来」默认成 E。
+
+    为什么不能写死 3：E 的合法穷举签是 `need=1` / `passes=1`（`v_vocab`
+    `EXHAUSTION_SIGN_STREAK_NEED=1`，业主 2026-11-17），拿 3 去卡它就是把真签判死。
+    """
+    out: dict[str, Any] = {"checked": True, "role": "", "need": 0, "source": "",
+                           "need_source": "", "why": ""}
+    role, source = sign_role_of(sign)
+    if not role:
+        for raw in ledger_rows or ():
+            row = dict(raw or {})
+            vid = str(row.get("verification_id") or "")
+            if str(row.get("review_scope") or "") == "single_round":
+                role, source = "E", f"ledger_row:{vid}:review_scope=single_round"
+                break
+            judge = row.get("secretary_judge")
+            judge_source = (str(judge.get("source") or "")
+                            if isinstance(judge, Mapping) else "")
+            if judge_source == "exhaustion_report":
+                role = "E"
+                source = (f"ledger_row:{vid}:"
+                          "secretary_judge.source=exhaustion_report")
+                break
+    passes = [p for p in (sign.get("passes") or []) if isinstance(p, Mapping)]
+    if not role:
+        try:
+            own = int(sign.get("need") or 0)
+        except (TypeError, ValueError):
+            own = 0
+        matches = [key for key in ("E", "F/B")
+                   if own >= 1 and tier_need(key) == own and len(passes) == own]
+        if len(matches) == 1:
+            role = matches[0]
+            source = (f"sign.need={own}（角色未点名，按自报门槛反推："
+                      f"passes={len(passes)}）")
+    if not role:
+        role = "F/B"
+        source = ("default:strict（签没点名角色、台账行也没有单轮会审标记"
+                  " ⇒ 按 F/B 的 3 判，不默认成 E）")
+    need = int(tier_need(role) or 0)
+    out.update(role=role, need=need, source=source,
+               need_source=tier_need_source(role), checked=bool(need >= 1),
+               why=(f"这一签按「{role}」档读 need（{source}）⇒ 要 {need} 票"
+                    if need >= 1 else f"need 档读不出来（role={role!r}）"))
+    return out
+
 
 
 def sign_kind_of(verification_id: Any) -> str:
@@ -955,7 +1106,7 @@ def sign_backing_target(sign: Mapping[str, Any], passes: list[dict[str, Any]],
 def item4_signs(ctx: dict[str, Any]) -> dict[str, Any]:
     root: Path = ctx["root"]
     lines: list[str] = []
-    item: dict[str, Any] = {"id": "4", "title": "签：只认 out/vsigns/<sha>.json（3 passes），issued.json 只作索引",
+    item: dict[str, Any] = {"id": "4", "title": "签：只认 out/vsigns/<sha>.json（按角色档 need：E=1、F/B=3；不是写死 3），issued.json 只作索引",
                             "state": "unknown", "degraded": False, "lines": lines,
                             "metrics": {}, "sources": ["out/vsigns/*.json", "out/vsigns/issued.json"]}
     vdir = root / "out" / "vsigns"
@@ -996,11 +1147,8 @@ def item4_signs(ctx: dict[str, Any]) -> dict[str, Any]:
         passes = [dict(p) for p in (sign.get("passes") or []) if isinstance(p, Mapping)]
         if artifact_sha != stem:
             problems.append(f"文件名 sha 与 artifact_sha 不一致（{stem[:12]} vs {artifact_sha[:12]}）")
-        if len(passes) != 3:
-            problems.append(f"passes={len(passes)}（要 3）")
-        need = sign.get("need")
-        if need is not None and int(num(need)) != 3:
-            problems.append(f"need={need}（要 3）")
+        # 票数与 `need` 不在这里按 3 判：need 是角色档的函数（E=1、F/B=3），由
+        # `sign_need_reading` 从签文件点名 / 台账行 / 自报门槛读出来（见下方回指之后那一格）。
         for i, p in enumerate(passes, 1):
             if not str(p.get("review_call") or "").strip():
                 problems.append(f"pass#{i} 缺 review_call")
@@ -1024,6 +1172,7 @@ def item4_signs(ctx: dict[str, Any]) -> dict[str, Any]:
         label = BACKING_LABEL.get(kind, "类型未判")
         backing: dict[str, Any] = {"kind": kind, "label": label, "path": "", "exists": False,
                                    "rows": 0, "rows_for_this_sign": 0, "unchecked": ""}
+        backed_rows: list[dict[str, Any]] = []
         target, why = ("", "") if not kind else sign_backing_target(sign, passes, by_proof, kind)
         if not kind:
             why = (f"3 票的号是 {[str(p.get('verification_id') or '') for p in passes]}："
@@ -1048,6 +1197,7 @@ def item4_signs(ctx: dict[str, Any]) -> dict[str, Any]:
                         problems.append(f"pass#{i} verification_id={vid} 不在 {target} 的行里")
                         continue
                     backing["rows_for_this_sign"] += 1
+                    backed_rows.append(dict(row))
                     row_sha = str(row.get("proof_sha256") or "")
                     if row_sha and row_sha != artifact_sha:
                         problems.append(
@@ -1057,9 +1207,26 @@ def item4_signs(ctx: dict[str, Any]) -> dict[str, Any]:
                     problems.append(f"{label}回指只对上 {backing['rows_for_this_sign']}/{len(passes)} 票"
                                     f"（台账 {target} 共 {len(trows)} 行）"
                                     + (f"；读不出来的行 {tproblems[:2]}" if tproblems else ""))
+        # ---- need 档：从真身读（E=1 / F/B=3），不写死 3 ------------------------
+        # 改前这里判 `len(passes)==3` 且 `need==3`：E 的合法穷举签是 need=1 / passes=1
+        # （`v_vocab.EXHAUSTION_SIGN_STREAK_NEED`，业主 2026-11-17），拿 3 去卡它等于
+        # 把真签判死。读法见 `sign_need_reading`：签文件点名的角色 → 台账行的机械会审
+        # 标记 → 签自报门槛反推 → 兜底按 F/B 的 3。
+        need_read = sign_need_reading(sign, backed_rows)
+        need_expected = int(need_read.get("need") or 0)
+        role = str(need_read.get("role") or "")
+        if need_expected >= 1:
+            if len(passes) != need_expected:
+                problems.append(f"passes={len(passes)}（{role} 档要 {need_expected}）")
+            need_field = sign.get("need")
+            if need_field is not None and int(num(need_field)) != need_expected:
+                problems.append(f"need={need_field}（{role} 档要 {need_expected}）")
+        else:
+            problems.append("need 档读不出来（签没点名角色、台账行也没有单轮会审标记）")
         rp = [p.get("review_pass") for p in passes]
-        if rp != [1, 2, 3]:
-            problems.append(f"review_pass 序列 {rp}（要 [1,2,3]）")
+        want_rp = list(range(1, need_expected + 1)) if need_expected >= 1 else []
+        if want_rp and rp != want_rp:
+            problems.append(f"review_pass 序列 {rp}（要 {want_rp}）")
         vids = [str(p.get("verification_id") or "") for p in passes if p.get("verification_id")]
         if len(vids) != len(set(vids)):
             problems.append("verification_id 有重复（3 个 pass 要能逐次回指不同的核验行）")
@@ -1090,6 +1257,10 @@ def item4_signs(ctx: dict[str, Any]) -> dict[str, Any]:
                "passes": len(passes), "review_calls": rcs,
                "object_sha256": sorted(objects), "at": str(sign.get("at") or ""),
                "backing": backing,
+               "need": need_expected, "role": role,
+               "need_source": str(need_read.get("source") or ""),
+               "need_const": str(need_read.get("need_source") or ""),
+               "need_why": str(need_read.get("why") or ""),
                "verdict": str(sign.get("verdict") or ""),
                "count": sign.get("count"), "streak": sign.get("streak"),
                "proof_sha_recheck": proof_check, "problems": problems}
@@ -1119,7 +1290,8 @@ def item4_signs(ctx: dict[str, Any]) -> dict[str, Any]:
     for rec in valid:
         back = rec["backing"]
         lines.append(f"  ✓ {rec['artifact_sha'][:12]}…  {rec['artifact_path']}  "
-                     f"passes={rec['passes']} object={rec['object_sha256'][0][:12]}… "
+                     f"passes={rec['passes']}/{rec['need']}（{rec['role']} 档；"
+                     f"{rec['need_const']}） object={rec['object_sha256'][0][:12]}… "
                      f"stmt={','.join(rec['statement_ids']) or '（无对应 statements 行）'} "
                      f"proof_sha 复算={rec['proof_sha_recheck']}")
         lines.append(f"     review_call={rec['review_calls']}   at={rec['at']}")
@@ -1828,13 +2000,52 @@ def _per_row_lines(reading: Mapping[str, Any]) -> list[str]:
 
 # ---------------------------------------------------------------- ⑦ 会话归口
 
+#: 交接账本的新家（2026-11-22 起；`manuscripts/` 只放正文手稿）。
+HANDOFFS_REL = "work/handoffs.jsonl"
+#: 旧布局的账本落点：只用于判「旧布局（不再支持）」，一个字节也不读。
+HANDOFFS_LEGACY_REL = "manuscripts/handoffs.jsonl"
+
+
+def handoffs_legacy_note(root: Path) -> str:
+    """旧布局的明确读数（空串 = 没有旧布局；非空 = 逐字含「旧布局（不再支持）」）。
+
+    口径真身是 `agentflow.manuscripts.legacy_layout_note`（产品可导入时现读）；
+    导入不了（`--no-product` / 产品树不稳）才在脚本里按同一判据复算 —— 两种形态都
+    必须报出「旧布局（不再支持）」，不许把旧账本折成「0 行」。
+    """
+    mod = PRODUCT.get("manuscripts")
+    note = getattr(mod, "legacy_layout_note", None) if mod is not None else None
+    if callable(note):
+        try:
+            return str(note(root) or "")
+        except Exception as exc:  # noqa: BLE001 —— 产品读数抛了：降级复算，不中止
+            PRODUCT["errors"].append(
+                f"manuscripts.legacy_layout_note: {type(exc).__name__}: {exc}")
+    if (root / HANDOFFS_REL).exists():
+        return ""
+    if (root / HANDOFFS_LEGACY_REL).exists():
+        return (f"旧布局（不再支持）：`{HANDOFFS_LEGACY_REL}` 在盘上，"
+                f"而新落点 `{HANDOFFS_REL}` 不在 —— 账本不迁移、也不回读"
+                "（2026-11-22 业主裁定）")
+    try:
+        legacy_md = sorted(p.name for p in (root / "manuscripts").glob("*.md")
+                           if re.match(r"^\d+-[A-Za-z]+to[A-Za-z]+\.md$", p.name))
+    except OSError:
+        legacy_md = []
+    if legacy_md:
+        return (f"旧布局（不再支持）：`manuscripts/` 下有 {len(legacy_md)} 份逐文件"
+                f"格式的交接（如 `{legacy_md[0]}`）；新落点是 `{HANDOFFS_REL}`"
+                "（2026-11-22 业主裁定：不读、不迁移）")
+    return ""
+
+
 def item7_session_scope(ctx: dict[str, Any]) -> dict[str, Any]:
     root: Path = ctx["root"]
     lines: list[str] = []
     item: dict[str, Any] = {"id": "7", "title": "会话归口：sessions/<sid>.jsonl 唯一？跨项目/跨 sid？读口 problems？unattributed task 在范围内？",
                             "state": "unknown", "degraded": False, "lines": lines,
                             "metrics": {}, "sources": ["sessions/*.jsonl", "data/tasks.json#rows",
-                                                       "out/review/m-verdicts.jsonl", "manuscripts/handoffs.jsonl"]}
+                                                       "out/report/m-verdicts.jsonl", HANDOFFS_REL]}
     tasks = ctx["T"]("tasks")
     ids = {str(r.get("task_id") or "") for r in tasks}
     ids |= {str(r.get("task_id") or "") for r in ctx["ledger"]}
@@ -1885,17 +2096,30 @@ def item7_session_scope(ctx: dict[str, Any]) -> dict[str, Any]:
             else:
                 run_sid_other.append(item_sid)
     other_sids.extend(run_sid_other)
-    mv, mv_problems = read_jsonl(root / "out" / "review" / "m-verdicts.jsonl")
+    mv, mv_problems = read_jsonl(root / "out" / "report" / "m-verdicts.jsonl")
     for v in mv:
         sidv = str(v.get("sid") or "")
         if stem and sidv and sidv != stem:
-            other_sids.append({"where": "out/review/m-verdicts.jsonl#sid", "sid": sidv, "expect": stem})
-    hf, hf_problems = read_jsonl(root / "manuscripts" / "handoffs.jsonl")
+            other_sids.append({"where": "out/report/m-verdicts.jsonl#sid", "sid": sidv, "expect": stem})
+    hf_path = root / HANDOFFS_REL
+    hf, hf_problems = read_jsonl(hf_path)
+    legacy_note = handoffs_legacy_note(root)
+    if legacy_note:
+        # 旧布局在盘上：报「不再支持」；旧账本一行也不读（不是静默 0 行）。
+        hf_problems = [legacy_note] + [p for p in hf_problems if "文件不在" not in p]
+    elif not hf_path.exists():
+        # 新落点不在、旧布局也不在 ⇒ 空账本初态（合法），不是「读不到」。
+        hf_problems = []
     for h in hf:
         sidv = str(h.get("sid") or "")
         if stem and sidv and sidv != stem:
-            other_sids.append({"where": f"manuscripts/handoffs.jsonl#{h.get('id')}#sid",
+            other_sids.append({"where": f"{HANDOFFS_REL}#{h.get('id')}#sid",
                                "sid": sidv, "expect": stem})
+    lines.append(f"交接账本（新落点 {HANDOFFS_REL}）：{len(hf)} 行")
+    if not hf_path.exists() and not legacy_note:
+        lines.append(f"  {HANDOFFS_REL} 不在、旧布局也不在 ⇒ 空账本初态（不是「读不到」）")
+    for p in hf_problems:
+        lines.append(f"  [问题] {p}")
 
     lines.append(f"跨项目：workspace_root 与本项目不一致 {len(cross_project)} 处"
                  + (f"：{cross_project[:3]}" if cross_project else "（0）"))
@@ -1938,10 +2162,14 @@ def item7_session_scope(ctx: dict[str, Any]) -> dict[str, Any]:
         "run_sid_missing": run_sid_missing,
         "unattributed_tasks": sorted(unattributed_tasks),
         "out_of_scope_tasks": out_of_scope,
+        "handoffs_path": rel(root, hf_path), "handoffs_rows": len(hf),
+        "handoffs_problems": hf_problems, "handoffs_legacy": legacy_note,
     }
-    ok = (not ctx["session_dir_problems"] and not bad and not cross_project
-          and not other_sids and not out_of_scope)
+    ok = (not ctx["session_dir_problems"] and not bad and not hf_problems
+          and not cross_project and not other_sids and not out_of_scope)
     item["state"] = "ok" if ok else "warn"
+    if legacy_note:
+        item["reason"] = legacy_note
     if not files:
         item["state"] = "unknown"
         item["metrics"]["tri"] = "not_applicable"

@@ -519,8 +519,9 @@ def _registration_after_sign(*, store: Any, root: Any, statement_id: str, proof_
                    reason="这一签没有手稿载体 ⇒ 这一条义务不知道要收录哪一份（不是「已收录」）")
         return out
     if not any(rel.startswith(prefix) for prefix in _OBL.REGISTRATION_CARRIERS):
+        carriers = " / ".join(f"`{c}…`" for c in _OBL.REGISTRATION_CARRIERS)
         out.update(code="not_a_proof_carrier",
-                   reason=(f"`{rel}` 不是 `reports/{{f,b}}-proof-…` 那一类载体 "
+                   reason=(f"`{rel}` 不是 {carriers} 那一类载体 "
                            f"{list(_OBL.REGISTRATION_CARRIERS)} ⇒ 不在这一条义务的射程内"))
         return out
     label = f"{str(statement_id or '')}#p{int(proof_no or 1)}"
@@ -572,8 +573,9 @@ def registration_after_unregistered_sign(*, store: Any, root: Any, manuscript: s
                            "（不是「已收录」）"))
         return out
     if not any(rel.startswith(prefix) for prefix in _OBL.REGISTRATION_CARRIERS):
+        carriers = " / ".join(f"`{c}…`" for c in _OBL.REGISTRATION_CARRIERS)
         out.update(code="not_a_proof_carrier",
-                   reason=(f"`{rel}` 不是 `reports/{{f,b}}-proof-…` 那一类载体 "
+                   reason=(f"`{rel}` 不是 {carriers} 那一类载体 "
                            f"{list(_OBL.REGISTRATION_CARRIERS)} ⇒ 不在这一条义务的射程内"))
         return out
     sid = _VS.manuscript_id_of(rel)

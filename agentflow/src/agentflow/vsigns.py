@@ -109,7 +109,7 @@ def _sign_sha(proof_text: Any) -> str:
     return _PR.proof_sha(proof_text)
 
 
-#: 签与归档的落点（工作区相对）。与 `out/experiments`、`out/review` 同一条约定：
+#: 签与归档的落点（工作区相对）。与 `out/experiments`、`out/report` 同一条约定：
 #: 产物住 `out/`，表住 `data/`。
 SIGNS_DIR = "out/vsigns"
 #: 派生归档的名字（与逐份签文件同目录：`out/vsigns/issued.json`）。
@@ -897,9 +897,11 @@ MANUSCRIPT_NAME_PLAN = "plan_is_not_a_sign_carrier"
 #: `_SIGN_CARRIER_RE` 两个名字已删除；旧调用方读 `parse_manuscript_name` /
 #: `sign_carrier_reading`，返回形状不变。
 
-#: 「签的载体」这一族的目录那一格（与 `manuscriptfamily.MANUSCRIPT_DIR` 同源）。
-#: 保留这个名字只为既有 import 不破；判据本体在 `manuscriptfamily.sign_carrier`。
-SIGN_CARRIER_DIR = _MFAM.MANUSCRIPT_DIR
+#: 「签的载体」的根（与 `manuscriptfamily.MANUSCRIPT_ROOT` 同源）。
+#: 2026-11-22：载体按角色分目录（`manuscripts/F|B|E/`）⇒ 需要具体目录的调用方
+#: 必须用 `manuscriptfamily.dir_of(族)`；这个名字只是父目录，不再是扫描落点。
+#: 判据本体在 `manuscriptfamily.sign_carrier`。
+SIGN_CARRIER_DIR = _MFAM.MANUSCRIPT_ROOT
 
 
 def sign_carrier_reading(path: Any) -> dict[str, Any]:
@@ -2136,7 +2138,8 @@ def sign_object_gate(*, artifact_sha: Any, statement_id: Any, ledger: Any,
                 "没有可签的对象：既没有命题号、也没有台账落点 ⇒ 这一签不颁发"
                 "（一个字节都不写）。没有号不是拒签理由：没号就先让 V 把这一签落进 "
                 "`verifications/pending/<正文sha>.jsonl`（这一趟的判定各一行），签块照旧盖在 "
-                "`reports/(f|b|e)-proof-<数字>.md` 上，B 收录时按正文 sha 从稿上拿签。"
+                f"`{_MFAM.MANUSCRIPT_ROOT}/<角色>/(f|b|e)-proof-<数字>.md` 上，"
+                "B 收录时按正文 sha 从稿上拿签。"
                 "这里拒的是「连 pending 台账都没有」——那一签没有任何背书。"))
             return out
         out.update(code=LEDGER_NOT_VERIFICATION, reason=(
@@ -2151,7 +2154,8 @@ def sign_object_gate(*, artifact_sha: Any, statement_id: Any, ledger: Any,
             f"`ledger={text!r}` 不是 V 自己那本台账（要 "
             "`verifications/<命题号>.jsonl#v-<号>` 或 "
             "`verifications/pending/<正文sha>.jsonl#u-<号>`）⇒ 这一签不颁发"
-            "（一个字节都不写）。稿头上自己写的「已签」（`reports/<稿>#V签`）"
+            f"（一个字节都不写）。稿头上自己写的「已签」"
+            f"（`{_MFAM.MANUSCRIPT_ROOT}/<角色>/<稿>#V签`）"
             "不是证据：它只是这份稿的一句话，拿它当台账等于自己给自己作证 —— "
             "真机 `b-proof-000016` / `f-proof-plan-000011` 上的那两块就是这种假签。"))
         return out
@@ -2171,7 +2175,8 @@ def sign_object_gate(*, artifact_sha: Any, statement_id: Any, ledger: Any,
         # （有 root、读得到行）判，`issue` 在写签文件之前会调它。
         carrier = sign_carrier_reading(artifact_path) if str(artifact_path or "").strip() else {
             "ok": False, "code": MANUSCRIPT_NAME_BAD,
-            "reason": "没号那一档的签必须落在正式手稿上（`reports/(f|b|e)-proof-<数字>.md`），"
+            "reason": f"没号那一档的签必须落在正式手稿上（`{_MFAM.MANUSCRIPT_ROOT}/<角色>/"
+                      "(f|b|e)-proof-<数字>.md`），"
                       "这一签没有给载体"}
         if not carrier.get("ok"):
             # 下面那个 `or` 是兜底、不是判据：`ok=False` 的每一种形状（缺 `.md` 的名字 /
@@ -2179,7 +2184,8 @@ def sign_object_gate(*, artifact_sha: Any, statement_id: Any, ledger: Any,
             # （探针：12 个形状上 reason 为空的集合是空集）。兜底串不再拿"计划稿"当反例
             # —— 2026-11-10 裁定之后老盘 `f-proof-plan-*` 与数字名同等，它是载体。
             out.update(code=str(carrier.get("code") or MANUSCRIPT_NAME_BAD), reason=(
-                f"没号那一档的载体必须是 `reports/(f|b|e)-proof-<数字>[-pN].md` 的真文件名字，"
+                f"没号那一档的载体必须是 `{_MFAM.MANUSCRIPT_ROOT}/<角色>/"
+                "(f|b|e)-proof-<数字>.md` 的真文件名字，"
                 f"收到 {str(artifact_path or '')!r} ⇒ 这一签不颁发（一个字节都不写）："
                 f"{carrier.get('reason') or '它不是签的载体'}"))
             return out
@@ -2269,7 +2275,8 @@ def sign_ledger_backing(root: Any, ledger: Any, *, proof_sha256: Any) -> dict[st
             f"`台账={text!r}` 不是 V 自己那本台账（要 "
             "`verifications/<命题号>.jsonl#v-<号>` 或 "
             "`verifications/pending/<正文sha>.jsonl#u-<号>`）⇒ 这一签没有独立台账背书："
-            "台账指向稿自己（`reports/… #V签`）时，那一行只是这份稿自己的一句话"))
+            f"台账指向稿自己（`{_MFAM.MANUSCRIPT_ROOT}/… #V签`）时，"
+            "那一行只是这份稿自己的一句话"))
         return out
     vid = str((pend or reg).group("vid"))
     out["verification_id"] = vid
@@ -2776,7 +2783,7 @@ def _sign_submission(root: Any, *, store: Any, key: str,
     ⇒ 这一笔抛什么都不许把签带走，只如实报。`store` 没给 / 给的不能用时返回的是
     `checked=False` + 真原因，不是 `None`：改前 `None` 会让调用方保留初值，而初值
     那句 why 写的是"调用方没给 store"—— 调用方明明给了的时候那就是假话
-    （`tests/test_jia_sign_submission.py::test_e` 钉这一格）。
+    （`tests/test_jia_sign_submission.py::test_e_without_the_mark_on_the_idempotent_path_c_goes_red` 钉这一格）。
     """
     if store is None or not hasattr(store, "rows") or not hasattr(store, "tx"):
         return {"checked": False, "written": False, "already": False, "via": "",
@@ -3676,7 +3683,8 @@ def manuscript_sign_gate(reading: Mapping[str, Any], *, statement_id: str = "",
                        f"第 9 格写的手稿号 {mid!r} 与它所在那份稿的裸稿号 "
                        f"{out['manuscript_key'] or '（认不出）'!r} 对不上 ⇒ 这一块要么被搬过、"
                        "要么是照别人的稿抄的")),
-                   suggestion=("先确认稿与号是同一份（稿名 `reports/f-proof-<裸稿号>.md`），"
+                   suggestion=(f"先确认稿与号是同一份"
+                               f"（稿名 `{_MFAM.dir_of('f-proof')}/f-proof-<裸稿号>.md`），"
                                "再用 `vsigns.land(by=\"secretary:F\")` 落块；号与稿不一致时"
                                "不许拿 `bits_after_sign` 认签。"))
         # ---- 2026-11-05（D1 的第二半）：签块与稿号对不上时不直接 return ----------
@@ -4035,11 +4043,12 @@ def _claim_pending_sign(bits: Mapping[str, Any], *, root: Any, sha: str,
         out.update(applied=False, code="carrier_missing")
         out["why"] = (
             f"{ledger} 这一行没有载体（`object_path` 不是 "
-            "`reports/(f|b|e)-proof-<数字>[-pN].md` 的真文件名字，也不是 "
+            f"`{_MFAM.MANUSCRIPT_ROOT}/<角色>/(f|b|e)-proof-<数字>.md` 的真文件名字，也不是 "
             "`out/experiments/<实验号>/exhaustion.md`）⇒ 不认领："
             "没有载体的 pending 行不给第 3 位（纯内联正文 / `notes/…` / `e-num` / "
             "缺 `.md` 的名字都不算载体）。处置：让 V 带 `proof_manuscript` "
-            "重审（签块落回那一份正式稿），或让 E 交 `reports/e-proof-<实验号>.md`。")
+            "重审（签块落回那一份正式稿），或让 E 交 "
+            f"`{_MFAM.dir_of('e-proof')}/e-proof-<实验号>.md`。")
         return dict(bits), out
     if not _VR.row_signable(row):
         out.update(applied=False, code=LEDGER_NOT_SIGNABLE)
@@ -4263,7 +4272,14 @@ def _now_iso() -> str:
 #: 不是"没签"）。刻意不写 `_STATES` 后缀：本仓的受控词表普查按后缀扫，
 #: 这里不是"某个字段的取值域"，而是一份读数词表（取值由本函数现算，不落盘）。
 SIGN_READING_WORDS: tuple[str, ...] = (
-    "signed",        # 凭据在、复算通过、对象对得上 —— 唯一"签了"
+    "signed",        # 凭据在、复算通过、地址对得上、正文也回指这一行 —— 唯一"签了"
+    #: 凭据复算通过、`statement_id` 也对得上，但这一行结构上不可能持有那份正文
+    #: （概念行 + 非 b-proof 稿）；改前这一档直接报 `signed`。
+    #: 现场：真机 `projects/lp-ball-15` 第 4 份签（`2f77…`），见
+    #: :func:`_row_body_reading` 的 docstring。受控读数，不许折成 `borrowed` /
+    #: `unbacked`：那两档说的是"签是别人的"/"签复算不上"，这一档说的是
+    #: "签是真的、地址也是真的，可这一行没有那份正文"。
+    "sign_does_not_back_the_row",
     "unissued",      # 够票（>=need）却没有签文件（事故档）
     "holding",       # 1..need-1 票，且最近一趟停在 clean 上（欠签，不是"没审"）
     "rejected",      # 停因 math / contract：这一份正文有缺陷、锁 sha
@@ -4274,6 +4290,13 @@ SIGN_READING_WORDS: tuple[str, ...] = (
     "unsigned",      # 这一版一票都没有（真的没审过）
     "unreadable",    # 台账读不出来（"没查成"，不是"没签"）
 )
+
+#: `sign_reading` 的受控读数：签真、地址真，但这一行不持有这份正文。
+#:
+#: 为什么不折成 `borrowed`：`borrowed` 是"签是别条命题的"（归属判据否掉）；这一档的
+#: `statement_id` 与问的号一致，否定它的是"这一行的正文指纹"（:func:`_row_body_reading`）。
+#: 也不折成 `unbacked`：那一档是凭据自己复算不上，而这一档凭据复算通过。
+SIGN_DOES_NOT_BACK_ROW = "sign_does_not_back_the_row"
 
 #: 正文（手稿那一版）在不在的三态（与 D4 同一套词）。
 BODY_STATE_WORDS: tuple[str, ...] = ("present", "absent", "unreadable")
@@ -4670,7 +4693,11 @@ def sign_reading(root: Any, statement_id: str = "", proof_text: str = "",
        `artifact_sha` 同一把尺：`ARTIFACT_SHA_RULE`）。
     2. 凭据 `out/vsigns/<sha>.json`（`sign_of`）。
     3. 文件在不算签：`_recomputable` 复算不过 ⇒ `unbacked`（带理由码）；复算通过
-       但归属对不上 ⇒ `borrowed`；对得上 ⇒ `signed`。归属不按号比：新签文件
+       但归属对不上 ⇒ `borrowed`；对得上 ⇒ 还要过「正文回指核对」
+       （:func:`_row_body_reading`，2026-11-21 RECONFIX2）：签盖的正文 sha 必须出现在
+       这一行自己的正文指纹里（`proof_sha256` / `proof_text` / `proofs` / 行上的稿记录），
+       对不上 ⇒ `sign_does_not_back_the_row`（受控读数，不算签），核不了 ⇒ 原结论不变、
+       读数落在 `credential.body_backing`。归属不按号比：新签文件
        不写 `proof_no`（2026-11-11 业主裁定，见 `_sign_is_for_this_path`），身份是
        正文 sha + `statement_id` + 稿路径；老签里带 `proof_no` 的仍按老口径比号。
        换锚（2026-11-13）之后多一条正路：签文件里那一格 `statement_id` 与本行
@@ -4690,7 +4717,8 @@ def sign_reading(root: Any, statement_id: str = "", proof_text: str = "",
     `votes_source`（call | legacy | none）/ `sha` / `statement_id` / `proof_no` /
     `credential`（path / artifact_sha / at / verification_id / review_call /
     recomputable / problem / found / tier / got / anchor（used / checked / owned /
-    path / manuscript_id / why））/ `evidence`（rows / covering /
+    path / manuscript_id / why）/ body_backing（checked / state / row_found / row_kind /
+    row_shas / artifact_sha / why））/ `evidence`（rows / covering /
     last_row / axis / verdict / fault_kind / kind_source / fault_at / void_rows /
     last_call）/ `filed`（True/False/None，给 store 才算）/ `abandoned`
     （True/False/None；另一根轴，与 `signed` 可以同时成立）/ `filed_why` /
@@ -4718,7 +4746,13 @@ def sign_reading(root: Any, statement_id: str = "", proof_text: str = "",
             #: `used=True, checked=False` = 没查成；`owned=True` = 本行的那份稿。
             #: 键集合固定，每一条读数都带它（"没查"与"查了没有"靠 `used` 分开）。
             "anchor": {"used": False, "checked": False, "owned": False,
-                       "path": "", "manuscript_id": "", "why": ""}},
+                       "path": "", "manuscript_id": "", "why": ""},
+            #: 正文回指核对（2026-11-21 RECONFIX2）：`state` 三态 matched / mismatched /
+            #: unchecked；只有 `state=mismatched` 且 `enforced=True`（结构上可证那一档）
+            #: 才否掉 `signed`（见 :func:`_row_body_reading`）。
+            "body_backing": {"checked": False, "state": "unchecked", "row_found": False,
+                             "row_kind": "", "row_shas": [], "artifact_sha": "",
+                             "why": ""}},
         "evidence": {
             "rows": 0, "covering": 0, "last_row": {}, "axis": "", "verdict": "",
             "fault_kind": "", "kind_source": "", "fault_at": "", "void_rows": 0,
@@ -4861,6 +4895,170 @@ def _filed_reading(*, store: Any, statement_id: str, sha: str,
                                   f"这一版还没收录（{abandoned_why}）")
     filed = bool(per.get(match_no, per.get(str(match_no), False)))
     return filed, abandoned, (f"{sid}#p{match_no} 在册；第 3 位={filed}（{abandoned_why}）")
+
+
+def _row_body_reading(root: Any, *, store: Any, statement_id: Any,
+                      artifact_sha: Any, cred_statement_id: Any = "",
+                      manuscript_path: Any = "",
+                      ) -> dict[str, Any]:
+    """这一行自己的正文，是不是这一签盖的那一份（三态：matched / mismatched / unchecked）。
+
+    ## 判据（唯一的正文回指核对）
+
+    签盖的那一份正文的 sha（`artifact_sha`，与台账 `proof_sha256` 同一把尺）必须出现在
+    这一行自己持有的正文指纹里：
+
+    - `proof_sha256` 那一格（B 收录时按 `proof_text` 现算的那一格）；
+    - `proof_text`（canonical `#p1`）与 `proofs` 清单里每一份正文的现算 sha；
+    - 这一行 `manuscripts` 记着的稿：读盘上那一份的 `## 证明` 再算 sha（`artifact_sha`
+      就是 `proofregistry.proof_sha(proof_text)`，不是 `.md` 的字节 sha）。
+
+    ## 为什么"地址对得上"还不够
+
+    `statement_id` 只是一格地址：它说"这一签属于哪一条命题"，不说"这一行装着哪一份正文"。
+    现场（2026-11-21，`projects/lp-ball-15` 第 4 份签）：`out/vsigns/2f77e321….json` 的
+    `statement_id="000003"`，而 `statements` 的 `000003` 是一个 `kind="concept"` 的概念行
+    （`proof_text=""`、没有 `proof_sha256`）；`2f77…` 也不在任何 statements 行的
+    `proof_sha256` 里（现算 `[]`）。改前 `_sign_is_for_this_path` 只比那一格号 ⇒ 照样
+    报 `signed`，于是"文件在 + 地址对得上"被读成"这一行真的持有这份正文"。
+
+    ## 谁能"否掉"（`enforced` 那一格管这个）
+
+    这一格在「所有」方向上都能读出"对不上"，但"对不上"能不能当结论由 `enforced` 分开：
+
+    - `enforced=True`（唯一一档，结构上可证）：行是概念（`kind=concept`），签盖的稿却是
+      非 `b-proof` 族 —— 概念行的正文只来自良定义证明（`agent_b.land_manuscript` 的族闸，
+      `tests/test_concept_well_definedness_has_a_landing.py` 的 c 把 F 族打红）。
+      这一行「不可能」持有这份正文 ⇒ 否签（`sign_does_not_back_the_row`）。
+    - 其余的"对不上"只是读数（`enforced=False`）：B 替换正文那一笔会先认新签、再写正文
+      （`_bits_after_canonical_write` / `_unsigned_proof_gate` 都在写之前调本函数的
+      上游），注册也是先认签再把正文落进命题行 —— 那时行上还是旧正文 / 还没有正文。
+      把它们当"对不上"否掉，会把收录与替换两条正路判死（2026-11-21 真机回归实测：
+      `test_b_register_collects_the_proof_bit` / `test_b_ingest_marks_submitted` /
+      `test_b_replaces_a_hard_to_prove_path` 三族当场红）。未在册签（`statement_id=""`）
+      同理：它的身份是正文 sha，不是某一行的地址。
+
+    ## 返回
+
+    `{checked, state, row_found, row_kind, row_shas, artifact_sha, enforced, why}`。
+    """
+    out: dict[str, Any] = {
+        "checked": False, "state": "unchecked", "row_found": False, "row_kind": "",
+        "row_shas": [], "artifact_sha": str(artifact_sha or "").strip().lower(),
+        #: 这一格读出的"对不上"能不能当结论（False = 只是读数）。
+        #: 只有结构上可证的那一档（概念行 + 非 b-proof 稿）为 True；见下面的说明。
+        "enforced": False, "why": ""}
+    sha = out["artifact_sha"]
+    sid = str(statement_id or "").strip()
+    claimed = str(cred_statement_id or "").strip()
+    if not sid:
+        out["why"] = ("这一签没有命题号（未在册签）⇒ 没有可回指的 statements 行，"
+                      "正文回指这一格核不了（不改变「签在不在」那一格的结论）")
+        return out
+    if store is None:
+        out["why"] = "没有 store ⇒ 这一行的正文读不出来，正文回指这一格核不了"
+        return out
+    try:
+        got = SL.by_id(store, stmt_id=sid)
+    except Exception as exc:  # noqa: BLE001 —— 读不出来 = 没查成
+        out["why"] = f"`statements` 读不出来（{type(exc).__name__}: {exc}）⇒ 正文回指核不了"
+        return out
+    if not got.get("checked"):
+        err = got.get("error") or {}
+        out["why"] = (f"`statements` 读不出来（{err.get('type', '?')}: "
+                      f"{err.get('message', '?')}）⇒ 正文回指核不了")
+        return out
+    if not got.get("found"):
+        out["checked"] = True
+        out["why"] = (f"`statements` 里没有 {sid} 这一行 ⇒ 没有可回指的正文"
+                      "（这一格核不了，不折成「对不上」）")
+        return out
+    row = dict(got.get("row") or {})
+    out["row_found"] = True
+    out["row_kind"] = str(row.get("kind") or "")
+    shas: list[str] = []
+    column = str(row.get("proof_sha256") or "").strip().lower()
+    if column:
+        shas.append(column)
+    try:
+        from . import verifications as _VR
+
+        for _no, text in _VR.proof_list(row):
+            if str(text or "").strip():
+                shas.append(_sign_sha(str(text)))
+    except Exception:  # noqa: BLE001 —— 证明清单读不出来只少一份指纹，不让整格变红
+        pass
+    unread: list[str] = []
+    mss = row.get("manuscripts")
+    if isinstance(mss, Mapping):
+        for rel in mss.values():
+            rel = str(rel or "").strip().replace("\\", "/")
+            if not rel:
+                continue
+            try:
+                text = (Path(str(root or "")) / rel).read_text(encoding="utf-8")
+            except OSError:
+                unread.append(rel)
+                continue
+            body = manuscript_proof_body(text) if "## 证明" in text else text
+            if str(body).strip():
+                shas.append(_sign_sha(body))
+    out["row_shas"] = list(dict.fromkeys(shas))
+    if out["row_shas"]:
+        out["checked"] = True
+        if sha and sha in out["row_shas"]:
+            out["state"] = "matched"
+            out["why"] = (f"对上了：这一行（kind={out['row_kind'] or '?'}）的正文指纹里有 "
+                          f"{sha[:12]}…")
+        elif claimed:
+            # 对得上不是"这一行现在装着它"就能判的：B 替换正文那一笔会先认新签、再写正文
+            # （`_bits_after_canonical_write` / `_unsigned_proof_gate` 都在写之前调这里），
+            # 那时行上还是旧正文。所以这一档只作读数，`enforced=False`，不否签。
+            out["state"] = "mismatched"
+            out["why"] = (f"这一行（kind={out['row_kind'] or '?'}）现在持有的是 "
+                          f"{[s[:12] + '…' for s in out['row_shas']]}，而签盖的是 "
+                          f"{sha[:12] + '…' if sha else '（空 sha）'} ⇒ 现在对不上"
+                          "（正文可能正要被替换；这一格只作读数，不据此否签）")
+        else:
+            out["state"] = "unchecked"
+            out["why"] = (f"这一行（kind={out['row_kind'] or '?'}）现在持有的是 "
+                          f"{[s[:12] + '…' for s in out['row_shas']]}，与签盖的 "
+                          f"{sha[:12] + '…' if sha else '（空 sha）'} 不同；而这一签是"
+                          "未在册签（身份是正文 sha，不是这一行的地址）⇒ 它是不是收录"
+                          "顺序未定，正文回指核不了（不折成「对不上」）")
+        return out
+    if unread:
+        out["why"] = (f"这一行记着的稿 {unread[:2]} 盘上读不出来 ⇒ 正文指纹取不到，"
+                      "这一格核不了（不是「对不上」）")
+        return out
+    if not claimed:
+        out["checked"] = True
+        out["why"] = ("这一行（kind="
+                      f"{out['row_kind'] or '?'}）现在还没有正文指纹，而这一签是未在册签"
+                      "（身份是正文 sha，不是这一行的地址）⇒ 正文可能正要被收录进来，"
+                      "这一格核不了（不折成「对不上」）")
+        return out
+    # 这一行还没有正文指纹、而签点名了它：先看签的稿族与行的 kind 相不相容。
+    # 概念行的正文只有一种来源（良定义证明，`reports/b-proof-<号>.md`）；这一条不是
+    # 新口径，是 `agent_b.land_manuscript` 对 concept 行的族闸（tests/
+    # test_concept_well_definedness_has_a_landing.py 的 c 把 F 族打红）在只读侧的
+    # 同一条判据：concept 行 + f-proof 稿 ⇒ 这一行结构上不可能持有这份正文。
+    rel = str(manuscript_path or "").strip().replace("\\", "/")
+    family = _MFAM.parse(rel) if rel else {}
+    fam = str((family or {}).get("family") or "")
+    if out["row_kind"] == "concept" and fam and fam != "b-proof":
+        out["checked"] = True
+        out["state"] = "mismatched"
+        out["enforced"] = True
+        out["why"] = (f"这一行是概念行（kind=concept），而签盖的稿是 `{rel}`（族 {fam}）"
+                      "—— 概念行的正文只来自良定义证明（b-proof 族）⇒ 这一行不可能"
+                      f"持有 {sha[:12] + '…' if sha else '这一签'}的正文")
+        return out
+    out["checked"] = True
+    out["why"] = ("这一行（kind="
+                  f"{out['row_kind'] or '?'}）现在还没有正文指纹（正文可能正要被收录/"
+                  "落稿）⇒ 正文回指这一格核不了（不折成「对不上」）")
+    return out
 
 
 def _sign_names_statement(cred_statement_id: Any, sid: Any) -> bool:
@@ -5153,6 +5351,32 @@ def _reading_with_credential(out: dict[str, Any], cred: Mapping[str, Any], *,
             out.update(state="borrowed", votes=0,
                        votes_source=(cred["tier"] or "none"),
                        why=(f"`{cred['path']}` 复算通过，但{why_not} ⇒ 借光不算签"))
+            out["need"] = int(cred["need"] or out["need"])
+            return out
+        # ---- 正文回指核对（2026-11-21 RECONFIX2）------------------------------
+        # 地址（statement_id）对得上 ≠ 这一行持有这份正文：真机 lp-ball-15 第 4 份签
+        # 的号指向一个 concept 行，而签盖的正文不在那一行里。三态：对不上才否签；
+        # 核不了（未在册签 / 没有 store / 行读不出来）不改变原结论，只留读数。
+        body_backing = _row_body_reading(
+            root, store=store, statement_id=sid,
+            artifact_sha=str(cred.get("artifact_sha") or ""),
+            cred_statement_id=str(sign.get("statement_id") or ""),
+            manuscript_path=str(manuscript_path or sign.get("artifact_path") or ""))
+        if anchored.get("owned"):
+            # 换锚那条正路已经核过更强的同一件事：这一行记着的那份稿，其正文 sha 就是签的
+            # 那一份（`_manuscript_owns_the_sign` 里逐字比过）。那一档不拿行上的
+            # `proof_text` 再否一次 —— 否则「行上的稿记录说它是、行上的旧正文说它否」
+            # 会被读成对不上，而两个读数里只有前者是这一签的归属凭据。
+            body_backing = {**body_backing, "checked": True, "state": "matched",
+                            "why": ("手稿记录认归本行"
+                                    f"（{anchored.get('why') or ''}）⇒ 正文回指由那一格作证")}
+        out["credential"]["body_backing"] = body_backing
+        if body_backing.get("enforced") and str(body_backing.get("state") or "") == "mismatched":
+            out.update(checked=True, state=SIGN_DOES_NOT_BACK_ROW, votes=0,
+                       votes_source=(cred["tier"] or "none"),
+                       why=(f"`{cred['path']}` 复算通过、地址也对得上，但它签的正文"
+                            f"（{str(cred.get('artifact_sha') or '')[:12]}…）不回指这一行："
+                            f"{body_backing.get('why') or ''} ⇒ 这一签不背这一行，不算签"))
             out["need"] = int(cred["need"] or out["need"])
             return out
         need = int(cred["need"] or out["need"])

@@ -17,7 +17,7 @@ from .proofloc import DEFAULT_PROOF_NO  # canonical 证明号只有一个出处�
 
 
 def _framework_holds(root: str | Path, row: Mapping[str, Any], *, need: Any,
-                     review_call: str = "") -> dict[str, Any]:
+                     review_call: str = "", proof_no: Any = None) -> dict[str, Any]:
     """这一签的「连续几次过审」读数：框架从台账现数（`sign_counting`），不吃调用方的数。
 
     业主 2026-11-17 逐字：「…（是系统计数落签）」。改前这一格由调用方递进来的
@@ -26,16 +26,28 @@ def _framework_holds(root: str | Path, row: Mapping[str, Any], *, need: Any,
     `review_call` 内 `review_pass=1..need` 连续 clean 的轮数。老行（没有 `review_call`）
     走 legacy 复算，读数里带 `legacy=True` + `counted_by="legacy:ledger_tail"`。
 
+    2026-11-22（BASELINEFIX）：这条口径此前只覆盖生产落地那一步
+    （:func:`land_sign_without_ledger`）；同文件的 :func:`sign_statement` 里还留着一条
+    按 `sign_issuance.within_call` 自报数判定的活门。那条已退役（见
+    :func:`_holds_for_the_issuance`），两个落地口现在同一个实现。
+
+    `proof_no=None` = 按这一行自己记的那一格（`proof_no_of`）；给了就用它 ——
+    调用方手里那个数才是"这一签签的是哪一份证明"（`sign_statement` 的 `proof_no`
+    与行上那一格可能不同：显式传号时行上往往没有那一格）。
+
     返回 `holds` 的键与 `consecutive_holds` 同形（`checked` / `streak` / `need` /
     `streak_ok` / `sha` / `legacy_rows`），另加 `counted_by` / `legacy` / `why`。
     """
     from . import sign_counting as _SC
 
     sid = str(row.get("stmt_id") or row.get("statement_id") or "")
-    try:
-        no = proof_no_of(row)
-    except VerificationError:
-        no = DEFAULT_PROOF_NO
+    if proof_no is None:
+        try:
+            no = proof_no_of(row)
+        except VerificationError:
+            no = DEFAULT_PROOF_NO
+    else:
+        no = proof_no
     counted = _SC.count_registered(
         root, statement_id=sid, proof_no=no,
         proof_sha256=row.get("proof_sha256"),
@@ -113,7 +125,7 @@ def land_sign_without_ledger(store: Any, *, row: Mapping[str, Any],
     # ---- 2026-11-17（业主：「是系统计数落签」）：门槛由框架从台账现数 --------------
     #
     # 改前这里吃 `within_call`（V 那一趟的 `pass_no`）：给了它，`streak` 就是调用方
-    # 说的那个整数，框架一个字都不核（`verifications.py:4264-4265` 的原文）。
+    # 说的那个整数，框架一个字都不核（现盘对应逻辑见 `secretary_sign.py::decide_sign_issuance`）。
     # 现在数只有一个来源：`sign_counting.count_registered` —— 同一份正文、同一个
     # `review_call` 内 `review_pass=1..need` 连续 clean。`within_call` 只作读数
     # （`within_call_claim`），它多了/少了一轮都不改变这里数出来的数。
@@ -155,11 +167,74 @@ def land_sign_without_ledger(store: Any, *, row: Mapping[str, Any],
     return out
 
 
+def _holds_for_the_issuance(root: str | Path, row: Mapping[str, Any], *,
+                            proof_no: Any,
+                            sign_issuance: Mapping[str, Any] | None) -> dict[str, Any]:
+    """这一签的连续读数：门槛只由台账定，`sign_issuance.within_call` 只进读数（退役门）。
+
+    ## 改前那一条活门（2026-11-02 → 2026-11-22）
+
+    `sign_issuance["within_call"]` 一旦给出，`sign_statement` 就只看那个整数：
+
+        within_call = int(sign_issuance.get("within_call"))
+        streak_ok = bool(within_call >= need)
+
+    台账一个字都不核。而 `within_call` 是秘书从 V 那一趟连判循环里拿到的调用方自报
+    轮数（`agent_v/core.py` 的 `pass_no`）—— 业主 2026-11-17 的裁定「是系统计数落签」
+    正是针对它：数只能从台账现数。
+
+    ## 为什么退役而不是删函数
+
+    `sign_statement` 现在只服务历史直调 / 夹具：生产在册落地那一步是
+    :func:`land_sign_without_ledger`（`secretary_sign.py:527-531` 逐字写明生产不再调
+    `sign_statement`），唯一剩下的框架侧调用者是 `record_verification(flip=True)`
+    这条兼容门。所以函数保留（夹具与 `record_verification` 的登记形态要它），
+    但那条"自报数当门槛"的语义退役：
+
+    - 给了 `sign_issuance.within_call` ⇒ 门槛与 `streak` / `need` / `streak_ok` 全部由
+      :func:`_framework_holds` → :func:`sign_counting.count_registered` 从台账现数；
+      `within_call` 原样留在 `holds["within_call_claim"]`（读数），它多了 / 少了一轮
+      都不改变判定；
+    - 没给 `sign_issuance`（历史直调 / 夹具 / `record_verification(flip=True)`）⇒
+      :func:`consecutive_holds` 的历史兼容门，一个字没动（它数台账尾部发生过什么，
+      与这条退役门无关；改它会把"打回之后又起转"那一档读宽）。
+
+    判定口径因此与生产落地那一步同一个实现；这条函数的门只剩"台账现数"一种。
+    """
+    issuance = dict(sign_issuance or {})
+    claim = issuance.get("within_call")
+    if claim is None:
+        return consecutive_holds(
+            root, str(row.get("stmt_id") or row.get("statement_id") or ""), proof_no=proof_no)
+    holds = _framework_holds(
+        root, row, need=int(issuance.get("need") or verifications.SIGN_STREAK_NEED),
+        review_call=str(issuance.get("review_call") or ""), proof_no=proof_no)
+    try:
+        holds["within_call_claim"] = max(0, int(claim))
+    except (TypeError, ValueError):
+        #: 报的不是一个整数 ⇒ 读数记成"读不出来"（None），判定照旧只由台账定。
+        holds["within_call_claim"] = None
+    return holds
+
+
 def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
                    path: Path | None = None, proof_no: Any = None,
                    sign_issuance: Mapping[str, Any] | None = None,
                    append_ledger: bool = True, by: str = "") -> dict[str, Any]:
     """把一签写回 `statements` 那一行里那一条证明的第 3 位（与台账同一次写）。
+
+    ## 2026-11-22（BASELINEFIX）：这是迁就历史直调 / 夹具的写口，生产不走它
+
+    生产在册落地那一步是 :func:`land_sign_without_ledger`（只颁签 + 只落块，不碰
+    `statements`）：`secretary_sign.py:527-531` 逐字写着「`sign_statement` 保留给历史
+    直调 / 夹具（`flip=True` 那条兼容门）」，而业主 2026-11-08 的口径是「V 现在只对手稿
+    负责」。本函数今天的全部调用者只有两个：`record_verification(flip=True)`
+    （`v_ledger_write.py:398/411` 的兼容门）与测试夹具。
+
+    判据 `tests/test_sign_statement_does_not_read_the_callers_number.py::test_e_*` 按 AST
+    钉住这条调用面：src 里除 `record_verification` 之外再长出一个调用点就会红 ——
+    新增生产调用点必须同时回答"为什么不走生产落地那一步"，而不是悄悄多一个写
+    `statements` 的口。
 
     ## 这一格为什么原来永远是 False
     第 3 位的唯一写者是 B 的 `register_statement`，而它按设计不替 V 签字（`BIT_OWNERS`：
@@ -224,13 +299,17 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
     `None` = 调用方没有问过秘书（老调用点 / 夹具 / 直接调本函数那一档）⇒ 只按连续闸判，
     这一档是兼容门，不是第二套判据。
 
-    ## `sign_issuance.within_call`：单次送审内部的轮数（2026-11-02 定稿）
-    这个键一旦给出（`AgentV` 的连判循环每一轮都会给"这一趟的第几轮"），本函数
-    只看它：`>= need` 才翻位；台账尾部的历史连续数不参与判定（不现数、不二次确认）。
-    这正是业主「不允许跨两次送审累计成功数」的落点 —— 旧后门是"台账已有 2 行 clean，
-    本次第 1 轮 clean ⇒ 3 票凑够"。`streak` / `need` / `streak_ok` 三格与签文件里的
-    `streak` 都取这个趟内数；签的 `passes` 按同一 `review_call` 取，绝不跨趟拼接。
-    不给 `within_call` ⇒ 走历史兼容门（台账读数），那一档不是送审路径。
+    ## `sign_issuance.within_call`：调用方自报的轮数 —— 2026-11-22 起只是读数
+
+    这个键的来路是 `AgentV` 的连判循环（每一轮报"这一趟的第几轮"），它是自报读数，
+    不是台账数。2026-11-02 到 2026-11-22 之间它曾是本函数唯一的门槛（`>= need` 就翻位，
+    台账一个字都不核）；业主 2026-11-17 的裁定「是系统计数落签」把它撤了。现在
+    `streak` / `need` / `streak_ok` 三格由 :func:`sign_counting.count_registered` 从台账
+    现数（同一份正文、同一 `review_call` 内 `review_pass=1..need` 连续 clean；签的
+    `passes` 按同一 `review_call` 取，绝不跨趟拼接），`within_call` 只原样留在读数里
+    （`holds["within_call_claim"]`）—— 它多了 / 少了一轮都不改变判定。
+    不给这个键时走 `consecutive_holds`（台账尾部连续数，历史兼容门，不是送审路径）。
+    判定口径见 :func:`_holds_for_the_issuance`。
 
     ## `append_ledger=False`：台账那一行已经由调用方落了（业主 2026-10-29 追加口径）
     V 不再自己发签：`AgentV.verify_proof` 只落台账（`record_verification(flip=False)`），
@@ -264,9 +343,11 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
         #: `{}` = 没动（已经是那一档 / 凭据不够 / 那一刻不适用），那几档都不改盘；
         #: 非空时形状见 `_grade_recomputed_from_signature` 的 `reading`。
         "grade_recomputed": {},
-        #: 连续读数（见 :func:`consecutive_holds`）：给了 `sign_issuance.within_call`
-        #: 时是这一趟送审内的轮数（2026-11-02 定稿）；不给时是台账尾部连续成立次数
-        #: （历史兼容门）。三个键无条件存在。
+        #: 连续读数（门槛的唯一来源是台账）：给了 `sign_issuance.within_call` 时由
+        #: :func:`sign_counting.count_registered` 现数这一趟（`within_call` 只作
+        #: `within_call_claim` 读数，不参与判定 —— 2026-11-22 退役那条自报门槛）；
+        #: 不给时是台账尾部连续成立次数（`consecutive_holds`，历史兼容门）。
+        #: 三个键无条件存在。
         "streak": 0, "need": verifications.SIGN_STREAK_NEED, "streak_ok": False,
         #: 业主 2026-11-01：这一签的侧文件（`out/vsigns/<artifact_sha>.json`）落成了没有。
         #: 三态与 `vsigns.write_sign` 同形：`written` / `idempotent` / `conflict` /
@@ -330,36 +411,17 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
                 return out
             # ---- 业主 2026-10-29：连续 N 次成立才翻位（第 1、2 次只落台账）----
             #
-            # 2026-11-02 定稿：`sign_issuance.within_call` 一旦给出，只看这一趟送审
-            # 内部的轮数，台账尾部历史连续数一个字节都不参与"发不发签"的判断
-            # （业主：「不允许跨两次送审累计成功数」；后门是"2 行历史 clean + 本次第 1 轮"）。
-            # `within_call` 是 `Secretary.decide_sign_issuance` 从 `AgentV` 那趟循环
-            # 拿到的、已经按趟数过的数；这里不再现数台账，也不拿台账做二次确认。
-            # 不给它（旧直调路径 / 夹具 / `record_verification(flip=True)`）⇒ 仍按台账
-            # 读数走，那是历史兼容门，不是送审路径。
-            within_call: int | None = None
-            if sign_issuance is not None and sign_issuance.get("within_call") is not None:
-                try:
-                    within_call = int(sign_issuance.get("within_call"))
-                except (TypeError, ValueError):
-                    within_call = None
-            if within_call is not None:
-                need = int(sign_issuance.get("need") or verifications.SIGN_STREAK_NEED)
-                holds = {
-                    "checked": True,
-                    "streak": within_call, "need": need,
-                    "streak_ok": bool(within_call >= need),
-                    "sha": str(row.get("proof_sha256") or ""),
-                    # 让 `_vsign_payload` 按同一趟送审取 `passes`（不按台账尾部回捞）。
-                    "review_call": str(sign_issuance.get("review_call")
-                                       or row.get("review_call") or ""),
-                    "legacy_rows": 0,
-                }
-            else:
-                # 历史 / 直调路径：现读台账（含刚追加的这一行）——这是旧"连续次数"的
-                # 唯一来路；不在这里另存一份计数、也不许把一个整数从调用方传进来：
-                # 位是台账的缓存，缓存只能从正本现算。
-                holds = consecutive_holds(getattr(store, "root", ""), sid, proof_no=no)
+            # 2026-11-22（BASELINEFIX）：这一格的门槛只有一个来源 —— 台账现数。
+            # 改前 `sign_issuance.within_call` 一旦给出就只看调用方报的那个数
+            # （`streak_ok = bool(within_call >= need)`），框架一个字都不核；而它是
+            # 秘书从 V 那一趟循环里拿到的自报轮数（业主 2026-11-17：「是系统计数
+            # 落签」）。现在与生产落地那一步（`land_sign_without_ledger`）同一个实现：
+            # `_framework_holds` → `sign_counting.count_registered`；`within_call` 只作
+            # 读数（`within_call_claim`），它多了 / 少了一轮都不改变数出来的数。
+            # 不给 `sign_issuance`（旧直调 / 夹具 / `record_verification(flip=True)`）
+            # 时走 `consecutive_holds` 的历史兼容门，那一档一个字没动。
+            holds = _holds_for_the_issuance(
+                getattr(store, "root", ""), row, proof_no=no, sign_issuance=sign_issuance)
             out["streak"] = int(holds.get("streak") or 0)
             out["need"] = int(holds.get("need") or verifications.SIGN_STREAK_NEED)
             out["streak_ok"] = bool(holds.get("streak_ok"))
@@ -442,7 +504,7 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
                     # 判据翻，「不写签」，并把这件事留在 `vsign.reason` 里。
                     #
                     # 为什么这一档不许把整笔弄失败：`signs_bit3` 是第 3 位的「唯一」硬闸
-                    # （`tests/test_v_sign_gate_streak.py::z1` 用"把 `streak_ok` 打成恒真"
+                    # （`tests/test_v_sign_gate_streak.py::test_z1_removing_the_streak_gate_makes_the_first_hold_flip` 用"把 `streak_ok` 打成恒真"
                     # 做反真空负控）。若这里改成抛异常回滚，那道闸就再也量不出来了 ——
                     # 一条"签没写"的读数是可见的，而一条"闸拆了也看不出来"的判据是不可修的。
                     out["vsign"]["reason"] = str(sign_out.get("reason") or "")

@@ -191,12 +191,17 @@ REVIEW_STATES: tuple[str, ...] = ("signed", "holding", "stale", "rejected",
 #: 「一次送审内部连续几次成立才发签」（业主 2026-11-02 定稿）。
 #:
 #: 语义写死在这里，后来人不许再把它读成"跨送审累计"：
-#: - 一次 `verify_proof` 调用 = V 连判 `SIGN_STREAK_NEED` 轮（`agent_v.core.review_pass_bound`
-#:   现读这个数）；三轮里任一轮「有毛病」⇒ 立刻停、打回、不签；三轮都干净 ⇒ 发签。
+#: - 门槛 = `sign_counting` 现数（系统计次，2026-11-17 业主裁定）：同一份正文、同一个
+#:   `review_call` 内 `review_pass=1..need` 连续 clean 的台账行数。一次 `verify_proof` 调用
+#:   里 V 连判 `SIGN_STREAK_NEED` 轮（`agent_v.core.review_pass_bound` 现读这个数）；三轮里
+#:   任一轮「有毛病」⇒ 立刻停、打回、不签；三轮都干净 ⇒ `sign_counting` 从台账数够门槛
+#:   ⇒ 发签。调用方自报的轮数（`within_call`，即 V 那一趟的 `pass_no`）只是读数，
+#:   不参与发不发签的判定。
 #: - 跨两次送审绝不累计：每份正文的签只由"某一次送审内部的那几轮"决定
 #:   （业主逐字：「不允许跨两次送审累计成功数」）。旧台账里那些没有 `review_call` /
 #:   `review_pass` 的行是历史形态（`legacy_rows`），读得出、但不参与新签判断。
-#: - 名字里的 "STREAK" 只指"同一趟调用内连着几轮 clean"，不是"台账尾部连续几行"。
+#: - 名字里的 "STREAK" 只指"同一趟调用内连着几轮 clean"（由 `sign_counting` 从台账现数），
+#:   不是"跨趟累计的台账尾部连续几行"。
 #:
 #: 为什么是一个常量而不是散在各处的 `3`：判据（`review_standing` / `signs_bit3` /
 #: `sign_statement`）与读数（`proof_review_gap` 的 checklist、`review_standing` 的

@@ -3,10 +3,10 @@
 
 判据：`DEFAULT_CHECKS` 八格，每格都能单独造红（`tests/test_closing_gate.py`：每条一条负控 + 一条反真空）。
 
-论文那一格（`paper`）不在门里（业主 2026-11-14 裁定：「是否出 paper 退出收工判定，
-由 M 自行判断是否到这个时机」）：它照旧算、照旧落在 `readings["paper"]`，
-但不进 `status`、不进 `machine_pass` —— 判断该不该出论文的人读那一格，
-门不拿它当交付前提。
+可选 `paper` 格已退役（业主 2026-11-22，`draft/197` §十四 ③）：它读的正文 / 编译回执
+与验收表都已分别由 `doc.paper_compile` 与 `acceptance` 格覆盖。显式把 `"paper"` 写进
+`checks=` 的调用方拿到一句「已退役」（受控拒绝，`readings["retired_checks"]`），
+其余格子照旧跑 —— 退役不是静默跳过。
 四态纪律（2026-11-20，EMPTYCELL 把"真空通过"拆出来）：
 
 - `pass` / `fail`：这一格依赖的东西存在、而且判过；
@@ -33,7 +33,7 @@ exit 2），不许当"可以交"；`machine_pass`（旧口径：八格全 pass�
 | `report_shape` | 报告形状：附件三件套判实（来源 / 依据 / 版本 sha）+ M 声明的体例有没有兑现 |
 | `user_pending` | 没有还在等用户回答的问题（有 ⇒ 必须停在"等待用户"，不许续跑） |
 | `substance` | 实质产出：`documents` / `relations` / `experiments` / `review_findings` / `statements` 至少一张非空（全 0 ⇒ 不许报「可交付」；`tasks`/`usage_ledger` 不算） |
-| `acceptance` | 验收表的机器可判行（`out/paper/ACCEPTANCE-CHECKS.json`）：逐行现算，任一不满足 ⇒ `fail`；行读不懂 ⇒ 那一行 `unreadable`、整格 `unknown`（绝不 `pass`） |
+| `acceptance` | 验收表的机器可判行（`out/package/ACCEPTANCE-TARGETS.json`）：逐行现算，任一不满足 ⇒ `fail`；行读不懂 ⇒ 那一行 `unreadable`、整格 `unknown`（绝不 `pass`） |
 | `artifact_ledger` | 产物台账（`ARTIFACTS.jsonl`）与盘上一致：`missing`/`unreadable` ⇒ `fail`（真缺陷）；只有 `changed` ⇒ `pass` + 一条 warning（按路径取最后一条登记之后又被改写是常态；把它读成没查成会让任何有派活的跑批都收不了工） |
 | `literature_pending` | 待入库候选表 `lit_candidates`（不是 `literature` 表的 `processed` 位 —— 那是 B 的消化面，数在 `acceptance` 的 `literature_unprocessed`）：全表还有 `pending` ⇒ `fail` + blocker（读数点名表名、委托与 ids、出口 = A 的 `lit.admit` / `lit.stage_reject` / 逐委托 `lit.admit_all`）；当前委托提交后没清表（行上没有 `cleared_at`）⇒ `fail` + blocker；表读不到 ⇒ `unknown`（不是"没有待裁"）。业主口径：「清空待入库文献表及文献 → 真正收工」 |
 
@@ -80,11 +80,19 @@ from . import autoretire as _AR
 #:「这一趟到底产出了什么」。这不是新判据，是把已有的三态纪律补到它该管的地方：
 #: 「没做」不许读成「没问题」。
 #:
-#: 2026-11-14（业主裁定）：`paper` 退出收工判定 —— 「是否出 paper 退出收工判定，
-#: 由 M 自行判断是否到这个时机」。论文正文与 PDF 对不对得上仍是 `readings["paper"]`
-#: （`_check_paper` 保留、照旧算），但它不再是一格：M 读那一格决定该不该出论文，
-#: 门不拿它当交付前提。显式把 `"paper"` 写进 `checks=` 的调用方仍会得到那一格
-#: （既有夹具与论文那一路的负控要它），但缺省八格里没有它。
+#: 2026-11-22（`draft/197` §十四 ③）：可选 `paper` 格退役 —— 它读的
+#: `out/package/main.tex` 与 `out/package/ACCEPTANCE-TARGETS.json` 已分别由
+#: `doc.paper_compile`（正文 / PDF 编译回执）与 `acceptance` 格（验收表）覆盖。
+#: 退役面：`_check_paper` / `_paper_requirement_reading` / `_run_paper_reading` /
+#: `PAPER_READING_NOTE` 与"显式请求 paper"的入口。显式点名它的调用方拿到一句
+#: 「已退役」（`readings["retired_checks"]` + blocker `check_retired`），不是静默跳过。
+RETIRED_CHECKS: tuple[str, ...] = ("paper",)
+RETIRED_CHECKS_NOTE = (
+    "`paper` 格已退役（2026-11-22，draft/197 §十四 ③）：它读的 "
+    "`out/package/main.tex` 与 `out/package/ACCEPTANCE-TARGETS.json` 已分别由 "
+    "`doc.paper_compile` 与 `acceptance` 格覆盖。显式点名它不再给读数，"
+    "也不会被静默忽略 —— 这一句就是它退役的读数")
+
 DEFAULT_CHECKS: tuple[str, ...] = (
     "contradictions", "load_bearing", "report_shape", "user_pending", "substance",
     "acceptance",
@@ -175,58 +183,43 @@ CONTRADICTION_TABLES: tuple[str, ...] = (
 LOAD_BEARING_TABLES: tuple[str, ...] = ("documents", "statements", "experiments")
 
 
-#: 同一个会话号的两种日期写法：ISO（`2026-11-21`）与紧凑（`20261121`）。
-#:
-#: 为什么读侧要认两种（2026-11-21 真机 lp-ball-14 的现场）：写侧把 `--sid` 逐字当文件名
-#: （`sessions.session_path` 只做 `f"{sid}.jsonl"`），真机启动传的是 ISO 日期 ⇒ 盘上是
-#: `sessions/2026-11-21.jsonl`；而不给号的那条路取 `sessions.session_id()`（`%Y%m%d`）⇒
-#: 只拼出 `20261121.jsonl`，于是「这一趟的会话」被判成「没有会话记录」，
-#: `user_pending` 从 pass 降成 na（`out/review/STATUS-*.json` 里那一格）。
-#: 口径只有这一处：两种写法都算候选（规范形是 ISO —— 真机真跑写出来的那一族全是它），
-#: 命中哪一份就把文件名记进这一格的读数（`session_file`）。
+#: 同一个会话号只有一种写法（2026-11-22 业主裁定：旧工作区不必兼容）：
+#: 读侧只认 ISO（`2026-11-21`）。紧凑名（`20261121.jsonl`）不再读 ——
+#: 它是旧写法的落盘形态；遇到它只按"这一趟没有会话记录"读，不猜另一份。
+#: 参数面仍把紧凑写法归一成 ISO（`--sid 20261121` 是「同一个号」的输入形态，
+#: 不是盘上的旧文件名）；归一之后只拼一个文件名，不再同时试两种。
 _SID_ISO = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _SID_COMPACT = re.compile(r"^(\d{4})(\d{2})(\d{2})$")
 
 
 def session_id_spellings(sid: str | None) -> tuple[str, ...]:
-    """同一个会话号的候选文件名主干：规范形（ISO）在前，同一天另一种写法兜底。
+    """同一个会话号的候选文件名主干只有一个（ISO 写法）。
 
-    - 日期形的号（`2026-11-21` / `20261121`）⇒ `("2026-11-21", "20261121")`；
+    - 日期形的号（`2026-11-21` / `20261121`）⇒ `("2026-11-21",)`：紧凑只是输入写法，
+      归一成 ISO 之后只拼一个文件名；
     - 别的号（`real11` / `r34c` / `s1`）⇒ 只有它自己 —— 不许把 `a-b` 当日期拆；
-    - `None`（缺省会话口径）⇒ 取 `sessions.session_id()` 当基号，再按上面两条展开。
+    - `None`（缺省会话口径）⇒ 取 `sessions.session_id()` 当基号。
 
-    「两种写法是同一个号」这条判断只在这里做一次：两处各拼一份文件名，改口径的人
-    只会改到一处 —— 2026-11-21 那次就是这么来的（写侧逐字、读侧按 `%Y%m%d`）。
+    两种写法各拼一份文件名的那一档（2026-11-21 的兼容）已按业主裁定删除：
+    旧紧凑名在盘上一律不读，读数里它是"没有会话记录"，不是"读了另一份"。
     """
     from . import sessions as _SESS
 
     text = (str(sid).strip() if sid is not None else "") or _SESS.session_id()
     if _SID_ISO.match(text):
-        iso = text
-    else:
-        match = _SID_COMPACT.match(text)
-        if not match:
-            return (text,)
-        iso = f"{match.group(1)}-{match.group(2)}-{match.group(3)}"
-    compact = iso.replace("-", "")
-    return (iso, compact)
+        return (text,)
+    match = _SID_COMPACT.match(text)
+    if not match:
+        return (text,)
+    return (f"{match.group(1)}-{match.group(2)}-{match.group(3)}",)
 
 
 def _session_candidates(session_root: Any, sid: str | None) -> tuple[Path, ...]:
-    """这一段的候选文件，顺序 = 优先读的那一份在前（同一份只出现一次，路径由 `sessions` 拼）。
-
-    - 显式给了号 ⇒ 逐字那一种写法在前（`--sid 2026-11-21` 先试 ISO，`--sid 20261121`
-      先试紧凑）：号就是那一段的名字，名字指向哪一份就读哪一份；
-    - `sid is None` ⇒ 规范形（ISO）在前：没有名字可依据时，按真机真跑的落盘形态排。
-    """
+    """这一段的候选文件（只有一个：`:func:`session_id_spellings` 的规范写着）。"""
     from . import sessions as _SESS
 
-    spellings = session_id_spellings(sid)
-    given = str(sid).strip() if sid is not None else ""
-    if given:
-        spellings = tuple(sorted(spellings, key=lambda s: s != given))
     out: list[Path] = []
-    for spelling in spellings:
+    for spelling in session_id_spellings(sid):
         path = _SESS.session_path(session_root, spelling)
         if path not in out:
             out.append(path)
@@ -297,13 +290,71 @@ def _record_not_applicable(rep: ClosingReport, name: str, why: str,
 #: 判据的形式：验收表是人写的散文（"这一行怎么算数"散在读数栏里），散文没法复算；
 #: 所以人给的机器可判行另落一份声明文件（JSON），每行一个受控的 `kind` + 阈值。
 #: 这一格就是把这些行从台账现算一遍：不满足 ⇒ `fail`（并逐行给出读数）。
-ACCEPTANCE_CHECKS_NAME = "out/paper/ACCEPTANCE-CHECKS.json"
+#:
+#: ## 名字（2026-11-22，PAPER-PKG-FIX，`draft/201` A-2）
+#:
+#: 它装的是「目标/阈值」（`id` / `kind` / `min|max|na` / `note`），不是验收结论 ——
+#: 真机 17 份旧包里有 16 份连一个状态字段都没有（`temp/paperpkg/REPORT.md` M1）。
+#: 旧名 `ACCEPTANCE-CHECKS.json` 让读的人以为打开的是"检查结果"。改名后不读旧名、
+#: 不双读：`out/package/ACCEPTANCE-CHECKS.json` 在盘上就是"没写过"。
+ACCEPTANCE_TARGETS_NAME = "out/package/ACCEPTANCE-TARGETS.json"
+
 
 #: 「论文对应表」那一行的受控档名（D-38 第二步，2026-10-24）。
 #:
 #: 它是 `LEG_CHECK_KINDS` 里的一档，但它被两处点名（受控词表与 `_check_acceptance`
 #: 的缺档兼容分支）：名字只留这一处，别处引用它，免得两个落点各漂各的。
 PAPER_MAPPING_LEG_KIND = "paper_mapping_rows"
+
+#: 交接手稿那一档的读数正名（2026-11-22，B3，`draft/195` §十四）。
+#:
+#: 为什么改名：`manuscript` 一词在系统里指两样东西（`draft/195` #22/#24）—— ①交接手稿
+#: `work/handoffs.jsonl`（每行 `to`/`summary`/`body`）；②论文/证明手稿（`documents`
+#: 表 + 盘上的稿）。这一档数的是①，旧名 `manuscript_rows` 与并列的 `document_rows` /
+#: `document_body_rows` / `document_claim_rows`（数②）摆在一张读数表上时，人很容易把
+#: 「交接手稿份数」读成「论文手稿份数」—— 这正是"名实不符"的第七类。
+HANDOFF_LEG_KIND = "handoff_rows"
+
+#: 旧名 → 正名（「一个版本的过渡」）。旧名不是第二份实现：`_leg_reading` 把两个名字折进
+#: 同一支，值由同一份 `work/handoffs.jsonl` 现算一次（`_leg_reading` 之外的
+#: 任何地方都不许再算一遍）。
+#:
+#: 为什么这一版旧名还留在 `LEG_CHECK_KINDS` 里：那份受控清单是「逐字抄进 M 的 brief」的，
+#: 而 `src/agentflow/specs/m.py` 正在 p316 冻结期（改一个字就破冻结）。所以写侧这一版仍列
+#: 旧名（正名也照收，见 :func:`known_leg_kind`），读数侧已经把正名摆在 `kind` 上、旧名摆在
+#: `kind_declared` 上并带 `deprecated`。p317 解冻时把 brief 的清单换成正名、
+#: `LEG_CHECK_KINDS` 删掉旧名，然后删掉这张表（登记在 `docs/SYSTEM-INTRO.md` 的
+#: 「读数键：改名与删除窗口」一节）。
+LEG_KIND_RENAMES: dict[str, str] = {"manuscript_rows": HANDOFF_LEG_KIND}
+
+#: 旧名读成正名时，读数行与页面读的那句标记（逐字：`deprecated: "use handoff_rows"`）。
+HANDOFF_LEG_DEPRECATED = "use handoff_rows"
+
+#: 交接手稿那一档的说明文（正名与旧名共用同一段 —— 口径只留一处，改的时候不会只改半边）。
+HANDOFF_LEG_DOC = (
+    "**交接手稿**份数（`work/handoffs.jsonl` 的**行数**，"
+    "每行要求 `to`/`summary`/`body` 齐全）—— 用户口径「传信息就传手稿编号」"
+    "落在盘上的那一份（`draft/37` §134）。为什么单列：T2 第 5 趟这一类"
+    "**一次也没用**（M 写了 26 条 `note`，只活在会话里；收工之后"
+    "「谁把什么交给了谁」在盘上查不到）。为什么从「数文件」改成「数行」"
+    "（`draft/39` §C1，用户 2026-10-05 裁）：旧口径要文件名能被 "
+    "`<编号>-<谁>to<谁>.md` 认出来 ⇒ 改个名就读成 0（读数被文件名的形状绑住），"
+    "而账本是追加写的、撞号与覆盖在结构上不可能发生"
+)
+
+
+def known_leg_kind(name: str) -> bool:
+    """这个词是不是这一档认得的名字（受控词表里的档 ∨ 读数正名）。
+
+    为什么正名不在 `LEG_CHECK_KINDS` 里：见 :data:`LEG_KIND_RENAMES` 的说明（brief 冻结）。
+    """
+    return name in LEG_CHECK_KINDS or name == HANDOFF_LEG_KIND
+
+
+def canonical_leg_kind(name: str) -> str:
+    """读侧接受的名字 → 读数里的正名（旧名折成正名；别的名字原样返回）。"""
+    return LEG_KIND_RENAMES.get(name, name)
+
 
 #: 机器可判的验收行只有这几档（受控词表）。加一档 = 加一条能被复算的验收口径，
 #: 所以它必须在这里逐档实现，不许写成"任意表达式"（那等于让验收表能执行代码）。
@@ -314,7 +365,7 @@ LEG_CHECK_KINDS: dict[str, str] = {
                              "`method=formal` 且 `evidence_kind=proof` 的行）",
     "reviewed_proof_rows": "**我方**走完「有证明过程 + 审过」的命题行数 —— 两条并列来源："
                            "① `statements` 里五元位派生出 `预备定理级` / `正式定理` 的行"
-                           "（且 `origin != external_lit`）；② 盘上 `reports/{f,b,e}-proof-*.md`"
+                           "（且 `origin != external_lit`）；② 盘上 `manuscripts/{F,B,E}/` 里 `{f,b,e}-proof-*.md`"
                            " 的稿 + 稿上的 V 签（`out/vsigns/<正文sha>.json`：`verdict=成立`、"
                            "`streak>=need`、复算得上、且没有被后来的否决盖过）"
                            "—— 2026-11-02 起 V 签先落稿、B 之后才收录，第一阶段没有在册命题"
@@ -345,7 +396,7 @@ LEG_CHECK_KINDS: dict[str, str] = {
                                    "`statements=0` —— 没有任何读数说得出来缺的是这一环，"
                                    "而 C 的依赖链正是建在它上面。明细里按「定理 N 条 / 定义 M 条 / "
                                    "审过 D 份 / 消化 X 份」分列（定义也入库那一档要看得见）",
-    "manuscript_edited": "可改的主稿有没有**实质**改动（`out/paper/main.tex` 与只读基线 "
+    "manuscript_edited": "可改的主稿有没有**实质**改动（`out/package/main.tex` 与只读基线 "
                          "`source/main.tex` 去空白规范化之后仍不相同 ⇒ 1，相同 ⇒ 0）——"
                          "缺只读基线时这一行记 `not_applicable`（E-05 ③ / CC-05）",
     "citation_records_vs_bibitems": "逐条核验引文：带比对记录的行数（`statements`/`relations` 里 "
@@ -376,7 +427,7 @@ LEG_CHECK_KINDS: dict[str, str] = {
                           "的行）—— 有 sections 却每节都空的那种稿件是**骨架**，不是手稿。"
                           "为什么单列（`draft/39` §6.48 的 D63）：T5 第 7 趟 `p8g` 里 `documents` 一行、"
                           "`document_rows` 与 `document_literature_citations` 都绿，而那份 survey 的"
-                          "三节 body **全是空串**（`documents/0000.md` 里只有框架生成的骨架与三条"
+                          "三节 body **全是空串**（当时那份 `documents/0000.md`（旧布局）里只有框架生成的骨架与三条"
                           "claim）—— 读数说「交了一份 survey」，实际交的是骨架。"
                           "没有 sections 的稿件（清单型交付）不在这一档说话（那是另一种形态）",
     "document_claim_rows": "手稿里**带引文的断言**条数（`documents` 各行 `claims` 之和）—— 缺省阈值 = "
@@ -435,7 +486,7 @@ LEG_CHECK_KINDS: dict[str, str] = {
     # 数值证明通道要 `lean_file`、形式化通道要 `lean_file` + `lean_target`、空通道那两格
     # 不计；数值通道另计索引四格（`numerictheorem.evidence_index_problems`）。凭据格
     # 「多填 / 填错」那一族不另判：`papermapping._lean_problems` 报红 ⇒ 这一行也不齐。
-    "paper_mapping_rows": "论文对应表里「该有的格子都齐」的行数（`out/paper/MAPPING.json`）："
+    "paper_mapping_rows": "论文对应表里「该有的格子都齐」的行数（`out/package/MAPPING.json`）："
                           "每一行按**这一条命题的证明通道**数（通道判据只有一处："
                           "`numericproof.proof_channel`，经 `papermapping._credential_slot`"
                           " 读）—— 数值证明通道要 `file`（证明栏第 ① 段的程序）、`lean_file`"
@@ -454,21 +505,23 @@ LEG_CHECK_KINDS: dict[str, str] = {
                             "C 自己的产出登记行），D 只是它的读者（`D.ingest(report)`）。"
                             "别把它当成 D 的交付物（2026-10-04 真机读数：主控为此重试 7 次、"
                             "换实例，最后只能如实记未核到 —— 因为 D 的动作面里没有写这张表的动作）",
-    "review_files": "**审校报告文件数**（`out/review/*.md` 里除 M 自己那两份之外的）—— "
+    "review_files": "**审校报告文件数**（`out/report/*.md` 里除 M 自己那两份之外的）—— "
                     "H 的动作 `review_report` 只写文件、不落表，而它**没有**任何一档读数看着它。"
                     "为什么单列（业主 2026-10-13：「review 只是任务的一种，咋产出中稳定产出 "
-                    "review 文件夹呢？」）：`out/review/` 里同时住着 M 的交付说明 `REPORT.md` 与 "
+                    "review 文件夹呢？」）：`out/report/` 里同时住着 M 的交付说明 `REPORT.md` 与 "
                     "状态报告 `STATUS-*.md`，所以这一档**要减掉它们**，只数「审出来的那些」；"
                     "审校报告的落点由框架定（`review_tools.DEFAULT_REPORT_SUBDIR`）而不是模型挑，"
                     "于是「任务里排了审、报告就必然在这个文件夹里」可以被数出来。"
                     "它与 `reviewed_documents` 分工不同：后者读 `documents` 行的审校状态（台账），"
                     "这一档读盘上那份报告（产物）—— 台账说「审过」而盘上没有报告，正是它要抓的",
-    "report_files": "D 写出来的报告文件数 —— D 的动作 `write_report` 只写文件、不落表"
+    "report_files": "D 写出来的报告文件数 —— D 的动作 `write_report` 把报告渲染到盘上"
                     "（签名 `write_report(out_path=None) -> str`）；要看它有没有真的产出，"
                     "数这个才是数对了地方。落位取并集：`out/reports/` 与写者自己用的那个"
-                    "子目录（`agent_d.reports_subdir`，缺省 `reports`）—— 写者读配置，"
+                    "子目录（`agent_d.reports_subdir`，缺省 `manuscripts/D`）—— 写者读配置，"
                     "读数就得读同一份配置（2026-10-04 T2 第 1 趟：报告真的写出来了，"
-                    "而读数只看一个写死的目录 ⇒ 读到 0 条）",
+                    "而读数只看一个写死的目录 ⇒ 读到 0 条）。**它与 `document_rows` 分工**："
+                    "这一档数盘上的文件、`document_rows` 数台账里的行（2026-11-22 `A-0c-2` 起"
+                    "D 的报告在 `documents` 里有 `kind=research` 的一行），两者对不上本身就是读数",
     # ---- 立项计数（informational：这一档只报数，不判 pass/fail）
     #
     # 2026-10-19 改口径（根因在 `closing.py` 的 `RESEARCH_CHAIN_GROUPS`）：这一档此前与
@@ -567,14 +620,11 @@ LEG_CHECK_KINDS: dict[str, str] = {
                                      "两条实验：后一条的界更大而耗时不多于前一条，或界相同而耗时"
                                      "降到 80% 以下）—— 这一档量的就是用户那句「把时间压下去」："
                                      "不是「跑得更久」，而是「同样的活更快、或更大的活同样快」",
-    "manuscript_rows": "**交接手稿**份数（`manuscripts/handoffs.jsonl` 的**行数**，"
-                       "每行要求 `to`/`summary`/`body` 齐全）—— 用户口径「传信息就传手稿编号」"
-                       "落在盘上的那一份（`draft/37` §134）。为什么单列：T2 第 5 趟这一类"
-                       "**一次也没用**（M 写了 26 条 `note`，只活在会话里；收工之后"
-                       "「谁把什么交给了谁」在盘上查不到）。为什么从「数文件」改成「数行」"
-                       "（`draft/39` §C1，用户 2026-10-05 裁）：旧口径要文件名能被 "
-                       "`<编号>-<谁>to<谁>.md` 认出来 ⇒ 改个名就读成 0（读数被文件名的形状绑住），"
-                       "而账本是追加写的、撞号与覆盖在结构上不可能发生",
+    # 交接手稿那一档：这一版「写侧仍收旧名」（brief 的清单在 p316 冻结、逐字抄的是旧名），
+    # 读数侧的正名是 `handoff_rows`（见 `HANDOFF_LEG_KIND` / `LEG_KIND_RENAMES`）。
+    "manuscript_rows": HANDOFF_LEG_DOC
+    + "（**旧名**，deprecated：读数正名是 `handoff_rows`。这一版两个名字同源同值；"
+      "p317 冻结解除后旧名删除 —— 登记在 `docs/SYSTEM-INTRO.md` 的「读数键」一节）",
     # ---- D-41（2026-10-24 裁"做成全形"；2026-11-16 AH2b 改成纯台账口径）：
     "run_evidence_backed_rows": "可复跑门（G8）的凭据条数（D-41）：成稿引到的每个 `exp:` 号"
                                 "都要在 `experiments` 台账里有一行，且那一行带 `code_hash` 与整数 "
@@ -598,6 +648,11 @@ LEG_CHECK_KINDS: dict[str, str] = {
                                "（把正常产物读成坏正是这一格要防的假读数）",
 
 }
+
+#: 读数里能出现的档名 → 说明文。受控词表 + 读数正名（正名这一版还不进写侧清单，见
+#: :data:`LEG_KIND_RENAMES`）。`LEG_CHECK_KINDS` 的键集仍是"写侧词表"（brief 逐字抄的那份），
+#: 这张表多出来的只有正名 —— 两处混用会让 `test_agent_prompts` 的"清单 == 词表"变红。
+LEG_READING_DOCS: dict[str, str] = {**LEG_CHECK_KINDS, HANDOFF_LEG_KIND: HANDOFF_LEG_DOC}
 
 #: 只报数、不判 pass/fail 的受控档（informational）。
 #:
@@ -1032,16 +1087,16 @@ def _is_check_section(title: str) -> bool:
 def paper_ledger_reading(project_root: Path) -> dict[str, Any]:
     """论文有没有承载本轮结果（T3 口径）。
 
-三条读数（都不看自述，只看 `out/paper/main.tex` 这一份盘上的稿子）：
+三条读数（都不看自述，只看 `out/package/main.tex` 这一份盘上的稿子）：
 
 - `bibitems`：主稿里 `\\bibitem` 的条数；
 - `result_sections`：正文里出现 `stmt:` / `exp:` / `rel:` 的非核查章节（这一条才是「承载本轮结果」：
   结果只出现在核查章节里，就等于没承载）；
 - `check_sections`：只出现在核查章节里的那些引用（读数，用来分开报）。
 
-没有 `out/paper/main.tex` ⇒ `LegNotApplicable`（这个工作区没有论文，这一档用不上；不是「查过了没问题」）。
+没有 `out/package/main.tex` ⇒ `LegNotApplicable`（这个工作区没有论文，这一档用不上；不是「查过了没问题」）。
     """
-    draft = Path(project_root) / "out" / "paper" / "main.tex"
+    draft = PC.package_dir(project_root) / PC.TEX_NAME
     if not draft.is_file():
         raise LegNotApplicable("paper_ledger_rows", f"这个工作区没有论文主稿：{draft}")
     text = draft.read_text(encoding="utf-8", errors="replace")
@@ -1056,10 +1111,10 @@ def paper_ledger_reading(project_root: Path) -> dict[str, Any]:
         item = {"section": title[:60], "citations": cites[:6]}
         (check_sections if _is_check_section(title) else result_sections).append(item)
     return {
-        "manuscript": "out/paper/main.tex",
+        "manuscript": "out/package/main.tex",
         "bibitems": text.count("\\bibitem"),
         # 这一份到底是不是一篇论文（T3 口径只在它是论文时说话）：真机上
-        # `p6r-paper-from-results/out/paper/main.tex` 是 `\documentclass{article}` 起头的
+        # `p6r-paper-from-results/out/package/main.tex` 是 `\documentclass{article}` 起头的
         # 5 节稿；而测试夹具与某些工作区里那一份只是一个占位文件（`\date{}` + 一行 body），
         # 拿"参考文献 ≥ 2"去要求占位文件是判错了对象。
         "looks_like_article": ("\\documentclass" in text or "\\begin{document}" in text),
@@ -1129,9 +1184,12 @@ OWN_RESULT_LINK_SOURCES: tuple[tuple[str, str], ...] = (
 )
 
 #: 读数里"这条命题的稿"的候选（工作区相对）。只按已记录的指针取，不扫盘猜：
-#: 行上 `line_range` 记过的那份稿（E 的 `reports/e-proof-<号>.md` 那一族），加上按号
-#: 约定的 F 稿（`reports/f-proof-<号>.md`）。找不到就是"没有这一份"，不是"没查成"。
-_MANUSCRIPT_REF_IN_LABEL = re.compile(r"reports/[\w./-]+\.md")
+#: 行上 `line_range` 记过的那份稿（E 的 `manuscripts/E/e-proof-<号>.md` 那一族），加上按号
+#: 约定的 F 稿（`manuscripts/F/f-proof-<号>.md`）。找不到就是"没有这一份"，不是"没查成"。
+#: 路径形认新落点（`manuscripts/<角色>/` · `work/<角色>/`）；退役的 `reports/` /
+#: `documents/` 仍能匹配，只为复核老行里写的路径（不当回退路径读）。
+_MANUSCRIPT_REF_IN_LABEL = re.compile(
+    r"(?:manuscripts/[A-Za-z]+|work/[A-Za-z]+|reports|documents)/[\w./-]+\.md")
 
 
 def _manuscript_paths_for(statement_id: str, row: Mapping[str, Any] | None = None) -> list[str]:
@@ -1369,7 +1427,7 @@ def _construct_leg_unmet(store: Any, project_root: Path,
                            f"{item.get('why') or ''}")
     if not own_ids and not int(ms.get("scanned") or 0):
         why_not.append("[no_source] `statements` 里 `origin=own_result` 的 0 行；"
-                       "`reports/` 里也没有签载体稿")
+                       "`manuscripts/` 里也没有签载体稿")
     readings: dict[str, Any] = {
         "statements": len(stmts),
         "own_result": int(links.get("own_result") or 0),
@@ -1522,7 +1580,7 @@ def content_leg_unmet(store: Any, project_root: Path, *,
             "而 C 的读数（`hottest` / `gaps` / `contradictions`）至少要能被交付物引到："
             "在手稿或文档断言里引一条 `rel:` 编号（`refs: [\"rel:0007\"]`，"
             "`manuscripts` 会校验它指向的关系行在不在册），"
-            "或让 C 的分析报告落进 `reports/<id>-<kind>.md` 与 `analysis_reports` 表")
+            "或让 C 的分析报告落进 `work/C/<id>-<kind>.md` 与 `analysis_reports` 表")
 
     # ---- ④ 逐字引文一条都没核到不算交付（T1 口径）。
     # 只看 `origin="external_lit"` 的行：`quote_verified` 管的是「文献里的原文摘录有没有
@@ -1551,7 +1609,7 @@ def content_leg_unmet(store: Any, project_root: Path, *,
             "为什么解决不了（不是把同一句「原文未取回」抄 N 遍）")
 
     # ---- ⑤ 论文要承载本轮结果（T3 口径）。
-    # 只在「这一趟是从结果写论文」时判：T1 那一类审阅项目的 `out/paper/main.tex`
+    # 只在「这一趟是从结果写论文」时判：T1 那一类审阅项目的 `out/package/main.tex`
     # 是被审的稿件本身（只读基线 `source/main.tex` 在盘上），它的参考文献与
     # 引用形态由原稿决定 —— 拿 T3 的口径去判它是判错了对象（同 `draft/38` §7 的
     # 「review 项目不触发研究链那一环」）。T3 的工作区没有只读基线。
@@ -1565,7 +1623,7 @@ def content_leg_unmet(store: Any, project_root: Path, *,
         readings["paper_leg"] = {"unreadable": f"{type(exc).__name__}: {exc}"}
     if paper is not None and not paper.get("looks_like_article"):
         # 占位文件（不是论文）⇒ 这一档不说话，但读数留着（"为什么没判"要看得见）。
-        readings["paper_leg_note"] = ("out/paper/main.tex 不是一篇论文（没有 "
+        readings["paper_leg_note"] = ("out/package/main.tex 不是一篇论文（没有 "
                                       "`\\documentclass` / `\\begin{document}`）⇒ "
                                       "T3 口径这一档不判它")
         paper = None
@@ -1573,7 +1631,7 @@ def content_leg_unmet(store: Any, project_root: Path, *,
         readings["paper_leg"] = paper
         if int(paper["bibitems"]) < 2:
             unmet.append(
-                f"论文的参考文献只有 {paper['bibitems']} 条（`out/paper/main.tex` 里 "
+                f"论文的参考文献只有 {paper['bibitems']} 条（`out/package/main.tex` 里 "
                 f"`\\bibitem` 的条数）—— 一篇承载研究结果的论文不会只引 1 条文献："
                 "把本轮实际用到的文献（`literature` 里取回的那些）写进参考文献")
         if not paper["result_sections"]:
@@ -2593,15 +2651,20 @@ def _manuscript_sign_reading(project_root: Path,
         out["why"] = (f"签的目录读不成（{table.get('why') or '（没有理由）'}）⇒ "
                       "「造」的新链这一路没查成（不是「这个工作区一份签都没有」）")
         return out
-    shots = project_root / "reports"
+    # 2026-11-22（B2b-2）：签载体按角色分目录（`manuscripts/F|B|E/`）；旧 `reports/` 不再读。
+    from . import manuscriptfamily as _E3_MFAM
+
+    shots_dirs = [project_root / rel_dir for rel_dir in _E3_MFAM.MANUSCRIPT_DIRS]
     files: list[Path] = []
-    if shots.is_dir():
-        try:
-            files = sorted(p for p in shots.glob("*.md") if p.is_file())
-        except OSError as exc:  # noqa: BLE001 —— 列不出来 = 没查成
-            out["why"] = (f"`reports/` 列不出来（{type(exc).__name__}: {exc}）⇒ "
-                          "「造」的新链这一路没查成")
-            return out
+    for shots in shots_dirs:
+        if shots.is_dir():
+            try:
+                files.extend(sorted(p for p in shots.glob("*.md") if p.is_file()))
+            except OSError as exc:  # noqa: BLE001 —— 列不出来 = 没查成
+                out["why"] = (f"`{shots.relative_to(project_root).as_posix()}/` 列不出来"
+                              f"（{type(exc).__name__}: {exc}）⇒ "
+                              "「造」的新链这一路没查成")
+                return out
     # ---- 在册那一路的「覆盖面」：稿号 / 证明 sha（行上的 + 证明清单里的）---------
     # 只用来判「这一份稿归谁判」，不参与计数：一件在册行覆盖的稿，它的档由现算的
     # 五位等级 + 最新判词决定（那件事已经在上面那一段分支里做过了，这里不重做）。
@@ -2665,9 +2728,10 @@ def _manuscript_sign_reading(project_root: Path,
                                 for x in out["unreadable"][:2])
                       + " ⇒ 「造」的新链这一路没查成（不是「没有签」）")
     elif not out["scanned"]:
-        out["why"] = ("查过了：`reports/` 里没有签载体稿"
+        out["why"] = ("查过了：`manuscripts/{F,B,E}/` 里没有签载体稿"
                       "（`f-proof-*` / `b-proof-*` / `e-proof-*`）"
-                      + ("" if shots.is_dir() else " —— 这个工作区连 `reports/` 都还没有"))
+                      + ("" if any(d.is_dir() for d in shots_dirs)
+                         else " —— 这个工作区连正文本目录都还没有"))
     else:
         out["why"] = (
             f"签载体稿 {out['scanned']} 份：数进这一档 {out['counted_total']} 份"
@@ -3036,7 +3100,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         # 为什么必须有一档盯它：三条腿的凭据可以全齐、收工门八格全过，而主稿一个字节
         # 都没改 —— "引文核过、形式化验过"与"把正文里的问题改掉"是三件事，
         # 前两件有判据，第三件没有这一档就没有读数。
-        draft = project_root / "out" / "paper" / "main.tex"
+        draft = PC.package_dir(project_root) / PC.TEX_NAME
         base = project_root / "source" / "main.tex"
         # 「实质改动」那一半：比 sha 会把"只差空白"
         # 也算成改过（一个字节即算），而任务要的是"把正文里的问题改掉"。
@@ -3059,7 +3123,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         same = d_sha == b_sha
         substantive = d_norm != b_norm
         return (0 if not substantive else 1), {
-            "manuscript": "out/paper/main.tex", "baseline": "source/main.tex",
+            "manuscript": "out/package/main.tex", "baseline": "source/main.tex",
             "manuscript_sha256": d_sha, "baseline_sha256": b_sha,
             "manuscript_bytes": draft.stat().st_size, "baseline_bytes": base.stat().st_size,
             "edited": substantive, "raw_edited": not same,
@@ -3074,7 +3138,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         # 那是"做一条就算"的口子，而任务原文要的是"逐条核验"。
         # 记录认两种：`quote_verified` 非 null（真/假两种比对结论），或 `quote_reason` 非空
         # （三态里的"未查 + 理由" —— 外部原文不在盘上时，这正是诚实的结论）。
-        draft = project_root / "out" / "paper" / "main.tex"
+        draft = PC.package_dir(project_root) / PC.TEX_NAME
         base = project_root / "source" / "main.tex"
         # E-05 ②：分母取只读基线（`source/main.tex`），不取可改的主稿。
         #
@@ -3122,8 +3186,10 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             # 单独给出来，读的人才知道那几条去哪了（不是被静默丢掉）。
             **{name: count for name, count in QE.no_source_reading(rows).items()},
         }
-    if kind == "manuscript_rows":
-        # 交接手稿那一档：数 `manuscripts/handoffs.jsonl` 的行数（一份交接一行）。
+    if canonical_leg_kind(kind) == HANDOFF_LEG_KIND:
+        # 交接手稿那一档（正名 `handoff_rows`；旧名 `manuscript_rows` 折进同一支 ——
+        # 两个键的值只能从这一处出来，这就是"同源一处真身"）。
+        # 数 `work/handoffs.jsonl` 的行数（一份交接一行）。
         # 按行而不按文件名：旧口径要文件名能被 `<编号>-<谁>to<谁>.md` 认出来，改个名或
         # 少个字段就读成 0（读数被文件名的形状绑住），而账本是追加写的，撞号与覆盖在结构
         # 上不可能发生。旧格式 `.md` 不计入这一档，但在明细里另列一栏 —— 既不假装没有，
@@ -3135,12 +3201,14 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         good = [r for r in all_rows if not MS.missing_fields(r)]
         derived = [r for r in good if "框架据" in str(r.get("note") or "")]
         authored = [r for r in good if r not in derived]
-        folder = project_root / MS.MANUSCRIPTS_DIR
-        legacy = [str(got.get("id") or "")
-                  for got in [MS.parse_name(p) or {} for p in
-                              (sorted(folder.glob("*.md")) if folder.is_dir() else [])] if got]
+        # 2026-11-22（B2b-2）：账本的新家是 `work/handoffs.jsonl`；旧的
+        # `manuscripts/handoffs.jsonl`（旧布局，不再支持）与旧 `.md` 格式都不再读
+        # （业主裁定「旧工作区不必兼容」）。遇到旧布局 ⇒ 明说「旧布局（不再支持）」。
+        # 不再扫 `manuscripts/*.md`：那个目录现在放的是正文手稿（F/B/E 的证明稿），
+        # 按旧格式去认会把每一份正文误读成一份"历史交接"。
+        legacy_note = MS.legacy_layout_note(project_root)
         detail: dict[str, Any] = {
-            "ledger": f"{MS.MANUSCRIPTS_DIR}/{MS.HANDOFFS_NAME}",
+            "ledger": f"{MS.HANDOFFS_DIR}/{MS.HANDOFFS_NAME}",
             "rows": len(all_rows),
             "authored_rows": [str(r.get("id") or "") for r in authored[:10]],
             "derived_rows": len(derived),
@@ -3150,13 +3218,11 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             "refs_ok": [str(r.get("id") or "") for r in authored
                         if list(r.get("refs") or [])][:10],
             "unparsable_lines": bad_lines[:5],
-            "legacy_md_files": legacy[:10],
             "rows_missing_fields": [{"id": str(r.get("id") or ""), "missing": MS.missing_fields(r)}
                                     for r in all_rows if MS.missing_fields(r)][:5],
         }
-        if legacy:
-            detail["note"] = (f"另有 {len(legacy)} 份旧格式 `.md` 手稿（不计入这一档）："
-                              "新口径数的是账本行；旧文件仍在 `manuscripts.list` 里可见")
+        if legacy_note:
+            detail["note"] = legacy_note
         if bad_lines:
             detail["note"] = ("账本里有读不出来的行 ⇒ 这一档的读数偏低，按 `unparsable_lines` "
                               "逐条去查（读不出不等于没有）")
@@ -3318,7 +3384,16 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             "implicit_min": 0, "implicit_max": 0,
             "note": ("这一档的判据是**上限**：队列里没做完的请求应为 0。有人做了"
                      "（派 `A.run_once` / `A.run` 认领）或如实标 `na` + 理由，两种都算数；"
-                     "「提交了没人做」不算数"),
+                     "「提交了没人做」不算数。"
+                     # 2026-11-22（DATAHYGIENE）：`reprocess_requests` 判「未启用」而不是退役
+                     # —— 两侧写点与 I4 闸都在、只是从来没有一条请求（51 个工作区 0 行）；
+                     # B 侧「重抽取」skill 已在 2026-11-22 退役（`221f9ab2`）⇒ 今天一条真提交
+                     # 没人认领。这一格因此不折平：`reprocess_unfinished > 0` 仍然是红，
+                     # 报告里要能读出"这条队列未启用、谁提交的谁解释"。
+                     "（`reprocess_requests` 登记为**未启用**："
+                     "它的生产者与消费者都在、但 B 侧『重抽取』skill 已于 2026-11-22 退役；"
+                     "这一格若真出现 pending 行，那是真缺陷 —— 要么有人提交了没人认领，"
+                     "要么那条线该整条退役，两种都要人裁）"),
         }
         if repro_note:
             detail["table_note"] = repro_note
@@ -3395,16 +3470,20 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             {"id": str(r.get("plan_id") or r.get("id") or ""),
              "status": str(r.get("status") or "")} for r in rows[:8]]}
     if kind == "review_files":
-        # H 的审校报告（`review_report` 的框架缺省落点 = `out/review/`）。
-        # M 自己的三件（`REPORT.md` / `STATUS-*.md` / `REPORT-STYLE.json`）也在那个目录里
-        # ⇒ 这一档必须减掉它们，否则"M 写了交付说明"就会冒充"审过了"。
-        d = project_root / "out" / "review"
+        # H 的审校报告（`review_report` 的框架缺省落点 = `out/report/`，真身
+        # `review_tools.DEFAULT_REPORT_SUBDIR`）。M 自己的三件（`REPORT.md` /
+        # `STATUS-*.md` / `REPORT-STYLE.json`）也在那个目录里 ⇒ 这一档必须减掉它们，
+        # 否则"M 写了交付说明"就会冒充"审过了"。
+        # 2026-11-22（draft/197 §十四 ④）：这一行此前 glob 退役目录 `out/review/`，
+        # 而写者与 `detail["dir"]` 都写 `out/report/` ⇒ 这一档永远数到 0（写的与读的
+        # 不是同一个目录；读数说"还没审过"而不是"读错了地方"）。
+        d = project_root / "out" / "report"
         got = sorted(d.glob("*.md")) if d.is_dir() else []
         excluded = [p.name for p in got
                     if p.name == "REPORT.md" or p.name.startswith("STATUS-")]
         reviews = [p for p in got if p.name not in set(excluded)]
         detail: dict[str, Any] = {
-            "dir": "out/review",
+            "dir": "out/report",
             "files": [p.name for p in reviews[:8]],
             "excluded": sorted(excluded)[:8],
         }
@@ -3416,12 +3495,15 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         # D 的 `write_report` 只写文件（返回路径），不落 `analysis_reports` —— 这一档就数文件。
         #
         # 落位取并集：写者的缺省落位是 `<工作区>/<reports_subdir>`
-        # （`AgentD.__init__` 从 `agent_d.reports_subdir` 取，缺省 `reports`），
-        # 而主控显式传 `out_path` 时常见的落点是 `out/reports`。写者读配置，读数就得
-        # 读同一份配置 —— 只看一个写死的目录会出现「报告写出来了、读数说 0 条」。
+        # （`AgentD.__init__` 从 `agent_d.reports_subdir` 取，缺省 `manuscripts/D`，
+        # 真身是 `agent_d.core.REPORTS_SUBDIR_DEFAULT`），而主控显式传 `out_path` 时
+        # 常见的落点是 `out/reports`。写者读配置，读数就得读同一份配置 —— 只看一个
+        # 写死的目录会出现「报告写出来了、读数说 0 条」。
+        from .agent_d.core import REPORTS_SUBDIR_DEFAULT
+
         subs = ["out/reports"]
         cfg_sub = _reports_subdir_of(project_root)
-        subs.append(cfg_sub or "reports")
+        subs.append(cfg_sub or REPORTS_SUBDIR_DEFAULT)
         files: list[Path] = []
         seen: set[str] = set()
         per_dir: dict[str, int] = {}
@@ -3436,14 +3518,15 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                     files.append(p)
         detail: dict[str, Any] = {
             "dirs": per_dir,
-            "reports_subdir": cfg_sub or "reports",
+            "reports_subdir": cfg_sub or REPORTS_SUBDIR_DEFAULT,
             "files": [str(p.relative_to(project_root)).replace("\\", "/") for p in files[:8]],
         }
         if not cfg_sub:
             # 配置在、但读不懂 ⇒ 说清楚"这一档是按缺省落位数出来的"，
-            # 而不是让它看起来像"配置说了就是 reports"（三态纪律）。
+            # 而不是让它看起来像"配置说了就是 manuscripts/D"（三态纪律）。
             detail["note"] = (f"{project_root / 'config.yaml'} 读不懂 ⇒ 按缺省落位 "
-                              "reports 数；若写者用的是别的子目录，这一档的读数会偏低")
+                              f"{REPORTS_SUBDIR_DEFAULT} 数；若写者用的是别的子目录，"
+                              "这一档的读数会偏低")
         return len(files), detail
     if kind == "reviewed_proof_rows":
         # 「造判决性证据」那一档：我方命题里五元位派生出「预备定理级」
@@ -4420,7 +4503,7 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
             "没给项目根 ⇒ 验收表的机器可判行没查成（不是「没有这一条」）",
         ))
         return
-    path = Path(resolve_under_workspace(store, project_dir)) / ACCEPTANCE_CHECKS_NAME
+    path = Path(resolve_under_workspace(store, project_dir)) / ACCEPTANCE_TARGETS_NAME
     if not path.is_file():
         # 研究型项目不许"没有这一栏"：缺表时收工门无从回答
         # "这一趟的研究链走到哪一步"（表是人自己写的 ⇒ 只会写最容易满足的几行）。
@@ -4439,7 +4522,7 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
             rep.status["acceptance"] = "fail"
             # ---- 2026-11-17（业主口径，真机 `projects/lp-ball-5`）：拒信与预算读数写在一起
             #
-            # 现场：那一趟花满 $5（F 77 趟 / V 18 次）时 `out/paper/ACCEPTANCE-CHECKS.json`
+            # 现场：那一趟花满 $5（F 77 趟 / V 18 次）时 `out/package/ACCEPTANCE-TARGETS.json`
             # 还没写 ⇒ 这一格只能红。而当时读这行拒信的人分不清两件事：没写（预算花在
             # 别处了）与写得不对（表在、行不成立）—— 前者要补文件，后者要改行，处置
             # 完全不同。所以这一档把"这一趟还剩多少预算"贴在拒信里。
@@ -4452,7 +4535,7 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
             rep.findings.append(Finding(
                 "acceptance", "acceptance_missing_for_research", "blocker",
                 f"这是个研究型项目（`research_questions` 有行），却没有 "
-                f"{ACCEPTANCE_CHECKS_NAME} ⇒ 这一趟没有可复算的验收口径。"
+                f"{ACCEPTANCE_TARGETS_NAME} ⇒ 这一趟没有可复算的验收口径。"
                 f"研究链四个环节每个至少一行：{'；'.join(m for m in chain['missing'])}。"
                 "读数不够就把那一行如实写出来（写着 0 ⇒ 那一行自己不成立，但读数留下了）；"
                 "缺的是那一行，不是那个数。"
@@ -4463,7 +4546,7 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
             # 改前这里落 `pass`（"这个项目没有机器可判的验收行"）—— 空工作区的一格
             # 真空通过。研究型项目（`research_questions` 有行）缺表仍判 `fail`：
             # 那是真的没写，不是"不需要写"。
-            why = (f"这个项目没有 {ACCEPTANCE_CHECKS_NAME}，`research_questions` 表也没有"
+            why = (f"这个项目没有 {ACCEPTANCE_TARGETS_NAME}，`research_questions` 表也没有"
                    "一行 ⇒ 没有可判对象（没有可判的验收口径），记 na（不是 pass：没判过；"
                    "也不是 unknown：不是读不成）")
             _record_not_applicable(rep, "acceptance", why,
@@ -4590,19 +4673,34 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                                     "problems": [], "why": f"{type(exc).__name__}: {exc}"})
         return _vref_cache
 
+    def _legacy_kind_fields(declared: str) -> dict[str, str]:
+        """旧名读成正名时，读数行上「仍留旧名」并带 `deprecated`（B3，一个版本的过渡）。
+
+        为什么把它做成字段而不是把 `kind` 改回旧名：读数的主名字必须是正名
+        `handoff_rows`（人第一眼看到的那个词决定他会不会读成"手稿份数"）；旧名不是
+        被删掉，而是并列在 `kind_declared` 上，让还按旧名找读数的人找得到、也知道
+        该换成哪个名字。两个名字的值不是两次数：`got` 来自同一支 `_leg_reading`。
+        """
+        if declared and canonical_leg_kind(declared) != declared:
+            return {"kind_declared": declared, "deprecated": HANDOFF_LEG_DEPRECATED}
+        return {}
+
     def _mark_unreadable(idx: int, raw: Any, code: str, why: str) -> None:
         """把第 `idx` 行记成 `unreadable`（并留一条 warning）。"""
         rid = str(raw.get("id") or "") if isinstance(raw, Mapping) else ""
-        kind = str(raw.get("kind") or "") if isinstance(raw, Mapping) else ""
+        declared = str(raw.get("kind") or "") if isinstance(raw, Mapping) else ""
+        kind = canonical_leg_kind(declared)
+        legacy = _legacy_kind_fields(declared)
         unreadable_rows.append({"id": rid or f"#{idx}", "kind": kind, "code": code,
-                                "reason": why})
+                                "reason": why, **legacy})
         if rid and rid in seen_ids and rid not in duplicate_ids:
             duplicate_ids.append(rid)
         rep.findings.append(Finding("acceptance", code, "warning", why))
         out.append({"id": rid, "name": str(raw.get("name") or "")
                     if isinstance(raw, Mapping) else "",
                     "kind": kind, "min": None, "max": None, "got": None, "ok": None,
-                    "state": "unreadable", "unreadable": True, "reason": why, "code": code})
+                    "state": "unreadable", "unreadable": True, "reason": why, "code": code,
+                    **legacy})
 
     for idx, row in enumerate(rows):
         if not isinstance(row, Mapping):
@@ -4611,7 +4709,10 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                              f"⇒ 这一行读不懂（其余行照常判）")
             continue
         cid = str(row.get("id") or "")
-        kind = str(row.get("kind") or "")
+        # `kind` 是「读侧正名」（旧名折成正名）；写侧声明的原文留在 `declared_kind` 里，
+        # 下面每一行读数都带 `kind_declared` + `deprecated`（见 `_legacy_kind_fields`）。
+        declared_kind = str(row.get("kind") or "")
+        kind = canonical_leg_kind(declared_kind)
         name = str(row.get("name") or "")
         note = str(row.get("note") or "")
         # ---- 行级形状/字段类型：读不懂 ⇒ 这一行 `unreadable`。
@@ -4655,14 +4756,16 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                 continue
             na_rows.append(cid)
             out.append({"id": cid, "name": name, "kind": kind, "min": want_min, "max": None,
-                        "got": None, "ok": True, "na": True, "state": "na", "note": note})
+                        "got": None, "ok": True, "na": True, "state": "na", "note": note,
+                        **_legacy_kind_fields(declared_kind)})
             continue
-        if kind not in LEG_CHECK_KINDS:
+        if not known_leg_kind(kind):
             # 词表外 `kind` 只废这一行；整格仍由下面的汇总落 `unknown`
             # （绝不 `pass`）—— 自造名字的威慑一点没减，只是不再连坐好行的读数。
             _mark_unreadable(idx, row, "acceptance_unknown_kind",
-                             f"验收行 {cid} 的 kind={kind!r} 不在受控词表 "
-                             f"{tuple(LEG_CHECK_KINDS)} 里 ⇒ 这一行读不懂（不是「满足了」）。"
+                             f"验收行 {cid} 的 kind={declared_kind!r} 不在受控词表 "
+                             f"{tuple(LEG_CHECK_KINDS)} 里（读数正名：{HANDOFF_LEG_KIND}）"
+                             f"⇒ 这一行读不懂（不是「满足了」）。"
                              f"别自造名字：写表时从受控词表里逐字挑"
                              f"（那一串逐字写在主控的 brief 里）")
             continue
@@ -4678,7 +4781,8 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
             na_kind_rows.append(cid)
             out.append({"id": cid, "name": name, "kind": kind, "min": want_min, "max": None,
                         "got": None, "ok": None, "state": "not_applicable",
-                        "not_applicable": True, "reason": na_exc.reason})
+                        "not_applicable": True, "reason": na_exc.reason,
+                        **_legacy_kind_fields(declared_kind)})
             continue
         except Exception as exc:  # noqa: BLE001 —— 台账读不到 = 这一行没查成
             _mark_unreadable(idx, row, "acceptance_leg_unreadable",
@@ -4709,7 +4813,8 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
             })
             out.append({"id": cid, "name": name, "kind": kind, "min": None, "max": None,
                         "got": got, "ok": None, "state": "informational",
-                        "informational": True, "detail": detail})
+                        "informational": True, "detail": detail,
+                        **_legacy_kind_fields(declared_kind)})
             informational_rows.append({"id": cid, "kind": kind, "got": got})
             continue
         # ---- E-05 ①：阈值取大（`min` 从此只能把阈值提高）。
@@ -4740,7 +4845,8 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
             detail = dict(detail)
             detail["min_overridden"] = min_overridden
         row_out = {"id": cid, "name": name, "kind": kind, "min": want_min, "max": want_max,
-                   "got": got, "ok": ok_row, "state": "computed", "detail": detail}
+                   "got": got, "ok": ok_row, "state": "computed", "detail": detail,
+                   **_legacy_kind_fields(declared_kind)}
         out.append(row_out)
         # ---- 第三条队列：`literature.unprocessed > 0` ⇒ 不许 pass。
         #
@@ -4893,7 +4999,7 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
             shown_detail = dict(detail) if isinstance(detail, dict) else detail
             if isinstance(shown_detail, dict):
                 shown_detail.pop("zero_reading_hint", None)
-            unmet.append(f"{cid}（{name or LEG_CHECK_KINDS[kind]}）：{why}"
+            unmet.append(f"{cid}（{name or LEG_READING_DOCS.get(kind) or kind}）：{why}"
                          + (f"；{hint}" if hint else "")
                          + f" —— 读数 {shown_detail}"
                          + (f"；{note}" if note else "")
@@ -4914,16 +5020,33 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
     computed_kinds = acceptance_kinds_with_state(out, "computed")
     na_kinds_in_table = acceptance_kinds_with_state(out, "na")
     _branch_kinds = ("reviewed_current_rows", "document_body_rows",
-                     "claim_evidence_fit_rows", "manuscript_rows")
+                     "claim_evidence_fit_rows", HANDOFF_LEG_KIND)
     # E-04b（机器报缺口）：这四档里"只被 `na` 行顶着"的那些 —— 如实报出来，
     # "算不算覆盖"的判断归 M/秘书，机器不判 fail/unknown。
     na_only_branch_kinds = sorted(k for k in _branch_kinds
                                   if k in na_kinds_in_table and k not in computed_kinds)
 
+    # ---- 读数键：正名 + 旧名（B3，一个版本的过渡）--------------------------------
+    # 为什么两个键放在同一处：它们是「同一个读数」的两个名字，不是两次数 —— 两个值都从
+    # 上面 `out` 里同一行（同一次 `_leg_reading`）取。旧名带 `deprecated`，下一版删
+    # （窗口登记在 `docs/SYSTEM-INTRO.md` 的「读数键：改名与删除窗口」一节）。
+    _handoff_got = next((r.get("got") for r in out
+                         if str(r.get("kind") or "") == HANDOFF_LEG_KIND
+                         and acceptance_row_state(r) == "computed"), None)
+    reading_keys: dict[str, Any] = {}
+    deprecated_keys: dict[str, str] = {}
+    if _handoff_got is not None:
+        reading_keys[HANDOFF_LEG_KIND] = _handoff_got
+        reading_keys["manuscript_rows"] = _handoff_got
+        deprecated_keys["manuscript_rows"] = HANDOFF_LEG_DEPRECATED
+
     rep.readings["acceptance"] = {
         "checks_file": str(path), "rows": out,
         # C4/C6：验收读数的口径版本（口径每改一次就要能说清"从哪一趟起变了"）。
         "reading_version": ACCEPTANCE_READING_VERSION,
+        # B3：交接手稿那一档的两个读数键（同值；旧名见 `deprecated_keys`）。
+        "reading_keys": reading_keys,
+        "deprecated_keys": deprecated_keys,
         # CC-05/CC-02 的读数：真的算过的行 / 不适用 / na / 读不懂，四档分开。
         "rows_read": len([r for r in out if acceptance_row_state(r) == "computed"]),
         "rows_na": len(na_rows),
@@ -5002,10 +5125,10 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
         absent_state = acceptance_absent_kind_state()
         absent_reason = (
             f"验收表缺 `{PAPER_MAPPING_LEG_KIND}` 这一档（老工作区里的 "
-            f"{ACCEPTANCE_CHECKS_NAME} 没有这一行）⇒ 这一档读成「没查成」（{absent_state}），"
+            f"{ACCEPTANCE_TARGETS_NAME} 没有这一行）⇒ 这一档读成「没查成」（{absent_state}），"
             "不判红。补法：在表里加一行 "
             "{\"id\": \"P12\", \"kind\": \"paper_mapping_rows\", \"min\": 1}"
-            "（读数 = out/paper/MAPPING.json 里三格齐的行数，分母是表里的行数）")
+            "（读数 = out/package/MAPPING.json 里三格齐的行数，分母是表里的行数）")
         rep.readings["acceptance"]["missing_kinds"] = [PAPER_MAPPING_LEG_KIND]
         rep.readings["acceptance"]["missing_kind_state"] = absent_state
         rep.readings["acceptance"]["problems"] = list(
@@ -5094,10 +5217,10 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
     # ---- 交接账本是不是被模板灌满：
     # 验收表里没写这一档时，门替它报出来 —— 账本可以 100% 是框架派生的模板、
     # `refs` 全空，而"手稿 N 行"这个读数一直在替噪声背书。
-    if "manuscript_rows" not in computed_kinds:
+    if HANDOFF_LEG_KIND not in computed_kinds:
         try:
             _got, ms_detail = _leg_reading(
-                store, "manuscript_rows",
+                store, HANDOFF_LEG_KIND,
                 Path(resolve_under_workspace(store, project_dir)))
         except Exception:  # noqa: BLE001 —— 读不出来时这一档不算数
             ms_detail = None
@@ -5107,7 +5230,7 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                 f"（`refs` 全空、正文是填空），**没有一份模型自己写的交接** —— "
                 "带信息的交接应当是：写清交给谁什么结论、依据哪几个编号（`refs` 非空）"
                 "（派活时带 `notify`，收工时的 `final.notify`）。"
-                "注意：写一行 `na` 关不掉它（这一条是从 `manuscripts/handoffs.jsonl` 现算的）；"
+                "注意：写一行 `na` 关不掉它（这一条是从 `work/handoffs.jsonl` 现算的）；"
                 "动作驱动的一趟也能自撰交接 —— 用一次 `handoff` 把结论与编号写给下一位")
     # ---- 五条「内容」判据：「算」要结论、「造」要我方派生命题、C 的产物要进交付、
     # 一条引文都没核到不算交付、论文要承载本轮结果。与上面四条同族：门替没写进表里的档
@@ -5310,7 +5433,7 @@ VERDICT_NOTE = (
 #: 却一个字都没判。现在的口径：体例归 M，门只核两件事 ① 附件三件套（`ATTACHMENT_FIELDS`）—— 来源与完整性，
 #: 不是排版，保留判实；② M 声明的体例有没有兑现 —— M 若落下 `REPORT-STYLE.json`（`{"sections": [...]}`，见
 #: :data:`REPORT_STYLE_NAME`），门就逐节核它在不在报告里；没声明 ⇒ 不判体例（读数里如实写 `none`，不是"通过"）。
-REPORT_STYLE_NAME = "out/review/REPORT-STYLE.json"
+REPORT_STYLE_NAME = "out/report/REPORT-STYLE.json"
 
 #: 附件三件套（报告行逐字要求）。
 ATTACHMENT_FIELDS: tuple[str, ...] = ("origin=own_result", "依据", "sha")
@@ -5331,7 +5454,11 @@ ATTACHMENT_FIELDS: tuple[str, ...] = ("origin=own_result", "依据", "sha")
 #: `"2026-10-19-C5"`（业主 2026-10-19）：`attack_plan_rows` 降为立项计数 `INFORMATIONAL_KINDS`（读数
 #: `rows_informational`，不进 `computed_kinds` 与研究链覆盖面，「攻」的通过只由 `plan_progress_rows` 决定 ⇒ 只写
 #: 立项那行 ⇒ 整格 `fail`；行状态词表新增 `informational`）。
-ACCEPTANCE_READING_VERSION = "2026-10-19-C5"
+#: `"2026-11-22-C6"`（B3，`draft/195` §十四）：交接手稿那一档的读数键正名成 `handoff_rows`
+#: （旧名 `manuscript_rows` 这一版照读、折进同一支现算；读数行上 `kind` 是正名、
+#: `kind_declared` 留旧名并带 `deprecated: "use handoff_rows"`）。读数形状新增两格，
+#: 所以与 C5 及以前的读数不可直接比 —— 变的只是名字，`got` 的口径一个字没动。
+ACCEPTANCE_READING_VERSION = "2026-11-22-C6"
 
 
 class LegNotApplicable(Exception):
@@ -5449,6 +5576,8 @@ class ClosingReport:
         形状：`{"code","sid","detail","exit_code"}`。`detail` 就是 CLI 打出来的那一句
         （`closing_session_identity()` 的 `problem`）—— 只写一处，两个出口同文同码。
         拒绝发生时 `status` 是空的：这不是"八格全是没查成"的空读数，而是"门根本没跑"。
+        两种拒绝：会话号落不下来（`code` 见 `closing_session_identity`），以及显式点名了
+        已退役的格（`code="retired_check"`，2026-11-22 `draft/197` §十四 ③）。
         """
         got = self.readings.get("refusal")
         return dict(got) if isinstance(got, Mapping) and got.get("code") else None
@@ -5806,7 +5935,7 @@ def resolve_under_workspace(store: Any, given: str) -> str:
     """把"相对工作区"的路径解析成绝对路径（`"."` = 工作区根）。
 
 为什么必须有它（`draft/37` §60 的真机读数）：第十趟主控按工具描述传 `project_dir="."` 与
-`report_path="out/review/REPORT.md"`（描述逐字写"相对工作区"），然后撞上一串怪读数：`closing` 报
+`report_path="out/report/REPORT.md"`（描述逐字写"相对工作区"），然后撞上一串怪读数：`closing` 报
 "报告不在盘上"（它刚写完、`fs.stat` 也确认 6,743 字节）、"锚文件读不到"（文件也在盘上），
 `conductor.acceptance(project_dir=".")` 还解析到了工作区上一级；它花了 8 步去查（步 27–34），结论是
 "`project_dir='.'` 被解析到工作区上一级"。
@@ -5825,18 +5954,24 @@ def resolve_under_workspace(store: Any, given: str) -> str:
 
 
 def _reports_subdir_of(project_root: Path) -> str:
-    """D 把报告写在哪个子目录（`agent_d.reports_subdir`，缺省 `reports`）。
+    """D 把报告写在哪个子目录（`agent_d.reports_subdir`，缺省 `manuscripts/D`）。
 
     为什么读数要读配置（`draft/37` §118）：写者（`AgentD.__init__`）就是从这个键取
     落位的。读数若只看一个写死的目录，就会出现"报告真的写出来了、读数说 0 条" ——
     在验收表里那会被读成"任务没做"，而实际是"读数问错了地方"。
 
-    三态：没有配置文件 ⇒ 返回缺省的 `reports`（这是"全用默认值"的正常形态）；
+    缺省值只认一处真身（`agent_d.core.REPORTS_SUBDIR_DEFAULT`）：写者、装配（`pipeline`）
+    与本读数三处各写一个答案，正是"D 的报告落哪取决于从哪个入口跑"的根因
+    （改前三个答案是 `manuscripts/G` / `reports` / `reports`）。
+
+    三态：没有配置文件 ⇒ 返回缺省值（这是"全用默认值"的正常形态）；
     文件在、但读不懂 ⇒ 返回空串，由调用方把"没读懂"写进读数（不许静默当成默认值）。
     """
+    from .agent_d.core import REPORTS_SUBDIR_DEFAULT
+
     p = project_root / "config.yaml"
     if not p.is_file():
-        return "reports"
+        return REPORTS_SUBDIR_DEFAULT
     try:
         import yaml
 
@@ -5844,124 +5979,7 @@ def _reports_subdir_of(project_root: Path) -> str:
         got = (doc.get("agent_d") or {}).get("reports_subdir")
     except Exception:  # noqa: BLE001 —— 读不懂是"没查成"，由调用方落成读数里的一句话
         return ""
-    return str(got) if got else "reports"
-
-def _check_paper(rep: ClosingReport, project_dir: str, store: Any) -> None:
-    """论文那一格：有正文就要求"这份 PDF 是本次从盘上这份 tex 编的"，没有正文就是不适用。
-
-判据只有一处实现（`agentflow.papercompile`）。旧那一格叫 `anchor`，查的是"渲染锚三维（源表 / 渲染
-出的源文件 / 编译回执）"—— 它随 `paper_package` 整条退场（业主 2026-10-13：「paper_package 里那些
-东西都是古早废案了，我们要智能体写文章」，退场面与理由见 `draft/117`）：正文由智能体自己写、框架
-只负责编译 ⇒"包与台账同不同时点"不再成立，成立的是「这份 PDF 是不是盘上这份正文编的」。
-
-三态（`receipt_matches_tex` 的话原样带出）：没有 `out/paper/main.tex` ⇒ `pass` + `not_applicable`
-（不交付论文，合法）；有正文、回执在、`tex_sha256` 对得上 ⇒ `pass`；有正文而回执的 tex 哈希对不上
-⇒ `fail` + `paper_pdf_is_stale`（改完正文没重编）；回执不在 / 读不出来 ⇒ `unknown` +
-`paper_not_checked`（没查成，不是通过）。
-
-## 2026-11-14：这一格不再是门，但判据保留
-
-业主逐字：「是否出 paper 退出收工判定，由 M 自行判断是否到这个时机」。于是
-`DEFAULT_CHECKS` 里没有 `paper`；`check_closing` 改为经 :func:`_run_paper_reading`
-把它算成读数（`readings["paper"]` 四档照旧，`status` 不落、finding 降 warning）。
-函数本身一个字不改 —— 显式把 `"paper"` 写进 `checks=` 的调用方（论文那一路的负控、
-D-38 的夹具）仍然得到这一格，判据强度不变。
-    """
-    if not str(project_dir or "").strip():
-        rep.status["paper"] = "unknown"
-        rep.findings.append(Finding(
-            "paper", "paper_not_checked", "warning",
-            "没给项目根（project_dir）⇒ 论文那一格没查成。这是没查成，不是一致 —— "
-            "交付前必须指到项目根再跑一次（正文在 <项目根>/out/paper/main.tex）",
-        ))
-        return
-    root = Path(resolve_under_workspace(store, project_dir))
-    pkg = root / "out" / "paper"
-    tex = pkg / PC.TEX_NAME
-    # 常见的调用姿势错误：把论文包目录（…/out/paper）当项目根传。指出来，别静默不适用。
-    if not tex.is_file() and (root / PC.TEX_NAME).is_file():
-        rep.status["paper"] = "unknown"
-        rep.findings.append(Finding(
-            "paper", "paper_not_checked", "warning",
-            f"给的目录看起来是论文包本身（{root} 下有 {PC.TEX_NAME}）⇒ 论文那一格没查成。"
-            f"请改传**项目根**（正文在 <项目根>/out/paper/{PC.TEX_NAME}）",
-        ))
-        return
-    if not tex.is_file():
-        rep.status["paper"] = "pass"
-        rep.readings["paper"] = {
-            "verdict": "not_applicable", "root": str(root),
-            "note": (f"这个项目没有论文正文（{tex} 不在盘上）⇒ 论文那一格不适用。"
-                     "交付论文那一档才需要它：正文由 G 写到那个落点，再调 "
-                     "`doc.paper_compile` 编出 PDF"),
-        }
-        return
-    matched, why = PC.receipt_matches_tex(root)
-    verdict = "consistent" if matched is True else ("drifted" if matched is False else "unknown")
-    rep.readings["paper"] = {"verdict": verdict, "root": str(root), "tex": str(tex),
-                             "pdf": str(pkg / PC.PDF_NAME), "reason": why}
-    if matched is True:
-        rep.status["paper"] = "pass"
-        return
-    if matched is False:
-        rep.status["paper"] = "fail"
-        rep.findings.append(Finding(
-            "paper", "paper_pdf_is_stale", "blocker",
-            f"{why} —— 重编一次（`doc.paper_compile`），并在最后一次改正文之后再核一遍",
-        ))
-        return
-    rep.status["paper"] = "unknown"
-    rep.findings.append(Finding(
-        "paper", "paper_not_checked", "warning",
-        f"论文那一格没查成：{why} ⇒ 这一格判不了（不是「PDF 不对」，也不是「没有 PDF」）",
-    ))
-
-
-#: `paper` 读数里那句"它不是门"的说明（业主 2026-11-14：是否出 paper 由 M 判断时机）。
-PAPER_READING_NOTE = "这一格由 M 判断，不是门（不进 machine_pass）"
-
-
-def _run_paper_reading(rep: ClosingReport, project_dir: str, store: Any) -> None:
-    """把 `paper` 那一格算成读数（不进 `status`、不产生 blocker）。
-
-    ## 为什么还要跑 `_check_paper`
-
-    业主 2026-11-14 的裁定是"这一格退出收工判定"，不是"这一格不用查"：
-    「是否出 paper 退出收工判定，由 M 自行判断是否到这个时机」—— M 要判断那个时机，
-    依据就是这一格（`verdict` 四档 `consistent` / `drifted` / `unknown` /
-    `not_applicable`）。所以判据本体一个字不改，改的是它落在哪里。
-
-    ## 为什么不能直接调 `_run_check`
-
-    `_run_check` 会写 `rep.status["paper"]`，而 `status` 的键集就是门的格表
-    （`tests/test_a_crashed_cell_is_unknown_not_a_traceback.py` 钉着"`set(status) ==
-    set(DEFAULT_CHECKS)`"）；它还会把 `paper_pdf_is_stale` 作为 blocker 留在
-    `rep.findings` 里 —— 那会让 `machine_pass` 继续因为论文而假，等于这一格没退出门。
-    所以在一次性报告上跑 `_check_paper`，只搬 `readings`，`status` 不搬，
-    它那几条 finding 降成 `warning`（看得见、不拦门）。
-
-    ## 没查成也留一格读数
-
-    `_check_paper` 在"没给项目根 / 给的是论文包本身"那两档只写 `status` + finding、
-    不写 `readings["paper"]`。这里补一格 `verdict="unknown"` 与那句原话 ——
-    "这一格没查成"不许变成"这一格不存在"。
-    """
-    scratch = ClosingReport()
-    _check_paper(scratch, project_dir, store)
-    reading = dict(scratch.readings.get("paper") or {})
-    if not reading:
-        why = next((str(f.detail or "") for f in scratch.findings
-                    if str(getattr(f, "check", "") or "") == "paper"), "")
-        reading = {"verdict": str(scratch.status.get("paper") or "unknown"),
-                   "root": str(project_dir or ""), "reason": why}
-    reading["gate"] = PAPER_READING_NOTE
-    rep.readings["paper"] = reading
-    for one in scratch.findings:
-        rep.findings.append(Finding(
-            str(getattr(one, "check", "") or "paper"),
-            str(getattr(one, "code", "") or ""), "warning",
-            str(getattr(one, "detail", "") or "")))
-
+    return str(got) if got else REPORTS_SUBDIR_DEFAULT
 
 #: 「有命题、已成稿，而论文包里没有对应表」这一档的理由码（D-38）。
 #:
@@ -5988,14 +6006,14 @@ def _paper_delivery_reading(project: Path, documents: Sequence[Mapping[str, Any]
 
     两个信号任一成立即算论文包：
 
-    - 盘上有 `out/paper/main.tex` 或 `main.pdf`（`doc.paper_compile` 的产物）；
+    - 盘上有 `out/package/main.tex` 或 `main.pdf`（`doc.paper_compile` 的产物）；
     - `documents` 里有 `kind == "paper"` 的行（`doc.build_document` 的论文档）。
 
     `kind` 是 `note` / `survey` 的那些是研究手稿 —— `specs/m.py` 明说研究手稿
     不需要 `MAPPING.json`，所以这一档对它 `not_applicable`，而不是"缺表"。
     反真空用例只打这一处桩（判据的分水岭只有这一个谓词）。
     """
-    package = Path(project) / "out" / "paper"
+    package = PC.package_dir(project)
     package_files = [name for name in (PC.TEX_NAME, PC.PDF_NAME)
                      if (package / name).is_file()]
     paper_docs = [str(d.get("doc_id") or "") for d in documents
@@ -6008,15 +6026,15 @@ def mapping_absence_reading(store: Any, project_root: Any) -> dict[str, Any]:
     """有命题、已成稿，而论文包里没有对应表 —— 这是"没产出"，不是"没查成"。
 
     D-38 的两趟真机读数（`cube-ws` / `r34c`）：`doc.build_document` 各 3 / 2 次、
-    `doc.write_mapping` 两次都是 0，`out/paper` 里只有两份验收表。那一趟的对应表那一格
+    `doc.write_mapping` 两次都是 0，`out/package` 里只有两份验收表。那一趟的对应表那一格
     是 unknown（"没有 `main.tex` ⇒ 不适用"）⇒ "论文欠一张对应表"在收工门上没有任何读数。
 
     四态（`checked` / `applicable` / `missing` 三格）：
 
     - `statements` 或 `documents` 读不出来 ⇒ `checked=False`、`missing=False`
       （没查成不许读成"没问题"，也不许读成"缺"）；
-    - 有 statements、交付是论文包（`out/paper/main.tex`/`main.pdf` 或
-      `documents kind=paper`），而 `out/paper/MAPPING.json` 不在盘上
+    - 有 statements、交付是论文包（`out/package/main.tex`/`main.pdf` 或
+      `documents kind=paper`），而 `out/package/MAPPING.json` 不在盘上
       ⇒ `checked=True`、`applicable=True`、`missing=True`；
     - 有 statements、交付只是研究手稿（`documents kind=note/survey`、盘上没有论文包）
       ⇒ `checked=True`、`applicable=False`、`missing=False`，理由写明"这是研究手稿，
@@ -6040,7 +6058,7 @@ def mapping_absence_reading(store: Any, project_root: Any) -> dict[str, Any]:
         "mapping_json": str(json_path), "exists": None, "missing": False,
         #: 交付形态：`paper`（论文包）/ `research_manuscript`（研究手稿）/ `none`。
         "delivery": "none", "applicable": False,
-        #: 论文包在不在盘上（`out/paper/main.tex` 或 `main.pdf`）。2026-11-04 真机
+        #: 论文包在不在盘上（`out/package/main.tex` 或 `main.pdf`）。2026-11-04 真机
         #: （`projects/paper-rewrite-big`）：PDF 编出来了、`documents` 0 行 ⇒ 改前这一档
         #: 判"还没有成稿 ⇒ 不适用"，于是"有 PDF 却没有对应表"在收工门上没有任何读数。
         "paper_package": False, "package_files": [], "paper_documents": [],
@@ -6049,12 +6067,12 @@ def mapping_absence_reading(store: Any, project_root: Any) -> dict[str, Any]:
     if store is None:
         out["reason"] = "没有 store ⇒ 有命题 / 已成稿这两格读不出来（没查成）"
         return out
-    # 常见的调用姿势错误：把论文包目录（…/out/paper）当项目根传。这一档要的是项目根
-    # （表在 <项目根>/out/paper/ 下），在包目录上判只会得到一个假的"缺表"（与
-    # `_check_paper` 那句"给的目录看起来是论文包本身"同一口径：说出来，别静默判红）。
+    # 常见的调用姿势错误：把论文包目录（…/out/package）当项目根传。这一档要的是项目根
+    # （表在 <项目根>/out/package/ 下），在包目录上判只会得到一个假的"缺表"（与论文包
+    # 那条落点同一口径：说出来，别静默判红）。
     if (project / PC.TEX_NAME).is_file():
         out["reason"] = (f"给的目录看起来是论文包本身（{project / PC.TEX_NAME} 在它下面）"
-                         "⇒ 这一档没查成：请改传项目根（表在 <项目根>/out/paper/ 下）")
+                         "⇒ 这一档没查成：请改传项目根（表在 <项目根>/out/package/ 下）")
         return out
     try:
         statements = len(store.rows("statements"))
@@ -6083,7 +6101,7 @@ def mapping_absence_reading(store: Any, project_root: Any) -> dict[str, Any]:
         if delivery["package_files"]:
             out["reason"] = (
                 f"有 {statements} 条命题、论文包已经在盘上（"
-                f"{' / '.join(str(Path('out/paper') / n) for n in delivery['package_files'])}），"
+                f"{' / '.join(str(Path('out/package') / n) for n in delivery['package_files'])}），"
                 f"论文包里却没有 {json_path} ⇒ 缺对应表 ⇒ "
                 "这份论文追溯不回台账（每条断言 -> 证据 -> 签 的那一环在盘上没有落点）")
         else:
@@ -6389,14 +6407,14 @@ def _check_mapping(rep: ClosingReport, project_dir: str, store: Any) -> None:
     """
     if not str(project_dir or "").strip():
         # 不给项目根 ⇒ 读数说"没查成"并给出理由，但不额外刷一条 finding：
-        # `paper` 那一格已经有一条 `paper_not_checked` 在说同一件事，再加一条只是噪声
+        # 这一格自己的读数（`readings["mapping"]`）已经在说同一件事，再加一条只是噪声
         # （与 `summon_consumption` 那条"不刷屏"的口径同源）。
         rep.readings["mapping"] = {
             "checked": False, "state": "unknown", "rows": 0, "envs": 0,
             "problems": [], "findings": 0, "blockers": 0, "problem_counts": {},
             "reason": ("没给项目根（project_dir）⇒ 论文对应表那一格没查成"
                        "（不是通过，也不是表里没问题）—— 交付论文那一档要指到项目根"
-                       "再跑一次（对应表在 <项目根>/out/paper/MAPPING.json）"),
+                       "再跑一次（对应表在 <项目根>/out/package/MAPPING.json）"),
         }
         return
     # 惰性导入：`closing` 被工具层（`conductor_tools`）反过来 import，
@@ -7075,7 +7093,7 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
       不算放弃（它进下面 `abandoned_without_reason` 那一类），否则"标个状态"就能
       绕过整条裁定。
 
-    ## 每一行的 `class`（十三档；这是散文里的受控词，刻意不定义成模块级元组 ——
+    ## 每一行的 `class`（十四档；这是散文里的受控词，刻意不定义成模块级元组 ——
     ## R011 的死取值普查会排除"定义点所在文件"当产出面，而这里的产出点就在本文件）
 
     | class | 意思 |
@@ -7084,6 +7102,7 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
     | `abandoned_without_reason` | 自称 `abandoned`，而理由/时间读不出来 ⇒ 不算明确放弃 |
     | `unbacked` | 签文件在、复算不上（自指签 / 没秘书轴 / passes 不齐）⇒ 不算签 |
     | `borrowed` | 凭据是别条命题的（借光）⇒ 不算签 |
+    | `sign_does_not_back_the_row` | 凭据复算通过、`statement_id` 也对得上，但这一行结构上不可能持有这份正文（概念行 + 非 b-proof 稿）⇒ 这一签不背这一行（READOUT-FIX；与 `never_submitted` 是两档） |
     | `stale` | 签过，但签的是旧版正文（正文在那之后改过，需重签） |
     | `unissued` | 够票（≥need）却没有签文件（签发那一步没写盘） |
     | `awaiting_report` | 停因程序性/文风 ⇒ 同一份正文原样再送、不用改稿 |
@@ -7096,6 +7115,15 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
 
     一条命题有多份证明时，按上面那张表的次序取最重的一档（`fault_unrepaired`
     排在最前：它有人被要求改，其余几档还在等一个动作）。
+
+    `sign_does_not_back_the_row` 为什么必须单独一档（READOUT-FIX，2026-11-22）：
+    它不是 `never_submitted`（"没送过 V"是误读 —— 送过、签也在、地址也对），
+    也不是 `unbacked`（那一档是凭据自己复算不上）或 `borrowed`（那一档是号指向
+    别条命题）。它说的是"这一行的正文与签盖的正文不是同一份" —— 裁决在
+    `vsigns._row_body_reading`（唯一一处 `enforced`），本读数只照抄 `state`。
+    它仍然进 `rows` / `count`：这一行确实还没有一个背书它的签（出路：补正文 / 重送 / 放弃）；
+    但逐条清单单列在 `sign_does_not_back_the_row` / `sign_does_not_back_the_row_count`，
+    Web 的 C 块只读这一格、不重跑判定。
 
     `signed_pending_filing` 不进 `rows` / `count`（它不是欠签、不阻塞收工门），
     单列在 `pending_filing` / `pending_filing_count`，并在 `reason` 里点名 ——
@@ -7131,6 +7159,10 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
                            "pending_filing": [], "pending_filing_count": 0,
                            "hard_to_prove": [], "hard_to_prove_count": 0,
                            "cited_placeholder": [], "cited_placeholder_count": 0,
+                           #: READOUT-FIX（2026-11-22）：第六档单列一格。它不是"没送过 V"
+                           #: —— 签在、地址也对，只是签不背书这一行；读数必须分得开。
+                           "sign_does_not_back_the_row": [],
+                           "sign_does_not_back_the_row_count": 0,
                            "unsigned_manuscripts": [], "unsigned_manuscripts_count": 0,
                            "problems": [], "reason": ""}
     rows, why = _statement_rows(store)
@@ -7144,12 +7176,16 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
     #: 的中间态，不是欠签（不阻塞收工门，单列在 `pending_filing`）。
     #: `error_without_evidence` 与 `abandoned_without_reason` 同档（1）：两者都是
     #: "自称终态却拿不出凭据"，比其余几档更该先被人看见。
+    #: `sign_does_not_back_the_row` 排在 `borrowed` 之后：两者都是"这一签不是这一行的"
+    #: （前者是"号对得上、正文对不上"，后者是"号就是别条命题的"），但它比"借光"更靠近
+    #: "这一行本身有问题"，所以排在它后面、比"这一版签旧了"（`stale`）前面。
     rank = {"fault_unrepaired": 0, "abandoned_without_reason": 1,
             "error_without_evidence": 1,
-            "unbacked": 2, "borrowed": 3, "stale": 4, "unissued": 5,
-            "awaiting_report": 6, "awaiting_streak": 7,
-            "signed_pending_filing": 8, "judgment_missing": 9, "unreadable": 10,
-            "never_submitted": 11, "cited_placeholder": 12}
+            "unbacked": 2, "borrowed": 3, "sign_does_not_back_the_row": 4,
+            "stale": 5, "unissued": 6,
+            "awaiting_report": 7, "awaiting_streak": 8,
+            "signed_pending_filing": 9, "judgment_missing": 10, "unreadable": 11,
+            "never_submitted": 12, "cited_placeholder": 13}
     pending_rows: list[dict[str, Any]] = []
     _unsigned_rows_reading(rows, out=out, root=root, now_dt=now_dt,
                            rank=rank, pending_rows=pending_rows, store=store)
@@ -7158,6 +7194,15 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
         out["by_class"][key] = int(out["by_class"].get(key) or 0) + 1
     out["pending_filing"] = pending_rows
     out["pending_filing_count"] = len(pending_rows)
+    #: READOUT-FIX（2026-11-22）：「签在、判决地址也对得上、但签不背书这一行」单列。
+    #: 仍然进 `rows` / `count`（这一行确实还没有一个背书它的签 —— 要么补正文、要么重送、
+    #: 要么放弃），但它必须与 `never_submitted` 分得开：把这一档说成"没送过 V"是误读
+    #: （凭据复算通过、V 也没做错）。`by_class` 里它自然有自己的一格，这一格给的是
+    #: 逐条清单，Web 的 C 块只读它、不重跑判定。
+    _snb = [one for one in out["rows"]
+            if str(one.get("class") or "") == "sign_does_not_back_the_row"]
+    out["sign_does_not_back_the_row"] = _snb
+    out["sign_does_not_back_the_row_count"] = len(_snb)
     #: 「有稿无签」清单（业主 2026-11-16 裁定 3 + 追加裁定 B 的读数落点）：
     #: 收工门不再读签拦收工，但这几份稿仍然要逐份点得出名（族 / 号 / sha / 为什么没签）。
     out["unsigned_manuscripts"] = unsigned_manuscripts_from(out["rows"])
@@ -7180,7 +7225,53 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
     if out["hard_to_prove_count"]:
         out["reason"] += (f"；另有 {out['hard_to_prove_count']} 条优化栏记着「难以自证」"
                           "（不欠签；要不要上报成研究任务由父代理裁）")
+    if _snb:
+        out["reason"] += (f"；其中 {len(_snb)} 条是「签在、判决地址对得上、但签不背书这一行」"
+                          f"（单列 `sign_does_not_back_the_row`：凭据复算通过、V 没做错，"
+                          "不是「没送过 V」）")
     return out
+
+
+def _unsigned_class_of_state(state: Any, ev: Mapping[str, Any], *,
+                             checked: bool = True) -> str:
+    """`vsigns.sign_reading` 的 `state` → 本读数的 `class`（唯一一处解码）。
+
+    ## 为什么要有这一处
+
+    改前这一段是内联的 `if/elif` 链，最后挂一个 `else: cls = "never_submitted"`。
+    那个 catch-all 把第六档 `sign_does_not_back_the_row`（凭据真、地址真，但这一行
+    结构上不可能持有这份正文）说成"一次都没送过 V" —— 任何读 `class` 的出口
+    （`by_class` / `unsigned_manuscripts[].class` / Web 验收页 C 块的原话）都跟着误读。
+    现在每一档各占一行，`never_submitted` 只由 `state == "unsigned"` 且秘书那两项判断
+    都不成立时给出；不认识的 `state` 一律记 `unreadable`（没查成），绝不折成"没送过"：
+    一个我们没见过的结论词，不是"这一条没送审"的证据。
+
+    ## `signed` 不在这里
+
+    `signed` 还差一步：册里 `filed is False` 时它是 `signed_pending_filing`（等 B 收录），
+    否则这一条根本不算欠签（调用方 `continue`）。那一步要看 `st.filed`，留在调用点。
+    """
+    if not checked:
+        return "unreadable"
+    s = str(state or "")
+    if s == "holding":
+        return "awaiting_streak"
+    if s == "retry_report":
+        return "awaiting_report"
+    if s in ("unissued", "unbacked", "borrowed", "stale"):
+        return s
+    if s == "rejected":
+        return "fault_unrepaired"
+    if s == "sign_does_not_back_the_row":
+        return "sign_does_not_back_the_row"
+    if s == "unsigned":
+        # 秘书那一问没判成 / 判了 fault：这两档是"有人被要求改"，比"没送过"更该先看见。
+        if bool(ev.get("secretary_fault")):
+            return "fault_unrepaired"
+        if bool(ev.get("secretary_unjudged")):
+            return "judgment_missing"
+        return "never_submitted"
+    return "unreadable"
 
 
 def _unsigned_rows_reading(rows: Mapping[str, Any], *, out: dict[str, Any],
@@ -7298,31 +7389,12 @@ def _unsigned_rows_reading(rows: Mapping[str, Any], *, out: dict[str, Any],
                     cls = "signed_pending_filing"
                 else:
                     continue
-            elif state == "holding":
-                cls = "awaiting_streak"
-            elif state == "retry_report":
-                cls = "awaiting_report"
-            elif state == "unissued":
-                cls = "unissued"
-            elif state == "unbacked":
-                cls = "unbacked"
-            elif state == "borrowed":
-                cls = "borrowed"
-            elif state == "rejected":
-                cls = "fault_unrepaired"
-            elif state == "stale":
-                cls = "stale"
-            elif state == "unreadable" or not bool(st.get("checked")):
-                cls = "unreadable"
-            elif state == "unsigned":
-                if bool(ev.get("secretary_fault")):
-                    cls = "fault_unrepaired"
-                elif bool(ev.get("secretary_unjudged")):
-                    cls = "judgment_missing"
-                else:
-                    cls = "never_submitted"
             else:
-                cls = "never_submitted"
+                # 每一档的解码只在 `_unsigned_class_of_state` 一处（READOUT-FIX）：
+                # 改前这里是内联的 if/elif + 一个 `else: never_submitted` 的 catch-all，
+                # 第六档 `sign_does_not_back_the_row` 因此被说成"一次都没送过 V"。
+                cls = _unsigned_class_of_state(
+                    state, ev, checked=bool(st.get("checked")))
             # 占位签只改"一次都没送过 V"这一档；真签 / holding / 打回 / 过期照旧。
             if cls == "never_submitted" and ph_now.get("placeholder"):
                 cls = "cited_placeholder"
@@ -7633,7 +7705,7 @@ def _optimization_next_step(*, sid: str, kind: str, origin: str, draft: Mapping[
         if origin == "external_lit":
             return ("文献术语：补 `quote_span` / `page_range`（或改成 own_result 再落 "
                     "b-稿）—— 两样都没有，这一条就是「没有可复制的原稿」")
-        return ("B 落 b-稿（`reports/b-proof-<号>.md`）→ 派 V 拿签 → "
+        return ("B 落 b-稿（`manuscripts/B/b-proof-<号>.md`）→ 派 V 拿签 → "
                 "`ingest_manuscript(cells=[\"proof_text\"])` —— 良定义论证先有，才有得优化")
     return ("无原稿：先让产出方落稿（定理走 F 的 `f-proof`、穷举走 E 的 `e-proof`）并拿 V 签"
             " → B 收录，再开优化稿")
@@ -7792,40 +7864,43 @@ DEPENDENCY_FACE_BUCKETS: tuple[tuple[str, str], ...] = (
 
 
 def _manuscripts_by_statement(root: Path) -> dict[str, list[dict[str, Any]]]:
-    """`<项目>/reports/` 里的证明手稿 ⇒ `{命题号: [{name, path, proof_no}, …]}`。
+    """`manuscripts/{F,B,E}/` 里的证明手稿 ⇒ `{命题号: [{name, path, proof_no}, …]}`。
 
-    只收名字落在 `*-proof-<号>[-p<N>].md` 家族里的（解析走 `vsigns.parse_manuscript_name`
-    —— 全仓唯一的手稿名解析口）：`reports/000003-proof-*.md` 那种论文分节稿文件名里
-    没有这个家族的前缀，`family` 判不出来，就不进这一格（它们本来也没有 `## 依赖`，
-    把"论文分节稿缺节"算成缺节会造出一条永远红的读数）。
+    只收名字落在 `*-proof-<号>` 家族里的（解析走 `vsigns.parse_manuscript_name`
+    —— 全仓唯一的手稿名解析口）：论文分节稿之类文件名里没有这个家族的前缀，
+    `family` 判不出来，就不进这一格（它们本来也没有 `## 依赖`）。
+
+    2026-11-22（B2b-2）：扫描面从 `reports/` 一棵树换成三族各自的目录
+    （`manuscripts/F|B|E/`）；旧 `reports/` 不再读。
     """
     from . import manuscriptfamily as _MFAM
     from .vsigns import parse_manuscript_name
 
     out: dict[str, list[dict[str, Any]]] = {}
-    reports = Path(root) / "reports"
-    if not reports.is_dir():
-        return out
-    try:
-        paths = sorted(reports.glob("*.md"))
-    except OSError:
-        return out
-    for path in paths:
-        # 目录是身份的一部分：把 `reports/` 带上再判。
-        got = parse_manuscript_name(f"{_MFAM.MANUSCRIPT_DIR}/{path.name}")
-        if not (got.get("checked") and got.get("family")):
+    for rel_dir in _MFAM.MANUSCRIPT_DIRS:
+        folder = Path(root) / rel_dir
+        if not folder.is_dir():
             continue
-        # `-v2` 历史档读成 `checked=True/tier=legacy`；它不进这一格。`e-num` 进族后
-        # 也不进（这一格问的是"证明手稿"，普通数值稿没有 `## 依赖`）。
-        if (got.get("tier") != _MFAM.TIER_FAMILY
-                or got.get("family") not in ("f-proof", "b-proof", "e-proof")):
+        try:
+            paths = sorted(folder.glob("*.md"))
+        except OSError:
             continue
-        sid = str(got.get("manuscript_id") or "")
-        if not sid or sid.startswith("plan-"):
-            continue
-        out.setdefault(sid, []).append({
-            "name": path.name, "path": path,
-            "proof_no": int(got.get("proof_no") or 1)})
+        for path in paths:
+            # 目录是身份的一部分：把族目录带上再判。
+            got = parse_manuscript_name(f"{rel_dir}/{path.name}")
+            if not (got.get("checked") and got.get("family")):
+                continue
+            # `-v2` 历史档读成 `checked=True/tier=legacy`；它不进这一格。`e-num` 进族后
+            # 也不进（这一格问的是"证明手稿"，普通数值稿没有 `## 依赖`）。
+            if (got.get("tier") != _MFAM.TIER_FAMILY
+                    or got.get("family") not in ("f-proof", "b-proof", "e-proof")):
+                continue
+            sid = str(got.get("manuscript_id") or "")
+            if not sid or sid.startswith("plan-"):
+                continue
+            out.setdefault(sid, []).append({
+                "name": path.name, "path": path,
+                "proof_no": int(got.get("proof_no") or 1)})
     for items in out.values():
         # 优先级：证明号升序（#p1 先）→ 名字（确定性）。同一号排在后面的只作 `also`。
         items.sort(key=lambda one: (int(one["proof_no"]), str(one["name"])))
@@ -7924,7 +7999,7 @@ def dependency_face_reading(store: Any, project_root: Any = None) -> dict[str, A
         files = manuscripts.get(sid) or []
         if not files:
             item.update(bucket="unread",
-                        why=("有证明正文，而 `reports/` 里没有这一条命题的手稿 ⇒ "
+                        why=("有证明正文，而 `manuscripts/` 里没有这一条命题的手稿 ⇒ "
                              "依赖面那一节读不到（不是「依赖为零」）"))
             counts["unread"] += 1
             out["rows"].append(item)
@@ -9596,7 +9671,7 @@ def declared_report_sections(store: Any, report_path: str) -> tuple[list[str], s
     """M 声明的报告体例（`REPORT_STYLE_NAME`）；返回 `(节名, 为什么读不到)`。
 
 R9（`draft/52` 裁决 1 = C''）之后，报告体例由 M 裁定：门不再自带任何节名清单，只核对"M 声明的体例有
-没有兑现"。声明的落点是一份机器可读的小文件（`out/review/REPORT-STYLE.json`，形如
+没有兑现"。声明的落点是一份机器可读的小文件（`out/report/REPORT-STYLE.json`，形如
 `{"sections": ["一、任务与范围", ...]}`）。
 
 三态（与全仓其余读数同一套纪律）：
@@ -9676,7 +9751,7 @@ def _check_report_shape(rep: ClosingReport, report_path: str, store: Any) -> Non
             "report_shape", "report_not_written", "blocker",
             f"报告不在盘上：{path} —— 给了报告路径而盘上没有这份文件 ⇒ 交付物缺失"
             "（不是「没查成」：路径与落点都指到了，缺的就是那份报告本身）。"
-            "报告是 M 的产物（落点 out/review/REPORT.md）",
+            "报告是 M 的产物（落点 out/report/REPORT.md）",
         ))
         return
     text = path.read_text(encoding="utf-8")
@@ -9817,7 +9892,7 @@ def _mirror_run_evidence_row(rep: ClosingReport, reading: Mapping[str, Any]) -> 
     所以它们不可能给出两个答案。
 
     合成行的形状与验收表的行同形（`id` / `kind` / `state` / `got` / `min` / `ok`），
-    外加 `source` 说明它是现算的、不来自 `ACCEPTANCE-CHECKS.json`。
+    外加 `source` 说明它是现算的、不来自 `ACCEPTANCE-TARGETS.json`。
     """
     acceptance = rep.readings.get("acceptance")
     if not isinstance(acceptance, dict):
@@ -9829,7 +9904,7 @@ def _mirror_run_evidence_row(rep: ClosingReport, reading: Mapping[str, Any]) -> 
     acceptance["run_evidence_row"] = {
         "id": "G8",
         "kind": RUN_EVIDENCE_READING,
-        "source": "收工门现算（成稿引文 × experiments 台账），不读 ACCEPTANCE-CHECKS.json",
+        "source": "收工门现算（成稿引文 × experiments 台账），不读 ACCEPTANCE-TARGETS.json",
         "state": state,
         "got": covered,
         "min": required,
@@ -9853,7 +9928,7 @@ LIT_DIGEST_SURFACE = "literature.processed"
 #: 为什么它必须存在（2026-11-21 真机 `projects/lp-ball-14`，MINE14 的 P0-2）：这一格报
 #: `fail` 时读的是 `lit_candidates` 里 24 条待裁候选（r-000011:15 / r-000012:2 /
 #: r-000013:4 / r-000014:3，全由 A2 的 t-000101 认领后只搜不裁），而 M 在
-#: `out/review/REPORT.md:59` 把它写成「lit 000001–000005 无本地全文」—— 那是
+#: `out/report/REPORT.md:59` 把它写成「lit 000001–000005 无本地全文」—— 那是
 #: `literature` 表的 5 行。于是 M 派 B2 去改那 5 行的下载判档（`table.update`
 #: `download.fulltext=metadata_only`），候选一行没动、门一格没变。次生后果：M 三次派活
 #: 都写了「不要洗稿」（它读的是「不要让 B 去润色 F 的证明」那条旧文案），B 的二阶段
@@ -10621,8 +10696,8 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
     """
     rep = ClosingReport()
     # 只有完整的八格门才可能给出权威结论 `pass`（ROOTGATE-①）：缩过面的那一份
-    # （`checks=("paper",)` / `reviewaccept` 的 `checks=("load_bearing",)`）是读数，
-    # 不是"这一趟能不能交"的结论。
+    # （`reviewaccept` 的 `checks=("load_bearing",)`；显式点名已退役的格 ⇒ 受控拒绝，
+    # 见下面 `retired` 那一支）是读数，不是"这一趟能不能交"的结论。
     rep.full_gate = set(DEFAULT_CHECKS) <= set(checks)
     rep.authoritative = bool(rep.full_gate and str(project_dir or "").strip()
                              and str(report_path or "").strip())
@@ -10661,7 +10736,7 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
         #
         # `project_dir` 的解析必须走 `resolve_under_workspace`：工具契约写的是
         # "相对工作区"，而 `Path(".")` 是按进程当前目录解析的 —— 真机 t1v 就是
-        # 这么把判据写到了跑批的工作目录（`agentflow/out/review/`）而不是工作区里，
+        # 这么把判据写到了跑批的工作目录（`agentflow/out/report/`）而不是工作区里，
         # 于是两处读数当场分家：M 判了达成，而外部门说"没人判过"。
         vroot_s = resolve_under_workspace(store, project_dir) if str(project_dir or "").strip() \
             else (str(root) if root is not None else "")
@@ -10669,7 +10744,7 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
         if vroot is not None:
             got = read_m_verdict(vroot)
             rep.readings["verdict_source"] = {
-                "where": "落盘的 M 判据（`out/review/m-verdicts.jsonl`）",
+                "where": "落盘的 M 判据（`out/report/m-verdicts.jsonl`）",
                 "path": str(got.get("path") or ""), "count": int(got.get("count") or 0),
                 "checked": bool(got.get("checked")),
                 "reason": str(got.get("reason") or ""),
@@ -10680,10 +10755,23 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
     # `m_says_done`，所以放在这里而不是函数开头。没喂 ⇒ None（`not_wired`）。
     rep.readings["machine_caliber"] = machine_caliber(
         m_says_done=rep.m_says_done, retire=retire, programs=programs)
+    # ---- 退役格先拒（③）：显式点名 `paper` 的调用方拿到一句「已退役」——门不跑，
+    # 受控拒绝（exit 2），但不是静默跳过。它不再是一格、也不再是一条读数。
+    retired = sorted({str(n) for n in checks if str(n) in RETIRED_CHECKS})
+    if retired:
+        rep.readings["retired_checks"] = {
+            "names": retired, "why": RETIRED_CHECKS_NOTE, "exit_code": 2}
+        rep.readings["refusal"] = {
+            "code": "retired_check", "sid": "",
+            "detail": RETIRED_CHECKS_NOTE, "exit_code": 2}
+        rep.findings.append(Finding(
+            "paper", "check_retired", "blocker",
+            f"显式点名了已退役的格：{'、'.join(retired)}。{RETIRED_CHECKS_NOTE}。"
+            "门不跑（受控拒绝，exit 2）—— 不是静默跳过"))
     for name in checks:
-        if name == "paper":
-            _run_check(rep, name, _check_paper, project_dir, store)
-        elif name == "contradictions":
+        if name in RETIRED_CHECKS:
+            continue
+        if name == "contradictions":
             _run_check(rep, name, _check_contradictions, store)
         elif name == "load_bearing":
             _run_check(rep, name, _check_load_bearing, store)
@@ -10705,15 +10793,6 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
             rep.status[name] = "unknown"
             rep.findings.append(Finding(name, "unknown_check", "warning",
                                         f"没有这个检查：{name!r}（判据表与实现在这里分家了）"))
-    # ---- 论文那一格：不在门里了，但读数照旧算（业主 2026-11-14） ----------------
-    #
-    # 显式点名的 `checks`（论文那一路的负控 / D-38 夹具）仍然走上面那一支，
-    # 得到 `status["paper"]`；覆盖整张格表的调用（缺省值就是）把它算成读数。
-    # 调用方把 `checks` 缩到别的格子时不算 —— 与改前"缩面就不多出这一格"同一套纪律。
-    if "paper" in checks:
-        pass
-    elif set(checks) >= set(DEFAULT_CHECKS):
-        _run_paper_reading(rep, project_dir, store)
     # ---- G8 的回执有没有台账背书（D-41，2026-10-24 真机 r34d）：与 `quote_evidence`
     # 同一层的读数 —— 它不是那八格之一（格表的语义与退出码一个都不动），但它是 blocker：
     # "文件在"与"本轮真的重跑过"是两件事，而此前的门只数得清前一件。
@@ -10728,11 +10807,11 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
             rep, "verdict_escalation", _escalation_reading,
             root, sid, list(rep.m_verdict.get("tasks") or []))
     # ---- 论文对应表那一格（业主 2026-10-22）：G 写正文之前先有它，H 依据它逐行核。
-    # 它跟着"整套门"一起跑（`checks` 覆盖 `DEFAULT_CHECKS` 时；`paper` 现在总是算读数），
-    # 但调用方把 `checks` 缩到别的格子时不算 —— 与改前"跟着 `paper` 走"同一套缩面纪律，
-    # 只是 `paper` 从"一格"换成了"一套门里的读数"。它不是 `DEFAULT_CHECKS` 的一格 ——
-    # 格表的语义（`status` / `machine_pass` / 退出码）一个都不动。
-    if "paper" in checks or set(checks) >= set(DEFAULT_CHECKS):
+    # 它跟着"整套门"一起跑（`checks` 覆盖 `DEFAULT_CHECKS` 时），但调用方把 `checks`
+    # 缩到别的格子时不算 —— 与改前"跟着 `paper` 走"同一套缩面纪律（`paper` 已退役，
+    # 2026-11-22）。它不是 `DEFAULT_CHECKS` 的一格 —— 格表的语义（`status` /
+    # `machine_pass` / 退出码）一个都不动。
+    if set(checks) >= set(DEFAULT_CHECKS):
         _run_reading(rep, "mapping", _check_mapping, rep, project_dir, store)
     # ---- 子产出处理那一格（业主裁定：父代理必须处理子代理的产出）
     #
@@ -11110,11 +11189,16 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
 #: 所以：M 给判据那一次调用把它落盘（`write_m_verdict`），运行外的出口读它
 #: （`check_closing` 在没有显式入参时的回退，`read_m_verdict` 三态）。
 #: 读侧取最后一行（append-only 的历史留着，人能看到判据是怎么变的）。
-M_VERDICT_FILE: tuple[str, ...] = ("out", "review", "m-verdicts.jsonl")
+#:
+#: 2026-11-22（SCRIPTS-OLD-PATH）：这一行此前指退役目录 `out/review/`，而同一份判断的
+#: 读数说明（本文件 :10916）、`cli.py`、`agent_loop.py` 与 `scripts/recon_b.py` 的跨 sid
+#: 直读都写 `out/report/`。写者按本常量写进旧目录、直读者按新路径读 ⇒ 后者静默读空
+#: （缺省合法，所以不报错，只是少读）。落点只认这一处常量。
+M_VERDICT_FILE: tuple[str, ...] = ("out", "report", "m-verdicts.jsonl")
 
 
 def m_verdicts_path(root: str | Path) -> Path:
-    """M 的收工判据落在哪儿（`<root>/out/review/m-verdicts.jsonl`）。"""
+    """M 的收工判据落在哪儿（`<root>/out/report/m-verdicts.jsonl`）。"""
     return Path(root).joinpath(*M_VERDICT_FILE)
 
 
@@ -11617,7 +11701,7 @@ _APPENDIX_POINTER = re.compile(r"(见\s*附录|see\s+(the\s+)?appendix|附录\s*
 
 
 def _paper_text(root: str | Path) -> str:
-    path = Path(root) / "out" / "paper" / "main.tex"
+    path = PC.package_dir(root) / PC.TEX_NAME
     return path.read_text(encoding="utf-8") if path.is_file() else ""
 
 
@@ -11958,3 +12042,4 @@ def t4_ladder_problems(root: str | Path, *,
             "但 research_questions 与 attack_plans 里都没有一次\"造梯子\"的尝试记录 —— "
             "T4 的价值是逼研究侧去造工具把它降下来，不是直接写进论文就完事")
     return problems
+

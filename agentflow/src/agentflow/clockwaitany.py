@@ -7,8 +7,12 @@
 业主 2026-10-27 第三条裁定：「可启动计时器等待任意计时器返回」。它不是一个计时器：
 计时器是"等某个具体的东西"，而这一格是"我手上没事了，谁先回来都行，回来叫我"。
 所以它单独落一份（`out/clock/wait_any.json`）、按台账号读，醒没醒只能由"有没有到点 /
-事件"现算 —— 写一个布尔值就会与事实漂开。交差账（`out/clock/handoff.json`）是同一层
-的另一格：父要能读到"子交回了什么"，而这件事必须与时钟事件分得开（消息 ≠ 交差）。
+事件"现算 —— 写一个布尔值就会与事实漂开。交差账（`out/clock/handoffs.json`）是同一层
+的另一格，原意是"父要能读到子交回了什么，且与消息事件分得开"。但这一格从未启用：
+2026-11-22 B2e 取证时 55 个工作区 0 份、0 条 `agent_handoff`、0 条 `decision=handoff`；
+理由、替代读数与重新启用的落点见 `HANDOFF_LEDGER_STATE` 那一组常量。
+它与 `work/handoffs.jsonl`（交接手稿正文，`manuscripts.py:17`）同名而相反：
+那个有正文、是"我要你接着做什么"；这个没有正文、只是一个"我不再有活"的静默信号。
 
 ## 装了什么
 
@@ -289,6 +293,10 @@ def cancel_wait_any(workspace: str | Path, task_id: str) -> dict[str, Any]:
 #: 口径（业主原话）：「如果已无事可做且无计时器，这意味着它交差了，需要向父代理报告，
 #: 父代理把它记为静默子代理」。写侧只记事实（谁向谁交差、为什么、当时账上是什么样），
 #: "静默"这一档由 `conductor.agent_state` 从盘上事实算出来，不在这里另存一个布尔。
+#:
+#: 未启用（2026-11-22 B2e）：真机 0/55 份，写侧入口被 `no_timers_to_wait` 关着
+#: —— 状态与证据见 `HANDOFF_LEDGER_STATE`。别把"盘上没有这个文件"读成"还没轮到"。
+#: 它也不是 `work/handoffs.jsonl`（交接手稿正文）：同名、两件东西。
 HANDOFF_REL: Path = Path("out") / "clock" / "handoffs.json"
 
 #: 交差报告的标题（父代理按它在收件箱里认出"孩子交差了"）。
@@ -296,6 +304,50 @@ HANDOFF_REL: Path = Path("out") / "clock" / "handoffs.json"
 #: 它是那条既有消息通道上的一句 subject，不是新开一条通道（业主：「需要向父代理报告」
 #: 沿用既有的收工/消息通道）。
 HANDOFF_SUBJECT: str = "交差"
+
+#: 交差账的启用状态（机器可读；判据按这一格认，不靠"盘上没有那个文件"这种沉默）。
+#:
+#: `"unused"` = 写侧没有任何活入口能走到它 —— 不是"跑得太少还没轮到"，也不是
+#: "设计师把文件放错了"。2026-11-22 B2e 取证（复算命令见 `temp/b2e/probe_handoff.py`）：
+#: 55 个工作区 0 份 `out/clock/handoffs.json`；47 个 sessions 文件 52,215 条事件里
+#: `agent_handoff` 0 条、`agent_park.decision` 只有 `park` 888 / `woke` 687 两档、
+#: `agent_run_end.handed_off` 非空 0 次；其中 24 个工作区跑在这一格落地之后
+#: （47,744 条事件），同样 0。
+HANDOFF_LEDGER_STATE: str = "unused"
+
+#: 未启用的原因（写侧入口被一条更晚的前置判据堵死）。
+#:
+#: 唯一写口是 `agent_loop._park_gate` 第 ② 支：`wait_any` 意图在账上、且名下一条计时器
+#: 都没有 ⇒ `decision=handoff` ⇒ `_hand_off` ⇒ `record_handoff`。而能让
+#: `waiting.requested` 为真的唯一入口是 `clock.wait_any` → `request_wait_any`，它在 0 条
+#: 计时器时受控拒绝（`no_timers_to_wait`；2026-10-27 的 d46cdbaf 加的前置判据）⇒
+#: 真机上"意图在账上"与"零计时器"不会同时成立。95 次真实 `clock.wait_any` 里 90 次
+#: 带表受理、5 次是别的拒（`monitor_turn_restricted` / 参数过长）、0 次"0 表"；
+#: 把表变没而不触发的那条动作（`clock.cancel`）0 次。
+HANDOFF_LEDGER_WHY: str = (
+    "写侧唯一入口（_park_gate 第 ② 支）要求 wait_any 意图在账上且零计时器；"
+    "而唯一写得着那条意图的 request_wait_any 在零计时器时受控拒绝（no_timers_to_wait）。"
+    "两个条件在真机上互斥 ⇒ 0/55。"
+)
+
+#: 父侧现在实际靠什么读静默（本账不在其中；这一格就是"替代读数"的指针）。
+#:
+#: `conductor.agent_state` 第 ⑩ 步：台账那一行已是终态、且时钟上一条都没有 ⇒ `silent`
+#: （`conductor.py:1269`，理由逐字「它已收工：没有任务、也没有任何计时器」）。
+#: 真机 33 次 `conductor.state` 读数里 `silent` 137 次，理由全部是这一档；
+#: `conductor.handoffs_reading` 的 `silent` 那一格在真机上恒为空（不是"没人交差"，
+#: 是"这条通道没启用"）。
+HANDOFF_LEDGER_PARENT_READ: str = (
+    "conductor.agent_state 第 ⑩ 步（conductor.py:1269）：台账终态 + 零计时器 ⇒ silent。"
+    "真机 silent 137/137 都是这一档给的。"
+)
+
+#: 要重新启用这一格，改动落点（两处之一，且都要补产文件判据与反真空）。
+HANDOFF_LEDGER_ENABLE_AT: str = (
+    "① agent_loop._park_gate 第 ② 支改按「无活 + 零计时器」判（不再要求 wait_any 意图）；"
+    "或 ② 给模型一个显式的「交差」动作 —— tools/clock_tools.py 的 0 表分支里那条"
+    "「按交差收工」目前没有落点。两处都在本模块之外，改时须同步 tests 的产文件判据与反真空。"
+)
 
 
 def handoff_path(workspace: str | Path) -> Path:
@@ -324,6 +376,14 @@ def record_handoff(workspace: str | Path, *, task_id: str, parent_task_id: str =
 
     同一个 `task_id` 只记一条（交差是一次性的）：第二次调用返回同一条并标
     `duplicate=True` —— "又交了一次"与"第一次交差"必须分得开。
+
+    ## 未启用（2026-11-22 B2e）
+
+    这个写口在真机上一次都没被调到过 —— 实现本身没坏（幂等、三态、事件消账都在），
+    坏的是触发：唯一能到达它的那一支要求"`wait_any` 意图在账上且零计时器"，而写那条
+    意图的 `request_wait_any` 偏偏在零计时器时拒收。保留实现是为了读侧与既有判据不必
+    改写，也为了将来按 `HANDOFF_LEDGER_ENABLE_AT` 接线时不用重写这一份；在那之前，
+    任何"它会产文件"的读法都是错的（状态见 `HANDOFF_LEDGER_STATE`）。
     """
     tid = str(task_id or "").strip()
     if not tid:
@@ -413,6 +473,10 @@ def read_handoffs(workspace: str | Path, *, parent_task_id: str = "") -> dict[st
     """读交差账。给 `parent_task_id` 就只看它名下收到的那些（父代理的那一格读数）。
 
     三态：读不成 => `checked=False`（不是"没人交差"）。
+    在真机上这一格恒为空（2026-11-22 B2e：0/55 份），所以 `rows` / `count` 恒为
+    `[]` / `0`：那是"这条通道未启用"，不是"没有子代理交差"。父侧的静默读数不在
+    这里 —— 它在 `conductor.agent_state` 第 ⑩ 步（见 `HANDOFF_LEDGER_PARENT_READ`），
+    这一格留着是因为读侧三态与"将来启用"共用同一份实现。
     """
     doc, error = _load_handoffs(workspace)
     if error:
@@ -433,3 +497,17 @@ def reset_handoffs(workspace: str | Path) -> dict[str, Any]:
     except OSError as exc:
         return {"checked": False, "reason": f"交差账写不成：{type(exc).__name__}: {exc}"}
     return {"checked": True, "reason": ""}
+
+
+def handoff_ledger_reading() -> dict[str, Any]:
+    """交差账的启用状态读数（只读、纯函数）：这一格现在到底算不算"在用"。
+
+    `{"checked", "state", "used", "why", "parent_read", "enable_at"}`。`used=False` 就是
+    "写侧没有活入口"的机器读法 —— 判据与页面读它，而不是去盘上猜"文件不在算不算正常"。
+    第 ② 个理由：把"未启用"的理由、替代读数与重新启用的落点收在同一份读数里，
+    下一个人就不用翻三个模块的注释才知道该改哪。
+    """
+    return {"checked": True, "state": str(HANDOFF_LEDGER_STATE),
+            "used": str(HANDOFF_LEDGER_STATE) != "unused",
+            "why": str(HANDOFF_LEDGER_WHY), "parent_read": str(HANDOFF_LEDGER_PARENT_READ),
+            "enable_at": str(HANDOFF_LEDGER_ENABLE_AT)}
