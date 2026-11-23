@@ -2254,6 +2254,36 @@ def _over_cap_gate(call_size: int, limit: int, already: int,
     return None
 
 
+def _wanted_slots(scoped: Sequence[Mapping[str, Any]],
+                  slots: Sequence[str] | None,
+                  batch: int | None,
+                  *, require_judged: bool) -> list[str]:
+    """这一次点名了哪些槽 —— `admission_plan` 那两档作用域的唯一实现。
+
+    三档（与 `submission_slots` 的 docstring 同一条口径）：
+
+    - `slots` 给了 ⇒ 就按点名的来（空表在逐条判收那一档是受控拒 `no_target`；
+      整批提交那一档允许空表，由 `_judged_gate` 逐条点名）；
+    - `slots` 没给、`batch` 也没给 ⇒ 本委托「已判定的全部」；
+    - `slots` 没给、`batch` 给了 ⇒ 那个批里还没判的槽。
+
+    为什么单独一个函数：`lit.admit` 的空结果要现算理由（`empty_batch_reason`），
+    而理由里的"本次点名的几个槽"必须与 `admission_plan` 判的是同一份作用域 ——
+    两处各写一遍必然漂，漂的形态是"回执说 3 个槽、闸其实看了 5 个"。
+    """
+    if slots is not None:
+        wanted = submission_slots(scoped, slots)
+        if not wanted and not require_judged:
+            raise LitStageError("slots 是空的：没有要入库的东西", kind="no_target")
+        return wanted
+    if batch is None:
+        # FX3·甲：不点名 = 本委托「已判定的全部」（按批提交的默认作用域）。
+        # 旧调用点（`lit.admit` 的 batch 档与 A 的自动链路）仍然显式给 slots/batch。
+        return submission_slots(scoped)
+    return [str(r.get("slot")) for r in sorted(scoped, key=lambda r: str(r.get("slot") or ""))
+            if int(r.get("batch") or 0) == int(batch) and judged_state(r) == "pending"]
+
+
 def admission_plan(
     store: Store | None,
     *,
@@ -2336,18 +2366,7 @@ def admission_plan(
     scope_note = pending_scope_note(scope, exclude=rid)
     scoped = [fold_legacy(r) for r in rows
               if str(r.get("request_id") or "") == rid]
-    if slots is None:
-        if batch is None:
-            # FX3·甲：不点名 = 本委托「已判定的全部」（按批提交的默认作用域）。
-            # 旧调用点（`lit.admit` 的 batch 档与 A 的自动链路）仍然显式给 slots/batch。
-            wanted = submission_slots(scoped)
-        else:
-            wanted = [str(r.get("slot")) for r in sorted(scoped, key=lambda r: str(r.get("slot") or ""))
-                      if int(r.get("batch") or 0) == int(batch) and judged_state(r) == "pending"]
-    else:
-        wanted = submission_slots(scoped, slots)
-        if not wanted and not require_judged:
-            raise LitStageError("slots 是空的：没有要入库的东西", kind="no_target")
+    wanted = _wanted_slots(scoped, slots, batch, require_judged=require_judged)
     by_slot = {str(r.get("slot") or ""): r for r in scoped}
     if judged_scope is None:
         gate_slots = wanted
@@ -2859,11 +2878,28 @@ def admit(
                      # 走到这里的 items 都过了内容性断言闸 + 可读性闸 + 读证据闸。
                      "content_read": True})
     rep = write_report(store, plan["request_id"], phase="draft") if write_report_file else None
+    # 一条都没判收时，回执同样是「做完了、但没得收」而不是「没做事也没理由」：
+    # `admitted: []` + `reason: ""` 在模型眼里与"这一笔没成立"同形（同一格缺陷在
+    # `admit_all` 上已由 `empty_batch_reason` 治过，单数这条路当时漏着）。
+    # 分档与词表复用同一处（`EMPTY_REASONS` / `empty_batch_reason`），不造第二套；
+    # 只换最后那句"接下来做什么" —— 本函数不写定稿、不清表、不归档。
+    reason = ""
+    if not done:
+        rid = str(plan.get("request_id") or "")
+        scoped = [fold_legacy(r) for r in _rows(store)
+                  if str(r.get("request_id") or "") == rid]
+        reason = empty_batch_reason(
+            request_id=rid,
+            target=_wanted_slots(scoped, slots, batch, require_judged=False),
+            by_slot={str(r.get("slot") or ""): r for r in scoped},
+            refused=list(plan.get("refused") or []),
+            cleared_rows=0, pending_total=int(plan.get("pending_total") or 0),
+            tail=SINGLE_ADMIT_NEXT_STEP)
     return {
         "ok": True,
         "kind": "",
         "whole_call_refused": False,
-        "reason": "",
+        "reason": reason,
         "request_id": plan["request_id"],
         "batch": plan["batch"],
         "call_size": plan["call_size"],
@@ -2877,6 +2913,78 @@ def admit(
         "report": rep,
         "report_path": (rep or {}).get("path"),
     }
+
+
+#: `lit.admit_all` 一条都没入库时 `reason` 的受控前缀（`ok=True` 的空结果回执）。
+#:
+#: 为什么要有这一格：`admitted: []` 只说明"这一批没有入库的"，不说明"为什么没有、
+#: 还欠不欠动作"。空 `reason` 会让模型把一次成功的收口读成一次没成立的调用 ——
+#: 真机 `projects/sylow-1`（sid 2026-11-22e，t-000003）在 13:37:24/26/27/29/31
+#: 连调 5 次，每次都是"全部判拒、报告与归档已落、行已清表、注册 0 条"，
+#: 回执却是 `{"admitted": [], "reason": ""}`。
+EMPTY_REASONS: tuple[str, ...] = (
+    "no_pending_candidates", "already_cleared", "all_rejected", "nothing_admitted",
+)
+
+#: 逐条判收（`lit.admit` 单数）空结果回执的最后一句 —— 与提交批那一档刻意不同：
+#: 本函数不写定稿、不清表、不归档，照抄"报告与归档都已落盘、行都已清表"就是假话。
+SINGLE_ADMIT_NEXT_STEP: str = (
+    "这一批一条都没判收 —— 行保持原样（判收不写终态、不发号）。"
+    "逐条见 `refused[]`：还没判的按那里的做法补 relevance / new_content 再调一次；"
+    "已经判过的别再判一次（判拒是终态）；不收的用 `lit.stage_reject` 判拒。"
+    "别原样再调一次。")
+
+
+def empty_batch_reason(*, request_id: str, target: Sequence[str],
+                       by_slot: Mapping[str, Mapping[str, Any]],
+                       refused: Sequence[Mapping[str, Any]],
+                       cleared_rows: int, pending_total: int,
+                       tail: str | None = None) -> str:
+    """这一批一条都没入库时的回执理由（受控前缀 + 计数 + "别再调一次"）。
+
+    四档（`EMPTY_REASONS`）按盘上的事实分，不按调用方的说法分：
+
+    - `no_pending_candidates`：这一次委托一行候选都没有（没东西可交）；
+    - `already_cleared`：点名的槽在这一次调用之前就都清过表了（这一批早交过 ——
+      幂等，不是新活）；
+    - `all_rejected`：点名的槽全被判拒（含撤回 / 超配额那一档）；
+    - `nothing_admitted`：兜底 —— 有判收的槽，但一条都没过入库闸（重叠 / 重复 /
+      不可读 / 登记失败，逐条见 `refused[]`）。
+
+    计数恒给：`槽位 / 判拒 / 已入库 / 此前已清 / 本次清表 / 入闸拒 / 本次注册 /
+    全表待裁`。两个"清表"数分开：「此前已清」是幂等的证据（调用前就带着
+    `cleared_at`），「本次清表」是这一笔真的打了几个标记。为什么把计数写进
+    `reason` 而不另开键：`lit.admit_all` 的 `returns` 已冻（p325），新增顶层键要
+    重冻；`reason` 本来就在声明里，而它正是模型要读的那一句。
+
+    `tail` 是最后那句「接下来做什么」（默认 = 提交批那一档）。逐条判收
+    （`lit.admit` 单数）不写定稿、不清表、不归档 ⇒ 它必须传自己那一句，否则
+    回执会谎报"报告与归档都已落盘、行都已清表"。分档与词表仍只有这一处实现。
+    """
+    slots = [str(s or "") for s in target]
+    n = len(slots)
+    rows = [dict(by_slot.get(s) or {}) for s in slots]
+    rejected = sum(1 for r in rows if str(r.get("status") or "") == "rejected")
+    admitted = sum(1 for r in rows if str(r.get("status") or "") == "admitted")
+    already = sum(1 for r in rows if str(r.get("cleared_at") or "").strip())
+    counts = (f"槽位={n} / 判拒={rejected} / 已入库={admitted} / 此前已清={already} / "
+              f"本次清表={int(cleared_rows)} / 入闸拒={len(refused)} / 本次注册=0 / "
+              f"全表待裁={int(pending_total)}")
+    if tail is None:
+        tail = ("报告与归档都已落盘、这一批的行都已清表 —— 没有要入库的，"
+                "别再对同一批调一次。")
+    if n == 0:
+        return (f"no_pending_candidates：本次点名的 0 个槽（委托 {request_id} 没有可收的"
+                f"候选 / 待判槽）⇒ 这一次没有可收的东西（{counts}）。要收文献先 "
+                "`lit.stage_add` 建候选，再逐条 `lit.admit` / `lit.stage_reject`，最后才提交。")
+    if already >= n:
+        return (f"already_cleared：本次点名的 {n} 个槽在这一次调用之前就都清过表了"
+                f"（幂等：这一批早交过）（{counts}）。{tail}")
+    if rejected >= n:
+        return (f"all_rejected：本次点名的 {n} 个槽全是判拒的（含撤回 / 超配额那一档）"
+                f"（{counts}）。{tail}")
+    return (f"nothing_admitted：本次点名的 {n} 个槽都过了提交闸，但没有一条过得了入库闸"
+            f"（重叠 / 重复 / 不可读 / 登记失败，逐条见 `refused[]`）（{counts}）。{tail}")
 
 
 def admit_all(
@@ -3034,11 +3142,19 @@ def admit_all(
                                 why, "registration_failed"))
     # 这一批之后的全表待裁读数（按委托分组）：没交的槽仍 pending，A 照它进下一批。
     left = pending_all_delegations(_rows(store), current=rid)
+    # 一条都没入库时，回执必须是「做完了、但没得收」而不是「既没做事也没理由」：
+    # 改前这里恒写空串，而 `admitted: []` + `reason: ""` 在模型眼里与"这一笔没成立"
+    # 同形 —— 真机 `projects/sylow-1`（sid 2026-11-22e、t-000003）13:37:24/26/27/29/31
+    # 连调 5 次，每次都是「全部判拒、报告与归档已落、行已清表、注册 0 条」，回执却是
+    # `{"admitted": [], "reason": ""}` ⇒ 模型把这 5 个委托读成"空转"。
+    reason = "" if done else empty_batch_reason(
+        request_id=rid, target=target, by_slot=by_slot, refused=refused,
+        cleared_rows=closed["cleared"], pending_total=left["total"])
     return {
         "ok": True,
         "kind": "",
         "whole_call_refused": False,
-        "reason": "",
+        "reason": reason,
         "request_id": rid,
         "submitted": list(target),
         "call_size": plan["call_size"],

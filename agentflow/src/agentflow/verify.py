@@ -1299,7 +1299,8 @@ def _check_8(rep, doc_by_id, findings, questions, rejected_by_id, store):
     # ---- 主控编队 / 花销 / 评测口径（`tasks` / `usage_ledger` / `eval_results`）
     #
     # 口径：这里是台账全量读，不是委托计数 ——
-    # 下面四条判据（父任务悬空 / 深度不连续 / 缺 input_key / 离线仍 running）
+    # 本段自己判三条（父任务悬空 / 深度不连续 / 缺 input_key），另两条
+    # （离线仍 running / artifacts）转发给唯一实现（下面那个 forward 循环），
     # 与 usage 对账（`dangling_usage_task` / `usage_task_total_mismatch`）问的都是
     # "台账自己一致吗"。所以顶趟行（`role=<本体>`、`action="run"`、`called_by="user"`、
     # `depth=1`、`parent_task_id=None`、`input_key="top:…"`）在这里是一行合法记录：
@@ -1349,22 +1350,27 @@ def _check_8(rep, doc_by_id, findings, questions, rejected_by_id, store):
             rep.issues.append(Issue("warning", "tasks", tid, "task_without_input_key",
                                     "input_key 为空 ⇒ 这条召唤**无法参与循环检测**"
                                     "（同一 (role, action, input_key) 出现在祖先链上才算循环）"))
-        # 僵尸：verify 是离线跑的，所以任何仍在 running 的行都是"没有 end 的 start"
-        if str(r.get("status")) == "running":
-            rep.issues.append(Issue("warning", "tasks", tid, "task_still_running",
-                                    f"status=running（started_at={r.get('started_at')}）—— "
-                                    "离线校验时它是一条**没有 end 的 start**。可能是崩溃残留；"
-                                    "本项目**不自动续跑**（重跑一个可能已经写了半张表的任务更危险），"
-                                    "由人决定是弃掉还是重发"))
-        # artifacts 的判据不在这里：它是 `capabilities.audit_task_ledger` 的
-        # "唯一实现"（那一份的 docstring 逐字这么写）。这里转发过去取它的判定结果，
-        # 而不是再写一份 —— 实测过漂移的代价：R-47 的产出摘要（文件路径）先在
-        # `verify.py` 这份副本里被认下，`audit_task_ledger` 那份仍在报，于是
-        # `verify_all` 干净、`Conductor.verify_tasks()` 报 61 条。
+        # ---- 两条判据转发给唯一实现，不在这里写第二份
+        #
+        # `capabilities.audit_task_ledger` 是台账审计的唯一实现（它的 docstring 逐字这么
+        # 写；`Conductor.task_issues()` 也读那一份）。本段只挑出归它管、且 `verify_all`
+        # 必须报的码：仍然欠着活的 `task_still_running` 与两种 artifacts 形态。
+        #
+        # 为什么必须转发而不是各写一份 —— 两份必然漂移，漂移的形态是"其中一处永远
+        # 说没问题"。实测过两次：
+        #   · R-47 的产出摘要（文件路径）先在 `verify.py` 这份副本里被认下，
+        #     `audit_task_ledger` 那份仍在报 ⇒ `verify_all` 干净、`verify_tasks()` 报 61 条；
+        #   · `task_still_running` 这份副本只数 `status == "running"`，而板项行的
+        #     `status` 是**类型标记**（`conductor._item_row` 建行写死 `pending`，收口只改
+        #     `item_state`）⇒ 整个板项类静默地不在审计里：真机 `projects/sylow-1` 的
+        #     1 条真待办，`verify_all` 报 0 条（按 status 数会读成 58 条假积压）。
+        # "还欠着活吗"只有一处判据：`boardrows.row_is_open`（板项按 `item_state`、
+        # 代理行按 `status`）。逐行转发（`[r]`）是安全的：这两个码都是行级判据。
         from . import capabilities as _C
 
         for issue in _C.audit_task_ledger([r], store=store):
-            if issue.code in ("unknown_artifact_kind", "dangling_task_artifact"):
+            if issue.code in ("task_still_running", "unknown_artifact_kind",
+                              "dangling_task_artifact"):
                 rep.issues.append(Issue(issue.level, "tasks", tid, issue.code, issue.message))
 
     usage_by_task: dict[str, int] = {}

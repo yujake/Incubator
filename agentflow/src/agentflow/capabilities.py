@@ -33,6 +33,11 @@ from typing import Any, Mapping
 
 from . import schema as S
 from . import specs as _specs
+#: 「这一行还欠着活吗」的唯一判据（板项按 `item_state`、代理行按 `status`）与它配套的
+#: 读数投影。审计里的 `task_still_running` 必须问它，不许自己再数一遍 `status` ——
+#: 板项行的 `status` 是类型标记（恒 `pending`），直接数会把"已经收口的通知"读成
+#: "还在跑"（真机 `projects/sylow-1` 的 58 条里有 57 条 `item_state=done`）。
+from .boardrows import row_is_open, tasks_row_reading
 
 #: 声明类型与声明词表住在叶子层 `agentspec`（M3：动作表的真身搬进 `specs/`，
 #: 本模块从它派生；搬移理由见 `agentspec.py` 末尾那一段）。
@@ -2450,10 +2455,9 @@ def audit_task_ledger(
     参数
     ----
     in_flight : 本进程确实在跑的任务 id 集合。`None` = 离线审计
-        （等价于空集）：此时任何 `running`/`pending` 行都是"没有 end 的 start"，
-        因为离线时没有任何 worker 在跑它 —— 这正是 `verify_all` 的语义
-        （`verify.verify_all` 里 `task_still_running` 那条的原话："verify 是离线跑的，所以任何仍在 running
-        的行都是『没有 end 的 start』"）。
+        （等价于空集）：离线时没有任何 worker 在跑它，于是任何"还欠着活"的行
+        （`boardrows.row_is_open`）都是一条没有在跑 worker 对应的残留 ——
+        这正是 `verify_all` 的语义（它整库离线跑）。
     """
     live = frozenset(in_flight or ())
     rows = list(tasks)
@@ -2500,14 +2504,41 @@ def audit_task_ledger(
         if st in ("done", "cancelled", "failed") and not str(r.get("ended_at") or "").strip():
             out.append(TaskIssue("task_terminal_without_end", "error", tid,
                                  f"status={st} 却没有 ended_at ⇒ 每个 start 必须有且仅有一个 end"))
-        if st in ("pending", "running") and str(r.get("ended_at") or "").strip():
-            out.append(TaskIssue("task_terminal_rewritten", "error", tid,
-                                 f"status={st} 却已有 ended_at ⇒ 终态先到先得，结束时间不许再被改写"))
-        if st in ("pending", "running") and tid not in live:
+        # ---- I-1（终态那一格）：终态先到先得（`ended_at` 一旦写下就不许再被改写）
+        #
+        # 两轴分开：**还开着**由 `boardrows.row_is_open` 判（板项按 `item_state`、代理行按
+        # `status`），不是 `status` 那一格 —— 板项行的 `status` 是类型标记，它不回答
+        # "终态到没到"。改前这里问 `st in ("pending","running")`，于是"已收口的板项"
+        # 会被读成"未终态"（同一形状的另一面：`task_still_running` 的旧口径）。
+        #
+        # 配对契约本身只属于**有过 start 的行**：`schema.Task` 的前两条讲的都是
+        # `started_at` / `ended_at` 成对（"每个 start 有且仅有一个 end"）。板项行没有 start
+        # （`conductor._item_row` 把 `started_at` 写成空串；全仓 2279 条板项行实测 0 条有），
+        # 它的 `ended_at` 是优雅停止记下的**停表时间**：`schema.TASK_STATUSES` 的 `block`
+        # 注释逐字写明"有时间（`ended_at`）"，`stopctl.block_remaining_tasks` 一次写两根轴
+        # （status=block 与 item_state=block）。那种行是 schema 明确合法的形状 —— 纯按
+        # `row_is_open` 移植会把它报成 error（全仓 26 条 / 3 个工作区），那是假报警。
+        # ⇒ 这一码只对"有 start 的行"成立：按自己那一轴还没终态、却已经有 end。
+        if (str(r.get("started_at") or "").strip() and row_is_open(r)
+                and str(r.get("ended_at") or "").strip()):
+            out.append(TaskIssue(
+                "task_terminal_rewritten", "error", tid,
+                f"{tasks_row_reading(r)} 却已有 ended_at ⇒ 终态先到先得，"
+                "结束时间不许写在一条还没收口的行上",
+            ))
+        # ---- I-1 的第二条：还欠着活的行必须有一个在跑的 worker 对应它
+        #
+        # 判据只有一处：`boardrows.row_is_open`（板项按 `item_state`、代理行按 `status`）。
+        # 改前这里直接问 `status in ("pending","running")`，而板项行的 `status` 是
+        # **类型标记**（`conductor._item_row` 建行写死 `pending`，收口只改 `item_state`）⇒
+        # 真机 `projects/sylow-1` 报出 58 条 `task_still_running`，其中 57 条
+        # `item_state=done`（53 条 `item_close=acked`）早就收口了：假积压 58 vs 真待办 1。
+        if row_is_open(r) and tid not in live:
             out.append(TaskIssue(
                 "task_still_running", "warning", tid,
-                f"status={st}（started_at={r.get('started_at')}）—— "
-                "没有任何在跑的 worker 对应它，是一条没有 end 的 start。"
+                f"{tasks_row_reading(r)}（started_at={r.get('started_at')}）—— "
+                "没有任何在跑的 worker 对应它：代理行是一次没有 end 的 start，"
+                "板项是一条没人领的未收口项。"
                 "可能是崩溃/会话中断残留；本项目不自动续跑（重跑一个可能已经"
                 "写了半张表的任务更危险），由人决定是弃掉还是重发",
             ))

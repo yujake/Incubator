@@ -2365,6 +2365,117 @@ MONITOR_REFUSAL_LIMIT: int = 3
 #: `agent_step` 与 `MAILBOX_EVENT`，于是这条事件不改变"重建 == 当时那一份"）。
 PARK_EVENT: str = "agent_park"
 
+
+#: 挂机 / 唤醒 / 到点三类事件里"读得懂"的那几格（2026-11-23 C1FIX-TIME）。
+#:
+#: 为什么收进 `payload`：Web UI 的逐条事件读模型（`webui/readers._event_row` 的
+#: `_EVENT_FIELDS`）只放行一张白名单，`payload` 是其中唯一自由形状的字典。这三类事件
+#: 此前把读数摊在顶层，于是事件面板上它们只剩 `kind` / `ts` / `role` —— "谁在等、
+#: 等多久、为什么"从那一面读不出来。这一份只是多一个投影：判定、事件序、既有顶层键
+#: 一个都不动（`resume_messages` 也不读这三类事件）。
+EVENT_PAYLOAD_FIELDS: tuple[str, ...] = ("reason", "waiting_on", "waited_sec",
+                                         "trigger", "timer_id")
+
+#: 一条计时器读数里最该被人读到的几格（够回答"等谁 / 等多久 / 为什么"）。
+_TIMER_READING_KEYS: tuple[str, ...] = ("timer_id", "wait_for", "purpose", "waiting_on_text",
+                                        "waited_sec", "parked_sec", "triggered_by",
+                                        "woke_reason")
+
+
+def _payload_timer_rows(rows: Any, *, limit: int = 8) -> list[dict[str, Any]]:
+    """把一串计时器读数压成事件 payload 里那几格（空值的键不写，免得"没读到"像"是空"）。
+
+    长文本（`purpose` / `reason` / `waiting_on_text`）截到 200 字：事件是给人读的投影，
+    完整原文仍在顶层与时钟簿记里 —— payload 不该把一份 3000 字的派活原话抄第二遍。
+    """
+    out: list[dict[str, Any]] = []
+    for row in (rows or ()):
+        if not isinstance(row, Mapping):
+            continue
+        cell: dict[str, Any] = {}
+        for key in _TIMER_READING_KEYS:
+            value = row.get(key)
+            if value in (None, ""):
+                continue
+            cell[key] = (str(value)[:200] if key in ("purpose", "reason",
+                                                     "waiting_on_text") else value)
+        if cell:
+            out.append(cell)
+        if len(out) >= int(limit):
+            break
+    return out
+
+
+def _park_event_payload(*, decision: str, reason: str, woke_reason: str,
+                        waited_sec: float, waiters: Any, timers: Any) -> dict[str, Any]:
+    """`agent_park` 那一拍的 payload：谁在等、等了多久、为什么、哪条计时器。
+
+    `waiters` 收挂机读数（`run.park["waiters"]` 的富行）；`timers` 收这一拍读到的
+    待发计时器（`out["timers"]`）。两串都缺时 payload 里仍有 `trigger` / `reason` /
+    `waited_sec` 三格 —— 不许折成空字典（那是"没有读数"，不是"没在等"）。
+    """
+    waiting = _payload_timer_rows(waiters)
+    pending = _payload_timer_rows(timers)
+    parked = [float(r.get("parked_sec") or 0.0) for r in waiting]
+    timer_id = ""
+    if waiting:
+        timer_id = str(waiting[0].get("timer_id") or "")
+    elif pending:
+        timer_id = str(pending[0].get("timer_id") or "")
+    return {
+        "trigger": str(woke_reason or decision or ""),
+        "decision": str(decision or ""),
+        "reason": str(reason or "")[:400],
+        "waiting_on": waiting,
+        "waited_sec": round(float(waited_sec or 0.0), 3),
+        "timer_id": timer_id,
+        "parked_sec": round(max(parked) if parked else 0.0, 3),
+        "timers": pending,
+    }
+
+
+def _wake_event_payload(events: Any) -> dict[str, Any]:
+    """`agent_wake` 的 payload：哪几条唤醒（`wake_id` / `timer_id`）、等谁、等了多久、为什么。"""
+    rows = [r for r in (events or ()) if isinstance(r, Mapping)]
+    waited = [float(r.get("waited_sec") or 0.0) for r in rows]
+    return {
+        "trigger": "wake",
+        "wake_ids": [str(r.get("wake_id") or "") for r in rows if str(r.get("wake_id") or "")],
+        "timer_id": next((str(r.get("timer_id") or "") for r in rows
+                          if str(r.get("timer_id") or "")), ""),
+        "timer_ids": [str(r.get("timer_id") or "") for r in rows
+                      if str(r.get("timer_id") or "")],
+        "waiting_on": [str(r.get("wait_for") or "") for r in rows
+                       if str(r.get("wait_for") or "")],
+        "waited_sec": round(max(waited) if waited else 0.0, 3),
+        "reasons": [str(r.get("purpose") or r.get("reason") or r.get("message") or "")[:200]
+                    for r in rows],
+        "mailbox_item_ids": [str(r.get("mailbox_item_id") or "") for r in rows
+                             if str(r.get("mailbox_item_id") or "")],
+    }
+
+
+def _clock_event_payload(fired: Any, deferred: Any, errors: Any) -> dict[str, Any]:
+    """`agent_clock` 的 payload：这一拍推响了哪几条表、等谁、等了多久、为什么。"""
+    rows = [r for r in (fired or ()) if isinstance(r, Mapping)]
+    waited = [float(r.get("waited_sec") or 0.0) for r in rows]
+    return {
+        "trigger": "timer_due",
+        "timer_id": next((str(r.get("timer_id") or "") for r in rows
+                          if str(r.get("timer_id") or "")), ""),
+        "timer_ids": [str(r.get("timer_id") or "") for r in rows
+                      if str(r.get("timer_id") or "")],
+        "waiting_on": [str(r.get("wait_for") or "") for r in rows
+                       if str(r.get("wait_for") or "")],
+        "waited_sec": round(max(waited) if waited else 0.0, 3),
+        "reasons": [str(r.get("purpose") or r.get("reason") or r.get("message") or "")[:200]
+                    for r in rows],
+        "fired_count": len(rows),
+        "deferred_count": len(list(deferred or ())),
+        "error_count": len(list(errors or ())),
+    }
+
+
 #: 挂机的一拍最多睡多久（秒）。第一拍取 `PARK_SLICE_MIN_SEC`，之后翻倍到本上界。
 #:
 #: 为什么要有上下界：下界 0.5 秒让"事件唤醒"（子代理发来一条留言）不会因为父代理正
@@ -6474,6 +6585,10 @@ class AgentLoop:
                 "step": int(step), "when": str(when), "fired": fired,
                 "deferred": list(report.get("deferred") or ()),
                 "errors": list(report.get("errors") or ()),
+                # 读模型只放行 `payload`（见 `EVENT_PAYLOAD_FIELDS` 的说明）：
+                # 这一拍推响了谁、等多久、为什么，收进这一格。
+                "payload": _clock_event_payload(
+                    fired, report.get("deferred") or (), report.get("errors") or ()),
             }, sid=self.sid)
         elif not report.get("checked", True):
             run.notes.append(f"时钟推不动（{report.get('reason') or '没查成'}）⇒ "
@@ -6525,6 +6640,8 @@ class AgentLoop:
                 "reasons": [str(e.get("reason") or "") for e in events],
                 "mailbox_item_ids": [str(e.get("mailbox_item_id") or "") for e in events],
                 "checked": bool(consumed.get("checked")),
+                # 读模型只放行 `payload`：这一拍被谁叫醒、等谁、等了多久、为什么。
+                "payload": _wake_event_payload(events),
             }, sid=self.sid)
         return {"checked": bool(consumed.get("checked")), "consumed": events,
                 "count": len(events), "reason": str(consumed.get("reason") or "")}
@@ -8647,6 +8764,14 @@ class AgentLoop:
                 "tree_busy": bool(out["tree_busy"]),
                 "tree_checked": bool(out["tree_checked"]),
                 "checked": bool(out["checked"]), "reason": str(out["reason"]),
+                # 读模型只放行 `payload`：谁在等（富行）、等多久、为什么、哪条计时器。
+                # 富行取自 `run.park["waiters"]`（与事件同源的 `_park_reading` 投影），
+                # 顶层 `waiters` 仍是编号串 —— 既有读者一个字不动。
+                "payload": _park_event_payload(
+                    decision=str(out["decision"]), reason=str(out["reason"]),
+                    woke_reason=str(out["woke_reason"]),
+                    waited_sec=float(out["waited_sec"] or 0.0),
+                    waiters=run.park.get("waiters") or (), timers=pending_timers),
             }, sid=self.sid)
         return out
 

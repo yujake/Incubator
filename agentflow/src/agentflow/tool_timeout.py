@@ -141,13 +141,16 @@ TIMEOUT_TABLE: dict[str, TimeoutDecl] = {
         120.0, "SEARCH_TIMEOUT", "handler",
         "一次检索要打多个源，慢源会把一步拖到分钟级；检查点放在每个源那一次调用之前"),
     "search.providers": TimeoutDecl(
-        30.0, "PROVIDERS_TIMEOUT", "pending",
-        "它只是读一张已知 provider 的清单，但探测会走网络（`_probe_network_provider`）"),
+        30.0, "PROVIDERS_TIMEOUT", "handler",
+        "它只是读一张已知 provider 的清单，但探测会走网络（`_probe_network_provider`）；"
+        "检查点接在每一个源探测之前（C1FIX-TOOLS ③，2026-11-23）—— 真机 C-1 的 "
+        "`sessions/2026-11-22e.jsonl` 13:36:17 那次调用表里写着 30000ms、实际跑了 "
+        "39328ms，因为当时这一件还没有检查点（那一档恰恰是'声明了却不看'）"),
     "search.walk_citations": TimeoutDecl(
         60.0, "WALK_TIMEOUT", "pending",
         "引文走查发 1–3 次 OpenAlex 请求（取源记录 + 最多两批解析，每批 `CITATION_BATCH=25` 个 id），"
         "每次自带重试与限速 ⇒ 给 60 秒而不是 120 秒：它**不像 `search.literature` 那样一次打多个源**。"
-        "检查点尚未接在 handler 里（与 `search.providers` / `search.download` 同一档，所以写 `pending`）"),
+        "检查点尚未接在 handler 里（与 `search.download` 同一档，所以写 `pending`）"),
     "search.download": TimeoutDecl(
         180.0, "DOWNLOAD_TIMEOUT", "pending",
         "下 PDF 是这一层最慢的一件（分钟级是常态，所以给三分钟而不是三十秒）"),

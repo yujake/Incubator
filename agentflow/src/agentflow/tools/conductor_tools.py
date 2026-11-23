@@ -1071,10 +1071,15 @@ def _queue_backlog(store_: Any) -> dict[str, Any]:
     side_effect="read",
     roles=("M",),
     returns="{'root','tables','conjectures','tasks','queues','programs',"
-            "'states','registration_refusals'}；`registration_refusals` 是"
+            "'states','registration_refusals','wall_clock','budget'}；"
+            "`registration_refusals` 是"
             "{checked,count,items,bad,owner,path}：名册写口拒过的号（items 每条 "
             "{task_id,requested_name,refusal_code,problem,at}；checked=false 是"
-            "「这一份流水读不出来」，不是「没人被拒」）",
+            "「这一份流水读不出来」，不是「没人被拒」）；`wall_clock` 是"
+            "{checked,limited,wall_clock_sec,elapsed_sec,remaining_sec,deadline_hit,reason}"
+            "（limited=false 时 remaining_sec 为 null：不限 ≠ 已经用完）；`budget` 是"
+            "{checked,spent_usd,usd_budget,remaining_usd,over_budget,reason}"
+            "（没设上限 / 账读不成 ⇒ remaining_usd 为 null，不是 0）",
     scenario='开工或巡查前想要一屏全局读数时用它；细节去 ledger',
     example='冷启动前一屏全局：回各表计数 / 猜想 / 台账 / 程序四组读数',
     example_code='conductor.state()',
@@ -1158,10 +1163,35 @@ def conductor_state(_conductor, ) -> ToolResult:
     except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不许折成"没人被拒"
         refused = {"checked": False, "count": 0, "items": [], "bad": [str(exc)],
                    "owner": "", "path": ""}
+    # ---- 墙钟余量（2026-11-23 C1FIX-TIME）：M 按时间编排的唯一读数来源。
+    #
+    # 为什么放在 `state` 里而不是另开一件工具：M 每一趟的第一次调用就是它，
+    # 而"还剩多少墙钟"与"还剩多少预算"是同一类"还能不能安排下一段活"的读数。
+    # 只读：判定仍在 `policy.check`（`deadline_exceeded` / `budget_exceeded`）。
+    try:
+        wall = dict(c.wall_clock_reading())
+    except Exception as exc:  # noqa: BLE001 —— 读不成是 unknown，不许折成"不限"
+        wall = {"checked": False, "limited": None, "wall_clock_sec": None,
+                "elapsed_sec": None, "remaining_sec": None, "deadline_hit": None,
+                "reason": f"墙钟读数没取到：{type(exc).__name__}: {exc}"}
+    # 预算余量：复用 `Conductor.budget_note`（与派活前那道 guard 同一份 `meter`），
+    # 只把键名摆成"已花 / 上限 / 还剩"三格 —— 不另算第二份口径。
+    try:
+        note = dict(c.budget_note(scope="conductor.state"))
+    except Exception as exc:  # noqa: BLE001
+        note = {"checked": False, "reason": f"预算读数没取到：{type(exc).__name__}: {exc}"}
+    spent_usd = note.get("spent_usd")
+    budget = {"checked": bool(note.get("checked")),
+              "spent_usd": None if spent_usd is None else float(spent_usd),
+              "usd_budget": note.get("usd_budget"),
+              "remaining_usd": note.get("usd_left"),
+              "over_budget": bool(note.get("over_budget")),
+              "reason": str(note.get("reason") or "")}
     data = {"root": str(getattr(store_, "root", "")), "tables": tables,
             "conjectures": conjectures, "tasks": len(c.tree()),
             "queues": _queue_backlog(store_), "programs": programs,
-            "states": _states_reading(c), "registration_refusals": refused}
+            "states": _states_reading(c), "registration_refusals": refused,
+            "wall_clock": wall, "budget": budget}
     return ok(data, **data)
 
 @tool(

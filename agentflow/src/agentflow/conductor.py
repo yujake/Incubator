@@ -33,6 +33,7 @@ from dataclasses import asdict, dataclass, field, is_dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator, Mapping, Sequence
 
+from . import boardrows as BR
 from . import capabilities as C
 from . import cancellation as CX
 from . import clock as CLK
@@ -3096,6 +3097,35 @@ class Conductor:
         if self.deadline is None:
             return False
         return time.monotonic() >= self.deadline
+
+    def wall_clock_reading(self) -> dict[str, Any]:
+        """墙钟余量（只读读数；不参与任何判定）。
+
+        为什么要有这一格（2026-11-23 C1FIX-TIME，真机 `projects/sylow-1`）：M 的第 1 步
+        `conductor.state` 只给表计数 / 问答队列 / 程序读数，没有时间 ⇒ 它无法预留
+        "成文"那一段墙钟，直到 14:34 才派 G，而墙钟 14:30:41 已过、`deadline_exceeded`
+        把那一笔拒了。这里把既有的 `_start` / `deadline`（由 `policy.wall_clock_sec`
+        在构造时算好）折成读数，`conductor.state` 只是把它摆到模型眼前。
+
+        三态：`limited=False` 时 `remaining_sec=None` —— 「不限」不是「已经用完」；
+        `checked` 今天恒为真（`time.monotonic()` 读不成是进程级故障，不在本格折叠）。
+        """
+        limit = self.policy.wall_clock_sec
+        elapsed = round(float(self.elapsed_sec), 3)
+        if limit is None or self.deadline is None:
+            return {"checked": True, "limited": False, "wall_clock_sec": None,
+                    "elapsed_sec": elapsed, "remaining_sec": None,
+                    "deadline_hit": False,
+                    "reason": "这一次墙钟不限（wall_clock_sec=None）—— "
+                              "「不限」不是「已经用完」"}
+        remaining = round(max(0.0, float(self.deadline) - time.monotonic()), 3)
+        hit = bool(self.deadline_hit)
+        return {"checked": True, "limited": True, "wall_clock_sec": float(limit),
+                "elapsed_sec": elapsed, "remaining_sec": remaining,
+                "deadline_hit": hit,
+                "reason": (f"墙钟已到点（{int(float(limit))} 秒用完）：新召唤一律被拒，"
+                           "收口这一趟把已有结论写进 final" if hit else
+                           f"墙钟还剩 {remaining} 秒（上限 {int(float(limit))} 秒）")}
 
     def _log(self, message: str, **extra: Any) -> None:
         if self.log is None:
@@ -7157,6 +7187,10 @@ class Conductor:
         那一格 `retry`（它的 `poke` 世代比较）：拿一份旧快照下"孩子们都停了"的结论，
         而读的过程中恰好有一个孩子交差 —— 那个结论在写下它的那一刻就已经过期了。
         世代取三样拼起来（行数 / 在飞数 / 最晚的结束时刻），任何一样变了就是另一代。
+        `running` 那一格数的是**还欠着活的**行（`boardrows.row_is_open`：板项按
+        `item_state`、代理行按 `status`）—— 改前直接数 `status`，而板项行的 `status`
+        是类型标记（恒 `pending`），于是真机 `projects/sylow-1` 的世代里永远坐着
+        58 条早已收口的板项（假积压），"这孩子还在跑"与"它早交差了"在同一代里同形。
         读不成 ⇒ 空串（那是"判不了"，`settlement_reading` 会如实说没重算成）。
         """
         try:
@@ -7164,8 +7198,7 @@ class Conductor:
         except Exception:  # noqa: BLE001 —— 读不成 ⇒ 没有世代可比（不许编一个）
             return ""
         ends = [str(r.get("ended_at") or "") for r in rows]
-        running = sum(1 for r in rows
-                      if str(r.get("status") or "") in UNFINISHED_STATUSES)
+        running = sum(1 for r in rows if BR.row_is_open(r))
         return f"{len(rows)}:{running}:{max(ends) if ends else ''}"
 
     def settlement_reading(self, parent_task_id: str) -> dict[str, Any]:
@@ -8171,13 +8204,26 @@ class Conductor:
         return {"checked": True, "ready": ready, "reason": ""}
 
     def board_readings(self) -> dict[str, Any]:
-        """板上读数（三态：读不成 ⇒ `checked=False`，不许返回一串 0）。"""
+        """板上读数（三态：读不成 ⇒ `checked=False`，不许返回一串 0）。
+
+        ## `open_rows` 与 `board_rows` 是两个量（C1-ROOTFIX，2026-11-23）
+
+        `board_rows` 数的是「板项行数」（含已收口的那些：`item_state=done` 的通知仍
+        在台账里，它不物理删）。拿它当"板上还挂着几件"会读出假积压：真机
+        `projects/sylow-1` 的 58 条板项行里 57 条早已 `done`（53 条 `acked`），
+        真要有人处理的只有 1 条 —— 而 C-1 现场引用的正是 `pending 58`。
+
+        `open_rows` 数的是「还欠着活的」（判据只有一处：`boardrows.row_is_open`：
+        板项按 `item_state`），两个量各自一个名、谁也不许冒充谁。
+        `by_state` / `by_close` 仍按原样逐档给出（`done` 那一格就是已收口的条数）。
+        """
         try:
             rows = self._board_rows()
         except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，与"板上没事"两件事
             return {"checked": False, "reason": f"{type(exc).__name__}: {exc}"}
         by_state: dict[str, int] = {s: 0 for s in S.ITEM_STATES}
         by_close: dict[str, int] = {c: 0 for c in S.ITEM_CLOSES}
+        open_rows = 0
         for r in rows:
             st = str(r.get("item_state") or "")
             if st in by_state:
@@ -8185,8 +8231,10 @@ class Conductor:
             cl = str(r.get("item_close") or "")
             if cl in by_close:
                 by_close[cl] += 1
-        return {"checked": True, "board_rows": len(rows), "by_state": by_state,
-                "by_close": by_close,
+            if BR.row_is_open(r):
+                open_rows += 1
+        return {"checked": True, "board_rows": len(rows), "open_rows": open_rows,
+                "by_state": by_state, "by_close": by_close,
                 "old_instance_rows": len(self._tasks()) - len(rows)}
 
     def board_view(self, *, limit: int = 20, by_task_id: str = "") -> dict[str, Any]:
@@ -10663,7 +10711,11 @@ class Conductor:
         closed: list[str] = []
         board_left: list[str] = []
         for row in self._tasks():
-            if row.get("status") not in UNFINISHED_STATUSES:
+            # 「还欠着活」的唯一判据（两轴分开）：代理行按 `status`、板项行按 `item_state`。
+            # 改前这里只问 `status in UNFINISHED_STATUSES`，而板项行的 `status` 是类型标记
+            # （恒 `pending`）⇒ 一条早已 ack 的 notice 在收工读数里被报成"还剩一条没消"
+            # （真机 C-1 `projects/sylow-1`：57 条已收口板项会被数成 57 条未消）。
+            if not BR.row_is_open(row):
                 continue
             tid = str(row["task_id"])
             if self._is_board_item(row):
@@ -11089,8 +11141,18 @@ class Conductor:
         板项（终态回报的 `notice`、传话的 `message`）不属于这个问题 ——
         混进来会让"顶趟恰好一行 M"这类读数凭空多一条（实测：加板之后
         `tests/test_agent_loop.py` 的 F1 判据当场红过）。板自己的读数在 `board` 那一格里。
+
+        ## `pending`：台账里"还开着几件"的唯一口径（C1-ROOTFIX，2026-11-23）
+
+        `by_status` 只数实例行 ⇒ 它回答不了"板上还剩几件没消"（板项的 `status` 是类型
+        标记）。改前想回答这个问题的读者只能自己数 `status`，于是把 57 条已收口的通知
+        读成待办（真机 `projects/sylow-1`：`status=pending` 58 条 / 真待办 1 条）。
+        现在这一格由 `boardrows.pending_reading` 一处给出（两轴分开：代理行按 `status`、
+        板项按 `item_state`），并把旧口径 `raw` 一起给出 —— 两者之差 `gap` 就是"类型标记
+        被当成状态"的量，读的人不必自己减。
         """
-        rows = [r for r in self._tasks() if self._is_instance_row(r)]
+        all_rows = self._tasks()
+        rows = [r for r in all_rows if self._is_instance_row(r)]
         # 视图与权威账对账（以账为准）：`stats()` 是唯一读这个视图的地方，
         # 每次问都先对齐 —— 这样"本次 run 花了多少"不会因为某条路径漏推视图
         # 而与台账给出不同的数字。
@@ -11150,7 +11212,7 @@ class Conductor:
             # `finish_top_level_run` 收）。于是这一屏上：
             #
             # - `total` / `by_role` / `by_status` / `by_outcome` / `by_depth`
-            #   = 台账全量（上面 `rows = self._tasks()` ⇒ 含顶趟行）；
+            #   = 台账全量（上面 `all_rows = self._tasks()` 收窄到实例行 ⇒ 含顶趟行）；
             # - `started_total` / `peak_running` = 本实例发起的召唤数（只在 `summon`
             #   里自增；顶趟不占并发/总量配额，所以它不进这两个数）。
             #
@@ -11160,8 +11222,14 @@ class Conductor:
             "calibers": {
                 "total / by_*": "tasks 台账全量（含顶趟行 action=run）",
                 "started_total / peak_running": "本实例发起的召唤数（顶趟不计）",
+                "pending": ("台账里『还开着』的唯一口径：代理行按 status、板项按 item_state"
+                            "（boardrows.pending_reading）；`raw` 是直接数 status 的旧口径，"
+                            "`gap` = raw - total 就是『类型标记被当成状态』的量"),
             },
             "top_level_runs": top_level_runs,
+            # 「还剩多少 pending」的唯一口径（两轴分开）：板项的 `status` 是类型标记，
+            # 拿它数会把已收口的通知读成待办（sylow-1：58 vs 1）。
+            "pending": BR.pending_reading(all_rows),
             # 板自己的读数（业主 2026-10-08 裁 A1=甲、T16）：既有那些格只数实例行，
             # 板项在这里单列 —— "派了几件活"与"板上还挂着什么"是两个问题，不许混。
             "board": self.board_readings(),
