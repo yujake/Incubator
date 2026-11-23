@@ -632,7 +632,7 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
     except Exception as exc:  # noqa: BLE001 —— 写不成不影响这次运行，但必须留痕
         notes.append(f"画像文件没写成：{type(exc).__name__}: {exc}")
 
-    # ---- 各角色的 skills 落到工作区（业主：「现做现读」）
+    # ---- skills 随提示词渲染（2026-11-22 业主裁定「skills 应该在系统内而非在工作区」）
     _materialize_skills(store, notes)
 
     # 内层 backend 必须带着 store：`LocalBackend.store` 由 `Conductor` 注入，
@@ -700,33 +700,23 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
 
 
 def _materialize_skills(store: Any, notes: list[str]) -> list[str]:
-    """把各角色的 skills 落到工作区（业主：「现做现读」）。
+    """skills 的落点读数（2026-11-22 起不写工作区）。
 
-    前置提示词里只给索引（`agent_prompts` 的 `SKILLS_INDEX` 段），正文落在
-    `<工作区>/skills/<角色>/<slug>.md`，角色用自己的 `fs.read` 现读。
-    ## 为什么抽成函数：它此前是 `run()` 里的一段内联 `try/except`，
-    一条判据都碰不到它（与本文件里那段"测试没看见它"的注释是同一类缺陷）。"现做现读"的落点
-    就是这一段：它不跑，提示词里的索引就指向一堆不存在的文件，而每一处各自自洽 ——
-    没有任何地方会报错。
-    ## 没有工作区时不写：`store is None` 时旧写法是 `materialize(".")`，会把几十个 `.md` 写进
-    进程当前目录。改成：没有工作区 ⇒ 这一格没做，并留一条明说的 note（三态：没做 ≠ 做好了）。
-    返回写出去的路径；一条不成也不打断这一趟（索引仍然有效），但必须留痕。
+    业主逐字：「skills 应该在系统内而非在工作区」。手写正文现在由
+    `agent_skills.index_block(role)` 随前置提示词渲染 —— 手册就在模型面前，
+    不再需要"开跑时写到 `<工作区>/skills/`、角色用 `fs.read` 现读"那一跳。
+    所以本函数只留一条装配读数（这一格到底做了什么），一个字节都不落盘；
+    `agent_skills.materialize` 仍保留给自检 / 导出显式调用，但生产路径不调它。
+
+    ## 为什么还留这个函数（而不是把调用点删掉）
+
+    这一格此前是一条判据都碰不到的静默面（见本文件里那段注释）。留一个只返回读数、
+    不写盘的函数，让"这一趟 skills 去哪了"在 `notes` 里仍读得到；判据
+    `tests/test_skills_live_in_the_system_not_the_workspace.py` 同时钉住
+    "开跑后工作区没有 `skills/`"与"提示词里每一份手册的正文都在"。
     """
-    if store is None or getattr(store, "root", None) is None:
-        notes.append("skills：这一趟没有工作区，没落盘（索引仍在提示词里，但盘上没有正文）")
-        # 这一格没做，不是"空输入得空输出"：没有工作区就没有落点，
-        # 所以"没写"这件事只能从 note 里读（`return []` 只表示"没写出任何路径"）。
-        return []
-    try:
-        from . import agent_skills as _AS
-
-        wrote = _AS.materialize(store.root)
-        notes.append(f"skills：落盘 {len(wrote)} 份（按需读；索引在提示词的 SKILLS_INDEX 段）"
-                     if wrote else "skills：盘上已是最新，未重写")
-        return list(wrote)
-    except Exception as exc:  # noqa: BLE001
-        notes.append(f"skills 没写成：{type(exc).__name__}: {exc}")
-        return []
+    notes.append("skills：随提示词渲染（系统内），不写工作区；工作区里没有 skills/ 目录")
+    return []
 
 
 def selftest() -> int:

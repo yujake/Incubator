@@ -43,7 +43,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
         # 动作说明；只把入口加在参数面、摘要不提，模型就不会知道那一格存在
         # （那一轮 `attack.step` 全部落成 reduction 的同一个形态）。
         ("推进一轮（唯一会改计划的方法）。**写好的证明 / 归约可以直接放进 `product` 交进来**："
-         "框架照既有产物校验逐条核过，过闸就替你落成 `reports/f-proof-<你的稿号>.md`"
+         "框架照既有产物校验逐条核过，过闸就替你落成 `manuscripts/F/f-proof-<你的稿号>.md`"
          "（`## 依赖` 由 `cites` 渲染，你不必手抄），并回 `manuscript_path` / `manuscript_id`；"
          "**不交 `product` 就照旧由框架这一轮自己产出**。"),
         _obj({"plan_id": _S, "product": _AR.HANDED_PRODUCT_SCHEMA}, ("plan_id",)),
@@ -159,7 +159,7 @@ SPEC = AgentSpec(
             "`attack.create_plan` 的 `subgoals` 每个写 `{sid,text,owner}`，一个子目标只判一件事"
             "（能独立核真假），写清第一个该试的筛选测试；③ 一轮一步 —— 每轮用 `attack.step` 只推一个"
             "子目标，读回 `v_sign` 与计划状态：没有新事实就换路（「又跑完一轮」不算进展）；"
-            "④ 写成 V 能逐行审的形态 —— `reports/f-proof-<稿号>.md` 三节 `## 命题` / `## 证明` / "
+            "④ 写成 V 能逐行审的形态 —— `manuscripts/F/f-proof-<稿号>.md` 三节 `## 命题` / `## 证明` / "
             "`## 依赖`：证明每一步一行、写清依据（`statements.stmt_id` 或引理号），依赖按四列写"
             "（依赖号 / 用途 / 位置 / 状态）；⑤ 登记与交回 —— `attack_plans.status` 与 "
             "`attack_plans.history` 如实记终止原因，出了稿立刻派 V（没签不算交差），把稿路径交回父。",
@@ -189,10 +189,10 @@ SPEC = AgentSpec(
             # 判据：`tests/test_f_delivery_needs_v_sign.py` 与
             # `tests/test_v_unregistered_manuscript_review.py`。
             "**证明写完之后由你派 V 审这一份证明稿（proof manuscript）**（`framework_summon` 形状：`role=\"V\"`，`task` 写清要审**哪一份** —— "
-            "**只能点 `F.step` 返回的 `manuscript_path`**：`reports/f-proof-<你的稿号>.md`（**稿号是你自己的**，"
+            "**只能点 `F.step` 返回的 `manuscript_path`**：`manuscripts/F/f-proof-<你的稿号>.md`（**稿号是你自己的**，"
             "不用命题号、不用计划号；同一份稿改稿仍是同一个稿号；**要写第二份证明就另开一份稿（新稿号）**），"
             "**收录前后都点同一份稿**）。"
-            "**你自己用 `fs.write` 写的论文章节稿（`reports/P1-*.md` / `reports/P2-*.md` / `notes/*.md` 这类）不是手稿**："
+            "**你自己用 `fs.write` 写的论文章节稿（`work/F/P1-*.md` / `work/F/P2-*.md` / `notes/*.md` 这类）不是手稿**："
             "它不是框架渲染的、没有 `## 命题` / `## 证明` / `## 依赖` 这三节，入口闸会整笔拒（真机实测 9 次全拒、签一发未发）——"
             "章节稿可以写，但它是给你自己推演用的草稿，不是交付物。"
             "V 的 `verify_proof` 参数按工具面给全："
@@ -209,7 +209,7 @@ SPEC = AgentSpec(
             # 收工门 `agent_loop._v_wait_gate_reading` **按签拦收工、不按计时器拦**：拦的是
             # 「计划号没有 V 签稿、且没有被放弃」。签成立那一刻签触发提交，复用 `mss:` 记号。
             "**送审之后这一趟还不能收工**：你发 `final` 时，**你自己的 final 门**"
-            "（`agent_loop._v_wait_gate_reading`）按签拦 —— 计划号名下没有一份现行的 V 签稿、"
+            "按签拦 —— 计划号名下没有一份现行的 V 签稿、"
             "且这个计划号没被放弃 ⇒ final 受控拒，点名计划号与缺的那份稿；"
             "**V 判「成立」的那一刻这份稿就已经置为已提交**"
             "（框架在签发时写 `mss:` 记号、`via=sign_issued`；收工那一趟还会再扫一次，幂等不重复），"
@@ -258,7 +258,8 @@ SPEC = AgentSpec(
             "**你的证明最终要有 V 签，或者那条命题被明确放弃**：既没有签、也没有被放弃的命题会进收工读数的 "
             "`statements_unsigned`（**全趟的收工报告（`closing` 那一侧）的读数，不是 blocker**：`machine_pass` 不因它变假、"
             "**那道门**不因它拦；2026-11-16 裁定 3 + 追加裁定 B —— 注意这与你发 `final` 时那道"
-            "「final 门」是**两道门**：那道门按签拦，见上面「送审之后这一趟还不能收工」）。"
+            "「final 门」是**两道门**：你这一趟的 `final` 由 final 门按签拦；"
+            "全趟的收工报告由收工门判（**是读数，不拦这一趟**）—— 见上面「送审之后这一趟还不能收工」）。"
             "它逐份列「有稿无签」清单（`unsigned_manuscripts`：族 / 号 / sha / 为什么没签）——"
             "清单不是门，但清单上每一份都是下一次委托要重做的活。两条出路：① 重送 V 拿到干净的「成立」；② 这条命题确实攻不动 ⇒ 派 **B** 把它**明确放弃**"
             "（B 走 `table.update`：`status=abandoned`，理由按四档之一给 —— **`math_error`**：指出错在第几步、错的是什么 ＋ "
@@ -279,8 +280,8 @@ SPEC = AgentSpec(
             "（`verify_proof` 只点那份稿的 `proof_manuscript`，不传 `proof_no`）、各自被 B 收录成"
             "该命题的一条证明路径（`path_group` 由 B 收录时分配），不许拿一份的签替另一份背书。"
             "**别再写 `-pN`**（一个稿号 = 一份文件 = 一份证明）：稿名只有 "
-            "`reports/f-proof-<稿号>.md` 这一种形式；老盘上已有的 "
-            "`reports/f-proof-<号>-p2.md` 不再被认成手稿，但你不要再造这种名字。"
+            "`manuscripts/F/f-proof-<稿号>.md` 这一种形式；老盘上已有的 "
+            "`manuscripts/F/f-proof-<号>-p2.md` 不再被认成手稿，但你不要再造这种名字。"
             "命题号由 **B 收录时现取**（你把稿交上去、经 D 携带给 B，由它读稿落那一行；你不写那张表）。"
             "不要用内联的 `proofs=[...]` 交正文，也不要为每条路线各立一条命题。论文对应表里"
             "同一条命题按证明路径各占一行。**反向判据：不要把同一条定理拆成多条命题**"
@@ -292,7 +293,7 @@ SPEC = AgentSpec(
             # `reports/f-proof-*` 会撞 `fs` 保留表（`reserved_framework_artifact`）。
             # 所以这一条只教"你交 cites"：渲染是框架的活，格式仍在 `agentflow.depsection`。
             "**依赖面不用你手写那一节 —— 你只交 `cites`**：你每一份证明的正文由 `F.step` 落成手稿"
-            "（`reports/f-proof-<你的稿号>.md`；返回里给 `manuscript_path` 与 `deps_preview`，全文不进返回值），"
+            "（`manuscripts/F/f-proof-<你的稿号>.md`；返回里给 `manuscript_path` 与 `deps_preview`，全文不进返回值），"
             "手稿里那一节标题逐字为 `## 依赖` 的三列表**由框架按你的 `cites` 渲染**（引用取那一步的原话 / "
             "命题号 / 用在哪一步；路径号是第四列，由 B 收录时分配、不进稿）。渲染出来长这样（**给你读的**，不用你写）：\n"
             "```\n"
@@ -303,7 +304,7 @@ SPEC = AgentSpec(
             "```\n"
             "所以你要做的是：写证明时读 B 已收录的定理（在册 `statements` —— "
             "提示词第 4.1 段那份现算的清单就是它们），**引到哪一条就把 `stmt:<号>` 写进那一步的 `cites`**。"
-            "**不要手写 `reports/f-proof-*`**：那是框架渲染的产物，`fs` 的保留表对它是受控拒绝"
+            "**不要手写 `manuscripts/F/f-proof-*`**：那是框架渲染的产物，`fs` 的保留表对它是受控拒绝"
             "（`reserved_framework_artifact`）。"
             "**引用门槛是等级 `pre_theorem` 及以上**（业主同日加码裁定；**等级是唯一的轴**，"
             "`evidence_kind` 只是它的历史列名）：低于它（`conjecture` / `strong_conjecture`）"
@@ -327,13 +328,13 @@ SPEC = AgentSpec(
             "\"assumption\": false}, …]}` 放进 `attack.step(plan_id=…, product=…)` —— "
             "框架照**既有的产物校验**逐条核（`cites` 必须在册、不许「易证 / 显然 / trivial」、"
             "推导步不许声明成前提；一条闸都不放宽），过闸就替你落成 "
-            "`reports/f-proof-<你的稿号>.md`（`manuscript_path` / `manuscript_id` 随返回值"
+            "`manuscripts/F/f-proof-<你的稿号>.md`（`manuscript_path` / `manuscript_id` 随返回值"
             "回来），`## 依赖` 那一节由框架按每一步的 `cites` 渲染，**你不必手抄**。"
             "校验不过 ⇒ **受控拒**，逐条点名第几步 / 哪一格不容（把校验器的原话带回），"
             "改那几处再把同一份交一次 —— 那一轮不落稿、不登记。归约同理："
             "`kind=\"reduction\"` + `new_subgoals`（1–3 条，每条 `goal` + `testable`）。"
             "**不交 `product` 也没关系：那一轮照旧由框架从你的推理缝现生成**（老路不变）——"
-            "但证明已经写好了就别只把草稿落到 `reports/` 或 `notes/` 上：那种文件不是框架手稿，"
+            "但证明已经写好了就别只把草稿落到 `work/F/` 或 `notes/` 上：那种文件不是框架手稿，"
             "V 不会签它，B 也不会收它。",
             # `dependency_source_not_registered` 只拦还不够，也要教。
             "**引的号必须在册**：`cites` 或 `## 依赖` 里出现一个不在 `statements` 的 `stmt:<号>` ⇒ "
@@ -360,9 +361,11 @@ SPEC = AgentSpec(
             "也会带上新够格的号，自己核一眼就知道到没到。等的时候**不要空转**：用 `clock.timer_start` 挂一个计时器"
             "（到点你会收到一条「时间到」），期间去推进不依赖那几条的部分；`clock.timer_list` 看还有哪些没到。"
             "**不许把\"我还没查\"写成\"这份证明自足\"**。",
+            # 实现落点只留在注释里（业主 2026-11-22 口径）：等级那两个读数由
+            # `agent_f/core._proof_outlet` 现算；模型面只说"框架按签名自己看"。
             "**V 签过之后这一行的等级就该是 `pre_theorem`，不许一直停在 `conjecture`**（2026-10-19 晚，按 `projects/mp2` 的 "
             "`stmt:000003` 修）：B 收录 `statements` 那一行时，等级由 `verifications/<命题号>.jsonl` 里的签名**现算**"
-            "（`_proof_outlet` 会自己看）—— `proof_text` 非空 ＋ 那一签**签得住**（`signs_bit3`："
+            "（框架按签名自己看）—— `proof_text` 非空 ＋ 那一签**签得住**（`signs_bit3`："
             "同一趟送审里由框架数满门槛、这一转的轴是 `clean`）且 `proof_sha256` 与现行正文相符 ⇒ "
             "`pre_theorem`（穷举证书或 Lean 核查也到位 ⇒ `theorem`，两者同级）；"
             "**只有真没有那一签时才停在 `conjecture`**（有普通数值实验支撑则是 `strong_conjecture`）。"
@@ -391,9 +394,9 @@ SPEC = AgentSpec(
             "**引文对不上、或某个关系的表述要换一种读法时，就该提重抽取**：把请求落进 `reprocess_requests`（那张表在你的写集里，"
             "经通用表工具 `table.create` 写，写清 `relation_ids` 与为什么）—— B 的 `run` 每趟都会 `run_reprocess()` 领走它；"
             "**只在报告里写「这个关系该重抽」等于没提**。",
-            "**阶段性中间成果要落一处一条**：每推进一条引理就写进 `reports/attack-<plan_id>.md`（一条一行：状态 / 依据 / 下一步），"
+            "**阶段性中间成果要落一处一条**：每推进一条引理就写进 `work/F/attack-<plan_id>.md`（一条一行：状态 / 依据 / 下一步），"
             "**先 `fs.read` 再改**（覆盖一个没读过的文件会被观测闸门拒）；够格的中间结论**落成一份手稿**"
-            "（`F.step` 把这一份证明落成 `reports/f-proof-<你的稿号>.md`，**稿名只按你的稿号**），再**交稿向上走 D**"
+            "（`F.step` 把这一份证明落成 `manuscripts/F/f-proof-<你的稿号>.md`，**稿名只按你的稿号**），再**交稿向上走 D**"
             "（`F → D` 是直接边；D 携带给 B，B 读稿登记并**现取命题号**）—— 那才是可复核"
             "的那一份，盘上那份 attack 文件只是给人读的推进台账（不是证明的终点）。",
             "**方向由 D 定，你负责把它做成**：你收到方向后落成计划（`F.create_plan`：`problem_key` 用 D 给的那一条、`subgoals` 给"
@@ -402,7 +405,7 @@ SPEC = AgentSpec(
             "**你造的例子要整理成命题—证明格式**：D 的手稿里「存在这样的例子」那一句必须引到一个落点，而**例子由谁造决定落点长什么"
             "样** —— E 从数值搜索里撞见的例子由 E 落（代码 + 实验行）；**你造的例子由你整理成「命题 + 证明」**：命题写成「某某例子"
             "符合某形式」（把「它符合什么」写清楚，别只贴一段构造），证明就是那个验证过程，然后**落成一份手稿**"
-            "（`F.step` 落 `reports/f-proof-<你的稿号>.md`），再**交稿向上走 D**（D 携带给 B，B 读稿登记、现取命题号）。",
+            "（`F.step` 落 `manuscripts/F/f-proof-<你的稿号>.md`），再**交稿向上走 D**（D 携带给 B，B 读稿登记、现取命题号）。",
             # 只写这一实现里真有的两件 —— `trace.children` 与
             # `conductor.escalate` 都在本角色的工具面上。判据：
             # tests/test_every_role_knows_it_can_watch_its_children.py。
@@ -430,15 +433,15 @@ SPEC = AgentSpec(
             "读现在几点、这一趟跑了多久、有没有等你的唤醒用 `clock.now`，查还有哪些在计时用 `clock.timer_list`。"
             "**无事可做就起「等任意计时器返回」这个意图**：手上没有要接着做的活时，用 "
             "`clock.wait_any(purpose=<目的>)` 记一条「谁先回来都行」的等待（它记的是意图，不是计时器本身）；"
-            "一条计时器都没有还起这个意图时，读数给 `requested=true` / `waiting=false` —— 那是「要求过等、"
-            "而手上没有可等的东西」，不是「没在等」；这一档既无计时而手头也没活，就按交差处理"
-            "（框架向父代理报告），别空转着等。"
+            "一条计时器都没有还起这个意图时，它会拒（`no_timers_to_wait`，不写意图账）—— "
+            "要么先起一条表再起这个意图，要么既无计时而手头也没活，就按交差处理"
+            "（框架向父代理报告、父代理记为静默），别空转着等。"
             "**计时只有时钟这一处**：旧的计时工具已经退役，别去找别的等待 / 定时入口。",
         ),
         signature_error="把无变化写成有进展。",
         deliverable="交付状态 —— 交给谁：派你这趟活的父（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名，通常是 D）"
-                    "+ 收方 V（送审）；形态：`attack_plans` 行 + `reports/attack-<plan_id>.md` + "
-                    "`reports/f-proof-<稿号>.md` + V 的签；可核字段：`attack_plans.plan_id` / "
+                    "+ 收方 V（送审）；形态：`attack_plans` 行 + `work/F/attack-<plan_id>.md` + "
+                    "`manuscripts/F/f-proof-<稿号>.md` + V 的签；可核字段：`attack_plans.plan_id` / "
                     "`attack_plans.status` / `attack_plans.subgoals` / `attack_plans.history` / "
                     "`attack_plans.best_partial` / `F.step` 的 `v_sign`；"
                     "算做完：每个计划都有终局 `status` 与终止原因、每个子目标 `{sid,text,owner}` 齐；"

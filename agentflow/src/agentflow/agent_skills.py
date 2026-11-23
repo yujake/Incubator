@@ -1,12 +1,15 @@
 # -*- coding: utf-8 -*-
-"""各智能体的 skills：把面对不同类型任务应唤起的协作方式写成各智能体的 skills，
-只把一张极短的索引放进前置提示词，正文现做现读。
+"""各智能体的 skills：把面对不同类型任务应唤起的协作方式写成各智能体的操作手册，
+随前置提示词一起渲染给模型。
 
-## 为什么要"现做现读"而不是"前置全塞"
+## 为什么在系统内，而不是在工作区（2026-11-22 业主裁定）
 
-前置提示词是每一次模型调用都要付的代价（一个角色的系统提示词动辄两万多字），
-而"这一趟到底会遇到哪一类活"要到跑起来才知道。所以这里只把一张极短的索引
-（slug + 一句话 + 什么时候读它 + 盘上路径）放进前置提示词，正文按需用 `fs.read` 现读。
+业主逐字：「skills 应该在系统内而非在工作区」。此前这里只把一张极短的索引
+（slug + 一句话 + 什么时候读它 + 盘上路径）放进前置提示词，正文由 `materialize`
+落到 `<工作区>/skills/`、模型按需用 `fs.read` 现读。裁定之后正文随提示词渲染
+（见 `index_block`）：手册就在模型面前，工作区里不再有 `skills/` 目录 ——
+手册不依赖"这一趟有没有写盘成功"，也不会在用户的工作区里留下框架材料。
+`materialize` 只保留为自检 / 导出用途，生产路径（开跑装配那一侧）不调用它。
 
 ## 三条硬约束（改这一份的人先读）
 
@@ -23,10 +26,9 @@
 ## 落点
 
 - 目录/正文/索引只有这一处定义（本模块的 `CATALOG`）；
-- `materialize(root)` 把目录里的每条 skill 写成 `<工作区>/skills/<角色>/<slug>.md`
-  （`AGENT-PROFILES.md` 同一条做法：框架在开跑时把可读材料落到工作区里），
-  于是角色能用自己的 `fs.read` 现读；
-- 前置提示词里只出现 `index_block(role)` 那一段。
+- `index_block(role)` 把这一岗（自己的 + `shared`）每一份 skill 的全文渲染进
+  前置提示词 —— 这是模型读手册的唯一入口；
+- `materialize(root)` 只在自检 / 导出时显式调用，不落工作区。
 """
 
 from __future__ import annotations
@@ -38,11 +40,22 @@ import re
 __all__ = ["SKILLS_DIR", "Skill", "CATALOG", "skills_for", "index_block",
            "materialize", "validate"]
 
+# 2026-11-23（SHARED-SEG-CLEAN，业主 2026-11-22 口径）：手册正文随提示词进模型面，
+# 正文里的内部实现名一律改成能力话；真名只保留在注释里（那一份允许的落点）：
+#   `_b_skills` 原标题点名 `dedup.py` 的 `find_concept` / `decide_relation`；
+#   `_a_skills` 原标题点名 `dedup.py` 的 `normalize_doi` / `literature_keys`（两处）；
+#   `_f_skills` 原标题点名 `agent_f/manuscript.py::_Manuscript.proof_manuscript`
+#   与判据文件 `tests/test_f_does_not_work_for_a_statement_number.py`；
+#   `_g_skills` 原标题点名内部草稿 `_canon_F_manuscript_protocol.md`；
+#   _v_skills 的 §四 原标题引 docs/DEVELOPMENT-SPEC.md §13（p324 删了路径与出处、p325 按 c8
+#   补回 <DEVELOPMENT-SPEC.md> §13 这两处 —— 只留出处、不引路径）。
+# 判据：`tests/test_model_face_has_no_impl_names.py`（渲染 11 角色提示词扫四类正则）。
+
 #: 工作区里那一层目录名（相对工作区根）。
 SKILLS_DIR = "skills"
 
 
-# 手册正文（落盘成 skills/<角色>/<slug>.md，模型会 fs.read）里的 L 指向。
+# 手册正文（与提示词渲染的是同一份正文）里的 L 指向。
 # 为什么单独一张表：`specs/*.py` 那几张表是按声明真身的文本写的，而手册正文是另一批字面量。
 # 关档时它们必须一起去掉，否则 L 的存在会从「模型按需读的文档」这个后门回来。
 #
@@ -104,6 +117,19 @@ NO_LEAN_SKILL_REPLACEMENTS: tuple[tuple[str, str], ...] = (
      '（`verifications/*.jsonl`）。',
      '都不算独立。落点：形式化那一档（本会话关着 ⇒ 记「未核到」；'
      '要不要做由**用户**指定、由 **B** 逐条安排）/ `V.verify_proof`（`verifications/*.jsonl`）。'),
+)
+
+#: 只作用于提示词的关档改写（`index_block` 用；`materialize` 不用）。
+#:
+#: 这里与 `NO_LEAN_SKILL_REPLACEMENTS` 分开的理由：D-40 那句是业主原话的逐字引用，
+#: 判据 `tests/test_skill_books_have_no_l_in_lean_off.py` 的允许清单专门保护它
+#: （"改引文比留一个角色名更坏"）—— 盘上导出的手册里它必须逐字保留。
+#: 但 2026-11-22 起手册正文随提示词渲染，而关档下提示词里不许出现 L 这个角色名
+#: （`tests/test_l_collab_surface_is_exactly_this.py` 的第 2 条）。两个判据在
+#: "同一份正文、两个读者"上分家 ⇒ 提示词这一侧单独改写这一句，导出那一侧保留原文。
+PROMPT_ONLY_NO_LEAN_REPLACEMENTS: tuple[tuple[str, str], ...] = (
+    # G（成稿）：D-40 的业主原话里点了 L 侧面；关档的提示词里改成"形式化那一侧"。
+    ('如果参照 L 侧的形式化会切割太细', '如果参照形式化那一侧会切割太细'),
 )
 
 #: `shared` 这个槽里的 skill 给每个角色（协作链层面的、与某一岗无关的那些）。
@@ -298,7 +324,7 @@ def _m_skills() -> tuple[Skill, ...]:
 
 ## 一条判据
 
-**同波并发的前提是"写集不相交"**（`policy.estimate_write_conflict`）。所以：
+**同波并发的前提是"写集不相交"**（框架按写集现判）。所以：
 
 - 两件活都写 `statements` ⇒ 放**不同波**（`summon_many` 会自己按写集分波，别指望它并发）；
 - 一件写 `literature`、一件写 `experiments` ⇒ 可以同波；
@@ -407,7 +433,7 @@ def _m_skills() -> tuple[Skill, ...]:
 - `drifted`：正文改过而 PDF 没跟上 ⇒ 要出论文就让 G 再编一次（那是 G 的活）；
   不出就如实写"正文改了、PDF 没跟上"，别把它写成已完成；
 - `unknown`：没查成（没给项目根 / 回执读不出来）—— **不是通过，也不是"没有 PDF"**；
-- `not_applicable`：盘上没有 `out/paper/main.tex`（这一趟不出论文，合法）。
+- `not_applicable`：盘上没有 `out/package/main.tex`（这一趟不出论文，合法）。
 
 这一格不进 `machine_pass`、也不产生 blocker：门不再替你决定"必须有论文"。
 但"读数是读数"那条纪律照旧 —— 盘上有论文、而 PDF 是旧正文编的，不许写成已完成
@@ -425,13 +451,13 @@ def _m_skills() -> tuple[Skill, ...]:
 ## 预算见底之前，先把收工必需物落盘（这一条排在"继续攻证明"前面）
 
 真机现场（`projects/lp-ball-5`，2026-11-17）：这一趟花满 $5（F 77 趟 / V 18 次）时
-`out/paper/ACCEPTANCE-CHECKS.json` **还没写** ⇒ 收工门 `acceptance` 只能报
+`out/package/ACCEPTANCE-TARGETS.json` **还没写** ⇒ 收工门 `acceptance` 只能报
 `acceptance_missing_for_research`（研究型项目没有可复算的验收口径），而预算已经花光、
 再也补不回来。那不是"证明没证出来"，是**预算花在证明上、交付物排在它后面**。
 
-预算余量低于阈值时，先把收工必需物落盘（`out/paper/ACCEPTANCE-CHECKS.json` 与 `out/review/REPORT.md`），再回去继续攻证明；宁可少证一条，不许交不出验收表。
+预算余量低于阈值时，先把收工必需物落盘（`out/package/ACCEPTANCE-TARGETS.json` 与 `out/report/REPORT.md`），再回去继续攻证明；宁可少证一条，不许交不出验收表。
 
-阈值是 `budget.PAPERWORK_RESERVE_USD`（今天 $1.00）。三档怎么读：
+阈值是 $1.00（框架按收工必需物的预留现判）。三档怎么读：
 
 - **余量 < $1** ⇒ 立刻停掉"再证一条"的派活，先落这两份文件；写完再回去攻证明。
 - **收工门已经报 `acceptance_missing_for_research`** ⇒ 无论余量看起来多少，先落盘：
@@ -440,7 +466,7 @@ def _m_skills() -> tuple[Skill, ...]:
 
 验收表怎么写、`kind` 从哪几个受控档里挑，见提示词里那一条（研究链每个环节至少一行、
 `min` 的三态别写错）；报告写交付结论与读数。**收工门的拒信里现在带着预算读数**
-（已花 / 上限 / 还剩，见 `budget.paperwork_first_reading`）—— 照着那一句读，就能分清
+（已花 / 上限 / 还剩）—— 照着那一句读，就能分清
 是"没写"还是"写得不对"：前者补文件，后者改行。
 
 这一类"预算花在交付物之前"的形态不止验收表一处：凡是收工门要读、而**只能由你写**的
@@ -510,16 +536,15 @@ def _m_skills() -> tuple[Skill, ...]:
 三条读法：① `checked=false` ⇒ 这一格没查成，**不是「一条都不欠洗」**；② 一条命题有多份证明时
 按 `proof_no` 逐份列，别把一条命题读成「洗过 / 没洗过」两态；③ 它是**读数、不拦门**（今天不产生
 blocker），但读错会派错人：`from_lit` 的活归 B 按文献侧原口径洗，`from_f` 的归产出的那一侧；
-第二阶段只看 `bits.evidence.optimized_by_proof[proof_no]`（三态字符串 `true` / `false` /
-`not_recorded`，读 `evidencebits.optimized_state`）或 `statements_unoptimized.rows[*]` 里逐份的
-`optimized` —— 为 `true` 的不再动，`false` / `not_recorded` 的要洗。
+第二阶段只看 `statements_unoptimized.rows[*]` 里逐份的 `optimized`（三态字符串 `true` /
+`false` / `not_recorded`）—— 为 `true` 的不再动，`false` / `not_recorded` 的要洗。
 
 ## 收工门报红的那两格问的是两张表：先看它点名的是哪一张
 
 `conductor.closing` 有两条容易混成一条的队列 —— 一条数待入库**候选**（`lit_candidates`），
 一条数已入库**文献**的消化位（`literature` 的 `processed`）。它们不是同一张表，
 出口也不是同一个角色。**两张表的区别与各自的出口逐字印在你的政策里**
-（真身 `closing.LITERATURE_QUEUES_NOTE`；同一句话也是收工门这一格的读数
+（同一句话也是收工门这一格的读数
 `readings.literature_pending.queues_note`）；本手册只讲怎么读，不再抄第二份。
 
 读格三步：
@@ -530,7 +555,7 @@ blocker），但读错会派错人：`from_lit` 的活归 B 按文献侧原口�
 3. 照 `queues_note` 点名的出口派活 —— 派错角色的活不会让那一格变绿。
 
 真机 `projects/lp-ball-14` 就是这么错的：门报 `literature_pending` fail（读数是 24 条
-候选、四个委托），`out/review/REPORT.md:59` 却写成「lit 000001–000005 无本地全文」（那是
+候选、四个委托），`out/report/REPORT.md:59` 却写成「lit 000001–000005 无本地全文」（那是
 另一张表的 5 行），于是 B2 被派去改那 5 行 —— 候选一行没动，这一格一格没变。
 
 ## 手上真的没事了：交差，不空转
@@ -678,7 +703,7 @@ blocker），但读错会派错人：`from_lit` 的活归 B 按文献侧原口�
 `AGENT-PROFILES.md`，`fs.read` 可查）。
 
 上表每一行对应的收件人是你的哪一类出边，**逐格以伙伴表为准**（伙伴表是
-`capabilities.ALLOWED_EDGES` 现算渲染出来的）—— 这一节不再抄第二份边表：
+由当前边表实时渲染出来的）—— 这一节不再抄第二份边表：
 抄一份就多一个真身，改一处另外两处不会跟着变，而不会有任何判据变红。
 **不在**你直接出边里的有三个：
 
@@ -702,7 +727,7 @@ blocker），但读错会派错人：`from_lit` 的活归 B 按文献侧原口�
   **E 的穷举稿同理**：D 的携带单只带已签的那一份，没签的稿连 D 那一关都过不去 ——
   经 D 让 E 先把稿拿去签。
   **F、E 与 B 各有直连 V 的边**（谁直连谁、几条边，逐格看伙伴表 ——
-  真身是 `capabilities.ALLOWED_EDGES`，这一条不再抄第二份路线）。
+  伙伴表就是边表的唯一抄本，这一条不再抄第二份路线）。
   研究型项目里有证明级断言而
   `reviewed_proof_rows` 记 0 时，必须在验收表上写清为什么，以及这条缺口转给了谁去办。
 - **L（形式化）**：**L 也不在你的出边里**（派 L 的唯一入口是 B —— `B → L` 是那条唯一的入边；
@@ -715,7 +740,7 @@ blocker），但读错会派错人：`from_lit` 的活归 B 按文献侧原口�
 ## 被拒之后的处置（别换名字重试）
 
 `forbidden_edge` 是"这条边不存在"，不是故障：换一条链 —— 可走的那几条**逐格看伙伴表**
-（那里印着谁是你的直接出边、谁要两跳；真身是 `capabilities.ALLOWED_EDGES`）。
+（那里印着谁是你的直接出边、谁要两跳；真身就是伙伴表）。
 收到别的拒绝就读**它给的理由** —— 那是在说"这件事要换个说法、或换个收件人"。
 
 ## 一次派几件
@@ -795,7 +820,7 @@ A → B → C → D → F → V；再 D → B(收录证明)
 | **D** 定可判方向 | C 报了候选路径（**C 的那份报告已经在盘上**） | `research_questions` 一行 ＋ 给 E / F 的派活文本（**不写 `conjectures`**：待登记命题由 E / F / B 在产出那一刻落行，D 不写这张表 —— 与 A 那一条「不造概念」政策同一条口径）；写清"若成立则省掉哪一步" | 方向是**可执行/可判**的（不是"值得研究"这种） | 定不出就逐条写"C 的哪一条为什么定不出"，不许跳过不读 |
 | **F** 攻坚 | 有一条 `testable` 猜想 | `attack_plans` 的 `history` 每一轮一个受控产物：reduction / proof / counterexample_request / dead_end | 每一轮都让**卡点更具体一步**；`no_change` **不是产物** | 走不通落 dead_end：写清卡在哪一步、缺什么才能往下 |
 | **V** 走查 | F 交出了证明级断言 | `verifications/<命题号>.jsonl` 一行（`verdict` / `unresolved_errors` / `proof_sha256` / `citation_checks`） | 只有「成立」且 `unresolved_errors=0`、且引用核实那四格没有挡签的档（`stronger` / `unrelated` / `inadmissible` / `unknown`）才算签过；**先判哪一步承重**并指出步号与原句 | 签不了就让它空着，不许拿"我大致看过了"补 |
-| **B** 收录证明 | V 已签「成立」且 `proof_sha256` 与现行正文相符，**且那一份稿在盘上**（`reports/f-proof-*` / `e-proof-*` / `b-proof-*`）；**普通数值那一档例外**：`reports/e-num-*`（`## 命题` + `## 数值结果`）**不过 V**，`proof_text` 留空、等级最多 `strong_conjecture` | `statements` 一行：等级按凭据给（文字证明 + V 签 ⇒ `pre_theorem`；**穷举程序 + V 签 ⇒ `theorem`**，与 Lean 同级；普通数值 ⇒ `strong_conjecture`；`evidence_kind` 只是历史列，由等级反算）、`proof_text` 从稿上收进（`e-num` 那一档为空）、`origin=own_result` | 走 B 自己的入库正路（工具名逐字 own.register_statement）：同一份内容再交一次即**就地升档、不新建行**；`bits` 由秘书算 | 闸拒收就把**拒收理由原话**写进报告，不许硬降档、不许虚报 |
+| **B** 收录证明 | V 已签「成立」且 `proof_sha256` 与现行正文相符，**且那一份稿在盘上**（`manuscripts/F/f-proof-*` / `manuscripts/E/e-proof-*` / `manuscripts/B/b-proof-*`）；**普通数值那一档例外**：`work/E/e-num-*`（`## 命题` + `## 数值结果`）**不过 V**，`proof_text` 留空、等级最多 `strong_conjecture` | `statements` 一行：等级按凭据给（文字证明 + V 签 ⇒ `pre_theorem`；**穷举程序 + V 签 ⇒ `theorem`**，与 Lean 同级；普通数值 ⇒ `strong_conjecture`；`evidence_kind` 只是历史列，由等级反算）、`proof_text` 从稿上收进（`e-num` 那一档为空）、`origin=own_result` | 走 B 自己的入库正路（工具名逐字 own.register_statement）：同一份内容再交一次即**就地升档、不新建行**；`bits` 由秘书算 | 闸拒收就把**拒收理由原话**写进报告，不许硬降档、不许虚报 |
 
 ### B 的正文与签从哪来（F 与 E 同一套）
 
@@ -845,7 +870,7 @@ V 真的审了框架手稿，而 B 一次都没跑 —— 派活被 `deadline_ex
 
 ### ① 三个号各管一件事
 
-- **稿号**：F 自己发（`manuscriptids.next_manuscript_id`，六位，`data/counters.json` 的
+- **稿号**：F 自己发（六位，`data/counters.json` 的
   `manuscript` 号段）。它是**签的单位**：同一份稿改稿仍是同一个稿号；同一命题要写
   **第二份证明就另开一份稿（新稿号）** —— 一个稿号 = 一份文件 = 一份证明。
 - **计划号**：**继续 / 放弃 / 更改**的单位（立项拿的那个号）。F 在计划下做；
@@ -854,7 +879,7 @@ V 真的审了框架手稿，而 B 一次都没跑 —— 派活被 `deadline_ex
 
 ⇒ 一句话：**计划管去留，稿号管签，命题号管收录**。三者不许互相顶替。
 
-### ② 落稿：F 的稿叫 `reports/f-proof-<稿号>.md`
+### ② 落稿：F 的稿叫 `manuscripts/F/f-proof-<稿号>.md`
 
 F 自己向框架要稿号（跑一轮时返回 `manuscript_id` 与 `manuscript_path`），
 **不用命题号、不用计划号**。稿在立项之后就可以落、可以反复改，不必为了拿号去写一行
@@ -917,7 +942,7 @@ V 签之后，所以「已登记、还没签」的稿在 `statements` 里还没�
 
 ### 一条反面（与下面那条并列，但病灶不同）
 
-把"草稿已经落盘"当成交付：报告里写着"证明已写完、在 `reports/P1.md`"，而 `statements`
+把"草稿已经落盘"当成交付：报告里写着"证明已写完、在 `work/F/P1.md`"，而 `statements`
 一行没长、`verifications` 一条没长 —— 交付说明读起来是完成的，台账读起来是空的，两者
 在收工门上分得开。
 
@@ -1024,7 +1049,7 @@ def _b_skills() -> tuple[Skill, ...]:
 
 > 这一份是**第一阶段（机械录入）**：E/F 交来的证明原文 ＋ 那一份已有的 V 签，几乎自动录入
 > （只有「自己分析引文落稿」那一档要花力气）。**登记完一批之后紧接着做第二阶段
-> （逐个优化）** —— 读 `skills/B/优化-登记完一批就逐个洗.md`，不要留到收工前。
+> （逐个优化）** —— 读你提示词里那份「优化-登记完一批就逐个洗」手册，不要留到收工前。
 
 ## 三件式（缺哪件都不算登记完）
 
@@ -1058,7 +1083,7 @@ D 的研究手稿里「## 携带的证明手稿」四列表带过来的那一份
 老记号 `mss:<号>` 仍读）；**要核 `sha256`**：带过来的与
 盘上那份不是同一份，就不是同一份稿；
 **第四格是路径号**（由 B 收录时分配；产出侧不写证明号、稿名不带 `-pN`）→ 行上记的
-`manuscript_id`（F 的稿号）指向的那份 `reports/f-proof-<稿号>.md`
+`manuscript_id`（F 的稿号）指向的那份 `manuscripts/F/f-proof-<稿号>.md`
 （老盘上按旧约定命名的只读兼容；**新稿不按命题号、也不按计划号命名**）→ 三处都没有（`source=none`）。
 
 - **`## 依赖` 那一节由你读出来落依赖边**，三列必填：**引用**（F 那一步的原话）/ **命题号** /
@@ -1080,8 +1105,8 @@ D 的研究手稿里「## 携带的证明手稿」四列表带过来的那一份
 
 | 族 | 内容契约 | 你登记时取什么 | 档位 / 签 |
 |---|---|---|---|
-| `reports/e-proof-<实验号>.md` | `## 命题` / `## 证明` / `## 依赖` | `proof_text` = `## 证明` 那一节的穷举论证（逐字）；程序地址去实验行的 `code_path` 读 | 穷举 + V 签 ⇒ `theorem`；**没有 V 签照旧整笔拒** |
-| `reports/e-num-<实验号>.md` | `## 命题` / `## 数值结果` | 只从 `## 命题` 取命题；程序地址去实验行的 `code_path` 读；**`## 数值结果` 与别的节一个字都不录** | `proof_text` 留空、`evidence_kind=cross_check`、等级 `strong_conjecture`；**不过 V**（绿色通道） |
+| `manuscripts/E/e-proof-<实验号>.md` | `## 命题` / `## 证明` / `## 依赖` | `proof_text` = `## 证明` 那一节的穷举论证（逐字）；程序地址去实验行的 `code_path` 读 | 穷举 + V 签 ⇒ `theorem`；**没有 V 签照旧整笔拒** |
+| `work/E/e-num-<实验号>.md` | `## 命题` / `## 数值结果` | 只从 `## 命题` 取命题；程序地址去实验行的 `code_path` 读；**`## 数值结果` 与别的节一个字都不录** | `proof_text` 留空、`evidence_kind=cross_check`、等级 `strong_conjecture`；**不过 V**（绿色通道） |
 
 绿色通道的边界（别把它读成"以后都不用签"）：
 
@@ -1114,7 +1139,7 @@ D 的研究手稿里「## 携带的证明手稿」四列表带过来的那一份
 
 不设机械闸：没有人会数你的箭头、也没有人判你写的是不是散文 —— 这三条是口径，
 不是判据。但有一件事是硬的：改写过就是换了一份正文。**改后的正文先落成一份手稿**
-（`reports/b-proof-<命题号>.md`，用 `own.land_manuscript` 显式落稿：只写文件、幂等、
+（`manuscripts/B/b-proof-<命题号>.md`，用 `own.land_manuscript` 显式落稿：只写文件、幂等、
 `statement_full` 可以不给 —— 命题取台账那一行），
 盖在旧正文上的那一签就不再算数（读侧现算 `proof_standing=stale`），
 你必须派 V 审这一份稿（`V.verify_proof`：`statement_id` 给号、`proof_manuscript` 给这份稿的路径
@@ -1132,13 +1157,13 @@ D 的研究手稿里「## 携带的证明手稿」四列表带过来的那一份
 
 | 动作 | 干什么 | 关键读数 |
 |---|---|---|
-| `own.land_manuscript` | 把一条**已登记**命题的这一版证明落成/就地重写成 `reports/b-proof-<号>.md`（只写文件、不写台账；一个稿号一份文件，新写不带 `-pN`） | `written` / `preserved`（同一份正文重放 ⇒ true，一个字节不动）/ `sha256`（签尺） |
+| `own.land_manuscript` | 把一条**已登记**命题的这一版证明落成/就地重写成 `manuscripts/B/b-proof-<号>.md`（只写文件、不写台账；一个稿号一份文件，新写不带 `-pN`） | `written` / `preserved`（同一份正文重放 ⇒ true，一个字节不动）/ `sha256`（签尺） |
 | `own.ingest_manuscript` | 按你给的**位置 + 格**从稿里提取并回填 | `cells`（逐格 outcome + 来源行号 + sha）/ `diff`（请求格 vs 实填格）/ `write`（写了哪几张表） |
 
 `own.ingest_manuscript` 的坐标（与动作声明的 `params` 同一份，一个不多一个不少）：
 
-- `manuscript`：稿的路径（只收 `reports/` 下 `f-proof-*` / `b-proof-*` / `e-proof-*` /
-  `e-num-*`；`notes/` 与 `-v2` 是 legacy —— 可 preview、不可收录）；
+- `manuscript`：稿的路径（只收 `manuscripts/<角色>/` 下的 `f-proof-*` / `b-proof-*` / `e-proof-*`；
+  `e-num-*` 不再是手稿：读数进 `experiments` 表、草稿在 `work/E/`；`notes/` 与 `-v2` 是 legacy —— 可 preview、不可收录）；
 - `target_stmt_id`：**位置**（录到哪一条命题）。它是权威：**稿里没有命题号**（2026-11-13
   裁定，任何稿都没有那一行）—— 别从稿头找号，工具也**不会替你换一行**（位置只由你给的这个号决定）；
 - `proof_no`：**已退役** —— 路径号由 B 收录时分配，产出侧不写证明号、稿名不带 `-pN`，
@@ -1212,8 +1237,7 @@ outcome 与理由（`diff.filled_not_requested` 恒空：没有一格越权写�
   的顺序，判据不看时间戳。**不要为了交差现造引理**：放弃后按正常流程注册新命题就是合法路径。
 - `experiment_id`：`counterexample` 那一档用，`experiments` 里那条真反例实验的号（那一行要
   `result="refutes"`、带非空反例，且检验的是**这一条**——引另一条命题的反例会被拒）；
-- `space`：`space_too_large` 那一档用，枚举参数与规模的读数（各维区间 / 枚举例数，取
-  `numericproof._space_reading` 认的字段；填一段散文不算读数）。
+- `space`：`space_too_large` 那一档用，枚举参数与规模的读数（各维区间 / 枚举例数，取框架认的这几格；填一段散文不算读数）。
 
 交接时**缺哪格就回去问派你的人要哪格**，别自己编一个号、也别把一段散文硬塞进 `abandon_basis` 了事：
 理由空着 / `difficulty` 不是真困难 / `experiment_id` 指不到真反例 / `space` 读不出规模 /
@@ -1264,7 +1288,7 @@ outcome 与理由（`diff.filled_not_requested` 恒空：没有一格越权写�
 
 ## 做哪几份：只看这一格
 
-逐份读 `optimized_by_proof[证明号]`（读侧 `evidencebits.optimized_state` 的三态）：
+逐份读 `optimized_by_proof[证明号]`（三态：`true` / `false` / `not_recorded`）：
 
 | 读到 | 做什么 |
 |---|---|
@@ -1274,12 +1298,12 @@ outcome 与理由（`diff.filled_not_requested` 恒空：没有一格越权写�
 
 **不再判签**：业主 2026-11-02「洗过的肯定能保证 V 签。所以二阶段只用看是否优化过」。
 洗不洗由这一格决定，不由「它有没有签」决定；但**打 true 那一刻**仍要签盖住这一版
-（判据只有 `evidencebits.optimized_signature` 一处）。
+（判据只有一条：签盖住的就是洗过的那一版正文）。
 
 ## 三步（顺序不许颠倒）
 
 1. **洗稿**：源稿已经拿过签的，先 `B.open_polish_copy` 开一份 B 号副本
-   （`reports/b-proof-<B稿号>.md`；源稿一个字节不动、副本里的签块被清掉），在副本上洗。
+   （`manuscripts/B/b-proof-<B稿号>.md`；源稿一个字节不动、副本里的签块被清掉），在副本上洗。
    **很多拍里副本已经被 `own.run_once` 自己开好了**（回执 `stage_two.opened` 里那份
    `path` 就是它）：有就直接接着洗，别再开第二份。
    「洗」的口径与「登记」那份手册的「消化」一节同一条：完整句、步骤间有衔接词、
@@ -1367,7 +1391,7 @@ outcome 与理由（`diff.filled_not_requested` 恒空：没有一格越权写�
 
 业主 2026-10-29 裁定（逐字）：「全交给模型判，5 个等级的自然语言描述应该还在吧」。
 所以判档看的是**这份证明本身**（思路、承重步骤、用到的工具、有没有真技巧），
-按上面那五句定义判；`secretary.proof_effort_readings` 数出来的几项
+按上面那五句定义判；框架另给的几项
 （体量 / 编号步骤 / 引理 / 工具簇 / 绕路）只是**参考读数**，不是判据：
 
 - 写得长不等于难：把证明注水到 2000 字以上，不会因此升档；
@@ -1445,7 +1469,7 @@ T0 / T1 / T2 / T3 / T4；没拿到判定就是「没查成」，不是第六个�
   有直接关系说明它们**已经被声明为两个不同的东西**，此时"邻域相同"是自然现象，
   **不得合并**；
 - **名字侧（第二路，独立于结构）**：C 给的 `name_evidence` **不能是 `none`**；
-  然后你用 `dedup.py` 的 `find_concept`（**同一套规范化**）**双向**复核 ——
+  然后你用**判重那套规范化**（框架判重用的同一份规则）**双向**复核 ——
   去掉自身后用 A 的名字/别名查，必须**恰好**查回 B，反向亦然。
   "恰好"很重要：**查回第三个概念 ⇒ 名字有歧义 ⇒ 不合并**。
 
@@ -1476,7 +1500,7 @@ T0 / T1 / T2 / T3 / T4；没拿到判定就是「没查成」，不是第六个�
    `verdict` 当既成事实往别处引；
 2. **判成 `reject` 时一行都不写**（连墓碑都不落）；
 3. **关系改写不自己造判据**：被合并方换成 survivor 之后可能出现重复关系，
-   那些行会喂给 `dedup.py` 的 `decide_relation` —— 判成 `duplicate` 的标
+   那些行会经**同一套判重**再判一次 —— 判成 `duplicate` 的标
    `status="rejected"` ＋ `duplicate_of` 指向幸存关系（**保留行，删了就无从审计**）、
    判成 `suspect` 的降级为 `suspect`，所有受影响概念的邻接关系（`relations` 里
    那些行；`related_concepts` 已随并表退役，新标准由 `relations` 现算）
@@ -1515,7 +1539,7 @@ def _h_skills() -> tuple[Skill, ...]:
 
 - `H.review`：**审稿** —— 出 findings（落 `review_findings`）；
 - `H.review_report`：**产出审校报告** —— 把这一轮的门表与发现落成 markdown（G1–G15，
-  落 `out/review/<doc_id>-review.md`），它不是"再审一份报告"。
+  落 `out/report/<doc_id>-review.md`），它不是"再审一份报告"。
 一次只做一件；两件放一起会让"这是稿子的问题还是报告的问题"读不出来。
 
 ## 引文那一档
@@ -1539,7 +1563,7 @@ def _h_skills() -> tuple[Skill, ...]:
 
 ## 审报告落在哪、返回什么（2026-10-16 亲测）
 
-`H.review_report(doc_id)` **真的落盘**：`out/review/<doc_id>-review.md`；
+`H.review_report(doc_id)` **真的落盘**：`out/report/<doc_id>-review.md`；
 返回里**同时给** `markdown`（报告全文）与 **`report_path`**（落盘路径）——
 所以"报告在哪"不用猜，读 `report_path` 就行。它需要的轮次参数是**关键字** `round_no`
 （位置传会报 `takes 2 positional arguments but 3 were given`）。
@@ -1560,7 +1584,7 @@ def _h_skills() -> tuple[Skill, ...]:
 
 ## 论文对应表：逐行核，别只看"有没有"
 
-拿到论文稿先读 `out/paper/MAPPING.json`（人读那份 `out/paper/MAPPING.md` 由它生成），
+拿到论文稿先读 `out/package/MAPPING.json`（人读那份 `out/package/MAPPING.md` 由它生成），
 再**逐行**核：正文里每个定理类环境在表里有没有一行、表里每一行在正文里有没有那个环境
 （label 与 `env_no` 都要对）、`ledger_id` 与 `proof_no` 能不能在台账里解析到、`file`
 的落点对不对（**两种落点都对，不许只按一种拦**：理论定理行写在论文包内；数值实验定理行写
@@ -1659,7 +1683,7 @@ review.scan(kinds=["text_integrity","cites","inputs","refs","proofs","duplicates
 
 ## 读数之后
 
-- 这些读数不进 finding 台账：`schema.FINDING_KINDS` 里没有这七类，
+- 这些读数不进 finding 台账：finding 的受控类别里没有这七类，
   `review.record_finding` 会当场拒收。**`review.scan` 的读数本身就是凭据**：
   `findings[]` 每条都带 `file` / `line` / `ref`（`scanned` 记这一趟扫了哪些文件），
   把读数原样写进你的交付与回报；`review.report` 的 markdown 是 G1–G15 门表、
@@ -1714,8 +1738,8 @@ finding」「判『成立』不要求你证明它正确」那三条），这里�
 框架侧写 `out/vsigns/<正文 sha>.json`，一稿一签。数次数不是你的活：框架现数，你只需看签到位 ——
 不要自己数审过几次，也不要推断还差几次。
 **未在册档**（命题还没在册）是明文例外（2026-11-04 业主裁定 乙-5）：**发签判定**这一路不经秘书 ——
-框架按这一趟送审自己数够门槛即由你**颁发**签信封（`vsigns.issue` 写同一个侧文件；轮数与门槛由框架定，
-你不用推断），手稿签块仍由收方秘书落（`vsigns.land`）。
+框架按这一趟送审自己数够门槛即由你**颁发**签信封（写同一个侧文件；轮数与门槛由框架定，
+你不用推断），手稿签块仍由收方秘书落。
 
 **门槛按这一趟算，跨趟不累计**：上一次送审判过的，这一次不算（同一份正文改过之后也是一趟新的）。
 **任一转判 `fault` ⇒ 立刻终止**，那一转就是终局：秘书把这一份落成 V 稿
@@ -1736,9 +1760,9 @@ finding」「判『成立』不要求你证明它正确」那三条），这里�
 
 ## 三、你看不到审阅之外的东西
 
-**被审必须是 `reports/f-proof*.md`；递来别的东西先退回**：你只审框架渲染的手稿
-（F 的 `reports/f-proof-<稿号>.md`；E/B 的框架稿同族 `reports/e-proof-*.md` /
-`reports/b-proof-*.md`）。调用方递来 `reports/P*.md` / `notes/*.md` 这类章节稿或草稿时，
+**被审必须是 `manuscripts/F/f-proof*.md`；递来别的东西先退回**：你只审框架渲染的手稿
+（F 的 `manuscripts/F/f-proof-<稿号>.md`；E/B 的框架稿同族 `manuscripts/E/e-proof-*.md` /
+`manuscripts/B/b-proof-*.md`）。调用方递来 `work/F/P*.md` / `notes/*.md` 这类章节稿或草稿时，
 **可以回一句「这不是手稿」并让它改用 `F.step` 的 `manuscript_path`（建议，不是判据）** —— 不要去读那份章节稿
 充当被审正文（入口闸会拒，白烧一次调用）；**入口闸拒了不要重试同一个路径**
 （真机里同一份章节稿被递了 5 次）：要么让调用方换稿，要么按拒信点名的那一份重来。
@@ -1749,7 +1773,7 @@ finding」「判『成立』不要求你证明它正确」那三条），这里�
 
 ## 四、审阅清单（这是嘱托，不是门）
 
-`docs/DEVELOPMENT-SPEC.md` §13 的分工：提示词管「想让它这么做」，判据管「不许它不这么做」。
+分工是：提示词管「想让它这么做」，判据管「不许它不这么做」（出处：`DEVELOPMENT-SPEC.md` §13）。
 这一份清单属于前者 —— 没有任何一格会因为「你没按清单逐条走」而变红。它是「怎么读」的
 嘱托；你不按它走时，你写「成立」的那句话就只是一句印象。
 
@@ -1879,7 +1903,7 @@ finding」「判『成立』不要求你证明它正确」那三条），这里�
    （空集、单点、零测、n=1 这些"显然"的地方往往是缺口）。用到在册命题的那一步，还要看
    那一条**够不够格被引**：等级低于 `pre_theorem` ⇒ 不必再谈用法，直接判 `inadmissible`；
 2. **引文轴**：用到在册命题的那几步，逐条判 F 的用法与那条命题真正的条件/结论是不是一回事。
-   六档（`verifications.CITATION_VERDICTS`，业主 2026-10-26 的口径是「正常写证明就是不会逐字的」）：
+   六档（业主 2026-10-26 的口径是「正常写证明就是不会逐字的」）：
    `consistent`（措辞不同但条件与结论一致）/ `weaker`（只用到弱形式，能签但要点名）/
    `stronger`（引用被夸大，或悄悄去掉了它要的假设）/ `unrelated`（引错了）/
    `inadmissible`（被引命题等级低于 `pre_theorem`，不够格被引）/ `unknown`（判不了）。
@@ -1933,7 +1957,7 @@ finding」「判『成立』不要求你证明它正确」那三条），这里�
 
 **自由文本的讨论不等于核验结论**：你的判定落在 `verifications/<命题号>.jsonl`
 那一行上；**签**是另一件东西 —— **颁发**那一步就写 `out/vsigns/<被审正文的 sha>.json`
-（`vsigns.issue`；一稿一签：正文改一个字，那一签就作废）；**落签**（手稿块 + 台账位）
+（一稿一签：正文改一个字，那一签就作废）；**落签**（手稿块 + 台账位）
 由**收方秘书**做。在对话里说
 "我觉得没问题"而那一行没落，等于没核；说"这一条我已经签过了"则是另一件假话 ——
 签不在你手上。
@@ -1956,7 +1980,7 @@ def _e_skills() -> tuple[Skill, ...]:
         Skill(
             slug="穷举证明-拿签与上报收养",
             title="穷举证明：手稿 → 派 V 审 → 签到位 → 收方落签 → 上报 D",
-            summary=("E 的数值证明与 F 走同一条链：稿在 `reports/e-proof-<实验号>.md`，"
+            summary=("E 的数值证明与 F 走同一条链：稿在 `manuscripts/E/e-proof-<实验号>.md`，"
                      "V 审过、签到位后由收方落签块，B 从稿上读到那一签才收录"),
             when="跑完一条穷举实验、要把它当「证明」交出去的时候（每一份证明都走一遍）",
             actions=("E.run_experiment", "V.verify_proof"),
@@ -1975,7 +1999,7 @@ def _e_skills() -> tuple[Skill, ...]:
 |---|---|---|
 | `experiment_id` / 台账行 | `experiments` 一行 | 这次实验跑没跑、读数是多少 |
 | `report_path` / `report_sha256` | `out/experiments/<实验号>/exhaustion.md` | ②③ 写得全不全（程序 / 程序设计 / 穷举论证） |
-| `proof_manuscript` / `manuscript_sha256` | `reports/e-proof-<实验号>.md` | **V 的签盖在哪一份正文上**（`## 证明` 那一节就是证明栏三段） |
+| `proof_manuscript` / `manuscript_sha256` | `manuscripts/E/e-proof-<实验号>.md` | **V 的签盖在哪一份正文上**（`## 证明` 那一节就是证明栏三段） |
 
 第三格是 2026-11-03 才有的：没有它，你手里只有"读数"，没有"被签的那份稿"——
 而 V 的签块只能落在一份手稿里。**把 `proof_manuscript` 记下来**，下一步要用它。
@@ -1986,16 +2010,16 @@ def _e_skills() -> tuple[Skill, ...]:
 
 ### 稿头没有 `- 证明号：` 这一行
 
-`reports/e-proof-<实验号>.md` 的稿头是框架渲染的（`exhaustionreport.compose_manuscript`）：
+`manuscripts/E/e-proof-<实验号>.md` 的稿头是框架渲染的：
 `- 实验号：` / `- 命题：` / `- 命题键：` / `- 程序：`。**产出侧不写证明号、稿名不带
 `-pN`**（一个稿号 = 一份文件 = 一份证明）：路径号由 B 收录时分配。老盘稿头里那一行仍
-读得出（`depsection.manuscript_proof_no`；省略 ⇒ 读成 `#p1`），但**绝不猜一个号**，
+读得出（省略 ⇒ 读成 `#p1`），但**绝不猜一个号**，
 也别自己往稿里补一行：那一格写错，B 会按另一个号去认这一签。
 
 ## 2. 送审：你自己派 V，点名那份稿
 
 用 `framework_summon` 派 V（`role="V"`），`task` 里写清要审哪一份，并让 V 调它的
-`verify_proof`：**`proof_manuscript=reports/e-proof-<实验号>.md`**（这时不给
+`verify_proof`：**`proof_manuscript=manuscripts/E/e-proof-<实验号>.md`**（这时不给
 `statement_id` —— 这一条还没在册），`readonly_facts` 附上实验号与读数。
 **没号也能签**：V 不假定有号 —— 这一签先落 `verifications/pending/<正文 sha>.jsonl`，
 B 登记拿到号后按正文 sha 认领（`verification_id` / `at` / `proof_sha256` 三票齐）。
@@ -2010,7 +2034,7 @@ V 对穷举证据走七项机械会审（程序在不在 / 报告三块齐不齐
 **签到位才算过** —— 与 F 的证明同一个门槛。返回值这样读：
 
 - `checked=True` + `kind="proof_unregistered_signed"` ⇒ 签块已由收方那一侧（落签者写作 `secretary:E`）
-  落进 `reports/e-proof-<实验号>.md`；稿上那一行 `- V 签：已签=true；连续=<门槛>/<门槛>；正文sha=…`
+  落进 `manuscripts/E/e-proof-<实验号>.md`；稿上那一行 `- V 签：已签=true；连续=<门槛>/<门槛>；正文sha=…`
   就是 B 之后认的那一签。V 自己一个字都不写块（它只发信封）。
 - `checked=True` + `kind="proof_unregistered_rejected"` ⇒ 判「有毛病」：按 `defect_step`
   指到的那一项补材料（缺剪枝说明就补剪枝、抽样就改穷举），补完**再派 V 重审**。
@@ -2018,7 +2042,7 @@ V 对穷举证据走七项机械会审（程序在不在 / 报告三块齐不齐
   补齐材料再送。**它不是「成立」**，别照着往下走。
 - 稿上已经有盖住这一份正文的签块 ⇒ 不重复判、不重复写（同一份正文一稿一签）。
 
-### 稿上那一行签块怎么读（九格，`vsigns.SIGN_BLOCK_KEYS`）
+### 稿上那一行签块怎么读（九格）
 
 ```
 - V 签：已签=true；判词=成立；连续=<门槛>/<门槛>；正文sha=<sha>；时间=<iso>；
@@ -2027,7 +2051,7 @@ V 对穷举证据走七项机械会审（程序在不在 / 报告三块齐不齐
 ```
 
 - **`签名者=secretary:E` 是收方秘书**，不是 V —— 认签时认的是这一位（V 只发信封）；
-- `正文sha` 必须与 `## 证明` 这一节**现算**的 sha 相等（改一个字就不是同一份签，`vsigns.ARTIFACT_SHA_RULE`）；
+- `正文sha` 必须与 `## 证明` 这一节**现算**的 sha 相等（改一个字就不是同一份签）；
 - 第 9 格 `手稿号` 是**裸稿号**（`000000` / `plan-0001`），不是文件名；读它的人还会给一格
   `identity_state`：`resolved`（号与这份稿对得上，这一块算数）/ `unmatched`（对不上：块被搬过
   或号是照别人的稿抄的，**不许**当"签过了"）/ `legacy`（旧 8 格块，当时真的签过，**绝不许**
@@ -2039,16 +2063,15 @@ V 对穷举证据走七项机械会审（程序在不在 / 报告三块齐不齐
 把（程序的相对路径 + 你写的 ②③ + V 的签 + `proof_manuscript` 那个路径）一起交上去。
 D 会把它写进研究手稿的**索引四格**（`evidence_kind=report`、`evidence_path`、
 `evidence_sha256`、`v_signature`），再由 D 派 B 入库；B 收录时按地址读到你那份稿，
-从稿上读到那一签（第 3 位就翻真），并记下这份证明**还没洗过**
-（`bits.evidence.optimized_by_proof[proof_no]` 记 `"false"`）—— 第二阶段它再逐个优化、
+从稿上读到那一签（第 3 位就翻真），并记下这份证明**还没洗过** —— 第二阶段它再逐个优化、
 优化后重拿一次 V 签。
 
 **你既不要写对应表，也不要自己去找 B 的 `register_statement`。**
 
-## 4b. 普通数值实验也落一份手稿（`reports/e-num-<实验号>.md`）
+## 4b. 普通数值实验也落一份手稿（`work/E/e-num-<实验号>.md`）
 
 业主 2026-11-08：「E侧普通数值实验也需写报告，即命题+数值实验结果」「E侧普通数值实验不用过V」。
-所以每一次**有命题**的实验跑完，`E.run_experiment` 都会落一份 `reports/e-num-<实验号>.md`：
+所以每一次**有命题**的实验跑完，`E.run_experiment` 都会落一份 `work/E/e-num-<实验号>.md`：
 
 - `## 命题`：被检验的那条命题（条件 → 结论）；
 - `## 数值结果`：算了什么、在什么范围、结果；
@@ -2062,16 +2085,16 @@ D 把这份稿的路径交给 B，B 从 `## 命题` 取命题、从实验行取�
 
 | 你跑的是 | 落什么 | 派不派 V | 拿不拿签 | 等级（唯一的轴） |
 |---|---|---|---|---|
-| **一般数值实验**（`method="numeric"`、抽样、`exhaustive` 不是布尔 `true`） | `experiments` 一行 + `reports/e-num-<实验号>.md`（`## 命题` + `## 数值结果`；程序只引用实验行的 `code_path`） | **不派 V** | **不拿签** | 最多 `strong_conjecture`（有普通数值实验支撑）；脚本自报的 `proof` 一律按凭据降级（历史列 `evidence_kind` 最多 `cross_check`） |
+| **一般数值实验**（`method="numeric"`、抽样、`exhaustive` 不是布尔 `true`） | `experiments` 一行 + `work/E/e-num-<实验号>.md`（`## 命题` + `## 数值结果`；程序只引用实验行的 `code_path`） | **不派 V** | **不拿签** | 最多 `strong_conjecture`（有普通数值实验支撑）；脚本自报的 `proof` 一律按凭据降级（历史列 `evidence_kind` 最多 `cross_check`） |
 | **穷举证明**（三件套齐 + ②③ 落盘 + 手稿） | 实验行 + 报告 + 手稿 | 派 | 拿（收方秘书落块） | 等级按通道给：穷举证书 + V 签 ⇒ **`theorem`** —— 与 Lean **同级**（历史列 `evidence_kind=proof`）；**不是** `pre_theorem`（文字证明那一档才停在 `pre_theorem`，它的历史列名是 `proof_review`） |
 
 两档**不许写成同一级**：
 
 - 一般数值实验没有 V 的签，所以它到不了 `theorem`：`strong_conjecture` 是"强猜想"，
-  不是"定理"（等级由 `evidencebits.derive_grade` 按凭据现算，任何角色自报的都不认）；
+  不是"定理"（等级由框架按凭据现算，任何角色自报的都不认）；
 - 穷举那一档不要求先有一份"文字证明"：它的凭据就是那份程序 + ②③ + V 的签，
   所以 V 不会"逐行走查"它（V 走的是七项机械会审）；
-- 落签那一刻等级按**现行签**重算（`verifications._grade_recomputed_from_signature`，只升不降）：
+- 落签那一刻等级按**现行签**重算（只升不降）：
   **穷举程序 + V 签 ⇒ `theorem`；文字证明 + V 签 ⇒ `pre_theorem`**。所以"我交了一份穷举证据、
   V 也签了"之后，别再按 `pre_theorem` 去理解这一行 —— 它已经是 `theorem`。
 """,
@@ -2260,7 +2283,7 @@ def _f_skills() -> tuple[Skill, ...]:
 
 ## 谁签那个字
 
-- **证明手稿由框架写，不是你手写的文件**（`reports/f-proof-<你的稿号>.md` —— 稿号是你自己的，
+- **证明手稿由框架写，不是你手写的文件**（`manuscripts/F/f-proof-<你的稿号>.md` —— 稿号是你自己的，
   与命题号、计划号无关；同一份稿改稿仍是同一个稿号；**同一命题要第二份证明就另开一份稿（新号）**）：
   `F.step` 的返回里给
   `manuscript_path` 与 `deps_preview`（全文**不进返回值** —— 它在盘上那一份里）；
@@ -2269,10 +2292,10 @@ def _f_skills() -> tuple[Skill, ...]:
 - **依赖面不用你手写那一节**：把引到的 `stmt:<号>` 写进**那一步的 `cites`**，框架按它渲染
   `## 依赖` 三列表（`引用` 取那一步的原话 / `命题号` / `用在哪一步`；路径号是第四列，由 B
   收录时分配、不进稿）。
-  手写 `reports/f-proof-*` 会被 `reserved_framework_artifact` 拒 —— 那是框架渲染的产物；
-  真身是 `agent_f/manuscript.py::_Manuscript.proof_manuscript` 的 `dependency_rows`（只从 `cites` 取）；
-- **递审只能点 `F.step` 返回的 `manuscript_path`**（`reports/f-proof-<你的稿号>.md`）：你自己用
-  `fs.write` 写的论文章节稿（`reports/P1-*.md` / `reports/P2-*.md` / `notes/*.md` 这类）**不是手稿**
+  手写 `manuscripts/F/f-proof-*` 会被 `reserved_framework_artifact` 拒 —— 那是框架渲染的产物；
+  这一节由框架按你每一步的 `cites` 渲染（**只**从 `cites` 取，别手写）；
+- **递审只能点 `F.step` 返回的 `manuscript_path`**（`manuscripts/F/f-proof-<你的稿号>.md`）：你自己用
+  `fs.write` 写的论文章节稿（`work/F/P1-*.md` / `work/F/P2-*.md` / `notes/*.md` 这类）**不是手稿**
   —— 它不是框架渲染的、没有 `## 命题` / `## 证明` / `## 依赖` 这三节，V 的入口闸会整笔拒
   （真机实测 9 次全拒、签一发未发）。章节稿可以写，但它是给你自己推演用的草稿，不是交付物；
 - **交活向上走 D**（业主 2026-11-07 裁边：`F → B` 那条边已被裁去）：你落完手稿之后
@@ -2290,7 +2313,7 @@ def _f_skills() -> tuple[Skill, ...]:
 - **"审过"由 V 签**（`verifications`）：`F → V` 是直接边 —— 你产出的证明**由你派 V 签**；
   B 入库文献侧引入的定理/证明时也会派 V 审一次。**你签过的不要再要求别人替你签**。
   **送审是你自己派 V 审这一份手稿**（`framework_summon` 形状：`role="V"`，`task` 写清要审
-  **哪一份** —— 一律点手稿路径 `reports/f-proof-<稿号>.md`；V 用 `verify_proof`，**在册也给
+  **哪一份** —— 一律点手稿路径 `manuscripts/F/f-proof-<稿号>.md`；V 用 `verify_proof`，**在册也给
   `proof_manuscript`** —— 签块只能落在稿里，B 收录时从稿上读到那一签；**不给命题号** ——
   那个号由 B 收录时现取，不在你这一趟的交接口上）。`F.step` **不替你送审**，它只回读签：
   返回值的 `v_sign` 那一格与 `history` 里是这一轮这一份的四档 `delivery_state` / `delivery_label`：
@@ -2358,7 +2381,7 @@ def _f_skills() -> tuple[Skill, ...]:
   （那是另一根轴）；
 - 写得规范的形态就是「**前提 → 结论**」那一路：把假设、量词范围、参数区间先写出来，
   再把「则/若…则」后面的断言写成一句能被判真假的话 —— 别把**作业要求**写进命题：
-  「本轮产物必须是 proof」「判据是 `manuscript_published=true`」「把 `reports/xxx.md` 原样提交」
+  「本轮产物必须是 proof」「判据是 `manuscript_published=true`」「把 `work/xxx.md` 原样提交」
   这类是流程要求，不是数学断言（98 现场就有三条这样的行被登记成了猜想，事后才被发现）；
 - 判不过（或那一问**没判成** —— 没有模型 / 超时 / 判词读不出来）⇒ 这一轮**受控拒**
   （`proposition_form_refused`，逐条列出缺什么），那一笔**不会**落成手稿登记条目。
@@ -2405,7 +2428,7 @@ def _f_skills() -> tuple[Skill, ...]:
   `result="refutes"` 且带非空反例、检验的是**这一条**的那一行）+ `abandon_basis` 写清
   **哪一个参数组让它假**。反例的证据是那一次实验，不是一句「我找到了反例」；
 - **枚举空间过于宏大** ⇒ `abandon_kind="space_too_large"` + `space`（枚举参数与规模：各维区间
-  `[lo, hi]` / 枚举例数，取 `numericproof._space_reading` 认的字段）+ `abandon_basis` 写清
+  `[lo, hi]` / 枚举例数，取框架认的这几格）+ `abandon_basis` 写清
   **为什么在合理成本内做不到**。「宏大」落在读数上，不是一句形容词；
 - 两格空着（只给一段散文理由）⇒ 受控拒 `abandon_reason_missing`；`salvaged` 指的是一条空壳
   （不在册 / 无证明 / 无经手人）⇒ `abandon_salvaged_not_reviewable`。受控拒时盘上一个字节都不改。
@@ -2428,13 +2451,13 @@ def _f_skills() -> tuple[Skill, ...]:
 ## 送审：你自己派 V 审这一份手稿，参数是这些
 
 送审**是你自己的一次派活**：用 `framework_summon` 派 V（`role="V"`），`task` 里写清要审
-**哪一份**（手稿路径 `reports/f-proof-*.md`，**在册了也点同一份稿**；**不点命题号** ——
+**哪一份**（手稿路径 `manuscripts/F/f-proof-*.md`，**在册了也点同一份稿**；**不点命题号** ——
 那个号是 B 收录时现取的，不是你的稿的身份），让 V 调它的
 `verify_proof`（那是 V 的工具面，不是你的）。它带过去的参数按工具面给全：
 
 | 键 | 必填 | 意思 |
 |---|---|---|
-| `proof_manuscript` | **是** | 这一份证明的手稿路径（`reports/f-proof-<稿号>.md`）；**在册也给** —— 不给它，签没有落点，B 从稿上读不到那一签 |
+| `proof_manuscript` | **是** | 这一份证明的手稿路径（`manuscripts/F/f-proof-<稿号>.md`）；**在册也给** —— 不给它，签没有落点，B 从稿上读不到那一签 |
 | `readonly_facts` | 否 | 你附的只读读数（命题现状 / 台账条数） |
 
 **`proof_no` 不再传**：一个稿号 = 一份文件 = 一份证明（路径号由 B 收录时分配；产出侧不写证明号、稿名不带 `-pN`）。
@@ -2442,8 +2465,7 @@ def _f_skills() -> tuple[Skill, ...]:
 进行攻坚或写证明的逻辑」）：F 交出去的只有**稿路径 ＋ 只读读数**，正文 sha
 由签那一侧现算。**没号也能签**（V 不假定有号）：还没在册时那一签按**正文 sha** 落
 `verifications/pending/<正文 sha>.jsonl`，B 登记拿到号后按同一个 sha 认领；
-`verification_id` / `at` / `proof_sha256` 三票必须齐。判据：
-`tests/test_f_does_not_work_for_a_statement_number.py`。
+`verification_id` / `at` / `proof_sha256` 三票必须齐。
 
 ## 板上那条 `v-resubmit@`：不是回执，ack 关不掉
 
@@ -2466,7 +2488,7 @@ sha**，换一份正文就是另一条义务），`expects=work` —— 业主 2
 - 它是**信息型**的：你读到就算收讫，**不要求你 ack**，也不会因为你不 ack 而升级；
 - 真正要你收口的是板上那条 `v-resubmit@<命题号>@<proof_sha256>`（`expects=work`，
   `ack` 不动它，只有新的干净「成立」才收口）—— 两件事别混；
-- 号源是 `verifications/reviews/index.jsonl` 与盘上 `v-review-*.md` 两边取大 + 1（不是 `store.alloc_id`），
+- 号源是 `verifications/reviews/index.jsonl` 与盘上 `v-review-*.md` 两边取大 + 1（不是按自增计数器），
   所以别自己按"第几份"去猜号；同一份稿被重复投递只回旧那一份，不会多一个号。
 
 ## 悬着的命题：签收或放弃，没有第三种收尾
@@ -2537,7 +2559,7 @@ sha**，换一份正文就是另一条义务），`expects=work` —— 业主 2
         Skill(
             slug="推进-中间成果一处一条",
             title="阶段性中间成果：一处一条，别只在话里说",
-            summary="reports/attack-<plan_id>.md 一条引理一行；够格的中间结论交 B 登记",
+            summary="work/F/attack-<plan_id>.md 一条引理一行；够格的中间结论交 B 登记",
             when="推进一步、证出一条引理、或撞见卡点的时候（每一轮都读它）",
             actions=("F.step", "F.create_plan", "V.verify_proof"),
             tools=("fs.read", "fs.write", "attack.status", "attack.pick_next_subgoal"),
@@ -2545,7 +2567,7 @@ sha**，换一份正文就是另一条义务），`expects=work` —— 业主 2
 
 ## 落点（业主 2026-10-14 第 2 条）
 
-`reports/attack-<plan_id>.md`（`<plan_id>` 就是你自己那份计划的号）—— **一条引理一行**：
+`work/F/attack-<plan_id>.md`（`<plan_id>` 就是你自己那份计划的号）—— **一条引理一行**：
 
 ```
 - [已证] 引理 L3：…… ｜ 依据：L1 + 定义 2.1 ｜ 交 V 复核：v-0007
@@ -2576,7 +2598,7 @@ sha**，换一份正文就是另一条义务），`expects=work` —— 业主 2
 
 - **盘上这一份**是给人读的推进台账（D 与下一趟的你看的就是它，比 `history` 好读）；
 - **够格的中间结论走手稿登记** —— `F.step` 把这一份证明落成手稿条目
-  （`reports/f-proof-<你的稿号>.md`），再由 **D** 向上携带给 B 读稿登记（`F → D`；
+  （`manuscripts/F/f-proof-<你的稿号>.md`），再由 **D** 向上携带给 B 读稿登记（`F → D`；
   你不直接派 B），那才是**可复核**的那一份
   （有逐字证明文本、能进五元位、能被 V 逐行走查）。
 
@@ -2678,8 +2700,8 @@ def _a_skills() -> tuple[Skill, ...]:
 
 ## 次序
 
-1. **归一化**：DOI 小写去前缀、arXiv id 去版本号 —— 归一化规则是**盘上那一份**
-   （`dedup.py` 的 `normalize_doi` / `literature_keys`），不是你自己临时想的写法。
+1. **归一化**：DOI 小写去前缀、arXiv id 去版本号 —— 归一化规则是**全仓同一份**
+   （框架判重用的就是它），不是你自己临时想的写法。
 2. **查重**：`search.dedup_check` 给读数，别凭标题眼熟就下结论。
    三态：`duplicate`（同一条）· `new`（确实没有）· `unknown`（判不了 ⇒ 说清为什么）。
 3. **登记**：`search.register` 落 `literature` 行。
@@ -2689,7 +2711,7 @@ def _a_skills() -> tuple[Skill, ...]:
 - **不许静默合并**：两条像但不等（预印本 vs 正式版、会议 vs 期刊）⇒ 如实登记两条并写清关系，
   合并是判断，判断要留痕；
 - **不许"先并了再说"**：判重错则概念图静默地少一条或多一条边，没有任何地方会报错 ——
-  这正是本仓把 `dedup.py` 划进禁改区的那条理由。
+  这正是判重口径被列为不可改的那条理由。
 """,
         ),
         Skill(
@@ -2728,7 +2750,7 @@ def _a_skills() -> tuple[Skill, ...]:
             title="查不到时换什么：四个旋钮、五条代换、三档缺口，以及引文图怎么走",
             summary="检索式怎么变（题面式说法不是查询词→规范术语→对象→参考文献）；`no_results` 建议换规范术语重查一次（读数不是闸）；每趟收尾逐条判收/判拒、逐委托 `lit.admit_all` 清表；工作区里已有的文献先 `ingest_local(dry_run=True)` 发现 → `lit.stage_add` 建候选 → 判收链（手册 §0.2）",
             when=("一次检索什么都没查到、一条 `no_results` 要按纪律换说法重查、或要收尾清待裁表时；"
-                  "工作区里已经投了一批历史文献（`library/` 下的 PDF、`SEED-README.md`）要逐份判收时；"
+                  "工作区里已经投了一批历史文献（输入区 `reference/` 下的 PDF、`reference/SEED-README.md`）要逐份判收时；"
                   "只查到一堆自称证明了某定理的条目、要为一个方向做一轮系统调研，"
                   "或**已经攥住一篇关键文献、想顺着引文往上/下游走**时"),
             actions=("A.search_literature", "A.shelf_search", "A.run_once", "A.walk_citations"),
@@ -2773,15 +2795,18 @@ the l_p ball` / `Brunn concavity sections centrally symmetric body` /
 
 ### 0.2 工作区里已有的文献不是「已入库」（SEEDDOC）
 
-真机的下一个工作区会在 `library/` 下投一批历史下载的 PDF（工作区根那份 `SEED-README.md`
+真机的下一个工作区会在**输入区**（`reference` 目录）下投一批历史下载的 PDF（`SEED-README.md`
 写着它们是什么；数量几十份），而 `data/literature.json` 是 0 行、没有 `lit_id`、也没有
 任何判收。**"盘上有文件"与"入库"是两件事**：前者只说明当时下载成功过、正文抽得出来。
 这条路的目标不是"把它们登记掉"，是"逐份判收"。
 
+`library/` 是**已登记书架**：那里只该有 `literature` 行引用到的文件（判收之后 A 收编进去的）。
+种子不在那里；`library/` 里出现没有登记行的文件本身就是结构异常，不是待判收材料。
+
 前置提示的政策行给了这条链的一句话版本；而**这一节是你现读的手册**，操作口径按这里做。
 顺序是死的，不许换（先发现、再建候选，候选的 url 才有出处）：
 
-1. **发现**：`search.ingest_local(books_dir="library", dry_run=True)`。它读同一个目录、
+1. **发现**：`search.ingest_local(books_dir="reference", dry_run=True)`。它读同一个目录、
    算同一份 sha256 / 页数 / 文本层，但**一个字节都不写**（候选表与两个台账都不动）。
    读数里的 `count` 与 `books[]` 就是候选清单；`ingested` 是「会登记」的预告，**不是**
    入库读数 —— `literature` 一行没多，凭它去派 B，B 什么也处理不到（它要的是 `lit_id`）。
@@ -2950,8 +2975,8 @@ the l_p ball` / `Brunn concavity sections centrally symmetric body` /
 1. 逐条判：`lit.admit`（每条带 `availability`；`relevance` 在 `lit.stage_add` 时已落候选行，
    items 里不再收它）或 `lit.stage_reject`（拒）；
    **还有待裁的条目时整批提交会被拒**，所以先把每一条判完；
-2. **提交**：`lit.admit_all` —— 先落**无号快照** `reports/lit-<请求号>.submitted.md`（号还没发，报告里也没有号），
-   再批量注册、把 `lit_id` 回填到同一行，最后重渲染**带号定稿** `reports/lit-<请求号>.md`；
+2. **提交**：`lit.admit_all` —— 先落**无号快照** `work/A/lit-<请求号>.submitted.md`（号还没发，报告里也没有号），
+   再批量注册、把 `lit_id` 回填到同一行，最后重渲染**带号定稿** `work/A/lit-<请求号>.md`；
    回填不是字符串替换，是同一份纯函数渲染两次 —— 所以"回填前后的报告除号之外逐字相同"这一点由框架保证；
 3. **清表**：提交顺带给本委托每一行打 `cleared_at` + `clear_reason`（不物理删）。
    表没清完 ⇒ 收工门第八格 `literature_pending` 报 `fail`（待入库表还有 `pending`、或当前委托没清表都会拦），
@@ -3008,7 +3033,7 @@ def _c_skills() -> tuple[Skill, ...]:
 
 C 的**产出登记口有两处，落的是同一张表**：工具 `analysis.register_report`，以及**你自己的动作
 `C.handle`**（派活时它被包成 `own.handle` 出现在你的工具面上；按动作声明，报告 ok 时由它收口落盘
-`analysis_reports` 一行 + `reports/<rid>-<kind>.md`）。两处随便用哪一处都能落行；
+`analysis_reports` 一行 + `work/C/<rid>-<kind>.md`）。两处随便用哪一处都能落行；
 **只在对话里报一堆读数、没有落 `analysis_reports` 行，这一趟等于没有产出**。
 所以：先跑分析器、把读数算出来，再用 `analysis.register_report` 登记 —— 只在对话里报
 一堆读数、没有落 `analysis_reports` 行，这一趟等于没有产出。
@@ -3177,11 +3202,11 @@ C 只判、不改：矛盾问题的闭环由 D 的 `D.adjudicate` 收口（I2）
    接缝怎么核（手上只有读数时也核得动）：前一批 `frontier[]` 里那一条的 `node`
    必须就是后一批那一行的起点，它的 `from` 必须是前一段走通的最后一个节点
    （`walked_nodes` 的末一个），`via_dep_id` 就是接缝那条边 —— 三样对得上才叫一处接缝。
-   框架侧另有一份核对读数 `path_shape.join_segments([批1, 批2])`：它把 `segments`
+   框架侧另有一份核对读数：它把两批的 `segments`
    （每段的起点 / 终点 / 跳数）与 `seams`（接缝节点）摊开，并按拼后的边重算
    `hops` / `steps`（不是把两批的数字相加 —— 前一批报的跳数里含着"越界那一跳"）。
-   但它是**框架内部读数，没有工具面入口**：你的工具面上没有 `path_shape.*`，
-   拿不到这份 `join_segments` 的结果 —— 接缝只能按上面那三样（`node` / `from` /
+   但它是**框架内部读数，没有工具面入口**，你拿不到：
+   接缝只能按上面那三样（`node` / `from` /
    `via_dep_id`）自己核。它是框架侧对同一件事的核对材料，不是替你把链拼好了：
    这么拼对不对、拼起来自不自然，仍由你判。
 6. **拼不起来就如实报哪一段缺，补全之后仍绕弯就上报**：接缝对不上、成环、某一段
@@ -3322,8 +3347,7 @@ D 自己不检索：`submit_gaps` 之后由 **A** 领跑（A 过 I7 准入闸门
   唤起 F 的建计划动作 —— **交出去的是研究方向，不是命令**（业主 2026-11-08）：`problem` /
   `subgoals` 写清要弄清什么、可以试哪条路，**不要点名任何 `conjecture_id`**
   （`conj:NNNNNN` 或裸 6 位号都不行）。你登记的猜想只是**参考意见**，F / E 可以选择
-  不证它、去攻更值得的一条；这一条是机器可核的（`agentflow.dispatchpolicy.
-  dispatch_text_problems` 从**D 的派活记录**取文本，文本里出现你自己的 `conjecture_id`
+  不证它、去攻更值得的一条；这一条是机器可核的（框架从**D 的派活记录**取文本，文本里出现你自己的 `conjecture_id`
   ⇒ 红并逐条点名；判据不判 F 自主写的计划）。
   ⚠️ 这里走的是**循环协议的形状**，不是工具清单里的某一件：**主控手上那件召唤工具不在你的面上**，
   别去工具清单里找它（照做的是**正文**，而正文里点名一个你没有的工具，只会白跑一步）。
@@ -3351,14 +3375,14 @@ D 的收获（数值实验结果、理论攻坚成果）→ 立新猜想 → 再
 - **方向参考，不是命令**（业主 2026-11-08，逐字）：「那条猜想只是参考意见，D不能直接把自己的
   猜想登记到命题台账，也不能命令E或F必须把它做出来，这只是研究方向参考」。所以派活文本里
   **不提号**（`conj:NNNNNN` / 裸 6 位号都不写）；F 选了另一条也合法，报告里如实写即可。
-  判据 `agentflow.dispatchpolicy.dispatch_text_problems` 从 D 的派活记录取文本、逐条点名。
+  框架从 D 的派活记录取文本、逐条点名（判据在框架侧）。
 - **你可以给「证明思路」与「依赖面参考」**：哪些引理要引、按什么顺序、用哪条已证命题
   （`stmt:` 号）—— 写进给 F 的派活，或写进 `F.create_plan` 的 `problem` / `subgoals`。
-- **证明的落稿与拿签不属于你**：`reports/f-proof-<号>.md` 由 F 落、签由 F 带 V 拿；
-  你的手稿 `reports/RESEARCH.md` 是**收录者/引用者** —— 引用 F 的
-  `reports/f-proof-<号>.md`（或带它的 sha256），不自己写一节 `## 证明`。
-- **转交时只转 F 给你的 `manuscript_path`**（`reports/f-proof-<号>.md`），**不转章节稿**
-  （`reports/P1-*.md` / `notes/*.md` 这类）：它不是框架渲染的手稿、没有 `## 命题` /
+- **证明的落稿与拿签不属于你**：`manuscripts/F/f-proof-<号>.md` 由 F 落、签由 F 带 V 拿；
+  你的手稿 `manuscripts/D/RESEARCH.md` 是**收录者/引用者** —— 引用 F 的
+  `manuscripts/F/f-proof-<号>.md`（或带它的 sha256），不自己写一节 `## 证明`。
+- **转交时只转 F 给你的 `manuscript_path`**（`manuscripts/F/f-proof-<号>.md`），**不转章节稿**
+  （`work/F/P1-*.md` / `notes/*.md` 这类）：它不是框架渲染的手稿、没有 `## 命题` /
   `## 证明` / `## 依赖` 这三节，B 读不出也登不了记。
 - **`out/proofs/` 不是证明稿的落点**：它是攻坚过程记录，可以写 `## 思路` /
   `## 依赖面参考`，**不能带 `## 证明` 节**（带这一节的写入会被 `reserved_framework_artifact`
@@ -3392,16 +3416,16 @@ D 的收获（数值实验结果、理论攻坚成果）→ 立新猜想 → 再
 
 ## 提交「有数值实验支持的强猜想」：引用 E 的 `e-num-*`（2026-11-08 业主裁定）
 
-你对 `statements` 只有只读权限 —— 要把一条强猜想交给 B 登记时，走的不是你自己写那一行：
+命题台账你只读（见上）—— 要把一条强猜想交给 B 登记时，走的不是你自己写那一行：
 
 1. 先让 E 跑一次普通数值实验（`E.run_experiment`）⇒ 它会落一份
-   `reports/e-num-<实验号>.md`（`## 命题` + `## 数值结果`；程序只引用实验行的 `code_path`）；
+   `work/E/e-num-<实验号>.md`（`## 命题` + `## 数值结果`；程序只引用实验行的 `code_path`）；
    **E 不需要 V 的签**（业主：「E侧普通数值实验不用过V」）；
 2. 把**那份稿的路径**交给 B（`summon` 派 B 的 `register_statement`，`proof_manuscript` 给这个
    路径、`kind=conjecture`）；B 从 `## 命题` 取命题、从实验行取程序，`proof_text` 空着、
    等级 `strong_conjecture`（`evidence_kind` 历史列 `cross_check`）；
 3. 这样你交出去的每一条强猜想都有 E 侧的读数背书；**穷举**那一档仍走
-   `reports/e-proof-<实验号>.md`（它要 V 签）、F 的文字证明走 F 的手稿 —— 三档的载体不同，
+   `manuscripts/E/e-proof-<实验号>.md`（它要 V 签）、F 的文字证明走 F 的手稿 —— 三档的载体不同，
    别把"没有 V 签"当成"不能交"。
 
 ## 有界与归因
@@ -3456,7 +3480,7 @@ D 的收获（数值实验结果、理论攻坚成果）→ 立新猜想 → 再
         Skill(
             slug="手稿-研究记忆就这一份",
             title="研究手稿：落点是 write_report 渲染的那份工作稿",
-            summary="研究记忆落在 reports/RESEARCH.md（七节、先读后改，收录 F/E 成果）与 research.write_note、write_report 的工作稿；证明的落稿与拿签归 F",
+            summary="研究记忆落在 manuscripts/D/RESEARCH.md（七节、先读后改，收录 F/E 成果）与 research.write_note、write_report 的工作稿；证明的落稿与拿签归 F",
             when="一趟研究开始（先读它）或收尾（更新它）的时候；也是别人把料交给你的时候",
             actions=("D.write_report", "D.propose_question"),
             tools=("fs.read", "fs.write", "fs.edit", "table.get"),
@@ -3474,16 +3498,16 @@ D 的收获（数值实验结果、理论攻坚成果）→ 立新猜想 → 再
 5. **未解问题**：还开着的 `research_questions` / 缺口清单；
 6. **下一步**：如果明天有人接手，他该先动哪一件。
 
-落点是三处你真能写的地方：① 项目级 `reports/RESEARCH.md`（**七节、先读后改**：先 `fs.read`
+落点是三处你真能写的地方：① 项目级 `manuscripts/D/RESEARCH.md`（**七节、先读后改**：先 `fs.read`
 看现在这一版，再用 `fs.edit` 定点改或 `fs.write(overwrite=true)` 整份更新；它是**收录者/引用者**，
-把 F 的证明手稿（`reports/f-proof-<号>.md`）与 E 的实验成果收进来、带上引用）；② `research.write_note`
+把 F 的证明手稿（`manuscripts/F/f-proof-<号>.md`）与 E 的实验成果收进来、带上引用）；② `research.write_note`
 （按研究问题**追加**一条笔记 —— 追加而非覆盖，七节逐条写进去）；③ `D.write_report` 渲染的
-`reports/<qid>-research.md`（一份问题一份的工作稿，结构由框架渲染；**携带单也在同一处生成** ——
+`manuscripts/D/<qid>-research.md`（一份问题一份的工作稿，结构由框架渲染；**携带单也在同一处生成** ——
 交 B 时 F 的证明稿随这张单一起走）。
 
-**证明的落稿与拿签不属于你**（业主 2026-11-04）：`reports/RESEARCH.md` 里出现你自己新写的
+**证明的落稿与拿签不属于你**（业主 2026-11-04）：`manuscripts/D/RESEARCH.md` 里出现你自己新写的
 `## 证明` 节会被 `fs.write` / `fs.edit` 受控拒绝（`reserved_framework_artifact`）—— 那一节只许是
-引用/转载 F 的稿（点名 `reports/f-proof-<号>.md` 或带它的 sha256）。`out/proofs/` 是攻坚过程记录，
+引用/转载 F 的稿（点名 `manuscripts/F/f-proof-<号>.md` 或带它的 sha256）。`out/proofs/` 是攻坚过程记录，
 可以写 `## 思路` / `## 依赖面参考`，同样不能带 `## 证明` 节；要落稿就派 F。
 
 ## 成果概述那一段：每句声称都要有落点
@@ -3493,7 +3517,7 @@ D 的收获（数值实验结果、理论攻坚成果）→ 立新猜想 → 再
 
 | 这一句声称 | 必须引到 |
 |---|---|
-| 「命题 P 证明了」 | **F** 的证明手稿 `reports/f-proof-<稿号>.md`（证明正文 + `## 依赖` 三列表；路径号是第四列，由 B 收录时分配）+ **B** 读稿登记的那一行 `statements.proof_text`；攻坚过程另有 F 的 `reports/attack-<plan_id>.md` |
+| 「命题 P 证明了」 | **F** 的证明手稿 `manuscripts/F/f-proof-<稿号>.md`（证明正文 + `## 依赖` 三列表；路径号是第四列，由 B 收录时分配）+ **B** 读稿登记的那一行 `statements.proof_text`；攻坚过程另有 F 的 `work/F/attack-<plan_id>.md` |
 | 「猜想 C 被证伪」 | 那条带 `counterexample` 的 `experiments` 行（`exp:` 号） |
 | 「做了数值实验 / 测了样例」 | **E** 的代码文件（实验行里的 `code_path`）|
 | 「存在这样的例子 / 反例」 | **描述那个例子的文件**；F 造的例子由 F 整理成**命题—证明格式**（命题写成「某某例子符合某形式」），引 F 那一份 |
@@ -3506,15 +3530,16 @@ D 的收获（数值实验结果、理论攻坚成果）→ 立新猜想 → 再
 ## 谁给你送料（别等，去收）
 
 - **E**：数值实验里的反例 / 玩具例（`experiments` 里 `result=refutes` 带 `counterexample`）；
-- **F**：攻坚的中间成果与卡点（`reports/attack-<plan_id>.md` + 它回报给你的 message）、
+- **F**：攻坚的中间成果与卡点（`work/F/attack-<plan_id>.md` + 它回报给你的 message）、
   以及它造的例子整理成的那份**命题—证明**；
 - **A**：泛化搜索三档（推广 / 类比 / 特例）—— 进「定义与已知」那一节；
 - **C**：结构读数（哪里薄、哪两条矛盾）—— 进「未解问题」。
 
 ## 与台账的分工
 
-工作稿（`reports/<qid>-research.md`）是**这一趟这一份问题的报告**；跨趟的记忆在
-**台账行**里（`research_questions` / **待登记命题**（`conjectures`） / `experiments` / `statements`）——
+工作稿（`manuscripts/D/<qid>-research.md`）是**这一趟这一份问题的报告**；跨趟的记忆在
+**台账行**里（`research_questions` / **待登记命题**（`conjectures`） / `experiments` / `statements` /
+`documents` 里你自己那一行 `kind=research`）——
 下一趟的人先读台账，再按需读那一份工作稿。别指望 30 份工作稿替记忆干活。
 
 ## D 的动作**返回形状是杂的**（2026-10-16 亲测逐个读出来的）
@@ -3524,7 +3549,7 @@ D 的动作**多数**回一个带 `ok`/`kind`（或各类读数）的字典，�
 | 动作 | 返回 | 意思 |
 |---|---|---|
 | `D.submit_gaps` | **一串请求编号**（`list`） | 这一次**真正提交出去**的那几条缺口。**空列表 = 没有可提交的**（配额/已提交集挡住，理由在 `consider`/`assess` 的读数里）—— 空与"没做成"是两件事 |
-| `D.write_report` | **一个文件路径**（`str`） | 它**写下的那份工作稿**在哪；它**只写文件、不落表**（落表是 `D.research` 的事） |
+| `D.write_report` | **一个文件路径**（`str`） | 它**写下的那份工作稿**在哪；它在**同一笔事务**里让 `documents` 多一行 `kind=research`（`markdown_path` 指那份文件，写口由框架持有）—— **那一行不是你手写的表**，别自己 `upsert`；`D.research` 写的是问题行，不是这份稿的行 |
 | `D.ingest` | **一串**（`list`） | 这一次从报告里**新建**的那些问题（明细用 `D.ingest_detailed`） |
 | `D.ingest_detailed` | **明细字典** | 含 `created`/`created_count`/`skipped`/`decisions`/`merged_by_content_key`/`contradictions` ⇒ **"被跳过者及原因"看这里** |
 
@@ -3569,7 +3594,7 @@ D 的动作**多数**回一个带 `ok`/`kind`（或各类读数）的字典，�
   真跑过、`result="refutes"`、带非空反例、且检验的是**这一条**的实验，`abandon_basis` 里
   写清**哪一个参数组让它假**；反例的证据是那一次实验，不是一句「我找到了反例」；
 - **枚举空间过于宏大** ⇒ `abandon_kind="space_too_large"`：给 `space` —— 枚举参数与规模
-  （各维区间 `[lo, hi]` / 枚举例数，取 `numericproof._space_reading` 认的字段），
+  （各维区间 `[lo, hi]` / 枚举例数，取框架认的这几格），
   `abandon_basis` 里写清**为什么在合理成本内做不到**（「宏大」落在读数上，不是形容词）；
 - `salvaged` 指的是一条空壳（不在册 / 无证明 / 无经手人）⇒ `abandon_salvaged_not_reviewable`；
   两格空着 ⇒ `abandon_reason_missing`。受控拒时盘上一个字节都不改。
@@ -3669,7 +3694,7 @@ transfer is misleading, state that failure clearly instead of forcing a weak int
 （请求的 `done`/`outcome`、文献的 `processed`）—— 因此不需要模型，也不会随措辞漂移。
 
 **但它不止判"消化完了"，还要判"新证据真的回答了那个问题吗"**：
-该请求带来的新落库关系交给 `interactions.evidence_relevance`：
+该请求带来的新落库关系由框架判相关性（三态读数）：
 
 | 读数 | 怎么办 |
 |---|---|
@@ -3763,7 +3788,7 @@ def _g_skills() -> tuple[Skill, ...]:
         Skill(
             slug="成稿-正文自己写",
             title="成稿：正文由你写，编译只负责编",
-            summary="散文体正文 fs.write 到 out/paper/main.tex，再 paper_compile",
+            summary="散文体正文 fs.write 到 out/package/main.tex，再 paper_compile",
             when="任务说「整理成论文 / 交付论文 / 稿件」，或要一份可编译的正文时",
             actions=("G.build_document", "G.register_dependency", "G.compose_claim"),
             tools=("fs.write", "doc.paper_compile", "doc.write_mapping", "doc.scan_claim",
@@ -3772,16 +3797,16 @@ def _g_skills() -> tuple[Skill, ...]:
 
 ## 业主 2026-10-13 裁定（逐条落地）
 
-- **正文是你写的，不是脚本生成的**：`fs.write` 写到 `out/paper/main.tex`，
+- **正文是你写的，不是脚本生成的**：`fs.write` 写到 `out/package/main.tex`，
   散文体、章节自己排，`\\cite` / 定理环境随你；落笔前后用 `fs.read` 读回来核一遍。
 - **没有「渲染脚本」「建论文包」「核锚」这回事**（2026-10-13 退场，见 `draft/117`）。
-- **编译**：`doc.paper_compile` 出 `out/paper/main.pdf`。
+- **编译**：`doc.paper_compile` 出 `out/package/main.pdf`。
   本机 MiKTeX 会写完 PDF 却以 `0xC0000409` 退出 ⇒ **产物与退出码分两栏读**，
   别只看退出码判成败。
 - **成稿是四步动作序列**（业主 2026-10-24 定；与本角色提示词里的政策同一口径）：⓪ 先用 `doc.build_document` 落一行 `documents`（H 的审校对象；没有它 `doc.paper_compile` 会受控拒绝 `paper_not_registered`）→ ① 写正文 → ② 落对应表 → ③ 逐行核「这一行该有的格子齐」→ ④ 编译。对应表用 `doc.write_mapping` 一次写三份 ——
   你只给行（正文里每条定理/引理/命题/推论/例子/实验各占一行：`kind` / `label` / `env_no` /
-  `ledger_id` / `proof_no` / `file`），它调 `papermapping.write_package` 渲染出
-  `out/paper/MAPPING.json`、`out/paper/MAPPING.md` 与正文附录「附录：产出对应表」，并把
+  `ledger_id` / `proof_no` / `file`），它渲染出
+  `out/package/MAPPING.json`、`out/package/MAPPING.md` 与正文附录「附录：产出对应表」，并把
   `\\input{mapping-appendix}` 放进正文。**md 与附录不许手写**：判据要的是"与渲染器逐字相同"
   （`md_drifted` / `mapping_paper_mismatch`），手抄一遍就对不上。
   正文里每个定理类环境都要能在表里找到一行，表里每一行也要在正文里
@@ -3818,13 +3843,13 @@ def _g_skills() -> tuple[Skill, ...]:
 
 | 格 | 工具从哪取（`sources` 指的就是它） | 抄不到时回退到 |
 |---|---|---|
-| `file` | 数值行：`experiments` 里那条 E 签的穷举行的证明栏第 ① 段（相对仓库根）；理论行：正文里 `label` 那个环境所在的文件（相对论文包） | 读 `data/statements` 那一行的 `proof_text` 第 ① 段；理论行读 `out/paper/main.tex` 里那个环境 |
-| `lean_file` | `numericproof.formal_slot`：numeric ⇒ 证明栏第 ① 段那份 `.py`；formal ⇒ 那份 `.lean`；空通道 ⇒ 空（不适用） | 同一条命题的 `proof_text` 第 ① 段；formal 再看 `data/experiments` 里 `method=formal` 那一行的 `code_path` |
-| `lean_target` | 仅 formal：那份 `.lean` 里字面出现的声明名（`papermapping.lean_declarations`） | 读 `code/formal/`（或包内 `formal/`）那份源码，抄那个声明的名字；**一个文件里不止一个声明时不许猜** |
-| `numeric_evidence` / `exhaustion_note` | `experiments` 里 E 签的那条穷举行：`exp:NNNNNN` 与 `exhaustionreport.report_relpath`（`out/experiments/` 下那份读数） | 读 `data/experiments` 那一行（`experiment_id` / `method` / `observations.e_signature`） |
+| `file` | 数值行：`experiments` 里那条 E 签的穷举行的证明栏第 ① 段（相对仓库根）；理论行：正文里 `label` 那个环境所在的文件（相对论文包） | 读 `data/statements` 那一行的 `proof_text` 第 ① 段；理论行读 `out/package/main.tex` 里那个环境 |
+| `lean_file` | 按通道：numeric ⇒ 证明栏第 ① 段那份 `.py`；formal ⇒ 那份 `.lean`；空通道 ⇒ 空（不适用） | 同一条命题的 `proof_text` 第 ① 段；formal 再看 `data/experiments` 里 `method=formal` 那一行的 `code_path` |
+| `lean_target` | 仅 formal：那份 `.lean` 里字面出现的声明名 | 读 `code/formal/`（或包内 `formal/`）那份源码，抄那个声明的名字；**一个文件里不止一个声明时不许猜** |
+| `numeric_evidence` / `exhaustion_note` | `experiments` 里 E 签的那条穷举行：`exp:NNNNNN` 与 `out/experiments/` 下那份读数 | 读 `data/experiments` 那一行（`experiment_id` / `method` / `observations.e_signature`） |
 | `evidence_kind` / `evidence_path` | 数值定理那一行的正文是 E 的报告 ⇒ `report`；路径与 `exhaustion_note` **同一处** | 同上，两格必须指同一份读数 |
-| `evidence_sha256` | **现算**：盘上那份读数的字节 sha256（`numericproof.object_sha256`） | 自己算（`hashlib.sha256` 读字节）；**不许抄表里或别人报告里的数** |
-| `v_signature` | `verifications/` 下这条命题最近一签（`numericproof.latest_third_party_sign`）或 `out/vsigns/` 里签这一份对象的那一签（`vsigns.sign_of`） | 读那两个落点；**没有签就留空并上报**（`problems` 会说"没有 V 的签"），不许拿空串冒充「签过」 |
+| `evidence_sha256` | **现算**：盘上那份读数的字节 sha256 | 自己现算（`fs.stat` 的 `sha256`，盘上那份文件字节的指纹）；**不许抄表里或别人报告里的数** |
+| `v_signature` | `verifications/` 下这条命题最近一签，或 `out/vsigns/` 里签这一份对象的那一签 | 读那两个落点；**没有签就留空并上报**（`problems` 会说"没有 V 的签"），不许拿空串冒充「签过」 |
 
 ## 定理结构以 B 台账的命题为准（业主 2026-10-24，D-40）
 
@@ -3842,7 +3867,7 @@ def _g_skills() -> tuple[Skill, ...]:
 - **形式化细节不进正文**：不搬 Lean 的 lemma / step 标题、不写 tactic、不贴检查器
   输出；**附录与脚注也不进**。正文最多一句结论性表述（"这一条已由检查器验证"），
   并指向对应表里那一行。
-- **凭据的落点只有两处**：`out/paper/MAPPING.json` 那一行（凭据格 `lean_file` 按通道 —— numeric ⇒
+- **凭据的落点只有两处**：`out/package/MAPPING.json` 那一行（凭据格 `lean_file` 按通道 —— numeric ⇒
   那份 `.py`、`lean_target` 留空；formal ⇒ `.lean` + `lean_target`；数值实验定理另带
   `numeric_evidence` / `exhaustion_note` 与索引四格 `evidence_kind` / `evidence_path` /
   `evidence_sha256` / `v_signature`）与
@@ -3853,13 +3878,13 @@ def _g_skills() -> tuple[Skill, ...]:
   自定义宏同样算一个定理类环境（`doc.write_mapping` 会点名"正文多出 N 个定理类环境，
   台账里没有对应命题"）。
 - **玩具例子（台账 `kind=example`）收进正文时用 `Example` 环境，不用 Lemma / Theorem**
-  （业主 2026-11-07，`_canon_F_manuscript_protocol.md` 第六节逐字）：
+  （业主 2026-11-07 的裁定，逐字）：
   `\\newtheorem{example}{Example}` + `\\begin{example}\\label{...} … \\end{example}`，
   对应表那一行的 `kind` 写 `example`、证明照那一行的 `proof_text` 排。它是**给人看的
   标签**：落稿 / V 审 / 等级与普通命题一致（文字论证到 `pre_theorem`、穷举到 `theorem`），
   所以不要因为它"只是例子"就省掉证明，也不要把一条例子改写成 Lemma 混进定理链。
   另五类照既有映射（theorem→Theorem / lemma→Lemma / proposition→Proposition /
-  corollary→Corollary / experiment→Experiment）；`papermapping.environment_titles`
+  corollary→Corollary / experiment→Experiment）；框架
   会把"该印什么"与导言区真声明成什么逐行对出来。
 
 ## 长路径 / 长哈希：正文里必须可断行（业主 2026-10-24，D-47）
@@ -3888,7 +3913,7 @@ def _g_skills() -> tuple[Skill, ...]:
 不是脚注、不是附录摘要。
 
 **② 与 ③ 由 E 写，你只原样引用**：E 把它们落成 `out/experiments/<实验号>/exhaustion.md` 里的三段
-（`程序：` / `程序设计：` / `穷举论证：`；`exhaustionreport` 的 `land_report` 写盘、`compose_report` 拼那三段文本，
+（`程序：` / `程序设计：` / `穷举论证：`；这三段文本由框架拼好、写进上面那份文件，
 三块标题逐字、结尾署名 `作者：E`、抬头写着 `exp:` 编号）。登记 `statements` 那一行的是 B
 （它原样收进 `proof_text`；E 自己不写台账）。你写正文时：
 
@@ -3973,8 +3998,8 @@ def _g_skills() -> tuple[Skill, ...]:
 
 ## 落点
 
-`documents` 一行 + `out/paper/main.tex` + `out/paper/main.pdf`；
-交付说明落在 `out/review/REPORT.md`（那是 M 的活）。
+`documents` 一行 + `out/package/main.tex` + `out/package/main.pdf`；
+交付说明落在 `out/report/REPORT.md`（那是 M 的活）。
 """,
         ),
         Skill(
@@ -3999,7 +4024,7 @@ def _g_skills() -> tuple[Skill, ...]:
 
 ## 要改某条断言：**同号交回**
 
-- **号从哪读**：`fs.read` 本稿 `documents/<doc_id>.md`，正文里每条断言都标着
+- **号从哪读**：`fs.read` 本稿 `manuscripts/G/<doc_id>.md`，正文里每条断言都标着
   `**`claim-N`**`（也可以读 `documents.claims[*].claim_id`）—— 不要自己编号。
 - **改哪条就把那条的 `claim_id` 原样放进 `new_claims`**：脚本按位置归一化，同号交回 =
   原位替换（回执 `replaced_claim_ids`），条数不变。要**新增**一条就不给 `claim_id`
@@ -4082,7 +4107,7 @@ def _l_skills() -> tuple[Skill, ...]:
   受控拒绝 `reading_mismatch`，一行都不写）；
 - 它**不动 `statements`**：形式化 ≠ 审过，命题的等级仍由五元位现算；
 - 这一行是第 4 位（`formal`）的**唯一凭据** —— B 收录那条命题时按 `method="formal"`
-  的行把它翻成 `verified`（`evidencebits.formal_ledger_reading`）。所以
+  的行把它翻成 `verified`。所以
   `proof_no` / `path_id` / `path_source` 要写对：第 4 位是**二维**的（一条命题的
   每一份证明各占一格），号写错就是给别人的那一份背书。
 
@@ -4252,7 +4277,7 @@ def _shared_skills() -> tuple[Skill, ...]:
 与 `留痕-证据先行` 同一个道理：指得到那一行才写上去，指不到就如实说没核到。
 
 （**正文里只反引号点名 `fs.*` 四件**：这一条是 `shared` 技能，它的工具面得对**每个**角色
-都成立 —— 判据 `agent_skills.validate()` 会逐角色核正文里点名的工具。所以库表类工具
+都成立 —— 框架会逐角色核正文里点名的工具（点错了名，装配期就红）。所以库表类工具
 在这里只用文字提及，不点名。）
 """,
         ),
@@ -4351,46 +4376,57 @@ def skills_for(role: str) -> tuple[Skill, ...]:
 
 
 def skill_path(role: str, slug: str) -> str:
-    """`fs.read` 用的相对路径（相对工作区根）。"""
+    """导出用的相对路径（`materialize` 的落点；生产路径不读它）。"""
     return f"{SKILLS_DIR}/{role}/{slug}.md"
 
 
 def index_block(role: str) -> str:
-    """前置提示词里那一段（只放索引：路径 + 一句话 + 何时读）。
+    """前置提示词里那一段：这一岗每一份 skill 手册的全文。
 
-    为什么这一段的形状是"表格 + 一句纪律"：前置提示词每多一行，每一次模型调用都要
-    重新付一次；而正文一旦被塞进来，"按需读"就退化成"还是全塞"。
+    2026-11-22（业主裁定，逐字「skills 应该在系统内而非在工作区」）：此前这里只印
+    「路径 + 一句话 + 何时读」，正文由 `materialize` 落到 `<工作区>/skills/`、模型用
+    `fs.read` 现读。裁定之后正文随提示词渲染 —— 手册就在模型面前，工作区里不再有
+    `skills/` 目录。函数名保留（`SKILLS_INDEX` 段名与若干判据都按它取），但它的内容
+    已经不只是索引：索引与正文合成同一段，少了"去盘上读"这一跳。
+
+    关档时正文仍要过 `NO_LEAN_SKILL_REPLACEMENTS`：正文现在进了提示词，L 的指向
+    不能从这条后门回来（判据 `tests/test_skill_books_have_no_l_in_lean_off.py`）。
     """
     rows = skills_for(role)
     if not rows:
         return ""
     lines = [
-        "**你这一岗的 skills（现做现读）**：下面每一行是一份**盘上**的操作手册 ——",
-        f"先看「什么时候读它」，对上了再用 `fs.read` 读 `{SKILLS_DIR}/<角色>/<名字>.md` 的全文。",
-        # 索引在提示词里，但正文常常一次都没被读过 —— 模型凭提示词里的规则就把活干完了。
-        # 加这一句不是"再叮嘱一遍"，而是把读它为什么划算说出来：
-        # 提示词给的是口径（每一格都要成立），手册给的是这一档的具体步骤与反面形态。
-        "**对上了就现在读**：手册里写着这一档的**具体步骤**与**反面形态**（提示词只给口径，"
-        "不给这些）—— 凭印象做，正是这些手册要防的那一种错。",
-        "**不要**把它们当前置知识背下来：这里只给索引，正文按需读。",
+        "**你这一岗的 skills（随提示词渲染；工作区里没有 `skills/` 目录，也不要用 `fs.read` 去找它们）**：",
+        "下面每一段是一份操作手册的**全文**。先看「什么时候用」；对上了就照它做 —— "
+        "手册给的是这一档的**具体步骤**与**反面形态**（提示词只给口径，不给这些）。",
+        "**不要**把它们当成与本题无关的背景跳过：凭印象做，正是这些手册要防的那一种错。",
         "",
-        "| 名字（相对工作区根的路径） | 一句话 | 什么时候读它 |",
-        "|---|---|---|",
     ]
-    #: 共享那一槽建一次集合：原先每一行都在那份共享表里线性找一遍（比的是正文长串）。
-    #: 集合只服务"这一条是不是共享的"这一问，归属口径与 `skills_for` 一字未变。
+    from . import leanscope as _LEANSCOPE
+
+    lean_on = _LEANSCOPE.lean_on()
     shared = set(CATALOG.get(SHARED, ()))
     for s in rows:
         owner = SHARED if s in shared else str(role)
-        lines.append(f"| `{skill_path(owner, s.slug)}` | {s.summary} | {s.when} |")
-    lines.append("")
+        body = s.body.strip()
+        if not lean_on:
+            for _old, _new in NO_LEAN_SKILL_REPLACEMENTS:
+                body = body.replace(_old, _new)
+            for _old, _new in PROMPT_ONLY_NO_LEAN_REPLACEMENTS:
+                body = body.replace(_old, _new)
+        lines.append(f"### {s.title}")
+        lines.append("")
+        lines.append(f"- 名字：`{s.slug}`（属于 `{owner}`）")
+        lines.append(f"- 什么时候用：{s.when}")
+        lines.append(f"- 一句话：{s.summary}")
+        lines.append("")
+        lines.append(body)
+        lines.append("")
     lines.append("读了之后按它做；做了什么要落台账（**没有台账的那一步等于没发生**）。")
     # 这一格只写"这件事的结论以什么为准、谁安排的、回执是什么形状"，不写"别自己写"
     # 也不写"找 L"（禁令归判据：工具面没有 formal.*，越权一律 forbidden_edge）。
     # B 那一格不补这一句：它的收件通道写在 `specs/b.py` 的政策里（唯一该写全的地方）。
-    from . import leanscope as _LEANSCOPE
-
-    if (_LEANSCOPE.lean_on() and role not in _LEANSCOPE.LEAN_ONLY_ROLES
+    if (lean_on and role not in _LEANSCOPE.LEAN_ONLY_ROLES
             and role not in ("B", "E")):
         lines.append("**形式化以 V 的签与 B 的台账为准**：要不要做由**用户**指定；"
                      "指定之后每一条由 **B** 逐条安排（一条才做一条），回执"
@@ -4399,12 +4435,17 @@ def index_block(role: str) -> str:
 
 
 def materialize(root: str | pathlib.Path) -> list[str]:
-    """把目录里的每条 skill 写到 `<root>/skills/<角色>/<slug>.md`；返回新写或改写的路径。
+    """把目录里的每条 skill 写成 `<root>/skills/<角色>/<slug>.md`；返回新写或改写的路径。
 
-    幂等：内容与盘上逐字节相同就不写（免得每次开跑都把工作区搅一遍）。
+    生产路径不再调用它（2026-11-22 业主裁定「skills 应该在系统内而非在工作区」）：
+    模型读到的手册由 `index_block` 随提示词渲染。本函数只保留给自检 / 导出
+    （`tests/` 与运维要把正文摊到盘上时显式调用）—— 调用它是调用方的选择，
+    默认的开跑路径（`host.wired_llm_conductor`）一个字节都不往工作区写。
+
+    幂等：内容与盘上逐字节相同就不写（免得每次导出都把目标目录搅一遍）。
 
     由 Lean 开关决定存在性的角色，开关关着时一份都不落盘 —— 落在
-    `<工作区>/skills/<角色>/` 里的手册是用户看得见的东西，
+    `<导出根>/skills/<角色>/` 里的手册是看得见的东西，
     那里出现 `skills/L/…` 就等于"L 今天存在、只是没派活"。
     """
     from . import leanscope as _LEANSCOPE
@@ -4668,13 +4709,13 @@ def _body_action_problems() -> list[str]:
 #: 加新落点时同时加这里（这一条是那件事的机器形态；判据见 `_path_problems`）。
 WORKSPACE_PATH_ROOTS: tuple[str, ...] = (
     "out/",          # 框架的产物区（论文、审校报告、任务全文、秘书台账）
-    "documents/",    # 稿件行登记的可读正文（`build_document` 的 default_subdir）
-    "reports/",      # 研究手稿与攻坚台账（D / F 的落点）
+    # 2026-11-22 起 `documents/` 与 `reports/` 是旧布局（不再支持）⇒ 它们不在这张表里：
+    # 正文里再点名它们就是"教模型去一个没人写的落点"，判据（`_path_problems`）会当场报出来。
     "data/",         # 台账表落盘后的那份 JSON
     "code/",         # 脚本与 Lean 源码
-    "skills/",       # 各角色的操作手册（本模块 materialize 写的）
     "notes/",        # 草稿本
-    "manuscripts/",  # 交接手稿
+    "manuscripts/",  # 正文手稿（`manuscripts/<角色>/`；旧注释说"交接手稿"已不成立）
+    "work/",         # 草稿区与交接账本（`work/<角色>/`、`work/handoffs.jsonl`，2026-11-22）
     "source/",       # 审阅型工作区的只读基线
     "verifications/",  # V 的复核台账
     "formal/",                 # 形式化产物（论文包里的 .lean；papermapping 会点名 formal/xxx.lean）

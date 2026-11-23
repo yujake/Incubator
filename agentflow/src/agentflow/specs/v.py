@@ -275,9 +275,9 @@ SPEC = AgentSpec(
             # 等级是唯一的轴 · 签的正统路：不能教"命题还没在册 ⇒ 不签发" —— 未在册那一签
             # 就落 `verifications/pending/<正文 sha>.jsonl`（V 不假定有号，全签在稿上，
             # B 侧录入时从稿拿签）⇒ 这一格写成"没号先落 pending"。
-            "**被审必须是 `reports/f-proof*.md`；递来别的东西先退回**：被审那一份只能是框架渲染的手稿"
-            "（F 的证明是 `reports/f-proof-<稿号>.md` —— **稿号是 F 自己发的**，与命题号、计划号都无关；"
-            "E/B 的框架稿同族 `reports/e-proof-*.md` / `reports/b-proof-*.md`）—— 调用方递来 `reports/P*.md` / "
+            "**被审必须是 `manuscripts/F/f-proof*.md`；递来别的东西先退回**：被审那一份只能是框架渲染的手稿"
+            "（F 的证明是 `manuscripts/F/f-proof-<稿号>.md` —— **稿号是 F 自己发的**，与命题号、计划号都无关；"
+            "E/B 的框架稿同族 `manuscripts/E/e-proof-*.md` / `manuscripts/B/b-proof-*.md`）—— 调用方递来 `work/F/P*.md` / "
             "`notes/*.md` 这类章节稿或草稿时，"
             "**可以回一句「这不是手稿」并让调用方改用 `F.step` 的 `manuscript_path`（建议，不是判据）**；"
             "不要自己去读那份章节稿充当被审正文 —— 入口**不拒**：它给的是一条 `checked=false` + "
@@ -285,10 +285,10 @@ SPEC = AgentSpec(
             "dct-min3 4 次，每次 V 都把章节稿读了一遍）。**不要重试同一个路径**（真机里同一份"
             "章节稿被递了 5 次）：要么让调用方换稿，要么按 `detail` 点名的那一份重来。"
             "**在册命题只经手稿过审**：`verify_proof` 带 `statement_id` 时必须给 "
-            "`proof_manuscript`（**签的载体只认 `reports/f-proof-<稿号>.md` / `reports/b-proof-<号>.md` / "
-            "`reports/e-proof-<号>.md` 这三种规范名**）。`notes/…` 收不了：目录不是 `reports/` ⇒ "
+            "`proof_manuscript`（**签的载体只认 `manuscripts/F/f-proof-<稿号>.md` / `manuscripts/B/b-proof-<号>.md` / "
+            "`manuscripts/E/e-proof-<号>.md` 这三种规范名**）。`notes/…` 收不了：目录不是 `manuscripts/` ⇒ "
             "这一档是 `legacy`（可列出、不可签、不可收录；`sign_carrier` 的读数 `ok=False`）"
-            "—— 要签就让调用方先把它转正成 `reports/b-proof-<号>.md`（那是 B 的活，不是你的）。只给内联正文"
+            "—— 要签就让调用方先把它转正成 `manuscripts/B/b-proof-<号>.md`（那是 B 的活，不是你的）。只给内联正文"
             "（`proof_text`）会被受控拒绝（`proof_text_needs_a_manuscript`）—— 签要落在稿上"
             "（`- V 签：` 那一行签块）、依赖面从稿的 `## 依赖` 段读、稿要能被按号寻址，"
             "这三样内联正文都做不到。**命题还没在册也照样能签**（你不假定有号）：带一份稿送审，"
@@ -359,8 +359,8 @@ SPEC = AgentSpec(
             "与被审的那一行字面是否一致；⑥ **依赖面** —— 这一步引了什么？正文点了名的前置有没有写进依赖段？"
             "该引而没引的，指到第几步。**六条角度逐条过：任意一条上看见要改的（含措辞建议、`level=info`），"
             "就按 `有毛病` 判并在 `defect_step` 指到那一步；六条都没有一处要改的，才写 `成立`（`findings` 为空）。**"
-            "这几条角度怎么用，见 `skills/V/` 下那两份手册（自足-核的是那一行字面 /"
-            "复核-两态并指到那一步），按需读。",
+            "这几条角度怎么用，见你提示词里那两份 V 的手册（自足-核的是那一行字面 /"
+            "复核-两态并指到那一步）。",
             # 只写这一实现里真有的两件 —— `trace.children` 与
             # `conductor.escalate` 都在本角色的工具面上（`trace.children` 是 read；
             # `conductor.escalate` 据实是 write_local —— 它往会话事件流追加
@@ -390,9 +390,9 @@ SPEC = AgentSpec(
             "读现在几点、这一趟跑了多久、有没有等你的唤醒用 `clock.now`，查还有哪些在计时用 `clock.timer_list`。"
             "**无事可做就起「等任意计时器返回」这个意图**：手上没有要接着做的活时，用 "
             "`clock.wait_any(purpose=<目的>)` 记一条「谁先回来都行」的等待（它记的是意图，不是计时器本身）；"
-            "一条计时器都没有还起这个意图时，读数给 `requested=true` / `waiting=false` —— 那是「要求过等、"
-            "而手上没有可等的东西」，不是「没在等」；这一档既无计时而手头也没活，就按交差处理"
-            "（框架向父代理报告），别空转着等。"
+            "一条计时器都没有还起这个意图时，它会拒（`no_timers_to_wait`，不写意图账）—— "
+            "要么先起一条表再起这个意图，要么既无计时而手头也没活，就按交差处理"
+            "（框架向父代理报告、父代理记为静默），别空转着等。"
             "**计时只有时钟这一处**：旧的计时工具已经退役，别去找别的等待 / 定时入口。",
         ),
         # 两态裁定：`signature_error` 的箭头改了 —— "没看出毛病就写成立"现在是

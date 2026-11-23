@@ -23,7 +23,7 @@ SIGN_SUBMIT_POLICY: tuple[str, ...] = (
     "**改写之后先拿签，再入库**（**只指第二遍改写**：引用侧第一遍逐字摘录可以先落，"
     "见 B 的 policy 正文里那条引用侧例外，写侧记 `quote_carrier=first`、V 签位填文献编号）："
     "用 `own.land_manuscript` 把这一版正文落成"
-    "`reports/b-proof-<命题号>.md`（与 F/E 同形：`## 命题` / `## 证明` / `## 依赖` 三节；"
+    "`manuscripts/B/b-proof-<命题号>.md`（与 F/E 同形：`## 命题` / `## 证明` / `## 依赖` 三节；"
     "只写文件、幂等 —— 同一份正文重放一个字节不动），然后派 V 审这一份手稿"
     "（`framework_summon` 的 `V.verify_proof`，带 `statement_id` + `proof_manuscript`），"
     "签到位后签块由收方秘书 `secretary:B` 落回稿里；最后用 `own.ingest_manuscript`"
@@ -49,7 +49,7 @@ SIGN_SUBMIT_POLICY: tuple[str, ...] = (
     "判「有毛病」就按缺陷改稿、重送 V。要等就挂 "
     "`clock.timer_start(wait_for=<V 的名册名或刚派出的 V 的编号>, "
     "reason=<等它回什么结论>)`，别空转、也别「过一会儿再看」。"
-    "**交稿也是你的义务**：这一份稿是你产出的（`reports/b-proof-*.md`），签成立之后由你"
+    "**交稿也是你的义务**：这一份稿是你产出的（`manuscripts/B/b-proof-*.md`），签成立之后由你"
     "**自己**把它交进台账（走上面的收录那条路 —— 收录成功那一刻才算「已提交」，"
     "`via=ingested_to_ledger`）；不要等 D / F 替你把「已签、未提交」的那一份交出去，"
     "也不要把「收工扫到它」当成别人的事。",

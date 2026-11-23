@@ -405,9 +405,9 @@ SPEC = AgentSpec(
             "读现在几点、这一趟跑了多久、有没有等你的唤醒用 `clock.now`，查还有哪些在计时用 `clock.timer_list`。"
             "**无事可做就起「等任意计时器返回」这个意图**：手上没有要接着做的活时，用 "
             "`clock.wait_any(purpose=<目的>)` 记一条「谁先回来都行」的等待（它记的是意图，不是计时器本身）；"
-            "一条计时器都没有还起这个意图时，读数给 `requested=true` / `waiting=false` —— 那是「要求过等、"
-            "而手上没有可等的东西」，不是「没在等」；这一档既无计时而手头也没活，就按交差处理"
-            "（框架向父代理报告），别空转着等。"
+            "一条计时器都没有还起这个意图时，它会拒（`no_timers_to_wait`，不写意图账）—— "
+            "要么先起一条表再起这个意图，要么既无计时而手头也没活，就按交差处理"
+            "（框架向父代理报告、父代理记为静默），别空转着等。"
             "**计时只有时钟这一处**：旧的计时工具已经退役，别去找别的等待 / 定时入口。",
             # 主动性口径：每一类下载失败的正确处置不同，把它们都归到「这篇找不到」会让
             # 只有元数据的文献被当成「本来就没有」。这一句是提示词口径，不是判据；
@@ -473,6 +473,22 @@ SPEC = AgentSpec(
     write_set=frozenset((
                      'literature',
                      'search_requests',
+                     # 2026-11-22（WRITESETFIX）：`lit_candidates` 是 A 的**实际写点**，
+                     # 改前漏在写集外 —— 写集是并发轴的读数（`policy.estimate_write_conflict`
+                     # 按它算冲突对），漏一张表就漏算冲突。
+                     # 证据（符号名，不写行号）：`agent_a/run_once.py` 那笔事务
+                     # `self.store.tx("search_requests", "literature", "lit_candidates", …)`
+                     # 里经 `litstage.stage_entries` / `litstage.apply_settlement` 落候选行；
+                     # `litstage.py` 的七处 `tx.upsert("lit_candidates", …)` 是唯一写口
+                     # （写入口只从 `agent_a/` 进：`closing.py` 只调它的读数、
+                     #  `tools/table_tools.py` 只 import 它的异常类型 `LitStageError`）。
+                     # 真机 `projects/lp-ball-15`
+                     # 的 `data/events.jsonl` 里 A 系 actor 写了 219 条 `lit_candidates` 事件
+                     # （`agent-A` 31 + `agent-A-A1` 96 + `-A2` 30 + `-A3` 18 + `-A4` 25 + `-A5` 19），
+                     # 而改前 `WRITE_SETS["A"]` 只有 {literature, search_requests}。
+                     # 它不是"可能写"的条件档：`run_once` 的暂存→判收→提交三步全都写这张表。
+                     # 判据：`tests/test_write_sets_match_their_write_points.py`。
+                     'lit_candidates',
                  )),
     class_path='agentflow.agent_a:AgentA',
     actions=ACTIONS,

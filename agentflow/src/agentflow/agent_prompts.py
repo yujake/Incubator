@@ -26,13 +26,14 @@ from . import persona as P
 from . import policy as POL
 from . import schema as S
 from . import specs as _SPECS_PKG
+from . import toolface as _TF
 #: A 的「检索式怎么给」那一段的正文（真身 = `specs/a.py::SEARCH_STYLE`）。
 #: 2026-11-22（PRESETRETIRE）：它此前由 `presets/a/blocks/search_style.md` 经预设机制
 #: 注册成 `A_SEARCH_STYLE` 段；预设退役之后正文回到 A 的声明文件，这里只是把它挂进
 #: 同一条渲染链（位置仍是 `SECTION_ORDERS["A_SEARCH_STYLE"]`，渲染逐字节不变）。
 from .specs.a import SEARCH_STYLE as _A_SEARCH_STYLE
 from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDERS
-PROMPT_VERSION = "p315"
+PROMPT_VERSION = "p325"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：
@@ -138,7 +139,7 @@ LOOP_PROTOCOL = """\
    必填 `to`/`summary`/`body`（空手稿是"我交接了"的假证据）；编号由框架分配，你不编。
    写错了一份要**订正**：加一格 `revises` 写清订正哪一号 —— 旧行**保留**、新行是一份订正，
    读的人看得到两行（这是"改了哪一版"的唯一痕迹，别用新编号重写一份冒充"第一次就写对了"）。
-   写进工作区根 `manuscripts/handoffs.jsonl`，并顺手把"编号 + 那一句话"发给 `to`
+   写进 `work/handoffs.jsonl`，并顺手把"编号 + 那一句话"发给 `to`
    （广播 `ALL` 已退场：`to=ALL` 会被受控拒绝 `broadcast_retired`，手稿一行不写；
    旧数据里的广播行仍读得出来）。`note` 是**盘上的文件**：追加写进 `notes/<你的角色号>.md`
    （收工后仍在；别的角色不会在自己的提示词里读到它，但它是文件），
@@ -742,15 +743,20 @@ FACULTY_LAYERS: dict[str, tuple[str, str]] = {
 #: `autonomy.run_autonomous` 四条被写成工具样式，而 123 件工具里一件都没有；照字面调
 #: 只会拿 `unknown_tool`）。判据：`tests/test_tool_summaries_only_name_tools_the_role_has.py`。
 STRUCTURE_NOT_PROMPT: tuple[tuple[str, str], ...] = (
+    # 实现落点只留在注释里（业主 2026-11-22 口径：角色不需要知道工具的具体实现）：
+    # 「谁能写数据」的调用期判据是 `tools/base.py` 的 `_role_surface`（`for_role` / `call` /
+    # `_callable_for` 三处共用的私有谓词）；模型面只说"调用期再判一次"。
     ("谁能写数据", "只读角色对其它智能体的产出只读（写工具只落在自己侧的产物与簿记上），"
-                 "且调用期再判一次（`tools/base.py` 的 `_role_surface`）"),
+                 "且调用期再判一次（同一份只读判据在调用时也会拦住，不只靠工具清单）"),
     ("谁能唤起谁", "`capabilities.ALLOWED_EDGES` 与 policy 模块的判据（边/深度/扇出/并发/预算）—— 这是结构，不是工具"),
     ("引文是否逐字可达", "由 quoteverify 模块逐字回验，不通过就标出来（机制，不是工具）"),
     ("自报的「proof 级」证据", "一律按凭据降级：计算类最多 `strong_conjecture`（`evidence_kind` 只是历史列）"),
     ("交叉验证的免责声明", "由结构强制填、H 精确匹配该常量"),
     ("没查成与查成了", "`judge.JUDGE_PROBLEMS` 三态词表 + `llmseam` 的落档"),
     ("越预算", "`llmseam` 在发起请求之前拒；`policy` 在召唤之前拒"),
-    ("私聊的准入", "`agent_loop._do_message` 按协作边判，无边的当场拒"),
+    # 「私聊的准入」的实现落点 = `agent_loop._do_message`（按协作边判、无边的当场拒）；
+    # 模型面不点这个内部方法名，只说"判在投递那一刻"。
+    ("私聊的准入", "按协作边判，无边的当场拒（判在投递那一刻，不是只在派活时判）"),
     ("只有用户能定的取舍", "把问题送进用户频道并等回答（走循环形状 `{\"ask_user\": …}`，不是工具）；"
                           "等不到就是 `user_no_answer`（不是默许），迟到的回答照样会被捞出来"),
     ("放手后的自主轮与汇报", "框架侧的自主轮：轮次上限 + 每 N 轮一次公共汇报 + "
@@ -906,7 +912,7 @@ FACULTY_LOCAL: dict[tuple[str, str], str] = {
     ("H", "敢创新"): "不改稿、不新增论断：你是判定者，不是作者。",
     ("M", "眼睛"): "你读的是台账、状态与角色的产出，不是原始文献。",
     ("M", "手"): "手用在两处：派活（conductor.summon / summon_many）与写交付说明"
-                 "（out/review/REPORT.md）；领域对象（文献 / 概念 / 关系 / 实验 / 稿件）"
+                 "（out/report/REPORT.md）；领域对象（文献 / 概念 / 关系 / 实验 / 稿件）"
                  "仍由角色出品 —— 你有笔，但没有知识表的写面。",
     ("M", "耳朵"): "角色回来的结论与拒绝理由决定下一步派谁 —— 被拒不是失败，是信息。",
     ("M", "能互动"): "你是用户的接口：关键取舍用 ask_user 交回用户（等不到不许当默许），放手跑多轮时按轮次阶段性汇报。",
@@ -982,11 +988,12 @@ EVIDENCE_CONTRACT = """\
 #: 这一段只对碰论文的角色成立（M 统筹交付、G 写正文并编译、H 审校），
 #: 对 A/B/C/E/F 说是噪音 —— 而噪音会稀释它们真正要看的东西。
 #:
-#: 段里的每一句都能在工作区里核对：正文是 `out/paper/main.tex`、编译回执是
-#: `out/paper/COMPILE-RECEIPT.json`（收工门 `paper` 那一格读的就是它）；审阅型工作区
-#: 另有一份人给的判据表 `out/paper/ACCEPTANCE.md`（十行 P1–P11），从零研究那一类的
+#: 段里的每一句都能在工作区里核对：正文是 `out/package/main.tex`、编译回执是
+#: `out/package/COMPILE-RECEIPT.json`（收工门 `paper` 那一格读的就是它）；审阅型工作区
+#: 另有一份人给的判据表 `out/package/ACCEPTANCE.md`（十行 P1–P11），从零研究那一类的
 #: 两份验收表由 M 自己写。写在这里的是"去哪看、看什么"，不是另立一套标准 ——
-#: 两份判据必然漂移。
+#: 两份判据必然漂移。（2026-11-22 B2b-2 把 `out/paper/` 整层挪到 `out/package/` ⇒
+#: 本注释与 M 的 policy 例子里那两处旧目录名随 B4/p317 一起改。）
 #:
 #: 2026-10-13 退场（业主裁定逐字：「paper_package 里那些东西都是古早废案了，我们要智能体
 #: 写文章」）：这一段原先假定项目自带一对渲染/编译脚本（`code/make_paper.py` /
@@ -1000,19 +1007,19 @@ PAPER_PACK = """\
 
 一、交付物是什么：**由智能体自己写出来的论文正文**，不是核验结果
 - **正文由 G 写**（业主 2026-10-13 裁定，逐字：「……我们要智能体写文章」）
-- **正文与附录都写在 `out/paper/main.tex` 这一份里**（附录也写进去：`appendix.tex` 不是单独的落点）；**没有"建论文包"这个动作**，也不要派渲染/核锚 —— 正文由 G 写，PDF 由 G 调 `doc.paper_compile` 编（那一件只在他面上）。——**但只在成文阶段写**：题面没说「整理成论文 /
+- **正文写在 `out/package/main.tex`；附录要么写进这一份，要么单独写成片段并被 `main.tex` `\\input` 进去**（整篇独立文档（含 `\\documentclass`）的 `appendix.tex` 不接受）；**没有"建论文包"这个动作**，也不要派渲染/核锚 —— 正文由 G 写，PDF 由 G 调 `doc.paper_compile` 编（那一件只在他面上）。——**但只在成文阶段写**：题面没说「整理成论文 /
   交付论文 / 稿件」时这一节与你无关（研究阶段只积累研究手稿、命题与证明）。项目根 `projects/<项目名>/`，工作区里
-  `out/paper/main.tex` **就是论文本体** —— 从零研究那一类工作区里它由 G 用 `fs.write`
+  `out/package/main.tex` **就是论文本体** —— 从零研究那一类工作区里它由 G 用 `fs.write`
   一段段写出来（散文体、章节自己排、`\\cite` 与定理环境随正文定）；审阅型工作区里它是
   盘上已有的那份正文，**该改的是 G**。**你不写正文**：你读正文与回执 → 核对 → 把不对的地方落成 finding（H）或派回 G（M）；落笔只由 G 做。
 - `source/`（审阅型工作区里的基线稿）是**只读基线**：它是用来做前后对比的，
-  一个字节都不许改；可改、该改的是 `out/paper/main.tex`。
+  一个字节都不许改；可改、该改的是 `out/package/main.tex`。
 - 交付物的定义只有一句话：**读者拿到的应当是一篇更好的论文**。核验、证据等级、台账表
   都是手段与附录 —— 把它们堆成主产物，等于交了一份勘误记录，那不是交付。
 - 每次改动都要留下"依据"（引文片段 / 实验 id / 检查器原话 / 论文内部矛盾在哪），
   一句话即可，但要能被读者核对。改不了、核不到、拿不准的，如实写成"未核到"或
   "维持原样"，不许把没做的事写成做了。
-- **`out/paper/main.tex` 一份就是全部正文**：要附录、要表就自己写进去。
+- **`out/package/main.tex` 一份就是全部正文**：要附录、要表就自己写进去。
   （台账表不必塞进正文 —— 正文是给读者读的论文，台账归工具面与附录。）
 - **外部论文不是我方稿件**（`draft/37` §41/§43 的用户裁定，方案 A）：盘上拿到的、别人写的那份稿子，
   登记走 A（`literature`，`search.ingest_local` / `search.register`）与 B（`statements`，
@@ -1029,7 +1036,7 @@ PAPER_PACK = """\
   claims 的外部论文去当 `documents` 行用。
 
 二、验收表就是 P1–P11，交付说明必须逐条对齐
-- 判据表在 `out/paper/ACCEPTANCE.md`：十行（P1–P7 各一行，P8、P9、P10/P11 各一行），
+- 判据表在 `out/package/ACCEPTANCE.md`：十行（P1–P7 各一行，P8、P9、P10/P11 各一行），
   每行三列「名称 / 结论 / 读数」。主控用 `conductor.acceptance` 读它；
   `G` / `H` 没有这一件工具（它只发给主控）—— 你们直接 `fs.read` 那个文件。
 - 一次读不完就按批读（`ids=['P5','P6','P7']`）—— 工具结果被上下文预算剪枝时，
@@ -1049,7 +1056,7 @@ PAPER_PACK = """\
 - **没有 Lean 时论文照样要写得出来**（业主 2026-10-12）：「写论文那一档原先卡每个定理都要到
   proof 水平，但没 Lean 显然做不到，但也要能写」。那一档的用词上限是等级 **`pre_theorem`**
   （历史列名 `proof_review`）：
-  一份证明的正文由 B 从**手稿**（`reports/f-proof-*` / `b-proof-*` / `e-proof-*`）收进
+  一份证明的正文由 B 从**手稿**（`manuscripts/F/f-proof-*` / `manuscripts/B/b-proof-*` / `manuscripts/E/e-proof-*`）收进
   `statements` 表的 `proof_text` 列、并由 V 的 `verify.verify_proof`（带 `proof_manuscript`，
   在册也给）逐行走查签了「成立」—— 这类断言可以写「定理 / 证明」，
   **但必须带那句声明**（`disclaimer`：逐行审阅过的证明，未经机器检查），
@@ -1061,9 +1068,9 @@ PAPER_PACK = """\
 - 主稿保持**论文自己的体例**：正文是给读者读的论文，改它的时候不要为了塞台账去换文档类、
   也不要把台账表塞进正文（台账归工具面与附录）。
 - **工作循环**（G 三步；M / H 只走第 ① 步，把读到的东西拿去核对 —— 写与编都不是他们的动作）：
-  ① `fs.read` 读盘上这一份正文与 `out/paper/COMPILE-RECEIPT.json`（上一轮的回执）—— 这一步三个角色都走；
+  ① `fs.read` 读盘上这一份正文与 `out/package/COMPILE-RECEIPT.json`（上一轮的回执）—— 这一步三个角色都走；
   ② G 用 `fs.write` 改正文（或第一次把正文写出来）；
-  ③ G 调 `doc.paper_compile` —— 它**在框架内**编出 `out/paper/main.pdf` 并写一份框架自己产的
+  ③ G 调 `doc.paper_compile` —— 它**在框架内**编出 `out/package/main.pdf` 并写一份框架自己产的
   回执。回执没记上 G 刚写的那一份（`tex_sha256` 对不上）就说明 PDF 是旧正文编的，G 重编一次。
 - 页数与引擎退出码**分两栏读**：本机 MiKTeX 会写完 PDF 却以 `0xC0000409` 退出 ⇒
   判据是回执里的产物读数（`pages` / `pdf_bytes` / 回执与 tex 是否一致），不是退出码。
@@ -1072,9 +1079,9 @@ PAPER_PACK = """\
   H 用 `fs.read` 读回执本身（`ok` / `tex_sha256` / `pages`），并在报告里写明
   "这是 G 的读数"还是"我自己核了哪几样"。
 - **H 审论文：审什么、在哪，靠派活告诉它**（业主 2026-10-13：「H 要能对论文进行只读审核，
-  至于论文在哪可在派活时告诉它」）：M 派 H 审正文时要把落点写进派活（`out/paper/main.tex`
+  至于论文在哪可在派活时告诉它」）：M 派 H 审正文时要把落点写进派活（`out/package/main.tex`
   与 `main.pdf`），H 用 `fs.read` 只读读它、一个字都不改；审校报告由 `review_report` 落到
-  **框架定的** `out/review/<doc_id>-review.md`（H 不挑路径），**验收表**里 `kind=review_files`
+  **框架定的** `out/report/<doc_id>-review.md`（H 不挑路径），**验收表**里 `kind=review_files`
   那一行数的就是它（验收表没声明这一行 ⇒ 这一档没有读数）。**成文阶段所有角色都可能有任务**：正文里的瑕疵要回去补（补证据 D/F、
   核引文 A/B、重算关系读数 C、逐行审阅 V）—— 别把「写论文」读成只有 G/H 的事。
   而**审校这条链的中心是 B / H / V**（业主 2026-10-13：「review 不是一种模式，显然应该是以 B、
@@ -1088,8 +1095,8 @@ PAPER_PACK = """\
 它会在读数里逐格点名，这里不重抄，同样以它的当次读数为准。**`paper` 不在门里**（2026-11-14 业主裁定：是否出 paper 由 M 自己判断时机）：
 它是 `readings["paper"]` 那一格读数，不是判据 —— 但"正文与 PDF 对得上"仍要自己核、如实写进交付说明。
 **blocker 有两类，读法不同**：① **格外 blocker（不落在任何一格上，八格全绿也照样拦）**：`mapping_not_written` ——
-有命题、交付的是**论文包**（盘上有 `out/paper/main.tex` / `main.pdf`，或 `documents` 里有 `kind=paper` 的行）而
-论文包里没有对应表（`closing` 读数 `mapping_written` 那一格）；交付**研究手稿**（`documents` 只有 `kind=note/survey`）
+有命题、交付的是**论文包**（盘上有 `out/package/main.tex` / `main.pdf`，或 `documents` 里有 `kind=paper` 的行）而
+论文包里没有对应表（`closing` 读数 `mapping_written` 那一格）；交付**研究手稿**（`documents` 里是 `kind=note/survey/research` 之一，词表真身见 `schema.DOC_KINDS`）
 **不需要**对应表 —— 那一档 `applicable=false`、不欠表，也不许为了凑它去写一份空表。② **格上 blocker（把那一格判成 `fail`）**：
 `acceptance_unmet` 落在 `acceptance` 那一格；`paper_pdf_is_stale` 不再是格上 blocker —— 它是 `readings["paper"]` 的读数
 （`verdict` 记 `drifted`，改完正文没重编），由 M 判断要不要在收工时补编。
@@ -1101,8 +1108,8 @@ PAPER_PACK = """\
 —— 但那是**义务**，不是门的开关；别把清单读成「门没开」。
 只要 `closing` 的读数里 `blockers` 非空，就不算交付。
 1. **正文与 PDF 对得上**（`readings["paper"]` 那一格，判据只有一条）：编译回执里的
-   `tex_sha256` 等于盘上这一份 `out/paper/main.tex` 的摘要 —— 那才叫"这份 PDF 是从盘上
-   这份正文编的"。四种读数各有各的名字，不许折平：盘上根本没有 `out/paper/main.tex`
+   `tex_sha256` 等于盘上这一份 `out/package/main.tex` 的摘要 —— 那才叫"这份 PDF 是从盘上
+   这份正文编的"。四种读数各有各的名字，不许折平：盘上根本没有 `out/package/main.tex`
    ⇒ 记 `not_applicable`（没写正文，不是"写坏了"）；有正文而回执不是它的 ⇒
    读数里 `verdict="drifted"`（`paper_pdf_is_stale`：PDF 是旧正文编的）；回执读不到或摘要算不出 ⇒ `unknown`
    （没查成，**不是**通过）。
@@ -1116,15 +1123,15 @@ PAPER_PACK = """\
 5. 交付说明里十条判据逐条有读数，**且基线 `source/` 逐字节未改**。
 
 六、收工前的最后一条：**改了正文就要重编**
-- 只要这一轮动过 `out/paper/main.tex`，盘上那份 `main.pdf` 就已经是旧的了 —— 收工读数
+- 只要这一轮动过 `out/package/main.tex`，盘上那份 `main.pdf` 就已经是旧的了 —— 收工读数
   会报 `paper_pdf_is_stale`（"这份 PDF 是从旧正文编的"），第 1 条也就不成立。
 - 收工之前必须再调一次 `doc.paper_compile`，让回执对上盘上这一份正文（这一步**只有 G
   跑得动**，见上面「四」）；做不到就如实写"正文改了、PDF 没跟上"，不许把这件事留在一份
   写着"已完成"的交付说明里。
 - **怎么派**：论文正文由 G 自己写（没有"建论文包"这一步）——
   正文由 G 自己写、PDF 由 G 自己调 `doc.paper_compile` 编。反例：`G.build_document` /
-  `G.revise` / `G.refresh_markdown` / `G.render` 动的是**稿件 markdown**（`documents/<id>.md`），
-  它们既不改 `out/paper/main.tex`、也编不出 PDF。
+  `G.revise` / `G.refresh_markdown` / `G.render` 动的是**稿件 markdown**（`manuscripts/G/<id>.md`），
+  它们既不改 `out/package/main.tex`、也编不出 PDF。
 - 重编的**时机**：最后一次改正文**之后**再编一次；改正文之前编出来的回执是关于旧正文的读数。
   真机踩过的坑：会改稿的人先全部收工、最后一步才发现 PDF 是上一版编的 —— 于是那份写着
   "已完成"的说明与盘上的产物对不上。
@@ -1140,8 +1147,8 @@ PAPER_PACK = """\
   核不到就说核不到（`import_unavailable` / `decl_mismatch` / `unknown` 都不是证否）。
 - **「形式化已关闭」那一档的替代路线**（第一行读数说「已关闭」时走这条）：
   这条路换成**自然语言逐行审阅**，交付形状是：
-  1. 证明过程逐字由框架落成一份手稿（F 的 `reports/f-proof-<稿号>.md` / E 的
-     `reports/e-proof-<实验号>.md` / B 的 `reports/b-proof-<命题号>.md`；含假设、每一步依据、
+  1. 证明过程逐字由框架落成一份手稿（F 的 `manuscripts/F/f-proof-<稿号>.md` / E 的
+     `manuscripts/E/e-proof-<实验号>.md` / B 的 `manuscripts/B/b-proof-<命题号>.md`；含假设、每一步依据、
      你接不上的那一步）；
   2. **派 V 是产出方（F / E / B）自己的动作，不是你的** —— 你（M / G / H）的伙伴表里
      没有到 V 的边（能不能直呼谁，逐格以伙伴表为准；它由 `capabilities.ALLOWED_EDGES`
@@ -1175,7 +1182,7 @@ PAPER_PACK = """\
 - 写哪几节、按什么顺序、每节多长，你按这一趟的任务判断：先声明体例（见下一条），
   框架核的是**你声明的体例有没有兑现**。
 - 声明的落点是一份机器可读的小文件（**工作区相对路径**，用 `fs.write` 写，默认不覆盖）：
-  `out/review/REPORT-STYLE.json`，形状只有一件事 —— 节名列表：
+  `out/report/REPORT-STYLE.json`，形状只有一件事 —— 节名列表：
   `{"sections": ["一、任务与范围", "二、逐条读数", "..."]}`。
   你声明了哪几节，收工门就逐节核它们**在报告里（按你写的小标题）出现没有**：缺一节那一格就红。
   这**不是**让你凑节名 —— 声明是把"这一趟我打算怎么组织说明"先说清，之后照它兑现。
@@ -1184,11 +1191,11 @@ PAPER_PACK = """\
 - 与体例无关、仍然成立的三条：
   - 报告里点到的每一行台账必须真的在盘上（下面那条长注记就是这条的来历）；
   - 附件三件套要在报告里可见：`origin=own_result`、`依据`、`sha`；
-  - 报告落点只有一处：`out/review/REPORT.md`（用 `fs.write`；它默认不覆盖，
+  - 报告落点只有一处：`out/report/REPORT.md`（用 `fs.write`；它默认不覆盖，
     重写要 `overwrite`）。
 - `conductor.closing` 仍要跑（它是收工门）：两个参数都给对 —— `project_dir` 是项目根
-  （这个工作区就是根 ⇒ 给 `"."`；给了 `out/paper` 它会把 `out/paper` 再拼一次），
-  `report_path` 给 `out/review/REPORT.md`。它报出来的缺口按原因行读。
+  （这个工作区就是根 ⇒ 给 `"."`；给了 `out/package` 它会把 `out/package` 再拼一次），
+  `report_path` 给 `out/report/REPORT.md`。它报出来的缺口按原因行读。
   **它给的是这一趟能不能交的唯一结论**（`closing_verdict`）：八格全 pass ∧ 你交的
   `m_says_done`（`goal_met` + `task_list`）∧ 名册全部销号 ∧ 程序都停了 ∧ 没有 blocker。
   `can_close` 是那份结论的三态出口：`null`（没查成）**不是通过**，`false` 也不是
@@ -1226,7 +1233,7 @@ _PAPER_PACK_STYLE_M = ('八、交付说明的体例由你（M）裁定（R9 / �
 #: 无人值守那一条 —— 那一条是 G/H 也要读的纪律，判据里点名要它在场，所以不能跟着删）。
 _PAPER_PACK_EIGHT_OTHERS = """\
 八、报告体例由 M 裁定 —— **不是你的活**
-- 写哪几节、顺序、每节多长都由 M 定（M 把它声明的体例落到 `out/review/REPORT-STYLE.json`）：
+- 写哪几节、顺序、每节多长都由 M 定（M 把它声明的体例落到 `out/report/REPORT-STYLE.json`）：
   **G 按它写、H 按它审**。那份文件不归你写，`conductor.closing` 也不归你跑（它是 M 的收工门）。
 - 与你有关、仍然成立的两条：报告里点到的每一行台账必须真的在盘上；G 的附件三件套要在报告里
   可见（`origin=own_result`、`依据`、`sha`）；H 的 findings 全部落 `review_findings` 台账。
@@ -1528,11 +1535,16 @@ def _params_hint(spec: Any, *, drop: tuple[str, ...] = ()) -> str:
             bits.append("可选 " + "、".join("?" + k for k in opt))
     return "（" + "；".join(bits) + "）"
 def tools_lines(role: str, registry: Any) -> list[str]:
-    """工具面逐条：名字 + 摘要 + 参数（只列必填，可用键见被拒时那张表）+ 副作用。"""
+    """工具面逐条：名字 + 三段（能力 / 场景 / 例 + 代码）+ 参数 + 副作用。
+
+    三段由 `tools/base.face_text` 一处渲染 —— 与 `llmseam.build_tool_face` 的
+    description 同源；这里再拼一套，模型在提示词里读到的与 function-calling 里
+    读到的就会是两句话（2026-11-22 业主三段格式的唯一渲染口径）。
+    """
     out: list[str] = []
     for spec in _specs_for(role, registry):
         side = getattr(spec, "side_effect", "none")
-        out.append(f"- {spec.name}：{spec.summary}{_params_hint(spec)}；副作用 {side}")
+        out.append(f"- {spec.name}：{_TF.face_text(spec)}{_params_hint(spec)}；副作用 {side}")
     return out
 def conductor_tool_count(role: str, registry: Any) -> int:
     """该角色工具面上 conductor.* 有几件（现算：加了工具提示词自己会跟上，不写死数字）。"""
@@ -1867,8 +1879,8 @@ def partners_lines(role: str, availability: Mapping[str, str] | None = None) -> 
         # 那这套循环对 V 是不是死的？不是 —— 调用方可以用 `--drive V.<动作>` 把 V 当循环角色
         # 驱动。所以这一句的落点不是"删掉协议"，而是把两个入口的关系说清：
         # 只讲循环会让读的人（或模型）以为"V 的日常就是跑这套循环"。
-        out.append("你的**真实入口**不是这套循环：V 是**一次性问答** —— 框架用 "
-                   "`verifications.cold_start_prompt` 把问题拼好直接问你一次，"
+        out.append("你的**真实入口**不是这套循环：V 是**一次性问答** —— 框架把问题"
+                   "拼好直接问你一次，"
                    "读完结论就落台账（`verifications/<命题号>.jsonl`）。"
                    "下面这一套循环形状与工具只在有人用 `--drive V.<动作>` 把你当"
                    "循环角色驱动时才用得上 —— 两种入口各照各的规矩做，"
@@ -2347,7 +2359,7 @@ def toolchain_facts_text() -> str:
             f"- Lean 形式化：**已关闭**（{where} = false）⇒ 本会话不做形式化验证（系统做不了）",
             "这台机器上的证明工具链（现算读数，不是记忆）：",
             "- 这一趟走替代路线（这条路上唯一的「审过」凭据）：证明正文先落成一份手稿（F 的 "
-            "`reports/f-proof-<稿号>.md` / E 的 `reports/e-proof-<实验号>.md` / B 的 `reports/b-proof-<命题号>.md`），再请 V 用 `verify.verify_proof` 带 **`proof_manuscript`**（在册也给）逐行走查 —— 签块落回那一份稿，结论进 "
+            "`manuscripts/F/f-proof-<稿号>.md` / E 的 `manuscripts/E/e-proof-<实验号>.md` / B 的 `manuscripts/B/b-proof-<命题号>.md`），再请 V 用 `verify.verify_proof` 带 **`proof_manuscript`**（在册也给）逐行走查 —— 签块落回那一份稿，结论进 "
             "`verifications/<命题号>.jsonl`（文件账本，不是表；还没号时先落 `verifications/pending/<正文 sha>.jsonl`，B 登记拿到号后按正文 sha 认领）；文字证明这一路本会话最高到等级 `pre_theorem`（`evidence_kind=\"proof_review\"` 是它的历史列名），"
             "所以任何断言都写成「逐行审阅」，不写「已证明」",
         ]
@@ -2438,8 +2450,8 @@ def toolchain_formal_text() -> str:
         return ("你这一岗怎么写形式化（由上面那份读数现算；读数是这一刻的，变了它跟着变）：\n"
                 "- 本会话 Lean 形式化**已关闭**（`lean_enabled=false`（`toolchain` 段））⇒ "
                 "这一趟的证明审阅走**自然语言逐行**那条路，交付形状是：\n"
-                "  1. 把证明过程逐字交给框架落成一份手稿（F 的 `reports/f-proof-<稿号>.md` / "
-                "E 的 `reports/e-proof-<实验号>.md` / B 的 `reports/b-proof-<命题号>.md`；含假设、"
+                "  1. 把证明过程逐字交给框架落成一份手稿（F 的 `manuscripts/F/f-proof-<稿号>.md` / "
+                "E 的 `manuscripts/E/e-proof-<实验号>.md` / B 的 `manuscripts/B/b-proof-<命题号>.md`；含假设、"
                 "每一步的依据、以及你没能接上的那一步）；\n"
                 "  2. 派 V（`summon` 它的 `verify.verify_proof`，交 `proof_manuscript`（在册也给）"
                 "+ 命题号）逐行走查 —— "
@@ -3033,7 +3045,10 @@ def role_prompt_registry(role: str, *, registry: Any = None,
     #: ⇒ 提示词里根本没有这件事，M 只能碰运气想起来 `fs.list source/`。
     #: 与 `toolchain_facts` 同一条既有裁定：事实必须进模型看得见的地方。
     #:
-    #: 2026-11-21（FACTSFIX）：看两个目录（`source/` 与 `library/`），种子投的是后者。
+    #: 2026-11-21（FACTSFIX）：看 `source/` 与 `library/`。
+    #: 2026-11-22（SEEDFIX）：再加上 `reference/` —— 种子投放的输入区（`seedinject.SEED_SUBDIR`）；
+    #: 它不在已登记书架上，但仍然必须出现在可见面里，否则"未收编材料=0"会因为扫不到
+    #: 而假成立（那是把"没看"读成"没有"）。
     #: 三态：读得到 `data/literature.json` 才报计数；台账不在盘上 ⇒ 返回空串（不说），
     #: 不编一个 0；台账在盘上但读不出来、或目录列不出来 ⇒ 报"没查成"。
     # 它是动态段（返回空串 = 这一段这次不存在）—— 不能用 `{{变量}}`：
@@ -3102,7 +3117,7 @@ def role_prompt_registry(role: str, *, registry: Any = None,
                         "**对用户**的接口是收工那句 `final`（例外句见上面的留痕那块）；"
                         "**对同伴**的接口是任务行（`summon` / `summon_many` 落的账）与交接手稿；"
                         f"**对框架**的接口是 `conductor.*` 那 {conductor_tool_count(role, registry)} 件读数与操作。"
-                        "交付物是一份**落在盘上**的交付说明（`out/review/REPORT.md`）——"
+                        "交付物是一份**落在盘上**的交付说明（`out/report/REPORT.md`）——"
                         "只写在对话里、没有落盘的交付不算交付。"))
     reg.section(Section("THREE_STATE", SECTION_ORDERS["THREE_STATE"],
                         "三态词表（框架用这几个码表示「没查成」，它们不等于「没有这个问题」）：\n"
@@ -3151,9 +3166,10 @@ def role_prompt_registry(role: str, *, registry: Any = None,
     # 十一种形状"什么时候用哪个"（决策表）：选择是每个角色每一步都要做的事。
     reg.section(Section("COLLAB_SHAPES", SECTION_ORDERS["COLLAB_SHAPES"],
                         COLLAB_SHAPES_TEXT))
-    # 这一岗的 skills：只放索引（slug + 一句话 + 什么时候读它 + 盘上路径）。
-    # 正文在盘上（`agent_skills.materialize` 开跑时落到工作区），角色按需 `fs.read`
-    # —— 业主 2026-10-14：「写成各智能体的 skills，以防止前置大量提示词，现做现读」。
+    # 这一岗的 skills：正文随提示词渲染（2026-11-22 业主裁定「skills 应该在系统内
+    # 而非在工作区」）；工作区里没有 `skills/` 目录，也不教模型去 `fs.read` 它。
+    # 此前只放索引、正文由 `agent_skills.materialize` 落到工作区（业主 2026-10-14
+    # 「现做现读」）；裁定把落点从工作区换回系统内，见 `agent_skills.index_block`。
     _skills = agent_skills.index_block(role)
     if _skills:
         reg.section(Section("SKILLS_INDEX", SECTION_ORDERS["SKILLS_INDEX"], _skills))
@@ -3205,7 +3221,7 @@ HANDOFF_PROTOCOL = """\
 
 - 写给谁：`to` 取名册名（如 `D1`）、绝对编号（如 `t-NNNNNN`）、角色名，或 `M`；广播 `to="ALL"` 已退场（会被受控拒绝 `broadcast_retired`），要通知多人就逐条写给人。
 - 编号：**由脚本分配**（从 `0000` 起顺次，你不需要也不许自己编号）；一份交接就是
-  工作区根 `manuscripts/handoffs.jsonl` 里的一行（追加式账本，一行一份，不覆盖）。
+  `work/handoffs.jsonl` 里的一行（追加式账本，一行一份，不覆盖）。
 - 形状：`{"handoff": {"to": "F", "summary": "...", "body": "...", "why": "...", "refs": ["0003"]}}`
   - `summary`：**一句话**，框架把它拼进发给对方的那条留言（`[手稿 0007] …`）—— 必填；
   - `body`：**markdown 正文** —— 我做了什么、依据是什么（实验号 / 文献号 / 前序手稿号）、
@@ -3215,7 +3231,7 @@ HANDOFF_PROTOCOL = """\
   - 旧名 `title` / `brief` 仍然接受（都当 `summary` 用），但新写的一律用 `summary`。
 - 框架会**同时**把留言发出去（编号 + 那句简要描述），你不需要再发一条 `message`；
   读全文用 `manuscripts.read(id="0007")`、看发给自己的用 `manuscripts.list(to="你")`
-  （主控 M 没有这两件工具 —— 它的读面是 `fs.*`：直接读 `manuscripts/handoffs.jsonl`
+  （主控 M 没有这两件工具 —— 它的读面是 `fs.*`：直接读 `work/handoffs.jsonl`
   这个追加式账本，一行一份）。
 - 为什么值得这么做：徒手传信息时，"派活依据"只活在对话里；写了手稿之后，
   **每一跳都能被第三方从盘上复核**（谁在什么时候把什么交给了谁、依据是哪几个编号）。
@@ -3431,6 +3447,26 @@ def _local_materials_not_checked(scan: dict[str, list[str]],
             + " 盘上有文件，但 `data/literature.json` 读不出来。"
             "**这不是「没有未入编」**：台账修好之前不知道其中几份已在表里；"
             "先跑 `agentflow verify` 定位，必要时 `agentflow rebuild`。")
+
+
+def _local_material_key(text: str) -> str:
+    """一份材料在「盘上文件名」这一侧的比较形态（B2a，2026-11-22）。
+
+    落点名是 `<内容 hash 前缀>-<清洗过的源文件名>`（`locallib.library_landing_name`），
+    所以 `literature.path` 的 basename 与 `source/` 下的源文件名不再逐字相等。而
+    "这份材料入编了没有"这条读数必须两边按同一个形态比：剥掉内容 hash 前缀
+    （`locallib.strip_landing_hash`），再过写侧同一个清洗函数
+    （`locallib.library_name_of`），最后大小写不敏感。
+
+    为什么两个都从 `locallib` 取：前缀有多长、哪些字符要清洗，只有那一处知道。
+    在这里另写一条正则，就是"同一件事两个实现" —— 落点将来一变，这条读数会静默地
+    把已入编的材料重新报成"未入编"（或反过来）。
+    """
+    from .locallib import library_name_of, strip_landing_hash
+
+    return library_name_of(strip_landing_hash(Path(str(text or "")).name)).casefold()
+
+
 def _pending_local_materials(root: str, role: str = "") -> str:
     """工作区里"盘上有、但还没登记进 literature"的本地材料（一行；没有或读不到 ⇒ 空串）。
 
@@ -3440,10 +3476,14 @@ def _pending_local_materials(root: str, role: str = "") -> str:
     与 `toolchain_facts` 同一条既有裁定：事实必须进模型看得见的地方。
 
     2026-11-21（FACTSFIX）：两个目录都要看，不能只看 `source/`。业主下一趟用
-    `--seed-literature` 把 25 份种子 PDF 投进 `library/`（`data/literature.json` 仍 0 行）；
-    只扫 `source/` 的话，A/M 的可见面里一个字都没有"library/ 有未入编的文献"。
+    `--seed-literature` 把 25 份种子 PDF 投进工作区（`data/literature.json` 仍 0 行）；
+    只扫 `source/` 的话，A/M 的可见面里一个字都没有"有未入编的文献"。
     每个目录各报三个数：盘上有几份、已在 `literature` 表里几份、盘上有而表里没有几份，
     并写明未入编的必须先走判收链（发现 → 建候选 → 抽读 → 判收 → 提交），不许当已入库。
+
+    2026-11-22（SEEDFIX）：投放落点从已登记书架 `library/` 改成输入区 `reference/`，
+    所以扫的目录是 `source/` / `library/` / `reference/`。三个都扫的理由与上面同一条：
+    扫不到就等于"未收编材料=0"假成立 —— 而种子恰恰住在 `reference/` 里。
 
     三态纪律（不许折平）：
     - `data/literature.json` 不在盘上（工作区没有这张表 / 被删）⇒ 整段沉默，不编一个 0；
@@ -3455,15 +3495,22 @@ def _pending_local_materials(root: str, role: str = "") -> str:
     if not root:
         return ""
     base = Path(root)
-    # 先看两个目录各有什么。目录不存在 ⇒ 这一条不写（scan 里没有它）。
+    # 先看三个目录各有什么。目录不存在 ⇒ 这一条不写（scan 里没有它）。
+    # `reference/` 是用户输入区与种子投放落点（`seedinject.SEED_SUBDIR`）；`library/`
+    # 是已登记书架（判收之后才该有文件），两者分开报，读者才分得清"待判收"与"已入库"。
     scan: dict[str, list[str]] = {}
     list_failed: list[str] = []
-    for name in ("source", "library"):
+    # `reference/SEED-README.md` 是种子投放的说明（`seedinject.MARKER_NAME`），不是参考材料：
+    # 把它算进"未入编"会让 25 份种子报成 26 份（off-by-one 的假读数）。
+    from .seedinject import MARKER_NAME as _SEED_MARKER
+
+    for name in ("source", "library", "reference"):
         path = base / name
         if not path.is_dir():
             continue
         try:
-            scan[name] = sorted(p.name for p in path.iterdir() if p.is_file())
+            scan[name] = sorted(p.name for p in path.iterdir()
+                                if p.is_file() and p.name != _SEED_MARKER)
         except OSError:
             list_failed.append(name)
     if not scan and not list_failed:
@@ -3492,16 +3539,23 @@ def _pending_local_materials(root: str, role: str = "") -> str:
         for key in ("path", "title"):
             val = str(row.get(key) or "").strip()
             if val:
+                known.add(_local_material_key(val))
                 known.add(Path(val).name.lower())
                 known.add(val.lower())
+        # `download.source_path` 是"这份字节从哪个本地文件来的"（`locallib` 写的）：
+        # 有它就直接按源文件名认 —— 落点名被内容 hash 前缀/清洗改写过也不影响这一格。
+        dl = row.get("download")
+        src_path = str((dl.get("source_path") if isinstance(dl, dict) else "") or "").strip()
+        if src_path:
+            known.add(_local_material_key(src_path))
     # 声明与"已入编"是两根轴：声明说"许不许入库"（只有用户点名的才可入库），
     # 已入编说"进没进 literature"。真身是 `locallib.read_declaration` / `is_declared`。
     from .locallib import is_declared, read_declaration
     declarations, decl_problem = read_declaration(root)
     parts: list[str] = []
-    for name in ("source", "library"):
+    for name in ("source", "library", "reference"):
         files = scan.get(name) or []
-        pending = [n for n in files if n.lower() not in known]
+        pending = [n for n in files if _local_material_key(n) not in known]
         if not pending:
             continue
         declared = [n for n in files if is_declared(f"{name}/{n}", declarations)]

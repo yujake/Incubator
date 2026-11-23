@@ -87,7 +87,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
     ActionSpec(
         "C", "handle",
         "自然语言需求 -> 分派到上面某个分析器；**它同时是本角色的产出登记口**："
-        "报告 ok 时由它收口落盘（`analysis_reports` 一行 + `reports/<rid>-<kind>.md`），"
+        "报告 ok 时由它收口落盘（`analysis_reports` 一行 + `work/C/<rid>-<kind>.md`），"
         "并把 `report_id` / `markdown_path` 带回来",
         _obj({"request_text": _S}, ("request_text",)),
         "AnalysisReport（带 `report_id` / `markdown_path`；`kind='unknown'` 那种失败报告不落库）",
@@ -154,7 +154,7 @@ SPEC = AgentSpec(
             "两样都从**局部树**上读，不手算：先 `ledger.resolve(query=<命题号 / 标签 / 关键字>)` 选根 ——"
             "它只给候选节点（号 / 类别 / 状态 / 等级 / 标签），**不是树**；再 "
             "`ledger.expand(node=\"stmt:<号>\", depth=<层数>)` 展开 —— **层数由你决定、必填**"
-            "（不填会被拒并给出可照抄的例子，框架不替你定），`direction` 默认两边都看。"
+            "（不填会被拒，框架不替你定），`direction` 默认两边都看。"
             "每个被查到的节点自带：相对选定节点的关系（方向 / 相距几层 / 经由的链）、命题号、命题类别、"
             "命题内容（不含证明）、等级、依赖面（**全路径**、按证明路径分组，断了会标 broken 并指出断点）、"
             "被引面（**只一层**：直接引用者）。不够就按返回的 `frontier` 再 `ledger.expand` 一次 ——"
@@ -195,15 +195,15 @@ SPEC = AgentSpec(
             "读现在几点、这一趟跑了多久、有没有等你的唤醒用 `clock.now`，查还有哪些在计时用 `clock.timer_list`。"
             "**无事可做就起「等任意计时器返回」这个意图**：手上没有要接着做的活时，用 "
             "`clock.wait_any(purpose=<目的>)` 记一条「谁先回来都行」的等待（它记的是意图，不是计时器本身）；"
-            "一条计时器都没有还起这个意图时，读数给 `requested=true` / `waiting=false` —— 那是「要求过等、"
-            "而手上没有可等的东西」，不是「没在等」；这一档既无计时而手头也没活，就按交差处理"
-            "（框架向父代理报告），别空转着等。"
+            "一条计时器都没有还起这个意图时，它会拒（`no_timers_to_wait`，不写意图账）—— "
+            "要么先起一条表再起这个意图，要么既无计时而手头也没活，就按交差处理"
+            "（框架向父代理报告、父代理记为静默），别空转着等。"
             "**计时只有时钟这一处**：旧的计时工具已经退役，别去找别的等待 / 定时入口。",
         ),
         signature_error="把模型给的排序当成算出来的评分。",
         deliverable="交付状态 —— 交给谁：派你这趟活的那一方（报告随返回值交回）"
                     "+ 读这张表的 D / 编排层；形态：`analysis_reports` 一行"
-                    "（你的登记动作 `handle` / `gaps` 落库）+ `reports/<report_id>-<kind>.md`；"
+                    "（你的登记动作 `handle` / `gaps` 落库）+ `work/C/<report_id>-<kind>.md`；"
                     "可核字段：`analysis_reports.report_id` / `analysis_reports.kind` / "
                     "`analysis_reports.summary` / `analysis_reports.markdown_path`；"
                     "算做完：登记动作回了 `report_id`、且 `analysis_reports` 里按号读得到这一行；"

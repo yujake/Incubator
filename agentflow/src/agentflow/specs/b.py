@@ -28,6 +28,7 @@ from ..agentspec import (
 from .b_ingest_policy import (
     B_METHOD_POLICY, INGEST_POLICY, MULTI_PROOF_POLICY, STAGE_TWO_BOUNDARY, STAGE_TWO_DUTY)
 from .b_sign_policy import SIGN_SUBMIT_POLICY
+from .b_wait_policy import CLOCK_WAIT_POLICY as _CLOCK_WAIT_POLICY
 
 #: 本角色的动作表。
 ACTIONS: tuple[ActionSpec, ...] = (
@@ -97,14 +98,14 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "出处不在库里就整笔不写）。`origin` 决定其余必填项 —— external_lit 要 `source_lit_id`"
         "+ `page_range`；own_result 要 `doc_id`（六位十进制编号）或 `line_range`。"
         "`proof_manuscript` 是证明正文的载体（证明稿，proof manuscript；在册也给稿：F/E 的稿，或你自己改写的 "
-        "`reports/b-proof-<命题号>.md`）；只给 `proof_text` / 内联 `proofs` 的正文不算交了稿，"
+        "`manuscripts/B/b-proof-<命题号>.md`）；只给 `proof_text` / 内联 `proofs` 的正文不算交了稿，"
         "依赖面也读不出来。**没有稿不拒收**：落最低等级（「猜想」）并进待办 —— 但补的是稿，"
         "不是往参数里贴一段正文。`quote_verified` 是三态（不传 = 还没查），"
         "不是 true 时必须给 `quote_reason`；是 true 时用 `quote_mode` 说清**怎么**通过的"
         "（逐字命中 / 语义相同 —— 后者是 H 判的，B 唤起 H）"
         # F 的稿自己维护一套号源，不依赖命题号和计划号；B 收录是唯一建 statements 行的
         # 时刻：命题号现取、稿名一个字不动、认签按正文 sha。
-        "。**收 F 的成果时 `proof_manuscript` 给 F 的那份稿**（`reports/f-proof-<稿号>.md`，"
+        "。**收 F 的成果时 `proof_manuscript` 给 F 的那份稿**（`manuscripts/F/f-proof-<稿号>.md`，"
         "**稿号是 F 自己的**：既不是命题号也不是计划号）：建行时**现取命题号**，行上记 "
         "`manuscript_id`（F 的稿号）+ `proof_no`，**不改稿名**（收录前后是同一份稿）；"
         "认签按**正文 sha**（稿上那一签 / pending 台账那一行，都是同一把 sha 尺），"
@@ -112,9 +113,11 @@ ACTIONS: tuple[ActionSpec, ...] = (
         # 说明面必须自己回答"作者那一格谁写"：`proof_authors` 不在参数表里，
         # 派活文字教 B 传它 ⇒ `param_invalid`；交上去的证明会被 `proofauthors.py`
         # 按来源路径推断成错的作者。答案是"不接受手写"这件事只能由说明面说。
-        "。`proof_authors` 不是本动作的参数：那一格由 `proofauthors.py` 按来源路径推断"
+        # 实现落点只留在注释里（业主 2026-11-22 口径）：推断者 = `proofauthors.py`；
+        # 参数门的拒绝文案 = `tools/base.py` 的 `validate_params`。
+        "。`proof_authors` 不是本动作的参数：那一格由框架按来源路径推断"
         "（收稿方读手稿时按手稿作者落），不接受手写 —— 传了会被参数门按未声明键"
-        "受控拒绝（派生列的去路见 `tools/base.py` 的参数门提示）",
+        "受控拒绝（派生列的去路见参数门给的提示）",
         _obj(
             {
                 # 这一格不再是"必填非空"：只给 `proof_manuscript`（工作区相对路径）时，
@@ -171,7 +174,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
                            "external_lit（论文里的）⇒ 必须给 source_lit_id + page_range；"
                            "own_result（我们自己的）⇒ 必须给 doc_id 或 line_range 之一，"
                            "**并且**交一份证明手稿（`proof_manuscript`；在册命题也给稿）；"
-                           "交的是 E 的普通数值手稿（`reports/e-num-<实验号>.md`）时例外："
+                           "交的是 E 的普通数值手稿（`work/E/e-num-<实验号>.md`）时例外："
                            "出处就是那条实验行，不用 doc_id / line_range，把那份稿交给 `proof_manuscript` 即可"},
                 # 自产概念在动作面本来没有入口：`kind="concept"` + `origin="own_result"`
                 # 会被硬拒，而参数面没有 `self_authored` 可传 ⇒ 「从零起的工作区自己定义
@@ -239,15 +242,15 @@ ACTIONS: tuple[ActionSpec, ...] = (
                 "proof_manuscript": {**_S, "description":
                                      "`proof_manuscript` 是**证明正文的载体**"
                                      "（自产命题在册与否都交它）：F/E 的稿，"
-                                     "或 B 自己改写后的 `reports/b-proof-<命题号>.md`；"
+                                     "或 B 自己改写后的 `manuscripts/B/b-proof-<命题号>.md`；"
                                      "只给 `proof_text` / 内联 `proofs` 不算交了稿。"
                                      # 只递指针那一支：D 只给手稿路径。
                                      "给的是**工作区相对路径**而 `statement_full` 留空时，这一笔按"
-                                     "「手稿路径收录」—— **这条指针支只收 `reports/` 下的规范名**："
-                                     "`reports/f-proof-…` / `reports/b-proof-…` / `reports/e-proof-…` / "
-                                     "`reports/e-num-…`；`notes/…` 是 `legacy` 档（目录不是 `reports/`）⇒ "
+                                     "「手稿路径收录」—— **这条指针支只收 `manuscripts/<角色>/` 下的规范名**："
+                                     "`manuscripts/F/f-proof-…` / `manuscripts/B/b-proof-…` / `manuscripts/E/e-proof-…` / "
+                                     "`work/E/e-num-…`；`notes/…` 是 `legacy` 档（目录不是 `manuscripts/`）⇒ "
                                      "受控拒 `manuscript_legacy_name`，要让 B 收它得走 B 自己带 "
-                                     "`statement_full` 的自登记支、并由它改写成 `reports/b-proof-…`。"
+                                     "`statement_full` 的自登记支、并由它改写成 `manuscripts/B/b-proof-…`。"
                                      "命题取 `## 命题`、证明取 `## 证明`、`kind` 取稿头"
                                      "`- 证据种类：`、`evidence_kind` 按族定（e-proof ⇒ proof、"
                                      "e-num ⇒ cross_check、F ⇒ heuristic）—— 调用方不许另传"
@@ -283,7 +286,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
     # 两件效果轴都是 `write_local`（land 只写盘上那份稿；ingest 只写既有三个写口），外部轴 none。
     ActionSpec(
         "B", "land_manuscript",
-        "把一条**已登记**命题的某一版证明落成 `reports/b-proof-<B稿号>.md`（只写文件，不写台账；"
+        "把一条**已登记**命题的某一版证明落成 `manuscripts/B/b-proof-<B稿号>.md`（只写文件，不写台账；"
         "同一份正文重放 ⇒ `preserved=true`、一个字节不动）。**稿号是 B 自己的号段**（六位号，"
         "与命题号 / 计划号都无关）：新写路径**不产生 `-p<N>`** —— 同一命题的第二份证明是"
         "**另一份稿**（另一个 B 稿号），不是同一份稿的第 N 个版本。这是「先拿签」"
@@ -316,7 +319,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "proof_sha256 / proof_authors / stmt_id）：它们由框架洗、由签现算、或是写口回执。`mode=apply` "
         "刻意不跑同一性判定 —— 录到哪一条由你点名的 `target_stmt_id` 决定，工具不会把这一笔并到别的行。",
         _obj({
-            "manuscript": {**_S, "description": "工作区相对路径；只收 `reports/` 下过族表的规范名（`f-proof-*` / `b-proof-*` / `e-proof-*` / `e-num-*`）；`notes/` 与 `-v2` 是 legacy（可 preview、不可收录）"},
+            "manuscript": {**_S, "description": "工作区相对路径；只收 `manuscripts/<角色>/` 下过族表的规范名（`f-proof-*` / `b-proof-*` / `e-proof-*`；`e-num-*` 归 `work/E/`）；`notes/` 与 `-v2` 是 legacy（可 preview、不可收录）"},
             "target_stmt_id": {**_S, "description": "录入位置：录到**哪一条**命题（`statements.stmt_id`）。`mode=apply` / `preview` 必填；`mode=register` 必须空"},
             "cells": {"type": "array", "minItems": 1, "items": {"type": "string", "enum": list(_MI.INGEST_CELLS)},
                       "description": "录入格（闭集）。`mode=register` 缺省按族给全（f/e-proof: statement_full+proof_text+dependencies；e-num: statement_full+numeric_evidence）；每族只收它允许的格（e-num 不收 proof_text）"},
@@ -353,7 +356,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
     ActionSpec(
         "B", "open_polish_copy",
         "把这一条命题**已拿签的那份稿**复制成一份 B 号优化副本：源稿只读、一个字节不动，"
-        "副本按 B 自己的稿号落 `reports/b-proof-<B稿号>.md` 并清掉副本里的 `- V 签：` 行。"
+        "副本按 B 自己的稿号落 `manuscripts/B/b-proof-<B稿号>.md` 并清掉副本里的 `- V 签：` 行。"
         "**已拿签的稿不许就地改** —— 改正文之前先拿这份副本，改完再重新派 V 签。",
         _obj({
             "statement_id": {**_S, "description": "待优化的那条命题号（必填：找「哪一份稿」的唯一入口）"},
@@ -520,7 +523,7 @@ SPEC = AgentSpec(
             # 原样入库认签、改过的正文重新送审。落地判据是现有那条 sha 比对
             # （`verifications.proof_review_gap`）。
             "**入库的是文献侧引入的定理/证明（不是 F 产的）⇒ 先把它交一次 `own.register_statement`"
-            "（框架落成 `reports/b-proof-<命题号>.md`），再派 V 审核签字（`V.verify_proof`："
+            "（框架落成 `manuscripts/B/b-proof-<命题号>.md`），再派 V 审核签字（`V.verify_proof`："
             "`statement_id` + `proof_manuscript=<这份稿>`）、签了才够 `pre_theorem`**；"
             "**例外：引用侧第一遍摘录可以先落**（`origin=\"external_lit\"` + `source_lit_id` 的逐字摘录）——"
             "写侧在这一笔记 `quote_carrier=first`，V 签位填文献编号（占位签），`closing` 记 "
@@ -556,7 +559,7 @@ SPEC = AgentSpec(
             "**概念的良定义证明也走这条链（稿由你产出）**：概念（`kind=\"concept\"`）不是"
             "「没有证明可写」—— 它的良定义证明由你落：用 `own.land_manuscript` 把"
             "`## 命题` = 这个概念的定义、`## 证明` = 良定义证明落成 "
-            "`reports/b-proof-<命题号>.md`（**复用 b-proof 族，不新开族**），派 V 照常签"
+            "`manuscripts/B/b-proof-<命题号>.md`（**复用 b-proof 族，不新开族**），派 V 照常签"
             "（V 只对手稿负责，不需要知道这是概念）；签回来之后用 "
             "`own.ingest_manuscript(apply, cells=[\"proof_text\"], target_stmt_id=<概念号>)` "
             "按位置与格收录 —— 那一节就进 concept 行的 `proof_text`（「良定义证明」这一格）。"
@@ -579,7 +582,7 @@ SPEC = AgentSpec(
             # 稿所有权这一条不只拦、也要教（只拦会让整份稿退回而不知道错在哪）。
             "**这一笔的稿必须是「这一行自己的」**：本行还没在册（还没有号）⇒ 没有「自己的稿」，"
             "拿别人号的稿来读正文 / 签 / 依赖面都不行；本行在册 ⇒ 稿头 `- 命题号：stmt:<号>`"
-            "（没有再按号的文件名 `reports/f-proof-<号>.md` / `b-proof-<号>.md`）必须等于本行号。"
+            "（没有再按号的文件名 `manuscripts/F/f-proof-<号>.md` / `manuscripts/B/b-proof-<号>.md`）必须等于本行号。"
             "对不上 ⇒ 整份退回（`manuscript_owner_mismatch`），不是改写几句就能过。",
             # 两句：① 改写是正确动作（别因为要重签就不敢改）；② 被拒时读拒信里的「建议」。
             "**改写是正确动作，不是越权**：把别人的或文献里的证明写得更清楚、补上漏掉的一步，"
@@ -640,7 +643,9 @@ SPEC = AgentSpec(
             # `specs/b_ingest_policy.py`（逐字不动，`*INGEST_POLICY` 原样摊回），
             # 只为让 `specs/b.py` 留在 800 行线内。
             *INGEST_POLICY,
-            "**这张收录表就是我们版的「综述」**：所以不产出「综述」这一件产物、不给 `documents` 另开一类；A 交来的文献由你把定理与"
+            "**这张收录表就是我们版的「综述」**：所以不产出「综述」这一件产物、也不给 `documents` 另开一类"
+            "（`kind` 只有 `schema.DOC_KINDS` 那四档：`survey` / `paper` / `note` / `research`；"
+            "别的交付走前三档，D 的研究报告走 `research`）；A 交来的文献由你把定理与"
             "证明收进 `statements`（`proof_text` + 逐字出处），**收录比转述强**：综述里的一句话查不到行，收录表里每一行都能。",
             # 只在提示词里提醒：不做 stage 强制、不做出处闸、不改 schema —— 这一格是提示词，
             # 不是判据；落库路径（lit_candidates / literature）一个字都没动。
@@ -655,29 +660,10 @@ SPEC = AgentSpec(
             "（`products`）、最近一次交接（`last_handoff`）；传 `depth` 大于 1 也只给一层。要看更深（例如你想看"
             "「下级的下级的下级」）就用 `conductor.escalate` 向 M 请求 —— M 的指导**沿绝对编号链逐级由秘书转发**，"
             "**内容只有链尾（你）看得到**，中间各跳只转发、不读内容；你看到的是指导，不是原始全树数据。",
-            # 计时口径进**每个角色**的政策（不只是 M）：计时类任务申请的形式 = 等待时间
-            # （或等待谁）+ 目的（必填）；忘填目的不报错、只要求追加；到点发回「目的 +
-            # 等待时间 + 时间到」。工具面的真身是 `tools/clock_tools.py` 那九件
-            # （`UNIVERSAL_TOOLS`：对十一个角色都发），这一段只写"怎么用它"，不抄工具签名
-            # （签名在工具说明里，抄一份就是第二个要同步的地方）。
-            # 判据：`tests/test_clock_governs_all_timed_work.py`（逐个角色数过九件）。
-            "**要等就用时钟，别空转**：等一段时间用 `clock.timer_start(after_sec=<秒>, reason=<目的>)`；"
-            "等某个人交差或回话用 `clock.timer_start(wait_for=<名册名 / 绝对编号 / task:编号>, reason=<目的>)` —— "
-            "这两种**选一种**（都给或都不给会被拒），并写一句目的。**目的漏填不报错**：先受理，读数里带 "
-            "`purpose_missing=true` 并追问你，补一句走 `clock.timer_purpose(entry_id=<同一个编号>, purpose=<目的>)`"
-            "（补的是那一条，不是新建一条）。**挂机**：把这一趟交给时钟之后，挂机期间你不产生回合、不轮询、"
-            "不空转；到点、或它交差那一刻，时钟把「目的 + 现场等了多久 + 时间到 + 对方说的话/交的东西」"
-            "一并发给你，长这样：「时间到：等 D1 交回命题 3 的证明｜等了 19 分钟 40 秒（起于 14:02:10，到于 14:21:50）」。"
-            "要反复回来看的（周期性的）用 `clock.periodic_start(every_sec=<秒>, purpose=<目的>)`，停它用 "
-            "`clock.periodic_stop(periodic_id=…)` —— 「等 20 分钟 + 周期性巡查」的**唯一写法**是 "
-            "`every_sec=1200` + `purpose=\"周期性巡查\"`（M 的巡视就是这一种），别写成「睡 20 分钟」。"
-            "读现在几点、这一趟跑了多久、有没有等你的唤醒用 `clock.now`，查还有哪些在计时用 `clock.timer_list`。"
-            "**无事可做就起「等任意计时器返回」这个意图**：手上没有要接着做的活时，用 "
-            "`clock.wait_any(purpose=<目的>)` 记一条「谁先回来都行」的等待（它记的是意图，不是计时器本身）；"
-            "一条计时器都没有还起这个意图时，读数给 `requested=true` / `waiting=false` —— 那是「要求过等、"
-            "而手上没有可等的东西」，不是「没在等」；这一档既无计时而手头也没活，就按交差处理"
-            "（框架向父代理报告），别空转着等。"
-            "**计时只有时钟这一处**：旧的计时工具已经退役，别去找别的等待 / 定时入口。",
+            # 计时口径（时钟九件 / `wait_any` 的意图账）那一段住
+            # `specs/b_wait_policy.py`（`CLOCK_WAIT_POLICY`，逐字不动）；搬出理由与
+            # `INGEST_POLICY` 相同 —— 只为把本文件留在 800 行线内。
+            *_CLOCK_WAIT_POLICY,
         ),
         signature_error="把规则抽取器的产出当成模型抽取的产出。",
         # 交付物两截都在：登记是快录（第一阶段），优化才是主职（第二阶段）。只写第一截，
@@ -685,7 +671,7 @@ SPEC = AgentSpec(
         deliverable=("交付状态 —— 交给谁：派你这趟活的那一方（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名）"
                      "+ 送稿方（F / E / A 的回执随这一趟的返回值带回）；"
                      "形态：`statements` 行（第一阶段・快录：概念行与命题行）+ `relations` 行 + "
-                     "`reports/b-proof-<B稿号>.md` 副本（第二阶段・逐个优化）；"
+                     "`manuscripts/B/b-proof-<B稿号>.md` 副本（第二阶段・逐个优化）；"
                      "可核字段：`statements.stmt_id` / `statements.kind` / "
                      "`statements.quote_verified` / `statements.proof_text` / "
                      "`relations.quote` / `relations.page_range` / `relations.quote_verified`；"
@@ -778,6 +764,8 @@ SPEC = AgentSpec(
                      # 状态不动 + `promoted_to_statement` 读数；台账里一行都没有（B 是第一个
                      # 见到这条命题的）⇒ 如实落一行。**拒收那一档**落 `refuted` + `refusal_ref`。
                      'conjectures',
+                     # 2026-11-22 WRITESETFIX：B 的秘书代写（`secretary_deps._write_dep_steps`），G 的写集也有它 ⇒ 改前漏算 `B×G`。
+                     'dependencies',
                  )),
     class_path='agentflow.agent_b:AgentB',
     actions=ACTIONS,

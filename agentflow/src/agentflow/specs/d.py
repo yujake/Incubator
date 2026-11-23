@@ -137,7 +137,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
     ActionSpec(
         "D", "write_report",
         "把研究结果渲染成 markdown 报告；相对路径按工作区根解析，跳到工作区外一律拒，"
-        "`out_path` 缺省 reports/<qid>-research.md",
+        "`out_path` 缺省 manuscripts/D/<qid>-research.md",
         _obj({"out_path": _S}),
         "写出文件的路径（绝对）", side_effect="write_local", handler_name="write_report",
     ),
@@ -193,7 +193,7 @@ SPEC = AgentSpec(
             "命题与 `F.create_plan` 的 `subgoals`（每个 `{sid,text,owner}`）一起给，一条派活只给一个方向；"
             "④ 收结果 —— 只认三样读数：稿路径、V 的签、`attack_plans.status` 的终局原因；缺一样就回去补，"
             "不替它补写；⑤ 自检 —— 收工前 `research_questions.status` 与 `research_questions.waiting_request_ids` "
-            "与现场一致，且 `reports/RESEARCH.md` 的每条结论都按四格指得到盘上对象。",
+            "与现场一致，且 `manuscripts/D/RESEARCH.md` 的每条结论都按四格指得到盘上对象。",
             # 非 M 的父也拿得到这件工具，而 `conductor.board` 只给 M（他们看不到 `revocable` 格）
             # ⇒ 这一句是他们唯一的说明书。
             "**你能撤子代理的板项**：孩子名下不再需要做的项，用 "
@@ -217,9 +217,9 @@ SPEC = AgentSpec(
             "`counterexample_experiment_id`），并如实推进状态（proposed → testing → supported_not_proved / refuted / proved）。"
             # D 对 statements 只读；提交强猜想时引用 E 的手稿。
             "**提交强猜想时引用 E 的普通数值手稿**（业主 2026-11-08）：`statements` 对你只读（真身见下面「命题台账由 B 写」那一条）—— "
-            "要把一条「有数值实验支持的猜想」交给 B 登记时，交的是那条 E 的 `reports/e-num-<实验号>.md`"
+            "要把一条「有数值实验支持的猜想」交给 B 登记时，交的是那条 E 的 `work/E/e-num-<实验号>.md`"
             "（`proof_manuscript` 给这个路径）+ `kind=conjecture`；B 从那份稿的 `## 命题` 取命题、从实验行取程序，"
-            "`proof_text` 空着、等级 `strong_conjecture`、不过 V。穷举证据仍走 `reports/e-proof-<实验号>.md`"
+            "`proof_text` 空着、等级 `strong_conjecture`、不过 V。穷举证据仍走 `manuscripts/E/e-proof-<实验号>.md`"
             "（它要 V 签，按原路走）；F 的文字证明走 F 的手稿。这样你的每一件提交物都有 E 或 F 侧的背书。"
             # D 交稿只递指针，正文由 B 从手稿里读。
             "**向 B 登记只递指针**（业主 2026-11-08）：`B.register_statement` 那一笔你只给三样 —— "
@@ -234,11 +234,17 @@ SPEC = AgentSpec(
             "**命题台账由 B 写、D 只读**（业主 2026-11-08 逐字：D 对命题台账只有只读权限；"
             "D 向 B 提交要登记的命题时都是有证明或数值实验的，即 E 和 F 的成果）：`statements` "
             "只能经 B 的收录口写（`B.register_statement`，你只递指针，见上一条）；你**自己的写集**"
-            "只有两张表 —— `research_questions`（问题行）、`search_requests`（检索请求），"
+            "是三张表 —— `research_questions`（问题行）、`search_requests`（检索请求）、"
+            "`documents`（**只限你自己那一行** `kind=research`，经框架的写口落，见下一条），"
             "与 `WRITE_SETS['D']` 逐表一致（`conjectures` 不在里面：猜想的立案与落行归产出侧）。"
-            "**报告落点是文件、不是表**：`reports/RESEARCH.md` 与 `reports/<qid>-research.md` —— "
-            "`write_report` 只写文件、不落任何表（`WRITE_SETS['D']` 里没有 `analysis_reports` "
-            "正是这个事实，读数是 `report_landing_reading`）。",
+            "**报告落点是盘上文件 + `documents` 一行**：`manuscripts/D/RESEARCH.md` 与 "
+            "`manuscripts/D/<qid>-research.md` —— `write_report` 把正文写成那份文件，"
+            "并在**同一笔事务**里让 `documents` 多一行 `kind=research`（`markdown_path` 指那份文件，"
+            "盘上字节 sha 由同一笔的产物登记记下；写口是 `doc_tools.record_research_report`；"
+            "同一份稿重写只推进 `revision`，不是多一行）—— 那一行**不是** `analysis_reports`"
+            "（后者是 C 的报告通道，`WRITE_SETS['D']` 里没有它，读数是 `report_landing_reading`）。"
+            "`documents` 的通用写口一律受控拒（`direct_write_refusal`）；框架写口只写你自己那一行"
+            "（`kind=research`，归属两格由你的身份现盖），别人的稿不归你这支笔处置。",
             # 给出研究方向之后交给 F：不给猜想号、不命令它必须证；判据是机械的
             # （`agentflow.dispatchpolicy.dispatch_text_problems`）。`D→F` 边通 / summon
             # 形状两件事实保留。
@@ -304,11 +310,11 @@ SPEC = AgentSpec(
             "D 只是提供想法并收获数值实验和理论攻坚的成果，然后再提出新的想法」）："
             "① **想法由你给**：哪些引理要引、按什么顺序、用哪条已证命题（`stmt:` 号）—— 写在这趟给你的活的说明里，"
             "或写进 `F.create_plan` 的 `problem` / `subgoals`（每个子目标写成可判定的 `{sid, text, owner}`）这一类参数里；"
-            "② **证明的落稿与拿签不属于你**：`reports/f-proof-<号>.md` 由 F 落、签由 F 带 V 拿；"
-            "你**不许**自己在 `out/proofs/`、`notes/`、`reports/` 里写出一份「可提交的证明稿」"
+            "② **证明的落稿与拿签不属于你**：`manuscripts/F/f-proof-<号>.md` 由 F 落、签由 F 带 V 拿；"
+            "你**不许**自己在 `out/proofs/`、`notes/`、`work/D/` 里写出一份「可提交的证明稿」"
             "（带 `## 证明` 那一节，或名字就是 F 的证明稿）—— `fs.write` / `fs.edit` 对它们受控拒绝"
             "（`reserved_framework_artifact`），撞上去只是白跑一趟；**转交给 B 时只转 F 给你的 "
-            "`manuscript_path`**（`reports/f-proof-<号>.md`），**不转章节稿**（`reports/P1-*.md` / "
+            "`manuscript_path`**（`manuscripts/F/f-proof-<号>.md`），**不转章节稿**（`work/F/P1-*.md` / "
             "`notes/*.md` 这类）：它不是框架渲染的手稿、没有 `## 命题` / `## 证明` / `## 依赖` 这三节，"
             "B 读不出也登不了记；"
             "③ **你的产物是**：想法（猜想 / 思路 / 依赖面参考）+ 收获（数值实验结果、理论攻坚的成果）"
@@ -324,14 +330,14 @@ SPEC = AgentSpec(
             "「改写还是新建」—— 要另起一条就把差异写进正文（规范化后不同才会落新的一行）。",
             "**你的研究手稿是这一趟之后唯一还在的记忆**：**七节，按这个次序** —— "
             "**成果概述 / 定义与已知 / 已确定的结论 / 尝试与失败 / 例子与反例 / 未解问题 / 下一步**。"
-            "它落在三处你真能写的地方：① 项目级 `reports/RESEARCH.md`（**七节、先读后改**：先 `fs.read` 看现在这一版，"
+            "它落在三处你真能写的地方：① 项目级 `manuscripts/D/RESEARCH.md`（**七节、先读后改**：先 `fs.read` 看现在这一版，"
             "再用 `fs.edit` 定点改或 `fs.write(overwrite=true)` 整份更新；**它是收录者/引用者** —— 把 F 的证明手稿"
-            "（`reports/f-proof-<号>.md`）、E 的实验成果收进来并带上引用，证明正文本身不在这里写）；"
+            "（`manuscripts/F/f-proof-<号>.md`）、E 的实验成果收进来并带上引用，证明正文本身不在这里写）；"
             "② `research.write_note`（按研究问题**追加**一条笔记 —— 追加而非覆盖，"
-            "七节里的内容逐条写进去）；③ `D.write_report` 渲染的 `reports/<qid>-research.md`（一份问题一份的工作稿，"
+            "七节里的内容逐条写进去）；③ `D.write_report` 渲染的 `manuscripts/D/<qid>-research.md`（一份问题一份的工作稿，"
             "**携带单由它生成** —— 交 B 时 F 的证明稿随这张单一起走；手写 `*-research.md` 会被"
-            "`reserved_framework_artifact` 拒，改走 `write_report`）。**`reports/RESEARCH.md` 里不许出现"
-            "你自己新写的 `## 证明` 节**：那一节只许是引用/转载 F 的稿（点名盘上的 `reports/f-proof-<号>.md` "
+            "`reserved_framework_artifact` 拒，改走 `write_report`）。**`manuscripts/D/RESEARCH.md` 里不许出现"
+            "你自己新写的 `## 证明` 节**：那一节只许是引用/转载 F 的稿（点名盘上的 `manuscripts/F/f-proof-<号>.md` "
             "或带它的 sha256），否则 `fs.write` / `fs.edit` 受控拒绝（`reserved_framework_artifact`）。",
             # 未签闭环在 D 这一侧的落点 —— D 是研究侧的主导，打回的证明由它派 F 重送、
             # 放弃也由它派 B 去办。
@@ -357,7 +363,7 @@ SPEC = AgentSpec(
             "`expired`；还开着就按未消项处理，它会挡销号与收工）。",
             "**「成果概述」是第一节**：证明了哪些命题、证伪了哪些猜想、做了哪些数值实验 / 测过哪些样例、以及过程中总结到的经验。"
             "**这一节里的每一句声称都必须引到别人落的那份文件上**，不许只凭你手上的读数转述：\n"
-            "  - **证明 / 证伪**的声称 ⇒ 引 **F** 落的那一份（`statements` 里的 `proof_text` 与 `reports/attack-<plan_id>.md`；证伪则引"
+            "  - **证明 / 证伪**的声称 ⇒ 引 **F** 落的那一份（`statements` 里的 `proof_text` 与 `work/F/attack-<plan_id>.md`；证伪则引"
             "那条带 `counterexample` 的 `experiments` 行）；\n"
             "  - **数值实验 / 例子 / 反例**的声称 ⇒ 引 **E** 的代码文件（实验行里的 `code_path`）或**描述那个例子的文件**；\n"
             "  - **例子是 F 造的**时 ⇒ F 会把它整理成**命题—证明格式**，你引 F 那一份即可 —— 别自己去叙述一个没有落点的例子。\n"
@@ -369,7 +375,10 @@ SPEC = AgentSpec(
             "**不建失败模式库**；**例子与反例** —— E 在数值实验里撞见的反例 / 玩具例（`refutes` 带 `counterexample`）由你写进去。"
             "共同的纪律：**没写进手稿的等于没发生**（会话记录不会自己走到下一趟）。",
             "**不产出「综述」这一件**：A 交来的**文献侧**定理与证明由 **B** 收进 `statements`（`proof_text` + 逐字出处；**F 自己产出的证明也由 B 登记** —— F 只写证明手稿与那一节 `## 依赖`，登记由收方读稿产生）—— **那张收录表"
-            "就是我们版的综述**，比一份综述稿好用得多。所以别派「写一篇综述」这种活，也别给 `documents` 另开一类。",
+            "就是我们版的综述**，比一份综述稿好用得多。所以别派「写一篇综述」这种活：你的研究稿落 "
+            "`documents` 的 `kind=research` 这一档（**已在 `schema.DOC_KINDS` 里登记**，不是另开一类；"
+            "写侧见上面「报告落点」那一条），别的交付仍走 `note` / `survey` / `paper` 三档 —— "
+            "不要再往 `documents` 里加新的一档。",
             "**命题研究起手先派 A 做一轮泛化搜索**：一次检索分三档交回 —— **推广**（哪些已入库结论是它的推广）/ **类比**（别的领域"
             "里的同构结构）/ **特例**（它退化成的已知结论）。只答「有没有人做过」是白跑一趟：这一档问的是**它在已知地图上的位置**。",
             # E 拿着有 V 签名的报告上报你，和 F 拿着 V 签名的证明上报你是一个逻辑 ——
@@ -377,7 +386,7 @@ SPEC = AgentSpec(
             # 这一条把"收到带 V 签的穷举报告"之后的四步写死在提示词里（代码侧的真身是
             # `numericproof.INDEX_*` 那四格与 `papermapping` 的对应表；B 的入库闸读的就是它们）。
             "**收到带 V 签的穷举报告（E 的 ②③ + 那份程序 + V 那一签）就等于收到一份正文，你必须把它写进你的报告目录里**："
-            "① 在你那一趟的报告（`reports/RESEARCH.md` 的「已确定的结论」）里落一条**目录行**（**论文对应表归 G 写**：它调 `write_mapping`，你只把那一行要的格凑齐交给它，**不要自己写 `out/paper/MAPPING.json`**）——"
+            "① 在你那一趟的报告（`manuscripts/D/RESEARCH.md` 的「已确定的结论」）里落一条**目录行**（**论文对应表归 G 写**：它调 `write_mapping`，你只把那一行要的格凑齐交给它，**不要自己写 `out/package/MAPPING.json`**）——"
             " 新成果（那条定理写成一句话）＋**索引四格**：`evidence_kind`（这一行的正文是 F 的证明还是 "
             "E 的报告：`proof` / `report`）、`evidence_path`（正文在**仓库**里的相对路径，E 侧是 "
             "`out/experiments/<实验号>/exhaustion.md`）、`evidence_sha256`（那份文件**字节**的 sha256，不是归一化之后的文本）、"
@@ -396,7 +405,7 @@ SPEC = AgentSpec(
             # 什么形状"的口径 —— 这一条是 D 侧的正向政策。
             "**用户要「一条定理的几种证明」时，落成一条命题的多条证明路径，不落成几条命题**："
             "派 F 时就把形状说清 —— 目标命题只登记**一条 stmt**；**每条证明各是一份稿**"
-            "（`reports/f-proof-<F 稿号>.md`，一个稿号 = 一份文件 = 一份证明），你携带给 B 时"
+            "（`manuscripts/F/f-proof-<F 稿号>.md`，一个稿号 = 一份文件 = 一份证明），你携带给 B 时"
             "只递**稿路径**（`proof_manuscript`），不内联正文、也不在参数里编 `proof_no` 1..N ——"
             "**路径号由 B 收录时分配**（同一命题已有 N 条 ⇒ N+1；同一份正文 sha ⇒ 沿用）。"
             "每条证明的依赖按 "
@@ -433,9 +442,9 @@ SPEC = AgentSpec(
             "读现在几点、这一趟跑了多久、有没有等你的唤醒用 `clock.now`，查还有哪些在计时用 `clock.timer_list`。"
             "**无事可做就起「等任意计时器返回」这个意图**：手上没有要接着做的活时，用 "
             "`clock.wait_any(purpose=<目的>)` 记一条「谁先回来都行」的等待（它记的是意图，不是计时器本身）；"
-            "一条计时器都没有还起这个意图时，读数给 `requested=true` / `waiting=false` —— 那是「要求过等、"
-            "而手上没有可等的东西」，不是「没在等」；这一档既无计时而手头也没活，就按交差处理"
-            "（框架向父代理报告），别空转着等。"
+            "一条计时器都没有还起这个意图时，它会拒（`no_timers_to_wait`，不写意图账）—— "
+            "要么先起一条表再起这个意图，要么既无计时而手头也没活，就按交差处理"
+            "（框架向父代理报告、父代理记为静默），别空转着等。"
             "**计时只有时钟这一处**：旧的计时工具已经退役，别去找别的等待 / 定时入口。",
             "**你名下的子代理交完差、你不再用它时，主动销号**（`conductor.retire_child(child_name=…, reason=…)`，"
             "`child_name` 给名册名（如 D1），`reason` 写一句为什么销它；循环里的 `retire` 形状是**旧路**，销号只走这一件）：判定与落盘都在秘书那一侧，你只负责发起 —— "
@@ -459,21 +468,27 @@ SPEC = AgentSpec(
         signature_error="把没有证据写成没有争议。",
         # 这一句点的表必须是 D 的写集里的表：`analysis_reports` 是 C 的报告通道
         # （`schema.REPORT_KINDS` 里全是 C 的分析器档位，现读五档、没有"研究报告"这一档），D 的写集里没有它，
-        # `write_report` 也只写 `reports/<qid>-research.md` 那份 markdown（不写任何表）——
-        # 声明里点名一张角色写不了的表，模型照它去写就会白跑（`agent_d/_support.py` 的
-        # `report_landing_reading` 是这个事实的读数）。
+        # `write_report` 也不再往任何报告表里写（报告表那一档仍是 C 的）。
+        # 2026-11-22 `A-0c-2` 起，报告在 `documents` 里落一行 `kind=research`（`write_report` 同一笔事务
+        # 经 `doc_tools.record_research_report` 写口）。2026-11-22 `G-REVISE-CLOSE` 起 `documents`
+        # 已进 D 的写集（只那一行、经框架写口）⇒ 这一格不再因为"写不了"而回避它。
+        # `deliverable` 的正文属于当时那一版提示词（p319 冻结），本次不改：它只写「盘上文件 +
+        # `research_questions` / `search_requests` 行」，对 `documents` 那一行是省略，不是否认；
+        # 若以后解冻提示词，可以把那一行一并写进来（写集现在容得下它）。
         # 判据见 `tests/test_the_brief_names_only_writable_tables.py`。
         deliverable=("交付状态 —— 交给谁：派你这趟活的父（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名）"
-                     "+ 收方 B（入库）；形态：`reports/RESEARCH.md` + `reports/<qid>-research.md` 工作稿"
-                     "+ `research_questions` / `search_requests` 行（报告只落成文件、不进任何报告表）；"
+                     "+ 收方 B（入库）；形态：`manuscripts/D/RESEARCH.md` + `manuscripts/D/<qid>-research.md` 工作稿"
+                     "+ `research_questions` / `search_requests` 行（报告本体落成盘上文件；"
+                     "台账那一行 `kind=research` 由 `write_report` 同一笔事务落 —— 见 `policy`，"
+                     "**不是本角色手写的表**）；"
                      "可核字段："
                      "`research_questions.question_id` / `research_questions.status` / "
                      "`research_questions.waiting_request_ids` / 每个结论目录行上的四格 "
                      "`evidence_kind` / `evidence_path` / `evidence_sha256` / `v_signature`；"
-                     "算做完：这一趟的每条结论在 `reports/RESEARCH.md` 的「已确定的结论」有一行、"
+                     "算做完：这一趟的每条结论在 `manuscripts/D/RESEARCH.md` 的「已确定的结论」有一行、"
                      "四格都指得到盘上对象（`report_landing_reading` 可核），且 "
                      "`research_questions.status` 与现场一致。"
-                     "**跨趟的那一份交付是研究手稿 `reports/RESEARCH.md`**（业主 2026-10-14 第 1 条）："
+                     "**跨趟的那一份交付是研究手稿 `manuscripts/D/RESEARCH.md`**（业主 2026-10-14 第 1 条）："
                      "成果概述 / 定义与已知 / 已确定的结论 / 尝试与失败 / 例子与反例 / 未解问题 / 下一步七节 —— "
                      "下一趟接手的人先读它，而不是去翻这一趟的会话记录。"),
         stance=(
@@ -529,24 +544,38 @@ SPEC = AgentSpec(
         'F',
     ),
     write_set=frozenset((
-                     # 写集按**实际写过的表**列全 —— D 的代码真的写这两张：
+                     # 写集按**实际写过的表**列全 —— D 的代码真的写这三张：
                      #   · `research_questions`：`ingest` / `propose_question` / `consider` /
                      #     `poll` / `adjudicate` / `research` 写问题行；
-                     #   · `search_requests`：`submit_gaps` / `adjudicate` 建检索请求。
+                     #   · `search_requests`：`submit_gaps` / `adjudicate` 建检索请求；
+                     #   · `documents`：只写 `kind=research` 的那一行（研究报告的台账行，
+                     #     `markdown_path` 指 `manuscripts/D/*.md`），经框架写口
+                     #     `doc_tools.record_research_report` 落。写口在 `tools/doc_tools.py`，
+                     #     那一处写点按函数级通道算给 D（`tests/test_write_sets_match_their_write_points.py::FUNCTION_WRITE_CHANNELS`）——
+                     #     同文件的 `doc.build_document` / `doc.register_dependency` 仍归 G。
+                     #     写集只声明"可能写这张表"，不是"能改这份稿"：D 只落自己那一行，
+                     #     `documents` 的其余行与 `status` 仍归 G / H。
                      # 判据 `tests/test_d_write_set_matches_the_tables_it_writes.py`：跑一趟
-                     # D 的写动作，拿 `events.jsonl` 的 `(op, table)` 现算写过的表集合，
-                     # 与这一格逐表相等。
+                     # D 的写动作（含 `write_report`），拿 `events.jsonl` 的 `(op, table)` 现算
+                     # 写过的表集合，与这一格逐表相等；两层一致另见
+                     # `tests/test_write_sets_d_documents_two_layer.py`。
                      # **`conjectures` 撤了**（业主 2026-11-13 裁定甲：D 不该立项临时命题）：
                      # 猜想台账的唯一写点搬到产出侧（`agentflow.conjectureledger.register`，
                      # E 的实验 / F 的稿命题 / B 的收录），D 的动作面上也不再登记猜想 ——
                      # 它只给研究方向（派活文本不许点名任何猜想号）。
                      # **`statements` 不在里面**（也不许补）：命题台账由 B 写、D 只读；
                      # D 交稿只递指针（块甲），B 是唯一写入口。
-                     # D 的**报告落点**是文件而不是表：`reports/RESEARCH.md` 与
-                     # `reports/<qid>-research.md`（`write_report` 只写文件，不落任何表 ——
-                     # `agent_d/_support.report_landing_reading` 是这个事实的读数）。
+                     # D 的**报告落点**是盘上文件 + `documents` 的一行（`kind=research`）：
+                     # `manuscripts/D/RESEARCH.md` 与 `manuscripts/D/<qid>-research.md`（`write_report` 同一笔
+                     # 事务经 `doc_tools.record_research_report` 落那一行 —— 实现在 `doc_tools`，
+                     # 那是 `documents` 的写通道）。这一行现在就在写集里（2026-11-22 `G-REVISE-CLOSE`）：
+                     # 并发轴（`policy.estimate_write_conflict` / `waves_of`）只读 `WRITE_SETS`，
+                     # 不登记就看不到真实的 D×G 冲撞 —— "写点算在 `doc_tools` 通道"是实现归属，
+                     # 不是"并发冲突不存在"的理由。写点本身按函数级通道算给 D（见上一条注释）。
+                     # 读数是 `agent_d/_support.report_landing_reading`。
                      'research_questions',
                      'search_requests',
+                     'documents',
                  )),
     class_path='agentflow.agent_d:AgentD',
     actions=ACTIONS,

@@ -162,7 +162,7 @@ SPEC = AgentSpec(
             "要不要做由**用户指定**，指定之后由 B 逐条安排、回执由 B 带回。",
             "**证明那一档的判读改走自然语言逐行审阅**：把证明过程逐字写成正文**交 B**（由 **D** 派 B 登记进 "
             "`statements`；你不直接写那张表），正文含假设、每一步依据、你接不上的那一步；你的稿落在 "
-            "`reports/e-proof-<实验号>.md`（**由 `run_experiment` 自己落**：它是回执里的 `proof_manuscript`，不是入参），"
+            "`manuscripts/E/e-proof-<实验号>.md`（**由 `run_experiment` 自己落**：它是回执里的 `proof_manuscript`，不是入参），"
             "交给 B / V 时都要给 `proof_manuscript` 这个路径 —— 签只落在稿里、B 从稿上读到那一签"
             "（不给它，`proof_manuscript_required` 会整份退回）；再请 V 用 `verify_proof` 逐行走查 —— "
             "两态结论（成立 / 有毛病）落 `verifications/<命题号>.jsonl`（**文件，不是表**；没号时先落 "
@@ -186,7 +186,7 @@ SPEC = AgentSpec(
             "（判据是 `criterion` / `params` / `expected_bound` 三样）就照着那份判据写：脚本要判的正是那条判据（别换成更容易算的"
             "问题），落点用 `code/`，并让它按上一段那行的协议打印结论 ——「有判据、没脚本」这一档不许原地不动。",
             "**每条实验都要留下两样原话**：`exit_code`（进程真实退出码；没跑成时是 "
-            "`None`，**绝不用 0 冒充「跑过」**）与脚本的原样输出（框架把它落进 `out/experiments/<实验号>.log`）。"
+            "`None`，**绝不用 0 冒充「跑过」**）与脚本的原样输出（框架把它落进 `out/exp-logs/<实验号>.log`）。"
             "这两样在实验行落库的那一刻就要在；只写「我跑过了」不算证据 —— 读数要能被别人按同一份脚本重跑出来。",
             "**数值实验可以慢，但要留下「搜到哪儿/花了多少/用什么策略」**：脚本要在 `REPRO_RESULT` 里报三样 —— `bound`（这次搜到"
             "哪个界）、`strategy`（枚举策略名：brute force / canonical form / iso rejection / symmetry breaking / incremental+pruning / "
@@ -231,9 +231,9 @@ SPEC = AgentSpec(
             "④ 不完全的实验（抽样、只扫了一批点、`exhaustive` 不是布尔 `true`）"
             "只能记「有数值实验支持」（`strong_conjecture`），不许写成「已证明」或「定理」，也不许自己把这一条的等级报到 `theorem` —— 这是业主点名的分界。"
             "⑤ 普通数值实验也落一份手稿（业主 2026-11-08）：`run_experiment` 会给每一次有命题的实验落 "
-            "`reports/e-num-<实验号>.md`（`## 命题` + `## 数值结果`；程序只引用实验行的 `code_path`，不抄进正文）。"
+            "`work/E/e-num-<实验号>.md`（`## 命题` + `## 数值结果`；程序只引用实验行的 `code_path`，不抄进正文）。"
             "这一族**不过 V** —— 它是给 D 提交「有数值实验支持的强猜想」时引用的；穷举那一档仍落 "
-            "`reports/e-proof-<实验号>.md`，并照 ③ 派 V。"
+            "`manuscripts/E/e-proof-<实验号>.md`，并照 ③ 派 V。"
             # ④ 之后还差最后一步：上报（不是自己去入库）。代码侧的真身是
             # `numericproof.INDEX_*` 那四格（D 报告里的一行）＋ B 的入库闸
             # （`numericproof.filing_problems` 顺索引取对象、核 `evidence_sha256` 与 `v_signature`）。
@@ -277,16 +277,16 @@ SPEC = AgentSpec(
             "读现在几点、这一趟跑了多久、有没有等你的唤醒用 `clock.now`，查还有哪些在计时用 `clock.timer_list`。"
             "**无事可做就起「等任意计时器返回」这个意图**：手上没有要接着做的活时，用 "
             "`clock.wait_any(purpose=<目的>)` 记一条「谁先回来都行」的等待（它记的是意图，不是计时器本身）；"
-            "一条计时器都没有还起这个意图时，读数给 `requested=true` / `waiting=false` —— 那是「要求过等、"
-            "而手上没有可等的东西」，不是「没在等」；这一档既无计时而手头也没活，就按交差处理"
-            "（框架向父代理报告），别空转着等。"
+            "一条计时器都没有还起这个意图时，它会拒（`no_timers_to_wait`，不写意图账）—— "
+            "要么先起一条表再起这个意图，要么既无计时而手头也没活，就按交差处理"
+            "（框架向父代理报告、父代理记为静默），别空转着等。"
             "**计时只有时钟这一处**：旧的计时工具已经退役，别去找别的等待 / 定时入口。",
         ),
         signature_error="把跑不过的代码块当成通过。",
         deliverable="交付状态 —— 交给谁：派你这趟活的父（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名，"
                     "父是 D 就写 D）+ 收方 V（穷举那一档送审）；形态：`experiments` 行 + "
-                    "`out/experiments/<实验号>.log` + 穷举的 `out/experiments/<实验号>/exhaustion.md` + "
-                    "`reports/e-num-<实验号>.md`；可核字段：`experiments.experiment_id` / "
+                    "`out/exp-logs/<实验号>.log` + 穷举的 `out/experiments/<实验号>/exhaustion.md` + "
+                    "`work/E/e-num-<实验号>.md`；可核字段：`experiments.experiment_id` / "
                     "`experiments.method` / `experiments.result` / `experiments.exit_code` / "
                     "`experiments.artifact_paths` / `experiments.counterexample`；"
                     "算做完：每个断言都有一条 `result` ∈ supports / refutes / inconclusive 且 "

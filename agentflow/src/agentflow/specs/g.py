@@ -25,6 +25,17 @@ from ..agentspec import (
     _obj,
 )
 
+#: G 能**建**的稿件 kind（动作面 enum）：与工具面 `doc_tools.BUILDABLE_DOC_KINDS` 同一条口径 ——
+#: `schema.DOC_KINDS` 去掉 D 的研究稿那一档 `research`。
+#:
+#: 为什么两处都要收：动作面管 `conductor.summon` 那条路的参数门，工具面管模型直接调
+#: `doc.build_document` 的那条路；只收一处等于给另一处留后门。`research` 行由 D 的
+#: `write_report` → `doc_tools.record_research_report` 落，它是读侧的判别键（S-07 数
+#: `kind=research` 的行、不看路径），G 的 build 面不造它。
+#: `doc.list_documents` 的 kind 仍是 `list(S.DOC_KINDS)`（读面按词表现算：D / H / F
+#: 也拿这个工具，遮住 `research` 会让 D 的工具面与 D 的教法打架）。
+_G_BUILDABLE_DOC_KINDS = tuple(k for k in S.DOC_KINDS if k != S.RESEARCH_DOC_KIND)
+
 #: 本角色的动作表。
 ACTIONS: tuple[ActionSpec, ...] = (
     ActionSpec(
@@ -92,7 +103,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
     ActionSpec(
         "G", "build_document",
         "写一行 documents 并渲染 markdown（无条件渲染）",
-        _obj({"kind": {"type": "string", "enum": list(S.DOC_KINDS)}, "title": _S,
+        _obj({"kind": {"type": "string", "enum": list(_G_BUILDABLE_DOC_KINDS)}, "title": _S,
               "claims": {"type": "array", "items": _OBJ, "minItems": 1},
               "sections": {"type": "array", "items": _OBJ},
               "open_problems": _ARR_S,
@@ -101,7 +112,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
               "out_path": {"type": "string", "description":
                            "生成 markdown 的落点（工作区内相对路径；缺省 "
                            "`<工作区>/<documents>/<doc_id>.md`）。**它是这份稿件的渲染产物，"
-                           "不是论文本体**：指到 `out/paper/main.tex` 会把论文正文换成台账稿"
+                           "不是论文本体**：指到 `out/package/main.tex` 会把论文正文换成台账稿"
                            "（真机实测：26 KB → 4 KB，不可逆），所以既有的、不属于任何 "
                            "`documents` 行的文件一律拒绝覆盖；要改主稿请用 `fs.edit`"}},
              ("kind", "title", "claims")),
@@ -272,7 +283,7 @@ WRITING_SCOPE = (
     "**L 的形式化产物只作「这一条命题的形式化已验证」的凭据**，不是正文目录的来源：它内部的 lemma / step 分解"
     "**不进正文**、不拆成多个 theorem / lemma / proposition 环境。**形式化细节不进正文**：不搬 Lean 的 lemma / step "
     "标题、不写 tactic、不贴检查器输出，**附录与脚注也不进**；正文最多一句结论性表述（「这一条已由检查器验证」），"
-    "并**指向对应表里那一行** —— 形式化凭据的落点只有两处：`out/paper/MAPPING.json` 那一行（`lean_file` / "
+    "并**指向对应表里那一行** —— 形式化凭据的落点只有两处：`out/package/MAPPING.json` 那一行（`lean_file` / "
     "`lean_target`，或数值实验定理那两格 `numeric_evidence` / `exhaustion_note`）与 `experiments` 台账那一行"
     "（路径 + 三态 + sha 都在那里），读者要看凭据就去那两处看。**`claim` 宏不得用来伪装定理类环境**：它是给"
     "「证明过程中的中间步骤」用的，不冒充 Lemma 标签 —— `\\newtheorem{claim}[theorem]{Lemma}` 这种定义会让它印成 "
@@ -290,7 +301,7 @@ WRITING_SCOPE_NO_LEAN = (
     "定理类环境。**形式化产物只作「这一条命题已由检查器验证」的凭据**，不是正文目录的来源：它内部的 lemma / step "
     "分解**不进正文**、不拆成多个定理类环境。**形式化细节不进正文**：不搬 lemma / step 标题、不写 tactic、不贴检查器"
     "输出，**附录与脚注也不进**；正文最多一句结论性表述（「这一条已由检查器验证」），并**指向对应表里那一行** —— "
-    "凭据的落点只有两处：`out/paper/MAPPING.json` 那一行与 `experiments` 台账那一行（路径与 sha 都在那里）。"
+    "凭据的落点只有两处：`out/package/MAPPING.json` 那一行与 `experiments` 台账那一行（路径与 sha 都在那里）。"
     "**`claim` 宏不得用来伪装定理类环境**：它是给「证明过程中的中间步骤」用的，不冒充 Lemma 标签 —— "
     "`\\newtheorem{claim}[theorem]{Lemma}` 这种定义禁写；对应表按环境逐行核，印成 Lemma 的自定义宏同样算一个定理类环境。"
     "**玩具例子（台账 `kind=example`）用 `Example` 环境**（业主 2026-11-07）：`\\newtheorem{example}{Example}` + "
@@ -376,12 +387,12 @@ SPEC = AgentSpec(
             "被拒就按点名的那一条改，不要换说法重交；⑤ 登记 —— `documents.doc_id` 与 "
             "`documents.content_sha256` 落库后读回，对应表用 `doc.write_mapping` 按 "
             "`(stmt_id, path_group)` 出行。",
-            "**正文是你写的，不是脚本生成的**：把论文正文用 `fs.write` 写到 `out/paper/main.tex`（散文体、章节自己排、`\\cite`/"
-            "定理环境随你），落笔前后用 `fs.read` 读回来核一遍；写完调 `doc.paper_compile` 把它编成 `out/paper/main.pdf`，页数与引擎"
+            "**正文是你写的，不是脚本生成的**：把论文正文用 `fs.write` 写到 `out/package/main.tex`（散文体、章节自己排、`\\cite`/"
+            "定理环境随你），落笔前后用 `fs.read` 读回来核一遍；写完调 `doc.paper_compile` 把它编成 `out/package/main.pdf`，页数与引擎"
             "退出码看那一次回执（MiKTeX 可能写完 PDF 却以 0xC0000409 退出 ⇒ 产物与退出码分两栏读）。**没有「渲染脚本」这回事**："
             "不建论文包、不核锚。",
             "**论文只在成文阶段写**：题面没说「整理成论文 / 交付论文 / 稿件」时，你的产出是 `documents` 里的研究与进展手稿"
-            "（`kind=\"note\"/\"survey\"`）与断言台账 —— **不要**去写 `out/paper/main.tex`。成文阶段写正文时，前面那些手稿是重建正文的"
+            "（`kind=\"note\"/\"survey\"`）与断言台账 —— **不要**去写 `out/package/main.tex`。成文阶段写正文时，前面那些手稿是重建正文的"
             "原料（`doc:` 引用在正式论文里会被拒，成果要按台账引用重建）。",
             # 2026-11-19（K11）：稿件台账按实例归属 —— 别人的稿不归我删、也不归我改。
             "**稿件行归写它的那一支笔**：`doc.build_document` 落下的每一行都带 `owner_task` / "
@@ -454,7 +465,7 @@ SPEC = AgentSpec(
             "**附录 A 是内部编号与算过的东西的唯一落点**：算法、参数域、量的表、内部编号（`exp:` / `stmt:` / `lit:` / `rel:` / "
             "`eval:` / `doc:`）、可复现入口全在 `Appendix A: Computational evidence`；`Appendix B` 只放长证明的机械细节（穷举、坐标计算"
             "这类），**不许把主证明搬走** —— 主证明留在第 3 节。",
-            "**导言区是配方，语言是硬线**：导言区**推荐**照本仓 mp3 那一篇论文的导言区写（六位编号、三层定理风格）—— "
+            "**导言区是配方，语言是硬线**：导言区**推荐**按下面这套配方写（六位编号、三层定理风格）—— "
             "`\\documentclass[11pt]{ctexart}`、`amsmath,amssymb,amsthm`、`geometry`（`margin=2.5cm`）、`booktabs`，三个 "
             "`\\theoremstyle` 段与九个 `\\newtheorem`（`theorem` / `lemma` / `proposition` / `corollary` / `conjecture` / "
             "`definition` / `example` / `openproblem` / `remark`），`\\title` 写你自己的题目、`\\author{G}`、`\\date{}`，本文专用记号"
@@ -510,7 +521,7 @@ SPEC = AgentSpec(
             '活在断言台账与附录 A 里，**论文正文一个字都不写** —— 正文引自己的结果是「由 Theorem 3.2 得」。',
             # 「同一份证据不能当第二份用」已由判据接手：
             # 判据：tests/test_g_evidence_obligations.py::test_the_same_experiment_cannot_support_two_claims
-            ("**成稿是四步动作序列，少一步都不算完**（D-38，2026-10-24 两趟真机：`doc.build_document` 都成功、`doc.write_mapping` 两次都是 0，论文包里只有两份验收表）：⓪ 先调 `doc.build_document` 把这份论文落一行（`documents` —— H 的审校对象；没有它，`doc.paper_compile` 会受控拒绝 `paper_not_registered`）→ ① 正文用 `fs.write` 写到 `out/paper/main.tex`（散文体、章节自己排）→ ② 调 `doc.write_mapping` 落 `out/paper/MAPPING.json`（它一次渲染 json / MD / 正文附录三份并把 `\\input{mapping-appendix}` 放进正文；md 与附录不许手写）→ ③ 逐行核「这一行该有的格子齐」→ ④ 最后调 `doc.paper_compile` 编出 `main.pdf`。**只写了正文、没调过 `doc.write_mapping` 等于没成稿**：收工门会记一条 `mapping_not_written`（缺对应表 ⇒ 论文无法从稿件追溯到台账）并拦下这一趟，而这一格不是「可选功能」。对应表是提纲的一部分，每条定理/引理/命题/推论/例子/实验各占一行（kind/label/env_no/ledger_id/proof_no/file），由它渲染 MD 与正文附录；正文与表两个方向都不许有孤儿；多证明每条各占一行；**`file` 有两种落点，都对**：理论定理那一行写论文包内的相对路径（证明栏第 ① 段那份文件的包内位置）；数值实验定理那一行写程序**相对仓库根**的路径（如 `code/r34_check.py`，**不在包里是正常的** —— 按「必须在包里」去核会把每一条合规的数值定理都误判成错） —— 它的证明栏就是那份程序，对应表里另有两格要一起填（还有索引四格，见下）：`numeric_evidence`（E 那条穷举读数，`exp:NNNNNN`）与 `exhaustion_note`（E 的 ②③ 落在 `out/experiments/<实验号>/exhaustion.md`）" + LEAN_FILE_ROW +
+            ("**成稿是四步动作序列，少一步都不算完**（D-38，2026-10-24 两趟真机：`doc.build_document` 都成功、`doc.write_mapping` 两次都是 0，论文包里只有两份验收表）：⓪ 先调 `doc.build_document` 把这份论文落一行（`documents` —— H 的审校对象；没有它，`doc.paper_compile` 会受控拒绝 `paper_not_registered`）→ ① 正文用 `fs.write` 写到 `out/package/main.tex`（散文体、章节自己排）→ ② 调 `doc.write_mapping` 落 `out/package/MAPPING.json`（它一次渲染 json / MD / 正文附录三份并把 `\\input{mapping-appendix}` 放进正文；md 与附录不许手写）→ ③ 逐行核「这一行该有的格子齐」→ ④ 最后调 `doc.paper_compile` 编出 `main.pdf`。**只写了正文、没调过 `doc.write_mapping` 等于没成稿**：收工门会记一条 `mapping_not_written`（缺对应表 ⇒ 论文无法从稿件追溯到台账）并拦下这一趟，而这一格不是「可选功能」。对应表是提纲的一部分，每条定理/引理/命题/推论/例子/实验各占一行（kind/label/env_no/ledger_id/proof_no/file），由它渲染 MD 与正文附录；正文与表两个方向都不许有孤儿；多证明每条各占一行；**`file` 有两种落点，都对**：理论定理那一行写论文包内的相对路径（证明栏第 ① 段那份文件的包内位置）；数值实验定理那一行写程序**相对仓库根**的路径（如 `code/r34_check.py`，**不在包里是正常的** —— 按「必须在包里」去核会把每一条合规的数值定理都误判成错） —— 它的证明栏就是那份程序，对应表里另有两格要一起填（还有索引四格，见下）：`numeric_evidence`（E 那条穷举读数，`exp:NNNNNN`）与 `exhaustion_note`（E 的 ②③ 落在 `out/experiments/<实验号>/exhaustion.md`）" + LEAN_FILE_ROW +
              "**数值实验定理那一行还要索引四格**（D-34：D 的报告是目录，B 顺索引取正文）：`evidence_kind`（那档正文是 `report`（E 的报告）还是 `proof`（F 的证明））、`evidence_path`（相对仓库根）、`evidence_sha256`（那份文件字节的 sha256）、`v_signature`（`{\"verdict\": \"成立\", \"sha256\": <被签那一份的 sha256>}`）；另加两格 `numeric_evidence`（E 那条穷举读数，`exp:NNNNNN`）与 `exhaustion_note`（E 的 ②③ 落在 `out/experiments/<实验号>/exhaustion.md`）—— 它们一起才是 B 取正文的索引，缺一件 `doc.write_mapping` 受控拒绝（`mapping_numeric_*`）。**「三格齐」只是收工门那一档的计数**（`file` + 数值那两格，或 `file` + Lean 那两格）：表里每一行都要齐，但「齐」不等于「这一行写完」—— 凭据格（`lean_file`，以及 formal 通道的 `lean_target`）与数值定理的索引四格也要填；缺任何一格都不算写完，不许说「表已经落好」。顺序是死的：json → MD 与附录 → 编 PDF。"),
             # 「如果数据位置都知道，要给 G 开发辅助工具直接拿到」：这一条把「哪几格怎么拿」
             # 从"读台账自己拼"改成"先调工具"：工具只读、判据只有一处
@@ -532,7 +543,7 @@ SPEC = AgentSpec(
             "不改对应表、不起子进程（逐格回退表见 `agent_skills` 的「成稿」那一条）。",
             # 纯数值实验证出的定理怎么写。
             # 判据：tests/test_numeric_theorem_writing_spec.py（七条）+ papermapping.NUMERIC_KINDS。
-            "**数值实验定理的证明栏有三块，作者是 E**（业主 2026-10-23）：纯数值实验把整个命题穷尽验证掉（覆盖全域）时也算证明，理由写「穷举」，签名是那份程序。正文里这类定理的证明栏就在第 3 节那个 `proof` 环境里（不是脚注、不是附录摘要），必须写全三块：① **程序地址（相对仓库）**（写成 `code/r34_check.py` 这种相对仓库根的路径，不是论文包内路径）；② **程序设计思路**（要解决什么、按什么结构搜、为什么这个结构能覆盖全域）；③ **穷举论证**（搜索空间多大、这个数怎么算出、用了什么对称性/剪枝、为什么不漏、边界怎么处理）；再加运行环境（语言与版本、随机种子若有）。**这三块合起来就是该定理在论文里的证明栏**。**② 与 ③ 都由 E 写，但 E 写的是盘上那份读数、不是台账**：E 把它们落成 `out/experiments/<实验号>/exhaustion.md` 与 `reports/e-proof-<实验号>.md`（由 `exhaustionreport` 写盘；登记进 `proof_text`（`statements` 那一栏） 的只有 ③ 穷举论证那一段 —— 2026-11-08 起程序地址在实验行的 `code_path`、程序设计思路在 `observations[\"design\"]`，两者都不再抄进证明栏）；你只**原样引用** E 的那两块（可以压缩措辞，不许改写实质，不许把 E 的读数变成「我们认为」），并在正文那一段里标出它们来自 E 的那条读数（写出那份程序路径；读数编号属内部编号，只写在附录 A 里、这里指过去）；**E 没给那两块时，正文里不许写成「定理」或「已证明」**，只能写「有数值实验支持」，并点名缺的是哪一块。对应表盯住三件事：证明栏（`file`）写程序地址（相对仓库）；`numeric_evidence` 写 E 那条穷举读数（`exp:NNNNNN`）；`exhaustion_note` 写 E 那两块读数落在哪一份文件（相对仓库，里面要有 `程序设计思路` / `穷举论证` / `运行环境` 三块、署名 `作者：E`、并写出那条 `exp:` 编号）。缺任何一块，`doc.write_mapping` 会受控拒绝（`mapping_not_clean`），不许把它当成「写完了」。",
+            "**数值实验定理的证明栏有三块，作者是 E**（业主 2026-10-23）：纯数值实验把整个命题穷尽验证掉（覆盖全域）时也算证明，理由写「穷举」，签名是那份程序。正文里这类定理的证明栏就在第 3 节那个 `proof` 环境里（不是脚注、不是附录摘要），必须写全三块：① **程序地址（相对仓库）**（写成 `code/r34_check.py` 这种相对仓库根的路径，不是论文包内路径）；② **程序设计思路**（要解决什么、按什么结构搜、为什么这个结构能覆盖全域）；③ **穷举论证**（搜索空间多大、这个数怎么算出、用了什么对称性/剪枝、为什么不漏、边界怎么处理）；再加运行环境（语言与版本、随机种子若有）。**这三块合起来就是该定理在论文里的证明栏**。**② 与 ③ 都由 E 写，但 E 写的是盘上那份读数、不是台账**：E 把它们落成 `out/experiments/<实验号>/exhaustion.md` 与 `manuscripts/E/e-proof-<实验号>.md`（由 `exhaustionreport` 写盘；登记进 `proof_text`（`statements` 那一栏） 的只有 ③ 穷举论证那一段 —— 2026-11-08 起程序地址在实验行的 `code_path`、程序设计思路在 `observations[\"design\"]`，两者都不再抄进证明栏）；你只**原样引用** E 的那两块（可以压缩措辞，不许改写实质，不许把 E 的读数变成「我们认为」），并在正文那一段里标出它们来自 E 的那条读数（写出那份程序路径；读数编号属内部编号，只写在附录 A 里、这里指过去）；**E 没给那两块时，正文里不许写成「定理」或「已证明」**，只能写「有数值实验支持」，并点名缺的是哪一块。对应表盯住三件事：证明栏（`file`）写程序地址（相对仓库）；`numeric_evidence` 写 E 那条穷举读数（`exp:NNNNNN`）；`exhaustion_note` 写 E 那两块读数落在哪一份文件（相对仓库，里面要有 `程序设计思路` / `穷举论证` / `运行环境` 三块、署名 `作者：E`、并写出那条 `exp:` 编号）。缺任何一块，`doc.write_mapping` 会受控拒绝（`mapping_not_clean`），不许把它当成「写完了」。",
             # 只写这一实现里真有的两件 —— `trace.children` 与
             # `conductor.escalate` 都在本角色的工具面上。判据：
             # tests/test_every_role_knows_it_can_watch_its_children.py。
@@ -560,15 +571,15 @@ SPEC = AgentSpec(
             "读现在几点、这一趟跑了多久、有没有等你的唤醒用 `clock.now`，查还有哪些在计时用 `clock.timer_list`。"
             "**无事可做就起「等任意计时器返回」这个意图**：手上没有要接着做的活时，用 "
             "`clock.wait_any(purpose=<目的>)` 记一条「谁先回来都行」的等待（它记的是意图，不是计时器本身）；"
-            "一条计时器都没有还起这个意图时，读数给 `requested=true` / `waiting=false` —— 那是「要求过等、"
-            "而手上没有可等的东西」，不是「没在等」；这一档既无计时而手头也没活，就按交差处理"
-            "（框架向父代理报告），别空转着等。"
+            "一条计时器都没有还起这个意图时，它会拒（`no_timers_to_wait`，不写意图账）—— "
+            "要么先起一条表再起这个意图，要么既无计时而手头也没活，就按交差处理"
+            "（框架向父代理报告、父代理记为静默），别空转着等。"
             "**计时只有时钟这一处**：旧的计时工具已经退役，别去找别的等待 / 定时入口。",
         ),
         signature_error="把'有一条数值/交叉验证支持'说成'这条断言已经成立'。",
         deliverable="交付状态 —— 交给谁：H（送审）+ 派你这趟活的父（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名）"
-                    "+ M（打包）；形态：`documents` 行 + `documents/<doc_id>.md` + 成文阶段的 "
-                    "`out/paper/main.tex` / `out/paper/main.pdf` + `out/paper/MAPPING.json`；"
+                    "+ M（打包）；形态：`documents` 行 + `manuscripts/G/<doc_id>.md` + 成文阶段的 "
+                    "`out/package/main.tex` / `out/package/main.pdf` + `out/package/MAPPING.json`；"
                     "可核字段：`documents.doc_id` / `documents.kind` / `documents.markdown_path` / "
                     "`documents.content_sha256` / `documents.claims` / `documents.status`；"
                     "算做完：`build_document` 回了 `doc_id`、每条 claim 的 `citations` 都指得到台账"

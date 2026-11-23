@@ -24,10 +24,10 @@ p310 起同一个文件里还放着两个模块级字符串 `STAGE_TWO_DUTY` / `
 #: 十三条 policy 正文；`specs/b.py` 的 policy 用 `*INGEST_POLICY` 把它们摊回那一段。
 INGEST_POLICY: tuple[str, ...] = (
     # 2026-11-08（业主三条裁定）：E 的手稿分两族，B 读法不同。
-    "**E 的手稿分两族，读法不同**（业主 2026-11-08）：`reports/e-proof-<实验号>.md` 是穷举档 —— "
+    "**E 的手稿分两族，读法不同**（业主 2026-11-08）：`manuscripts/E/e-proof-<实验号>.md` 是穷举档 —— "
     "`proof_text` 只原样收 `## 证明` 那一节的穷举论证（程序地址住实验行的 `code_path`、程序设计住 "
     "`observations[\"design\"]`，都不许再塞进 `proof_text`），没有 V 签照旧受控拒 "
-    "（`proof_needs_third_party_signature`）。`reports/e-num-<实验号>.md` 是普通数值档"
+    "（`proof_needs_third_party_signature`）。`work/E/e-num-<实验号>.md` 是普通数值档"
     "（`## 命题` + `## 数值结果`）—— 只从 `## 命题` 取命题、程序取 实验行的 `code_path`，"
     "`proof_text` 留空、`evidence_kind` 落 `cross_check`（等级 `strong_conjecture`），**不过 V**；"
     "`## 数值结果` 与别的节一个字都不录。这一档不收 `doc_id` / `line_range`（出处就是那条实验行），"
@@ -51,7 +51,7 @@ INGEST_POLICY: tuple[str, ...] = (
     "`## 依赖` 那一段顶替 —— 那一档按「稿不完整」受控拒。",
     # 2026-11-09（提示词-工具面一致性审计 L2-4）：族名早就教了，五档读数没教。
     "**手稿名是五档读数，不是「像不像手稿」**："
-    "`reports/` 下的 `f-proof-` / `b-proof-` / `e-proof-` / `e-num-` 才是 `family`；"
+    "`manuscripts/` 下的 `f-proof-` / `b-proof-` / `e-proof-` 才是 `family`（`e-num-` 不再是手稿：读数进 `experiments` 表、草稿在 `work/E/`）；"
     "同一个名字换到 `notes/` 或带 `-vN` ⇒ `legacy`（可列出、不可签、不可收录）；"
     "像手稿但号解析不出（如 `f-proof-abc`）⇒ `bad_name`；`RESEARCH.md` / `notes/A.md` "
     "这类不是手稿形 ⇒ `unrecognized`。只有 `family` 这一档可收；其中要签的 "
@@ -198,7 +198,7 @@ MULTI_PROOF_POLICY: tuple[str, ...] = (
     # 判据（别拆成几条命题）。
     "**同一条定理的多种证明只占一条 stmt，不占多条命题**：用户要「几种证明语言 / 几条独立"
     "路径」时，目标是同一条命题的**多条证明路径**（`path_group` 1..N），不是 N 条独立命题。"
-    "登记时**逐份交稿**：**B 的稿号是自己的号段**（`reports/b-proof-<B稿号>.md`）——"
+    "登记时**逐份交稿**：**B 的稿号是自己的号段**（`manuscripts/B/b-proof-<B稿号>.md`）——"
     "**同一命题的第二份证明是另一份稿**（另一个 B 稿号），不是同一份稿的第 N 个版本，"
     "新写也不产生 `-p<N>` 名字；路径号由你收录时分配（同一命题已有 N 条 ⇒ N+1，"
     "同一份正文 sha 重复收录 ⇒ 沿用原号）。**不要用内联的 `proofs=[…]` 交正文**"
