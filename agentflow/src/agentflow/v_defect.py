@@ -12,6 +12,8 @@
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping, Sequence
 
+import datetime as _dt
+
 
 def _findings_of(row: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     """这一行的 findings 里形状可读的那几条（坏形状静默跳过 —— 读侧只做分类，不改历史）。"""
@@ -421,6 +423,225 @@ def report_fix_list(root: str | Path, *, statement_id: str,
     return out
 
 
+def defect_scope_of(row: Mapping[str, Any]) -> str:
+    """这一行把缺陷归到哪一层：`statement` / `proof` / `style`；`""` = 没分类（CLAIM-INTEGRITY ②）。
+
+    读 `secretary_judge.defect_scope` 那一格（写侧白名单在 `v_ledger_write.py`，
+    词表本体在 `v_vocab.DEFECT_SCOPES`）。老行没有这一格 ⇒ 空串，不是"命题层"：
+    重送闸只认「明确写下」的 `statement`（没判过不等于判成命题层）。
+    """
+    got = row.get(SECRETARY_JUDGE_KEY)
+    if not isinstance(got, Mapping):
+        return ""
+    scope = str(got.get("defect_scope") or "").strip().lower()
+    return scope if scope in DEFECT_SCOPES else ""
+
+
+#: 「命题层缺陷没改就重送」的受控码（`verify_proof` 的 `reason`，见 `agent_v/core.py`）。
+REFUSED_STATEMENT_SCOPE = "statement_scope_fault_unamended"
+
+#: 想查「命题改过没有」而命题台账读不出来（没查成 ≠ 改过了）。
+REFUSED_SCOPE_LEDGER = "statement_scope_ledger_unreadable"
+
+#: 算作「命题被 amend 过」的终态（`_statement_amend_history[i]["changes"]["status"]["to"]`）。
+#:
+#: 只有这三档在说「这条命题不再被当作成立地在册」：`abandoned`（放弃）、
+#: `refuted`（判死）、`superseded`（被取代 —— 改对之后重新登记，旧的留作被替代）。
+#: `disputed` 不在里面：它仍然断言着那句话（只是有争议），拿它解锁等于"点一下就能过"。
+TERMINAL_AMEND_STATUSES: tuple[str, ...] = ("abandoned", "refuted", "superseded")
+
+#: 算作「命题本身被改过」的那几格（正文 / 名字；未来写者若把它们记进 amend 历史也算）。
+#:
+#: `quote_reason` 不在里面 —— 它是一句注记，改注记不改变命题说的那句话。
+#: `kind` 也不在：换个类名（`theorem`→`lemma`）命题一个字没变，拿它解锁等于把闸变成
+#: 「改一格不痛不痒的就能过」（`amend_statement_meta` 的白名单里恰好有它）。
+AMEND_CELLS: tuple[str, ...] = ("statement_full", "label")
+
+
+def _amend_cells(entry: Mapping[str, Any]) -> list[str]:
+    """一条 amend 历史记录算不算「命题被改过」；算就返回命中的那几格（纯函数）。
+
+    两档任一即算：
+    - `status` 改成 :data:`TERMINAL_AMEND_STATUSES` 之一（这条命题不再在册）；
+    - `statement_full` / `label` 变了（命题那句话本身变了）。
+    """
+    changes = entry.get("changes")
+    if not isinstance(changes, Mapping):
+        return []
+    hit: list[str] = []
+    status = changes.get("status")
+    if isinstance(status, Mapping):
+        to = str(status.get("to") or "").strip()
+        if to in TERMINAL_AMEND_STATUSES:
+            hit.append(f"status→{to}")
+    for cell in AMEND_CELLS:
+        if cell in changes:
+            hit.append(str(cell))
+    return hit
+
+
+def _iso_after(later: Any, earlier: Any) -> bool:
+    """`later` 是不是严格晚于 `earlier`（ISO-8601，带不带时区都行，但两边要一致）。
+
+    任何一边读不出来 / 一边有时区一边没有 ⇒ False：算不出先后就不许当"判定之后"。
+    这是 fail-closed 的方向（那会让闸保持闭合），不是"没查成"的读数。
+    """
+    try:
+        a = _dt.datetime.fromisoformat(str(later))
+        b = _dt.datetime.fromisoformat(str(earlier))
+    except (TypeError, ValueError):
+        return False
+    if (a.tzinfo is None) != (b.tzinfo is None):
+        return False
+    return a > b
+
+
+def statement_scope_gate(root: Any, *, statement_id: Any, store: Any = None) -> dict[str, Any]:
+    """重送闸：上一次判的是「缺陷在命题层」而命题没改过 ⇒ 这一趟不许重送（CLAIM-INTEGRITY ②）。
+
+    ## 它挡的是什么形状（真机 lp-ball-18 的 000060）
+
+    V 对某一条命题判「有毛病」，`findings` 里给的是「命题本身」的反例（把命题打掉了）。
+    B 没有改命题，而是把稿里的命题句改写成一条更弱的命题（把 k=1 也算进"对角方向"），
+    再拿改过的证明重送 —— 于是 V 的下一趟审的是一条台账上没有的命题，而
+    `contradictions` 那一格只看 `dependencies.status` / `statements.status` / 稿件状态，
+    不查"证明证明的是不是台账上那一条"，门照样亮绿。
+
+    结构上的事实是：命题正文在在册行上是只读的（`manuscriptintake._plan_statement`
+    的 `CODE_STATEMENT_LOCKED`、`STATEMENT_META_PATCH_KEYS` 的三种格都不含正文）。
+    所以"改弱命题"只能发生在稿里，台账那一行原封不动 —— 这一格就是问：
+    最后一次把缺陷归到命题层的判定之后，台账那一行有没有被真改过。
+
+    ## 判据（三条，任一成立即放行）
+
+    1. 台账里没有「轴 fault 且 `defect_scope=statement`」的行 ⇒ 闸不适用（老行 / 判的是证明层）；
+    2. 那条判定之后有更新的判定把它撤回 / 降级了：后续任一行的轴是 `clean`，
+       或 `defect_scope ∈ {proof, style}`（V 自己说缺陷不在命题层）⇒ 放行；
+    3. 那条判定之后，命题行的 `_statement_amend_history` 多了一条改「命题本身」的记录
+       （`_amend_cells`：`status` 改成 abandoned / refuted / superseded，或正文 / 名字变了）⇒ 放行。
+
+    其余 ⇒ `blocked=True` + 受控码 `statement_scope_fault_unamended`（不问模型、不落台账行）。
+
+    ## 三态（不折平）
+
+    - 台账读不出来 / 命题行读不出来 ⇒ `checked=False` + 受控码 `...ledger_unreadable`，
+      而且仍然 `blocked=True`：「没查成」不等于「改过了」（这一档只有工作区坏了才走到）；
+    - 查成了、闸不适用 ⇒ `checked=True, blocked=False`；
+    - 查成了、该挡 ⇒ `checked=True, blocked=True`。
+
+    ## 这一层机器判不了什么（写进报告，别当成判据）
+
+    "稿里的命题句与台账那一句是不是同一条"—— 本闸不判这个（那需要语义比对，
+    而真机那次的弱化句与原文是"看起来很像"的一段话）。本闸只判结构：
+    「命题层缺陷之后，台账那一行有没有被改过」。判漏仍然可能：
+    若 V 的秘书把命题层缺陷归成了 `proof`，闸就不开。这一条的强度取决于
+    `defect_scope` 那一格判得准不准，不取决于这里。
+    """
+    sid = str(statement_id or "").strip()
+    out: dict[str, Any] = {
+        "checked": False, "blocked": False, "refused": "", "why": "",
+        "statement_id": sid, "rows": 0, "problems": [],
+        "trigger": {}, "retraction": {}, "amend": {},
+    }
+    if not sid:
+        out.update(checked=True, why="没有命题号 ⇒ 没有可比的判定（未在册那一支不设这道闸）")
+        return out
+    try:
+        rows, bad = list_verifications(root, statement_id=sid, limit=None)
+    except Exception as exc:  # noqa: BLE001 —— 读不成 = 没查成（下面按 fail-closed 挡）
+        out.update(why=f"V 的台账读不出来（{type(exc).__name__}: {exc}）⇒ 没查成",
+                   refused=REFUSED_SCOPE_LEDGER, blocked=True)
+        return out
+    rows = [dict(r) for r in (rows or []) if isinstance(r, Mapping)]
+    out["rows"] = len(rows)
+    out["problems"] = [str(b) for b in (bad or [])]
+    #: 最后一次「判 fault 且缺陷在命题层」的那一行（台账是追加式的，序 = 时间序）。
+    at = -1
+    for i, row in enumerate(rows):
+        if (verifications.ledger_axis(row) == "fault"
+                and defect_scope_of(row) == "statement"):
+            at = i
+    if at < 0:
+        out.update(checked=True,
+                   why=("台账里没有「判 fault 且 defect_scope=statement」的行 ⇒ "
+                        "这道闸不适用（判的是证明层 / 老行没这一格）"))
+        return out
+    trigger = rows[at]
+    out["trigger"] = {
+        "verification_id": str(trigger.get("verification_id") or ""),
+        "at": str(trigger.get("at") or ""),
+        "defect_step": trigger.get("defect_step"),
+        "proof_sha256": str(trigger.get("proof_sha256") or ""),
+        "detail": str((trigger.get(SECRETARY_JUDGE_KEY) or {}).get("reason") or "")
+        if isinstance(trigger.get(SECRETARY_JUDGE_KEY), Mapping) else "",
+    }
+    # ---- ② 后续判定撤回 / 降级（V 自己说缺陷不在命题层）
+    for row in rows[at + 1:]:
+        axis = verifications.ledger_axis(row)
+        scope = defect_scope_of(row)
+        if axis == "clean" or scope in ("proof", "style"):
+            out.update(checked=True, retraction={
+                "verification_id": str(row.get("verification_id") or ""),
+                "at": str(row.get("at") or ""), "axis": axis, "defect_scope": scope,
+            }, why=(f"那条命题层判定（{out['trigger']['verification_id'] or '?'}）之后，"
+                    f"V 又在 {str(row.get('verification_id') or '?')} 判了 "
+                    f"{axis or '（无轴）'} / scope={scope or '（未分类）'} ⇒ 归类已撤回 / 降级"))
+            return out
+    # ---- ③ 命题行在这条判定之后被真改过（`_statement_amend_history`）
+    try:
+        got = statementledger.by_id(store, stmt_id=sid)
+    except Exception as exc:  # noqa: BLE001 —— 读不成 = 没查成（fail-closed 挡）
+        out.update(why=(f"命题台账读不出来（{type(exc).__name__}: {exc}）⇒ "
+                        "不知道命题改过没有（没查成 ≠ 改过了）"),
+                   refused=REFUSED_SCOPE_LEDGER, blocked=True)
+        return out
+    if not got.get("checked"):
+        out.update(why=(f"命题台账读不出来（{got.get('reason') or got.get('why') or '未知原因'}）"
+                        "⇒ 不知道命题改过没有（没查成 ≠ 改过了）"),
+                   refused=REFUSED_SCOPE_LEDGER, blocked=True)
+        return out
+    if not got.get("found"):
+        # 判定过、而现在这一行不在册（被删 / 换号）⇒ 不再是"同一条命题的重送"。
+        out.update(checked=True,
+                   why=(f"台账里已经按号读不到 stmt:{sid}（这一行不在册了）⇒ "
+                        "没有可 amend 的那一行，也没有可重送的命题"))
+        return out
+    row_now = dict(got.get("row") or {})
+    history = [h for h in (row_now.get("_statement_amend_history") or [])
+               if isinstance(h, Mapping)]
+    amend_after: list[dict[str, Any]] = []
+    for entry in history:
+        if not _iso_after(entry.get("at"), out["trigger"]["at"]):
+            continue
+        cells = _amend_cells(entry)
+        if cells:
+            amend_after.append({"at": str(entry.get("at") or ""),
+                                "by": str(entry.get("by") or ""),
+                                "cells": cells})
+    out["amend"] = {"history": len(history), "after": amend_after}
+    if amend_after:
+        out.update(checked=True,
+                   why=(f"那条命题层判定（{out['trigger']['verification_id'] or '?'}，"
+                        f"{out['trigger']['at']}）之后，命题行被改过（"
+                        + "；".join(f"{one['at']} 改 {'/'.join(one['cells'])}"
+                                    for one in amend_after[:3])
+                        + "）⇒ 放行"))
+        return out
+    out.update(checked=True, blocked=True, refused=REFUSED_STATEMENT_SCOPE,
+               why=(f"V 上一次把缺陷归到了命题层（{out['trigger']['verification_id'] or '?'}，"
+                    f"{out['trigger']['at']}）：命题本身不成立 / 表述错 —— 改证明改不掉它。"
+                    f"而那条判定之后，这条命题的 `_statement_amend_history` 没有新增一条"
+                    f"改命题本身的记录（status→{list(TERMINAL_AMEND_STATUSES)} 或 "
+                    f"{list(AMEND_CELLS)} 任一；现有 {len(history)} 条）。"
+                    "所以这一趟重送受控拒：不问模型、不落台账行、不签发。"
+                    "出路二选一：(i) 先把命题改了再重送 —— 按正确表述重述并重新登记"
+                    "（在册行的命题正文是只读的；改正文只能「放弃旧的 + 登记新的」，"
+                    "而只改证明正文、命题原文一字不动地重送，正是这条闸要挡的形状）；"
+                    "(ii) 让 V 收回归类 —— V 后续判定的 `defect_scope` 写成 proof / style"
+                    "（或判 clean）即视为撤回。"))
+    return out
+
+
 def banned_markers_in(proof_text: str) -> list[str]:
     """这份证明里命中了哪些硬禁令短语（I10 的机械那一半，可离线复算）。"""
     text = str(proof_text or "")
@@ -431,7 +652,9 @@ def banned_markers_in(proof_text: str) -> list[str]:
 # 引用（顶层 `from .x import y` 在环里会在对方还没定义完时执行）。引用点
 # 全部在函数体里，所以只要定义都跑完了，谁先被导入都拿得到。
 from . import verifications  # 门面字典：被打桩的名字经它取
+from . import statementledger  # 命题台账的取数口（`statement_scope_gate` 读 amend 留痕）
 from .v_vocab import (  # noqa: F401 — 实现在 v_vocab.py
+    DEFECT_SCOPES,
     FAULT_CAUSES,
     FAULT_KIND_VALUES,
     HARD_BAN_MARKERS,

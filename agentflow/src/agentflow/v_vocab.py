@@ -330,10 +330,30 @@ FAULT_KIND_VALUES: tuple[str, ...] = FAULT_KINDS
 
 
 #: `fault_kind_of` 的 `cause` 全部取值（只对 `procedural` 有意义；`""` = 没有细分原因）。
-#:
 #: - `report_gap`：缺"反例尝试 / 逐关核对"的记录 —— 不是缺陷（裁定 ①）；
 #: - `self_declared`：V 自己说"我没逐行验证 / 判不了" —— 仍然是 fault。
 FAULT_CAUSES: tuple[str, ...] = ("report_gap", "self_declared")
+
+
+#: 「这条缺陷要改哪一层」的三档（CLAIM-INTEGRITY ②，2026-11-24）。
+#:
+#: 它与 :data:`FAULT_KINDS` 是两根轴，不是同一件事的两种写法：
+#: - `fault_kind` 回答「缺陷的内容是哪一类」（math / procedural / style / contract），
+#:   用来决定"同 sha 要不要继续锁"；
+#: - `defect_scope` 回答「要修的是哪一层」：`statement` = 命题本身不成立 / 表述错
+#:   （改证明改不掉）；`proof` = 命题对、证明有洞；`style` = 不归证明的那一面。
+#:
+#: 为什么不把 `statement` 塞进 `FAULT_KINDS`：`math` 今天同时盖着"证明有洞"与"命题为假"
+#: 两种毛病，两者对"下一步该动什么"的结论完全相反（一个改证明、一个改命题）。
+#: 把 `statement` 加进那张词表会让 `_rejection_stands`（按 kind 决定锁不锁 sha）与
+#: `fault_kind_of` 的四类归档同时换义 —— 那是给已有判据改口径，不是加一格读数。
+#:
+#: `""` = 没分类（老行 / 秘书没给 / 明确 clean）。「未分类」不触发重送闸：
+#: 闸的语义是「V 明确判过缺陷在命题层」，不是「没判过 ⇒ 它在命题层」。
+DEFECT_SCOPES: tuple[str, ...] = ("statement", "proof", "style")
+
+#: `defect_scope` 的三档加上"没分类"（写侧白名单；`""` 是合法值，不是缺键）。
+DEFECT_SCOPE_VALUES: tuple[str, ...] = ("",) + DEFECT_SCOPES
 
 
 #: :func:`fault_kind_of` 的 `source` 全部取值。

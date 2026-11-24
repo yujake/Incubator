@@ -150,7 +150,8 @@ class SignMixin:
         out.update(axis=str(_reading["axis"]),
                    fault_kind=str(_reading["fault_kind"]),
                    fault_cause=str(_reading["fault_cause"]),
-                   report_gap=str(_reading["report_gap"]))
+                   report_gap=str(_reading["report_gap"]),
+                   defect_scope=str(got.get("defect_scope") or ""))
         #: p247：判 fault 时那一步由秘书这一问定（V 没给就以秘书给的为准；V 给了同一步
         #: 时二者相同）。判 clean ⇒ null（没有要改的那一步）。
         out["defect_step"] = (got.get("defect_step")

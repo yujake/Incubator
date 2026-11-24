@@ -170,6 +170,8 @@ V_VERIFY_PROOF_REASONS: tuple[str, ...] = (
     "proof_text_needs_a_manuscript",
     "secretary_unjudged",
     "statement_id_missing",
+    "statement_scope_fault_unamended",
+    "statement_scope_ledger_unreadable",
     "unparsable",
 )
 
@@ -420,9 +422,23 @@ def _verdict_has_math_evidence(verdict: Mapping[str, Any]) -> bool:
                if isinstance(one, Mapping))
 
 
+def _scope_cell(value: Any, *, axis: str) -> str:
+    """`defect_scope` 的写行归一（CLAIM-INTEGRITY ②）：只认词表里的三档，且只在 fault 行上有值。
+
+    - `axis != "fault"` ⇒ 空串：clean 行没有"缺陷要改哪一层"这回事（把一条 clean 行带着
+      `statement` 落盘，会让重送闸对一条没缺陷的行开门）；
+    - 词表外 / 没给 ⇒ 空串（没分类），不是"猜成某一档"：重送闸只认明确写下的 `statement`。
+    词表本体只有一处（`v_vocab.DEFECT_SCOPES`）。
+    """
+    if str(axis or "") != "fault":
+        return ""
+    scope = str(value or "").strip().lower()
+    return scope if scope in VR.DEFECT_SCOPES else ""
+
+
 def _write_fault_cell(judgment: Mapping[str, Any],
                       verdict: Mapping[str, Any]) -> dict[str, Any]:
-    """写行前把 `fault_kind` / `fault_cause` / `report_gap` 归一（D3 批 2 的写侧分类）。
+    """写行前把 `fault_kind` / `fault_cause` / `report_gap` / `defect_scope` 归一。
 
     ## 为什么归一必须在这里（而不是只在秘书那一侧）
 
@@ -440,11 +456,13 @@ def _write_fault_cell(judgment: Mapping[str, Any],
        `kind="math"`（继续锁 sha）。契约：宁可多锁一条，不许静默解锁一条数学缺陷。
     3. 写侧护栏：`procedural` / `style` 带着数学证据 ⇒ 强制折回 `math`
        （只往更严的方向折；反方向永远不允许）。
-    4. 每一行都写：三个键一定在（值可为空串）。键在不在是"新行 / 老行"的唯一分界
-       （`verifications.fault_kind_of` 读它）；没写这一格的行会被当成老行，
+    4. 每一行都写：四个键一定在（值可为空串；`defect_scope` 是 CLAIM-INTEGRITY ② 加的那一格，
+       由 :func:`_scope_cell` 归一）。键在不在是"新行 / 老行"的唯一分界
+       （`verifications.fault_kind_of` 读 `fault_kind` 那三格；`defect_scope` 走
+       `v_defect.defect_scope_of`）；没写这一格的行会被当成老行，
        走 `legacy_*` 的保守读法。
 
-    没判成（`checked=False` / 空轴）也照写三个空键：那一行的"没有类别"是明确写了的，
+    没判成（`checked=False` / 空轴）也照写四个空键：那一行的"没有类别"是明确写了的，
     不是"老行没有这一格"。`"kind_override"` 是这一格的读数（`report_gap` /
     `default_math` / `guard:carries_math_evidence`），只在被归一时出现。
     """
@@ -462,7 +480,7 @@ def _write_fault_cell(judgment: Mapping[str, Any],
             and (cause == "report_gap" or VR.says_only_a_report_gap(reason))):
         out.update(axis="clean", fault_kind="", fault_cause="report_gap",
                    report_gap=(gap or reason),
-                   kind_override="report_gap")
+                   kind_override="report_gap", defect_scope="")
         out["basis"] = list(out.get("basis") or []) + [
             "业主 2026-11-09 裁定①：「没记录反例尝试」不是缺陷 ⇒ 这一行按 clean 收、"
             "cause=report_gap（算 clean 的那一票、不锁 sha）"]
@@ -480,9 +498,11 @@ def _write_fault_cell(judgment: Mapping[str, Any],
         out.update(fault_kind=kind,
                    fault_cause=("self_declared" if kind == "procedural" else ""),
                    report_gap=gap)
+        out["defect_scope"] = _scope_cell(out.get("defect_scope"), axis="fault")
         return out
     out.update(fault_kind="", fault_cause=("report_gap" if gap else ""),
                report_gap=gap)
+    out["defect_scope"] = _scope_cell(out.get("defect_scope"), axis=str(out.get("axis") or ""))
     return out
 
 
@@ -1636,6 +1656,10 @@ class AgentV:
             #: 没有走那一格（没签过 / 签块已经由旧路短接 / 没给正文）。键无条件存在 ——
             #: 与 `review_write` 同一条纪律：读的人不必按分支猜这一格在不在。
             "issued_sign": {},
+            #: CLAIM-INTEGRITY ②（2026-11-24）：重送闸的读数
+            #: （`v_defect.statement_scope_gate`）。空表 = 这一趟没走到那一格
+            #: （未在册 / 更早的早退）；键无条件存在 —— 同上一条纪律。
+            "statement_scope_gate": {},
         }
         # ---- 2026-11-02 业主定稿：一次送审 = 同一次调用内连判三轮，跨调用绝不累计 ----
         #
@@ -2184,6 +2208,36 @@ class AgentV:
                        f"打回过（{_obj_ref or '台账里那一行'}）—— 不重复判、不落新行、"
                        "不问模型；改过字之后重送")
             return out
+
+        # ---- CLAIM-INTEGRITY ②（2026-11-24）：命题层缺陷没改过 ⇒ 不受理这次重送 ------
+        #
+        # 位置在这里（「打回站住」之后、任何模型调用与台账写入之前）：
+        # ① 同一份正文的重送由上面那一格先挡（它更具体：正文一个字没改）；
+        # ② 这一格挡的是"改过证明、但台账上的命题原文一字不动"的重送 —— 真机现场是
+        #    B 把稿里的命题句换成了更弱的一条（把坐标轴方向也算进「对角方向」），
+        #    于是 V 下一趟审的是台账上没有的那条命题，而每格读数都合法；
+        # ③ 判据本体在 `v_defect.statement_scope_gate`（纯读、零模型），这里只做返回形状
+        #    与受控码。它读的是「最后一次把缺陷归到命题层的判定」之后、命题行有没有被
+        #    真改过（`_statement_amend_history`）或 V 有没有把归类撤回（后续 clean /
+        #    proof / style）。
+        if sid:
+            _scope_gate = VR.statement_scope_gate(
+                self.workspace_root, statement_id=sid, store=self.store)
+            out["statement_scope_gate"] = dict(_scope_gate)
+            if _scope_gate.get("blocked"):
+                #: 两枚受控码按本文件既有写法写成字面量（`V_VERIFY_PROOF_REASONS` 的
+                #: 声明由 `temp/probe_verify_tool_face.py` 从这个位置现算并双向对账）；
+                #: 判据本体 `v_defect` 里另有同名常量，给判据与测试读 —— 同一对值、
+                #: 一处产出点（这里）、一处声明（`V_VERIFY_PROOF_REASONS`）。
+                out.update(
+                    checked=False, kind="", signed_bit3=False,
+                    reason=("statement_scope_ledger_unreadable"
+                            if not _scope_gate.get("checked")
+                            else "statement_scope_fault_unamended"),
+                    detail=str(_scope_gate.get("why") or ""))
+                self._emit(f"verify_proof({sid})：上一次判定把缺陷归到命题层、而命题"
+                           "之后没改过 —— 这一趟不受理（不调模型、不落台账行、不签发）")
+                return out
 
         # ---- 引用核实的材料（业主 2026-10-26：V 要核 F 的引用，而 F 的引用不是逐字引文）----
         #

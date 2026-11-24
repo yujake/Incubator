@@ -421,6 +421,15 @@ class JudgeMixin:
             # 形状归一（字符串、截断），语义归类在 `v_reply_fault_reading` 一处。
             out["defect_kind"] = str(data.get("defect_kind") or "").strip()[:40]
             out["report_gap"] = str(data.get("report_gap") or "").strip()[:500]
+            # ---- CLAIM-INTEGRITY ②（2026-11-24）：这条缺陷要改哪一层 --------------
+            #
+            # 与 `defect_kind` 同一趟给、同一个词表出口（`v_vocab.DEFECT_SCOPES`）：
+            # 这一格只做形状归一（小写、去空白、词表外留空），语义归类在
+            # `secretary_sign.v_reply_fault_reading`（唯一一处）。词表外不许"猜成某一档"：
+            # 空串 = 没分类，重送闸不会因它而开（见 `v_vocab.DEFECT_SCOPES` 的注释）。
+            from . import verifications as _VR
+            _scope = str(data.get("defect_scope") or "").strip().lower()
+            out["defect_scope"] = _scope if _scope in _VR.DEFECT_SCOPES else ""
         if kind == "proposition_identity":
             # ---- 同一趟判断的第二组输出。
             #

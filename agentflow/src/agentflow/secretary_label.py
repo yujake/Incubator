@@ -153,9 +153,11 @@ def wash_working_name(label: Any, *, statement_full: Any = "", kind: str = "",
        「<kind> 待命名（stmt:NNNNNN）」，并在读数里点名"原名不可用"。
 
     ## 返回
-    `{"from", "to", "class", "why"}`：`from` 是交上来的原标签，`to` 是洗过的名字，
+    `{"from", "to", "class", "why", "needs_id"}`：`from` 是交上来的原标签，`to` 是洗过的名字，
     `class` 点名触发的那一类（内部工作名 + 命中的类名；见 `LABEL_WORKING_NAME_RULES`），
     `why` 是一句人话 —— 静默改名是不许的，读的人要能看出"凭什么改"与"改成了什么"。
+    `needs_id` 只在第三级兜底（名字里要嵌 `stmt_id`）时为真：那一档的名字要等发号
+    之后才定得下来，所以登记事务在发号之前查名字位时要跳过它（编号本身保证唯一）。
     """
     original = str(label or "")
     if not original.strip():
@@ -168,6 +170,7 @@ def wash_working_name(label: Any, *, statement_full: Any = "", kind: str = "",
         # 命中的那段在括号里（路线 / 草稿状态那一类的落点）⇒ 交给模型洗名，这里不动它。
         return None
     classes = "、".join(dict.fromkeys(hits))
+    needs_id = False
     if _readable_label(kept):
         to = _clip_label(kept)
         why = (f"标签里的内部工作名（{classes}）删掉之后还剩 {to!r} ⇒ 它就是名字"
@@ -181,7 +184,9 @@ def wash_working_name(label: Any, *, statement_full: Any = "", kind: str = "",
         else:
             tag = str(kind or "命题").strip() or "命题"
             to = f"{tag} 待命名（stmt:{str(stmt_id or '').strip() or '未发号'}）"
+            needs_id = not str(stmt_id or "").strip()
             why = (f"整条标签都是内部工作名（{classes}），而 statement_full 也抽不出可读的"
                    f"一句 ⇒ 原名不可用，名字待定：{to!r}")
     return {"from": original, "to": to,
-            "class": f"{LABEL_WASH_WORKING}（{classes}）", "why": why}
+            "class": f"{LABEL_WASH_WORKING}（{classes}）", "why": why,
+            "needs_id": needs_id}

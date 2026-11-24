@@ -250,6 +250,101 @@ def by_id(source: Any = None, *, stmt_id: Any, rows: Iterable[Mapping[str, Any]]
     return out
 
 
+# ---------------------------------------------------------------- 名字位：label 唯一
+
+
+#: `label_owner` 默认只把哪几档状态算「这个名字还有主」（CLAIM-INTEGRITY ①）。
+#:
+#: 只有 `active`：`abandoned` / `superseded` 是历史（换号正是「先放弃旧的、再登记
+#: 同名的新的」这条既有路，`statementabandon.relabel_events` 就是按同名对读它的），
+#: 把历史行也算进来会让换号这条路当场断掉。`refuted` / `disputed` /
+#: `pending_definition` 不是「这个名字现在指着一条成立的命题」—— 它们各有自己的
+#: 问题，名字位不为它们保留（否则一条被判死的命题会把名字永久钉住）。
+LABEL_OWNER_STATUSES: tuple[str, ...] = ("active",)
+
+
+def label_owner(source: Any = None, *, label: Any, rows: Iterable[Mapping[str, Any]] | None = None,
+                exclude_stmt_id: Any = "", statuses: Sequence[str] | None = LABEL_OWNER_STATUSES
+                ) -> dict[str, Any]:
+    """「这个名字现在有没有主」—— 一条 `active` 命题只许有一个 label（CLAIM-INTEGRITY ①）。
+
+    ## 它不是第三种查口径
+
+    `by_id` / `by_keywords` 回答的是「有哪些行」；这一格回答的是一个谓词：
+    给定的名字在给定的那批行里有没有主人。输入永远是调用方给的那批行（事务快照），
+    本函数不自己决定池 —— 与 `pool` 同一条纪律（见模块 docstring 的「池归调用方」）。
+
+    ## 为什么需要它（真机两处同名）
+
+    `projects/sylow-4` 的 000062 / 000063 都是 `active`、`label` 逐字都是
+    「Sylow 第三定理」，而 000063 的正文是指数公式 `n_p = [G:N(P)]`—— 论文对应表
+    `thm:index → 000063` 于是「编号对了、名字错了」。全仓此前没有一条判据问过
+    「同一个名字是不是已经有主」：两笔登记各自都合法，落完之后没有任何读数会响。
+
+    ## 归一（不是逐字比）
+
+    按 `textutil.normalize`（全半角 / 大小写 / 标点 / 空白折叠）比：`Sylow 第三定理`
+    与 `Sylow　第三定理`（全角空格）、`定理 A。` 与 `定理 A` 是同一个名字。
+    这是判重用的同一把尺（`duplicate_hits` 也用它），不另造相似度阈值。
+
+    ## 三态
+
+    | 结局 | 返回 |
+    |---|---|
+    | 查成了、没主 | `checked=True` + `taken=False` |
+    | 查成了、有主 | `checked=True` + `taken=True` + `owners=[{stmt_id,label,status,kind}]` |
+    | 没查成 | `checked=False` + `reason`（台账读不出来 / 没给名字） |
+
+    `checked=False` 不许折成「没主」：调用方（`_record_statement_tx`）对它按
+    fail-closed 处理（不落这一行），否则一次 I/O 故障就等于把判据摘掉一次。
+    """
+    out: dict[str, Any] = {
+        "checked": False, "label": str(label or ""), "normalized": "", "taken": False,
+        "owners": [], "owned_by": "", "scanned": 0, "skipped_status": 0,
+        "statuses": None if statuses is None else [str(s) for s in statuses],
+        "source": _source_label(source, rows),
+        "why": "", "reason": "", "error": {},
+    }
+    got, problem, error = rows_of(source, rows=rows)
+    if problem:
+        out.update(why=problem, reason=problem, error=dict(error))
+        return out
+    want = T.normalize(out["label"])
+    out["normalized"] = want
+    if not want:
+        # 空名字不占名字位（`Statement.validate` 不要求 label 非空；不命名是另一条问题）。
+        out.update(checked=True, scanned=len(got),
+                   why="这个名字归一之后是空的 ⇒ 不占名字位（没有可比的字）")
+        return out
+    want_status = None if statuses is None else {str(s) for s in statuses}
+    skip = str(exclude_stmt_id or "").strip()
+    owners: list[dict[str, Any]] = []
+    for row in got:
+        sid = str(row.get("stmt_id") or "")
+        if skip and sid == skip:
+            continue
+        if want_status is not None and str(row.get("status") or "") not in want_status:
+            out["skipped_status"] += 1
+            continue
+        if T.normalize(str(row.get("label") or "")) != want:
+            continue
+        owners.append({"stmt_id": sid, "label": str(row.get("label") or ""),
+                       "status": str(row.get("status") or ""),
+                       "kind": str(row.get("kind") or "")})
+    out.update(checked=True, scanned=len(got), owners=owners, taken=bool(owners))
+    if owners:
+        out["owned_by"] = owners[0]["stmt_id"]
+        out["why"] = (f"这个名字已经有主：stmt:{owners[0]['stmt_id']}"
+                      f"（{owners[0]['label']!r}，status={owners[0]['status'] or '?'}）"
+                      f"在 {len(got)} 行里命中 {len(owners)} 条")
+    else:
+        _kinds = "/".join(sorted(want_status)) if want_status is not None else "（全部状态）"
+        out["why"] = (f"查过：{len(got)} 行里没有别的行用这个名字"
+                      f"（跳过 {out['skipped_status']} 行不在 {_kinds} 里的；"
+                      "同名历史行不算占用）")
+    return out
+
+
 # ---------------------------------------------------------------- 口径二：按内容关键字
 
 

@@ -4,7 +4,7 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（2026-11-23 A-3-EXEC 按现盘重算 `scripts/recompute_map_headline.py`；含同日并行路的未提交改动）：**
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **426 个 `.py`、330,644 行**，**72 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，16,706 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **426 个 `.py`、331,168 行**，**72 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，16,706 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > **2026-11-21 COL2 合稿路（p313 一次冻结，观测 19:4x）：三格 418 / 319,694 / 72。**
 > `>800` 的 **73 → 72**：`specs/b.py` 821 → **798**（PA4 的方法学条与「同一条定理多种证明」
 > 条**逐字搬进** `specs/b_ingest_policy.py` 的 `B_METHOD_POLICY` / `MULTI_PROOF_POLICY`，
@@ -1199,23 +1199,23 @@
 | `secretary_identity.py` | 683 | 秘书的命题同一性判定：判不了不许新建 / 合并（U21 前半） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_identity_side.py` | 500 | 秘书的挑词、形态闸与修稿同一性（U21 后半） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_inbox.py` | 482 | 秘书的收件箱与闭环提醒：两栏不混（U10+U28+U29） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
-| `secretary_judge.py` | 596 | 秘书的判断内核：一次模型判断的整条链（U15+U14） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
-| `secretary_label.py` | 187 | 秘书的标签洗：内部工作名 → 名字（U20） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_judge.py` | 605 | 秘书的判断内核：一次模型判断的整条链（U15+U14） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_label.py` | 192 | 秘书的标签洗：内部工作名 → 名字（U20） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_ledger.py` | 428 | 秘书的台账底座：落点、追加口、发号、名册写临界区（U01+U02+U03） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
-| `secretary_merge.py` | 711 | 秘书的并进在册：同一命题 / 第 N 份证明（U22 合并侧） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_merge.py` | 742 | 秘书的并进在册：同一命题 / 第 N 份证明（U22 合并侧） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_outbound.py` | 727 | 秘书的发件口：不替本体表态（U17） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_port.py` | 53 | 秘书的装配口：造一名 `Secretary` 只经这一处（混入模块那一侧） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
-| `secretary_prompts.py` | 340 | 秘书的判断提示词：system 段逐字节稳定（U16） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_prompts.py` | 351 | 秘书的判断提示词：system 段逐字节稳定（U16） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_proofkind.py` | 335 | 秘书的同种证明判定（U22 证明种侧） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_relay.py` | 286 | 秘书的转发链：正文只在链尾（U12） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_retire.py` | 597 | 秘书的销号：静默闸 + 级联 + 台账落终态（U09） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_roster_read.py` | 649 | 秘书的名册读侧与视图：事件流折叠与三态读数（U04） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_roster_write.py` | 708 | 秘书的名册写口与名字身份（U06+U05） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_session.py` | 292 | 秘书的实例台账读写：一实例一片（U13） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
-| `secretary_sign.py` | 795 | 秘书的签：决定 ≠ 落地（U26） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
-| `secretary_statement.py` | 499 | 秘书的登记外壳与形状闸（U22 外壳） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_sign.py` | 796 | 秘书的签：决定 ≠ 落地（U26） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_statement.py` | 501 | 秘书的登记外壳与形状闸（U22 外壳） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_statement_meta.py` | 556 | 秘书的元数据改写与两个新终态（U22 元数据侧） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
-| `secretary_statement_tx.py` | 710 | 秘书的登记事务：一笔全落或一字节不落（U22 事务侧） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_statement_tx.py` | 760 | 秘书的登记事务：一笔全落或一字节不落（U22 事务侧） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_surface.py` | 489 | 秘书的读写面池：一槽一主（U07） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_tier_judge.py` | 605 | 秘书的档位判据：力气读数 + 指路（U25 前半） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_tier_ledger.py` | 586 | 秘书的档位读侧：折叠与三态（U25 中段） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
@@ -1225,15 +1225,15 @@
 | `secretary_vocab.py` | 485 | 秘书的受控词表：一个词只有一个定义（U15/U17/U18/U25/U26 等单元的常量） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_wash.py` | 776 | 秘书的两段式洗 / 请示 / 确认（U18+U19+U23 洗侧） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `v_citation.py` | 316 | 引用核实：V 核 F 在 `dependencies` 上登记的引用，够不够格被引 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
-| `v_defect.py` | 458 | 缺陷分类与投票（纯读） | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
+| `v_defect.py` | 681 | 缺陷分类与投票（纯读） | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
 | `v_evidence.py` | 173 | 证据同一性：同一份读数只算一份 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
 | `v_gap_read.py` | 784 | 凭据缺口读数（pending / 短回路） | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
 | `v_grades.py` | 282 | 等级反算（apply 才写盘） | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
-| `v_ledger_write.py` | 526 | 台账写口：追加 + 可撤回 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
+| `v_ledger_write.py` | 532 | 台账写口：追加 + 可撤回 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
 | `v_paths.py` | 385 | 台账路径 + 证明号 / 哈希 / 判词解析 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
 | `v_pending_read.py` | 540 | pending 读侧：哪一行算那一签 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
 | `v_pending_write.py` | 266 | pending 写口：两层锁 + 跨文件发号 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
-| `v_prompt.py` | 357 | 冷启动提示词：只有对象，没有句柄 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
+| `v_prompt.py` | 363 | 冷启动提示词：只有对象，没有句柄 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
 | `v_rowread.py` | 709 | 行轴与签资格：轴只由秘书给 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
 | `v_selftest.py` | 101 | 自检 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
 | `v_sign.py` | 634 | 签落位：台账与 statements 同一次写 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
@@ -1241,7 +1241,7 @@
 | `v_standing.py` | 641 | 第 3 位读数：签的是哪一份 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
 | `v_streak.py` | 270 | 连续票与打回：同一份正文才算数 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
 | `v_unverified.py` | 476 | 未审命题：在册 / pending 两路 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
-| `v_vocab.py` | 439 | 词表与常量 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
+| `v_vocab.py` | 459 | 词表与常量 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
 | `refusalfault.py` | 413 | 拒信必须说真话：框架内部错误的分档、落库事实、诊断不丢、审计痕迹 | 第 3 层 · 工具面（GUARDFIX 新建；`tools/attack_tools.py` 的 `_guard` 与 `agent_f/step.py` 两处共用） |
 
 ### §1.2 2026-11-21 新建的两个模块（新模块在这里有位置）

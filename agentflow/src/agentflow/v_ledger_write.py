@@ -319,9 +319,14 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
     # 写行处）每一行都给，于是新行的键一定在 —— 键在不在是 `fault_kind_of` 分
     # "新行 / 老行"的唯一依据。调用方没给时（老测试夹具 / 非 V 的写口）不写，
     # 那一行的读法回到 `legacy_*` 的保守推定（不会静默解锁）。
-    for _key in ("fault_kind", "fault_cause", "report_gap"):
+    for _key in ("fault_kind", "fault_cause", "report_gap", "defect_scope"):
         if _key in _judge:
             row[SECRETARY_JUDGE_KEY][_key] = str(_judge.get(_key) or "")[:500]
+    #: CLAIM-INTEGRITY ②（2026-11-24）：`defect_scope` 写侧只认三档 + 空
+    #: （词表只有一处：`v_vocab.DEFECT_SCOPE_VALUES`）。词表外的写法落成空 = 没分类 ——
+    #: 不许让一个读侧读不出的值在重送闸那里"因为不是 statement 所以放行"。
+    if str(row[SECRETARY_JUDGE_KEY].get("defect_scope") or "") not in DEFECT_SCOPE_VALUES:
+        row[SECRETARY_JUDGE_KEY]["defect_scope"] = ""
     #: 洗过的那一份转达文本（业主 2026-10-29 的 C 段）：`{text, findings, dropped, refused}`。
     #: 只在秘书真的洗出来时写（`washed=True`）—— 洗不出来的那一档不写这一格：
     #: 台账上"没有这一格"必须是"没洗过/洗不出来"，而不许写一份空文本冒充洗过。
@@ -506,6 +511,7 @@ def _rollback_append(path: Path, before: int, row: Mapping[str, Any]) -> bool:
 # 全部在函数体里，所以只要定义都跑完了，谁先被导入都拿得到。
 from . import verifications  # 门面字典：被打桩的名字经它取
 from .v_vocab import (  # noqa: F401 — 实现在 v_vocab.py
+    DEFECT_SCOPE_VALUES,
     SECRETARY_JUDGE_KEY,
     _FAULT_VERDICT,
 )

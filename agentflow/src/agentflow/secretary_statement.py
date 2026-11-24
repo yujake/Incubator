@@ -107,7 +107,9 @@ class StatementMixin:
 
         理由码：`secretary_unavailable` / `not_statement_writer` / `wash_failed` /
         `unresolved_dependency`（依赖指着一个不在册的 id）/ `unknown_lit_id` /
-        `empty_statement`（缺 `statement_full` —— 只有短版不算数）。
+        `empty_statement`（缺 `statement_full` —— 只有短版不算数）/
+        `statement_label_taken`（同一个名字已经有 active 行在册；见 `_record_statement_tx` 的
+        名字位那一格 —— 改名的出路写在 `reason` 里）/ `statement_label_unchecked`（没查成）。
         概念的定义空着不是拒绝：它落成 `pending_definition` + 待补标记。
 
         ## 同一命题 / 同种证明

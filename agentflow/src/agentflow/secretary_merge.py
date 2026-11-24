@@ -563,8 +563,9 @@ class MergeMixin:
         _note_path_material(out, _path_material_numbers(groups)
                             if len(groups) <= 1 else [], decided=proof_no)
         written = ["statements"]
+        #: 并这一笔动 label 之前的值（CLAIM-INTEGRITY ① 的查重只看"这一笔真的改了名"）。
+        _label_before = str(row.get("label") or "")
         # ---- 洗定理名 + 路线进证明层（「路线写在证明这一层」）。
-        #
         # 这一笔的 label 已经被洗成 `canonical_name`（见 `_record_statement_tx`），但并进去之后
         # label 用的是那条在册行的。所以这里两件都要做：
         # ① 在册那一条的名字如果与洗过的名字不同 ⇒ 顺手把它洗掉（第一条带着
@@ -596,6 +597,36 @@ class MergeMixin:
             out["label_washed"] = dict(working, stmt_id=sid)
             row["label"] = str(working["to"])
             out["canonical_name"] = str(working["to"])
+        # ---- CLAIM-INTEGRITY ①（2026-11-24）：并这一笔顺手改的名字也不许撞上别人 -----
+        #
+        # 上面两处（路线洗名 / 内部工作名洗名）改的是在册那一行的 label。它同样是一条
+        # 「同名」的来路：两条不同的命题可以经「先落一条带修饰的名字、再落一条干净的名字」
+        # 变成同名。位置在任何 `tx.upsert` 之前（这一支此时只读过事务快照），受控拒仍然
+        # 是一个字节都不写。排除的是这一行自己（它当然用着自己的名字）。
+        if str(row.get("label") or "") != _label_before:
+            _label_owner = SL.label_owner(rows=tx.rows("statements"),
+                                          label=row.get("label"), exclude_stmt_id=sid)
+            out["label_uniqueness"] = dict(_label_owner)
+            if not _label_owner.get("checked"):
+                out.update(checked=False, created=False, duplicate=False, merged=False,
+                           refused="statement_label_unchecked",
+                           reason=("并这一笔要顺手改名字，而名字位没查成（"
+                                   + str(_label_owner.get("reason")
+                                         or _label_owner.get("why") or "台账读不出来")
+                                   + "）⇒ 整笔不写：没查成 ≠ 这个名字没主"))
+                return out
+            if _label_owner.get("taken"):
+                _owner_row = dict((_label_owner.get("owners") or [{}])[0])
+                out.update(checked=False, created=False, duplicate=False, merged=False,
+                           refused="statement_label_taken",
+                           stmt_id=sid, label_owner=_owner_row,
+                           reason=(f"并这一笔会把 stmt:{sid} 的名字改成 "
+                                   f"{row.get('label')!r}，而这个名字在 active 命题里已经有主："
+                                   f"stmt:{_owner_row.get('stmt_id') or '?'}"
+                                   f"（{_owner_row.get('label') or '（空）'}）⇒ 整笔不写（一个字节"
+                                   "都没改）。处置：留名不改（把 canonical_name 那一格放弃），"
+                                   "或先把那一条改成一个不撞的名字"))
+                return out
         if route:
             out["proof_route"] = route
             routes = dict(row.get(PROOF_ROUTES_KEY) or {})

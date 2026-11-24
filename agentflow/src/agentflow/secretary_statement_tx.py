@@ -347,6 +347,56 @@ class StatementTxMixin:
             # 过渡期的号空间只有一个权威（老表还在时是 `concept`，迁移之后是 `stmt`）
             concept_kind = (S.TABLES[CR.LEGACY_TABLE]["id_kind"] if legacy.get("present")
                             else stmt_kind)
+            # ---- CLAIM-INTEGRITY ①（2026-11-24）：一个 active 命题只许有一个名字 ------
+            #
+            # 位置在发号之前：受控拒要求「盘上零写入」，而 `tx.alloc_id` 会推进
+            # `counters.json`（`_alloc_kinds` 那一支在提交时写回）—— 放在发号之后再拒，
+            # 会留下一个没建行的号（`verify` 的 `id_gap`，而它确实是一次写入）。
+            #
+            # 名字用「这一笔最终会写下的那个」：模型洗名已经落在 `body["label"]` 上
+            # （本方法开头那一格），内部工作名这一档在这里先洗一次（确定性、零模型）。
+            # 第三级兜底（名字里嵌 `stmt_id`）此时定不下来 ⇒ 跳过这一查：编号本身保证唯一。
+            #
+            # 为什么查的是全表 active 行而不是 `kind=theorem`：按 kind 收窄等于给绕行留门
+            # （把重复那条登记成 `lemma` 就过去了）。概念 / 定义行也在这张表里，它们同样
+            # 该只有一个名字（概念同一性闸按定义项判，与这一格不冲突：两把尺都在）。
+            _pre_wash = wash_working_name(body.get("label"), statement_full=full,
+                                          kind=kind, stmt_id="")
+            _label_now = str(_pre_wash["to"]) if _pre_wash else str(body.get("label") or "")
+            #: `force_new` 是调用方显式说「不许替它合并、另起一条」（不在编排层、
+            #: 模型面没有这个参数，见 `capabilities` 的注释）⇒ 跳过名字位：同内容另起
+            #: 一条必然同名，查了就等于把这条路关死。它不构成绕行面。
+            if not force_new and not (_pre_wash and _pre_wash.get("needs_id")):
+                _owner = SL.label_owner(rows=tx.rows("statements"), label=_label_now)
+                out["label_uniqueness"] = dict(_owner)
+                if not _owner.get("checked"):
+                    out.update(checked=False, created=False, duplicate=False,
+                               refused="statement_label_unchecked",
+                               reason=("名字位没查成（"
+                                       + str(_owner.get("reason") or _owner.get("why")
+                                             or "台账读不出来")
+                                       + "）⇒ 整笔不写：没查成 ≠ 这个名字没主"))
+                    return out
+                if _owner.get("taken"):
+                    _one = dict((_owner.get("owners") or [{}])[0])
+                    out.update(checked=False, created=False, duplicate=False,
+                               refused="statement_label_taken",
+                               stmt_id=str(_one.get("stmt_id") or ""),
+                               label_owner=_one,
+                               reason=(
+                                   f"这个名字在 active 命题里已经有主：stmt:"
+                                   f"{_one.get('stmt_id') or '?'}（{_one.get('label') or _label_now!r}，"
+                                   f"kind={_one.get('kind') or '?'}）。同一个名字不许挂两条"
+                                   "命题 —— 论文对应表与引用只认名字，两条同名会让「引的是"
+                                   "哪一条」在盘上无解（同一个名字底下可能是两条内容完全"
+                                   "不同的命题）。处置二选一：① 改名：把"
+                                   "这一条与那一条的差别写进 label（例如把「Sylow 第三定理」"
+                                   "改成它真正说的那个结论）；② 它其实是已有那条命题的另一面 /"
+                                   "派生陈述 ⇒ 不要再登记一条新行：把内容并进已有那一条"
+                                   "（作为它的第 N 份证明或一条依赖），或在 `derived_from` 里"
+                                   "点名已有那条、并给这一条一个自己的名字。"
+                                   "整笔不写，盘上一个字节都没变。"))
+                    return out
             # ---- D2（2026-11-05 走查）：稿名 / 稿头的号当候选号，「不另发一个」 -------
             #
             # 现场（`temp/e2e-sign-20261105-b` 主链）：稿名 / 稿头是 000001，而计数器从 0

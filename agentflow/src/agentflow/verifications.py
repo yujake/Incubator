@@ -129,6 +129,8 @@ from .v_vocab import (  # noqa: F401 — 再导出：词表与常量
     CITATION_VERDICTS,
     CODE_AUDIT,
     CODE_WRITE,
+    DEFECT_SCOPES,
+    DEFECT_SCOPE_VALUES,
     DISPROVED,
     EXHAUSTION_SIGN_STREAK_NEED,
     FAULT_CAUSES,
@@ -258,6 +260,9 @@ from .v_rowread import (  # noqa: F401 — 再导出：行轴与签资格（轴�
 )
 
 from .v_defect import (  # noqa: F401 — 再导出：缺陷分类与投票（纯读）
+    AMEND_CELLS,
+    REFUSED_SCOPE_LEDGER,
+    REFUSED_STATEMENT_SCOPE,
     _fault_kind_text,
     _findings_of,
     _has_math_evidence,
@@ -266,10 +271,12 @@ from .v_defect import (  # noqa: F401 — 再导出：缺陷分类与投票（�
     _looks_like_style,
     _mechanical_gate_of,
     banned_markers_in,
+    defect_scope_of,
     fault_kind_of,
     is_a_vote,
     report_fix_list,
     says_only_a_report_gap,
+    statement_scope_gate,
     vote_reading,
 )
 
