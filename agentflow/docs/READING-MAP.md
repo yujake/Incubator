@@ -2,9 +2,9 @@
 
 > **这份文件回答一个问题：我现在要改的东西，代码在哪、判据在哪。**
 >
-> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（2026-11-23 A-3-EXEC 按现盘重算 `scripts/recompute_map_headline.py`；含同日并行路的未提交改动）：**
+> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（2026-11-24 B2R21-BOOKKEEPING 按现盘重算 `scripts/recompute_map_headline.py`；含同日并行路的未提交改动）：**
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **426 个 `.py`、331,168 行**，**72 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，16,706 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **428 个 `.py`、333,155 行**，**72 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，16,977 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > **2026-11-21 COL2 合稿路（p313 一次冻结，观测 19:4x）：三格 418 / 319,694 / 72。**
 > `>800` 的 **73 → 72**：`specs/b.py` 821 → **798**（PA4 的方法学条与「同一条定理多种证明」
 > 条**逐字搬进** `specs/b_ingest_policy.py` 的 `B_METHOD_POLICY` / `MULTI_PROOF_POLICY`，
@@ -1151,6 +1151,7 @@
 | `providers.py` | 文献检索 provider 层（禁改区） |
 | `fetch.py` | 下载层：流式下载、原子落盘、限速重试、镜像回退 |
 | `extract.py` | 文本抽取层：`extract_text(path) -> DocumentText`（禁改区） |
+| `extractbudget.py` | **B 抽取面的协作式预算**（2026-11-24，真机 lp-ball-21）：`Budget` / `BudgetStop` / `make_budget` / `note_progress` / `stamp_step_beat` / `stop_reading` —— 到点在安全点（块 / 页边界）停、已完成的产物原样交回；进度落会话事件与步轨迹（`conductor.step_beats` 只读后者），缺省 240 秒、显式 0 才是无限。判据 `tests/test_b_run_once_stops_at_its_budget.py` |
 | `formalgw.py` | Lean 形式化验证后端 |
 | `textutil.py` | 文本规范化、相似度、slug、页码解析 |
 | `errorstats.py` | **按角色 × 类目的「错误动作计数」**（业主口径逐字在模块 docstring：统计"被各种判据拦下或被秘书拦下"的行为，按角色细分多类）：只读事件流与会话记录，一份都不写（不建表、不改行、不追加事件、不落报告）；`ERROR_CATEGORIES` / `CODE_TABLE`（码→类目→`file:line` 出处）/ `primary_code`（一条记录只算一次的主码规则）/ `error_action_stats`（三态 `checked` + `state` + `reason`）/ `render_text` / `stats_json`。人看 `agentflow stats errors`，程序看 `as_dict()` |
@@ -1177,7 +1178,7 @@
 | 模块 | 行数 | 一句话职责 | 它在哪一层 |
 |---|---:|---|---|
 | `clockcost.py` | 160 | 到点判定的成本读数：最近一拍花了多少、下一拍该在多少秒后醒 | 第 6 层 · 时钟零件（`clock.py` 拆出） |
-| `clockfire.py` | 714 | 到点那一整层：`_DUE_HANDLER` / `fire_due` / 投递 / 周期补拍 / 成本读数 / 假时钟 | 第 6 层 · 时钟零件（`clock.py` 拆出） |
+| `clockfire.py` | 727 | 到点那一整层：`_DUE_HANDLER` / `fire_due` / 投递 / 周期补拍 / 成本读数 / 假时钟 | 第 6 层 · 时钟零件（`clock.py` 拆出） |
 | `clockmem.py` | 396 | 计时器 / 闹钟 / 周期巡查的申请面：起表、补目的、取消、读清单 | 第 6 层 · 时钟零件（`clock.py` 拆出） |
 | `clockpatrol.py` | 445 | 巡查文案与异常清单：`patrol_*` 那一整层 | 第 6 层 · 时钟零件（`clock.py` 拆出） |
 | `clockprobe.py` | 99 | 「等谁」的探针与判定：把外部读口折成三态的那一层 | 第 6 层 · 时钟零件（`clock.py` 拆出） |
@@ -1187,7 +1188,7 @@
 | `clocktimer.py` | 797 | 计时器与簿记的环核：`Timer` / `TimerBook` / `book()` / `target_state()` | 第 6 层 · 时钟零件（`clock.py` 拆出） |
 | `clockwaitany.py` | 513 | `wait_any` 与交差账：等任意计时器返回的意图账 + 交接（handoff）的读写 | 第 6 层 · 时钟零件（`clock.py` 拆出） |
 | `clockwaits.py` | 719 | 等待账（`out/clock/` 下那一个 waits 文件）与两把普查：原始等待 / 起进程 | 第 6 层 · 时钟零件（`clock.py` 拆出） |
-| `clockwakes.py` | 388 | 唤醒标记与兜底计时器（lifeline）：到点之后「叫醒谁」的那一层 | 第 6 层 · 时钟零件（`clock.py` 拆出） |
+| `clockwakes.py` | 570 | 唤醒标记与兜底计时器（lifeline）：到点之后「叫醒谁」的那一层 | 第 6 层 · 时钟零件（`clock.py` 拆出） |
 | `secretary_addressing.py` | 575 | 秘书的寻址与父子计数（U08 前半） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_axes.py` | 316 | 秘书的四本判定旁支台账：append / rows / of / path（U30） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_axis.py` | 235 | 秘书的行轴与活口（唯一判据，U08 尾段） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
@@ -1326,7 +1327,7 @@
 | 文件 | 行数 | 它的边界 | 为什么大（不是"没整理"，是职责本身宽） |
 |---|---:|---|---|
 | `agent_d/core.py` | 1754 | D 的全部动作（14 个，**拆包**：一个动作一个文件；`agent_d/core.py` 是其余成员（含 core 自身共 1707 行）；`agent_d/_support.py` 是模块级 helper 与常量，867 行）：摄入 / 溯源 / 评估 / 提问（`propose_question`）/ 裁决 / 研究 / 汇报（批 R22 把两处请求账本收成一处 `_d_requests`，1702 → 1772 行） | 每个动作都自带"数据面前置检查 + 落库 + 三态"三段，15 个叠起来就是几千行 |
-| `agent_loop.py` | 16706 | 角色循环：模型决定调哪个工具 / 唤起谁 / 给谁留言，框架负责执行与留痕（**批 R40 补进本表** —— 它此前只在 §2 的用途表里；2026-11-16 读数：全仓最大的是 `secretary.py`，本表里最大的一行仍是它）。批 R62：`max_output_tokens` 8,192 → 32,768（严格口径 T1 的 `ModelReplyNotOk` 与 2026-10-03 第八趟的整份重写被截断，是同一格）。批 R68：新增一档 `no_reply`（"没拿到可用的回复"：超时与"思考吃光输出预算"分开计数、分开收场，各配一句只对它说的纠正）。批 R105：新增 `_registry_with_own_action`（把"我这一趟被派的那个动作"包成 `own.<动作>` 交给循环 —— `--subagents` 那一档的收尾）。批 R119：新增 B 入库前的秘书判档（只在那件动作**真在注册表里**时才问）；NT2（2026-11-15）判/落拆段之后，判在 `Secretary.judge_statement`、落行在 `Secretary.record_nontriviality`（拿到命题号与路径号之后），本文件只把回执抬成 `out["tier"]` | 一次循环要管八种形状、每一步的提醒/闸门/读数与续跑重建 |
+| `agent_loop.py` | 16977 | 角色循环：模型决定调哪个工具 / 唤起谁 / 给谁留言，框架负责执行与留痕（**批 R40 补进本表** —— 它此前只在 §2 的用途表里；2026-11-16 读数：全仓最大的是 `secretary.py`，本表里最大的一行仍是它）。批 R62：`max_output_tokens` 8,192 → 32,768（严格口径 T1 的 `ModelReplyNotOk` 与 2026-10-03 第八趟的整份重写被截断，是同一格）。批 R68：新增一档 `no_reply`（"没拿到可用的回复"：超时与"思考吃光输出预算"分开计数、分开收场，各配一句只对它说的纠正）。批 R105：新增 `_registry_with_own_action`（把"我这一趟被派的那个动作"包成 `own.<动作>` 交给循环 —— `--subagents` 那一档的收尾）。批 R119：新增 B 入库前的秘书判档（只在那件动作**真在注册表里**时才问）；NT2（2026-11-15）判/落拆段之后，判在 `Secretary.judge_statement`、落行在 `Secretary.record_nontriviality`（拿到命题号与路径号之后），本文件只把回执抬成 `out["tier"]` | 一次循环要管八种形状、每一步的提醒/闸门/读数与续跑重建 |
 | `agent_c/core.py` | 1139 | C 的 10 个纯读分析动作（**拆包**：一个动作一个文件；`agent_c/core.py` 是其余成员（含 core 自身共 1087 行）（批 R54 的 CS-10 ② 加了 `_report` 的产出即登记）；`agent_c/_support.py` 是模块级 helper 与常量，268 行）（批 R22 把 payload 里那句取不到的 `graph.*` 换成 `detail_reading`） | 分析类动作的**输出形状**很宽（每条都要给人读的措辞 + 给机器读的结构） |
 | `capabilities.py` | 3407 | 动作表 + 写集 + 边表 + 导入期交叉断言（批 R21 加了空写集的并发含义表 `EMPTY_WRITE_SETS` 与它的两条反真空断言：2490 → 2569 行；2026-10-15 加 `A.walk_citations` 之后两层对账的读数更新为 61 = 22 + 39 + 0；2026-11-09 T1 加 B 的两条动作之后两层对账读数更新为 66 = 25 + 41 + 0；2026-11-11 `open_polish_copy` 进 unmatched 之后现算 67 = 25 + 42 + 0，只动注释、+2 行；2026-11-22 PROMPTFIX 把 L 补进 `_INDIRECT_FROM_M`，+6 行） | 声明本身不长，长的是**逐条理由**与断言（禁改区，必须写清为什么） |
 | `agent_skills.py` | 4898 | 各智能体的 skills（2026-11-22 业主裁定「skills 应该在系统内而非在工作区」）：**50 条**操作手册的**目录 + 正文**（一处定义）、`SURVEY`（38 个来源 skill 的调研记录）、`validate()`（动作可达 + 工具在**本角色**的面上 + **正文里点名**的动作/工具也算 + **落点必须在登记过的根下** + slug 可当文件名，配一张具名的"指到别人"豁免表）与导出用的 `materialize()`（2026-10-15：A/C/B/D 各补手册 + A 一条讲引文图，38 → 40；同日再加 `shared/取数-编号一律从台账读`，40 → 41 条 shared→**44 条**；2026-10-16：第 10 趟 T5 真机读数驱动 D 的攻坚口径更正；2026-10-30：F 的两份手册从三态收成两态；2026-11-21 SKILLFIX：删 `B/重抽取`（场景不存在）、并 `V/假设轴` 进 `V/复核` ⇒ 52 → **50 条**，四处语义错与三条零读取的触发点同笔改；2026-11-21 FINALIZE p315：PA6 的规矩 7 两处技能正文压缩 —— `产出-只产意见-签分两档` §一 340 → 221 字、`找文献-换招法而不是换说法` 1270 → 204 字 ⇒ 4,859 → **4,828** 行，条数仍 50；2026-11-22 PROMPTFIX：正文改由 `index_block` 随提示词渲染、工作区不再落 `skills/`；关档提示词另走 `PROMPT_ONLY_NO_LEAN_REPLACEMENTS`，导出件保留 D-40 原话） | 正文是**给人（模型）读的操作手册**，一条一大段；2026-11-22 起它随提示词渲染（手册就在模型面前），不再靠工作区文件"现做现读" |
