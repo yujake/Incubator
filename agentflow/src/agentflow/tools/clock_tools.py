@@ -745,7 +745,27 @@ def _deliver_due(timer: C.Timer) -> dict[str, Any]:
     两件刻意分开 try：一件失败不该把另一件也吞掉。两件的错误都写进 `note`，
     `fire_due` 仍把计时器标成 fired —— "到点这一刻"是已经发生的事实，失败的
     那一件必须留在审计里，而不是靠重复触发去补（那会产生重复的 mailbox 项）。
+
+    ## 兜底表（lifeline）不投件
+
+    兜底表不是"到点给你一句话"：它被打掉只意味着"有与我有关的东西来了"，续与叫醒
+    由 `clockfire._renew_lifeline` 一处完成。所以这里**不投 mailbox 项、也不记唤醒
+    标记** —— 投了就是替它开一条待办：
+
+    - `expects="ack"` 的 notice 会变成"名下未消项"，`retire_child` / 收工门因此拒
+      （2026-11-24 实测：`test_agent_loop` 4 条与 `test_rehearsal_a_literature_flow`
+      2 条全红在这条由兜底表自己长出来的 notice 上）；
+    - 投递侧的 `_ensure_consumer` 还会把刚收工的号按**空动作**再跑一趟（真机夹具里
+      那一趟落 `judge_not_wired`、行变 failed）。
+
+    口径一句话（回答"收件箱有未读该不该拦销号"）：看那条未读是不是**别人真的要它
+    办/看**的东西 —— `kind="message"`，或经秘书链送来的指导（`input_key=relay@…`）：
+    是，就该拦（它是债）、该叫醒；不是（`notice@…` 的收工汇报、兜底表自己、它自己的
+    状态报告），就不该拦，也不该记成待办。所以兜底表这一档连一条板项都不许开。
     """
+    if C.is_lifeline(timer):
+        return {"mailbox_item_id": "", "wake_id": "",
+                "note": "lifeline：不投件（只打掉 + 续 + 叫醒）"}
     workspace = timer.workspace
     binding = _binding(workspace)
     store = binding.get("store")

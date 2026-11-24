@@ -152,12 +152,25 @@ def waiters(workspace: str | Path) -> dict[str, Any]:
 
     业主点名的三档：`parked` / `woke` / `cancelled`；`parked` 仍算活跃，但必须与
     "正在跑"分开列（`active = running + parked`），且 `parked` 的不许被当成卡住。
+
+    ## 兜底表不是"挂机等谁"
+
+    兜底表 `wait_for="task:<自己>"`，所以 `Timer.is_park` 为真、会混进这份读数。
+    但它不是"它在等的活"：业主 2026-10-29 第 3 条的口径是"它是框架的保活账、
+    代理对它无感"（`conductor.agent_state` 的 docstring 逐字）。这一份读数给模型
+    与页面看"我等谁/谁在等"，把保活列进去等于告诉它们"我在等我自己"。
+    所以这里按 `is_lifeline` 剔掉 —— 与 `AgentLoop._park_reading` /
+    `_wait_any_reading` 同一句口径（那两处早就剔了；2026-11-24 全量 #21 抓到的
+    正是"只有这一份没剔"）。它仍然真的挂着：`clock.lifeline_of` / `state.json`
+    里看得到（判据 `test_lifeline_arm_does_not_leak_into_waiters`）。
     """
     reading = now()
     bucket = book(workspace)
     rows: list[dict[str, Any]] = []
     for timer in bucket.all():
         if not timer.is_park:
+            continue
+        if is_lifeline(timer):
             continue
         if timer.state == "pending":
             # 进程重启后盘上的 waiter 不在内存视图里：读到它时顺手补登记，

@@ -14,9 +14,9 @@
 
 `wake_path` / `_load_wake_doc` / `record_wake` / `read_wakes` / `pending_wakes` /
 `consume_wakes`；`lifeline_of` / `arm_lifeline` / `_new_lifeline_timer` /
-`_renew_lifeline` / `_LIFELINE_WAKE_HANDLER` / `set_lifeline_wake_handler` /
-`_LIVE_LOOPS` / `loop_started` / `loop_ended` / `loop_is_live` / `live_loops` /
-`lifeline_suppressed` / `kill_lifeline`。
+`_renew_lifeline` / `lifeline_owners` / `sweep_lifelines` / `_LIFELINE_WAKE_HANDLER` /
+`set_lifeline_wake_handler` / `_LIVE_LOOPS` / `loop_started` / `loop_ended` /
+`loop_is_live` / `live_loops` / `lifeline_suppressed` / `kill_lifeline`。
 
 ## 可变量与依赖
 
@@ -41,8 +41,10 @@ from .clockbase import (  # noqa: F401 — 这些名字由 clockbase 定义
     _iso,
 )
 from .clockevents import (  # noqa: F401 — 这些名字由 clockevents 定义
+    _event_hits,
     _event_seq,
     _register_parked,
+    _unregister_parked,
 )
 from .clockrun import (  # noqa: F401 — 这些名字由 clockrun 定义
     _atomic_json,
@@ -217,7 +219,9 @@ def arm_lifeline(workspace: str | Path, *, task_id: str, role: str = "",
     bucket = book(workspace)
     timer.timer_id = bucket.allocate("tm")
     bucket.add(timer)
-    _register_parked(timer)
+    # 刻意不 `_register_parked(timer)`：那不是"它在挂机等谁"，是框架的保活账
+    # （业主 2026-10-29 第 3 条：代理对它无感）。登记进去会让 `waiters` / 挂机读数
+    # 把保活列成一条"它在等的活"，也会把 `parked_steps` 记到它头上。
     return {"armed": True, "skipped": "", "task_id": want,
             "timer_id": str(timer.timer_id or ""), "reason": ""}
 
@@ -240,16 +244,67 @@ def _new_lifeline_timer(workspace: str | Path, *, task_id: str, role: str,
     return timer
 
 
+def _someone_else_hit(timer: Timer) -> bool:
+    """这一拍命中兜底表的事件里，有没有别人产生的那一条。
+
+    `_event_hits` 只按 `task:<号>` 认（`task_id` / `from_task_id`），而兜底表的键
+    就是它自己的号 ⇒ 生产里能命中它的几乎都是它自己的事件（收工 submit、自己发出的
+    消息）。"与我有关的东西来了"指的是别人送来的东西（来信走的是 sweep 的 `inbox`
+    那一格）；自己产生的事件只该续、不该叫。
+
+    读不成 ⇒ 返回 True（按旧口径"有事件就叫"）：这一格是读数，不许因为读不到就
+    把该叫的人静默掉。
+    """
+    tid = str(timer.task_id or "")
+    try:
+        hits = _event_hits(timer)
+    except Exception:  # noqa: BLE001 —— 读不成按"有命中"处理（宁可叫）
+        return True
+    for event in hits:
+        from_id = str(getattr(event, "from_task_id", "") or "")
+        task_id = str(getattr(event, "task_id", "") or "")
+        if from_id and from_id != tid:
+            return True
+        if not from_id and task_id and task_id != tid:
+            return True
+    return False
+
+
 def _renew_lifeline(timer: Timer) -> dict[str, Any]:
     """一条兜底计时器被打掉之后，立刻续一条新的（幂等：同一台账号恰好一条）。
 
     除了续，还要叫醒它：兜底表被打掉就是有与我有关的东西来了（业主 2026-10-29 第 1、2 条）。
     叫醒由运行期注入的钩子做（`set_lifeline_wake_handler`）—— 时钟不 import 编排层。
     失败不抛：续不上、叫不醒都要能被读数看见，而不是把一次投递搞崩。
+
+    ## 两条调用路，只有一条该叫醒（2026-11-24 B2-21 现场，296 取证）
+
+    ```text
+    ① clockfire._deliver_one_locked:420 —— 兜底表到点/到上限续期。
+       这一拍没有事件命中（feedback 空、triggered_by 不是 inbox）：
+       "到点"本身不是"与我有关的东西来了"，只续、不叫。
+    ② clockwakes.sweep_lifelines → _knock_lifeline（triggered_by="inbox"）——
+       收件箱里有来信（别人真的要它办/看的东西）。这一条该叫醒。
+    ```
+
+    现场（temp/b2r21reh/probe_resume2.py，16:36 当前树，cli_proof）：
+    `[resume_dispatched] task=t-000002 kind=lifeline prev=done`，
+    栈是 `_lifeline_wake_with <- <lambda> <- _renew_lifeline <- _deliver_one_locked:420`；
+    前一行 `[ensure_consumer] t-000002 还在跑（status=running）⇒ 板项它下一拍自己读到`。
+    于是一次"到点续期"把刚收工的号按空动作又跑起来 ⇒ M 的 `retire_child` 读到 busy
+    ⇒ 销不掉 ⇒ final 被拒 ×3 ⇒ rc=5。判据只看盘上两格读数：
+
+    - `triggered_by == "inbox"`：`_knock_lifeline` 打的（来信那条路）；
+    - `feedback` 非空：`_deliver_one_locked` 把命中事件的正文抄了进来
+      （`test_consuming_it_calls_the_wake_hook_once` 走这一格）。
+
+    两格都空 ⇒ 只续不叫。`_deliver_one_locked` 不动：它只是如实记了"这一次为什么到点"，
+    该不该叫是这里判的。
     """
     if not is_lifeline(timer):
         return {"armed": False, "skipped": "not_lifeline", "woke": False}
-    out: dict[str, Any] = {"armed": False, "skipped": "", "woke": False, "wake_reason": ""}
+    out: dict[str, Any] = {"armed": False, "skipped": "", "woke": False,
+                           "started": False, "wake_reason": ""}
     try:
         out.update(arm_lifeline(timer.workspace, task_id=str(timer.task_id or ""),
                                 role=str(timer.role or "")))
@@ -263,6 +318,20 @@ def _renew_lifeline(timer: Timer) -> dict[str, Any]:
         out["wake_reason"] = ("它自己的循环在跑（进程内登记）⇒ 不另起一个同号循环；"
                               "那条消息会进它自己的收件箱")
         return out
+    if (str(getattr(timer, "triggered_by", "")) != "inbox"
+            and not str(getattr(timer, "feedback", "") or "")):
+        out["wake_reason"] = ("兜底表到点续期，这一拍没有事件命中 ⇒ 只续不叫"
+                              "（到点本身不是「与我有关的东西来了」）")
+        return out
+    if (str(getattr(timer, "triggered_by", "")) != "inbox"
+            and not _someone_else_hit(timer)):
+        # 事件是它自己产生的（submit / 它自己发的消息）：`_observe_submit` 与
+        # `send_message` 记的 `task_id`/`from_task_id` 都是它自己。那也不是"来了"，
+        # 只续不叫。2026-11-24 cli_proof 现场：B 收工后自己的 submit 命中兜底表
+        # ⇒ 钩子把 B 按空动作又跑一趟 ⇒ M 的 retire_child 读到 busy ⇒ rc=5。
+        out["wake_reason"] = ("兜底表被我自己的事件命中（submit / 我发的消息）"
+                              "⇒ 只续不叫（这不是「有与我有关的东西来了」）")
+        return out
     if handler is None:
         out["wake_reason"] = ("没有接叫醒钩子（set_lifeline_wake_handler 未接线）"
                               "：这次只是续上，没人被叫起来")
@@ -273,7 +342,120 @@ def _renew_lifeline(timer: Timer) -> dict[str, Any]:
         out["wake_reason"] = f"叫醒失败（{type(exc).__name__}: {exc}）"
         return out
     out["woke"] = True
+    out["started"] = bool(got.get("started")) if isinstance(got, Mapping) else False
     out["wake_reason"] = str(got.get("reason") or "") if isinstance(got, Mapping) else ""
+    return out
+
+
+def lifeline_owners(workspace: str | Path) -> list[str]:
+    """当前挂着兜底表的台账号（去重、按号排序；只读）。
+
+    读不成返回空表 —— 调用方那一格是"没有可扫的"，不是"扫过了没有"；
+    要不要把"读不成"另记一档由调用方决定（`sweep_lifelines` 自己会记）。
+    """
+    try:
+        timers = list(book(workspace).pending())
+    except Exception:  # noqa: BLE001 —— 读不成不挡推时钟
+        return []
+    return sorted({str(t.task_id or "") for t in timers if is_lifeline(t)})
+
+
+def _knock_lifeline(bucket: TimerBook, timer: Timer) -> dict[str, Any]:
+    """把一条兜底表就地标成"被打掉"（与 `_deliver_one_locked` 那一笔同形：转 fired）。"""
+    reading = now()
+    timer.state = "fired"
+    timer.fired_at = _iso(reading.wall) if reading.wall is not None else ""
+    timer.woke_at = timer.fired_at
+    timer.triggered_by = "inbox"
+    timer.woke_reason = "event"
+    timer.feedback = ""
+    timer.message = ""
+    # 醒了就不再"在等谁"：与到点投递那一支同一口径（`waiting_on` 清空）。
+    timer.waiting_on = {}
+    _unregister_parked(timer.timer_id)
+    bucket.sync_index(timer)
+    return {"timer_id": str(timer.timer_id or ""), "task_id": str(timer.task_id or "")}
+
+
+def sweep_lifelines(workspace: str | Path, *, unread: Mapping[str, Any]) -> dict[str, Any]:
+    """投递侧：收件箱里有未读板项 ⇒ 按"有与我有关的东西来了"打掉兜底表。
+
+    ## 为什么需要这一层（真机 lp-ball-21 的读数，不是设想）
+
+    投递一条指导走的是 `Conductor.open_item(kind="notice", parent_task_id=收件人)`
+    —— 板项落在收件人名下，但时钟侧一条事件都没有：`observe_message` 记的
+    `task_id` 是发信人，`to_task_id` 刻意不进 `_event_hits` 的键集（见
+    `clockevents._event_target_keys` 的注释）。所以"来信"永远撞不到兜底表的
+    `task:<收件人>` 这个键：现场的读数就是兜底表挂着、指导已在收件箱里
+    （`item_state=queued`），却没有任何东西把它打掉、续上、叫醒。
+
+    本函数把"收件箱里有未读"当成那个"与我有关的东西"，只处理本进程没有活着的
+    循环的那些号：
+
+    - 不在跑 ⇒ 打掉 + 记一条唤醒标记（`record_wake`）+ 续一条 + 交给叫醒钩子；
+      钩子起不来（已销号 / 没接执行侧）⇒ 把那条唤醒标记撤回，不积压；
+    - 在跑 ⇒ 整条跳过。它自己的循环下一步就会读到那条板项，替它续一条只是白转
+      计时器账（这里刻意不续：投递敲的是"该叫谁"，不是"该记一笔账"）。
+
+    三态：读不成 ⇒ `checked=False`（不是"没有要打掉的"）；一条都没命中是
+    `knocked=[]` 的正常返回。从不抛 —— 推时钟那一拍不许被这一层带走。
+    """
+    owners = {str(k) for k, v in (unread or {}).items() if int(v or 0) > 0}
+    out: dict[str, Any] = {"checked": True, "knocked": [], "renewed": [],
+                           "woke": [], "skipped": [], "reason": ""}
+    if not owners:
+        return out
+    try:
+        bucket = book(workspace)
+        pending = [t for t in bucket.pending() if is_lifeline(t)]
+    except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+        out.update(checked=False,
+                   reason=f"兜底表簿记读不成：{type(exc).__name__}: {exc}")
+        return out
+    dirty = False
+    for timer in pending:
+        tid = str(timer.task_id or "")
+        if tid not in owners:
+            continue
+        if loop_is_live(tid):
+            # 它自己在跑：那条板项它下一步会读到，这里不续也不叫（见 docstring）。
+            out["skipped"].append({"task_id": tid, "timer_id": str(timer.timer_id or ""),
+                                   "reason": "它自己的循环在跑 ⇒ 不另起一个同号循环"})
+            continue
+        knocked = _knock_lifeline(bucket, timer)
+        out["knocked"].append(knocked)
+        dirty = True
+        wake: dict[str, Any] = {}
+        try:
+            wake = record_wake(workspace, timer)
+        except Exception as exc:  # noqa: BLE001 —— 唤醒标记写不成也要继续（钩子还能叫）
+            out["reason"] = (str(out["reason"] or "")
+                             + f"唤醒标记没写成（{type(exc).__name__}: {exc}）；")
+        try:
+            got = _renew_lifeline(timer)
+        except Exception as exc:  # noqa: BLE001 —— 续不上也要如实记
+            got = {"armed": False, "woke": False, "started": False,
+                   "wake_reason": f"{type(exc).__name__}: {exc}"}
+        if got.get("armed"):
+            out["renewed"].append({"task_id": tid, "timer_id": str(got.get("timer_id") or "")})
+        if got.get("started"):
+            out["woke"].append({"task_id": tid})
+        elif wake:
+            # 没叫起来 ⇒ 把刚记的那条唤醒标记撤回（否则它会在收件箱里积成假唤醒）。
+            try:
+                consume_wakes(workspace, tid, wake_ids=[str(wake.get("wake_id") or "")])
+            except Exception:  # noqa: BLE001 —— 撤不回只是多一条标记，不许带走推时钟
+                pass
+        if str(got.get("wake_reason") or "") and not got.get("started"):
+            out["reason"] = (str(out["reason"] or "")
+                             + f"{tid}：{got.get('wake_reason')}；")
+    if dirty:
+        try:
+            bucket.save()
+        except Exception as exc:  # noqa: BLE001 —— 落盘失败也要让调用方看见
+            out.update(checked=False,
+                       reason=(str(out["reason"] or "")
+                               + f"兜底表落盘失败（{type(exc).__name__}: {exc}）"))
     return out
 
 

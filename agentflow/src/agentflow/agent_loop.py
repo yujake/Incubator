@@ -30,6 +30,7 @@ import re
 import tempfile
 import time
 from dataclasses import dataclass, field
+from functools import wraps
 from pathlib import Path
 from typing import Any, ClassVar, Mapping, Sequence
 
@@ -37,6 +38,7 @@ from . import agent_prompts as AP
 from . import autoretire as _AR      # 收工前自动收尾的只读判据（ROOTGATE-③）
 from . import capabilities as C
 from . import clock as CLK
+from . import clockwakes as CLKW
 from . import leanscope as _LEANSCOPE
 from . import policy as P
 from . import schema as S
@@ -5951,6 +5953,92 @@ def _void_dirty_ack_items(cond: Any, root: str, out: dict[str, Any]) -> None:
             for p in void["problems"])
 
 
+def _tracks_live_loop(method: Any) -> Any:
+    """`run()` 的"活着的循环"登记：起跑 `loop_started`、收工（含异常）`loop_ended`。
+
+    为什么包一层而不是在方法体里成对写：`run()` 只有一个 `return`，但异常出口有好几个
+    （模型缝、store、工具都会抛）。成对写在方法体里只能盖住正常出口，漏掉的那一半是
+    "已登记、永远没人注销"——`loop_is_live` 从此恒真，那个号在这个进程里再也叫不醒
+    （fail-closed 的方向错成了"永远沉默"）。所以注销放在 `finally`。
+
+    这张登记是 `_renew_lifeline` 唯一的"另起同号循环"闸（2026-10-29 两次挂死的根因），
+    也是 `wake_on_lifeline` 之外唯一不读台账 status 的活性读数。
+    """
+    @wraps(method)
+    def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
+        tid = str(kwargs.get("my_task_id") or "").strip()
+        if tid:
+            CLK.loop_started(tid)
+        try:
+            return method(self, *args, **kwargs)
+        finally:
+            if tid:
+                CLK.loop_ended(tid)
+    return wrapper
+
+
+def _lifeline_wake_with(cond: Any, task_id: str) -> dict[str, Any]:
+    """兜底表打掉之后"把那个台账号叫起来"的注入实现（`set_lifeline_wake_handler` 那一端）。
+
+    ## 两道闸（顺序与 `Conductor.wake_on_lifeline` 一致）
+
+    ① 已销号 / 销号名单读不全 ⇒ 不叫（业主 2026-10-31 的 fail-closed：读不出它销过没有，
+       就不把"叫醒"当结论）；
+    ② 它自己的循环**在这一进程里**还活着（`clock.loop_is_live`）⇒ 不叫：那条消息会进
+       它自己的收件箱，再叫一次就是复制一个自己（2026-10-29 的挂死）。
+
+    ## 为什么②读进程内登记、不读台账 status
+
+    真机 lp-ball-21 的三支 B 都停在 `status="running"`（13:32 / 13:39 之后再无步、无 park、
+    无 run_end），而 M 的两条 guide 在收件箱里躺到强停。台账的 running 只能证明"上一次
+    跑没有收尾"，不能证明"此刻有循环在读它"；后者只有进程内的 `loop_started` /
+    `loop_ended` 答得了（`draft/113` §二 的结论：权威读数是"这一趟是否正由一个活着的
+    循环持有"，不是台账 status）。所以这里以 `loop_is_live` 当闸，台账 status 只在
+    挑"该读哪一份销号名单"时用。
+
+    销号闸直接调 `retired_verdict`（同一个读口，不另写一套判定），叫醒直接调
+    `resume_runner`（生产里就是 `resume_dispatched`；没接就如实说没接）。
+    """
+    tid = str(task_id or "").strip()
+    if not tid:
+        return {"started": False, "task_id": "", "reason": "没有台账号 ⇒ 叫不起来"}
+    if cond is None:
+        return {"started": False, "task_id": tid, "reason": "这一趟没有主控 ⇒ 叫不起来"}
+    if CLK.loop_is_live(tid):
+        return {"started": False, "task_id": tid,
+                "reason": (f"{tid} 它自己的循环在跑（进程内登记）⇒ 不另起一个同号循环；"
+                           "那条消息会进它自己的收件箱")}
+    try:
+        row = cond._task(tid) or {}
+    except Exception:  # noqa: BLE001 - 读不成不拦（宁可叫它；销号闸下面自己会再读）
+        row = {}
+    try:
+        verdict = cond.retired_verdict(tid, parent=str(row.get("parent_task_id") or ""))
+    except Exception as exc:  # noqa: BLE001 - 判定自己坏了也是"没叫成"
+        return {"started": False, "task_id": tid,
+                "reason": f"叫醒判定没跑成（{type(exc).__name__}: {exc}）"}
+    if verdict == "retired":
+        return {"started": False, "task_id": tid,
+                "reason": f"{tid} 已销号 ⇒ 彻底没有了，叫不醒（要它干活就重新派一个）"}
+    if verdict == "unknown":
+        return {"started": False, "task_id": tid,
+                "reason": (f"{tid} 的销号名单读不全 ⇒ 不叫（fail-closed）；"
+                           "这一格既不是「已销号」也不是「没销号」")}
+    runner = getattr(cond, "resume_runner", None)
+    if not callable(runner):
+        return {"started": False, "task_id": tid,
+                "reason": "这一趟没有接执行侧（resume_runner 未接线）⇒ 只是续上，没人被叫起来"}
+    try:
+        got = runner(tid, kind="lifeline", previous_status=str(row.get("status") or ""))
+    except Exception as exc:  # noqa: BLE001 - 叫不醒要如实回，不许炸掉投递
+        return {"started": False, "task_id": tid,
+                "reason": f"叫醒失败（{type(exc).__name__}: {exc}）"}
+    out = dict(got) if isinstance(got, Mapping) else {}
+    out.setdefault("started", False)
+    out["task_id"] = tid
+    return out
+
+
 @dataclass
 class AgentLoop:
     """一个角色的一次循环。跑完即弃（没有可复用的状态，避免两次运行互相污染）。"""
@@ -6141,6 +6229,12 @@ class AgentLoop:
     #: `consume_at_end` 决定、由 `_arm_stop_teardown` 记下、由
     #: `_consume_stop_at_teardown` 在 `run()` 收尾（`agent_run_end` 落盘之后）兑现。
     _stop_to_consume_at_end: dict[str, Any] = field(default_factory=dict)
+    #: 这一趟挂兜底表的读数（`_arm_lifeline_once` 的返回：armed / skipped / 理由）。
+    lifeline_reading: dict[str, Any] = field(default_factory=dict)
+    #: 叫醒钩子的接线读数（`_wire_lifeline_wake_handler` 的返回：wired / 理由）。
+    lifeline_wake_reading: dict[str, Any] = field(default_factory=dict)
+    #: 最近一次扫兜底表是在哪一拍（同一拍只扫一次；见 `_sweep_lifelines`）。
+    _lifeline_swept_at_step: int = -1
 
     # ---------------------------------------------------------------- 信箱与唤醒（D-52 / D-53）
     #: 这一趟是"被唤醒开起来的"时，唤醒的理由（空串 = 不是监控回合）。
@@ -6509,6 +6603,127 @@ class AgentLoop:
         self.lifeline_reading = got
         return got
 
+    def _wire_lifeline_wake_handler(self) -> dict[str, Any]:
+        """把"兜底表被打掉 ⇒ 把这个台账号叫起来"接上（`set_lifeline_wake_handler`）。
+
+        ## 为什么接在这里
+
+        `set_lifeline_wake_handler` 全仓只在 `host.wired_conductor` 里接过一次；
+        而 `run-agent` / 自主跑走的是 `host.wired_llm_conductor` —— 那一条只接了
+        `resume_runner`（`test_the_block_table_wakes_one_by_one` 的注释记的也是它），
+        于是 `_renew_lifeline` 读到 `handler is None`、只续不叫，读数写着"没人被叫起来"。
+        这一趟的循环就是"把台账号 resume 起来的那条路"，接线放在起跑处，两条装配路
+        都覆盖（子代理的循环也走 `run()`）。
+
+        fail-open：没主控 / 没 `wake_on_lifeline` ⇒ 不接，读数说清为什么。
+        """
+        cond = self.conductor
+        if cond is None or not callable(getattr(cond, "wake_on_lifeline", None)):
+            self.lifeline_wake_reading = {
+                "wired": False,
+                "reason": "这一趟没有主控（或它没有 wake_on_lifeline）⇒ 叫醒钩子不接"}
+            return self.lifeline_wake_reading
+        try:
+            CLK.set_lifeline_wake_handler(
+                lambda task_id: _lifeline_wake_with(cond, task_id))
+        except Exception as exc:  # noqa: BLE001 —— 接不上不许拦下这一趟
+            self.lifeline_wake_reading = {
+                "wired": False, "reason": f"叫醒钩子没接上：{type(exc).__name__}: {exc}"}
+            return self.lifeline_wake_reading
+        self.lifeline_wake_reading = {"wired": True, "reason": ""}
+        return self.lifeline_wake_reading
+
+    def _sweep_lifelines(self, *, step: int) -> dict[str, Any]:
+        """把"收件箱里有未读的来信"交给兜底表（`clock.sweep_lifelines` 的生产调用点）。
+
+        ## 为什么投递要单独喂一次（真机 lp-ball-21 的读数）
+
+        一条指导落在收件人名下（`kind="notice"` 的板项），但时钟侧没有一条以**收件人**
+        为 `task_id` 的事件：消息事件的 `task_id` 是发信人，`to_task_id` 刻意不进
+        `_event_hits` 的键集。于是"来信"撞不到兜底表的 `task:<收件人>` 键 —— 兜底表
+        挂着，指导已在收件箱里，却没有任何东西把它打掉、续上、叫醒。这一层把未读的
+        **来信**当作"与我有关的东西"（判据 `tests/test_lifeline_arms_at_the_start.py`
+        的 b）。
+
+        ## 什么算"来信"（2026-11-24 全量 #21 的教训：不能只看"未读"）
+
+        只看 `item_state ∈ queued/claimed` 会把**收工/状态汇报**也算进来 ——
+        `input_key="notice@<角色>:<号>"` 那一族（"第 N 步收工：这一轮做完了"）
+        是子代理写给它父的完成汇报，HEAD 的行为是"躺在收件箱里等父下一轮自己读"，
+        从不因此把父叫起来。按"未读"扫它 ⇒ 每推一次时钟就把父叫起来一次：
+        `test_d19_a_user_stop_stops_the_next_round` 的负控因此多跑一轮监控回合
+        （多出的 wake 在轮次用尽后被 `autonomy.WAKE_ALLOWANCE` 折成一整轮）。
+
+        所以只认两条**别人要它办/看**的投递路：
+
+        - `kind="message"`：一条发给它的留言；
+        - `kind="notice"` 且 `input_key` 以 `relay@` 开头：指导沿秘书链下发的链尾落点
+          （`secretary_relay.deliver_local` 的唯一写入形状）。
+
+        其余（`notice@…` 的收工汇报、`clock:<timer>` 的到点通知、它自己的状态报告）
+        不算"来信"：它们要么是收件人自己产出的，要么是 HEAD 就不叫人的那一档。
+        省钱的三处照旧：① 一条兜底表都没有 ⇒ 连台账都不读；② 只在有"不在跑的号"
+        时才读台账（都在跑 ⇒ 它们自己会读收件箱）；③ 同一拍只扫一次（一步里的多个
+        动作条目各推一次时钟，读的是同一份台账）。2026-11-24 实测单次扫描约
+        25–30 ms（`test_agent_loop.py` 51 条：ON 40.9s / OFF 38.4s，103 次扫）。
+        """
+        root = self._clock_root()
+        cond = self.conductor
+        if not root or cond is None:
+            return {"checked": False, "knocked": [], "reason": "没有时钟根或主控 ⇒ 扫不了"}
+        # 每步最多扫一次：一步里的多个动作条目各会推一次时钟（`stepdispatch` 那条
+        # 调用点），同一拍的台账读没有区别 —— 重复扫只是把 O(步×任务) 乘上"动作数"。
+        # 2026-11-24 全量 #21 的耗时对拍：`test_agent_loop.py` 51 条ON 40.9s /
+        # OFF 38.4s、103 次扫 ⇒ 约 25–30 ms/次（小工作区）；这一步去重把同一拍里
+        # 的重复读按"动作数"倍砍掉。
+        if int(step) == int(self._lifeline_swept_at_step):
+            return {"checked": True, "knocked": [], "reason": "这一拍已经扫过"}
+        self._lifeline_swept_at_step = int(step)
+        try:
+            owners = CLKW.lifeline_owners(root)
+        except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+            return {"checked": False, "knocked": [],
+                    "reason": f"兜底表读不成：{type(exc).__name__}: {exc}"}
+        # 只关心**不在跑**的号：在跑的号下一步自己会把收件箱读掉，替它读台账
+        # 没有用（`sweep_lifelines` 里也会跳过它们）。先做这一个便宜的过滤，
+        # 于是"所有号都在跑"的常见情形根本不会读一次 tasks 表 —— 这是本方法
+        # 从"每步一次台账读"降到"只有真有空转号时才读"的那一刀。
+        wanted = {str(o) for o in owners if not CLK.loop_is_live(str(o))}
+        if not wanted:
+            return {"checked": True, "knocked": [],
+                    "reason": "挂着兜底表的号都在跑 ⇒ 它们自己会读收件箱"}
+        try:
+            rows = cond._tasks()
+        except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+            return {"checked": False, "knocked": [],
+                    "reason": f"台账读不成：{type(exc).__name__}: {exc}"}
+        unread: dict[str, int] = {}
+        for row in rows:
+            # 收件人写在这一行的 `parent_task_id`（与 `webui.readers._roster_inbox`
+            # 同一条归属判据：`item_state ∈ queued/claimed`）。
+            if str(row.get("item_state") or "") not in ("queued", "claimed"):
+                continue
+            kind = str(row.get("kind") or "")
+            if kind == "message":
+                incoming = True
+            elif kind == "notice":
+                # 只有经秘书链送来的指导算来信；收工汇报（notice@…）不算（见 docstring）。
+                incoming = str(row.get("input_key") or "").startswith("relay@")
+            else:
+                incoming = False
+            if not incoming:
+                continue
+            owner = str(row.get("parent_task_id") or "")
+            if owner in wanted:
+                unread[owner] = int(unread.get(owner) or 0) + 1
+        if not unread:
+            return {"checked": True, "knocked": [], "reason": ""}
+        try:
+            return dict(CLKW.sweep_lifelines(root, unread=unread))
+        except Exception as exc:  # noqa: BLE001 —— 推时钟那一拍不许被这一层带走
+            return {"checked": False, "knocked": [],
+                    "reason": f"兜底表扫描失败：{type(exc).__name__}: {exc}"}
+
     def _clock_root(self) -> str:
         """本实例的时钟根（`<根>/out/clock/…` 就在它下面）。
 
@@ -6597,6 +6812,21 @@ class AgentLoop:
             run.notes.append(f"时钟推到一半（deferred {len(report.get('deferred') or [])} / "
                              f"errors {len(report.get('errors') or [])}）—— 计时器保持 pending，"
                              "下一次步进再推")
+        # ---- 兜底表：投递侧那一半（"有与我有关的东西来了"= 收件箱里有未读板项）。
+        # 为什么挂在推时钟这一拍：这是全仓唯一"某个活着的循环正在跑"的时刻，也是
+        # `fire_due` 那一套按工作区扫全表的既有位置；不这样挂，投递（板项落盘）就
+        # 不会在任何一处撞到兜底表（见 `_sweep_lifelines` 的 docstring）。
+        sweep = self._sweep_lifelines(step=step)
+        report["lifeline_sweep"] = dict(sweep)
+        if sweep.get("knocked"):
+            run.notes.append(
+                "兜底表：收件箱里有未读 ⇒ 打掉+续上 "
+                f"{len(sweep.get('knocked') or [])} 条"
+                + (f"、叫醒 {len(sweep.get('woke') or [])} 个"
+                   if sweep.get("woke") else "（没有一个被叫醒）"))
+        elif not sweep.get("checked", True):
+            run.notes.append(f"兜底表扫描没查成（{sweep.get('reason') or '没查成'}）"
+                             "⇒ 这一格是 unknown，不是「没有要打掉的」")
         return report
 
     def _take_wakes(self, *, step: int, run: "AgentLoop.LoopRun") -> dict[str, Any]:
@@ -7720,6 +7950,16 @@ class AgentLoop:
         「可启动计时器"等待任意计时器返回"」—— 这是一个显式的意图（`clock.request_wait_any`
         记的那一条），不是"有计时器"本身。三态：读不成 ⇒ `checked=False`
         （"没查成"不是"它没要求等"）。
+
+        ## 兜底表不算"它还在等的计时器"（2026-10-29 起跑就挂的那次挂死）
+
+        `clock.wait_any_reading` 的 `pending` 把名下所有 pending 计时器都数进去，
+        兜底表也在里面。剔掉它是必须的：`_park_gate` 第 ① 支读 `waiting and pending`、
+        第 ② 支读 `requested and not pending`；不剔 ⇒ 起跑就挂一条兜底表之后永远
+        走第 ① 支（挂机），"无事可做且无计时器 ⇒ 交差"那一支永远到不了 ——
+        `test_timers_and_handoff_semantics` 的 d 条就是这么挂住的（`draft/113` §一
+        只排除了 `_park_reading` 那一处，漏的就是这里）。口径与 `_park_reading`
+        同一句：代理对兜底表无感。
         """
         root = self._clock_root()
         if not root or not str(self.my_task_id or ""):
@@ -7727,11 +7967,24 @@ class AgentLoop:
                     "purpose": "", "wait_id": "",
                     "reason": "没有工作区根或台账号 ⇒ 这一格读不到（不是「没要求等」）"}
         try:
-            return dict(CLK.wait_any_reading(root, str(self.my_task_id)))
+            got = dict(CLK.wait_any_reading(root, str(self.my_task_id)))
         except Exception as exc:  # noqa: BLE001 - 读不成是"没查成"
             return {"checked": False, "waiting": False, "pending": [], "woke": [],
                     "purpose": "", "wait_id": "",
                     "reason": f"等待意图读不成：{type(exc).__name__}: {exc}"}
+        if got.get("pending"):
+            bucket = CLK.book(root)
+            kept: list[str] = []
+            for timer_id in got.get("pending") or ():
+                timer = bucket.get(str(timer_id))
+                if timer is not None and CLK.is_lifeline(timer):
+                    continue
+                kept.append(str(timer_id))
+            got["pending"] = kept
+            # `waiting` 是"确实还有计时器没回来"；剔完之后要按剩下的重算，
+            # 否则读数里写着 waiting=True 而 pending 是空表（自相矛盾的两格）。
+            got["waiting"] = bool(kept) and not got.get("woke")
+        return got
 
     def _research_reading(self) -> dict[str, Any]:
         """M 这一拍「研究还没做完」的读数（唯一实现在 `agentflow.researchpending`）。
@@ -8609,8 +8862,11 @@ class AgentLoop:
                     run.park["wait_any"] = True
         elif want.get("requested") and not pending_timers:
             # ② 显式要求等 + 一条计时器都没有 ⇒ 无事可做 ⇒ 交差
-            # 兜底表在这里挂（而不是起跑处）：它只在"这一趟要静默了"的这一刻存在。
-            # 起跑处挂会让活跃期间的每次投递都被它命中 —— 那正是前三次挂死的原因。
+            # 兜底表在这一档也挂一次（幂等重复）：起跑处已经挂过（每号一条），这里是
+            # "这一趟要静默了"那一刻的确认 —— 已有 ⇒ `skipped="already"`，改前语义
+            # （交差那一刻保证盘上有一条）一个字没丢。2026-10-29 两次挂死的原因不是
+            # "起跑处挂"，而是 `clock.wait_any` 的 `pending` 把兜底表数成了在等的表
+            # （见 `_wait_any_reading`）与"活跃期叫醒自己"（见 `loop_is_live`）。
             #
             # 「研究未尽」先挡：研究没做完时，"无事可做 ⇒ 交差"会把整盘活静默地放掉。
             # 这一档只把交差换成"排动作"，
@@ -10158,6 +10414,7 @@ class AgentLoop:
                 "problem": problem,
             }, sid=self.sid)
 
+    @_tracks_live_loop
     def run(self, task: str, *, summoned_by: str = "", my_task_id: str = "",
             parent_task_id: str = "", surface: str = "",
             depth: int = 1, resumed: tuple[Sequence[Mapping[str, Any]], int] | None = None,
@@ -10174,13 +10431,27 @@ class AgentLoop:
         t0 = time.monotonic()
         self.my_task_id = my_task_id
         self.depth = depth
-        # 兜底计时器（业主 2026-10-29 第 3 条：通用设计，每个台账号一条）：
-        # 入口 `_arm_lifeline_once` 与"活着的循环"登记（clock.loop_started / loop_ended）
-        # 都已实现且有判据，但起跑处仍不挂：第三次试接（带进程内登记闸门）之后
-        # `test_timers_and_handoff_semantics` 仍然挂住（>4 分钟无输出）。
-        # 已排除：①永远 park（_park_reading 剔了 lifeline）②自我唤醒（loop_is_live 闸）
-        # 下一轮的查法写在这里：给"挂上之后这一趟到底多跑了哪些拍"加一条临时读数，
-        # 看是不是每次投递都触发续 → 又立刻被同一批事件命中，形成自激。
+        # ---- 兜底计时器（业主 2026-10-29 第 3 条：通用设计，每个台账号一条）
+        #
+        # 起跑处就挂（每号一条）。幂等：已有 ⇒ `skipped="already"`（`arm_lifeline`
+        # 已实现）；销过号 ⇒ `skipped="suppressed"`（`lifeline_suppressed` 照旧）。
+        # 原来只在 `_park_gate` 第 ② 支（"无事可做 ⇒ 交差"）挂一次 —— 真机 lp-ball-21
+        # 的读数就是那个形态：35 条计时器里 lifeline 0 条，B 的三支一条都没有。
+        #
+        # ## 为什么现在不再挂死（2026-10-29 两次接线都让
+        # `test_timers_and_handoff_semantics` 超时，`draft/113` 只排除了两处）
+        #
+        # ① 复制同号循环那一半：`_renew_lifeline` 里已有 `loop_is_live` 闸
+        #    （本趟起跑登记、收工注销，见 `_tracks_live_loop`），所以活跃期每一次
+        #    事件命中兜底表都只导致"续一条 + 不叫醒"，不会另起一个同号的自己。
+        # ② 永远 park 那一半：`_park_reading` 早就剔了 lifeline，但 `clock.wait_any`
+        #    的 `pending` 没剔 —— 起跑就挂之后，它被读成"它还在等的计时器"，
+        #    于是第 ② 支（无事可做且无计时器 ⇒ 交差）永远走不到、第 ① 支永远 park。
+        #    这一处现在由 `_wait_any_reading` 剔掉（同一句口径：代理对兜底表无感）。
+        self._arm_lifeline_once()
+        # 叫醒钩子：生产装配（`run-agent` 那条路走 `host.wired_llm_conductor`）只接了
+        # `resume_runner`，没接 `set_lifeline_wake_handler` ⇒ `_renew_lifeline` 只续不叫。
+        self._wire_lifeline_wake_handler()
         # 这一趟的收件人（父是谁）现算一次：它既是提示词里 `{{parent_task_id}}` 那一格，
         # 也是终态回报挂板项时用的名字（D89）。三条分支见 `_resolve_parent`。
         self.parent_task_id, self.parent_role, self.parent_problem = self._resolve_parent(
