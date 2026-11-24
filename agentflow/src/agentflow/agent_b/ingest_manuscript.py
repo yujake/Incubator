@@ -490,6 +490,17 @@ class _IngestManuscript:
             got = {"checked": False, "settled": [], "left": [], "problems": [],
                    "reason": f"收口那一笔抛了（{type(exc).__name__}: {exc}）"}
         out["registration_settled"] = dict(got)
+        # D 的「待递交」义务（COLLAB-E2D）：B 收录成功这一刻把 `d-handoff@<猜想号>`
+        # 按证据收口。为什么挂在同一处：两个收录出口（`mode=register` 与按格回填）
+        # 都从这里过，与 `b-register@` 的消账同一个落点 —— 收口不许靠"收工时有人想起来
+        # 做对账"（RED11 的现场是收工对账根本没跑）。失败不许带走这一笔收录。
+        try:
+            settle_hand = _OBL.settle_handoff(store=self.store, stmt_id=stmt_id)
+        except Exception as exc:  # noqa: BLE001 —— 收口那一笔抛了不许带走这一笔收录
+            settle_hand = {"checked": False, "stmt_id": stmt_id,
+                           "closed": [], "expired": [], "left": [], "problems": [],
+                           "reason": f"待递交义务收口抛了（{type(exc).__name__}: {exc}）"}
+        out["d_handoff_settled"] = dict(settle_hand)
         return out
 
     def _mark_ingested(self, out: dict, *, rel: str,

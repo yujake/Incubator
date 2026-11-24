@@ -1761,6 +1761,698 @@ def registration_digest(root: str | Path, store: Any = None) -> dict[str, Any]:
     return out
 
 
+# ------------------------------------------------------------------ D 的递交义务（d-handoff@）
+#
+# 现场（真机 lp-ball-21，2026-11-24）：E 落了 19 条 conjecture（refuted 6 /
+# supported_not_proved 6 / testing 7），D 的两次任务只做了 fs.list / table.list /
+# research.list_gaps / propose_question / assess / submit_gaps —— 一次都没有把猜想递给 B。
+# 结果 `statements` 60 条全是 concept（文献来源）、theorem 0 条 ⇒ B 无命题可证
+# ⇒ `documents` 0。缺的不是"教"（`specs/d.py` 逐字写着"把这条猜想写清交给产出侧"
+# 与"向 B 登记只递指针"），而是义务：猜想落成之后没有任何东西把"这一条还没递"
+# 摆到 D 面前。
+#
+# 所以这一档与 `v-resubmit@` / `b-register@` 同形（同一个 `conductor.open_item`、
+# 同一种"凭证据收口"，不靠 ack；不新造第二套板项）：
+#
+# - 幂等键 `d-handoff@<猜想号>`：不带收件人后缀、不带 sha（一条猜想只有一个"递交"动作，
+#   同一条重复落行只该有一条义务）；
+# - 触发：E 的 `run_experiment` 把猜想行落成 `status=supported_not_proved`（台账唯一
+#   写点 `conjectureledger.register` 之后、事务之外那一刻，见
+#   `agent_e.run_experiment` 的 [6]）；收工对账 `reconcile` 再扫一遍补开
+#   （`sweep_handoffs` —— 漏开不许靠"下一次有人想起来"补）；
+# - 收口三条（全是盘上的事实，不是回执）：
+#   ① B 收录成功 —— `statements` 出现同文命题（规范化正文相同），`kind` 是
+#      `theorem` / `conjecture` 且证据是数值那一档（第 1 位 `numeric=verified`，或
+#      老行 `evidence_kind=cross_check`）；`b-register@` 那一项被消账也算；
+#   ② 该猜想被 `refuted` / `withdrawn`（不再值得递交）⇒ `close="expired"`；
+#   ③ 命题被明确放弃（`statementabandon.parse_abandon` 认得出的放弃标记）⇒ `expired`；
+# - 负责人：角色是 D，地址取"这条猜想的产出来源的父"（产出那一趟 E 的
+#   `parent_task_id`，只有它是 D 才认）；认不出就取那一刻唯一在飞的 D；再认不出
+#   ⇒ `owner=""`、读数记 `unknown`（按角色地址落在板上）—— 不拿"谁醒着"当负责人。
+# - 唤醒：开项走 `Conductor.open_item` 的同一条投递路（板项 + `_ensure_consumer`），
+#   不在这里另造 clock / lifeline 逻辑。
+
+#: 「把这条猜想递给 B」义务的幂等键前缀。与 `b-register@` / `v-resubmit@` 分开。
+HANDOFF_PREFIX = "d-handoff@"
+
+#: 这一条义务的负责人角色（递交是 D 的动作；收口是 B 的动作）。
+HANDOFF_ROLE = "D"
+
+
+def handoff_key(conjecture_id: Any) -> str:
+    """「必须递交」义务的幂等键：`d-handoff@<猜想号>`。
+
+    为什么键里只有猜想号：一条猜想的递交只有一个动作（"这一条有没有递给 B"），
+    与 `b-register@` 的"哪一份正文"、`v-resubmit@` 的"哪一份被审正文"不同 ——
+    猜想行本身没有 sha。同一条猜想重复落行（E 重跑支持性实验）落在同一个键上
+    ⇒ 板上只有一条义务。
+    """
+    return f"{HANDOFF_PREFIX}{str(conjecture_id or '').strip()}"
+
+
+def handoff_conjecture_of(key: Any) -> str:
+    """从义务键里取回猜想号（认不出 ⇒ 空串，不猜）。"""
+    raw = str(key or "")
+    if not raw.startswith(HANDOFF_PREFIX):
+        return ""
+    return raw[len(HANDOFF_PREFIX):].split("@", 1)[0]
+
+
+def _handoff_items(conductor: Any) -> list[dict[str, Any]]:
+    """板上所有「必须递交」义务（读不成 ⇒ 空列表，由调用方的话说清）。
+
+    与 `_register_items` 同一条纪律：没有 conductor / 读不成都是"读不到板"，
+    由调用方记 `skipped` + 原因；这一格不冒充"板上没有这一条"这个结论。
+    """
+    if conductor is None:  # 未接板 ⇒ 没有可读的板项；由调用方写 skipped + reason
+        return []
+    try:
+        rows = [dict(r) for r in conductor._board_rows()]
+    except Exception:  # noqa: BLE001 —— 读不成不是"没有义务"
+        return []
+    return [r for r in rows if str(r.get("input_key") or "").startswith(HANDOFF_PREFIX)]
+
+
+def _handoff_item_by_key(conductor: Any, key: str) -> dict[str, Any]:
+    """板上有没有这一条（精确键；未接板 / 读不成 ⇒ 空字典，由调用方说清三态）。"""
+    if conductor is None:  # 未接板 ⇒ 空字典是「读不到板」，由调用方记 skipped + reason
+        return {}
+    try:
+        rows = [dict(r) for r in conductor._board_rows()]
+    except Exception:  # noqa: BLE001
+        return {}
+    for row in rows:
+        if str(row.get("input_key") or "") == str(key or ""):
+            return row
+    return {}
+
+
+def _conjecture_row(store: Any, conjecture_id: str) -> dict[str, Any]:
+    """按号取回猜想行（读不出来 / 没有 ⇒ 空字典，由调用方按三态处置）。"""
+    if store is None or not str(conjecture_id or ""):
+        return {}
+    try:
+        for row in store.rows("conjectures"):
+            if str(row.get("conjecture_id") or "") == str(conjecture_id):
+                return dict(row)
+    except Exception:  # noqa: BLE001 —— 读不成不是"没有这一条"
+        return {}
+    return {}
+
+
+def _norm_text(value: Any) -> str:
+    """判重用的规范化正文：唯一实现是 `conjectureledger.norm_statement`，不抄第二份。
+
+    为什么同一把尺：B 收录时写 `registered_stmt_id` 用的就是它；这里若另写一份
+    去空白 / 标点的规则，"同一条命题"在两个号段上就会有两个答案。
+    """
+    from . import conjectureledger as _CL
+
+    return _CL.norm_statement(value)
+
+
+def _statements_reading(store: Any) -> tuple[list[dict[str, Any]], bool, str]:
+    """一次读全 `statements` 表：`(rows, checked, why)`。
+
+    三态纪律：读不出来 ⇒ `checked=False`，由调用方写成"这一格没查成"，
+    不许折成"还没有这一行"（那会把一条还该开着的义务静默关掉）。
+    """
+    if store is None:
+        return [], False, "没有 store ⇒ `statements` 读不出来（不是「还没有这一行」）"
+    try:
+        rows, problem, _error = SL.rows_of(store)
+    except Exception as exc:  # noqa: BLE001 —— 读不出来是"没查成"
+        return [], False, f"`statements` 读不出来（{type(exc).__name__}: {exc}）"
+    if problem:
+        return [], False, str(problem)
+    return [dict(r) for r in (rows or ())], True, ""
+
+
+def _numeric_evidence_reading(row: Mapping[str, Any]) -> dict[str, Any]:
+    """这一条 `statements` 行算不算"B 收录成功"（形状 + 数值证据）。
+
+    判据（缺一不可）：`kind ∈ {theorem, conjecture}`，且证据是数值那一档 ——
+    第 1 位 `numeric=verified`（`evidencebits` 的读口），或者老行没有 bits 时
+    `evidence_kind=cross_check`（`numericproof.SUPPORTED_ONLY_KIND` 的口径）。
+    纯文献来源的 `concept` 行不在此列：它不证明"这条猜想被收进了命题台账"。
+    """
+    from . import evidencebits as _EB
+
+    out: dict[str, Any] = {"ok": False, "why": ""}
+    kind = str(row.get("kind") or "")
+    if kind not in ("theorem", "conjecture"):
+        out["why"] = f"kind={kind!r} 不是 theorem / conjecture"
+        return out
+    try:
+        bits = dict(_EB.bits_from_row(row) or {})
+    except Exception:  # noqa: BLE001 —— bits 读不出来退回历史列，不在这里抛
+        bits = {}
+    if str(bits.get("numeric") or "") == "verified":
+        out.update(ok=True, why="第 1 位 numeric=verified")
+        return out
+    if str(row.get("evidence_kind") or "") == "cross_check":
+        out.update(ok=True, why="evidence_kind=cross_check（老行没有 bits 的读法）")
+        return out
+    out["why"] = (f"证据不是数值那一档（bits.numeric={bits.get('numeric')!r}，"
+                  f"evidence_kind={row.get('evidence_kind')!r}）")
+    return out
+
+
+def _statement_abandoned(row: Mapping[str, Any]) -> dict[str, Any]:
+    """这一条 `statements` 行是不是"明确放弃"（可解析的放弃标记）。
+
+    `status=abandoned` 且 `quote_reason` 是一条可解析的标记（理由与时间都在）
+    才算；只写状态的行不算（与 `closing.statements_unsigned` 的
+    `abandoned_without_reason` 同一把尺）。
+    """
+    from . import statementabandon as _SA
+
+    out: dict[str, Any] = {"abandoned": False, "why": ""}
+    if str(row.get("status") or "") != "abandoned":
+        return out
+    got = _SA.parse_abandon(row.get("quote_reason"))
+    if not got.get("checked"):
+        out["why"] = f"状态是 abandoned，但放弃标记读不出来（{got.get('why')}）"
+        return out
+    out.update(abandoned=True,
+               why=f"已明确放弃（{got.get('at')}：{str(got.get('reason'))[:40]}）")
+    return out
+
+
+def _conjecture_producer_task(store: Any, row: Mapping[str, Any]) -> str:
+    """这条猜想是哪一趟 E 产出的（`origin=experiment:<号>` ⇒ 实验行的 `owner_task`）。
+
+    只认 E 的落点（`experiment:` 开头的 origin）：F 的稿命题 / B 的收录行不在这
+    一档 —— 它们是"猜想台账的另外两个时刻"，没有"递给 B"这回事。
+    """
+    origin = str(row.get("origin") or "")
+    if not origin.startswith("experiment:"):
+        return ""
+    eid = origin.split(":", 1)[1].strip()
+    if not eid or store is None:
+        return ""
+    try:
+        for one in store.rows("experiments"):
+            if str(one.get("experiment_id") or "") == eid:
+                return str(one.get("owner_task") or "")
+    except Exception:  # noqa: BLE001 —— 读不成 ⇒ 认不出产出来源，由调用方记 unknown
+        return ""
+    return ""
+
+
+def _conjecture_manuscript(store: Any, row: Mapping[str, Any]) -> str:
+    """这条猜想可引用的 E 手稿路径（普通数值档优先，其次穷举证明稿）。
+
+    为什么义务正文里要带它：`specs/d.py` 要求 D 递指针时"`proof_manuscript` 给这个
+    路径 + `kind=conjecture`"—— 义务正文不点名那份稿，D 还得自己再找一遍。
+    """
+    origin = str(row.get("origin") or "")
+    if not origin.startswith("experiment:"):
+        return ""
+    eid = origin.split(":", 1)[1].strip()
+    if not eid or store is None:
+        return ""
+    try:
+        rows = [dict(r) for r in store.rows("experiments")]
+    except Exception:  # noqa: BLE001 —— 读不成 ⇒ 正文写"路径没读到"，不猜
+        return ""
+    for one in rows:
+        if str(one.get("experiment_id") or "") != eid:
+            continue
+        obs = dict(one.get("observations") or {})
+        for name in ("numeric_manuscript", "proof_manuscript"):
+            raw = obs.get(name)
+            if isinstance(raw, Mapping):
+                path = str(raw.get("path") or "").strip()
+            else:
+                path = str(raw or "").strip()
+            if path:
+                return path
+    return ""
+
+
+def _row_instance_of(store: Any, role: str, row: Mapping[str, Any]) -> str:
+    """这一行台账自己的实例地址（`tasks.instance` 那一格本身，不读调用上下文）。
+
+    为什么不用 `_row_instance`：那一格走 `identity.resolve_identity`，而
+    `resolve_identity` 会把当前调用上下文的实例标签当成候选（explicit 优先于
+    `tasks.instance`）。递交义务是在 E 那一趟里开的 —— 那一刻上下文是 E 的实例，
+    拿它去读"那个 D 是谁"，读回来的是 E 自己的标签（探针实测：owner_instance=E1）。
+    板项地址必须来自被读的那一行，不许来自"谁正在说话"。
+    """
+    instance = str(row.get("instance") or "").strip()
+    if instance:
+        return instance
+    return _row_instance(store, role, str(row.get("task_id") or ""))
+
+
+def _live_row_of_instance(store: Any, role: str, instance: str) -> dict[str, Any]:
+    """那个实例此刻在飞的台账号行（按 `tasks.instance` 本身比；没有 ⇒ 空字典）。"""
+    from .conductor import UNFINISHED_STATUSES
+
+    want = str(instance or "")
+    if not want:
+        return {}
+    rows, _why = _role_rows(store, role)
+    alive = [r for r in rows
+             if str(r.get("status") or "") in UNFINISHED_STATUSES
+             and str(r.get("instance") or "") == want]
+    if not alive:
+        return {}
+    alive.sort(key=lambda r: (str(r.get("started_at") or ""), str(r.get("task_id") or "")))
+    return dict(alive[-1])
+
+
+def handoff_owner(*, store: Any, row: Mapping[str, Any]) -> dict[str, Any]:
+    """这条递交义务该挂在哪个 D 名下（三档，不拿"谁醒着"当负责人）。
+
+    次序（与模块那段注释逐字对应）：
+
+    1. `producer_parent`：产出这条猜想的那一趟 E，它的 `parent_task_id` 是 D ⇒
+       用那个 D 的实例地址（它在飞就同时给台账号；不在飞就按实例地址等它下一次起跑）；
+    2. `in_flight_d`：父不是 D（例如 M 直接派了 E）⇒ 取那一刻唯一在飞的 D；
+    3. `role`：一个 D 都认不出 / 有好几个在飞 ⇒ `owner=""`、`owner_known=False`，
+       按角色地址落在板上（`d_handoff_reading` 的 `unowned` 数出来）。
+    """
+    from .conductor import UNFINISHED_STATUSES
+
+    out: dict[str, Any] = {"owner": "", "owner_instance": "", "owner_known": False,
+                           "owner_source": "", "owner_why": ""}
+    producer = _conjecture_producer_task(store, row)
+    parent_id = str(_task_row(store, producer).get("parent_task_id") or "") if producer else ""
+    parent_row = _task_row(store, parent_id)
+    if str(parent_row.get("role") or "") == HANDOFF_ROLE:
+        instance = _row_instance_of(store, HANDOFF_ROLE, parent_row)
+        live = _live_row_of_instance(store, HANDOFF_ROLE, instance)
+        out.update(owner=str(live.get("task_id") or ""), owner_instance=instance,
+                   owner_known=bool(instance), owner_source="producer_parent",
+                   owner_why=(f"猜想由 {producer} 产出，它的父是 D 台账号 {parent_id}"
+                              + (f"（实例 {instance}"
+                                 + (f"，此刻在飞 {live.get('task_id')}" if live
+                                    else "，此刻没有在飞的台账号 ⇒ 按实例地址等它")
+                                 + "）" if instance
+                                 else "（读不出实例标签 ⇒ 按角色地址）")))
+        return out
+    rows, why = _role_rows(store, HANDOFF_ROLE)
+    live_rows = [r for r in rows if str(r.get("status") or "") in UNFINISHED_STATUSES]
+    if len(live_rows) == 1:
+        one = live_rows[0]
+        tid = str(one.get("task_id") or "")
+        instance = _row_instance_of(store, HANDOFF_ROLE, one)
+        out.update(owner=tid, owner_instance=instance, owner_known=bool(instance),
+                   owner_source="in_flight_d",
+                   owner_why=(f"产出来源的父不是 D（{parent_id or '没有父'}）"
+                              f"⇒ 那一刻唯一在飞的 D 是 {tid}"
+                              + (f"（实例 {instance}）" if instance else "")))
+        return out
+    out.update(owner_source="role",
+               owner_why=(f"产出来源的父不是 D（{parent_id or '没有父'}）"
+                          + (f"，{why}" if why else "")
+                          + f"，此刻在飞的 D 有 {len(live_rows)} 个 ⇒ 不挑"
+                          "；这一条按角色地址落在板上，读数记 owner=unknown"))
+    return out
+
+
+def handoff_gap(*, store: Any, conjecture_id: str) -> dict[str, Any]:
+    """这条递交义务还欠不欠（收口判据的唯一实现；纯读、不写任何东西）。
+
+    返回 `{checked, gap, eligible, refuted, abandoned, statement_id, matched_by,
+    manuscript, conjecture_status, reason}`：
+
+    - `gap=False` + `refuted=True`：猜想被 `refuted` / `withdrawn` ⇒ 义务作废；
+    - `gap=False` + `abandoned=True`：命题被明确放弃（可解析标记）⇒ 义务作废；
+    - `gap=False` + `statement_id` 非空：B 收录成功（同文 + 数值证据；或 b-register 已消账）；
+    - `gap=True` + `eligible=True`：还欠着，该有一条 `d-handoff@`；
+    - `gap=True` + `eligible=False`：状态不是 `supported_not_proved`（例如 `testing`）——
+      不新开，但也不凭空关掉已经开着的那一条（收口条件只有三条，见模块注释）；
+    - `checked=False`：`conjectures` / `statements` 读不出来 ⇒ "没查成"，不折成"不欠"。
+    """
+    out: dict[str, Any] = {"checked": False, "gap": None, "eligible": False,
+                           "refuted": False, "abandoned": False, "statement_id": "",
+                           "matched_by": "", "manuscript": "",
+                           "conjecture_status": "", "reason": ""}
+    cid = str(conjecture_id or "").strip()
+    if store is None:
+        out["reason"] = "没有 store ⇒ 判不了这条义务还欠不欠（不是「不欠」）"
+        return out
+    row = _conjecture_row(store, cid)
+    if not row:
+        out["reason"] = (f"`conjectures` 里没有 {cid!r} 那一行 ⇒ 判不了"
+                         "（不是「不欠」；这一格没查成）")
+        return out
+    out["checked"] = True
+    status = str(row.get("status") or "")
+    out["conjecture_status"] = status
+    out["manuscript"] = _conjecture_manuscript(store, row)
+    if status in ("refuted", "withdrawn"):
+        out.update(gap=False, refuted=True,
+                   reason=f"猜想 {cid} 已是 {status}（不再值得递交）")
+        return out
+    rows, checked, why = _statements_reading(store)
+    if not checked:
+        out.update(checked=False, reason=why + " ⇒ 这一格没查成")
+        return out
+    want = _norm_text(row.get("statement"))
+    hit: dict[str, Any] = {}
+    for one in rows:
+        if not str(one.get("stmt_id") or ""):
+            continue
+        if _norm_text(one.get("statement_full")) == want:
+            hit = dict(one)
+            break
+    if hit:
+        sid = str(hit.get("stmt_id") or "")
+        out["statement_id"] = sid
+        abandoned = _statement_abandoned(hit)
+        if abandoned.get("abandoned"):
+            out.update(gap=False, abandoned=True, matched_by="statement",
+                       reason=f"`statements` 的 {sid} {abandoned.get('why')} ⇒ 义务作废")
+            return out
+        evidence = _numeric_evidence_reading(hit)
+        if evidence.get("ok"):
+            out.update(gap=False, matched_by="statement",
+                       reason=(f"`statements` 已有同文命题 {sid}"
+                               f"（{evidence.get('why')}）⇒ B 收录成功"))
+            return out
+        out.update(gap=True, eligible=(status == "supported_not_proved"),
+                   matched_by="statement",
+                   reason=(f"`statements` 有同文命题 {sid}，但{evidence.get('why')}"
+                           " ⇒ 不算收录成功"))
+        return out
+    # 同文命题一行都没有：再看 `b-register@` 那一侧有没有已经消账的（同一份正文）。
+    settled = _settled_register_statement_ids(store, want=want, rows=rows)
+    if settled:
+        out.update(gap=False, matched_by="b-register", statement_id=settled[0],
+                   reason=(f"`b-register@` 那一项已经凭证据消账（{settled[0]}）"
+                           "⇒ 收录已经落成"))
+        return out
+    out.update(gap=True, eligible=(status == "supported_not_proved"),
+               reason=(f"`statements` 里没有与猜想 {cid} 同文的命题"
+                       + ("" if status == "supported_not_proved"
+                          else f"（猜想状态是 {status}，不新开）")))
+    return out
+
+
+def _settled_register_statement_ids(store: Any, *, want: str,
+                                    rows: Sequence[Mapping[str, Any]]
+                                    ) -> list[str]:
+    """已经凭证据消账的 `b-register@` 项里，正文与这条猜想相同的命题号。
+
+    为什么还要对一遍正文：`b-register@` 的键里只有命题号与 sha，板上可能有一条
+    别人的收录义务刚刚消账 —— 拿"板上有任何一条消账的 b-register"当"这一条被收录了"，
+    会把一条还欠着的递交义务静默关掉。纯读；未接板 / 读不成 ⇒ 空列表（调用方
+    按"没有这一条证据"处置，不会因此关项）。
+    """
+    conductor = _conductor(store)
+    if conductor is None:  # 未接板 ⇒ 这一档读不到；空列表由调用方在 reason 里说清
+        return []
+    by_id = {str(row.get("stmt_id") or ""): dict(row) for row in rows}
+    out: list[str] = []
+    for item in _register_items(conductor):
+        if str(item.get("item_state") or "") != "done":
+            continue
+        num = str(item.get("input_key") or "")[len(REGISTER_PREFIX):].partition("@")[0]
+        hit = by_id.get(num) or {}
+        if hit and _norm_text(hit.get("statement_full")) == want:
+            out.append(num)
+    return out
+
+
+def _handoff_body(*, row: Mapping[str, Any], manuscript: str, at: str = ""
+                  ) -> tuple[str, str]:
+    """这一条义务的一句话摘要 + 正文（上限 = `agent_loop.BOARD_DETAIL_CHARS`，480 字）。
+
+    正文要把 D 该做的那一笔写全（递给谁、怎么递、引哪一份稿）—— 与 `specs/d.py`
+    的"向 B 登记只递指针"同一口径；收口条件两条都写出来，否则 D 只看见"要交"，
+    看不见"交完之后它自己会消失"。
+    """
+    from .agent_loop import BOARD_DETAIL_CHARS
+
+    cid = str(row.get("conjecture_id") or "")
+    origin = str(row.get("origin") or "")
+    eid = origin.split(":", 1)[1].strip() if origin.startswith("experiment:") else ""
+    summary = f"待递交：猜想 {cid}（E 有数值支持、还没有递给 B）"
+    body = (
+        f"这是一条必须递交的义务，不是通知：E 的实验 exp:{eid or '（没读到）'}"
+        f" 已经把猜想 {cid} 落成「有支持但未证明」（supported_not_proved，"
+        f"落于 {at or '时刻没读到'}），而 `statements` 里还没有它。\n"
+        "要交的那一笔：把这条猜想递给 B —— `register_statement` 只递指针："
+        f"`proof_manuscript` 给 {manuscript or 'E 的数值手稿（路径没读到，按实验号找）'}"
+        "、`kind=conjecture`、出处给 `exp:<实验号>`；命题正文 / 证明正文都由 B 从那份稿里读。\n"
+        "收口条件（任一即由框架自动收口，不靠 ack）：① B 收录成功（`statements` 出现同文命题，"
+        "kind=theorem|conjecture 且证据是数值那一档）；② 这条猜想被 refuted / withdrawn"
+        "（届时这一项作废）。退回一句「知道了」不会让它消失。"
+    )
+    return summary, body[:int(BOARD_DETAIL_CHARS)]
+
+
+def ensure_handoff(*, store: Any, row: Mapping[str, Any], at: str = "") -> dict[str, Any]:
+    """E 落一条猜想那一刻：该开就开一条 `d-handoff@<号>`（幂等；已清了就收口）。
+
+    返回 `{checked,state,key,item_id,owner,owner_instance,owner_known,owner_source,
+    owner_why,reason,problems}`，`state` 取：
+
+    - `opened`：新开了一条；
+    - `existing`：同键的项已经在板上（不重开 —— 幂等的落点）；
+    - `closed` / `expired`：板上那条原本开着，但盘上的事实已经让义务没了
+      （B 收录成功 / 猜想被 refuted / 命题被放弃）⇒ 按证据收口；
+    - `cleared`：盘上已经清了、板上也没有开着的（历史补投走这一支）；
+    - `ineligible`：状态不是 `supported_not_proved` ⇒ 不新开（也不关已开的）；
+    - `skipped`：没有 conductor / 台账读不成；
+    - `error`：开项抛了（`problems` 里带原话），不带走这一趟实验。
+    """
+    out: dict[str, Any] = {"checked": False, "state": "", "key": "", "item_id": "",
+                           "owner": "", "owner_instance": "", "owner_known": False,
+                           "owner_source": "", "owner_why": "", "reason": "",
+                           "problems": []}
+    cid = str((row or {}).get("conjecture_id") or "").strip()
+    if not cid:
+        out.update(state="skipped",
+                   reason="这一行没有猜想号 ⇒ 做不出幂等键（不猜）")
+        return out
+    key = handoff_key(cid)
+    out["key"] = key
+    conductor = _conductor(store)
+    item = _handoff_item_by_key(conductor, key)
+    gap = handoff_gap(store=store, conjecture_id=cid)
+    if not gap.get("checked"):
+        out.update(state="skipped",
+                   reason=(f"{gap.get('reason')}；不拿'读不出来'当'已经递过了'"
+                           "去开一条待办"))
+        out["problems"].append(str(gap.get("reason") or "递交状态读不成"))
+        return out
+    if not gap.get("gap"):
+        if item and conductor is not None and str(item.get("item_state") or "") != "done":
+            close = "expired" if (gap.get("refuted") or gap.get("abandoned")) else "completed"
+            _state, why = conductor.close_item_by_evidence(
+                str(item.get("task_id") or ""), close=close,
+                why=f"义务已清：{gap.get('reason')}")
+            if why:
+                out["problems"].append(why)
+            out.update(checked=True, item_id=str(item.get("task_id") or ""),
+                       state=("expired" if close == "expired" else "closed"),
+                       reason=str(gap.get("reason") or "义务已清"))
+            return out
+        out.update(checked=True, item_id=str((item or {}).get("task_id") or ""),
+                   state="cleared", reason=str(gap.get("reason") or "义务已清"))
+        return out
+    if not gap.get("eligible"):
+        out.update(checked=True,
+                   item_id=str((item or {}).get("task_id") or ""),
+                   state=("existing" if item else "ineligible"),
+                   reason=str(gap.get("reason") or "状态不是 supported_not_proved ⇒ 不新开"))
+        return out
+    if item:
+        out.update(checked=True, item_id=str(item.get("task_id") or ""),
+                   owner=str(item.get("parent_task_id") or ""),
+                   owner_instance=str(item.get("instance") or ""),
+                   owner_known=bool(item.get("instance") or item.get("parent_task_id")),
+                   owner_source="board_row",
+                   state=("closed" if str(item.get("item_state") or "") == "done"
+                          else "existing"),
+                   reason=(f"同键的板项已存在（{item.get('task_id')}，"
+                           f"item_state={item.get('item_state')}）⇒ 不重开"))
+        return out
+    if conductor is None:
+        out.update(state="skipped",
+                   reason=("这一趟没有 conductor ⇒ 板项开不了（义务不落盘 = 没人会看到；"
+                           "不是「已经递过了」）"))
+        return out
+    owner = handoff_owner(store=store, row=row)
+    out.update(owner=str(owner.get("owner") or ""),
+               owner_instance=str(owner.get("owner_instance") or ""),
+               owner_known=bool(owner.get("owner_known")),
+               owner_source=str(owner.get("owner_source") or ""),
+               owner_why=str(owner.get("owner_why") or ""))
+    if out["owner"]:
+        item_depth = max(1, int(_task_row(store, out["owner"]).get("depth") or 1)) + 1
+    else:
+        item_depth = 1
+    summary, body = _handoff_body(row=row,
+                                  manuscript=str(gap.get("manuscript") or ""), at=at)
+    try:
+        item_id = conductor.open_item(
+            kind="notice", role=HANDOFF_ROLE, expects="work", action="notice",
+            summary=summary, called_by="E", parent_task_id=(out["owner"] or None),
+            depth=item_depth, input_key=key,
+            recipient_instance=str(out["owner_instance"] or ""))
+        conductor.set_item_detail(item_id, body)
+    except Exception as exc:  # noqa: BLE001 —— 一条开不成不许带走这一趟实验
+        out.update(state="error", reason=f"板项没开成（{type(exc).__name__}: {exc}）")
+        out["problems"].append(out["reason"])
+        return out
+    out.update(checked=True, state="opened", item_id=item_id,
+               reason=(f"新开「待递交」义务 {item_id}"
+                       + (f"（收件实例 {out['owner_instance']}"
+                          + (f"，在飞台账号 {out['owner']}" if out["owner"] else "，此刻不在飞")
+                          + "）" if out["owner_instance"]
+                          else "（没有可判定的负责人 ⇒ 按角色地址，由 D 的实例领取）")))
+    return out
+
+
+def settle_handoff(*, store: Any, stmt_id: str = "") -> dict[str, Any]:
+    """把板上开着的 `d-handoff@` 按盘上的事实收口（B 收录那一刻 / 收工对账共用）。
+
+    为什么需要这一格：收录成功发生在 B 的写口里，而那一层不认识板项；收工对账
+    在本链里不一定跑（真机 RED11 的现场）。所以 B 收录落成那一刻也调它一次
+    （`agent_b.ingest_manuscript._settle_registration_duty` 的两个出口都过那里），
+    收工时 `reconcile` 再调一次 —— 两处同一份判据，idempotent。
+
+    `stmt_id` 只进读数（"这一笔收录是哪一个号"），收口判据不依赖它：同文命题
+    在 `statements` 里出现这件事本身就是证据。
+
+    三态：没有 conductor / 台账读不成 ⇒ `checked=False`（不是"没有要收口的"）。
+    """
+    out: dict[str, Any] = {"checked": False, "stmt_id": str(stmt_id or ""),
+                           "closed": [], "expired": [], "left": [],
+                           "problems": [], "reason": ""}
+    conductor = _conductor(store)
+    if conductor is None:
+        out["reason"] = "没有 conductor ⇒ 板项读不出来（不是「没有要收口的义务」）"
+        return out
+    out["checked"] = True
+    for item in _handoff_items(conductor):
+        if str(item.get("item_state") or "") == "done":
+            continue
+        key = str(item.get("input_key") or "")
+        cid = handoff_conjecture_of(key)
+        gap = handoff_gap(store=store, conjecture_id=cid)
+        if not gap.get("checked"):
+            out["left"].append({"key": key, "why": str(gap.get("reason") or "查不成")})
+            continue
+        if gap.get("gap"):
+            out["left"].append({"key": key,
+                                "why": f"义务还在（{gap.get('reason')}）"})
+            continue
+        close = "expired" if (gap.get("refuted") or gap.get("abandoned")) else "completed"
+        _state, problem = conductor.close_item_by_evidence(
+            str(item.get("task_id") or ""), close=close,
+            why=f"义务已清：{gap.get('reason')}")
+        if problem:
+            out["problems"].append(f"{item.get('task_id')}：{problem}")
+            continue
+        if close == "expired":
+            out["expired"].append(str(item.get("task_id") or ""))
+        else:
+            out["closed"].append(str(item.get("task_id") or ""))
+    out["reason"] = (f"收口 {len(out['closed'])} 条、作废 {len(out['expired'])} 条，"
+                     f"仍开着 {len(out['left'])} 条"
+                     + (f"；{len(out['problems'])} 条没办成" if out["problems"] else ""))
+    return out
+
+
+def sweep_handoffs(*, store: Any, limit: int = 50) -> dict[str, Any]:
+    """扫一遍 `conjectures`：`supported_not_proved` 且还没有义务的 ⇒ 逐条补开（幂等）。
+
+    为什么还要扫盘（E 落账那一刻已经会开一条）：义务不能只依赖"落账那一路跑到了"——
+    病根正是"没有任何东西把这件事摆到 D 面前"。这一趟是收工前的看门：谁漏开
+    （例如那一趟没有 conductor）都在这里被数一遍、补一条。
+
+    范围只认 E 的落点（`origin=experiment:`）：F 的稿命题 / B 的收录行没有
+    "递给 B"这回事，纯文献来源的 concept 行也不在此列。
+    """
+    out: dict[str, Any] = {"checked": False, "scanned": 0, "opened": [], "existing": [],
+                           "closed": [], "expired": [], "cleared": [], "skipped": [],
+                           "problems": [], "reason": ""}
+    if store is None:
+        out["reason"] = "没有 store ⇒ 这一格没查成（不是「没有漏开的义务」）"
+        return out
+    try:
+        rows = [dict(r) for r in store.rows("conjectures")]
+    except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+        out["reason"] = (f"`conjectures` 读不出来（{type(exc).__name__}: {exc}）"
+                         "⇒ 这一格没查成")
+        return out
+    out["checked"] = True
+    for row in rows:
+        if not str(row.get("origin") or "").startswith("experiment:"):
+            continue
+        if str(row.get("status") or "") != "supported_not_proved":
+            continue
+        if len(out["opened"]) + len(out["existing"]) >= max(1, int(limit)):
+            out["skipped"].append({"conjecture_id": str(row.get("conjecture_id") or ""),
+                                   "why": f"到了一次扫盘的上限 {int(limit)} 条"})
+            break
+        out["scanned"] += 1
+        got = ensure_handoff(store=store, row=row)
+        out["problems"].extend(str(x) for x in (got.get("problems") or []))
+        state = str(got.get("state") or "")
+        if state in ("opened", "existing", "closed", "expired", "cleared"):
+            out[state].append(str(got.get("item_id") or ""))
+        else:
+            out["skipped"].append({"conjecture_id": str(row.get("conjecture_id") or ""),
+                                   "why": str(got.get("reason") or "这一条没开成")})
+    out["reason"] = (f"扫到 {out['scanned']} 条有数值支持的猜想："
+                     f"新开 {len(out['opened'])} 条、已在板上 {len(out['existing'])} 条、"
+                     f"顺手收口 {len(out['closed']) + len(out['cleared'])} 条、"
+                     f"作废 {len(out['expired'])} 条、跳过 {len(out['skipped'])} 条"
+                     + (f"；{len(out['problems'])} 条没办成" if out["problems"] else ""))
+    return out
+
+
+def d_handoff_reading(store: Any = None) -> dict[str, Any]:
+    """「待递交」义务的一眼读数：开着的 / 负责人认不出的 / 逐条明细。
+
+    读者是主控（挂在收工门的 `readings.v_obligations.d_handoff_reading` 上），
+    它不要求主控多做一步：这一格只回答"还有几条没递、每一条挂在谁名下、卡在哪"。
+
+    三态：没有 conductor / 板项读不出来 ⇒ `checked=False` + 理由
+    （"没查成"不是"没有待递交"）。
+    """
+    out: dict[str, Any] = {"checked": False, "open": 0, "unowned": 0, "rows": [],
+                           "problems": [], "reason": ""}
+    conductor = _conductor(store)
+    if conductor is None:
+        out["reason"] = "没有 conductor ⇒ 板项读不出来（不是「没有待递交义务」）"
+        return out
+    out["checked"] = True
+    for row in _handoff_items(conductor):
+        if str(row.get("item_state") or "") == "done":
+            continue
+        key = str(row.get("input_key") or "")
+        cid = handoff_conjecture_of(key)
+        owner = str(row.get("parent_task_id") or "")
+        instance = str(row.get("instance") or "")
+        gap = handoff_gap(store=store, conjecture_id=cid)
+        out["open"] += 1
+        if not owner and not instance:
+            out["unowned"] += 1
+        out["rows"].append({"task_id": str(row.get("task_id") or ""), "key": key,
+                            "conjecture_id": cid,
+                            "owner": owner or "unknown", "owner_instance": instance,
+                            "item_state": str(row.get("item_state") or ""),
+                            "role": str(row.get("role") or ""),
+                            "gap": gap.get("gap"),
+                            "eligible": bool(gap.get("eligible")),
+                            "statement_id": str(gap.get("statement_id") or ""),
+                            "why": str(gap.get("reason") or ""),
+                            "detail": str(row.get("detail") or "")[:200]})
+    out["reason"] = (f"板上开着 {out['open']} 条待递交义务"
+                     + (f"（其中 {out['unowned']} 条 owner=unknown，等主控派人）"
+                        if out["unowned"] else ""))
+    return out
+
+
 def _prefix() -> str:
     from .agent_loop import V_VERDICT_ITEM_PREFIX
 
@@ -2172,7 +2864,9 @@ def reconcile(*, store: Any, root: str | Path = "", caller: str = "conductor.clo
     out: dict[str, Any] = {"checked": False, "caller": caller, "receipts": 0,
                            "opened": [], "left": [], "resubmit": [],
                            "resubmit_reconcile": {}, "registration": {},
-                           "registration_reconcile": {}, "problems": [], "reason": ""}
+                           "registration_reconcile": {}, "d_handoff": {},
+                           "d_handoff_settle": {}, "d_handoff_reading": {},
+                           "problems": [], "reason": ""}
     if store is None:
         out["reason"] = "没有 store ⇒ 这一格没查成（不是「没有漏开的义务」）"
         return out
@@ -2258,9 +2952,34 @@ def reconcile(*, store: Any, root: str | Path = "", caller: str = "conductor.clo
         out["registration_reconcile"] = {
             "checked": False, "closed": [], "expired": [], "left": [], "problems": [],
             "reason": f"对账没跑成（{type(exc).__name__}: {exc}）"}
+    # ④ 递交义务（D 侧）：先扫盘补开（`sweep_handoffs`），再按盘上的事实收口
+    #    （`settle_handoff`），最后给一眼读数。读数挂在这里 ⇒ 它随
+    #    `conductor.closing` 的 `readings.v_obligations` 出现在主控眼前，不需要主控
+    #    多做一步（也不新增工具、不动工具面 golden）。
+    try:
+        out["d_handoff"] = sweep_handoffs(store=store)
+    except Exception as exc:  # noqa: BLE001 —— 扫盘没跑成不许带走收工读数
+        out["d_handoff"] = {"checked": False, "scanned": 0, "opened": [], "existing": [],
+                            "closed": [], "expired": [], "cleared": [], "skipped": [],
+                            "problems": [],
+                            "reason": f"扫盘没跑成（{type(exc).__name__}: {exc}）"}
+    try:
+        out["d_handoff_settle"] = settle_handoff(store=store)
+    except Exception as exc:  # noqa: BLE001
+        out["d_handoff_settle"] = {
+            "checked": False, "closed": [], "expired": [], "left": [], "problems": [],
+            "reason": f"对账没跑成（{type(exc).__name__}: {exc}）"}
+    try:
+        out["d_handoff_reading"] = d_handoff_reading(store)
+    except Exception as exc:  # noqa: BLE001
+        out["d_handoff_reading"] = {
+            "checked": False, "open": 0, "unowned": 0, "rows": [], "problems": [],
+            "reason": f"读数没跑成（{type(exc).__name__}: {exc}）"}
     out["reason"] = (f"打回 {out['receipts']} 条；补开重送项 {len(out['opened'])} 条、"
                      f"认不出送审者 {len(out['left'])} 条；"
                      f"{str(out['resubmit_reconcile'].get('reason') or '')}；"
                      f"{str(out['registration'].get('reason') or '')}；"
-                     f"{str(out['registration_reconcile'].get('reason') or '')}")
+                     f"{str(out['registration_reconcile'].get('reason') or '')}；"
+                     f"{str(out['d_handoff'].get('reason') or '')}；"
+                     f"{str(out['d_handoff_settle'].get('reason') or '')}")
     return out

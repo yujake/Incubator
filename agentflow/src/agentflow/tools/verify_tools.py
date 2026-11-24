@@ -937,7 +937,7 @@ def _verify_detect_verifier():
             "'report_blocks','report_problems',"
             "'proof_manuscript','manuscript_sha256','manuscript_proof_sha256','manuscript_problems',"
             "'numeric_manuscript','numeric_manuscript_sha256','numeric_manuscript_problems',"
-            "'conjecture_ledger'}"
+            "'conjecture_ledger','d_handoff'}"
             "；失败（未接线 / 参数与数据校验失败 / 脚本越界或超时 / IO 失败）：ok=False + "
             "kind(not_wired/validation_error/experiment_error/io_error) + data=None"
             "（失败分支不承诺上面那套键；meta 里留 script_path / claim_key）"

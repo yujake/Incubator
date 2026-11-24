@@ -9,6 +9,7 @@ from .. import conjectureledger as CL
 from .. import exhaustionreport as _ER
 from .. import identity as _IDENTITY
 from .. import numericproof as _NP
+from .. import obligations as _OBL
 from .. import rowscope as _RS
 from .. import verifications as VR
 
@@ -779,6 +780,27 @@ class _RunExperiment:
                              + f"\n[conjecture] 台账没有落这一条：{_ledger['kind']}：{exc}").strip()
                 tx.upsert("experiments", row.to_dict(), note=f"experiment:{claim_key}")
 
+        # ---- [6b] 猜想落成 ⇒ 给 D 开一条「待递交」义务（COLLAB-E2D） ------------
+        #
+        # 现场（真机 lp-ball-21，2026-11-24）：E 落了 19 条 conjecture，D 的两次任务
+        # 一次都没把猜想递给 B ⇒ `statements` 60 条全是 concept、theorem 0 条 ⇒
+        # B 无命题可证（20 次调用即停）⇒ `documents` 0。缺的不是"教"（`specs/d.py`
+        # 逐字写着那一笔），是义务：没有任何东西把"这一条还没递"摆到 D 面前。
+        #
+        # 为什么在事务之外：开板项是另一次写（`tasks` 表），塞进实验事务会让
+        # "实验落盘"与"义务落盘"互相牵连；实验已经落了，义务开不成只记读数
+        # （三态：`ok=False` 的台账那一档不在这里开 —— 没有猜想行就没有可递的）。
+        # 状态是 refuted / withdrawn 的也交进去：那一支负责把已经开着的义务作废。
+        _handoff: dict = {}
+        try:
+            if _ledger.get("ok") and str(_ledger.get("status") or "") in (
+                    "supported_not_proved", "refuted", "withdrawn"):
+                _handoff = dict(_OBL.ensure_handoff(
+                    store=self.store, row=_ledger, at=S.now_iso()) or {})
+        except Exception as exc:  # noqa: BLE001 —— 义务开不成不许带走这一趟实验
+            _handoff = {"checked": False, "state": "error",
+                        "reason": f"待递交义务没开成（{type(exc).__name__}: {exc}）"}
+
         # 签名那一格（`observations.e_signature`）：谁签、谁写 ②③ —— 读侧不自己去翻台账。
         # 从 `row` 上读而不是从 `derived` 上读：签名是 `build_experiment` 里现算并写进
         # 那一行的，`derived` 里没有它（读 `derived` 会得到一格空字符串，而看上去像"没签"）。
@@ -822,6 +844,9 @@ class _RunExperiment:
             "reason": _result_reason(row),
             # 这条命题的台账行（`conjectureledger` 的返回；`ok=False` = 记账失败、实验照旧成立）
             "conjecture_ledger": dict(_ledger),
+            # 给 D 开的那条「待递交」义务的读数（`obligations.ensure_handoff`；
+            # 状态不在 supported_not_proved / refuted / withdrawn 时是空字典）
+            "d_handoff": dict(_handoff),
         }
         # ---- 这一份 e-proof 的 V 签读数与下一步（2026-11-18 TEACH1 ⑨）-------------
         #
