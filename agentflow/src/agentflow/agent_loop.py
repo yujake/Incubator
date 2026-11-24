@@ -1880,20 +1880,23 @@ def send_interjection(session_root: Path, *, sender: str, subject: str, body: st
                "body": str(body or ""),
                # 叫停类要额外落读数（见 `INTERJECTION_STOP_MARKERS`）
                "is_stop": any(m in str(subject or "") for m in INTERJECTION_STOP_MARKERS)}
+    # 先投收件箱、再落会话事件：事件要带上"这一份投没投成"的三档读数
+    # （`inbox_state`），所以不能先落盘再补 —— 那两格永远进不了盘。
+    inbox, inbox_problem = _deliver_interjection_to_inbox(
+        Path(session_root), subject=subject, body=body, iid=iid)
+    if inbox:
+        payload["inbox_item_id"] = inbox
+        payload["inbox_state"] = "delivered"
+        failure = ""
+    else:
+        payload["inbox_state"] = ("no_conductor" if "没有正在跑的主控" in inbox_problem
+                                  else "failed")
+        payload["inbox_note"] = str(inbox_problem)
+        failure = inbox_problem if payload["inbox_state"] == "failed" else ""
     path, problem = SS.append(session_root, payload, sid=sid)
     if problem:
         return "", problem
-    # 除了会话里那一条（审计与"下一步开头单列一段【插话】"用），还要**照收件箱那条路**
-    # 落一条板项（业主 2026-11-24：「插话和智能体间通信几乎一致，一样走收件箱」）。
-    # 于是三件事一次成立：页面上看得到它绑在谁的收件箱里、兜底表把它当"来信"扫得到、
-    # 主控在步首读收件箱时与普通留言走同一个渲染口。
-    inbox, inbox_problem = _deliver_interjection_to_inbox(
-        Path(session_root), subject=subject, body=body, iid=iid)
-    if inbox_problem:
-        # 板项没落成不等于插话没落：如实回一句，但**不**把已写的事件说成失败。
-        return iid, f"插话已落会话（{iid}），但收件箱那一份没落成：{inbox_problem}"
-    payload["inbox_item_id"] = inbox
-    return iid, ""
+    return iid, failure
 
 
 def _deliver_interjection_to_inbox(root: Path, *, subject: str, body: str,

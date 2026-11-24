@@ -119,7 +119,7 @@ cli_tools_role_h       = 47
 cli_tools_role_v       = 29
 cli_tools_role_l       = 39
 cli_tools_role_m       = 41
-webui_modules           = 12   # `(Get-ChildItem src/agentflow/webui -Filter '*.py').Count`（2026-11-21 追平：11 → 12，多的是 WEBFIX2 的 `sse_external.py`）
+webui_modules           = 13   # `(Get-ChildItem src/agentflow/webui -Filter '*.py').Count`（2026-11-21 追平：11 → 12，多的是 WEBFIX2 的 `sse_external.py`）（2026-11-25：SETTINGS-RAW 新增 `settingsraw.py`，12 → 13）
 webui_routes            = 39   # `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes as r;print(len(r.ROUTES))"`（2026-11-21 23:49 按现盘追平：38 → 39，`writes.py` 又加了一条 POST 写端点；当日早先 35 → 38 是同批只读面/写面各一条）
 webui_routes_get        = 28   # 同上，按 `x[0] == 'GET'` 计数（2026-11-21：27 → 28）
 webui_routes_post       = 11   # 同上，按 `x[0] == 'POST'` 计数（2026-11-21：8 → 10 → 11）
@@ -395,7 +395,7 @@ LIVE-READINGS:END
 - **入口文件**：
   - 命令行入口是 `web` 子命令：`python -m agentflow.cli --help` 里逐字
     「`web   起用户端网页（本地小服务：待回答面板 / 运行态 / 事件回放）`」；
-  - 服务端 `src/agentflow/webui/` —— **12 个模块**（`__init__.py` / `__main__.py` /
+  - 服务端 `src/agentflow/webui/` —— **13 个模块**（`__init__.py` / `__main__.py` /
     `routes.py` / `server.py` / `state.py` / `writes.py` / `readers.py` / `sse.py` / `sse_external.py` /
     `audit.py` / `cacheface.py` / `facecache.py`）；
     复跑 `(Get-ChildItem src/agentflow/webui -Filter '*.py').Count`，键 `webui_modules`；
@@ -419,7 +419,7 @@ LIVE-READINGS:END
     `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import sse;print(len(sse.EVENT_KINDS))"`，
     键 `webui_event_kinds`；
   - 静态产物在 **`src/agentflow/web/static/`**：外壳 `static/index.html`（1760 B）+
-    `static/assets/index.BPsmjfB6.js`（244044 B）+ `static/assets/index.D8bpVw-o.css`（26775 B）；
+    `static/assets/index.DbUnFBxc.js`（245059 B）+ `static/assets/index.D8bpVw-o.css`（26775 B）；
     （2026-11-24 20:4x 实测 —— BATCH3 路的前端重建：NUMCLAIM 那批页面文案改成插值 /
     中性描述，`types.ts` 重生成（`run_digest.steps_note`）之后 `tsc --noEmit` rc=0、
     `vite build` 一次成功；CSS 与上一版逐字节相同（`index.D8bpVw-o.css` 26775 B），
