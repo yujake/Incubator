@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from ._support import BRunResult, D, I, Iterable, NO_EXTRACTOR_ERROR, QUOTE_OUT_OF_DECLARED_RANGE, S, T, check_quote, make_lease
+from . import budgeted_extract as _BE   # 抽取段：预算 / 进度 / 续跑游标（口径都在那里）
 from .. import conceptrows as _CR   # 并表过渡层：老表写完同步一份新标准（两处同号）
 from .. import litread as _LR       # M2/M3/裁决 16：`path` 两基准解析 + `download.fulltext` 四档的唯一实现
 from .. import quoteevidence as _QE   # D1：三态判决 ⇒ 可复核的区间/理由/调用指纹
@@ -39,10 +40,14 @@ def _page_range_of_page(page: Any) -> Any:
     return S.PageRange(no, no, f"p. {no}") if no >= 1 else None
 
 
-class _RunOnce:
+class _RunOnce(_BE._BudgetedExtract):
     #: 工作区里那份「正文」的候选落点（审阅型项目：`out/package/main.tex` 是可改稿，
     #: `source/main.tex` 是只读基线）。逐字档先试它 —— 理由见 `_manuscript_doc`。
     MANUSCRIPT_RELS: tuple[str, ...] = ("out/package/main.tex", "source/main.tex")
+
+    #: 预算的注入点（夹具用；生产路径恒为 `None`）。判据不能拿裸 `sleep` 造时间（R5）
+    #: ⇒ 夹具塞一个假钟进来。`factory(lit_id) -> Budget`。
+    _budget_factory: Any = None
 
     def _manuscript_doc(self) -> tuple[object | None, str, str]:
         """工作区那份正文的文本视图：返回 `(doc, 用的是哪一份, 读不出来的原因)`。
@@ -263,15 +268,15 @@ class _RunOnce:
                                 "why": "规则回退抽取器会把碎片当概念/关系（R-56）"})
             return self._finish(res)
 
+        # ---- 抽取段（预算 / 进度 / 续跑）：口径与读数都在 `agent_b/budgeted_extract`。
+        # 实测：那一篇 `extract_text` 0.73 秒，`extract` 切 87 块（中位 58.5 秒/块）≈ 85 分钟。
         try:
-            doc = self.extract_text(path)
-            concepts, relations = self.extractor.extract(
-                doc, lit_id, self._extraction_meta(lit)
-            )
+            got = self._run_extraction(lit, lit_id, path, res)
         except Exception as e:
-            # 抽取失败：不置 processed，写退避租约让到点后重试（`D-2`：修复前这里
-            # 把 `lease_until` 也清成 None，而 `_claim` 的跳过判据要求 `claimed_by`
-            # 非空 ⇒ 所谓"让租约过期后重试"其实没有任何租约存在，同一趟里立刻重领）。
+            # 抽取失败（`extract_text` 抛了与 `extract` 抛了是同一档）：不置 processed，
+            # 写退避租约让到点后重试（`D-2`：修复前这里把 `lease_until` 也清成 None，
+            # 而 `_claim` 的跳过判据要求 `claimed_by` 非空 ⇒ 所谓"让租约过期后重试"
+            # 其实没有任何租约存在，同一趟里立刻重领）。
             with self.store.tx("literature", actor=self.actor, note="extract_failed") as tx:
                 row = tx.find("literature", lit_id=lit_id) or lit
                 row["claimed_by"] = None
@@ -285,6 +290,8 @@ class _RunOnce:
             res.details.append({"lit_id": lit_id, "stage": "extract", "error": f"{type(e).__name__}: {e}"})
             return self._finish(res)
 
+        doc, concepts, relations = got["doc"], got["concepts"], got["relations"]
+        stopped_budget = bool(got["stopped"])
         # ---- 抽取阶段被剔除的那几条：留一条可复核的点名
         #
         # 真机 lp-ball-15（2026-11-21）的 32 条「剔除引文无法回验」只活在滚过去的
@@ -429,6 +436,12 @@ class _RunOnce:
                 existing = D.find_concept(concept_rows, name, list(aliases or []))
                 if existing is not None:
                     _merge_aliases(existing, name, aliases, page_range)
+                    # 续跑时把同一篇后面那些块的定义并进来（理由见 `budgeted_extract`）：
+                    # 没有这一条，"两片跑完"会比"一次跑完"少半句定义。
+                    if _BE.merge_definition(existing, definition, lit_id):
+                        existing["updated_at"] = S.now_iso()
+                        _CR.upsert_legacy_shaped(tx, existing, actor=self.actor,
+                                                 note="definition_merged")
                     res.concepts_reused += 1
                     return existing["concept_id"]
                 # 2026-11-08（D2 后门）：先判同一性、再发号。`conceptrows.upsert`
@@ -715,10 +728,25 @@ class _RunOnce:
                                              note="related_recomputed")
 
             # 5) 标记文献处理完成（与实体写入同一事务 —— 见 DESIGN.md §2.4）
+            #
+            # ---- 预算到点那一支（COLLAB-B-BUDGET ②）：上面的写入一条都不回滚，但这里
+            # 不许写 `processed=True`（那等于把"没跑完"折成"跑完了"）；处置三步见
+            # `budgeted_extract.mark_unfinished`。
+            if stopped_budget:
+                lit_row = tx.find("literature", lit_id=lit_id) or lit
+                _BE.mark_unfinished(lit_row, got=got, now=S.now_iso())
+                tx.upsert("literature", lit_row, note="stopped_budget")
+                res.concepts_page_missing = len(missing_page_cids)
+                res.concept_quota = quota.reading()
+                return self._finish(res)
+
             lit_row = tx.find("literature", lit_id=lit_id) or lit
             lit_row["processed"] = True
             lit_row["claimed_by"] = None
             lit_row["lease_until"] = None
+            # 续跑游标用完即清：这一篇已整篇抽完 ⇒ 留着它会让"下一次"从半路开始；
+            # 不清的话盘上会同时留着 `processed=True` 与一个未完成的游标。
+            lit_row.pop("extract_resume", None)
             # 配额拒过东西时「不动」 `last_mine_error`：那一格是"这一篇为什么没抽成"
             # （`no_local_file` / 抽取异常），不是"抽成了但概念配额满了"。
             # 把配额写进去会让两种完全不同的处置读成同一件事。

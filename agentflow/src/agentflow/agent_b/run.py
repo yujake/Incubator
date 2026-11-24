@@ -70,6 +70,19 @@ class _Run:
             if r.stage_two and r.stage_two.get("checked"):
                 total.stage_two = dict(r.stage_two)
             n += 1
+            # ---- 预算到点 ⇒ 这一轮就地收口（COLLAB-B-BUDGET）。
+            #
+            # 为什么必须在这里 break 而不是让 while 继续：预算的语义是"一次工具调用
+            # 不许无限长"，而 `run` 这一层若继续下一片，效果与"没有预算"完全一样
+            # （同一个工具调用里连着跑 21 片 = 85 分钟，父依旧看不到任何一步）。
+            # 已落的行一条不回滚，续跑游标在 `literature.extract_resume` 上。
+            if getattr(r, "stopped_budget", False):
+                total.stopped_budget = True
+                total.budget = dict(getattr(r, "budget", {}) or {})
+                total.budget_applied = bool(getattr(r, "budget_applied", False))
+                if not total.extract_text:
+                    total.extract_text = dict(getattr(r, "extract_text", {}) or {})
+                break
         out = total.to_dict()
         # 这一轮配额的「总」读数：`concepts_created` 只说得清"写了多少"，
         # 说不清"被挡了多少、挡的是谁"—— 后者才是"不许静默丢弃"要的那一半。

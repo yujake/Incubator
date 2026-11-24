@@ -149,6 +149,23 @@ class BRunResult:
     #: 配额的读数（`conceptrows.ConceptQuota.reading()`：`limit` / `written` /
     #: `refused` / `refused_count` / `why`）。空 dict = 这一趟没走到建概念那一步。
     concept_quota: dict = field(default_factory=dict)
+    # ---- 协作式预算的读数（COLLAB-B-BUDGET，2026-11-24）
+    #:
+    #: `stopped_budget`：这一趟到点停在安全点了（`processed` 一定是 False）。
+    #: 它与 `failed` 是两件事：前者是"还有活，下一次接着做"，后者是"这一篇抽不出来"。
+    #: 折平会让续跑永远起不来（那一刻盘上写着"失败"，而其实只差半篇）。
+    stopped_budget: bool = False
+    #: 抽取器认不认预算回调（`LLMExtractor.supports_extract_budget`）。替身/第三方
+    #: 抽取器没有这一格 ⇒ False，而"没接预算"与"接了但没到点"必须分得开。
+    budget_applied: bool = False
+    #: 预算读数（`extractbudget.Budget.reading()` + `why` 一句人话）：
+    #: `used_sec` / `remaining_sec` / `limit_sec` / `stage` / `done` / `total`。
+    #: 空 dict = 这一趟没走到抽取阶段（没领到文献 / 文件不可读 / 拒抽）。
+    budget: dict = field(default_factory=dict)
+    #: 文本段读数：`pages` / `pages_total` / `complete` / `window` / `budget`。
+    #: 为什么单列：`extract_text` 与 `extractor.extract` 是两段，一段没有上限
+    #: 另一段有上限时，"哪一段没有截止"这个问题必须能从结果里直接答出来。
+    extract_text: dict = field(default_factory=dict)
     skipped_reason: str | None = None
     #: 这一趟领到的那篇文献，`literature.path` 是按哪个基准解析出来的
     #: （`library` / `workspace`；没领到或没解析出来 = 空串）。

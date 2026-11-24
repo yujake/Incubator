@@ -37,12 +37,19 @@ if TYPE_CHECKING:  # pragma: no cover - 仅供类型检查器
     from .schema import PageRange
 
     from .extract import DocumentText
+    from .extractbudget import Budget
+
+from .extractbudget import BudgetStop as _BudgetStop
+
+#: 协作式预算的受控停止（与 `ExtractionError` 不是同一档，见 `extract` 的 docstring）。
+ExtractBudgetStop = _BudgetStop
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
     "ConceptDraft",
     "DEFAULT_PROMPT_TEMPLATE",
+    "ExtractBudgetStop",
     "ExtractionError",
     "LLMExtractor",
     "NullExtractor",
@@ -841,6 +848,12 @@ class LLMExtractor:
     #: 单条引文在留痕里保留多少字符：够在原文里重新定位即可。
     _DROP_QUOTE_CHARS: Final = 400
 
+    #: 这个抽取器认不认协作式预算（`extract(..., budget=…)`）。
+    #: 调用方（`agent_b.run_once`）按这一格判，不去猜签名：替身/第三方抽取器
+    #: 没有这一格 ⇒ 按老样子整篇一次调用，读数里如实写 `budget_applied=False`
+    #: —— "没接预算"与"接了但没到点"必须分得开。
+    supports_extract_budget: Final = True
+
     def __init__(
         self,
         client: Any,
@@ -1001,9 +1014,34 @@ class LLMExtractor:
     # -- extract ----------------------------------------------------------- #
 
     def extract(
-        self, doc: "DocumentText", lit_id: str, meta: dict
+        self,
+        doc: "DocumentText",
+        lit_id: str,
+        meta: dict,
+        *,
+        budget: "Budget | None" = None,
+        from_chunk: int = 0,
+        doc_complete: bool = True,
     ) -> tuple[list[ConceptDraft], list[RelationDraft]]:
         """见 §4.1。
+
+        ## 协作式预算（COLLAB-B-BUDGET，2026-11-24）
+
+        三个关键字参数（位置参数一字未动 ⇒ 既有调用方与替身抽取器都不受影响）：
+
+        - ``budget``：:class:`agentflow.extractbudget.Budget`。给了就在每一块的
+          开始处检查一次（安全点 = 块边界）：到点抛
+          :class:`~agentflow.extractbudget.BudgetStop`，本方法接住它、把已经拿到
+          的草稿照常合并返回，并在 ``last_report`` 里写 ``stopped_budget`` /
+          ``chunks_done`` / ``chunks_usable``。为什么接住而不是上抛：块边界上
+          已经完成的那些块的产物必须逐条交回调用方（落库），上抛等于让调用方
+          只拿到一个异常 —— 那就是"把活做半截丢掉"。
+        - ``from_chunk``：从第几块接着做（续跑）。块划分是 ``_chunk_bodies`` 的
+          纯函数结果 ⇒ 同一份 ``doc`` 上它稳定，这个下标就是可持久化的游标。
+        - ``doc_complete``：``doc`` 是不是整篇。页数窗口把 PDF 截断时传
+          ``False``：此时最后一块只含文件的一部分，处理它会把"半块"的产物落库、
+          而续跑时那一块还会变 ⇒ 这一块留到下一次（只处理完整的块）。
+          这一条是"续跑结果与一次跑完逐条相同"的根据。
 
         fail-closed 总原则：任何无法在原文里回验的产出都不进入下游。
 
@@ -1029,6 +1067,14 @@ class LLMExtractor:
                 "truncated": False,
                 "chunks": 0,
                 "chunks_failed": 0,
+                # 预算那三格在"没抽"这一档也要在：调用方读的是同一份读数形状，
+                # 缺键会让"这一篇没抽"与"这一篇抽了但预算字段没写"同形。
+                "chunks_usable": 0,
+                "chunks_from": 0,
+                "chunks_done": 0,
+                "next_chunk": 0,
+                "stopped_budget": False,
+                "budget": (budget.reading(stage="no_text_layer") if budget is not None else {}),
                 "concepts": 0,
                 "relations_kept": 0,
                 "relations_dropped": 0,
@@ -1040,6 +1086,14 @@ class LLMExtractor:
             return [], []
 
         bodies = self._chunk_bodies(doc)
+        # "只有完整的块才处理"（见 docstring 的 `doc_complete`）：被页数窗口截断的
+        # 那一份最后一块是"半个块"，处理它会把半块的产物落库，而续跑时那一块还会
+        # 变长 ⇒ 它的产物就成了"一次跑完"里不存在的东西。
+        usable = len(bodies) if doc_complete else max(0, len(bodies) - 1)
+        try:
+            start = max(0, min(int(from_chunk or 0), usable))
+        except (TypeError, ValueError):
+            start = 0
         concepts: list[ConceptDraft] = []
         relations: list[RelationDraft] = []
         dropped = 0
@@ -1047,14 +1101,24 @@ class LLMExtractor:
         drop_items: list[dict[str, Any]] = []
         truncated = False
         failures: list[dict[str, Any]] = []
+        #: 这一趟停在哪个安全点（`None` = 没停）。它是"续跑游标"的唯一来源。
+        stopped_at: int | None = None
         # 读数先清空：`_ground_relations` 是就地覆写这几个字段的，
         # 不清的话"这一篇的剔除数"会带上上一篇的尾巴（同一个 extractor
         # 实例连续抽多篇是正常用法：B 的 run_once 就是这么循环的）。
         self._dropped_count = 0
         self._drop_reasons = []
         self._drop_items = []
-        for idx, (body, cut) in enumerate(bodies):
+        for idx in range(start, usable):
+            body, cut = bodies[idx]
             truncated = truncated or cut
+            if budget is not None:
+                try:
+                    # 安全点 = 块边界：上一块的产物已经在 `concepts` / `relations` 里。
+                    budget.checkpoint(stage="extract", done=idx, total=usable)
+                except ExtractBudgetStop:
+                    stopped_at = idx
+                    break
             try:
                 raw = self.client.complete(self._render(body, lit_id))
                 payload = parse_llm_json(raw)
@@ -1070,8 +1134,9 @@ class LLMExtractor:
             # 逐条留痕也跨块累积（`_ground_relations` 每块会清自己的那一份）。
             drop_items.extend(self._drop_items)
 
-        if failures and not concepts and not relations:
+        if failures and not concepts and not relations and stopped_at is None:
             # 全灭：照旧抛（"这一篇没抽成"必须能被调用方看见并如实处置）。
+            # 停在预算上时不抛：那不是"抽不出来"，是"还没抽完"。
             raise ExtractionError(
                 f"文献 {lit_id} 的 {len(failures)}/{len(bodies)} 块全部抽取失败："
                 + "；".join(f"[块 {f['chunk'] + 1}] {f['error']}" for f in failures[:3]))
@@ -1081,10 +1146,24 @@ class LLMExtractor:
         self._dropped_count = dropped
         self._drop_reasons = reasons
         self._drop_items = drop_items[: self._MAX_DROP_ITEMS]
+        #: 下一次从第几块接着做。停在预算上 ⇒ 就是停下的那一块（`stopped_at`）；
+        #: 跑完了全部可用的块 ⇒ 等于 `usable`（再调用一次是空转，调用方据此判完成）。
+        next_chunk = usable if stopped_at is None else int(stopped_at)
         self.last_report = {
             "lit_id": lit_id,
             "truncated": truncated,
             "chunks": len(bodies),
+            #: 这一份 `doc` 上"完整"的块数（被页数窗口截断时会比 `chunks` 少 1）：
+            #: 续跑游标的上界就是它。
+            "chunks_usable": int(usable),
+            #: 从第几块开始做的、做到第几块、下一块是哪一块（三个数一起才复算得出"进度"）。
+            "chunks_from": int(start),
+            "chunks_done": int(next_chunk),
+            "next_chunk": int(next_chunk),
+            #: 是不是停在预算上（`True` ⇒ 这一篇没处理完，调用方必须留续跑游标）。
+            "stopped_budget": bool(stopped_at is not None),
+            "budget": (budget.reading(stage="extract", done=next_chunk, total=usable)
+                       if budget is not None else {}),
             "chunks_failed": len(failures),
             "chunk_failures": failures[:5],
             "concepts": len(merged_concepts),
