@@ -1,0 +1,17 @@
+{
+  "schema_version": 2,
+  "rows": [
+    {
+      "question_id": "000000",
+      "origin": "agent-D-D1",
+      "requests": [
+        {
+          "request_id": "r-000004",
+          "topic": "三维 l^p 球 B_p^3（1≤p≤∞）的中心截面最大面积：求 A_max(…",
+          "mode": "topical",
+          "at": "2026-11-24T19:27:40+08:00"
+        }
+      ]
+    }
+  ]
+}

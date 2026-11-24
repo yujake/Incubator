@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-25T00:18:36+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 4904,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"交付完成：论文正文 + PDF + 对应表三份已落盘，稿件行 doc_id=000001 经 H 三轮复审后裁决 accepted（已签名）。逐项读数如下 ——\\n\\n【1. 正文 main.tex】sha256=b9d159678b54d1330c991f66430e549bf4a4caf66adb726e302b9e16af4cb27f，字节数 31651（230 行）。全文英文、`\\\\documentclass[11pt]{article}`，无 ctexart、无中文抬头（CJK 字符 0）。\\n\\n【2. PDF 回执 out/package/COMPILE-RECEIPT.json】tex_sha256=b9d159678b54d1330c991f66430e549bf4a4caf66adb726e302b9e16af4cb27f（与盘上这份 main.tex 逐字相同 ⇒ pdf_fresh=true，不是旧正文编的）；pages=10；pdf_bytes=315097；engine=pdflatex；exit_codes=[0,0]；pdf_sha256=c36d9a45…。编译日志里正文段没有 Overfull \\\\hbox；末尾有一处 Overfull \\\\vbox (254.99pt)，落在第 10 页（附录/参考文献那一段），如实登记。\\n\\n【3. 对应表】out/package/MAPPING.json + out/package/MAPPING.md + out/package/mapping-appendix.tex（由 doc.write_mapping 渲染，未手写），state=pass，**4 行**：thm:integral→stmt:000034、thm:zero→stmt:000035、thm:diag→stmt:000041、thm:delta→stmt:000042，每行 file=main.tex、proof_no=1、四条都写了 citation_loc_reason（自有结果、非文献摘引）。正文 4 个定理类环境 vs 台账 4 条 theorem 类命题一一对上，无孤儿。\\n\\n【4. 每节标题清单】Title/Author/Date → Abstract → 1 Introduction → 2 Definitions and notation（补写了 ordering cone 0≤a≤b≤c 与两条边界弧 α(t)=(0,1,t)/√(1+t²)、β(t)=(1,1,t)/√(2+t²) 的定义）→ 3 Main results（4 个 theorem 环境，各带 proof 环境、分步写）→ 4 Discussion and open problems（数值支持的强猜想明写 not proved here；文献关系；局限；3 条 open problem）→ References（5 条真 bibitem）→ Appendix A: Computational evidence（12 个 p 扫掠、6 轮局部加密、两临界点二分、求积核自检 1e-15 级；内部编号只在这一节）。\\n\\n【5. 引了哪些号】文献：lit:000000（K. Ball, Cube slicing in R^n, Proc. AMS 97(1986) 465–473 —— 元数据逐字取自 library/000006.txt 的文献表）、lit:000001（H. König, On maximal hyperplane sections… p>2, Adv. Operator Theory 10(2025) 15 —— 取自 library/000001.txt 首部）、lit:000002（R. Grząślewicz, Plane sections of the unit ball of L_p, Acta Math. Hungar. 52(1988) 219–227 —— 取自 library/000002.txt 首部）、lit:000003（G. Ambrus, Critical central sections of the cube, arXiv:2107.14778v3 (2023) —— 由 D1→A 核实、落手稿 000039）、lit:000006（A. Eskenazis, On extremal sections of subspaces of L_p）。实验：exp:000003（求积核自检）、exp:000004（12 个 p 扫掠）、exp:000006（临界 p / 三段结构）、",
+ "payload_sha256": "352169a0067d2af599136c892a3b74ab09a3548a777b8d5c40e37021fe7ff5ad",
+ "readings": {},
+ "role": "G",
+ "status": "done",
+ "task_id": "t-000244"
+}

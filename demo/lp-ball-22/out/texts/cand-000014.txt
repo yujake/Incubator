@@ -1,0 +1,5921 @@
+===== page 1 =====
+arXiv:2312.01325v2  [math.FA]  26 Jan 2025
+NON-CENTRAL SECTIONS OF THE REGULAR n-SIMPLEX
+HERMANN K ¨ONIG
+Abstract. We show that the maximal non-central hyperplane sections of the
+regular n-simplex of side-length
+√
+2 at a ﬁxed distance t to the centroid are those
+parallel to a face of the simplex, if
+q
+n−2
+3(n+1) < t ≤
+q
+n−1
+2(n+1) and n ≥5. For
+n = 4, the same is true in a slightly smaller range for t. This adds to a previous
+result for
+q
+n−1
+2(n+1) < t ≤
+q
+n
+n+1. For n = 2, 3, we determine the maximal and
+the minimal sections for all distances t to the centroid.
+Dedicated to the memory of Nicole Tomczak-Jaegermann, friend and coauthor
+1. Introduction
+The Busemann-Petty problem and the hyperplane conjecture of Bourgain initi-
+ated an investigation of extremal hyperplane sections of convex bodies. This became
+a very active area in convex geometry and geometric tomography.
+K. Ball [B] found the maximal hyperplane section of the n-cube in a celebrated
+paper.
+The minimal ones had been determined by Hadwiger [Ha] and Hensley
+[He]. Meyer and Pajor [MP] settled the maximal section problem for the ln
+p-balls, if
+0 < p < 2, and the minimal one for the ln
+1 -ball, which was extended by Koldobsky
+[K] to ln
+p-balls for 0 < p < 2. Important progress in the case 2 < p < ∞was made
+recently by Eskenazis, Nayar and Tkocz [ENT]. Webb [W] found the maximal cen-
+tral sections of the regular n-simplex. The paper by Nayar and Tkocz [NT] gives
+an excellent survey on extremal sections of classical convex bodies.
+For non-central sections at distance t to the centroid, not too many results are
+known. Moody, Stone, Zach and Zvavitch [MSZZ] proved that the maximal sections
+of the n-cube at very large distances from the origin are those perpendicular to the
+main diagonal. Pournin [P] showed the same result for slightly smaller distances.
+Liu and Tkocz [LT] proved a corresponding result for the ln
+1 -ball, if the distance t to
+the origin satisﬁes
+1
+√
+2 < t ≤1. K¨onig [Ko2] extended this to
+1
+√
+3 < t ≤
+1
+√
+2. Maximal
+non-central sections of the regular n-simplex of side-length
+√
+2 were studied by K¨onig
+[Ko] for relatively large distances t to the centroid. In this paper, we extend this
+result to smaller distances t for n ≥4, resulting in the range
+q
+n−2
+3(n+1) < t ≤
+q
+n
+n+1.
+Note that for t >
+q
+n
+n+1, the intersection is empty.
+The maximal sections are
+those parallel to faces, i.e. those perpendicular to the diagonals from the centroid
+2000 Mathematics Subject Classiﬁcation. Primary: 52A38, 52A40. Secondary: 52A20.
+Key words and phrases. Volume, non-central section, simplex.
+1
+===== page 2 =====
+2
+HERMANN K ¨ONIG
+to the vertices of the simplex, in dimension n = 4 in a slightly smaller range for
+t.
+The proof uses a volume formula of Dirksen [D] which extended a result of
+Webb [W]. This formula involves alternating terms with removable singularities, if
+q
+n−2
+3(n+1) < t ≤
+q
+n−1
+2(n+1), resulting in diﬃculties to ﬁnd extrema of section volumes.
+For small dimensions n = 2, 3, we determine the maximal and the minimal hy-
+perplane sections for all possible distances |t| ≤
+q
+n
+n+1.
+To formulate our results precisely, we introduce some deﬁnitions and notations.
+Let N := { n ∈Z | n ≥1 } denote the positive integers. For the regular n-simplex
+K = ∆n we use its representation in Rn+1
+∆n := {x ∈Rn+1 | x = (xj)n+1
+j=1 , xj ≥0,
+n+1
+X
+j=1
+xj = 1}.
+Let a ∈Sn := { x = (xj)n+1
+j=1 ∈Rn+1 | Pn+1
+j=1 x2
+j = 1 } be a direction vector and t ∈
+R. We will always assume that Pn+1
+j=1 aj = 0 so that the centroid c =
+1
+n+1(1, · · · , 1) ∈
+∆n is in the hyperplane a⊥. By H(a, t) := {x ∈∆n | ⟨a, x⟩= t} = {ta} + a⊥we
+denote the hyperplane orthogonal to a at distance t to the centroid. Thus c ∈H0(a).
+Then
+A(a, t) := voln−1(H(a, t) ∩∆n) = voln−1({x ∈∆n | ⟨a, x⟩= t})
+is the parallel section function of ∆n. We aim to ﬁnd the extrema of A(·, t) on Sn
+for ﬁxed t. For t̸ = 0 we have non-central sections.
+Note that
+q
+n
+n+1 is the distance of the vertices ej = (0, . . . , 0,
+1
+|{z}
+j
+, 0, . . . , 0) of ∆n
+to the centroid c; it is the maximum coordinates of a ∈Sn with Pn+1
+j=1 aj = 0 can
+attain, and in this case all other coordinates are equal to −
+1
+√
+n(n+1). The side-length
+of the simplex ∆n is
+√
+2, its height
+q
+n+1
+n
+and its volume
+√n+1
+n!
+. The distance of the
+centroid to the midpoint of edges of ∆n is
+q
+n−1
+2(n+1). By symmetry, we may assume
+that a = (aj)n+1
+j=1 ∈Sn satisﬁes a1 ≥a2 · · · ≥an+1. Throughout this paper, we make
+the following
+General Assumption. A direction vector a = (aj)n+1
+j=1 ∈Rn is always assumed
+to satisfy Pn+1
+j=1 a2
+j = 1, Pn+1
+j=1 aj = 0 and a1 ≥a2 · · · ≥an+1.
+Note that under this assumption always an+1 < 0. We introduce the sets H+(a, t) =
+{ x ∈∆n | ⟨a, x⟩> t } and H−(a, t) = { x ∈∆n | ⟨a, x⟩< t }. For
+q
+n−1
+2(n+1) <
+t <
+q
+n
+n+1 the set H+(a, t) contains just one vertex, namely e1. Further,
+q
+n−k+1
+k(n+1) is
+the distance from the centroid of ∆n to the centroid of a (k −1)-boundary simplex.
+For
+q
+n−k
+(k+1)(n+1) < t <
+q
+n−k+1
+k(n+1) the set H+(a, t) contains at most k vertices of ∆n.
+===== page 3 =====
+NON-CENTRAL SECTIONS OF THE REGULAR n-SIMPLEX
+3
+This follows from Lemma 2.1 below. If a1 < t and x ∈∆n, t > Pn+1
+j=1 ajxj = ⟨a, x⟩,
+hence H(a, t) = ∅. If a1 = t and x ∈∆n, t > Pn+1
+j=1 ajxj = ⟨a, x⟩as well, unless
+x = e1. Then H(a, t) = {e1} and A(a, t) = 0. Therefore, if A(a, t) > 0, the General
+Assumption implies that a1 > t.
+The unit vectors in the direction from the centroid of ∆n to the centroid e1+···+ek
+k
+of a (particular) boundary (k −1)-simplex are
+a(k) :=
+r
+k(n −k + 1)
+n + 1
+(1
+k , . . . , 1
+k
+|
+{z
+}
+k
+, −
+1
+n −k + 1, . . . , −
+1
+n −k + 1
+|
+{z
+}
+n−k+1
+) ∈Sn ,
+k = 1, · · · , n. Thus a(1) points from the centroid of ∆n to a vertex, a(2) to the
+midpoint of an edge and a(3) to the center of a boundary triangle. A hyperplane
+orthogonal to the ”main diagonal” a(1) is parallel to a boundary (n −1)-face of ∆n.
+Note that a(n−k+1) is essentially equal to −a(k), up to a permutation of coordinates.
+Since Ht(a) = H−t(−a), we have
+(1.1)
+A(a, t) = A(−a, −t)
+,
+A(a(k), t) = A(a(n−k+1), −t) , k = 1, . . . , n .
+We now formulate our main results.
+Theorem 1.1. Let n ≥5, ∆n be the regular n-simplex and assume that t ∈R
+satisﬁes
+q
+n−2
+3(n+1) < t ≤
+q
+n
+n+1. Let a ∈Sn with Pn+1
+j=1 aj = 0. Then Ht(a(1)) is a
+maximal hyperplane section of ∆n at distance t to the centroid, i.e.
+A(a, t) ≤A(a(1), t) =
+√n + 1
+(n −1)!
+
+n
+n + 1
+n/2 r
+n
+n + 1 −t
+n−1
+.
+All maximal sections at distance t are parallel to a boundary (n −1)-face, and the
+orthogonal vector is a permutation of a(1). For n = 4, the same is true if 0.3877 ≃
+˜t < t <
+q
+4
+5. For n = 4 and
+q
+n−2
+3(n+1) =
+q
+2
+15 ≤t < ˜t, a(2) yields a maximal
+hyperplane at distance t to the centroid. We have A(a(2), ˜t) = A(a(1), ˜t).
+The range
+q
+n−1
+2(n+1) < t ≤
+q
+n
+n+1 was already covered by a result in K¨onig [Ko].
+As in the results of Moody, Stone, Zach and Zvavitch [MSZZ] for the n-cube and of
+Liu and Tkocz [LT] and K¨onig [Ko2] for the ln
+1 -ball, the maximal hyperplanes far
+from the barycenter are those perpendicular to the main diagonal. By K¨onig [Ko],
+a(1) is a local maximum of A(·, t) if
+2n+1
+n(n+2)
+q
+n
+n+1 < t. It can be routinely veriﬁed that
+2n+1
+n(n+2)
+q
+n
+n+1 ≤
+q
+n−2
+3(n+1) for all n ≥4. The value ˜t is the solution of a cubic equation.
+For t = 0, by Webb [W] the maximal central sections of ∆n are those contain-
+ing (n −1) vertices and the midpoint of the remaining two vertices, orthogonal to
+vectors like
+1
+√
+2(1, 0, . . . , 0, −1). Filliman [F] stated without proof that the minimal
+central sections are those parallel to a face of ∆n. Recently, Tang [T] proved an
+asymptotically sharp lower bound for the volume of central sections of ∆n.
+===== page 4 =====
+4
+HERMANN K ¨ONIG
+For dimensions n = 2, 3, we give the extrema of A(·, t) for all t:
+Proposition 1.2. For n = 2 and 0 ≤t ≤
+q
+2
+3, let
+a[t] :=
+1
+2(
+p
+2 −3t2 −t), t, −1
+2(t +
+p
+2 −3t2)
+
+∈S2 and
+a{t} := ( ˜a1, b+, b−) ∈S2, ˜a1 := t +
+r
+t2 −1
+6, b± := −˜a1
+2 ± 1
+2
+p
+2 −3 ˜a12 .
+Then the extrema of A(·, t) on S2 are given by
+Maximum :
+
+
+
+
+
+
+
+a[t]
+, 0 ≤t ≤
+1
+√
+6 :
+A(a[t], t) =
+√
+3
+1
+√
+2−3t2
+a{t} ,
+1
+√
+6 < t ≤5
+4
+1
+√
+6 :
+A(a{t}, t) =
+1
+2
+√
+3
+1
+t+√
+t2−1/6
+a(1) , 5
+4
+1
+√
+6 ≤t <
+q
+2
+3 :
+A(a(1), t) = 2
+√
+2
+3
+−
+2
+√
+3t
+
+
+
+
+
+
+
+,
+Minimum :
+n
+a(1) , 0 ≤t ≤
+1
+√
+6 :
+A(a(1), t) = 2
+√
+2
+3
+−
+2
+√
+3t
+o
+.
+Partially, this can be found already in Dirksen [D] and K¨onig [Ko].
+For 0 ≤
+t ≤
+1
+√
+6, a[t] turns continuously from a[0] =
+1
+√
+2(1, 0, −1) as given by Webb’s result
+[W] to a(2) =
+1
+√
+6(1, 1, −2), and for
+1
+√
+6 < t ≤5
+4
+1
+√
+6, a{t} turns continuously from
+a(2) =
+1
+√
+6(1, 1, −2) to a(1) =
+1
+√
+6(2, −1, −1). Up to a permutation of coordinates,
+a(2) is just −a(1). The distance of the center to a side of the triangle ∆2 is t =
+1
+√
+6.
+Enlarging t a bit, turning the side slightly and moving it partially outside of ∆2,
+intersects ∆2 in about 1
+2 of its length. Thus there is a discontinuity of A(amax, ·)
+at t =
+1
+√
+6, where amax denotes the direction of largest value of the parallel section
+function,
+A(a(2), 1
+√
+6) =
+√
+2 >
+lim
+tց1/
+√
+6
+A(a{t}, t) = 1
+√
+2 .
+Proposition 1.3. For n = 3 and 0 ≤t ≤
+√
+3
+2 , let t0 := 9+4√
+16−6
+√
+3
+2(3
+√
+3+16)
+≃0.43575,
+t1 :=
+√
+6+1
+10
+≃0.34495 and
+a[t] :=
+1
+2
+p
+2 −8t2 −t, t, t, −(1
+2
+p
+2 −8t2 + t)
+
+∈S3 and
+a{t} := ( ˜a1, ˜a1, b+, b−) ∈S3, b± := −˜a1 ± 1
+2
+p
+2 −8 ˜a12 ,
+where t ∈[
+1
+2
+√
+3, t1] and ˜a1 ∈[
+1
+2
+√
+3, 1
+2] is the unique solution of φ(a1) = t,
+φ(a1) := a1(5 −12a2
+1) + (6a2
+1 −1
+2)
+p
+28a2
+1 −1
+1 + 36a2
+1
+.
+===== page 5 =====
+NON-CENTRAL SECTIONS OF THE REGULAR n-SIMPLEX
+5
+Then the extrema of A(·, t) on S3 are given by
+Maximum :
+
+
+
+
+
+
+
+
+
+a[t] , 0 ≤t ≤
+1
+2
+√
+3 :
+A(a[t], t) =
+1
+√
+2−8t2
+a{t} ,
+1
+2
+√
+3 < t ≤t1
+a(2) ,
+t1 ≤t ≤t0 :
+A(a(2), t) = 1
+2 −2t2
+a(1) , t0 ≤t <
+√
+3
+2 :
+A(a(1), t) = 3
+√
+3
+8 (
+√
+3
+2 −t)2
+
+
+
+
+
+
+
+
+
+,
+Minimum :
+n
+a(1) , 0 ≤t ≤
+1
+2
+√
+3 :
+A(a(1), t) = 3
+√
+3
+8 (
+√
+3
+2 −t)2 o
+.
+For
+1
+2
+√
+3 < t ≤t1, A(a{t}, t) = ψ( ˜a1), ψ(a1) :=
+4
+h
+a1(5+52a2
+1)−(2a2
+1+ 1
+2)√
+28a2
+1−1
+i
+(1+36a2
+1)2
+.
+Again, a[t] turns continuously from a[0] =
+1
+√
+2(1, 0, 0, −1) as given by Webb [W]
+to a(3) =
+1
+2
+√
+3(1, 1, 1, −3) which is −a(1) up to a permutation of coordinates. For
+1
+2
+√
+3 < t ≤t1, a{t} turns continuously from a(3) to a(2) = 1
+2(1, 1, −1, −1). Again
+there is a discontinuity at the distance of the center to a boundary triangle t =
+1
+2
+√
+3,
+A(a(3),
+1
+2
+√
+3
+) =
+√
+3
+2
+>
+lim
+tց1/2
+√
+3
+A(a{t}, t) = 5
+9
+√
+3
+2 = 5
+18
+√
+3 .
+The last value stems from the fact that for t ց
+1
+2
+√
+3, also ˜a1 ց
+1
+2
+√
+3. The factor 5
+9
+is easily explained: Dividing a boundary triangle of ∆3 by a line through its center
+parallel to a side into a triangle and a trapezoid , the area of the trapezoid is 5
+9-th
+of the area of the triangle itself.
+In the next chapter we state a general formula for A(a, t) which involves al-
+ternating terms with removable singularities and give some consequences, e.g. a
+formula for A(a(k), t). After some preparations in chapter 3, we prove Theorem 1.1
+in chapter 4. The proof uses some ideas also found in K¨onig [Ko2], though there are
+essential diﬀerences due to the non-symmetry of ∆n and the additional constraint
+Pn+1
+j=1 aj = 0. Basically, we show that there are at most three diﬀerent coordinates
+in critical points a ∈Sn−1 of A(·, t) in addition to the largest two coordinates, which
+is then reduced to two with predetermined multiplicity. This leads to speciﬁc func-
+tions of the largest two coordinates (a1, a2) of a to be investigated. We then apply
+some monotonicity result proved in chapter 3. In chapter 5 we verify Propositions
+1.2 and 1.3.
+The author would like to thank the referee for carefully evaluating the paper, for
+his questions and suggestions, helping to improve the manuscript.
+2. A volume formula for sections of the n-simplex
+The general assumption on a implies
+Lemma 2.1. Let a ∈Sn, Pn+1
+j=1 aj = 0, a1 ≥a2 ≥· · · ≥an+1 and 1 ≤k ≤n.
+i) If a1 ≥· · · ≥ak ≥0, ak ≤
+q
+n−k+1
+k(n+1). In particular, a1 ≤
+q
+n
+n+1. If a1 > a2,
+===== page 6 =====
+6
+HERMANN K ¨ONIG
+a3 <
+q
+n−2
+3(n+1)
+.
+ii) If a1 ≥a2 ≥0, a1 ≤ψ(a2) :=
+q
+n−1
+n
+q
+1 −n+1
+n a2
+2 −a2
+n . ψ is a decreasing function
+with ψ2 = Id, a1 = ψ(a2) if and only if a2 = ψ(a1).
+Therefore, if
+q
+n−k
+(k+1)(n+1) < t ≤
+q
+n−k+1
+k(n+1), as assumed in Theorem 1.1 for k = 2
+or k = 1, ak+1 < t and there are ≤k vertices ej of ∆n in H+(a, t).
+We will use the function ψ throughout the paper.
+Proof. i) Using the Cauchy Schwarz inequality, we ﬁnd that
+Pk
+j=1 aj = −Pn+1
+j=k+1 aj ≤
+√
+n −k + 1
+qPn+1
+j=k+1 a2
+j =
+√
+n −k + 1
+q
+1 −Pk
+j=1 a2
+j,
+which together with kak ≤Pk
+j=1 aj and ka2
+k ≤Pk
+j=1 a2
+j implies ak ≤
+q
+n−k+1
+k(n+1).
+ii) For k = 2, the previous inequalities yield (a1 + a2)2 ≤(n −1)(1 −(a2
+1 + a2
+2)).
+This quadratic inequality implies a1 ≤
+q
+n−1
+n
+q
+1 −n+1
+n a2
+2 −a2
+n =: ψ(a2).
+Since
+ψ′(a2) = −
+q
+n−1
+n
+(n+1)/na
+√
+1−(n+1)/na2 −1
+n < 0, ψ is strictly decreasing. We have a1 = ψ(a2)
+if and only if (a1 +a2)2 = (n−1)(1−(a2
+1 +a2
+2)), which is symmetric in a1 and a2.
+□
+We need an explicit formula for A(a, t). Put x+ := max(x, 0) for any x ∈R.
+Then:
+Proposition 2.2. Let n ∈N, t ∈R with |t| ≤
+q
+n
+n+1 and a ∈Sn with Pn+1
+j=1 aj = 0.
+Assume that a1 > a2 > · · · > an+1. Then
+(2.1)
+A(a, t) =
+√n + 1
+(n −1)!
+n+1
+X
+j=1
+(aj −t)n−1
++
+Qn+1
+k=1,k̸=j(aj −ak)
+.
+This is Corollary 2.4 of Dirksen [D].
+It is stated there for sequences a ∈Sn
+without Pn+1
+j=1 aj = 0, but explained how to transform it into the above formula.
+Formula (2.1) generalizes a result of Webb [W] for central sections.
+The proof
+uses the Fourier transform technique explained in Koldobsky’s book [K] leading to
+A(a, t) =
+1
+2π
+R
+R
+Qn+1
+k=1
+1
+1+i(ak−t)s ds, which is evaluated using the residue theorem.
+By (1.1), A(a, t) = A(−a, −t). Possibly exchanging (a, t) with (−a, −t), we may
+apply (2.1) with at most [n+1
+2 ] non-zero terms, thus with less than n non-zero terms.
+For the standard vectors a(k) we have the following result.
+Proposition 2.3. Let 1 ≤k ≤n and −
+q
+k
+(n−k+1)(n+1) < t <
+q
+n−k+1
+k(n+1).
+Then
+A(a(k), t) =
+√n+1
+(n−1)!
+n−1
+k−1
+q
+k(n−k+1)
+n+1
+n 
+t +
+q
+k
+(n−k+1)(n+1)
+k−1 q
+n−k+1
+k(n+1) −t
+n−k
+.
+Since |⟨a(k), ej⟩| ≥
+q
+k
+(n−k+1)(n+1) for all j = 1, . . . , n + 1, A(a(k), t) = 0 for
+t < −
+q
+k
+(n−k+1)(n+1).
+===== page 7 =====
+NON-CENTRAL SECTIONS OF THE REGULAR n-SIMPLEX
+7
+Proof. By continuity, formula (2.1) also holds for all sequences a ∈Sn with a1 >
+a2 > · · · > ak > t ≥ak+1, · · · , an+1 where some or all of the al with l > k may be
+equal. For k = 1, equation (2.1) immediately implies the claim. For a1 > a2 > t ≥
+a3, . . . , an+1,
+A(a, t) =
+√n + 1
+(n −1)!
+1
+a1 −a2
+ 
+(a1 −t)n−1
+Qn+1
+j=3 (a1 −aj)
+−
+(a2 −t)n−1
+Qn+1
+j=3 (a2 −aj)
+!
+.
+For k = 2, with a(2) = (b, b, c, · · · , c), b :=
+q
+n−1
+2(n+1), c := −
+q
+2
+(n−1)(n+1), let a(ε) :=
+1
+√
+1−ε2(b + ε, b −ε, c, · · · , c), Pn+1
+j=1 a(ε)j = 0, Pn+1
+j=1 a(ε)2
+j = 1, a(ε) →a(2) and
+A(a(ε), t) →A(a(2), t) as ε →0. The continuous extension of (2.1) to a(ε) then
+contains two alternating non-zero summands with b + ε = a1 and b −ε = a2,
+provided that b −ε > t. We ﬁnd for t <
+q
+n−1
+2(n+1)
+(n −1)!
+√n + 1 A(a(2), t) = lim
+ε→0
+1
+2ε
+(b −t + ε)n−1
+(b −c + ε)n−1 −(b −t −ε)n−1
+(b −c −ε)n−1
+
+= g′(b) ,
+where g(x) := (x−t)n−1
+(x−c)n−1 , g′(x) = (n −1)(t −c)(x−t)n−2
+(x−c)n ,
+g′(b) = (n −1)
+
+t +
+q
+2
+(n−1)(n+1)
+ q
+2(n−1)
+n+1
+n q
+n−1
+2(n+1) −t
+n−2
+, since
+1
+b−c =
+q
+2(n−1)
+n+1 .
+For k > 2 and ak = (b, . . . , b
+| {z }
+k
+, c, . . . , c
+| {z }
+n+1−k
+), b :=
+q
+n−k+1
+k(n+1), c := −
+q
+k
+(n−k+1)(n+1) and t < b
+we consider k equidistant points of step-size ε around b, b + jε, j = −[k
+2], . . . , [k
+2], to
+deﬁne a(ε) similarly, and then (2.1) yields a (k −1)-st order ε-step size diﬀerence
+∆(k−1)
+ε
+g of the function g(x) :=
+(x−t)n−1
+(x−c)n−k+1 , namely
+(n −1)!
+√n + 1 A(a(k), t) = lim
+ε→0
+1
+(k −1)!
+1
+εk−1 ∆(k−1)
+ε
+g(b) =
+1
+(k −1)!g(k−1)(b) .
+The power in the denominator of g is reduced by the fact that there are (k −1)
+products of diﬀerences of values near b resulting in the (k −1)-st order diﬀerence.
+One veriﬁes by induction that
+1
+(k −1)!g(k−1)(x) =
+n −1
+k −1
+
+(t −c)k−1 (x −t)n−k
+(x −c)n
+,
+and with
+1
+b−c =
+q
+k(n−k+1)
+n+1
+we have that
+A(a(k), t) =
+√n+1
+(n−1)!
+n−1
+k−1
+q
+k(n−k+1)
+n+1
+n 
+t +
+q
+k
+(n−k+1)(n+1)
+k−1 q
+n−k+1
+k(n+1) −t
+n−k
+.
+□
+In particular, A(a(1), t) =
+√n+1
+(n−1)!
+q
+n
+n+1
+n q
+n
+n+1 −t
+n−1
+, t <
+q
+n
+n+1 ,
+A(a(2), t) =
+√n+1
+(n−2)!
+q
+2(n−1)
+n+1
+n q
+2
+(n−1)(n+1) + t
+ q
+n−1
+2(n+1) −t
+n−2
+, t <
+q
+n−1
+2(n+1) .
+===== page 8 =====
+8
+HERMANN K ¨ONIG
+For all
+c
+√
+n(n+1) < t <
+q
+n
+n+1, A(a(1), t) > A(a(2), t) is true asymptotically for
+c ≃2.6363: A
+
+a(1),
+c
+√
+n(n+1)
+
+−A
+
+a(2),
+c
+√
+n(n+1)
+
+= O( 1
+n) leads to the requirement
+2(
+√
+2 + c) = exp(1 + (
+√
+2 −1)c), which has only one positive solution c ≃2.6363.
+Let tn be the positive solution in dimension n of A(a(1), tn) = A(a(2), tn) less than
+q
+n−1
+2(n+1). Then t3 ≃0.4357, t4 ≃0.3877 and t5 ≃0.3426.
+3. Prerequisites
+In this chapter we prove two results which are needed in the proof of Theorem
+1.1 in the next chapter. The ﬁrst one is used to reduce the number of diﬀerent
+coordinates of extremal critical points of A(·, t), the second is a monotonicity result
+for A(a, t).
+Proposition 3.1. Let n ≥4,
+q
+n−2
+3(n+1) < t < a2 < a1, p, r, s ∈N and c, d, e ∈R be
+such that a1 + a2 + c + d + e = 0, a2
+1 + a2
+2 + c2
+p + d2
+r + e2
+s = 1, p + r + s = n −1. Then
+a1 −t
+a2 −t
+n−1
+>
+ 
+a1 −c
+p
+a2 −c
+p
+!p+1 
+a1 −d
+r
+a2 −d
+r
+!r+1 a1 −e
+s
+a2 −e
+s
+s+1
+.
+For the proof we need the
+Lemma 3.2. Let n ≥4,
+q
+n−2
+3(n+1) < t < a2 < a1 and c ∈R. Then:
+(i) If c ≤0,
+
+a1−t
+a2−t
+
+>
+
+a1−c
+a2−c
+3
+.
+(ii) If c ≤g(n) := 2
+q
+n−2
+3(n+1) −
+q
+n−1
+2(n+1),
+
+a1−t
+a2−t
+
+>
+
+a1−c
+a2−c
+2
+.
+Proof. (i) Since
+
+a1−c
+a2−c
+
+is decreasing in c, it suﬃces to prove (i) for c = 0. This means
+
+a1−t
+a2−t
+
+>
+
+a1
+a2
+3
+or equivalently t(a3
+1 −a3
+2) −a1a2(a2
+1 −a2
+2) > 0, which is equivalent
+to t >
+a1a2(a1+a2)
+(a1−a2)2+3a1a2 . By Lemma 2.1 a1 ≤ψ(a2), hence a1 + a2 ≤ψ(a2) + a2 =
+q
+n−1
+n
+q
+1 −n+1
+n a2
+2 + n−1
+n a2 =: γ(a2), γ′(a2) = −
+q
+n−1
+n
+n+1
+n
+a2
+q
+1−n+1
+n a2
+2
++ n−1
+n
+≥0,
+since n−1
+n
+≥
+( n+1
+n )2a2
+2
+1−n+1
+n a2
+2 is satisﬁed in view of a2 ≤
+q
+n−1
+2(n+1) which holds by Lemma
+2.1. Thus γ is increasing in a2, so that a1 + a2 ≤γ(
+q
+n−1
+2(n+1)) =
+q
+2(n−1)
+n+1 . Therefore
+for n ≥4
+a1a2(a1 + a2)
+(a1 −a2)2 + 3a1a2
+< a1 + a2
+3
+≤1
+3
+r
+2(n −1)
+n + 1
+≤
+s
+n −2
+3(n + 1) < t
+is satisﬁed and (i) holds for c ≤0.
+(ii) In view of (i), we may assume that c > 0. The claim
+
+a1−t
+a2−t
+
+>
+
+a1−c
+a2−c
+2
+is equivalent to (a1 −a2)[(a1 + a2 −2c)t + c2 −a1a2] > 0.
+Therefore we need
+===== page 9 =====
+NON-CENTRAL SECTIONS OF THE REGULAR n-SIMPLEX
+9
+t >
+a1a2−c2
+a1+a2−2c =: h(c). Since h′(c) = 2(a1−c)(a2−c)
+(a1+a2−2c)2 > 0, if c < a2 < a1, h is increasing
+in [0, a2]. Note here that c ≤g(n) < t < a2. Now c0 = t −
+p
+(a1 −t)(a2 −t) is the
+solution of t = h(c) =
+a1a2−c2
+(a1+a2−2c) with c0 < t < a2. Thus for c < c0, h(c) < t. By the
+arithmetic-geometric mean inequality
+p
+(a1 −t)(a2 −t) ≤a1+a2
+2
+−t ≤
+q
+n−1
+2(n+1) −t
+and hence c0 = t−
+p
+(a1 −t)(a2 −t) ≥2t−
+q
+n−1
+2(n+1) > 2
+q
+n−2
+3(n+1) −
+q
+n−1
+2(n+1) = g(n).
+Thus, if c ≤g(n), c < c0 and h(c) < t is satisﬁed.
+□
+Proof of Proposition 3.1.
+Assume that c
+p ≤d
+r ≤e
+s. Then c < 0. By assumption
+q
+n−2
+3(n+1) < a2 < a1 and by
+Lemma 2.1 i), e
+s ≤
+q
+n−2
+3(n+1). We distinguish some cases for n ≥4:
+a) If d
+r , e
+s > g(n),
+
+a1−t
+a2−t
+
+>
+ a1−c
+p
+a2−c
+p
+3
+,
+
+a1−t
+a2−t
+
+> max
+
+a1−d
+r
+a2−d
+r
+
+,
+a1−e
+s
+a2−e
+s
+
+and the
+claim will follow from p+1
+3 +r+1+s+1 ≤n−1 = p+r+s, i.e. p ≥4. This is satisﬁed:
+Since c < 0, |c| = a1 + a2 + d + e ≥2
+q
+n−2
+3(n+1) + (r + s)g(n) = 2(1 + r + s)
+q
+n−2
+3(n+1) −
+(r + s)
+q
+n−1
+2(n+1) and c2
+p = 1 −a2
+1 −a2
+2 −r
+ d
+r
+2 −s
+ e
+s
+2 ≤1 −2
+3
+n−2
+n+1 −(r + s)g(n)2,
+implying
+(3.1)
+p ≥
+
+2(1 + r + s)
+q
+n−2
+3(n+1) −(r + s)
+q
+n−1
+2(n+1)
+2
+1 −2
+3
+n−2
+n+1 −(r + s)g(n)2
+.
+Since r, s ∈N, r + s ≥2. For n = 5 this yields p ≥3.035, i.e. p ≥4. The right
+side of (3.1) is increasing in r + s and in n. Thus p ≥4 holds for all n ≥5. For
+n = 4, p + r + s = 3 means p = r = s = 1. But (3.1) yields p > 1. Thus this case is
+impossible for n = 4.
+b) If
+d
+r ≤g(n) <
+e
+s, we have
+
+a1−t
+a2−t
+
+>
+
+a1−d
+r
+a2−d
+r
+2
+and the claim will follow
+from p+1
+3
++ r+1
+2
++ s + 1 ≤n −1 = p + r + s, i.e. 11 ≤4p + 3r. This requires
+p ≥2 or p = 1 and r ≥3.
+We check this similarly as above, if d ≥0: Then
+|c| ≥a1 + a2 + d + e ≥2
+q
+n−2
+3(n+1) + s g(n), c2
+p ≤1 −2
+3
+n−2
+n+1 −s g(n)2. This yields
+(3.1) with r + s replaced by s. For s = 1, n = 4, (3.1) yields p ≥1.19, i.e. p ≥2 is
+satisﬁed, as needed. For s > 1 or n > 4, p will be even larger. For n = 4, this case
+is impossible, since p + r + s = n −1 = 3 requires p = r = s = 1.
+If d < 0, we only need for the claim that p+1
+3
++ r+1
+3
++ s + 1 ≤n −1 = p + r + s,
+which means p + r ≥3. We show that p = r = 1 is impossible so that p + r ≥3
+will follow. If p = r = 1, 0 = a1 + a2 + c + d + e ≥2
+q
+n−2
+3(n+1) + s g(n) + c + d ≥
+2(1+s)
+q
+n−2
+3(n+1) −s
+q
+n−1
+2(n+1) −
+q
+2
+3
+n+7
+n+1 =: γ(s, n), using c2+d2 ≤1−a2
+1−a2
+2 ≤
+n+7
+3(n+1),
+===== page 10 =====
+10
+HERMANN K ¨ONIG
+|c + d| ≤
+q
+2
+3
+n+7
+n+1.
+For s = 1, γ(s, n) > 0, if n ≥6.
+For n = 5, we need
+4 = p + r + s = 2 + s, i.e. s = 2. However, also γ(2, 5) > 0. Thus p + r ≥3
+is satisﬁed. The case n = 4 needs a separate argument.
+c) If d
+r , e
+s ≤g(n), we have that
+
+a1−t
+a2−t
+
+> max
+ 
+a1−d
+r
+a2−d
+r
+2
+,
+a1−e
+s
+a2−e
+s
+2
+!
+, and we
+need p+1
+3
++ r+1
+2
++ s+1
+2
+≤n −1 = p + r + s, i.e. 8 ≤4p + 3(r + s), which is always
+satisﬁed, also for n = 4.
+d) For n = 4, case b) with d < 0 was left open. Then
+d, e = −a1+a2+c
+2
+± 1
+2
+p
+2 −3(a2
+1 + a2
+2 + c2) −2(a1a2 + a1c + a2c). Calculation shows
+a1 −d
+a2 −d
+ a1 −e
+a2 −e
+
+= 1 + (a1 −a2)
+2(a1 + a2) + c
+(a1 + a2 + c)2 + 2a2
+2 −a1c −1
+2
+,
+a1 −t
+a2 −t
+
+= 1 + (a1 −a2)
+1
+a2 −t .
+We will prove that
+
+a1−t
+a2−t
+
+>
+
+a1−d
+a2−d
+ 
+a1−e
+a2−e
+
+. The claim of Proposition 3.1 will
+then follow from the inequality 2
+3 + 2 < 3 for the exponents. We have to show
+that φ(a1, a2) :=
+(a1+a2+c)2+2a2
+2−a1c−1
+2
+2(a1+a2)+c
+> a2 −t. Using a2
+1 + a2
+2 ≥
+4
+15, |c| ≤
+q
+11
+15,
+it can be checked that
+∂φ
+∂a1 = 1+2(a2
+1−a2
+2)+4a1a2+2a1c−c2
+(2(a1+a2)+c)2
+≥0. Therefore φ(a1, a2) ≥
+φ(a2, a2) =
+(2a2+c)2+2a2
+2−a2c−1
+2
+4a2+c
+=: k(c). We want to minimize k(c) on the interval
+c ∈[−1, 0]. We have k′(c) =
+6a2
+2+8a2c+c2+ 1
+2
+(4a2+c)2
+= 0 for c± = −4a2 ± 1
+2
+p
+40a2
+2 −2. Only
+c+ satisﬁes c+ ≥−1 as needed for a ∈S4, and c+ is the minimum of k. We have
+k(c+) =
+p
+40a2
+2 −2 −5a2, hence φ(a1, a2) ≥
+p
+40a2
+2 −2 −5a2. It is easy to see that
+this is > a2 −
+q
+2
+15 > a2 −t.
+□
+The second auxiliary result concerns the monotonicity of a very special function
+appearing in the proof of Theorem 1.1 in the situation that (n−2) of the coordinates
+of a critical point a ∈Sn of A(·, t) with ﬁxed a1 > a2 > t coincide.
+Proposition 3.3. Let n ≥4,
+q
+n−2
+3(n+1) ≤t < a2 < a1. Let
+W = W(a1, a2) :=
+q
+(n −1)(1 −a2
+1 −a2
+2) −(a1 + a2)2 ,
+F = F(a1, a2) :=
+(a1 −t)n−1
+
+a1 + a1+a2
+n−1 +
+1
+√n−2(n−1)W
+n−2 
+a1 + a1+a2
+n−1 −
+√n−2
+n−1 W
+ ,
+G = G(a1, a2) :=
+(a2 −t)n−1
+
+a2 + a1+a2
+n−1 +
+1
+√n−2(n−1)W
+n−2 
+a2 + a1+a2
+n−1 −
+√n−2
+n−1 W
+ ,
+===== page 11 =====
+NON-CENTRAL SECTIONS OF THE REGULAR n-SIMPLEX
+11
+and f = f(a1, a2) := F (a1,a2)−G(a1,a2)
+a1−a2
+. Then for ﬁxed a1, f is strictly increasing in
+a2.
+By Lemma 2.1 a2 < ψ(a1), and this guarantees that W is well-deﬁned.
+For
+a2 = ψ(a1), W = W(a1, ψ(a1)) = 0. W decreases if a2 increases. For the proof we
+need
+Lemma 3.4. Let n ≥4,
+q
+n−2
+3(n+1) ≤t < a2 < a1 and
+W(a1, a2) :=
+p
+(n −1)(1 −a2
+1 −a2
+2) −(a1 + a2)2, c := −a1+a2
+n−1 −
+1
+√n−2(n−1)W(a1, a2)
+and d := −a1+a2
+n−1 +
+√n−2
+n−1 W(a1, a2). Then :
+(a) a2 −d ≥3(a2 −t) + (a1 −a2) ,
+(b) a2 −c ≥5(a2 −t) + a1−a2
+n−1 ,
+(c) a1−c
+a2−c < 3
+2.
+Proof. (a) Let δ := a2 −t, ε := a1 −t. We claim that t −d ≥δ + ε. Inserting δ, ε
+into t −d, this is equivalent to t −d = n+1
+n−1t + δ+ε
+n−1 −
+√n−2
+n−1 W(a1, a2) ≥δ + ε which
+means √n −2 W(a1, a2) ≤(n + 1)t −(n −2)(δ + ε). This is equivalent to
+(n −2)
+
+n −1 −2(n + 1)(t2 + (δ + ε)t) −n(δ2 + ε2) −2δε
+
+≤(n + 1)2t2 −2(n −2)(n + 1)(δ + ε)t + (n −2)2(δ + ε)2 .
+The terms with (δ +ε)t on both sides cancel, and the inequality is clearly satisﬁed if
+(n −2)(n −1) ≤t2((n + 1)2 + 2(n −2)(n + 1)) = t2 3(n + 1)(n −1), i.e. t2 ≥
+n−2
+3(n+1),
+which holds by assumption on t. Hence t −d ≥a1 + a2 −2t = 2(a2 −t) + (a1 −a2),
+a2 −d = a2 −t + t −d ≥3(a2 −t) + (a1 −a2).
+(b) We have t−c = t+ a1+a2
+n−1 +
+1
+√n−2(n−1)W(a1, a2) ≥t+ a1+a2
+n−1 = t+
+2
+n−1a2+ a1−a2
+n−1 .
+We claim that t +
+2
+n−1a2 ≥4(a2 −t) holds. This is equivalent to t ≥(4
+5 −2
+5
+1
+n−1)a2.
+Since t ≥
+q
+n−2
+3(n+1) =
+q
+2
+3
+n−2
+n−1
+q
+n−1
+2(n+1) ≥
+q
+2
+3
+n−2
+n−1 a2,
+q
+2
+3
+n−2
+n−1 ≥4
+5 −2
+5
+1
+n−1 will imply
+the claim, and this is true for all n ≥4. Hence a2−c = a2−t+t−c ≥5(a2−t)+ a1−a2
+n−1 .
+(c) By Lemma 2.1 a1
+a2 ≤ψ(a2)
+a2
+=
+q
+n−1
+n
+q
+1
+a2
+2 −n+1
+n
+−1
+n. Using a2 ≥
+q
+n−2
+3(n+1), we
+ﬁnd y := a1
+a2 ≤n+1
+n
+q
+n−1
+n−2
+√
+2 −1
+n. Since a1+x
+a2+x is decreasing for x ≥0 and −c ≥0,
+−c ≥
+a1+a2
+n−1 , we conclude a1−c
+a2−c ≤
+a1+ a1+a2
+n−1
+a2+ a1+a2
+n−1
+=
+ny+1
+n+y .
+We claim that ny+1
+n+y
+<
+3
+2.
+This is equivalent to y < 3n−2
+2n−3. Using the above estimate for y, it suﬃces to show
+q
+2(n−1)
+n−2
+<
+n
+n+1
+
+3n−2
+2n−3 + 1
+n
+
+= 3 n−1
+2n−3, or equivalently, 2(2n −3)2 < 9(n −1)(n −2),
+which holds for all n ≥4. Hence a1−c
+a2−c < 3
+2 for all n ≥4.
+□
+Remark. By Lemma 3.4 (a), a2+ a1+a2
+n−1 −
+√n−2
+n−1 W = a2−d > 0, so that the denom-
+inators of F(a1, a2) and G(a1, a2) in Proposition 3.3 are positive and F(a1, a2) > 0,
+G(a1, a2) > 0.
+===== page 12 =====
+12
+HERMANN K ¨ONIG
+Proof of Proposition 3.3.
+We denote by ′ the derivative with respect to a2. Then
+f ′(a1, a2) = F(a1, a2)(1 + (a1 −a2)(ln F)′(a1, a2)) −G(a1, a2)(1 + (a1 −a2)(ln G)′(a1, a2))
+(a1 −a2)2
+.
+We will show that f ′(a1, a2) ≥0. This is equivalent to
+F(a1, a2)
+G(a1, a2)
+
+1 + (a1 −a2)(ln F)′(a1, a2)
+
+≥1 + (a1 −a2)(ln G)′(a1, a2) .
+We have W ′(a1, a2) = −na2+a1
+W (a1,a2). Let u := a1 + a1+a2
+n−1 , v := a2 + a1+a2
+n−1 . Then
+(ln F)′(a1, a2) = −
+
+
+n−2
+n−1 −
+√n−2
+n−1
+na2+a1
+W (a1,a2)
+u +
+1
+√n−2(n−1)W(a1, a2) +
+1
+n−1 +
+√n−2
+n−1
+na2+a1
+W (a1,a2)
+u −
+√n−2
+n−1 W(a1, a2)
+
+.
+A tedious calculation with the common denominator
+h(u) :=
+
+u +
+1
+√n −2(n −1)W(a1, a2)
+ 
+u −
+√n −2
+n −1 W(a1, a2)
+
+shows that this is equal to (ln F)′(a1, a2) = −h(u)−h(v)
+(a1−a2)h(u). Therefore
+1 + (a1 −a2)(ln F)′(a1, a2) = 1 −h(u) −h(v)
+h(u)
+= h(v)
+h(u) =
+a2 −c
+a1 −c
+ a2 −d
+a1 −d
+
+,
+where c := −a1+a2
+n−1 −
+1
+√n−2(n−1)W(a1, a2), d := −a1+a2
+n−1 +
+√n−2
+n−1 W(a1, a2). We have
+a1 + a2 + (n −2)c + d = 0, a2
+1 + a2
+2 + (n −2)c2 + d2 = 1. We get
+F(a1, a2)
+G(a1, a2)
+
+1 + (a1 −a2)(ln F)′(a1, a2)
+
+=
+a1 −t
+a2 −t
+n−1 a2 −c
+a1 −c
+n−1 a2 −d
+a1 −d
+2
+and we have to show that this is ≥1 + (a1 −a2)(ln G)′(a1, a2). We have
+(ln G)′(a1, a2) = n −1
+a2 −t −
+(n −2)
+n
+n−1 −
+√n−2
+n−1
+na2+a1
+W (a1,a2)
+y +
+1
+√n−2(n−1)W(a1, a2)
+−
+n
+n−1 +
+√n−2
+n−1
+na2+a1
+W (a1,a2)
+y −
+√n−2
+n−1 W(a1, a2)
+.
+Using that c −d = −
+1
+√n−2W(a1, a2), a2 −c = y +
+1
+√n−2(n−1)W(a1, a2) and a2 −d =
+y −
+√n−2
+n−1 W(a1, a2), we ﬁnd after some calculation
+(ln G)′(a1, a2) = (n −1)
+
+1
+a2 −t −
+1
+a2 −c
+
+−
+2
+a2 −d .
+We have to show
+a1 −t
+a2 −t
+n−1
+>
+a1 −c
+a2 −c
+n−1 a1 −d
+a2 −d
+2
+×
+(3.2)
+×
+
+1 + (a1 −a2)
+
+(n −1)(
+1
+a2 −t −
+1
+a2 −c) −
+2
+a2 −d
+
+Let x := a1−a2
+a2−t > 0, y := a1−a2
+a2−c > 0 and z := a1−a2
+a2−d > 0. Then we need
+(3.3)
+(1 + x)n−1 > (1 + y)n−1(1 + z)2 (1 + (n −1)(x −y) −2z) .
+===== page 13 =====
+NON-CENTRAL SECTIONS OF THE REGULAR n-SIMPLEX
+13
+By Lemma 3.4, y ≤x
+5 and z ≤
+a1−a2
+3(a2−t)+(a1−a2) =
+x
+3+x. Now the right side of (3.3) is
+increasing in z and y, since their derivatives satisfy
+2(1 + z) [1 + (n −1)(x −y) −2z −(1 + z)] ≥2(1 + z)
+4
+5(n −1)x −
+3x
+3 + x
+
+> 0 ,
+(n −1)(1 + y)n−2 [1 + (n −1)(x −y) −2z −(1 + y)]
+≥(n −1)(1 + y)n−2
+
+(n −1)4
+5x −
+2x
+3 + x −x
+5
+
+> 0 .
+Therefore (3.3) will be satisﬁed if for all x > 0
+(3.4)
+φn(x) := (1 + x)n−1 −
+
+1 + x
+5
+n−1 
+1 +
+x
+3 + x
+2 
+1 + (n −1)4
+5x −
+2x
+3 + x
+
+> 0
+holds. We use induction on n to show that φn(x) > 0 for all n ≥5 and all 0 < x ≤5
+2.
+For n = 5, expansion shows that φ5(x) =
+x2
+(1+ x
+3 )3
+P6
+j=0 αjxj, α0 = 7
+5, αj ≥0 for
+j = 1, · · · , 5, α6 = −
+64
+84375 < 0. Since α6(5
+2)6 =
+5
+27 < 1
+5, φ5(x) > 6
+5
+x2
+(1+ x
+3 )3 > 0. For
+n ≥5, assume that φn(x) > 0 for all 0 < x ≤5
+2. Then
+φn+1(x) −φn(x) = x(1 + x)n−1 −x
+
+1 + x
+5
+n−1 
+1 +
+x
+3 + x
+2 
+1 + 4
+25nx −2
+5
+x
+3 + x
+
+> xφn(x) + x
+
+1 + x
+5
+n−1 
+1 +
+x
+3 + x
+2 16
+25nx −4
+3x
+
+> 0 .
+For x ≥5
+2, x
+5 ≥1
+2, we use that by Lemma 3.4 (c), a1−c
+a2−c = 1 + y < 3
+2, y < 1
+2. Then
+(3.3) will be satisﬁed if
+Φn(x) :=
+2
+3(1 + x)
+n−1
+−
+
+1 +
+x
+3 + x
+2 
+1 + (n −1)(x −1
+2) −
+2x
+3 + x
+
+> 0
+holds. For n = 5, Φ5(x) =
+P7
+j=0 βj(x−5
+2 )j
+(1+ x
+3 )3
+with βj > 0 for all j = 0, · · · , 7, β0 > 75.
+Thus Φ5(x) > 0 for all x ≥5
+2. For n ≥5 and x ≥5
+2,
+Φn+1(x) ≥7
+3
+2
+3(1 + x)
+n−1
+−
+
+1 +
+x
+3 + x
+2 
+1 + (n −1)(x −1
+2) −
+2x
+3 + x
+
+−
+
+1 +
+x
+3 + x
+2 
+x −1
+2
+
+.
+Thus Φn(x) > 0 implies Φn+1(x) > 0, since for x ≥
+5
+2 and n ≥5 we have
+4
+3
+ 2
+3(1 + x)
+n−1 > 1
+3(1+x)3 > 1
+3(1+x)2(x−1
+2) > (1+ x
+3 )2(x−1
+2) >
+
+1 +
+x
+3+x
+2 x −1
+2
+
+.
+Therefore we have veriﬁed (3.3) and (3.2) for all n ≥5.
+For n = 4, we use that by Lemma 3.4 we actually have a better estimate for y,
+namely y ≤
+a1−a2
+5(a2−t)+ a1−a2
+3
+=
+x
+5+ x
+3 . Then we need only that for x > 0
+˜φ4(x) = (1 + x)3 −
+
+1 +
+x
+5 + x
+3
+3 
+1 +
+x
+3 + x
+2 
+1 + 3x −3
+x
+5 + x
+3
+−
+2x
+3 + x
+
+> 0 .
+===== page 14 =====
+14
+HERMANN K ¨ONIG
+Calculation shows that ˜φ4(x) =
+x2
+(1+ x
+3 )3(1+ x
+15)4
+P8
+j=0 γjxj, γj > 0 for all j = 0, · · · , 8
+with γ0 = 13
+75 > 1
+6. Thus ˜φ4(x) > 1
+6
+x2
+(1+ x
+3 )3(1+ x
+15 )4 > 0 for all x > 0. Hence inequality
+(3.3) holds for n = 4, too.
+□
+4. Proof of Theorem 1.1
+Proof. The case
+q
+n−1
+2(n+1) < t <
+q
+n
+n+1 is covered by Theorem 1.1 of [Ko]. Hence
+assume that
+q
+n−2
+3(n+1) < t ≤
+q
+n−1
+2(n+1). We may assume A(a, t) > 0. As mentioned in
+the Introduction, the general assumption and A(a, t) > 0 implies that a1 > t holds.
+By Lemma 2.1 a3 ≤
+q
+n−2
+3(n+1) < t, a2 ≤
+q
+n−1
+2(n+1) and a1 ≤
+q
+n
+n+1. We have to con-
+sider two cases: a1 > t ≥a2, . . . , an+1 and a1 > a2 > t ≥a3, . . . , an+1, with limiting
+case a1 = a2. In the ﬁrst case, formula (2.1) contains only one non-zero summand,
+in the second case two non-zero summands. In the second case a2 >
+q
+n−2
+3(n+1), and
+by Lemma 2.1 a1 ≤ψ(a2) <
+q
+2
+3.
+i) Assume ﬁrst that a1 > t ≥a2, . . . , an+1. By continuity, (2.1) is also valid if
+some or all of the values a2, . . . , an+1 coincide. To ﬁnd the maximum of A(a, t) =
+√n+1
+(n−1)!
+(a1−t)n−1
+Qn+1
+j=2 (a1−aj) in Ω:= {(a1, a2, . . . , an+1) | a1 > t ≥a2, . . . , an+1} relative to
+the constraints Pn+1
+j=1 aj = 0, Pn+1
+j=1 a2
+j = 1, we ﬁrst look for the critical points of
+A(·, t) in the interior of Ω, i.e. when a2, . . . , an+1 < t. We show later in ii) that the
+maximum of A(·, t) is not attained on the boundary of Ω. The Lagrange function
+L(a, t) = (n −1) ln(a1 −t) −
+n+1
+X
+j=2
+ln(a1 −aj) + λ
+2
+
+
+n+1
+X
+j=1
+a2
+j −1
+
++ µ
+
+
+n+1
+X
+j=1
+aj
+
+
+gives the critical points of A(·, t) relative to the above constraints,
+∂L
+∂a1
+= n −1
+a1 −t −
+n+1
+X
+j=2
+1
+a1 −aj
++ λa1 + µ = 0 ,
+∂L
+∂al
+=
+1
+a1 −al
++ λal + µ = 0 , l = 2, . . . , n + 1 .
+As shown in [Ko], this implies µ = −n−1
+n+1
+1
+a1−t, λ = n −(n −1) a1
+a1−t and that the al,
+l ≥2 are solutions of the quadratic equation x2 −px −q = 0, p = a1 −n−1
+n+1
+1
+nt−a1 ,
+q =
+(n+1)t−2a1
+(n+1)(nt−a1). Thus there are at most two diﬀerent values among the al’s, l ≥2.
+In fact, as shown in [Ko], for t >
+2
+√
+n(n+1), there is only one possible solution x−
+since the other one x+ does not satisfy x+ ≤t. In this case, the only critical point
+of A(·, t) is a(1) =
+q
+n
+n+1(1, −1
+n, . . . , −1
+n). It is a (local) maximum by Proposition
+===== page 15 =====
+NON-CENTRAL SECTIONS OF THE REGULAR n-SIMPLEX
+15
+1.3 of [Ko], and hence the absolute maximum of A(·, t). The condition t >
+2
+√
+n(n+1)
+is satisﬁed for all n ≥5, since then
+q
+n−2
+3(n+1) >
+2
+√
+n(n+1). For n = 4, the condition
+might be violated, and then there might be two diﬀerent values among (a2, a3, a4, a5)
+in the case of a critical point a. Suppose c := a2 appears r times and a5 s times,
+r + s = 4.
+Then a1 + rc + sd = 0, a2
+1 + rc2 + sd2 = 1.
+If r = s = 2, c =
+−1
+4
+
+a1 +
+p
+4 −5a2
+1
+
+< d = −1
+4
+
+a1 −
+p
+4 −5a2
+1
+
+. Inserting these values into the
+equation
+1
+a1−c + λc + µ = 0 with the above values for λ = λ(t) and µ = µ(t) gives
+a formula for t, namely t = 5a2
+1+2
+20a1 , a1 = 2t + 1
+5
+√
+100t2 −10, which is >
+q
+4
+5 for
+t ≥0.34. However, 0.365 <
+q
+2
+15 < t by our assumption on t for n = 4. Thus the
+case r = s = 2 is impossible. Similarly, also r = 1, s = 3 is impossible. This leaves
+r = 3, s = 1, c = −1
+4
+
+a1 + 1
+3
+p
+12 −15a2
+1
+
+< d = −1
+4
+
+a1 −
+p
+12 −15a2
+1
+
+. In this
+case t = a1(80a2
+1+17)+3√
+12−15a2
+1
+40(8a2
+1−1)
+=: φ(a1). The function φ is strictly decreasing in
+[
+q
+2
+15,
+q
+4
+5]. One has φ(a1) >
+q
+3
+10 for a1 <
+q
+3
+10, hence φ(a1) = t has no solution
+a1 ∈[
+q
+2
+15,
+q
+3
+10). For
+q
+3
+10 ≤a1 ≤
+q
+4
+5, one has φ(
+q
+3
+10) =
+q
+3
+10, and φ is bijective
+φ : [
+q
+3
+10,
+q
+4
+5] →[3
+4
+1
+√
+5,
+q
+3
+10].
+The equation t = φ(a1) = d has the solutions
+¯a =
+q
+3
+10 ≃0.548 and ˜a = 13
+2
+1
+√
+95 ≃0.667. For ¯a < a1 < ˜a we have d > t which is
+impossible. This leaves the possibility that a1 ∈
+h
+13
+2
+1
+√
+95,
+q
+4
+5
+i
+with c < d ≤t. In
+this case, 0.335 ≃3
+4
+1
+√
+5 < t < φ(˜a) =
+4
+√
+95 ≃0.411. The value
+q
+2
+15 ≃0.365 is in this
+range. For a = (a1, c, c, c, d) ∈S4 with t ∈[
+q
+2
+15,
+4
+√
+95] we have
+A(a, t) = A(a, φ(a1)) =
+√
+5
+6
+27
+1000
+9a1(260a4
+1−128a2
+1+17)−3(20a4
+1+8a2
+1−3)√
+12−15a2
+1
+(8a2
+1−1)3
+.
+Comparing this with
+A(a(1), t) = A(a(1), φ(a1)) =
+√
+5
+6
+16
+25
+q
+4
+5 −a1(80a2
+1+17)+3√
+12−15a2
+1
+40(8a2
+1−1)
+3
+,
+(tedious) estimates show that A(a, φ(a1)) < A(a(1), φ(a1)) for all a1 ∈
+h
+13
+2
+1
+√
+95,
+q
+4
+5
+
+,
+with equality for a1 =
+q
+4
+5. Thus A(a, t) < A(a(1), t) for all
+q
+2
+15 ≤t <
+4
+√
+95. In fact,
+for t < ˜t ≃0.3877, A(a(1), t) < A(a(2), t), with ˜t ∈[
+q
+2
+15,
+4
+√
+95].
+ii) The boundary of Ωin i) is Λ = {(a1, a3, . . . , an+1) | a1 > t = a2 > a3, . . . , an+1}.
+Note that by Lemma 2.1 i) we have a3, . . . , an+1 <
+q
+n−2
+3(n+1) < t. For t = a2 we have
+A(a, t) =
+√n+1
+(n−1)!
+(a1−t)n−2
+Qn+1
+j=3 (a1−aj) with constraints Pn+1
+j=1,j̸=2 aj = −t, Pn+1
+j=1,j̸=2 a2
+j = 1−t2.
+The corresponding Lagrange function yields the necessary conditions for critical
+===== page 16 =====
+16
+HERMANN K ¨ONIG
+points of A(·, t) in Λ relative to the constraints
+∂L
+∂a1
+= n −2
+a1 −t −
+n+1
+X
+j=3
+1
+a1 −aj
++ λa1 + µ = 0 ,
+∂L
+∂al
+=
+1
+a1 −al
++ λal + µ = 0 , l = 3, . . . , n + 1 ,
+(4.1)
+implying for l, k ∈{3, . . . , n + 1}
+al −ak
+(a1 −al)(a1 −ak) =
+1
+a1 −al
+−
+1
+a1 −ak
+= λ(ak −al) .
+If there are l̸ = k with al̸ = ak, λ = −
+1
+(a1−al)(a1−ak) and µ = −
+a1−al−ak
+(a1−al)(a1−ak).
+Therefore there are at most two diﬀerent values among the al, l ∈{3, . . . , n+1}. We
+claim that there is only one value. Suppose to the contrary that c := al̸ = ak =: d
+satisfy (4.1) with multiplicities p and q, i.e. p + q = n −1, a1 + pc + qd = −t,
+a2
+1 + pc2 + qd2 = 1 −t2. Inserting the values of λ and µ into the ﬁrst equation of
+(4.1) yields
+n −2
+a1 −t −p + 1
+a1 −c −q + 1
+a1 −d = 0 ,
+or equivalently
+(4.2) F := (n −2)(a1 −c)(a1 −d) −(a −t)[(p + 1)(a1 −d) + (q + 1)(a1 −d)] = 0 .
+However, we will show that F > 0 holds. The quadratic equations for c and d imply
+with W := (n −1)(1 −a2
+1 −t2) −(a1 + t)2, assuming that c > d,
+c = −a1 + t
+n −1 +
+1
+n −1
+rq
+p
+√
+W , d = −a1 + t
+n −1 −
+1
+n −1
+rp
+q
+√
+W ,
+a1 −c = a1 + a1 + t
+n −1 −
+1
+n −1
+rq
+p
+√
+W , a1 −d = a1 + a1 + t
+n −1 +
+1
+n −1
+rp
+q
+√
+W .
+Inserting these values into (4.2) and using
+q
+p
+q −
+q
+q
+p = p−q
+√pq, (p+1)
+q
+p
+q −(q+1)
+q
+q
+p =
+n p−q
+√pq, calculation yields
+(n −1)2F =
+(n + 1)[(2n −3)t2 + a1((n2 −3)t −na1)] −(n −1)(n −2)
+
++ p −q
+√pq ((n2 −2)t −na1)
+√
+W .
+Since a1 ≤ψ(t) =
+q
+n−1
+n
+q
+1 −n+1
+n t2−t
+n < 1.916t < 2t for all n ≥4, (n2−3)t−na1 >
+0. Further, a1((n2 −3)t−na1) is strictly increasing as a function of a1 ∈[t, ψ(t)] for
+all n ≥5, and for n = 4 attains its strict minimum at a1 = t. For a1 > t ≥
+q
+n−2
+3(n+1),
+W <
+n+1
+3 .
+To show F > 0, the worst case is p = 1, q = n −2, since then
+p−q
+√pq = −n−3
+√n−2 attains its (negative) minimum. Replacing in this case ﬁrst W by
+n+1
+3
+and then a1 by t, we conclude
+(n −1)2F > (n −2)
+ 
+[(n + 3)(n + 1)t2 −(n −1)] −(n −3)(n + 1)
+s
+n + 1
+3(n −2)t
+!
+.
+===== page 17 =====
+NON-CENTRAL SECTIONS OF THE REGULAR n-SIMPLEX
+17
+The right side is increasing in t, its derivative being positive for t ≥
+q
+n−2
+3(n+1) =: t0.
+Note that t0 depends on n, but for simplicity of notation we will omit the index n.
+Replacing t by
+q
+n−2
+3(n+1), the right side becomes zero and we conclude that F > 0.
+Therefore all al, l ≥3 satisfying (4.1) have to coincide, a3 = · · · an+1 = −a1+t
+n−1 ,
+W = 0, a1 = ψ(t) and for a = (a1, t, a3, . . . , a3)
+(n −1)!
+√n + 1 A(a, t) =
+(a1 −t)n−2
+(a1 + a1+t
+n−1 )n−1 =
+n −1
+n
+n−1
+(1 −
+t
+ψ(t))n−2
+ψ(t)(1 + 1
+n
+t
+ψ(t))n−1 .
+For n ≥4, ψ(t) ≥0.6992 and ψ(t)(1 + 1
+n
+t
+ψ(t))n−1 ≥(1 +
+1
+1.916n)n−1 > 1.01 > 1,
+n ≥4. Since t ≥t0, ψ(t) ≤ψ(t0), implying
+(n −1)!
+√n + 1 A(a, t) <
+n −1
+n
+n−1 
+1 −
+t
+ψ(t0)
+n−2
+.
+We compare this with
+(n −1)!
+√n + 1 A(a(1), t) =
+
+n
+n + 1
+n−1
+2
+ 
+1 −
+r
+n + 1
+n
+t
+!n−1
+,
+and want to show that A(a, t) < A(a(1), t) for all t ∈[
+q
+n−2
+3(n+1),
+q
+n−1
+2(n+1)] and n ≥5
+and for t ∈[0.37,
+q
+3
+10] for n = 4. The quotient hn(t) =
+(1−
+t
+ψ(t0) )n−2
+(1−
+q
+n+1
+n t)n−1 is decreasing
+in [
+q
+n−2
+3(n+1),
+q
+n−1
+2(n+1)], since
+(ln hn)′(t) =
+−(n −2)(
+q
+n+1
+n
+−t) + (n −1)(ψ(t0) −t)
+(
+q
+n+1
+n
+−t)(ψ(t0) −t)
+< 0 .
+The last inequality holds since for φ(t) = −(n −2)(
+q
+n+1
+n
+−t) + (n −1)(ψ(t0) −t)
+we have φ′(t) = −1 < 0, φ(t0) ≤−1
+20, n ≥4. Therefore with
+q
+n+1
+n t0 =
+q
+n−2
+3n
+A(a, t)
+A(a(1), t) ≤
+A(a, t0)
+A(a(1), t0) <
+n2 −1
+n2
+n−1 n + 1
+n
+ 1
+2 (1 −
+t0
+ψ(t0))n−2
+(1 −
+q
+n−2
+3n )n−1
+.
+We have ψ(t0)
+t0
+= n+1
+n
+q
+2n−1
+n−2 −1
+n < 3n−2
+2n−3, the latter inequality being equivalent to
+q
+2n−1
+n−2 < 3 n−1
+3n−2, 2(2n −3)2 < 9(n −1)(n −2), which is true for all n ≥4. Hence
+A(a, t)
+A(a(1), t) <
+n2 −1
+n2
+n−1 n + 1
+n
+ 1
+2 (1 −2n−3
+3n−2)n−2
+(1 −
+q
+n−2
+3n )n−1
+,
+which is < 1 for all n ≥5, the right side being decreasing in n, as can be seen by
+taking the logarithmic derivative with respect to n: The base in the numerator tends
+to 1
+3, the one in the denominator to 1 −
+1
+√
+3 > 1
+3 for n →∞. For n = 4,
+A(a,t)
+A(a(1),t) < 1
+===== page 18 =====
+18
+HERMANN K ¨ONIG
+for all t ≥0.37. For t ∈[
+q
+2
+15, 0.37] with
+q
+2
+15 ≃0.3651 we have A(a, t) < A(a(2), t),
+since the formulas for A(a, t) and A(a(2), t) show for these t and n = 4
+A(a, t) ≤A(a,
+r
+2
+15) = 3
+16
+√
+2−3
+32
+√
+6 < 0.0355 < 0.0374 < A(a(2), 0.37) ≤A(a(2), t) .
+Therefore the maximum of A(·, t) is not attained on the boundary of Ωin i).
+Actually, for
+q
+2
+15 ≤t < 0.3668 we have A(a(1), t) < A(a, t) < A(a(2), t), when n = 4.
+iii) Assume next that a1 > a2 > t >
+q
+n−2
+3(n+1) ≥a3, . . . , an+1. Then by Proposi-
+tion 2.2
+(n −1)!
+√n + 1 A(a, t) =
+1
+a1 −a2
+ 
+(a1 −t)n−1
+Qn+1
+j=3 (a1 −aj)
+−
+(a2 −t)n−1
+Qn+1
+j=3 (a2 −aj)
+!
+=: B(a, t) −C(a, t)
+a1 −a2
+.
+By continuity, this formula also holds if some or all of the aj, j ≥3 coincide.
+Fix a1 > a2 > t and consider (a1 −a2)A(a, t) as a function of (a3, . . . , an+1) with
+constraints Pn+1
+j=3 aj = −(a1 + a2), Pn+1
+j=3 a2
+j = 1 −(a2
+1 + a2
+2). The Lagrange function
+L(a, λ, µ) := B(a, t) −C(a, t) + λ
+2(Pn+1
+j=3 a2
+j −1+ (a2
+1 + a2
+2)) + µ(Pn+1
+j=3 aj + (a1 + a2))
+yields the critical points of A relative to the constraints via
+∂L
+∂al
+= B(a, t)
+a1 −al
+−C(a, t)
+a2 −al
++ λal + µ = 0 , l = 3, . . . , n + 1 .
+This implies that all coordinates al satisfy the cubic equation in x = al
+B(a, t)(a2 −x) −C(a, t)(a1 −x) + λx(a1 −x)(a2 −x) + µ(a1 −x)(a2 −x) = 0 .
+Therefore there are at most three diﬀerent values among the coordinates al, l ≥3 of a
+critical point a ∈Sn. Suppose these occur with multiplicities p, r, s, p+r+s = n−1,
+and call them (x = al =) c
+p, d
+r , e
+s. Then a1+a2+c+d+e = 0, a2
+1+a2
+2+ c2
+p + d2
+r + e2
+s = 1
+and
+(n −1)!
+√n + 1 A(a, t) =
+1
+a1 −a2
+ 
+(a1 −t)n−1
+(a1 −c
+p)p(a1 −d
+r)r(a1 −e
+s)s −
+(a2 −t)n−1
+(a2 −c
+p)p(a2 −d
+r)r(a2 −e
+s)s
+!
+=: B −C
+a1 −a2
+.
+Suppose that c
+p < d
+r < e
+s. Then c < 0 and by Lemma 2.1 a1 ≤
+q
+n
+n+1, a2 ≤
+q
+n−1
+2(n+1).
+We perturb the values c, d, e by δ > ε := θδ > 0, θ :=
+d
+r −c
+p
+e
+s −c
+p ∈(0, 1) in the following
+way: c′ = c + (δ −ε), d′ = d −δ, e′ = e + ε. Then a1 + a2 + c′ + d′ + e′ = 0,
+a2
+1 + a2
+2 + c′2
+p + d′2
+r + e′2
+s = 1 + O(δ2), since c
+p(δ −ε) −d
+r δ + e
+sε = 0. These values are
+independent of a1. Calculation shows that
+ga1(δ) :=
+1
+(a1 −c
+p −(1 −θ) δ
+p)p
+1
+(a1 −d
+r + δ
+r)r
+1
+(a1 −e
+s −θ δ
+s)s
+===== page 19 =====
+NON-CENTRAL SECTIONS OF THE REGULAR n-SIMPLEX
+19
+satisﬁes
+ga1(δ) = ga1(0) +
+(e
+s −d
+r)(d
+r −c
+p)
+(a1 −c
+p)p+1(a1 −d
+r)r+1(a1 −e
+s)s+1 δ + O(δ2) ,
+where the terms in the numerator are positive. (The value of ε could be modiﬁed
+ε = θδ + O(δ2) to guarantee that a2
+1 + a2
+2 + c′2
+p + d′2
+r + e′2
+s
+= 1 holds precisely.
+The additional second order perturbation yields the same result for ga1(δ).) Let
+B(δ) := (a1 −t)n−1ga1(δ) and C(δ) := (a2 −t)n−1ga2(δ). We claim that the ﬁrst
+order perturbation of B, B(δ) −B(0), is bigger than the one of C, C(δ) −C(0), so
+that B(δ) −C(δ) > B(0) −C(0), as δ →0 (up to O(δ2)). This is equivalent to the
+inequality (a1 −t)n−1ga1(δ) > (a2 −t)n−1ga2(δ) for small δ, i.e.
+a1 −t
+a2 −t
+n−1
+>
+ 
+a1 −c
+p
+a2 −c
+p
+!p+1 
+a1 −d
+r
+a2 −d
+r
+!r+1 a1 −e
+s
+a2 −e
+s
+s+1
+,
+p + r + s = n −1. By Proposition 3.1 this inequality is true. Therefore, ﬁxing
+a1 > a2 > t, A(a, t) increases if c is replaced by c + δ1, d by d −δ2 and e by e + δ3
+for small δ1, δ2, δ3 > 0 depending on each other. This holds independently of t.
+Therefore the maximum of A(a, t) relative to ﬁxed a1 > a2 > t occurs for c
+p = d
+r < e
+s.
+Further, we claim that in the maximum case, the multiplicity of e
+s should be s = 1.
+If s ≥2, the vector a would have p coordinates c
+p and s coordinates e
+s with c
+p < e
+s,
+p+s = n−1, c+e = −(a1 +a2), c2
+p + e2
+s = 1−a2
+1 −a2
+2. Deﬁne a perturbed vector a′
+having p coordinates c′
+p = c+ε(δ)
+p
+, s −1 coordinates
+d′
+s−1 = e
+s −
+δ
+s−1 and 1 coordinate
+e′ = e
+s + δ −ε(δ), where ε(δ) = 1
+2
+s
+s−1
+δ2
+e
+s −c
+p for small δ > 0, 0 < ε(δ) < δ. Then
+c′+d′+e′ = c+e = −(a1+a2) and c′2
+p + d′2
+s−1+e′2 = c2
+p + e2
+s +O(δ3) = 1−a2
+1−a2
+2+O(δ3).
+Let
+ga1(δ) :=
+1
+(a1 −c
+p −ε(δ)
+p )p
+1
+(a1 −e
+s +
+δ
+s−1)s−1
+1
+(a1 −e
+s −δ + ε(δ))s .
+Calculation shows that
+ga1(δ) −ga1(0) = 1
+2
+e
+s −c
+p
+(a1 −c
+p)p+1(a1 −e
+s)s+2 + O(δ3) ,
+with
+e
+s −c
+p > 0 being independent of a1.
+We remark that if ε(δ) is chosen as
+the solution of the quadratic equation implied by requiring that a′ satisﬁes the
+constraints exactly, and not only up to O(δ3), the same is true. The given value
+ε(δ) is an O(δ2)-approximation of this solution.
+Again we have B(δ) −C(δ) >
+B(0) −C(0), i.e. A(a′, t) > A(a, t), since
+a1 −t
+a2 −t
+n−1
+>
+ 
+a1 −c
+p
+a2 −c
+p
+!p+1 a1 −e
+s
+a2 −e
+s
+s+2
+.
+The last inequality follows from Proposition 3.1 with the choice r = s −1, s = 1,
+c + (s −1)e
+s + e
+s = −(a1 + a2) and p( c
+p)2 + (s −1)(e
+s)2 + (e
+s)2 = c2
+p + e2
+s = 1 −a2
+1 −a2
+2.
+The vector a′ again has three diﬀerent coordinates, the largest one of multiplicity
+1. Applying the ﬁrst case then shows that in the maximum case the two smaller
+===== page 20 =====
+20
+HERMANN K ¨ONIG
+coordinates should coincide.
+For e of multiplicity 1 and c
+p of multiplicity n −2 we have
+(n −1)!
+√n + 1 A(a, t) =
+1
+a1 −a2
+ 
+(a1 −t)n−1
+(a1 −
+c
+n−2)n−2(a1 −e) −
+(a2 −t)n−1
+(a2 −
+c
+n−2)n−2(a2 −e)
+!
+,
+with a1+a2+c+e = 0, a2
+1+a2
+2+ c2
+n−2+e2 = 1. This yields c = −n−2
+n−1(a1+a2)−
+√n−2
+n−1 W,
+e = −
+1
+n−1(a1 + a2) +
+√n−2
+n−1 W, where W =
+p
+(n −1)(1 −a2
+1 −a2
+2) −(a1 + a2)2, with
+c
+n−2 < e, c < 0.
+The square root W is well-deﬁned, since by Lemma 2.1 a2 ≤
+ψ(a1) :=
+q
+n−1
+n
+q
+1 −n+1
+n a2
+1 −a1
+n or equivalently a1 ≤ψ(a2). In fact, ψ is strictly
+decreasing and ψ : [
+q
+n−2
+3(n+1), ψ(
+q
+n−2
+3(n+1))] →[
+q
+n−2
+3(n+1), ψ(
+q
+n−2
+3(n+1))] is bijective with
+ψ−1 = ψ and ψ(
+q
+n−2
+3(n+1)) =
+q
+2
+3
+√
+n2−1
+n
+−1
+n
+q
+n−2
+3(n+1) <
+q
+2
+3. Further, ψ(
+q
+n−1
+2(n+1)) =
+q
+n−1
+2(n+1).
+Inserting the values of c and e, we have that
+(n −1)!
+√n + 1 A(a, t) =
+1
+a1 −a2
+
+(a1 −t)n−1
+(a1 + a1+a2
+n−1 +
+1
+√n−2(n−1)W)n−2(a1 + a1+a2
+n−1 −
+√n−2
+n−1 W)
+(4.3)
+−
+(a2 −t)n−1
+(a2 + a1+a2
+n−1 +
+1
+√n−2(n−1)W)n−2(a2 + a1+a2
+n−1 −
+√n−2
+n−1 W)
+
+=:
+1
+a1 −a2
+(B(a1, a2) −C(a1, a2)) .
+By Proposition 3.3 B(a1,a2)−C(a1,a2)
+a1−a2
+is increasing in a2. Thus the maximum of A(a, t)
+occurs either for a2 →a1, if a1 ≤
+q
+n−1
+2(n+1) or for a2 = ψ(a1), if a1 >
+q
+n−1
+2(n+1). Re-
+call here that
+q
+n−2
+3(n+1) < a2 ≤
+q
+n−1
+2(n+1), so that in the latter situation a2 = a1 is
+impossible.
+iv) We ﬁrst consider the subcase of iii) that t < a1 ≤
+q
+n−1
+2(n+1) and
+q
+n−2
+3(n+1) < a2.
+Then the limit a2 →a1 can be taken in (4.3) using l’Hospital’s rule, yielding with
+V (n, a1) :=
+p
+n −1 −2(n + 1)a2
+1 and ˜a = (a1, a1, c(a1), · · · , c(a1), d(a1)), c(a1) =
+−2a1
+n−1 −
+V (n,a1)
+√n−2(n+1) and d(a1) = −2a1
+n−1 +
+√n−2V (n,a1)
+n+1
+that
+(n + 1
+n −1)n (n −1)!
+√n + 1 A(˜a, t) =
+(4.4)
+=
+(a1 −t)n−2
+
+a1 +
+1
+√n−2(n+1)V (n, a1)
+n−1 
+a1 −
+√n−2
+n+1 V (n, a1)
+2 M(n, t, a1) =: f(n, t, a1) ,
+===== page 21 =====
+NON-CENTRAL SECTIONS OF THE REGULAR n-SIMPLEX
+21
+where M(n, a1) := 4a2
+1 + (n −1)a1t −n−1
+n+1 −
+n−3
+√n−2(n+1)[2a1 + (n −1)t]V (n, a1). We
+claim that f(n, t, a1) is strictly increasing as a function of a1. Let
+f1(n, t, a1) :=
+(a1 −t)n−3
+
+a1 +
+1
+√n−2(n+1)V (n, a1)
+n−2 
+a1 −
+√n−2
+n+1 V (n, a1)
+
+f2(n, t, a1) :=
+(a1 −t)
+
+a1 +
+1
+√n−2(n+1)V (n, a1)
+ 
+a1 −
+√n−2
+n+1 V (n, a1)
+M(n, t, a1) .
+Then f(n, t, a1) = f1(n, t, a1)f2(n, t, a2). We will show that for n ≥5 the functions
+f1 and f2 are both increasing in a1. For n = 4 we have to multiply f1 by √a1 −t
+and divide f2 by √a1 −t to get the same result. Since f1, f2 > 0, it suﬃces to prove
+that (ln fi)′(n, t, a1) > 0 for a1 > t and i = 1, 2, where ′ denotes the derivative with
+respect to a1. As for f1 we have, using V ′(n, a1) = −2(n+1)a1
+V (n,a1) ,
+(ln f1)′(n, t, a1) = n −3
+a1 −t −
+n −2 −2a1
+√n−2
+V (n,a1)
+a1 +
+V (n,a1)
+√n−2(n+1)
+−
+1 + 2a1
+√n−2
+V (n,a1)
+a1 −
+√n−2V (n,a1)
+n+1
+= n −3
+a1 −t −(n −1)A
+a1A −n−1
+n+1
+, A := (n + 3)a1 −n −3
+√n −2V (n, a1) .
+This is positive if and only if
+1 < n + 1
+n −3
+
+t −2a1
+n −1
+
+A = n + 1
+n −3
+
+t −2a1
+n −1
+ 
+(n + 3)a1 −n −3
+√n −2V (n, a1)
+
+.
+Assume ﬁrst that n ≥5 holds. For the last inequality it suﬃces to verify
+1 < n + 1
+n −3
+
+t −2a1
+n −1
+ 
+(n + 3)a1 −n −3
+√n −2V (n, a1)
+
+=: gn(a1)
+for all a1 ∈(
+q
+n−2
+3(n+1),
+q
+n−1
+2(n+1)] =: In, since in this subcase a1 ≤
+q
+n−1
+2(n+1) is assumed.
+We have gn(
+q
+n−2
+3(n+1)) = 1 and we will show for all n ≥5 that g′
+n(a1) > 0 for all
+a1 ∈In. We ﬁnd
+g′
+n(a1)
+n + 3 =
+ s
+n −2
+3(n + 1) −4a1
+n −1
+!
++
+2(n −3)
+(n + 3)√n −2
+"
+(n + 1)a1
+V (n, a1)
+ s
+n −2
+3(n + 1) −2a1
+n −1
+!
++ V (n, a1)
+n −1
+#
+.
+(4.5)
+Since
+q
+n−2
+3(n+1) −4a1
+n−1 ≥
+q
+n−2
+3(n+1) −2
+q
+2
+n2−1 =: k(n) > 0 if and only if (n−1)(n−2) >
+24, i.e. n ≥7, g′
+n(a1) > 0 holds for all n ≥7, since the bracket [·] is always positive.
+For n = 5, 6, k(5) =
+1
+√
+6 −
+1
+√
+3 ≃−0.169, k(6) = 2(
+1
+√
+21 −
+q
+2
+35) ≃−0.0417. For
+n = 5, 6 we have to estimate [·] from below. Easy estimates show that
+a1(
+q
+n−2
+3(n+1) −2a1
+n−1) ≥αn, where α5 =
+√
+2−1
+6
+, α6 =
+4
+35 for all a1 ∈In. Therefore the
+bracket [·] in (4.5) is ≥φ(V (n, a1)), where φ(s) := A
+s +Bs, s > 0, with A = (n+1)αn
+===== page 22 =====
+22
+HERMANN K ¨ONIG
+and B =
+1
+n−1. The minimum of φ in (0, ∞) is 2
+√
+AB = 2
+q
+n+1
+n−1αn, attained at
+s =
+q
+A
+B . Hence for n = 5, 6, g′
+n(a1)
+n+3 ≥
+2(n−3)
+(n+3)√n−22
+q
+n+1
+n−1αn. Inserting the values for
+n, αn yields that g′
+5(a1) >
+2
+15 > 0 and g′
+6(a1) > 2 > 0. Thus gn(a1) > 1 for a1 ∈In
+and hence f1 is strictly increasing for n ≥5. Similarly for n = 4, √a1 −t f1(n, t, a1)
+is increasing in a1. Concerning f2 we have
+N(n, t, a1) := M′(n, t, a1) = 8a1 + (n −1)t
++ 2
+n −3
+√n −2 V (n, a1)
+
+4a2
+1 + (n −1)a1t −n −1
+n + 1
+
+,
+M2(n, t, a1) := (n + 1)
+
+a1 +
+V (n, a1)
+√n −2 (n + 1)
+ 
+a1 −
+√n −2 V (n, a1)
+n + 1
+
+= (n + 3)a2
+1 −n −3
+√n −2a1V (n, a1) −n −1
+n + 1 .
+We get
+(ln f2)′(n, t, a1) =
+1
+a1 −t −
+2(n + 3)a1 −
+n−3
+√n−2V (n, a1) + 2(n−3)(n+1)
+√n−2
+a2
+1
+V (n,a1)
+M2(n, t, a1)
++ N(n, t, a1)
+M(n, t, a1)
+=
+ 
+1
+a1 −t −
+2(n + 3)a1 −
+n−3
+√n−2V (n, a1)
+M2(n, t, a1)
+!
++
+ N(n, t, a1)
+M(n, t, a1) −N2(n, t, a1)
+M2(n, t, a1)
+
+,
+with N2(n, t, a1) := 2(n−3)(n+1)
+√n−2
+a2
+1
+V (n,a1). We claim that both terms in the brackets
+are positive. Calculation shows that the ﬁrst term in brackets is positive if and only
+if t >
+(n+3)a2
+1+ n−1
+n+1
+2(n+3)a1−n−3
+√n−2 V (n,a1) =: Hn(a1). We have Hn(
+q
+n−2
+3(n+1)) =
+q
+n−2
+3(n+1) and claim
+that for all n ≥5, the function Hn is strictly decreasing in In. Then for a1 > t,
+Hn(a1) <
+q
+n−2
+3(n+1) ≤t will be satisﬁed. As for H′
+n, we ﬁnd with n−1
+n+1 ≥2a2
+1
+(ln Hn)′(a1) =
+2(n + 3)a1
+(n + 3)a2
+1 + n−1
+n+1
+−
+1 +
+n−3
+(n+3)√n−2
+(n+1)a1
+V (n,a1)
+2(n + 3)a1 −
+n−3
+√n−2V (n, a1)
+≤
+1
+(n + 5)a1
+−
+1 +
+n−3
+(n+3)√n−2
+(n+1)a1
+V (n,a1)
+2(n + 3)a1 −
+n−3
+√n−2V (n, a1) .
+Calculation shows that the latter is negative if and only if
+1 ≤
+n−3
+√n−2( V (n,a1)
+(n+1)a1 + n+5
+n+3
+a1
+V (n,a1)) =
+n−3
+√n−2φ(
+a1
+V (n,a1)) =: ln(a1) with A :=
+1
+n+1 and
+B :=
+n+5
+n+3 in terms of the above function φ.
+Therefore ln(a1) ≥
+n−3
+√n−22
+√
+AB =
+n−3
+√n−22
+q
+n+5
+(n+1)(n+3) =: Φ(n). We have that Φ is increasing with Φ(5) =
+√
+10
+3
+> 1.
+Therefore Hn is decreasing for all n ≥5.
+The second term in brackets is posi-
+tive if and only if g(n, t, a1) := N(n, t, a1)M2(n, t, a1) −N2(n, t, a1)M(n, t, a1) > 0.
+===== page 23 =====
+NON-CENTRAL SECTIONS OF THE REGULAR n-SIMPLEX
+23
+Calculation shows
+g(n, t, a1) =
+
+(n + 1)(n + 3)a2
+1 −(n −1)2
+n + 1
+
+t+
+2a1
+n −2
+
+2(n2 + 8n −21)a2
+1 + n −1
+n + 1(n2 −10n + 17)
+
+−
+n −3
+√n −2(n + 1)V (n, a1)
+
+8(n + 2)a2
+1 + (n −1)(n + 3)a1t −2n −1
+n + 1
+
+.
+Since V (n, a1) is decreasing in a1, g is obviously strictly increasing in a1 and in t.
+We have for t = a1 =
+q
+n−2
+3(n+1) that g(n, t, a1) = 0. Thus for t < a1, g(n, t, a1) > 0,
+and hence f2 is increasing in a1, too. For n = 4, f2(n,t,a1)
+√a1−t
+is increasing in a1 and
+hence f(4, t, a1) is increasing in a1, too.
+We conclude that for
+q
+n−2
+3(n+1) ≤t < a1 <
+q
+n−1
+2(n+1), A(˜a, t) is increasing in a1.
+Since for a1 →
+q
+n−1
+2(n+1), V (n, a1) →0 and hence ˜a →a(2), we ﬁnd from (4.4)
+A(˜a, t) ≤A(a(2), t) =
+√n+1
+(n−2)!
+q
+2(n−1)
+n+1
+n q
+2
+(n−1)(n+1) + t
+ q
+n−1
+2(n+1) −t
+n−2
+,
+if t <
+q
+n−1
+2(n+1), coinciding, of course, with the value for A(a(2), t) given in Proposition
+2.3. Therefore in this case a(2) yields the maximum of A(·, t).
+v) Secondly, consider the subcase of iii) that a1 >
+q
+n−1
+2(n+1) =: t1. By Lemma 2.1,
+a2 ≤ψ(a1) ≤ψ(t1) = t1. Thus a1 > t1 ≥a2 > t > t0 :=
+q
+n−2
+3(n+1). Since A(·, t) is
+increasing in a2, the maximum occurs for a2 = ψ(a1). Then W = 0 and
+(4.6)
+(n −1)!
+√n + 1 A(a, t) =
+
+a1−t
+a1+ a1+a2
+n−1
+n−1
+−
+
+a2−t
+a2+ a1+a2
+n−1
+n−1
+a1 −a2
+=: B(a1, a2, t) .
+For a1 > t1, ψ′(a1) = −n+1
+n
+√n−1a1
+√
+n−(n+1)a2
+1
+−1
+n ≤−1. Since ψ(t1) = t1, we have for
+a1 > t1 and a suitable θ ∈(t1, a1)
+a1 −a2 = a1 −ψ(a1) = a1 −t1 −(ψ(a1) −ψ(t1)) = (a1 −t1)(1 −ψ′(θ)) ≥2(a1 −t1) .
+We will show for n ≥5 that A(a, t) < A(a(1), t), considering two cases: ﬁrst,
+a1 ≥
+r
+n−1
+2
+2(n+1) =: t2 and secondly t1 < a1 < t2. In the ﬁrst case, a1 and a2 = ψ(a1)
+are suﬃciently far apart that we can omit the second term in B(a1, a2, t). In the
+second case, we use the mean value theorem to estimate B(a1, a2, t). The second
+case is investigated in part vi) below, the case n = 4 in part vii).
+===== page 24 =====
+24
+HERMANN K ¨ONIG
+Thus let n ≥5 and a1 ≥t2 > t1 > a2 = ψ(a1) > t > t0. By (4.6)
+(n −1)!
+√n + 1 A(a, t) ≤
+1
+2(a1 −t1)
+ 
+a1 −t
+a1 + a1+ψ(a1)
+n−1
+!n−1
+= (n−1
+n )n−1
+2(a1 −t1)
+ 
+1 −
+t
+a1
+1 + 1
+n
+ψ(a1)
+a1
+!n−1
+(4.7)
+≤(n−1
+n )n−1
+2(a1 −t1)
+ 
+1 −
+t
+a1
+1 + 1
+n
+t
+a1
+!n−1
+=: L ,
+Since ψ2 = Id and ψ is decreasing, this implies a1 = ψ(a2) ≤ψ(t0) =
+q
+2
+3
+√
+n2−1
+n
+−
+1
+nt0 <
+q
+2
+3
+q
+n
+n+1 =: t3. The last inequality follows from n2−1
+n2
+< (
+q
+1 −
+1
+n+1+ 1
+nt0)2 =
+1 −
+1
+n+1 + t2
+0
+n2 +
+2
+√
+3
+1
+n+1
+q
+n−2
+n , which is implied by 1 −1
+n <
+2
+√
+3
+q
+n−2
+n
+for n ≥5. We
+want to show that L is strictly less than
+(n −1)!
+√n + 1 A(a(1), t) =
+
+n
+n + 1
+n−1
+2
+ 
+1 −
+r
+n + 1
+n
+t
+!n−1
+=: R ,
+i.e. that (4.6) does not yield the maximum of A(·, t). We have
+L
+R =
+(n2−1
+n2 )n−1
+2
+q
+n
+n−1
+2(a1 −t1)
+
+
+1 −
+t
+a1
+(1 −
+q
+n+1
+n t)(1 + 1
+n
+t
+a1 )
+
+
+n−1
+.
+Now h(t) := ln(
+1−t
+a1
+(1−
+q
+n+1
+n t)(1+ 1
+n
+t
+a1 )) is decreasing in t, since
+h′(t) = −
+1
+a1−t +
+1
+√
+n
+n+1−t −
+1
+n
+a1+ 1
+nt = −
+√
+n
+n+1−a1
+(a1−t)(√
+n
+n+1−t) −
+1
+n
+a1+ 1
+nt < 0, so that h is
+maximal for t = t0 :=
+q
+n−2
+3(n+1). Therefore
+L
+R ≤
+(n2−1
+n2 )n−1
+2
+q
+n
+n−1
+2(a1 −t1)
+
+
+1 −t0
+a1
+(1 −
+q
+n+1
+n t0)(1 + 1
+n
+t0
+a1 )
+
+
+n−1
+=: Qn(a1).
+We claim that φ(a1) :=
+1
+a1−t1
+ 
+1−t0
+a1
+(1−
+q
+n+1
+n t0)(1+ 1
+n
+t0
+a1 )
+!n−1
+is ﬁrst decreasing and then
+increasing in (t1, t3]. This will imply Qn(a1) ≤max(Qn(t2), Qn(t3)) for all a1 ∈
+[t2, t3]. The logarithmic derivative of φ is
+(ln φ)′(a1) = −
+1
+a1 −t1
++ (n −1)t0
+a1(a1 −t0) +
+(n −1)t0
+a1(na1 + t0)
+= nt0a1 −a2
+1 −(n −1)t0t1
+(a1(a1 −t0)(a1 −t1)
++
+(n −1)t0
+a1(na1 + t0) .
+===== page 25 =====
+NON-CENTRAL SECTIONS OF THE REGULAR n-SIMPLEX
+25
+The ﬁrst term is negative for a1 > t1 close to t1, being singular at t1. The quadratic
+term
+q(a1) = nt0a1 −a2
+1 −(n −1)t0t1 =
+r
+n −2
+n + 1
+ 
+na1
+√
+3
+−
+(n −1)
+3
+2
+√
+6(n + 1)
+3
+2
+!
+−a2
+1
+is positive at a1 = t3 =
+q
+2
+3
+n
+n+1. The second zero of q is near nt0 −t1, clearly > 1
+for n ≥5. Thus the ﬁrst term in (ln φ)′(a1) has exactly one zero ˜a ∈(t1, t3). It
+is decreasing in modulus for a1 ∈(t1, ˜a), since q is increasing there, with negative
+values, and the denominator a1(a1 −t0)(a1 −t1) is increasing, too. Therefore also
+(ln φ)′(a1) has exactly one zero ¯a ∈(t1, t3) with ¯a < ˜a, since we add a second positive
+term. This means that φ is ﬁrst decreasing and then increasing in (t1, t3). Therefore
+L
+R ≤Qn(a1) ≤max(Qn(t2), Qn(t3)) , a1 ∈[t2, t3] .
+To estimate Qn(t3), we use
+1
+2(t3−t1) =
+√n+1
+n+3 (
+√
+6√n+ 3
+√
+2
+√n −1) ≤(
+√
+6+ 3
+√
+2)
+n+ 1
+2
+n+3 <
+4.6 −
+11
+n+3 . Logarithmic diﬀerentiation shows that f1(n) := (1 +
+1
+√
+2n
+q
+n−2
+n )n−1
+is increasing in n, so that f1(n) ≥f1(5) > 3
+2 for n ≥5. We also use f2(n) :=
+(n2−1
+n2 )n−1
+2
+q
+n
+n−1 < 1. Note that t0
+t3 =
+1
+√
+2
+q
+n−2
+n
+and
+q
+n+1
+n t0 =
+1
+√
+3
+q
+n−2
+n . The func-
+tion f3(α) :=
+1−α
+√
+2
+1−α
+√
+3 is decreasing in α ∈(0, 1), since (ln f2)′(α) = −
+√
+3−
+√
+2
+(
+√
+3−α)(
+√
+2−α) <
+0. Applying this for α =
+q
+n−2
+n , f4(n) :=
+1−
+q
+n−2
+2n
+1−
+q
+n−2
+3n
+satisﬁes f4(n) ≤f4(5) < 0.82 for
+all n ≥5. We conclude that
+Qn(t3) < (4.6 −
+11
+n + 3)f4(n)n−1
+f1(n)
+< 2
+3(4.6 −
+11
+n + 3)0.82n−1 =: f5(n) ,
+which is decreasing in n, with f5(n) ≤f5(5) < 0.98 < 1 for all n ≥5.
+As for Qn(t2), we have t0
+t2 =
+q 2
+3
+n−2
+n−1
+2 ,
+q
+n+1
+n t0 =
+q
+n−2
+3n .
+By the arithmetic-
+geometric mean inequality
+1
+2(t2−t1) =
+√
+2√n + 1(
+q
+n −1
+2 + √n −1) ≤2
+√
+2n +
+1
+2
+√
+2.
+Therefore
+Qn(t2) ≤(2
+√
+2n+ 1
+2
+√
+2
+)
+n2 −1
+n2
+n−1
+2 r
+n
+n −1
+
+
+
+1 −
+q 2
+3
+n−2
+n−1
+2
+(1 −
+q
+1
+3
+n−2
+n )(1 + 1
+n
+q 2
+3
+n−2
+n−1
+2 )
+
+
+
+n−1
+.
+Let f6(n) :=
+1−
+r
+2
+3
+n−2
+n−1
+2
+1−
+q
+1
+3
+n−2
+n
+. Then f6(5) < 0.604 and we claim that f6(n) < 3
+5 for all
+n ≥6. This is equivalent to 2 < 5
+q 2
+3
+n−2
+n−1
+2 −3
+q
+1
+3
+n−2
+n
+=: f7(n). Now
+q n−2
+n−1
+2 ≥1−1
+n,
+q
+n−2
+n
+≤1 −1
+n, so that f7(n) ≥(5
+q
+2
+3 −
+√
+3)(1 −1
+n) > 2 for all n ≥7.
+Also
+f7(6) > 2. Further, f8(n) := (1 + 1
+n
+q 2
+3
+n−2
+n−1
+2 )n−1 is increasing in n, being essentially
+===== page 26 =====
+26
+HERMANN K ¨ONIG
+of the form (1 +
+q
+2
+3
+1
+n(1 + O( 1
+n)))n, with f8(n) ≥f8(5) > 1.64 for all n ≥5. Hence
+for n ≥6, we have Qn(t2) <
+2
+√
+2n+
+1
+2
+√
+2
+1.64
+ 3
+5
+n−1 =: f9(n), which is decreasing in n,
+with f9(n) ≤f9(6) < 0.83 < 1 for n ≥6.
+For n = 5, the estimate has to be
+reﬁned: ﬁrst, replace t2 ≃0.6124 by ˜t2 =
+r
+n−2
+5
+2(n+1) ≃0.6191, with
+1
+2( ˜t2−t1) < 12
+and the corresponding ˜f6(5) < 0.617, ˜f8(5) > 1.64. We also use f2(5) < 0.931.
+Then for n = 5, Qn(˜t2) <
+12
+1.64 0.931 · 0.6174 < 0.99 < 1.
+This leaves the esti-
+mate for Qn(a1) for a1 ∈[t2, ˜t2], n = 5. In this situation, we may improve the
+estimate 1 + 1
+n
+ψ(a1)
+a1
+≥1 + 1
+n
+t
+a1 leading to L, by using ψ(a1)
+a1
+≥ψ( ˜t2)
+˜t2
+> 0.86 and
+(1 + 1
+n
+ψ(a1)
+a1 )n−1 > (1 + 0.86
+n )n−1 > 1.88, n = 5. Then for a1 ∈[t2, ˜t2] and n = 5,
+L
+R <
+10
+√
+2+
+1
+2
+√
+2
+1.88
+0.931 · 0.6044 < 0.96 < 1. This shows A(a, t) < A(a(1), t) also for
+n = 5.
+vi) We now study the case n ≥5 and t0 < t < a2 = ψ(a1) < t1 < a1 < t2.
+Again, we estimate the right side B(a1, a2, t) in (4.6). Let γ := a1+a2
+n−1
+and consider
+g(x) := ( x−t
+x+γ )n−1. Then g′(x) = (n −1)(x−t)n−2
+(x+γ)n (t + γ), g′′(x) = (n −1) (x−t)n−3
+(x+γ)n+1 (t +
+γ)(n(t + γ) −2(x + γ)). Since 4t > 2a1, 2t > a2, g′′(x) > 0 for all x ∈(a2, a1).
+Therefore g′ is increasing in (a2, a1) and we ﬁnd from (4.6) with suitable θ ∈(a2, a1)
+B(a1, a2, t) = g′(θ) ≤g′(a1) = (n −1) (a1 −t)n−2
+(a1 + a1+a2
+n−1 )n
+
+t + a1 + a2
+n −1
+
+.
+To estimate B(a1, a2, t), we will use a1 + a2 = a1 + ψ(a1) ≤2t1. This follows from
+ψ′(x) ≤−1, x ≥t1. Further, we claim that a2
+a1 ≥1 −3
+5
+1
+n. Since ψ is decreasing,
+a2
+a1 ≥ψ(t2)
+t2
+=
+√
+n2−1
+n
+q
+2n+1
+2n−1 −1
+n. Our claim will follow from
+√
+n2−1
+n
+q
+2n+1
+2n−1 ≥1 + 2
+5
+1
+n.
+This is true, since for n ≥5 we have n2−1
+n
+2n+1
+2n−1 −1 ≥13
+15
+1
+n ≥4
+5
+1
+n +
+4
+25
+1
+n2. Thus
+(1 + 1
+n
+a2
+a1 )n ≥(1 + 1
+n(1 −3
+5
+1
+n))n ≥(1 + 22
+25
+1
+n)n > 20
+9 for n ≥5. We ﬁnd
+B(a1, a2, t) ≤(n −1)
+n −1
+n
+n 
+t +
+2t1
+n −1
+ (1 −
+t
+a1 )n−2
+a2
+1(1 + 1
+n
+a2
+a1 )n
+≤9
+20(n −1)
+n −1
+n
+n 
+t +
+2t1
+n −1
+ (1 −
+t
+a1 )n−2
+a2
+1
+.
+The function k(a1) :=
+(1−t
+a1 )n−2
+a2
+1
+is increasing in a1, since (ln k)′(a1) =
+nt−2a1
+a1(a1−t) > 0.
+Therefore
+B(a1, a2, t) ≤9
+20(n −1)
+n −1
+n
+n 
+t +
+2t1
+n −1
+ (1 −t
+t2 )n−2
+t2
+2
+=: L .
+===== page 27 =====
+NON-CENTRAL SECTIONS OF THE REGULAR n-SIMPLEX
+27
+Again we claim that A(a, t) < A(a(1), t). This will follow from L
+R < 1 with R as in
+v). We have
+L
+R = 9
+20(n −1)
+n2 −1
+n2
+n r
+n
+n −1
+t + 2t1
+n−1
+t2
+2
+(1 −t
+t2 )n−2
+(1 −
+q
+n+1
+n t)n−1
+.
+The function h(t) := (t + δ)
+(1−t
+a1 )n−2
+(1−
+q
+n+1
+n t)n−1 is decreasing in t, for any ﬁxed δ ∈(0, 1),
+since (ln h)′(t) =
+1
+t+δ −n−2
+a1−t +
+n−1
+√
+n
+n+1−t =
+1
+t+δ +
+1
+√
+n
+n+1−t −(n −2)
+√
+n
+n+1−a1
+(a1−t)(√
+n
+n+1−t) < 0.
+Thus L
+R will be maximal for t = t0, when t0
+t2 =
+q 2
+3
+n−2
+n−1
+2 ,
+q
+n+1
+n t0 =
+q
+1
+3
+n−2
+n
+and
+then, also using (n2−1
+n2 )n < exp(−1
+n),
+L
+R ≤9
+20(n−1) exp(−1
+n)
+
+2
+√
+3
+p
+n(n −2)
+n −1
+2
++ 2
+√
+2
+q
+n
+n−1
+n −1
+2
+
+
+(1 −
+q 2
+3
+n−2
+n−1
+2 )n−2
+(1 −
+q
+1
+3
+n−2
+n )n−1
+=: α(n) .
+This gives L
+R ≤α(5) < 0.99 < 1 for n = 5. For n > 5, we use √1 + x ≤1 + x
+2 for
+|x| < 1 to estimate
+2
+√
+3
+√
+n(n−2)
+n−1
+2
++ 2
+√
+2
+√
+n
+n−1
+n−1
+2
+≤
+2
+√
+3 −
+1
+√
+3n + 2
+√
+2
+n−1 < 8
+5 for all n ≥7.
+For n = 6, the left side is also < 8
+5. Therefore
+L
+R ≤18
+25(n −1) exp(−1
+n)
+(1 −
+q 2
+3
+n−2
+n−1
+2 )n−2
+(1 −
+q
+1
+3
+n−2
+n )n−1
+.
+We know from part v) that
+1−
+r
+2
+3
+n−2
+n−1
+2
+1−
+q
+1
+3
+n−2
+n
+< 3
+5 for n ≥6. Using also 1 −
+q
+1
+3
+n−2
+n
+≥
+1 −
+1
+√
+3 > 21
+50, we get for all n ≥6 that L
+R ≤12
+7 exp(−1
+n)(n −1)
+ 3
+5
+n−2 =: β(n).
+Since (ln β)′(n) =
+1
+n2 +
+1
+n−1 −ln(5
+3) < 0 for all n ≥6, β is decreasing with
+L
+R ≤β(n) ≤β(6) < 0.95 < 1 for all n ≥6.
+Therefore A(a, t) < A(a(1), t) for
+all n ≥5.
+vii) Last we consider the dimension n = 4 and a1 > t1 =
+q
+3
+10, a2 = ψ(a1) > t >
+t0 =
+q
+2
+15. We have
+(4.8)
+6
+√
+5
+A(a, t) =
+1
+a1 −a2
+ 
+(a1 −t)3
+(a1 + a1+a2
+3
+)3 −
+(a2 −t)3
+(a2 + a1+a2
+3
+)3
+!
+.
+This is equal to
+1
+a1−a2
+R a1
+a2
+(x−t)2
+(x+α)4 dx (t + α), α = a1+a2
+3
+≥β := 0.3548, since h(x) =
+(x−t)3
+(x+α)3 has the derivative h′(x) =
+(x−t)2
+(x+α)4 (t + α). Let t0 := 0.404. We show that
+A(a,t)
+A(a(1),t) is decreasing for t ∈[t0,
+q
+3
+10], where
+6
+√
+5A(a(1), t) = 16
+25
+q
+4
+5 −t
+3
+. By the
+===== page 28 =====
+28
+HERMANN K ¨ONIG
+integral formula, it suﬃces to prove that k(t) :=
+(x−t)2
+(
+q
+4
+5 −t)3 (t+β) is decreasing in t for
+any x ≤a1 ≤ψ(t). Note here that t ≤a2 = ψ(a1) implies a1 ≤ψ(t) since ψ2 = Id
+and ψ is decreasing. We have for x ≤ψ(t0) ≤0.6717
+(ln k)′(t) =
+−2
+x −t +
+3
+q
+4
+5 −t
++
+1
+t + β
+= −
+2
+q
+4
+5 + t −3x
+(x −t)
+q
+4
+5 −t
+ +
+1
+t + β ≤−
+0.1777
+0.268 · 0.491 +
+1
+0.758 ≤−0.03 < 0 .
+Therefore k is decreasing for t ∈[t0,
+q
+3
+10].
+Thus if we prove that A(a, t0) ≤
+A(a(1), t0) holds, A(a, t) ≤A(a(1), t) will follow for all t ∈[t0,
+q
+3
+10].
+Calculation shows that the formal singularity in (4.8) can be removed; we ﬁnd with
+a2 = ψ(a1)
+6
+√
+5
+A(a, t) =
+ 
+t + a1+a2
+3
+(a1 + a1+a2
+3
+)(a2 + a1+a2
+3
+)
+!3
+(a1 −a2)2
++
+3(t + a1+a2
+3
+)
+(a1 + a1+a2
+3
+)2(a2 + a1+a2
+3
+)2 (a1 −t)(a2 −t)
+(4.9)
+=: f1(t, a1, a2) + f2(t, a1, a2) =: f(t, a1, a2) .
+We claim that f(t, a1, ψ(a1)) is decreasing in a1 ∈[
+q
+3
+10, ψ(
+q
+3
+10)] ≃[0.5477, 0.6993]
+for all t ∈[
+q
+2
+15, t0]. Then the maximum for these t in (4.9) will be attained for
+a1 = a2 =
+q
+3
+10, when f1 = 0 and f2 =
+6
+√
+5A(a(2), t). Therefore for t ∈[
+q
+2
+15, t0],
+A(a, t) ≤A(a(2), t), with equality for a1 =
+q
+3
+10. For t > ˜t ≃0.3877, A(a(2), t) <
+A(a(1), t), so that, in particular, A(a, t0) < A(a(1), t0) holds as required above.
+Actually, for all t ∈[
+q
+2
+15,
+q
+3
+10], f2(t, a1, ψ(a1)) is decreasing in a1 ∈[
+q
+3
+10, ψ(t)]
+and f1(t, a1, ψ(a1)) is increasing. For t ∈[
+q
+2
+15, t0], f2 is decreasing faster than f1 is
+increasing (up from 0). One has for a1 near
+q
+3
+10
+f(t, a1, ψ(a1)) =
+6
+√
+5A(a(2), t)
+−54
+125
+ 
+4t −
+r
+2
+15
+! 
+7
+3 + 10
+r
+2
+15t −20t2
+! 
+a1 −
+r
+3
+10
+!2
++ O
+
+
+ 
+a1 −
+r
+3
+10
+!3
+.
+This means that close to
+q
+3
+10, f is decreasing for all t with t ≤1
+4(
+√
+2 +
+q
+2
+15) ≃
+0.4448. For t ≤t0, f is decreasing in the full interval [
+q
+3
+10, ψ(
+q
+3
+10)], as a tedious
+===== page 29 =====
+NON-CENTRAL SECTIONS OF THE REGULAR n-SIMPLEX
+29
+calculation of the derivative
+d
+da1 f(t, a1, ψ(a1)) shows, using that ψ(a1) ≤−1 for
+a1 ∈[
+q
+3
+10, ψ(
+q
+3
+10)]. We do not give the details of the calculation. The conclusion
+is A(a, t) ≤max(A(a(1), t), A(a(2), t)), with equality for t ≤˜t and a1 = a2 and strict
+inequality for t > ˜t.
+□
+Remark. For 0.411 < t < 0.444, f in part vii) is ﬁrst decreasing and then increas-
+ing in [
+q
+3
+10, ψ(t)]. For t > 0.445 f is increasing in the full interval. The situation
+for n = 4 is slightly diﬀerent than for n ≥5, in the sense that in the second case
+a1 > a2 > t, t ≤˜t leads to a maximal situation A(a, t) = A(a(2), t) in the limit
+a1 = a2 =
+q
+n−1
+2(n+1) for n = 4, whereas for n ≥5 it does not. The above quotient
+A(a,t)
+A(a(1),t) is actually also decreasing for t ∈[
+q
+2
+15, t0], but the quotient may be > 1
+for t < ˜t.
+5. Dimensions n = 2 and n = 3
+We now prove Propositions 1.2 and 1.3 and start with the easy case of dimension 2.
+Proof of Proposition 1.2.
+Let a ∈S2 ⊂R3 with P3
+j=1 aj = 0, t <
+q
+2
+3 and a1 > t. Then a2 + a3 = −a1,
+a2
+2 + a2
+3 = 1 −a2
+1 imply that a2,3 = −a1
+2 ± 1
+2
+p
+2 −3a2
+1, (a1 −a2)(a1 −a3) = 3a2
+1 −1
+2.
+By Proposition 2.2 A(a, t) = 2
+√
+3 a1−t
+6a2
+1−1.
+If e2, e3 ∈H−(a, t) = {x ∈∆2|⟨a, x⟩< t}, we have by Lemma 2.1 that 2t > a2+a3 =
+−a1 ≥−
+q
+2
+3, t > −1
+√
+6. Therefore, if t ≤−1
+√
+6, only one vertex ej can be in H−(a, t).
+Using A(a, t) = A(−a, −t), it suﬃces to consider only one non-zero term in formula
+(2.1) for A(a, t) when i)
+1
+√
+6 ≤t <
+q
+2
+3 or ii) t ∈[0,
+1
+√
+6] or −t ∈[0,
+1
+√
+6].
+We have
+d
+da1
+a1−t
+6a2
+1−1 = −6a2
+1+1−12a1t
+(6a2
+1−1)2
+. This is zero for a1 = t +
+p
+t2 −1/6, recalling
+a1 > t. For t > 5
+4
+1
+√
+6, a1 >
+q
+2
+3 which is impossible. For t > 5
+4
+1
+√
+6,
+d
+da1 A(·, t) < 0, and
+A(a, t) is maximal for a1 =
+q
+2
+3, a2 = a3 = −
+1
+2
+√
+3, i.e. a = a(1). For
+1
+√
+6 < t < 5
+4
+1
+√
+6,
+1
+√
+6 < a1 := t +
+p
+t2 −1/6 <
+q
+2
+3, and
+x−t
+6x2−1 is increasing for x < a1 and decreasing
+for x > a1. Thus a{t} ∈S2 yields the maximum of A(·, t) in this range of t. For
+0 ≤t ≤
+1
+√
+6, again
+d
+da1 A(·, t) < 0 and A(·, t) attains its minimum for the maximal
+value of a1, i.e. for a(1).
+As for the maximum of A(·, t) for 0 ≤t ≤
+1
+√
+6, we have to consider −t, i.e.
+A(a, t) = 2
+√
+3 a1+t
+6a2
+1−1. Then
+d
+da1
+a1+t
+6a2
+1−1 = −6a2
+1+1+12a1t
+(6a2
+1−1)2
+< 0 and A(·, t) is decreasing
+in a1. We need a1 > −t ≥a2, a3. Thus a2 + t ≤0 with a2 = 1
+2(
+p
+2 −3a2
+1 −a1).
+===== page 30 =====
+30
+HERMANN K ¨ONIG
+This implies a1 ≥1
+2(
+√
+2 −3t2 + t), and in the maximum case a1 = 1
+2(
+√
+2 −3t2 + t),
+a2 = −t and a3 = −1
+2(
+√
+2 −3t2 −t): Replacing −t = |t| again by t yields the
+maximum a[t] stated in Proposition 1.2.
+□
+In dimension 3 there are more critical points of A(a, t).
+Proof of Proposition 1.3.
+Let a ∈S3 ⊂R4 with P4
+j=1 aj = 0 and t ≤
+√
+3
+2 . If e2, e3, e4 ∈H−(a, t), we get using
+Lemma 2.1 i) that 3t > a2+a3+a4 = −a1 ≥−
+√
+3
+2 , t > −
+1
+2
+√
+3. Therefore, if t ≤−
+1
+2
+√
+3,
+only one or two vertices of ∆3 can be in H−(a, t). Using A(a, t) = A(−a, −t), it
+suﬃces to consider one or two non-zero terms in formula (2.1) for A(a, t) when i)
+1
+2
+√
+3 ≤t <
+√
+3
+2
+or ii) t ∈[0,
+1
+2
+√
+3] or −t ∈[0,
+1
+2
+√
+3]. Thus we have to consider two
+possible cases in the volume formula (2.1): if a1 > t ≥a2, a3, a4, there is only one
+non-zero term in (2.1); if a1 > a2 > t ≥a3, a4, there are two terms, exchanging
+possibly t and −t when |t| ≤
+1
+2
+√
+3.
+a) i) Consider ﬁrst the case a1 > t ≥a2, a3, a4. As in the proof of Theorem 1.1,
+there are at most two diﬀerent coordinates among (a2, a3, a4). Letting a2 = a3 =: c,
+a4 =: d, we have a1 + 2c + d = 0, a2
+1 + 2c2 + d2 = 1. We have two possibilities
+
+c+ =
+−1
+3a1 + 1
+6
+p
+6 −8a2
+1
+d+ =
+−1
+3a1 −1
+3
+p
+6 −8a2
+1
+
+,
+
+c−=
+−1
+3a1 −1
+6
+p
+6 −8a2
+1
+d−=
+−1
+3a1 + 1
+3
+p
+6 −8a2
+1
+
+.
+For (c+, d+), c+ < a1 requires a1 >
+1
+2
+√
+3 and if a1 > t ≥
+1
+2
+√
+3, c+ < t is satisﬁed. If
+0 ≤t <
+1
+2
+√
+3, for c+ < t we need a1 > 1
+2
+√
+2 −8t2 −t.
+For (c−, d−), d−< a1 requires a1 > 1
+2 and if a1 > t ≥1
+2, d−< t is satisﬁed. If
+0 ≤t ≤1
+2, for d−< t we need a1 > 1
+3
+√
+6 −8t2 −t
+3.
+Proposition 2.2 yields A(a, t) = f±(a1, t) =
+(a1−t)2
+(a1−c±)2(a1−d±). We ﬁnd with ′ =
+d
+da1
+(ln f±)′(a1, t) =
+4
+a1−t
+1
+4a1±√
+6−8a2
+1
+1
+8a1∓√
+6−8a2
+1
+[±(3t−a1)
+p
+6 −8a2
+1 +30a1t−10a2
+1−3] .
+The denominators are positive, if a1 >
+1
+2
+√
+3 or a1 > 1
+2, respectively.
+In the case of f+, let t0 :=
+7
+10
+1
+√
+3 ≃0.4041. Since the factor
+F(a1, t) = (3t −a1)
+p
+6 −8a2
+1 + 30a1t −10a2
+1 −3 is increasing in t, its minimum
+for t ≥t0 is in t0, with F(a1, t0) = ( 7
+10
+√
+3 −a1)
+p
+6 −8a2
+1 + 7
+√
+3a1 −10a2
+1 −3,
+which is decreasing in a1, with value 0 in a1 =
+√
+3
+2 . Therefore (ln f+)′ ≥0 for all
+1
+2
+√
+3 ≤a1 ≤
+√
+3
+2 and t ≥t0. Hence for t ≥t0, the maximum of f+ is in a1 =
+√
+3
+2 , i.e.
+a(1) attains the maximum. The minimum here is irrelevant, since t ≥t0 >
+1
+2
+√
+3 and
+the the minimum of A(·, t) is zero.
+For
+1
+2
+√
+3 < t <
+7
+10
+1
+√
+3 = t0, F(a1, t) = 0 if and only if t = a1
+3 +
+1
+10a1+√
+6−8a2
+1
+=:
+φ(a1). The function φ is strictly increasing and bijective φ : [
+1
+2
+√
+3,
+√
+3
+2 ] →[
+1
+2
+√
+3, 7
+10
+1
+√
+3].
+===== page 31 =====
+NON-CENTRAL SECTIONS OF THE REGULAR n-SIMPLEX
+31
+For
+1
+2
+√
+3 < t <
+7
+10
+1
+√
+3, let a0 be the unique solution of t = φ(a1).
+Then f+ is
+increasing for a1 < a0 and decreasing for a0 < a1, hence attains its maximum
+at a0: In this case, A(·, t) attains its maximum at ˜a := (a0, c(a0), c(a0), d(a0)),
+A(˜a, t) =
+(a0−t)2
+(a0−c(a0))2(a0−d(a0)) =
+(a0−φ(a0))2
+(a0−c(a0))2(a0−d(a0)) =: Φ(a0). It can be checked that
+for a0 ≥1
+3, this is strictly smaller than A(a(2), t) = A(a(2), φ(a0)) = 1
+2 −2φ(a0)2,
+so that ˜a does not yield the absolute maximum of A(·, t) for t ≥φ(1
+3) = 22+
+√
+19
+90
+≃
+0.2928. However, for t very close to
+1
+2
+√
+3 ≃0.2887, A(˜a, t) > A(a(2), t). But in this
+case A(˜a, t) < A(a{t}, t) for the vector a{t} given in Proposition 1.3 and considered
+in part b) i) below. Actually, Φ is decreasing in a0 and A(a{t}, t) is decreasing in t,
+so that for
+1
+2
+√
+3 < t < φ(1
+3) ≃0.2928, A(˜a, t) = Φ(a0) < Φ(
+1
+2
+√
+3) = 16
+75
+√
+3 ≃0.3695 <
+0.4069 ≃A(a{(φ( 1
+3 )}, φ(1
+3)) ≤A(a{t}, t), and again ˜a does not yield the maximum of
+A(·, t). We have limsց
+1
+2
+√
+3 A(a{s}, s) =
+5
+18
+√
+3, see part b) i) below.
+For 0 ≤t <
+1
+2
+√
+3, F(a1, t) < 0 : since it is increasing in t, the maximum of F is
+attained at t =
+1
+2
+√
+3 and F(a1,
+1
+2
+√
+3) = (
+√
+3
+2 −a1)
+p
+6 −8a2
+1 + 5
+√
+3a1 −10a2
+1 −3 is
+decreasing in a1 and 0 in a1 =
+1
+2
+√
+3. Thus (ln f+)′ ≤0 for all
+1
+2
+√
+3 ≤a1 ≤
+√
+3
+2
+and
+0 ≤t ≤
+1
+2
+√
+3. Hence the minimum of A = f+ for all 0 ≤t ≤
+1
+2
+√
+3 is in a1 =
+√
+3
+2 , i.e.
+a(1) attains the minimum of A(·, t). The maximum of A(·, t) = f+ is attained at the
+minimal possible value a1 = 1
+2
+p
+2 −8a2
+1 −t, and the extremal vector is
+a[t] =
+1
+2
+q
+2 −8a2
+1 −t, t, t, −1
+2
+q
+2 −8a2
+1 −t
+
+with A(a[t], t) =
+1
+√
+2−8t2 .
+ii) In the case of f−, let F(a, t) = (a1 −3t)
+p
+6 −8a2
+1 + 30a1t −10a2
+1 −3. Re-
+call a1 > 1
+2. Then
+d
+dtF(a1, t) = 30a1 −3
+p
+6 −8a2
+1 > 0 for a1 > 1
+2. Hence F is
+increasing in t.
+For 0 ≤t ≤t0 =
+7
+10
+1
+√
+3, f is maximal in t0, with F(a1, t0) =
+(a1 −7
+10
+√
+3)
+p
+6 −8a2
+1 + 7
+√
+3a1 −10a2
+1 −3, which is increasing in a1, F(
+√
+3
+2 , t0) = 0.
+Therefore (ln f−)′ ≤0 for all 0 ≤t ≤t0 and 1
+2 ≤a1 ≤
+√
+3
+2 , and f−attains its
+maximum at a1 = 1
+2, i.e. a(2) = 1
+2(1, −1, −1, 1) attains the maximum of A(·, t) in
+the case of f−for 0 ≤t ≤t0. The minimum is in a1 =
+√
+3
+2 , with vector a(1).
+For t0 < t < 1
+2, we have F < 0 in 1
+2 < a1 < a0 and F > 0 in a0 < a1 <
+√
+3
+2 , where
+a0 is the solution of t = 3+10a2
+1−a−√
+6−8a2
+1
+3(10a1−√
+6−8a2
+1)
+=: φ(a1). Here φ : [1
+2,
+√
+3
+2 ] →[t0, 1
+2] is
+bijective and strictly decreasing, so that there is a unique solution a1 ∈[1
+2,
+√
+3
+2 ]. The
+minimal possible value of a1 is ˜a = 1
+3
+√
+6 −8t2−t
+3. Moreover, φ(˜a) > t = φ(a0). Since
+φ is decreasing, ˜a < a0. Hence the maximum of f−is attained either in a1 = ˜a or in
+a1 =
+√
+3
+2 . For t ≤¯t ≃0.4259 this occurs in ˜a, for t ≥¯t in
+√
+3
+2 . In the latter case, the
+maximum of A(·, t) is in a(1). However, for t0 < t < ¯t, f−(˜a, t) < 1
+2 −2t2 = A(a(2), t),
+===== page 32 =====
+32
+HERMANN K ¨ONIG
+so that the maximum of f−for t0 < t < 1
+2 is attained either in a(1) or in a(2).
+b) i) Next we consider the second case a1 > a2 > t ≥a3, a4. Then a3+a4 = −(a1+
+a2), a2
+3 + a2
+4 = 1 −a2
+1 −a2
+2 implies a3,4 = −a1+a2
+2
+± 1
+2
+p
+2(1 −a2
+1 −a2
+2) −(a1 + a2)2,
+where 2(1−a2
+1 −a2
+2) −(a1 + a2)2 ≥0 requires a1 ≤1
+3
+p
+6 −8a2
+2 −a2
+3 =: ψ(a2) ≤
+q
+2
+3.
+We also have t < a2 ≤1
+2 (=
+q
+n−1
+2(n+1)), as shown in Lemma 2.1. Therefore t < a2 ≤
+1
+2, a1 ≤
+q
+2
+3. Proposition 2.2 yields with (a1 −a3)(a1 −a4) = 3a2
+1 + 2a1a2 + a2
+2 −1
+2,
+(a2 −a3)(a2 −a4) = a2
+1 + 2a1a2 + 3a2
+2 −1
+2 that
+(5.1)
+A(a, t) = f(a1, a2, t) :=
+1
+a1 −a2
+
+(a1 −t)2
+3a2
+1 + 2a1a2 + a2
+2 −1
+2
+−
+(a2 −t)2
+a2
+1 + 2a1a2 + 3a2
+2 −1
+2
+
+.
+The critical points of A(·, t) satisfy
+∂f
+∂a1 = ∂f
+∂a2 = 0. In particular,
+0 = ( ∂f
+∂a1 −∂f
+∂a2 )(a1, a2, t) = (a1−a2)[4t(a1+a2)−(1−2a2
+1−2a2
+2)][t(1−2a2
+1−2a2
+2)+2(a1+a2)3−(a1+a2)]
+(3a2
+1+2a1a2+a2
+2−1
+2)(a2
+1+2a1a2+3a2
+2−1
+2)
+.
+Therefore either a1 = a2 (in the limit a2 →a1) or
+(5.2)
+t = 1 −2(a1 + a2)2 + 4a1a2
+4(a1 + a2)
+or t = (a1 + a2)(1 −2(a1 + a2)2)
+1 −2(a1 + a2)2 + 4a1a2
+.
+First, suppose that t ≥
+1
+2
+√
+3. Then there is no solution (a1, a2) of (5.2), since for
+1
+2
+√
+3 ≤t < a2 < a1 ≤
+q
+2
+3 we have in the ﬁrst case 1−2(a1+a2)2+4a1a2
+4(a1+a2)
+<
+1
+2
+√
+3 because
+a2
+1 +a2
+2 + a1+a2
+√
+3
+−1
+2 = (a2 −
+1
+2
+√
+3)(2a2 +
+√
+3)+(2a2 + 1
+√
+3)(a1 −a2)+(a1 −a2)2 > 0 and
+in the second case also (a1+a2)(1−2(a1+a2)2)
+1−2(a1+a2)2+4a1a2
+<
+1
+2
+√
+3, if 2a2
+1 + 2a2
+2 < 1, with equality for
+a1 = a2 =
+1
+2
+√
+3, which is not attained since a1 > a2. If 2a2
+1 + 2a2
+2 > 1, the left side
+is > 3 and thus cannot be equal to t ≤
+q
+2
+3, either.
+Hence for t ≥
+1
+2
+√
+3 the only critical points of A(·, t) occur for a1 = a2 (limiting case).
+Then a1 = a2 ≤1
+2 and by l’Hospital’s rule
+(5.3)
+lim
+a2րa1 f(a1, a2, t) =
+4
+(12a2
+1 −1)2
+a1(8a2
+1 −1) + t(1 −4a2
+1) −4t2a1
+
+=: F(a1, t) .
+For a1 = 1
+2 we get F(1
+2, t) = 1
+2 −2t2, with a = a(2) = 1
+2(1, 1, −1, −1). The critical
+points of F satisfy
+∂F
+∂a1
+=
+4
+(12a2
+1 −1)3
+
+4(1 + 36a2
+1)t2 −8a1(5 −12a2
+1)t + (1 + 12a2
+1 −96a4
+1)
+
+= 0
+with solutions
+(5.4)
+t± = t±(a1) =
+1
+1 + 36a2
+1
+
+a1(5 −12a2
+1) ± 1
+2(12a2
+1 −1)
+q
+28a2
+1 −1
+
+.
+===== page 33 =====
+NON-CENTRAL SECTIONS OF THE REGULAR n-SIMPLEX
+33
+Both functions t+ and t−are bijective in the following ranges, t+ : [
+1
+2
+√
+3, 1
+2] →
+[
+1
+2
+√
+3,
+√
+6+1
+10 ], t−: [
+1
+2
+√
+3, 1
+2] →[−
+√
+6−1
+10 ,
+1
+2
+√
+3], where t+ is increasing and t−decreas-
+ing. Here
+√
+6+1
+10
+≃0.3449, −
+√
+6−1
+10
+≃−0.1449. Then t′
+±(a1) has the same sign as
+±a1(3024a4
+1 + 504a2
+1 −31) −(216a4
+1 + 108a2
+1 −5/2)
+p
+28a2
+1 −1. For t+ this is non-
+negative and zero in a1 =
+1
+2
+√
+3. For t >
+1
+2
+√
+3, (5.4) admits a solution a1 only for
+t+ = t+(a1). Moreover t ≤t1 :=
+√
+6+1
+10
+is required to have a solution. Hence the
+solution interval for t = t+(a1) is t ∈[
+1
+2
+√
+3,
+√
+6+1
+10 ], with a1 ∈[
+1
+2
+√
+3, 1
+2].
+For t > t1, ∂F
+∂a1 > 0 and F is increasing, with maximum in a1 = 1
+2, i.e. for a(2): The
+absolute maximum of A(·, t) is then in a(1) or in a(2). Deﬁne t0 := 9+4√
+16−6
+√
+3
+2(3
+√
+3+16)
+≃
+0.4357. For t > t0, the maximum of A(·, t) is in a(1), for t < t0, in a(2).
+For
+1
+2
+√
+3 < t < t1, solve t = t+( ¯a1) with ¯a1 ∈(
+1
+2
+√
+3, 1
+2). Then
+∂F
+∂a1 is positive for
+1
+2
+√
+3 < a1 < ¯a1 and negative for ¯a1 < a1 < 1
+2. Hence F(·, t) attains its maximum
+in ¯a1, with a larger value than in a1 = 1
+2, i.e. larger than for a(2). This yields the
+maximum a{t} of A(·, t) given in Proposition 1.3.
+For t ց
+1
+2
+√
+3 we have a1 ց
+1
+2
+√
+3 and F(a1, t) →5
+9
+√
+3
+2 = 5
+9A(a(1), t).
+ii) Secondly, we suppose that 0 ≤t <
+1
+2
+√
+3 in the case a1 > a2 > t ≥a3, a4.
+Generally a ∈S3, a1 > 0, P4
+j=1 aj = 0 requires a1 ≥
+1
+2
+√
+3. Then t+(a1) ≥
+1
+2
+√
+3,
+so that t+(a1) = t is impossible. However, t−(a1) = t has a solution as long as
+t−(a1) ≥0. This means a1 ≤1
+4
+r
+1 +
+q
+11
+3 =: ˜a1 ≃0.4268.
+But ﬁrst, we consider the case a1 = a2 ≤1
+2. Then t ≥a3 = −a1 + 1
+2
+p
+2 −8a2
+1 is
+required. For a1 ∈[
+1
+2
+√
+3, 1
+2], t−(a1) ≥−a1 + 1
+2
+p
+2 −8a2
+1 is satisﬁed: The diﬀerence
+is zero in a1 =
+1
+2
+√
+3 and increasing in a1. We have for the function F given in (5.3)
+that
+(5.5)
+F(a1, t−(a1)) =
+4
+(1 + 36a2
+1)2
+
+a1(5 + 52a2
+1) + (2a2
+1 + 1
+2)
+q
+28a2
+1 −1
+
+.
+In part a) we had for a[t] that A(a[t], t) =
+1
+√
+2−8t2 =: Φ(t) and then
+Φ(t−(a1)) =
+1 + 36a2
+1
+2
+q
+(1 + 4a2
+1)(1 + 36a2
+1) −2a1(12a2
+1 −1)(12a2
+1 −5)(8a1 +
+p
+28a2
+1 −1)
+.
+One can check that Φ(t−(a1) > F(a1, t−(a1)) for all a1 ∈(
+1
+2
+√
+3, ˜a1], with equality
+for a1 =
+1
+2
+√
+3. Therefore a[t] is also the maximum of A(·, t) in this case.
+Next, we study the cases t = 1−2(a1+a2)2+4a1a2
+4(a1+a2)
+and t = (a1+a2)(1−2(a1+a2)2)
+1−2(a1+a2)2+4a1a2
+of
+(5.2) with 0 ≤t = t−(a1) <
+1
+2
+√
+3.
+We claim that the second case is impossible, since a3 ≤t would not be satisﬁed: Let
+x := a1 + a2, y := 4a1a2. Then a3 = −x
+2 + 1
+2
+p
+2 −3x2 + y and t = x(1−2x2)
+1−2x2+y, with
+===== page 34 =====
+34
+HERMANN K ¨ONIG
+1
+2
+√
+3 ≤x ≤
+1
+√
+2 and 0 ≤y ≤x2 ≤1
+2. Assume a3 ≤t. We show the contradiction
+a3 > t which is equivalent to
+(5.6)
+(1 −2x2 + y)(
+p
+2 −3x2 + y −x) > 2x(1 −2x2) .
+We claim that y > 2x2 + 2x
+√
+1 −2x2 −1. This will imply (5.6): Since the left side
+of (5.6) is strictly increasing in y, (5.6) follows from
+2x
+√
+1 −2x2(
+p
+1 −x2 + 2x
+√
+1 −2x2 −x) ≥2x(1 −2x2) which is true with equality
+sign since (x +
+√
+1 −2x2)2 = 1 −x2 + 2x
+√
+1 −2x2.
+Now y > 2x2 + 2x
+√
+1 −2x2 −1 is equivalent to
+1 −2(a2
+1 + a2
+2)
+2 −4(a1 + a2)2 1 −2(a1 + a2)2
+=
+6a2
+1 −1 + 4a1a2 + 2a2
+2
+ 2a2
+1 −1 + 4a1a2 + 6a2
+2
+
+> 0 ,
+which is true since a1 > a2 > −a1
+3 + 1
+6
+p
+6 −8a2
+1 is satisﬁed: the assumption a2 >
+t ≥a3 = −a1+a2
+2
++ 1
+2
+p
+2 −3(a2
+1 + a2
+2) −(a1 + a2)2 yields a2 > −a1
+3 + 1
+6
+p
+6 −8a2
+1.
+Therefore the claim for y is true and the contradiction a3 > t would follow.
+This leaves the case t = 1−2(a1+a2)2+4a1a2
+4(a1+a2)
+. Calculation using (5.1) shows that then
+A(a, t) =
+1
+2(a1+a2). This is smaller than A(a[t], t) =
+1
+√
+2−8t2 , since 2−8t2 < 4(a1+a2)2
+is satisﬁed in view of
+1 −2(a2
+1 + a2
+2)
+2 −4(a1 + a2)2 1 −2(a1 + a2)2
+> 0, as we
+just showed.
+iii) This leaves only the minimum case for 0 ≤t <
+1
+2
+√
+3.
+For a1 = a2 with
+1
+2
+√
+3 ≤a1 = a2 ≤1
+2, we have by (5.5) for t = t−(a1)
+F(a1, t−(a1)) =
+4
+(1 + 36a2
+1)2
+
+a1(5 + 52a2
+1) + (2a2
+1 + 1
+2)
+q
+28a2
+1 −1
+
+.
+This is decreasing in a1. On the other hand, A(a(1), t) =
+√
+3
+2
+3 √
+3
+2 −t−(a1)
+2
+is increasing in a1. For the maximal possible a1 ≤˜a1 ≃0.4268 (zero of t−) we
+have t−( ˜a1) = 0 and A(a(1), 0) =
+9
+32
+√
+3 ≃0.4871 < F(a1, 0) ≃0.5551.
+Hence
+A(a(1), t) < F(a1, t) for all 0 ≤t <
+1
+2
+√
+3, and a(1) is the minimum of A(·, t).
+In the second case t = t(a1, a2) = 1−2(a1+a2)2+4a1a2
+4(a1+a2)
+, as above A(a, t) =
+1
+2(a1+a2).
+This is larger than A(a(1), t) =
+√
+3
+2
+3 √
+3
+2 −t(a1, a2)
+2
+: Using a2 ≥1
+6
+p
+6 −8a2
+1 −
+a1
+3 , a2 > 0, the diﬀerence A(a, t) −A(a(1), t) is minimal for a1 = a2 = ˜a1 which then
+is 0.0986 > 0. This case does not lead to the minimum of A(·, t).
+□
+References
+[B]
+K. Ball; Cube slicing in Rn, Proc. Amer. Math. Soc. 97 (1986), 465-473.
+[D]
+H. Dirksen; Sections of the regular simplex - volume formulas and estimates, Math. Nachr.
+290 (, ), 2567-2584.
+[ENT] A. Eskenazis, P. Nayar, T. Tkocz;
+Resilience of cube slicing in lp, preprint 2022,
+arXiv:2211.01986.
+[F]
+P. Filliman; The volume of duals and sections of polytopes, Mathematika 39 (1992), 67-80.
+===== page 35 =====
+NON-CENTRAL SECTIONS OF THE REGULAR n-SIMPLEX
+35
+[Ha] H. Hadwiger; Gitterperiodische Punktmengen und Isoperimetrie, Monatsh. Math. 76 (1972),
+410-418.
+[He]
+D. Hensley; Slicing the cube in Rn and probability, Proc. Amer. Math. Soc. 73 (1979), 95-100.
+[K]
+A. Koldobsky; Fourier Analysis in Convex Geometry, Amer. Math Soc., Providence, 2005.
+[Ko] H. K¨onig; Non-central sections of the simplex, the cross-polytope and the cube, Advances in
+Math. 376 (2021), 107458.
+[Ko2] H. K¨onig; Non-central sections of the l1-ball, preprint (2023), arXiv:2312.01321.
+[LT] R. Liu, T. Tkocz; A note on extremal noncentral sections of the cross-polytope, preprint,
+arXiv:1910.06993.
+[MP] M. Meyer, A. Pajor; Sections of the unit ball of ln
+q , J. Funct. Anal. 80 (1988), 109-123.
+[MSZZ] J. Moody, C. Stone, D. Zach, A. Zvavitch; A remark on extremal non-central sections of
+the unit cube, Asympt. Geometr. Anal., Fields Inst. Comm. 68, 211-228, Springer, New York,
+2013.
+[NT] P. Nayar, T. Tkocz; Extremal sections and projections of certain convex bodies: A sur-
+vey, Harmonic Analysis and Convexity, Advances in Analysis and Geometry 9, 343-390, de
+Gruyter, Berlin / Boston 2023.
+[P]
+L. Pournin;
+Shallow sections of the hypercube, Israel J. Math. 255 (2023), 685-704,
+arXiv:2104.08484.
+[T]
+C. Tang; Simplex slicing: An asymptotically-sharp lower bound, arXiv:2403.13224.
+[W]
+S. Webb; Central slices of the regular simplex, Geom. Dedic. 61 (1996), 19-28.
+(Hermann K¨onig) Mathematisches Seminar, Universit¨at Kiel, 24098 Kiel, Germany
+Email address: hkoenig@math.uni-kiel.de

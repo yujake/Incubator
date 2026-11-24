@@ -1,0 +1,6 @@
+{"at": "2026-11-24T18:25:16+08:00", "kind": "alloc", "name": "B1", "owner": "t-000011", "seq": 1, "slot": "S01"}
+{"at": "2026-11-24T18:27:41+08:00", "kind": "alloc", "name": "F1", "owner": "t-000011", "seq": 2, "slot": "S02"}
+{"at": "2026-11-24T19:27:59+08:00", "kind": "alloc", "name": "A1", "owner": "t-000011", "seq": 3, "slot": "S03"}
+{"at": "2026-11-24T21:32:59+08:00", "kind": "release", "name": "A1", "owner": "t-000011", "seq": 4, "slot": "S03"}
+{"at": "2026-11-24T21:33:04+08:00", "kind": "release", "name": "B1", "owner": "t-000011", "seq": 5, "slot": "S01"}
+{"at": "2026-11-24T21:33:12+08:00", "kind": "release", "name": "F1", "owner": "t-000011", "seq": 6, "slot": "S02"}

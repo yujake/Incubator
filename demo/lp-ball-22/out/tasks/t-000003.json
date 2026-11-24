@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T19:37:58+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 367,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"25 份用户逐字声明的 reference/ PDF 全部收编完成，待裁表已清零（跨委托 pending=0），B 已收编并回执。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\lp-ball-22\\\\runs\\\\A-20261124-193758-001.json\", \"messages\": [], \"outcome\": \"ok\", \"status\": \"done\", \"steps\": 112, \"stop_reason\": \"final\", \"summons\": [\"B\"]}",
+ "payload_sha256": "67c83716e25a047308d828a65cf86e69a71e29695c47752cd5671d509a7ff250",
+ "readings": {},
+ "role": "A",
+ "status": "done",
+ "task_id": "t-000003"
+}

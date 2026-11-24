@@ -1,0 +1,1997 @@
+{
+  "role": "G",
+  "task": "G：这一趟派给你的活是 —— 只做一件已定下来的收口 + 重编：收工门 acceptance 现在只剩一条 blocker —— 「论文没有在**正文结果章节**里引本轮台账（`stmt:` / `exp:` / `rel:`）；只出现在核查章节里」。判据是从 `documents` 里那一条 `doc:000001` 的 claims 现算的（按 claim 所属章节判），所以改的是**claims 的章节归属与引文**，不是措辞强度。\n\n要做的事（只做这一件）：\n1) 读 `documents` 里 `doc_id=000001` 的现行 claims（你是这一行的笔主，`table.get` / `own.revise` 都通）。\n2) 找到承载**结果**的那一两条 claim（讲三段结构 / 两个临界点 / 三个方向面积表达式的那几条，不是讲核查与状态的），把本轮台账引用**补进结果章节的 claim** 里：至少 `exp:000004`（12 个 p 的球面扫描与 argmax 类型）、`stmt:000042`（体对角向与面对角向公式，V 判「成立」）、`stmt:000034`（A_p(n) 积分表示与坐标向闭式，V 判「成立」）；若已有 `exp:000003`/`exp:000006`/`exp:000007` 也一并留在结果章节那一侧。**只挪/加引文与章节归属，不改断言的数学内容与结论强度**。\n3) 用 `own.revise(doc_id=\"000001\", new_claims=[…])` 落盘（其余 claims 原样保留，只动需要动的那一两条）。\n4) 若你同时改了 `out/package/main.tex`（例如为了让附录与正文引文对应），必须自己调 `doc.paper_compile` 重编 `out/package/main.pdf`，并确认回执 `tex_sha256` 等于盘上 main.tex 的新 sha；若没动 main.tex，明确写「未动，无需重编」。\n\n硬约束：结论强度不许抬；不许把数值支持的强猜想写成定理；不许改别的 claims 的数学内容。\n\n回执四行：① 改动的那几条 claim 的 id / 所属章节 / 改后 citations 逐条（`stmt:`/`exp:` 号）；② `doc:000001` 改后的 content_sha256 前 12 位；③ main.tex 有没有动、动了的话新 sha256 与回执 pages；④ 若某步被受控拒，贴拒码原话，不要自己宣布通过。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "documents",
+          "id": "000001"
+        },
+        "why": "读 doc:000001 现行 claims，定位承载结果的 claim 与其章节归属"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "doc_id": "000001",
+          "kind": "paper",
+          "title": "Maximal-area central sections of the three-dimensional l_p ball",
+          "markdown_path": "manuscripts/G/000001.md",
+          "sections": [
+            {
+              "heading": "1 Introduction",
+              "body": "Ball determined the maximal hyperplane section of the cube. The present note treats the three-dimensional l_p ball B_p^3 and asks which central section has maximal area, comparing the coordinate, body-diagonal and face-diagonal normal directions."
+            },
+            {
+              "heading": "2 Definitions and notation",
+              "body": "Write B_p^3 = {(x,y,z) : |x|^p+|y|^p+|z|^p <= 1} and let A_p(n) be the two-dimensional Lebesgue area of B_p^3 intersected with the plane through the origin with unit normal n. The candidate areas are A_coord(p) = A_p(e_3), A_diag(p) = A_p((1,1,1)/sqrt(3)) and A_face(p) = A_p((1,1,0)/sqrt(2))."
+            },
+            {
+              "heading": "3 Main results",
+              "body": "The integral representation and the two closed forms are recorded, then the two transition parameters are located: p = 2 where the coordinate and body-diagonal areas coincide, and p-star = 4.998215596862 where the body-diagonal and face-diagonal areas coincide. The three-regime description is stated as a numerically supported conjecture."
+            },
+            {
+              "heading": "4 Discussion and open problems",
+              "body": "The scans support a three-regime picture but do not exclude intermediate maximizing normals; an analytic treatment of the ordered absolute-value domain and a sharp value of p-star remain open."
+            }
+          ],
+          "claims": [
+            {
+              "text": "Ball determined the largest hyperplane section of the unit cube: among all hyperplane sections of the cube, a section perpendicular to 2^{-1/2}(1,1,0,...,0) has the largest volume.",
+              "citations": [
+                "lit:000000"
+              ],
+              "evidence_kind": "heuristic",
+              "section": "1",
+              "claim_id": "claim-1",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "Koenig studies the largest hyperplane sections of the unit ball of l_p^n for p > 2 and shows that the cube-slicing phenomenon persists for suitable normals when p is large.",
+              "citations": [
+                "lit:000001"
+              ],
+              "evidence_kind": "heuristic",
+              "section": "1",
+              "claim_id": "claim-2",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "The literature on plane sections of the unit ball of l_p, on critical central sections of the cube and on extremal sections of subspaces of l_p supplies the general circle of questions addressed by the computations reported here.",
+              "citations": [
+                "lit:000002",
+                "lit:000003",
+                "lit:000006"
+              ],
+              "evidence_kind": "heuristic",
+              "section": "1",
+              "claim_id": "claim-3",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "For every p in [1,infinity) and every unit vector n, the area A_p(n) of the central section B_p^3 intersected with the plane n^perp depends only on that plane, is invariant under signed coordinate permutations, and equals (1/2) integral_0^{2 pi} ||cos(psi) u + sin(psi) v||_p^{-2} dpsi for any orthonormal basis {u,v} of n^perp.",
+              "citations": [
+                "stmt:000034"
+              ],
+              "evidence_kind": "proof_review",
+              "disclaimer": "逐行审阅过的证明，未经机器检查",
+              "section": "2",
+              "claim_id": "claim-4",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "For every p in [1,infinity) the coordinate normal gives A_coord(p) = 4 Gamma(1+1/p)^2 / Gamma(1+2/p); this equals pi at p = 2 and tends to 4 as p tends to infinity, and the quadrature kernel reproduces these values to relative deviation at most 1e-13.",
+              "citations": [
+                "stmt:000034",
+                "exp:000003"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "section": "3",
+              "claim_id": "claim-5",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "citations": [
+                "stmt:000034",
+                "stmt:000042",
+                "lit:000002",
+                "lit:000006"
+              ],
+              "claim_id": "claim-6",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "evidence_kind": "cross_check",
+              "is_negative": false,
+              "negation_kind": null,
+              "section": "3",
+              "text": "For every p in [1,infinity), the central plane section of the unit ball of l_p^3 by the hyperplane with face-diagonal normal (1,1,0)/sqrt(2) has area A_face(p) = 2^{1/2-1/p} * 4 Gamma(1+1/p)^2 / Gamma(1+2/p), with A_face(1) = sqrt(2), A_face(2) = pi and A_face(p) tending to 4 sqrt(2); moreover A_face(p) < A_coord(p) exactly when p < 2, with equality at p = 2 and the reverse inequality for p > 2."
+            },
+            {
+              "text": "If a unit normal n has at least one vanishing coordinate, then A_p(n) = C_p (sum over j not equal i of |n_j|^p)^{-1/p} with C_p = 4 Gamma(1+1/p)^2 / Gamma(1+2/p); consequently for 1 <= p < 2 every such normal gives A_p(n) <= C_p with equality only at coordinate normals, and for p > 2 the same expression holds with the reverse inequality.",
+              "citations": [
+                "stmt:000035",
+                "exp:000003"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "section": "3",
+              "claim_id": "claim-7",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "For every p in [1,infinity) the body-diagonal section area satisfies A_diag(p) = (3/4) integral_0^{2 pi} (|cos(theta - pi/6)|^p + |cos(theta + pi/6)|^p + |sin theta|^p)^{-2/p} d theta; moreover A_diag(1) = 3 sqrt(3)/4, A_diag(2) = pi, the limit of A_diag(p) as p tends to infinity is 3 sqrt(3), and p maps to A_diag(p) is continuous on [1,infinity).",
+              "citations": [
+                "stmt:000041",
+                "exp:000003"
+              ],
+              "evidence_kind": "proof_review",
+              "disclaimer": "逐行审阅过的证明，未经机器检查",
+              "section": "3",
+              "claim_id": "claim-8",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "The difference Delta(p) = A_face(p) - A_diag(p) is continuous on [1,infinity), Delta(2) = 0, Delta(1) = sqrt(2) - 3 sqrt(3)/4 > 0 and the limit of Delta(p) as p tends to infinity is 4 sqrt(2) - 3 sqrt(3) > 0; hence there is P0 in [1,infinity) with A_face(p) > A_diag(p) for every p >= P0.",
+              "citations": [
+                "stmt:000042",
+                "stmt:000041"
+              ],
+              "evidence_kind": "proof_review",
+              "disclaimer": "逐行审阅过的证明，未经机器检查",
+              "section": "3",
+              "claim_id": "claim-9",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "Numerically supported strong conjecture, not established here: for the twelve values p in {1.05,1.1,1.2,1.5,2,2.5,3,4,5,8,16,1000} the largest central section of B_p^3 is attained at the coordinate normal when p < 2, at the body-diagonal normal when 2 < p < p-star and at the face-diagonal normal when p > p-star, where p-star = 4.998215596862.",
+              "citations": [
+                "exp:000004",
+                "exp:000006",
+                "exp:000007"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "section": "3",
+              "claim_id": "claim-10",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "Two transition parameters separate the three regimes in the scanned range: the ratio A_diag/A_coord crosses 1 exactly at p = 2, and A_diag and A_face cross at p-star = 4.998215596862 located by bisection with six rounds of local refinement; along the boundary arcs of normals of the form (0,1,t) and (1,1,t) the section area is largest at an endpoint t in {0,1,infinity}, and any strictly intermediate t gives a strictly smaller value for p not equal to 2.",
+              "citations": [
+                "exp:000006",
+                "exp:000007"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "section": "3",
+              "claim_id": "claim-11",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "The quadrature kernel used for all scans was validated independently: it returns pi for every central section at p = 2 with deviation at most 1e-15, matches the octahedron clipping values at p = 1, approaches the cube values 4, 3 sqrt(3) and 4 sqrt(2) at p = 1000, reproduces 4 Gamma(1+1/p)^2 / Gamma(1+2/p) to relative deviation at most 1e-13, and is invariant under rotation of the plane basis to 1e-12.",
+              "citations": [
+                "exp:000003"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "section": "4",
+              "claim_id": "claim-12",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "The three-regime picture obtained here is a three-dimensional finite-p counterpart of the cube-slicing result of Ball and of the p > 2 analysis of Koenig: as p tends to infinity the three candidate areas tend to 4, 3 sqrt(3) and 4 sqrt(2), so the face-diagonal normal is the largest in the limit, in agreement with the cube case.",
+              "citations": [
+                "lit:000000",
+                "lit:000001",
+                "stmt:000042"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "section": "4",
+              "claim_id": "claim-13",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "Limitation: no analytic argument is offered here for the absence of intermediate maximizing normals; the evidence is a boundary-arc scan together with a grid in the ordered absolute-value domain 0 <= a <= b <= c, so a normal with three distinct non-zero coordinates lying outside the scanned grid is not excluded by these computations.",
+              "citations": [
+                "exp:000004",
+                "exp:000007"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "section": "4",
+              "claim_id": "claim-14",
+              "is_negative": false,
+              "negation_kind": null
+            }
+          ],
+          "open_problems": [
+            "Give an analytic argument that no normal with three distinct non-zero coordinates maximizes the section area for any p in [1,infinity).",
+            "Determine p-star in closed form, or prove that it is transcendental, and prove that the crossing of A_diag and A_face is unique."
+          ],
+          "status": "accepted",
+          "review_rounds": 13,
+          "review_verdict": "成立",
+          "reviewed_at": "2026-11-25T03:29:53+08:00",
+          "reviewed_by": "agent-H",
+          "created_at": "2026-11-24T23:49:04+08:00",
+          "updated_at": "2026-11-25T03:17:33+08:00",
+          "revision": 2,
+          "content_sha256": "66c671e9a0e7361f564a9cfaa7521ca4a647063db9c22f475656cd1d1ee23914",
+          "owner_task": "t-000244",
+          "owner_instance": "G1",
+          "created_by": "agent-G-G1"
+        },
+        "error": "",
+        "meta": {
+          "table": "documents",
+          "id": "000001",
+          "id_field": "doc_id",
+          "found": true,
+          "row_scope": "own-instance（G1 这一支笔的行 + 角色级老行）"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 64768,
+        "prompt_cache_miss_tokens": 5507,
+        "tokens_in": 70275,
+        "tokens_out": 296,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000322"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/G/000001.md",
+          "max_lines": 400
+        },
+        "why": "读回本稿 markdown，拿到全部 claims（含被截断的 claim-6 之后那几条）与章节归属"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# Maximal-area central sections of the three-dimensional l_p ball\n\n- 稿件代号：`doc:000001`；类型：`paper`；状态：`revised`；审校轮次：7\n- 断言数：14（正文主结果区 14、**已作废 0（在附录 A，不在正文）**、移入 open 0）；依赖数：0\n- 本文件：`manuscripts/G/000001.md`\n\n## 0. 阅读须知\n\n1. **每条断言都带引用**（`citations`，形如 `rel:<id>` / `lit:<id>` / `exp:<id>` / `eval:<id>` / `doc:<id>` / `stmt:<id>`）。\n   没有引用的断言在结构上无法进入本稿（`schema.Document.validate` 强制）。\n2. 证据档位共 4 档，且**必须分列**：`proof`（形式化核验（proof））、`proof_review`（逐行审阅（proof_review））、`cross_check`（交叉验证（cross_check））、`heuristic`（启发式（heuristic））。\n3. **`cross_check` 不是证明**：这类断言后面自动附「数值交叉验证，不构成证明」；\n   `proof_review` 那一档同样自带「逐行审阅过的证明，未经机器检查」—— 两条声明各写在自己那一栏里。\n4. 否定型结论分四类：未证明 / 已证否 / 未搜索 / 无本地证据 —— 它们的含义完全不同，\n   合并计数会让人把「没搜过」读成「已证否」。\n\n## 1. 证据档位统计（分档计数，不是单一通过率）\n\n| 证据档位 | 含义 | 条数 |\n|---|---|---|\n| `proof` | 形式化核验（proof） | 0 |\n| `proof_review` | 逐行审阅（proof_review） | 3 |\n| `cross_check` | 交叉验证（cross_check） | 8 |\n| `heuristic` | 启发式（heuristic） | 3 |\n\n说明：一个「通过率 80%」会掩盖「另外 20% 是失败还是没校验」这个决定性差异，因此这里**只报分档计数**（FC-10）：每一档一条，档数由 `schema.EVIDENCE_KINDS` 定，今天是 4 档。\n\n## 2. 否定型结论分类（未证明 / 已证否 / 未搜索 必须分开）\n\n| 分类 | 含义 | 条数 |\n|---|---|---|\n| `disproved`（已证否） | 见 schema.NEGATION_KINDS | 0 |\n| `not_proved`（未证明） | 见 schema.NEGATION_KINDS | 0 |\n| `not_searched_here`（未搜索） | 见 schema.NEGATION_KINDS | 0 |\n| `no_local_evidence`（无本地证据） | 见 schema.NEGATION_KINDS | 0 |\n| （非否定型断言） | 本表不计入 | 14 |\n\n说明：「未证明」与「已证否」在数学上有天壤之别；检索上「库里没有」与「这世上没有」也是两件事（FC-25）。\n\n## 3. 断言清单（每条带引用）\n\n### 3.1 1\n\n**`claim-1`**｜证据档位 `heuristic`｜引用：`lit:000000`\n\nBall determined the largest hyperplane section of the unit cube: among all hyperplane sections of the cube, a section perpendicular to 2^{-1/2}(1,1,0,...,0) has the largest volume.\n\n**`claim-2`**｜证据档位 `heuristic`｜引用：`lit:000001`\n\nKoenig studies the largest hyperplane sections of the unit ball of l_p^n for p > 2 and shows that the cube-slicing phenomenon persists for suitable normals when p is large.\n\n**`claim-3`**｜证据档位 `heuristic`｜引用：`lit:000002`、`lit:000003`、`lit:000006`\n\nThe literature on plane sectio…（落档截断，原 7462 字）",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/G/000001.md",
+          "encoding": "utf-8",
+          "bytes_read": 9168,
+          "total_bytes": 9168,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 136,
+          "total_lines": 136,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 1–136 行（共 136 行）",
+          "sha256": "3b992419b380c05a38737c10e66f7ef41090e0249456d951d088f7e9b5675447"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 69248,
+        "prompt_cache_miss_tokens": 2963,
+        "tokens_in": 72211,
+        "tokens_out": 279,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000322"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.search",
+        "args": {
+          "pattern": "结果章节|results section|正文结果",
+          "path": "out",
+          "limit": 40
+        },
+        "why": "找收工门 acceptance 那条 blocker 的原话，确认它到底按什么口径判「正文结果章节未引台账」"
+      },
+      "result": {
+        "tool": "fs.search",
+        "ok": true,
+        "data": {
+          "pattern": "结果章节|results section|正文结果",
+          "path": "out",
+          "matches": [
+            {
+              "path": "out/clock/state.json",
+              "line": 9154,
+              "text": "\"reason\": \"只做一件已定下来的收口 + 重编：收工门 acceptance 现在只剩一条 blocker —— 「论文没有在**正文结果章节**里引本轮台账（`stmt:` / `exp:` / `rel:`）；只出现在核查章节里」。判据是从 `documents` 里那一条 `doc:000001` 的 claims 现算的（按 claim 所属章节判），所以改的是**claims 的章节归属与引文**，不\","
+            },
+            {
+              "path": "out/clock/state.json",
+              "line": 9195,
+              "text": "\"purpose\": \"只做一件已定下来的收口 + 重编：收工门 acceptance 现在只剩一条 blocker —— 「论文没有在**正文结果章节**里引本轮台账（`stmt:` / `exp:` / `rel:`）；只出现在核查章节里」。判据是从 `documents` 里那一条 `doc:000001` 的 claims 现算的（按 claim 所属章节判），所以改的是**claims 的章节归属与引文**，不\""
+            },
+            {
+              "path": "out/report/m-verdicts.jsonl",
+              "line": 9,
+              "text": "{\"at\": \"2026-11-25T03:07:40+08:00\", \"basis\": \"论文三件已由我独立核在盘（main.tex sha256=b9d159678b54d1330c991f66430e549bf4a4caf66adb726e302b9e16af4cb27f / COMPILE-RECEIPT tex_sha256 同 / pages=10 / MAPPING.json sha=4527b18a7738256fb930b102d7755ea41ee485bec84b97a14e9cf5b8232063e9）；documents doc_id=000001 经 H 三轮复审 accepted；研究手稿 manuscripts/D/RESEARCH.md 七节齐；V 签住命题 4 条；C 关系分析 3 行；literature 25 行 pending=0 且 unprocessed=0；search_requests / reprocess_requests unfinished=0；名册 children_unretired=0、无程序在跑、未消板项 0。收工门 a…"
+            },
+            {
+              "path": "out/report/REPORT.md",
+              "line": 65,
+              "text": "2. **同一格另两条读数**（`conductor.closing` 原话）：24 条实验里 7 条 `result=inconclusive`（000009/000010/000011/000012/000013/000017 等），没有给出 `supports`/`refutes` + 界或证书；论文结果章节对本轮台账（`stmt:`/`exp:`/`rel:`）的引用偏少（G2 已补一处指向附录 A 数值比较的引用并重编，但判据仍要求结果章节直接引）。"
+            },
+            {
+              "path": "out/secretary/G-t-000293.jsonl",
+              "line": 1,
+              "text": "{\"after\": \"我的产出物口径：交付状态 —— 交给谁：H（送审）+ 派你这趟活的父（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名）+ M（打包）；形态：`documents` 行 + `manuscripts/G/<doc_id>.md` + 成文阶段的 `out/package/main.tex` / `out/package/main.pdf` + `out/package/MAPPING.json`；可核字段：`documents.doc_id` / `documents.kind` / `documents.markdown_path` / `documents.content_sha256` / `documents.claims` / `documents.status`；算做完：`build_document` 回了 `doc_id`、每条 claim 的 `citations` 都指得到台账已有的号（`stmt:` / `lit:` / `exp:`），且 H 审到 `documents.status=acc…"
+            },
+            {
+              "path": "out/secretary/M-t-000292.jsonl",
+              "line": 2,
+              "text": "{\"after\": \"{\\\"action\\\": \\\"\\\", \\\"brief\\\": \\\"定点修 claim-6 的跑题引文（acceptance 唯一 blocker）\\\", \\\"name\\\": \\\"G2\\\", \\\"params\\\": {\\\"broken_claim\\\": \\\"claim-6\\\", \\\"claim_text\\\": \\\"A_face(p)=2^{1/2-1/p}*4*Gamma(1+1/p)^2/Gamma(1+2/p) and the comparison A_face vs A_coord across p<2 / p=2 / p>2\\\", \\\"doc_id\\\": \\\"000001\\\", \\\"ledger_refs_to_cite\\\": [\\\"exp:000004\\\", \\\"stmt:000042\\\"], \\\"paper\\\": [\\\"out/package/main.tex\\\", \\\"out/package/main.pdf\\\"], \\\"wrong_citation\\\": \\\"lit:000000\\\"}, \\\"role\\\": \\\"G\\\", \\\"task\\\": \\\"收工门…"
+            },
+            {
+              "path": "out/secretary/M-t-000296.jsonl",
+              "line": 33,
+              "text": "{\"after\": \"{\\\"action\\\": \\\"\\\", \\\"brief\\\": \\\"把本轮台账引文写进结果章节的 claims，并重编\\\", \\\"name\\\": \\\"G1\\\", \\\"params\\\": {\\\"citations_for_results_section\\\": [\\\"exp:000003\\\", \\\"exp:000004\\\", \\\"exp:000006\\\", \\\"exp:000007\\\", \\\"stmt:000034\\\", \\\"stmt:000042\\\"], \\\"doc_id\\\": \\\"000001\\\", \\\"requirement\\\": \\\"results_section_must_cite_ledger\\\", \\\"target\\\": \\\"results claims must carry stmt:/exp: refs\\\"}, \\\"role\\\": \\\"G\\\", \\\"task\\\": \\\"只做一件已定下来的收口 + 重编：收工门 acceptance 现在只剩一条 blocker —— 「论文没有在**正文结果章节**里引本轮台账（`stmt:` / `exp:` / `r…"
+            }
+          ],
+          "lines": [
+            "out/clock/state.json:9154: \"reason\": \"只做一件已定下来的收口 + 重编：收工门 acceptance 现在只剩一条 blocker —— 「论文没有在**正文结果章节**里引本轮台账（`stmt:` / `exp:` / `rel:`）；只出现在核查章节里」。判据是从 `documents` 里那一条 `doc:000001` 的 claims 现算的（按 claim 所属章节判），所以改的是**claims 的章节归属与引文**，不\",",
+            "out/clock/state.json:9195: \"purpose\": \"只做一件已定下来的收口 + 重编：收工门 acceptance 现在只剩一条 blocker —— 「论文没有在**正文结果章节**里引本轮台账（`stmt:` / `exp:` / `rel:`）；只出现在核查章节里」。判据是从 `documents` 里那一条 `doc:000001` 的 claims 现算的（按 claim 所属章节判），所以改的是**claims 的章节归属与引文**，不\"",
+            "out/report/m-verdicts.jsonl:9: {\"at\": \"2026-11-25T03:07:40+08:00\", \"basis\": \"论文三件已由我独立核在盘（main.tex sha256=b9d159678b54d1330c991f66430e549bf4a4caf66adb726e302b9e16af4cb27f / COMPILE-RECEIPT tex_sha256 同 / pages=10 / MAPPING.json sha=4527b18a7738256fb930b102d7755ea41ee485bec84b97a14e9cf5b8232063e9）；documents doc_id=000001 经 H 三轮复审 accepted；研究手稿 manuscripts/D/RESEARCH.md 七节齐；V 签住命题 4 条；C 关系分析 3 行；literature 25 行 pending=0 且 unprocessed=0；search_requests / reprocess_requests unfinished=0；名册 children_unretired=0、无程序在跑、未消板项 0。收工门 a…",
+            "out/report/REPORT.md:65: 2. **同一格另两条读数**（`conductor.closing` 原话）：24 条实验里 7 条 `result=inconclusive`（000009/000010/000011/000012/000013/000017 等），没有给出 `supports`/`refutes` + 界或证书；论文结果章节对本轮台账（`stmt:`/`exp:`/`rel:`）的引用偏少（G2 已补一处指向附录 A 数值比较的引用并重编，但判据仍要求结果章节直接引）。",
+            "out/secretary/G-t-000293.jsonl:1: {\"after\": \"我的产出物口径：交付状态 —— 交给谁：H（送审）+ 派你这趟活的父（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名）+ M（打包）；形态：`documents` 行 + `manuscripts/G/<doc_id>.md` + 成文阶段的 `out/package/main.tex` / `out/package/main.pdf` + `out/package/MAPPING.json`；可核字段：`documents.doc_id` / `documents.kind` / `documents.markdown_path` / `documents.content_sha256` / `documents.claims` / `documents.status`；算做完：`build_document` 回了 `doc_id`、每条 claim 的 `citations` 都指得到台账已有的号（`stmt:` / `lit:` / `exp:`），且 H 审到 `documents.status=acc…",
+            "out/secretary/M-t-000292.jsonl:2: {\"after\": \"{\\\"action\\\": \\\"\\\", \\\"brief\\\": \\\"定点修 claim-6 的跑题引文（acceptance 唯一 blocker）\\\", \\\"name\\\": \\\"G2\\\", \\\"params\\\": {\\\"broken_claim\\\": \\\"claim-6\\\", \\\"claim_text\\\": \\\"A_face(p)=2^{1/2-1/p}*4*Gamma(1+1/p)^2/Gamma(1+2/p) and the comparison A_face vs A_coord across p<2 / p=2 / p>2\\\", \\\"doc_id\\\": \\\"000001\\\", \\\"ledger_refs_to_cite\\\": [\\\"exp:000004\\\", \\\"stmt:000042\\\"], \\\"paper\\\": [\\\"out/package/main.tex\\\", \\\"out/package/main.pdf\\\"], \\\"wrong_citation\\\": \\\"lit:000000\\\"}, \\\"role\\\": \\\"G\\\", \\\"task\\\": \\\"收工门…",
+            "out/secretary/M-t-000296.jsonl:33: {\"after\": \"{\\\"action\\\": \\\"\\\", \\\"brief\\\": \\\"把本轮台账引文写进结果章节的 claims，并重编\\\", \\\"name\\\": \\\"G1\\\", \\\"params\\\": {\\\"citations_for_results_section\\\": [\\\"exp:000003\\\", \\\"exp:000004\\\", \\\"exp:000006\\\", \\\"exp:000007\\\", \\\"stmt:000034\\\", \\\"stmt:000042\\\"], \\\"doc_id\\\": \\\"000001\\\", \\\"requirement\\\": \\\"results_section_must_cite_ledger\\\", \\\"target\\\": \\\"results claims must carry stmt:/exp: refs\\\"}, \\\"role\\\": \\\"G\\\", \\\"task\\\": \\\"只做一件已定下来的收口 + 重编：收工门 acceptance 现在只剩一条 blocker —— 「论文没有在**正文结果章节**里引本轮台账（`stmt:` / `exp:` / `r…"
+          ],
+          "total": 7,
+          "truncated": false,
+          "scanned": 408,
+          "skipped": {
+            "binary": 1,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        },
+        "error": "",
+        "meta": {
+          "total": 7,
+          "truncated": false,
+          "scanned": 408,
+          "skipped": {
+            "binary": 1,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 71168,
+        "prompt_cache_miss_tokens": 3974,
+        "tokens_in": 75142,
+        "tokens_out": 2472,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000322"
+    },
+    {
+      "index": 3,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/package/ACCEPTANCE.md"
+        },
+        "why": "读验收表原话，确认「正文结果章节未引台账」这条 blocker 的量法与现行读数"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": false,
+        "data": null,
+        "error": "文件不存在：out/package/ACCEPTANCE.md；建议：路径先用 `fs.list` 确认，新建请用 `fs.write`（写完再读）",
+        "meta": {
+          "kind": "path_denied",
+          "tool": "fs_read"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 74112,
+        "prompt_cache_miss_tokens": 4757,
+        "tokens_in": 78869,
+        "tokens_out": 2506,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000322"
+    },
+    {
+      "index": 4,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.search",
+        "args": {
+          "pattern": "cite_ledger|results_section|result_section|ledger_citations",
+          "path": ".",
+          "limit": 40
+        },
+        "why": "找出收工门 acceptance 那条判据的原话与量法，确认它到底按什么口径判「结果章节未引台账」，再决定改哪几条 claim"
+      },
+      "result": {
+        "tool": "fs.search",
+        "ok": true,
+        "data": {
+          "pattern": "cite_ledger|results_section|result_section|ledger_citations",
+          "path": ".",
+          "matches": [
+            {
+              "path": "out/secretary/M-t-000296.jsonl",
+              "line": 33,
+              "text": "{\"after\": \"{\\\"action\\\": \\\"\\\", \\\"brief\\\": \\\"把本轮台账引文写进结果章节的 claims，并重编\\\", \\\"name\\\": \\\"G1\\\", \\\"params\\\": {\\\"citations_for_results_section\\\": [\\\"exp:000003\\\", \\\"exp:000004\\\", \\\"exp:000006\\\", \\\"exp:000007\\\", \\\"stmt:000034\\\", \\\"stmt:000042\\\"], \\\"doc_id\\\": \\\"000001\\\", \\\"requirement\\\": \\\"results_section_must_cite_ledger\\\", \\\"target\\\": \\\"results claims must carry stmt:/exp: refs\\\"}, \\\"role\\\": \\\"G\\\", \\\"task\\\": \\\"只做一件已定下来的收口 + 重编：收工门 acceptance 现在只剩一条 blocker —— 「论文没有在**正文结果章节**里引本轮台账（`stmt:` / `exp:` / `r…"
+            }
+          ],
+          "lines": [
+            "out/secretary/M-t-000296.jsonl:33: {\"after\": \"{\\\"action\\\": \\\"\\\", \\\"brief\\\": \\\"把本轮台账引文写进结果章节的 claims，并重编\\\", \\\"name\\\": \\\"G1\\\", \\\"params\\\": {\\\"citations_for_results_section\\\": [\\\"exp:000003\\\", \\\"exp:000004\\\", \\\"exp:000006\\\", \\\"exp:000007\\\", \\\"stmt:000034\\\", \\\"stmt:000042\\\"], \\\"doc_id\\\": \\\"000001\\\", \\\"requirement\\\": \\\"results_section_must_cite_ledger\\\", \\\"target\\\": \\\"results claims must carry stmt:/exp: refs\\\"}, \\\"role\\\": \\\"G\\\", \\\"task\\\": \\\"只做一件已定下来的收口 + 重编：收工门 acceptance 现在只剩一条 blocker —— 「论文没有在**正文结果章节**里引本轮台账（`stmt:` / `exp:` / `r…"
+          ],
+          "total": 1,
+          "truncated": false,
+          "scanned": 670,
+          "skipped": {
+            "binary": 65,
+            "large": 1,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        },
+        "error": "",
+        "meta": {
+          "total": 1,
+          "truncated": false,
+          "scanned": 670,
+          "skipped": {
+            "binary": 65,
+            "large": 1,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 77824,
+        "prompt_cache_miss_tokens": 1743,
+        "tokens_in": 79567,
+        "tokens_out": 954,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000322"
+    },
+    {
+      "index": 5,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.list",
+        "args": {
+          "path": "out/report",
+          "limit": 100
+        },
+        "why": "找出 M 落下的收工门/验收读数文件，读「结果章节未引台账」那条 blocker 的原话与量法"
+      },
+      "result": {
+        "tool": "fs.list",
+        "ok": true,
+        "data": {
+          "path": "out/report",
+          "entries": [
+            {
+              "name": "000001-review.md",
+              "path": "out/report/000001-review.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 17453,
+              "mtime": "2026-11-25T03:22:59+08:00"
+            },
+            {
+              "name": "m-verdicts.jsonl",
+              "path": "out/report/m-verdicts.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 26690,
+              "mtime": "2026-11-25T03:47:34+08:00"
+            },
+            {
+              "name": "REPORT.md",
+              "path": "out/report/REPORT.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 9052,
+              "mtime": "2026-11-25T03:14:31+08:00"
+            },
+            {
+              "name": "STATUS-20261125-0302.json",
+              "path": "out/report/STATUS-20261125-0302.json",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 24226,
+              "mtime": "2026-11-25T03:02:33+08:00"
+            },
+            {
+              "name": "STATUS-20261125-0302.md",
+              "path": "out/report/STATUS-20261125-0302.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 4839,
+              "mtime": "2026-11-25T03:02:33+08:00"
+            },
+            {
+              "name": "STATUS-20261125-0308.json",
+              "path": "out/report/STATUS-20261125-0308.json",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 24374,
+              "mtime": "2026-11-25T03:08:09+08:00"
+            },
+            {
+              "name": "STATUS-20261125-0308.md",
+              "path": "out/report/STATUS-20261125-0308.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 4939,
+              "mtime": "2026-11-25T03:08:09+08:00"
+            },
+            {
+              "name": "STATUS-20261125-0314.json",
+              "path": "out/report/STATUS-20261125-0314.json",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 24607,
+              "mtime": "2026-11-25T03:14:50+08:00"
+            },
+            {
+              "name": "STATUS-20261125-0314.md",
+              "path": "out/report/STATUS-20261125-0314.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 4904,
+              "mtime": "2026-11-25T03:14:50+08:00"
+            }
+          ],
+          "total": 9,
+          "returned": 9,
+          "truncated": false
+        },
+        "error": "",
+        "meta": {
+          "total": 9,
+          "returned": 9,
+          "truncated": false
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 78592,
+        "prompt_cache_miss_tokens": 2257,
+        "tokens_in": 80849,
+        "tokens_out": 1493,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000322"
+    },
+    {
+      "index": 6,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/report/STATUS-20261125-0314.md",
+          "max_lines": 160
+        },
+        "why": "读最近一次状态报告的 acceptance 那一格原话，确认「结果章节未引台账」这条判据的量法与现行读数"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# 项目状态报告（2026-11-25T03:14:48+08:00）\n\n- 工作区：`D:\\Incubator\\projects\\lp-ball-22`\n- 统计起点：`（全部）`\n- 这份报告是**旁路观测**：只读台账与手稿，零模型调用，不打断任何循环。\n\n## 一、产出（各表行数 + 最近几条）\n\n| 表 | 行数 | 最近 |\n|---|---:|---|\n| `tasks` | 295 | t-000293 G. done/ok；t-000294 M.notice 板项 done/acked；t-000295 M.notice 板项 done/acked |\n| `documents` | 2 | 000000 research D 初步研究报告（1 个研究问题）（draft）；000001 paper Maximal-area central sections of the three-dimensional l_p ball（accepted） |\n| `experiments` | 24 | 000021 numeric/cross_check inconclusive；000022 numeric/cross_check refutes；000023 numeric/cross_check supports |\n| `conjectures` | 27 | 000024 refuted：承接 exp:000014/000016/000020/000021 的同一口径（A_diag(p)；000025 supported_not_proved：承接 exp:000014/000016/000020/000022 的同一口径（Δ(p)=A_fa；000026 refuted：设 1 ≤ p < ∞，B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p  |\n| `attack_plans` | 3 | 000000 attacking（history 8 条）；000001 stalled（history 8 条）；000002 abandoned（history 3 条） |\n| `review_findings` | 5 | 000001 warning/garbled fixed；000001 error/dangling_dep fixed；000001 error/dangling_dep fixed |\n| `literature` | 25 | 000022 ；000023 ；000024  |\n| `search_requests` | 4 | r-000002 ；r-000003 ；r-000004  |\n| `statements` | 144 | 000141 external_lit active；000142 external_lit active；000143 external_lit active |\n- D 的报告落点：这一屏没有调用过 `write_report`（0 次）\n- 声明了但没被召唤过的动作：**66** 个（声明 67 / 有召唤行 1；例如 A.ingest_local、A.run、A.search_literature、A.shelf_search、A.walk_citations、B.decide_structural_duplicate）—— 该不该派归秘书/主控判断，这条读数不构成闸门\n\n## 二、交接（手稿账本：谁→谁，一行一份）\n\n- 账本行数：**48**（模型自己填的 notify 3 行 / 框架派生 7 行）\n  - `000043` B→M：B 回执：6 篇里 5 篇 processed 已翻真、lit:000024 卡在分块抽取预算未跑完；unprocessed 由 6 降到 1（未注明）\n  - `000044` M→B：派 B 只消化 lit:000024，清掉验收表 R8 最后一格（模型填的 notify）\n  - `000045` B→M：R8 最后一格清掉：lit:000024 已 processed=true，literature.unprocessed 由 1 归 0（另报 2 份二阶段欠账（未注明）\n  - `000046` M→G：派活：G（派活：收工门 acceptance 只剩一条确定性失败，定点修它，不要重写论文：论文 doc 000001 的 claim-6 引了 `lit:000（框架派生）\n  - `000047` G→M：claim-6 改不动（doc:000001 归 G1，row_not_yours）；第二条已做：main.tex 加一句指向附录 A 的数值比较，重编后回执 （未注…（落档截断，原 3262 字）",
+        "error": "",
+        "meta": {
+          "path": "out/report/STATUS-20261125-0314.md",
+          "encoding": "utf-8",
+          "bytes_read": 4904,
+          "total_bytes": 4904,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 51,
+          "total_lines": 51,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 1–51 行（共 51 行）",
+          "sha256": "4420ab8c70aeb928042e1c4bd05639ac125ebc2eafbdf539b5442be794ddec33"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 79872,
+        "prompt_cache_miss_tokens": 2330,
+        "tokens_in": 82202,
+        "tokens_out": 631,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000322"
+    },
+    {
+      "index": 7,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/report/m-verdicts.jsonl",
+          "max_lines": 40
+        },
+        "why": "读 M 的裁决日志全文，找 conductor.closing 对「结果章节未引台账」这一格的原始读数（含它到底按哪个章节口径、点了哪几条 claim）"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "{\"at\": \"2026-11-24T21:34:11+08:00\", \"basis\": \"E 的确定性数值（exp:000003/000004/000006/000007 及后续 20 条实验）、D 的 RESEARCH.md 七节、B 的 statements、V 的签、C 的关系分析各就位；验收表刚落盘 out/package/ACCEPTANCE-TARGETS.json；报告待写\", \"counts\": {\"cannot\": 0, \"done\": 6, \"not_done\": 2, \"total\": 8}, \"goal\": \"求 B_p^3 最大面积中心截面：给出取到最大的平面法向等价类与 A_max(p) 分段表达式，交付研究手稿 + 交付说明 + 验收表\", \"kind\": \"m_verdict\", \"met\": true, \"seq\": 1, \"sid\": \"2026-11-22n\", \"tasks\": [{\"state\": \"done\", \"what\": \"收编 reference/ 25 份用户声明 PDF 入库（A）\"}, {\"state\": \"done\", \"what\": \"确定性数值扫描：每 p 最大方向、临界 p=2、方向切换 p*=4.998215596862（E）\"}, {\"state\": \"done\", \"what\": \"研究手稿 manuscripts/D/RESEARCH.md 七节 + 三段结构与两临界点（D）\"}, {\"state\": \"done\", \"what\": \"命题/猜想入册与证明稿 V 签（B / F / V）\"}, {\"state\": \"done\", \"what\": \"关系分析（C）\"}, {\"state\": \"done\", \"what\": \"验收表 out/package/ACCEPTANCE-TARGETS.json 落盘\"}, {\"state\": \"not_done\", \"what\": \"交付说明 out/report/REPORT.md 落盘\"}, {\"state\": \"not_done\", \"what\": \"名册销号与收口\"}], \"who\": \"M\"}\n{\"at\": \"2026-11-24T21:34:44+08:00\", \"basis\": \"交付说明已落盘（out/report/REPORT.md，9219 bytes）；验收表 out/package/ACCEPTANCE-TARGETS.json 已落盘；E 的 20+ 条确定性实验、D 的 RESEARCH.md 七节、B 的 statements、V 的四份签、C 的关系分析都在盘上。本轮目的：看 acceptance 那一格具体哪一行没成立\", \"counts\": {\"cannot\": 0, \"done\": 7, \"not_done\": 1, \"total\": 8}, \"goal\": \"求 B_p^3 最大面积中心截面：给出取到最大的平面法向等价类与 A_max(p) 分段表达式，交付研究手稿 + 交付说明 + 验收表\", \"kind\": \"m_verdict\", \"met\": true, \"seq\": 2, \"sid\": \"2026-11-22n\", \"tasks\": [{\"state\": \"done\", \"what\": \"收编 reference/ 25 份用户声明 PDF 入库（A）\"}, {\"state\": \"done\", \"what\": \"确定性数值扫描：每 p 最大方向、临界 p=2、方向切换 p*=4.998215596862（E）\"}, {\"state\": \"done\", \"what\": \"研究手稿 manuscripts/D/RESEARCH.md 七节 + 三段结构与两临界点（D）\"}, {\"state\": \"done\", \"what\": \"命题/猜想入册与证明稿 V 签（B / F / V）\"}, {\"state\": \"done\", \"what\": \"关系分析（C）\"}, {\"state\": \"done\", \"what\": \"验收表 out/package/ACCEPTANCE-TARGETS.json 落盘\"}, {\"state\": \"done\", \"what\": \"交付说明 out/report/REPORT.md 落盘\"}, {\"state\": \"not_done\", \"what\": \"名册销号与收口\"}], \"who\": \"M\"}\n{\"at\": \"2026-11-24T21:35:31+08:00\", \"basis\": \"交付说明 out/report/REPORT.md 已在盘（9219 B，report_shape 已 pass）；验收表 out/package/AC…（落档截断，原 18869 字）",
+        "error": "",
+        "meta": {
+          "path": "out/report/m-verdicts.jsonl",
+          "encoding": "utf-8",
+          "bytes_read": 26690,
+          "total_bytes": 26690,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 12,
+          "total_lines": 12,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 1–12 行（共 12 行）",
+          "sha256": "14bfbf14ff06689a7658fd80b79298cb39452abedc4fe440369d1090f39317db"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 81152,
+        "prompt_cache_miss_tokens": 3490,
+        "tokens_in": 84642,
+        "tokens_out": 2724,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000322"
+    },
+    {
+      "index": 8,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/package/ACCEPTANCE-TARGETS.json",
+          "max_lines": 120
+        },
+        "why": "读验收表里那条「结果章节须引台账」的行，看清它写的判据口径（按什么章节名、数什么），再决定 claims 的章节归属怎么改"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "{\n  \"checks\": [\n    {\n      \"id\": \"R1\",\n      \"name\": \"立题：研究问题在册\",\n      \"kind\": \"research_question_rows\",\n      \"min\": 1,\n      \"note\": \"research_questions 一行（qid 000000）：B_p^3 最大面积中心截面的方向等价类与 A_max(p) 分段表达式\"\n    },\n    {\n      \"id\": \"R2\",\n      \"name\": \"检索：真的取回并入库\",\n      \"kind\": \"retrieval_ok_rows\",\n      \"min\": 1,\n      \"note\": \"search_requests 4 行 unfinished=0；reference/ 下用户逐字声明的 25 份 PDF 收编为 lit:000000–lit:000024，待裁表 30 行 pending=0（admitted 25 / rejected 5，cleared_at 已回填）\"\n    },\n    {\n      \"id\": \"R3\",\n      \"name\": \"造：V 逐行走查签住的证明\",\n      \"kind\": \"reviewed_proof_rows\",\n      \"min\": 1,\n      \"note\": \"V 判「成立」的命题 4 条：stmt:000034 / 000035 / 000041 / 000042（verifications/<号>.jsonl 有「成立」行 + out/vsigns/<sha>.json 签发文件）\"\n    },\n    {\n      \"id\": \"R4\",\n      \"name\": \"想：命题与猜想在册\",\n      \"kind\": \"statement_rows\",\n      \"min\": 6,\n      \"note\": \"statements 里的概念行 + 命题行 + strong_conjecture 猜想行\"\n    },\n    {\n      \"id\": \"R5\",\n      \"name\": \"看：关系分析跑过\",\n      \"kind\": \"c_analysis_runs\",\n      \"min\": 1,\n      \"note\": \"C 跑过关系分析（analysis_reports 000000 gaps / 000001 proof_chain / 000002 gaps：概念图 30 概念、21 关系、18 组）\"\n    },\n    {\n      \"id\": \"R6\",\n      \"name\": \"攻：攻坚计划有真推进\",\n      \"kind\": \"plan_progress_rows\",\n      \"min\": 1,\n      \"note\": \"F 的 plan 000002 有一轮 outcome=progress；其 history 的 statement_id 已由 D 更正为 stmt:000042（verifications/000042.jsonl 有「成立」行）\"\n    },\n    {\n      \"id\": \"R7\",\n      \"name\": \"交：手稿与论文落盘\",\n      \"kind\": \"document_rows\",\n      \"min\": 1,\n      \"note\": \"documents 两行：D 的研究手稿 manuscripts/D/RESEARCH.md（七节齐）+ G 的论文行 doc_id=000001（H 三轮审后 accepted）；论文包 out/package/main.tex（31651 B, sha256 b9d15967…）+ main.pdf（10 页, 315097 B）+ MAPPING.json\"\n    },\n    {\n      \"id\": \"R8\",\n      \"name\": \"闭：请求闭环（上限 0）\",\n      \"kind\": \"unfinished_request_rows\",\n      \"max\": 0,\n      \"unprocessed_reason\": \"第三条队列 literature.unprocessed 带着收工的理由：lib:000019–000024 这 6 篇已登记、已读，但 B 一侧的概念抽取配额（30 条/趟累计封顶、跨趟不重置）在 lit:000016 那一趟一次性用满，B 对它们的回执是「已读、落行 0 条（配额封顶，非缺正文）」（手稿 000028 / 000030 逐篇写明）；它们的 process…（落档截断，原 2460 字）",
+        "error": "",
+        "meta": {
+          "path": "out/package/ACCEPTANCE-TARGETS.json",
+          "encoding": "utf-8",
+          "bytes_read": 3282,
+          "total_bytes": 3282,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 68,
+          "total_lines": 68,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 1–68 行（共 68 行）",
+          "sha256": "ed248e1d11868a8d0910cc5f7dc560bc7c5ebf0cea14b434f4f6f41194267c11"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 83584,
+        "prompt_cache_miss_tokens": 4720,
+        "tokens_in": 88304,
+        "tokens_out": 2461,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000322"
+    },
+    {
+      "index": 9,
+      "shape": "tool",
+      "payload": {
+        "name": "own.revise",
+        "args": {
+          "doc_id": "000001",
+          "new_claims": [
+            {
+              "claim_id": "claim-5",
+              "citations": [
+                "stmt:000034",
+                "exp:000003"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "is_negative": false,
+              "negation_kind": null,
+              "section": "3 Main results",
+              "text": "For every p in [1,infinity) the coordinate normal gives A_coord(p) = 4 Gamma(1+1/p)^2 / Gamma(1+2/p); this equals pi at p = 2 and tends to 4 as p tends to infinity, and the quadrature kernel reproduces these values to relative deviation at most 1e-13."
+            },
+            {
+              "claim_id": "claim-6",
+              "citations": [
+                "stmt:000034",
+                "stmt:000042",
+                "lit:000002",
+                "lit:000006"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "is_negative": false,
+              "negation_kind": null,
+              "section": "3 Main results",
+              "text": "For every p in [1,infinity), the central plane section of the unit ball of l_p^3 by the hyperplane with face-diagonal normal (1,1,0)/sqrt(2) has area A_face(p) = 2^{1/2-1/p} * 4 Gamma(1+1/p)^2 / Gamma(1+2/p), with A_face(1) = sqrt(2), A_face(2) = pi and A_face(p) tending to 4 sqrt(2); moreover A_face(p) < A_coord(p) exactly when p < 2, with equality at p = 2 and the reverse inequality for p > 2."
+            },
+            {
+              "claim_id": "claim-7",
+              "citations": [
+                "stmt:000035",
+                "exp:000003"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "is_negative": false,
+              "negation_kind": null,
+              "section": "3 Main results",
+              "text": "If a unit normal n has at least one vanishing coordinate, then A_p(n) = C_p (sum over j not equal i of |n_j|^p)^{-1/p} with C_p = 4 Gamma(1+1/p)^2 / Gamma(1+2/p); consequently for 1 <= p < 2 every such normal gives A_p(n) <= C_p with equality only at coordinate normals, and for p > 2 the same expression holds with the reverse inequality."
+            },
+            {
+              "claim_id": "claim-8",
+              "citations": [
+                "stmt:000041",
+                "exp:000003"
+              ],
+              "evidence_kind": "proof_review",
+              "disclaimer": "逐行审阅过的证明，未经机器检查",
+              "is_negative": false,
+              "negation_kind": null,
+              "section": "3 Main results",
+              "text": "For every p in [1,infinity) the body-diagonal section area satisfies A_diag(p) = (3/4) integral_0^{2 pi} (|cos(theta - pi/6)|^p + |cos(theta + pi/6)|^p + |sin theta|^p)^{-2/p} d theta; moreover A_diag(1) = 3 sqrt(3)/4, A_diag(2) = pi, the limit of A_diag(p) as p tends to infinity is 3 sqrt(3), and p maps to A_diag(p) is continuous on [1,infinity)."
+            },
+            {
+              "claim_id": "claim-9",
+              "citations": [
+                "stmt:000042",
+                "stmt:000041"
+              ],
+              "evidence_kind": "proof_review",
+              "disclaimer": "逐行审阅过的证明，未经机器检查",
+              "is_negative": false,
+              "negation_kind": null,
+              "section": "3 Main results",
+              "text": "The difference Delta(p) = A_face(p) - A_diag(p) is continuous on [1,infinity), Delta(2) = 0, Delta(1) = sqrt(2) - 3 sqrt(3)/4 > 0 and the limit of Delta(p) as p tends to infinity is 4 sqrt(2) - 3 sqrt(3) > 0; hence there is P0 in [1,infinity) with A_face(p) > A_diag(p) for every p >= P0."
+            },
+            {
+              "claim_id": "claim-10",
+              "citations": [
+                "exp:000004",
+                "exp:000006",
+                "exp:000007"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "is_negative": false,
+              "negation_kind": null,
+              "section": "3 Main results",
+              "text": "Numerically supported strong conjecture, not established here: for the twelve values p in {1.05,1.1,1.2,1.5,2,2.5,3,4,5,8,16,1000} the largest central section of B_p^3 is attained at the coordinate normal when p < 2, at the body-diagonal normal when 2 < p < p-star and at the face-diagonal normal when p > p-star, where p-star = 4.998215596862."
+            },
+            {
+              "claim_id": "claim-11",
+              "citations": [
+                "exp:000006",
+                "exp:000007"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "is_negative": false,
+              "negation_kind": null,
+              "section": "3 Main results",
+              "text": "Two transition parameters separate the three regimes in the scanned range: the ratio A_diag/A_coord crosses 1 exactly at p = 2, and A_diag and A_face cross at p-star = 4.998215596862 located by bisection with six rounds of local refinement; along the boundary arcs of normals of the form (0,1,t) and (1,1,t) the section area is largest at an endpoint t in {0,1,infinity}, and any strictly intermediate t gives a strictly smaller value for p not equal to 2."
+            }
+          ],
+          "note": "只改章节归属：把承载结果的那几条（claim-5/6/7/8/9/10/11）的 section 从「3」改成与文档 sections 标题逐字一致的「3 Main results」，使收工门 results_section_must_cite_ledger 判据能把它们归到结果章节；数学正文、证据档位、disclaimer、结论强度一字未改，引文一条未删未增（claim-10 仍引 exp:000004 12 个 p 的球面扫描，claim-6/9 引 stmt:000042，claim-5/6 引 stmt:000034，claim-5/7/8 引 exp:000003，claim-10/11 引 exp:000006/000007）；其余 claims 原样保留。"
+        },
+        "why": "收工门 acceptance 唯一 blocker 是结果章节未引本轮台账，判据按 claim 所属章节现算；现行 claims 的 section 写的是数字「3」，与文档 sections 里那一节标题「3 Main results」对不上，故把它们归到结果章节标题上"
+      },
+      "result": {
+        "tool": "own.revise",
+        "ok": true,
+        "data": {
+          "doc_id": "000001",
+          "review_rounds": 13,
+          "status": "revised",
+          "claim_count": 14,
+          "replaced_claim_ids": [
+            "claim-5",
+            "claim-6",
+            "claim-7",
+            "claim-8",
+            "claim-9",
+            "claim-10",
+            "claim-11"
+          ],
+          "appended_claim_ids": [],
+          "fixed_findings": [],
+          "markdown_path": "manuscripts/G/000001.md",
+          "rendered_path": "D:\\Incubator\\projects\\lp-ball-22\\manuscripts\\G\\000001.md",
+          "body_path": "out/package/main.tex",
+          "body_sha256": "a4174b2f0733b7fac2698c4b88ce9d01f204ab5d88d98ec1ecdb328b26dca365",
+          "body_bytes": 32529,
+          "body_problem": "",
+          "content_sha256": "7b558cb640bb2517fbd561b3c7fe4a58e282e8e00650452be98bde79148a4809",
+          "next_step": "改完之后要再复核：派 `H.verify_fixes`（它按 `round_no` 复核这一版）或 `H.review`，让签名钉到现行版上；改完不复核的稿子不许当成交付。",
+          "citation_coverage": {
+            "own": {
+              "lit": [
+                "lit:000000",
+                "lit:000001",
+                "lit:000002",
+                "lit:000003",
+                "lit:000006"
+              ],
+              "rel": [],
+              "exp": [
+                "exp:000003",
+                "exp:000004",
+                "exp:000006",
+                "exp:000007"
+              ],
+              "stmt": [
+                "stmt:000034",
+                "stmt:000042",
+                "stmt:000035",
+                "stmt:000041"
+              ],
+              "doc": [],
+              "eval": []
+            },
+            "counts": {
+              "lit": 5,
+              "rel": 0,
+              "exp": 4,
+              "stmt": 4,
+              "doc": 0,
+              "eval": 0
+            },
+            "available": {
+              "literature_total": 25,
+              "literature_processed": 25,
+              "literature_with_fulltext": 25,
+              "relations": 107,
+              "experiments": 24,
+              "statements": 144,
+              "eval_results": 0,
+              "research_questions": -1
+            },
+            "readable": true,
+            "gaps": [
+              "这份稿子 0 条 `rel:` 引用，而库里有 **107 条关系**（例：000000、000001、000002） —— C 的关系读数要能被交付物引到（用户点名过「重点考察 C」）"
+            ],
+            "fit": {
+              "fit": 12,
+              "mismatch": 0,
+              "unjudged": 2
+            },
+            "fit_rows": [
+              {
+                "claim_id": "claim-1",
+                "citations": [
+                  "lit:000000"
+                ],
+                "verdict": "fit",
+                "why": []
+              },
+              {
+                "claim_id": "claim-2",
+                "citations": [
+                  "lit:000001"
+                ],
+                "verdict": "fit",
+                "why": []
+              },
+              {
+                "claim_id": "claim-3",
+                "citations": [
+                  "lit:000002",
+                  "lit:000003",
+                  "lit:000006"
+                ],
+                "verdict": "fit",
+                "why": []
+              },
+              {
+                "claim_id": "claim-4",
+                "citations": [
+                  "stmt:000034"
+                ],
+                "verdict": "unjudged",
+                "why": []
+              },
+              {
+                "claim_id": "claim-5",
+                "citations": [
+                  "stmt:000034",
+                  "exp:000003"
+                ],
+                "verdict": "fit",
+                "why": []
+              },
+              {
+                "claim_id": "claim-6",
+                "citations": [
+                  "stmt:000034",
+                  "stmt:000042",
+                  "lit:000002",
+                  "lit:000006"
+                ],
+                "verdict": "fit",
+                "why": []
+              },
+              {
+                "claim_id": "claim-7",
+                "citations": [
+                  "stmt:000035",
+                  "exp:000003"
+                ],
+                "verdict": "fit",
+                "why": []
+              },
+              {
+                "claim_id": "claim-8",
+                "citations": [
+                  "stmt:000041",
+                  "exp:000003"
+                ],
+                "verdict": "fit",
+                "why": []
+              },
+              {
+                "claim_id": "claim-9",
+                "citations": [
+                  "stmt:000042",
+                  "stmt:000041"
+                ],
+                "verdict": "unjudged",
+                "why": []
+              },
+              {
+                "claim_id": "claim-10",
+                "citations": [
+                  "exp:000004",
+                  "exp:000006",
+                  "exp:000007"
+                ],
+                "verdict": "fit",
+                "why": []
+              },
+              {
+                "claim_id": "claim-11",
+                "citations": [
+                  "exp:000006",
+                  "exp:000007"
+                ],
+                "verdict": "fit",
+                "why": []
+              },
+              {
+                "claim_id": "claim-12",
+                "citations": [
+                  "exp:000003"
+                ],
+                "verdict": "fit",
+                "why": []
+              },
+              {
+                "claim_id": "claim-13",
+                "citations": [
+                  "lit:000000",
+                  "lit:000001",
+                  "stmt:000042"
+                ],
+                "verdict": "fit",
+                "why": []
+              },
+              {
+                "claim_id": "claim-14",
+                "citations": [
+                  "exp:000004",
+                  "exp:000007"
+                ],
+                "verdict": "fit",
+                "why": []
+              }
+            ],
+            "misfit": [],
+            "questions_vs_claims": {
+              "research_questions": -1,
+              "claims_with_citations": 14,
+              "short": -1
+            },
+            "suggest_lit": [
+              {
+                "lit_id": "000000",
+                "title": "Cube slicing in R^n"
+              },
+              {
+                "lit_id": "000001",
+                "title": "On maximal hyperplane sections of the unit ball of l_p^n for (filename truncated after 'for')"
+              },
+              {
+                "lit_id": "000002",
+                "title": "Plane sections of the unit ball of l_p"
+              },
+              {
+                "lit_id": "000003",
+                "title": "Critical central sections of the cube"
+              },
+              {
+                "lit_id": "000004",
+                "title": "Non-diagonal critical central sections of the cube"
+              }
+            ],
+            "suggest_rel": [
+              {
+                "relation_id": "000000",
+                "description": "The paper studies (n-1)-dimensional sections of the unit cube."
+              },
+              {
+                "relation_id": "000001",
+                "description": "Hensley conjectured that the volume is at most sqrt(2)."
+              },
+              {
+                "relation_id": "000002",
+                "description": "The text asks for the maximum volume, in terms of k and n, of the intersection of Qn with a k-dimensional subs"
+              },
+              {
+                "relation_id": "000003",
+                "description": "Ball’s theorem bounds the normalized section function for p=∞ by its value at a(2), equal to √2."
+              },
+              {
+                "relation_id": "000004",
+                "description": "Eskenazis, Nayar and Tkocz extended the Ball-type maximal section result to l^n_p-balls for very large p."
+              }
+            ],
+            "note": "只报数、不拦：引用的**存在性**由 `check_citations` 判（fail-closed）；这一格是把「引了什么 / 库里有什么」放到写稿那一刻看得见。`own` 里的号都是这份稿子真的写了的前缀引用（`doc:` 收在 `doc` 那一格）；`library_root` 没给 ⇒ 「有全文」那一格只按 `download.status` 算（没看盘）"
+          },
+          "hard_to_prove": {
+            "checked": true,
+            "why": "",
+            "rows": [],
+            "held_back": [],
+            "attributed": [],
+            "report": {
+              "checked": true,
+              "sent": false,
+              "to": "",
+              "msg_id": "",
+              "why": "这一趟没有承重条目需要上报"
+            }
+          }
+        },
+        "error": "",
+        "meta": {},
+        "warn": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.revise 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 9,
+          "call_index": 0,
+          "calls": 1,
+          "step_index": 9,
+          "summary": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.revise 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 9,
+            "calls": 1,
+            "items": 1,
+            "steps": [
+              9
+            ],
+            "executed": 1,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 87296,
+        "prompt_cache_miss_tokens": 2946,
+        "tokens_in": 90242,
+        "tokens_out": 10053,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000322"
+    },
+    {
+      "index": 10,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/G/000001.md",
+          "start_line": 55,
+          "max_lines": 90
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "\n### 3.2 2\n\n**`claim-4`**｜证据档位 `proof_review`｜引用：`stmt:000034`\n\nFor every p in [1,infinity) and every unit vector n, the area A_p(n) of the central section B_p^3 intersected with the plane n^perp depends only on that plane, is invariant under signed coordinate permutations, and equals (1/2) integral_0^{2 pi} ||cos(psi) u + sin(psi) v||_p^{-2} dpsi for any orthonormal basis {u,v} of n^perp.\n\n### 3.3 3 Main results\n\n**`claim-5`**｜证据档位 `cross_check`｜引用：`stmt:000034`、`exp:000003`\n\nFor every p in [1,infinity) the coordinate normal gives A_coord(p) = 4 Gamma(1+1/p)^2 / Gamma(1+2/p); this equals pi at p = 2 and tends to 4 as p tends to infinity, and the quadrature kernel reproduces these values to relative deviation at most 1e-13.\n\n> ⚠️ 数值交叉验证，不构成证明\n\n**`claim-6`**｜证据档位 `cross_check`｜引用：`stmt:000034`、`stmt:000042`、`lit:000002`、`lit:000006`\n\nFor every p in [1,infinity), the central plane section of the unit ball of l_p^3 by the hyperplane with face-diagonal normal (1,1,0)/sqrt(2) has area A_face(p) = 2^{1/2-1/p} * 4 Gamma(1+1/p)^2 / Gamma(1+2/p), with A_face(1) = sqrt(2), A_face(2) = pi and A_face(p) tending to 4 sqrt(2); moreover A_face(p) < A_coord(p) exactly when p < 2, with equality at p = 2 and the reverse inequality for p > 2.\n\n> ⚠️ 数值交叉验证，不构成证明\n\n**`claim-7`**｜证据档位 `cross_check`｜引用：`stmt:000035`、`exp:000003`\n\nIf a unit normal n has at least one vanishing coordinate, then A_p(n) = C_p (sum over j not equal i of |n_j|^p)^{-1/p} with C_p = 4 Gamma(1+1/p)^2 / Gamma(1+2/p); consequently for 1 <= p < 2 every such normal gives A_p(n) <= C_p with equality only at coordinate normals, and for p > 2 the same expression holds with the reverse inequality.\n\n> ⚠️ 数值交叉验证，不构成证明\n\n**`claim-8`**｜证据档位 `proof_review`｜引用：`stmt:000041`、`exp:000003`\n\nFor every p in [1,infinity) the body-diagonal section area satisfies A_diag(p) = (3/4) integral_0^{2 pi} (|cos(theta - pi/6)|^p + |cos(theta + pi/6)|^p + |sin theta|^p)^{-2/p} d theta; moreover A_diag(1) = 3 sqrt(3)/4, A_diag(2) = pi, the limit of…（落档截断，原 5275 字）",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/G/000001.md",
+          "encoding": "utf-8",
+          "bytes_read": 9182,
+          "total_bytes": 9182,
+          "truncated": false,
+          "start_line": 55,
+          "lines_read": 82,
+          "total_lines": 136,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 55–136 行（共 136 行）",
+          "sha256": "7233a289fe2ac9531e6e09d9270e92571c05e24f60c07758d26b8f0c15005d2b"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 89216,
+        "prompt_cache_miss_tokens": 3678,
+        "tokens_in": 92894,
+        "tokens_out": 2193,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000322"
+    },
+    {
+      "index": 11,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.stat",
+        "args": {
+          "path": "out/package/main.tex"
+        },
+        "why": "核盘上 main.tex 的当前 sha256 / 字节数，确认本轮 own.revise 没有动它、并与既有编译回执对账"
+      },
+      "result": {
+        "tool": "fs.stat",
+        "ok": true,
+        "data": {
+          "path": "out/package/main.tex",
+          "exists": true,
+          "is_dir": false,
+          "is_file": true,
+          "is_symlink": false,
+          "size": 32529,
+          "mtime": "2026-11-25T03:27:54+08:00",
+          "mtime_epoch": 1795548474.947,
+          "link_target": null,
+          "sha256": "a4174b2f0733b7fac2698c4b88ce9d01f204ab5d88d98ec1ecdb328b26dca365"
+        },
+        "error": "",
+        "meta": {
+          "path": "out/package/main.tex",
+          "size": 32529,
+          "sha256": "a4174b2f0733b7fac2698c4b88ce9d01f204ab5d88d98ec1ecdb328b26dca365"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 91904,
+        "prompt_cache_miss_tokens": 3781,
+        "tokens_in": 95685,
+        "tokens_out": 1939,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000322"
+    },
+    {
+      "index": 12,
+      "shape": "summon",
+      "payload": {
+        "role": "H",
+        "action": "",
+        "params": {
+          "doc_id": "000001",
+          "round_no": 13,
+          "content_sha256": "7b558cb640bb2517fbd561b3c7fe4a58e282e8e00650452be98bde79148a4809",
+          "changed_claim_ids": [
+            "claim-5",
+            "claim-6",
+            "claim-7",
+            "claim-8",
+            "claim-9",
+            "claim-10",
+            "claim-11"
+          ],
+          "change_scope": "only claim.section: '3' -> '3 Main results'; texts, citations, evidence_kind unchanged",
+          "paper_tex_sha256": "a4174b2f0733b7fac2698c4b88ce9d01f204ab5d88d98ec1ecdb328b26dca365",
+          "paper_pages": 10,
+          "results_section_ledger_refs": [
+            "stmt:000034",
+            "stmt:000041",
+            "stmt:000042",
+            "exp:000003",
+            "exp:000004",
+            "exp:000006",
+            "exp:000007"
+          ],
+          "open_findings_to_recheck": [
+            "000006",
+            "000007"
+          ]
+        },
+        "why": "revise 把稿件推成 revised 而签名仍钉在改之前那一版；按政策改完稿必须送回 H 复审，让签名钉到现行版（这一条是硬性收口条件）",
+        "brief": "复审 doc:000001 现行版（只改了结果章节归属），钉签名",
+        "name": "H1",
+        "task": "复审 doc:000001 的**现行版**（round_no=13，content_sha256=7b558cb640bb2517fbd561b3c7fe4a58e282e8e00650452be98bde79148a4809，claim_count=14，status=revised），把签名钉到这一版上。这一版只改了一件事：§3 结果章节里承载结果的 claim-5…claim-11 的 `section` 字段由 \"3\" 改为 \"3 Main results\"（与 documents.sections 里那条 heading 逐字一致），**断言原文一字未改、citations 一字未加、evidence_kind 与结论强度未动**（claim-5 仍是 cross_check：A_coord + 求积核自检；claim-6 仍是 cross_check：A_face 闭式与 A_face vs A_coord 分段；claim-8/claim-9 仍是 proof_review：A_diag 积分表示、Δ 连续性与尾段符号；claim-10 仍是「数值支持的强猜想，未证明」；claim-1..claim-4、claim-12..claim-14 原样未动）。改这一格的动机是收工门 acceptance 的一条确定性判据 `results_section_must_cite_ledger`：结果章节的 claim 必须直接引本轮台账（stmt:/exp:/rel:）。请核：(1) 结果章节现在确实带 stmt:000034 / stmt:000041 / stmt:000042 / exp:000003 / exp:000004 / exp:000006 / exp:000007，且这些号都指得到台账已有的行；(2) 没有任何一条断言的数学内容或强度被抬高（尤其 cross_check 那几条仍带「不构成证明」声明、claim-10 仍写明未证明）；(3) 若判通过就把 documents.status 落 accepted 并把签名钉到上面那个 content_sha256；若仍有 findings，逐条落 review_findings 并把 target 指到 claim-N / 节。另：out/package/main.tex 这一趟我**没有**再动（盘上 sha256=a4174b2f0733b7fac2698c4b88ce9d01f204ab5d88d98ec1ecdb328b26dca365，32529 字节），你上一轮点的第 4 节那处 overclaim（findings 000006/000007）在第 189 行已按 thm:delta(iii) 的真实强度改写，PDF 已重编、回执 tex_sha256 与盘上正文一致（pages=10），请一并确认那一处已不再 overclaim。"
+      },
+      "result": {
+        "summoned": "H",
+        "action": "",
+        "ok": true,
+        "task_id": "t-000323",
+        "status": "done",
+        "outcome": "ok",
+        "refusal_reason": null,
+        "detail": "执行完成",
+        "children": [],
+        "llm_run_path": "D:\\Incubator\\projects\\lp-ball-22\\runs\\H-20261125-035401-001.json",
+        "final": "doc:000001 第 13 轮复审完成：裁决 accepted，documents.status 已置 accepted，签名钉在 content_sha256=7b558cb640bb2517fbd561b3c7fe4a58e282e8e00650452be98bde79148a4809（签名凭据 doc-signatures/000001-7b558cb640bb2517-003.json，sha256=255e85ee53029e6b4aaf5553f712fa5b08d71745799f23689a4c78f2a527af91，round=14）。逐条读数：(1) §3 结果章节的 claim-5…claim-11 的 section 均为 “3 Main results”，与 documents.sections 的 heading 逐字一致；citations 合起来确实是 stmt:000034 / stmt:000041 / stmt:000042 / exp:000003 / exp:000004 / exp:000006 / exp:000007，且每个号都在台账里有行（statements：000034/000041/000042 均为 theorem；experiments：000003/000004/000006/000007 均 method=num…（原文 2058 字，已截断）",
+        "payload": "{\"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\lp-ball-22\\\\runs\\\\H-20261125-035401-001.json\", \"final\": \"doc:000001 第 13 轮复审完成：裁决 accepted，documents.status 已置 accepted，签名钉在 content_sha256=7b558cb640bb2517fbd561b3c7fe4a58e282e8e00650452be98bde79148a4809（签名凭据 doc-signatures/000001-7b558cb640bb2517-003.json，sha256=255e85ee53029e6b4aaf5553f712fa5b08d71745799f23689a4c78f2a527af91，round=14）。逐条读数：(1) §3 结果章节的…（原文 2288 字，已截断）",
+        "roster_name": "H1",
+        "秘书": {
+          "alarms": [
+            "'H1' 不是注册表里的真名"
+          ],
+          "fail_open": false,
+          "problem": "'H1' 不是注册表里的真名",
+          "wash": {
+            "checked": true,
+            "washed": false,
+            "refused": "",
+            "reason": ""
+          },
+          "changes": [],
+          "surface_fit": {
+            "checked": false,
+            "fits": null,
+            "paths": [],
+            "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+            "shape": "summon",
+            "reach": {
+              "checked": true,
+              "verdict": "unknown",
+              "hops": [],
+              "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+            }
+          },
+          "reach_fit": {
+            "checked": true,
+            "verdict": "unknown",
+            "hops": [],
+            "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+          },
+          "assessment": {
+            "decision": "可派",
+            "reason": "这一条没点名具体动作（role 级派活）⇒ 不拿动作表去卡它；角色存在性由预筛管",
+            "basis": [
+              "specs/<role>.py 的动作表",
+              "tasks: 同 key 的既有终态行",
+              "没点名动作 ⇒ 动作表那一格不适用"
+            ],
+            "duplicates": [],
+            "alarms": [],
+            "novel": false,
+            "surface": {
+              "checked": false,
+              "fits": null,
+              "paths": [],
+              "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+              "shape": "summon",
+              "reach": {
+                "checked": true,
+                "verdict": "unknown",
+                "hops": [],
+                "reason": "角色 '' 不在能力表里（['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'L', 'M', 'V']）⇒ 判不了"
+              }
+            },
+            "judge": {
+              "checked": false,
+              "reason": "预筛没有报警、也没有重复候选 ⇒ 不必判断"
+            },
+            "engaged": false,
+            "seq": 3
+          }
+        },
+        "可退役": [
+          {
+            "task_id": "t-000323",
+            "role": "H",
+            "branch": "waiting_no_children",
+            "reading": {
+              "items_open": 0,
+              "items_open_ids": [],
+              "items_open_expects": {},
+              "items_open_states": {}
+            }
+          }
+        ],
+        "新消息": [
+          {
+            "id": "m000050",
+            "from": "M",
+            "channel": "private",
+            "subject": "手稿 000058：派活：G（派活：只做一件已定下来的收口 + 重编：收工门 acceptance 现在只剩一条 blocker —— 「论文没有在**正文结果章节**里引本轮台账（`stmt:` / `exp:` / `rel:`）；只出现在核查章节里」。判据是从 `documents` 里那一条 `doc:000001` 的 claims 现算的（按 claim 所属章节判），所以改的是**claims 的章节归属与引文**，不是措辞强度。\n\n要做的事（只做这一件）：\n1) 读 `documents` 里 `doc_id=000001` 的现行 claims（你是这一行的笔主，`table.get` / `own.revise` 都通）。\n2) 找到承载**结果**的那一两条 claim（讲三段结构 / 两个临界点 / 三个方向面积表达式的那几条，不是讲核查与状态的），把本轮台账引用**补进结果章节的 claim** 里：至少 `exp:000004`（12 个 p 的球面扫描与 argmax 类型）、`stmt:000042`（体对角向与面对角向公式，V 判「成立」）、`stmt:000034`（A_p(n) 积分表示与坐标向闭式，V 判「成立」）；若已有 `exp:000003`/`exp:000006`/`exp:000007` 也一并留在结果章节那一侧。**只挪/加引文与章节归属，不改断言的数学内容与结论强度**。\n3) 用 `own.revise(doc_id=\"000001\", new_claims=[…])` 落盘（其余 claims 原样保留，只动需要动的那一两条）。\n4) 若你同时改了 `out/package/main.tex`（例如为了让附录与正文引文对应），必须自己调 `doc.paper_compile` 重编 `out/package/main.pdf`，并确认回执 `tex_sha256` 等于盘上 main.tex 的新 sha；若没动 main.tex，明确写「未动，无需重编」。\n\n硬约束：结论强度不许抬；不许把数值支持的强猜想写成定理；不许改别的 claims 的数学内容。\n\n回执四行：① 改动的那几条 claim 的 id / 所属章节 / 改后 citations 逐条（`stmt:`/`exp:` 号）；② `doc:000001` 改后的 content_sha256 前 12 位；③ main.tex 有没有动、动了的话新 sha256 与回执 pages；④ 若某步被受控拒，贴拒码原话，不要自己宣布通过。）",
+            "body": "[手稿 000058] 派活：G（派活：只做一件已定下来的收口 + 重编：收工门 acceptance 现在只剩一条 blocker —— 「论文没有在**正文结果章节**里引本轮台账（`stmt:` / `exp:` / `rel:`）；只出现在核查章节里」。判据是从 `documents` 里那一条 `doc:000001` 的 claims 现算的（按 claim 所属章节判），所以改的是**claims 的章节归属与引文**，不是措辞强度。\n\n要做的事（只做这一件）：\n1) 读 `documents` 里 `doc_id=000001` 的现行 claims（你是这一行的笔主，`table.get` / `own.revise` 都通）。\n2) 找到承载**结果**的那一两条 claim（讲三段结构 / 两个临界点 / 三个方向面积表达式的那几条，不是讲核查与状态的），把本轮台账引…（原文 1218 字，已截断）",
+            "source": {
+              "kind": "message",
+              "form": "notice",
+              "summary": "手稿 000058：派活：G（派活：只做一件已定下来的收口 + 重编：收工门 acceptance 现在只剩一条 blocker —— 「论文没有在**正文结果章节**里引本轮台账（`stmt:` / `exp:` / `rel:`）；只出现在核查章节里」。判据是从 `documents` 里那一条 `doc:000001` 的 claims 现算的（按 claim 所属章节判），所以改的是**claims 的章节归属与引文**，不是措辞强度。\n\n要做的事（只做这一件）：\n1) 读 `documents` 里 `doc_id=000001` 的现行 claims（你是这一行的笔主，`table.get` / `own.revise` 都通）。\n2) 找到承载**结果**的那一两条 claim（讲三段结构 / 两个临界点 / 三个方向面积表达式的那几条，不是讲核查与状态的），把本轮台账引用**补进结果章节的 claim** 里：至少 `exp:000004`（12 个 p 的球面扫描与 argmax 类型）、`stmt:000042`（体对角向与面对角向公式，V 判「成立」）、`stmt:000034`（A_p(n) 积分表示与坐标向闭式，V 判「成立」）；若已有 `exp:000003`/`exp:000006`/`exp:000007` 也一并留在结果章节那一侧。**只挪/加引文与章节归属，不改断言的数学内容与结论强度**。\n3) 用 `own.revise(doc_id=\"000001\", new_claims=[…])` 落盘（其余 claims 原样保留，只动需要动的那一两条）。\n4) 若你同时改了 `out/package/main.tex`（例如为了让附录与正文引文对应），必须自己调 `doc.paper_compile` 重编 `out/package/main.pdf`，并确认回执 `tex_sha256` 等于盘上 main.tex 的新 sha；若没动 main.tex，明确写「未动，无需重编」。\n\n硬约束：结论强度不许抬；不许把数值支持的强猜想写成定理；不许改别的 claims 的数学内容。\n\n回执四行：① 改动的那几条 claim 的 id / 所属章节 / 改后 citations 逐条（`stmt:`/`exp:` 号）；② `doc:000001` 改后的 content_sha256 前 12 位；③ main.tex 有没有动、动了的话新 sha256 与回执 pages；④ 若某步被受控拒，贴拒码原话，不要自己宣布通过。）"
+            }
+          },
+          {
+            "板": "- （新）[t-000324] message·要一个回执 来自 H：手稿 000059：doc 000001 第 13 轮复审通过：status=accepted，签名钉在 content_sha256=7b558cb6…，§3 引台账与强度两档均有逐行读数\n[手稿 000059] doc 000001 第 13 轮复审通过：status=accepted，签名钉在 content_sha256=7b558cb6…，§3 引台账与强度两档均有逐行读数\n全文：`manuscripts.read(id=\"000059\")`（盘上 work/handoffs.jsonl#000059）"
+          }
+        ],
+        "秘书加工": {
+          "reworked": [
+            {
+              "item": {
+                "id": "m000050",
+                "from": "M",
+                "channel": "private",
+                "subject": "手稿 000058：派活：G（派活：只做一件已定下来的收口 + 重编：收工门 acceptance 现在只剩一条 blocker —— 「论文没有在**正文结果章节**里引本轮台账（`stmt:` / `exp:` / `rel:`）；只出现在核查章节里」。判据是从 `documents` 里那一条 `doc:000001` 的 claims 现算的（按 claim 所属章节判），所以改的是**claims 的章节归属与引文**，不是措辞强度。\n\n要做的事（只做这一件）：\n1) 读 `documents` 里 `doc_id=000001` 的现行 claims（你是这一行的笔主，`table.get` / `own.revise` 都通）。\n2) 找到承载**结果**的那一两条 claim（讲三段结构 / 两个临界点 / 三个方向面积表达式的那几条，不是讲核查与状态的），把本轮台账引用**补进结果章节的 claim** 里：至少 `exp:000004`（12 个 p 的球面扫描与 argmax 类型）、`stmt:000042`（体对角向与面对角向公式，V 判「成立」）、`stmt:000034`（A_p(n) 积分表示与坐标向闭式，V 判「成立」）；若已有 `exp:000003`/`exp:000006`/`exp:000007` 也一并留在结果章节那一侧。**只挪/加引文与章节归属，不改断言的数学内容与结论强度**。\n3) 用 `own.revise(doc_id=\"000001\", new_claims=[…])` 落盘（其余 claims 原样保留，只动需要动的那一两条）。\n4) 若你同时改了 `out/package/main.tex`（例如为了让附录与正文引文对应），必须自己调 `doc.paper_compile` 重编 `out/package/main.pdf`，并确认回执 `tex_sha256` 等于盘上 main.tex 的新 sha；若没动 main.tex，明确写「未动，无需重编」。\n\n硬约束：结论强度不许抬；不许把数值支持的强猜想写成定理；不许改别的 claims 的数学内容。\n\n回执四行：① 改动的那几条 claim 的 id / 所属章节 / 改后 citations 逐条（`stmt:`/`exp:` 号）；② `doc:000001` 改后的 content_sha256 前 12 位；③ main.tex 有没有动、动了的话新 sha256 与回执 pages；④ 若某步被受控拒，贴拒码原话，不要自己宣布通过。）",
+                "body": "[手稿 000058] 派活：G（派活：只做一件已定下来的收口 + 重编：收工门 acceptance 现在只剩一条 blocker —— 「论文没有在**正文结果章节**里引本轮台账（`stmt:` / `exp:` / `rel:`）；只出现在核查章节里」。判据是从 `documents` 里那一条 `doc:000001` 的 claims 现算的（按 claim 所属章节判），所以改的是**claims 的章节归属与引文**，不是措辞强度。\n\n要做的事（只做这一件）：\n1) 读 `documents` 里 `doc_id=000001` 的现行 claims（你是这一行的笔主，`table.get` / `own.revise` 都通）。\n2) 找到承载**结果**的那一两条 claim（讲三段结构 / 两个临界点 / 三个方向面积表达式的那几条，不是讲核查与状态的），把本轮台账引…（原文 1218 字，已截断）",
+                "source": {
+                  "kind": "message",
+                  "form": "notice",
+                  "summary": "手稿 000058：派活：G（派活：只做一件已定下来的收口 + 重编：收工门 acceptance 现在只剩一条 blocker —— 「论文没有在**正文结果章节**里引本轮台账（`stmt:` / `exp:` / `rel:`）；只出现在核查章节里」。判据是从 `documents` 里那一条 `doc:000001` 的 claims 现算的（按 claim 所属章节判），所以改的是**claims 的章节归属与引文**，不是措辞强度。\n\n要做的事（只做这一件）：\n1) 读 `documents` 里 `doc_id=000001` 的现行 claims（你是这一行的笔主，`table.get` / `own.revise` 都通）。\n2) 找到承载**结果**的那一两条 claim（讲三段结构 / 两个临界点 / 三个方向面积表达式的那几条，不是讲核查与状态的），把本轮台账引用**补进结果章节的 claim** 里：至少 `exp:000004`（12 个 p 的球面扫描与 argmax 类型）、`stmt:000042`（体对角向与面对角向公式，V 判「成立」）、`stmt:000034`（A_p(n) 积分表示与坐标向闭式，V 判「成立」）；若已有 `exp:000003`/`exp:000006`/`exp:000007` 也一并留在结果章节那一侧。**只挪/加引文与章节归属，不改断言的数学内容与结论强度**。\n3) 用 `own.revise(doc_id=\"000001\", new_claims=[…])` 落盘（其余 claims 原样保留，只动需要动的那一两条）。\n4) 若你同时改了 `out/package/main.tex`（例如为了让附录与正文引文对应），必须自己调 `doc.paper_compile` 重编 `out/package/main.pdf`，并确认回执 `tex_sha256` 等于盘上 main.tex 的新 sha；若没动 main.tex，明确写「未动，无需重编」。\n\n硬约束：结论强度不许抬；不许把数值支持的强猜想写成定理；不许改别的 claims 的数学内容。\n\n回执四行：① 改动的那几条 claim 的 id / 所属章节 / 改后 citations 逐条（`stmt:`/`exp:` 号）；② `doc:000001` 改后的 content_sha256 前 12 位；③ main.tex 有没有动、动了的话新 sha256 与回执 pages；④ 若某步被受控拒，贴拒码原话，不要自己宣布通过。）"
+                }
+              },
+              "addendum": "我的产出物口径：交付状态 —— 交给谁：H（送审）+ 派你这趟活的父（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名）+ M（打包）；形态：`documents` 行 + `manuscripts/G/<doc_id>.md` + 成文阶段的 `out/package/main.tex` / `out/package/main.pdf` + `out/package/MAPPING.json`；可核字段：`documents.doc_id` / `documents.kind` / `documents.markdown_path` / `documents.content_sha256` / `documents.claims` / `documents.status`；算做完：`build_document` 回了 `doc_id`、每条 claim 的 `citations` 都指得到台账已有的号（`stmt:` / `lit:` / `exp:`），且 H 审到 `documents.status=accepted`（不通过就按 findings 改）。\n我在本条线上的位置：论文撰写：把台账里的结论汇编成可审校的稿件，附带每条断言的来路",
+              "problem": "",
+              "fail_open": false
+            },
+            {
+              "item": {
+                "板": "- （新）[t-000324] message·要一个回执 来自 H：手稿 000059：doc 000001 第 13 轮复审通过：status=accepted，签名钉在 content_sha256=7b558cb6…，§3 引台账与强度两档均有逐行读数\n[手稿 000059] doc 000001 第 13 轮复审通过：status=accepted，签名钉在 content_sha256=7b558cb6…，§3 引台账与强度两档均有逐行读数\n全文：`manuscripts.read(id=\"000059\")`（盘上 work/handoffs.jsonl#000059）"
+              },
+              "addendum": "我的产出物口径：交付状态 —— 交给谁：H（送审）+ 派你这趟活的父（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名）+ M（打包）；形态：`documents` 行 + `manuscripts/G/<doc_id>.md` + 成文阶段的 `out/package/main.tex` / `out/package/main.pdf` + `out/package/MAPPING.json`；可核字段：`documents.doc_id` / `documents.kind` / `documents.markdown_path` / `documents.content_sha256` / `documents.claims` / `documents.status`；算做完：`build_document` 回了 `doc_id`、每条 claim 的 `citations` 都指得到台账已有的号（`stmt:` / `lit:` / `exp:`），且 H 审到 `documents.status=accepted`（不通过就按 findings 改）。\n我在本条线上的位置：论文撰写：把台账里的结论汇编成可审校的稿件，附带每条断言的来路",
+              "problem": "",
+              "fail_open": false
+            }
+          ],
+          "handoffs_digest": "- 000055 E→M：E：7 条 inconclusive 一条也没落成——七行归属 E1、我是 E2，table.update 逐条 row_not_yours（附七条拒码原话与一条判据口径诊断）\n- 000056 M→E：派活：E（派活：只做一件事：把 `experiments` 台账里 7 条 `result=inconclusive` 的行落成**确定结论**（收工门 acceptance「算」那一环唯一的拦点，用户点名要这一趟做完）。对象：exp:000009、exp:000010、exp:000011、exp:000012、exp:000013、exp:000017、exp:000021（以你自己读到的 `result=inconclusive` 行为准）。\n\n**上一趟 E2 没做成的原因不是判据，是归属**：这 7 行的 owner 是 `E1` 那一支笔，E2 对七行 `table.update` 全部拿到 `row_not_yours`。**你这一趟被指派的名册名就是 E1** —— 先逐条试一次：读该行（`table.get(table=\"experiments\", id=<号>)`）确认读得到，再用 `table.update` 写 `result`。若仍拿 `row_not_yours`，**立刻停手**，把七条拒码原话贴回来，不要重试换姿势。\n\n这 7 条都是同一恒等式的重复数值验证：A_diag(p) = (3/4)∫_0^{2π} (|cos(θ−π/6)|^p + |cos(θ+π/6)|^p + |sinθ|^p)^{−2/p} dθ，而该恒等式已有 V 判「成立」的在册命题 `stmt:000034`。每条二选一，**必须落定**：\n(a) 脚本 stdout 真能下结论 ⇒ `result=supports`（或确实反驳时 `refutes` + 非空 `counterexample`），并补可核凭据：`certificate`（实测最大偏差与容差，逐字取自 `out/exp-logs/<号>.log` 的 stdout）或 `search_bound`（搜索型时），`exit_code` 保留真实值；\n(b) 若是同一判据的重复验证 ⇒ 同样把 `result` 落成确定值，并在 `notes` 写「与 exp:<被重复那条> 同判据、同脚本同参数，作为该判据的重复核验，结论随 exp:<主那条>」。\n\n硬约束：所有数字必须来自脚本真实 stdout（`REPRO_RESULT:` 协议 + `out/exp-logs/<号>.log`），**不许编造**；不许把 inconclusive 改成 supports 却没有实测凭据；不许动别的实验行、不许新增文献/命题。\n\n回执三行：① 逐条 `exp 号 / 改前 / 改后 / 凭据关键一句`；② 改完后 `result=inconclusive` 还剩几条；③ 被拒的逐条贴拒码原话。）\n- 000057 E→M：7 条 inconclusive 全部落定 supports，inconclusive 余 0；附三条被拒原话与「哪些是重复核验」的标注\n- 000058 M→G：派活：G（派活：只做一件已定下来的收口 + 重编：收工门 acceptance 现在只剩一条 blocker —— 「论文没有在**正文结果章节**里引本轮台账（`stmt:` / `exp:` / `rel:`）；只出现在核查章节里」。判据是从 `documents` 里那一条 `doc:000001` 的 claims 现算的（按 claim 所属章节判），所以改的是**claims 的章节归属与引文**，不是措辞强度。\n\n要做的事（只做这一件）：\n1) 读 `documents` 里 `doc_id=000001` 的现行 claims（你是这一行的笔主，`table.get` / `own.revise` 都通）。\n2) 找到承载**结果**的那一两条 claim（讲三段结构 / 两个临界点 / 三个方向面积表达式的那几条，不是讲核查与状态的），把本轮台账引用**补进结果章节的 claim** 里：至少 `exp:000004`（12 个 p 的球面扫描与 argmax 类型）、`stmt:000042`（体对角向与面对角向公式，V 判「成立」）、`stmt:000034`（A_p(n) 积分表示与坐标向闭式，V 判「成立」）；若已有 `exp:000003`/`exp:000006`/`exp:000007` 也一并留在结果章节那一侧。**只挪/加引文与章节归属，不改断言的数学内容与结论强度**。\n3) 用 `own.revise(doc_id=\"000001\", new_claims=[…])` 落盘（其余 claims 原样保留，只动需要动的那一两条）。\n4) 若你同时改了 `out/package/main.tex`（例如为了让附录与正文引文对应），必须自己调 `doc.paper_compile` 重编 `out/package/main.pdf`，并确认回执 `tex_sha256` 等于盘上 main.tex 的新 sha；若没动 main.tex，明确写「未动，无需重编」。\n\n硬约束：结论强度不许抬；不许把数值支持的强猜想写成定理；不许改别的 claims 的数学内容。\n\n回执四行：① 改动的那几条 claim 的 id / 所属章节 / 改后 citations 逐条（`stmt:`/`exp:` 号）；② `doc:000001` 改后的 content_sha256 前 12 位；③ main.tex 有没有动、动了的话新 sha256 与回执 pages；④ 若某步被受控拒，贴拒码原话，不要自己宣布通过。）\n- 000059 H→G：doc 000001 第 13 轮复审通过：status=accepted，签名钉在 content_sha256=7b558cb6…，§3 引台账与强度两档均有逐行读数"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 94720,
+        "prompt_cache_miss_tokens": 1881,
+        "tokens_in": 96601,
+        "tokens_out": 3390,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000322"
+    },
+    {
+      "index": 14,
+      "shape": "final",
+      "payload": {
+        "final": "收口完成：doc:000001 的结果章节 claims 已按章节归属改到「3 Main results」并在该章节带上本轮台账引用（stmt:/exp:），未改任何数学内容或结论强度；H 已复审现行版并置 accepted。\n\n① 改动的那几条 claim（本轮共 7 条，只改 section 归属，text 与 citations 一字未动，集合上已覆盖要求的三类引用：stmt:000034 / stmt:000042 / exp:000004 及 exp:000003 / exp:000006 / exp:000007）：\n- claim-5 ｜ section=3 Main results ｜ citations: stmt:000034, exp:000003\n- claim-6 ｜ section=3 Main results ｜ citations: stmt:000034, stmt:000042, lit:000002, lit:000006\n- claim-7 ｜ section=3 Main results ｜ citations: stmt:000035, exp:000003\n- claim-8 ｜ section=3 Main results ｜ citations: stmt:000041, exp:000003\n- claim-9 ｜ section=3 Main results ｜ citations: stmt:000042, stmt:000041\n- claim-10｜ section=3 Main results ｜ citations: exp:000004, exp:000006, exp:000007\n- claim-11｜ section=3 Main results ｜ citations: exp:000006, exp:000007\n（原 section 是裸号 \"3\"，与 documents.sections 的 heading「3 Main results」不逐字一致；现改为与 heading 逐字一致。claim-10 仍写明「Numerically supported strong conjecture, not established here」，claim-5/6/7/10/11 仍为 cross_check 且带「数值交叉验证，不构成证明」，claim-8/9 仍为 proof_review 且带「逐行审阅过的证明，未经机器检查」——强度一格未抬。）\n\n② doc:000001 改后 content_sha256（前 12 位）= 7b558cb640bb（全文 7b558cb640bb2517fbd561b3c7fe4a58e282e8e00650452be98bde79148a4809，claim_count=14，落盘 manuscripts/G/000001.md）；H1 复审已把签名钉在这一版：documents.status=accepted，签名凭据 doc-signatures/000001-7b558cb640bb2517-003.json（round=14）。\n\n③ main.tex：**未动，无需重编**（本轮只调 own.revise 改 claims 台账与 manuscripts/G/000001.md，未触碰 out/package/main.tex）。盘上 main.tex 仍为上一轮改完第 189 行后重编的那一版：sha256=a4174b2f0733b7fac2698c4b88ce9d01f204ab5d88d98ec1ecdb328b26dca365，32529 字节；对应编译回执 tex_sha256 与该 sha 一致、pages=10、pdf_bytes=316925、exit_codes [0,0]。\n\n④ 无受控拒（own.revise 一次成功，replaced_claim_ids=claim-5…claim-11；未出现 row_not_yours / unknown_claim_id / paper_not_registered 等拒码）。另：名下 H1 已交差（t-000323 done），板项 t-000325 是唤醒通知；若需销号由父代理处置——本趟不代为宣布名册清理完成。",
+        "evidence": [
+          "doc:000001",
+          "stmt:000034",
+          "stmt:000042",
+          "stmt:000041",
+          "stmt:000035",
+          "exp:000003",
+          "exp:000004",
+          "exp:000006",
+          "exp:000007",
+          "doc-signatures/000001-7b558cb640bb2517-003.json"
+        ],
+        "notify": {
+          "to": "M",
+          "summary": "doc:000001 结果章节 claims 已补台账引用并改章节归属，H 复审 accepted；main.tex 未动无需重编",
+          "body": "## 做了什么\n1) 读 `documents` 的 `doc_id=000001` 现行 14 条 claims，定位承载结果的那几条（讲三个方向面积表达式 / 两临界点 / 三段结构）。\n2) 用 `own.revise(doc_id=\"000001\", new_claims=[…])` 把它们（claim-5…claim-11）的 `section` 从裸号 `\"3\"` 改为与 `documents.sections` heading 逐字一致的 `\"3 Main results\"`；**text 与 citations 一字未动**，证据档位与免责声明原样保留（cross_check 的「数值交叉验证，不构成证明」、proof_review 的「逐行审阅过的证明，未经机器检查」都在）。\n3) 结果章节现在集合上覆盖：`stmt:000034`、`stmt:000042`、`stmt:000041`、`stmt:000035`、`exp:000003`、`exp:000004`、`exp:000006`、`exp:000007`（此前这些号只在 section \"3\" 这一格上、与 heading 字符串不匹配，判据于是读成「结果章节没有台账引用」）。\n4) 派 H1 复审现行版，裁决 `accepted`，签名钉在 content_sha256=7b558cb640bb2517…（round=14）。\n\n## 读数\n- doc:000001 改后 content_sha256 = 7b558cb640bb2517fbd561b3c7fe4a58e282e8e00650452be98bde79148a4809（前 12 位 7b558cb640bb），claim_count=14，status=accepted。\n- `out/package/main.tex` **未动**：sha256=a4174b2f0733b7fac2698c4b88ce9d01f204ab5d88d98ec1ecdb328b26dca365（32529 B），与既有回执 `tex_sha256` 相同、pages=10、pdf_bytes=316925 ⇒ 无需重编。\n- 无受控拒。\n\n## 要对方做什么\n- 跑 `conductor.closing` 复核 acceptance 那一格是否已转 pass；若判据认的是别的章节字符串（例如只认裸号），回一句原话，我按原话再调一次 section 归属。\n- 名册：H1（t-000323）已交差，可按需 `retire_child`；板项 t-000325 是唤醒通知。",
+          "refs": [
+            "stmt:000034",
+            "stmt:000042",
+            "stmt:000041",
+            "stmt:000035",
+            "exp:000003",
+            "exp:000004",
+            "exp:000006",
+            "exp:000007"
+          ]
+        }
+      },
+      "result": {
+        "notify_handoff": {
+          "handoff": "000060",
+          "ok": true,
+          "id": "000060",
+          "path": "work/handoffs.jsonl#000060",
+          "to": "M",
+          "brief": "doc:000001 结果章节 claims 已补台账引用并改章节归属，H 复审 accepted；main.tex 未动无需重编",
+          "addressing": {
+            "checked": true,
+            "how": "outside_roster",
+            "to": "M",
+            "kind": "",
+            "name": "",
+            "task_id": "",
+            "role": "",
+            "brief": "",
+            "candidates": [],
+            "callable": "",
+            "refused": "",
+            "error": "",
+            "why": "角色级/公告栏/频道外的收件人面（手稿台账按它建键）",
+            "delivery": "role",
+            "manuscript_to": "M"
+          },
+          "notify_channel": "role",
+          "revises": "",
+          "existing_same_summary": {
+            "count": 0,
+            "ids": [],
+            "note": "查过了：没有同一句话的既有交接"
+          },
+          "notified": "m000051",
+          "error": "",
+          "note": "收件人下次运行时（或本步之后）会在收件箱/板上看到编号；它用 `manuscripts.read` 读全文"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 95616,
+        "prompt_cache_miss_tokens": 5770,
+        "tokens_in": 101386,
+        "tokens_out": 2443,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000322"
+    }
+  ],
+  "final": "收口完成：doc:000001 的结果章节 claims 已按章节归属改到「3 Main results」并在该章节带上本轮台账引用（stmt:/exp:），未改任何数学内容或结论强度；H 已复审现行版并置 accepted。\n\n① 改动的那几条 claim（本轮共 7 条，只改 section 归属，text 与 citations 一字未动，集合上已覆盖要求的三类引用：stmt:000034 / stmt:000042 / exp:000004 及 exp:000003 / exp:000006 / exp:000007）：\n- claim-5 ｜ section=3 Main results ｜ citations: stmt:000034, exp:000003\n- claim-6 ｜ section=3 Main results ｜ citations: stmt:000034, stmt:000042, lit:000002, lit:000006\n- claim-7 ｜ section=3 Main results ｜ citations: stmt:000035, exp:000003\n- claim-8 ｜ section=3 Main results ｜ citations: stmt:000041, exp:000003\n- claim-9 ｜ section=3 Main results ｜ citations: stmt:000042, stmt:000041\n- claim-10｜ section=3 Main results ｜ citations: exp:000004, exp:000006, exp:000007\n- claim-11｜ section=3 Main results ｜ citations: exp:000006, exp:000007\n（原 section 是裸号 \"3\"，与 documents.sections 的 heading「3 Main results」不逐字一致；现改为与 heading 逐字一致。claim-10 仍写明「Numerically supported strong conjecture, not established here」，claim-5/6/7/10/11 仍为 cross_check 且带「数值交叉验证，不构成证明」，claim-8/9 仍为 proof_review 且带「逐行审阅过的证明，未经机器检查」——强度一格未抬。）\n\n② doc:000001 改后 content_sha256（前 12 位）= 7b558cb640bb（全文 7b558cb640bb2517fbd561b3c7fe4a58e282e8e00650452be98bde79148a4809，claim_count=14，落盘 manuscripts/G/000001.md）；H1 复审已把签名钉在这一版：documents.status=accepted，签名凭据 doc-signatures/000001-7b558cb640bb2517-003.json（round=14）。\n\n③ main.tex：**未动，无需重编**（本轮只调 own.revise 改 claims 台账与 manuscripts/G/000001.md，未触碰 out/package/main.tex）。盘上 main.tex 仍为上一轮改完第 189 行后重编的那一版：sha256=a4174b2f0733b7fac2698c4b88ce9d01f204ab5d88d98ec1ecdb328b26dca365，32529 字节；对应编译回执 tex_sha256 与该 sha 一致、pages=10、pdf_bytes=316925、exit_codes [0,0]。\n\n④ 无受控拒（own.revise 一次成功，replaced_claim_ids=claim-5…claim-11；未出现 row_not_yours / unknown_claim_id / paper_not_registered 等拒码）。另：名下 H1 已交差（t-000323 done），板项 t-000325 是唤醒通知；若需销号由父代理处置——本趟不代为宣布名册清理完成。",
+  "evidence": [
+    "doc:000001",
+    "stmt:000034",
+    "stmt:000042",
+    "stmt:000041",
+    "stmt:000035",
+    "exp:000003",
+    "exp:000004",
+    "exp:000006",
+    "exp:000007",
+    "doc-signatures/000001-7b558cb640bb2517-003.json"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 1,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 14,
+  "compactions": 0,
+  "mailbox_items": [
+    "t-000324",
+    "t-000325"
+  ],
+  "mailbox_msgs": [
+    "m000046",
+    "m000050"
+  ],
+  "mailbox_delivered": 4,
+  "monitor_turns": 1,
+  "wakes": 1,
+  "wake_ids": [
+    "wk-000111"
+  ],
+  "wake_events": [
+    {
+      "wake_id": "wk-000111",
+      "task_id": "t-000322",
+      "role": "G",
+      "timer_id": "tm-000359",
+      "kind": "timer",
+      "reason": "复审 doc:000001 的**现行版**（round_no=13，content_sha256=7b558cb640bb2517fbd561b3c7fe4a58e282e8e00650452be98bde79148a4809，claim_count=14，status=revised），把签名钉到这一版上。这一版只改了一件事：§3 结果章节里承载结果的 claim-5…claim-11 的 `",
+      "purpose": "复审 doc:000001 的**现行版**（round_no=13，content_sha256=7b558cb640bb2517fbd561b3c7fe4a58e282e8e00650452be98bde79148a4809，claim_count=14，status=revised），把签名钉到这一版上。这一版只改了一件事：§3 结果章节里承载结果的 claim-5…claim-11 的 `",
+      "purpose_missing": false,
+      "message": "时间到：复审 doc:000001 的**现行版**（round_no=13，content_sha256=7b558cb640bb2517fbd561b3c7fe4a58e282e8e00650452be98bde79148a4809，claim_count=14，status=revised），把签名钉到这一版上。这一版只改了一件事：§3 结果章节里承载结果的 claim-5…claim-11 的 `｜等了 2 分钟 50 秒（起于 03:51:14，到于 03:54:04）。它交的是：ok：执行完成",
+      "waited_sec": 170.220604,
+      "triggered_by": "target_event",
+      "wait_for": "task:t-000323",
+      "due_at": "",
+      "fired_at": "2026-11-24T19:54:05.094833+00:00",
+      "mailbox_item_id": "t-000325",
+      "state": "pending"
+    }
+  ],
+  "clock_pumps": 28,
+  "clock_fired": 2,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "G 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "G",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    },
+    "woke_turns": 1,
+    "skip_calls": 1,
+    "woke_reasons": [
+      "event"
+    ]
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [
+    "000060"
+  ],
+  "summons": [
+    "H"
+  ],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [
+    {
+      "kind": "summon",
+      "counted": true,
+      "task_id": "t-000323",
+      "role": "H",
+      "step": 12,
+      "status": "done",
+      "outcome": "ok",
+      "handoff_id": "",
+      "outputs": [
+        "t-000323",
+        "doc-signatures/000001-7b558cb640bb2517-003.json"
+      ],
+      "disposition": ""
+    }
+  ],
+  "summons_total": 1,
+  "summons_consumed": 1,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 1,
+    "summons_consumed": 1,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [
+      {
+        "kind": "summon",
+        "counted": true,
+        "task_id": "t-000323",
+        "role": "H",
+        "step": 12,
+        "status": "done",
+        "outcome": "ok",
+        "handoff_id": "",
+        "outputs": [
+          "t-000323",
+          "doc-signatures/000001-7b558cb640bb2517-003.json"
+        ],
+        "disposition": "consumed",
+        "evidence": {
+          "step": 14,
+          "shape": "final",
+          "effect": "收工结论里的具体产物指涉",
+          "refs": [
+            "t-000323",
+            "doc-signatures/000001-7b558cb640bb2517-003.json"
+          ]
+        }
+      }
+    ],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p328",
+    "role": "G",
+    "prompt_sha256": "655e347ab428586de744b5f83e53e1747b2bdca18bcb6f41bc314d1092cb0ebb",
+    "prompt_chars": 81799,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "FACULTIES_07",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "TOOL_29",
+      "TOOL_30",
+      "TOOL_31",
+      "TOOL_32",
+      "TOOL_33",
+      "TOOL_34",
+      "TOOL_35",
+      "TOOL_36",
+      "TOOL_37",
+      "TOOL_38",
+      "TOOL_39",
+      "TOOL_40",
+      "TOOL_41",
+      "TOOL_42",
+      "TOOL_43",
+      "TOOL_44",
+      "TOOL_45",
+      "TOOL_46",
+      "TOOL_47",
+      "TOOL_48",
+      "TOOL_49",
+      "TOOL_50",
+      "TOOL_51",
+      "TOOL_52",
+      "TOOL_53",
+      "TOOL_54",
+      "TOOL_55",
+      "TOOL_56",
+      "TOOL_57",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "PAPER_PACK",
+      "PAPER_01",
+      "PAPER_02",
+      "PAPER_03",
+      "PAPER_04",
+      "PAPER_05",
+      "PAPER_06",
+      "PAPER_07",
+      "PAPER_07_BODY",
+      "PAPER_08",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_LIMITS",
+      "COLLAB_NAMES",
+      "PARENT_STOP",
+      "PARENT_ROSTER",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 15,
+    "tokens_in": 1189086,
+    "tokens_out": 34020,
+    "usd": 0.03133,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 14,
+    "no_request_calls": 0,
+    "hit": 1139072,
+    "miss": 49797,
+    "unknown_calls": 0,
+    "tokens_in": 1188869,
+    "hit_rate": 0.9581,
+    "mismatched_calls": 0,
+    "saved_usd": 0.167445,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 380.422,
+  "end_ts": "2026-11-25T03:54:19+08:00",
+  "notes": [
+    "收工时名下还有 1 条证明没有 V 的签字（读数，不拦收工；明细：000112）",
+    "缓存读数：命中 1139072 / 未命中 49797 token，命中率 95.8%（14 次调用）；按 modelcost 口径估算可省 约 0.167445 美元",
+    "子产出处理读数：summons_total=1，consumed=1，waived=0，unknown=0，unconsumed=0"
+  ],
+  "final_payload": {
+    "final": "收口完成：doc:000001 的结果章节 claims 已按章节归属改到「3 Main results」并在该章节带上本轮台账引用（stmt:/exp:），未改任何数学内容或结论强度；H 已复审现行版并置 accepted。\n\n① 改动的那几条 claim（本轮共 7 条，只改 section 归属，text 与 citations 一字未动，集合上已覆盖要求的三类引用：stmt:000034 / stmt:000042 / exp:000004 及 exp:000003 / exp:000006 / exp:000007）：\n- claim-5 ｜ section=3 Main results ｜ citations: stmt:000034, exp:000003\n- claim-6 ｜ section=3 Main results ｜ citations: stmt:000034, stmt:000042, lit:000002, lit:000006\n- claim-7 ｜ section=3 Main results ｜ citations: stmt:000035, exp:000003\n- claim-8 ｜ section=3 Main results ｜ citations: stmt:000041, exp:000003\n- claim-9 ｜ section=3 Main results ｜ citations: stmt:000042, stmt:000041\n- claim-10｜ section=3 Main results ｜ citations: exp:000004, exp:000006, exp:000007\n- claim-11｜ section=3 Main results ｜ citations: exp:000006, exp:000007\n（原 section 是裸号 \"3\"，与 documents.sections 的 heading「3 Main results」不逐字一致；现改为与 heading 逐字一致。claim-10 仍写明「Numerically supported strong conjecture, not established here」，claim-5/6/7/10/11 仍为 cross_check 且带「数值交叉验证，不构成证明」，claim-8/9 仍为 proof_review 且带「逐行审阅过的证明，未经机器检查」——强度一格未抬。）\n\n② doc:000001 改后 content_sha256（前 12 位）= 7b558cb640bb（全文 7b558cb640bb2517fbd561b3c7fe4a58e282e8e00650452be98bde79148a4809，claim_count=14，落盘 manuscripts/G/000001.md）；H1 复审已把签名钉在这一版：documents.status=accepted，签名凭据 doc-signatures/000001-7b558cb640bb2517-003.json（round=14）。\n\n③ main.tex：**未动，无需重编**（本轮只调 own.revise 改 claims 台账与 manuscripts/G/000001.md，未触碰 out/package/main.tex）。盘上 main.tex 仍为上一轮改完第 189 行后重编的那一版：sha256=a4174b2f0733b7fac2698c4b88ce9d01f204ab5d88d98ec1ecdb328b26dca365，32529 字节；对应编译回执 tex_sha256 与该 sha 一致、pages=10、pdf_bytes=316925、exit_codes [0,0]。\n\n④ 无受控拒（own.revise 一次成功，replaced_claim_ids=claim-5…claim-11；未出现 row_not_yours / unknown_claim_id / paper_not_registered 等拒码）。另：名下 H1 已交差（t-000323 done），板项 t-000325 是唤醒通知；若需销号由父代理处置——本趟不代为宣布名册清理完成。",
+    "evidence": [
+      "doc:000001",
+      "stmt:000034",
+      "stmt:000042",
+      "stmt:000041",
+      "stmt:000035",
+      "exp:000003",
+      "exp:000004",
+      "exp:000006",
+      "exp:000007",
+      "doc-signatures/000001-7b558cb640bb2517-003.json"
+    ],
+    "notify": {
+      "to": "M",
+      "summary": "doc:000001 结果章节 claims 已补台账引用并改章节归属，H 复审 accepted；main.tex 未动无需重编",
+      "body": "## 做了什么\n1) 读 `documents` 的 `doc_id=000001` 现行 14 条 claims，定位承载结果的那几条（讲三个方向面积表达式 / 两临界点 / 三段结构）。\n2) 用 `own.revise(doc_id=\"000001\", new_claims=[…])` 把它们（claim-5…claim-11）的 `section` 从裸号 `\"3\"` 改为与 `documents.sections` heading 逐字一致的 `\"3 Main results\"`；**text 与 citations 一字未动**，证据档位与免责声明原样保留（cross_check 的「数值交叉验证，不构成证明」、proof_review 的「逐行审阅过的证明，未经机器检查」都在）。\n3) 结果章节现在集合上覆盖：`stmt:000034`、`stmt:000042`、`stmt:000041`、`stmt:000035`、`exp:000003`、`exp:000004`、`exp:000006`、`exp:000007`（此前这些号只在 section \"3\" 这一格上、与 heading 字符串不匹配，判据于是读成「结果章节没有台账引用」）。\n4) 派 H1 复审现行版，裁决 `accepted`，签名钉在 content_sha256=7b558cb640bb2517…（round=14）。\n\n## 读数\n- doc:000001 改后 content_sha256 = 7b558cb640bb2517fbd561b3c7fe4a58e282e8e00650452be98bde79148a4809（前 12 位 7b558cb640bb），claim_count=14，status=accepted。\n- `out/package/main.tex` **未动**：sha256=a4174b2f0733b7fac2698c4b88ce9d01f204ab5d88d98ec1ecdb328b26dca365（32529 B），与既有回执 `tex_sha256` 相同、pages=10、pdf_bytes=316925 ⇒ 无需重编。\n- 无受控拒。\n\n## 要对方做什么\n- 跑 `conductor.closing` 复核 acceptance 那一格是否已转 pass；若判据认的是别的章节字符串（例如只认裸号），回一句原话，我按原话再调一次 section 归属。\n- 名册：H1（t-000323）已交差，可按需 `retire_child`；板项 t-000325 是唤醒通知。",
+      "refs": [
+        "stmt:000034",
+        "stmt:000042",
+        "stmt:000041",
+        "stmt:000035",
+        "exp:000003",
+        "exp:000004",
+        "exp:000006",
+        "exp:000007"
+      ]
+    }
+  },
+  "task_id": "t-000322"
+}

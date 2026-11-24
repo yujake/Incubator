@@ -1,0 +1,1291 @@
+===== page 1 =====
+Szarek and Ball made simple
+Colin Tang† and Tomasz Tkocz†∗
+†Department of Mathematical Sciences, Carnegie Mellon University,
+Pittsburgh, PA 15213, USA
+Abstract
+We present proofs of Szarek’s moment comparison and Ball’s cube
+slicing inequalities based on elementary convexity and majorisation. The
+key ingredient is a moment-lifting argument which allows us to use Schur
+monotonicity, avoiding the integral inequalities used in the original Fourier-
+analytic approaches.
+2020 Mathematics Subject Classification. Primary 52A40; Secondary 60E15, 26D15.
+Key words.
+cube, volume of sections, Schur-convexity, uniform distribution, Rademacher
+sums, Khinchin-type inequalities
+1
+Introduction
+Szarek’s L1 −L2 moment comparison inequality [64] for Rademacher sums X
+states that
+E|X| ≥
+1
+√
+2
+(1)
+for all random variables X of the form X = Pn
+j=1 ajεj, where ε1, ε2, . . . are
+independent and identically distributed (i.i.d.) Rademacher random variables,
+∗Email: ttkocz@math.cmu.edu. Research supported in part by Simons Foundation Inter-
+national Travel Support for Mathematicians grant SFI-MPS-TSM-00025936.
+1
+arXiv:2610.28384v1  [math.FA]  20 Oct 2026
+===== page 2 =====
+that is, random signs, P (εj = ±1) = 1
+2, and a1, . . . , an are real numbers satis-
+fying
+E|X|2 =
+n
+X
+j=1
+a2
+j = 1.
+(2)
+Moreover, when n ≥2 the inequality is sharp and equality holds if and only if the
+coefficient vector a = (a1, . . . , an) is a = ( 1
+√
+2,
+1
+√
+2, 0, . . . , 0), up to permutations
+and sign changes.
+Ball’s cube slicing inequality [3] is a geometric result asserting that the maximal-
+volume central hyperplane sections [−1
+2, 1
+2]n∩a⊥of the unit-volume cube [−1
+2, 1
+2]n
+in Rn occur precisely at the two-coordinate diagonal sections by hyperplanes a⊥
+with unit normal vectors a = (a1, . . . , an) proportional to (1, 1, 0, . . . , 0), again,
+up to symmetries: permutations and coordinate-hyperplane reflections.
+Both inequalities admit arguably natural geometric and probabilistic formu-
+lations. Szarek’s inequality is equivalent to the statement, dual to cube slic-
+ing, about minimal-volume hyperplane projections of the cross-polytope Bn
+1 =
+{x ∈Rn, Pn
+j=1 |xj| ≤1} (see [4, 53]), with the same extremising hyperplanes,
+whereas Ball’s inequality is equivalent to a probabilistic statement about sums
+of independent uniform random variables (see [4]). Thanks to Archimedes’ hat-
+box theorem (see [14, 53]), this can be further recast in perfect analogy to (1),
+namely Ball’s cube slicing inequality states that
+E
+
+|X|−1
+≤
+√
+2
+(3)
+for all random vectors X of the form X = Pn
+j=1 ajξj, where ξ1, ξ2, . . . are i.i.d.
+uniform on the unit Euclidean sphere S2 in R3 and a1, . . . , an are real numbers
+satisfying the same constraint (2). We shall refer to such a random vector X as
+a spherical sum, to parallel the term “Rademacher sum”. Here and throughout,
+| · | also denotes the standard Euclidean norm.
+Each of these results has been quite influential in its own and intertwined right,
+with a great deal of understanding of their various extensions and refinements
+(see, e.g. [53]). Two particularly effective approaches use Fourier integral es-
+timates (Haagerup’s approach from [28] to (1) and Ball’s original proof of (3)
+in [3]). Additionally, in the Rademacher case, there is a one of its kind proof
+from the book, a spectral-gap argument of Lata la and Oleszkiewicz [45] using
+2
+===== page 3 =====
+the discrete Fourier analytic framework (see, e.g. [53], p. 381, or Exercise 2.55
+in [57] for a modern presentation), taking (1) beyond the Euclidean setting to
+every normed space. We give a brief historical account in the final section.
+Our purpose here is to show a new non-technical convexity-based argument
+explaining both inequalities in a unified fashion, dispensing with the Fourier-
+methods. For brevity, we focus on the inequalities and the sharpness of their
+constants, and do not pursue the characterisation of all equality cases in (1) and
+(3). This characterisation will follow from stability estimates in a companion
+paper [66].
+In the next section, we recall the classical notion of majorisation and the well-
+known Schur-monotonicity results available for Lp moments of sums X featured
+in (1) and (3). They provide the very underpinning of a new argument making
+Szarek’s and Ball’s inequalities simple. The argument is then presented in detail
+in the next two sections. The final section is devoted to a wider overview and a
+natural programme for further work.
+2
+Majorisation background
+For two nonnegative vectors x = (x1, . . . , xn) and y = (y1, . . . , yn) in Rn
++ with
+equal total mass Pn
+j=1 xj = Pn
+j=1 yj, we say that x is majorised by y, denoted
+x ≺y, if all partial sums of a nonincreasing rearrangement x∗= (x∗
+j)n
+j=1 of x
+(i.e. a permutation with x∗
+1 ≥· · · ≥x∗
+n) do not exceed the corresponding partial
+sums of y∗,
+k
+X
+j=1
+x∗
+j ≤
+k
+X
+j=1
+y∗
+j ,
+for all
+k = 1, . . . , n.
+(4)
+There are several other equivalent definitions. One is that x = Py, for an n × n
+doubly stochastic matrix P.
+Alternatively, x is obtained from y by a finite
+sequence of T-transforms, where each is a convex combination of the identity
+and a transposition, namely of the form
+xi = (1 −λ)yi + λyj = yi + λ(yj −yi),
+xj = λyi + (1 −λ)yj = yj −λ(yj −yi),
+3
+===== page 4 =====
+for some indices i̸ = j and 0 ≤λ ≤1, with the remaining coordinates unchanged
+(robbing Peter to pay Paul). Finally, geometrically, x ≺y if x lies in the convex
+hull of all permutations of y, x = P
+σ λσyσ for some nonnegative weights λσ
+adding up to 1, indexed by all permutations σ of the n-element index set, and
+yσ = (yσ(1), . . . , yσ(n)).
+For example, among all nonnegative vectors x of total mass 1, the extremal ones
+are the constant vector and the standard basis vectors, that is we have
+ 1
+n, . . . , 1
+n
+
+≺x ≺(1, 0, . . . , 0).
+(5)
+A function f : Rn
++ →R is Schur-convex (concave) if it preserves (reverses) the
+majorisation order, that is f(x) ≤f(y) (f(x) ≥f(y)) provided that x ≺y. We
+refer to [8, 48] for further background on this classical elementary notion.
+As an instructive example, vital in the sequel, fix x ∈R and consider the
+function
+h(t) = E|x +
+√
+tε|3,
+t ≥0,
+where ε is a Rademacher random variable. Without loss of generality, we can
+assume that x ≥0 (thanks to the symmetry of ε). Then, explicitly,
+h(t) = |x +
+√
+t|3 + |x −
+√
+t|3
+2
+=
+
+
+
+x3 + 3xt,
+0 ≤t ≤x2,
+t3/2 + 3x2√
+t,
+t ≥x2.
+Suppose x > 0. The function h is affine on [0, x2], the one-sided derivatives at
+t = x2 match and h′′(t) = 3(t−x2)
+4t3/2 , t > x2, so h is strictly convex on (x2, ∞) and
+convex globally. At x = 0, h(t) = t3/2, which is plainly convex. Consequently,
+we have the following claim,
+F(x1, . . . , xn) = E
+h
+|√x1ε1 + · · · + √xnεn|3i
+is Schur-concave,
+(6)
+which is classical, going back to Eaton’s criterion [19], verified for power func-
+tions | · |p, p ≥3 by Komorowski in [40].
+For completeness, we present a direct argument. To see (6), it suffices to verify
+this under a single T-transform. Thanks to symmetry under permutations, this
+4
+===== page 5 =====
+in turn is reduced to verifying that the map
+f(δ) = F(a + δ, a −δ, x3, . . . , xn)
+is nonincreasing on [0, a] for a fixed a > 0 and x3, . . . , xn ≥0. Conditioning on
+(εj)j≥3 and letting x = P
+j≥3
+√xjεj, we have
+f(δ) = ExEε1,ε2
+
+√
+a + δε1 +
+√
+a −δε2 + x
+
+3
+= ExEε1,ε2hx
+
+|
+√
+a + δε1 +
+√
+a −δε2|2
+= ExEεhx(2a + 2
+p
+a2 −δ2ε),
+where we denote hx(t) = h(t) to emphasise the dependence on x. The point is
+that since t 7→hx(t) is convex, the function
+t 7→Eεhx(2a(1 + tε)),
+−1 ≤t ≤1
+is convex and even, hence nondecreasing on [0, 1], proving the claimed Schur-
+concavity (6).
+Combined with (5), (6) gives that every Rademacher sum X = Pn
+j=1 ajεj of
+length at most n, subject to the L2 constraint (2), satisfies
+1 ≤E|X|3 ≤E
+
+ε1 + · · · + εn
+√n
+
+3
+(nota bene, also by (6), the right-hand side is nondecreasing in n).
+3
+Szarek’s inequality made simple
+As in the Fourier proofs [3, 28], we distinguish the easy case, when one coefficient
+carries at least half of the total squared mass, from the opposite hard case, when
+every coefficient carries less than half.
+5
+===== page 6 =====
+3.1
+Easy case: maxj |aj| ≥
+1
+√
+2.
+For the proof of (1), first note the elementary identity
+E|aε1 + bε2| = max{|a|, |b|},
+a, b ∈R.
+(7)
+In particular, for the Rademacher sum X = Pn
+j=1 ajεj, we have
+E|X| ≥max
+j
+|aj|.
+Consequently, (1) holds whenever
+max
+j
+|aj| ≥
+1
+√
+2.
+3.2
+Hard case: maxj |aj| ≤
+1
+√
+2.
+Setting xj = a2
+j, the opposite case is equivalent to
+E
+
+n
+X
+j=1
+√xjεj
+
+≥
+1
+√
+2 = E
+
+1
+√
+2ε1 + 1
+√
+2ε2
+ ,
+(8)
+for all x = (x1, . . . , xn) ∈Rn
++ with P xj = 1 and xj ≤1
+2, for every j. For such
+vectors,
+(x1, . . . , xn) ≺
+1
+2, 1
+2, 0, . . . , 0
+
+,
+but the map (x1, . . . , xn) 7→E| P √xjεj| fails to be Schur-monotone (otherwise,
+Szarek’s inequality would plainly have a different extremiser). However, we have
+(6), so it is a compelling idea to connect the L1 and L3 moments of X.
+6
+===== page 7 =====
+3.3
+The L1 −L3 bridge.
+A natural link between power functions with different exponents is offered by
+differentiation. If a function f : R →R is C2, then for a fixed x ∈R, as h →0,
+Ef(x + hε) = f(x + h) + f(x −h)
+2
+= f(x) + h2
+2 f ′′(x) + o(h2),
+thus
+d
+dt
+
+t=0+Ef(x +
+√
+tε) = 1
+2f ′′(x).
+(9)
+We emphasise that the square-root order of the increment is the right scaling
+for the Rademacher averaging. In particular,
+d
+dt
+
+t=0+E|x +
+√
+tε|3 = 3|x|.
+(10)
+We are ready to establish the heart of the whole argument, a sharp L1 −L3
+moment comparison which offers the needed bridge.
+Lemma 1. For every Rademacher sum X = Pn
+j=1 ajεj, aj ∈R, we have
+E|X| · E|X|2 ≥1
+2E|X|3,
+(11)
+which is sharp.
+Proof. The assertion is trivial for X = 0. Otherwise, by homogeneity and after
+discarding zero coefficients and absorbing signs, we may write X = Pn
+j=1
+√xjεj,
+where xj > 0 and P
+j xj = 1.
+To use (10), we introduce a new auxiliary
+summand
+√
+tε independent of X, with a small positive weight t and spread the
+weight out among the rest proportionally to the masses xj. Specifically, note
+the following majorisation,
+(x1, . . . , xn, t) ≺
+(1 + t)x1, . . . , (1 + t)xn, 0
+
+,
+which holds for all 0 < t < minj xj (so that the appended component is the
+smallest one). Averaging (10) over X (which has finite support), and then using
+7
+===== page 8 =====
+Schur-concavity (6), we obtain
+E|X| = 1
+3 lim
+t→0+
+E|X +
+√
+tε|3 −E|X|3
+t
+≥1
+3 lim
+t→0+
+E|√1 + tX|3 −E|X|3
+t
+= 1
+2E|X|3.
+We check directly that equality holds for X = ε1+ε2
+√
+2 . This finishes the proof.
+3.4
+End of proof.
+To finish the argument, we need to show (8) for x ∈Rn
++ with P xj = 1 and
+xj ≤1
+2. Using first the L1 −L3 bridge (11) and then Schur-concavity (6), we
+obtain
+E|X| ≥1
+2E|X|3 ≥1
+2E
+
+ε1 + ε2
+√
+2
+
+3
+=
+1
+√
+2,
+since x ≺( 1
+2, 1
+2, 0, . . . , 0).
+□
+This establishes a blueprint we shall now follow to present a similar proof of
+Ball’s cube-slicing result (3), where instead of Rademacher sums, we need to
+handle spherical ones.
+4
+Ball’s inequality made simple
+Throughout this section, ξ, ξ1, ξ2, . . . are i.i.d. random vectors uniform on the
+unit sphere S2 in R3. For a fixed vector x ∈R3, consider the function
+H(t) = E|x +
+√
+tξ|,
+t ≥0.
+8
+===== page 9 =====
+Assume x̸ = 0. Since the marginal distribution ⟨x, ξ⟩is uniform on [−|x|, |x|],
+we can explicitly evaluate it,
+H(t) = E
+q
+|x +
+√
+tξ|2 = E
+q
+|x|2 + 2
+√
+t ⟨x, ξ⟩+ t
+= 1
+2
+Z 1
+−1
+q
+|x|2 + 2
+√
+t|x|u + tdu
+=
+
+
+
+|x| +
+t
+3|x|,
+0 ≤t ≤|x|2,
+√
+t + |x|2
+3
+√
+t,
+t ≥|x|2.
+Again, the function H is affine on [0, |x|2], the one-sided derivatives at t = |x|2
+match and H′′(t) = −t−|x|2
+4t5/2 , t ≥|x|2, so H is strictly concave on (|x|2, ∞) and
+concave globally. With hindsight, we also note the affine envelope bound,
+|x| ≤H(t) ≤|x| +
+t
+3|x|,
+t ≥0,
+(12)
+as well as the value of the right derivative
+H′(0+) =
+1
+3|x|.
+(13)
+When x = 0, we simply have H(t) =
+√
+t. Analogously to (6), we derive the
+following claim,
+G(x1, . . . , xn) = E
+h
+|√x1ξ1 + · · · + √xnξn|
+i
+is Schur-convex.
+(14)
+(It is instrumental to use the fact that a sum of independent spherically sym-
+metric random vectors is spherically symmetric; we leave out the details.) This
+goes back to the work of K¨onig and Kwapie´n on Khinchin-type inequalities [42],
+which has been further delightfully treated in greater generality in all dimensions
+by Baernstein II and Culverhouse in [2].
+4.1
+The L−1 −L1 bridge.
+The next lemma is the analogue of Lemma 1, providing the key link between the
+L−1 and L1 moments for spherical sums, with integrability aspects requiring a
+bit more care. In particular, E|X|−1 < ∞for every nonzero spherical sum X;
+this is carefully explained in the next subsection (see (17) below).
+9
+===== page 10 =====
+Lemma 2. For every sum X = Pn
+j=1 ajξj, aj ∈R (not all zero), we have
+E[|X|−1] · E[|X|2] ≤3
+2E|X|,
+(15)
+which is sharp.
+Proof of Lemma 2. First, we note that Taylor’s formula gives the following ana-
+logue of (9),
+d
+dt
+
+t=0+Ef(x +
+√
+tξ) = 1
+6∆f(x),
+for a C2 function f : R3 →R. We would like to apply it to the Euclidean norm
+function f(x) = |x| since ∆|x| = 2|x|−1, x̸ = 0, averaged over the law of X,
+but this requires care with regularity at the origin and differentiation under the
+expectation. To avoid these technicalities, we derive the desired identity directly
+for this function.
+Claim. For every random vector Y in R3 independent of ξ with E|Y |−1 < ∞
+and E|Y | < ∞, we have
+d
+dt
+
+t=0+E|Y +
+√
+tξ| = 1
+3E|Y |−1.
+(16)
+Indeed, conditioning on the values of Y , and then averaging over Y the function
+Hx(t) = Eξ|x +
+√
+tξ| analysed in (12)-(13), we have
+lim
+t→0+
+E|Y +
+√
+tξ| −E|Y |
+t
+= lim
+t→0+ EY
+HY (t) −|Y |
+t
+= EY
+
+lim
+t→0+
+HY (t) −|Y |
+t
+
+= EY H′
+Y (0+) = EY
+1
+3|Y |,
+where we have used pointwise bound (12) and Lebesgue’s dominated conver-
+gence theorem to justify swapping the order of taking the limit and expectation,
+and then applied (13).
+It remains to repeat the comparison from Lemma 1, with the inequality re-
+versed: invoke identity (16) with Y = X = P √xjξj (assuming without loss
+of generality xj > 0, P xj = 1), spread out the new variable t among the
+variables xj, and finish with Schur-convexity (14) of the L1-norm to conclude
+10
+===== page 11 =====
+1
+3E|X|−1 ≤1
+2E|X|. Again, it can be checked that equality holds for X = ξ1+ξ2
+√
+2
+(we have E|ξ1 + ξ2| = 4
+3 and E|ξ1 + ξ2|−1 = 1).
+We now use the same dichotomy according to whether one coefficient carries at
+least half of the total squared mass.
+4.2
+Easy case: maxj |aj| ≥
+1
+√
+2.
+A spherical counterpart of (7) in R3 reads as follows
+E|aξ1 + bξ2|−1 = min{|a|−1, |b|−1},
+a, b ∈R
+(17)
+(with the convention 1/0 = +∞). It can be checked by a direct calculation akin
+to the one for function H(t) (see, e.g. Lemma 6.6 in [15]), or justified by means
+of the divergence theorem (see, e.g. Lemma 2 in [26]). The direct calculation
+with a, b > 0 reads as follows
+E|aξ1 + bξ2|−1 = 1
+2
+Z 1
+−1
+(a2 + b2 + 2abu)−1/2du = (a + b) −|a −b|
+2ab
+=
+1
+max{a, b}.
+Consequently, singling out a nonzero summand, say a1ξ1 in X = P ajξj, writing
+X = a1ξ1+X′ and using the rotational invariance of the sum X′ of the remaining
+ones gives
+E|X|−1 = E min{|a1|−1, |X′|−1} ≤|a1|−1.
+Incidentally, this explicitly establishes the integrability promised earlier. (This
+is a probabilistic reincarnation of Ball’s original geometric projection argument,
+see the beginning of the proof of Theorem 4 in [3]). Thus (3) holds in the easy
+case: maxj |aj| ≥
+1
+√
+2.
+4.3
+Hard case: maxj |aj| ≤
+1
+√
+2.
+Exactly as before, setting xj = a2
+j, it remains to consider sums X = P √xjξj
+with P xj = 1 and xj ≤
+1
+2 for every j.
+Starting with (15), and using the
+majorisation of such vectors x by ( 1
+2, 1
+2, 0, . . . , 0) combined with (14) finishes
+11
+===== page 12 =====
+the proof,
+E|X|−1 ≤3
+2E|X| ≤3
+2E
+
+ξ1 + ξ2
+√
+2
+ =
+3
+2
+√
+2
+4
+3 =
+√
+2.
+5
+Further remarks
+5.1
+Bridges without majorisation
+After discovering the unified proof mechanism for the inequalities of Szarek
+and Ball presented in the previous sections, we noticed an alternative way of
+obtaining the bridge inequalities (11) and (15), the workhorses of the entire
+argument. The key insight is a replacement identity of Bara´nski, Murawski,
+Nayar and Oleszkiewicz from Lemma 4 in [5].
+We illustrate the idea starting with Rademacher sums X = P ajεj. Note that
+for a C1 function f : R →R and a, x ∈R, we have
+E[εf(x + aε)] = f(x + a) −f(x −a)
+2
+= 1
+2
+Z 1
+−1
+d
+duf(x + au) du = aE[f′(x + aU)],
+where U is a uniform random variable on [−1, 1]. If we then take U1, U2, . . . to
+be i.i.d. copies of U, independent of the Rademacher variables ε1, ε2, . . . , and
+set
+X(k) = akUk +
+X
+j̸=k
+ajεj,
+then conditioning on the remaining signs, applying the above identity with
+a = ak, multiplying by ak and summing over k gives the Bara´nski–Murawski–
+Nayar–Oleszkiewicz identity
+E
+
+Xf(X)
+
+=
+n
+X
+k=1
+a2
+kE
+h
+f ′(X(k))
+i
+.
+(18)
+Specialised to f(x) = x|x|, this yields
+E
+
+|X|3
+= 2
+n
+X
+k=1
+a2
+kE
+h
+|X(k)|
+i
+.
+12
+===== page 13 =====
+To obtain the desired bridge inequality (11), observe that for a convex function
+φ: R →R, we have a simple uniform-to-Rademacher replacement bound
+E
+
+φ(x + aU)
+
+≤E
+h
+φ(x + a)1 + U
+2
++ φ(x −a)1 −U
+2
+i
+= φ(x + a) + φ(x −a)
+2
+= E
+
+φ(x + aε)
+
+.
+Thus, E|X(k)| ≤E|X| and (11) follows.
+There is a natural spherical counterpart of (18). Let X = P
+j ajξj be a nonzero
+spherical sum and discard zero coefficients. If X(k) is obtained by replacing ξk by
+a random point Vk, uniform in the solid unit Euclidean ball B3
+2 and independent
+of all the sphere vectors, say
+X(k) = akVk +
+X
+j̸=k
+ajξj
+|
+{z
+}
+X′
+k
+,
+then the divergence theorem applied to a C2 function f : R3 →R gives
+E ⟨X, ∇f(X)⟩= 1
+3
+n
+X
+k=1
+a2
+kE
+
+∆f(X(k))
+
+.
+(19)
+Applying this first to fδ(x) =
+p
+|x|2 + δ, δ > 0 and then letting δ →0+ yields
+E|X| = 2
+3
+X
+k
+a2
+kE
+h
+|X(k)|−1i
+.
+Taking the limit in expectation is justified on the left by monotone convergence:
+the integrand is ⟨X, ∇fδ(X)⟩=
+|X|2
+√
+|X|2+δ ↑|X|, and on the right by the pointwise
+bound
+0 ≤∆fδ(x) =
+3
+p
+|x|2 + δ
+−
+|x|2
+(|x|2 + δ)3/2 ≤3
+|x|,
+combined with the integrability
+E|X(k)|−1 ≤|ak|−1E|Vk|−1 = 3
+2|ak|−1,
+using (17) and the fact that |Vk| has density 3r2 on (0, 1). Moreover, a replace-
+13
+===== page 14 =====
+ment principle for the Newton potential |x|−1 also follows from (17),
+E
+h
+|X(k)|−1i
+= E min{|ak|−1|Vk|−1, |X′
+k|−1}
+≥E min{|ak|−1|ξk|−1, |X′
+k|−1} = E
+h
+|X|−1i
+,
+since |Vk| ≤1 = |ξk|, pointwise. Consequently, (19) also proves the spherical
+bridge inequality (15), without the majorisation trick.
+5.2
+Szarek made even simpler
+The distinction between the easy and hard cases in the proof of Szarek’s in-
+equality can be dispensed with by virtue of H¨older’s inequality. Indeed,
+E|X|2 ≤
+p
+E|X|
+p
+E|X|3,
+which, for a Rademacher sum X with E|X|2 = 1, combined with the bridge
+inequality (11), E|X|3 ≤2E|X|, immediately yields
+1 ≤
+p
+E|X|
+p
+2E|X| =
+√
+2E|X|,
+that is, Szarek’s inequality (1) (again, without invoking majorisation used in
+the hard case).
+This shortcut, however, does not give Ball’s sharp constant: the spherical bridge
+followed by E|X| ≤(E|X|2)1/2 = 1 gives only E|X|−1 ≤3/2. In the Rademacher
+case, the H¨older step is sharp at the extremiser because |X| is supported on
+{0,
+√
+2}; the extremal spherical radius is not constant. The split into two co-
+efficient regimes is therefore natural for Ball’s problem, and it is precisely the
+Schur comparison of the lifted first moment in the small-coefficient regime (the
+hard case) that allows us to use the bridge effectively. This is why we have re-
+tained the original presentation for Szarek’s inequality and have chosen to show
+a common mechanism for the two inequalities, rather than concealing it behind
+a shortcut particular to Rademachers.
+14
+===== page 15 =====
+5.3
+A bit of history and wider context
+Moment comparison inequalities are most interesting as reversals of the plain
+monotonicity ∥X∥p ≤∥X∥q, 0 < p ≤q, of the Lp-norms1 ∥X∥p = (E|X|p)1/p.
+For Rademacher sums, such comparisons go back to Khinchin’s century-old 1923
+work [36] on dyadic expansions. The conjecture that the sharp constant in (1)
+is 1/
+√
+2, equivalently that we have ∥X∥2 ≤
+√
+2∥X∥1 for every Rademacher sum
+X = P
+j ajεj, was posed by Littlewood in his 1930 paper [47], in relation to
+questions on boundedness of bilinear forms in infinitely many variables. Lit-
+tlewood’s conjecture was settled positively by Szarek in his master’s thesis and
+published in 1976, [64].
+Szarek’s argument is inductive and involves a delicate analysis of the coeffi-
+cient configurations.
+It is organised around the homogeneous ratio F(a) =
+1
+|a|E| P
+j ajεj|. The proof exploits the piecewise-linear structure of the numer-
+ator: by [64, Lemma 1], at a local minimum of F, the sign vectors producing
+exact cancellation must span a⊥. The corollary to that lemma yields a quan-
+titative starting estimate in six dimensions, while [64, Lemma 2] provides a
+local estimate near the two-coordinate extremiser using the lower-dimensional
+inequality. The induction then distinguishes vectors near this extremiser from
+those bounded away from it, rather than splitting according to the largest co-
+efficient, and propagates a stronger bound in the latter region. A four-to-two
+coefficient reduction averages the first moment exactly but can decrease the av-
+erage Euclidean norm. The infinite-product estimate of [64, Lemma 3] controls
+the accumulated loss and shows that the initial gap above 1/
+√
+2 survives away
+from the extremiser in every dimension.
+Tomaszewski [67] subsequently gave a shorter proof based on an elementary
+but quite sophisticated combinatorial lemma tailored to the L1–L2 comparison
+(the lemma is proved by merging two coefficients, and the theorem follows by
+summing over partitions of the coefficients and choices of signs).
+A completely different approach had been introduced by Haagerup in [28] in
+his work completing the determination of all the sharp Lp–L2 constants for
+Rademacher sums X. The main idea is analytic to its core, relying on Fourier
+representations of power functions |x|p, thus allowing one to take advantage of
+1As customary, we retain the terminology of a norm when 0 < p < 1.
+15
+===== page 16 =====
+the independence of the summands ajεj on the Fourier side by studying uni-
+variate integrals of their characteristic functions, however oscillatory in nature.
+Concretely, to give a flavour, for X = P
+j ajεj, we have the identity
+E|X| = 2
+π
+Z ∞
+0
+1 −Q
+j cos(ajt)
+t2
+dt.
+(20)
+Haagerup’s next ingenious idea was to bound the product by the product of
+its absolute values and then decouple it using the weighted AM–GM inequality
+(with weights related to the coefficients aj), turning the problem into rather
+subtle estimates on certain special functions. Remarkably, this step is tight at
+the two-coordinate extremiser. Here decoupling means an elementary separation
+of a product; it should be distinguished from decoupling theory in harmonic
+analysis, with its far-reaching applications to number theory and geometry. For
+accounts of the latter, see [60, 27].
+Lata la and Oleszkiewicz in their early work [45] found another approach to
+Szarek’s inequality.
+Their striking proof (nota bene, very short) in modern
+language is based on the discrete Fourier analysis on the Boolean cube {−1, 1}n
+(Walsh functions), and does much more than establish the scalar inequality (1).
+See, e.g. [53] for a streamlined presentation. For arbitrary vectors x1, . . . , xn in
+any normed space, they show
+
+E
+
+P
+j εjxj
+
+21/2
+≤
+√
+2 · E
+
+X
+j
+εjxj
+
+.
+No Hilbert-space structure or geometric assumption on the norm is required
+(in fact (1) extends quasi gratis to the Hilbert-space setting, see the so-called
+Szarek-Orlicz argument, Remark 3 in [64]).
+We emphasise that the second
+moment above is not replaced by P
+j ∥xj∥2, which would be a very different
+assertion outside Hilbert space. This is the sharp L1 −L2 case of the vector-
+valued moment comparisons initiated by Kahane in [35], see also [46] for their
+role in probability in Banach spaces. The essence of the Lata la-Oleszkiewicz
+argument, in the later operator formulation [43, 58], is a gain in the spectral gap
+for the discrete Laplacian coming from symmetry, combined with an effective
+use of convexity of the norm (a pointwise bound), resulting in a Poincar´e-type
+inequality. This exceptionally economical and powerful mechanism is one of the
+main motivations behind this paper, where we sought an equally transparent
+16
+===== page 17 =====
+approach to Ball’s inequality in the framework of spherical harmonics.
+The
+challenge was to connect this spectral framework with the negative moment
+in Ball’s problem. Although this did not yield a spectral proof, it led to the
+moment-lifting argument underpinning this work.
+By now, there is a substantial literature on Khinchin-type inequalities for both
+Rademacher sums [28, 32, 43, 45], as well as other distributions: uniform vari-
+ables on intervals [44, 13] and finite sets [30], Steinhaus variables [63, 41, 62]
+and higher-dimensional spherical analogues [2, 42, 34], Gaussian mixtures [22],
+marginals of ℓp-balls [24], type-L variables [56, 29], or exponentials [10]. These
+comparisons have strong connections to sharp bounds for sections and projec-
+tions [6, 7, 14, 39, 52, 53]. Comparisons between moments other than the second
+continue to stimulate new approaches; the treatment of even moments via ultra
+log-concavity [54], and Hadamard factorisation [29], souped-up to more pre-
+cise Schur-monotonicity results [17], as well as the recent Lp–L4 theorem of [5],
+provide examples.
+Ball’s proof is a landmark in the Fourier-analytic treatment of section problems,
+and to the best of our knowledge is the only available one prior to this paper.
+Akin to (20), the Fourier-inversion formula applied to the density of the relevant
+sum of uniform random variables gives
+voln−1([−1
+2, 1
+2]n ∩a⊥) = 2
+π
+Z ∞
+0
+Y
+j
+sin(ajt)
+ajt
+dt,
+(21)
+for every unit vector a in Rn.
+Then Ball’s argument proceeds along very similar lines to Haagerup’s, with a
+decoupling step taken care of by means of H¨older’s inequality, which reduces the
+problem in the small-coefficient regime (the hard case) to showing the following
+integral inequality:
+1
+π
+Z
+R
+
+sin t
+t
+
+s
+dt ≤1
+π
+Z
+R
+
+e−t2/(2π)s
+dt =
+r
+2
+s,
+s ≥2.
+This is a rather delicate estimate due to the oscillatory nature of the integrand.
+It can be viewed as the key analytic component and workhorse of the whole
+approach. Our approach here bypasses that entirely. Ball’s direct proof of the
+integral inequality above relied to a large extent on several carefully crafted
+17
+===== page 18 =====
+pointwise estimates coming from power series expansions and comparisons with
+the Gaussian function. Later, Nazarov and Podkorytov in [55] offered an alter-
+native, robust and efficient method based on controlling the number of intersec-
+tions between the distribution functions of | sin t
+t | and e−t2/(2π). More recently,
+Melbourne and Roberto in [50] put forward yet another point of view and de-
+veloped an efficient mechanism in terms of controlling the derivative of relevant
+transport maps. The Fourier representation (21) goes back to P´olya [61]; in
+the context of cube slicing, it can be traced back to Hensley’s work [31], where
+it was used as a proxy in his pioneering probabilistic viewpoint. Fourier tech-
+niques subsequently grew into a substantial part of convex geometry, developed
+systematically in Koldobsky’s work [37] and his monograph [38]. A prominent
+example is the resolution of the Busemann-Petty problem (Problem 1 in [12]),
+culminating in [25].
+We finish by reiterating that Khinchin-type inequalities provide a natural prob-
+abilistic language for both section and projection questions, well beyond the
+present two problems. This paradigm is central in the recent survey [53]. Here,
+concretely, for a unit vector a in Rn,
+voln−1(Bn
+∞∩a⊥)
+voln−1(Bn−1
+∞
+)
+= E
+
+X
+j
+ajξj
+
+−1
+,
+(22)
+voln−1(Pa⊥Bn
+1 )
+voln−1(Bn−1
+1
+) = E
+
+X
+j
+ajεj
+
+,
+(23)
+and related representations have been established for normalised sections of ℓp-
+balls Bn
+p = {x ∈Rn, ∥x∥p ≤1} for 0 < p ≤∞, and for their hyperplane
+projections in the convex range 1 ≤p ≤∞; see [6, 7, 53]. The first identity can
+be traced back to [42]. The second, recorded in [4], follows by projecting the
+facets of the cross-polytope Bn
+1 ; for the corresponding use of Cauchy’s projection
+formula for other ℓp balls, see [7]. It is still intriguing that the negative moment
+of a spherical sum describes sections, while the positive moment of a Rademacher
+sum describes projections, for the polar pair (Bn
+∞)◦= Bn
+1 .
+18
+===== page 19 =====
+5.4
+Future work
+Stability.
+Once a sharp inequality and its equality cases are known, the next
+natural question is whether near equality forces the coefficients to be close to an
+extremiser. For Szarek’s inequality, see [18]; for Ball’s inequality, see [15, 49],
+with explicit estimates for both in [23]. For higher moments, dimensions and
+other aspects, see also [17, 21, 32, 33, 34] The analogous question for polydisc
+slicing is treated in [26]. We plan to retain the losses in our lifting and ma-
+jorisation arguments to give direct, more transparent proofs of such stability
+estimates in the companion paper [66], with better numerical constants.
+Higher dimensions.
+The differentiation principles (9) and (16) extend mu-
+tatis mutandis to all dimensions: for ξ uniform on the unit sphere Sd−1,
+d
+dt
+
+t=0+
+Ef(x +
+√
+t ξ) = 1
+2d∆f(x).
+Here f is a C2 function near x. Together with the spherical majorisation prin-
+ciple of [2], we shall provide a common treatment of the known sharp slicing
+inequalities for unit balls in ℓ∞(ℓ2) by block subspaces, in particular bypassing
+the difficult Fourier estimates in the works of Oleszkiewicz and Pe lczy´nski [59]
+and Brzezinski [11]. This method also gives sharp Lp–L2 Khinchin inequalities
+for sums of independent random vectors uniform on Sd−1, for every d ≥5 and
+−(d −2) ≤p ≤−2. We will present these results in [66], extending Theorem 1
+from [16] into part of the range mentioned as open in Table 1 therein. Further
+aspects, including moment comparisons and quantitative questions in this set-
+ting, have been also studied in [16, 20, 34]. Moreover, very recently, stability of
+Brzezinski’s bound has been established in [9], albeit without explicit constants.
+Our companion paper will rectify that.
+Other bodies.
+A different stability question concerns perturbations of the
+summand distribution; see [21].
+In particular, the resilience theorem of [23]
+says that the two-coordinate normal continues to maximise sections of real ℓp
+balls for all sufficiently large p, uniformly in the dimension, and to minimise
+projections of ℓq balls for q sufficiently close to 1. It would be interesting to
+find a lifting adapted to these perturbed laws which remains sharp at the two-
+19
+===== page 20 =====
+coordinate sum, and thereby obtain a simpler proof of resilience.
+The simplex gives another natural test. Webb’s upper bound [69] already has
+a proof based on comparisons of half-line moments of log-concave densities; see
+[68, Lemma 1.7]. This fits the bridge philosophy, although it is not the same
+replacement identity. The negative-moment point of view is developed further
+in [51]. For the opposite, lower bound, Ambrus and G´argy´an [1] recently proved
+that the minimal central hyperplane sections are parallel to facets, following the
+asymptotically sharp result of Tang [65]. We would like to understand whether
+lifting and convexity can give an alternative proof of this lower bound.
+Acknowledgments.
+The compelling idea of using majorisation has been float-
+ing around for a long time. We are particularly grateful to Peter Pivovarov and
+Paul Simanjuntak for a brief but very inspiring discussion back in 2020 at the
+University of Missouri in Columbia (as well as the lovely visit there), and to
+Piotr Nayar for the many discussions.
+AI disclosure.
+During preliminary work, T.T. explored a spectral proof of
+Ball’s cube slicing inequality in discussions with ChatGPT, which contributed
+to the moment-lifting approach and the initial arguments. The authors sub-
+sequently rederived, simplified, and developed the proofs and wrote the final
+exposition.
+References
+[1] Ambrus, G., G´argy´an, B., Minimal central slices of the regular simplex.
+arXiv:2609.12714, 2026.
+[2] Baernstein II, A., Culverhouse, R. C., Majorization of sequences, sharp
+vector Khinchin inequalities, and bisubharmonic functions. Studia Math.
+152 (2002), no. 3, 231–248.
+[3] Ball, K., Cube slicing in Rn. Proc. Amer. Math. Soc. 97 (1986), no. 3,
+465–473.
+20
+===== page 21 =====
+[4] Ball, K., Mahler’s conjecture and wavelets. Discrete Comput. Geom. 13
+(1995), 271–277.
+[5] Bara´nski, A., Murawski, D., Nayar, P., Oleszkiewicz, K., On the optimal
+Lp-L4 Khintchine inequality. arXiv:2503.11869, 2025.
+[6] Barthe, F., Gu´edon, O., Mendelson, S., Naor, A., A probabilistic approach
+to the geometry of the ℓn
+p-ball. Ann. Probab. 33 (2005), no. 2, 480–513.
+[7] Barthe, F., Naor, A., Hyperplane projections of the unit ball of ℓn
+p. Discrete
+Comput. Geom. 27 (2002), no. 2, 215–226.
+[8] Bhatia, R., Matrix analysis. Graduate Texts in Mathematics, 169, Springer-
+Verlag, New York, 1997.
+[9] Brazitikos, S., Rapaport, M., Tkocz, T., Hermite-Fisher bounds and sta-
+bility for min-entropy power inequalities. arXiv:2609.22065, 2026.
+[10] Brazitikos, S., Tang, C., Tkocz, T., Moments of sums of exponentials,
+beyond CHS. arXiv:2602.03058, 2026.
+[11] Brzezinski, P., Volume estimates for sections of certain convex bodies.
+Math. Nachr. 286 (2013), no. 17–18, 1726–1743.
+[12] Busemann, H., Petty, C. M., Problems on convex bodies. Math. Scand. 4
+(1956), 88–94.
+[13] Chasapis, G., Gurushankar, K., Tkocz, T., Sharp bounds on p-norms for
+sums of independent uniform random variables, 0 < p < 1. J. Anal. Math.
+149 (2023), no. 2, 529–553.
+[14] Chasapis, G., K¨onig, H., Tkocz, T., From Ball’s cube slicing inequality
+to Khinchin-type inequalities for negative moments. J. Funct. Anal. 281
+(2021), no. 9, Paper No. 109185, 23 pp.
+[15] Chasapis, G., Nayar, P., Tkocz, T., Slicing ℓp-balls reloaded: stability,
+planar sections in ℓ1. Ann. Probab. 50 (2022), no. 6, 2344–2372.
+[16] Chasapis, G., Singh, S., Tkocz, T., Haagerup’s phase transition at polydisc
+slicing. Anal. PDE 17 (2024), no. 7, 2509–2539.
+[17] Ch´avez, ´A., Sheng, S., Stability of Khintchine-type inequalities via log-
+monotonicity. arXiv:2606.19313, 2026.
+21
+===== page 22 =====
+[18] De, A., Diakonikolas, I., Servedio, R. A., A robust Khintchine inequality,
+and algorithms for computing optimal constants in Fourier analysis and
+high-dimensional geometry. SIAM J. Discrete Math. 30 (2016), no. 2, 1058–
+1094.
+[19] Eaton, M. L., A note on symmetric Bernoulli random variables. Ann. Math.
+Statist. 41 (1970), no. 4, 1223–1226.
+[20] Eskenazis, A., On extremal sections of subspaces of Lp. Discrete Comput.
+Geom. 65 (2021), 489–509.
+[21] Eskenazis, A., Nayar, P., Tkocz, T., Distributional stability of the Szarek
+and Ball inequalities. Math. Ann. 389 (2024), no. 2, 1161–1185.
+[22] Eskenazis, A., Nayar, P., Tkocz, T., Gaussian mixtures: entropy and geo-
+metric inequalities. Ann. Probab. 46 (2018), no. 5, 2908–2945.
+[23] Eskenazis, A., Nayar, P., Tkocz, T., Resilience of cube slicing in ℓp. Duke
+Math. J. 173 (2024), no. 17, 3377–3412.
+[24] Eskenazis, A., Nayar, P., Tkocz, T., Sharp comparison of moments and the
+log-concave moment problem. Adv. Math. 334 (2018), 389–416.
+[25] Gardner, R. J., Koldobsky, A., Schlumprecht, T., An analytic solution to
+the Busemann–Petty problem on sections of convex bodies. Ann. of Math.
+(2) 149 (1999), no. 2, 691–703.
+[26] Glover, N., Tkocz, T., Wyczesany, K., Stability of polydisc slicing. Mathe-
+matika 69 (2023), no. 4, 1165–1182.
+[27] Guth, L., Decoupling estimates in Fourier analysis. In: Proceedings of the
+International Congress of Mathematicians 2022, Vol. 2, Plenary lectures,
+1054–1089, EMS Press, Berlin, 2023.
+[28] Haagerup, U., The best constants in the Khintchine inequality. Studia
+Math. 70 (1981), no. 3, 231–283.
+[29] Havrilla,
+A.,
+Nayar,
+P.,
+Tkocz,
+T.,
+Khinchin-type inequalities via
+Hadamard’s factorisation. Int. Math. Res. Not. IMRN 2023, no. 3, 2429–
+2445.
+22
+===== page 23 =====
+[30] Havrilla, A., Tkocz, T., Sharp Khinchin-type inequalities for symmetric
+discrete uniform random variables. Israel J. Math. 246 (2021), no. 1, 281–
+297.
+[31] Hensley, D., Slicing the cube in Rn and probability (bounds for the measure
+of a central cube slice in Rn by probability methods). Proc. Amer. Math.
+Soc. 73 (1979), no. 1, 95–100.
+[32] Jakimiuk, J., Stability of Khintchine inequalities with optimal constants
+between the second and the p-th moment for p ≥3. Bernoulli 32 (2026),
+no. 3, 2524–2542.
+[33] Jakimiuk, J., Stability of extremal hyperplane projections of balls in ℓn
+p(R).
+arXiv:2608.21787, 2026.
+[34] Jakimiuk, J., Tang, C., Tkocz, T., Khinchin inequalities for uniforms on
+spheres with a deficit. Math. Z. 313 (2026), Paper No. 11.
+[35] Kahane, J.-P., Sur les sommes vectorielles P ±un. C. R. Acad. Sci. Paris
+259 (1964), 2577–2580.
+[36] Khintchine, A., ¨Uber dyadische Br¨uche. Math. Z. 18 (1923), 109–116.
+[37] Koldobsky, A., An application of the Fourier transform to sections of star
+bodies. Israel J. Math. 106 (1998), 157–164.
+[38] Koldobsky, A., Fourier analysis in convex geometry. Mathematical Surveys
+and Monographs, 116, American Mathematical Society, Providence, RI,
+2005.
+[39] Koldobsky, A., Ryabogin, D., Zvavitch, A., Projections of convex bodies
+and the Fourier transform. Israel J. Math. 139 (2004), 361–380.
+[40] Komorowski, R., On the best possible constants in the Khintchine inequal-
+ity for p ≥3. Bull. London Math. Soc. 20 (1988), no. 1, 73–75.
+[41] K¨onig, H., On the best constants in the Khintchine inequality for Steinhaus
+variables. Israel J. Math. 203 (2014), no. 1, 23–57.
+[42] K¨onig, H., Kwapie´n, S., Best Khintchine type inequalities for sums of inde-
+pendent, rotationally invariant random vectors. Positivity 5 (2001), no. 2,
+115–152.
+23
+===== page 24 =====
+[43] Kwapie´n, S., Lata la, R., Oleszkiewicz, K., Comparison of moments of sums
+of independent random variables and differential inequalities. J. Funct.
+Anal. 136 (1996), no. 1, 258–268.
+[44] Lata la, R., Oleszkiewicz, K., A note on sums of independent uniformly
+distributed random variables. Colloq. Math. 68 (1995), no. 2, 197–206.
+[45] Lata la, R., Oleszkiewicz, K., On the best constant in the Khinchin–Kahane
+inequality. Studia Math. 109 (1994), no. 1, 101–104.
+[46] Ledoux, M., Talagrand, M., Probability in Banach spaces. Isoperimetry
+and processes. Ergebnisse der Mathematik und ihrer Grenzgebiete (3), 23,
+Springer-Verlag, Berlin, 1991.
+[47] Littlewood, J. E., On bounded bilinear forms in an infinite number of
+variables. Quart. J. Math. Oxford Ser. 1 (1930), 164–174.
+[48] Marshall, A. W., Olkin, I., Arnold, B. C., Inequalities: Theory of Ma-
+jorization and Its Applications. Second edition, Springer Series in Statistics,
+Springer, New York, 2011.
+[49] Melbourne, J., Roberto, C., Quantitative form of Ball’s cube slicing in Rn
+and equality cases in the min-entropy power inequality. Proc. Amer. Math.
+Soc. 150 (2022), no. 8, 3595–3611.
+[50] Melbourne, J., Roberto, C., Transport-majorization to analytic and geo-
+metric inequalities. J. Funct. Anal. 284 (2023), no. 1, Paper No. 109717,
+36 pp.
+[51] Melbourne, J., Roysdon, M., Tang, C., Tkocz, T., From simplex slicing to
+sharp reverse H¨older inequalities. J. Lond. Math. Soc. (2) 113 (2026), no. 3,
+Paper No. e70461.
+[52] Meyer, M., Pajor, A., Sections of the unit ball of ℓn
+p. J. Funct. Anal. 80
+(1988), no. 1, 109–123.
+[53] Nayar, P., Tkocz, T., Extremal sections and projections of certain convex
+bodies: a survey. In: Harmonic analysis and convexity, 343–390, Adv. Anal.
+Geom., 9, De Gruyter, Berlin, 2023.
+[54] Nayar, P., Oleszkiewicz, K., Khinchine type inequalities with optimal con-
+stants via ultra log-concavity. Positivity 16 (2012), no. 2, 359–371.
+24
+===== page 25 =====
+[55] Nazarov, F. L., Podkorytov, A. N., Ball, Haagerup, and distribution func-
+tions. In: Complex analysis, operators, and related topics, 247–267, Oper.
+Theory Adv. Appl., 113, Birkh¨auser, Basel, 2000.
+[56] Newman, C. M., An extension of Khintchine’s inequality. Bull. Amer. Math.
+Soc. 81 (1975), no. 5, 913–915.
+[57] O’Donnell, R., Analysis of Boolean Functions. Cambridge University Press,
+Cambridge, 2014.
+[58] Oleszkiewicz, K., Comparison of moments via Poincar´e-type inequality. In:
+Advances in stochastic inequalities (Atlanta, GA, 1997), 135–148, Con-
+temp. Math., 234, American Mathematical Society, Providence, RI, 1999.
+[59] Oleszkiewicz, K., Pe lczy´nski, A., Polydisc slicing in Cn. Studia Math. 142
+(2000), no. 3, 281–294.
+[60] Pierce, L. B., The Vinogradov mean value theorem (after Wooley, and
+Bourgain, Demeter and Guth). Ast´erisque 407 (2019), Exp. No. 1134, 479–
+564.
+[61] P´olya, G., Berechnung eines bestimmten Integrals. Math. Ann. 74 (1913),
+no. 2, 204–212.
+[62] Rapaport, M., Tkocz, T., Wu, I., Negative moments of Steinhaus sums.
+arXiv:2512.09077, 2025.
+[63] Sawa, J., The best constant in the Khintchine inequality for complex Stein-
+haus variables, the case p = 1. Studia Math. 81 (1985), no. 1, 107–126.
+[64] Szarek, S. J., On the best constants in the Khinchin inequality. Studia
+Math. 58 (1976), no. 2, 197–208.
+[65] Tang, C., Simplex slicing:
+an asymptotically-sharp lower bound. Adv.
+Math. 451 (2024), Paper No. 109784.
+[66] Tang, C., Tkocz, T., Moment lifting in Khinchin-type inequalities: sharp
+constants and stability. In preparation.
+[67] Tomaszewski, B., A simple and elementary proof of the Khintchine inequal-
+ity with the best constant. Bull. Sci. Math. (2) 111 (1987), no. 1, 103–109.
+25
+===== page 26 =====
+[68] Webb, S. P., Central slices of the regular simplex. Ph.D. thesis, University
+College London, 1996.
+[69] Webb, S., Central slices of the regular simplex. Geom. Dedicata 61 (1996),
+no. 1, 19–28.
+26

@@ -1,0 +1,1112 @@
+{
+  "role": "V",
+  "task": "V：这一趟派给你的活是 —— 审这一份优化副本的证明正文并给两态结论：statement_id=000030，proof_manuscript=manuscripts/B/b-proof-000003.md（B 号优化副本，正文 sha 43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6）。它是二阶段逐个优化的那一版（在 F 的 manuscripts/F/f-proof-000003.md 基础上洗过），要做的是逐行走查这一版正文本身、把签盖在这一版上，结论落 verifications/000030.jsonl。注意：稿里现存的 `- V 签：` 块是搬来的旧痕（台账指向 verifications/000042.jsonl#v-000008，不是本号），不要把它当既有签；请按本轮读到的正文重新判。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/B/b-proof-000003.md"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# F 的证明手稿：证明四段叙述的严格骨架：(i) Δ(2)=A_face(2)−A_diag(2)=0 且两者都等于 π；(ii) Δ(…\n\n- 计划：000002 · 子目标：n1\n- V 签：已签=true；判词=成立；连续=3/3；正文sha=43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6；时间=2026-11-24T21:29:17+08:00；签名者=secretary:B；台账=verifications/000042.jsonl#v-000008；手稿号=000003\n- 依赖面洗稿：已洗=true；执行者=secretary-F\n- 稿族：b-proof\n- 产出者：agent-B-B1\n- 正文sha：43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6\n- 命题指纹：da831b7b4a3dc1a603c2df16234b02d42fd9d3d56471081b702d31adc9ea8c7e\n- 命题类型：conjecture\n- 登记时间：2026-11-24T20:51:08+08:00\n- 标签：B_p^3 对角与面对角截面面积公式及 Δ(p) 的最终正性\n- 版本：2026-11-24T21:19:47+08:00@43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6\n\n## 命题\n\n设 1 ≤ p < ∞，B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积，并记 A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。则：(i) A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，且 A_diag(2) = π、A_diag(1) = 3√3/4、lim_{p→∞}A_diag(p) = 3√3；(ii) A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，且 A_face(2) = π、A_face(1) = √2、lim_{p→∞}A_face(p) = 4√2；(iii) Δ 在 [1,∞) 上连续，Δ(2) = 0，Δ(1) = √2 − 3√3/4 > 0，lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0，因而存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 A_face(p) > A_diag(p)。\n\n## 证明\n\n设 p ∈ [1,∞) 固定。记 B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n，记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；并记 A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。\n\n一、先把 A_diag 写成平面 H := {x+y+z=0} 上的极坐标积分。取 u := (1,-1,0)/√2 与 v := (1,1,-2)/√6。直接验算得 ‖u‖ = ‖v‖ = 1、u·v = 0，又 u·(1,1,1) = 0、v·(1,1,1) = 0，故 {u,v} 是 H 的一组单位正交基，而 n := (1,1,1)/√3 是 H 的单位法向量、H = n^⊥。在 H 上以 (u,v) 为基取极坐标 x = r·e(θ)，其中 e(θ) := cosθ·u + sinθ·v、r ≥ 0、θ ∈ [0,2π)。由于 l_p 范数是正齐次的，‖x‖_p = r‖e(θ)‖_p，于是 x ∈ B_p^3 当且仅当 r ≤ ‖e(θ)‖_p^{-1}。平面极坐标的面积元带 Jacobi 因子 r，先对 r 积分得 ∫_0^{‖e(θ)‖_p^{-1}} r dr = (1/2)‖e(θ)‖_p^{-2}，再对 θ 积分便有 A_diag(p) = (1/2)∫_0^{2π}‖e(θ)‖_p^{-2} dθ，这就是 (i) 的第一个等号。\n\n二、把 ‖e(θ)‖_p 算出来。由 u、v 的分量得 e_1 = cos…（落档截断，原 6675 字）",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/B/b-proof-000003.md",
+          "encoding": "utf-8",
+          "bytes_read": 10202,
+          "total_bytes": 10202,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 46,
+          "total_lines": 46,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 46 行",
+          "sha256": "375a5da3c9ab29cbb2aa3d33c108af2e96667fae4c1087c631701a58e692c8a2"
+        },
+        "multi_call": {
+          "turn_index": 0,
+          "call_index": 0,
+          "calls": 2,
+          "step_index": 0
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 36608,
+        "prompt_cache_miss_tokens": 1314,
+        "tokens_in": 37922,
+        "tokens_out": 144,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000190"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "statements",
+          "id": "000030"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "stmt_id": "000030",
+          "origin": "own_result",
+          "kind": "theorem",
+          "label": "截面面积计算核自检通过：极坐标 tanh-sinh 求积（断点取 A cosψ+B sinψ=0 与 |w_i|=|w_j| 在 [0,2π) 上的全部根）在",
+          "statement_text": "lp3-section-validate-v3",
+          "statement_full": "截面面积计算核自检通过：极坐标 tanh-sinh 求积（断点取 A cosψ+B sinψ=0 与 |w_i|=|w_j| 在 [0,2π) 上的全部根）在 p=2 上给任意中心截面面积 π（偏差 ≤1e-15）；在 p=1 上与八面体边缘裁剪精确值一致（≤1e-15）；p=1000 上坐标/体对角/面对角截面与立方体精确值 4、3√3、4√2 的偏差随 p 增大而缩小且落在 O(1/p) 以内；每个 p 的坐标截面等于 4Γ(1+1/p)^2/Γ(1+2/p)（相对偏差 ≤1e-13）；面积对平面基的旋转不变（≤1e-12）；粗嵌套 Simpson 法随加密收敛到极坐标值。",
+          "proof_text": "",
+          "source_lit_id": null,
+          "page_range": {
+            "start": null,
+            "end": null,
+            "label": ""
+          },
+          "quote_verified": null,
+          "quote_mode": "",
+          "quote_reason": "手稿收录（D 只递指针）：普通数值手稿 `work/E/e-num-000003.md` —— 命题逐字取自 `## 命题`，证明栏空着（业主 2026-11-08：普通数值档不写证明正文），程序在实验行的 `code_path`，引文面不适用",
+          "quote_span": "",
+          "quote_call_sha256": "",
+          "evidence_kind": "cross_check",
+          "bits": {
+            "numeric": "verified",
+            "proof": true,
+            "reviewed": false,
+            "formal": "pending",
+            "audited": false,
+            "origin": "own_result",
+            "evidence": {
+              "numeric": {
+                "entries": [
+                  {
+                    "script": "code/exp/lpsec_validate.py",
+                    "range": "",
+                    "n_cases": 0,
+                    "n_counterexamples": 0,
+                    "code_hash": "226a5da3ceebc6ed",
+                    "exp": "exp:000003"
+                  }
+                ],
+                "experiments": [
+                  "000003"
+                ],
+                "experiment_id": "000003",
+                "script": "code/exp/lpsec_validate.py",
+                "code_hash": "226a5da3ceebc6ed",
+                "manuscript": "work/E/e-num-000003.md",
+                "manuscript_sha256": "6b67487691efdd67657db5a075a5cc19c0b9168229f248f08ee8eea8d8b731c3",
+                "certificate": false
+              },
+              "numeric_reason": "",
+              "proof_process": "1. 【前提】固定 1 ≤ p < ∞；B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。（前提）（前提）\n2. 【推导】由 stmt:000034 的 (i)，对每个单位法向 n 与 n^⊥ 的任意单位正交基 (u,v) 有 A_p(n) = (1/2)∫_0^{2π}‖cosθ·u+sinθ·v‖_p^{-2}dθ。取 n = (1,1,1)/√3、u = (1,-1,0)/√2、v = (1,1,-2)/√6（直接验算 ‖u‖=‖v‖=1、u·v=0、u·n=v·n=0，故 {u,v} 是 H := {x+y+z=0} 的单位正交基）；另一路参数化 Φ(x,y) := (x,y,−x−y) 是 R²→H 的双射，∂_xΦ=(1,0,−1) 与 ∂_yΦ=(0,1,−1) 的叉积为 (1,1,1)、模为 √3，故 A_diag(p) = √3∫∫_D dxdy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。（依据：stmt:000034）\n3. 【推导】对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)（r ≥ 0、θ ∈ [0,2π)）：由 |r cosθ|^p+|r sinθ|^p+|r(cosθ+sinθ)|^p = r^p g(θ)（记 g(θ) := |cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p）得 (x,y) ∈ D ⟺ r ≤ g(θ)^{-1/p}；由面积元 r dr dθ 得 ∫∫_D = ∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ，与第 2 步合并即 A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，这给出 (i) 的积分式。（依据：stmt:000034）\n4. 【推导】一致控制：g ≥ max(|cosθ|,|sinθ|)^p ≥ (1/√2)^p（因为 max(|cosθ|,|sinθ|) ≥ 1/√2），故对一切 p ∈ [1,∞) 与一切 θ 有 0 < g(θ)^{-2/p} ≤ (1/√2)^{-2} = 2；又 (p,θ) ↦ g(θ) 连续且在每个局部 p-区间上 g 有与 p 无关的正下界，故 θ ↦ g(θ)^{-2/p} 关于 p 逐点连续。（依据：stmt:000034）\n5. 【推导】p = 2 时 g(θ) = cos²θ+sin²θ+(cosθ+sinθ)² = 2+sin2θ；代换 u = 2θ 后用 ∫_0^{2π}du/(a+b sin u) = 2π/√(a²−b²)（取 a=2、b=1）得 ∫_0^{2π} dθ/(2+sin2θ) = ∫_0^{2π} du/(2+sin u) = 2π/√3，此处 p=2 使 g^{-2/p} 化为 g^{-1}，故 A_diag(2) = (√3/2)·(2π/√3) = π。（依据：stmt:000034）\n6. 【推导】由 stmt:000034 的 (ii)(iii)(iv) 的闭式 A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，在 p = 2 处得 A_face(2) = 2^0·4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π；与第 5 步合并得 Δ(2) = π − π = 0。（依据：stmt:000034）\n7. 【推导】Δ(1) 的计算：A_face(1) = 2^{-1/2}·4Γ(2)²/Γ(3) = 2^{-1/2}·4·1/2 = √2（Γ(2)=1、Γ(3)=2）；A_diag(1)：p = 1 时 g = |cosθ|+|sinθ|+|cosθ+sinθ| 满足 g(θ+π) = g(θ)，且在 [0,π/2] 上 g = 2(cosθ+sinθ)（故 g^{-2} = (1/4)(cosθ+sinθ)^{-2}）、在 [π/2,3π/4] 上 g = 2sinθ（g^{-2} = (1/4)sin^{-2}θ）、在 [3π/4,π] 上 g = −2cosθ（g^{-2} = (1/4)cos^{-2}θ）；三段对 ∫g^{-2} 的贡献各为 1/4（分别用 ∫_0^{π/2}dθ/(cosθ+sinθ)² = 1、[−cotθ] 与 [tanθ] 在两个端点区间上的取值各得 1），故 ∫_0^{2π}g^{-2}dθ = 2·(1/4+1/4+1/4) = 3/2，A_diag(1) = (√3/2)·(3/2) = 3√3/4；于是 Δ(1) = √2 − 3√3/4 > 0，因为 4√2 > 3√3 ⟺ 32 > 27。（依据：stmt:000034）\n8. 【推导】Δ 的连续性：Γ 在 (0,∞) 上连续且取正值，p ↦ 1/p、1+1/p、1+2/p 在 [1,∞) 上连续，故 A_face 在 [1,∞) 上连续；由第 4 步与 p 无关的控制 g^{-2/p} ≤ 2 与逐点连续性，有界收敛定理给出 p ↦ ∫_0^{2π}g(θ)^{-2/p}dθ 在 [1,∞) 上连续，故 A_diag 连续；两者相减得 Δ 在 [1,∞) 上连续。（依据：stmt:000034）\n9. 【推导】p→∞ 时 A_diag 的极限：记 m(θ) := max(|cosθ|,|sinθ|,|cosθ+sinθ|)，则 m(θ)^p ≤ g(θ) ≤ 3m(θ)^p，故对每个 θ 有 g(θ)^{-2/p} → m(θ)^{-2}；又 g ≥ m^p 给出 g^{-2/p} ≤ m^{-2} ≤ 2（因 m ≥ 1/√2），有界收敛定理给出 A_diag(p) → (√3/2)∫_0^{2π}m(θ)^{-2}dθ。按符号分段：在 [0,π/2] 上 m = cosθ+sinθ、在 [π/2,3π/4] 上 m = sinθ、在 [3π/4,π] 上 m = −cosθ，且 m(θ+π) = m(θ)，三段各贡献 1（同上一步的三段积分），故 ∫_0^{2π}m^{-2}dθ = 2·3 = 6，于是 lim_{p→∞}A_diag(p) = (√3/2)·6 = 3√3。（依据：stmt:000034）\n10. 【推导】p→∞ 时 A_face 的极限：C_p := 4Γ(1+1/p)²/Γ(1+2/p) → 4Γ(1)²/Γ(1) = 4（Γ 连续、Γ(1)=1），又 2^{1/2−1/p} → √2，故 A_face(p) → 4√2；与第 9 步合并得 lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0（同样由 32 > 27）。（依据：stmt:000034）\n11. 【推导】收尾：记 L := 4√2 − 3√3 > 0；由第 8 步 Δ 的连续性与第 10 步 lim Δ = L，取 ε := L/2 > 0，则存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 |Δ(p) − L| < ε，从而 Δ(p) > L/2 > 0，即 A_face(p) > A_diag(p) 对一切 p ≥ P0 成立，这给出 (iii) 的最后一句。（依据：stmt:000034）",
+              "proof_source": "own",
+              "reviewed_by": {},
+              "reviewed_source": "",
+              "formal": {},
+              "formal_reason": "",
+              "audited_by": {},
+              "optimized_by_proof": {
+                "2": false
+              }
+            },
+            "voided_by": {},
+            "grade": "strong_conjecture",
+            "audited_badge": false
+          },
+          "status": "active",
+          "derived_from": [],
+          "aliases": [],
+          "doc_id": null,
+          "line_range": {
+            "start": null,
+            "end": null,
+            "label": "exp:000003"
+          },
+          "created_at": "2026-11-24T18:25:33+08:00",
+          "created_by": "secretary-B",
+          "_proposition_adjudication": {
+            "checked": true,
+            "attempted": false,
+            "verdict": "different",
+            "canonical_name": "",
+            "same_as": "",
+            "basis": "查过：没有可比的候选 ⇒ 不同",
+            "reason": "查过：命题台账里没有可检索的 active 命题（候选 0 条）⇒ 注册新的",
+            "reused": false,
+            "seam_source": "agent_b.register_statement:same_statement",
+            "seam_attempted": false,
+            "at": "2026-11-24T18:25:33+08:00"
+          },
+          "manuscripts": {
+            "1": "work/E/e-num-000003.md",
+            "2": "manuscripts/F/f-proof-000003.md"
+          },
+          "manuscript_id": "000003",
+          "manuscript_family": "e-num",
+          "_kind_upgrade": {
+            "from": "conjecture",
+            "to": "theorem",
+            "basis": "手稿签块（连续 3/3 成立、正文 sha 相符）",
+            "grade": "strong_conjecture",
+            "by": "secretary-B",
+            "at": "2026-11-24T21:32:49+08:00"
+          },
+          "proofs": [
+            {
+              "proof_no": 2,
+              "text": "1. 【前提】固定 1 ≤ p < ∞；B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。（前提）（前提）\n2. 【推导】由 stmt:000034 的 (i)，对每个单位法向 n 与 n^⊥ 的任意单位正交基 (u,v) 有 A_p(n) = (1/2)∫_0^{2π}‖cosθ·u+sinθ·v‖_p^{-2}dθ。取 n = (1,1,1)/√3、u = (1,-1,0)/√2、v = (1,1,-2)/√6（直接验算 ‖u‖=‖v‖=1、u·v=0、u·n=v·n=0，故 {u,v} 是 H := {x+y+z=0} 的单位正交基）；另一路参数化 Φ(x,y) := (x,y,−x−y) 是 R²→H 的双射，∂_xΦ=(1,0,−1) 与 ∂_yΦ=(0,1,−1) 的叉积为 (1,1,1)、模为 √3，故 A_diag(p) = √3∫∫_D dxdy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。（依据：stmt:000034）\n3. 【推导】对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)（r ≥ 0、θ ∈ [0,2π)）：由 |r cosθ|^p+|r sinθ|^p+|r(cosθ+sinθ)|^p = r^p g(θ)（记 g(θ) := |cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p）得 (x,y) ∈ D ⟺ r ≤ g(θ)^{-1/p}；由面积元 r dr dθ 得 ∫∫_D = ∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ，与第 2 步合并即 A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，这给出 (i) 的积分式。（依据：stmt:000034）\n4. 【推导】一致控制：g ≥ max(|cosθ|,|sinθ|)^p ≥ (1/√2)^p（因为 max(|cosθ|,|sinθ|) ≥ 1/√2），故对一切 p ∈ [1,∞) 与一切 θ 有 0 < g(θ)^{-2/p} ≤ (1/√2)^{-2} = 2；又 (p,θ) ↦ g(θ) 连续且在每个局部 p-区间上 g 有与 p 无关的正下界，故 θ ↦ g(θ)^{-2/p} 关于 p 逐点连续。（依据：stmt:000034）\n5. 【推导】p = 2 时 g(θ) = cos²θ+sin²θ+(cosθ+sinθ)² = 2+sin2θ；代换 u = 2θ 后用 ∫_0^{2π}du/(a+b sin u) = 2π/√(a²−b²)（取 a=2、b=1）得 ∫_0^{2π} dθ/(2+sin2θ) = ∫_0^{2π} du/(2+sin u) = 2π/√3，此处 p=2 使 g^{-2/p} 化为 g^{-1}，故 A_diag(2) = (√3/2)·(2π/√3) = π。（依据：stmt:000034）\n6. 【推导】由 stmt:000034 的 (ii)(iii)(iv) 的闭式 A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，在 p = 2 处得 A_face(2) = 2^0·4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π；与第 5 步合并得 Δ(2) = π − π = 0。（依据：stmt:000034）\n7. 【推导】Δ(1) 的计算：A_face(1) = 2^{-1/2}·4Γ(2)²/Γ(3) = 2^{-1/2}·4·1/2 = √2（Γ(2)=1、Γ(3)=2）；A_diag(1)：p = 1 时 g = |cosθ|+|sinθ|+|cosθ+sinθ| 满足 g(θ+π) = g(θ)，且在 [0,π/2] 上 g = 2(cosθ+sinθ)（故 g^{-2} = (1/4)(cosθ+sinθ)^{-2}）、在 [π/2,3π/4] 上 g = 2sinθ（g^{-2} = (1/4)sin^{-2}θ）、在 [3π/4,π] 上 g = −2cosθ（g^{-2} = (1/4)cos^{-2}θ）；三段对 ∫g^{-2} 的贡献各为 1/4（分别用 ∫_0^{π/2}dθ/(cosθ+sinθ)² = 1、[−cotθ] 与 [tanθ] 在两个端点区间上的取值各得 1），故 ∫_0^{2π}g^{-2}dθ = 2·(1/4+1/4+1/4) = 3/2，A_diag(1) = (√3/2)·(3/2) = 3√3/4；于是 Δ(1) = √2 − 3√3/4 > 0，因为 4√2 > 3√3 ⟺ 32 > 27。（依据：stmt:000034）\n8. 【推导】Δ 的连续性：Γ 在 (0,∞) 上连续且取正值，p ↦ 1/p、1+1/p、1+2/p 在 [1,∞) 上连续，故 A_face 在 [1,∞) 上连续；由第 4 步与 p 无关的控制 g^{-2/p} ≤ 2 与逐点连续性，有界收敛定理给出 p ↦ ∫_0^{2π}g(θ)^{-2/p}dθ 在 [1,∞) 上连续，故 A_diag 连续；两者相减得 Δ 在 [1,∞) 上连续。（依据：stmt:000034）\n9. 【推导】p→∞ 时 A_diag 的极限：记 m(θ) := max(|cosθ|,|sinθ|,|cosθ+sinθ|)，则 m(θ)^p ≤ g(θ) ≤ 3m(θ)^p，故对每个 θ 有 g(θ)^{-2/p} → m(θ)^{-2}；又 g ≥ m^p 给出 g^{-2/p} ≤ m^{-2} ≤ 2（因 m ≥ 1/√2），有界收敛定理给出 A_diag(p) → (√3/2)∫_0^{2π}m(θ)^{-2}dθ。按符号分段：在 [0,π/2] 上 m = cosθ+sinθ、在 [π/2,3π/4] 上 m = sinθ、在 [3π/4,π] 上 m = −cosθ，且 m(θ+π) = m(θ)，三段各贡献 1（同上一步的三段积分），故 ∫_0^{2π}m^{-2}dθ = 2·3 = 6，于是 lim_{p→∞}A_diag(p) = (√3/2)·6 = 3√3。（依据：stmt:000034）\n10. 【推导】p→∞ 时 A_face 的极限：C_p := 4Γ(1+1/p)²/Γ(1+2/p) → 4Γ(1)²/Γ(1) = 4（Γ 连续、Γ(1)=1），又 2^{1/2−1/p} → √2，故 A_face(p) → 4√2；与第 9 步合并得 lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0（同样由 32 > 27）。（依据：stmt:000034）\n11. 【推导】收尾：记 L := 4√2 − 3√3 > 0；由第 8 步 Δ 的连续性与第 10 步 lim Δ = L，取 ε := L/2 > 0，则存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 |Δ(p) − L| < ε，从而 Δ(p) > L/2 > 0，即 A_face(p) > A_diag(p) 对一切 p ≥ P0 成立，这给出 (iii) 的最后一句。（依据：stmt:000034）",
+              "proof_sha256": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+              "created_at": "2026-11-24T21:32:50+08:00"
+            }
+          ],
+          "proof_no": 2,
+          "proof_sha256": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+          "proof_routes": {},
+          "route": ""
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "id": "000030",
+          "id_field": "stmt_id",
+          "found": true
+        },
+        "warn": "这一步给了 2 条调用，已按顺序逐条：第 1 条 fs.read 成功；第 2 条 table.get 成功。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 0,
+          "call_index": 1,
+          "calls": 2,
+          "step_index": 1,
+          "summary": "这一步给了 2 条调用，已按顺序逐条：第 1 条 fs.read 成功；第 2 条 table.get 成功。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 0,
+            "calls": 2,
+            "items": 2,
+            "steps": [
+              0,
+              1
+            ],
+            "executed": 2,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000190"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/B/b-proof-000003.md",
+          "start_line": 20,
+          "max_lines": 30
+        },
+        "why": "续读证明正文后半段（上一次读数在「六、p→∞ 的极限」处被观测层截断）"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "\n设 p ∈ [1,∞) 固定。记 B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n，记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；并记 A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。\n\n一、先把 A_diag 写成平面 H := {x+y+z=0} 上的极坐标积分。取 u := (1,-1,0)/√2 与 v := (1,1,-2)/√6。直接验算得 ‖u‖ = ‖v‖ = 1、u·v = 0，又 u·(1,1,1) = 0、v·(1,1,1) = 0，故 {u,v} 是 H 的一组单位正交基，而 n := (1,1,1)/√3 是 H 的单位法向量、H = n^⊥。在 H 上以 (u,v) 为基取极坐标 x = r·e(θ)，其中 e(θ) := cosθ·u + sinθ·v、r ≥ 0、θ ∈ [0,2π)。由于 l_p 范数是正齐次的，‖x‖_p = r‖e(θ)‖_p，于是 x ∈ B_p^3 当且仅当 r ≤ ‖e(θ)‖_p^{-1}。平面极坐标的面积元带 Jacobi 因子 r，先对 r 积分得 ∫_0^{‖e(θ)‖_p^{-1}} r dr = (1/2)‖e(θ)‖_p^{-2}，再对 θ 积分便有 A_diag(p) = (1/2)∫_0^{2π}‖e(θ)‖_p^{-2} dθ，这就是 (i) 的第一个等号。\n\n二、把 ‖e(θ)‖_p 算出来。由 u、v 的分量得 e_1 = cosθ/√2 + sinθ/√6 = (√3cosθ+sinθ)/√6、e_2 = −cosθ/√2 + sinθ/√6 = −(√3cosθ−sinθ)/√6、e_3 = −2sinθ/√6。用余弦的差角公式 √3cosθ+sinθ = 2cos(θ−π/6) 与 √3cosθ−sinθ = 2cos(θ+π/6)，得 |e_1| = (2/√6)|cos(θ−π/6)|、|e_2| = (2/√6)|cos(θ+π/6)|、|e_3| = (2/√6)|sinθ|。记 S(θ) := |cos(θ−π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p，则 ‖e(θ)‖_p^p = (2/√6)^p·S(θ)；因为 (2/√6)² = 2/3，两边取 −2/p 次幂得 ‖e(θ)‖_p^{-2} = (3/2)·S(θ)^{-2/p}。代回上一段，便得 (i) 的第二个等号 A_diag(p) = (3/4)∫_0^{2π} S(θ)^{-2/p} dθ。\n\n三、另一条路把同一个面积写进 (x,y) 平面，这给出 (ii)。H 上的点可唯一写成 (x,y,−x−y)，即 Φ(x,y) := (x,y,−x−y) 是 R² 到 H 的双射；它的偏导向量 ∂_xΦ = (1,0,−1) 与 ∂_yΦ = (0,1,−1) 的叉积为 (1,1,1)、模为 √3，故曲面面积公式给出 A_diag(p) = √3∫∫_D dx dy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。再对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)：记 g(θ) := |cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p，由 |r cosθ|^p+|r sinθ|^p+|r(cosθ+sinθ)|^p = r^p g(θ) 得 (x,y) ∈ D 当且仅当 r ≤ g(θ)^{-1/p}；用面积元 r dr dθ 先对 r 积分得 ∫_0^{g(θ)^{-1/p}} r dr = (1/2)g(θ)^{-2/p}，于是 A_diag(p) = (√3/2)∫_0^{2π} g(θ)^{-2/p} dθ。两条路算的是同一个 A_diag，故上面三个积分表示彼此相等；下文算特例值时用 g(θ) 这一式。\n\n四、A_face 的闭式。取 n_face := (1,1,0)/√2，则 n_face^⊥ 是平面 x+y=0。用 (x,z) ↦ (x,−x,z) 参数化这个平面：两个偏导 (1,−1,0) 与 (0,0,1) 的叉积为 (−1,−1,0)、模为 √2，而该点的 l_p 范数的 p 次幂是 2|x|^p+|z|^p，故 A_face(p) = √2·area{(x,z) : 2|x|^p+|z|^p ≤ 1}。作代换 u := 2^{1/p}x，即 x = 2^{-1/p}u、dx = 2^{-1/p}du，则 2|x|^p = |u|^p，于是 …（落档截断，原 5407 字）",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/B/b-proof-000003.md",
+          "encoding": "utf-8",
+          "bytes_read": 10202,
+          "total_bytes": 10202,
+          "truncated": false,
+          "start_line": 20,
+          "lines_read": 27,
+          "total_lines": 46,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 20–46 行（共 46 行）",
+          "sha256": "375a5da3c9ab29cbb2aa3d33c108af2e96667fae4c1087c631701a58e692c8a2"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 37120,
+        "prompt_cache_miss_tokens": 9393,
+        "tokens_in": 46513,
+        "tokens_out": 286,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000190"
+    },
+    {
+      "index": 3,
+      "shape": "tool",
+      "payload": {
+        "name": "verify.verify_proof",
+        "args": {
+          "statement_id": "000030",
+          "proof_manuscript": "manuscripts/B/b-proof-000003.md"
+        },
+        "why": "把 B 号优化副本（manuscripts/B/b-proof-000003.md，正文 sha 43f4c2ab…）按写成后的样子整体重读，两态结论与 findings 落 verifications/000030.jsonl"
+      },
+      "result": {
+        "tool": "verify.verify_proof",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "kind": "proof_manuscript_signed",
+          "statement_id": "000030",
+          "verification_id": "",
+          "verdict": "成立",
+          "defect_step": null,
+          "findings": [],
+          "unresolved_errors": 0,
+          "proof_sha256": "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6",
+          "proof_chars": 5312,
+          "signed_bit3": false,
+          "reviewed_by": {},
+          "bits": {},
+          "review_write": {
+            "written": false,
+            "rolled_back": false,
+            "deferred_to": "filing:B",
+            "manuscript_signed": true,
+            "filed": "not_read_by_v",
+            "reason": "这一份正文在稿上已经签过；命题行由 B 收录时按正文 sha 认领（V 不读、也不写 statements）"
+          },
+          "ledger": "",
+          "reason": "already_signed",
+          "detail": "命题 000030 的 000030#p1 在稿`manuscripts/B/b-proof-000003.md` 上已经签过（连续 3/3 成立，正文 sha 43f4c2ab662e…）⇒ 这一趟没有可做的审校：不再重复审、不落新台账行、不问模型。上面那些引用核实与 findings 是那一签留下的读数，不是这一趟新判的（台账那一行：verifications/000030.jsonl#?）。这一份签已经落在稿上；命题行的第 3 位与等级由 B 收录时按正文 sha 认领/现算（V 不写 statements）。要重新审这一份已经签过的证明，先改稿（正文 sha 变了就不短接）。",
+          "exhaustion_review": {},
+          "signer": "",
+          "proof_authors": [],
+          "report_path": "",
+          "checks": [],
+          "missing": [],
+          "citations": [],
+          "citation_checks": [],
+          "citation_gate": {
+            "ok": true,
+            "blocking": [],
+            "weaker": [],
+            "problem": "",
+            "why": ""
+          },
+          "secretary_judge": {},
+          "sign_issuance": {
+            "checked": false,
+            "issue": false,
+            "issued": false,
+            "landed": false,
+            "decision": "",
+            "writeback": {},
+            "streak": 0,
+            "need": 3,
+            "streak_ok": false,
+            "projected": 0,
+            "same_sha": false,
+            "state": "",
+            "reason": "这一趟没走到签发那一步（早退）⇒ 没有发签：`checked=False` 不是「可以签」，也不是「不签发」这一档",
+            "within_call": null,
+            "review_call": "",
+            "ledger_streak": 0,
+            "basis": [],
+            "reading": {},
+            "cost": {},
+            "material": {},
+            "statement_id": "000030"
+          },
+          "review_passes": [],
+          "manuscript_identity": {
+            "checked": true,
+            "statement_id": "000030",
+            "manuscript_id": "000003",
+            "row_manuscript_id": "000003",
+            "matched_by": "manuscript_id",
+            "fallback": false,
+            "row_checked": true,
+            "found": true,
+            "problem": "",
+            "path_checked": true,
+            "path_count": 2,
+            "path_group": 1,
+            "path_problem": "",
+            "why": "稿号 000003 == stmt:000030 行上的 `manuscript_id`，也在第 1 条逐路径记录上 ⇒ 这是这一条命题的稿"
+          },
+          "issued_sign": {},
+          "statement_scope_gate": {}
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 45696,
+        "prompt_cache_miss_tokens": 5073,
+        "tokens_in": 50769,
+        "tokens_out": 15630,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000190"
+    },
+    {
+      "index": 4,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "statements",
+          "fields": [
+            "stmt_id",
+            "label",
+            "status",
+            "kind",
+            "evidence_kind",
+            "manuscript_id",
+            "proof_no"
+          ],
+          "limit": 50
+        },
+        "why": "核对被审的这一份稿（manuscripts/B/b-proof-000003.md 的 命题 与标签）到底对应 statements 表里哪一行：稿头标签是「B_p^3 对角与面对角截面面积公式及 Δ(p) 的最终正性」，与 000030 行的 statement_full（数值自检）看着不是同一条"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": false,
+        "data": null,
+        "error": "statements 没有字段 ['manuscript_id', 'proof_no']；可投影的字段：['aliases', 'bits', 'created_at', 'created_by', 'derived_from', 'doc_id', 'evidence_kind', 'kind', 'label', 'line_range', 'origin', 'page_range', 'proof_routes', 'proof_routes_problem', 'proof_text', 'quote_call_sha256', 'quote_mode', 'quote_reason', 'quote_span', 'quote_verified', 'route', 'source_lit_id', 'statement_full', 'statement_text', 'status', 'stmt_id']（投影只回你点的键，写错一个字就会少一格，所以这里直接拒）",
+        "meta": {
+          "table": "statements",
+          "kind": "param_error"
+        },
+        "参数表": "【参数表】被拒的是参数形状/取值，不是这件事不能做。照下面这张声明表重写一次（键名与类型都要对；表里没列的键一律不许传）：\n- table.list 的参数表：table: string，必填，枚举 [search_requests/literature/relations/research_questions/conjectures/analysis_reports/reprocess_requests/experiments]，16 张表之一；limit: integer，返回条数上限（1-500）；offset: integer，跳过的行数；filter: object，等值过滤：{字段: 期望值}；模糊匹配请用 table.search；fields: array，字段投影：只回这几个键（例如 statements 的 stmt_id / label / kind / evidence_kind）；省略=整行（与改前逐字相同，含 proof_text 全文）（参数表是封闭集合：多传一个键会被拒）"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 49920,
+        "prompt_cache_miss_tokens": 2961,
+        "tokens_in": 52881,
+        "tokens_out": 15425,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000190"
+    },
+    {
+      "index": 5,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "statements",
+          "id": "000034"
+        },
+        "why": "核清「这条证明给的是哪一条命题」：000030 这一行的证明正文里点的是 stmt:000034 的 (i)，要看 000034 究竟写着什么"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "stmt_id": "000034",
+          "origin": "own_result",
+          "kind": "theorem",
+          "label": "B_p^3 中心截面面积 A_p(n) 的积分表示与坐标向/面对角向闭式面积公式",
+          "statement_text": "设 1 ≤ p < ∞，n ∈ R³ 为单位向量，A_p(n) 表示 B_p^3 = {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1} 与平面 n^⊥ 的交的二维 Lebesgue 面积。则对每个这样的 p 与每个单位 n：(i) A_p(n) = (1/2)∫_0^{2π} ‖cosψ·u + sinψ·v‖_p^{-2} dψ，其中 u,v 是 n^⊥ 的任意一组单位正交基，该值不随基的选取而变，A_p(n) 只依赖 n^⊥（从而 A_p(n) = A_p(-n)），并且在带符号坐标置换（把 B_p^3 映到自身的 48 阶变换）下不变；(ii) A_p(e_3) = 4Γ(1+1/p)²/Γ(1+2/p)；(iii) A_p((1,1,0)/√2) = 2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p)，故 A_p((1,1,0)/√2) < A_p(e_3) 当且仅当 p < 2，两者相等当且仅当 p = 2，前者大于后者当且仅当 p > 2；(iv) p = 2 时 A_2(n) = π 对一切单位 n 成立；(v) p = 1 时 A_1(e_3) = 2、A_1((1,1,0)/√2) = √2、A_1((1,1,1)/√3) = 3√3/4。",
+          "statement_full": "设 1 ≤ p < ∞，n ∈ R³ 为单位向量，A_p(n) 表示 B_p^3 = {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1} 与平面 n^⊥ 的交的二维 Lebesgue 面积。则对每个这样的 p 与每个单位 n：(i) A_p(n) = (1/2)∫_0^{2π} ‖cosψ·u + sinψ·v‖_p^{-2} dψ，其中 u,v 是 n^⊥ 的任意一组单位正交基，该值不随基的选取而变，A_p(n) 只依赖 n^⊥（从而 A_p(n) = A_p(-n)），并且在带符号坐标置换（把 B_p^3 映到自身的 48 阶变换）下不变；(ii) A_p(e_3) = 4Γ(1+1/p)²/Γ(1+2/p)；(iii) A_p((1,1,0)/√2) = 2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p)，故 A_p((1,1,0)/√2) < A_p(e_3) 当且仅当 p < 2，两者相等当且仅当 p = 2，前者大于后者当且仅当 p > 2；(iv) p = 2 时 A_2(n) = π 对一切单位 n 成立；(v) p = 1 时 A_1(e_3) = 2、A_1((1,1,0)/√2) = √2、A_1((1,1,1)/√3) = 3√3/4。",
+          "proof_text": "设 1 ≤ p < ∞ 固定，n ∈ R³ 是单位向量。记 B_p^3 = {x ∈ R³ : |x_1|^p+|x_2|^p+|x_3|^p ≤ 1}，并记 A_p(n) 为 B_p^3 与平面 n^⊥ 的交在该平面上的二维 Lebesgue 面积。\\n\\n先做两项准备工作。其一，在 n^⊥ 上取一对单位正交基 (u,v)，把平面上的点写成极坐标 x = r(cosψ·u + sinψ·v)，其中 r ≥ 0、ψ ∈ [0,2π)，并记 w(ψ) = cosψ·u + sinψ·v。由于 l_p 范数是正齐次的，对 x = r·w(ψ) 有 ‖x‖_p = r‖w(ψ)‖_p；于是 x ∈ B_p^3 当且仅当 r ≤ 1/‖w(ψ)‖_p。其二，平面极坐标的面积元带 Jacobi 因子 r，因此 A_p(n) = ∫_0^{2π}∫_0^{1/‖w(ψ)‖_p} r dr dψ = (1/2)∫_0^{2π}‖w(ψ)‖_p^{-2} dψ。由此立刻得到 (i) 的前半：换用另一对单位正交基 (u',v') 只会把参数变成 ψ ↦ ±ψ + ψ_0，即整周期上的平移或反向，积分值不变，所以 A_p(n) 不依赖基的选取、只依赖平面 n^⊥；又 n^⊥ = (-n)^⊥，故 A_p(n) = A_p(-n)。\\n\\n(i) 的后半来自对称性。设 σ 是任一带符号坐标置换矩阵（共 2³·3! = 48 个）。σ 是正交的，且 |(σx)_i| 只是 |x_j| 的一个重排，因此 σ(B_p^3) = B_p^3；同时 σ 把 n^⊥ 映成 (σn)^⊥，而 σ 作为等距同构保持二维 Lebesgue 面积，于是 A_p(σn) = A_p(n)。这说明 A_p 只依赖排序后的 (|n_1|,|n_2|,|n_3|)。\\n\\n其次计算 (ii) 的坐标向截面。n = e_3 时 n^⊥ = {(x,y,0)}，截面是 {(x,y) : |x|^p+|y|^p ≤ 1}，故 A_p(e_3) = 4∫_0^1 (1-x^p)^{1/p} dx。作代换 u = x^p，则 dx = (1/p)u^{1/p-1} du，于是 A_p(e_3) = (4/p)∫_0^1 u^{1/p-1}(1-u)^{1/p} du = (4/p)B(1/p, 1+1/p) = (4/p)·Γ(1/p)Γ(1+1/p)/Γ(1+2/p)。再用 Γ(1/p) = pΓ(1+1/p)，即得 A_p(e_3) = 4Γ(1+1/p)²/Γ(1+2/p)。\\n\\n接着处理 (iii) 的面对角向。取 n = (1,1,0)/√2，则 n^⊥ = span{(1,-1,0)/√2, (0,0,1)}，这两个向量单位正交。把 x ∈ n^⊥ 写成 x = s·(1,-1,0)/√2 + z·(0,0,1)，则 ‖x‖_p^p = 2|s/√2|^p + |z|^p = 2^{1-p/2}|s|^p + |z|^p，而 (s,z) 是正交坐标、面积元为 ds dz；所以该截面等于 {(s,z) : 2^{1-p/2}|s|^p + |z|^p ≤ 1}。为求它的面积，令 c = 2^{1/p-1/2} > 0，则 c^p = 2^{1-p/2}，并且上面的不等式等价于 |cs|^p + |z|^p ≤ 1，也就是 (cs,z) 落在 D_p = {(X,Y) : |X|^p+|Y|^p ≤ 1} 之中；这两个方向是同一个等价式，故映射 T(s,z) = (cs,z) 把该截面双射到 D_p。由于 |det T| = c，面积的伸缩律给出 c·area(截面) = area(D_p)，于是 area(截面) = c^{-1}·area(D_p) = 2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p)，最后一步用的是 (ii)。比较这两个闭式即得 (iii) 的分界：正因子 2^{1/2-1/p} 与 1 的大小由指数 1/2 - 1/p 的符号决定，而该符号由 p 与 2 的大小决定；因此 p < 2 时面对角向面积小于坐标向，p = 2 时两者相等，p > 2 时前者大于后者。\\n\\n(iv) 在 p = 2 时，B_2^3 是欧氏单位球，任何过原点的平面都截得半径为 1 的圆盘，面积为 π；这与 (ii) 的闭式在 p = 2 处的取值一致：4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π。\\n\\n最后 (v) 取 p = 1，此时 B_1^3 是正八面体。(a) 当 n = e_3 时截面为 {|x|+|y| ≤ 1}，这是两条对角线长都为 2 的菱形，面积为 2。(b) 当 n = (1,1,0)/√2 时，由前面截面形状在 p = 1 的特例（2^{1-1/2} = √2）得到 √2|s| + |z| ≤ 1，其顶点为 (±1/√2, 0) 与 (0, ±1)，面积 = (1/2)·(2/√2)·2 = √2，与 (iii) 在 p = 1 的取值 2^{1/2-1}·2 = √2 相符。(c) 当 n = (1,1,1)/√3 时，n^⊥ = {x+y+z = 0}，B_1^3 ∩ n^⊥ 的顶点是 (±1/2, ∓1/2, 0) 这一类点（经坐标置换与取反）共 6 个；它们共面、到原点的距离都是 |(1/2,-1/2,0)| = 1/√2，构成外接半径为 1/√2 的正六边形，面积 = (3√3/2)·(1/√2)² = 3√3/4。",
+          "source_lit_id": null,
+          "page_range": {
+            "start": null,
+            "end": null,
+            "label": ""
+          },
+          "quote_verified": null,
+          "quote_mode": "",
+          "quote_reason": "手稿收录（D 只递指针）：命题正文、证明正文与档位全部逐字取自 `manuscripts/F/f-proof-000000.md` —— 引文面不适用（这份稿是我们自己产出的成果，不是文献里摘的）；V 的签（若有）在手稿块上",
+          "quote_span": "",
+          "quote_call_sha256": "",
+          "evidence_kind": "heuristic",
+          "bits": {
+            "numeric": "pending",
+            "proof": true,
+            "reviewed": true,
+            "formal": "pending",
+            "audited": false,
+            "origin": "own_result",
+            "evidence": {
+              "numeric": {},
+              "numeric_reason": "",
+              "proof_process": "设 1 ≤ p < ∞ 固定，n ∈ R³ 是单位向量。记 B_p^3 = {x ∈ R³ : |x_1|^p+|x_2|^p+|x_3|^p ≤ 1}，并记 A_p(n) 为 B_p^3 与平面 n^⊥ 的交在该平面上的二维 Lebesgue 面积。\\n\\n先做两项准备工作。其一，在 n^⊥ 上取一对单位正交基 (u,v)，把平面上的点写成极坐标 x = r(cosψ·u + sinψ·v)，其中 r ≥ 0、ψ ∈ [0,2π)，并记 w(ψ) = cosψ·u + sinψ·v。由于 l_p 范数是正齐次的，对 x = r·w(ψ) 有 ‖x‖_p = r‖w(ψ)‖_p；于是 x ∈ B_p^3 当且仅当 r ≤ 1/‖w(ψ)‖_p。其二，平面极坐标的面积元带 Jacobi 因子 r，因此 A_p(n) = ∫_0^{2π}∫_0^{1/‖w(ψ)‖_p} r dr dψ = (1/2)∫_0^{2π}‖w(ψ)‖_p^{-2} dψ。由此立刻得到 (i) 的前半：换用另一对单位正交基 (u',v') 只会把参数变成 ψ ↦ ±ψ + ψ_0，即整周期上的平移或反向，积分值不变，所以 A_p(n) 不依赖基的选取、只依赖平面 n^⊥；又 n^⊥ = (-n)^⊥，故 A_p(n) = A_p(-n)。\\n\\n(i) 的后半来自对称性。设 σ 是任一带符号坐标置换矩阵（共 2³·3! = 48 个）。σ 是正交的，且 |(σx)_i| 只是 |x_j| 的一个重排，因此 σ(B_p^3) = B_p^3；同时 σ 把 n^⊥ 映成 (σn)^⊥，而 σ 作为等距同构保持二维 Lebesgue 面积，于是 A_p(σn) = A_p(n)。这说明 A_p 只依赖排序后的 (|n_1|,|n_2|,|n_3|)。\\n\\n其次计算 (ii) 的坐标向截面。n = e_3 时 n^⊥ = {(x,y,0)}，截面是 {(x,y) : |x|^p+|y|^p ≤ 1}，故 A_p(e_3) = 4∫_0^1 (1-x^p)^{1/p} dx。作代换 u = x^p，则 dx = (1/p)u^{1/p-1} du，于是 A_p(e_3) = (4/p)∫_0^1 u^{1/p-1}(1-u)^{1/p} du = (4/p)B(1/p, 1+1/p) = (4/p)·Γ(1/p)Γ(1+1/p)/Γ(1+2/p)。再用 Γ(1/p) = pΓ(1+1/p)，即得 A_p(e_3) = 4Γ(1+1/p)²/Γ(1+2/p)。\\n\\n接着处理 (iii) 的面对角向。取 n = (1,1,0)/√2，则 n^⊥ = span{(1,-1,0)/√2, (0,0,1)}，这两个向量单位正交。把 x ∈ n^⊥ 写成 x = s·(1,-1,0)/√2 + z·(0,0,1)，则 ‖x‖_p^p = 2|s/√2|^p + |z|^p = 2^{1-p/2}|s|^p + |z|^p，而 (s,z) 是正交坐标、面积元为 ds dz；所以该截面等于 {(s,z) : 2^{1-p/2}|s|^p + |z|^p ≤ 1}。为求它的面积，令 c = 2^{1/p-1/2} > 0，则 c^p = 2^{1-p/2}，并且上面的不等式等价于 |cs|^p + |z|^p ≤ 1，也就是 (cs,z) 落在 D_p = {(X,Y) : |X|^p+|Y|^p ≤ 1} 之中；这两个方向是同一个等价式，故映射 T(s,z) = (cs,z) 把该截面双射到 D_p。由于 |det T| = c，面积的伸缩律给出 c·area(截面) = area(D_p)，于是 area(截面) = c^{-1}·area(D_p) = 2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p)，最后一步用的是 (ii)。比较这两个闭式即得 (iii) 的分界：正因子 2^{1/2-1/p} 与 1 的大小由指数 1/2 - 1/p 的符号决定，而该符号由 p 与 2 的大小决定；因此 p < 2 时面对角向面积小于坐标向，p = 2 时两者相等，p > 2 时前者大于后者。\\n\\n(iv) 在 p = 2 时，B_2^3 是欧氏单位球，任何过原点的平面都截得半径为 1 的圆盘，面积为 π；这与 (ii) 的闭式在 p = 2 处的取值一致：4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π。\\n\\n最后 (v) 取 p = 1，此时 B_1^3 是正八面体。(a) 当 n = e_3 时截面为 {|x|+|y| ≤ 1}，这是两条对角线长都为 2 的菱形，面积为 2。(b) 当 n = (1,1,0)/√2 时，由前面截面形状在 p = 1 的特例（2^{1-1/2} = √2）得到 √2|s| + |z| ≤ 1，其顶点为 (±1/√2, 0) 与 (0, ±1)，面积 = (1/2)·(2/√2)·2 = √2，与 (iii) 在 p = 1 的取值 2^{1/2-1}·2 = √2 相符。(c) 当 n = (1,1,1)/√3 时，n^⊥ = {x+y+z = 0}，B_1^3 ∩ n^⊥ 的顶点是 (±1/2, ∓1/2, 0) 这一类点（经坐标置换与取反）共 6 个；它们共面、到原点的距离都是 |(1/2,-1/2,0)| = 1/√2，构成外接半径为 1/√2 的正六边形，面积 = (3√3/2)·(1/√2)² = 3√3/4。",
+              "proof_source": "own",
+              "reviewed_by": {
+                "verifier": "V",
+                "verification_id": "v-000004",
+                "round": null,
+                "verdict": "成立",
+                "evidence": "verifications/000034.jsonl#v-000004",
+                "findings": [],
+                "proof_no": 1,
+                "proof_sha256": "e8f5eec99ab03a9036ddbe36a376f073aa03e50665d3d3f3af32e15f5d908fb8"
+              },
+              "reviewed_source": "v",
+              "formal": {},
+              "formal_reason": "",
+              "audited_by": {},
+              "optimized_by_proof": {
+                "1": true
+              },
+              "reviewed_by_proof": {
+                "1": true
+              },
+              "reviewed_sha_by_proof": {
+                "1": "e8f5eec99ab03a9036ddbe36a376f073aa03e50665d3d3f3af32e15f5d908fb8"
+              }
+            },
+            "voided_by": {},
+            "grade": "pre_theorem",
+            "audited_badge": false
+          },
+          "status": "active",
+          "derived_from": [],
+          "aliases": [],
+          "doc_id": null,
+          "line_range": {
+            "start": null,
+            "end": null,
+            "label": "manuscripts/F/f-proof-000000.md"
+          },
+          "created_at": "2026-11-24T18:42:49+08:00",
+          "created_by": "secretary-B",
+          "_proof_routes": {
+            "1": "标签中的『F 攻坚 000000 子目标 s2』为攻坚任务子目标编号，非证明路线"
+          },
+          "_proposition_adjudication": {
+            "checked": true,
+            "attempted": true,
+            "verdict": "different",
+            "canonical_name": "B_p^3 中心截面面积 A_p(n) 的积分表示与坐标向/面对角向闭式面积公式",
+            "same_as": "",
+            "basis": "条件比对：本条条件为『1≤p<∞ 任意、n∈R³ 任意单位向量』；000030 的条件是 p=2、p=1、p=1000 等具体取值的数值自检，000031/000032/000033 的条件是离散集 p∈{1.05,…,1000} 且多限于基本域 0≤a≤b≤c —— 条件强弱不同（有限离散样本 vs 任意 p 与任意 n），按准绳判 different；结论比对：本条结论是 (i) A_p(n)=(1/2)∫‖cosψ·u+sinψ·v‖_p^{-2}dψ 且与基选取/±n/坐标置换无关、(ii) 坐标向闭式 4Γ(1+1/p)²/Γ(1+2/p)、(iii) 面对角向闭式 2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p) 及与坐标向的大小比较、(iv) p=2 时 A_2≡π、(v) p=1 的三个具体值；四条候选的结论分别是数值偏差界（000030）、最大面积位置与 r(p) 临界性（000031）、公式+单调性+分段结构（000032）、边界弧上最大值取端点（000033）—— 结论组均不一致；000032 的 (i) 与本条 (ii) 坐标面积公式有部分重叠，但缺本条 (i) 的积分表示、(iii) 的 2^{1/2-1/p} 面对角闭式及 (iv)(v)，且条件限定在有限 p 集，不构成同一定理；判定准绳（how_to_judge）：只比条件与结论，条件强弱不同即判 different，不因『同一主题（B_p^3 中心截面）』而判 same；本条是『任意 1≤p<∞、任意单位 n』下 B_p^3 中心截面面积的积分表示与闭式面积公式（含 p=2、p=1 特例），而四条候选要么是有限离散 p 集上的极值方向/比值临界性，要么是数值自检，条件强弱与结论组均不同，无一条与之同一定理。",
+            "reason": "本条是『任意 1≤p<∞、任意单位 n』下 B_p^3 中心截面面积的积分表示与闭式面积公式（含 p=2、p=1 特例），而四条候选要么是有限离散 p 集上的极值方向/比值临界性，要么是数值自检，条件强弱与结论组均不同，无一条与之同一定理。",
+            "reused": false,
+            "seam_source": "secretary（LlmSeam.for_secretary）",
+            "seam_attempted": true,
+            "at": "2026-11-24T18:42:49+08:00"
+          },
+          "proof_authors": [
+            "F"
+          ],
+          "proof_no": 1,
+          "proof_sha256": "e8f5eec99ab03a9036ddbe36a376f073aa03e50665d3d3f3af32e15f5d908fb8",
+          "manuscript_id": "000000",
+          "manuscripts": {
+            "1": "manuscripts/B/b-proof-000000.md"
+          },
+          "_grade_recomputed": {
+            "checked": true,
+            "from": "conjecture",
+            "to": "pre_theorem",
+            "from_kind": "heuristic",
+            "to_kind": "proof_review",
+            "channel": "text",
+            "why": "V 的签刚落位：这一行有证明正文，且台账里那一签盖住的就是现行这一版 ⇒ 按五元位现算等级（只算等级，不写档位）；历史列 `evidence_kind`=heuristic 只是读数，判定面读 `pre_theorem`",
+            "basis": "verifications/pending/4cbbbeaf3989914e5756c9da973790a81da790ee98b226b4b9c965b430c9fc0a.jsonl#u-000004",
+            "proof_no": 1,
+            "at": "2026-11-24T18:42:50+08:00"
+          },
+          "_kind_upgrade": {
+            "from": "conjecture",
+            "to": "theorem",
+            "basis": "out/vsigns/4cb054c6745ec737591bd41c456ea83a22efa7fa072fbd8f529843d22bfa3c9f.json#u-000004 · 台账 verifications/pending/4cbbbeaf3989914e5756c9da973790a81da790ee98b226b4b9c965b430c9fc0a.jsonl#u-000004",
+            "grade": "conjecture",
+            "by": "agent-B",
+            "at": "2026-11-24T18:42:50+08:00"
+          },
+          "manuscript_family": "b-proof",
+          "proof_history": [
+            {
+              "text": "1. 【前提】固定 1 ≤ p < ∞ 与单位向量 n ∈ R³；B_p^3 := {x ∈ R³ : |x_1|^p + |x_2|^p + |x_3|^p ≤ 1}；A_p(n) := B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；取 n^⊥ 的一对单位正交基 (u, v)。（前提）\n2. 【前提】在 n^⊥ 上取极坐标 x = r(cosψ·u + sinψ·v)，r ≥ 0，ψ ∈ [0, 2π)，记 w(ψ) := cosψ·u + sinψ·v；对 x = r·w(ψ) 有 ‖x‖_p = r‖w(ψ)‖_p（r ≥ 0，l_p 范数正齐次），故 x ∈ B_p^3 ⟺ r ≤ 1/‖w(ψ)‖_p。（前提）\n3. 【推导】由平面极坐标面积公式（Jacobi 因子 r）得 A_p(n) = ∫_0^{2π}∫_0^{1/‖w(ψ)‖_p} r dr dψ = (1/2)∫_0^{2π}‖w(ψ)‖_p^{-2} dψ。换成另一对单位正交基 (u',v') 只使 ψ ↦ ±ψ + ψ_0（整周期上的平移与反向），积分值不变；又 n^⊥ = (-n)^⊥，故 A_p(n) = A_p(-n)。这给出 (i) 的前半。（前提）\n4. 【推导】设 σ 为任一带符号坐标置换矩阵（2³·3! = 48 个），则 σ 正交且 |(σx)_i| 只是 |x_j| 的重排，故 σ(B_p^3) = B_p^3；同时 σ(n^⊥) = (σn)^⊥，而 σ 是等距同构、保二维 Lebesgue 面积，故 A_p(σn) = A_p(n)。这给出 (i) 的后半：A_p 只依赖排序后的 (|n_1|,|n_2|,|n_3|)。（前提）\n5. 【推导】(ii)：n = e_3 时 n^⊥ = {(x,y,0)}，A_p(e_3) = area{(x,y) : |x|^p+|y|^p ≤ 1} = 4∫_0^1 (1-x^p)^{1/p} dx。代换 u = x^p（dx = (1/p)u^{1/p-1}du）得 A_p(e_3) = (4/p)∫_0^1 u^{1/p-1}(1-u)^{1/p}du = (4/p)B(1/p, 1+1/p) = (4/p)·Γ(1/p)Γ(1+1/p)/Γ(1+2/p)；再用 Γ(1+1/p) = (1/p)Γ(1/p)（即 Γ(1/p) = pΓ(1+1/p)）得 A_p(e_3) = 4Γ(1+1/p)²/Γ(1+2/p)。（前提）\n6. 【推导】(iii) 之截面形状：n = (1,1,0)/√2 时 n^⊥ = span{(1,-1,0)/√2, (0,0,1)}，这两向量单位正交；把 x ∈ n^⊥ 写成 x = s·(1,-1,0)/√2 + z·(0,0,1)，则 ‖x‖_p^p = 2|s/√2|^p + |z|^p = 2^{1-p/2}|s|^p + |z|^p，且 (s,z) 是正交坐标、面积元为 ds dz，故截面 = {(s,z) : 2^{1-p/2}|s|^p + |z|^p ≤ 1}。（前提）\n7. 【推导】(iii) 之面积（上一版此处换元方向取反，现改正）：令 c := 2^{1/p-1/2} > 0，则 c^p = 2^{1-p/2}，于是「(s,z) 属于第 6 步的截面 ⟺ |cs|^p + |z|^p ≤ 1 ⟺ (cs,z) 属于 D_p := {(X,Y) : |X|^p+|Y|^p ≤ 1}」（两个方向是同一个等价式，故是双射）。取线性映射 T(s,z) := (cs,z)，det T = c，由 area(T(E)) = |det T|·area(E) 及 T(截面) = D_p 得 c·area(截面) = area(D_p)，即 area(截面) = c^{-1}·area(D_p) = 2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p)（末一步用第 5 步的 (ii)）。（前提）\n8. 【推导】(iii) 之比较：正因子 2^{1/2-1/p} 与 1 的大小比较等价于 1/2 - 1/p 与 0 的比较，等价于 p 与 2 的比较（p > 0）；结合第 7 步与第 5 步即得 (iii) 的三个结论（p < 2 时小、p = 2 时等、p > 2 时大）。（前提）\n9. 【推导】(iv)：p = 2 时 B_2^3 是欧氏单位球，任一过原点的平面截得半径 1 的圆盘，面积 π；与 (ii) 的闭式在 p = 2 的取值对照：4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π，两者一致。（前提）\n10. 【推导】(v)：p = 1 时 B_1^3 是正八面体。(a) n = e_3：截面 {|x|+|y| ≤ 1} 是两条对角线长都为 2 的菱形，面积 2。(b) n = (1,1,0)/√2：由第 6 步在 p = 1 的特例（2^{1-1/2} = √2）截面为 √2|s| + |z| ≤ 1，顶点为 (±1/√2, 0), (0, ±1)，面积 = (1/2)·(2/√2)·2 = √2（与 (iii) 在 p = 1 的取值 2^{1/2-1}·2 = √2 一致）。(c) n = (1,1,1)/√3：n^⊥ = {x+y+z = 0}，B_1^3 ∩ n^⊥ 的顶点是 (±1/2, ∓1/2, 0) 一类共 6 个点（坐标置换与取反），它们共面、外接半径 |(1/2,-1/2,0)| = 1/√2，构成正六边形，面积 = (3√3/2)·(1/√2)² = 3√3/4。（前提）",
+              "sha": "4cb054c6745ec737591bd41c456ea83a22efa7fa072fbd8f529843d22bfa3c9f",
+              "at": "2026-11-24T19:14:29+08:00",
+              "replaced_by": "e8f5eec99ab03a9036ddbe36a376f073aa03e50665d3d3f3af32e15f5d908fb8",
+              "proof_no": 1
+            }
+          ],
+          "proof_routes": {
+            "1": "标签中的『F 攻坚 000000 子目标 s2』为攻坚任务子目标编号，非证明路线"
+          },
+          "route": "标签中的『F 攻坚 000000 子目标 s2』为攻坚任务子目标编号，非证明路线"
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "id": "000034",
+          "id_field": "stmt_id",
+          "found": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 52096,
+        "prompt_cache_miss_tokens": 1893,
+        "tokens_in": 53989,
+        "tokens_out": 14180,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000190"
+    },
+    {
+      "index": 6,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "statements",
+          "id": "000042"
+        },
+        "why": "稿上签块记的台账是 verifications/000042.jsonl#v-000008 —— 要核清这一版正文真正对应的是哪一条命题（000042 与 000030 各写着什么）"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "stmt_id": "000042",
+          "origin": "own_result",
+          "kind": "theorem",
+          "label": "B_p^3 对角与面对角截面面积公式及 Δ(p) 的最终正性",
+          "statement_text": "设 1 ≤ p < ∞，B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积，并记 A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。则：(i) A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，且 A_diag(2) = π、A_diag(1) = 3√3/4、lim_{p→∞}A_diag(p) = 3√3；(ii) A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，且 A_face(2) = π、A_face(1) = √2、lim_{p→∞}A_face(p) = 4√2；(iii) Δ 在 [1,∞) 上连续，Δ(2) = 0，Δ(1) = √2 − 3√3/4 > 0，lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0，因而存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 A_face(p) > A_diag(p)。",
+          "statement_full": "设 1 ≤ p < ∞，B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积，并记 A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。则：(i) A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，且 A_diag(2) = π、A_diag(1) = 3√3/4、lim_{p→∞}A_diag(p) = 3√3；(ii) A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，且 A_face(2) = π、A_face(1) = √2、lim_{p→∞}A_face(p) = 4√2；(iii) Δ 在 [1,∞) 上连续，Δ(2) = 0，Δ(1) = √2 − 3√3/4 > 0，lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0，因而存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 A_face(p) > A_diag(p)。",
+          "proof_text": "设 p ∈ [1,∞) 固定。记 B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n，记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；并记 A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。\n\n一、先把 A_diag 写成平面 H := {x+y+z=0} 上的极坐标积分。取 u := (1,-1,0)/√2 与 v := (1,1,-2)/√6。直接验算得 ‖u‖ = ‖v‖ = 1、u·v = 0，又 u·(1,1,1) = 0、v·(1,1,1) = 0，故 {u,v} 是 H 的一组单位正交基，而 n := (1,1,1)/√3 是 H 的单位法向量、H = n^⊥。在 H 上以 (u,v) 为基取极坐标 x = r·e(θ)，其中 e(θ) := cosθ·u + sinθ·v、r ≥ 0、θ ∈ [0,2π)。由于 l_p 范数是正齐次的，‖x‖_p = r‖e(θ)‖_p，于是 x ∈ B_p^3 当且仅当 r ≤ ‖e(θ)‖_p^{-1}。平面极坐标的面积元带 Jacobi 因子 r，先对 r 积分得 ∫_0^{‖e(θ)‖_p^{-1}} r dr = (1/2)‖e(θ)‖_p^{-2}，再对 θ 积分便有 A_diag(p) = (1/2)∫_0^{2π}‖e(θ)‖_p^{-2} dθ，这就是 (i) 的第一个等号。\n\n二、把 ‖e(θ)‖_p 算出来。由 u、v 的分量得 e_1 = cosθ/√2 + sinθ/√6 = (√3cosθ+sinθ)/√6、e_2 = −cosθ/√2 + sinθ/√6 = −(√3cosθ−sinθ)/√6、e_3 = −2sinθ/√6。用余弦的差角公式 √3cosθ+sinθ = 2cos(θ−π/6) 与 √3cosθ−sinθ = 2cos(θ+π/6)，得 |e_1| = (2/√6)|cos(θ−π/6)|、|e_2| = (2/√6)|cos(θ+π/6)|、|e_3| = (2/√6)|sinθ|。记 S(θ) := |cos(θ−π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p，则 ‖e(θ)‖_p^p = (2/√6)^p·S(θ)；因为 (2/√6)² = 2/3，两边取 −2/p 次幂得 ‖e(θ)‖_p^{-2} = (3/2)·S(θ)^{-2/p}。代回上一段，便得 (i) 的第二个等号 A_diag(p) = (3/4)∫_0^{2π} S(θ)^{-2/p} dθ。\n\n三、另一条路把同一个面积写进 (x,y) 平面，这给出 (ii)。H 上的点可唯一写成 (x,y,−x−y)，即 Φ(x,y) := (x,y,−x−y) 是 R² 到 H 的双射；它的偏导向量 ∂_xΦ = (1,0,−1) 与 ∂_yΦ = (0,1,−1) 的叉积为 (1,1,1)、模为 √3，故曲面面积公式给出 A_diag(p) = √3∫∫_D dx dy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。再对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)：记 g(θ) := |cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p，由 |r cosθ|^p+|r sinθ|^p+|r(cosθ+sinθ)|^p = r^p g(θ) 得 (x,y) ∈ D 当且仅当 r ≤ g(θ)^{-1/p}；用面积元 r dr dθ 先对 r 积分得 ∫_0^{g(θ)^{-1/p}} r dr = (1/2)g(θ)^{-2/p}，于是 A_diag(p) = (√3/2)∫_0^{2π} g(θ)^{-2/p} dθ。两条路算的是同一个 A_diag，故上面三个积分表示彼此相等；下文算特例值时用 g(θ) 这一式。\n\n四、A_face 的闭式。取 n_face := (1,1,0)/√2，则 n_face^⊥ 是平面 x+y=0。用 (x,z) ↦ (x,−x,z) 参数化这个平面：两个偏导 (1,−1,0) 与 (0,0,1) 的叉积为 (−1,−1,0)、模为 √2，而该点的 l_p 范数的 p 次幂是 2|x|^p+|z|^p，故 A_face(p) = √2·area{(x,z) : 2|x|^p+|z|^p ≤ 1}。作代换 u := 2^{1/p}x，即 x = 2^{-1/p}u、dx = 2^{-1/p}du，则 2|x|^p = |u|^p，于是 A_face(p) = √2·2^{-1/p}·S_p，其中 S_p := area{(u,z) : |u|^p+|z|^p ≤ 1}。算 S_p：由对称性与竖向切片（固定 u 时 |z| ≤ (1−|u|^p)^{1/p}）得 S_p = 4∫_0^1 (1−u^p)^{1/p} du。作代换 t = u^p（u = t^{1/p}、du = (1/p)t^{1/p−1}dt）把积分化为 Beta 积分：4∫_0^1 (1−u^p)^{1/p} du = (4/p)∫_0^1 t^{1/p−1}(1−t)^{1/p} dt = (4/p)B(1/p, 1+1/p) = (4/p)·Γ(1/p)Γ(1+1/p)/Γ(1+2/p) = 4Γ(1+1/p)²/Γ(1+2/p)，最后一步用了 Γ(1+1/p) = Γ(1/p)/p。代回上式即得 (ii) 的闭式 A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)。\n\n五、特例值。p = 2 时 g(θ) = cos²θ+sin²θ+(cosθ+sinθ)² = 2+sin2θ，而 g^{-2/p} 在 p = 2 处就是 g^{-1}，故 A_diag(2) = (√3/2)∫_0^{2π} dθ/(2+sin2θ)。作代换 u = 2θ：θ 走一整圈对应 u 走两圈、且 sin 以 2π 为周期，故 ∫_0^{2π} dθ/(2+sin2θ) = (1/2)∫_0^{4π} du/(2+sin u) = ∫_0^{2π} du/(2+sin u)；再用 ∫_0^{2π} du/(a+b sin u) = 2π/√(a²−b²)（取 a = 2、b = 1）得它为 2π/√3，于是 A_diag(2) = (√3/2)·(2π/√3) = π。同一 p = 2 下 S_2 = 4∫_0^1 √(1−u²) du = 4·(π/4) = π，而 2^{1/2−1/2} = 1，故 A_face(2) = π。两者相等，于是 Δ(2) = 0。\n\np = 1 时 g(θ) = |cosθ|+|sinθ|+|cosθ+sinθ|，满足 g(θ+π) = g(θ)，故只需算 [0,π] 上的积分再乘 2。在 [0,π/2] 上三项都非负，g = 2(cosθ+sinθ)，从而 g^{-2} = (1/4)(cosθ+sinθ)^{-2}；把 cosθ+sinθ 写成 √2sin(θ+π/4)，代换 φ = θ+π/4 得 ∫_0^{π/2} dθ/(cosθ+sinθ)² = (1/2)∫_{π/4}^{3π/4} dφ/sin²φ = (1/2)[−cotφ] 在两端取值之差 = 1，故这一段贡献 1/4。在 [π/2,3π/4] 上 cosθ ≤ 0 而 cosθ+sinθ ≥ 0，故 g = 2sinθ、g^{-2} = (1/4)sin^{-2}θ，而 ∫_{π/2}^{3π/4} dθ/sin²θ = [−cotθ] 在两端取值之差为 1，这一段也贡献 1/4。在 [3π/4,π] 上 cosθ+sinθ ≤ 0，故 g = −2cosθ、g^{-2} = (1/4)cos^{-2}θ，而 ∫_{3π/4}^{π} dθ/cos²θ = [tanθ] 在两端取值之差为 1，这一段同样贡献 1/4。三段相加得 ∫_0^{2π} g^{-2} dθ = 2·(3/4) = 3/2，于是 A_diag(1) = (√3/2)·(3/2) = 3√3/4。另一边 S_1 = 4∫_0^1 (1−u) du = 2，而 2^{-1/1} = 1/2，故 A_face(1) = √2·(1/2)·2 = √2。于是 Δ(1) = √2 − 3√3/4，它是正的，因为 4√2 > 3√3 等价于平方后的 32 > 27。\n\n六、p → ∞ 的极限。记 m(θ) := max(|cosθ|,|sinθ|,|cosθ+sinθ|)。因为 g(θ) 是三项之和，每一项都不超过 m(θ)^p 而其中至少有一项恰等于 m(θ)^p，故 m(θ)^p ≤ g(θ) ≤ 3m(θ)^p；两边取 −2/p 次幂并令 p → ∞（此时 3^{-2/p} → 1），得对每个 θ 都有 g(θ)^{-2/p} → m(θ)^{-2}。至于控制：由 g ≥ m^p 得 g^{-2/p} ≤ m^{-2}，而 m(θ) ≥ max(|cosθ|,|sinθ|) ≥ 1/√2，故 m(θ)^{-2} ≤ 2，于是对一切 p ≥ 1 与一切 θ 都有与 p 无关的界 g(θ)^{-2/p} ≤ 2。有界收敛定理给出 A_diag(p) → (√3/2)∫_0^{2π} m(θ)^{-2} dθ。剩下的积分按符号分段算出：在 [0,π/2] 上 m = cosθ+sinθ、在 [π/2,3π/4] 上 m = sinθ、在 [3π/4,π] 上 m = −cosθ，且 m(θ+π) = m(θ)；三段各自的积分与上一步 p = 1 时算过的三段相同、各为 1，故 ∫_0^{2π} m^{-2} dθ = 2·3 = 6，于是 lim_{p→∞} A_diag(p) = (√3/2)·6 = 3√3。另一边，S_p 关于 p 单调不减：若 |u|^p+|z|^p ≤ 1 而 p' > p，则必有 |u| ≤ 1 与 |z| ≤ 1，从而 |u|^{p'}+|z|^{p'} ≤ |u|^p+|z|^p ≤ 1。再看这族集合的并 E := ∪_{p≥1} {(u,z) : |u|^p+|z|^p ≤ 1}：一方面，|u|^p+|z|^p ≤ 1 迫使 |u| ≤ 1 与 |z| ≤ 1，故 E 落在闭正方形 [−1,1]² 之内；另一方面，任给 (u,z) ∈ (−1,1)² 有 max(|u|,|z|) < 1，于是 max(|u|,|z|)^p → 0，充分大的 p 便使 |u|^p+|z|^p ≤ 1，故整个开正方形 (−1,1)² 都含在 E 里。合起来，E 与 (−1,1)² 只差 [−1,1]² 的边界那一段零测集；(−1,1)² 是边长 2 的开正方形（四个象限各占其四分之一），面积为 4，于是 E 的面积也是 4。由单调收敛定理得 S_p ↑ 4，于是 lim_{p→∞} A_face(p) = √2·1·4 = 4√2。与上一条合并得 lim_{p→∞} Δ(p) = 4√2 − 3√3，它同样是正的（仍由 32 > 27）。\n\n七、连续性。先看 A_face：S_p = 4∫_0^1 (1−u^p)^{1/p} du 的被积函数关于 (p,u) ∈ [1,∞)×[0,1] 连续（u = 1 处它恒取值 0），且被常数 1 控制，故由有界收敛定理 p ↦ S_p 在 [1,∞) 上连续；又 p ↦ 2^{-1/p} 连续，于是 A_face 在 [1,∞) 上连续。再看 A_diag：由上面那条与 p 无关的控制 g(θ)^{-2/p} ≤ 2 以及 g 关于 (p,θ) 的联合连续性，对任意收敛序列 p_k → p 都有 g^{-2/p_k} → g^{-2/p} 逐点成立且被常数 2 控制，故有界收敛定理给出 p ↦ ∫_0^{2π} g(θ)^{-2/p} dθ 连续；A_diag 就是它乘常数 √3/2，故 A_diag 也连续。两者相减，Δ 在 [1,∞) 上连续。\n\n八、收尾。记 L := 4√2 − 3√3 > 0，取 ε := L/2 > 0。由 Δ 的连续性与 lim_{p→∞} Δ(p) = L，存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 |Δ(p) − L| < ε，从而 Δ(p) > L/2 > 0，即 A_face(p) > A_diag(p) 对一切 p ≥ P0 成立。至此 (i)(ii)(iii) 全部成立。",
+          "source_lit_id": null,
+          "page_range": {
+            "start": null,
+            "end": null,
+            "label": ""
+          },
+          "quote_verified": null,
+          "quote_mode": "",
+          "quote_reason": "手稿收录（D 只递指针）：命题正文、证明正文与档位全部逐字取自 `manuscripts/F/f-proof-000003.md` —— 引文面不适用（这份稿是我们自己产出的成果，不是文献里摘的）；V 的签（若有）在手稿块上",
+          "quote_span": "",
+          "quote_call_sha256": "",
+          "evidence_kind": "heuristic",
+          "bits": {
+            "numeric": "pending",
+            "proof": true,
+            "reviewed": true,
+            "formal": "pending",
+            "audited": false,
+            "origin": "own_result",
+            "evidence": {
+              "numeric": {},
+              "numeric_reason": "",
+              "proof_process": "设 p ∈ [1,∞) 固定。记 B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n，记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；并记 A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。\n\n一、先把 A_diag 写成平面 H := {x+y+z=0} 上的极坐标积分。取 u := (1,-1,0)/√2 与 v := (1,1,-2)/√6。直接验算得 ‖u‖ = ‖v‖ = 1、u·v = 0，又 u·(1,1,1) = 0、v·(1,1,1) = 0，故 {u,v} 是 H 的一组单位正交基，而 n := (1,1,1)/√3 是 H 的单位法向量、H = n^⊥。在 H 上以 (u,v) 为基取极坐标 x = r·e(θ)，其中 e(θ) := cosθ·u + sinθ·v、r ≥ 0、θ ∈ [0,2π)。由于 l_p 范数是正齐次的，‖x‖_p = r‖e(θ)‖_p，于是 x ∈ B_p^3 当且仅当 r ≤ ‖e(θ)‖_p^{-1}。平面极坐标的面积元带 Jacobi 因子 r，先对 r 积分得 ∫_0^{‖e(θ)‖_p^{-1}} r dr = (1/2)‖e(θ)‖_p^{-2}，再对 θ 积分便有 A_diag(p) = (1/2)∫_0^{2π}‖e(θ)‖_p^{-2} dθ，这就是 (i) 的第一个等号。\n\n二、把 ‖e(θ)‖_p 算出来。由 u、v 的分量得 e_1 = cosθ/√2 + sinθ/√6 = (√3cosθ+sinθ)/√6、e_2 = −cosθ/√2 + sinθ/√6 = −(√3cosθ−sinθ)/√6、e_3 = −2sinθ/√6。用余弦的差角公式 √3cosθ+sinθ = 2cos(θ−π/6) 与 √3cosθ−sinθ = 2cos(θ+π/6)，得 |e_1| = (2/√6)|cos(θ−π/6)|、|e_2| = (2/√6)|cos(θ+π/6)|、|e_3| = (2/√6)|sinθ|。记 S(θ) := |cos(θ−π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p，则 ‖e(θ)‖_p^p = (2/√6)^p·S(θ)；因为 (2/√6)² = 2/3，两边取 −2/p 次幂得 ‖e(θ)‖_p^{-2} = (3/2)·S(θ)^{-2/p}。代回上一段，便得 (i) 的第二个等号 A_diag(p) = (3/4)∫_0^{2π} S(θ)^{-2/p} dθ。\n\n三、另一条路把同一个面积写进 (x,y) 平面，这给出 (ii)。H 上的点可唯一写成 (x,y,−x−y)，即 Φ(x,y) := (x,y,−x−y) 是 R² 到 H 的双射；它的偏导向量 ∂_xΦ = (1,0,−1) 与 ∂_yΦ = (0,1,−1) 的叉积为 (1,1,1)、模为 √3，故曲面面积公式给出 A_diag(p) = √3∫∫_D dx dy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。再对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)：记 g(θ) := |cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p，由 |r cosθ|^p+|r sinθ|^p+|r(cosθ+sinθ)|^p = r^p g(θ) 得 (x,y) ∈ D 当且仅当 r ≤ g(θ)^{-1/p}；用面积元 r dr dθ 先对 r 积分得 ∫_0^{g(θ)^{-1/p}} r dr = (1/2)g(θ)^{-2/p}，于是 A_diag(p) = (√3/2)∫_0^{2π} g(θ)^{-2/p} dθ。两条路算的是同一个 A_diag，故上面三个积分表示彼此相等；下文算特例值时用 g(θ) 这一式。\n\n四、A_face 的闭式。取 n_face := (1,1,0)/√2，则 n_face^⊥ 是平面 x+y=0。用 (x,z) ↦ (x,−x,z) 参数化这个平面：两个偏导 (1,−1,0) 与 (0,0,1) 的叉积为 (−1,−1,0)、模为 √2，而该点的 l_p 范数的 p 次幂是 2|x|^p+|z|^p，故 A_face(p) = √2·area{(x,z) : 2|x|^p+|z|^p ≤ 1}。作代换 u := 2^{1/p}x，即 x = 2^{-1/p}u、dx = 2^{-1/p}du，则 2|x|^p = |u|^p，于是 A_face(p) = √2·2^{-1/p}·S_p，其中 S_p := area{(u,z) : |u|^p+|z|^p ≤ 1}。算 S_p：由对称性与竖向切片（固定 u 时 |z| ≤ (1−|u|^p)^{1/p}）得 S_p = 4∫_0^1 (1−u^p)^{1/p} du。作代换 t = u^p（u = t^{1/p}、du = (1/p)t^{1/p−1}dt）把积分化为 Beta 积分：4∫_0^1 (1−u^p)^{1/p} du = (4/p)∫_0^1 t^{1/p−1}(1−t)^{1/p} dt = (4/p)B(1/p, 1+1/p) = (4/p)·Γ(1/p)Γ(1+1/p)/Γ(1+2/p) = 4Γ(1+1/p)²/Γ(1+2/p)，最后一步用了 Γ(1+1/p) = Γ(1/p)/p。代回上式即得 (ii) 的闭式 A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)。\n\n五、特例值。p = 2 时 g(θ) = cos²θ+sin²θ+(cosθ+sinθ)² = 2+sin2θ，而 g^{-2/p} 在 p = 2 处就是 g^{-1}，故 A_diag(2) = (√3/2)∫_0^{2π} dθ/(2+sin2θ)。作代换 u = 2θ：θ 走一整圈对应 u 走两圈、且 sin 以 2π 为周期，故 ∫_0^{2π} dθ/(2+sin2θ) = (1/2)∫_0^{4π} du/(2+sin u) = ∫_0^{2π} du/(2+sin u)；再用 ∫_0^{2π} du/(a+b sin u) = 2π/√(a²−b²)（取 a = 2、b = 1）得它为 2π/√3，于是 A_diag(2) = (√3/2)·(2π/√3) = π。同一 p = 2 下 S_2 = 4∫_0^1 √(1−u²) du = 4·(π/4) = π，而 2^{1/2−1/2} = 1，故 A_face(2) = π。两者相等，于是 Δ(2) = 0。\n\np = 1 时 g(θ) = |cosθ|+|sinθ|+|cosθ+sinθ|，满足 g(θ+π) = g(θ)，故只需算 [0,π] 上的积分再乘 2。在 [0,π/2] 上三项都非负，g = 2(cosθ+sinθ)，从而 g^{-2} = (1/4)(cosθ+sinθ)^{-2}；把 cosθ+sinθ 写成 √2sin(θ+π/4)，代换 φ = θ+π/4 得 ∫_0^{π/2} dθ/(cosθ+sinθ)² = (1/2)∫_{π/4}^{3π/4} dφ/sin²φ = (1/2)[−cotφ] 在两端取值之差 = 1，故这一段贡献 1/4。在 [π/2,3π/4] 上 cosθ ≤ 0 而 cosθ+sinθ ≥ 0，故 g = 2sinθ、g^{-2} = (1/4)sin^{-2}θ，而 ∫_{π/2}^{3π/4} dθ/sin²θ = [−cotθ] 在两端取值之差为 1，这一段也贡献 1/4。在 [3π/4,π] 上 cosθ+sinθ ≤ 0，故 g = −2cosθ、g^{-2} = (1/4)cos^{-2}θ，而 ∫_{3π/4}^{π} dθ/cos²θ = [tanθ] 在两端取值之差为 1，这一段同样贡献 1/4。三段相加得 ∫_0^{2π} g^{-2} dθ = 2·(3/4) = 3/2，于是 A_diag(1) = (√3/2)·(3/2) = 3√3/4。另一边 S_1 = 4∫_0^1 (1−u) du = 2，而 2^{-1/1} = 1/2，故 A_face(1) = √2·(1/2)·2 = √2。于是 Δ(1) = √2 − 3√3/4，它是正的，因为 4√2 > 3√3 等价于平方后的 32 > 27。\n\n六、p → ∞ 的极限。记 m(θ) := max(|cosθ|,|sinθ|,|cosθ+sinθ|)。因为 g(θ) 是三项之和，每一项都不超过 m(θ)^p 而其中至少有一项恰等于 m(θ)^p，故 m(θ)^p ≤ g(θ) ≤ 3m(θ)^p；两边取 −2/p 次幂并令 p → ∞（此时 3^{-2/p} → 1），得对每个 θ 都有 g(θ)^{-2/p} → m(θ)^{-2}。至于控制：由 g ≥ m^p 得 g^{-2/p} ≤ m^{-2}，而 m(θ) ≥ max(|cosθ|,|sinθ|) ≥ 1/√2，故 m(θ)^{-2} ≤ 2，于是对一切 p ≥ 1 与一切 θ 都有与 p 无关的界 g(θ)^{-2/p} ≤ 2。有界收敛定理给出 A_diag(p) → (√3/2)∫_0^{2π} m(θ)^{-2} dθ。剩下的积分按符号分段算出：在 [0,π/2] 上 m = cosθ+sinθ、在 [π/2,3π/4] 上 m = sinθ、在 [3π/4,π] 上 m = −cosθ，且 m(θ+π) = m(θ)；三段各自的积分与上一步 p = 1 时算过的三段相同、各为 1，故 ∫_0^{2π} m^{-2} dθ = 2·3 = 6，于是 lim_{p→∞} A_diag(p) = (√3/2)·6 = 3√3。另一边，S_p 关于 p 单调不减：若 |u|^p+|z|^p ≤ 1 而 p' > p，则必有 |u| ≤ 1 与 |z| ≤ 1，从而 |u|^{p'}+|z|^{p'} ≤ |u|^p+|z|^p ≤ 1。再看这族集合的并 E := ∪_{p≥1} {(u,z) : |u|^p+|z|^p ≤ 1}：一方面，|u|^p+|z|^p ≤ 1 迫使 |u| ≤ 1 与 |z| ≤ 1，故 E 落在闭正方形 [−1,1]² 之内；另一方面，任给 (u,z) ∈ (−1,1)² 有 max(|u|,|z|) < 1，于是 max(|u|,|z|)^p → 0，充分大的 p 便使 |u|^p+|z|^p ≤ 1，故整个开正方形 (−1,1)² 都含在 E 里。合起来，E 与 (−1,1)² 只差 [−1,1]² 的边界那一段零测集；(−1,1)² 是边长 2 的开正方形（四个象限各占其四分之一），面积为 4，于是 E 的面积也是 4。由单调收敛定理得 S_p ↑ 4，于是 lim_{p→∞} A_face(p) = √2·1·4 = 4√2。与上一条合并得 lim_{p→∞} Δ(p) = 4√2 − 3√3，它同样是正的（仍由 32 > 27）。\n\n七、连续性。先看 A_face：S_p = 4∫_0^1 (1−u^p)^{1/p} du 的被积函数关于 (p,u) ∈ [1,∞)×[0,1] 连续（u = 1 处它恒取值 0），且被常数 1 控制，故由有界收敛定理 p ↦ S_p 在 [1,∞) 上连续；又 p ↦ 2^{-1/p} 连续，于是 A_face 在 [1,∞) 上连续。再看 A_diag：由上面那条与 p 无关的控制 g(θ)^{-2/p} ≤ 2 以及 g 关于 (p,θ) 的联合连续性，对任意收敛序列 p_k → p 都有 g^{-2/p_k} → g^{-2/p} 逐点成立且被常数 2 控制，故有界收敛定理给出 p ↦ ∫_0^{2π} g(θ)^{-2/p} dθ 连续；A_diag 就是它乘常数 √3/2，故 A_diag 也连续。两者相减，Δ 在 [1,∞) 上连续。\n\n八、收尾。记 L := 4√2 − 3√3 > 0，取 ε := L/2 > 0。由 Δ 的连续性与 lim_{p→∞} Δ(p) = L，存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 |Δ(p) − L| < ε，从而 Δ(p) > L/2 > 0，即 A_face(p) > A_diag(p) 对一切 p ≥ P0 成立。至此 (i)(ii)(iii) 全部成立。",
+              "proof_source": "own",
+              "reviewed_by": {
+                "verifier": "V",
+                "verification_id": "v-000005",
+                "round": null,
+                "verdict": "成立",
+                "evidence": "verifications/000042.jsonl#v-000005",
+                "findings": [],
+                "proof_no": 1,
+                "proof_sha256": "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6"
+              },
+              "reviewed_source": "v",
+              "formal": {},
+              "formal_reason": "",
+              "audited_by": {},
+              "optimized_by_proof": {
+                "1": true
+              },
+              "reviewed_by_proof": {
+                "1": true
+              },
+              "reviewed_sha_by_proof": {
+                "1": "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6"
+              }
+            },
+            "voided_by": {},
+            "grade": "pre_theorem",
+            "audited_badge": false
+          },
+          "status": "active",
+          "derived_from": [
+            "000034"
+          ],
+          "aliases": [],
+          "doc_id": null,
+          "line_range": {
+            "start": null,
+            "end": null,
+            "label": "manuscripts/F/f-proof-000003.md"
+          },
+          "created_at": "2026-11-24T21:01:15+08:00",
+          "created_by": "secretary-B",
+          "_proposition_adjudication": {
+            "checked": true,
+            "attempted": true,
+            "verdict": "different",
+            "canonical_name": "B_p^3 对角与面对角截面面积公式及 Δ(p) 的最终正性",
+            "same_as": "",
+            "basis": "条件：目标为 1≤p<∞ 的一般 p，候选 000031/000033 用有限 p 集，000030 是数值核自检，000039 用 ΔK(t) 的 p,t 范围，条件强弱/论域不同（条件强弱不同）；结论：目标给出 A_diag(p)、A_face(p) 的积分/Γ 公式、特殊值与存在 P0 使 A_face(p)>A_diag(p)，候选 000031 是最大面积位置与 A_diag/A_coord 临界比，000033 是边界弧分段最大位置，000030 是面积计算核自检，000039 是 ΔK(t) 零点唯一性，结论均不一致；条件论域与结论均不一致：目标是任意 1≤p<∞ 下 A_diag/A_face 的公式及 Δ(p) 最终为正，候选分别讨论有限 p 集的最大面积位置、边界弧分段、数值核自检或 ΔK(t) 变号唯一性。",
+            "reason": "条件论域与结论均不一致：目标是任意 1≤p<∞ 下 A_diag/A_face 的公式及 Δ(p) 最终为正，候选分别讨论有限 p 集的最大面积位置、边界弧分段、数值核自检或 ΔK(t) 变号唯一性。",
+            "reused": false,
+            "seam_source": "secretary（LlmSeam.for_secretary）",
+            "seam_attempted": true,
+            "at": "2026-11-24T21:01:15+08:00"
+          },
+          "proof_authors": [
+            "F"
+          ],
+          "proof_no": 1,
+          "proof_sha256": "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6",
+          "manuscript_id": "000003",
+          "manuscripts": {
+            "1": "manuscripts/B/b-proof-000003.md"
+          },
+          "_grade_recomputed": {
+            "checked": true,
+            "from": "conjecture",
+            "to": "pre_theorem",
+            "from_kind": "heuristic",
+            "to_kind": "proof_review",
+            "channel": "text",
+            "why": "V 的签刚落位：这一行有证明正文，且台账里那一签盖住的就是现行这一版 ⇒ 按五元位现算等级（只算等级，不写档位）；历史列 `evidence_kind`=heuristic 只是读数，判定面读 `pre_theorem`",
+            "basis": "verifications/pending/202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8.jsonl#u-000024",
+            "proof_no": 1,
+            "at": "2026-11-24T21:01:16+08:00"
+          },
+          "_kind_upgrade": {
+            "from": "conjecture",
+            "to": "theorem",
+            "basis": "out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json#u-000024 · 台账 verifications/pending/202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8.jsonl#u-000024",
+            "grade": "conjecture",
+            "by": "agent-B",
+            "at": "2026-11-24T21:01:16+08:00"
+          },
+          "manuscript_family": "b-proof",
+          "proof_history": [
+            {
+              "text": "1. 【前提】固定 1 ≤ p < ∞；B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。（前提）（前提）\n2. 【推导】由 stmt:000034 的 (i)，对每个单位法向 n 与 n^⊥ 的任意单位正交基 (u,v) 有 A_p(n) = (1/2)∫_0^{2π}‖cosθ·u+sinθ·v‖_p^{-2}dθ。取 n = (1,1,1)/√3、u = (1,-1,0)/√2、v = (1,1,-2)/√6（直接验算 ‖u‖=‖v‖=1、u·v=0、u·n=v·n=0，故 {u,v} 是 H := {x+y+z=0} 的单位正交基）；另一路参数化 Φ(x,y) := (x,y,−x−y) 是 R²→H 的双射，∂_xΦ=(1,0,−1) 与 ∂_yΦ=(0,1,−1) 的叉积为 (1,1,1)、模为 √3，故 A_diag(p) = √3∫∫_D dxdy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。（依据：stmt:000034）\n3. 【推导】对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)（r ≥ 0、θ ∈ [0,2π)）：由 |r cosθ|^p+|r sinθ|^p+|r(cosθ+sinθ)|^p = r^p g(θ)（记 g(θ) := |cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p）得 (x,y) ∈ D ⟺ r ≤ g(θ)^{-1/p}；由面积元 r dr dθ 得 ∫∫_D = ∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ，与第 2 步合并即 A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，这给出 (i) 的积分式。（依据：stmt:000034）\n4. 【推导】一致控制：g ≥ max(|cosθ|,|sinθ|)^p ≥ (1/√2)^p（因为 max(|cosθ|,|sinθ|) ≥ 1/√2），故对一切 p ∈ [1,∞) 与一切 θ 有 0 < g(θ)^{-2/p} ≤ (1/√2)^{-2} = 2；又 (p,θ) ↦ g(θ) 连续且在每个局部 p-区间上 g 有与 p 无关的正下界，故 θ ↦ g(θ)^{-2/p} 关于 p 逐点连续。（依据：stmt:000034）\n5. 【推导】p = 2 时 g(θ) = cos²θ+sin²θ+(cosθ+sinθ)² = 2+sin2θ；代换 u = 2θ 后用 ∫_0^{2π}du/(a+b sin u) = 2π/√(a²−b²)（取 a=2、b=1）得 ∫_0^{2π} dθ/(2+sin2θ) = ∫_0^{2π} du/(2+sin u) = 2π/√3，此处 p=2 使 g^{-2/p} 化为 g^{-1}，故 A_diag(2) = (√3/2)·(2π/√3) = π。（依据：stmt:000034）\n6. 【推导】由 stmt:000034 的 (ii)(iii)(iv) 的闭式 A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，在 p = 2 处得 A_face(2) = 2^0·4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π；与第 5 步合并得 Δ(2) = π − π = 0。（依据：stmt:000034）\n7. 【推导】Δ(1) 的计算：A_face(1) = 2^{-1/2}·4Γ(2)²/Γ(3) = 2^{-1/2}·4·1/2 = √2（Γ(2)=1、Γ(3)=2）；A_diag(1)：p = 1 时 g = |cosθ|+|sinθ|+|cosθ+sinθ| 满足 g(θ+π) = g(θ)，且在 [0,π/2] 上 g = 2(cosθ+sinθ)（故 g^{-2} = (1/4)(cosθ+sinθ)^{-2}）、在 [π/2,3π/4] 上 g = 2sinθ（g^{-2} = (1/4)sin^{-2}θ）、在 [3π/4,π] 上 g = −2cosθ（g^{-2} = (1/4)cos^{-2}θ）；三段对 ∫g^{-2} 的贡献各为 1/4（分别用 ∫_0^{π/2}dθ/(cosθ+sinθ)² = 1、[−cotθ] 与 [tanθ] 在两个端点区间上的取值各得 1），故 ∫_0^{2π}g^{-2}dθ = 2·(1/4+1/4+1/4) = 3/2，A_diag(1) = (√3/2)·(3/2) = 3√3/4；于是 Δ(1) = √2 − 3√3/4 > 0，因为 4√2 > 3√3 ⟺ 32 > 27。（依据：stmt:000034）\n8. 【推导】Δ 的连续性：Γ 在 (0,∞) 上连续且取正值，p ↦ 1/p、1+1/p、1+2/p 在 [1,∞) 上连续，故 A_face 在 [1,∞) 上连续；由第 4 步与 p 无关的控制 g^{-2/p} ≤ 2 与逐点连续性，有界收敛定理给出 p ↦ ∫_0^{2π}g(θ)^{-2/p}dθ 在 [1,∞) 上连续，故 A_diag 连续；两者相减得 Δ 在 [1,∞) 上连续。（依据：stmt:000034）\n9. 【推导】p→∞ 时 A_diag 的极限：记 m(θ) := max(|cosθ|,|sinθ|,|cosθ+sinθ|)，则 m(θ)^p ≤ g(θ) ≤ 3m(θ)^p，故对每个 θ 有 g(θ)^{-2/p} → m(θ)^{-2}；又 g ≥ m^p 给出 g^{-2/p} ≤ m^{-2} ≤ 2（因 m ≥ 1/√2），有界收敛定理给出 A_diag(p) → (√3/2)∫_0^{2π}m(θ)^{-2}dθ。按符号分段：在 [0,π/2] 上 m = cosθ+sinθ、在 [π/2,3π/4] 上 m = sinθ、在 [3π/4,π] 上 m = −cosθ，且 m(θ+π) = m(θ)，三段各贡献 1（同上一步的三段积分），故 ∫_0^{2π}m^{-2}dθ = 2·3 = 6，于是 lim_{p→∞}A_diag(p) = (√3/2)·6 = 3√3。（依据：stmt:000034）\n10. 【推导】p→∞ 时 A_face 的极限：C_p := 4Γ(1+1/p)²/Γ(1+2/p) → 4Γ(1)²/Γ(1) = 4（Γ 连续、Γ(1)=1），又 2^{1/2−1/p} → √2，故 A_face(p) → 4√2；与第 9 步合并得 lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0（同样由 32 > 27）。（依据：stmt:000034）\n11. 【推导】收尾：记 L := 4√2 − 3√3 > 0；由第 8 步 Δ 的连续性与第 10 步 lim Δ = L，取 ε := L/2 > 0，则存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 |Δ(p) − L| < ε，从而 Δ(p) > L/2 > 0，即 A_face(p) > A_diag(p) 对一切 p ≥ P0 成立，这给出 (iii) 的最后一句。（依据：stmt:000034）",
+              "sha": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+              "at": "2026-11-24T21:28:56+08:00",
+              "replaced_by": "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6"
+            }
+          ],
+          "proof_routes": {},
+          "route": ""
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "id": "000042",
+          "id_field": "stmt_id",
+          "found": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 53120,
+        "prompt_cache_miss_tokens": 5765,
+        "tokens_in": 58885,
+        "tokens_out": 21044,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000190"
+    },
+    {
+      "index": 7,
+      "shape": "final",
+      "payload": {
+        "final": "结论：有毛病（defect_step=1）。\n\n先说清核到哪一步：这份稿的证明正文（一～八段）我按写成后的样子逐段走查过 —— 正交基与叉积、Jacobi 因子与平面极坐标、Beta 积分化简、p=2 与 p=1 的分段积分、p→∞ 的被 2 控制的收敛与 S_p↑4、连续性、收尾的 ε=L/2 —— 前提/计算/逻辑三轴没有查出数学断点；下面四条都是「字面与命题身份」层面的要改项，按规矩任一条即判有毛病（零 finding 才是成立）。\n\nF1｜step=1（稿的 `## 命题` 与证明首段「设 p ∈ [1,∞) 固定。记 B_p^3 := …」）｜命题身份不符（台账一致这一轴）：稿内 `## 命题` 逐字是 stmt:000042 的 statement_full（「设 1 ≤ p < ∞，B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) … 则：(i) A_diag(p) = (√3/2)∫…；(ii) A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)…；(iii) …存在 P0…」），而这一趟给的 statement_id=000030 的 statement_full 是另一条（「截面面积计算核自检通过：极坐标 tanh-sinh 求积…」，evidence_kind=cross_check、证明栏空着）。按 000030 把签盖在这一份正文上＝把甲稿的签借给乙稿。最小补法：改挂 stmt:000042 送审（这一版正文 sha 43f4c2ab… 就是 000042 行的 proof_sha256）；或由 B 先给这一份稿登记一条与稿内 `## 命题` 逐字一致的命题行，再按新号重送。\n\nF2｜step=1（一、末句）｜原文逐字：「这就是 (i) 的第一个等号」。稿内 (i) 只有一条等式（g(θ) 那一式），(1/2)∫_0^{2π}‖e(θ)‖_p^{-2}dθ 并不出现在 (i) 里，读者对不上「第一个等号」。补法：改为「这给出 (i) 的积分表示（化成 g 的形式见下）」或删掉序数。\n\nF3｜step=2（二、末句）｜原文逐字：「代回上一段，便得 (i) 的第二个等号 A_diag(p) = (3/4)∫_0^{2π} S(θ)^{-2/p} dθ」。同上：(i) 里没有第二个等号，(3/4)∫S^{-2/p} 也不是 (i) 的字面。补法同 F2。\n\nF4｜step=3（三、首句）｜原文逐字：「三、另一条路把同一个面积写进 (x,y) 平面，这给出 (ii)。」序数错：这一段推的是 A_diag 的 g 形式，即 (i)；(ii) 是 A_face 的闭式，由第四段给出。补法：把「(ii)」改成「(i)」。\n\n程序性读数（如实报，不当结论用）：verify.verify_proof 这一趟以 already_signed 短接 —— 这一份正文 sha 43f4c2ab… 在稿上带着 sign block（连续 3/3、判词=成立，台账 verifications/000042.jsonl#v-000008），工具因此没有写新台账行（review_write.written=false）、sign_issuance.checked=false。这既不是「可以签」也不是「已签发」；要按本号重新审这一版，须先改稿（正文 sha 变了才不短接），并按 F1 把命题号挂对后重送。",
+        "evidence": [
+          "manuscripts/B/b-proof-000003.md",
+          "stmt:000030",
+          "stmt:000042",
+          "verifications/000042.jsonl#v-000008"
+        ],
+        "notify": {
+          "to": "B",
+          "summary": "V 审 manuscripts/B/b-proof-000003.md：判「有毛病」（defect_step=1）—— 命题身份挂错号（稿内命题是 stmt:000042 的字面）+ 三处残留序数；数学内容未查出错误",
+          "body": "## 被审对象\n- 稿：`manuscripts/B/b-proof-000003.md`（正文 sha 43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6）\n- 任务给的 statement_id：000030\n\n## 结论：有毛病（defect_step=1）\n证明正文一～八段逐段走查，前提/计算/逻辑三轴没有查出数学断点（正交基与叉积、Jacobi 因子与平面极坐标、Beta 积分、p=2 与 p=1 的分段积分、p→∞ 被 2 控制的收敛与 S_p↑4、连续性、收尾 ε=L/2 都对得上）。要改的是字面与命题身份，四条如下：\n\n1. **F1（step 1，承重）命题身份不符**：稿内 `## 命题` 逐字是 stmt:000042 的 statement_full；而 000030 的 statement_full 是「截面面积计算核自检通过：极坐标 tanh-sinh 求积…」（evidence_kind=cross_check、无证明正文）。按 000030 签这一份正文＝把甲稿的签借给乙稿。→ 改挂 stmt:000042（sha 就是 000042 行的 proof_sha256），或先给这一份稿登记一条与稿内 `## 命题` 逐字一致的命题行再送审。\n2. **F2（step 1）**：一、末句「这就是 (i) 的第一个等号」—— 稿内 (i) 只有 g(θ) 那一条等式，(1/2)∫‖e(θ)‖_p^{-2}dθ 不在 (i) 里。\n3. **F3（step 2）**：二、末句「便得 (i) 的第二个等号 A_diag(p) = (3/4)∫_0^{2π} S(θ)^{-2/p} dθ」—— 同上，无第二个等号。\n4. **F4（step 3）**：三、首句「这给出 (ii)」—— 该段推的是 A_diag 的 g 形式即 (i)；(ii) 是 A_face 闭式，在第四段。\n\n## 程序性读数（不等于「没问题」，也不等于「已签发」）\nverify.verify_proof 以 `already_signed` 短接：这一份正文 sha 已在稿上带 sign block（台账 verifications/000042.jsonl#v-000008），故**这一趟没有写 verifications/000030.jsonl 新行**、`sign_issuance.checked=false`。要按本号重审：先改稿（正文 sha 变了才不短接），并按 F1 挂对命题号再送；F1–F4 改完之前，这一签不签发。\n\n## 要你们做的\n- B：确认这一份优化副本应挂哪一号（按稿内 `## 命题` 字面应是 000042）；若确要给 000030 用，需先把稿内 `## 命题` 换成 000030 的字面。\n- F/B：F2–F4 三处序数是洗稿残留，改字即可，不必重写段落。",
+          "refs": [
+            "stmt:000030",
+            "stmt:000042"
+          ]
+        }
+      },
+      "result": {
+        "notify_handoff": {
+          "handoff": "000027",
+          "ok": true,
+          "id": "000027",
+          "path": "work/handoffs.jsonl#000027",
+          "to": "B",
+          "brief": "V 审 manuscripts/B/b-proof-000003.md：判「有毛病」（defect_step=1）—— 命题身份挂错号（稿内命题是 stmt:000042 的字面）+ 三处残留序数；数学内容未查出错误",
+          "addressing": {
+            "checked": true,
+            "how": "parent",
+            "to": "B",
+            "kind": "parent",
+            "name": "B-digest1",
+            "task_id": "t-000188",
+            "role": "B",
+            "brief": "",
+            "candidates": [],
+            "callable": "父 B-digest1（t-000188）",
+            "why": "名册成员（parent）⇒ 手稿写角色 B，通知投实例 B",
+            "delivery": "roster",
+            "manuscript_to": "B",
+            "addressed_by": "role_fallback"
+          },
+          "notify_channel": "roster",
+          "revises": "",
+          "existing_same_summary": {
+            "count": 0,
+            "ids": [],
+            "note": "查过了：没有同一句话的既有交接"
+          },
+          "notified": "t-000191",
+          "error": "",
+          "note": "收件人下次运行时（或本步之后）会在收件箱/板上看到编号；它用 `manuscripts.read` 读全文"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 58112,
+        "prompt_cache_miss_tokens": 5600,
+        "tokens_in": 63712,
+        "tokens_out": 18467,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000190"
+    }
+  ],
+  "final": "结论：有毛病（defect_step=1）。\n\n先说清核到哪一步：这份稿的证明正文（一～八段）我按写成后的样子逐段走查过 —— 正交基与叉积、Jacobi 因子与平面极坐标、Beta 积分化简、p=2 与 p=1 的分段积分、p→∞ 的被 2 控制的收敛与 S_p↑4、连续性、收尾的 ε=L/2 —— 前提/计算/逻辑三轴没有查出数学断点；下面四条都是「字面与命题身份」层面的要改项，按规矩任一条即判有毛病（零 finding 才是成立）。\n\nF1｜step=1（稿的 `## 命题` 与证明首段「设 p ∈ [1,∞) 固定。记 B_p^3 := …」）｜命题身份不符（台账一致这一轴）：稿内 `## 命题` 逐字是 stmt:000042 的 statement_full（「设 1 ≤ p < ∞，B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) … 则：(i) A_diag(p) = (√3/2)∫…；(ii) A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)…；(iii) …存在 P0…」），而这一趟给的 statement_id=000030 的 statement_full 是另一条（「截面面积计算核自检通过：极坐标 tanh-sinh 求积…」，evidence_kind=cross_check、证明栏空着）。按 000030 把签盖在这一份正文上＝把甲稿的签借给乙稿。最小补法：改挂 stmt:000042 送审（这一版正文 sha 43f4c2ab… 就是 000042 行的 proof_sha256）；或由 B 先给这一份稿登记一条与稿内 `## 命题` 逐字一致的命题行，再按新号重送。\n\nF2｜step=1（一、末句）｜原文逐字：「这就是 (i) 的第一个等号」。稿内 (i) 只有一条等式（g(θ) 那一式），(1/2)∫_0^{2π}‖e(θ)‖_p^{-2}dθ 并不出现在 (i) 里，读者对不上「第一个等号」。补法：改为「这给出 (i) 的积分表示（化成 g 的形式见下）」或删掉序数。\n\nF3｜step=2（二、末句）｜原文逐字：「代回上一段，便得 (i) 的第二个等号 A_diag(p) = (3/4)∫_0^{2π} S(θ)^{-2/p} dθ」。同上：(i) 里没有第二个等号，(3/4)∫S^{-2/p} 也不是 (i) 的字面。补法同 F2。\n\nF4｜step=3（三、首句）｜原文逐字：「三、另一条路把同一个面积写进 (x,y) 平面，这给出 (ii)。」序数错：这一段推的是 A_diag 的 g 形式，即 (i)；(ii) 是 A_face 的闭式，由第四段给出。补法：把「(ii)」改成「(i)」。\n\n程序性读数（如实报，不当结论用）：verify.verify_proof 这一趟以 already_signed 短接 —— 这一份正文 sha 43f4c2ab… 在稿上带着 sign block（连续 3/3、判词=成立，台账 verifications/000042.jsonl#v-000008），工具因此没有写新台账行（review_write.written=false）、sign_issuance.checked=false。这既不是「可以签」也不是「已签发」；要按本号重新审这一版，须先改稿（正文 sha 变了才不短接），并按 F1 把命题号挂对后重送。",
+  "evidence": [
+    "manuscripts/B/b-proof-000003.md",
+    "stmt:000030",
+    "stmt:000042",
+    "verifications/000042.jsonl#v-000008"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 0,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 8,
+  "compactions": 0,
+  "mailbox_items": [],
+  "mailbox_msgs": [],
+  "mailbox_delivered": 0,
+  "monitor_turns": 0,
+  "wakes": 0,
+  "wake_ids": [],
+  "wake_events": [],
+  "clock_pumps": 14,
+  "clock_fired": 0,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "V 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "V",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    }
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [
+    "000027"
+  ],
+  "summons": [],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [],
+  "summons_total": 0,
+  "summons_consumed": 0,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 0,
+    "summons_consumed": 0,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p328",
+    "role": "V",
+    "prompt_sha256": "171b42af018313bbcc69a25b1530f2ab9412256a4419f69333b5f3b963dad68e",
+    "prompt_chars": 46343,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "FACULTIES_07",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_STOP",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 7,
+    "tokens_in": 364671,
+    "tokens_out": 85176,
+    "usd": 0.056904,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 7,
+    "no_request_calls": 0,
+    "hit": 332672,
+    "miss": 31999,
+    "unknown_calls": 0,
+    "tokens_in": 364671,
+    "hit_rate": 0.9123,
+    "mismatched_calls": 0,
+    "saved_usd": 0.048902,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 383.391,
+  "end_ts": "2026-11-24T21:55:25+08:00",
+  "notes": [
+    "缓存读数：命中 332672 / 未命中 31999 token，命中率 91.2%（7 次调用）；按 modelcost 口径估算可省 约 0.048902 美元",
+    "子产出处理读数：summons_total=0（这一趟没派过子代理 ⇒ 没有要处理的子产出；判据没有对象，不红）"
+  ],
+  "final_payload": {
+    "final": "结论：有毛病（defect_step=1）。\n\n先说清核到哪一步：这份稿的证明正文（一～八段）我按写成后的样子逐段走查过 —— 正交基与叉积、Jacobi 因子与平面极坐标、Beta 积分化简、p=2 与 p=1 的分段积分、p→∞ 的被 2 控制的收敛与 S_p↑4、连续性、收尾的 ε=L/2 —— 前提/计算/逻辑三轴没有查出数学断点；下面四条都是「字面与命题身份」层面的要改项，按规矩任一条即判有毛病（零 finding 才是成立）。\n\nF1｜step=1（稿的 `## 命题` 与证明首段「设 p ∈ [1,∞) 固定。记 B_p^3 := …」）｜命题身份不符（台账一致这一轴）：稿内 `## 命题` 逐字是 stmt:000042 的 statement_full（「设 1 ≤ p < ∞，B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) … 则：(i) A_diag(p) = (√3/2)∫…；(ii) A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)…；(iii) …存在 P0…」），而这一趟给的 statement_id=000030 的 statement_full 是另一条（「截面面积计算核自检通过：极坐标 tanh-sinh 求积…」，evidence_kind=cross_check、证明栏空着）。按 000030 把签盖在这一份正文上＝把甲稿的签借给乙稿。最小补法：改挂 stmt:000042 送审（这一版正文 sha 43f4c2ab… 就是 000042 行的 proof_sha256）；或由 B 先给这一份稿登记一条与稿内 `## 命题` 逐字一致的命题行，再按新号重送。\n\nF2｜step=1（一、末句）｜原文逐字：「这就是 (i) 的第一个等号」。稿内 (i) 只有一条等式（g(θ) 那一式），(1/2)∫_0^{2π}‖e(θ)‖_p^{-2}dθ 并不出现在 (i) 里，读者对不上「第一个等号」。补法：改为「这给出 (i) 的积分表示（化成 g 的形式见下）」或删掉序数。\n\nF3｜step=2（二、末句）｜原文逐字：「代回上一段，便得 (i) 的第二个等号 A_diag(p) = (3/4)∫_0^{2π} S(θ)^{-2/p} dθ」。同上：(i) 里没有第二个等号，(3/4)∫S^{-2/p} 也不是 (i) 的字面。补法同 F2。\n\nF4｜step=3（三、首句）｜原文逐字：「三、另一条路把同一个面积写进 (x,y) 平面，这给出 (ii)。」序数错：这一段推的是 A_diag 的 g 形式，即 (i)；(ii) 是 A_face 的闭式，由第四段给出。补法：把「(ii)」改成「(i)」。\n\n程序性读数（如实报，不当结论用）：verify.verify_proof 这一趟以 already_signed 短接 —— 这一份正文 sha 43f4c2ab… 在稿上带着 sign block（连续 3/3、判词=成立，台账 verifications/000042.jsonl#v-000008），工具因此没有写新台账行（review_write.written=false）、sign_issuance.checked=false。这既不是「可以签」也不是「已签发」；要按本号重新审这一版，须先改稿（正文 sha 变了才不短接），并按 F1 把命题号挂对后重送。",
+    "evidence": [
+      "manuscripts/B/b-proof-000003.md",
+      "stmt:000030",
+      "stmt:000042",
+      "verifications/000042.jsonl#v-000008"
+    ],
+    "notify": {
+      "to": "B",
+      "summary": "V 审 manuscripts/B/b-proof-000003.md：判「有毛病」（defect_step=1）—— 命题身份挂错号（稿内命题是 stmt:000042 的字面）+ 三处残留序数；数学内容未查出错误",
+      "body": "## 被审对象\n- 稿：`manuscripts/B/b-proof-000003.md`（正文 sha 43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6）\n- 任务给的 statement_id：000030\n\n## 结论：有毛病（defect_step=1）\n证明正文一～八段逐段走查，前提/计算/逻辑三轴没有查出数学断点（正交基与叉积、Jacobi 因子与平面极坐标、Beta 积分、p=2 与 p=1 的分段积分、p→∞ 被 2 控制的收敛与 S_p↑4、连续性、收尾 ε=L/2 都对得上）。要改的是字面与命题身份，四条如下：\n\n1. **F1（step 1，承重）命题身份不符**：稿内 `## 命题` 逐字是 stmt:000042 的 statement_full；而 000030 的 statement_full 是「截面面积计算核自检通过：极坐标 tanh-sinh 求积…」（evidence_kind=cross_check、无证明正文）。按 000030 签这一份正文＝把甲稿的签借给乙稿。→ 改挂 stmt:000042（sha 就是 000042 行的 proof_sha256），或先给这一份稿登记一条与稿内 `## 命题` 逐字一致的命题行再送审。\n2. **F2（step 1）**：一、末句「这就是 (i) 的第一个等号」—— 稿内 (i) 只有 g(θ) 那一条等式，(1/2)∫‖e(θ)‖_p^{-2}dθ 不在 (i) 里。\n3. **F3（step 2）**：二、末句「便得 (i) 的第二个等号 A_diag(p) = (3/4)∫_0^{2π} S(θ)^{-2/p} dθ」—— 同上，无第二个等号。\n4. **F4（step 3）**：三、首句「这给出 (ii)」—— 该段推的是 A_diag 的 g 形式即 (i)；(ii) 是 A_face 闭式，在第四段。\n\n## 程序性读数（不等于「没问题」，也不等于「已签发」）\nverify.verify_proof 以 `already_signed` 短接：这一份正文 sha 已在稿上带 sign block（台账 verifications/000042.jsonl#v-000008），故**这一趟没有写 verifications/000030.jsonl 新行**、`sign_issuance.checked=false`。要按本号重审：先改稿（正文 sha 变了才不短接），并按 F1 挂对命题号再送；F1–F4 改完之前，这一签不签发。\n\n## 要你们做的\n- B：确认这一份优化副本应挂哪一号（按稿内 `## 命题` 字面应是 000042）；若确要给 000030 用，需先把稿内 `## 命题` 换成 000030 的字面。\n- F/B：F2–F4 三处序数是洗稿残留，改字即可，不必重写段落。",
+      "refs": [
+        "stmt:000030",
+        "stmt:000042"
+      ]
+    }
+  },
+  "task_id": "t-000190"
+}

@@ -1,0 +1,630 @@
+===== page 1 =====
+Geometriae Dedicata 76: 189–196, 1999.
+© 1999 Kluwer Academic Publishers. Printed in the Netherlands.
+189
+An Isoperimetric Inequality for Hyperplane
+Sections of a Convex Body
+CARLA PERI⋆
+Università Cattolica del Sacro Cuore, Largo A Gemelli 1,
+20123 Milan, Italy. e-mail: cperi@mi.unicatt.it
+(Received: 30 June 1998)
+Abstract. We obtain an inequality which estimates the product of the volumes of the two parts into
+which a convex body is divided by a hyperplane through its interior in terms of the volume of the
+hyperplane section. The basic tool in the proof is a ‘Localization lemma’ for log-concave functions
+due to Kannan, Lovász and Simonovits.
+Mathematics Subject Classiﬁcations (1991): 52A40, 52A41.
+Key words: isoperimetric inequalities, hyperplane cuts, log-concave functions.
+1. Introduction and Results
+Consider the Euclidean space Rn with the canonical inner product ⟨·, ·⟩and cor-
+responding norm ∥·∥. Denote by Sn−1 := {x ∈Rn | ∥x∥= 1} the unit Euclidean
+sphere, by V (·) the Lebesgue n-dimensional measure and by A(·) the Lebesgue
+(n −1)-dimensional measure deﬁned on Borel sets lying in hyperplanes of Rn.
+Let us suppose that a convex body K ⊂Rn is divided by a hyperplane H into
+two sets K1, K2. We want to ﬁnd a sharp upper bound for the product V (K1)V (K2)
+in terms of the area A(K ∩H) of the intersection of K with the hyperplane H.
+This problem has been studied by Bokowski and Sperner [2], Bokowski [1], Gysin
+[8], Mao [11] and Santalò [13] who obtained upper bounds where A(K ∩H) is
+multiplied by a constant depending on the diameter of K and on the dimension
+n. It should be noted that a more general version of this problem, where H is
+replaced by a measurable surface, has been studied by many authors in connection
+with randomized algorithms for approximating the volume of a convex body (see
+the survey of Gritzmann and Klee [6] and the recent article of Kannan, Lovász
+and Simonovits [10] for references). Relative isoperimetric inequalities are also
+related to immersion theorems for Sobolev spaces (see, for instance, [3–5] and the
+references given there).
+In this note we prove the following:
+⋆Work partially supported by Italian Research Council (CNR) Grant 96.00226.CT01.
+201290.tex; 1/06/1999; 14:54; p.1
+PDF [Corrected] [Disc/Cp] (Kb. 6) INTERPRINT: Shirley [Geom 1680] (geomkap:mathfam) v.1.15
+===== page 2 =====
+190
+CARLA PERI
+THEOREM 1. If K ⊂Rn is a convex body divided into two parts K1, K2 by a
+hyperplane H orthogonal to u ∈Sn−1 then
+V (K1)V (K2) ⩽
+1
+ln 2
+
+min
+y∈Rn
+Z
+K
+|⟨u, x −y⟩| dx
+
+A(K ∩H).
+(1)
+We also show that inequality (1) is asymptotically tight for sufﬁciently large n.
+We recall that the centroid of a body K is deﬁned by
+c(K) :=
+1
+V (K)
+Z
+K
+x dx.
+COROLLARY 1. If K ⊂Rn is a convex body divided into two parts K1, K2 by a
+hyperplane H orthogonal to u ∈Sn−1 then
+V (K1)V (K2) ⩽
+1
+ln 2
+Z
+K
+|⟨u, x −c(K)⟩| dx
+
+A(K ∩H).
+Note that for a ﬁxed convex body K the function ϕu: Rn →R+ deﬁned by
+ϕu(y) :=
+Z
+K
+|⟨u, x −y⟩| dx
+is constant on any hyperplane orthogonal to u and attains its minimum when y
+belongs to the hyperplane which cuts K into two parts with equal volume. Thus,
+when K is centrally symmetric the centroid of K minimizes the function ϕu. Ac-
+tually, in this case the constant 1/ ln 2 in the previous inequalities can be dropped
+as it is shown by the following.
+THEOREM 2. If K ⊂Rn is a centrally symmetric convex body divided into two
+parts K1, K2 by a hyperplane H orthogonal to u ∈Sn−1 then
+V (K1)V (K2) ⩽
+Z
+K
+|⟨u, x −c(K)⟩| dx
+
+A(K ∩H).
+(2)
+Inequality (2) is sharp: equality occurs for a cylinder in the direction u when H
+passes through the centre of the cylinder.
+Moreover, in the case where H passes through the centre of K, i.e. H ∩K is the
+section with maximum area in the direction u, inequality (2) follows from a more
+general inequality due to Milman and Pajor [12].
+We also note that the constant
+R
+K |⟨u, x −c(K)⟩| dx can be given a geometric
+interpretation. Suppose c(K) = o, then the function h0K: Sn−1 →R deﬁned by
+h0K(u) :=
+1
+V (K)
+Z
+K
+|⟨u, x⟩| dx
+is the support function in the direction u of the centroid body 0K of K [14]. Thus,
+inequality (1) implies
+201290.tex; 1/06/1999; 14:54; p.2
+===== page 3 =====
+AN ISOPERIMETRIC INEQUALITY FOR HYPERPLANE SECTIONS
+191
+min{V (K1), V (K2)} ⩽
+1
+ln 2D0KA(K ∩H)
+(D0K being the diameter of 0K) and the constant 1/ ln 2 can be dropped when K
+is centered. We think that this inequality can be generalized as follows.
+CONJECTURE 1. Let K be a convex body in Rn such that c(K) = o and let
+E ⊂K be a measurable set. Let A(K, E) denote the Minkowski content [3] of the
+part of the boundary of E which is contained in the interior of K. Then
+min
+
+V (E), V (K⧹E)
+	
+⩽
+1
+ln 2D0KA(K, E)
+and the constant 1/ ln 2 can be dropped when K is centered.
+In the case where K is the unit cube this inequality was proved by Hadwiger
+[9]; in the general case it would improve an inequality obtained by Kannan, Lovász
+and Simonovits [10].
+2. Proof of Theorem 1
+The results of this note are both based on the following ‘Localization lemma’
+for log-concave functions proved by Kannan, Lovász and Simonovits [10]. We
+recall that a function f : Rn →[0, ∞) is said to be logarithmically concave (log-
+concave) if the function ln f : Rn →[−∞, ∞) is concave (with the usual conven-
+tions regarding −∞).
+LEMMA 1. Let f1, f2, f3, f4 be four nonnegative continuous functions deﬁned on
+an interval [a, b] ⊂R and let α, β > 0. Then the following are equivalent:
+(i) For every log-concave function F on R
+Z b
+a
+F(t)f1(t) dt
+α Z b
+a
+F(t)f2(t) dt
+β
+⩽
+Z b
+a
+F(t)f3(t) dt
+α Z b
+a
+F(t)f4(t) dt
+β
+.
+(ii) For every subinterval
+
+a′, b′
+⊂[a, b] , and every real number ζ,
+ Z b′
+a′
+eζtf1(t) dt
+!α Z b′
+a′
+eζtf2(t) dt
+!β
+⩽
+ Z b′
+a′
+eζtf3(t) dt
+!α Z b′
+a′
+eζtf4(t) dt
+!β
+.
+201290.tex; 1/06/1999; 14:54; p.3
+===== page 4 =====
+192
+CARLA PERI
+By dominated convergence of the integrals this lemma extends to the more
+general case where f1 and f2 are upper semicontinuous functions, whereas f3 and
+f4 are lower semicontinuous functions.
+It must be observed that a procedure of localization for the study of isoperimet-
+ric inequalities was also introduced by Gromov and Milman in [7].
+In what follows hyperplanes will be conveniently parametrized in the form
+Hu(t) :=
+
+x ∈Rn | ⟨u, x⟩= t
+	
+,
+where u ∈Sn−1 and t ∈R.
+We also need the following easy lemma which is an immediate consequence of
+the Brunn–Minkowski theorem [14].
+LEMMA 2. Let K be a convex body in Rn and u ∈Sn−1. The function deﬁned by
+A(t) := A(K ∩Hu(t)), for t ∈R, is log-concave.
+We can now prove the ﬁrst theorem.
+Proof. If H ∩int K = ∅the inequality is trivial. Thus let H ∩int K̸ = ∅.
+We replace H by its (ε/2)-neighborhood Hε := H + (ε/2)B, where ε > 0, and
+we deﬁne Kε
+1 := K1⧹Hε and Kε
+2 := K2⧹Hε. It is enough to prove that for ε
+sufﬁciently small
+V (Kε
+1)V (Kε
+2) ⩽
+1
+ln 2
+
+min
+y∈Rn
+Z
+K
+|⟨u, x −y⟩| dx
+ V (K ∩Hε)
+ε
+,
+as this implies inequality (1) by letting ε →0. Then, we have to prove that for
+every y ∈Rn
+V (Kε
+1)V (Kε
+2) ⩽
+1
+ln 2
+Z
+K
+|⟨u, x −y⟩| dx
+ V (K ∩Hε)
+ε
+.
+(3)
+Let H be deﬁned by the equation ⟨u, x⟩= h. Denote c := ⟨u, y⟩,
+a :=
+min {t ∈R |K ∩Hu(t)̸ = ∅} and b := max {t ∈R |K ∩Hu(t)̸ = ∅} . With these
+notations we have
+Z
+K
+|⟨u, x −y⟩| dx =
+Z b
+a
+|t −c| A(t) dt,
+where A(t) is deﬁned as in Lemma 2.
+Let ε be sufﬁciently small so that
+
+h −ε/2, h + ε/2
+
+⊂[a, b]. Denote by
+f1, f2, f3 the indicator functions of the intervals
+
+a, h −ε/2
+
+,
+
+h + ε/2, b
+
+,
+201290.tex; 1/06/1999; 14:54; p.4
+===== page 5 =====
+AN ISOPERIMETRIC INEQUALITY FOR HYPERPLANE SECTIONS
+193
+
+h −ε/2, h + ε/2
+
+respectively and let f4(t) := (|t −c|/ε ln 2) b
+f4(t), where b
+f4 is
+the indicator function of the interval [a, b] . Then inequality (3) becomes
+Z b
+a
+A(t)f1(t) dt
+Z b
+a
+A(t)f2(t) dt ⩽
+Z b
+a
+A(t)f3(t) dt
+Z b
+a
+A(t)f4(t) dt.
+By Lemmas 1 and 2 it is sufﬁcient to prove that for every subinterval
+
+a′, b′
+⊂
+[a, b] and every real number ζ
+Z b′
+a′
+eζtf1(t) dt
+Z b′
+a′
+eζtf2(t) dt ⩽
+Z b′
+a′
+eζtf3(t) dt
+Z b′
+a′
+eζtf4(t) dt.
+We can assume
+
+h −ε/2, h + ε/2
+
+⊂
+
+a′, b′
+, otherwise the inequality is trivial.
+We can also rescale so that ζ = 1 (the case ζ = 0 is trivial). Then the inequality
+we have to prove becomes
+Z h−ε/2
+a′
+et dt
+Z b′
+h+ε/2
+et dt ⩽
+1
+ε ln 2
+Z h+ε/2
+h−ε/2
+et dt
+Z b′
+a′ |t −c| et dt,
+which is equivalent to
+(1 −ea′−h+ε/2)(eb′ −eh+ε/2) ⩽
+1
+ln 2
+eε −1
+ε
+ Z b′
+a′ |t −c| et dt.
+When ε decreases the left-hand side increases, while the right-hand side decreases.
+Thus, it is sufﬁcient to prove the inequality in the limit case ε = 0. Moreover, the
+left-hand side is maximized when h = (a′ + b′)/2, while the right-hand side is
+minimized when c = ln((ea′ + eb′)/2). By replacing these values in the previous
+inequality we see that we have to prove the inequality
+(e(b′−a′)/2 −1)2 ⩽
+1
+ln 2
+ 
+−eb′−a′ ln ea′−b′ + 1
+2
+−ln eb′−a′ + 1
+2
+!
+.
+Further, denote z := e(b′−a′)/2 and
+f (z) := (z −1)2 +
+1
+ln 2
+
+z2 ln z−2 + 1
+2
++ ln z2 + 1
+2
+
+.
+Then we have to show that f (z) ⩽0 for z ⩾1. We have f ′(1) = 0, f ′(z)/z →0
+as z →+∞and
+d
+dz
+f ′(z)
+z
+
+= 2(z2 −(2/ ln 2)z + 1)
+z2(z2 + 1)
+⩾0,
+201290.tex; 1/06/1999; 14:54; p.5
+===== page 6 =====
+194
+CARLA PERI
+for z ⩾(1 +
+p
+1 −(ln 2)2)/ ln 2. This implies f ′(z) ⩽0 for z ⩾1 so that f is not
+increasing. Since f (1) = 0, this implies f (z) ⩽0 for z ⩾1.
+Inequality (1) is asymptotically tight for sufﬁciently large n. To show that,
+we consider a truncated cone in Rn, with axis parallel to u, such that A(t) =
+(1 + t/(n −1))n−1 for t ∈[0, b] and A(t) = 0 for t /∈[0, b] , where b is any
+real positive number. We cut this body by the hyperplane deﬁned by the equation
+⟨u, x⟩= b/2. For sufﬁciently large n we have A(t) ∼et, so that it is enough to
+take b sufﬁciently large.
+3. Proof of Theorem 2
+We may assume c(K) = o. If H ∩int K = ∅, then the inequality is trivial. Thus let
+H ∩int K̸ = ∅. We can also assume that H is deﬁned by the equation ⟨u, x⟩= h,
+where h ⩾0. Let k := max {t ∈R | K ∩Hu(t)̸ = ∅} , then 0 ⩽h < k. By
+symmetry inequality (2) becomes
+Z k
+h
+A(t) dt
+Z h
+0
+A(t) dt +
+Z k
+0
+A(t) dt
+
+⩽2A(h)
+Z k
+0
+A(t)t dt
+(4)
+where the function A(t) is deﬁned as in Lemma 2.
+By elementary computation we obtain
+Z k
+h
+A(t) dt
+Z h
+0
+A(t) dt +
+Z k
+0
+A(t) dt
+
+= 2
+Z k
+h
+A(t)
+Z t
+0
+A(s) ds
+
+dt.
+Since the function A(t) is not increasing in the interval [0, k] then
+Z k
+h
+A(t)
+Z t
+0
+A(s) ds
+
+dt
+⩽
+Z h
+0
+A(t) dt
+Z k
+h
+A(t) dt + A(h)
+Z k
+h
+(t −h) A(t) dt.
+When h = 0 this implies inequality (4). Thus let h > 0. It is sufﬁcient to show that
+Z h
+0
+A(t) dt
+Z k
+h
+A(t) dt ⩽A(h)
+Z h
+0
+tA(t) dt + hA(h)
+Z k
+h
+A(t) dt.
+(5)
+We prove that for ε > 0 sufﬁciently small
+Z h−ε/2
+0
+A(t) dt
+Z k
+h+ε/2
+A(t) dt
+⩽1
+ε
+Z h
+0
+tA(t) dt + h
+Z k
+h
+A(t) dt
+ Z h+ε/2
+h−ε/2
+A(t) dt,
+201290.tex; 1/06/1999; 14:54; p.6
+===== page 7 =====
+AN ISOPERIMETRIC INEQUALITY FOR HYPERPLANE SECTIONS
+195
+as this implies inequality (5) by letting ε →0.
+Let ε be sufﬁciently small so that
+
+h −ε/2, h + ε/2
+
+⊂[0, k]. Denote by
+f1, f2, f3 the indicator functions of the intervals
+
+0, h −ε/2
+
+,
+
+h + ε/2, k
+
+,
+
+h −ε/2, h + ε/2
+
+respectively and let
+g(t) :=
+(
+t
+if 0 ⩽t < h,
+h
+if h ⩽t.
+Deﬁne f4(t) := g(t) b
+f4(t)/ε, where b
+f4 is the indicator function of the interval
+[0, k]. Then the previous inequality becomes
+Z k
+0
+A(t)f1(t) dt
+Z k
+0
+A(t)f2(t) dt
+⩽
+Z k
+0
+A(t)f3(t) dt
+Z k
+0
+A(t)f4(t) dt.
+By Lemma 1 and Lemma 2 it is sufﬁcient to prove that for every subinterval
+[a, b] ⊂[0, k] and every real number ζ
+Z b
+a
+eζtf1(t) dt
+Z b
+a
+eζtf2(t) dt ⩽
+Z b
+a
+eζtf3(t) dt
+Z b
+a
+eζtf4(t) dt.
+We can assume
+
+h −ε/2, h + ε/2
+
+⊂[a, b] , otherwise the inequality is trivial.
+The case ζ = 0 is trivial. Thus let ζ̸ = 0. We distinguish two cases.
+(i) Let ζ > 0. By rescaling so that ζ = 1 we get
+Z bh−bε/2
+ba
+et dt
+Z bb
+bh+bε/2
+et dt
+⩽1
+bε
+Z bh+bε/2
+bh−bε/2
+et dt
+ Z bh
+ba
+t et +
+Z bb
+bh
+bh et dt
+!
+,
+where ba = ζa,bb = ζb,bh = ζh and bε = ζε. Thus, we have to prove the
+inequality
+(1 −eba−bh+bε/2)(ebb −ebh+bε/2)
+⩽
+ebε −1
+bε
+
+(bh e
+bb −e
+bh −ba eba + eba).
+When bε decreases the left-hand side increases, while the right-hand side de-
+creases. Thus, it is sufﬁcient to prove the inequality in the limit case bε = 0.
+Denote f (z) = −eba+bb−z −z ebb +ba eba + ebb. We have to show that f (z) ⩽0 for
+every z ∈
+
+ba,bb
+
+, where 0 ⩽ba ⩽bb. This follows from the fact that f (ba) = 0
+and f ′(z) ⩽0 for z ∈
+
+ba,bb
+
+.
+201290.tex; 1/06/1999; 14:54; p.7
+===== page 8 =====
+196
+CARLA PERI
+(ii) The proof in the case ζ < 0 is similar.
+References
+1.
+Bokowski, J.: Ungleichungen für den Inhalt von Trennﬂächen, Arch. Math. 34 (1980), 84–89.
+2.
+Bokowski, J. and Sperner, E.: Zerlegung konvexer Körper durch minimale Trennﬂächen, J.
+Reine Angew. Math. 311/312 (1979), 80–100.
+3.
+Burago, Yu. D. and Zalgaller, V. A.: Geometric Inequalities, Springer-Verlag, Berlin, 1988.
+4.
+Cianchi, A.: On relative isoperimetric inequalities in the plane, Bull. U.M.I B 3(7) (1989),
+289–325.
+5.
+Cianchi, A.: A sharp form of Poincaré type inequalities on balls and spheres, ZAMP 40 (1989),
+558–569.
+6.
+Gritzmann, P. and Klee, V.: On the complexity of some basic problems in computational con-
+vexity: II. Volume and mixed volumes, In: T. Bisztriczky et al. (eds), Polytopes: Abstract,
+Convex and Computational, NATO ASI Series 440, Kluwer Acad. Publ., Dordrecht, 1994, pp.
+373–466.
+7.
+Gromov, M. and Milman, V. D.: Generalization of the spherical isoperimetric inequality to
+uniformly convex Banach spaces, Compositio Math. 62 (1987), 263–282.
+8.
+Gysin, L.: Inequalities for the product of the volumes of a partition determined in a convex
+body by a surface, Rend. Circ. Mat. Palermo, Ser. II 35 (1986), 420–428.
+9.
+Hadwiger, H.: Gitterperiodische Punktmengen und Isoperimetrie, Monatsh. Math. 76 (1972),
+410–418.
+10.
+Kannan, R., Lovász, L. and Simonovits, M.: Isoperimetric problems for convex bodies and a
+localization lemma, Discrete Comput. Geom. 13 (1995), 541–559.
+11.
+Mao, Q. J.: On an inequality related to the splitting of a convex body by a plane, Geom.
+Dedicata 47 (1993), 237–239.
+12.
+Milman, V. D. and Pajor, A.: Isotropic position and inertia ellipsoids and zonoids of the unit
+ball of a normed n-dimensional space, In: J. Lindenstrauss and V. D. Milman (eds), Geometric
+Aspects of Functional Analysis, Lecture Notes in Math. 1376, Springer-Verlag, Berlin, 1989,
+pp. 64–104.
+13.
+Santaló, L.: An inequality between the parts into which a convex body is divided by a plane
+section, Rend. Circ. Mat. Palermo, Ser. II 32 (1983), 124–130.
+14.
+Schneider, R.: Convex bodies: The Brunn–Minkowski Theory, Cambridge University Press,
+Cambridge, 1993.
+201290.tex; 1/06/1999; 14:54; p.8

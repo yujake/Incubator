@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-25T03:24:39+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 1548,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"监控回合（唤醒 wk-000102）收口：H1 对 doc:000001 现行版（own.revise 后 status=revised、rounds=7；本轮只动 claim-6：citations 由 [stmt:000034, stmt:000042, lit:000000] 换成 [stmt:000034, stmt:000042, lit:000002, lit:000006]，措辞收敛为「the central …」那一句）已复核并交差（树形读数 H·done，名下未消 0 项；板项 t-000303 报「ok：执行完成」）。但本回合受 monitor_turn_restricted 限制（出口只许 summon / final / note），我调不了 review.list_findings、own.revise、doc.paper_compile ⇒ H 的裁决在我这里是「未核到」，不是「通过」，我也不把 doc:000001 报成 accepted。补派没有必要（H 已交差，没有第二条要它做的事）；余下四件必须落到下一轮正常回合：① review.list_findings(doc_id=000001, status=open) 取裁决与逐条 finding；② 有 open finding 就 own.revise 同号交回改 claim-N（fixed_findings 要真改到那一处），改完再派 H 按 round_no 复核；③ 只要动过 out/package/main.tex 就重跑 doc.paper_compile，让回执 tex_sha256 对上盘上正文（否则 paper_pdf_is_stale）；④ conductor.ack 消 t-000303。若要判「这一趟算不算交差」：稿件仍未到 accepted，缺口是「现行版缺一次被签名的复审」。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\lp-ball-22\\\\runs\\\\G-20261125-032439-001.json\", \"messages\": [], \"outcome\": \"ok\", \"status\": \"done\", \"steps\": 2, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "79aeeb2ef21067bff5680f86a6d9fcaddd2e224acb0161dc810f9879a26bed81",
+ "readings": {},
+ "role": "G",
+ "status": "done",
+ "task_id": "t-000297"
+}

@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T22:27:49+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 3408,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"五篇文献逐篇结论（本轮 B・t-000204）：**消化 0 篇 / 5 篇**，卡点是框架侧的「概念配额按会话累计」——不是我读不到全文。\\n\\n逐篇：\\n- lit:000017《Paraconsistent dominated convergence》：run_once 已领取并读完（12 页全文，37 条引文回验通过、1 条 failed），但 `concepts_created=0 / relations_added=0`：概念配额已满（limit 30, written 30）⇒ 本条 159 个概念候选全部受控拒绝、37 条关系 deferred。落库 0 条 statements / 0 条 relations。\\n- lit:000018《Generalized integrals and convergence theorems》：同上，已读（22 条引文回验通过、1 条 failed），0/0；73 概念拒绝、23 关系 deferred。\\n- lit:000019《An introduction to measure theory》：未领取（还没轮到），0/0。\\n- lit:000023《Measure, integration & real analysis》：未领取，0/0。\\n- lit:000024《Measure theory and integration by and for the learner》：未领取，0/0。\\n\\n配额被谁吃掉的：我第一次 run_once 按队列领到的是 lit:000016（《estimates on the decay of the Laplace–Pólya integral》，不在这五篇里）——它一次写满 30 条 concept + 23 条 relation，把本次会话的 30 条概念额度用尽；此后 000017、000018 两轮都是同一读数（written=30 恒满），第三次再调必然是同样的 0，属原地打转，故停手。数据面核对：statements 里 source_lit_id 出现过的只有 000000/000001/000014/000015/000016/000020/000021/000022，这五篇一条都没有；literature 上它们 processed 仍为 false（我没有把没消化的写成消化了）。\\n\\n能力边界（如实报）：PDF 在 library/ 是二进制，fs.read 读不了；盘上只有 000001/000002/000006 三份 .txt，这五篇没有文本缓存。可选的替代路是 ocr.run 逐页取文本后由我用 own.register_statement 手工落 concept 行（quote_verified 由框架对库内全文重算，不自报），但关系行没有可核的写入口（table.create 不跑逐字回验，写进去等于把「未核」说成「核过」），所以手工路最多补概念、补不出合格关系 —— 我没有用这条路冒充「消化了」。\\n\\n迁移口径（派活要求的那一条）：这五篇是 measure theory / 广义积分背景，**可迁移**的只有标准工具位（σ-代数与测度、可测函数、单调/控制收敛定理、Fubini 型换序）——它们在立方体超平面截面体积这条线上只当「极限与积分换序」的合法性依据，不作结论；**不迁移**的是 lit:000017 的 Levi-Civita 非 Archimedes 域 + Chunk-and-Permeate 悖协调框架、lit:000018 的广义（Henstock–Kurzweil 型）积分与重排 Riemann 定理 —— 它们给不出任何截面体积的定量界，当成结论会把背景工具抬成结果。三本教材（019/023/024）同理：只供应标准定理的引用位，不产出 Brunn–Minkowski / 截面体积界的新事实。\\n\\n另有欠账（不在本委托内，但读数在我名下）：run_once 回执 `stage_two.unwashed` = stmt:000030 #p2（已开副本 000003/000004，未洗未重签）。本轮预算没有再开这条线。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\lp-ball-22\\\\runs\\\\B-20261124-222749-001.json\", \"messages\": [], \"outcome\": \"ok\", \"status\": \"done\", \"steps\": 17, \"stop_reason\": \"final\", \"summons\":",
+ "payload_sha256": "e3e69a95d306976c230064870a6f46e60d8c432fa89efe42e98c595789441ead",
+ "readings": {},
+ "role": "B",
+ "status": "done",
+ "task_id": "t-000204"
+}

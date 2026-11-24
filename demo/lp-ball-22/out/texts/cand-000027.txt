@@ -1,0 +1,1440 @@
+===== page 1 =====
+Geometriae Dedicata 63: 267-296, 1996. 
+267 
+(E) 1996 Kluwer Academic Publishers. Printed in the Netherlands. 
+The Cross-Section Body, Plane Sections of Convex 
+Bodies and Approximation of Convex Bodies, I 
+E. MAKAI, JR. t * and H. MARTINI 2 
+I Mathematical Institute of the Hungarian Academy of Sciences, Pf. 127, H-1364 Budapest, 
+Hungary. e-mail: makai@math-inst.hu 
+2Technische Universit& Chemnitz-Zwickau, Fakult~it fiir Mathematik, Postfach 964, D-09009 
+Chemnitz, Germany. e-mail: martini@mathematik.tu-chemnitz.de 
+(Received: 25 February 1994; revised version: 27 December 1995) 
+Abstract. For a convex body K C ]~d we investigate three associated bodies, its intersection body IK 
+(for 0 C int K), cross-section body CK, and projection body HK, which satisfy IK C CK C IIK. 
+Conversely we prove CK C consh(d)I(K - x) for some x E intK, and HK C const2 (d)CK, for 
+certain constants, the first constant being sharp. We estimate the maximal k-volume of sections 
+of ½(K + (-K)) with k-planes parallel to a fixed k-plane by the analogous quantity for K; our 
+inequality is, if only k is fixed, sharp. For L C ~a a convex body, we take n random segments in L, 
+and consider their 'Minkowski average' D. We prove that, for V(L) fixed, the supremum of V(D) 
+(with also n E N arbitrary) is minimal for L an ellipsoid. This result implies the Petty projection 
+inequality about max V((IIM)*), for M C ]~a a convex body, with V(M) fixed. We compare the 
+volumes of projections of convex bodies and the volumes of the projections of their sections, and, 
+dually, the volumes of sections of convex bodies and the volumes of sections of their circumscribed 
+cylinders. For fixed n, thepth moments of V(D) (1 < p < c~) also are minimized, for V(L) fixed, by 
+the ellipsoids. For k = 2, the supremum (n E N arbitrary) and the pth moment (n fixed) of V(D) are 
+maximized for example by triangles, and, for L centrally symmetric, for example by parallelograms. 
+Last we discuss some examples for cross-section bodies. 
+Mathematics Subject Classifications (1991): 52A20, 52A22, 52A27, 52A40. 
+Key words: projection body, intersection body, cross-section body, central symmetral, ellipsoid, 
+zonoid, Petty projection inequality. 
+1. Basic Notions 
+Let K C ~d be a convex body, i.e. a compact, convex set with non-empty interior. 
+We always suppose d > 2. In this paper we will investigate several bodies associated 
+with K. 
+We denote by Vk the k-dimensional Lebesgue measure, for k = d we write 
+V instead of Ira. For K C ~d a convex body and x E intK the radial function 
+rx of K with respect to x is the strictly positive function on S a-t for which 
+bd K = { x + rx ( u )u I u E S a-l}. Centred means: symmetric about the origin. For 
+x, g E I~ d the segment with endpoints x, y is denoted by [x, y]. 
+* Research (partially) supported by Hungarian National Foundation for Scientific Research, Grant 
+No. 41. 
+===== page 2 =====
+268 
+E. MAKAI JR. AND H. MARTINI 
+First we recall the definition of the cross-section body CK, cf. [Mar 2, Mar 3]. 
+For u E S d-a we let _Vd-1 (K, u) = max{Vd-1 (K tq (u ± + Au)) [ A E ~}, where 
+S d-1 denotes the unit (d- 1)-sphere and u ± = {x E l~ d [ (u, x) = 0}. (Analogous- 
+ly, for linear subspaces of ]~d, ± will be used to denote their orthocomplement.) 
+Then CK = {#u ] u E S d-1 , 0 ~_ ]~ ~ V d_ 1 (K, u)}. Here Vd_l (K, u) is a positive 
+continuous function of u E S d-l, hence CK is a star body with 0 in its interior, 
+and it is also centred. For K centrally symmetric, CK is known to be convex, cf. 
+[Bu 1] and also [Ba], [BaF], [MP]. 
+The projection body IIK is defined as the convex body with support function 
+h(IIK, u) being equal to the (d - 1)-volume of the orthogonal projection of K 
+to u ±. (We note that this function of u is in fact the support function of a centred 
+convex body, cf. [BF, p. 45], even actually of a zonoid, [Bo, p. 327], cf. also [Sch, 
+§§5.3, 7.4]). 
+We also recall the definition of the intersection body IK, cf. [L2] and also [Sch, 
+§ 7.4.] For 0 E intK, one puts IK = {#u l u E S d-l, 0 ~ ]z ~ Vd_ 1 (K fq u±)}. 
+Also Va-1 (K M u ±) is a positive continuous function ofu E S d-1 , so IK also is a 
+centred star body with 0 as interior point. In general it is not convex, cf. [Cr]. One 
+can define the intersection body IzK of K with respect to any interior point x as 
+1(K-x). 
+We still note that for d -- 2 we have IK c CK = HK, and that IIK coincides 
+with the planar convex body obtained from K + (-K) by rotation about 0 through 
+90 °. Here IK = CK holds if and only if K is centred, see [H]. 
+Evidently we have IK C CK, and here equality holds for K being centred, 
+by the famous Brunn-Minkowski theorem. (Actually, the equality IK = CK is 
+equivalent to the centredness of K, as is proved in the forthcoming joint paper 
+[MM0] of the authors with T. Odor.) Moreover, by [Mar l] we have CK C IIK 
+(actually the theorem given there asserts, equivalently, that the distance function 
+of HK is at most that of CK). For d > 3, the equality CK = IIK holds if 
+and only if K is an ellipsoid, cf. [Mar 5, Cot. 1]. As an example, we have for 
+K = rB d (B d is the unit ball about 0, having the volume ad) the relations 
+IK = CK = IIK = rd-lt~d_l Bd. 
+2. Summary of Results 
+Let K c ]~d (d > 2) be a convex body, and let IK, CK, HK denote its intersection 
+body, cross-section body and projection body, respectively. These are known to 
+satisfy IK C CK C IIK. We prove conversely that, for some x E int K, 
+CK C 
+• I(K -x) 
+and IIK C [2~-d(1 + o(1))] d/2" CK. 
+The constant in the first inclusion is sharp and is attained for example for K a 
+simplex. For both of these statements we give generalizations to k-dimensional 
+sections and projections rather than (d - 1)-dimensional ones, that for the second 
+===== page 3 =====
+CONVEX BODIES, I 
+269 
+statement involving some inequalities between the volumes of projections of convex 
+bodies and the volumes of the projections of their sections (cf. Sections 3, 7, 8). We 
+also give a dual statement for sections of convex bodies and of their circumscribed 
+cylinders (Section 8). 
+For these we need a statement relating the volumes of k-dimensional sections 
+of the bodies K and ZXK =I(K 
++ (-K)): 
+Vk((/kK) MLk) < (! k nk ~k. max Vk(K M(Lk +z)), 
+- 
+~2 i,~k_l ] 
+zEL~ 
+where nk = 7rk/2/F (1 + (k/2)), and Lk is a linear k-subspace of ]~d. This estimate 
+is, for k being fixed, sharp if d > k is allowed to be arbitrary (cf. Section 6). 
+This statement in turn is based on the following one. Let L C l~ d be a convex 
+body, and let 
+b(L) = inf 
+~ 
+E[xi,yi] 
+nEN, xl,Yl,...,xn, ynEL. 
+i=1 
+(The body (1/n)En=l [xi, Yi] is a zonotope, lying in L.) For L = (HM)* where M 
+is a zonoid, we have 
+b(L) = V(L) . V(M)d-I(½d) d, 
+where * denotes the polar body with respect to the unit sphere about 0. For any L, 
+we have 
+b(L) < (ld. '~d )d, 
+/~d-1 
+with equality, for example, for an ellipsoid, i.e., the worst approximable convex 
+bodies in this sense are, for example, the ellipsoids. 
+For d = 2 we prove 
+b(L) > 3/2, 
+and, for L being centrally symmetric, 
+b(L) >_ 2, 
+with equality if and only if L is a triangle or a parallelogram, respectively. Thus, 
+the best approximable (centrally symmetric) planar convex bodies in this sense are 
+the triangles (parallelograms), cf. Section 5. 
+===== page 4 =====
+270 
+E. MAKAI JR. AND H. MARTINI 
+A consequence of the upper estimate of b(L) is the Petty projection inequality: 
+For a convex body M C ll~ 
+V((IIM)*)V(M) d-1 <_ ( e;------~-d ~ d, 
+\ ~d-1 / 
+(cf. Section 6). Here, as proved by [Pc 2], equality holds if and only if M is an 
+ellipsoid. However, our results do not yield the description of the equality cases. 
+We investigate not only the supremum of V((1/n)E~= 1 [xi, Yi]), but, for fixed 
+n > d, also its pth moments flPn(L), for 1 < p < c~, where Xl, Yl,..., xn, Yn are 
+2n randomly chosen points of L. We prove 
+where B is a ball with V (B) = V(L). Equality holds if and only if L is an ellipsoid. 
+Thus the convex bodies, on average being the worst approximable in this sense, are 
+the ellipsoids. In fact we prove a more general theorem about V((1 In)En=l [xi, Yi]) 
+with xi, Yi C Li, where L1,... , Ln C ll~ a are convex bodies and n > d. Denoting 
+for 1 < p < cx3 the pth moments of this quantity by/3nP (L1, • •., Ln), we prove 
+tiP(L1,... ,L~) >_/3Pn(B1,... ,B~), 
+where Bi is a ball with V(Bi) = V(Li), (cf. Section 9). 
+For d = 2, we also give upper estimates for fl~(L), with 1 < p < co. Namely, 
+/3 p (L) _</3 p (T), 
+where T is a triangle with V(T) = V(L). For centrally symmetric L we get 
+flP~(L) <_ flPn(P), 
+where P is a parallelogram with V(P) = V(L). Thus the (centrally symmetric) 
+planar convex bodies, on average being the best approximable in this sense, are, 
+for example, the triangles (parallelograms). 
+We give analogues of these statements for aPn(L), which is the pth moment of 
+the area of the convex hull of n > 3 randomly chosen points in L (cf. Section 10). 
+About the maximal radius of CK we give a negative result (actually we give 
+it for k-dimensional sections, k being arbitrary with 2 _< k _< d - 1), showing 
+that for polytopes it cannot be determined as simply as it is in the case k = 1 (cf. 
+Section 11). 
+(The abstract and this summary concern both parts of this paper; Sections 1-7 
+are in Part I, Sections 8-11 in Part II. All references are given in Part I, while in 
+Part II we only give references that are mentioned there.) 
+===== page 5 =====
+CONVEX BODIES, I 
+271 
+v 
+- ¢t ° 
+-0. 
+Figure 1. 
+I 
+I 
+lO 
+% 
+b 
+3. The Intersection Body and the Cross-Section Body 
+Recall from Section 1 that we have IK C CK C IIK. One may ask if there are 
+inclusions of the form CK C constd • IxK = constd • I(K - x) for a suitable 
+point x E int K, and also of the form IIK C consta • CK. Of course, compactness 
+considerations or John's ellipsoids (see [J]) yield such constants, but we aim at 
+better ones. 
+THEOREM 3.1. For any convex body K C ~d, there exists an x E int K such that 
+CKc 
+(~-~-)d-l.IzK. 
+(1) 
+The constant ( ( d + 1) / d) d-1 is sharp, for example, for K a simplex. Moreover, for 
+any K one has (1)for example for x the barycentre of K. In this last statement 
+the constant ((d + 1)/d) d-1 cannot be reduced if and only if K is a cone over a 
+( d - 1 )-dimensional convex body. 
+Proof. (1) Let x be the barycentre of K. We have to prove that Vd-I(KM 
+(x + u±)) > (d/(d + 1)) d-1 • Vd_I(K N (x + u ± + ~ou)) for any uES d-l, 
+),o E ~. This is evident for ),o = O, so we will suppose ),o # O. Replacing u by -u, 
+if necessary, we may suppose ),o > O. 
+Let KM (x +u ± + Au) be non-empty exactly for -a < A < b. Then -a < 0 < b. 
+Let us denote (V d- 1 (K fq (x + u ± + )~u) ) ) 1 /(d- 1) by f (),). By the Bmnn-Minkowski 
+theorem for -a < A < b, f(),) is a concave function of )~. Then we have to prove 
+f(O) >_ [d/(d + 1)If ()~0). We may suppose f(0) < f(),0). (Note that we also have 
+f(0) > 0.) Since x is the barycentre of K, we have fb_ a f()0d-1),dA = 0. Hence 
+L 
+/0 
+/0 
+= 
+>__ 
+Let us denote by g(A) the linear function satisfying g(0) = f(0) and g(),o) = 
+f()~o). 
+By f(0) < f ()'o) the function g(),) is strictly increasing. Thus g()Q vanishes in 
+a point -ao, satisfying -ao <_ -a. Thus g(),) = c()~ + ao), where c > 0. By the 
+===== page 6 =====
+272 
+E. MAKAI JR. AND H. MARTINI 
+concavity of f(A), for -a < ~ < 0 we have 9()~) > f()~), and for 0 < ~ < )~0 we 
+have f(A) > g(~). Hence 
+? 
+f 
+L 
+g(/k)d-l(-)Od)~ > 
+g()Od-l(-jk)da > 
+f(Jk)d-l(--/k) da 
+a 0 
+a 
+~0 
+--> fO )~Of()Od-l'~d)~ --> fO 
+ff(~)d-l'~d'~" 
+This implies /.,o 
+0 > 
+g()t)d_l)~d/k = cd_l 
+)~o (,k + ao)d-1)~d/k 
+ao 
+ao 
+= cd_l [ao+~o td_l(t _ ao) dt 
+dO 
+=cd_l((ao+/~O) d+l 
+(ao +_d$O) d) 
+d+ 1 
+-ao. 
+- 
+, 
+hence 
+ao + ),o 
+ao 
+0 > - - 
+- 
+d+l 
+d' 
+or, equivalently, 
+,~o < ao 
+-- 
+d" 
+Then 
+f(O) _ g(O)_ 
+a o 
+> d 
+f(~o) 
+9(Ao) 
+ao + )~o - d + 1' 
+as we had to prove. 
+By examining the proof, we see that for x the barycentre equality can hold 
+only if the following relations are satisfied: ~0 = b, -a0 = -a, and 9(),) = f(~) 
+on [-a, Ao] = [-a, b]. Hence, by the equality cases in the Brunn-Minkowski 
+inequality, we see that, in the case of the equality f(O)/f()~o) = d/(d + 1), all 
+sections K fq (x + u ± + )~u) with -a < )~ < b are homothetic, and K is a cone 
+with apex K fq (x + u ± - au) and base K f3 (x + u ± + bu). 
+(2) Now we have to show that the constant ((d + 1)/d) a-1 in the first statement 
+of the theorem is sharp for K a simplex. Let x E K be arbitrary. We will show that 
+for some u E S d-1 and some ),0 E I~ we have 
+( 
+d 
+,~a-1 
+Vd-l(g n (x + #)) ~ \~--~] 
+• Va-1 (g n (z + u ± + ~o~)). 
+===== page 7 =====
+CONVEX BODIES, I 
+273 
+Let the barycentric coordinates of x, with respect to the vertices xl,.. •, Xd+l of 
+K, be #1,.-., #4+1. Let for example ~1 >--- 1/(d + 1). Let u be the normal of the 
+facet of K opposite to Xl, and let K M (x + u ± + )~0u) be the facet of K opposite 
+to X l. Then 
+Vd-I(K N (x + u±)) 
+= (1 - #1) d-1 <: 
+Vd-I(K f3 (x + u ± + )~ou)) 
+- \d + l/ 
+[] 
+CONJECTURE 3.2. In the first statement of Theorem 3.1, the constant ( (d + 1)/ 
+d) d-1 cannot be reduced if and only if K is a simplex. 
+[] 
+Analogously one may investigate the k-dimensional volumes Vk of sections of a 
+convex body with k-planes, for any k with 1 < k < d - 1. For centred convex 
+bodies the Brunn-Minkowski theorem yields max{Vk(K M (Lk + Y))I Y E L~ } = 
+Vk(K M Lk), where Lk is a linear k-subspace. Thus it is reasonable to state 
+CONJECTURE 3.3. For any k, 1 < k < d- 1, and any convex body K C ~d there 
+exists an x E intK, such that for any linear k-subspace Lk, and for any y E L~, 
+we have 
+Vk(KM(x+Lk+y)) 
+< (d+l) 
+k 
+Vk( K M (x + Lk) ) 
+- \-ff--~ ] 
+' 
+with equality for K a simplex. 
+[] 
+(For a simplex, equality is attained for x being its barycentre and K M (Lk + y) a 
+k-face.) Possibly one can always choose x as the barycentre of K. 
+For k = 1, it is easy to settle this conjecture. 
+PROPOSITION 3.4. For any convex body K C ~a there exists an x E int K such 
+that for any one-dimensional linear subspace I and any y E l ± we have 
+d+l 
+Vl(KM(x+l+y))<_ 
+2 
+VI(KM(x+I)). 
+The constant (d + 1)/2 is sharp; it is attained if and only if K is a simplex (and 
+then x is the barycentre and l, for example, is parallel to an edge of K). Moreover, 
+for any K one has the stated inequality, for example, for x the barycentre of K, 
+and in this statement the constant (d + 1)/2 cannot be reduced if and only if K is 
+a cone over a (d - 1)-dimensional convex body. 
+Proof We consider the segment K M (x + l), for a point x later to be chosen 
+suitably. This segment is divided by the point x into two segments of lengths rx (u) 
+and rx(-u), where u E S a-1 , l = {Au I A E ~}, and rx denotes the radial function 
+of K with respect to x. Thus it suffices to show 
+VI(K A (x + l + y)) < (d + 1)rx(+u), 
+===== page 8 =====
+274 
+E. MAKAI JR. AND H. MARTINI 
+since then 
+Vl(K M(x +l +y)) < (d + l) rx(u) + rx(-u) 
+- 
+2 
+= (d+ l) Vl(gM(x+l)) 
+2 
+However, max{V1 (K fq (x + l + Y))IY E l l} = r(u) is the radial function of 
+the body K + (-K), and we have to show that this radial function is at most 
+(d + 1)rx(u). (The other case is done similarly.) In other words, we have to show 
+K + (-K) C (d + 1)(K - x) for a suitable x. However, one has -(K - z) C 
+d(K - z) for some z E int K, and here d cannot be reduced if and only if K is a 
+simplex (respectively, this holds for z the barycentre of K, with equality if and only 
+if K is a cone over a (d - 1)-dimensional convex body), cf. [Grii], p. 247. From 
+here we have -K C d(K - z) - z, hence K + (-K) C (d + 1)K - (d + 1)z = 
+(d + 1)(K - z). Thus our point x can be chosen as z. This shows each of the 
+statements, except those about the cases of equality, for K a simplex. 
+Let K be a simplex with vertices Xl,. • •, Xd+l. Let the barycentric coordinates 
+ofx be #1,.- •,/-td+l. Then E(/zi +#j) = d for 1 < i < j < d+ 1. Hence, unless all 
+#i + #j are equal (i.e., x is the barycentre), we have min (#i + #j) < 2/(d + 1 ). Let l 
+be spanned by xj - xi, where #i + #j < 2/(d + 1 ). Then max 1/] (K fq (x + l + y)) = 
+II x5 - xi II. Further, V](K M (x + l)) is the length of the segment of points with 
+I 
+barycentric coordinates #~, where #~ = #k for k # i, j; #~ = t, #j = #i + #j - t, 
+for 0 < t < #i + #j. Thus 
+VI(KM (x +l)) 
+2 
+maxVl(K M (x+l+y)) 
+= #i +#j< 
+d+ 1 
+if x is not the barycentre. 
+[] 
+For any k, 1 < k < d - 1, we can only prove a weaker result (which, however, 
+implies a large part of our Proposition 3.4). 
+PROPOSITION 3.5. For any convex body K C ~d there exists an x E int K such 
+that for any k, 1 < k < d - 1, any linear k-subspace Lk, and any y E LAk we have 
+Vk(K M(x + Lk +y)) <_ (d21) 
+k 
+- - 
+• Yk(K M (x + Lk)). 
+Proof. By [J], there exist two concentric homothetic ellipsoids E1, E2 with some 
+x C int K as common centre such that E1 C K C E2 and the ratio of homothety is 
+at most d. By affine invariance of our problem we may assume x = 0, E1 the unit 
+ball about 0, and also E2 the ball of radius d about 0. We want to show 
+\ 
+===== page 9 =====
+CONVEX BODIES, I 
+Figure 2. 
+275 
+It suffices to show that 
+d+l. 
+1 
+[KN(Lk +y)]C 
+y+~(KnLk) 
+• 
+Of course, we may suppose y ¢ 0. Let the radial function of K O Lk with respect 
+to 0 be 7,I, and that of K n (Lk + y) (¢ 0) with respect to y (possibly in an extended 
+sense, since y need not be an interior point) shall be denoted by r2. Then we have 
+to show 
+d+l 
+7,2 ~ --7"1. 
+2 
+It suffices to investigate these radial functions on the unit sphere of Lk only. 
+Let u C S a-1 n Lk. Consider the linear 2-plane P spanned by u, y. Then E1 N 
+P C K n P C E2 N P and 7,1 (u)u E relbd (K n P). Draw the (possibly coincident) 
+two tangent lines l ~, l" through 7,1 (u)u to the circle E1 N P. 
+Let v ~ denote the point of tangency of E1 n P with l ~, and let l~_ denote the 
+halfline of I t with endpoint v ~, passing through rl (u)u. The lines l ~, l" cut P into 
+four angular domains, and K N P does not intersect the open angular domain, 
+opposite to the angular domain containing E1 N P. Hence r2(u) is at most the 
+distance of the point (relbd (E2 O P)) n l~_ to the line 0y, i.e., 
+7,2(U) ~ dcos(6 - o~), 
+where 0 < 5 < 7r/2, cos 5 = 1/d, and o~ C [0, 5] is the angle of the lines 0u and 
+0v'. Further, rl (u) = 1/(cos a). Thus 
+r2(u_____)) < dcos(5-a)cosa = ½d[cos((5-a)+a)+cos((5-a)-a)] 
+7,1(u) 
+- 
+===== page 10 =====
+276 
+E. MAKAI JR. AND H. MARTINI 
+as needed for showing the statement of the proposition. 
+v1 
+4. Plane Sections of a Convex Body and its Central Symmetral 
+In this part and the following two sections we prove some statements to be used for 
+the comparison of CK and IIK in Section 7, which, as we hope, are of independent 
+interest. Further, we show some consequences of these statements. 
+Let L C I~ a be a convex body. Let us consider 2n points xl, Yl,..., xn, Yn E L. 
+Further, let us denote D(xl,Yl,... ,Xn,Yn) = (1/n)([xl,Yl] +... + [Xn, Yn]) 
+the 'Minkowski average' of the segments [xi, Yi] C L with 1 < i _< n. This is a 
+zonotope, lying in L. We denote 
+b(L) = inf {V(L)/V(D(xl,yl,... ,x,,yn)) InE N; 
+xl,yl,...,xn,yn EL} (<oc). 
+Observe that we have 
+i=1 
+,~l,...,)~n _> 0; ~)~i = 1 . 
+i=1 
+For rational ,~i this is evident, because then E~=l~i[xi,yi ] is of the form 
+ll, s 
+I 
+Ei=l (1/n') [x~, y~], where the sequence [x~, Yi] is obtained from the sequence [xi, Yi] 
+by taking them with suitable multiplicity. For irrational ,~i an approximation argu- 
+ment can be used (recalling that convergence of convex bodies is equivalent to 
+uniform convergence of their support functions on sa-1). We also note that the 
+idea of proofs of Proposition 4.1 and Theorem 6.3 comes from [CM]. 
+With the above notation, we obtain 
+PROPOSITION 4.1. Let K C 1~ a be a convex body, and let AK = ½(K + (-K) ). 
+For any k with 1 < k < d - 1 and any linear k-subspace Lk we have 
+max Vk(K rl (Lk + z)) <_ Vk((•K) M Lk) 
+zE L-~ 
+= max Vk((AK) M (nk + z)) 
+zEL~ 
+< b((Ag) M Lk)" max Vk(g M (nk + z)), 
+-- 
+zEL~ 
+where b((AK) M Lk) is meant relative to Lk( D ((AK) f-) Lk)). Supposing k and 
+L = (AK) M Lk arefixed, and replacing in the last inequality b((AK) M Lk) by 
+any smaller number, the resulting inequality is false for all sufficiently large d. 
+===== page 11 =====
+CONVEX BODIES, I 
+277 
+Proof. 
+(1) The first inequality and the equality follow from the Brunn- 
+Minkowski theorem. Namely, K M (Lk + z) and -K N (Lk -- z) are sections 
+of K and -K, respectively, and have equal k-volume, and (/kK) M Lk D ½[(K M 
+( Lk + z) ) + (-K Cl ( Lk -- z))]. For/XK we proceed similarly. 
+(2) We turn to the last inequality. Let n E N and Xl, Yl,..., xn, Yn E (AK) M Lk 
+be arbitrary. We need to show 
+Vk((AK) M Lk) <_ 
+Vk((AK) M Lk) 
+max Vk(K M (Lk + z)), 
+Vk(D(xl, yl, . . . , Xn, Yn) ) z C L~ 
+i.e., 
+Vk(D(xl,y,,... 
+,xn,yn)) < max Vk(K M (Lk +z)). 
+-- zEL~ 
+We have xi, Yi e (/kK) M Lk, hence Yi - xi E (/kK) + (-AK) 
+= 2A(AK) = 
+2AK 
+K+(-K).Alsoyi-xiELk.Thusforsome 
+' 
+' 
+= 
+xi, Yi E K we have Yi - xi = 
+y~- 
+' 
+x i ELk. Now let us choose z C L~- so that 
+' 
+' 
+(2n). 
+L k + z ~ 
+xi + 
+Yi 
+i=l 
+Then 
+, 
+t 
+t 
+~ 
+t 
+D(xl,Yl,..,xn,Y~) 
+is a 
+[xi, Yi] C K, hence their 'Minkowski average' 
+' y~) C Lk +z, by the choice ofz and 
+subset of K as well. Further, D (x], y],..., Xn, 
+, 
+... ,xn,Yn) isatranslateofD(xl,Yl, 
+yn). 
+' 
+D(x 
+ 
+' 
+' 
+by y~ - x i E Lk. Also 
+..., Xn, 
+From these we get 
+Vk(D(xl,Yl,... 
+,xn,yn)) 
+' Yn)) <- Vk(K N (Lk + z)), 
+= Vk(D(x~,y~,... ,x n, 
+as we needed to show. 
+(3) It remains to prove the last statement. Let therefore the integer k and 
+the centred convex body L C I~ k (that should be (AK) f'l Lk) be fixed. Let 
+0 < e < 1 be a sufficiently small number. For some n, let us choose n chords 
+[-Yl, yl], • • •, [-Yn, yn] of L with centres at 0, such that the closed e-neighbourhood 
+of the set uin__l [-Yi, Yi] contains L. This is possible for sufficiently large n. Let Ai 
+denote the intersection of the closed e-neighbourhood of [-Yi, Yi] with L. Then 
+L 
+'~ 
+= Ui=l Ai. 
+Now let d > k + n be any integer. We consider Lk = N k C IR d as the linear 
+subspace of l~d--spanned by the first k basic vectors ei. Let us define the compact 
+convex set K C I~ d by 
+,) 
+K =conv 
+i + ek+i 
+• 
+===== page 12 =====
+278 
+E. MAKAI JR. AND H. MARTINI 
+(4) First we estimate 
+max Vk (K N (Lk + z)) 
+zCL~ 
+from above. Let z = (~1, •. •, ~d), where ~1 ..... 
+~k = O. K lies in the linear sub- 
+space spanned by el,..., ek+n, hence K N (Lk + z) is non-empty only if ~k+n+l = 
+.... 
+~d = O. So we can suppose z = (O,...,O,(k+l,...,(k+n,O,...,O). We 
+have 
+K = 
+)~i(ai q- ek+i) I)~i >_ O, 
+ki=l 
+Thus 
+~)~i= 
+l, aiEAi}. 
+i=1 
+K N (Lk + z) = 
+)~iai + Y~ )~iek+i I )~i > O, 
+i=1 
+i=1 
+hi=l, 
+ai e Ai, hi = ~a+i , 
+i=1 
+which equals 
+~k+iai q- 
+~k+iek+i l ai ~ Ai 
+, 
+"= 
+i=l 
+provided ~k+i > O, P,,n__l~k+ i = 1, and is empty otherwise. So we may suppose 
+(k+i > O, En_l(k+i = 1. Then 
+Irk 
+~k+iai + 
+~k+iek+i l ai E Ai 
+= Irk 
+ek+iAi 
+• 
+"= 
+i=l 
+"= 
+We have A~ C [-y~, Yi] + eB k, hence 
+n 
+n 
+~k+iAi c ~ 
+(k+i[--Yi, Yi] + eB k. 
+i=1 
+i=1 
+By the observation right before Proposition 4.1, we get 
+vk 
+< Yk(L------2) 
+- 
+b(L)" 
+===== page 13 =====
+CONVEX BODIES, I 
+Then, using Cy!l<k+i[-yi, yi] C L and E < 1, we obtain 
+Here V&) (C, D) denotes the mixed volume of j copies of D and k - j copies of 
+C. Thus we have shown 
+(5) Now we show that (AK) 
+n Lk = L. Using the formula for K n (Lk + x) 
+from part (4) of this proof, (AAi) = Ai and U7=l Ai = L, we have 
+= conv UA, =convL= L, 
+) 
+as asserted. 
+Recalling the result from part (4), we have 
+which is arbitrarily close to b(L), if E is sufficiently small. 
+===== page 14 =====
+280 
+E. MAKAI JR. AND H. MARTINI 
+Up to now we have constructed only a compact convex set K. Observe that 
+affK - affK D (AK) fl Lk = L, thus affK - affK D affL = Lk. Let B ~ denote 
+the unit ball of (aft K - aff K) ±, and consider the convex body K ~ defined as the 
+direct sum K + B ~. Then clearly 
+Vk((AK') CI Lk) = Vk((AK) fl Lk), max Vk(K' M (Lk + z)) 
+zEL~ 
+= 
+max Vk (K M (Lk + z) ), 
+zEL~ 
+hence their quotient is at least a number arbitrarily close to b(L). This shows the 
+last statement from Proposition 4.1. 
+[] 
+Remark 4.2. Part (4) of the proof of Proposition 4.1 is actually valid for any 
+convex body L C l~ k , if we define K by n chords [xi, Yi], such that the closed 
+e-neighbourhood of Uinl [xi, yi] contains L. Obviously, Proposition 4.1 makes it 
+possible to define b(L), for L centrally symmetric (in an extrinsic way) as the sharp 
+constant in the last inequality of Proposition 4.1. If we fix k and d, we denote by 
+Ck,a the smallest number such that, for any convex body K C I~ d and any linear 
+subspace Lk, 
+Vk((AK) M Lk) < Ck,d max Vk(K M (Lk + z)) 
+-
+-
+ 
+zEL~ 
+holds. Then Proposition 4. l implies that, for fixed k, 
+sup ek, a = sup{b(L) [ L C 1~ k is a centrally symmetric convex body}, 
+d>k 
+and this quantity only depends on k. Observe that for k = 1 evidently C1, a = 1, 
+while for k = d, by the difference body inequality (cf. [RS]), 
+Cdd= 
+[] 
+5. Approximation of Convex Bodies 
+Further on we will deal, rather than with ck,a, with b(L), that is a question of 
+approximation for convex bodies. First we show that in certain cases we can 
+determine b(L). We denote by * the polar reciprocal of a convex body with respect 
+to the unit sphere about 0. A zonoid in IRa is a centrally symmetric convex body in 
+N a that is the limit of convex bodies of the form x + Y]~=I [ -zi, xi] (where n E N 
+and x, xi E I~ a) in the Hausdorff metric, cf. [Bo]. (Note however that [Bo] uses the 
+term 'projection body' in a sense different from ours, the latter coinciding with that 
+of [BF, p. 45].) Further on, we let AL be the set ½(L + (-L)). 
+===== page 15 =====
+CONVEX BODIES, I 
+281 
+THEOREM 5.1• Let L, M C l~ d be convex bodies, for which the relation AL = 
+(IIM)* holds. Then we have 
+b(L) >_ V(L)V(M) d-1 • (2d)l d, 
+and here equality holds if and only if M is a zonoid. 
+Proof. Let xi, Yi E L, xi # Yi. Then, as in the proof of Proposition 4.1, part (2), 
+for some ' 
+~ 
+~ 
+t We have 
+xi, Yi E AL we have Yi - xi = Yi - xi. 
+V([xi,Yi],i, 
+M) - 
+[[ Yi-xi IlVd_l(il(yg _xi)±) 
+• "" ' 
+d 
+-- 
+-~ 
+h 
+HM, II Yi 
+xi 1[ 
+1 h(HM, Yi - xi) = 1 
+1 
+t 
+t 
+2 
+= ~ II yi- 
+xi IIAL___ 5' 
+where M ] (Yi - xi) ± means orthogonal projection of M to (Yi - xi) ±, h(HM, u) 
+means support function of HM, and I1" U AL means distance function of the centred 
+convex body AL. The same estimate trivially holds for xi =: Yi. Then for the 
+'Minkowski average' D = (l/n) ([Xl, Yl] +"" + [Xn, Yn]) we have 
+V(D,M,... 
+,M) <_ 2/d 
+as well; hence by the Minkowski inequality 
+(2/d) d 
+V(D)< 
+V(M)d-i" 
+Thus 
+V(L) 
+V(D) 
+V(L) V(M) d-1 
+1 d 
+-
+-
+ 
+• 
+• ( ~d) 
+. 
+Therefore for b(L) = inf{V(L)/V(D)(xl, 
+yl,.. . , Xn, y,~) ln e N; xi, Yi E L} we 
+have the stated inequality. 
+Suppose M is not a zonoid. Then we assert that 
+, 
+(2/d) d 
+V(D) <_ (1- ~o)vT-~a:1, 
+for some e0 > 0, that implies strict inequality in the inequality of the theo- 
+rem. In fact, in the contrary case we could choose some above Dm(C L) with 
+===== page 16 =====
+282 
+E. MAKAI JR. AND H. MARTINI 
+V(Dm) --+ (2/d)d/V(M) d-l, and we could suppose Dm--+ Do C L, where Do 
+also has to be a zonoid. Then, by continuity of mixed volumes, we have 0 < 
+V(Do)V(M) d-1 = (2/d) d >_ V(Oo, M,... , M) d, hence 0 < V(Do)V(M) a-1 = 
+V(D0, M,..., M) d, i.e., we have equality in the Minkowski inequality, and so 
+M -- const • Do is a zonoid, a contradiction. 
+If M is a zonoid, then we choose xl,yl,... ,Zn,yn EL so that each [xi, yi] 
+has a maximal length among the chords parallel to it. Then II 
+- 
+Ilzxr= 2, 
+thus V(D, M,... M) = 2/d. For suitable n, Xl, Yl,. • •, Xn, Yn we can achieve that 
+D approximates AM (where V(AM, M,..., M) = 2/d), say (1 - e)AM C D C 
+(1 + e)AM, where e > 0 is arbitrary. Then A = 2/(d. V(M)) and V(D) > 
+(1 
+- 
+e)d)~dV(M), hence 
+V(L) < V(L) . V(M) k-l . (½d) d 
+V(D) 
+- 
+(1 - 
+' 
+showing the stated equality. 
+[] 
+THEOREM 5.2. Let L C I( 2 be a planar convex body. Then 
+3 < b(L) = V(L). V((AL)*) < ¼~.2, 
+2- 
+4 
+- 
+where equality at the lower or upper estimate holds if and only if L is a triangle or 
+an ellipse, respectively. If L also is centrally symmetric, then 
+2 ~ b(L), 
+with equality if and only if L is a parallelogram. 
+Proof. Let M be the plate obtained from ½ (AL)* by rotation about 0 through 
+90 °. This is a centrally symmetric plane convex body, hence a zonoid. Also, from 
+Section l, IIM = (AL)*, hence /XL = (HM)*. Thus, Theorem 5.1 gives the 
+equality b( n ) = (V ( L ) . V ( ( A L ) * ) ) / 4. The inequality 
+3 < V(L). V((AL)*) 
+2, 
+4 
+' 
+together with the case of equality, follows from [Z, Th. 2]. Namely, he has shown 
+that for a convex body L C I~ d, we have 
+(2d)d-d<_V(L)d-I.V((HL)*), 
+with equality if and only if L is a simplex. Now recall from Section 1 that, for 
+d = 2, HL equals the planar convex body obtained from L + (-L) by rotation 
+about 0 through 90 °, thus V((HL)*) = V[(L + (-L))*]. Therefore 
+V(L) . V((AL)*) = V(L) . V[(L + (-L))*] > 3 
+===== page 17 =====
+CONVEX BODIES, I 
+283 
+with equality precisely for triangles. (Actually, the two-dimensional case of [Z, Th. 
+2] has already been shown by [E].) 
+On the other hand, by the Brunn-Minkowski inequality 
+V(L). V((AL)*) < V(AL). V((AL)*) 
+4 
+- 
+4 
+' 
+with equality only for L having central symmetry. Further, 
+V(AL). V((AL)*) < ¼7r2 
+4 
+with equality only for AL an ellipse, cf. IS-R] and ILl]. These imply the upper 
+bound, with the cases of equality. 
+For L C ]~2 being centrally symmetric, and hence a zonoid, the inequality 2 < 
+(V(L) • V((AL)*))/4, together with the cases of equality, follows from [R] (cf. 
+also [MGR]), who showed 
+4 d 
+--<V(L)V(L*) 
+d!- 
+for L C ]~d a zonoid, with equality exactly for parallelotopes. 
+[] 
+Remark 5.3. The lower estimates of b(L) in Theorem5.2 imply the result an- 
+nounced in [Mak, p. 377, Remark], namely that the area of a convex m-gon P, all 
+of whose side vectors have length 2 (or at most 2) in the Minkowski geometry with 
+unit circle AL, is at most m2V(L)/6, and also that, for L centrally symmetric, it 
+is even at most m2V(L)/8. Namely, P can be considered as a non-strictly convex 
+2m-gon Q (i.e., each inner angle of this polygon is at most 70, with side lengths at 
+most 1 in the above Minkowski geometry, by halving its sides. Then taking some 
+m consecutive sides of Q, say XlX2, • .., XmXm+l, these sides, together with their 
+mirror images with respect to the centre (xi + Xm+i)/2, bound a 2m-gon Q~ of area 
+at least V(Q). Rearrange now the cyclic order of the side vectors of Q' (oriented 
+according to the positive orientation) to obtain a convex polygon Q'; then Q" 
+is a translate of the Minkowski sum of the m segments [xi, x2],..., [xm, Xm+l], 
+V(P) = V(Q) < V(Q') < V(Q"), and V(2Q"/m) < V(L)/b(L) < 2V(L)/3, 
+and even <__ V(L)/2 for L centrally symmetric. These imply the above upper esti- 
+mates of V(P). 
+[] 
+Now we turn to give the sharp upper estimate for b(L) for each d. We follow the 
+proofs of [Mac] and [Gro 1], who use Steiner symmetrization and convexity of 
+certain functions of several real variables, which represent the volumes of certain 
+convex polytopes. 
+Let us define, for L C l~ d a convex body and for n > d a fixed integer, 
+bn(L) = inf{V(L)/V(D(xl, Yi, . . . , Xn, yn)) l xl, YI,..., Xn, Yn e L}. 
+===== page 18 =====
+284 
+E. MAKAI JR. AND H. MARTINI 
+Then bn (L) < co and 
+b(L) = infbn(L). 
+n 
+LEMMA 5.4. Let n >_ d be an integer, and let Xl,..., Xn E ~a. Let the d-th 
+coordinate of zi be denoted by (i. Then the volume of the Minkowski sum [0, Xl] + 
+• .- + [0, Xn] is a convex function of the variables ~l,..., ~n, for anyfixed values 
+of the first d - 1 coordinates of zl, . .. , Zn. 
+Proof. We recall from [MP, p. 73], the formula 
+V([0, Xl] +'" 
++ [0, xn]) = 
+E 
+[det(xi(1),... ,Xi(d))[, 
+1_<i(1)<... < i(d)<n 
+(which, as observed in [MP], is a special case of the expression of the volume 
+of a Minkowski sum by the mixed volumes). Here each det(xi0),... , Xi(d)) is a 
+homogeneous linear function of ~1,..., ~n, hence its absolute value, and also the 
+sum of these absolute values, is a convex function of ~1, • • • , ~n. 
+[] 
+Remark 5.5. For the 2-dimensional case, a similar area formula like that cited 
+in the proof of Lemma 5.4 - by maximum of certain sums of determinants - is 
+given for a case, which is a bit more general, in [FM, Lemma 1]. There it has been 
+shown that the area of a convex polygon with given side vectors is the maximum 
+of the signed areas of all polygons with side vectors being any permutation of the 
+original side vectors. 
+[] 
+Let L C ~d be a convex body, and n > d a fixed integer. Recall from before 
+Lemma 5.4 that 
+bn(L) = inf{V(L)/V(D(xl,yl,... 
+,xn, yn)) Ixl,yl,... ,xn, yn EL} 
+= V(i)/sup{V(n(xl,yl,...,xn,y,~))lxl,Yl,...,xn, 
+ynEi}, 
+where 
+D(xl,vl,... ,x,,v,) = ¼([xi, vm] +... + Ix,, v,]). 
+Now, following [Mac], [Bu 2], [Gro l] and [BMMP], we prove 
+LEMMA 5.6. Let n > d be an integer, let L C ]~d be a convex body, and let S(L) 
+be its Steiner symmetral with respect to some hyperplane. Then 
+bn(n) < bn(S(L)). 
+This lemma follows from the next lemma (put there L = L1 ..... 
+Ln, and use 
+V(L) = V(S(L))). For this we introduce a notation. Let n _> d be an integer, and 
+let L1, ..., L,~ C ]~d be convex bodies. Let 
+fln(L1,.. . ,Ln) 
+= sup{V(D(xl, Yl,..., xn, Yn)) ] xl, Yl E L1,..., xn, Yn E Ln}. 
+===== page 19 =====
+CONVEX BODIES, I 
+285 
+Then bn(L) = V(L)/flu(L,. . . , L). 
+LEMMA 5.7. Let n >_ d be an integer, let L1, . . . , Ln C ]~d be convex bodies, and 
+let S( L1), .., S( Ln ) be their Steiner symmetrals with respect to some hyperplane 
+H. Then 
+~n(LI,... , Ln) >_ fln(S(L1),..., S(Ln)). 
+Proof. Let the hyperplane H be spanned by 0 and the first d - 1 basic vectors. 
+For brevity, we will write D (xi, YI, . . . , xn, Yn) = D(xi, Yi; 1 < i < n). We have 
+to prove 
+sup{V(D(vi,wi;1 
+< i < n))IVl,Wl ELI,... 
+,vn, Wn ELn} 
+> sup{V(D(xi,yi; 1 < i < n)) I xl,yl E S(L1),...,xn,yn E S(Ln)}. 
+Let therefore Xl, yl E S(L1),. . . ,xn,Yn E S(Ln). Wehavetofindvl, Wl EL1,..., 
+v~, wn E Ln, such that D(vi, wi; 1 < i < n) > D(xi, yi; 1 < i < n). We denote 
+Xl 
+I 
+I 
+xi = ( i, ~i), Yi = (Yi, rli), where x~, Yi are the projections of xi, Yi to the hyper- 
+plane H, and ~i, r/i are the dth coordinates of xi, Yi. (We will use analogous notation 
+for other points of I~ d, too.) Hence we have a body D + = D((x~, ~i), (Y~, rh); 1 _< 
+x' 
+' 
+S(Li), where 1 < i < n. Then 
+i _< n) associated to the points ( i, ~i), (Yi, ~?i) E 
+x I 
+also the mirror images of these points with respect to H, i.e., ( i, -~i), (Y~, -r/i) 
+lie in S(Li), and the body D- = D((x~, -~i), (Y~, -r/i); 1 < i < n) is the mirror 
+image of the above body D + with respect to H. Therefore 
+V(D +) -= V(D-). 
+(2) 
+Denote by L~ the projection of Li on H, which also is the projection of S(Li) 
+x t 
+on H. For x~ E L~, let ( i, hi(x~)) denote the midpoint of the segment that is the 
+intersection of Li and the line orthogonal to H and passing through x~. Here hi 
+is continuous on rel int L~. Moreover, for any line l in H, intersecting rel int L~, 
+the restriction of hi to L~ M 1 is continuous. Choosing some x~ 0 E rel int L~, then 
+hi(x~) = limE-+ohi(ex~, o + (1 - e)x~) is a aorel function on L~. Then 
+(x~, ~i + hi(x~)), (y~,rh + hi(y~)) ELi, 
+and also 
+t 
+h 
+(xi, -~i + hi(x~)), (Yi, -rli + 
+i(Yi)) ELi. 
+We let 
+h 
+I 
+h 
+' 
+D + = D((x~,~i + 
+i(xi)), (y~,r h + 
+i(yi)); 1 < i < n), 
+h 
+D a = D((x~,-~i + hi(x~)), (Yi,-~i + 
+i(yi));1 < i < n). 
+===== page 20 =====
+286 
+E. MAKAI JR. AND H. MARTINI 
+We have 
+V(D +) + V(D[) 
+I 
+= V(D((x~,~i + hi(x~)),(y~,~?i + hi(yi));1 < i < n)+ 
++v(n((x~,¢i 
+x' 
+' 
+h 
+' 
+- hi(i)), (Yi, Ili -- 
+i(Yi)); 
+1 < i < n) 
+-- 
+" 
+-- xi, ~i 
+- ~-7 
+V 
+[(O,O),(y~ 
+-¢i+ 
+i(Yi)-hi(x~))] 
++ 
+-- 
+-- 
+h 
+! 
+x ! 
++V 
+[(O,O),(y~ 
+x~,rli 
+¢i-i(Yi)+hi( 
+i))] 
+_> 
+2v 
+[(o, o), 
+- 
+- 
+= 
+' 
+(y~, r/~)); 1 < i < n) = 2V(D+). 
+(3) 
+Here the first equality follows like equality (2). Moreover, Ein__l means Minkowski 
+sum. The inequality follows from Lemma 5.4. 
+Comparing the first and last quantities in (3) we obtain 
+max{V(D+), v(n~)} >_ V(D+). 
+Thus we have found vi, wi ELi, for 1 < i _< n, such that V(D(vi,wi; 1 < i < 
+n)) ~_ v(n(xi, Yi;1 < i < n)),namelyeither(x~,~i + hi(x~)),(y~,~i + hi(y~)), 
+x ! 
+I 
+or( i,-~i + hi(x~)),(y~,-~i + hi(Yi)). Thisisjustwhatwehadtoprove. 
+[] 
+Again following [Mac], [Bu 2], [Gro l] and [BMMP] we prove a theorem that 
+implies the upper estimate in Theorem 5.2, without the discussion of the cases of 
+equality. 
+THEOREM 5.8. Let L C ~d be any convex body, and let B C I[~ d be a ball. Let 
+n > d be any integer. Then 
+b~(L) <_ b~(B), 
+with equality for example ilL is an ellipsoid. Consequently 
+b(L) < b(B) = did ad ~d 
+[d½7r(1 + o(1))] d/2, 
+-- 
+~2 
+gd-1 
+] 
+"~- 
+with equality for example if L is an ellipsoid. 
+This theorem follows from 
+===== page 21 =====
+CONVEX BODIES, I 
+287 
+THEOREM 5.9. Let n >__ d be an integer, let L1,..., Ln C ]~d be convex bodies, 
+and let B1,..., Bn C ~d be balls with V(Bi) = V(Li), 1 < i < n. Then 
+fin(L1,.--,Ln) 
+> fin(B1,--. ,Bn), 
+with equality, for example, if the Li's are homothetic ellipsoids. For Bi a ball of 
+radius ri, we have 
+En 
+)d 
+fin(B1 .. 
+Bn ) < (ld 
+i=1 ri 
+/~d- 1 
+, 
+., 
+Proof. For Li homothetic ellipsoids we have equality in the first inequality by 
+/3n ( L1, . . . , Ln ) = fl,~ ( ~ L1, . . . , ~ Ln ), for volume-preserving affinities R,. 
+For arbitrary convex bodies L1,..., Ln, there exists for each i E {1,..., n} an 
+infinite sequence Li = Li,1, Li,2,... of convex bodies, Li,j+l obtained from Lid 
+by Steiner symmetrization with respect to some hyperplane Hj (independent of 
+i, 1 < i < n), and Li,j converging to a ball Bi of volume V(Li), cf. [B1, § 115]. (He 
+states this for n = 1 and d = 3 only, but the given proof works for any n and any 
+d.) Since fn(L1,..., Ln) is a continuous functional of the n-tuple (L1,..., Ln), 
+by Lemma 5.7 we have 
+/~n(L1,..., Ln) = fln(Ll,1,..., Ln,1) >_ fin(L1,2,..., Ln,2) >_'", 
+lim fln(L1j,..., Ln,j) = fin(B1,..., Bn), 
+j--+oo 
+implying the first inequality of the theorem. 
+For Bi = riB(l), B(1) a ball of unit radius, we have for xi, Yi C Bi, analo- 
+gously to Theorem 5. l, 
+V([xi, Yi], B(1),..., B(1)) = 
+hence 
+thus 
+d 
+---~--~ri, 
+V(D(xl,yl,...,xn, 
+yn),B(1),...,B(1)) 
+_< - - 
+-
+-
+ 
+2t~d-1 Einl ri 
+d 
+n 
+V(D(xl,Yl,... ,xn, Yn)) _< 
+2 
+t }-~.in_-i ri 
+~ 
+, 
+n 
+which implies the second inequality of the theorem. 
+[] 
+Proof of Theorem 5.8. By 
+V(L) 
+bn(L) = fin(L,...,L) 
+===== page 22 =====
+288 
+E. MAKAI JR. AND H. MARTINI 
+and Theorem 5.9 we have the first inequality, with equality, for example, if L is an 
+ellipsoid. As stated before Lemma 5.4, we have b(L) = infn bn (L). Hence 
+b(L) = infbn(L) < infbn(B) = b(B). 
+n 
+n 
+Apply Theorem 5.1 to M a unit ball (that is a zonoid), and L = z~L = (IIM)*. 
+Then HM is a ball of radius rid-l, L is a ball of radius n~l 1,_ hence 
+b(B) = b(Z) = (id 
+~k 2 /~d_l ,J 
+[] 
+Remark 5.10. The cases n = d of Lemma 5.6 (for L centrally symmetric) 
+and of Theorem5.8 (for any L) essentially reduce to [Gro 1, p. 76, Hilfssatz], and 
+[Gro 1, formula (16)]. In Theorem5.8 for d = 2, n = 2 we have equality only for 
+L an ellipse, cf. [FT, ch. II, § 4, p. 36]. Possibly for any d, n we have equality in the 
+first inequality of Theorem 5.9 only for homothetic ellipsoids. 
+[] 
+6. On the Petty Projection Inequality and Plane Sections 
+of Convex Bodies 
+Now we show that the above results imply the Petty projection inequality (with- 
+out the description of the equality cases). This inequality has been proved by 
+Petty (cf. [Pe 2]); for further proofs and generalizations see the survey paper [L 4, 
+§3]. 
+THEOREM 6.1. Let M C IRd be any convex body. Then, letting nd be the volume 
+of the unit ball in 1R d, we have 
+\~d-1 ] 
+with equality, if M is an ellipsoid. 
+Proof. By Theorem 5.1, applied for L = AL = (IIM)*, and by Theorem 5.8, 
+we have 
+V((]-IM)*). V(M) d-1 <_ b((]-IM)*). (2/d) d <_ (~d/l~d_l) 
+d . 
+For the fact that for an ellipsoid we have equality in the inequality of the theorem, 
+we refer to [Pe 2]. 
+[] 
+Remark 6.2. Recall that Theorem5.2 gives, for d = 2, the exact lower bound 
+for b(L), and thus also for V(L)V(M) d-l - where M is the unique centred planar 
+convex body satisfying AL = (IIM)* - while L varies among all (centrally 
+symmetric) planar convex bodies (cf. also the proof of Theorem 5.2). However, for 
+d > 3 the problems of the two infima are independent of each other. Choosing for 
+===== page 23 =====
+CONVEX BODIES, I 
+289 
+M a cube of edge length 2, HM will be a cube of edge length 2 d, and (L =)z~L a 
+cross-polytope of diagonal 2 -a+2. Thus, by Theorem 5.1, 
+d d 
+e d 
+b(AL) = d-~. "~ ~ ' 
+for AL a cross-polytope. Thus 
+d d 
+inf{b(L)]L is a centrally symmetric convex body in ~d} _< ~.V" 
+However, for d = 3 the above value is not the infimum: choosing for L a cube its 
+four diagonals, we see 
+3 3 
+b(L) <_ b4(L) _< 4 < 3--~" 
+It can be conjectured that for arbitrary convex bodies the infimum of b(L) is attained 
+for L a simplex. Now let us suppose that M is a centrally symmetric convex body, 
+and investigate V((HM)*) • V(M) d-1. For M a cube (and hence, as follows by 
+[Pe l, Th. 3], cf. also [L4, § 3, formula after 3.1], and [Ca, § IV, 3.3, Cor. 3] for any 
+parallelotope), its value is 2d/d!. For d = 3, M a regular octahedron of diagonal 
+2, HM is a rhombic dodecahedron, and (riM)* is a cuboctahedron. The radial 
+function of (HM)* is minimal exactly in the directions of the centres of any of 
+the six square facets, and its value there is the reciprocal of the maximum of the 
+support function of IIM, i.e., the reciprocal of the maximum of the projection area 
+of M. This maximum is attained for exactly six directions. By taking the symmetry 
+group of M into consideration, this implies that the radial function of (HM)* in 
+the mentioned directions is the reciprocal of the area of the projection of M along 
+one of its diagonals, i.e. ½. Thus V((HM)*) • V(M) 2 = 40/27 > 23/3!. It can 
+be conjectured that inf V((IIM)*) • V(M) d-1 is attained, for M a centrally sym- 
+metric convex body in Rd, if M is a parallelotope. (Cf. also [B, Appendix], taking 
+in account [L 4, § 3].) We note that for general convex bodies M, the analogous 
+infirfium has been determined by [Z]: it is 
+d -d, and is attained exactly for the 
+simplices. 
+[] 
+Now we give a supplement to Proposition 4.1. 
+THEOREM 6.3. Let K C ]~d be a convex body and let AK = ½(K + (-K) ). For 
+any k, 1 < k < d - 1, and any linear k-subspace Lk, we have, with no = 1, 
+Vk((/XK) NLk) < f l_k ak "~k max Vk(K N(Lk + z) ) 
+- 
+\2  
+k-1] 
+= [klTr(1 + o(1))] k/2 max Vk(K n (Lk + z)). 
+zEL~ 
+===== page 24 =====
+290 
+z. MAKAI JR. AND H. MARTINI 
+Moreover, for fixed k, if we replace the factor (½k (~k/t%_l)) k by any smaller 
+number, the resulting inequality is false for all sufficiently large d. 
+Proof. The inequality follows from Proposition 4.1 and Theorem 5.8, applied 
+to L = (AK) fq Lk. (Observe that Theorem 5.8 evidently holds for d = 1 as well.) 
+For the second statement, choose for L an ellipsoid. It follows from Proposi- 
+tion 4.1 and Theorem 5.8 that the mentioned resulting inequality will be false for 
+all sufficiently large d. 
+[] 
+7. Cross-Section Body and Projection Body 
+Using the results of Section 6, we obtain 
+THEOREM 7.1. For any convex body K C •d we have, with e;o = 1, 
+1 
+-~ 
+nj_-~/ 
+• CK 
+= [27rd(1 + o(1))] d/2. CK. 
+If tf is also centrally symmetric, then 
+Proof. For any star-body L C l~ d, we denote r(L, u) its radial function, i.e., 
+bd L = {r(u).u I u 6 S d-* }, where r(L, u) is defined on S d-1 and r(L, u) > 0. We 
+have r(IIK, u) = min{h(IIK, v)/(u, v) l v 6 S d-1 , (u, v) > 0}. Thus, for a con- 
+stant c, the inclusion HK C c. (CK) is equivalent to r(HK, u) < c. r(CK, u), i.e., 
+Vu C S d-1 3v E S d-1 ((u, v) > O, h(IIK, v) < c. (u, v)r(Cg, u)). More geomet- 
+rically, the last formulation is: Vu E S d-1 3v E S d-l, such that the (d - 1)-volume 
+of the orthogonal projection of K to v ± is at most c times the (d - 1)-volume of 
+the orthogonal projection to v ± of the intersection of K with some (d - 1)-flat 
+with normal u, or in formula 
+Vd-1 (K Iv ±) < c. max Vd-1 ((K N (u ± + Au)) I v±)), 
+A6R 
+where A Iv ± denotes the orthogonal projection of a set A to v ±. (For example, 
+for K an ellipsoid, v can be taken as the conjugate direction to u ±, when we have 
+c= 1.) 
+First we deal with the case that K is centrally symmetric. We may suppose that 
+K is centred. Then K is the unit ball of a d-dimensional Minkowski space (Banach 
+space), which we denote by M d and whose norm will be denoted by II II- By [Boh], 
+Theorem 1, there exists a projection P: M d --4 M d (i.e., a linear operator satisfying 
+pZ = p), with image P(M d) = u -t-, and with norm II P II- 
+< (2d - 2)/d (the 
+===== page 25 =====
+CONVEX BODIES, I 
+291 
+mentioned theorem asserts this for any linear (d - 1)-subspace). Then II P I1~ 
+(2d - 2)/d is equivalent to P(K) C (2d - 2)/d (K M u-L), which implies 
+Vd_I(P(K)) < (2dd2)d-Ivd_I(K 
+MuJ- ). 
+Now, we can choose v E S d-1 M p-1 (0), and then for the orthogonal projection to 
+v -L we have 
+Vd-1 (t(1'131) 
+Vd-1 (P(K) ) 
+Yd_l((K n ~,±) I v • ) 
+V~_I(P(K n ~')) 
+Vd- 1 (K rq u -L) - 
+and this is just the above geometric reformulation of our problem (with)~ = 
+0, which yields the maximum, by Proposition4.1). This shows the statement of 
+Theorem 7.1 for centrally symmetric K. 
+Now we turn to K not centrally symmetric. Then let us consider the centrally 
+symmetric convex body/X K = ½ (K + (- K)), and the norm 11 I[ of the Minkowski 
+space M d with unit ball AK, and the above P and v, associated to AK and u ±. 
+By the Brunn-Minkowski theorem, by the above shown inequality for centrally 
+symmetric bodies, and by Theorem6.3, applied to k = d - 1, we have 
+Vd_l(KI v±) < Vd_I((AK)Iv ±) 
+< (2dd-----~2)d-1Vd_I(((AK)nu ±) Iv -L) 
+(~__2)d-1 (d- ll'~d-l~ d-1 
+X maxVd_l((K rl (u -L + ~,~,)) I v'), 
+)~ER 
+which shows the first statement of Theorem7.1, in its geometric reformula- 
+tion. 
+[] 
+Recall that the geometric reformulation of IIK C c- (GK) is the following (cf. the 
+proof of Theorem 7.1): 
+Vu E S d-1 3v E S d-1 
+Vd_l(KI v-t-) 
+< c. maxVd_l((K f-1 (u -L + ,~u)) I v-L). 
+AER 
+Let, for fixed K and u E S d-1 , CK(U) denote the smallest constant for which this 
+statement is true. Then HK C max,, CK (u) • CK, and the factor maxu CK (u) is 
+sharp. 
+===== page 26 =====
+292 
+e. MAKAI JR. AND H. MARTINI 
+For K 
+= y]d a regular simplex of edge-length 2 it is to be expected that 
+maxu cK(u) is attained for a vector u orthogonal to two disjoint faces of y]d 
+of dimensions dl= 
+[(d - 1)/2] and d2 = [(d - 1)/2J, respectively, and for 
+v = u ([xJ denotes the integer part of x, and Ix] = -/-x J). If this is true, 
+cK(u) is the quotient of the volume of the orthogonal projection to this u ± = v ± 
+and of the maximal volume of a section parallel to u ±. We have in this case that 
+Ed I v± = Ed I ux is the convex hull of two regular simplices Z dl and ~d2 (of edge- 
+length 2, and dimensions dl and d2, respectively), lying in orthogonal subspaces 
+and having a common barycentre. Hence, by [RS, p. 274, Lemma], 
+Vd_ I ( Ed I v ±) = Vdl ( ~']dl ) Vd2 ( y]d2 ) 
+dl 
+Further, like in [W], the set Ndcl (u ± + ,~u), if non-empty, is a translate of the direct 
+sum of #Nal and (1 - #)Na2, where 0 _< # _< 1 and u ± + ,~u cuts the segment 
+joining the barycentres of Nd~, Na2 in the ratio (1 - #) : #. In this case 
+Vd-1 ((zd fq (U.L + )~u)) lv ±) = #a, (1 -- #)dZVd, (~adl)Vd2 (~]d2), 
+that attains for 0 < # _< 1 its maximum 
+ddl dd2 
+1 t*2 
+dl 
+(d- 1) d-I vdl(~-] )Vd2(Y]d2) 
+for # = dl/(dl + d2). Therefore we may expect for K = ~d 
+(d-l) 
+d-1 
+( 
+) 
+• 
+m2x cg(u) = 
+a - 1 
+Now let C d be the regular cross-polytope cony {:t:ei}, where el,..., ea are the 
+basic coordinate vectors. Let u = v = (1/v~,..., 1/v'~). Then Celv ± is the 
+convex hull of a regular (d - 1)-simplex N of edge-length ~ 
+(whose volume is 
+denoted by V), and its mirror image with respect to its barycentre. Hence, by [FR, 
+Satz 6], 
+Vd_l(Cdlv ±) = V. 
+[(d- 1)/2J 
+" 
+Further, Vd-1( ca n ( u ± + )~ u ) ) is maximal for/k = 0, and cd N u ± = ½ ( ~ +(--~)). 
+Hence, by [RS, p. 271 ], 
+2d-I 
+===== page 27 =====
+CONVEX BODIES, I 
+293 
+We may expect that, for K = C a, maxu cK(u) is attained for the above u, and for 
+v = u, thus presumably 
+vd-i (Cdlv *) 
+maxcg(u) = Va_I(C d fq u± ) 
+d- 1 
+)2d_ l 
+[(d - 1)/21 
+Based on these considerations, we formulate 
+CONJECTURE 7.2. For any convex body K C I~ d we have HK C c . (CK), for 
+C 
+(d- IV -I 
+~ V~"~/7-Sv'-d, 
+(d--1),4dlAd2 
+dl 
+~1 '*2 
+where d 1 = 
+L(d - 1)/2], d2 = [(d - 1)/2], which is conjectured to be sharp for 
+K a simplex. Moreover, ifK is centrally symmetric, we have IIK C c. (CK),for 
+d-1 
+( L(d-1)/2J ) 2a-1 
+x/~, 
+c= 
+(2d- 2"~ 
+d-l/ 
+which is conjectured to be sharp for K a cross-polytope. 
+[] 
+Acknowledgement 
+We would like to express our gratitude to I. Bgtrfiny for several stimulating conver- 
+sations. 
+Note added in proof'. 
+After the submission of this article, the monograph [Ga] appeared. In this book 
+various further results about projection bodies, intersection bodies and cross-section 
+bodies are discussed. 
+===== page 28 =====
+294 
+E. MAKAI JR. AND H. MARTINI 
+References 
+[A] 
+[B] 
+[BB] 
+[Ba] 
+[BaF] 
+[Be] 
+[BI] 
+[Boh] 
+[Bo] 
+[BF] 
+[BMMP] 
+[Bu 1] 
+[Bu 2] 
+[CM] 
+[Ca] 
+[Cr] 
+[D] 
+[DL] 
+[E] 
+[FM] 
+[FR] 
+[FT] 
+[Oa] 
+[Gi] 
+[Gro 1] 
+Ali, M. M.: Content of the frustum of a simplex, Pacific J. Math. 48 (1973), 313-322, MR 
+52#15232. 
+Ball, K.: Volume ratios and a reverse isoperimetric inequality, J. London Math. Soc. 44 
+(1991), 351-359, MR 92j:52013. 
+Bfir~ny, I. and Buchta, Ch.: Random polytopes in a convex polytope, independence of 
+shape and concentration of vertices, Math. Ann. 297 (1993), 467--497, MR 95g:52005. 
+Barthel, W.: Zum Busemannschen und Brunn-Minkowskischen Satz, Math. Z. 70 
+(1958-59), 407--429, MR 21#3809. 
+Barthel, W. and Franz, G.: Eine Verallgemeinerung des Busemannschen Satzes vom 
+Brunn-Minkowskischen Typ, Math. Ann. 144 (1961), 183-198, MR 25#1491. 
+Behrend, E: Uber einige Affininvarianten konvexer Bereiche, Math. Ann. 113 (1937), 
+713-747, Zbl. 15.367. 
+Blaschke, W.: Vorlesungen iiber Differentialgeometrie und geometrische Grundlagen 
+von Einsteins Relativitiitstheorie, L Elementare Differentialgeometrie, III. erw. Aufl., 
+Grundlehren Math. Wiss. 1, Springer, Berlin, 1930, Fortschr. Math. 588 (1930). 
+Bohnenblust, E: Convex regions and projections in Minkowski spaces, Ann. of Math. (2), 
+39 (1938), 301-308, Zbl. 19.141. 
+Bolker, E. D.: A class of convex bodies, Trans. Amen. Math. Soc. 145 (1969), 323-345, 
+MR 41#921. 
+Bonnesen, T. and Fenchel, W.: Theorie der konvexen K6rper, Berichtigter Reprint, 
+Springer, Berlin, Heidelberg, New York, 1974, MR 49#9736. 
+Bourgain, J., Meyer, M., Milman, V., and Pajor, A.: On a geometric inequality, Geometric 
+Aspects of Functional Analysis (1986/87), pp. 217-282, Lecture Notes in Math. 1317, 
+Springer, Berlin, New York 1988, MR 89h:46012. 
+Busemann, H.: A theorem on convex bodies of the Brunn-Minkowski type, Proc. Nat. 
+Acad. Sci. U.S.A. 35 (1949), 27-31, MR 10-395. 
+Busemann, H.: Volume in terms of concurrent cross-sections, Pacific J. Math. 3 (1953), 
+1-12, MR 14-1115. 
+Carl, B. and Makai, E. Jr.: Covering numbers and volume ratios of convex sets and spectral 
+properties of operators in Banach spaces. In preparation. 
+Cassels, J. W. S.: An Introduction to the Geometry of Numbers, Grundlehren Math. Wiss. 
+99, Springer, Berlin, G6ttingen, Heidelberg, 1959, MR 28#1175. 
+Croft, H. T.: Two problems on convex bodies, Proc. Camb. Phil Soc. 58 (1962), 1-7, MR 
+25#1490. 
+Davis, W. J.: Remarks on finite rank projections, J. Appr. Th. 9 (1973), 205-211, MR 
+50#947. 
+Dalla, L. and Larman, D. G.: Volumes of a random polytope in a convex set. DIMACS 
+Series in Discr. Math. and Theor. Comp. Sci. 4, 1991. Applied Geom. and Discr. Math., 
+The Victor Klee Festschrift, Amer. Math. Soc., Providence, R.I., 1991, pp. 175-180, MR 
+92m:52008. 
+Eggleston, H. G.: Note on a conjecture of L. Santal6, Mathematika 8 (1961), 63--65, MR 
+24#A1070. 
+Ffiry, I. and Makai, E. Jr.: Isoperimetry in variable metric, Studia Sci. Math. Hungar. 17 
+(1982), 143-158, MR 85i:52003. 
+F~ry, I. and R6dei, L.: Der zentralsymmetrische Kern und die zentralsymmetrische Htille 
+von konvexen K6rpern, Math. Ann. 122 (1950), 205-220, MR 12-526. 
+Fejes T6th, L.: Lagerungen in der Ebene, auf der Kugel und im Raum. II. Aufl., Grundlehren 
+Math. Wiss. 65, Springer, Berlin, New York, 1972, MR 50#5603. 
+Gardner, R. J.: Geometric Tomography. Cambridge Univ. Press, Cambridge, 1995. 
+Giannopoulos, A. A.: On the mean value of the area of a random polygon in a plane convex 
+body, Mathematika 39 (1992), 279-290. Zbl. 214.52009. 
+Groemer, H.: Zusammenh~ingende Lagerungen konvexer K6rper, Math. Z. 94 (1966), 
+66-78, MR 33#7935. 
+===== page 29 =====
+CONVEX BODIES, I 
+295 
+[Gro 2] 
+[Gro 3] 
+[Gro 4] 
+[Grii] 
+[HI 
+[J] 
+[KLL] 
+[KT-J] 
+ILl] 
+[L2] 
+[L 3] 
+[L4] 
+[Mac] 
+[Mah] 
+[Mak] 
+[MMO] 
+[Mar 1] 
+[Mar 21 
+[Mar 3] 
+[MGR] 
+[MP] 
+[Pe 1] 
+[Pe 2] 
+[Ph] 
+[Pi] 
+[RI 
+Groemer, H.: On some mean values associated with a randomly selected simplex in a 
+convex set, Pacific J. Math. 45 (1973), 525-533, MR 47#5916. 
+Groemer, H.: On the mean value of the volume of a random polytope in a convex set, Arch. 
+Math. (Basel) 25 (1974), 86-90, MR 49#6036. 
+Groemer, H.: On the average size of polytopes in a convex set, Geom. Dedicata 13 (1982), 
+47-62, MR 84d:52013. 
+Griinbaum, B.: Measures of symmetry for convex sets, In Convexity, V. Klee (ed.), Proc. 
+Symp. Pure Math. 7, Amer. Math. Soc., Providence, R.I., 1963, pp. 233-270, MR 27#6187. 
+Hammer, P. C.: Diameters of convex bodies, Proc. Amer. Math. Soc. 5 (1954), 304-306, 
+MR 15-819. 
+John, E: Extremum problems with inequalities as subsidiary conditions, Studies andEssays, 
+presented to R. Courant. Interscience, New York, 1948, pp. 187-204, MR 10-719. 
+K6nig, H., Lewis, D. R. and Lin, P. K.: Finite dimensional projection constants, Studia 
+Math. 75 (1983), 341-358, MR 84k:46014. 
+KSnig, H. and Tomczak-Jaegermann, N.: Norms of minimal projections, J. Funct. Anal. 
+119 (1994), 253-280, MR 94m:46024. 
+Lutwak, E.: On the Blaschke-Santal6 inequality, Discrete Geom. and Convexity (New York, 
+1982), Ann. New York Acad. Sci. 440, New York, 1985, pp. 106-112, MR 87c:52018. 
+Lutwak, E.: Intersection bodies and dual mixed volumes, Advances in Math. 71 (1988), 
+232-261, MR 90a:52023. 
+Lutwak, E.: On some ellipsoid formulas of Busemann, Furstenberg and Tzkoni, Guggen- 
+heimer, and Petty, J. Math. Anal Appl. 159 (1991), 18-26, MR 92k:52014. 
+Lutwak, E.: Selected affine isoperimetric inequalities, In P. M. Gmber and J. M. Wills (eds), 
+Handbook of Convex Geometry, North-Holland, Amsterdam, Oxford, New York, 1993, pp. 
+151-176, MR 94h:52014. 
+Macbeath, A. M.: An extremal property of the hypersphere, Proc.. Camb. Phil. Soc. 47 
+(1951), 245-247, MR 12-526. 
+Mahler, K.: Ein Minimalproblem fiir konvexe Polygone, Mathematika B (Zutphen) 7 (1938), 
+118-127, Zbl. 20.050. 
+Makai, E. Jr.: Five-neighbour packing of convex plates, Intuitive Geom. (Si6fok, 1985), 
+Colloq. Math. Soc. J. Bolyai 48, North-Holland, Amsterdam, New York, 1987, pp. 373-381. 
+MR 88k:52019. 
+Makai, E. Jr., Martini, H., and Odor, T.: Maximal sections and centrally symmetric bodies. 
+Manuscript. 
+Martini, H.: On inner quermasses of convex bodies, Arch. Math. (Basel) 52 (1989), 
+402-406, MR 90g:52012. 
+Martini, H.: Extremal equalities for cross-sectional measures of convex bodies, Proc. 
+3rd Geometry Congress, Aristoteles Univ. Thessaloniki, 1991, 1992, pp. 285-296, MR 
+93f:52014. 
+Martini, H.: Cross-sectional measures, Intuitive Geom. (Szeged, 1992), Coll. Math. Soc. 
+J. Bolyai 63, North-Holland, Amsterdam, Oxford, New York, 1994, pp. 269-310, zbl. 
+620.52003. 
+Meyer, M., Gordon, Y., and Reisner, S.: Zonoids with minimal volume product - a new 
+proof, Proc. Amer. Math. Soc. 104 (1988), 273-276, MR 89i:52015. 
+Milman, V. D. and Pajor, A.: Isotropic position and inertia ellipsoids and zonoids of the unit 
+ball of a normed n-dimensional space, Geometric Aspects of Functional Analysis, Israel 
+Seminar (GAFA), 1987-88, Lecture Notes in Math. 1376, Springer, Berlin, Heidelberg, 
+1989, pp. 64-104, MR 90g:52003. 
+Petty, C. M.: Projection bodies, Proc. Coll. Convexity, Copenhagen, 1965, KCbenhavns 
+Univ. Mat. Inst., Copenhagen, 1967, pp. 234-241, MR 35#7203. 
+Petty, C. M.: Isoperimetric problems. Proc. Conf. Convexity and Combin. Geom. (Univ. 
+Oklahoma, Norman, 1971), Norman, Oklahoma, 1971, pp. 26--41, MR 50#14499. 
+Philip, J.: Plane sections of simplices, Math. Prog. 3 (1972), 312-325, MR 47#7598. 
+Pietsch, A.: Operator Ideals, Math. Monographien 16, VEB Deutscher Verlag der Wis- 
+senschaften, Berlin, 1978, MR 81a:47002. 
+Reisner, S.: Zonoids with minimal volume product, Math. Z. 192 (1986), 339-346, MR 
+87g:52022. 
+===== page 30 =====
+296 
+E. MAKAI JR. AND H. MARTINI 
+[RS] 
+IS-R] 
+[Sch] 
+[w] 
+[z] 
+Rogers, C. A. and Shephard, G. C.: Convex bodies associated with a given convex body, J. 
+London Math. Soc. 33 (1958), 270-281, MR 21#318. 
+Saint-Raymond, J.: Sur le volume des corps convexes sym6triques. Sdminaire Choquet, 20- 
+ibme annie (1980/81), Initiation ?t l' analyse, Comm. No. 11, 25 pp., Publ. Math. Univ. Pierre 
+et Marie Curie 46, Univ. Paris VI, Paris, 1981, MR 84j:46033. 
+Schneider, R.: Convex Bodies - The Brunn-Minkowski Theory, Cambridge Univ. Press, 
+Cambridge, 1993, MR 94d:52007. 
+Walkup, D. W.: A simplex with a large cross-section, Amer. Math. Monthly 75 (1968), 34-36, 
+MR 37#2095. 
+Zhang, G. Y.: Restricted chord projection and affine inequalities, Geom. Dedicata 39 (1991), 
+213-222, MR 92f:52017. 

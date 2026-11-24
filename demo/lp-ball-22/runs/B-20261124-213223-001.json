@@ -1,0 +1,2821 @@
+{
+  "role": "B",
+  "task": "B：这一趟派给你的活是 —— 把 B 侧那份已拿 V 签、还没进 statements 的证明稿按「只递指针」口径收录：指针在 params.pointers（稿的工作区相对路径 + V 签那一行 + 判词 + 正文 sha）。请自己核盘上字节与签是否同一份、核 V 的判词，再决定收录与等级（等级一律由框架五元位现算，不要自报）。若核不上（sha 不符 / 签的是旧版），如实证出来并点名缺哪一段，别硬登。回执请写清：投稿路径、stmt 号、现算等级、以及 signed_unregistered 这一项是否因此消掉。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.list",
+        "args": {
+          "path": "manuscripts/B",
+          "recursive": true,
+          "limit": 100
+        },
+        "why": "先看 B 侧有哪些稿，定位派活里说的那一份"
+      },
+      "result": {
+        "tool": "fs.list",
+        "ok": true,
+        "data": {
+          "path": "manuscripts/B",
+          "entries": [
+            {
+              "name": "b-proof-000000.md",
+              "path": "manuscripts/B/b-proof-000000.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 5871,
+              "mtime": "2026-11-24T19:13:21+08:00"
+            },
+            {
+              "name": "b-proof-000001.md",
+              "path": "manuscripts/B/b-proof-000001.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 6088,
+              "mtime": "2026-11-24T19:24:08+08:00"
+            },
+            {
+              "name": "b-proof-000002.md",
+              "path": "manuscripts/B/b-proof-000002.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 8275,
+              "mtime": "2026-11-24T21:08:15+08:00"
+            },
+            {
+              "name": "b-proof-000003.md",
+              "path": "manuscripts/B/b-proof-000003.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 9951,
+              "mtime": "2026-11-24T21:19:47+08:00"
+            }
+          ],
+          "total": 4,
+          "returned": 4,
+          "truncated": false
+        },
+        "error": "",
+        "meta": {
+          "total": 4,
+          "returned": 4,
+          "truncated": false
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 64384,
+        "prompt_cache_miss_tokens": 1724,
+        "tokens_in": 66108,
+        "tokens_out": 456,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000172"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/B/b-proof-000003.md",
+          "max_lines": 120
+        },
+        "why": "读这份待处理的稿，核对稿头元信息与 V 签块"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# F 的证明手稿：证明四段叙述的严格骨架：(i) Δ(2)=A_face(2)−A_diag(2)=0 且两者都等于 π；(ii) Δ(…\n\n- 计划：000002 · 子目标：n1\n- 依赖面洗稿：已洗=true；执行者=secretary-F\n- 稿族：b-proof\n- 产出者：agent-B-B1\n- 正文sha：43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6\n- 命题指纹：da831b7b4a3dc1a603c2df16234b02d42fd9d3d56471081b702d31adc9ea8c7e\n- 命题类型：conjecture\n- 登记时间：2026-11-24T20:51:08+08:00\n- 标签：B_p^3 对角与面对角截面面积公式及 Δ(p) 的最终正性\n- 版本：2026-11-24T21:19:47+08:00@43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6\n\n## 命题\n\n设 1 ≤ p < ∞，B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积，并记 A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。则：(i) A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，且 A_diag(2) = π、A_diag(1) = 3√3/4、lim_{p→∞}A_diag(p) = 3√3；(ii) A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，且 A_face(2) = π、A_face(1) = √2、lim_{p→∞}A_face(p) = 4√2；(iii) Δ 在 [1,∞) 上连续，Δ(2) = 0，Δ(1) = √2 − 3√3/4 > 0，lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0，因而存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 A_face(p) > A_diag(p)。\n\n## 证明\n\n设 p ∈ [1,∞) 固定。记 B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n，记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；并记 A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。\n\n一、先把 A_diag 写成平面 H := {x+y+z=0} 上的极坐标积分。取 u := (1,-1,0)/√2 与 v := (1,1,-2)/√6。直接验算得 ‖u‖ = ‖v‖ = 1、u·v = 0，又 u·(1,1,1) = 0、v·(1,1,1) = 0，故 {u,v} 是 H 的一组单位正交基，而 n := (1,1,1)/√3 是 H 的单位法向量、H = n^⊥。在 H 上以 (u,v) 为基取极坐标 x = r·e(θ)，其中 e(θ) := cosθ·u + sinθ·v、r ≥ 0、θ ∈ [0,2π)。由于 l_p 范数是正齐次的，‖x‖_p = r‖e(θ)‖_p，于是 x ∈ B_p^3 当且仅当 r ≤ ‖e(θ)‖_p^{-1}。平面极坐标的面积元带 Jacobi 因子 r，先对 r 积分得 ∫_0^{‖e(θ)‖_p^{-1}} r dr = (1/2)‖e(θ)‖_p^{-2}，再对 θ 积分便有 A_diag(p) = (1/2)∫_0^{2π}‖e(θ)‖_p^{-2} dθ，这就是 (i) 的第一个等号。\n\n二、把 ‖e(θ)‖_p 算出来。由 u、v 的分量得 e_1 = cosθ/√2 + sinθ/√6 = (√3cosθ+sinθ)/√6、e_2 = −cosθ/√2 + sinθ/√6 = −(√3cosθ−sinθ)/√6、e_3 = −2sinθ/√6。用余弦的差角公式 √3cosθ+sinθ = 2cos(θ−π/6) 与 √3cosθ−sinθ = 2cos(θ+π/6)，得 |e_1| = (2/√6)|cos(θ−π/6)|、|e_2| …（落档截断，原 6482 字）",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/B/b-proof-000003.md",
+          "encoding": "utf-8",
+          "bytes_read": 9951,
+          "total_bytes": 9951,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 45,
+          "total_lines": 45,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 1–45 行（共 45 行）",
+          "sha256": "26f3a7da2042133a473fbdb7755fd463141a3b32cb8948459a3f2b8e94dc5fb2"
+        },
+        "multi_call": {
+          "turn_index": 1,
+          "call_index": 0,
+          "calls": 2,
+          "step_index": 1
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 65152,
+        "prompt_cache_miss_tokens": 1767,
+        "tokens_in": 66919,
+        "tokens_out": 344,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000172"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "statements",
+          "limit": 50,
+          "fields": [
+            "stmt_id",
+            "label",
+            "kind",
+            "origin",
+            "status",
+            "evidence_kind",
+            "proof_no",
+            "manuscript_id",
+            "proof_sha256"
+          ]
+        },
+        "why": "看台账里已有哪些命题行，判断这一份稿是否还没进 statements"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": false,
+        "data": null,
+        "error": "statements 没有字段 ['manuscript_id', 'proof_no', 'proof_sha256']；可投影的字段：['aliases', 'bits', 'created_at', 'created_by', 'derived_from', 'doc_id', 'evidence_kind', 'kind', 'label', 'line_range', 'origin', 'page_range', 'proof_routes', 'proof_routes_problem', 'proof_text', 'quote_call_sha256', 'quote_mode', 'quote_reason', 'quote_span', 'quote_verified', 'route', 'source_lit_id', 'statement_full', 'statement_text', 'status', 'stmt_id']（投影只回你点的键，写错一个字就会少一格，所以这里直接拒）",
+        "meta": {
+          "table": "statements",
+          "kind": "param_error"
+        },
+        "参数表": "【参数表】被拒的是参数形状/取值，不是这件事不能做。照下面这张声明表重写一次（键名与类型都要对；表里没列的键一律不许传）：\n- table.list 的参数表：table: string，必填，枚举 [search_requests/literature/relations/research_questions/conjectures/analysis_reports/reprocess_requests/experiments]，16 张表之一；limit: integer，返回条数上限（1-500）；offset: integer，跳过的行数；filter: object，等值过滤：{字段: 期望值}；模糊匹配请用 table.search；fields: array，字段投影：只回这几个键（例如 statements 的 stmt_id / label / kind / evidence_kind）；省略=整行（与改前逐字相同，含 proof_text 全文）（参数表是封闭集合：多传一个键会被拒）",
+        "warn": "这一步给了 2 条调用，已按顺序逐条：第 1 条 fs.read 成功；第 2 条 table.list 被拒：statements 没有字段 ['manuscript_id', 'proof_no', 'pro…。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 1,
+          "call_index": 1,
+          "calls": 2,
+          "step_index": 2,
+          "summary": "这一步给了 2 条调用，已按顺序逐条：第 1 条 fs.read 成功；第 2 条 table.list 被拒：statements 没有字段 ['manuscript_id', 'proof_no', 'pro…。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 1,
+            "calls": 2,
+            "items": 2,
+            "steps": [
+              1,
+              2
+            ],
+            "executed": 2,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000172"
+    },
+    {
+      "index": 3,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "statements",
+          "fields": [
+            "stmt_id",
+            "label",
+            "kind",
+            "origin",
+            "status",
+            "quote_verified",
+            "evidence_kind"
+          ],
+          "limit": 50
+        },
+        "why": "看台账里已有哪些命题行，判断 b-proof-000003 是否还没进 statements"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "statements",
+          "rows": [
+            {
+              "stmt_id": "000000",
+              "label": "unit cube",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000001",
+              "label": "section",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000002",
+              "label": "volume",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000003",
+              "label": "Hensley conjectured",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000004",
+              "label": "random variable",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000005",
+              "label": "probability density function",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000006",
+              "label": "derivative",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000007",
+              "label": "Khintchine inequality",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000008",
+              "label": "maximum volume",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000009",
+              "label": "intersection of Qn with a k-dimensional subspace",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000010",
+              "label": "independent random variables",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000011",
+              "label": "maximal hyperplane section",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000012",
+              "label": "ln p-balls",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000013",
+              "label": "n-cube",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000014",
+              "label": "Ball’s result",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000015",
+              "label": "main diagonal",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000016",
+              "label": "normalized section function An,p",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000017",
+              "label": "unit ball Bn p",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000018",
+              "label": "central hyperplane sections",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000019",
+              "label": "projections",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000020",
+              "label": "Khintchine-type inequality",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000021",
+              "label": "random variables",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000022",
+              "label": "resilience of cubic sections",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000023",
+              "label": "Ball’s cube slicing result",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000024",
+              "label": "Fourier transform representations of moments of independent sums",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000025",
+              "label": "Pólya’s formula",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000026",
+              "label": "normalized Fourier transform γp(s) of exp(−|r|p)",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000027",
+              "label": "Ball’s integral inequality",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000028",
+              "label": "Hölder’s inequality",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000029",
+              "label": "Nazarov and Podkorytov’s method",
+              "kind": "concept",
+              "origin": "external_lit",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000030",
+              "label": "截面面积计算核自检通过：极坐标 tanh-sinh 求积（断点取 A cosψ+B sinψ=0 与 |w_i|=|w_j| 在 [0,2π) 上的全部根）在",
+              "kind": "conjecture",
+              "origin": "own_result",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "cross_check"
+            },
+            {
+              "stmt_id": "000031",
+              "label": "B_p^3 中心截面最大面积的位置与面积比临界性",
+              "kind": "conjecture",
+              "origin": "own_result",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "cross_check"
+            },
+            {
+              "stmt_id": "000032",
+              "label": "B_p^3 中心截面的坐标面积公式、面积比单调性与最大面积方向的分段结构",
+              "kind": "conjecture",
+              "origin": "own_result",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "cross_check"
+            },
+            {
+              "stmt_id": "000033",
+              "label": "B_p^3 中心截面在两条边界弧上的最大面积方向分段",
+              "kind": "conjecture",
+              "origin": "own_result",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "cross_check"
+            },
+            {
+              "stmt_id": "000034",
+              "label": "B_p^3 中心截面面积 A_p(n) 的积分表示与坐标向/面对角向闭式面积公式",
+              "kind": "theorem",
+              "origin": "own_result",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000035",
+              "label": "B_p^3 中心截面面积公式与坐标向极值",
+              "kind": "theorem",
+              "origin": "own_result",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000036",
+              "label": "B_p^3 对角截面面积公式",
+              "kind": "conjecture",
+              "origin": "own_result",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "cross_check"
+            },
+            {
+              "stmt_id": "000037",
+              "label": "B_p^3 面对角截面面积闭式",
+              "kind": "conjecture",
+              "origin": "own_result",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "cross_check"
+            },
+            {
+              "stmt_id": "000038",
+              "label": "B_p^3 中心截面 A_diag−A_face 的零点唯一性与比值 ρ=A_diag/A_face 的单调性",
+              "kind": "conjecture",
+              "origin": "own_result",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "cross_check"
+            },
+            {
+              "stmt_id": "000039",
+              "label": "ΔK(t) 关于 t 的零点唯一性（每个 p 恰变号一次）",
+              "kind": "conjecture",
+              "origin": "own_result",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "cross_check"
+            },
+            {
+              "stmt_id": "000040",
+              "label": "Δ(p)=A_face(p)−A_diag(p) 的单调收敛性与 ρ 无第二零点",
+              "kind": "conjecture",
+              "origin": "own_result",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "cross_check"
+            },
+            {
+              "stmt_id": "000041",
+              "label": "B_p^3 中心截面 A_diag(p) 的积分表示、特殊值与连续性",
+              "kind": "theorem",
+              "origin": "own_result",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000042",
+              "label": "B_p^3 对角与面对角截面面积公式及 Δ(p) 的最终正性",
+              "kind": "theorem",
+              "origin": "own_result",
+              "status": "active",
+              "quote_verified": null,
+              "evidence_kind": "heuristic"
+            }
+          ],
+          "total": 43,
+          "returned": 43,
+          "limit": 50,
+          "offset": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "total": 43,
+          "returned": 43,
+          "offset": 0,
+          "limit": 50,
+          "fields": [
+            "stmt_id",
+            "label",
+            "kind",
+            "origin",
+            "status",
+            "quote_verified",
+            "evidence_kind"
+          ]
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 65920,
+        "prompt_cache_miss_tokens": 6332,
+        "tokens_in": 72252,
+        "tokens_out": 791,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000172"
+    },
+    {
+      "index": 4,
+      "shape": "tool",
+      "payload": {
+        "name": "manuscripts.submission_reading",
+        "args": {
+          "manuscript": "manuscripts/B/b-proof-000003.md"
+        },
+        "why": "核对派活所指那份稿的签与提交状态：已签/已提交各是哪一格"
+      },
+      "result": {
+        "tool": "manuscripts.submission_reading",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "manuscript": "manuscripts/B/b-proof-000003.md",
+          "manuscript_id": "000003",
+          "producer_role": "B",
+          "producer_code": "",
+          "state": "unsubmitted",
+          "submitted_at": "",
+          "via": "",
+          "signed": false,
+          "signed_sha": "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6",
+          "sign_sha": "",
+          "sign_at": "",
+          "token": "",
+          "task_id": "",
+          "task_role": "",
+          "problems": [],
+          "why": "`tasks.artifacts` 里没有 b-proof 稿号 000003 的 `mss:` 记号 ⇒ 未提交（via 没有来源）"
+        },
+        "error": "",
+        "meta": {
+          "checked": true,
+          "manuscript": "manuscripts/B/b-proof-000003.md",
+          "manuscript_id": "000003",
+          "producer_role": "B",
+          "producer_code": "",
+          "state": "unsubmitted",
+          "submitted_at": "",
+          "via": "",
+          "signed": false,
+          "signed_sha": "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6",
+          "sign_sha": "",
+          "sign_at": "",
+          "token": "",
+          "task_id": "",
+          "task_role": "",
+          "problems": [],
+          "why": "`tasks.artifacts` 里没有 b-proof 稿号 000003 的 `mss:` 记号 ⇒ 未提交（via 没有来源）"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 71296,
+        "prompt_cache_miss_tokens": 3764,
+        "tokens_in": 75060,
+        "tokens_out": 1925,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000172"
+    },
+    {
+      "index": 5,
+      "shape": "tool",
+      "payload": {
+        "name": "table.search",
+        "args": {
+          "table": "statements",
+          "query": "对角与面对角",
+          "select": [
+            "stmt_id",
+            "label",
+            "kind",
+            "status",
+            "origin"
+          ],
+          "limit": 20
+        },
+        "why": "定位 b-proof-000003 对应的那条命题行（V 的 verify_proof 要 statement_id）"
+      },
+      "result": {
+        "tool": "table.search",
+        "ok": true,
+        "data": {
+          "table": "statements",
+          "query": "对角与面对角",
+          "fields": [
+            "label",
+            "statement_full"
+          ],
+          "rows": [
+            {
+              "stmt_id": "000042",
+              "label": "B_p^3 对角与面对角截面面积公式及 Δ(p) 的最终正性",
+              "kind": "theorem",
+              "status": "active",
+              "origin": "own_result"
+            }
+          ],
+          "total": 1,
+          "returned": 1
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "total": 1,
+          "returned": 1,
+          "matched_fields": {
+            "000042": [
+              "label"
+            ]
+          },
+          "truncated": false,
+          "select": [
+            "stmt_id",
+            "label",
+            "kind",
+            "status",
+            "origin"
+          ]
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 74112,
+        "prompt_cache_miss_tokens": 2077,
+        "tokens_in": 76189,
+        "tokens_out": 1158,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000172"
+    },
+    {
+      "index": 6,
+      "shape": "summon",
+      "payload": {
+        "role": "V",
+        "action": "",
+        "params": {
+          "statement_id": "000042",
+          "proof_manuscript": "manuscripts/B/b-proof-000003.md",
+          "expected_proof_sha256": "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6",
+          "verdict_two_state": "成立 / 有毛病"
+        },
+        "why": "这一份是我名下的 b-proof 稿且 V 签未到：按纪律「先拿签再入库」，签不到就不能收录（签闸），所以这一拍先把稿送去逐行走查。",
+        "brief": "逐行走查 b-proof-000003（stmt 000042）并出两态结论",
+        "task": "逐行走查一份 B 侧证明手稿，给出两态结论（成立 / 有毛病）；有毛病时每条 finding 带步号与 defect_step 非空。要审的稿：manuscripts/B/b-proof-000003.md（只读它、先读盘上字节），对应命题号 statement_id=000042（题：B_p^3 对角与面对角截面面积公式及 Δ(p) 的最终正性）。稿件正文 sha 按稿头元信息是 43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6 —— 请自己读稿复算确认审的正是这一版正文；若盘上正文与这个 sha 不符，请如实指出并额外说明差在哪一段。结论请落 verifications/000042.jsonl（在册档）；签块落回这一份稿。"
+      },
+      "result": {
+        "summoned": "V",
+        "action": "",
+        "ok": true,
+        "task_id": "t-000173",
+        "status": "running",
+        "outcome": null,
+        "refusal_reason": null,
+        "preemptible": true,
+        "dispatched": [
+          "t-000173"
+        ],
+        "running": [
+          "t-000173"
+        ],
+        "detail": "还在跑：本步先不等（可抢占）。它回来之后结论会在你下一次被问之前以【子代理返场】投给你 —— 不要因为 status=running 就重派；收工会被拒到它回齐",
+        "roster_considered": true,
+        "roster_name": "V1",
+        "秘书": {
+          "alarms": [],
+          "fail_open": false,
+          "wash": {
+            "checked": true,
+            "washed": false,
+            "refused": "",
+            "reason": ""
+          },
+          "changes": [],
+          "surface_fit": {
+            "checked": false,
+            "fits": null,
+            "paths": [],
+            "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+            "shape": "summon",
+            "reach": {
+              "checked": true,
+              "verdict": "unknown",
+              "hops": [],
+              "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+            }
+          },
+          "reach_fit": {
+            "checked": true,
+            "verdict": "unknown",
+            "hops": [],
+            "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+          },
+          "assessment": {
+            "decision": "可派",
+            "reason": "这一条没点名具体动作（role 级派活）⇒ 不拿动作表去卡它；角色存在性由预筛管",
+            "basis": [
+              "specs/<role>.py 的动作表",
+              "tasks: 同 key 的既有终态行",
+              "没点名动作 ⇒ 动作表那一格不适用"
+            ],
+            "duplicates": [],
+            "alarms": [],
+            "novel": false,
+            "surface": {
+              "checked": false,
+              "fits": null,
+              "paths": [],
+              "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+              "shape": "summon",
+              "reach": {
+                "checked": true,
+                "verdict": "unknown",
+                "hops": [],
+                "reason": "角色 '' 不在能力表里（['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'L', 'M', 'V']）⇒ 判不了"
+              }
+            },
+            "judge": {
+              "checked": false,
+              "reason": "预筛没有报警、也没有重复候选 ⇒ 不必判断"
+            },
+            "engaged": false,
+            "seq": 2
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 75264,
+        "prompt_cache_miss_tokens": 2146,
+        "tokens_in": 77410,
+        "tokens_out": 1551,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000172"
+    },
+    {
+      "index": 7,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.list",
+        "args": {
+          "path": "verifications",
+          "recursive": true,
+          "limit": 100
+        },
+        "why": "核 V 的台账有没有盖在 b-proof-000003 这一版正文（sha 43f4c2ab…）上的签与判词"
+      },
+      "result": {
+        "tool": "fs.list",
+        "ok": true,
+        "data": {
+          "path": "verifications",
+          "entries": [
+            {
+              "name": "000034.jsonl",
+              "path": "verifications/000034.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 5254,
+              "mtime": "2026-11-24T19:14:29+08:00"
+            },
+            {
+              "name": "000035.jsonl",
+              "path": "verifications/000035.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 3736,
+              "mtime": "2026-11-24T19:24:08+08:00"
+            },
+            {
+              "name": "000041.jsonl",
+              "path": "verifications/000041.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 4709,
+              "mtime": "2026-11-24T21:08:15+08:00"
+            },
+            {
+              "name": "000042.jsonl",
+              "path": "verifications/000042.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 9603,
+              "mtime": "2026-11-24T21:22:21+08:00"
+            },
+            {
+              "name": "pending",
+              "path": "verifications/pending",
+              "is_dir": true,
+              "is_file": false,
+              "is_symlink": false,
+              "size": 4096,
+              "mtime": "2026-11-24T21:01:16+08:00"
+            },
+            {
+              "name": "0cf2e9d63d84d89e1fc793263941d594c6d840a70c44f2c050a1aa94486ecb6e.jsonl",
+              "path": "verifications/pending/0cf2e9d63d84d89e1fc793263941d594c6d840a70c44f2c050a1aa94486ecb6e.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 5032,
+              "mtime": "2026-11-24T19:16:27+08:00"
+            },
+            {
+              "name": "0eace33564540fd1f1172fc3c00141355ee2753c62c329c4ca416a4c4116322d.jsonl",
+              "path": "verifications/pending/0eace33564540fd1f1172fc3c00141355ee2753c62c329c4ca416a4c4116322d.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 9944,
+              "mtime": "2026-11-24T20:59:49+08:00"
+            },
+            {
+              "name": "202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8.jsonl",
+              "path": "verifications/pending/202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 7288,
+              "mtime": "2026-11-24T21:01:16+08:00"
+            },
+            {
+              "name": "3a237e1e80bb627d56480df693ee47cc8425e5af9873468944313b2deb3bede4.jsonl",
+              "path": "verifications/pending/3a237e1e80bb627d56480df693ee47cc8425e5af9873468944313b2deb3bede4.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 4987,
+              "mtime": "2026-11-24T19:16:27+08:00"
+            },
+            {
+              "name": "4cbbbeaf3989914e5756c9da973790a81da790ee98b226b4b9c965b430c9fc0a.jsonl",
+              "path": "verifications/pending/4cbbbeaf3989914e5756c9da973790a81da790ee98b226b4b9c965b430c9fc0a.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 7628,
+              "mtime": "2026-11-24T18:42:50+08:00"
+            },
+            {
+              "name": "595e388ff219fe0ab4e3b0b64d9d9f147fbc5ad283b8399920f076809f426623.jsonl",
+              "path": "verifications/pending/595e388ff219fe0ab4e3b0b64d9d9f147fbc5ad283b8399920f076809f426623.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 4161,
+              "mtime": "2026-11-24T19:16:27+08:00"
+            },
+            {
+              "name": "6429ab828f56dcf8dc1bcd14daa2a563187dccb99056e30e89a63b4179c47929.jsonl",
+              "path": "verifications/pending/6429ab828f56dcf8dc1bcd14daa2a563187dccb99056e30e89a63b4179c47929.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 4224,
+              "mtime": "2026-11-24T20:59:49+08:00"
+            },
+            {
+              "name": "84916f2519368a82c41da1c239f682ae69d1b2bf0e4cee8d2f9ca2e9ba906595.jsonl",
+              "path": "verifications/pending/84916f2519368a82c41da1c239f682ae69d1b2bf0e4cee8d2f9ca2e9ba906595.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 4143,
+              "mtime": "2026-11-24T20:59:49+08:00"
+            },
+            {
+              "name": "bfe78f85fca1df894a28d8d4c99124b24c6920864b90af5e527ca2a4ad407907.jsonl",
+              "path": "verifications/pending/bfe78f85fca1df894a28d8d4c99124b24c6920864b90af5e527ca2a4ad407907.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 12490,
+              "mtime": "2026-11-24T18:42:49+08:00"
+            },
+            {
+              "name": "c3799ef6c1a48592a8bc6f8cefabda2a4a946df3e10e182574eefa15cce099c4.jsonl",
+              "path": "verifications/pending/c3799ef6c1a48592a8bc6f8cefabda2a4a946df3e10e182574eefa15cce099c4.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 6684,
+              "mtime": "2026-11-24T20:59:49+08:00"
+            },
+            {
+              "name": "c47e71d0f92e0db60d668bd26ef3939cae4fe84eb03d1da23a1b62e226ba8ddb.jsonl",
+              "path": "verifications/pending/c47e71d0f92e0db60d668bd26ef3939cae4fe84eb03d1da23a1b62e226ba8ddb.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 6201,
+              "mtime": "2026-11-24T20:59:49+08:00"
+            },
+            {
+              "name": "c9a58441bbfbac8ea83ed35ef6e997999b0357d1bf4b1fd919ee25f6aec3473e.jsonl",
+              "path": "verifications/pending/c9a58441bbfbac8ea83ed35ef6e997999b0357d1bf4b1fd919ee25f6aec3473e.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 11894,
+              "mtime": "2026-11-24T20:59:49+08:00"
+            },
+            {
+              "name": "e7fe441c9e14f4a55e963c14793341a76654496a78c17a57607ccc55053c5e7f.jsonl",
+              "path": "verifications/pending/e7fe441c9e14f4a55e963c14793341a76654496a78c17a57607ccc55053c5e7f.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 7145,
+              "mtime": "2026-11-24T19:16:27+08:00"
+            },
+            {
+              "name": "reviews",
+              "path": "verifications/reviews",
+              "is_dir": true,
+              "is_file": false,
+              "is_symlink": false,
+              "size": 4096,
+              "mtime": "2026-11-24T21:17:55+08:00"
+            },
+            {
+              "name": "index.jsonl",
+              "path": "verifications/reviews/index.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 9203,
+              "mtime": "2026-11-24T21:17:55+08:00"
+            },
+            {
+              "name": "v-review-000001.md",
+              "path": "verifications/reviews/v-review-000001.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 8169,
+              "mtime": "2026-11-24T18:36:47+08:00"
+            },
+            {
+              "name": "v-review-000002.md",
+              "path": "verifications/reviews/v-review-000002.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 1844,
+              "mtime": "2026-11-24T18:55:06+08:00"
+            },
+            {
+              "name": "v-review-000003.md",
+              "path": "verifications/reviews/v-review-000003.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 1676,
+              "mtime": "2026-11-24T19:00:56+08:00"
+            },
+            {
+              "name": "v-review-000004.md",
+              "path": "verifications/reviews/v-review-000004.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 1753,
+              "mtime": "2026-11-24T19:07:32+08:00"
+            },
+            {
+              "name": "v-review-000005.md",
+              "path": "verifications/reviews/v-review-000005.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 1559,
+              "mtime": "2026-11-24T19:57:13+08:00"
+            },
+            {
+              "name": "v-review-000006.md",
+              "path": "verifications/reviews/v-review-000006.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 2020,
+              "mtime": "2026-11-24T20:16:37+08:00"
+            },
+            {
+              "name": "v-review-000007.md",
+              "path": "verifications/reviews/v-review-000007.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 1975,
+              "mtime": "2026-11-24T20:21:25+08:00"
+            },
+            {
+              "name": "v-review-000008.md",
+              "path": "verifications/reviews/v-review-000008.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 1601,
+              "mtime": "2026-11-24T20:25:37+08:00"
+            },
+            {
+              "name": "v-review-000009.md",
+              "path": "verifications/reviews/v-review-000009.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 2488,
+              "mtime": "2026-11-24T20:30:15+08:00"
+            },
+            {
+              "name": "v-review-000010.md",
+              "path": "verifications/reviews/v-review-000010.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 1984,
+              "mtime": "2026-11-24T20:36:15+08:00"
+            },
+            {
+              "name": "v-review-000011.md",
+              "path": "verifications/reviews/v-review-000011.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 1797,
+              "mtime": "2026-11-24T20:38:02+08:00"
+            },
+            {
+              "name": "v-review-000012.md",
+              "path": "verifications/reviews/v-review-000012.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 3906,
+              "mtime": "2026-11-24T21:11:12+08:00"
+            },
+            {
+              "name": "v-review-000013.md",
+              "path": "verifications/reviews/v-review-000013.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 1825,
+              "mtime": "2026-11-24T21:17:55+08:00"
+            }
+          ],
+          "total": 33,
+          "returned": 33,
+          "truncated": false
+        },
+        "error": "",
+        "meta": {
+          "total": 33,
+          "returned": 33,
+          "truncated": false
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 76416,
+        "prompt_cache_miss_tokens": 2574,
+        "tokens_in": 78990,
+        "tokens_out": 398,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000172"
+    },
+    {
+      "index": 8,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "verifications/000042.jsonl"
+        },
+        "why": "核 V 判词与正文 sha：确认这一签盖的是 43f4c2ab… 这一版、判词是「成立」"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "{\"at\": \"2026-11-24T21:11:12+08:00\", \"citation_checks\": [], \"defect_step\": 1, \"findings\": [{\"detail\": \"`stmt:000034`（在哪一步：证明正文（未标步号的行））· 类别：等级读不出来（判不了）（`citation_level_unreadable`） · 期望：盘上有一份这一条命题的手稿（`manuscripts/F/f-proof-<号>.md`；V 只读手稿：正文与签都在稿上） · 实得：盘上没有这一条命题的手稿（找过：（没记））⇒ 读不到它的正文，也读不到它的签 · 怎么改：先把这一条命题的证明落成一份手稿（`manuscripts/F/f-proof-<号>.md`，`## 命题` / `## 证明` / `## 依赖` 三节），再引它；V 不从台账读正文\", \"kind\": \"citation_level_unreadable\", \"level\": \"error\", \"step\": null}, {\"detail\": \"`stmt:000034`（在哪一步：证明正文（未标步号的行））· 类别：表述错误·表与正文的引用集合不一致（`deps_table_disagrees_with_proof`） · 期望：手稿的 `## 依赖` 表里有一行 `stmt:000034`（写明它用在哪一步） · 实得：表里没有这一行 · 怎么改：把表里那一行补上（号与用在哪一步都写对）；正文是 F 的署名作品，表按它补齐 —— 两处必须说的是同一件事\", \"kind\": \"deps_table_disagrees_with_proof\", \"level\": \"error\", \"step\": null}], \"manuscript\": \"manuscripts/B/b-proof-000003.md\", \"object_path\": \"manuscripts/B/b-proof-000003.md\", \"object_sha256\": \"d5b16c8825d876e7b1c6b8c2c0d63777efd2be242986b6081ed8f6b3d5b0cb1c\", \"producer_code\": \"B1\", \"producer_role\": \"B\", \"proof_chars\": 3576, \"proof_sha256\": \"c41c0cfc4384f4c61ebd8f6c28a51c5ed92800bf7cd03fbd7d8a272a46eb291c\", \"quote\": \"\", \"review_call\": \"e0c2d1882da3\", \"review_pass\": 1, \"round\": 1, \"secretary_judge\": {\"axis\": \"clean\", \"checked\": true, \"decision\": \"\", \"defect_scope\": \"\", \"fault_cause\": \"report_gap\", \"fault_kind\": \"\", \"reason\": \"这段回复声称已逐段核对，并给出了具体核对点（参数化与极坐标换元、p=1/p=2 常数、连续性统一界、p→∞ 极限与 Γ 常数收尾），且未指出任何缺陷，属于「逐条走查、未发现问题」的一档。\", \"report_gap\": \"未记录反例构造尝试的位置；findings 与 citation_checks 均为空，没有逐关核对的可查明细。\"}, \"statement_id\": \"000042\", \"stmt_id\": \"000042\", \"submission_id\": \"\", \"unresolved_errors\": 2, \"used_faces\": [], \"verdict\": \"有毛病\", \"verification_id\": \"v-000001\", \"verifier\": \"agent-V-V2\", \"why\": \"逐段核对：A_diag 的参数化与极坐标换元正确；p=1、p=2 特例常数一致；连续性有统一界 2 与有界收敛依据；p→∞ 时 m(θ) 极限、分段积分、Γ 常数与收尾均无断点，未发现可指到步号的缺陷。；`stmt:000034`（在哪一步：证明正文（未标步号的行））· 类别：等级读不出来（判不了）（`citation_level_unreadable`） · 期望：盘上有一份这一条命题的手稿（`manuscripts/F/f-proof-<号>.md`；V 只读手稿：正文与签都在稿上） · 实得：盘上没有这一条命题的手稿（找过：（没记））⇒ 读不到它的正文，也读不到它的签 · 怎么改：先把这一条命题的证明落成一份手稿（`m…（落档截断，原 10518 字）",
+        "error": "",
+        "meta": {
+          "path": "verifications/000042.jsonl",
+          "encoding": "utf-8",
+          "bytes_read": 14835,
+          "total_bytes": 14835,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 8,
+          "total_lines": 8,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 8 行",
+          "sha256": "5e5432ffc69246c056358813328602633d90a3f7e169384d6c0251a6a5b9d779"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 78080,
+        "prompt_cache_miss_tokens": 4340,
+        "tokens_in": 82420,
+        "tokens_out": 781,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000172"
+    },
+    {
+      "index": 9,
+      "shape": "tool",
+      "payload": {
+        "name": "own.ingest_manuscript",
+        "args": {
+          "manuscript": "manuscripts/B/b-proof-000003.md",
+          "target_stmt_id": "000042",
+          "cells": [
+            "proof_text"
+          ],
+          "mode": "preview",
+          "reason": "核这一份已签稿要回填哪一格、目标格现在有没有冲突（先看零写入的 diff）"
+        },
+        "why": "按「只递指针」口径收录前先预检：位置 stmt 000042、格 proof_text"
+      },
+      "result": {
+        "tool": "own.ingest_manuscript",
+        "ok": true,
+        "data": {
+          "ok": true,
+          "mode": "preview",
+          "why": "",
+          "manuscript": {
+            "path": "manuscripts/B/b-proof-000003.md",
+            "family": "b-proof",
+            "tier": "family",
+            "manuscript_id": "000003",
+            "proof_no": 1,
+            "sha256": "375a5da3c9ab29cbb2aa3d33c108af2e96667fae4c1087c631701a58e692c8a2",
+            "proof_sha256": "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6",
+            "proof_state": "present",
+            "sign": {
+              "found": false,
+              "signed": false,
+              "state": ""
+            },
+            "canonical": ""
+          },
+          "target": {
+            "stmt_id": "000042",
+            "before": {
+              "proof_text_sha256": "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6",
+              "proof_no": 1,
+              "kind": "theorem"
+            }
+          },
+          "requested_cells": [
+            "proof_text"
+          ],
+          "cells": {
+            "statement_full": {
+              "requested": false,
+              "writable": false,
+              "outcome": "not_requested",
+              "source": {
+                "section": "## 命题",
+                "lines": [],
+                "sha": ""
+              }
+            },
+            "proof_text": {
+              "requested": true,
+              "writable": true,
+              "outcome": "unchanged",
+              "source": {
+                "section": "## 证明",
+                "lines": [
+                  19,
+                  40
+                ],
+                "sha": "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6"
+              },
+              "value": "设 p ∈ [1,∞) 固定。记 B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n，记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；并记 A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。\n\n一、先把 A_diag 写成平面 H := {x+y+z=0} 上的极坐标积分。取 u := (1,-1,0)/√2 与 v := (1,1,-2)/√6。直接验算得 ‖u‖ = ‖v‖ = 1、u·v = 0，又 u·(1,1,1) = 0、v·(1,1,1) = 0，故 {u,v} 是 H 的一组单位正交基，而 n := (1,1,1)/√3 是 H 的单位法向量、H = n^⊥。在 H 上以 (u,v) 为基取极坐标 x = r·e(θ)，其中 e(θ) := cosθ·u + sinθ·v、r ≥ 0、θ ∈ [0,2π)。由于 l_p 范数是正齐次的，‖x‖_p = r‖e(θ)‖_p，于是 x ∈ B_p^3 当且仅当 r ≤ ‖e(θ)‖_p^{-1}。平面极坐标的面积元带 Jacobi 因子 r，先对 r 积分得 ∫_0^{‖e(θ)‖_p^{-1}} r dr = (1/2)‖e(θ)‖_p^{-2}，再对 θ 积分便有 A_diag(p) = (1/2)∫_0^{2π}‖e(θ)‖_p^{-2} dθ，这就是 (i) 的第一个等号。\n\n二、把 ‖e(θ)‖_p 算出来。由 u、v 的分量得 e_1 = cosθ/√2 + sinθ/√6 = (√3cosθ+sinθ)/√6、e_2 = −cosθ/√2 + sinθ/√6 = −(√3cosθ−sinθ)/√6、e_3 = −2sinθ/√6。用余弦的差角公式 √3cosθ+sinθ = 2cos(θ−π/6) 与 √3cosθ−sinθ = 2cos(θ+π/6)，得 |e_1| = (2/√6)|cos(θ−π/6)|、|e_2| = (2/√6)|cos(θ+π/6)|、|e_3| = (2/√6)|sinθ|。记 S(θ) := |cos(θ−π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p，则 ‖e(θ)‖_p^p = (2/√6)^p·S(θ)；因为 (2/√6)² = 2/3，两边取 −2/p 次幂得 ‖e(θ)‖_p^{-2} = (3/2)·S(θ)^{-2/p}。代回上一段，便得 (i) 的第二个等号 A_diag(p) = (3/4)∫_0^{2π} S(θ)^{-2/p} dθ。\n\n三、另一条路把同一个面积写进 (x,y) 平面，这给出 (ii)。H 上的点可唯一写成 (x,y,−x−y)，即 Φ(x,y) := (x,y,−x−y) 是 R² 到 H 的双射；它的偏导向量 ∂_xΦ = (1,0,−1) 与 ∂_yΦ = (0,1,−1) 的叉积为 (1,1,1)、模为 √3，故曲面面积公式给出 A_diag(p) = √3∫∫_D dx dy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。再对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)：记 g(θ) := |cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p，由 |r cosθ|^p+|r sinθ|^p+|r(cosθ+sinθ)|^p = r^p g(θ) 得 (x,y) ∈ D 当且仅当 r ≤ g(θ)^{-1/p}；用面积元 r dr dθ 先对 r 积分得 ∫_0^{g(θ)^{-1/p}} r dr = (1/2)g(θ)^{-2/p}，于是 A_diag(p) = (√3/2)∫_0^{2π} g(θ)^{-2/p} dθ。两条路算的是同一个 A_diag，故上面三个积分表示彼此相等；下文算特例值时用 g(θ) 这一式。\n\n四、A_face 的闭式。取 n_face := (1,1,0)/√2，则 n_face^⊥ 是平面 x+y=0。用 (x,z) ↦ (x,−x,z) 参数化这个平面：两个偏导 (1,−1,0) 与 (0,0,1) 的叉积为 (−1,−1,0)、模为 √2，而该点的 l_p 范数的 p 次幂是 2|x|^p+|z|^p，故 A_face(p) = √2·area{(x,z) : 2|x|^p+|z|^p ≤ 1}。作代换 u := 2^{1/p}x，即 x = 2^{-1/p}u、dx = 2^{-1/p}du，则 2|x|^p = |u|^p，于是 A_face(p) = √2·2^{-1/p}·S_p，其中 S_p := area{(u,z) : |u|^p+|z|^p ≤ 1}。算 S_p：由对称性与竖向切片（固定 u 时 |z| ≤ (1−|u|^p)^{1/p}）得 S_p = 4∫_0^1 (1−u^p)^{1/p} du。作代换 t = u^p（u = t^{1/p}、du = (1/p)t^{1/p−1}dt）把积分化为 Beta 积分：4∫_0^1 (1−u^p)^{1/p} du = (4/p)∫_0^1 t^{1/p−1}(1−t)^{1/p} dt = (4/p)B(1/p, 1+1/p) = (4/p)·Γ(1/p)Γ(1+1/p)/Γ(1+2/p) = 4Γ(1+1/p)²/Γ(1+2/p)，最后一步用了 Γ(1+1/p) = Γ(1/p)/p。代回上式即得 (ii) 的闭式 A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)。\n\n五、特例值。p = 2 时 g(θ) = cos²θ+sin²θ+(cosθ+sinθ)² = 2+sin2θ，而 g^{-2/p} 在 p = 2 处就是 g^{-1}，故 A_diag(2) = (√3/2)∫_0^{2π} dθ/(2+sin2θ)。作代换 u = 2θ：θ 走一整圈对应 u 走两圈、且 sin 以 2π 为周期，故 ∫_0^{2π} dθ/(2+sin2θ) = (1/2)∫_0^{4π} du/(2+sin u) = ∫_0^{2π} du/(2+sin u)；再用 ∫_0^{2π} du/(a+b sin u) = 2π/√(a²−b²)（取 a = 2、b = 1）得它为 2π/√3，于是 A_diag(2) = (√3/2)·(2π/√3) = π。同一 p = 2 下 S_2 = 4∫_0^1 √(1−u²) du = 4·(π/4) = π，而 2^{1/2−1/2} = 1，故 A_face(2) = π。两者相等，于是 Δ(2) = 0。\n\np = 1 时 g(θ) = |cosθ|+|sinθ|+|cosθ+sinθ|，满足 g(θ+π) = g(θ)，故只需算 [0,π] 上的积分再乘 2。在 [0,π/2] 上三项都非负，g = 2(cosθ+sinθ)，从而 g^{-2} = (1/4)(cosθ+sinθ)^{-2}；把 cosθ+sinθ 写成 √2sin(θ+π/4)，代换 φ = θ+π/4 得 ∫_0^{π/2} dθ/(cosθ+sinθ)² = (1/2)∫_{π/4}^{3π/4} dφ/sin²φ = (1/2)[−cotφ] 在两端取值之差 = 1，故这一段贡献 1/4。在 [π/2,3π/4] 上 cosθ ≤ 0 而 cosθ+sinθ ≥ 0，故 g = 2sinθ、g^{-2} = (1/4)sin^{-2}θ，而 ∫_{π/2}^{3π/4} dθ/sin²θ = [−cotθ] 在两端取值之差为 1，这一段也贡献 1/4。在 [3π/4,π] 上 cosθ+sinθ ≤ 0，故 g = −2cosθ、g^{-2} = (1/4)cos^{-2}θ，而 ∫_{3π/4}^{π} dθ/cos²θ = [tanθ] 在两端取值之差为 1，这一段同样贡献 1/4。三段相加得 ∫_0^{2π} g^{-2} dθ = 2·(3/4) = 3/2，于是 A_diag(1) = (√3/2)·(3/2) = 3√3/4。另一边 S_1 = 4∫_0^1 (1−u) du = 2，而 2^{-1/1} = 1/2，故 A_face(1) = √2·(1/2)·2 = √2。于是 Δ(1) = √2 − 3√3/4，它是正的，因为 4√2 > 3√3 等价于平方后的 32 > 27。\n\n六、p → ∞ 的极限。记 m(θ) := max(|cosθ|,|sinθ|,|cosθ+sinθ|)。因为 g(θ) 是三项之和，每一项都不超过 m(θ)^p 而其中至少有一项恰等于 m(θ)^p，故 m(θ)^p ≤ g(θ) ≤ 3m(θ)^p；两边取 −2/p 次幂并令 p → ∞（此时 3^{-2/p} → 1），得对每个 θ 都有 g(θ)^{-2/p} → m(θ)^{-2}。至于控制：由 g ≥ m^p 得 g^{-2/p} ≤ m^{-2}，而 m(θ) ≥ max(|cosθ|,|sinθ|) ≥ 1/√2，故 m(θ)^{-2} ≤ 2，于是对一切 p ≥ 1 与一切 θ 都有与 p 无关的界 g(θ)^{-2/p} ≤ 2。有界收敛定理给出 A_diag(p) → (√3/2)∫_0^{2π} m(θ)^{-2} dθ。剩下的积分按符号分段算出：在 [0,π/2] 上 m = cosθ+sinθ、在 [π/2,3π/4] 上 m = sinθ、在 [3π/4,π] 上 m = −cosθ，且 m(θ+π) = m(θ)；三段各自的积分与上一步 p = 1 时算过的三段相同、各为 1，故 ∫_0^{2π} m^{-2} dθ = 2·3 = 6，于是 lim_{p→∞} A_diag(p) = (√3/2)·6 = 3√3。另一边，S_p 关于 p 单调不减：若 |u|^p+|z|^p ≤ 1 而 p' > p，则必有 |u| ≤ 1 与 |z| ≤ 1，从而 |u|^{p'}+|z|^{p'} ≤ |u|^p+|z|^p ≤ 1。再看这族集合的并 E := ∪_{p≥1} {(u,z) : |u|^p+|z|^p ≤ 1}：一方面，|u|^p+|z|^p ≤ 1 迫使 |u| ≤ 1 与 |z| ≤ 1，故 E 落在闭正方形 [−1,1]² 之内；另一方面，任给 (u,z) ∈ (−1,1)² 有 max(|u|,|z|) < 1，于是 max(|u|,|z|)^p → 0，充分大的 p 便使 |u|^p+|z|^p ≤ 1，故整个开正方形 (−1,1)² 都含在 E 里。合起来，E 与 (−1,1)² 只差 [−1,1]² 的边界那一段零测集；(−1,1)² 是边长 2 的开正方形（四个象限各占其四分之一），面积为 4，于是 E 的面积也是 4。由单调收敛定理得 S_p ↑ 4，于是 lim_{p→∞} A_face(p) = √2·1·4 = 4√2。与上一条合并得 lim_{p→∞} Δ(p) = 4√2 − 3√3，它同样是正的（仍由 32 > 27）。\n\n七、连续性。先看 A_face：S_p = 4∫_0^1 (1−u^p)^{1/p} du 的被积函数关于 (p,u) ∈ [1,∞)×[0,1] 连续（u = 1 处它恒取值 0），且被常数 1 控制，故由有界收敛定理 p ↦ S_p 在 [1,∞) 上连续；又 p ↦ 2^{-1/p} 连续，于是 A_face 在 [1,∞) 上连续。再看 A_diag：由上面那条与 p 无关的控制 g(θ)^{-2/p} ≤ 2 以及 g 关于 (p,θ) 的联合连续性，对任意收敛序列 p_k → p 都有 g^{-2/p_k} → g^{-2/p} 逐点成立且被常数 2 控制，故有界收敛定理给出 p ↦ ∫_0^{2π} g(θ)^{-2/p} dθ 连续；A_diag 就是它乘常数 √3/2，故 A_diag 也连续。两者相减，Δ 在 [1,∞) 上连续。\n\n八、收尾。记 L := 4√2 − 3√3 > 0，取 ε := L/2 > 0。由 Δ 的连续性与 lim_{p→∞} Δ(p) = L，存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 |Δ(p) − L| < ε，从而 Δ(p) > L/2 > 0，即 A_face(p) > A_diag(p) 对一切 p ≥ P0 成立。至此 (i)(ii)(iii) 全部成立。",
+              "code": "",
+              "reason": "台账正文与稿同一 sha（幂等）"
+            },
+            "dependencies": {
+              "requested": false,
+              "writable": false,
+              "outcome": "not_requested",
+              "source": {
+                "section": "## 依赖",
+                "lines": [],
+                "sha": ""
+              }
+            },
+            "kind": {
+              "requested": false,
+              "writable": false,
+              "outcome": "not_requested",
+              "source": {
+                "section": "head: - 命题类型：",
+                "lines": [],
+                "sha": ""
+              }
+            },
+            "numeric_evidence": {
+              "requested": false,
+              "writable": false,
+              "outcome": "not_requested",
+              "source": {
+                "section": "## 数值结果",
+                "lines": [],
+                "sha": ""
+              }
+            }
+          },
+          "diff": {
+            "requested_not_filled": [],
+            "filled_not_requested": []
+          },
+          "derived_write": [
+            "bits",
+            "proof_no",
+            "proof_sha256",
+            "kind",
+            "proofs"
+          ],
+          "write": {
+            "statements": false,
+            "dependencies": false,
+            "written": false,
+            "sink": "preview：只提取、一个字节都不写"
+          },
+          "refused": "",
+          "reason": "",
+          "caller_reason": "核这一份已签稿要回填哪一格、目标格现在有没有冲突（先看零写入的 diff）"
+        },
+        "error": "",
+        "meta": {},
+        "可退役": [
+          {
+            "task_id": "t-000173",
+            "role": "V",
+            "branch": "waiting_no_children",
+            "reading": {
+              "items_open": 0,
+              "items_open_ids": [],
+              "items_open_expects": {},
+              "items_open_states": {}
+            }
+          }
+        ],
+        "新消息": [
+          {
+            "板": "- （新）[t-000183] notice·要一个回执 来自 clock：时间到：逐行走查一份 B 侧证明手稿，给出两态结论（成立 / 有毛病）；有毛病时每条 finding 带步号与 defect_step 非空。要审的稿：manuscripts/B/b-proof-000003.md（只读它、先读盘上字节），对应命题号 statement_id=000042（题：B_p^3 对角与面对角截面面积公式及 Δ(p) 的最终正性）。稿件正文 sha 按稿头元信息是 43f4c2a｜等了 9 分钟 28 秒（起于 21:21:58，到于 21:31:26）。它交的是：ok：执行完成"
+          }
+        ],
+        "秘书加工": {
+          "reworked": [
+            {
+              "item": {
+                "板": "- （新）[t-000183] notice·要一个回执 来自 clock：时间到：逐行走查一份 B 侧证明手稿，给出两态结论（成立 / 有毛病）；有毛病时每条 finding 带步号与 defect_step 非空。要审的稿：manuscripts/B/b-proof-000003.md（只读它、先读盘上字节），对应命题号 statement_id=000042（题：B_p^3 对角与面对角截面面积公式及 Δ(p) 的最终正性）。稿件正文 sha 按稿头元信息是 43f4c2a｜等了 9 分钟 28 秒（起于 21:21:58，到于 21:31:26）。它交的是：ok：执行完成"
+              },
+              "addendum": "我的产出物口径：交付状态 —— 交给谁：派你这趟活的那一方（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名）+ 送稿方（F / E / A 的回执随这一趟的返回值带回）；形态：`statements` 行（第一阶段・快录：概念行与命题行）+ `relations` 行 + `manuscripts/B/b-proof-<B稿号>.md` 副本（第二阶段・逐个优化）；可核字段：`statements.stmt_id` / `statements.kind` / `statements.quote_verified` / `statements.proof_text` / `relations.quote` / `relations.page_range` / `relations.quote_verified`；算做完：每一份送来的证明都有处置结论 —— 洗过的给副本、盖在新正文上的 V 签，没洗完的逐份点名还剩哪几份、卡在哪；每条关系的 `quote_verified` 有值（true / false / 未核到，不许空）。\n我在本条线上的位置：文献整理：第一阶段是快录 —— E/F 侧交来的成果几乎自动录入（机械录入：证明原文 ＋ 那一份已有的 V 签；只有「自己分析引文落稿」那一档要花力气）；第二阶段（逐个优化）是你的主职，**自驱、不必等 M 派** —— 洗稿 → 重拿 V 签 → 精准替换（每一步的入口、判据与自驱入口写在 policy 那一节）。",
+              "problem": "",
+              "fail_open": false
+            }
+          ],
+          "handoffs_digest": "- 000021 V→F：V 复核 f-proof-000003：有毛病（defect_step=2）—— 三处局部可改，11 步算式与两处极限复算无误\n- 000022 F→D：F 收口：体对角向面积表达式已签（f-proof-000002）+ Δ 连续性与尾段符号已签（f-proof-000003/在册 stmt:000030）；2<p<p* 段只有 strong_conjecture 数值（两零点），缺一条单调性引理\n- 000023 V→B：B 号 b-proof-000002（stmt:000041，正文 sha 12847fcc…）经 V 复核：成立，零 finding，签已落回本稿\n- 000024 V→B：V 复核 b-proof-000003：有毛病（依赖表漏 stmt:000034；被引命题手稿不在闸门读的 F 族路径），数学正文无第二处缺陷\n- 000025 V→B：V 复核 manuscripts/B/b-proof-000003.md（正文 sha 43f4c2ab…）：有毛病 —— 第 1、2 步把中间积分表示误标成 (i) 的等号；第 6 步修复已确认正确，其余各步与全部数值均复算通过"
+        },
+        "warn": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.ingest_manuscript 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 9,
+          "call_index": 0,
+          "calls": 1,
+          "step_index": 9,
+          "summary": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.ingest_manuscript 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 9,
+            "calls": 1,
+            "items": 1,
+            "steps": [
+              9
+            ],
+            "executed": 1,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 81664,
+        "prompt_cache_miss_tokens": 5333,
+        "tokens_in": 86997,
+        "tokens_out": 673,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000172"
+    },
+    {
+      "index": 11,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "statements",
+          "filter": {
+            "stmt_id": "000042"
+          },
+          "fields": [
+            "stmt_id",
+            "kind",
+            "status",
+            "label",
+            "bits",
+            "proof_routes"
+          ],
+          "limit": 5
+        },
+        "why": "核 stmt 000042 的五元位与现算等级读数，判「已签未收录」这一项是否真的已闭环"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "statements",
+          "rows": [
+            {
+              "stmt_id": "000042",
+              "kind": "theorem",
+              "status": "active",
+              "label": "B_p^3 对角与面对角截面面积公式及 Δ(p) 的最终正性",
+              "bits": {
+                "numeric": "pending",
+                "proof": true,
+                "reviewed": true,
+                "formal": "pending",
+                "audited": false,
+                "origin": "own_result",
+                "evidence": {
+                  "numeric": {},
+                  "numeric_reason": "",
+                  "proof_process": "设 p ∈ [1,∞) 固定。记 B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n，记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；并记 A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。\n\n一、先把 A_diag 写成平面 H := {x+y+z=0} 上的极坐标积分。取 u := (1,-1,0)/√2 与 v := (1,1,-2)/√6。直接验算得 ‖u‖ = ‖v‖ = 1、u·v = 0，又 u·(1,1,1) = 0、v·(1,1,1) = 0，故 {u,v} 是 H 的一组单位正交基，而 n := (1,1,1)/√3 是 H 的单位法向量、H = n^⊥。在 H 上以 (u,v) 为基取极坐标 x = r·e(θ)，其中 e(θ) := cosθ·u + sinθ·v、r ≥ 0、θ ∈ [0,2π)。由于 l_p 范数是正齐次的，‖x‖_p = r‖e(θ)‖_p，于是 x ∈ B_p^3 当且仅当 r ≤ ‖e(θ)‖_p^{-1}。平面极坐标的面积元带 Jacobi 因子 r，先对 r 积分得 ∫_0^{‖e(θ)‖_p^{-1}} r dr = (1/2)‖e(θ)‖_p^{-2}，再对 θ 积分便有 A_diag(p) = (1/2)∫_0^{2π}‖e(θ)‖_p^{-2} dθ，这就是 (i) 的第一个等号。\n\n二、把 ‖e(θ)‖_p 算出来。由 u、v 的分量得 e_1 = cosθ/√2 + sinθ/√6 = (√3cosθ+sinθ)/√6、e_2 = −cosθ/√2 + sinθ/√6 = −(√3cosθ−sinθ)/√6、e_3 = −2sinθ/√6。用余弦的差角公式 √3cosθ+sinθ = 2cos(θ−π/6) 与 √3cosθ−sinθ = 2cos(θ+π/6)，得 |e_1| = (2/√6)|cos(θ−π/6)|、|e_2| = (2/√6)|cos(θ+π/6)|、|e_3| = (2/√6)|sinθ|。记 S(θ) := |cos(θ−π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p，则 ‖e(θ)‖_p^p = (2/√6)^p·S(θ)；因为 (2/√6)² = 2/3，两边取 −2/p 次幂得 ‖e(θ)‖_p^{-2} = (3/2)·S(θ)^{-2/p}。代回上一段，便得 (i) 的第二个等号 A_diag(p) = (3/4)∫_0^{2π} S(θ)^{-2/p} dθ。\n\n三、另一条路把同一个面积写进 (x,y) 平面，这给出 (ii)。H 上的点可唯一写成 (x,y,−x−y)，即 Φ(x,y) := (x,y,−x−y) 是 R² 到 H 的双射；它的偏导向量 ∂_xΦ = (1,0,−1) 与 ∂_yΦ = (0,1,−1) 的叉积为 (1,1,1)、模为 √3，故曲面面积公式给出 A_diag(p) = √3∫∫_D dx dy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。再对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)：记 g(θ) := |cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p，由 |r cosθ|^p+|r sinθ|^p+|r(cosθ+sinθ)|^p = r^p g(θ) 得 (x,y) ∈ D 当且仅当 r ≤ g(θ)^{-1/p}；用面积元 r dr dθ 先对 r 积分得 ∫_0^{g(θ)^{-1/p}} r dr = (1/2)g(θ)^{-2/p}，于是 A_diag(p) = (√3/2)∫_0^{2π} g(θ)^{-2/p} dθ。两条路算的是同一个 A_diag，故上面三个积分表示彼此相等；下文算特例值时用 g(θ) 这一式。\n\n四、A_face 的闭式。取 n_face := (1,1,0)/√2，则 n_face^⊥ 是平面 x+y=0。用 (x,z) ↦ (x,−x,z) 参数化这个平面：两个偏导 (1,−1,0) 与 (0,0,1) 的叉积为 (−1,−1,0)、模为 √2，而该点的 l_p 范数的 p 次幂是 2|x|^p+|z|^p，故 A_face(p) = √2·area{(x,z) : 2|x|^p+|z|^p ≤ 1}。作代换 u := 2^{1/p}x，即 x = 2^{-1/p}u、dx = 2^{-1/p}du，则 2|x|^p = |u|^p，于是 A_face(p) = √2·2^{-1/p}·S_p，其中 S_p := area{(u,z) : |u|^p+|z|^p ≤ 1}。算 S_p：由对称性与竖向切片（固定 u 时 |z| ≤ (1−|u|^p)^{1/p}）得 S_p = 4∫_0^1 (1−u^p)^{1/p} du。作代换 t = u^p（u = t^{1/p}、du = (1/p)t^{1/p−1}dt）把积分化为 Beta 积分：4∫_0^1 (1−u^p)^{1/p} du = (4/p)∫_0^1 t^{1/p−1}(1−t)^{1/p} dt = (4/p)B(1/p, 1+1/p) = (4/p)·Γ(1/p)Γ(1+1/p)/Γ(1+2/p) = 4Γ(1+1/p)²/Γ(1+2/p)，最后一步用了 Γ(1+1/p) = Γ(1/p)/p。代回上式即得 (ii) 的闭式 A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)。\n\n五、特例值。p = 2 时 g(θ) = cos²θ+sin²θ+(cosθ+sinθ)² = 2+sin2θ，而 g^{-2/p} 在 p = 2 处就是 g^{-1}，故 A_diag(2) = (√3/2)∫_0^{2π} dθ/(2+sin2θ)。作代换 u = 2θ：θ 走一整圈对应 u 走两圈、且 sin 以 2π 为周期，故 ∫_0^{2π} dθ/(2+sin2θ) = (1/2)∫_0^{4π} du/(2+sin u) = ∫_0^{2π} du/(2+sin u)；再用 ∫_0^{2π} du/(a+b sin u) = 2π/√(a²−b²)（取 a = 2、b = 1）得它为 2π/√3，于是 A_diag(2) = (√3/2)·(2π/√3) = π。同一 p = 2 下 S_2 = 4∫_0^1 √(1−u²) du = 4·(π/4) = π，而 2^{1/2−1/2} = 1，故 A_face(2) = π。两者相等，于是 Δ(2) = 0。\n\np = 1 时 g(θ) = |cosθ|+|sinθ|+|cosθ+sinθ|，满足 g(θ+π) = g(θ)，故只需算 [0,π] 上的积分再乘 2。在 [0,π/2] 上三项都非负，g = 2(cosθ+sinθ)，从而 g^{-2} = (1/4)(cosθ+sinθ)^{-2}；把 cosθ+sinθ 写成 √2sin(θ+π/4)，代换 φ = θ+π/4 得 ∫_0^{π/2} dθ/(cosθ+sinθ)² = (1/2)∫_{π/4}^{3π/4} dφ/sin²φ = (1/2)[−cotφ] 在两端取值之差 = 1，故这一段贡献 1/4。在 [π/2,3π/4] 上 cosθ ≤ 0 而 cosθ+sinθ ≥ 0，故 g = 2sinθ、g^{-2} = (1/4)sin^{-2}θ，而 ∫_{π/2}^{3π/4} dθ/sin²θ = [−cotθ] 在两端取值之差为 1，这一段也贡献 1/4。在 [3π/4,π] 上 cosθ+sinθ ≤ 0，故 g = −2cosθ、g^{-2} = (1/4)cos^{-2}θ，而 ∫_{3π/4}^{π} dθ/cos²θ = [tanθ] 在两端取值之差为 1，这一段同样贡献 1/4。三段相加得 ∫_0^{2π} g^{-2} dθ = 2·(3/4) = 3/2，于是 A_diag(1) = (√3/2)·(3/2) = 3√3/4。另一边 S_1 = 4∫_0^1 (1−u) du = 2，而 2^{-1/1} = 1/2，故 A_face(1) = √2·(1/2)·2 = √2。于是 Δ(1) = √2 − 3√3/4，它是正的，因为 4√2 > 3√3 等价于平方后的 32 > 27。\n\n六、p → ∞ 的极限。记 m(θ) := max(|cosθ|,|sinθ|,|cosθ+sinθ|)。因为 g(θ) 是三项之和，每一项都不超过 m(θ)^p 而其中至少有一项恰等于 m(θ)^p，故 m(θ)^p ≤ g(θ) ≤ 3m(θ)^p；两边取 −2/p 次幂并令 p → ∞（此时 3^{-2/p} → 1），得对每个 θ 都有 g(θ)^{-2/p} → m(θ)^{-2}。至于控制：由 g ≥ m^p 得 g^{-2/p} ≤ m^{-2}，而 m(θ) ≥ max(|cosθ|,|sinθ|) ≥ 1/√2，故 m(θ)^{-2} ≤ 2，于是对一切 p ≥ 1 与一切 θ 都有与 p 无关的界 g(θ)^{-2/p} ≤ 2。有界收敛定理给出 A_diag(p) → (√3/2)∫_0^{2π} m(θ)^{-2} dθ。剩下的积分按符号分段算出：在 [0,π/2] 上 m = cosθ+sinθ、在 [π/2,3π/4] 上 m = sinθ、在 [3π/4,π] 上 m = −cosθ，且 m(θ+π) = m(θ)；三段各自的积分与上一步 p = 1 时算过的三段相同、各为 1，故 ∫_0^{2π} m^{-2} dθ = 2·3 = 6，于是 lim_{p→∞} A_diag(p) = (√3/2)·6 = 3√3。另一边，S_p 关于 p 单调不减：若 |u|^p+|z|^p ≤ 1 而 p' > p，则必有 |u| ≤ 1 与 |z| ≤ 1，从而 |u|^{p'}+|z|^{p'} ≤ |u|^p+|z|^p ≤ 1。再看这族集合的并 E := ∪_{p≥1} {(u,z) : |u|^p+|z|^p ≤ 1}：一方面，|u|^p+|z|^p ≤ 1 迫使 |u| ≤ 1 与 |z| ≤ 1，故 E 落在闭正方形 [−1,1]² 之内；另一方面，任给 (u,z) ∈ (−1,1)² 有 max(|u|,|z|) < 1，于是 max(|u|,|z|)^p → 0，充分大的 p 便使 |u|^p+|z|^p ≤ 1，故整个开正方形 (−1,1)² 都含在 E 里。合起来，E 与 (−1,1)² 只差 [−1,1]² 的边界那一段零测集；(−1,1)² 是边长 2 的开正方形（四个象限各占其四分之一），面积为 4，于是 E 的面积也是 4。由单调收敛定理得 S_p ↑ 4，于是 lim_{p→∞} A_face(p) = √2·1·4 = 4√2。与上一条合并得 lim_{p→∞} Δ(p) = 4√2 − 3√3，它同样是正的（仍由 32 > 27）。\n\n七、连续性。先看 A_face：S_p = 4∫_0^1 (1−u^p)^{1/p} du 的被积函数关于 (p,u) ∈ [1,∞)×[0,1] 连续（u = 1 处它恒取值 0），且被常数 1 控制，故由有界收敛定理 p ↦ S_p 在 [1,∞) 上连续；又 p ↦ 2^{-1/p} 连续，于是 A_face 在 [1,∞) 上连续。再看 A_diag：由上面那条与 p 无关的控制 g(θ)^{-2/p} ≤ 2 以及 g 关于 (p,θ) 的联合连续性，对任意收敛序列 p_k → p 都有 g^{-2/p_k} → g^{-2/p} 逐点成立且被常数 2 控制，故有界收敛定理给出 p ↦ ∫_0^{2π} g(θ)^{-2/p} dθ 连续；A_diag 就是它乘常数 √3/2，故 A_diag 也连续。两者相减，Δ 在 [1,∞) 上连续。\n\n八、收尾。记 L := 4√2 − 3√3 > 0，取 ε := L/2 > 0。由 Δ 的连续性与 lim_{p→∞} Δ(p) = L，存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 |Δ(p) − L| < ε，从而 Δ(p) > L/2 > 0，即 A_face(p) > A_diag(p) 对一切 p ≥ P0 成立。至此 (i)(ii)(iii) 全部成立。",
+                  "proof_source": "own",
+                  "reviewed_by": {
+                    "verifier": "V",
+                    "verification_id": "v-000005",
+                    "round": null,
+                    "verdict": "成立",
+                    "evidence": "verifications/000042.jsonl#v-000005",
+                    "findings": [],
+                    "proof_no": 1,
+                    "proof_sha256": "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6"
+                  },
+                  "reviewed_source": "v",
+                  "formal": {},
+                  "formal_reason": "",
+                  "audited_by": {},
+                  "optimized_by_proof": {
+                    "1": true
+                  },
+                  "reviewed_by_proof": {
+                    "1": true
+                  },
+                  "reviewed_sha_by_proof": {
+                    "1": "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6"
+                  }
+                },
+                "voided_by": {},
+                "grade": "pre_theorem",
+                "audited_badge": false
+              },
+              "proof_routes": {}
+            }
+          ],
+          "total": 1,
+          "returned": 1,
+          "limit": 5,
+          "offset": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "total": 1,
+          "returned": 1,
+          "offset": 0,
+          "limit": 5,
+          "fields": [
+            "stmt_id",
+            "kind",
+            "status",
+            "label",
+            "bits",
+            "proof_routes"
+          ]
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 86144,
+        "prompt_cache_miss_tokens": 4902,
+        "tokens_in": 91046,
+        "tokens_out": 1519,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000172"
+    },
+    {
+      "index": 12,
+      "shape": "tool",
+      "payload": {
+        "name": "own.ingest_manuscript",
+        "args": {
+          "manuscript": "manuscripts/B/b-proof-000003.md",
+          "mode": "apply",
+          "target_stmt_id": "000042",
+          "cells": [
+            "proof_text"
+          ],
+          "conflict": "refuse",
+          "if_match_proof_sha256": "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6",
+          "reason": "按 D 的「只递指针」口径收录已签稿：位置 stmt 000042、格 proof_text；preview 显示与稿同一 sha（幂等）"
+        },
+        "why": "真正执行收录回填（preview 已确认格与冲突情况），拿到写入回执"
+      },
+      "result": {
+        "tool": "own.ingest_manuscript",
+        "ok": true,
+        "data": {
+          "ok": true,
+          "mode": "apply",
+          "why": "",
+          "manuscript": {
+            "path": "manuscripts/B/b-proof-000003.md",
+            "family": "b-proof",
+            "tier": "family",
+            "manuscript_id": "000003",
+            "proof_no": 1,
+            "sha256": "375a5da3c9ab29cbb2aa3d33c108af2e96667fae4c1087c631701a58e692c8a2",
+            "proof_sha256": "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6",
+            "proof_state": "present",
+            "sign": {
+              "found": false,
+              "signed": false,
+              "state": ""
+            },
+            "canonical": ""
+          },
+          "target": {
+            "stmt_id": "000042",
+            "before": {
+              "proof_text_sha256": "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6",
+              "proof_no": 1,
+              "kind": "theorem"
+            }
+          },
+          "requested_cells": [
+            "proof_text"
+          ],
+          "cells": {
+            "statement_full": {
+              "requested": false,
+              "writable": false,
+              "outcome": "not_requested",
+              "source": {
+                "section": "## 命题",
+                "lines": [],
+                "sha": ""
+              }
+            },
+            "proof_text": {
+              "requested": true,
+              "writable": true,
+              "outcome": "unchanged",
+              "source": {
+                "section": "## 证明",
+                "lines": [
+                  19,
+                  40
+                ],
+                "sha": "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6"
+              },
+              "value": "设 p ∈ [1,∞) 固定。记 B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n，记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；并记 A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。\n\n一、先把 A_diag 写成平面 H := {x+y+z=0} 上的极坐标积分。取 u := (1,-1,0)/√2 与 v := (1,1,-2)/√6。直接验算得 ‖u‖ = ‖v‖ = 1、u·v = 0，又 u·(1,1,1) = 0、v·(1,1,1) = 0，故 {u,v} 是 H 的一组单位正交基，而 n := (1,1,1)/√3 是 H 的单位法向量、H = n^⊥。在 H 上以 (u,v) 为基取极坐标 x = r·e(θ)，其中 e(θ) := cosθ·u + sinθ·v、r ≥ 0、θ ∈ [0,2π)。由于 l_p 范数是正齐次的，‖x‖_p = r‖e(θ)‖_p，于是 x ∈ B_p^3 当且仅当 r ≤ ‖e(θ)‖_p^{-1}。平面极坐标的面积元带 Jacobi 因子 r，先对 r 积分得 ∫_0^{‖e(θ)‖_p^{-1}} r dr = (1/2)‖e(θ)‖_p^{-2}，再对 θ 积分便有 A_diag(p) = (1/2)∫_0^{2π}‖e(θ)‖_p^{-2} dθ，这就是 (i) 的第一个等号。\n\n二、把 ‖e(θ)‖_p 算出来。由 u、v 的分量得 e_1 = cosθ/√2 + sinθ/√6 = (√3cosθ+sinθ)/√6、e_2 = −cosθ/√2 + sinθ/√6 = −(√3cosθ−sinθ)/√6、e_3 = −2sinθ/√6。用余弦的差角公式 √3cosθ+sinθ = 2cos(θ−π/6) 与 √3cosθ−sinθ = 2cos(θ+π/6)，得 |e_1| = (2/√6)|cos(θ−π/6)|、|e_2| = (2/√6)|cos(θ+π/6)|、|e_3| = (2/√6)|sinθ|。记 S(θ) := |cos(θ−π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p，则 ‖e(θ)‖_p^p = (2/√6)^p·S(θ)；因为 (2/√6)² = 2/3，两边取 −2/p 次幂得 ‖e(θ)‖_p^{-2} = (3/2)·S(θ)^{-2/p}。代回上一段，便得 (i) 的第二个等号 A_diag(p) = (3/4)∫_0^{2π} S(θ)^{-2/p} dθ。\n\n三、另一条路把同一个面积写进 (x,y) 平面，这给出 (ii)。H 上的点可唯一写成 (x,y,−x−y)，即 Φ(x,y) := (x,y,−x−y) 是 R² 到 H 的双射；它的偏导向量 ∂_xΦ = (1,0,−1) 与 ∂_yΦ = (0,1,−1) 的叉积为 (1,1,1)、模为 √3，故曲面面积公式给出 A_diag(p) = √3∫∫_D dx dy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。再对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)：记 g(θ) := |cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p，由 |r cosθ|^p+|r sinθ|^p+|r(cosθ+sinθ)|^p = r^p g(θ) 得 (x,y) ∈ D 当且仅当 r ≤ g(θ)^{-1/p}；用面积元 r dr dθ 先对 r 积分得 ∫_0^{g(θ)^{-1/p}} r dr = (1/2)g(θ)^{-2/p}，于是 A_diag(p) = (√3/2)∫_0^{2π} g(θ)^{-2/p} dθ。两条路算的是同一个 A_diag，故上面三个积分表示彼此相等；下文算特例值时用 g(θ) 这一式。\n\n四、A_face 的闭式。取 n_face := (1,1,0)/√2，则 n_face^⊥ 是平面 x+y=0。用 (x,z) ↦ (x,−x,z) 参数化这个平面：两个偏导 (1,−1,0) 与 (0,0,1) 的叉积为 (−1,−1,0)、模为 √2，而该点的 l_p 范数的 p 次幂是 2|x|^p+|z|^p，故 A_face(p) = √2·area{(x,z) : 2|x|^p+|z|^p ≤ 1}。作代换 u := 2^{1/p}x，即 x = 2^{-1/p}u、dx = 2^{-1/p}du，则 2|x|^p = |u|^p，于是 A_face(p) = √2·2^{-1/p}·S_p，其中 S_p := area{(u,z) : |u|^p+|z|^p ≤ 1}。算 S_p：由对称性与竖向切片（固定 u 时 |z| ≤ (1−|u|^p)^{1/p}）得 S_p = 4∫_0^1 (1−u^p)^{1/p} du。作代换 t = u^p（u = t^{1/p}、du = (1/p)t^{1/p−1}dt）把积分化为 Beta 积分：4∫_0^1 (1−u^p)^{1/p} du = (4/p)∫_0^1 t^{1/p−1}(1−t)^{1/p} dt = (4/p)B(1/p, 1+1/p) = (4/p)·Γ(1/p)Γ(1+1/p)/Γ(1+2/p) = 4Γ(1+1/p)²/Γ(1+2/p)，最后一步用了 Γ(1+1/p) = Γ(1/p)/p。代回上式即得 (ii) 的闭式 A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)。\n\n五、特例值。p = 2 时 g(θ) = cos²θ+sin²θ+(cosθ+sinθ)² = 2+sin2θ，而 g^{-2/p} 在 p = 2 处就是 g^{-1}，故 A_diag(2) = (√3/2)∫_0^{2π} dθ/(2+sin2θ)。作代换 u = 2θ：θ 走一整圈对应 u 走两圈、且 sin 以 2π 为周期，故 ∫_0^{2π} dθ/(2+sin2θ) = (1/2)∫_0^{4π} du/(2+sin u) = ∫_0^{2π} du/(2+sin u)；再用 ∫_0^{2π} du/(a+b sin u) = 2π/√(a²−b²)（取 a = 2、b = 1）得它为 2π/√3，于是 A_diag(2) = (√3/2)·(2π/√3) = π。同一 p = 2 下 S_2 = 4∫_0^1 √(1−u²) du = 4·(π/4) = π，而 2^{1/2−1/2} = 1，故 A_face(2) = π。两者相等，于是 Δ(2) = 0。\n\np = 1 时 g(θ) = |cosθ|+|sinθ|+|cosθ+sinθ|，满足 g(θ+π) = g(θ)，故只需算 [0,π] 上的积分再乘 2。在 [0,π/2] 上三项都非负，g = 2(cosθ+sinθ)，从而 g^{-2} = (1/4)(cosθ+sinθ)^{-2}；把 cosθ+sinθ 写成 √2sin(θ+π/4)，代换 φ = θ+π/4 得 ∫_0^{π/2} dθ/(cosθ+sinθ)² = (1/2)∫_{π/4}^{3π/4} dφ/sin²φ = (1/2)[−cotφ] 在两端取值之差 = 1，故这一段贡献 1/4。在 [π/2,3π/4] 上 cosθ ≤ 0 而 cosθ+sinθ ≥ 0，故 g = 2sinθ、g^{-2} = (1/4)sin^{-2}θ，而 ∫_{π/2}^{3π/4} dθ/sin²θ = [−cotθ] 在两端取值之差为 1，这一段也贡献 1/4。在 [3π/4,π] 上 cosθ+sinθ ≤ 0，故 g = −2cosθ、g^{-2} = (1/4)cos^{-2}θ，而 ∫_{3π/4}^{π} dθ/cos²θ = [tanθ] 在两端取值之差为 1，这一段同样贡献 1/4。三段相加得 ∫_0^{2π} g^{-2} dθ = 2·(3/4) = 3/2，于是 A_diag(1) = (√3/2)·(3/2) = 3√3/4。另一边 S_1 = 4∫_0^1 (1−u) du = 2，而 2^{-1/1} = 1/2，故 A_face(1) = √2·(1/2)·2 = √2。于是 Δ(1) = √2 − 3√3/4，它是正的，因为 4√2 > 3√3 等价于平方后的 32 > 27。\n\n六、p → ∞ 的极限。记 m(θ) := max(|cosθ|,|sinθ|,|cosθ+sinθ|)。因为 g(θ) 是三项之和，每一项都不超过 m(θ)^p 而其中至少有一项恰等于 m(θ)^p，故 m(θ)^p ≤ g(θ) ≤ 3m(θ)^p；两边取 −2/p 次幂并令 p → ∞（此时 3^{-2/p} → 1），得对每个 θ 都有 g(θ)^{-2/p} → m(θ)^{-2}。至于控制：由 g ≥ m^p 得 g^{-2/p} ≤ m^{-2}，而 m(θ) ≥ max(|cosθ|,|sinθ|) ≥ 1/√2，故 m(θ)^{-2} ≤ 2，于是对一切 p ≥ 1 与一切 θ 都有与 p 无关的界 g(θ)^{-2/p} ≤ 2。有界收敛定理给出 A_diag(p) → (√3/2)∫_0^{2π} m(θ)^{-2} dθ。剩下的积分按符号分段算出：在 [0,π/2] 上 m = cosθ+sinθ、在 [π/2,3π/4] 上 m = sinθ、在 [3π/4,π] 上 m = −cosθ，且 m(θ+π) = m(θ)；三段各自的积分与上一步 p = 1 时算过的三段相同、各为 1，故 ∫_0^{2π} m^{-2} dθ = 2·3 = 6，于是 lim_{p→∞} A_diag(p) = (√3/2)·6 = 3√3。另一边，S_p 关于 p 单调不减：若 |u|^p+|z|^p ≤ 1 而 p' > p，则必有 |u| ≤ 1 与 |z| ≤ 1，从而 |u|^{p'}+|z|^{p'} ≤ |u|^p+|z|^p ≤ 1。再看这族集合的并 E := ∪_{p≥1} {(u,z) : |u|^p+|z|^p ≤ 1}：一方面，|u|^p+|z|^p ≤ 1 迫使 |u| ≤ 1 与 |z| ≤ 1，故 E 落在闭正方形 [−1,1]² 之内；另一方面，任给 (u,z) ∈ (−1,1)² 有 max(|u|,|z|) < 1，于是 max(|u|,|z|)^p → 0，充分大的 p 便使 |u|^p+|z|^p ≤ 1，故整个开正方形 (−1,1)² 都含在 E 里。合起来，E 与 (−1,1)² 只差 [−1,1]² 的边界那一段零测集；(−1,1)² 是边长 2 的开正方形（四个象限各占其四分之一），面积为 4，于是 E 的面积也是 4。由单调收敛定理得 S_p ↑ 4，于是 lim_{p→∞} A_face(p) = √2·1·4 = 4√2。与上一条合并得 lim_{p→∞} Δ(p) = 4√2 − 3√3，它同样是正的（仍由 32 > 27）。\n\n七、连续性。先看 A_face：S_p = 4∫_0^1 (1−u^p)^{1/p} du 的被积函数关于 (p,u) ∈ [1,∞)×[0,1] 连续（u = 1 处它恒取值 0），且被常数 1 控制，故由有界收敛定理 p ↦ S_p 在 [1,∞) 上连续；又 p ↦ 2^{-1/p} 连续，于是 A_face 在 [1,∞) 上连续。再看 A_diag：由上面那条与 p 无关的控制 g(θ)^{-2/p} ≤ 2 以及 g 关于 (p,θ) 的联合连续性，对任意收敛序列 p_k → p 都有 g^{-2/p_k} → g^{-2/p} 逐点成立且被常数 2 控制，故有界收敛定理给出 p ↦ ∫_0^{2π} g(θ)^{-2/p} dθ 连续；A_diag 就是它乘常数 √3/2，故 A_diag 也连续。两者相减，Δ 在 [1,∞) 上连续。\n\n八、收尾。记 L := 4√2 − 3√3 > 0，取 ε := L/2 > 0。由 Δ 的连续性与 lim_{p→∞} Δ(p) = L，存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 |Δ(p) − L| < ε，从而 Δ(p) > L/2 > 0，即 A_face(p) > A_diag(p) 对一切 p ≥ P0 成立。至此 (i)(ii)(iii) 全部成立。",
+              "code": "",
+              "reason": "台账正文与稿同一 sha（幂等）"
+            },
+            "dependencies": {
+              "requested": false,
+              "writable": false,
+              "outcome": "not_requested",
+              "source": {
+                "section": "## 依赖",
+                "lines": [],
+                "sha": ""
+              }
+            },
+            "kind": {
+              "requested": false,
+              "writable": false,
+              "outcome": "not_requested",
+              "source": {
+                "section": "head: - 命题类型：",
+                "lines": [],
+                "sha": ""
+              },
+              "kind_upgraded": {
+                "from": "conjecture",
+                "to": "theorem",
+                "basis": "out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json#u-000024 · 台账 verifications/pending/202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8.jsonl#u-000024"
+              }
+            },
+            "numeric_evidence": {
+              "requested": false,
+              "writable": false,
+              "outcome": "not_requested",
+              "source": {
+                "section": "## 数值结果",
+                "lines": [],
+                "sha": ""
+              }
+            }
+          },
+          "diff": {
+            "requested_not_filled": [],
+            "filled_not_requested": []
+          },
+          "derived_write": [
+            "bits",
+            "proof_no",
+            "proof_sha256",
+            "kind",
+            "proofs"
+          ],
+          "write": {
+            "statements": false,
+            "dependencies": false,
+            "written": false,
+            "evidence": false,
+            "cells": [],
+            "sink": "land_statement:attach_proofs / amend_statement_meta / record_manuscript_dependency_face"
+          },
+          "refused": "",
+          "reason": "逐格回填完成",
+          "caller_reason": "按 D 的「只递指针」口径收录已签稿：位置 stmt 000042、格 proof_text；preview 显示与稿同一 sha（幂等）",
+          "intake_claim": {
+            "checked": true,
+            "state": "mine",
+            "rel": "manuscripts/B/b-proof-000003.md",
+            "holder": {
+              "owner": "agent-B-B1",
+              "role": "B",
+              "task_id": "t-000172",
+              "instance": "B1",
+              "attributed": true,
+              "identity_conflict": "",
+              "purpose": "intake",
+              "sha256": "375a5da3c9ab29cbb2aa3d33c108af2e96667fae4c1087c631701a58e692c8a2",
+              "family": "b-proof",
+              "target": "000042",
+              "previous": {},
+              "at": "2026-11-24T21:31:47+08:00"
+            },
+            "why": "",
+            "identity": {
+              "checked": true,
+              "role": "B",
+              "task_id": "t-000172",
+              "instance": "B1",
+              "actor": "agent-B-B1",
+              "source": "roster",
+              "attributed": true,
+              "conflict": "",
+              "tasks_instance": "B1",
+              "roster_name": "B1",
+              "roster_checked": true,
+              "roster_why": ""
+            }
+          },
+          "path_group_reading": {
+            "checked": true,
+            "same_proof": true,
+            "path_group": 1,
+            "basis": "path_manuscript",
+            "fallback": "",
+            "why": "逐路径记录里第 1 条路径的稿就是它"
+          },
+          "evidence": {
+            "checked": true,
+            "written": false,
+            "changed": [],
+            "proof": true,
+            "reviewed": true,
+            "grade": "pre_theorem",
+            "kind": "theorem",
+            "kind_upgraded": {},
+            "kind_downgraded": {},
+            "kind_trace": {
+              "from": "conjecture",
+              "to": "theorem",
+              "basis": "out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json#u-000024 · 台账 verifications/pending/202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8.jsonl#u-000024",
+              "grade": "conjecture",
+              "by": "agent-B",
+              "at": "2026-11-24T21:01:16+08:00"
+            },
+            "grade_recomputed": {},
+            "sign_claim": {
+              "checked": true,
+              "found": true,
+              "applied": true,
+              "artifact_sha": "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6",
+              "state": "signed",
+              "why": "凭据复算通过：凭据 `out/vsigns/43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6.json` 复算通过：3/3 转同源、每行签得住 ⇒ 这一份签了（3/3 才算签）",
+              "credential": {
+                "path": "out/vsigns/43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6.json",
+                "artifact_sha": "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6",
+                "at": "2026-11-24T21:25:17+08:00",
+                "verification_id": "v-000005",
+                "review_call": "014989ec539a",
+                "recomputable": true,
+                "problem": "",
+                "found": true,
+                "tier": "call",
+                "got": 3,
+                "why": "复算通过：3/3 份同源、每行签得住（call=014989ec539a）",
+                "anchor": {
+                  "used": false,
+                  "checked": false,
+                  "owned": false,
+                  "path": "",
+                  "manuscript_id": "",
+                  "why": ""
+                },
+                "body_backing": {
+                  "checked": true,
+                  "state": "matched",
+                  "row_found": true,
+                  "row_kind": "theorem",
+                  "row_shas": [
+                    "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6"
+                  ],
+                  "artifact_sha": "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6",
+                  "enforced": false,
+                  "why": "对上了：这一行（kind=theorem）的正文指纹里有 43f4c2ab662e…"
+                }
+              }
+            },
+            "reason": "按现行事实重算：派生格与盘上逐字相同 ⇒ 一个字节都没写"
+          },
+          "pending_claim": {
+            "checked": true,
+            "bound": false,
+            "already": false,
+            "statement_id": "",
+            "ledger": "",
+            "bound_files": [],
+            "bound_elsewhere": "",
+            "why": "这一笔没有认到 pending 台账上的签（`evidence.sign_claim.claim` 空）⇒ 没有要回写的行"
+          },
+          "b_submission": {
+            "checked": true,
+            "written": false,
+            "already": true,
+            "manuscript_id": "000003",
+            "family": "b-proof",
+            "token": "",
+            "via": "ingested_to_ledger",
+            "path_group": 0,
+            "why": "`tasks.artifacts` 里已经有 b-proof 稿号 000003 的提交记号 ⇒ 幂等：不重复写"
+          },
+          "registration_settled": {
+            "checked": true,
+            "settled": [],
+            "left": [],
+            "problems": [],
+            "reason": "收录落成：收口 0 条"
+          },
+          "d_handoff_settled": {
+            "checked": true,
+            "stmt_id": "000042",
+            "closed": [],
+            "expired": [],
+            "left": [],
+            "problems": [],
+            "reason": "收口 0 条、作废 0 条，仍开着 0 条"
+          },
+          "nontriviality_record": {
+            "recorded": false,
+            "tri": "computed",
+            "level": 1,
+            "label": "T1",
+            "stmt_id": "000042",
+            "path_group": 1,
+            "reused": true,
+            "reason": "同一材料已判过 ⇒ 不重判、也不重落"
+          }
+        },
+        "error": "",
+        "meta": {},
+        "warn": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.ingest_manuscript 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 12,
+          "call_index": 0,
+          "calls": 1,
+          "step_index": 12,
+          "summary": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.ingest_manuscript 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 12,
+            "calls": 1,
+            "items": 1,
+            "steps": [
+              12
+            ],
+            "executed": 1,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 90240,
+        "prompt_cache_miss_tokens": 5727,
+        "tokens_in": 95967,
+        "tokens_out": 1771,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000172"
+    },
+    {
+      "index": 13,
+      "shape": "tool",
+      "payload": {
+        "name": "conductor.ack",
+        "args": {
+          "item_ids": [
+            "t-000179",
+            "t-000182",
+            "t-000183"
+          ],
+          "close": "acked",
+          "note": "V 的签通知与到点通知已读：b-proof-000003（stmt 000042，正文 sha 43f4c2ab…）判「成立」，签在 out/vsigns/43f4c2ab….json，已按幂等收录核对完毕"
+        },
+        "why": "把 V 与时钟发来的三条 notice 收口，销号前清板"
+      },
+      "result": {
+        "tool": "conductor.ack",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "ok": true,
+          "state": "acked",
+          "acked": [
+            "t-000179",
+            "t-000182",
+            "t-000183"
+          ],
+          "already_done": [
+            "t-000179",
+            "t-000182",
+            "t-000183"
+          ],
+          "refused": [],
+          "unknown": [],
+          "missing": [],
+          "not_yours": [],
+          "refusal_codes": [],
+          "results": [
+            {
+              "item_id": "t-000179",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000182",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000183",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            }
+          ],
+          "count": 3,
+          "requested": 3,
+          "by_task_id": "t-000172",
+          "note": "V 的签通知与到点通知已读：b-proof-000003（stmt 000042，正文 sha 43f4c2ab…）判「成立」，签在 out/vsigns/43f4c2ab….json，已按幂等收录核对完毕",
+          "close": "acked",
+          "reason": "确认了 3 条"
+        },
+        "error": "",
+        "meta": {
+          "checked": true,
+          "ok": true,
+          "state": "acked",
+          "acked": [
+            "t-000179",
+            "t-000182",
+            "t-000183"
+          ],
+          "already_done": [
+            "t-000179",
+            "t-000182",
+            "t-000183"
+          ],
+          "refused": [],
+          "unknown": [],
+          "missing": [],
+          "not_yours": [],
+          "refusal_codes": [],
+          "results": [
+            {
+              "item_id": "t-000179",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000182",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000183",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            }
+          ],
+          "count": 3,
+          "requested": 3,
+          "by_task_id": "t-000172",
+          "note": "V 的签通知与到点通知已读：b-proof-000003（stmt 000042，正文 sha 43f4c2ab…）判「成立」，签在 out/vsigns/43f4c2ab….json，已按幂等收录核对完毕",
+          "close": "acked",
+          "reason": "确认了 3 条"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 95104,
+        "prompt_cache_miss_tokens": 4784,
+        "tokens_in": 99888,
+        "tokens_out": 1338,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000172"
+    },
+    {
+      "index": 14,
+      "shape": "tool",
+      "payload": {
+        "name": "conductor.retire_child",
+        "args": {
+          "child_name": "V1",
+          "reason": "b-proof-000003 的逐行走查已出结论（成立，正文 sha 43f4c2ab 复算一致）并已按幂等收录核对完毕，这一趟不再需要这个审稿实例"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "conductor.retire_child",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "state": "retired",
+          "retired": true,
+          "task_id": "t-000173",
+          "name": "V1",
+          "parent_task_id": "t-000172",
+          "branch": "waiting_no_children",
+          "open_items": [],
+          "missing": [],
+          "reason": "V1 退役：waiting_no_children（子已停 + 它名下无活跃子代理）；面 S01 已归还池里",
+          "note": "b-proof-000003 的逐行走查已出结论（成立，正文 sha 43f4c2ab 复算一致）并已按幂等收录核对完毕，这一趟不再需要这个审稿实例",
+          "retired_path": "D:\\Incubator\\projects\\lp-ball-22\\out\\roster\\t-000172-retired.jsonl",
+          "roster_retired": true,
+          "task_id_compat": false,
+          "addressed_by": "child_name",
+          "subtree": [
+            "t-000173"
+          ],
+          "subtree_size": 1,
+          "order": [
+            "t-000173"
+          ],
+          "cascade": [
+            {
+              "task_id": "t-000173",
+              "parent": "t-000172",
+              "depth": 0,
+              "role": "V",
+              "name": "V1",
+              "branch": "waiting_no_children",
+              "state": "retired",
+              "why": "V1 退役：waiting_no_children（子已停 + 它名下无活跃子代理）；面 S01 已归还池里"
+            }
+          ],
+          "retired_count": 1,
+          "unrostered": [],
+          "active_nodes": [],
+          "busy_task_ids": [],
+          "readings": {
+            "child_counts_before": {
+              "checked": true,
+              "reason": "",
+              "owner": "t-000172",
+              "children_unretired": 1,
+              "active_child_count": 0,
+              "labels": {
+                "children_unretired": "子代理数",
+                "active_child_count": "活跃子代理数"
+              },
+              "waiting_only": [],
+              "unjudged": [],
+              "states": {
+                "flying": 0,
+                "standby": 0,
+                "silent": 1,
+                "unknown": 0,
+                "active": 0,
+                "total": 1
+              },
+              "state_labels": {
+                "flying": "在飞",
+                "standby": "待机",
+                "silent": "静默",
+                "unknown": "未读到"
+              },
+              "complete": true,
+              "by_owner": {
+                "t-000172": {
+                  "children_unretired": 1,
+                  "active_child_count": 0,
+                  "flying": 0,
+                  "standby": 0,
+                  "silent": 1,
+                  "unknown": 0
+                }
+              },
+              "bad_roster_lines": [],
+              "note": "子代理数=1，活跃子代理数=0（在飞 0 · 待机 0 · 静默 1）"
+            },
+            "depth_of": {
+              "t-000173": 0
+            },
+            "subtree_size": 1,
+            "active_count": 0,
+            "busy_task_ids": [],
+            "labels": {
+              "children_unretired": "子代理数",
+              "active_child_count": "活跃子代理数"
+            },
+            "target_state": "silent",
+            "child_counts_after": {
+              "checked": true,
+              "reason": "",
+              "owner": "t-000172",
+              "children_unretired": 0,
+              "active_child_count": 0,
+              "labels": {
+                "children_unretired": "子代理数",
+                "active_child_count": "活跃子代理数"
+              },
+              "waiting_only": [],
+              "unjudged": [],
+              "states": {
+                "flying": 0,
+                "standby": 0,
+                "silent": 0,
+                "unknown": 0,
+                "active": 0,
+                "total": 0
+              },
+              "state_labels": {
+                "flying": "在飞",
+                "standby": "待机",
+                "silent": "静默",
+                "unknown": "未读到"
+              },
+              "complete": true,
+              "by_owner": {},
+              "bad_roster_lines": [],
+              "note": "子代理数=0，活跃子代理数=0（在飞 0 · 待机 0 · 静默 0）"
+            },
+            "written": [
+              "t-000173"
+            ]
+          },
+          "kept": [],
+          "cascade_reading": {
+            "count": 1,
+            "ids": [
+              "t-000173"
+            ],
+            "levels": [
+              0
+            ],
+            "kept": []
+          },
+          "children_unretired": 0,
+          "active_child_count": 0,
+          "target_state": "silent",
+          "target_state_label": "静默",
+          "blocking": [],
+          "refusal_code": ""
+        },
+        "error": "",
+        "meta": {
+          "checked": true,
+          "state": "retired",
+          "retired": true,
+          "task_id": "t-000173",
+          "name": "V1",
+          "parent_task_id": "t-000172",
+          "branch": "waiting_no_children",
+          "open_items": [],
+          "missing": [],
+          "reason": "V1 退役：waiting_no_children（子已停 + 它名下无活跃子代理）；面 S01 已归还池里",
+          "note": "b-proof-000003 的逐行走查已出结论（成立，正文 sha 43f4c2ab 复算一致）并已按幂等收录核对完毕，这一趟不再需要这个审稿实例",
+          "retired_path": "D:\\Incubator\\projects\\lp-ball-22\\out\\roster\\t-000172-retired.jsonl",
+          "roster_retired": true,
+          "task_id_compat": false,
+          "addressed_by": "child_name",
+          "subtree": [
+            "t-000173"
+          ],
+          "subtree_size": 1,
+          "order": [
+            "t-000173"
+          ],
+          "cascade": [
+            {
+              "task_id": "t-000173",
+              "parent": "t-000172",
+              "depth": 0,
+              "role": "V",
+              "name": "V1",
+              "branch": "waiting_no_children",
+              "state": "retired",
+              "why": "V1 退役：waiting_no_children（子已停 + 它名下无活跃子代理）；面 S01 已归还池里"
+            }
+          ],
+          "retired_count": 1,
+          "unrostered": [],
+          "active_nodes": [],
+          "busy_task_ids": [],
+          "readings": {
+            "child_counts_before": {
+              "checked": true,
+              "reason": "",
+              "owner": "t-000172",
+              "children_unretired": 1,
+              "active_child_count": 0,
+              "labels": {
+                "children_unretired": "子代理数",
+                "active_child_count": "活跃子代理数"
+              },
+              "waiting_only": [],
+              "unjudged": [],
+              "states": {
+                "flying": 0,
+                "standby": 0,
+                "silent": 1,
+                "unknown": 0,
+                "active": 0,
+                "total": 1
+              },
+              "state_labels": {
+                "flying": "在飞",
+                "standby": "待机",
+                "silent": "静默",
+                "unknown": "未读到"
+              },
+              "complete": true,
+              "by_owner": {
+                "t-000172": {
+                  "children_unretired": 1,
+                  "active_child_count": 0,
+                  "flying": 0,
+                  "standby": 0,
+                  "silent": 1,
+                  "unknown": 0
+                }
+              },
+              "bad_roster_lines": [],
+              "note": "子代理数=1，活跃子代理数=0（在飞 0 · 待机 0 · 静默 1）"
+            },
+            "depth_of": {
+              "t-000173": 0
+            },
+            "subtree_size": 1,
+            "active_count": 0,
+            "busy_task_ids": [],
+            "labels": {
+              "children_unretired": "子代理数",
+              "active_child_count": "活跃子代理数"
+            },
+            "target_state": "silent",
+            "child_counts_after": {
+              "checked": true,
+              "reason": "",
+              "owner": "t-000172",
+              "children_unretired": 0,
+              "active_child_count": 0,
+              "labels": {
+                "children_unretired": "子代理数",
+                "active_child_count": "活跃子代理数"
+              },
+              "waiting_only": [],
+              "unjudged": [],
+              "states": {
+                "flying": 0,
+                "standby": 0,
+                "silent": 0,
+                "unknown": 0,
+                "active": 0,
+                "total": 0
+              },
+              "state_labels": {
+                "flying": "在飞",
+                "standby": "待机",
+                "silent": "静默",
+                "unknown": "未读到"
+              },
+              "complete": true,
+              "by_owner": {},
+              "bad_roster_lines": [],
+              "note": "子代理数=0，活跃子代理数=0（在飞 0 · 待机 0 · 静默 0）"
+            },
+            "written": [
+              "t-000173"
+            ]
+          },
+          "kept": [],
+          "cascade_reading": {
+            "count": 1,
+            "ids": [
+              "t-000173"
+            ],
+            "levels": [
+              0
+            ],
+            "kept": []
+          },
+          "children_unretired": 0,
+          "active_child_count": 0,
+          "target_state": "silent",
+          "target_state_label": "静默",
+          "blocking": [],
+          "refusal_code": ""
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 99072,
+        "prompt_cache_miss_tokens": 2389,
+        "tokens_in": 101461,
+        "tokens_out": 1245,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000172"
+    },
+    {
+      "index": 15,
+      "shape": "final",
+      "payload": {
+        "final": "按「只递指针」口径收录完成（幂等），signed_unregistered 已消掉。\n\n【核盘】manuscripts/B/b-proof-000003.md ↔ stmt 000042（label「B_p^3 对角与面对角截面面积公式及 Δ(p) 的最终正性」完全对上）。我按稿头「## 证明」一节复算正文 sha256 = 43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6，与稿头元信息、与 V 签文件里记的 artifact_sha 三者同一份；整文件指纹 375a5da3…（签块写入前 26f3a7da…）——整文件 sha 与正文 sha 是两件事，我核的是后者。\n【核签】verifications/000042.jsonl 里，现行正文 sha 上 V 判「成立」（零 finding、unresolved_errors=0），台账最新一轮 v-000005 判「成立」；签文件 out/vsigns/43f4c2ab…json 复算 3/3 同源。stmt 000042 的 bits 上 reviewed_by_proof={\"1\": true}、reviewed_sha_by_proof={\"1\": \"43f4c2ab…\"}，与这一版正文对得上。\n【收录】own.ingest_manuscript(mode=apply, target_stmt_id=000042, cells=[\"proof_text\"]) 回：proof_text outcome=unchanged（「台账正文与稿同一 sha（幂等）」），b_submission.already=true / via=ingested_to_ledger，registration_settled「收口 0 条、left 空」、d_handoff_settled 也「仍开着 0 条」⇒ 没有任何遗留的 b-register 义务项。所以这一笔其实早已在册、证明正文也已在台账，本次是指针复核 + 幂等确认，没有新字节可写。\n【现算等级】pre_theorem（框架现算：proof=true、reviewed=true；kind 由框架抬到 theorem，evidence_kind 不参与判定）。这是我读到的读数，不是我自报。\n【二阶段】bits.evidence.optimized_by_proof={\"1\": true} ⇒ 这一份已洗过，按口径不再动，没有 unwashed 欠账。\n【如实提请注意的两处读数】① 稿文件内的 `- V 签：` 签块没扫到（ingest 回 manuscript.sign.found=false），签落在 out/vsigns 与台账 reviewed 面 —— 属「已入台账」这一档，不是没签；② 手稿摘要 000025（V→B）曾在正文 sha 43f4c2ab 上报过「有毛病」（第 1、2 步把中间积分表示误标成 (i) 的等号），而 verifications/000042.jsonl 与 bits.reviewed 的最新一轮判「成立」；我按最新一轮认签，但这条历史分歧值得知道，若要更保险可让 V 对现行稿再走查一次。\n【板】t-000179/182/183 三条 notice 已 ack；V1 已退役（名下子代理数 0、在飞 0）。",
+        "evidence": [
+          "manuscripts/B/b-proof-000003.md",
+          "stmt:000042",
+          "verifications/000042.jsonl#v-000005",
+          "out/vsigns/43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6.json"
+        ],
+        "notify": {
+          "to": "D",
+          "summary": "b-proof-000003（stmt 000042）已按指针核签并幂等收录：现算 pre_theorem，signed_unregistered 消掉",
+          "body": "## 做了什么\n按你给的「只递指针」口径，核了 B 侧那份稿的盘上字节、V 签与判词，并走了一遍收录：\n\n- **投稿路径**：`manuscripts/B/b-proof-000003.md`（B 稿号 000003，稿族 b-proof）\n- **stmt 号**：`stmt:000042`（label「B_p^3 对角与面对角截面面积公式及 Δ(p) 的最终正性」，与稿的 `## 命题` 一致）\n- **先绕一步**：框架这一拍提示这份稿「V 签还没到」，我按产出者的义务命 V（V1/t-000173）逐行走查了这一份；V 回来判「成立」，并复算 `## 证明` 一节正文 sha256 = `43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6`，与稿头元信息一致 ⇒ 审的正是这一版。\n- **核签**：`verifications/000042.jsonl` 现行 sha 上判「成立」、零 finding；台账最新一轮 `v-000005` 成立；签文件 `out/vsigns/43f4c2ab….json` 复算 3/3 同源；`bits.reviewed_by_proof={\"1\": true}` 且 `reviewed_sha_by_proof` 对得上这一版正文。\n- **收录**：`own.ingest_manuscript(apply, target_stmt_id=000042, cells=[\"proof_text\"])` 回 `proof_text outcome=unchanged`（「台账正文与稿同一 sha（幂等）」）、`b_submission.already=true / via=ingested_to_ledger`、`registration_settled` 与 `d_handoff_settled` 都是「仍开着 0 条」⇒ **signed_unregistered 这一项已消掉**，没有遗留的 b-register 义务。\n- **现算等级**：`pre_theorem`（框架现算：proof=true、reviewed=true；kind 由框架抬到 theorem）。这是读数，不是我自报的档。\n- **二阶段**：`optimized_by_proof={\"1\": true}` ⇒ 这一份已洗过，按口径不再动，本批 `unwashed` 为空（洗了 0 份 / 剩 0 份）。\n\n## 两处如实报的读数（不是「没问题」）\n1. 稿文件内的 `- V 签：` 签块没扫到（ingest 回 `manuscript.sign.found=false`）；签落在 `out/vsigns/` 与台账 `reviewed` 面 —— 属「已入台账」这一档，**不是没签**。\n2. 手稿摘要 `000025`（V→B）曾在正文 sha `43f4c2ab…` 上报过「有毛病」（第 1、2 步把中间积分表示误标成 (i) 的等号），而 `verifications/000042.jsonl` 与 `bits.reviewed` 的最新一轮判「成立」。我按最新一轮认签；这条历史分歧留给你知道，若要更保险，可再让 V 对现行稿走查一次。\n\n## 要你做什么\n台账侧这一笔已闭环，无需你再补材料。若你希望把上面第 2 条的分歧消掉，请一句话，我再派 V 走查一次现行稿。\n\n## 板与名册\n`t-000179/182/183`（V 的签通知与到点通知）已 ack；V1 已退役（名下子代理数 0）。",
+          "refs": [
+            "stmt:000042",
+            "manuscripts/B/b-proof-000003.md"
+          ]
+        }
+      },
+      "result": {
+        "notify_problem": "notify.refs 里的 'manuscripts/B/b-proof-000003.md' 立不住：引用的前序手稿 'manuscripts/B/b-proof-000003.md' 不在盘上 ⇒ 不许凭空引用（溯源链断了）"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 100608,
+        "prompt_cache_miss_tokens": 3616,
+        "tokens_in": 104224,
+        "tokens_out": 2982,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000172"
+    }
+  ],
+  "final": "按「只递指针」口径收录完成（幂等），signed_unregistered 已消掉。\n\n【核盘】manuscripts/B/b-proof-000003.md ↔ stmt 000042（label「B_p^3 对角与面对角截面面积公式及 Δ(p) 的最终正性」完全对上）。我按稿头「## 证明」一节复算正文 sha256 = 43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6，与稿头元信息、与 V 签文件里记的 artifact_sha 三者同一份；整文件指纹 375a5da3…（签块写入前 26f3a7da…）——整文件 sha 与正文 sha 是两件事，我核的是后者。\n【核签】verifications/000042.jsonl 里，现行正文 sha 上 V 判「成立」（零 finding、unresolved_errors=0），台账最新一轮 v-000005 判「成立」；签文件 out/vsigns/43f4c2ab…json 复算 3/3 同源。stmt 000042 的 bits 上 reviewed_by_proof={\"1\": true}、reviewed_sha_by_proof={\"1\": \"43f4c2ab…\"}，与这一版正文对得上。\n【收录】own.ingest_manuscript(mode=apply, target_stmt_id=000042, cells=[\"proof_text\"]) 回：proof_text outcome=unchanged（「台账正文与稿同一 sha（幂等）」），b_submission.already=true / via=ingested_to_ledger，registration_settled「收口 0 条、left 空」、d_handoff_settled 也「仍开着 0 条」⇒ 没有任何遗留的 b-register 义务项。所以这一笔其实早已在册、证明正文也已在台账，本次是指针复核 + 幂等确认，没有新字节可写。\n【现算等级】pre_theorem（框架现算：proof=true、reviewed=true；kind 由框架抬到 theorem，evidence_kind 不参与判定）。这是我读到的读数，不是我自报。\n【二阶段】bits.evidence.optimized_by_proof={\"1\": true} ⇒ 这一份已洗过，按口径不再动，没有 unwashed 欠账。\n【如实提请注意的两处读数】① 稿文件内的 `- V 签：` 签块没扫到（ingest 回 manuscript.sign.found=false），签落在 out/vsigns 与台账 reviewed 面 —— 属「已入台账」这一档，不是没签；② 手稿摘要 000025（V→B）曾在正文 sha 43f4c2ab 上报过「有毛病」（第 1、2 步把中间积分表示误标成 (i) 的等号），而 verifications/000042.jsonl 与 bits.reviewed 的最新一轮判「成立」；我按最新一轮认签，但这条历史分歧值得知道，若要更保险可让 V 对现行稿再走查一次。\n【板】t-000179/182/183 三条 notice 已 ack；V1 已退役（名下子代理数 0、在飞 0）。",
+  "evidence": [
+    "manuscripts/B/b-proof-000003.md",
+    "stmt:000042",
+    "verifications/000042.jsonl#v-000005",
+    "out/vsigns/43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6.json"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 1,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 15,
+  "compactions": 0,
+  "mailbox_items": [
+    "t-000179",
+    "t-000182",
+    "t-000183"
+  ],
+  "mailbox_msgs": [],
+  "mailbox_delivered": 3,
+  "monitor_turns": 1,
+  "wakes": 1,
+  "wake_ids": [
+    "wk-000051"
+  ],
+  "wake_events": [
+    {
+      "wake_id": "wk-000051",
+      "task_id": "t-000172",
+      "role": "B",
+      "timer_id": "tm-000156",
+      "kind": "timer",
+      "reason": "逐行走查一份 B 侧证明手稿，给出两态结论（成立 / 有毛病）；有毛病时每条 finding 带步号与 defect_step 非空。要审的稿：manuscripts/B/b-proof-000003.md（只读它、先读盘上字节），对应命题号 statement_id=000042（题：B_p^3 对角与面对角截面面积公式及 Δ(p) 的最终正性）。稿件正文 sha 按稿头元信息是 43f4c2a",
+      "purpose": "逐行走查一份 B 侧证明手稿，给出两态结论（成立 / 有毛病）；有毛病时每条 finding 带步号与 defect_step 非空。要审的稿：manuscripts/B/b-proof-000003.md（只读它、先读盘上字节），对应命题号 statement_id=000042（题：B_p^3 对角与面对角截面面积公式及 Δ(p) 的最终正性）。稿件正文 sha 按稿头元信息是 43f4c2a",
+      "purpose_missing": false,
+      "message": "时间到：逐行走查一份 B 侧证明手稿，给出两态结论（成立 / 有毛病）；有毛病时每条 finding 带步号与 defect_step 非空。要审的稿：manuscripts/B/b-proof-000003.md（只读它、先读盘上字节），对应命题号 statement_id=000042（题：B_p^3 对角与面对角截面面积公式及 Δ(p) 的最终正性）。稿件正文 sha 按稿头元信息是 43f4c2a｜等了 9 分钟 28 秒（起于 21:21:58，到于 21:31:26）。它交的是：ok：执行完成",
+      "waited_sec": 568.3655,
+      "triggered_by": "target_event",
+      "wait_for": "task:t-000173",
+      "due_at": "",
+      "fired_at": "2026-11-24T13:31:26.545753+00:00",
+      "mailbox_item_id": "t-000183",
+      "state": "pending"
+    }
+  ],
+  "clock_pumps": 29,
+  "clock_fired": 2,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "名下没有「已登记、V 签还没到」的稿（正文本目录下 8 份 f-proof/b-proof/e-proof 的稿里有 8 份「已登记」（b-proof×4、f-proof×4））",
+      "problems": [],
+      "producer": "B",
+      "owner_instance": "B1",
+      "owner_source": "roster",
+      "unattributed": []
+    },
+    "own_children": [
+      "t-000173"
+    ],
+    "return_given": [
+      "t-000173"
+    ],
+    "reentry_turns": 2,
+    "reentry_reasons": [
+      "派活之后还没给过模型回合：这一批 1 项还在跑（t-000173），这一拍的 waiter 全是在等它们 ⇒ 这一拍返场问模型一次，下一拍起才按挂机口径走",
+      "上一拍是等谁的唤醒（t-000173 回来）—— 那一拍按 ③ 跳过，那一批的产出现在就在上下文里 ⇒ 这一拍返场问模型（不许再睡一拍）"
+    ],
+    "woke_turns": 1,
+    "skip_calls": 1,
+    "woke_reasons": [
+      "event"
+    ]
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [],
+  "summons": [
+    "V"
+  ],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [
+    {
+      "kind": "summon",
+      "counted": true,
+      "task_id": "t-000173",
+      "role": "V",
+      "step": 6,
+      "status": "running",
+      "outcome": "",
+      "handoff_id": "",
+      "outputs": [
+        "t-000173"
+      ],
+      "disposition": ""
+    }
+  ],
+  "summons_total": 1,
+  "summons_consumed": 1,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 1,
+    "summons_consumed": 1,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [
+      {
+        "kind": "summon",
+        "counted": true,
+        "task_id": "t-000173",
+        "role": "V",
+        "step": 6,
+        "status": "running",
+        "outcome": "",
+        "handoff_id": "",
+        "outputs": [
+          "t-000173"
+        ],
+        "disposition": "consumed",
+        "evidence": {
+          "step": 15,
+          "shape": "final",
+          "effect": "收工结论里的具体产物指涉",
+          "refs": [
+            "t-000173"
+          ]
+        }
+      }
+    ],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p328",
+    "role": "B",
+    "prompt_sha256": "3b2cc9b3ca436e61701bb141d29affa3e3b7492fbf794c03e312fd08f32eb93c",
+    "prompt_chars": 81606,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "TOOL_29",
+      "TOOL_30",
+      "TOOL_31",
+      "TOOL_32",
+      "TOOL_33",
+      "TOOL_34",
+      "TOOL_35",
+      "TOOL_36",
+      "TOOL_37",
+      "TOOL_38",
+      "TOOL_39",
+      "TOOL_40",
+      "TOOL_41",
+      "TOOL_42",
+      "TOOL_43",
+      "TOOL_44",
+      "TOOL_45",
+      "TOOL_46",
+      "TOOL_47",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_LIMITS",
+      "COLLAB_NAMES",
+      "PARENT_STOP",
+      "PARENT_ROSTER",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 14,
+    "tokens_in": 1174931,
+    "tokens_out": 16932,
+    "usd": 0.02125,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 14,
+    "no_request_calls": 0,
+    "hit": 1123456,
+    "miss": 51475,
+    "unknown_calls": 0,
+    "tokens_in": 1174931,
+    "hit_rate": 0.9562,
+    "mismatched_calls": 0,
+    "saved_usd": 0.165148,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 671.687,
+  "end_ts": "2026-11-24T21:32:23+08:00",
+  "notes": [
+    "第 7 步返场：子代理回来 0 条，还在跑 1 条（这一拍为了返场没等子：返场判据给过之后才等）",
+    "第 8 步返场：子代理回来 0 条，还在跑 1 条（等待 300.0s，原因 slice）",
+    "第 9 步返场：子代理回来 1 条，还在跑 0 条（等待 70.4s，原因 settled）",
+    "返场（Q22）：上一拍是等谁的唤醒（t-000173 回来）—— 那一拍按 ③ 跳过，那一批的产出现在就在上下文里 ⇒ 这一拍返场问模型（不许再睡一拍）",
+    "收工没有可用 notify 表（notify.refs 里的 'manuscripts/B/b-proof-000003.md' 立不住：引用的前序手稿 'manuscripts/B/b-proof-000003.md' 不在盘上 ⇒ 不许凭空引用（溯源链断了））⇒ 这一趟没有交接手稿（不打回、不代填）",
+    "缓存读数：命中 1123456 / 未命中 51475 token，命中率 95.6%（14 次调用）；按 modelcost 口径估算可省 约 0.165148 美元",
+    "子产出处理读数：summons_total=1，consumed=1，waived=0，unknown=0，unconsumed=0",
+    "终态回报已落板：t-000184（框架通报；模型没填 notify）"
+  ],
+  "final_payload": {
+    "final": "按「只递指针」口径收录完成（幂等），signed_unregistered 已消掉。\n\n【核盘】manuscripts/B/b-proof-000003.md ↔ stmt 000042（label「B_p^3 对角与面对角截面面积公式及 Δ(p) 的最终正性」完全对上）。我按稿头「## 证明」一节复算正文 sha256 = 43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6，与稿头元信息、与 V 签文件里记的 artifact_sha 三者同一份；整文件指纹 375a5da3…（签块写入前 26f3a7da…）——整文件 sha 与正文 sha 是两件事，我核的是后者。\n【核签】verifications/000042.jsonl 里，现行正文 sha 上 V 判「成立」（零 finding、unresolved_errors=0），台账最新一轮 v-000005 判「成立」；签文件 out/vsigns/43f4c2ab…json 复算 3/3 同源。stmt 000042 的 bits 上 reviewed_by_proof={\"1\": true}、reviewed_sha_by_proof={\"1\": \"43f4c2ab…\"}，与这一版正文对得上。\n【收录】own.ingest_manuscript(mode=apply, target_stmt_id=000042, cells=[\"proof_text\"]) 回：proof_text outcome=unchanged（「台账正文与稿同一 sha（幂等）」），b_submission.already=true / via=ingested_to_ledger，registration_settled「收口 0 条、left 空」、d_handoff_settled 也「仍开着 0 条」⇒ 没有任何遗留的 b-register 义务项。所以这一笔其实早已在册、证明正文也已在台账，本次是指针复核 + 幂等确认，没有新字节可写。\n【现算等级】pre_theorem（框架现算：proof=true、reviewed=true；kind 由框架抬到 theorem，evidence_kind 不参与判定）。这是我读到的读数，不是我自报。\n【二阶段】bits.evidence.optimized_by_proof={\"1\": true} ⇒ 这一份已洗过，按口径不再动，没有 unwashed 欠账。\n【如实提请注意的两处读数】① 稿文件内的 `- V 签：` 签块没扫到（ingest 回 manuscript.sign.found=false），签落在 out/vsigns 与台账 reviewed 面 —— 属「已入台账」这一档，不是没签；② 手稿摘要 000025（V→B）曾在正文 sha 43f4c2ab 上报过「有毛病」（第 1、2 步把中间积分表示误标成 (i) 的等号），而 verifications/000042.jsonl 与 bits.reviewed 的最新一轮判「成立」；我按最新一轮认签，但这条历史分歧值得知道，若要更保险可让 V 对现行稿再走查一次。\n【板】t-000179/182/183 三条 notice 已 ack；V1 已退役（名下子代理数 0、在飞 0）。",
+    "evidence": [
+      "manuscripts/B/b-proof-000003.md",
+      "stmt:000042",
+      "verifications/000042.jsonl#v-000005",
+      "out/vsigns/43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6.json"
+    ],
+    "notify": {
+      "to": "D",
+      "summary": "b-proof-000003（stmt 000042）已按指针核签并幂等收录：现算 pre_theorem，signed_unregistered 消掉",
+      "body": "## 做了什么\n按你给的「只递指针」口径，核了 B 侧那份稿的盘上字节、V 签与判词，并走了一遍收录：\n\n- **投稿路径**：`manuscripts/B/b-proof-000003.md`（B 稿号 000003，稿族 b-proof）\n- **stmt 号**：`stmt:000042`（label「B_p^3 对角与面对角截面面积公式及 Δ(p) 的最终正性」，与稿的 `## 命题` 一致）\n- **先绕一步**：框架这一拍提示这份稿「V 签还没到」，我按产出者的义务命 V（V1/t-000173）逐行走查了这一份；V 回来判「成立」，并复算 `## 证明` 一节正文 sha256 = `43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6`，与稿头元信息一致 ⇒ 审的正是这一版。\n- **核签**：`verifications/000042.jsonl` 现行 sha 上判「成立」、零 finding；台账最新一轮 `v-000005` 成立；签文件 `out/vsigns/43f4c2ab….json` 复算 3/3 同源；`bits.reviewed_by_proof={\"1\": true}` 且 `reviewed_sha_by_proof` 对得上这一版正文。\n- **收录**：`own.ingest_manuscript(apply, target_stmt_id=000042, cells=[\"proof_text\"])` 回 `proof_text outcome=unchanged`（「台账正文与稿同一 sha（幂等）」）、`b_submission.already=true / via=ingested_to_ledger`、`registration_settled` 与 `d_handoff_settled` 都是「仍开着 0 条」⇒ **signed_unregistered 这一项已消掉**，没有遗留的 b-register 义务。\n- **现算等级**：`pre_theorem`（框架现算：proof=true、reviewed=true；kind 由框架抬到 theorem）。这是读数，不是我自报的档。\n- **二阶段**：`optimized_by_proof={\"1\": true}` ⇒ 这一份已洗过，按口径不再动，本批 `unwashed` 为空（洗了 0 份 / 剩 0 份）。\n\n## 两处如实报的读数（不是「没问题」）\n1. 稿文件内的 `- V 签：` 签块没扫到（ingest 回 `manuscript.sign.found=false`）；签落在 `out/vsigns/` 与台账 `reviewed` 面 —— 属「已入台账」这一档，**不是没签**。\n2. 手稿摘要 `000025`（V→B）曾在正文 sha `43f4c2ab…` 上报过「有毛病」（第 1、2 步把中间积分表示误标成 (i) 的等号），而 `verifications/000042.jsonl` 与 `bits.reviewed` 的最新一轮判「成立」。我按最新一轮认签；这条历史分歧留给你知道，若要更保险，可再让 V 对现行稿走查一次。\n\n## 要你做什么\n台账侧这一笔已闭环，无需你再补材料。若你希望把上面第 2 条的分歧消掉，请一句话，我再派 V 走查一次现行稿。\n\n## 板与名册\n`t-000179/182/183`（V 的签通知与到点通知）已 ack；V1 已退役（名下子代理数 0）。",
+      "refs": [
+        "stmt:000042",
+        "manuscripts/B/b-proof-000003.md"
+      ]
+    }
+  },
+  "task_id": "t-000172"
+}

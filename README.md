@@ -19,8 +19,9 @@ claim lands on an append-only ledger with evidence, cost and an audit trail you 
 
 **Current status (honest):** working and judge-backed, **not feature-frozen**, and **not
 production-ready**. The real-machine acceptance target ("8/8 closing-gate cells on a real run")
-has **not** been reached; code work alone tops out at an honest 6/8 and the remaining cells are
-content-side. See [Project status and limitations](#project-status-and-limitations).
+**has been reached twice**, and both runs are exported under [`demo/`](demo/README.md) — see
+[Project status and limitations](#project-status-and-limitations) for the readings and the caveats
+that go with them.
 
 ## Table of contents
 
@@ -593,12 +594,23 @@ nine, in this order:
 machine, and the local suite is judge-style — it asserts what the framework refuses, not only
 what it produces. The following are stated rather than hidden:
 
-- **The real-machine acceptance target is not reached.** The internal target is "8/8 closing-gate
-  cells on a real run". As of 2026-11 the honest reading is 6/8: code work alone tops out there,
-  and the remaining cells are content-side (clearing the pending-literature ledger, the signing
-  chain) — they cannot be produced by changing code. Do not write "8/8 = done" into any
-  acceptance text before the owner ratifies it. In this checkout the last measured real run was
-  `fail` / exit `1` / 6-of-8 pass.
+- **The real-machine acceptance target has been reached twice (readings, 2026-11-25).**
+  Both runs finished with **8/8 closing-gate cells, `can_close=true`, exit 0**, and both are
+  exported file by file under [`demo/`](demo/README.md):
+
+  | run | closing gate | spend / wall clock | paper | ledger |
+  |---|---|---|---|---|
+  | `demo/sylow-4` | 8/8 · can_close · exit 0 | $1.93 of $3 · 114 min | `out/package/main.pdf`, 7 pages | 4 statements · 4 literature |
+  | `demo/lp-ball-22` | 8/8 · can_close · exit 0 | $7.17 of $10 · 10 h 0 min | `out/package/main.pdf`, 10 pages · `MAPPING.json` 4 rows | 144 statements · 24 experiments · 107 relations · 25 literature |
+
+  Re-derive the gate with
+  `python -m agentflow --root demo/<run> closing --project-dir demo/<run> --report demo/<run>/out/report/REPORT.md --sid <sid> --cap-usd <cap>`;
+  the export carries `data/`, `sessions/`, `verifications/` and `out/` so every number above is
+  recomputable from the directory itself. **Caveats that do not go away:** Lean was off, so no
+  proof is machine-checked (the top tier is a V line-by-line signature); the lp-ball piecewise-max
+  claim is numerically supported (a stated strong conjecture) except the four signed theorems; and
+  ten statements remain unsigned with one manuscript unrepaired — recorded in the export, and not
+  a blocker of the gate.
 - **Lean is off by default.** Without a usable toolchain, formal experiments are refused in a
   controlled way (`lean_disabled` and `no_backend` are different fixes), and no row may claim
   `proof`; text proofs top out at `pre_theorem` (a V line-by-line signature). An exhaustion

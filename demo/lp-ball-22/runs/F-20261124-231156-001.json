@@ -1,0 +1,3015 @@
+{
+  "role": "F",
+  "task": "F：这一趟派给你的活是 —— 请更正你自己名下一条攻坚计划 history 里一处 statement_id 的归属错误：这是对你自己产出的更正，不是改别人的台账。\n\n【怎么定位】先 `attack.list_plans(include_terminal=True)` 列出你自己名下的全部计划，找出 history 里唯一一处 `\"statement_id\": \"000030\"` 的那一条。命中位置在 history 第 2 轮（round=2）的条目：它的 manuscript_path 是你自己落的那份 f-proof 稿，proof_sha256 = 3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db。拿到 plan_id 后，用 `table.get(table=\"attack_plans\", id=<你的 plan_id>)` 把 history 逐字读全（长字段分段读，别用被观测层截断的版本回写）。\n\n【做法 (1)，首选】调用 `table.update(table=\"attack_plans\", id=<同一个 plan_id>, patch={\"history\": <整条 history 的完整数组>})`，只对 round=2 那一条改两处：\n a) 把该条的 `\"statement_id\": \"000030\"` 改成 `\"statement_id\": \"000042\"`；\n b) 在该条新增一格 `\"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"`。\n其余字段、其余轮次一个字节都不动（不要重排键序、不要删字段、不要碰其它计划）。\n\n【做法 (2)，只在 (1) 被拒时做】用你自己的 step 动作追加一条 round=3 的新 history：statement_id 只填 \"000042\"，cites 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」，并写明这是对 round=2 里旧号 000030 的更正。\n\n【回执硬要求：三样逐字读数，不许只下结论】\n ① 改后 `fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\", path=\"data/attack_plans.json\")` 的全部命中行（行号 + 内容逐字，一条不漏）；\n ② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256（逐字读数；读不出就如实报三态码，不要折成「没问题」）；\n ③ 若两条做法都做不到，逐条贴拒信原文（拒码 + 那句话原样），不要自己下结论说「做不到」就停。\n\n【基线读数（我这一步查到的，供你对照）】改前 fs.search 在 data/attack_plans.json 只有一处命中 —— 第 2593 行：`\"statement_id\": \"000030\",`。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "attack.list_plans",
+        "args": {
+          "include_terminal": true
+        },
+        "why": "找出 history 里含 statement_id 000030 的那条计划"
+      },
+      "result": {
+        "tool": "attack.list_plans",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "total": 3,
+          "plans": [
+            {
+              "plan_id": "000000",
+              "problem_key": "lp3-max-central-section",
+              "status": "attacking",
+              "lifecycle_state": "active",
+              "rounds": 8,
+              "max_rounds": 8,
+              "subgoals": 7,
+              "depth": 0,
+              "created_by": "agent-F-F1"
+            },
+            {
+              "plan_id": "000001",
+              "problem_key": "lp3-diag-vs-face",
+              "status": "stalled",
+              "lifecycle_state": "completed",
+              "rounds": 6,
+              "max_rounds": 6,
+              "subgoals": 6,
+              "depth": 0,
+              "created_by": "agent-F-F1"
+            },
+            {
+              "plan_id": "000002",
+              "problem_key": "lp3-diag-vs-face-narrative",
+              "status": "abandoned",
+              "lifecycle_state": "abandoned",
+              "rounds": 2,
+              "max_rounds": 3,
+              "subgoals": 3,
+              "depth": 0,
+              "created_by": "agent-F"
+            }
+          ],
+          "reason": "共 3 个计划（include_terminal=True；只列你名下，过滤前 3 条）"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 62208,
+        "prompt_cache_miss_tokens": 2119,
+        "tokens_in": 64327,
+        "tokens_out": 72,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000236"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.search",
+        "args": {
+          "pattern": "\"statement_id\": \"0000(30|42)\"",
+          "path": "data/attack_plans.json",
+          "limit": 200
+        },
+        "why": "改前先核基线命中位置与所在计划"
+      },
+      "result": {
+        "tool": "fs.search",
+        "ok": true,
+        "data": {
+          "pattern": "\"statement_id\": \"0000(30|42)\"",
+          "path": "data/attack_plans.json",
+          "matches": [
+            {
+              "path": "data/attack_plans.json",
+              "line": 2593,
+              "text": "\"statement_id\": \"000030\","
+            }
+          ],
+          "lines": [
+            "data/attack_plans.json:2593: \"statement_id\": \"000030\","
+          ],
+          "total": 1,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        },
+        "error": "",
+        "meta": {
+          "total": 1,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 63488,
+        "prompt_cache_miss_tokens": 1198,
+        "tokens_in": 64686,
+        "tokens_out": 272,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000236"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "data/attack_plans.json",
+          "start_line": 2400,
+          "max_lines": 260
+        },
+        "why": "定位第 2593 行所在计划与 round=2 条目上下文"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "",
+        "error": "",
+        "meta": {
+          "path": "data/attack_plans.json",
+          "encoding": "utf-8/replace",
+          "bytes_read": 200000,
+          "total_bytes": 242400,
+          "truncated": true,
+          "start_line": 2400,
+          "lines_read": 0,
+          "total_lines": 2154,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": true,
+          "note": "只读了前 200000 字节（共 242400 字节）；本次给第 2400 行起是空的（共 2154 行）",
+          "sha256": "f339cd5b91c01aea33b2c70ff4e8376fbc5e1869ef8cda429533029f7d701aff"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 63872,
+        "prompt_cache_miss_tokens": 1294,
+        "tokens_in": 65166,
+        "tokens_out": 345,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000236"
+    },
+    {
+      "index": 3,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "attack_plans",
+          "id": "000002"
+        },
+        "why": "先读最短的一条计划（rounds=2），核 history 第 2 轮是否含 statement_id 000030"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "plan_id": "000002",
+          "problem": "把 B_p^3 中心截面最大方向分段结构里最后一环（体对角向 A_diag 与面对角向 A_face 的比较大 p 段）拼成可判定的四段叙述：(1) 证明 Δ:=A_face−A_diag 在 p=1 为正、p=2 为零、p→∞ 极限为 4√2−3√3>0（从而存在 P0 使 p≥P0 时 A_face>A_diag）、且 Δ 在 [1,∞) 上连续；(2) 把 p<2 / p=2 / 2<p<p* / p>p* 四段逐条落到在册 stmt 号或 exp 号，未证部分明确标 strong_conjecture；(3) 把证明稿交父 D 携带给 B 收录，并把缺的那条引理写成一句话。引依赖只许用 pre_theorem 级的 stmt:000034、stmt:000035（A_diag 的极坐标/闭式与本稿自足的极限推导），数值段只引 exp:000016/exp:000023。",
+          "problem_key": "lp3-diag-vs-face-narrative",
+          "for_question_id": null,
+          "status": "abandoned",
+          "rounds": 2,
+          "budget": {
+            "max_rounds": 3,
+            "max_parallel_subgoals": 3,
+            "max_persist_attempts": 3,
+            "max_depth": 1
+          },
+          "subgoals": [
+            {
+              "sid": "n1",
+              "text": "证明四段叙述的严格骨架：(i) Δ(2)=A_face(2)−A_diag(2)=0 且两者都等于 π；(ii) Δ(1)=√2−3√3/4>0（因 4√2>3√3 ⟺ 32>27）；(iii) lim_{p→∞}A_face=4√2、lim_{p→∞}A_diag=3√3，故 lim Δ=4√2−3√3>0，从而存在 P0 使 p≥P0 时 A_face(p)>A_diag(p)；(iv) Δ 在 [1,∞) 上连续。证法：A_face 用 stmt:000034 的闭式 2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p) 直接算；A_diag 用 stmt:000034(i) 的极坐标表示 + √3 面积因子 + 控制收敛（g^{-2/p} 单调夹在 3^{-2/p}m^{-2} 与 m^{-2} 之间，m=max(|cosθ|,|sinθ|,|cosθ+sinθ|)，∫m^{-2}=6）。",
+              "owner": "F",
+              "status": "blocked",
+              "evidence_ids": [],
+              "experiment_ids": [],
+              "proof_experiment_ids": [],
+              "blocked_reason": "这一份已经拿签（签 sha=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db），只读；要改就开 B 的优化副本（`B.open_polish_copy(statement_id=…)` → 复制成新的 B 号稿 → 改正文 → 重新送 V）",
+              "attempts": 1,
+              "negation_kind": null,
+              "testable": "V 对 manuscripts/F/f-proof-<新稿号>.md 判「成立」且 findings 为空；数值侧由 exp:000014/exp:000015 在 p∈{1,2,3,5,10,100} 上复核到 1e-12 相对差。",
+              "in_flight": false,
+              "tried_strategies": [
+                "极值与双重计数"
+              ]
+            },
+            {
+              "sid": "n2",
+              "text": "把四段叙述写成可判形式：p<2 段（坐标向最大）指 stmt:000034 的 1≤p<2 条款与 stmt:000035(ii)；p=2 段指 stmt:000034(iv) 的 A_2(n)=π；2<p<p* 段与 p>p* 段以 Δ 的唯一内部零点 p*=4.998215596840938（夹逼宽 <1e-9）为界，其中 p≥P0 与 p=1、p=2 三处是定理级，其余标 strong_conjecture 并点 exp:000016/exp:000023。",
+              "owner": "F",
+              "status": "todo",
+              "evidence_ids": [],
+              "experiment_ids": [],
+              "proof_experiment_ids": [],
+              "blocked_reason": "",
+              "attempts": 0,
+              "negation_kind": null,
+              "testable": "四段里每一条不等号都能指到一个在册 stmt 号或一个 exp 号；没有一条「无落点」的断言。"
+            },
+            {
+              "sid": "n3",
+              "text": "把 n1 的签稿交父 D（F→D，不直接派 B），由 D 携带给 B 按正文 sha 收录；同时把缺口写成一句话交给 D：缺的是「ρ=A_face/A_diag 在 (2,∞) 上先降后升（单谷）」这一条引理，或等价地「Δ 在 (2,P0) 上存在一个严格负值见证」。",
+              "owner": "D",
+              "status": "todo",
+              "evidence_ids": [],
+              "experiment_ids": [],
+              "proof_experiment_ids": [],
+              "blocked_reason": "",
+              "attempts": 0,
+              "negation_kind": null,
+              "testable": "D 的回执点名收录结果（新 stmt 号）或明确说未收录；缺口那句话在交接正文里逐字可查。"
+            }
+          ],
+          "history": [
+            {
+              "round": 1,
+              "sid": "n1",
+              "action": "proof",
+              "outcome": "progress",
+              "detail": "论证（极值与双重计数）：11 步；这一轮是论证不是机器核验 ⇒ 子目标不关闭（FC-22）；手稿登记：`manuscripts/F/f-proof-000003.md`（一稿一份，正文 sha 3f9c71fc243d…）；这一条还没有 statements 行 —— 等 B 在 V 签之后收录（既有认领路径）；登记那一刻手上的稿：`manuscript_source=param`、4138 字、依赖段 1 行、正文引用 1 条；V 签：待签（这一份正文还没有一份能算数的签（state=unsigned）：这一版（3f9c71fc243d…）没有任何台账行 ⇒ 一次都没送过 V（真的没审） ⇒ 派 V 审这一份、拿到签才算交差） —— 没签 ⇒ 这一趟不算交差；下一步：派 V 审这一份（`framework_summon` 形状：`role=\"V\"`，`task` 写清「审这一份证明稿 manuscripts/F/f-proof-000003.md」与要审什么）—— 拿到 V 签才算交差；派不出去（深度 / 边）就照实写进回报；秘书洗稿（secretary-F）：依赖面本来就合规（未改动） —— 交出去的是这一份；台账 `work/F/attack-000002.md`；交差（逐条）：已签 0/1（待签 1 条、未签 0 条） —— 不是「有一条签了」就算交差；还没签的成果（逐条）：mss:000003（手稿 manuscripts/F/f-proof-000003.md）[待签（还没 V 签，不算证明）] 共 1 条；怎么办由你定（举例：换一条证明路线重做那一步、把这条命题拆成几条更弱的引理、去补原证明里缺的工具/引理、减弱自己的断言（定理→条件性结论/猜想）），并把选择与理由写进 self_assessment.next_move / why。这一轮用的是你通过 `attack.step(product=…)` 交进来的那一份（label=F 攻坚 000002：Δ=A_face−A_diag 的连续性与两端符号（p=2 相等、p→∞ 为正，进而尾段 A_face>A_diag））",
+              "evidence": [],
+              "at": "2026-11-24T20:51:08+08:00",
+              "product_detail": {
+                "product": "proof",
+                "label": "F 攻坚 000002：Δ=A_face−A_diag 的连续性与两端符号（p=2 相等、p→∞ 为正，进而尾段 A_face>A_diag）",
+                "strategy": "极值与双重计数",
+                "why_strategy": "把 A_diag 化成单参数积分后用有界收敛定理取两端极限，与 A_face 的 Γ-闭式逐点相减，行为完全由端点与连续性定下",
+                "self_assessment": {
+                  "comprehensive": "partial",
+                  "enough_output": "some_output",
+                  "partial_output": "partial_output",
+                  "next_move": "拿到这一份的 V 签后：把 2<p<p* 的中间负区间如实标成 strong_conjecture（exp:000016 p*≈4.9982、exp:000023 ρ 极小 0.98856@3.024 后升向 1.0887，两者合起来给「两端为正、中间有一段为负」的数值图景），并把两份签稿（f-proof-000002 s1 + 本份）一起交父 D 携带给 B 收录；仍缺的引理一句话：A_p((1,1,t)/√(2+t²)) 对 t∈[0,1] 的单调性（等价 A_face(p) ≥ A_diag(p) 对一切 p>2）没有证明。",
+                  "why": "这一段（连续 + p=1/2/∞ 三点符号 + 尾部存在 P0）是本趟唯一能严格闭合的比较结论，其余段落只能作数值级旁证；先把它做成签稿，比把「两零点」写成定理干净。"
+                },
+                "proposition": "设 1 ≤ p < ∞，B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积，并记 A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。则：(i) A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，且 A_diag(2) = π、A_diag(1) = 3√3/4、lim_{p→∞}A_diag(p) = 3√3；(ii) A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，且 A_face(2) = π、A_face(1) = √2、lim_{p→∞}A_face(p) = 4√2；(iii) Δ 在 [1,∞) 上连续，Δ(2) = 0，Δ(1) = √2 − 3√3/4 > 0，lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0，因而存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 A_face(p) > A_diag(p)。",
+                "steps": [
+                  {
+                    "n": 1,
+                    "text": "【前提】固定 1 ≤ p < ∞；B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。（前提）",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "前提步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 2,
+                    "text": "【推导】由 stmt:000034 的 (i)，对每个单位法向 n 与 n^⊥ 的任意单位正交基 (u,v) 有 A_p(n) = (1/2)∫_0^{2π}‖cosθ·u+sinθ·v‖_p^{-2}dθ。取 n = (1,1,1)/√3、u = (1,-1,0)/√2、v = (1,1,-2)/√6（直接验算 ‖u‖=‖v‖=1、u·v=0、u·n=v·n=0，故 {u,v} 是 H := {x+y+z=0} 的单位正交基）；另一路参数化 Φ(x,y) := (x,y,−x−y) 是 R²→H 的双射，∂_xΦ=(1,0,−1) 与 ∂_yΦ=(0,1,−1) 的叉积为 (1,1,1)、模为 √3，故 A_diag(p) = √3∫∫_D dxdy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。",
+                    "cites": [
+                      "stmt:000034"
+                    ],
+                    "assumption": false,
+                    "role": "推导步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 3,
+                    "text": "【推导】对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)（r ≥ 0、θ ∈ [0,2π)）：由 |r cosθ|^p+|r sinθ|^p+|r(cosθ+sinθ)|^p = r^p g(θ)（记 g(θ) := |cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p）得 (x,y) ∈ D ⟺ r ≤ g(θ)^{-1/p}；由面积元 r dr dθ 得 ∫∫_D = ∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ，与第 2 步合并即 A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，这给出 (i) 的积分式。",
+                    "cites": [
+                      "stmt:000034"
+                    ],
+                    "assumption": false,
+                    "role": "推导步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 4,
+                    "text": "【推导】一致控制：g ≥ max(|cosθ|,|sinθ|)^p ≥ (1/√2)^p（因为 max(|cosθ|,|sinθ|) ≥ 1/√2），故对一切 p ∈ [1,∞) 与一切 θ 有 0 < g(θ)^{-2/p} ≤ (1/√2)^{-2} = 2；又 (p,θ) ↦ g(θ) 连续且在每个局部 p-区间上 g 有与 p 无关的正下界，故 θ ↦ g(θ)^{-2/p} 关于 p 逐点连续。",
+                    "cites": [
+                      "stmt:000034"
+                    ],
+                    "assumption": false,
+                    "role": "推导步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 5,
+                    "text": "【推导】p = 2 时 g(θ) = cos²θ+sin²θ+(cosθ+sinθ)² = 2+sin2θ；代换 u = 2θ 后用 ∫_0^{2π}du/(a+b sin u) = 2π/√(a²−b²)（取 a=2、b=1）得 ∫_0^{2π} dθ/(2+sin2θ) = ∫_0^{2π} du/(2+sin u) = 2π/√3，此处 p=2 使 g^{-2/p} 化为 g^{-1}，故 A_diag(2) = (√3/2)·(2π/√3) = π。",
+                    "cites": [
+                      "stmt:000034"
+                    ],
+                    "assumption": false,
+                    "role": "推导步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 6,
+                    "text": "【推导】由 stmt:000034 的 (ii)(iii)(iv) 的闭式 A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，在 p = 2 处得 A_face(2) = 2^0·4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π；与第 5 步合并得 Δ(2) = π − π = 0。",
+                    "cites": [
+                      "stmt:000034"
+                    ],
+                    "assumption": false,
+                    "role": "推导步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 7,
+                    "text": "【推导】Δ(1) 的计算：A_face(1) = 2^{-1/2}·4Γ(2)²/Γ(3) = 2^{-1/2}·4·1/2 = √2（Γ(2)=1、Γ(3)=2）；A_diag(1)：p = 1 时 g = |cosθ|+|sinθ|+|cosθ+sinθ| 满足 g(θ+π) = g(θ)，且在 [0,π/2] 上 g = 2(cosθ+sinθ)（故 g^{-2} = (1/4)(cosθ+sinθ)^{-2}）、在 [π/2,3π/4] 上 g = 2sinθ（g^{-2} = (1/4)sin^{-2}θ）、在 [3π/4,π] 上 g = −2cosθ（g^{-2} = (1/4)cos^{-2}θ）；三段对 ∫g^{-2} 的贡献各为 1/4（分别用 ∫_0^{π/2}dθ/(cosθ+sinθ)² = 1、[−cotθ] 与 [tanθ] 在两个端点区间上的取值各得 1），故 ∫_0^{2π}g^{-2}dθ = 2·(1/4+1/4+1/4) = 3/2，A_diag(1) = (√3/2)·(3/2) = 3√3/4；于是 Δ(1) = √2 − 3√3/4 > 0，因为 4√2 > 3√3 ⟺ 32 > 27。",
+                    "cites": [
+                      "stmt:000034"
+                    ],
+                    "assumption": false,
+                    "role": "推导步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 8,
+                    "text": "【推导】Δ 的连续性：Γ 在 (0,∞) 上连续且取正值，p ↦ 1/p、1+1/p、1+2/p 在 [1,∞) 上连续，故 A_face 在 [1,∞) 上连续；由第 4 步与 p 无关的控制 g^{-2/p} ≤ 2 与逐点连续性，有界收敛定理给出 p ↦ ∫_0^{2π}g(θ)^{-2/p}dθ 在 [1,∞) 上连续，故 A_diag 连续；两者相减得 Δ 在 [1,∞) 上连续。",
+                    "cites": [
+                      "stmt:000034"
+                    ],
+                    "assumption": false,
+                    "role": "推导步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 9,
+                    "text": "【推导】p→∞ 时 A_diag 的极限：记 m(θ) := max(|cosθ|,|sinθ|,|cosθ+sinθ|)，则 m(θ)^p ≤ g(θ) ≤ 3m(θ)^p，故对每个 θ 有 g(θ)^{-2/p} → m(θ)^{-2}；又 g ≥ m^p 给出 g^{-2/p} ≤ m^{-2} ≤ 2（因 m ≥ 1/√2），有界收敛定理给出 A_diag(p) → (√3/2)∫_0^{2π}m(θ)^{-2}dθ。按符号分段：在 [0,π/2] 上 m = cosθ+sinθ、在 [π/2,3π/4] 上 m = sinθ、在 [3π/4,π] 上 m = −cosθ，且 m(θ+π) = m(θ)，三段各贡献 1（同上一步的三段积分），故 ∫_0^{2π}m^{-2}dθ = 2·3 = 6，于是 lim_{p→∞}A_diag(p) = (√3/2)·6 = 3√3。",
+                    "cites": [
+                      "stmt:000034"
+                    ],
+                    "assumption": false,
+                    "role": "推导步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 10,
+                    "text": "【推导】p→∞ 时 A_face 的极限：C_p := 4Γ(1+1/p)²/Γ(1+2/p) → 4Γ(1)²/Γ(1) = 4（Γ 连续、Γ(1)=1），又 2^{1/2−1/p} → √2，故 A_face(p) → 4√2；与第 9 步合并得 lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0（同样由 32 > 27）。",
+                    "cites": [
+                      "stmt:000034"
+                    ],
+                    "assumption": false,
+                    "role": "推导步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 11,
+                    "text": "【推导】收尾：记 L := 4√2 − 3√3 > 0；由第 8 步 Δ 的连续性与第 10 步 lim Δ = L，取 ε := L/2 > 0，则存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 |Δ(p) − L| < ε，从而 Δ(p) > L/2 > 0，即 A_face(p) > A_diag(p) 对一切 p ≥ P0 成立，这给出 (iii) 的最后一句。",
+                    "cites": [
+                      "stmt:000034"
+                    ],
+                    "assumption": false,
+                    "role": "推导步",
+                    "problem": ""
+                  }
+                ],
+                "problems": []
+              },
+              "product": "proof",
+              "strategy": "极值与双重计数",
+              "best_partial": [],
+              "v_sign": {
+                "state": "waiting",
+                "label": "待签",
+                "delivered": false,
+                "channel": "",
+                "ledger": "",
+                "submitted": false,
+                "skipped": false,
+                "why": "这一份正文还没有一份能算数的签（state=unsigned）：这一版（3f9c71fc243d…）没有任何台账行 ⇒ 一次都没送过 V（真的没审） ⇒ 派 V 审这一份、拿到签才算交差"
+              },
+              "delivery": {
+                "checked": true,
+                "total": 1,
+                "signed_count": 0,
+                "pending_count": 1,
+                "unsigned_count": 0,
+                "proof_count": 0,
+                "abandoned_count": 0,
+                "unfinished_count": 1,
+                "coverage": "0/1",
+                "state": "outputs_unsigned",
+                "legal_stop": false,
+                "delivered": false
+              },
+              "delivered": false,
+              "self_assessment": {
+                "comprehensive": "partial",
+                "enough_output": "some_output",
+                "partial_output": "partial_output",
+                "next_move": "拿到这一份的 V 签后：把 2<p<p* 的中间负区间如实标成 strong_conjecture（exp:000016 p*≈4.9982、exp:000023 ρ 极小 0.98856@3.024 后升向 1.0887，两者合起来给「两端为正、中间有一段为负」的数值图景），并把两份签稿（f-proof-000002 s1 + 本份）一起交父 D 携带给 B 收录；仍缺的引理一句话：A_p((1,1,t)/√(2+t²)) 对 t∈[0,1] 的单调性（等价 A_face(p) ≥ A_diag(p) 对一切 p>2）没有证明。",
+                "why": "这一段（连续 + p=1/2/∞ 三点符号 + 尾部存在 P0）是本趟唯一能严格闭合的比较结论，其余段落只能作数值级旁证；先把它做成签稿，比把「两零点」写成定理干净。"
+              },
+              "report_path": "work/F/attack-000002.md",
+              "proof_mode": "registered",
+              "proof_registered": true,
+              "proof_rewritten": false,
+              "proof_sha256": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+              "proof_label": "F 攻坚 000002 子目标 n1",
+              "proof_section_hashes": {
+                "## 命题": "da831b7b4a3dc1a603c2df16234b02d42fd9d3d56471081b702d31adc9ea8c7e",
+                "## 证明": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+                "## 依赖": "9134a9bc71260b8e23447b38e5461aa7c89616263c59e365b9615adee70545ea"
+              },
+              "manuscript_migrated": false,
+              "manuscript_path": "manuscripts/F/f-proof-000003.md",
+              "manuscript_id": "000003",
+              "manuscript_id_source": "given"
+            },
+            {
+              "round": 2,
+              "sid": "n1",
+              "action": "no_change",
+              "outcome": "no_change",
+              "detail": "这一份已经拿签（签 sha=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db），只读；要改就开 B 的优化副本（`B.open_polish_copy(statement_id=…)` → 复制成新的 B 号稿 → 改正文 → 重新送 V）；这一轮没有落稿、没有登记、没有送审；V 签：已签（out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json 复算通过：凭据 `out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json` 复算通过：3/3 转同源、每行签得住 ⇒ 这一份签了（3/3 才算签））；交差（逐条）：已签 1/1（待签 0 条、未签 0 条）。这一轮用的是你通过 `attack.step(product=…)` 交进来的那一份（label=F 攻坚 000002 子目标 n1（按 V 的 v-review 三处稿面 finding 定点改：第 2 步只用 Φ、第 4 步改成 (p,θ) 联合连续、第 5 步补 dθ=du/2 与两周期折算及 |b|<a））",
+              "evidence": [],
+              "at": "2026-11-24T21:01:11+08:00",
+              "statement_id": "000030",
+              "v_sign": {
+                "state": "signed",
+                "label": "已签",
+                "delivered": true,
+                "channel": "pending",
+                "ledger": "out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json",
+                "submitted": false,
+                "skipped": false,
+                "why": "out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json 复算通过：凭据 `out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json` 复算通过：3/3 转同源、每行签得住 ⇒ 这一份签了（3/3 才算签）"
+              },
+              "delivery": {
+                "checked": true,
+                "total": 1,
+                "signed_count": 1,
+                "pending_count": 0,
+                "unsigned_count": 0,
+                "proof_count": 1,
+                "abandoned_count": 0,
+                "unfinished_count": 0,
+                "coverage": "1/1",
+                "state": "signed_all",
+                "legal_stop": true,
+                "delivered": true
+              },
+              "delivered": true,
+              "refusal": {
+                "kind": "manuscript_frozen",
+                "problems": [
+                  "这一份已经拿签（签 sha=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db），只读；要改就开 B 的优化副本（`B.open_polish_copy(statement_id=…)` → 复制成新的 B 号稿 → 改正文 → 重新送 V）"
+                ],
+                "next_step": "这一份已经拿签 ⇒ 先 `B.open_polish_copy(statement_id=…)` 复制成新的 B 号稿，在副本上改",
+                "manuscript_id": "000003",
+                "manuscript_path": "manuscripts/F/f-proof-000003.md"
+              },
+              "manuscript_path": "manuscripts/F/f-proof-000003.md",
+              "manuscript_id": "000003"
+            },
+            {
+              "round": 2,
+              "sid": "",
+              "action": "abandon",
+              "abandon_kind": "不再需要",
+              "detail": "不再需要：本计划要办的事已经办到它能办到的边上：可证核心已闭环并以签稿交付 —— f-proof-000003（在册 stmt:000030）证 Δ:=A_face−A_diag 在 [1,∞) 上连续、Δ(1)=√2−3√3/4>0、Δ(2)=0、lim_{p→∞}Δ=4√2−3√3>0，从而存在尾门槛 P0 使 p≥P0 时 A_face(p)>A_diag(p)。剩下的 n2/n3（2<p<p* 一段谁大）不是可判的证明对象：E 已按只递指针口径把确定性数值入库（stmt:000036–000040：p*≈4.998215596840938、ρ=A_face/A_diag 在 p≈3.02439 取极小 0.98856 后单调升向 1.088662、Δ 在 (2,∞) 上有两个零点），这些是 strong_conjecture 级旁证，不能写成定理。这一环真正缺的是一条独立引理『对固定 p>2，A_p((1,1,t)/√(2+t²)) 在 t∈[0,1] 上严格递减』，它该另立一条新计划去攻，不在本计划名下把数值结论硬凑成证明。相关口径与缺口已由 handoff 000020 与 message m000021 交回 D。",
+              "evidence": [],
+              "at": "2026-11-24T21:01:40+08:00"
+            }
+          ],
+          "depth": 0,
+          "parent_plan_id": null,
+          "best_partial": "已进行 2 轮。子目标进展（按'离终结有多近'排序）：\n- n2（owner=F，status=todo）: 把四段叙述写成可判形式：p<2 段（坐标向最大）指 stmt:000034 的 1≤p<2 条款与 stmt:000035(ii)；p=2 段指 stmt:000034(iv) 的 A_2(n)=π；2<p<p* 段与 p>p* 段以 Δ 的唯一内部零点 p*=4.998215596840938（夹逼宽 <1e-9）为界，其中 p≥P0 与 p=1、p=2 三处是定理级，其余标 strong_conjecture 并点 exp:000016/exp:000023。\n- n3（owner=D，status=todo）: 把 n1 的签稿交父 D（F→D，不直接派 B），由 D 携带给 B 按正文 sha 收录；同时把缺口写成一句话交给 D：缺的是「ρ=A_face/A_diag 在 (2,∞) 上先降后升（单谷）」这一条引理，或等价地「Δ 在 (2,P0) 上存在一个严格负值见证」。\n- n1（owner=F，status=blocked）: 证明四段叙述的严格骨架：(i) Δ(2)=A_face(2)−A_diag(2)=0 且两者都等于 π；(ii) Δ(1)=√2−3√3/4>0（因 4√2>3√3 ⟺ 32>27）；(iii) lim_{p→∞}A_face=4√2、lim_{p→∞}A_diag=3√3，故 lim Δ=4√2−3√3>0，从而存在 P0 使 p≥P0 时 A_face(p)>A_diag(p)；(iv) Δ 在 [1,∞) 上连续。证法：A_face 用 stmt:000034 的闭式 2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p) 直接算；A_diag 用 stmt:000034(i) 的极坐标表示 + √3 面积因子 + 控制收敛（g^{-2/p} 单调夹在 3^{-2/p}m^{-2} 与 m^{-2} 之间，m=max(|cosθ|,|sinθ|,|cosθ+sinθ|)，∫m^{-2}=6）。；卡点：这一份已经拿签（签 sha=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db），只读；要改就开 B 的优化副本（`B.open_polish_copy(statement_id=…)` → 复制成新的 B 号稿 → 改正文 → 重新送 V）\n**以上均为过程记录**：标了 supported_not_proved 或只有 experiment_ids 的条目都还不是证明。",
+          "created_at": "2026-11-24T20:50:13+08:00",
+          "updated_at": "2026-11-24T22:56:52+08:00",
+          "created_by": "agent-F",
+          "report_path": "work/F/attack-000002.md"
+        },
+        "error": "",
+        "meta": {
+          "table": "attack_plans",
+          "id": "000002",
+          "id_field": "plan_id",
+          "found": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 64384,
+        "prompt_cache_miss_tokens": 1344,
+        "tokens_in": 65728,
+        "tokens_out": 1137,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000236"
+    },
+    {
+      "index": 4,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.search",
+        "args": {
+          "pattern": "\"plan_id\": \"0000[0-9][0-9]\"|\"statement_id\": \"0000(30|42)\"",
+          "path": "data/attack_plans.json",
+          "limit": 200
+        },
+        "why": "定位第 2593 行落在哪条计划的 history 里（按 plan_id 行的相对位置判定）"
+      },
+      "result": {
+        "tool": "fs.search",
+        "ok": true,
+        "data": {
+          "pattern": "\"plan_id\": \"0000[0-9][0-9]\"|\"statement_id\": \"0000(30|42)\"",
+          "path": "data/attack_plans.json",
+          "matches": [
+            {
+              "path": "data/attack_plans.json",
+              "line": 5,
+              "text": "\"plan_id\": \"000000\","
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 1138,
+              "text": "\"plan_id\": \"000001\","
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 2343,
+              "text": "\"plan_id\": \"000002\","
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 2593,
+              "text": "\"statement_id\": \"000030\","
+            }
+          ],
+          "lines": [
+            "data/attack_plans.json:5: \"plan_id\": \"000000\",",
+            "data/attack_plans.json:1138: \"plan_id\": \"000001\",",
+            "data/attack_plans.json:2343: \"plan_id\": \"000002\",",
+            "data/attack_plans.json:2593: \"statement_id\": \"000030\","
+          ],
+          "total": 4,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        },
+        "error": "",
+        "meta": {
+          "total": 4,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 64896,
+        "prompt_cache_miss_tokens": 4590,
+        "tokens_in": 69486,
+        "tokens_out": 1975,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000236"
+    },
+    {
+      "index": 5,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "data/attack_plans.json",
+          "start_line": 2343,
+          "max_lines": 300,
+          "max_bytes": 250000
+        },
+        "why": "读 plan 000002 那一行的原始字节（含 history 全文，第 2593 行命中在其中），逐字取回用于更正"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "      \"plan_id\": \"000002\",\n      \"problem\": \"把 B_p^3 中心截面最大方向分段结构里最后一环（体对角向 A_diag 与面对角向 A_face 的比较大 p 段）拼成可判定的四段叙述：(1) 证明 Δ:=A_face−A_diag 在 p=1 为正、p=2 为零、p→∞ 极限为 4√2−3√3>0（从而存在 P0 使 p≥P0 时 A_face>A_diag）、且 Δ 在 [1,∞) 上连续；(2) 把 p<2 / p=2 / 2<p<p* / p>p* 四段逐条落到在册 stmt 号或 exp 号，未证部分明确标 strong_conjecture；(3) 把证明稿交父 D 携带给 B 收录，并把缺的那条引理写成一句话。引依赖只许用 pre_theorem 级的 stmt:000034、stmt:000035（A_diag 的极坐标/闭式与本稿自足的极限推导），数值段只引 exp:000016/exp:000023。\",\n      \"problem_key\": \"lp3-diag-vs-face-narrative\",\n      \"for_question_id\": null,\n      \"status\": \"abandoned\",\n      \"rounds\": 2,\n      \"budget\": {\n        \"max_rounds\": 3,\n        \"max_parallel_subgoals\": 3,\n        \"max_persist_attempts\": 3,\n        \"max_depth\": 1\n      },\n      \"subgoals\": [\n        {\n          \"sid\": \"n1\",\n          \"text\": \"证明四段叙述的严格骨架：(i) Δ(2)=A_face(2)−A_diag(2)=0 且两者都等于 π；(ii) Δ(1)=√2−3√3/4>0（因 4√2>3√3 ⟺ 32>27）；(iii) lim_{p→∞}A_face=4√2、lim_{p→∞}A_diag=3√3，故 lim Δ=4√2−3√3>0，从而存在 P0 使 p≥P0 时 A_face(p)>A_diag(p)；(iv) Δ 在 [1,∞) 上连续。证法：A_face 用 stmt:000034 的闭式 2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p) 直接算；A_diag 用 stmt:000034(i) 的极坐标表示 + √3 面积因子 + 控制收敛（g^{-2/p} 单调夹在 3^{-2/p}m^{-2} 与 m^{-2} 之间，m=max(|cosθ|,|sinθ|,|cosθ+sinθ|)，∫m^{-2}=6）。\",\n          \"owner\": \"F\",\n          \"status\": \"blocked\",\n          \"evidence_ids\": [],\n          \"experiment_ids\": [],\n          \"proof_experiment_ids\": [],\n          \"blocked_reason\": \"这一份已经拿签（签 sha=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db），只读；要改就开 B 的优化副本（`B.open_polish_copy(statement_id=…)` → 复制成新的 B 号稿 → 改正文 → 重新送 V）\",\n          \"attempts\": 1,\n          \"negation_kind\": null,\n          \"testable\": \"V 对 manuscripts/F/f-proof-<新稿号>.md 判「成立」且 findings 为空；数值侧由 exp:000014/exp:000015 在 p∈{1,2,3,5,10,100} 上复核到 1e-12 相对差。\",\n          \"in_flight\": false,\n          \"tried_strategies\": [\n            \"极值与双重计数\"\n          ]\n        },\n        {\n          \"sid\": \"n2\",\n          \"text\": \"把四段叙述写成可判形式：p<2 段（坐标向最大）指 stmt:000034 的 1≤p<2 条款与 stmt:000035(ii)；p=2 段指 stmt:000034(iv) 的 …（落档截断，原 17068 字）",
+        "error": "",
+        "meta": {
+          "path": "data/attack_plans.json",
+          "encoding": "utf-8",
+          "bytes_read": 242400,
+          "total_bytes": 242400,
+          "truncated": false,
+          "start_line": 2343,
+          "lines_read": 300,
+          "total_lines": 2650,
+          "next_line": 2643,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 2343–2642 行（共 2650 行）；续读 start_line=2643",
+          "sha256": "f339cd5b91c01aea33b2c70ff4e8376fbc5e1869ef8cda429533029f7d701aff"
+        },
+        "multi_call": {
+          "turn_index": 5,
+          "call_index": 0,
+          "calls": 2,
+          "step_index": 5
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 68736,
+        "prompt_cache_miss_tokens": 1805,
+        "tokens_in": 70541,
+        "tokens_out": 1794,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000236"
+    },
+    {
+      "index": 6,
+      "shape": "tool",
+      "payload": {
+        "name": "table.schema",
+        "args": {
+          "table": "attack_plans"
+        },
+        "why": "确认 history 字段的类型（数组还是字符串），再决定 patch 怎么写"
+      },
+      "result": {
+        "tool": "table.schema",
+        "ok": true,
+        "data": {
+          "tables": {
+            "attack_plans": {
+              "file": "attack_plans.json",
+              "primary_key": "plan_id",
+              "id_kind": "plan",
+              "uses_id_counter": true,
+              "fields": [
+                {
+                  "name": "plan_id",
+                  "type": "str",
+                  "required": true,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "problem",
+                  "type": "str",
+                  "required": true,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "problem_key",
+                  "type": "str",
+                  "required": true,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "for_question_id",
+                  "type": "str | null",
+                  "required": false,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "status",
+                  "type": "str",
+                  "required": false,
+                  "default": "open",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "rounds",
+                  "type": "int",
+                  "required": false,
+                  "default": 0,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "budget",
+                  "type": "dict",
+                  "required": false,
+                  "default": {},
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "subgoals",
+                  "type": "list[dict]",
+                  "required": false,
+                  "default": [],
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "history",
+                  "type": "list[dict]",
+                  "required": false,
+                  "default": [],
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "depth",
+                  "type": "int",
+                  "required": false,
+                  "default": 0,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "parent_plan_id",
+                  "type": "str | null",
+                  "required": false,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "best_partial",
+                  "type": "str",
+                  "required": false,
+                  "default": "",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "created_at",
+                  "type": "str",
+                  "required": false,
+                  "default": "",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "updated_at",
+                  "type": "str",
+                  "required": false,
+                  "default": "",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "created_by",
+                  "type": "str",
+                  "required": false,
+                  "default": "agent-F",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "report_path",
+                  "type": "str | null",
+                  "required": false,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                }
+              ],
+              "required": [
+                "plan_id",
+                "problem",
+                "problem_key"
+              ],
+              "vocabularies": {}
+            }
+          },
+          "vocabularies": {
+            "SEARCH_MODES": [
+              "broad",
+              "topical",
+              "precise"
+            ],
+            "PRIORITIES": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "LIT_TYPES": [
+              "J",
+              "M",
+              "C",
+              "D",
+              "R",
+              "S",
+              "P",
+              "N",
+              "EB",
+              "Z"
+            ],
+            "RELATION_STATUS": [
+              "active",
+              "suspect",
+              "rejected"
+            ],
+            "SEARCH_OUTCOMES": [
+              "ok",
+              "no_results",
+              "search_failed",
+              "gave_up"
+            ],
+            "DOWNLOAD_STATUSES": [
+              "ok",
+              "content_mismatch",
+              "failed",
+              "skipped"
+            ],
+            "CANDIDATE_STATUSES": [
+              "pending",
+              "withdrawn",
+              "rejected",
+              "qualified",
+              "admitted",
+              "cleared"
+            ],
+            "CANDIDATE_REASON_CODES": [
+              "withdrawn_by_reviewer",
+              "rejected_off_topic",
+              "rejected_low_quality",
+              "duplicate_doi",
+              "overlap_without_new_content",
+              "overlap_ok_false",
+              "registration_failed",
+              "over_cap",
+              "not_screened"
+            ],
+            "LIT_MATCH_STATUSES": [
+              "exact",
+              "partial",
+              "mismatch"
+            ],
+            "QUOTE_MODES": [
+              "verbatim",
+              "semantic"
+            ],
+            "REPORT_KINDS": [
+              "hottest",
+              "paths",
+              "cold",
+              "gaps",
+              "proof_chain"
+            ],
+            "QUESTION_STATUSES": [
+              "open",
+              "needs_evidence",
+              "researching",
+              "answered",
+              "dropped"
+            ],
+            "CONTRADICTION_VERDICTS": [
+              "resolved",
+              "unresolved",
+              "new_contradiction",
+              "persistent"
+            ],
+            "QUESTION_KINDS": [
+              "gap",
+              "contradiction"
+            ],
+            "CONJECTURE_STATUSES": [
+              "proposed",
+              "needs_evidence",
+              "testing",
+              "supported_not_proved",
+              "refuted",
+              "proved",
+              "promoted",
+              "known_in_literature",
+              "withdrawn"
+            ],
+            "CONJECTURE_FORMS": [
+              "universal",
+              "existential",
+              "identity",
+              "bound",
+              "structural"
+            ],
+            "CONJECTURE_QUESTION_MARKS": [
+              "?",
+              "？",
+              "是否",
+              "吗"
+            ],
+            "CONJECTURE_QUESTION_PATTERNS": [
+              "^\\s*(谁|什么|哪些|哪类|如何|怎么|为什么)",
+              "(?i)^\\s*(which|what|whether|who|whom|whose|when|where|why|how)\\b",
+              "(?i)^\\s*(is|are|does|do|can|could|should|would|will|has|have)\\b"
+            ],
+            "REPROCESS_REASONS": [
+              "quote_unverifiable",
+              "low_information",
+              "need_context",
+              "structural_duplicate"
+            ],
+            "REPROCESS_STATUSES": [
+              "pending",
+              "done",
+              "rejected"
+            ],
+            "EXPERIMENT_METHODS": [
+              "numeric",
+              "symbolic",
+              "exhaustive_search",
+              "formal"
+            ],
+            "EVIDENCE_KINDS": [
+              "proof",
+              "proof_review",
+              "cross_check",
+              "heuristic"
+            ],
+            "EXPERIMENT_EVIDENCE_KINDS": [
+              "proof",
+              "cross_check",
+              "heuristic"
+            ],
+            "EXPERIMENT_RESULTS": [
+              "supports",
+              "refutes",
+              "inconclusive"
+            ],
+            "EXPERIMENT_STATUSES": [
+              "active",
+              "voided"
+            ],
+            "VOID_REASON_CODES": [
+              "code_changed"
+            ],
+            "NEGATION_KINDS": [
+              "disproved",
+              "not_proved",
+              "not_searched_here",
+              "no_local_evidence"
+            ],
+            "ATTACK_STATUSES": [
+              "open",
+              "attacking",
+              "supported_not_proved",
+              "stalled",
+              "resolved",
+              "abandoned"
+            ],
+            "ATTACK_TERMINAL_STATUSES": [
+              "resolved",
+              "abandoned",
+              "stalled",
+              "supported_not_proved"
+            ],
+            "SUBGOAL_STATUSES": [
+              "todo",
+              "in_progress",
+              "supported_not_proved",
+              "closed",
+              "blocked",
+              "dropped"
+            ],
+            "SUBGOAL_OWNERS": [
+              "F",
+              "A",
+              "B",
+              "C",
+              "D",
+              "E",
+              "G"
+            ],
+            "DOC_KINDS": [
+              "survey",
+              "paper",
+              "note",
+              "research"
+            ],
+            "DOC_STATUSES": [
+              "draft",
+              "in_review",
+              "revised",
+              "accepted",
+              "rejected",
+              "unresolved_review"
+            ],
+            "REVIEW_VERDICTS": [
+              "",
+              "成立",
+              "有毛病"
+            ],
+            "REVIEW_LEGACY_VERDICTS": [
+              "看不出来"
+            ],
+            "DEP_KINDS": [
+              "theorem",
+              "definition",
+              "lemma",
+              "proposition",
+              "experiment",
+              "prior_art"
+            ],
+            "DEP_STATUSES": [
+              "closed",
+              "dangling",
+              "external_unavailable",
+              "refuted",
+              "disputed"
+            ],
+            "STATEMENT_ORIGINS": [
+              "external_lit",
+              "own_result"
+            ],
+            "STATEMENT_STATUSES": [
+              "active",
+              "disputed",
+              "refuted",
+              "superseded",
+              "pending_definition",
+              "abandoned"
+            ],
+            "STATEMENT_UNUSABLE_STATUSES": [
+              "disputed",
+              "refuted",
+              "superseded",
+              "pending_definition",
+              "abandoned"
+            ],
+            "STATEMENT_PROPOSITION_KINDS": [
+              "theorem",
+              "lemma",
+              "proposition",
+              "corollary",
+              "conjecture",
+              "example"
+            ],
+            "STATEMENT_NON_PROPOSITION_KINDS": [
+              "concept",
+              "definition"
+            ],
+            "STATEMENT_KINDS": [
+              "theorem",
+              "lemma",
+              "proposition",
+              "corollary",
+              "conjecture",
+              "example",
+              "concept",
+              "definition"
+            ],
+            "CLAIM_KINDS": [
+              "定义",
+              "定理",
+              "命题",
+              "引理",
+              "推论",
+              "例",
+              "注",
+              "反例"
+            ],
+            "CLAIM_STATUSES": [
+              "证",
+              "验",
+              "待精化",
+              "作废"
+            ],
+            "ALLOWED_USE_KINDS": [
+              "主结果",
+              "Remark only",
+              "移入 open"
+            ],
+            "NUMERIC_EVIDENCE_KEYS": [
+              "script",
+              "range",
+              "n_cases",
+              "n_counterexamples"
+            ],
+            "CLAIM_SOURCE_KINDS": [
+              "文献"
+            ],
+            "CLAIM_CHECK_KINDS": [
+              "证明",
+              "数值",
+              "只读了陈述"
+            ],
+            "FINDING_KINDS": [
+              "unsupported_claim",
+              "dangling_dep",
+              "overclaim",
+              "missing_negation_kind",
+              "scope_drift",
+              "garbled",
+              "inconsistent_number"
+            ],
+            "FINDING_LEVELS": [
+              "error",
+              "warning",
+              "info"
+            ],
+            "FINDING_STATUSES": [
+              "open",
+              "fixed",
+              "wontfix",
+              "disputed",
+              "superseded"
+            ],
+            "FINDING_MATHS_VALUES": [
+              "yes",
+              "no"
+            ],
+            "ROLES": [
+              "A",
+              "B",
+              "C",
+              "D",
+              "E",
+              "F",
+              "G",
+              "H",
+              "V",
+              "L"
+            ],
+            "ITEM_KINDS": [
+              "delegation",
+              "message",
+              "report",
+              "notice"
+            ],
+            "ITEM_EXPECTS": [
+              "ack",
+              "work"
+            ],
+            "ITEM_STATES": [
+              "queued",
+              "claimed",
+              "seen",
+              "done",
+              "block"
+            ],
+            "ITEM_CLOSES": [
+              "acked",
+              "completed",
+              "expired"
+            ],
+            "TASK_STATUSES": [
+              "pending",
+              "running",
+              "done",
+              "cancelled",
+              "failed",
+              "block"
+            ],
+            "TASK_OUTCOMES": [
+              "ok",
+              "no_result",
+              "not_applicable",
+              "refused",
+              "failed",
+              "cancelled",
+              "cut_off_by_parent"
+            ],
+            "CHILD_ENDINGS": [
+              "delivered",
+              "cut_off_by_parent",
+              "stopped"
+            ],
+            "FRAMEWORK_ONLY_OUTCOMES": [
+              "cut_off_by_parent"
+            ],
+            "REFUSAL_REASONS": [
+              "unknown_role",
+              "unknown_action",
+              "forbidden_edge",
+              "invalid_params",
+              "depth_exceeded",
+              "fanout_exceeded",
+              "concurrency_exceeded",
+              "budget_exceeded",
+              "deadline_exceeded",
+              "cycle_detected",
+              "not_wired"
+            ],
+            "USAGE_SCOPES": [
+              "summon",
+              "experiment",
+              "search",
+              "extract",
+              "review",
+              "reason"
+            ],
+            "EVAL_REQUIRED_FIELDS": [
+              "benchmark",
+              "benchmark_version",
+              "split",
+              "k",
+              "decontamination",
+              "date",
+              "source"
+            ]
+          }
+        },
+        "error": "",
+        "meta": {
+          "table_count": 1,
+          "vocabulary_count": 65
+        },
+        "warn": "这一步给了 2 条调用，已按顺序逐条：第 1 条 fs.read 成功；第 2 条 table.schema 成功。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 5,
+          "call_index": 1,
+          "calls": 2,
+          "step_index": 6,
+          "summary": "这一步给了 2 条调用，已按顺序逐条：第 1 条 fs.read 成功；第 2 条 table.schema 成功。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 5,
+            "calls": 2,
+            "items": 2,
+            "steps": [
+              5,
+              6
+            ],
+            "executed": 2,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000236"
+    },
+    {
+      "index": 7,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.search",
+        "args": {
+          "pattern": "\"round\": [0-9]+",
+          "path": "data/attack_plans.json",
+          "limit": 200
+        },
+        "why": "定位 plan 000002 里 round=2 条目的起止行号，好分段读它而不碰 round=1 那一段超长字段"
+      },
+      "result": {
+        "tool": "fs.search",
+        "ok": true,
+        "data": {
+          "pattern": "\"round\": [0-9]+",
+          "path": "data/attack_plans.json",
+          "matches": [
+            {
+              "path": "data/attack_plans.json",
+              "line": 126,
+              "text": "\"round\": 1,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 152,
+              "text": "\"round\": 2,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 249,
+              "text": "\"round\": 3,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 410,
+              "text": "\"round\": 4,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 479,
+              "text": "\"round\": 5,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 642,
+              "text": "\"round\": 6,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 804,
+              "text": "\"round\": 7,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 968,
+              "text": "\"round\": 8,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 1245,
+              "text": "\"round\": 1,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 1417,
+              "text": "\"round\": 2,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 1590,
+              "text": "\"round\": 3,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 1763,
+              "text": "\"round\": 4,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 1922,
+              "text": "\"round\": 5,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 2095,
+              "text": "\"round\": 6,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 2150,
+              "text": "\"round\": 6,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 2325,
+              "text": "\"round\": 7,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 2402,
+              "text": "\"round\": 1,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 2586,
+              "text": "\"round\": 2,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 2632,
+              "text": "\"round\": 2,"
+            }
+          ],
+          "lines": [
+            "data/attack_plans.json:126: \"round\": 1,",
+            "data/attack_plans.json:152: \"round\": 2,",
+            "data/attack_plans.json:249: \"round\": 3,",
+            "data/attack_plans.json:410: \"round\": 4,",
+            "data/attack_plans.json:479: \"round\": 5,",
+            "data/attack_plans.json:642: \"round\": 6,",
+            "data/attack_plans.json:804: \"round\": 7,",
+            "data/attack_plans.json:968: \"round\": 8,",
+            "data/attack_plans.json:1245: \"round\": 1,",
+            "data/attack_plans.json:1417: \"round\": 2,",
+            "data/attack_plans.json:1590: \"round\": 3,",
+            "data/attack_plans.json:1763: \"round\": 4,",
+            "data/attack_plans.json:1922: \"round\": 5,",
+            "data/attack_plans.json:2095: \"round\": 6,",
+            "data/attack_plans.json:2150: \"round\": 6,",
+            "data/attack_plans.json:2325: \"round\": 7,",
+            "data/attack_plans.json:2402: \"round\": 1,",
+            "data/attack_plans.json:2586: \"round\": 2,",
+            "data/attack_plans.json:2632: \"round\": 2,"
+          ],
+          "total": 19,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        },
+        "error": "",
+        "meta": {
+          "total": 19,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 69760,
+        "prompt_cache_miss_tokens": 6939,
+        "tokens_in": 76699,
+        "tokens_out": 5712,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000236"
+    },
+    {
+      "index": 8,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "data/attack_plans.json",
+          "start_line": 2580,
+          "max_lines": 80,
+          "max_bytes": 250000
+        },
+        "why": "逐字读 plan 000002 的 history 第 2 轮条目（第 2586 行起，命中在第 2593 行）"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "          \"manuscript_migrated\": false,\n          \"manuscript_path\": \"manuscripts/F/f-proof-000003.md\",\n          \"manuscript_id\": \"000003\",\n          \"manuscript_id_source\": \"given\"\n        },\n        {\n          \"round\": 2,\n          \"sid\": \"n1\",\n          \"action\": \"no_change\",\n          \"outcome\": \"no_change\",\n          \"detail\": \"这一份已经拿签（签 sha=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db），只读；要改就开 B 的优化副本（`B.open_polish_copy(statement_id=…)` → 复制成新的 B 号稿 → 改正文 → 重新送 V）；这一轮没有落稿、没有登记、没有送审；V 签：已签（out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json 复算通过：凭据 `out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json` 复算通过：3/3 转同源、每行签得住 ⇒ 这一份签了（3/3 才算签））；交差（逐条）：已签 1/1（待签 0 条、未签 0 条）。这一轮用的是你通过 `attack.step(product=…)` 交进来的那一份（label=F 攻坚 000002 子目标 n1（按 V 的 v-review 三处稿面 finding 定点改：第 2 步只用 Φ、第 4 步改成 (p,θ) 联合连续、第 5 步补 dθ=du/2 与两周期折算及 |b|<a））\",\n          \"evidence\": [],\n          \"at\": \"2026-11-24T21:01:11+08:00\",\n          \"statement_id\": \"000030\",\n          \"v_sign\": {\n            \"state\": \"signed\",\n            \"label\": \"已签\",\n            \"delivered\": true,\n            \"channel\": \"pending\",\n            \"ledger\": \"out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json\",\n            \"submitted\": false,\n            \"skipped\": false,\n            \"why\": \"out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json 复算通过：凭据 `out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json` 复算通过：3/3 转同源、每行签得住 ⇒ 这一份签了（3/3 才算签）\"\n          },\n          \"delivery\": {\n            \"checked\": true,\n            \"total\": 1,\n            \"signed_count\": 1,\n            \"pending_count\": 0,\n            \"unsigned_count\": 0,\n            \"proof_count\": 1,\n            \"abandoned_count\": 0,\n            \"unfinished_count\": 0,\n            \"coverage\": \"1/1\",\n            \"state\": \"signed_all\",\n            \"legal_stop\": true,\n            \"delivered\": true\n          },\n  …（落档截断，原 4772 字）",
+        "error": "",
+        "meta": {
+          "path": "data/attack_plans.json",
+          "encoding": "utf-8",
+          "bytes_read": 242400,
+          "total_bytes": 242400,
+          "truncated": false,
+          "start_line": 2580,
+          "lines_read": 71,
+          "total_lines": 2650,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 2580–2650 行（共 2650 行）",
+          "sha256": "f339cd5b91c01aea33b2c70ff4e8376fbc5e1869ef8cda429533029f7d701aff"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 75904,
+        "prompt_cache_miss_tokens": 2497,
+        "tokens_in": 78401,
+        "tokens_out": 4175,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000236"
+    },
+    {
+      "index": 9,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "data/attack_plans.json",
+          "start_line": 2400,
+          "max_lines": 50,
+          "max_bytes": 250000
+        },
+        "why": "逐字取回 plan 000002 history 第 1 轮开头（history 数组起点与前几个键），分段读避免观测层截断"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "      \"history\": [\n        {\n          \"round\": 1,\n          \"sid\": \"n1\",\n          \"action\": \"proof\",\n          \"outcome\": \"progress\",\n          \"detail\": \"论证（极值与双重计数）：11 步；这一轮是论证不是机器核验 ⇒ 子目标不关闭（FC-22）；手稿登记：`manuscripts/F/f-proof-000003.md`（一稿一份，正文 sha 3f9c71fc243d…）；这一条还没有 statements 行 —— 等 B 在 V 签之后收录（既有认领路径）；登记那一刻手上的稿：`manuscript_source=param`、4138 字、依赖段 1 行、正文引用 1 条；V 签：待签（这一份正文还没有一份能算数的签（state=unsigned）：这一版（3f9c71fc243d…）没有任何台账行 ⇒ 一次都没送过 V（真的没审） ⇒ 派 V 审这一份、拿到签才算交差） —— 没签 ⇒ 这一趟不算交差；下一步：派 V 审这一份（`framework_summon` 形状：`role=\\\"V\\\"`，`task` 写清「审这一份证明稿 manuscripts/F/f-proof-000003.md」与要审什么）—— 拿到 V 签才算交差；派不出去（深度 / 边）就照实写进回报；秘书洗稿（secretary-F）：依赖面本来就合规（未改动） —— 交出去的是这一份；台账 `work/F/attack-000002.md`；交差（逐条）：已签 0/1（待签 1 条、未签 0 条） —— 不是「有一条签了」就算交差；还没签的成果（逐条）：mss:000003（手稿 manuscripts/F/f-proof-000003.md）[待签（还没 V 签，不算证明）] 共 1 条；怎么办由你定（举例：换一条证明路线重做那一步、把这条命题拆成几条更弱的引理、去补原证明里缺的工具/引理、减弱自己的断言（定理→条件性结论/猜想）），并把选择与理由写进 self_assessment.next_move / why。这一轮用的是你通过 `attack.step(product=…)` 交进来的那一份（label=F 攻坚 000002：Δ=A_face−A_diag 的连续性与两端符号（p=2 相等、p→∞ 为正，进而尾段 A_face>A_diag））\",\n          \"evidence\": [],\n          \"at\": \"2026-11-24T20:51:08+08:00\",\n          \"product_detail\": {\n            \"product\": \"proof\",\n            \"label\": \"F 攻坚 000002：Δ=A_face−A_diag 的连续性与两端符号（p=2 相等、p→∞ 为正，进而尾段 A_face>A_diag）\",\n            \"strategy\": \"极值与双重计数\",\n            \"why_strategy\": \"把 A_diag 化成单参数积分后用有界收敛定理取两端极限，与 A_face 的 Γ-闭式逐点相减，行为完全由端点与连续性定下\",\n            \"self_assessment\": {\n              \"comprehensive\": \"partial\",\n              \"enough_output\": \"some_output\",\n              \"partial_output\": \"partial_output\",\n              \"next_move\": \"拿到这一份的 V 签后：把 2<p<p* 的中间负区间如实标成 strong_conjecture（exp:000016 p*≈4.9982、exp:000023 ρ 极小 0.98856@3.024 后升向 1.0887，两者合起来给「两端为正、中间有一段为负」的数值图景），并把两份签稿（f-proof-000002 s1 + 本份）一起交父 D 携带给 B 收录；仍缺的引理一句话：A_p((1,1,t)/√(2+t²)) 对 t∈[0,1] 的单调性（等价 A_face(p) ≥ A_diag(p) 对一切 p>2）没有证明。\",\n              \"why\": \"这一段（连续 + p=1/2/∞ 三点符号 + 尾部存在 P0）是本趟唯一能严格闭合的比较结论，其余段落只能作数值级旁证；先把它做成签稿，比把「两零点」写成定…（落档截断，原 4308 字）",
+        "error": "",
+        "meta": {
+          "path": "data/attack_plans.json",
+          "encoding": "utf-8",
+          "bytes_read": 242400,
+          "total_bytes": 242400,
+          "truncated": false,
+          "start_line": 2400,
+          "lines_read": 50,
+          "total_lines": 2650,
+          "next_line": 2450,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 2400–2449 行（共 2650 行）；续读 start_line=2450",
+          "sha256": "f339cd5b91c01aea33b2c70ff4e8376fbc5e1869ef8cda429533029f7d701aff"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 77568,
+        "prompt_cache_miss_tokens": 4043,
+        "tokens_in": 81611,
+        "tokens_out": 7467,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000236"
+    },
+    {
+      "index": 10,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "data/attack_plans.json",
+          "start_line": 2450,
+          "max_lines": 62,
+          "max_bytes": 250000
+        },
+        "why": "续读 plan 000002 history 第 1 轮的中间段（第 2450–2511 行），为整条 history 的逐字重建取原字节"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "              },\n              {\n                \"n\": 4,\n                \"text\": \"【推导】一致控制：g ≥ max(|cosθ|,|sinθ|)^p ≥ (1/√2)^p（因为 max(|cosθ|,|sinθ|) ≥ 1/√2），故对一切 p ∈ [1,∞) 与一切 θ 有 0 < g(θ)^{-2/p} ≤ (1/√2)^{-2} = 2；又 (p,θ) ↦ g(θ) 连续且在每个局部 p-区间上 g 有与 p 无关的正下界，故 θ ↦ g(θ)^{-2/p} 关于 p 逐点连续。\",\n                \"cites\": [\n                  \"stmt:000034\"\n                ],\n                \"assumption\": false,\n                \"role\": \"推导步\",\n                \"problem\": \"\"\n              },\n              {\n                \"n\": 5,\n                \"text\": \"【推导】p = 2 时 g(θ) = cos²θ+sin²θ+(cosθ+sinθ)² = 2+sin2θ；代换 u = 2θ 后用 ∫_0^{2π}du/(a+b sin u) = 2π/√(a²−b²)（取 a=2、b=1）得 ∫_0^{2π} dθ/(2+sin2θ) = ∫_0^{2π} du/(2+sin u) = 2π/√3，此处 p=2 使 g^{-2/p} 化为 g^{-1}，故 A_diag(2) = (√3/2)·(2π/√3) = π。\",\n                \"cites\": [\n                  \"stmt:000034\"\n                ],\n                \"assumption\": false,\n                \"role\": \"推导步\",\n                \"problem\": \"\"\n              },\n              {\n                \"n\": 6,\n                \"text\": \"【推导】由 stmt:000034 的 (ii)(iii)(iv) 的闭式 A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，在 p = 2 处得 A_face(2) = 2^0·4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π；与第 5 步合并得 Δ(2) = π − π = 0。\",\n                \"cites\": [\n                  \"stmt:000034\"\n                ],\n                \"assumption\": false,\n                \"role\": \"推导步\",\n                \"problem\": \"\"\n              },\n              {\n                \"n\": 7,\n                \"text\": \"【推导】Δ(1) 的计算：A_face(1) = 2^{-1/2}·4Γ(2)²/Γ(3) = 2^{-1/2}·4·1/2 = √2（Γ(2)=1、Γ(3)=2）；A_diag(1)：p = 1 时 g = |cosθ|+|sinθ|+|cosθ+sinθ| 满足 g(θ+π) = g(θ)，且在 [0,π/2] 上 g = 2(cosθ+sinθ)（故 g^{-2} = (1/4)(cosθ+sinθ)^{-2}）、在 [π/2,3π/4] 上 g = 2sinθ（g^{-2} = (1/4)sin^{-2}θ）、在 [3π/4,π] 上 g = −2cosθ（g^{-2} = (1/4)cos^{-2}θ）；三段对 ∫g^{-2} 的贡献各为 1/4（分别用 ∫_0^{π/2}dθ/(cosθ+sinθ)² = 1、[−cotθ] 与 [tanθ] 在两个端点区间上的取值各得 1），故 ∫_0^{2π}g^{-2}dθ = 2·(1/4+1/4+1/4) = 3/2，A_diag(1) = (√3/2)·(3/2) = 3√3/4；于是 Δ(1) = √2 − 3√3/4 > 0，因为 4√2 > 3√3 ⟺ 32 > 27。\",\n     …（落档截断，原 3320 字）",
+        "error": "",
+        "meta": {
+          "path": "data/attack_plans.json",
+          "encoding": "utf-8",
+          "bytes_read": 242400,
+          "total_bytes": 242400,
+          "truncated": false,
+          "start_line": 2450,
+          "lines_read": 62,
+          "total_lines": 2650,
+          "next_line": 2512,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 2450–2511 行（共 2650 行）；续读 start_line=2512",
+          "sha256": "f339cd5b91c01aea33b2c70ff4e8376fbc5e1869ef8cda429533029f7d701aff"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 80768,
+        "prompt_cache_miss_tokens": 4010,
+        "tokens_in": 84778,
+        "tokens_out": 1355,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000236"
+    },
+    {
+      "index": 11,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "data/attack_plans.json",
+          "start_line": 2512,
+          "max_lines": 76,
+          "max_bytes": 250000
+        },
+        "why": "续读 plan 000002 history 第 1 轮的尾段（第 2512–2585 行，含第 10/11 步与稿面字段），把整条 history 逐字读全再回写"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "                \"n\": 10,\n                \"text\": \"【推导】p→∞ 时 A_face 的极限：C_p := 4Γ(1+1/p)²/Γ(1+2/p) → 4Γ(1)²/Γ(1) = 4（Γ 连续、Γ(1)=1），又 2^{1/2−1/p} → √2，故 A_face(p) → 4√2；与第 9 步合并得 lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0（同样由 32 > 27）。\",\n                \"cites\": [\n                  \"stmt:000034\"\n                ],\n                \"assumption\": false,\n                \"role\": \"推导步\",\n                \"problem\": \"\"\n              },\n              {\n                \"n\": 11,\n                \"text\": \"【推导】收尾：记 L := 4√2 − 3√3 > 0；由第 8 步 Δ 的连续性与第 10 步 lim Δ = L，取 ε := L/2 > 0，则存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 |Δ(p) − L| < ε，从而 Δ(p) > L/2 > 0，即 A_face(p) > A_diag(p) 对一切 p ≥ P0 成立，这给出 (iii) 的最后一句。\",\n                \"cites\": [\n                  \"stmt:000034\"\n                ],\n                \"assumption\": false,\n                \"role\": \"推导步\",\n                \"problem\": \"\"\n              }\n            ],\n            \"problems\": []\n          },\n          \"product\": \"proof\",\n          \"strategy\": \"极值与双重计数\",\n          \"best_partial\": [],\n          \"v_sign\": {\n            \"state\": \"waiting\",\n            \"label\": \"待签\",\n            \"delivered\": false,\n            \"channel\": \"\",\n            \"ledger\": \"\",\n            \"submitted\": false,\n            \"skipped\": false,\n            \"why\": \"这一份正文还没有一份能算数的签（state=unsigned）：这一版（3f9c71fc243d…）没有任何台账行 ⇒ 一次都没送过 V（真的没审） ⇒ 派 V 审这一份、拿到签才算交差\"\n          },\n          \"delivery\": {\n            \"checked\": true,\n            \"total\": 1,\n            \"signed_count\": 0,\n            \"pending_count\": 1,\n            \"unsigned_count\": 0,\n            \"proof_count\": 0,\n            \"abandoned_count\": 0,\n            \"unfinished_count\": 1,\n            \"coverage\": \"0/1\",\n            \"state\": \"outputs_unsigned\",\n            \"legal_stop\": false,\n            \"delivered\": false\n          },\n          \"delivered\": false,\n          \"self_assessment\": {\n            \"comprehensive\": \"partial\",\n            \"enough_output\": \"some_output\",\n            \"partial_output\": \"partial_output\",\n            \"nex…（落档截断，原 3266 字）",
+        "error": "",
+        "meta": {
+          "path": "data/attack_plans.json",
+          "encoding": "utf-8",
+          "bytes_read": 242400,
+          "total_bytes": 242400,
+          "truncated": false,
+          "start_line": 2512,
+          "lines_read": 76,
+          "total_lines": 2650,
+          "next_line": 2588,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 2512–2587 行（共 2650 行）；续读 start_line=2588",
+          "sha256": "f339cd5b91c01aea33b2c70ff4e8376fbc5e1869ef8cda429533029f7d701aff"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 83968,
+        "prompt_cache_miss_tokens": 3390,
+        "tokens_in": 87358,
+        "tokens_out": 4554,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000236"
+    },
+    {
+      "index": 12,
+      "shape": "tool",
+      "payload": {
+        "name": "table_update",
+        "args": {
+          "table": "attack_plans",
+          "id": "000002",
+          "patch": {
+            "history": [
+              {
+                "round": 1,
+                "sid": "n1",
+                "action": "proof",
+                "outcome": "progress",
+                "detail": "论证（极值与双重计数）：11 步；这一轮是论证不是机器核验 ⇒ 子目标不关闭（FC-22）；手稿登记：`manuscripts/F/f-proof-000003.md`（一稿一份，正文 sha 3f9c71fc243d…）；这一条还没有 statements 行 —— 等 B 在 V 签之后收录（既有认领路径）；登记那一刻手上的稿：`manuscript_source=param`、4138 字、依赖段 1 行、正文引用 1 条；V 签：待签（这一份正文还没有一份能算数的签（state=unsigned）：这一版（3f9c71fc243d…）没有任何台账行 ⇒ 一次都没送过 V（真的没审） ⇒ 派 V 审这一份、拿到签才算交差） —— 没签 ⇒ 这一趟不算交差；下一步：派 V 审这一份（`framework_summon` 形状：`role=\\\"V\\\"`，`task` 写清「审这一份证明稿 manuscripts/F/f-proof-000003.md」与要审什么）—— 拿到 V 签才算交差；派不出去（深度 / 边）就照实写进回报；秘书洗稿（secretary-F）：依赖面本来就合规（未改动） —— 交出去的是这一份；台账 `work/F/attack-000002.md`；交差（逐条）：已签 0/1（待签 1 条、未签 0 条） —— 不是「有一条签了」就算交差；还没签的成果（逐条）：mss:000003（手稿 manuscripts/F/f-proof-000003.md）[待签（还没 V 签，不算证明）] 共 1 条；怎么办由你定（举例：换一条证明路线重做那一步、把这条命题拆成几条更弱的引理、去补原证明里缺的工具/引理、减弱自己的断言（定理→条件性结论/猜想）），并把选择与理由写进 self_assessment.next_move / why。这一轮用的是你通过 `attack.step(product=…)` 交进来的那一份（label=F 攻坚 000002：Δ=A_face−A_diag 的连续性与两端符号（p=2 相等、p→∞ 为正，进而尾段 A_face>A_diag））",
+                "evidence": [],
+                "at": "2026-11-24T20:51:08+08:00",
+                "product_detail": {
+                  "product": "proof",
+                  "label": "F 攻坚 000002：Δ=A_face−A_diag 的连续性与两端符号（p=2 相等、p→∞ 为正，进而尾段 A_face>A_diag）",
+                  "strategy": "极值与双重计数",
+                  "why_strategy": "把 A_diag 化成单参数积分后用有界收敛定理取两端极限，与 A_face 的 Γ-闭式逐点相减，行为完全由端点与连续性定下",
+                  "self_assessment": {
+                    "comprehensive": "partial",
+                    "enough_output": "some_output",
+                    "partial_output": "partial_output",
+                    "next_move": "拿到这一份的 V 签后：把 2<p<p* 的中间负区间如实标成 strong_conjecture（exp:000016 p*≈4.9982、exp:000023 ρ 极小 0.98856@3.024 后升向 1.0887，两者合起来给「两端为正、中间有一段为负」的数值图景），并把两份签稿（f-proof-000002 s1 + 本份）一起交父 D 携带给 B 收录；仍缺的引理一句话：A_p((1,1,t)/√(2+t²)) 对 t∈[0,1] 的单调性（等价 A_face(p) ≥ A_diag(p) 对一切 p>2）没有证明。",
+                    "why": "这一段（连续 + p=1/2/∞ 三点符号 + 尾部存在 P0）是本趟唯一能严格闭合的比较结论，其余段落只能作数值级旁证；先把它做成签稿，比把「两零点」写成定理干净。"
+                  },
+                  "proposition": "设 1 ≤ p < ∞，B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积，并记 A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。则：(i) A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，且 A_diag(2) = π、A_diag(1) = 3√3/4、lim_{p→∞}A_diag(p) = 3√3；(ii) A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，且 A_face(2) = π、A_face(1) = √2、lim_{p→∞}A_face(p) = 4√2；(iii) Δ 在 [1,∞) 上连续，Δ(2) = 0，Δ(1) = √2 − 3√3/4 > 0，lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0，因而存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 A_face(p) > A_diag(p)。",
+                  "steps": [
+                    {
+                      "n": 1,
+                      "text": "【前提】固定 1 ≤ p < ∞；B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。（前提）",
+                      "cites": [],
+                      "assumption": true,
+                      "role": "前提步",
+                      "problem": ""
+                    },
+                    {
+                      "n": 2,
+                      "text": "【推导】由 stmt:000034 的 (i)，对每个单位法向 n 与 n^⊥ 的任意单位正交基 (u,v) 有 A_p(n) = (1/2)∫_0^{2π}‖cosθ·u+sinθ·v‖_p^{-2}dθ。取 n = (1,1,1)/√3、u = (1,-1,0)/√2、v = (1,1,-2)/√6（直接验算 ‖u‖=‖v‖=1、u·v=0、u·n=v·n=0，故 {u,v} 是 H := {x+y+z=0} 的单位正交基）；另一路参数化 Φ(x,y) := (x,y,−x−y) 是 R²→H 的双射，∂_xΦ=(1,0,−1) 与 ∂_yΦ=(0,1,−1) 的叉积为 (1,1,1)、模为 √3，故 A_diag(p) = √3∫∫_D dxdy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。",
+                      "cites": [
+                        "stmt:000034"
+                      ],
+                      "assumption": false,
+                      "role": "推导步",
+                      "problem": ""
+                    },
+                    {
+                      "n": 3,
+                      "text": "【推导】对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)（r ≥ 0、θ ∈ [0,2π)）：由 |r cosθ|^p+|r sinθ|^p+|r(cosθ+sinθ)|^p = r^p g(θ)（记 g(θ) := |cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p）得 (x,y) ∈ D ⟺ r ≤ g(θ)^{-1/p}；由面积元 r dr dθ 得 ∫∫_D = ∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ，与第 2 步合并即 A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，这给出 (i) 的积分式。",
+                      "cites": [
+                        "stmt:000034"
+                      ],
+                      "assumption": false,
+                      "role": "推导步",
+                      "problem": ""
+                    },
+                    {
+                      "n": 4,
+                      "text": "【推导】一致控制：g ≥ max(|cosθ|,|sinθ|)^p ≥ (1/√2)^p（因为 max(|cosθ|,|sinθ|) ≥ 1/√2），故对一切 p ∈ [1,∞) 与一切 θ 有 0 < g(θ)^{-2/p} ≤ (1/√2)^{-2} = 2；又 (p,θ) ↦ g(θ) 连续且在每个局部 p-区间上 g 有与 p 无关的正下界，故 θ ↦ g(θ)^{-2/p} 关于 p 逐点连续。",
+                      "cites": [
+                        "stmt:000034"
+                      ],
+                      "assumption": false,
+                      "role": "推导步",
+                      "problem": ""
+                    },
+                    {
+                      "n": 5,
+                      "text": "【推导】p = 2 时 g(θ) = cos²θ+sin²θ+(cosθ+sinθ)² = 2+sin2θ；代换 u = 2θ 后用 ∫_0^{2π}du/(a+b sin u) = 2π/√(a²−b²)（取 a=2、b=1）得 ∫_0^{2π} dθ/(2+sin2θ) = ∫_0^{2π} du/(2+sin u) = 2π/√3，此处 p=2 使 g^{-2/p} 化为 g^{-1}，故 A_diag(2) = (√3/2)·(2π/√3) = π。",
+                      "cites": [
+                        "stmt:000034"
+                      ],
+                      "assumption": false,
+                      "role": "推导步",
+                      "problem": ""
+                    },
+                    {
+                      "n": 6,
+                      "text": "【推导】由 stmt:000034 的 (ii)(iii)(iv) 的闭式 A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，在 p = 2 处得 A_face(2) = 2^0·4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π；与第 5 步合并得 Δ(2) = π − π = 0。",
+                      "cites": [
+                        "stmt:000034"
+                      ],
+                      "assumption": false,
+                      "role": "推导步",
+                      "problem": ""
+                    },
+                    {
+                      "n": 7,
+                      "text": "【推导】Δ(1) 的计算：A_face(1) = 2^{-1/2}·4Γ(2)²/Γ(3) = 2^{-1/2}·4·1/2 = √2（Γ(2)=1、Γ(3)=2）；A_diag(1)：p = 1 时 g = |cosθ|+|sinθ|+|cosθ+sinθ| 满足 g(θ+π) = g(θ)，且在 [0,π/2] 上 g = 2(cosθ+sinθ)（故 g^{-2} = (1/4)(cosθ+sinθ)^{-2}）、在 [π/2,3π/4] 上 g = 2sinθ（g^{-2} = (1/4)sin^{-2}θ）、在 [3π/4,π] 上 g = −2cosθ（g^{-2} = (1/4)cos^{-2}θ）；三段对 ∫g^{-2} 的贡献各为 1/4（分别用 ∫_0^{π/2}dθ/(cosθ+sinθ)² = 1、[−cotθ] 与 [tanθ] 在两个端点区间上的取值各得 1），故 ∫_0^{2π}g^{-2}dθ = 2·(1/4+1/4+1/4) = 3/2，A_diag(1) = (√3/2)·(3/2) = 3√3/4；于是 Δ(1) = √2 − 3√3/4 > 0，因为 4√2 > 3√3 ⟺ 32 > 27。",
+                      "cites": [
+                        "stmt:000034"
+                      ],
+                      "assumption": false,
+                      "role": "推导步",
+                      "problem": ""
+                    },
+                    {
+                      "n": 8,
+                      "text": "【推导】Δ 的连续性：Γ 在 (0,∞) 上连续且取正值，p ↦ 1/p、1+1/p、1+2/p 在 [1,∞) 上连续，故 A_face 在 [1,∞) 上连续；由第 4 步与 p 无关的控制 g^{-2/p} ≤ 2 与逐点连续性，有界收敛定理给出 p ↦ ∫_0^{2π}g(θ)^{-2/p}dθ 在 [1,∞) 上连续，故 A_diag 连续；两者相减得 Δ 在 [1,∞) 上连续。",
+                      "cites": [
+                        "stmt:000034"
+                      ],
+                      "assumption": false,
+                      "role": "推导步",
+                      "problem": ""
+                    },
+                    {
+                      "n": 9,
+                      "text": "【推导】p→∞ 时 A_diag 的极限：记 m(θ) := max(|cosθ|,|sinθ|,|cosθ+sinθ|)，则 m(θ)^p ≤ g(θ) ≤ 3m(θ)^p，故对每个 θ 有 g(θ)^{-2/p} → m(θ)^{-2}；又 g ≥ m^p 给出 g^{-2/p} ≤ m^{-2} ≤ 2（因 m ≥ 1/√2），有界收敛定理给出 A_diag(p) → (√3/2)∫_0^{2π}m(θ)^{-2}dθ。按符号分段：在 [0,π/2] 上 m = cosθ+sinθ、在 [π/2,3π/4] 上 m = sinθ、在 [3π/4,π] 上 m = −cosθ，且 m(θ+π) = m(θ)，三段各贡献 1（同上一步的三段积分），故 ∫_0^{2π}m^{-2}dθ = 2·3 = 6，于是 lim_{p→∞}A_diag(p) = (√3/2)·6 = 3√3。",
+                      "cites": [
+                        "stmt:000034"
+                      ],
+                      "assumption": false,
+                      "role": "推导步",
+                      "problem": ""
+                    },
+                    {
+                      "n": 10,
+                      "text": "【推导】p→∞ 时 A_face 的极限：C_p := 4Γ(1+1/p)²/Γ(1+2/p) → 4Γ(1)²/Γ(1) = 4（Γ 连续、Γ(1)=1），又 2^{1/2−1/p} → √2，故 A_face(p) → 4√2；与第 9 步合并得 lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0（同样由 32 > 27）。",
+                      "cites": [
+                        "stmt:000034"
+                      ],
+                      "assumption": false,
+                      "role": "推导步",
+                      "problem": ""
+                    },
+                    {
+                      "n": 11,
+                      "text": "【推导】收尾：记 L := 4√2 − 3√3 > 0；由第 8 步 Δ 的连续性与第 10 步 lim Δ = L，取 ε := L/2 > 0，则存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 |Δ(p) − L| < ε，从而 Δ(p) > L/2 > 0，即 A_face(p) > A_diag(p) 对一切 p ≥ P0 成立，这给出 (iii) 的最后一句。",
+                      "cites": [
+                        "stmt:000034"
+                      ],
+                      "assumption": false,
+                      "role": "推导步",
+                      "problem": ""
+                    }
+                  ],
+                  "problems": []
+                },
+                "product": "proof",
+                "strategy": "极值与双重计数",
+                "best_partial": [],
+                "v_sign": {
+                  "state": "waiting",
+                  "label": "待签",
+                  "delivered": false,
+                  "channel": "",
+                  "ledger": "",
+                  "submitted": false,
+                  "skipped": false,
+                  "why": "这一份正文还没有一份能算数的签（state=unsigned）：这一版（3f9c71fc243d…）没有任何台账行 ⇒ 一次都没送过 V（真的没审） ⇒ 派 V 审这一份、拿到签才算交差"
+                },
+                "delivery": {
+                  "checked": true,
+                  "total": 1,
+                  "signed_count": 0,
+                  "pending_count": 1,
+                  "unsigned_count": 0,
+                  "proof_count": 0,
+                  "abandoned_count": 0,
+                  "unfinished_count": 1,
+                  "coverage": "0/1",
+                  "state": "outputs_unsigned",
+                  "legal_stop": false,
+                  "delivered": false
+                },
+                "delivered": false,
+                "self_assessment": {
+                  "comprehensive": "partial",
+                  "enough_output": "some_output",
+                  "partial_output": "partial_output",
+                  "next_move": "拿到这一份的 V 签后：把 2<p<p* 的中间负区间如实标成 strong_conjecture（exp:000016 p*≈4.9982、exp:000023 ρ 极小 0.98856@3.024 后升向 1.0887，两者合起来给「两端为正、中间有一段为负」的数值图景），并把两份签稿（f-proof-000002 s1 + 本份）一起交父 D 携带给 B 收录；仍缺的引理一句话：A_p((1,1,t)/√(2+t²)) 对 t∈[0,1] 的单调性（等价 A_face(p) ≥ A_diag(p) 对一切 p>2）没有证明。",
+                  "why": "这一段（连续 + p=1/2/∞ 三点符号 + 尾部存在 P0）是本趟唯一能严格闭合的比较结论，其余段落只能作数值级旁证；先把它做成签稿，比把「两零点」写成定理干净。"
+                },
+                "report_path": "work/F/attack-000002.md",
+                "proof_mode": "registered",
+                "proof_registered": true,
+                "proof_rewritten": false,
+                "proof_sha256": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+                "proof_label": "F 攻坚 000002 子目标 n1",
+                "proof_section_hashes": {
+                  "## 命题": "da831b7b4a3dc1a603c2df16234b02d42fd9d3d56471081b702d31adc9ea8c7e",
+                  "## 证明": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+                  "## 依赖": "9134a9bc71260b8e23447b38e5461aa7c89616263c59e365b9615adee70545ea"
+                },
+                "manuscript_migrated": false,
+                "manuscript_path": "manuscripts/F/f-proof-000003.md",
+                "manuscript_id": "000003",
+                "manuscript_id_source": "given"
+              },
+              {
+                "round": 2,
+                "sid": "n1",
+                "action": "no_change",
+                "outcome": "no_change",
+                "detail": "这一份已经拿签（签 sha=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db），只读；要改就开 B 的优化副本（`B.open_polish_copy(statement_id=…)` → 复制成新的 B 号稿 → 改正文 → 重新送 V）；这一轮没有落稿、没有登记、没有送审；V 签：已签（out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json 复算通过：凭据 `out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json` 复算通过：3/3 转同源、每行签得住 ⇒ 这一份签了（3/3 才算签））；交差（逐条）：已签 1/1（待签 0 条、未签 0 条）。这一轮用的是你通过 `attack.step(product=…)` 交进来的那一份（label=F 攻坚 000002 子目标 n1（按 V 的 v-review 三处稿面 finding 定点改：第 2 步只用 Φ、第 4 步改成 (p,θ) 联合连续、第 5 步补 dθ=du/2 与两周期折算及 |b|<a））",
+                "evidence": [],
+                "at": "2026-11-24T21:01:11+08:00",
+                "statement_id": "000042",
+                "notes_correction": "归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号",
+                "v_sign": {
+                  "state": "signed",
+                  "label": "已签",
+                  "delivered": true,
+                  "channel": "pending",
+                  "ledger": "out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json",
+                  "submitted": false,
+                  "skipped": false,
+                  "why": "out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json 复算通过：凭据 `out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json` 复算通过：3/3 转同源、每行签得住 ⇒ 这一份签了（3/3 才算签）"
+                },
+                "delivery": {
+                  "checked": true,
+                  "total": 1,
+                  "signed_count": 1,
+                  "pending_count": 0,
+                  "unsigned_count": 0,
+                  "proof_count": 1,
+                  "abandoned_count": 0,
+                  "unfinished_count": 0,
+                  "coverage": "1/1",
+                  "state": "signed_all",
+                  "legal_stop": true,
+                  "delivered": true
+                },
+                "delivered": true,
+                "refusal": {
+                  "kind": "manuscript_frozen",
+                  "problems": [
+                    "这一份已经拿签（签 sha=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db），只读；要改就开 B 的优化副本（`B.open_polish_copy(statement_id=…)` → 复制成新的 B 号稿 → 改正文 → 重新送 V）"
+                  ],
+                  "next_step": "这一份已经拿签 ⇒ 先 `B.open_polish_copy(statement_id=…)` 复制成新的 B 号稿，在副本上改",
+                  "manuscript_id": "000003",
+                  "manuscript_path": "manuscripts/F/f-proof-000003.md"
+                },
+                "manuscript_path": "manuscripts/F/f-proof-000003.md",
+                "manuscript_id": "000003"
+              },
+              {
+                "round": 2,
+                "sid": "",
+                "action": "abandon",
+                "abandon_kind": "不再需要",
+                "detail": "不再需要：本计划要办的事已经办到它能办到的边上：可证核心已闭环并以签稿交付 —— f-proof-000003（在册 stmt:000030）证 Δ:=A_face−A_diag 在 [1,∞) 上连续、Δ(1)=√2−3√3/4>0、Δ(2)=0、lim_{p→∞}Δ=4√2−3√3>0，从而存在尾门槛 P0 使 p≥P0 时 A_face(p)>A_diag(p)。剩下的 n2/n3（2<p<p* 一段谁大）不是可判的证明对象：E 已按只递指针口径把确定性数值入库（stmt:000036–000040：p*≈4.998215596840938、ρ=A_face/A_diag 在 p≈3.02439 取极小 0.98856 后单调升向 1.088662、Δ 在 (2,∞) 上有两个零点），这些是 strong_conjecture 级旁证，不能写成定理。这一环真正缺的是一条独立引理『对固定 p>2，A_p((1,1,t)/√(2+t²)) 在 t∈[0,1] 上严格递减』，它该另立一条新计划去攻，不在本计划名下把数值结论硬凑成证明。相关口径与缺口已由 handoff 000020 与 message m000021 交回 D。",
+                "evidence": [],
+                "at": "2026-11-24T21:01:40+08:00"
+              }
+            ]
+          }
+        },
+        "why": "按做法(1)对 plan 000002 的 history 整条回写，只把 round=2（sid=n1）那一条的 statement_id 000030→000042 并新增 notes_correction，其余逐字不动"
+      },
+      "result": {
+        "tool": "table.update",
+        "ok": true,
+        "data": "000002",
+        "error": "",
+        "meta": {
+          "table": "attack_plans",
+          "id": "000002",
+          "id_field": "plan_id",
+          "row": {
+            "plan_id": "000002",
+            "problem": "把 B_p^3 中心截面最大方向分段结构里最后一环（体对角向 A_diag 与面对角向 A_face 的比较大 p 段）拼成可判定的四段叙述：(1) 证明 Δ:=A_face−A_diag 在 p=1 为正、p=2 为零、p→∞ 极限为 4√2−3√3>0（从而存在 P0 使 p≥P0 时 A_face>A_diag）、且 Δ 在 [1,∞) 上连续；(2) 把 p<2 / p=2 / 2<p<p* / p>p* 四段逐条落到在册 stmt 号或 exp 号，未证部分明确标 strong_conjecture；(3) 把证明稿交父 D 携带给 B 收录，并把缺的那条引理写成一句话。引依赖只许用 pre_theorem 级的 stmt:000034、stmt:000035（A_diag 的极坐标/闭式与本稿自足的极限推导），数值段只引 exp:000016/exp:000023。",
+            "problem_key": "lp3-diag-vs-face-narrative",
+            "for_question_id": null,
+            "status": "abandoned",
+            "rounds": 2,
+            "budget": {
+              "max_rounds": 3,
+              "max_parallel_subgoals": 3,
+              "max_persist_attempts": 3,
+              "max_depth": 1
+            },
+            "subgoals": [
+              {
+                "sid": "n1",
+                "text": "证明四段叙述的严格骨架：(i) Δ(2)=A_face(2)−A_diag(2)=0 且两者都等于 π；(ii) Δ(1)=√2−3√3/4>0（因 4√2>3√3 ⟺ 32>27）；(iii) lim_{p→∞}A_face=4√2、lim_{p→∞}A_diag=3√3，故 lim Δ=4√2−3√3>0，从而存在 P0 使 p≥P0 时 A_face(p)>A_diag(p)；(iv) Δ 在 [1,∞) 上连续。证法：A_face 用 stmt:000034 的闭式 2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p) 直接算；A_diag 用 stmt:000034(i) 的极坐标表示 + √3 面积因子 + 控制收敛（g^{-2/p} 单调夹在 3^{-2/p}m^{-2} 与 m^{-2} 之间，m=max(|cosθ|,|sinθ|,|cosθ+sinθ|)，∫m^{-2}=6）。",
+                "owner": "F",
+                "status": "blocked",
+                "evidence_ids": [],
+                "experiment_ids": [],
+                "proof_experiment_ids": [],
+                "blocked_reason": "这一份已经拿签（签 sha=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db），只读；要改就开 B 的优化副本（`B.open_polish_copy(statement_id=…)` → 复制成新的 B 号稿 → 改正文 → 重新送 V）",
+                "attempts": 1,
+                "negation_kind": null,
+                "testable": "V 对 manuscripts/F/f-proof-<新稿号>.md 判「成立」且 findings 为空；数值侧由 exp:000014/exp:000015 在 p∈{1,2,3,5,10,100} 上复核到 1e-12 相对差。",
+                "in_flight": false,
+                "tried_strategies": [
+                  "极值与双重计数"
+                ]
+              },
+              {
+                "sid": "n2",
+                "text": "把四段叙述写成可判形式：p<2 段（坐标向最大）指 stmt:000034 的 1≤p<2 条款与 stmt:000035(ii)；p=2 段指 stmt:000034(iv) 的 A_2(n)=π；2<p<p* 段与 p>p* 段以 Δ 的唯一内部零点 p*=4.998215596840938（夹逼宽 <1e-9）为界，其中 p≥P0 与 p=1、p=2 三处是定理级，其余标 strong_conjecture 并点 exp:000016/exp:000023。",
+                "owner": "F",
+                "status": "todo",
+                "evidence_ids": [],
+                "experiment_ids": [],
+                "proof_experiment_ids": [],
+                "blocked_reason": "",
+                "attempts": 0,
+                "negation_kind": null,
+                "testable": "四段里每一条不等号都能指到一个在册 stmt 号或一个 exp 号；没有一条「无落点」的断言。"
+              },
+              {
+                "sid": "n3",
+                "text": "把 n1 的签稿交父 D（F→D，不直接派 B），由 D 携带给 B 按正文 sha 收录；同时把缺口写成一句话交给 D：缺的是「ρ=A_face/A_diag 在 (2,∞) 上先降后升（单谷）」这一条引理，或等价地「Δ 在 (2,P0) 上存在一个严格负值见证」。",
+                "owner": "D",
+                "status": "todo",
+                "evidence_ids": [],
+                "experiment_ids": [],
+                "proof_experiment_ids": [],
+                "blocked_reason": "",
+                "attempts": 0,
+                "negation_kind": null,
+                "testable": "D 的回执点名收录结果（新 stmt 号）或明确说未收录；缺口那句话在交接正文里逐字可查。"
+              }
+            ],
+            "history": [
+              {
+                "round": 1,
+                "sid": "n1",
+                "action": "proof",
+                "outcome": "progress",
+                "detail": "论证（极值与双重计数）：11 步；这一轮是论证不是机器核验 ⇒ 子目标不关闭（FC-22）；手稿登记：`manuscripts/F/f-proof-000003.md`（一稿一份，正文 sha 3f9c71fc243d…）；这一条还没有 statements 行 —— 等 B 在 V 签之后收录（既有认领路径）；登记那一刻手上的稿：`manuscript_source=param`、4138 字、依赖段 1 行、正文引用 1 条；V 签：待签（这一份正文还没有一份能算数的签（state=unsigned）：这一版（3f9c71fc243d…）没有任何台账行 ⇒ 一次都没送过 V（真的没审） ⇒ 派 V 审这一份、拿到签才算交差） —— 没签 ⇒ 这一趟不算交差；下一步：派 V 审这一份（`framework_summon` 形状：`role=\\\"V\\\"`，`task` 写清「审这一份证明稿 manuscripts/F/f-proof-000003.md」与要审什么）—— 拿到 V 签才算交差；派不出去（深度 / 边）就照实写进回报；秘书洗稿（secretary-F）：依赖面本来就合规（未改动） —— 交出去的是这一份；台账 `work/F/attack-000002.md`；交差（逐条）：已签 0/1（待签 1 条、未签 0 条） —— 不是「有一条签了」就算交差；还没签的成果（逐条）：mss:000003（手稿 manuscripts/F/f-proof-000003.md）[待签（还没 V 签，不算证明）] 共 1 条；怎么办由你定（举例：换一条证明路线重做那一步、把这条命题拆成几条更弱的引理、去补原证明里缺的工具/引理、减弱自己的断言（定理→条件性结论/猜想）），并把选择与理由写进 self_assessment.next_move / why。这一轮用的是你通过 `attack.step(product=…)` 交进来的那一份（label=F 攻坚 000002：Δ=A_face−A_diag 的连续性与两端符号（p=2 相等、p→∞ 为正，进而尾段 A_face>A_diag））",
+                "evidence": [],
+                "at": "2026-11-24T20:51:08+08:00",
+                "product_detail": {
+                  "product": "proof",
+                  "label": "F 攻坚 000002：Δ=A_face−A_diag 的连续性与两端符号（p=2 相等、p→∞ 为正，进而尾段 A_face>A_diag）",
+                  "strategy": "极值与双重计数",
+                  "why_strategy": "把 A_diag 化成单参数积分后用有界收敛定理取两端极限，与 A_face 的 Γ-闭式逐点相减，行为完全由端点与连续性定下",
+                  "self_assessment": {
+                    "comprehensive": "partial",
+                    "enough_output": "some_output",
+                    "partial_output": "partial_output",
+                    "next_move": "拿到这一份的 V 签后：把 2<p<p* 的中间负区间如实标成 strong_conjecture（exp:000016 p*≈4.9982、exp:000023 ρ 极小 0.98856@3.024 后升向 1.0887，两者合起来给「两端为正、中间有一段为负」的数值图景），并把两份签稿（f-proof-000002 s1 + 本份）一起交父 D 携带给 B 收录；仍缺的引理一句话：A_p((1,1,t)/√(2+t²)) 对 t∈[0,1] 的单调性（等价 A_face(p) ≥ A_diag(p) 对一切 p>2）没有证明。",
+                    "why": "这一段（连续 + p=1/2/∞ 三点符号 + 尾部存在 P0）是本趟唯一能严格闭合的比较结论，其余段落只能作数值级旁证；先把它做成签稿，比把「两零点」写成定理干净。"
+                  },
+                  "proposition": "设 1 ≤ p < ∞，B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积，并记 A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。则：(i) A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，且 A_diag(2) = π、A_diag(1) = 3√3/4、lim_{p→∞}A_diag(p) = 3√3；(ii) A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，且 A_face(2) = π、A_face(1) = √2、lim_{p→∞}A_face(p) = 4√2；(iii) Δ 在 [1,∞) 上连续，Δ(2) = 0，Δ(1) = √2 − 3√3/4 > 0，lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0，因而存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 A_face(p) > A_diag(p)。",
+                  "steps": [
+                    {
+                      "n": 1,
+                      "text": "【前提】固定 1 ≤ p < ∞；B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。（前提）",
+                      "cites": [],
+                      "assumption": true,
+                      "role": "前提步",
+                      "problem": ""
+                    },
+                    {
+                      "n": 2,
+                      "text": "【推导】由 stmt:000034 的 (i)，对每个单位法向 n 与 n^⊥ 的任意单位正交基 (u,v) 有 A_p(n) = (1/2)∫_0^{2π}‖cosθ·u+sinθ·v‖_p^{-2}dθ。取 n = (1,1,1)/√3、u = (1,-1,0)/√2、v = (1,1,-2)/√6（直接验算 ‖u‖=‖v‖=1、u·v=0、u·n=v·n=0，故 {u,v} 是 H := {x+y+z=0} 的单位正交基）；另一路参数化 Φ(x,y) := (x,y,−x−y) 是 R²→H 的双射，∂_xΦ=(1,0,−1) 与 ∂_yΦ=(0,1,−1) 的叉积为 (1,1,1)、模为 √3，故 A_diag(p) = √3∫∫_D dxdy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。",
+                      "cites": [
+                        "stmt:000034"
+                      ],
+                      "assumption": false,
+                      "role": "推导步",
+                      "problem": ""
+                    },
+                    {
+                      "n": 3,
+                      "text": "【推导】对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)（r ≥ 0、θ ∈ [0,2π)）：由 |r cosθ|^p+|r sinθ|^p+|r(cosθ+sinθ)|^p = r^p g(θ)（记 g(θ) := |cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p）得 (x,y) ∈ D ⟺ r ≤ g(θ)^{-1/p}；由面积元 r dr dθ 得 ∫∫_D = ∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ，与第 2 步合并即 A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，这给出 (i) 的积分式。",
+                      "cites": [
+                        "stmt:000034"
+                      ],
+                      "assumption": false,
+                      "role": "推导步",
+                      "problem": ""
+                    },
+                    {
+                      "n": 4,
+                      "text": "【推导】一致控制：g ≥ max(|cosθ|,|sinθ|)^p ≥ (1/√2)^p（因为 max(|cosθ|,|sinθ|) ≥ 1/√2），故对一切 p ∈ [1,∞) 与一切 θ 有 0 < g(θ)^{-2/p} ≤ (1/√2)^{-2} = 2；又 (p,θ) ↦ g(θ) 连续且在每个局部 p-区间上 g 有与 p 无关的正下界，故 θ ↦ g(θ)^{-2/p} 关于 p 逐点连续。",
+                      "cites": [
+                        "stmt:000034"
+                      ],
+                      "assumption": false,
+                      "role": "推导步",
+                      "problem": ""
+                    },
+                    {
+                      "n": 5,
+                      "text": "【推导】p = 2 时 g(θ) = cos²θ+sin²θ+(cosθ+sinθ)² = 2+sin2θ；代换 u = 2θ 后用 ∫_0^{2π}du/(a+b sin u) = 2π/√(a²−b²)（取 a=2、b=1）得 ∫_0^{2π} dθ/(2+sin2θ) = ∫_0^{2π} du/(2+sin u) = 2π/√3，此处 p=2 使 g^{-2/p} 化为 g^{-1}，故 A_diag(2) = (√3/2)·(2π/√3) = π。",
+                      "cites": [
+                        "stmt:000034"
+                      ],
+                      "assumption": false,
+                      "role": "推导步",
+                      "problem": ""
+                    },
+                    {
+                      "n": 6,
+                      "text": "【推导】由 stmt:000034 的 (ii)(iii)(iv) 的闭式 A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，在 p = 2 处得 A_face(2) = 2^0·4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π；与第 5 步合并得 Δ(2) = π − π = 0。",
+                      "cites": [
+                        "stmt:000034"
+                      ],
+                      "assumption": false,
+                      "role": "推导步",
+                      "problem": ""
+                    },
+                    {
+                      "n": 7,
+                      "text": "【推导】Δ(1) 的计算：A_face(1) = 2^{-1/2}·4Γ(2)²/Γ(3) = 2^{-1/2}·4·1/2 = √2（Γ(2)=1、Γ(3)=2）；A_diag(1)：p = 1 时 g = |cosθ|+|sinθ|+|cosθ+sinθ| 满足 g(θ+π) = g(θ)，且在 [0,π/2] 上 g = 2(cosθ+sinθ)（故 g^{-2} = (1/4)(cosθ+sinθ)^{-2}）、在 [π/2,3π/4] 上 g = 2sinθ（g^{-2} = (1/4)sin^{-2}θ）、在 [3π/4,π] 上 g = −2cosθ（g^{-2} = (1/4)cos^{-2}θ）；三段对 ∫g^{-2} 的贡献各为 1/4（分别用 ∫_0^{π/2}dθ/(cosθ+sinθ)² = 1、[−cotθ] 与 [tanθ] 在两个端点区间上的取值各得 1），故 ∫_0^{2π}g^{-2}dθ = 2·(1/4+1/4+1/4) = 3/2，A_diag(1) = (√3/2)·(3/2) = 3√3/4；于是 Δ(1) = √2 − 3√3/4 > 0，因为 4√2 > 3√3 ⟺ 32 > 27。",
+                      "cites": [
+                        "stmt:000034"
+                      ],
+                      "assumption": false,
+                      "role": "推导步",
+                      "problem": ""
+                    },
+                    {
+                      "n": 8,
+                      "text": "【推导】Δ 的连续性：Γ 在 (0,∞) 上连续且取正值，p ↦ 1/p、1+1/p、1+2/p 在 [1,∞) 上连续，故 A_face 在 [1,∞) 上连续；由第 4 步与 p 无关的控制 g^{-2/p} ≤ 2 与逐点连续性，有界收敛定理给出 p ↦ ∫_0^{2π}g(θ)^{-2/p}dθ 在 [1,∞) 上连续，故 A_diag 连续；两者相减得 Δ 在 [1,∞) 上连续。",
+                      "cites": [
+                        "stmt:000034"
+                      ],
+                      "assumption": false,
+                      "role": "推导步",
+                      "problem": ""
+                    },
+                    {
+                      "n": 9,
+                      "text": "【推导】p→∞ 时 A_diag 的极限：记 m(θ) := max(|cosθ|,|sinθ|,|cosθ+sinθ|)，则 m(θ)^p ≤ g(θ) ≤ 3m(θ)^p，故对每个 θ 有 g(θ)^{-2/p} → m(θ)^{-2}；又 g ≥ m^p 给出 g^{-2/p} ≤ m^{-2} ≤ 2（因 m ≥ 1/√2），有界收敛定理给出 A_diag(p) → (√3/2)∫_0^{2π}m(θ)^{-2}dθ。按符号分段：在 [0,π/2] 上 m = cosθ+sinθ、在 [π/2,3π/4] 上 m = sinθ、在 [3π/4,π] 上 m = −cosθ，且 m(θ+π) = m(θ)，三段各贡献 1（同上一步的三段积分），故 ∫_0^{2π}m^{-2}dθ = 2·3 = 6，于是 lim_{p→∞}A_diag(p) = (√3/2)·6 = 3√3。",
+                      "cites": [
+                        "stmt:000034"
+                      ],
+                      "assumption": false,
+                      "role": "推导步",
+                      "problem": ""
+                    },
+                    {
+                      "n": 10,
+                      "text": "【推导】p→∞ 时 A_face 的极限：C_p := 4Γ(1+1/p)²/Γ(1+2/p) → 4Γ(1)²/Γ(1) = 4（Γ 连续、Γ(1)=1），又 2^{1/2−1/p} → √2，故 A_face(p) → 4√2；与第 9 步合并得 lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0（同样由 32 > 27）。",
+                      "cites": [
+                        "stmt:000034"
+                      ],
+                      "assumption": false,
+                      "role": "推导步",
+                      "problem": ""
+                    },
+                    {
+                      "n": 11,
+                      "text": "【推导】收尾：记 L := 4√2 − 3√3 > 0；由第 8 步 Δ 的连续性与第 10 步 lim Δ = L，取 ε := L/2 > 0，则存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 |Δ(p) − L| < ε，从而 Δ(p) > L/2 > 0，即 A_face(p) > A_diag(p) 对一切 p ≥ P0 成立，这给出 (iii) 的最后一句。",
+                      "cites": [
+                        "stmt:000034"
+                      ],
+                      "assumption": false,
+                      "role": "推导步",
+                      "problem": ""
+                    }
+                  ],
+                  "problems": []
+                },
+                "product": "proof",
+                "strategy": "极值与双重计数",
+                "best_partial": [],
+                "v_sign": {
+                  "state": "waiting",
+                  "label": "待签",
+                  "delivered": false,
+                  "channel": "",
+                  "ledger": "",
+                  "submitted": false,
+                  "skipped": false,
+                  "why": "这一份正文还没有一份能算数的签（state=unsigned）：这一版（3f9c71fc243d…）没有任何台账行 ⇒ 一次都没送过 V（真的没审） ⇒ 派 V 审这一份、拿到签才算交差"
+                },
+                "delivery": {
+                  "checked": true,
+                  "total": 1,
+                  "signed_count": 0,
+                  "pending_count": 1,
+                  "unsigned_count": 0,
+                  "proof_count": 0,
+                  "abandoned_count": 0,
+                  "unfinished_count": 1,
+                  "coverage": "0/1",
+                  "state": "outputs_unsigned",
+                  "legal_stop": false,
+                  "delivered": false
+                },
+                "delivered": false,
+                "self_assessment": {
+                  "comprehensive": "partial",
+                  "enough_output": "some_output",
+                  "partial_output": "partial_output",
+                  "next_move": "拿到这一份的 V 签后：把 2<p<p* 的中间负区间如实标成 strong_conjecture（exp:000016 p*≈4.9982、exp:000023 ρ 极小 0.98856@3.024 后升向 1.0887，两者合起来给「两端为正、中间有一段为负」的数值图景），并把两份签稿（f-proof-000002 s1 + 本份）一起交父 D 携带给 B 收录；仍缺的引理一句话：A_p((1,1,t)/√(2+t²)) 对 t∈[0,1] 的单调性（等价 A_face(p) ≥ A_diag(p) 对一切 p>2）没有证明。",
+                  "why": "这一段（连续 + p=1/2/∞ 三点符号 + 尾部存在 P0）是本趟唯一能严格闭合的比较结论，其余段落只能作数值级旁证；先把它做成签稿，比把「两零点」写成定理干净。"
+                },
+                "report_path": "work/F/attack-000002.md",
+                "proof_mode": "registered",
+                "proof_registered": true,
+                "proof_rewritten": false,
+                "proof_sha256": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+                "proof_label": "F 攻坚 000002 子目标 n1",
+                "proof_section_hashes": {
+                  "## 命题": "da831b7b4a3dc1a603c2df16234b02d42fd9d3d56471081b702d31adc9ea8c7e",
+                  "## 证明": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+                  "## 依赖": "9134a9bc71260b8e23447b38e5461aa7c89616263c59e365b9615adee70545ea"
+                },
+                "manuscript_migrated": false,
+                "manuscript_path": "manuscripts/F/f-proof-000003.md",
+                "manuscript_id": "000003",
+                "manuscript_id_source": "given"
+              },
+              {
+                "round": 2,
+                "sid": "n1",
+                "action": "no_change",
+                "outcome": "no_change",
+                "detail": "这一份已经拿签（签 sha=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db），只读；要改就开 B 的优化副本（`B.open_polish_copy(statement_id=…)` → 复制成新的 B 号稿 → 改正文 → 重新送 V）；这一轮没有落稿、没有登记、没有送审；V 签：已签（out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json 复算通过：凭据 `out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json` 复算通过：3/3 转同源、每行签得住 ⇒ 这一份签了（3/3 才算签））；交差（逐条）：已签 1/1（待签 0 条、未签 0 条）。这一轮用的是你通过 `attack.step(product=…)` 交进来的那一份（label=F 攻坚 000002 子目标 n1（按 V 的 v-review 三处稿面 finding 定点改：第 2 步只用 Φ、第 4 步改成 (p,θ) 联合连续、第 5 步补 dθ=du/2 与两周期折算及 |b|<a））",
+                "evidence": [],
+                "at": "2026-11-24T21:01:11+08:00",
+                "statement_id": "000042",
+                "notes_correction": "归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号",
+                "v_sign": {
+                  "state": "signed",
+                  "label": "已签",
+                  "delivered": true,
+                  "channel": "pending",
+                  "ledger": "out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json",
+                  "submitted": false,
+                  "skipped": false,
+                  "why": "out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json 复算通过：凭据 `out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json` 复算通过：3/3 转同源、每行签得住 ⇒ 这一份签了（3/3 才算签）"
+                },
+                "delivery": {
+                  "checked": true,
+                  "total": 1,
+                  "signed_count": 1,
+                  "pending_count": 0,
+                  "unsigned_count": 0,
+                  "proof_count": 1,
+                  "abandoned_count": 0,
+                  "unfinished_count": 0,
+                  "coverage": "1/1",
+                  "state": "signed_all",
+                  "legal_stop": true,
+                  "delivered": true
+                },
+                "delivered": true,
+                "refusal": {
+                  "kind": "manuscript_frozen",
+                  "problems": [
+                    "这一份已经拿签（签 sha=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db），只读；要改就开 B 的优化副本（`B.open_polish_copy(statement_id=…)` → 复制成新的 B 号稿 → 改正文 → 重新送 V）"
+                  ],
+                  "next_step": "这一份已经拿签 ⇒ 先 `B.open_polish_copy(statement_id=…)` 复制成新的 B 号稿，在副本上改",
+                  "manuscript_id": "000003",
+                  "manuscript_path": "manuscripts/F/f-proof-000003.md"
+                },
+                "manuscript_path": "manuscripts/F/f-proof-000003.md",
+                "manuscript_id": "000003"
+              },
+              {
+                "round": 2,
+                "sid": "",
+                "action": "abandon",
+                "abandon_kind": "不再需要",
+                "detail": "不再需要：本计划要办的事已经办到它能办到的边上：可证核心已闭环并以签稿交付 —— f-proof-000003（在册 stmt:000030）证 Δ:=A_face−A_diag 在 [1,∞) 上连续、Δ(1)=√2−3√3/4>0、Δ(2)=0、lim_{p→∞}Δ=4√2−3√3>0，从而存在尾门槛 P0 使 p≥P0 时 A_face(p)>A_diag(p)。剩下的 n2/n3（2<p<p* 一段谁大）不是可判的证明对象：E 已按只递指针口径把确定性数值入库（stmt:000036–000040：p*≈4.998215596840938、ρ=A_face/A_diag 在 p≈3.02439 取极小 0.98856 后单调升向 1.088662、Δ 在 (2,∞) 上有两个零点），这些是 strong_conjecture 级旁证，不能写成定理。这一环真正缺的是一条独立引理『对固定 p>2，A_p((1,1,t)/√(2+t²)) 在 t∈[0,1] 上严格递减』，它该另立一条新计划去攻，不在本计划名下把数值结论硬凑成证明。相关口径与缺口已由 handoff 000020 与 message m000021 交回 D。",
+                "evidence": [],
+                "at": "2026-11-24T21:01:40+08:00"
+              }
+            ],
+            "depth": 0,
+            "parent_plan_id": null,
+            "best_partial": "已进行 2 轮。子目标进展（按'离终结有多近'排序）：\n- n2（owner=F，status=todo）: 把四段叙述写成可判形式：p<2 段（坐标向最大）指 stmt:000034 的 1≤p<2 条款与 stmt:000035(ii)；p=2 段指 stmt:000034(iv) 的 A_2(n)=π；2<p<p* 段与 p>p* 段以 Δ 的唯一内部零点 p*=4.998215596840938（夹逼宽 <1e-9）为界，其中 p≥P0 与 p=1、p=2 三处是定理级，其余标 strong_conjecture 并点 exp:000016/exp:000023。\n- n3（owner=D，status=todo）: 把 n1 的签稿交父 D（F→D，不直接派 B），由 D 携带给 B 按正文 sha 收录；同时把缺口写成一句话交给 D：缺的是「ρ=A_face/A_diag 在 (2,∞) 上先降后升（单谷）」这一条引理，或等价地「Δ 在 (2,P0) 上存在一个严格负值见证」。\n- n1（owner=F，status=blocked）: 证明四段叙述的严格骨架：(i) Δ(2)=A_face(2)−A_diag(2)=0 且两者都等于 π；(ii) Δ(1)=√2−3√3/4>0（因 4√2>3√3 ⟺ 32>27）；(iii) lim_{p→∞}A_face=4√2、lim_{p→∞}A_diag=3√3，故 lim Δ=4√2−3√3>0，从而存在 P0 使 p≥P0 时 A_face(p)>A_diag(p)；(iv) Δ 在 [1,∞) 上连续。证法：A_face 用 stmt:000034 的闭式 2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p) 直接算；A_diag 用 stmt:000034(i) 的极坐标表示 + √3 面积因子 + 控制收敛（g^{-2/p} 单调夹在 3^{-2/p}m^{-2} 与 m^{-2} 之间，m=max(|cosθ|,|sinθ|,|cosθ+sinθ|)，∫m^{-2}=6）。；卡点：这一份已经拿签（签 sha=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db），只读；要改就开 B 的优化副本（`B.open_polish_copy(statement_id=…)` → 复制成新的 B 号稿 → 改正文 → 重新送 V）\n**以上均为过程记录**：标了 supported_not_proved 或只有 experiment_ids 的条目都还不是证明。",
+            "created_at": "2026-11-24T20:50:13+08:00",
+            "updated_at": "2026-11-24T23:10:52+08:00",
+            "created_by": "agent-F",
+            "report_path": "work/F/attack-000002.md"
+          },
+          "normalized": []
+        },
+        "aliased_from": "table_update"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 86528,
+        "prompt_cache_miss_tokens": 3086,
+        "tokens_in": 89614,
+        "tokens_out": 16441,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000236"
+    },
+    {
+      "index": 13,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.search",
+        "args": {
+          "pattern": "\"statement_id\": \"0000(30|42)\"",
+          "path": "data/attack_plans.json",
+          "limit": 200
+        },
+        "why": "改后回执①：逐字取回 data/attack_plans.json 里 statement_id 30/42 的全部命中行"
+      },
+      "result": {
+        "tool": "fs.search",
+        "ok": true,
+        "data": {
+          "pattern": "\"statement_id\": \"0000(30|42)\"",
+          "path": "data/attack_plans.json",
+          "matches": [
+            {
+              "path": "data/attack_plans.json",
+              "line": 2593,
+              "text": "\"statement_id\": \"000042\","
+            }
+          ],
+          "lines": [
+            "data/attack_plans.json:2593: \"statement_id\": \"000042\","
+          ],
+          "total": 1,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        },
+        "error": "",
+        "meta": {
+          "total": 1,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 88832,
+        "prompt_cache_miss_tokens": 5276,
+        "tokens_in": 94108,
+        "tokens_out": 389,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000236"
+    },
+    {
+      "index": 14,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.stat",
+        "args": {
+          "path": "verifications/000042.jsonl"
+        },
+        "why": "回执②前置：先看 verifications/000042.jsonl 的大小与 sha，决定分段读最后一行"
+      },
+      "result": {
+        "tool": "fs.stat",
+        "ok": true,
+        "data": {
+          "path": "verifications/000042.jsonl",
+          "exists": true,
+          "is_dir": false,
+          "is_file": true,
+          "is_symlink": false,
+          "size": 14835,
+          "mtime": "2026-11-24T21:29:17+08:00",
+          "mtime_epoch": 1795526957.903,
+          "link_target": null,
+          "sha256": "5e5432ffc69246c056358813328602633d90a3f7e169384d6c0251a6a5b9d779"
+        },
+        "error": "",
+        "meta": {
+          "path": "verifications/000042.jsonl",
+          "size": 14835,
+          "sha256": "5e5432ffc69246c056358813328602633d90a3f7e169384d6c0251a6a5b9d779"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 93312,
+        "prompt_cache_miss_tokens": 1313,
+        "tokens_in": 94625,
+        "tokens_out": 689,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000236"
+    },
+    {
+      "index": 15,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "verifications/000042.jsonl",
+          "max_bytes": 20000
+        },
+        "why": "回执②：读 verifications/000042.jsonl 的逐字内容，取最近一行的 verdict 与 proof_sha256"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "{\"at\": \"2026-11-24T21:11:12+08:00\", \"citation_checks\": [], \"defect_step\": 1, \"findings\": [{\"detail\": \"`stmt:000034`（在哪一步：证明正文（未标步号的行））· 类别：等级读不出来（判不了）（`citation_level_unreadable`） · 期望：盘上有一份这一条命题的手稿（`manuscripts/F/f-proof-<号>.md`；V 只读手稿：正文与签都在稿上） · 实得：盘上没有这一条命题的手稿（找过：（没记））⇒ 读不到它的正文，也读不到它的签 · 怎么改：先把这一条命题的证明落成一份手稿（`manuscripts/F/f-proof-<号>.md`，`## 命题` / `## 证明` / `## 依赖` 三节），再引它；V 不从台账读正文\", \"kind\": \"citation_level_unreadable\", \"level\": \"error\", \"step\": null}, {\"detail\": \"`stmt:000034`（在哪一步：证明正文（未标步号的行））· 类别：表述错误·表与正文的引用集合不一致（`deps_table_disagrees_with_proof`） · 期望：手稿的 `## 依赖` 表里有一行 `stmt:000034`（写明它用在哪一步） · 实得：表里没有这一行 · 怎么改：把表里那一行补上（号与用在哪一步都写对）；正文是 F 的署名作品，表按它补齐 —— 两处必须说的是同一件事\", \"kind\": \"deps_table_disagrees_with_proof\", \"level\": \"error\", \"step\": null}], \"manuscript\": \"manuscripts/B/b-proof-000003.md\", \"object_path\": \"manuscripts/B/b-proof-000003.md\", \"object_sha256\": \"d5b16c8825d876e7b1c6b8c2c0d63777efd2be242986b6081ed8f6b3d5b0cb1c\", \"producer_code\": \"B1\", \"producer_role\": \"B\", \"proof_chars\": 3576, \"proof_sha256\": \"c41c0cfc4384f4c61ebd8f6c28a51c5ed92800bf7cd03fbd7d8a272a46eb291c\", \"quote\": \"\", \"review_call\": \"e0c2d1882da3\", \"review_pass\": 1, \"round\": 1, \"secretary_judge\": {\"axis\": \"clean\", \"checked\": true, \"decision\": \"\", \"defect_scope\": \"\", \"fault_cause\": \"report_gap\", \"fault_kind\": \"\", \"reason\": \"这段回复声称已逐段核对，并给出了具体核对点（参数化与极坐标换元、p=1/p=2 常数、连续性统一界、p→∞ 极限与 Γ 常数收尾），且未指出任何缺陷，属于「逐条走查、未发现问题」的一档。\", \"report_gap\": \"未记录反例构造尝试的位置；findings 与 citation_checks 均为空，没有逐关核对的可查明细。\"}, \"statement_id\": \"000042\", \"stmt_id\": \"000042\", \"submission_id\": \"\", \"unresolved_errors\": 2, \"used_faces\": [], \"verdict\": \"有毛病\", \"verification_id\": \"v-000001\", \"verifier\": \"agent-V-V2\", \"why\": \"逐段核对：A_diag 的参数化与极坐标换元正确；p=1、p=2 特例常数一致；连续性有统一界 2 与有界收敛依据；p→∞ 时 m(θ) 极限、分段积分、Γ 常数与收尾均无断点，未发现可指到步号的缺陷。；`stmt:000034`（在哪一步：证明正文（未标步号的行））· 类别：等级读不出来（判不了）（`citation_level_unreadable`） · 期望：盘上有一份这一条命题的手稿（`manuscripts/F/f-proof-<号>.md`；V 只读手稿：正文与签都在稿上） · 实得：盘上没有这一条命题的手稿（找过：（没记））⇒ 读不到它的正文，也读不到它的签 · 怎么改：先把这一条命题的证明落成一份手稿（`m…（落档截断，原 10518 字）",
+        "error": "",
+        "meta": {
+          "path": "verifications/000042.jsonl",
+          "encoding": "utf-8",
+          "bytes_read": 14835,
+          "total_bytes": 14835,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 8,
+          "total_lines": 8,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 8 行",
+          "sha256": "5e5432ffc69246c056358813328602633d90a3f7e169384d6c0251a6a5b9d779"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 93824,
+        "prompt_cache_miss_tokens": 1608,
+        "tokens_in": 95432,
+        "tokens_out": 518,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000236"
+    },
+    {
+      "index": 16,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "verifications/000042.jsonl",
+          "start_line": 8,
+          "max_lines": 1
+        },
+        "why": "回执②：逐字读 verifications/000042.jsonl 最近一行（第 8 行）的 verdict 与 proof_sha256"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "{\"at\": \"2026-11-24T21:29:17+08:00\", \"citation_checks\": [], \"defect_step\": null, \"findings\": [], \"manuscript\": \"manuscripts/B/b-proof-000003.md\", \"object_path\": \"manuscripts/B/b-proof-000003.md\", \"object_sha256\": \"802a85e9853b5fe2d772ef53fdef51048df3eca7ca2a72ebe84071ee9434e313\", \"producer_code\": \"B1\", \"producer_role\": \"B\", \"proof_chars\": 5312, \"proof_sha256\": \"43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6\", \"quote\": \"\", \"review_call\": \"2f34a642b3d7\", \"review_pass\": 3, \"round\": 8, \"secretary_judge\": {\"axis\": \"clean\", \"checked\": true, \"decision\": \"\", \"defect_scope\": \"\", \"fault_cause\": \"report_gap\", \"fault_kind\": \"\", \"reason\": \"V 逐段核对了假设、定理链、记号与条件性措辞，并明确未发现未定义前提、无依据步骤或指数/常数错配，findings 为空，未指出任何缺陷。\", \"report_gap\": \"未记录反例尝试的具体位置；citation_checks 为空\"}, \"statement_id\": \"000042\", \"stmt_id\": \"000042\", \"submission_id\": \"\", \"unresolved_errors\": 0, \"used_faces\": [], \"verdict\": \"成立\", \"verification_id\": \"v-000008\", \"verifier\": \"agent-V-V1\", \"why\": \"沿假设、定理链、记号与条件性措辞逐段核对：A_diag 与 A_face 的参数化与 Jacobi 因子、p=1 与 p=2 的特例积分、p→∞ 的控制收敛与单调收敛、连续性及收尾极限均对应原文，未发现未定义前提、无依据步骤或指数/常数错配，依赖面为空。\"}\n",
+        "error": "",
+        "meta": {
+          "path": "verifications/000042.jsonl",
+          "encoding": "utf-8",
+          "bytes_read": 14835,
+          "total_bytes": 14835,
+          "truncated": false,
+          "start_line": 8,
+          "lines_read": 1,
+          "total_lines": 8,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 8–8 行（共 8 行）",
+          "sha256": "5e5432ffc69246c056358813328602633d90a3f7e169384d6c0251a6a5b9d779"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 94592,
+        "prompt_cache_miss_tokens": 4684,
+        "tokens_in": 99276,
+        "tokens_out": 783,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000236"
+    },
+    {
+      "index": 17,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.search",
+        "args": {
+          "pattern": "notes_correction|\"round\": [0-9]+",
+          "path": "data/attack_plans.json",
+          "limit": 200
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "fs.search",
+        "ok": true,
+        "data": {
+          "pattern": "notes_correction|\"round\": [0-9]+",
+          "path": "data/attack_plans.json",
+          "matches": [
+            {
+              "path": "data/attack_plans.json",
+              "line": 126,
+              "text": "\"round\": 1,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 152,
+              "text": "\"round\": 2,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 249,
+              "text": "\"round\": 3,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 410,
+              "text": "\"round\": 4,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 479,
+              "text": "\"round\": 5,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 642,
+              "text": "\"round\": 6,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 804,
+              "text": "\"round\": 7,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 968,
+              "text": "\"round\": 8,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 1245,
+              "text": "\"round\": 1,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 1417,
+              "text": "\"round\": 2,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 1590,
+              "text": "\"round\": 3,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 1763,
+              "text": "\"round\": 4,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 1922,
+              "text": "\"round\": 5,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 2095,
+              "text": "\"round\": 6,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 2150,
+              "text": "\"round\": 6,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 2325,
+              "text": "\"round\": 7,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 2402,
+              "text": "\"round\": 1,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 2586,
+              "text": "\"round\": 2,"
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 2594,
+              "text": "\"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\","
+            },
+            {
+              "path": "data/attack_plans.json",
+              "line": 2633,
+              "text": "\"round\": 2,"
+            }
+          ],
+          "lines": [
+            "data/attack_plans.json:126: \"round\": 1,",
+            "data/attack_plans.json:152: \"round\": 2,",
+            "data/attack_plans.json:249: \"round\": 3,",
+            "data/attack_plans.json:410: \"round\": 4,",
+            "data/attack_plans.json:479: \"round\": 5,",
+            "data/attack_plans.json:642: \"round\": 6,",
+            "data/attack_plans.json:804: \"round\": 7,",
+            "data/attack_plans.json:968: \"round\": 8,",
+            "data/attack_plans.json:1245: \"round\": 1,",
+            "data/attack_plans.json:1417: \"round\": 2,",
+            "data/attack_plans.json:1590: \"round\": 3,",
+            "data/attack_plans.json:1763: \"round\": 4,",
+            "data/attack_plans.json:1922: \"round\": 5,",
+            "data/attack_plans.json:2095: \"round\": 6,",
+            "data/attack_plans.json:2150: \"round\": 6,",
+            "data/attack_plans.json:2325: \"round\": 7,",
+            "data/attack_plans.json:2402: \"round\": 1,",
+            "data/attack_plans.json:2586: \"round\": 2,",
+            "data/attack_plans.json:2594: \"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\",",
+            "data/attack_plans.json:2633: \"round\": 2,"
+          ],
+          "total": 20,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        },
+        "error": "",
+        "meta": {
+          "total": 20,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 98432,
+        "prompt_cache_miss_tokens": 2164,
+        "tokens_in": 100596,
+        "tokens_out": 370,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000236"
+    },
+    {
+      "index": 18,
+      "shape": "final",
+      "payload": {
+        "final": "已完成对 plan 000002（problem_key=lp3-diag-vs-face-narrative）history 第 2 轮条目（sid=n1，稿 manuscripts/F/f-proof-000003.md，proof_sha256=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db）的归属更正，走的是做法 (1)（table.update 整条 history 回写，一次成功，无拒信）。改动只有两处：该条 \"statement_id\": \"000030\" → \"000042\"，并新增一格 notes_correction（原文见下）。其余字段、其余轮次一个字节未动：round 结构仍是 1 / 2 / 2（2402 / 2586 / 2633 行），只因为插入 notes_correction 一行，第二个 round=2 的行号由 2632 后移为 2633；data/attack_plans.json 仍是 3 条计划（000000/000001/000002）原样。\n\n【回执 ① 改后 fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\", path=data/attack_plans.json) 全部命中行，逐字】\n\ndata/attack_plans.json:2593: \"statement_id\": \"000042\",\n\n（total=1、truncated=false —— 全文件只有这一处命中，000030 已不存在；改前同一调用只有 2593 行 \"statement_id\": \"000030\", 一处，与基线一致。）\n\n【回执 ①b 新增格逐字】\n\ndata/attack_plans.json:2594: \"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\",\n\n【回执 ② verifications/000042.jsonl 最近一行（第 8/8 行）逐字读数】\n- verdict: \"成立\"\n- proof_sha256: \"43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6\"\n- verification_id: v-000008；review_pass: 3；round: 8；at: 2026-11-24T21:29:17+08:00；statement_id/stmt_id: 000042；findings: []；defect_step: null；unresolved_errors: 0；verifier: agent-V-V1；manuscript: manuscripts/B/b-proof-000003.md（object_sha256 802a85e9853b5fe2d772ef53fdef51048df3eca7ca2a72ebe84071ee9434e313，proof_chars 5312）\n- 文件级读数：fs.stat verifications/000042.jsonl → size=14835、sha256=5e5432ffc69246c056358813328602633d90a3f7e169384d6c0251a6a5b9d779、mtime=2026-11-24T21:29:17+08:00；共 8 行（前 7 行里 v-000001/v-000002 判「有毛病」，v-000003 起「成立」）。\n\n【回执 ③ 不适用】两条做法没有都不成立：做法 (1) 一次成功，没有拒信可贴。\n\n【必须说清的边界】\n1) 这是对我自己计划 history 的更正，不是改别人的台账，也不是改任何证明正文/命题正文；稿 manuscripts/F/f-proof-000003.md 与 stmt:000042 的正文一个字未动。\n2) 回写用的 history 是我按行分段读回 data/attack_plans.json 第 2400–2650 行（每次 50–76 行窗口，未触发观测层截断）逐字重建的；table.update 读回的行里 history 两个 round=2 条目均在（sid=n1 的 no_change 条 + sid=\"\" 的 abandon 条），round=1 的 11 步 product_detail、proof_sha256/三段 section hashes、v_sign、delivery、self_assessment、best_partial、subgoals、budget 全部保留 —— 但「逐字节等同改前」这一句我只能按内容核对担保，不能按二进制担保（JSON 序列化后的空白/键序可能与原来的 pretty-print 排版不完全一致；语义内容与键集合一致）。\n3) 未送 V：本条不是新的证明稿，也不涉及命题正文变更，按规矩不进 V 的送审口。",
+        "evidence": [
+          "attack_plans:000002",
+          "verifications/000042.jsonl#v-000008",
+          "stmt:000042",
+          "manuscripts/F/f-proof-000003.md",
+          "data/attack_plans.json:2593",
+          "data/attack_plans.json:2594"
+        ],
+        "notify": {
+          "to": "D",
+          "summary": "plan 000002 history 第 2 轮 statement_id 000030→000042 已更正，附三样逐字读数",
+          "body": "## 做了什么\n对我自己名下的攻坚计划 **plan 000002**（problem_key=`lp3-diag-vs-face-narrative`）的 `history` 第 2 轮条目（`sid=n1`，`manuscript_path=manuscripts/F/f-proof-000003.md`，`proof_sha256=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db`）做了归属更正，走**做法 (1)**：`table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 完整数组>})`，一次成功、无拒信。\n\n只改两处：\n- `\"statement_id\": \"000030\"` → `\"statement_id\": \"000042\"`；\n- 新增 `\"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"`。\n\n其余字段、其余轮次未动：history 仍是 3 条（round=1 / round=2(sid=n1) / round=2(abandon)），三个计划 000000/000001/000002 原样。\n\n## 回执 ① 改后 fs.search 全部命中（pattern `\"statement_id\": \"0000(30|42)\"`，path=data/attack_plans.json）\n```\ndata/attack_plans.json:2593: \"statement_id\": \"000042\",\n```\ntotal=1、truncated=false —— 全文件仅此一处命中，`000030` 已不存在（改前同调用只有 2593 行 `\"statement_id\": \"000030\",`，与你给的基线一致）。\n新增格逐字：\n```\ndata/attack_plans.json:2594: \"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\",\n```\n\n## 回执 ② verifications/000042.jsonl 最近一行（第 8/8 行）逐字读数\n- `verdict`: **成立**\n- `proof_sha256`: **43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6**\n- 其余关键格：`verification_id=v-000008`、`review_pass=3`、`round=8`、`at=2026-11-24T21:29:17+08:00`、`statement_id=stmt_id=000042`、`findings=[]`、`defect_step=null`、`unresolved_errors=0`、`verifier=agent-V-V1`、`manuscript=manuscripts/B/b-proof-000003.md`（object_sha256=`802a85e9853b5fe2d772ef53fdef51048df3eca7ca2a72ebe84071ee9434e313`、proof_chars=5312）。\n- 文件级：size=14835、sha256=`5e5432ffc69246c056358813328602633d90a3f7e169384d6c0251a6a5b9d779`、mtime=2026-11-24T21:29:17+08:00、共 8 行（v-000001/v-000002 判「有毛病」，v-000003 起「成立」）。\n\n## 回执 ③\n不适用：做法 (1) 一次成功，没有拒信。\n\n## 边界与保留（请照实读）\n- 这是更正**我自己**计划 history 里的归属，不是改别人的台账；证明稿 `manuscripts/F/f-proof-000003.md` 与 `stmt:000042` 的正文一个字未动，未送 V（不是新证明稿，也不涉命题正文变更）。\n- 回写用的 history 是我按行分段读回 `data/attack_plans.json` 第 2400–2650 行（50–76 行窗口，未触发观测层截断）逐字重建的；`table.update` 读回的行里两个 round=2 条目都在、round=1 的 11 步 `product_detail`、`proof_sha256`/三段 section hashes、`v_sign`、`delivery`、`self_assessment`、`best_partial`、`subgoals`、`budget` 全部保留。**但我只能按内容核对担保「语义与键集合未变」，不能担保与改前二进制逐字节一致**（pretty-print 的空白/键序可能不同）。",
+          "refs": [
+            "stmt:000042",
+            "verifications/000042.jsonl#v-000008"
+          ]
+        }
+      },
+      "result": {
+        "notify_problem": "notify.refs 里的 'verifications/000042.jsonl#v-000008' 立不住：引用的前序手稿 'verifications/000042.jsonl#v-000008' 不在盘上 ⇒ 不许凭空引用（溯源链断了）"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 99840,
+        "prompt_cache_miss_tokens": 2348,
+        "tokens_in": 102188,
+        "tokens_out": 3130,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000236"
+    }
+  ],
+  "final": "已完成对 plan 000002（problem_key=lp3-diag-vs-face-narrative）history 第 2 轮条目（sid=n1，稿 manuscripts/F/f-proof-000003.md，proof_sha256=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db）的归属更正，走的是做法 (1)（table.update 整条 history 回写，一次成功，无拒信）。改动只有两处：该条 \"statement_id\": \"000030\" → \"000042\"，并新增一格 notes_correction（原文见下）。其余字段、其余轮次一个字节未动：round 结构仍是 1 / 2 / 2（2402 / 2586 / 2633 行），只因为插入 notes_correction 一行，第二个 round=2 的行号由 2632 后移为 2633；data/attack_plans.json 仍是 3 条计划（000000/000001/000002）原样。\n\n【回执 ① 改后 fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\", path=data/attack_plans.json) 全部命中行，逐字】\n\ndata/attack_plans.json:2593: \"statement_id\": \"000042\",\n\n（total=1、truncated=false —— 全文件只有这一处命中，000030 已不存在；改前同一调用只有 2593 行 \"statement_id\": \"000030\", 一处，与基线一致。）\n\n【回执 ①b 新增格逐字】\n\ndata/attack_plans.json:2594: \"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\",\n\n【回执 ② verifications/000042.jsonl 最近一行（第 8/8 行）逐字读数】\n- verdict: \"成立\"\n- proof_sha256: \"43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6\"\n- verification_id: v-000008；review_pass: 3；round: 8；at: 2026-11-24T21:29:17+08:00；statement_id/stmt_id: 000042；findings: []；defect_step: null；unresolved_errors: 0；verifier: agent-V-V1；manuscript: manuscripts/B/b-proof-000003.md（object_sha256 802a85e9853b5fe2d772ef53fdef51048df3eca7ca2a72ebe84071ee9434e313，proof_chars 5312）\n- 文件级读数：fs.stat verifications/000042.jsonl → size=14835、sha256=5e5432ffc69246c056358813328602633d90a3f7e169384d6c0251a6a5b9d779、mtime=2026-11-24T21:29:17+08:00；共 8 行（前 7 行里 v-000001/v-000002 判「有毛病」，v-000003 起「成立」）。\n\n【回执 ③ 不适用】两条做法没有都不成立：做法 (1) 一次成功，没有拒信可贴。\n\n【必须说清的边界】\n1) 这是对我自己计划 history 的更正，不是改别人的台账，也不是改任何证明正文/命题正文；稿 manuscripts/F/f-proof-000003.md 与 stmt:000042 的正文一个字未动。\n2) 回写用的 history 是我按行分段读回 data/attack_plans.json 第 2400–2650 行（每次 50–76 行窗口，未触发观测层截断）逐字重建的；table.update 读回的行里 history 两个 round=2 条目均在（sid=n1 的 no_change 条 + sid=\"\" 的 abandon 条），round=1 的 11 步 product_detail、proof_sha256/三段 section hashes、v_sign、delivery、self_assessment、best_partial、subgoals、budget 全部保留 —— 但「逐字节等同改前」这一句我只能按内容核对担保，不能按二进制担保（JSON 序列化后的空白/键序可能与原来的 pretty-print 排版不完全一致；语义内容与键集合一致）。\n3) 未送 V：本条不是新的证明稿，也不涉及命题正文变更，按规矩不进 V 的送审口。",
+  "evidence": [
+    "attack_plans:000002",
+    "verifications/000042.jsonl#v-000008",
+    "stmt:000042",
+    "manuscripts/F/f-proof-000003.md",
+    "data/attack_plans.json:2593",
+    "data/attack_plans.json:2594"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 0,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 19,
+  "compactions": 0,
+  "mailbox_items": [],
+  "mailbox_msgs": [],
+  "mailbox_delivered": 0,
+  "monitor_turns": 0,
+  "wakes": 0,
+  "wake_ids": [],
+  "wake_events": [],
+  "clock_pumps": 36,
+  "clock_fired": 0,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "名下没有「已登记、V 签还没到」的稿（正文本目录下 9 份 f-proof/b-proof/e-proof 的稿里有 9 份「已登记」（b-proof×5、f-proof×4））",
+      "problems": [],
+      "producer": "F",
+      "owner_instance": "F1",
+      "owner_source": "roster",
+      "unattributed": []
+    }
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [],
+  "summons": [],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [],
+  "summons_total": 0,
+  "summons_consumed": 0,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 0,
+    "summons_consumed": 0,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p328",
+    "role": "F",
+    "prompt_sha256": "fab0e71f11f8fc111948fe751b05ea630eef70ba30fabdef0ea4a726f8638cd4",
+    "prompt_chars": 78164,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "TOOL_29",
+      "TOOL_30",
+      "TOOL_31",
+      "TOOL_32",
+      "TOOL_33",
+      "TOOL_34",
+      "TOOL_35",
+      "TOOL_36",
+      "TOOL_37",
+      "TOOL_38",
+      "TOOL_39",
+      "TOOL_40",
+      "TOOL_41",
+      "TOOL_42",
+      "TOOL_43",
+      "TOOL_44",
+      "TOOL_45",
+      "TOOL_46",
+      "TOOL_47",
+      "TOOL_48",
+      "TOOL_49",
+      "TOOL_50",
+      "TOOL_51",
+      "TOOL_52",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_LIMITS",
+      "COLLAB_NAMES",
+      "PARENT_STOP",
+      "PARENT_ROSTER",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 18,
+    "tokens_in": 1484620,
+    "tokens_out": 51178,
+    "usd": 0.043054,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 18,
+    "no_request_calls": 0,
+    "hit": 1430912,
+    "miss": 53708,
+    "unknown_calls": 0,
+    "tokens_in": 1484620,
+    "hit_rate": 0.9638,
+    "mismatched_calls": 0,
+    "saved_usd": 0.210346,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 343.296,
+  "end_ts": "2026-11-24T23:11:55+08:00",
+  "notes": [
+    "V 判决递送：投递 0 条（已在板上 0 条）",
+    "收工没有可用 notify 表（notify.refs 里的 'verifications/000042.jsonl#v-000008' 立不住：引用的前序手稿 'verifications/000042.jsonl#v-000008' 不在盘上 ⇒ 不许凭空引用（溯源链断了））⇒ 这一趟没有交接手稿（不打回、不代填）",
+    "缓存读数：命中 1430912 / 未命中 53708 token，命中率 96.4%（18 次调用）；按 modelcost 口径估算可省 约 0.210346 美元",
+    "子产出处理读数：summons_total=0（这一趟没派过子代理 ⇒ 没有要处理的子产出；判据没有对象，不红）",
+    "终态回报已落板：t-000237（框架通报；模型没填 notify）"
+  ],
+  "final_payload": {
+    "final": "已完成对 plan 000002（problem_key=lp3-diag-vs-face-narrative）history 第 2 轮条目（sid=n1，稿 manuscripts/F/f-proof-000003.md，proof_sha256=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db）的归属更正，走的是做法 (1)（table.update 整条 history 回写，一次成功，无拒信）。改动只有两处：该条 \"statement_id\": \"000030\" → \"000042\"，并新增一格 notes_correction（原文见下）。其余字段、其余轮次一个字节未动：round 结构仍是 1 / 2 / 2（2402 / 2586 / 2633 行），只因为插入 notes_correction 一行，第二个 round=2 的行号由 2632 后移为 2633；data/attack_plans.json 仍是 3 条计划（000000/000001/000002）原样。\n\n【回执 ① 改后 fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\", path=data/attack_plans.json) 全部命中行，逐字】\n\ndata/attack_plans.json:2593: \"statement_id\": \"000042\",\n\n（total=1、truncated=false —— 全文件只有这一处命中，000030 已不存在；改前同一调用只有 2593 行 \"statement_id\": \"000030\", 一处，与基线一致。）\n\n【回执 ①b 新增格逐字】\n\ndata/attack_plans.json:2594: \"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\",\n\n【回执 ② verifications/000042.jsonl 最近一行（第 8/8 行）逐字读数】\n- verdict: \"成立\"\n- proof_sha256: \"43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6\"\n- verification_id: v-000008；review_pass: 3；round: 8；at: 2026-11-24T21:29:17+08:00；statement_id/stmt_id: 000042；findings: []；defect_step: null；unresolved_errors: 0；verifier: agent-V-V1；manuscript: manuscripts/B/b-proof-000003.md（object_sha256 802a85e9853b5fe2d772ef53fdef51048df3eca7ca2a72ebe84071ee9434e313，proof_chars 5312）\n- 文件级读数：fs.stat verifications/000042.jsonl → size=14835、sha256=5e5432ffc69246c056358813328602633d90a3f7e169384d6c0251a6a5b9d779、mtime=2026-11-24T21:29:17+08:00；共 8 行（前 7 行里 v-000001/v-000002 判「有毛病」，v-000003 起「成立」）。\n\n【回执 ③ 不适用】两条做法没有都不成立：做法 (1) 一次成功，没有拒信可贴。\n\n【必须说清的边界】\n1) 这是对我自己计划 history 的更正，不是改别人的台账，也不是改任何证明正文/命题正文；稿 manuscripts/F/f-proof-000003.md 与 stmt:000042 的正文一个字未动。\n2) 回写用的 history 是我按行分段读回 data/attack_plans.json 第 2400–2650 行（每次 50–76 行窗口，未触发观测层截断）逐字重建的；table.update 读回的行里 history 两个 round=2 条目均在（sid=n1 的 no_change 条 + sid=\"\" 的 abandon 条），round=1 的 11 步 product_detail、proof_sha256/三段 section hashes、v_sign、de…（落档截断，原 2191 字）",
+    "evidence": [
+      "attack_plans:000002",
+      "verifications/000042.jsonl#v-000008",
+      "stmt:000042",
+      "manuscripts/F/f-proof-000003.md",
+      "data/attack_plans.json:2593",
+      "data/attack_plans.json:2594"
+    ],
+    "notify": {
+      "to": "D",
+      "summary": "plan 000002 history 第 2 轮 statement_id 000030→000042 已更正，附三样逐字读数",
+      "body": "## 做了什么\n对我自己名下的攻坚计划 **plan 000002**（problem_key=`lp3-diag-vs-face-narrative`）的 `history` 第 2 轮条目（`sid=n1`，`manuscript_path=manuscripts/F/f-proof-000003.md`，`proof_sha256=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db`）做了归属更正，走**做法 (1)**：`table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 完整数组>})`，一次成功、无拒信。\n\n只改两处：\n- `\"statement_id\": \"000030\"` → `\"statement_id\": \"000042\"`；\n- 新增 `\"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"`。\n\n其余字段、其余轮次未动：history 仍是 3 条（round=1 / round=2(sid=n1) / round=2(abandon)），三个计划 000000/000001/000002 原样。\n\n## 回执 ① 改后 fs.search 全部命中（pattern `\"statement_id\": \"0000(30|42)\"`，path=data/attack_plans.json）\n```\ndata/attack_plans.json:2593: \"statement_id\": \"000042\",\n```\ntotal=1、truncated=false —— 全文件仅此一处命中，`000030` 已不存在（改前同调用只有 2593 行 `\"statement_id\": \"000030\",`，与你给的基线一致）。\n新增格逐字：\n```\ndata/attack_plans.json:2594: \"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\",\n```\n\n## 回执 ② verifications/000042.jsonl 最近一行（第 8/8 行）逐字读数\n- `verdict`: **成立**\n- `proof_sha256`: **43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6**\n- 其余关键格：`verification_id=v-000008`、`review_pass=3`、`round=8`、`at=2026-11-24T21:29:17+08:00`、`statement_id=stmt_id=000042`、`findings=[]`、`defect_step=null`、`unresolved_errors=0`、`verifier=agent-V-V1`、`manuscript=manuscripts/B/b-proof-000003.md`（object_sha256=`802a85e9853b5fe2d772ef53fdef51048df3eca7ca2a72ebe84071ee9434e313`、proof_chars=5312）。\n- 文件级：size=14835、sha256=`5e5432ffc69246c056358813328602633d90a3f7e169384d6c0251a6a5b9d779`、mtime=2026-11-24T21:29:17+08:00、共 8 行（v-000001/v-000002 判「有毛病」，v-000003 起「成立」）。\n\n## 回执 ③\n不适用：做法 (1) 一次成功，没有拒信。\n\n## 边界与保留（请照实读）\n- 这是更正**我自己**计划 history 里的归属，不是改别人的台账；证明稿 `manuscripts/F/f-proof-000003.md` 与 `stmt:000042` 的正文一个字未动，未送 V（不是新证明稿，也不涉命题正文变更）。\n- 回写用的 history 是我按行分段读回 `data/attack_plans.json` 第 2400–2650 行（50–76 行窗口，未触发观测层截断）逐字重建的；`table.update` 读回的行里两个 round=2 条目都在、round=1 的 11 步 `product_detail`、`proof_sha256`/三段 section hashes、`v_sign`、`delivery`、`self_assessment`、`best_partial`、`subgoals`、`budget` 全部保留。**但我只能按内容核对担保「语义与键集合未变」，不能担保与改前二进制逐字节一致**（pretty-print 的空白/键序可能不同）。",
+      "refs": [
+        "stmt:000042",
+        "verifications/000042.jsonl#v-000008"
+      ]
+    }
+  },
+  "task_id": "t-000236"
+}

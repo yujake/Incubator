@@ -1,0 +1,1625 @@
+===== page 1 =====
+Received: 7 January 2025
+Revised: 5 June 2025
+Accepted: 9 July 2025
+DOI: 10.1112/blms.70157
+Bulletin of the London
+Mathematical Society
+R E S E A RC H A RT I C L E
+Estimates on the decay of the Laplace–Pólya
+integral
+Gergely Ambrus1,2
+Barnabás Gárgyán1,3
+1Bolyai Institute, University of Szeged, Szeged, Hungary
+2HUN-REN Rényi Institute of Mathematics, Budapest, Hungary
+3Mathematics Institute, University of Warwick, Coventry, UK
+Correspondence
+Gergely Ambrus, Bolyai Institute,
+University of Szeged, Aradi vertanuk tere
+1, Szeged 6720, Hungary.
+Email: ambrus.gergely@renyi.hu
+Funding information
+European Research Council,
+Grant/Award Number: 882971 “Geoscape”
+Advanced Grant; National Research,
+Development and Innovation Fund,
+Ministry of Innovation and Technology of
+Hungary, Grant/Award Numbers:
+K-147145, K-147544, K-15015, KKP-13381,
+TKP2021-NVA-09; Ministry of Innovation
+and Technology NRDI Office, Artificial
+Intelligence National Laboratory,
+Grant/Award Number:
+RRF-2.3.1-21-2022-00004; New National
+Excellence Program of the Ministry for
+Culture and Innovation, Grant/Award
+Number: ÚNKP-23-2-SZTE-584; Warwick
+Mathematics Institute Centre for Doctoral
+Training; University of Warwick,
+Grant/Award Number: Chancellors’
+International Scholarship
+Abstract
+The
+Laplace–Pólya
+integral,
+defined
+by
+𝐽𝑛(𝑟) =
+1
+𝜋∫∞
+−∞sinc𝑛𝑡cos(𝑟𝑡) d𝑡, appears in several areas of
+mathematics. We study this quantity by combinatorial
+methods; accordingly, our investigation focuses on the
+values at integer 𝑟s. Our main result establishes a lower
+bound for the ratio 𝐽𝑛(𝑟+2)
+𝐽𝑛(𝑟)
+which extends and gener-
+alises the previous estimates of Lesieur and Nicolas [23],
+and provides a natural counterpart to the upper estimate
+established in our previous work [2]. We derive the state-
+ment by purely combinatorial, elementary arguments.
+As a corollary, we deduce that no subdiagonal central
+sections of the unit cube are extremal, apart from the
+minimal, maximal, and the main diagonal sections. We
+also prove several consequences for Eulerian numbers.
+M S C 2 02 0
+26D15, 52A38, 52A40 (primary), 05A20 (secondary)
+© 2025 The Author(s). Bulletin of the London Mathematical Society is copyright © London Mathematical Society. This is an open access
+article under the terms of the Creative Commons Attribution License, which permits use, distribution and reproduction in any medium,
+provided the original work is properly cited.
+3360
+wileyonlinelibrary.com/journal/blms
+Bull. London Math. Soc. 2025;57:3360–3379.
+===== page 2 =====
+ESTIMATES ON THE DECAY OF THE LAPLACE–PóLYA INTEGRAL
+3361
+1
+INTRODUCTION
+This article focuses on estimates of the Laplace–Pólya integral, defined by
+𝐽𝑛(𝑟) ∶= 1
+𝜋∫
+∞
+−∞
+sinc𝑛𝑡⋅cos(𝑟𝑡) d𝑡,
+(1.1)
+where 𝑛⩾1 is an integer, 𝑟∈ℝ, and sinc is the unnormalised cardinal sine function, that is,
+sinc 𝑥∶=
+⎧
+⎪
+⎨
+⎪⎩
+sin 𝑥
+𝑥
+,
+if 𝑥≠0,
+1,
+if 𝑥= 0.
+(1.2)
+As we illustrate in the next subsection, function (1.1) arises in various areas of mathematics, and
+through linking seemingly distant notions and quantities, it leads to interesting results in convex
+geometry as well as new, alternative proofs for results in enumerative combinatorics.
+1.1
+A brief historical overview
+The very first appearance of the function (1.1) is attributed to Laplace in the 19th century. In his
+prominent work on probability theory [22], he pointed out that the probability density function of
+the sum of 𝑛independent random variables which are uniformly distributed in [−1, 1] is given by
+half of the Laplace–Pólya integral (1.1). Formally, if 𝑋1, … , 𝑋𝑛are i.i.d. uniform random variables
+on [−1, 1], and 𝑓𝑋(.) denotes the probability density function of a continuous random variable 𝑋,
+then for 𝑛⩾2, or 𝑛= 1 and 𝑟≠±1,
+𝑓∑𝑛
+𝑖=1 𝑋𝑖(𝑟) = 1
+2𝐽𝑛(𝑟),
+(1.3)
+nowadays, this is known as an Irwin–Hall distribution. Laplace [22, Section 42, Chapter III] also
+proved that the probability density function above may also be expressed as a finite sum:
+𝐽𝑛(𝑟) =
+1
+2𝑛−1(𝑛−1)!
+⌊𝑛+𝑟
+2 ⌋
+∑
+𝑖=0
+(−1)𝑖
+(
+𝑛
+𝑖
+)
+(𝑛+ 𝑟−2𝑖)𝑛−1,
+(1.4)
+even though evaluating this formula becomes computationally difficult for large 𝑛s. Since
+Laplace’s time, justifying Equation (1.4) has become a standard exercise; see, for example, [7,
+Appendix III, Example 22; 36, Problem 1928]. It can also be found in several integral tables, such
+as [5, Formula 1.6(11); 13, Formula 3.836.5].
+Neither formula (1.1) nor (1.4) indicates that the Laplace–Pólya integral equals zero for |𝑟| ⩾𝑛,
+yet this fact readily follows from (1.3). Also note that since the probability density function
+of the sum of random variables is given by the convolution of their probability density func-
+tions, the closed support of (1.3) is [−𝑛, 𝑛], and its values may be obtained by calculating the
+respective convolutions.
+ 14692120, 2025, 11, Downloaded from https://londmathsoc.onlinelibrary.wiley.com/doi/10.1112/blms.70157 by University Of Szeged, Wiley Online Library on [02/12/2025]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+===== page 3 =====
+3362
+AMBRUS and GÁRGYÁN
+The story of the integral (1.1) continues in the early 20th century, with Pólya’s work [27] related
+to statistical mechanics. Let 𝑄𝑛= [ −1
+2, 1
+2
+]𝑛denote the centred 𝑛-dimensional cube, where 𝑛⩾2.
+Hyperplanes through the origin 𝟎𝑛of ℝ𝑛will be called central; they are of the form 𝐮⟂where
+𝐮∈𝑆𝑛−1 is a unit normal vector (as usual, 𝑆𝑛−1 denotes the unit sphere in ℝ𝑛). We introduce the
+central section function as the volume of the section of the cube cut by 𝐮⟂:
+𝜎(𝐮) = Vol𝑛−1
+(𝑄𝑛∩𝐮⟂)
+(1.5)
+for a unit vector 𝐮∈𝑆𝑛−1. Pólya [27] showed that this quantity may be evaluated by the classical
+integral formula
+𝜎(𝐮) = 1
+𝜋∫
+∞
+−∞
+𝑛
+∏
+𝑖=1
+sinc(𝑢𝑖𝑡) d𝑡,
+(1.6)
+where 𝐮= (𝑢1, … , 𝑢𝑛).
+A unit vector in 𝑆𝑛−1 is said to be a 𝑘-diagonal direction if it is parallel to the main diagonal
+of a 𝑘-dimensional face of 𝑄𝑛. Let 𝟏𝑛denote the 𝑛-dimensional vector (1, … , 1). The standard
+𝑘-diagonal direction is given by
+𝐝𝑛,𝑘∶=
+1
+√
+𝑘
+(𝟏𝑘, 𝟎𝑛−𝑘)
+(1.7)
+for 𝑘= 1, … , 𝑛. Up to permuting the coordinates and flipping their signs, all 𝑘-diagonal directions
+are of the above form. Such normal vectors and the corresponding orthogonal central sections of
+𝑄𝑛will simply be called diagonal; 𝐝𝑛,𝑛is the main diagonal direction, while 𝐝𝑛,𝑘is a subdiagonal
+for 1 ⩽𝑘⩽𝑛−1. Based on (1.6), the volume of central diagonal sections can be expressed by the
+central values of the Laplace–Pólya integral: for all 𝑘= 1, … , 𝑛,
+𝜎(𝐝𝑛,𝑘) =
+√
+𝑘𝐽𝑘(0).
+(1.8)
+Furthermore,
+√
+𝑛𝐽𝑛(𝑟) equals to the volume of the main diagonal section of 𝑄𝑛that lies at dis-
+tance
+𝑟
+2
+√
+𝑛from the centre; see [2, Formula (2.9)]. We also note that König and Koldobsky [21]
+proved formulae for the surface area of cube sections that can be interpreted in terms of the
+Laplace–Pólya integrals.
+Hadwiger [15] and later Hensley [17] showed that the central section function 𝜎(𝐮) (cf. (1.5))
+is globally minimal over 𝑆𝑛−1 when 𝐮= 𝐝𝑛,1. In his seminal article, Ball [3] proved that 𝐮= 𝐝𝑛,2
+constitutes a global maximum:
+√
+𝑛𝐽𝑛(0) ⩽
+√
+2
+for every 𝑛⩾1. As 𝑛→∞, we also have
+lim
+𝑛→∞
+√
+𝑛𝐽𝑛(0) =
+√
+6
+𝜋;
+ 14692120, 2025, 11, Downloaded from https://londmathsoc.onlinelibrary.wiley.com/doi/10.1112/blms.70157 by University Of Szeged, Wiley Online Library on [02/12/2025]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+===== page 4 =====
+ESTIMATES ON THE DECAY OF THE LAPLACE–PóLYA INTEGRAL
+3363
+TA B L E 1
+Central values 𝐽𝑛(0) for 𝑛= 2, … , 8.
+𝑛
+2
+3
+4
+5
+6
+7
+8
+𝐽𝑛(0)
+1
+3
+4
+2
+3
+115
+192
+11
+20
+5887
+11 520
+151
+315
+see [22, 27]. Furthermore, Bartha, Fodor and González Merino [4] proved that the convergence is
+strictly monotone increasing for 𝑛⩾3:
+√
+𝑛
+𝑛+ 1 ⩽𝐽𝑛+1(0)
+𝐽𝑛(0)
+(1.9)
+for every 𝑛⩾3. This improves upon a bound of Lesieur and Nicolas [23] who, in their work
+regarding maxima of Eulerian numbers of the first kind, showed that for even positive values
+of 𝑛,
+𝑛
+𝑛+ 1 < 𝐽𝑛+2(0)
+𝐽𝑛(0)
+< 𝑛+ 1
+𝑛+ 2.
+(1.10)
+Recall that the Eulerian number 𝐴(𝑚, 𝑙) for integers 𝑚, 𝑙⩾1 is defined as the number of permu-
+tations of the set {1, … , 𝑚} in which exactly 𝑙−1 elements are greater than the previous element.
+The connection to the Laplace–Pólya integral is provided by the formula
+𝐴(𝑚, 𝑙) = 𝑚!𝐽𝑚+1(2𝑙−𝑚−1);
+for more details, see Section 4.
+In the 20th century, applications in telecommunication raised the need to calculate integrals in
+the vein of (1.1) more efficiently. One way to evaluate 𝐽𝑛(0) is through its power series expansion.
+Determining asymptotic coefficients began with Silberstein’s work [33] during WW2. Unfortu-
+nately, his paper contained several errors that had later been addressed in a series of articles [8,
+12, 14, 26]. Finally, the correct coefficients up to order 10 were published by Medhurst and
+Roberts [24]. For central values (that is, for 𝑟= 0), the asymptotic expansion up to order 3 reads
+as
+𝐽𝑛(0) =
+√
+6
+𝜋𝑛
+(
+1 −
+3
+20𝑛−
+13
+1120𝑛2 +
+27
+3200𝑛3 + 𝑂
+( 1
+𝑛4
+))
+.
+Finer estimates were established in [19, 25, 32]. The exact values of 𝐽𝑛(0) were calculated by
+Harumi, Katsura and Wrench [16] up to 𝑛= 30, and by Medhurst and Roberts [24] up to 𝑛= 100
+(see Table 1 for the initial segment of the sequence). Later, Butler [9] and Fettis [11]† presented
+† In [11, Formula (7)] the factor 2
+𝜋in the second row should be 2
+𝑛and should appear on the right-hand side of the
+equality sign.
+ 14692120, 2025, 11, Downloaded from https://londmathsoc.onlinelibrary.wiley.com/doi/10.1112/blms.70157 by University Of Szeged, Wiley Online Library on [02/12/2025]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+===== page 5 =====
+3364
+AMBRUS and GÁRGYÁN
+further methods based on Poisson’s summation formula to evaluate the Laplace–Pólya inte-
+gral efficiently.
+The easiest way to calculate exact values of 𝐽𝑛(𝑟) is based on its recursive properties. Medhurst
+and Roberts [24] proved ‘vertical’ recurrence relations for even and odd values of 𝑟, separately.
+Our work is based on the recursion proved by Thompson [35, p. 331, line 2]:
+𝐽𝑛(𝑟) =
+𝑛+ 𝑟
+2(𝑛−1)𝐽𝑛−1(𝑟+ 1) +
+𝑛−𝑟
+2(𝑛−1)𝐽𝑛−1(𝑟−1)
+(1.11)
+for 𝑛⩾3. Although this formula is valid for all 𝑟∈ℝ, we will use it only for integer values
+throughout this work. Since 𝐽𝑛(𝑟) is even in 𝑟, we specifically derive that
+𝐽𝑛(0) =
+𝑛
+𝑛−1𝐽𝑛−1(1)
+(1.12)
+for 𝑛⩾3. Combined with (1.11) this provides a simple way to calculate the central values 𝐽𝑛(0) for
+small values of 𝑛; see Table 1.
+1.2
+New results
+The study of cube sections necessitates to analyse the decay of the sequence (𝐽𝑛(0))∞
+𝑛=1, see [2]. By
+the recurrence relations (1.11) and (1.12), this is equivalent to the study of the value of the Laplace–
+Pólya integral at integers. In our previous work [2], we gave an upper bound on the decay of the
+two-step ratio of the Laplace–Pólya integral.
+Theorem 1.1 [2, Theorem 1.4]. Let 𝑛⩾4 and 𝑟be integers satisfying −1 ⩽𝑟⩽𝑛−2. Then
+𝐽𝑛(𝑟+ 2)
+𝐽𝑛(𝑟)
+⩽𝑑𝑛,𝑟,
+(1.13)
+where
+𝑑𝑛,𝑟=
+(𝑛−𝑟)
+(𝑛+ 𝑟+ 2) ⋅(𝑛−𝑟−2)(𝑛−𝑟+ 2)
+(𝑛+ 𝑟)(𝑛+ 𝑟+ 4)
+.
+(1.14)
+In our present work, we complement the above result with a corresponding lower estimate.
+Theorem 1.2. Let 𝑛⩾4 and 𝑟be integers satisfying −1 ⩽𝑟⩽𝑛−2. Then
+𝑐𝑛,𝑟⩽𝐽𝑛(𝑟+ 2)
+𝐽𝑛(𝑟)
+,
+(1.15)
+where
+𝑐𝑛,𝑟=
+(𝑛−𝑟)2
+(𝑛+ 𝑟+ 2)2 ⋅(4𝑛−7𝑟−8)(4𝑛+ 3𝑟+ 6)
+(4𝑛+ 7𝑟+ 6)(4𝑛−3𝑟)
+.
+(1.16)
+Moreover, equality holds in (1.15) if and only if 𝑟= −1.
+ 14692120, 2025, 11, Downloaded from https://londmathsoc.onlinelibrary.wiley.com/doi/10.1112/blms.70157 by University Of Szeged, Wiley Online Library on [02/12/2025]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+===== page 6 =====
+ESTIMATES ON THE DECAY OF THE LAPLACE–PóLYA INTEGRAL
+3365
+Note that, although Theorem 1.2 holds for the entire range −1 ⩽𝑟⩽𝑛−2, the bound (1.16)
+remains non-negative only for −1 ⩽𝑟⩽⌊4𝑛−8
+7
+⌋. Consequently, the estimate becomes trivial for
+larger values of 𝑟.
+As a direct consequence of Theorems 1.1 and 1.2, we obtain the following bounds.
+Corollary 1.3. For 𝑛⩾4 we have
+𝑛(𝑛−2)
+(𝑛+ 2)2 < 𝐽𝑛(2)
+𝐽𝑛(0) ⩽𝑛−2
+𝑛+ 4.
+(1.17)
+Based on (1.11) and (1.12), this leads to the following estimate for central values:
+𝑛
+𝑛+ 1 < 𝐽𝑛+2(0)
+𝐽𝑛(0)
+⩽(𝑛+ 2)(𝑛2 + 2𝑛−2)
+𝑛(𝑛+ 1)(𝑛+ 4)
+,
+(1.18)
+where 𝑛⩾2 for the lower bound, and 𝑛⩾4 for the upper bound.
+The lower bound of (1.18) for 𝑛= 2, 3 follows from direct substitution based on Table 1. The
+upper bounds were established in [2]. Moreover, we note that (1.9) leads to the inequality
+√
+𝑛
+𝑛+ 2 < 𝐽𝑛+2(0)
+𝐽𝑛(0)
+which is slightly stronger than the lower estimates in Corollary 1.3.
+We readily see that the lower bound in (1.18) extends the lower estimate of (1.10) to all values of
+𝑛⩾2, and also provides a simpler, purely combinatorial proof for even values of 𝑛. We note that
+L. Pournin managed to extend the upper estimate of (1.10) to all integers 𝑛≥136 by utilising the
+bound of [29, Theorem 2.1]. In fact, he showed that for those values of 𝑛, the stronger inequality
+𝐽𝑛+2(0)
+𝐽𝑛(0)
+<
+√
+𝑛
+𝑛+ 2
+(
+1 +
+1
+3𝑛2
+)
+holds as well. We believe that the extension of the upper bound of (1.10) should also be provable
+by combinatorial methods, which would amount to verifying the inequality
+𝐽𝑛(2)
+𝐽𝑛(0) ⩽𝑛(𝑛2 −2)
+(𝑛+ 2)3
+(1.19)
+for all 𝑛⩾2 — for even values of 𝑛, this follows from the results in [23]. The relationship between
+the quantities in (1.3) and in (1.19) is plotted in Figure 1.
+In Section 3 we prove an application of Theorem 1.2 with respect to the volume of central sec-
+tions of the cube 𝑄𝑛. Theorem 1.1 in [30] states that the diagonal sections of 𝑄𝑛orthogonal to
+𝐝𝑛,𝑘, where 𝑘= 4, … , 𝑛, are strictly locally maximal with respect to the volume function, when-
+ever 𝑛⩾4. In our previous work [2], we gave an alternative proof for this statement in the case
+𝑘= 𝑛. that is, for the main diagonal sections, based on Theorem 1.1. In Section 3, using the esti-
+mates from Corollary 1.3, we point out that Pournin’s argument is unfortunately based on an
+ 14692120, 2025, 11, Downloaded from https://londmathsoc.onlinelibrary.wiley.com/doi/10.1112/blms.70157 by University Of Szeged, Wiley Online Library on [02/12/2025]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+===== page 7 =====
+3366
+AMBRUS and GÁRGYÁN
+F I G U R E 1
+Difference between the central ratio and its estimates.
+incorrect formula† by demonstrating that the subdiagonal sections are not locally extremal for
+any 3 ⩽𝑘⩽𝑛−1:
+Theorem 1.4. For any 𝑛⩾4, the subdiagonal sections of 𝑄𝑛of order 3 ⩽𝑘⩽𝑛−1 do not have
+locally extremal volumes among the central sections of 𝑄𝑛.
+Finally, in Section 4, we elaborate on the connection between Eulerian numbers and the
+Laplace–Pólya integral. Continuing the work of Lesieur and Nicolas [23], we establish estimates
+for the ratios of consecutive Eulerian numbers (Corollary 4.1) and prove convexity properties of
+those (Propositions 4.3 and 4.4).
+2
+LOWER BOUND ON THE TWO-STEP RATIO
+Proof of Theorem 1.2. Suppose that 𝑟⩾−1 is an integer. We will proceed by induction on 𝑛, with
+𝑛= 4 being the base case.
+The values of 𝐽4(𝑟) for 𝑟= −1, … , 4 can be calculated directly using the formula (1.4). By
+substituting these, the 𝑛= 4 case of (1.15) is easy to check; see Table 2.
+For later reference, note that (1.16) shows that in the range −1 ⩽𝑟⩽𝑛−2, the bound 𝑐𝑛,𝑟is
+positive if and only if 𝑟< 4𝑛−8
+7 .
+Suppose now that for some 𝑛⩾4, (1.15) holds for each −1 ⩽𝑟⩽𝑛−2. We need to show that
+𝑐𝑛+1,𝑟𝐽𝑛+1(𝑟) ⩽𝐽𝑛+1(𝑟+ 2)
+(2.1)
+for each 𝑟with −1 ⩽𝑟⩽𝑛−1, with strict inequality for 0 ⩽𝑟.
+For 𝑟= −1, equality holds above because 𝑐𝑛,−1 =
+𝐽𝑛(1)
+𝐽𝑛(−1) = 1 for each 𝑛⩾4. Also, if 𝑟⩾4𝑛−4
+7 ,
+then 𝑐𝑛+1,𝑟⩽0, hence (1.15) is trivially satisfied.
+† The mistake in [30] is on p. 570, where a summand of 2𝜆= −
+√
+𝑛𝜕
+𝜕𝑎2
+𝑑
+𝑉
+‖𝑎‖ is missing from the right side of the last equation
+on the page. This issue was addressed in the Corrigendum [31], where the correct results are proved.
+ 14692120, 2025, 11, Downloaded from https://londmathsoc.onlinelibrary.wiley.com/doi/10.1112/blms.70157 by University Of Szeged, Wiley Online Library on [02/12/2025]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+===== page 8 =====
+ESTIMATES ON THE DECAY OF THE LAPLACE–PóLYA INTEGRAL
+3367
+TA B L E 2
+Two sides of the inequality (1.15) for 𝑛= 4 and 𝑟= −1, … , 2.
+𝑟
+−1
+0
+1
+2
+𝐽4(𝑟+2)
+𝐽4(𝑟)
+1
+1
+4
+1
+23
+0
+𝑐4,𝑟
+1
+2
+9
+225
+18 473
+−
+7
+240
+Assume that 0 ⩽𝑟< 4𝑛−4
+7 . Then 𝑐𝑛,𝑟−1 > 0, as noted before. By (1.11) we have
+𝐽𝑛+1(𝑟+ 2) = 𝑛+ 𝑟+ 3
+2𝑛
+𝐽𝑛(𝑟+ 3) + 𝑛−𝑟−1
+2𝑛
+𝐽𝑛(𝑟+ 1),
+𝐽𝑛+1(𝑟) = 𝑛+ 𝑟+ 1
+2𝑛
+𝐽𝑛(𝑟+ 1) + 𝑛−𝑟+ 1
+2𝑛
+𝐽𝑛(𝑟−1).
+Applying the induction hypothesis for the pairs (𝑛, 𝑟+ 1) and (𝑛, 𝑟−1) shows that
+𝑐𝑛,𝑟+1𝐽𝑛(𝑟+ 1) ⩽𝐽𝑛(𝑟+ 3) and
+𝐽𝑛(𝑟−1) ⩽
+1
+𝑐𝑛,𝑟−1
+𝐽𝑛(𝑟+ 1).
+Thus, (2.1) follows from the inequality
+𝑐𝑛+1,𝑟
+(
+𝑛+ 𝑟+ 1
+2𝑛
++ 𝑛−𝑟+ 1
+2𝑛
+⋅
+1
+𝑐𝑛,𝑟−1
+)
+< 𝑛+ 𝑟+ 3
+2𝑛
+𝑐𝑛,𝑟+1 + 𝑛−𝑟−1
+2𝑛
+,
+which is equivalent to
+0 < (𝑛+ 𝑟+ 3)𝑐𝑛,𝑟+1 + (𝑛−𝑟−1) −𝑐𝑛+1,𝑟
+(
+(𝑛+ 𝑟+ 1) + (𝑛−𝑟+ 1)
+1
+𝑐𝑛,𝑟−1
+)
+.
+(2.2)
+Substituting (1.16), the right-hand side can be combined to a single fraction with the numerator:
+8(𝑟+ 1)(128𝑛6 + 128𝑛5(41𝑟2 + 82𝑟+ 36) + 8𝑛4(1807𝑟2 + 3614𝑟+ 1585)−
+−4𝑛3(1018𝑟4 + 4072𝑟3 + 5441𝑟2 + 2738𝑟+ 45) −4𝑛2(958𝑟4 + 3832𝑟3 + 9243𝑟2 + 10 822𝑟+ 3697)+
++3𝑛(𝑟+ 1)2(455𝑟4 + 1820𝑟3 + 2299𝑟2 + 958𝑟−1476) −9(𝑟+ 1)2(91𝑟4 + 364𝑟3 −17𝑟2 −762𝑟−220)
+)
+,
+(2.3)
+and denominator
+(4𝑛−7𝑟−1)(4𝑛−3𝑟−3)(4𝑛−3𝑟+ 4)(𝑛+ 𝑟+ 3)2(4𝑛+ 3𝑟+ 3)(4𝑛+ 7𝑟+ 10)(4𝑛+ 7𝑟+ 13).
+(2.4)
+Clearly, (2.4) is positive as 𝑟< 4𝑛−1
+7
+and hence all factors are strictly positive.
+ 14692120, 2025, 11, Downloaded from https://londmathsoc.onlinelibrary.wiley.com/doi/10.1112/blms.70157 by University Of Szeged, Wiley Online Library on [02/12/2025]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+===== page 9 =====
+3368
+AMBRUS and GÁRGYÁN
+Thus, it suffices to prove the positivity of (2.3). To that end, introduce the bivariate polynomial
+𝑝𝑛(𝑠) = 𝛼𝑛𝑠3 + 𝛽𝑛𝑠2 + 𝛾𝑛𝑠+ 𝛿𝑛,
+whose coefficients are
+𝛼𝑛= 1365𝑛−819,
+𝛽𝑛= −4072𝑛3 −3832𝑛2 −1293𝑛+ 5067,
+𝛾𝑛= 5248𝑛5 + 14 456𝑛4 + 2668𝑛3 −13 980𝑛2 −4500𝑛−2268,
+𝛿𝑛= 128𝑛6 −640𝑛5 −1776𝑛4 + 1224𝑛3 + 3024𝑛2.
+By direct calculation, the quantity (2.3) simplifies to
+8(𝑟+ 1)𝑝𝑛
+((𝑟+ 1)2).
+We will show that 𝑝𝑛(𝑠) > 0 for any 1 ⩽𝑠. To that end, note that
+𝑝𝑛(1) = 128𝑛6 + 4608𝑛5 + 12 680𝑛4 −180𝑛3 −14 788𝑛2 −4428𝑛+ 1980 =
+= 4(𝑛−1)(𝑛+ 1)(𝑛+ 33)(2𝑛+ 5)(4𝑛−1)(4𝑛+ 3)>
+> 0
+(2.5)
+for all 𝑛⩾4. Furthermore,
+𝑝′
+𝑛(𝑠) = 3𝛼𝑛𝑠2 + 2𝛽𝑛𝑠+ 𝛾𝑛
+whose leading coefficient 3𝛼𝑛is strictly positive for all 𝑛⩾1. The discriminant of the above
+quadratic polynomial is given by
+4𝛽2
+𝑛−12𝛼𝑛𝛾𝑛= −19 637 504𝑛6 −60 380 704𝑛5 + 199 229 392𝑛4 + 129 789 120𝑛3−
+−21 331 996𝑛2 −59 489 208𝑛+ 80 408 052 <
+< 108(−𝑛6 −6𝑛5 + 21𝑛4 + 18𝑛3) =
+= 108(3 −𝑛)𝑛3(𝑛2 + 9𝑛+ 6) < 0
+for 𝑛⩾4. Thus, 𝑝′
+𝑛(𝑠) > 0 for all 𝑛⩾1 and 𝑠⩾1. Combining with (2.5), we derive that 𝑝𝑛(𝑠) > 0
+for all 𝑛⩾4 and 𝑠⩾1, which completes the proof.
+□
+3
+LOCAL MAXIMALITY OF DIAGONAL SECTIONS
+Before turning to the proof of Theorem 1.4, we briefly summarise a few technical details. Recall
+that we may evaluate the central section function 𝜎(𝐮) (cf. (1.5)) for unit vectors 𝐮∈𝑆𝑛−1 via the
+integral (1.6). Note that this integral formula allows us to extend the support of 𝜎(.) to the whole
+ 14692120, 2025, 11, Downloaded from https://londmathsoc.onlinelibrary.wiley.com/doi/10.1112/blms.70157 by University Of Szeged, Wiley Online Library on [02/12/2025]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+===== page 10 =====
+ESTIMATES ON THE DECAY OF THE LAPLACE–PóLYA INTEGRAL
+3369
+ℝ𝑛— yet, for 𝐯∉𝑆𝑛−1, the quantity 𝜎(𝐯) does not express the volume of the central section of 𝑄𝑛
+anymore: for 𝐯∈ℝ𝑛⧵{𝟎𝑛},
+𝜎(𝐯) = 1
+𝜋∫
+∞
+−∞
+𝑛
+∏
+𝑖=1
+sinc(𝑣𝑖𝑡) d𝑡= 1
+|𝐯|Vol𝑛−1
+(𝑄𝑛∩𝐯⟂);
+see [2, Section 2].
+It can be shown that the function 𝜎(𝐯) defined above is differentiable at points 𝐯∈ℝ𝑛with at
+least three non-zero coordinates (see Pournin’s works [28, 30, Corollary 2.3]), and for such 𝐯=
+(𝑣1, … , 𝑣𝑛) ∈ℝ𝑛,
+𝜕
+𝜕𝑣𝑗
+𝜎(𝐯) = 1
+𝜋∫
+∞
+−∞
+∏
+𝑖≠𝑗
+sinc(𝑣𝑖𝑡) ⋅
+cos(𝑣𝑗𝑡) −sinc(𝑣𝑗𝑡)
+𝑣𝑗
+d𝑡
+(3.1)
+for any 𝑗= 1, … , 𝑛(cf. [2, formula (2.11)]). Furthermore, if 𝐯has at least four non-zero coordinates,
+then 𝜎(𝐯) is twice differentiable by the Newton–Leibniz rule applied to (3.1); cf. [30, Corollary 2.4].
+Critical points of 𝜎(.) on 𝑆𝑛−1 are called critical directions — note that these correspond to
+central sections which constitute critical points of the volume function. Based on the Lagrange
+multiplier method, the following characterisation was given in [1] (for an alternative proof, see
+[18]):
+Proposition 3.1 [1, Formula (2.12)]. The unit vector 𝐮= (𝑢1, … , 𝑢𝑛) ∈𝑆𝑛−1 with at least three non-
+zero coordinates is a critical direction with respect to the central section function 𝜎(𝐮) if and only if
+𝜎(𝐮) =
+1
+𝜋(1 −𝑢2
+𝑗) ∫
+∞
+−∞
+∏
+𝑖≠𝑗
+sinc(𝑢𝑖𝑡) ⋅cos(𝑢𝑗𝑡) d𝑡
+(3.2)
+holds for each 𝑗= 1, … , 𝑛.
+The argument also yields that at such critical directions 𝐮∈𝑆𝑛−1,
+𝜕
+𝜕𝑢𝑗
+𝜎(𝐮) = −𝜎(𝐮) ⋅𝑢𝑗,
+(3.3)
+see [1, Proof of Theorem 1]. Accordingly, the Lagrange function
+Λ(𝐯) = 𝜎(𝐯) +̃ 𝜆⋅(|𝐯|2 −1)
+(3.4)
+defined on ℝ𝑛has a stationary point at 𝐯= 𝐮∈𝑆𝑛−1 with the Lagrange multiplier̃
+𝜆= 𝜎(𝐮)
+2
+.
+(3.5)
+Proof of Theorem 1.4. First, we assume that 𝑘⩾4 — this will ensure the required differentiability
+properties. In the last part of the proof, we will handle the 𝑘= 3 case separately.
+Consider now the subdiagonal directions 𝐝𝑛,𝑘=
+1
+√
+𝑘(𝟏𝑘, 𝟎𝑛−𝑘) for arbitrary 𝑘= 4, … , 𝑛−1.
+Since Proposition 3.1 and (1.12) imply that 𝐝𝑛,𝑘is a critical direction, we may apply formulae
+ 14692120, 2025, 11, Downloaded from https://londmathsoc.onlinelibrary.wiley.com/doi/10.1112/blms.70157 by University Of Szeged, Wiley Online Library on [02/12/2025]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+===== page 11 =====
+3370
+AMBRUS and GÁRGYÁN
+(3.3)–(3.5). We will show that the function 𝜎(𝐯) has no local extremum at 𝐯= 𝐝𝑛,𝑘subject to
+the constraint |𝐯| = 1. This is a constrained local optimisation problem which can be solved by
+studying the bordered Hessian matrix, that is, the Hessian of the Lagrange function Λ(𝐯) defined
+by (3.4).
+Based on (3.4) and (3.5), one can calculate the bordered Hessian matrix 𝐻(Λ(𝐯)) for general 𝐯∈
+ℝ𝑛where 𝜎(.) is twice differentiable. Using (3.1) and the subsequent remark, the Newton–Leibniz
+rule implies that for such 𝐯, 𝐻(Λ(𝐯)) takes the following form:
+𝐻(Λ(𝐯)) =
+⎡
+⎢
+⎢
+⎢
+⎢
+⎢⎣
+0
+2𝑣1
+2𝑣2
+…
+2𝑣𝑛
+2𝑣1
+2𝑣2
+⋮
+2𝑣𝑛
+𝜕2𝜎
+𝜕𝑣𝑗1𝜕𝑣𝑗2
+(𝐯) + 𝜎(𝐯) ⋅
+{
+0,
+if 𝑗1 ≠𝑗2
+1,
+if 𝑗1 = 𝑗2
+⎤
+⎥
+⎥
+⎥
+⎥
+⎥⎦
+=
+⎡
+⎢
+⎢
+⎢
+⎢
+⎢⎣
+0
+2𝑣1
+2𝑣2
+…
+2𝑣𝑛
+2𝑣1 𝛽1(𝐯) 𝛾1,2(𝐯) … 𝛾1,𝑛(𝐯)
+2𝑣2 𝛾2,1(𝐯) 𝛽2(𝐯) … 𝛾2,𝑛(𝐯)
+⋮
+⋮
+⋮
+⋱
+⋮
+2𝑣𝑛𝛾𝑛,1(𝐯) 𝛾𝑛,2(𝐯) … 𝛽𝑛(𝐯)
+⎤
+⎥
+⎥
+⎥
+⎥
+⎥⎦
+,
+(3.6)
+where
+𝛽𝑗(𝐯) = 1
+𝜋∫
+∞
+−∞
+∏
+𝑖≠𝑗
+sinc(𝑣𝑖𝑡) ⋅
+(
+2
+𝑣2
+𝑗
+(
+sinc(𝑣𝑗𝑡) −cos(𝑣𝑗𝑡)
+)
+−
+(𝑣𝑗𝑡)2
+𝑣2
+𝑗
+sinc(𝑣𝑗𝑡) + sinc(𝑣𝑗𝑡)
+)
+d𝑡
+(3.7)
+along the diagonal 𝑗= 𝑗1 = 𝑗2 with 1 ⩽𝑗⩽𝑛, and
+𝛾𝑗1,𝑗2(𝐯) = 1
+𝜋∫
+∞
+−∞
+∏
+𝑖≠𝑗1,𝑗2
+sinc(𝑣𝑖𝑡) ⋅
+cos(𝑣𝑗1𝑡) −sinc(𝑣𝑗1𝑡)
+𝑣𝑗1
+⋅
+cos(𝑣𝑗2𝑡) −sinc(𝑣𝑗2𝑡)
+𝑣𝑗2
+d𝑡
+(3.8)
+for the off-diagonal entries, that is, 𝑗1 ≠𝑗2, 1 ⩽𝑗1, 𝑗2 ⩽𝑛.
+Substitute now 𝐯= 𝐝𝑛,𝑘. Let 𝐻𝑚,𝑘denote the principal upper left minor of 𝐻(Λ(𝐝𝑛,𝑘)) of order
+𝑚for† 𝑚= 3, … , 𝑛+ 1. We will apply the second derivative test for constrained local extrema [34,
+Theorem 1]. This implies that if the sequence 𝐻3,𝑘, … , 𝐻𝑛+1,𝑘contains two non-zero consecutive
+elements of the same sign as well as two non-zero consecutive elements with alternating sign, then
+𝜎(.) does not have a local extremum at 𝐝𝑛,𝑘on the constraint set 𝑆𝑛−1. We will prove that this prop-
+erty holds for each 𝑘= 4, … , 𝑛−1, which shows that these cases do not represent local extrema.
+(Besides differentiability issues, an additional reason for treating the 𝑘= 3 case separately is that
+the second derivative test is inconclusive then.)
+Integrating by substitution for 𝑣𝑗𝑡in (3.7) and (3.8), applying the identity sin2 𝑡= 1−cos(2𝑡)
+2
+and
+employing (1.11) repeatedly results in the formulae
+𝛽𝑗(𝐝𝑛,𝑘) =
+√
+𝑘
+𝜋⋅∫
+∞
+−∞
+(sinc𝑘−1 𝑡) ⋅(2𝑘(sinc 𝑡−cos 𝑡) −𝑘𝑡2 sinc 𝑡+ sinc 𝑡) d𝑡=
+=
+√
+𝑘⋅
+(
+(2𝑘+ 1)𝐽𝑘(0) −2𝑘𝐽𝑘−1(1) −𝑘
+2 𝐽𝑘−2(0) + 𝑘
+2 𝐽𝑘−2(2)
+)
+=
+=
+√
+𝑘⋅
+(((2𝑘+ 1)𝑘
+2(𝑘−1) −𝑘−𝑘
+2
+)
+⋅𝐽𝑘−2(0) +
+(
+(2𝑘+ 1)𝑘2
+2(𝑘−2)(𝑘−1) −
+𝑘2
+(𝑘−2) + 𝑘
+2
+)
+⋅𝐽𝑘−2(2)
+)
+=
+=
+𝑘
+3
+2
+2(𝑘−1) ⋅
+(
+(4 −𝑘)𝐽𝑘−2(0) + 𝑘2 + 2
+𝑘−2 𝐽𝑘−2(2)
+)
+† The upper bound of 𝑚in [2, Section 4] should read as 𝑛+ 1, like in the present argument, instead of 𝑛.
+ 14692120, 2025, 11, Downloaded from https://londmathsoc.onlinelibrary.wiley.com/doi/10.1112/blms.70157 by University Of Szeged, Wiley Online Library on [02/12/2025]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+===== page 12 =====
+ESTIMATES ON THE DECAY OF THE LAPLACE–PóLYA INTEGRAL
+3371
+for any 𝑗= 1, … , 𝑘, and
+𝛾𝑗1,𝑗2(𝐝𝑛,𝑘) = 𝑘
+3
+2
+𝜋⋅∫
+∞
+−∞
+(
+sinc𝑘−2 𝑡
+)
+⋅(cos2 𝑡−2 sinc 𝑡⋅cos 𝑡+ sinc2 𝑡) d𝑡=
+= 𝑘
+3
+2 ⋅
+(
+𝐽𝑘(0) −2𝐽𝑘−1(1) + 1
+2𝐽𝑘−2(0) + 1
+2𝐽𝑘−2(2)
+)
+=
+= 𝑘
+3
+2 ⋅
+((
+𝑘2
+2(𝑘−2)(𝑘−1) −
+𝑘
+𝑘−2 + 1
+2
+)
+𝐽𝑘−2(2) +
+(
+𝑘
+2(𝑘−1) −1 + 1
+2
+)
+⋅𝐽𝑘−2(0)
+)
+=
+=
+𝑘
+3
+2
+2(𝑘−1) ⋅(𝐽𝑘−2(0) −𝐽𝑘−2(2))
+for 𝑗1 ≠𝑗2, 1 ⩽𝑗1, 𝑗2 ⩽𝑘. Moreover, based on the limits
+lim
+𝑣𝑗→0
+cos(𝑣𝑗𝑡) −sinc(𝑣𝑗𝑡)
+𝑣𝑗
+= 0
+and
+lim
+𝑣𝑗→0
+2
+𝑣2
+𝑗
+(sinc(𝑣𝑗𝑡) −cos(𝑣𝑗𝑡)) = 2𝑡2
+3 ,
+for any 𝑗= 𝑘+ 1, … , 𝑛we have
+𝛽𝑗(𝐝𝑛,𝑘) =
+√
+𝑘
+𝜋∫
+∞
+−∞
+sinc𝑘𝑡⋅
+(
+2𝑘𝑡2
+3
+−𝑘𝑡2 + 1
+)
+d𝑡=
+=
+√
+𝑘
+(
+𝐽𝑘(0) −𝑘
+6 𝐽𝑘−2(0) + 𝑘
+6 𝐽𝑘−2(2)
+)
+=
+=
+√
+𝑘
+((
+𝑘2
+2(𝑘−2)(𝑘−1) −𝑘
+6
+)
+𝐽𝑘−2(0) +
+(
+𝑘
+2(𝑘−1) + 𝑘
+6
+)
+𝐽𝑘−2(2)
+)
+=
+=
+𝑘
+3
+2
+6(𝑘−1)
+(
+(4 −𝑘)𝐽𝑘−2(0) + 𝑘2 + 2
+𝑘−2 𝐽𝑘−2(2)
+)
+and 𝛾𝑗1,𝑗2(𝐝𝑛,𝑘) = 0 for 𝑗1 ≠𝑗2 and 𝑗1 ⩾𝑘+ 1 or 𝑗2 ⩾𝑘+ 1. In conclusion, (3.6) shows that
+𝐻(Λ(𝐝𝑛,𝑘)) is of the form
+𝐻
+(
+Λ(𝐝𝑛,𝑘)
+)
+=
+⎡
+⎢
+⎢
+⎢
+⎢
+⎢
+⎢
+⎢
+⎢
+⎢
+⎢
+⎢
+⎢⎣
+0 𝛼𝑘𝛼𝑘⋯𝛼𝑘𝛼𝑘𝛼𝑘⋯𝛼𝑘
+𝛼𝑘𝛽𝑘𝛾𝑘⋯𝛾𝑘0
+0 ⋯0
+𝛼𝑘𝛾𝑘𝛽𝑘⋯𝛾𝑘0
+0 ⋯0
+⋮
+⋮
+⋮⋱⋮
+⋮
+⋮⋱⋮
+𝛼𝑘𝛾𝑘𝛾𝑘⋯𝛽𝑘0
+0 ⋯0
+𝛼𝑘0
+0 ⋯0
+𝛽𝑘
+3
+0 ⋯0
+𝛼𝑘0
+0 ⋯0
+0
+𝛽𝑘
+3 ⋯0
+⋮
+⋮
+⋮⋱⋮
+⋮
+⋮⋱⋮
+𝛼𝑘0
+0 ⋯0
+0
+0 ⋯
+𝛽𝑘
+3
+⎤
+⎥
+⎥
+⎥
+⎥
+⎥
+⎥
+⎥
+⎥
+⎥
+⎥
+⎥
+⎥⎦
+𝑘
+𝑛−𝑘
+𝑘
+𝑛−𝑘
+(𝑛+1)×(𝑛+1)
+(3.9)
+ 14692120, 2025, 11, Downloaded from https://londmathsoc.onlinelibrary.wiley.com/doi/10.1112/blms.70157 by University Of Szeged, Wiley Online Library on [02/12/2025]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+===== page 13 =====
+3372
+AMBRUS and GÁRGYÁN
+where†
+𝛼𝑘=
+2
+√
+𝑘
+,
+𝛽𝑘=
+𝑘
+3
+2
+2(𝑘−1) ⋅
+(
+(4 −𝑘)𝐽𝑘−2(0) + 𝑘2 + 2
+𝑘−2 𝐽𝑘−2(2)
+)
+,
+and
+𝛾𝑘=
+𝑘
+3
+2
+2(𝑘−1) ⋅(𝐽𝑘−2(0) −𝐽𝑘−2(2))
+(3.10)
+are functions of 𝑘.
+Note that 𝛽4 = 0. Furthermore, the inequalities 𝛽𝑘> 0 for 𝑘⩾5 and 𝛾𝑘> 0 for 𝑘⩾4 are implied
+by direct calculation based on Table 1 for 𝑘= 4, 5 and by Corollary 1.3 for 𝑘⩾6.
+Recall that 𝐻𝑚,𝑘denotes the 𝑚th principal minor of 𝐻(Λ(𝐝𝑛,𝑘)). For 𝑚= 3, … , 𝑘+ 1, 𝐻𝑚,𝑘has
+the form
+𝐻𝑚,𝑘=
+|||||||||||
+0 𝛼𝑘𝛼𝑘⋯𝛼𝑘
+𝛼𝑘𝛽𝑘𝛾𝑘⋯𝛾𝑘
+𝛼𝑘𝛾𝑘𝛽𝑘⋯𝛾𝑘
+⋮
+⋮
+⋮⋱⋮
+𝛼𝑘𝛾𝑘𝛾𝑘⋯𝛽𝑘
+|||||||||||𝑚×𝑚
+.
+(3.11)
+Subtracting the second row from the ones below, expanding the resulting determinant along the
+first column, and finally adding the sum of all but the first columns of the remaining matrix to
+the first one results in an upper triangular matrix:
+𝐻𝑚,𝑘= (−𝛼𝑘) ⋅
+|||||||||||
+(𝑚−1)𝛼𝑘
+𝛼𝑘
+𝛼𝑘
+⋯
+𝛼𝑘
+0
+𝛽𝑘−𝛾𝑘
+0
+⋯
+0
+0
+0
+𝛽𝑘−𝛾𝑘⋯
+0
+⋮
+⋮
+⋮
+⋱
+⋮
+0
+0
+0
+⋯𝛽𝑘−𝛾𝑘
+|||||||||||(𝑚−1)×(𝑚−1)
+= −(𝑚−1)𝛼2
+𝑘𝛿𝑚−2
+𝑘
+,
+(3.12)
+where 𝛿𝑘= 𝛽𝑘−𝛾𝑘.
+Based on (3.10) we derive that 𝛿4 = −4
+3 and 𝛿5 = −5
+√
+5
+32 . For 𝑘⩾6, note that according to
+Corollary 1.3,
+𝐽𝑘−2(2) ⩽𝑘−4
+𝑘+ 2𝐽𝑘−2(0),
+hence, by (3.10),
+𝛿𝑘= 𝛽𝑘−𝛾𝑘=
+𝑘
+3
+2
+2(𝑘−1) ⋅
+(
+(3 −𝑘)𝐽𝑘−2(0) + 𝑘(𝑘+ 1)
+𝑘−2 𝐽𝑘−2(2)
+)
+⩽
+𝑘
+3
+2
+2(𝑘−1) ⋅
+(
+−
+12
+𝑘2 −4𝐽𝑘−2(0)
+)
+< 0.
+† There is a typo in [2, Formula (4.4)], in the definitions of the quantities similar to the ones defined below. The power of
+the first factor in 𝛽and 𝛾should be 1.
+ 14692120, 2025, 11, Downloaded from https://londmathsoc.onlinelibrary.wiley.com/doi/10.1112/blms.70157 by University Of Szeged, Wiley Online Library on [02/12/2025]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+===== page 14 =====
+ESTIMATES ON THE DECAY OF THE LAPLACE–PóLYA INTEGRAL
+3373
+Therefore, 𝛿𝑘< 0 for each 𝑘⩾4, thus (3.12) implies that
+(−1)𝑚−1𝐻𝑚,𝑘> 0 for every 𝑚= 3, … , 𝑘+ 1.
+(3.13)
+Consider now the remaining minors of 𝐻(Λ(𝐝𝑛,𝑘)), that is, 𝐻𝑚,𝑘with 𝑘+ 2 ⩽𝑚⩽𝑛+ 1.
+According to (3.9), these are of the form
+𝐻𝑚,𝑘=
+⎡
+⎢
+⎢
+⎢
+⎢
+⎢
+⎢
+⎢
+⎢
+⎢
+⎢
+⎢
+⎢⎣
+0 𝛼𝑘𝛼𝑘⋯𝛼𝑘𝛼𝑘𝛼𝑘⋯𝛼𝑘
+𝛼𝑘𝛽𝑘𝛾𝑘⋯𝛾𝑘0
+0 ⋯0
+𝛼𝑘𝛾𝑘𝛽𝑘⋯𝛾𝑘0
+0 ⋯0
+⋮
+⋮
+⋮⋱⋮
+⋮
+⋮⋱⋮
+𝛼𝑘𝛾𝑘𝛾𝑘⋯𝛽𝑘0
+0 ⋯0
+𝛼𝑘0
+0 ⋯0
+𝛽𝑘
+3
+0 ⋯0
+𝛼𝑘0
+0 ⋯0
+0
+𝛽𝑘
+3 ⋯0
+⋮
+⋮
+⋮⋱⋮
+⋮
+⋮⋱⋮
+𝛼𝑘0
+0 ⋯0
+0
+0 ⋯
+𝛽𝑘
+3
+⎤
+⎥
+⎥
+⎥
+⎥
+⎥
+⎥
+⎥
+⎥
+⎥
+⎥
+⎥
+⎥⎦
+𝑘
+𝑚−𝑘−1
+𝑘
+𝑚−𝑘−1
+𝑚×𝑚
+.
+For 𝑘= 4, we have 𝛽4 = 0, so 𝐻𝑚,4 can be easily calculated: 𝐻4,4 = −3, 𝐻5,4 = 4 and 𝐻6,4 = 3.
+This shows that 𝐝𝑛,4 is not locally extremal.
+From now on, assume that 𝑘⩾5. Then, as we noted above, 𝛽𝑘> 0, 𝛾𝑘> 0, and 𝛿𝑘< 0. Note
+that the last row of the determinant above contains only two non-zero elements: 𝛼𝑘and 𝛽𝑘
+3 .
+Accordingly, expanding the determinant along the last row yields that for 𝑘+ 2 ⩽𝑚⩽𝑛+ 1,
+𝐻𝑚,𝑘= (−1)𝑚+1𝛼𝑘⋅(−1)𝑚𝛼𝑘⋅
+(𝛽𝑘
+3
+)𝑚−𝑘−2
+⋅
+|||||||||
+𝛽𝑘𝛾𝑘⋯𝛾𝑘
+𝛾𝑘𝛽𝑘⋯𝛾𝑘
+⋮
+⋮⋱⋮
+𝛾𝑘𝛾𝑘⋯𝛽𝑘
+|||||||||𝑘×𝑘
++ 𝛽𝑘
+3 𝐻𝑚−1,𝑘.
+(3.14)
+The above determinant can be calculated by subtracting the first row from the other ones and then
+adding the sum of the last 𝑘−1 columns to the first column, which results in an upper triangular
+determinant. Consequently,
+|||||||||
+𝛽𝑘𝛾𝑘⋯𝛾𝑘
+𝛾𝑘𝛽𝑘⋯𝛾𝑘
+⋮
+⋮⋱⋮
+𝛾𝑘𝛾𝑘⋯𝛽𝑘
+|||||||||𝑘×𝑘
+=
+|||||||||
+𝛽𝑘+ (𝑘−1)𝛾𝑘
+𝛾𝑘
+⋯
+𝛾𝑘
+0
+𝛽𝑘−𝛾𝑘⋯
+0
+⋮
+⋮
+⋱
+⋮
+0
+0
+⋯𝛽𝑘−𝛾𝑘
+|||||||||𝑘×𝑘
+= (𝛽𝑘+ (𝑘−1)𝛾𝑘)𝛿𝑘−1
+𝑘
+whose sign is (−1)𝑘−1. Therefore, the first summand on the right-hand side of (3.14) has sign
+(−1)𝑘. Since (3.13) implies that (−1)𝑘𝐻𝑘+1,𝑘> 0, induction on 𝑚shows that the sign of 𝐻𝑚,𝑘is
+(−1)𝑘for every 𝑚= 𝑘+ 1, … , 𝑛+ 1. Along with (3.13), this shows that the sequence of minors is
+neither alternating nor of constant sign, hence 𝐝𝑛,𝑘is not locally extremal.
+Finally, we handle the case 𝑘= 3. Clearly, it suffices to prove that 𝐝3,3 is not a local extremal
+direction in 𝑆2 — equivalently, the main diagonal sections of 𝑄3 do not have locally extremal
+ 14692120, 2025, 11, Downloaded from https://londmathsoc.onlinelibrary.wiley.com/doi/10.1112/blms.70157 by University Of Szeged, Wiley Online Library on [02/12/2025]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+===== page 15 =====
+3374
+AMBRUS and GÁRGYÁN
+F I G U R E 2
+The main diagonal section of 𝑄3 is not locally extremal.
+volume. We will show this by a direct, elementary geometric argument (we also note that it can
+be proved by the methods in [20]; see the Remark after Proposition 7 therein).
+To simplify the notation, we verify the statement for the cube 2𝑄3 = [ −1, 1]3. Let 𝐻= 𝐝⟂
+3,3.
+Then the main diagonal section 2𝑄3 ∩𝐻is a regular hexagon with two opposite vertices at
+𝑝= (1, −1, 0) and 𝑝′ = (−1, 1, 0); see Figure 2. Let 𝓁be the line through 𝑝and 𝑝′, and rotate
+𝐻around the axis 𝓁. This may be parameterised as follows: for 𝑡∈[−1, 1], let 𝑞(𝑡) = (𝑡, −1, 1),
+𝑞′(𝑡) = (−1, 𝑡, 1) and denote by 𝐻(𝑡) the plane spanned by the points 𝑝, 𝑝′ and 𝑞(𝑡) — note that
+𝐻= 𝐻(0). Then 2𝑄3 ∩𝐻(𝑡) is a hexagon that decomposes to the union of two congruent trapezia,
+one of which is 𝑇(𝑡) = 𝑝𝑝′𝑞′(𝑡)𝑞(𝑡). To calculate the area of 𝑇(𝑡), let̃ 𝑞(𝑡) denote the orthogonal
+projection of 𝑞(𝑡) onto 𝓁. Note that |𝑝𝑝′| = 2
+√
+2 and |𝑞(𝑡)𝑞′(𝑡)| =
+√
+2(1 + 𝑡), hence by symmetry,
+|̃𝑞(𝑡)𝑝| = 1−𝑡
+√
+2 . Since |𝑝𝑞(𝑡)| =
+√
+1 + (1 −𝑡)2, the Pythagorean theorem implies that
+|𝑞(𝑡)̃𝑞(𝑡)| =
+√
+1 + (1 −𝑡)2
+2
+and thus the area of 𝑇(𝑡) is
+𝑎(𝑡) ∶= Vol2(𝑇(𝑡)) = 3 + 𝑡
+√
+2
+⋅
+√
+1 + (1 −𝑡)2
+2
+.
+Direct calculation shows that 𝑎′(0) = 𝑎′′(0) = 0 while 𝑎(3)(0) =
+2
+√
+3 > 0. Consequently, the
+function 𝑎(𝑡), and thus the area of 2𝑄3 ∩𝐻(𝑡), cannot have a local extremum at 𝑡= 0.
+□
+4
+CONSEQUENCES FOR EULERIAN NUMBERS
+A combinatorial interpretation of the Laplace–Pólya integral originates from the connection with
+Eulerian numbers of the first kind 𝐴(𝑚, 𝑙), which will simply be referred to as Eulerian numbers
+(see also [2, Section 3]). The classic definition of 𝐴(𝑚, 𝑙) is the number of permutations of the set
+{1, … , 𝑚} in which exactly 𝑙−1 elements are greater than the previous element. This immediately
+implies the symmetry relation
+𝐴(𝑚, 𝑙) = 𝐴(𝑚, 𝑚−𝑙+ 1).
+(4.1)
+ 14692120, 2025, 11, Downloaded from https://londmathsoc.onlinelibrary.wiley.com/doi/10.1112/blms.70157 by University Of Szeged, Wiley Online Library on [02/12/2025]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+===== page 16 =====
+ESTIMATES ON THE DECAY OF THE LAPLACE–PóLYA INTEGRAL
+3375
+Eulerian numbers can be explicitly expressed by the formula
+𝐴(𝑚, 𝑙) =
+𝑙∑
+𝑖=0
+(−1)𝑖
+(
+𝑚+ 1
+𝑖
+)
+(𝑙−𝑖)𝑚;
+(4.2)
+see [6, Theorem 1.11]. Further properties are presented in [6, Section 1.1] and [10, Section 6.5].
+The comparison of (4.2) and (1.4) implies that
+𝐴(𝑚, 𝑙) = 𝑚!𝐽𝑚+1(2𝑙−𝑚−1)
+(4.3)
+for arbitrary non-negative integers 𝑚and 𝑙. Hence, our results for the Laplace–Pólya integral
+translate to estimates for Eulerian numbers via the connection
+𝐴(𝑚, 𝑙+ 1)
+𝐴(𝑚, 𝑙)
+= 𝐽𝑚+1(2𝑙−𝑚+ 1)
+𝐽𝑚+1(2𝑙−𝑚−1).
+This allows us to derive lower and upper bounds on the ratio of consecutive Eulerian numbers
+from Theorems 1.1 and 1.2:
+Corollary 4.1. For integers 𝑚⩾3 and 𝑚
+2 ⩽𝑙⩽𝑚−1,
+𝑐𝑚+1,2𝑙−𝑚−1 ⩽𝐴(𝑚, 𝑙+ 1)
+𝐴(𝑚, 𝑙)
+⩽𝑑𝑚+1,2𝑙−𝑚−1,
+(4.4)
+where 𝑐𝑛,𝑟and 𝑑𝑛,𝑟are defined by formulae (1.16) and (1.14), respectively.
+The upper bound is from [2, Proposition 3.1]. Note that the lower bound becomes negative and
+thus trivial for 1
+2
+⌊11𝑚+3
+7
+⌋< 𝑙⩽𝑚−1. Furthermore, due to the symmetry relation (4.1), analogous
+estimates hold for 0 ⩽𝑙< 𝑚
+2 .
+Eulerian numbers were studied extensively by Lesieur and Nicolas [23]. Following their work,
+we introduce the notation
+𝑀𝑚∶= max
+𝑙=1,…,𝑚𝐴(𝑚, 𝑙) = 𝐴
+(
+𝑚,
+⌊𝑚
+2
+⌋
++ 1
+)
+(4.5)
+for the central Eulerian numbers in a row.
+According to (4.3),
+𝑀𝑚= 𝑚!𝐽𝑚+1
+(
+2
+⌊𝑚
+2
+⌋
+−𝑚+ 1
+)
+=
+{
+𝑚!𝐽𝑚+1(1),
+if 𝑚is even,
+𝑚!𝐽𝑚+1(0),
+if 𝑚is odd.
+(4.6)
+As in [23, Subsection 3.5], we define the function 𝑓(𝑚) for 𝑚⩾1 by
+𝑓(𝑚) ∶= 𝑀𝑚
+𝑚! =
+{
+𝐽𝑚+1(1),
+if 𝑚is even,
+𝐽𝑚+1(0),
+if 𝑚is odd,
+(4.7)
+The initial values of the sequence 𝑓(𝑚)∞
+𝑚=1 are listed in Table 3.
+ 14692120, 2025, 11, Downloaded from https://londmathsoc.onlinelibrary.wiley.com/doi/10.1112/blms.70157 by University Of Szeged, Wiley Online Library on [02/12/2025]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+===== page 17 =====
+3376
+AMBRUS and GÁRGYÁN
+TA B L E 3
+Values of 𝑓(𝑚) for 𝑚= 1, … , 7.
+𝑚
+1
+2
+3
+4
+5
+6
+7
+𝑓(𝑚)
+1
+1
+2
+3
+4
+23
+48
+115
+192
+841
+1920
+5887
+11 520
+Using analytic arguments involving estimates of power series coefficients, Lesieur and Nicolas
+proved the following core result of [23].
+Theorem 4.2 [23, p. 395, Theorem 2]. For all 𝑝⩾1,
+2𝑝
+2𝑝+ 1 < 𝑓(2𝑝+ 1)
+𝑓(2𝑝−1) < 2𝑝+ 1
+2𝑝+ 2.
+(4.8)
+Note that via (4.7), Corollary 1.3 implies the slightly weaker bounds
+2𝑝
+2𝑝+ 1 < 𝑓(2𝑝+ 1)
+𝑓(2𝑝−1) ⩽(𝑝+ 1)(2𝑝2 + 2𝑝−1)
+𝑝(𝑝+ 2)(2𝑝+ 1)
+(4.9)
+for every 𝑝⩾2.
+The above estimates can simply be extended to even indices via the identity
+𝑓(2𝑝) = 2𝑝+ 1
+2𝑝+ 2𝑓(2𝑝+ 1)
+(4.10)
+for any 𝑝⩾1 that is a consequence of (4.7) and (1.12). Thus, (4.9) leads to
+2𝑝2
+2𝑝2 + 𝑝−1 <
+𝑓(2𝑝)
+𝑓(2𝑝−2) ⩽
+2𝑝2 + 2𝑝−1
+(𝑝+ 2)(2𝑝−1),
+(4.11)
+which is slightly weaker than
+2𝑝2
+2𝑝2 + 𝑝−1 <
+𝑓(2𝑝)
+𝑓(2𝑝−2) <
+𝑝(2𝑝+ 1)2
+2(𝑝+ 1)2(2𝑝−1)
+implied by Theorem 4.2.
+Note that (4.9) and (4.10) show that the sequences (𝑓(2𝑝))∞
+𝑝=1 and (𝑓(2𝑝+ 1)))∞
+𝑝=0 are decreas-
+ing, which was proved in [23, Theorem 3, p. 396]. We conclude this section by establishing the
+relevant convexity properties; see Figure 3.
+Proposition 4.3. The sequence (𝑓(2𝑝+ 1))∞
+𝑝=0 is convex and logarithmically convex.
+Proposition 4.4. The sequence (𝑓(2𝑝))∞
+𝑝=2 is convex.
+ 14692120, 2025, 11, Downloaded from https://londmathsoc.onlinelibrary.wiley.com/doi/10.1112/blms.70157 by University Of Szeged, Wiley Online Library on [02/12/2025]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+===== page 18 =====
+ESTIMATES ON THE DECAY OF THE LAPLACE–PóLYA INTEGRAL
+3377
+F I G U R E 3
+The sequence 𝑓(𝑚) and its logarithm up to 𝑚= 20, marked with different colors for odd and
+even values of 𝑚.
+Proof of Proposition 4.3. For the initial segment of the sequence (𝑓(2𝑝+ 1))3
+𝑝=0, the statement is
+verified by direct calculation based on Table 3.
+For 𝑝⩾2, proving convexity and log-convexity amounts to showing that
+𝑓(2𝑝+ 3)
+𝑓(2𝑝+ 1) + 𝑓(2𝑝−1)
+𝑓(2𝑝+ 1) ⩾2
+and
+𝑓(2𝑝+ 3)
+𝑓(2𝑝+ 1) ⋅𝑓(2𝑝−1)
+𝑓(2𝑝+ 1) ⩾1,
+respectively. Applying the bounds in (4.9) leads to
+1
+2
+(𝑓(2𝑝+ 3)
+𝑓(2𝑝+ 1) + 𝑓(2𝑝−1)
+𝑓(2𝑝+ 1)
+)
+⩾1
+2
+(2𝑝+ 2
+2𝑝+ 3 +
+𝑝(𝑝+ 2)(2𝑝+ 1)
+(𝑝+ 1)(2𝑝2 + 2𝑝−1)
+)
+=
+= 8𝑝4 + 28𝑝3 + 29𝑝2 + 6𝑝−2
+8𝑝4 + 28𝑝3 + 28𝑝2 + 2𝑝−6 > 1,
+furthermore
+𝑓(2𝑝+ 3)
+𝑓(2𝑝+ 1) ⋅𝑓(2𝑝−1)
+𝑓(2𝑝+ 1) ⩾2𝑝+ 2
+2𝑝+ 3 ⋅
+𝑝(𝑝+ 2)(2𝑝+ 1)
+(𝑝+ 1)(2𝑝2 + 2𝑝−1) =
+=
+4𝑝3 + 10𝑝2 + 4𝑝
+4𝑝3 + 10𝑝2 + 4𝑝−3 > 1.
+□
+Proof of Proposition 4.4. Convexity is implied by applying both the lower and upper estimates of
+(4.11):
+1
+2
+(𝑓(2𝑝+ 2)
+𝑓(2𝑝)
++ 𝑓(2𝑝−2)
+𝑓(2𝑝)
+)
+⩾1
+2
+(2𝑝2 + 4𝑝+ 2
+2𝑝2 + 5𝑝+ 2 + (𝑝+ 2)(2𝑝−1)
+2𝑝2 + 2𝑝−1
+)
+=
+= 8𝑝4 + 28𝑝3 + 25𝑝2 −4𝑝−6
+8𝑝4 + 28𝑝3 + 24𝑝2 −2𝑝−4 > 1.
+□
+We conjecture that the sequence (𝑓(2𝑝))∞
+𝑝=2 is log-convex as well, although (4.11) leads only to
+the slightly weaker inequality
+𝑓(2𝑝+ 2)
+𝑓(2𝑝)
+⋅𝑓(2𝑝−2)
+𝑓(2𝑝)
+⩾4𝑝3 + 6𝑝2 −2
+4𝑝3 + 6𝑝2 −1 .
+ 14692120, 2025, 11, Downloaded from https://londmathsoc.onlinelibrary.wiley.com/doi/10.1112/blms.70157 by University Of Szeged, Wiley Online Library on [02/12/2025]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+===== page 19 =====
+3378
+AMBRUS and GÁRGYÁN
+AC K N OW L E D G E M E N T S
+The authors are grateful to Oscar Ortega Moreno for insightful discussions and for proposing
+the study of local extremality of diagonal cube sections, to Lionel Pournin for his support and
+collaboration, and to the anonymous referees whose comments greatly enhanced the clarity of
+the presentation. Research of G. Ambrus was partially supported by the ERC Advanced Grant
+“GeoScape” no. 882971, by Hungarian National Research grants no. 147145, 147544, 150151, and
+KKP-133819, which has been implemented with the support provided by the Ministry of Cul-
+ture and Innovation of Hungary from the National Research, Development and Innovation Fund,
+financed under the ADVANCED-24 funding scheme. This work was supported by the Ministry
+of Innovation and Technology NRDI Office within the framework of the Artificial Intelligence
+National Laboratory (RRF-2.3.1-21-2022-00004). Work of B. Gárgyán was supported by the ÚNKP-
+23-2-SZTE-584 New National Excellence Program of the Ministry for Culture and Innovation from
+the source of the National Research, Development and Innovation Fund, and by the Warwick
+Mathematics Institute Centre for Doctoral Training, and gratefully acknowledges funding by Uni-
+versity of Warwick’s Chancellors’ International Scholarship scheme. We acknowledge the support
+by project no. TKP2021-NVA-09, which has been implemented with the support provided by the
+Ministry of Innovation and Technology of Hungary from the National Research, Development
+and Innovation Fund, financed under the TKP2021-NVA funding scheme.
+J O U R NA L I N FO R M AT I O N
+The Bulletin of the London Mathematical Society is wholly owned and managed by the London
+Mathematical Society, a not-for-profit Charity registered with the UK Charity Commission.
+All surplus income from its publishing programme is used to support mathematicians and
+mathematics research in the form of research grants, conference grants, prizes, initiatives for
+early career researchers and the promotion of mathematics.
+O RC I D
+Gergely Ambrus
+https://orcid.org/0000-0003-1246-6601
+R E F E R E N C E S
+1. G. Ambrus, Critical central sections of the cube, Proc. Amer. Math. Soc. 150 (2022), no. 10, 4463–4474.
+2. G. Ambrus and B. Gárgyán, Non-diagonal critical central sections of the cube, Adv. Math. 441 (2024), 109524.
+3. K. Ball, Cube slicing in ℝ𝑛, Proc. Amer. Math. Soc. 97 (1986), no. 3, 465–473.
+4. F. Á. Bartha, F. Fodor, and B. González Merino, Central diagonal sections of the 𝑛-cube, Int. Math. Res. Not.
+2021 (2021), no. 4, 2861–2881.
+5. H. Bateman, A. Erdélyi, W. Magnus, and F. Oberhettinger, Tables of integral transforms, vol. 1, McGraw-Hill,
+New York, 1954, Based, in part, on notes left by Harry Bateman and compiled by the staff of the Bateman
+Manuscript Project.
+6. M. Bóna, Combinatorics of permutations, Discrete Mathematics and Its Applications (Boca Raton), Chapman
+& Hall/CRC, Boca Raton, FL, 2004.
+7. T. J. I’A. Bromwich, An introduction to the theory of infinite series, 2nd ed., Macmillan, London, 1926, Second
+edition revised with the assistance of T. M. MacRobert.
+8. R. E. Burgess, Comments on Dr. Silberstein’s paper in Phil. Mag., June 1944, Lond. Edinb. Dubl. Phil. Mag. J.
+Sci. 36 (1945), no. 253, 143.
+9. R. Butler, On the evaluation of ∫∞
+0 (sin𝑚𝑡)∕𝑡𝑚d𝑡by the trapezoidal rule, Amer. Math. Monthly 67 (1960), no. 6,
+566–569.
+10. L. Comtet, Advanced combinatorics, D. Reidel, Dordrecht, 1974.
+11. H. E. Fettis, More on the calculation of the integral 𝐼𝑛(𝑏) = 2
+𝜋∫∞
+0 ( sin 𝑥
+𝑥) cos(bx)d𝑥, Math. Comp. 21 (1967), no.
+100, 727–730.
+ 14692120, 2025, 11, Downloaded from https://londmathsoc.onlinelibrary.wiley.com/doi/10.1112/blms.70157 by University Of Szeged, Wiley Online Library on [02/12/2025]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License
+===== page 20 =====
+ESTIMATES ON THE DECAY OF THE LAPLACE–PóLYA INTEGRAL
+3379
+12. L. S. Goddard, The accumulation of chance effects and the Gaussian frequency distribution, Lond. Edinb. Dubl.
+Phil. Mag. J. Sci. 36 (1945), no. 257, 428–433.
+13. I. S. Gradshteyn and I. M. Ryzhik, Table of integrals, series, and products, 7th ed., Academic Press, Cambridge,
+MA, 2007.
+14. A. H. R. Grimsey, On the accumulation of chance effects and the Gaussian frequency distribution: to the editors
+of the Philosophical Magazine, Lond. Edinb. Dubl. Phil. Mag. J. Sci. 36 (1945), no. 255, 294–295.
+15. H. Hadwiger, Gitterperiodische Punktmengen und Isoperimetrie, Monatsh. Math. 76 (1972), no. 5, 410–418.
+16. K. Harumi, S. Katsura, and J. W. Wrench, Values of (2∕𝜋) ∫∞
+0
+(sin 𝑡∕𝑡)𝑛d𝑡, Math. Comp. 14 (1960), no. 72,
+379–379.
+17. D. Hensley, Slicing the cube in ℝ𝑛and probability (bounds for the measure of a central cube slice in ℝ𝑛by
+probability methods), Proc. Amer. Math. Soc. 73 (1979), no. 1, 95–100.
+18. G. Ivanov and I. Tsiutsiurupa, On the volume of sections of the cube, Anal. Geom. Metr. Spaces 9 (2021), no. 1,
+1–18.
+19. R. Kerman, R. Ol’hava, and S. Spektor, An asymptotically sharp form of Ball’s integral inequality, Proc. Amer.
+Math. Soc. 143 (2015), no. 9, 3839–3846.
+20. H. König and A. Koldobsky, Volumes of low-dimensional slabs and sections in the cube, Adv. Appl. Math. 47
+(2011), no. 4, 894–907.
+21. H. König and A. Koldobsky, On the maximal perimeter of sections of the cube, Adv. Math. 346 (2019), 773–804.
+22. P. S. Laplace, Théorie analytique des probabilités, vol. 7, Courcier, Paris, 1812.
+23. L. Lesieur and J.-L. Nicolas, On the Eulerian numbers 𝑀𝑛= max1⩽𝑘⩽𝑛𝐴(𝑛, 𝑘), Eur. J. Combin. 13 (1992), no. 5,
+379–399.
+24. R. G. Medhurst and J. H. Roberts, Evaluation of 𝐼𝑛(𝑏) = 2
+𝜋∫∞
+0
+( sin 𝑥
+𝑥)
+𝑛cos(bx)dx, Math. Comp. 19 (1965), no.
+89, 113–117.
+25. R. B. Paris, Asymptotics of some generalised sine-integrals, arXiv:2011.05156, 2021.
+26. J. B. Parker, The accumulation of chance effects and the Gaussian frequency distribution: to the editors of the
+Philosophical Magazine, Lond. Edinb. Dubl. Phil. Mag. J. Sci. 38 (1947), no. 284, 681–682.
+27. G. Pólya, Berechnung eines bestimmten Integrals, Math. Ann. 74 (1913), no. 2, 204–212.
+28. L. Pournin, Shallow sections of the hypercube, Israel J. Math. 255 (2023), no. 2, 685–704.
+29. L. Pournin, Deep sections of the hypercube, arXiv:2407.04637, 2024.
+30. L. Pournin, Local extrema for hypercube sections, J. Anal. Math. 152 (2024), no. 2, 557–594.
+31. L. Pournin, Erratum to ‘Local extrema for hypercube sections’, J. Anal. Math. (2025), https://lipn.fr/∼pournin/
+LocalExtremaCorrigendum.pdf
+32. J.-C. Schlage-Puchta, Asymptotic evaluation of ∫∞
+0
+( sin 𝑥
+𝑥)
+𝑛d𝑥, Commun. Korean Math. Soc. 35 (2020), no. 4,
+1193–1202.
+33. L. Silberstein, The accumulation of chance effects and the Gaussian frequency distribution, Lond. Edinb. Dubl.
+Phil. Mag. J. Sci. 35 (1944), no. 245, 395–404.
+34. D. Spring, On the second derivative test for constrained local extrema, Amer. Math. Monthly 92 (1985), no. 9,
+631–643.
+35. R. Thompson, Evaluation of 𝐼𝑛(𝑏) = 2
+𝜋∫∞
+0
+( sin 𝑥
+𝑥)
+𝑛cos(bx)dx and of similar integrals, Math. Comp. 20 (1966),
+no. 94, 330–332.
+36. J. Wolstenholme, Mathematical problems on the first and second divisions of the schedule of subjects for the
+Cambridge Mathematical Tripos Examination, 2nd ed., Macmillan, London, 1878.
+ 14692120, 2025, 11, Downloaded from https://londmathsoc.onlinelibrary.wiley.com/doi/10.1112/blms.70157 by University Of Szeged, Wiley Online Library on [02/12/2025]. See the Terms and Conditions (https://onlinelibrary.wiley.com/terms-and-conditions) on Wiley Online Library for rules of use; OA articles are governed by the applicable Creative Commons License

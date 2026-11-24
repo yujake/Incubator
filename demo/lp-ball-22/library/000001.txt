@@ -1,0 +1,5187 @@
+===== page 1 =====
+Advances in Operator Theory (2025) 10:15
+https://doi.org/10.1007/s43036-024-00404-y
+Tusi
+Mathematical
+Research
+Group
+ORIGINAL PAPER
+On maximal hyperplane sections of the unit ball of ln
+p for
+p > 2
+Hermann König1
+Received: 12 September 2024 / Accepted: 2 November 2024 / Published online: 21 November 2024
+© The Author(s) 2024
+Abstract
+The maximal hyperplane section of the ln
+∞-ball, i.e. of the n-cube, is the one perpen-
+dicular to
+1
+√
+2(1, 1, 0, . . . , 0), as shown by Ball. Eskenazis, Nayar and Tkocz extended
+this result to the ln
+p-balls for very large p ≥1015. By Oleszkiewicz, Ball’s result does
+not transfer to ln
+p for 2 < p < p0 ≃26.265. Then the hyperplane section perpendic-
+ular to the main diagonal yields a counterexample for large dimensions n. Suppose
+that p0 ≤p < ∞. We show that the analogue of Ball’s result holds in ln
+p-balls for all
+hyperplanes with normal unit vectors a, if all coordinates of a have modulus ≤
+1
+√
+2
+and p has distance ≥2−p to the even integers. Under similar assumptions, we give a
+Gaussian upper bound for 20 < p < p0.
+Keywords Volume · Hyperplane sections · ln
+p-ball · Random variables
+Mathematics Subject Classiﬁcation 52A38 · 52A40 · 46 B07 · 60F05
+1 Introduction and main results
+It is not an easy task to determine extremal volumes of hyperplane sections or pro-
+jections onto hyperplanes of convex bodies, even for speciﬁc convex sets. The proofs
+of known results are mainly based on probabilistic techniques and Fourier analysis,
+see Koldobsky [9], Chapters 3, 7 and 8. Ball [2] proved in a celebrated paper that the
+hyperplane section of the n-cube orthogonal to a(2) :=
+1
+√
+2(1, 1, 0, . . . , 0) ∈Rn has
+maximal volume among all hyperplane sections. Hadwiger [7] and Hensley [8] had
+shown before that coordinate hyperplanes, e.g. those perpendicular to (1, 0, . . . , 0) ∈
+Rn, yield minimal volume central hyperplane cubic sections.
+Dedicated to the memory of Albrecht Pietsch.
+Communicated by Thomas Kuehn.
+B Hermann König
+hkoenig@math.uni-kiel.de
+1
+Mathematisches Seminar, Universität Kiel, 24098 Kiel, Germany
+===== page 2 =====
+15
+Page 2 of 42
+H. König
+Meyer and Pajor [12] considered the analogue in ln
+p for 1 ≤p < ∞. They proved
+that the normalized volume of central hyperplane sections of the unit ball Bn
+p of ln
+p is
+monotone increasing in p, implying that coordinate hyperplanes provide the minimal
+sections for 2 < p < ∞and the maximal sections for 1 ≤p < 2. The minimal
+sections of Bn
+p for 1 ≤p < 2 are those orthogonal to the main diagonals, e.g. to
+a(n) :=
+1
+√n (1, , . . . , 1) ∈Rn, see [12] for p = 1 and Koldobsky [9] for 1 < p < 2.
+The question of the maximal hyperplane sections of Bn
+p for 2 < p < ∞is
+more complicated, since the answer may depend on p as well as on the dimen-
+sion n. Oleszkiewicz [15] showed that Ball’s result does not transfer to Bn
+p for
+2 < p < p0 ≃26.265. In that case, the hyperplane section perpendicular to a
+main diagonal has larger volume than the one orthogonal to a(2) for large dimensions
+n. A quantitative estimate for which dimensions this happens is given in König [11].
+On the other hand, for very large p ≥1015, Eskenazis, Nayar and Tkocz proved that
+Ball’s result is stable for ln
+p: then Bn
+p ∩(a(2))⊥has maximal hyperplane section volume
+for all dimensions n. They call it "resilience of cubic sections". We extend this result to
+p0 ≤p < ∞for those hyperplanes with normal unit vectors a, if all coordinates of a
+have modulus ≤
+1
+√
+2 and p has distance ≥2−p to the even integers. For 20 < p < p0
+we give an asymptotic Gaussian type upper bound under similar assumptions.
+Finding extremal projections of convex bodies onto hyperplanes is dual to determin-
+ing extremal sections. Forln
+p-balls, the known results for sections essentially transfer to
+projections, if one interchanges p and q = p′, 1
+p + 1
+p′ = 1, and minimal and maximal
+volume results. For instance, Ball’s result corresponds to the fact that the projection
+of the ln
+1-ball onto the hyperplane (a(2))⊥has minimal volume, see Barthe, Naor [3].
+The latter result is a consequence of Cauchy’s projection formula and the optimal
+lower bound in the L1-Khintchine inequality, which was found by Szarek [19]. The
+Khintchine inequalities are important in Banach Space Theory and Operator Theory.
+They are useful, in particular, when studying absolutely p-summing operators, see
+Pietsch [16], Chapter 17. For ln
+q-balls, determining extremal hyperplane projections
+is equivalent to ﬁnding the best constants in a Khintchine-type inequality for random
+variables with a certain exponential density, see Barthe, Naor [3]. Identifying extremal
+hyperplane sections of ln
+p-balls also amounts to ﬁnding the best constants in a gen-
+eralized Khintchine inequality, see the remarks after Proposition 2.1. Even though
+the results for projections are dual to those for sections, the known proofs are not
+obtained by duality. This is a consequence of the fact that volume does not behave
+well under duality. Nayar and Tkocz [13] gave a beautiful survey on extremal sections
+and projections of classical convex bodies.
+To formulate our results on sections of ln
+p precisely, we introduce the following
+notations. For 1 ≤p ≤∞and any natural positive number n ∈N, denote the closed
+unit ball of ln
+p by
+Bn
+p :=
+⎧
+⎪⎨
+⎪⎩
+x = (x j)n
+j=1 ∈Rn  ∥x∥p :=
+⎛
+⎝
+n
+	
+j=1
+|x j|
+⎞
+⎠
+1
+p
+≤1
+⎫
+⎪⎬
+⎪⎭
+.
+===== page 3 =====
+On maximal hyperplane sections of the unit ball of lnp for p > 2
+Page 3 of 42
+15
+Let Sn−1 := { x ∈Rn  ∥x∥2 = 1 }, a ∈Sn−1 be a direction vector and a⊥the
+hyperplane orthogonal to a. We deﬁne the normalized section function An,p by
+An,p(a) :=
+voln−1(Bn
+p ∩a⊥)
+voln−1(Bn−1
+p
+)
+.
+For 1 ≤k ≤n, let a(k) :=
+1
+√
+k (1, . . . , 1
+  
+k
+, 0, . . . , 0) ∈Sn−1 ⊂Rn. Then Ball’s theorem
+states An,∞(a) ≤An,∞(a(2)) =
+√
+2 for all n ∈N and a ∈Sn−1. Eskenazis, Nayar
+and Tkocz’s result reads An,p(a) ≤An,p(a(2)) = 2
+1
+2 −1
+p for all n ∈N, a ∈Sn−1 and
+p ≥1015. Note that An,p(a(2)) does not depend on n.
+Oleszkiewicz [15] showed that limn→∞An,p(a(n)) > An,p(a(2)) holds for all
+2 < p < p0 ≃26.265, where p0 is the unique solution of 3
+π
+2
+2p 
+
+1+ 1
+p
+3
+
+
+1+ 3
+p
+
+= 1
+for p ∈(2, ∞). More precisely, we have limn→∞An,p(a(n)) =
+
+6
+π
+
+
+1+ 1
+p
+3
+
+
+1+ 3
+p
+
+ 1
+2
+>
+An,p(a(2)) = 2
+1
+2 −1
+p , see [15] and also [11].
+Let a = (a j)n
+j=1 ∈Sn−1. In view of the symmetries of Bn
+p, we may suppose that
+a1 ≥a2 ≥· · · ≥an ≥0. We assume this in the statement of our two main results:
+Theorem 1.1 Let p0 ≤p < ∞and dist(p, 2N) ≥2−p. Then for all n ∈N, n ≥2
+and a ∈Sn−1
+An,p(a) ≤An,p(a(2)) = 2
+1
+2 −1
+p ,
+with the possible exception of those a with a1 ∈
+
+1
+√
+2, 2
+1p
+√
+2
+
+=: Ip, an interval of length
+|Ip| <
+1
+2p. If a1 ∈Ip or if dist(p, 2N) < 2−p, we have at least
+An,p(a) < 2
+1
+p An,p(a(2)) .
+The restriction on p can be weakened to dist(p, 2N) ≥p−p for p ≥50 and to
+dist(p, 2N) ≥p−5p for p ≥175.
+Most likely, the assumption that p has a certain distance to the even integers is not
+necessary. By the result of [5], it is not needed, if p ≥1015.
+Theorem 1.2 Let 20 < p < p0, dist(p, 2N) ≥( 14
+15)p. Then for all n ∈N, n ≥2 and
+a ∈Sn−1 with a1 ≤
+1
+√
+2
+An,p(a) ≤lim
+n→∞An,p(a(n)) =
+
+6
+π
+(1 + 1
+p)3
+(1 + 3
+p)
+ 1
+2
+.
+===== page 4 =====
+15
+Page 4 of 42
+H. König
+The result is also true if a1 ≥
+1
+√
+2 + 1
+3p +
+1
+150.
+The ﬁrst part of 2 probably holds for all 2 < p < p0. The restriction p > 20 is
+required by estimates in the proof.
+We sketch the main ideas of the proof of both theorems and describe the organization
+of the paper. As in Ball’s cube slicing result, the proofs use Fourier transform repre-
+sentations of moments of independent sums, a technique also employed by Haagerup
+[6] in his proof of the best constants in the Khintchine inequality. Ball’s result is based
+on Pólya’s [17] formula An,∞(a) = 2
+π
+ ∞
+0
+n
+j=1 γ∞(a js) ds, a = (a j)n
+j=1 ∈Sn−1,
+with γ∞(s) = sin(s)
+s
+, s̸ = 0. The main ingredient of his proof is the integral inequality
+h∞(u) ≤h∞(2) for all u ≥2, where h∞(u) := √u
+ ∞
+0
+|γ∞(s)|u ds, which together
+with Hölder’s inequality allows to prove An,∞(a) ≤An,∞(a(2)) for all vectors a with
+|a j| ≤
+1
+√
+2, j = 1, · · · , n. There is an analogue of Pólya’s formula for An,p(a) in
+terms of the normalized Fourier transform γp(s) of exp(−|r|p), see Proposition 2.1.
+Let h p(u) := √u
+ ∞
+0
+|γp(s)|u ds. Our main technical result is Theorem 2.2, namely
+that h p(u) ≤h p(2) for all u ≥2, provided that p ≥p0 and that p is not too close
+to an even integer. Together with Hölder’s inequality and Proposition 2.1, this yields
+a proof of Theorem 1.1 for hyperplanes with normal unit vectors which have only
+coordinates of modulus ≤
+1
+√
+2, see Sect. 2.
+Nazarov and Podkorytov [14] found an ingenious proof of Ball’s integral inequal-
+ity, using the distribution functions of f (s) = |γ∞(s)| and g(s) = exp(−s2
+2π ), cf.
+Proposition 2.5. We apply their method to prove the integral inequality in Theo-
+rem 2.2. Consider f (s) = |γp(s)| and g(s) = exp(−dps2), where dp > 0 is such that
+|| f ||L2(0,∞) = ||g||L2(0,∞). Nazarov and Podkorytov’s method yields inequalities of
+the form
+ ∞
+0
+| f (s)|u ds ≤
+ ∞
+0
+|g(s)|u ds for all u ≥2, provided that the difference of
+the distribution functions F −G of f −g changes sign just once in the right direction.
+Then
+h p(u) = √u
+ ∞
+0
+|γp(s)|u ds ≤√u
+ ∞
+0
+exp(−dps2)u ds
+=
+√
+2
+ ∞
+0
+exp(−dps2)2 ds = h p(2)
+by the deﬁnition of dp. To have F(x) −G(x) < 0 for values x close to x < 1, one
+needs that f (s) = |γp(s)| ≤exp(−dps2) = g(s) for s near zero. We show that
+|γp(s)| ≤exp(−cps2) holds for 0 ≤s ≤3, see Proposition 3.1, where cp > 0 is
+the optimal constant for this inequality close to s = 0. To have f (s) ≤g(s) near
+0, one needs that dp ≤cp holds. This condition is just Oleszkiewicz’ restriction on
+p, namely p ≥p0, see Lemma 2.3. While the distribution function of g is simple,
+G(x) =
+
+1
+dp ln( 1
+x ), the distribution function of f = |γp| is rather complicated.
+However, its determination is independent of the speciﬁc index p0. While the functions
+γp are positive for 1 ≤p ≤2, see Koldobsky [9], for p > 2, p /∈2N, they have ﬁnitely
+many real zeros, and for large arguments s show a negative power type decay, see
+Pólya [18]. We prove an error estimate for this decay for large s, see Proposition 3.7.
+For p > 2, p ∈2N, the functions γp have inﬁnitely many real zeros and decay
+===== page 5 =====
+On maximal hyperplane sections of the unit ball of lnp for p > 2
+Page 5 of 42
+15
+exponentially fast at inﬁnity, see Boyd [4] for an asymptotic expansion, but without
+error estimates. For relatively small s > 0, the functions γp show a damped sin(s)
+s
+-type
+behavior, with faster decay for smaller p. To ﬁnd estimates the distribution function
+F of |γp|, we approximate exp(−|r|p) by linear splines and calculate their Fourier
+transform, which are roughly of sin(s)
+s
+-type decay for 0 ≤s ≤cp, see Lemmas 3.2
+and 3.3. Their distribution functions are determined in Proposition 4.1 and in the
+proof of Theorem 2.2. For large p, say p ≥400, the simple approximation of γp in
+Lemma 3.2 sufﬁces, but for p0 ≤p ≤400, we need the better approximation of γp
+in Lemma 3.3. Lemmas 4.2 and 4.3 are required to estimate the size of the ﬁrst bumps
+of |γp| and the distribution function F(x) for 1
+20 ≤x ≤1
+5.
+The difﬁculty determining F is two-fold: ﬁrst, it depends on p, and the decay of
+|γp| for 0 ≤s ≤p is faster for smaller p, which requires a better approximation of γp,
+and secondly, for p close to an even integer, the decay for large s is difﬁcult to handle:
+for p /∈2N, the distribution function F increases of inverse power type β(p)x−
+1
+p+1
+for small x > 0 with limdist(p,2N)→0 β(p) = 0, while for p ∈2N it increases just
+logarithmically, (ln( 1
+x ))1−1
+p . The last fact lead to the requirement in both theorems
+that p should not be too close to the even integers. Our arguments are analytical, but
+for relatively small p we rely on the numerical evaluation of some integrals.
+In the case a1 >
+1
+√
+2 Ball projects the hyperplane onto (a(1))⊥and estimates the
+distortion factor. This method works in ln
+p-spaces only for a1 ≥2
+1p
+√
+2, leaving the gap
+between
+1
+√
+2 and 2
+1p
+√
+2. To close this gap, one would need a new argument, possibly of
+geometric nature. The technique used by Eskenazis, Nayar and Tkocz [5] to cover the
+case a1 >
+1
+√
+2 only works for very large p.
+2 Formulas and proofs
+Ball [2] used Pólya’s [17] result
+An,∞(a) = 2
+π
+ ∞
+0
+n
+
+j=1
+sin(a js)
+a js
+ds , a = (a j)n
+j=1 ∈Sn−1
+(2.1)
+to prove his theorem for ln
+∞. There is a corresponding formula for ln
+p:
+Proposition 2.1 Let 1 ≤p < ∞, n ∈N and a = (a j)n
+j=1 ∈Sn−1, a j ≥0. Then
+An,p(a) = 
+
+1 + 1
+p
+ 2
+π
+ ∞
+0
+n
+
+j=1
+γp(a js) ds ,
+(2.2)
+===== page 6 =====
+15
+Page 6 of 42
+H. König
+where
+γp(s) :=
+1
+
+
+1 + 1
+p
+
+ ∞
+0
+cos(sr) exp(−r p) dr , γp(0) = 1 .
+A proof of (2.2) by Fourier transform techniques can be found in Koldobsky [9],
+Theorem 3.2, using the normalization with voln−1(Bn−1
+p
+) =
+(2(1+ 1
+p ))n−1
+(1+ n−1
+p )
+. A different
+proof is given in König [11], as a consequence of the following formula of Eskenazis,
+Nayar and Tkocz [5], used in the proof of their resilience of cube slicing result:
+An,p(a) = 
+
+1 + 1
+p
+
+E(ξ,R)
+      
+n
+	
+j=1
+a j R jξ j
+      
+−1
+2
+;
+(2.3)
+here the ξ j are i.i.d. random vectors uniformly distributed on the unit sphere
+S2
+⊂
+R3 and the
+R j
+are i.i.d. positive random variables with density
+p
+(1+ 1
+p )x p exp(−x p)1[x>0)(x), independent of the ξ j’s. Theorem 1.1 amounts to deter-
+mining the optimal constant in a Khintchine type inequality for the L−1-norm with
+respect to these (combined) variables.
+For 1 ≤p < 2, the γp are just the (positive) densities of the p-stable random
+variables. However, we need the formula for 2 < p < ∞. By Pólya [18], for 2 <
+p < ∞and p /∈2N, the γp have real zeros, but only ﬁnitely many and inﬁnitely
+many complex zeros. For 4 ≤p ∈2N, the γp have inﬁnitely many real zeros and no
+complex zeros, see [18] or Boyd [4]. The order of decay of γp is very different in the
+cases p /∈2N and p ∈2N, in the ﬁrst case of negative power type, in the second of
+exponential decay. For p →∞, exp(−x p) →1[0,1)(x) pointwise.
+By the dominated convergence theorem, γp(s) →
+ 1
+0 cos(sr)dr = sin(s)
+s
+for p →
+∞. Ball used (2.1) and his integral inequality h∞(u) ≤h∞(2) for all u ≥2, where
+h∞(u) := √u
+ ∞
+0
+| sin(s)
+s
+|uds. Our proofs of Theorems 1.1 and 1.2 are based on (2.2)
+and the following analogue of Ball’s integral inequality for ln
+p, which is the main
+technical result of this paper.
+Theorem 2.2 Let 2 < p < ∞, cp := 1
+6
+(1+ 3
+p )
+(1+ 1
+p ), dp :=
+(2
+1p (1+ 1
+p ))2
+2π
+. Put
+h p(u) := √u
+ ∞
+0
+|γp(s)|u ds , 2 ≤u < ∞.
+Then
+h p(2) = 1
+2
+! π
+dp
+and h p(∞) := lim
+u→∞h p(u) = 1
+2
+! π
+cp
+.
+===== page 7 =====
+On maximal hyperplane sections of the unit ball of lnp for p > 2
+Page 7 of 42
+15
+a) If dp ≤cp, we have h p(u) ≤h p(2) for all u ≥2, assuming additionally
+dist(p, 2N) ≥
+1
+Ap , where A = 2. It also holds for A = p, if p ≥50 and for
+A = p5, if p ≥175.
+b) If cp < dp and p ≥20, we have h p(u) ≤h p(∞) for all u ≥2, assuming
+additionally dist(p, 2N) ≥( 14
+15)p.
+We need some facts on the -function. Since  is log-convex, the Digamma function
+ := (ln )′ is strictly increasing, ′ > 0. By Abramowitz, Stegun [1], 6.3.16. and
+6.4.10 we have for all x > 0
+(1 + x) = −γ +
+∞
+	
+k=1
+x
+k(x + k) , ′(1 + x) =
+∞
+	
+k=1
+1
+(k + x)2 ,
+(2.4)
+where γ ≃0.5772 is the Euler-Mascheroni constant. In particular, ′(1) =
+π2
+6 ,
+′(2) = π2
+6 −1 and ′( 5
+2) = π2
+2 −40
+9 , [1], 6.4.5.
+Lemma 2.3 The equation cp = dp has exactly one solution p0 ∈(2, ∞), p0 ≃
+26.265, with h p0(2) = h p0(∞). For p0 < p < ∞, dp < cp and h p(∞) < h p(2).
+For 2 < p < p0, cp < dp and h p(2) < h p(∞).
+Proof The equation cp = dp is equivalent to Oleszkiewicz’s condition in [15]
+φ(p) := 3
+π
+2
+2
+p 
+
+1 + 1
+p
+3
+
+
+1 + 3
+p
+
+= 1 .
+Note that φ(2) = 1, limp→∞φ(p) = 3
+π < 1. We show that φ is strictly increasing in
+p ∈(2, p1) and strictly decreasing in p ∈(p1, ∞), where p1 ≃4.192. We have
+(ln φ)′(p) = −1
+p2
+
+2 ln 2 + 3
+
+1 + 1
+p
+
+−3
+
+1 + 3
+p
+
+,
+We claim that F(p) := (1 + 1
+p) −(1 + 3
+p) is increasing for p ∈(2, ∞): Since
+F′(p) =
+1
+p2 (3′(1+ 3
+p)−′(1+ 1
+p)), (2.4) yields F′(p) =
+1
+p2
+"∞
+k=1
+2k2−6
+p2
+(k+ 3
+p )2(k+ 1
+p )2 >
+0 for all p ≥
+√
+3, in particular for p ≥2. Thus F and 2 ln 2+3F are strictly increasing
+in (2, ∞), with 2 ln 2 + 3F(2) = −2(1 −ln 2) < 0, using ( 3
+2) −( 5
+2) = −2
+3, cf.
+[1], 6.3.4. However, for p = 5, 2 ln 2 + 3F(5) > 0. Hence there is exactly one zero
+p1 of 2 ln 2 + 3F(p) = 0 in the interval (2, 5), p1 ≃4.192. For 2 < p < p1,
+(ln φ)′ > 0, φ is increasing, and for p1 < p < ∞, (ln φ)′ < 0, φ is decreasing. For
+p →∞, (ln φ)′ →0 and φ(p) →3
+π < 1. Thus φ(p) = 1 has exactly one solution
+p0 ∈(2, ∞), p0 ≃26.265. One may check e.g. that φ(26) > 1 > φ(27).
+⊓⊔
+===== page 8 =====
+15
+Page 8 of 42
+H. König
+Lemma 2.4 (a) As a function of p, dp =
+(2
+1p (1+ 1
+p ))2
+2π
+decreases in [2, ∞), with d2 = 1
+4
+and lim p→∞dp =
+1
+2π ≃0.15915.
+(b) As a function of p, cp = 1
+6
+(1+ 3
+p )
+(1+ 1
+p ) decreases in [2, p2) and increases in (p2, ∞),
+where p2 ≃9.1147, with c2 = 1
+4, lim p→∞cp = 1
+6 and cp2 ≃0.15715.
+For p = p0 ≃26.265 we have cp0 = dp0 ≃0.1609. Further c15 ≃0.1584.
+Proof (a) We have d
+dp(ln dp) = −2
+p2 (ln 2 + (1 + 1
+p)) < 0.
+(b) We get
+d
+dp(ln cp) = −1
+p2 ((1 + 1
+p) −3(1 + 3
+p)) =:
+F(p)
+p2 . By (2.4) ′ is
+decreasing and for 0 ≤x ≤3
+2, π2
+2 −40
+9 = ′( 5
+2) ≤′(1 + x) ≤′(1) = π2
+6 . This
+implies for all p ≥2 that
+F′(p) = 1
+p2
+
+9′
+
+1 + 3
+p
+
+−′
+
+1 + 1
+p
+
+≥1
+p2
+13
+3 π2 −40
+
+> 2
+p2 > 0 .
+Hence F is increasing in [2, ∞). Since F(9) < −0.012, F(10) > 0.084, F has
+exactly one zero p2 ∈[2, ∞), p2 ≃9.1147. Thus cp is decreasing in [2, p2) and
+increasing in (p2, ∞). For all p ∈[2, ∞), cp ≥cp2 ≃0.15715.
+⊓⊔
+We now prove Theorems 1.1 and 1.2 using (2.2) and Theorem 2.2 which we will
+verify later.
+Proof of Theorem 1.1 i) Since γp is the normalized Fourier cosine transform of
+exp(−r p), Plancherel’s theorem yields
+h p(2) =
+√
+2
+ ∞
+0
+γp(s)2 ds =
+√
+2
+
+
+1 + 1
+p
+2
+π
+2
+ ∞
+0
+exp(−r p)2 dr
+=
+1
+
+
+1+ 1
+p
+2
+π
+√
+2
+1
+p2
+1
+p
+ ∞
+0
+v
+1
+p −1 exp(−v) dv =
+π
+2
+1
+2+1
+p 
+
+1+ 1
+p
+ = 1
+2
+! π
+dp
+.
+(2.5)
+For u ≥2, h p(u) =
+ ∞
+0
+γp
+
+s
+√u
+
+u
+ds. Since cos(sr) = 1 −s2r2
+2
++ O(r4) near
+r = 0 and
+1
+
+
+1 + 1
+p
+
+ ∞
+0
+
+1 −s2
+2u r2
+
+exp(−r p) dr = 1 −1
+2p
+
+
+3
+p
+
+
+
+1 + 1
+p
+ s2
+u
+= 1 −1
+6
+
+
+1 + 3
+p
+
+
+
+1 + 1
+p
+ s2
+u = 1 −cp
+s2
+u ,
+===== page 9 =====
+On maximal hyperplane sections of the unit ball of lnp for p > 2
+Page 9 of 42
+15
+the dominated convergence theorem yields
+h p(∞) := lim
+u→∞h p(u) = lim
+u→∞
+ ∞
+0
+
+1 −cp
+s2
+u
+u
+ds
+=
+ ∞
+0
+exp(−cps2) ds = 1
+2
+! π
+cp
+=
+#
+$
+$
+%3π
+2
+(1 + 1
+p)
+(1 + 3
+p)
+.
+(2.6)
+ii) Let a = (a j)n
+j=1 ∈Sn−1. Assume ﬁrst that all a j satisfy 0 ≤a j ≤
+1
+√
+2. We
+may assume a j > 0 for all j. In Theorem 1.1 dp ≤cp and hence by Theorem 2.2
+h p(u) ≤h p(2) for all u ≥2. Then (2.2), Hölder’s inequality with "n
+j=1 a2
+j = 1 and
+h p(u) ≤h p(2) for u = a−2
+j
+≥2 imply
+An,p(a) = 
+
+1 + 1
+p
+ 2
+π
+ ∞
+0
+n
+
+j=1
+γp(a js) ds
+≤
+
+1 + 1
+p
+ 2
+π
+n
+
+j=1
+ ∞
+0
+|γp(a js)|a−2
+j
+ds
+a2
+j
+= 
+
+1 + 1
+p
+ 2
+π
+n
+
+j=1
+ 1
+a j
+ ∞
+0
+|γp(s)|a−2
+j
+ds
+a2
+j
+= 
+
+1 + 1
+p
+ 2
+π
+n
+
+j=1
+h p(a−2
+j )a2
+j
+≤
+
+1 + 1
+p
+ 2
+π h p(2) = 2
+1
+2 −1
+p = An,p(a(2)) ,
+where the last two equalities are a direct consequence of the formula for h p(2) in (2.5)
+and of (2.2).
+iii) Let a = (a j)n
+j=1 ∈Sn−1, a j ≥0 and a1 >
+1
+√
+2. Then a j <
+1
+√
+2 for all j ≥2.
+Consider the “cylinder”
+Z := {x = (x1, . . . , xn) ∈Rn | (x2, . . . , xn) ∈Bn−1
+p
+, x1 ∈R } .
+Then Bn
+p ∩a⊥⊂Z ∩a⊥. Let Q : Rn →Rn be the orthogonal projection onto (a(1))⊥
+and T = Rn →Rn be given by T (ta + x) = ta(1) + Qx, where x ∈a⊥. In matrix
+terms
+T =
+⎛
+⎜⎜⎝
+a1
+a2
+· · ·
+an
+−a2a1 1 −a2
+2
+· · · −a2an
+· · ·
+· · ·
+· · ·
+· · ·
+−ana1
+· · · −anan−1 1 −a2
+n
+⎞
+⎟⎟⎠.
+===== page 10 =====
+15
+Page 10 of 42
+H. König
+Then Ta = a(1) and for any x = (x1, x2, . . . , xn) ∈Rn with ⟨a, x⟩= 0 we have
+T x = (0, x2, . . . , xn). Thus T projects Z ∩a⊥onto Bn−1
+p
+= Bn
+p∩(a(1))⊥. Calculation
+shows that det(T ) = a1 and hence
+An,p(a) ≤voln−1(Z ∩a⊥)
+voln−1(Bn−1
+p
+)
+= 1
+a1
+≤2
+1
+2 −1
+p = An,p(a(2)) ,
+if a1 ≥2
+1
+p −1
+2 . This proves An,p(a) ≤An,p(a(2)) for all a ∈Sn−1 except possibly for
+those a with a1 ∈
+
+1
+√
+2, 2
+1p
+√
+2
+
+= Ip, an interval of length |Ip| <
+1
+2p for p ≥p0.
+iv) Suppose that a1 ∈Ip or that dist(p, 2N) < 2−p. If a1 ∈Ip, choose 2 < p <
+q < ∞with
+1
+√
+2 < 2
+1q
+√
+2 < a1 and dist(q, 2N) ≥2−q. If a1 /∈Ip, but dist(p, 2N) <
+2−p, choose 2 < p < q < ∞with dist(q, 2N) ≥2−q. Since An,p(a) is increasing
+in p by Meyer, Pajor [12], we have An,p(a) ≤An,q(a). Then by iii)
+An,p(a) ≤An,q(a) ≤An,q(a(2)) = 2
+1
+p −1
+q An,p(a(2)) < 2
+1
+p An,p(a(2)) .
+⊓⊔
+Proof of Theorem 1.2 i) Let a = (a j)n
+j=1 ∈Sn−1 with 0 ≤a j ≤
+1
+√
+2 for all j =
+1, . . . , n. We may assume a j > 0 for all j. Suppose that 20 < p < p0. Then cp < dp
+and h p(u) ≤h p(∞) for all u ≥2 by Theorem 2.2. Similarly as in part ii) of the
+previous proof we ﬁnd with u = a−2
+j
+≥2
+An,p(a) ≤
+
+1 + 1
+p
+ 2
+π
+⎛
+⎝
+n
+
+j=1
+h p(a−2
+j )
+⎞
+⎠
+a2
+j
+≤
+
+1 + 1
+p
+ 2
+π h p(∞) =
+#
+$
+$
+$
+$
+%
+6
+π
+
+
+1 + 1
+p
+3
+
+
+1 + 3
+p
+ = lim
+n→∞An,p(a(n)) .
+The last equality is a consequence of (2.2) and the dominated convergence theorem,
+lim
+n→∞An,p(a(n)) = lim
+n→∞
+
+1 + 1
+p
+ 2
+π
+ ∞
+0
+γp
+ s
+√n
+n
+ds
+= lim
+n→∞
+
+1 + 1
+p
+ 2
+π
+ ∞
+0
+
+1 −cp
+s2
+n
+n
+ds
+= 
+
+1 + 1
+p
+ 2
+π
+ ∞
+0
+exp(−cps2) ds
+===== page 11 =====
+On maximal hyperplane sections of the unit ball of lnp for p > 2
+Page 11 of 42
+15
+= 
+
+1 + 1
+p
+ 2
+π
+1
+2
+! π
+cp
+=
+#
+$
+$
+$
+$
+%
+6
+π
+
+
+1 + 1
+p
+3
+
+
+1 + 3
+p
+ .
+ii) If a1 >
+1
+√
+2, the same argument as in iii) of the previous proof shows that
+An,p(a) ≤
+1
+a1 . Hence Theorem 1.2 will be valid for all a ∈Sn−1 with a1 ≥
+(
+π
+6
+(1+ 3
+p )
+(1+ 1
+p )3 =: φ(p). The function φ is convex in (2, p0): Calculation yields that
+signum(φ′′(p)) = signum(ψ(p)), where
+ψ(p) =
+
+
+
+1 + 3
+p
+
+−
+
+1 + 1
+p
+ 
+3
+
+1 + 3
+p
+
+−3
+
+1 + 1
+p
+
++ 4p
+
++
+
+6′
+
+1 + 3
+p
+
+−2′
+
+1 + 1
+p
+
+.
+The ﬁrst summand is positive, since  is increasing due to the log-convexity of ,
+and for the second summand (2.4) yields
+6′
+
+1 + 3
+p
+
+−2′
+
+1 + 1
+p
+
+=
+∞
+	
+k=1
+4
+p2
+k2 −3
+p2
+(k + 3
+p)2(k + 1
+p)2 > 0 .
+We have that φ(p) >
+1
+√
+2 + 1
+3p +
+1
+150 holds for p = 20 and p = p0. Thus by convexity
+of φ, a1 >
+1
+√
+2 + 1
+3p +
+1
+150 implies a1 > φ(p) for all 20 ≤p ≤p0.
+⊓⊔
+Conjecture. We conjecture that for 2 < p < p0 and n ≥2 the maximal hyperplane
+section of Bn
+p is either given by (a(2))⊥or by (a(n))⊥,
+An,p(a) ≤max(An,p(a(2)), An,p(a(n))) ,
+where a(2) only occurs for relatively small n ≤N(p). The motivation for the con-
+jecture is that the p-analogue h p(u) of Ball’s integral function, which by the above
+proof is closely related to An,p(a(n)) for u = n, seems to decrease ﬁrst for u > 2
+close to 2 and then increase to limn→∞h p(n) > h p(2), at least for 5 ≤p < p0. The
+value N(p) should be approximately the smallest value n such that h p(n) > h p(2).
+Numerical evaluation of (2.2) yields e.g.
+A3,6(a(2)) = 2
+1
+3 ≃1.260 > A3,6(a(3)) ≃1.250 ,
+A4,8(a(2)) = 2
+3
+8 ≃1.297 > A4,8(a(4)) ≃1.295 > A4,8(a(3)) ≃1.270 .
+===== page 12 =====
+15
+Page 12 of 42
+H. König
+For 2 < p < 4.3, h p seems to increase in the full interval (2, ∞), at least we have by
+numerical evaluation that
+h′
+p(2) =
+1
+2
+√
+2
+ ∞
+0
+γp(s)2 ds +
+√
+2
+ ∞
+0
+γp(u)2 ln |γp(u)| du
+= 1
+8
+! π
+dp
++
+√
+2
+ ∞
+0
+γp(u)2 ln |γp(u)| du > 0
+e.g. h′
+4(2) > 0.009, h′
+4.3(2) > 0.002. But h′
+4.5(2) < −0.002. Thus we conjecture that
+for 2 < p < 4.3, the main diagonal a(n) should yield the maximal hyperplane section
+foralldimensionsn.Inthisrespect,notealsothat,byKoldobsky[9],Chapter7,for p <
+2 we have An,p(a(n)) ≤An,p(a) for all a ∈Sn−1, which implies
+d
+dp An,p(a)|p=2 ≤
+d
+dp An,p(a(n))|p=2, since An,2(a) = An,2(a(n)). If the inequality were strict, we could
+conclude that An,p(a) ≤An,p(a(n)) for p > 2 close to 2. The conjecture is that this
+holds up to p = 4.3 for all a ∈Sn−1.
+To prove Theorem 2.2, we will use the following ingenious distribution function
+result of Nazarov, Podkorytov [14]. Let (
+, μ) be a measure space. The distribution
+function F of a measurable function f : 
+ →R≥0 is deﬁned by
+F(x) = μ{s ∈
+ | f (s) > x} , x > 0 .
+Proposition 2.5 Let (
+, μ) be a measure space, f , g : 
+ →R≥0 be measurable and
+F, G be their distribution functions, assumed to be ﬁnite for every x > 0. Suppose that
+there is u0 ∈(0, ∞) such that gu −f u ∈L1(
+, μ) for all u ≥u0. Assume further
+that there is x0 > 0 such that the difference G −F changes sign from −to +, i.e.
+G(x) ≤F(x) for all x ∈(0, x0) and G(x) ≥F(x) for all x > x0. Then the function
+h(u) :=
+1
+uxu
+0
+
+
+(gu −f u) dμ
+is increasing in u ∈[u0, ∞). In particular, if
+
+
+(gu0 −f u0) dμ ≥0 holds, we also
+have
+
+
+(gu −f u) dμ ≥0 for all u ≥u0.
+We will apply this to f = |γp| and g(s) = exp(−dps2) and u0 = 2 to prove
+Theorem 2.2 (a). Note that
+√u
+ ∞
+0
+exp(−dps2)u ds = 1
+2
+! π
+dp
+is independent of u and we get a bound of h p(u) = √u
+ ∞
+0
+|γp(s)|u ds for all u ≥u0.
+While the distribution function of G is easily determined, G(x) =
+
+1
+dp ln( 1
+x ), the
+estimate of the distribution function of |γp| is more complicated and requires some
+information on the decay of γp(s), which we will investigate in the next section.
+===== page 13 =====
+On maximal hyperplane sections of the unit ball of lnp for p > 2
+Page 13 of 42
+15
+3 Decay of p
+To estimate the distribution function of |γp|, we need some results on the decay of
+γp(s), for s close to zero, asymptotically in s, and in the medium range for s. We start
+with the estimate close to zero.
+Proposition 3.1 Let 5 ≤p < ∞, cp := 1
+6
+
+
+1+ 3
+p
+
+
+
+1+ 1
+p
+. Then for all 0 ≤s ≤3
+γp(s) ≤exp(−cps2) , γp(0) = 1 .
+Proof i) Using the series expansion of cos(sr), we ﬁnd
+γp(s) =
+1
+
+
+1 + 1
+p
+
+ ∞
+0
+cos(sr) exp(−r p) dr
+=
+1
+
+
+1 + 1
+p
+
+∞
+	
+n=0
+(−1)n s2n
+(2n)!
+ ∞
+0
+r2n exp(−r p) dr
+=
+∞
+	
+n=0
+(−1)n
+1
+(2n + 1)!
+
+
+1 + 2n+1
+p
+
+
+
+1 + 1
+p
+ s2n =:
+∞
+	
+n=0
+(−1)nap(n)s2n .
+The series expansion of exp(−cps2) is
+exp(−cps2) =
+∞
+	
+n=0
+(−1)n
+⎛
+⎝1
+6
+
+
+1 + 3
+p
+
+
+
+1 + 1
+p
+
+⎞
+⎠
+n
+s2n
+n! =:
+∞
+	
+n=0
+(−1)nbp(n)s2n .
+The ﬁrst two terms in both series coincide. Therefore γp(s) ≤exp(−cps2) will be
+satisﬁed for 0 < s ≤3, if for all even integers n ≥2
+bp(n) −bp(n + 1)s2 ≥ap(n) −ap(n + 1)s2
+(3.1)
+holds. We have for 0 < s ≤3
+bp(n) −bp(n + 1)s2 = bp(n)
+⎛
+⎝1 −
+s2
+6(n + 1)
+
+
+1 + 3
+p
+
+
+
+1 + 1
+p
+
+⎞
+⎠> 0 ,
+ap(n) −ap(n + 1)s2 = ap(n)
+⎛
+⎝1 −
+s2
+2(n + 1)(2n + 3)
+
+
+1 + 2n+3
+p
+
+
+
+1 + 2n+1
+p
+
+⎞
+⎠> 0 .
+===== page 14 =====
+15
+Page 14 of 42
+H. König
+Hence (3.1) is equivalent to
+bp(n)
+ap(n) := C p(n) ≥Dp(n) :=
+1 −
+s2
+2(n+1)(2n+3)
+
+
+1+ 2n+3
+p
+
+
+
+1+ 2n+1
+p
+
+1 −
+s2
+6(n+1)
+
+
+1+ 3
+p
+
+
+
+1+ 1
+p
+
+.
+(3.2)
+For n = 0 both values are 1.
+⊓⊔
+ii) We claim that C p(n) is increasing in n ≥2 for all p. Differentiation shows
+d
+dn (ln(C p(n))) = 2(2n + 2) −(n + 1) + ln
+⎛
+⎝1
+6
+
+
+1 + 3
+p
+
+
+
+1 + 1
+p
+
+⎞
+⎠
+−2
+p 
+
+1 + 2n + 1
+p
+
+.
+Let E(n, p) := ln( 1
+6
+(1+ 3
+p )
+(1+ 1
+p ))−2
+p(1+ 2n+1
+p ). We will show that E(n, p) is increasing
+in p for all n (and negative), and then E(n, p) ≥E(n, 2) will imply
+d
+dn (ln(C p(n))) ≥2(2n + 2) −(n + 1) −2 ln 2 −
+
+n + 3
+2
+
+= 0 ,
+where the last equality is a consequence of the duplication formula for the Digamma
+function , (2x) = 1
+2(x)+ 1
+2(x + 1
+2)+ln 2, see Abramowitz, Stegum [1], 6.3.8.
+Thus C p(n) will be increasing in n. As for E(n, p), we have
+p2 d
+dp E(n, p)
+=2
+
+1+ 2n+1
+p
+
++
+
+1+ 1
+p
+
+−3
+
+1+ 3
+p
+
++22n+1
+p
+′
+
+1+ 2n + 1
+p
+
+≥2
+
+1 + 5
+p
+
++ 
+
+1 + 1
+p
+
+−3
+
+1 + 3
+p
+
+,
+using that  is increasing, ′ > 0, since  is log-convex. Calculation using (2.4)
+shows that
+2
+
+1 + 5
+p
+
++
+
+1+ 1
+p
+
+−3
+
+1 + 3
+p
+
+= 2
+p
+∞
+	
+k=1
+k −3
+p
+(k + 5
+p)(k + 1
+p)(k + 3
+p)
+>0
+for p ≥3. In fact, the sum of the ﬁrst four terms (and thus the full sum) is positive for
+all p ≥2. Thus E(n, p) is increasing in p for all n ≥2.
+===== page 15 =====
+On maximal hyperplane sections of the unit ball of lnp for p > 2
+Page 15 of 42
+15
+We next show that Dp(n, s) is decreasing in n ≥2 for all p ≥5 and s ≥0,
+Dp(n) :=
+1 −
+s2
+2(n+1)(2n+3)
+
+
+1+ 2n+3
+p
+
+
+
+1+ 2n+1
+p
+
+1 −
+s2
+6(n+1)
+
+
+1+ 3
+p
+
+
+
+1+ 1
+p
+
+=: 1 −Bp(n)s2
+1 −Ap(n)s2 .
+This is equivalent to
+(Ap(n) −Ap(n + 1)) −(Bp(n) −Bp(n + 1)) + s2(Ap(n + 1)Bp(n)
+−Ap(n)Bp(n + 1)) ≥0 .
+(3.3)
+The coefﬁcient of s2 is non-negative if and only if
+(2n + 5)
+
+1 + 2n + 3
+p
+2
+≥(2n + 3)
+
+1 + 2n + 5
+p
+
+
+
+1 + 2n + 1
+p
+
+.
+(3.4)
+We have equality for p = 2 and claim that l(p) := 2 ln((1 + 2n+3
+p )) −ln((1 +
+2n+5
+p ))−ln((1+ 2n+1
+p )) is increasing in p ≥2, so that (3.4) will hold. Differentiation
+shows, using again (2.4),
+p2 l′(p)
+= (2n + 5)
+
+1 + 2n + 5
+p
+
++ (2n + 1)
+
+1 + 2n + 1
+p
+
+−2(2n + 3)
+
+1 + 2n + 3
+p
+
+= 8
+p
+∞
+	
+k=1
+k
+(k + 2n+5
+p )(k + 2n+5
+p )(k + 2n+5
+p )
+> 0 .
+Therefore the coefﬁcient of s2 in (3.3) is positive.
+By the log-convexity of , (1 + 2n+3
+p )2 ≤(1 + 2n+1
+p )(1 + 2n+5
+p ). This yields
+for the ﬁrst two terms in (3.3)
+Ap(n) −Ap(n + 1) =
+1
+6(n + 1)(n + 2)
+
+
+1 + 3
+p
+
+
+
+1 + 1
+p
+ ,
+Bp(n) −Bp(n + 1) ≤
+
+1
+2(n + 1)(2n + 3) −
+1
+2(n + 2)(2n + 5)
+ 
+
+1 + 2n+3
+p
+
+
+
+1 + 2n+1
+p
+ .
+===== page 16 =====
+15
+Page 16 of 42
+H. König
+Again by the log-convexity of , for x = 1 + 2n+1
+p
+and 0 < θ = 2
+p ≤1
+(x + θ) ≤(x)1−θ(x + 1)θ = xθ(x) ,
+
+
+1 + 2n+3
+p
+
+
+
+1 + 2n+1
+p
+ ≤
+
+1 + 2n + 1
+p
+ 2
+p
+.
+Therefore
+(Ap(n)−Ap(n + 1)) −(Bp(n) −Bp(n + 1))
+≥
+1
+6(n + 1)(n + 2)
+⎛
+⎝
+
+
+1 + 3
+p
+
+
+
+1 + 1
+p
+ −
+12n+21
+(2n + 3)(2n + 5)
+
+1+ 2n + 1
+p
+ 2
+p
+⎞
+⎠.
+By Lemma 2.4 (b),
+(1+ 3
+p )
+(1+ 1
+p ) ≥0.9429 for all p ≥2. The negative term in the last
+inequality is maximal for n = 2, and it is < 0.9426 for all p ≥5. Thus (3.3) is
+satisﬁed for all p ≥5 and s ≥0.
+iii) Since C p(n) is increasing in n and Dp(n, s) is decreasing in n for p ≥5 and
+s ≥0,theworstcasefor(3.2)toholdisn = 2.WehavetoprovethatCp(2) ≥Dp(2, s)
+for all 0 ≤s ≤3. Since
+p2 d
+dp ln(C p(2)) = 5
+
+1 + 5
+p
+
++ 
+
+1 + 1
+p
+
+−6
+
+1 + 3
+p
+
+= 8
+p
+∞
+	
+k=1
+k
+(k + 5
+p)(k + 1
+p)(k + 3
+p)
+> 0 ,
+C p(2) is strictly increasing in p with lim p→∞C p(2) =
+5
+3. Also Dp(2, s) =
+1−s2
+42
+(1+ 7p )
+(1+ 5p )
+1−s2
+18
+(1+ 3p )
+(1+ 1p )
+is strictly increasing in p for all p ≥5 and 0 ≤s ≤3: 1 ≤
+(1+ 7
+p )
+(1+ 5
+p ) ≤7
+2
+is strictly decreasing and
+(1+ 3
+p )
+(1+ 1
+p ) is strictly increasing for p ≥p2 ≃9.1147. For
+p ∈[5, p2), Dp(2, s) is increasing in p, since
+(1+ 7
+p )
+(1+ 5
+p ) decreases relatively faster than
+(1+ 3
+p )
+(1+ 1
+p ). Namely, we have for 5 ≤p ≤p2
+d
+dp
+
+
+1+ 3
+p
+
+
+
+1+ 1
+p
+
+d
+dp
+
+
+1+ 7
+p
+
+
+
+1+ 5
+p
+
+< 1
+4 < 0.29 < 3
+7
+1 −s2
+18
+
+
+1+ 3
+p
+
+
+
+1+ 1
+p
+
+1 −s2
+42
+
+
+1+ 7
+p
+
+
+
+1+ 5
+p
+
+,
+===== page 17 =====
+On maximal hyperplane sections of the unit ball of lnp for p > 2
+Page 17 of 42
+15
+where the maximum on the left side occurs for p = 5 and the minimum on the right
+side for s = 3 and p = p2. Further, Dp(2, s) is increasing in s for all p.
+Deﬁne a decreasing sequence 2 ≤pn ≤∞as follows: Let p1 := ∞. Since 11
+7 =
+Dp1(2, 3) < C p1(2) = 5
+3 and C p(2) and Dp(2, 3) are strictly increasing in p with
+C2(2) = D2(2, 3) = 1, there is a unique p2, 2 < p2 < p1 = ∞such that Dp1(2, 3) =
+C p2(2). Then for all p2 ≤p < p1, C p(2) ≥C p2(2) = Dp1(2, 3) ≥Dp(2, 3). If
+(pn−1, pn)n≥2 have been chosen with 2 < pn < pn−1 and C pn(2) = Dpn−1(2, 3)
+such that C p(2) ≥Dp(2, 3) for all pn ≤p < pn−1, choose 2 ≤pn+1 < pn with
+C pn+1(2) = Dpn(2, 3). Note that pn+1 > 2 since C2(2) = D2(2, s) = 1. Then for all
+pn+1 ≤p < pn, C p(2) ≥C pn+1(2) = Dpn(2, 3) ≥Dp(2, 3). Numerical evaluation
+yields p2 ≃8.6, p3 ≃5.31 and p4 ≃4.76. Hence for all p ≥5 and 0 ≤s ≤3,
+C p(2) ≥Dp(2, 3) ≥Dp(2, s), i.e. (3.2) holds. This proves Proposition 3.1.
+⊓⊔
+Remarks. (1) The estimate is also true for 2 < p ≤5, though more tedious to
+prove by the method used.
+(2) In König, Koldobsky [10], Lemma 4.1, a similar inequality was proven in a differ-
+ent context, where information on the real zeros of the Fourier transform of a speciﬁc
+function was available. Proposition 3.1 might be shown (easier than here) by a modi-
+ﬁcation of that technique, provided one would know that the (real and complex) zeros
+(zn)n∈N of γp satisfy ℜ(zn) ≥3 + ℑ(zn) for all n. We have not been able to prove
+this.
+Lemma 3.2 Let 2 ≤p < ∞. Then for any s > 0
+
+sin(s)
+s
+−
+
+1 + 1
+p
+
+γp(s)
+ ≤1.016
+p
+,
+(3.5)
+hence
+γp(s)
+ ≥
+1
+
+
+1 + 1
+p
+
+
+sin(s)
+s
+ −1.016
+p
+
+.
+Proof We have
+sin(s)
+s
+−
+
+1 + 1
+p
+
+γp(s)
+ =
+
+ 1
+0
+cos(sr) (1 −exp(−r p)) dr
+−
+ ∞
+1
+cos(sr) exp(−r p) dr
+
+≤
+ 1
+0
+(1 −exp(−r p)) dr +
+ ∞
+1
+exp(−r p) dr
+= 1 −
+ ∞
+0
+exp(−r p) dr + 2
+ ∞
+1
+exp(−r p) dr
+= 1 −
+
+1 + 1
+p
+
++ 2
+p
+ ∞
+1
+t
+1
+p −1 exp(−t) dt =: φ(p) .
+===== page 18 =====
+15
+Page 18 of 42
+H. König
+We claim that ψ(p) := pφ(p) is increasing in p. We ﬁnd
+ψ′(p) = 1 −
+
+1 + 1
+p
+
++ 
+
+1 + 1
+p
+ 1
+p 
+
+1 + 1
+p
+
+−2
+p2
+ ∞
+1
+t
+1
+p −1 ln(t) exp(−t) dt .
+It follows from (2.4) that (1 + 1
+p) ≥−γ + 4(1 −ln 2) 1
+p > −γ + 6
+5
+1
+p for all p ≥2.
+Further 2
+ ∞
+1
+t−1
+2 ln(t) exp(−t) dt < 3
+10. This implies
+ψ′(p) ≥1 −
+
+1 + 1
+p
+ 
+1 + γ
+p −6
+5
+1
+p2
+
+−3
+10
+1
+p2 .
+(3.6)
+For all p ≥2, (1 + 1
+p) ≤1 −γ
+p + 1
+p2 , whereas for 2 ≤p ≤4 the better estimate
+(1 + 1
+p) ≤1 −γ
+p + 5
+6
+1
+p2 holds. Using these estimates in (3.6), calculation shows
+that ψ′(p) > 0 for all p ≥2. Therefore ψ(p) = pφ(p) ≤limp→∞ψ(p) =
+γ + 2
+ ∞
+1
+t−1 exp(−t) dt = γ + 2Ei(1, 1) < 1.016 and (3.5) follows. Here Ei
+denotes the exponential integral function.
+⊓⊔
+For 15 ≤p < ∞, we need a better, slightly more complicated estimate for γp(s)
+in the medium range for s > 0.
+Lemma 3.3 For 15 ≤p < ∞and s > 0 let
+p(s) :=
+
+14
+19
+sin(s)
+s
++ 5
+19
+sin((1 −2
+p)s)
+s
+ sin( s
+p)
+s
+p
+.
+Then for all s > 0
+p(s) −
+
+1 + 1
+p
+
+γp(s)
+ ≤
+1
+Np ,
+where N = 7.857 for 175 < p < ∞, N = 8.003 for 26 ≤p ≤175 and N = 8.62
+for 15 ≤p ≤26. Hence
+γp(s)
+ ≥
+1
+
+
+1 + 1
+p
+
+ p(s)
+ −1
+Np
+
+.
+The function p may be also written as
+p(s) = 1
+19
+!
+221 + 140 cos(2 s
+p ) sin(s −αp(s))
+s
+sin( s
+p)
+s
+p
+,
+where αp(s) = arctan
+
+5 sin(2 s
+p )
+14+5 cos(2 s
+p )
+
+.
+===== page 19 =====
+On maximal hyperplane sections of the unit ball of lnp for p > 2
+Page 19 of 42
+15
+Proof In Lemma 3.2 we approximated ep(r) := exp(−r p) just by 1[0,1](r). We now
+use a better piecewise linear approximation kp ∈C[0, ∞). Deﬁne
+kp(r) :=
+⎧
+⎪⎪⎪⎨
+⎪⎪⎪⎩
+1
+r ∈I1,p := [0, 1 −3
+p]
+5
+38 p(1 −r) + 23
+38
+r ∈I2,p := (1 −3
+p, 1 −1
+p)
+7
+19 p(1 −r) + 7
+19
+r ∈I3,p := [1 −1
+p, 1 + 1
+p]
+0
+r ∈I4,p := (1 + 1
+p, ∞)
+⎫
+⎪⎪⎪⎬
+⎪⎪⎪⎭
+.
+We claim that
+ ∞
+0
+|ep(r) −kp(r)| dr <
+1
+Np, with the value N given in the statement
+of Lemma 3.3.
+Let φ1(p)
+:=
+
+I1,p∪I4,p |ep(r) −kp(r)| dr
+=
+
+I1,p(1 −exp(−r p)) dr +
+
+I4,p exp(−r p) dr. Then ψ1(p) := pφ1(p) is increasing in p, similarly as in the
+proof of Lemma 3.2, with
+ψ1(p) ≤lim
+p→∞ψ1(p) = γ −3 +
+ ∞
+exp(−3)
+1
+r exp(−r) dr
++
+ ∞
+exp(1)
+1
+r exp(−r) dr =: ψ1(∞) ≤0.06791 .
+Deﬁne φ2(p) :=
+
+I2,p∪I3,p |ep(r)−kp(r)| dr and ψ2(p) := pφ2(p). The substitution
+x = 1 −
+p
+10(1 −r) transforms the intervals I2,p and I3,p onto J1 := [ 7
+10, 9
+10] and
+J2 := [ 9
+10, 11
+10]. We get
+ψ2(p) = 10
+
+J1
+exp(−[1 −10
+p (1 −x)]p) −(73
+38 −25
+19x)
+ dx
++ 10
+
+J2
+exp(−[1 −10
+p (1 −x)]p) −(77
+19 −70
+19 x)
+ dx .
+Denote lp(x) := exp(−[1 −10
+p (1 −x)]p)), which is decreasing in p for all x in
+J := [ 7
+10, 11
+10], since (1+ y
+p)p is increasing in p for |y| < p. Note that lp(x) converges
+uniformly on J to l∞(x) = exp(−exp(−10 (1 −x))). For x = 1 we have equality
+lp(1) = l∞(1) = 1
+e. With λ1(x) = 73
+38 −25
+19x and λ2(x) = 77
+19 −70
+19x we have
+ψ2(p) = 10
+
+J1
+lp(x) −λ1(x)
+ dx + 10
+
+J2
+lp(x) −λ2(x)
+ dx .
+Let q < p ≤∞. Then lq(x) ≥lp(x) and the triangle inequality yields
+|ψ2(p) −ψ2(q)| ≤10
+
+J
+(lq(x) −lp(x)) dx =: ψ3(p, q) .
+The claim
+ ∞
+0
+|ep(r) −kp(r)| dr <
+1
+Np means that ψ(p) := ψ1(p) + ψ2(p) < 1
+N .
+Since ψ1 is increasing in p and ψ3(p, q) is increasing in p for any ﬁxed q, q < p,
+===== page 20 =====
+15
+Page 20 of 42
+H. König
+we ﬁnd for all 26 ≤p < ∞that
+ψ(p) ≤ψ1(∞) + ψ2(26) + ψ3(p, 26) ≤ψ1(∞) + ψ2(26) + ψ3(∞, 26) .
+We know already ψ1(∞) < 0.06791. Numerical integration yields ψ2(26) < 0.05675
+and ψ3(∞, 26) < 0.01993, so that ψ(p) < 0.1446 < 1
+N with N = 6.9. To ﬁnd the
+better values of N stated in Lemma 3.3, one has to apply the previous procedure to
+a sequence of points, namely p1 = ∞, p2 = 600, p3 = 175, p4 = 120, p5 = 73,
+p6 = 43 and p7 = 26 and use for p j+1 ≤p ≤p j for j = 1, . . . , 6 that
+ψ(p) ≤ψ1(p j) + ψ2(p j+1) + ψ3(p, p j+1) ≤ψ1(p j)
++ψ2(p j+1) + ψ3(p j, p j+1) =: C j.
+Numerical integration of ψ1(p j), ψ2(p j+1) and ψ3(p j, p j+1) for j = 1, . . . , 6 yields
+that C1, C2 <
+1
+7.857 and C j <
+1
+8.003 for j = 3, . . . , 6. Hence ψ(p) < 1
+N for all p with
+26 ≤p < ∞. The scheme with several points p j yields a better result, since ψ1(p)
+is strictly increasing in p. We have e.g. ψ1(43) < 0.0602 < 0.0679 < ψ1(∞). For
+15 ≤p ≤26, let p7 = 26, p8 = 22.3, p9 = 18.5 and p10 = 15. Use ψ2(p j) instead
+of ψ2(p j+1) to ﬁnd for all p with p j+1 ≤p ≤p j for j = 7, 8, 9 that
+ψ(p) ≤ψ1(p j) + ψ2(p j) + ψ3(p, p j+1)
+≤ψ1(p j) + ψ2(p j) + ψ3(p j, p j+1) =: D j .
+Numerical evaluation gives D j <
+1
+8.62 for j = 7, 8, 9.
+Thus
+ ∞
+0
+|ep(r) −kp(r)| dr <
+1
+Np for all p ≥15. This implies
+
+ ∞
+0
+cos(sr) exp(−r p) dr −
+ ∞
+0
+cos(sr) kp(r) dr
+
+≤
+ ∞
+0
+|ep(r) −kp(r)| dr <
+1
+Np .
+Explicit integration yields
+ ∞
+0
+cos(sr) kp(r) dr =
+
+14
+19
+sin(s)
+s
++ 5
+19
+sin((1 −2
+p)s)
+s
+ sin( s
+p)
+s
+p
+= p(s) .
+To verify the alternative form of p(s) with only one sin(s−α)
+s
+term, let y := 2 s
+p and
+deﬁne α = arctan
+
+5 sin(y)
+14+5 cos(y)
+
+. Then tan(α) =
+5 sin(y)
+14+5 cos(y), which implies cos(α) =
+14+5 cos(y)
+√221+140 cos(y), sin(α) =
+5 sin(y)
+√221+140 cos(y). Therefore with (1 −2
+p)s = s −y
+14
+19 sin(s) + 5
+19 sin(s −y) = 1
+19 (sin(s)(14 + 5 cos(y)) −5 cos(s) sin(y))
+===== page 21 =====
+On maximal hyperplane sections of the unit ball of lnp for p > 2
+Page 21 of 42
+15
+= 1
+19
+)
+221 + 140 cos(y) (sin(s) cos(α) −cos(s) sin(α))
+= 1
+19
+)
+221 + 140 cos(y) sin(s −α) .
+⊓⊔
+Remarks. (1) Let β(y) := arctan
+
+5 sin(y)
+14+5 cos(y)
+
+. Then β′(y) = 5
+14 cos(y)+5
+221+140 cos(y).
+This is zero for y± = π ± arccos( 5
+14) and β has a maximum in y−≃1.936, β(y−) =
+arctan( 5
+3
+1
+√
+19) ≃0.3653 and a minimum in y+ ≃4.347, β(y+) = −arctan( 5
+3
+1
+√
+19).
+Hence |β(y)| ≤0.3653 for all y. The function β is increasing in [0, y−] and decreasing
+in [y−, y+]. It is positive in (0, π) and negative in (π, 2π). For αp(s) = β(2 s
+p) we
+have that αp is increasing in s and decreasing in p, if 0 ≤2 s
+p ≤y−. The converse
+holds for y−≤2 s
+p ≤y+. We have −5
+9 ≤β′(y) ≤
+5
+19, with equality for the upper
+estimate at y = 0 and for the lower estimate at y = π.
+(2) Lemma 3.3 holds for 6 ≤p ≤15, too, with N = 8. This implies γp(s) ≥0 for
+all 0 ≤s ≤3 and p ≥6.
+Corollary 3.4 Assume p ≥15, 0 ≤s ≤y−
+2 p and s −αp(s) ≥[ s
+π ]π. The assumption
+is satisﬁed e.g. for s ∈[0, π], s ∈[3.255, 2π], for s ∈[6.501, 3π] and for s ∈
+[9.73, 4π]. Put
+p(s) := 1
+19
+!
+221 + 140 cos(2 s
+p ) min(| sin(s −αp(s))|, | sin(s)|)
+s
+sin( s
+p)
+s
+p
+−1
+Np ,
+with N as in Lemma 3.3. Then (1 + 1
+p)|γp(s)| ≥p(s), and for each s, p(s) is
+increasing in p.
+Proof The factors 1
+19
+
+221 + 140 cos(2 s
+p) and
+sin( s
+p )
+s
+p
+are strictly increasing in p since
+s
+p is decreasing. Also −1
+p is increasing in p. If s <
+y−
+2 p, αp(s) is positive and
+decreasing in p, s −αp(s) < s is increasing in p. In intervals where | sin(x)| is
+increasing, | sin(s−αp(s))| ≤| sin(s)| and min(| sin(s−αp(s))|, | sin(s)|) = | sin(s−
+αp(s))|. This is increasing in p under our assumption that s −αp(s) ≥[ s
+π ]π, and
+hence p(s) is increasing in p, too. In intervals where | sin(x)| is decreasing, | sin(s −
+αp(s))| ≥| sin(s)| and min(| sin(s −αp(s))|, | sin(s)|) = | sin(s)| is constant in p.
+We have s −αp(s) ≥0, since αp(s) ≤
+5
+19
+2
+ps ≤s. Note that for p ≥15 and
+0 ≤s < 14, s < y−
+2 p is satisﬁed. For 0 ≤s ≤y−
+2 p, s −αp(s) is increasing in s and in
+p, since ∂
+∂p(s−αp(s)) = 10s
+p2
+14 cos(2 s
+p )+5
+221+140 cos(2 s
+p ) > 0 and ∂
+∂s (s−αp(s)) = 1−2
+pβ′(2 s
+p) ≥
+1 −
+10
+19p > 0. This means that the valid inequality 3.255 −α15(3.255) > π implies
+s −αp(s) > π for all p ≥15 and s ∈[3.255, 2π]. Similarly 6.501−αp(6.501) > 2π
+and 9.73−αp(9.73) > 3π imply the other two claims when the assumption is satisﬁed
+for s.
+⊓⊔
+===== page 22 =====
+15
+Page 22 of 42
+H. König
+Corollary 3.5 Let p ≥15 and 0 ≤s ≤p. For n ∈N and In := [nπ, (n + 1)π] put
+yn := maxs∈In
+ sin(s)
+s
+. Then
+|γp(s)| ≤yn +
+1
+120
+(1 + 1
+15)
+, s ∈In .
+We have y1 ≃0.21723 with maximum at s1 ≃4.493, y2 ≃0.12827 with maximum at
+s2 ≃7.725. Hence |γp(s)| ≤0.2336 for s ∈I1 and |γp(s)| ≤0.1416 for s ∈I2 for
+p ≥15. Replacing 15 here by p0 ≃26.265 yields |γp(s)| ≤0.2267 for s ∈I1 and
+|γp(s)| ≤0.1360 for s ∈I2 for any p ≥p0.
+Proof For s ≤p, 2 s
+p < π and αp(s) ≥0. Hence for s −αp(s) ∈In
+| sin(s −αp(s))|
+s
+= s −αp(s)
+s
+| sin(s −αp(s))|
+s −αp(s)
+≤yn .
+This is also true, if s ∈In, but s −αp(s) < nπ: We have αp(s) < 0.37 <
+2
+5,
+s −αp(s) > nπ −2
+5, with
+| sin(nπ −2
+5)|
+nπ −2
+5
+= sin( 2
+5)
+nπ −2
+5
+<
+1
+(n + 1
+2)π
+≤yn .
+Therefore for s ∈In, (1 + 1
+p)|γp(s)| ≤p(s) +
+1
+Np ≤yn +
+1
+Np, |γp(s)| ≤
+yn+ 1
+Np
+(1+ 1
+p ),
+which is maximal for p = 15. The upper estimate for I1 easily extends to [3, 2π]. ⊓⊔
+Lemma 3.6 (a) Let 2 ≤p < ∞. The for any s > 0
+(1 + 1
+p )γ ′
+p(s) −s cos(s) −sin(s)
+s2
+ ≤1.016
+p
+and
+γ ′
+p(s)
+ ≤
+1.064
+
+
+1 + 1
+p
+
+1
+s + 1
+p
+
+.
+For s > π the constant 1.064 in the second inequality may be replaced by 1.016.
+(b) Let 15 ≤p < ∞. Then γp is strictly convex in [2.5, 5.5] with γ (2.5) > 0 and
+γp(5.5) < 0. In [5.5, 7] γp is strictly increasing with γp(7) > 0. Further, γp is strictly
+concave in [7, 8.5] and strictly decreasing in [8.5, 10] with γp(10) < 0.
+Proof (a) We have γ ′
+p(s) =
+−1
+(1+ 1
+p )
+ ∞
+0
+sin(sr) r exp(−r p) dr and
+
+ ∞
+0
+sin(sr) r (1[0,1](r) −exp(−r p)) dr
+===== page 23 =====
+On maximal hyperplane sections of the unit ball of lnp for p > 2
+Page 23 of 42
+15
+≤
+ 1
+0
+r (1 −exp(−r p)) dr +
+ ∞
+1
+r exp(−r p) dr
+= 1
+2 −
+ ∞
+0
+r exp(−r p) dr + 2
+ ∞
+1
+r exp(−r p) dr
+= 1
+2
+
+1 −
+
+1 + 2
+p
+
++ 2
+p
+ ∞
+1
+t
+2
+p −1 exp(−t) dt =: φ(p) .
+As in the proof of Lemma 3.2, ψ(p) := pφ(p) is increasing in p, with ψ(p) ≤
+γ + 2Ei(1, 1) < 1.016. Hence, using
+ 1
+0 sin(sr) r dr = sin(s)−s cos(s)
+s2
+,
+
+
+1 + 1
+p
+
+γ ′
+p(s) −s cos(s) −sin(s)
+s2
+ ≤1.016
+p
+.
+For 0 ≤s ≤π, h(s) := | s cos(s)−sin(s)
+s2
+| is bounded by 1.064
+s
+, with maximum of
+sh(s) at s0 ≃2.744. For s > π, h(s) is bounded by 1.014
+s
+, the extrema occurring for s
+satisfying 2s cos(s)+(s2 −2) sin(s) = 0, s ≃nπ −2
+nπ . Therefore (1+ 1
+p)|γ ′
+p(s)| ≤
+1.064( 1
+s + 1
+p).
+(b) We have γ ′′
+p (s) =
+−1
+(1+ 1
+p )
+ ∞
+0
+cos(sr) r2 exp(−r p) dr. Similarly as above we
+ﬁnd
+
+ ∞
+0
+cos(sr) r2 (1[0,1](r) −exp(−r p)) dr
+
+≤
+ 1
+0
+r2 (1[0,1](r) −exp(−r p)) dr +
+ ∞
+1
+exp(−r p) dr
+= 1
+3
+
+1 −
+
+1 + 3
+p
+
++ 2
+p
+ ∞
+1
+t
+3
+p −1 exp(−t) dt =: ˜φ(p) .
+Again ˜ψ(p) := p ˜φ(p) is increasing in p, with ˜ψ(p) ≤γ + 2Ei(1, 1) <
+1.016. Hence
+γ ′′
+p (p) +
+ 1
+0 cos(sr) r2 dr
+ <
+1.016
+p . Since
+ 1
+0 cos(sr) r2 dr
+=
+(s2−2) sin(s)+2s cos(s)
+s3
+=: k(s) with k(s) ≤−1
+14 for s ∈[2.5, 5.5], as a standard inves-
+tigation shows, γ ′′
+p (s) ≥
+1
+14 −1.016
+p
+> 0 for p ≥15 and γp is strictly convex in
+[2.5, 5.5]. In [5.5, 7], the function l(s) = s cos(s)−sin(s)
+s2
+is positive with l(s) >
+1
+11.
+Hence by part (a), 
+
+1 + 1
+p
+
+γ ′
+p(s) >
+1
+11 −1.016
+p
+> 0, i.e. γp is strictly increasing
+there. Similarly we have in [7, 8.5] that k(s) >
+1
+14, γ ′′
+p (s) < 0 and in [8.5, 10] that
+l(s) < −1
+14 , γ ′
+p(s) < 0.
+The estimate
+
+
+1 + 1
+p
+
+γp(s) −sin(s)
+s
+ ≤1.016
+p
+of Lemma 3.2 yields γp(2.5) > 0,
+γp(5.5) < 0, γp(7) > 0 and γp(10) < 0, since sin(2.5)
+2.5
+> 1
+5, sin(5.5)
+5.5
+< −1
+8 , sin(7)
+7
+> 1
+11
+and sin(10)
+10
+< −1
+14 .
+⊓⊔
+===== page 24 =====
+15
+Page 24 of 42
+H. König
+Pólya [18] proved an asymptotic estimate for γp(s), see also Koldobsky [9], Lemma
+2.28, if p > 2 is not an even integer. We need this with an error estimate.
+Proposition 3.7 Let 5 ≤p < ∞, p /∈2N. Then for any s ≥2
+3
+p3
+| sin( π p
+2 )|
+1p
+
+
+1 + 1
+p
+
+s p+1γp(s) −(p + 1) sin
+π p
+2
+ < 1
+2(p + 1)
+sin
+π p
+2
+ .(3.7)
+For p ≥10, 2
+3 here may be replaced by 5
+8.
+Proof As in [18], we integrate γp(s) by parts, substitute z = s pt p and put δ := s−p
+to ﬁnd
+
+
+1 + 1
+p
+
+s p+1γp(s) = s p+1
+ ∞
+0
+cos(st) exp(−t p) dt
+= ps p
+ ∞
+0
+sin(st) t p−1 exp(−t p) dt
+= ps pℑ
+ ∞
+0
+exp(ist) t p−1 exp(−t p) dt
+
+= ℑ
+ ∞
+0
+exp(iz
+1
+p ) exp(−δz) dz
+
+.
+Fix 0 < θ ≤π
+2 . By analyticity, we may change the path of integration from [0, ∞) to
+exp(iθ)[0, ∞), since for large R > 0 and z = R exp(iφ)
+
+ θ
+0
+exp(i R
+1
+p exp(i φ
+p )) exp(−δR exp(iφ)) dφ
+
+≤
+ θ
+0
+exp(−R
+1
+p sin(φ
+p ) −δR cos(φ)) dφ , cos(φ) ≥0
+≤
+ θ
+0
+exp(−R
+1
+p sin(φ
+p )) dφ ≤
+ θ
+0
+exp(−2
+π p R
+1
+p φ) dφ
+= π
+2
+p
+R
+1
+p
+
+1 −exp(−2
+π
+θ
+p R
+1
+p )
+
+≤π
+2
+p
+R
+1
+p
+,
+which tends to zero for R →∞. Thus for z = r exp(iθ)
+
+
+1 + 1
+p
+
+s p+1γp(s)
+=ℑ
+
+exp(iθ)
+ ∞
+0
+exp
+
+ir
+1
+p exp
+
+i θ
+p
+
+exp(−δr cos(θ)) exp(−iδr sin(θ)) dr
+
+.
+(3.8)
+===== page 25 =====
+On maximal hyperplane sections of the unit ball of lnp for p > 2
+Page 25 of 42
+15
+As in Pólya [18], we ﬁnd for s →∞, δ →0
+
+
+1 + 1
+p
+
+s p+1γp(s) →ℑ
+
+exp(iθ)
+ ∞
+0
+exp
+
+ir
+1
+p exp
+
+i θ
+p
+
+dr
+
+= ℑ
+
+exp(i π p
+2 )
+ ∞
+0
+exp
+
+−r
+1
+p
+
+dr
+
+= (p + 1) sin
+π p
+2
+
+,
+(3.9)
+where we used analyticity again to replace r exp(iθ) by r exp(i π p
+2 ).
+To get the error estimate in (3.7), we have to estimate the difference between the
+integrals in (3.8) and (3.9). For a = exp(−δr cos(θ)), ψ = −δr sin(θ), we ﬁnd using
+cos(θ) ≥0, sin(x) ≤x and 0 ≤1 −exp(−x) ≤x for x ≥0
+|1 −a exp(iψ)|2 = (1 −a cos(ψ))2 + a2 sin(ψ)2 = (1 −a)2 + 4a sin
+ψ
+2
+2
+= (1 −exp(−δr cos(θ)))2 + 4 exp (−δr cos(θ)) sin
+δr sin(θ)
+2
+2
+≤(δr cos(θ))2 + 4
+δr sin(θ)
+2
+2
+= (δr)2 ,
+i.e. |1 −a exp(iψ)| ≤δr. This implies
+
+
+1 + 1
+p
+
+s p+1γp(s) −(p + 1) sin
+π p
+2
+
+≤
+ ∞
+0
+δr
+ exp
+
+ir
+1
+p exp
+
+i θ
+p
+  dr = δ
+ ∞
+0
+r exp
+
+−r
+1
+p sin
+ θ
+p
+
+dr =: I .
+Substituting u = r
+1
+p sin
+
+θ
+p
+
+, i.e. r =
+
+u
+sin
+
+θ
+p
+
+p
+, we get with δ = s−p
+I = δ
+ ∞
+0
+p
+u2p−1
+sin
+
+θ
+p
+2p exp(−u) du
+=
+δ p
+sin( θ
+p)2p (2p) = 1
+2
+(2p + 1)
+sin
+
+θ
+p
+2p
+1
+s p .
+This holds, in particular, for the choice θ = π
+2 . To prove (3.7), it sufﬁces that
+1
+2
+(2p + 1)
+sin
+
+π
+2p
+2p
+1
+s p < 1
+2(p + 1)
+sin
+π p
+2
+ ,
+===== page 26 =====
+15
+Page 26 of 42
+H. König
+which means
+s >
+(2p + 1)
+(p + 1)
+ 1
+p
+1
+sin
+
+π
+2p
+2
+1
+ sin
+
+π p
+2
+
+1
+p
+.
+We claim that h1(p) :=
+
+1
+p
+(2p+1)
+(p+1)
+ 1
+p is decreasing in p. We have
+(ln h1)′(p) = −1
+p2 k(p) , k(p) = ln
+(2p + 1)
+(p + 1)
+
++p (1 + (p + 1) −2(2p + 1)) .
+To show that k is positive, note that k(1) = γ + ln 2 −1 > 1
+4 > 0. Thus it sufﬁces
+to show that k′(p) > 0. We ﬁnd k′(p) = 1 + p(′(p + 1) −4′(2p + 1)). By
+the duplication formula for , see Abramowitz, Stegun [1], 6.3.8, 2(2z) = (z) +
+(z + 1
+2) + 2 ln 2. Hence 4′(2z) −′(z + 1
+2) = ′(z). For z = p + 1
+2 we get
+4′(2p + 1) −′(p + 1) = ′(p + 1
+2). Thus k′(p) = 1 −p′(p + 1
+2). By (2.4),
+′(p + 1
+2) = "∞
+k=1
+1
+(k+p−1
+2 )2 . Let y := p −1
+2. Then for any k ∈N we have
+ k+ 1
+2
+k−1
+2
+dx
+(x+y)2 =
+1
+(k+y)2−1
+4 >
+1
+(k+y)2 and "∞
+k=1
+1
+(k+p−1
+2 )2 <
+ ∞
+1
+2
+dx
+(x+y)2 =
+2
+1+2y = 1
+p.
+Therefore k′(p) = 1−p "∞
+k=1
+1
+(k+p−1
+2 )2 > 0. Hence h1 is decreasing in p. It is easily
+veriﬁed that h2(p) := p sin( π
+2p) is increasing in p. Let h(p) := h1(p)
+h2(p)2 . Then h(p) is
+decreasing in p and
+
+(2p+1)
+(p+1)
+ 1
+p
+1
+sin( π
+2p )2 ≤h(p)p3. This proves Proposition 3.7 for
+s > h(p)
+p3
+| sin( π p
+2 )|
+1p . We have h(5) ≤2
+3, h(10) ≤5
+8, h(60) ≤3
+5 and lim p→∞h(p) =
+16
+π2e < 0.597.
+⊓⊔
+For even integers p ∈2N, the decay of γp(s) is not polynomial but exponential
+in nature. Boyd [4] proved the following asymptotic expansion: Let p ∈2N, p ≥4.
+Then for large s > 0
+
+
+1 + 1
+p
+
+γp(s) ≃
+(
+2π
+p −1
+1
+p
+1
+2(p−1) s
+p/2−1
+p−1
+exp
+
+−(p −1) sin
+π
+2
+1
+p −1
+  s
+p
+
+p
+p−1
+
+× cos
+
+(p −1) cos
+π
+2
+1
+p −1
+  s
+p
+
+p
+p−1
+−π
+4
+p −2
+p −1
+
+.
+(3.10)
+===== page 27 =====
+On maximal hyperplane sections of the unit ball of lnp for p > 2
+Page 27 of 42
+15
+There is no explicit error estimate, but the basic order of decay is exp(−αps
+p
+p−1 ),
+and thus slower than exp(−dps2) for p > 2. (In [4] there is a misprint which is
+corrected in (3.10).) For p /∈2N and s << p2, (3.10) also seems to give a reasonably
+good approximation of (1+ 1
+p)γp(s), as indicated by numerical plots. Actually, both
+orders for p ∈2N and p /∈2N roughly coincide, i.e. exp(−αps
+p
+p−1 ) ∼βps−(p+1), if
+s ∼p2 ln(p). Thus a possible conjecture for p /∈2N would be that Proposition 3.7 is
+valid for s > c p2 ln(p), and that γp has no real zeros for s > c p2 ln(p) for a suitable
+constant c > 0. Pólya [18] showed that for p /∈2N, γp has only ﬁnitely many real
+zeros, but at least 2[ p
+2 ] of them, and inﬁnitely many complex zeros.
+4 Proof of Theorem 2.2
+In this section we prove the main technical result of the paper. Lemmas 3.2 and 3.3
+show that the graph of |γp| resembles the one of
+ sin(s)
+s
+ for s < p. The estimate of the
+distribution function of |γp| will be based on the following result on the distribution
+function of | sin(s)
+s
+|.
+Proposition 4.1 Let Fsinc denote the distribution function of | sin(s)
+s
+|, i.e.
+Fsinc(x) := λ
+*
+s > 0
+
+
+sin(s)
+s
+ > x
++
+, 0 < x < 1 .
+Then for any 0 < x <
+1
+2π
+Fsinc(x) ≥2
+π
+1
+x −27
+16 .
+Proof Let 0 < x <
+1
+2π , deﬁne n ∈N and 0 ≤θ < 1 by
+1
+πx = n + θ. Let
+I j := (( j −1)π, jπ] for j = 1, . . . , n. For s ∈I j, | sin(s)
+s
+| ≥| sin(s)
+jπ | and hence with
+jπx =
+j
+n+θ
+λ
+*
+s ∈I j
+
+
+sin(s)
+s
+ > x
++
+≥λ
+*
+s ∈I j
+ | sin(s)| >
+j
+n + θ
++
+= π −2 arcsin
+
+j
+n + θ
+
+= 2 arccos
+
+j
+n + θ
+
+for 2 ≤j ≤n and λ
+*
+s ∈I1 | | sin(s)| >
+j
+n+θ
++
+= π −arcsin
+
+1
+n+θ
+
+=
+arcsin
+
+1
+n+θ
+
++ 2 arccos
+
+1
+n+θ
+
+. Therefore
+Fsinc
+ 1
+nπ
+
+≥arcsin
+
+1
+n + θ
+
++ 2
+n
+	
+j=1
+arccos
+
+j
+n + θ
+===== page 28 =====
+15
+Page 28 of 42
+H. König
+= arcsin
+
+1
+n + θ
+
++ 2
+n
+	
+j=0
+arccos
+
+j
+n + θ
+
+−π .
+Let h(y) := arccos
+
+y
+n+θ
+
+. By the Euler - Maclaurin summation formula
+n
+	
+j=0
+h( j) =
+ n
+0
+h(y) dy + h(0) + h(n)
+2
++
+ n
+0
+(y −[y] −1
+2) h′(y) dy .
+We have h′(y) = −
+1
+√
+(n+θ)2−y2 =: −k(y). Then −
+ 1
+2
+0 (y −1
+2) k(y) dy ≥0, and
+substituting z = 2 j −y for j = 1, . . . , n, we ﬁnd
+−
+ j
+j−1
+2
+
+y −
+
+j −1
+2
+
+k(y) dy −
+ j+ 1
+2
+j
+
+y −
+
+j + 1
+2
+
+k(y) dy
+= −
+ j
+j−1
+2
+
+y −
+
+j −1
+2
+
+k(y) dy +
+ j
+j−1
+2
+
+z −
+
+j −1
+2
+
+k(2 j −z) dz ≥0 ,
+since k is increasing in y. Therefore
+−
+ n
+0
+
+y −[y] −1
+2
+
+k(y) dy ≥−
+ n
+n−1
+2
+
+y −n + 1
+2
+
+k(y) dy .
+Further, substituting y = (n + θ)z,
+ n
+0
+h(y) dy = (n + θ)
+
+n
+n+θ
+0
+arccos(y) dy = (n + θ) −(n + θ)
+ 1
+n
+n+θ
+arccos(y) dy .
+With h(0) = π
+2 , h(n) = arccos
+
+n
+n+θ
+
+and arcsin(z) ≥z we ﬁnd
+Fsinc(x) ≥2(n + θ) −π
+2 +
+1
+n + θ −2(n + θ)
+ 1
+n
+n+θ
+arccos(y) dy
++ arccos
+
+n
+n + θ
+
+−2
+ n
+n−1
+2
+y −n + 1
+2
+)
+(n + θ)2 −y2 dy
+= 2(n + θ) −π
+2 +
+1
+n + θ + 2 arccos
+
+n
+n + θ
+
++ (2n −1) arccos
+n −1
+2
+n + θ
+
+−2
+(1
+2 + θ
+
+2n + θ −1
+2
+
+=: 2(n + θ) −π
+2 + φn(θ).
+===== page 29 =====
+On maximal hyperplane sections of the unit ball of lnp for p > 2
+Page 29 of 42
+15
+For each n ∈N, the function φn is concave in θ, since calculation shows
+φ′′
+n(θ) = −
+1
+(n + θ)2
+⎛
+⎜⎜⎜⎜⎝
+2n
+
+n2 + 4nθ + 2θ2
+
+(θ(2n + θ))
+3
+2
++
+
+n −1
+2
+2
+(
+1
+2 + θ
+
+2n + θ −1
+2
+ −
+1
+n + θ
+⎞
+⎟⎟⎟⎟⎠
+< 0 .
+Thus for any n ∈N, the minimum of φn is attained for either θ = 0 or θ = 1. For
+θ = 0, we have φn(0) = 1
+n + (2n −1) arccos(1 −1
+2n ) −2
+
+n −1
+4, which has the
+derivative d
+dn φn(0) = −1
+n2 + 2 arccos(1 −1
+2n ) −2
+
+n−1
+4
+n
+. By the series development
+of arccos, we have 2 arccos
+
+1 −1
+2n
+
+≥
+2
+√n
+
+1 +
+1
+24n
+
+. Using this, one checks that
+d
+dn φn(0) > 0 for n ≥9. Therefore φn(0) ≥φ9(0) > −0.112 for n ≥9 and also for
+n = 2, . . . , 8 by direct veriﬁcation. A similar investigation shows that φn(1) attains
+larger (negative) values that φn(0). Since −π
+2 −0.112 > −27
+16, we conclude that
+Fsinc(x) ≥2(n + θ) −27
+16 = 2
+π
+1
+x −27
+16.
+⊓⊔
+For the investigation of the distribution function of |γp| we need some information
+on the ﬁrst | sin(s)
+s
+|-type bumps of the graph of |γp| which we state in the next two
+Lemmas.
+Lemma 4.2 Let p ≥15. Then γp(s) > 0 for all 0 ≤s ≤3.11 and γp(s) < 0 for
+3.4 ≤s ≤5.8. If γp(s) < −1
+100, then s > π. Further, γp is strictly decreasing in
+[ 1
+4, 4]. For s ∈[0, π] we have: if γp(s) <
+4
+17, s ≥2.48, if γp(s) < 1
+8, s ≥2.75, if
+γp(s) < 1
+10, s > 2.8 and if γp(s) < 1
+20, s ≥2.966.
+Proof Let p ≥15. Lemma 3.3 yields with 14
+19 + 5
+19 = 1 that
+γp(s) ≥(1 + 1
+p )γp(s) ≥p(s) −1
+Np
+≥
+min
+
+sin(s), sin
+
+1 −2
+p
+
+s
+
+s
+sin
+
+s
+p
+
+s
+p
+−1
+Np .
+If (1 −2
+p)s < π
+2 , we have
+sin
+
+1−2
+p
+
+s
+
+s
+≥
+
+1 −2
+p
+
+2
+π ≥13
+15
+2
+π , since sin(x)
+x
+is
+decreasing in [0, π], and s ≤
+15
+13
+π
+2 implies sin(s)
+s
+≥
+13
+15
+2
+π sin
+
+15
+13
+π
+2
+
+. This yields
+p(s) ≥
+13
+15
+π
+2 sin
+
+15
+13
+π
+2
+ sin
+
+π
+26
+
+π
+26
+> 0.53, hence γp(s) ≥0.53 −
+1
+120 >
+1
+2. If
+π
+2 ≤
+
+1 −2
+p
+
+s ≤s ≤π, sin
+
+1 −2
+p
+
+s
+
+≥sin(s) and
+===== page 30 =====
+15
+Page 30 of 42
+H. König
+γp(s) ≥p(s) −1
+Np ≥sin(s)
+s
+sin
+
+s
+15
+
+s
+15
+−
+1
+120 =: h(s) .
+The function h is decreasing with γp(2.48) ≥h(2.48) >
+4
+17, γp(2.75) ≥h(2.75) >
+1
+8, γp(2.8) ≥h(2.8) >
+1
+10, γp(2.966) ≥h(2.966) >
+1
+20 and γp(3.11) ≥h(3.11) >
+1
+600 > 0.
+By Lemma 3.2, (1+ 1
+p)γp(s) ≤sin(s)
+s
++ 1.016
+p
+< sin(s)
+s
++ 1
+14. Since sin(s)
+s
+< −1
+14 for
+all s ∈[3.4, 5.8], we have γp(s) < 0 there. Further, Lemma 3.6 implies for s ∈[ 1
+4, 4]
+(1 + 1
+p )γ ′
+p(s) ≤s cos(s) −sin(s)
+s2
++ 1
+14 < −1
+100 < 0 ,
+as astandardanalysis of k(s) = s cos(s)−sin(s)
+s2
+shows. Thereforeγp is strictlydecreasing
+in [ 1
+4, 4]. (It is also decreasing in [0, 1
+4] which we do not require here.) For p ≥15,
+
+
+1+ 1
+p
+
+≥25
+26. If γp(s) < −1
+100, Lemma 3.3 yields that p(s) ≤
+
+1+ 1
+p
+
+γp(s)+
+1
+120 < −25
+26
+1
+100 + 1
+120 < 0. Since for s ∈[3, 2π] we have sin
+
+s
+p
+
+> 0 and αp(s) > 0,
+we conclude from p(s) < 0 that sin(s −αp(s)) < 0 and hence s > s −αp(s) > π.
+⊓⊔
+Lemma 4.3 Let p ≥15, x1(p) := maxs≥3 |γp(s)|, x2(p) := max2π≤s≤3π |γp(s)|.
+Then: (a) x1(p) ∈[0.1973, 0.2336] and x2(p) ∈[0.1011, 0.1416]. If p ≥p0 ≃
+26.265, x1(p) ∈[0.2010, 0.2267] and x2(p) ∈[0.1113, 0.1360].
+(b) Let 0 < x < x1(p). Then γp(s) = x has exactly one solution 0 < s1(p) < 3.4
+and γp(s) > x for all 0 < s < s1(p). The equation γp(s) = −x has exactly two
+solutions in [3.11, 7], 3.11 < s2(p) < s3(p) < 7 such that |γp(s)| > x for all
+s2(p) < s < s3(p). If 1
+8 ≤x, s2(p) ≥3.55, if
+1
+10 ≤x ≤1
+8, s2(p) ≥3.45 and
+s3(p) ≥5.39 and if 1
+20 ≤s ≤
+1
+10, s2(p) ≥3.27 and s3(p) ≥5.57. If 0 < x ≤
+1
+20,
+s3(p) ≥5.89 and s3(p) −s2(p) ≥2.426.
+Further, for
+1
+100 < x ≤
+1
+20, γp(s) = x has exactly two solutions s4(p) < s5(p) in
+[5.5, 10] such that |γp(s)| > x for all s4(p) < s < s5(p). We have s5(p) −s4(p) ≥
+1.763.
+Proof (a) By Corollary 3.4
+
+
+1 + 1
+p
+
+|γp(s)| ≥p(s)
+= 1
+19
+(
+221 + 140 cos
+
+2 s
+p
+ min
+
+| sin
+
+s −αp(s)
+
+|, | sin(s)|
+
+s
+sin( s
+p)
+s
+p
+−1
+Np ,
+and p(s) is increasing in p for all s ∈[3.255, 2π] ∪[6.501, 3π]. Hence y1(p) :=
+maxs∈[3.255,2π] p(s) is increasing in p, too. For t1 = 4.63, 15(t1) ≥0.19056 and
+===== page 31 =====
+On maximal hyperplane sections of the unit ball of lnp for p > 2
+Page 31 of 42
+15
+for ˜t1 = 4.58, p0( ˜t1) ≥0.2010. Therefore for any 15 ≤p ≤p0, maxs≥3 |γp(s)| ≥
+0.19056
+(1+ 1
+p0 ) ≥0.1973 and for p ≥p0, maxs≥3 |γp(s)| ≥0.2010. The upper estimates
+0.2336 for 15 ≤p ≤p0 and 0.2267 for p ≥p0 were shown in Corollary 3.5, at least
+for s ∈[3, 2π]. Note that for s > 2π, |γp(s)| < 1
+5 < 0.2267, which is implied by
+Lemma 3.3 and 
+
+1 + 1
+p
+
+|γp(s)| < 1
+s +
+1
+Np.
+Similarly for s ∈I2, we choose t2 = 7.94 with 15(t2) ≥0.09767 with x2(p) ≥
+0.09767
+
+
+1+ 1
+15
+ ≥0.1011 and ˜t2 = 7.87 with p0( ˜t2) ≥0.1113. The upper estimates again
+follow from Corollary 3.5.
+(b) Let 0 < x < x1(p). By (a) x1(p) < 0.2336 <
+4
+17, and Lemma 4.2 shows that
+γp(s) = x requires s > 2.48. By Lemma 4.2, too, γp(s) is strictly decreasing for s in
+[ 1
+4, 4] with γp(3.4) < 0. Therefore γp(s) = x has a unique solution 0 < s1(p) < 3.4
+and γp(s) > x holds for all 0 ≤s < s1(p). Lemma 3.6 (b) implies that γp(s) = −x
+has exactly two solutions s2(p) < s3(p) in [3.11, 7], since γp(3.11) > 0, γp(5.5) < 0,
+γp(7) > 0 and γp is strictly convex in [3.11, 5.5] and strictly increasing in [5.5, 7].
+For s2(p) < s < s3(p) we have |γp(s)| > x. By Corollary 3.4 for p ≥15 we have
+|γp(s)| ≥p(s) ≥15(s) for all s ∈[3.255, 2π]. Assume that 0 < x ≤1
+8. Since
+15(5.38) ≥0.127 > 1
+8 and 15 is decreasing in [5, 6] because | sin(s)| is decreasing
+there, the larger solution satisﬁes s3(p) > 5.38. Similarly, for 0 < x ≤
+1
+10, with
+15(5.57) >
+1
+10, we have s3(p) > 5.57. If 0 < x ≤
+1
+20, we use (5.89) >
+1
+20, and
+then s3(p) > 5.89.
+Concerning upper estimates for |γp(s)| in [3.255, 4.4], where both | sin(s)| and
+| sin(s −αp(s))| are increasing, we ﬁnd from Lemma 3.3 for s ∈[3.255, 4.4]
+|γp(s)| ≤
+1
+
+
+1+ 1
+p
+
+
+sin(s)
+s
++ 1
+Np
+
+≤
+1
+
+
+1+ 1
+15
+
+
+sin(s)
+s
+ +
+1
+120
+
+=: h(s) .
+If x ≥1
+8 and γp(s) = −x, 1
+8 ≤|γp(s)| ≤h(s). Since h(3.55) < 1
+8 and h is increasing
+in [π, 4.4], the smaller solution s2(p) satisﬁes s2(p) > 3.55. If x ≥
+1
+10, we use that
+h(3.45) < 1
+10, so that s2(p) > 3.45. If x ≥1
+20, use h(3.27) < 1
+20, hence s2(p) > 3.27.
+For x = 1
+20, the equation 15(s) = x has the two solutions ¯s2 ≃3.472 and ¯s3 ≃5.898
+with ¯s3 −¯s2 > 2.426. The two solutions s2(p) < s3(p) of γp(x) = −x are farther
+apart than ¯s2 and ¯s3, since x = |γp( ¯s2)| ≥p( ¯s2) ≥15( ¯s2) and |γp(s)| is increasing
+near ¯s2, so that ¯s2 > s2(p). Similarly x = |γp( ¯s3)| ≥15( ¯s3), where |γp(s)| is
+decreasing near ¯s3, so that ¯s3 < s3(p) and s3(p) −s2(p) ≥¯s3 −¯s2 > 2.426. If
+x < 1
+20, the solutions of γp(s) = −x are even farther apart than 2.426.
+On the interval [5.5, 10] the argument is similar: By Lemma 3.6 γp is strictly increasing
+in [5.5, 7] with γp(5.5) < 0 < γp(7), strictly concave in [7, 8.5] and strictly decreas-
+ing in [8.5, 10] with γp(10) < 0. By part (a), maxs∈[5.5,10] |γp(s)| >
+1
+10, so that for
+0 < x ≤
+1
+10, γp(s) = x has exactly two solutions s4(p) < s5(p) in [5.5, 10]. For
+===== page 32 =====
+15
+Page 32 of 42
+H. König
+s4(p) < s < s5(p) we have |γp(s)| > x. For x =
+1
+20, 15(s) = x has the two solu-
+tions ¯s4 ≃6.994 and ¯s5 ≃8.757. Similarly as above, s5(p)−s4(p) ≥¯s5−¯s4 ≥1.763.
+⊓⊔
+Proof of Theorem 2.2 (i) We will apply Proposition 2.5, the distribution function result
+of Nazarov, Podkorytov [14] to 
+ = [0, ∞), μ = λ Lebesgue measure.
+We start with case a), when dp ≤cp, i.e. 26.265 ≃p0 ≤p < ∞and put
+f (s) = |γp(s)| and g(s) = exp(−dps2). Then
+ ∞
+0
+f (s)2 ds =
+ ∞
+0
+g(s)2 ds =
+1
+2
+√
+2
+ π
+dp , see (2.5). In terms of the distribution functions F and G of f and g, we have
+0 =
+ ∞
+0 ( f (s)2 −g(s)2) ds =
+ 1
+0 2x (F(x) −G(x)) dx, which implies that F = G
+has at least one solution in (0, 1). We have to show that F −G changes sign only once
+in (0, 1). By Lemma 4.2 f is positive for all 0 ≤s ≤3.11 and has a zero in [3.11, 3.4]
+(which is actually > π). By Proposition 3.1 f (s) = |γp(s)| = γp(s) ≤exp(−cps2) ≤
+exp(−dps2) = g(s) for all 0 ≤s ≤3, with strict inequality for s > 0. Let again
+x1(p) := maxs≥3 f (s). By Lemma 4.3, f (s) = |γp(s)| ≤x1(p) ≤0.2336 for all
+s ≥3 and x1(p) ≥0.1973. We claim that f (s) < g(s) holds also for all 3 < s ≤3.3
+with g(3.3) < x1(p). By Lemma 2.4 (a), 0.159 <
+1
+2π < dp ≤d15 < 0.163 for all
+15 ≤p < ∞, hence
+0.16 < exp(−0.163 · 3.32) < exp(−dp 3.32) = g(3.3)
+≤exp(−0.159 · 3.32) < 0.18 < x1(p) .
+The function p in Lemma 3.3 satisﬁes
+|p(s)| ≤max
+| sin(s −αp(s))|
+s
+, | sin(s)|
+s
+
+,
+and for s ∈[3, 3.3], we have by Remark (1) following Lemma 3.3, 0 ≤αp(s) ≤
+5
+19
+2
+p3.3 ≤6.6
+57 < 0.12, hence maxs∈[3,3.3] |p(s)| ≤maxs∈[2.88,3.3]
+| sin(s)|
+s
+<
+1
+11.
+Lemma 3.3 yields for all s ∈[3, 3.3] with N as given there
+f (s) ≤
+max
+s∈[3,3.3] |γp(s)| ≤
+1
+
+
+1 + 1
+p
+
+ 1
+11 + 1
+Np
+
+≤
+1
+(1 + 1
+15)
+ 1
+11 +
+1
+120
+
+< 0.11 < 0.16 <
+min
+s∈[3,3.3] exp(−dp s2) ≤g(s) .
+This implies F(x) < G(x) for all x ∈[x1(p), 1).
+To prove that F −G changes sign at most once, it sufﬁces to show for a suitable
+0 < x2 < x1(p) that
+(1) G −F is strictly increasing in [x2, x1(p)] and
+(2) F(x) > G(x) for all x ∈(0, x2] .
+(4.1)
+===== page 33 =====
+On maximal hyperplane sections of the unit ball of lnp for p > 2
+Page 33 of 42
+15
+Since F and G are differentiable decreasing functions, condition (1) is equivalent to
+|F′(x)|
+|G′(x)| > 1, x ∈[x2, x1(p)]. This means, see [14],
+|F′(x)|
+|G′(x)| =
+⎛
+⎝
+	
+s>0,|γp(s)|=x
+1
+|γ ′p(s)|
+⎞
+⎠
+1
+|G′(x)|
+= 2
+)
+dp
+	
+s>0,|γp(s)|=x
+|γp(s)|
+|γ ′p(s)|
+(
+ln
+
+1
+|γp(s)|
+
+> 1 ,
+(4.2)
+where we used that G(x) =
+
+1
+dp ln( 1
+x ),
+1
+|G′(x)| = 2)dp x
+
+ln( 1
+x ). Having shown
+(4.1) and (4.2), Proposition 2.5 will imply that for all u ≥2
+√u
+ ∞
+0
+|γp(s)|u ds ≤√u
+ ∞
+0
+exp(−dps2)u ds
+= 1
+2
+! π
+dp
+,
+the claim in Theorem 2.2 a). We will later choose x2 =
+1
+20 for all p0 ≤p < ∞and
+also for 20 ≤p ≤p0.
+Before proving (4.2) and (4.1), let us consider case b), cp < dp, i.e. 20 < p < p0.
+Let r := r(p) := dp
+cp . It follows from Lemma 2.4 that 1 < r < 1.0273. Consider
+f (s) = |γp(s)|r and g(s) = exp(−dps2) in Proposition 2.5. Then by Proposition 3.1
+and Lemma 4.2 we have f (s) = |γp(s)|r ≤exp(−cps2)r = exp(−dps2) for 0 ≤
+s ≤3, with strict inequality for s > 0, p ≥15. Again by Lemma 4.3, x1(p) :=
+maxs≥3 |γp(s)|r ≥0.19731.0273 ≥0.1887 with g(3.3) ≤0.18 < x1(p). Using
+the above estimate for |γp(s)|, we get f (s) = |γp(s)|r ≤|γp(s)| < g(s) for all
+s ∈[3, 3.3]. This implies F(x) < G(x) for all x1(p) ≤x < 1. Further, using r > 1
+and exp(−dps2) ≤1,
+ ∞
+0
+f (s)
+2
+r ds =
+ ∞
+0
+γp(s)2 ds =
+ ∞
+0
+exp(−dps2)2 ds <
+ ∞
+0
+exp(−dps2)
+2
+r ds .
+Suppose that p /∈2N. By Proposition 3.7, f (s) ∼δps−r(p+1) for large s, so that f /∈
+L
+1
+r(p+1) (0, ∞). This implies that there is q,
+1
+r(p+1) < q < 2
+r such that
+ ∞
+0
+f (s)q ds =
+ ∞
+0
+g(s)q ds, hence 0 =
+ ∞
+0 ( f (s)q −g(s)q) ds = q
+ 1
+0 xq−1(F(x) −G(x)) dx.
+Therefore F = G has at least one solution in (0, 1). This is also true for p ∈2N,
+since then on average f is larger than g asymptotically, using (3.10), hence for small
+x, F(x) > G(x) will hold. If ˜F and ˜G are the distribution functions of |γp(s)| and
+g(s)
+1
+r = exp(−cps2), we have F(x) = ˜F(x
+1
+r ) and G(x) = ˜G(x
+1
+r ). Thus it sufﬁces
+to show that ˜F −˜G changes sign only once. Similar to (4.1) and (4.2) we will show
+===== page 34 =====
+15
+Page 34 of 42
+H. König
+for a suitable 0 < x2 < x1(p)
+(1) | ˜F′(x)|
+| ˜G′(x)|
+= 2√cp
+	
+s>0,|γp(s)|=x
+|γp(s)|
+|γ ′p(s)|
+(
+ln
+
+1
+|γp(s)|
+
+> 1 , x ∈[x2, x1(p)] ,
+(2) ˜F(x) > ˜G(x) for all x ∈(0, x2] .
+(4.3)
+Having shown this, Proposition 2.5 will imply that for all v ≥u0 = 2
+r ,
+ ∞
+0
+f v(s) ds ≤
+ ∞
+0
+g(s)v ds, i.e. for all u = rv ≥2
+√u
+ ∞
+0
+|γp(s)|u ds ≤√u
+ ∞
+0
+exp(−dps2)v ds
+= √u
+ ∞
+0
+exp(−cps2)u ds = 1
+2
+! π
+cp
+,
+the claim in Theorem 2.2 b). We will again choose x2 = 1
+20.
+(ii) We note that cp and dp, which are important for the estimates in (4.1), (4.2) and
+(4.3), do not vary very much in their respective intervals. We have
+inf
+p0≤p<∞dp = 1
+2π ≃0.1592 <
+max
+p0≤p<∞dp ≃0.1610
+and
+min
+15≤p<p0
+cp ≃0.15846 <
+max
+15≤p<p0
+cp ≃0.1610 ,
+so that min(2√cp, 2)dp) ≥0.796 and max
+
+1
+cp ,
+
+1
+dp
+
+≤2.5122 in the ranges
+for p considered here.
+In both cases a) and b) we have to compare the distribution functions F of |γp| and
+G of exp(−dps2), case a) or exp(−cps2), case b). It sufﬁces to prove with the choice
+x2 = 1
+20
+(1) h p(x) := 0.796
+	
+s>0,|γp(s)|=x
+|γp(s)|
+|γ ′p(s)|
+(
+ln(
+1
+|γp(s)|) > 1 , x ∈[x2, x1(p)] ,
+(2) F(x) > 2.5122
+!
+ln(1
+x ) ≥G(x) , x ∈(0, x2] .
+Then the unique sign change of G −F will occur at some x0 ∈(x2, x1(p)).
+We now verify (1) for all p ≥15 and x with x2 =
+1
+20 ≤x ≤x1(p). We have
+h p(x) = 0.796 ("
+s>0,|γp(s)|=x
+1
+|γ ′p(s)|) x
+
+ln( 1
+x ). For 0 < x < 3
+5 < exp
+
+−1
+2
+
+,
+x
+
+ln( 1
+x ) is increasing in x. Suppose ﬁrst that 1
+8 ≤x ≤x1(p). By Lemma 3.6 for all
+===== page 35 =====
+On maximal hyperplane sections of the unit ball of lnp for p > 2
+Page 35 of 42
+15
+p ≥15
+|γ ′
+p(s)| ≤
+1.064
+(1 + 1
+p)
+1
+s + 1
+p
+
+≤
+1.064
+
+
+1 + 1
+15
+
+1
+s + 1
+15
+
+≤1.102
+1
+s + 1
+15
+
+=: l1(s) ,
+for 0 < s < π, while
+|γ ′
+p(s)| ≤
+1.016
+
+
+1 + 1
+15
+
+1
+s + 1
+15
+
+≤1.053
+1
+s + 1
+15
+
+=: l2(s)
+for s ≥π. By Lemmas 4.2 and 4.3, with x1(p) < 4
+17 as needed there, |γp(s)| = x has
+three solutions in (0, 7), s1(p) ≥2.48, s3(p) > s2(p) ≥3.55. Hence
+h p(x) ≥0.796
+
+1
+l1(2.48) +
+2
+l2(3.55)
+1
+8
+√
+ln 8 > 1.06 > 1 .
+For 1
+10 ≤x ≤1
+8, the three solutions satisfy s1(p) ≥2.75, s2(p) ≥3.45 and s3(p) ≥
+5.39, see Lemmas 4.2 and 4.3. Hence for these x
+h p(x) ≥0.796
+
+1
+l1(2.75) +
+1
+l2(3.45) +
+1
+l2(5.39)
+ 1
+10
+√
+ln 10 > 1.03 > 1 .
+For
+1
+20 ≤x ≤
+1
+10, by Lemma 4.3 (a), x ≤
+1
+10 < x2(p), and |γp(s)| = x has two
+additionalsolutionss5(p) > s4(p)in(5.5, 10).Wehaves1(p) ≥2.966,s2(p) ≥3.27,
+s3(p) ≥5.57, s5(p) > s4(p) ≥s3(p) ≥5.57. Therefore
+h p(x) ≥0.796
+
+1
+l1(2.966) +
+1
+l2(3.27) +
+3
+l2(5.57)
+ 1
+20
+√
+ln 20 > 1.1 > 1 .
+Hence (1) is satisﬁed for all p ≥15 and x with
+1
+20 ≤x ≤x1(p). For x =
+1
+20,
+we have by Lemmas 4.2 and 4.3, that |γp(s)| > x holds for all 0 ≤x < 2.966,
+s2(p) < x < s3(p) with s3(p) −s2(p) ≥2.425 and for s4(p) < x < s5(p) with
+s5(p) −s4(p) ≥1.763. Thus F( 1
+20) ≥7.15 > 4.25 > G( 1
+20). Actually G(x) ≤
+2.5122
+
+ln( 1
+x ) ≤7.15 holds for all
+1
+3200 < x <
+1
+20. Hence F(x) > G(x) is true for
+all x with
+1
+1000π < x < 1
+20.
+(iii) Suppose that p /∈2N. Let A > 1 and p ≥15 be such that | sin( π
+2 p)| ≥
+1
+Ap ,
+whichissatisﬁedifdist(p, 2N) ≥
+1
+Ap .Weprovethat F(x) > G(x)holdsforverysmall
+x > 0,namelyfor0 < x ≤
+
+0.482
+(Ap)2
+p+1
+.ByStirling’sformula(p+1) ≥√2π p( p
+e )p
+===== page 36 =====
+15
+Page 36 of 42
+H. König
+and hence
+
+1
+2
+(p + 1)
+(1 + 1
+p)
+
+1
+p+1
+≥
+1
+2(p + 1)
+
+1
+p+1
+≥
+(
+πe2
+2p
+1
+p+1 p
+e .
+The function k(p) :=
+
+πe2
+2p
+1
+p+1 satisﬁes (ln k)′(p) =
+1
+p(p+1)2 (p ln( 2p
+πe2 ) −1). Since
+2
+πe2 ≃
+1
+31.5, (ln k)′(p1) = 0 for p1 near 31.5, namely p1 ≃32.535, and k attains
+its minimum at p1, with k(p) ≥k(p1) > 0.9847. This implies
+, 1
+2(p + 1)
+-
+1
+p+1 >
+0.3622 p. By Proposition 3.7 we have for any s > 5
+8 Ap3 that
+|γp(s)| ≥1
+2
+(p + 1)
+(1 + 1
+p)
+1
+Ap
+1
+s p+1 ≥
+0.3622 p
+s
+p+1 1
+Ap ≥
+0.3622 p
+As
+p+1
+.
+Thus for x > 0
+F(x) = λ
+*
+s > 0
+ |γp(s)| > x
++
+≥λ
+*
+s > 5
+8 Ap3
+
+0.3622 p
+As
+p+1
+> x
++
+= λ
+*
+s > 0
+ 5
+8 Ap3 < s < 0.3622 p
+Ax
+1
+p+1
++
+.
+Assuming 0 < x <
+
+0.482p
+(Ap)2
+p+1
+, 0.3622 p
+Ax
+1
+p+1 > 3
+4 Ap3 = 6
+5( 5
+8 Ap3) and hence
+F(x) ≥0.3622 p
+Ax
+1
+p+1
+−5
+8 Ap3 ≥1
+6
+0.3622 p
+Ax
+1
+p+1
+.
+For G we know G(x) < 2.5122
+
+ln( 1
+x ). To prove F(x) > G(x), it sufﬁces
+to verify x
+1
+p+1
+
+ln( 1
+x ) ≤
+1
+50
+p
+A, since
+0.3622
+6·2.5122 >
+1
+50. Now l(x) := x
+1
+p+1
+
+ln( 1
+x )
+is increasing for 0 < x < exp(−p+1
+2 ), which is satisﬁed under our assump-
+tion on x. Inserting the maximal x considered, ¯x =
+
+0.482
+(Ap)2
+p+1
+, we ﬁnd l(¯x) =
+0.482
+(Ap)2
+
+(p + 1)[2 ln(Ap) + ln(
+1
+0.482)], which is easily seen to be < 1
+50
+p
+A for any A ≥1
+and p ≥15.
+For the maximal x in this range, with ln(
+1
+0.482) ≤0.73,
+G(¯x) ≤2.5122
+)
+(p + 1)[2 ln(Ap) + 0.73] .
+(4.4)
+(iv) It remains to prove F(x) > G(x) for all x in the intermediate range
+
+0.482
+(Ap)2
+p+1
+< x <
+1
+1000π for p ≥20. Assume ﬁrst that
+1
+210p ≤x ≤
+1
+1000π . By
+===== page 37 =====
+On maximal hyperplane sections of the unit ball of lnp for p > 2
+Page 37 of 42
+15
+Lemma 3.2 |γp(s)| ≥| sin(s)|
+s
+−1.016
+p . Therefore by Proposition 4.1
+F(x) ≥Fsinc
+
+x + 1.016
+p
+
+> 2
+π
+1
+x + 1.016
+p
+−27
+16 .
+Since G(x) ≤2.5122
+
+ln( 1
+x ), F(x) > G(x) will be satisﬁed if
+
+x + 1.016
+p
+ !
+ln(1
+x ) + 27
+40
+
+< 1
+4 ,
+using that
+27
+16·2.5122 <
+27
+40 and
+2
+2.5122 π >
+1
+4. By assumption 1
+p < 210 x, hence
+x + 1.016
+p
+< 215 x. It sufﬁces that 215 x(
+
+ln( 1
+x ) + 27
+40) < 1
+4 holds. Since x
+
+ln( 1
+x )
+is increasing for 0 < x < exp(−1
+2), we only have to check this for the maximal
+x =
+1
+1000π , when it is true.
+If x <
+1
+210p, x + 1.016
+p
+< 1.021
+p , and by the above estimate F(x) ≥
+2
+1.021 π p −27
+16.
+This will be > 2.5122
+
+ln( 1
+x ) ≥G(x), if
+
+ln( 1
+x ) < 0.2481p −27
+40. For any p ≥20,
+(0.2481p −27
+40)2 ≥p2
+25 . Thus F(x) > G(x) holds for all x > 0 with exp(−p2
+25 ) <
+x <
+1
+210p.
+Assume next that ¯x :=
+
+0.482
+(Ap)2
+p+1
+< x < exp(−p2
+25 ). By (4.4)
+G(x) ≤G(¯x) = 2.5122
+)
+(p + 1)[2 ln(Ap) + 0.73]
+≤3.5528
+)
+(p + 1)[ln(Ap) + 0.365] .
+For x < exp(−p2
+25 ), x + 1.016
+p
+≤1.018
+p
+and the estimate for F(x) yields F(x) ≥
+2
+1.018π p −27
+16 ≥5
+8 −27
+16. To verify F(x) > G(x), it sufﬁces to show
+ψA(p) := 5
+8 p −27
+16 −3.5528
+)
+(p + 1)[ln(Ap) + 0.365] > 0 .
+(4.5)
+For any A ≥1, ψA is increasing in p. For the choice A = p, ψA(400) > 2 > 0
+and for A = 10, ψA(265) > 1 > 0. Together with parts (ii) and (iii) this shows that
+F(x) > G(x) holds for all 0 < x < x1(p) for A = p if p ≥400 and for A = 10 if
+p ≥265. This proves Theorem 2.2 for p ≥400.
+(v) For 20 ≤p ≤400, we use the better approximation of |γp(s)| of Lemma 3.3. We
+may also assume that ¯x =
+
+0.482
+(Ap)2
+p+1
+< x < exp(−p2
+25 ), since the estimate outside of
+this interval was valid for all p ≥20. By Lemma 3.3, |γp(s)| ≥|p(s)|−1
+Np, where N
+is as in Lemma 3.2, e.g. N = 8.002 for 26 ≤p ≤175, and p(s) = k( s
+p) sin(s−αp(s))
+s
+,
+k(y) = 1
+19
+√221 + 140 cos(2y) sin(y)
+y
+. Since for x < exp(−p2
+25 ) and 26 ≤p ≤175 we
+===== page 38 =====
+15
+Page 38 of 42
+H. König
+have x +
+1
+8.002p <
+1
+8p,
+F(x) ≥λ
+*
+s > 0 | |p(s)| >
+1
+Mp
++
+, M = 8 ,
+26 ≤p ≤175 , ¯x < x < exp
+
+−p2
+25
+
+.
+For 175 < p < ∞, the same holds with M = 7.85, and for 17 ≤p ≤26 with
+M = 8.6. We will use this for 0 ≤s ≤3
+4π p, y =
+s
+p ≤3
+4π. The function k is
+decreasing in y ∈[0, 3
+4π], since
+(ln k)′(y) = −
+140 sin(2y)
+221 + 140 cos(2y) +cot(y)−1
+y ≤−
+140 sin(2y)
+221 + 140 cos(2y) −y
+3 −y3
+45 ,
+using the series development of cotangent. For 0 < y ≤π
+2 , this is obviously negative,
+and for π
+2 < y < 3
+4π, too, as may be checked. Therefore for s ∈(( j −1)π, jπ],
+j ≤3
+4 p, k( s
+p) ≥k( jπ
+p ).
+Let Jj = (( j −1)π −αp(( j −1)π), jπ −αp( jπ)] for j = 1, . . . , n. Recall
+that αp(0) = 0, that αp(s) is increasing for 0 < s < (π −arccos( 5
+14)) p
+2 ≃0.968p
+and decreasing for (π −arccos( 5
+14)) p
+2 < s < (π + arccos( 5
+14)) p
+2 ≃2.173p. Let
+y j = 1
+M
+jπ
+p
+k( jπ
+p ), essentially y j ≃1
+M
+jπ
+p . Solving | sin(s −αp(s))| = y j for s in Jj yields
+two solutions s j,1 < s j,2 with s j,1 −αp(s j,1) = ± arcsin(y j), s j,2 −αp(s j,2) =
+±(π −arcsin(y j)), hence ±2 arccos(y j) = ±(π −2 arcsin(y j)) = s j,2 −s j,1 −
+(αp(s j,2) −αp(s j,1)). In each interval Jj, the difference αp(s j,2) −αp(s j,1) is small,
+of modulus < 2
+p, positive for 0 < s j,i < 0.96p and negative for s j,i > 0.97p. The
+gaps between successive differences αp(s j+1,1) −αp(s j,2) are even smaller, of order
+1
+p2 , since 0 < s j+1,1−s j,2 = O( 1
+p) (for small j about 2π
+M
+1
+p < 1
+p) and |α′
+p(s)| ≤10
+9
+1
+p.
+The gaps slightly increase with j. Further, |αp(s)|
+s
+≤5
+9
+1
+p for all s > 0. The distribution
+function of p will be bounded below by sums of s j,2 −s j,1. The error by sums of
+−(αp(s j,2) −αp(s j,1)) over j is bounded in modulus by the maximum of |αp(s)|,
+which is arctan(
+5
+3
+√
+19) < 0.366, attained at π ± arccos( 5
+14). We will estimate the
+distribution function of |p| from below by assuming αp(s) = 0 and correct the
+possible error by subtracting from the lower bound the value 0.366.
+Hence consider I j = (( j −1)π, jπ], j ∈N and |p(s)| = k( s
+p) | sin(s)|
+s
+. For s ∈I j,
+|p(s)| ≥k( jπ
+p ) | sin(s)|
+jπ
+and
+λ
+*
+s ∈I j
+|p(s)| >
+1
+Mp
++
+≥λ
+⎧
+⎪⎪⎨
+⎪⎪⎩
+s ∈I j
+| sin(s)| > 1
+M
+jπ
+p
+k
+
+jπ
+p
+
+⎫
+⎪⎪⎬
+⎪⎪⎭
+.
+===== page 39 =====
+On maximal hyperplane sections of the unit ball of lnp for p > 2
+Page 39 of 42
+15
+Obviously, we require for y = jπ
+p that l(y) := 1
+M
+y
+k(y) = 19
+M
+y2
+sin(y)
+1
+√221+140 cos(2y) ≤1.
+Since k is decreasing, l is increasing and l(y) = 1 has a unique solution y0 > 0. For
+M = 8 it is y0 ≃2.1228, for M = 7.85, y0 ≃2.0976 and for M = 8.6, y0 ≃2.2096.
+As required above, y0 ≤3
+4π. Deﬁne n ∈N and θ ∈[0, 1) by y0
+π p = n + θ. Then
+jπ
+p = y0
+j
+n+θ ≤y0 for all j = 1, . . . , n and l( jπ
+p ) ≤1. We get for j = 2, . . . , n
+λ
+*
+s ∈I j
+ | sin(s)| > 1
+M
+jπ
+p
+k( jπ
+p )
++
+= λ
+*
+s ∈I j
+ | sin(s)| > l
+ y0 j
+n + θ
+ +
+= 2 arccos
+
+l
+ y0 j
+n + θ
+
+,
+with an additional term arcsin
+
+l
+
+y0
+n+θ
+
+for j = 1 and
+F(x) ≥2
+n
+	
+j=1
+arccos
+
+l
+ y0 j
+n + θ
+
++ arcsin
+
+l
+
+y0
+n + θ
+
+≥2
+n
+	
+j=0
+arccos
+
+l
+ y0 j
+n + θ
+
+−π + l
+
+y0
+n + θ
+
+,
+(4.6)
+also using arcsin(x) ≥x for 0 ≤x ≤1. Let h(u) := arccos
+
+l
+
+y0u
+n+θ
+
+. By the Euler
+- Maclaurin summation formula and the substitution v = (n + θ)u,
+n
+	
+j=0
+h( j) =
+ n
+0
+h(u) du + h(0) + h(n)
+2
++
+ n
+0
+
+u −[u] −1
+2
+
+h′(u) du
+= (n + θ)
+
+n
+n+θ
+0
+arccos(l(y0v)) dv + 1
+2
+.π
+2 + h(n)
+/
++
+ n
+0
+
+u −[u] −1
+2
+
+h′(u) du .
+(4.7)
+Similar as in the proof of Proposition 4.1, we have h′(u) < 0 for all 0 < u < 1 and
+ n
+0
+
+u −[u] −1
+2
+
+h′(u) du ≥
+ n
+n−1
+2
+
+u −[u] −1
+2
+
+h′(u) du .
+In the proof of Proposition 4.1 we used that |h′(u)| was increasing, which is true
+here for 0 < u < 1, u /∈[0.7, 0.85]. However, while this may be false when u ∈
+[0.7, 0.85], |h′(u −c) + h′(u)| is then increasing, when c ∈[ 1
+5, 1
+4], as a somewhat
+tedious investigation shows. If u =
+y0 j
+n+θ is in [0.7, 0.85], choose k < j such that
+v :=
+y0k
+n+θ satisﬁes 1
+5 < u −v <
+1
+4 to conclude for K j = [ j −1
+2, j + 1
+2] and
+===== page 40 =====
+15
+Page 40 of 42
+H. König
+Kk = [k −1
+2, k + 1
+2] that
+
+K j∩Kk((u −[u] −1
+2)h′(u) du ≥0. Combining any two
+such intervals, if necessary, we get, since h′(u) < 0,
+ n
+0
+
+u −[u] −1
+2
+
+h′(u) du ≥1
+2
+ n
+n−1
+2
+h′(u) du = 1
+2
+
+h(n) −h
+
+n −1
+2
+
+.
+Further,
+
+n
+n+θ
+0
+arccos(l(y0v)) dv =
+ 1
+0 arccos(l(y0v)) dv −
+ 1
+n
+n+θ arccos(l(y0v)) dv
+and (n + θ)
+ 1
+n
+n+θ arccos(l(y0v)) dv ≤(n + θ)(1 −
+n
+n+θ ) arccos(l( y0n
+n+θ )) = θh(n),
+since h is decreasing. Inserting this into equation (4.7), we ﬁnd with n + θ = y0
+π p
+n
+	
+j=0
+h( j) ≥y0
+π p
+ 1
+0
+arccos(l(y0v)) dv + (1 −θ)h(n) −1
+2h
+
+n −1
+2
+
++ π
+4
+≥y0
+π p
+ 1
+0
+arccos(l(y0v)) dv −1
+2h
+
+n −1
+2
+
++ π
+4 .
+Together with inequality (4.6), we get
+F(x) ≥2 y0
+π p
+ 1
+0
+arccos(l(y0v)) dv−∥!π
+2 −arccos
+
+l
+
+y0(n −1
+2)
+n+θ
+
++l
+
+y0
+n + θ
+
+.
+As mentioned before, to take into account the effect of the omitted αp-terms, we
+subtract from this the value arctan(
+5
+3
+√
+19). Since π
+2 + arctan(
+5
+3
+√
+19) < 1.9361, we
+arrive at
+F(x) ≥2 y0
+π p
+ 1
+0
+arccos(l(y0v)) dv −1.9361
+−arccos
+
+l
+
+y0(n −1
+2)
+n + θ
+
++ l
+
+y0
+n + θ
+
+.
+(4.8)
+Consider ﬁrst the case 175 ≤p ≤∞. Then y0 ≥2.0976 and numerical integration
+yields L :=
+ 1
+0 arccos(l(y0v)) dv ≥1.15206. We have n + θ = y0
+π p ≥116 and
+then −arccos
+
+l
+
+y0(n−1
+2 )
+n+1
+
++ l
+
+y0
+n+1
+
+≥−0.1935 so that with 2 y0
+π L ≥1.5384,
+F(x) ≥1.5384p −2.13. In the case 26 ≤p ≤175 we have similarly with y0 ≥
+2.1228 by numerical integration that L =
+ 1
+0 arccos(l(y0v)) dv ≥1.15197. Then
+n + θ = y0
+π p ≥17.5 implies that −arccos
+
+l
+
+y0(n−1
+2 )
+n+1
+
++ l
+
+y0
+n+1
+
+≥−0.4639,
+with the conclusion F(x) ≥1.5568p −2.40. Finally, in the case 20 ≤p ≤26,
+y0 ≥2.2096, L ≥1.15628 and n + θ ≥14.05, with −arccos
+
+l
+
+y0(n−1
+2 )
+n+1
+
++
+l
+
+y0
+n+1
+
+≥−0.5414, so that F(x) ≥1.6265p −2.478. We note that the integral

@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T21:32:23+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 2699,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"按「只递指针」口径收录完成（幂等），signed_unregistered 已消掉。\\n\\n【核盘】manuscripts/B/b-proof-000003.md ↔ stmt 000042（label「B_p^3 对角与面对角截面面积公式及 Δ(p) 的最终正性」完全对上）。我按稿头「## 证明」一节复算正文 sha256 = 43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6，与稿头元信息、与 V 签文件里记的 artifact_sha 三者同一份；整文件指纹 375a5da3…（签块写入前 26f3a7da…）——整文件 sha 与正文 sha 是两件事，我核的是后者。\\n【核签】verifications/000042.jsonl 里，现行正文 sha 上 V 判「成立」（零 finding、unresolved_errors=0），台账最新一轮 v-000005 判「成立」；签文件 out/vsigns/43f4c2ab…json 复算 3/3 同源。stmt 000042 的 bits 上 reviewed_by_proof={\\\"1\\\": true}、reviewed_sha_by_proof={\\\"1\\\": \\\"43f4c2ab…\\\"}，与这一版正文对得上。\\n【收录】own.ingest_manuscript(mode=apply, target_stmt_id=000042, cells=[\\\"proof_text\\\"]) 回：proof_text outcome=unchanged（「台账正文与稿同一 sha（幂等）」），b_submission.already=true / via=ingested_to_ledger，registration_settled「收口 0 条、left 空」、d_handoff_settled 也「仍开着 0 条」⇒ 没有任何遗留的 b-register 义务项。所以这一笔其实早已在册、证明正文也已在台账，本次是指针复核 + 幂等确认，没有新字节可写。\\n【现算等级】pre_theorem（框架现算：proof=true、reviewed=true；kind 由框架抬到 theorem，evidence_kind 不参与判定）。这是我读到的读数，不是我自报。\\n【二阶段】bits.evidence.optimized_by_proof={\\\"1\\\": true} ⇒ 这一份已洗过，按口径不再动，没有 unwashed 欠账。\\n【如实提请注意的两处读数】① 稿文件内的 `- V 签：` 签块没扫到（ingest 回 manuscript.sign.found=false），签落在 out/vsigns 与台账 reviewed 面 —— 属「已入台账」这一档，不是没签；② 手稿摘要 000025（V→B）曾在正文 sha 43f4c2ab 上报过「有毛病」（第 1、2 步把中间积分表示误标成 (i) 的等号），而 verifications/000042.jsonl 与 bits.reviewed 的最新一轮判「成立」；我按最新一轮认签，但这条历史分歧值得知道，若要更保险可让 V 对现行稿再走查一次。\\n【板】t-000179/182/183 三条 notice 已 ack；V1 已退役（名下子代理数 0、在飞 0）。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\lp-ball-22\\\\runs\\\\B-20261124-213223-001.json\", \"messages\": [], \"outcome\": \"ok\", \"status\": \"done\", \"steps\": 15, \"stop_reason\": \"final\", \"summons\": [\"V\"]}",
+ "payload_sha256": "3d329c4c924685c735e8ebf60b01409ac3cdcaa8e38c410832f617236d61d76c",
+ "readings": {},
+ "role": "B",
+ "status": "done",
+ "task_id": "t-000172"
+}

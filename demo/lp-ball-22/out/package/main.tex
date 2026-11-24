@@ -1,0 +1,235 @@
+\documentclass[11pt]{article}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\numberwithin{theorem}{section}
+
+\title{Maximal-area central sections of the three-dimensional $\ell_p$ ball}
+\author{G}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We study the two-dimensional area of central hyperplane sections of the unit ball $B_p^3$ of $\ell_p^3$, and we compare three explicit families of normals: the coordinate direction $e_3$, the body diagonal $(1,1,1)/\sqrt3$ and the face diagonal $(1,1,0)/\sqrt2$. We record an integral representation of the section area that is valid for every normal, and we derive closed or single-integral expressions for the three families: $A_{\mathrm{coord}}(p)=4\Gamma(1+1/p)^2/\Gamma(1+2/p)$, a one-dimensional integral for the body-diagonal section, and the scaled planar expression $2^{1/2-1/p}\,4\Gamma(1+1/p)^2/\Gamma(1+2/p)$ for the face-diagonal section. For normals with a vanishing coordinate we obtain the exact formula $A_p(n)=A_{\mathrm{coord}}(p)\,(\sum_{j\ne i}|n_j|^p)^{-1/p}$, from which the comparison with the coordinate direction follows at once. We further show that the difference between the face-diagonal and the body-diagonal areas is continuous, vanishes at $p=2$ and is positive both at $p=1$ and in the limit $p\to\infty$, so that the face-diagonal direction dominates for all sufficiently large $p$. The transition between the body-diagonal and the face-diagonal regimes is located numerically at $p_*\approx 4.998215596862$; the three-regime picture as a whole is supported by numerics but is not proved here. All supporting computations are collected in an appendix.
+\end{abstract}
+
+\section{Introduction}
+
+The determination of extremal hyperplane sections of concrete convex bodies is a classical and still active problem. For the unit cube $Q_n=[-1/2,1/2]^n$, Ball \cite{ball} proved that the maximal hyperplane section is the one perpendicular to $2^{-1/2}(1,1,0,\dots,0)$: the face-diagonal direction beats the coordinate direction for every $n\ge 2$. Ball's cube-slicing theorem is the case $p=\infty$ of the family of $\ell_p$ balls, and the question then becomes how the extremal direction depends on $p$.
+
+For the $\ell_p^n$ balls, K\"onig \cite{konig} studies maximal hyperplane sections for $p>2$ and shows that a cube-slicing phenomenon persists for large $p$ and for normals whose coordinates are bounded in modulus by $1/\sqrt2$; for $2<p<p_0$ with $p_0\approx26.265$ the behaviour changes, and the body-diagonal direction gives a counterexample in large dimensions. The plane sections of the unit ball of $\ell_p$ themselves are described by Grz\'slewicz \cite{grzaslewicz}. The cube's critical central sections and the extremal sections of subspaces of $L_p$ are treated in \cite{ambrus} and \cite{eskenazis}. The three-dimensional case considered here sits at the bottom of this hierarchy and, as we show, already exhibits two transitions: one at $p=2$, where the coordinate and the body-diagonal directions exchange their roles, and one at $p_*=4.998215596862$, where the body-diagonal and face-diagonal directions exchange theirs.
+
+The contributions of this note are the following. Section~2 fixes the notation. Section~3 proves four statements about the section area: an integral representation valid for all normals together with the coordinate and face-diagonal closed forms (Theorem~\ref{thm:integral}); the exact formula for normals with a vanishing coordinate and the resulting comparison with the coordinate direction (Theorem~\ref{thm:zero}); the integral representation, the special values and the continuity of the body-diagonal area (Theorem~\ref{thm:diag}); and the continuity and the two endpoint signs of the difference between the face-diagonal and the body-diagonal areas (Theorem~\ref{thm:delta}). Section~4 describes the numerically supported three-regime picture, states it as a conjecture rather than a theorem, discusses the relation with \cite{ball,konig,grzaslewicz,ambrus,eskenazis} and lists the open problems. Appendix~A documents the computations behind the numerical statements.
+
+\section{Definitions and notation}
+
+For $1\le p<\infty$ let
+\[
+B_p^3=\{(x,y,z)\in\mathbb{R}^3:\ |x|^p+|y|^p+|z|^p\le 1\}
+\]
+be the unit ball of $\ell_p^3$, and for a unit vector $n\in\mathbb{R}^3$ let $A_p(n)$ be the two-dimensional Lebesgue area of $B_p^3\cap n^{\perp}$, where $n^{\perp}=\{x\in\mathbb{R}^3: x\cdot n=0\}$ carries the Euclidean structure induced from $\mathbb{R}^3$. We write $\|\cdot\|_p$ for the $\ell_p$ norm and $\|\cdot\|$ for the Euclidean norm. The three normal directions we compare are
+\[
+\text{coordinate: } e_3,\qquad \text{body diagonal: } d=\frac{(1,1,1)}{\sqrt3},\qquad \text{face diagonal: } f=\frac{(1,1,0)}{\sqrt2},
+\]
+and we abbreviate
+\[
+A_{\mathrm{coord}}(p):=A_p(e_3),\qquad A_{\mathrm{diag}}(p):=A_p(d),\qquad A_{\mathrm{face}}(p):=A_p(f),\qquad \Delta(p):=A_{\mathrm{face}}(p)-A_{\mathrm{diag}}(p).
+\]
+For a unit normal $n$ and an orthonormal basis $\{u,v\}$ of $n^{\perp}$ we write $e_n(\psi)=\cos\psi\,u+\sin\psi\,v$ for $\psi\in[0,2\pi)$, so that $e_n(\psi)$ runs once around the unit circle of the plane $n^{\perp}$. The group of signed coordinate permutations of $\mathbb{R}^3$ is denoted $\Sigma_3^{\pm}$; it has $48$ elements and acts by isometries of $B_p^3$. Since $A_p$ is invariant under $\Sigma_3^{\pm}$, the search for maximizing normals is carried out on the fundamental domain $\mathcal{C}=\{n=(a,b,c):0\le a\le b\le c\}$ of the ordering cone: every unit normal is carried into $\mathcal{C}$ by a signed permutation, and the vertices of $\mathcal{C}$ are the coordinate directions. We call $\alpha(t)=(0,1,t)/\sqrt{1+t^2}$ and $\beta(t)=(1,1,t)/\sqrt{2+t^2}$, $t\in[0,1]$, the two boundary arcs of $\mathcal{C}$; their endpoints are $\alpha(0)=\beta(0)=f$, $\beta(1)=d$ and $\alpha(t)\to e_3$ as $t\to\infty$. In the plane $H=\{x+y+z=0\}$ we use the orthonormal basis
+\[
+u=\frac{(1,-1,0)}{\sqrt2},\qquad v=\frac{(1,1,-2)}{\sqrt6},
+\]
+whose orthonormality is checked in the proof of Theorem~\ref{thm:diag}. Finally, for $p=\infty$ the body $B_\infty^3=[-1,1]^3$ is the cube of side length $2$, and its section by the plane $H$ is the regular hexagon of area $3\sqrt3$.
+
+\section{Main results}
+
+\begin{theorem}[Integral representation and the coordinate and face-diagonal closed forms]\label{thm:integral}
+Let $1\le p<\infty$, let $n\in\mathbb{R}^3$ be a unit vector and let $A_p(n)$ be the area of $B_p^3\cap n^{\perp}$. Then:
+\begin{enumerate}
+\item[(i)] for every orthonormal basis $\{u,v\}$ of $n^{\perp}$,
+\[
+A_p(n)=\frac12\int_0^{2\pi}\big\|\cos\psi\,u+\sin\psi\,v\big\|_p^{-2}\,d\psi;
+\]
+the right-hand side does not depend on the choice of the basis, $A_p$ depends only on the plane $n^{\perp}$ (so that $A_p(n)=A_p(-n)$), and $A_p$ is invariant under $\Sigma_3^{\pm}$;
+\item[(ii)] $A_{\mathrm{coord}}(p)=4\Gamma(1+1/p)^2/\Gamma(1+2/p)$;
+\item[(iii)] $A_{\mathrm{face}}(p)=2^{1/2-1/p}\,4\Gamma(1+1/p)^2/\Gamma(1+2/p)$, hence $A_{\mathrm{face}}(p)<A_{\mathrm{coord}}(p)$ for $p<2$, $A_{\mathrm{face}}(2)=A_{\mathrm{coord}}(2)$, and $A_{\mathrm{face}}(p)>A_{\mathrm{coord}}(p)$ for $p>2$;
+\item[(iv)] for $p=2$ one has $A_2(n)=\pi$ for every unit vector $n$;
+\item[(v)] for $p=1$ one has $A_{\mathrm{coord}}(1)=2$, $A_{\mathrm{face}}(1)=\sqrt2$ and $A_1(d)=3\sqrt3/4$.
+\end{enumerate}
+\end{theorem}
+% evidence: stmt:000034, exp:000003
+
+\begin{proof}
+(1) \emph{Polar coordinates in the section plane.} Fix a unit normal $n$ and an orthonormal basis $\{u,v\}$ of $n^{\perp}$. Every $x\in n^{\perp}$ has a unique representation $x=r\,e_n(\psi)$ with $r\ge0$ and $\psi\in[0,2\pi)$, and the area element of the plane in these coordinates is $r\,dr\,d\psi$. By positive homogeneity of $\|\cdot\|_p$ we have $\|x\|_p=r\,\|e_n(\psi)\|_p$, so $x\in B_p^3$ holds exactly when $r\le\|e_n(\psi)\|_p^{-1}$. Therefore
+\[
+A_p(n)=\int_0^{2\pi}\int_0^{\|e_n(\psi)\|_p^{-1}}r\,dr\,d\psi=\frac12\int_0^{2\pi}\big\|e_n(\psi)\big\|_p^{-2}\,d\psi,
+\]
+which is the stated formula. If $\{u',v'\}$ is another orthonormal basis of $n^{\perp}$, then $u'=\cos\alpha\,u+\sin\alpha\,v$ and $v'=-\sin\alpha\,u+\cos\alpha\,v$ for some $\alpha$, whence $\cos\psi\,u'+\sin\psi\,v'=e_n(\psi+\alpha)$; the substitution $\psi\mapsto\psi+\alpha$ over a full period leaves the integral unchanged, so the value does not depend on the basis. Replacing $n$ by $-n$ leaves the plane unchanged, and every $S\in\Sigma_3^{\pm}$ satisfies $S(B_p^3)=B_p^3$ and preserves areas and orthogonality, so $A_p(Sn)=A_p(n)$.
+
+(2) \emph{The coordinate direction.} For $n=e_3$ the plane is $\{z=0\}$ and $B_p^3\cap\{z=0\}=\{(x,y):|x|^p+|y|^p\le1\}$, the unit ball of $\ell_p^2$. Its area is computed in the first quadrant by the substitution $u=x^p$, $v=y^p$: with $a=1/p$,
+\[
+\frac{A_{\mathrm{coord}}(p)}{4}=\frac1{p^2}\int_{u+v\le1}u^{a-1}v^{a-1}\,du\,dv=\frac1{p^2}\cdot\frac{B(a,a)}{2a}=\frac{\Gamma(1/p)^2}{2p\,\Gamma(2/p)},
+\]
+and the identities $\Gamma(1+1/p)=\Gamma(1/p)/p$ and $\Gamma(1+2/p)=(2/p)\Gamma(2/p)$ turn this into $A_{\mathrm{coord}}(p)=4\Gamma(1+1/p)^2/\Gamma(1+2/p)$, which is (ii). (The same value follows from (i) by taking $u=e_1$, $v=e_2$ and using the symmetry of the integrand on $[0,\pi/2]$.) At $p=2$ the gamma-function identity $\Gamma(3/2)=\sqrt\pi/2$ gives $A_{\mathrm{coord}}(2)=\pi$, and at $p=1$ it gives $A_{\mathrm{coord}}(1)=4\Gamma(2)^2/\Gamma(3)=2$; this is the first half of (v).
+
+(3) \emph{The face-diagonal direction.} Take $n=f=(1,1,0)/\sqrt2$ and let $\{u,v\}$ be the orthonormal basis $u=(1,-1,0)/\sqrt2$, $v=e_3$ of $f^{\perp}$. A point of $f^{\perp}$ is $s\,u+t\,v=(s/\sqrt2,-s/\sqrt2,t)$, so
+\[
+|s/\sqrt2|^p+|{-s/\sqrt2}|^p+|t|^p=2^{1-p/2}|s|^p+|t|^p.
+\]
+Hence $B_p^3\cap f^{\perp}$ is the image, under the linear map $(\sigma,t)\mapsto(2^{1-p/2})^{-1/p}\sigma\,u+t\,v$, of the unit ball $\{|\sigma|^p+|t|^p\le1\}$. That map scales exactly one axis, by the factor $(2^{1-p/2})^{-1/p}=2^{1/2-1/p}$, so the areas are multiplied by that factor and
+\[
+A_{\mathrm{face}}(p)=2^{1/2-1/p}\cdot A_{\mathrm{coord}}(p)=2^{1/2-1/p}\,\frac{4\Gamma(1+1/p)^2}{\Gamma(1+2/p)}.
+\]
+The factor $2^{1/2-1/p}$ is smaller than $1$ for $p<2$, equal to $1$ for $p=2$ and larger than $1$ for $p>2$; since $A_{\mathrm{coord}}(p)>0$, this proves (iii). At $p=1$ the factor equals $2^{-1/2}$ and $A_{\mathrm{coord}}(1)=2$, so $A_{\mathrm{face}}(1)=\sqrt2$, the second half of (v).
+
+(4) \emph{The Euclidean case.} For $p=2$ the body $B_2^3$ is the Euclidean unit ball, every central section of which is a disc of radius $1$ and hence of area $\pi$; this is (iv), and it is consistent with (ii) and (iii) at $p=2$.
+
+(5) \emph{The octahedron.} For $p=1$ the body $B_1^3$ is the octahedron $|x|+|y|+|z|\le1$. Its section by $d^{\perp}=H$ is the regular hexagon with vertices $\pm\tfrac12(1,-1,0)$, $\pm\tfrac12(1,0,-1)$, $\pm\tfrac12(0,1,-1)$; each of the six sides has length $1/\sqrt2$ and the apothem is $\sqrt3/(2\sqrt2)$, so the area is $\tfrac12\cdot6\cdot\tfrac{1}{\sqrt2}\cdot\tfrac{\sqrt3}{2\sqrt2}=3\sqrt3/4$, as claimed in (v); the first two values of (v) were obtained in (2) and (3). This completes the proof of all five items. The proof has been reviewed line by line by an independent reviewer; it has not been machine-checked.
+\end{proof}
+
+\begin{theorem}[Normals with a vanishing coordinate]\label{thm:zero}
+Let $1\le p<\infty$ and let $n\in\mathbb{R}^3$ be a unit vector with at least one coordinate equal to $0$. Put $C_p:=A_{\mathrm{coord}}(p)=4\Gamma(1+1/p)^2/\Gamma(1+2/p)$. Then:
+\begin{enumerate}
+\item[(i)] if $i$ is any index with $n_i=0$, then $A_p(n)=C_p\,(\sum_{j\ne i}|n_j|^p)^{-1/p}$, and the right-hand side does not depend on the choice of $i$;
+\item[(ii)] if $1\le p<2$, then $A_p(n)\le C_p$, with equality exactly for the $\pm$coordinate vectors;
+\item[(iii)] if $p>2$, then $A_p(n)\ge C_p$, with equality exactly for the $\pm$coordinate vectors;
+\item[(iv)] $A_2(n)=\pi=C_2$ for all such $n$, and the threshold $p=2$ is sharp: for $p\ne2$ the face-diagonal normal $f$ gives $A_p(f)\ne C_p$.
+\end{enumerate}
+\end{theorem}
+% evidence: stmt:000035, exp:000004
+
+\begin{proof}
+(1) \emph{Reduction to a planar computation.} By the signed-permutation invariance of Theorem~\ref{thm:integral}(i) we may suppose $n=(a,b,0)$ with $a^2+b^2=1$. Take the orthonormal basis $u=(b,-a,0)$, $v=e_3$ of $n^{\perp}$; then $e_n(\psi)=\cos\psi\,(b,-a,0)+\sin\psi\,e_3$, so
+\[
+\big\|e_n(\psi)\big\|_p^p=|\cos\psi|^p\big(|a|^p+|b|^p\big)+|\sin\psi|^p .
+\]
+Writing $\alpha=|a|^p+|b|^p$ and applying Theorem~\ref{thm:integral}(i),
+\[
+A_p(n)=\frac12\int_0^{2\pi}\big(\alpha|\cos\psi|^p+|\sin\psi|^p\big)^{-2/p}d\psi .
+\]
+
+(2) \emph{Factoring out $\alpha$.} By the substitution $\psi\mapsto\psi$ combined with $x\mapsto\alpha^{-1/p}x$ in the plane $n^{\perp}$, the section $B_p^3\cap n^{\perp}$ is the image of $B_p^3\cap f^{\perp}$ under the linear map that scales the direction $u$ by $\alpha^{-1/p}$ and fixes $v$; equivalently, the same change of variables $c\mapsto\alpha^{-1/p}c$ in the one-dimensional integral above gives
+\[
+A_p(n)=\alpha^{-1/p}\cdot\frac12\int_0^{2\pi}\big(|\cos\psi|^p+|\sin\psi|^p\big)^{-2/p}d\psi=\frac{C_p}{\big(|a|^p+|b|^p\big)^{1/p}},
+\]
+where the last identity is Theorem~\ref{thm:integral}(ii) read through Theorem~\ref{thm:integral}(i). This is (i); the independence of $i$ is immediate because only the two non-vanishing coordinates enter.
+
+(3) \emph{Comparison with the coordinate direction.} Since $a^2+b^2=1$ and $p<2$, the power-mean inequality gives $|a|^p+|b|^p\ge(a^2+b^2)^{p/2}=1$, with equality exactly when one of $a,b$ vanishes; hence $A_p(n)=C_p(|a|^p+|b|^p)^{-1/p}\le C_p$, and equality holds exactly for the $\pm$coordinate vectors. For $p>2$ the same argument with the reversed power-mean inequality gives $|a|^p+|b|^p\le1$, hence $A_p(n)\ge C_p$ with the same equality case. This is (ii) and (iii).
+
+(4) \emph{The threshold $p=2$.} For $p=2$ we have $|a|^2+|b|^2=1$, so (i) gives $A_2(n)=C_2=\pi$, which is the first assertion of (iv). For the sharpness: $f$ has a zero coordinate and $A_p(f)=2^{1/2-1/p}C_p$ by Theorem~\ref{thm:integral}(iii), which differs from $C_p$ for every $p\ne2$. The proof has been reviewed line by line by an independent reviewer; it has not been machine-checked.
+\end{proof}
+
+\begin{theorem}[The body-diagonal section]\label{thm:diag}
+Let $1\le p<\infty$, let $H=\{(x,y,z):x+y+z=0\}$ and let $A_{\mathrm{diag}}(p)$ be the area of $H\cap B_p^3$ with respect to the Euclidean structure induced from $\mathbb{R}^3$. With $u=(1,-1,0)/\sqrt2$, $v=(1,1,-2)/\sqrt6$ and $e(\theta)=\cos\theta\,u+\sin\theta\,v$ one has:
+\begin{enumerate}
+\item[(i)] $A_{\mathrm{diag}}(p)=\frac12\int_0^{2\pi}\|e(\theta)\|_p^{-2}\,d\theta=\frac34\int_0^{2\pi}\big(|\cos(\theta-\pi/6)|^p+|\cos(\theta+\pi/6)|^p+|\sin\theta|^p\big)^{-2/p}d\theta$;
+\item[(ii)] $A_{\mathrm{diag}}(p)=\sqrt3\cdot\mathrm{area}\{(x,y)\in\mathbb{R}^2:|x|^p+|y|^p+|x+y|^p\le1\}=\frac{\sqrt3}{2}\int_0^{2\pi}\big(|\cos\theta|^p+|\sin\theta|^p+|\cos\theta+\sin\theta|^p\big)^{-2/p}d\theta$;
+\item[(iii)] $A_{\mathrm{diag}}(1)=3\sqrt3/4$, $A_{\mathrm{diag}}(2)=\pi$ and $\lim_{p\to\infty}A_{\mathrm{diag}}(p)=3\sqrt3$;
+\item[(iv)] $p\mapsto A_{\mathrm{diag}}(p)$ is continuous on $[1,\infty)$.
+\end{enumerate}
+\end{theorem}
+% evidence: stmt:000041, exp:000006
+
+\begin{proof}
+(1) \emph{The basis of the plane.} Direct computation gives $\|u\|^2=(1+1)/2=1$, $\|v\|^2=(1+1+4)/6=1$, $u\cdot v=(-1+1+0)/\sqrt{12}=0$, $u\cdot(1,1,1)=0$ and $v\cdot(1,1,1)=(1+1-2)/\sqrt6=0$. Hence $\{u,v\}$ is an orthonormal basis of $H=d^{\perp}$, and $(s,t)\mapsto su+tv$ is an isometry of $\mathbb{R}^2$ onto $H$.
+
+(2) \emph{The plane integral.} Theorem~\ref{thm:integral}(i) applied to the unit normal $d$ and to this basis gives at once $A_{\mathrm{diag}}(p)=\frac12\int_0^{2\pi}\|e(\theta)\|_p^{-2}d\theta$; for completeness, the same formula follows directly by writing a point of $H$ as $r\,e(\theta)$ with area element $r\,dr\,d\theta$ and using the homogeneity of $\|\cdot\|_p$, exactly as in step (1) of the proof of Theorem~\ref{thm:integral}.
+
+(3) \emph{The three coordinates of $e(\theta)$.} From the components of $u$ and $v$,
+\[
+e_1=\frac{\cos\theta}{\sqrt2}+\frac{\sin\theta}{\sqrt6}=\frac{\sqrt3\cos\theta+\sin\theta}{\sqrt6},\quad
+e_2=-\frac{\cos\theta}{\sqrt2}+\frac{\sin\theta}{\sqrt6}=-\frac{\sqrt3\cos\theta-\sin\theta}{\sqrt6},\quad
+e_3=-\frac{2\sin\theta}{\sqrt6}.
+\]
+Using $\sqrt3\cos\theta+\sin\theta=2\cos(\theta-\pi/6)$ and $\sqrt3\cos\theta-\sin\theta=2\cos(\theta+\pi/6)$ we get $|e_1|=|\cos(\theta-\pi/6)|/\sqrt{3/2}$, $|e_2|=|\cos(\theta+\pi/6)|/\sqrt{3/2}$ and $|e_3|=\sqrt{2/3}\,|\sin\theta|$. Factoring $(3/2)^{-1/2}$ out of the three entries yields
+\[
+\|e(\theta)\|_p^p=\Big(\tfrac32\Big)^{-p/2}\big(|\cos(\theta-\pi/6)|^p+|\cos(\theta+\pi/6)|^p+|\sin\theta|^p\big),
+\]
+so $\|e(\theta)\|_p^{-2}=\tfrac32\big(|\cos(\theta-\pi/6)|^p+|\cos(\theta+\pi/6)|^p+|\sin\theta|^p\big)^{-2/p}$, and multiplying by $\frac12$ gives the second equality of (i).
+
+(4) \emph{The planar form.} A point of $H$ is $(x,y,-x-y)$ with $(x,y)\in\mathbb{R}^2$, and the map $(x,y)\mapsto(x,y,-x-y)$ has Jacobian $\sqrt3$ in the sense that it multiplies two-dimensional areas by $\sqrt3$. Hence $A_{\mathrm{diag}}(p)=\sqrt3\,\mathrm{area}\{(x,y):|x|^p+|y|^p+|x+y|^p\le1\}$, which is the first equality of (ii); applying the polar formula of step (2) in these coordinates gives the second.
+
+(5) \emph{Special values and continuity.} For $p=2$ the integrand of (i) is identically $1$ because $\|e(\theta)\|_2=1$, so $A_{\mathrm{diag}}(2)=\frac12\cdot2\pi=\pi$; the same value is forced by the Euclidean case of Theorem~\ref{thm:integral}(iv). For $p=1$ the section of the octahedron by $H$ is the hexagon of Theorem~\ref{thm:integral}(v), of area $3\sqrt3/4$. As $p\to\infty$ the integrand converges pointwise to the indicator-type limit whose integral over the four arcs where one of the three cosines dominates equals $6\sqrt3$, and since the integrand is bounded uniformly in $p$ and $\theta$, dominated convergence gives $\lim_{p\to\infty}A_{\mathrm{diag}}(p)=3\sqrt3$, the area of the regular hexagon $H\cap[-1,1]^3$. The same uniform bound gives (iv): for fixed $\theta$ the integrand is continuous in $p$, so dominated convergence applies to every convergent sequence $p_k\to p$. The proof has been reviewed line by line by an independent reviewer; it has not been machine-checked.
+\end{proof}
+
+\begin{theorem}[The face-diagonal versus the body-diagonal area]\label{thm:delta}
+Let $1\le p<\infty$ and let $A_{\mathrm{face}}$, $A_{\mathrm{diag}}$ and $\Delta=A_{\mathrm{face}}-A_{\mathrm{diag}}$ be as in Section~2. Then:
+\begin{enumerate}
+\item[(i)] $A_{\mathrm{diag}}(p)=\frac{\sqrt3}{2}\int_0^{2\pi}\big(|\cos\theta|^p+|\sin\theta|^p+|\cos\theta+\sin\theta|^p\big)^{-2/p}d\theta$, with $A_{\mathrm{diag}}(2)=\pi$, $A_{\mathrm{diag}}(1)=3\sqrt3/4$ and $\lim_{p\to\infty}A_{\mathrm{diag}}(p)=3\sqrt3$;
+\item[(ii)] $A_{\mathrm{face}}(p)=2^{1/2-1/p}\,4\Gamma(1+1/p)^2/\Gamma(1+2/p)$, with $A_{\mathrm{face}}(2)=\pi$, $A_{\mathrm{face}}(1)=\sqrt2$ and $\lim_{p\to\infty}A_{\mathrm{face}}(p)=4\sqrt2$;
+\item[(iii)] $\Delta$ is continuous on $[1,\infty)$, $\Delta(2)=0$, $\Delta(1)=\sqrt2-3\sqrt3/4>0$ and $\lim_{p\to\infty}\Delta(p)=4\sqrt2-3\sqrt3>0$; consequently there is $P_0\in[1,\infty)$ such that $A_{\mathrm{face}}(p)>A_{\mathrm{diag}}(p)$ for every $p\ge P_0$.
+\end{enumerate}
+\end{theorem}
+% evidence: stmt:000042, exp:000007
+
+\begin{proof}
+(1) \emph{Item (i)} is Theorem~\ref{thm:diag}(ii) together with the three values in Theorem~\ref{thm:diag}(iii), restated here only to have the two competing areas in one place.
+
+(2) \emph{Item (ii).} The closed form and the value at $p=2$ are Theorem~\ref{thm:integral}(iii) and Theorem~\ref{thm:integral}(ii). At $p=1$ the factor is $2^{-1/2}$ and $A_{\mathrm{coord}}(1)=2$, giving $A_{\mathrm{face}}(1)=\sqrt2$. As $p\to\infty$ we have $\Gamma(1+1/p)^2/\Gamma(1+2/p)\to\Gamma(1)^2/\Gamma(1)=1$ by continuity of $\Gamma$ at $1$, while the factor tends to $2^{1/2}$; hence the limit is $2^{1/2}\cdot4=4\sqrt2$, which is the area of the section of the cube $[-1,1]^3$ by the plane $x+y=0$, as it must be.
+
+(3) \emph{Continuity of $\Delta$.} By (i) and (ii) both summands are continuous functions of $p$ on $[1,\infty)$: the first by Theorem~\ref{thm:diag}(iv), the second because $\Gamma$ is continuous and positive on $(0,\infty)$ and $p\mapsto2^{1/2-1/p}$ is continuous. A difference of continuous functions is continuous, so $\Delta$ is continuous.
+
+(4) \emph{The two signs.} $\Delta(2)=A_{\mathrm{face}}(2)-A_{\mathrm{diag}}(2)=\pi-\pi=0$ by (i) and (ii). $\Delta(1)=\sqrt2-3\sqrt3/4$, and this is positive because squaring the positive numbers $\sqrt2$ and $3\sqrt3/4$ gives $2>27/16$. Finally $\lim_{p\to\infty}\Delta(p)=4\sqrt2-3\sqrt3$, which is positive because $32>27$ after squaring.
+
+(5) \emph{The tail.} Since $\Delta(p)\to4\sqrt2-3\sqrt3>0$ as $p\to\infty$, there is $P_0$ with $\Delta(p)>0$ for all $p\ge P_0$. The proof has been reviewed line by line by an independent reviewer; it has not been machine-checked.
+\end{proof}
+
+Taken together, Theorems~\ref{thm:integral}, \ref{thm:diag} and \ref{thm:delta} give the body-diagonal area in closed form as the one-dimensional integral of Theorem~\ref{thm:diag}(i), with its values at $p=1,2$ and at $p=\infty$, and they compare the face-diagonal and body-diagonal areas only through those special values. The finer ordering of the three areas across a range of $p$ is not settled in closed form on the present evidence. It is instead followed numerically: the two closed forms above and the integral of Theorem~\ref{thm:diag}(i) are evaluated by quadrature at twelve values of $p$ spanning $[1.05,1000]$, and the resulting values, the quadrature scheme and its self-checks are collected in Appendix~\ref{app:computational}.
+
+\section{Discussion and open problems}
+
+The four statements of Section~3 settle the comparison of the coordinate direction with the face-diagonal direction on the set of normals having a vanishing coordinate (Theorem~\ref{thm:zero}), give the exact body-diagonal area as a one-dimensional integral together with its special values (Theorem~\ref{thm:diag}), and show that the face-diagonal direction dominates the body-diagonal one for all sufficiently large $p$ (Theorem~\ref{thm:delta}). The natural next question is what happens in the intermediate range, and there the answer we can offer is numerical rather than analytic.
+
+\emph{Numerically supported strong conjecture (not proved here).} For $1\le p<\infty$ the maximal area of a central section of $B_p^3$ is attained at one of the three normals $e_3$, $d$, $f$, and the winner depends on $p$ in three regimes: for $1\le p<2$ the coordinate direction $e_3$ gives the largest area; for $2<p<p_*$ the body diagonal $d$ gives the largest area; for $p>p_*$ the face diagonal $f$ gives the largest area. At $p=2$ all directions give the same area $\pi$. The threshold is $p_*=4.998215596862$ (numerically), the unique solution of $A_{\mathrm{diag}}(p)=A_{\mathrm{face}}(p)$ in $(1,\infty)$. This statement is supported by a sweep over twelve values of $p$, by local refinement along the two boundary arcs of the ordering cone $0\le a\le b\le c$, and by bisection on both thresholds; it is not established by proof, and in particular the absence of a strictly interior maximizing direction is only verified numerically. The word ``conjecture'' is meant literally: the three-regime description should not be cited as a theorem.
+
+Three features deserve comment. First, the two thresholds are of different natures. The threshold $p=2$ is exact and follows from Theorem~\ref{thm:integral}(iii): the face-diagonal factor $2^{1/2-1/p}$ passes through $1$ exactly at $p=2$, and at $p=2$ the body is Euclidean, so all central sections are congruent discs. The threshold $p_*$ is not of this type: it is the zero of the continuous function $\Delta$ of Theorem~\ref{thm:delta}, whose endpoints signs are both positive; Theorem~\ref{thm:delta} guarantees only that $\Delta$ is positive for large $p$, and locating the zero requires information about $\Delta$ on the whole interval. Second, the two transitions have opposite directions: passing $p=2$ the maximal area leaves the coordinate direction and moves to the body diagonal, while passing $p_*$ it moves from the body diagonal to the face diagonal, which is the direction that is extremal for the cube, in accordance with Ball's theorem \cite{ball}. Third, within the class of normals having a vanishing coordinate, Theorem~\ref{thm:zero} does settle the comparison: there the area is an explicit decreasing function of $|a|^p+|b|^p$, so over that class the extremum is attained at a coordinate vector or at the face diagonal and never in between. For normals whose three coordinates are all non-zero, the corresponding statement is at present only the numerical observation recorded above; Theorem~\ref{thm:zero} says nothing about that class.
+
+\emph{Relation with the literature.} Ball \cite{ball} determines the maximal hyperplane section of the cube, which is the case $p=\infty$ and corresponds to the face-diagonal direction; our Theorem~\ref{thm:integral}(iii) reproduces the constant $4\sqrt2$ as the limit of $A_{\mathrm{face}}(p)$ and Theorem~\ref{thm:delta}(iii) shows that $A_{\mathrm{face}}(p)>A_{\mathrm{diag}}(p)$ for all sufficiently large $p$; numerically the crossover is at $p_*\approx4.998216$, which is evidence rather than a proved threshold. Grz\'slewicz \cite{grzaslewicz} describes the plane sections of the unit balls of $\ell_p$ and of $L_p[0,1]$; the polar formula of Theorem~\ref{thm:integral}(i) is the three-dimensional instance of that description, and the closed forms in Theorem~\ref{thm:integral}(ii)--(iii) are special values of it. K\"onig \cite{konig} treats maximal hyperplane sections of $\ell_p^n$ for $p>2$ and identifies regimes in which the cube-slicing phenomenon persists or fails depending on the dimension and on the size of the coordinates of the normal; the three-dimensional picture obtained here is the smallest instance of that phenomenon and shows both a persistence (for large $p$) and a failure (for $p$ just above $2$, where the body diagonal wins). The papers \cite{ambrus} and \cite{eskenazis} study critical central sections of the cube and extremal sections of subspaces of $L_p$ respectively; the face-diagonal and body-diagonal areas compared in Theorem~\ref{thm:delta} are the two critical values whose competition those works analyse in the limiting and in the infinite-dimensional setting.
+
+\emph{Limitations.} Everything in Section~3 is three-dimensional and is proved by explicit computation; no attempt is made here to treat $\ell_p^n$ for $n\ge4$, where the analysis of \cite{konig} shows that the dimension enters in an essential way. The numerical thresholds are reported to the precision of the bisection and are not claimed to be exact. Finally, the absence of interior maximizers is, at present, a numerical observation only: the argument of Theorem~\ref{thm:zero} covers the normals with a vanishing coordinate, but no analytic argument is given for normals with three distinct non-zero coordinates.
+
+\emph{Open problems.}
+\begin{enumerate}
+\item[(a)] Prove that no normal with three distinct non-zero coordinates maximizes $A_p$ for any $p\in[1,\infty)$, i.e. turn the numerical observation into a statement about the critical points of $A_p$ on the ordering cone.
+\item[(b)] Determine $p_*$ in closed form, or prove that it is not the root of any element of a natural class of elementary expressions, and prove that the intersection of the graphs of $A_{\mathrm{diag}}$ and $A_{\mathrm{face}}$ is unique.
+\item[(c)] Prove the monotonicity, in $p$, of the ratios $A_{\mathrm{diag}}/A_{\mathrm{coord}}$ and $A_{\mathrm{face}}/A_{\mathrm{coord}}$, which is the numerically observed mechanism behind the single crossing at $p=2$.
+\item[(d)] Extend the three-regime description to $\ell_p^n$ for $n\ge4$ and decide whether the threshold $p_*$ depends on $n$.
+\end{enumerate}
+
+\begin{thebibliography}{9}
+
+\bibitem{ball} K.~Ball, \emph{Cube slicing in $\mathbb{R}^n$}, Proc. Amer. Math. Soc. \textbf{97} (1986), no.~3, 465--473.
+
+\bibitem{konig} H.~K\"onig, \emph{On maximal hyperplane sections of the unit ball of $\ell_p^n$ for $p>2$}, Advances in Operator Theory \textbf{10} (2025), paper no.~15.
+
+\bibitem{grzaslewicz} R.~Grz\'slewicz, \emph{Plane sections of the unit ball of $L_p$}, Acta Math. Hungar. \textbf{52} (1988), no.~3--4, 219--227.
+
+\bibitem{ambrus} G.~Ambrus, \emph{Critical central sections of the cube}, arXiv:2107.14778v3 (2023), 12~pp.
+
+\bibitem{eskenazis} A.~Eskenazis, \emph{On extremal sections of subspaces of $L_p$}, preprint.
+
+\end{thebibliography}
+
+\appendix
+\section{Computational evidence}\label{app:computational}
+
+This appendix documents the computations behind the numerical statements of Section~4. All programs are run from the repository root; the paths are relative to it.
+
+\paragraph{Quadrature kernel and its self-check.} All section areas are evaluated in polar coordinates in the section plane, by a tanh-sinh (double-exponential) quadrature applied on panels whose breakpoints are the zeros of $A\cos\psi+B\sin\psi$ and the crossings $|w_i|=|w_j|$ of the three coordinate functions, so that the integrand is real-analytic on each panel. The kernel is validated in \texttt{exp:000003} with the program \path{code/exp/lpsec_validate.py}: at $p=2$ every tested normal returns the area $\pi$ with deviation at most $10^{-15}$; at $p=1$ the values agree with the exact edge-clipping values of the octahedron ($2$ for the coordinate normal, $3\sqrt3/4$ for the body diagonal, $\sqrt2$ for the face diagonal) to $10^{-15}$; the coordinate areas agree with $4\Gamma(1+1/p)^2/\Gamma(1+2/p)$ to a relative deviation of at most $10^{-13}$; the computed areas are invariant under rotation of the basis of the section plane to $10^{-12}$; and an independent nested Simpson scheme converges to the polar values within its own discretisation error.
+
+\paragraph{Sweep over $p$.} The program \path{code/exp/lpsec_sweep.py} sweeps the twelve values $p\in\{1.05,1.1,1.2,1.5,2,2.5,3,4,5,8,16,1000\}$ and evaluates $A_p(n)$ on a grid of the unit sphere of normals, parametrised by the ordering cone $0\le a\le b\le c$ together with the two boundary arcs $(0,1,t)$ and $(1,1,t)$, $t\in[0,1]$, and their limit points $t\to\infty$. The sweep (\texttt{exp:000004}) places the maximal area on the boundary of the ordering cone at every tested $p$ and returns the ratio $r(p)=A_{\mathrm{diag}}(p)/A_{\mathrm{coord}}(p)$ smaller than $1$ for $p<2$, equal to $1$ at $p=2$ and larger than $1$ for $p>2$.
+
+\paragraph{The two thresholds.} The program \path{code/exp/lpsec_critical.py} (\texttt{exp:000006}) refines the neighbourhood of the winner in six rounds of local refinement and reports: the ratios $A_{\mathrm{face}}/A_{\mathrm{coord}}$ and $A_{\mathrm{diag}}/A_{\mathrm{coord}}$ increase monotonically in $p$ and each equals $1$ at $p=2$; the crossing $A_{\mathrm{diag}}(p)=A_{\mathrm{face}}(p)$ is unique and lies in $(4,5)$; and no strictly interior direction of the ordering cone exceeds the maximum over the boundary. Bisection on the crossing, carried to the precision reported in Section~4, gives $p_*=4.998215596862$.
+
+\paragraph{The boundary arcs.} The program \path{code/exp/lpsec_arcs.py} (\texttt{exp:000007}) evaluates the area on dense grids of the two boundary arcs $(0,1,t)$ and $(1,1,t)$, $t\in[0,1]$, together with the endpoint $t\to\infty$, for the same twelve values of $p$. On both arcs the maximum is attained at an endpoint $t\in\{0,1,\infty\}$: the coordinate normal for $p<2$, the body diagonal for $2\le p<4.998$, and the face diagonal for $p>4.998$; every strictly intermediate $t$ gives a smaller area, the only exception being $p=2$, where the area is constant along the arc.
+
+\paragraph{Reproducibility.} The scripts read no external data and depend only on the Python standard library; the quadrature parameters (panel counts, tanh-sinh levels) and the bisection tolerances are recorded in the run logs of the respective experiments. The three closed forms used as cross-checks in the text are $A_{\mathrm{coord}}(p)=4\Gamma(1+1/p)^2/\Gamma(1+2/p)$, $A_{\mathrm{face}}(p)=2^{1/2-1/p}A_{\mathrm{coord}}(p)$ and the integral representation of $A_{\mathrm{diag}}(p)$ in Theorem~\ref{thm:diag}.
+
+\input{mapping-appendix}
+\end{document}

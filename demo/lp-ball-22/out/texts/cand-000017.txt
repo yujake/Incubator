@@ -1,0 +1,2550 @@
+===== page 1 =====
+arXiv:0708.2900v1  [math.MG]  21 Aug 2007
+The geometry of Minkowski spaces — a survey.
+Part I
+Horst Martini
+Fakult¨at f¨ur Mathematik
+Technische Universit¨at Chemnitz
+D-01097 Chemnitz
+Germany
+E-mail: martini@mathematik.tu-chemnitz.de
+Konrad J. Swanepoel∗
+Department of Mathematics and Applied Mathematics
+University of Pretoria, Pretoria 0002
+South Africa
+E-mail: konrad@math.up.ac.za
+Gunter Weiß
+Institut f¨ur Geometrie
+Technische Universit¨at Dresden
+D-01062 Dresden
+Germany
+E-mail: weiss@math.tu-dresden.de
+Abstract
+We survey elementary results in Minkowski spaces (i.e. ﬁnite dimen-
+sional Banach spaces) that deserve to be collected together, and give sim-
+ple proofs for some of them. We place special emphasis on planar results.
+Many of these results have often been rediscovered as lemmas to other
+results. In Part I we cover the following topics: The triangle inequality
+and consequences such as the monotonicity lemma, geometric character-
+izations of strict convexity, normality (Birkhoﬀorthogonality), conjugate
+diameters and Radon curves, equilateral triangles and the aﬃne regu-
+lar hexagon construction, equilateral sets, circles: intersection, circum-
+scribed, characterizations, circumference and area, inscribed equilateral
+polygons.
+∗Research supported by a grant from a cooperation between the Deutsche Forschungs-
+gemeinschaft in Germany and the National Research Foundation in South Africa
+1
+===== page 2 =====
+Contents
+1
+Introduction
+3
+2
+The subject and its origin
+4
+3
+The triangle inequality
+5
+3.1
+The triangle inequality in Minkowski planes . . . . . . . . . . . .
+8
+3.2
+Strict convexity . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+10
+3.3
+Interlude: Intersection of homothets of a ﬁxed convex curve . . .
+15
+3.4
+Generalization of the triangle inequality to convex curves
+. . . .
+18
+3.5
+The monotonicity lemma
+. . . . . . . . . . . . . . . . . . . . . .
+21
+4
+Equilateral triangles and aﬃne regular hexagons
+23
+5
+Equilateral sets
+26
+5.1
+Four-point equilateral sets . . . . . . . . . . . . . . . . . . . . . .
+26
+5.2
+Equilateral sets in higher dimensions . . . . . . . . . . . . . . . .
+27
+5.2.1
+Upper bounds . . . . . . . . . . . . . . . . . . . . . . . . .
+27
+5.2.2
+Lower bounds . . . . . . . . . . . . . . . . . . . . . . . . .
+28
+6
+Normality, Conjugate diameters, and Radon curves
+28
+6.1
+Planes . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+29
+6.1.1
+Conjugate diameters . . . . . . . . . . . . . . . . . . . . .
+29
+6.1.2
+Radon curves . . . . . . . . . . . . . . . . . . . . . . . . .
+31
+6.2
+Higher dimensions
+. . . . . . . . . . . . . . . . . . . . . . . . . .
+34
+6.3
+Non-symmetric curves . . . . . . . . . . . . . . . . . . . . . . . .
+35
+7
+Minkowski circles
+36
+7.1
+Circumscribed and inscribed circles . . . . . . . . . . . . . . . . .
+36
+7.2
+Equilateral n-gons inscribed in the unit circle . . . . . . . . . . .
+38
+7.3
+Characterization of the Minkowski circle . . . . . . . . . . . . . .
+38
+7.4
+Circumference and area of the unit circle . . . . . . . . . . . . . .
+40
+References
+43
+2
+===== page 3 =====
+1
+Introduction
+This paper is a survey of basic results on the geometry of ﬁnite dimensional
+normed linear spaces, which we, following Thompson [194], call Minkowski ge-
+ometry.
+We place special emphasis on planar results, since there are many
+planar results which are simple and elementary, or at least considered to be
+so, which are often needed in work on Minkowski geometry, often rediscovered,
+and not often proved. They come from various parts of mathematics: discrete
+geometry and geometry of numbers (the historical origin of Minkowski geom-
+etry), convex geometry, functional analysis, and lately also from optimization,
+theoretical computer science and combinatorics. Our motivation for this survey
+is that the book of Thompson [194] does not cover many of these results; neither
+does the Handbook of Convex Geometry [84] (as admitted in its introduction).
+Previous surveys of this type, such as Petty [152] and Yaglom [206], are old and
+not easily accessible. In many of these results, the proofs, once written out,
+have a tendency to be messy. In this regard Sch¨aﬀer [173] says (in 1967)
+The amazing amount of underbrush that has to be cleared away,
+. . . , indicates, to this author at least, that the geometry of ﬁnite-
+dimensional convex sets is still quite imperfectly known.
+We discuss many of these elementary results, and give proofs whenever the orig-
+inal proofs are in journals that are diﬃcult to ﬁnd, or if we have simpler proofs
+than those in the literature. In each case we then survey the extensions to higher
+dimensions. There are many topics that are not included here, but which will
+appear in a continuation of this survey, such as d-segments and d-convexity,
+characterizations of smoothness, various notions of angle measures, diametri-
+cally maximal sets, sets of constant width, packing and covering of unit balls,
+various discrete inequalities, Hadwiger numbers, bisectors, Erd˝os-type problems,
+approximation theory (Chebyshev sets), isometries (the Mazur-Ulam theorem
+and its relatives, Beckman-Quarles type theorems, Banach-Mazur distance),
+parameters of functional analysis, applications to discrete optimization prob-
+lems such as minimum spanning trees and Steiner minimum trees, the Fermat-
+Torricelli problem, etc. We do not consider the local theory of Banach spaces
+itself [195, 157] nor diﬀerential and integral geometry of Minkowski spaces, for
+which the main reference is [194]. We have here mainly concentrated on the
+triangle inequality and its consequences such as the monotonicity lemma; geo-
+metric characterizations of strict convexity and smoothness; normality (Birkhoﬀ
+orthogonality), conjugate diameters and Radon curves; equilateral triangles and
+the aﬃne regular hexagon construction; equilateral sets; various aspects of cir-
+cles and spheres: intersection of circles, circumscribed spheres, characterizations
+of spheres, circumference and area of the unit circle, and equilateral polygons
+inscribed in the unit circle.
+Also, we do not consider inﬁnite dimensional spaces, and for the sake of
+simplicity, we only consider Minkowski spaces with a symmetric norm (∥x∥=
+∥−x∥) satisfying the triangle inequality.
+3
+===== page 4 =====
+2
+The subject and its origin
+As is well known, the axioms of Minkowski spaces were introduced by Minkowski
+[140], in connection with problems from number theory.
+However, it seems
+that the earliest reference to non-Euclidean geometry in the sense of Minkowski
+Geometry was made by Riemann in his Habilitationsvortrag [166], where he
+mentioned the ℓ4-norm. See ´Alvarez [8] for a discussion of Riemann’s remarks
+on non-Euclidean norms. Hilbert [100] in his famous lecture delivered before
+the International Congress of Mathematicians in 1900 gives a description of
+Minkowski Geometry in his fourth problem.
+Two important and neglected early papers, considering Minkowski Geometry
+from a geometric (as opposed to analytic) point of view are [74] and [76]. Min-
+kowski Geometry was studied, especially by Busemann [39], in order to throw
+more light on Finsler Geometry, introduced by Finsler [65]. See also [169]. For
+recent developments in Finsler Geometry, see ´Alvarez [8]. Closely related is the
+subject of distance geometry, cf. the work of Menger and his school, summa-
+rized by Menger [138] and Blumenthal [29] (see also [30]), as well as the works
+of Alexandrov [2] and Rinow [167].
+In Functional Analysis, although concentrating from its outset almost exclu-
+sively on inﬁnite dimensional spaces [17, 144], various ﬁne geometric properties
+of ﬁnite dimensional spaces play an important role in the so-called local theory
+of Banach spaces [139, 195, 157, 127]. For inﬁnite dimensional Banach space
+geometry, see [54, 57, 128, 22]. Also, characterizations of inner product spaces
+lead to interesting geometry of ﬁnite dimensional spaces [10].
+Recently, in Operations Research and VLSI design, various norms have
+started playing an important role, especially ℓp-norms and polygonal norms;
+see e.g. [63, 49].
+For physical interpretations of Minkowski spaces, see e.g. [118, 145, 121].
+The two most common equivalent deﬁnitions of a Minkowski space are by giving
+axioms for a norm ∥· ∥: V →R, namely
+∥x∥
+≥
+0,
+∥x∥
+=
+0 iﬀx = o
+(positive deﬁniteness),
+∥λx∥
+=
+|λ| ∥x∥
+(symmetry),
+∥x + y∥
+≤
+∥x∥+ ∥y∥
+(triangle inequality),
+where V is the underlying ﬁnite dimensional real vector space, or by giving
+axioms for the unit ball B ⊂V , namely
+B is bounded,
+B has a non-empty interior,
+B is centrally symmetric,
+B is convex.
+In the sequel, M = Md will be an arbitrary d-dimensional Minkowski space
+with norm ∥· ∥, unit ball B = B(M), and unit sphere S = S(M). A two-
+dimensional Minkowski space will be referred to as a Minkowski plane, its unit
+ball called the unit disc and its unit sphere the unit circle.
+4
+===== page 5 =====
+We identify isometric spaces; by the Mazur-Ulam theorem [136] two Minkow-
+ski spaces are isometric iﬀtheir unit balls are aﬃnely equivalent. The Minkowski
+plane with a parallelogram as unit disc will be called the rectilinear or taxicab
+plane. We denote vectors by x, y, . . . , the normalization of x̸ = o by bx :=
+1
+∥x∥x,
+the closed (straight line) segment from a to b by [ab], the triangle with vertices
+p, q, r by △pqr, the line through a and b by ⟨ab⟩, the ray with origin a passing
+through b by [ab⟩, curves parametrized by [a, b] by γ, the length of a segment
+[ab] (in the norm) by |ab| := ∥b −a∥, and the length of a curve by |γ|, which
+we deﬁne in the elementary way (i.e. without integrals)
+|γ| := sup{
+n
+X
+i=1
+|aiai+1| : n ∈N, ai = γ(ti), a = t0 < t1 < · · · < tn−1 = b}.
+The unit circle S of a Minkowski plane M, parametrized as a curve, has a length
+ℓ(S), called its circumference. We use the following notation: Π(M) := ℓ(S)/2.
+A metric segment is a curve which is isometric to a closed segment of the real
+line, a metric line is a curve parametrized by R and isometric to the real line, and
+a geodesic (a notion due to Busemann [35]; see also [39, p. 32]) is a curve that is
+locally a metric segment, i.e., each point of the curve has a closed neighbourhood
+that is a metric segment.
+We use the standard facts about duals, denoting functionals by φ, ψ etc. An
+important fact is that all Minkowski spaces are reﬂexive Banach spaces. We
+denote the convex hull of a set S by conv S, the positive hull by pos S, the
+interior by int S, the relative interior by rel int S, and the boundary by bd S. A
+(positive) homothet of a set A is a set of the form λA + v, where λ > 0 and v
+are arbitrary. Thus we allow translates as special homothets (with the point of
+homothety at inﬁnity).
+We say that x̸ = o is normal to y̸ = o, denoted x ⊣y, if ∥x∥≤∥x + λy∥for
+all λ ∈R, or equivalently, if the unit ball is supported at bx by a line parallel to
+y. See Section 6 for a discussion of this notion.
+The diﬀerence body of a convex body C is 1
+2(C −C). Given any convex
+body C, its diﬀerence body is centrally symmetric, hence induces a norm for
+which C has constant width. A face of a convex body C is a subset F of C
+such that, whenever the relative interior of some segment [ab] ⊆C intersects
+S, then [ab] ⊆S.
+It is a well-known fact from convex geometry that any
+point of a convex body is contained in the relative interior of a unique face (see
+[177, Theorem 2.1.2]). A set of points S in a ﬁnite dimensional vector space is
+antipodal if for any distinct x, y ∈S there exist parallel (distinct) hyperplanes
+supporting conv S at x and y. The set S is strictly antipodal if it is furthermore
+possible to ﬁnd hyperplanes containing no other point of conv S.
+3
+The triangle inequality
+We only consider the triangle inequality and some of its simple consequences.
+We omit altogether a discussion of hypermetric inequalities, piecewise linear
+5
+===== page 6 =====
+inequalities, duals of zonoids, etc., since this is well-treated in e.g. the Handbook
+of Convex Geometry [84].
+We also postpone discussion of Fermat-Torricelli
+points, sums of distances, Chebyshev centres, vector balancing and discrepancy
+theory, etc., to part II. The books of Bottema et al. [31] and Mitrinovi´c et al.
+[142] have many inequalities for triangles, which in fact are true for all metric
+spaces, since they are purely algebraic consequences of the triangle inequality
+(e.g. inequalities 1.1–1.24 in [31]).
+We now discuss the triangle inequality and metric lines.
+When one deﬁnes a distance function using only a star-shaped body, then
+the triangle inequality is equivalent to the convexity of unit ball, and the strict
+triangle inequality (equality only for collinear points) is equivalent to strict
+convexity. This was already proved by Minkowski [141, Kapitel 1, Paragraph
+18].
+In the following two propositions we analyse the triangle inequality further.
+The ﬁrst, characterizing speciﬁc instances of equality in the triangle inequality,
+has been noticed by Alt [6], and also by Go lab and H¨arlen [76].
+Proposition 1. For any distinct a, b, c in a Minkowski space, |ac| ≤|ab|+|bc|,
+with equality iﬀ[xy] ⊆S, where x = [
+b −a and x = [
+c −b.
+Proof. Let α = |ab|, β = |bc|, γ = |ac|.
+Letting z = [
+c −a, we have z =
+(α/γ)x + (β/γ)y.
+Suppose now γ = α + β. Then we see that the above representation of z is a
+convex combination of x and y, with z strictly between x and y. Thus we have
+three collinear vectors on the boundary of the unit ball, and it follows that their
+convex hull is also on the boundary, i.e., [xy] is a segment on the unit sphere.
+Conversely, suppose that [xy] is a segment on the unit sphere. Let µ =
+γ/(α + β). Thus we have the convex combination µz = µ(α/γ)x + µ(β/γ)y,
+i.e., µz is on the segment [xy]. It follows that µz is a unit vector, µ = 1, and
+γ = α + β.
+The above proposition has also been observed recently by Nitka and Wia-
+trowska [146], who furthermore make the remark that, given any three points
+in d-dimensional vector space, there is a norm such that the three points give
+equality in the triangle inequality. One merely has to give a unit ball with the
+right segment on its boundary.
+Go lab and H¨arlen [76] made a very complete analysis of the triangle inequal-
+ity. The following proposition, due to them, states that the extreme points of
+the unit ball coincide with the directions of strict inequality in the triangle in-
+equality, and with the directions of unique metric segments, i.e., curves γ from
+a to b such that ℓ(γ) = |ab|. This result has also been observed recently by
+Toranzos [196].
+Proposition 2. Let v be a unit vector. Then the following are equivalent.
+1. v is an extreme point of the unit ball.
+2. For any distinct a, b, c such that v = [
+c −a we have |ac| = |ab| + |bc| iﬀ
+a, b, c are collinear.
+6
+===== page 7 =====
+B
+a
+b
+Figure 1: Characterizing metric segments by their chords
+B
+Figure 2: A geodesic that is not a metric segment
+3. The segment [ab] is the unique metric segment joining a to b.
+Metric segments and lines in a more general context have also been investi-
+gated by Menger [138].
+It is also now simple to characterize metric segments in general. Note that
+a curve from a to b is a metric segment iﬀit has length |ab|. See Section 2 for
+the deﬁnition of a face of a convex body.
+Proposition 3. A curve γ from a to b is a metric segment iﬀeach directed
+chord of γ is in a direction contained in the unique face of the unit ball containing
+[
+b −a in its relative interior.
+There are at least 2d directions in which there are unique metric segments
+(Go lab and H¨arlen show at least d + 1 in the case of a non-symmetric norm),
+and more if the unit ball is not a cross-polytope. This can be seen from the
+higher-dimensional generalization of Proposition 39 (in Section 6.1.1 below).
+It was noticed by Szenthe [188] that in certain Minkowski spaces there exist
+geodesics which are not metric segments. For example, using Proposition 3, the
+curve in Figure 2 is easily seen to be a geodesic.
+Szenthe gave the following characterization of Minkowski spaces which have
+geodesics that are not metric segments.
+7
+===== page 8 =====
+x
+y
+z
+w
+Figure 3: |xw| ≤max{|xy|, |xz|}
+o
+y
+
+y
+x
+
+x
+Figure 4: If |xy| ≥1, then |bxby| ≥1
+Theorem 4. A Minkowski space has geodesics which are not metric segments
+iﬀthe unit sphere contains two segments with a common endpoint that are not
+contained in the same supporting hyperplane.
+We now consider special consequences of the triangle inequality in Minkowski
+planes.
+3.1
+The triangle inequality in Minkowski planes
+The following two lemmas also hold for higher dimensional spaces, but the
+argument is two-dimensional. They are mentioned in e.g. [62].
+Lemma 5. If w is strictly between y and z, then |xw| ≤max{|xy|, |xz|}, with
+equality iﬀ|xw| = |xy| = |xz|.
+In the case of equality, |xw| is the shortest
+distance from x to the line ⟨wz⟩, and |xw| = |xv| for all v ∈[yz].
+Proof. Writing w = λy + (1 −λ)z for some 0 < λ < 1 we have the following
+sequence of inequalities:
+|xw|
+=
+∥x −(λy + (1 −λ)z)∥
+≤
+λ|xy| + (1 −λ)|xz|
+(1)
+≤
+max(|xy|, |xz|).
+(2)
+Suppose now that we have equality. Equality in (2) gives |xy| = |xz|, hence
+also = |xw|. Thus y, w, z are on the circle with centre x and radius |xw|. It
+follows that [yz] is on that circle. Thus |xw| = |xv| for all v ∈[yz].
+It remains to prove that this is the minimum distance. Let p be such that
+z is between y and p. Suppose |xp| < |xy|. Applying the above inequality to
+y, z and p, we obtain that there is in fact equality |xz| = max(|xy|, |xp|), hence
+|xy| = |xp|, a contradiction. Thus |xp| ≥|xy|.
+We get the same inequality for p such that y is between p and z.
+Lemma 6. Let x, y̸ = o be contained in the unit ball. If |xy| ≥1, then |bxby| ≥1.
+8
+===== page 9 =====
+p
+a
+d
+c
+b
+Figure 5: The sum of the diagonals
+is at least the sum of opposite sides
+a
+d
+b
+c
+Figure 6: Counterpart to Proposition 7
+Proof. By multiplying x, y by a suitable scalar ≥1, we may assume without
+loss of generality that ∥x∥= 1 ≥∥y∥. By Lemma 5 it follows that |xy| ≤
+max(|xo|, |xby|). If |xby| < 1, then, since |xy| ≥1, we have equality in the above
+inequality, and it follows from Lemma 5 that |xby| = 1, a contradiction. Hence
+|xby| ≥1.
+We note that Lemma 5 also immediately gives that the diameter of a convex
+body in a Minkowski space is attained at extreme points.
+Proposition 7. In a convex quadrilateral abcd in a Minkowski plane, the sum
+of the diagonals is at least the sum of two opposite sides, i.e.,
+|ac| + |bd| ≥|ab| + |cd|
+(3)
+and
+|ac| + |bd| ≥|bc| + |ad|,
+with equality in (3), say, iﬀ[[
+c −a [
+b −d] ⊆S.
+Corollary 8. In a convex quadrilateral abcd in a Minkowski plane, twice the
+sum of the diagonals is at least the sum of the sides, with equality iﬀthe plane
+is rectilinear.
+Both the proposition and the corollary above follow from Proposition 1 using
+the intersection point of the diagonals.
+It follows that if the plane is not rectilinear one cannot have the diagonals
+as the two shortest distances between the four points, and if the plane is strictly
+convex one cannot have two opposite sides as the two largest distances between
+the four points (mentioned by Gr¨unbaum and Kelly [91, Theorem 1]). See Brass
+[32] for combinatorial consequences. Also note that the Dowker-type results [61]
+for perimeter of Moln´ar [143] (see [150, Chapter 2] for the Euclidean case) are
+immediately extendable to Minkowski planes, using elementary inequalities still
+valid for Minkowski planes: for inscribed n-gons one needs Proposition 7, and
+for circumscribed n-gons one needs
+9
+===== page 10 =====
+Proposition 9. In a convex quadrilateral abcd in a Minkowski plane, if ⟨ad⟩
+and ⟨bc⟩intersect on the side of ⟨ab⟩opposite c and d, and ⟨ab⟩and ⟨cd⟩
+intersect on the side of ⟨bc⟩opposite a and d, then
+|ab| + |bc| ≤|ad| + |dc|.
+The remainder of the proof (see [150]) is then easily adapted for Minkowski
+planes, and we obtain
+Theorem 10. Let C be a convex disc in a Minkowski plane M. For each n ≥3,
+let Qn (qn) be an n-gon of minimum (maximum) perimeter circumscribed about
+C (inscribed in C). Then
+|Qn| ≤|Qn−1| + |Qn+1|
+2
+and |qn| ≥|qn−1| + |qn+1|
+2
+for all n ≥4.
+3.2
+Strict convexity
+A Minkowski space is strictly convex if ∥x + y∥= ∥x∥+ ∥y∥implies that x and
+y are linearly dependent, i.e., there is equality in the triangle inequality only in
+the trivial cases.
+The unit ball of a Minkowski space is rotund if its boundary does not contain
+any straight line segment, i.e., each boundary point is an extreme point.
+There are various strengthenings of the deﬁnition of strict convexity, such as
+uniform convexity, but these stronger concepts are usually only stronger in the
+inﬁnite dimensional context; see the survey by Cudia [50]. We now discuss a few
+properties that are equivalent to strict convexity of a Minkowski space. We only
+consider geometric characterizations and ignore the many characterizations in
+terms of operators, duality maps and semi-inner products such as those given
+in [197, 92, 179].
+Note that strict convexity is a two-dimensional notion, i.e., a space is strictly
+convex iﬀeach of its two-dimensional subspaces is strictly convex. The following
+characterizations of strict convexity for Minkowski spaces are essentially folklore
+results from convex geometry (see Minkowski [141, Kapitel 1, Paragraph 18] and
+Day [54, p. 144]). See also Bumcrot for a further discussion [34].
+The following are equivalent to strict convexity of a Minkowski space:
+1. every boundary point is an extreme point (exposed point),
+2. metric segments are always straight line segments,
+3. the unit ball is rotund,
+4. a linear functional has at most one maximum on the unit ball,
+5. any supporting hyperplane of the unit ball touches the unit ball in at most
+one boundary point,
+10
+===== page 11 =====
+6. supporting hyperplanes at distinct points of the boundary of the unit ball
+are distinct.
+James [107] gave a few characterizations in terms of properties of normality:
+A Minkowski space is strictly convex iﬀnormality is left unique, i.e., for all
+x1, x2̸ = o, if x1 ⊣y and x2 ⊣y for some y̸ = o, then x1 = x2.
+In terms of nearest points there are the following equivalences:
+1. For each point p and each convex set C there is at most one point in C
+that is nearest to p.
+2. For each point p and each closed convex set C there is exactly one point
+in C that is nearest to p.
+3. For each point p and each one-dimensional subspace L there is exactly
+one point in L that is nearest to p.
+4. For each point p and each metric line γ there is exactly one point in γ
+that is nearest to p (Andalafte and Valentine [11]).
+Singer [181] gives generalizations of the above to properties weaker than strict
+convexity.
+Andalafte and Valentine [11] note the following two characterizations.
+Proposition 11. The following properties are equivalent to strict convexity of
+a Minkowski space.
+1. A line and a sphere intersect in at most two points.
+2. The distance from a ﬁxed point to a variable point on a line is strictly
+unimodal.
+Proof. 1 immediately follows from 2. In 2 unimodality follows immediately from
+convexity of the mentioned function. Strict unimodality is then equivalent to a
+unique minimum, which is number 3 of the above-mentioned characterizations
+in terms of nearest points.
+Note that the above-mentioned unimodality is formulated in an elementary
+way in Lemma 5.
+Valentine [199] gives the following characterizations.
+Proposition 12. The following properties are equivalent to strict convexity of
+a Minkowski space.
+1. The diagonals of a metric parallelogram (i.e., a planar quadrilateral with
+opposite sides of equal length) bisect each other.
+2. There is no ramiﬁcation point, i.e., a point x such that there are distinct
+points a, b, c such that |ax| + |xb| = |ab| and |ax| + |xc| = |ac|.
+11
+===== page 12 =====
+There are statements in Euclidean geometry about lengths that characterize
+equality in the triangle inequality. These then also lead to characterizations of
+strict convexity. As an example, the Heron formula for the area of a triangle in
+the Euclidean plane gives 0 exactly when the sum of two sides equals the third
+side. This then gives a characterization that has essentially the same geometric
+content as the deﬁnition (see Reda [163] and Diminnie and White [58]).
+See Diminnie and White [59] for characterizations of strict convexity in terms
+of various postulates for the metric betweenness relation.
+We now turn to characterizations in Minkowski planes. Holub [102] gives
+two interesting characterizations of strict convexity of Minkowski planes. We
+begin by stating a lemma that was needed by Benz for a Beckman-Quarles type
+theorem [24, 25], and was also discussed in [21].
+Lemma 13. In a Minkowski plane,
+1. any vector of norm < 1 is the midpoint of some chord of the unit circle,
+2. any vector of norm < 2 is the sum of two unit vectors,
+3. any two unit circles with centres at distance < 2 intersect.
+Proof. It is easily seen that the three statements are equivalent, while the last
+is intuitively obvious, and follows from a simple continuity argument.
+Holub’s one characterization is that a Minkowski plane is strictly convex
+iﬀany vector of norm < 1 is the midpoint of at most one chord of the unit
+circle. In fact, it is easily seen that we may replace “< 1” by “< ε for some
+ε > 0”. Also, it must have been noticed very early that two circles in a strictly
+convex plane intersect in at most two points. Two early references are Mayer
+[135], who also assumes smoothness, and Buter [40], who drops the assumption
+of smoothness. Mayer also remarks that this is equivalent to the fact that any
+three points are contained in at most one unit circle. Valentine [199] uses a
+diﬀerent geometric approach to show that strict convexity is characterized by
+the fact that two unit circles intersect in at most one point on each side of the line
+passing through the two centres. His approach is related to the Monotonicity
+Lemma (see Section 3.5).
+By these remarks we now have the following list of equivalences.
+Proposition 14. Each of the following statements are equivalent to strict con-
+vexity of a Minkowski plane.
+1. Any vector of norm < 1 is the midpoint of a unique (at most one) chord
+of the unit circle,
+2. Any vector of norm < 2 is the sum of two unit vectors in a unique (at
+most one) way,
+3. Any two unit circles with centres at distance < 2 intersect in exactly (at
+most) two points,
+12
+===== page 13 =====
+o
+x1
+x2
+′
+x2
+x3
+Figure 7: o and x2 on opposite sides
+of ⟨x1x3⟩
+o
+x1
+′
+x1
+x2
+′x2
+x3
+′x3
+Figure 8: o and x2 on the same side
+of ⟨x1x3⟩
+4. There is an ε > 0 such that any vector of norm < ε is the midpoint of a
+unique (at most one) chord of the unit circle,
+5. There is an ε > 0 such that any vector of norm < ε is the sum of two unit
+vectors in a unique (at most one) way,
+6. There is an ε > 0 such that any two unit circles with centres at distance
+< ε intersect in exactly (at most) two points,
+7. Any two circles intersect in at most two points,
+8. Any three points are contained in at most one circle.
+Proof. Essentially the only nontrivial part that remains to be proven is that
+given any three points T = {x1, x2, x3}, and any positive homothetic copy
+T ′ = {x′
+1, x′
+2, x′
+3} of them, the resulting six points cannot be in strictly convex
+position, i.e., one of them is in the convex hull of the remaining ﬁve. We may
+assume without loss of generality that T is not collinear.
+We ﬁrst consider the case where T ′ is not a translate of T . Let o be the
+centre of homothety. If o ∈conv T , then T ∪T ′ is clearly not in strictly convex
+position.
+So assume that o̸ ∈conv T . Find a line ℓthrough o such that T is in an
+open half-plane bounded by ℓ. See Figures 7 and 8.
+We now show that some two rays [oxi⟩and [oxj⟩coincide. If the rays [oxi⟩
+are all distinct, some ray is between the other two. Assume without loss of
+generality that [ox2⟩is between [ox1⟩and [ox3⟩. Also assume without loss of
+generality that the homothety factor is > 1. If o and x2 are on opposite sides
+of the line ⟨x1x3⟩, then x2 ∈int conv{x1, x′
+2, x3}, a contradiction. If o and x2
+are on the same side of the line ⟨x1x3⟩, then o and x′
+2 are on the same side of
+⟨x′
+1x′
+3⟩, and x′
+2 ∈int conv{x′
+1, x2, x′
+3}, a contradiction.
+Thus some two rays [oxi⟩and [oxj⟩coincide, and then {xi, xj, x′
+i, x′
+j} is
+collinear.
+13
+===== page 14 =====
+w
+z
+y
+x
+Figure 9: Proof of Proposition 17
+The case where T ′ is a translate of T is similar: If two of the lines ⟨xix′
+i⟩
+coincide, then some {xi, xj, x′
+i, x′
+j} is collinear. Otherwise one of the lines is
+between the other two, say ⟨x2x′
+2⟩between ⟨x1x′
+1⟩and ⟨x3x′
+3⟩. If x1, x2, x3 are
+not collinear, then we obtain a contradiction as before by considering whether
+x2 and ⟨x′
+1x′
+3⟩are on opposite sides of the line ⟨x1x3⟩or not.
+Holub’s second characterization is in terms of the bisector of two points x
+and y:
+B(x, y) := {z : |xz| = |yz|}.
+As Holub did not give a proof in [102] and seemingly neither in a later paper, we
+include a proof. We ﬁrst give a related characterization for Minkowski spaces.
+Proposition 15. A Minkowski space is strictly convex iﬀfor all distinct points
+x and y, and for all lines ℓparallel to y −x, ℓintersects B(x, y) in exactly (at
+most) one point.
+Proof. Suppose that z1 and z2 are two points in B(x, y) with ⟨z1z2⟩parallel to
+⟨xy⟩. Then the sum of the diagonals of the convex quadrilateral xyz1z2 equals
+the sum of the two opposite sides, and by Proposition 7 the space is not strictly
+convex.
+Conversely, suppose the space is not strictly convex. Let [ab] be a segment
+on the unit circle. Let x = a, y = 1
+2(a + b), z1 = o and z2 = 1
+2(a −b). Then
+z1, z2 ∈B(x, y), but ⟨z1z2⟩is parallel to ⟨xy⟩.
+A local version of the previous proposition is
+Corollary 16. Given distinct x, y in a Minkowski space, then all lines parallel
+to ⟨xy⟩intersect B(x, y) in at most one point iﬀthe unit sphere does not contain
+a segment parallel to ⟨xy⟩.
+Proposition 17 (Holub [102]). A Minkowski plane is strictly convex iﬀfor
+any distinct x, y and any z ∈B(x, y) the bisector of x and y is contained in the
+double cone of x and y with apex z, i.e.,
+B(x, y) ⊆{z + λ(x −z) + µ(y −z) : λµ ≥0}.
+14
+===== page 15 =====
+Proof. Suppose that there is w ∈B(x, y) outside the double cone, say w =
+z + λ(x −z) + µ(y −z) with λ > 0, µ < 0 (see Figure 9). Using the convex
+quadrilateral xyzw we obtain that the plane is not strictly convex as in the
+proof of Proposition 15.
+For the converse the same example may be used as in the proof of Proposi-
+tion 15.
+We may again formulate a local version:
+Corollary 18. Given distinct x, y in a Minkowski plane, then B(x, y) is con-
+tained in all double cones with apex z iﬀthere is no segment on the unit circle
+parallel to ⟨xy⟩. In this case we in fact have that B(x, y) equals the intersection
+of all the double cones as z ranges over B(x, y).
+We now discuss a measure of non-strict convexity of Minkowski planes, in-
+troduced by Brass [32]. Let λ(M) be the length of the longest line segment
+contained in the boundary of the unit circle of the Minkowski plane M.
+Proposition 19. 0 ≤λ(M) ≤2, with equality on the left side iﬀM is strictly
+convex, and equality on the right side iﬀM is rectilinear, in which case the
+segments of length two “ﬁll up” the unit circle.
+This observation has been made more than once; see e.g. Brass [32]. Thus
+in the rectilinear plane there are two pairs of segments of length two on the unit
+circle. Brass has shown that there are at most two pairs of segments of length
+> 1. Here we show the following sharpening:
+Proposition 20. On the unit circle of a Minkowski plane there are at most three
+pairs of segments of length at least 1. If there are three pairs of segments of length
+at least 1, then the unit disc must a hexagon with vertices ±x1, ±x2, ±λ(x1+x2)
+for some λ ∈( 1
+2, 1], and at least two pairs are of length exactly 1.
+The proof will be given after we discuss the useful concept of conjugate
+diameters (Section 6.1.1).
+3.3
+Interlude: Intersection of homothets of a ﬁxed convex
+curve
+Although this section is not strictly Minkowski geometry, but rather convex
+geometry, the results are important also in Minkowski geometry; we need them
+for example in the proof of Proposition 29 below.
+As discussed in Section 3.2, two circles in a Minkowski plane intersect in at
+most two points iﬀthe plane is strictly convex. This remains true for homothets
+of a closed convex curve that is not centrally symmetric, with the same proof
+(as noted in [135] and [40]). We now examine the case when the plane is not
+necessarily strictly convex. In general, the intersection of two circles is always
+the union of two segments, which are either disjoint or intersect in a common
+endpoint, where a segment may degenerate to a point or the empty set. This was
+proved by Gr¨unbaum [85] and later also by Banasiak [18]. Again, this result
+15
+===== page 16 =====
+γ 1
+′
+γ 2
+′
+γ 1
+γ 2
+c1
+′c1
+c2
+′c2
+p2
+′p2
+Figure 10: Intersecting two homothets of a convex curve
+remains true if we do not assume central symmetry, as shown by Shiﬀman
+[180] (as mentioned in [148]), and also by Sch¨aﬀer [176, 4B]. In the following
+proposition is also included a statement on where the diﬀerent pieces of the
+homothets lie relative to each other; this generalizes a lemma of Sch¨aﬀer [173,
+Lemma 4.3].
+Proposition 21. Let C be a compact convex disc with boundary the closed con-
+vex curve γ, and C′ be a positive homothet (which may be a translate) with
+boundary γ′. Then γ ∩γ′ is a union of two segments, each of which may degen-
+erate to a point or the empty set.
+Suppose furthermore that this intersection consists of two connected non-
+empty components A1, A2. Then the centre of homothety is outside C ∪C′, and
+the two lines of homothety supporting C ∩C′ intersect C ∩C′ in exactly A1 and
+A2.
+Choose a point pi from each component Ai and let T : C →C′ be the positive
+homothety mapping C onto C′. Let ci = T −1pi and c′
+i = T pi for i = 1, 2. Let
+γ1 (γ2) be the part of γ on the same side (opposite side) of ⟨p1p2⟩as c1 and
+c2; similarly for γ′. See Figure 10.
+Then γ2 ⊆conv γ′
+1 and γ′
+2 ⊆conv γ1.
+We reiterate for translates:
+Proposition 22. Let C be a compact convex disc with boundary the closed curve
+γ, and C +v be a translate of C with boundary γ′. Then γ ∩γ′ is a union of two
+segments parallel to the direction of translation, each of which may degenerate
+to a point or the empty set.
+Suppose that this intersection consists of two connected non-empty compo-
+nents A1, A2.
+Then the two lines of translation supporting C ∩C′ intersect
+C ∩C′ in exactly A1 and A2.
+16
+===== page 17 =====
+a
+a
+a
+b
+b
+b
+c
+c
+c
+d
+d
+d
+Figure 11: The unit distance graph K2,2
+Choose a point pi from each component Ai and let ci = pi−v and c′
+i = pi+v
+for i = 1, 2. Let γ1 (γ2) be the part of γ on the same side (opposite side) of
+⟨p1p2⟩as c1 and c2; similarly for γ′. Then γ2 ⊆conv γ′
+1 and γ′
+2 ⊆conv γ1.
+We note that it can also be proved that the intersection of any number of
+homothets of a ﬁxed closed convex curve has at most two components, except
+if the curve is a triangle, in which case it is also possible for the intersection of
+at least three homothets to be three points homothetic to the vertices of the
+original triangle.
+From the result on the intersection of circles it can be seen exactly when
+a four-cycle can occur as a unit distance graph, which is used to analyse unit
+distance graphs [32]. See Figure 11.
+Lemma 23. Consider a quadrilateral with vertices a, b, c, d (not necessarily in
+this order) and sides of unit length. Then the vertices may be relabled such that
+one of the following three cases occur:
+1. acbd is a parallelogram.
+2. There is a segment on the unit circle parallel to [cd], |ab| = 2 and |ac| =
+|ad| = |bc| = |bd| = 1; also |cd| ≤2 with equality implying that the plane
+is rectilinear.
+3. There is a segment of length at least |ab| + |cd| on the unit circle parallel
+to [ab] and [cd], and |ab| < 2 and |cd| < 2.
+It is easily seen by Proposition 21 that the set-theoretic diﬀerence of two
+homothets of a convex disc is always connected. This is generalized to higher
+dimensions by considering two-dimensional sections of the diﬀerence of two ho-
+mothets of a convex body through two points that need to be connected (Ba-
+nasiak [18]). However, the intersection of two spheres is complicated: if it is
+17
+===== page 18 =====
+a1
+a2
+an
+c
+b
+Figure 12: Proof of Lemma 24
+assumed that two unit spheres always have an intersection contained in a hyper-
+plane, then the space must be Euclidean (Goodey [78]). A higher dimensional
+analogue of Proposition 21 is that the intersection of two spheres (or homothets
+of the boundary of a convex body) always consists of at most one connected
+component (announced by Novikoﬀ[148]).
+A converse of the fact that the intersection of two homothets of a convex
+curve has at most two connected components is the following result: Let K1
+and K2 be two planar convex bodies, such that for any translate K′
+2 of K2
+with K′
+2̸ = K1 and the property that the interiors of K1 and K′
+2 intersect,
+we have that the boundaries of K1 and K′
+2 intersect in exactly two connected
+components. Then K1 and K2 are translates (Goodey and Woodcock [79]). For
+related results see also [77].
+3.4
+Generalization of the triangle inequality to convex
+curves
+We now give an elementary proof that in any Minkowski plane, if one con-
+vex curve is contained in another, it is not longer than the containing curve.
+Archimedes in his work Sphere and Cylinder, Book I [12], took this statement as
+a postulate (together with his now famous axiom that any two magnitudes are
+comparable using integer multiples). Perhaps the most elegant way of proving
+this is by mixed volumes (as in Thompson [194, Remark on p. 121]) or by Crofton
+formulae [9], but it is not diﬃcult to give an elementary treatment, and to char-
+acterize equality, which delivers a small surprise (Corollary 28). Gr¨unbaum [90]
+also uses this inequality for Minkowski planes.
+Lemma 24. Let a1 . . . an be a convex polygonal path contained in the triangle
+a1ban. Then Pn
+i=1 |aiai+1| ≤|a1b| + |ban|.
+Proof. Induction on n ≥2. The case n = 2 is the triangle inequality. In the
+induction case n ≥3, let [a1a2⟩intersect the segment [ban] in c. See Figure 12.
+18
+===== page 19 =====
+a
+b
+γ1
+γ 2
+Figure 13: |γ1| ≤|γ2|
+Then
+n−1
+X
+i=1
+|aiai+1|
+=
+|a1a2| +
+n−1
+X
+i=2
+|aiai+1|
+≤
+|a1a2| + |a2c| + |can|
+(Induction)
+≤
+|a1b| + |bc| + |can|
+(Triangle inequality).
+Lemma 25. Let γ be a convex curve from a to c contained in triangle abc.
+Then |γ| ≤|ab| + |bc|.
+Proof. Approximate γ by inscribed convex polygons (which are still contained
+in the triangle by convexity), use Lemma 24, and take the supremum.
+Lemma 26. Let γ be a convex curve from a1 to an, contained in a convex
+polygon a1 . . . an. Then |γ| ≤Pn−1
+i=1 |aiai+1|.
+Proof. We use induction on n ≥3. The case n = 3 is Lemma 25. For n > 3,
+take an edge of the polygon not containing a1 or an and translate it until it
+supports γ at b, say. Then we have two polygons a1 . . . b and b . . . an, and we
+may use the induction hypothesis and the triangle inequality.
+Theorem 27. Let γ1 and γ2 be convex curves from a to b such that conv γ1 ⊆
+conv γ2.
+Then |γ1| ≤|γ2|, with equality iﬀthere exists a (possibly inﬁnite)
+sequence a1, a2, . . . common to γ1 and γ2, and such that the arcs on γ1 and γ2
+from ai to ai+1 are both metric segments.
+Proof. To obtain the inequality, approximate γ2 by circumscribed polygons, use
+Lemma 26 and take the limit.
+We now assume that |γ1| = |γ2|. The intersection γ1 ∩γ2 is a closed subset
+of a (topological) interval (or circle). By considering the maximal open intervals
+contained in γ1∩γ2 as well as its complement, we obtain a partition of γ1 and γ2
+into corresponding pieces that are either identical or coincide only at endpoints.
+We may therefore assume without loss of generality that γ1 and γ2 coincide
+only at endpoints. If we cut oﬀa piece of γ2 using a supporting line of γ1, we
+obtain a metric segment (from the inequality |γ1| ≤|γ2|). See Figure 13. By
+19
+===== page 20 =====
+p
+′p
+q
+′
+q
+γ
+Figure 14: Proof of Proposition 29
+Proposition 3 all chords of this metric segment are contained in a segment of S.
+Using all supporting lines of γ1, we obtain that all chords of γ2 are contained
+in the same edge of S. Again by Proposition 3, γ2 is a metric segment, hence
+γ1 is also a metric segment.
+Corollary 28. Let γ1 and γ2 be convex curves from a to b such that conv γ1 ⊆
+conv γ2, |ab| < |γ1|, and γ1 and γ2 only have endpoints in common.
+Then
+|γ1| < |γ2|.
+It is now simple to prove the following lemma used by Sch¨aﬀer [176, 4E].
+Proposition 29. Let p, p′, q′, q be points in the given order on a convex curve γ
+such that ⟨pq⟩and ⟨p′q′⟩are parallel. Let γ1 be the curve from p to q containing
+p′ and q′, and γ2 the part of γ1 from p′ to q′. Then
+|γ1|
+|pq| ≥|γ2|
+|p′q′|.
+Proof. Using Proposition 21, the image γ′
+1 of γ1 under the positive homothety
+mapping [pq] to [p′q′] contains γ2. See Figure 14. By Theorem 27 it follows
+that
+|γ2| ≤|γ′
+1| = |γ1| · |p′q′|
+|pq| .
+Sch¨aﬀer [173] studied the inner metric of the unit sphere S of a Minkowski
+space: For unit vectors p, q, δ(p, q) is the inﬁmum (minimum in ﬁnite dimen-
+sional spaces) of the lengths of all curves on S joining p and q. He proved that
+the inner metric and the metric induced by the norm are equivalent using the
+following planar inequality [173, Theorem 4.4], which is an immediate corollary
+of the previous propostion.
+Proposition 30. In a Minkowski plane M, for any unit vectors p′, q′,
+δ(p′, q′) ≤1
+2Π(M)|p′q′|.
+Proof. Let [pq] be the diameter of the unit circle parallel to [p′q′]. Note that
+δ(p′, q′) is the length of the arc of the unit circle from p′ to q′ on the side of
+[p′q′] opposite [pq]. Now apply Proposition 29.
+20
+===== page 21 =====
+p
+x
+x
+x
+o
+Figure 15: Monotonicity Lemma
+3.5
+The monotonicity lemma
+For a ﬁxed point p on the unit circle and a variable point x, the length |px| is
+non-decreasing as x moves on the unit circle from p to −p. See Figuremonﬁg.
+This has often been assumed as intuitively obvious and has sometimes been given
+with complicated proofs (Sch¨aﬀer [176], Thompson [194, Lemma 4.1.2], Doyle-
+Lagarias-Randall [62]). Thompson writes “a more straightforward proof would
+be preferable.. . ”. Gr¨unbaum [85] gives a proof of the following strengthening:
+if a, b, c, d are on the unit circle in this order, then |bc| < |ad|, unless |bc| =
+|ad| = 2 in which case the plane is not strictly convex, and the points are on
+opposite pairs of line segments in the unit circle.
+Here we give a simple proof of a generalization (p does not have to be on
+the unit circle), mentioned without proof by Alonso and Ben´ıtez [3, Lemma 1],
+and characterize equality. The proof is a generalization of a proof of Valentine
+[199] that two unit circles intersect in at most two points.
+Proposition 31 (Monotonicity lemma). Let a, b c̸ = o, a̸ = c, with [ob⟩
+between [oa⟩and [oc⟩, and suppose that |ob| = |oc|. Then |ab| ≤|ac|, with
+equality iﬀeither
+1. b = c,
+2. or o and b are on opposite sides of ⟨ac⟩, and [[
+c −a bb] is a segment on
+the unit circle,
+3. or o and b are on the same side of ⟨ac⟩, and [[
+c −a c
+−c] is a segment on
+the unit circle.
+In particular, if the plane is strictly convex, then we always have strict inequality.
+Proof. If o and b are on opposite sides of ⟨ac⟩, let [ob] and [ac] intersect in p.
+See Figure 16.
+Then
+|ob| + |ac|
+=
+(|ap| + |pb|) + (|op| + |pc|)
+≥
+|ab| + |oc|
+(Triangle inequality).
+21
+===== page 22 =====
+a
+b
+c
+d
+p
+Figure 16:
+Proof of Monotonicity
+Lemma
+a
+b
+c
+p
+o
+Figure 17:
+Proof of Monotonicity
+Lemma
+The case of equality may now be analysed using Proposition 1.
+If o and b are on the same side of ⟨ac⟩, let [cb⟩intersect [oa] in p. See
+Figure 17. Since |ob| = |oc|, Lemma 5 gives that |op| ≥|oc|. Thus |ac| +
+|op| ≥|ac| + |oc| ≥|ao| = |ap| + |op| by the triangle inequality, hence |ac| ≥
+|ap|, and |ac| ≥|ab| by Lemma 5.
+Again, equality can be analysed using
+Proposition 1.
+As a simple corollary we have that a pencil of lines with point of concurrency
+outside the unit circle intersects the unit circle in segments of which the lengths
+are unimodal. See Figures 18 and 19.
+Corollary 32. Let ∥p∥> 1. Let ℓ1, ℓ2, ℓ3 be lines through p with ℓ2 between ℓ1
+and ℓ3, and ℓ3 a diameter of the unit circle. Let ℓi intersect the unit circle in
+a1 and bi, i = 1, 2, 3. Then |a1b2| ≤|a2b2|.
+Also, by specializing the above proof of the Monotonicity Lemma to strictly
+convex planes, we obtain Valentine’s proof [199] that two unit circles intersect
+in at most two points (we also do not need to assume that the circles have
+equal radii). Gr¨unbaum and Kelly [91, Theorem 3]) use a similar method as
+the ﬁrst case of the above proof to obtain a monotonicity result for curves of
+constant diameter, i.e., each point is an endpoint of a diameter, in strictly convex
+Minkowski planes. It would be of interest to characterize the curves for which
+there is a monotonicity result; perhaps the curves of constant diameter are the
+Figure 18:
+22
+===== page 23 =====
+o
+p
+a3
+a1
+a2
+b3
+b2
+b1
+l3
+l2
+l1
+Figure 19: Proof of Corollary 32
+only such ones. Heppes [98] (see [91]) has shown that in the Euclidean plane,
+if a monotonicity result holds, then the curve has constant width (which in the
+Euclidean case is equivalent to constant diameter).
+4
+Equilateral triangles and aﬃne regular hexa-
+gons
+Proposition 33. Given any segment [pq] in a Minkowski plane, and a half-
+plane bounded by the line ⟨pq⟩, there exists a point r in the half plane such that
+△pqr is an equilateral triangle. The point r is unique iﬀthe longest segment in
+the unit circle parallel to ⟨pq⟩has length at most 1.
+Proof. The proof is exactly the same as the proof for the Euclidean plane going
+back to Euclid: consider the two circles which have one endpoint of the segment
+as a centre, and the other endpoint on the boundary. Any intersection point r
+of the two circles gives the third point of the equilateral triangle. If two points
+r1 and r2 are both intersection points of the two circles in the chosen half plane,
+then by Lemma 23 we obtain a segment of length 1 + |r1r2|/|pq| on the unit
+circle, parallel to [pq]. See Figure 20. The converse is clear.
+Figure 20: Non-uniqueness in the construction of an equilateral triangle
+23
+===== page 24 =====
+p
+q
+q
+p
+−
+Figure 21: An aﬃne regular hexagon inscribed to the unit circle
+Thus we get uniqueness in a larger class of Minkowski planes than the strictly
+convex ones, namely those in which the measure of non-strict convexity λ(M) ≤
+1. Also, by Proposition 20 it follows that it is in at most two directions of the
+given segment that we get non-uniqueness of the equilateral triangle, for any
+Minkowski plane.
+From the construction of an equilateral triangle it is possible to construct
+a hexagon inscribed in the unit circle and with unit side lengths, exactly as in
+Euclidean geometry. This construction was noticed very early (Go lab [74], P.
+J. Kelly [110]).
+Proposition 34. Let △opq be an equilateral triangle. Then the hexagon with
+vertices ±p, ±q, ±(p −q) is an aﬃne image of a Euclidean equilateral hexagon,
+and all sides have the same length.
+See Figure 21. If p1, . . . , p6 are the six vertices in order of some inscribed
+regular hexagon, then we call opi a radius, pipi+3 a diameter, and pipi+2 a
+diagonal. Given a direction for a diameter or radius of such a hexagon, we have
+the same discussion of uniqueness as for the equilateral triangle: there is an
+essentially unique hexagon iﬀthe unit ball does not contain a segment of length
+> 1 parallel to the given direction. Lassak [116] proves that if the direction of
+a diagonal is given, there is always a unique hexagon.
+For non-strictly convex curves one can also always ﬁnd an inscribed aﬃne
+regular hexagon, but the direction may not be prescribed anymore (discovered
+independently by various authors; see Gr¨unbaum [87, p. 242–243]).
+The following two ﬁner results have been used as intermediate steps to var-
+ious results in planar Minkowski geometry.
+Ohmann [149] shows that any convex disc in a Minkowski plane has a sym-
+metric circumscribed hexagon whose sides are parallel to some hexagon circum-
+scribed to the unit ball B and supporting the unit ball at the vertices of an
+inscribed aﬃne regular hexagon.
+Lassak [116] also proves that the unit circle has an inscribed aﬃne regular
+hexagon p1 . . . p6 such that the line through pi parallel to ⟨pi−1pi+1⟩supports
+the unit disc.
+In three-dimensional Minkowski spaces the following results are known. Sch¨aﬀer
+[174] shows with topological methods that a centrally symmetric simple closed
+24
+===== page 25 =====
+curve on the unit sphere of a three-dimensional Minkowski space has a concen-
+tric inscribed aﬃne regular hexagon. Laugwitz [120] shows that for any two
+unit vectors u1, u2 in a three-dimensional Minkowski space there exists a unit
+vector u3 and aﬃne regular hexagons H1, H2 inscribed in the unit ball such that
+u1, u3 ∈H1 and u2, u3 ∈H2. Again the proof needs some topology.
+See Ceder [41], Ceder and Gr¨unbaum [42] for further results on inscribed
+(and circumscribed) hexagons.
+We now discuss some applications of the hexagon construction. First of all,
+it immediately gives the lower bound of 6 to the circumference of the unit circle
+(see Section 7.4), as well as the lower bound of 6 for the Hadwiger number of the
+unit disc (see Gr¨unbaum [86] for a discussion of the upper bound). Chakerian
+[43] gives a discussion of how it is applied to prove that in the Minkowski plane
+a Reuleaux triangle is a body of ﬁxed constant width of least area. Lassak
+[116] uses his strengthened hexagon construction mentioned above to obtain a
+two-dimensional Minkowski analogue of John’s theorem on the approximation
+of convex bodies by the Euclidean ball.
+We now give a proof of a special case of an inequality of Nordlander [147]
+using the hexagon construction. Nordlander’s inequality in general is proved by
+a continuous averaging argument.
+Proposition 35. In any Minkowski plane,
+inf{∥x + y∥: ∥x∥, ∥y∥≥1, ∥x −y∥≤1} ≤
+√
+3,
+(4)
+and
+sup{∥x + y∥: ∥x∥, ∥y∥≤1, ∥x −y∥≥1} ≥
+√
+3.
+(5)
+Proof. We only prove inequality (4), as (5) is similar. Let xi, i ∈Z6, be an aﬃne
+regular hexagon inscribed in the unit circle, i.e., ∥x0∥= ∥x1∥= ∥x1 −x0∥= 1,
+and xi+1 = xi −xi−1. Let yi =
+1
+√
+3(xi + xi+1) for all i ∈Z6. Then yi+1 =
+yi −yi−1 and xi =
+1
+√
+3(yi −yi−1) for all i ∈Z6.
+If ∥xi + xi+1∥≤
+√
+3 for some i, then (4) is satisﬁed. Otherwise ∥yi∥> 1
+for all i. Consider a yi of smallest norm. Let x =
+1
+∥yi∥yi−1 and y =
+1
+∥yi∥yi−2.
+Then ∥x∥, ∥y∥≥1, ∥x −y∥= ∥yi−1 −yi−2∥/∥yi∥= 1, and ∥x + y∥= ∥yi−1 +
+yi−2∥/∥yi∥=
+√
+3/∥yi∥<
+√
+3, proving (4).
+We now show how Lemma 5 and the Monotonicity Lemma (Proposition 31)
+are utilized to sharpen the above result.
+Corollary 36. In any Minkowski plane,
+inf{∥x + y∥: ∥x∥= ∥y∥= ∥x −y∥= 1} ≤
+√
+3,
+(6)
+and
+sup{∥x + y∥: ∥x∥= ∥y∥= ∥x −y∥= 1} ≥
+√
+3.
+(7)
+Proof. Consider any x, y such that ∥x∥, ∥y∥≥1, ∥x −y∥≤1. Let d = ∥x + y∥.
+Assume without loss of generality that ∥x∥≤∥y∥. Let x1 = bx and y1 =
+1
+∥x∥y.
+25
+===== page 26 =====
+Then ∥x1 −y1∥≤1, ∥x1∥= 1 ≤∥y1∥and ∥x1 + y1∥≤d. Let y2 = b
+y1. By
+Lemma 5, ∥x1 −y2∥≤max{∥x1 + y1∥, ∥x1∥} ≤d. By continuity there exists
+a y3 on the arc of the unit circle from y1 to −x1 such that ∥x1 −y3∥= 1. By
+Proposition 31, ∥x1 + y3∥≤∥x1 + y2∥≤d.
+Inequality (7) is proved similarly.
+Geometrically, the previous corollary says that there always exists a unit
+equilateral triangle with a median ≤
+√
+3/2 as well as one with a median ≥
+√
+3/2.
+(A median of a triangle is a segment from a vertex to the midpoint of the
+opposite edge.) By continuity there then exists a unit equilateral triangle with
+a median of length exactly
+√
+3/2. The Euclidean plane shows that the value
+of
+√
+3/2 is best possible. Surprisingly, there are other Minkowski planes where
+the medians of all unit equilateral triangles are all
+√
+3/2, such as the plane
+with an aﬃne regular hexagon as unit circle (L. M. Kelly [109]). See Alonso
+and Ben´ıtez [3] for a discussion of equality in all other cases of Nordlander’s
+inequality: for a countable set of cases, there is equality also for certain other
+Minkowski planes (such as those with regular polygons as unit circles), and for
+all other cases, there is a characterization of Euclidean space. These results are
+further generalized by Alonso and Ull´an [5].
+See Section 7.4 for results on the ratio between the area of a unit equilateral
+triangle and the area of the unit disc.
+5
+Equilateral sets
+5.1
+Four-point equilateral sets
+The following proposition is derived in many papers (e.g. Ra˘ıko [162], Chilaka-
+marri [48], Brass [32]).
+Proposition 37. The maximum cardinality of an equilateral set is 4 in the
+rectilinear plane, and 3 in any other Minkowski plane.
+Proof. We use the notation of the proof of Proposition 33. In order to obtain
+an equilateral set of four points we have to ﬁnd in the previous construction of
+an equilateral triangle two points r1 and r2 on the same side of ⟨pq⟩such that
+|r1r2| ≥|pq|. This means that on the unit circle we have to ﬁnd a segment
+of length 1 + |r1r2|/|pq| ≥2, i.e., we must have λ(M2) ≥2. It follows from
+Proposition 19 that a four-point equilateral set is possible only in the rectilin-
+ear plane. Also, since we now have |r1r2| = |pq|, a 5-point equilateral set is
+impossible in the rectilinear plane.
+The previous proposition can also be proved by a packing argument of
+Danzer and Gr¨unbaum [51], by noticing that equilateral sets are antipodal sets
+(see Petty [153] and Soltan [182]). This packing argument generalizes to higher
+dimensions (see below).
+26
+===== page 27 =====
+5.2
+Equilateral sets in higher dimensions
+Equilateral sets are considered by Baronti, Casini and Papini [20] in relation
+to Chebyshev centres, medians, and barycentres. Equilateral sets in Minkowski
+spaces are used to ﬁnd area-minimizing surfaces, see Lawlor and Morgan [121].
+See Section 7.4 for results on the volume of equilateral simplices in higher di-
+mensions. We now survey the literature on the maximum cardinalities of these
+sets.
+5.2.1
+Upper bounds
+Petty [153] and, independently, Soltan [182] show that equilateral sets are an-
+tipodal, and by a result of Danzer and Gr¨unbaum [51], an antipodal set in
+d-dimensional vector space has at most 2d elements, with equality iﬀthe points
+form the vertex set of a parallelotope. They also show that the existence of 2d
+equilateral points implies that the unit ball is a parallelotope homothetic to the
+convex hull of the equilateral set. This upper bound is also proved by F¨uredi,
+Lagarias and Morgan [69] using the isodiametric inequality for Minkowski spaces
+due to Mel’nikov [137].
+Petty characterizes the Minkowski spaces in which equilateral sets are strictly
+antipodal; this class includes the strictly convex spaces. Better upper bounds
+are known in some cases for strictly antipodal sets. E.g., Gr¨unbaum [88] shows
+that in three-dimensional space a strictly antipodal set has at most ﬁve points.
+It follows that in a strictly convex three-dimensional Minkowski space, an equi-
+lateral set can have at most ﬁve points. There indeed exists such a Minkowski
+space, which is also smooth; see Lawlor and Morgan [121, Example 3.4]. See
+also Morgan [145].
+Soltan furthermore proves the following: For any convex set S, let b(S) be
+the least number of positive homothets of S with homothety coeﬃcient < 1
+that cover S. Let A be the convex hull of an equilateral set of cardinality k.
+Then k = b(A). He also asks whether b(B) equals the largest cardinality of an
+equilateral set.
+It is easy to ﬁnd d + 1 equilateral points in d-dimensional ℓp, and even 2d
+equilateral points in d-dimensional ℓ1. However, it is not known whether these
+are upper bounds, except in three-dimensional ℓ1, where it is known that there
+are at most 6 (Bandelt, Chepoi and Laurent [19]). See also [93] where these
+problems are explicitly mentioned.
+F¨uredi, Lagarias and Morgan [69] conjecture that there exists an ε > 0 such
+that for any strictly convex d-dimensional Minkowski space an equilateral set
+has cardinality at most (2 −ε)d. They construct strictly convex spaces for each
+dimension such that there are equilateral sets of cardinality at least (1.02)d.
+In [187] the following generalization of Petty’s upper bound is conjectured
+(and the case d = 2 is proved): A subset of a d-dimensional Minkowski space in
+which at most k distinct distances occur, has cardinality at most (k + 1)d, with
+equality only if the unit ball is a parallelotope.
+27
+===== page 28 =====
+5.2.2
+Lower bounds
+Petty showed that in a Minkowski space of at least three dimensions, there are
+always equilateral sets of size 4. He uses a topological result which essentially
+says that a punctured disc is not contractible. Makeev [133] proves a stronger
+property in three dimensions, involving two norms. Surprisingly, it is not known
+whether each d-dimensional Minkowski space (d ≥4) admits an equilateral set of
+d+1 points. This question is asked by Ra˘ıko [162], Morgan [145] and Thompson
+[194]. Also, Gr¨unbaum [87, bottom of p. 242] asks for the existence of the dif-
+ference body of a d-dimensional simplex inscribed in an arbitrary d-dimensional
+convex body. For the case of symmetric convex bodies this is equivalent to the
+existence of d+1 equilateral points in the norm determined by the convex body.
+The best result to date is that there is a function f(d) tending to inﬁnity
+such that any d-dimensional Minkowski space has an equilateral set of size
+f(d) (Brass [33]). The proof uses Dvoretzky’s theorem to reduce to an almost
+Euclidean space, and then Brouwer’s theorem to turn an almost equilateral set
+into an equilateral set.
+Petty [153] also gives an example of a d-dimensional space for each d ≥4
+where there is an equilateral set of 4 points that is maximal, i.e., that cannot be
+extended to a larger equilateral set. Thus a naive attempt at proving the above
+problem using induction seemingly does not work.
+6
+Normality, Conjugate diameters, and Radon
+curves
+Normality, as deﬁned in the Introduction, was introduced in a question of
+Carath´eodory studied by Blaschke [27] and Radon [160, 161], and introduced in-
+dependently by Birkhoﬀ[26]. James [107] made a study of normality in normed
+spaces, linking it to strict convexity and smoothness (see Sections 3.2). From
+Proposition 46 it follows immediately that the normality relation determines
+the norm uniquely up to a positive constant. This is also proved in detail by
+Sch¨opf [178].
+The normality relation is not necessarily symmetric. In fact, in Minkowski
+spaces of dimension at least 3 normality is symmetric iﬀthe space is Euclidean
+(the proof essentially going back to Blaschke [27] and, independently, Birkhoﬀ
+[26]; the ﬁnal result, without any assumptions of strict convexity or smoothness,
+is due to James [106]; see Thompson [194, §3.2] for a discussion.)
+In two dimensions normality is symmetric iﬀthe unit circle is a so-called
+Radon curve, introduced by Radon [160, 161]. These curves have many remark-
+able almost-Euclidean properties (see Section 6.1.2 below).
+James [107] showed that for any x, y there exists an a ∈R such that x ⊣
+ax + y. Also, if x ⊣ax + y and y ⊣by + x, then |ab| ≤1. Necessity in the
+following characterization of symmetry of normality (in arbitrary dimensions)
+is due to James [107].
+28
+===== page 29 =====
+B
+Figure 22: A pair of conjugate diameters
+Proposition 38. Normality in a Minkowski space is symmetric iﬀfor any
+x, y̸ = o the following implication holds: if x ⊣ax + y and y ⊣by + x, then
+ab ≥0.
+Laugwitz gave a similar characterization in [119].
+Next we ﬁrst discuss normality and conjugate diameters in Minkowski planes,
+where many of the essential ideas already occur.
+Then we indicate higher-
+dimensional generalizations.
+6.1
+Planes
+6.1.1
+Conjugate diameters
+Two diameters of the unit circle of a Minkowski plane are conjugate if their
+directions are mutually normal, i.e., x ⊣y and y ⊣x, where x and y are the
+directions of the two diameters. See Figure 22. It is not a priori clear that
+conjugate diameters exist for any unit circle. It seems that Auerbach [13, 14]
+(see also [17, p. 238]) ﬁrst proved that each centrally symmetric convex curve
+has a conjugate pair of diameters.
+Proposition 39. The unit circle of any Minkowski plane has a pair of conjugate
+diameters. These diameters may be chosen such that their endpoints are extreme
+points of the unit disc.
+Proof. By compactness there is a triangle △opq of maximum area, where p, q
+range over all unit vectors. By this maximum area property it follows that the
+line through p parallel to q supports the unit circle, i.e., p ⊣q, and vice versa.
+If p is in the relative interior of the segment [ab] on the unit circle, then either
+△oaq or △obq must also have maximum area.
+The following proof is a typical application of Proposition 39. For another,
+see [187].
+Proof of Proposition 20. Consider a coordinate system determined by conjugate
+diameters of the unit circle whose endpoints are extreme points. Assume that
+29
+===== page 30 =====
+Figure 23: Proof of Proposition 20
+there are at least three pairs of segments of length at least 1 on the unit circle.
+Then there are at least two such segments in some quadrant, say the ﬁrst. See
+Figure 23. Let d be the length of the arc of the unit circle lying in the ﬁrst
+quadrant. Then d ≥2 (since each segment is of length at least 1). But also
+d ≤2 by Theorem 27. Thus d = 2, and it follows that the two segments in the
+ﬁrst quadrant share an endpoint, with the other endpoints being the standard
+unit vectors e1, e2, and both are of length exactly 1, and [e2(−e1)] is a segment
+on the unit circle by equality in the Monotonicity Lemma. It follows that the
+unit circle is determined.
+In particular, the endpoint shared by the two segments in the ﬁrst quadrant
+must be in the direction 1
+2(e1+e2), and there are exactly three pairs of segments
+of length ≥1.
+Another way of ﬁnding conjugate diameters is by considering a parallelogram
+of minimum area circumscribed to the unit circle. By minimality of area it is
+easily seen that the midpoints of the sides of the parallelogram must be on the
+unit circle, and since the parallelogram is circumscribed, the segments joining
+midpoints of opposite sides are conjugate diameters. Funk [68, p. 92] mentions
+the idea of considering a smallest circumscribed parallelogram, but it is not
+clear that he knew of the above result.
+The earliest reference to this proof
+using circumscribed parallelograms is Day [52], who also gave a generalization
+to circumscribed 2n-gons and to higher dimensions (Section 6.2). S¨uss [186]
+gave a proof using the inscribed parallelogram of maximum area, although this
+is later than Taylor [191] and Day [52], who both already cover the higher-
+dimensional case.
+Lenz [126] shows that these two ways always give diﬀerent pairs of conjugate
+diameters, except if the unit circle is a Radon curve, in which case any diameter
+has a conjugate diameter. Auerbach [14] also announces that a planar symmetric
+convex disc always has at least two diﬀerent pairs of conjugate diameters, but
+without proof.
+Laugwitz [117] uses a parametrization of convex curves due
+to Radon [160, 161] to prove that there are at least two conjugate diameters.
+Inzinger [104] gives a suﬃcient condition for a symmetric disc to have exactly
+two pairs of conjugate diameters: no concentric ellipse should intersect it in
+more than four diametral pairs of points. For a comprehensive discussion of
+30
+===== page 31 =====
+conjugate diameters of planar convex curves, see Heil and Krautwald [97]. In
+particular, they show that a pair of conjugate diameters induced by an inscribed
+parallelogram of largest area corresponds to a pair of conjugate diameters of the
+dual induced by a circumscribed parallelogram of smallest area, and vice versa.
+Weiss [200] proves that by iterating the operation of choosing normals to vectors,
+one obtains conjugate diameters in the limit.
+6.1.2
+Radon curves
+A Radon curve is the unit circle of a Minkowski plane in which normality is
+symmetric, i.e., for any x, y̸ = o, if x ⊣y then y ⊣x.
+Radon curves were
+introduced by Radon [160, 161], who gave examples of them and studied some
+of their properties. He introduced them concretely, namely as those curves which
+are aﬃnely equivalent to a curve whose polar is a 90◦rotation of the original
+curve. He showed that any curve for which normality is symmetric must be
+of this form. What is essentially needed for the proof is Proposition 46. He
+indicated that there exist algebraic curves that are Radon curves, a statement
+worked out in detail by Leichtweiss [123]. He also showed that these norms are
+exactly those in which
+|ab| = lim
+ε→0
+Area([ab] + εB)
+2ε
+.
+Birkhoﬀ[26] independently discovers and constructs Radon curves. James [106]
+also constructs these curves and gives the example of a two-dimensional norm
+which is the p-norm in the ﬁrst and third quadrants and the q-norm in the second
+and fourth quadrants, where 1/p+1/q = 1. Day [53] describes the construction
+in detail, as well as the proof that this construction exhausts all norms for which
+normality is symmetric (this follows immediately from Proposition 46). Heil [96]
+notices that the regular 2n-gons are Radon curves iﬀn is odd. Note also that
+any Radon curve can be approximated by a sequence of polygonal Radon curves,
+as noted by Day [53, pp. 332–333]. Textbooks which discuss Radon curves are
+Busemann [39], Benson [23], Leichtweiss [124] and Thompson [194]. See also
+Krautwald [114] for a discussion of Radon curves.
+Phelps [155] relates symmetry of normality to nonexpansiveness of nearest-
+point maps. Let M be a Minkowski space and S a subset. Then a mapping
+f : M →S is a nearest-point map if f(x) is a point in S nearest to x, among
+all points in S. Phelps shows that a Minkowski plane M is strictly convex and
+of Radon type iﬀfor any closed convex subset S and any nearest point map
+f : M →S is non-expansive, i.e., for all x, y ∈M, |f(x)f(y)| ≤|xy|. Thus in
+higher dimensions only Euclidean space has this property. Related to this are
+results of Sch¨aﬀer [172] and De Figueiredo and Karlovitz [55] on the so-called
+radial projection (see below).
+Note that Radon curves may be characterized as those unit circles in which
+each boundary point is the midpoint of a side of a circumscribed parallelogram
+of smallest area. It is necessary to require that each point is a midpoint of a
+31
+===== page 32 =====
+circumscribed parallelogram, as the example of a regular octagon shows. See
+also Section 7.4 where equiframed curves are discussed.
+Lenz [126] studies various extremal properties of Radon curves.
+Let A1
+be the maximum area of a quadrilateral inscribed in the unit circle, A2 the
+minimum area of a circumscribed quadrilateral, and A3 the minimum area of a
+circumscribed parallelogram. Lenz shows that A3/A1 ≤2, with equality only
+for Radon curves. It follows from this inequality that whenever the unit circle
+is not a Radon curve, then the conjugate diameters induced from an inscribed
+parallelogram of largest area, and from a circumscribed parallelogram of smallest
+area, must be diﬀerent (as noted above). He also shows that Area(B)/A1 ≤
+Π(M)/2, with equality iﬀB is a Radon curve, that A3/ Area(B) ≤4/3 if B
+is a Radon curve (proved earlier for any Minkowski plane by Petty [152]), and
+that 3 ≤Π(M) ≤π for Radon curves.
+This last inequality was rederived
+by diﬀerent methods in [96], and was also rediscovered by Yaglom [206]. See
+Section 7.4 for a further discussion of these three results.
+As noted in [97],
+the above inequalities remain true with A3 replaced by A2, since by a result of
+Dowker [61], if a convex disc is centrally symmetric, then among circumscribed
+2n-gons of smallest area there is a symmetric one (with the same centre as the
+convex disc). Lenz also characterizes the Euclidean plane as a Radon plane in
+which each pair of conjugate diameters partitions the unit circle into four pieces
+of equal area (or of equal length).
+Laugwitz [117] characterizes Radon curves as those for which the tangential
+curvature of the unit circle parametrized by arc length is constant (and then
+necessarily 0).
+Busemann [36], in solving the isoperimetric problem for Minkowski planes,
+shows that a plane is of Radon type iﬀisoperimetrices are circles.
+Busemann [39] proves that in Radon planes the following deﬁnition of area
+of a triangle is independent of which side is chosen as base: Area = hb/2, where
+h is the shortest distance from an opposite vertex to a side and b is the length of
+the side of the triangle. Tam´assy [189, 190] shows the converse: if the deﬁnition
+is independent of the choice of side of the triangle, then the plane is of Radon
+type.
+S¨uss [185] gives a characterization of Radon curves in terms of chords. Porcu
+[159] and Heil [96] discuss various aﬃne properties of Radon curves.
+In [172] Sch¨aﬀer introduces a constant, later named the Sch¨aﬀer constant,
+as
+µ := lim inf
+|bxby|→0
+|xy|
+|bxby| max(∥x∥, ∥y∥).
+This constant always satisﬁes 1/2 ≤µ ≤1, and Sch¨aﬀer shows that µ = 1 iﬀ
+normality is symmetric, hence in the two-dimensional case, iﬀthe norm is of
+Radon type. It therefore follows that the radial projection R : M →M, deﬁned
+by
+Rx :=
+ x
+if ∥x∥≤1
+bx
+if ∥x∥> 1,
+is non-expansive, a fact also proved by De Figueiredo and Karlovitz [55], and
+32
+===== page 33 =====
+x
+p
+y
+Figure 24: 1⇒4 in Proposition 40
+generalized by Karlovitz [108] and Gruber [81, 82, 83]. Recently this result was
+rediscovered in [94]. Sch¨aﬀer also shows that the normalization bγ of a curve γ,
+deﬁned by bγ(x) := d
+γ(x), has length |bγ| ≤|γ|.
+We now give elementary proofs of propositions in [55], indicating how one
+can use geometric arguments very reminiscent of Euclidean geometry in proving
+results on Radon planes.
+Proposition 40. In a Minkowski plane M the following four properties are
+equivalent.
+1. The plane is a Radon plane.
+2. The radial projection is non-expansive.
+3. For any two unit vectors x, y, there exists a point p on ⟨oy⟩nearest to x
+satisfying p ∈B.
+4. For any two unit vectors x, y, all points p on ⟨oy⟩nearest to x satisfy
+p ∈B.
+Proof. 1⇒4.
+Let x, y be unit vectors and p a point on ⟨oy⟩nearest to x.
+Without loss of generality assume that c̸ = y and that p is a positive multiple
+of y. Then p −x ⊣y, hence y ⊣p −x. If p̸ ∈B, it now follows that the line
+through y parallel to p −x intersects int B, a contradiction. See Figure 24.
+3⇒1. Choose any unit vectors x, y such that x ⊣y.
+Suppose y̸ ⊣x.
+Thus the line through y parallel to x intersects int B.
+Assume without loss of generality that this is on the same side of ⟨oy⟩as x.
+Choose a unit vector z on the same side of ⟨ox⟩as y such that the line ℓthrough
+y parallel to z still intersects int B. Then no point on ℓat a shortest distance
+to o can lie on ⟨oy⟩or in the open half plane bounded by ⟨oy⟩opposite x. It
+follows that all points p on ⟨oz⟩nearest to x are such that z is between o and
+p, a contradiction. See Figure 25.
+2⇒3.
+Let unit vectors x, y be given. We are given that for any λ ≥1,
+∥x−λy∥≥∥x−y∥and ∥x+λy∥≥∥x−y∥. By Lemma 5, λ 7→∥x−λy∥attains
+a minimum for −1 ≤λ ≤1.
+33
+===== page 34 =====
+y
+x
+p
+z
+B
+Figure 25: 3⇒1 in Proposition 40
+3⇒2.
+It is suﬃcient to show that if λ > 1 and ∥x∥≤1 = ∥y∥, then
+∥x −λy∥≥∥x −y∥. It is given that there exists µ such that −1 ≤µ ≤1 and
+∥x −µy∥≤∥x −λy∥. By Lemma 5, ∥x −y∥≤max(∥x −µy∥, ∥x −λy∥) =
+∥x −λy∥.
+The implication 3 ⇒4 was already noticed by Amir [10, §18]. Amir im-
+plicitly discusses Radon planes in Lemma 10.3 and its corollaries and in §18 of
+[10].
+Thele [192] studies the Lipschitz constant of the radial projection,
+inf{c > 0 : |Rx Ry| ≤c|xy|}.
+Desbiens [56] shows that this constant and Sch¨aﬀer’s constant are in fact equal.
+Franchetti [66] shows that the Thele constant of a Minkowski space is equal to
+the Thele constant of its dual.
+Sperner [184] characterizes Radon curves among all self-dual Minkowski
+planes in terms of a so-called canonical isomorphism between a self-dual space
+and its dual introduced by Leichtweiss [122]. Alonso and Ben´ıtez [4] give char-
+acterizations of Radon curves in terms of the equivalence of various deﬁnitions
+of orthogonality.
+Finally, Radon curves also make an appearance in hyperbolic geometry.
+Pinkall [156] characterizes horocyclically convex sets (for any two points in the
+set the horocyclic segment joining them is also in the set) of constant width in
+terms of Radon curves.
+6.2
+Higher dimensions
+We deﬁne a set of d diameters of the unit ball of a d-dimensional Minkowski
+space to be conjugate diameters if their normalized direction vectors x1, . . . , xd
+have the property that each xi is normal to each vector in the linear span of the
+remaining direction vectors. An Auerbach basis of a Minkowski space is such a
+set of direction vectors. Note that it is not suﬃcient to require that x1, . . . , xd
+are mutually normal, as the following three-dimensional example shows: Let
+e1, e2, e3 be linearly independent vectors in R3. Then e1, e2, e3 are mutually
+34
+===== page 35 =====
+normal in the Minkowski space with unit ball conv{±e1, ±e2, ±e3, ±r(e1 +e2 +
+e3)} for any r > 1, although they do not form an Auerbach basis.
+If x1, . . . , xd is a normalized Auerbach basis, then a dual normalized basis is
+φ1, . . . , φd, where φi is a unit functional with kernel the hyperplane spanned by
+{xj : j̸ = i}. The sequence of pairs (xi, φi) is also called a biorthogonal system.
+The existence of an Auerbach basis means metrically that for any norm there
+is a coordinatization of d-space such that the norm is majorized by the 1-norm,
+and minorized by the ∞-norm.
+Banach [17, p. 106 and p. 238] deﬁnes the notion of a biorthogonal system
+and says that the existence of an Auerbach basis is due to Auerbach. However,
+it seems that Auerbach did not publish anything on the higher-dimensional case
+[13, 14]. The ﬁrst published proofs of existence seem to be Taylor [191] and Day
+[52].
+As in the two-dimensional case we have that any Minkowski space has at
+least two Auerbach bases. One is induced by a cross-polytope inscribed in the
+unit ball of maximum volume (Taylor [191], Ruston [170]), and the other by
+the midpoints of the facets of a circumscribed parallelotope of minimum volume
+(Day [52], Lenz [125]). As noticed by Knowles and Cook [111], these two ways
+of ﬁnding Auerbach bases are dual in the sense that if an Auerbach basis is
+induced by an inscribed cross-polytope of maximum volume, then any dual
+basis is induced by a circumscribed parallelotope of minimum volume, and vice
+versa (the two-dimensional case being noticed in [97]; see Section 6.1.1).
+If any minimum volume base and maximum volume base coincide, then by
+the following result of Lenz [125] we have that the space is Euclidean: Let V1 be
+the volume of a cross-polytope of maximum volume inscribed in the unit ball,
+and V2 the volume of a parallelotope of minimum volume circumscribed to the
+unit ball. Then V2/V1 ≤d!, with equality iﬀthe space is Euclidean (where the
+dimension d ≥3). Lenz proves the characterization under the assumption that
+the space is smooth or strictly convex, but notices that his argument for the
+non-uniqueness of Auerbach bases does not need any such assumptions. Also,
+it is easily seen that the inequality does not depend on any assumptions of
+smoothness or strict convexity, as it immediately follows from the fact that a
+maximal inscribed cross-polytope provides a circumscribed parallelotope of vol-
+ume d! times that of the cross-polytope. Plichko [158] removes the assumptions
+from the above characterization of Euclidean space by showing its equivalence
+to symmetry of normality.
+Plichko [158] also proves that if for any two Auerbach bases of a Minkowski
+space there is an isometry of the space taking the one Auerbach basis to the
+other, then the space is Euclidean.
+6.3
+Non-symmetric curves
+We brieﬂy remark on the non-symmetric generalization of Radon curves. Blaschke
+[28] introduced P-curves, deﬁned to be the closed convex curves which have a
+continuous family of inscribed quadrilaterals of maximum area. He characterizes
+them as the convex curves for which each diameter has a conjugate. He shows
+35
+===== page 36 =====
+that Radon curves are exactly the P-curves with a centre of symmetry, and that
+the diﬀerence body of a P-curve is always a Radon curve. Lenz [126] shows
+that the inequality A2/A1 ≤2, with A2 the area of a smallest circumscribed
+parallelogram, and A1 the area of a largest inscribed quadrilateral, is also true
+for convex curves that are not necessarily centrally symmetric, and that equality
+holds exactly for P-curves. He also shows that a P-curve is a curve of constant
+width with respect to its diﬀerence body as unit ball, and that the circumfer-
+ence/width ratio of a P-curve is ≤π, where the circumference is measured with
+respect to its central symmetrization, with equality only for those curves which
+are also aﬃnely equivalent to Euclidean curves of constant width. He observes
+that among all P-curves with the same central symmetrization S and width 2,
+S has the largest area (since central symmetrization of a non-symmetric disc
+increases area). Heil and Krautwald [97] observe that regular n-gons, with n
+odd, as well as Euclidean curves of constant width, are P-curves. Porcu [159]
+also proves some properties of P-curves. Martini [134] gives a characterization
+of P-curves (see the Concluding Remarks at the end of [134]).
+In higher dimensions, Krautwald [115] gives non-symmetric analogues of the
+characterization of ellipsoids due to Lenz [125] mentioned above in Section 6.2:
+In a space of dimension d ≥3, a convex body is an aﬃne image of a Euclidean
+body of constant width iﬀthe vertices of an inscribed cross-polytope of max-
+imum volume are on the faces of a circumscribed parallelotope of minimum
+volume, iﬀthe ratio between the volumes of these two polytopes is d!.
+7
+Minkowski circles
+7.1
+Circumscribed and inscribed circles
+As mentioned earlier, a Minkowski plane is strictly convex iﬀthere is at most
+one circumscribed circle through any three non-collinear points. We also have
+the following
+Proposition 41. A Minkowski plane is smooth iﬀthrough any three non-
+collinear points there is at least one circumscribed circle.
+Suﬃciency of smoothness in the plane was proved by Mayer [135], and even
+earlier by Zindler [207, Satz 39, p. 53] for the special case of equilateral triangles
+(which is already general if one uses aﬃne transformations). We here sketch the
+proof of Kramer and N´emeth [113, 112] which, although based on Brouwer’s
+ﬁxed point theorem, is very clear and is immediately generalizable to higher
+dimensions.
+Proof. Let pi, i = 1, 2, 3, be the three non-collinear points.
+Let c be their
+centroid, and let p′
+i = \
+pi −c be the directions from the centroid to the points.
+For any point x in the unit ball B, let qi(x) be the point of B on the ray with
+origin x and direction p′
+i furthest from x.
+It is easily seen that qi are continuous mappings (even if B is not strictly
+convex). Deﬁne f : B →B by f = 1
+3(q1 + q2 + q3). See Figure 26. By the
+36
+===== page 37 =====
+B
+x
+q
+x
+3( )
+q x
+1( )
+q
+x
+2( )
+f x
+( )
+p3
+p1
+p2
+Figure 26: Deﬁning f
+Brouwer ﬁxed point theorem, f has a ﬁxed point x0. If x0 is on the boundary
+of B, then it is easily seen that B is not smooth (see Figure 27). Note that it is
+only at this point that we need smoothness.
+Thus x0 ∈int B, and it is easily seen that the points pi(x0) are positively
+homothetic to pi, which is equivalent to the fact that xi have a circumscribed
+circle.
+The converse is clear from Figure 28.
+The above proof even generalizes to the non-centrally symmetric case, which
+was, according to Kramer and N´emeth, a conjecture of Tur´an. Makeev also
+proved this result somewhat later [131], using more complicated topological
+methods. See also [132].
+By contrast any triangle in a Minkowski plane has a unique inscribed circle.
+This can be proved using Glogovskii’s deﬁnition of angular bisectors [73] exactly
+as in the Euclidean plane: For any angle with sides [ab⟩and [ac⟩, there exists
+a unique ray [ad⟩with the property that each point on [ad⟩is equidistant
+to [ab⟩and [ac⟩. (This is true even if the space is not smooth.) If we call
+[ad⟩the angular bisector of angle ∢bac, then the three angular bisectors of a
+triangle intersects in the centre of the unique inscribed circle of the triangle.
+This observation in the case of the Minkowski plane with a regular hexagon as
+B
+x
+q x
+q
+x
+q
+x
+=
+=
+=
+1
+2
+3
+( )
+( )
+( )
+Figure 27: Since B is smooth, the ﬁxed point is not on the boundary
+37
+===== page 38 =====
+B
+Figure 28: A triangle without a circumscribed circle
+unit circle, was made by Sowell [183].
+7.2
+Equilateral n-gons inscribed in the unit circle
+In [62] it is shown that for any n ≥3 there is an equilateral n-gon inscribed in
+the unit circle, starting at any given x. For a ﬁxed x, although the n-gon need
+not be unique, its side length is unique.
+This result leads to four extremal problems: for given n, ﬁnd an inscribed
+equilateral n-gon of smallest or largest side length, and minimize or maximize
+this quantity over all Minkowski planes. In [62] the largest side length is consid-
+ered, and it is shown that for n ≤6 (when this side length is at least 1) ﬁnding
+this side length is equivalent to ﬁnding the smallest circle containing a packing
+of n unit discs, essentially by using Lemma 6. They ﬁnd that if δM(n) is the
+largest side length in the Minkowski plane M, then δM(4) ≥
+√
+2, with equality
+for the ellipse. There are also other planes where equality holds, see Gao [70].
+In [62] it is also conjectured that δM(3) ≥1 +1/
+√
+2, equality holding if the unit
+ball is a regular octagon. Linhart [129] makes an equivalent conjecture. Doliwka
+and Lassak [60] show that δM(5) ≥
+√
+5 −1, with equality if e.g. the unit circle
+is an aﬃne regular decagon.
+7.3
+Characterization of the Minkowski circle
+Valentine [198] gives the following characterization of discs in the Minkowski
+plane.
+Proposition 42. A bounded closed subset S of a Minkowski plane is a Minkow-
+ski disc iﬀfor any distinct x, y ∈S there exists a semicircle in S with diameter
+[xy].
+Valentine also shows that the above is true for Minkowski spaces if “semi-
+circle” is replaced by “hemisphere”.
+W.-T. Hsiang [103] shows (for the case of the Euclidean plane) the following
+Proposition 43. A Jordan curve γ in a Minkowski plane is a Minkowski circle
+iﬀfor any distinct x, y, both in the interior or both in the exterior of γ, there
+exists a circle through x and y not intersecting γ.
+38
+===== page 39 =====
+This is a special case of the following result of Petty and Crotty [154].
+Proposition 44. A non-empty bounded open subset S of a Minkowski space is
+an open ball iﬀfor any distinct x, y ∈S there exists an open ball in S with x
+and y as boundary points.
+The above result is in fact proved for a more general class of metric spaces
+in [154]. See also [105], where essentially the same result is posed as a problem
+(for Banach spaces) and solved.
+See O. Haupt [95] and also [135] for a study of certain sets satisfying a
+property related to the condition of Valentine.
+Petty and Crotty also give the following characterization of balls in Min-
+kowski spaces: a bounded open convex subset of a Minkowski space is an open
+ball iﬀit has constant width and possesses an equichordal point (i.e. all chords
+through this point are of equal length).
+The following characterization was proved by Groemer [80] for the Euclidean
+case.
+Proposition 45. Let C be a convex body in a Minkowski space with the property
+that there exists a point p such that for any boundary point q of C there is a
+supporting hyperplane H at q such that the unit ball has a supporting hyperplane
+at [
+q −p parallel to H. Then C is a ball.
+The above proposition follows immediately from the following characteriza-
+tion of homothets of convex bodies (proved by Sch¨aﬀer [176, 4A]).
+Proposition 46. Let K1 and K2 be convex bodies in d-dimensional space both
+containing o as interior point. Assume that for each ray with origin o there are
+parallel hyperplanes supporting K1 and K2 at the points where the ray meets the
+boundaries of K1 and K2. Then K1 = λK2 for some λ > 0.
+Witsenhausen [204] proved the following
+Proposition 47. Let γ be a simple closed rectiﬁable curve in a Minkowski plane
+M. For each x on the curve let x′ be the point whose distance along γ is half
+its length |γ|. Then
+|γ| ≥Π(M) min
+x∈γ |xx′|.
+Note that Witsenhausen proved a similar result in any Minkowski space,
+where Π is replaced by half the girth of the unit ball (see Sch¨aﬀer [173]). It is
+known that in the Euclidean plane equality in the above inequality characterizes
+the circle [99], but Witsenhausen notes that for example in the rectilinear plane
+there are other curves than circles for which equality holds.
+However, it is
+probable that in strictly convex Minkowski planes equality characterizes circles.
+The results of Goodey and Woodcock (see Section 3.3) may also be consid-
+ered as a characterization of the Minkowski circle.
+39
+===== page 40 =====
+7.4
+Circumference and area of the unit circle
+As will be seen below, it is proﬁtable to study the circumference of the unit circle
+together with the area of the unit circle (where there are various intrinsic ways
+of ﬁxing the unit area). In the ﬁrst case we use area to study circumference,
+and in the second case we use circumference to study area.
+Go lab [74] proved that the circumference of the unit circle is at least 6,
+with equality iﬀthe unit circle is an aﬃne regular hexagon, and at most 8,
+with equality iﬀthe unit circle is a parallelogram. This was rediscovered by
+later authors, e.g., Petty [152], Sch¨aﬀer [173], Laugwitz [117], Reˇsetnyak [165].
+Sch¨aﬀer [175] shows that the circumference is equal to that of the unit circle of
+the dual plane; see also Thompson [193]. This is posed as a question for the
+p-norms as recently as [1]. See [194] for an exposition of these results.
+There are many papers on the circumference of unit circles of non-symmetric
+norms; see [89, 90, 75, 46, 44, 45, 71]. See also Heil [96] for inequalities relating
+cirumference and area, deduced using inequalities from convex geometry. Recent
+references on the circumference in the symmetric case are the following.
+Franchetti and Votruba [67] show that four times the absolutely summing
+constant of a Minkowski plane equals the circumference of its unit circle. Chalmers,
+Franchetti and Giaquinta [47] show that in a symmetric Minkowski plane (for
+some basis x, y the norm satisﬁes ∥|λ|x + |µ|y∥= ∥λx + µy∥= ∥µx + λy∥),
+the circumference of the unit circle is at least 2π, with equality iﬀthe plane is
+Euclidean. See Adler and Tanton [1] and Euler and Sadek [64] for estimates of
+the numerical values in the ℓp planes. Ghandehari and Pﬁefer [72] give formulas
+for the circumference of the unit circle if it is a regular 2n-gon.
+We now state a result that is not so well known, due to Lenz [126] and
+rediscovered by Yaglom [205]. See also Heil where a diﬀerent proof is given. We
+follow the proof given by Lenz.
+Proposition 48. In a Radon plane, the circumference of the unit circle is at
+least 6 with equality iﬀthe unit circle is an aﬃne regular hexagon, and at most
+2π, with equality iﬀthe plane is Euclidean.
+Its proof is given after we discuss a notion of area for Minkowski planes.
+There are many ways of deﬁning unit area.
+One way is to consider the
+parallelogram of maximum area inscribed in the unit circle, and let the area of
+this parallelogram be 2. This gives the usual area in the Euclidean plane. Then
+the area of the unit circle is at least 2 (equality iﬀthe plane is rectilinear —
+trivial), and at most π (equality iﬀthe plane is Euclidean — see Sas [171] and
+Macbeath [130] for a simpler proof). Instead of inscribed parallelograms, we
+may take an inscribed n-gon of maximum area, and normalize for the Euclidean
+plane. Note that, since the unit circle is centrally symmetric, by a theorem of
+Dowker [61] there exists a centrally symmetric n-gon achieving the maximum
+if n is even. Again, we will have the Euclidean plane as the upper extreme by
+the result of Sas. The lower extreme is again trivial if n is even (attained iﬀthe
+unit ball is a centrally symmetric n-gon), but is still interesting for n odd.
+40
+===== page 41 =====
+With this deﬁnition of area, the area/circumference ratio is a priori in the
+interval [1/4, π/6], with the lower bound best possible. The upper bound can
+be improved to 1/2, with equality iﬀthe unit circle is a Radon curve (Lenz [126]
+and Yaglom [205]).
+Proposition 49. In any Minkowski plane, let P be a parallelogram of maximum
+area inscribed in the unit circle. Then Area(S)/ Area(P) ≤|S|/4, with equality
+iﬀS is a Radon curve.
+Proof. By an aﬃne transformation we may assume without loss of generality
+that the diagonals of P are [(−e1)e1] and [(−e2)e2], with e1 and e2 the standard
+unit vector basis of R2. By Proposition 39 the diagonals of this parallelogram
+are conjugate diameters. Note that if we take any two unit vectors u, v, then
+| det[u, v]| ≤1, with equality implying that u and v are on conjugate diameters.
+Parametrize S by arclength γ : [0, 2Π(M)] →M. Let p : [0, 2Π(M)] →M
+be the unit (normalized in M) right tangent vector. Then p is right continuous,
+and also left continuous except at countably many points. We may now ﬁnd
+the area of S by integrating:
+Area(S)
+=
+Z 2Π(M)
+0
+1
+2 det[γ(t), p(t)]dt
+≤
+1
+2|S|.
+Equality holds iﬀdet[γ(t), p(t)] = 1 except possibly at nonsmooth points of
+S. Approximating nonsmooth points from the right (p is right continuous), we
+obtain det[γ(t), p(t)] = 1 for all t, hence each diameter is conjugate to some
+other diameter, and it follows that S is a Radon curve.
+Proof of Proposition 48. This follows from the previous proposition, as well as
+the result of Sas [171] that the area of the unit circle is at most π, with equality
+iﬀit is a Euclidean circle.
+In higher dimensions, letting the volume of the inscribed cross-polytope of
+maximum volume be 2d/d!, the volume is at least 2d/d! (again trivial), and at
+most that of the Euclidean unit sphere (following from the higher dimensional
+counterpart of the theorem of Sas, due to Macbeath [130]).
+Another way of deﬁning area is to let the area of the circumscribed parallel-
+ogram of least area have area 4. Then the area of the unit disc is at most 4 with
+equality iﬀit is a parallelogram (trivial), and at least 3 with equality iﬀit is an
+aﬃne regular hexagon (proved by Lenz [126] in the case of Radon curves, and
+in general by Petty [152], and later also by Babenko [15] and Pe lczynski and
+Szarek [151]). We now give a simple proof of this result, by deducing it from
+a seemingly new area/circumference inequality dual to Proposition 49 (which
+Lenz [126] missed, although he had all the tools). Following Pe lczynski and
+Szarek [151], we say that a convex body is equiframed if each boundary point is
+contained in the boundary of a circumscribed parallelotope of minimum volume.
+Note that an equiframed centrally symmetric convex disc is not necessarily a
+41
+===== page 42 =====
+Radon curve, as the example of a regular octagon shows. More generally, any
+regular 2n-gon is equiframed. However, it can be shown that strictly convex or
+smooth equiframed curves must be of Radon type.
+Proposition 50. In any Minkowski plane, let P be a parallelogram of minimum
+area circumscribed to the unit circle.
+Then Area(S)/ Area(P) ≥|S|/8, with
+equality iﬀS is an equiframed convex disc. In particular, Area(S)/ Area(P) ≥
+3/4, with equality iﬀS is an aﬃne regular hexagon.
+Proof. After an aﬃne transformation we may assume that P = conv{±e1, ±e2}.
+As in the proof of Proposition 49, we parametrize S by arc length and use
+the normalized right tangent vector p.
+Note that | det[γ(t), p(t)]| ≥1, with
+equality implying that γ(t) lies on a circumscribed parallelogram of minimum
+area, namely the parallelogram with a side parallel to p(t) and a side parallel
+to a supporting line of the unit circle at d
+p(t). We now evaluate the area:
+Area(S)
+=
+Z 2Π(M)
+0
+1
+2 det[γ(t), p(t)]dt
+≥
+1
+2|S|.
+As in the proof of Proposition 49, we have equality iﬀdet[γ(t), p(t)] ≥1 for all
+t, iﬀeach point is on a circumscribed parallelogram of minimum area.
+Babenko [15, Proposition 2.2] shows that any unit disc contains a Radon
+curve for which a minimum circumscribed parallelogram has the same area as
+a minimum circumscribed parallelogram of the original disc.
+See Babenko [15], Ball [16] and Pe lczynski and Szarek [151] for the higher
+dimensional question, where there are only partial results. Ball gives an asymp-
+totic relationship between this ratio and the so-called volume ratio (the fourth
+way of deﬁning the volume of a unit ball, deﬁned below using the Loewner
+ellipsoid).
+A third way of deﬁning area is to consider the inscribed aﬃne regular
+hexagon of maximum or of minimum area, and to normalize accordingly. This
+is equivalent to asking for the extremes of the ratio of the areas of equilateral
+triangles to the area of the unit disc. Reimann [164] proved the inequality be-
+low, and the equality cases were characterized by Wellmann and Wernicke [202].
+Wernicke [203] extends these results to Reuleaux triangles.
+Proposition 51. Let ∆be a unit equilateral triangle in the Minkowski plane
+M. Then
+1
+8 ≤Area(∆)
+Area(B) ≤1
+6.
+There is equality on the left iﬀM is the rectilinear plane or has a centrally
+symmetric hexagon (not necessarily aﬃne regular) as unit disc, and equality on
+the right iﬀthe unit disc is an aﬃne regular hexagon and some translate of ∆
+has o and two vertices of the unit circle as its own vertices.
+42
+===== page 43 =====
+Weissbach and Wernicke [201] considers this ratio in higher dimensions, and
+obtain an upper bound of
+2d
+d
+−1, which follows from the Rogers-Shephard in-
+equality [168]. They show that there is no positive lower bound for d ≥3; this
+is immediate since in the d-dimensional ℓ∞space one can ﬁnd d + 1 equilateral
+points in a hyperplane, and it is then possible to shift one point, without losing
+the equilateral property, out of the hyperplane by an arbitrarily small distance,
+to obtain a simplex of arbitrarily small volume.
+A fourth way of deﬁning area is to let the Loewner ellipsoid have area π.
+Then the area of the unit circle is at most 4, equality if the plane is rectilinear
+(due to Keith Ball [16]), and at least π (trivial). Again the area/circumference
+ratio may be examined.
+In higher dimensions the volume is at most 2d, equality iﬀthe unit ball is a
+parallelotope (Ball [16]), and at most that of the Euclidean unit sphere.
+Finally, see [194, Chapters 5–7] for various ways of deﬁning area, i.e., (n−1)-
+dimensional content, the two most important deﬁnitions coming from Buseman
+[37, 38] and Holmes and Thompson [101]. There are various upper and lower
+bounds for the surface area of the unit ball in dimensions at least three, most
+of them not sharp – see [101] and ´Alvarez [7].
+References
+[1] C. L. Adler and J. Tanton, π is the minimum value for Pi, College Math.
+J. 31 (2000), 102–106.
+[2] A. D. Aleksandrov, Intrinsic geometry of convex surfaces (Russian),
+OGIZ, Moscow-Leningrad, 1948, MR 10,619c.
+[3] J. Alonso and C. Ben´ıtez, Some characteristic and noncharacteristic prop-
+erties of inner product spaces, J. Approx. Theory 55 (1988), 318–325, MR
+90k:46047.
+[4]
+, Orthogonality in normed linear spaces: a survey. II. Relations
+between main orthogonalities, Extracta Math. 4 (1989), 121–131, MR
+91e:46021b.
+[5] J. Alonso and A. Ull´an, Moduli in normed linear spaces and characteri-
+zation of inner product spaces, Arch. Math. (Basel) 59 (1992), 487–495,
+MR 93m:46018.
+[6] F.
+Alt,
+Dreiecksungleichung
+und
+Eichk¨orper
+in
+verallgemeinerten
+Minkowskischen R¨aumen, Erg. Math. Kolloq. H. 8 (1937), 32–33.
+[7] J.
+C.
+´Alvarez
+Paiva,
+The
+area
+of
+the
+unit
+sphere
+in
+three-
+dimensional
+normed
+spaces,
+The
+Finsler
+Geometry
+Newsletter,
+http://gauss.math.ucl.ac.be/∼fweb/intro/intro.html
+1
+(2000),
+1–5.
+43
+===== page 44 =====
+[8]
+, Some problems in Finsler geometry, The Finsler Geometry
+Newsletter, http://gauss.math.ucl.ac.be/∼fweb/intro/intro.html
+(2000), 1–30.
+[9] J. C. ´Alvarez Paiva and Dur´an C., An Introduction to Finsler Geometry,
+Notas de la Escuela Venezolana de Mat´ematicas, 1998.
+[10] Dan Amir, Characterizations of inner product spaces, Birkh¨auser Verlag,
+Basel, 1986, MR 88m:46001.
+[11] E. Z. Andalafte and J. E. Valentine, Criteria for unique metric lines in
+Banach spaces, Proc. Amer. Math. Soc. 39 (1973), 367–370, MR 47#2499.
+[12] Archimedes, Kugel und Zylinder. ¨Uber Paraboloide, Hyperboloide und El-
+lipsoide, Akademische Verlagsgesellschaft Geest & Portig K.-G., Leipzig,
+1987, MR 88i:01164.
+[13] H. Auerbach, On the area of convex curves with conjugate diameters (Pol-
+ish), Ph.D. thesis, L’vov University, 1930.
+[14]
+, ¨Uber eine Eigenschaft der Eilinien mit Mittelpunkt, Ann. Soc.
+Polon. Math. 9 (1930), 204.
+[15] I. K. Babenko, Asymptotic volume of tori and the geometry of convex
+bodies (Russian), Mat. Zametki 44 (1988), 177–190, 286, MR 89m:52015.
+[16] K. Ball, Volumes of sections of cubes and related problems, Geometric
+Aspects of Functional Analysis (1987–88), Springer, Berlin, 1989, pp. 251–
+260, MR 90i:52019.
+[17] S. Banach, Th´eorie des op´erations lin´eaires, second ed., Chelsea, New
+York, 1978.
+[18] J. Banasiak, Some contribution to the geometry of normed linear spaces,
+Math. Nachr. 139 (1988), 175–184, MR 89k:46021.
+[19] H.-J. Bandelt, V. Chepoi, and M. Laurent, Embedding into rectilinear
+spaces, Discrete Comput. Geom. 19 (1998), 595–604, MR 99d:51017.
+[20] M. Baronti, E. Casini, and P. L. Papini, Equilateral sets and their central
+points, Rend. Mat. Appl. (7) 13 (1993), 133–148, MR 94m:46020.
+[21] M. Baronti and P. L. Papini, Intersection of spheres and isometries, Riv.
+Mat. Univ. Parma (4) 13 (1987), 101–104 (1988), MR 90a:46025.
+[22] B. Beauzamy, Introduction to Banach spaces and their geometry, second
+ed., Notas de Matem´atica [Mathematical Notes], 86, North-Holland Pub-
+lishing Co., Amsterdam, 1985, MR 88f:46021.
+[23] R. V. Benson, Euclidean Geometry and Convexity, McGraw-Hill Book
+Co., New York, 1966, MR 35#844.
+44
+===== page 45 =====
+[24] W. Benz, Isometrien in normierten R¨aumen, Aequationes Math. 29
+(1985), 204–209, MR 88b:51022.
+[25] W. Benz and H. Berens, A contribution to a theorem of Ulam and Mazur,
+Aequationes Math. 34 (1987), 61–63, MR 88j:46020.
+[26] G. Birkhoﬀ, Orthogonality in linear metric spaces, Duke Math. J. 1 (1935),
+169–172.
+[27] W. Blaschke, R¨aumliche Variationsprobleme mit symmetrischer Transver-
+salit¨atsbedingung, Ber. Verh. S¨achs. Ges. Wiss. Leipzig. Math.-Phys. Kl.
+68 (1916), 50–55.
+[28] W. Blaschke, Zur Aﬃngeometrie der Eilinien und Eiﬂ¨achen, Math. Nachr.
+15 (1956), 258–264, MR 18,922c.
+[29] L. M. Blumenthal, Theory and applications of distance geometry, second
+ed., Chelsea Publishing Co., New York, 1970, MR 42#3678.
+[30] L. M. Blumenthal and K. Menger, Studies in geometry, W. H. Freeman
+and Co., San Francisco, Calif., 1970, MR 42#8370.
+[31] O. Bottema, R. ˇZ. Djordjevi´c, R. R. Jani´c, D. S. Mitrinovi´c, and P. M.
+Vasi´c, Geometric Inequalities, Wolters-NoordhoﬀPublishing, Groningen,
+1969, MR 41#7537.
+[32] P. Brass, Erd˝os distance problems in normed spaces, Comput. Geom. 6
+(1996), 195–214, MR 97c:52036.
+[33]
+, On equilateral simplices in normed spaces, Beitr¨age Algebra
+Geom. 40 (1999), 303–307, CMP 1 720 106.
+[34] R. J. Bumcrot, Algebraic versus metric concepts in a normed linear space,
+Simon Stevin 41 (1967/1968), 252–255, MR 38#3714.
+[35] H. Busemann, Metric Methods in Finsler Spaces and in the Foundations
+of Geometry, Annals of Mathematics Studies, no. 8, Princeton University
+Press, Princeton, N. J., 1942, MR 4,109e.
+[36]
+, The isoperimetric problem in the Minkowski plane, Amer. J.
+Math. 69 (1947), 863–871, MR 9,372h.
+[37]
+, The isoperimetric problem for Minkowski area, Amer. J. Math.
+71 (1949), 743–762, MR 11,200j.
+[38]
+, The foundations of Minkowskian geometry, Comment. Math.
+Helv. 24 (1950), 156–187, MR 12,527b.
+[39]
+, The Geometry of Geodesics, Academic Press Inc., New York, N.
+Y., 1955, MR 17,779a.
+45
+===== page 46 =====
+[40] J. Buter, ¨Uberkonvexe Mengen in der Ebene, Proc. Kon. Nederl. Akad. 41
+(1938), 756–762.
+[41] J. G. Ceder, A property of planar convex bodies, Israel J. Math. 1 (1963),
+248–253, MR 29#6391.
+[42] J. Ceder and B. Gr¨unbaum, On inscribing and circumscribing hexagons,
+Colloq. Math. 17 (1967), 99–101, MR 35#3544.
+[43] G. D. Chakerian, Sets of constant width, Paciﬁc J. Math. 19 (1966), 13–21,
+MR 34#4986.
+[44]
+, On a certain aﬃne invariant functional for convex bodies, Studia
+Sci. Math. Hungar. 8 (1973), 91–93, MR 49#3687.
+[45]
+, Mixed areas and the self-circumference of a plane convex body,
+Arch. Math. (Basel) 34 (1980), 81–83, MR 81e:52002.
+[46] G. D. Chakerian and W. K. Talley,
+Some properties of the self-
+circumference of convex sets, Arch. Math. (Basel) 20 (1969), 431–443,
+MR 40#3434.
+[47] B. Chalmers, C. Franchetti, and M. Giaquinta, On the self-length of two-
+dimensional Banach spaces, Bull. Austral. Math. Soc. 53 (1996), 101–107,
+MR 96m:46018.
+[48] K. B. Chilakamarri, Unit-distance graphs in Minkowski metric spaces,
+Geom. Dedicata 37 (1991), 345–356, MR 92b:05036.
+[49] D. Cieslik, Steiner minimal trees, Kluwer Academic Publishers, Dordrecht,
+1998, MR 99i:05062.
+[50] D. F. Cudia, Rotundity, Proc. Sympos. Pure Math., Vol. VII, Amer. Math.
+Soc., Providence, R.I., 1963, pp. 73–97, MR 27#5106.
+[51] L. Danzer and B. Gr¨unbaum, ¨Uber zwei Probleme bez¨uglich konvexer
+K¨orper von P. Erd˝os und von V. L. Klee, Math. Z. 79 (1962), 95–99,
+MR 25#1488.
+[52] M. M. Day, Polygons circumscribed about closed convex curves, Trans.
+Amer. Math. Soc. 62 (1947), 315–319, MR 9,246h.
+[53]
+, Some characterizations of inner-product spaces, Trans. Amer.
+Math. Soc. 62 (1947), 320–337, MR 9,192c.
+[54]
+, Normed linear spaces, third ed., Ergebnisse der Mathematik
+und ihrer Grenzgebiete, Band 21, Springer-Verlag, New York, 1973, MR
+49#9588.
+[55] D. G. de Figueiredo and L. A. Karlovitz, On the radial projection in
+normed spaces, Bull. Amer. Math. Soc. 73 (1967), 364–368, MR 35#2130.
+46
+===== page 47 =====
+[56] J. Desbiens, Sur les constantes de Thele et de Sch¨aﬀer, Ann. Sci. Math.
+Qu´ebec 16 (1992), 125–141, MR 94a:46018.
+[57] Joseph Diestel, Geometry of Banach spaces—selected topics, Lecture
+Notes in Mathematics, Vol. 485, Springer-Verlag, Berlin, 1975, MR
+57#1079.
+[58] C. Diminnie and A. White, A note on strict convexity and straight lines in
+normed spaces, Demonstratio Math. 10 (1977), 827–829, MR 57#13452.
+[59] C. R. Diminnie and A. G. White, Remarks on strict convexity and between-
+ness postulates, Demonstratio Math. 14 (1981), 209–220, MR 82k:52004.
+[60] K. Doliwka and M. Lassak, On relatively short and long sides of convex
+pentagons, Geom. Dedicata 56 (1995), 221–224, MR 96d:52002.
+[61] C. H. Dowker, On minimum circumscribed polygons, Bull. Amer. Math.
+Soc. 50 (1944), 120–122, MR 5,153m.
+[62] P. G. Doyle, J. C. Lagarias, and D. Randall, Self-packing of centrally
+symmetric convex bodies in R2, Discrete Comput. Geom. 8 (1992), 171–
+189, MR 93e:52038.
+[63] Z. Drezner (ed.), Facility Location, Springer-Verlag, New York, 1995, CMP
+1 358 610.
+[64] R. Euler and J. Sadek, The πs go full circle, Math. Magazine 72 (1999),
+59–63.
+[65] P. Finsler, ¨Uber Kurven und Fl¨achen in allgemeinen R¨aumen, Ph.D. the-
+sis, G¨ottingen, 1918.
+[66] C. Franchetti, On the radial projection in Banach spaces, Approximation
+theory, III (Proc. Conf., Univ. Texas, Austin, Tex., 1980), Academic Press,
+New York, 1980, MR 82c:46017, pp. 425–428.
+[67] C. Franchetti and G. F. Votruba, Perimeter, Macphail number and pro-
+jection constant in Minkowski planes, Boll. Un. Mat. Ital. B (5) 13 (1976),
+560–573, MR 57#10594.
+[68] P. Funk, ¨Uber den Begriﬀ“extremale Kr¨ummung” und eine kennzeich-
+nende Eigenschaft der Ellipse, Math. Z. 3 (1919), 87–92.
+[69] Z. F¨uredi, J. C. Lagarias, and F. Morgan, Singularities of minimal surfaces
+and networks and related extremal problems in Minkowski space, Discrete
+and Computational Geometry (New Brunswick, NJ, 1989/1990), Amer.
+Math. Soc., Providence, RI, 1991, pp. 95–109, MR 93d:52009.
+[70] Ji Gao, An application of elementary geometry in functional analysis, Col-
+lege Math. J. 28 (1997), 39–43, MR 98a:46031.
+47
+===== page 48 =====
+[71] M. Ghandehari and E. J. O’Neill, Self-circumference of rotors, Acta Math.
+Hungar. 79 (1998), 179–190, MR 99c:52009.
+[72] M. A. Ghandehari and R. E. Pﬁefer, Polygonal circles, Math. Comput.
+Ed. 29 (1995), 203–210.
+[73] V. V. Glogovs’ki˘ı, Bisectors on the Minkowski plane with norm (xp +
+yp)1/p (Russian), V¯ısnik L’v¯ıv. Pol¯ıtehn. ¯Inst. (1970), 192–198, 218, MR
+45#2597.
+[74] S. Go lab, Some metric problems in the geometry of Minkowski (Polish.
+French summary), Prace Akademii G´orniczej w Krakowie 6 (1932), 1–79.
+[75] S. Go lab, Sur la longueur de l’indicatrice dans la g´eom´etrie plane de Min-
+kowski, Colloq. Math. 15 (1966), 141–144, MR 33#3188.
+[76] S. Go lab and H. H¨arlen, Minkowskische Geometrie I u. II, Monatsh. Math.
+Phys. 38 (1931), 387–398.
+[77] P. R. Goodey, Connectivity and freely rolling convex bodies, Mathematika
+29 (1982), 249–259 (1983), MR 84e:52007.
+[78]
+, Homothetic ellipsoids, Math. Proc. Cambridge Philos. Soc. 93
+(1983), 25–34, MR 84e:52006.
+[79] P. R. Goodey and M. M. Woodcock, Intersections of convex bodies with
+their translates, The Geometric Vein, Springer, New York, 1981, pp. 289–
+296, MR 84e:52014.
+[80] H. Groemer, Eine kennzeichnende Eigenschaft der Kugel, Enseignement
+Math. (2) 7 (1961), 275–276 (1962), MR 25#2515.
+[81] P. Gruber, Kontrahierende Radialprojektionen in normierten R¨aumen,
+Boll. Un. Mat. Ital. (4) 11 (1975), 10–21, MR 51#13648.
+[82] P. M. Gruber, Fixpunktmengen von Kontraktionen in endlichdimension-
+alen normierten R¨aumen, Geometriae Dedicata 4 (1975), 179–198, MR
+57#1279.
+[83]
+, Planar Chebyshev sets, Mathematical Structure–Computational
+Mathematics–Mathematical Modelling, 2, Bulgar. Acad. Sci., Soﬁa, 1984,
+pp. 184–191, MR 86k:41032.
+[84] P. M. Gruber and J. M. Wills (eds.), Handbook of convex geometry. Vol. A
+and B, North-Holland Publishing Co., Amsterdam, 1993, MR 94e:52001.
+[85] B. Gr¨unbaum, Borsuk’s partition conjecture in Minkowski planes, Bull.
+Res. Council Israel. Sect. F 7F (1957/1958), 25–30, MR 21#2209.
+[86]
+, On a conjecture of H. Hadwiger, Paciﬁc J. Math. 11 (1961), 215–
+219, MR 25#1492.
+48
+===== page 49 =====
+[87]
+, Measures of symmetry for convex sets, Proc. Sympos. Pure Math.,
+Vol. VII, Amer. Math. Soc., Providence, R.I., 1963, pp. 233–270, MR
+27#6187.
+[88]
+, Strictly antipodal sets, Israel J. Math. 1 (1963), 5–10, MR
+28#2480.
+[89]
+, Self-circumference of convex sets, Colloq. Math. 13 (1964), 55–57,
+MR 30#2396.
+[90]
+, The perimeter of Minkowski unit discs, Colloq. Math. 15 (1966),
+135–139, MR 34#1925.
+[91] B. Gr¨unbaum and L. M. Kelly, Metrically homogeneous sets, Israel J.
+Math. 6 (1968), 183–197, MR 39#6180.
+[92] S. Gudder and D. Strawther, Strictly convex normed linear spaces, Proc.
+Amer. Math. Soc. 59 (1976), 263–267, MR 54#5806.
+[93] R. K. Guy, An olla-podrida of open problems, often oddly posed, Amer.
+Math. Monthly 90 (1983), 196–199.
+[94] S. B. Hadid, Unit balls with a nonexpansive map, Panamer. Math. J. 5
+(1995), 31–37, MR 96f:46022.
+[95] O. Haupt, ¨Uber eine Kennzeichnung der Kugel, Jber. Deutsch. Math.-
+Verein. 50 (1940), 113–120.
+[96] E. Heil, Absch¨atzungen f¨ur einige Aﬃninvarianten konvexer Kurven,
+Monatsh. Math. 71 (1967), 405–423, MR 37#5796.
+[97] E. Heil and W. Krautwald, Konjugierte Durchmesser und extremale
+Vierecke konvexer Bereiche,
+Elem. Math. 24 (1969),
+97–103,
+MR
+40#3431.
+[98] A. Heppes, On characterisation of curves of constant width (Hungarian.
+Russian and English summaries), Mat. Lapok 10 (1959), 133–135, MR
+22#1846.
+[99] H. Herda, A characterization of circles and other closed curves, Amer.
+Math. Monthly 81 (1974), 146–149, MR 48#12290.
+[100] D. Hilbert, Mathematical problems, Bull. Amer. Math. Soc. 37 (2000),
+407–436.
+[101] R. D. Holmes and A. C. Thompson, n-dimensional area and content in
+Minkowski spaces, Paciﬁc J. Math. 85 (1979), 77–110, MR 81k:52023.
+[102] J. R. Holub, Rotundity, orthogonality, and characterizations of inner prod-
+uct spaces, Bull. Amer. Math. Soc. 81 (1975), 1087–1089, MR 52#1263.
+49
+===== page 50 =====
+[103] W.-T. Hsiang, Another characterization of circles, Amer. Math. Monthly
+69 (1962), 142–143.
+[104] R. Inzinger, Sui diametri coniugati delle ovali a centro, Atti Accad. Naz.
+Lincei. Rend. Cl. Sci. Fis. Mat. Nat. (8) 3 (1947), 293–295, MR 10,60c.
+[105] R. B. Israel, Solution to problem 10228 (characterizing the ball), Amer.
+Math. Monthly 101 (1994), 183–184.
+[106] R. C. James, Inner product in normed linear spaces, Bull. Amer. Math.
+Soc. 53 (1947), 559–566, MR 9,42d.
+[107]
+, Orthogonality and linear functionals in normed linear spaces,
+Trans. Amer. Math. Soc. 61 (1947), 265–292, MR 9,42c.
+[108] L. A. Karlovitz, The construction and application of contractive retrac-
+tions in 2-dimensional normed linear spaces, Indiana Univ. Math. J. 22
+(1972/73), 473–481, MR 46#7869.
+[109] L. M. Kelly, On the equilateral feeble four-point property, The geometry of
+metric and linear spaces (Proc. Conf., Michigan State Univ., East Lansing,
+Mich., 1974), Lecture Notes in Math., Vol. 490, Springer, Berlin, 1975,
+pp. 14–16, MR 53#6433.
+[110] P. J. Kelly, A property of Minkowskian circles, Amer. Math. Monthly 57
+(1950), 677–678, MR 12,525i.
+[111] R. J. Knowles and T. A. Cook, Some results on Auerbach bases for ﬁnite
+dimensional normed spaces, Bull. Soc. Roy. Sci. Li`ege 42 (1973), 518–522,
+MR 50#2879.
+[112] H. Kramer and A. B. N´emeth, Equally spaced points for families of com-
+pact convex sets in Minkowski spaces, Mathematica (Cluj) 15(38) (1973),
+71–78, MR 50#14504.
+[113]
+, The application of Brouwer’s ﬁxed point theorem to the geome-
+try of convex bodies (Romanian), An. Univ. Timi¸soara Ser. S¸ti. Mat. 13
+(1975), 33–39 (1977), MR 57#7384.
+[114] W. Krautwald, Kennzeichnungen der aﬃnen Bilder von K¨orpern kon-
+stanter Breite, Dissertation, Fachbereich Mathematik der Technischen
+Hochschule Darmstadt, 1974.
+[115] W. Krautwald, Kennzeichnungen der aﬃnen Bilder von K¨orpern konstan-
+ter Breite, J. Geom. 15 (1980), 140–148, MR 82j:52012.
+[116] M. Lassak, Approximation of plane convex bodies by centrally symmetric
+bodies, J. London Math. Soc. (2) 40 (1989), 369–377, MR 91a:52001.
+[117] D. Laugwitz, Konvexe Mittelpunktsbereiche und normierte R¨aume, Math.
+Z. 61 (1954), 235–244, MR 16,613d.
+50
+===== page 51 =====
+[118] D. Laugwitz, Die Geometrien van H. Minkowski, Der Mathematikunter-
+richt 4 (1958), 27–42.
+[119] D. Laugwitz, On characterizations of inner product spaces, Proc. Amer.
+Math. Soc. 50 (1975), 184–188, MR 51#11069.
+[120]
+, Regular hexagons in normed spaces and a theorem of Walter Benz,
+Aequationes Math. 45 (1993), 163–166, MR 94c:51030.
+[121] G. Lawlor and F. Morgan, Paired calibrations applied to soap ﬁlms, im-
+miscible ﬂuids, and surfaces or networks minimizing other norms, Paciﬁc
+J. Math. 166 (1994), 55–83, MR 95i:58051.
+[122] K. Leichtweiss, Selbstadjungierte Banach-R¨aume, Math. Z. 71 (1959),
+335–360, MR 22#174.
+[123]
+, ¨Uber eine analytische Darstellung des Randes konvexer K¨orper,
+Arch. Math. 16 (1965), 300–319, MR 33#3191.
+[124]
+, Konvexe Mengen, VEB Deutscher Verlag der Wissenschaften,
+Berlin, 1980, MR 81b:52001.
+[125] H. Lenz, Eine Kennzeichnung des Ellipsoids, Arch. Math. 8 (1957), 209–
+211, MR 19,977d.
+[126]
+, Die Eilinien mit einer Schar konjugierter Durchmesserpaare,
+Arch. Math. 9 (1958), 134–139, MR 21#2204.
+[127] J. Lindenstrauss and V. D. Milman, The local theory of normed spaces
+and its applications to convexity, Handbook of convex geometry, Vol. A,
+B, North-Holland, Amsterdam, 1993, MR 95b:46012, pp. 1149–1220.
+[128] J. Lindenstrauss and L. Tzafriri, Classical Banach spaces. I. sequence
+spaces, Ergebnisse der Mathematik und ihrer Grenzgebiete, Vol. 92,
+Springer-Verlag, Berlin, 1977, MR 58#17766.
+[129] J. Linhart, Closest packings and closest coverings by translates of a convex
+disc, Studia Sci. Math. Hungar. 13 (1978), 157–162 (1981), MR 83d:52015.
+[130] A. M. Macbeath, An extremal property of the hypersphere, Proc. Cam-
+bridge Philos. Soc. 47 (1951), 245–247, MR 12,526e.
+[131] V. V. Makeev, The degree of a mapping in some problems of combinatorial
+geometry, Ukrain. Geom. Sb. (1987), 62–66, ii, MR 88m:55001.
+[132]
+, Inscribed simplices of a convex body, Ukrain. Geom. Sb. (1992),
+47–49, 162, MR 95d:52006.
+[133]
+, Reﬁned equilateral problem in Minkowski space, Abstracts of the
+International Conference dedicated to the 80th Anniversary of V. A.
+Rokhlin, August 19–25, 1999, St. Petersburg, 1999, p. 41.
+51
+===== page 52 =====
+[134] H. Martini, Convex polytopes whose projection bodies and diﬀerence sets
+are polars, Discrete Comput. Geom. 6 (1991), 83–91, MR 91k:52018.
+[135] A. E. Mayer, Eine ¨Uberkonvexit¨at, Math. Z. 39 (1935), 511–531.
+[136] S. Mazur and S. Ulam, Sur le transformations isom´etriques d’espaces vec-
+toriels, norm´es, C. R. Acad. Sci. Paris 194 (1932), 946–948.
+[137] M. S. Mel’nikov, Dependence of volume and diameter of sets in an n-
+dimensional Banach space (Russian), Uspehi Mat. Nauk 18 (1963), 165–
+170, MR 27#6191.
+[138] K. Menger, Untersuchungen ¨uber allgemeine Metrik, Math. Ann. 100
+(1928), 75–163.
+[139] V. D. Milman and G. Schechtman, Asymptotic theory of ﬁnite-dimensional
+normed spaces, Springer-Verlag, Berlin, 1986, MR 87m:46038.
+[140] H. Minkowski, Sur les propri´et´es des nombres entiers qui sont d´eriv´ees de
+l’intuition de l’espace, Nouvelles Annales de Mathematiques, 3e s´erie 15
+(1896), Also in Gesammelte Abhandlungen, 1. Band, XII, pp. 271–277.
+[141]
+, Geometrie der Zahlen, B. G. Teubner, Leipzig und Berlin, 1910.
+[142] D. S. Mitrinovi´c, J. E. Peˇcari´c, and V. Volenec, Recent Advances in Geo-
+metric Inequalities, Kluwer Academic Publishers Group, Dordrecht, 1989,
+MR 91k:52014.
+[143] J. Moln´ar, On inscribed and circumscribed polygons of convex regions
+(Hungarian), Mat. Lapok 6 (1955), 210–218, MR 17,1235c.
+[144] A. F. Monna, Functional Analysis in Historical Perspective, John Wiley
+& Sons, New York-Toronto, Ont., 1973, MR 58#2112.
+[145] F. Morgan, Minimal surfaces, crystals, shortest networks, and undergrad-
+uate research, Math. Intelligencer 14 (1992), 37–44, MR 93h:53012.
+[146] W. Nitka and L. Wiatrowska, Linearity in the Minkowski space with non-
+strictly convex spheres, Colloq. Math. 20 (1969), 113–115, MR 39#2070.
+[147] G. Nordlander, The modulus of convexity in normed linear spaces, Ark.
+Mat. 4 (1960), 15–17, MR 25#4329.
+[148] A. B. Novikoﬀ, The intersection of convex sets, Bull. Amer. Math. Soc.
+61 (1955), 308.
+[149] D. Ohmann, Extremalprobleme f¨ur konvexe Bereiche der euklidischen
+Ebene, Math. Z. 55 (1952), 346–352, MR 14,76a.
+[150] J. Pach and P. K. Agarwal, Combinatorial Geometry, John Wiley & Sons
+Inc., New York, 1995, MR 96j:52001.
+52
+===== page 53 =====
+[151] A. Pe lczy´nski and S. J. Szarek, On parallelepipeds of minimal volume con-
+taining a convex symmetric body in Rn, Math. Proc. Cambridge Philos.
+Soc. 109 (1991), 125–148, MR 92b:52014.
+[152] C. M. Petty, On the geometry of the Minkowski plane, Riv. Mat. Univ.
+Parma 6 (1955), 269–292, MR 18,760e.
+[153]
+, Equilateral sets in Minkowski spaces, Proc. Amer. Math. Soc. 29
+(1971), 369–374, MR 43#1051.
+[154] C. M. Petty and J. M. Crotty, Characterizations of spherical neighbour-
+hoods, Canad. J. Math. 22 (1970), 431–435, MR 41#2538.
+[155] R. R. Phelps, Convex sets and nearest points, Proc. Amer. Math. Soc. 8
+(1957), 790–797, MR 19,432a.
+[156] U. Pinkall, h-konvexe Kurven in der hyperbolischen Ebene, Math. Ann.
+267 (1984), 289–297, MR 85c:52019.
+[157] G. Pisier, The Volume of Convex Bodies and Banach Space Geometry,
+Cambridge University Press, Cambridge, 1989, MR 91d:52005.
+[158] A. M. Plichko, On the volume method in the study of Auerbach bases of
+ﬁnite-dimensional normed spaces, Colloq. Math. 69 (1995), 267–270, MR
+96k:46020.
+[159] L. Porcu, Propriet`a metriche e aﬃni di notevoli classi di ovali, Ist. Lom-
+bardo Accad. Sci. Lett. Rend. A 97 (1963), 899–929, MR 30#2400.
+[160] J. Radon, ¨Uber eine besondere Art ebener Kurven, Ber. Verh. S¨achs. Ges.
+Wiss. Leipzig. Math.-Phys. Kl. 68 (1916), 23–28.
+[161] J.
+Radon,
+Gesammelte
+Abhandlungen.
+Band
+1,
+Verlag
+der
+¨Osterreichischen Akademie der Wissenschaften,
+Vienna,
+1987,
+MR
+89i:01142a.
+[162] S. A. Ra˘ıko, A certain extremal problem of a ﬁnite-dimensional normed
+space, Prikl. Mat. i Programmirovanie (1975), 95–101, 160, MR 56#13114.
+[163] C. Reda, Straight lines in metric spaces, Demonstratio Math. 6 (1973),
+809–819 (1974), MR 52#4244.
+[164] H. Reimann, Eine Absch¨atzung f¨ur den Fl¨acheninhalt von Eichbere-
+ichen Banach-Minkowskischer Ebenen, Wiss. Z. P¨adagog. Hochsch. Er-
+furt/M¨uhlhausen Math.-Natur. Reihe 23 (1987), 124–132, MR 89d:52027.
+[165] Yu. G. Reˇsetnyak, An extremal problem from the theory of convex curves
+(Russian), Uspehi Matem. Nauk (N.S.) 8 (1953), 125–126, MR 15,819d.
+[166] B. Riemann, ¨Uber die Hypothesen, welche der Geometrie zu Grunde liegen,
+Abh. K¨oniglichen Gesellschaft Wiss. G¨ottingen 13 (1868).
+53
+===== page 54 =====
+[167] W. Rinow, Die innere Geometrie der metrischen R¨aume, Die Grundlehren
+der mathematischen Wissenschaften, Bd. 105, Springer-Verlag, Berlin,
+1961, MR 23#A1290.
+[168] C. A. Rogers and G. C. Shephard, The diﬀerence body of a convex body,
+Arch. Math. 8 (1957), 220–233, MR 19,1073f.
+[169] H. Rund, The diﬀerential geometry of Finsler spaces, Die Grundlehren der
+Mathematischen Wissenschaften, Bd. 101, Springer-Verlag, Berlin, 1959,
+MR 21#4462.
+[170] A. F. Ruston, Auerbach’s theorem and tensor products of Banach spaces,
+Proc. Cambridge Philos. Soc. 58 (1962), 476–480, MR 29#2630.
+[171] E. Sas, ¨Uber eine Extremumeigenschaft der Ellipsen, Compositio Math. 6
+(1939), 468–470.
+[172] J. J. Sch¨aﬀer, Another characterization of Hilbert spaces, Studia Math. 25
+(1965), 271–276, MR 31#3834.
+[173]
+, Inner diameter, perimeter, and girth of spheres, Math. Ann. 173
+(1967), 59–79; addendum, ibid. 173 (1967), 79–82, MR 36#1959.
+[174]
+, Symmetric curves, hexagons, and the girth of spheres in dimen-
+sion 3., Israel J. Math. 6 (1968), 202–205, MR 38#1610.
+[175]
+, The self-circumferences of polar convex disks, Arch. Math. (Basel)
+24 (1973), 87–90, MR 47#5732.
+[176]
+, Geometry of Spheres in Normed Spaces, Lecture Notes in Pure
+and Applied Mathematics, No. 20, Marcel Dekker Inc., New York, 1976,
+MR 57#7120.
+[177] R. Schneider, Convex Bodies: the Brunn-Minkowski Theory, Cambridge
+University Press, Cambridge, 1993, MR 94d:52007.
+[178] P. Sch¨opf, Orthogonality and proportional norms, Anz. ¨Osterreich. Akad.
+Wiss. Math.-Natur. Kl. 133 (1996), 11–16 (1997), MR 98m:46018.
+[179] D. K. Sen, Characterizations of strict convexity, Bull. Calcutta Math. Soc.
+73 (1981), 93–97, MR 84b:46021.
+[180] M. Shiﬀman, On the eﬀective determination of conformal mapping, Con-
+struction and Applications of Conformal Maps. Proceedings of a sympo-
+sium (Washington, D. C.), National Bureau of Standards, Appl. Math.
+Ser., No. 18, U. S. Government Printing Oﬃce, 1952, pp. 227–229, MR
+14,632d.
+[181] I. Singer, On the set of the best approximations of an element in a normed
+linear space, Rev. Math. Pures Appl. 5 (1960), 383–402, MR 24#A1629.
+54
+===== page 55 =====
+[182] P. S. Soltan, Analogues of regular simplexes in normed spaces (Russian),
+Soviet Math. Dokl. 16 (1975), 787–789, MR 52#4127.
+[183] K. O. Sowell, Taxicab geometry—a new slant, Math. Mag. 62 (1989), 238–
+248, MR 91a:51003.
+[184] E. Sperner, Zur expliziten Bestimmung der Norm der selbstadjungierten
+Minkowski-R¨aume, Resultate Math. 1 (1978), 61–87, MR 82f:52004.
+[185] W. S¨uss, ¨Uber Eibereiche mit Mittelpunkt, Math.-Phys. Semesterber. 1
+(1950), 273–287, MR 12,46d.
+[186]
+, Ueber Parallelogramme und Rechtecke, die sich ebenen Eibere-
+ichen einbeschreiben lassen, Rend. Mat. e Appl. (5) 14 (1955), 338–341,
+MR 16,1046b.
+[187] K. J. Swanepoel, Cardinalities of k-distance sets in Minkowski spaces,
+Discrete Math. 197/198 (1999), 759–767, MR 99k:52028.
+[188] J. Szenthe, ¨Uber ein Problem von H. Busemann, Publ. Math. Debrecen 7
+(1960), 408–413, MR 23#A2779.
+[189] L. Tam´assy, Ein Problem der zweidimensionalen Minkowskischen Geome-
+trie, Ann. Polon. Math. 9 (1960/1961), 39–48, MR 23#A4052.
+[190] L. Tam´assy, Bemerkung zu meiner Arbeit: “Ein Problem der zweidimen-
+sionalen Minkowskischen Geometrie”, Ann. Polon. Math. 10 (1960/1961),
+175.
+[191] A. E. Taylor, A geometric theorem and its application to biorthogonal
+systems, Bull. Amer. Math. Soc. 53 (1947), 614–616, MR 8,588c.
+[192] R. L. Thele, Some results on the radial projection in Banach spaces, Proc.
+Amer. Math. Soc. 42 (1974), 483–486, MR 48#6892.
+[193] A. C. Thompson, An equiperimetric property of Minkowski circles, Bull.
+London Math. Soc. 7 (1975), 271–272, MR 52#4138.
+[194]
+, Minkowski Geometry, Cambridge University Press, Cambridge,
+1996, MR 97f:52001.
+[195] N.
+Tomczak-Jaegermann,
+Banach-Mazur
+Distances
+and
+Finite-
+dimensional Operator Ideals, Longman Scientiﬁc & Technical, Harlow,
+1989, MR 90k:46039.
+[196] F. A. Toranzos, Metric betweenness in normed linear spaces, Colloq. Math.
+23 (1971), 99–102, MR 46#4171.
+[197] E. Torrance, Strictly convex spaces via semi-inner-product space orthogo-
+nality, Proc. Amer. Math. Soc. 26 (1970), 108–110, MR 41#5943.
+55
+===== page 56 =====
+[198] F. A. Valentine, A characteristic property of the circle in the Minkowski
+plane, Amer. Math. Monthly 58 (1951), 484–487, MR 13,377g.
+[199] J. E. Valentine, Some implications of Euclid’s Proposition 7, Math. Japon.
+28 (1983), 421–425, MR 84m:46023.
+[200] G. Weiss, The concepts of triangle orthocenters in Minkowski planes,
+Preprint MATH-GE-01-99, Technische Universit¨at Dresden, 1999.
+[201] B. Weißbach and B. Wernicke, Simplices with edges of equal length in
+ﬁnite-dimensional Banach spaces, J. Geom. 56 (1996), 190–195, MR
+97m:52021.
+[202] M. Wellmann and B. Wernicke, Fl¨acheninhalte gleichseitiger Dreiecke
+in einer Banach-Minkowskischen Ebene, Wiss. Z. P¨adagog. Hochsch.
+Erfurt/M¨uhlhausen Math.-Naturwiss. Reihe 27 (1991),
+21–28,
+MR
+93d:51044.
+[203] B. Wernicke, Triangles and Reuleaux triangles in Banach-Minkowski
+planes, Intuitive Geometry (Szeged, 1991), North-Holland, Amsterdam,
+1994, pp. 505–511, MR 96m:51006.
+[204] H. S. Witsenhausen, On closed curves in Minkowski spaces, Proc. Amer.
+Math. Soc. 35 (1972), 240–241, MR 45#5939.
+[205] I. M. Yaglom, A certain extremal property of the number π (Russian),
+Moskov. Gos. Ped. Inst. Uˇcen. Zap. (1971), 135–138, MR 47#4147.
+[206]
+, Plane Minkowski geometry—problems and results, Studies in the
+theory of functions of several real variables (Russian), Jaroslav. Gos.
+Univ., Yaroslavl, 1976, MR 58#30739, pp. 90–103.
+[207] K. Zindler, ¨Uber konvexe Gebilde, II. Teil, Monatsh. Math. Phys. 31
+(1921), 25–57.
+56

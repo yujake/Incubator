@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T22:30:03+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 3119,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"收口完成：`search_requests` 两条未闭环请求都已给终局并置 `done=true`，`table.count(done=false)=0`（unfinished 由 2 → 0，R8 这一格可关）。\\n\\n逐条回执（request id / topic / outcome / result_lit_ids）：\\n1) `r-000002` — topic「local reference/ batch 2 (12 user-declared PDFs): cube sections, Brunn-Minkowski, measure theory background」— outcome=`ok` — result_lit_ids=`000010,000011,000012,000013,000014,000015,000016,000017,000018,000019`（10 条，逐号核过 `literature.source_request_ids=[r-000002]`、`download.status=ok`、候选期已抽读正文）。\\n   原先的 `last_error`（OpenAlex HTTP 429）是**一次对本委托 topic 的网络检索**失败 —— 该 topic 是本地批次描述符、不是可检的规范术语，此路与收编无关，故不作终局依据，也没有重试/换源（见下\\\"没做什么与为什么\\\"）。\\n2) `r-000003` — topic「local reference/ batch 3 (overflow 5): d-cube hyperplane section volume, polytope section perimeters, cross-section body, measure-theory background」— outcome=`ok` — result_lit_ids=`000020,000021,000022,000023,000024`（5 条，source_request_ids 逐号核实为 r-000003）。\\n\\n收尾自查（三步都过）：① `lit.stage_list(request_id=\\\"*\\\", status=\\\"pending\\\")` → 全表**待裁 0 条**（30 行候选：admitted 25 / rejected 5 / pending 0），三个委托均已清表；② 无新增候选需判收；③ 逐委托无需再 `lit.admit_all`。`literature` 25 行未改动（只按 M 的指令写 `search_requests` 的 outcome / result_lit_ids / done / submit_note 四格，未动文献行）。未开任何新检索。\\n\\n没做什么、与为什么（留给复核人的线索）：\\n- 没有对 `r-000002` 原样重发检索：topic 是本地批次描述符，重发只会再撞 429 或换回跑题候选；且 B 的概念配额按会话累计已满（30/30），此刻再搬新文献只增欠账。\\n- 本趟 `run_once` 侧读数：`processed=0`、`skipped_reason=no_pending_delegation`（无待领的候选），故两条请求的收口走的是「核实现有文献行是否已在库 → 如实回填 outcome / result_lit_ids / done」这条路，不虚构检索结果。\\n\\n仍需 M / B 处置的缺口（不属于本委托，不带病写成已完成）：B 的回执（手稿 000028 / 000029 / 000030）里，25 篇中只有 `lit:000014` 收成 30 条概念 + 25 条关系；其余 10 篇（含 `lit:000016` 一次用满配额之后那批 measure-theory / 广义积分文献）是 0 条概念 / 0 条关系，卡在「概念抽取配额 30 条跨趟累计封顶」。也就是说这批文献**已入库、但未全部收编**；若收工门或 R6 那一侧要求\\\"这批已派 B 收编且回执给条数\\\"，条数是有的（0/0 也是条数），但**内容未落行**这一事实应记在 M 的结论里，别被 `done=true` 盖住。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\lp-ball-22\\\\runs\\\\A-20261124-223003-001.json\", \"messages\": [], \"outcome\": \"ok\", \"status\": \"done\", \"steps\": 11, \"stop_reason\"",
+ "payload_sha256": "467a90ec6726c373ae5e9f79b1c42d670357dad40e02c42a704007c832e5d7f8",
+ "readings": {},
+ "role": "A",
+ "status": "done",
+ "task_id": "t-000208"
+}

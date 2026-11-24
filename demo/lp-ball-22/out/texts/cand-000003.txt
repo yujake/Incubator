@@ -1,0 +1,900 @@
+===== page 1 =====
+CRITICAL CENTRAL SECTIONS OF THE CUBE
+GERGELY AMBRUS
+Abstract. We study the volume of central hyperplane sections of the cube. Using Fourier
+analytic and variational methods, we retrieve a geometric condition characterizing critical
+sections which, by entirely different methods, was recently proven by Ivanov and Tsi-
+utsiurupa. Using this characterization result, we prove that critical central hyperplane
+sections in the 3-dimensional case are all diagonal to a (possibly lower dimensional) face
+of the cube, while in the 4-dimensional case, they are either diagonal to a face, or, up to
+permuting the coordinates and sign changes, perpendicular to the vector (1, 1, 2, 2). This
+shows the existence of non-diagonal critical central sections.
+1. History and results
+Let Qn = [−1, 1]n denote the standard n-dimensional cube, which is the unit ball of
+the ℓ∞-norm on Rn. It is a classical question to study the (n −1)-dimensional volume of
+sections of Qn with hyperplanes containing 0. Determining which central sections are of
+minimal and maximal volume had been at the center of attention for over a century, as
+this question was already rooted in the works of Laplace [L1812] and P´olya [P1913]. Yet,
+it was not before the 1970’s that Hadwiger [H71] proved that minimal hyperplane sections
+are parallel to facets of Qn and thus they are of volume 2n−1. A few years later, Hens-
+ley [H79] independently re-proved this result using probabilistic methods and also gave
+an upper bound on the volume of central hyperplane sections.
+In his celebrated work,
+Ball [B86] proved that maximal hyperplane sections are orthogonal to a main diagonal of a
+2-dimensional face of Qn, hence, their volume is
+√
+2·2n−1. Extensions of these estimates to
+lower dimensional sections were proven by Vaaler [V79], Ball [B89], and Ivanov and Tsiut-
+siurupa [IT21], while alternate proofs were given by Nazarov and Podkorytov [NP00], and
+Akopyan, Hubard and Karasev [AHK19]. Non-central sections were estimated by Moody,
+Stone, Zach and Zvavitch [MSZZ13] and K¨onig [K21]. Further extensions to unit balls of
+ℓp-norms were studied by Meyer and Pajor [MP88], Koldobsky [K98], Eskenazis [E19], and
+Liu and Tkocz [LT20]. Generalizations to Gaussian measures were given by Zvavitch [Z08],
+Barthe, Gu´edon, Mendelson and Naor [BGMN05] and Koldobsky and K¨onig [KK12], while
+the analogous question for perimeters was studied recently in [KK19]. Aliev [A21] deter-
+mined maximal sections with respect to a certain normalization. The closely related prob-
+lem of estimating volumes of central slabs was discussed by Barthe and Koldobsky [BK03]
+and by K¨onig and Koldobsky [KK11]. For related results and further discussions, see [K05]
+and [KY08].
+2020 Mathematics Subject Classification.
+52A40, 52A38, 49Q20.
+Key words and phrases. Cube sections, volume, variational methods, Fourier analytic tools.
+Research of the author was supported by NKFIH grant KKP-133819 and by the EFOP-3.6.1-16-2016-
+00008 project, which in turn has been supported by the European Union, co-financed by the European
+Social Fund.
+1
+arXiv:2107.14778v3  [math.MG]  22 Jun 2023
+===== page 2 =====
+2
+CRITICAL CENTRAL SECTIONS OF THE CUBE
+Determining minimal and maximal sections is only the tip of the iceberg when studying
+the behaviour of Voln−1(Qn ∩a⊥) as a function of a ∈Sn−1 (the unit sphere in Rn).
+One is tempted to believe that local extremizers are perpendicular to a main diagonal
+of a k-dimensional face of Qn – we are going to call these k-diagonal directions and the
+corresponding hyperplane sections as k-diagonal sections.
+Hence, up to permuting the
+coordinates and changing signs, k-diagonal directions are of the form ( 1
+√
+k, . . . ,
+1
+√
+k, 0, . . . , 0)
+where the number of non-zero coordinates is k. Without specifying k, we will also simply
+refer to diagonal directions and diagonal sections.
+As a first step in the analysis, it is essential to compare the volumes of diagonal sections.
+By probabilistic methods, the Central Limit Theorem implies that the volume of k-diagonal
+sections for k ≈n is about
+p
+6/π · 2n−1, which is slightly less than the volume of 2-
+diagonal sections, that is
+√
+2 · 2n−1. In their recent work, Bartha, Fodor, and Gonz´alez
+Merino [BFGM21] proved that for each fixed n ⩾3 the volume of k-diagonal sections form
+a strictly increasing sequence for k ⩾3, which is sandwiched between the values taken
+at k = 1 and k = 2.
+Considering sections of arbitrary dimension, by using geometric
+methods, analyzing local modifications, and studying the relationship with frames, Ivanov
+and Tsiutsiurupa [IT21] established necessary conditions for sections in order to have locally
+maximal volume.
+In this note we apply Fourier analytic methods to study critical central hyperplane
+sections: these are the sections a⊥∩Qn whose normal vector a is a critical point on Sn−1 with
+respect to the volume of the central section of Qn. Such normal vectors will be referred to
+as critical directions. We retrieve the main condition of Ivanov and Tsiutsiurupa [IT21] (see
+Theorem 1.1, Condition 4 therein) for (n −1)-dimensional sections being locally maximal.
+Yet, the Fourier analytic approach yields a more transparent proof for the statement. Our
+argument is reminiscent of the work of Koldobsky and K¨onig [KK11] – for that connection,
+see the remark following the proof of Theorem 1.
+Below and later on, Si denotes the facet of Qn corresponding to the ith coordinate
+being 1. That is, Si = {x = (x1, . . . , xn) ∈Qn : xi = 1}. The vectors a, x ∈Rn will always
+have coordinates a = (a1, . . . , an) and x = (x1, . . . , xn). As mentioned before, Sn−1 is the
+unit sphere of Rn.
+Theorem 1. The unit vector a = (a1, . . . , an) ∈Sn−1 is a critical direction with respect to
+the central section volume function Voln−1(Qn ∩a⊥) if and only if it is parallel to a main
+diagonal of a 2-dimensional face of Qn, or there exists some µ > 0 for which
+(1.1)
+Voln−1(conv (0 ∪(Sk ∩a⊥)) = µ(1 −a2
+k)
+holds true for each k = 1, . . . , n.
+The condition guaranteed by Theorem 1 may be used to calculate critical directions.
+With the aid of probabilistic methods, we demonstrate this for n ⩽4. Based on compu-
+tational evidence, it has been widely believed that all critical directions are diagonal. We
+confirm this conjecture in dimension 3, but disprove it in dimension 4.
+Theorem 2. For n = 2, 3, critical central hyperplane sections of Qn are exactly the diagonal
+sections.
+Theorem 3. For n = 4, critical central hyperplane sections of Q4 are either diagonal, or
+their normal vector is
+1
+√
+10(1, 1, 2, 2) up to permuting coordinates and changing signs.
+===== page 3 =====
+CRITICAL CENTRAL SECTIONS OF THE CUBE
+3
+2. A geometric characterization of critical sections
+Theorem 1 will be proved using Fourier analytic tools and variational methods – see [K05]
+for detailed theoretical background. Naturally, the following classical formula, dating back
+to P´olya [P1913], lies at the core of the arguments: For any unit vector a ∈Sn−1,
+(2.1)
+Voln−1(Qn ∩a⊥) = 2n−1
+π
+Z ∞
+−∞
+n
+Y
+i=1
+sin ait
+ait
+dt.
+Here and later on, sin(0)
+0
+is understood to be 1.
+We will use the following generalization of (2.1). For arbitrary non-zero a ∈Rn, introduce
+the parallel section function sa(.) defined on R as
+(2.2)
+sa(r) = Voln−1(x ∈Qn : ⟨x, a⟩= r).
+Note that sa(r) is the (n−1)-dimensional volume of the hyperplane section of Qn orthogonal
+to a at distance
+r
+|a| from the origin. In particular, sa(r) is not invariant under scaling of a.
+Furthermore, introduce the normalized central section function σ(.) defined on Rn \ {0}
+as
+(2.3)
+σ(a) =
+π
+2n−1 sa(0).
+For a continuous random variable X, let fX(.) denote its density function, FX(.) its
+distribution function, and φX(.) its characteristic function.
+Let now X1, . . . , Xn be independent random variables, each distributed uniformly on
+[−1, 1].
+The joint distribution of X1, . . . , Xn induces the normalized Lebesgue measure
+on Qn. Accordingly, for arbitrary 0̸ = a ∈Rn and r ∈R,
+P
+
+n
+X
+i=1
+aiXi −r
+ ⩽ε
+
+= 1
+2n Voln
+
+x ∈Qn :
+⟨x, a⟩−r
+ ⩽ε
+
+.
+Thus, letting ε →0, we deduce by (2.2) that
+(2.4)
+fPn
+i=1 aiXi(r) =
+1
+2n|a|sa(r)
+as long as fPn
+i=1 aiXi(r) exists, that is, a and r are not of the form a = c · ej and |r| = |c|,
+where ej denotes the jth standard basis vector, and c ∈R.
+Excluding the above degenerate cases, we can express fPn
+i=1 aiXi(r) using the inverse
+Fourier transform. As is well known, the characteristic function of Pn
+i=1 aiXi is given by
+(2.5)
+φPn
+i=1 aiXi(t) =
+n
+Y
+i=1
+sin ait
+ait
+.
+Hence, by standard Fourier inversion,
+(2.6)
+fPn
+i=1 aiXi(r) = 1
+2π
+Z ∞
+−∞
+n
+Y
+i=1
+sin ait
+ait
+· cos rt dt.
+Therefore, by (2.4),
+(2.7)
+sa(r) = 2n−1|a|
+π
+Z ∞
+−∞
+n
+Y
+i=1
+sin ait
+ait
+· cos rt dt
+===== page 4 =====
+4
+CRITICAL CENTRAL SECTIONS OF THE CUBE
+and, by (2.3), we recover (2.1):
+(2.8)
+σ(a) = |a|
+Z ∞
+−∞
+n
+Y
+i=1
+sin ait
+ait
+dt.
+Proof of Theorem 1. Assume that a ∈Sn−1 is a critical direction. Since the constraint on
+a is expressed by the equation a2
+1 + . . . + a2
+n = 1, and σ(a) is differentiable, the method of
+Lagrange multipliers implies that there exists a constant λ ∈R so that for each k = 1, . . . , n,
+(2.9)
+λak =
+∂
+∂ak
+σ(a).
+Referring to (2.8), the Leibniz integral rule shows that for each k with ak̸ = 0,
+(2.10)
+∂
+∂ak
+σ(a) =
+Z ∞
+−∞
+Y
+i̸=k
+sin ait
+ait
+·
+cos akt
+ak
+−sin akt
+a2
+kt
+
+dt.
+Therefore, multiplying (2.9) by ak shows that
+(2.11)
+λa2
+k + σ(a) =
+Z ∞
+−∞
+Y
+i̸=k
+sin ait
+ait
+· cos akt dt
+whenever ak̸ = 0. Since
+∂
+∂ak σ(a) = 0 if ak = 0, the above equality holds in fact for all values
+of k = 1, . . . , n.
+Next, we calculate the value of λ. To that end, let φ(t) := φPn
+i=1 aiXi(t). Then by (2.5),
+φ′(t) = 1
+t ·
+n
+X
+k=1
+ Y
+i̸=k
+sin ait
+ait
+· cos akt
+
+−n
+t · φ(t).
+Thus, summing (2.11) over k = 1, . . . , n leads to
+λ = λ
+n
+X
+k=1
+a2
+k
+= −n σ(a) +
+Z ∞
+−∞
+tφ′(t) + nφ(t) dt
+=
+Z ∞
+−∞
+tφ′(t) dt
+=
+h
+tφ(t)
+i∞
+−∞−
+Z ∞
+−∞
+φ(t) dt
+= −σ(a)
+whenever n ⩾2.
+Introduce eak = (a1, . . . , ak−1, ak+1, . . . , an) ∈Rn−1. If eak = 0, then ak = ±1 and a is a
+critical direction corresponding to a minimal central section. Note that (1.1) holds in this
+case. Otherwise, by (2.7), equation (2.11) translates to
+(2.12)
+σ(a) · (1 −a2
+k) =
+Z ∞
+−∞
+Y
+i̸=k
+sin ait
+ait
+· cos akt dt =
+π
+2n−2
+q
+1 −a2
+k
+seak(ak)
+unless only one coordinate of eak is non-zero, and its absolute value equals that of ak. In
+this case, the critical direction is, up to permutations and sign changes of the coordinates,
+a = ( 1
+√
+2,
+1
+√
+2, 0, . . . , 0) – that is, a is parallel to a main diagonal of a 2-dimensional face
+===== page 5 =====
+CRITICAL CENTRAL SECTIONS OF THE CUBE
+5
+of Qn.
+These are indeed critical directions, as they correspond to the maximal central
+sections of Qn [B86].
+From now on, assume that a⊥∩Qn is not a minimal or a maximal section, and consider
+the (n −2)-dimensional section
+Sk ∩a⊥= {x ∈Qn : ⟨x, a⟩= 0 and xk = 1}.
+Then (see also [KK19])
+(2.13)
+Voln−2(Sk ∩a⊥) = seak(−ak) = seak(ak).
+An elementary geometric computation shows that the distance between 0 and Sk ∩a⊥is
+1
+√
+1−a2
+k
+= 1/|eak|. Therefore, by (2.12) and (2.13),
+Voln−1(conv (0 ∪(Sk ∩a⊥)) = Voln−2(Sk ∩a⊥)
+(n −1)|eak|
+=
+seak(ak)
+(n −1)|eak|
+= 2n−2σ(a)
+(n −1)π · (1 −a2
+k)
+which shows that (1.1) holds indeed.
+For the reverse direction, it suffices to assume that there exists µ > 0 so that (1.1) is
+satisfied. Summing over k = 1, . . . , n we obtain half the volume of the section a⊥∩Qn
+(note that we only take the cones spanned by sides corresponding to xi = 1).
+Hence
+1
+2sa(0) = (n −1)µ. Therefore,
+µ =
+sa(0)
+2(n −1) =
+2n−2
+(n −1)πσ(a)
+and (2.12) holds for every k. This implies (2.11) with λ = −σ(a), which in turn yields (2.9)
+whenever ak̸ = 0. Since (2.9) also holds trivially for ak = 0, we obtain that ∇(|a|) and
+∇(σ(a)) are indeed parallel to each other, hence a is a critical direction.
+□
+Note that if a is not a normal direction of a minimal or a maximal section of Qn, then
+(1.1) shows that seak(ak)̸ = 0 for each k, which via (2.6) and (2.7) translates to the condition
+(2.14)
+|ak| <
+X
+i̸=k
+|ai|.
+I would like to point out that the above proof is in the same spirit as the one given by
+K¨onig and Koldobsky [KK11] used for determining central slabs of the cube of extremal vol-
+ume. This connection is not gratuitous: for each ak̸ = 0, applying an orthogonal projection
+of Qn ∩a⊥onto Sk shows that
+sa(0) = 1
+ak
+Voln−1(x ∈Qn−1 : |⟨x, ak⟩| ⩽ak).
+Yet, the two problems behave quite differently: for the question regarding the volume of
+slabs, the 3-dimensional case is already surprisingly complex with a large number of critical
+sections, while for the present problem, the behaviour of σ(a) is still fairly simple when
+n = 4, as shown by Theorem 3.
+===== page 6 =====
+6
+CRITICAL CENTRAL SECTIONS OF THE CUBE
+3. Critical sections for n = 2, 3
+Our goal in this section is to prove that critical central hyperplane sections are all diagonal
+when n ⩽3. That amounts to showing that given a normal vector a which is critical with
+respect to σ(a), all of its non-zero coordinates are equal up to sign changes.
+We start the proof of Theorem 2 by noting that for n = 2 the statement follows by
+an elementary geometric observation: maximal sections are 2-diagonal, minimal sections
+are 1-diagonal, and the length of the central sections changes monotonously between these
+extrema. Therefore, we restrict our study to the case n = 3.
+Let a ∈Sn−1 be a critical normal direction. If ak = 0 holds for some k, then eak needs
+to be a critical direction for Sk as well. Therefore, we may assume that all coordinates of
+a are non-zero. Furthermore, by symmetry, we may assume that ak > 0 for each k ⩽n.
+Then, our goal is to show that all the coordinates ak are identical.
+We will compare two coordinates, say, a1 and a2. Formulae (2.6) and (2.12) yield
+1
+1 −a2
+1
+fP
+i̸=1 aiXi(a1) =
+1
+1 −a2
+2
+fP
+i̸=2 aiXi(a2).
+Since
+fP
+i̸=1 aiXi(a1) =
+1
+2a2
+Z a1+a2
+a1−a2
+fPn
+i=3 aiXi(x) dx
+and
+fP
+i̸=2 aiXi(a2) =
+1
+2a1
+Z a2+a1
+a2−a1
+fPn
+i=3 aiXi(x) dx,
+this is equivalent to
+(3.1)
+1 −a2
+2
+a2
+Z a1+a2
+a1−a2
+fPn
+i=3 aiXi(x) dx = 1 −a2
+1
+a1
+Z a2+a1
+a2−a1
+fPn
+i=3 aiXi(x) dx.
+The above equation must hold true for any pair of coordinates in place of a1 and a2 as well.
+Proof of Theorem 2 for n = 3. We may assume that 0 < a1 ⩽a2 ⩽a3 < 1. By (2.14),
+a3 < a2 + a1. Therefore, the sum of any two of the coordinates is larger than the third one,
+while their difference is smaller than that. Thus, (3.1) reads as
+1 −a2
+2
+a2
+1
+2 + a2 −a1
+2a3
+
+= 1 −a2
+1
+a1
+1
+2 −a2 −a1
+2a3
+
+which implies that
+(3.2)
+a1 + a2 −a3 −a1a2
+2 −a2
+1a2 −a1a2a3 = 0
+if a1̸ = a2.
+First, assume that all three coordinates of a are different. By swapping the role of a1, a2
+and a3 above, (3.2) modifies to
+a1 −a2 + a3 −a1a2
+3 −a2
+1a3 −a1a2a3 = 0
+−a1 + a2 + a3 −a2a2
+3 −a2
+2a3 −a1a2a3 = 0.
+Summing the above equations along with (3.2) results in
+(a1 + a2 + a3)(1 −a1a2 −a1a3 −a2a3) = 0,
+hence,
+a1a2 + a1a3 + a2a3 = 1.
+===== page 7 =====
+CRITICAL CENTRAL SECTIONS OF THE CUBE
+7
+Since a2
+1 + a2
+2 + a2
+3 = 1, this leads to
+(3.3)
+(a1 −a2)2 + (a1 −a3)2 + (a2 −a3)2 = 0
+which shows that a1 = a2 = a3 = 1/
+√
+3 must hold.
+Second, assume that two coordinates are equal, and the third is different from them.
+Without loss of generality, we may suppose that a2 = a3 (the same argument applies to the
+other cases as well). Then (3.2) transforms to
+(3.4)
+a1(1 −2a2
+2 −a1a2) = 0.
+Since a2
+1 + 2a2
+2 = 1 and a1 > 0, this implies that a1 = a2, which contradicts our assump-
+tion.
+Thus, all the critical directions are diagonal. As is well known, (1, 0, 0)⊥∩Q3 is a minimal
+section, while ( 1
+√
+2,
+1
+√
+2, 0)⊥yields the maximum. By calculating the bordered Hessian one
+finds that 3-diagonal directions are saddle points (see also Figure 1).
+□
+Figure 1. Plot of Vol2(Q3 ∩(sin α, cos α sin β, cos α cos β)⊥), the area of
+central sections of Qn for n = 3, with α ∈[0, π/2] and β ∈[0, π].
+4. Critical sections in the 4-dimensional case
+Proof of Theroem 3. Similarly to the 3-dimensional case, the argument is based on (3.1).
+Yet, the 4-dimensional case requires a longer discussion and case study. In order to simplify
+the subsequent arguments, we denote the coordinates with b1, b2, b3 and b4 momentarily,
+which will be substituted by the coordinates of a in various order later.
+Let thus 0 < b1 ⩽b2 and 0 < b3 ⩽b4 with
+(4.1)
+b2
+1 + b2
+2 + b2
+3 + b2
+4 = 1.
+By comparing b1 and b2, (3.1) shows that
+(4.2)
+1 −b2
+2
+b2
+Z b1+b2
+b1−b2
+fb3X3+b4X4(x) dx = 1 −b2
+1
+b1
+Z b2+b1
+b2−b1
+fb3X3+b4X4(x) dx.
+Note that
+(4.3)
+fb3X3+b4X4(x) =
+
+
+
+
+
+
+
+x+b3+b4
+4b3b4
+for −b3 −b4 ⩽x ⩽b3 −b4
+1
+2b4
+for b3 −b4 ⩽x ⩽b4 −b3
+−x+b3+b4
+4b3b4
+for b4 −b3 ⩽x ⩽b4 + b3
+===== page 8 =====
+8
+CRITICAL CENTRAL SECTIONS OF THE CUBE
+We will consider four cases according to the signs of (b1 + b2) −(b3 + b4) and (b1 + b4) −
+(b2 + b3).
+Case A. b1 + b2 ⩽b3 + b4 and b2 + b3 ⩽b1 + b4. Then, since b2 −b1 ⩽b4 −b3, by (4.3),
+(4.2) leads to
+(b2 −b1)[(b1 + b2 + b3 −b4)2(1 + b1b2) −8b1b2b3(b1 + b2)].
+Therefore, either b1 = b2 holds true, or
+(4.4)
+(b1 + b2 + b3 −b4)2(1 + b1b2) = 8b1b2b3(b1 + b2).
+Case B. b1 + b2 ⩽b3 + b4 and b2 + b3 ⩾b1 + b4. Comparing b1 and b2 by (4.2) now leads to
+(4.5)
+(b2
+2 −b2
+1)(1 + b2
+2 −2b2(b3 + b4)) = (1 −b2
+2)(b3 −b4)2.
+Case C. b1 + b2 ⩾b3 + b4 and b2 + b3 ⩽b1 + b4. In this case, (4.2) simplifies to
+b1(1 −b2
+2)
+1
+2 + b2 −b1
+2b4
+
+= b2(1 −b2
+1)
+1
+2 −b2 −b1
+2b4
+
+.
+Thus, either b1 = b2, or
+(4.6)
+b1 + b2 −b4 −b1b2
+2 −b2
+1b2 −b1b2b4 = 0.
+Case D. b1 + b2 ⩾b3 + b4 and b2 + b3 ⩾b1 + b4. Now, equation (4.2) may be written as
+b1(1 −b2
+2)
+
+1 −(b1 −b2 + b3 + b4)2
+8b3b4
+
+= b2(1 −b2
+1)(b1 −b2 + b3 + b4)2
+8b3b4
+,
+which leads to
+(4.7)
+8b1b3b4(1 −b2
+2) −(b1 −b2 + b3 + b4)2
+b1 + b2 −b2
+1b2 −b1b2
+2
+
+= 0.
+Let now a = (a1, a2, a3, a4) ∈S3 be a critical direction with none of its coordinates being
+0. We may assume that 0 < a1 ⩽a2 ⩽a3 ⩽a4.
+We will study two cases according the sign of (a1 + a4) −(a2 + a3). Suppose first that
+a1 + a4 ⩽a2 + a3. It is easy check that the conditions of Case C are satisfied in all the
+three substitutions below:
+(4.8)
+(b1, b2, b3, b4) := (a2, a4, a1, a3) or (a3, a4, a1, a2) or (a2, a3, a1, a4).
+Applying these substitutions, we proceed as in the proof of Theorem 2.
+If a2, a3 and a4 are all different, then we have
+(a2 −a3)2 + (a2 −a4)2 + (a3 −a4)2 = −2a2
+1
+which yields that a1 = 0, a contradiction.
+Assume next that two of a2, a3 and a4 are equal, and the third one differs from them.
+The either a2 = a3 or a3 = a4. Suppose that a2 = a3, then a2̸ = a4. Applying the first
+substitution in (4.8), equation (4.6) simplifies to
+a4(1 −2a2
+2 −a2a4) = 0,
+which by a4 > 0 and 1 −2a2
+2 = a2
+1 + a2
+4 implies that
+a2
+1 + a2
+4(a4 −a2) = 0,
+which is impossible.
+Thus, we must have that a3 = a4 for all critical directions for which a1 + a4 ⩽a2 + a3
+holds. Apply the following substitution:
+(b1, b2, b3, b4) := (a1, a2, a3, a3)
+===== page 9 =====
+CRITICAL CENTRAL SECTIONS OF THE CUBE
+9
+which belongs to Case B. Then (4.5) simplifies to
+(a2
+2 −a2
+1)(1 + a2
+2 −4a2a3) = 0.
+Therefore, either a1 = a2, or, using (4.1),
+a2
+1 + 2(a2 −a3)2 = 0,
+which contradicts to a1 > 0.
+Thus, a1 = a2 and a3 = a4. Taking the first substitution in (4.8) yields that either
+a1 = a3, in which case a is a 4-diagonal direction, or by (4.6),
+a1(1 −a1a3 −2a2
+3) = 0.
+By (4.1), this is equivalent to
+a1(2a1 −a3) = 0
+which is only possible if a3 = 2a1. Accordingly,
+(4.9)
+a =
+ 1
+√
+10,
+1
+√
+10,
+2
+√
+10,
+2
+√
+10
+
+.
+In this case, (3.1) indeed holds for any pair of coordinates of a, therefore, a is a critical
+direction.
+Second, assume that a1 + a4 ⩾a2 + a3. In this case, conditions of Case D are satisfied
+for each of the following three substitutions:
+(4.10)
+(b1, b2, b3, b4) := (a1, a4, a2, a3) or (a2, a4, a1, a3) or (a3, a4, a1, a2).
+Taking the difference of (4.7) under the first two substitutions above, we obtain that
+(a1 + a2 + a3 −a4)2(a1 −a2)(a4(a1 + a2 + a4) −1) = 0.
+Equation (2.14) for k = 4 shows that the first term above may not be 0. Thus, either
+a1 = a2, or
+(4.11)
+a1 + a2 = 1
+a4
+−a4.
+Applying the same argument for the other two pairs of substitutions of (4.10) yields the
+same conclusion for a1 and a3, and for a2 and a3.
+Assume first that a1, a2 and a3 are all different. Then (4.11) implies that 1/a4 −a4 =
+a1 + a2 = a1 + a3, which leads to a2 = a3, a contradiction.
+Therefore, we deduce that out of the coefficients a1, a2, a3, at least two must be equal.
+Let us first assume that not all three of these are the same. The subsequent argument is
+going to be symmetric with respect to permuting the coordinates 1,2,3, therefore we may
+assume that a1 = a2, and they differ from a3.
+By the analogue of (4.11), (a1 + a3 + a4)a4 = 1. By (4.1), we also have 2a2
+1 + a2
+3 + a2
+4 = 1.
+Moreover, taking the substitution
+(b1, b2, b3, b4) := (a1, a3, a1, a4)
+which belongs to Case A, (4.4) implies that
+(2a1 + a3 −a4)2(1 + a1a3) = 8a2
+1a3(a1 + a3).
+===== page 10 =====
+10
+CRITICAL CENTRAL SECTIONS OF THE CUBE
+Utilizing a computer algebra software reveals that the only positive solution to the system
+of polynomial equations
+
+
+
+
+
+
+
+(a1 + a3 + a4)a4 = 1
+2a2
+1 + a2
+3 + a2
+4 = 1
+(2a1 + a3 −a4)2(1 + a1a3) −8a2
+1a3(a1 + a3) = 0
+is given by a1 =
+1
+√
+10, a3 = a4 =
+2
+√
+10, which yields (4.9) again.
+Finally, assume that a1 = a2 = a3. Then by (4.1) and (4.7) via (4.10), a1 and a4 satisfies
+the following system of polynomial equations:
+(
+3a2
+1 + a2
+4 = 1
+8a3
+1(1 −a2
+4) −(3a1 −a4)2(a1 + a4)(1 −a1a4) = 0
+Moreover, because of (2.14) we also have a1 >
+1
+√
+12 ≈0.2887. Again utilizing a computer
+algebra software shows that among positive numbers, the above system of equations has two
+solutions: either a1 = a4 = 1
+2 which yields that a is a 4-diagonal direction, or a1 ≈0.2142
+and a4 ≈0.9286 which does not satisfy the above constraint.
+Thus, critical directions are either diagonal or they are of the form (4.9), up to per-
+mutations and sign changes. It is easy to check that these indeed satisfy (3.1) for any
+pair of coordinates. Out of these possibilities, 1-diagonal sections constitute global min-
+ima, 2-diagonal sections yield global maxima. As seen before, 3-diagonal directions are
+saddle points. Calculating the bordered Hessian at 4-diagonal directions shows that these
+constitue local, but not global, maxima.
+□
+5. Concluding remarks
+This piece of research stemmed from the recent result of Bartha, Fodor and Gonz´alez
+Merino [BFGM21] who proved that volumes of central k-diagonal sections of Qn form an
+increasing sequence for k ⩾3. It is natural to ask if that result can be used to determine
+minimal/maximal central sections of the cube. To that end, it would be sufficient to show
+that all directions a ∈Sn−1 which are critical with respect to σ(a) are diagonal. However,
+Theorem 3 shows that this is not true. Yet, in the 4-dimensional case, non-diagonal critical
+points constitute only saddle points. Therefore, the following question remains open: Is
+it true that all locally extremal central sections are diagonal? If so, that would yield an
+alternate proof to the celebrated result of Ball [B86] via [BFGM21].
+Even though it is not true that critical sections are all diagonal, it holds in the fol-
+lowing ‘approximate asymptotic sense’. Assuming that the ai’s are fairly equal, the Cen-
+tral Limit Theorem implies that Pn
+i=3 aiXi is close to a standard normal variable. Let
+g(x) =
+1
+√
+2πe−x2/2 be the standard Gaussian density. Introduce the function
+G(r, s) := 1 −r2
+r
+Z s
+s−2r
+g(x) dx = 1 −r2
+2r
+(erf(s) −erf(s −2r)).
+Then (3.1) reads approximately as
+G(a1, a1 + a2) = G(a2, a1 + a2).
+This can be shown to imply a1 = a2. Of course, this heuristic argument does not exclude
+non-diagonal critical directions when the distribution of Pn
+i=3 aiXi differs substantially
+from the normal distribution.
+===== page 11 =====
+CRITICAL CENTRAL SECTIONS OF THE CUBE
+11
+I only became aware of the neat article of Ivanov and Tsiutsiurupa [IT21] after proving
+Theorem 1. I find it reassuring that two entirely different approaches yield essentially the
+same result.
+The methods used in the present paper may also be applied to other problems regarding
+volumes or perimeters of sections.
+In particular, the problem of estimating volumes of
+central sections of the simplex is subject to a forthcoming paper.
+Finally, I would like to express my gratitude to F. Fodor, G. Ivanov, A. Koldobsky and
+H. K¨onig for the illuminating discussions on the topic, and to the anonymous referee for
+useful suggestions.
+References
+[AHK19]
+A. Akopyan, A. Hubard, and R. Karasev, Lower and upper bounds for the waists of different
+spaces. Topol. Methods Nonlinear Anal. 53 (2019), no. 2, 457–490.
+[A21]
+I. Aliev, On the volume of hyperplane sections of a d-cube. Acta Math. Hungar. 163 (2021), no.
+2., 547–551.
+[B86]
+K.M. Ball, Cube slicing in Rn. Proc. Amer. Math. Soc. 97 (1986), 465–473.
+[B89]
+——–, Volumes of section of cubes and related problems. In: J. Lindenstrauss, V.D. Milman
+(Eds.), Israel seminar on Geometric Aspects of Functional Analysis, Lectures Notes in Mathe-
+matics, Vol. 1376, Springer, Berlin, 1989.
+[BFGM21] F.´A. Bartha, F. Fodor, B. Gonz´alez Merino, Central diagonal sections of the n-cube. Int. Math.
+Res. Not. 2021 (2021), no. 4, 2861–2881.
+[BGMN05] F. Barthe, O. Gu´edon, S. Mendelson, and A. Naor, A probabilistic approach to the geometry of
+the ℓn
+p-ball. Ann. Probab. 33 (2005), 480–513.
+[BK03]
+F. Barthe and A. Koldobsky, Extremal slabs in the cube and the Laplace transform. Adv. Math.
+174 (2003), 89–114.
+[E19]
+A. Eskenazis, On extremal sections of subspaces of Lp.
+Discrete Comput. Geom.65 (2021),
+489–509.
+[IT21]
+G. Ivanov and I. Tsiutsiurupa, On the volume of sections of the cube. Anal. Geom. Metr. Spaces
+9 (2021), 1–18.
+[H71]
+H. Hadwiger, Gitterperiodische Punktmengen und Isoperimetrie. Monatsh. Math. 76 (1972),
+410–418.
+[H79]
+D. Hensley, Slicing the cube in Rn and probability. Proc. Amer. Math. Soc. 73 (1979), no. 1.,
+95–100.
+[K21]
+H. K¨onig, Non-central sections of the simplex, the cross-polytope and the cube. Adv. Math. 376
+(2021), 107458.
+[KK11]
+H. K¨onig and A. Koldobsky, Volumes of low-dimensional slabs and sections of the cube. Adv.
+Appl. Math. 47 (2011), 894–907.
+[KK12]
+——–, On the maximal measure of sections of the n-cube. Geometric Analysis, Mathematical
+Relativity, and Nonlinear Partial Differential Equations, Contemp. Math. 599 (2012), 123–155.
+[KK19]
+——–, On the maximal perimeter of sections of the cube. Adv. Math. 346 (2019), 773–804.
+[K98]
+A. Koldobsky, An application of the Fourier transform to sections of star bodies. Israel J. Math.
+106 (1998), 157–164.
+[K05]
+——–, Fourier analysis in convex geomety. Mathematical Surveys and Monographs 116, AMS,
+Providence, RI, 2005.
+[KY08]
+A. Koldobsky, V. Yaskin, The interface between convex geometry and harmonic analysis. CBMS
+Regional Conference Series in Mathematics 108, AMS, Providence, RI, 2008.
+[L1812]
+P.S. Laplace, Th´eorie analytique des probabilit´es. Paris, 1812.
+[LT20]
+R. Liu, T. Tkocz, A note on extremal noncentral sections of the cross-polytope. Adv. Appl. Math.
+118 (2020), 102031.
+[MP88]
+M. Meyer and A. Pajor, Sections of the unit ball of ℓn
+p. J. Funct. Anal. 80 (1988), no. 1, 109–123.
+[MSZZ13]
+J. Moody, C. Stone, D. Zach, A. Zvavitch, A Remark on Extremal Non-Central Sections of
+the Unit Cube. Asympt. Geometr. Anal., Fields Inst. Comm. 68, Springer, New York, 2013,
+pp.211–228.
+[NP00]
+F.L. Nazarov and A.N. Podkorytov, Ball, Haagerup, and distribution functions. Complex anal-
+ysis, operators, and related topics, Springer, 2000, pp. 247–267.
+===== page 12 =====
+12
+CRITICAL CENTRAL SECTIONS OF THE CUBE
+[P1913]
+G. P´olya, Berechnung eines bestimmten Integrals. Math. Ann. 74 (1913), 204–212.
+[V79]
+J. Vaaler, A geometric inequality with applications to linear forms, Pacific J. Math. 83 (1979),
+no. 2, 543—553.
+[Z08]
+A. Zvavitch, Gaussian measure of sections of dilates and shifts of convex bodies. Adv. Appl.
+Math. 41 (2008), 247–254.
+Gergely Ambrus
+Alfr´ed R´enyi Institute of Mathematics, E¨otv¨os Lor´and Research Network, Budapest, Hun-
+gary
+and
+Bolyai Institute, University of Szeged, Hungary
+e-mail address: ambrus@renyi.hu

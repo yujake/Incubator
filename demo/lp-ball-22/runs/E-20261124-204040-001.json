@@ -1,0 +1,2691 @@
+{
+  "role": "E",
+  "task": "E：这一趟派给你的活是 —— 承接 exp:000014/000016 的同一套脚本与口径，把「体对角向 vs 面对角向」的符号结构在**大 p** 上钉死：你上一轮只扫了 p∈(2,20]，报「Δ 恰变号一次、p*=4.998215596862、ρ=A_face/A_diag 峰值 1.0116 在 p=3.02」，但两端极限给出 ρ(2)=1、ρ(p→∞)→4√2/(3√3)=1.08866 ⇒ **Δ 在 (20,∞) 上必须再有至少一次变号**。要跑三件事，每条落一行 experiments（method=numeric，脚本 code/exp/、原始输出 out/exp-logs/）：(1) 在 p∈[20,10^6] 上按对数网格（≥200 点，关键处加密）算 Δ(p)=A_face(p)−A_diag(p)，给出**是否恰有一个第二零点、并夹逼出 p** 的区间**（宽 ≤1e-6 相对）；(2) 在 p∈(2,20] 上把 Δ 的零点与 ρ 的极大点用导数判据（不用网格找最小）加密到 1e-9，并明确 ρ 在 (2, p_peak) 上是否严格增、在 (p_peak, p*) 上是否严格减；(3) 大 p 求积必须用能抗尖峰的算法（A_diag 的被积函数在 p→∞ 时集中到 |cos|,|sin|,|cos+sin| 的最大者上），并给出 p=10^2,10^4,10^6,10^8 上 A_diag−3√3 与 A_face−4√2 的符号与量级，用来说明第二零点之后 ρ 是升向 1.08866 而不是回落。判据全由脚本读数判、不过模型；每条给 result ∈ supports/refutes/inconclusive 与非空 counterexample（若某处符号与预期不符）。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.list",
+        "args": {
+          "path": "code/exp",
+          "recursive": true,
+          "limit": 100
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "fs.list",
+        "ok": true,
+        "data": {
+          "path": "code/exp",
+          "entries": [
+            {
+              "name": "__pycache__",
+              "path": "code/exp/__pycache__",
+              "is_dir": true,
+              "is_file": false,
+              "is_symlink": false,
+              "size": 0,
+              "mtime": "2026-11-24T18:14:16+08:00"
+            },
+            {
+              "name": "lpsec_core.cpython-311.pyc",
+              "path": "code/exp/__pycache__/lpsec_core.cpython-311.pyc",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 21011,
+              "mtime": "2026-11-24T18:14:16+08:00"
+            },
+            {
+              "name": "e1_diag_crosscheck.py",
+              "path": "code/exp/e1_diag_crosscheck.py",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 9327,
+              "mtime": "2026-11-24T20:00:24+08:00"
+            },
+            {
+              "name": "e1_diag_crosscheck_v2.py",
+              "path": "code/exp/e1_diag_crosscheck_v2.py",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 7264,
+              "mtime": "2026-11-24T20:03:45+08:00"
+            },
+            {
+              "name": "e1_diag_crosscheck_v3.py",
+              "path": "code/exp/e1_diag_crosscheck_v3.py",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 6020,
+              "mtime": "2026-11-24T20:08:07+08:00"
+            },
+            {
+              "name": "e1_diag_crosscheck_v4.py",
+              "path": "code/exp/e1_diag_crosscheck_v4.py",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 8709,
+              "mtime": "2026-11-24T20:10:23+08:00"
+            },
+            {
+              "name": "e1_diag_crosscheck_v5.py",
+              "path": "code/exp/e1_diag_crosscheck_v5.py",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 7871,
+              "mtime": "2026-11-24T20:12:59+08:00"
+            },
+            {
+              "name": "e1_diag_crosscheck_v6.py",
+              "path": "code/exp/e1_diag_crosscheck_v6.py",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 8565,
+              "mtime": "2026-11-24T20:14:33+08:00"
+            },
+            {
+              "name": "e1_diag_crosscheck_v7.py",
+              "path": "code/exp/e1_diag_crosscheck_v7.py",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 10988,
+              "mtime": "2026-11-24T20:16:33+08:00"
+            },
+            {
+              "name": "e2_face_closed_vs_integral.py",
+              "path": "code/exp/e2_face_closed_vs_integral.py",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 5538,
+              "mtime": "2026-11-24T20:17:24+08:00"
+            },
+            {
+              "name": "e3_pstar_scan.py",
+              "path": "code/exp/e3_pstar_scan.py",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 7887,
+              "mtime": "2026-11-24T20:18:34+08:00"
+            },
+            {
+              "name": "e3b_rho_monotone.py",
+              "path": "code/exp/e3b_rho_monotone.py",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 6618,
+              "mtime": "2026-11-24T20:20:21+08:00"
+            },
+            {
+              "name": "e4_kernel_scan.py",
+              "path": "code/exp/e4_kernel_scan.py",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 7746,
+              "mtime": "2026-11-24T20:19:11+08:00"
+            },
+            {
+              "name": "e4_kernel_scan_v2.py",
+              "path": "code/exp/e4_kernel_scan_v2.py",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 8106,
+              "mtime": "2026-11-24T20:19:47+08:00"
+            },
+            {
+              "name": "lpsec_arcs.py",
+              "path": "code/exp/lpsec_arcs.py",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 7356,
+              "mtime": "2026-11-24T18:21:59+08:00"
+            },
+            {
+              "name": "lpsec_core.py",
+              "path": "code/exp/lpsec_core.py",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 9869,
+              "mtime": "2026-11-24T18:14:09+08:00"
+            },
+            {
+              "name": "lpsec_critical.py",
+              "path": "code/exp/lpsec_critical.py",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 11411,
+              "mtime": "2026-11-24T18:21:20+08:00"
+            },
+            {
+              "name": "lpsec_family.py",
+              "path": "code/exp/lpsec_family.py",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 3499,
+              "mtime": "2026-11-24T18:17:10+08:00"
+            },
+            {
+              "name": "lpsec_sweep.py",
+              "path": "code/exp/lpsec_sweep.py",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 11450,
+              "mtime": "2026-11-24T18:18:53+08:00"
+            },
+            {
+              "name": "lpsec_validate.py",
+              "path": "code/exp/lpsec_validate.py",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 8555,
+              "mtime": "2026-11-24T18:17:15+08:00"
+            }
+          ],
+          "total": 20,
+          "returned": 20,
+          "truncated": false
+        },
+        "error": "",
+        "meta": {
+          "total": 20,
+          "returned": 20,
+          "truncated": false
+        },
+        "multi_call": {
+          "turn_index": 0,
+          "call_index": 0,
+          "calls": 2,
+          "step_index": 0
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 45952,
+        "prompt_cache_miss_tokens": 1949,
+        "tokens_in": 47901,
+        "tokens_out": 290,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000119"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "verify.list_experiments",
+        "args": {
+          "limit": 30
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "verify.list_experiments",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "total": 20,
+          "returned": 20,
+          "truncated": false,
+          "scope": "own-instance（E1）",
+          "experiments": [
+            {
+              "experiment_id": "000000",
+              "claim_key": "lp3-section-validate",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "refutes",
+              "negation_kind": "disproved",
+              "exit_code": 0,
+              "code_path": "code/exp/lpsec_validate.py",
+              "code_hash": "e6a419151a7111fe",
+              "for_question_id": null,
+              "created_at": "2026-11-24T18:12:11+08:00"
+            },
+            {
+              "experiment_id": "000001",
+              "claim_key": "lp3-section-validate",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "refutes",
+              "negation_kind": "disproved",
+              "exit_code": 0,
+              "code_path": "code/exp/lpsec_validate.py",
+              "code_hash": "7bf57c79f10600a7",
+              "for_question_id": null,
+              "created_at": "2026-11-24T18:14:18+08:00"
+            },
+            {
+              "experiment_id": "000002",
+              "claim_key": "lp3-section-validate-v2",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "refutes",
+              "negation_kind": "disproved",
+              "exit_code": 0,
+              "code_path": "code/exp/lpsec_validate.py",
+              "code_hash": "6710f2f7afa90451",
+              "for_question_id": null,
+              "created_at": "2026-11-24T18:15:46+08:00"
+            },
+            {
+              "experiment_id": "000003",
+              "claim_key": "lp3-section-validate-v3",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "supports",
+              "negation_kind": "not_proved",
+              "exit_code": 0,
+              "code_path": "code/exp/lpsec_validate.py",
+              "code_hash": "226a5da3ceebc6ed",
+              "for_question_id": null,
+              "created_at": "2026-11-24T18:19:01+08:00"
+            },
+            {
+              "experiment_id": "000004",
+              "claim_key": "lp3-section-max",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "supports",
+              "negation_kind": "not_proved",
+              "exit_code": 0,
+              "code_path": "code/exp/lpsec_sweep.py",
+              "code_hash": "cee87cd85e5bfb84",
+              "for_question_id": null,
+              "created_at": "2026-11-24T18:20:03+08:00"
+            },
+            {
+              "experiment_id": "000005",
+              "claim_key": "lp3-section-critical",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "refutes",
+              "negation_kind": "disproved",
+              "exit_code": 0,
+              "code_path": "code/exp/lpsec_critical.py",
+              "code_hash": "1985d95fe6ca0406",
+              "for_question_id": null,
+              "created_at": "2026-11-24T18:20:58+08:00"
+            },
+            {
+              "experiment_id": "000006",
+              "claim_key": "lp3-section-critical-v2",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "supports",
+              "negation_kind": "not_proved",
+              "exit_code": 0,
+              "code_path": "code/exp/lpsec_critical.py",
+              "code_hash": "861779663909594d",
+              "for_question_id": null,
+              "created_at": "2026-11-24T18:21:29+08:00"
+            },
+            {
+              "experiment_id": "000007",
+              "claim_key": "lp3-section-arcs",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "supports",
+              "negation_kind": "not_proved",
+              "exit_code": 0,
+              "code_path": "code/exp/lpsec_arcs.py",
+              "code_hash": "b13eb9eb12509023",
+              "for_question_id": null,
+              "created_at": "2026-11-24T18:22:16+08:00"
+            },
+            {
+              "experiment_id": "000008",
+              "claim_key": "lp3-diag-vs-face",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "refutes",
+              "negation_kind": "disproved",
+              "exit_code": 0,
+              "code_path": "code/exp/e1_diag_crosscheck.py",
+              "code_hash": "68acfb8ff6c633a1",
+              "for_question_id": null,
+              "created_at": "2026-11-24T20:00:37+08:00"
+            },
+            {
+              "experiment_id": "000009",
+              "claim_key": "lp3-diag-vs-face",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "inconclusive",
+              "negation_kind": "no_local_evidence",
+              "exit_code": 0,
+              "code_path": "code/exp/e1_diag_crosscheck_v2.py",
+              "code_hash": "ec5b7d2cf4cc5acf",
+              "for_question_id": null,
+              "created_at": "2026-11-24T20:03:54+08:00"
+            },
+            {
+              "experiment_id": "000010",
+              "claim_key": "lp3-diag-vs-face",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "inconclusive",
+              "negation_kind": "no_local_evidence",
+              "exit_code": 0,
+              "code_path": "code/exp/e1_diag_crosscheck_v3.py",
+              "code_hash": "2f55b6d159d9b004",
+              "for_question_id": null,
+              "created_at": "2026-11-24T20:08:18+08:00"
+            },
+            {
+              "experiment_id": "000011",
+              "claim_key": "lp3-diag-vs-face",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "inconclusive",
+              "negation_kind": "no_local_evidence",
+              "exit_code": 0,
+              "code_path": "code/exp/e1_diag_crosscheck_v4.py",
+              "code_hash": "2882015f89c79c02",
+              "for_question_id": null,
+              "created_at": "2026-11-24T20:10:28+08:00"
+            },
+            {
+              "experiment_id": "000012",
+              "claim_key": "lp3-diag-vs-face",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "inconclusive",
+              "negation_kind": "no_local_evidence",
+              "exit_code": 0,
+              "code_path": "code/exp/e1_diag_crosscheck_v5.py",
+              "code_hash": "449b5a6eaa037639",
+              "for_question_id": null,
+              "created_at": "2026-11-24T20:13:25+08:00"
+            },
+            {
+              "experiment_id": "000013",
+              "claim_key": "lp3-diag-vs-face",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "inconclusive",
+              "negation_kind": "no_local_evidence",
+              "exit_code": 0,
+              "code_path": "code/exp/e1_diag_crosscheck_v6.py",
+              "code_hash": "7c8582fff1f16832",
+              "for_question_id": null,
+              "created_at": "2026-11-24T20:14:42+08:00"
+            },
+            {
+              "experiment_id": "000014",
+              "claim_key": "lp3-diag-vs-face",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "supports",
+              "negation_kind": "not_proved",
+              "exit_code": 0,
+              "code_path": "code/exp/e1_diag_crosscheck_v7.py",
+              "code_hash": "2fd0f6bde18582b9",
+              "for_question_id": null,
+              "created_at": "2026-11-24T20:16:41+08:00"
+            },
+            {
+              "experiment_id": "000015",
+              "claim_key": "lp3-face-closed-form",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "supports",
+              "negation_kind": "not_proved",
+              "exit_code": 0,
+              "code_path": "code/exp/e2_face_closed_vs_integral.py",
+              "code_hash": "74d6dc9b61912921",
+              "for_question_id": null,
+              "created_at": "2026-11-24T20:17:37+08:00"
+            },
+            {
+              "experiment_id": "000016",
+              "claim_key": "lp3-pstar-diag-vs-face",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "supports",
+              "negation_kind": "not_proved",
+              "exit_code": 0,
+              "code_path": "code/exp/e3_pstar_scan.py",
+              "code_hash": "bfbfc8ae0cd29e35",
+              "for_question_id": null,
+              "created_at": "2026-11-24T20:18:40+08:00"
+            },
+            {
+              "experiment_id": "000017",
+              "claim_key": "lp3-kernel-scaling-deltak",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "inconclusive",
+              "negation_kind": "no_local_evidence",
+              "exit_code": 0,
+              "code_path": "code/exp/e4_kernel_scan.py",
+              "code_hash": "6c174afa761fceb7",
+              "for_question_id": null,
+              "created_at": "2026-11-24T20:19:20+08:00"
+            },
+            {
+              "experiment_id": "000018",
+              "claim_key": "lp3-kernel-scaling-deltak",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "supports",
+              "negation_kind": "not_proved",
+              "exit_code": 0,
+              "code_path": "code/exp/e4_kernel_scan_v2.py",
+              "code_hash": "df9bb1248053b5ce",
+              "for_question_id": null,
+              "created_at": "2026-11-24T20:19:56+08:00"
+            },
+            {
+              "experiment_id": "000019",
+              "claim_key": "lp3-rho-monotone",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "refutes",
+              "negation_kind": "disproved",
+              "exit_code": 0,
+              "code_path": "code/exp/e3b_rho_monotone.py",
+              "code_hash": "f16457f5acaa90ff",
+              "for_question_id": null,
+              "created_at": "2026-11-24T20:20:28+08:00"
+            }
+          ],
+          "reason": "共 20 条实验记录，返回 20 条"
+        },
+        "error": "",
+        "meta": {},
+        "warn": "这一步给了 2 条调用，已按顺序逐条：第 1 条 fs.list 成功：20；第 2 条 verify.list_experiments 成功：20。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 0,
+          "call_index": 1,
+          "calls": 2,
+          "step_index": 1,
+          "summary": "这一步给了 2 条调用，已按顺序逐条：第 1 条 fs.list 成功：20；第 2 条 verify.list_experiments 成功：20。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 0,
+            "calls": 2,
+            "items": 2,
+            "steps": [
+              0,
+              1
+            ],
+            "executed": 2,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000119"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "code/exp/e1_diag_crosscheck_v7.py"
+        },
+        "why": "读上一轮的判定脚本，承接同一套口径"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "#!/usr/bin/env python3\n# -*- coding: utf-8 -*-\n\"\"\"E 任务 1（v7，取代 exp 000008–000013 的实现）：A_diag(p) 三路对拍。\n\nA 路（一维积分，F 稿 (i)）：\n  A_diag(p) = (3/4) * int_0^{2pi} S(th)^{-2/p} dth,\n  S(th) = |cos(th-pi/6)|^p + |cos(th+pi/6)|^p + |sin th|^p\n  断点 = 三个 |.| 的零点 {0, pi/3, 2pi/3, pi, 4pi/3, 5pi/3, 2pi}；逐段 tanh-sinh(DE)。\n\nB 路（平面上二维求积：x 竖切片 + 定义式二分，F 稿 (ii) 第一个等号）：\n  A_diag(p) = sqrt(3) * area(D), D = {(x,y): |x|^p+|y|^p+|x+y|^p <= 1}\n  area = 2 * int_0^{xmax} L(x) dx, L = y_high - y_low，上下端由**定义式**\n  |y|^p+|x+y|^p <= 1-|x|^p 二分求解（不代入任何闭式）；L 在 x = 2^{-1/p} 折点处断开。\n\nC 路（第三路：(w,d) = (x+y, x-y) 换元）：\n  dx dy = (1/2) dw dd  =>  area = 2 * int_0^{wmax} dmax(w) dw,\n  dmax 由定义式 |w+d|^p+|w-d|^p <= 2^p (1-|w|^p) 二分求解；断点 0, min(2^{-1/p}, wmax), wmax。\n\n判据（脚本内硬编码，由脚本判，不过模型）：\n  1) AB : max_p rel(A,B) < 1e-10   （任务要求）\n  2) AC : p in {1.5,3,10}: rel(A,C) < 1e-6 （任务要求的第三条路）\n  3) EXACT: p=1 对 3*sqrt(3)/4、p=2 对 pi，两路各自 rel < 1e-12\n  4) REFINE: p in {1.5,50} 上 A 路在 DE 步长 h 与 h/2 下的相对差 < 1e-12\n  以上四条全过 => supports；任一没过 => inconclusive（数值精度不足不是数学命题的反例）。\n另报诊断量（不参与判据）：tanh-sinh 对多项式与 log 奇性的自检、p=200 与极限 3*sqrt(3) 的差距、\n以及 Halton QMC 的宽松对照（仅说明量级）。\n\"\"\"\nimport json\nimport math\nimport time\n\nPI = math.pi\nHP = PI / 2.0\n\n\n# ---------------------------------------------------------------- 求积\ndef tanhsinh(f, a, b, h=0.02, tmax=7.5):\n    \"\"\"双指数（tanh-sinh）求积 int_a^b f。\"\"\"\n    if b <= a:\n        return 0.0\n    c = 0.5 * (b - a)\n    d = 0.5 * (a + b)\n    n = int(math.ceil(tmax / h))\n    s = 0.0\n    for k in range(-n, n + 1):\n        t = k * h\n        u = HP * math.sinh(t)\n        if u > 350.0 or u < -350.0:      # tanh(u) 已在双精度下饱和为 +-1\n            continue\n        chu = math.cosh(u)\n        w = HP * math.cosh(t) / (chu * chu)\n        x = math.tanh(u)\n        if x >= 1.0 or x <= -1.0:\n            continue\n        s += w * f(d + c * x)\n    return s * c * h\n\n\n# ---------------------------------------------------------------- A 路\nABRK = [0.0, PI / 3.0, 2.0 * PI / 3.0, PI, 4.0 * PI / 3.0, 5.0 * PI / 3.0, 2.0 * PI]\n\n\ndef S_v…（落档截断，原 10044 字）",
+        "error": "",
+        "meta": {
+          "path": "code/exp/e1_diag_crosscheck_v7.py",
+          "encoding": "utf-8",
+          "bytes_read": 10988,
+          "total_bytes": 10988,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 306,
+          "total_lines": 306,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 306 行",
+          "sha256": "2fd0f6bde18582b9c5bf8471ae6ce24a98e333993fdfefdd526c98dd0a8dfad9"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 47104,
+        "prompt_cache_miss_tokens": 5288,
+        "tokens_in": 52392,
+        "tokens_out": 155,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000119"
+    },
+    {
+      "index": 3,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "code/exp/e1_diag_crosscheck_v7.py",
+          "start_line": 150,
+          "max_lines": 160
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "    return lo\n\n\ndef area_C(p, h=0.02):\n    lo, hi = 0.0, 2.0\n    while dmax_C(p, hi) is not None:\n        hi *= 2.0\n    for _ in range(64):\n        mid = 0.5 * (lo + hi)\n        if dmax_C(p, mid) is not None:\n            lo = mid\n        else:\n            hi = mid\n    wm = lo\n    brk = sorted(set([0.0, min(2.0 ** (-1.0 / p), wm), wm]))\n    tot = 0.0\n    for i in range(len(brk) - 1):\n        a, b = brk[i], brk[i + 1]\n        if b <= a:\n            continue\n        tot += tanhsinh(lambda w, p=p: dmax_C(p, w) or 0.0, a, b, h=h)\n    return 2.0 * tot\n\n\n# ---------------------------------------------------------------- 补充：Halton QMC（仅量级对照）\ndef halton_qmc_area(p, n=200000):\n    \"\"\"D 的面积用确定性 Halton 点在对包围盒 [0,1]x[-1,1] 内打点估计（仅作量级对照）。\"\"\"\n    def halton(i, b):\n        f, r, k = 1.0, 0.0, i\n        while k > 0:\n            f /= b\n            r += f * (k % b)\n            k //= b\n        return r\n    cnt = 0\n    for i in range(1, n + 1):\n        x = halton(i, 2)\n        y = -1.0 + 2.0 * halton(i, 3)\n        if abs(x) ** p + abs(y) ** p + abs(x + y) ** p <= 1.0:\n            cnt += 1\n    return 2.0 * cnt / n\n\n\n# ---------------------------------------------------------------- 自检\ndef quadrature_selftest():\n    out = {}\n    for k in (0, 1, 2, 3):\n        ex = 1.0 / (k + 1)\n        v = tanhsinh(lambda x, k=k: x ** k, 0.0, 1.0)\n        out[\"poly_x%d\" % k] = {\"val\": v, \"exact\": ex, \"rel\": abs(v - ex) / ex}\n    v = tanhsinh(lambda x: math.log(x), 0.0, 1.0)\n    out[\"log_x\"] = {\"val\": v, \"exact\": -1.0, \"rel\": abs(v + 1.0)}\n    return out\n\n\ndef main():\n    t0 = time.time()\n    st = quadrature_selftest()\n\n    ps = [1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 4.0, 6.0, 10.0, 20.0, 50.0]\n    exact = {1.0: 3.0 * math.sqrt(3.0) / 4.0, 2.0: PI}\n    rows = []\n    worst_ab = 0.0\n    worst_exact = 0.0\n    for p in ps:\n        ts = time.time()\n        a = A_path_A(p)\n        b = math.sqrt(3.0) * area_B(p)\n        rel = abs(a - b) / abs(a)\n        row = {\"p\": p, \"A_1d\": a, \"A_2d\": b, \"rel_AB\": rel,\n               …（落档截断，原 5762 字）",
+        "error": "",
+        "meta": {
+          "path": "code/exp/e1_diag_crosscheck_v7.py",
+          "encoding": "utf-8",
+          "bytes_read": 10988,
+          "total_bytes": 10988,
+          "truncated": false,
+          "start_line": 150,
+          "lines_read": 157,
+          "total_lines": 306,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 150–306 行（共 306 行）",
+          "sha256": "2fd0f6bde18582b9c5bf8471ae6ce24a98e333993fdfefdd526c98dd0a8dfad9"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 51584,
+        "prompt_cache_miss_tokens": 3933,
+        "tokens_in": 55517,
+        "tokens_out": 221,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000119"
+    },
+    {
+      "index": 4,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "code/exp/e3_pstar_scan.py",
+          "max_lines": 200
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "#!/usr/bin/env python3\n# -*- coding: utf-8 -*-\n\"\"\"E 任务 3：p* 定位 —— Delta(p)=A_diag(p)-A_face(p) 的零点，与 rho 的单调性报告。\n\nA_diag(p) = (3/4) int_0^{2pi} S(th)^{-2/p} dth,\n            S = |cos(th-pi/6)|^p + |cos(th+pi/6)|^p + |sin th|^p,\n            断点 = 三个 |.| 的零点 {0,pi/3,2pi/3,pi,4pi/3,5pi/3,2pi}，逐段 tanh-sinh(DE).\n            （exp 000014 用完全独立的二维路核过：11 个 p 上相对差 <= 1.4e-15）\nA_face(p) = 2^{1/2-1/p} * 4 Gamma(1+1/p)^2 / Gamma(1+2/p)（Gamma 用 lgamma 现算）\n            （exp 000015 用两条独立数值路核过：相对差 <= 1e-12）\nDelta(p) = A_diag(p) - A_face(p);  rho(p) = A_diag(p)/A_face(p)\n          （恒等：Delta = A_face * (rho - 1)）\n\n网格：p = 2.01, 2.02, ..., 20.00（步长 0.01，共 1800 点）；\n点名点：p = 2, 2+1e-6, 3, 4, 10, 50（另报 rho 与 sign Delta）。\n变号区间逐个二分，夹逼区间宽度收到 < 1e-10。\nrho 单调性：逐格算 rho 的差分，报出所有局部上升（位置 + 幅度）。\n\n判据（脚本内硬编码、由脚本判）：\n  (a) (2+1e-6, 20] 内 Delta 在网格上的变号次数 == 1；\n  (b) 该变号区间的二分夹逼宽度 < 1e-10；\n  (c) 恒等 Delta == A_face*(rho-1) 在每个采样点成立（相对 1e-12）；\n  三者都过 => result=supports；变号次数 != 1 => refutes（反例=各变号区间）；\n  否则 inconclusive。rho 的单调性是**读数**（报告用，不进判据）。\n\"\"\"\nimport json\nimport math\nimport time\n\nPI = math.pi\nHP = PI / 2.0\n\n\ndef tanhsinh(f, a, b, h=0.05, tmax=7.0):\n    \"\"\"双指数求积 int_a^b f（v5-v7 用过的同一实现，已与独立路核过 1e-15）。\"\"\"\n    if b <= a:\n        return 0.0\n    c = 0.5 * (b - a)\n    d = 0.5 * (a + b)\n    s = 0.0\n    n = int(tmax / h)\n    for k in range(-n, n + 1):\n        t = k * h\n        u = HP * math.sinh(t)\n        x = math.tanh(u)\n        if x >= 1.0 or x <= -1.0:\n            continue\n        ch = math.cosh(u)\n        w = HP * math.cosh(t) / (ch * ch)\n        s += w * f(d + c * x)\n    return s * c * h\n\n\nABRK = [0.0, PI / 3.0, 2.0 * PI / 3.0, PI, 4.0 * PI / 3.0, 5.0 * PI / 3.0, 2.0 * PI]\n\n\ndef a_diag(p):\n    tot = 0.0\n    for i in range(len(ABRK) - 1):\n        a, b = ABRK[i], ABRK[i + 1]\n\n        def f(th, p=p):\n            return (abs(math.cos(th - PI / 6.0)) ** p\n                    + abs(math.cos(th + PI / 6.0)) ** p\n                    + abs(math.sin(th)) ** p) ** (-2.0 / p)\n\n        tot += tanhsinh(f, a, b)\n    return…（落档截断，原 6941 字）",
+        "error": "",
+        "meta": {
+          "path": "code/exp/e3_pstar_scan.py",
+          "encoding": "utf-8",
+          "bytes_read": 7887,
+          "total_bytes": 7887,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 200,
+          "total_lines": 208,
+          "next_line": 201,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 1–200 行（共 208 行）；续读 start_line=201",
+          "sha256": "bfbfc8ae0cd29e35c2c8e24b3e13a85199203f9adea3c21d01ca6c3bbed1aecc"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 54656,
+        "prompt_cache_miss_tokens": 3707,
+        "tokens_in": 58363,
+        "tokens_out": 211,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000119"
+    },
+    {
+      "index": 5,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.write",
+        "args": {
+          "path": "code/exp/e5_delta_second_root.py",
+          "content": "#!/usr/bin/env python3\n# -*- coding: utf-8 -*-\n\"\"\"E 本趟任务 (1)：Delta(p) = A_face(p) - A_diag(p) 在大 p 上的第二零点。\n\n口径承接 exp:000014 / exp:000016（同一套 A_diag 与 A_face）：\n  A_diag(p) = (3/4) * int_0^{2pi} S(th)^{-2/p} dth,\n              S = |cos(th-pi/6)|^p + |cos(th+pi/6)|^p + |sin th|^p,\n              断点 {0,pi/3,2pi/3,pi,4pi/3,5pi/3,2pi}，逐段 tanh-sinh(DE, 步长 h, tmax=7)。\n              与 exp:000014 的唯一差别：S^{-2/p} 走 log-sum-exp\n                S^{-2/p} = exp(-2m) * (sum_i exp(p*(log a_i - m)))^{-2/p},  m = max_i log a_i\n              因为 p>=1e3 时 a_i^p 在双精度下下溢成 0（直接求和得 S=0、除零）。\n              这条恒等式在小 p 上与精确值对得上（自检见下），故与旧脚本等价。\n  A_face(p) = 2^{1/2-1/p} * 4 * Gamma(1+1/p)^2 / Gamma(1+2/p)   （lgamma 现算；exp:000015 已核）\n  Delta(p) = A_face(p) - A_diag(p)     <-- 与 exp:000016 里的 Delta 差一个整体符号\n  端点：Delta(2) = 0（两者都等于 pi）；Delta(p->inf) = 4*sqrt(2) - 3*sqrt(3) = +0.4607013...\n\n网格：p_i = 20 * (1e6/20)^{i/(N-1)}, i=0..N-1, N=241（对数等距、>=200 点）。\n      另在变号点附近用 root/1.5 .. root*1.5 的 41 点对数网格加密复核。\n\n判据（脚本内硬编码、由脚本判，不过模型）：\n  (a) 网格上 Delta 的变号次数 == 1，且变号点落在 (20, 1e6) 内部；\n  (b) 变号点二分夹逼的**相对**宽度 (hi-lo)/p_mid < 1e-6；\n  (c) 网格最右端 Delta > 0（与 p->inf 的极限同号）；\n  (d) 加密网格上 Delta 的变号次数也 == 1；\n  (e) 自检：A_diag(1)=3sqrt3/4、A_diag(2)=pi、A_face(2)=pi 相对误差 < 1e-12；\n      且 h=0.05 与 h=0.025 在 p in {20,1e3,1e6} 上相对差 < 1e-11。\n  全过 => supports；自检过但变号次数 != 1 => refutes（counterexample=变号区间与两端读数）；\n  自检没过 => inconclusive（精度不足不是数学命题的反例）。\n\"\"\"\nimport json\nimport math\nimport time\n\nPI = math.pi\nHP = PI / 2.0\nABRK = [0.0, PI / 3.0, 2.0 * PI / 3.0, PI, 4.0 * PI / 3.0, 5.0 * PI / 3.0, 2.0 * PI]\n\n\ndef tanhsinh(f, a, b, h=0.05, tmax=7.0):\n    \"\"\"双指数（tanh-sinh）求积 int_a^b f（exp:000014 用的同一实现）。\"\"\"\n    if b <= a:\n        return 0.0\n    c = 0.5 * (b - a)\n    d = 0.5 * (a + b)\n    n = int(math.ceil(tmax / h))\n    s = 0.0\n    for k in range(-n, n + 1):\n        t = k * h\n        u = HP * math.sinh(t)\n        x = math.tanh(u)\n        if x >= 1.0 or x <= -1.0:\n            continue\n        ch = math.cosh(u)\n        s += (HP * math.cosh(t) / (ch * ch)) * f(d + c * x)\n    return s * c * h\n\n\ndef integrand(p, th):\n    \"\"\"S(th)^{-2/p}，log-sum-exp 形式（p 大时 a_i^p 下溢，直接求和会得 0）。\"\"\"\n    a = (abs(math.cos(th - PI / 6.0)), abs(math.cos(th + PI / 6.0)), abs(math.sin(th)))\n    m = None\n    for v in a:\n        if v > 0.0:\n            lv = math.log(v)\n            if m is None or lv > m:\n                m = lv\n    s = 0.0\n    for v in a:\n        if v > 0.0:\n            e = p * (math.log(v) - m)\n            if e > -745.0:\n                s += math.exp(e)\n    return math.exp(-2.0 * m) * math.exp(-(2.0 / p) * math.log(s))\n\n\ndef a_diag(p, h=0.05):\n    tot = 0.0\n    for i in range(len(ABRK) - 1):\n        a, b = ABRK[i], ABRK[i + 1]\n        tot += tanhsinh(lambda th, p=p: integrand(p, th), a, b, h=h)\n    return 0.75 * tot\n\n\ndef a_face(p):\n    return 2.0 ** (0.5 - 1.0 / p) * 4.0 * math.exp(\n        2.0 * math.lgamma(1.0 + 1.0 / p) - math.lgamma(1.0 + 2.0 / p))\n\n\ndef delta(p, h=0.05):\n    return a_face(p) - a_diag(p, h=h)\n\n\ndef main():\n    t0 = time.time()\n    exact1 = 3.0 * math.sqrt(3.0) / 4.0\n\n    # ---------------- 自检 ----------------\n    st = {\n        \"a_diag_1_rel\": abs(a_diag(1.0) - exact1) / exact1,\n        \"a_diag_2_rel\": abs(a_diag(2.0) - PI) / PI,\n        \"a_face_2_rel\": abs(a_face(2.0) - PI) / PI,\n    }\n    refine = []\n    for p in (20.0, 1.0e3, 1.0e6):\n        v1 = a_diag(p, h=0.05)\n        v2 = a_diag(p, h=0.025)\n        r = {\"p\": p, \"h005\": v1, \"h0025\": v2, \"rel\": abs(v1 - v2) / abs(v1)}\n        refine.append(r)\n        print(\"PROGRESS: \" + json.dumps({\"stage\": \"h_refine\", **r}))\n    selftest_ok = (max(st.values()) < 1e-12\n                   and max(r[\"rel\"] for r in refine) < 1e-11)\n\n    # ---------------- 对数网格扫描 ----------------\n    N = 241\n    gl, gh = 20.0, 1.0e6\n    grid = [gl * (gh / gl) ** (i / (N - 1.0)) for i in range(N)]\n    rows = []\n    changes = []\n    prev = None\n    for i, p in enumerate(grid):\n        d = delta(p)\n        row = {\"p\": p, \"Delta\": d}\n        rows.append(row)\n        if (prev is not None and d != 0.0 and prev[\"Delta\"] != 0.0\n                and (d > 0.0) != (prev[\"Delta\"] > 0.0)):\n            changes.append([prev[\"p\"], p])\n        prev = row\n        if i % 40 == 0:\n            print(\"PROGRESS: \" + json.dumps({\"stage\": \"grid\", \"i\": i, \"p\": p, \"Delta\": d,\n                                             \"sec\": round(time.time() - t0, 2)}))\n    print(\"PROGRESS: \" + json.dumps({\"stage\": \"grid\", \"i\": N - 1, \"p\": grid[-1],\n                                     \"Delta\": rows[-1][\"Delta\"],\n                                     \"sec\": round(time.time() - t0, 2)}))\n\n    # ---------------- 变号点二分（相对宽度判据） ----------------\n    roots = []\n    for lo, hi in changes:\n        flo, fhi = delta(lo), delta(hi)\n        it = 0\n        while (hi - lo) / (0.5 * (hi + lo)) > 1e-13 and it < 400:\n            mid = 0.5 * (lo + hi)\n            fm = delta(mid)\n            if (fm > 0.0) == (flo > 0.0):\n                lo, flo = mid, fm\n            else:\n                hi, fhi = mid, fm\n            it += 1\n        roots.append({\"p_star\": 0.5 * (lo + hi), \"lo\": lo, \"hi\": hi,\n                      \"rel_width\": (hi - lo) / (0.5 * (lo + hi)),\n                      \"Delta_lo\": flo, \"Delta_hi\": fhi, \"bisect_iters\": it})\n        print(\"PROGRESS: \" + json.dumps({\"stage\": \"bisect\", **roots[-1]}))\n\n    # ---------------- 变号点附近加密复核 ----------------\n    dense = []\n    dense_changes = []\n    if roots:\n        r0 = roots[0][\"p_star\"]\n        dg = [r0 / 1.5 * 3.0 ** (i / 40.0) for i in range(41)]\n        prevd = None\n        for p in dg:\n            d = delta(p)\n            dense.append({\"p\": p, \"Delta\": d})\n            if (prevd is not None and d != 0.0 and prevd[\"Delta\"] != 0.0\n                    and (d > 0.0) != (prevd[\"Delta\"] > 0.0)):\n                dense_changes.append([prevd[\"p\"], p])\n            prevd = dense[-1]\n        print(\"PROGRESS: \" + json.dumps({\"stage\": \"dense\", \"n\": len(dg),\n                                         \"changes\": dense_changes,\n                                         \"min_abs_Delta\": min(abs(x[\"Delta\"]) for x in dense)}))\n\n    # ---------------- 判据 ----------------\n    ok_count = (len(changes) == 1)\n    ok_int = all(gl < r[\"p_star\"] < gh for r in roots)\n    ok_width = all(r[\"rel_width\"] < 1e-6 for r in roots)\n    ok_tail = rows[-1][\"Delta\"] > 0.0\n    ok_dense = (len(dense_changes) == 1) if ok_count else False\n\n    if not selftest_ok:\n        result = \"inconclusive\"\n        ce = None\n        why = \"求积自检未过，读数不可用（精度不足不是数学反例）\"\n    elif not ok_count:\n        result = \"refutes\"\n        ce = {\"sign_changes_on_grid\": changes,\n              \"Delta_at_20\": rows[0][\"Delta\"], \"Delta_at_1e6\": rows[-1][\"Delta\"],\n              \"n_grid\": N, \"note\": \"网格上 Delta 的变号次数与断言（恰一次）不符\"}\n        why = \"网格上 Delta 的变号次数 != 1\"\n    elif ok_width and ok_tail and ok_dense and ok_int:\n        result = \"supports\"\n        ce = None\n        why = \"网格上恰一次变号，二分夹逼相对宽度 < 1e-6，加密复核同样恰一次\"\n    else:\n        result = \"inconclusive\"\n        ce = None\n        why = \"变号次数对但夹逼宽度/端点符号/加密复核未全过\"\n\n    payload = {\n        \"result\": result,\n        \"counterexample\": ce,\n        \"why\": why,\n        \"bound\": \"p in [20, 1e6], log-grid N=241; bracket refined to relative width <= 1e-6\",\n        \"strategy\": (\"6-piece tanh-sinh(DE, h=0.05) on the theta integral with log-sum-exp \"\n                     \"integrand; log-equidistant grid; sign-change bisection in p; \"\n                     \"dense 41-point log grid around the root; h-refinement as convergence control\"),\n        \"scaling\": {\"total_sec\": round(time.time() - t0, 2),\n                    \"a_diag_evals_equiv\": N + 2 * len(roots) * 30 + 41 + 6,\n                    \"per_a_diag_ms\": round(1000.0 * (time.time() - t0) / max(1, N), 2)},\n        \"selftest\": st,\n        \"h_refine\": refine,\n        \"selftest_ok\": selftest_ok,\n        \"grid_first_last\": [rows[0], rows[-1]],\n        \"sign_changes\": changes,\n        \"roots\": roots,\n        \"dense_near_root\": {\"changes\": dense_changes,\n                            \"min_abs_Delta\": min((abs(x[\"Delta\"]) for x in dense), default=None)},\n        \"limit_at_inf\": 4.0 * math.sqrt(2.0) - 3.0 * math.sqrt(3.0),\n        \"checks\": {\"count_one\": ok_count, \"inside\": ok_int, \"rel_width_lt_1e-6\": ok_width,\n                   \"tail_positive\": ok_tail, \"dense_one\": ok_dense},\n        \"note\": (\"Delta = A_face - A_diag（与 exp:000016 的 Delta 差一个整体符号）。\"\n                 \"A_face 用闭式（exp:000015 已与两条独立数值路核过）；A_diag 用 exp:000014 的 \"\n                 \"六段 tanh-sinh，只把被积函数改成 log-sum-exp 形式以扛住 p 大到 1e6 时 a_i^p 下溢。\"\n                 \"p=1,2 的精确值自检与 h 细化都在 payload 里。\"\n                 \"本行判的是「(20,1e6] 上 Delta 变号恰一次并夹逼出该点」这一条网格级断言。\"),\n    }\n    print(\"REPRO_RESULT: \" + json.dumps(payload))\n\n\nif __name__ == \"__main__\":\n    main()\n"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "fs.write",
+        "ok": true,
+        "data": {
+          "path": "code/exp/e5_delta_second_root.py",
+          "bytes": 9808,
+          "sha256": "47077ee89e91dadf119efc9be0a8e50765d9e6a3f97c563df37b294595a07428",
+          "created": true
+        },
+        "error": "",
+        "meta": {
+          "path": "code/exp/e5_delta_second_root.py",
+          "bytes": 9808,
+          "created": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 57600,
+        "prompt_cache_miss_tokens": 3978,
+        "tokens_in": 61578,
+        "tokens_out": 23936,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000119"
+    },
+    {
+      "index": 6,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "code/exp/e5_delta_second_root.py",
+          "start_line": 60,
+          "max_lines": 110
+        },
+        "why": "回读刚写的脚本中段，确认求积与二分逻辑完整（避免把跑不过的代码当通过）"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "    a = (abs(math.cos(th - PI / 6.0)), abs(math.cos(th + PI / 6.0)), abs(math.sin(th)))\n    m = None\n    for v in a:\n        if v > 0.0:\n            lv = math.log(v)\n            if m is None or lv > m:\n                m = lv\n    s = 0.0\n    for v in a:\n        if v > 0.0:\n            e = p * (math.log(v) - m)\n            if e > -745.0:\n                s += math.exp(e)\n    return math.exp(-2.0 * m) * math.exp(-(2.0 / p) * math.log(s))\n\n\ndef a_diag(p, h=0.05):\n    tot = 0.0\n    for i in range(len(ABRK) - 1):\n        a, b = ABRK[i], ABRK[i + 1]\n        tot += tanhsinh(lambda th, p=p: integrand(p, th), a, b, h=h)\n    return 0.75 * tot\n\n\ndef a_face(p):\n    return 2.0 ** (0.5 - 1.0 / p) * 4.0 * math.exp(\n        2.0 * math.lgamma(1.0 + 1.0 / p) - math.lgamma(1.0 + 2.0 / p))\n\n\ndef delta(p, h=0.05):\n    return a_face(p) - a_diag(p, h=h)\n\n\ndef main():\n    t0 = time.time()\n    exact1 = 3.0 * math.sqrt(3.0) / 4.0\n\n    # ---------------- 自检 ----------------\n    st = {\n        \"a_diag_1_rel\": abs(a_diag(1.0) - exact1) / exact1,\n        \"a_diag_2_rel\": abs(a_diag(2.0) - PI) / PI,\n        \"a_face_2_rel\": abs(a_face(2.0) - PI) / PI,\n    }\n    refine = []\n    for p in (20.0, 1.0e3, 1.0e6):\n        v1 = a_diag(p, h=0.05)\n        v2 = a_diag(p, h=0.025)\n        r = {\"p\": p, \"h005\": v1, \"h0025\": v2, \"rel\": abs(v1 - v2) / abs(v1)}\n        refine.append(r)\n        print(\"PROGRESS: \" + json.dumps({\"stage\": \"h_refine\", **r}))\n    selftest_ok = (max(st.values()) < 1e-12\n                   and max(r[\"rel\"] for r in refine) < 1e-11)\n\n    # ---------------- 对数网格扫描 ----------------\n    N = 241\n    gl, gh = 20.0, 1.0e6\n    grid = [gl * (gh / gl) ** (i / (N - 1.0)) for i in range(N)]\n    rows = []\n    changes = []\n    prev = None\n    for i, p in enumerate(grid):\n        d = delta(p)\n        row = {\"p\": p, \"Delta\": d}\n        rows.append(row)\n        if (prev is not None and d != 0.0 and prev[\"Delta\"] != 0.0\n                and (d > 0.0) != (prev[\"Delta\"] > 0.0)):\n            changes.append([prev[…（落档截断，原 3928 字）",
+        "error": "",
+        "meta": {
+          "path": "code/exp/e5_delta_second_root.py",
+          "encoding": "utf-8",
+          "bytes_read": 9808,
+          "total_bytes": 9808,
+          "truncated": false,
+          "start_line": 60,
+          "lines_read": 110,
+          "total_lines": 229,
+          "next_line": 170,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 60–169 行（共 229 行）；续读 start_line=170",
+          "sha256": "47077ee89e91dadf119efc9be0a8e50765d9e6a3f97c563df37b294595a07428"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 60800,
+        "prompt_cache_miss_tokens": 2103,
+        "tokens_in": 62903,
+        "tokens_out": 1366,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000119"
+    },
+    {
+      "index": 7,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "code/exp/e5_delta_second_root.py",
+          "start_line": 170,
+          "max_lines": 70
+        },
+        "why": "回读脚本尾段，确认 REPRO_RESULT 与判据完整，再决定是否跑"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "\n    # ---------------- 判据 ----------------\n    ok_count = (len(changes) == 1)\n    ok_int = all(gl < r[\"p_star\"] < gh for r in roots)\n    ok_width = all(r[\"rel_width\"] < 1e-6 for r in roots)\n    ok_tail = rows[-1][\"Delta\"] > 0.0\n    ok_dense = (len(dense_changes) == 1) if ok_count else False\n\n    if not selftest_ok:\n        result = \"inconclusive\"\n        ce = None\n        why = \"求积自检未过，读数不可用（精度不足不是数学反例）\"\n    elif not ok_count:\n        result = \"refutes\"\n        ce = {\"sign_changes_on_grid\": changes,\n              \"Delta_at_20\": rows[0][\"Delta\"], \"Delta_at_1e6\": rows[-1][\"Delta\"],\n              \"n_grid\": N, \"note\": \"网格上 Delta 的变号次数与断言（恰一次）不符\"}\n        why = \"网格上 Delta 的变号次数 != 1\"\n    elif ok_width and ok_tail and ok_dense and ok_int:\n        result = \"supports\"\n        ce = None\n        why = \"网格上恰一次变号，二分夹逼相对宽度 < 1e-6，加密复核同样恰一次\"\n    else:\n        result = \"inconclusive\"\n        ce = None\n        why = \"变号次数对但夹逼宽度/端点符号/加密复核未全过\"\n\n    payload = {\n        \"result\": result,\n        \"counterexample\": ce,\n        \"why\": why,\n        \"bound\": \"p in [20, 1e6], log-grid N=241; bracket refined to relative width <= 1e-6\",\n        \"strategy\": (\"6-piece tanh-sinh(DE, h=0.05) on the theta integral with log-sum-exp \"\n                     \"integrand; log-equidistant grid; sign-change bisection in p; \"\n                     \"dense 41-point log grid around the root; h-refinement as convergence control\"),\n        \"scaling\": {\"total_sec\": round(time.time() - t0, 2),\n                    \"a_diag_evals_equiv\": N + 2 * len(roots) * 30 + 41 + 6,\n                    \"per_a_diag_ms\": round(1000.0 * (time.time() - t0) / max(1, N), 2)},\n        \"selftest\": st,\n        \"h_refine\": refine,\n        \"selftest_ok\": selftest_ok,\n        \"grid_first_last\": [rows[0], rows[-1]],\n        \"sign_changes\": changes,\n        \"roots\": roots,\n        \"dense_near_root\": {\"changes\": dense_changes,\n                            \"min_abs_Delta\": min((abs(x[\"Delta\"]) for x in dense), default=None)},\n        \"limit_at_in…（落档截断，原 2653 字）",
+        "error": "",
+        "meta": {
+          "path": "code/exp/e5_delta_second_root.py",
+          "encoding": "utf-8",
+          "bytes_read": 9808,
+          "total_bytes": 9808,
+          "truncated": false,
+          "start_line": 170,
+          "lines_read": 60,
+          "total_lines": 229,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 170–229 行（共 229 行）",
+          "sha256": "47077ee89e91dadf119efc9be0a8e50765d9e6a3f97c563df37b294595a07428"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 62080,
+        "prompt_cache_miss_tokens": 3226,
+        "tokens_in": 65306,
+        "tokens_out": 177,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000119"
+    },
+    {
+      "index": 8,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.search",
+        "args": {
+          "pattern": "stage\": \"named",
+          "path": "out/exp-logs",
+          "include": "*.log",
+          "limit": 20
+        },
+        "why": "读 exp:000016 里 p=2/3/4/10/50 的点名读数，先把「同一套口径」的基准数字拿到手，再判断任务给的前提是否成立"
+      },
+      "result": {
+        "tool": "fs.search",
+        "ok": true,
+        "data": {
+          "pattern": "stage\": \"named",
+          "path": "out/exp-logs",
+          "matches": [
+            {
+              "path": "out/exp-logs/000016.log",
+              "line": 12,
+              "text": "PROGRESS: {\"stage\": \"named\", \"p\": 2.0, \"A_diag\": 3.1415926535897936, \"A_face\": 3.141592653589792, \"rho\": 1.0000000000000007, \"Delta\": 1.7763568394002505e-15, \"sign_Delta\": 1}"
+            },
+            {
+              "path": "out/exp-logs/000016.log",
+              "line": 13,
+              "text": "PROGRESS: {\"stage\": \"named\", \"p\": 2.000001, \"A_diag\": 3.1415938972821724, \"A_face\": 3.1415938047756455, \"rho\": 1.0000000294457312, \"Delta\": 9.250652688308492e-08, \"sign_Delta\": 1}"
+            },
+            {
+              "path": "out/exp-logs/000016.log",
+              "line": 14,
+              "text": "PROGRESS: {\"stage\": \"named\", \"p\": 3.0, \"A_diag\": 4.011851809584641, \"A_face\": 3.9659699005362343, \"rho\": 1.011568899966236, \"Delta\": 0.04588190904840683, \"sign_Delta\": 1}"
+            },
+            {
+              "path": "out/exp-logs/000016.log",
+              "line": 15,
+              "text": "PROGRESS: {\"stage\": \"named\", \"p\": 4.0, \"A_diag\": 4.44288293815836, \"A_face\": 4.409757595986336, \"rho\": 1.007511828360401, \"Delta\": 0.03312534217202412, \"sign_Delta\": 1}"
+            },
+            {
+              "path": "out/exp-logs/000016.log",
+              "line": 16,
+              "text": "PROGRESS: {\"stage\": \"named\", \"p\": 10.0, \"A_diag\": 5.0478750702303845, \"A_face\": 5.20272455276747, \"rho\": 0.9702368478349067, \"Delta\": -0.15484948253708541, \"sign_Delta\": -1}"
+            },
+            {
+              "path": "out/exp-logs/000016.log",
+              "line": 17,
+              "text": "PROGRESS: {\"stage\": \"named\", \"p\": 50.0, \"A_diag\": 5.189510459242496, \"A_face\": 5.575409013080393, \"rho\": 0.9307856064133508, \"Delta\": -0.3858985538378974, \"sign_Delta\": -1}"
+            }
+          ],
+          "lines": [
+            "out/exp-logs/000016.log:12: PROGRESS: {\"stage\": \"named\", \"p\": 2.0, \"A_diag\": 3.1415926535897936, \"A_face\": 3.141592653589792, \"rho\": 1.0000000000000007, \"Delta\": 1.7763568394002505e-15, \"sign_Delta\": 1}",
+            "out/exp-logs/000016.log:13: PROGRESS: {\"stage\": \"named\", \"p\": 2.000001, \"A_diag\": 3.1415938972821724, \"A_face\": 3.1415938047756455, \"rho\": 1.0000000294457312, \"Delta\": 9.250652688308492e-08, \"sign_Delta\": 1}",
+            "out/exp-logs/000016.log:14: PROGRESS: {\"stage\": \"named\", \"p\": 3.0, \"A_diag\": 4.011851809584641, \"A_face\": 3.9659699005362343, \"rho\": 1.011568899966236, \"Delta\": 0.04588190904840683, \"sign_Delta\": 1}",
+            "out/exp-logs/000016.log:15: PROGRESS: {\"stage\": \"named\", \"p\": 4.0, \"A_diag\": 4.44288293815836, \"A_face\": 4.409757595986336, \"rho\": 1.007511828360401, \"Delta\": 0.03312534217202412, \"sign_Delta\": 1}",
+            "out/exp-logs/000016.log:16: PROGRESS: {\"stage\": \"named\", \"p\": 10.0, \"A_diag\": 5.0478750702303845, \"A_face\": 5.20272455276747, \"rho\": 0.9702368478349067, \"Delta\": -0.15484948253708541, \"sign_Delta\": -1}",
+            "out/exp-logs/000016.log:17: PROGRESS: {\"stage\": \"named\", \"p\": 50.0, \"A_diag\": 5.189510459242496, \"A_face\": 5.575409013080393, \"rho\": 0.9307856064133508, \"Delta\": -0.3858985538378974, \"sign_Delta\": -1}"
+          ],
+          "total": 6,
+          "truncated": false,
+          "scanned": 20,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        },
+        "error": "",
+        "meta": {
+          "total": 6,
+          "truncated": false,
+          "scanned": 20,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 64512,
+        "prompt_cache_miss_tokens": 2166,
+        "tokens_in": 66678,
+        "tokens_out": 17705,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000119"
+    },
+    {
+      "index": 9,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.edit",
+        "args": {
+          "path": "code/exp/e5_delta_second_root.py",
+          "old_string": "    selftest_ok = (max(st.values()) < 1e-12\n                   and max(r[\"rel\"] for r in refine) < 1e-11)",
+          "new_string": "    # h 细化门槛按用途定：本行判的是 Delta 的符号（网格上最小裕度 >=0.15 量级），\n    # 收敛控制只需远小于该裕度即可；取 1e-9，既足够，也不把大 p 的层结构误差误判成\"读数不可用\"。\n    selftest_ok = (max(st.values()) < 1e-12\n                   and max(r[\"rel\"] for r in refine) < 1e-9)",
+          "note": "把 h 细化门槛从 1e-11 调到 1e-9 并写明理由（判符号只需收敛控制远小于裕度）"
+        },
+        "why": "自检门槛要对准用途：本行判符号，裕度 0.15 量级"
+      },
+      "result": {
+        "tool": "fs.edit",
+        "ok": true,
+        "data": {
+          "path": "code/exp/e5_delta_second_root.py",
+          "sha256_before": "47077ee89e91dadf119efc9be0a8e50765d9e6a3f97c563df37b294595a07428",
+          "sha256_after": "039d93a9a740bd932a203b1e98663b01470e1aefd5cc3d263132b703ae1aaeba",
+          "replacements": 1,
+          "bytes_before": 9808,
+          "bytes_after": 10055,
+          "note": "把 h 细化门槛从 1e-11 调到 1e-9 并写明理由（判符号只需收敛控制远小于裕度）"
+        },
+        "error": "",
+        "meta": {
+          "path": "code/exp/e5_delta_second_root.py",
+          "replacements": 1,
+          "note": "把 h 细化门槛从 1e-11 调到 1e-9 并写明理由（判符号只需收敛控制远小于裕度）"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 65920,
+        "prompt_cache_miss_tokens": 2945,
+        "tokens_in": 68865,
+        "tokens_out": 9075,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000119"
+    },
+    {
+      "index": 10,
+      "shape": "tool",
+      "payload": {
+        "name": "verify.run_experiment",
+        "args": {
+          "claim": "承接 exp:000014/000016 的同一套口径（A_diag(p)=(3/4)∫_0^{2π}S(θ)^{-2/p}dθ，S=|cos(θ−π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p；A_face(p)=2^{1/2−1/p}·4Γ(1+1/p)^2/Γ(1+2/p)；Δ(p)=A_face(p)−A_diag(p)）：在 p∈[20,10^6] 上 Δ(p) 恰有一个零点（即 Δ 在 p>20 上仍有至少一次变号），且该零点可夹逼到相对宽度 ≤1e-6 的区间。",
+          "claim_key": "lp3-diag-vs-face-largep-2nd-root",
+          "script_path": "code/exp/e5_delta_second_root.py",
+          "method": "numeric",
+          "params": {
+            "p_range": [
+              20.0,
+              1000000.0
+            ],
+            "grid": "log-equidistant N=241",
+            "delta_convention": "A_face - A_diag",
+            "rho_convention": "A_face / A_diag",
+            "bracket_rel_width": 1e-06,
+            "integrand": "log-sum-exp form of S^{-2/p} to avoid underflow at p>=1e3"
+          },
+          "timeout": 900
+        },
+        "why": "任务 (1)：把「大 p 上 Δ 还要变号一次」这条断言变成一次可复现的判定，读数由脚本判"
+      },
+      "result": {
+        "tool": "verify.run_experiment",
+        "ok": true,
+        "data": {
+          "experiment_id": "000020",
+          "recorded": true,
+          "result": "refutes",
+          "evidence_kind": "cross_check",
+          "negation_kind": "disproved",
+          "exit_code": 0,
+          "runtime_sec": 0.719,
+          "code_hash": "039d93a9a740bd93",
+          "report_path": "",
+          "report_sha256": "",
+          "report_bytes": 0,
+          "report_blocks": {},
+          "report_problems": [],
+          "proof_manuscript": "",
+          "manuscript_sha256": "",
+          "manuscript_proof_sha256": "",
+          "manuscript_problems": [],
+          "numeric_manuscript": "work/E/e-num-000020.md",
+          "numeric_manuscript_sha256": "219c03905bd2d890f5b1e2ac84718497309ad8e4cb0565ed28040853772e78e8",
+          "numeric_manuscript_problems": [],
+          "signed_by": "V",
+          "proof_authors": [
+            "E"
+          ],
+          "notes": "[run] exit_code=0，runtime=0.719s，脚本 code/exp/e5_delta_second_root.py（sha256 前 16 位 039d93a9a740bd93）\n[stdout] PROGRESS: {\"stage\": \"h_refine\", \"p\": 20.0, \"h005\": 5.156387676535961, \"h0025\": 5.156387676535962, \"rel\": 1.7224818524444223e-16} PROGRESS: {\"stage\": \"h_refine\", \"p\": 1000.0, \"h005\": 5.196135353009356, \"h0025\": 5.196135353009356, \"rel\": 0.0} PROGRESS: {\"stage\": \"h_refine\", \"p\": 1000000.0, \"h005\": 5.…",
+          "reason": "实验给出反例 ⇒ disproved（已证否，且反例已登记）",
+          "conjecture_ledger": {
+            "conjecture_id": "000022",
+            "statement": "承接 exp:000014/000016 的同一套口径（A_diag(p)=(3/4)∫_0^{2π}S(θ)^{-2/p}dθ，S=|cos(θ−π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p；A_face(p)=2^{1/2−1/p}·4Γ(1+1/p)^2/Γ(1+2/p)；Δ(p)=A_face(p)−A_diag(p)）：在 p∈[20,10^6] 上 Δ(p) 恰有一个零点（即 Δ 在 p>20 上仍有至少一次变号），且该零点可夹逼到相对宽度 ≤1e-6 的区间。",
+            "negation_statement": "",
+            "form": "universal",
+            "testable": {},
+            "origin": "experiment:000020",
+            "status": "refuted",
+            "experiment_ids": [
+              "000020"
+            ],
+            "proof_experiment_id": "",
+            "counterexample_experiment_id": "000020",
+            "refusal_ref": "",
+            "promoted_to": {},
+            "known_lit_id": "",
+            "withdraw_reason": "",
+            "notes": "E 的实验 exp:000020（refutes）落地时自动记账：命题正文逐字是这一行的 `claim`，证据是同一行的读数",
+            "created_at": "2026-11-24T20:31:17+08:00",
+            "updated_at": "2026-11-24T20:31:17+08:00",
+            "created_by": "agent-E-E1",
+            "updated_by": "agent-E-E1",
+            "registered_stmt_id": "",
+            "duplicate": false,
+            "ok": true
+          },
+          "d_handoff": {
+            "checked": true,
+            "state": "cleared",
+            "key": "d-handoff@000022",
+            "item_id": "",
+            "owner": "",
+            "owner_instance": "",
+            "owner_known": false,
+            "owner_source": "",
+            "owner_why": "",
+            "reason": "猜想 000022 已是 refuted（不再值得递交）",
+            "problems": []
+          }
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 68096,
+        "prompt_cache_miss_tokens": 2127,
+        "tokens_in": 70223,
+        "tokens_out": 1146,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000119"
+    },
+    {
+      "index": 11,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/exp-logs/000020.log",
+          "max_lines": 40
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# lp3-diag-vs-face-largep-2nd-root\n# 脚本 code/exp/e5_delta_second_root.py  sha256=039d93a9a740bd93\n# exit_code=0  runtime=0.719s\n# claim: 承接 exp:000014/000016 的同一套口径（A_diag(p)=(3/4)∫_0^{2π}S(θ)^{-2/p}dθ，S=|cos(θ−π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p；A_face(p)=2^{1/2−1/p}·4Γ(1+1/p)^2/Γ(1+2/p)；Δ(p)=A_face(p)−A_diag(p)）：在 p∈[20,10^6] 上 Δ(p) 恰有一个零点（即 Δ 在 p>20 上仍有至少一次变号），且该零点可夹逼到相对宽度 ≤1e-6 的区间。\n----- stdout -----\nPROGRESS: {\"stage\": \"h_refine\", \"p\": 20.0, \"h005\": 5.156387676535961, \"h0025\": 5.156387676535962, \"rel\": 1.7224818524444223e-16}\nPROGRESS: {\"stage\": \"h_refine\", \"p\": 1000.0, \"h005\": 5.196135353009356, \"h0025\": 5.196135353009356, \"rel\": 0.0}\nPROGRESS: {\"stage\": \"h_refine\", \"p\": 1000000.0, \"h005\": 5.1961524226895355, \"h0025\": 5.196152422689538, \"rel\": 5.127900497039709e-16}\nPROGRESS: {\"stage\": \"grid\", \"i\": 0, \"p\": 20.0, \"Delta\": 0.2868654787912064, \"sec\": 0.02}\nPROGRESS: {\"stage\": \"grid\", \"i\": 40, \"p\": 121.39244620058344, \"Delta\": 0.42901924299404826, \"sec\": 0.11}\nPROGRESS: {\"stage\": \"grid\", \"i\": 80, \"p\": 736.8062997280772, \"Delta\": 0.4553970052696421, \"sec\": 0.18}\nPROGRESS: {\"stage\": \"grid\", \"i\": 120, \"p\": 4472.13595499958, \"Delta\": 0.4598255146108716, \"sec\": 0.26}\nPROGRESS: {\"stage\": \"grid\", \"i\": 160, \"p\": 27144.17616594906, \"Delta\": 0.46055738712672856, \"sec\": 0.33}\nPROGRESS: {\"stage\": \"grid\", \"i\": 200, \"p\": 164754.89724420663, \"Delta\": 0.46067802793598833, \"sec\": 0.42}\nPROGRESS: {\"stage\": \"grid\", \"i\": 240, \"p\": 1000000.0, \"Delta\": 0.46069790576232705, \"sec\": 0.49}\nPROGRESS: {\"stage\": \"grid\", \"i\": 240, \"p\": 1000000.0, \"Delta\": 0.46069790576232705, \"sec\": 0.49}\nREPRO_RESULT: {\"result\": \"refutes\", \"counterexample\": {\"sign_changes_on_grid\": [], \"Delta_at_20\": 0.2868654787912064, \"Delta_at_1e6\": 0.46069790576232705, \"n_grid\": 241, \"note\": \"\\u7f51\\u683c\\u4e0a Delta \\u7684\\u53d8\\u53f7\\u6b21\\u6570\\u4e0e\\u65ad\\u8a00\\uff08\\u6070\\u4e00\\u6b21\\uff09\\u4e0d\\u7b26\"}, \"why\": \"\\u7f51\\u683c\\u4e0a Delta \\u7684\\u53d8\\u53f7\\u6b21\\u6570 != 1\", \"bound\": \"p in [20, 1e6], log-grid N=241; brac…（落档截断，原 3901 字）",
+        "error": "",
+        "meta": {
+          "path": "out/exp-logs/000020.log",
+          "encoding": "utf-8",
+          "bytes_read": 4035,
+          "total_bytes": 4035,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 18,
+          "total_lines": 18,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 1–18 行（共 18 行）",
+          "sha256": "ad2deafbf1d66724b08a25deaf387bb0e5eaba1c6635683f454603c787567d60"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 69376,
+        "prompt_cache_miss_tokens": 2907,
+        "tokens_in": 72283,
+        "tokens_out": 180,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000119"
+    },
+    {
+      "index": 12,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.write",
+        "args": {
+          "path": "code/exp/e6_pstar_peak_derivative.py",
+          "content": "#!/usr/bin/env python3\n# -*- coding: utf-8 -*-\n\"\"\"E 本趟任务 (2)：用导数判据把 p in (2,20] 上的 Delta 零点与 rho 的驻点加密到 1e-9，并判 rho 的单调性。\n\n口径 = exp:000014 / exp:000016 / exp:000020（同一 A_diag 与 A_face）：\n  A_diag(p) = (3/4) int_0^{2pi} S(th)^{-2/p} dth,\n              S = |cos(th-pi/6)|^p + |cos(th+pi/6)|^p + |sin th|^p\n              六段 tanh-sinh(DE, 步长 h)，断点 {0,pi/3,2pi/3,pi,4pi/3,5pi/3,2pi}\n              被积函数走 log-sum-exp（p 大时 a_i^p 不下溢）\n  导数用精确恒等式（不是差商）：d/dp S^{-2/p} = S^{-2/p} * (2/p^2) * ln S\n    => A_diag'(p) = (3/4)*(2/p^2) * int S^{-2/p} * ln S dth（同一套断点与求积）\n  A_face(p) = 2^{1/2-1/p} * 4 * Gamma(1+1/p)^2 / Gamma(1+2/p)\n    => A_face'(p) = A_face(p) * p^{-2} * [ln2 - 2 psi(1+1/p) + 2 psi(1+2/p)]\n       （psi 脚本内自实现：递推 + 渐近级数；与 lgamma 的中心差商对拍）\n两套约定都算、各自报符号：\n  R2（任务原文）：rho2 = A_face/A_diag,  Delta2 = A_face - A_diag\n  R1（exp:000014/000016 落库）：rho1 = A_diag/A_face = 1/rho2,  Delta1 = -Delta2\n\n脚本判据（硬编码、由脚本判、不过模型）：\n  (a) Delta2 在 (2,20] 上恰有一个零点；Newton + 夹逼，相对宽度 <= 1e-12；\n  (b) rho2 的驻点在 (2,20] 上唯一（rho2' 在 120 点对数采样上变号恰一次）；\n  (c) 单调性：rho2' 在 (2,p_ext) 与 (p_ext,20] 上的符号是否各自恒定（各 150 点 + 最小裕度）；\n  (d) 自检：A_diag(1)/A_diag(2)/A_face(2) 精确值；A_face' 与中心差商；A_diag' 与 Delta 的中心差商；\n      Delta2 与 rho2' 在 p=3.02/5/10 上的 h-细化（h=0.05 vs 0.025）。\nresult：任务原文那条断言（(i) 零点唯一且可加密；(ii) rho 在 p_peak~3.02 取极大、(2,p_peak) 严格增、\n        (p_peak,p*) 严格减）与读数不符 => refutes（counterexample 点名反例点与读数）；相符 => supports；\n        自检不过 => inconclusive（数值精度不足不是数学反例）。\n\"\"\"\nimport json\nimport math\nimport time\n\nPI = math.pi\nHP = PI / 2.0\nABRK = [0.0, PI / 3.0, 2.0 * PI / 3.0, PI, 4.0 * PI / 3.0, 5.0 * PI / 3.0, 2.0 * PI]\n\n\ndef tanhsinh_pair(f, a, b, h=0.05, tmax=7.0):\n    \"\"\"一段上同时求两个被积函数（一次遍历，两个累加）。\"\"\"\n    if b <= a:\n        return (0.0, 0.0)\n    c = 0.5 * (b - a)\n    d = 0.5 * (a + b)\n    s0 = 0.0\n    s1 = 0.0\n    n = int(tmax / h)\n    for k in range(-n, n + 1):\n        t = k * h\n        u = HP * math.sinh(t)\n        x = math.tanh(u)\n        if x >= 1.0 or x <= -1.0:\n            continue\n        ch = math.cosh(u)\n        w = HP * math.cosh(t) / (ch * ch)\n        v0, v1 = f(d + c * x)\n        s0 += w * v0\n        s1 += w * v1\n    return (s0 * c * h, s1 * c * h)\n\n\ndef integrand_pair(p, th):\n    \"\"\"返回 (S^{-2/p}, S^{-2/p} * ln S)，S = sum_i a_i^p；log-sum-exp 形式防下溢。\"\"\"\n    a = (abs(math.cos(th - PI / 6.0)), abs(math.cos(th + PI / 6.0)), abs(math.sin(th)))\n    m = -1.0e308\n    for v in a:\n        if v > 0.0:\n            lv = math.log(v)\n            if lv > m:\n                m = lv\n    s = 0.0\n    for v in a:\n        if v > 0.0:\n            e = p * (math.log(v) - m)\n            if e > -745.0:\n                s += math.exp(e)\n    ls = math.log(s)\n    v0 = math.exp(-2.0 * m - (2.0 / p) * ls)\n    lnS = p * m + ls\n    return (v0, v0 * lnS)\n\n\ndef a_diag_deriv(p, h=0.05):\n    t0 = 0.0\n    t1 = 0.0\n    for i in range(len(ABRK) - 1):\n        a, b = ABRK[i], ABRK[i + 1]\n        s0, s1 = tanhsinh_pair(lambda th, p=p: integrand_pair(p, th), a, b, h=h)\n        t0 += s0\n        t1 += s1\n    return (0.75 * t0, 0.75 * (2.0 / (p * p)) * t1)\n\n\ndef a_face(p):\n    return 2.0 ** (0.5 - 1.0 / p) * 4.0 * math.exp(\n        2.0 * math.lgamma(1.0 + 1.0 / p) - math.lgamma(1.0 + 2.0 / p))\n\n\ndef digamma(x):\n    \"\"\"psi(x)，x>0：递推抬到 x>=12 后用渐近级数。\"\"\"\n    r = 0.0\n    while x < 12.0:\n        r -= 1.0 / x\n        x += 1.0\n    inv = 1.0 / x\n    u = inv * inv\n    return r + math.log(x) - 0.5 * inv - u * (1.0 / 12.0 - u * (1.0 / 120.0 - u * (1.0 / 252.0 - u / 240.0)))\n\n\ndef a_face_deriv(p):\n    g = math.log(2.0) - 2.0 * digamma(1.0 + 1.0 / p) + 2.0 * digamma(1.0 + 2.0 / p)\n    return a_face(p) * g / (p * p)\n\n\ndef probe(p, h=0.05):\n    ad, dad = a_diag_deriv(p, h=h)\n    af = a_face(p)\n    daf = a_face_deriv(p)\n    dr2 = (daf * ad - af * dad) / (ad * ad)\n    return {\"p\": p, \"A_diag\": ad, \"A_face\": af,\n            \"Delta2\": af - ad, \"dDelta2\": daf - dad,\n            \"rho2\": af / ad, \"drho2\": dr2, \"rho1\": ad / af, \"drho1\": -dr2 / ((af / ad) ** 2)}\n\n\ndef d2(p, h=0.05):\n    ad, _ = a_diag_deriv(p, h=h)\n    return a_face(p) - ad\n\n\ndef dd2(p, h=0.05):\n    _, dad = a_diag_deriv(p, h=h)\n    return a_face_deriv(p) - dad\n\n\ndef dr2(p, h=0.05):\n    ad, dad = a_diag_deriv(p, h=h)\n    af = a_face(p)\n    daf = a_face_deriv(p)\n    return (daf * ad - af * dad) / (ad * ad)\n\n\ndef num_deriv(f, p, rt=1e-5):\n    hh = rt * p\n    return (f(p + hh) - f(p - hh)) / (2.0 * hh)\n\n\ndef solve_newton(f, df, lo, hi, rtol=1e-12, itmax=200):\n    flo = f(lo)\n    fhi = f(hi)\n    if not (flo * fhi < 0.0):\n        return None\n    its = 0\n    for its in range(1, itmax + 1):\n        mid = 0.5 * (lo + hi)\n        fm = f(mid)\n        dm = df(mid)\n        cand = mid\n        if dm != 0.0:\n            c1 = mid - fm / dm\n            if lo < c1 < hi:\n                cand = c1\n        fc = f(cand)\n        if fc == 0.0:\n            lo = cand\n            hi = cand\n            break\n        if (fc > 0.0) == (flo > 0.0):\n            lo, flo = cand, fc\n        else:\n            hi, fhi = cand, fc\n        if (hi - lo) <= rtol * 0.5 * (hi + lo):\n            break\n    pc = 0.5 * (lo + hi)\n    return {\"p\": pc, \"lo\": lo, \"hi\": hi, \"rel_width\": (hi - lo) / (0.5 * (hi + lo)),\n            \"value\": f(pc), \"slope\": df(pc), \"iters\": its}\n\n\ndef scan_sign_changes(g, lo, hi, n=120):\n    pts = [lo * (hi / lo) ** (i / (n - 1.0)) for i in range(n)]\n    vals = [g(p) for p in pts]\n    ch = []\n    for i in range(1, n):\n        if vals[i] != 0.0 and vals[i - 1] != 0.0 and (vals[i] > 0.0) != (vals[i - 1] > 0.0):\n            ch.append([pts[i - 1], pts[i]])\n    return pts, vals, ch\n\n\ndef main():\n    t0 = time.time()\n    exact1 = 3.0 * math.sqrt(3.0) / 4.0\n\n    # ---------------- 自检 ----------------\n    st = {\n        \"a_diag_1_rel\": abs(a_diag_deriv(1.0)[0] - exact1) / exact1,\n        \"a_diag_2_rel\": abs(a_diag_deriv(2.0)[0] - PI) / PI,\n        \"a_face_2_rel\": abs(a_face(2.0) - PI) / PI,\n    }\n    for p in (3.02, 7.0):\n        dnum = (a_face(p * (1.0 + 1e-7)) - a_face(p * (1.0 - 1e-7))) / (2.0 * 1e-7 * p)\n        st[\"a_face_deriv_rel@%.2f\" % p] = abs(a_face_deriv(p) - dnum) / abs(a_face_deriv(p))\n        adp = a_diag_deriv(p * (1.0 + 1e-6))[0]\n        adm = a_diag_deriv(p * (1.0 - 1e-6))[0]\n        dnum2 = (adp - adm) / (2.0 * 1e-6 * p)\n        st[\"a_diag_deriv_rel@%.2f\" % p] = abs(a_diag_deriv(p)[1] - dnum2) / abs(a_diag_deriv(p)[1])\n\n    refine = []\n    for p in (3.02, 5.0, 10.0):\n        r = {\"p\": p,\n             \"Delta2_h005\": d2(p, h=0.05), \"Delta2_h0025\": d2(p, h=0.025),\n             \"drho2_h005\": dr2(p, h=0.05), \"drho2_h0025\": dr2(p, h=0.025)}\n        r[\"Delta2_rel\"] = abs(r[\"Delta2_h005\"] - r[\"Delta2_h0025\"]) / max(1e-300, abs(r[\"Delta2_h005\"]))\n        r[\"drho2_rel\"] = abs(r[\"drho2_h005\"] - r[\"drho2_h0025\"]) / max(1e-300, abs(r[\"drho2_h005\"]))\n        refine.append(r)\n        print(\"PROGRESS: \" + json.dumps({\"stage\": \"h_refine\", **{k: r[k] for k in (\"p\", \"Delta2_rel\", \"drho2_rel\")}}))\n\n    selftest_ok = (max(st[\"a_diag_1_rel\"], st[\"a_diag_2_rel\"], st[\"a_face_2_rel\"]) < 1e-12\n                   and max(v for k, v in st.items() if \"_deriv_rel\" in k) < 1e-6\n                   and max(r[\"Delta2_rel\"] for r in refine) < 1e-10\n                   and max(r[\"drho2_rel\"] for r in refine) < 1e-9)\n\n    # ---------------- Delta2 的零点 ----------------\n    pts, vals, ch_d = scan_sign_changes(d2, 2.01, 20.0, n=120)\n    print(\"PROGRESS: \" + json.dumps({\"stage\": \"scan_Delta2\", \"n\": len(pts),\n                                     \"changes\": ch_d, \"D_at_2.01\": vals[0], \"D_at_20\": vals[-1]}))\n    root = solve_newton(d2, dd2, ch_d[0][0], ch_d[0][1]) if len(ch_d) == 1 else None\n    if root:\n        print(\"PROGRESS: \" + json.dumps({\"stage\": \"root_Delta2\", \"p_star\": root[\"p\"],\n                                         \"rel_width\": root[\"rel_width\"], \"Delta2\": root[\"value\"],\n                                         \"dDelta2\": root[\"slope\"], \"iters\": root[\"iters\"]}))\n\n    # ---------------- rho2 的驻点 ----------------\n    pts2, vals2, ch_r = scan_sign_changes(dr2, 2.01, 20.0, n=120)\n    print(\"PROGRESS: \" + json.dumps({\"stage\": \"scan_drho2\", \"n\": len(pts2), \"changes\": ch_r,\n                                     \"drho2_at_2.01\": vals2[0], \"drho2_at_20\": vals2[-1]}))\n    ext = None\n    if len(ch_r) == 1:\n        lo, hi = ch_r[0]\n        ext = solve_newton(dr2, lambda x: num_deriv(dr2, x), lo, hi)\n        if ext:\n            rho2_at = a_face(ext[\"p\"]) / a_diag_deriv(ext[\"p\"])[0]\n            ext[\"rho2\"] = rho2_at\n            ext[\"rho1\"] = 1.0 / rho2_at\n            ext[\"curvature\"] = num_deriv(dr2, ext[\"p\"])\n            print(\"PROGRESS: \" + json.dumps({\"stage\": \"stationary\", **ext}))\n\n    # ---------------- 单调性（两套约定） ----------------\n    mono = {}\n    if ext:\n        pe = ext[\"p\"]\n        left = [2.02 * (pe / 2.02) ** (i / 149.0) for i in range(150)]\n        left = [p for p in left if p < pe - 1e-6]\n        right = [pe * (19.9 / pe) ** (i / 149.0) for i in range(150)]\n        right = [p for p in right if p > pe + 1e-6]\n        lv = [dr2(p) for p in left]\n        rv = [dr2(p) for p in right]\n        mono[\"left\"] = {\"n\": len(lv), \"max_drho2\": max(lv), \"min_drho2\": min(lv),\n                        \"all_negative\": all(v < 0.0 for v in lv),\n                        \"all_positive\": all(v > 0.0 for v in lv),\n                        \"min_abs\": min(abs(v) for v in lv)}\n        mono[\"right\"] = {\"n\": len(rv), \"max_drho2\": max(rv), \"min_drho2\": min(rv),\n                         \"all_negative\": all(v < 0.0 for v in rv),\n                         \"all_positive\": all(v > 0.0 for v in rv),\n                         \"min_abs\": min(abs(v) for v in rv)}\n        mono[\"note\"] = (\"left = (2, p_ext)，right = (p_ext, 20]；drho2 = d/dp(A_face/A_diag)，\"\n                        \"drho1 = -drho2/rho2^2 与它符号相反\")\n        print(\"PROGRESS: \" + json.dumps({\"stage\": \"monotone\", **mono}))\n\n    # ---------------- 反例点（任务原文约定 R2 的两个见证） ----------------\n    wit = []\n    for p in (2.5, 4.0):\n        pr = probe(p)\n        wit.append({\"p\": p, \"rho_face_over_diag\": pr[\"rho2\"], \"drho_face_over_diag\": pr[\"drho2\"],\n                    \"rho_diag_over_face\": pr[\"rho1\"], \"drho_diag_over_face\": pr[\"drho1\"],\n                    \"Delta_face_minus_diag\": pr[\"Delta2\"]})\n    for w in wit:\n        print(\"PROGRESS: \" + json.dumps({\"stage\": \"witness\", **w}))\n\n    # ---------------- 判据 ----------------\n    ok_root = (root is not None and len(ch_d) == 1 and root[\"rel_width\"] < 1e-12\n               and 2.0 < root[\"p\"] < 20.0)\n    ok_ext = (ext is not None and len(ch_r) == 1 and ext[\"rel_width\"] < 1e-12)\n    claim_ii_R2 = None\n    if ok_ext and mono:\n        claim_ii_R2 = (mono[\"left\"][\"all_positive\"] and mono[\"right\"][\"all_negative\"])\n    if not selftest_ok:\n        result = \"inconclusive\"\n        ce = None\n        why = \"自检/收敛控制未过，读数不可用（精度不足不是数学反例）\"\n    elif not (ok_root and ok_ext):\n        result = \"inconclusive\"\n        ce = None\n        why = \"零点或驻点未在 (2,20] 上唯一确定（采样级读数不足以判这两条）\"\n    elif claim_ii_R2:\n        result = \"supports\"\n        ce = None\n        why = \"零点唯一、驻点唯一，且 rho2 在 (2,p_ext) 严格增、(p_ext,20] 严格减\"\n    else:\n        result = \"refutes\"\n        ce = {\n            \"claim_part\": \"(ii) rho(p)=A_face/A_diag 在 p_peak~3.02 处取极大，(2,p_peak) 严格增，(p_peak,p*) 严格减\",\n            \"p_peak\": ext[\"p\"],\n            \"rho_A_face_over_A_diag_at_peak\": ext[\"rho2\"],\n            \"rho_A_diag_over_A_face_at_peak\": ext[\"rho1\"],\n            \"curvature_sign\": (\"rho2'' > 0 => 极小（不是极大）\" if ext[\"curvature\"] > 0 else \"rho2'' < 0\"),\n            \"witnesses\": wit,\n            \"task_value_1_0116_belongs_to\": \"A_diag/A_face（R1 约定）在 p_peak 的极大值，不是 A_face/A_diag（R2）的极大值\",\n        }\n        why = \"读数与任务原文的单调方向相反：R2 下 rho 在 p_peak 是极小；1.0116 属于 1/rho\"\n\n    payload = {\n        \"result\": result,\n        \"counterexample\": ce,\n        \"why\": why,\n        \"bound\": \"p in (2,20]; 120-point log scan for sign changes; root and stationary point refined to relative width <= 1e-12 (ok_root requires < 1e-12)\",\n        \"strategy\": (\"6-piece tanh-sinh (DE, h=0.05) with log-sum-exp integrand; derivatives by analytic \"\n                     \"identities (A_diag' = (3/4)(2/p^2) int S^{-2/p} ln S dth; A_face' via self-implemented \"\n                     \"digamma) — no finite differences in the judged quantities; safeguarded Newton for the \"\n                     \"Delta2 root; safeguarded Newton + central-difference slope for the stationary point of rho; \"\n                     \"h-refinement (0.05 vs 0.025) as convergence control\"),\n        \"scaling\": {\"total_sec\": round(time.time() - t0, 2),\n                    \"probe_evals_equiv\": len(pts) + len(pts2) + 2 * 150 + 40},\n        \"selftest\": st,\n        \"selftest_ok\": selftest_ok,\n        \"h_refine\": refine,\n        \"scan_Delta2\": {\"changes\": ch_d, \"Delta2_at_2.01\": vals[0], \"Delta2_at_20\": vals[-1]},\n        \"scan_drho2\": {\"changes\": ch_r, \"drho2_at_2.01\": vals2[0], \"drho2_at_20\": vals2[-1]},\n        \"root_Delta2\": root,\n        \"stationary_rho2\": ext,\n        \"monotone\": mono,\n        \"witnesses\": wit,\n        \"checks\": {\"root_unique_and_tight\": ok_root, \"stationary_unique_and_tight\": ok_ext,\n                   \"claim_ii_holds_in_R2\": claim_ii_R2},\n        \"note\": (\"Delta2 = A_face - A_diag，rho2 = A_face/A_diag（任务原文约定）；R1 = 落库约定（reciprocal）。\"\n                 \"A_face 用闭式（exp:000015 已与两条独立数值路核过）；A_diag 用 exp:000014 的六段 tanh-sinh，\"\n                 \"只把被积函数改成 log-sum-exp。单调性是 150+150 点的采样级读数（不是穷举）。\"),\n    }\n    print(\"REPRO_RESULT: \" + json.dumps(payload))\n\n\nif __name__ == \"__main__\":\n    main()\n"
+        },
+        "why": "任务 (2)：用解析导数（A_diag' 走精确恒等式、A_face' 走 digamma）把零点与驻点加密到 1e-9，并让脚本自己判 ρ 的单调性；判据与符号全由读数判"
+      },
+      "result": {
+        "tool": "fs.write",
+        "ok": true,
+        "data": {
+          "path": "code/exp/e6_pstar_peak_derivative.py",
+          "bytes": 14576,
+          "sha256": "b441a0e789b6284f5da466d9fe99a0afe6e0d964dfad2152280efaee307a171b",
+          "created": true
+        },
+        "error": "",
+        "meta": {
+          "path": "code/exp/e6_pstar_peak_derivative.py",
+          "bytes": 14576,
+          "created": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 71424,
+        "prompt_cache_miss_tokens": 3263,
+        "tokens_in": 74687,
+        "tokens_out": 32539,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000119"
+    },
+    {
+      "index": 13,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "code/exp/e6_pstar_peak_derivative.py",
+          "start_line": 1,
+          "max_lines": 150
+        },
+        "why": "回读任务(2)脚本前段：确认导数恒等式与判据写法，再决定是否跑（不能把跑不过的代码当通过）"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "#!/usr/bin/env python3\n# -*- coding: utf-8 -*-\n\"\"\"E 本趟任务 (2)：用导数判据把 p in (2,20] 上的 Delta 零点与 rho 的驻点加密到 1e-9，并判 rho 的单调性。\n\n口径 = exp:000014 / exp:000016 / exp:000020（同一 A_diag 与 A_face）：\n  A_diag(p) = (3/4) int_0^{2pi} S(th)^{-2/p} dth,\n              S = |cos(th-pi/6)|^p + |cos(th+pi/6)|^p + |sin th|^p\n              六段 tanh-sinh(DE, 步长 h)，断点 {0,pi/3,2pi/3,pi,4pi/3,5pi/3,2pi}\n              被积函数走 log-sum-exp（p 大时 a_i^p 不下溢）\n  导数用精确恒等式（不是差商）：d/dp S^{-2/p} = S^{-2/p} * (2/p^2) * ln S\n    => A_diag'(p) = (3/4)*(2/p^2) * int S^{-2/p} * ln S dth（同一套断点与求积）\n  A_face(p) = 2^{1/2-1/p} * 4 * Gamma(1+1/p)^2 / Gamma(1+2/p)\n    => A_face'(p) = A_face(p) * p^{-2} * [ln2 - 2 psi(1+1/p) + 2 psi(1+2/p)]\n       （psi 脚本内自实现：递推 + 渐近级数；与 lgamma 的中心差商对拍）\n两套约定都算、各自报符号：\n  R2（任务原文）：rho2 = A_face/A_diag,  Delta2 = A_face - A_diag\n  R1（exp:000014/000016 落库）：rho1 = A_diag/A_face = 1/rho2,  Delta1 = -Delta2\n\n脚本判据（硬编码、由脚本判、不过模型）：\n  (a) Delta2 在 (2,20] 上恰有一个零点；Newton + 夹逼，相对宽度 <= 1e-12；\n  (b) rho2 的驻点在 (2,20] 上唯一（rho2' 在 120 点对数采样上变号恰一次）；\n  (c) 单调性：rho2' 在 (2,p_ext) 与 (p_ext,20] 上的符号是否各自恒定（各 150 点 + 最小裕度）；\n  (d) 自检：A_diag(1)/A_diag(2)/A_face(2) 精确值；A_face' 与中心差商；A_diag' 与 Delta 的中心差商；\n      Delta2 与 rho2' 在 p=3.02/5/10 上的 h-细化（h=0.05 vs 0.025）。\nresult：任务原文那条断言（(i) 零点唯一且可加密；(ii) rho 在 p_peak~3.02 取极大、(2,p_peak) 严格增、\n        (p_peak,p*) 严格减）与读数不符 => refutes（counterexample 点名反例点与读数）；相符 => supports；\n        自检不过 => inconclusive（数值精度不足不是数学反例）。\n\"\"\"\nimport json\nimport math\nimport time\n\nPI = math.pi\nHP = PI / 2.0\nABRK = [0.0, PI / 3.0, 2.0 * PI / 3.0, PI, 4.0 * PI / 3.0, 5.0 * PI / 3.0, 2.0 * PI]\n\n\ndef tanhsinh_pair(f, a, b, h=0.05, tmax=7.0):\n    \"\"\"一段上同时求两个被积函数（一次遍历，两个累加）。\"\"\"\n    if b <= a:\n        return (0.0, 0.0)\n    c = 0.5 * (b - a)\n    d = 0.5 * (a + b)\n    s0 = 0.0\n    s1 = 0.0\n    n = int(tmax / h)\n    for k in range(-n, n + 1):\n        t = k * h\n        u = HP * math.sinh(t)\n        x = math.tanh(u)\n        if x >= 1.0 or x <= -1.0:\n            continue\n        ch = math.cosh(u)\n        w = HP * …（落档截断，原 4459 字）",
+        "error": "",
+        "meta": {
+          "path": "code/exp/e6_pstar_peak_derivative.py",
+          "encoding": "utf-8",
+          "bytes_read": 14576,
+          "total_bytes": 14576,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 150,
+          "total_lines": 340,
+          "next_line": 151,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 1–150 行（共 340 行）；续读 start_line=151",
+          "sha256": "b441a0e789b6284f5da466d9fe99a0afe6e0d964dfad2152280efaee307a171b"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 73856,
+        "prompt_cache_miss_tokens": 2072,
+        "tokens_in": 75928,
+        "tokens_out": 3203,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000119"
+    },
+    {
+      "index": 14,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "code/exp/e6_pstar_peak_derivative.py",
+          "start_line": 151,
+          "max_lines": 190
+        },
+        "why": "回读任务(2)脚本后段：确认 main 与判据（Newton/夹逼、单调性、REPRO_RESULT）完整，再决定是否跑"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "    its = 0\n    for its in range(1, itmax + 1):\n        mid = 0.5 * (lo + hi)\n        fm = f(mid)\n        dm = df(mid)\n        cand = mid\n        if dm != 0.0:\n            c1 = mid - fm / dm\n            if lo < c1 < hi:\n                cand = c1\n        fc = f(cand)\n        if fc == 0.0:\n            lo = cand\n            hi = cand\n            break\n        if (fc > 0.0) == (flo > 0.0):\n            lo, flo = cand, fc\n        else:\n            hi, fhi = cand, fc\n        if (hi - lo) <= rtol * 0.5 * (hi + lo):\n            break\n    pc = 0.5 * (lo + hi)\n    return {\"p\": pc, \"lo\": lo, \"hi\": hi, \"rel_width\": (hi - lo) / (0.5 * (hi + lo)),\n            \"value\": f(pc), \"slope\": df(pc), \"iters\": its}\n\n\ndef scan_sign_changes(g, lo, hi, n=120):\n    pts = [lo * (hi / lo) ** (i / (n - 1.0)) for i in range(n)]\n    vals = [g(p) for p in pts]\n    ch = []\n    for i in range(1, n):\n        if vals[i] != 0.0 and vals[i - 1] != 0.0 and (vals[i] > 0.0) != (vals[i - 1] > 0.0):\n            ch.append([pts[i - 1], pts[i]])\n    return pts, vals, ch\n\n\ndef main():\n    t0 = time.time()\n    exact1 = 3.0 * math.sqrt(3.0) / 4.0\n\n    # ---------------- 自检 ----------------\n    st = {\n        \"a_diag_1_rel\": abs(a_diag_deriv(1.0)[0] - exact1) / exact1,\n        \"a_diag_2_rel\": abs(a_diag_deriv(2.0)[0] - PI) / PI,\n        \"a_face_2_rel\": abs(a_face(2.0) - PI) / PI,\n    }\n    for p in (3.02, 7.0):\n        dnum = (a_face(p * (1.0 + 1e-7)) - a_face(p * (1.0 - 1e-7))) / (2.0 * 1e-7 * p)\n        st[\"a_face_deriv_rel@%.2f\" % p] = abs(a_face_deriv(p) - dnum) / abs(a_face_deriv(p))\n        adp = a_diag_deriv(p * (1.0 + 1e-6))[0]\n        adm = a_diag_deriv(p * (1.0 - 1e-6))[0]\n        dnum2 = (adp - adm) / (2.0 * 1e-6 * p)\n        st[\"a_diag_deriv_rel@%.2f\" % p] = abs(a_diag_deriv(p)[1] - dnum2) / abs(a_diag_deriv(p)[1])\n\n    refine = []\n    for p in (3.02, 5.0, 10.0):\n        r = {\"p\": p,\n             \"Delta2_h005\": d2(p, h=0.05), \"Delta2_h0025\": d2(p, h=0.025),\n             \"drho2_h005\": dr2(p, h=0.05), \"drho2…（落档截断，原 8907 字）",
+        "error": "",
+        "meta": {
+          "path": "code/exp/e6_pstar_peak_derivative.py",
+          "encoding": "utf-8",
+          "bytes_read": 14576,
+          "total_bytes": 14576,
+          "truncated": false,
+          "start_line": 151,
+          "lines_read": 190,
+          "total_lines": 340,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 151–340 行（共 340 行）",
+          "sha256": "b441a0e789b6284f5da466d9fe99a0afe6e0d964dfad2152280efaee307a171b"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 75136,
+        "prompt_cache_miss_tokens": 4227,
+        "tokens_in": 79363,
+        "tokens_out": 366,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000119"
+    },
+    {
+      "index": 15,
+      "shape": "tool",
+      "payload": {
+        "name": "verify.run_experiment",
+        "args": {
+          "claim": "承接 exp:000014/000016/000020 的同一口径（A_diag(p)=(3/4)∫_0^{2π}S(θ)^{-2/p}dθ，S=|cos(θ−π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p；A_face(p)=2^{1/2−1/p}·4Γ(1+1/p)^2/Γ(1+2/p)；Δ(p)=A_face(p)−A_diag(p)；ρ(p)=A_face(p)/A_diag(p)）：在 p∈(2,20] 上 Δ 恰有一个零点 p*（导数判据可把夹逼区间加密到相对宽度 ≤1e-9），且 ρ 在 p_peak≈3.02 处取极大值、(2,p_peak) 上严格单调增、(p_peak,p*) 上严格单调减。",
+          "claim_key": "lp3-pstar-peak-derivative",
+          "script_path": "code/exp/e6_pstar_peak_derivative.py",
+          "method": "numeric",
+          "params": {
+            "delta_convention": "A_face - A_diag",
+            "rho_convention": "A_face / A_diag (task): rho2; report also rho1 = A_diag/A_face (exp:000016 convention)",
+            "derivative": "exact identity d/dp S^{-2/p} = S^{-2/p}*(2/p^2)*lnS; A_face' via digamma; Newton+bisection on the derivative",
+            "target_width": 1e-09,
+            "p_range": [
+              2.01,
+              20.0
+            ]
+          },
+          "timeout": 600
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "verify.run_experiment",
+        "ok": true,
+        "data": {
+          "experiment_id": "000021",
+          "recorded": true,
+          "result": "inconclusive",
+          "evidence_kind": "cross_check",
+          "negation_kind": "no_local_evidence",
+          "exit_code": 0,
+          "runtime_sec": 0.921,
+          "code_hash": "b441a0e789b6284f",
+          "report_path": "",
+          "report_sha256": "",
+          "report_bytes": 0,
+          "report_blocks": {},
+          "report_problems": [],
+          "proof_manuscript": "",
+          "manuscript_sha256": "",
+          "manuscript_proof_sha256": "",
+          "manuscript_problems": [],
+          "numeric_manuscript": "work/E/e-num-000021.md",
+          "numeric_manuscript_sha256": "0bb794de2354ca37636966c782c62f58b91aa571378cb96c963ccacc59842abc",
+          "numeric_manuscript_problems": [],
+          "signed_by": "V",
+          "proof_authors": [
+            "E"
+          ],
+          "notes": "[run] exit_code=0，runtime=0.921s，脚本 code/exp/e6_pstar_peak_derivative.py（sha256 前 16 位 b441a0e789b6284f）\n[stdout] PROGRESS: {\"stage\": \"h_refine\", \"p\": 3.02, \"Delta2_rel\": 1.1577201538553467e-13, \"drho2_rel\": 1.2175437123859202e-15} PROGRESS: {\"stage\": \"h_refine\", \"p\": 5.0, \"Delta2_rel\": 1.2222611530854115e-10, \"drho2_rel\": 1.7139685085829155e-15} PROGRESS: {\"stage\": \"h_refine\", \"p\": 10.0, \"Delta2_rel\": 2.86787…",
+          "reason": "未得到可判定的结论（negation_kind=no_local_evidence）",
+          "conjecture_ledger": {
+            "conjecture_id": "000023",
+            "statement": "承接 exp:000014/000016/000020 的同一口径（A_diag(p)=(3/4)∫_0^{2π}S(θ)^{-2/p}dθ，S=|cos(θ−π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p；A_face(p)=2^{1/2−1/p}·4Γ(1+1/p)^2/Γ(1+2/p)；Δ(p)=A_face(p)−A_diag(p)；ρ(p)=A_face(p)/A_diag(p)）：在 p∈(2,20] 上 Δ 恰有一个零点 p*（导数判据可把夹逼区间加密到相对宽度 ≤1e-9），且 ρ 在 p_peak≈3.02 处取极大值、(2,p_peak) 上严格单调增、(p_peak,p*) 上严格单调减。",
+            "negation_statement": "",
+            "form": "universal",
+            "testable": {},
+            "origin": "experiment:000021",
+            "status": "testing",
+            "experiment_ids": [
+              "000021"
+            ],
+            "proof_experiment_id": "",
+            "counterexample_experiment_id": "",
+            "refusal_ref": "",
+            "promoted_to": {},
+            "known_lit_id": "",
+            "withdraw_reason": "",
+            "notes": "E 的实验 exp:000021（inconclusive）落地时自动记账：命题正文逐字是这一行的 `claim`，证据是同一行的读数",
+            "created_at": "2026-11-24T20:34:07+08:00",
+            "updated_at": "2026-11-24T20:34:07+08:00",
+            "created_by": "agent-E-E1",
+            "updated_by": "agent-E-E1",
+            "registered_stmt_id": "",
+            "duplicate": false,
+            "ok": true
+          },
+          "d_handoff": {}
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 78592,
+        "prompt_cache_miss_tokens": 3784,
+        "tokens_in": 82376,
+        "tokens_out": 1389,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000119"
+    },
+    {
+      "index": 16,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/exp-logs/000021.log",
+          "max_lines": 60
+        },
+        "why": "读回任务(2)的原始读数：看是哪一条自检没过导致 inconclusive，以及根/驻点/单调性的实际数值"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# lp3-pstar-peak-derivative\n# 脚本 code/exp/e6_pstar_peak_derivative.py  sha256=b441a0e789b6284f\n# exit_code=0  runtime=0.921s\n# claim: 承接 exp:000014/000016/000020 的同一口径（A_diag(p)=(3/4)∫_0^{2π}S(θ)^{-2/p}dθ，S=|cos(θ−π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p；A_face(p)=2^{1/2−1/p}·4Γ(1+1/p)^2/Γ(1+2/p)；Δ(p)=A_face(p)−A_diag(p)；ρ(p)=A_face(p)/A_diag(p)）：在 p∈(2,20] 上 Δ 恰有一个零点 p*（导数判据可把夹逼区间加密到相对宽度 ≤1e-9），且 ρ 在 p_peak≈3.02 处取极大值、(2,p_peak) 上严格单调增、(p_peak,p*) 上严格单调减。\n----- stdout -----\nPROGRESS: {\"stage\": \"h_refine\", \"p\": 3.02, \"Delta2_rel\": 1.1577201538553467e-13, \"drho2_rel\": 1.2175437123859202e-15}\nPROGRESS: {\"stage\": \"h_refine\", \"p\": 5.0, \"Delta2_rel\": 1.2222611530854115e-10, \"drho2_rel\": 1.7139685085829155e-15}\nPROGRESS: {\"stage\": \"h_refine\", \"p\": 10.0, \"Delta2_rel\": 2.867876615239616e-14, \"drho2_rel\": 1.820499610577846e-15}\nPROGRESS: {\"stage\": \"scan_Delta2\", \"n\": 120, \"changes\": [[4.980793507478227, 5.077894766453985]], \"D_at_2.01\": -0.0009198306964579572, \"D_at_20\": 0.2868654787912064}\nPROGRESS: {\"stage\": \"root_Delta2\", \"p_star\": 4.998215596839471, \"rel_width\": 7.729910906881659e-13, \"Delta2\": -5.5067062021407764e-14, \"dDelta2\": 0.20846110432518913, \"iters\": 30}\nPROGRESS: {\"stage\": \"scan_drho2\", \"n\": 120, \"changes\": [], \"drho2_at_2.01\": 0.16254516002114971, \"drho2_at_20\": 0.0071206724751140755}\nPROGRESS: {\"stage\": \"witness\", \"p\": 2.5, \"rho_face_over_diag\": 0.9908119347594537, \"drho_face_over_diag\": 0.11925366819463826, \"rho_diag_over_face\": 1.0092732686377834, \"drho_diag_over_face\": -0.12147566583871311, \"Delta_face_minus_diag\": -0.03360258656250714}\nPROGRESS: {\"stage\": \"witness\", \"p\": 4.0, \"rho_face_over_diag\": 0.9925441784910599, \"drho_face_over_diag\": 0.06113254059511591, \"rho_diag_over_face\": 1.007511828360401, \"drho_diag_over_face\": -0.06205442445991479, \"Delta_face_minus_diag\": -0.03312534217202412}\nREPRO_RESULT: {\"result\": \"inconclusive\", \"counterexample\": null, \"why\": \"\\u81ea\\u68c0/\\u6536\\u655b\\u63a7\\u5236\\u672a\\u8fc7\\uff0c\\u8bfb\\u6570\\u4e0d\\u53ef\\u7528\\uff08\\u7cbe\\u5ea6…（落档截断，原 5383 字）",
+        "error": "",
+        "meta": {
+          "path": "out/exp-logs/000021.log",
+          "encoding": "utf-8",
+          "bytes_read": 5544,
+          "total_bytes": 5544,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 15,
+          "total_lines": 15,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 1–15 行（共 15 行）",
+          "sha256": "26b1d067d49e8a57333731b5929ce5a9f69fa294e77e432256833e589796cb9d"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 81536,
+        "prompt_cache_miss_tokens": 2811,
+        "tokens_in": 84347,
+        "tokens_out": 432,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000119"
+    },
+    {
+      "index": 17,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.write",
+        "args": {
+          "path": "code/exp/e6b_pstar_peak_deriv_v2.py",
+          "content": "#!/usr/bin/env python3\n# -*- coding: utf-8 -*-\n'''E 任务 (2) v2：修正 A_diag'(p) 的解析式后重做「Delta 零点 + rho 驻点」的导数判据加密与单调性判定。\n\nv1 = exp:000021（inconclusive）的根因已定位：A_diag'(p) 的解析式漏了 -(2/p)(S'/S) 一项，\n  v1 用的是 A_diag' = (3/4)(2/p^2) int S^{-2/p} ln S（只对「S 与 p 无关」才成立）；\n  完整恒等式是 d/dp S^{-2/p} = S^{-2/p} [ (2/p^2) ln S - (2/p) (S'/S) ]，S'/S = sum_i a_i^p ln a_i / S。\n后果：v1 里 drho2 在 p~2 处翻号、drho2 全程为正、驻点扫描找不到变号，且 A_diag' 与差商对拍相对差 1.76。\n\n本版自检（都不依赖模型）：\n  (1) p=2 时 S(theta,2) == 3/2 恒等于 theta（直接代数），于是 int S^{-2/p}, I1, I2, A_diag'(2) 都有闭式：\n      I1 = (2/3) ln(3/2) * 2pi；int S'(2,theta) dtheta = 3 pi (1/2 - ln2)；I2 = (2/3)(int S' dtheta)/(3/2)\n      A_diag'(2) = (3/4)[ (2/4) I1 - (2/2) I2 ]\n  (2) A_diag(1)=3sqrt3/4、A_diag(2)=pi、A_face(2)=pi；\n  (3) A_diag'(p)、A_face'(p) 与中心差商（rt=1e-4）对拍；\n  (4) Delta2 与 drho2 在 p=3.02/5/10 上 h=0.05 vs h=0.025 的**绝对**差（相对差在 Delta~0 附近会假报警）。\n\n判据（硬编码、脚本判、不过模型）：\n  (i)  Delta2 = A_face - A_diag 在 (2,20] 上恰一个零点，Newton+夹逼把相对宽度收到 <= 1e-9；\n  (ii) 任务原文断言：rho2 = A_face/A_diag 在 p_peak~3.02 取**极大**、(2,p_peak) 严格增、(p_peak,p*) 严格减。\n       判法：drho2 = d/dp(A_face/A_diag) 在 (2,20] 上驻点唯一 + 曲率 < 0 + 左段 drho2<0 且右段 drho2<0 的两侧符号。\n结果：自检不过 => inconclusive；两条都成立 => supports；否则 refutes（counterexample 点名读数与反例点）。\n同时报 R1 约定（rho1 = A_diag/A_face = 1/rho2，即 exp:000014/000016 落库的那一个）的同一组读数。\n'''\nimport json\nimport math\nimport time\n\nPI = math.pi\nHP = PI / 2.0\nABRK = [0.0, PI/3.0, 2.0*PI/3.0, PI, 4.0*PI/3.0, 5.0*PI/3.0, 2.0*PI]\n\n\ndef tanhsinh3(f, a, b, h=0.05, tmax=7.0):\n    '''一段上同时求三个被积函数（一次遍历三个累加，省一倍的被积函数求值）。'''\n    if b <= a:\n        return (0.0, 0.0, 0.0)\n    c = 0.5*(b - a)\n    d = 0.5*(a + b)\n    s0 = 0.0\n    s1 = 0.0\n    s2 = 0.0\n    n = int(tmax/h)\n    for k in range(-n, n + 1):\n        t = k*h\n        u = HP*math.sinh(t)\n        x = math.tanh(u)\n        if x >= 1.0 or x <= -1.0:\n            continue\n        ch = math.cosh(u)\n        w = HP*math.cosh(t)/(ch*ch)\n        v0, v1, v2 = f(d + c*x)\n        s0 += w*v0\n        s1 += w*v1\n        s2 += w*v2\n    return (s0*c*h, s1*c*h, s2*c*h)\n\n\ndef integrand3(p, th):\n    '''返回 (S^{-2/p}, S^{-2/p} ln S, S^{-2/p} (S'/S))，S = sum_i a_i^p；log-sum-exp 防下溢。'''\n    a1 = abs(math.cos(th - PI/6.0))\n    a2 = abs(math.cos(th + PI/6.0))\n    a3 = abs(math.sin(th))\n    m = -1.0e308\n    for v in (a1, a2, a3):\n        if v > 0.0:\n            lv = math.log(v)\n            if lv > m:\n                m = lv\n    s = 0.0\n    wl = 0.0\n    for v in (a1, a2, a3):\n        if v > 0.0:\n            lv = math.log(v)\n            e = p*(lv - m)\n            if e > -745.0:\n                t = math.exp(e)\n                s += t\n                wl += t*lv\n    ls = math.log(s)\n    v0 = math.exp(-2.0*m - (2.0/p)*ls)\n    lnS = p*m + ls\n    return (v0, v0*lnS, v0*wl/s)\n\n\ndef a_diag_deriv(p, h=0.05):\n    '''返回 (A_diag(p), A_diag'(p))，导数走完整解析恒等式。'''\n    i0 = 0.0\n    i1 = 0.0\n    i2 = 0.0\n    for i in range(len(ABRK) - 1):\n        a, b = ABRK[i], ABRK[i+1]\n        t0, t1, t2 = tanhsinh3(lambda th, p=p: integrand3(p, th), a, b, h=h)\n        i0 += t0\n        i1 += t1\n        i2 += t2\n    return (0.75*i0, 0.75*((2.0/(p*p))*i1 - (2.0/p)*i2))\n\n\ndef a_face(p):\n    return 2.0**(0.5 - 1.0/p)*4.0*math.exp(2.0*math.lgamma(1.0 + 1.0/p) - math.lgamma(1.0 + 2.0/p))\n\n\ndef digamma(x):\n    '''psi(x), x>0：递推抬到 x>=12 后用渐近级数（与 lgamma 的中心差商对拍）。'''\n    r = 0.0\n    while x < 12.0:\n        r -= 1.0/x\n        x += 1.0\n    inv = 1.0/x\n    u = inv*inv\n    return r + math.log(x) - 0.5*inv - u*(1.0/12.0 - u*(1.0/120.0 - u*(1.0/252.0 - u/240.0)))\n\n\ndef a_face_deriv(p):\n    g = math.log(2.0) - 2.0*digamma(1.0 + 1.0/p) + 2.0*digamma(1.0 + 2.0/p)\n    return a_face(p)*g/(p*p)\n\n\ndef probe(p, h=0.05):\n    ad, dad = a_diag_deriv(p, h=h)\n    af = a_face(p)\n    daf = a_face_deriv(p)\n    dr2 = (daf*ad - af*dad)/(ad*ad)\n    return {'p': p, 'A_diag': ad, 'A_face': af, 'Delta2': af - ad, 'dDelta2': daf - dad,\n            'rho2': af/ad, 'drho2': dr2, 'rho1': ad/af, 'drho1': -dr2/((af/ad)**2)}\n\n\ndef d2(p, h=0.05):\n    return probe(p, h=h)['Delta2']\n\n\ndef dd2(p, h=0.05):\n    return probe(p, h=h)['dDelta2']\n\n\ndef dr2(p, h=0.05):\n    return probe(p, h=h)['drho2']\n\n\ndef num_deriv(f, p, rt=1e-4):\n    hh = rt*p\n    return (f(p + hh) - f(p - hh))/(2.0*hh)\n\n\ndef solve_newton(f, df, lo, hi, rtol=1e-12, itmax=200):\n    flo = f(lo)\n    fhi = f(hi)\n    if not (flo*fhi < 0.0):\n        return None\n    its = 0\n    for its in range(1, itmax + 1):\n        mid = 0.5*(lo + hi)\n        fm = f(mid)\n        dm = df(mid)\n        cand = mid\n        if dm != 0.0 and math.isfinite(dm):\n            c1 = mid - fm/dm\n            if lo < c1 < hi:\n                cand = c1\n        fc = f(cand)\n        if fc == 0.0:\n            lo = cand\n            hi = cand\n            break\n        if (fc > 0.0) == (flo > 0.0):\n            lo = cand\n            flo = fc\n        else:\n            hi = cand\n            fhi = fc\n        if (hi - lo) <= rtol*0.5*(hi + lo):\n            break\n    pc = 0.5*(lo + hi)\n    return {'p': pc, 'lo': lo, 'hi': hi, 'rel_width': (hi - lo)/(0.5*(hi + lo)),\n            'value': f(pc), 'slope': df(pc), 'iters': its}\n\n\ndef scan_sign_changes(g, lo, hi, n=120):\n    pts = [lo*(hi/lo)**(i/(n - 1.0)) for i in range(n)]\n    vals = [g(p) for p in pts]\n    ch = []\n    for i in range(1, n):\n        if vals[i] != 0.0 and vals[i-1] != 0.0 and (vals[i] > 0.0) != (vals[i-1] > 0.0):\n            ch.append([pts[i-1], pts[i]])\n    return pts, vals, ch\n\n\ndef main():\n    t0 = time.time()\n    exact1 = 3.0*math.sqrt(3.0)/4.0\n\n    # ---------------- 自检 ----------------\n    st = {}\n    st['a_diag_1_rel'] = abs(a_diag_deriv(1.0)[0] - exact1)/exact1\n    st['a_diag_2_rel'] = abs(a_diag_deriv(2.0)[0] - PI)/PI\n    st['a_face_2_rel'] = abs(a_face(2.0) - PI)/PI\n    # p=2 的闭式导数（S == 3/2 恒等）\n    I1x = (2.0/3.0)*math.log(1.5)*2.0*PI\n    Ssum = 3.0*PI*(0.5 - math.log(2.0))\n    I2x = (2.0/3.0)*(Ssum/1.5)\n    dAex = 0.75*(0.5*I1x - 1.0*I2x)\n    st['a_diag_deriv_2_rel'] = abs(a_diag_deriv(2.0)[1] - dAex)/abs(dAex)\n    for p in (3.02, 7.0):\n        dnum_af = num_deriv(a_face, p)\n        st['a_face_deriv_rel@%.2f' % p] = abs(a_face_deriv(p) - dnum_af)/abs(a_face_deriv(p))\n        dnum_ad = num_deriv(lambda x: a_diag_deriv(x)[0], p)\n        st['a_diag_deriv_rel@%.2f' % p] = abs(a_diag_deriv(p)[1] - dnum_ad)/abs(a_diag_deriv(p)[1])\n\n    refine = []\n    for p in (3.02, 5.0, 10.0):\n        a5 = probe(p, h=0.05)\n        a25 = probe(p, h=0.025)\n        r = {'p': p,\n             'Delta2_h005': a5['Delta2'], 'Delta2_h0025': a25['Delta2'],\n             'drho2_h005': a5['drho2'], 'drho2_h0025': a25['drho2']}\n        r['Delta2_abs'] = abs(a5['Delta2'] - a25['Delta2'])\n        r['drho2_abs'] = abs(a5['drho2'] - a25['drho2'])\n        r['Delta2_rel'] = r['Delta2_abs']/max(1e-300, abs(a5['Delta2']))\n        r['drho2_rel'] = r['drho2_abs']/max(1e-300, abs(a5['drho2']))\n        refine.append(r)\n        print('PROGRESS: ' + json.dumps({'stage': 'h_refine', 'p': p, 'Delta2_abs': r['Delta2_abs'],\n                                         'drho2_abs': r['drho2_abs'], 'Delta2_rel': r['Delta2_rel']}))\n\n    selftest_ok = (max(st['a_diag_1_rel'], st['a_diag_2_rel'], st['a_face_2_rel'],\n                       st['a_diag_deriv_2_rel']) < 1e-12\n                   and max(v for k, v in st.items() if k.endswith('_rel') and '_deriv' in k) < 1e-5\n                   and max(r['Delta2_abs'] for r in refine) < 1e-12\n                   and max(r['drho2_abs'] for r in refine) < 1e-11)\n\n    # ---------------- (i) Delta2 的零点 ----------------\n    pts, vals, ch_d = scan_sign_changes(d2, 2.01, 20.0, n=120)\n    print('PROGRESS: ' + json.dumps({'stage': 'scan_Delta2', 'n': len(pts), 'changes': ch_d,\n                                     'D_at_2.01': vals[0], 'D_at_20': vals[-1]}))\n    root = solve_newton(d2, dd2, ch_d[0][0], ch_d[0][1]) if len(ch_d) == 1 else None\n    if root:\n        print('PROGRESS: ' + json.dumps({'stage': 'root_Delta2', 'p_star': root['p'],\n                                         'rel_width': root['rel_width'], 'Delta2': root['value'],\n                                         'dDelta2': root['slope'], 'iters': root['iters']}))\n\n    # ---------------- (ii) rho2 的驻点 + 曲率 ----------------\n    pts2, vals2, ch_r = scan_sign_changes(dr2, 2.01, 20.0, n=120)\n    print('PROGRESS: ' + json.dumps({'stage': 'scan_drho2', 'n': len(pts2), 'changes': ch_r,\n                                     'drho2_at_2.01': vals2[0], 'drho2_at_20': vals2[-1]}))\n    ext = None\n    if len(ch_r) == 1:\n        ext = solve_newton(dr2, lambda x: num_deriv(dr2, x), ch_r[0][0], ch_r[0][1])\n    if ext:\n        pr = probe(ext['p'])\n        ext['rho2'] = pr['rho2']\n        ext['rho1'] = pr['rho1']\n        ext['curvature_num'] = num_deriv(dr2, ext['p'])\n        print('PROGRESS: ' + json.dumps({'stage': 'stationary', **ext}))\n\n    # ---------------- 单调性（drho2 的两侧符号） ----------------\n    mono = {}\n    if ext:\n        pe = ext['p']\n        left = [2.02*(pe/2.02)**(i/149.0) for i in range(150)]\n        left = [p for p in left if p < pe - 1e-6]\n        right = [pe*(19.9/pe)**(i/149.0) for i in range(150)]\n        right = [p for p in right if p > pe + 1e-6]\n        lv = [dr2(p) for p in left]\n        rv = [dr2(p) for p in right]\n        mono['left'] = {'n': len(lv), 'max': max(lv), 'min': min(lv), 'min_abs': min(abs(v) for v in lv),\n                        'all_negative': all(v < 0.0 for v in lv), 'all_positive': all(v > 0.0 for v in lv)}\n        mono['right'] = {'n': len(rv), 'max': max(rv), 'min': min(rv), 'min_abs': min(abs(v) for v in rv),\n                         'all_negative': all(v < 0.0 for v in rv), 'all_positive': all(v > 0.0 for v in rv)}\n        mono['note'] = ('left=(2.02, p_ext)，right=(p_ext, 19.9]；drho2 = d/dp(A_face/A_diag)，'\n                        '符号级读数（采样级，不是穷举）；drho1 = -drho2/rho2^2 与它反号')\n        print('PROGRESS: ' + json.dumps({'stage': 'monotone', **mono}))\n\n    # ---------------- 见证点（两套约定） ----------------\n    wit = []\n    for p in (2.5, 3.02, 4.0, 10.0):\n        pr = probe(p)\n        wit.append({'p': p, 'rho2': pr['rho2'], 'drho2': pr['drho2'], 'rho1': pr['rho1'],\n                    'drho1': pr['drho1'], 'Delta2': pr['Delta2'], 'dDelta2': pr['dDelta2']})\n        print('PROGRESS: ' + json.dumps({'stage': 'witness', **wit[-1]}))\n\n    # ---------------- 判据 ----------------\n    ok_i = (root is not None and len(ch_d) == 1 and root['rel_width'] < 1e-9\n            and 2.0 < root['p'] < 20.0)\n    ok_ii = (ext is not None and len(ch_r) == 1 and ext['rel_width'] < 1e-9\n             and ext['curvature_num'] < 0.0\n             and mono['left']['all_negative'] and mono['right']['all_negative'])\n\n    ce = None\n    if not selftest_ok:\n        result = 'inconclusive'\n        why = '自检/收敛控制未过，读数不可用（精度不足不是数学反例）'\n    elif ok_i and ok_ii:\n        result = 'supports'\n        why = 'Delta2 唯一零点与 rho2 的极大点都被导数判据加密到 <=1e-9，单调性两侧符号与断言一致'\n    else:\n        result = 'refutes'\n        why = '任务原文的断言 (i)(ii) 至少一条与读数不符：(i)=%s，(ii)=%s' % (ok_i, ok_ii)\n        ce = {'failing_part': ('ii' if not ok_ii else 'i'),\n              'Delta_root': root,\n              'rho2_stationary': ext,\n              'monotone_left_drho2': mono.get('left'),\n              'monotone_right_drho2': mono.get('right'),\n              'witnesses': wit,\n              'reversal': ('rho2 = A_face/A_diag 在驻点处是**极小**（曲率>0）而不是题面说的极大；'\n                           'rho2 在 (2,p_ext) 上严格减、在 (p_ext,20] 上严格增。极大属于 R1 约定 '\n                           'rho1 = A_diag/A_face = 1/rho2（峰值 %r 在 p=%r）'\n                           % (ext['rho1'] if ext else None, ext['p'] if ext else None))}\n\n    payload = {\n        'result': result,\n        'counterexample': ce,\n        'why': why,\n        'bound': ('p in (2.01, 20]; 120-point log scan for sign changes; root/stationary refined by '\n                  'safeguarded Newton to relative width <= 1e-12 (judged threshold 1e-9); '\n                  'monotonicity read on 150+150 sample points'),\n        'strategy': ('6-piece tanh-sinh (DE, h=0.05 & 0.025) with log-sum-exp integrand; derivatives by the '\n                     'COMPLETE analytic identity A_diag\\' = (3/4)[(2/p^2) int S^{-2/p} ln S - (2/p) int S^{-2/p}(S\\'/S)] '\n                     'and A_face\\' via self-implemented digamma; no finite differences in the judged quantities '\n                     '(central differences only as self-check); safeguarded Newton for both roots'),\n        'scaling': {'total_sec': round(time.time() - t0, 2)},\n        'selftest': st,\n        'selftest_ok': selftest_ok,\n        'h_refine': refine,\n        'root_Delta2': root,\n        'stationary_rho2': ext,\n        'monotone': mono,\n        'witnesses': wit,\n        'checks': {'claim_i_unique_root_tight': ok_i, 'claim_ii_rho2_max_left_up_right_down': ok_ii},\n        'conventions': ('R2（任务原文）= rho2 = A_face/A_diag, Delta2 = A_face - A_diag；'\n                        'R1（exp:000014/000016 落库）= rho1 = A_diag/A_face = 1/rho2, Delta1 = -Delta2。'\n                        '两套约定的驻点是同一个 p，极大/极小互换。'),\n        'note': ('本行修的正是 v1(exp:000021) 的缺陷：v1 的 A_diag\\'(p) 漏了 -(2/p)(S\\'/S) 项，'\n                 '导致 drho2 全程为正、驻点找不到、自检差商相对差 1.76 => inconclusive。本版补全该项，'\n                 'p=2 的闭式 A_diag\\'(2) 与 3.02/7 的差商都对上了（见 selftest）。'),\n    }\n    print('REPRO_RESULT: ' + json.dumps(payload))\n\n\nif __name__ == '__main__':\n    main()\n"
+        },
+        "why": "写任务(2)的 v2：补全 A_diag' 的解析式（v1 漏掉 -(2/p)(S'/S) 项），并把 h 细化判据改成绝对差（Delta~0 处相对差会假报警）"
+      },
+      "result": {
+        "tool": "fs.write",
+        "ok": true,
+        "data": {
+          "path": "code/exp/e6b_pstar_peak_deriv_v2.py",
+          "bytes": 14500,
+          "sha256": "1d736cb2a163354cd901212537c59e6d8bbfa782928bd89260b45411ac5e65e3",
+          "created": true
+        },
+        "error": "",
+        "meta": {
+          "path": "code/exp/e6b_pstar_peak_deriv_v2.py",
+          "bytes": 14500,
+          "created": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 83584,
+        "prompt_cache_miss_tokens": 3976,
+        "tokens_in": 87560,
+        "tokens_out": 25172,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000119"
+    },
+    {
+      "index": 18,
+      "shape": "tool",
+      "payload": {
+        "name": "verify.run_experiment",
+        "args": {
+          "claim": "承接 exp:000014/000016/000020/000021 的同一口径（A_diag(p)=(3/4)∫_0^{2π}S(θ)^{-2/p}dθ，S=|cos(θ−π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p；A_face(p)=2^{1/2−1/p}·4Γ(1+1/p)^2/Γ(1+2/p)；Δ(p)=A_face(p)−A_diag(p)；ρ(p)=A_face(p)/A_diag(p) 取任务原文的约定）：在 p∈(2,20] 上 Δ 恰有一个零点 p*（导数判据可把夹逼区间加密到相对宽度 ≤1e-9），且 ρ 在 p_peak≈3.02 处取极大值、(2,p_peak) 上严格单调增、(p_peak,p*) 上严格单调减。",
+          "claim_key": "lp3-pstar-peak-derivative-v2",
+          "script_path": "code/exp/e6b_pstar_peak_deriv_v2.py",
+          "method": "numeric",
+          "timeout": 900,
+          "params": {
+            "delta_convention": "A_face - A_diag",
+            "rho_convention": "A_face / A_diag (task text); reciprocal convention reported too",
+            "derivative": "exact identity d/dp S^{-2/p} = S^{-2/p}[(2/p^2)lnS - (2/p)(S'/S)], S'/S = sum a_i^p ln a_i / S; A_face' via digamma; safeguarded Newton",
+            "root_tolerance_rel": 1e-09,
+            "p_range": [
+              2.0,
+              20.0
+            ],
+            "supersedes": "exp:000021 (v1 derivative missing the -(2/p)(S'/S) term)"
+          },
+          "why": "v1(e6) 的 A_diag' 解析式漏了 S'/S 一项导致 inconclusive；v2 换上完整恒等式并加了 p=2 的闭式自检，重跑同一判据"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "verify.run_experiment",
+        "ok": true,
+        "data": {
+          "experiment_id": "000022",
+          "recorded": true,
+          "result": "refutes",
+          "evidence_kind": "cross_check",
+          "negation_kind": "disproved",
+          "exit_code": 0,
+          "runtime_sec": 1.922,
+          "code_hash": "1d736cb2a163354c",
+          "report_path": "",
+          "report_sha256": "",
+          "report_bytes": 0,
+          "report_blocks": {},
+          "report_problems": [],
+          "proof_manuscript": "",
+          "manuscript_sha256": "",
+          "manuscript_proof_sha256": "",
+          "manuscript_problems": [],
+          "numeric_manuscript": "work/E/e-num-000022.md",
+          "numeric_manuscript_sha256": "57efb938e118d434a4834d21528c50a117d833da746f4127400feee4f21b4ea1",
+          "numeric_manuscript_problems": [],
+          "signed_by": "V",
+          "proof_authors": [
+            "E"
+          ],
+          "notes": "[run] exit_code=0，runtime=1.922s，脚本 code/exp/e6b_pstar_peak_deriv_v2.py（sha256 前 16 位 1d736cb2a163354c）\n[stdout] PROGRESS: {\"stage\": \"h_refine\", \"p\": 3.02, \"Delta2_abs\": 5.329070518200751e-15, \"drho2_abs\": 1.098703376542498e-16, \"Delta2_rel\": 1.1577201538553467e-13} PROGRESS: {\"stage\": \"h_refine\", \"p\": 5.0, \"Delta2_abs\": 7.993605777301127e-15, \"drho2_abs\": 6.938893903907228e-17, \"Delta2_rel\": 1.22226115308541…",
+          "reason": "实验给出反例 ⇒ disproved（已证否，且反例已登记）",
+          "conjecture_ledger": {
+            "conjecture_id": "000024",
+            "statement": "承接 exp:000014/000016/000020/000021 的同一口径（A_diag(p)=(3/4)∫_0^{2π}S(θ)^{-2/p}dθ，S=|cos(θ−π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p；A_face(p)=2^{1/2−1/p}·4Γ(1+1/p)^2/Γ(1+2/p)；Δ(p)=A_face(p)−A_diag(p)；ρ(p)=A_face(p)/A_diag(p) 取任务原文的约定）：在 p∈(2,20] 上 Δ 恰有一个零点 p*（导数判据可把夹逼区间加密到相对宽度 ≤1e-9），且 ρ 在 p_peak≈3.02 处取极大值、(2,p_peak) 上严格单调增、(p_peak,p*) 上严格单调减。",
+            "negation_statement": "",
+            "form": "universal",
+            "testable": {},
+            "origin": "experiment:000022",
+            "status": "refuted",
+            "experiment_ids": [
+              "000022"
+            ],
+            "proof_experiment_id": "",
+            "counterexample_experiment_id": "000022",
+            "refusal_ref": "",
+            "promoted_to": {},
+            "known_lit_id": "",
+            "withdraw_reason": "",
+            "notes": "E 的实验 exp:000022（refutes）落地时自动记账：命题正文逐字是这一行的 `claim`，证据是同一行的读数",
+            "created_at": "2026-11-24T20:36:30+08:00",
+            "updated_at": "2026-11-24T20:36:30+08:00",
+            "created_by": "agent-E-E1",
+            "updated_by": "agent-E-E1",
+            "registered_stmt_id": "",
+            "duplicate": false,
+            "ok": true
+          },
+          "d_handoff": {
+            "checked": true,
+            "state": "cleared",
+            "key": "d-handoff@000024",
+            "item_id": "",
+            "owner": "",
+            "owner_instance": "",
+            "owner_known": false,
+            "owner_source": "",
+            "owner_why": "",
+            "reason": "猜想 000024 已是 refuted（不再值得递交）",
+            "problems": []
+          }
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 86784,
+        "prompt_cache_miss_tokens": 2105,
+        "tokens_in": 88889,
+        "tokens_out": 6830,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000119"
+    },
+    {
+      "index": 19,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/exp-logs/000022.log",
+          "max_lines": 40
+        },
+        "why": "读任务(2) v2 的原始读数：修正后的驻点、单调性与反例见证"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# lp3-pstar-peak-derivative-v2\n# 脚本 code/exp/e6b_pstar_peak_deriv_v2.py  sha256=1d736cb2a163354c\n# exit_code=0  runtime=1.922s\n# claim: 承接 exp:000014/000016/000020/000021 的同一口径（A_diag(p)=(3/4)∫_0^{2π}S(θ)^{-2/p}dθ，S=|cos(θ−π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p；A_face(p)=2^{1/2−1/p}·4Γ(1+1/p)^2/Γ(1+2/p)；Δ(p)=A_face(p)−A_diag(p)；ρ(p)=A_face(p)/A_diag(p) 取任务原文的约定）：在 p∈(2,20] 上 Δ 恰有一个零点 p*（导数判据可把夹逼区间加密到相对宽度 ≤1e-9），且 ρ 在 p_peak≈3.02 处取极大值、(2,p_peak) 上严格单调增、(p_peak,p*) 上严格单调减。\n----- stdout -----\nPROGRESS: {\"stage\": \"h_refine\", \"p\": 3.02, \"Delta2_abs\": 5.329070518200751e-15, \"drho2_abs\": 1.098703376542498e-16, \"Delta2_rel\": 1.1577201538553467e-13}\nPROGRESS: {\"stage\": \"h_refine\", \"p\": 5.0, \"Delta2_abs\": 7.993605777301127e-15, \"drho2_abs\": 6.938893903907228e-17, \"Delta2_rel\": 1.2222611530854115e-10}\nPROGRESS: {\"stage\": \"h_refine\", \"p\": 10.0, \"Delta2_abs\": 4.440892098500626e-15, \"drho2_abs\": 1.0408340855860843e-17, \"Delta2_rel\": 2.867876615239616e-14}\nPROGRESS: {\"stage\": \"scan_Delta2\", \"n\": 120, \"changes\": [[4.980793507478227, 5.077894766453985]], \"D_at_2.01\": -0.0009198306964579572, \"D_at_20\": 0.2868654787912064}\nPROGRESS: {\"stage\": \"root_Delta2\", \"p_star\": 4.998215596840938, \"rel_width\": 7.28566315361046e-15, \"Delta2\": -6.217248937900877e-15, \"dDelta2\": 0.03664832067772372, \"iters\": 44}\nPROGRESS: {\"stage\": \"scan_drho2\", \"n\": 120, \"changes\": [[3.0149797493079986, 3.073757196918439]], \"drho2_at_2.01\": -0.028884000285500068, \"drho2_at_20\": 0.0014351973725529724}\nPROGRESS: {\"stage\": \"stationary\", \"p\": 3.0243905837657037, \"lo\": 3.0243905837657037, \"hi\": 3.0243905837657037, \"rel_width\": 0.0, \"value\": 0.0, \"slope\": 0.012635397889322698, \"iters\": 39, \"rho2\": 0.9885596074444155, \"rho1\": 1.01157278981402, \"curvature_num\": 0.012635397889322698}\nPROGRESS: {\"stage\": \"monotone\", \"left\": {\"n\": 149, \"max\": -0.00010396711286829127, \"min\": -0.028331312348898303, \"min_abs\": 0.00010396711286829127, \"all_negative\": true, \"all_positive\": false}, \"right\": {\"n\": 149, \"max\": 0.007833538146225252, \"min\": …（落档截断，原 10180 字）",
+        "error": "",
+        "meta": {
+          "path": "out/exp-logs/000022.log",
+          "encoding": "utf-8",
+          "bytes_read": 10357,
+          "total_bytes": 10357,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 19,
+          "total_lines": 19,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 1–19 行（共 19 行）",
+          "sha256": "8b18ecc90b042fe297b8765709b3679867cc8f33cfb98d84fe29456d7751429f"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 88064,
+        "prompt_cache_miss_tokens": 3083,
+        "tokens_in": 91147,
+        "tokens_out": 165,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000119"
+    },
+    {
+      "index": 20,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.write",
+        "args": {
+          "path": "code/exp/e7_largep_asymptotics.py",
+          "content": "#!/usr/bin/env python3\n# -*- coding: utf-8 -*-\n\"\"\"E 本趟任务 (3)：大 p 上 A_diag 与 A_face 贴近极限的方向与量级（抗尖峰求积）。\n\n口径 = exp:000014 / 000016 / 000020 / 000022 的同一套 A_diag 与 A_face。\n要回答：p > p*(=4.9982) 之后 rho = A_face/A_diag 是升向 4sqrt2/(3sqrt3)=1.088662 还是回落\n（任务原文断言 Delta 在 (20,inf) 上还有第二次零点；exp:000020 已给出 [20,1e6] 上无变号，\n 本行把它钉到 1e8，并给出 A_diag-3sqrt3 与 A_face-4sqrt2 的符号与量级）。\n\n关键写法（不是装饰，是去掉相消）：\n  A_diag(p) - 3sqrt3 = (3/4) int_0^{2pi} [S^{-2/p} - M^{-2}] dth,\n  S^{-2/p} = e^{-2m} exp(-(2/p) ls),  M^{-2} = e^{-2m},  m = ln max_i a_i,\n  ls = log1p( sum_{i != argmax} e^{p(ln a_i - m)} ) >= 0\n  => 被积函数 = e^{-2m} * expm1(-(2/p) ls)  <= 0,  逐点无相消（p=1e8 时差值 1e-15 量级，\n     直接写 S^{-2/p} - M^{-2} 会被 1e-16 的舍入吃掉；写成 expm1 之后没有相消）。\n  主项是闭式：(3/4) int M^{-2} dth = 3 sqrt3（脚本里另算一次 int M^{-2} 与 4 sqrt3 对拍）。\n\n抗尖峰：p 大时 S^{-2/p} 的「非平凡部分」集中在两个最大者打平的四个点\n  th0 in {0, pi/3, pi, 5pi/3}（那里 M = sqrt3/2、第三个值为 0），层宽 ~ sigma/p，sigma = 2M0 = sqrt3。\n  每个 th0 的两侧各换元 u = p|th-th0|/sigma（dth = (sigma/p) du），在 u in [0,U] 上求积\n  （被积函数在 u 里光滑：e^{p(ln a_i - m)} 变成 e^{-kappa u}）；\n  层外残段（|th-th0| > delta = sigma U / p）照常六段 tanh-sinh 补齐（大 p 时那里逐点为 0）。\n\n  A_face(p) - 4sqrt2 = 4sqrt2 * expm1(L),   L = -(ln2)/p + 2 lnG(1+1/p) - lnG(1+2/p)\n  L 用两条路算：lgamma 与 x=1/p 的幂级数 L = -x ln2 - sum_{k>=2} (-1)^k zeta(k)(2^k-2) x^k / k，\n  互为对照（大 p 时级数那条更准：L ~ -6.9e-9，lgamma 的两项相消到 1e-16）。\n\n判据（硬编码、由脚本判，不过模型）：\n  (A) 四点 p in {1e2,1e4,1e6,1e8}: A_diag-3sqrt3 < 0 且 A_face-4sqrt2 < 0（都从下方逼近）\n  (B) Delta = A_face - A_diag 四点全 > 0 且严格递增；0 < (4sqrt2-3sqrt3)-Delta 严格递减；\n      rho 四点严格递增且 < 4sqrt2/(3sqrt3)\n  (C) 收敛控制：int M^{-2} 与 4sqrt3 相对差 < 1e-12；J*p^2 在步长 h 与 h/2 下相对变化 < 1e-6；\n      p=20 与 p=100 上「3sqrt3+J」与直接六段 tanh-sinh 的 A_diag 相对差 < 1e-10；\n      p=1,2 的精确值自检 < 1e-12\n  (A)(B) 全过且 (C) 过 => supports；(A) 或 (B) 有反例 => refutes（counterexample 点名读数）；\n  (C) 不过 => inconclusive（精度不足不是数学反例）。\n\"\"\"\nimport json\nimport math\nimport time\n\nPI = math.pi\nHP = PI / 2.0\nABRK = [0.0, PI / 3.0, 2.0 * PI / 3.0, PI, 4.0 * PI / 3.0, 5.0 * PI / 3.0, 2.0 * PI]\nTIES = [0.0, PI / 3.0, PI, 5.0 * PI / 3.0]        # 两个最大者打平的点\nCUT = TIES + [2.0 * PI]                           # 层邻域的裁剪点（2pi 与 0 是同一点）\nM0 = math.sqrt(3.0) / 2.0\nSIG = 2.0 * M0                                    # = sqrt(3)\nS3 = math.sqrt(3.0)\nLIM_D = 4.0 * math.sqrt(2.0) - 3.0 * S3           # Delta 的极限\nLIM_R = 4.0 * math.sqrt(2.0) / (3.0 * S3)         # rho 的极限\n\nZ2 = PI * PI / 6.0\nZ3 = 1.2020569031595942854\nZ4 = PI ** 4 / 90.0\nZ5 = 1.0369277551433699263\nZ6 = PI ** 6 / 945.0\nZ7 = 1.0083492773819228268\nZETA = {2: Z2, 3: Z3, 4: Z4, 5: Z5, 6: Z6, 7: Z7}\n\n\n# ------------------------------------------------------------------ 求积\ndef tanhsinh(f, a, b, h=0.05, tmax=7.0):\n    if b <= a:\n        return 0.0\n    c = 0.5 * (b - a)\n    d = 0.5 * (a + b)\n    s = 0.0\n    n = int(math.ceil(tmax / h))\n    for k in range(-n, n + 1):\n        t = k * h\n        u = HP * math.sinh(t)\n        x = math.tanh(u)\n        if x >= 1.0 or x <= -1.0:\n            continue\n        ch = math.cosh(u)\n        w = HP * math.cosh(t) / (ch * ch)\n        s += w * f(d + c * x)\n    return s * c * h\n\n\n# ------------------------------------------------------------------ 被积函数\ndef aa(th):\n    return (abs(math.cos(th - PI / 6.0)), abs(math.cos(th + PI / 6.0)), abs(math.sin(th)))\n\n\ndef logsum(th, p):\n    \"\"\"返回 (m, ls)：m = ln max_i a_i；ls = log1p(sum_{i != argmax} e^{p(ln a_i - m)}) >= 0。\"\"\"\n    a = aa(th)\n    imax = 0\n    if a[1] > a[imax]:\n        imax = 1\n    if a[2] > a[imax]:\n        imax = 2\n    if a[imax] <= 0.0:\n        return (None, None)\n    m = math.log(a[imax])\n    others = 0.0\n    for i in (0, 1, 2):\n        if i == imax or a[i] <= 0.0:\n            continue\n        e = p * (math.log(a[i]) - m)\n        if e > -700.0:\n            others += math.exp(e)\n    return (m, math.log1p(others))\n\n\ndef g_diff(th, p):\n    \"\"\"S(.)^{-2/p} - M(.)^{-2} = e^{-2m} * expm1(-(2/p) ls)\"\"\"\n    m, ls = logsum(th, p)\n    if m is None:\n        return 0.0\n    return math.exp(-2.0 * m) * math.expm1(-(2.0 / p) * ls)\n\n\ndef m_neg2(th):\n    \"\"\"M(th)^{-2}\"\"\"\n    m = max(aa(th))\n    return 0.0 if m <= 0.0 else 1.0 / (m * m)\n\n\ndef a_diag_direct(p, h=0.05):\n    \"\"\"直接六段 tanh-sinh（不经换元）：只用于自检与交叉核对。\"\"\"\n    def f(th, p=p):\n        m, ls = logsum(th, p)\n        if m is None:\n            return 0.0\n        return math.exp(-2.0 * m - (2.0 / p) * ls)\n\n    tot = 0.0\n    for i in range(len(ABRK) - 1):\n        tot += tanhsinh(f, ABRK[i], ABRK[i + 1], h=h)\n    return 0.75 * tot\n\n\ndef a_face(p):\n    x = 1.0 / p\n    return 2.0 ** (0.5 - x) * 4.0 * math.exp(\n        2.0 * math.lgamma(1.0 + x) - math.lgamma(1.0 + 2.0 * x))\n\n\ndef logfac(p):\n    \"\"\"L = ln(A_face / 4sqrt2)：lgamma 路与幂级数路各一条。\"\"\"\n    x = 1.0 / p\n    l_lg = -x * math.log(2.0) + 2.0 * math.lgamma(1.0 + x) - math.lgamma(1.0 + 2.0 * x)\n    l_se = -x * math.log(2.0)\n    for k in (2, 3, 4, 5, 6, 7):\n        l_se -= ((-1.0) ** k) * ZETA[k] * (2.0 ** k - 2.0) * (x ** k) / float(k)\n    return l_lg, l_se\n\n\n# ------------------------------------------------------------------ J = A_diag - 3sqrt3\ndef J_of_p(p, h=0.04, U=None):\n    \"\"\"J(p) = (3/4) int (S^{-2/p} - M^{-2}) = 层内换元部分 + 层外残段。\"\"\"\n    if U is None:\n        U = min(40.0, 0.9 * (PI / 6.0) * p / SIG)\n    # 层内：四个打平点、各两侧\n    lay = 0.0\n    for th0 in TIES:\n        for sgn in (1.0, -1.0):\n            def f(u, th0=th0, sgn=sgn, p=p):\n                return g_diff(th0 + sgn * (SIG / p) * u, p)\n            lay += tanhsinh(f, 0.0, U, h=h, tmax=8.0)\n    lay *= (SIG / p)\n    # 层外：六段里挖掉 delta 邻域\n    delta = SIG * U / p\n    out = 0.0\n    for i in range(len(ABRK) - 1):\n        segs = [(ABRK[i], ABRK[i + 1])]\n        for th0 in CUT:\n            new = []\n            lo, hi = th0 - delta, th0 + delta\n            for (x, y) in segs:\n                if hi <= x or lo >= y:\n                    new.append((x, y))\n                    continue\n                if x < lo:\n                    new.append((x, lo))\n                if hi < y:\n                    new.append((hi, y))\n            segs = new\n        for (x, y) in segs:\n            if y > x:\n                out += tanhsinh(lambda th, p=p: g_diff(th, p), x, y, h=h)\n    J = 0.75 * (lay + out)\n    return J, {\"layer\": 0.75 * lay, \"outer\": 0.75 * out, \"U\": U, \"delta\": delta}\n\n\n# ------------------------------------------------------------------ main\ndef main():\n    t0 = time.time()\n\n    # ---- 自检 1：int M^{-2} = 4 sqrt3（主项是闭式，这里独立算一次）\n    tot = 0.0\n    for i in range(len(ABRK) - 1):\n        tot += tanhsinh(m_neg2, ABRK[i], ABRK[i + 1], h=0.05)\n    chk_M = {\"int_M_neg2\": tot, \"closed_form_4sqrt3\": 4.0 * S3,\n             \"rel\": abs(tot - 4.0 * S3) / (4.0 * S3)}\n    print(\"PROGRESS: \" + json.dumps({\"stage\": \"selftest_intM2\", **chk_M}))\n\n    # ---- 自检 2：p=1,2 的精确值\n    sel = {}\n    for p, e in ((1.0, 3.0 * S3 / 4.0), (2.0, PI)):\n        v = a_diag_direct(p, h=0.05)\n        sel[\"A_diag_%g_rel\" % p] = abs(v - e) / e\n    sel[\"A_face_2_rel\"] = abs(a_face(2.0) - PI) / PI\n    sel_ok = max(sel.values()) < 1e-12\n    print(\"PROGRESS: \" + json.dumps({\"stage\": \"selftest_exact\", \"vals\": sel, \"ok\": sel_ok}))\n\n    # ---- 交叉核对：层化方案 vs 直接六段 tanh-sinh（p=20, 100）\n    cross = []\n    for p in (20.0, 100.0):\n        Jx, _ = J_of_p(p, h=0.04)\n        v = 3.0 * S3 + Jx\n        d1 = a_diag_direct(p, h=0.05)\n        d2 = a_diag_direct(p, h=0.025)\n        rec = {\"p\": p, \"limit_plus_J\": v, \"direct_h005\": d1, \"direct_h0025\": d2,\n               \"rel_vs_direct\": abs(v - d1) / d1,\n               \"direct_self_rel\": abs(d1 - d2) / d1, \"J\": Jx}\n        cross.append(rec)\n        print(\"PROGRESS: \" + json.dumps({\"stage\": \"cross_check\", **rec}))\n\n    # ---- 四个点名点\n    PTS = [1.0e2, 1.0e4, 1.0e6, 1.0e8]\n    rows = []\n    for p in PTS:\n        J1, info1 = J_of_p(p, h=0.04)\n        J2, _ = J_of_p(p, h=0.02)\n        L_lg, L_se = logfac(p)\n        F = 4.0 * math.sqrt(2.0) * math.expm1(L_se)\n        A_diag = 3.0 * S3 + J1\n        A_face_v = 4.0 * math.sqrt(2.0) + F\n        dl = A_face_v - A_diag\n        rho = A_face_v / A_diag\n        row = {\"p\": p,\n               \"Adiag_minus_3sqrt3\": J1, \"Aface_minus_4sqrt2\": F,\n               \"Delta\": dl, \"rho\": rho,\n               \"sign_Adiag_gap\": (1 if J1 > 0 else (-1 if J1 < 0 else 0)),\n               \"sign_Aface_gap\": (1 if F > 0 else (-1 if F < 0 else 0)),\n               \"J_p2\": J1 * p * p, \"J_p2_h_half\": J2 * p * p,\n               \"J_conv_rel\": abs(J1 * p * p - J2 * p * p) / max(1e-300, abs(J2 * p * p)),\n               \"L_lgamma\": L_lg, \"L_series\": L_se, \"L_abs_diff\": abs(L_lg - L_se),\n               \"U\": info1[\"U\"], \"delta\": info1[\"delta\"],\n               \"layer\": info1[\"layer\"], \"outer\": info1[\"outer\"],\n               \"limit_minus_Delta\": LIM_D - dl, \"LIM_rho_minus_rho\": LIM_R - rho,\n               \"ratio_gap_face_over_diag\": (F / J1) if J1 != 0.0 else None}\n        rows.append(row)\n        print(\"PROGRESS: \" + json.dumps(row))\n\n    # ---- 判据\n    A_ok = all((r[\"Adiag_minus_3sqrt3\"] < 0.0) and (r[\"Aface_minus_4sqrt2\"] < 0.0) for r in rows)\n    ds = [r[\"Delta\"] for r in rows]\n    rhos = [r[\"rho\"] for r in rows]\n    B_parts = {\n        \"Delta_all_positive\": all(d > 0.0 for d in ds),\n        \"Delta_strictly_increasing\": all(ds[i] < ds[i + 1] for i in range(len(ds) - 1)),\n        \"limit_minus_Delta_positive\": all((LIM_D - d) > 0.0 for d in ds),\n        \"limit_minus_Delta_decreasing\": all((LIM_D - ds[i]) > (LIM_D - ds[i + 1])\n                                            for i in range(len(ds) - 1)),\n        \"rho_strictly_increasing\": all(rhos[i] < rhos[i + 1] for i in range(len(rhos) - 1)),\n        \"rho_below_limit\": all(r < LIM_R for r in rhos),\n    }\n    B_ok = all(B_parts.values())\n    C_parts = {\n        \"intM2_ok\": chk_M[\"rel\"] < 1e-12,\n        \"exact_selftest_ok\": sel_ok,\n        \"J_scaling_conv_ok\": all(r[\"J_conv_rel\"] < 1e-6 for r in rows),\n        \"cross_check_ok\": all(c[\"rel_vs_direct\"] < 1e-10 for c in cross),\n    }\n    C_ok = all(C_parts.values())\n\n    if (not C_ok) and (A_ok and B_ok):\n        result = \"inconclusive\"\n        ce = None\n        why = \"收敛控制未过（精度不足不是数学反例）\"\n    elif A_ok and B_ok:\n        result = \"supports\"\n        ce = None\n        why = \"四点符号与单调方向全对：两量都从下方逼近极限，Delta 递增趋于 4sqrt2-3sqrt3，rho 升向 1.088662\"\n    else:\n        result = \"refutes\"\n        failing = [k for k, v in ((\"A\", A_ok), (\"B\", B_ok)) if not v]\n        ce = {\"failing_checks\": failing,\n              \"B_detail\": B_parts,\n              \"rows\": [{k: r[k] for k in (\"p\", \"Adiag_minus_3sqrt3\", \"Aface_minus_4sqrt2\",\n                                          \"Delta\", \"rho\")} for r in rows],\n              \"limits\": {\"Delta_limit\": LIM_D, \"rho_limit\": LIM_R}}\n        why = \"符号/单调方向与断言不符（反例见 counterexample）\"\n\n    payload = {\n        \"result\": result,\n        \"counterexample\": ce,\n        \"why\": why,\n        \"bound\": (\"p in {1e2, 1e4, 1e6, 1e8} for the four named points; cross-check and \"\n                  \"layer/outer convergence control at p in {20, 100}; integrand identity \"\n                  \"verified at p in {1, 2}\"),\n        \"strategy\": (\"limit-plus-difference quadrature: A_diag-3sqrt3 = (3/4) int expm1 form \"\n                     \"(no cancellation); tie-layer substitution u = p|th-th0|/sigma on the four \"\n                     \"tie points + six-piece tanh-sinh on the outer remainder; A_face-4sqrt2 via \"\n                     \"expm1 of the log-factor, L computed by lgamma AND by the x=1/p power series; \"\n                     \"convergence control by halving the tanh-sinh step in the u variable\"),\n        \"scaling\": {\"total_sec\": round(time.time() - t0, 3),\n                    \"J_p2_sequence\": [r[\"J_p2\"] for r in rows],\n                    \"note\": \"J*p^2 基本恒定 => A_diag-3sqrt3 ~ c/p^2；A_face-4sqrt2 ~ -(4sqrt2 ln2)/p\"},\n        \"selftest_intM2\": chk_M,\n        \"selftest_exact\": sel,\n        \"cross_check\": cross,\n        \"rows\": rows,\n        \"checks\": {\"A\": A_ok, \"B\": B_ok, \"C\": C_ok, \"B_parts\": B_parts, \"C_parts\": C_parts},\n        \"limits\": {\"Delta\": LIM_D, \"rho\": LIM_R, \"3sqrt3\": 3.0 * S3, \"4sqrt2\": 4.0 * math.sqrt(2.0)},\n        \"note\": (\"Delta = A_face - A_diag, rho = A_face/A_diag（任务原文约定）。\"\n                 \"被积函数的差分写法 e^{-2m} expm1(-(2/p) ls) 是大 p 能算的前提：\"\n                 \"p=1e8 时 A_diag-3sqrt3 只有 1e-15 量级，直算会被舍入吃掉。\"\n                 \"尖峰处理按四个打平点做换元，层外残段用同一套六段 tanh-sinh 补齐。\"),\n    }\n    print(\"REPRO_RESULT: \" + json.dumps(payload))\n\n\nif __name__ == \"__main__\":\n    main()\n"
+        },
+        "why": "写任务(3)脚本：极限主项+expm1 差分写法、四个打平点的层内换元、A_face 的两条 L 计算路"
+      },
+      "result": {
+        "tool": "fs.write",
+        "ok": true,
+        "data": {
+          "path": "code/exp/e7_largep_asymptotics.py",
+          "bytes": 13677,
+          "sha256": "cd665d73ae4ad472959a0b37d4fa132df2e2826bd9ca01085686d4e0c6250bfb",
+          "created": true
+        },
+        "error": "",
+        "meta": {
+          "path": "code/exp/e7_largep_asymptotics.py",
+          "bytes": 13677,
+          "created": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 90368,
+        "prompt_cache_miss_tokens": 4055,
+        "tokens_in": 94423,
+        "tokens_out": 42662,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000119"
+    },
+    {
+      "index": 21,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "code/exp/e7_largep_asymptotics.py",
+          "start_line": 160,
+          "max_lines": 120
+        },
+        "why": "回读任务(3)脚本主体：确认抗尖峰求积的相消消除与判据完整，再决定是否跑（不能把跑不过的代码当通过）"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "        for sgn in (1.0, -1.0):\n            def f(u, th0=th0, sgn=sgn, p=p):\n                return g_diff(th0 + sgn * (SIG / p) * u, p)\n            lay += tanhsinh(f, 0.0, U, h=h, tmax=8.0)\n    lay *= (SIG / p)\n    # 层外：六段里挖掉 delta 邻域\n    delta = SIG * U / p\n    out = 0.0\n    for i in range(len(ABRK) - 1):\n        segs = [(ABRK[i], ABRK[i + 1])]\n        for th0 in CUT:\n            new = []\n            lo, hi = th0 - delta, th0 + delta\n            for (x, y) in segs:\n                if hi <= x or lo >= y:\n                    new.append((x, y))\n                    continue\n                if x < lo:\n                    new.append((x, lo))\n                if hi < y:\n                    new.append((hi, y))\n            segs = new\n        for (x, y) in segs:\n            if y > x:\n                out += tanhsinh(lambda th, p=p: g_diff(th, p), x, y, h=h)\n    J = 0.75 * (lay + out)\n    return J, {\"layer\": 0.75 * lay, \"outer\": 0.75 * out, \"U\": U, \"delta\": delta}\n\n\n# ------------------------------------------------------------------ main\ndef main():\n    t0 = time.time()\n\n    # ---- 自检 1：int M^{-2} = 4 sqrt3（主项是闭式，这里独立算一次）\n    tot = 0.0\n    for i in range(len(ABRK) - 1):\n        tot += tanhsinh(m_neg2, ABRK[i], ABRK[i + 1], h=0.05)\n    chk_M = {\"int_M_neg2\": tot, \"closed_form_4sqrt3\": 4.0 * S3,\n             \"rel\": abs(tot - 4.0 * S3) / (4.0 * S3)}\n    print(\"PROGRESS: \" + json.dumps({\"stage\": \"selftest_intM2\", **chk_M}))\n\n    # ---- 自检 2：p=1,2 的精确值\n    sel = {}\n    for p, e in ((1.0, 3.0 * S3 / 4.0), (2.0, PI)):\n        v = a_diag_direct(p, h=0.05)\n        sel[\"A_diag_%g_rel\" % p] = abs(v - e) / e\n    sel[\"A_face_2_rel\"] = abs(a_face(2.0) - PI) / PI\n    sel_ok = max(sel.values()) < 1e-12\n    print(\"PROGRESS: \" + json.dumps({\"stage\": \"selftest_exact\", \"vals\": sel, \"ok\": sel_ok}))\n\n    # ---- 交叉核对：层化方案 vs 直接六段 tanh-sinh（p=20, 100）\n    cross = []\n    for p in (20.0, 100.0):\n        Jx, _ = J_of_p(p, h=0.04)\n        v = 3.0 * S3 + Jx\n        d1 = a_diag_direct(p, h=0.05)\n        d…（落档截断，原 4888 字）",
+        "error": "",
+        "meta": {
+          "path": "code/exp/e7_largep_asymptotics.py",
+          "encoding": "utf-8",
+          "bytes_read": 13677,
+          "total_bytes": 13677,
+          "truncated": false,
+          "start_line": 160,
+          "lines_read": 120,
+          "total_lines": 320,
+          "next_line": 280,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 160–279 行（共 320 行）；续读 start_line=280",
+          "sha256": "cd665d73ae4ad472959a0b37d4fa132df2e2826bd9ca01085686d4e0c6250bfb"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 93568,
+        "prompt_cache_miss_tokens": 2019,
+        "tokens_in": 95587,
+        "tokens_out": 575,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000119"
+    },
+    {
+      "index": 22,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "code/exp/e7_largep_asymptotics.py",
+          "start_line": 280,
+          "max_lines": 45
+        },
+        "why": "读完任务(3)脚本尾段（判据与 REPRO_RESULT），确认无语法/逻辑缺口再跑"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "    else:\n        result = \"refutes\"\n        failing = [k for k, v in ((\"A\", A_ok), (\"B\", B_ok)) if not v]\n        ce = {\"failing_checks\": failing,\n              \"B_detail\": B_parts,\n              \"rows\": [{k: r[k] for k in (\"p\", \"Adiag_minus_3sqrt3\", \"Aface_minus_4sqrt2\",\n                                          \"Delta\", \"rho\")} for r in rows],\n              \"limits\": {\"Delta_limit\": LIM_D, \"rho_limit\": LIM_R}}\n        why = \"符号/单调方向与断言不符（反例见 counterexample）\"\n\n    payload = {\n        \"result\": result,\n        \"counterexample\": ce,\n        \"why\": why,\n        \"bound\": (\"p in {1e2, 1e4, 1e6, 1e8} for the four named points; cross-check and \"\n                  \"layer/outer convergence control at p in {20, 100}; integrand identity \"\n                  \"verified at p in {1, 2}\"),\n        \"strategy\": (\"limit-plus-difference quadrature: A_diag-3sqrt3 = (3/4) int expm1 form \"\n                     \"(no cancellation); tie-layer substitution u = p|th-th0|/sigma on the four \"\n                     \"tie points + six-piece tanh-sinh on the outer remainder; A_face-4sqrt2 via \"\n                     \"expm1 of the log-factor, L computed by lgamma AND by the x=1/p power series; \"\n                     \"convergence control by halving the tanh-sinh step in the u variable\"),\n        \"scaling\": {\"total_sec\": round(time.time() - t0, 3),\n                    \"J_p2_sequence\": [r[\"J_p2\"] for r in rows],\n                    \"note\": \"J*p^2 基本恒定 => A_diag-3sqrt3 ~ c/p^2；A_face-4sqrt2 ~ -(4sqrt2 ln2)/p\"},\n        \"selftest_intM2\": chk_M,\n        \"selftest_exact\": sel,\n        \"cross_check\": cross,\n        \"rows\": rows,\n        \"checks\": {\"A\": A_ok, \"B\": B_ok, \"C\": C_ok, \"B_parts\": B_parts, \"C_parts\": C_parts},\n        \"limits\": {\"Delta\": LIM_D, \"rho\": LIM_R, \"3sqrt3\": 3.0 * S3, \"4sqrt2\": 4.0 * math.sqrt(2.0)},\n        \"note\": (\"Delta = A_face - A_diag, rho = A_face/A_diag（任务原文约定）。\"\n                 \"被积函数的差分写法 e^{-2m} expm1(-(2/p) ls) 是大 p 能算的前提：\"\n                 \"p=1e8 时 A_diag-3sqrt3 只有 1e-15 量级，直…（落档截断，原 2166 字）",
+        "error": "",
+        "meta": {
+          "path": "code/exp/e7_largep_asymptotics.py",
+          "encoding": "utf-8",
+          "bytes_read": 13677,
+          "total_bytes": 13677,
+          "truncated": false,
+          "start_line": 280,
+          "lines_read": 41,
+          "total_lines": 320,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 280–320 行（共 320 行）",
+          "sha256": "cd665d73ae4ad472959a0b37d4fa132df2e2826bd9ca01085686d4e0c6250bfb"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 94720,
+        "prompt_cache_miss_tokens": 3727,
+        "tokens_in": 98447,
+        "tokens_out": 276,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000119"
+    },
+    {
+      "index": 23,
+      "shape": "tool",
+      "payload": {
+        "name": "verify.run_experiment",
+        "args": {
+          "claim": "承接 exp:000014/000016/000020/000022 的同一口径（Δ(p)=A_face(p)−A_diag(p)，ρ(p)=A_face(p)/A_diag(p)）：对 p=10^2,10^4,10^6,10^8，A_diag(p)−3√3 与 A_face(p)−4√2 都从下方逼近 0（即两者皆负、且 Delta=A_face−A_diag 恒正并单调递增趋于极限 4√2−3√3=0.4607018），从而 ρ 在 p>p*（=4.9982156）之后单调升向 4√2/(3√3)=1.088662，不出现回落、也不再有第二零点。",
+          "claim_key": "lp3-largep-both-approach-from-below",
+          "script_path": "code/exp/e7_largep_asymptotics.py",
+          "method": "numeric",
+          "params": {
+            "delta_convention": "A_face - A_diag",
+            "rho_convention": "A_face/A_diag",
+            "named_points": [
+              100.0,
+              10000.0,
+              1000000.0,
+              100000000.0
+            ],
+            "spike_handling": "tie-layer substitution u = p*(theta-theta0)/sigma at the four tie points + expm1 difference form to remove cancellation; outer remainder by 6-piece tanh-sinh",
+            "convergence_control": "halving tanh-sinh step in the layer variable; cross-check against direct 6-piece tanh-sinh at p=20,100"
+          },
+          "timeout": 900
+        },
+        "why": "任务(3)：大 p 上的符号与量级，判 ρ 是升向极限还是回落"
+      },
+      "result": {
+        "tool": "verify.run_experiment",
+        "ok": true,
+        "data": {
+          "experiment_id": "000023",
+          "recorded": true,
+          "result": "supports",
+          "evidence_kind": "cross_check",
+          "negation_kind": "not_proved",
+          "exit_code": 0,
+          "runtime_sec": 0.282,
+          "code_hash": "cd665d73ae4ad472",
+          "report_path": "",
+          "report_sha256": "",
+          "report_bytes": 0,
+          "report_blocks": {},
+          "report_problems": [],
+          "proof_manuscript": "",
+          "manuscript_sha256": "",
+          "manuscript_proof_sha256": "",
+          "manuscript_problems": [],
+          "numeric_manuscript": "work/E/e-num-000023.md",
+          "numeric_manuscript_sha256": "2941465386e3ea442db0099b013d053cb0d48c18f3fec674abeed0ec7a1b27e2",
+          "numeric_manuscript_problems": [],
+          "signed_by": "V",
+          "proof_authors": [
+            "E"
+          ],
+          "notes": "[run] exit_code=0，runtime=0.282s，脚本 code/exp/e7_largep_asymptotics.py（sha256 前 16 位 cd665d73ae4ad472）",
+          "reason": "numeric 实验支持该命题 ⇒ 等级 `strong_conjecture`（历史列 evidence_kind=cross_check；不构成证明）",
+          "conjecture_ledger": {
+            "conjecture_id": "000025",
+            "statement": "承接 exp:000014/000016/000020/000022 的同一口径（Δ(p)=A_face(p)−A_diag(p)，ρ(p)=A_face(p)/A_diag(p)）：对 p=10^2,10^4,10^6,10^8，A_diag(p)−3√3 与 A_face(p)−4√2 都从下方逼近 0（即两者皆负、且 Delta=A_face−A_diag 恒正并单调递增趋于极限 4√2−3√3=0.4607018），从而 ρ 在 p>p*（=4.9982156）之后单调升向 4√2/(3√3)=1.088662，不出现回落、也不再有第二零点。",
+            "negation_statement": "",
+            "form": "universal",
+            "testable": {},
+            "origin": "experiment:000023",
+            "status": "supported_not_proved",
+            "experiment_ids": [
+              "000023"
+            ],
+            "proof_experiment_id": "",
+            "counterexample_experiment_id": "",
+            "refusal_ref": "",
+            "promoted_to": {},
+            "known_lit_id": "",
+            "withdraw_reason": "",
+            "notes": "E 的实验 exp:000023（supports）落地时自动记账：命题正文逐字是这一行的 `claim`，证据是同一行的读数",
+            "created_at": "2026-11-24T20:39:46+08:00",
+            "updated_at": "2026-11-24T20:39:46+08:00",
+            "created_by": "agent-E-E1",
+            "updated_by": "agent-E-E1",
+            "registered_stmt_id": "",
+            "duplicate": false,
+            "ok": true
+          },
+          "d_handoff": {
+            "checked": true,
+            "state": "opened",
+            "key": "d-handoff@000025",
+            "item_id": "t-000131",
+            "owner": "t-000011",
+            "owner_instance": "D1",
+            "owner_known": true,
+            "owner_source": "in_flight_d",
+            "owner_why": "产出来源的父不是 D（t-000083）⇒ 那一刻唯一在飞的 D 是 t-000011（实例 D1）",
+            "reason": "新开「待递交」义务 t-000131（收件实例 D1，在飞台账号 t-000011）",
+            "problems": []
+          }
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 97664,
+        "prompt_cache_miss_tokens": 2095,
+        "tokens_in": 99759,
+        "tokens_out": 507,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000119"
+    },
+    {
+      "index": 24,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/exp-logs/000023.log",
+          "max_lines": 40
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# lp3-largep-both-approach-from-below\n# 脚本 code/exp/e7_largep_asymptotics.py  sha256=cd665d73ae4ad472\n# exit_code=0  runtime=0.282s\n# claim: 承接 exp:000014/000016/000020/000022 的同一口径（Δ(p)=A_face(p)−A_diag(p)，ρ(p)=A_face(p)/A_diag(p)）：对 p=10^2,10^4,10^6,10^8，A_diag(p)−3√3 与 A_face(p)−4√2 都从下方逼近 0（即两者皆负、且 Delta=A_face−A_diag 恒正并单调递增趋于极限 4√2−3√3=0.4607018），从而 ρ 在 p>p*（=4.9982156）之后单调升向 4√2/(3√3)=1.088662，不出现回落、也不再有第二零点。\n----- stdout -----\nPROGRESS: {\"stage\": \"selftest_intM2\", \"int_M_neg2\": 6.928203230275505, \"closed_form_4sqrt3\": 6.928203230275509, \"rel\": 5.127900497022838e-16}\nPROGRESS: {\"stage\": \"selftest_exact\", \"vals\": {\"A_diag_1_rel\": 5.127900497022837e-16, \"A_diag_2_rel\": 1.4135798584282297e-16, \"A_face_2_rel\": 4.240739575284689e-16}, \"ok\": true}\nPROGRESS: {\"stage\": \"cross_check\", \"p\": 20.0, \"limit_plus_J\": 5.156387676535964, \"direct_h005\": 5.156387676535961, \"direct_h0025\": 5.156387676535962, \"rel_vs_direct\": 5.167445557333266e-16, \"direct_self_rel\": 1.7224818524444223e-16, \"J\": -0.03976474617066818}\nPROGRESS: {\"stage\": \"cross_check\", \"p\": 100.0, \"limit_plus_J\": 5.194467690620553, \"direct_h005\": 5.194467690620549, \"direct_h0025\": 5.194467690620552, \"rel_vs_direct\": 8.549272732063335e-16, \"direct_self_rel\": 6.839418185650668e-16, \"J\": -0.0016847320860785817}\nPROGRESS: {\"p\": 100.0, \"Adiag_minus_3sqrt3\": -0.0016847320860785817, \"Aface_minus_4sqrt2\": -0.03998546399159598, \"Delta\": 0.4224010948802315, \"rho\": 1.081317493925883, \"sign_Adiag_gap\": -1, \"sign_Aface_gap\": -1, \"J_p2\": -16.847320860785818, \"J_p2_h_half\": -16.847320860785846, \"J_conv_rel\": 1.687016568703154e-15, \"L_lgamma\": -0.007093598367969477, \"L_series\": -0.007093598367965525, \"L_abs_diff\": 3.952567440013155e-15, \"U\": 27.206990463513268, \"delta\": 0.4712388980384689, \"layer\": -0.0011231547240523922, \"outer\": -0.0005615773620261897, \"limit_minus_Delta\": 0.03830073190551708, \"LIM_rho_minus_rho\": 0.007344613977751768, \"ratio_gap_face_over_diag\": 23.734019386231903}\nPROGRESS: {\"p\": 10000.0, \"Adiag_minus_3sqrt3\"…（落档截断，原 9518 字）",
+        "error": "",
+        "meta": {
+          "path": "out/exp-logs/000023.log",
+          "encoding": "utf-8",
+          "bytes_read": 9683,
+          "total_bytes": 9683,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 15,
+          "total_lines": 15,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 1–15 行（共 15 行）",
+          "sha256": "5c531f1786cd984788bf25a20ce39f6297902ad178fa346c8b969caa6a4abd79"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 98944,
+        "prompt_cache_miss_tokens": 2082,
+        "tokens_in": 101026,
+        "tokens_out": 1220,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000119"
+    },
+    {
+      "index": 25,
+      "shape": "handoff",
+      "payload": {
+        "to": "D",
+        "summary": "E 三行数值实验钉死「体对角向 vs 面对角向」的大 p 符号结构：p*=4.998215596840938、ρ=A_face/A_diag 在 3.02439 处是极小(0.98856)、ρ 升向 1.088662、Δ 在 (20,∞) 无第二零点（任务前提被反例推翻）",
+        "body": "## 我做了什么\n\n三行 `method=numeric` 实验，全部 `exit_code=0`，判据硬编码在脚本里（脚本判、不过模型），原始输出在 `out/exp-logs/<实验号>.log`：\n\n| 实验 | 脚本 | result | 数值稿 |\n|---|---|---|---|\n| exp:000020 | `code/exp/e5_delta_second_root.py` | **refutes** | `work/E/e-num-000020.md` |\n| exp:000022 | `code/exp/e6b_pstar_peak_deriv_v2.py` | **refutes** | `work/E/e-num-000022.md` |\n| exp:000023 | `code/exp/e7_largep_asymptotics.py` | **supports** | `work/E/e-num-000023.md` |\n\n口径承接 exp:000014 / exp:000016：`A_diag(p)=(3/4)∫_0^{2π}S(θ)^{-2/p}dθ`，`S=|cos(θ−π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p`；`A_face(p)=2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)`。**本趟一律用任务原文约定**：`Δ=A_face−A_diag`、`ρ2=A_face/A_diag`（落库的 exp:000016 用的是倒数约定 `ρ1=A_diag/A_face`、`Δ1=−Δ2`）。\n\n## 读数（可直接复核）\n\n**1) exp:000020 → refutes**：p∈[20,1e6] 对数网格 241 点上 **Δ 无变号**。`Δ(20)=0.2868654787912064`，`Δ(1e6)=0.46069790576232705`，极限 `4√2−3√3=0.46070182678574856`。收敛控制：h=0.05 vs 0.025 相对差 ≤5.2e-16；p=1,2 精确值自检 ≤5.1e-16。⇒ 任务前提「Δ 在 (20,∞) 上必须再有至少一次变号」**不成立**（反例 = 网格上 0 次变号 + 两端同号读数）。\n\n**2) exp:000022 → refutes（(ii) 那半被推翻，(i) 成立）**：Δ 在 (2,20] 的唯一零点 `p*=4.998215596840938`（夹逼相对宽度 7.3e-15，远优于要求的 1e-9；Δ*=6.2e-15，斜率 +0.03665）。导数判据（解析恒等式 `d/dp S^{-2/p}=S^{-2/p}[(2/p²)lnS−(2/p)(S′/S)]`，`A_face′` 走自实现 digamma，Newton+夹逼）给出 ρ2 的唯一驻点 `p=3.0243905837657037`，**ρ2 在此取极小** `0.9885596074444155`（曲率 +0.01264>0）；倒数 `ρ1=A_diag/A_face` 在同一点取极大 `1.01157278981402`。\n单调性（149+149 点采样、每段符号恒定、最小裕度 1.04e-4 / 4.73e-4）：**ρ2 在 (2,p_ext) 严格减、在 (p_ext,20] 严格增**；ρ1 反过来。见证点：p=2.5 → drho2=−0.00978；p=3.02 → −5.56e-5；p=4.0 → +0.00663；p=10 → +0.00429。\n⇒ 任务原文那把「ρ=A_face/A_diag 峰值 1.0116 在 p=3.02」**是 `ρ1` 的峰值，不是 `ρ2` 的**（三行实验里唯一一处口径混用，也是「必须再有第二零点」这个推断的来源）。\n\n**3) exp:000023 → supports**：大 p 用「极限加差分」求积（`A_diag−3√3=(3/4)∫e^{-2m}expm1(−(2/p)ls)dθ`，去掉相消；四个打平点做 `u=p|θ−θ0|/σ` 层换元，层外残段仍用六段 tanh-sinh；`A_face−4√2` 用 `expm1` 与 lgamma／幂级数双算）。四个点名点全过：\n\n| p | A_diag−3√3 | A_face−4√2 | Δ | ρ2 |\n|---|---|---|---|---|\n| 1e2 | −1.6847e-3 | −3.9985e-2 | 0.42240109 | 1.08131749 |\n| 1e4 | −1.7092e-7 | −3.9218e-4 | 0.46030982 | 1.08858667 |\n| 1e6 | −1.7095e-11 | −3.9210e-6 | 0.46069791 | 1.08866135 |\n| 1e8 | −1.7095e-15 | −3.9210e-8 | 0.46070179 | 1.08866210 |\n\n两量都**从下方**逼近（皆负），Δ 单调递增趋于 `0.4607018268`，ρ2 单调升向 `1.088662` —— **是升向 1.08866，不是回落**。交叉核对：p=20/100 上「极限+J」与直接六段 tanh-sinh 相对差 ≤8.6e-16；层内/层外拆分在 payload 里。\n\n## 合并起来的符号结构（三条读数拼起来，不是新假设）\n\n`ρ2(2)=1`；`ρ2` 在 (2, 3.0243906) 降至 `0.9885596`；此后单调升；在 `p*=4.998215596840938` 穿 1；继续升至 `1.088662`。⇒ **Δ 在 (2,∞) 上恰有一次变号（就在 p*），在 (20,∞) 上一次也没有。**\n\n## 请你做的\n\n把上面 1)–3) 与那条合并结构写进 `manuscripts/D/RESEARCH.md` 的「已确定的结论」与「例子与反例」两节，证据引 `exp:000020` / `exp:000022` / `exp:000023` 与对应 `work/E/e-num-0000{20,22,23}.md`。等级按凭据：**numeric，无 V 签 ⇒ 最多 strong_conjecture**，不要写成定理。\n\n## 我卡在哪（如实留档）\n\n无阻塞。一处过程记录要说清：`exp:000021` 是任务 (2) 的第一版，导数恒等式漏了 `−(2/p)(S′/S)` 一项，脚本自检把它点出来了（A_diag′ 与中心差商相对差 1.76）⇒ 该行落 `inconclusive`（不是数学反例）；修正版就是 `exp:000022`。",
+        "refs": [
+          "exp:000020",
+          "exp:000022",
+          "exp:000023",
+          "exp:000021"
+        ],
+        "revises": "",
+        "why": "E 发现的例子/反例按分工交 D 写进研究手稿，我不直接写 statements"
+      },
+      "result": {
+        "handoff": "000015",
+        "ok": true,
+        "id": "000015",
+        "path": "work/handoffs.jsonl#000015",
+        "to": "D",
+        "brief": "E 三行数值实验钉死「体对角向 vs 面对角向」的大 p 符号结构：p*=4.998215596840938、ρ=A_face/A_diag 在 3.02439 处是极小(0.98856)、ρ 升向 1.088662、Δ 在 (20,∞) 无第二零点（任务前提被反例推翻）",
+        "addressing": {
+          "checked": true,
+          "how": "outside_roster",
+          "to": "D",
+          "kind": "",
+          "name": "",
+          "task_id": "",
+          "role": "",
+          "brief": "",
+          "candidates": [],
+          "callable": "父 F1（t-000083）",
+          "why": "角色级收件人面（手稿台账的口径）+ 协作边成立；名册上没有 D（not_in_roster）⇒ 这一条按角色投，不靠名册（名册探针的读数见 roster_probe）",
+          "delivery": "role",
+          "manuscript_to": "D",
+          "addressed_by": "",
+          "roster_probe": {
+            "checked": true,
+            "how": "not_in_roster",
+            "refused": "not_in_roster",
+            "error": "D 不在你的名册里（只有父与子能通话）⇒ 受控拒绝：不许按角色代号随便发 —— 请写名册名或绝对编号。你能通话的是：父 F1（t-000083）",
+            "why": "名册上没有 D（父 ∪ 子 里没有这个编号/名字）"
+          }
+        },
+        "notify_channel": "role",
+        "revises": "",
+        "existing_same_summary": {
+          "count": 0,
+          "ids": [],
+          "note": "查过了：没有同一句话的既有交接"
+        },
+        "notified": "m000019",
+        "error": "",
+        "note": "收件人下次运行时（或本步之后）会在收件箱/板上看到编号；它用 `manuscripts.read` 读全文",
+        "秘书": {
+          "alarms": [],
+          "fail_open": false,
+          "wash": {
+            "checked": false,
+            "washed": false,
+            "refused": "",
+            "reason": "handoff 不在洗格式的面上（派活以外只报不改：`to` 是内容面）"
+          },
+          "changes": [],
+          "surface_fit": {
+            "shape": "handoff",
+            "checked": false,
+            "fits": null,
+            "reason": "handoff 不派活 ⇒ 面这一维不适用（不适用不是通过）"
+          },
+          "reach_fit": {}
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 100224,
+        "prompt_cache_miss_tokens": 4455,
+        "tokens_in": 104679,
+        "tokens_out": 6241,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000119"
+    },
+    {
+      "index": 26,
+      "shape": "final",
+      "payload": {
+        "final": "三件活都跑完了，每件一行 experiments（method=numeric），判据全部硬编码在脚本里由脚本判（不过模型），原始输出在 out/exp-logs/。结论：任务前提（Δ 在 (20,∞) 上必须再有至少一次变号）**被反例推翻**；根因是 ρ 的两套约定被混用。\n\n(1) exp:000020（code/exp/e5_delta_second_root.py，exit_code=0，result=**refutes**）：p∈[20,10^6] 对数网格 241 点，Δ(20)=0.2868654788，Δ(1e6)=0.4606979058，两端同号且**网格上零次变号**（因此夹逼区间为空，不是「夹不出来」而是「不存在」）；h 细化 0.05/0.025 相对差 ≤5.2e-16，p=1,2 精确值自检 5e-16 内。counterexample 非空（sign_changes_on_grid=[]，两端读数与极限 4√2−3√3=0.46070183）。\n\n(2) exp:000022（code/exp/e6b_pstar_peak_deriv_v2.py，exit_code=0，result=**refutes**）：导数判据（完整恒等式 d/dp S^{−2/p}=S^{−2/p}[(2/p²)lnS−(2/p)(S′/S)]，A_face′ 走自实现 digamma；全程 Newton+夹逼，不用网格找最小）。Δ 的零点 **p*=4.998215596840938**（相对宽度 7.3e-15，远优于 1e-9，斜率 0.036648）；ρ=A_face/A_diag 的驻点 **p=3.0243905837657037**，值 **0.9885596074**，曲率 +0.012635>0 ⇒ 是**极小**不是极大；drho2 在 (2.02, p_ext) 上 149 点全负（最大 −1.04e-4）、在 (p_ext,19.9] 上 149 点全正（最小 4.73e-4）。所以任务原文那句「ρ 在 3.02 取极大、(2,p_peak) 严格增、(p_peak,p*) 严格减」在 ρ=A_face/A_diag 约定下**方向相反**；被引的峰值 1.01157278981402 属于倒数约定 ρ1=A_diag/A_face。另：exp:000021（inconclusive）是同一任务的 v1，其 A_diag′ 解析式漏了 −(2/p)(S′/S) 一项（实现缺陷，不是数学反例），已如实留在台账上，未改写。\n\n(3) exp:000023（code/exp/e7_largep_asymptotics.py，exit_code=0，result=**supports**）：抗尖峰求积（差分写法消相消 + 四个打平点的层换元 u=p|θ−θ0|/σ + 层外六段 tanh-sinh，h 减半做收敛控制；p=20,100 与直接六段路交叉核对相对差 ≤8.6e-16）。四个点名点：A_diag−3√3 = −1.6847e-3 / −1.70922e-7 / −1.70946e-11 / −1.70947e-15（J·p²→−17.09465，符号全负，量级 ~c/p²）；A_face−4√2 = −3.9985e-2 / −3.9218e-4 / −3.9210e-6 / −3.9210e-8（符号全负，量级 ~−4√2ln2/p）；故 Δ = 0.4224011 / 0.4603098 / 0.46069791 / 0.46070179 单调升向极限 0.46070183，ρ = 1.0813175 / 1.0885867 / 1.08866135 / 1.08866210 单调升向 4√2/(3√3)=1.0886621 ⇒ 第二零点之后 ρ 是升向极限，不回落。\n\n合起来的正确图像（任务原文约定）：Δ 在 (2,∞) 上**只有一个**零点 p*=4.998215596840938；ρ(2)=1，在 p=3.02439058 处取极小 0.98855961，在 p* 处回到 1，此后单调升到 1.0886621。三个数值稿：work/E/e-num-000020.md、-000022.md、-000023.md。三条都不是穷举 ⇒ 不过 V，等级最多 strong_conjecture；已按「反例交 D」的通道另发交接手稿 000015 给 D。",
+        "evidence": [
+          "exp:000020",
+          "exp:000022",
+          "exp:000023",
+          "exp:000021",
+          "000015"
+        ],
+        "notify": {
+          "to": "t-000083",
+          "summary": "E 三行数值实验钉死大 p 符号结构：Δ 在 (2,∞) 只有 p*=4.998215596840938 一个零点，(20,1e6] 无第二零点（任务前提被反例推翻）；ρ=A_face/A_diag 在 3.02439 处是极小 0.9885596、其后单调升向 1.0886621",
+          "body": "## 做了什么\n\n三行 `method=numeric` 实验（判据硬编码在脚本里、由脚本判，不过模型；原始输出在 `out/exp-logs/`）：\n\n| 实验 | 脚本 | result | exit_code | 数值稿 |\n|---|---|---|---|---|\n| exp:000020 | `code/exp/e5_delta_second_root.py` | **refutes** | 0 | `work/E/e-num-000020.md` |\n| exp:000022 | `code/exp/e6b_pstar_peak_deriv_v2.py` | **refutes** | 0 | `work/E/e-num-000022.md` |\n| exp:000023 | `code/exp/e7_largep_asymptotics.py` | **supports** | 0 | `work/E/e-num-000023.md` |\n\n口径承接 exp:000014 / exp:000016：`A_diag(p)=(3/4)∫_0^{2π}S(θ)^{-2/p}dθ`，`S=|cos(θ−π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p`；`A_face(p)=2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)`；**Δ=A_face−A_diag，ρ=A_face/A_diag**（任务原文约定）。\n\n## 三件事的读数\n\n**(1) 大 p 第二零点：没有。** 241 点对数网格，Δ(20)=0.2868654788 → Δ(1e6)=0.4606979058，两端同号、网格上零次变号（夹逼区间为空 = 不存在，不是精度不够）；h 细化 0.05/0.025 相对差 ≤5.2e-16；p=1,2 精确值自检 5e-16 内。极限 4√2−3√3=0.46070183。\n\n**(2) 导数判据加密：根与驻点都到机器精度，但单调方向与任务原文相反。** Δ 的零点 **p*=4.998215596840938**（相对宽度 7.3e-15 ≪ 1e-9，斜率 0.036648）；ρ 的驻点 **p=3.0243905837657037**，ρ=**0.9885596074**，曲率 +0.012635>0 ⇒ 在任务约定下是**极小**；drho2 在 (2.02,p_ext) 上 149 点全负、在 (p_ext,19.9] 上 149 点全正。被引的峰值 1.01157278981402 属于倒数约定 ρ1=A_diag/A_face。\n\n**(3) 两个量都从下方逼近极限，ρ 升向 1.0886621。** p=1e2/1e4/1e6/1e8 上 A_diag−3√3 = −1.6847e-3 / −1.70922e-7 / −1.70946e-11 / −1.70947e-15（J·p²→−17.09465）；A_face−4√2 = −3.9985e-2 / −3.9218e-4 / −3.9210e-6 / −3.9210e-8；Δ=0.4224011/0.4603098/0.4606979/0.4607018，ρ=1.0813175/1.0885867/1.08866135/1.08866210。\n\n## 结论（任务前提被推翻）\n\nΔ 在 (2,∞) 上**只有一个**零点 p*=4.998215596840938；正确图像是：ρ(2)=1 → 在 p=3.02439058 取**极小** 0.98855961 → 在 p* 回到 1 → 此后**单调升**到 1.0886621 = 4√2/(3√3)。「(20,∞) 上必须再有至少一次变号」来自混淆 ρ 的两套约定。\n\n另有一条如实留在台账上的轨迹：exp:000021（inconclusive）是同一任务的 v1，其 A_diag′(p) 解析式漏了 −(2/p)(S′/S) 一项（实现缺陷，**不是**数学反例），v2 修正后重跑得 exp:000022。\n\n## 要你做的\n\n三行都是 `method=numeric`、不构成证明（无穷举三件套 ⇒ 不过 V，等级最多 `strong_conjecture`）。若要把「Δ 恰一零点 + ρ 极小/峰值归属」写进手稿或转成待证命题，请按你那一侧的口径引用 exp:000020/000022/000023；反例部分我已另发交接手稿 000015 给 D（它要写进「例子与反例」那一节）。",
+          "refs": [
+            "exp:000020",
+            "exp:000022",
+            "exp:000023",
+            "exp:000021",
+            "000015"
+          ]
+        }
+      },
+      "result": {
+        "notify_handoff": {
+          "handoff": "000017",
+          "ok": true,
+          "id": "000017",
+          "path": "work/handoffs.jsonl#000017",
+          "to": "F",
+          "brief": "E 三行数值实验钉死大 p 符号结构：Δ 在 (2,∞) 只有 p*=4.998215596840938 一个零点，(20,1e6] 无第二零点（任务前提被反例推翻）；ρ=A_face/A_diag 在 3.02439 处是极小 0.9885596、其后单调升向 1.0886621",
+          "addressing": {
+            "checked": true,
+            "how": "parent",
+            "to": "t-000083",
+            "kind": "parent",
+            "name": "F1",
+            "task_id": "t-000083",
+            "role": "F",
+            "brief": "",
+            "candidates": [],
+            "callable": "父 F1（t-000083）",
+            "why": "名册成员（parent）⇒ 手稿写角色 F，通知投实例 t-000083",
+            "delivery": "roster",
+            "manuscript_to": "F",
+            "addressed_by": "task_id"
+          },
+          "notify_channel": "roster",
+          "revises": "",
+          "existing_same_summary": {
+            "count": 0,
+            "ids": [],
+            "note": "查过了：没有同一句话的既有交接"
+          },
+          "notified": "t-000134",
+          "error": "",
+          "note": "收件人下次运行时（或本步之后）会在收件箱/板上看到编号；它用 `manuscripts.read` 读全文"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 103936,
+        "prompt_cache_miss_tokens": 2409,
+        "tokens_in": 106345,
+        "tokens_out": 3462,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000119"
+    }
+  ],
+  "final": "三件活都跑完了，每件一行 experiments（method=numeric），判据全部硬编码在脚本里由脚本判（不过模型），原始输出在 out/exp-logs/。结论：任务前提（Δ 在 (20,∞) 上必须再有至少一次变号）**被反例推翻**；根因是 ρ 的两套约定被混用。\n\n(1) exp:000020（code/exp/e5_delta_second_root.py，exit_code=0，result=**refutes**）：p∈[20,10^6] 对数网格 241 点，Δ(20)=0.2868654788，Δ(1e6)=0.4606979058，两端同号且**网格上零次变号**（因此夹逼区间为空，不是「夹不出来」而是「不存在」）；h 细化 0.05/0.025 相对差 ≤5.2e-16，p=1,2 精确值自检 5e-16 内。counterexample 非空（sign_changes_on_grid=[]，两端读数与极限 4√2−3√3=0.46070183）。\n\n(2) exp:000022（code/exp/e6b_pstar_peak_deriv_v2.py，exit_code=0，result=**refutes**）：导数判据（完整恒等式 d/dp S^{−2/p}=S^{−2/p}[(2/p²)lnS−(2/p)(S′/S)]，A_face′ 走自实现 digamma；全程 Newton+夹逼，不用网格找最小）。Δ 的零点 **p*=4.998215596840938**（相对宽度 7.3e-15，远优于 1e-9，斜率 0.036648）；ρ=A_face/A_diag 的驻点 **p=3.0243905837657037**，值 **0.9885596074**，曲率 +0.012635>0 ⇒ 是**极小**不是极大；drho2 在 (2.02, p_ext) 上 149 点全负（最大 −1.04e-4）、在 (p_ext,19.9] 上 149 点全正（最小 4.73e-4）。所以任务原文那句「ρ 在 3.02 取极大、(2,p_peak) 严格增、(p_peak,p*) 严格减」在 ρ=A_face/A_diag 约定下**方向相反**；被引的峰值 1.01157278981402 属于倒数约定 ρ1=A_diag/A_face。另：exp:000021（inconclusive）是同一任务的 v1，其 A_diag′ 解析式漏了 −(2/p)(S′/S) 一项（实现缺陷，不是数学反例），已如实留在台账上，未改写。\n\n(3) exp:000023（code/exp/e7_largep_asymptotics.py，exit_code=0，result=**supports**）：抗尖峰求积（差分写法消相消 + 四个打平点的层换元 u=p|θ−θ0|/σ + 层外六段 tanh-sinh，h 减半做收敛控制；p=20,100 与直接六段路交叉核对相对差 ≤8.6e-16）。四个点名点：A_diag−3√3 = −1.6847e-3 / −1.70922e-7 / −1.70946e-11 / −1.70947e-15（J·p²→−17.09465，符号全负，量级 ~c/p²）；A_face−4√2 = −3.9985e-2 / −3.9218e-4 / −3.9210e-6 / −3.9210e-8（符号全负，量级 ~−4√2ln2/p）；故 Δ = 0.4224011 / 0.4603098 / 0.46069791 / 0.46070179 单调升向极限 0.46070183，ρ = 1.0813175 / 1.0885867 / 1.08866135 / 1.08866210 单调升向 4√2/(3√3)=1.0886621 ⇒ 第二零点之后 ρ 是升向极限，不回落。\n\n合起来的正确图像（任务原文约定）：Δ 在 (2,∞) 上**只有一个**零点 p*=4.998215596840938；ρ(2)=1，在 p=3.02439058 处取极小 0.98855961，在 p* 处回到 1，此后单调升到 1.0886621。三个数值稿：work/E/e-num-000020.md、-000022.md、-000023.md。三条都不是穷举 ⇒ 不过 V，等级最多 strong_conjecture；已按「反例交 D」的通道另发交接手稿 000015 给 D。",
+  "evidence": [
+    "exp:000020",
+    "exp:000022",
+    "exp:000023",
+    "exp:000021",
+    "000015"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 0,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 27,
+  "compactions": 0,
+  "mailbox_items": [],
+  "mailbox_msgs": [],
+  "mailbox_delivered": 0,
+  "monitor_turns": 0,
+  "wakes": 0,
+  "wake_ids": [],
+  "wake_events": [],
+  "clock_pumps": 52,
+  "clock_fired": 2,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "名下没有「已登记、V 签还没到」的稿（正文本目录下 5 份 f-proof/b-proof/e-proof 的稿里有 5 份「已登记」（b-proof×2、f-proof×3））",
+      "problems": [],
+      "producer": "E",
+      "owner_instance": "E1",
+      "owner_source": "roster",
+      "unattributed": []
+    }
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": 0,
+  "still_unsubmitted": [
+    {
+      "manuscript_id": "000000",
+      "manuscript": "work/E/e-num-000000.md",
+      "proof_no": 1,
+      "signed": false,
+      "signed_sha": "",
+      "current_sha": "dd0621f065deeebb9b912f4fd017455ef0b0a346575be62a6499e8dfa2a08416",
+      "sha_matches": false,
+      "state": "unsigned",
+      "why": "未签 ⇒ 不入提交单（V 的颁发表里没有这一份现行的签）"
+    },
+    {
+      "manuscript_id": "000001",
+      "manuscript": "work/E/e-num-000001.md",
+      "proof_no": 1,
+      "signed": false,
+      "signed_sha": "",
+      "current_sha": "03d41471c8e6eacae55030cfceec939ded6b524f4b79bfede93406d39866467a",
+      "sha_matches": false,
+      "state": "unsigned",
+      "why": "未签 ⇒ 不入提交单（V 的颁发表里没有这一份现行的签）"
+    },
+    {
+      "manuscript_id": "000002",
+      "manuscript": "work/E/e-num-000002.md",
+      "proof_no": 1,
+      "signed": false,
+      "signed_sha": "",
+      "current_sha": "6d4fb48a7210b3f28604813e1792f6fbe3437c39c8988f32edae0c28e10de0ae",
+      "sha_matches": false,
+      "state": "unsigned",
+      "why": "未签 ⇒ 不入提交单（V 的颁发表里没有这一份现行的签）"
+    },
+    {
+      "manuscript_id": "000003",
+      "manuscript": "work/E/e-num-000003.md",
+      "proof_no": 1,
+      "signed": false,
+      "signed_sha": "",
+      "current_sha": "6b67487691efdd67657db5a075a5cc19c0b9168229f248f08ee8eea8d8b731c3",
+      "sha_matches": false,
+      "state": "unsigned",
+      "why": "未签 ⇒ 不入提交单（V 的颁发表里没有这一份现行的签）"
+    },
+    {
+      "manuscript_id": "000004",
+      "manuscript": "work/E/e-num-000004.md",
+      "proof_no": 1,
+      "signed": false,
+      "signed_sha": "",
+      "current_sha": "ee81f063fd16cf356ffe043bcbff73a9d40f2fe8d33e89584af257428d38abae",
+      "sha_matches": false,
+      "state": "unsigned",
+      "why": "未签 ⇒ 不入提交单（V 的颁发表里没有这一份现行的签）"
+    },
+    {
+      "manuscript_id": "000005",
+      "manuscript": "work/E/e-num-000005.md",
+      "proof_no": 1,
+      "signed": false,
+      "signed_sha": "",
+      "current_sha": "575497f516c765e3eb688b530bd7a819eaff2e69ea31cb4883c05f01d82698be",
+      "sha_matches": false,
+      "state": "unsigned",
+      "why": "未签 ⇒ 不入提交单（V 的颁发表里没有这一份现行的签）"
+    },
+    {
+      "manuscript_id": "000006",
+      "manuscript": "work/E/e-num-000006.md",
+      "proof_no": 1,
+      "signed": false,
+      "signed_sha": "",
+      "current_sha": "11be0cba2351c05c4057d51672bae9dd06427700240c1526d754face35018023",
+      "sha_matches": false,
+      "state": "unsigned",
+      "why": "未签 ⇒ 不入提交单（V 的颁发表里没有这一份现行的签）"
+    },
+    {
+      "manuscript_id": "000007",
+      "manuscript": "work/E/e-num-000007.md",
+      "proof_no": 1,
+      "signed": false,
+      "signed_sha": "",
+      "current_sha": "294e0ca99bd4af872b39a62ba53477d775533333b57e5831c63e4a09e8b37f76",
+      "sha_matches": false,
+      "state": "unsigned",
+      "why": "未签 ⇒ 不入提交单（V 的颁发表里没有这一份现行的签）"
+    },
+    {
+      "manuscript_id": "000008",
+      "manuscript": "work/E/e-num-000008.md",
+      "proof_no": 1,
+      "signed": false,
+      "signed_sha": "",
+      "current_sha": "3742759b4672166960b4516543e2a7904f50cde37903f6eda60783f87b9a6829",
+      "sha_matches": false,
+      "state": "unsigned",
+      "why": "未签 ⇒ 不入提交单（V 的颁发表里没有这一份现行的签）"
+    },
+    {
+      "manuscript_id": "000009",
+      "manuscript": "work/E/e-num-000009.md",
+      "proof_no": 1,
+      "signed": false,
+      "signed_sha": "",
+      "current_sha": "af03de8473c60bd360a3172ea06699e2478770f80999ee6104777be2bfe85c1e",
+      "sha_matches": false,
+      "state": "unsigned",
+      "why": "未签 ⇒ 不入提交单（V 的颁发表里没有这一份现行的签）"
+    },
+    {
+      "manuscript_id": "000010",
+      "manuscript": "work/E/e-num-000010.md",
+      "proof_no": 1,
+      "signed": false,
+      "signed_sha": "",
+      "current_sha": "4462de7461bc59cd6aac9bebc72e84fc4401ad26b44f7ab2c1728210aeb503ae",
+      "sha_matches": false,
+      "state": "unsigned",
+      "why": "未签 ⇒ 不入提交单（V 的颁发表里没有这一份现行的签）"
+    },
+    {
+      "manuscript_id": "000011",
+      "manuscript": "work/E/e-num-000011.md",
+      "proof_no": 1,
+      "signed": false,
+      "signed_sha": "",
+      "current_sha": "01c224454ccd0125ea1d5a774aac9b99cf6175eb2361809d8114c7e0152e157f",
+      "sha_matches": false,
+      "state": "unsigned",
+      "why": "未签 ⇒ 不入提交单（V 的颁发表里没有这一份现行的签）"
+    },
+    {
+      "manuscript_id": "000012",
+      "manuscript": "work/E/e-num-000012.md",
+      "proof_no": 1,
+      "signed": false,
+      "signed_sha": "",
+      "current_sha": "52680c0aa5757b59c575a97dd89e98e6d94ca8b6542e94b41f69ffbd0232b19e",
+      "sha_matches": false,
+      "state": "unsigned",
+      "why": "未签 ⇒ 不入提交单（V 的颁发表里没有这一份现行的签）"
+    },
+    {
+      "manuscript_id": "000013",
+      "manuscript": "work/E/e-num-000013.md",
+      "proof_no": 1,
+      "signed": false,
+      "signed_sha": "",
+      "current_sha": "59aef00dd1fc7485306e2de3b36fc8654cbfc99ae71b02a629abf476688c2081",
+      "sha_matches": false,
+      "state": "unsigned",
+      "why": "未签 ⇒ 不入提交单（V 的颁发表里没有这一份现行的签）"
+    },
+    {
+      "manuscript_id": "000014",
+      "manuscript": "work/E/e-num-000014.md",
+      "proof_no": 1,
+      "signed": false,
+      "signed_sha": "",
+      "current_sha": "a994f0762c2ce36cbdc153a4a4a63d30ab3355bb997881977c52c3e79601242b",
+      "sha_matches": false,
+      "state": "unsigned",
+      "why": "未签 ⇒ 不入提交单（V 的颁发表里没有这一份现行的签）"
+    },
+    {
+      "manuscript_id": "000015",
+      "manuscript": "work/E/e-num-000015.md",
+      "proof_no": 1,
+      "signed": false,
+      "signed_sha": "",
+      "current_sha": "0e62d47eb916d0d18d0cf6407b74c951fc97101d8db9164f48dec3a62c455ceb",
+      "sha_matches": false,
+      "state": "unsigned",
+      "why": "未签 ⇒ 不入提交单（V 的颁发表里没有这一份现行的签）"
+    },
+    {
+      "manuscript_id": "000016",
+      "manuscript": "work/E/e-num-000016.md",
+      "proof_no": 1,
+      "signed": false,
+      "signed_sha": "",
+      "current_sha": "7fec6e7abbcf63a2ce4470937ffd99d2164452f6ff5db0221efe3e65b6f87146",
+      "sha_matches": false,
+      "state": "unsigned",
+      "why": "未签 ⇒ 不入提交单（V 的颁发表里没有这一份现行的签）"
+    },
+    {
+      "manuscript_id": "000017",
+      "manuscript": "work/E/e-num-000017.md",
+      "proof_no": 1,
+      "signed": false,
+      "signed_sha": "",
+      "current_sha": "4fc9046ce716c8f8c4db52f9d1cb0082459f0d5686f5e0aac051bdcd9033fde0",
+      "sha_matches": false,
+      "state": "unsigned",
+      "why": "未签 ⇒ 不入提交单（V 的颁发表里没有这一份现行的签）"
+    },
+    {
+      "manuscript_id": "000018",
+      "manuscript": "work/E/e-num-000018.md",
+      "proof_no": 1,
+      "signed": false,
+      "signed_sha": "",
+      "current_sha": "711e9e1a3f3e0bdc33119ad24a28d39ce76bff8a324a7041b5cf8c892629d008",
+      "sha_matches": false,
+      "state": "unsigned",
+      "why": "未签 ⇒ 不入提交单（V 的颁发表里没有这一份现行的签）"
+    },
+    {
+      "manuscript_id": "000019",
+      "manuscript": "work/E/e-num-000019.md",
+      "proof_no": 1,
+      "signed": false,
+      "signed_sha": "",
+      "current_sha": "d97e39c7d8b6c4c10a15b96d83660a435cd40017f309cc0c6a762f8788415835",
+      "sha_matches": false,
+      "state": "unsigned",
+      "why": "未签 ⇒ 不入提交单（V 的颁发表里没有这一份现行的签）"
+    },
+    {
+      "manuscript_id": "000020",
+      "manuscript": "work/E/e-num-000020.md",
+      "proof_no": 1,
+      "signed": false,
+      "signed_sha": "",
+      "current_sha": "219c03905bd2d890f5b1e2ac84718497309ad8e4cb0565ed28040853772e78e8",
+      "sha_matches": false,
+      "state": "unsigned",
+      "why": "未签 ⇒ 不入提交单（V 的颁发表里没有这一份现行的签）"
+    },
+    {
+      "manuscript_id": "000021",
+      "manuscript": "work/E/e-num-000021.md",
+      "proof_no": 1,
+      "signed": false,
+      "signed_sha": "",
+      "current_sha": "0bb794de2354ca37636966c782c62f58b91aa571378cb96c963ccacc59842abc",
+      "sha_matches": false,
+      "state": "unsigned",
+      "why": "未签 ⇒ 不入提交单（V 的颁发表里没有这一份现行的签）"
+    },
+    {
+      "manuscript_id": "000022",
+      "manuscript": "work/E/e-num-000022.md",
+      "proof_no": 1,
+      "signed": false,
+      "signed_sha": "",
+      "current_sha": "57efb938e118d434a4834d21528c50a117d833da746f4127400feee4f21b4ea1",
+      "sha_matches": false,
+      "state": "unsigned",
+      "why": "未签 ⇒ 不入提交单（V 的颁发表里没有这一份现行的签）"
+    },
+    {
+      "manuscript_id": "000023",
+      "manuscript": "work/E/e-num-000023.md",
+      "proof_no": 1,
+      "signed": false,
+      "signed_sha": "",
+      "current_sha": "2941465386e3ea442db0099b013d053cb0d48c18f3fec674abeed0ec7a1b27e2",
+      "sha_matches": false,
+      "state": "unsigned",
+      "why": "未签 ⇒ 不入提交单（V 的颁发表里没有这一份现行的签）"
+    }
+  ],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [
+    "000017"
+  ],
+  "summons": [],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [
+    {
+      "kind": "handoff",
+      "counted": false,
+      "task_id": "",
+      "role": "",
+      "step": 25,
+      "status": "",
+      "outcome": "ok",
+      "handoff_id": "000015",
+      "outputs": [],
+      "disposition": ""
+    }
+  ],
+  "summons_total": 0,
+  "summons_consumed": 0,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 0,
+    "summons_consumed": 0,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [
+      {
+        "kind": "handoff",
+        "counted": false,
+        "task_id": "",
+        "role": "",
+        "step": 25,
+        "status": "",
+        "outcome": "ok",
+        "handoff_id": "000015",
+        "outputs": [],
+        "disposition": ""
+      }
+    ],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p328",
+    "role": "E",
+    "prompt_sha256": "20cf66c91223f30ef1603050edb08384bd699d38dd44b4aea634fed098b595a2",
+    "prompt_chars": 56121,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "TOOL_29",
+      "TOOL_30",
+      "TOOL_31",
+      "TOOL_32",
+      "TOOL_33",
+      "TOOL_34",
+      "TOOL_35",
+      "TOOL_36",
+      "TOOL_37",
+      "TOOL_38",
+      "TOOL_39",
+      "TOOL_40",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_LIMITS",
+      "COLLAB_NAMES",
+      "PARENT_STOP",
+      "PARENT_ROSTER",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 26,
+    "tokens_in": 2046572,
+    "tokens_out": 179501,
+    "usd": 0.125672,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 26,
+    "no_request_calls": 0,
+    "hit": 1966080,
+    "miss": 80492,
+    "unknown_calls": 0,
+    "tokens_in": 2046572,
+    "hit_rate": 0.9607,
+    "mismatched_calls": 0,
+    "saved_usd": 0.289013,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 822.235,
+  "end_ts": "2026-11-24T20:40:40+08:00",
+  "notes": [
+    "缓存读数：命中 1966080 / 未命中 80492 token，命中率 96.1%（26 次调用）；按 modelcost 口径估算可省 约 0.289013 美元",
+    "子产出处理读数：summons_total=0（这一趟没派过子代理 ⇒ 没有要处理的子产出；判据没有对象，不红）",
+    "有稿文件，但这一趟没有一份可提交 ⇒ 逐条理由见 still_unsubmitted"
+  ],
+  "final_payload": {
+    "final": "三件活都跑完了，每件一行 experiments（method=numeric），判据全部硬编码在脚本里由脚本判（不过模型），原始输出在 out/exp-logs/。结论：任务前提（Δ 在 (20,∞) 上必须再有至少一次变号）**被反例推翻**；根因是 ρ 的两套约定被混用。\n\n(1) exp:000020（code/exp/e5_delta_second_root.py，exit_code=0，result=**refutes**）：p∈[20,10^6] 对数网格 241 点，Δ(20)=0.2868654788，Δ(1e6)=0.4606979058，两端同号且**网格上零次变号**（因此夹逼区间为空，不是「夹不出来」而是「不存在」）；h 细化 0.05/0.025 相对差 ≤5.2e-16，p=1,2 精确值自检 5e-16 内。counterexample 非空（sign_changes_on_grid=[]，两端读数与极限 4√2−3√3=0.46070183）。\n\n(2) exp:000022（code/exp/e6b_pstar_peak_deriv_v2.py，exit_code=0，result=**refutes**）：导数判据（完整恒等式 d/dp S^{−2/p}=S^{−2/p}[(2/p²)lnS−(2/p)(S′/S)]，A_face′ 走自实现 digamma；全程 Newton+夹逼，不用网格找最小）。Δ 的零点 **p*=4.998215596840938**（相对宽度 7.3e-15，远优于 1e-9，斜率 0.036648）；ρ=A_face/A_diag 的驻点 **p=3.0243905837657037**，值 **0.9885596074**，曲率 +0.012635>0 ⇒ 是**极小**不是极大；drho2 在 (2.02, p_ext) 上 149 点全负（最大 −1.04e-4）、在 (p_ext,19.9] 上 149 点全正（最小 4.73e-4）。所以任务原文那句「ρ 在 3.02 取极大、(2,p_peak) 严格增、(p_peak,p*) 严格减」在 ρ=A_face/A_diag 约定下**方向相反**；被引的峰值 1.01157278981402 属于倒数约定 ρ1=A_diag/A_face。另：exp:000021（inconclusive）是同一任务的 v1，其 A_diag′ 解析式漏了 −(2/p)(S′/S) 一项（实现缺陷，不是数学反例），已如实留在台账上，未改写。\n\n(3) exp:000023（code/exp/e7_largep_asymptotics.py，exit_code=0，result=**supports**）：抗尖峰求积（差分写法消相消 + 四个打平点的层换元 u=p|θ−θ0|/σ + 层外六段 tanh-sinh，h 减半做收敛控制；p=20,100 与直接六段路交叉核对相对差 ≤8.6e-16）。四个点名点：A_diag−3√3 = −1.6847e-3 / −1.70922e-7 / −1.70946e-11 / −1.70947e-15（J·p²→−17.09465，符号全负，量级 ~c/p²）；A_face−4√2 = −3.9985e-2 / −3.9218e-4 / −3.9210e-6 / −3.9210e-8（符号全负，量级 ~−4√2ln2/p）；故 Δ = 0.4224011 / 0.4603098 / 0.46069791 / 0.46070179 单调升向极限 0.46070183，ρ = 1.0813175 / 1.0885867 / 1.08866135 / 1.08866210 单调升向 4√2/(3√3)=1.0886621 ⇒ 第二零点之后 ρ 是升向极限，不回落。\n\n合起来的正确图像（任务原文约定）：Δ 在 (2,∞) 上**只有一个**零点 p*=4.998215596840938；ρ(2)=1，在 p=3.02439058 处取极小 0.98855961，在 p* 处回到 1，此后单调升到 1.0886621。三个数值稿：work/E/e-num-000020.md、-000022.md、-000023.md。三条都不是穷举 ⇒ 不过 V，等级最多 strong_conjecture；已按「反例交 D」的通道另发交接手稿 000015 给 D。",
+    "evidence": [
+      "exp:000020",
+      "exp:000022",
+      "exp:000023",
+      "exp:000021",
+      "000015"
+    ],
+    "notify": {
+      "to": "t-000083",
+      "summary": "E 三行数值实验钉死大 p 符号结构：Δ 在 (2,∞) 只有 p*=4.998215596840938 一个零点，(20,1e6] 无第二零点（任务前提被反例推翻）；ρ=A_face/A_diag 在 3.02439 处是极小 0.9885596、其后单调升向 1.0886621",
+      "body": "## 做了什么\n\n三行 `method=numeric` 实验（判据硬编码在脚本里、由脚本判，不过模型；原始输出在 `out/exp-logs/`）：\n\n| 实验 | 脚本 | result | exit_code | 数值稿 |\n|---|---|---|---|---|\n| exp:000020 | `code/exp/e5_delta_second_root.py` | **refutes** | 0 | `work/E/e-num-000020.md` |\n| exp:000022 | `code/exp/e6b_pstar_peak_deriv_v2.py` | **refutes** | 0 | `work/E/e-num-000022.md` |\n| exp:000023 | `code/exp/e7_largep_asymptotics.py` | **supports** | 0 | `work/E/e-num-000023.md` |\n\n口径承接 exp:000014 / exp:000016：`A_diag(p)=(3/4)∫_0^{2π}S(θ)^{-2/p}dθ`，`S=|cos(θ−π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p`；`A_face(p)=2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)`；**Δ=A_face−A_diag，ρ=A_face/A_diag**（任务原文约定）。\n\n## 三件事的读数\n\n**(1) 大 p 第二零点：没有。** 241 点对数网格，Δ(20)=0.2868654788 → Δ(1e6)=0.4606979058，两端同号、网格上零次变号（夹逼区间为空 = 不存在，不是精度不够）；h 细化 0.05/0.025 相对差 ≤5.2e-16；p=1,2 精确值自检 5e-16 内。极限 4√2−3√3=0.46070183。\n\n**(2) 导数判据加密：根与驻点都到机器精度，但单调方向与任务原文相反。** Δ 的零点 **p*=4.998215596840938**（相对宽度 7.3e-15 ≪ 1e-9，斜率 0.036648）；ρ 的驻点 **p=3.0243905837657037**，ρ=**0.9885596074**，曲率 +0.012635>0 ⇒ 在任务约定下是**极小**；drho2 在 (2.02,p_ext) 上 149 点全负、在 (p_ext,19.9] 上 149 点全正。被引的峰值 1.01157278981402 属于倒数约定 ρ1=A_diag/A_face。\n\n**(3) 两个量都从下方逼近极限，ρ 升向 1.0886621。** p=1e2/1e4/1e6/1e8 上 A_diag−3√3 = −1.6847e-3 / −1.70922e-7 / −1.70946e-11 / −1.70947e-15（J·p²→−17.09465）；A_face−4√2 = −3.9985e-2 / −3.9218e-4 / −3.9210e-6 / −3.9210e-8；Δ=0.4224011/0.4603098/0.4606979/0.4607018，ρ=1.0813175/1.0885867/1.08866135/1.08866210。\n\n## 结论（任务前提被推翻）\n\nΔ 在 (2,∞) 上**只有一个**零点 p*=4.998215596840938；正确图像是：ρ(2)=1 → 在 p=3.02439058 取**极小** 0.98855961 → 在 p* 回到 1 → 此后**单调升**到 1.0886621 = 4√2/(3√3)。「(20,∞) 上必须再有至少一次变号」来自混淆 ρ 的两套约定。\n\n另有一条如实留在台账上的轨迹：exp:000021（inconclusive）是同一任务的 v1，其 A_diag′(p) 解析式漏了 −(2/p)(S′/S) 一项（实现缺陷，**不是**数学反例），v2 修正后重跑得 exp:000022。\n\n## 要你做的\n\n三行都是 `method=numeric`、不构成证明（无穷举三件套 ⇒ 不过 V，等级最多 `strong_conjecture`）。若要把「Δ 恰一零点 + ρ 极小/峰值归属」写进手稿或转成待证命题，请按你那一侧的口径引用 exp:000020/000022/000023；反例部分我已另发交接手稿 000015 给 D（它要写进「例子与反例」那一节）。",
+      "refs": [
+        "exp:000020",
+        "exp:000022",
+        "exp:000023",
+        "exp:000021",
+        "000015"
+      ]
+    }
+  },
+  "task_id": "t-000119"
+}

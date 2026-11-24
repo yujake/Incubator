@@ -1,0 +1,1980 @@
+===== page 1 =====
+ON EXTREMAL SECTIONS OF SUBSPACES OF Lp
+ALEXANDROS ESKENAZIS
+Abstract. Let m, n ∈N and p ∈(0, ∞).
+For a ﬁnite dimensional quasi-normed space X =
+(Rm, ∥· ∥X), let
+Bn
+p (X) =
+n
+(x1, . . . , xn) ∈
+Rmn :
+n
+X
+i=1
+∥xi∥p
+X ⩽1
+o
+.
+We show that for every p ∈(0, 2) and X which admits an isometric embedding into Lp, the function
+Sn−1 ∋θ = (θ1, . . . , θn) 7−→
+Bn
+p (X) ∩
+n
+(x1, . . . , xn) ∈
+Rmn :
+n
+X
+i=1
+θixi = 0
+o
+is a Schur convex function of (θ2
+1, . . . , θ2
+n), where | · | denotes Lebesgue measure. In particular, it is
+minimized when θ =
+ 1
+√n, . . . ,
+1
+√n
+
+and maximized when θ = (1, 0, . . . , 0). This is a consequence of
+a more general statement about Laplace transforms of norms of suitable Gaussian random vectors
+which also implies dual estimates for the mean width of projections of the polar body
+Bn
+p (X)
+◦
+if the unit ball BX of X is in Lewis’ position. Finally, we prove a lower bound for the volume of
+projections of Bn
+∞(X), where X = (Rm, ∥· ∥X) is an arbitrary quasi-normed space.
+2010 Mathematics Subject Classiﬁcation. Primary: 52A40; Secondary: 52A20, 52A21.
+Key words and phrases. ℓp-ball, subspaces of Lp, extremal sections, Lewis’ position, volume, mean width.
+1. Introduction
+For a quasi-normed space (X, ∥· ∥X), n ∈N and p ∈(0, ∞), the ℓn
+p power of X, denoted ℓn
+p(X),
+is the space Xn equipped with the quasi-norm
+∥(x1, . . . , xn)∥ℓnp (X)
+def
+=
+
+n
+X
+i=1
+∥xi∥p
+X
+ 1
+p ,
+(1)
+where (x1, . . . , xn) ∈Xn. In particular, if m ∈N and X = (Rm, ∥· ∥X) is an m-dimensional space,
+then ℓn
+p(X) is an mn-dimensional quasi-normed space, whose unit ball we denote by
+Bn
+p (X) def
+=
+
+x ∈Rmn : ∥x∥ℓnp (X) ⩽1
+	
+.
+(2)
+Similarly, we deﬁne ℓn
+∞(X) to be the quasi-normed space with unit ball Bn
+∞(X) def
+= Bn
+X, where
+BX ⊆Rm is the unit ball of X. If X is a normed space and p ⩾1, then Bn
+p (X) is a convex body,
+though in general it is always a star body. Extremal sections of such bodies have been thoroughly
+studied in the literature via a variety of analytic, geometric and probabilistic techniques (see the
+monograph [Kol05] of Koldobsky for an exposition of some of these). In this paper, we will be
+interested in sections of Bn
+p (X), p ∈(0, ∞], with block hyperplanes, i.e. subspaces of the form
+Hθ
+def
+= θ⊥⊗Rm =
+n
+x = (x1, . . . , xn) ∈
+Rmn :
+n
+X
+i=1
+θixi = 0
+o
+,
+(3)
+This work was completed while the author was in residence at the Institute for Pure & Applied Mathematics at
+UCLA for the long program on Quantitative Linear Algebra. He would like to thank the organizers of the program
+for the excellent working conditions. He was also supported in part by the Simons Foundation.
+1
+arXiv:1806.04333v2  [math.MG]  4 Sep 2019
+===== page 2 =====
+where θ is a unit vector in Rn. We refer the reader to Remark 11 for a discussion explaining the
+necessity of this particular choice of subspaces (see also Lemma 3). The most well-understood case
+is, naturally, the Hilbert space case X = ℓm
+2 , where it is known that for every unit vector θ in Rn,
+p ∈(0, 2]
+=⇒
+Bn
+p (ℓm
+2 ) ∩Hθ
+ ⩽
+Bn−1
+p
+(ℓm
+2 )
+
+(4)
+and
+p ∈[2, ∞]
+=⇒
+Bn−1
+p
+(ℓm
+2 )
+ ⩽
+Bn
+p (ℓm
+2 ) ∩Hθ
+,
+(5)
+where | · | denotes the Lebesgue measure. The case p = ∞of (5) was proven by Vaaler in [Vaa79],
+though the case m = 1 of hyperplane sections of the unit cube had ﬁrst been shown by Had-
+wiger [Had72] (see also [Hen79]).
+Afterwards, Meyer and Pajor [MP88, p. 116] proved (5) for
+p ∈(2, ∞) and (4) for p ∈[1, 2).
+Finally, the p ∈(0, 1) case of (4) was settled by Caetano
+in [Cae92] for m = 1 (see also [Bar95]) and by Barthe [Bar01] for general m ∈N.
+We note
+in passing that [Vaa79], [MP88] and [Bar01] contain similar results for sections of Bn
+p (ℓm
+2 ) with
+block subspaces of arbitrary codimension.
+The study of reverse inequalities to (4) and (5) is notoriously more involved, even for X = R. The
+maximal hyperplane section of the unit cube Bn
+∞(R) was shown to be Bn
+∞(R) ∩
+ 1
+√
+2,
+1
+√
+2, 0, . . . , 0
+
+in Ball’s work [Bal86]. Moreover, in [MP88], Meyer and Pajor showed that the minimal hyperplane
+section of the crosspolytope Bn
+1 (R) is Bn
+1 (R) ∩
+ 1
+√n, . . . ,
+1
+√n
+⊥, a result which was later extended
+by Koldobsky [Kol98] who proved that
+p ∈(0, 2]
+=⇒
+Bn
+p (R) ∩
+ 1
+√n, . . . , 1
+√n
+⊥ ⩽
+Bn
+p (R) ∩θ⊥,
+(6)
+for every unit vector θ in Rn. The question of determining the maximal hyperplane sections of
+Bn
+p (R) for p ∈(2, ∞) remains open (see [Ole03, Proposition 5] for a related observation).
+The aforementioned reverse inequalities of Ball, Meyer–Pajor and Koldobsky for Bn
+p (R) have
+well-studied complex counterparts for the unit balls of the complex ℓn
+p(C) spaces, which can be iso-
+metrically identiﬁed with ℓn
+p(ℓ2
+2) following the notation (1). Recall that a complex hyperplane of Cn
+is a subspace of the form w⊥= {z ∈Cn : ⟨z, w⟩= 0}, where ⟨·, ·⟩denotes the Hermitian inner prod-
+uct on Cn and w ∈Cn. Oleszkiewicz and Pe lczy´nski proved in [OP00] that the maximal complex
+hyperplane section of Bn
+∞(C) is Bn
+∞(C) ∩
+ 1
+√
+2,
+1
+√
+2, 0, . . . , 0
+⊥and Koldobsky and Zymonopoulou
+[KZ03] showed that the minimal complex hyperplane section of Bn
+p (C) is Bn
+p (C) ∩
+ 1
+√n, . . . ,
+1
+√n
+⊥
+for every p ∈(0, 2], in perfect analogy to the real case.
+The main purpose of the present article is to unify and extend these results of [MP88], [Kol98]
+and [KZ03], by exhibiting a wide class of (non-Hilbertian) quasi-normed spaces X = (Rm, ∥·∥X), for
+which the extremal sections of Bn
+p (X), p ∈(0, 2), with subspaces of the form (3) can be determined.
+To better state our main result, we will make use of the Schur majorization ordering. A vector
+α = (α1, . . . , αn) ∈Rn is said to be majorized by a vector β = (β1, . . . , βn) ∈Rn, denoted α ⪯β,
+if their nonincreasing rearrangements α∗
+1 ⩾. . . ⩾α∗
+n and β∗
+1 ⩾. . . ⩾β∗
+n satisfy the inequalities
+k
+X
+j=1
+α∗
+j ⩽
+k
+X
+j=1
+β∗
+j for every k ∈{1, . . . , n −1} and
+n
+X
+j=1
+αj =
+n
+X
+j=1
+βj.
+(7)
+For instance, if a vector (α1, . . . , αn) ∈[0, ∞)n satisﬁes Pn
+i=1 αi = 1, then
+ 1
+n, . . . , 1
+n
+
+⪯(α1, . . . , αn) ⪯(1, 0, . . . , 0).
+(8)
+Our main result concerning the volume of sections of Bn
+p (X) is the following.
+2
+===== page 3 =====
+Theorem 1. Fix m, n ∈N, p ∈(0, 2] and let X = (Rm, ∥· ∥X) be an m-dimensional quasi-normed
+space which admits an isometric embedding into Lp. Then, for every unit vectors θ = (θ1, . . . , θn)
+and φ = (φ1, . . . , φn) in Rn, we have
+(θ2
+1, . . . , θ2
+n) ⪯(φ2
+1, . . . , φ2
+n)
+=⇒
+Bn
+p (X) ∩Hθ
+ ⩽
+Bn
+p (X) ∩Hφ
+.
+(9)
+In particular, for every unit vector θ in Rn, we have
+Bn
+p (X) ∩Hdiag
+ ⩽
+Bn
+p (X) ∩Hθ
+ ⩽
+Bn−1
+p
+(X)
+,
+(10)
+where Hdiag =
+
+(x1, . . . , xn) ∈
+Rmn : Pn
+i=1 xi = 0
+	
+.
+Theorem 1 implies the results (4) of Meyer and Pajor, (6) of Koldobsky and its complex coun-
+terpart due to Koldobsky and Zymonopoulou since L2 admits an isometric embedding into Lp
+for every p ∈(0, ∞) (see [Kad58] and [BDCK66]). However, it also signiﬁcantly extends those
+results. For instance, by [Kad58] and [BDCK66], Lq admits an isometric embedding into Lp for
+every 0 < p ⩽q ⩽2, therefore for every m, n ∈N and unit vector θ in Rn, we have
+Bn
+p (ℓm
+q ) ∩Hdiag
+ ⩽
+Bn
+p (ℓm
+q ) ∩Hθ
+ ⩽
+Bn−1
+p
+(ℓm
+q )
+
+(11)
+(see also the discussion preceeding and following Question 13 below).
+Since ﬁnite dimensional
+normed subspaces of L1 are exactly those spaces X such that the polar B◦
+X of their unit ball BX
+is a zonoid (see [Bol69]), it follows that
+Bn
+p (X) ∩Hdiag
+ ⩽
+Bn
+p (X) ∩Hθ
+ ⩽
+Bn−1
+p
+(X)
+,
+(12)
+whenever B◦
+X is a zonoid and p ∈(0, 1]. To illustrate the rich repertoire of examples contained in
+this class of spaces, we mention that by the work [Sch75] of Schneider, for every m ∈N there exists
+a zonoid A ⊆Rm whose polar body A◦is also a zonoid, yet A is not an ellipsoid. Therefore, for
+every m ∈N, there exists an m-dimensional Banach space X = (Rm, ∥· ∥X) so that (12) is valid
+both for X and its dual X∗when p ∈(0, 1], yet X is not isometric to Hilbert space. Finally, since
+every two-dimensional symmetric convex body is a zonoid (see, e.g., [Kol05, Corollary 6.8]), we
+deduce that (12) also holds true for a general normed space of the form X = (R2, ∥· ∥X) and all
+p ∈(0, 1]. For further extremal properties of sections and projections of unit balls of subspaces of
+Lp spaces, we refer the reader to [Bal91b], [Bar98], [LYZ04], [LHX18] and the references therein.
+The proof of Theorem 1 is probabilistic and builds upon [ENT18, Corollary 19], where the Schur
+monotonicity statement of Theorem 1 was veriﬁed for X = R. The new ingredient needed to obtain
+Theorem 1 is a classical Banach space theoretic result of Lewis (see [Lew78] and Theorem 4 below)
+on the isometric structure of subspaces of Lp. As in [ENT18] (see also [BGMN05]), Theorem 1
+will be a consequence of a more general comparison for Laplace transforms of norms of suitable
+Gaussian random vectors which also implies dual estimates for the mean width of projections of
+the polar body
+Bn
+p (X)
+◦(see Theorem 5 and Corollary 6 below).
+In view of Theorem 1, a number of natural problems pose themselves. Perhaps most naturally,
+one would ask whether an analogue of Theorem 1 holds true when p ∈(2, ∞] and X is isometric
+to a subspace of Lp.
+We explain in Section 4 below that the left hand side of inequality (10)
+cannot have such an analogue even for p = ∞. However, we obtain a weak reverse inequality to
+the right hand side of (10) for p = ∞, where sections are replaced by projections but is valid for
+arbitrary symmetric compact sets (see also Question 12 below). Recall that any separable Banach
+space embeds isometrically into L∞. Therefore, any symmetric convex body of the form Kn, where
+K ⊆Rm, can be identiﬁed with Bn
+∞(X) for the normed space X = (Rm, ∥· ∥X) with unit ball K.
+Proposition 2. Fix m, n ∈N. For every symmetric compact set K ⊆Rm and unit vector θ in
+Rn, we have
+ProjHθ(Kn)
+ ⩾|K|n−1.
+(13)
+3
+===== page 4 =====
+The proof of Theorem 1 in presented in Section 2 and the proof of Proposition 2 is in Section 3.
+Finally, we conclude with some additional remarks and open problems in Section 4.
+Acknowledgements. I would like to thank Franck Barthe, Apostolos Giannopoulos, Olivier
+Gu´edon, Assaf Naor and the anonymous referees for constructive feedback on this work. I am
+also very grateful to Tomasz Tkocz for many helpful discussions.
+2. Proof of Theorem 1
+Before presenting the proof of Theorem 1, we make a simple observation which implies that the
+conclusion of the theorem is invariant under isometries of the space X = (Rm, ∥· ∥X).
+Lemma 3. Fix m, n ∈N, p ∈(0, ∞] and let X = (Rm, ∥· ∥X) be a quasi-normed space. Then, for
+every invertible linear operator T : Rm →Rm and every unit vector θ in Rn, we have
+|Bn
+p (TX) ∩Hθ| = det(T)n−1|Bn
+p (X) ∩Hθ|,
+(14)
+where TX = (Rm, ∥·∥TX) and ∥y∥TX = ∥T −1y∥X for y ∈Rm. In particular, for every unit vectors
+θ, φ in Rm, we have
+|Bn
+p (TX) ∩Hθ|
+|Bnp (TX) ∩Hφ| = |Bn
+p (X) ∩Hθ|
+|Bnp (X) ∩Hφ|.
+(15)
+Proof. The proof is a simple linear algebra exercise. Consider the natural mapping T = In ⊗T :
+Rmn →Rmn given by T(x1, . . . , xn) = (Tx1, . . . , Txn). Then, one can easily check that THθ = Hθ
+and furthermore, since T(BX) = BTX, that
+Bn
+p (TX) = TBn
+p (X).
+(16)
+Therefore,
+|Bn
+p (TX) ∩Hθ| = |T
+Bn
+p (X) ∩Hθ
+
+| = det(T|Hθ)|Bn
+p (X) ∩Hθ|.
+(17)
+Since T|Hθ = Iθ⊥⊗T, we deduce that
+det(T|Hθ) = det(Iθ⊥⊗T) = det(T)n−1,
+(18)
+which along with (17) implies (14).
+□
+In convex geometric terminology, Lemma 3 implies that the conclusion of Theorem 1 is inde-
+pendent of the position of the unit ball BX of X = (Rm, ∥· ∥X). The starting point of the proof
+of Theorem 1 is a classical result due to Lewis [Lew78], according to which the unit ball of every
+ﬁnite dimensional subspace of Lp can be put in a special position, which is called Lewis’ position.
+Recall that a Borel measure µ on the unit sphere Sm−1 on Rm is called isotropic if
+∥x∥2 =
+ ˆ
+Sm−1⟨x, θ⟩2 dµ(θ)
+1/2
+,
+(19)
+for every x ∈Rm. The following theorem was proven by Lewis for p ∈[1, ∞) in [Lew78] and
+extended to the whole range p ∈(0, ∞) by Schechtman and Zvavitch [SZ01].
+Theorem 4 (Lewis, Schechtman–Zvavitch). Fix m ∈N and p ∈(0, ∞). An m-dimensional quasi-
+normed space X = (Rm, ∥· ∥X) embeds isometrically into Lp if and only if there exists an isotropic
+measure µ on the unit sphere Sm−1 and an invertible linear transformation U : Rm →Rm such that
+∥Ux∥X = ∥x∥p,µ
+def
+=
+ ˆ
+Sm−1 |⟨x, θ⟩|p dµ(θ)
+1/p
+,
+(20)
+for every x ∈Rm.
+4
+===== page 5 =====
+This formulation of Lewis’ theorem is taken from [LYZ05]. According to Lemma 3, for the rest of
+the proof of Theorem 1, we can freely assume that the subspace of Lp at hand is X = (Rm, ∥·∥p,µ),
+in which case we will write X = Xp(µ) and say that BX is in Lewis’ position. We refer to the survey
+[JS01] for an in-depth account of ﬁnite dimensional subspaces of Lp including Lewis’ theorem.
+As ﬁrst observed by Barthe, Gu´edon, Mendelson and Naor in [BGMN05], inequalities about
+volumes of sections such as (10) can be formally obtained by the comparison of Laplace transforms
+of suitable Gaussian random vectors. In our case, we will prove the following stronger theorem.
+Theorem 5. Fix m, n ∈N, p ∈(0, 2] and let X = Xp(µ) be an m-dimensional subspace of Lp such
+that BX is in Lewis’ position. For a unit vector a in Rn, let Ga be a standard Gaussian random
+vector on the subspace Ha of Rmn. Then for every λ ∈(0, ∞) and unit vectors θ = (θ1, . . . , θn)
+and φ = (φ1, . . . , φn) in Rn, we have
+(θ2
+1, . . . , θ2
+n) ⪯(φ2
+1, . . . , φ2
+n)
+=⇒
+Ee
+−λ∥Gθ∥p
+ℓnp (X)∩Hθ ⩽Ee
+−λ∥Gφ∥p
+ℓnp (X)∩Hφ.
+(21)
+Using Theorem 5, one can additionally derive the following inequality.
+Corollary 6. Fix m, n ∈N, q ∈[2, ∞] and let X = Xp(µ) be an m-dimensional subspace of
+Lp, where
+1
+p + 1
+q = 1, whose unit ball BX is in Lewis’ position.
+Then for every unit vectors
+θ = (θ1, . . . , θn) and φ = (φ1, . . . , φn) in Rn, we have
+(θ2
+1, . . . , θ2
+n) ⪯(φ2
+1, . . . , φ2
+n)
+=⇒
+w
+ProjHθ(Bn
+q (X∗))
+
+⩾w
+ProjHφ(Bn
+q (X∗))
+
+,
+(22)
+where w(A) is the mean width of the set A.
+The derivation of volume and mean width inequalities from the comparison of Laplace transforms
+was explained in full detail in [ENT18, Section 6] in the scalar case X = R.
+The necessary
+modiﬁcations for the vector-valued case treated here are only symbolic, yet we include them for
+the readers’ convenience.
+Theorem 5 implies Theorem 1. Let θ, φ ∈Sn−1 such that (θ2
+1, . . . , θ2
+n) ⪯(φ2
+1, . . . , φ2
+n) and X =
+(Rm, ∥· ∥X) an m-dimensional subspace of Lp.
+By Lemma 3, the conclusion of Theorem 1 is
+invariant under isometries and thus, by Theorem 4, we can assume that BX is in Lewis’ position.
+Then, by Theorem 5, for every λ ∈(0, ∞) we have
+Ee
+−λ∥Gθ∥p
+ℓnp (X)∩Hθ ⩽Ee
+−λ∥Gφ∥p
+ℓnp (X)∩Hφ.
+(23)
+Recall that an inﬁnitely diﬀerentiable function h : (0, ∞) →R+ is called completely monotonic
+if (−1)nh(n)(t) ⩾0 for every t ∈(0, ∞) and every n ∈N. A classical theorem of Bernstein (see,
+e.g., [Fel71]) characterizes completely monotonic functions as those who can be expressed as the
+Laplace transform of a Borel measure on (0, ∞). Integrating (23) with respect to an arbitrary Borel
+measure µ on (0, ∞), we deduce that
+E
+ˆ ∞
+0
+e
+−λ∥Gθ∥p
+ℓnp (X)∩Hθ dµ(λ) ⩽E
+ˆ ∞
+0
+e
+−λ∥Gφ∥p
+ℓnp (X)∩Hφ dµ(λ),
+(24)
+which, by Bernstein’s theorem, is equivalent to the validity of the inequality
+Eh
+∥Gθ∥p
+ℓnp (X)∩Hθ
+
+⩽Eh
+∥Gφ∥p
+ℓnp (X)∩Hφ
+
+(25)
+for every completely monotonic function h : (0, ∞) →R. A straightforward computation shows
+that the function h(t) = t−α/p is completely monotonic for α > 0 and thus (25) implies that
+E∥Gθ∥−α
+ℓnp (X)∩Hθ ⩽E∥Gφ∥−α
+ℓnp (X)∩Hφ
+(26)
+5
+===== page 6 =====
+for every α ∈
+0, m(n −1)
+
+so that both expectations converge. Integration in polar coordinates
+now shows that
+ˆ
+S(Hθ)
+∥u∥−α
+ℓnp (X)∩Hθ dσHθ(u) ⩽
+ˆ
+S(Hφ)
+∥u∥−α
+ℓnp (X)∩Hφ dσHφ(u)
+(27)
+for every α ∈
+0, m(n−1)
+
+, where σHθ and σHφ are the rotationally invariant probability measures
+on the unit spheres of Hθ and Hφ respectively. Letting α →m(n −1) and using the identity
+ˆ
+Sℓ−1 ∥u∥−ℓ
+K dσ(u) = |K|
+|Bℓ
+2|,
+(28)
+which holds true for every convex body K ⊆Rℓ, we ﬁnally deduce that
+Bn
+p (X) ∩Hθ
+ ⩽
+Bn
+p (X) ∩Hφ
+.
+(29)
+This completes the proof of Theorem 1.
+□
+Theorem 5 implies Corollary 6. Let θ, φ ∈Sn−1 such that (θ2
+1, . . . , θ2
+n) ⪯(φ2
+1, . . . , φ2
+n) and X =
+(Rm, ∥· ∥X) an m-dimensional subspace of Lp whose unit ball BX is in Lewis’ position. A simple
+inductive argument shows that for every β ∈(0, 1] and c ∈(0, ∞), the function h(t) = e−ctβ is
+completely monotonic. Thus, (25) imples that
+Ee
+−c∥Gθ∥βp
+ℓnp (X)∩Hθ ⩽Ee
+−c∥Gφ∥βp
+ℓnp (X)∩Hφ.
+(30)
+Since both sides of (30), as functions of c ∈(0, ∞), are equal at c = 0 we deduce that their
+derivatives at c = 0 compare in the same way, that is
+E∥Gθ∥βp
+ℓnp (X)∩Hθ ⩾E∥Gφ∥βp
+ℓnp (X)∩Hφ,
+(31)
+for every β ∈(0, 1]. Choosing β = 1/p and integrating in polar coordinates yields
+ˆ
+S(Hθ)
+∥u∥ℓnp (X)∩Hθ dσHθ(u) ⩾
+ˆ
+S(Hφ)
+∥u∥ℓnp (X)∩Hφ dσHφ(u).
+(32)
+Recall that if E = (Rℓ, ∥· ∥E) is an ℓ-dimensional normed space with unit ball K, then the mean
+width of the polar body K◦is given by
+w(K◦) =
+ˆ
+Sℓ−1 ∥u∥E dσ(u).
+(33)
+Combining (33) with the classical polarity relation
+Bn
+p (X) ∩Hθ
+◦= ProjHθ
+Bn
+q (X∗)
+
+(34)
+we can rewrite (32) as
+w
+ProjHθ(Bn
+q (X∗))
+
+⩾w
+ProjHφ(Bn
+q (X∗))
+
+,
+(35)
+which completes the proof of Corollary 6.
+□
+We now proceed with the proof of Theorem 5. Let X = Xp(µ) be a subspace of Lp, p ∈(0, 2),
+whose unit ball BX is in Lewis’ position. We will assume that µ is ﬁnitely supported, that is, there
+exist M ∈N, u1, . . . , uM ∈Sm−1 and c1, . . . , cM ∈(0, ∞) such that µ = PM
+j=1 cjδuj. After proving
+Theorem 5 for X = Xp(µ) corresponding to ﬁnitely supported measures µ, the general case will
+follow by a standard approximation argument. Notice that µ is full dimensional by the isotropicity
+assumption (19), therefore the vectors u1, . . . , uM span Rm.
+6
+===== page 7 =====
+For a block hyperplane Hθ as in (3) and ε ∈(0, 1), denote
+Hθ(ε) =
+n
+x = (x1, . . . , xn) ∈
+Rmn :
+
+n
+X
+i=1
+θixi
+
+∞< ε
+2
+o
+.
+(36)
+We will make use of an identity which is a formal consequence of [BGMN05, Lemma 14].
+Lemma 7. Fix m, n ∈N, p ∈(0, ∞) and let X = (Rm, ∥· ∥X) be an m-dimensional quasi-normed
+space. Then for every λ ∈(0, ∞) and every unit vector θ in Rn,
+Ee
+−λ∥Gθ∥p
+ℓnp (X)∩Hθ = lim
+ε→0+
+(2π)−m(n−1)
+2
+εm
+µn
+p,λ,X
+Hθ(ε)
+
+,
+(37)
+where
+dµn
+p,λ,X(x1, . . . , xn) = e−Pn
+i=1(λ∥xi∥p
+X+ 1
+2 ∥xi∥2
+2) dx1 · · · dxn,
+(38)
+and each dxi is Lebesgue measure on Rm.
+For a quasi-normed space X = (Rm, ∥· ∥X) which embeds into Lp, p ∈(0, 2), and whose unit
+ball BX is in Lewis’ position, the measure appearing in Lemma 7 takes the following form.
+Lemma 8. Fix m, n ∈N, p ∈(0, 2) and let X = Xp(µ) be an m-dimensional subspace of Lp whose
+unit ball BX is in Lewis’ position and µ = PM
+=1 cjδuj. Then there exists a probability measure ν
+on (0, ∞)M such that
+dµn
+p,λ,X(x1, . . . , xn)
+dx1 · · · dxn
+=
+ˆ
+(0,∞)nM exp
+
+−
+n
+X
+i=1
+M
+X
+j=1
+sij⟨xi, uj⟩2
+dνn(s),
+(39)
+for every (x1, . . . , xn) ∈
+Rmn, where νn = ν⊗n and µn
+p,λ,X is deﬁned by (38).
+Proof. By the fact that BX is in Lewis’ position and the deﬁnition of µ, we know that
+∥x∥p
+X =
+M
+X
+j=1
+cj|⟨x, uj⟩|p
+and
+∥x∥2
+2 =
+M
+X
+j=1
+cj⟨x, uj⟩2,
+(40)
+for every x ∈Rm. Therefore, (38) can be rewritten as
+dµn
+p,λ,X(x1, . . . , xn)
+dx1 · · · dxn
+= exp
+
+−
+n
+X
+i=1
+M
+X
+j=1
+cj
+λ|⟨xi, uj⟩|p + 1
+2⟨xi, uj⟩2
+.
+(41)
+A simple inductive argument shows that for every θ ∈(0, 1] and c ∈(0, ∞), the function h(t) = e−ctθ
+is completely monotonic.
+Since additionally the product of completely monotonic functions is
+completely monotonic and p ∈(0, 2), we infer from Bernstein’s theorem [Fel71] that for every
+j ∈{1, . . . , M} there exists a Borel measure τj on (0, ∞) satisfying
+exp
+
+−cj
+λtp/2 + 1
+2t
+
+=
+ˆ ∞
+0
+e−st dτj(s),
+(42)
+for every t ∈(0, ∞). The dominated convergence theorem easily implies that each τj is a probability
+measure. Denote ν def
+= τ1 ⊗· · · ⊗τM which is also a probability measure and satisﬁes
+exp
+
+−
+M
+X
+j=1
+cj
+λ|tj|p + 1
+2t2
+j
+
+=
+ˆ
+(0,∞)M exp
+
+−
+M
+X
+j=1
+sjt2
+j
+
+dν(s),
+(43)
+7
+===== page 8 =====
+for every t1, . . . , tM ∈R. Then, combining (41) and (43), we deduce that
+dµn
+p,λ,X(x1, . . . , xn)
+dx1 · · · dxn
+(41)
+=
+n
+Y
+i=1
+exp
+
+−
+M
+X
+j=1
+cj
+λ|⟨xi, uj⟩|p + 1
+2⟨xi, uj⟩2
+(43)
+=
+n
+Y
+i=1
+ˆ
+(0,∞)M exp
+
+−
+M
+X
+j=1
+sij⟨xi, uj⟩2
+dν(si)
+=
+ˆ
+(0,∞)nM exp
+
+−
+n
+X
+i=1
+M
+X
+j=1
+sij⟨xi, uj⟩2
+dνn(s),
+(44)
+for every (x1, . . . , xn) ∈
+Rmn, where νn = ν⊗n.
+□
+Before proceeding with the proof of Theorem 5, we will need the following technical statement.
+Lemma 9. Fix m, n ∈N and let M1, . . . , Mn be i.i.d. positive deﬁnite m × m random matrices.
+Then, for every vectors (α1, . . . , αn), (β1, . . . , βn) ∈[0, ∞)n and r ∈(0, ∞), we have
+(α1, . . . , αn) ⪯(β1, . . . , βn)
+=⇒
+E
+h
+det
+
+n
+X
+i=1
+αiMi
+−ri
+⩽E
+h
+det
+
+n
+X
+i=1
+βiMi
+−ri
+.
+(45)
+Proof. Consider the function ϕ : [0, ∞)n ∖{(0, . . . , 0)} →R given by
+ϕ(α1, . . . , αn) = E
+h
+det
+
+n
+X
+i=1
+αiMi
+−ri
+.
+(46)
+Since M1, . . . , Mn are i.i.d., ϕ is invariant under permutations of its arguments. An elementary
+result of Marshall and Proschan [MP65] then asserts that (45) is true, provided that ϕ is convex.
+To verify this, it suﬃces to check that for every positive deﬁnite matrices A, B and λ ∈(0, 1),
+det
+λA + (1 −λ)B
+−r ⩽λdet(A)−r + (1 −λ)det(B)−r.
+(47)
+Multiplying both sides by det(A)r ∈(0, ∞), this inequality can be rewritten as
+det
+λIm + (1 −λ)A−1/2BA−1/2−r ⩽λ + (1 −λ)det
+A−1/2BA−1/2−r,
+(48)
+which is equivalent to
+m
+Y
+k=1
+λ + (1 −λ)ρk
+−r ⩽λ + (1 −λ)
+m
+Y
+k=1
+ρ−r
+k ,
+(49)
+where ρ1, . . . , ρm ∈(0, ∞) are the eigenvalues of the positive deﬁnite matrix A−1/2BA−1/2. To
+verify (49), notice that, by the concavity of the logarithm,
+log
+ m
+Y
+k=1
+λ + (1 −λ)ρk
+−r
+!
+= −r
+m
+X
+k=1
+log
+λ + (1 −λ)ρk
+
+⩽−r
+m
+X
+k=1
+(1 −λ) log ρk
+= (1 −λ) log
+m
+Y
+k=1
+ρ−r
+k
+⩽log
+ 
+λ + (1 −λ)
+m
+Y
+k=1
+ρ−r
+k
+!
+.
+(50)
+This concludes the proof of (45).
+□
+We are now in position to complete the proof of Theorem 5.
+8
+===== page 9 =====
+Proof of Theorem 5. Suppose that X = Xp(µ), where p ∈(0, 2) and µ is a ﬁnitely supported
+isotropic measure of the form µ = PM
+j=1 cjδuj on the unit sphere Sm−1. Then, by Lemmas 7 and
+8 and Fubini’s theorem,
+Ee
+−λ∥Gθ∥p
+ℓnp (X)∩Hθ = lim
+ε→0+
+(2π)−m(n−1)
+2
+εm
+ˆ
+(0,∞)nM
+ˆ
+Hθ(ε)
+exp
+
+−
+n
+X
+i=1
+M
+X
+j=1
+sij⟨xi, uj⟩2
+dx dνn(s), (51)
+where νn = ν⊗n for the probability measure ν on (0, ∞)M that was constructed in (43). For ﬁxed
+s = (sij) ∈(0, ∞)nM, consider independent centered Gaussian random vectors Z1(s), . . . , Zn(s) on
+Rm so that Zi(s) has covariance matrix
+Mi(s) def
+= 1
+2
+ M
+X
+j=1
+sijuj ⊗uj
+−1
+.
+(52)
+Then, for every s ∈(0, ∞)nM, we have
+ˆ
+Hθ(ε)
+exp
+
+−
+n
+X
+i=1
+M
+X
+j=1
+sij⟨xi,uj⟩2
+dx =
+ˆ
+Hθ(ε)
+exp
+
+−1
+2
+n
+X
+i=1
+⟨Mi(s)−1xi, xi⟩
+
+dx
+= (2π)
+mn
+2
+n
+Y
+i=1
+q
+det
+Mi(s)
+
+· P
+Z1(s), . . . , Zn(s)
+
+∈Hθ(ε)
+
+(53)
+and thus (51) can be rewritten as
+Ee
+−λ∥Gθ∥p
+ℓnp (X)∩Hθ = lim
+ε→0+
+(2π)m/2
+εm
+ˆ
+(0,∞)nM
+n
+Y
+i=1
+q
+det
+Mi(s)
+
+P
+
+n
+X
+i=1
+θiZi(s)
+
+∞< ε
+2
+
+dνn(s). (54)
+However, for ﬁxed s ∈(0, ∞)nM, the Gaussian vectors Z1(s), . . . , Zn(s) are independent, therefore
+the weighted sum Pn
+i=1 θiZi(s) is a centered Gaussian random vector Z(s) on Rm with covariance
+matrix
+M(s) def
+=
+n
+X
+i=1
+θ2
+i Mi(s).
+(55)
+Therefore, continuing from (54), if γm is the standard Gaussian measure on Rm, we have
+Ee
+−λ∥Gθ∥p
+ℓnp (X)∩Hθ = lim
+ε→0+
+(2π)m/2
+εm
+ˆ
+(0,∞)nM
+n
+Y
+i=1
+q
+det
+Mi(s)
+
+· P
+
+Z(s) ∈ε
+2Bm
+∞
+
+dνn(s)
+= lim
+ε→0+
+(2π)m/2
+εm
+ˆ
+(0,∞)nM
+n
+Y
+i=1
+q
+det
+Mi(s)
+
+· γm
+ε
+2M(s)−1/2Bm
+∞
+
+dνn(s)
+(∗)
+=
+ˆ
+(0,∞)nM
+n
+Y
+i=1
+q
+det
+Mi(s)
+
+· lim
+ε→0+
+(2π)m/2
+εm
+γm
+ε
+2M(s)−1/2Bm
+∞
+
+dνn(s)
+(†)
+=
+ˆ
+(0,∞)nM
+n
+Y
+i=1
+q
+det
+Mi(s)
+
+· det
+
+n
+X
+i=1
+θ2
+i Mi(s)
+−1/2
+dνn(s),
+(56)
+where in (†) we used the fact that for a compact set L ⊆Rm
+lim
+ε→0+
+(2π)m/2
+εm
+γm(εL) = lim
+ε→0+
+ˆ
+L
+e−ε2∥w∥2
+2/2 dw = |L|
+(57)
+9
+===== page 10 =====
+and moreover
+1
+2M(s)−1/2Bm
+∞
+ = det
+M(s)−1/2
+= det
+
+n
+X
+i=1
+θ2
+i Mi(s)
+−1/2
+.
+(58)
+Finally, the fact that we can swap limit and integration in (∗), follows from Lebesgue’s monotone
+convergence theorem, since (57) implies that the function ε 7→γm(εL)/εm is decreasing as ε →0+.
+Consider the measure ρn on (0, ∞)nM given by
+dρn(s) =
+n
+Y
+i=1
+q
+det
+Mi(s)
+
+dνn(s).
+(59)
+Since Mi(s) depends only on sij, j ∈{1, . . . , M} and the random matrices M1, . . . , Mn are identi-
+cally distributed with respect to the law νn = ν⊗n, the measure ρn is also a product measure of
+the form ρ⊗n for some Borel measure ρ on (0, ∞)M. Moreover, choosing θ = e1 = (1, 0, . . . , 0) in
+(56), we deduce that
+Ee
+−λ∥Ge1∥p
+ℓnp (X)∩He1 =
+ˆ
+(0,∞)nM
+n
+Y
+i=2
+q
+det
+Mi(s)
+
+dνn(s) = ρ
+(0, ∞)Mn−1,
+(60)
+which implies that ρ is a ﬁnite measure. Therefore, (56) can equivalently be written as
+Ee
+−λ∥Gθ∥p
+ℓnp (X)∩Hθ =
+ˆ
+(0,∞)nM det
+
+n
+X
+i=1
+θ2
+i Mi(s)
+−1/2
+dρn(s).
+(61)
+Finally, since the random matrices M1, . . . , Mn are i.i.d. with respect to the law ρn, the conclusion
+of the theorem follows by combining identity (61) with Lemma 9.
+To argue that (21) is true for a general subspace X of Lp (or equivalently for a general isotropic
+measure µ on Sm−1), we will use an approximation argument of Barthe. In [Bar04, pp. 55-56], it
+was shown that for every isotropic measure µ on Sm−1 there exists a sequence {µk}∞
+k=1 of ﬁnitely
+supported isotropic measures on Sm−1 which converges weakly to µ, that is, for every continuous
+function f : Sm−1 →R, we have
+lim
+k→∞
+ˆ
+Sm−1 f(θ) dµk(θ) =
+ˆ
+Sm−1 f(θ) dµ(θ).
+(62)
+In particular, this means that for every x ∈Rm,
+lim
+k→∞∥x∥p,µk = lim
+k→∞
+ ˆ
+Sm−1 |⟨x, θ⟩|p dµk(θ)
+1/p
+=
+ ˆ
+Sm−1 |⟨x, θ⟩|p dµ(θ)
+1/p
+= ∥x∥p,µ.
+(63)
+If Xk = Xp(µk) and X = Xp(µ), then the bounded convergence theorem implies that if ω ∈Sm−1
+and Gω is a standard Gaussian random vector on the subspace Hω of Rmn, then for every λ ∈(0, ∞),
+lim
+k→∞Ee−λ∥Gω∥ℓnp (Xk)∩Hω = Ee−λ∥Gω∥ℓnp (X)∩Hω.
+(64)
+Combining (64) with the validity of (21) for all spaces Xp(µ) where µ is a discrete isotropic measure,
+we conclude that (21) in fact holds for every isotropic measure µ on Sm−1.
+□
+Remark 10. In the proof of Theorem 5, the fact that BX is in Lewis’ position was crucially used
+in Lemma 8 and more speciﬁcally in equation (41). A more general version of the result could be
+proven along the same lines without any assumption on the position of BX, using a classical result
+of Levy (see, e.g., [Kol05, Lemma 6.4]) which asserts that for every p ∈(0, ∞), the norm of every
+m-dimensional subspace X = (Rm, ∥· ∥X) of Lp admits a representation of the form
+∥x∥X =
+ ˆ
+Sm−1 |⟨x, θ⟩|p dµ(θ)
+1/p
+,
+(65)
+10
+===== page 11 =====
+for every x ∈Rn, where µ is a (not necessarily isotropic) ﬁnite Borel measure on Sm−1. In this
+case, the Gaussian random vectors Ga on Ha appearing in the statement of Theorem 5 would have
+covariance matrices determined by the measure µ.
+Remark 11. It is natural to ask whether an analogue of Theorem 1 and in particular (10) can hold
+for sections of the form Bn
+p (X)∩F, where F is a general subspace of Rmn of codimension m instead
+of a block hyperplane of the form (3). We will construct here an example of an m-dimensional
+subspace X of L1 whose unit ball is in Lewis’ position and a coordinate subspace F of Rmn of
+codimension m, for which
+Bn
+1 (X) ∩F
+ >
+Bn−1
+1
+(X)
+,
+(66)
+thus showing that the comparison (10) cannot hold in this generality. Let m = 4n and consider
+X = ℓ2n
+1 ⊕1 ℓ2n
+2 , the space (R4n, ∥· ∥X) equipped with the norm
+∥(x1, x2)∥X = ∥x1∥1 + ∥x2∥2,
+(67)
+where x1, x2 ∈R2n. Since L2 admits an isometric embedding into L1 (see [Kad58]), X is also
+isometric to a subspace of L1 and furthermore BX is in Lewis’ position. To see this, notice that
+∥x∥X =
+ˆ
+S2n−1×{0}
+|⟨x, θ⟩| dµ(θ) +
+ˆ
+{0}×S2n−1 |⟨x, θ⟩| dν(θ),
+(68)
+where µ = P2n
+j=1 δej and ν is a multiple of the uniform measure; both these measures are isotropic.
+Moreover, ℓn
+1(X) is, up to permutation of its coordinates, ℓ2n2
+1
+⊕1 ℓn
+1(ℓ2n
+2 ) and thus there exists a
+coordinate subspace F of codimension m = 4n for which ℓn
+1(X) ∩F is equal to ℓ2n(n−2)
+1
+⊕1 ℓn
+1(ℓ2n
+2 ).
+We claim that
+Bn
+1 (X) ∩F
+ =
+Bℓ2n(n−2)
+1
+⊕1ℓn
+1 (ℓ2n
+2 )
+ >
+Bℓ2n(n−1)
+1
+⊕1ℓn−1
+1
+(ℓ2n
+2 )
+ =
+Bn−1
+1
+(X)
+.
+(69)
+To show (69), we will use the fact that for any k-dimensional normed space Z = (Rk, ∥· ∥Z),
+1
+k!
+ˆ
+Rk e−∥z∥Z dz = 1
+k!
+ˆ
+Rk
+ˆ ∞
+∥z∥Z
+e−s ds dz = 1
+k!
+ˆ ∞
+0
+ˆ
+sBZ
+e−s dz ds
+= |BZ|
+k!
+ˆ ∞
+0
+ske−s ds = |BZ|,
+(70)
+which immediately implies that if Z1, Z2 are of dimensions k1 and k2 respectively, then
+BZ1⊕1Z2
+ =
+1
+(k1 + k2)!
+ˆ
+Rk1
+ˆ
+Rk2
+e−∥z1∥Z1−∥z2∥Z2 dz2 dz1
+=
+1
+(k1 + k2)!
+ˆ
+Rk1
+e−∥z1∥Z1 dz1
+ˆ
+Rk2
+e−∥z2∥Z2 dz2 =
+k1!k2!
+(k1 + k2)!
+BZ1
+BZ2
+.
+(71)
+Moreover, an iteration of (71) shows that if Z = (Rk, ∥· ∥Z) and s ∈N, then
+Bs
+1(Z)
+ = (k!)s
+(sk)!
+BZ
+s.
+(72)
+Hence, for a, b, c ∈N, we have
+Bℓa
+1⊕1ℓb
+1(ℓc
+2)
+ (71)
+=
+a!(bc)!
+(a + bc)!|Ba
+1||Bb
+1(ℓc
+2)|
+(72)
+=
+2a(c!)b
+(a + bc)! ·
+πbc/2
+Γ
+ c
+2 + 1
+b ,
+(73)
+using the well-known formulas for the volumes of Ba
+1 and Bc
+2. Therefore, (69) is equivalent to
+22n(n−2)(2n)!
+nπn2
+4n(n −1)
+
+!(n!)n
+> 22n(n−1)(2n)!
+n−1πn(n−1)
+4n(n −1)
+
+!(n!)n−1
+(74)
+11
+===== page 12 =====
+which can be rewritten as
+(2n)!
+n!
+>
+ 4
+π
+n
+.
+(75)
+Finally, to verify (75) notice that
+(2n)!
+n!
+=
+n
+Y
+i=1
+(n + i) ⩾2n >
+ 4
+π
+n
+(76)
+and (69) follows.
+3. Proof of Proposition 2
+We now proceed with the proof of Proposition 2. The argument relies on a recent observation
+of Liakopoulos [Lia19], who extended Ball’s version [Bal91a] of the classical Loomis–Whitney in-
+equality [LW49]. In [Lia19], the author showed that if the subspaces F1, . . . , Fr of Rk induce a
+decomposition of the identity of the form
+sIk =
+r
+X
+i=1
+ciProjFi,
+(77)
+where ProjFi is the orthogonal projection on Fi and ci ∈(0, ∞), then for every compact set L ⊆Rk,
+|L|s ⩽
+r
+Y
+i=1
+ProjFi(L)
+ci.
+(78)
+In [Bal91a], Ball showed the above implication when all the Fi are hyperplanes using his geometric
+Brascamp–Lieb inequality from [Bal89] and Liakopoulos’ proof of the general case proceeds along
+the same lines using Barthe’s [Bar98] multidimensional geometric Brascamp–Lieb inequality.
+Proof of Proposition 2. For (ε1, . . . , εn) ∈{−1, 1}n and a permutation σ ∈Sn, denote
+Hε,σ
+θ
+def
+=
+n
+(x1, . . . , xn) ∈
+Rmn :
+n
+X
+i=1
+εiθσ(i)xi = 0
+o
+.
+(79)
+Moreover, let Pε,σ
+def
+= ProjHε,σ
+θ
+be the orthogonal projection on Hε,σ
+θ . An elementary computation
+shows that
+Pε,σ(x1, . . . , xn) =
+
+x1 −ε1θσ(1)
+n
+X
+k=1
+εkθσ(k)xk, . . . , xn −εnθσ(n)
+n
+X
+k=1
+εkθσ(k)xk
+
+,
+(80)
+for every (x1, . . . , xn) ∈
+Rmn. Averaging over ε ∈{−1, 1}n, we get
+1
+2n
+X
+ε∈{−1,1}n
+Pε,σ(x1, . . . , xn) =
+
+xi −1
+2n
+X
+ε∈{−1,1}n
+εiθσ(i)
+n
+X
+k=1
+εkθσ(k)xk
+n
+i=1
+=
+x1 −θ2
+σ(1)x1, . . . , xn −θ2
+σ(n)xn
+
+,
+(81)
+which after further averaging over σ ∈Sn becomes
+1
+2nn!
+X
+ε∈{−1,1}n
+X
+σ∈Sn
+Pε,σ(x1, . . . , xn) =
+
+xi −1
+n!
+X
+σ∈Sn
+θ2
+σ(i)xi
+n
+i=1
+=
+
+xi −θ2
+1 + · · · + θ2
+n
+n
+xi
+n
+i=1 = n −1
+n
+(x1, . . . , xn).
+(82)
+12
+===== page 13 =====
+Equation (82) can be rewritten as
+1
+2nn!
+X
+ε∈{−1,1}n
+X
+σ∈Sn
+Pε,σ = n −1
+n
+Imn,
+(83)
+hence, by (78) applied to the compact set L = Kn, we have that
+|K|n−1 =
+Kn
+n−1
+n
+⩽
+Y
+ε∈{−1,1}n
+Y
+σ∈Sn
+Pε,σ(Kn)
+
+1
+2nn! .
+(84)
+However, notice that (x1, . . . , xn) ∈Kn if and only if (ε1xσ(1), . . . , εnxσ(n)) ∈Kn for every ε ∈
+{−1, 1}n and σ ∈Sn since K is centrally symmetric. Therefore |Pε,σ(Kn)| = |ProjHθ(Kn)| for
+every ε ∈{−1, 1}n and σ ∈Sn and thus (84) can equivalently be written as
+|K|n−1 ⩽
+Y
+ε∈{−1,1}n
+Y
+σ∈Sn
+ProjHθ(Kn)
+
+1
+2nn! =
+ProjHθ(Kn)
+,
+(85)
+which completes the proof of Proposition 2.
+□
+4. Concluding remarks
+1. It follows from Theorem 1 that for every p ∈(0, 2], X = (Rm, ∥· ∥X) which admits an isometric
+embedding into Lp and unit vector θ in Rn,
+Bn
+p (X) ∩Hθ
+ ⩽
+Bn−1
+p
+(X)
+.
+(86)
+It is conceivable that the reverse inequality of (86) holds true when p > 2.
+Question 12. Let p ∈(2, ∞] and X = (Rm, ∥· ∥X) which is isometric to a subspace of Lp. Is it true
+that
+Bn−1
+p
+(X)
+ ⩽
+Bn
+p (X) ∩Hθ
+
+(87)
+for every unit vector θ in Rn? In particular, does every symmetric convex (or even star) body
+K ⊆Rm satisfy
+|K|n−1 ⩽
+Kn ∩Hθ
+
+(88)
+for every unit vector θ in Rn?
+Inequality (87) for X = ℓm
+q , where q ∈[2, p], follows from [Bar01, Theorem 19]. It was shown there
+that for every normed space X = (Rm, ∥· ∥X) and every subspace F of Rmn of dimension mk, the
+function
+(0, ∞] ∋r 7−→|Bn
+r (X) ∩F|
+|Bkr (X)|
+is nondecreasing. Therefore, if p ⩾q ⩾2,
+|Bn
+p (ℓm
+q ) ∩Hθ|
+|Bn−1
+p
+(ℓm
+q )|
+⩾|Bn
+q (ℓm
+q ) ∩Hθ|
+|Bn−1
+q
+(ℓm
+q )|
+= |Bmn
+q
+(R) ∩Hθ|
+|Bm(n−1)
+q
+(R)|
+⩾1,
+where the last inequality follows from [MP88]. In particular, (88) holds true for K = Bm
+q (R) for
+every q ∈[2, ∞].
+13
+===== page 14 =====
+2. Even though every separable Banach space embeds isometrically in L∞, an analogue of the re-
+sults of [Bal86] and [OP00] cannot hold for general Bn
+∞(X) spaces. It has been shown by Brzezinski
+[Brz13] that for every n ∈N, m ⩾2 and unit vector θ in Rn,
+(Bm
+2 )n ∩Hθ
+
+|Bm
+2 |n−1
+⩽lim
+k→∞
+(Bm
+2 )k ∩Hdiag
+
+|Bm
+2 |k−1
+= (2m + 4)
+m
+2
+m2m−1Γ
+ m
+2
+,
+(89)
+which shows that sections of Bn
+∞(ℓm
+2 ) with the diagonal block hyperplane Hdiag maximize the
+volume asymptotically in n when X = ℓm
+2
+and m ⩾2 (after proper normalization).
+We note
+that the upper bound of (89) coincides with the bound of Oleszkiewicz and Pe lczy´nski [OP00]
+when m = 2. This should be viewed in contrast with Ball’s theorem [Bal86], according to which
+Bn
+∞(R) ∩
+ 1
+√
+2,
+1
+√
+2, . . . , 0
+
+is the maximal section of the unit cube Bn
+∞(R).
+We note in passing that a formal strengthening of Brzezinski’s result can be obtained using an
+estimate of Gluskin and Milman. It follows from [GM04, Proposition 2] that for every compact set
+A ⊆Rm such that |A| = |Bm
+2 | and unit vector θ in Rn, we have
+An ∩Hθ
+ ⩽
+(Bm
+2 )n ∩Hθ
+,
+(90)
+which combined with (89) shows that for every compact set A ⊆Rm, m ⩾2,
+An ∩Hθ
+ ⩽(2m + 4)
+m
+2 |A|n−1
+m2m−1Γ
+ m
+2
+
+(91)
+and, by [Bal86], |An ∩θ⊥| ⩽
+√
+2|A|n−1 for compact sets A ⊆R.
+3. Choosing X = ℓm
+p , p ∈(0, 2) in the statement of Theorem 1 we deduce that
+Bmn
+p
+(R) ∩Hθ
+ =
+Bn
+p (ℓm
+p ) ∩Hθ
+ ⩾
+Bn
+p (ℓn
+p) ∩Hdiag
+ =
+Bmn
+p
+(R) ∩Hdiag
+,
+(92)
+for every unit vector θ in Rn. This observation is relevant to the following well-known open question.
+Question 13. Fix p ∈(0, 2) and k, d ∈N satisfying d ⩽k −2. What are the minimal d-dimensional
+sections of Bk
+p(R)?
+Equation (92) asserts that when k is a multiple of d, the minimal d-dimensional section of Bk
+p(R)
+with a block subspace is Bk
+p(R) ∩Hdiag. In contrast to the case of the unit cube (see [Bal89]), these
+sections do not extremize the volume of Bk
+p(R) ∩E over a general d-dimensional subspace E when
+p ∈(0, 2). As was pointed out to me by an anonymous referee, if k = 4, d = 2 and
+E = span
+n
+1, 1
+√
+2, 0, −1
+√
+2
+
+,
+
+0, 1
+√
+2, 1, 1
+√
+2
+o
+,
+(93)
+then
+B4
+1 ∩Hdiag
+ = 1 > 4(3
+√
+2 −4) =
+B4
+1 ∩E
+.
+(94)
+4. A symmetric convex body K ⊆Rn is called 1-symmetric if (x1, . . . , xn) ∈K if and only if for
+every ε ∈{−1, 1}n and σ ∈Sn also (ε1xσ(1), . . . , εnxσ(n)) ∈K. A slight variant of the proof of
+Proposition 2, yields the following estimate on projections of 1-symmetric bodies.
+Proposition 14. Fix d, n ∈N with d ∈{1, . . . , n}. For every 1-symmetric convex body K ⊆Rn
+and d-dimensional subspace F of Rn, we have
+ProjF K
+ ⩾|K|
+d
+n .
+(95)
+14
+===== page 15 =====
+We shall sketch the proof of Proposition 14.
+Let F be a d-dimensional subspace of Rn.
+For
+ε ∈{−1, 1}n and a permutation σ ∈Sn consider the subspace
+F ε,σ =
+
+(ε1xσ(1), . . . , εnxσ(n)) ∈Rn : (x1, . . . , xn) ∈F
+	
+(96)
+and denote by Pε,σ the orthogonal projection on F ε,σ. As in the proof of Proposition 2, one can
+easily observe that every 1-symmetric convex body K ⊆Rn satisﬁes
+|Pε,σK| =
+ProjF K
+,
+(97)
+for every ε ∈{−1, 1}n and σ ∈Sn. Moreover, a simple algebraic computation using bases shows
+that
+1
+2nn!
+X
+ε∈{−1,1}n
+X
+σ∈Sn
+Pε,σ = d
+nIn.
+(98)
+Therefore, invoking inequality (78), we deduce that
+|K|
+d
+n
+(78)∧(98)
+⩽
+Y
+ε∈{−1,1}n
+Y
+σ∈Sn
+|Pε,σK|
+1
+2nn! (97)
+=
+Y
+ε∈{−1,1}n
+Y
+σ∈Sn
+ProjF K
+
+1
+2nn! =
+ProjF K
+,
+(99)
+for every 1-symetric convex body K ⊆Rn, thus concluding the proof of Proposition 14.
+We note that for d = n −1, Proposition 14 follows from the main result of [Bal91a], where Ball
+proved that every convex body K ⊆Rn whose projection body ΠK is in John’s position (see, e.g.,
+[AAGM15]) satisﬁes
+Projθ⊥K
+ ⩾|K|
+n−1
+n ,
+(100)
+for every unit vector θ in Rn. Notice that if K is 1-symmetric, then the same holds true for its
+projection body ΠK. Therefore, combining Ball’s theorem with the well-known fact that every
+1-symmetric convex body can be rescaled to be in John’s position, we conclude that (100) holds
+for every 1-symmetric convex body K ⊆Rn and every unit vector θ in Rn.
+References
+[AAGM15] S. Artstein-Avidan, A. Giannopoulos, and V. D. Milman. Asymptotic geometric analysis. Part I, volume
+202 of Mathematical Surveys and Monographs. American Mathematical Society, Providence, RI, 2015.
+[Bal86]
+K. Ball. Cube slicing in Rn. Proc. Amer. Math. Soc., 97(3):465–473, 1986.
+[Bal89]
+K. Ball. Volumes of sections of cubes and related problems. In Geometric aspects of functional analysis
+(1987–88), volume 1376 of Lecture Notes in Math., pages 251–260. Springer, Berlin, 1989.
+[Bal91a]
+K. Ball. Shadows of convex bodies. Trans. Amer. Math. Soc., 327(2):891–901, 1991.
+[Bal91b]
+K. Ball. Volume ratios and a reverse isoperimetric inequality. J. London Math. Soc. (2), 44(2):351–359,
+1991.
+[Bar95]
+F. Barthe. Mesures unimodales et sections des boules Bn
+p . C. R. Acad. Sci. Paris S´er. I Math., 321(7):865–
+868, 1995.
+[Bar98]
+F. Barthe. On a reverse form of the Brascamp-Lieb inequality. Invent. Math., 134(2):335–361, 1998.
+[Bar01]
+F. Barthe. Extremal properties of central half-spaces for product measures. J. Funct. Anal., 182(1):81–
+107, 2001.
+[Bar04]
+F. Barthe. A continuous version of the Brascamp-Lieb inequalities. In Geometric aspects of functional
+analysis, volume 1850 of Lecture Notes in Math., pages 53–63. Springer, Berlin, 2004.
+[BDCK66] J. Bretagnolle, D. Dacunha-Castelle, and J.-L. Krivine. Lois stables et espaces Lp. Ann. Inst. H. Poincar´e
+Sect. B (N.S.), 2:231–259, 1965/1966.
+[BGMN05] F. Barthe, O. Gu´edon, S. Mendelson, and A. Naor. A probabilistic approach to the geometry of the
+ln
+p -ball. Ann. Probab., 33(2):480–513, 2005.
+[Bol69]
+E. D. Bolker. A class of convex bodies. Trans. Amer. Math. Soc., 145:323–345, 1969.
+[Brz13]
+P. Brzezinski. Volume estimates for sections of certain convex bodies. Math. Nachr., 286(17-18):1726–
+1743, 2013.
+[Cae92]
+A. M. Caetano. Weyl numbers in sequence spaces and sections of unit balls. J. Funct. Anal., 106(1):1–17,
+1992.
+15
+===== page 16 =====
+[ENT18]
+A. Eskenazis, P. Nayar, and T. Tkocz. Gaussian mixtures: entropy and geometric inequalities. Ann.
+Probab., 46(5):2908–2945, 2018.
+[Fel71]
+W. Feller. An introduction to probability theory and its applications. Vol. II. Second edition. John Wiley
+& Sons, Inc., New York-London-Sydney, 1971.
+[GM04]
+E. Gluskin and V. Milman. Geometric probability and random cotype 2. In Geometric aspects of functional
+analysis, volume 1850 of Lecture Notes in Math., pages 123–138. Springer, Berlin, 2004.
+[Had72]
+H. Hadwiger. Gitterperiodische Punktmengen und Isoperimetrie. Monatsh. Math., 76:410–418, 1972.
+[Hen79]
+D. Hensley. Slicing the cube in Rn and probability (bounds for the measure of a central cube slice in Rn
+by probability methods). Proc. Amer. Math. Soc., 73(1):95–100, 1979.
+[JS01]
+W. B. Johnson and G. Schechtman. Finite dimensional subspaces of Lp. In Handbook of the geometry of
+Banach spaces, Vol. I, pages 837–870. North-Holland, Amsterdam, 2001.
+[Kad58]
+M. ˘I. Kadec’. Linear dimension of the spaces Lp and lq. Uspehi Mat. Nauk, 13(6 (84)):95–98, 1958.
+[Kol98]
+A. Koldobsky. An application of the Fourier transform to sections of star bodies. Israel J. Math., 106:157–
+164, 1998.
+[Kol05]
+A. Koldobsky. Fourier analysis in convex geometry, volume 116 of Mathematical Surveys and Monographs.
+American Mathematical Society, Providence, RI, 2005.
+[KZ03]
+A. Koldobsky and M. Zymonopoulou. Extremal sections of complex lp-balls, 0 < p ⩽2. Studia Math.,
+159(2):185–194, 2003. Dedicated to Professor Aleksander Pe lczy´nski on the occasion of his 70th birthday
+(Polish).
+[Lew78]
+D. R. Lewis. Finite dimensional subspaces of Lp. Studia Math., 63(2):207–212, 1978.
+[LHX18]
+A.-J. Li, Q. Huang, and D. Xi. Sections and projections of Lp-zonoids and their polars. J. Geom. Anal.,
+28(1):427–447, 2018.
+[Lia19]
+D.-M. Liakopoulos. Reverse Brascamp-Lieb inequality and the dual Bollob´as-Thomason inequality. Arch.
+Math. (Basel), 112(3):293–304, 2019.
+[LW49]
+L. H. Loomis and H. Whitney. An inequality related to the isoperimetric inequality. Bull. Amer. Math.
+Soc, 55:961–962, 1949.
+[LYZ04]
+E. Lutwak, D. Yang, and G. Zhang. Volume inequalities for subspaces of Lp. J. Diﬀerential Geom.,
+68(1):159–184, 2004.
+[LYZ05]
+E. Lutwak, D. Yang, and G. Zhang. Lp John ellipsoids. Proc. London Math. Soc. (3), 90(2):497–520,
+2005.
+[MP65]
+A. W. Marshall and F. Proschan. An inequality for convex functions involving majorization. J. Math.
+Anal. Appl., 12:87–90, 1965.
+[MP88]
+M. Meyer and A. Pajor. Sections of the unit ball of Ln
+p. J. Funct. Anal., 80(1):109–123, 1988.
+[Ole03]
+K. Oleszkiewicz. On p-pseudostable random variables, Rosenthal spaces and ln
+p ball slicing. In Geometric
+aspects of functional analysis, volume 1807 of Lecture Notes in Math., pages 188–210. Springer, Berlin,
+2003.
+[OP00]
+K. Oleszkiewicz and A. Pe lczy´nski. Polydisc slicing in Cn. Studia Math., 142(3):281–294, 2000.
+[Sch75]
+R. Schneider. Zonoids whose polars are zonoids. Proc. Amer. Math. Soc., 50:365–368, 1975.
+[SZ01]
+G. Schechtman and A. Zvavitch. Embedding subspaces of Lp into lN
+p , 0 < p < 1. Math. Nachr., 227:133–
+142, 2001.
+[Vaa79]
+J. D. Vaaler. A geometric inequality with applications to linear forms. Paciﬁc J. Math., 83(2):543–553,
+1979.
+Mathematics Department, Princeton University, Fine Hall, Washington Road, Princeton, NJ 08544-
+1000, USA
+E-mail address: ae3@math.princeton.edu
+16

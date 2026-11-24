@@ -1,0 +1,909 @@
+{
+  "schema_version": 2,
+  "rows": [
+    {
+      "lit_id": "000000",
+      "title": "Cube slicing in R^n",
+      "type": "J",
+      "summary": "",
+      "path": "929d246e1f5b-cube-slicing-in-r-n.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000001"
+      ],
+      "dedup_key": "title:cube slicing in r n|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T18:05:13+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 520776,
+        "sha256": "929d246e1f5b47f2eec0047c2f052ef9a4717412afea746733bbaec5cda002d4",
+        "error": null,
+        "fulltext": "ok",
+        "note": "候选期已抽读：12659 字（指纹 748e93590f55）"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null,
+      "_keys": [
+        "title:cube slicing in r n|*"
+      ]
+    },
+    {
+      "lit_id": "000001",
+      "title": "On maximal hyperplane sections of the unit ball of l_p^n for (filename truncated after 'for')",
+      "type": "J",
+      "summary": "",
+      "path": "daac9fe7d2e3-on-maximal-hyperplane-sections-of-the-unit-ball-of-l-p-n-for.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000001"
+      ],
+      "dedup_key": "title:on maximal hyperplane sections of the unit ball of l p n for filename truncated after for|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T18:05:13+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 890285,
+        "sha256": "daac9fe7d2e3c13c0c605e1f47aa157e4696cce1afd87e9b33fd551526614360",
+        "error": null,
+        "fulltext": "ok",
+        "note": "text.extract: 抽出的文本可读"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null,
+      "_keys": [
+        "title:on maximal hyperplane sections of the unit ball of l p n for filename truncated after for|*"
+      ]
+    },
+    {
+      "lit_id": "000002",
+      "title": "Plane sections of the unit ball of l_p",
+      "type": "J",
+      "summary": "",
+      "path": "a7344ad13416-plane-sections-of-the-unit-ball-of-l-p.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000001"
+      ],
+      "dedup_key": "title:plane sections of the unit ball of l p|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T18:05:13+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 385104,
+        "sha256": "a7344ad13416e8c3ffa43f67614d50bdf9b6008f2a10bd64acc7fc4e3b595fc5",
+        "error": null,
+        "fulltext": "ok",
+        "note": "text.extract: 抽出的文本可读"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null,
+      "_keys": [
+        "title:plane sections of the unit ball of l p|*"
+      ]
+    },
+    {
+      "_keys": [
+        "title:critical central sections of the cube|*"
+      ],
+      "lit_id": "000003",
+      "title": "Critical central sections of the cube",
+      "type": "J",
+      "summary": "题录（按本地 PDF 首部逐字读数，非推测）：作者 GERGELY AMBRUS（首部全大写，单作者）；arXiv:2107.14778v3 [math.MG]，22 Jun 2023；PDF 共 12 页；期刊名与卷期页 PDF 上取不到。身份格 authors/venue/year 由收编口写，通用写口拒改（identity_cell_refused），逐字读数另见本趟回执。",
+      "path": "5d236efcb7ea-critical-central-sections-of-the-cube.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000001"
+      ],
+      "dedup_key": "title:critical central sections of the cube|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T18:05:13+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 955094,
+        "sha256": "5d236efcb7ea803dd7b7641b3d6f0f8fe5d8a2c9a6d0b2825c0becb5c7351611",
+        "error": null,
+        "fulltext": "ok",
+        "note": "text.extract: 抽出的文本可读"
+      },
+      "pages": "12 pp.（PDF 共 12 页；期刊卷期页 PDF 上取不到）",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null
+    },
+    {
+      "lit_id": "000004",
+      "title": "Non-diagonal critical central sections of the cube",
+      "type": "J",
+      "summary": "",
+      "path": "f79129be94de-non-diagonal-critical-central-sections-of-the-cube.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000001"
+      ],
+      "dedup_key": "title:non diagonal critical central sections of the cube|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T18:05:13+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 453619,
+        "sha256": "f79129be94de37f18f12dae74555f9fcaced06f2e157b13b12fcdf7c0e53d3c7",
+        "error": null,
+        "fulltext": "ok",
+        "note": "候选期已抽读：43588 字（指纹 b24a0a344d44）"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null,
+      "_keys": [
+        "title:non diagonal critical central sections of the cube|*"
+      ]
+    },
+    {
+      "lit_id": "000005",
+      "title": "Resilience of cube slicing in l_p",
+      "type": "J",
+      "summary": "",
+      "path": "290c7eb63abe-resilience-of-cube-slicing-in-lp.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000001"
+      ],
+      "dedup_key": "title:resilience of cube slicing in l p|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T18:05:13+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 710811,
+        "sha256": "290c7eb63abe42c0f00423d754866958f1906514cd834551c5bf5f33b1d3976a",
+        "error": null,
+        "fulltext": "ok",
+        "note": "候选期已抽读：51026 字（指纹 2025df30f621）"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null,
+      "_keys": [
+        "title:resilience of cube slicing in l p|*"
+      ]
+    },
+    {
+      "lit_id": "000006",
+      "title": "On extremal sections of subspaces of l_p",
+      "type": "J",
+      "summary": "",
+      "path": "9ec6189b98ee-on-extremal-sections-of-subspaces-of-l-p.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000001"
+      ],
+      "dedup_key": "title:on extremal sections of subspaces of l p|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T18:05:13+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 490751,
+        "sha256": "9ec6189b98ee3fa3fb1c05aa6cd672a2867f4723d196bb9ead95cfb7680ac1cc",
+        "error": null,
+        "fulltext": "ok",
+        "note": "text.extract: 抽出的文本可读"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null,
+      "_keys": [
+        "title:on extremal sections of subspaces of l p|*"
+      ]
+    },
+    {
+      "lit_id": "000007",
+      "title": "Hyperplane projections of the unit ball of l_p^n",
+      "type": "J",
+      "summary": "",
+      "path": "b53daf49eb45-hyperplane-projections-of-the-unit-ball-of-l-p-n.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000001"
+      ],
+      "dedup_key": "title:hyperplane projections of the unit ball of l p n|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T18:05:13+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 119759,
+        "sha256": "b53daf49eb4562f097297ddf427d8e3e7e45d8aaffe44ecdd4b155a1bd37abaa",
+        "error": null,
+        "fulltext": "ok",
+        "note": "候选期已抽读：24284 字（指纹 b013c64084aa）"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null,
+      "_keys": [
+        "title:hyperplane projections of the unit ball of l p n|*"
+      ]
+    },
+    {
+      "lit_id": "000008",
+      "title": "Plane sections of convex bodies of maximal volume",
+      "type": "J",
+      "summary": "",
+      "path": "d0a9f661eb23-plane-sections-of-convex-bodies-of-maximal-volume.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000001"
+      ],
+      "dedup_key": "title:plane sections of convex bodies of maximal volume|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T18:05:14+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 135362,
+        "sha256": "d0a9f661eb23abe7ed7a7f439567940612700a8b1a910a2b9957a34484bcf832",
+        "error": null,
+        "fulltext": "ok",
+        "note": "候选期已抽读：51604 字（指纹 46c9bffe8419）"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null,
+      "_keys": [
+        "title:plane sections of convex bodies of maximal volume|*"
+      ]
+    },
+    {
+      "lit_id": "000009",
+      "title": "A cube slice that is not a zonoid",
+      "type": "J",
+      "summary": "",
+      "path": "e52716c8c83e-a-cube-slice-that-is-not-a-zonoid.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000001"
+      ],
+      "dedup_key": "title:a cube slice that is not a zonoid|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T18:05:14+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 141767,
+        "sha256": "e52716c8c83e9a0b31f2950cfb1a66ce11575a87c049ab5baf2338aa50f96201",
+        "error": null,
+        "fulltext": "ok",
+        "note": "候选期已抽读：25500 字（指纹 98c843cf4593）"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null,
+      "_keys": [
+        "title:a cube slice that is not a zonoid|*"
+      ]
+    },
+    {
+      "lit_id": "000010",
+      "title": "Non-central sections of convex bodies",
+      "type": "J",
+      "summary": "",
+      "path": "dc44da69df46-non-central-sections-of-convex-bodies.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000002"
+      ],
+      "dedup_key": "title:non central sections of convex bodies|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T18:05:14+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 389032,
+        "sha256": "dc44da69df463d5a1d26bc4def832725acbafa8471fd8f962c637558643eeb7c",
+        "error": null,
+        "fulltext": "ok",
+        "note": "候选期已抽读：47830 字（指纹 0caad710c1b4）"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null,
+      "_keys": [
+        "title:non central sections of convex bodies|*"
+      ]
+    },
+    {
+      "lit_id": "000011",
+      "title": "Non-central sections of the regular n-simplex",
+      "type": "J",
+      "summary": "",
+      "path": "bd62474e88b1-non-central-sections-of-the-regular-n-simplex.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000002"
+      ],
+      "dedup_key": "title:non central sections of the regular n simplex|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T18:05:14+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 396062,
+        "sha256": "bd62474e88b1554336390d94b25fd93291aa39da848aef1ae1c909ab4f235800",
+        "error": null,
+        "fulltext": "ok",
+        "note": "候选期已抽读：77301 字（指纹 4b6cb9fa328f）"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null,
+      "_keys": [
+        "title:non central sections of the regular n simplex|*"
+      ]
+    },
+    {
+      "lit_id": "000012",
+      "title": "An isoperimetric inequality for hyperplane sections of a convex body",
+      "type": "J",
+      "summary": "",
+      "path": "e835f5f27173-an-isoperimetric-inequality-for-hyperplane-sections-of-a-con.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000002"
+      ],
+      "dedup_key": "title:an isoperimetric inequality for hyperplane sections of a convex body|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T18:05:14+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 63316,
+        "sha256": "e835f5f2717355e4a9cf3c604a481d827c52e99adddde93944822ec9613d3529",
+        "error": null,
+        "fulltext": "ok",
+        "note": "候选期已抽读：14478 字（指纹 b608e8d18236）"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null,
+      "_keys": [
+        "title:an isoperimetric inequality for hyperplane sections of a convex body|*"
+      ]
+    },
+    {
+      "lit_id": "000013",
+      "title": "On a reverse form of the Brascamp-Lieb inequality",
+      "type": "J",
+      "summary": "",
+      "path": "e370bf2a2c26-on-a-reverse-form-of-the-brascamp-lieb-inequality.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000002"
+      ],
+      "dedup_key": "title:on a reverse form of the brascamp lieb inequality|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T18:05:14+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 333946,
+        "sha256": "e370bf2a2c26022664492b90d7860493a992455066a0ef8b8aade4fe1f79fda6",
+        "error": null,
+        "fulltext": "ok",
+        "note": "候选期已抽读：41500 字（指纹 886dc5538133）"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null,
+      "_keys": [
+        "title:on a reverse form of the brascamp lieb inequality|*"
+      ]
+    },
+    {
+      "lit_id": "000014",
+      "title": "The geometry of Minkowski spaces: a survey, part I",
+      "type": "J",
+      "summary": "",
+      "path": "6c8afb33fc1a-the-geometry-of-minkowski-spaces-a-survey-part-i.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000002"
+      ],
+      "dedup_key": "title:the geometry of minkowski spaces a survey part i|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T18:05:14+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 580480,
+        "sha256": "6c8afb33fc1a481de12d4ba8246229871b0b857d187385f10c55930c307af11d",
+        "error": null,
+        "fulltext": "ok",
+        "note": "候选期已抽读：122719 字（指纹 bf0f514c111c）"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null,
+      "_keys": [
+        "title:the geometry of minkowski spaces a survey part i|*"
+      ]
+    },
+    {
+      "_keys": [
+        "title:szarek and ball made simple|*"
+      ],
+      "lit_id": "000015",
+      "title": "Szarek and Ball made simple",
+      "type": "J",
+      "summary": "",
+      "path": "f69890810ecb-szarek-and-ball-made-simple.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000002"
+      ],
+      "dedup_key": "title:szarek and ball made simple|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T18:05:14+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 401803,
+        "sha256": "f69890810ecb62cdb23aab11e3d32745c36e9a54f7a759ba234d1b2f3f1399b3",
+        "error": null,
+        "fulltext": "ok",
+        "note": "候选期已抽读：41754 字（指纹 55daaab67861）"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 2,
+      "last_mine_error": null
+    },
+    {
+      "lit_id": "000016",
+      "title": "Estimates on the decay of the Laplace-Polya integral",
+      "type": "J",
+      "summary": "",
+      "path": "52375fd6b18c-estimates-on-the-decay-of-the-laplacepolya-integral.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000002"
+      ],
+      "dedup_key": "title:estimates on the decay of the laplace polya integral|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T18:05:15+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 473586,
+        "sha256": "52375fd6b18cfb23123115e3052328fe9447c9125c58d90945b8485eef105880",
+        "error": null,
+        "fulltext": "ok",
+        "note": "候选期已抽读：46184 字（指纹 47a229ef8dd9）"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null,
+      "_keys": [
+        "title:estimates on the decay of the laplace polya integral|*"
+      ],
+      "unprocessed_reason": "B 已经把这一篇登记成 1 条 statements（概念/命题，source_lit_id=000016）与 1 条 relations（lit_id=000016），只是 `processed` 位仍为假：该位只由 B.run_once 的领取路径翻，B 用 table.create / own.register_statement 手工登记不会翻它。⇒ 这一条已经消化过（证据就是上面那两行条数），可以带着这一格收工。"
+    },
+    {
+      "lit_id": "000017",
+      "title": "Paraconsistent dominated convergence",
+      "type": "J",
+      "summary": "",
+      "path": "c2398a987031-paraconsistent-dominated-convergence.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000002"
+      ],
+      "dedup_key": "title:paraconsistent dominated convergence|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T18:05:15+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 263234,
+        "sha256": "c2398a9870319b8663813d887911718128f5eb644991c2ae8b0dda9a253aff66",
+        "error": null,
+        "fulltext": "ok",
+        "note": "候选期已抽读：32001 字（指纹 c568e799abfd）"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null,
+      "_keys": [
+        "title:paraconsistent dominated convergence|*"
+      ]
+    },
+    {
+      "lit_id": "000018",
+      "title": "Generalized integrals and convergence theorems",
+      "type": "J",
+      "summary": "",
+      "path": "acb5dd61859c-generalized-integrals-and-convergence-theorems.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000002"
+      ],
+      "dedup_key": "title:generalized integrals and convergence theorems|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T18:05:15+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 313454,
+        "sha256": "acb5dd61859cf92d6a50eed7d0151f0d9f4c5d46b7bfeb085e3833cf63e2720b",
+        "error": null,
+        "fulltext": "ok",
+        "note": "候选期已抽读：25800 字（指纹 9846be2b6516）"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null,
+      "_keys": [
+        "title:generalized integrals and convergence theorems|*"
+      ]
+    },
+    {
+      "lit_id": "000019",
+      "title": "An introduction to measure theory",
+      "type": "J",
+      "summary": "",
+      "path": "64498329b65e-an-introduction-to-measure-theory.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000002"
+      ],
+      "dedup_key": "title:an introduction to measure theory|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T18:05:15+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 1338765,
+        "sha256": "64498329b65eea0145b3dec77ace89bc9f34df82ed4f35dd7c467125c2a3dfec",
+        "error": null,
+        "fulltext": "ok",
+        "note": "候选期已抽读：369088 字（指纹 1aae8934974a）"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null,
+      "_keys": [
+        "title:an introduction to measure theory|*"
+      ]
+    },
+    {
+      "lit_id": "000020",
+      "title": "On the volume of hyperplane sections of a d-cube",
+      "type": "J",
+      "summary": "",
+      "path": "08359e313da3-on-the-volume-of-hyperplane-sections-of-a-d-cube.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000003"
+      ],
+      "dedup_key": "title:on the volume of hyperplane sections of a d cube|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T18:05:15+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 227622,
+        "sha256": "08359e313da348ff28fea2486d12d158f23f11437f3a753f137f3dfa242e8d6c",
+        "error": null,
+        "fulltext": "ok",
+        "note": "候选期已抽读：7616 字（指纹 5e461ec78ba9）"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null,
+      "_keys": [
+        "title:on the volume of hyperplane sections of a d cube|*"
+      ],
+      "unprocessed_reason": "B 已经把这一篇登记成 3 条 statements（概念/命题，source_lit_id=000020）与 3 条 relations（lit_id=000020），只是 `processed` 位仍为假：该位只由 B.run_once 的领取路径翻，B 用 table.create / own.register_statement 手工登记不会翻它。⇒ 这一条已经消化过（证据就是上面那两行条数），可以带着这一格收工。"
+    },
+    {
+      "lit_id": "000021",
+      "title": "Maximal perimeters of polytope sections and origin-symmetry",
+      "type": "J",
+      "summary": "",
+      "path": "66cf70c235d2-maximal-perimeters-of-polytope-sections-and-origin-symmetry.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000003"
+      ],
+      "dedup_key": "title:maximal perimeters of polytope sections and origin symmetry|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T18:05:15+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 398399,
+        "sha256": "66cf70c235d261533c4c82cdcaf00d7319c27f293a0039886455e444fd4deac7",
+        "error": null,
+        "fulltext": "ok",
+        "note": "候选期已抽读：45025 字（指纹 7caa6a463bc7）"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null,
+      "_keys": [
+        "title:maximal perimeters of polytope sections and origin symmetry|*"
+      ],
+      "unprocessed_reason": "B 已经把这一篇登记成 2 条 statements（概念/命题，source_lit_id=000021）与 1 条 relations（lit_id=000021），只是 `processed` 位仍为假：该位只由 B.run_once 的领取路径翻，B 用 table.create / own.register_statement 手工登记不会翻它。⇒ 这一条已经消化过（证据就是上面那两行条数），可以带着这一格收工。"
+    },
+    {
+      "lit_id": "000022",
+      "title": "The cross-section body, plane sections of convex bodies and approximation of convex bodies",
+      "type": "J",
+      "summary": "",
+      "path": "92378bba55bc-the-cross-section-body-plane-sections-of-convex-bodies-and-a.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000003"
+      ],
+      "dedup_key": "title:the cross section body plane sections of convex bodies and approximation of convex bodies|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T18:05:15+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 1365231,
+        "sha256": "92378bba55bc2f92f0cd86786358c740994d1f4a0dd1caf0607e0139fb8280f7",
+        "error": null,
+        "fulltext": "ok",
+        "note": "候选期已抽读：57732 字（指纹 3af1d6a38cc2）"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null,
+      "_keys": [
+        "title:the cross section body plane sections of convex bodies and approximation of convex bodies|*"
+      ],
+      "unprocessed_reason": "B 已经把这一篇登记成 1 条 statements（概念/命题，source_lit_id=000022）与 1 条 relations（lit_id=000022），只是 `processed` 位仍为假：该位只由 B.run_once 的领取路径翻，B 用 table.create / own.register_statement 手工登记不会翻它。⇒ 这一条已经消化过（证据就是上面那两行条数），可以带着这一格收工。"
+    },
+    {
+      "lit_id": "000023",
+      "title": "Measure, integration & real analysis",
+      "type": "J",
+      "summary": "",
+      "path": "7a7ab07fb74f-measure-integration-real-analysis.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000003"
+      ],
+      "dedup_key": "title:measure integration real analysis|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T18:05:15+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 3539121,
+        "sha256": "7a7ab07fb74f5394c3180da51875ec467a0d89627321c8b2624b6b9b9585fb4e",
+        "error": null,
+        "fulltext": "ok",
+        "note": "候选期已抽读：373415 字（指纹 687cd0eb080b）"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null,
+      "_keys": [
+        "title:measure integration real analysis|*"
+      ]
+    },
+    {
+      "lit_id": "000024",
+      "title": "Measure theory and integration by and for the learner",
+      "type": "J",
+      "summary": "",
+      "path": "de5d051e7e09-measure-theory-and-integration-by-and-for-the-learner.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000003"
+      ],
+      "dedup_key": "title:measure theory and integration by and for the learner|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T18:05:16+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 2958073,
+        "sha256": "de5d051e7e09af3ac64abf13c826860686ebe74275f7aa7174f5c19530bc63d5",
+        "error": null,
+        "fulltext": "ok",
+        "note": "候选期已抽读：199643 字（指纹 1974aa329b80）"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null,
+      "_keys": [
+        "title:measure theory and integration by and for the learner|*"
+      ]
+    }
+  ]
+}

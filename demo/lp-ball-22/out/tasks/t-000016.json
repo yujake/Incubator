@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T18:37:17+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 3191,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"结论：有毛病（数学缺陷在第 10 步；`defect_step = 10`）。\\n\\n**第 10 步（必要步骤，可核缺陷）** 原文：「取 T(t,z) = (2^{1/2-1/p} t, z)，即 x = 2^{1/2-1/p} t、y = z，其行列式为 2^{1/2-1/p}；而 2^{1-p/2}·(2^{1/2-1/p})^p = 2^{1-p/2}·2^{p/2-1} = 1，故 T 把 {2^{1-p/2}|t|^p+|z|^p ≤ 1} 双射到 {|x|^p+|y|^p ≤ 1}。于是 A_p((1,1,0)/√2) = 2^{1/2-1/p}·area{|x|^p+|y|^p ≤ 1}」。问题：双射的映射方向写反了，而且“于是”给出的因子与其自述方向不自洽。记 c=2^{1/2-1/p}，E={2^{1-p/2}|t|^p+|z|^p≤1}，S={|t|^p+|z|^p≤1}。对 (t,z)∈S，像 (ct,z) 满足 2^{1-p/2}|ct|^p+|z|^p = 2^{1-p/2}·2^{p/2-1}|t|^p+|z|^p = |t|^p+|z|^p ≤ 1 ⇒ T(S)⊆E（实际上 T 把 S 双射到 E），即 T^{-1} 才是 E→S 的那个映射；反向取 c^p=2^{p/2-1} 而非 2^{1-p/2}，除 p=2 外推不出 |x|^p+|y|^p≤1。所以按稿面所写“T: E→S”再用 area(T(E))=|det T|·area(E) 只能得 area(E)=c^{-1}·area(S)，与稿面写的 c·area(S) 矛盾；结论 (iii) 的数值本身是对的（p=1 时 c·2=√2 与 (v) 一致），但这一步按写成后的样子推不出来。最小补法（二选一）：把方向改述为「T 把 {|t|^p+|z|^p≤1} 双射到 {2^{1-p/2}|t|^p+|z|^p≤1}」，再由 area(T(S))=|det T|·area(S) 得 area(E)=2^{1/2-1/p}·A_p(e_3)；或显式改用 T^{-1}(x,y)=(2^{1/p-1/2}x,y)（det=2^{1/p-1/2}）并相应写面积关系。\\n\\n**关于 `## 依赖` 一节（不作为本次退回的实质依据）**：工具还自动记录了四条 `citation_not_in_citable_pool`（第 3、4、5、7 步引 stmt:000017/000018/000016/000001，四条全是 kind=concept、grade=not_applicable、evidence_kind=heuristic，低于 pre_theorem 可引门槛，盘上也没有对应证明稿）。按派活说明，这一节下一轮清掉即可 —— 它不是这一份被判「有毛病」的理由，判定的实质理由只有上面第 10 步那一条；但这四条读数会留在台账里，清依赖时一并处理。\\n\\n**已逐行核过、未见缺陷的部分**：第 1 步（B_p^3 紧凸、面积良定）、第 2 步（极坐标面积公式）、第 3 步（ρ(w)=‖w‖_p^{-1}）、第 4 步（ρ(ψ)=‖cosψ·u+sinψ·v‖_p^{-1}，换基只作 ψ 的平移，积分不变）、第 5 步（A_p(n)=A_p(-n) 与带符号置换不变）、第 6 步（p=2 时 ‖·‖_2=1 ⇒ A_2=π）、第 7 步（A_p(e_3)=4∫_0^1(1-x^p)^{1/p}dx）、第 8 步（t=x^p 换元 ⇒ (4/p)B(1/p,1+1/p)=4Γ(1+1/p)²/Γ(1+2/p)，p=1、2、4 数值代入一致）、第 9 步（n^⊥ 上 2^{1-p/2}|t|^p+|z|^p≤1）、第 11 步（r(p)=2^{1/2-1/p} 的临界性与 (v) 的数值）。\\n\\n**签发状态**：负判，不写手稿签块、五元位第 3 位不动；判词落 `verifications/pending/<正文 sha>.jsonl#u-000001`，审阅报告 `verifications/reviews/v-review-000001.md` 已作为板项 t-000020 投给 F。改完第 10 步后把同一份稿重新送审即可。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\lp-ball-22\\\\runs\\\\V-20261124-183717-001.json\", \"messages\": [], \"outcome\": \"ok\", \"status\": \"done\", \"steps\": 8, \"stop_reason\": \"fina",
+ "payload_sha256": "7e2e1f5b7bda194a34e62e3759742f9a5b3980a14953ab68faaea6da34f6748e",
+ "readings": {},
+ "role": "V",
+ "status": "done",
+ "task_id": "t-000016"
+}

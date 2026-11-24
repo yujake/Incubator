@@ -1,0 +1,6 @@
+{"at": "2026-11-25T03:31:04+08:00", "branch": "waiting_no_children", "name": "G1", "owner": "t-000296", "reason": "论文 claim-6 定点修订与第 189 行 overclaim 收紧 + 重编（tex_sha256=a4174b2f…）均已交差，H 复审现行版判 accepted，名下无未消板项，不再派新活", "role": "G", "seq": 1, "task_id": "t-000297"}
+{"at": "2026-11-25T03:31:04+08:00", "branch": "waiting_no_children", "name": "G1", "owner": "t-000296", "reason": "论文 claim-6 定点修订与第 189 行 overclaim 收紧 + 重编（tex_sha256=a4174b2f…）均已交差，H 复审现行版判 accepted，名下无未消板项，不再派新活", "role": "G", "seq": 2, "task_id": "t-000309"}
+{"at": "2026-11-25T03:31:13+08:00", "branch": "waiting_no_children", "name": "H2", "owner": "t-000296", "reason": "doc:000001 现行版复审已交差（裁定 accepted、签名钉在 content_sha 66c671e9a0e7 上），名下无未消板项，不再派新活", "role": "H", "seq": 3, "task_id": "t-000306"}
+{"at": "2026-11-25T03:56:05+08:00", "branch": "waiting_no_children", "name": "E2", "owner": "t-000296", "reason": "收工前自动收尾：静默且无未消项（R9FIX-D5）", "role": "E", "seq": 4, "task_id": "t-000315"}
+{"at": "2026-11-25T03:56:06+08:00", "branch": "waiting_no_children", "name": "E1", "owner": "t-000296", "reason": "收工前自动收尾：静默且无未消项（R9FIX-D5）", "role": "E", "seq": 5, "task_id": "t-000319"}
+{"at": "2026-11-25T03:56:06+08:00", "branch": "waiting_no_children", "name": "G2", "owner": "t-000296", "reason": "收工前自动收尾：静默且无未消项（R9FIX-D5）", "role": "G", "seq": 6, "task_id": "t-000322"}

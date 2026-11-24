@@ -1,0 +1,9 @@
+{"at": "2026-11-24T21:32:59+08:00", "branch": "waiting_no_children", "name": "A1", "owner": "t-000011", "reason": "销号退场：waiting_no_children（发起 t-000011）", "role": "A", "seq": 1, "task_id": "t-000074"}
+{"at": "2026-11-24T21:33:03+08:00", "branch": "waiting_no_children", "name": "B1", "owner": "t-000011", "reason": "销号退场：waiting_no_children（发起 t-000011）", "role": "B", "seq": 2, "task_id": "t-000012"}
+{"at": "2026-11-24T21:33:03+08:00", "branch": "waiting_no_children", "name": "B1", "owner": "t-000011", "reason": "销号退场：waiting_no_children（发起 t-000011）", "role": "B", "seq": 3, "task_id": "t-000059"}
+{"at": "2026-11-24T21:33:03+08:00", "branch": "waiting_no_children", "name": "B1", "owner": "t-000011", "reason": "销号退场：waiting_no_children（发起 t-000011）", "role": "B", "seq": 4, "task_id": "t-000105"}
+{"at": "2026-11-24T21:33:03+08:00", "branch": "waiting_no_children", "name": "B1", "owner": "t-000011", "reason": "销号退场：waiting_no_children（发起 t-000011）", "role": "B", "seq": 5, "task_id": "t-000138"}
+{"at": "2026-11-24T21:33:03+08:00", "branch": "waiting_no_children", "name": "B1", "owner": "t-000011", "reason": "销号退场：waiting_no_children（发起 t-000011）", "role": "B", "seq": 6, "task_id": "t-000151"}
+{"at": "2026-11-24T21:33:03+08:00", "branch": "waiting_no_children", "name": "B1", "owner": "t-000011", "reason": "销号退场：waiting_no_children（发起 t-000011）", "role": "B", "seq": 7, "task_id": "t-000172"}
+{"at": "2026-11-24T21:33:12+08:00", "branch": "waiting_no_children", "name": "F1", "owner": "t-000011", "reason": "已交差收口（两份 V 签证明稿 + Δ 结构如实缺口），其子 V1 一并按由深到浅销号", "role": "F", "seq": 8, "task_id": "t-000015"}
+{"at": "2026-11-24T21:33:12+08:00", "branch": "waiting_no_children", "name": "F1", "owner": "t-000011", "reason": "已交差收口（两份 V 签证明稿 + Δ 结构如实缺口），其子 V1 一并按由深到浅销号", "role": "F", "seq": 9, "task_id": "t-000083"}

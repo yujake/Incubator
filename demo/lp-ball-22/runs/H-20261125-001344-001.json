@@ -1,0 +1,2023 @@
+{
+  "role": "H",
+  "task": "H：这一趟派给你的活是 —— 复审：我按你上一轮三条 findings 改完正文并重编了 PDF，请按 round_no 复核这一版（verify_fixes），逐条判这三条是否已修好，并给 documents doc_id=000001 一个新的裁决（通过就签，不通过就把仍然站不住的地方逐条落成新的 finding，写明行号与逐字引文）。改了什么：① finding 000000（section:4 过度声称）—— 把「the result of Theorem thm:zero explains why only these three directions can compete」收窄为只在「至少一个坐标为 0 的法向」这一类里成立，并写明三坐标都非零的情形只到数值观察；② finding 000001（section:4 + 附录 A 未定义 ordering cone）—— 在第 2 节 Definitions and notation 里补了基本域 C={n=(a,b,c): 0<=a<=b<=c}、它由 Sigma_3^± 不变性得到、以及两条边界弧 alpha(t)=(0,1,t)/sqrt(1+t^2)、beta(t)=(1,1,t)/sqrt(2+t^2) 与端点 t=0、t=1、t->infinity 的含义；③ finding 000002（references）—— bibitem{critical} 换成可核条目 G. Ambrus, Critical central sections of the cube, arXiv:2107.14778v3 (2023), 12 pp.（作者/编号/年份来自 lit:000003 首部核实的逐字读数，交接手稿 000039）。这一版 main.tex 的 sha256=e2c7a5277ef11a3b8af108945d903413b01a1e63cb62defcefc5462bbd670d8d，回执里 tex_sha256 应与之一致、pages=10、pdf_bytes=314797。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "review.list_findings",
+        "args": {
+          "doc_id": "000001"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "review.list_findings",
+        "ok": true,
+        "data": {
+          "count": 3,
+          "findings": [
+            {
+              "finding_id": "000000",
+              "doc_id": "000001",
+              "kind": "overclaim",
+              "level": "warning",
+              "target": "section:4",
+              "message": "第 4 节把 Theorem thm:zero 说成「解释了为什么只有这三个方向能竞争」，但 thm:zero 只覆盖「至少一个坐标为 0」的法向，对三个坐标都非零的法向没有给出任何结论，这句话的强度超过它引的证据。",
+              "evidence": "main.tex 第 185 行逐字：「the result of Theorem~\\ref{thm:zero} explains why only these three directions can compete: for normals with a vanishing coordinate the area is an explicit decreasing function of $|a|^p+|b|^p$, so within that class the extremum is always at a coordinate vector or at the face diagonal, never in between.」而 thm:zero（main.tex 第 97–115 行；台账 stmt:000035）的前提是「at least one coordinate equal to 0」；三个坐标都非零的情形在本文里只有附录 A（行 218–224）的数值读数，正文第 4 节同一页自己也承认「the absence of a strictly interior maximizing direction is only verified numerically」（行 183）。同一节行 193 还把它列为 open problem (a)。",
+              "status": "open",
+              "round": 1,
+              "resolution_note": "[manual] 手工判词：H 自己读出来的发现（record_finding 落库）",
+              "superseded_by": ""
+            },
+            {
+              "finding_id": "000001",
+              "doc_id": "000001",
+              "kind": "garbled",
+              "level": "warning",
+              "target": "section:4",
+              "message": "第 4 节用一个从未定义过的「ordering cone $0\\le a\\le b\\le c$」描述数值扫描的参数化（第 183 行、第 193 行、附录第 220 行），读者无从知道 a,b,c 指什么、凭什么可以假定这一顺序、两条边界弧 $(0,1,t)$ 与 $(1,1,t)$ 里的 t 又是什么——这三处都缺定义。",
+              "evidence": "逐字引文（main.tex 第 183 行）：「by local refinement along the two boundary arcs of the ordering cone $0\\le a\\le b\\le c$」；第 193 行「the critical points of $A_p$ on the ordering cone」；附录第 220 行「parametrised by the ordering cone $0\\le a\\le b\\le c$ together with the two boundary arcs $(0,1,t)$ and $(1,1,t)$, $t\\in[0,1]$」。第 2 节（Definitions and notation，第 30–54 行）只定义了 $B_p^3$、$A_p(n)$、$e_n(\\psi)$、$\\Sigma_3^{\\pm}$、$u,v$，没有定义这个锥、也没有写出「由 $\\Sigma_3^{\\pm}$ 不变性可设法向各分量满足 $0\\le a\\le b\\le c$」这一步约化；按我在正文里的通读，该词在正文首次出现即在第 4 节。",
+              "status": "open",
+              "round": 1,
+              "resolution_note": "[manual] 手工判词：H 自己读出来的发现（record_finding 落库）",
+              "superseded_by": ""
+            },
+            {
+              "finding_id": "000002",
+              "doc_id": "000001",
+              "kind": "garbled",
+              "level": "warning",
+              "target": "references",
+              "message": "参考文献项 \\bibitem{critical} 缺作者与出处，条目里还写着内部的核验备注（「Author metadata for this item could not be verified from the sources available to us」）——读者据此找不到这篇文献，而正文第 1 节与第 4 节至少两处 \\cite{critical} 把它当作已知工作引用，两处因此都不可核。",
+              "evidence": "逐字引文（main.tex 第 207 行）：「\\bibitem{critical} \\emph{Critical central sections of the cube}, preprint. (Author metadata for this item could not be verified from the sources available to us; the title is quoted as recorded.)」；正文引它的位置：第 1 节「The cube's critical central sections and the extremal sections of subspaces of $L_p$ are treated in \\cite{critical} and \\cite{eskenazis}.」与第 4 节 Relation with the literature 一段的 \\cite{ball,konig,grzaslewicz,critical,eskenazis}。台账侧：literature 里有同名行 lit:000003「Critical central sections of the cube」（table.list 读数），补齐元数据的材料在盘上是有的。",
+              "status": "open",
+              "round": 1,
+              "resolution_note": "[manual] 手工判词：H 自己读出来的发现（record_finding 落库）",
+              "superseded_by": ""
+            }
+          ]
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 51072,
+        "prompt_cache_miss_tokens": 1801,
+        "tokens_in": 52873,
+        "tokens_out": 163,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000265"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/package/main.tex",
+          "max_lines": 400
+        },
+        "why": "读这一版正文，逐条核三条 finding 是否真改好"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "\\documentclass[11pt]{article}\n\\usepackage[margin=2.5cm]{geometry}\n\\usepackage{amsmath,amssymb,amsthm}\n\\usepackage{booktabs}\n\\usepackage{url}\n\\usepackage[hidelinks]{hyperref}\n\\theoremstyle{plain}\n\\newtheorem{theorem}{Theorem}\n\\numberwithin{theorem}{section}\n\n\\title{Maximal-area central sections of the three-dimensional $\\ell_p$ ball}\n\\author{G}\n\\date{}\n\n\\begin{document}\n\\maketitle\n\n\\begin{abstract}\nWe study the two-dimensional area of central hyperplane sections of the unit ball $B_p^3$ of $\\ell_p^3$, and we compare three explicit families of normals: the coordinate direction $e_3$, the body diagonal $(1,1,1)/\\sqrt3$ and the face diagonal $(1,1,0)/\\sqrt2$. We record an integral representation of the section area that is valid for every normal, and we derive closed or single-integral expressions for the three families: $A_{\\mathrm{coord}}(p)=4\\Gamma(1+1/p)^2/\\Gamma(1+2/p)$, a one-dimensional integral for the body-diagonal section, and the scaled planar expression $2^{1/2-1/p}\\,4\\Gamma(1+1/p)^2/\\Gamma(1+2/p)$ for the face-diagonal section. For normals with a vanishing coordinate we obtain the exact formula $A_p(n)=A_{\\mathrm{coord}}(p)\\,(\\sum_{j\\ne i}|n_j|^p)^{-1/p}$, from which the comparison with the coordinate direction follows at once. We further show that the difference between the face-diagonal and the body-diagonal areas is continuous, vanishes at $p=2$ and is positive both at $p=1$ and in the limit $p\\to\\infty$, so that the face-diagonal direction dominates for all sufficiently large $p$. The transition between the body-diagonal and the face-diagonal regimes is located numerically at $p_*\\approx 4.998215596862$; the three-regime picture as a whole is supported by numerics but is not proved here. All supporting computations are collected in an appendix.\n\\end{abstract}\n\n\\section{Introduction}\n\nThe determination of extremal hyperplane sections of concrete convex bodies is a classical and still active problem. For the unit cube $Q_n=[-1/2,1/2]^n$, Ball \\cite{ball} …（落档截断，原 31657 字）",
+        "error": "",
+        "meta": {
+          "path": "out/package/main.tex",
+          "encoding": "utf-8",
+          "bytes_read": 31657,
+          "total_bytes": 31657,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 229,
+          "total_lines": 229,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 1–229 行（共 229 行）",
+          "sha256": "e2c7a5277ef11a3b8af108945d903413b01a1e63cb62defcefc5462bbd670d8d"
+        },
+        "multi_call": {
+          "turn_index": 1,
+          "call_index": 0,
+          "calls": 2,
+          "step_index": 1
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 52096,
+        "prompt_cache_miss_tokens": 2071,
+        "tokens_in": 54167,
+        "tokens_out": 189,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000265"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/package/COMPILE-RECEIPT.json"
+        },
+        "why": "核回执的 tex_sha256 / pages / pdf_bytes 是否与派活给的一致"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "{\n  \"tex_sha256\": \"e2c7a5277ef11a3b8af108945d903413b01a1e63cb62defcefc5462bbd670d8d\",\n  \"pdf_sha256\": \"18f6ce1a43995c8d1137533991e3a7d90168b8a1f9c9766602556b99f2003914\",\n  \"engine\": \"pdflatex\",\n  \"runs\": 2,\n  \"exit_codes\": [\n    0,\n    0\n  ],\n  \"pages\": 10,\n  \"pdf_bytes\": 314797,\n  \"pdf_fresh\": true,\n  \"compiled_at\": \"2026-11-25T00:10:55+08:00\",\n  \"written_by\": \"agentflow.papercompile（框架内置编译）\",\n  \"stderr_tail\": \"\",\n  \"compile_log\": \"compile-20261125-001055.log\",\n  \"compile_stderr_log\": \"\"\n}\n",
+        "error": "",
+        "meta": {
+          "path": "out/package/COMPILE-RECEIPT.json",
+          "encoding": "utf-8",
+          "bytes_read": 512,
+          "total_bytes": 512,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 18,
+          "total_lines": 18,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 18 行",
+          "sha256": "70609471917c7b78969a40564b6b6701189d0e97abeb4a6307652c603c8b0090"
+        },
+        "warn": "这一步给了 2 条调用，已按顺序逐条：第 1 条 fs.read 成功；第 2 条 fs.read 成功。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 1,
+          "call_index": 1,
+          "calls": 2,
+          "step_index": 2,
+          "summary": "这一步给了 2 条调用，已按顺序逐条：第 1 条 fs.read 成功；第 2 条 fs.read 成功。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 1,
+            "calls": 2,
+            "items": 2,
+            "steps": [
+              1,
+              2
+            ],
+            "executed": 2,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000265"
+    },
+    {
+      "index": 3,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/package/main.tex",
+          "start_line": 55,
+          "max_lines": 80
+        },
+        "why": "读第 2 节其余部分与第 3 节开头，核 finding 000001 的补定义是否成立"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "\\item[(i)] for every orthonormal basis $\\{u,v\\}$ of $n^{\\perp}$,\n\\[\nA_p(n)=\\frac12\\int_0^{2\\pi}\\big\\|\\cos\\psi\\,u+\\sin\\psi\\,v\\big\\|_p^{-2}\\,d\\psi;\n\\]\nthe right-hand side does not depend on the choice of the basis, $A_p$ depends only on the plane $n^{\\perp}$ (so that $A_p(n)=A_p(-n)$), and $A_p$ is invariant under $\\Sigma_3^{\\pm}$;\n\\item[(ii)] $A_{\\mathrm{coord}}(p)=4\\Gamma(1+1/p)^2/\\Gamma(1+2/p)$;\n\\item[(iii)] $A_{\\mathrm{face}}(p)=2^{1/2-1/p}\\,4\\Gamma(1+1/p)^2/\\Gamma(1+2/p)$, hence $A_{\\mathrm{face}}(p)<A_{\\mathrm{coord}}(p)$ for $p<2$, $A_{\\mathrm{face}}(2)=A_{\\mathrm{coord}}(2)$, and $A_{\\mathrm{face}}(p)>A_{\\mathrm{coord}}(p)$ for $p>2$;\n\\item[(iv)] for $p=2$ one has $A_2(n)=\\pi$ for every unit vector $n$;\n\\item[(v)] for $p=1$ one has $A_{\\mathrm{coord}}(1)=2$, $A_{\\mathrm{face}}(1)=\\sqrt2$ and $A_1(d)=3\\sqrt3/4$.\n\\end{enumerate}\n\\end{theorem}\n\n\\begin{proof}\n(1) \\emph{Polar coordinates in the section plane.} Fix a unit normal $n$ and an orthonormal basis $\\{u,v\\}$ of $n^{\\perp}$. Every $x\\in n^{\\perp}$ has a unique representation $x=r\\,e_n(\\psi)$ with $r\\ge0$ and $\\psi\\in[0,2\\pi)$, and the area element of the plane in these coordinates is $r\\,dr\\,d\\psi$. By positive homogeneity of $\\|\\cdot\\|_p$ we have $\\|x\\|_p=r\\,\\|e_n(\\psi)\\|_p$, so $x\\in B_p^3$ holds exactly when $r\\le\\|e_n(\\psi)\\|_p^{-1}$. Therefore\n\\[\nA_p(n)=\\int_0^{2\\pi}\\int_0^{\\|e_n(\\psi)\\|_p^{-1}}r\\,dr\\,d\\psi=\\frac12\\int_0^{2\\pi}\\big\\|e_n(\\psi)\\big\\|_p^{-2}\\,d\\psi,\n\\]\nwhich is the stated formula. If $\\{u',v'\\}$ is another orthonormal basis of $n^{\\perp}$, then $u'=\\cos\\alpha\\,u+\\sin\\alpha\\,v$ and $v'=-\\sin\\alpha\\,u+\\cos\\alpha\\,v$ for some $\\alpha$, whence $\\cos\\psi\\,u'+\\sin\\psi\\,v'=e_n(\\psi+\\alpha)$; the substitution $\\psi\\mapsto\\psi+\\alpha$ over a full period leaves the integral unchanged, so the value does not depend on the basis. Replacing $n$ by $-n$ leaves the plane unchanged, and every $S\\in\\Sigma_3^{\\pm}$ satisfies $S(B_p^3)=B_p^3$ and preserves areas and orthogonality, so $A_p(Sn)=A_p(n)$.\n\n(2) \\e…（落档截断，原 8707 字）",
+        "error": "",
+        "meta": {
+          "path": "out/package/main.tex",
+          "encoding": "utf-8",
+          "bytes_read": 31657,
+          "total_bytes": 31657,
+          "truncated": false,
+          "start_line": 55,
+          "lines_read": 80,
+          "total_lines": 229,
+          "next_line": 135,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 55–134 行（共 229 行）；续读 start_line=135",
+          "sha256": "e2c7a5277ef11a3b8af108945d903413b01a1e63cb62defcefc5462bbd670d8d"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 53376,
+        "prompt_cache_miss_tokens": 3668,
+        "tokens_in": 57044,
+        "tokens_out": 273,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000265"
+    },
+    {
+      "index": 4,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/package/main.tex",
+          "start_line": 40,
+          "max_lines": 20
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "and we abbreviate\n\\[\nA_{\\mathrm{coord}}(p):=A_p(e_3),\\qquad A_{\\mathrm{diag}}(p):=A_p(d),\\qquad A_{\\mathrm{face}}(p):=A_p(f),\\qquad \\Delta(p):=A_{\\mathrm{face}}(p)-A_{\\mathrm{diag}}(p).\n\\]\nFor a unit normal $n$ and an orthonormal basis $\\{u,v\\}$ of $n^{\\perp}$ we write $e_n(\\psi)=\\cos\\psi\\,u+\\sin\\psi\\,v$ for $\\psi\\in[0,2\\pi)$, so that $e_n(\\psi)$ runs once around the unit circle of the plane $n^{\\perp}$. The group of signed coordinate permutations of $\\mathbb{R}^3$ is denoted $\\Sigma_3^{\\pm}$; it has $48$ elements and acts by isometries of $B_p^3$. Since $A_p$ is invariant under $\\Sigma_3^{\\pm}$, the search for maximizing normals is carried out on the fundamental domain $\\mathcal{C}=\\{n=(a,b,c):0\\le a\\le b\\le c\\}$ of the ordering cone: every unit normal is carried into $\\mathcal{C}$ by a signed permutation, and the vertices of $\\mathcal{C}$ are the coordinate directions. We call $\\alpha(t)=(0,1,t)/\\sqrt{1+t^2}$ and $\\beta(t)=(1,1,t)/\\sqrt{2+t^2}$, $t\\in[0,1]$, the two boundary arcs of $\\mathcal{C}$; their endpoints are $\\alpha(0)=\\beta(0)=f$, $\\beta(1)=d$ and $\\alpha(t)\\to e_3$ as $t\\to\\infty$. In the plane $H=\\{x+y+z=0\\}$ we use the orthonormal basis\n\\[\nu=\\frac{(1,-1,0)}{\\sqrt2},\\qquad v=\\frac{(1,1,-2)}{\\sqrt6},\n\\]\nwhose orthonormality is checked in the proof of Theorem~\\ref{thm:diag}. Finally, for $p=\\infty$ the body $B_\\infty^3=[-1,1]^3$ is the cube of side length $2$, and its section by the plane $H$ is the regular hexagon of area $3\\sqrt3$.\n\n\\section{Main results}\n\n\\begin{theorem}[Integral representation and the coordinate and face-diagonal closed forms]\\label{thm:integral}\nLet $1\\le p<\\infty$, let $n\\in\\mathbb{R}^3$ be a unit vector and let $A_p(n)$ be the area of $B_p^3\\cap n^{\\perp}$. Then:\n\\begin{enumerate}\n\\item[(i)] for every orthonormal basis $\\{u,v\\}$ of $n^{\\perp}$,\n\\[\nA_p(n)=\\frac12\\int_0^{2\\pi}\\big\\|\\cos\\psi\\,u+\\sin\\psi\\,v\\big\\|_p^{-2}\\,d\\psi;\n\\]\nthe right-hand side does not depend on the choice of the basis, $A_p$ depends only on the plane $n^{\\perp…（落档截断，原 2078 字）",
+        "error": "",
+        "meta": {
+          "path": "out/package/main.tex",
+          "encoding": "utf-8",
+          "bytes_read": 31657,
+          "total_bytes": 31657,
+          "truncated": false,
+          "start_line": 40,
+          "lines_read": 20,
+          "total_lines": 229,
+          "next_line": 60,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 40–59 行（共 229 行）；续读 start_line=60",
+          "sha256": "e2c7a5277ef11a3b8af108945d903413b01a1e63cb62defcefc5462bbd670d8d"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 56192,
+        "prompt_cache_miss_tokens": 3852,
+        "tokens_in": 60044,
+        "tokens_out": 352,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000265"
+    },
+    {
+      "index": 5,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/package/main.tex",
+          "start_line": 135,
+          "max_lines": 45
+        },
+        "why": "读第 4 节，核 finding 000000 的收窄是否真落到正文（行号与逐字引文）"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "\n\\begin{proof}\n(1) \\emph{The basis of the plane.} Direct computation gives $\\|u\\|^2=(1+1)/2=1$, $\\|v\\|^2=(1+1+4)/6=1$, $u\\cdot v=(-1+1+0)/\\sqrt{12}=0$, $u\\cdot(1,1,1)=0$ and $v\\cdot(1,1,1)=(1+1-2)/\\sqrt6=0$. Hence $\\{u,v\\}$ is an orthonormal basis of $H=d^{\\perp}$, and $(s,t)\\mapsto su+tv$ is an isometry of $\\mathbb{R}^2$ onto $H$.\n\n(2) \\emph{The plane integral.} Theorem~\\ref{thm:integral}(i) applied to the unit normal $d$ and to this basis gives at once $A_{\\mathrm{diag}}(p)=\\frac12\\int_0^{2\\pi}\\|e(\\theta)\\|_p^{-2}d\\theta$; for completeness, the same formula follows directly by writing a point of $H$ as $r\\,e(\\theta)$ with area element $r\\,dr\\,d\\theta$ and using the homogeneity of $\\|\\cdot\\|_p$, exactly as in step (1) of the proof of Theorem~\\ref{thm:integral}.\n\n(3) \\emph{The three coordinates of $e(\\theta)$.} From the components of $u$ and $v$,\n\\[\ne_1=\\frac{\\cos\\theta}{\\sqrt2}+\\frac{\\sin\\theta}{\\sqrt6}=\\frac{\\sqrt3\\cos\\theta+\\sin\\theta}{\\sqrt6},\\quad\ne_2=-\\frac{\\cos\\theta}{\\sqrt2}+\\frac{\\sin\\theta}{\\sqrt6}=-\\frac{\\sqrt3\\cos\\theta-\\sin\\theta}{\\sqrt6},\\quad\ne_3=-\\frac{2\\sin\\theta}{\\sqrt6}.\n\\]\nUsing $\\sqrt3\\cos\\theta+\\sin\\theta=2\\cos(\\theta-\\pi/6)$ and $\\sqrt3\\cos\\theta-\\sin\\theta=2\\cos(\\theta+\\pi/6)$ we get $|e_1|=|\\cos(\\theta-\\pi/6)|/\\sqrt{3/2}$, $|e_2|=|\\cos(\\theta+\\pi/6)|/\\sqrt{3/2}$ and $|e_3|=\\sqrt{2/3}\\,|\\sin\\theta|$. Factoring $(3/2)^{-1/2}$ out of the three entries yields\n\\[\n\\|e(\\theta)\\|_p^p=\\Big(\\tfrac32\\Big)^{-p/2}\\big(|\\cos(\\theta-\\pi/6)|^p+|\\cos(\\theta+\\pi/6)|^p+|\\sin\\theta|^p\\big),\n\\]\nso $\\|e(\\theta)\\|_p^{-2}=\\tfrac32\\big(|\\cos(\\theta-\\pi/6)|^p+|\\cos(\\theta+\\pi/6)|^p+|\\sin\\theta|^p\\big)^{-2/p}$, and multiplying by $\\frac12$ gives the second equality of (i).\n\n(4) \\emph{The planar form.} A point of $H$ is $(x,y,-x-y)$ with $(x,y)\\in\\mathbb{R}^2$, and the map $(x,y)\\mapsto(x,y,-x-y)$ has Jacobian $\\sqrt3$ in the sense that it multiplies two-dimensional areas by $\\sqrt3$. Hence $A_{\\mathrm{diag}}(p)=\\sqrt3\\,\\mathrm{area}\\{(x,y):|x|^p+|y|^p+|x+y|^p\\le1\\}$, …（落档截断，原 5822 字）",
+        "error": "",
+        "meta": {
+          "path": "out/package/main.tex",
+          "encoding": "utf-8",
+          "bytes_read": 31657,
+          "total_bytes": 31657,
+          "truncated": false,
+          "start_line": 135,
+          "lines_read": 45,
+          "total_lines": 229,
+          "next_line": 180,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 135–179 行（共 229 行）；续读 start_line=180",
+          "sha256": "e2c7a5277ef11a3b8af108945d903413b01a1e63cb62defcefc5462bbd670d8d"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 59264,
+        "prompt_cache_miss_tokens": 2088,
+        "tokens_in": 61352,
+        "tokens_out": 319,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000265"
+    },
+    {
+      "index": 6,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/package/main.tex",
+          "start_line": 180,
+          "max_lines": 50
+        },
+        "why": "读第 4 节与参考文献，核 finding 000000 与 000002"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "\nThe four statements of Section~3 settle the comparison of the coordinate direction with the face-diagonal direction on the set of normals having a vanishing coordinate (Theorem~\\ref{thm:zero}), give the exact body-diagonal area as a one-dimensional integral together with its special values (Theorem~\\ref{thm:diag}), and show that the face-diagonal direction dominates the body-diagonal one for all sufficiently large $p$ (Theorem~\\ref{thm:delta}). The natural next question is what happens in the intermediate range, and there the answer we can offer is numerical rather than analytic.\n\n\\emph{Numerically supported strong conjecture (not proved here).} For $1\\le p<\\infty$ the maximal area of a central section of $B_p^3$ is attained at one of the three normals $e_3$, $d$, $f$, and the winner depends on $p$ in three regimes: for $1\\le p<2$ the coordinate direction $e_3$ gives the largest area; for $2<p<p_*$ the body diagonal $d$ gives the largest area; for $p>p_*$ the face diagonal $f$ gives the largest area. At $p=2$ all directions give the same area $\\pi$. The threshold is $p_*=4.998215596862$ (numerically), the unique solution of $A_{\\mathrm{diag}}(p)=A_{\\mathrm{face}}(p)$ in $(1,\\infty)$. This statement is supported by a sweep over twelve values of $p$, by local refinement along the two boundary arcs of the ordering cone $0\\le a\\le b\\le c$, and by bisection on both thresholds; it is not established by proof, and in particular the absence of a strictly interior maximizing direction is only verified numerically. The word ``conjecture'' is meant literally: the three-regime description should not be cited as a theorem.\n\nThree features deserve comment. First, the two thresholds are of different natures. The threshold $p=2$ is exact and follows from Theorem~\\ref{thm:integral}(iii): the face-diagonal factor $2^{1/2-1/p}$ passes through $1$ exactly at $p=2$, and at $p=2$ the body is Euclidean, so all central sections are congruent discs. The threshold $p_*$ is not of this type:…（落档截断，原 10477 字）",
+        "error": "",
+        "meta": {
+          "path": "out/package/main.tex",
+          "encoding": "utf-8",
+          "bytes_read": 31657,
+          "total_bytes": 31657,
+          "truncated": false,
+          "start_line": 180,
+          "lines_read": 50,
+          "total_lines": 229,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 180–229 行（共 229 行）",
+          "sha256": "e2c7a5277ef11a3b8af108945d903413b01a1e63cb62defcefc5462bbd670d8d"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 60544,
+        "prompt_cache_miss_tokens": 3733,
+        "tokens_in": 64277,
+        "tokens_out": 129,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000265"
+    },
+    {
+      "index": 7,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/package/main.tex",
+          "start_line": 205,
+          "max_lines": 25
+        },
+        "why": "读参考文献段，核 finding 000002 的 \\\\bibitem{critical} 是否已换成可核条目"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "\\bibitem{grzaslewicz} R.~Grz\\'slewicz, \\emph{Plane sections of the unit ball of $L_p$}, Acta Math. Hungar. \\textbf{52} (1988), no.~3--4, 219--227.\n\n\\bibitem{ambrus} G.~Ambrus, \\emph{Critical central sections of the cube}, arXiv:2107.14778v3 (2023), 12~pp.\n\n\\bibitem{eskenazis} A.~Eskenazis, \\emph{On extremal sections of subspaces of $L_p$}, preprint.\n\n\\end{thebibliography}\n\n\\appendix\n\\section{Computational evidence}\\label{app:computational}\n\nThis appendix documents the computations behind the numerical statements of Section~4. All programs are run from the repository root; the paths are relative to it.\n\n\\paragraph{Quadrature kernel and its self-check.} All section areas are evaluated in polar coordinates in the section plane, by a tanh-sinh (double-exponential) quadrature applied on panels whose breakpoints are the zeros of $A\\cos\\psi+B\\sin\\psi$ and the crossings $|w_i|=|w_j|$ of the three coordinate functions, so that the integrand is real-analytic on each panel. The kernel is validated in \\texttt{exp:000003} with the program \\path{code/exp/lpsec_validate.py}: at $p=2$ every tested normal returns the area $\\pi$ with deviation at most $10^{-15}$; at $p=1$ the values agree with the exact edge-clipping values of the octahedron ($2$ for the coordinate normal, $3\\sqrt3/4$ for the body diagonal, $\\sqrt2$ for the face diagonal) to $10^{-15}$; the coordinate areas agree with $4\\Gamma(1+1/p)^2/\\Gamma(1+2/p)$ to a relative deviation of at most $10^{-13}$; the computed areas are invariant under rotation of the basis of the section plane to $10^{-12}$; and an independent nested Simpson scheme converges to the polar values within its own discretisation error.\n\n\\paragraph{Sweep over $p$.} The program \\path{code/exp/lpsec_sweep.py} sweeps the twelve values $p\\in\\{1.05,1.1,1.2,1.5,2,2.5,3,4,5,8,16,1000\\}$ and evaluates $A_p(n)$ on a grid of the unit sphere of normals, parametrised by the ordering cone $0\\le a\\le b\\le c$ together with the two boundary arcs $(0,1,t)$ and $(1,1,t)$, $…（落档截断，原 4079 字）",
+        "error": "",
+        "meta": {
+          "path": "out/package/main.tex",
+          "encoding": "utf-8",
+          "bytes_read": 31657,
+          "total_bytes": 31657,
+          "truncated": false,
+          "start_line": 205,
+          "lines_read": 25,
+          "total_lines": 229,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 205–229 行（共 229 行）",
+          "sha256": "e2c7a5277ef11a3b8af108945d903413b01a1e63cb62defcefc5462bbd670d8d"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 63488,
+        "prompt_cache_miss_tokens": 2614,
+        "tokens_in": 66102,
+        "tokens_out": 435,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000265"
+    },
+    {
+      "index": 8,
+      "shape": "tool",
+      "payload": {
+        "name": "review.scan",
+        "args": {
+          "kinds": [
+            "cites",
+            "refs",
+            "inputs",
+            "proofs",
+            "duplicates",
+            "text_integrity",
+            "ledger_match"
+          ],
+          "project": ".\""
+        },
+        "why": "这一版改过 bibitem（critical→ambrus），必须机器核 \\cite 键是否还解析得上；同时取定理/台账读数供复审"
+      },
+      "result": {
+        "tool": "review.scan",
+        "ok": true,
+        "data": {
+          "checked": false,
+          "kinds": [
+            "cites",
+            "refs",
+            "inputs",
+            "proofs",
+            "duplicates",
+            "text_integrity",
+            "ledger_match"
+          ],
+          "findings": [],
+          "counts": {
+            "files": 1,
+            "findings": 0,
+            "by_kind": {
+              "cites": 0,
+              "refs": 0,
+              "inputs": 0,
+              "proofs": 0,
+              "duplicates": 0,
+              "text_integrity": 0,
+              "ledger_match": 0
+            },
+            "by_severity": {
+              "error": 0,
+              "warning": 0,
+              "info": 0
+            },
+            "facts": {
+              "cite_keys": 0,
+              "bibitem_keys": 0,
+              "uncited": 0,
+              "cite_commands": [
+                "cite",
+                "citep",
+                "citet",
+                "citealp",
+                "citeauthor",
+                "citeyear",
+                "nocite"
+              ],
+              "ref_keys": 0,
+              "label_keys": 0,
+              "unused_labels": 0,
+              "ref_commands": [
+                "ref",
+                "eqref",
+                "autoref",
+                "pageref",
+                "cref",
+                "Cref"
+              ],
+              "files_read": 0,
+              "directives": 0,
+              "proof_envs": 0,
+              "statement_envs": 0,
+              "proof_without_statement": 0,
+              "statement_without_proof": 0,
+              "proof_unclosed": 0,
+              "statement_env_names": [
+                "corollary",
+                "lemma",
+                "proposition",
+                "theorem"
+              ],
+              "labels": 0,
+              "duplicate_labels": 0,
+              "newtheorem_names": 0,
+              "duplicate_newtheorem": 0,
+              "cjk": 0,
+              "control": 0,
+              "zero_width": 0,
+              "replacement": 0,
+              "bidi": 0,
+              "nbsp": 0,
+              "statement_ledger_rows": 114,
+              "ledger_propositions": 14,
+              "ledger_theorem_kinds": 5,
+              "ledger_theorem_kinds_projected": 5,
+              "mapping_rows": 0,
+              "statement_surplus": [],
+              "mapping_state": "unknown"
+            }
+          },
+          "bad": [
+            {
+              "kind": "cites",
+              "reason": "没有可读的正文 ⇒ 这一档没查成（不是「没有引用」）"
+            },
+            {
+              "kind": "refs",
+              "reason": "没有可读的正文 ⇒ 这一档没查成"
+            },
+            {
+              "kind": "inputs",
+              "reason": "没有 main.tex ⇒ 无从跟 \\input（这一档没查成，不是「没有 \\input」）"
+            },
+            {
+              "kind": "proofs",
+              "reason": "没有可读的正文 ⇒ 这一档没查成"
+            },
+            {
+              "kind": "duplicates",
+              "reason": "没有可读的正文 ⇒ 这一档没查成"
+            },
+            {
+              "kind": "text_integrity",
+              "reason": "paths 是空的（或不是数组）⇒ 这一趟什么都没扫，不是「查过了、干净」"
+            },
+            {
+              "kind": "ledger_match",
+              "reason": "这个项目没有论文正文（D:\\Incubator\\projects\\lp-ball-22\\.\"\\out\\package\\main.tex 不在盘上），论文包里也没有对应表 —— 这一格不适用（不是通过）"
+            }
+          ],
+          "detail": [
+            {
+              "kind": "cites",
+              "checked": false,
+              "reason": "没有可读的正文 ⇒ 这一档没查成（不是「没有引用」）",
+              "scanned": [],
+              "counts": {
+                "findings": 0
+              },
+              "returned": 0
+            },
+            {
+              "kind": "refs",
+              "checked": false,
+              "reason": "没有可读的正文 ⇒ 这一档没查成",
+              "scanned": [],
+              "counts": {
+                "findings": 0
+              },
+              "returned": 0
+            },
+            {
+              "kind": "inputs",
+              "checked": false,
+              "reason": "没有 main.tex ⇒ 无从跟 \\input（这一档没查成，不是「没有 \\input」）",
+              "scanned": [],
+              "counts": {
+                "findings": 0
+              },
+              "returned": 0
+            },
+            {
+              "kind": "proofs",
+              "checked": false,
+              "reason": "没有可读的正文 ⇒ 这一档没查成",
+              "scanned": [],
+              "counts": {
+                "findings": 0
+              },
+              "returned": 0
+            },
+            {
+              "kind": "duplicates",
+              "checked": false,
+              "reason": "没有可读的正文 ⇒ 这一档没查成",
+              "scanned": [],
+              "counts": {
+                "findings": 0
+              },
+              "returned": 0
+            },
+            {
+              "kind": "text_integrity",
+              "checked": false,
+              "reason": "paths 是空的（或不是数组）⇒ 这一趟什么都没扫，不是「查过了、干净」",
+              "scanned": [],
+              "counts": {
+                "findings": 0
+              },
+              "returned": 0
+            },
+            {
+              "kind": "ledger_match",
+              "checked": false,
+              "reason": "这个项目没有论文正文（D:\\Incubator\\projects\\lp-ball-22\\.\"\\out\\package\\main.tex 不在盘上），论文包里也没有对应表 —— 这一格不适用（不是通过）",
+              "scanned": [
+                "D:\\Incubator\\projects\\lp-ball-22\\.\"\\out\\package\\MAPPING.json"
+              ],
+              "counts": {
+                "findings": 0
+              },
+              "returned": 0
+            }
+          ],
+          "scanned": [
+            "D:\\Incubator\\projects\\lp-ball-22\\.\"\\out\\package\\MAPPING.json"
+          ],
+          "reason": "cites 没查成：没有可读的正文 ⇒ 这一档没查成（不是「没有引用」）；refs 没查成：没有可读的正文 ⇒ 这一档没查成；inputs 没查成：没有 main.tex ⇒ 无从跟 \\input（这一档没查成，不是「没有 \\input」）；proofs 没查成：没有可读的正文 ⇒ 这一档没查成；duplicates 没查成：没有可读的正文 ⇒ 这一档没查成；text_integrity 没查成：paths 是空的（或不是数组）⇒ 这一趟什么都没扫，不是「查过了、干净」；ledger_match 没查成：这个项目没有论文正文（D:\\Incubator\\projects\\lp-ball-22\\.\"\\out\\package\\main.tex 不在盘上），论文包里也没有对应表 —— 这一格不适用（不是通过）"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 65280,
+        "prompt_cache_miss_tokens": 2627,
+        "tokens_in": 67907,
+        "tokens_out": 511,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000265"
+    },
+    {
+      "index": 9,
+      "shape": "tool",
+      "payload": {
+        "name": "review.scan",
+        "args": {
+          "kinds": [
+            "cites",
+            "refs",
+            "inputs",
+            "proofs",
+            "duplicates",
+            "text_integrity",
+            "ledger_match"
+          ],
+          "project": ".",
+          "paths": [
+            "out/package/main.tex"
+          ]
+        },
+        "why": "上一次 project 路径写错（多了引号）导致七类全部没查成；用正确路径重扫，重点核 bibitem{critical} 改名为 ambrus 后 \\cite{critical} 是否成了悬空引用"
+      },
+      "result": {
+        "tool": "review.scan",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "kinds": [
+            "cites",
+            "refs",
+            "inputs",
+            "proofs",
+            "duplicates",
+            "text_integrity",
+            "ledger_match"
+          ],
+          "findings": [
+            {
+              "kind": "cites",
+              "severity": "error",
+              "file": "out/package/main.tex",
+              "line": 26,
+              "column": 0,
+              "text": "\\cite{critical}",
+              "why": "这条 \\cite 的键 'critical' 在参考文献里没有对应的 \\bibitem —— 正文引了一份不存在于参考文献表的文献（读的人点不过去）",
+              "ref": "critical",
+              "codepoint": ""
+            }
+          ],
+          "counts": {
+            "files": 3,
+            "findings": 1,
+            "by_kind": {
+              "cites": 1,
+              "refs": 0,
+              "inputs": 0,
+              "proofs": 0,
+              "duplicates": 0,
+              "text_integrity": 0,
+              "ledger_match": 0
+            },
+            "by_severity": {
+              "error": 1,
+              "warning": 0,
+              "info": 0
+            },
+            "facts": {
+              "cite_keys": 5,
+              "bibitem_keys": 5,
+              "uncited": 1,
+              "cite_commands": [
+                "cite",
+                "citep",
+                "citet",
+                "citealp",
+                "citeauthor",
+                "citeyear",
+                "nocite"
+              ],
+              "ref_keys": 4,
+              "label_keys": 5,
+              "unused_labels": 1,
+              "ref_commands": [
+                "ref",
+                "eqref",
+                "autoref",
+                "pageref",
+                "cref",
+                "Cref"
+              ],
+              "files_read": 2,
+              "directives": 1,
+              "proof_envs": 4,
+              "statement_envs": 4,
+              "proof_without_statement": 0,
+              "statement_without_proof": 0,
+              "proof_unclosed": 0,
+              "statement_env_names": [
+                "corollary",
+                "lemma",
+                "proposition",
+                "theorem"
+              ],
+              "labels": 5,
+              "duplicate_labels": 0,
+              "newtheorem_names": 1,
+              "duplicate_newtheorem": 0,
+              "cjk": 0,
+              "control": 0,
+              "zero_width": 0,
+              "replacement": 0,
+              "bidi": 0,
+              "nbsp": 0,
+              "statement_ledger_rows": 114,
+              "ledger_propositions": 14,
+              "ledger_theorem_kinds": 5,
+              "ledger_theorem_kinds_projected": 5,
+              "mapping_rows": 4,
+              "statement_surplus": [],
+              "mapping_state": "pass"
+            }
+          },
+          "bad": [],
+          "detail": [
+            {
+              "kind": "cites",
+              "checked": true,
+              "reason": "",
+              "scanned": [
+                "out/package/main.tex"
+              ],
+              "counts": {
+                "findings": 1
+              },
+              "returned": 1
+            },
+            {
+              "kind": "refs",
+              "checked": true,
+              "reason": "",
+              "scanned": [
+                "out/package/main.tex"
+              ],
+              "counts": {
+                "findings": 0
+              },
+              "returned": 0
+            },
+            {
+              "kind": "inputs",
+              "checked": true,
+              "reason": "",
+              "scanned": [
+                "out/package/main.tex",
+                "out/package/mapping-appendix.tex"
+              ],
+              "counts": {
+                "findings": 0
+              },
+              "returned": 0
+            },
+            {
+              "kind": "proofs",
+              "checked": true,
+              "reason": "",
+              "scanned": [
+                "out/package/main.tex"
+              ],
+              "counts": {
+                "findings": 0
+              },
+              "returned": 0
+            },
+            {
+              "kind": "duplicates",
+              "checked": true,
+              "reason": "",
+              "scanned": [
+                "out/package/main.tex"
+              ],
+              "counts": {
+                "findings": 0
+              },
+              "returned": 0
+            },
+            {
+              "kind": "text_integrity",
+              "checked": true,
+              "reason": "",
+              "scanned": [
+                "out/package/main.tex"
+              ],
+              "counts": {
+                "findings": 0
+              },
+              "returned": 0
+            },
+            {
+              "kind": "ledger_match",
+              "checked": true,
+              "reason": "",
+              "scanned": [
+                "D:\\Incubator\\projects\\lp-ball-22\\out\\package\\MAPPING.json"
+              ],
+              "counts": {
+                "findings": 0
+              },
+              "returned": 0
+            }
+          ],
+          "scanned": [
+            "out/package/main.tex",
+            "out/package/mapping-appendix.tex",
+            "D:\\Incubator\\projects\\lp-ball-22\\out\\package\\MAPPING.json"
+          ],
+          "reason": "cites 1 条；refs 0 条；inputs 0 条；proofs 0 条；duplicates 0 条；text_integrity 0 条；ledger_match 0 条"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 67072,
+        "prompt_cache_miss_tokens": 2788,
+        "tokens_in": 69860,
+        "tokens_out": 289,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000265"
+    },
+    {
+      "index": 10,
+      "shape": "tool",
+      "payload": {
+        "name": "review.verify_fixes",
+        "args": {
+          "doc_id": "000001",
+          "round_no": 2
+        },
+        "why": "按派活复审第 1 轮三条 findings；先取机械重判读数，再看是否仍 open"
+      },
+      "result": {
+        "tool": "review.verify_fixes",
+        "ok": true,
+        "data": {
+          "doc_id": "000001",
+          "round": 2,
+          "resolved": [],
+          "still_open": [
+            {
+              "finding_id": "000000",
+              "kind": "overclaim",
+              "level": "warning",
+              "target": "section:4",
+              "message": "第 4 节把 Theorem thm:zero 说成「解释了为什么只有这三个方向能竞争」，但 thm:zero 只覆盖「至少一个坐标为 0」的法向，对三个坐标都非零的法向没有给出任何结论，这句话的强度超过它引的证据。",
+              "evidence": "main.tex 第 185 行逐字：「the result of Theorem~\\ref{thm:zero} explains why only these three directions can compete: for normals with a vanishing coordinate the area is an explicit decreasing function of $|a|^p+|b|^p$, so within that class the extremum is always at a coordinate vector or at the face diagonal, never in between.」而 thm:zero（main.tex 第 97–115 行；台账 stmt:000035）的前提是「at least one coordinate equal to 0」；三个坐标都非零的情形在本文里只有附录 A（行 218–224）的数值读数，正文第 4 节同一页自己也承认「the absence of a strictly interior maximizing direction is only verified numerically」（行 183）。同一节行 193 还把它列为 open problem (a)。",
+              "round": 1,
+              "status": "open",
+              "source": "manual_not_rechecked",
+              "note": "[round 2] 手工判词（`review.record_finding` 落的散文发现）**不能被自动复跑判掉**：它的去重键不在机械 scan 的可产出集合里，「本轮没复现」不等于「H 复核过」。离场只有一条路：H 用 `review.record_finding` 以同一去重键再登记一次，`evidence` 以 `复核 fixed：` 或 `复核 wontfix：` 开头"
+            },
+            {
+              "finding_id": "000001",
+              "kind": "garbled",
+              "level": "warning",
+              "target": "section:4",
+              "message": "第 4 节用一个从未定义过的「ordering cone $0\\le a\\le b\\le c$」描述数值扫描的参数化（第 183 行、第 193 行、附录第 220 行），读者无从知道 a,b,c 指什么、凭什么可以假定这一顺序、两条边界弧 $(0,1,t)$ 与 $(1,1,t)$ 里的 t 又是什么——这三处都缺定义。",
+              "evidence": "逐字引文（main.tex 第 183 行）：「by local refinement along the two boundary arcs of the ordering cone $0\\le a\\le b\\le c$」；第 193 行「the critical points of $A_p$ on the ordering cone」；附录第 220 行「parametrised by the ordering cone $0\\le a\\le b\\le c$ together with the two boundary arcs $(0,1,t)$ and $(1,1,t)$, $t\\in[0,1]$」。第 2 节（Definitions and notation，第 30–54 行）只定义了 $B_p^3$、$A_p(n)$、$e_n(\\psi)$、$\\Sigma_3^{\\pm}$、$u,v$，没有定义这个锥、也没有写出「由 $\\Sigma_3^{\\pm}$ 不变性可设法向各分量满足 $0\\le a\\le b\\le c$」这一步约化；按我在正文里的通读，该词在正文首次出现即在第 4 节。",
+              "round": 1,
+              "status": "open",
+              "source": "manual_not_rechecked",
+              "note": "[round 2] 手工判词（`review.record_finding` 落的散文发现）**不能被自动复跑判掉**：它的去重键不在机械 scan 的可产出集合里，「本轮没复现」不等于「H 复核过」。离场只有一条路：H 用 `review.record_finding` 以同一去重键再登记一次，`evidence` 以 `复核 fixed：` 或 `复核 wontfix：` 开头"
+            },
+            {
+              "finding_id": "000002",
+              "kind": "garbled",
+              "level": "warning",
+              "target": "references",
+              "message": "参考文献项 \\bibitem{critical} 缺作者与出处，条目里还写着内部的核验备注（「Author metadata for this item could not be verified from the sources available to us」）——读者据此找不到这篇文献，而正文第 1 节与第 4 节至少两处 \\cite{critical} 把它当作已知工作引用，两处因此都不可核。",
+              "evidence": "逐字引文（main.tex 第 207 行）：「\\bibitem{critical} \\emph{Critical central sections of the cube}, preprint. (Author metadata for this item could not be verified from the sources available to us; the title is quoted as recorded.)」；正文引它的位置：第 1 节「The cube's critical central sections and the extremal sections of subspaces of $L_p$ are treated in \\cite{critical} and \\cite{eskenazis}.」与第 4 节 Relation with the literature 一段的 \\cite{ball,konig,grzaslewicz,critical,eskenazis}。台账侧：literature 里有同名行 lit:000003「Critical central sections of the cube」（table.list 读数），补齐元数据的材料在盘上是有的。",
+              "round": 1,
+              "status": "open",
+              "source": "manual_not_rechecked",
+              "note": "[round 2] 手工判词（`review.record_finding` 落的散文发现）**不能被自动复跑判掉**：它的去重键不在机械 scan 的可产出集合里，「本轮没复现」不等于「H 复核过」。离场只有一条路：H 用 `review.record_finding` 以同一去重键再登记一次，`evidence` 以 `复核 fixed：` 或 `复核 wontfix：` 开头"
+            }
+          ],
+          "unresolved_findings": [],
+          "not_rechecked": [
+            {
+              "finding_id": "000000",
+              "kind": "overclaim",
+              "level": "warning",
+              "target": "section:4",
+              "message": "第 4 节把 Theorem thm:zero 说成「解释了为什么只有这三个方向能竞争」，但 thm:zero 只覆盖「至少一个坐标为 0」的法向，对三个坐标都非零的法向没有给出任何结论，这句话的强度超过它引的证据。",
+              "evidence": "main.tex 第 185 行逐字：「the result of Theorem~\\ref{thm:zero} explains why only these three directions can compete: for normals with a vanishing coordinate the area is an explicit decreasing function of $|a|^p+|b|^p$, so within that class the extremum is always at a coordinate vector or at the face diagonal, never in between.」而 thm:zero（main.tex 第 97–115 行；台账 stmt:000035）的前提是「at least one coordinate equal to 0」；三个坐标都非零的情形在本文里只有附录 A（行 218–224）的数值读数，正文第 4 节同一页自己也承认「the absence of a strictly interior maximizing direction is only verified numerically」（行 183）。同一节行 193 还把它列为 open problem (a)。",
+              "round": 1,
+              "status": "open",
+              "source": "manual_not_rechecked",
+              "note": "[round 2] 手工判词（`review.record_finding` 落的散文发现）**不能被自动复跑判掉**：它的去重键不在机械 scan 的可产出集合里，「本轮没复现」不等于「H 复核过」。离场只有一条路：H 用 `review.record_finding` 以同一去重键再登记一次，`evidence` 以 `复核 fixed：` 或 `复核 wontfix：` 开头"
+            },
+            {
+              "finding_id": "000001",
+              "kind": "garbled",
+              "level": "warning",
+              "target": "section:4",
+              "message": "第 4 节用一个从未定义过的「ordering cone $0\\le a\\le b\\le c$」描述数值扫描的参数化（第 183 行、第 193 行、附录第 220 行），读者无从知道 a,b,c 指什么、凭什么可以假定这一顺序、两条边界弧 $(0,1,t)$ 与 $(1,1,t)$ 里的 t 又是什么——这三处都缺定义。",
+              "evidence": "逐字引文（main.tex 第 183 行）：「by local refinement along the two boundary arcs of the ordering cone $0\\le a\\le b\\le c$」；第 193 行「the critical points of $A_p$ on the ordering cone」；附录第 220 行「parametrised by the ordering cone $0\\le a\\le b\\le c$ together with the two boundary arcs $(0,1,t)$ and $(1,1,t)$, $t\\in[0,1]$」。第 2 节（Definitions and notation，第 30–54 行）只定义了 $B_p^3$、$A_p(n)$、$e_n(\\psi)$、$\\Sigma_3^{\\pm}$、$u,v$，没有定义这个锥、也没有写出「由 $\\Sigma_3^{\\pm}$ 不变性可设法向各分量满足 $0\\le a\\le b\\le c$」这一步约化；按我在正文里的通读，该词在正文首次出现即在第 4 节。",
+              "round": 1,
+              "status": "open",
+              "source": "manual_not_rechecked",
+              "note": "[round 2] 手工判词（`review.record_finding` 落的散文发现）**不能被自动复跑判掉**：它的去重键不在机械 scan 的可产出集合里，「本轮没复现」不等于「H 复核过」。离场只有一条路：H 用 `review.record_finding` 以同一去重键再登记一次，`evidence` 以 `复核 fixed：` 或 `复核 wontfix：` 开头"
+            },
+            {
+              "finding_id": "000002",
+              "kind": "garbled",
+              "level": "warning",
+              "target": "references",
+              "message": "参考文献项 \\bibitem{critical} 缺作者与出处，条目里还写着内部的核验备注（「Author metadata for this item could not be verified from the sources available to us」）——读者据此找不到这篇文献，而正文第 1 节与第 4 节至少两处 \\cite{critical} 把它当作已知工作引用，两处因此都不可核。",
+              "evidence": "逐字引文（main.tex 第 207 行）：「\\bibitem{critical} \\emph{Critical central sections of the cube}, preprint. (Author metadata for this item could not be verified from the sources available to us; the title is quoted as recorded.)」；正文引它的位置：第 1 节「The cube's critical central sections and the extremal sections of subspaces of $L_p$ are treated in \\cite{critical} and \\cite{eskenazis}.」与第 4 节 Relation with the literature 一段的 \\cite{ball,konig,grzaslewicz,critical,eskenazis}。台账侧：literature 里有同名行 lit:000003「Critical central sections of the cube」（table.list 读数），补齐元数据的材料在盘上是有的。",
+              "round": 1,
+              "status": "open",
+              "source": "manual_not_rechecked",
+              "note": "[round 2] 手工判词（`review.record_finding` 落的散文发现）**不能被自动复跑判掉**：它的去重键不在机械 scan 的可产出集合里，「本轮没复现」不等于「H 复核过」。离场只有一条路：H 用 `review.record_finding` 以同一去重键再登记一次，`evidence` 以 `复核 fixed：` 或 `复核 wontfix：` 开头"
+            }
+          ],
+          "semantic_check": {
+            "checked": false,
+            "judge": "",
+            "reason": "没接线：语义级判据（「结论是否强于引文」）需要 LLM 或人，本框架默认零 LLM 调用。接法：`scan_document(..., semantic_judge=<可调用>)`，签名见 `SemanticJudge`。⇒ 这一格的状态是**没查**，不是'查过、没问题' —— 措辞级判据仍然跑过（见 findings）",
+            "claims_judged": 0,
+            "claims_unknown": 0,
+            "checker_errors": 0,
+            "stronger_than_evidence": 0
+          },
+          "verdict": "revise_again",
+          "reason": "第 2 轮复审：上一轮 3 条发现里 resolved=0、仍复现=3；error 级未解决 0 条；；其中 3 条是**手工判词**（`record_finding` 落的散文发现）、本轮**没有 H 的显式复核** ⇒ 留在 open，不许判 fixed（手工判词不能被自动复跑判掉；逐条见 `not_rechecked`）；。",
+          "error_count": 0,
+          "warning_count": 0,
+          "info_count": 0,
+          "dep_check": {
+            "checked": true,
+            "reason": "检查了 0 条依赖",
+            "open": []
+          },
+          "finding_updates": [],
+          "status": "in_review",
+          "status_updated": true,
+          "status_error": null,
+          "paper_body": {
+            "checked": true,
+            "source": "tex",
+            "path": "out/package/main.tex",
+            "sha256": "e2c7a5277ef11a3b8af108945d903413b01a1e63cb62defcefc5462bbd670d8d",
+            "bytes": 31657,
+            "lines": 230,
+            "chars": 31657,
+            "reason": ""
+          }
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 68992,
+        "prompt_cache_miss_tokens": 2198,
+        "tokens_in": 71190,
+        "tokens_out": 1593,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000265"
+    },
+    {
+      "index": 11,
+      "shape": "tool",
+      "payload": {
+        "name": "review.record_finding",
+        "args": {
+          "doc_id": "000001",
+          "kind": "overclaim",
+          "target": "section:4",
+          "level": "warning",
+          "axis": "证据",
+          "round_no": 2,
+          "message": "复核结论：已修。第 4 节不再把 Theorem thm:zero 说成「解释了为什么只有这三个方向能竞争」，而是明确收窄到「至少一个坐标为 0 的法向」这一类，并写明三坐标都非零的情形只到数值观察。",
+          "evidence": "复核 fixed：本版 main.tex（sha256=e2c7a527…670d8d）第 4 节第三段逐字：「Third, within the class of normals having a vanishing coordinate, Theorem~\\ref{thm:zero} does settle the comparison: there the area is an explicit decreasing function of $|a|^p+|b|^p$, so over that class the extremum is attained at a coordinate vector or at the face diagonal and never in between. For normals whose three coordinates are all non-zero, the corresponding statement is at present only the numerical observation recorded above; Theorem~\\ref{thm:zero} says nothing about that class.」同节 Limitations 段复述同一收窄：「the argument of Theorem~\\ref{thm:zero} covers the normals with a vanishing coordinate, but no analytic argument is given for normals with three distinct non-zero coordinates」。上一轮点名的那句「the result of Theorem~\\ref{thm:zero} explains why only these three directions can compete」已不在文中（全文 fs.read 已通读 229 行确认）。",
+          "suggestion": "无须修订；若后续要再提这一收窄，保持「within the class of normals having a vanishing coordinate」的限定语。",
+          "verbatim_quote": "within the class of normals having a vanishing coordinate, Theorem~\\ref{thm:zero} does settle the comparison",
+          "line_unavailable_reason": "fs.read 按字符窗口返回、未把行号钉到该句；位置以 section:4 第三段与上面的逐字引文为准"
+        },
+        "why": "复核 finding 000000：按 verify_fixes 的 note，手工判词只能由 H 以同一去重键再登记、evidence 前缀「复核 fixed：」才能离场"
+      },
+      "result": {
+        "tool": "review.record_finding",
+        "ok": false,
+        "data": null,
+        "error": "校验失败：复核的对象不存在：稿件 000001 上没有去重键为 ('overclaim', 'section:4', '复核结论：已修。第 4 节不再把 Theorem thm:zero 说成「解释了为什么只有这三个方向能竞争」，而是明确收窄到「至少一个坐标为 0 的法向」这一类，并写明三坐标都非零的情形只到数值观察。') 的发现 ⇒ 显式复核只能针对**已经登记过**的发现（它是回执，不是新发现）",
+        "meta": {
+          "kind": "validation_error"
+        },
+        "参数表": "【参数表】被拒的是参数形状/取值，不是这件事不能做。照下面这张声明表重写一次（键名与类型都要对；表里没列的键一律不许传）：\n- review.record_finding 的参数表：doc_id: string，必填，被审稿件号；kind: string，必填，枚举 [unsupported_claim/dangling_dep/overclaim/missing_negation_kind/scope_drift/garbled/inconsistent_number]，发现类别（受控词表 ['unsupported_claim', 'dangling_dep', 'overclaim', 'missing_negation_kind', 'scope_drift', 'garbled'；target: string，必填，位置：claim-3 / section:2 / dep:0004 / rel:0007；message: string，必填，这条发现说什么（一句话）；evidence: string，必填，凭什么这么判（必填：读数、盘上路径、回执原样）；level: string，枚举 [error/warning/info]，严重度（缺省 warning）；axis: string，枚举 [数学/体例/工程/证据]，轴（数学 / 体例 / 工程 / 证据）；suggestion: string，最小修法；round_no: integer，审校轮次（不给时 = `documents.review_rounds` 的当前值；正常不需要给）；verbatim_quote: string，≤20 词的逐字引文（G10 那一格）；line: integer，行号（只在版本冻结后才有意义；拿不到就别给）；line_unavailable_reason: string，拿不到行号的理由（`line` 省略时必填）（参数表是封闭集合：多传一个键会被拒）"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 70400,
+        "prompt_cache_miss_tokens": 4146,
+        "tokens_in": 74546,
+        "tokens_out": 3510,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000265"
+    },
+    {
+      "index": 12,
+      "shape": "tool",
+      "payload": {
+        "name": "review.record_finding",
+        "args": {
+          "doc_id": "000001",
+          "kind": "overclaim",
+          "target": "section:4",
+          "axis": "证据",
+          "level": "warning",
+          "message": "第 4 节把 Theorem thm:zero 说成「解释了为什么只有这三个方向能竞争」，但 thm:zero 只覆盖「至少一个坐标为 0」的法向，对三个坐标都非零的法向没有给出任何结论，这句话的强度超过它引的证据。",
+          "evidence": "复核 fixed：本版 main.tex（sha256=e2c7a5277ef11a3b8af108945d903413b01a1e63cb62defcefc5462bbd670d8d）第 4 节「Three features deserve comment」段第三点已改写为：「Third, within the class of normals having a vanishing coordinate, Theorem~\\ref{thm:zero} does settle the comparison: there the area is an explicit decreasing function of $|a|^p+|b|^p$, so over that class the extremum is attained at a coordinate vector or at the face diagonal and never in between. For normals whose three coordinates are all non-zero, the corresponding statement is at present only the numerical observation recorded above; Theorem~\\ref{thm:zero} says nothing about that class.」原句「the result of Theorem~\\ref{thm:zero} explains why only these three directions can compete」已不在正文里；同节 Limitations 段另写「the argument of Theorem~\\ref{thm:zero} covers the normals with a vanishing coordinate, but no analytic argument is given for normals with three distinct non-zero coordinates」。强度已降到与 thm:zero（台账 stmt:000035，前提 at least one coordinate equal to 0）相称。此判为我逐句读本版正文所得。",
+          "line_unavailable_reason": "本版 main.tex 为流动版本，我按 fs.read 的行窗口取证；该段落在第 180–229 行窗口内（第 4 节「Three features deserve comment」第三点），未冻结到单行。"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "review.record_finding",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "created": false,
+          "duplicate_skipped": 1,
+          "finding_id": "000000",
+          "doc_id": "000001",
+          "kind": "overclaim",
+          "level": "warning",
+          "round": 2,
+          "status": "fixed"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 73728,
+        "prompt_cache_miss_tokens": 2399,
+        "tokens_in": 76127,
+        "tokens_out": 3771,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000265"
+    },
+    {
+      "index": 13,
+      "shape": "tool",
+      "payload": {
+        "name": "review.record_finding",
+        "args": {
+          "doc_id": "000001",
+          "kind": "garbled",
+          "target": "section:4",
+          "message": "第 4 节用一个从未定义过的「ordering cone $0\\le a\\le b\\le c$」描述数值扫描的参数化（第 183 行、第 193 行、附录第 220 行），读者无从知道 a,b,c 指什么、凭什么可以假定这一顺序、两条边界弧 $(0,1,t)$ 与 $(1,1,t)$ 里的 t 又是什么——这三处都缺定义。",
+          "evidence": "复核 fixed：本版 main.tex（sha256=e2c7a5277ef11a3b8af108945d903413b01a1e63cb62defcefc5462bbd670d8d）第 2 节 Definitions and notation（第 40–54 行）已补上定义，逐字引文：「the search for maximizing normals is carried out on the fundamental domain $\\mathcal{C}=\\{n=(a,b,c):0\\le a\\le b\\le c\\}$ of the ordering cone: every unit normal is carried into $\\mathcal{C}$ by a signed permutation, and the vertices of $\\mathcal{C}$ are the coordinate directions. We call $\\alpha(t)=(0,1,t)/\\sqrt{1+t^2}$ and $\\beta(t)=(1,1,t)/\\sqrt{2+t^2}$, $t\\in[0,1]$, the two boundary arcs of $\\mathcal{C}$; their endpoints are $\\alpha(0)=\\beta(0)=f$, $\\beta(1)=d$ and $\\alpha(t)\\to e_3$ as $t\\to\\infty$.」a,b,c 的含义（法向的三坐标）、凭什么可假定 $0\\le a\\le b\\le c$（$\\Sigma_3^{\\pm}$ 共 48 元、为 $B_p^3$ 的等距、$A_p$ 在其下不变）、两条边界弧的 t 及其端点含义均已写明；第 4 节第 183 行、附录 A 第 220 行引用的记号现在在第 2 节有定义，术语不再首次出现即使用。原文所述缺陷已消失。",
+          "axis": "体例",
+          "level": "warning",
+          "suggestion": "（已修，无需动作）若再加一条最小改进：在第 2 节把 $\\mathcal{C}$ 的边界写成「两条弧 + 三个顶点」的完整参数化图，可让第 4 节的「local refinement along the two boundary arcs」一眼对上。",
+          "verbatim_quote": "the fundamental domain $\\mathcal{C}=\\{n=(a,b,c):0\\le a\\le b\\le c\\}$ of the ordering cone",
+          "line": 47
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "review.record_finding",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "created": false,
+          "duplicate_skipped": 1,
+          "finding_id": "000001",
+          "doc_id": "000001",
+          "kind": "garbled",
+          "level": "warning",
+          "round": 2,
+          "status": "fixed"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 75264,
+        "prompt_cache_miss_tokens": 1784,
+        "tokens_in": 77048,
+        "tokens_out": 1341,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000265"
+    },
+    {
+      "index": 14,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.search",
+        "args": {
+          "pattern": "critical",
+          "path": "out/package/main.tex"
+        },
+        "why": "取 \\\\cite{critical} 与 \\\\bibitem 改名的确切行号，供新发现写清位置（scan 只报了第一处 line 26）"
+      },
+      "result": {
+        "tool": "fs.search",
+        "ok": true,
+        "data": {
+          "pattern": "critical",
+          "path": "out/package/main.tex",
+          "matches": [
+            {
+              "path": "out/package/main.tex",
+              "line": 26,
+              "text": "For the $\\ell_p^n$ balls, K\\\"onig \\cite{konig} studies maximal hyperplane sections for $p>2$ and shows that a cube-slicing phenomenon persists for large $p$ and for normals whose coordinates are bounded in modulus by $1/\\sqrt2$; for $2<p<p_0$ with $p_0\\approx26.265$ the behaviour changes, and the body-diagonal direction gives a counterexample in large dimensions. The plane sections of the unit ball of $\\ell_p$ themselves are described by Grz\\'slewicz \\cite{grzaslewicz}. The cube's critical centr…"
+            },
+            {
+              "path": "out/package/main.tex",
+              "line": 28,
+              "text": "The contributions of this note are the following. Section~2 fixes the notation. Section~3 proves four statements about the section area: an integral representation valid for all normals together with the coordinate and face-diagonal closed forms (Theorem~\\ref{thm:integral}); the exact formula for normals with a vanishing coordinate and the resulting comparison with the coordinate direction (Theorem~\\ref{thm:zero}); the integral representation, the special values and the continuity of the body-di…"
+            },
+            {
+              "path": "out/package/main.tex",
+              "line": 187,
+              "text": "\\emph{Relation with the literature.} Ball \\cite{ball} determines the maximal hyperplane section of the cube, which is the case $p=\\infty$ and corresponds to the face-diagonal direction; our Theorem~\\ref{thm:integral}(iii) reproduces the constant $4\\sqrt2$ as the limit of $A_{\\mathrm{face}}(p)$ and Theorem~\\ref{thm:delta} shows that the cube behaviour already dominates from $p_*$ on. Grz\\'slewicz \\cite{grzaslewicz} describes the plane sections of the unit balls of $\\ell_p$ and of $L_p[0,1]$; the …"
+            },
+            {
+              "path": "out/package/main.tex",
+              "line": 193,
+              "text": "\\item[(a)] Prove that no normal with three distinct non-zero coordinates maximizes $A_p$ for any $p\\in[1,\\infty)$, i.e. turn the numerical observation into a statement about the critical points of $A_p$ on the ordering cone."
+            },
+            {
+              "path": "out/package/main.tex",
+              "line": 222,
+              "text": "\\paragraph{The two thresholds.} The program \\path{code/exp/lpsec_critical.py} (\\texttt{exp:000006}) refines the neighbourhood of the winner in six rounds of local refinement and reports: the ratios $A_{\\mathrm{face}}/A_{\\mathrm{coord}}$ and $A_{\\mathrm{diag}}/A_{\\mathrm{coord}}$ increase monotonically in $p$ and each equals $1$ at $p=2$; the crossing $A_{\\mathrm{diag}}(p)=A_{\\mathrm{face}}(p)$ is unique and lies in $(4,5)$; and no strictly interior direction of the ordering cone exceeds the maxi…"
+            }
+          ],
+          "lines": [
+            "out/package/main.tex:26: For the $\\ell_p^n$ balls, K\\\"onig \\cite{konig} studies maximal hyperplane sections for $p>2$ and shows that a cube-slicing phenomenon persists for large $p$ and for normals whose coordinates are bounded in modulus by $1/\\sqrt2$; for $2<p<p_0$ with $p_0\\approx26.265$ the behaviour changes, and the body-diagonal direction gives a counterexample in large dimensions. The plane sections of the unit ball of $\\ell_p$ themselves are described by Grz\\'slewicz \\cite{grzaslewicz}. The cube's critical centr…",
+            "out/package/main.tex:28: The contributions of this note are the following. Section~2 fixes the notation. Section~3 proves four statements about the section area: an integral representation valid for all normals together with the coordinate and face-diagonal closed forms (Theorem~\\ref{thm:integral}); the exact formula for normals with a vanishing coordinate and the resulting comparison with the coordinate direction (Theorem~\\ref{thm:zero}); the integral representation, the special values and the continuity of the body-di…",
+            "out/package/main.tex:187: \\emph{Relation with the literature.} Ball \\cite{ball} determines the maximal hyperplane section of the cube, which is the case $p=\\infty$ and corresponds to the face-diagonal direction; our Theorem~\\ref{thm:integral}(iii) reproduces the constant $4\\sqrt2$ as the limit of $A_{\\mathrm{face}}(p)$ and Theorem~\\ref{thm:delta} shows that the cube behaviour already dominates from $p_*$ on. Grz\\'slewicz \\cite{grzaslewicz} describes the plane sections of the unit balls of $\\ell_p$ and of $L_p[0,1]$; the …",
+            "out/package/main.tex:193: \\item[(a)] Prove that no normal with three distinct non-zero coordinates maximizes $A_p$ for any $p\\in[1,\\infty)$, i.e. turn the numerical observation into a statement about the critical points of $A_p$ on the ordering cone.",
+            "out/package/main.tex:222: \\paragraph{The two thresholds.} The program \\path{code/exp/lpsec_critical.py} (\\texttt{exp:000006}) refines the neighbourhood of the winner in six rounds of local refinement and reports: the ratios $A_{\\mathrm{face}}/A_{\\mathrm{coord}}$ and $A_{\\mathrm{diag}}/A_{\\mathrm{coord}}$ increase monotonically in $p$ and each equals $1$ at $p=2$; the crossing $A_{\\mathrm{diag}}(p)=A_{\\mathrm{face}}(p)$ is unique and lies in $(4,5)$; and no strictly interior direction of the ordering cone exceeds the maxi…"
+          ],
+          "total": 5,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        },
+        "error": "",
+        "meta": {
+          "total": 5,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 76288,
+        "prompt_cache_miss_tokens": 1730,
+        "tokens_in": 78018,
+        "tokens_out": 1730,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000265"
+    },
+    {
+      "index": 15,
+      "shape": "tool",
+      "payload": {
+        "name": "review.record_finding",
+        "args": {
+          "axis": "证据",
+          "doc_id": "000001",
+          "evidence": "review.scan(kinds=[\"cites\",...], project=\".\") 读数：findings[0] = {kind: cites, severity: error, file: out/package/main.tex, line: 26, ref: critical, why: 「这条 \\cite 的键 'critical' 在参考文献里没有对应的 \\bibitem —— 正文引了一份不存在于参考文献表的文献（读的人点不过去）」}；facts.bibitem_keys=5、cite_keys=5、uncited=1。fs.search(pattern=\"critical\") 读数：第 26 行「The cube's critical central sections and the extremal sections of subspaces of $L_p$ are treated in \\cite{critical} and \\cite{eskenazis}.」；第 187 行 Relation with the literature 段「The papers \\cite{critical} and \\cite{eskenazis} study critical central sections of the cube and extremal sections of subspaces of $L_p$ respectively」。参考文献表（第 205–211 行）现在是 \\bibitem{grzaslewicz} / \\bibitem{ambrus} G.~Ambrus, arXiv:2107.14778v3 (2023), 12 pp. / \\bibitem{eskenazis}，已没有 \\bibitem{critical} —— 条目改名而正文引键没跟着改，两处都不再解析。",
+          "kind": "dangling_dep",
+          "level": "error",
+          "line": 26,
+          "message": "参考文献条目改为 \\bibitem{ambrus} 之后，正文第 26 行与第 187 行仍写 \\cite{critical}：引键在参考文献表里已不存在，两处引用都悬空（scan 判 cites error，且 bibitem{ambrus} 无人引用、uncited=1）。",
+          "round_no": 2,
+          "suggestion": "把两处 \\cite{critical} 改成 \\cite{ambrus}（第 26 行与第 187 行各一处），使引键与 \\bibitem{ambrus} 对上；条目内容本身已可核，不必回退。",
+          "target": "references",
+          "verbatim_quote": "are treated in \\cite{critical} and \\cite{eskenazis}"
+        },
+        "why": "第 1 轮 finding 000002 只修了一半：bibitem 改成可核条目了，但 body 仍引旧的 critical 键 —— 这是本版新出现的机械级 error，必须落成 finding",
+        "shape_alias": "name"
+      },
+      "result": {
+        "tool": "review.record_finding",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "created": true,
+          "duplicate_skipped": 0,
+          "finding_id": "000003",
+          "doc_id": "000001",
+          "kind": "dangling_dep",
+          "level": "error",
+          "round": 2,
+          "status": "open"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 77184,
+        "prompt_cache_miss_tokens": 2973,
+        "tokens_in": 80157,
+        "tokens_out": 2371,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000265"
+    },
+    {
+      "index": 16,
+      "shape": "tool",
+      "payload": {
+        "name": "review.review_document",
+        "args": {
+          "doc_id": "000001",
+          "round_no": 2
+        },
+        "why": "上一轮三条 finding 复核后仍有一条 error 级新发现（悬空 \\cite），要让它落成稿件 000001 这一轮的新裁决（不能签 accepted）"
+      },
+      "result": {
+        "tool": "review.review_document",
+        "ok": true,
+        "data": {
+          "doc_id": "000001",
+          "checked": true,
+          "round": 3,
+          "new_findings": [],
+          "duplicate_skipped": 0,
+          "reopened": [],
+          "error_count": 0,
+          "warning_count": 0,
+          "info_count": 0,
+          "dep_check": {
+            "checked": true,
+            "reason": "检查了 0 条依赖",
+            "open": []
+          },
+          "semantic_check": {
+            "checked": false,
+            "judge": "",
+            "reason": "没接线：语义级判据（「结论是否强于引文」）需要 LLM 或人，本框架默认零 LLM 调用。接法：`scan_document(..., semantic_judge=<可调用>)`，签名见 `SemanticJudge`。⇒ 这一格的状态是**没查**，不是'查过、没问题' —— 措辞级判据仍然跑过（见 findings）",
+            "claims_judged": 0,
+            "claims_unknown": 0,
+            "checker_errors": 0,
+            "stronger_than_evidence": 0
+          },
+          "coverage": {
+            "claims_total": 14,
+            "claims_reviewed": 14,
+            "claims_decided": 14,
+            "claims_semantically_judged": 0,
+            "note": "`claims_reviewed` = 逐条字段/引用/证据档位检查真的跑过的断言数；`claims_decided` = 其中校验器判成了的（判不了的另计）；`claims_semantically_judged` = 语义级判据（「结论是否强于引文」）真的判过的条数（没接线时为 0 = **没查**，不是'没问题'）。本覆盖率只覆盖「稿件有没有把自己说清楚」，不覆盖「数学对不对」——后者要 proof 级证据（FC-22），不由本函数给出。"
+          },
+          "status": "in_review",
+          "status_updated": true,
+          "status_error": null,
+          "signature": null,
+          "signature_error": null,
+          "verdict": "accepted",
+          "open_findings": {
+            "checked": true,
+            "total": 2,
+            "error": 1,
+            "warning": 1,
+            "finding_ids": [
+              "000002",
+              "000003"
+            ],
+            "review_round": 3,
+            "review_rounds": 3,
+            "blocks_accept": true,
+            "why": "还有 2 条 open findings 没被本轮复审收口（000002、000003）"
+          },
+          "paper_body": {
+            "checked": true,
+            "source": "tex",
+            "path": "out/package/main.tex",
+            "sha256": "e2c7a5277ef11a3b8af108945d903413b01a1e63cb62defcefc5462bbd670d8d",
+            "bytes": 31657,
+            "lines": 230,
+            "chars": 31657,
+            "reason": "",
+            "documents_row": "present"
+          },
+          "reason": "被审正文：out/package/main.tex（tex，sha256=e2c7a5277ef11a3b…，230 行）；机械检查发现 error=0、warning=0、info=0；依赖闭合已检查（检查了 0 条依赖）；新增发现 0 条、与已有发现重复被跳过 0 条；覆盖率 14/14（判成 14）；语义级判据**没查**（未接线）—— '措辞干净而结论强于引文'这一形态看不见；⛔ 有 open findings ⇒ **不判 accepted**（status=in_review）：还有 2 条 open findings 没被本轮复审收口（000002、000003）；本轮 round=3、documents.review_rounds=3 —— 先去 `review.verify_fixes` 逐条判 fixed / 仍 open（手工判词只有 H 的显式复核通道能判掉），收口之后再复审。"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 79360,
+        "prompt_cache_miss_tokens": 1682,
+        "tokens_in": 81042,
+        "tokens_out": 1073,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000265"
+    },
+    {
+      "index": 17,
+      "shape": "tool",
+      "payload": {
+        "name": "review.report",
+        "args": {
+          "doc_id": "000001",
+          "round_no": 3,
+          "own_errors": [
+            "第一次调 review.scan 时把 project 写成 \".\\\"（多了一个引号），导致七类读数全部 checked=false；我改用 project=\".\" + paths=[\"out/package/main.tex\"] 重扫一次才拿到真实读数。若有人只看第一次读数，会误以为「没查成 = 没问题」。",
+            "第一次对 finding 000000 调 review.record_finding 时，我传的是自己新写的 message，而显式复核的去重键是 (kind, target, message)，于是被拒（「复核的对象不存在」）；照原样重传原 message、evidence 以「复核 fixed：」开头才收口。",
+            "本轮我没有对 finding 000002 给出「已修」的显式复核登记：它的 bibitem 元数据那一半确实修好了，但正文两处 \\cite{critical} 变成了悬空引用，整条发现按「读者能不能点到那篇文献」这个口径仍不成立，我选择留 open，另落 000003 把具体修法写清，而不是把半修写成一整个 fixed。"
+          ]
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "review.report",
+        "ok": true,
+        "data": {
+          "doc_id": "000001",
+          "round": 3,
+          "report_path": "out/report/000001-review.md",
+          "revision_hash": "8be1df362cd79bf1",
+          "verdict": "unverified",
+          "gates_total": 15,
+          "pass_count": 10,
+          "fail_count": 0,
+          "unknown_count": 2,
+          "not_applicable_count": 3,
+          "failed_gates": [],
+          "unknown_gates": [
+            "G11",
+            "G9"
+          ],
+          "own_error_count": 3,
+          "coverage": {
+            "claims_total": 14,
+            "claims_reviewed": 14,
+            "claims_decided": 14,
+            "claims_semantically_judged": 0,
+            "note": "`claims_reviewed` = 逐条字段/引用/证据档位检查真的跑过的断言数；`claims_decided` = 其中校验器判成了的（判不了的另计）；`claims_semantically_judged` = 语义级判据（「结论是否强于引文」）真的判过的条数（没接线时为 0 = **没查**，不是'没问题'）。本覆盖率只覆盖「稿件有没有把自己说清楚」，不覆盖「数学对不对」——后者要 proof 级证据（FC-22），不由本函数给出。"
+          },
+          "markdown": "# 审校报告：doc:000001\n\n- 审校者：`agent-H`；轮次：3\n- **被审版本 hash**：`8be1df362cd79bf1`（算法：`sha256(json(claims, sort_keys, ensure_ascii=False))[:16]`）\n- 总体结论：**`unverified`**（pass=10 / fail=0 / unknown=2 / not_applicable=3，共 15 道门）\n- 结论依据：pass=10 fail=0 unknown=2 not_applicable=3 missing=0；没查成的门=['G11', 'G9']（不许读成『没问题』）\n- 本轮自证数字：断言数=14、引用数=28、依赖数=0、发现数=4、pass 门数=10、fail 门数=0、unknown 门数=2、not_applicable 门数=3\n\n## 0. 我这一轮犯的错（缺失则退回）\n\n1. 第一次调 review.scan 时把 project 写成 \".\\\"（多了一个引号），导致七类读数全部 checked=false；我改用 project=\".\" + paths=[\"out/package/main.tex\"] 重扫一次才拿到真实读数。若有人只看第一次读数，会误以为「没查成 = 没问题」。\n2. 第一次对 finding 000000 调 review.record_finding 时，我传的是自己新写的 message，而显式复核的去重键是 (kind, target, message)，于是被拒（「复核的对象不存在」）；照原样重传原 message、evidence 以「复核 fixed：」开头才收口。\n3. 本轮我没有对 finding 000002 给出「已修」的显式复核登记：它的 bibitem 元数据那一半确实修好了，但正文两处 \\cite{critical} 变成了悬空引用，整条发现按「读者能不能点到那篇文献」这个口径仍不成立，我选择留 open，另落 000003 把具体修法写清，而不是把半修写成一整个 fixed。\n\n## 1. G1–G15 逐门结论\n\n| 门 | 名称 | 轴 | 结论 | 发现数 | 判据 |\n|---|---|---|---|---:|---|\n| G1 | 自含性门 | 工程 | `pass` | 0 | 正文不得引用工作区外的路径；每个被引材料必须在工作区内存在 |\n| G2 | 引用解析门 | 证据 | `pass` | 0 | 每个『材料/路径』引用可解析（含通配符）；裸文件名也能在工作区内解析 |\n| G3 | 交叉引用门 | 体例 | `pass` | 0 | 每个外部/上游引用的目标标签真实存在；窗口取最近锚点、不跨句号、允许自指 |\n| G4 | 账本对账门 | 体例 | `pass` | 0 | 索引/账本点名的文件存在、卷内文件全被列出、声明的字数在容差内、声明的标签在正文 |\n| G5 | 禁词/手糊门 | 体例 | `not_applicable` | 0 | 中文禁词表 + 英文连词表；命中带上下文供人工裁（允许元叙述例外） |\n| G6 | 虚证门 | 证据 | `not_applicable` | 0 | 每个数值/经验断言点名的脚本与数据文件必须存在且在工作区内 |\n| G7 | 台账完整门 | 证据 | `pass` | 0 | 每个数值断言都在台账里有一行（位置 + 逐字断言 + 类别）；禁止『仅泛证』 |\n| G8 | 可复跑门 | 证据 | `pass` | 0 | 每条数值断言都有精确命令，且**本轮实跑过**并留输出 |\n| G9 | 计数一致门 | 体例 | `unknown` | 0 | 同一计数（定理数/反例数/脚本数/批次数）在所有文件中一致 |\n| G10 | 审校格式门 | 体例 | `pass` | 0 | 每条发现必须有：轴 + 严重度 + 行号 + ≤20 词逐字引文 + 最小修法  |\n| G11 | 版本冻结门 | 工程 | `unknown` | 0 | 审校期间不改文件；报告钉住被审版本 hash；一次改完一篇,不二次编辑 |\n| G12 | 反方门 | 数学 | `not_applicable` | 0 | 主动构造小参数反例；冲突时先手验最小实例，不许『用更多计算量去裁决计算与证明的冲 |\n| G13 | 空结论自证门 | 体例 | `pass` | 0 | 某个轴『零发现』时必须报告『用了什么过程、数出了什么数字』 |\n| G14 | 降级合规门 | 数学 | `pass` | 0 | 只有数值支撑的结论不得出现在摘要/主结果，必须降为 Remark + 命令 |\n| G15 | 自己的错入册 | 工程 | `pass` | 0 | 报告/审核记录里必须有『我在这轮里犯的错』一节 |\n\n## 2. 逐门自证与发现\n\n### G1 自含性门 —— `pass`\n\n- 轴：工程；判据：正文不得引用工作区外的路径；每个被引材料必须在工作区内存在\n- 判据状态：适配：参考体例的『包』在这里读成『工作区』（我们没有卷/包的概念）\n- 结论理由：0 条路径全部在工作区内且都存在\n- **自证**：从 claims[*].proof_location 与 dependencies[*] 的自由文本里抽出0 个像路径的字符串，逐个切掉尾部 `:行号`（只切数字）、按盘符/POSIX 根判绝对路径、resolve() 后 relative_to(workspace_root)（工作区 D:\\Incubator\\projects\\lp-ball-22）；再对工作区内、不含通配符的候选逐个判存在性（`D-7` 补上的 criterion 第二句），存在性问不出来的记 `unknown`（检查的路径数=0、工作区内=0、工作区内不存在=0、工作区外=0、内外无法判定=0、未展开的通配符=0、存在性无法判定=0）\n- 用到的证据：documents.claims[*].proof_location、dependencies[*]、workspace_root\n\n### G2 引用解析门 —— `pass`\n\n- 轴：证据；判据：每个『材料/路径』引用可解析（含通配符）；裸文件名也能在工作区内解析\n- 判据状态：适配：前缀式引用（lit/rel/exp/eval）；『裸文件名』档在本项目不存在，只留 warning\n- 结论理由：28 条引用全部可解析\n- **自证**：逐条 partition(':') 解析 claims[*].citations（共 28 条），核对前缀是否在 ['rel', 'lit', 'exp', 'eval', 'doc', 'stmt'] 内（扫描的引用数=28、前缀可解析=28、前缀不可解析=0、解析失败=0）\n- 用到的证据：documents.claims[*].citations\n\n### G3 交叉引用门 —— `pass`\n\n- 轴：体例；判据：每个外部/上游引用的目标标签真实存在；窗口取最近锚点、不跨句号、允许自指\n- 判据状态：**适配**：参考体例判的是散文里的『锚点窗口、不跨句号』；我们的引用是结构化字段，没有『锚点窗口』这个对象 ⇒ 改判『目标必须是本文档内真实存在的 claim_id 或可解析的 file:line』\n- 结论理由：0 条交叉引用全部可解析\n- **自证**：从 14 条断言里取出 0 个 proof_location，逐个与本文档的 14 个 claim_id 比对形态（分类函数与写入期 `doc_tools.classify_proof_location` 同一份）（声明了 proof_location 的断言=0、指向本文档内 claim_id=0、其中裸写 claim_id=0、指向 file:line 形态=0、两者都不是=0）\n- 用到的证据：documents.claims[*].proof_location、documents.claims[*].claim_id\n\n### G4 账本对账门 —— `pass`\n\n- 轴：体例；判据：索引/账本点名的文件存在、卷内文件全被列出、声明的字数在容差内、声明的标签在正文存在\n- 判据状态：适配：参考体例对的是『索引/README 与卷内文件』；我们是『documents 行与它渲染出的 markdown 文件 + claims 计数』。参考体例的另三档（卷内文件全被列出 / 声明字数在容差内 / 声明标签在正文存在）**本实现不判** ⇒ 如实登记为缺口，不静默丢弃\n- 结论理由：账本（文档行）与实物（markdown 文件、claims）一致\n- **自证**：核对 documents 行（doc_id=000001）的 markdown_path='manuscripts/G/000001.md' 与 claims 计数（markdown_path 存在=True、实际断言数=14、声明的断言数=未声明）\n- 用到的证据：documents.markdown_path、documents.claims、workspace_root\n\n### G5 禁词/手糊门 —— `not_applicable`\n\n- 轴：体例；判据：中文禁词表 + 英文连词表；命中带上下文供人工裁（允许元叙述例外）\n- 判据状态：适配：词表由配置注入（**不写死第二份词表** —— 参考体例的 15 中文词 + 12 英文连词表属于人的文风决定）；缺词表时报 not_applicable 而不是 pass\n- 结论理由：调用方没有提供 `banned_words` ⇒ 这道门在本轮**没有可判定的对象**。本项目**故意不在代码里写死一份词表**（写死第二份词表就是 FC-03 的形态）：参考体例的词表来自 `STYLE/RUBRIC.md:50-53`，属于**人的文风决定**，应当由配置注入而不是由 AI 固化。门保留、如实报『没有对象』，而不是删门\n- **自证**：检查 ctx.banned_words 是否为空（14 条断言在场）（提供的禁词数=0、扫描的断言数=14）\n- 用到的证据：ctx.banned_words\n\n### G6 虚证门 —— `not_applicable`\n\n- 轴：证据；判据：每个数值/经验断言点名的脚本与数据文件必须存在且在工作区内\n- 判据状态：适配：数值证据的载体是 §8.3 的 numeric_evidence 四元组；脚本路径支持通配符（按 glob 展开）。参考体例的『数据文件』这一档**本实现不判**（只核 `numeric_evidence.script`）⇒ 如实登记为缺口\n- 结论理由：本稿 14 条断言**没有任何一条点名数值脚本**（`numeric_evidence.script` 全空）⇒ 虚证门本轮没有可判定的对象。注意这与『脚本都存在』是两件事 —— 所以判 not_applicable 而不是 pass\n- **自证**：遍历 claims[*].numeric_evidence.script（0 个非空值），在工作区 D:\\Incubator\\projects\\lp-ball-22 下 glob/isfile 核对（点名的脚本数=0、命中真实文件=0、虚证数=0）\n- 用到的证据：documents.claims[*].numeric_evidence.script、workspace_root\n\n### G7 台账完整门 —— `pass`\n\n- 轴：证据；判据：每个数值断言都在台账里有一行（位置 + 逐字断言 + 类别）；禁止『仅泛证』\n- 判据状态：适配：我们的『台账』就是 documents.claims 本身 ⇒ 这道门判『数值型断言必须结构化』；参考体例 §8.5 明确『仅泛证型』档我们应直接取消\n- 结论理由：14 条断言全部有台账形态\n- **自证**：遍历 14 条断言，按正文关键词 ['[验]', '数值', '枚举', '穷举', '反例', 'n_cases'] 与 status=='验' 识别数值型断言，核对 numeric_evidence.script 是否非空（扫描的断言数=14、有台账行=0、缺台账行=0）\n- 用到的证据：documents.claims[*].statement、documents.claims[*].numeric_evidence、documents.claims[*].status\n\n### G8 可复跑门 —— `pass`\n\n- 轴：证据；判据：每条数值断言都有精确命令，且**本轮实跑过**并留输出\n- 判据状态：逐字照搬 §8.4（该行标注为『新增』，摘自 RP/00_STANDARD.md:149-150 门 B）\n- 结论理由：7 条数值断言都有台账行背书，且 `exit_code` 全绿（0）\n- **自证**：把 7 条数值断言与 24 行 experiments 台账按脚本求交集，再逐行核 `code_hash` 与退出码（需要命令的数值断言数=7、本轮实跑记录=24、缺命令=0、退出码非零=0）\n- 用到的证据：ctx.experiments、documents.claims[*].numeric_evidence.script\n\n### G9 计数一致门 —— `unknown`\n\n- 轴：体例；判据：同一计数（定理数/反例数/脚本数/批次数）在所有文件中一致\n- 判据状态：适配：『所有文件』读成『同一份稿件在不同读取路径下的数字 + 调用方声明的计数』\n- 结论理由：调用方没有提供**声明侧的计数**（`claim_counts`）⇒ 没有『另一个文件』可对账，**判不了一致性**。注意：单看一处数字永远不能判『一致』 —— 那正是 §1.4 十处漂移始终没被发现的原因（没有任何脚本在查）\n- **自证**：**（无 —— 违规）**\n- 用到的证据：documents.claims、ctx.claim_counts\n\n### G10 审校格式门 —— `pass`\n\n- 轴：体例；判据：每条发现必须有：轴 + 严重度 + 行号 + ≤20 词逐字引文 + 最小修法 + maths: yes/no\n- 判据状态：适配（缺口已按裁决补齐）：`schema.ReviewFinding` 自 2026-09-27 起带 `axis` / `line` / `verbatim_quote` / `maths` 四个字段，'最小修法'那一格与 `suggestion` 对齐（`minimal_fix` 作为历史键名继续接受）—— `P-9` 候选 A，所有者裁定；生效日之前落盘的行按 `created_at` 豁免、缺键不计入结构缺口且**不许回填**；**字段齐全的发现按 §8.4 逐字判**（六字段 + ≤20 词逐字引文 + 轴/maths 取值域 + 行号形态）\n- 结论理由：作用面内 4 条发现全部符合六字段格式；版本未冻结 ⇒ 行号那一格按可省判（拿不到时自证理由）\n- **自证**：逐条检查 4 条落在格式契约作用面内的发现的六个必需字段、引文词数上限（≤20 词）、轴与 maths 的取值域以及行号形态（发现数=4、契约作用面内=4、豁免(契约生效前的历史行)=0、不合格式=0、版本冻结(G11 通过)=否）\n- 用到的证据：ctx.findings、ctx.observed_hash\n\n### G11 版本冻结门 —— `unknown`\n\n- 轴：工程；判据：审校期间不改文件；报告钉住被审版本 hash；一次改完一篇,不二次编辑\n- 判据状态：适配：`observed_hash` 来自上一轮报告；未提供时只能证明『钉住了 hash』，故判 unknown\n- 结论理由：本轮**已经钉住** hash=8be1df362cd79bf1，但调用方**没有提供上一轮报告里钉住的 hash** ⇒ 『审校期间文件有没有被改过』这件事**判不了**（钉住 hash ≠ 验证没被改）。三态纪律：这两种结论必须分开\n- **自证**：对 documents（doc_id/title/kind/claims 逐条内容 hash）算 sha256[:16]（被审版本 hash=8be1df362cd79bf1、上一轮钉住的 hash=未提供）\n- 用到的证据：documents、ctx.observed_hash\n\n### G12 反方门 —— `not_applicable`\n\n- 轴：数学；判据：主动构造小参数反例；冲突时先手验最小实例，不许『用更多计算量去裁决计算与证明的冲突』\n- 判据状态：适配：反例搜索的痕迹载体是 counterexamples / numeric_evidence.n_counterexamples\n- 结论理由：本稿**没有任何 `status='证'` 的断言**（可能仍用旧字段、没有 status）⇒ 反方门本轮没有可判定的对象。这不是『反例都搜过了』\n- **自证**：在 14 条断言里筛出 0 条 status=='证'，逐条核对 counterexamples / numeric_evidence.n_counterexamples 是否存在（标『证』的断言数=0、有反例搜索痕迹=0、问题数=0）\n- 用到的证据：documents.claims[*].status\n\n### G13 空结论自证门 —— `pass`\n\n- 轴：体例；判据：某个轴『零发现』时必须报告『用了什么过程、数出了什么数字』\n- 判据状态：逐字照搬 §8.4（并把它做成结构强制：缺自证的 GateResult 构造不出来）\n- 结论理由：9 道门报零发现，全部带自证数字（共 9 道）\n- **自证**：遍历其余 14 道门的结论，筛出 verdict=='pass' 且 findings 为空的门，核对 self_attestation 与 counts 是否都非空（检查的门数=14、报零发现的门数=9、自证齐全=9）\n- 用到的证据：run_all_gates 的返回\n\n### G14 降级合规门 —— `pass`\n\n- 轴：数学；判据：只有数值支撑的结论不得出现在摘要/主结果，必须降为 Remark + 命令\n- 判据状态：适配：降级的载体是 §8.3 的 allowed_use 与 status（`main_body_claims` 是同一份判据）\n- 结论理由：14 条断言的降级规则全部合规\n- **自证**：遍历 14 条断言，检查 status=='作废' 与 (evidence_kind, allowed_use) 组合是否符合降级规则（扫描的断言数=14、作废却在正文=0、须降级却标主结果=0、问题数=0）\n- 用到的证据：documents.claims[*].status、documents.claims[*].allowed_use、documents.claims[*].evidence_kind\n\n### G15 自己的错入册 —— `pass`\n\n- 轴：工程；判据：报告/审核记录里必须有『我在这轮里犯的错』一节\n- 判据状态：逐字照搬 §8.4（并把它做成必填参数：不写就 fail）\n- 结论理由：『我这一轮犯的错』一节已登记 3 条\n- **自证**：检查 ctx.own_errors 是否为 None（None=没写这一节 ⇒ fail；[]=显式声明零错误 ⇒ pass）（自身错误条数=3、显式声明零错误=False）\n- 用到的证据：ctx.own_errors\n\n## 3. 判不了的门（**不许读成『没问题』**）\n\n- `G11` **没查成**：本轮**已经钉住** hash=8be1df362cd79bf1，但调用方**没有提供上一轮报告里钉住的 hash** ⇒ 『审校期间文件有没有被改过』这件事**判不了**（钉住 hash ≠ 验证没被改）。三态纪律：这两种结论必须分开\n- `G9` **没查成**：调用方没有提供**声明侧的计数**（`claim_counts`）⇒ 没有『另一个文件』可对账，**判不了一致性**。注意：单看一处数字永远不能判『一致』 —— 那正是 §1.4 十处漂移始终没被发现的原因（没有任何脚本在查）\n- `G12` 无对象可判：本稿**没有任何 `status='证'` 的断言**（可能仍用旧字段、没有 status）⇒ 反方门本轮没有可判定的对象。这不是『反例都搜过了』\n- `G5` 无对象可判：调用方没有提供 `banned_words` ⇒ 这道门在本轮**没有可判定的对象**。本项目**故意不在代码里写死一份词表**（写死第二份词表就是 FC-03 的形态）：参考体例的词表来自 `STYLE/RUBRIC.md:50-53`，属于**人的文风决定**，应当由配置注入而不是由 AI 固化。门保留、如实报『没有对象』，而不是删门\n- `G6` 无对象可判：本稿 14 条断言**没有任何一条点名数值脚本**（`numeric_evidence.script` 全空）⇒ 虚证门本轮没有可判定的对象。注意这与『脚本都存在』是两件事 —— 所以判 not_applicable 而不是 pass\n\n"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 80256,
+        "prompt_cache_miss_tokens": 2331,
+        "tokens_in": 82587,
+        "tokens_out": 1129,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000265"
+    },
+    {
+      "index": 18,
+      "shape": "tool",
+      "payload": {
+        "name": "review.verify_fixes",
+        "args": {
+          "doc_id": "000001",
+          "round_no": 3
+        },
+        "why": "取本轮收口读数：确认 000000 / 000001 已判 fixed，000002 / 000003 仍 open，作为交给 G 的最终裁决依据"
+      },
+      "result": {
+        "tool": "review.verify_fixes",
+        "ok": true,
+        "data": {
+          "doc_id": "000001",
+          "round": 4,
+          "resolved": [
+            {
+              "finding_id": "000000",
+              "kind": "overclaim",
+              "level": "warning",
+              "target": "section:4",
+              "message": "第 4 节把 Theorem thm:zero 说成「解释了为什么只有这三个方向能竞争」，但 thm:zero 只覆盖「至少一个坐标为 0」的法向，对三个坐标都非零的法向没有给出任何结论，这句话的强度超过它引的证据。",
+              "evidence": "main.tex 第 185 行逐字：「the result of Theorem~\\ref{thm:zero} explains why only these three directions can compete: for normals with a vanishing coordinate the area is an explicit decreasing function of $|a|^p+|b|^p$, so within that class the extremum is always at a coordinate vector or at the face diagonal, never in between.」而 thm:zero（main.tex 第 97–115 行；台账 stmt:000035）的前提是「at least one coordinate equal to 0」；三个坐标都非零的情形在本文里只有附录 A（行 218–224）的数值读数，正文第 4 节同一页自己也承认「the absence of a strictly interior maximizing direction is only verified numerically」（行 183）。同一节行 193 还把它列为 open problem (a)。",
+              "round": 1,
+              "status": "fixed",
+              "source": "manual_rechecked"
+            },
+            {
+              "finding_id": "000001",
+              "kind": "garbled",
+              "level": "warning",
+              "target": "section:4",
+              "message": "第 4 节用一个从未定义过的「ordering cone $0\\le a\\le b\\le c$」描述数值扫描的参数化（第 183 行、第 193 行、附录第 220 行），读者无从知道 a,b,c 指什么、凭什么可以假定这一顺序、两条边界弧 $(0,1,t)$ 与 $(1,1,t)$ 里的 t 又是什么——这三处都缺定义。",
+              "evidence": "逐字引文（main.tex 第 183 行）：「by local refinement along the two boundary arcs of the ordering cone $0\\le a\\le b\\le c$」；第 193 行「the critical points of $A_p$ on the ordering cone」；附录第 220 行「parametrised by the ordering cone $0\\le a\\le b\\le c$ together with the two boundary arcs $(0,1,t)$ and $(1,1,t)$, $t\\in[0,1]$」。第 2 节（Definitions and notation，第 30–54 行）只定义了 $B_p^3$、$A_p(n)$、$e_n(\\psi)$、$\\Sigma_3^{\\pm}$、$u,v$，没有定义这个锥、也没有写出「由 $\\Sigma_3^{\\pm}$ 不变性可设法向各分量满足 $0\\le a\\le b\\le c$」这一步约化；按我在正文里的通读，该词在正文首次出现即在第 4 节。",
+              "round": 1,
+              "status": "fixed",
+              "source": "manual_rechecked"
+            }
+          ],
+          "still_open": [
+            {
+              "finding_id": "000002",
+              "kind": "garbled",
+              "level": "warning",
+              "target": "references",
+              "message": "参考文献项 \\bibitem{critical} 缺作者与出处，条目里还写着内部的核验备注（「Author metadata for this item could not be verified from the sources available to us」）——读者据此找不到这篇文献，而正文第 1 节与第 4 节至少两处 \\cite{critical} 把它当作已知工作引用，两处因此都不可核。",
+              "evidence": "逐字引文（main.tex 第 207 行）：「\\bibitem{critical} \\emph{Critical central sections of the cube}, preprint. (Author metadata for this item could not be verified from the sources available to us; the title is quoted as recorded.)」；正文引它的位置：第 1 节「The cube's critical central sections and the extremal sections of subspaces of $L_p$ are treated in \\cite{critical} and \\cite{eskenazis}.」与第 4 节 Relation with the literature 一段的 \\cite{ball,konig,grzaslewicz,critical,eskenazis}。台账侧：literature 里有同名行 lit:000003「Critical central sections of the cube」（table.list 读数），补齐元数据的材料在盘上是有的。",
+              "round": 1,
+              "status": "open",
+              "source": "manual_not_rechecked",
+              "note": "[round 4] 手工判词（`review.record_finding` 落的散文发现）**不能被自动复跑判掉**：它的去重键不在机械 scan 的可产出集合里，「本轮没复现」不等于「H 复核过」。离场只有一条路：H 用 `review.record_finding` 以同一去重键再登记一次，`evidence` 以 `复核 fixed：` 或 `复核 wontfix：` 开头"
+            },
+            {
+              "finding_id": "000003",
+              "kind": "dangling_dep",
+              "level": "error",
+              "target": "references",
+              "message": "参考文献条目改为 \\bibitem{ambrus} 之后，正文第 26 行与第 187 行仍写 \\cite{critical}：引键在参考文献表里已不存在，两处引用都悬空（scan 判 cites error，且 bibitem{ambrus} 无人引用、uncited=1）。",
+              "evidence": "review.scan(kinds=[\"cites\",...], project=\".\") 读数：findings[0] = {kind: cites, severity: error, file: out/package/main.tex, line: 26, ref: critical, why: 「这条 \\cite 的键 'critical' 在参考文献里没有对应的 \\bibitem —— 正文引了一份不存在于参考文献表的文献（读的人点不过去）」}；facts.bibitem_keys=5、cite_keys=5、uncited=1。fs.search(pattern=\"critical\") 读数：第 26 行「The cube's critical central sections and the extremal sections of subspaces of $L_p$ are treated in \\cite{critical} and \\cite{eskenazis}.」；第 187 行 Relation with the literature 段「The papers \\cite{critical} and \\cite{eskenazis} study critical central sections of the cube and extremal sections of subspaces of $L_p$ respectively」。参考文献表（第 205–211 行）现在是 \\bibitem{grzaslewicz} / \\bibitem{ambrus} G.~Ambrus, arXiv:2107.14778v3 (2023), 12 pp. / \\bibitem{eskenazis}，已没有 \\bibitem{critical} —— 条目改名而正文引键没跟着改，两处都不再解析。",
+              "round": 2,
+              "status": "open",
+              "source": "manual_not_rechecked",
+              "note": "[round 4] 手工判词（`review.record_finding` 落的散文发现）**不能被自动复跑判掉**：它的去重键不在机械 scan 的可产出集合里，「本轮没复现」不等于「H 复核过」。离场只有一条路：H 用 `review.record_finding` 以同一去重键再登记一次，`evidence` 以 `复核 fixed：` 或 `复核 wontfix：` 开头"
+            }
+          ],
+          "unresolved_findings": [
+            {
+              "finding_id": "000003",
+              "kind": "dangling_dep",
+              "level": "error",
+              "target": "references",
+              "message": "参考文献条目改为 \\bibitem{ambrus} 之后，正文第 26 行与第 187 行仍写 \\cite{critical}：引键在参考文献表里已不存在，两处引用都悬空（scan 判 cites error，且 bibitem{ambrus} 无人引用、uncited=1）。",
+              "evidence": "review.scan(kinds=[\"cites\",...], project=\".\") 读数：findings[0] = {kind: cites, severity: error, file: out/package/main.tex, line: 26, ref: critical, why: 「这条 \\cite 的键 'critical' 在参考文献里没有对应的 \\bibitem —— 正文引了一份不存在于参考文献表的文献（读的人点不过去）」}；facts.bibitem_keys=5、cite_keys=5、uncited=1。fs.search(pattern=\"critical\") 读数：第 26 行「The cube's critical central sections and the extremal sections of subspaces of $L_p$ are treated in \\cite{critical} and \\cite{eskenazis}.」；第 187 行 Relation with the literature 段「The papers \\cite{critical} and \\cite{eskenazis} study critical central sections of the cube and extremal sections of subspaces of $L_p$ respectively」。参考文献表（第 205–211 行）现在是 \\bibitem{grzaslewicz} / \\bibitem{ambrus} G.~Ambrus, arXiv:2107.14778v3 (2023), 12 pp. / \\bibitem{eskenazis}，已没有 \\bibitem{critical} —— 条目改名而正文引键没跟着改，两处都不再解析。",
+              "round": 2,
+              "status": "open",
+              "source": "manual_not_rechecked",
+              "note": "[round 4] 手工判词（`review.record_finding` 落的散文发现）**不能被自动复跑判掉**：它的去重键不在机械 scan 的可产出集合里，「本轮没复现」不等于「H 复核过」。离场只有一条路：H 用 `review.record_finding` 以同一去重键再登记一次，`evidence` 以 `复核 fixed：` 或 `复核 wontfix：` 开头"
+            }
+          ],
+          "not_rechecked": [
+            {
+              "finding_id": "000002",
+              "kind": "garbled",
+              "level": "warning",
+              "target": "references",
+              "message": "参考文献项 \\bibitem{critical} 缺作者与出处，条目里还写着内部的核验备注（「Author metadata for this item could not be verified from the sources available to us」）——读者据此找不到这篇文献，而正文第 1 节与第 4 节至少两处 \\cite{critical} 把它当作已知工作引用，两处因此都不可核。",
+              "evidence": "逐字引文（main.tex 第 207 行）：「\\bibitem{critical} \\emph{Critical central sections of the cube}, preprint. (Author metadata for this item could not be verified from the sources available to us; the title is quoted as recorded.)」；正文引它的位置：第 1 节「The cube's critical central sections and the extremal sections of subspaces of $L_p$ are treated in \\cite{critical} and \\cite{eskenazis}.」与第 4 节 Relation with the literature 一段的 \\cite{ball,konig,grzaslewicz,critical,eskenazis}。台账侧：literature 里有同名行 lit:000003「Critical central sections of the cube」（table.list 读数），补齐元数据的材料在盘上是有的。",
+              "round": 1,
+              "status": "open",
+              "source": "manual_not_rechecked",
+              "note": "[round 4] 手工判词（`review.record_finding` 落的散文发现）**不能被自动复跑判掉**：它的去重键不在机械 scan 的可产出集合里，「本轮没复现」不等于「H 复核过」。离场只有一条路：H 用 `review.record_finding` 以同一去重键再登记一次，`evidence` 以 `复核 fixed：` 或 `复核 wontfix：` 开头"
+            },
+            {
+              "finding_id": "000003",
+              "kind": "dangling_dep",
+              "level": "error",
+              "target": "references",
+              "message": "参考文献条目改为 \\bibitem{ambrus} 之后，正文第 26 行与第 187 行仍写 \\cite{critical}：引键在参考文献表里已不存在，两处引用都悬空（scan 判 cites error，且 bibitem{ambrus} 无人引用、uncited=1）。",
+              "evidence": "review.scan(kinds=[\"cites\",...], project=\".\") 读数：findings[0] = {kind: cites, severity: error, file: out/package/main.tex, line: 26, ref: critical, why: 「这条 \\cite 的键 'critical' 在参考文献里没有对应的 \\bibitem —— 正文引了一份不存在于参考文献表的文献（读的人点不过去）」}；facts.bibitem_keys=5、cite_keys=5、uncited=1。fs.search(pattern=\"critical\") 读数：第 26 行「The cube's critical central sections and the extremal sections of subspaces of $L_p$ are treated in \\cite{critical} and \\cite{eskenazis}.」；第 187 行 Relation with the literature 段「The papers \\cite{critical} and \\cite{eskenazis} study critical central sections of the cube and extremal sections of subspaces of $L_p$ respectively」。参考文献表（第 205–211 行）现在是 \\bibitem{grzaslewicz} / \\bibitem{ambrus} G.~Ambrus, arXiv:2107.14778v3 (2023), 12 pp. / \\bibitem{eskenazis}，已没有 \\bibitem{critical} —— 条目改名而正文引键没跟着改，两处都不再解析。",
+              "round": 2,
+              "status": "open",
+              "source": "manual_not_rechecked",
+              "note": "[round 4] 手工判词（`review.record_finding` 落的散文发现）**不能被自动复跑判掉**：它的去重键不在机械 scan 的可产出集合里，「本轮没复现」不等于「H 复核过」。离场只有一条路：H 用 `review.record_finding` 以同一去重键再登记一次，`evidence` 以 `复核 fixed：` 或 `复核 wontfix：` 开头"
+            }
+          ],
+          "semantic_check": {
+            "checked": false,
+            "judge": "",
+            "reason": "没接线：语义级判据（「结论是否强于引文」）需要 LLM 或人，本框架默认零 LLM 调用。接法：`scan_document(..., semantic_judge=<可调用>)`，签名见 `SemanticJudge`。⇒ 这一格的状态是**没查**，不是'查过、没问题' —— 措辞级判据仍然跑过（见 findings）",
+            "claims_judged": 0,
+            "claims_unknown": 0,
+            "checker_errors": 0,
+            "stronger_than_evidence": 0
+          },
+          "verdict": "revise_again",
+          "reason": "第 4 轮复审：上一轮 4 条发现里 resolved=2、仍复现=2；error 级未解决 1 条；；其中 2 条是**手工判词**（`record_finding` 落的散文发现）、本轮**没有 H 的显式复核** ⇒ 留在 open，不许判 fixed（手工判词不能被自动复跑判掉；逐条见 `not_rechecked`）；2 条手工判词已由 H 显式复核过（fixed / wontfix 带理由）⇒ 本轮不改写它们。",
+          "error_count": 0,
+          "warning_count": 0,
+          "info_count": 0,
+          "dep_check": {
+            "checked": true,
+            "reason": "检查了 0 条依赖",
+            "open": []
+          },
+          "finding_updates": [],
+          "status": "in_review",
+          "status_updated": true,
+          "status_error": null,
+          "paper_body": {
+            "checked": true,
+            "source": "tex",
+            "path": "out/package/main.tex",
+            "sha256": "e2c7a5277ef11a3b8af108945d903413b01a1e63cb62defcefc5462bbd670d8d",
+            "bytes": 31657,
+            "lines": 230,
+            "chars": 31657,
+            "reason": ""
+          }
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 81792,
+        "prompt_cache_miss_tokens": 5205,
+        "tokens_in": 86997,
+        "tokens_out": 865,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000265"
+    },
+    {
+      "index": 19,
+      "shape": "final",
+      "payload": {
+        "final": "复审完毕（doc 000001，round 2 的 verify_fixes + 显式复核登记，读数落在 round 4）：**不予通过**，稿件状态置 `in_review`（未签 accepted）。逐条判：\n\n① finding 000000（section:4 过度声称）⇒ **fixed**。本版第 4 节第三点已收窄：逐字「Third, within the class of normals having a vanishing coordinate, Theorem~\\ref{thm:zero} does settle the comparison: … so over that class the extremum is attained at a coordinate vector or at the face diagonal and never in between. For normals whose three coordinates are all non-zero, the corresponding statement is at present only the numerical observation recorded above; Theorem~\\ref{thm:zero} says nothing about that class.」Limitations 段也重申了同一收窄。已用 record_finding 以原去重键登记 `复核 fixed：`。\n\n② finding 000001（ordering cone 未定义）⇒ **fixed**。第 2 节（第 44–50 行）已定义 $\\mathcal{C}=\\{n=(a,b,c):0\\le a\\le b\\le c\\}$、说明由 $\\Sigma_3^{\\pm}$ 不变性可约化、顶点是坐标方向，并定义 $\\alpha(t)=(0,1,t)/\\sqrt{1+t^2}$、$\\beta(t)=(1,1,t)/\\sqrt{2+t^2}$、$t\\in[0,1]$ 及端点 $\\alpha(0)=\\beta(0)=f$、$\\beta(1)=d$、$\\alpha(t)\\to e_3$。已登记 `复核 fixed：`。\n\n③ finding 000002（references）⇒ **仍未修好，留 open**，并新落 **error 级 finding 000003（dangling_dep）**：参考文献条目已从 `\\bibitem{critical}` 改名为 `\\bibitem{ambrus}` G.~Ambrus, arXiv:2107.14778v3 (2023), 12~pp.（这一半确实可核了），**但正文的引键没跟着改** —— 第 26 行逐字「…are treated in \\cite{critical} and \\cite{eskenazis}.」、第 187 行「The papers \\cite{critical} and \\cite{eskenazis} study critical central sections…」两处仍写 `\\cite{critical}`，参考文献表里已无该键 ⇒ 两处引用悬空、`\\bibitem{ambrus}` 无人引用。`review.scan(kinds=[\"cites\",…], project=\".\")` 读数：cites 1 条，severity=error，file=out/package/main.tex，line=26，ref=critical，bibitem_keys=5 / cite_keys=5 / uncited=1。**最小修法：把第 26、187 行的 `\\cite{critical}` 改成 `\\cite{ambrus}`（改完全文搜一遍 `critical` 确认无残留），再重编 PDF。**\n\n其它读数（我自己核的，不是转述）：main.tex sha256 = e2c7a5277ef11a3b8af108945d903413b01a1e63cb62defcefc5462bbd670d8d，与派活给的一致；COMPILE-RECEIPT.json 的 tex_sha256 同值、pages=10、pdf_bytes=314797、exit_codes=[0,0]、pdf_fresh=true ⇒ 这份 PDF 是从盘上这一版正文编的。机械七类里 refs / inputs / proofs / duplicates / text_integrity / ledger_match 均 0 条，`statement_surplus` 为空（statement_envs=4、proof_envs=4、mapping_rows=4、mapping_state=pass）；`\\input{mapping-appendix}` 解析到盘上文件。审校报告已落 out/report/000001-review.md（G1–G15：pass=10 / fail=0 / unknown=2〔G9 计数一致、G11 版本冻结 —— 这两格**没查成**，不是没问题〕/ n/a=3，总判 `unverified`）。语义级判据（结论是否强于引文）**未接线 ⇒ 没查**，我不把它读成通过。\n\n我这一轮自己犯的错：第一次 review.scan 把 project 写成 `.\\\"`（多一个引号），七类全部 checked=false，我重扫一次才拿到真读数；第一次登记 000000 的复核时用了自己新写的 message，被去重键拒，照原 message 重传才收口。两条都写进了报告的「我这一轮犯的错」。",
+        "evidence": [
+          "doc:000001",
+          "review_findings 000000 (fixed)",
+          "review_findings 000001 (fixed)",
+          "review_findings 000002 (open)",
+          "review_findings 000003 (open, error)",
+          "out/package/main.tex sha256=e2c7a5277ef11a3b8af108945d903413b01a1e63cb62defcefc5462bbd670d8d",
+          "out/package/COMPILE-RECEIPT.json (pages=10, pdf_bytes=314797)",
+          "out/report/000001-review.md"
+        ],
+        "notify": {
+          "to": "G",
+          "summary": "H 复审 doc 000001：000000/000001 已判 fixed，000002 仍 open 且新增 error 级 000003（\\cite{critical} 悬空），不予通过，状态 in_review",
+          "body": "## 结论：这一版不能签 accepted（documents.status = in_review）\n\n被审版本：`out/package/main.tex`，sha256=`e2c7a5277ef11a3b8af108945d903413b01a1e63cb62defcefc5462bbd670d8d`（230 行）；回执 tex_sha256 同值、pages=10、pdf_bytes=314797、exit_codes=[0,0] ⇒ PDF 与正文对得上（这一格是我自己读回执核的）。\n\n### 逐条复核\n| 发现 | 结论 | 依据 |\n|---|---|---|\n| 000000（section:4 过度声称，warning） | **fixed** | 第 4 节第三点已收窄到「至少一个坐标为 0 的法向」，并明写「For normals whose three coordinates are all non-zero, the corresponding statement is at present only the numerical observation recorded above; Theorem~\\ref{thm:zero} says nothing about that class.」 |\n| 000001（ordering cone 未定义，warning） | **fixed** | 第 2 节第 44–50 行已定义 $\\mathcal{C}=\\{n=(a,b,c):0\\le a\\le b\\le c\\}$、$\\Sigma_3^{\\pm}$ 约化、$\\alpha(t)$/\\beta(t)$ 与端点 $f,d,e_3$ |\n| 000002（references，warning） | **仍 open** | 条目元数据那一半修好了，但正文引键没跟着改（见下） |\n| **000003（新增，error）** | **open** | `\\cite{critical}` 悬空 |\n\n### 必须改的一处（唯一阻断项）\n参考文献表已把 `\\bibitem{critical}` 换成 `\\bibitem{ambrus}`（G.~Ambrus, arXiv:2107.14778v3 (2023), 12~pp.），但正文两处仍写旧键：\n- 第 26 行：「…extremal sections of subspaces of $L_p$ are treated in `\\cite{critical}` and `\\cite{eskenazis}`.」\n- 第 187 行：「The papers `\\cite{critical}` and `\\cite{eskenazis}` study critical central sections of the cube…」\n\n`review.scan(kinds=[\"cites\",…], project=\".\")` 读数：cites **1 条 error**，line=26，ref=`critical`；facts：bibitem_keys=5 / cite_keys=5 / uncited=1（`ambrus` 无人引用）。\n**最小修法：两处 `\\cite{critical}` → `\\cite{ambrus}`（改完全文搜 `critical` 确认无残留），然后 `doc.paper_compile` 重编，回执 tex_sha256 必须等于新正文的 sha。** 改完这一处，000002 与 000003 两条可一并请求收口。\n\n### 其它机器读数（供你对账，不进 finding 台账）\nrefs 0 / inputs 0 / proofs 0 / duplicates 0 / text_integrity 0 / ledger_match 0；`statement_surplus` 空（statement_envs=4、proof_envs=4、mapping_rows=4、mapping_state=pass）；`\\input{mapping-appendix}` 目标在盘上。\n\n### 没查成的两格（不许读成通过）\n审校报告 G9（计数一致）与 G11（版本冻结）判 `unknown` —— **没查成**，不是没问题；语义级判据（结论是否强于引文）本会话未接线 ⇒ **没查**。报告落 `out/report/000001-review.md`（pass=10 / fail=0 / unknown=2 / n/a=3，总判 `unverified`）。\n\n我这一轮犯的错已写进报告 §0（scan 的 project 路径打错、复核登记时用错 message 被拒）。",
+          "refs": [
+            "doc:000001"
+          ]
+        }
+      },
+      "result": {
+        "notify_problem": "notify.refs 里的 'doc:000001' 立不住：引用 'doc:000001' 的前缀不认识：认 c/exp/lit/q/rel/stmt: 这几种，或者四位手稿编号"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 86144,
+        "prompt_cache_miss_tokens": 4221,
+        "tokens_in": 90365,
+        "tokens_out": 2485,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000265"
+    }
+  ],
+  "final": "复审完毕（doc 000001，round 2 的 verify_fixes + 显式复核登记，读数落在 round 4）：**不予通过**，稿件状态置 `in_review`（未签 accepted）。逐条判：\n\n① finding 000000（section:4 过度声称）⇒ **fixed**。本版第 4 节第三点已收窄：逐字「Third, within the class of normals having a vanishing coordinate, Theorem~\\ref{thm:zero} does settle the comparison: … so over that class the extremum is attained at a coordinate vector or at the face diagonal and never in between. For normals whose three coordinates are all non-zero, the corresponding statement is at present only the numerical observation recorded above; Theorem~\\ref{thm:zero} says nothing about that class.」Limitations 段也重申了同一收窄。已用 record_finding 以原去重键登记 `复核 fixed：`。\n\n② finding 000001（ordering cone 未定义）⇒ **fixed**。第 2 节（第 44–50 行）已定义 $\\mathcal{C}=\\{n=(a,b,c):0\\le a\\le b\\le c\\}$、说明由 $\\Sigma_3^{\\pm}$ 不变性可约化、顶点是坐标方向，并定义 $\\alpha(t)=(0,1,t)/\\sqrt{1+t^2}$、$\\beta(t)=(1,1,t)/\\sqrt{2+t^2}$、$t\\in[0,1]$ 及端点 $\\alpha(0)=\\beta(0)=f$、$\\beta(1)=d$、$\\alpha(t)\\to e_3$。已登记 `复核 fixed：`。\n\n③ finding 000002（references）⇒ **仍未修好，留 open**，并新落 **error 级 finding 000003（dangling_dep）**：参考文献条目已从 `\\bibitem{critical}` 改名为 `\\bibitem{ambrus}` G.~Ambrus, arXiv:2107.14778v3 (2023), 12~pp.（这一半确实可核了），**但正文的引键没跟着改** —— 第 26 行逐字「…are treated in \\cite{critical} and \\cite{eskenazis}.」、第 187 行「The papers \\cite{critical} and \\cite{eskenazis} study critical central sections…」两处仍写 `\\cite{critical}`，参考文献表里已无该键 ⇒ 两处引用悬空、`\\bibitem{ambrus}` 无人引用。`review.scan(kinds=[\"cites\",…], project=\".\")` 读数：cites 1 条，severity=error，file=out/package/main.tex，line=26，ref=critical，bibitem_keys=5 / cite_keys=5 / uncited=1。**最小修法：把第 26、187 行的 `\\cite{critical}` 改成 `\\cite{ambrus}`（改完全文搜一遍 `critical` 确认无残留），再重编 PDF。**\n\n其它读数（我自己核的，不是转述）：main.tex sha256 = e2c7a5277ef11a3b8af108945d903413b01a1e63cb62defcefc5462bbd670d8d，与派活给的一致；COMPILE-RECEIPT.json 的 tex_sha256 同值、pages=10、pdf_bytes=314797、exit_codes=[0,0]、pdf_fresh=true ⇒ 这份 PDF 是从盘上这一版正文编的。机械七类里 refs / inputs / proofs / duplicates / text_integrity / ledger_match 均 0 条，`statement_surplus` 为空（statement_envs=4、proof_envs=4、mapping_rows=4、mapping_state=pass）；`\\input{mapping-appendix}` 解析到盘上文件。审校报告已落 out/report/000001-review.md（G1–G15：pass=10 / fail=0 / unknown=2〔G9 计数一致、G11 版本冻结 —— 这两格**没查成**，不是没问题〕/ n/a=3，总判 `unverified`）。语义级判据（结论是否强于引文）**未接线 ⇒ 没查**，我不把它读成通过。\n\n我这一轮自己犯的错：第一次 review.scan 把 project 写成 `.\\\"`（多一个引号），七类全部 checked=false，我重扫一次才拿到真读数；第一次登记 000000 的复核时用了自己新写的 message，被去重键拒，照原 message 重传才收口。两条都写进了报告的「我这一轮犯的错」。",
+  "evidence": [
+    "doc:000001",
+    "review_findings 000000 (fixed)",
+    "review_findings 000001 (fixed)",
+    "review_findings 000002 (open)",
+    "review_findings 000003 (open, error)",
+    "out/package/main.tex sha256=e2c7a5277ef11a3b8af108945d903413b01a1e63cb62defcefc5462bbd670d8d",
+    "out/package/COMPILE-RECEIPT.json (pages=10, pdf_bytes=314797)",
+    "out/report/000001-review.md"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 0,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 20,
+  "compactions": 0,
+  "mailbox_items": [],
+  "mailbox_msgs": [],
+  "mailbox_delivered": 0,
+  "monitor_turns": 0,
+  "wakes": 0,
+  "wake_ids": [],
+  "wake_events": [],
+  "clock_pumps": 38,
+  "clock_fired": 0,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "H 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "H",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    }
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [],
+  "summons": [],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [],
+  "summons_total": 0,
+  "summons_consumed": 0,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 0,
+    "summons_consumed": 0,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p328",
+    "role": "H",
+    "prompt_sha256": "59b75ccd8bcfde902604a400a3b34cbd4c14a8f19d366c7b9ccf7470c6a19710",
+    "prompt_chars": 66822,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "FACULTIES_07",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "TOOL_29",
+      "TOOL_30",
+      "TOOL_31",
+      "TOOL_32",
+      "TOOL_33",
+      "TOOL_34",
+      "TOOL_35",
+      "TOOL_36",
+      "TOOL_37",
+      "TOOL_38",
+      "TOOL_39",
+      "TOOL_40",
+      "TOOL_41",
+      "TOOL_42",
+      "TOOL_43",
+      "TOOL_44",
+      "TOOL_45",
+      "TOOL_46",
+      "TOOL_47",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "PAPER_PACK",
+      "PAPER_01",
+      "PAPER_02",
+      "PAPER_03",
+      "PAPER_04",
+      "PAPER_05",
+      "PAPER_06",
+      "PAPER_07",
+      "PAPER_07_BODY",
+      "PAPER_08",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_LIMITS",
+      "COLLAB_NAMES",
+      "PARENT_STOP",
+      "PARENT_ROSTER",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 19,
+    "tokens_in": 1351703,
+    "tokens_out": 22528,
+    "usd": 0.025496,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 19,
+    "no_request_calls": 0,
+    "hit": 1297792,
+    "miss": 53911,
+    "unknown_calls": 0,
+    "tokens_in": 1351703,
+    "hit_rate": 0.9601,
+    "mismatched_calls": 0,
+    "saved_usd": 0.190776,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 162.188,
+  "end_ts": "2026-11-25T00:13:43+08:00",
+  "notes": [
+    "收工没有可用 notify 表（notify.refs 里的 'doc:000001' 立不住：引用 'doc:000001' 的前缀不认识：认 c/exp/lit/q/rel/stmt: 这几种，或者四位手稿编号）⇒ 这一趟没有交接手稿（不打回、不代填）",
+    "收工时名下还有 1 条证明没有 V 的签字（读数，不拦收工；明细：000112）",
+    "缓存读数：命中 1297792 / 未命中 53911 token，命中率 96.0%（19 次调用）；按 modelcost 口径估算可省 约 0.190776 美元",
+    "子产出处理读数：summons_total=0（这一趟没派过子代理 ⇒ 没有要处理的子产出；判据没有对象，不红）",
+    "终态回报已落板：t-000266（框架通报；模型没填 notify）",
+    "H 的 finding 判词已回写 documents：000001（2 条 open finding，最新 2026-11-25T00:13:05+08:00）（这一趟没有可回写的 review.report 判词 ⇒ 按最新一条 open finding 更新；阳性判词只走报告与签名链）"
+  ],
+  "final_payload": {
+    "final": "复审完毕（doc 000001，round 2 的 verify_fixes + 显式复核登记，读数落在 round 4）：**不予通过**，稿件状态置 `in_review`（未签 accepted）。逐条判：\n\n① finding 000000（section:4 过度声称）⇒ **fixed**。本版第 4 节第三点已收窄：逐字「Third, within the class of normals having a vanishing coordinate, Theorem~\\ref{thm:zero} does settle the comparison: … so over that class the extremum is attained at a coordinate vector or at the face diagonal and never in between. For normals whose three coordinates are all non-zero, the corresponding statement is at present only the numerical observation recorded above; Theorem~\\ref{thm:zero} says nothing about that class.」Limitations 段也重申了同一收窄。已用 record_finding 以原去重键登记 `复核 fixed：`。\n\n② finding 000001（ordering cone 未定义）⇒ **fixed**。第 2 节（第 44–50 行）已定义 $\\mathcal{C}=\\{n=(a,b,c):0\\le a\\le b\\le c\\}$、说明由 $\\Sigma_3^{\\pm}$ 不变性可约化、顶点是坐标方向，并定义 $\\alpha(t)=(0,1,t)/\\sqrt{1+t^2}$、$\\beta(t)=(1,1,t)/\\sqrt{2+t^2}$、$t\\in[0,1]$ 及端点 $\\alpha(0)=\\beta(0)=f$、$\\beta(1)=d$、$\\alpha(t)\\to e_3$。已登记 `复核 fixed：`。\n\n③ finding 000002（references）⇒ **仍未修好，留 open**，并新落 **error 级 finding 000003（dangling_dep）**：参考文献条目已从 `\\bibitem{critical}` 改名为 `\\bibitem{ambrus}` G.~Ambrus, arXiv:2107.14778v3 (2023), 12~pp.（这一半确实可核了），**但正文的引键没跟着改** —— 第 26 行逐字「…are treated in \\cite{critical} and \\cite{eskenazis}.」、第 187 行「The papers \\cite{critical} and \\cite{eskenazis} study critical central sections…」两处仍写 `\\cite{critical}`，参考文献表里已无该键 ⇒ 两处引用悬空、`\\bibitem{ambrus}` 无人引用。`review.scan(kinds=[\"cites\",…], project=\".\")` 读数：cites 1 条，severity=error，file=out/package/main.tex，line=26，ref=critical，bibitem_keys=5 / cite_keys=5 / uncited=1。**最小修法：把第 26、187 行的 `\\cite{critical}` 改成 `\\cite{ambrus}`（改完全文搜一遍 `critical` 确认无残留），再重编 PDF。**\n\n其它读数（我自己核的，不是转述）：main.tex sha256 = e2c7a5277ef11a3b8af108945d903413b01a1e63cb62defcefc5462bbd670d8d，与派活给的一致；COMPILE-RECEIPT.json 的 tex_sha256 同值、pages=10、pdf_bytes=314797、exit_codes=[0,0]、pdf_fresh=true ⇒ 这份 PDF 是从盘上这一版正文编的。机械七类里 refs / inputs / proofs / duplicates / text_integrity / ledger_match 均 0 条，`statement_surplus` 为空（statement_env…（落档截断，原 2417 字）",
+    "evidence": [
+      "doc:000001",
+      "review_findings 000000 (fixed)",
+      "review_findings 000001 (fixed)",
+      "review_findings 000002 (open)",
+      "review_findings 000003 (open, error)",
+      "out/package/main.tex sha256=e2c7a5277ef11a3b8af108945d903413b01a1e63cb62defcefc5462bbd670d8d",
+      "out/package/COMPILE-RECEIPT.json (pages=10, pdf_bytes=314797)",
+      "out/report/000001-review.md"
+    ],
+    "notify": {
+      "to": "G",
+      "summary": "H 复审 doc 000001：000000/000001 已判 fixed，000002 仍 open 且新增 error 级 000003（\\cite{critical} 悬空），不予通过，状态 in_review",
+      "body": "## 结论：这一版不能签 accepted（documents.status = in_review）\n\n被审版本：`out/package/main.tex`，sha256=`e2c7a5277ef11a3b8af108945d903413b01a1e63cb62defcefc5462bbd670d8d`（230 行）；回执 tex_sha256 同值、pages=10、pdf_bytes=314797、exit_codes=[0,0] ⇒ PDF 与正文对得上（这一格是我自己读回执核的）。\n\n### 逐条复核\n| 发现 | 结论 | 依据 |\n|---|---|---|\n| 000000（section:4 过度声称，warning） | **fixed** | 第 4 节第三点已收窄到「至少一个坐标为 0 的法向」，并明写「For normals whose three coordinates are all non-zero, the corresponding statement is at present only the numerical observation recorded above; Theorem~\\ref{thm:zero} says nothing about that class.」 |\n| 000001（ordering cone 未定义，warning） | **fixed** | 第 2 节第 44–50 行已定义 $\\mathcal{C}=\\{n=(a,b,c):0\\le a\\le b\\le c\\}$、$\\Sigma_3^{\\pm}$ 约化、$\\alpha(t)$/\\beta(t)$ 与端点 $f,d,e_3$ |\n| 000002（references，warning） | **仍 open** | 条目元数据那一半修好了，但正文引键没跟着改（见下） |\n| **000003（新增，error）** | **open** | `\\cite{critical}` 悬空 |\n\n### 必须改的一处（唯一阻断项）\n参考文献表已把 `\\bibitem{critical}` 换成 `\\bibitem{ambrus}`（G.~Ambrus, arXiv:2107.14778v3 (2023), 12~pp.），但正文两处仍写旧键：\n- 第 26 行：「…extremal sections of subspaces of $L_p$ are treated in `\\cite{critical}` and `\\cite{eskenazis}`.」\n- 第 187 行：「The papers `\\cite{critical}` and `\\cite{eskenazis}` study critical central sections of the cube…」\n\n`review.scan(kinds=[\"cites\",…], project=\".\")` 读数：cites **1 条 error**，line=26，ref=`critical`；facts：bibitem_keys=5 / cite_keys=5 / uncited=1（`ambrus` 无人引用）。\n**最小修法：两处 `\\cite{critical}` → `\\cite{ambrus}`（改完全文搜 `critical` 确认无残留），然后 `doc.paper_compile` 重编，回执 tex_sha256 必须等于新正文的 sha。** 改完这一处，000002 与 000003 两条可一并请求收口。\n\n### 其它机器读数（供你对账，不进 finding 台账）\nrefs 0 / inputs 0 / proofs 0 / duplicates 0 / text_integrity 0 / ledger_match 0；`statement_surplus` 空（statement_envs=4、proof_envs=4、mapping_rows=4、mapping_state=pass）；`\\input{mapping-appendix}` 目标在盘上。\n\n### 没查成的两格（不许读成通过）\n审校报告 G9（计数一致）与 G11（版本冻结）判 `unknown` —— **没查成**，不是没问题；语义级判据（结论是否强于引文）本会话未接线 ⇒ **没查**。报告落 `out/report/000001-review.md`（pass=10 / fail=0 / unknown=2 / n/a=3，总判 `unverified`）。\n\n我这一轮犯的错已写进报告 §0（scan 的 project 路径打错、复核登记时用错 message 被拒）。",
+      "refs": [
+        "doc:000001"
+      ]
+    }
+  },
+  "task_id": "t-000265"
+}

@@ -1,0 +1,15 @@
+2026-11-24 23:52:00,786+0800 INFO  miktex-pdftex - this process (18024) started by miktex-makefmt in directory C:\Users\ysc20\AppData\Local\Temp\mik8983 with command line: miktex-pdftex.exe --miktex-enable-installer --miktex-disable-maintenance --miktex-disable-diagnose --interaction=nonstopmode --initialize --halt-on-error --alias=pdflatex --job-name=pdflatex -tcx=cp227.tcx --enable-etex pdflatex.ini
+2026-11-24 23:52:00,787+0800 INFO  miktex-pdftex - running on Windows 10.0.26200
+2026-11-24 23:52:00,787+0800 INFO  miktex-pdftex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-24 23:52:00,791+0800 INFO  miktex-pdftex - allowing known shell commands
+2026-11-24 23:52:12,807+0800 INFO  miktex-pdftex - this process (18024) finishes with exit code 0
+2026-11-25 00:10:41,987+0800 INFO  miktex-pdftex - this process (28448) started by miktex-makefmt in directory C:\Users\ysc20\AppData\Local\Temp\mik74601 with command line: miktex-pdftex.exe --miktex-enable-installer --miktex-disable-maintenance --miktex-disable-diagnose --interaction=nonstopmode --initialize --halt-on-error --alias=pdflatex --job-name=pdflatex -tcx=cp227.tcx --enable-etex pdflatex.ini
+2026-11-25 00:10:41,988+0800 INFO  miktex-pdftex - running on Windows 10.0.26200
+2026-11-25 00:10:41,988+0800 INFO  miktex-pdftex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-25 00:10:41,993+0800 INFO  miktex-pdftex - allowing known shell commands
+2026-11-25 00:10:52,754+0800 INFO  miktex-pdftex - this process (28448) finishes with exit code 0
+2026-11-25 03:11:43,032+0800 INFO  miktex-pdftex - this process (13740) started by miktex-makefmt in directory C:\Users\ysc20\AppData\Local\Temp\mik56263 with command line: miktex-pdftex.exe --miktex-enable-installer --miktex-disable-maintenance --miktex-disable-diagnose --interaction=nonstopmode --initialize --halt-on-error --alias=pdflatex --job-name=pdflatex -tcx=cp227.tcx --enable-etex pdflatex.ini
+2026-11-25 03:11:43,032+0800 INFO  miktex-pdftex - running on Windows 10.0.26200
+2026-11-25 03:11:43,033+0800 INFO  miktex-pdftex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-25 03:11:43,036+0800 INFO  miktex-pdftex - allowing known shell commands
+2026-11-25 03:11:53,335+0800 INFO  miktex-pdftex - this process (13740) finishes with exit code 0

@@ -1,0 +1,2635 @@
+{
+  "role": "C",
+  "task": "C：这一趟派给你的活是 —— 跑一次关系分析（只算、不判定）：用已入库的 25 篇文献（lit:000000–lit:000024）与 B 建好的 30 条概念行、21 条关系行，回答「本题所在的这一支文献里，哪几篇是直接对口的、谁是这簇概念的中心、哪些方向（坐标向 / 体对角向 / 面对角向的最大截面；p<2 与 p>2 的分界）已有定理、哪些是缺口」。交付：把结果登记成 analysis_reports 一行（`kind` 取你的热点/缺口那一档），报告落 work/C/；回执里给 report_id、读数摘要、以及每条缺口候选的 worth / confidence 与一句「为什么值得查」。不要下数学结论、不要改任何台账。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "graph.stats",
+        "args": {
+          "top_n": 10
+        },
+        "why": "先看概念图的规模与热度前列，定位这簇概念的中心"
+      },
+      "result": {
+        "tool": "graph.stats",
+        "ok": true,
+        "data": {
+          "concept_count": 30,
+          "relation_count": 21,
+          "literature_count": 25,
+          "pair_count": 24,
+          "group_count": 18,
+          "isolated_concepts": [
+            "000004",
+            "000005",
+            "000006",
+            "000007",
+            "000010",
+            "000013",
+            "000028",
+            "000029"
+          ],
+          "isolated_count": 8,
+          "degree_top": [
+            {
+              "concept_id": "000012",
+              "name": "ln p-balls",
+              "degree": 5
+            },
+            {
+              "concept_id": "000011",
+              "name": "maximal hyperplane section",
+              "degree": 4
+            },
+            {
+              "concept_id": "000014",
+              "name": "Ball’s result",
+              "degree": 4
+            },
+            {
+              "concept_id": "000017",
+              "name": "unit ball Bn p",
+              "degree": 4
+            },
+            {
+              "concept_id": "000000",
+              "name": "unit cube",
+              "degree": 3
+            }
+          ],
+          "status_counts": {
+            "active": 21
+          },
+          "quote_verified_counts": {
+            "true": 21,
+            "false": 0,
+            "unknown": 0
+          },
+          "concepts_missing_from_table": [],
+          "top_n": 10,
+          "hot": [
+            {
+              "concept_id": "000012",
+              "name": "ln p-balls",
+              "occurrences": 5,
+              "relation_count": 5,
+              "group_count": 5
+            },
+            {
+              "concept_id": "000011",
+              "name": "maximal hyperplane section",
+              "occurrences": 4,
+              "relation_count": 4,
+              "group_count": 4
+            },
+            {
+              "concept_id": "000014",
+              "name": "Ball’s result",
+              "occurrences": 4,
+              "relation_count": 4,
+              "group_count": 4
+            },
+            {
+              "concept_id": "000017",
+              "name": "unit ball Bn p",
+              "occurrences": 4,
+              "relation_count": 4,
+              "group_count": 4
+            },
+            {
+              "concept_id": "000000",
+              "name": "unit cube",
+              "occurrences": 3,
+              "relation_count": 3,
+              "group_count": 3
+            },
+            {
+              "concept_id": "000018",
+              "name": "central hyperplane sections",
+              "occurrences": 3,
+              "relation_count": 3,
+              "group_count": 3
+            },
+            {
+              "concept_id": "000019",
+              "name": "projections",
+              "occurrences": 3,
+              "relation_count": 3,
+              "group_count": 3
+            },
+            {
+              "concept_id": "000025",
+              "name": "Pólya’s formula",
+              "occurrences": 3,
+              "relation_count": 3,
+              "group_count": 3
+            },
+            {
+              "concept_id": "000020",
+              "name": "Khintchine-type inequality",
+              "occurrences": 2,
+              "relation_count": 2,
+              "group_count": 2
+            },
+            {
+              "concept_id": "000023",
+              "name": "Ball’s cube slicing result",
+              "occurrences": 2,
+              "relation_count": 2,
+              "group_count": 2
+            }
+          ]
+        },
+        "error": "",
+        "meta": {},
+        "multi_call": {
+          "turn_index": 0,
+          "call_index": 0,
+          "calls": 4,
+          "step_index": 0
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 25216,
+        "prompt_cache_miss_tokens": 15069,
+        "tokens_in": 40285,
+        "tokens_out": 656,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000125"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "literature",
+          "limit": 40,
+          "fields": [
+            "lit_id",
+            "title",
+            "year",
+            "authors",
+            "file_path",
+            "status"
+          ]
+        },
+        "why": "清点 25 篇文献，判断哪几篇直接对口"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": false,
+        "data": null,
+        "error": "literature 没有字段 ['file_path', 'status']；可投影的字段：['added_at', 'authors', 'claimed_by', 'dedup_key', 'doi', 'download', 'language', 'last_mine_error', 'lease_until', 'lit_id', 'matched', 'mine_attempts', 'pages', 'path', 'processed', 'source_request_ids', 'summary', 'title', 'type', 'venue', 'year']（投影只回你点的键，写错一个字就会少一格，所以这里直接拒）",
+        "meta": {
+          "table": "literature",
+          "kind": "param_error"
+        },
+        "参数表": "【参数表】被拒的是参数形状/取值，不是这件事不能做。照下面这张声明表重写一次（键名与类型都要对；表里没列的键一律不许传）：\n- table.list 的参数表：table: string，必填，枚举 [search_requests/literature/relations/research_questions/conjectures/analysis_reports/reprocess_requests/experiments]，16 张表之一；limit: integer，返回条数上限（1-500）；offset: integer，跳过的行数；filter: object，等值过滤：{字段: 期望值}；模糊匹配请用 table.search；fields: array，字段投影：只回这几个键（例如 statements 的 stmt_id / label / kind / evidence_kind）；省略=整行（与改前逐字相同，含 proof_text 全文）（参数表是封闭集合：多传一个键会被拒）",
+        "multi_call": {
+          "turn_index": 0,
+          "call_index": 1,
+          "calls": 4,
+          "step_index": 1
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000125"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "relations",
+          "limit": 40,
+          "fields": [
+            "relation_id",
+            "src_id",
+            "dst_id",
+            "relation_type",
+            "status",
+            "quote_verified"
+          ]
+        },
+        "why": "清点 21 条关系行，建立关系图"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": false,
+        "data": null,
+        "error": "relations 没有字段 ['dst_id', 'relation_type', 'src_id']；可投影的字段：['concept_group_key', 'concept_ids', 'created_at', 'dedup_key', 'description', 'duplicate_of', 'lit_id', 'merged_at', 'page_range', 'quote', 'quote_call_sha256', 'quote_mode', 'quote_normalized', 'quote_reason', 'quote_span', 'quote_verified', 'relation_id', 'statement', 'status', 'supporting_lit_ids']（投影只回你点的键，写错一个字就会少一格，所以这里直接拒）",
+        "meta": {
+          "table": "relations",
+          "kind": "param_error"
+        },
+        "参数表": "【参数表】被拒的是参数形状/取值，不是这件事不能做。照下面这张声明表重写一次（键名与类型都要对；表里没列的键一律不许传）：\n- table.list 的参数表：table: string，必填，枚举 [search_requests/literature/relations/research_questions/conjectures/analysis_reports/reprocess_requests/experiments]，16 张表之一；limit: integer，返回条数上限（1-500）；offset: integer，跳过的行数；filter: object，等值过滤：{字段: 期望值}；模糊匹配请用 table.search；fields: array，字段投影：只回这几个键（例如 statements 的 stmt_id / label / kind / evidence_kind）；省略=整行（与改前逐字相同，含 proof_text 全文）（参数表是封闭集合：多传一个键会被拒）",
+        "multi_call": {
+          "turn_index": 0,
+          "call_index": 2,
+          "calls": 4,
+          "step_index": 2
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000125"
+    },
+    {
+      "index": 3,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "statements",
+          "limit": 80,
+          "fields": [
+            "stmt_id",
+            "label",
+            "kind",
+            "status",
+            "evidence_kind"
+          ]
+        },
+        "why": "清点 30 条概念行与已有定理行，判断哪些方向已有定理"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "statements",
+          "rows": [
+            {
+              "stmt_id": "000000",
+              "label": "unit cube",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000001",
+              "label": "section",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000002",
+              "label": "volume",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000003",
+              "label": "Hensley conjectured",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000004",
+              "label": "random variable",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000005",
+              "label": "probability density function",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000006",
+              "label": "derivative",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000007",
+              "label": "Khintchine inequality",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000008",
+              "label": "maximum volume",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000009",
+              "label": "intersection of Qn with a k-dimensional subspace",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000010",
+              "label": "independent random variables",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000011",
+              "label": "maximal hyperplane section",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000012",
+              "label": "ln p-balls",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000013",
+              "label": "n-cube",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000014",
+              "label": "Ball’s result",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000015",
+              "label": "main diagonal",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000016",
+              "label": "normalized section function An,p",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000017",
+              "label": "unit ball Bn p",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000018",
+              "label": "central hyperplane sections",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000019",
+              "label": "projections",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000020",
+              "label": "Khintchine-type inequality",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000021",
+              "label": "random variables",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000022",
+              "label": "resilience of cubic sections",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000023",
+              "label": "Ball’s cube slicing result",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000024",
+              "label": "Fourier transform representations of moments of independent sums",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000025",
+              "label": "Pólya’s formula",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000026",
+              "label": "normalized Fourier transform γp(s) of exp(−|r|p)",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000027",
+              "label": "Ball’s integral inequality",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000028",
+              "label": "Hölder’s inequality",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000029",
+              "label": "Nazarov and Podkorytov’s method",
+              "kind": "concept",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000030",
+              "label": "截面面积计算核自检通过：极坐标 tanh-sinh 求积（断点取 A cosψ+B sinψ=0 与 |w_i|=|w_j| 在 [0,2π) 上的全部根）在",
+              "kind": "conjecture",
+              "status": "active",
+              "evidence_kind": "cross_check"
+            },
+            {
+              "stmt_id": "000031",
+              "label": "B_p^3 中心截面最大面积的位置与面积比临界性",
+              "kind": "conjecture",
+              "status": "active",
+              "evidence_kind": "cross_check"
+            },
+            {
+              "stmt_id": "000032",
+              "label": "B_p^3 中心截面的坐标面积公式、面积比单调性与最大面积方向的分段结构",
+              "kind": "conjecture",
+              "status": "active",
+              "evidence_kind": "cross_check"
+            },
+            {
+              "stmt_id": "000033",
+              "label": "B_p^3 中心截面在两条边界弧上的最大面积方向分段",
+              "kind": "conjecture",
+              "status": "active",
+              "evidence_kind": "cross_check"
+            },
+            {
+              "stmt_id": "000034",
+              "label": "B_p^3 中心截面面积 A_p(n) 的积分表示与坐标向/面对角向闭式面积公式",
+              "kind": "theorem",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000035",
+              "label": "B_p^3 中心截面面积公式与坐标向极值",
+              "kind": "theorem",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000036",
+              "label": "B_p^3 对角截面面积公式",
+              "kind": "conjecture",
+              "status": "active",
+              "evidence_kind": "cross_check"
+            },
+            {
+              "stmt_id": "000037",
+              "label": "B_p^3 面对角截面面积闭式",
+              "kind": "conjecture",
+              "status": "active",
+              "evidence_kind": "cross_check"
+            },
+            {
+              "stmt_id": "000038",
+              "label": "B_p^3 中心截面 A_diag−A_face 的零点唯一性与比值 ρ=A_diag/A_face 的单调性",
+              "kind": "conjecture",
+              "status": "active",
+              "evidence_kind": "cross_check"
+            },
+            {
+              "stmt_id": "000039",
+              "label": "ΔK(t) 关于 t 的零点唯一性（每个 p 恰变号一次）",
+              "kind": "conjecture",
+              "status": "active",
+              "evidence_kind": "cross_check"
+            }
+          ],
+          "total": 40,
+          "returned": 40,
+          "limit": 80,
+          "offset": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "total": 40,
+          "returned": 40,
+          "offset": 0,
+          "limit": 80,
+          "fields": [
+            "stmt_id",
+            "label",
+            "kind",
+            "status",
+            "evidence_kind"
+          ]
+        },
+        "warn": "这一步给了 4 条调用，已按顺序逐条：第 1 条 graph.stats 成功；第 2 条 table.list 被拒：literature 没有字段 ['file_path', 'status']；可投影的字段：['a…；第 3 条 table.list 被拒：relations 没有字段 ['dst_id', 'relation_type', 'src_id…；第 4 条 table.list 成功：40。（真的执行 4 / 4 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 0,
+          "call_index": 3,
+          "calls": 4,
+          "step_index": 3,
+          "summary": "这一步给了 4 条调用，已按顺序逐条：第 1 条 graph.stats 成功；第 2 条 table.list 被拒：literature 没有字段 ['file_path', 'status']；可投影的字段：['a…；第 3 条 table.list 被拒：relations 没有字段 ['dst_id', 'relation_type', 'src_id…；第 4 条 table.list 成功：40。（真的执行 4 / 4 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 0,
+            "calls": 4,
+            "items": 4,
+            "steps": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "executed": 4,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000125"
+    },
+    {
+      "index": 4,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "literature",
+          "fields": [
+            "lit_id",
+            "title",
+            "year",
+            "authors",
+            "path",
+            "summary"
+          ],
+          "limit": 40
+        },
+        "why": "清点 25 篇文献的题名与摘要，判断哪几篇是直接对口的"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "literature",
+          "rows": [
+            {
+              "lit_id": "000000",
+              "title": "Cube slicing in R^n",
+              "year": null,
+              "authors": [],
+              "path": "929d246e1f5b-cube-slicing-in-r-n.pdf",
+              "summary": ""
+            },
+            {
+              "lit_id": "000001",
+              "title": "On maximal hyperplane sections of the unit ball of l_p^n for (filename truncated after 'for')",
+              "year": null,
+              "authors": [],
+              "path": "daac9fe7d2e3-on-maximal-hyperplane-sections-of-the-unit-ball-of-l-p-n-for.pdf",
+              "summary": ""
+            },
+            {
+              "lit_id": "000002",
+              "title": "Plane sections of the unit ball of l_p",
+              "year": null,
+              "authors": [],
+              "path": "a7344ad13416-plane-sections-of-the-unit-ball-of-l-p.pdf",
+              "summary": ""
+            },
+            {
+              "lit_id": "000003",
+              "title": "Critical central sections of the cube",
+              "year": null,
+              "authors": [],
+              "path": "5d236efcb7ea-critical-central-sections-of-the-cube.pdf",
+              "summary": ""
+            },
+            {
+              "lit_id": "000004",
+              "title": "Non-diagonal critical central sections of the cube",
+              "year": null,
+              "authors": [],
+              "path": "f79129be94de-non-diagonal-critical-central-sections-of-the-cube.pdf",
+              "summary": ""
+            },
+            {
+              "lit_id": "000005",
+              "title": "Resilience of cube slicing in l_p",
+              "year": null,
+              "authors": [],
+              "path": "290c7eb63abe-resilience-of-cube-slicing-in-lp.pdf",
+              "summary": ""
+            },
+            {
+              "lit_id": "000006",
+              "title": "On extremal sections of subspaces of l_p",
+              "year": null,
+              "authors": [],
+              "path": "9ec6189b98ee-on-extremal-sections-of-subspaces-of-l-p.pdf",
+              "summary": ""
+            },
+            {
+              "lit_id": "000007",
+              "title": "Hyperplane projections of the unit ball of l_p^n",
+              "year": null,
+              "authors": [],
+              "path": "b53daf49eb45-hyperplane-projections-of-the-unit-ball-of-l-p-n.pdf",
+              "summary": ""
+            },
+            {
+              "lit_id": "000008",
+              "title": "Plane sections of convex bodies of maximal volume",
+              "year": null,
+              "authors": [],
+              "path": "d0a9f661eb23-plane-sections-of-convex-bodies-of-maximal-volume.pdf",
+              "summary": ""
+            },
+            {
+              "lit_id": "000009",
+              "title": "A cube slice that is not a zonoid",
+              "year": null,
+              "authors": [],
+              "path": "e52716c8c83e-a-cube-slice-that-is-not-a-zonoid.pdf",
+              "summary": ""
+            },
+            {
+              "lit_id": "000010",
+              "title": "Non-central sections of convex bodies",
+              "year": null,
+              "authors": [],
+              "path": "dc44da69df46-non-central-sections-of-convex-bodies.pdf",
+              "summary": ""
+            },
+            {
+              "lit_id": "000011",
+              "title": "Non-central sections of the regular n-simplex",
+              "year": null,
+              "authors": [],
+              "path": "bd62474e88b1-non-central-sections-of-the-regular-n-simplex.pdf",
+              "summary": ""
+            },
+            {
+              "lit_id": "000012",
+              "title": "An isoperimetric inequality for hyperplane sections of a convex body",
+              "year": null,
+              "authors": [],
+              "path": "e835f5f27173-an-isoperimetric-inequality-for-hyperplane-sections-of-a-con.pdf",
+              "summary": ""
+            },
+            {
+              "lit_id": "000013",
+              "title": "On a reverse form of the Brascamp-Lieb inequality",
+              "year": null,
+              "authors": [],
+              "path": "e370bf2a2c26-on-a-reverse-form-of-the-brascamp-lieb-inequality.pdf",
+              "summary": ""
+            },
+            {
+              "lit_id": "000014",
+              "title": "The geometry of Minkowski spaces: a survey, part I",
+              "year": null,
+              "authors": [],
+              "path": "6c8afb33fc1a-the-geometry-of-minkowski-spaces-a-survey-part-i.pdf",
+              "summary": ""
+            },
+            {
+              "lit_id": "000015",
+              "title": "Szarek and Ball made simple",
+              "year": null,
+              "authors": [],
+              "path": "f69890810ecb-szarek-and-ball-made-simple.pdf",
+              "summary": ""
+            },
+            {
+              "lit_id": "000016",
+              "title": "Estimates on the decay of the Laplace-Polya integral",
+              "year": null,
+              "authors": [],
+              "path": "52375fd6b18c-estimates-on-the-decay-of-the-laplacepolya-integral.pdf",
+              "summary": ""
+            },
+            {
+              "lit_id": "000017",
+              "title": "Paraconsistent dominated convergence",
+              "year": null,
+              "authors": [],
+              "path": "c2398a987031-paraconsistent-dominated-convergence.pdf",
+              "summary": ""
+            },
+            {
+              "lit_id": "000018",
+              "title": "Generalized integrals and convergence theorems",
+              "year": null,
+              "authors": [],
+              "path": "acb5dd61859c-generalized-integrals-and-convergence-theorems.pdf",
+              "summary": ""
+            },
+            {
+              "lit_id": "000019",
+              "title": "An introduction to measure theory",
+              "year": null,
+              "authors": [],
+              "path": "64498329b65e-an-introduction-to-measure-theory.pdf",
+              "summary": ""
+            },
+            {
+              "lit_id": "000020",
+              "title": "On the volume of hyperplane sections of a d-cube",
+              "year": null,
+              "authors": [],
+              "path": "08359e313da3-on-the-volume-of-hyperplane-sections-of-a-d-cube.pdf",
+              "summary": ""
+            },
+            {
+              "lit_id": "000021",
+              "title": "Maximal perimeters of polytope sections and origin-symmetry",
+              "year": null,
+              "authors": [],
+              "path": "66cf70c235d2-maximal-perimeters-of-polytope-sections-and-origin-symmetry.pdf",
+              "summary": ""
+            },
+            {
+              "lit_id": "000022",
+              "title": "The cross-section body, plane sections of convex bodies and approximation of convex bodies",
+              "year": null,
+              "authors": [],
+              "path": "92378bba55bc-the-cross-section-body-plane-sections-of-convex-bodies-and-a.pdf",
+              "summary": ""
+            },
+            {
+              "lit_id": "000023",
+              "title": "Measure, integration & real analysis",
+              "year": null,
+              "authors": [],
+              "path": "7a7ab07fb74f-measure-integration-real-analysis.pdf",
+              "summary": ""
+            },
+            {
+              "lit_id": "000024",
+              "title": "Measure theory and integration by and for the learner",
+              "year": null,
+              "authors": [],
+              "path": "de5d051e7e09-measure-theory-and-integration-by-and-for-the-learner.pdf",
+              "summary": ""
+            }
+          ],
+          "total": 25,
+          "returned": 25,
+          "limit": 40,
+          "offset": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "literature",
+          "total": 25,
+          "returned": 25,
+          "offset": 0,
+          "limit": 40,
+          "fields": [
+            "lit_id",
+            "title",
+            "year",
+            "authors",
+            "path",
+            "summary"
+          ]
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 39424,
+        "prompt_cache_miss_tokens": 5244,
+        "tokens_in": 44668,
+        "tokens_out": 195,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000125"
+    },
+    {
+      "index": 5,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "relations",
+          "fields": [
+            "relation_id",
+            "concept_ids",
+            "lit_id",
+            "statement",
+            "status",
+            "quote_verified",
+            "page_range"
+          ],
+          "limit": 40
+        },
+        "why": "清点 21 条关系行：哪条概念连哪条、出自哪篇文献、引文是否逐字通过"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "relations",
+          "rows": [
+            {
+              "relation_id": "000000",
+              "concept_ids": [
+                "000000",
+                "000001"
+              ],
+              "lit_id": "000000",
+              "statement": "The paper studies (n-1)-dimensional sections of the unit cube.",
+              "status": "active",
+              "quote_verified": true,
+              "page_range": {
+                "start": 1,
+                "end": 1,
+                "label": "p. 1"
+              }
+            },
+            {
+              "relation_id": "000001",
+              "concept_ids": [
+                "000002",
+                "000003"
+              ],
+              "lit_id": "000000",
+              "statement": "Hensley conjectured that the volume is at most sqrt(2).",
+              "status": "active",
+              "quote_verified": true,
+              "page_range": {
+                "start": 1,
+                "end": 1,
+                "label": "p. 1"
+              }
+            },
+            {
+              "relation_id": "000002",
+              "concept_ids": [
+                "000008",
+                "000009"
+              ],
+              "lit_id": "000000",
+              "statement": "The text asks for the maximum volume, in terms of k and n, of the intersection of Qn with a k-dimensional subspace.",
+              "status": "active",
+              "quote_verified": true,
+              "page_range": {
+                "start": 9,
+                "end": 9,
+                "label": "p. 9"
+              }
+            },
+            {
+              "relation_id": "000003",
+              "concept_ids": [
+                "000014",
+                "000016"
+              ],
+              "lit_id": "000001",
+              "statement": "Ball’s theorem bounds the normalized section function for p=∞ by its value at a(2), equal to √2.",
+              "status": "active",
+              "quote_verified": true,
+              "page_range": {
+                "start": 3,
+                "end": 3,
+                "label": "p. 3"
+              }
+            },
+            {
+              "relation_id": "000004",
+              "concept_ids": [
+                "000012",
+                "000014"
+              ],
+              "lit_id": "000001",
+              "statement": "Eskenazis, Nayar and Tkocz extended the Ball-type maximal section result to l^n_p-balls for very large p.",
+              "status": "active",
+              "quote_verified": true,
+              "page_range": {
+                "start": 1,
+                "end": 1,
+                "label": "p. 1"
+              }
+            },
+            {
+              "relation_id": "000005",
+              "concept_ids": [
+                "000012",
+                "000014"
+              ],
+              "lit_id": "000001",
+              "statement": "Oleszkiewicz showed Ball’s result does not carry over to l^n_p-balls in the range 2<p<p0≈26.265.",
+              "status": "active",
+              "quote_verified": true,
+              "page_range": {
+                "start": 1,
+                "end": 1,
+                "label": "p. 1"
+              }
+            },
+            {
+              "relation_id": "000006",
+              "concept_ids": [
+                "000011",
+                "000015"
+              ],
+              "lit_id": "000001",
+              "statement": "In the regime where Ball’s result fails, the hyperplane section perpendicular to the main diagonal gives a counterexample for large dimensions n.",
+              "status": "active",
+              "quote_verified": true,
+              "page_range": {
+                "start": 1,
+                "end": 1,
+                "label": "p. 1"
+              }
+            },
+            {
+              "relation_id": "000007",
+              "concept_ids": [
+                "000012",
+                "000017",
+                "000018"
+              ],
+              "lit_id": "000001",
+              "statement": "For the unit ball of l^n_p, the normalized volume of central hyperplane sections increases monotonically with p.",
+              "status": "active",
+              "quote_verified": true,
+              "page_range": {
+                "start": 2,
+                "end": 2,
+                "label": "p. 2"
+              }
+            },
+            {
+              "relation_id": "000008",
+              "concept_ids": [
+                "000012",
+                "000019"
+              ],
+              "lit_id": "000001",
+              "statement": "For l^n_p-balls, known section results transfer to projections by dualizing p to q=p′ and swapping minimal and maximal volume results.",
+              "status": "active",
+              "quote_verified": true,
+              "page_range": {
+                "start": 2,
+                "end": 2,
+                "label": "p. 2"
+              }
+            },
+            {
+              "relation_id": "000009",
+              "concept_ids": [
+                "000019",
+                "000020",
+                "000021"
+              ],
+              "lit_id": "000001",
+              "statement": "For l^n_q-balls, determining extremal hyperplane projections is equivalent to finding best constants in a Khintchine-type inequality for random variables with an exponential density.",
+              "status": "active",
+              "quote_verified": true,
+              "page_range": {
+                "start": 2,
+                "end": 2,
+                "label": "p. 2"
+              }
+            },
+            {
+              "relation_id": "000010",
+              "concept_ids": [
+                "000011",
+                "000012",
+                "000020"
+              ],
+              "lit_id": "000001",
+              "statement": "Identifying extremal hyperplane sections of l^n_p-balls is equivalent to finding best constants in a generalized Khintchine inequality.",
+              "status": "active",
+              "quote_verified": true,
+              "page_range": {
+                "start": 2,
+                "end": 2,
+                "label": "p. 2"
+              }
+            },
+            {
+              "relation_id": "000011",
+              "concept_ids": [
+                "000014",
+                "000022"
+              ],
+              "lit_id": "000001",
+              "statement": "For very large p, Ball’s result remains stable for l^n_p-balls; this phenomenon is called resilience of cubic sections.",
+              "status": "active",
+              "quote_verified": true,
+              "page_range": {
+                "start": 2,
+                "end": 2,
+                "label": "p. 2"
+              }
+            },
+            {
+              "relation_id": "000012",
+              "concept_ids": [
+                "000023",
+                "000024"
+              ],
+              "lit_id": "000001",
+              "statement": "本文证明借用 Ball 立方体切片结果中的做法，使用独立和矩的傅里叶变换表示。",
+              "status": "active",
+              "quote_verified": true,
+              "page_range": {
+                "start": 4,
+                "end": 4,
+                "label": "p. 4"
+              }
+            },
+            {
+              "relation_id": "000013",
+              "concept_ids": [
+                "000023",
+                "000025"
+              ],
+              "lit_id": "000001",
+              "statement": "Ball 的结果基于 Pólya 公式。",
+              "status": "active",
+              "quote_verified": true,
+              "page_range": {
+                "start": 4,
+                "end": 4,
+                "label": "p. 4"
+              }
+            },
+            {
+              "relation_id": "000014",
+              "concept_ids": [
+                "000025",
+                "000026"
+              ],
+              "lit_id": "000001",
+              "statement": "存在用 exp(−|r|^p) 的归一化傅里叶变换表示的 Pólya 公式在 A_{n,p} 中的类比。",
+              "status": "active",
+              "quote_verified": true,
+              "page_range": {
+                "start": 4,
+                "end": 4,
+                "label": "p. 4"
+              }
+            },
+            {
+              "relation_id": "000015",
+              "concept_ids": [
+                "000025",
+                "000027"
+              ],
+              "lit_id": "000001",
+              "statement": "Ball 使用 Pólya 公式 (2.1) 及其积分不等式。",
+              "status": "active",
+              "quote_verified": true,
+              "page_range": {
+                "start": 6,
+                "end": 6,
+                "label": "p. 6"
+              }
+            },
+            {
+              "relation_id": "000016",
+              "concept_ids": [
+                "000011",
+                "000017"
+              ],
+              "lit_id": "000001",
+              "statement": "The paper conjectures that the maximal hyperplane section of Bn p is either (a(2))⊥ or (a(n))⊥.",
+              "status": "active",
+              "quote_verified": true,
+              "page_range": {
+                "start": 11,
+                "end": 11,
+                "label": "p. 11"
+              }
+            },
+            {
+              "relation_id": "000017",
+              "concept_ids": [
+                "000011",
+                "000017"
+              ],
+              "lit_id": "000001",
+              "statement": "The article studies maximal hyperplane sections of the unit ball of lnp for p > 2.",
+              "status": "active",
+              "quote_verified": true,
+              "page_range": {
+                "start": 15,
+                "end": 15,
+                "label": "p. 15"
+              }
+            },
+            {
+              "relation_id": "000018",
+              "concept_ids": [
+                "000000",
+                "000018"
+              ],
+              "lit_id": "000003",
+              "statement": "Central hyperplane sections are sections of the cube Qn by hyperplanes containing 0, and their (n−1)-dimensional volume is a classical object of study.",
+              "status": "active",
+              "quote_verified": true,
+              "page_range": {
+                "start": 1,
+                "end": 1,
+                "label": "p. 1"
+              }
+            },
+            {
+              "relation_id": "000019",
+              "concept_ids": [
+                "000000",
+                "000018"
+              ],
+              "lit_id": "000004",
+              "statement": "Qn 的中心超平面截面是形如 Qn ∩ v⊥ 的截面。",
+              "status": "active",
+              "quote_verified": true,
+              "page_range": {
+                "start": 1,
+                "end": 1,
+                "label": "p. 1"
+              }
+            },
+            {
+              "relation_id": "000020",
+              "concept_ids": [
+                "000017",
+                "000019"
+              ],
+              "lit_id": "000007",
+              "statement": "The paper studies hyperplane projections of the unit ball of ℓ_p^n.",
+              "status": "active",
+              "quote_verified": true,
+              "page_range": {
+                "start": 11,
+                "end": 11,
+                "label": "p. 11"
+              }
+            }
+          ],
+          "total": 21,
+          "returned": 21,
+          "limit": 40,
+          "offset": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "relations",
+          "total": 21,
+          "returned": 21,
+          "offset": 0,
+          "limit": 40,
+          "fields": [
+            "relation_id",
+            "concept_ids",
+            "lit_id",
+            "statement",
+            "status",
+            "quote_verified",
+            "page_range"
+          ]
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 43904,
+        "prompt_cache_miss_tokens": 2579,
+        "tokens_in": 46483,
+        "tokens_out": 215,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000125"
+    },
+    {
+      "index": 6,
+      "shape": "tool",
+      "payload": {
+        "name": "own.gaps",
+        "args": {
+          "limit": 12,
+          "request": "本题所在的这一支文献里，哪几篇是直接对口的、谁是这簇概念的中心、哪些方向（坐标向/体对角向/面对角向的最大截面；p<2 与 p>2 的分界）已有定理、哪些是缺口"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "own.gaps",
+        "ok": true,
+        "data": "AnalysisReport(kind='gaps', request='本题所在的这一支文献里，哪几篇是直接对口的、谁是这簇概念的中心、哪些方向（坐标向/体对角向/面对角向的最大截面；p<2 与 p>2 的分界）已有定理、哪些是缺口', params={'limit': 12}, summary='确实有：发现 12 条值得研究的关系候选（最高置信度 high）。检查范围：18 个概念组、26 个结构洞；被否决项剔除 3 条、净分不足 18 条。（结构洞 26 个、低频概念组 15 个、否决 3 条、净分不足 18 条，截断=False）', payload={'verdict': '有', 'has_candidates': True, 'conclusion': '确实有：发现 12 条值得研究的关系候选（最高置信度 high）。检查范围：18 个概念组、26 个结构洞；被否决项剔除 3 条、净分不足 18 条。', 'candidate_gaps': [{'key': '000012|000017|000018', 'kind': 'rare_group', 'concept_ids': ['000012', '000017', '000018'], 'concept_names': ['ln p-balls', 'unit ball Bn p', 'central hyperplane sections'], 'common_neighbors': [{'concept_id': '000011', 'name': 'maximal hyperplane section'}, {'concept_id': '000018', 'name': 'central hyperplane sections'}, {'concept_id': '000019', 'name': 'projections'}], 'reason': '概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；结构洞信号：有 3 个共同邻居（maximal hyperplane section、central hyperplane sections、projections）却无直接关系；热门概念参与：ln p-balls、unit ball Bn p 在热门集里；文献充足：相关关系分布在 4 篇文献里', 'positive_score': 3.0, 'negative_score': 0.0, 'net_score': 3.0, 'confidence': 'high', 'confidence_deterministic': 'high', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 3 个共同邻居（maximal hyperplane section、central hyperplane sections、projections）却无直接关系', '热门概念参与：ln p-balls、unit ball Bn p 在热门集里', '文献充足：相关关系分布在 4 篇文献里'], 'negative_signals': [], 'related_relation_ids': ['000004', '000005', '000007', '000008', '000010', '000016', '000017', '000020', '000018', '000019']}, {'key': '000011|000019', 'kind': 'structural_hole', 'concept_ids': ['000011', '000019'], 'concept_names': ['maximal hyperplane section', 'projections'], 'common_neighbors': [{'concept_id': '000012', 'name': 'ln p-balls'}, {'concept_id': '000017', 'name': 'unit ball Bn p'}, {'concept_id': '000020', 'name': 'Khintchine-type inequality'}], 'reason': \"结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 3 个共同邻居（ln p-balls、unit ball Bn p、Khintchine-type inequality）却无直接关系；热门概念参与：maximal hyperplane section 在热门集里；文献充足：相关关系分布在 2 篇文献里\", 'positive_score': 2.5, 'negative_score': 0.0, 'net_score': 2.5, 'confidence': 'high', 'confidence_deterministic': 'high', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 3 个共同邻居（ln p-balls、unit ball Bn p、Khintchine-type inequality）却无直接关系', '热门概念参与：maximal hyperplane section 在热门集里', '文献充足：相关关系分布在 2 篇文献里'], 'negative_signals': [], 'related_relation_ids': ['000006', '000010', '000016', '000017', '000008', '000009', '000020']}, {'key': '000017|000020', 'kind': 'structural_hole', 'concept_ids': ['000017', '000020'], 'concept_names': ['unit ball Bn p', 'Khintchine-type inequality'], 'common_neighbors': [{'concept_id': '000011', 'name': 'maximal hyperplane section'}, {'concept_id': '000012', 'name': 'ln p-balls'}, {'concept_id': '000019', 'name': 'projections'}], 'reason': \"结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 3 个共同邻居（maximal hyperplane section、ln p-balls、projections）却无直接关系；热门概念参与：unit ball Bn p 在热门集里；文献充足：相关关系分布在 2 篇文献里\", 'positive_score': 2.5, 'negative_score': 0.0, 'net_score': 2.5, 'confidence': 'high', 'confidence_deterministic': 'high', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 3 个共同邻居（maximal hyperplane section、ln p-balls、projections）却无直接关系', '热门概念参与：unit ball Bn p 在热门集里', '文献充足：相关关系分布在 2 篇文献里'], 'negative_signals': [], 'related_relation_ids': ['000007', '000016', '000017', '000020', '000009', '000010']}, {'key': '000000|000012', 'kind': 'structural_hole', 'concept_ids': ['000000', '000012'], 'concept_names': ['unit cube', 'ln p-balls'], 'common_neighbors': [{'concept_id': '000018', 'name': 'central hyperplane sections'}], 'reason': \"结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（central hyperplane sections）却无直接关系；热门概念参与：unit cube、ln p-balls 在热门集里；文献充足：相关关系分布在 4 篇文献里\", 'positive_score': 2.0, 'negative_score': 0.0, 'net_score': 2.0, 'confidence': 'high', 'confidence_deterministic': 'high', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 1 个共同邻居（central hyperplane sections）却无直接关系', '热门概念参与：unit cube、ln p-balls 在热门集里', '文献充足：相关关系分布在 4 篇文献里'], 'negative_signals': [], 'related_relation_ids': ['000000', '000018', '000019', '000004', '000005', '000007', '000008', '000010']}, {'key': '000000|000017', 'kind': 'structural_hole', 'concept_ids': ['000000', '000017'], 'concept_names': ['unit cube', 'unit ball Bn p'], 'common_neighbors': [{'concept_id': '000018', 'name': 'central hyperplane sections'}], 'reason': \"结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（central hyperplane sections）却无直接关系；热门概念参与：unit cube、unit ball Bn p 在热门集里；文献充足：相关关系分布在 5 篇文献里\", 'positive_score': 2.0, 'negative_score': 0.0, 'net_score': 2.0, 'confidence': 'high', 'confidence_deterministic': 'high', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 1 个共同邻居（central hyperplane sections）却无直接关系', '热门概念参与：unit cube、unit ball Bn p 在热门集里', '文献充足：相关关系分布在 5 篇文献里'], 'negative_signals': [], 'related_relation_ids': ['000000', '000018', '000019', '000007', '000016', '000017', '000020']}, {'key': '000011|000012|000020', 'kind': 'rare_group', 'concept_ids': ['000011', '000012', '000020'], 'concept_names': ['maximal hyperplane section', 'ln p-balls', 'Khintchine-type inequality'], 'common_neighbors': [{'concept_id': '000017', 'name': 'unit ball Bn p'}, {'concept_id': '000020', 'name': 'Khintchine-type inequality'}], 'reason': '概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；结构洞信号：有 2 个共同邻居（unit ball Bn p、Khintchine-type inequality）却无直接关系；热门概念参与：maximal hyperplane section、ln p-balls 在热门集里', 'positive_score': 2.0, 'negative_score': 0.0, 'net_score': 2.0, 'confidence': 'high', 'confidence_deterministic': 'high', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 2 个共同邻居（unit ball Bn p、Khintchine-type inequality）却无直接关系', '热门概念参与：maximal hyperplane section、ln p-balls 在热门集里'], 'negative_signals': [], 'related_relation_ids': ['000006', '000010', '000016', '000017', '000004', '000005', '000007', '000008', '000009']}, {'key': '000011|000018', 'kind': 'structural_hole', 'concept_ids': ['000011', '000018'], 'concept_names': ['maximal hyperplane section', 'central hyperplane sections'], 'common_neighbors': [{'concept_id': '000012', 'name': 'ln p-balls'}, {'concept_id': '000017', 'name': 'unit ball Bn p'}], 'reason': \"结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 2 个共同邻居（ln p-balls、unit ball Bn p）却无直接关系；热门概念参与：maximal hyperplane section 在热门集里；文献充足：相关关系分布在 3 篇文献里\", 'positive_score': 2.0, 'negative_score': 0.0, 'net_score': 2.0, 'confidence': 'high', 'confidence_deterministic': 'high', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 2 个共同邻居（ln p-balls、unit ball Bn p）却无直接关系', '热门概念参与：maximal hyperplane section 在热门集里', '文献充足：相关关系分布在 3 篇文献里'], 'negative_signals': [], 'related_relation_ids': ['000006', '000010', '000016', '000017', '000007', '000018', '000019']}, {'key': '000012|000019', 'kind': 'rare_group', 'concept_ids': ['000012', '000019'], 'concept_names': ['ln p-balls', 'projections'], 'common_neighbors': [{'concept_id': '000017', 'name': 'unit ball Bn p'}, {'concept_id': '000020', 'name': 'Khintchine-type inequality'}], 'reason': '概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；结构洞信号：有 2 个共同邻居（unit ball Bn p、Khintchine-type inequality）却无直接关系；热门概念参与：ln p-balls 在热门集里；文献充足：相关关系分布在 2 篇文献里', 'positive_score': 2.0, 'negative_score': 0.0, 'net_score': 2.0, 'confidence': 'high', 'confidence_deterministic': 'high', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 2 个共同邻居（unit ball Bn p、Khintchine-type inequality）却无直接关系', '热门概念参与：ln p-balls 在热门集里', '文献充足：相关关系分布在 2 篇文献里'], 'negative_signals': [], 'related_relation_ids': ['000004', '000005', '000007', '000008', '000010', '000009', '000020']}, {'key': '000014|000017', 'kind': 'structural_hole', 'concept_ids': ['000014', '000017'], 'concept_names': ['Ball’s result', 'unit ball Bn p'], 'common_neighbors': [{'concept_id': '000012', 'name': 'ln p-balls'}], 'reason': \"结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系；热门概念参与：Ball’s result、unit ball Bn p 在热门集里；文献充足：相关关系分布在 2 篇文献里\", 'positive_score': 2.0, 'negative_score': 0.0, 'net_score': 2.0, 'confidence': 'high', 'confidence_deterministic': 'high', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系', '热门概念参与：Ball’s result、unit ball Bn p 在热门集里', '文献充足：相关关系分布在 2 篇文献里'], 'negative_signals': [], 'related_relation_ids': ['000003', '000004', '000005', '000011', '000007', '000016', '000017', '000020']}, {'key': '000011|000014', 'kind': 'structural_hole', 'concept_ids': ['000011', '000014'], 'concept_names': ['maximal hyperplane section', 'Ball’s result'], 'common_neighbors': [{'concept_id': '000012', 'name': 'ln p-balls'}], 'reason': \"结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系；热门概念参与：maximal hyperplane section、Ball’s result 在热门集里\", 'positive_score': 1.5, 'negative_score': 0.0, 'net_score': 1.5, 'confidence': 'medium', 'confidence_deterministic': 'medium', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系', '热门概念参与：maximal hyperplane section、Ball’s result 在热门集里'], 'negative_signals': [], 'related_relation_ids': ['000006', '000010', '000016', '000017', '000003', '000004', '000005', '000011']}, {'key': '000014|000018', 'kind': 'structural_hole', 'concept_ids': ['000014', '000018'], 'concept_names': ['Ball’s result', 'central hyperplane sections'], 'common_neighbors': [{'concept_id': '000012', 'name': 'ln p-balls'}], 'reason': \"结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系；热门概念参与：Ball’s result 在热门集里；文献充足：相关关系分布在 3 篇文献里\", 'positive_score': 1.5, 'negative_score': 0.0, 'net_score': 1.5, 'confidence': 'medium', 'confidence_deterministic': 'medium', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系', '热门概念参与：Ball’s result 在热门集里', '文献充足：相关关系分布在 3 篇文献里'], 'negative_signals': [], 'related_relation_ids': ['000003', '000004', '000005', '000011', '000007', '000018', '000019']}, {'key': '000014|000019', 'kind': 'structural_hole', 'concept_ids': ['000014', '000019'], 'concept_names': ['Ball’s result', 'projections'], 'common_neighbors': [{'concept_id': '000012', 'name': 'ln p-balls'}], 'reason': \"结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系；热门概念参与：Ball’s result 在热门集里；文献充足：相关关系分布在 2 篇文献里\", 'positive_score': 1.5, 'negative_score': 0.0, 'net_score': 1.5, 'confidence': 'medium', 'confidence_deterministic': 'medium', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系', '热门概念参与：Ball’s result 在热门集里', '文献充足：相关关系分布在 2 篇文献里'], 'negative_signals': [], 'related_relation_ids': ['000003', '000004', '000005', '000011', '000008', '000009', '000020']}], 'rejected_by_llm': [], 'vetoed_candidates': [{'key': '000012|000016', 'kind': 'structural_hole', 'concept_ids': ['000012', '000016'], 'concept_names': ['ln p-balls', 'normalized section function An,p'], 'common_neighbors': [{'concept_id': '000014', 'name': 'Ball’s result'}], 'reason': \"结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（Ball’s result）却无直接关系；热门概念参与：ln p-balls 在热门集里\", 'positive_score': 1.0, 'negative_score': 0.125, 'net_score': 0.875, 'confidence': 'low', 'confidence_deterministic': 'low', 'passed_veto': False, 'vetoed': True, 'veto_reasons': ['概念名明显不是概念：概念名含句读标点：normalized section function An,p'], 'positive_signals': ['结构洞信号：有 1 个共同邻居（Ball’s result）却无直接关系', '热门概念参与：ln p-balls 在热门集里'], 'negative_signals': ['候选端连接薄弱：normalized section function An,p(degree=1)'], 'related_relation_ids': ['000004', '000005', '000007', '000008', '000010', '000003']}, {'key': '000014|000016', 'kind': 'rare_group', 'concept_ids': ['000014', '000016'], 'concept_names': ['Ball’s result', 'normalized section function An,p'], 'common_neighbors': [], 'reason': '概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；热门概念参与：Ball’s result 在热门集里', 'positive_score': 0.5, 'negative_score': 0.125, 'net_score': 0.375, 'confidence': 'low', 'confidence_deterministic': 'low', 'passed_veto': False, 'vetoed': True, 'veto_reasons': ['概念名明显不是概念：概念名含句读标点：normalized section function An,p'], 'positive_signals': ['热门概念参与：Ball’s result 在热门集里'], 'negative_signals': ['候选端连接薄弱：normalized section function An,p(degree=1)'], 'related_relation_ids': ['000003', '000004', '000005', '000011']}, {'key': '000016|000022', 'kind': 'structural_hole', 'concept_ids': ['000016', '000022'], 'concept_names': ['normalized section function An,p', 'resilience of cubic sections'], 'common_neighbors': [{'concept_id': '000014', 'name': 'Ball’s result'}], 'reason': \"结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（Ball’s result）却无直接关系\", 'positive_score': 0.5, 'negative_score': 0.25, 'net_score': 0.25, 'confidence': 'low', 'confidence_deterministic': 'low', 'passed_veto': False, 'vetoed': True, 'veto_reasons': ['概念名明显不是概念：概念名含句读标点：normalized section function An,p'], 'positive_signals': ['结构洞信号：有 1 个共同邻居（Ball’s result）却无直接关系'], 'negative_signals': ['候选端连接薄弱：normalized section function An,p(degree=1)、resilience of cubic sections(degree=1)'], 'related_relation_ids': ['000003', '000011']}], 'low_confidence_candidates': [{'key': '000000|000001', 'kind': 'rare_group', 'concept_ids': ['000000', '000001'], 'concept_names': ['unit cube', 'section'], 'common_neighbors': [], 'reason': '概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；热门概念参与：unit cube 在热门集里；文献充足：相关关系分布在 3 篇文献里', 'positive_score': 1.0, 'negative_score': 0.125, 'net_score': 0.875, 'confidence': 'low', 'confidence_deterministic': 'low', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['热门概念参与：unit cube 在热门集里', '文献充足：相关关系分布在 3 篇文献里'], 'negative_signals': ['候选端连接薄弱：section(degree=1)'], 'related_relation_ids': ['000000', '000018', '000019']}, {'key': '000001|000018', 'kind': 'structural_hole', 'concept_ids': ['000001', '000018'], 'concept_names': ['section', 'central hyperplane sections'], 'common_neighbors': [{'concept_id': '000000', 'name': 'unit cube'}], 'reason': \"结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（unit cube）却无直接关系；文献充足：相关关系分布在 4 篇文献里\", 'positive_score': 1.0, 'negative_score': 0.125, 'net_score': 0.875, 'confidence': 'low', 'confidence_deterministic': 'low', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 1 个共同邻居（unit cube）却无直接关系', '文献充足：相关关系分布在 4 篇文献里'], 'negative_signals': ['候选端连接薄弱：section(degree=1)'], 'related_relation_ids': ['000000', '000007', '000018', '000019']}, {'key': '000011|000021', 'kind': 'structural_hole', 'concept_ids': ['000011', '000021'], 'concept_names': ['maximal hyperplane section', 'random variables'], 'common_neighbors': [{'concept_id': '000020', 'name': 'Khintchine-type inequality'}], 'reason': \"结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（Khintchine-type inequality）却无直接关系；热门概念参与：maximal hyperplane section 在热门集里\", 'positive_score': 1.0, 'negative_score': 0.125, 'net_score': 0.875, 'confidence': 'low', 'confidence_deterministic': 'low', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 1 个共同邻居（Khintchine-type inequality）却无直接关系', '热门概念参与：maximal hyperplane section 在热门集里'], 'negative_signals': ['候选端连接薄弱：random variables(degree=1)'], 'related_relation_ids': ['000006', '000010', '000016', '000017', '000009']}, {'key': '000012|000015', 'kind': 'structural_hole', 'concept_ids': ['000012', '000015'], 'concept_names': ['ln p-balls', 'main diagonal'], 'common_neighbors': [{'concept_id': '000011', 'name': 'maximal hyperplane section'}], 'reason': \"结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（maximal hyperplane section）却无直接关系；热门概念参与：ln p-balls 在热门集里\", 'positive_score': 1.0, 'negative_score': 0.125, 'net_score': 0.875, 'confidence': 'low', 'confidence_deterministic': 'low', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 1 个共同邻居（maximal hyperplane section）却无直接关系', '热门概念参与：ln p-balls 在热门集里'], 'negative_signals': ['候选端连接薄弱：main diagonal(degree=1)'], 'related_relation_ids': ['000004', '000005', '000007', '000008', '000010', '000006']}, {'key': '000012|000022', 'kind': 'structural_hole', 'concept_ids': ['000012', '000022'], 'concept_names': ['ln p-balls', 'resilience of cubic sections'], 'common_neighbors': [{'concept_id': '000014', 'name': 'Ball’s result'}], 'reason': \"结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（Ball’s result）却无直接关系；热门概念参与：ln p-balls 在热门集里\", 'positive_score': 1.0, 'negative_score': 0.125, 'net_score': 0.875, 'confidence': 'low', 'confidence_deterministic': 'low', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 1 个共同邻居（Ball’s result）却无直接关系', '热门概念参与：ln p-balls 在热门集里'], 'negative_signals': ['候选端连接薄弱：resilience of cubic sections(degree=1)'], 'related_relation_ids': ['000004', '000005', '000007', '000008', '000010', '000011']}, {'key': '000011|000015', 'kind': 'rare_group', 'concept_ids': ['000011', '000015'], 'concept_names': ['maximal hyperplane section', 'main diagonal'], 'common_neighbors': [], 'reason': '概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；热门概念参与：maximal hyperplane section 在热门集里', 'positive_score': 0.5, 'negative_score': 0.125, 'net_score': 0.375, 'confidence': 'low', 'confidence_deterministic': 'low', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['热门概念参与：maximal hyperplane section 在热门集里'], 'negative_signals': ['候选端连接薄弱：main diagonal(degree=1)'], 'related_relation_ids': ['000006', '000010', '000016', '000017']}, {'key': '000014|000022', 'kind': 'rare_group', 'concept_ids': ['000014', '000022'], 'concept_names': ['Ball’s result', 'resilience of cubic sections'], 'common_neighbors': [], 'reason': '概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；热门概念参与：Ball’s result 在热门集里', 'positive_score': 0.5, 'negative_score': 0.125, 'net_score': 0.375, 'confidence': 'low', 'confidence_deterministic': 'low', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['热门概念参与：Ball’s result 在热门集里'], 'negative_signals': ['候选端连接薄弱：resilience of cubic sections(degree=1)'], 'related_relation_ids': ['000003', '000004', '000005', '000011']}, {'key': '000015|000020', 'kind': 'structural_hole', 'concept_ids': ['000015', '000020'], 'concept_names': ['main diagonal', 'Khintchine-type inequality'], 'common_neighbors': [{'concept_id': '000011', 'name': 'maximal hyperplane section'}], 'reason': \"结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（maximal hyperplane section）却无直接关系\", 'positive_score': 0.5, 'negative_score': 0.125, 'net_score': 0.375, 'confidence': 'low', 'confidence_deterministic': 'low', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 1 个共同邻居（maximal hyperplane section）却无直接关系'], 'negative_signals': ['候选端连接薄弱：main diagonal(degree=1)'], 'related_relation_ids': ['000006', '000009', '000010']}, {'key': '000023|000026', 'kind': 'structural_hole', 'concept_ids': ['000023', '000026'], 'concept_names': ['Ball’s cube slicing result', 'normalized Fourier transform γp(s) of exp(−|r|p)'], 'common_neighbors': [{'concept_id': '000025', 'name': 'Pólya’s formula'}], 'reason': \"结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（Pólya’s formula）却无直接关系\", 'positive_score': 0.5, 'negative_score': 0.125, 'net_score': 0.375, 'confidence': 'low', 'confidence_deterministic': 'low', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 1 个共同邻居（Pólya’s formula）却无直接关系'], 'negative_signals': ['候选端连接薄弱：normalized Fourier transform γp(s) of exp(−|r|p)(degree=1)'], 'related_relation_ids': ['000012', '000013', '000014']}, {'key': '000023|000027', 'kind': 'structural_hole', 'concept_ids': ['000023', '000027'], 'concept_names': ['Ball’s cube slicing result', 'Ball’s integral inequality'], 'common_neighbors': [{'concept_id': '000025', 'name': 'Pólya’s formula'}], 'reason': \"结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（Pólya’s formula）却无直接关系\", 'positive_score': 0.5, 'negative_score': 0.125, 'net_score': 0.375, 'confidence': 'low', 'confidence_deterministic': 'low', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 1 个共同邻居（Pólya’s formula）却无直接关系'], 'negative_signals': ['候选端连接薄弱：Ball’s integral inequality(degree=1)'], 'related_relation_ids': ['000012', '000013', '000015']}, {'key': '000024|000025', 'kind': 'structural_hole', 'concept_ids': ['000024', '000025'], 'concept_names': ['Fourier transform representations of moments of independent sums', 'Pólya’s formula'], 'common_neighbors': [{'concept_id': '000023', 'name': 'Ball’s cube slicing result'}], 'reason': \"结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（Ball’s cube slicing result）却无直接关系\", 'positive_score': 0.5, 'negative_score': 0.125, 'net_score': 0.375, 'confidence': 'low', 'confidence_deterministic': 'low', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 1 个共同邻居（Ball’s cube slicing result）却无直接关系'], 'negative_signals': ['候选端连接薄弱：Fourier transform representations of moments of independent sums(degree=1)'], 'related_relation_ids': ['000012', '000013', '000014', '000015']}, {'key': '000026|000027', 'kind': 'structural_hole', 'concept_ids': ['000026', '000027'], 'concept_names': ['normalized Fourier transform γp(s) of exp(−|r|p)', 'Ball’s integral inequality'], 'common_neighbors': [{'concept_id': '000025', 'name': 'Pólya’s formula'}], 'reason': \"结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（Pólya’s formula）却无直接关系\", 'positive_score': 0.5, 'negative_score': 0.25, 'net_score': 0.25, 'confidence': 'low', 'confidence_deterministic': 'low', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 1 个共同邻居（Pólya’s formula）却无直接关系'], 'negative_signals': ['候选端连接薄弱：normalized Fourier transform γp(s) of exp(−|r|p)(degree=1)、Ball’s integral inequality(degree=1)'], 'related_relation_ids': ['000014', '000015']}, {'key': '000023|000025', 'kind': 'rare_group', 'concept_ids': ['000023', '000025'], 'concept_names': ['Ball’s cube slicing result', 'Pólya’s formula'], 'common_neighbors': [], 'reason': '概念组频次 1 < 阈值 2（该组合只被研究过 1 次）', 'positive_score': 0.0, 'negative_score': 0.0, 'net_score': 0.0, 'confidence': 'low', 'confidence_deterministic': 'low', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': [], 'negative_signals': [], 'related_relation_ids': ['000012', '000013', '000014', '000015']}, {'key': '000023|000024', 'kind': 'rare_group', 'concept_ids': ['000023', '000024'], 'concept_names': ['Ball’s cube slicing result', 'Fourier transform representations of moments of independent sums'], 'common_neighbors': [], 'reason': '概念组频次 1 < 阈值 2（该组合只被研究过 1 次）', 'positive_score': 0.0, 'negative_score': 0.125, 'net_score': -0.125, 'confidence': 'low', 'confidence_deterministic': 'low', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': [], 'negative_signals': ['候选端连接薄弱：Fourier transform representations of moments of independent sums(degree=1)'], 'related_relation_ids': ['000012', '000013']}, {'key': '000025|000026', 'kind': 'rare_group', 'concept_ids': ['000025', '000026'], 'concept_names': ['Pólya’s formula', 'normalized Fourier transform γp(s) of exp(−|r|p)'], 'common_neighbors': [], 'reason': '概念组频次 1 < 阈值 2（该组合只被研究过 1 次）', 'positive_score': 0.0, 'negative_score': 0.125, 'net_score': -0.125, 'confidence': 'low', 'confidence_deterministic': 'low', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': [], 'negative_signals': ['候选端连接薄弱：normalized Fourier transform γp(s) of exp(−|r|p)(degree=1)'], 'related_relation_ids': ['000013', '000014', '000015']}, {'key': '000025|000027', 'kind': 'rare_group', 'concept_ids': ['000025', '000027'], 'concept_names': ['Pólya’s formula', 'Ball’s integral inequality'], 'common_neighbors': [], 'reason': '概念组频次 1 < 阈值 2（该组合只被研究过 1 次）', 'positive_score': 0.0, 'negative_score': 0.125, 'net_score': -0.125, 'confidence': 'low', 'confidence_deterministic': 'low', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': [], 'negative_signals': ['候选端连接薄弱：Ball’s integral inequality(degree=1)'], 'related_relation_ids': ['000013', '000014', '000015']}, {'key': '000002|000003', 'kind': 'rare_group', 'concept_ids': ['000002', '000003'], 'concept_names': ['volume', 'Hensley conjectured'], 'common_neighbors': [], 'reason': '概念组频次 1 < 阈值 2（该组合只被研究过 1 次）', 'positive_score': 0.0, 'negative_score': 0.25, 'net_score': -0.25, 'confidence': 'low', 'confidence_deterministic': 'low', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': [], 'negative_signals': ['候选端连接薄弱：volume(degree=1)、Hensley conjectured(degree=1)'], 'related_relation_ids': ['000001']}, {'key': '000008|000009', 'kind': 'rare_group', 'concept_ids': ['000008', '000009'], 'concept_names': ['maximum volume', 'intersection of Qn with a k-dimensional subspace'], 'common_neighbors': [], 'reason': '概念组频次 1 < 阈值 2（该组合只被研究过 1 次）', 'positive_score': 0.0, 'negative_score': 0.25, 'net_score': -0.25, 'confidence': 'low', 'confidence_deterministic': 'low', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': [], 'negative_signals': ['候选端连接薄弱：maximum volume(degree=1)、intersection of Qn with a k-dimensional subspace(degree=1)'], 'related_relation_ids': ['000002']}], 'overflow_candidates': [{'key': '000017|000019', 'kind': 'rare_group', 'concept_ids': ['000017', '000019'], 'concept_names': ['unit ball Bn p', 'projections'], 'common_neighbors': [{'concept_id': '000012', 'name': 'ln p-balls'}], 'reason': '概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系；热门概念参与：unit ball Bn p 在热门集里；文献充足：相关关系分布在 2 篇文献里', 'positive_score': 1.5, 'negative_score': 0.0, 'net_score': 1.5, 'confidence': 'medium', 'confidence_deterministic': 'medium', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系', '热门概念参与：unit ball Bn p 在热门集里', '文献充足：相关关系分布在 2 篇文献里'], 'negative_signals': [], 'related_relation_ids': ['000007', '000016', '000017', '000020', '000008', '000009']}, {'key': '000018|000019', 'kind': 'structural_hole', 'concept_ids': ['000018', '000019'], 'concept_names': ['central hyperplane sections', 'projections'], 'common_neighbors': [{'concept_id': '000012', 'name': 'ln p-balls'}, {'concept_id': '000017', 'name': 'unit ball Bn p'}], 'reason': \"结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 2 个共同邻居（ln p-balls、unit ball Bn p）却无直接关系；文献充足：相关关系分布在 4 篇文献里\", 'positive_score': 1.5, 'negative_score': 0.0, 'net_score': 1.5, 'confidence': 'medium', 'confidence_deterministic': 'medium', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 2 个共同邻居（ln p-balls、unit ball Bn p）却无直接关系', '文献充足：相关关系分布在 4 篇文献里'], 'negative_signals': [], 'related_relation_ids': ['000007', '000018', '000019', '000008', '000009', '000020']}, {'key': '000019|000020|000021', 'kind': 'rare_group', 'concept_ids': ['000019', '000020', '000021'], 'concept_names': ['projections', 'Khintchine-type inequality', 'random variables'], 'common_neighbors': [{'concept_id': '000012', 'name': 'ln p-balls'}, {'concept_id': '000021', 'name': 'random variables'}], 'reason': '概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；结构洞信号：有 2 个共同邻居（ln p-balls、random variables）却无直接关系；文献充足：相关关系分布在 2 篇文献里', 'positive_score': 1.5, 'negative_score': 0.0833, 'net_score': 1.4167, 'confidence': 'medium', 'confidence_deterministic': 'medium', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 2 个共同邻居（ln p-balls、random variables）却无直接关系', '文献充足：相关关系分布在 2 篇文献里'], 'negative_signals': ['候选端连接薄弱：random variables(degree=1)'], 'related_relation_ids': ['000008', '000009', '000020', '000010']}, {'key': '000012|000021', 'kind': 'structural_hole', 'concept_ids': ['000012', '000021'], 'concept_names': ['ln p-balls', 'random variables'], 'common_neighbors': [{'concept_id': '000019', 'name': 'projections'}, {'concept_id': '000020', 'name': 'Khintchine-type inequality'}], 'reason': \"结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 2 个共同邻居（projections、Khintchine-type inequality）却无直接关系；热门概念参与：ln p-balls 在热门集里\", 'positive_score': 1.5, 'negative_score': 0.125, 'net_score': 1.375, 'confidence': 'medium', 'confidence_deterministic': 'medium', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 2 个共同邻居（projections、Khintchine-type inequality）却无直接关系', '热门概念参与：ln p-balls 在热门集里'], 'negative_signals': ['候选端连接薄弱：random variables(degree=1)'], 'related_relation_ids': ['000004', '000005', '000007', '000008', '000010', '000009']}, {'key': '000015|000017', 'kind': 'structural_hole', 'concept_ids': ['000015', '000017'], 'concept_names': ['main diagonal', 'unit ball Bn p'], 'common_neighbors': [{'concept_id': '000011', 'name': 'maximal hyperplane section'}], 'reason': \"结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（maximal hyperplane section）却无直接关系；热门概念参与：unit ball Bn p 在热门集里；文献充足：相关关系分布在 2 篇文献里\", 'positive_score': 1.5, 'negative_score': 0.125, 'net_score': 1.375, 'confidence': 'medium', 'confidence_deterministic': 'medium', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 1 个共同邻居（maximal hyperplane section）却无直接关系', '热门概念参与：unit ball Bn p 在热门集里', '文献充足：相关关系分布在 2 篇文献里'], 'negative_signals': ['候选端连接薄弱：main diagonal(degree=1)'], 'related_relation_ids': ['000006', '000007', '000016', '000017', '000020']}, {'key': '000017|000021', 'kind': 'structural_hole', 'concept_ids': ['000017', '000021'], 'concept_names': ['unit ball Bn p', 'random variables'], 'common_neighbors': [{'concept_id': '000019', 'name': 'projections'}], 'reason': \"结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（projections）却无直接关系；热门概念参与：unit ball Bn p 在热门集里；文献充足：相关关系分布在 2 篇文献里\", 'positive_score': 1.5, 'negative_score': 0.125, 'net_score': 1.375, 'confidence': 'medium', 'confidence_deterministic': 'medium', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 1 个共同邻居（projections）却无直接关系', '热门概念参与：unit ball Bn p 在热门集里', '文献充足：相关关系分布在 2 篇文献里'], 'negative_signals': ['候选端连接薄弱：random variables(degree=1)'], 'related_relation_ids': ['000007', '000016', '000017', '000020', '000009']}, {'key': '000014|000020', 'kind': 'structural_hole', 'concept_ids': ['000014', '000020'], 'concept_names': ['Ball’s result', 'Khintchine-type inequality'], 'common_neighbors': [{'concept_id': '000012', 'name': 'ln p-balls'}], 'reason': \"结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系；热门概念参与：Ball’s result 在热门集里\", 'positive_score': 1.0, 'negative_score': 0.0, 'net_score': 1.0, 'confidence': 'medium', 'confidence_deterministic': 'medium', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系', '热门概念参与：Ball’s result 在热门集里'], 'negative_signals': [], 'related_relation_ids': ['000003', '000004', '000005', '000011', '000009', '000010']}, {'key': '000018|000020', 'kind': 'structural_hole', 'concept_ids': ['000018', '000020'], 'concept_names': ['central hyperplane sections', 'Khintchine-type inequality'], 'common_neighbors': [{'concept_id': '000012', 'name': 'ln p-balls'}], 'reason': \"结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系；文献充足：相关关系分布在 3 篇文献里\", 'positive_score': 1.0, 'negative_score': 0.0, 'net_score': 1.0, 'confidence': 'medium', 'confidence_deterministic': 'medium', 'passed_veto': True, 'vetoed': False, 'veto_reasons': [], 'positive_signals': ['结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系', '文献充足：相关关系分布在 3 篇文献里'], 'negative_signals': [], 'related_relation_ids': ['000007', '000018', '000019', '000009', '000010']}], 'veto_rules': ['相关关系的 quote_verified 全部为 False（没有任何可核实的原文依据）', '概念名明显不是概念（过长/纯符号/含停用词/含句读）', '两者已被判重（相关关系的 duplicate_of 非空）'], 'deduction_rules': ['引文校验部分失败（-0.5）', 'status=suspect 占比（-0.5 × 占比）', '存在 status=rejected（-0.5）', '候选端连接薄弱（degree <= cold_weak_peer_degree，-0.25 × 占比）'], 'searched': {'group_count': 18, 'rare_group_candidates': 15, 'structural_holes': 26, 'triples_examined': 51, 'pair_budget': 5000, 'vetoed': 3}, 'thresholds': {'gap_group_min_count': 2, 'limit': 12, 'confidence_high_net': 2.0, 'confidence_medium_net': 1.0}, 'hot_ids': ['000012', '000011', '000014', '000017', '000000'], 'hook': {'llm_available': False, 'note': \"未启用 LLM 钩子：'是否值得研究'完全由确定性信号决定。\"}, 'submitted_request_ids': [], 'rejected_requests': [], 'skipped_duplicate_topics': [], 'request_submission': {'enabled': False, 'attempted': 0, 'max_per_run': 30, 'inflight_limit': 200, 'submitted_request_ids': [], 'rejected_requests': [], 'skipped_duplicate_topics': [], 'reason': 'submit_requests=False（默认）：C 不写 search_requests。C 的工具面保持**全量只读**，写入只可能来自编排层显式开启这条确定性代码路径'}, 'structural_duplicates': {'checked': True, 'candidate_count': 2, 'merge_proposals': 0, 'review_proposals': 2, 'truncated': False, 'sample': [{'concept_ids': ['000016', '000022'], 'concept_names': ['normalized section function An,p', 'resilience of cubic sections'], 'proposal': 'review', 'name_evidence': 'none'}, {'concept_ids': ['000026', '000027'], 'concept_names': ['normalized Fourier transform γp(s) of exp(−|r|p)', 'Ball’s integral inequality'], 'proposal': 'review', 'name_evidence': 'none'}], 'method_note': '结构等价 ≠ 同义：只有结构证据时 proposal=review，合并决定权在 B', 'detail_reading': '完整候选：把 `limit` 调大再调一次本动作（`structural_duplicates`）；不要在编排路径上调 `graph.*` —— 那 9 件只注册在 C 的 CLI 自检面'}}, markdown=\"# C 分析报告：gaps\\n\\n- 生成者：`agent-C`\\n- 标题摘要：确实有：发现 12 条值得研究的关系候选（最高置信度 high）。检查范围：18 个概念组、26 个结构洞；被否决项剔除 3 条、净分不足 18 条。（结构洞 26 个、低频概念组 15 个、否决 3 条、净分不足 18 条，截断=False）\\n- 警告：\\n    - 另有 8 条中等以上置信度候选超出 limit=12 未展开（已在统计中计数）。\\n\\n- **二元结论：有** —— 确实有：发现 12 条值得研究的关系候选（最高置信度 high）。检查范围：18 个概念组、26 个结构洞；被否决项剔除 3 条、净分不足 18 条。\\n\\n- 检索范围：概念组 18 个（其中低频 15 个）、结构洞 26 个（检查三元组 51 个，预算 5000，截断=False）\\n- 否决项剔除 3 条；净分不足（low）18 条\\n- LLM 钩子：未启用 LLM 钩子：'是否值得研究'完全由确定性信号决定。\\n\\n## I3 缺口直连 A（search_requests 写入）\\n\\n- 开关：**关闭（默认）** —— submit_requests=False（默认）：C 不写 search_requests。C 的工具面保持**全量只读**，写入只可能来自编排层显式开启这条确定性代码路径\\n- 提交：（无）（单次上限 30，全局在途上限 200）\\n\\n## I5 结构重复概念（检测侧摘要）\\n\\n- 候选 2 对（merge 建议 0 对 / review 2 对，截断=False）\\n- 结构等价 ≠ 同义：只有结构证据时 proposal=review，合并决定权在 B\\n- 完整候选：完整候选：把 `limit` 调大再调一次本动作（`structural_duplicates`）；不要在编排路径上调 `graph.*` —— 那 9 件只注册在 C 的 CLI 自检面\\n\\n## 候选缺口（通过了否决门，且 confidence 至少 medium）\\n\\n### rare_group：ln p-balls ↔ unit ball Bn p ↔ central hyperplane sections（000012|000017|000018，置信度 high）\\n- 理由：概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；结构洞信号：有 3 个共同邻居（maximal hyperplane section、central hyperplane sections、projections）却无直接关系；热门概念参与：ln p-balls、unit ball Bn p 在热门集里；文献充足：相关关系分布在 4 篇文献里\\n- 正向信号（3.0）：结构洞信号：有 3 个共同邻居（maximal hyperplane section、central hyperplane sections、projections）却无直接关系；热门概念参与：ln p-balls、unit ball Bn p 在热门集里；文献充足：相关关系分布在 4 篇文献里\\n- 负向信号（-0.0）：无\\n- 净分 3.0；涉及关系：000004, 000005, 000007, 000008, 000010, 000016, 000017, 000020, 000018, 000019\\n\\n### structural_hole：maximal hyperplane section ↔ projections（000011|000019，置信度 high）\\n- 理由：结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 3 个共同邻居（ln p-balls、unit ball Bn p、Khintchine-type inequality）却无直接关系；热门概念参与：maximal hyperplane section 在热门集里；文献充足：相关关系分布在 2 篇文献里\\n- 正向信号（2.5）：结构洞信号：有 3 个共同邻居（ln p-balls、unit ball Bn p、Khintchine-type inequality）却无直接关系；热门概念参与：maximal hyperplane section 在热门集里；文献充足：相关关系分布在 2 篇文献里\\n- 负向信号（-0.0）：无\\n- 净分 2.5；涉及关系：000006, 000010, 000016, 000017, 000008, 000009, 000020\\n\\n### structural_hole：unit ball Bn p ↔ Khintchine-type inequality（000017|000020，置信度 high）\\n- 理由：结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 3 个共同邻居（maximal hyperplane section、ln p-balls、projections）却无直接关系；热门概念参与：unit ball Bn p 在热门集里；文献充足：相关关系分布在 2 篇文献里\\n- 正向信号（2.5）：结构洞信号：有 3 个共同邻居（maximal hyperplane section、ln p-balls、projections）却无直接关系；热门概念参与：unit ball Bn p 在热门集里；文献充足：相关关系分布在 2 篇文献里\\n- 负向信号（-0.0）：无\\n- 净分 2.5；涉及关系：000007, 000016, 000017, 000020, 000009, 000010\\n\\n### structural_hole：unit cube ↔ ln p-balls（000000|000012，置信度 high）\\n- 理由：结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（central hyperplane sections）却无直接关系；热门概念参与：unit cube、ln p-balls 在热门集里；文献充足：相关关系分布在 4 篇文献里\\n- 正向信号（2.0）：结构洞信号：有 1 个共同邻居（central hyperplane sections）却无直接关系；热门概念参与：unit cube、ln p-balls 在热门集里；文献充足：相关关系分布在 4 篇文献里\\n- 负向信号（-0.0）：无\\n- 净分 2.0；涉及关系：000000, 000018, 000019, 000004, 000005, 000007, 000008, 000010\\n\\n### structural_hole：unit cube ↔ unit ball Bn p（000000|000017，置信度 high）\\n- 理由：结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（central hyperplane sections）却无直接关系；热门概念参与：unit cube、unit ball Bn p 在热门集里；文献充足：相关关系分布在 5 篇文献里\\n- 正向信号（2.0）：结构洞信号：有 1 个共同邻居（central hyperplane sections）却无直接关系；热门概念参与：unit cube、unit ball Bn p 在热门集里；文献充足：相关关系分布在 5 篇文献里\\n- 负向信号（-0.0）：无\\n- 净分 2.0；涉及关系：000000, 000018, 000019, 000007, 000016, 000017, 000020\\n\\n### rare_group：maximal hyperplane section ↔ ln p-balls ↔ Khintchine-type inequality（000011|000012|000020，置信度 high）\\n- 理由：概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；结构洞信号：有 2 个共同邻居（unit ball Bn p、Khintchine-type inequality）却无直接关系；热门概念参与：maximal hyperplane section、ln p-balls 在热门集里\\n- 正向信号（2.0）：结构洞信号：有 2 个共同邻居（unit ball Bn p、Khintchine-type inequality）却无直接关系；热门概念参与：maximal hyperplane section、ln p-balls 在热门集里\\n- 负向信号（-0.0）：无\\n- 净分 2.0；涉及关系：000006, 000010, 000016, 000017, 000004, 000005, 000007, 000008, 000009\\n\\n### structural_hole：maximal hyperplane section ↔ central hyperplane sections（000011|000018，置信度 high）\\n- 理由：结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 2 个共同邻居（ln p-balls、unit ball Bn p）却无直接关系；热门概念参与：maximal hyperplane section 在热门集里；文献充足：相关关系分布在 3 篇文献里\\n- 正向信号（2.0）：结构洞信号：有 2 个共同邻居（ln p-balls、unit ball Bn p）却无直接关系；热门概念参与：maximal hyperplane section 在热门集里；文献充足：相关关系分布在 3 篇文献里\\n- 负向信号（-0.0）：无\\n- 净分 2.0；涉及关系：000006, 000010, 000016, 000017, 000007, 000018, 000019\\n\\n### rare_group：ln p-balls ↔ projections（000012|000019，置信度 high）\\n- 理由：概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；结构洞信号：有 2 个共同邻居（unit ball Bn p、Khintchine-type inequality）却无直接关系；热门概念参与：ln p-balls 在热门集里；文献充足：相关关系分布在 2 篇文献里\\n- 正向信号（2.0）：结构洞信号：有 2 个共同邻居（unit ball Bn p、Khintchine-type inequality）却无直接关系；热门概念参与：ln p-balls 在热门集里；文献充足：相关关系分布在 2 篇文献里\\n- 负向信号（-0.0）：无\\n- 净分 2.0；涉及关系：000004, 000005, 000007, 000008, 000010, 000009, 000020\\n\\n### structural_hole：Ball’s result ↔ unit ball Bn p（000014|000017，置信度 high）\\n- 理由：结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系；热门概念参与：Ball’s result、unit ball Bn p 在热门集里；文献充足：相关关系分布在 2 篇文献里\\n- 正向信号（2.0）：结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系；热门概念参与：Ball’s result、unit ball Bn p 在热门集里；文献充足：相关关系分布在 2 篇文献里\\n- 负向信号（-0.0）：无\\n- 净分 2.0；涉及关系：000003, 000004, 000005, 000011, 000007, 000016, 000017, 000020\\n\\n### structural_hole：maximal hyperplane section ↔ Ball’s result（000011|000014，置信度 medium）\\n- 理由：结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系；热门概念参与：maximal hyperplane section、Ball’s result 在热门集里\\n- 正向信号（1.5）：结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系；热门概念参与：maximal hyperplane section、Ball’s result 在热门集里\\n- 负向信号（-0.0）：无\\n- 净分 1.5；涉及关系：000006, 000010, 000016, 000017, 000003, 000004, 000005, 000011\\n\\n### structural_hole：Ball’s result ↔ central hyperplane sections（000014|000018，置信度 medium）\\n- 理由：结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系；热门概念参与：Ball’s result 在热门集里；文献充足：相关关系分布在 3 篇文献里\\n- 正向信号（1.5）：结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系；热门概念参与：Ball’s result 在热门集里；文献充足：相关关系分布在 3 篇文献里\\n- 负向信号（-0.0）：无\\n- 净分 1.5；涉及关系：000003, 000004, 000005, 000011, 000007, 000018, 000019\\n\\n### structural_hole：Ball’s result ↔ projections（000014|000019，置信度 medium）\\n- 理由：结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系；热门概念参与：Ball’s result 在热门集里；文献充足：相关关系分布在 2 篇文献里\\n- 正向信号（1.5）：结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系；热门概念参与：Ball’s result 在热门集里；文献充足：相关关系分布在 2 篇文献里\\n- 负向信号（-0.0）：无\\n- 净分 1.5；涉及关系：000003, 000004, 000005, 000011, 000008, 000009, 000020\\n\\n## 被否决项（veto）剔除的候选 —— 它们**不算**“有”\\n\\n否决项的语义：候选**拿不出可核实的依据**，因此无论正向分多高都不进候选。逐条列出理由，便于独立复核“证据不足”这个结论。\\n\\n- structural_hole ln p-balls ↔ normalized section function An,p（净分 0.875，本可判 low）：被否决 —— 概念名明显不是概念：概念名含句读标点：normalized section function An,p\\n- rare_group Ball’s result ↔ normalized section function An,p（净分 0.375，本可判 low）：被否决 —— 概念名明显不是概念：概念名含句读标点：normalized section function An,p\\n- structural_hole normalized section function An,p ↔ resilience of cubic sections（净分 0.25，本可判 low）：被否决 —— 概念名明显不是概念：概念名含句读标点：normalized section function An,p\\n\\n## 净分不足（low）的候选 —— 有依据但证据偏弱\\n\\n- rare_group unit cube ↔ section：净分 0.875（正 1.0 / 负 0.125）；候选端连接薄弱：section(degree=1)\\n- structural_hole section ↔ central hyperplane sections：净分 0.875（正 1.0 / 负 0.125）；候选端连接薄弱：section(degree=1)\\n- structural_hole maximal hyperplane section ↔ random variables：净分 0.875（正 1.0 / 负 0.125）；候选端连接薄弱：random variables(degree=1)\\n- structural_hole ln p-balls ↔ main diagonal：净分 0.875（正 1.0 / 负 0.125）；候选端连接薄弱：main diagonal(degree=1)\\n- structural_hole ln p-balls ↔ resilience of cubic sections：净分 0.875（正 1.0 / 负 0.125）；候选端连接薄弱：resilience of cubic sections(degree=1)\\n- rare_group maximal hyperplane section ↔ main diagonal：净分 0.375（正 0.5 / 负 0.125）；候选端连接薄弱：main diagonal(degree=1)\\n- rare_group Ball’s result ↔ resilience of cubic sections：净分 0.375（正 0.5 / 负 0.125）；候选端连接薄弱：resilience of cubic sections(degree=1)\\n- structural_hole main diagonal ↔ Khintchine-type inequality：净分 0.375（正 0.5 / 负 0.125）；候选端连接薄弱：main diagonal(degree=1)\\n- structural_hole Ball’s cube slicing result ↔ normalized Fourier transform γp(s) of exp(−|r|p)：净分 0.375（正 0.5 / 负 0.125）；候选端连接薄弱：normalized Fourier transform γp(s) of exp(−|r|p)(degree=1)\\n- structural_hole Ball’s cube slicing result ↔ Ball’s integral inequality：净分 0.375（正 0.5 / 负 0.125）；候选端连接薄弱：Ball’s integral inequality(degree=1)\\n- structural_hole Fourier transform representations of moments of independent sums ↔ Pólya’s formula：净分 0.375（正 0.5 / 负 0.125）；候选端连接薄弱：Fourier transform representations of moments of independent sums(degree=1)\\n- structural_hole normalized Fourier transform γp(s) of exp(−|r|p) ↔ Ball’s integral inequality：净分 0.25（正 0.5 / 负 0.25）；候选端连接薄弱：normalized Fourier transform γp(s) of exp(−|r|p)(degree=1)、Ball’s integral inequality(degree=1)\\n- rare_group Ball’s cube slicing result ↔ Pólya’s formula：净分 0.0（正 0.0 / 负 0.0）\\n- rare_group Ball’s cube slicing result ↔ Fourier transform representations of moments of independent sums：净分 -0.125（正 0.0 / 负 0.125）；候选端连接薄弱：Fourier transform representations of moments of independent sums(degree=1)\\n- rare_group Pólya’s formula ↔ normalized Fourier transform γp(s) of exp(−|r|p)：净分 -0.125（正 0.0 / 负 0.125）；候选端连接薄弱：normalized Fourier transform γp(s) of exp(−|r|p)(degree=1)\\n- rare_group Pólya’s formula ↔ Ball’s integral inequality：净分 -0.125（正 0.0 / 负 0.125）；候选端连接薄弱：Ball’s integral inequality(degree=1)\\n- rare_group volume ↔ Hensley conjectured：净分 -0.25（正 0.0 / 负 0.25）；候选端连接薄弱：volume(degree=1)、Hensley conjectured(degree=1)\\n- rare_group maximum volume ↔ intersection of Qn with a k-dimensional subspace：净分 -0.25（正 0.0 / 负 0.25）；候选端连接薄弱：maximum volume(degree=1)、intersection of Qn with a k-dimensional subspace(degree=1)\\n\", warnings=['另有 8 条中等以上置信度候选超出 limit=12 未展开（已在统计中计数）。'], truncated=False, ok=True, error=None, report_id='000000', markdown_path='work/C/000000-gaps.md', created_at='2026-11-24T20:32:30+08:00', created_by='agent-C')",
+        "error": "",
+        "meta": {},
+        "warn": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.gaps 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 6,
+          "call_index": 0,
+          "calls": 1,
+          "step_index": 6,
+          "summary": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.gaps 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 6,
+            "calls": 1,
+            "items": 1,
+            "steps": [
+              6
+            ],
+            "executed": 1,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 45696,
+        "prompt_cache_miss_tokens": 3190,
+        "tokens_in": 48886,
+        "tokens_out": 664,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000125"
+    },
+    {
+      "index": 7,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "relations",
+          "fields": [
+            "relation_id",
+            "lit_id",
+            "concept_ids",
+            "page_range"
+          ],
+          "limit": 40
+        },
+        "why": "核准 21 条关系覆盖了哪几篇文献（只投影 lit_id，避免正文截断导致我报错覆盖数）"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "relations",
+          "rows": [
+            {
+              "relation_id": "000000",
+              "lit_id": "000000",
+              "concept_ids": [
+                "000000",
+                "000001"
+              ],
+              "page_range": {
+                "start": 1,
+                "end": 1,
+                "label": "p. 1"
+              }
+            },
+            {
+              "relation_id": "000001",
+              "lit_id": "000000",
+              "concept_ids": [
+                "000002",
+                "000003"
+              ],
+              "page_range": {
+                "start": 1,
+                "end": 1,
+                "label": "p. 1"
+              }
+            },
+            {
+              "relation_id": "000002",
+              "lit_id": "000000",
+              "concept_ids": [
+                "000008",
+                "000009"
+              ],
+              "page_range": {
+                "start": 9,
+                "end": 9,
+                "label": "p. 9"
+              }
+            },
+            {
+              "relation_id": "000003",
+              "lit_id": "000001",
+              "concept_ids": [
+                "000014",
+                "000016"
+              ],
+              "page_range": {
+                "start": 3,
+                "end": 3,
+                "label": "p. 3"
+              }
+            },
+            {
+              "relation_id": "000004",
+              "lit_id": "000001",
+              "concept_ids": [
+                "000012",
+                "000014"
+              ],
+              "page_range": {
+                "start": 1,
+                "end": 1,
+                "label": "p. 1"
+              }
+            },
+            {
+              "relation_id": "000005",
+              "lit_id": "000001",
+              "concept_ids": [
+                "000012",
+                "000014"
+              ],
+              "page_range": {
+                "start": 1,
+                "end": 1,
+                "label": "p. 1"
+              }
+            },
+            {
+              "relation_id": "000006",
+              "lit_id": "000001",
+              "concept_ids": [
+                "000011",
+                "000015"
+              ],
+              "page_range": {
+                "start": 1,
+                "end": 1,
+                "label": "p. 1"
+              }
+            },
+            {
+              "relation_id": "000007",
+              "lit_id": "000001",
+              "concept_ids": [
+                "000012",
+                "000017",
+                "000018"
+              ],
+              "page_range": {
+                "start": 2,
+                "end": 2,
+                "label": "p. 2"
+              }
+            },
+            {
+              "relation_id": "000008",
+              "lit_id": "000001",
+              "concept_ids": [
+                "000012",
+                "000019"
+              ],
+              "page_range": {
+                "start": 2,
+                "end": 2,
+                "label": "p. 2"
+              }
+            },
+            {
+              "relation_id": "000009",
+              "lit_id": "000001",
+              "concept_ids": [
+                "000019",
+                "000020",
+                "000021"
+              ],
+              "page_range": {
+                "start": 2,
+                "end": 2,
+                "label": "p. 2"
+              }
+            },
+            {
+              "relation_id": "000010",
+              "lit_id": "000001",
+              "concept_ids": [
+                "000011",
+                "000012",
+                "000020"
+              ],
+              "page_range": {
+                "start": 2,
+                "end": 2,
+                "label": "p. 2"
+              }
+            },
+            {
+              "relation_id": "000011",
+              "lit_id": "000001",
+              "concept_ids": [
+                "000014",
+                "000022"
+              ],
+              "page_range": {
+                "start": 2,
+                "end": 2,
+                "label": "p. 2"
+              }
+            },
+            {
+              "relation_id": "000012",
+              "lit_id": "000001",
+              "concept_ids": [
+                "000023",
+                "000024"
+              ],
+              "page_range": {
+                "start": 4,
+                "end": 4,
+                "label": "p. 4"
+              }
+            },
+            {
+              "relation_id": "000013",
+              "lit_id": "000001",
+              "concept_ids": [
+                "000023",
+                "000025"
+              ],
+              "page_range": {
+                "start": 4,
+                "end": 4,
+                "label": "p. 4"
+              }
+            },
+            {
+              "relation_id": "000014",
+              "lit_id": "000001",
+              "concept_ids": [
+                "000025",
+                "000026"
+              ],
+              "page_range": {
+                "start": 4,
+                "end": 4,
+                "label": "p. 4"
+              }
+            },
+            {
+              "relation_id": "000015",
+              "lit_id": "000001",
+              "concept_ids": [
+                "000025",
+                "000027"
+              ],
+              "page_range": {
+                "start": 6,
+                "end": 6,
+                "label": "p. 6"
+              }
+            },
+            {
+              "relation_id": "000016",
+              "lit_id": "000001",
+              "concept_ids": [
+                "000011",
+                "000017"
+              ],
+              "page_range": {
+                "start": 11,
+                "end": 11,
+                "label": "p. 11"
+              }
+            },
+            {
+              "relation_id": "000017",
+              "lit_id": "000001",
+              "concept_ids": [
+                "000011",
+                "000017"
+              ],
+              "page_range": {
+                "start": 15,
+                "end": 15,
+                "label": "p. 15"
+              }
+            },
+            {
+              "relation_id": "000018",
+              "lit_id": "000003",
+              "concept_ids": [
+                "000000",
+                "000018"
+              ],
+              "page_range": {
+                "start": 1,
+                "end": 1,
+                "label": "p. 1"
+              }
+            },
+            {
+              "relation_id": "000019",
+              "lit_id": "000004",
+              "concept_ids": [
+                "000000",
+                "000018"
+              ],
+              "page_range": {
+                "start": 1,
+                "end": 1,
+                "label": "p. 1"
+              }
+            },
+            {
+              "relation_id": "000020",
+              "lit_id": "000007",
+              "concept_ids": [
+                "000017",
+                "000019"
+              ],
+              "page_range": {
+                "start": 11,
+                "end": 11,
+                "label": "p. 11"
+              }
+            }
+          ],
+          "total": 21,
+          "returned": 21,
+          "limit": 40,
+          "offset": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "relations",
+          "total": 21,
+          "returned": 21,
+          "offset": 0,
+          "limit": 40,
+          "fields": [
+            "relation_id",
+            "lit_id",
+            "concept_ids",
+            "page_range"
+          ]
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 48128,
+        "prompt_cache_miss_tokens": 3852,
+        "tokens_in": 51980,
+        "tokens_out": 1911,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000125"
+    },
+    {
+      "index": 8,
+      "shape": "tool",
+      "payload": {
+        "name": "own.structural_duplicates",
+        "args": {
+          "limit": 12
+        },
+        "why": "核一组可疑重号：孤立概念 n-cube / random variable / Khintchine inequality 与已入图概念 unit cube / random variables / Khintchine-type inequality 疑似同一概念被登记两次"
+      },
+      "result": {
+        "tool": "own.structural_duplicates",
+        "ok": true,
+        "data": {
+          "method": "structural_neighborhood_equality",
+          "method_note": "只做'邻域完全相同 + 两者之间无直接关系'的结构判据；结构等价 ≠ 同义（两个不同概念可能连着同一批邻居），因此只有结构证据时只给 proposal=review，合并决定权在 B",
+          "limit": 12,
+          "checked": true,
+          "candidates": [
+            {
+              "concept_ids": [
+                "000016",
+                "000022"
+              ],
+              "concept_names": [
+                "normalized section function An,p",
+                "resilience of cubic sections"
+              ],
+              "neighborhood_size": 1,
+              "neighbors": [
+                "000014"
+              ],
+              "neighbor_names": [
+                "Ball’s result"
+              ],
+              "shared_relation_ids": [],
+              "name_evidence": "none",
+              "proposal": "review",
+              "reason": "邻域完全相同（1 个共同邻居：Ball’s result），且两者之间无直接关系；**但名字规范化后不同、也无别名交集 ⇒ 只有结构证据，不得据此合并**（结构等价 ≠ 同义：两个不同的概念完全可能连着同一批邻居）",
+              "detected_by": "agent-C"
+            },
+            {
+              "concept_ids": [
+                "000026",
+                "000027"
+              ],
+              "concept_names": [
+                "normalized Fourier transform γp(s) of exp(−|r|p)",
+                "Ball’s integral inequality"
+              ],
+              "neighborhood_size": 1,
+              "neighbors": [
+                "000025"
+              ],
+              "neighbor_names": [
+                "Pólya’s formula"
+              ],
+              "shared_relation_ids": [],
+              "name_evidence": "none",
+              "proposal": "review",
+              "reason": "邻域完全相同（1 个共同邻居：Pólya’s formula），且两者之间无直接关系；**但名字规范化后不同、也无别名交集 ⇒ 只有结构证据，不得据此合并**（结构等价 ≠ 同义：两个不同的概念完全可能连着同一批邻居）",
+              "detected_by": "agent-C"
+            }
+          ],
+          "truncation_notice": null,
+          "truncated": false,
+          "scanned_concepts": 30,
+          "scanned_relations": 21,
+          "reason": "扫描 30 个概念、21 条关系，命中 2 对结构等价候选（其中 0 对名字侧也有证据 ⇒ proposal=merge，其余 2 对只有结构证据 ⇒ proposal=review，**不得据此合并**）"
+        },
+        "error": "",
+        "meta": {},
+        "warn": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.structural_duplicates 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 8,
+          "call_index": 0,
+          "calls": 1,
+          "step_index": 8,
+          "summary": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.structural_duplicates 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 8,
+            "calls": 1,
+            "items": 1,
+            "steps": [
+              8
+            ],
+            "executed": 1,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 51200,
+        "prompt_cache_miss_tokens": 2674,
+        "tokens_in": 53874,
+        "tokens_out": 2415,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000125"
+    },
+    {
+      "index": 9,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "dependencies",
+          "limit": 100
+        },
+        "why": "核一遍依赖边：定理行（000034/000035）与对角向猜想（000036–000039）在依赖图里有没有下游，决定「哪一向已有定理」不只靠标签"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "dependencies",
+          "rows": [],
+          "total": 0,
+          "returned": 0,
+          "limit": 100,
+          "offset": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "dependencies",
+          "total": 0,
+          "returned": 0,
+          "offset": 0,
+          "limit": 100
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 53120,
+        "prompt_cache_miss_tokens": 2161,
+        "tokens_in": 55281,
+        "tokens_out": 2569,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000125"
+    },
+    {
+      "index": 10,
+      "shape": "tool",
+      "payload": {
+        "name": "own.proof_chain",
+        "args": {
+          "target": "stmt:000034",
+          "max_depth": 3
+        },
+        "why": "确认「依赖边 0 条」这个读数：定理行 000034 在证明链分析里到底有没有承重链可读，决定我能不能说「坐标向已有定理（但无可查依赖）」"
+      },
+      "result": {
+        "tool": "own.proof_chain",
+        "ok": true,
+        "data": "AnalysisReport(kind='proof_chain', request='stmt:000034', params={'max_depth': 3, 'k': 1}, summary='B_p^3 中心截面面积 A_p(n) 的积分表示与坐标向/面对角向闭式面积公式：**已经是根**（无依赖；按口径：文献／原始概念／有 proof 证据／**经审核的自证定理**）⇒ 这一条链**闭合**', payload={'checked': True, 'target': 'stmt:000034', 'matched_by': 'stmt_id', 'groups': [], 'best_group': None, 'groups_total': 0, 'best_proof_no': None, 'proof_nos': [], 'closed': True, 'roots': ['000034'], 'bad_used_by': [], 'path_shapes': [{'path_id': 'target-is-root', 'proof_no': 0, 'path_group': 0, 'hops': 0, 'steps': 0, 'gaps': 1, 'gap_nodes': ['stmt:000034'], 'detour_nodes': [], 'off_path_ratio': 0.0, 'support_edges': [], 'alternatives': 0, 'reached': True, 'spine_found': True, 'spine_nodes': [], 'walked_nodes': ['stmt:000034'], 'walked_edges': [], 'frontier': [], 'why': ''}], 'path_shapes_checked': True, 'path_shapes_note': '', 'frontier': [], 'frontier_checked': True, 'frontier_note': '', 'node': {'stmt_id': '000034', 'kind': 'theorem', 'label': 'B_p^3 中心截面面积 A_p(n) 的积分表示与坐标向/面对角向闭式面积公式'}}, markdown='# C 分析报告：proof_chain\\n\\n- 生成者：`agent-C`\\n- 标题摘要：B_p^3 中心截面面积 A_p(n) 的积分表示与坐标向/面对角向闭式面积公式：**已经是根**（无依赖；按口径：文献／原始概念／有 proof 证据／**经审核的自证定理**）⇒ 这一条链**闭合**\\n\\n## 目标\\n\\n- 原样目标：`stmt:000034`（按 `stmt_id` 命中）；节点 `000034` · B_p^3 中心截面面积 A_p(n) 的积分表示与坐标向/面对角向闭式面积公式（kind=`theorem`）\\n\\n## 结论\\n\\n- 走到根（closed）：是\\n- 候选路径 0 组（没有依赖边；是根还是依赖没写，见下面那一行）\\n- 根（无依赖，按口径就是根）：`000034`\\n\\n## 候选路径（每条一行：第几条证明 · 第几组）\\n\\n（没有候选路径：这一条要么已经是根，要么依赖没写；理由见上面。）\\n\\n## 形状与前沿\\n\\n- 形状读数：已算（1 条候选路径）\\n- 前沿：已算（0 个待接节点）\\n', warnings=[], truncated=False, ok=True, error=None, report_id='000001', markdown_path='work/C/000001-proof_chain.md', created_at='2026-11-24T20:33:12+08:00', created_by='agent-C')",
+        "error": "",
+        "meta": {},
+        "warn": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.proof_chain 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 10,
+          "call_index": 0,
+          "calls": 1,
+          "step_index": 10,
+          "summary": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.proof_chain 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 10,
+            "calls": 1,
+            "items": 1,
+            "steps": [
+              10
+            ],
+            "executed": 1,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 54528,
+        "prompt_cache_miss_tokens": 1468,
+        "tokens_in": 55996,
+        "tokens_out": 374,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000125"
+    },
+    {
+      "index": 11,
+      "shape": "tool",
+      "payload": {
+        "name": "analysis.register_report",
+        "args": {
+          "kind": "gaps",
+          "summary": "图读数：30 概念/21 关系/24 两两边/18 组、8 个孤立概念，中心是 000012 ln p-balls（度 5，次高 000011/000014/000017 各 4）；关键读数是「21 条关系只落在 5 篇文献上（lit:000001 占 15 条），11 篇对口文献里有 6 篇零关系 + dependencies 表 0 行」—— 这让「定理行 000034/000035 的承重链无可查」这条缺口成立，也让「体对角向只有 conjecture、p<2 一侧零关系」两条缺口成立；结构洞候选 12 条（最高 net 3.0，confidence high）。",
+          "markdown": "# C 关系分析：lp-ball-22 这一支的结构读数（只算不判定）\n\n## 0. 边界（先读这一节）\n\n- 本报告只用确定性读数：`graph.stats` / `graph.build` 口径、`relations` 表按 `lit_id` 分组计数、`statements` 的 `kind` 与 `label`、`dependencies` 行数、`own.gaps` / `own.structural_duplicates` / `own.proof_chain` 的返回。\n- 我**不下数学结论**：度数高不等于重要，路径短不等于那条证明对，`conjecture` 行存在不等于命题假。\n- 我**没改任何台账**：`dependencies`、`statements`、`relations` 一个字节都没写；本报告由 `analysis.register_report` 落 `analysis_reports` 一行。\n\n## 1. 图规模与完整性（`graph.stats`）\n\n| 读数 | 值 |\n|---|---|\n| concept_count | 30 |\n| relation_count | 21 |\n| pair_count（两两边） | 24 |\n| group_count | 18 |\n| isolated_count | 8 |\n| literature_count | 25 |\n| status_counts | active 21 / 其它 0 |\n| quote_verified_counts | true 21 / false 0 / unknown 0 |\n| concepts_missing_from_table | 0 |\n\n⇒ 图与台账同源，21 条关系引文全部逐字回验通过（`quote_verified=true`）。**这一点是好消息**：后面所有「缺口」都不是引文质量缺口，而是**边没登记 / 边没走到那一篇**。\n\n## 2. 谁是这簇概念的中心（度数中心性，`degree_top` / `hot`）\n\n| 名次 | concept_id | 名字 | degree |\n|---|---|---|---|\n| 1 | 000012 | ln p-balls | **5** |\n| 2 | 000011 | maximal hyperplane section | 4 |\n| 3 | 000014 | Ball's result | 4 |\n| 4 | 000017 | unit ball Bn p | 4 |\n| 5 | 000000 | unit cube | 3 |\n| 6 | 000018 | central hyperplane sections | 3 |\n| 7 | 000019 | projections | 3 |\n| 8 | 000025 | Pólya's formula | 3 |\n\n**中心是 `000012 ln p-balls`（度 5）**，不是 `unit cube`：decisive 的一点是 `relations` 表里 15/21 条出自 `lit:000001`（Eskenazis–Nayar–Tkocz 那条 p>2 的线），而 `unit cube` 只连着 `{section, central hyperplane sections}` 三条边。**读数含义**：这一簇的承重不是「立方体切片」本体，而是「l_p^n 球的最大超平面截面」这一支；立方体（p=∞ 端）在图上反而是端点。\n\n`000014 Ball's result` 与 `000017 unit ball Bn p` 同度 4 但角色不同：前者是**被引用的结论枢纽**（`000003/000004/000005/000011` 四条边全与它相连），后者是**题面对象**（本题 B_p^3 就是 n=3 的 `unit ball Bn p`）。\n\n## 3. 哪几篇文献是直接对口的（题名 + 关系覆盖两把尺）\n\n**按题名判定的对口集（11 篇）**：`lit:000000` Cube slicing in R^n、`000001` On maximal hyperplane sections of the unit ball of l_p^n for p>2、`000002` Plane sections of the unit ball of l_p、`000003` Critical central sections of the cube、`000004` Non-diagonal critical central sections of the cube、`000005` Resilience of cube slicing in l_p、`000006` On extremal sections of subspaces of l_p、`000007` Hyperplane projections of the unit ball of l_p^n、`000008` Plane sections of convex bodies of maximal volume、`000009` A cube slice that is not a zonoid、`000010` Non-central sections of convex bodies。\n\n**按关系覆盖（确定性计数，`relations` 按 `lit_id` 分组）**：\n\n| lit_id | 关系条数 | 题名 |\n|---|---|---|\n| 000001 | **15** | On maximal hyperplane sections … for p>2 |\n| 000000 | 3 | Cube slicing in R^n |\n| 000003 | 1 | Critical central sections of the cube |\n| 000004 | 1 | Non-diagonal critical central sections of the cube |\n| 000007 | 1 | Hyperplane projections of the unit ball of l_p^n |\n| 其余 20 篇 | **0** | 含上表里另外 6 篇对口文献 |\n\n**两把尺的差就是第一条结构性缺口**：11 篇对口文献里 **6 篇零关系** —— `000002`（plane sections of l_p，p 全区间的基础篇）、`000005`（resilience，正文里 000011 那条「resilience of cubic sections」概念正是它）、`000006`（extremal sections of subspaces of l_p）、`000008`（maximal volume plane sections）、`000009`（non-zonoid cube slice）、`000010`（non-central sections）。\n⇒ **直接可用的核心六篇 = `000000 / 000001 / 000003 / 000004 / 000007`**（有关系落地），其中 `000001` 是绝对主干。**「直接对口」与「已进图」不是同一个集合**，这一点必须一起报。\n\n## 4. 三个方向 + p 分界的台账现状（只读 `kind` 与 `label`，不下判断）\n\n`statements` 现有 40 行：30 行 `kind=concept`、6 行 `kind=conjecture`（000030–000033、000036–000039，`evidence_kind=cross_check`）、2 行 `kind=theorem`（**只有 000034、000035**，`evidence_kind=heuristic`）。\n\n| 方向 | 台账里有什么 | 性质 |\n|---|---|---|\n| **坐标向** | `000034` theorem：面积积分表示 + 坐标向闭式；`000035` theorem：面积公式 + 坐标向极值 | 有 theorem 行，但 `evidence_kind=heuristic` ⇒ **等级不能按 theorem 读** |\n| **面对角向** | `000034` 的 label 含「面对角向闭式面积公式」；同时 `000037` 仍是 cross_check conjecture「面对角截面面积闭式」 | **同一件事在台账里同时是 theorem 行与 conjecture 行** ⇒ 口径冲突（见 §6 第 6 条） |\n| **体对角向** | 只有 `000036` conjecture「对角截面面积公式」；`000038`（A_diag−A_face 零点唯一性，比值 ρ 单调）、`000039`（ΔK(t) 零点唯一性）也是 cross_check conjecture | **没有 theorem 行** ⇒ 缺口 |\n| **p<2 / p>2 分界** | 关系只覆盖 p>2：`rel:000005` 记 Oleszkiewicz 在 `2<p<p0≈26.265` 上反例，`rel:000007` 记归一化体积随 p 单调增，`rel:000016/000017` 停在 p>2；p<2 一侧 **0 条关系、0 条 hypothes 行** | 缺口（且是**范围缺口**，不是「已证不存在」） |\n\n⚠️ 一条必须写清的边界：`own.proof_chain(stmt:000034)` 返回 `closed=True`，但同一份返回里 `path_shapes[0]` 写着 `path_id=\"target-is-root\"`、`gaps=1`、`gap_nodes=[\"stmt:000034\"]`、`hops=0`。**`dependencies` 表 0 行**（`table.list` total=0）是同一件事的另一面。所以这个 `closed=True` 读的是「没有依赖边、按口径把目标当根」，**不是**「这条定理的承重链已经查过并成立」。这一条我不许写成「坐标向定理已立」，只能写成「坐标向有 theorem 行、但其承重链在台账里无可查」。\n\n## 5. 缺口候选（每条带 worth / confidence 与「为什么值得查」）\n\n`own.gaps(limit=12)` 的确定性口径：检查 18 个概念组、26 个结构洞，否决 3 条、净分不足 18 条，返回 12 条候选，`confidence` 由代码算（最高 `high`），`truncated=False`。**confidence 我只降不抬**；`worth` 是我的判断（不是算出来的）。\n\n| # | 候选 | 结构读数（确定性） | worth | confidence | 为什么值得查 |\n|---|---|---|---|---|---|\n| 1 | `000012` ln p-balls · `000017` unit ball Bn p · `000018` central hyperplane sections（`rare_group`，net 3.0） | 组频次 1 < 阈值 2；3 个共同邻居（000011 / 000018 / 000019）却无直接边；相关关系散布 4 篇 | **高** | high（工具口径） | 本题对象正是 `unit ball Bn p` 在 n=3 的中心截面，而它和「中心超平面截面」「ln p-balls」三个热点之间**没有一条直接边**——「哪一向已有定理」要落到具体命题上时，缺的正是把这三者接起来的那条关系 |\n| 2 | `000011` maximal hyperplane section · `000019` projections（`structural_hole`，net 2.5） | 3 个共同邻居（000012 / 000017 / 000020）无直接边 | **高** | high | 截面对偶投影这件事只写在 `rel:000008` 一句「p↔q=p′、极大极小互换」里，图上没有一条从 section 到 projection 的边；体对角向若要经对偶转成 Khintchine 常数问题，这是必经结点 |\n| 3 | `000017` unit ball Bn p · `000020` Khintchine-type inequality（`structural_hole`，net 2.5） | 3 个共同邻居（000011 / 000012 / 000019）无直接边 | 中高 | high | `rel:000010` 已经把「识别 l_p 极值截面 ≅ 求广义 Khintchine 常数」写成等价，但这条等价现在只落在 `000011|000012|000020` 上；主角 `000017` 身上没有——等价关系的宿主挂错了位置，读图的人会漏 |\n| 4 | `000000` unit cube · `000012` ln p-balls（`structural_hole`，net 2.0） | 1 个共同邻居（000018）无直接边 | 中 | high | 立方体是 p=∞ 端，`rel:000003` 已经以「p=∞ 处取值 √2」的口径把 Ball 定理想过一次；这条洞可能只是**命名层缺边**而非实质缺口——低 value，但便宜，值得核一次以排除 |\n| 5 | **文献侧缺口（非概念侧）**：6 篇对口文献零关系 | `relations` 按 `lit_id` 计数：`000002/000005/000006/000008/000009/000010` 各 0 条 | **高** | high（计数确定性） | 这不是「这些文献不重要」，而是**抽关系时没走到它们**。`000002` 是 p 全区间的基础篇、`000005` 的标题正是图上的 `000022 resilience of cubic sections`、`000006` 直指 extremal sections of subspaces of l_p —— 三篇都与本题同题面。**「缺一条边」与「这篇不重要」在图上一模一样，但台账上前者该修** |\n| 6 | **同一件事在台账里同时是 theorem 与 conjecture**：`000034`(theorem, 含面对角闭式) vs `000037`(conjecture, 面对角闭式) | `kind` 冲突；两者 `evidence_kind` 分别是 `heuristic` / `cross_check` | **高** | high | 这是 §4 表里最刺眼的一格：同一条面积闭式被登记成两个档位。**判不了谁对**（我只判结构），但它足以让任何「面对角向是否已有定理」的回答都取决于你看哪一行——必须由 B/D 收口（I2/I5 那一档） |\n| 7 | **孤立概念 8 个**：`000004` random variable、`000005` pdf、`000006` derivative、`000007` Khintchine inequality、`000010` independent random variables、`000013` n-cube、`000028` Hölder's inequality、`000029` Nazarov–Podkorytov's method | `graph.stats.isolated_concepts`，度 0 | 中 | high | 这 8 个全是**方法/基础概念**，度 0 有两种原因：真的边缘，或**该连的边没连**。至少 `000007 Khintchine inequality` 与已入图的 `000020 Khintchine-type inequality`、`000013 n-cube` 与 `000000 unit cube` 看着是同一层的两种叫法 ⇒ 该去 L2 看它们有没有该有而没有的关系，不能凭度数丢 |\n| 8 | **依赖边 0 条**：`dependencies` 空表 | `table.list total=0`；`own.proof_chain(000034)` 得 `target-is-root`、`gaps=1` | **高** | high | 它决定了本报告能说到哪一步：没有依赖边 ⇒ 任何「哪个方向已有定理」只能靠 `kind`+`label` 判，不能靠证明链判；命题被判错时也**查不出污染面**。这是整条分析管线的地基缺口 |\n| 9 | **p<2 一侧零关系** | `relations` 里 p 范围只出现在 `2<p<p0≈26.265`（rel:000005）与 p>2（rel:000016/000017） | 中 | **medium（我下调）** | 缺口成立与否取决于检索范围而不是图上事实——若这一支文献本就只做 p>2，那这是**范围声明**而非缺口。留 medium 是因为我没有读全文核过 `000002`（plane sections of l_p）是否覆盖 p<2 |\n\n`own.structural_duplicates`（限 12）另给 2 对结构等价候选，**都不是重复**：`000016|000022`（共同邻居只有 Ball's result）与 `000026|000027`（共同邻居只有 Pólya's formula），名字侧无证据 ⇒ `proposal=review`，**不得据此合并**。这两对我按「只有结构证据」记，不给 worth。\n\n## 6. 与 `own.gaps` 原始返回的对账\n\n- 工具口径：`verdict=有`，`has_candidates=true`，12 条候选，最高 `confidence=high`，否决 3 条（未展开）、净分不足 18 条被剔。\n- 我在上表里**新增了 3 条工具给不出的缺口类型**（#5 文献侧零关系、#6 theorem/conjecture 档位冲突、#8 依赖边空表）—— 它们出自 `relations`/`statements`/`dependencies` 的直接计数与 `kind` 读，不是 `own.gaps` 的产物；来路已在各行注明。**这是本报告与工具输出的唯一实质差别，读的人请按来路分开引用。**\n\n## 7. 我没做、也不该由我做的事\n\n1. **没提交检索请求**：`own.gaps` 的 `submit_requests` 这一趟由调用方给（缺省 false），我**没有在循环里自己拧开关**。要把上面 #1–#4 变成 `search_requests`，请派我这一趟的一方以 `gaps(submit_requests=true)` 再唤一次（或按本报告 payload 直接落请求）。\n2. **没判矛盾对错**：§4 的 `000034` vs `000037` 档位冲突只报「哪两行 + 冲突在哪」，处置在 D 的 `adjudicate`（I2）、登记在 B。\n3. **没读原文**：本报告一个 `lit:` 正文都没读（L1/L2 都没下钻）。所有「对口」判断基于题名与 `relations` 的 `lit_id` 覆盖；若要把「哪篇直接对口」变成可复核结论，下一步是各篇取一段逐字摘录（`search.local` / `trace.literature`），那一步不在这一趟的交付里。\n",
+          "payload": {
+            "report_scope": "lp-ball-22 关系结构（只算不判定）",
+            "graph": {
+              "concept_count": 30,
+              "relation_count": 21,
+              "pair_count": 24,
+              "group_count": 18,
+              "isolated_count": 8,
+              "isolated_concepts": [
+                "000004",
+                "000005",
+                "000006",
+                "000007",
+                "000010",
+                "000013",
+                "000028",
+                "000029"
+              ],
+              "quote_verified_true": 21,
+              "quote_verified_false": 0
+            },
+            "degree_top": [
+              {
+                "concept_id": "000012",
+                "name": "ln p-balls",
+                "degree": 5
+              },
+              {
+                "concept_id": "000011",
+                "name": "maximal hyperplane section",
+                "degree": 4
+              },
+              {
+                "concept_id": "000014",
+                "name": "Ball's result",
+                "degree": 4
+              },
+              {
+                "concept_id": "000017",
+                "name": "unit ball Bn p",
+                "degree": 4
+              },
+              {
+                "concept_id": "000000",
+                "name": "unit cube",
+                "degree": 3
+              },
+              {
+                "concept_id": "000018",
+                "name": "central hyperplane sections",
+                "degree": 3
+              },
+              {
+                "concept_id": "000019",
+                "name": "projections",
+                "degree": 3
+              },
+              {
+                "concept_id": "000025",
+                "name": "Pólya's formula",
+                "degree": 3
+              }
+            ],
+            "center": "000012",
+            "lit_coverage_of_relations": {
+              "000001": 15,
+              "000000": 3,
+              "000003": 1,
+              "000004": 1,
+              "000007": 1,
+              "zero_relation_papers": [
+                "000002",
+                "000005",
+                "000006",
+                "000008",
+                "000009",
+                "000010",
+                "000011",
+                "000012",
+                "000013",
+                "000014",
+                "000015",
+                "000016",
+                "000017",
+                "000018",
+                "000019",
+                "000020",
+                "000021",
+                "000022",
+                "000023",
+                "000024"
+              ]
+            },
+            "on_topic_by_title": [
+              "000000",
+              "000001",
+              "000002",
+              "000003",
+              "000004",
+              "000005",
+              "000006",
+              "000007",
+              "000008",
+              "000009",
+              "000010"
+            ],
+            "on_topic_with_relations": [
+              "000000",
+              "000001",
+              "000003",
+              "000004",
+              "000007"
+            ],
+            "on_topic_zero_relations": [
+              "000002",
+              "000005",
+              "000006",
+              "000008",
+              "000009",
+              "000010"
+            ],
+            "direction_status": {
+              "coordinate": {
+                "rows": [
+                  "000034",
+                  "000035"
+                ],
+                "kind": "theorem",
+                "evidence_kind": "heuristic",
+                "note": "有 theorem 行，但等级不得按 theorem 读；承重链无可查"
+              },
+              "body_diagonal": {
+                "rows": [
+                  "000036",
+                  "000038",
+                  "000039"
+                ],
+                "kind": "conjecture",
+                "note": "无 theorem 行 ⇒ 缺口"
+              },
+              "face_diagonal": {
+                "rows": [
+                  "000034",
+                  "000037"
+                ],
+                "kind": "theorem+conjecture 冲突",
+                "note": "同一条闭式在两行里档位不同，需 B/D 收口"
+              },
+              "p_split": {
+                "relations": [
+                  "000005"
+                ],
+                "note": "只覆盖 p>2（2<p<p0≈26.265）；p<2 一侧零关系"
+              }
+            },
+            "dependencies_rows": 0,
+            "proof_chain_reading": {
+              "target": "stmt:000034",
+              "closed": true,
+              "path_id": "target-is-root",
+              "gaps": 1,
+              "gap_nodes": [
+                "stmt:000034"
+              ],
+              "hops": 0,
+              "interpretation": "closed 读的是『无依赖边、按口径当根』，不是『承重链已核且成立』"
+            },
+            "gap_candidates": [
+              {
+                "key": "000012|000017|000018",
+                "kind": "rare_group",
+                "net_score": 3.0,
+                "confidence": "high",
+                "worth": "高",
+                "why": "本题对象 unit ball Bn p 与中心超平面截面、ln p-balls 三个热点之间无直接边，是『哪一向已有定理』落到具体命题时缺的那条接边"
+              },
+              {
+                "key": "000011|000019",
+                "kind": "structural_hole",
+                "net_score": 2.5,
+                "confidence": "high",
+                "worth": "高",
+                "why": "截面对偶投影只写在 rel:000008 一句里，图上无 section→projection 边；体对角向经对偶转 Khintchine 常数必经此结点"
+              },
+              {
+                "key": "000017|000020",
+                "kind": "structural_hole",
+                "net_score": 2.5,
+                "confidence": "high",
+                "worth": "中高",
+                "why": "rel:000010 的『极值截面 ≅ 广义 Khintchine 常数』等价只挂在 000011|000012|000020 上，主角 000017 身上没有"
+              },
+              {
+                "key": "000000|000012",
+                "kind": "structural_hole",
+                "net_score": 2.0,
+                "confidence": "high",
+                "worth": "中",
+                "why": "可能只是命名层缺边（rel:000003 已以 p=∞ 口径连过 Ball 定理），便宜，值得核一次以排除"
+              },
+              {
+                "key": "lit_zero_relations_x6",
+                "kind": "literature_level",
+                "confidence": "high",
+                "worth": "高",
+                "why": "000002/000005/000006 与本题同题面却零关系；『缺一条边』与『这篇不重要』图上一样，台账上前者该修"
+              },
+              {
+                "key": "stmt:000034_vs_000037",
+                "kind": "kind_conflict",
+                "confidence": "high",
+                "worth": "高",
+                "why": "同一条面对角闭式同时登记为 theorem 与 conjecture；面对角向是否已有定理取决于你看哪一行"
+              },
+              {
+                "key": "isolated_concepts_x8",
+                "kind": "isolated",
+                "confidence": "high",
+                "worth": "中",
+                "why": "8 个方法/基础概念度 0，000007 Khintchine inequality 与 000020、000013 n-cube 与 000000 疑似同层两种叫法，须 L2 核有无该有而没有的关系"
+              },
+              {
+                "key": "dependencies_empty",
+                "kind": "ledger_floor",
+                "confidence": "high",
+                "worth": "高",
+                "why": "依赖边 0 条 ⇒ 方向判断只能靠 kind+label，命题被判错时查不出污染面"
+              },
+              {
+                "key": "p_lt_2_zero_relations",
+                "kind": "range_gap",
+                "confidence": "medium",
+                "worth": "中",
+                "why": "缺口成立与否取决于检索范围而非图上事实；未读 000002 全文核 p<2 覆盖，故 confidence 下调为 medium"
+              }
+            ],
+            "structural_duplicates": {
+              "pairs": [
+                "000016|000022",
+                "000026|000027"
+              ],
+              "proposal": "review",
+              "note": "无名字侧证据，不得据此合并"
+            },
+            "submit_requests": false,
+            "submit_requests_note": "开关由调用方给（缺省 false），未在循环内自拧"
+          },
+          "params": {
+            "gaps_limit": 12,
+            "duplicates_limit": 12,
+            "proof_chain_target": "stmt:000034",
+            "proof_chain_max_depth": 3
+          },
+          "warnings": [
+            "dependencies 表 0 行：任何『已有定理』的判断只能来自 statements.kind + label，不能来自证明链；命题被判错时也查不出污染面",
+            "本报告未读任何文献正文（未做 L3），『哪几篇直接对口』基于题名与 relations.lit_id 覆盖两把尺，不是逐字核过的对口性",
+            "000034(theorem) 与 000037(conjecture) 对同一条面对角闭式的档位不一致：本报告只报结构冲突，不判谁对（处置在 D.adjudicate / 登记在 B）",
+            "8 个孤立概念只按『有该连而未连的边』报缺口，未去 L2 逐条确认，不得把度数 0 读成不重要",
+            "p<2 一侧零关系这一条 confidence 已下调为 medium：可能是范围声明而非缺口，未读 000002 全文核过",
+            "own.gaps 的 submit_requests 由调用方给，本趟为 false ⇒ 上面的缺口候选尚未落成 search_requests"
+          ],
+          "request": "跑一次关系分析（只算、不判定）：用已入库的 25 篇文献（lit:000000–lit:000024）与 B 建好的 30 条概念行、21 条关系行，回答「本题所在的这一支文献里，哪几篇是直接对口的、谁是这簇概念的中心、哪些方向（坐标向 / 体对角向 / 面对角向的最大截面；p<2 与 p>2 的分界）已有定理、哪些是缺口」"
+        },
+        "why": "把这一趟的关系读数（中心、对口文献、三方向+p 分界的台账现状、9 条缺口候选带 worth/confidence）落成 analysis_reports 一行；不登记=台账上没发生"
+      },
+      "result": {
+        "tool": "analysis.register_report",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "report_id": "000002",
+          "markdown_path": "work/C/000002-gaps.md",
+          "kind": "gaps",
+          "summary": "图读数：30 概念/21 关系/24 两两边/18 组、8 个孤立概念，中心是 000012 ln p-balls（度 5，次高 000011/000014/000017 各 4）；关键读数是「21 条关系只落在 5 篇文献上（lit:000001 占 15 条），11 篇对口文献里有 6 篇零关系 + dependencies 表 0 行」—— 这让「定理行 000034/000035 的承重链无可查」这条缺口成立，也让「体对角向只有 conjecture、p<2 一侧零关系」两条缺口成立；结构洞候选 12 条（最高 net 3.0，confidence high）。",
+          "created_by": "agent-C"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 55168,
+        "prompt_cache_miss_tokens": 2217,
+        "tokens_in": 57385,
+        "tokens_out": 8114,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000125"
+    },
+    {
+      "index": 12,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "analysis_reports",
+          "fields": [
+            "report_id",
+            "kind",
+            "markdown_path",
+            "summary"
+          ],
+          "limit": 20
+        },
+        "why": "核对我的报告是否按号落盘，并看 own.gaps 那一趟有没有留下单独的报告行（决定我还需不需要补读候选缺口）"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "analysis_reports",
+          "rows": [
+            {
+              "report_id": "000000",
+              "kind": "gaps",
+              "markdown_path": "work/C/000000-gaps.md",
+              "summary": "确实有：发现 12 条值得研究的关系候选（最高置信度 high）。检查范围：18 个概念组、26 个结构洞；被否决项剔除 3 条、净分不足 18 条。（结构洞 26 个、低频概念组 15 个、否决 3 条、净分不足 18 条，截断=False）"
+            },
+            {
+              "report_id": "000001",
+              "kind": "proof_chain",
+              "markdown_path": "work/C/000001-proof_chain.md",
+              "summary": "B_p^3 中心截面面积 A_p(n) 的积分表示与坐标向/面对角向闭式面积公式：**已经是根**（无依赖；按口径：文献／原始概念／有 proof 证据／**经审核的自证定理**）⇒ 这一条链**闭合**"
+            },
+            {
+              "report_id": "000002",
+              "kind": "gaps",
+              "markdown_path": "work/C/000002-gaps.md",
+              "summary": "图读数：30 概念/21 关系/24 两两边/18 组、8 个孤立概念，中心是 000012 ln p-balls（度 5，次高 000011/000014/000017 各 4）；关键读数是「21 条关系只落在 5 篇文献上（lit:000001 占 15 条），11 篇对口文献里有 6 篇零关系 + dependencies 表 0 行」—— 这让「定理行 000034/000035 的承重链无可查」这条缺口成立，也让「体对角向只有 conjecture、p<2 一侧零关系」两条缺口成立；结构洞候选 12 条（最高 net 3.0，confidence high）。"
+            }
+          ],
+          "total": 3,
+          "returned": 3,
+          "limit": 20,
+          "offset": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "analysis_reports",
+          "total": 3,
+          "returned": 3,
+          "offset": 0,
+          "limit": 20,
+          "fields": [
+            "report_id",
+            "kind",
+            "markdown_path",
+            "summary"
+          ]
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 56576,
+        "prompt_cache_miss_tokens": 1922,
+        "tokens_in": 58498,
+        "tokens_out": 1005,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000125"
+    },
+    {
+      "index": 13,
+      "shape": "final",
+      "payload": {
+        "final": "C 关系分析已算完并登记（只算、不判定；未改任何台账）。\n\n【登记】主报告 report_id=000002（kind=gaps，落 work/C/000002-gaps.md，analysis_reports 已按号读到这一行）；同趟另落两行辅读：000000（gaps，12 条候选全文在 work/C/000000-gaps.md）、000001（proof_chain，work/C/000001-proof_chain.md）。\n\n【核心读数（确定性）】概念图 30 概念 / 21 关系 / 24 两两边 / 18 组；孤立概念 8 个；21 条关系 status 全 active、quote_verified 21/21 为 true；dependencies 表 0 行。\n- 中心：000012 ln p-balls 度 5；次高 000011 maximal hyperplane section、000014 Ball’s result、000017 unit ball Bn p 各 4；000000 unit cube、000018 central hyperplane sections、000019 projections、000025 Pólya’s formula 各 3。这簇概念的中心是「ln p-balls」，不是「unit cube」。\n- 关系分布：21 条只落在 5 篇文献上 —— lit:000001 占 15 条、lit:000000 占 3 条、lit:000003 / 000004 / 000007 各 1 条；其余 20 篇零关系。\n\n【直接对口的文献（按题名 + 关系落点分组，属我的内容判断，不是算出来的分数）】\n- 核心 4 篇：lit:000000 Cube slicing in R^n（立方体切片本体）、lit:000001 On maximal hyperplane sections of the unit ball of l_p^n for p>2（唯一有 15 条关系的承重文献）、lit:000003 Critical central sections of the cube、lit:000004 Non-diagonal critical central sections of the cube。\n- 紧邻 7 篇：lit:000002 Plane sections of the unit ball of l_p、lit:000005 Resilience of cube slicing in l_p、lit:000006 On extremal sections of subspaces of l_p、lit:000007 Hyperplane projections of l_p^n（对偶面）、lit:000008 Plane sections of convex bodies of maximal volume、lit:000020 On the volume of hyperplane sections of a d-cube、lit:000021 Maximal perimeters of polytope sections。\n- 外围：lit:000009、000010、000011、000012、000013、000014、000015、000016、000022。\n- 与本题无直接对口：lit:000017–000019、000023、000024（测度论 / 广义积分那一簇，属背景工具体）。\n\n【哪一向已有定理、哪一向没有（按 statements.kind + label 读，不判数学真假）】\n- 坐标向：有 kind=theorem 行 000034（A_p(n) 积分表示 + 坐标向/面对角向闭式面积公式）、000035（面积公式与坐标向极值），但 evidence_kind 均为 heuristic，且 dependencies 0 行 ⇒ 等级不可抬，承重链在台账上无可查。\n- 面对角向：闭式面积公式出现在 000034 的 label 里，而 000037 又以 conjecture 登记同一件事 ⇒ 同一方向的定理/猜想双登记（worth 中、判给 B 去核，不是我能合并的）。\n- 体对角向：只有 conjecture 000036（对角截面面积公式）与 000038 / 000039（零点唯一性、比值 ρ 单调性），没有 theorem 行。\n- p<2 一侧：21 条关系全部指向 p>2（lit:000001 标题即 p>2，rel:000005 给 p0≈26.265 的反例区间）；p<2 侧零关系、零概念组。\n\n【缺口候选：worth / confidence / 为什么值得查】（图上候选来自 own.gaps，worth 是我的判断，confidence 取确定性档）\n1. 000012|000017|000018（ln p-balls / unit ball Bn p / central hyperplane sections）：worth 高 · confidence high（net 3.0，3 个共同邻居却无直接关系）。为什么值得查：这三元组正是本题的核心三联，缺那条直接边意味着「p 变化如何改中心截面」在图上只能绕 000019 走。\n2. 000011|000019（maximal hyperplane section ↔ projections）：worth 高 · confidence high（net 2.5）。为什么值得查：rel:000008 已把对偶口径写成一句话，图上却没有这条边 ⇒ 极值截面的对偶路线在图上走不通，任何按图搜路径的人都会漏掉它。\n3. 000017|000020（unit ball Bn p ↔ Khintchine-type inequality）：worth 中高 · confidence high（net 2.5）。为什么值得查：rel:000010 说「极值截面 = 广义 Khintchine 最佳常数」，这条等价没有落到概念边上，缺口成立。\n4. 000000|000012（unit cube ↔ ln p-balls）：worth 高 · confidence high（net 2.0）。为什么值得查：立方体是 p=∞ 端点，这条边缺失与「p<2 一侧零关系」是同一处结构洞，直接对住题面里 p<2 / p>2 的分界。\n5. 000000|000017（unit cube ↔ unit ball Bn p）：worth 中 · confidence high（net 2.0）。为什么值得查：与第 4 条同源，若只补一条，补 000000|000012 更省。\n6. 000011|000012|000020 低频概念组：worth 中 · confidence（net 2.0，该组合只被研究过 1 次）。为什么值得查：三概念各自都有关系、合起来只出现一次 ⇒ 「极值截面 + Khintchine」这条线只从一篇文献抽过，第二来源缺。\n7. 结构缺口（非图上候选，来自台账计数）：20/25 篇文献零关系，其中对口文献 6 篇零关系（lit:000002、000005、000006、000008、000009、000010）：worth 高 · confidence high（计数确定）。为什么值得查：这几篇题名正对「plane sections / extremal sections / resilience」，正文已在盘上却没有一条概念关系，抽关系那一环漏了。\n8. dependencies 表 0 行，proof_chain(stmt:000034) 只给出 target-is-root（gaps=1、walked_edges 空）：worth 高 · confidence high（0 行是确定性读数）。为什么值得查：现在任何「这条定理靠什么站着」都只能看到「无依赖 ⇒ 按口径算根」，与「它真是自证」在台账上长得一样。\n9. 体对角向 000015 main diagonal 度 1、只由 rel:000006 挂到 000011：worth 中 · confidence high（度数确定）。为什么值得查：题面点名的体对角向在图上是最薄的一支，与「只有 conjecture 000036」互相印证。\n10. 疑似同概念双登记（000013 n-cube vs 000000 unit cube；000021 random variables vs 000004 random variable；000007 Khintchine inequality vs 000020 Khintchine-type inequality）：worth 中 · confidence 低（own.structural_duplicates 只命中 2 对邻域等价，且明确 name_evidence=none、不得据此合并；我这三条是名字侧怀疑，无结构判据）。为什么值得查：8 个孤立概念里有 4 个正好是这些通用词，很可能是同一概念被抽了两次导致边分散——但这要 B 用名字/定义核，我不能合。\n\n【要你（调用方）做的一件事】这趟 gaps 的 submit_requests 是默认 false，所以上面 10 条一条都没落成 search_requests。要让缺口闭环，请用 gaps 的 submit_requests=true 再跑一次（或由 D 按 1/4/7 三条起检索请求）。\n\n【边界】度数高≠重要、路径短≠证明对；conjecture 行存在不等于命题假；我不判数学真假，矛盾/重复的处置在 D/B 那一侧。",
+        "evidence": [
+          "analysis_reports:000002",
+          "analysis_reports:000000",
+          "analysis_reports:000001",
+          "stmt:000012",
+          "stmt:000011",
+          "stmt:000014",
+          "stmt:000017",
+          "stmt:000034",
+          "stmt:000035",
+          "stmt:000036",
+          "stmt:000037",
+          "rel:000005",
+          "rel:000008",
+          "rel:000010",
+          "lit:000000",
+          "lit:000001",
+          "lit:000002",
+          "lit:000003",
+          "lit:000004",
+          "work/C/000002-gaps.md"
+        ],
+        "notify": {
+          "to": "M",
+          "summary": "C 关系分析登记 000002（kind=gaps）：中心是 000012 ln p-balls，11 篇对口文献里 6 篇零关系、dependencies 0 行、体对角向只有 conjecture、p<2 侧零关系；10 条缺口候选带 worth/confidence",
+          "body": "## 交付\n\n- 主报告：`analysis_reports` **000002**（kind=`gaps`）→ `work/C/000002-gaps.md`\n- 辅读：**000000**（gaps，12 条候选全文 `work/C/000000-gaps.md`）、**000001**（proof_chain，`work/C/000001-proof_chain.md`）\n- 未改任何台账（statements / relations / dependencies 零写入）。\n\n## 关键读数\n\n- 30 概念 / 21 关系 / 24 两两边 / 18 组 / 8 孤立；`quote_verified` 21/21 true；`dependencies` **0 行**。\n- 中心：`stmt:000012` ln p-balls 度 5；次高 `000011` / `000014` / `000017` 各 4。\n- 21 条关系只落在 5 篇文献：`lit:000001` 15 条、`lit:000000` 3 条、`lit:000003` / `000004` / `000007` 各 1 条。\n- 已有定理：坐标向 `stmt:000034` / `000035`（kind=theorem，但 evidence_kind=heuristic、无依赖边）；面对角向闭式面积在 000034 的 label 里、同时又是 conjecture `000037`（双登记，需 B 核）；体对角向只有 conjecture `000036`/`000038`/`000039`；p<2 一侧零关系。\n\n## 要你做的\n\n1. 这趟 `gaps` 的 `submit_requests` 是 false ⇒ 10 条缺口候选**没有**落 `search_requests`。请用 `submit_requests=true` 再跑一次（优先第 1、4、7 条）。\n2. 若这条线要继续，建议由 D 组织研究：p<2 侧的截面极值（当前零关系）、体对角向的定理化（只有 conjecture 000036）、000011↔000019 对偶边的补抽。\n\n卡点：我没有出边，派不了活；也判不了定理真假与合并，这两件在 D/B 那一侧。",
+          "refs": [
+            "analysis_reports:000002",
+            "analysis_reports:000000",
+            "analysis_reports:000001",
+            "stmt:000012",
+            "stmt:000034",
+            "stmt:000036",
+            "lit:000001"
+          ]
+        }
+      },
+      "result": {
+        "notify_problem": "notify.refs 里的 'analysis_reports:000002' 立不住：引用 'analysis_reports:000002' 的前缀不认识：认 c/exp/lit/q/rel/stmt: 这几种，或者四位手稿编号"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 57728,
+        "prompt_cache_miss_tokens": 1964,
+        "tokens_in": 59692,
+        "tokens_out": 4310,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000125"
+    }
+  ],
+  "final": "C 关系分析已算完并登记（只算、不判定；未改任何台账）。\n\n【登记】主报告 report_id=000002（kind=gaps，落 work/C/000002-gaps.md，analysis_reports 已按号读到这一行）；同趟另落两行辅读：000000（gaps，12 条候选全文在 work/C/000000-gaps.md）、000001（proof_chain，work/C/000001-proof_chain.md）。\n\n【核心读数（确定性）】概念图 30 概念 / 21 关系 / 24 两两边 / 18 组；孤立概念 8 个；21 条关系 status 全 active、quote_verified 21/21 为 true；dependencies 表 0 行。\n- 中心：000012 ln p-balls 度 5；次高 000011 maximal hyperplane section、000014 Ball’s result、000017 unit ball Bn p 各 4；000000 unit cube、000018 central hyperplane sections、000019 projections、000025 Pólya’s formula 各 3。这簇概念的中心是「ln p-balls」，不是「unit cube」。\n- 关系分布：21 条只落在 5 篇文献上 —— lit:000001 占 15 条、lit:000000 占 3 条、lit:000003 / 000004 / 000007 各 1 条；其余 20 篇零关系。\n\n【直接对口的文献（按题名 + 关系落点分组，属我的内容判断，不是算出来的分数）】\n- 核心 4 篇：lit:000000 Cube slicing in R^n（立方体切片本体）、lit:000001 On maximal hyperplane sections of the unit ball of l_p^n for p>2（唯一有 15 条关系的承重文献）、lit:000003 Critical central sections of the cube、lit:000004 Non-diagonal critical central sections of the cube。\n- 紧邻 7 篇：lit:000002 Plane sections of the unit ball of l_p、lit:000005 Resilience of cube slicing in l_p、lit:000006 On extremal sections of subspaces of l_p、lit:000007 Hyperplane projections of l_p^n（对偶面）、lit:000008 Plane sections of convex bodies of maximal volume、lit:000020 On the volume of hyperplane sections of a d-cube、lit:000021 Maximal perimeters of polytope sections。\n- 外围：lit:000009、000010、000011、000012、000013、000014、000015、000016、000022。\n- 与本题无直接对口：lit:000017–000019、000023、000024（测度论 / 广义积分那一簇，属背景工具体）。\n\n【哪一向已有定理、哪一向没有（按 statements.kind + label 读，不判数学真假）】\n- 坐标向：有 kind=theorem 行 000034（A_p(n) 积分表示 + 坐标向/面对角向闭式面积公式）、000035（面积公式与坐标向极值），但 evidence_kind 均为 heuristic，且 dependencies 0 行 ⇒ 等级不可抬，承重链在台账上无可查。\n- 面对角向：闭式面积公式出现在 000034 的 label 里，而 000037 又以 conjecture 登记同一件事 ⇒ 同一方向的定理/猜想双登记（worth 中、判给 B 去核，不是我能合并的）。\n- 体对角向：只有 conjecture 000036（对角截面面积公式）与 000038 / 000039（零点唯一性、比值 ρ 单调性），没有 theorem 行。\n- p<2 一侧：21 条关系全部指向 p>2（lit:000001 标题即 p>2，rel:000005 给 p0≈26.265 的反例区间）；p<2 侧零关系、零概念组。\n\n【缺口候选：worth / confidence / 为什么值得查】（图上候选来自 own.gaps，worth 是我的判断，confidence 取确定性档）\n1. 000012|000017|000018（ln p-balls / unit ball Bn p / central hyperplane sections）：worth 高 · confidence high（net 3.0，3 个共同邻居却无直接关系）。为什么值得查：这三元组正是本题的核心三联，缺那条直接边意味着「p 变化如何改中心截面」在图上只能绕 000019 走。\n2. 000011|000019（maximal hyperplane section ↔ projections）：worth 高 · confidence high（net 2.5）。为什么值得查：rel:000008 已把对偶口径写成一句话，图上却没有这条边 ⇒ 极值截面的对偶路线在图上走不通，任何按图搜路径的人都会漏掉它。\n3. 000017|000020（unit ball Bn p ↔ Khintchine-type inequality）：worth 中高 · confidence high（net 2.5）。为什么值得查：rel:000010 说「极值截面 = 广义 Khintchine 最佳常数」，这条等价没有落到概念边上，缺口成立。\n4. 000000|000012（unit cube ↔ ln p-balls）：worth 高 · confidence high（net 2.0）。为什么值得查：立方体是 p=∞ 端点，这条边缺失与「p<2 一侧零关系」是同一处结构洞，直接对住题面里 p<2 / p>2 的分界。\n5. 000000|000017（unit cube ↔ unit ball Bn p）：worth 中 · confidence high（net 2.0）。为什么值得查：与第 4 条同源，若只补一条，补 000000|000012 更省。\n6. 000011|000012|000020 低频概念组：worth 中 · confidence（net 2.0，该组合只被研究过 1 次）。为什么值得查：三概念各自都有关系、合起来只出现一次 ⇒ 「极值截面 + Khintchine」这条线只从一篇文献抽过，第二来源缺。\n7. 结构缺口（非图上候选，来自台账计数）：20/25 篇文献零关系，其中对口文献 6 篇零关系（lit:000002、000005、000006、000008、000009、000010）：worth 高 · confidence high（计数确定）。为什么值得查：这几篇题名正对「plane sections / extremal sections / resilience」，正文已在盘上却没有一条概念关系，抽关系那一环漏了。\n8. dependencies 表 0 行，proof_chain(stmt:000034) 只给出 target-is-root（gaps=1、walked_edges 空）：worth 高 · confidence high（0 行是确定性读数）。为什么值得查：现在任何「这条定理靠什么站着」都只能看到「无依赖 ⇒ 按口径算根」，与「它真是自证」在台账上长得一样。\n9. 体对角向 000015 main diagonal 度 1、只由 rel:000006 挂到 000011：worth 中 · confidence high（度数确定）。为什么值得查：题面点名的体对角向在图上是最薄的一支，与「只有 conjecture 000036」互相印证。\n10. 疑似同概念双登记（000013 n-cube vs 000000 unit cube；000021 random variables vs 000004 random variable；000007 Khintchine inequality vs 000020 Khintchine-type inequality）：worth 中 · confidence 低（own.structural_duplicates 只命中 2 对邻域等价，且明确 name_evidence=none、不得据此合并；我这三条是名字侧怀疑，无结构判据）。为什么值得查：8 个孤立概念里有 4 个正好是这些通用词，很可能是同一概念被抽了两次导致边分散——但这要 B 用名字/定义核，我不能合。\n\n【要你（调用方）做的一件事】这趟 gaps 的 submit_requests 是默认 false，所以上面 10 条一条都没落成 search_requests。要让缺口闭环，请用 gaps 的 submit_requests=true 再跑一次（或由 D 按 1/4/7 三条起检索请求）。\n\n【边界】度数高≠重要、路径短≠证明对；conjecture 行存在不等于命题假；我不判数学真假，矛盾/重复的处置在 D/B 那一侧。",
+  "evidence": [
+    "analysis_reports:000002",
+    "analysis_reports:000000",
+    "analysis_reports:000001",
+    "stmt:000012",
+    "stmt:000011",
+    "stmt:000014",
+    "stmt:000017",
+    "stmt:000034",
+    "stmt:000035",
+    "stmt:000036",
+    "stmt:000037",
+    "rel:000005",
+    "rel:000008",
+    "rel:000010",
+    "lit:000000",
+    "lit:000001",
+    "lit:000002",
+    "lit:000003",
+    "lit:000004",
+    "work/C/000002-gaps.md"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 0,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 14,
+  "compactions": 0,
+  "mailbox_items": [],
+  "mailbox_msgs": [],
+  "mailbox_delivered": 0,
+  "monitor_turns": 0,
+  "wakes": 0,
+  "wake_ids": [],
+  "wake_events": [],
+  "clock_pumps": 24,
+  "clock_fired": 0,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "C 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "C",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    }
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [],
+  "summons": [],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [],
+  "summons_total": 0,
+  "summons_consumed": 0,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 0,
+    "summons_consumed": 0,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p328",
+    "role": "C",
+    "prompt_sha256": "3388f80d358ca12a5c7a37c4cf5513865a62e5de6dc7749d2d1310c79f5bdc8f",
+    "prompt_chars": 47030,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "FACULTIES_07",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "TOOL_29",
+      "TOOL_30",
+      "TOOL_31",
+      "TOOL_32",
+      "TOOL_33",
+      "TOOL_34",
+      "TOOL_35",
+      "TOOL_36",
+      "TOOL_37",
+      "TOOL_38",
+      "TOOL_39",
+      "TOOL_40",
+      "TOOL_41",
+      "TOOL_42",
+      "TOOL_43",
+      "TOOL_44",
+      "TOOL_45",
+      "TOOL_46",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_STOP",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 11,
+    "tokens_in": 573028,
+    "tokens_out": 22428,
+    "usd": 0.021401,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 11,
+    "no_request_calls": 0,
+    "hit": 530688,
+    "miss": 42340,
+    "unknown_calls": 0,
+    "tokens_in": 573028,
+    "hit_rate": 0.9261,
+    "mismatched_calls": 0,
+    "saved_usd": 0.07801,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 120.89,
+  "end_ts": "2026-11-24T20:34:16+08:00",
+  "notes": [
+    "收工没有可用 notify 表（notify.refs 里的 'analysis_reports:000002' 立不住：引用 'analysis_reports:000002' 的前缀不认识：认 c/exp/lit/q/rel/stmt: 这几种，或者四位手稿编号）⇒ 这一趟没有交接手稿（不打回、不代填）",
+    "缓存读数：命中 530688 / 未命中 42340 token，命中率 92.6%（11 次调用）；按 modelcost 口径估算可省 约 0.078010 美元",
+    "子产出处理读数：summons_total=0（这一趟没派过子代理 ⇒ 没有要处理的子产出；判据没有对象，不红）",
+    "终态回报已落板：t-000126（框架通报；模型没填 notify）"
+  ],
+  "final_payload": {
+    "final": "C 关系分析已算完并登记（只算、不判定；未改任何台账）。\n\n【登记】主报告 report_id=000002（kind=gaps，落 work/C/000002-gaps.md，analysis_reports 已按号读到这一行）；同趟另落两行辅读：000000（gaps，12 条候选全文在 work/C/000000-gaps.md）、000001（proof_chain，work/C/000001-proof_chain.md）。\n\n【核心读数（确定性）】概念图 30 概念 / 21 关系 / 24 两两边 / 18 组；孤立概念 8 个；21 条关系 status 全 active、quote_verified 21/21 为 true；dependencies 表 0 行。\n- 中心：000012 ln p-balls 度 5；次高 000011 maximal hyperplane section、000014 Ball’s result、000017 unit ball Bn p 各 4；000000 unit cube、000018 central hyperplane sections、000019 projections、000025 Pólya’s formula 各 3。这簇概念的中心是「ln p-balls」，不是「unit cube」。\n- 关系分布：21 条只落在 5 篇文献上 —— lit:000001 占 15 条、lit:000000 占 3 条、lit:000003 / 000004 / 000007 各 1 条；其余 20 篇零关系。\n\n【直接对口的文献（按题名 + 关系落点分组，属我的内容判断，不是算出来的分数）】\n- 核心 4 篇：lit:000000 Cube slicing in R^n（立方体切片本体）、lit:000001 On maximal hyperplane sections of the unit ball of l_p^n for p>2（唯一有 15 条关系的承重文献）、lit:000003 Critical central sections of the cube、lit:000004 Non-diagonal critical central sections of the cube。\n- 紧邻 7 篇：lit:000002 Plane sections of the unit ball of l_p、lit:000005 Resilience of cube slicing in l_p、lit:000006 On extremal sections of subspaces of l_p、lit:000007 Hyperplane projections of l_p^n（对偶面）、lit:000008 Plane sections of convex bodies of maximal volume、lit:000020 On the volume of hyperplane sections of a d-cube、lit:000021 Maximal perimeters of polytope sections。\n- 外围：lit:000009、000010、000011、000012、000013、000014、000015、000016、000022。\n- 与本题无直接对口：lit:000017–000019、000023、000024（测度论 / 广义积分那一簇，属背景工具体）。\n\n【哪一向已有定理、哪一向没有（按 statements.kind + label 读，不判数学真假）】\n- 坐标向：有 kind=theorem 行 000034（A_p(n) 积分表示 + 坐标向/面对角向闭式面积公式）、000035（面积公式与坐标向极值），但 evidence_kind 均为 heuristic，且 dependencies 0 行 ⇒ 等级不可抬，承重链在台账上无可查。\n- 面对角向：闭式面积公式出现在 000034 的 label 里，而 000037 又以 conjecture 登记同一件事 ⇒ 同一方向的定理/猜想双登记（worth 中、判给 B 去核，不是我能合并的）。\n- 体对角向：只有 conjecture 000036（对角截面面积公式）与 000038 / 000039（零点唯一性、比值 ρ 单调性），没有 theorem 行。\n- p<2 一侧：21 条关系全部指向 p>2（lit:000001 标题即 p>2，rel:000005 给 p0≈26.265 的反例区间）；p<2 侧零关系、零概念组。\n\n【缺口候选：wort…（落档截断，原 4103 字）",
+    "evidence": [
+      "analysis_reports:000002",
+      "analysis_reports:000000",
+      "analysis_reports:000001",
+      "stmt:000012",
+      "stmt:000011",
+      "stmt:000014",
+      "stmt:000017",
+      "stmt:000034",
+      "stmt:000035",
+      "stmt:000036",
+      "stmt:000037",
+      "rel:000005",
+      "rel:000008",
+      "rel:000010",
+      "lit:000000",
+      "lit:000001",
+      "lit:000002",
+      "lit:000003",
+      "lit:000004",
+      "work/C/000002-gaps.md"
+    ],
+    "notify": {
+      "to": "M",
+      "summary": "C 关系分析登记 000002（kind=gaps）：中心是 000012 ln p-balls，11 篇对口文献里 6 篇零关系、dependencies 0 行、体对角向只有 conjecture、p<2 侧零关系；10 条缺口候选带 worth/confidence",
+      "body": "## 交付\n\n- 主报告：`analysis_reports` **000002**（kind=`gaps`）→ `work/C/000002-gaps.md`\n- 辅读：**000000**（gaps，12 条候选全文 `work/C/000000-gaps.md`）、**000001**（proof_chain，`work/C/000001-proof_chain.md`）\n- 未改任何台账（statements / relations / dependencies 零写入）。\n\n## 关键读数\n\n- 30 概念 / 21 关系 / 24 两两边 / 18 组 / 8 孤立；`quote_verified` 21/21 true；`dependencies` **0 行**。\n- 中心：`stmt:000012` ln p-balls 度 5；次高 `000011` / `000014` / `000017` 各 4。\n- 21 条关系只落在 5 篇文献：`lit:000001` 15 条、`lit:000000` 3 条、`lit:000003` / `000004` / `000007` 各 1 条。\n- 已有定理：坐标向 `stmt:000034` / `000035`（kind=theorem，但 evidence_kind=heuristic、无依赖边）；面对角向闭式面积在 000034 的 label 里、同时又是 conjecture `000037`（双登记，需 B 核）；体对角向只有 conjecture `000036`/`000038`/`000039`；p<2 一侧零关系。\n\n## 要你做的\n\n1. 这趟 `gaps` 的 `submit_requests` 是 false ⇒ 10 条缺口候选**没有**落 `search_requests`。请用 `submit_requests=true` 再跑一次（优先第 1、4、7 条）。\n2. 若这条线要继续，建议由 D 组织研究：p<2 侧的截面极值（当前零关系）、体对角向的定理化（只有 conjecture 000036）、000011↔000019 对偶边的补抽。\n\n卡点：我没有出边，派不了活；也判不了定理真假与合并，这两件在 D/B 那一侧。",
+      "refs": [
+        "analysis_reports:000002",
+        "analysis_reports:000000",
+        "analysis_reports:000001",
+        "stmt:000012",
+        "stmt:000034",
+        "stmt:000036",
+        "lit:000001"
+      ]
+    }
+  },
+  "task_id": "t-000125"
+}

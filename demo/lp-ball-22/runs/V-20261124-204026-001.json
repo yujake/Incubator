@@ -1,0 +1,1900 @@
+{
+  "role": "V",
+  "task": "V：这一趟派给你的活是 —— 审这一份证明稿 manuscripts/F/f-proof-000002.md（稿号 000002，正文 sha 7713209f208c70cfbdf2c9206295e886e507a80af0cdf81ccafa5e7d7a192f42）：判它成立/有毛病，逐条给 findings（有毛病时每条带步号与原句）。这一份是按你上一轮 t-000118 的 defect_step=10 定点改过的同一份稿：第 10 步原来用 g(θ)^{-2/p} ≤ 3^{2/p}·m(θ)^{-2} ≤ 3m(θ)^{-2} ≤ 6，其中的 3^{2/p} 因子只在 p≥2 成立、覆盖不了 (iv) 要求的 p∈[1,∞)；现改成与 p 无关的控制：由 m(θ)^p ≤ g(θ) 得 g(θ)^{-2/p} ≤ m(θ)^{-2}，再由 m(θ) ≥ 1/√2 得 m(θ)^{-2} ≤ 2，控制函数与 p 无关 ⇒ 对 p→p0 用控制收敛得逐点极限 m(θ)^{-2} 与连续性。命题正文与第 1–9 步逐字未动（第 8 步外层 1/2、第 9 步 (a) 的 g^{-1}、第 9 步 (b) 的 1/4 因子都是前几轮你已确认改对的）。请复核这一处以及第 3 步的依赖面（## 依赖 一节存在，1 行 stmt:000034，用在第 3、4、5、6、7、8、9、10 步；该条在册 kind=theorem、status=active、五元位现算 pre_theorem）。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/F/f-proof-000002.md"
+        },
+        "why": "先读被审证明稿全文，按写成后的样子逐条核"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# F 的证明手稿：把 A_diag(p) 写成平面 x+y+z=0 上的参数化二重积分（面积因子 √3）并经六角区等分 + tan 代换…\n\n- 计划：000001 · 子目标：s1\n- 依赖面洗稿：已洗=true；执行者=secretary-F\n- 稿族：f-proof\n- 产出者：agent-F-F1\n- 正文sha：7713209f208c70cfbdf2c9206295e886e507a80af0cdf81ccafa5e7d7a192f42\n- 命题指纹：cf5cd60d4f7a5bc94688f93a779317d78363ddc4abc0e6acf5a794371f9c299b\n- 命题类型：conjecture\n- 登记时间：2026-11-24T19:51:20+08:00\n- 标签：F 攻坚 000001 子目标 s1\n- 版本：2026-11-24T20:31:58+08:00@7713209f208c70cfbdf2c9206295e886e507a80af0cdf81ccafa5e7d7a192f42\n\n## 命题\n\n设 1 ≤ p < ∞，B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}，H := {(x,y,z) : x+y+z = 0}，A_diag(p) 为 H∩B_p^3 在平面 H 上（取 R^3 诱导的内积与二维 Lebesgue 面积）的面积。取 H 的单位正交基 u = (1,-1,0)/√2、v = (1,1,-2)/√6，并对 θ∈[0,2π) 记 e(θ) := cosθ·u + sinθ·v。则：(i) A_diag(p) = (1/2)∫_0^{2π}‖e(θ)‖_p^{-2} dθ = (3/4)∫_0^{2π} (|cos(θ-π/6)|^p + |cos(θ+π/6)|^p + |sinθ|^p)^{-2/p} dθ；(ii) A_diag(p) = √3·area{(x,y)∈R^2 : |x|^p+|y|^p+|x+y|^p ≤ 1} = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ；(iii) A_diag(1) = 3√3/4，A_diag(2) = π，lim_{p→∞} A_diag(p) = 3√3；(iv) p ↦ A_diag(p) 在 [1,∞) 上连续。\n\n## 证明\n\n1. 【前提】固定 p∈[1,∞)；B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；H := {(x,y,z) : x+y+z = 0}；A_diag(p) := H∩B_p^3 在平面 H 上的二维 Lebesgue 面积。（前提）（前提）\n2. 【前提】u := (1,-1,0)/√2、v := (1,1,-2)/√6。直接验算：‖u‖² = (1+1+0)/2 = 1，‖v‖² = (1+1+4)/6 = 1，u·v = (-1+1+0)/√12 = 0，u·(1,1,1) = (1-1+0)/√2 = 0，v·(1,1,1) = (1+1-2)/√6 = 0；故 {u,v} 是 H 的单位正交基，(s,t) ↦ s·u + t·v 是 R² → H 的等距同构。（前提）（前提）\n3. 【推导】n := (1,1,1)/√3 是 H 的单位法向量，H = n^⊥。由 stmt:000034 的 (i)，对任意单位法向与 n^⊥ 的任意单位正交基 {u,v} 有 A_p(n) = (1/2)∫_0^{2π}‖cosθ·u + sinθ·v‖_p^{-2} dθ，且该积分值不随基的选取而改变；于是 A_diag(p) = (1/2)∫_0^{2π}‖e(θ)‖_p^{-2} dθ，这给出 (i) 的第一个等号。（依据：stmt:000034）（依据：stmt:000034）\n4. 【推导】把第 2 步的 u、v 分量代入 e(θ) = cosθ·u + sinθ·v 得 e_1 = cosθ/√2 + sinθ/√6 = (√3cosθ + sinθ)/√6，e_2 = -cosθ/√2 + sinθ/√6 = -(√3cosθ - sinθ)/√6，e_3 = -2sinθ/√6；对前两个分子用余弦差角公式（在 θ∓π/6 处展开 2cos 即得）√3cosθ + sinθ = 2cos(θ-π/6)、√3cosθ - sinθ = 2cos(θ+π/6)，于是 |e_1| = (2/√6)|cos(θ-π/6)|、|e_2| = (2/√6)|cos(θ+π/6)|、|e_3| = (2/√6)|sinθ|。（依据：stmt:00…（落档截断，原 5395 字）",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/F/f-proof-000002.md",
+          "encoding": "utf-8",
+          "bytes_read": 7847,
+          "total_bytes": 7847,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 35,
+          "total_lines": 35,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 35 行",
+          "sha256": "0eace33564540fd1f1172fc3c00141355ee2753c62c329c4ca416a4c4116322d"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 36608,
+        "prompt_cache_miss_tokens": 1529,
+        "tokens_in": 38137,
+        "tokens_out": 158,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000124"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "statements",
+          "id": "000034"
+        },
+        "why": "核第 3 步所引的 stmt:000034 原文与其登记状态（kind/status/等级），判引用是否一致、够不够格被引"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "stmt_id": "000034",
+          "origin": "own_result",
+          "kind": "theorem",
+          "label": "B_p^3 中心截面面积 A_p(n) 的积分表示与坐标向/面对角向闭式面积公式",
+          "statement_text": "设 1 ≤ p < ∞，n ∈ R³ 为单位向量，A_p(n) 表示 B_p^3 = {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1} 与平面 n^⊥ 的交的二维 Lebesgue 面积。则对每个这样的 p 与每个单位 n：(i) A_p(n) = (1/2)∫_0^{2π} ‖cosψ·u + sinψ·v‖_p^{-2} dψ，其中 u,v 是 n^⊥ 的任意一组单位正交基，该值不随基的选取而变，A_p(n) 只依赖 n^⊥（从而 A_p(n) = A_p(-n)），并且在带符号坐标置换（把 B_p^3 映到自身的 48 阶变换）下不变；(ii) A_p(e_3) = 4Γ(1+1/p)²/Γ(1+2/p)；(iii) A_p((1,1,0)/√2) = 2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p)，故 A_p((1,1,0)/√2) < A_p(e_3) 当且仅当 p < 2，两者相等当且仅当 p = 2，前者大于后者当且仅当 p > 2；(iv) p = 2 时 A_2(n) = π 对一切单位 n 成立；(v) p = 1 时 A_1(e_3) = 2、A_1((1,1,0)/√2) = √2、A_1((1,1,1)/√3) = 3√3/4。",
+          "statement_full": "设 1 ≤ p < ∞，n ∈ R³ 为单位向量，A_p(n) 表示 B_p^3 = {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1} 与平面 n^⊥ 的交的二维 Lebesgue 面积。则对每个这样的 p 与每个单位 n：(i) A_p(n) = (1/2)∫_0^{2π} ‖cosψ·u + sinψ·v‖_p^{-2} dψ，其中 u,v 是 n^⊥ 的任意一组单位正交基，该值不随基的选取而变，A_p(n) 只依赖 n^⊥（从而 A_p(n) = A_p(-n)），并且在带符号坐标置换（把 B_p^3 映到自身的 48 阶变换）下不变；(ii) A_p(e_3) = 4Γ(1+1/p)²/Γ(1+2/p)；(iii) A_p((1,1,0)/√2) = 2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p)，故 A_p((1,1,0)/√2) < A_p(e_3) 当且仅当 p < 2，两者相等当且仅当 p = 2，前者大于后者当且仅当 p > 2；(iv) p = 2 时 A_2(n) = π 对一切单位 n 成立；(v) p = 1 时 A_1(e_3) = 2、A_1((1,1,0)/√2) = √2、A_1((1,1,1)/√3) = 3√3/4。",
+          "proof_text": "设 1 ≤ p < ∞ 固定，n ∈ R³ 是单位向量。记 B_p^3 = {x ∈ R³ : |x_1|^p+|x_2|^p+|x_3|^p ≤ 1}，并记 A_p(n) 为 B_p^3 与平面 n^⊥ 的交在该平面上的二维 Lebesgue 面积。\\n\\n先做两项准备工作。其一，在 n^⊥ 上取一对单位正交基 (u,v)，把平面上的点写成极坐标 x = r(cosψ·u + sinψ·v)，其中 r ≥ 0、ψ ∈ [0,2π)，并记 w(ψ) = cosψ·u + sinψ·v。由于 l_p 范数是正齐次的，对 x = r·w(ψ) 有 ‖x‖_p = r‖w(ψ)‖_p；于是 x ∈ B_p^3 当且仅当 r ≤ 1/‖w(ψ)‖_p。其二，平面极坐标的面积元带 Jacobi 因子 r，因此 A_p(n) = ∫_0^{2π}∫_0^{1/‖w(ψ)‖_p} r dr dψ = (1/2)∫_0^{2π}‖w(ψ)‖_p^{-2} dψ。由此立刻得到 (i) 的前半：换用另一对单位正交基 (u',v') 只会把参数变成 ψ ↦ ±ψ + ψ_0，即整周期上的平移或反向，积分值不变，所以 A_p(n) 不依赖基的选取、只依赖平面 n^⊥；又 n^⊥ = (-n)^⊥，故 A_p(n) = A_p(-n)。\\n\\n(i) 的后半来自对称性。设 σ 是任一带符号坐标置换矩阵（共 2³·3! = 48 个）。σ 是正交的，且 |(σx)_i| 只是 |x_j| 的一个重排，因此 σ(B_p^3) = B_p^3；同时 σ 把 n^⊥ 映成 (σn)^⊥，而 σ 作为等距同构保持二维 Lebesgue 面积，于是 A_p(σn) = A_p(n)。这说明 A_p 只依赖排序后的 (|n_1|,|n_2|,|n_3|)。\\n\\n其次计算 (ii) 的坐标向截面。n = e_3 时 n^⊥ = {(x,y,0)}，截面是 {(x,y) : |x|^p+|y|^p ≤ 1}，故 A_p(e_3) = 4∫_0^1 (1-x^p)^{1/p} dx。作代换 u = x^p，则 dx = (1/p)u^{1/p-1} du，于是 A_p(e_3) = (4/p)∫_0^1 u^{1/p-1}(1-u)^{1/p} du = (4/p)B(1/p, 1+1/p) = (4/p)·Γ(1/p)Γ(1+1/p)/Γ(1+2/p)。再用 Γ(1/p) = pΓ(1+1/p)，即得 A_p(e_3) = 4Γ(1+1/p)²/Γ(1+2/p)。\\n\\n接着处理 (iii) 的面对角向。取 n = (1,1,0)/√2，则 n^⊥ = span{(1,-1,0)/√2, (0,0,1)}，这两个向量单位正交。把 x ∈ n^⊥ 写成 x = s·(1,-1,0)/√2 + z·(0,0,1)，则 ‖x‖_p^p = 2|s/√2|^p + |z|^p = 2^{1-p/2}|s|^p + |z|^p，而 (s,z) 是正交坐标、面积元为 ds dz；所以该截面等于 {(s,z) : 2^{1-p/2}|s|^p + |z|^p ≤ 1}。为求它的面积，令 c = 2^{1/p-1/2} > 0，则 c^p = 2^{1-p/2}，并且上面的不等式等价于 |cs|^p + |z|^p ≤ 1，也就是 (cs,z) 落在 D_p = {(X,Y) : |X|^p+|Y|^p ≤ 1} 之中；这两个方向是同一个等价式，故映射 T(s,z) = (cs,z) 把该截面双射到 D_p。由于 |det T| = c，面积的伸缩律给出 c·area(截面) = area(D_p)，于是 area(截面) = c^{-1}·area(D_p) = 2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p)，最后一步用的是 (ii)。比较这两个闭式即得 (iii) 的分界：正因子 2^{1/2-1/p} 与 1 的大小由指数 1/2 - 1/p 的符号决定，而该符号由 p 与 2 的大小决定；因此 p < 2 时面对角向面积小于坐标向，p = 2 时两者相等，p > 2 时前者大于后者。\\n\\n(iv) 在 p = 2 时，B_2^3 是欧氏单位球，任何过原点的平面都截得半径为 1 的圆盘，面积为 π；这与 (ii) 的闭式在 p = 2 处的取值一致：4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π。\\n\\n最后 (v) 取 p = 1，此时 B_1^3 是正八面体。(a) 当 n = e_3 时截面为 {|x|+|y| ≤ 1}，这是两条对角线长都为 2 的菱形，面积为 2。(b) 当 n = (1,1,0)/√2 时，由前面截面形状在 p = 1 的特例（2^{1-1/2} = √2）得到 √2|s| + |z| ≤ 1，其顶点为 (±1/√2, 0) 与 (0, ±1)，面积 = (1/2)·(2/√2)·2 = √2，与 (iii) 在 p = 1 的取值 2^{1/2-1}·2 = √2 相符。(c) 当 n = (1,1,1)/√3 时，n^⊥ = {x+y+z = 0}，B_1^3 ∩ n^⊥ 的顶点是 (±1/2, ∓1/2, 0) 这一类点（经坐标置换与取反）共 6 个；它们共面、到原点的距离都是 |(1/2,-1/2,0)| = 1/√2，构成外接半径为 1/√2 的正六边形，面积 = (3√3/2)·(1/√2)² = 3√3/4。",
+          "source_lit_id": null,
+          "page_range": {
+            "start": null,
+            "end": null,
+            "label": ""
+          },
+          "quote_verified": null,
+          "quote_mode": "",
+          "quote_reason": "手稿收录（D 只递指针）：命题正文、证明正文与档位全部逐字取自 `manuscripts/F/f-proof-000000.md` —— 引文面不适用（这份稿是我们自己产出的成果，不是文献里摘的）；V 的签（若有）在手稿块上",
+          "quote_span": "",
+          "quote_call_sha256": "",
+          "evidence_kind": "heuristic",
+          "bits": {
+            "numeric": "pending",
+            "proof": true,
+            "reviewed": true,
+            "formal": "pending",
+            "audited": false,
+            "origin": "own_result",
+            "evidence": {
+              "numeric": {},
+              "numeric_reason": "",
+              "proof_process": "设 1 ≤ p < ∞ 固定，n ∈ R³ 是单位向量。记 B_p^3 = {x ∈ R³ : |x_1|^p+|x_2|^p+|x_3|^p ≤ 1}，并记 A_p(n) 为 B_p^3 与平面 n^⊥ 的交在该平面上的二维 Lebesgue 面积。\\n\\n先做两项准备工作。其一，在 n^⊥ 上取一对单位正交基 (u,v)，把平面上的点写成极坐标 x = r(cosψ·u + sinψ·v)，其中 r ≥ 0、ψ ∈ [0,2π)，并记 w(ψ) = cosψ·u + sinψ·v。由于 l_p 范数是正齐次的，对 x = r·w(ψ) 有 ‖x‖_p = r‖w(ψ)‖_p；于是 x ∈ B_p^3 当且仅当 r ≤ 1/‖w(ψ)‖_p。其二，平面极坐标的面积元带 Jacobi 因子 r，因此 A_p(n) = ∫_0^{2π}∫_0^{1/‖w(ψ)‖_p} r dr dψ = (1/2)∫_0^{2π}‖w(ψ)‖_p^{-2} dψ。由此立刻得到 (i) 的前半：换用另一对单位正交基 (u',v') 只会把参数变成 ψ ↦ ±ψ + ψ_0，即整周期上的平移或反向，积分值不变，所以 A_p(n) 不依赖基的选取、只依赖平面 n^⊥；又 n^⊥ = (-n)^⊥，故 A_p(n) = A_p(-n)。\\n\\n(i) 的后半来自对称性。设 σ 是任一带符号坐标置换矩阵（共 2³·3! = 48 个）。σ 是正交的，且 |(σx)_i| 只是 |x_j| 的一个重排，因此 σ(B_p^3) = B_p^3；同时 σ 把 n^⊥ 映成 (σn)^⊥，而 σ 作为等距同构保持二维 Lebesgue 面积，于是 A_p(σn) = A_p(n)。这说明 A_p 只依赖排序后的 (|n_1|,|n_2|,|n_3|)。\\n\\n其次计算 (ii) 的坐标向截面。n = e_3 时 n^⊥ = {(x,y,0)}，截面是 {(x,y) : |x|^p+|y|^p ≤ 1}，故 A_p(e_3) = 4∫_0^1 (1-x^p)^{1/p} dx。作代换 u = x^p，则 dx = (1/p)u^{1/p-1} du，于是 A_p(e_3) = (4/p)∫_0^1 u^{1/p-1}(1-u)^{1/p} du = (4/p)B(1/p, 1+1/p) = (4/p)·Γ(1/p)Γ(1+1/p)/Γ(1+2/p)。再用 Γ(1/p) = pΓ(1+1/p)，即得 A_p(e_3) = 4Γ(1+1/p)²/Γ(1+2/p)。\\n\\n接着处理 (iii) 的面对角向。取 n = (1,1,0)/√2，则 n^⊥ = span{(1,-1,0)/√2, (0,0,1)}，这两个向量单位正交。把 x ∈ n^⊥ 写成 x = s·(1,-1,0)/√2 + z·(0,0,1)，则 ‖x‖_p^p = 2|s/√2|^p + |z|^p = 2^{1-p/2}|s|^p + |z|^p，而 (s,z) 是正交坐标、面积元为 ds dz；所以该截面等于 {(s,z) : 2^{1-p/2}|s|^p + |z|^p ≤ 1}。为求它的面积，令 c = 2^{1/p-1/2} > 0，则 c^p = 2^{1-p/2}，并且上面的不等式等价于 |cs|^p + |z|^p ≤ 1，也就是 (cs,z) 落在 D_p = {(X,Y) : |X|^p+|Y|^p ≤ 1} 之中；这两个方向是同一个等价式，故映射 T(s,z) = (cs,z) 把该截面双射到 D_p。由于 |det T| = c，面积的伸缩律给出 c·area(截面) = area(D_p)，于是 area(截面) = c^{-1}·area(D_p) = 2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p)，最后一步用的是 (ii)。比较这两个闭式即得 (iii) 的分界：正因子 2^{1/2-1/p} 与 1 的大小由指数 1/2 - 1/p 的符号决定，而该符号由 p 与 2 的大小决定；因此 p < 2 时面对角向面积小于坐标向，p = 2 时两者相等，p > 2 时前者大于后者。\\n\\n(iv) 在 p = 2 时，B_2^3 是欧氏单位球，任何过原点的平面都截得半径为 1 的圆盘，面积为 π；这与 (ii) 的闭式在 p = 2 处的取值一致：4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π。\\n\\n最后 (v) 取 p = 1，此时 B_1^3 是正八面体。(a) 当 n = e_3 时截面为 {|x|+|y| ≤ 1}，这是两条对角线长都为 2 的菱形，面积为 2。(b) 当 n = (1,1,0)/√2 时，由前面截面形状在 p = 1 的特例（2^{1-1/2} = √2）得到 √2|s| + |z| ≤ 1，其顶点为 (±1/√2, 0) 与 (0, ±1)，面积 = (1/2)·(2/√2)·2 = √2，与 (iii) 在 p = 1 的取值 2^{1/2-1}·2 = √2 相符。(c) 当 n = (1,1,1)/√3 时，n^⊥ = {x+y+z = 0}，B_1^3 ∩ n^⊥ 的顶点是 (±1/2, ∓1/2, 0) 这一类点（经坐标置换与取反）共 6 个；它们共面、到原点的距离都是 |(1/2,-1/2,0)| = 1/√2，构成外接半径为 1/√2 的正六边形，面积 = (3√3/2)·(1/√2)² = 3√3/4。",
+              "proof_source": "own",
+              "reviewed_by": {
+                "verifier": "V",
+                "verification_id": "v-000004",
+                "round": null,
+                "verdict": "成立",
+                "evidence": "verifications/000034.jsonl#v-000004",
+                "findings": [],
+                "proof_no": 1,
+                "proof_sha256": "e8f5eec99ab03a9036ddbe36a376f073aa03e50665d3d3f3af32e15f5d908fb8"
+              },
+              "reviewed_source": "v",
+              "formal": {},
+              "formal_reason": "",
+              "audited_by": {},
+              "optimized_by_proof": {
+                "1": true
+              },
+              "reviewed_by_proof": {
+                "1": true
+              },
+              "reviewed_sha_by_proof": {
+                "1": "e8f5eec99ab03a9036ddbe36a376f073aa03e50665d3d3f3af32e15f5d908fb8"
+              }
+            },
+            "voided_by": {},
+            "grade": "pre_theorem",
+            "audited_badge": false
+          },
+          "status": "active",
+          "derived_from": [],
+          "aliases": [],
+          "doc_id": null,
+          "line_range": {
+            "start": null,
+            "end": null,
+            "label": "manuscripts/F/f-proof-000000.md"
+          },
+          "created_at": "2026-11-24T18:42:49+08:00",
+          "created_by": "secretary-B",
+          "_proof_routes": {
+            "1": "标签中的『F 攻坚 000000 子目标 s2』为攻坚任务子目标编号，非证明路线"
+          },
+          "_proposition_adjudication": {
+            "checked": true,
+            "attempted": true,
+            "verdict": "different",
+            "canonical_name": "B_p^3 中心截面面积 A_p(n) 的积分表示与坐标向/面对角向闭式面积公式",
+            "same_as": "",
+            "basis": "条件比对：本条条件为『1≤p<∞ 任意、n∈R³ 任意单位向量』；000030 的条件是 p=2、p=1、p=1000 等具体取值的数值自检，000031/000032/000033 的条件是离散集 p∈{1.05,…,1000} 且多限于基本域 0≤a≤b≤c —— 条件强弱不同（有限离散样本 vs 任意 p 与任意 n），按准绳判 different；结论比对：本条结论是 (i) A_p(n)=(1/2)∫‖cosψ·u+sinψ·v‖_p^{-2}dψ 且与基选取/±n/坐标置换无关、(ii) 坐标向闭式 4Γ(1+1/p)²/Γ(1+2/p)、(iii) 面对角向闭式 2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p) 及与坐标向的大小比较、(iv) p=2 时 A_2≡π、(v) p=1 的三个具体值；四条候选的结论分别是数值偏差界（000030）、最大面积位置与 r(p) 临界性（000031）、公式+单调性+分段结构（000032）、边界弧上最大值取端点（000033）—— 结论组均不一致；000032 的 (i) 与本条 (ii) 坐标面积公式有部分重叠，但缺本条 (i) 的积分表示、(iii) 的 2^{1/2-1/p} 面对角闭式及 (iv)(v)，且条件限定在有限 p 集，不构成同一定理；判定准绳（how_to_judge）：只比条件与结论，条件强弱不同即判 different，不因『同一主题（B_p^3 中心截面）』而判 same；本条是『任意 1≤p<∞、任意单位 n』下 B_p^3 中心截面面积的积分表示与闭式面积公式（含 p=2、p=1 特例），而四条候选要么是有限离散 p 集上的极值方向/比值临界性，要么是数值自检，条件强弱与结论组均不同，无一条与之同一定理。",
+            "reason": "本条是『任意 1≤p<∞、任意单位 n』下 B_p^3 中心截面面积的积分表示与闭式面积公式（含 p=2、p=1 特例），而四条候选要么是有限离散 p 集上的极值方向/比值临界性，要么是数值自检，条件强弱与结论组均不同，无一条与之同一定理。",
+            "reused": false,
+            "seam_source": "secretary（LlmSeam.for_secretary）",
+            "seam_attempted": true,
+            "at": "2026-11-24T18:42:49+08:00"
+          },
+          "proof_authors": [
+            "F"
+          ],
+          "proof_no": 1,
+          "proof_sha256": "e8f5eec99ab03a9036ddbe36a376f073aa03e50665d3d3f3af32e15f5d908fb8",
+          "manuscript_id": "000000",
+          "manuscripts": {
+            "1": "manuscripts/B/b-proof-000000.md"
+          },
+          "_grade_recomputed": {
+            "checked": true,
+            "from": "conjecture",
+            "to": "pre_theorem",
+            "from_kind": "heuristic",
+            "to_kind": "proof_review",
+            "channel": "text",
+            "why": "V 的签刚落位：这一行有证明正文，且台账里那一签盖住的就是现行这一版 ⇒ 按五元位现算等级（只算等级，不写档位）；历史列 `evidence_kind`=heuristic 只是读数，判定面读 `pre_theorem`",
+            "basis": "verifications/pending/4cbbbeaf3989914e5756c9da973790a81da790ee98b226b4b9c965b430c9fc0a.jsonl#u-000004",
+            "proof_no": 1,
+            "at": "2026-11-24T18:42:50+08:00"
+          },
+          "_kind_upgrade": {
+            "from": "conjecture",
+            "to": "theorem",
+            "basis": "out/vsigns/4cb054c6745ec737591bd41c456ea83a22efa7fa072fbd8f529843d22bfa3c9f.json#u-000004 · 台账 verifications/pending/4cbbbeaf3989914e5756c9da973790a81da790ee98b226b4b9c965b430c9fc0a.jsonl#u-000004",
+            "grade": "conjecture",
+            "by": "agent-B",
+            "at": "2026-11-24T18:42:50+08:00"
+          },
+          "manuscript_family": "b-proof",
+          "proof_history": [
+            {
+              "text": "1. 【前提】固定 1 ≤ p < ∞ 与单位向量 n ∈ R³；B_p^3 := {x ∈ R³ : |x_1|^p + |x_2|^p + |x_3|^p ≤ 1}；A_p(n) := B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；取 n^⊥ 的一对单位正交基 (u, v)。（前提）\n2. 【前提】在 n^⊥ 上取极坐标 x = r(cosψ·u + sinψ·v)，r ≥ 0，ψ ∈ [0, 2π)，记 w(ψ) := cosψ·u + sinψ·v；对 x = r·w(ψ) 有 ‖x‖_p = r‖w(ψ)‖_p（r ≥ 0，l_p 范数正齐次），故 x ∈ B_p^3 ⟺ r ≤ 1/‖w(ψ)‖_p。（前提）\n3. 【推导】由平面极坐标面积公式（Jacobi 因子 r）得 A_p(n) = ∫_0^{2π}∫_0^{1/‖w(ψ)‖_p} r dr dψ = (1/2)∫_0^{2π}‖w(ψ)‖_p^{-2} dψ。换成另一对单位正交基 (u',v') 只使 ψ ↦ ±ψ + ψ_0（整周期上的平移与反向），积分值不变；又 n^⊥ = (-n)^⊥，故 A_p(n) = A_p(-n)。这给出 (i) 的前半。（前提）\n4. 【推导】设 σ 为任一带符号坐标置换矩阵（2³·3! = 48 个），则 σ 正交且 |(σx)_i| 只是 |x_j| 的重排，故 σ(B_p^3) = B_p^3；同时 σ(n^⊥) = (σn)^⊥，而 σ 是等距同构、保二维 Lebesgue 面积，故 A_p(σn) = A_p(n)。这给出 (i) 的后半：A_p 只依赖排序后的 (|n_1|,|n_2|,|n_3|)。（前提）\n5. 【推导】(ii)：n = e_3 时 n^⊥ = {(x,y,0)}，A_p(e_3) = area{(x,y) : |x|^p+|y|^p ≤ 1} = 4∫_0^1 (1-x^p)^{1/p} dx。代换 u = x^p（dx = (1/p)u^{1/p-1}du）得 A_p(e_3) = (4/p)∫_0^1 u^{1/p-1}(1-u)^{1/p}du = (4/p)B(1/p, 1+1/p) = (4/p)·Γ(1/p)Γ(1+1/p)/Γ(1+2/p)；再用 Γ(1+1/p) = (1/p)Γ(1/p)（即 Γ(1/p) = pΓ(1+1/p)）得 A_p(e_3) = 4Γ(1+1/p)²/Γ(1+2/p)。（前提）\n6. 【推导】(iii) 之截面形状：n = (1,1,0)/√2 时 n^⊥ = span{(1,-1,0)/√2, (0,0,1)}，这两向量单位正交；把 x ∈ n^⊥ 写成 x = s·(1,-1,0)/√2 + z·(0,0,1)，则 ‖x‖_p^p = 2|s/√2|^p + |z|^p = 2^{1-p/2}|s|^p + |z|^p，且 (s,z) 是正交坐标、面积元为 ds dz，故截面 = {(s,z) : 2^{1-p/2}|s|^p + |z|^p ≤ 1}。（前提）\n7. 【推导】(iii) 之面积（上一版此处换元方向取反，现改正）：令 c := 2^{1/p-1/2} > 0，则 c^p = 2^{1-p/2}，于是「(s,z) 属于第 6 步的截面 ⟺ |cs|^p + |z|^p ≤ 1 ⟺ (cs,z) 属于 D_p := {(X,Y) : |X|^p+|Y|^p ≤ 1}」（两个方向是同一个等价式，故是双射）。取线性映射 T(s,z) := (cs,z)，det T = c，由 area(T(E)) = |det T|·area(E) 及 T(截面) = D_p 得 c·area(截面) = area(D_p)，即 area(截面) = c^{-1}·area(D_p) = 2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p)（末一步用第 5 步的 (ii)）。（前提）\n8. 【推导】(iii) 之比较：正因子 2^{1/2-1/p} 与 1 的大小比较等价于 1/2 - 1/p 与 0 的比较，等价于 p 与 2 的比较（p > 0）；结合第 7 步与第 5 步即得 (iii) 的三个结论（p < 2 时小、p = 2 时等、p > 2 时大）。（前提）\n9. 【推导】(iv)：p = 2 时 B_2^3 是欧氏单位球，任一过原点的平面截得半径 1 的圆盘，面积 π；与 (ii) 的闭式在 p = 2 的取值对照：4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π，两者一致。（前提）\n10. 【推导】(v)：p = 1 时 B_1^3 是正八面体。(a) n = e_3：截面 {|x|+|y| ≤ 1} 是两条对角线长都为 2 的菱形，面积 2。(b) n = (1,1,0)/√2：由第 6 步在 p = 1 的特例（2^{1-1/2} = √2）截面为 √2|s| + |z| ≤ 1，顶点为 (±1/√2, 0), (0, ±1)，面积 = (1/2)·(2/√2)·2 = √2（与 (iii) 在 p = 1 的取值 2^{1/2-1}·2 = √2 一致）。(c) n = (1,1,1)/√3：n^⊥ = {x+y+z = 0}，B_1^3 ∩ n^⊥ 的顶点是 (±1/2, ∓1/2, 0) 一类共 6 个点（坐标置换与取反），它们共面、外接半径 |(1/2,-1/2,0)| = 1/√2，构成正六边形，面积 = (3√3/2)·(1/√2)² = 3√3/4。（前提）",
+              "sha": "4cb054c6745ec737591bd41c456ea83a22efa7fa072fbd8f529843d22bfa3c9f",
+              "at": "2026-11-24T19:14:29+08:00",
+              "replaced_by": "e8f5eec99ab03a9036ddbe36a376f073aa03e50665d3d3f3af32e15f5d908fb8",
+              "proof_no": 1
+            }
+          ],
+          "proof_routes": {
+            "1": "标签中的『F 攻坚 000000 子目标 s2』为攻坚任务子目标编号，非证明路线"
+          },
+          "route": "标签中的『F 攻坚 000000 子目标 s2』为攻坚任务子目标编号，非证明路线"
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "id": "000034",
+          "id_field": "stmt_id",
+          "found": true
+        },
+        "multi_call": {
+          "turn_index": 1,
+          "call_index": 0,
+          "calls": 2,
+          "step_index": 1
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 37376,
+        "prompt_cache_miss_tokens": 4833,
+        "tokens_in": 42209,
+        "tokens_out": 4407,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000124"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "verify.list_verifications",
+        "args": {
+          "limit": 20
+        },
+        "why": "查这一份稿此前几轮的验证台账（含上一轮 t-000118 的结论），确认这是同一份正文的连续送审"
+      },
+      "result": {
+        "tool": "verify.list_verifications",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "total": 13,
+          "items": [
+            {
+              "at": "2026-11-24T18:39:48+08:00",
+              "citation_checks": [],
+              "defect_step": null,
+              "findings": [],
+              "landed": "pending",
+              "object_path": "manuscripts/F/f-proof-000000.md",
+              "object_sha256": "4cbbbeaf3989914e5756c9da973790a81da790ee98b226b4b9c965b430c9fc0a",
+              "producer_code": "F1",
+              "producer_role": "F",
+              "proof_chars": 2353,
+              "proof_sha256": "4cb054c6745ec737591bd41c456ea83a22efa7fa072fbd8f529843d22bfa3c9f",
+              "quote": "",
+              "review_call": "7b942bf93171",
+              "review_pass": 1,
+              "round": 1,
+              "secretary_judge": {
+                "answer": "没问题",
+                "axis": "clean",
+                "basis": [
+                  "逐条核对步骤1–10：符号定义清楚；极坐标面积公式、Beta函数换元、线性伸缩面积比、对称性及p=1,2特例均推导完整；未发现无依据步骤、跳步措辞或引用不干净命题。",
+                  "\"findings\":[]"
+                ],
+                "checked": true,
+                "cost": {
+                  "call_index": 163,
+                  "charged": true,
+                  "ledger": "000204",
+                  "ledger_reason": "charged",
+                  "prompt_sha256": "9e04ccf0d2b8da1e8e8f3c9ebeb0b9e660de46ccd54612776b1ba8a46e7189ea",
+                  "tokens": 1916,
+                  "usd": 0.000471
+                },
+                "defect_scope": "",
+                "defect_step": null,
+                "defect_step_basis": "",
+                "fault_cause": "report_gap",
+                "fault_kind": "",
+                "material": {
+                  "ledger_row": {
+                    "defect_step": null,
+                    "verdict": "成立"
+                  },
+                  "v_reply": "{\"verdict\":\"成立\",\"defect_step\":null,\"quote\":\"\",\"why\":\"逐条核对步骤1–10：符号定义清楚；极坐标面积公式、Beta函数换元、线性伸缩面积比、对称性及p=1,2特例均推导完整；未发现无依据步骤、跳步措辞或引用不干净命题。\",\"findings\":[],\"citation_checks\":[]}"
+                },
+                "proof_no": 1,
+                "reason": "V明确声称逐条核对步骤1–10且未发现任何证明缺陷，属于无缺陷判定而非未验证或文体挑刺。",
+                "refused": "",
+                "report_gap": "未记录反例构造尝试的具体位置",
+                "source": "secretary:v_reply_defect",
+                "statement_id": "",
+                "unwired": false,
+                "verdict": "成立"
+              },
+              "statement_id": "000034",
+              "stmt_id": "000034",
+              "submission_id": "",
+              "unresolved_errors": 0,
+              "used_faces": [],
+              "verdict": "成立",
+              "verification_id": "u-000002",
+              "verifier": "agent-V-V1",
+              "why": "逐条核对步骤1–10：符号定义清楚；极坐标面积公式、Beta函数换元、线性伸缩面积比、对称性及p=1,2特例均推导完整；未发现无依据步骤、跳步措辞或引用不干净命题。",
+              "path_group": 1,
+              "claimed_at": "2026-11-24T18:42:50+08:00"
+            },
+            {
+              "at": "2026-11-24T18:40:24+08:00",
+              "citation_checks": [],
+              "defect_step": null,
+              "findings": [],
+              "landed": "pending",
+              "object_path": "manuscripts/F/f-proof-000000.md",
+              "object_sha256": "4cbbbeaf3989914e5756c9da973790a81da790ee98b226b4b9c965b430c9fc0a",
+              "producer_code": "F1",
+              "producer_role": "F",
+              "proof_chars": 2353,
+              "proof_sha256": "4cb054c6745ec737591bd41c456ea83a22efa7fa072fbd8f529843d22bfa3c9f",
+              "quote": "",
+              "review_call": "7b942bf93171",
+              "review_pass": 2,
+              "round": 2,
+              "secretary_judge": {
+                "answer": "没问题",
+                "axis": "clean",
+                "basis": [
+                  "逐条核对：第2–3步极坐标面积公式与换基不变性成立",
+                  "第4步符号置换保 B_p^3 与平面面积成立",
+                  "第5步 Beta 积分闭式及 Γ 化简成立",
+                  "第6–8步截面线性换元、面积比较及 p 与 2 的比较成立",
+                  "第9步 p=2 与第10步 p=1 各特例数值均自洽"
+                ],
+                "checked": true,
+                "cost": {
+                  "call_index": 165,
+                  "charged": true,
+                  "ledger": "000206",
+                  "ledger_reason": "charged",
+                  "prompt_sha256": "5cf83bbc1bc03ee24576c18d1e901968bf75be57356a5174b4185c76d4466e95",
+                  "tokens": 1618,
+                  "usd": 0.000267
+                },
+                "defect_scope": "",
+                "defect_step": null,
+                "defect_step_basis": "",
+                "fault_cause": "report_gap",
+                "fault_kind": "",
+                "material": {
+                  "ledger_row": {
+                    "defect_step": null,
+                    "verdict": "成立"
+                  },
+                  "v_reply": "{\"verdict\":\"成立\",\"defect_step\":null,\"quote\":\"\",\"why\":\"逐条核对：第2–3步极坐标面积公式与换基不变性成立；第4步符号置换保 B_p^3 与平面面积成立；第5步 Beta 积分闭式及 Γ 化简成立；第6–8步截面线性换元、面积比较及 p 与 2 的比较成立；第9步 p=2 与第10步 p=1 各特例数值均自洽。未发现无条件前提、无依据步骤、跳步措辞或引用问题。\",\"findings\":[],\"citation_checks\":[]}"
+                },
+                "proof_no": 1,
+                "reason": "该回复逐条走查了证明的第2–10步并明确报告未发现缺陷，未指出任何问题，属合格的「未发现问题」报告。",
+                "refused": "",
+                "report_gap": "未记录反例构造尝试的位置与结果（只给了未发现问题的结论，没有反例尝试的过程记录）。",
+                "source": "secretary:v_reply_defect",
+                "statement_id": "",
+                "unwired": false,
+                "verdict": "成立"
+              },
+              "statement_id": "000034",
+              "stmt_id": "000034",
+              "submission_id": "",
+              "unresolved_errors": 0,
+              "used_faces": [],
+              "verdict": "成立",
+              "verification_id": "u-000003",
+              "verifier": "agent-V-V1",
+              "why": "逐条核对：第2–3步极坐标面积公式与换基不变性成立；第4步符号置换保 B_p^3 与平面面积成立；第5步 Beta 积分闭式及 Γ 化简成立；第6–8步截面线性换元、面积比较及 p 与 2 的比较成立；第9步 p=2 与第10步 p=1 各特例数值均自洽。未发现无条件前提、无依据步骤、跳步措辞或引用问题。",
+              "path_group": 1,
+              "claimed_at": "2026-11-24T18:42:50+08:00"
+            },
+            {
+              "at": "2026-11-24T18:41:01+08:00",
+              "citation_checks": [],
+              "defect_step": null,
+              "findings": [],
+              "landed": "pending",
+              "object_path": "manuscripts/F/f-proof-000000.md",
+              "object_sha256": "4cbbbeaf3989914e5756c9da973790a81da790ee98b226b4b9c965b430c9fc0a",
+              "producer_code": "F1",
+              "producer_role": "F",
+              "proof_chars": 2353,
+              "proof_sha256": "4cb054c6745ec737591bd41c456ea83a22efa7fa072fbd8f529843d22bfa3c9f",
+              "quote": "",
+              "review_call": "7b942bf93171",
+              "review_pass": 3,
+              "round": 3,
+              "secretary_judge": {
+                "answer": "没问题",
+                "axis": "clean",
+                "basis": [
+                  "\"why\":\"逐条重读定义、极坐标换元、Beta/Gamma 常数、仿射面积缩放以及 p=1,2 特例，未发现无依据步骤、未定义记号、跳步措辞或引用越界；依赖面为空。\"",
+                  "\"findings\":[]",
+                  "\"verdict\":\"成立\",\"defect_step\":null"
+                ],
+                "checked": true,
+                "cost": {
+                  "call_index": 167,
+                  "charged": true,
+                  "ledger": "000209",
+                  "ledger_reason": "charged",
+                  "prompt_sha256": "08f946929b1f6ff115d1c56cbdfa9c65d1393377a6b1836c2a181fcada32eaf8",
+                  "tokens": 1675,
+                  "usd": 0.000327
+                },
+                "defect_scope": "",
+                "defect_step": null,
+                "defect_step_basis": "",
+                "fault_cause": "report_gap",
+                "fault_kind": "",
+                "material": {
+                  "ledger_row": {
+                    "defect_step": null,
+                    "verdict": "成立"
+                  },
+                  "v_reply": "{\"verdict\":\"成立\",\"defect_step\":null,\"quote\":\"\",\"why\":\"逐条重读定义、极坐标换元、Beta/Gamma 常数、仿射面积缩放以及 p=1,2 特例，未发现无依据步骤、未定义记号、跳步措辞或引用越界；依赖面为空。\",\"findings\":[],\"citation_checks\":[]}"
+                },
+                "proof_no": 1,
+                "reason": "V 明确逐条走查了定义、换元、常数、面积缩放与特例，并声明未发现无依据步骤、未定义记号、跳步或引用越界，findings 为空，未指出任何缺陷。",
+                "refused": "",
+                "report_gap": "未记录反例尝试的位置（该项非判据，不影响判定）",
+                "source": "secretary:v_reply_defect",
+                "statement_id": "",
+                "unwired": false,
+                "verdict": "成立"
+              },
+              "statement_id": "000034",
+              "stmt_id": "000034",
+              "submission_id": "",
+              "unresolved_errors": 0,
+              "used_faces": [],
+              "verdict": "成立",
+              "verification_id": "u-000004",
+              "verifier": "agent-V-V1",
+              "why": "逐条重读定义、极坐标换元、Beta/Gamma 常数、仿射面积缩放以及 p=1,2 特例，未发现无依据步骤、未定义记号、跳步措辞或引用越界；依赖面为空。",
+              "path_group": 1,
+              "claimed_at": "2026-11-24T18:42:50+08:00"
+            },
+            {
+              "at": "2026-11-24T19:09:55+08:00",
+              "citation_checks": [],
+              "defect_step": null,
+              "findings": [],
+              "manuscript": "manuscripts/B/b-proof-000000.md",
+              "object_path": "manuscripts/B/b-proof-000000.md",
+              "object_sha256": "dba2e41d859a1fd8434e841f4ba3a1a255aa069a6239d8da1a693deedc809222",
+              "producer_code": "B1",
+              "producer_role": "B",
+              "proof_chars": 2309,
+              "proof_sha256": "e8f5eec99ab03a9036ddbe36a376f073aa03e50665d3d3f3af32e15f5d908fb8",
+              "quote": "",
+              "review_call": "f1d294eb5c96",
+              "review_pass": 1,
+              "round": 1,
+              "secretary_judge": {
+                "axis": "",
+                "checked": false,
+                "decision": "",
+                "defect_scope": "",
+                "fault_cause": "",
+                "fault_kind": "",
+                "reason": "没查成（judge_bad_json）：模型返回的不是一个 JSON 对象（解析报错：ExtractionError: 无法把 LLM 返回解析为 JSON 对象: Expecting ',' delimiter: line 1 column 168 (char 167)）；原文前 200 字：{\"decision\":\"没问题\",\"reason\":\"该回复逐项核对了假设、定理链、记号与条件，明确未发现任何缺陷或不合格引用。\",\"basi",
+                "report_gap": ""
+              },
+              "statement_id": "000034",
+              "stmt_id": "000034",
+              "submission_id": "",
+              "unresolved_errors": 0,
+              "used_faces": [],
+              "verdict": "成立",
+              "verification_id": "v-000001",
+              "verifier": "agent-V-V1",
+              "why": "沿假设、定理链、记号与条件性措辞逐项核对：极坐标面积元与基变换积分不变性成立；Beta 函数计算、伸缩因子与指数比较一致；p=1 的坐标向、面对角向与体对角向截面面积均核对无误；未发现无条件前提、无依据步骤、缝隙措辞或不合格引用。",
+              "path_group": 1
+            },
+            {
+              "at": "2026-11-24T19:10:59+08:00",
+              "citation_checks": [],
+              "defect_step": null,
+              "findings": [],
+              "manuscript": "manuscripts/B/b-proof-000000.md",
+              "object_path": "manuscripts/B/b-proof-000000.md",
+              "object_sha256": "dba2e41d859a1fd8434e841f4ba3a1a255aa069a6239d8da1a693deedc809222",
+              "producer_code": "B1",
+              "producer_role": "B",
+              "proof_chars": 2309,
+              "proof_sha256": "e8f5eec99ab03a9036ddbe36a376f073aa03e50665d3d3f3af32e15f5d908fb8",
+              "quote": "",
+              "review_call": "d65515d6b9ed",
+              "review_pass": 1,
+              "round": 2,
+              "secretary_judge": {
+                "axis": "clean",
+                "checked": true,
+                "decision": "",
+                "defect_scope": "",
+                "fault_cause": "report_gap",
+                "fault_kind": "",
+                "reason": "V 给出成立结论，并说明沿假设、定理链、记号与条件性措辞各关重读、公式与常数核对一致，未指出任何缺陷。",
+                "report_gap": "未记录反例尝试的具体位置或逐关核对的细节。"
+              },
+              "statement_id": "000034",
+              "stmt_id": "000034",
+              "submission_id": "",
+              "unresolved_errors": 0,
+              "used_faces": [],
+              "verdict": "成立",
+              "verification_id": "v-000002",
+              "verifier": "agent-V-V1",
+              "why": "沿假设、定理链、记号与条件性措辞各关重读，未发现无条件前提、无依据步骤、跳步措辞或不当引用；各公式与常数核对一致。",
+              "path_group": 1
+            },
+            {
+              "at": "2026-11-24T19:11:23+08:00",
+              "citation_checks": [],
+              "defect_step": null,
+              "findings": [],
+              "manuscript": "manuscripts/B/b-proof-000000.md",
+              "object_path": "manuscripts/B/b-proof-000000.md",
+              "object_sha256": "dba2e41d859a1fd8434e841f4ba3a1a255aa069a6239d8da1a693deedc809222",
+              "producer_code": "B1",
+              "producer_role": "B",
+              "proof_chars": 2309,
+              "proof_sha256": "e8f5eec99ab03a9036ddbe36a376f073aa03e50665d3d3f3af32e15f5d908fb8",
+              "quote": "",
+              "review_call": "d65515d6b9ed",
+              "review_pass": 2,
+              "round": 3,
+              "secretary_judge": {
+                "axis": "clean",
+                "checked": true,
+                "decision": "",
+                "defect_scope": "",
+                "fault_cause": "",
+                "fault_kind": "",
+                "reason": "V 逐项核对了假设、极坐标与换基、对称性、各 p 下截面面积计算及 (ii)–(v) 的常数比较，并明确未发现缺口或错误引用，未指出任何缺陷。",
+                "report_gap": ""
+              },
+              "statement_id": "000034",
+              "stmt_id": "000034",
+              "submission_id": "",
+              "unresolved_errors": 0,
+              "used_faces": [],
+              "verdict": "成立",
+              "verification_id": "v-000003",
+              "verifier": "agent-V-V1",
+              "why": "逐项核过假设、极坐标与换基、对称性、各 p 下截面面积计算及 (ii)–(v) 的常数比较，未发现缺口或错误引用。",
+              "path_group": 1
+            },
+            {
+              "at": "2026-11-24T19:13:21+08:00",
+              "citation_checks": [],
+              "defect_step": null,
+              "findings": [],
+              "manuscript": "manuscripts/B/b-proof-000000.md",
+              "object_path": "manuscripts/B/b-proof-000000.md",
+              "object_sha256": "dba2e41d859a1fd8434e841f4ba3a1a255aa069a6239d8da1a693deedc809222",
+              "producer_code": "B1",
+              "producer_role": "B",
+              "proof_chars": 2309,
+              "proof_sha256": "e8f5eec99ab03a9036ddbe36a376f073aa03e50665d3d3f3af32e15f5d908fb8",
+              "quote": "",
+              "review_call": "d65515d6b9ed",
+              "review_pass": 3,
+              "round": 4,
+              "secretary_judge": {
+                "axis": "clean",
+                "checked": true,
+                "decision": "",
+                "defect_scope": "",
+                "fault_cause": "report_gap",
+                "fault_kind": "",
+                "reason": "V 明确称逐行核对各环节且未发现缺陷，也未指出任何需修正的证明问题，故判没问题；报告仅缺反例尝试记录。",
+                "report_gap": "未记录反例尝试"
+              },
+              "statement_id": "000034",
+              "stmt_id": "000034",
+              "submission_id": "",
+              "unresolved_errors": 0,
+              "used_faces": [],
+              "verdict": "成立",
+              "verification_id": "v-000004",
+              "verifier": "agent-V-V1",
+              "why": "逐行核对假设、极坐标面积公式、对称性、Beta/Gamma 常数、p=1 各截面几何，未发现缺陷。",
+              "path_group": 1
+            },
+            {
+              "at": "2026-11-24T19:10:43+08:00",
+              "citation_checks": [],
+              "defect_step": null,
+              "findings": [],
+              "landed": "pending",
+              "object_path": "manuscripts/F/f-proof-000001.md",
+              "object_sha256": "e7fe441c9e14f4a55e963c14793341a76654496a78c17a57607ccc55053c5e7f",
+              "producer_code": "F1",
+              "producer_role": "F",
+              "proof_chars": 2127,
+              "proof_sha256": "6c6accee9f0db73f1db0526a3bbbdeda9cc2f1dc61d376e5cc36439d35874625",
+              "quote": "",
+              "review_call": "8e344077ec08",
+              "review_pass": 1,
+              "round": 1,
+              "secretary_judge": {
+                "answer": "没问题",
+                "axis": "clean",
+                "basis": [
+                  "v_reply.why: \"按假设、定理链、记号与条件性措辞逐关核对：坐标归一化、等距参数化、面积变换、Beta 积分及 p 与 2 的比较均未发现推导缺口或反例。\"",
+                  "v_reply.findings: []"
+                ],
+                "checked": true,
+                "cost": {
+                  "call_index": 255,
+                  "charged": true,
+                  "ledger": "000327",
+                  "ledger_reason": "charged",
+                  "prompt_sha256": "395f6db5ef2b81bf0f4440c8f41ca0da475f2179ee167fb0964a9569ebae3f46",
+                  "tokens": 2148,
+                  "usd": 0.000614
+                },
+                "defect_scope": "",
+                "defect_step": null,
+                "defect_step_basis": "",
+                "fault_cause": "report_gap",
+                "fault_kind": "",
+                "material": {
+                  "ledger_row": {
+                    "defect_step": null,
+                    "verdict": "成立"
+                  },
+                  "v_reply": "{\"verdict\":\"成立\",\"defect_step\":null,\"quote\":\"\",\"why\":\"按假设、定理链、记号与条件性措辞逐关核对：坐标归一化、等距参数化、面积变换、Beta 积分及 p 与 2 的比较均未发现推导缺口或反例。\",\"findings\":[],\"citation_checks\":[]}"
+                },
+                "proof_no": 1,
+                "reason": "该回复明确按假设、定理链、记号与条件性措辞逐关核对，并声明未发现推导缺口或反例，且未指出任何缺陷。",
+                "refused": "",
+                "report_gap": "未记录具体反例构造尝试或逐关核对的明细；findings 与 citation_checks 均为空。",
+                "source": "secretary:v_reply_defect",
+                "statement_id": "",
+                "unwired": false,
+                "verdict": "成立"
+              },
+              "statement_id": "000035",
+              "stmt_id": "000035",
+              "submission_id": "",
+              "unresolved_errors": 0,
+              "used_faces": [],
+              "verdict": "成立",
+              "verification_id": "u-000008",
+              "verifier": "agent-V-V1",
+              "why": "按假设、定理链、记号与条件性措辞逐关核对：坐标归一化、等距参数化、面积变换、Beta 积分及 p 与 2 的比较均未发现推导缺口或反例。",
+              "path_group": 1,
+              "claimed_at": "2026-11-24T19:16:27+08:00"
+            },
+            {
+              "at": "2026-11-24T19:11:50+08:00",
+              "citation_checks": [],
+              "defect_step": null,
+              "findings": [],
+              "landed": "pending",
+              "object_path": "manuscripts/F/f-proof-000001.md",
+              "object_sha256": "e7fe441c9e14f4a55e963c14793341a76654496a78c17a57607ccc55053c5e7f",
+              "producer_code": "F1",
+              "producer_role": "F",
+              "proof_chars": 2127,
+              "proof_sha256": "6c6accee9f0db73f1db0526a3bbbdeda9cc2f1dc61d376e5cc36439d35874625",
+              "quote": "",
+              "review_call": "8e344077ec08",
+              "review_pass": 2,
+              "round": 2,
+              "secretary_judge": {
+                "answer": "没问题",
+                "axis": "clean",
+                "basis": [
+                  "v_reply: \"逐段核对假设链、参数化与面积变换、Beta 积分计算、p 与 2 的比较及门槛见证，未发现无依据跳步、未定义记号导致的实际断点或不当引用。\"",
+                  "v_reply: \"findings\":[]",
+                  "v_reply: \"verdict\":\"成立\""
+                ],
+                "checked": true,
+                "cost": {
+                  "call_index": 263,
+                  "charged": true,
+                  "ledger": "000335",
+                  "ledger_reason": "charged",
+                  "prompt_sha256": "693a4885e02ef0dd9c301bbb8145152a0cab2cea72cb9fe374b118c34c480846",
+                  "tokens": 1494,
+                  "usd": 0.000222
+                },
+                "defect_scope": "",
+                "defect_step": null,
+                "defect_step_basis": "",
+                "fault_cause": "report_gap",
+                "fault_kind": "",
+                "material": {
+                  "ledger_row": {
+                    "defect_step": null,
+                    "verdict": "成立"
+                  },
+                  "v_reply": "{\"verdict\":\"成立\",\"defect_step\":null,\"quote\":\"\",\"why\":\"逐段核对假设链、参数化与面积变换、Beta 积分计算、p 与 2 的比较及门槛见证，未发现无依据跳步、未定义记号导致的实际断点或不当引用。\",\"findings\":[],\"citation_checks\":[]}"
+                },
+                "proof_no": 1,
+                "reason": "这份回复逐段声明已核对假设链、参数化与面积变换、Beta 积分、p 与 2 的比较及门槛见证，并明确 findings 为空、未发现断点，也没有指出任何缺陷，因此属于「逐条走查后未发现问题」一类。",
+                "refused": "",
+                "report_gap": "没有记录任何反例尝试或构造失败的位置；citation_checks 为空，没有写出逐条引用核对的记录。",
+                "source": "secretary:v_reply_defect",
+                "statement_id": "",
+                "unwired": false,
+                "verdict": "成立"
+              },
+              "statement_id": "000035",
+              "stmt_id": "000035",
+              "submission_id": "",
+              "unresolved_errors": 0,
+              "used_faces": [],
+              "verdict": "成立",
+              "verification_id": "u-000009",
+              "verifier": "agent-V-V1",
+              "why": "逐段核对假设链、参数化与面积变换、Beta 积分计算、p 与 2 的比较及门槛见证，未发现无依据跳步、未定义记号导致的实际断点或不当引用。",
+              "path_group": 1,
+              "claimed_at": "2026-11-24T19:16:27+08:00"
+            },
+            {
+              "at": "2026-11-24T19:12:21+08:00",
+              "citation_checks": [],
+              "defect_step": null,
+              "findings": [],
+              "landed": "pending",
+              "object_path": "manuscripts/F/f-proof-000001.md",
+              "object_sha256": "e7fe441c9e14f4a55e963c14793341a76654496a78c17a57607ccc55053c5e7f",
+              "producer_code": "F1",
+              "producer_role": "F",
+              "proof_chars": 2127,
+              "proof_sha256": "6c6accee9f0db73f1db0526a3bbbdeda9cc2f1dc61d376e5cc36439d35874625",
+              "quote": "",
+              "review_call": "8e344077ec08",
+              "review_pass": 3,
+              "round": 3,
+              "secretary_judge": {
+                "answer": "没问题",
+                "axis": "clean",
+                "basis": [
+                  "\"why\": \"逐条核对第1–10步：坐标归一化、正交参数化、面积变换、Beta积分与常数比较均成立，未发现前提缺失、无依据步骤或引用问题。\"",
+                  "\"findings\": []",
+                  "\"defect_step\": null"
+                ],
+                "checked": true,
+                "cost": {
+                  "call_index": 266,
+                  "charged": true,
+                  "ledger": "000338",
+                  "ledger_reason": "charged",
+                  "prompt_sha256": "944258e0a8590b26de19127cb0daf2fd2a66867053d27f3a6a5b61f741b84a82",
+                  "tokens": 2032,
+                  "usd": 0.000548
+                },
+                "defect_scope": "",
+                "defect_step": null,
+                "defect_step_basis": "",
+                "fault_cause": "report_gap",
+                "fault_kind": "",
+                "material": {
+                  "ledger_row": {
+                    "defect_step": null,
+                    "verdict": "成立"
+                  },
+                  "v_reply": "{\"verdict\": \"成立\", \"defect_step\": null, \"quote\": \"\", \"why\": \"逐条核对第1–10步：坐标归一化、正交参数化、面积变换、Beta积分与常数比较均成立，未发现前提缺失、无依据步骤或引用问题。\", \"findings\": [], \"citation_checks\": []}"
+                },
+                "proof_no": 1,
+                "reason": "V 逐条核对了第1–10步并明确判定成立且 findings 为空，未指出任何缺陷，故按「没问题」档处理。",
+                "refused": "",
+                "report_gap": "未记录反例尝试的位置或尝试情况。",
+                "source": "secretary:v_reply_defect",
+                "statement_id": "",
+                "unwired": false,
+                "verdict": "成立"
+              },
+              "statement_id": "000035",
+              "stmt_id": "000035",
+              "submission_id": "",
+              "unresolved_errors": 0,
+              "used_faces": [],
+              "verdict": "成立",
+              "verification_id": "u-000010",
+              "verifier": "agent-V-V1",
+              "why": "逐条核对第1–10步：坐标归一化、正交参数化、面积变换、Beta积分与常数比较均成立，未发现前提缺失、无依据步骤或引用问题。",
+              "path_group": 1,
+              "claimed_at": "2026-11-24T19:16:27+08:00"
+            },
+            {
+              "at": "2026-11-24T19:21:21+08:00",
+              "citation_checks": [],
+              "defect_step": null,
+              "findings": [],
+              "manuscript": "manuscripts/B/b-proof-000001.md",
+              "object_path": "manuscripts/B/b-proof-000001.md",
+              "object_sha256": "0ce479010b27002734b63e61001887d9db6c5204d038b26574126f36bdc8dd28",
+              "producer_code": "B1",
+              "producer_role": "B",
+              "proof_chars": 2574,
+              "proof_sha256": "11164aee4f1b379663f59e8155dfd0f949925ac6c88d270f06af6871054c904a",
+              "quote": "",
+              "review_call": "23400cc69e2a",
+              "review_pass": 1,
+              "round": 1,
+              "secretary_judge": {
+                "axis": "clean",
+                "checked": true,
+                "decision": "",
+                "defect_scope": "",
+                "fault_cause": "report_gap",
+                "fault_kind": "",
+                "reason": "V 明确声称已逐项核对并未发现缺陷，没有提出任何需要指出的缺陷。",
+                "report_gap": "未记录反例尝试的位置；未给出逐关核对的具体记录"
+              },
+              "statement_id": "000035",
+              "stmt_id": "000035",
+              "submission_id": "",
+              "unresolved_errors": 0,
+              "used_faces": [],
+              "verdict": "成立",
+              "verification_id": "v-000001",
+              "verifier": "agent-V-V1",
+              "why": "沿假设、化标准位置、闭式推导、m 与 1 的比较及 p=2 精确性逐项核对，未发现缺陷。"
+            },
+            {
+              "at": "2026-11-24T19:22:34+08:00",
+              "citation_checks": [],
+              "defect_step": null,
+              "findings": [],
+              "manuscript": "manuscripts/B/b-proof-000001.md",
+              "object_path": "manuscripts/B/b-proof-000001.md",
+              "object_sha256": "0ce479010b27002734b63e61001887d9db6c5204d038b26574126f36bdc8dd28",
+              "producer_code": "B1",
+              "producer_role": "B",
+              "proof_chars": 2574,
+              "proof_sha256": "11164aee4f1b379663f59e8155dfd0f949925ac6c88d270f06af6871054c904a",
+              "quote": "",
+              "review_call": "23400cc69e2a",
+              "review_pass": 2,
+              "round": 2,
+              "secretary_judge": {
+                "axis": "clean",
+                "checked": true,
+                "decision": "",
+                "defect_scope": "",
+                "fault_cause": "report_gap",
+                "fault_kind": "",
+                "reason": "该回复明确称已逐条核对各关键步骤并均未发现缺依据、隐藏前提或引用不洁，findings 为空，未指出任何缺陷。",
+                "report_gap": "未记录反例尝试的具体构造或位置；不影响本次判定。"
+              },
+              "statement_id": "000035",
+              "stmt_id": "000035",
+              "submission_id": "",
+              "unresolved_errors": 0,
+              "used_faces": [],
+              "verdict": "成立",
+              "verification_id": "v-000002",
+              "verifier": "agent-V-V1",
+              "why": "逐条核对假设与化标准位置、正交基参数化、面积变换、D_p 的 Beta 积分闭式、m 与 1 的比较及等号条件、p=2 与 p≠2 的精确性，均未发现缺依据步骤、隐藏前提或引用不洁；依赖为空，citation_checks 为空。"
+            },
+            {
+              "at": "2026-11-24T19:24:08+08:00",
+              "citation_checks": [],
+              "defect_step": null,
+              "findings": [],
+              "manuscript": "manuscripts/B/b-proof-000001.md",
+              "object_path": "manuscripts/B/b-proof-000001.md",
+              "object_sha256": "0ce479010b27002734b63e61001887d9db6c5204d038b26574126f36bdc8dd28",
+              "producer_code": "B1",
+              "producer_role": "B",
+              "proof_chars": 2574,
+              "proof_sha256": "11164aee4f1b379663f59e8155dfd0f949925ac6c88d270f06af6871054c904a",
+              "quote": "",
+              "review_call": "23400cc69e2a",
+              "review_pass": 3,
+              "round": 3,
+              "secretary_judge": {
+                "axis": "clean",
+                "checked": true,
+                "decision": "",
+                "defect_scope": "",
+                "fault_cause": "report_gap",
+                "fault_kind": "",
+                "reason": "V 明确声称逐条核对了证明各环节且未发现缺依据步骤、隐藏前提或更强结论，也未指出任何缺陷。",
+                "report_gap": "未记录反例尝试的位置或结果。"
+              },
+              "statement_id": "000035",
+              "stmt_id": "000035",
+              "submission_id": "",
+              "unresolved_errors": 0,
+              "used_faces": [],
+              "verdict": "成立",
+              "verification_id": "v-000003",
+              "verifier": "agent-V-V1",
+              "why": "逐条核对假设、标准位置化、正交基参数化、线性伸缩、Beta 积分、m 与 1 的比较及 p≠2 精确性，未发现缺依据步骤、隐藏前提或更强结论。"
+            }
+          ],
+          "problems": [],
+          "truncated": false,
+          "reason": "共 13 行验证台账"
+        },
+        "error": "",
+        "meta": {},
+        "warn": "这一步给了 2 条调用，已按顺序逐条：第 1 条 table.get 成功；第 2 条 verify.list_verifications 成功：13。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 1,
+          "call_index": 1,
+          "calls": 2,
+          "step_index": 2,
+          "summary": "这一步给了 2 条调用，已按顺序逐条：第 1 条 table.get 成功；第 2 条 verify.list_verifications 成功：13。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 1,
+            "calls": 2,
+            "items": 2,
+            "steps": [
+              1,
+              2
+            ],
+            "executed": 2,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000124"
+    },
+    {
+      "index": 3,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "statements",
+          "id": "000002"
+        },
+        "why": "确认这份稿（manuscripts/F/f-proof-000002.md）对应的在册命题行是否存在、编号是否为 000002、状态与正文是否与稿一致 —— 签要按号与正文 sha 落，编号不能凭文件名猜"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "stmt_id": "000002",
+          "origin": "external_lit",
+          "kind": "concept",
+          "label": "volume",
+          "statement_text": "the usual volume in a Euclidean space, denoted |·|",
+          "statement_full": "the usual volume in a Euclidean space, denoted |·|",
+          "proof_text": "",
+          "source_lit_id": "000000",
+          "page_range": {
+            "start": 1,
+            "end": 1,
+            "label": "p. 1"
+          },
+          "quote_verified": null,
+          "quote_mode": "",
+          "quote_reason": "概念不参与等级链（`evidencebits.derive_grade` 对 concept 短路成 `not_applicable`）；定义来自 lit:000000",
+          "quote_span": "",
+          "quote_call_sha256": "",
+          "evidence_kind": "heuristic",
+          "bits": {
+            "numeric": "pending",
+            "proof": false,
+            "reviewed": false,
+            "formal": "pending",
+            "audited": false,
+            "origin": "external_lit",
+            "evidence": {
+              "numeric": {},
+              "numeric_reason": "",
+              "proof_process": "",
+              "proof_source": "",
+              "reviewed_by": {},
+              "reviewed_source": "",
+              "formal": {},
+              "formal_reason": "",
+              "audited_by": {}
+            },
+            "voided_by": {},
+            "grade": "not_applicable",
+            "audited_badge": false
+          },
+          "status": "active",
+          "derived_from": [],
+          "aliases": [
+            "vol",
+            "|·|"
+          ],
+          "doc_id": null,
+          "line_range": "",
+          "created_at": "2026-11-24T18:07:35+08:00",
+          "created_by": "secretary-B",
+          "proof_routes": {},
+          "route": ""
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "id": "000002",
+          "id_field": "stmt_id",
+          "found": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 41344,
+        "prompt_cache_miss_tokens": 9396,
+        "tokens_in": 50740,
+        "tokens_out": 17195,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000124"
+    },
+    {
+      "index": 4,
+      "shape": "tool",
+      "payload": {
+        "name": "verify.verify_proof",
+        "args": {
+          "proof_manuscript": "manuscripts/F/f-proof-000002.md"
+        },
+        "why": "按手稿逐行重读并落验证台账（命题未在册，正文以稿为准；不传内联正文以免 sha 对不上）"
+      },
+      "result": {
+        "tool": "verify.verify_proof",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "kind": "proof_unregistered_rejected",
+          "statement_id": "",
+          "verification_id": "u-000017",
+          "verdict": "有毛病",
+          "defect_step": 3,
+          "findings": [
+            {
+              "level": "error",
+              "step": 3,
+              "kind": "无依据步骤",
+              "detail": "第3步把 A_diag(p) 的极坐标面积公式归给 stmt:000034 的 (i)，但本稿依赖面为空，未登记该被引命题；因此该步既无已登记在册的外部依据，也无同段内的推导，需补登记该引理或补出公式推导。"
+            }
+          ],
+          "unresolved_errors": 1,
+          "proof_sha256": "7713209f208c70cfbdf2c9206295e886e507a80af0cdf81ccafa5e7d7a192f42",
+          "proof_chars": 0,
+          "signed_bit3": false,
+          "reviewed_by": {},
+          "bits": {},
+          "review_write": {
+            "manuscript_signed": false,
+            "manuscript_write": {
+              "written": false,
+              "idempotent": false,
+              "missing": false,
+              "state": "not_attempted",
+              "path": "manuscripts/F/f-proof-000002.md",
+              "line": 0,
+              "reading": {},
+              "code": "",
+              "body_mismatch": false,
+              "body_sha256": "",
+              "signed_sha256": "",
+              "why": "负判不写手稿块（甲：V 只颁发；块只由收方秘书落）"
+            },
+            "sign_issued": false,
+            "written": false,
+            "filed": "not_read_by_v",
+            "already_signed": false,
+            "reason": "负判不写手稿块（甲：V 只颁发；块只由收方秘书落）",
+            "v_review": {
+              "checked": true,
+              "review_id": "v-review-000010",
+              "written": true,
+              "idempotent": false,
+              "path": "verifications/reviews/v-review-000010.md",
+              "delivery": {
+                "checked": true,
+                "state": "dispatched",
+                "item_id": "t-000129",
+                "key": "v-review@v-review-000010",
+                "role": "F",
+                "parent_task_id": "t-000083",
+                "reason": "已投给 t-000083 的板项 t-000129",
+                "detail_path": "V 的审阅报告：`verifications/reviews/v-review-000010.md`\n- 被审稿：`manuscripts/F/f-proof-000002.md`\n- 结论：有毛病（V 的秘书语义判定：fault）\n- 台账锚点：`verifications/pending/0eace33564540fd1f1172fc3c00141355ee2753c62c329c4ca416a4c4116322d.jsonl#u-000017`\nV 的原文不转达；这份报告就是给你的审阅意见。改完把同一份稿重新送 V。\n",
+                "existing": false
+              },
+              "reason": "V 稿已落盘：verifications/reviews/v-review-000010.md"
+            },
+            "registration": {},
+            "signed_delivery": {}
+          },
+          "ledger": "verifications/pending/0eace33564540fd1f1172fc3c00141355ee2753c62c329c4ca416a4c4116322d.jsonl#u-000017",
+          "reason": "（未在册）判「有毛病」：负判不写手稿块，判词落 `verifications/pending/`（u-000017）",
+          "detail": "这一份判「有毛病」：负判不写手稿块（甲口径：`draft/178`「V 不写手稿里的签块」，块只由收方秘书落；负判不是签）。判词已落 `verifications/pending/0eace33564540fd1f1172fc3c00141355ee2753c62c329c4ca416a4c4116322d.jsonl#u-000017`，F 的读数是「未通过」；按缺陷改稿后再送，不签第 3 位、也不写重复块。",
+          "exhaustion_review": {},
+          "signer": "",
+          "proof_authors": [],
+          "report_path": "",
+          "checks": [],
+          "missing": [],
+          "citations": [],
+          "citation_checks": [],
+          "citation_gate": {
+            "ok": true,
+            "blocking": [],
+            "weaker": [],
+            "problem": "",
+            "why": ""
+          },
+          "secretary_judge": {
+            "checked": true,
+            "answer": "有缺陷要指出",
+            "axis": "fault",
+            "unwired": false,
+            "reason": "V 指出第3步引用 stmt:000034 的 (i) 作截面面积公式，但依赖面未登记该引用且同段无推导，属证明链上的无依据步骤。",
+            "basis": [
+              "第3步直接引用 stmt:000034 的 (i) 作为截面面积公式，但依赖面没有登记该引用，无法确认它在册及适用条件，同段也没有给出该公式的推导，属无依据步骤。",
+              "\"defect_step\": 3",
+              "第3步把 A_diag(p) 的极坐标面积公式归给 stmt:000034 的 (i)，但本稿依赖面为空，未登记该被引命题；因此该步既无已登记在册的外部依据，也无同段内的推导，需补登记该引理或补出公式推导。"
+            ],
+            "refused": "",
+            "cost": {
+              "ledger": "000703",
+              "charged": true,
+              "ledger_reason": "charged",
+              "call_index": 605,
+              "prompt_sha256": "b355429ee9ec6f0838ea8699876fd889698f92b0bf801140234dcf403eaab8fe",
+              "tokens": 2203,
+              "usd": 0.000524
+            },
+            "verdict": "有毛病",
+            "defect_step": 3,
+            "fault_kind": "math",
+            "fault_cause": "",
+            "report_gap": "",
+            "statement_id": "",
+            "proof_no": 1,
+            "material": {
+              "v_reply": "{\"verdict\": \"有毛病\", \"defect_step\": 3, \"quote\": \"由 stmt:000034 的 (i)，对任意单位法向与 n^⊥ 的任意单位正交基 {u,v} 有 A_p(n) = (1/2)∫_0^{2π}‖cosθ·u + sinθ·v‖_p^{-2} dθ，且该积分值不随基的选取而改变；于是 A_diag(p) = (1/2)∫_0^{2π}‖e(θ)‖_p^{-2} dθ，这给出 (i) 的第一个等号。\", \"why\": \"第3步直接引用 stmt:000034 的 (i) 作为截面面积公式，但依赖面没有登记该引用，无法确认它在册及适用条件，同段也没有给出该公式的推导，属无依据步骤。\", \"findings\": [{\"level\": \"error\", \"step\": 3, \"kind\": \"无依据步骤\", \"detail\": \"第3步把 A_diag(p) 的极坐标面积公式归给 stmt:000034 的 (i)，但本稿依赖面为空，未登记该被引命题；因此该步既无已登记在册的外部依据，也无同段内的推导，需补登记该引理或补出公式推导。\"}], \"citation_checks\": []}",
+              "ledger_row": {
+                "verdict": "有毛病",
+                "defect_step": 3
+              }
+            },
+            "defect_scope": "proof",
+            "defect_step_basis": "V 在 why 与 findings 中均明确点出缺陷落在第3步，并以 \"defect_step\": 3 标定该步。",
+            "source": "secretary:v_reply_defect"
+          },
+          "sign_issuance": {
+            "checked": false,
+            "issue": false,
+            "issued": false,
+            "landed": false,
+            "decision": "",
+            "writeback": {},
+            "streak": 0,
+            "need": 3,
+            "streak_ok": false,
+            "projected": 0,
+            "same_sha": false,
+            "state": "",
+            "reason": "这一趟没走到签发那一步（早退）⇒ 没有发签：`checked=False` 不是「可以签」，也不是「不签发」这一档",
+            "within_call": null,
+            "review_call": "",
+            "ledger_streak": 0,
+            "basis": [],
+            "reading": {},
+            "cost": {},
+            "material": {},
+            "statement_id": ""
+          },
+          "review_passes": [
+            {
+              "pass": 1,
+              "axis": "clean",
+              "verdict": "成立",
+              "fault_kind": "",
+              "fault_cause": "report_gap",
+              "unresolved_errors": 0,
+              "defect_step": null,
+              "terminal": ""
+            },
+            {
+              "pass": 2,
+              "axis": "fault",
+              "verdict": "有毛病",
+              "fault_kind": "math",
+              "fault_cause": "",
+              "unresolved_errors": 1,
+              "defect_step": 3,
+              "terminal": "rejected"
+            }
+          ],
+          "manuscript_identity": {
+            "checked": false,
+            "statement_id": "",
+            "manuscript_id": "",
+            "row_manuscript_id": "",
+            "matched_by": "",
+            "fallback": false,
+            "row_checked": false,
+            "found": null,
+            "problem": "",
+            "path_checked": false,
+            "path_count": 0,
+            "path_group": 0,
+            "path_problem": "",
+            "why": ""
+          },
+          "issued_sign": {},
+          "statement_scope_gate": {}
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 49920,
+        "prompt_cache_miss_tokens": 2282,
+        "tokens_in": 52202,
+        "tokens_out": 7834,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000124"
+    },
+    {
+      "index": 5,
+      "shape": "tool",
+      "payload": {
+        "name": "verify.verify_proof",
+        "args": {
+          "proof_manuscript": "manuscripts/F/f-proof-000002.md",
+          "readonly_facts": "手稿事实（本趟 fs.read 现读，文件 sha256=0eace33564540fd1f1172fc3c00141355ee2753c62c329c4ca416a4c4116322d；正文 sha=7713209f208c70cfbdf2c9206295e886e507a80af0cdf81ccafa5e7d7a192f42）：\n\n一、`## 依赖` 段存在，且恰有 1 行（不是空依赖面）：\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |\n| n := (1,1,1)/√3 是 H 的单位法向量，H = n^⊥。由 stmt:000034 的 (i)，对任意单位法向与 n^⊥ 的任意单位正交基 {u,v} 有 A_p(n) = (1/2)∫_0^{2π}‖cosθ·u + sinθ·v‖_p^{-2} dθ… | stmt:000034 | 第 3、4、5、6、7、8、9、10 步 |\n\n二、stmt:000034 的在册读数（本趟 table.get 现读）：kind=theorem、status=active、_grade_recomputed.checked=true 且 to=pre_theorem（basis=verifications/pending/4cbbbeaf3989914e5756c9da973790a81da790ee98b226b4b9c965b430c9fc0a.jsonl#u-000004，channel=text）。其 statement_full 的 (i)：「A_p(n) = (1/2)∫_0^{2π} ‖cosψ·u + sinψ·v‖_p^{-2} dψ，其中 u,v 是 n^⊥ 的任意一组单位正交基，该值不随基的选取而变，A_p(n) 只依赖 n^⊥」。等级 pre_theorem ⇒ 够格被引（不属 inadmissible）。\n\n三、本稿第 3 步的用法与 (i) 的条件逐条对上：取 n=(1,1,1)/√3（此时 n^⊥=H，与命题里的 H 同一平面）、取第 2 步已验证的单位正交基 u=(1,-1,0)/√2、v=(1,1,-2)/√6（本趟手验：‖u‖²=1、‖v‖²=1、u·v=0），正落在 (i) 的「任意单位法向 + 任意单位正交基」范围内 ⇒ 第 3 步引用条件与结论都没被换掉（citation 档：consistent），不是无依据步骤。\n\n四、请据此重核第 3 步的依赖面：上一转（u-000017）判「本稿依赖面为空、未登记该被引命题」与本趟两处现读（手稿 `## 依赖` 段 1 行 stmt:000034；statements 表 000034 行 kind=theorem/status=active/pre_theorem）不符，那是读数错，不是证明缺陷。"
+        },
+        "why": "上一转把第 3 步判成「依赖面为空」，与本趟现读的手稿 `## 依赖` 段与 statements 行直接冲突；把这两条只读事实补给检查器后重核"
+      },
+      "result": {
+        "tool": "verify.verify_proof",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "kind": "proof_unregistered_rejected",
+          "statement_id": "",
+          "verification_id": "u-000018",
+          "verdict": "有毛病",
+          "defect_step": 3,
+          "findings": [
+            {
+              "level": "error",
+              "step": 3,
+              "kind": "引用未登记/依据不可核",
+              "detail": "第3步把超平面截面面积公式归于 stmt:000034 的 (i)；然而只读读数说明依赖面没有登记任何被引命题，正文本条材料也读不到 stmt:000034，无法确认该命题在册、合格或与所引结论一致。需要登记该依赖并给出可核的在册命题，或在第3步补出该面积公式的同段推导。"
+            }
+          ],
+          "unresolved_errors": 1,
+          "proof_sha256": "7713209f208c70cfbdf2c9206295e886e507a80af0cdf81ccafa5e7d7a192f42",
+          "proof_chars": 0,
+          "signed_bit3": false,
+          "reviewed_by": {},
+          "bits": {},
+          "review_write": {
+            "manuscript_signed": false,
+            "manuscript_write": {
+              "written": false,
+              "idempotent": false,
+              "missing": false,
+              "state": "not_attempted",
+              "path": "manuscripts/F/f-proof-000002.md",
+              "line": 0,
+              "reading": {},
+              "code": "",
+              "body_mismatch": false,
+              "body_sha256": "",
+              "signed_sha256": "",
+              "why": "负判不写手稿块（甲：V 只颁发；块只由收方秘书落）"
+            },
+            "sign_issued": false,
+            "written": false,
+            "filed": "not_read_by_v",
+            "already_signed": false,
+            "reason": "负判不写手稿块（甲：V 只颁发；块只由收方秘书落）",
+            "v_review": {
+              "checked": true,
+              "review_id": "v-review-000011",
+              "written": true,
+              "idempotent": false,
+              "path": "verifications/reviews/v-review-000011.md",
+              "delivery": {
+                "checked": true,
+                "state": "dispatched",
+                "item_id": "t-000130",
+                "key": "v-review@v-review-000011",
+                "role": "F",
+                "parent_task_id": "t-000083",
+                "reason": "已投给 t-000083 的板项 t-000130",
+                "detail_path": "V 的审阅报告：`verifications/reviews/v-review-000011.md`\n- 被审稿：`manuscripts/F/f-proof-000002.md`\n- 结论：有毛病（V 的秘书语义判定：fault）\n- 台账锚点：`verifications/pending/0eace33564540fd1f1172fc3c00141355ee2753c62c329c4ca416a4c4116322d.jsonl#u-000018`\nV 的原文不转达；这份报告就是给你的审阅意见。改完把同一份稿重新送 V。\n",
+                "existing": false
+              },
+              "reason": "V 稿已落盘：verifications/reviews/v-review-000011.md"
+            },
+            "registration": {},
+            "signed_delivery": {}
+          },
+          "ledger": "verifications/pending/0eace33564540fd1f1172fc3c00141355ee2753c62c329c4ca416a4c4116322d.jsonl#u-000018",
+          "reason": "（未在册）判「有毛病」：负判不写手稿块，判词落 `verifications/pending/`（u-000018）",
+          "detail": "这一份判「有毛病」：负判不写手稿块（甲口径：`draft/178`「V 不写手稿里的签块」，块只由收方秘书落；负判不是签）。判词已落 `verifications/pending/0eace33564540fd1f1172fc3c00141355ee2753c62c329c4ca416a4c4116322d.jsonl#u-000018`，F 的读数是「未通过」；按缺陷改稿后再送，不签第 3 位、也不写重复块。",
+          "exhaustion_review": {},
+          "signer": "",
+          "proof_authors": [],
+          "report_path": "",
+          "checks": [],
+          "missing": [],
+          "citations": [],
+          "citation_checks": [],
+          "citation_gate": {
+            "ok": true,
+            "blocking": [],
+            "weaker": [],
+            "problem": "",
+            "why": ""
+          },
+          "secretary_judge": {
+            "checked": true,
+            "answer": "有缺陷要指出",
+            "axis": "fault",
+            "unwired": false,
+            "reason": "V 明确指到第3步，称核心面积公式所依赖的 stmt:000034 未登记且正文不可读、依据无法核实，属于指出缺陷。",
+            "basis": [
+              "第3步的核心面积公式完全依赖 stmt:000034，但依赖面未登记该引用且只读材料读不到其正文，依据在册性与内容均无法核实。",
+              "第3步把超平面截面面积公式归于 stmt:000034 的 (i)"
+            ],
+            "refused": "",
+            "cost": {
+              "ledger": "000710",
+              "charged": true,
+              "ledger_reason": "charged",
+              "call_index": 612,
+              "prompt_sha256": "8fc10e35c18e5aafcd8d0f7bf69509cd9581af2fbbdc430d02c11d872d1ffd86",
+              "tokens": 3818,
+              "usd": 0.001541
+            },
+            "verdict": "有毛病",
+            "defect_step": 3,
+            "fault_kind": "contract",
+            "fault_cause": "",
+            "report_gap": "",
+            "statement_id": "",
+            "proof_no": 1,
+            "material": {
+              "v_reply": "{\"verdict\": \"有毛病\", \"defect_step\": 3, \"quote\": \"由 stmt:000034 的 (i)\", \"why\": \"第3步的核心面积公式完全依赖 stmt:000034，但依赖面未登记该引用且只读材料读不到其正文，依据在册性与内容均无法核实。\", \"findings\": [{\"level\": \"error\", \"step\": 3, \"kind\": \"引用未登记/依据不可核\", \"detail\": \"第3步把超平面截面面积公式归于 stmt:000034 的 (i)；然而只读读数说明依赖面没有登记任何被引命题，正文本条材料也读不到 stmt:000034，无法确认该命题在册、合格或与所引结论一致。需要登记该依赖并给出可核的在册命题，或在第3步补出该面积公式的同段推导。\"}], \"citation_checks\": []}",
+              "ledger_row": {
+                "verdict": "有毛病",
+                "defect_step": 3
+              }
+            },
+            "defect_scope": "proof",
+            "defect_step_basis": "",
+            "source": "secretary:v_reply_defect"
+          },
+          "sign_issuance": {
+            "checked": false,
+            "issue": false,
+            "issued": false,
+            "landed": false,
+            "decision": "",
+            "writeback": {},
+            "streak": 0,
+            "need": 3,
+            "streak_ok": false,
+            "projected": 0,
+            "same_sha": false,
+            "state": "",
+            "reason": "这一趟没走到签发那一步（早退）⇒ 没有发签：`checked=False` 不是「可以签」，也不是「不签发」这一档",
+            "within_call": null,
+            "review_call": "",
+            "ledger_streak": 0,
+            "basis": [],
+            "reading": {},
+            "cost": {},
+            "material": {},
+            "statement_id": ""
+          },
+          "review_passes": [
+            {
+              "pass": 1,
+              "axis": "fault",
+              "verdict": "有毛病",
+              "fault_kind": "contract",
+              "fault_cause": "",
+              "unresolved_errors": 1,
+              "defect_step": 3,
+              "terminal": "rejected"
+            }
+          ],
+          "manuscript_identity": {
+            "checked": false,
+            "statement_id": "",
+            "manuscript_id": "",
+            "row_manuscript_id": "",
+            "matched_by": "",
+            "fallback": false,
+            "row_checked": false,
+            "found": null,
+            "problem": "",
+            "path_checked": false,
+            "path_count": 0,
+            "path_group": 0,
+            "path_problem": "",
+            "why": ""
+          },
+          "issued_sign": {},
+          "statement_scope_gate": {}
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 51456,
+        "prompt_cache_miss_tokens": 3798,
+        "tokens_in": 55254,
+        "tokens_out": 10617,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000124"
+    },
+    {
+      "index": 6,
+      "shape": "tool",
+      "payload": {
+        "name": "table.search",
+        "args": {
+          "table": "statements",
+          "query": "A_diag",
+          "select": [
+            "stmt_id",
+            "label",
+            "status",
+            "kind",
+            "manuscript_id",
+            "manuscripts"
+          ],
+          "limit": 20
+        },
+        "why": "上一轮 verify_proof 的 findings 说「依赖面为空、读不到 stmt:000034」，但稿里 ## 依赖 一节明明在册（我第 1 步 fs.read 现读）—— 先查这份稿是否有一条在册命题行（manuscript_id=000002）。给了 statement_id 工具才会按号读依赖面，否则它会按「未在册」乱判"
+      },
+      "result": {
+        "tool": "table.search",
+        "ok": false,
+        "data": null,
+        "error": "statements 没有字段 ['manuscript_id', 'manuscripts']；可投影的字段：['aliases', 'bits', 'created_at', 'created_by', 'derived_from', 'doc_id', 'evidence_kind', 'kind', 'label', 'line_range', 'origin', 'page_range', 'proof_text', 'quote_call_sha256', 'quote_mode', 'quote_reason', 'quote_span', 'quote_verified', 'source_lit_id', 'statement_full', 'statement_text', 'status', 'stmt_id']（投影只回你点的键，写错一个字就会少一格，所以这里直接拒）",
+        "meta": {
+          "table": "statements",
+          "kind": "param_error"
+        },
+        "参数表": "【参数表】被拒的是参数形状/取值，不是这件事不能做。照下面这张声明表重写一次（键名与类型都要对；表里没列的键一律不许传）：\n- table.search 的参数表：table: string，必填，枚举 [search_requests/literature/relations/research_questions/conjectures/analysis_reports/reprocess_requests/experiments]，16 张表之一；query: string，必填，要查找的子串（不做正则解释）。statements 表按内容面匹配：label / statement_full 做归一化后包含（全半角 / 大小写 / 标点 / 空白不敏感）；归一后为空 ⇒ 受控拒绝；fields: array，限定扫描字段；省略时：statements 表 = label / statement_full（与命题查口同一把尺），其它表 = 全部标量字符串字段。statements 上点名这两列之外的字段 ⇒ 受控拒绝（要按其它；select: array，字段投影（与 table.list 的 `fields` 是同一件事）：只回这几个键；省略=整行。注意它不参与搜索：搜哪些字段仍由 `fields` 决定；limit: integer（参数表是封闭集合：多传一个键会被拒）"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 54400,
+        "prompt_cache_miss_tokens": 3803,
+        "tokens_in": 58203,
+        "tokens_out": 6329,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000124"
+    },
+    {
+      "index": 7,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.search",
+        "args": {
+          "pattern": "f-proof-000002",
+          "path": "data",
+          "include": "statements.json"
+        },
+        "why": "查这份手稿是否已在册（对应哪一条 statements 行）：工具上一轮按「未在册」读不到依赖面，若在册给了 statement_id 它才会按号读依赖"
+      },
+      "result": {
+        "tool": "fs.search",
+        "ok": true,
+        "data": {
+          "pattern": "f-proof-000002",
+          "path": "data",
+          "matches": [],
+          "lines": [],
+          "total": 0,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 25
+          }
+        },
+        "error": "",
+        "meta": {
+          "total": 0,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 25
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 57344,
+        "prompt_cache_miss_tokens": 1993,
+        "tokens_in": 59337,
+        "tokens_out": 6420,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000124"
+    },
+    {
+      "index": 8,
+      "shape": "final",
+      "payload": {
+        "final": "结论：成立（findings 为空，零 finding）。我按写成后的样子逐条重读了 manuscripts/F/f-proof-000002.md（正文 sha 7713209f208c70cfbdf2c9206295e886e507a80af0cdf81ccafa5e7d7a192f42，文件 sha 0eace33564540fd1f1172fc3c00141355ee2753c62c329c4ca416a4c4116322d），六条角度都过了一遍，没有一处要改的。\n\n逐条核对（要指到步的都在这里）：\n- 第 1–2 步：定义与 u、v 的单位正交性逐项验算（‖u‖²=1、‖v‖²=1、u·v=0、两者都与 (1,1,1) 正交）成立，{u,v} 是 H=n^⊥ 的单位正交基。\n- 第 3 步（依赖面）：`## 依赖` 段存在且恰有 1 行，命题号 stmt:000034，标为用在第 3–10 步；stmt:000034 在册 kind=theorem、status=active、_grade_recomputed=pre_theorem（不低于 pre_theorem，够格被引）；其 (i) 的陈述（对任意单位法向 n 与 n^⊥ 的任意单位正交基，A_p(n)=(1/2)∫‖cosψ·u+sinψ·v‖_p^{-2}dψ 且与基选取无关）与第 3 步的用法一致（n=(1,1,1)/√3 时 n^⊥=H）⇒ 引用关系判 consistent（没有 stronger / unrelated / inadmissible）。\n- 第 4–6 步：e(θ) 三个分量与 2cos(θ∓π/6) 的展开逐项对得上；‖e‖_p^p=(2/√6)^p·S(θ)、(2/√6)^{-2}=3/2、合并 1/2·3/2=3/4 都对。\n- 第 7–8 步：∂_xΦ×∂_yΦ=(1,1,1)、模 √3；极坐标下 r≤g(θ)^{-1/p}，内层给出 (1/2)g^{-2/p}，合并成 (√3/2)∫g^{-2/p}（外层没有多乘 1/2）。\n- 第 9 步：(a) p=2 时 g=2+sin2θ，u=2θ 换元用到周期性与 ∫_0^{2π}du/(a+b sin u)=2π/√(a²-b²)（本情形 a=2、b=1 已写明确切陈述），得 π；(b) p=1 时三段 g 分别为 2(cosθ+sinθ)、2sinθ、-2cosθ，三段积分各为 1，合计 ∫_0^{2π}g^{-2}=3/2，得 3√3/4 —— 逐段核过。\n- 第 10 步（这一处的改动）：m^p≤g≤3m^p ⇒ g^{-2/p}≤m^{-2}；max(|cosθ|,|sinθ|)≥1/√2 ⇒ m≥1/√2 ⇒ m^{-2}≤2；这条控制与 p 无关，对 p∈[1,∞) 一致成立（不再依靠 3^{2/p} 那一档，正好覆盖 (iv) 要求的 p∈[1,∞)）。p→∞ 时 g/m^p∈[1,3] ⇒ (g/m^p)^{-2/p}→1 ⇒ g^{-2/p}→m^{-2}，控制收敛给出 lim A_diag(p)=(√3/2)∫m^{-2}；三段（[0,π/2] m=cosθ+sinθ、[π/2,3π/4] m=sinθ、[3π/4,π] m=-cosθ，各段积分为 1，m(θ+π)=m(θ)）给 2·3=6，极限 3√3。对 p→p₀ 那一支：g^{-2/p}=exp(-(2/p)ln g) 的逐点连续 + 同一个与 p 无关的控制（≤2）⇒ 积分连续，(iv) 成立。\n- 强度/台账一致：结论逐字对回命题 (i)(ii)(iii)(iv)，没有更强的断言；没把猜想当定理用（被引一条是 pre_theorem）；没有「易证/显然/trivial」这类缝。\n- 试过的反驳：想在第 9(b) 的分段边界（θ=π/2、3π/4）与第 10 步 m 的分段边界处找跳变或漏段，逐点代入后两侧一致；想在第 5 步的 (2/√6)^{-2}、第 8 步的外层系数、第 10 步的控制函数上找错配，重算都对，没能推翻。\n\n程序性读数（不是这份证明的缺陷，但必须如实报）：verify.verify_proof 这一趟写了 u-000017、u-000018 两行「有毛病」，其 findings 原话是「依赖面为空 / 未登记 stmt:000034 / 读不到该命题」—— 与我本趟直读相反（稿的 `## 依赖` 段存在且恰 1 行 stmt:000034；table.get 000034 返回 kind=theorem、status=active、_grade_recomputed=pre_theorem）。按 `judge_ungrounded_findings` 记：这两行属『没查成』，不折成「证明有毛病」，也不折成「没问题」；据此投出的 v-review-000010 / v-review-000011 的「有毛病」根因在工具侧对未在册稿的依赖面读取，不在这一份正文。我因此没有第三次重放同一个调用。\n\n签的状态：本轮没有落签（未在册这一档按正文 sha 落 verifications/pending/…，我这一侧没拿到一条干净的台账行）。原因如上，在工具/框架侧，不在证明侧。修好「未在册稿的依赖面读取」后把同一份稿（同一 sha）重送，我的结论仍是：成立、零 finding。",
+        "evidence": [
+          "manuscripts/F/f-proof-000002.md",
+          "stmt:000034",
+          "u-000017",
+          "u-000018"
+        ],
+        "notify": {
+          "to": "F",
+          "summary": "f-proof-000002（正文 sha 7713209f…2f42）复核结论：成立、零 finding；工具那两行『有毛病』是未在册依赖面读取的误判（没查成），不是证明缺陷",
+          "body": "## 结论：成立（findings 为空）\n\n被审稿：`manuscripts/F/f-proof-000002.md`，正文 sha `7713209f208c70cfbdf2c9206295e886e507a80af0cdf81ccafa5e7d7a192f42`。\n\n### 做了什么\n- 通读第 1–10 步，逐条核：第 1–2 步定义与 {u,v} 单位正交性（逐项验算通过）；第 4 步 e(θ) 分量与 2cos(θ∓π/6) 展开；第 5 步 (2/√6)^p 与 (3/2) 因子；第 6 步 (1/2)(3/2)=3/4；第 7 步叉积 (1,1,1)、模 √3；第 8 步极坐标内层 (1/2)g^{-2/p}、外层不再乘 1/2；第 9 步 p=2（u=2θ + ∫du/(2+sin u)=2π/√3 ⇒ π）与 p=1（三段各 1，合计 3/2 ⇒ 3√3/4）；第 10 步 p→∞ 与 (iv)。\n- 第 3 步的依赖面：`## 依赖` 段存在、恰 1 行 stmt:000034，标用于第 3–10 步；stmt:000034 在册 kind=theorem、status=active、五元位现算 pre_theorem（够格被引），其 (i) 与第 3 步用法一致 ⇒ 引用关系 consistent。\n- 第 10 步这一处改动：m^p≤g≤3m^p ⇒ g^{-2/p}≤m^{-2}，m≥1/√2 ⇒ m^{-2}≤2，控制与 p 无关、对 p∈[1,∞) 一致成立（原来的 3^{2/p} 只在 p≥2 成立，现已不依赖它）；p→∞ 逐点极限 m^{-2}、三段积分各 1 ⇒ 和 6 ⇒ 3√3；p→p₀ 用 exp(-(2/p)ln g) 的逐点连续 + 同一控制得连续性。这一处改对了。\n- 反驳尝试：分段边界（第 9(b)、第 10 步 m）、常数与系数（第 5、8 步）逐点重算，没找到反例。\n\n### 需要你知道的程序性事实（不是缺陷）\n`verify.verify_proof` 这一趟写了 u-000017、u-000018 两行「有毛病」，findings 称「依赖面为空、未登记 stmt:000034、读不到该命题」—— 与直读事实相反（依赖段存在；000034 在册且 pre_theorem）。按 `judge_ungrounded_findings` 应记「没查成」，不是这份证明的缺陷；据此投出的 v-review-000010 / v-review-000011 的否定根因在工具侧对未在册稿的依赖面读取。\n\n### 卡在哪\n签没落（未在册这一档落在 `verifications/pending/<正文 sha>.jsonl`，我这侧没拿到干净的台账行），原因是工具/框架侧，不是正文侧。请把「未在册稿的依赖面读取」这条修好后，用同一份稿（同一 sha）重送；我的判断不因此改变：成立、零 finding。",
+          "refs": [
+            "stmt:000034"
+          ]
+        }
+      },
+      "result": {
+        "notify_handoff": {
+          "handoff": "000016",
+          "ok": true,
+          "id": "000016",
+          "path": "work/handoffs.jsonl#000016",
+          "to": "F",
+          "brief": "f-proof-000002（正文 sha 7713209f…2f42）复核结论：成立、零 finding；工具那两行『有毛病』是未在册依赖面读取的误判（没查成），不是证明缺陷",
+          "addressing": {
+            "checked": true,
+            "how": "parent",
+            "to": "F",
+            "kind": "parent",
+            "name": "F1",
+            "task_id": "t-000083",
+            "role": "F",
+            "brief": "",
+            "candidates": [],
+            "callable": "父 F1（t-000083）",
+            "why": "名册成员（parent）⇒ 手稿写角色 F，通知投实例 F",
+            "delivery": "roster",
+            "manuscript_to": "F",
+            "addressed_by": "role_fallback"
+          },
+          "notify_channel": "roster",
+          "revises": "",
+          "existing_same_summary": {
+            "count": 0,
+            "ids": [],
+            "note": "查过了：没有同一句话的既有交接"
+          },
+          "notified": "t-000133",
+          "error": "",
+          "note": "收件人下次运行时（或本步之后）会在收件箱/板上看到编号；它用 `manuscripts.read` 读全文"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 58496,
+        "prompt_cache_miss_tokens": 1667,
+        "tokens_in": 60163,
+        "tokens_out": 19376,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000124"
+    }
+  ],
+  "final": "结论：成立（findings 为空，零 finding）。我按写成后的样子逐条重读了 manuscripts/F/f-proof-000002.md（正文 sha 7713209f208c70cfbdf2c9206295e886e507a80af0cdf81ccafa5e7d7a192f42，文件 sha 0eace33564540fd1f1172fc3c00141355ee2753c62c329c4ca416a4c4116322d），六条角度都过了一遍，没有一处要改的。\n\n逐条核对（要指到步的都在这里）：\n- 第 1–2 步：定义与 u、v 的单位正交性逐项验算（‖u‖²=1、‖v‖²=1、u·v=0、两者都与 (1,1,1) 正交）成立，{u,v} 是 H=n^⊥ 的单位正交基。\n- 第 3 步（依赖面）：`## 依赖` 段存在且恰有 1 行，命题号 stmt:000034，标为用在第 3–10 步；stmt:000034 在册 kind=theorem、status=active、_grade_recomputed=pre_theorem（不低于 pre_theorem，够格被引）；其 (i) 的陈述（对任意单位法向 n 与 n^⊥ 的任意单位正交基，A_p(n)=(1/2)∫‖cosψ·u+sinψ·v‖_p^{-2}dψ 且与基选取无关）与第 3 步的用法一致（n=(1,1,1)/√3 时 n^⊥=H）⇒ 引用关系判 consistent（没有 stronger / unrelated / inadmissible）。\n- 第 4–6 步：e(θ) 三个分量与 2cos(θ∓π/6) 的展开逐项对得上；‖e‖_p^p=(2/√6)^p·S(θ)、(2/√6)^{-2}=3/2、合并 1/2·3/2=3/4 都对。\n- 第 7–8 步：∂_xΦ×∂_yΦ=(1,1,1)、模 √3；极坐标下 r≤g(θ)^{-1/p}，内层给出 (1/2)g^{-2/p}，合并成 (√3/2)∫g^{-2/p}（外层没有多乘 1/2）。\n- 第 9 步：(a) p=2 时 g=2+sin2θ，u=2θ 换元用到周期性与 ∫_0^{2π}du/(a+b sin u)=2π/√(a²-b²)（本情形 a=2、b=1 已写明确切陈述），得 π；(b) p=1 时三段 g 分别为 2(cosθ+sinθ)、2sinθ、-2cosθ，三段积分各为 1，合计 ∫_0^{2π}g^{-2}=3/2，得 3√3/4 —— 逐段核过。\n- 第 10 步（这一处的改动）：m^p≤g≤3m^p ⇒ g^{-2/p}≤m^{-2}；max(|cosθ|,|sinθ|)≥1/√2 ⇒ m≥1/√2 ⇒ m^{-2}≤2；这条控制与 p 无关，对 p∈[1,∞) 一致成立（不再依靠 3^{2/p} 那一档，正好覆盖 (iv) 要求的 p∈[1,∞)）。p→∞ 时 g/m^p∈[1,3] ⇒ (g/m^p)^{-2/p}→1 ⇒ g^{-2/p}→m^{-2}，控制收敛给出 lim A_diag(p)=(√3/2)∫m^{-2}；三段（[0,π/2] m=cosθ+sinθ、[π/2,3π/4] m=sinθ、[3π/4,π] m=-cosθ，各段积分为 1，m(θ+π)=m(θ)）给 2·3=6，极限 3√3。对 p→p₀ 那一支：g^{-2/p}=exp(-(2/p)ln g) 的逐点连续 + 同一个与 p 无关的控制（≤2）⇒ 积分连续，(iv) 成立。\n- 强度/台账一致：结论逐字对回命题 (i)(ii)(iii)(iv)，没有更强的断言；没把猜想当定理用（被引一条是 pre_theorem）；没有「易证/显然/trivial」这类缝。\n- 试过的反驳：想在第 9(b) 的分段边界（θ=π/2、3π/4）与第 10 步 m 的分段边界处找跳变或漏段，逐点代入后两侧一致；想在第 5 步的 (2/√6)^{-2}、第 8 步的外层系数、第 10 步的控制函数上找错配，重算都对，没能推翻。\n\n程序性读数（不是这份证明的缺陷，但必须如实报）：verify.verify_proof 这一趟写了 u-000017、u-000018 两行「有毛病」，其 findings 原话是「依赖面为空 / 未登记 stmt:000034 / 读不到该命题」—— 与我本趟直读相反（稿的 `## 依赖` 段存在且恰 1 行 stmt:000034；table.get 000034 返回 kind=theorem、status=active、_grade_recomputed=pre_theorem）。按 `judge_ungrounded_findings` 记：这两行属『没查成』，不折成「证明有毛病」，也不折成「没问题」；据此投出的 v-review-000010 / v-review-000011 的「有毛病」根因在工具侧对未在册稿的依赖面读取，不在这一份正文。我因此没有第三次重放同一个调用。\n\n签的状态：本轮没有落签（未在册这一档按正文 sha 落 verifications/pending/…，我这一侧没拿到一条干净的台账行）。原因如上，在工具/框架侧，不在证明侧。修好「未在册稿的依赖面读取」后把同一份稿（同一 sha）重送，我的结论仍是：成立、零 finding。",
+  "evidence": [
+    "manuscripts/F/f-proof-000002.md",
+    "stmt:000034",
+    "u-000017",
+    "u-000018"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 0,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 9,
+  "compactions": 0,
+  "mailbox_items": [],
+  "mailbox_msgs": [],
+  "mailbox_delivered": 0,
+  "monitor_turns": 0,
+  "wakes": 0,
+  "wake_ids": [],
+  "wake_events": [],
+  "clock_pumps": 16,
+  "clock_fired": 0,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "V 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "V",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    }
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [
+    "000016"
+  ],
+  "summons": [],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [],
+  "summons_total": 0,
+  "summons_consumed": 0,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 0,
+    "summons_consumed": 0,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p328",
+    "role": "V",
+    "prompt_sha256": "171b42af018313bbcc69a25b1530f2ab9412256a4419f69333b5f3b963dad68e",
+    "prompt_chars": 46343,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "FACULTIES_07",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_STOP",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 8,
+    "tokens_in": 416245,
+    "tokens_out": 72336,
+    "usd": 0.048956,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 8,
+    "no_request_calls": 0,
+    "hit": 386944,
+    "miss": 29301,
+    "unknown_calls": 0,
+    "tokens_in": 416245,
+    "hit_rate": 0.9296,
+    "mismatched_calls": 0,
+    "saved_usd": 0.056883,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 498.484,
+  "end_ts": "2026-11-24T20:40:26+08:00",
+  "notes": [
+    "缓存读数：命中 386944 / 未命中 29301 token，命中率 93.0%（8 次调用）；按 modelcost 口径估算可省 约 0.056883 美元",
+    "子产出处理读数：summons_total=0（这一趟没派过子代理 ⇒ 没有要处理的子产出；判据没有对象，不红）"
+  ],
+  "final_payload": {
+    "final": "结论：成立（findings 为空，零 finding）。我按写成后的样子逐条重读了 manuscripts/F/f-proof-000002.md（正文 sha 7713209f208c70cfbdf2c9206295e886e507a80af0cdf81ccafa5e7d7a192f42，文件 sha 0eace33564540fd1f1172fc3c00141355ee2753c62c329c4ca416a4c4116322d），六条角度都过了一遍，没有一处要改的。\n\n逐条核对（要指到步的都在这里）：\n- 第 1–2 步：定义与 u、v 的单位正交性逐项验算（‖u‖²=1、‖v‖²=1、u·v=0、两者都与 (1,1,1) 正交）成立，{u,v} 是 H=n^⊥ 的单位正交基。\n- 第 3 步（依赖面）：`## 依赖` 段存在且恰有 1 行，命题号 stmt:000034，标为用在第 3–10 步；stmt:000034 在册 kind=theorem、status=active、_grade_recomputed=pre_theorem（不低于 pre_theorem，够格被引）；其 (i) 的陈述（对任意单位法向 n 与 n^⊥ 的任意单位正交基，A_p(n)=(1/2)∫‖cosψ·u+sinψ·v‖_p^{-2}dψ 且与基选取无关）与第 3 步的用法一致（n=(1,1,1)/√3 时 n^⊥=H）⇒ 引用关系判 consistent（没有 stronger / unrelated / inadmissible）。\n- 第 4–6 步：e(θ) 三个分量与 2cos(θ∓π/6) 的展开逐项对得上；‖e‖_p^p=(2/√6)^p·S(θ)、(2/√6)^{-2}=3/2、合并 1/2·3/2=3/4 都对。\n- 第 7–8 步：∂_xΦ×∂_yΦ=(1,1,1)、模 √3；极坐标下 r≤g(θ)^{-1/p}，内层给出 (1/2)g^{-2/p}，合并成 (√3/2)∫g^{-2/p}（外层没有多乘 1/2）。\n- 第 9 步：(a) p=2 时 g=2+sin2θ，u=2θ 换元用到周期性与 ∫_0^{2π}du/(a+b sin u)=2π/√(a²-b²)（本情形 a=2、b=1 已写明确切陈述），得 π；(b) p=1 时三段 g 分别为 2(cosθ+sinθ)、2sinθ、-2cosθ，三段积分各为 1，合计 ∫_0^{2π}g^{-2}=3/2，得 3√3/4 —— 逐段核过。\n- 第 10 步（这一处的改动）：m^p≤g≤3m^p ⇒ g^{-2/p}≤m^{-2}；max(|cosθ|,|sinθ|)≥1/√2 ⇒ m≥1/√2 ⇒ m^{-2}≤2；这条控制与 p 无关，对 p∈[1,∞) 一致成立（不再依靠 3^{2/p} 那一档，正好覆盖 (iv) 要求的 p∈[1,∞)）。p→∞ 时 g/m^p∈[1,3] ⇒ (g/m^p)^{-2/p}→1 ⇒ g^{-2/p}→m^{-2}，控制收敛给出 lim A_diag(p)=(√3/2)∫m^{-2}；三段（[0,π/2] m=cosθ+sinθ、[π/2,3π/4] m=sinθ、[3π/4,π] m=-cosθ，各段积分为 1，m(θ+π)=m(θ)）给 2·3=6，极限 3√3。对 p→p₀ 那一支：g^{-2/p}=exp(-(2/p)ln g) 的逐点连续 + 同一个与 p 无关的控制（≤2）⇒ 积分连续，(iv) 成立。\n- 强度/台账一致：结论逐字对回命题 (i)(ii)(iii)(iv)，没有更强的断言；没把猜想当定理用（被引一条是 pre_theorem）；没有「易证/显然/trivial」这类缝。\n- 试过的反驳：想在第 9(b) 的分段边界（θ=π/2、3π/4）与第 10 步 m 的分段边界处找跳变或漏段，逐点代入后两侧一致；想在第 5 步的 (2/√6)^{-2}、第 8 步的外层系数、第 10 步的控制函数上找错配，重算都对，没能推翻。\n\n程序性读数（不是这份证明的缺陷，但必须如实报）：verify.verify_proof 这一趟写了 u-000017、u-000018 两行「有毛病」，其 findings 原话是「依赖面为空 / 未登记 stmt:000034 / 读不到该命题」—— 与我本趟直读相反（稿的 `## 依赖` 段存在且恰 1 行 stmt:000034；table.get 000034 返回 kind=theorem、status=active、_grade_recomputed=pre_theorem）。按 `judge_ungrounded_findings` 记：这两行属『没查成』，不折…（落档截断，原 2248 字）",
+    "evidence": [
+      "manuscripts/F/f-proof-000002.md",
+      "stmt:000034",
+      "u-000017",
+      "u-000018"
+    ],
+    "notify": {
+      "to": "F",
+      "summary": "f-proof-000002（正文 sha 7713209f…2f42）复核结论：成立、零 finding；工具那两行『有毛病』是未在册依赖面读取的误判（没查成），不是证明缺陷",
+      "body": "## 结论：成立（findings 为空）\n\n被审稿：`manuscripts/F/f-proof-000002.md`，正文 sha `7713209f208c70cfbdf2c9206295e886e507a80af0cdf81ccafa5e7d7a192f42`。\n\n### 做了什么\n- 通读第 1–10 步，逐条核：第 1–2 步定义与 {u,v} 单位正交性（逐项验算通过）；第 4 步 e(θ) 分量与 2cos(θ∓π/6) 展开；第 5 步 (2/√6)^p 与 (3/2) 因子；第 6 步 (1/2)(3/2)=3/4；第 7 步叉积 (1,1,1)、模 √3；第 8 步极坐标内层 (1/2)g^{-2/p}、外层不再乘 1/2；第 9 步 p=2（u=2θ + ∫du/(2+sin u)=2π/√3 ⇒ π）与 p=1（三段各 1，合计 3/2 ⇒ 3√3/4）；第 10 步 p→∞ 与 (iv)。\n- 第 3 步的依赖面：`## 依赖` 段存在、恰 1 行 stmt:000034，标用于第 3–10 步；stmt:000034 在册 kind=theorem、status=active、五元位现算 pre_theorem（够格被引），其 (i) 与第 3 步用法一致 ⇒ 引用关系 consistent。\n- 第 10 步这一处改动：m^p≤g≤3m^p ⇒ g^{-2/p}≤m^{-2}，m≥1/√2 ⇒ m^{-2}≤2，控制与 p 无关、对 p∈[1,∞) 一致成立（原来的 3^{2/p} 只在 p≥2 成立，现已不依赖它）；p→∞ 逐点极限 m^{-2}、三段积分各 1 ⇒ 和 6 ⇒ 3√3；p→p₀ 用 exp(-(2/p)ln g) 的逐点连续 + 同一控制得连续性。这一处改对了。\n- 反驳尝试：分段边界（第 9(b)、第 10 步 m）、常数与系数（第 5、8 步）逐点重算，没找到反例。\n\n### 需要你知道的程序性事实（不是缺陷）\n`verify.verify_proof` 这一趟写了 u-000017、u-000018 两行「有毛病」，findings 称「依赖面为空、未登记 stmt:000034、读不到该命题」—— 与直读事实相反（依赖段存在；000034 在册且 pre_theorem）。按 `judge_ungrounded_findings` 应记「没查成」，不是这份证明的缺陷；据此投出的 v-review-000010 / v-review-000011 的否定根因在工具侧对未在册稿的依赖面读取。\n\n### 卡在哪\n签没落（未在册这一档落在 `verifications/pending/<正文 sha>.jsonl`，我这侧没拿到干净的台账行），原因是工具/框架侧，不是正文侧。请把「未在册稿的依赖面读取」这条修好后，用同一份稿（同一 sha）重送；我的判断不因此改变：成立、零 finding。",
+      "refs": [
+        "stmt:000034"
+      ]
+    }
+  },
+  "task_id": "t-000124"
+}

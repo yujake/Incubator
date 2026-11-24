@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T18:22:59+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 2332,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"已完成：三维 l^p 球中心截面面积的确定性数值研究（12 个 p、球面基本域网格 + 6 轮局部加密 + 两条边界弧细扫描 + 解析值自检）。核心读数：(1) 求积核先用已知解析值认证（exp:000003，supports，exit_code=0）：p=2 任意方向 = π 到 4.4e-16、p=1 与八面体精确裁剪一致到 6.7e-16、每个 p 的坐标截面 = 4Γ(1+1/p)^2/Γ(1+2/p) 到 7.0e-16、面积对平面基旋转不变到 8.9e-16；p=1000 与立方体精确值 4 / 3√3 / 4√2 的残差为 O(1/p)（6.6e-6 / 1.7e-5 / 3.9e-3），如实报出未抹掉。(2) 12 个 p 的扫描（exp:000004，supports）：最大面积只在三类法向等价类上取到，等价类口径 = 带符号坐标置换群下的排序绝对值 (a≤b≤c)（p≠2 时任意旋转不是对称）。(3) 关键结构：p<2 坐标向最大；p=2 各向同性（全部 π）；2<p<p*=4.9982155968 体对角向最大；p>p* 面对角向最大。临界 p：r_face 与 r_diag 都在 p=2 穿过 1（二分读数 1.9999999999999991，41 点扫描上两者均单调，r_face_monotone=r_diag_monotone=true）。(4) 「是否出现既非坐标向也非体对角向的极大方向」——没有：(1,1,t)、(0,1,t) 两条弧（51 个 t + 端点极限）的最优 t 只落在端点 t∈{0,1,∞}，严格中间 t 一律更小（例 p=8 时 t=0.975 给 5.073193 < 端点 5.075627），基本域内部网格的内部最优值始终低于边界最大值（相对超出量 −1e-3…−1.2e-1，p=2 退化处 1e-16）。如实标注的限度：这是数值证据，等级最多 strong_conjecture；「最大方向只在三类端点」是在网格 + 局部加密 + 弧细扫描上验证的，不是连续域上的穷举（连续域无法穷举 ⇒ 不给 exhaustive、不送 V 签）。过程中被否掉并已按「脚本已改」撤销的行：exp:000000/000001/000002（求积核真错两处：断点漏了相差 π 的第二个根、立方体面对角参考值 2√2 应为 4√2）、exp:000005（claim 写错 + p=2 退化误判）。汇总报告：work/E/lp3-section-report.md（a5b2b1121cfd19df…）。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\lp-ball-22\\\\runs\\\\E-20261124-182259-001.json\", \"messages\": [], \"outcome\": \"ok\", \"status\": \"done\", \"steps\": 42, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "db627847754c03deffe08be1ff418ebe9becaa70d603e7d39e068595e8aae680",
+ "readings": {},
+ "role": "E",
+ "status": "done",
+ "task_id": "t-000002"
+}

@@ -1,0 +1,2086 @@
+{
+  "schema_version": 2,
+  "rows": [
+    {
+      "report_id": "000000",
+      "kind": "gaps",
+      "request": "本题所在的这一支文献里，哪几篇是直接对口的、谁是这簇概念的中心、哪些方向（坐标向/体对角向/面对角向的最大截面；p<2 与 p>2 的分界）已有定理、哪些是缺口",
+      "params": {
+        "limit": 12
+      },
+      "summary": "确实有：发现 12 条值得研究的关系候选（最高置信度 high）。检查范围：18 个概念组、26 个结构洞；被否决项剔除 3 条、净分不足 18 条。（结构洞 26 个、低频概念组 15 个、否决 3 条、净分不足 18 条，截断=False）",
+      "payload": {
+        "verdict": "有",
+        "has_candidates": true,
+        "conclusion": "确实有：发现 12 条值得研究的关系候选（最高置信度 high）。检查范围：18 个概念组、26 个结构洞；被否决项剔除 3 条、净分不足 18 条。",
+        "candidate_gaps": [
+          {
+            "key": "000012|000017|000018",
+            "kind": "rare_group",
+            "concept_ids": [
+              "000012",
+              "000017",
+              "000018"
+            ],
+            "concept_names": [
+              "ln p-balls",
+              "unit ball Bn p",
+              "central hyperplane sections"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000011",
+                "name": "maximal hyperplane section"
+              },
+              {
+                "concept_id": "000018",
+                "name": "central hyperplane sections"
+              },
+              {
+                "concept_id": "000019",
+                "name": "projections"
+              }
+            ],
+            "reason": "概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；结构洞信号：有 3 个共同邻居（maximal hyperplane section、central hyperplane sections、projections）却无直接关系；热门概念参与：ln p-balls、unit ball Bn p 在热门集里；文献充足：相关关系分布在 4 篇文献里",
+            "positive_score": 3.0,
+            "negative_score": 0.0,
+            "net_score": 3.0,
+            "confidence": "high",
+            "confidence_deterministic": "high",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 3 个共同邻居（maximal hyperplane section、central hyperplane sections、projections）却无直接关系",
+              "热门概念参与：ln p-balls、unit ball Bn p 在热门集里",
+              "文献充足：相关关系分布在 4 篇文献里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "000004",
+              "000005",
+              "000007",
+              "000008",
+              "000010",
+              "000016",
+              "000017",
+              "000020",
+              "000018",
+              "000019"
+            ]
+          },
+          {
+            "key": "000011|000019",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "000011",
+              "000019"
+            ],
+            "concept_names": [
+              "maximal hyperplane section",
+              "projections"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000012",
+                "name": "ln p-balls"
+              },
+              {
+                "concept_id": "000017",
+                "name": "unit ball Bn p"
+              },
+              {
+                "concept_id": "000020",
+                "name": "Khintchine-type inequality"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 3 个共同邻居（ln p-balls、unit ball Bn p、Khintchine-type inequality）却无直接关系；热门概念参与：maximal hyperplane section 在热门集里；文献充足：相关关系分布在 2 篇文献里",
+            "positive_score": 2.5,
+            "negative_score": 0.0,
+            "net_score": 2.5,
+            "confidence": "high",
+            "confidence_deterministic": "high",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 3 个共同邻居（ln p-balls、unit ball Bn p、Khintchine-type inequality）却无直接关系",
+              "热门概念参与：maximal hyperplane section 在热门集里",
+              "文献充足：相关关系分布在 2 篇文献里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "000006",
+              "000010",
+              "000016",
+              "000017",
+              "000008",
+              "000009",
+              "000020"
+            ]
+          },
+          {
+            "key": "000017|000020",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "000017",
+              "000020"
+            ],
+            "concept_names": [
+              "unit ball Bn p",
+              "Khintchine-type inequality"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000011",
+                "name": "maximal hyperplane section"
+              },
+              {
+                "concept_id": "000012",
+                "name": "ln p-balls"
+              },
+              {
+                "concept_id": "000019",
+                "name": "projections"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 3 个共同邻居（maximal hyperplane section、ln p-balls、projections）却无直接关系；热门概念参与：unit ball Bn p 在热门集里；文献充足：相关关系分布在 2 篇文献里",
+            "positive_score": 2.5,
+            "negative_score": 0.0,
+            "net_score": 2.5,
+            "confidence": "high",
+            "confidence_deterministic": "high",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 3 个共同邻居（maximal hyperplane section、ln p-balls、projections）却无直接关系",
+              "热门概念参与：unit ball Bn p 在热门集里",
+              "文献充足：相关关系分布在 2 篇文献里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "000007",
+              "000016",
+              "000017",
+              "000020",
+              "000009",
+              "000010"
+            ]
+          },
+          {
+            "key": "000000|000012",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "000000",
+              "000012"
+            ],
+            "concept_names": [
+              "unit cube",
+              "ln p-balls"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000018",
+                "name": "central hyperplane sections"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（central hyperplane sections）却无直接关系；热门概念参与：unit cube、ln p-balls 在热门集里；文献充足：相关关系分布在 4 篇文献里",
+            "positive_score": 2.0,
+            "negative_score": 0.0,
+            "net_score": 2.0,
+            "confidence": "high",
+            "confidence_deterministic": "high",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（central hyperplane sections）却无直接关系",
+              "热门概念参与：unit cube、ln p-balls 在热门集里",
+              "文献充足：相关关系分布在 4 篇文献里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "000000",
+              "000018",
+              "000019",
+              "000004",
+              "000005",
+              "000007",
+              "000008",
+              "000010"
+            ]
+          },
+          {
+            "key": "000000|000017",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "000000",
+              "000017"
+            ],
+            "concept_names": [
+              "unit cube",
+              "unit ball Bn p"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000018",
+                "name": "central hyperplane sections"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（central hyperplane sections）却无直接关系；热门概念参与：unit cube、unit ball Bn p 在热门集里；文献充足：相关关系分布在 5 篇文献里",
+            "positive_score": 2.0,
+            "negative_score": 0.0,
+            "net_score": 2.0,
+            "confidence": "high",
+            "confidence_deterministic": "high",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（central hyperplane sections）却无直接关系",
+              "热门概念参与：unit cube、unit ball Bn p 在热门集里",
+              "文献充足：相关关系分布在 5 篇文献里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "000000",
+              "000018",
+              "000019",
+              "000007",
+              "000016",
+              "000017",
+              "000020"
+            ]
+          },
+          {
+            "key": "000011|000012|000020",
+            "kind": "rare_group",
+            "concept_ids": [
+              "000011",
+              "000012",
+              "000020"
+            ],
+            "concept_names": [
+              "maximal hyperplane section",
+              "ln p-balls",
+              "Khintchine-type inequality"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000017",
+                "name": "unit ball Bn p"
+              },
+              {
+                "concept_id": "000020",
+                "name": "Khintchine-type inequality"
+              }
+            ],
+            "reason": "概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；结构洞信号：有 2 个共同邻居（unit ball Bn p、Khintchine-type inequality）却无直接关系；热门概念参与：maximal hyperplane section、ln p-balls 在热门集里",
+            "positive_score": 2.0,
+            "negative_score": 0.0,
+            "net_score": 2.0,
+            "confidence": "high",
+            "confidence_deterministic": "high",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 2 个共同邻居（unit ball Bn p、Khintchine-type inequality）却无直接关系",
+              "热门概念参与：maximal hyperplane section、ln p-balls 在热门集里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "000006",
+              "000010",
+              "000016",
+              "000017",
+              "000004",
+              "000005",
+              "000007",
+              "000008",
+              "000009"
+            ]
+          },
+          {
+            "key": "000011|000018",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "000011",
+              "000018"
+            ],
+            "concept_names": [
+              "maximal hyperplane section",
+              "central hyperplane sections"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000012",
+                "name": "ln p-balls"
+              },
+              {
+                "concept_id": "000017",
+                "name": "unit ball Bn p"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 2 个共同邻居（ln p-balls、unit ball Bn p）却无直接关系；热门概念参与：maximal hyperplane section 在热门集里；文献充足：相关关系分布在 3 篇文献里",
+            "positive_score": 2.0,
+            "negative_score": 0.0,
+            "net_score": 2.0,
+            "confidence": "high",
+            "confidence_deterministic": "high",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 2 个共同邻居（ln p-balls、unit ball Bn p）却无直接关系",
+              "热门概念参与：maximal hyperplane section 在热门集里",
+              "文献充足：相关关系分布在 3 篇文献里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "000006",
+              "000010",
+              "000016",
+              "000017",
+              "000007",
+              "000018",
+              "000019"
+            ]
+          },
+          {
+            "key": "000012|000019",
+            "kind": "rare_group",
+            "concept_ids": [
+              "000012",
+              "000019"
+            ],
+            "concept_names": [
+              "ln p-balls",
+              "projections"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000017",
+                "name": "unit ball Bn p"
+              },
+              {
+                "concept_id": "000020",
+                "name": "Khintchine-type inequality"
+              }
+            ],
+            "reason": "概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；结构洞信号：有 2 个共同邻居（unit ball Bn p、Khintchine-type inequality）却无直接关系；热门概念参与：ln p-balls 在热门集里；文献充足：相关关系分布在 2 篇文献里",
+            "positive_score": 2.0,
+            "negative_score": 0.0,
+            "net_score": 2.0,
+            "confidence": "high",
+            "confidence_deterministic": "high",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 2 个共同邻居（unit ball Bn p、Khintchine-type inequality）却无直接关系",
+              "热门概念参与：ln p-balls 在热门集里",
+              "文献充足：相关关系分布在 2 篇文献里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "000004",
+              "000005",
+              "000007",
+              "000008",
+              "000010",
+              "000009",
+              "000020"
+            ]
+          },
+          {
+            "key": "000014|000017",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "000014",
+              "000017"
+            ],
+            "concept_names": [
+              "Ball’s result",
+              "unit ball Bn p"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000012",
+                "name": "ln p-balls"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系；热门概念参与：Ball’s result、unit ball Bn p 在热门集里；文献充足：相关关系分布在 2 篇文献里",
+            "positive_score": 2.0,
+            "negative_score": 0.0,
+            "net_score": 2.0,
+            "confidence": "high",
+            "confidence_deterministic": "high",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系",
+              "热门概念参与：Ball’s result、unit ball Bn p 在热门集里",
+              "文献充足：相关关系分布在 2 篇文献里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "000003",
+              "000004",
+              "000005",
+              "000011",
+              "000007",
+              "000016",
+              "000017",
+              "000020"
+            ]
+          },
+          {
+            "key": "000011|000014",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "000011",
+              "000014"
+            ],
+            "concept_names": [
+              "maximal hyperplane section",
+              "Ball’s result"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000012",
+                "name": "ln p-balls"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系；热门概念参与：maximal hyperplane section、Ball’s result 在热门集里",
+            "positive_score": 1.5,
+            "negative_score": 0.0,
+            "net_score": 1.5,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系",
+              "热门概念参与：maximal hyperplane section、Ball’s result 在热门集里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "000006",
+              "000010",
+              "000016",
+              "000017",
+              "000003",
+              "000004",
+              "000005",
+              "000011"
+            ]
+          },
+          {
+            "key": "000014|000018",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "000014",
+              "000018"
+            ],
+            "concept_names": [
+              "Ball’s result",
+              "central hyperplane sections"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000012",
+                "name": "ln p-balls"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系；热门概念参与：Ball’s result 在热门集里；文献充足：相关关系分布在 3 篇文献里",
+            "positive_score": 1.5,
+            "negative_score": 0.0,
+            "net_score": 1.5,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系",
+              "热门概念参与：Ball’s result 在热门集里",
+              "文献充足：相关关系分布在 3 篇文献里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "000003",
+              "000004",
+              "000005",
+              "000011",
+              "000007",
+              "000018",
+              "000019"
+            ]
+          },
+          {
+            "key": "000014|000019",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "000014",
+              "000019"
+            ],
+            "concept_names": [
+              "Ball’s result",
+              "projections"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000012",
+                "name": "ln p-balls"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系；热门概念参与：Ball’s result 在热门集里；文献充足：相关关系分布在 2 篇文献里",
+            "positive_score": 1.5,
+            "negative_score": 0.0,
+            "net_score": 1.5,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系",
+              "热门概念参与：Ball’s result 在热门集里",
+              "文献充足：相关关系分布在 2 篇文献里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "000003",
+              "000004",
+              "000005",
+              "000011",
+              "000008",
+              "000009",
+              "000020"
+            ]
+          }
+        ],
+        "rejected_by_llm": [],
+        "vetoed_candidates": [
+          {
+            "key": "000012|000016",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "000012",
+              "000016"
+            ],
+            "concept_names": [
+              "ln p-balls",
+              "normalized section function An,p"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000014",
+                "name": "Ball’s result"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（Ball’s result）却无直接关系；热门概念参与：ln p-balls 在热门集里",
+            "positive_score": 1.0,
+            "negative_score": 0.125,
+            "net_score": 0.875,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": false,
+            "vetoed": true,
+            "veto_reasons": [
+              "概念名明显不是概念：概念名含句读标点：normalized section function An,p"
+            ],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（Ball’s result）却无直接关系",
+              "热门概念参与：ln p-balls 在热门集里"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：normalized section function An,p(degree=1)"
+            ],
+            "related_relation_ids": [
+              "000004",
+              "000005",
+              "000007",
+              "000008",
+              "000010",
+              "000003"
+            ]
+          },
+          {
+            "key": "000014|000016",
+            "kind": "rare_group",
+            "concept_ids": [
+              "000014",
+              "000016"
+            ],
+            "concept_names": [
+              "Ball’s result",
+              "normalized section function An,p"
+            ],
+            "common_neighbors": [],
+            "reason": "概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；热门概念参与：Ball’s result 在热门集里",
+            "positive_score": 0.5,
+            "negative_score": 0.125,
+            "net_score": 0.375,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": false,
+            "vetoed": true,
+            "veto_reasons": [
+              "概念名明显不是概念：概念名含句读标点：normalized section function An,p"
+            ],
+            "positive_signals": [
+              "热门概念参与：Ball’s result 在热门集里"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：normalized section function An,p(degree=1)"
+            ],
+            "related_relation_ids": [
+              "000003",
+              "000004",
+              "000005",
+              "000011"
+            ]
+          },
+          {
+            "key": "000016|000022",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "000016",
+              "000022"
+            ],
+            "concept_names": [
+              "normalized section function An,p",
+              "resilience of cubic sections"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000014",
+                "name": "Ball’s result"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（Ball’s result）却无直接关系",
+            "positive_score": 0.5,
+            "negative_score": 0.25,
+            "net_score": 0.25,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": false,
+            "vetoed": true,
+            "veto_reasons": [
+              "概念名明显不是概念：概念名含句读标点：normalized section function An,p"
+            ],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（Ball’s result）却无直接关系"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：normalized section function An,p(degree=1)、resilience of cubic sections(degree=1)"
+            ],
+            "related_relation_ids": [
+              "000003",
+              "000011"
+            ]
+          }
+        ],
+        "low_confidence_candidates": [
+          {
+            "key": "000000|000001",
+            "kind": "rare_group",
+            "concept_ids": [
+              "000000",
+              "000001"
+            ],
+            "concept_names": [
+              "unit cube",
+              "section"
+            ],
+            "common_neighbors": [],
+            "reason": "概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；热门概念参与：unit cube 在热门集里；文献充足：相关关系分布在 3 篇文献里",
+            "positive_score": 1.0,
+            "negative_score": 0.125,
+            "net_score": 0.875,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "热门概念参与：unit cube 在热门集里",
+              "文献充足：相关关系分布在 3 篇文献里"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：section(degree=1)"
+            ],
+            "related_relation_ids": [
+              "000000",
+              "000018",
+              "000019"
+            ]
+          },
+          {
+            "key": "000001|000018",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "000001",
+              "000018"
+            ],
+            "concept_names": [
+              "section",
+              "central hyperplane sections"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000000",
+                "name": "unit cube"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（unit cube）却无直接关系；文献充足：相关关系分布在 4 篇文献里",
+            "positive_score": 1.0,
+            "negative_score": 0.125,
+            "net_score": 0.875,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（unit cube）却无直接关系",
+              "文献充足：相关关系分布在 4 篇文献里"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：section(degree=1)"
+            ],
+            "related_relation_ids": [
+              "000000",
+              "000007",
+              "000018",
+              "000019"
+            ]
+          },
+          {
+            "key": "000011|000021",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "000011",
+              "000021"
+            ],
+            "concept_names": [
+              "maximal hyperplane section",
+              "random variables"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000020",
+                "name": "Khintchine-type inequality"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（Khintchine-type inequality）却无直接关系；热门概念参与：maximal hyperplane section 在热门集里",
+            "positive_score": 1.0,
+            "negative_score": 0.125,
+            "net_score": 0.875,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（Khintchine-type inequality）却无直接关系",
+              "热门概念参与：maximal hyperplane section 在热门集里"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：random variables(degree=1)"
+            ],
+            "related_relation_ids": [
+              "000006",
+              "000010",
+              "000016",
+              "000017",
+              "000009"
+            ]
+          },
+          {
+            "key": "000012|000015",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "000012",
+              "000015"
+            ],
+            "concept_names": [
+              "ln p-balls",
+              "main diagonal"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000011",
+                "name": "maximal hyperplane section"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（maximal hyperplane section）却无直接关系；热门概念参与：ln p-balls 在热门集里",
+            "positive_score": 1.0,
+            "negative_score": 0.125,
+            "net_score": 0.875,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（maximal hyperplane section）却无直接关系",
+              "热门概念参与：ln p-balls 在热门集里"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：main diagonal(degree=1)"
+            ],
+            "related_relation_ids": [
+              "000004",
+              "000005",
+              "000007",
+              "000008",
+              "000010",
+              "000006"
+            ]
+          },
+          {
+            "key": "000012|000022",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "000012",
+              "000022"
+            ],
+            "concept_names": [
+              "ln p-balls",
+              "resilience of cubic sections"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000014",
+                "name": "Ball’s result"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（Ball’s result）却无直接关系；热门概念参与：ln p-balls 在热门集里",
+            "positive_score": 1.0,
+            "negative_score": 0.125,
+            "net_score": 0.875,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（Ball’s result）却无直接关系",
+              "热门概念参与：ln p-balls 在热门集里"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：resilience of cubic sections(degree=1)"
+            ],
+            "related_relation_ids": [
+              "000004",
+              "000005",
+              "000007",
+              "000008",
+              "000010",
+              "000011"
+            ]
+          },
+          {
+            "key": "000011|000015",
+            "kind": "rare_group",
+            "concept_ids": [
+              "000011",
+              "000015"
+            ],
+            "concept_names": [
+              "maximal hyperplane section",
+              "main diagonal"
+            ],
+            "common_neighbors": [],
+            "reason": "概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；热门概念参与：maximal hyperplane section 在热门集里",
+            "positive_score": 0.5,
+            "negative_score": 0.125,
+            "net_score": 0.375,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "热门概念参与：maximal hyperplane section 在热门集里"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：main diagonal(degree=1)"
+            ],
+            "related_relation_ids": [
+              "000006",
+              "000010",
+              "000016",
+              "000017"
+            ]
+          },
+          {
+            "key": "000014|000022",
+            "kind": "rare_group",
+            "concept_ids": [
+              "000014",
+              "000022"
+            ],
+            "concept_names": [
+              "Ball’s result",
+              "resilience of cubic sections"
+            ],
+            "common_neighbors": [],
+            "reason": "概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；热门概念参与：Ball’s result 在热门集里",
+            "positive_score": 0.5,
+            "negative_score": 0.125,
+            "net_score": 0.375,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "热门概念参与：Ball’s result 在热门集里"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：resilience of cubic sections(degree=1)"
+            ],
+            "related_relation_ids": [
+              "000003",
+              "000004",
+              "000005",
+              "000011"
+            ]
+          },
+          {
+            "key": "000015|000020",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "000015",
+              "000020"
+            ],
+            "concept_names": [
+              "main diagonal",
+              "Khintchine-type inequality"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000011",
+                "name": "maximal hyperplane section"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（maximal hyperplane section）却无直接关系",
+            "positive_score": 0.5,
+            "negative_score": 0.125,
+            "net_score": 0.375,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（maximal hyperplane section）却无直接关系"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：main diagonal(degree=1)"
+            ],
+            "related_relation_ids": [
+              "000006",
+              "000009",
+              "000010"
+            ]
+          },
+          {
+            "key": "000023|000026",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "000023",
+              "000026"
+            ],
+            "concept_names": [
+              "Ball’s cube slicing result",
+              "normalized Fourier transform γp(s) of exp(−|r|p)"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000025",
+                "name": "Pólya’s formula"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（Pólya’s formula）却无直接关系",
+            "positive_score": 0.5,
+            "negative_score": 0.125,
+            "net_score": 0.375,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（Pólya’s formula）却无直接关系"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：normalized Fourier transform γp(s) of exp(−|r|p)(degree=1)"
+            ],
+            "related_relation_ids": [
+              "000012",
+              "000013",
+              "000014"
+            ]
+          },
+          {
+            "key": "000023|000027",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "000023",
+              "000027"
+            ],
+            "concept_names": [
+              "Ball’s cube slicing result",
+              "Ball’s integral inequality"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000025",
+                "name": "Pólya’s formula"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（Pólya’s formula）却无直接关系",
+            "positive_score": 0.5,
+            "negative_score": 0.125,
+            "net_score": 0.375,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（Pólya’s formula）却无直接关系"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：Ball’s integral inequality(degree=1)"
+            ],
+            "related_relation_ids": [
+              "000012",
+              "000013",
+              "000015"
+            ]
+          },
+          {
+            "key": "000024|000025",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "000024",
+              "000025"
+            ],
+            "concept_names": [
+              "Fourier transform representations of moments of independent sums",
+              "Pólya’s formula"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000023",
+                "name": "Ball’s cube slicing result"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（Ball’s cube slicing result）却无直接关系",
+            "positive_score": 0.5,
+            "negative_score": 0.125,
+            "net_score": 0.375,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（Ball’s cube slicing result）却无直接关系"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：Fourier transform representations of moments of independent sums(degree=1)"
+            ],
+            "related_relation_ids": [
+              "000012",
+              "000013",
+              "000014",
+              "000015"
+            ]
+          },
+          {
+            "key": "000026|000027",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "000026",
+              "000027"
+            ],
+            "concept_names": [
+              "normalized Fourier transform γp(s) of exp(−|r|p)",
+              "Ball’s integral inequality"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000025",
+                "name": "Pólya’s formula"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（Pólya’s formula）却无直接关系",
+            "positive_score": 0.5,
+            "negative_score": 0.25,
+            "net_score": 0.25,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（Pólya’s formula）却无直接关系"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：normalized Fourier transform γp(s) of exp(−|r|p)(degree=1)、Ball’s integral inequality(degree=1)"
+            ],
+            "related_relation_ids": [
+              "000014",
+              "000015"
+            ]
+          },
+          {
+            "key": "000023|000025",
+            "kind": "rare_group",
+            "concept_ids": [
+              "000023",
+              "000025"
+            ],
+            "concept_names": [
+              "Ball’s cube slicing result",
+              "Pólya’s formula"
+            ],
+            "common_neighbors": [],
+            "reason": "概念组频次 1 < 阈值 2（该组合只被研究过 1 次）",
+            "positive_score": 0.0,
+            "negative_score": 0.0,
+            "net_score": 0.0,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "000012",
+              "000013",
+              "000014",
+              "000015"
+            ]
+          },
+          {
+            "key": "000023|000024",
+            "kind": "rare_group",
+            "concept_ids": [
+              "000023",
+              "000024"
+            ],
+            "concept_names": [
+              "Ball’s cube slicing result",
+              "Fourier transform representations of moments of independent sums"
+            ],
+            "common_neighbors": [],
+            "reason": "概念组频次 1 < 阈值 2（该组合只被研究过 1 次）",
+            "positive_score": 0.0,
+            "negative_score": 0.125,
+            "net_score": -0.125,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [],
+            "negative_signals": [
+              "候选端连接薄弱：Fourier transform representations of moments of independent sums(degree=1)"
+            ],
+            "related_relation_ids": [
+              "000012",
+              "000013"
+            ]
+          },
+          {
+            "key": "000025|000026",
+            "kind": "rare_group",
+            "concept_ids": [
+              "000025",
+              "000026"
+            ],
+            "concept_names": [
+              "Pólya’s formula",
+              "normalized Fourier transform γp(s) of exp(−|r|p)"
+            ],
+            "common_neighbors": [],
+            "reason": "概念组频次 1 < 阈值 2（该组合只被研究过 1 次）",
+            "positive_score": 0.0,
+            "negative_score": 0.125,
+            "net_score": -0.125,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [],
+            "negative_signals": [
+              "候选端连接薄弱：normalized Fourier transform γp(s) of exp(−|r|p)(degree=1)"
+            ],
+            "related_relation_ids": [
+              "000013",
+              "000014",
+              "000015"
+            ]
+          },
+          {
+            "key": "000025|000027",
+            "kind": "rare_group",
+            "concept_ids": [
+              "000025",
+              "000027"
+            ],
+            "concept_names": [
+              "Pólya’s formula",
+              "Ball’s integral inequality"
+            ],
+            "common_neighbors": [],
+            "reason": "概念组频次 1 < 阈值 2（该组合只被研究过 1 次）",
+            "positive_score": 0.0,
+            "negative_score": 0.125,
+            "net_score": -0.125,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [],
+            "negative_signals": [
+              "候选端连接薄弱：Ball’s integral inequality(degree=1)"
+            ],
+            "related_relation_ids": [
+              "000013",
+              "000014",
+              "000015"
+            ]
+          },
+          {
+            "key": "000002|000003",
+            "kind": "rare_group",
+            "concept_ids": [
+              "000002",
+              "000003"
+            ],
+            "concept_names": [
+              "volume",
+              "Hensley conjectured"
+            ],
+            "common_neighbors": [],
+            "reason": "概念组频次 1 < 阈值 2（该组合只被研究过 1 次）",
+            "positive_score": 0.0,
+            "negative_score": 0.25,
+            "net_score": -0.25,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [],
+            "negative_signals": [
+              "候选端连接薄弱：volume(degree=1)、Hensley conjectured(degree=1)"
+            ],
+            "related_relation_ids": [
+              "000001"
+            ]
+          },
+          {
+            "key": "000008|000009",
+            "kind": "rare_group",
+            "concept_ids": [
+              "000008",
+              "000009"
+            ],
+            "concept_names": [
+              "maximum volume",
+              "intersection of Qn with a k-dimensional subspace"
+            ],
+            "common_neighbors": [],
+            "reason": "概念组频次 1 < 阈值 2（该组合只被研究过 1 次）",
+            "positive_score": 0.0,
+            "negative_score": 0.25,
+            "net_score": -0.25,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [],
+            "negative_signals": [
+              "候选端连接薄弱：maximum volume(degree=1)、intersection of Qn with a k-dimensional subspace(degree=1)"
+            ],
+            "related_relation_ids": [
+              "000002"
+            ]
+          }
+        ],
+        "overflow_candidates": [
+          {
+            "key": "000017|000019",
+            "kind": "rare_group",
+            "concept_ids": [
+              "000017",
+              "000019"
+            ],
+            "concept_names": [
+              "unit ball Bn p",
+              "projections"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000012",
+                "name": "ln p-balls"
+              }
+            ],
+            "reason": "概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系；热门概念参与：unit ball Bn p 在热门集里；文献充足：相关关系分布在 2 篇文献里",
+            "positive_score": 1.5,
+            "negative_score": 0.0,
+            "net_score": 1.5,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系",
+              "热门概念参与：unit ball Bn p 在热门集里",
+              "文献充足：相关关系分布在 2 篇文献里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "000007",
+              "000016",
+              "000017",
+              "000020",
+              "000008",
+              "000009"
+            ]
+          },
+          {
+            "key": "000018|000019",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "000018",
+              "000019"
+            ],
+            "concept_names": [
+              "central hyperplane sections",
+              "projections"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000012",
+                "name": "ln p-balls"
+              },
+              {
+                "concept_id": "000017",
+                "name": "unit ball Bn p"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 2 个共同邻居（ln p-balls、unit ball Bn p）却无直接关系；文献充足：相关关系分布在 4 篇文献里",
+            "positive_score": 1.5,
+            "negative_score": 0.0,
+            "net_score": 1.5,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 2 个共同邻居（ln p-balls、unit ball Bn p）却无直接关系",
+              "文献充足：相关关系分布在 4 篇文献里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "000007",
+              "000018",
+              "000019",
+              "000008",
+              "000009",
+              "000020"
+            ]
+          },
+          {
+            "key": "000019|000020|000021",
+            "kind": "rare_group",
+            "concept_ids": [
+              "000019",
+              "000020",
+              "000021"
+            ],
+            "concept_names": [
+              "projections",
+              "Khintchine-type inequality",
+              "random variables"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000012",
+                "name": "ln p-balls"
+              },
+              {
+                "concept_id": "000021",
+                "name": "random variables"
+              }
+            ],
+            "reason": "概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；结构洞信号：有 2 个共同邻居（ln p-balls、random variables）却无直接关系；文献充足：相关关系分布在 2 篇文献里",
+            "positive_score": 1.5,
+            "negative_score": 0.0833,
+            "net_score": 1.4167,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 2 个共同邻居（ln p-balls、random variables）却无直接关系",
+              "文献充足：相关关系分布在 2 篇文献里"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：random variables(degree=1)"
+            ],
+            "related_relation_ids": [
+              "000008",
+              "000009",
+              "000020",
+              "000010"
+            ]
+          },
+          {
+            "key": "000012|000021",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "000012",
+              "000021"
+            ],
+            "concept_names": [
+              "ln p-balls",
+              "random variables"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000019",
+                "name": "projections"
+              },
+              {
+                "concept_id": "000020",
+                "name": "Khintchine-type inequality"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 2 个共同邻居（projections、Khintchine-type inequality）却无直接关系；热门概念参与：ln p-balls 在热门集里",
+            "positive_score": 1.5,
+            "negative_score": 0.125,
+            "net_score": 1.375,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 2 个共同邻居（projections、Khintchine-type inequality）却无直接关系",
+              "热门概念参与：ln p-balls 在热门集里"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：random variables(degree=1)"
+            ],
+            "related_relation_ids": [
+              "000004",
+              "000005",
+              "000007",
+              "000008",
+              "000010",
+              "000009"
+            ]
+          },
+          {
+            "key": "000015|000017",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "000015",
+              "000017"
+            ],
+            "concept_names": [
+              "main diagonal",
+              "unit ball Bn p"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000011",
+                "name": "maximal hyperplane section"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（maximal hyperplane section）却无直接关系；热门概念参与：unit ball Bn p 在热门集里；文献充足：相关关系分布在 2 篇文献里",
+            "positive_score": 1.5,
+            "negative_score": 0.125,
+            "net_score": 1.375,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（maximal hyperplane section）却无直接关系",
+              "热门概念参与：unit ball Bn p 在热门集里",
+              "文献充足：相关关系分布在 2 篇文献里"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：main diagonal(degree=1)"
+            ],
+            "related_relation_ids": [
+              "000006",
+              "000007",
+              "000016",
+              "000017",
+              "000020"
+            ]
+          },
+          {
+            "key": "000017|000021",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "000017",
+              "000021"
+            ],
+            "concept_names": [
+              "unit ball Bn p",
+              "random variables"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000019",
+                "name": "projections"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（projections）却无直接关系；热门概念参与：unit ball Bn p 在热门集里；文献充足：相关关系分布在 2 篇文献里",
+            "positive_score": 1.5,
+            "negative_score": 0.125,
+            "net_score": 1.375,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（projections）却无直接关系",
+              "热门概念参与：unit ball Bn p 在热门集里",
+              "文献充足：相关关系分布在 2 篇文献里"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：random variables(degree=1)"
+            ],
+            "related_relation_ids": [
+              "000007",
+              "000016",
+              "000017",
+              "000020",
+              "000009"
+            ]
+          },
+          {
+            "key": "000014|000020",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "000014",
+              "000020"
+            ],
+            "concept_names": [
+              "Ball’s result",
+              "Khintchine-type inequality"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000012",
+                "name": "ln p-balls"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系；热门概念参与：Ball’s result 在热门集里",
+            "positive_score": 1.0,
+            "negative_score": 0.0,
+            "net_score": 1.0,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系",
+              "热门概念参与：Ball’s result 在热门集里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "000003",
+              "000004",
+              "000005",
+              "000011",
+              "000009",
+              "000010"
+            ]
+          },
+          {
+            "key": "000018|000020",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "000018",
+              "000020"
+            ],
+            "concept_names": [
+              "central hyperplane sections",
+              "Khintchine-type inequality"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "000012",
+                "name": "ln p-balls"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系；文献充足：相关关系分布在 3 篇文献里",
+            "positive_score": 1.0,
+            "negative_score": 0.0,
+            "net_score": 1.0,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（ln p-balls）却无直接关系",
+              "文献充足：相关关系分布在 3 篇文献里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "000007",
+              "000018",
+              "000019",
+              "000009",
+              "000010"
+            ]
+          }
+        ],
+        "veto_rules": [
+          "相关关系的 quote_verified 全部为 False（没有任何可核实的原文依据）",
+          "概念名明显不是概念（过长/纯符号/含停用词/含句读）",
+          "两者已被判重（相关关系的 duplicate_of 非空）"
+        ],
+        "deduction_rules": [
+          "引文校验部分失败（-0.5）",
+          "status=suspect 占比（-0.5 × 占比）",
+          "存在 status=rejected（-0.5）",
+          "候选端连接薄弱（degree <= cold_weak_peer_degree，-0.25 × 占比）"
+        ],
+        "searched": {
+          "group_count": 18,
+          "rare_group_candidates": 15,
+          "structural_holes": 26,
+          "triples_examined": 51,
+          "pair_budget": 5000,
+          "vetoed": 3
+        },
+        "thresholds": {
+          "gap_group_min_count": 2,
+          "limit": 12,
+          "confidence_high_net": 2.0,
+          "confidence_medium_net": 1.0
+        },
+        "hot_ids": [
+          "000012",
+          "000011",
+          "000014",
+          "000017",
+          "000000"
+        ],
+        "hook": {
+          "llm_available": false,
+          "note": "未启用 LLM 钩子：'是否值得研究'完全由确定性信号决定。"
+        },
+        "submitted_request_ids": [],
+        "rejected_requests": [],
+        "skipped_duplicate_topics": [],
+        "request_submission": {
+          "enabled": false,
+          "attempted": 0,
+          "max_per_run": 30,
+          "inflight_limit": 200,
+          "submitted_request_ids": [],
+          "rejected_requests": [],
+          "skipped_duplicate_topics": [],
+          "reason": "submit_requests=False（默认）：C 不写 search_requests。C 的工具面保持**全量只读**，写入只可能来自编排层显式开启这条确定性代码路径"
+        },
+        "structural_duplicates": {
+          "checked": true,
+          "candidate_count": 2,
+          "merge_proposals": 0,
+          "review_proposals": 2,
+          "truncated": false,
+          "sample": [
+            {
+              "concept_ids": [
+                "000016",
+                "000022"
+              ],
+              "concept_names": [
+                "normalized section function An,p",
+                "resilience of cubic sections"
+              ],
+              "proposal": "review",
+              "name_evidence": "none"
+            },
+            {
+              "concept_ids": [
+                "000026",
+                "000027"
+              ],
+              "concept_names": [
+                "normalized Fourier transform γp(s) of exp(−|r|p)",
+                "Ball’s integral inequality"
+              ],
+              "proposal": "review",
+              "name_evidence": "none"
+            }
+          ],
+          "method_note": "结构等价 ≠ 同义：只有结构证据时 proposal=review，合并决定权在 B",
+          "detail_reading": "完整候选：把 `limit` 调大再调一次本动作（`structural_duplicates`）；不要在编排路径上调 `graph.*` —— 那 9 件只注册在 C 的 CLI 自检面"
+        }
+      },
+      "markdown_path": "work/C/000000-gaps.md",
+      "created_at": "2026-11-24T20:32:30+08:00",
+      "created_by": "agent-C"
+    },
+    {
+      "report_id": "000001",
+      "kind": "proof_chain",
+      "request": "stmt:000034",
+      "params": {
+        "max_depth": 3,
+        "k": 1
+      },
+      "summary": "B_p^3 中心截面面积 A_p(n) 的积分表示与坐标向/面对角向闭式面积公式：**已经是根**（无依赖；按口径：文献／原始概念／有 proof 证据／**经审核的自证定理**）⇒ 这一条链**闭合**",
+      "payload": {
+        "checked": true,
+        "target": "stmt:000034",
+        "matched_by": "stmt_id",
+        "groups": [],
+        "best_group": null,
+        "groups_total": 0,
+        "best_proof_no": null,
+        "proof_nos": [],
+        "closed": true,
+        "roots": [
+          "000034"
+        ],
+        "bad_used_by": [],
+        "path_shapes": [
+          {
+            "path_id": "target-is-root",
+            "proof_no": 0,
+            "path_group": 0,
+            "hops": 0,
+            "steps": 0,
+            "gaps": 1,
+            "gap_nodes": [
+              "stmt:000034"
+            ],
+            "detour_nodes": [],
+            "off_path_ratio": 0.0,
+            "support_edges": [],
+            "alternatives": 0,
+            "reached": true,
+            "spine_found": true,
+            "spine_nodes": [],
+            "walked_nodes": [
+              "stmt:000034"
+            ],
+            "walked_edges": [],
+            "frontier": [],
+            "why": ""
+          }
+        ],
+        "path_shapes_checked": true,
+        "path_shapes_note": "",
+        "frontier": [],
+        "frontier_checked": true,
+        "frontier_note": "",
+        "node": {
+          "stmt_id": "000034",
+          "kind": "theorem",
+          "label": "B_p^3 中心截面面积 A_p(n) 的积分表示与坐标向/面对角向闭式面积公式"
+        }
+      },
+      "markdown_path": "work/C/000001-proof_chain.md",
+      "created_at": "2026-11-24T20:33:12+08:00",
+      "created_by": "agent-C"
+    },
+    {
+      "report_id": "000002",
+      "kind": "gaps",
+      "request": "跑一次关系分析（只算、不判定）：用已入库的 25 篇文献（lit:000000–lit:000024）与 B 建好的 30 条概念行、21 条关系行，回答「本题所在的这一支文献里，哪几篇是直接对口的、谁是这簇概念的中心、哪些方向（坐标向 / 体对角向 / 面对角向的最大截面；p<2 与 p>2 的分界）已有定理、哪些是缺口」",
+      "params": {
+        "gaps_limit": 12,
+        "duplicates_limit": 12,
+        "proof_chain_target": "stmt:000034",
+        "proof_chain_max_depth": 3
+      },
+      "summary": "图读数：30 概念/21 关系/24 两两边/18 组、8 个孤立概念，中心是 000012 ln p-balls（度 5，次高 000011/000014/000017 各 4）；关键读数是「21 条关系只落在 5 篇文献上（lit:000001 占 15 条），11 篇对口文献里有 6 篇零关系 + dependencies 表 0 行」—— 这让「定理行 000034/000035 的承重链无可查」这条缺口成立，也让「体对角向只有 conjecture、p<2 一侧零关系」两条缺口成立；结构洞候选 12 条（最高 net 3.0，confidence high）。",
+      "payload": {
+        "report_scope": "lp-ball-22 关系结构（只算不判定）",
+        "graph": {
+          "concept_count": 30,
+          "relation_count": 21,
+          "pair_count": 24,
+          "group_count": 18,
+          "isolated_count": 8,
+          "isolated_concepts": [
+            "000004",
+            "000005",
+            "000006",
+            "000007",
+            "000010",
+            "000013",
+            "000028",
+            "000029"
+          ],
+          "quote_verified_true": 21,
+          "quote_verified_false": 0
+        },
+        "degree_top": [
+          {
+            "concept_id": "000012",
+            "name": "ln p-balls",
+            "degree": 5
+          },
+          {
+            "concept_id": "000011",
+            "name": "maximal hyperplane section",
+            "degree": 4
+          },
+          {
+            "concept_id": "000014",
+            "name": "Ball's result",
+            "degree": 4
+          },
+          {
+            "concept_id": "000017",
+            "name": "unit ball Bn p",
+            "degree": 4
+          },
+          {
+            "concept_id": "000000",
+            "name": "unit cube",
+            "degree": 3
+          },
+          {
+            "concept_id": "000018",
+            "name": "central hyperplane sections",
+            "degree": 3
+          },
+          {
+            "concept_id": "000019",
+            "name": "projections",
+            "degree": 3
+          },
+          {
+            "concept_id": "000025",
+            "name": "Pólya's formula",
+            "degree": 3
+          }
+        ],
+        "center": "000012",
+        "lit_coverage_of_relations": {
+          "000001": 15,
+          "000000": 3,
+          "000003": 1,
+          "000004": 1,
+          "000007": 1,
+          "zero_relation_papers": [
+            "000002",
+            "000005",
+            "000006",
+            "000008",
+            "000009",
+            "000010",
+            "000011",
+            "000012",
+            "000013",
+            "000014",
+            "000015",
+            "000016",
+            "000017",
+            "000018",
+            "000019",
+            "000020",
+            "000021",
+            "000022",
+            "000023",
+            "000024"
+          ]
+        },
+        "on_topic_by_title": [
+          "000000",
+          "000001",
+          "000002",
+          "000003",
+          "000004",
+          "000005",
+          "000006",
+          "000007",
+          "000008",
+          "000009",
+          "000010"
+        ],
+        "on_topic_with_relations": [
+          "000000",
+          "000001",
+          "000003",
+          "000004",
+          "000007"
+        ],
+        "on_topic_zero_relations": [
+          "000002",
+          "000005",
+          "000006",
+          "000008",
+          "000009",
+          "000010"
+        ],
+        "direction_status": {
+          "coordinate": {
+            "rows": [
+              "000034",
+              "000035"
+            ],
+            "kind": "theorem",
+            "evidence_kind": "heuristic",
+            "note": "有 theorem 行，但等级不得按 theorem 读；承重链无可查"
+          },
+          "body_diagonal": {
+            "rows": [
+              "000036",
+              "000038",
+              "000039"
+            ],
+            "kind": "conjecture",
+            "note": "无 theorem 行 ⇒ 缺口"
+          },
+          "face_diagonal": {
+            "rows": [
+              "000034",
+              "000037"
+            ],
+            "kind": "theorem+conjecture 冲突",
+            "note": "同一条闭式在两行里档位不同，需 B/D 收口"
+          },
+          "p_split": {
+            "relations": [
+              "000005"
+            ],
+            "note": "只覆盖 p>2（2<p<p0≈26.265）；p<2 一侧零关系"
+          }
+        },
+        "dependencies_rows": 0,
+        "proof_chain_reading": {
+          "target": "stmt:000034",
+          "closed": true,
+          "path_id": "target-is-root",
+          "gaps": 1,
+          "gap_nodes": [
+            "stmt:000034"
+          ],
+          "hops": 0,
+          "interpretation": "closed 读的是『无依赖边、按口径当根』，不是『承重链已核且成立』"
+        },
+        "gap_candidates": [
+          {
+            "key": "000012|000017|000018",
+            "kind": "rare_group",
+            "net_score": 3.0,
+            "confidence": "high",
+            "worth": "高",
+            "why": "本题对象 unit ball Bn p 与中心超平面截面、ln p-balls 三个热点之间无直接边，是『哪一向已有定理』落到具体命题时缺的那条接边"
+          },
+          {
+            "key": "000011|000019",
+            "kind": "structural_hole",
+            "net_score": 2.5,
+            "confidence": "high",
+            "worth": "高",
+            "why": "截面对偶投影只写在 rel:000008 一句里，图上无 section→projection 边；体对角向经对偶转 Khintchine 常数必经此结点"
+          },
+          {
+            "key": "000017|000020",
+            "kind": "structural_hole",
+            "net_score": 2.5,
+            "confidence": "high",
+            "worth": "中高",
+            "why": "rel:000010 的『极值截面 ≅ 广义 Khintchine 常数』等价只挂在 000011|000012|000020 上，主角 000017 身上没有"
+          },
+          {
+            "key": "000000|000012",
+            "kind": "structural_hole",
+            "net_score": 2.0,
+            "confidence": "high",
+            "worth": "中",
+            "why": "可能只是命名层缺边（rel:000003 已以 p=∞ 口径连过 Ball 定理），便宜，值得核一次以排除"
+          },
+          {
+            "key": "lit_zero_relations_x6",
+            "kind": "literature_level",
+            "confidence": "high",
+            "worth": "高",
+            "why": "000002/000005/000006 与本题同题面却零关系；『缺一条边』与『这篇不重要』图上一样，台账上前者该修"
+          },
+          {
+            "key": "stmt:000034_vs_000037",
+            "kind": "kind_conflict",
+            "confidence": "high",
+            "worth": "高",
+            "why": "同一条面对角闭式同时登记为 theorem 与 conjecture；面对角向是否已有定理取决于你看哪一行"
+          },
+          {
+            "key": "isolated_concepts_x8",
+            "kind": "isolated",
+            "confidence": "high",
+            "worth": "中",
+            "why": "8 个方法/基础概念度 0，000007 Khintchine inequality 与 000020、000013 n-cube 与 000000 疑似同层两种叫法，须 L2 核有无该有而没有的关系"
+          },
+          {
+            "key": "dependencies_empty",
+            "kind": "ledger_floor",
+            "confidence": "high",
+            "worth": "高",
+            "why": "依赖边 0 条 ⇒ 方向判断只能靠 kind+label，命题被判错时查不出污染面"
+          },
+          {
+            "key": "p_lt_2_zero_relations",
+            "kind": "range_gap",
+            "confidence": "medium",
+            "worth": "中",
+            "why": "缺口成立与否取决于检索范围而非图上事实；未读 000002 全文核 p<2 覆盖，故 confidence 下调为 medium"
+          }
+        ],
+        "structural_duplicates": {
+          "pairs": [
+            "000016|000022",
+            "000026|000027"
+          ],
+          "proposal": "review",
+          "note": "无名字侧证据，不得据此合并"
+        },
+        "submit_requests": false,
+        "submit_requests_note": "开关由调用方给（缺省 false），未在循环内自拧"
+      },
+      "markdown_path": "work/C/000002-gaps.md",
+      "created_at": "2026-11-24T20:33:49+08:00",
+      "created_by": "agent-C"
+    }
+  ]
+}

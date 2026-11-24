@@ -1,0 +1,755 @@
+{
+  "role": "V",
+  "task": "V：这一趟派给你的活是 —— 审这一份证明稿 manuscripts/F/f-proof-000001.md（稿号 000001，现行正文 sha 98dcb95e251c…）：按 `## 命题` / `## 证明` / `## 依赖` 三节逐行走查，判『成立』（没找到缺陷）或『有毛病』（找到缺陷，每条 finding 带步号与那一句原话）。这是**改稿**：上一版（sha 6a6444ab…）你判『有毛病』，defect_step=7，意见是第 7 步（原写 1≤p≤2）与第 8 步（原写 p≥2）在 p=2 处 t^p=t² 对整个 [0,1] 成立、等号刻画过宽；本版已把第 7 步收窄为 1≤p<2、第 8 步收窄为 p>2，并把 p=2 单独作为一段处理（A_2 恒等于 π）。请按新映射范围重核这两步的等号条件与前后衔接。这一份是自足证明：台账可引池为空（0 条 pre_theorem），依赖面 not_applicable 合法。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/F/f-proof-000001.md"
+        },
+        "why": "读被审证明稿全文（命题/证明/依赖三节）"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# F 的证明手稿：给出显式门槛 P0，使 p ≥ P0 时面对角截面面积大于坐标向与体对角向（用 ‖·‖_p 与 ‖·‖_∞ 的夹逼 3…\n\n- 计划：000000 · 子目标：s3\n- 依赖面洗稿：已洗=true；执行者=secretary-F\n- 稿族：f-proof\n- 产出者：agent-F-F1\n- 正文sha：98dcb95e251c610c23787098370515d5602c98c98b1a8b85995ebad682d4dec0\n- 命题指纹：92396aa5a2eba07e4d1cfb51d32e8910632707ea05ae220189320627ada7b33f\n- 命题类型：conjecture\n- 登记时间：2026-11-24T18:45:47+08:00\n- 标签：F 攻坚 000000 子目标 s3\n- 版本：2026-11-24T18:55:53+08:00@98dcb95e251c610c23787098370515d5602c98c98b1a8b85995ebad682d4dec0\n\n## 命题\n\n设 1 ≤ p < ∞，n ∈ R³ 为单位向量且 n 至少有一个坐标为 0。记 A_p(n) 为 B_p^3 = {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1} 与平面 n^⊥ 的交的二维 Lebesgue 面积，C_p := A_p(e_3)。则：(i) 若 i 是使 n_i = 0 的任一下标，则 A_p(n) = C_p·(Σ_{j≠i}|n_j|^p)^{-1/p}，右端不依赖 i 的选取，且 C_p = 4Γ(1+1/p)²/Γ(1+2/p)；(ii) 当 1 ≤ p < 2 时 A_p(n) ≤ C_p，等号成立当且仅当 n 是 ±坐标向量；(iii) 当 p > 2 时 A_p(n) ≥ C_p，等号成立当且仅当 n 是 ±坐标向量；(iv) p = 2 时对一切这样的 n 有 A_2(n) = π = C_2，且门槛 p = 2 是精确的：对每个 p ≠ 2，法向 n = (1,1,0)/√2 给出 A_p(n) ≠ C_p（p < 2 时严格小、p > 2 时严格大）。\n\n## 证明\n\n1. 前提：p ∈ [1,∞)，n 为单位向量且存在 i 使 n_i = 0；B_p^3 在带符号坐标置换下不变、二维面积在正交变换下不变，故不妨设 i = 3、n = (a,b,0) 且 a²+b² = 1。（前提）\n2. 设 u = (b,-a,0)、v = (0,0,1)。由 a²+b² = 1 得 ‖u‖ = ‖v‖ = 1、u·v = 0、u·n = ab - ab = 0、v·n = 0，所以 {u,v} 是 n^⊥ 的单位正交基，参数化 x = s·u + z·v = (sb,-sa,z) 是 R² → n^⊥ 的等距同构。（前提）\n3. 把该参数化代入约束：x ∈ B_p^3 ⟺ |sb|^p + |−sa|^p + |z|^p ≤ 1 ⟺ m|s|^p + |z|^p ≤ 1，其中 m := |a|^p+|b|^p ∈ (0,∞)（m > 0 因为 a²+b² = 1）。（前提）\n4. 记 E := {(s,z) : m|s|^p+|z|^p ≤ 1}。取 c := m^{1/p} > 0 与线性映射 T(s,z) := (cs,z)，则 det T = c，且 (s,z) ∈ E ⟺ |cs|^p+|z|^p ≤ 1 ⟺ T(s,z) ∈ D_p := {(X,Y) : |X|^p+|Y|^p ≤ 1}，即 T(E) = D_p。（前提）\n5. 由 area(T(E)) = |det T|·area(E) 与 T(E) = D_p 得 c·area(E) = area(D_p)，即 area(E) = c^{-1}·area(D_p) = m^{-1/p}·area(D_p)。（前提）\n6. D_p 的面积为 C_p := 4Γ(1+1/p)²/Γ(1+2/p)：在第一象限用代换把 ∫∫_{|X|^p+|Y|^p≤1} 化为 ∫_0^1 4(1-u^p)^{1/p}du，再令 u = t^{1/p} 得 4p^{-1}B(1/p,1+1/p) = 4Γ(1/p)Γ(1+1/p)/Γ(1+2/p)，用 Γ(1/p) = pΓ(1+1/p) 即得（自足的 Beta 积分计算）。（前提）\n7. 合并上两步：A_p(n) = area(E) = C_p·m^{-1/p} = C_p·(|a|^p+|b|^p)^{-1/p} = C_p·(Σ_{j≠i}|n_j|^p)^{-1/p}；而 (a,b,0) 中两个非零坐标的对称性与所取零坐标位置的对称性说明右…（落档截断，原 2788 字）",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/F/f-proof-000001.md",
+          "encoding": "utf-8",
+          "bytes_read": 4317,
+          "total_bytes": 4317,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 36,
+          "total_lines": 36,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 36 行",
+          "sha256": "595e388ff219fe0ab4e3b0b64d9d9f147fbc5ad283b8399920f076809f426623"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 36608,
+        "prompt_cache_miss_tokens": 1392,
+        "tokens_in": 38000,
+        "tokens_out": 85,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000035"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "table.search",
+        "args": {
+          "table": "statements",
+          "query": "截面",
+          "limit": 10,
+          "select": [
+            "stmt_id",
+            "label",
+            "kind",
+            "evidence_kind",
+            "status"
+          ]
+        },
+        "why": "确认这份证明对应的命题是否已在册（决定 verify_proof 要不要带 statement_id）"
+      },
+      "result": {
+        "tool": "table.search",
+        "ok": true,
+        "data": {
+          "table": "statements",
+          "query": "截面",
+          "fields": [
+            "label",
+            "statement_full"
+          ],
+          "rows": [
+            {
+              "stmt_id": "000011",
+              "label": "maximal hyperplane section",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000030",
+              "label": "截面面积计算核自检通过：极坐标 tanh-sinh 求积（断点取 A cosψ+B sinψ=0 与 |w_i|=|w_j| 在 [0,2π) 上的全部根）在",
+              "kind": "conjecture",
+              "evidence_kind": "cross_check",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000031",
+              "label": "B_p^3 中心截面最大面积的位置与面积比临界性",
+              "kind": "conjecture",
+              "evidence_kind": "cross_check",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000032",
+              "label": "B_p^3 中心截面的坐标面积公式、面积比单调性与最大面积方向的分段结构",
+              "kind": "conjecture",
+              "evidence_kind": "cross_check",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000033",
+              "label": "B_p^3 中心截面在两条边界弧上的最大面积方向分段",
+              "kind": "conjecture",
+              "evidence_kind": "cross_check",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000034",
+              "label": "B_p^3 中心截面面积 A_p(n) 的积分表示与坐标向/面对角向闭式面积公式",
+              "kind": "theorem",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            }
+          ],
+          "total": 6,
+          "returned": 6
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "total": 6,
+          "returned": 6,
+          "matched_fields": {
+            "000011": [
+              "statement_full"
+            ],
+            "000030": [
+              "label",
+              "statement_full"
+            ],
+            "000031": [
+              "label",
+              "statement_full"
+            ],
+            "000032": [
+              "label",
+              "statement_full"
+            ],
+            "000033": [
+              "label",
+              "statement_full"
+            ],
+            "000034": [
+              "label"
+            ]
+          },
+          "truncated": false,
+          "select": [
+            "stmt_id",
+            "label",
+            "kind",
+            "evidence_kind",
+            "status"
+          ]
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 37248,
+        "prompt_cache_miss_tokens": 2949,
+        "tokens_in": 40197,
+        "tokens_out": 15941,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000035"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "table.search",
+        "args": {
+          "table": "statements",
+          "query": "坐标向量",
+          "select": [
+            "stmt_id",
+            "label",
+            "kind",
+            "evidence_kind",
+            "status"
+          ],
+          "limit": 10
+        },
+        "why": "确认这条命题是否已在册（决定 verify_proof 带不带 statement_id）并核对命题字面"
+      },
+      "result": {
+        "tool": "table.search",
+        "ok": true,
+        "data": {
+          "table": "statements",
+          "query": "坐标向量",
+          "fields": [
+            "label",
+            "statement_full"
+          ],
+          "rows": [],
+          "total": 0,
+          "returned": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "total": 0,
+          "returned": 0,
+          "matched_fields": {},
+          "truncated": false,
+          "select": [
+            "stmt_id",
+            "label",
+            "kind",
+            "evidence_kind",
+            "status"
+          ]
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 39424,
+        "prompt_cache_miss_tokens": 2309,
+        "tokens_in": 41733,
+        "tokens_out": 10094,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000035"
+    },
+    {
+      "index": 3,
+      "shape": "tool",
+      "payload": {
+        "name": "verify.verify_proof",
+        "args": {
+          "proof_manuscript": "manuscripts/F/f-proof-000001.md"
+        },
+        "why": "按写成后的样子整体重读这一份改稿（在册/未在册都走手稿入口，命题是否登记未确认，故只给稿不猜 statement_id）"
+      },
+      "result": {
+        "tool": "verify.verify_proof",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "kind": "proof_unregistered_rejected",
+          "statement_id": "",
+          "verification_id": "u-000006",
+          "verdict": "有毛病",
+          "defect_step": 6,
+          "findings": [
+            {
+              "level": "error",
+              "step": 6,
+              "kind": "代数漏因子",
+              "detail": "4p^{-1}B(1/p,1+1/p) 应展开为 4Γ(1/p)Γ(1+1/p)/(pΓ(1+2/p))；原文右边分母少了 p。需补回 p^{-1} 后再用 Γ(1/p)=pΓ(1+1/p) 得到 C_p。"
+            }
+          ],
+          "unresolved_errors": 1,
+          "proof_sha256": "98dcb95e251c610c23787098370515d5602c98c98b1a8b85995ebad682d4dec0",
+          "proof_chars": 0,
+          "signed_bit3": false,
+          "reviewed_by": {},
+          "bits": {},
+          "review_write": {
+            "manuscript_signed": false,
+            "manuscript_write": {
+              "written": false,
+              "idempotent": false,
+              "missing": false,
+              "state": "not_attempted",
+              "path": "manuscripts/F/f-proof-000001.md",
+              "line": 0,
+              "reading": {},
+              "code": "",
+              "body_mismatch": false,
+              "body_sha256": "",
+              "signed_sha256": "",
+              "why": "负判不写手稿块（甲：V 只颁发；块只由收方秘书落）"
+            },
+            "sign_issued": false,
+            "written": false,
+            "filed": "not_read_by_v",
+            "already_signed": false,
+            "reason": "负判不写手稿块（甲：V 只颁发；块只由收方秘书落）",
+            "v_review": {
+              "checked": true,
+              "review_id": "v-review-000003",
+              "written": true,
+              "idempotent": false,
+              "path": "verifications/reviews/v-review-000003.md",
+              "delivery": {
+                "checked": true,
+                "state": "dispatched",
+                "item_id": "t-000037",
+                "key": "v-review@v-review-000003",
+                "role": "F",
+                "parent_task_id": "t-000015",
+                "reason": "已投给 t-000015 的板项 t-000037",
+                "detail_path": "V 的审阅报告：`verifications/reviews/v-review-000003.md`\n- 被审稿：`manuscripts/F/f-proof-000001.md`\n- 结论：有毛病（V 的秘书语义判定：fault）\n- 台账锚点：`verifications/pending/595e388ff219fe0ab4e3b0b64d9d9f147fbc5ad283b8399920f076809f426623.jsonl#u-000006`\nV 的原文不转达；这份报告就是给你的审阅意见。改完把同一份稿重新送 V。\n",
+                "existing": false
+              },
+              "reason": "V 稿已落盘：verifications/reviews/v-review-000003.md"
+            },
+            "registration": {},
+            "signed_delivery": {}
+          },
+          "ledger": "verifications/pending/595e388ff219fe0ab4e3b0b64d9d9f147fbc5ad283b8399920f076809f426623.jsonl#u-000006",
+          "reason": "（未在册）判「有毛病」：负判不写手稿块，判词落 `verifications/pending/`（u-000006）",
+          "detail": "这一份判「有毛病」：负判不写手稿块（甲口径：`draft/178`「V 不写手稿里的签块」，块只由收方秘书落；负判不是签）。判词已落 `verifications/pending/595e388ff219fe0ab4e3b0b64d9d9f147fbc5ad283b8399920f076809f426623.jsonl#u-000006`，F 的读数是「未通过」；按缺陷改稿后再送，不签第 3 位、也不写重复块。",
+          "exhaustion_review": {},
+          "signer": "",
+          "proof_authors": [],
+          "report_path": "",
+          "checks": [],
+          "missing": [],
+          "citations": [],
+          "citation_checks": [],
+          "citation_gate": {
+            "ok": true,
+            "blocking": [],
+            "weaker": [],
+            "problem": "",
+            "why": ""
+          },
+          "secretary_judge": {
+            "checked": true,
+            "answer": "有缺陷要指出",
+            "axis": "fault",
+            "unwired": false,
+            "reason": "V 明确指出第 6 步在展开 Beta 积分时漏掉了代换产生的因子 p^{-1}，导致原文等式相差因子 p，属于证明链上的代数漏洞。",
+            "basis": [
+              "\"why\": \"第6步在展开 Beta 积分时漏掉了代换带来的因子 p^{-1}，使该等式相差因子 p；因此按原文这一步不成立，尽管最终 C_p 公式本身正确。\"",
+              "\"detail\": \"4p^{-1}B(1/p,1+1/p) 应展开为 4Γ(1/p)Γ(1+1/p)/(pΓ(1+2/p))；原文右边分母少了 p。\""
+            ],
+            "refused": "",
+            "cost": {
+              "ledger": "000281",
+              "charged": true,
+              "ledger_reason": "charged",
+              "call_index": 217,
+              "prompt_sha256": "ee152ee18aacd0d67e6374dab6fa42740d9ff90b9cbff06fa3f859467ef6e519",
+              "tokens": 1798,
+              "usd": 0.000325
+            },
+            "verdict": "有毛病",
+            "defect_step": 6,
+            "fault_kind": "math",
+            "fault_cause": "",
+            "report_gap": "",
+            "statement_id": "",
+            "proof_no": 1,
+            "material": {
+              "v_reply": "{\"verdict\": \"有毛病\", \"defect_step\": 6, \"quote\": \"再令 u = t^{1/p} 得 4p^{-1}B(1/p,1+1/p) = 4Γ(1/p)Γ(1+1/p)/Γ(1+2/p)，用 Γ(1/p) = pΓ(1+1/p) 即得（自足的 Beta 积分计算）。\", \"why\": \"第6步在展开 Beta 积分时漏掉了代换带来的因子 p^{-1}，使该等式相差因子 p；因此按原文这一步不成立，尽管最终 C_p 公式本身正确。\", \"findings\": [{\"level\": \"error\", \"step\": 6, \"kind\": \"代数漏因子\", \"detail\": \"4p^{-1}B(1/p,1+1/p) 应展开为 4Γ(1/p)Γ(1+1/p)/(pΓ(1+2/p))；原文右边分母少了 p。需补回 p^{-1} 后再用 Γ(1/p)=pΓ(1+1/p) 得到 C_p。\"}], \"citation_checks\": []}",
+              "ledger_row": {
+                "verdict": "有毛病",
+                "defect_step": 6
+              }
+            },
+            "defect_scope": "proof",
+            "defect_step_basis": "",
+            "source": "secretary:v_reply_defect"
+          },
+          "sign_issuance": {
+            "checked": false,
+            "issue": false,
+            "issued": false,
+            "landed": false,
+            "decision": "",
+            "writeback": {},
+            "streak": 0,
+            "need": 3,
+            "streak_ok": false,
+            "projected": 0,
+            "same_sha": false,
+            "state": "",
+            "reason": "这一趟没走到签发那一步（早退）⇒ 没有发签：`checked=False` 不是「可以签」，也不是「不签发」这一档",
+            "within_call": null,
+            "review_call": "",
+            "ledger_streak": 0,
+            "basis": [],
+            "reading": {},
+            "cost": {},
+            "material": {},
+            "statement_id": ""
+          },
+          "review_passes": [
+            {
+              "pass": 1,
+              "axis": "fault",
+              "verdict": "有毛病",
+              "fault_kind": "math",
+              "fault_cause": "",
+              "unresolved_errors": 1,
+              "defect_step": 6,
+              "terminal": "rejected"
+            }
+          ],
+          "manuscript_identity": {
+            "checked": false,
+            "statement_id": "",
+            "manuscript_id": "",
+            "row_manuscript_id": "",
+            "matched_by": "",
+            "fallback": false,
+            "row_checked": false,
+            "found": null,
+            "problem": "",
+            "path_checked": false,
+            "path_count": 0,
+            "path_group": 0,
+            "path_problem": "",
+            "why": ""
+          },
+          "issued_sign": {},
+          "statement_scope_gate": {}
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 40960,
+        "prompt_cache_miss_tokens": 2037,
+        "tokens_in": 42997,
+        "tokens_out": 24003,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000035"
+    },
+    {
+      "index": 4,
+      "shape": "final",
+      "payload": {
+        "final": "结论：有毛病（defect_step = 6），不签发（负判不写手稿签块；已由框架落 verifications/pending 与 v-review-000003 投给 F）。\n\n【本次送审对象】manuscripts/F/f-proof-000001.md，正文 sha 98dcb95e251c…（与题面一致，verify_proof 读数 proof_sha256=98dcb95e251c610c23787098370515d5602c98c98b1a8b85995ebad682d4dec0）；命题未在册（manuscript_identity.found=null，kind=proof_unregistered_rejected），依赖段为空表、可引池 0 条 ⇒ 依赖面 not_applicable 合法。\n\n【缺陷（唯一一条，但足以判负）】第 6 步原话：“再令 u = t^{1/p} 得 4p^{-1}B(1/p,1+1/p) = 4Γ(1/p)Γ(1+1/p)/Γ(1+2/p)，用 Γ(1/p) = pΓ(1+1/p) 即得（自足的 Beta 积分计算）。”\n类型：代数漏因子（kind=代数漏因子, level=error）。为何不成立：B(1/p,1+1/p) = Γ(1/p)Γ(1+1/p)/Γ(1+2/p)，故左边 4p^{-1}B(1/p,1+1/p) 应等于 4p^{-1}Γ(1/p)Γ(1+1/p)/Γ(1+2/p)，写成 4Γ(1/p)Γ(1+1/p)/Γ(1+2/p) 在 p≠1 时相差因子 p，该等号按字面为假。最小补法：把中间的 p^{-1} 补回，写成 4p^{-1}Γ(1/p)Γ(1+1/p)/Γ(1+2/p)，再用 Γ(1/p)=pΓ(1+1/p) 得 4Γ(1+1/p)²/Γ(1+2/p)。终式 C_p 本身正确（p=1 得 2、p=2 得 π 复核通过），所以这是书写层的因子丢失，不是结论错。\n\n【上一版意见（原第 7 步 1≤p≤2 / 第 8 步 p≥2 在 p=2 处 t^p=t² 的等号刻画过宽）的复核：已真正修好】新版第 8 步固定为 1≤p<2：“t^p ≥ t²，且当 t∈(0,1) 时严格大于；等号当且仅当 t∈{0,1}”——在 [0,1] 上对 1≤p<2 成立（t=0、t=1 两点确实取等，中间严格）；第 9 步固定 p>2：“t^p ≤ t² … 等号当且仅当 t∈{0,1}”——同样正确；p=2 单列为第 10 步，只写 m=a²+b²=1 ⇒ A_2=C_2=π，不再断言 t^p=t² 对全 [0,1] 取等。两档的等号刻画经 m=|a|^p+|b|^p 传递到“m=1 ⇔ |a|,|b|∈{0,1} ⇔ n 为 ±坐标向量”，与 (ii)(iii) 字面一致，前后衔接无缺口。第 10 步的门槛精确性也复核通过：n=(1,1,0)/√2 时 m=2^{1-p/2}，p<2 给出 m>1 ⇒ A_p<C_p，p>2 给出 m<1 ⇒ A_p>C_p。第 1–5、7 步（WLOG 归约、正交基参数化、线性拉伸 T、面积变换、合并 (i)、i 的无关性）逐条核对无问题。\n\n【给 F 的动作】只改第 6 步那一处中间的因子（补回 p^{-1}），其余不动；同一份稿改完重新送 V。改稿后建议同时把“C_p=A_p(e_3)=area(B_p^3∩{z=0})=area(D_p)”这一句识别写明（第 6 步开头现在是直接写“D_p 的面积为 C_p := …”），这属于可读性建议，不是本次判负的理由。\n\n【轴】本转终局：fault（单转即终局，不续判后续轮次）；台账锚点 verifications/pending/595e388ff219fe0ab4e3b0b64d9d9f147fbc5ad283b8399920f076809f426623.jsonl#u-000006，V 稿 verifications/reviews/v-review-000003.md 已投给 F（板项 t-000037）。五元位第 3 位不动：负判不签发。",
+        "evidence": [
+          "manuscripts/F/f-proof-000001.md",
+          "98dcb95e251c610c23787098370515d5602c98c98b1a8b85995ebad682d4dec0",
+          "u-000006",
+          "verifications/pending/595e388ff219fe0ab4e3b0b64d9d9f147fbc5ad283b8399920f076809f426623.jsonl",
+          "v-review-000003",
+          "t-000037"
+        ]
+      },
+      "result": {
+        "notify_problem": "没有 notify 表（`final` 要给一个 notify 对象，字段：['to', 'summary', 'body', 'refs', 'why']）—— 除主控外每个角色收工都要留一份交接手稿，这是用户点名的强制项"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 42240,
+        "prompt_cache_miss_tokens": 3910,
+        "tokens_in": 46150,
+        "tokens_out": 8339,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000035"
+    }
+  ],
+  "final": "结论：有毛病（defect_step = 6），不签发（负判不写手稿签块；已由框架落 verifications/pending 与 v-review-000003 投给 F）。\n\n【本次送审对象】manuscripts/F/f-proof-000001.md，正文 sha 98dcb95e251c…（与题面一致，verify_proof 读数 proof_sha256=98dcb95e251c610c23787098370515d5602c98c98b1a8b85995ebad682d4dec0）；命题未在册（manuscript_identity.found=null，kind=proof_unregistered_rejected），依赖段为空表、可引池 0 条 ⇒ 依赖面 not_applicable 合法。\n\n【缺陷（唯一一条，但足以判负）】第 6 步原话：“再令 u = t^{1/p} 得 4p^{-1}B(1/p,1+1/p) = 4Γ(1/p)Γ(1+1/p)/Γ(1+2/p)，用 Γ(1/p) = pΓ(1+1/p) 即得（自足的 Beta 积分计算）。”\n类型：代数漏因子（kind=代数漏因子, level=error）。为何不成立：B(1/p,1+1/p) = Γ(1/p)Γ(1+1/p)/Γ(1+2/p)，故左边 4p^{-1}B(1/p,1+1/p) 应等于 4p^{-1}Γ(1/p)Γ(1+1/p)/Γ(1+2/p)，写成 4Γ(1/p)Γ(1+1/p)/Γ(1+2/p) 在 p≠1 时相差因子 p，该等号按字面为假。最小补法：把中间的 p^{-1} 补回，写成 4p^{-1}Γ(1/p)Γ(1+1/p)/Γ(1+2/p)，再用 Γ(1/p)=pΓ(1+1/p) 得 4Γ(1+1/p)²/Γ(1+2/p)。终式 C_p 本身正确（p=1 得 2、p=2 得 π 复核通过），所以这是书写层的因子丢失，不是结论错。\n\n【上一版意见（原第 7 步 1≤p≤2 / 第 8 步 p≥2 在 p=2 处 t^p=t² 的等号刻画过宽）的复核：已真正修好】新版第 8 步固定为 1≤p<2：“t^p ≥ t²，且当 t∈(0,1) 时严格大于；等号当且仅当 t∈{0,1}”——在 [0,1] 上对 1≤p<2 成立（t=0、t=1 两点确实取等，中间严格）；第 9 步固定 p>2：“t^p ≤ t² … 等号当且仅当 t∈{0,1}”——同样正确；p=2 单列为第 10 步，只写 m=a²+b²=1 ⇒ A_2=C_2=π，不再断言 t^p=t² 对全 [0,1] 取等。两档的等号刻画经 m=|a|^p+|b|^p 传递到“m=1 ⇔ |a|,|b|∈{0,1} ⇔ n 为 ±坐标向量”，与 (ii)(iii) 字面一致，前后衔接无缺口。第 10 步的门槛精确性也复核通过：n=(1,1,0)/√2 时 m=2^{1-p/2}，p<2 给出 m>1 ⇒ A_p<C_p，p>2 给出 m<1 ⇒ A_p>C_p。第 1–5、7 步（WLOG 归约、正交基参数化、线性拉伸 T、面积变换、合并 (i)、i 的无关性）逐条核对无问题。\n\n【给 F 的动作】只改第 6 步那一处中间的因子（补回 p^{-1}），其余不动；同一份稿改完重新送 V。改稿后建议同时把“C_p=A_p(e_3)=area(B_p^3∩{z=0})=area(D_p)”这一句识别写明（第 6 步开头现在是直接写“D_p 的面积为 C_p := …”），这属于可读性建议，不是本次判负的理由。\n\n【轴】本转终局：fault（单转即终局，不续判后续轮次）；台账锚点 verifications/pending/595e388ff219fe0ab4e3b0b64d9d9f147fbc5ad283b8399920f076809f426623.jsonl#u-000006，V 稿 verifications/reviews/v-review-000003.md 已投给 F（板项 t-000037）。五元位第 3 位不动：负判不签发。",
+  "evidence": [
+    "manuscripts/F/f-proof-000001.md",
+    "98dcb95e251c610c23787098370515d5602c98c98b1a8b85995ebad682d4dec0",
+    "u-000006",
+    "verifications/pending/595e388ff219fe0ab4e3b0b64d9d9f147fbc5ad283b8399920f076809f426623.jsonl",
+    "v-review-000003",
+    "t-000037"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 0,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 5,
+  "compactions": 0,
+  "mailbox_items": [],
+  "mailbox_msgs": [],
+  "mailbox_delivered": 0,
+  "monitor_turns": 0,
+  "wakes": 0,
+  "wake_ids": [],
+  "wake_events": [],
+  "clock_pumps": 9,
+  "clock_fired": 1,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "V 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "V",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    }
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [],
+  "summons": [],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [],
+  "summons_total": 0,
+  "summons_consumed": 0,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 0,
+    "summons_consumed": 0,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p328",
+    "role": "V",
+    "prompt_sha256": "171b42af018313bbcc69a25b1530f2ab9412256a4419f69333b5f3b963dad68e",
+    "prompt_chars": 46343,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "FACULTIES_07",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_STOP",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 5,
+    "tokens_in": 209077,
+    "tokens_out": 58462,
+    "usd": 0.037557,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 5,
+    "no_request_calls": 0,
+    "hit": 196480,
+    "miss": 12597,
+    "unknown_calls": 0,
+    "tokens_in": 209077,
+    "hit_rate": 0.9397,
+    "mismatched_calls": 0,
+    "saved_usd": 0.028881,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 335.718,
+  "end_ts": "2026-11-24T19:01:37+08:00",
+  "notes": [
+    "收工没有可用 notify 表（没有 notify 表（`final` 要给一个 notify 对象，字段：['to', 'summary', 'body', 'refs', 'why']）—— 除主控外每个角色收工都要留一份交接手稿，这是用户点名的强制项）⇒ 这一趟没有交接手稿（不打回、不代填）",
+    "缓存读数：命中 196480 / 未命中 12597 token，命中率 94.0%（5 次调用）；按 modelcost 口径估算可省 约 0.028881 美元",
+    "子产出处理读数：summons_total=0（这一趟没派过子代理 ⇒ 没有要处理的子产出；判据没有对象，不红）",
+    "终态回报已落板：t-000040（框架通报；模型没填 notify）"
+  ],
+  "final_payload": {
+    "final": "结论：有毛病（defect_step = 6），不签发（负判不写手稿签块；已由框架落 verifications/pending 与 v-review-000003 投给 F）。\n\n【本次送审对象】manuscripts/F/f-proof-000001.md，正文 sha 98dcb95e251c…（与题面一致，verify_proof 读数 proof_sha256=98dcb95e251c610c23787098370515d5602c98c98b1a8b85995ebad682d4dec0）；命题未在册（manuscript_identity.found=null，kind=proof_unregistered_rejected），依赖段为空表、可引池 0 条 ⇒ 依赖面 not_applicable 合法。\n\n【缺陷（唯一一条，但足以判负）】第 6 步原话：“再令 u = t^{1/p} 得 4p^{-1}B(1/p,1+1/p) = 4Γ(1/p)Γ(1+1/p)/Γ(1+2/p)，用 Γ(1/p) = pΓ(1+1/p) 即得（自足的 Beta 积分计算）。”\n类型：代数漏因子（kind=代数漏因子, level=error）。为何不成立：B(1/p,1+1/p) = Γ(1/p)Γ(1+1/p)/Γ(1+2/p)，故左边 4p^{-1}B(1/p,1+1/p) 应等于 4p^{-1}Γ(1/p)Γ(1+1/p)/Γ(1+2/p)，写成 4Γ(1/p)Γ(1+1/p)/Γ(1+2/p) 在 p≠1 时相差因子 p，该等号按字面为假。最小补法：把中间的 p^{-1} 补回，写成 4p^{-1}Γ(1/p)Γ(1+1/p)/Γ(1+2/p)，再用 Γ(1/p)=pΓ(1+1/p) 得 4Γ(1+1/p)²/Γ(1+2/p)。终式 C_p 本身正确（p=1 得 2、p=2 得 π 复核通过），所以这是书写层的因子丢失，不是结论错。\n\n【上一版意见（原第 7 步 1≤p≤2 / 第 8 步 p≥2 在 p=2 处 t^p=t² 的等号刻画过宽）的复核：已真正修好】新版第 8 步固定为 1≤p<2：“t^p ≥ t²，且当 t∈(0,1) 时严格大于；等号当且仅当 t∈{0,1}”——在 [0,1] 上对 1≤p<2 成立（t=0、t=1 两点确实取等，中间严格）；第 9 步固定 p>2：“t^p ≤ t² … 等号当且仅当 t∈{0,1}”——同样正确；p=2 单列为第 10 步，只写 m=a²+b²=1 ⇒ A_2=C_2=π，不再断言 t^p=t² 对全 [0,1] 取等。两档的等号刻画经 m=|a|^p+|b|^p 传递到“m=1 ⇔ |a|,|b|∈{0,1} ⇔ n 为 ±坐标向量”，与 (ii)(iii) 字面一致，前后衔接无缺口。第 10 步的门槛精确性也复核通过：n=(1,1,0)/√2 时 m=2^{1-p/2}，p<2 给出 m>1 ⇒ A_p<C_p，p>2 给出 m<1 ⇒ A_p>C_p。第 1–5、7 步（WLOG 归约、正交基参数化、线性拉伸 T、面积变换、合并 (i)、i 的无关性）逐条核对无问题。\n\n【给 F 的动作】只改第 6 步那一处中间的因子（补回 p^{-1}），其余不动；同一份稿改完重新送 V。改稿后建议同时把“C_p=A_p(e_3)=area(B_p^3∩{z=0})=area(D_p)”这一句识别写明（第 6 步开头现在是直接写“D_p 的面积为 C_p := …”），这属于可读性建议，不是本次判负的理由。\n\n【轴】本转终局：fault（单转即终局，不续判后续轮次）；台账锚点 verifications/pending/595e388ff219fe0ab4e3b0b64d9d9f147fbc5ad283b8399920f076809f426623.jsonl#u-000006，V 稿 verifications/reviews/v-review-000003.md 已投给 F（板项 t-000037）。五元位第 3 位不动：负判不签发。",
+    "evidence": [
+      "manuscripts/F/f-proof-000001.md",
+      "98dcb95e251c610c23787098370515d5602c98c98b1a8b85995ebad682d4dec0",
+      "u-000006",
+      "verifications/pending/595e388ff219fe0ab4e3b0b64d9d9f147fbc5ad283b8399920f076809f426623.jsonl",
+      "v-review-000003",
+      "t-000037"
+    ]
+  },
+  "task_id": "t-000035"
+}

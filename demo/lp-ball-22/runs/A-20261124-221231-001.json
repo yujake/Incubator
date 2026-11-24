@@ -1,0 +1,2006 @@
+{
+  "role": "A",
+  "task": "A.run_once：这次没有带参数（调用方只要求你按职责做这件事）。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "lit.stage_list",
+        "args": {
+          "request_id": "*",
+          "status": "pending"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "lit.stage_list",
+        "ok": true,
+        "data": {
+          "request_id": "*",
+          "current_request_id": "r-000003",
+          "batch": null,
+          "status": "admitted",
+          "count": 0,
+          "counts": {
+            "pending": 0,
+            "withdrawn": 0,
+            "rejected": 5,
+            "qualified": 0,
+            "admitted": 25,
+            "cleared": 0
+          },
+          "duplicate_rows": 8,
+          "duplicate_groups": [
+            {
+              "key": "title:on the volume of hyperplane sections of a d cube",
+              "slots": [
+                "000010",
+                "000025"
+              ]
+            },
+            {
+              "key": "title:maximal perimeters of polytope sections and origin symmetry",
+              "slots": [
+                "000011",
+                "000026"
+              ]
+            },
+            {
+              "key": "title:measure integration real analysis",
+              "slots": [
+                "000023",
+                "000028"
+              ]
+            },
+            {
+              "key": "title:measure theory and integration by and for the learner",
+              "slots": [
+                "000024",
+                "000029"
+              ]
+            }
+          ],
+          "gaps": [],
+          "rows": [],
+          "total_all_delegations": 30,
+          "note": "默认只返回当前委托的行（`request_id` = 最近一次暂存的那次委托）；查历史请显式给 request_id（`*` = 全部）。状态四档：`pending` 待裁 / `qualified` 判收未注册（无号） / `admitted` 已注册（带 lit_id） / `rejected` 拒收；历史的 `cleared` 读成 rejected+over_cap、`withdrawn` 读成 rejected+withdrawn_by_reviewer（撤掉的槽位仍在，序号不复用）。本委托还有 0 条没判：只要还大于 0，`lit.admit_all` 就整批拒绝（`lit.admit` 逐条判收不受它拦）。判收（`lit.admit`）**不发号**：正式文献号由 `lit.admit_all` 在提交那一刻批量注册并回填，随后清表（`cleared_at` 打上、整份行归档在 data/archive/lit_candidates/archive-<request_id>.jsonl）。A 的 `done=True` 只表示「这一条检索请求跑完了」，不等于「清表」；收工闸数的是**全表**，不是当前委托、也不是那一条检索请求。**没有正文就不许判收**（业主 2026-11-20）：「通过」的每一条都必须真的读到正文。标 `readable` 之前先 `text.extract(path=<全文路径>, lit_id=\"cand:<槽位>\")` 抽出正文、再用 `fs.read` 读那份 `.txt`，`lit.admit` 才认；`content_read` 那一格是机器现算的（抽读回执 + 版本 + `fs.read` + 不只摘要），不是自报。仅题录（`metadata_only`）、抽取失败（`extract_failed`）、没下载 / 只有摘要的候选：**不许判收、不许入库** —— 只能把题录留在候选记录里并写清为什么没读到（`lit.stage_reject` + 受控理由码：没下到 / 抽不出 / 只有题录或摘要）。摘要最多用于初排与去重，它不是正文：只抽到摘要的，按 `abstract_only` 拒。全表（跨委托）没有待裁的行（30 行候选里 0 条 pending）。"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 55296,
+        "prompt_cache_miss_tokens": 1186,
+        "tokens_in": 56482,
+        "tokens_out": 391,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000187"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "search_requests",
+          "limit": 50,
+          "fields": [
+            "request_id",
+            "topic",
+            "mode",
+            "outcome",
+            "done",
+            "result_lit_ids"
+          ]
+        },
+        "why": "查还有没有待办的检索请求（run_once 要认领的那些）"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "search_requests",
+          "rows": [
+            {
+              "request_id": "r-000001",
+              "topic": "local reference/ batch 1 (13 user-declared PDFs): maximal hyperplane sections of l_p balls / cube slicing",
+              "mode": "topical",
+              "outcome": "ok",
+              "done": true,
+              "result_lit_ids": [
+                "000000",
+                "000001",
+                "000002",
+                "000003",
+                "000004",
+                "000005",
+                "000006",
+                "000007",
+                "000008",
+                "000009"
+              ]
+            },
+            {
+              "request_id": "r-000002",
+              "topic": "local reference/ batch 2 (12 user-declared PDFs): cube sections, Brunn-Minkowski, measure theory background",
+              "mode": "topical",
+              "outcome": "ok",
+              "done": false,
+              "result_lit_ids": [
+                "000010",
+                "000011",
+                "000012",
+                "000013",
+                "000014",
+                "000015",
+                "000016",
+                "000017",
+                "000018",
+                "000019"
+              ]
+            },
+            {
+              "request_id": "r-000003",
+              "topic": "local reference/ batch 3 (overflow 5): d-cube hyperplane section volume, polytope section perimeters, cross-section body, measure-theory background",
+              "mode": "topical",
+              "outcome": "ok",
+              "done": false,
+              "result_lit_ids": [
+                "000020",
+                "000021",
+                "000022",
+                "000023",
+                "000024"
+              ]
+            },
+            {
+              "request_id": "r-000004",
+              "topic": "三维 l^p 球 B_p^3（1≤p≤∞）的中心截面最大面积：求 A_max(…",
+              "mode": "topical",
+              "outcome": "ok",
+              "done": true,
+              "result_lit_ids": [
+                "000001",
+                "000003",
+                "000004"
+              ]
+            }
+          ],
+          "total": 4,
+          "returned": 4,
+          "limit": 50,
+          "offset": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "search_requests",
+          "total": 4,
+          "returned": 4,
+          "offset": 0,
+          "limit": 50,
+          "fields": [
+            "request_id",
+            "topic",
+            "mode",
+            "outcome",
+            "done",
+            "result_lit_ids"
+          ]
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 55680,
+        "prompt_cache_miss_tokens": 1946,
+        "tokens_in": 57626,
+        "tokens_out": 225,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000187"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "search_requests",
+          "id": "r-000002"
+        },
+        "why": "r-000002 与 r-000003 仍是 done=false，先读整行看它还缺什么（下载失败/未清表）再决定 run_once 怎么跑"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "request_id": "r-000002",
+          "timestamp": "2026-11-24T14:13:00+08:00",
+          "topic": "local reference/ batch 2 (12 user-declared PDFs): cube sections, Brunn-Minkowski, measure theory background",
+          "mode": "topical",
+          "content_description": "用户逐字声明 reference/ 全部 25 份 PDF 为可靠参考文献；本委托为第 2 批 12 份的收编判定（发现→候选→抽读→判收→提交）",
+          "done": false,
+          "submitted_by": "agent-A",
+          "claimed_by": null,
+          "lease_until": null,
+          "attempts": 0,
+          "result_lit_ids": [
+            "000010",
+            "000011",
+            "000012",
+            "000013",
+            "000014",
+            "000015",
+            "000016",
+            "000017",
+            "000018",
+            "000019"
+          ],
+          "last_error": null,
+          "outcome": "ok",
+          "priority": "medium",
+          "for_question_id": null,
+          "submit_note": "本地已声明文献收编，不出网",
+          "providers": [],
+          "submitted_instance": ""
+        },
+        "error": "",
+        "meta": {
+          "table": "search_requests",
+          "id": "r-000002",
+          "id_field": "request_id",
+          "found": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 56832,
+        "prompt_cache_miss_tokens": 1511,
+        "tokens_in": 58343,
+        "tokens_out": 765,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000187"
+    },
+    {
+      "index": 3,
+      "shape": "tool",
+      "payload": {
+        "name": "own.run_once",
+        "args": {
+          "request_ids": [
+            "r-000002",
+            "r-000003"
+          ]
+        },
+        "why": "r-000002/r-000003 仍是 done=false（未收尾）且全表 0 条待裁，按职责领跑这两条委托把它跑完并如实记结果"
+      },
+      "result": {
+        "tool": "own.run_once",
+        "ok": true,
+        "data": "ARunResult(processed=0, registered=0, duplicated=0, downloaded=0, download_failed=0, download_suspect=0, gave_up=0, skipped_reason='no_pending_delegation', outcome=None, request_id=None, priority=None, priority_rank=None, submitted_by=None, queue_pending=0, skipped_lease_active=0, skipped_lease_backoff=0, providers_requested=[], role_providers=[], sources=[], cost={}, report_path='', report_admitted=0, report_not_admitted=0, report_error='', pending_total=0, pending_by_delegation=[], claimed_delegations=[], claim_note='点名但没有待裁行（已判完或已清表）：r-000002、r-000003。', pending_note='全表待裁 0 条：候选已逐条判完、逐委托提交清表。', clear_stage={'checked': True, 'enabled': True, 'in_task': True, 'in_task_why': '', 'delegations': 3, 'settled': ['r-000001', 'r-000002', 'r-000003'], 'cleared': [], 'pending': [], 'refused': [], 'why': '全表 3 个委托都已清表（每一行都有 cleared_at），这一拍没有要提交的', 'note': '全表 3 个委托都已清表（每一行都有 cleared_at），这一拍没有要提交的'}, unprocessed_reasons={'checked': True, 'enabled': True, 'unprocessed': 11, 'written': [], 'kept': [], 'undigested': [{'lit_id': '000014', 'title': 'The geometry of Minkowski spaces: a survey, part I', 'why': 'statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化）'}, {'lit_id': '000015', 'title': 'Szarek and Ball made simple', 'why': 'statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化）'}, {'lit_id': '000016', 'title': 'Estimates on the decay of the Laplace-Polya integral', 'why': 'statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化）'}, {'lit_id': '000017', 'title': 'Paraconsistent dominated convergence', 'why': 'statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化）'}, {'lit_id': '000018', 'title': 'Generalized integrals and convergence theorems', 'why': 'statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化）'}, {'lit_id': '000019', 'title': 'An introduction to measure theory', 'why': 'statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化）'}, {'lit_id': '000020', 'title': 'On the volume of hyperplane sections of a d-cube', 'why': 'statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化）'}, {'lit_id': '000021', 'title': 'Maximal perimeters of polytope sections and origin-symmetry', 'why': 'statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化）'}, {'lit_id': '000022', 'title': 'The cross-section body, plane sections of convex bodies and approximation of convex bodies', 'why': 'statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化）'}, {'lit_id': '000023', 'title': 'Measure, integration & real analysis', 'why': 'statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化）'}, {'lit_id': '000024', 'title': 'Measure theory and integration by and for the learner', 'why': 'statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化）'}], 'why': '没有写理由的：lit:000014（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000015（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000016（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000017（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000018（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000019（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000020（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000021（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000022（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000023（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000024（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））。', 'note': '没有写理由的：lit:000014（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000015（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000016（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000017（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000018（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000019（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000020（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000021（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000022（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000023（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000024（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））。'})",
+        "error": "",
+        "meta": {},
+        "warn": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.run_once 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 3,
+          "call_index": 0,
+          "calls": 1,
+          "step_index": 3,
+          "summary": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.run_once 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 3,
+            "calls": 1,
+            "items": 1,
+            "steps": [
+              3
+            ],
+            "executed": 1,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 57600,
+        "prompt_cache_miss_tokens": 1651,
+        "tokens_in": 59251,
+        "tokens_out": 235,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000187"
+    },
+    {
+      "index": 4,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "literature",
+          "fields": [
+            "lit_id",
+            "title",
+            "year",
+            "doi",
+            "path",
+            "processed"
+          ],
+          "limit": 40
+        },
+        "why": "核对 run_once 报的 11 篇「无消化痕迹」文献的盘上全文与状态，决定派 B 收编哪一批"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "literature",
+          "rows": [
+            {
+              "lit_id": "000000",
+              "title": "Cube slicing in R^n",
+              "year": null,
+              "doi": null,
+              "path": "929d246e1f5b-cube-slicing-in-r-n.pdf",
+              "processed": true
+            },
+            {
+              "lit_id": "000001",
+              "title": "On maximal hyperplane sections of the unit ball of l_p^n for (filename truncated after 'for')",
+              "year": null,
+              "doi": null,
+              "path": "daac9fe7d2e3-on-maximal-hyperplane-sections-of-the-unit-ball-of-l-p-n-for.pdf",
+              "processed": true
+            },
+            {
+              "lit_id": "000002",
+              "title": "Plane sections of the unit ball of l_p",
+              "year": null,
+              "doi": null,
+              "path": "a7344ad13416-plane-sections-of-the-unit-ball-of-l-p.pdf",
+              "processed": true
+            },
+            {
+              "lit_id": "000003",
+              "title": "Critical central sections of the cube",
+              "year": null,
+              "doi": null,
+              "path": "5d236efcb7ea-critical-central-sections-of-the-cube.pdf",
+              "processed": true
+            },
+            {
+              "lit_id": "000004",
+              "title": "Non-diagonal critical central sections of the cube",
+              "year": null,
+              "doi": null,
+              "path": "f79129be94de-non-diagonal-critical-central-sections-of-the-cube.pdf",
+              "processed": true
+            },
+            {
+              "lit_id": "000005",
+              "title": "Resilience of cube slicing in l_p",
+              "year": null,
+              "doi": null,
+              "path": "290c7eb63abe-resilience-of-cube-slicing-in-lp.pdf",
+              "processed": true
+            },
+            {
+              "lit_id": "000006",
+              "title": "On extremal sections of subspaces of l_p",
+              "year": null,
+              "doi": null,
+              "path": "9ec6189b98ee-on-extremal-sections-of-subspaces-of-l-p.pdf",
+              "processed": true
+            },
+            {
+              "lit_id": "000007",
+              "title": "Hyperplane projections of the unit ball of l_p^n",
+              "year": null,
+              "doi": null,
+              "path": "b53daf49eb45-hyperplane-projections-of-the-unit-ball-of-l-p-n.pdf",
+              "processed": true
+            },
+            {
+              "lit_id": "000008",
+              "title": "Plane sections of convex bodies of maximal volume",
+              "year": null,
+              "doi": null,
+              "path": "d0a9f661eb23-plane-sections-of-convex-bodies-of-maximal-volume.pdf",
+              "processed": true
+            },
+            {
+              "lit_id": "000009",
+              "title": "A cube slice that is not a zonoid",
+              "year": null,
+              "doi": null,
+              "path": "e52716c8c83e-a-cube-slice-that-is-not-a-zonoid.pdf",
+              "processed": true
+            },
+            {
+              "lit_id": "000010",
+              "title": "Non-central sections of convex bodies",
+              "year": null,
+              "doi": null,
+              "path": "dc44da69df46-non-central-sections-of-convex-bodies.pdf",
+              "processed": true
+            },
+            {
+              "lit_id": "000011",
+              "title": "Non-central sections of the regular n-simplex",
+              "year": null,
+              "doi": null,
+              "path": "bd62474e88b1-non-central-sections-of-the-regular-n-simplex.pdf",
+              "processed": true
+            },
+            {
+              "lit_id": "000012",
+              "title": "An isoperimetric inequality for hyperplane sections of a convex body",
+              "year": null,
+              "doi": null,
+              "path": "e835f5f27173-an-isoperimetric-inequality-for-hyperplane-sections-of-a-con.pdf",
+              "processed": true
+            },
+            {
+              "lit_id": "000013",
+              "title": "On a reverse form of the Brascamp-Lieb inequality",
+              "year": null,
+              "doi": null,
+              "path": "e370bf2a2c26-on-a-reverse-form-of-the-brascamp-lieb-inequality.pdf",
+              "processed": true
+            },
+            {
+              "lit_id": "000014",
+              "title": "The geometry of Minkowski spaces: a survey, part I",
+              "year": null,
+              "doi": null,
+              "path": "6c8afb33fc1a-the-geometry-of-minkowski-spaces-a-survey-part-i.pdf",
+              "processed": false
+            },
+            {
+              "lit_id": "000015",
+              "title": "Szarek and Ball made simple",
+              "year": null,
+              "doi": null,
+              "path": "f69890810ecb-szarek-and-ball-made-simple.pdf",
+              "processed": false
+            },
+            {
+              "lit_id": "000016",
+              "title": "Estimates on the decay of the Laplace-Polya integral",
+              "year": null,
+              "doi": null,
+              "path": "52375fd6b18c-estimates-on-the-decay-of-the-laplacepolya-integral.pdf",
+              "processed": false
+            },
+            {
+              "lit_id": "000017",
+              "title": "Paraconsistent dominated convergence",
+              "year": null,
+              "doi": null,
+              "path": "c2398a987031-paraconsistent-dominated-convergence.pdf",
+              "processed": false
+            },
+            {
+              "lit_id": "000018",
+              "title": "Generalized integrals and convergence theorems",
+              "year": null,
+              "doi": null,
+              "path": "acb5dd61859c-generalized-integrals-and-convergence-theorems.pdf",
+              "processed": false
+            },
+            {
+              "lit_id": "000019",
+              "title": "An introduction to measure theory",
+              "year": null,
+              "doi": null,
+              "path": "64498329b65e-an-introduction-to-measure-theory.pdf",
+              "processed": false
+            },
+            {
+              "lit_id": "000020",
+              "title": "On the volume of hyperplane sections of a d-cube",
+              "year": null,
+              "doi": null,
+              "path": "08359e313da3-on-the-volume-of-hyperplane-sections-of-a-d-cube.pdf",
+              "processed": false
+            },
+            {
+              "lit_id": "000021",
+              "title": "Maximal perimeters of polytope sections and origin-symmetry",
+              "year": null,
+              "doi": null,
+              "path": "66cf70c235d2-maximal-perimeters-of-polytope-sections-and-origin-symmetry.pdf",
+              "processed": false
+            },
+            {
+              "lit_id": "000022",
+              "title": "The cross-section body, plane sections of convex bodies and approximation of convex bodies",
+              "year": null,
+              "doi": null,
+              "path": "92378bba55bc-the-cross-section-body-plane-sections-of-convex-bodies-and-a.pdf",
+              "processed": false
+            },
+            {
+              "lit_id": "000023",
+              "title": "Measure, integration & real analysis",
+              "year": null,
+              "doi": null,
+              "path": "7a7ab07fb74f-measure-integration-real-analysis.pdf",
+              "processed": false
+            },
+            {
+              "lit_id": "000024",
+              "title": "Measure theory and integration by and for the learner",
+              "year": null,
+              "doi": null,
+              "path": "de5d051e7e09-measure-theory-and-integration-by-and-for-the-learner.pdf",
+              "processed": false
+            }
+          ],
+          "total": 25,
+          "returned": 25,
+          "limit": 40,
+          "offset": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "literature",
+          "total": 25,
+          "returned": 25,
+          "offset": 0,
+          "limit": 40,
+          "fields": [
+            "lit_id",
+            "title",
+            "year",
+            "doi",
+            "path",
+            "processed"
+          ]
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 58496,
+        "prompt_cache_miss_tokens": 3117,
+        "tokens_in": 61613,
+        "tokens_out": 910,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000187"
+    },
+    {
+      "index": 5,
+      "shape": "summon",
+      "payload": {
+        "role": "B",
+        "action": "",
+        "params": {
+          "request_ids": [
+            "r-000002",
+            "r-000003"
+          ],
+          "literature": [
+            {
+              "lit_id": "000014",
+              "path": "6c8afb33fc1a-the-geometry-of-minkowski-spaces-a-survey-part-i.pdf"
+            },
+            {
+              "lit_id": "000015",
+              "path": "f69890810ecb-szarek-and-ball-made-simple.pdf"
+            },
+            {
+              "lit_id": "000016",
+              "path": "52375fd6b18c-estimates-on-the-decay-of-the-laplacepolya-integral.pdf"
+            },
+            {
+              "lit_id": "000017",
+              "path": "c2398a987031-paraconsistent-dominated-convergence.pdf"
+            },
+            {
+              "lit_id": "000018",
+              "path": "acb5dd61859c-generalized-integrals-and-convergence-theorems.pdf"
+            },
+            {
+              "lit_id": "000019",
+              "path": "64498329b65e-an-introduction-to-measure-theory.pdf"
+            },
+            {
+              "lit_id": "000020",
+              "path": "08359e313da3-on-the-volume-of-hyperplane-sections-of-a-d-cube.pdf"
+            },
+            {
+              "lit_id": "000021",
+              "path": "66cf70c235d2-maximal-perimeters-of-polytope-sections-and-origin-symmetry.pdf"
+            },
+            {
+              "lit_id": "000022",
+              "path": "92378bba55bc-the-cross-section-body-plane-sections-of-convex-bodies-and-a.pdf"
+            },
+            {
+              "lit_id": "000023",
+              "path": "7a7ab07fb74f-measure-integration-real-analysis.pdf"
+            },
+            {
+              "lit_id": "000024",
+              "path": "de5d051e7e09-measure-theory-and-integration-by-and-for-the-learner.pdf"
+            }
+          ],
+          "note": "A.run_once 的 unprocessed_reasons 读数显示这 11 篇没有任何 statements/relations 挂靠；先做六篇截面方向，measure-theory 五篇由你判断。"
+        },
+        "why": "这批文献已入库但没有任何消化痕迹（unprocessed_reasons 逐条点名 11 篇），不派 B 就等于只检索不收编",
+        "brief": "收编 lit:000014–000024 这 11 篇未消化文献",
+        "name": "B-digest1",
+        "task": "收编我名下尚未消化的 11 篇已入库文献（lit:000014–000024）：逐篇抽概念（statements）、建关系（relations，quote 必须逐字取自正文并带 page_range），没有可读全文的如实说明卡在哪。优先做与 l_p 球/cube 截面直接相关的六篇：lit:000014《The geometry of Minkowski spaces: a survey, part I》、lit:000015《Szarek and Ball made simple》、lit:000016《Estimates on the decay of the Laplace-Polya integral》、lit:000020《On the volume of hyperplane sections of a d-cube》、lit:000021《Maximal perimeters of polytope sections and origin-symmetry》、lit:000022《The cross-section body…》；另外五篇（lit:000017、000018、000019、000023、000024）是 measure-theory 背景，按你自己的判断决定消化哪几篇、还是判为与本项目无关。回执里请逐篇点名：消化了几篇、各建了几条 statements/relations、哪几篇没有可读正文（file / 抽取失败的类别）。注意：这 11 篇在 literature 表里 processed=false，statements 与 relations 都没挂到它们上；它们是我这一批本地已声明文献，不是检索来的，题录与盘上 PDF 见 params。"
+      },
+      "result": {
+        "summoned": "B",
+        "action": "",
+        "ok": true,
+        "task_id": "t-000188",
+        "status": "running",
+        "outcome": null,
+        "refusal_reason": null,
+        "preemptible": true,
+        "dispatched": [
+          "t-000188"
+        ],
+        "running": [
+          "t-000188"
+        ],
+        "detail": "还在跑：本步先不等（可抢占）。它回来之后结论会在你下一次被问之前以【子代理返场】投给你 —— 不要因为 status=running 就重派；收工会被拒到它回齐",
+        "roster_considered": true,
+        "roster_name": "B-digest1",
+        "秘书": {
+          "alarms": [
+            "'B-digest1' 不是注册表里的真名"
+          ],
+          "fail_open": false,
+          "problem": "'B-digest1' 不是注册表里的真名",
+          "wash": {
+            "checked": true,
+            "washed": false,
+            "refused": "",
+            "reason": ""
+          },
+          "changes": [],
+          "surface_fit": {
+            "checked": false,
+            "fits": null,
+            "paths": [],
+            "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+            "shape": "summon",
+            "reach": {
+              "checked": true,
+              "verdict": "unknown",
+              "hops": [],
+              "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+            }
+          },
+          "reach_fit": {
+            "checked": true,
+            "verdict": "unknown",
+            "hops": [],
+            "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+          },
+          "assessment": {
+            "decision": "可派",
+            "reason": "这一条没点名具体动作（role 级派活）⇒ 不拿动作表去卡它；角色存在性由预筛管",
+            "basis": [
+              "specs/<role>.py 的动作表",
+              "tasks: 同 key 的既有终态行",
+              "没点名动作 ⇒ 动作表那一格不适用"
+            ],
+            "duplicates": [],
+            "alarms": [],
+            "novel": false,
+            "surface": {
+              "checked": false,
+              "fits": null,
+              "paths": [],
+              "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+              "shape": "summon",
+              "reach": {
+                "checked": true,
+                "verdict": "unknown",
+                "hops": [],
+                "reason": "角色 '' 不在能力表里（['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'L', 'M', 'V']）⇒ 判不了"
+              }
+            },
+            "judge": {
+              "checked": false,
+              "reason": "预筛没有报警、也没有重复候选 ⇒ 不必判断"
+            },
+            "engaged": false,
+            "seq": 3
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 60800,
+        "prompt_cache_miss_tokens": 3148,
+        "tokens_in": 63948,
+        "tokens_out": 1972,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000187"
+    },
+    {
+      "index": 6,
+      "shape": "note",
+      "payload": {
+        "text": "A.run_once 第 5 步读数：全表 0 条待裁，3 个委托（r-000001/2/3）都已清表；run_once 回报 processed=0、skipped_reason=no_pending_delegation。但 unprocessed_reasons 点名 lit:000014–000024 共 11 篇「无消化痕迹」（statements 与 relations 都没挂上去）⇒ 这批文献只入库未收编，按职责已派 B（名册名 B-digest1 / 台账号 t-000188）收编。r-000002、r-000003 的 done 仍为 false，而 outcome=ok、result_lit_ids（000010–000024）在 literature 表 25 行里逐条可读 —— 收尾判据的三项里前两项已成立，第三项（B 收编）在等 B 回执；done 旗不是我写的字段，不擅自改，如实报。"
+      },
+      "result": {
+        "note_written": "D:\\Incubator\\projects\\lp-ball-22\\notes\\A.md",
+        "ok": true
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 63104,
+        "prompt_cache_miss_tokens": 2352,
+        "tokens_in": 65456,
+        "tokens_out": 753,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000187"
+    },
+    {
+      "index": 10,
+      "shape": "summon",
+      "payload": {
+        "role": "B",
+        "action": "",
+        "params": {
+          "literature": [
+            {
+              "lit_id": "000020",
+              "path": "08359e313da3-on-the-volume-of-hyperplane-sections-of-a-d-cube.pdf",
+              "priority": 1
+            },
+            {
+              "lit_id": "000021",
+              "path": "66cf70c235d2-maximal-perimeters-of-polytope-sections-and-origin-symmetry.pdf",
+              "priority": 2
+            },
+            {
+              "lit_id": "000022",
+              "path": "92378bba55bc-the-cross-section-body-plane-sections-of-convex-bodies-and-a.pdf",
+              "priority": 3
+            },
+            {
+              "lit_id": "000015",
+              "path": "f69890810ecb-szarek-and-ball-made-simple.pdf",
+              "priority": 4
+            },
+            {
+              "lit_id": "000016",
+              "path": "52375fd6b18c-estimates-on-the-decay-of-the-laplacepolya-integral.pdf",
+              "priority": 5
+            }
+          ],
+          "skip_with_reason": [
+            "000017",
+            "000018",
+            "000019",
+            "000023",
+            "000024"
+          ],
+          "prior_receipt": "handoff:000028"
+        },
+        "why": "上一趟 B 的回执说其余 10 篇 0/0 是配额封顶、不是缺正文；这 5 篇与本题（l_p 球/立方体截面极值）直接相关，值得新开一趟拿新配额收编",
+        "brief": "收编 5 篇与 l_p 截面相关的未消化文献",
+        "reuse": "B-digest1",
+        "task": "接着上一趟（t-000188，回执手稿 000028）的欠账：lit:000014 已收 30 条概念 + 25 条关系，其余 10 篇因「概念配额 30 条/趟累计封顶」得 0/0。这一趟请只针对下面 5 篇逐篇做实质收编（抽概念 + 建关系 + 落命题线索），按与本项目（l_p 球/立方体的超平面截面最大体积、截面周长、cross-section body）的相关度排序：\n1) lit:000020《On the volume of hyperplane sections of a d-cube》（path: 08359e313da3-on-the-volume-of-hyperplane-sections-of-a-d-cube.pdf）—— 最相关：d-立方体超平面截面体积的估计\n2) lit:000021《Maximal perimeters of polytope sections and origin-symmetry》（66cf70c235d2-…pdf）—— 截面周长极值 + 原点对称，与「最大截面」主线同构\n3) lit:000022《The cross-section body, plane sections of convex bodies and approximation of convex bodies》（92378bba55bc-…pdf）—— cross-section body 定义与逼近，是截面族的对象层\n4) lit:000015《Szarek and Ball made simple》（f69890810ecb-…pdf）—— l_p 球截面/Ball 那套论证的简化叙述，对台账引理路线有用\n5) lit:000016《Estimates on the decay of the Laplace-Polya integral》（52375fd6b18c-…pdf）—— Laplace-Polya 积分衰减估计，是截面体积估计的技术件\n其余 5 篇（lit:000017/000018/000019/000023/000024，测度论与广义积分背景）本轮不必花配额：如果概念配额仍封顶，就逐篇写一句「因配额让位给截面主线」的处置结论即可，不要写成已消化。\n要求：每条关系必须带逐字 quote 与 page_range（回验要过）；概念行按你的抽取口径如实标 quote_verified（自产命题写 null + quote_reason）；这 5 篇里哪一篇其实读不出可引正文，就如实报「未消化 + 为什么」，不要凑数。回执里给逐篇的 statements/relations 条数，以及这一趟配额封没封顶。"
+      },
+      "result": {
+        "summoned": "B",
+        "action": "",
+        "ok": true,
+        "task_id": "t-000197",
+        "status": "running",
+        "outcome": null,
+        "refusal_reason": null,
+        "preemptible": true,
+        "dispatched": [
+          "t-000197"
+        ],
+        "running": [
+          "t-000197"
+        ],
+        "detail": "还在跑：本步先不等（可抢占）。它回来之后结论会在你下一次被问之前以【子代理返场】投给你 —— 不要因为 status=running 就重派；收工会被拒到它回齐",
+        "roster_considered": true,
+        "roster_problem": "t-000197：名册三份没写全 —— 名册正文 t-000187.jsonl 没写成（文件里没有这一趟的那一行）",
+        "秘书": {
+          "alarms": [],
+          "fail_open": false,
+          "wash": {
+            "checked": true,
+            "washed": false,
+            "refused": "",
+            "reason": ""
+          },
+          "changes": [],
+          "surface_fit": {
+            "checked": false,
+            "fits": null,
+            "paths": [],
+            "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+            "shape": "summon",
+            "reach": {
+              "checked": true,
+              "verdict": "unknown",
+              "hops": [],
+              "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+            }
+          },
+          "reach_fit": {
+            "checked": true,
+            "verdict": "unknown",
+            "hops": [],
+            "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+          },
+          "assessment": {
+            "decision": "可派",
+            "reason": "这一条没点名具体动作（role 级派活）⇒ 不拿动作表去卡它；角色存在性由预筛管",
+            "basis": [
+              "specs/<role>.py 的动作表",
+              "tasks: 同 key 的既有终态行",
+              "没点名动作 ⇒ 动作表那一格不适用"
+            ],
+            "duplicates": [],
+            "alarms": [],
+            "novel": false,
+            "surface": {
+              "checked": false,
+              "fits": null,
+              "paths": [],
+              "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+              "shape": "summon",
+              "reach": {
+                "checked": true,
+                "verdict": "unknown",
+                "hops": [],
+                "reason": "角色 '' 不在能力表里（['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'L', 'M', 'V']）⇒ 判不了"
+              }
+            },
+            "judge": {
+              "checked": false,
+              "reason": "预筛没有报警、也没有重复候选 ⇒ 不必判断"
+            },
+            "engaged": false,
+            "seq": 5
+          }
+        },
+        "可退役": [
+          {
+            "task_id": "t-000188",
+            "role": "B",
+            "branch": "waiting_no_children",
+            "reading": {
+              "items_open": 0,
+              "items_open_ids": [],
+              "items_open_expects": {},
+              "items_open_states": {}
+            }
+          },
+          {
+            "task_id": "t-000197",
+            "role": "B",
+            "branch": "active",
+            "reading": {
+              "items_open": 0,
+              "items_open_ids": [],
+              "items_open_expects": {},
+              "items_open_states": {}
+            }
+          }
+        ],
+        "新消息": [
+          {
+            "板": "- （新）[t-000196] notice·要一个回执 来自 clock：时间到：收编我名下尚未消化的 11 篇已入库文献（lit:000014–000024）：逐篇抽概念（statements）、建关系（relations，quote 必须逐字取自正文并带 page_range），没有可读全文的如实说明卡在哪。优先做与 l_p 球/cube 截面直接相关的六篇：lit:000014《The geometry of Minkowski spaces: a survey, par｜等了 22 分钟 27 秒（起于 21:36:28，到于 21:58:55）。它交的是：ok：执行完成"
+          }
+        ],
+        "秘书加工": {
+          "reworked": [
+            {
+              "item": {
+                "板": "- （新）[t-000196] notice·要一个回执 来自 clock：时间到：收编我名下尚未消化的 11 篇已入库文献（lit:000014–000024）：逐篇抽概念（statements）、建关系（relations，quote 必须逐字取自正文并带 page_range），没有可读全文的如实说明卡在哪。优先做与 l_p 球/cube 截面直接相关的六篇：lit:000014《The geometry of Minkowski spaces: a survey, par｜等了 22 分钟 27 秒（起于 21:36:28，到于 21:58:55）。它交的是：ok：执行完成"
+              },
+              "addendum": "我的产出物口径：交付状态 —— 交给谁：派你这趟活的那一方（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名，它是主控就写 M）与收方 B；形态：`search_requests` 行 + `literature` 行；可核字段：`search_requests.outcome` / `search_requests.result_lit_ids` / `search_requests.done` / `literature.lit_id`；算做完：本条请求的 `outcome` 已终局（不是 pending）、`result_lit_ids` 里每个号都 能在 `literature` 里读到，且这批已派 B 收编、B 回执给出概念行与关系行的条数。\n我在本条线上的位置：文献检索：把搜索请求变成已登记的文献行，并如实报告每一次失败",
+              "problem": "",
+              "fail_open": false
+            }
+          ],
+          "handoffs_digest": "- 000024 V→B：V 复核 b-proof-000003：有毛病（依赖表漏 stmt:000034；被引命题手稿不在闸门读的 F 族路径），数学正文无第二处缺陷\n- 000025 V→B：V 复核 manuscripts/B/b-proof-000003.md（正文 sha 43f4c2ab…）：有毛病 —— 第 1、2 步把中间积分表示误标成 (i) 的等号；第 6 步修复已确认正确，其余各步与全部数值均复算通过\n- 000026 D→M：D 收口：RESEARCH.md 七节齐（6 条目录行四格可核）、三段结构与两临界点写成显式表述、两份改主意留痕、缺口与未签 9 条处置已写清\n- 000027 V→B：V 审 manuscripts/B/b-proof-000003.md：判「有毛病」（defect_step=1）—— 命题身份挂错号（稿内命题是 stmt:000042 的字面）+ 三处残留序数；数学内容未查出错误\n- 000028 B→A：11 篇回执：lit:000014 收 30 条概念+25 条关系；其余 10 篇 0/0（概念配额 30 条/趟累计封顶，非缺正文）；二阶段 stmt:000030 #p2 仍未洗，落稿被 stale_target 挡住"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 64640,
+        "prompt_cache_miss_tokens": 2625,
+        "tokens_in": 67265,
+        "tokens_out": 2149,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000187"
+    },
+    {
+      "index": 12,
+      "shape": "tool",
+      "payload": {
+        "name": "clock.timer_start",
+        "args": {
+          "wait_for": "t-000197",
+          "reason": "等 B 第二趟（t-000197）交回收编回执后再收工"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "clock.timer_start",
+        "ok": true,
+        "data": {
+          "timer_id": "tm-000178",
+          "kind": "timer",
+          "state": "pending",
+          "to": "self",
+          "task_id": "t-000187",
+          "role": "A",
+          "reason": "等 B 第二趟（t-000197）交回收编回执后再收工",
+          "after_sec": null,
+          "due_at": "",
+          "at": "",
+          "remaining_sec": null,
+          "created_at": "2026-11-24T13:59:03.291173+00:00",
+          "clock_status": "ok",
+          "wait_for": "t-000197",
+          "wait_for_resolved": "task:t-000197",
+          "wait_state": "open",
+          "max_wait_sec": null,
+          "park_state": "parked",
+          "parked_at": "2026-11-24T13:59:03.291173+00:00",
+          "parked_sec": 0.034666,
+          "parked_steps": 0,
+          "parked_calls": 0,
+          "purpose": "等 B 第二趟（t-000197）交回收编回执后再收工",
+          "purpose_missing": false,
+          "purpose_prompt": ""
+        },
+        "error": "",
+        "meta": {
+          "timer_id": "tm-000178"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 66176,
+        "prompt_cache_miss_tokens": 4175,
+        "tokens_in": 70351,
+        "tokens_out": 560,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000187"
+    },
+    {
+      "index": 15,
+      "shape": "tool",
+      "payload": {
+        "name": "conductor.ack",
+        "args": {
+          "item_ids": [
+            "t-000195",
+            "t-000196",
+            "t-000198"
+          ],
+          "close": "acked",
+          "note": "B 两趟收编回执（手稿 000028/000029）已读并核过：lit:000014 收 30 概念+25 关系、000020/21/22/16 手工收编 8 概念+7 关系（quote_verified 全 true）；其余 6 篇 0/0 的原因是概念配额跨趟累计封顶，非缺正文"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "conductor.ack",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "ok": true,
+          "state": "acked",
+          "acked": [
+            "t-000195",
+            "t-000196",
+            "t-000198"
+          ],
+          "already_done": [
+            "t-000195",
+            "t-000196",
+            "t-000198"
+          ],
+          "refused": [],
+          "unknown": [],
+          "missing": [],
+          "not_yours": [],
+          "refusal_codes": [],
+          "results": [
+            {
+              "item_id": "t-000195",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000196",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000198",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            }
+          ],
+          "count": 3,
+          "requested": 3,
+          "by_task_id": "t-000187",
+          "note": "B 两趟收编回执（手稿 000028/000029）已读并核过：lit:000014 收 30 概念+25 关系、000020/21/22/16 手工收编 8 概念+7 关系（quote_verified 全 true）；其余 6 篇 0/0 的原因是概念配额跨趟累计封顶，非缺正文",
+          "close": "acked",
+          "reason": "确认了 3 条"
+        },
+        "error": "",
+        "meta": {
+          "checked": true,
+          "ok": true,
+          "state": "acked",
+          "acked": [
+            "t-000195",
+            "t-000196",
+            "t-000198"
+          ],
+          "already_done": [
+            "t-000195",
+            "t-000196",
+            "t-000198"
+          ],
+          "refused": [],
+          "unknown": [],
+          "missing": [],
+          "not_yours": [],
+          "refusal_codes": [],
+          "results": [
+            {
+              "item_id": "t-000195",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000196",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000198",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            }
+          ],
+          "count": 3,
+          "requested": 3,
+          "by_task_id": "t-000187",
+          "note": "B 两趟收编回执（手稿 000028/000029）已读并核过：lit:000014 收 30 概念+25 关系、000020/21/22/16 手工收编 8 概念+7 关系（quote_verified 全 true）；其余 6 篇 0/0 的原因是概念配额跨趟累计封顶，非缺正文",
+          "close": "acked",
+          "reason": "确认了 3 条"
+        },
+        "可退役": [
+          {
+            "task_id": "t-000188",
+            "role": "B",
+            "branch": "waiting_no_children",
+            "reading": {
+              "items_open": 0,
+              "items_open_ids": [],
+              "items_open_expects": {},
+              "items_open_states": {}
+            }
+          },
+          {
+            "task_id": "t-000197",
+            "role": "B",
+            "branch": "waiting_no_children",
+            "reading": {
+              "items_open": 0,
+              "items_open_ids": [],
+              "items_open_expects": {},
+              "items_open_states": {}
+            }
+          }
+        ],
+        "新消息": [
+          {
+            "板": "- （新）[t-000199] notice·要一个回执 来自 clock：时间到：接着上一趟（t-000188，回执手稿 000028）的欠账：lit:000014 已收 30 条概念 + 25 条关系，其余 10 篇因「概念配额 30 条/趟累计封顶」得 0/0。这一趟请只针对下面 5 篇逐篇做实质收编（抽概念 + 建关系 + 落命题线索），按与本项目（l_p 球/立方体的超平面截面最大体积、截面周长、cross-section body）的相关度排序：\n1) lit:000｜等了 13 分钟 11 秒（起于 21:58:56，到于 22:12:07）。它交的是：ok：执行完成\n- （新）[t-000200] notice·要一个回执 来自 clock：时间到：等 B 第二趟（t-000197）交回收编回执后再收工｜等了 13 分钟 4 秒（起于 21:59:03，到于 22:12:07）。它交的是：ok：执行完成"
+          }
+        ],
+        "秘书加工": {
+          "reworked": [
+            {
+              "item": {
+                "板": "- （新）[t-000199] notice·要一个回执 来自 clock：时间到：接着上一趟（t-000188，回执手稿 000028）的欠账：lit:000014 已收 30 条概念 + 25 条关系，其余 10 篇因「概念配额 30 条/趟累计封顶」得 0/0。这一趟请只针对下面 5 篇逐篇做实质收编（抽概念 + 建关系 + 落命题线索），按与本项目（l_p 球/立方体的超平面截面最大体积、截面周长、cross-section body）的相关度排序：\n1) lit:000｜等了 13 分钟 11 秒（起于 21:58:56，到于 22:12:07）。它交的是：ok：执行完成\n- （新）[t-000200] notice·要一个回执 来自 clock：时间到：等 B 第二趟（t-000197）交回收编回执后再收工｜等了 13 分钟 4 秒（起于 21:59:03，到于 22:12:07）。它交的是：ok：执行完成"
+              },
+              "addendum": "我的产出物口径：交付状态 —— 交给谁：派你这趟活的那一方（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名，它是主控就写 M）与收方 B；形态：`search_requests` 行 + `literature` 行；可核字段：`search_requests.outcome` / `search_requests.result_lit_ids` / `search_requests.done` / `literature.lit_id`；算做完：本条请求的 `outcome` 已终局（不是 pending）、`result_lit_ids` 里每个号都 能在 `literature` 里读到，且这批已派 B 收编、B 回执给出概念行与关系行的条数。\n我在本条线上的位置：文献检索：把搜索请求变成已登记的文献行，并如实报告每一次失败",
+              "problem": "",
+              "fail_open": false
+            }
+          ],
+          "handoffs_digest": "- 000025 V→B：V 复核 manuscripts/B/b-proof-000003.md（正文 sha 43f4c2ab…）：有毛病 —— 第 1、2 步把中间积分表示误标成 (i) 的等号；第 6 步修复已确认正确，其余各步与全部数值均复算通过\n- 000026 D→M：D 收口：RESEARCH.md 七节齐（6 条目录行四格可核）、三段结构与两临界点写成显式表述、两份改主意留痕、缺口与未签 9 条处置已写清\n- 000027 V→B：V 审 manuscripts/B/b-proof-000003.md：判「有毛病」（defect_step=1）—— 命题身份挂错号（稿内命题是 stmt:000042 的字面）+ 三处残留序数；数学内容未查出错误\n- 000028 B→A：11 篇回执：lit:000014 收 30 条概念+25 条关系；其余 10 篇 0/0（概念配额 30 条/趟累计封顶，非缺正文）；二阶段 stmt:000030 #p2 仍未洗，落稿被 stale_target 挡住\n- 000029 B→A：5 篇截面主线文献首轮手工收编完成：8 条概念 + 7 条关系（quote_verified 全 true）；机械抽取器 30 条配额跨趟累计不重置，是这一批只能手工做的原因"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 69376,
+        "prompt_cache_miss_tokens": 2735,
+        "tokens_in": 72111,
+        "tokens_out": 561,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000187"
+    },
+    {
+      "index": 17,
+      "shape": "tool",
+      "payload": {
+        "name": "conductor.ack",
+        "args": {
+          "item_ids": [
+            "t-000199",
+            "t-000200"
+          ],
+          "close": "acked",
+          "note": "两条 clock 到点通知（第二轮收编的唤醒与等待计时器）已读：对应的工作已经由 t-000197 交回（手稿 000029，5 篇手工收编 8 概念+7 关系），这一趟不再有别的欠账"
+        },
+        "why": "把到点通知收口，清板后收工"
+      },
+      "result": {
+        "tool": "conductor.ack",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "ok": true,
+          "state": "acked",
+          "acked": [
+            "t-000199",
+            "t-000200"
+          ],
+          "already_done": [
+            "t-000199",
+            "t-000200"
+          ],
+          "refused": [],
+          "unknown": [],
+          "missing": [],
+          "not_yours": [],
+          "refusal_codes": [],
+          "results": [
+            {
+              "item_id": "t-000199",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000200",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            }
+          ],
+          "count": 2,
+          "requested": 2,
+          "by_task_id": "t-000187",
+          "note": "两条 clock 到点通知（第二轮收编的唤醒与等待计时器）已读：对应的工作已经由 t-000197 交回（手稿 000029，5 篇手工收编 8 概念+7 关系），这一趟不再有别的欠账",
+          "close": "acked",
+          "reason": "确认了 2 条"
+        },
+        "error": "",
+        "meta": {
+          "checked": true,
+          "ok": true,
+          "state": "acked",
+          "acked": [
+            "t-000199",
+            "t-000200"
+          ],
+          "already_done": [
+            "t-000199",
+            "t-000200"
+          ],
+          "refused": [],
+          "unknown": [],
+          "missing": [],
+          "not_yours": [],
+          "refusal_codes": [],
+          "results": [
+            {
+              "item_id": "t-000199",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000200",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            }
+          ],
+          "count": 2,
+          "requested": 2,
+          "by_task_id": "t-000187",
+          "note": "两条 clock 到点通知（第二轮收编的唤醒与等待计时器）已读：对应的工作已经由 t-000197 交回（手稿 000029，5 篇手工收编 8 概念+7 关系），这一趟不再有别的欠账",
+          "close": "acked",
+          "reason": "确认了 2 条"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 71040,
+        "prompt_cache_miss_tokens": 4113,
+        "tokens_in": 75153,
+        "tokens_out": 440,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000187"
+    },
+    {
+      "index": 18,
+      "shape": "final",
+      "payload": {
+        "final": "A.run_once 这一趟跑完：没有新的检索可领，真正的欠账是「只入库未收编」的 11 篇已入库文献，已两趟派 B 收编并拿到逐篇回执。\n\n【检索面】own.run_once(request_ids=[r-000002, r-000003]) 回报 processed=0、skipped_reason=no_pending_delegation、pending_total=0、pending_by_delegation=[]；lit.stage_list(request_id=\"*\") 全表 30 行候选里 pending=0（admitted 25 / rejected 5），三个委托 r-000001/2/3 的每一行都已打 cleared_at（clear_stage.settled 三条、cleared=[]、refused=[]）。⇒ 本轮没有要新增的检索请求，也没有待裁表要清。\n\n【收尾判据三项】① outcome 终局：r-000001 ok(+done)、r-000002 ok、r-000003 ok、r-000004 ok —— 没有 pending；② result_lit_ids 可读：literature 表 25 行，r-000002 的 000010–000019 与 r-000003 的 000020–000024 逐条在表（连带 000000–000009），盘上 path 齐；③ 已派 B 收编、B 回执给到条数：见下。\n\n【B 收编回执（两趟）】\n- 手稿 000028（t-000188）：lit:000014《The geometry of Minkowski spaces: a survey, part I》收 30 条概念（stmt 000043–000072，page_range p.35–36）+ 25 条关系（rel 000021–000045，quote_verified 全 true，p.35–43）；其余 10 篇 0/0，卡点是机械抽取器的「概念配额 30 条/趟累计封顶」，不是缺正文。\n- 手稿 000029（t-000197）：接着做 5 篇截面主线文献，走手工路径（register_statement kind=concept + table.create relations + 逐字回验），落 8 条概念 + 7 条关系（quote_verified 全 true）；B 点名 000020/000021/000022/000016 是手工收编的，机械器 30 条配额跨趟累计不重置是这一批只能手工做的原因。\n\n【如实报的三处缺口，不折成「没有问题」】\n1) 仍有 6 篇已入库文献没有消化痕迹（000015《Szarek and Ball made simple》、000017《Paraconsistent dominated convergence》、000018《Generalized integrals and convergence theorems》、000019《An introduction to measure theory》、000023《Measure, integration & real analysis》、000024《Measure theory and integration by and for the learner》）—— 主体是测度论背景，B 报的原因是概念配额跨趟累计封顶（concept_quota limit:30/written:30、concepts_refused=105、relations_deferred=31），不是没下到全文；要它们的命题线索得先解配额或继续走手工路径。\n2) r-000002、r-000003 的 done 旗仍为 false，而 outcome=ok、候选已逐条清表、result_lit_ids 逐条可读 —— done 不是我写的字段，不擅自改，留给 M/D 裁。\n3) lit.stage_list 报了 4 组重复（title 归一后 000010/000025、000011/000026、000023/000028、000024/000029）；它们在候选表里已落 rejected 档，不影响 literature 表（25 行无同 DOI/同题重复）。\n\n【这一趟的经验】本地已声明 PDF 的收编链是通的（发现→候选→抽读→判收→admit_all→清表，全表 0 待裁可复核）；真正的瓶颈在 B 侧的「概念配额 30 条/趟且跨趟累计」—— 同一条委托的第二批只能改手工，这是下一趟该先谈的口径，不是检索侧能改的。",
+        "evidence": [
+          "r-000001",
+          "r-000002",
+          "r-000003",
+          "r-000004",
+          "lit:000014",
+          "lit:000016",
+          "lit:000020",
+          "lit:000021",
+          "lit:000022",
+          "stmt:000043",
+          "rel:000021",
+          "手稿000028",
+          "手稿000029"
+        ],
+        "notify": {
+          "to": "M",
+          "summary": "A.run_once 收口：全表 0 待裁、3 个委托已清表；11 篇「只入库未收编」已两趟派 B 交回条数（lit:000014 得 30 概念+25 关系；5 篇截面主线手工得 8 概念+7 关系），仍 6 篇（测度论背景）0/0 卡在概念配额跨趟累计封顶",
+          "body": "## 做了什么\n\n**检索面**：own.run_once(request_ids=[r-000002, r-000003]) → processed=0、skipped_reason=no_pending_delegation、pending_total=0；lit.stage_list(request_id=\"*\") → 全表 30 条候选 pending=0（admitted 25 / rejected 5），r-000001/2/3 三个委托逐行已打 cleared_at。本轮没有新检索可领、也没有待裁表要清。\n\n**收编面（这是我发现并补上的欠账）**：run_once 的 unprocessed_reasons 点名 lit:000014–000024 共 11 篇「statements 与 relations 都没挂上 ⇒ 无消化痕迹」。按职责派了 B 两趟：\n- 手稿 000028（t-000188）：lit:000014 收 **30 条概念（stmt 000043–000072）+ 25 条关系（rel 000021–000045，quote_verified 全 true）**；其余 10 篇 0/0，卡点=概念配额 30 条/趟累计封顶（不是缺正文）。\n- 手稿 000029（t-000197）：5 篇截面主线走手工路径，落 **8 条概念 + 7 条关系（quote_verified 全 true）**；机械器配额跨趟累计不重置是只能手工的原因。\n\n## 收尾判据三项\n① outcome 终局（r-000001/2/3/4 全 ok，无 pending）；② result_lit_ids 逐个在 literature 表可读（000010–000024 齐，path 齐）；③ 已派 B 并拿到「概念行 + 关系行」条数（上）。\n\n## 我卡在哪 / 要谁定\n1) **6 篇仍是 0/0**（lit:000015、000017、000018、000019、000023、000024，主体是测度论背景）：原因是概念配额跨趟累计封顶（B 读数 concept_quota limit:30/written:30、concepts_refused=105、relations_deferred=31），不是没下到全文 —— 要它们的命题线索，得先定「配额是否按委托重置」这条口径，或一律走手工路径。\n2) **r-000002、r-000003 的 done 仍为 false**，而 outcome=ok、候选已清表、result_lit_ids 可读。done 不是我写的字段，没擅自改，请裁要不要补置。\n3) 候选表报了 4 组 title 重复（000010/000025、000011/000026、000023/000028、000024/000029），都已在 rejected 档；literature 表 25 行没有同 DOI/同题重复。\n\n## 经验（可复用）\n本地已声明 PDF 的收编链是通的（发现→候选→抽读→判收→admit_all→清表，全表 0 待裁可复核）；瓶颈在 B 侧概念配额「30 条/趟且跨趟累计」——同一委托第二批必定转手工，这是下一趟该先谈的口径。",
+          "refs": [
+            "r-000002",
+            "r-000003",
+            "lit:000014",
+            "lit:000020",
+            "stmt:000043",
+            "rel:000021",
+            "000028",
+            "000029"
+          ]
+        }
+      },
+      "result": {
+        "notify_problem": "notify.refs 里的 'r-000002' 立不住：引用的前序手稿 'r-000002' 不在盘上 ⇒ 不许凭空引用（溯源链断了）"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 74112,
+        "prompt_cache_miss_tokens": 2151,
+        "tokens_in": 76263,
+        "tokens_out": 2835,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000187"
+    }
+  ],
+  "final": "A.run_once 这一趟跑完：没有新的检索可领，真正的欠账是「只入库未收编」的 11 篇已入库文献，已两趟派 B 收编并拿到逐篇回执。\n\n【检索面】own.run_once(request_ids=[r-000002, r-000003]) 回报 processed=0、skipped_reason=no_pending_delegation、pending_total=0、pending_by_delegation=[]；lit.stage_list(request_id=\"*\") 全表 30 行候选里 pending=0（admitted 25 / rejected 5），三个委托 r-000001/2/3 的每一行都已打 cleared_at（clear_stage.settled 三条、cleared=[]、refused=[]）。⇒ 本轮没有要新增的检索请求，也没有待裁表要清。\n\n【收尾判据三项】① outcome 终局：r-000001 ok(+done)、r-000002 ok、r-000003 ok、r-000004 ok —— 没有 pending；② result_lit_ids 可读：literature 表 25 行，r-000002 的 000010–000019 与 r-000003 的 000020–000024 逐条在表（连带 000000–000009），盘上 path 齐；③ 已派 B 收编、B 回执给到条数：见下。\n\n【B 收编回执（两趟）】\n- 手稿 000028（t-000188）：lit:000014《The geometry of Minkowski spaces: a survey, part I》收 30 条概念（stmt 000043–000072，page_range p.35–36）+ 25 条关系（rel 000021–000045，quote_verified 全 true，p.35–43）；其余 10 篇 0/0，卡点是机械抽取器的「概念配额 30 条/趟累计封顶」，不是缺正文。\n- 手稿 000029（t-000197）：接着做 5 篇截面主线文献，走手工路径（register_statement kind=concept + table.create relations + 逐字回验），落 8 条概念 + 7 条关系（quote_verified 全 true）；B 点名 000020/000021/000022/000016 是手工收编的，机械器 30 条配额跨趟累计不重置是这一批只能手工做的原因。\n\n【如实报的三处缺口，不折成「没有问题」】\n1) 仍有 6 篇已入库文献没有消化痕迹（000015《Szarek and Ball made simple》、000017《Paraconsistent dominated convergence》、000018《Generalized integrals and convergence theorems》、000019《An introduction to measure theory》、000023《Measure, integration & real analysis》、000024《Measure theory and integration by and for the learner》）—— 主体是测度论背景，B 报的原因是概念配额跨趟累计封顶（concept_quota limit:30/written:30、concepts_refused=105、relations_deferred=31），不是没下到全文；要它们的命题线索得先解配额或继续走手工路径。\n2) r-000002、r-000003 的 done 旗仍为 false，而 outcome=ok、候选已逐条清表、result_lit_ids 逐条可读 —— done 不是我写的字段，不擅自改，留给 M/D 裁。\n3) lit.stage_list 报了 4 组重复（title 归一后 000010/000025、000011/000026、000023/000028、000024/000029）；它们在候选表里已落 rejected 档，不影响 literature 表（25 行无同 DOI/同题重复）。\n\n【这一趟的经验】本地已声明 PDF 的收编链是通的（发现→候选→抽读→判收→admit_all→清表，全表 0 待裁可复核）；真正的瓶颈在 B 侧的「概念配额 30 条/趟且跨趟累计」—— 同一条委托的第二批只能改手工，这是下一趟该先谈的口径，不是检索侧能改的。",
+  "evidence": [
+    "r-000001",
+    "r-000002",
+    "r-000003",
+    "r-000004",
+    "lit:000014",
+    "lit:000016",
+    "lit:000020",
+    "lit:000021",
+    "lit:000022",
+    "stmt:000043",
+    "rel:000021",
+    "手稿000028",
+    "手稿000029"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 1,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 12,
+  "compactions": 0,
+  "mailbox_items": [
+    "t-000195",
+    "t-000196",
+    "t-000198",
+    "t-000199",
+    "t-000200"
+  ],
+  "mailbox_msgs": [
+    "m000024"
+  ],
+  "mailbox_delivered": 6,
+  "monitor_turns": 2,
+  "wakes": 3,
+  "wake_ids": [
+    "wk-000057",
+    "wk-000058",
+    "wk-000059"
+  ],
+  "wake_events": [
+    {
+      "wake_id": "wk-000057",
+      "task_id": "t-000187",
+      "role": "A",
+      "timer_id": "tm-000169",
+      "kind": "timer",
+      "reason": "收编我名下尚未消化的 11 篇已入库文献（lit:000014–000024）：逐篇抽概念（statements）、建关系（relations，quote 必须逐字取自正文并带 page_range），没有可读全文的如实说明卡在哪。优先做与 l_p 球/cube 截面直接相关的六篇：lit:000014《The geometry of Minkowski spaces: a survey, par",
+      "purpose": "收编我名下尚未消化的 11 篇已入库文献（lit:000014–000024）：逐篇抽概念（statements）、建关系（relations，quote 必须逐字取自正文并带 page_range），没有可读全文的如实说明卡在哪。优先做与 l_p 球/cube 截面直接相关的六篇：lit:000014《The geometry of Minkowski spaces: a survey, par",
+      "purpose_missing": false,
+      "message": "时间到：收编我名下尚未消化的 11 篇已入库文献（lit:000014–000024）：逐篇抽概念（statements）、建关系（relations，quote 必须逐字取自正文并带 page_range），没有可读全文的如实说明卡在哪。优先做与 l_p 球/cube 截面直接相关的六篇：lit:000014《The geometry of Minkowski spaces: a survey, par｜等了 22 分钟 27 秒（起于 21:36:28，到于 21:58:55）。它交的是：ok：执行完成",
+      "waited_sec": 1347.104497,
+      "triggered_by": "target_event",
+      "wait_for": "task:t-000188",
+      "due_at": "",
+      "fired_at": "2026-11-24T13:58:55.706360+00:00",
+      "mailbox_item_id": "t-000196",
+      "state": "pending"
+    },
+    {
+      "wake_id": "wk-000058",
+      "task_id": "t-000187",
+      "role": "A",
+      "timer_id": "tm-000176",
+      "kind": "timer",
+      "reason": "接着上一趟（t-000188，回执手稿 000028）的欠账：lit:000014 已收 30 条概念 + 25 条关系，其余 10 篇因「概念配额 30 条/趟累计封顶」得 0/0。这一趟请只针对下面 5 篇逐篇做实质收编（抽概念 + 建关系 + 落命题线索），按与本项目（l_p 球/立方体的超平面截面最大体积、截面周长、cross-section body）的相关度排序：\n1) lit:000",
+      "purpose": "接着上一趟（t-000188，回执手稿 000028）的欠账：lit:000014 已收 30 条概念 + 25 条关系，其余 10 篇因「概念配额 30 条/趟累计封顶」得 0/0。这一趟请只针对下面 5 篇逐篇做实质收编（抽概念 + 建关系 + 落命题线索），按与本项目（l_p 球/立方体的超平面截面最大体积、截面周长、cross-section body）的相关度排序：\n1) lit:000",
+      "purpose_missing": false,
+      "message": "时间到：接着上一趟（t-000188，回执手稿 000028）的欠账：lit:000014 已收 30 条概念 + 25 条关系，其余 10 篇因「概念配额 30 条/趟累计封顶」得 0/0。这一趟请只针对下面 5 篇逐篇做实质收编（抽概念 + 建关系 + 落命题线索），按与本项目（l_p 球/立方体的超平面截面最大体积、截面周长、cross-section body）的相关度排序：\n1) lit:000｜等了 13 分钟 11 秒（起于 21:58:56，到于 22:12:07）。它交的是：ok：执行完成",
+      "waited_sec": 791.946004,
+      "triggered_by": "target_event",
+      "wait_for": "task:t-000197",
+      "due_at": "",
+      "fired_at": "2026-11-24T14:12:07.947086+00:00",
+      "mailbox_item_id": "t-000199",
+      "state": "pending"
+    },
+    {
+      "wake_id": "wk-000059",
+      "task_id": "t-000187",
+      "role": "A",
+      "timer_id": "tm-000178",
+      "kind": "timer",
+      "reason": "等 B 第二趟（t-000197）交回收编回执后再收工",
+      "purpose": "等 B 第二趟（t-000197）交回收编回执后再收工",
+      "purpose_missing": false,
+      "message": "时间到：等 B 第二趟（t-000197）交回收编回执后再收工｜等了 13 分钟 4 秒（起于 21:59:03，到于 22:12:07）。它交的是：ok：执行完成",
+      "waited_sec": 785.256646,
+      "triggered_by": "target_event",
+      "wait_for": "t-000197",
+      "due_at": "",
+      "fired_at": "2026-11-24T14:12:08.547819+00:00",
+      "mailbox_item_id": "t-000200",
+      "state": "pending"
+    }
+  ],
+  "clock_pumps": 30,
+  "clock_fired": 6,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "A 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "A",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    },
+    "own_children": [
+      "t-000188",
+      "t-000197"
+    ],
+    "return_given": [
+      "t-000188",
+      "t-000197"
+    ],
+    "reentry_turns": 3,
+    "reentry_reasons": [
+      "派活之后还没给过模型回合：这一批 1 项还在跑（t-000188），这一拍的 waiter 全是在等它们 ⇒ 这一拍返场问模型一次，下一拍起才按挂机口径走",
+      "派活之后还没给过模型回合：这一批 1 项还在跑（t-000197），这一拍的 waiter 全是在等它们 ⇒ 这一拍返场问模型一次，下一拍起才按挂机口径走",
+      "上一拍是等谁的唤醒（t-000197 回来）—— 那一拍按 ③ 跳过，那一批的产出现在就在上下文里 ⇒ 这一拍返场问模型（不许再睡一拍）"
+    ],
+    "research_fp": "",
+    "patrol": {
+      "checked": true,
+      "mounted": false,
+      "skipped": "role",
+      "timer_id": "",
+      "interval_sec": 1200.0,
+      "remaining_sec": null,
+      "reason": "轮查计时器只挂给主控（M）：这一趟是 A ⇒ 不挂"
+    },
+    "asked_sec": 15.5,
+    "slice_sec": 16.0,
+    "parked_turns": 5,
+    "skip_calls": 7,
+    "woke_turns": 2,
+    "woke_reasons": [
+      "event",
+      "event"
+    ]
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {
+    "checked": true,
+    "enabled": true,
+    "in_task": true,
+    "in_task_why": "",
+    "delegations": 3,
+    "settled": [
+      "r-000001",
+      "r-000002",
+      "r-000003"
+    ],
+    "cleared": [],
+    "pending": [],
+    "refused": [],
+    "why": "全表 3 个委托都已清表（每一行都有 cleared_at），这一拍没有要提交的",
+    "note": "全表 3 个委托都已清表（每一行都有 cleared_at），这一拍没有要提交的"
+  },
+  "unprocessed_reasons": {
+    "checked": true,
+    "enabled": true,
+    "unprocessed": 9,
+    "written": [
+      {
+        "lit_id": "000016",
+        "title": "Estimates on the decay of the Laplace-Polya integral",
+        "statements": 1,
+        "relations": 1,
+        "reason": "B 已经把这一篇登记成 1 条 statements（概念/命题，source_lit_id=000016）与 1 条 relations（lit_id=000016），只是 `processed` 位仍为假：该位只由 B.run_once 的领取路径翻，B 用 table.create / own.register_statement 手工登记不会翻它。⇒ 这一条已经消化过（证据就是上面那两行条数），可以带着这一格收工。"
+      },
+      {
+        "lit_id": "000020",
+        "title": "On the volume of hyperplane sections of a d-cube",
+        "statements": 3,
+        "relations": 3,
+        "reason": "B 已经把这一篇登记成 3 条 statements（概念/命题，source_lit_id=000020）与 3 条 relations（lit_id=000020），只是 `processed` 位仍为假：该位只由 B.run_once 的领取路径翻，B 用 table.create / own.register_statement 手工登记不会翻它。⇒ 这一条已经消化过（证据就是上面那两行条数），可以带着这一格收工。"
+      },
+      {
+        "lit_id": "000021",
+        "title": "Maximal perimeters of polytope sections and origin-symmetry",
+        "statements": 2,
+        "relations": 1,
+        "reason": "B 已经把这一篇登记成 2 条 statements（概念/命题，source_lit_id=000021）与 1 条 relations（lit_id=000021），只是 `processed` 位仍为假：该位只由 B.run_once 的领取路径翻，B 用 table.create / own.register_statement 手工登记不会翻它。⇒ 这一条已经消化过（证据就是上面那两行条数），可以带着这一格收工。"
+      },
+      {
+        "lit_id": "000022",
+        "title": "The cross-section body, plane sections of convex bodies and approximation of convex bodies",
+        "statements": 1,
+        "relations": 1,
+        "reason": "B 已经把这一篇登记成 1 条 statements（概念/命题，source_lit_id=000022）与 1 条 relations（lit_id=000022），只是 `processed` 位仍为假：该位只由 B.run_once 的领取路径翻，B 用 table.create / own.register_statement 手工登记不会翻它。⇒ 这一条已经消化过（证据就是上面那两行条数），可以带着这一格收工。"
+      }
+    ],
+    "kept": [],
+    "undigested": [
+      {
+        "lit_id": "000017",
+        "title": "Paraconsistent dominated convergence",
+        "why": "statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化）"
+      },
+      {
+        "lit_id": "000018",
+        "title": "Generalized integrals and convergence theorems",
+        "why": "statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化）"
+      },
+      {
+        "lit_id": "000019",
+        "title": "An introduction to measure theory",
+        "why": "statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化）"
+      },
+      {
+        "lit_id": "000023",
+        "title": "Measure, integration & real analysis",
+        "why": "statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化）"
+      },
+      {
+        "lit_id": "000024",
+        "title": "Measure theory and integration by and for the learner",
+        "why": "statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化）"
+      }
+    ],
+    "why": "这一拍给 4 条已消化但 processed 仍为假的文献行写了 `unprocessed_reason`：lit:000016（statements 1 / relations 1）、lit:000020（statements 3 / relations 3）、lit:000021（statements 2 / relations 1）、lit:000022（statements 1 / relations 1）；没有写理由的：lit:000017（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000018（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000019（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000023（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000024（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））。",
+    "note": "这一拍给 4 条已消化但 processed 仍为假的文献行写了 `unprocessed_reason`：lit:000016（statements 1 / relations 1）、lit:000020（statements 3 / relations 3）、lit:000021（statements 2 / relations 1）、lit:000022（statements 1 / relations 1）；没有写理由的：lit:000017（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000018（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000019（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000023（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000024（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））。"
+  },
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [],
+  "summons": [
+    "B",
+    "B"
+  ],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [
+    {
+      "kind": "summon",
+      "counted": true,
+      "task_id": "t-000188",
+      "role": "B",
+      "step": 5,
+      "status": "running",
+      "outcome": "",
+      "handoff_id": "",
+      "outputs": [
+        "t-000188"
+      ],
+      "disposition": ""
+    },
+    {
+      "kind": "summon",
+      "counted": true,
+      "task_id": "t-000197",
+      "role": "B",
+      "step": 10,
+      "status": "running",
+      "outcome": "",
+      "handoff_id": "",
+      "outputs": [
+        "t-000197"
+      ],
+      "disposition": ""
+    }
+  ],
+  "summons_total": 2,
+  "summons_consumed": 2,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 2,
+    "summons_consumed": 2,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [
+      {
+        "kind": "summon",
+        "counted": true,
+        "task_id": "t-000188",
+        "role": "B",
+        "step": 5,
+        "status": "running",
+        "outcome": "",
+        "handoff_id": "",
+        "outputs": [
+          "t-000188"
+        ],
+        "disposition": "consumed",
+        "evidence": {
+          "step": 6,
+          "shape": "note",
+          "effect": "笔记",
+          "refs": [
+            "t-000188"
+          ]
+        }
+      },
+      {
+        "kind": "summon",
+        "counted": true,
+        "task_id": "t-000197",
+        "role": "B",
+        "step": 10,
+        "status": "running",
+        "outcome": "",
+        "handoff_id": "",
+        "outputs": [
+          "t-000197"
+        ],
+        "disposition": "consumed",
+        "evidence": {
+          "step": 12,
+          "shape": "tool",
+          "effect": "工具 clock.timer_start",
+          "refs": [
+            "t-000197"
+          ]
+        }
+      }
+    ],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p328",
+    "role": "A",
+    "prompt_sha256": "3b118b3b5143061cd95090fcc8dc49314db65d0dce7dd285b6613ff426466c7a",
+    "prompt_chars": 66088,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "FACULTIES_07",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "TOOL_29",
+      "TOOL_30",
+      "TOOL_31",
+      "TOOL_32",
+      "TOOL_33",
+      "TOOL_34",
+      "TOOL_35",
+      "TOOL_36",
+      "TOOL_37",
+      "TOOL_38",
+      "TOOL_39",
+      "TOOL_40",
+      "TOOL_41",
+      "TOOL_42",
+      "TOOL_43",
+      "TOOL_44",
+      "TOOL_45",
+      "TOOL_46",
+      "TOOL_47",
+      "TOOL_48",
+      "TOOL_49",
+      "TOOL_50",
+      "TOOL_51",
+      "TOOL_52",
+      "TOOL_53",
+      "TOOL_54",
+      "A_SEARCH_STYLE",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_LIMITS",
+      "COLLAB_NAMES",
+      "PARENT_STOP",
+      "PARENT_ROSTER",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 13,
+    "tokens_in": 784081,
+    "tokens_out": 12091,
+    "usd": 0.014153,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 12,
+    "no_request_calls": 0,
+    "hit": 753152,
+    "miss": 30710,
+    "unknown_calls": 0,
+    "tokens_in": 783862,
+    "hit_rate": 0.9608,
+    "mismatched_calls": 0,
+    "saved_usd": 0.110713,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 2200.453,
+  "end_ts": "2026-11-24T22:12:30+08:00",
+  "notes": [
+    "第 6 步返场：子代理回来 0 条，还在跑 1 条（这一拍为了返场没等子：返场判据给过之后才等）",
+    "返场（Q22）：派活之后还没给过模型回合：这一批 1 项还在跑（t-000188），这一拍的 waiter 全是在等它们 ⇒ 这一拍返场问模型一次，下一拍起才按挂机口径走",
+    "第 7 步返场：子代理回来 0 条，还在跑 1 条（等待 300.0s，原因 slice）",
+    "第 8 步返场：子代理回来 0 条，还在跑 1 条（等待 300.0s，原因 slice）",
+    "第 9 步返场：子代理回来 0 条，还在跑 1 条（等待 300.0s，原因 slice）",
+    "第 10 步返场：子代理回来 1 条，还在跑 0 条（等待 240.6s，原因 settled）",
+    "第 11 步返场：子代理回来 0 条，还在跑 1 条（这一拍为了返场没等子：返场判据给过之后才等）",
+    "第 12 步返场：子代理回来 0 条，还在跑 1 条（这一拍为了返场没等子：返场判据给过之后才等）",
+    "返场（Q22）：派活之后还没给过模型回合：这一批 1 项还在跑（t-000197），这一拍的 waiter 全是在等它们 ⇒ 这一拍返场问模型一次，下一拍起才按挂机口径走",
+    "第 13 步返场：子代理回来 0 条，还在跑 1 条（等待 300.0s，原因 slice）",
+    "第 14 步返场：子代理回来 0 条，还在跑 1 条（等待 300.0s，原因 slice）",
+    "第 15 步返场：子代理回来 1 条，还在跑 0 条（等待 165.8s，原因 settled）",
+    "返场（Q22）：上一拍是等谁的唤醒（t-000197 回来）—— 那一拍按 ③ 跳过，那一批的产出现在就在上下文里 ⇒ 这一拍返场问模型（不许再睡一拍）",
+    "收工没有可用 notify 表（notify.refs 里的 'r-000002' 立不住：引用的前序手稿 'r-000002' 不在盘上 ⇒ 不许凭空引用（溯源链断了））⇒ 这一趟没有交接手稿（不打回、不代填）",
+    "缓存读数：命中 753152 / 未命中 30710 token，命中率 96.1%（12 次调用）；按 modelcost 口径估算可省 约 0.110713 美元",
+    "子产出处理读数：summons_total=2，consumed=2，waived=0，unknown=0，unconsumed=0",
+    "A 这一拍退场时的收尾自驱（自驱不是模型补的）：未消化理由自驱：这一拍给 4 条已消化但 processed 仍为假的文献行写了 `unprocessed_reason`：lit:000016（statements 1 / relations 1）、lit:000020（statements 3 / relations 3）、lit:000021（statements 2 / relations 1）、lit:000022（statements 1 / relations 1）；没有写理由的：lit:000017（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000018（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000019（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000023（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000024（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））。",
+    "终态回报已落板：t-000201（框架通报；模型没填 notify）"
+  ],
+  "final_payload": {
+    "final": "A.run_once 这一趟跑完：没有新的检索可领，真正的欠账是「只入库未收编」的 11 篇已入库文献，已两趟派 B 收编并拿到逐篇回执。\n\n【检索面】own.run_once(request_ids=[r-000002, r-000003]) 回报 processed=0、skipped_reason=no_pending_delegation、pending_total=0、pending_by_delegation=[]；lit.stage_list(request_id=\"*\") 全表 30 行候选里 pending=0（admitted 25 / rejected 5），三个委托 r-000001/2/3 的每一行都已打 cleared_at（clear_stage.settled 三条、cleared=[]、refused=[]）。⇒ 本轮没有要新增的检索请求，也没有待裁表要清。\n\n【收尾判据三项】① outcome 终局：r-000001 ok(+done)、r-000002 ok、r-000003 ok、r-000004 ok —— 没有 pending；② result_lit_ids 可读：literature 表 25 行，r-000002 的 000010–000019 与 r-000003 的 000020–000024 逐条在表（连带 000000–000009），盘上 path 齐；③ 已派 B 收编、B 回执给到条数：见下。\n\n【B 收编回执（两趟）】\n- 手稿 000028（t-000188）：lit:000014《The geometry of Minkowski spaces: a survey, part I》收 30 条概念（stmt 000043–000072，page_range p.35–36）+ 25 条关系（rel 000021–000045，quote_verified 全 true，p.35–43）；其余 10 篇 0/0，卡点是机械抽取器的「概念配额 30 条/趟累计封顶」，不是缺正文。\n- 手稿 000029（t-000197）：接着做 5 篇截面主线文献，走手工路径（register_statement kind=concept + table.create relations + 逐字回验），落 8 条概念 + 7 条关系（quote_verified 全 true）；B 点名 000020/000021/000022/000016 是手工收编的，机械器 30 条配额跨趟累计不重置是这一批只能手工做的原因。\n\n【如实报的三处缺口，不折成「没有问题」】\n1) 仍有 6 篇已入库文献没有消化痕迹（000015《Szarek and Ball made simple》、000017《Paraconsistent dominated convergence》、000018《Generalized integrals and convergence theorems》、000019《An introduction to measure theory》、000023《Measure, integration & real analysis》、000024《Measure theory and integration by and for the learner》）—— 主体是测度论背景，B 报的原因是概念配额跨趟累计封顶（concept_quota limit:30/written:30、concepts_refused=105、relations_deferred=31），不是没下到全文；要它们的命题线索得先解配额或继续走手工路径。\n2) r-000002、r-000003 的 done 旗仍为 false，而 outcome=ok、候选已逐条清表、result_lit_ids 逐条可读 —— done 不是我写的字段，不擅自改，留给 M/D 裁。\n3) lit.stage_list 报了 4 组重复（title 归一后 000010/000025、000011/000026、000023/000028、000024/000029）；它们在候选表里已落 rejected 档，不影响 literature 表（25 行无同 DOI/同题重复）。\n\n【这一趟的经验】本地已声明 PDF 的收编链是通的（发现→候选→抽读→判收→admit_all→清表，全表 0 待裁可复核）；真正的瓶颈在 B 侧的「概念配额 30 条/趟且跨趟累计」—— 同一条委托的第二批只能改手工，这是下一趟该先谈的口径，不是检索侧能改的。",
+    "evidence": [
+      "r-000001",
+      "r-000002",
+      "r-000003",
+      "r-000004",
+      "lit:000014",
+      "lit:000016",
+      "lit:000020",
+      "lit:000021",
+      "lit:000022",
+      "stmt:000043",
+      "rel:000021",
+      "手稿000028",
+      "手稿000029"
+    ],
+    "notify": {
+      "to": "M",
+      "summary": "A.run_once 收口：全表 0 待裁、3 个委托已清表；11 篇「只入库未收编」已两趟派 B 交回条数（lit:000014 得 30 概念+25 关系；5 篇截面主线手工得 8 概念+7 关系），仍 6 篇（测度论背景）0/0 卡在概念配额跨趟累计封顶",
+      "body": "## 做了什么\n\n**检索面**：own.run_once(request_ids=[r-000002, r-000003]) → processed=0、skipped_reason=no_pending_delegation、pending_total=0；lit.stage_list(request_id=\"*\") → 全表 30 条候选 pending=0（admitted 25 / rejected 5），r-000001/2/3 三个委托逐行已打 cleared_at。本轮没有新检索可领、也没有待裁表要清。\n\n**收编面（这是我发现并补上的欠账）**：run_once 的 unprocessed_reasons 点名 lit:000014–000024 共 11 篇「statements 与 relations 都没挂上 ⇒ 无消化痕迹」。按职责派了 B 两趟：\n- 手稿 000028（t-000188）：lit:000014 收 **30 条概念（stmt 000043–000072）+ 25 条关系（rel 000021–000045，quote_verified 全 true）**；其余 10 篇 0/0，卡点=概念配额 30 条/趟累计封顶（不是缺正文）。\n- 手稿 000029（t-000197）：5 篇截面主线走手工路径，落 **8 条概念 + 7 条关系（quote_verified 全 true）**；机械器配额跨趟累计不重置是只能手工的原因。\n\n## 收尾判据三项\n① outcome 终局（r-000001/2/3/4 全 ok，无 pending）；② result_lit_ids 逐个在 literature 表可读（000010–000024 齐，path 齐）；③ 已派 B 并拿到「概念行 + 关系行」条数（上）。\n\n## 我卡在哪 / 要谁定\n1) **6 篇仍是 0/0**（lit:000015、000017、000018、000019、000023、000024，主体是测度论背景）：原因是概念配额跨趟累计封顶（B 读数 concept_quota limit:30/written:30、concepts_refused=105、relations_deferred=31），不是没下到全文 —— 要它们的命题线索，得先定「配额是否按委托重置」这条口径，或一律走手工路径。\n2) **r-000002、r-000003 的 done 仍为 false**，而 outcome=ok、候选已清表、result_lit_ids 可读。done 不是我写的字段，没擅自改，请裁要不要补置。\n3) 候选表报了 4 组 title 重复（000010/000025、000011/000026、000023/000028、000024/000029），都已在 rejected 档；literature 表 25 行没有同 DOI/同题重复。\n\n## 经验（可复用）\n本地已声明 PDF 的收编链是通的（发现→候选→抽读→判收→admit_all→清表，全表 0 待裁可复核）；瓶颈在 B 侧概念配额「30 条/趟且跨趟累计」——同一委托第二批必定转手工，这是下一趟该先谈的口径。",
+      "refs": [
+        "r-000002",
+        "r-000003",
+        "lit:000014",
+        "lit:000020",
+        "stmt:000043",
+        "rel:000021",
+        "000028",
+        "000029"
+      ]
+    }
+  },
+  "task_id": "t-000187"
+}

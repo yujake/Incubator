@@ -1,0 +1,784 @@
+{
+  "role": "V",
+  "task": "V：这一趟派给你的活是 —— 审这一份证明稿 manuscripts/F/f-proof-000002.md（稿号 000002，正文 sha 912a98b82fcc2930b93450c5c259d53f82fc7ac338b02ca5adae50b5166841d1）：判它成立/有毛病，逐条给 findings（有毛病时每条带步号与原句）。这一份证的是体对角向截面面积的可算表达式：A_diag(p) = (1/2)∫_0^{2π}‖e(θ)‖_p^{-2}dθ = (3/4)∫_0^{2π}(|cos(θ-π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p)^{-2/p}dθ，以及等价形式 (√3/2)∫_0^{2π}(|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p}dθ 与 p=1,2,∞ 三个精确值（3√3/4、π、3√3）。请调 verify_proof，只点 proof_manuscript=manuscripts/F/f-proof-000002.md（不给命题号）。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/F/f-proof-000002.md"
+        },
+        "why": "先读被审稿全文，再逐条核"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# F 的证明手稿：把 A_diag(p) 写成平面 x+y+z=0 上的参数化二重积分（面积因子 √3）并经六角区等分 + tan 代换…\n\n- 计划：000001 · 子目标：s1\n- 依赖面洗稿：已洗=true；执行者=secretary-F\n- 稿族：f-proof\n- 产出者：agent-F-F1\n- 正文sha：912a98b82fcc2930b93450c5c259d53f82fc7ac338b02ca5adae50b5166841d1\n- 命题指纹：cf5cd60d4f7a5bc94688f93a779317d78363ddc4abc0e6acf5a794371f9c299b\n- 命题类型：conjecture\n- 登记时间：2026-11-24T19:51:20+08:00\n- 标签：F 攻坚 000001 子目标 s1\n- 版本：2026-11-24T19:51:20+08:00@912a98b82fcc2930b93450c5c259d53f82fc7ac338b02ca5adae50b5166841d1\n\n## 命题\n\n设 1 ≤ p < ∞，B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}，H := {(x,y,z) : x+y+z = 0}，A_diag(p) 为 H∩B_p^3 在平面 H 上（取 R^3 诱导的内积与二维 Lebesgue 面积）的面积。取 H 的单位正交基 u = (1,-1,0)/√2、v = (1,1,-2)/√6，并对 θ∈[0,2π) 记 e(θ) := cosθ·u + sinθ·v。则：(i) A_diag(p) = (1/2)∫_0^{2π}‖e(θ)‖_p^{-2} dθ = (3/4)∫_0^{2π} (|cos(θ-π/6)|^p + |cos(θ+π/6)|^p + |sinθ|^p)^{-2/p} dθ；(ii) A_diag(p) = √3·area{(x,y)∈R^2 : |x|^p+|y|^p+|x+y|^p ≤ 1} = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ；(iii) A_diag(1) = 3√3/4，A_diag(2) = π，lim_{p→∞} A_diag(p) = 3√3；(iv) p ↦ A_diag(p) 在 [1,∞) 上连续。\n\n## 证明\n\n1. 【前提】固定 p∈[1,∞)；B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；H := {(x,y,z) : x+y+z = 0}；A_diag(p) := H∩B_p^3 在平面 H 上的二维 Lebesgue 面积。（前提）\n2. 【前提】u := (1,-1,0)/√2、v := (1,1,-2)/√6。直接验算：‖u‖^2 = (1+1+0)/2 = 1，‖v‖^2 = (1+1+4)/6 = 1，u·v = (-1+1+0)/√12 = 0，u·(1,1,1) = (1-1+0)/√2 = 0，v·(1,1,1) = (1+1-2)/√6 = 0；故 {u,v} 是 H 的单位正交基，(s,t) ↦ s·u + t·v 是 R^2 → H 的等距同构。（前提）\n3. 【推导】n := (1,1,1)/√3 是 H 的单位法向量，H = n^⊥。由 stmt:000034 的 (i)，对任意单位法向与 n^⊥ 的任意单位正交基 {u,v} 有 A_p(n) = (1/2)∫_0^{2π}‖cosθ·u + sinθ·v‖_p^{-2} dθ，且该积分值不随基的选取而改变；于是 A_diag(p) = (1/2)∫_0^{2π}‖e(θ)‖_p^{-2} dθ，这给出 (i) 的第一个等号。（依据：stmt:000034）\n4. 【推导】把第 2 步的 u、v 分量代入 e(θ) = cosθ·u + sinθ·v 得 e_1 = cosθ/√2 + sinθ/√6 = (√3cosθ + sinθ)/√6，e_2 = -cosθ/√2 + sinθ/√6 = -(√3cosθ - sinθ)/√6，e_3 = -2sinθ/√6；对前两个分子用余弦差角公式（在 θ∓π/6 处展开 2cos 即得）√3cosθ + sinθ = 2cos(θ-π/6)、√3cosθ - sinθ = 2cos(θ+π/6)，于是 |e_1| = (2/√6)|cos(θ-π/6)|、|e_2| = (2/√6)|cos(θ+π/6)|、|e_3| = (2/√6)|sinθ|。（依据：stmt:000034）\n5. 【推导】记 S(θ) :…（落档截断，原 4324 字）",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/F/f-proof-000002.md",
+          "encoding": "utf-8",
+          "bytes_read": 6218,
+          "total_bytes": 6218,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 35,
+          "total_lines": 35,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 35 行",
+          "sha256": "6429ab828f56dcf8dc1bcd14daa2a563187dccb99056e30e89a63b4179c47929"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 36608,
+        "prompt_cache_miss_tokens": 1391,
+        "tokens_in": 37999,
+        "tokens_out": 94,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000085"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "statements",
+          "id": "000034"
+        },
+        "why": "核查被引命题 stmt:000034 的字面、等级与可引性（第 3 步起全靠它）"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "stmt_id": "000034",
+          "origin": "own_result",
+          "kind": "theorem",
+          "label": "B_p^3 中心截面面积 A_p(n) 的积分表示与坐标向/面对角向闭式面积公式",
+          "statement_text": "设 1 ≤ p < ∞，n ∈ R³ 为单位向量，A_p(n) 表示 B_p^3 = {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1} 与平面 n^⊥ 的交的二维 Lebesgue 面积。则对每个这样的 p 与每个单位 n：(i) A_p(n) = (1/2)∫_0^{2π} ‖cosψ·u + sinψ·v‖_p^{-2} dψ，其中 u,v 是 n^⊥ 的任意一组单位正交基，该值不随基的选取而变，A_p(n) 只依赖 n^⊥（从而 A_p(n) = A_p(-n)），并且在带符号坐标置换（把 B_p^3 映到自身的 48 阶变换）下不变；(ii) A_p(e_3) = 4Γ(1+1/p)²/Γ(1+2/p)；(iii) A_p((1,1,0)/√2) = 2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p)，故 A_p((1,1,0)/√2) < A_p(e_3) 当且仅当 p < 2，两者相等当且仅当 p = 2，前者大于后者当且仅当 p > 2；(iv) p = 2 时 A_2(n) = π 对一切单位 n 成立；(v) p = 1 时 A_1(e_3) = 2、A_1((1,1,0)/√2) = √2、A_1((1,1,1)/√3) = 3√3/4。",
+          "statement_full": "设 1 ≤ p < ∞，n ∈ R³ 为单位向量，A_p(n) 表示 B_p^3 = {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1} 与平面 n^⊥ 的交的二维 Lebesgue 面积。则对每个这样的 p 与每个单位 n：(i) A_p(n) = (1/2)∫_0^{2π} ‖cosψ·u + sinψ·v‖_p^{-2} dψ，其中 u,v 是 n^⊥ 的任意一组单位正交基，该值不随基的选取而变，A_p(n) 只依赖 n^⊥（从而 A_p(n) = A_p(-n)），并且在带符号坐标置换（把 B_p^3 映到自身的 48 阶变换）下不变；(ii) A_p(e_3) = 4Γ(1+1/p)²/Γ(1+2/p)；(iii) A_p((1,1,0)/√2) = 2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p)，故 A_p((1,1,0)/√2) < A_p(e_3) 当且仅当 p < 2，两者相等当且仅当 p = 2，前者大于后者当且仅当 p > 2；(iv) p = 2 时 A_2(n) = π 对一切单位 n 成立；(v) p = 1 时 A_1(e_3) = 2、A_1((1,1,0)/√2) = √2、A_1((1,1,1)/√3) = 3√3/4。",
+          "proof_text": "设 1 ≤ p < ∞ 固定，n ∈ R³ 是单位向量。记 B_p^3 = {x ∈ R³ : |x_1|^p+|x_2|^p+|x_3|^p ≤ 1}，并记 A_p(n) 为 B_p^3 与平面 n^⊥ 的交在该平面上的二维 Lebesgue 面积。\\n\\n先做两项准备工作。其一，在 n^⊥ 上取一对单位正交基 (u,v)，把平面上的点写成极坐标 x = r(cosψ·u + sinψ·v)，其中 r ≥ 0、ψ ∈ [0,2π)，并记 w(ψ) = cosψ·u + sinψ·v。由于 l_p 范数是正齐次的，对 x = r·w(ψ) 有 ‖x‖_p = r‖w(ψ)‖_p；于是 x ∈ B_p^3 当且仅当 r ≤ 1/‖w(ψ)‖_p。其二，平面极坐标的面积元带 Jacobi 因子 r，因此 A_p(n) = ∫_0^{2π}∫_0^{1/‖w(ψ)‖_p} r dr dψ = (1/2)∫_0^{2π}‖w(ψ)‖_p^{-2} dψ。由此立刻得到 (i) 的前半：换用另一对单位正交基 (u',v') 只会把参数变成 ψ ↦ ±ψ + ψ_0，即整周期上的平移或反向，积分值不变，所以 A_p(n) 不依赖基的选取、只依赖平面 n^⊥；又 n^⊥ = (-n)^⊥，故 A_p(n) = A_p(-n)。\\n\\n(i) 的后半来自对称性。设 σ 是任一带符号坐标置换矩阵（共 2³·3! = 48 个）。σ 是正交的，且 |(σx)_i| 只是 |x_j| 的一个重排，因此 σ(B_p^3) = B_p^3；同时 σ 把 n^⊥ 映成 (σn)^⊥，而 σ 作为等距同构保持二维 Lebesgue 面积，于是 A_p(σn) = A_p(n)。这说明 A_p 只依赖排序后的 (|n_1|,|n_2|,|n_3|)。\\n\\n其次计算 (ii) 的坐标向截面。n = e_3 时 n^⊥ = {(x,y,0)}，截面是 {(x,y) : |x|^p+|y|^p ≤ 1}，故 A_p(e_3) = 4∫_0^1 (1-x^p)^{1/p} dx。作代换 u = x^p，则 dx = (1/p)u^{1/p-1} du，于是 A_p(e_3) = (4/p)∫_0^1 u^{1/p-1}(1-u)^{1/p} du = (4/p)B(1/p, 1+1/p) = (4/p)·Γ(1/p)Γ(1+1/p)/Γ(1+2/p)。再用 Γ(1/p) = pΓ(1+1/p)，即得 A_p(e_3) = 4Γ(1+1/p)²/Γ(1+2/p)。\\n\\n接着处理 (iii) 的面对角向。取 n = (1,1,0)/√2，则 n^⊥ = span{(1,-1,0)/√2, (0,0,1)}，这两个向量单位正交。把 x ∈ n^⊥ 写成 x = s·(1,-1,0)/√2 + z·(0,0,1)，则 ‖x‖_p^p = 2|s/√2|^p + |z|^p = 2^{1-p/2}|s|^p + |z|^p，而 (s,z) 是正交坐标、面积元为 ds dz；所以该截面等于 {(s,z) : 2^{1-p/2}|s|^p + |z|^p ≤ 1}。为求它的面积，令 c = 2^{1/p-1/2} > 0，则 c^p = 2^{1-p/2}，并且上面的不等式等价于 |cs|^p + |z|^p ≤ 1，也就是 (cs,z) 落在 D_p = {(X,Y) : |X|^p+|Y|^p ≤ 1} 之中；这两个方向是同一个等价式，故映射 T(s,z) = (cs,z) 把该截面双射到 D_p。由于 |det T| = c，面积的伸缩律给出 c·area(截面) = area(D_p)，于是 area(截面) = c^{-1}·area(D_p) = 2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p)，最后一步用的是 (ii)。比较这两个闭式即得 (iii) 的分界：正因子 2^{1/2-1/p} 与 1 的大小由指数 1/2 - 1/p 的符号决定，而该符号由 p 与 2 的大小决定；因此 p < 2 时面对角向面积小于坐标向，p = 2 时两者相等，p > 2 时前者大于后者。\\n\\n(iv) 在 p = 2 时，B_2^3 是欧氏单位球，任何过原点的平面都截得半径为 1 的圆盘，面积为 π；这与 (ii) 的闭式在 p = 2 处的取值一致：4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π。\\n\\n最后 (v) 取 p = 1，此时 B_1^3 是正八面体。(a) 当 n = e_3 时截面为 {|x|+|y| ≤ 1}，这是两条对角线长都为 2 的菱形，面积为 2。(b) 当 n = (1,1,0)/√2 时，由前面截面形状在 p = 1 的特例（2^{1-1/2} = √2）得到 √2|s| + |z| ≤ 1，其顶点为 (±1/√2, 0) 与 (0, ±1)，面积 = (1/2)·(2/√2)·2 = √2，与 (iii) 在 p = 1 的取值 2^{1/2-1}·2 = √2 相符。(c) 当 n = (1,1,1)/√3 时，n^⊥ = {x+y+z = 0}，B_1^3 ∩ n^⊥ 的顶点是 (±1/2, ∓1/2, 0) 这一类点（经坐标置换与取反）共 6 个；它们共面、到原点的距离都是 |(1/2,-1/2,0)| = 1/√2，构成外接半径为 1/√2 的正六边形，面积 = (3√3/2)·(1/√2)² = 3√3/4。",
+          "source_lit_id": null,
+          "page_range": {
+            "start": null,
+            "end": null,
+            "label": ""
+          },
+          "quote_verified": null,
+          "quote_mode": "",
+          "quote_reason": "手稿收录（D 只递指针）：命题正文、证明正文与档位全部逐字取自 `manuscripts/F/f-proof-000000.md` —— 引文面不适用（这份稿是我们自己产出的成果，不是文献里摘的）；V 的签（若有）在手稿块上",
+          "quote_span": "",
+          "quote_call_sha256": "",
+          "evidence_kind": "heuristic",
+          "bits": {
+            "numeric": "pending",
+            "proof": true,
+            "reviewed": true,
+            "formal": "pending",
+            "audited": false,
+            "origin": "own_result",
+            "evidence": {
+              "numeric": {},
+              "numeric_reason": "",
+              "proof_process": "设 1 ≤ p < ∞ 固定，n ∈ R³ 是单位向量。记 B_p^3 = {x ∈ R³ : |x_1|^p+|x_2|^p+|x_3|^p ≤ 1}，并记 A_p(n) 为 B_p^3 与平面 n^⊥ 的交在该平面上的二维 Lebesgue 面积。\\n\\n先做两项准备工作。其一，在 n^⊥ 上取一对单位正交基 (u,v)，把平面上的点写成极坐标 x = r(cosψ·u + sinψ·v)，其中 r ≥ 0、ψ ∈ [0,2π)，并记 w(ψ) = cosψ·u + sinψ·v。由于 l_p 范数是正齐次的，对 x = r·w(ψ) 有 ‖x‖_p = r‖w(ψ)‖_p；于是 x ∈ B_p^3 当且仅当 r ≤ 1/‖w(ψ)‖_p。其二，平面极坐标的面积元带 Jacobi 因子 r，因此 A_p(n) = ∫_0^{2π}∫_0^{1/‖w(ψ)‖_p} r dr dψ = (1/2)∫_0^{2π}‖w(ψ)‖_p^{-2} dψ。由此立刻得到 (i) 的前半：换用另一对单位正交基 (u',v') 只会把参数变成 ψ ↦ ±ψ + ψ_0，即整周期上的平移或反向，积分值不变，所以 A_p(n) 不依赖基的选取、只依赖平面 n^⊥；又 n^⊥ = (-n)^⊥，故 A_p(n) = A_p(-n)。\\n\\n(i) 的后半来自对称性。设 σ 是任一带符号坐标置换矩阵（共 2³·3! = 48 个）。σ 是正交的，且 |(σx)_i| 只是 |x_j| 的一个重排，因此 σ(B_p^3) = B_p^3；同时 σ 把 n^⊥ 映成 (σn)^⊥，而 σ 作为等距同构保持二维 Lebesgue 面积，于是 A_p(σn) = A_p(n)。这说明 A_p 只依赖排序后的 (|n_1|,|n_2|,|n_3|)。\\n\\n其次计算 (ii) 的坐标向截面。n = e_3 时 n^⊥ = {(x,y,0)}，截面是 {(x,y) : |x|^p+|y|^p ≤ 1}，故 A_p(e_3) = 4∫_0^1 (1-x^p)^{1/p} dx。作代换 u = x^p，则 dx = (1/p)u^{1/p-1} du，于是 A_p(e_3) = (4/p)∫_0^1 u^{1/p-1}(1-u)^{1/p} du = (4/p)B(1/p, 1+1/p) = (4/p)·Γ(1/p)Γ(1+1/p)/Γ(1+2/p)。再用 Γ(1/p) = pΓ(1+1/p)，即得 A_p(e_3) = 4Γ(1+1/p)²/Γ(1+2/p)。\\n\\n接着处理 (iii) 的面对角向。取 n = (1,1,0)/√2，则 n^⊥ = span{(1,-1,0)/√2, (0,0,1)}，这两个向量单位正交。把 x ∈ n^⊥ 写成 x = s·(1,-1,0)/√2 + z·(0,0,1)，则 ‖x‖_p^p = 2|s/√2|^p + |z|^p = 2^{1-p/2}|s|^p + |z|^p，而 (s,z) 是正交坐标、面积元为 ds dz；所以该截面等于 {(s,z) : 2^{1-p/2}|s|^p + |z|^p ≤ 1}。为求它的面积，令 c = 2^{1/p-1/2} > 0，则 c^p = 2^{1-p/2}，并且上面的不等式等价于 |cs|^p + |z|^p ≤ 1，也就是 (cs,z) 落在 D_p = {(X,Y) : |X|^p+|Y|^p ≤ 1} 之中；这两个方向是同一个等价式，故映射 T(s,z) = (cs,z) 把该截面双射到 D_p。由于 |det T| = c，面积的伸缩律给出 c·area(截面) = area(D_p)，于是 area(截面) = c^{-1}·area(D_p) = 2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p)，最后一步用的是 (ii)。比较这两个闭式即得 (iii) 的分界：正因子 2^{1/2-1/p} 与 1 的大小由指数 1/2 - 1/p 的符号决定，而该符号由 p 与 2 的大小决定；因此 p < 2 时面对角向面积小于坐标向，p = 2 时两者相等，p > 2 时前者大于后者。\\n\\n(iv) 在 p = 2 时，B_2^3 是欧氏单位球，任何过原点的平面都截得半径为 1 的圆盘，面积为 π；这与 (ii) 的闭式在 p = 2 处的取值一致：4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π。\\n\\n最后 (v) 取 p = 1，此时 B_1^3 是正八面体。(a) 当 n = e_3 时截面为 {|x|+|y| ≤ 1}，这是两条对角线长都为 2 的菱形，面积为 2。(b) 当 n = (1,1,0)/√2 时，由前面截面形状在 p = 1 的特例（2^{1-1/2} = √2）得到 √2|s| + |z| ≤ 1，其顶点为 (±1/√2, 0) 与 (0, ±1)，面积 = (1/2)·(2/√2)·2 = √2，与 (iii) 在 p = 1 的取值 2^{1/2-1}·2 = √2 相符。(c) 当 n = (1,1,1)/√3 时，n^⊥ = {x+y+z = 0}，B_1^3 ∩ n^⊥ 的顶点是 (±1/2, ∓1/2, 0) 这一类点（经坐标置换与取反）共 6 个；它们共面、到原点的距离都是 |(1/2,-1/2,0)| = 1/√2，构成外接半径为 1/√2 的正六边形，面积 = (3√3/2)·(1/√2)² = 3√3/4。",
+              "proof_source": "own",
+              "reviewed_by": {
+                "verifier": "V",
+                "verification_id": "v-000004",
+                "round": null,
+                "verdict": "成立",
+                "evidence": "verifications/000034.jsonl#v-000004",
+                "findings": [],
+                "proof_no": 1,
+                "proof_sha256": "e8f5eec99ab03a9036ddbe36a376f073aa03e50665d3d3f3af32e15f5d908fb8"
+              },
+              "reviewed_source": "v",
+              "formal": {},
+              "formal_reason": "",
+              "audited_by": {},
+              "optimized_by_proof": {
+                "1": true
+              },
+              "reviewed_by_proof": {
+                "1": true
+              },
+              "reviewed_sha_by_proof": {
+                "1": "e8f5eec99ab03a9036ddbe36a376f073aa03e50665d3d3f3af32e15f5d908fb8"
+              }
+            },
+            "voided_by": {},
+            "grade": "pre_theorem",
+            "audited_badge": false
+          },
+          "status": "active",
+          "derived_from": [],
+          "aliases": [],
+          "doc_id": null,
+          "line_range": {
+            "start": null,
+            "end": null,
+            "label": "manuscripts/F/f-proof-000000.md"
+          },
+          "created_at": "2026-11-24T18:42:49+08:00",
+          "created_by": "secretary-B",
+          "_proof_routes": {
+            "1": "标签中的『F 攻坚 000000 子目标 s2』为攻坚任务子目标编号，非证明路线"
+          },
+          "_proposition_adjudication": {
+            "checked": true,
+            "attempted": true,
+            "verdict": "different",
+            "canonical_name": "B_p^3 中心截面面积 A_p(n) 的积分表示与坐标向/面对角向闭式面积公式",
+            "same_as": "",
+            "basis": "条件比对：本条条件为『1≤p<∞ 任意、n∈R³ 任意单位向量』；000030 的条件是 p=2、p=1、p=1000 等具体取值的数值自检，000031/000032/000033 的条件是离散集 p∈{1.05,…,1000} 且多限于基本域 0≤a≤b≤c —— 条件强弱不同（有限离散样本 vs 任意 p 与任意 n），按准绳判 different；结论比对：本条结论是 (i) A_p(n)=(1/2)∫‖cosψ·u+sinψ·v‖_p^{-2}dψ 且与基选取/±n/坐标置换无关、(ii) 坐标向闭式 4Γ(1+1/p)²/Γ(1+2/p)、(iii) 面对角向闭式 2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p) 及与坐标向的大小比较、(iv) p=2 时 A_2≡π、(v) p=1 的三个具体值；四条候选的结论分别是数值偏差界（000030）、最大面积位置与 r(p) 临界性（000031）、公式+单调性+分段结构（000032）、边界弧上最大值取端点（000033）—— 结论组均不一致；000032 的 (i) 与本条 (ii) 坐标面积公式有部分重叠，但缺本条 (i) 的积分表示、(iii) 的 2^{1/2-1/p} 面对角闭式及 (iv)(v)，且条件限定在有限 p 集，不构成同一定理；判定准绳（how_to_judge）：只比条件与结论，条件强弱不同即判 different，不因『同一主题（B_p^3 中心截面）』而判 same；本条是『任意 1≤p<∞、任意单位 n』下 B_p^3 中心截面面积的积分表示与闭式面积公式（含 p=2、p=1 特例），而四条候选要么是有限离散 p 集上的极值方向/比值临界性，要么是数值自检，条件强弱与结论组均不同，无一条与之同一定理。",
+            "reason": "本条是『任意 1≤p<∞、任意单位 n』下 B_p^3 中心截面面积的积分表示与闭式面积公式（含 p=2、p=1 特例），而四条候选要么是有限离散 p 集上的极值方向/比值临界性，要么是数值自检，条件强弱与结论组均不同，无一条与之同一定理。",
+            "reused": false,
+            "seam_source": "secretary（LlmSeam.for_secretary）",
+            "seam_attempted": true,
+            "at": "2026-11-24T18:42:49+08:00"
+          },
+          "proof_authors": [
+            "F"
+          ],
+          "proof_no": 1,
+          "proof_sha256": "e8f5eec99ab03a9036ddbe36a376f073aa03e50665d3d3f3af32e15f5d908fb8",
+          "manuscript_id": "000000",
+          "manuscripts": {
+            "1": "manuscripts/B/b-proof-000000.md"
+          },
+          "_grade_recomputed": {
+            "checked": true,
+            "from": "conjecture",
+            "to": "pre_theorem",
+            "from_kind": "heuristic",
+            "to_kind": "proof_review",
+            "channel": "text",
+            "why": "V 的签刚落位：这一行有证明正文，且台账里那一签盖住的就是现行这一版 ⇒ 按五元位现算等级（只算等级，不写档位）；历史列 `evidence_kind`=heuristic 只是读数，判定面读 `pre_theorem`",
+            "basis": "verifications/pending/4cbbbeaf3989914e5756c9da973790a81da790ee98b226b4b9c965b430c9fc0a.jsonl#u-000004",
+            "proof_no": 1,
+            "at": "2026-11-24T18:42:50+08:00"
+          },
+          "_kind_upgrade": {
+            "from": "conjecture",
+            "to": "theorem",
+            "basis": "out/vsigns/4cb054c6745ec737591bd41c456ea83a22efa7fa072fbd8f529843d22bfa3c9f.json#u-000004 · 台账 verifications/pending/4cbbbeaf3989914e5756c9da973790a81da790ee98b226b4b9c965b430c9fc0a.jsonl#u-000004",
+            "grade": "conjecture",
+            "by": "agent-B",
+            "at": "2026-11-24T18:42:50+08:00"
+          },
+          "manuscript_family": "b-proof",
+          "proof_history": [
+            {
+              "text": "1. 【前提】固定 1 ≤ p < ∞ 与单位向量 n ∈ R³；B_p^3 := {x ∈ R³ : |x_1|^p + |x_2|^p + |x_3|^p ≤ 1}；A_p(n) := B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；取 n^⊥ 的一对单位正交基 (u, v)。（前提）\n2. 【前提】在 n^⊥ 上取极坐标 x = r(cosψ·u + sinψ·v)，r ≥ 0，ψ ∈ [0, 2π)，记 w(ψ) := cosψ·u + sinψ·v；对 x = r·w(ψ) 有 ‖x‖_p = r‖w(ψ)‖_p（r ≥ 0，l_p 范数正齐次），故 x ∈ B_p^3 ⟺ r ≤ 1/‖w(ψ)‖_p。（前提）\n3. 【推导】由平面极坐标面积公式（Jacobi 因子 r）得 A_p(n) = ∫_0^{2π}∫_0^{1/‖w(ψ)‖_p} r dr dψ = (1/2)∫_0^{2π}‖w(ψ)‖_p^{-2} dψ。换成另一对单位正交基 (u',v') 只使 ψ ↦ ±ψ + ψ_0（整周期上的平移与反向），积分值不变；又 n^⊥ = (-n)^⊥，故 A_p(n) = A_p(-n)。这给出 (i) 的前半。（前提）\n4. 【推导】设 σ 为任一带符号坐标置换矩阵（2³·3! = 48 个），则 σ 正交且 |(σx)_i| 只是 |x_j| 的重排，故 σ(B_p^3) = B_p^3；同时 σ(n^⊥) = (σn)^⊥，而 σ 是等距同构、保二维 Lebesgue 面积，故 A_p(σn) = A_p(n)。这给出 (i) 的后半：A_p 只依赖排序后的 (|n_1|,|n_2|,|n_3|)。（前提）\n5. 【推导】(ii)：n = e_3 时 n^⊥ = {(x,y,0)}，A_p(e_3) = area{(x,y) : |x|^p+|y|^p ≤ 1} = 4∫_0^1 (1-x^p)^{1/p} dx。代换 u = x^p（dx = (1/p)u^{1/p-1}du）得 A_p(e_3) = (4/p)∫_0^1 u^{1/p-1}(1-u)^{1/p}du = (4/p)B(1/p, 1+1/p) = (4/p)·Γ(1/p)Γ(1+1/p)/Γ(1+2/p)；再用 Γ(1+1/p) = (1/p)Γ(1/p)（即 Γ(1/p) = pΓ(1+1/p)）得 A_p(e_3) = 4Γ(1+1/p)²/Γ(1+2/p)。（前提）\n6. 【推导】(iii) 之截面形状：n = (1,1,0)/√2 时 n^⊥ = span{(1,-1,0)/√2, (0,0,1)}，这两向量单位正交；把 x ∈ n^⊥ 写成 x = s·(1,-1,0)/√2 + z·(0,0,1)，则 ‖x‖_p^p = 2|s/√2|^p + |z|^p = 2^{1-p/2}|s|^p + |z|^p，且 (s,z) 是正交坐标、面积元为 ds dz，故截面 = {(s,z) : 2^{1-p/2}|s|^p + |z|^p ≤ 1}。（前提）\n7. 【推导】(iii) 之面积（上一版此处换元方向取反，现改正）：令 c := 2^{1/p-1/2} > 0，则 c^p = 2^{1-p/2}，于是「(s,z) 属于第 6 步的截面 ⟺ |cs|^p + |z|^p ≤ 1 ⟺ (cs,z) 属于 D_p := {(X,Y) : |X|^p+|Y|^p ≤ 1}」（两个方向是同一个等价式，故是双射）。取线性映射 T(s,z) := (cs,z)，det T = c，由 area(T(E)) = |det T|·area(E) 及 T(截面) = D_p 得 c·area(截面) = area(D_p)，即 area(截面) = c^{-1}·area(D_p) = 2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p)（末一步用第 5 步的 (ii)）。（前提）\n8. 【推导】(iii) 之比较：正因子 2^{1/2-1/p} 与 1 的大小比较等价于 1/2 - 1/p 与 0 的比较，等价于 p 与 2 的比较（p > 0）；结合第 7 步与第 5 步即得 (iii) 的三个结论（p < 2 时小、p = 2 时等、p > 2 时大）。（前提）\n9. 【推导】(iv)：p = 2 时 B_2^3 是欧氏单位球，任一过原点的平面截得半径 1 的圆盘，面积 π；与 (ii) 的闭式在 p = 2 的取值对照：4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π，两者一致。（前提）\n10. 【推导】(v)：p = 1 时 B_1^3 是正八面体。(a) n = e_3：截面 {|x|+|y| ≤ 1} 是两条对角线长都为 2 的菱形，面积 2。(b) n = (1,1,0)/√2：由第 6 步在 p = 1 的特例（2^{1-1/2} = √2）截面为 √2|s| + |z| ≤ 1，顶点为 (±1/√2, 0), (0, ±1)，面积 = (1/2)·(2/√2)·2 = √2（与 (iii) 在 p = 1 的取值 2^{1/2-1}·2 = √2 一致）。(c) n = (1,1,1)/√3：n^⊥ = {x+y+z = 0}，B_1^3 ∩ n^⊥ 的顶点是 (±1/2, ∓1/2, 0) 一类共 6 个点（坐标置换与取反），它们共面、外接半径 |(1/2,-1/2,0)| = 1/√2，构成正六边形，面积 = (3√3/2)·(1/√2)² = 3√3/4。（前提）",
+              "sha": "4cb054c6745ec737591bd41c456ea83a22efa7fa072fbd8f529843d22bfa3c9f",
+              "at": "2026-11-24T19:14:29+08:00",
+              "replaced_by": "e8f5eec99ab03a9036ddbe36a376f073aa03e50665d3d3f3af32e15f5d908fb8",
+              "proof_no": 1
+            }
+          ],
+          "proof_routes": {
+            "1": "标签中的『F 攻坚 000000 子目标 s2』为攻坚任务子目标编号，非证明路线"
+          },
+          "route": "标签中的『F 攻坚 000000 子目标 s2』为攻坚任务子目标编号，非证明路线"
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "id": "000034",
+          "id_field": "stmt_id",
+          "found": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 37248,
+        "prompt_cache_miss_tokens": 4044,
+        "tokens_in": 41292,
+        "tokens_out": 11642,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000085"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "verify.verify_proof",
+        "args": {
+          "proof_manuscript": "manuscripts/F/f-proof-000002.md"
+        },
+        "why": "按派活要求只给证明稿（不给命题号）整体重读：逐条核第 3 步对 stmt:000034(i) 的引用、第 4-6 步的系数账、第 7-8 步的面积元与极坐标、第 9 步 p=1,2 的定积分、第 10 步的极限与连续性"
+      },
+      "result": {
+        "tool": "verify.verify_proof",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "kind": "proof_unregistered_rejected",
+          "statement_id": "",
+          "verification_id": "u-000011",
+          "verdict": "有毛病",
+          "defect_step": 8,
+          "findings": [
+            {
+              "level": "error",
+              "step": 8,
+              "kind": "积分因子错误",
+              "detail": "第8步中间等式写成了 (1/2)∫∫ r dr dθ，但极坐标下 ∫∫_D dxdy = ∫∫ r dr dθ = (1/2)∫g(θ)^{-2/p}dθ；外面的 1/2 是多余的，导致该行等号不成立。"
+            }
+          ],
+          "unresolved_errors": 1,
+          "proof_sha256": "912a98b82fcc2930b93450c5c259d53f82fc7ac338b02ca5adae50b5166841d1",
+          "proof_chars": 0,
+          "signed_bit3": false,
+          "reviewed_by": {},
+          "bits": {},
+          "review_write": {
+            "manuscript_signed": false,
+            "manuscript_write": {
+              "written": false,
+              "idempotent": false,
+              "missing": false,
+              "state": "not_attempted",
+              "path": "manuscripts/F/f-proof-000002.md",
+              "line": 0,
+              "reading": {},
+              "code": "",
+              "body_mismatch": false,
+              "body_sha256": "",
+              "signed_sha256": "",
+              "why": "负判不写手稿块（甲：V 只颁发；块只由收方秘书落）"
+            },
+            "sign_issued": false,
+            "written": false,
+            "filed": "not_read_by_v",
+            "already_signed": false,
+            "reason": "负判不写手稿块（甲：V 只颁发；块只由收方秘书落）",
+            "v_review": {
+              "checked": true,
+              "review_id": "v-review-000005",
+              "written": true,
+              "idempotent": false,
+              "path": "verifications/reviews/v-review-000005.md",
+              "delivery": {
+                "checked": true,
+                "state": "dispatched",
+                "item_id": "t-000089",
+                "key": "v-review@v-review-000005",
+                "role": "F",
+                "parent_task_id": "t-000083",
+                "reason": "已投给 t-000083 的板项 t-000089",
+                "detail_path": "V 的审阅报告：`verifications/reviews/v-review-000005.md`\n- 被审稿：`manuscripts/F/f-proof-000002.md`\n- 结论：有毛病（V 的秘书语义判定：fault）\n- 台账锚点：`verifications/pending/6429ab828f56dcf8dc1bcd14daa2a563187dccb99056e30e89a63b4179c47929.jsonl#u-000011`\nV 的原文不转达；这份报告就是给你的审阅意见。改完把同一份稿重新送 V。\n",
+                "existing": false
+              },
+              "reason": "V 稿已落盘：verifications/reviews/v-review-000005.md"
+            },
+            "registration": {},
+            "signed_delivery": {}
+          },
+          "ledger": "verifications/pending/6429ab828f56dcf8dc1bcd14daa2a563187dccb99056e30e89a63b4179c47929.jsonl#u-000011",
+          "reason": "（未在册）判「有毛病」：负判不写手稿块，判词落 `verifications/pending/`（u-000011）",
+          "detail": "这一份判「有毛病」：负判不写手稿块（甲口径：`draft/178`「V 不写手稿里的签块」，块只由收方秘书落；负判不是签）。判词已落 `verifications/pending/6429ab828f56dcf8dc1bcd14daa2a563187dccb99056e30e89a63b4179c47929.jsonl#u-000011`，F 的读数是「未通过」；按缺陷改稿后再送，不签第 3 位、也不写重复块。",
+          "exhaustion_review": {},
+          "signer": "",
+          "proof_authors": [],
+          "report_path": "",
+          "checks": [],
+          "missing": [],
+          "citations": [],
+          "citation_checks": [],
+          "citation_gate": {
+            "ok": true,
+            "blocking": [],
+            "weaker": [],
+            "problem": "",
+            "why": ""
+          },
+          "secretary_judge": {
+            "checked": true,
+            "answer": "有缺陷要指出",
+            "axis": "fault",
+            "unwired": false,
+            "reason": "V明确指认第8步极坐标面积元积分多乘了一个1/2，导致该行等号不成立，属于证明链上的常数因子错误。",
+            "basis": [
+              "第8步极坐标面积元积分多乘了一个1/2",
+              "外面的 1/2 是多余的，导致该行等号不成立。"
+            ],
+            "refused": "",
+            "cost": {
+              "ledger": "000509",
+              "charged": true,
+              "ledger_reason": "charged",
+              "call_index": 419,
+              "prompt_sha256": "8f563c62f2d2fb2c74dac82c57a1fb172c1675b446ea506bebe8c75cc3af4c83",
+              "tokens": 1894,
+              "usd": 0.000377
+            },
+            "verdict": "有毛病",
+            "defect_step": 8,
+            "fault_kind": "math",
+            "fault_cause": "",
+            "report_gap": "",
+            "statement_id": "",
+            "proof_no": 1,
+            "material": {
+              "v_reply": "{\"verdict\": \"有毛病\", \"defect_step\": 8, \"quote\": \"(1/2)∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ\", \"why\": \"第8步极坐标面积元积分多乘了一个1/2：内层 ∫_0^{g^{-1/p}} r dr = (1/2)g^{-2/p}，所以外层不应再有 (1/2)，否则会得到 (1/4)∫g^{-2/p} 而非该步最右端及后文使用的 (1/2)∫g^{-2/p}。\", \"findings\": [{\"level\": \"error\", \"step\": 8, \"kind\": \"积分因子错误\", \"detail\": \"第8步中间等式写成了 (1/2)∫∫ r dr dθ，但极坐标下 ∫∫_D dxdy = ∫∫ r dr dθ = (1/2)∫g(θ)^{-2/p}dθ；外面的 1/2 是多余的，导致该行等号不成立。\"}], \"citation_checks\": []}",
+              "ledger_row": {
+                "verdict": "有毛病",
+                "defect_step": 8
+              }
+            },
+            "defect_scope": "proof",
+            "defect_step_basis": "",
+            "source": "secretary:v_reply_defect"
+          },
+          "sign_issuance": {
+            "checked": false,
+            "issue": false,
+            "issued": false,
+            "landed": false,
+            "decision": "",
+            "writeback": {},
+            "streak": 0,
+            "need": 3,
+            "streak_ok": false,
+            "projected": 0,
+            "same_sha": false,
+            "state": "",
+            "reason": "这一趟没走到签发那一步（早退）⇒ 没有发签：`checked=False` 不是「可以签」，也不是「不签发」这一档",
+            "within_call": null,
+            "review_call": "",
+            "ledger_streak": 0,
+            "basis": [],
+            "reading": {},
+            "cost": {},
+            "material": {},
+            "statement_id": ""
+          },
+          "review_passes": [
+            {
+              "pass": 1,
+              "axis": "clean",
+              "verdict": "成立",
+              "fault_kind": "",
+              "fault_cause": "report_gap",
+              "unresolved_errors": 0,
+              "defect_step": null,
+              "terminal": ""
+            },
+            {
+              "pass": 2,
+              "axis": "fault",
+              "verdict": "有毛病",
+              "fault_kind": "math",
+              "fault_cause": "",
+              "unresolved_errors": 1,
+              "defect_step": 8,
+              "terminal": "rejected"
+            }
+          ],
+          "manuscript_identity": {
+            "checked": false,
+            "statement_id": "",
+            "manuscript_id": "",
+            "row_manuscript_id": "",
+            "matched_by": "",
+            "fallback": false,
+            "row_checked": false,
+            "found": null,
+            "problem": "",
+            "path_checked": false,
+            "path_count": 0,
+            "path_group": 0,
+            "path_problem": "",
+            "why": ""
+          },
+          "issued_sign": {},
+          "statement_scope_gate": {}
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 40448,
+        "prompt_cache_miss_tokens": 6280,
+        "tokens_in": 46728,
+        "tokens_out": 31289,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000085"
+    },
+    {
+      "index": 3,
+      "shape": "final",
+      "payload": {
+        "final": "结论：**有毛病**（defect_step = 8；findings 一条，level=error）\n\n被审稿：`manuscripts/F/f-proof-000002.md`（稿号 000002，正文 sha 912a98b82fcc2930b93450c5c259d53f82fc7ac338b02ca5adae50b5166841d1）。已按派活要求只给 `proof_manuscript`（不带命题号）调用 `verify.verify_proof`，两态结论与 findings 已落 `verifications/pending/6429ab828f56dcf8dc1bcd14daa2a563187dccb99056e30e89a63b4179c47929.jsonl#u-000011`，V 稿 `verifications/reviews/v-review-000005.md` 已投给 F（板项 t-000089）。负判不写手稿签块、不签第 3 位（那是收方秘书的事）。\n\n**唯一缺陷（第 8 步）**\n- 原句：`由面积元 r dr dθ 得 ∫∫_D = (1/2)∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ`\n- 为何不成立：极坐标下 `∫∫_D dxdy = ∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ`，内层已经给出因子 `(1/2)`（`∫_0^{R} r dr = R²/2`）；中间那一项外面再乘 `(1/2)` 会得 `(1/4)∫g^{-2/p}`，与该行最右端（以及第 8 步合并进 (ii) 后面用到的 `(1/2)∫g^{-2/p}`）差一个因子 2，故该行第一个等号字面不成立。\n- 最小补法：删掉中间项那个 `1/2`，写成 `∫∫_D = ∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ`，后面不用动（结论 (ii) 的系数 `√3/2` 正确）。补完之后这份可以过。\n\n**其余各处我都逐处核过、没有第二处要改的**\n- 第 3 步引 `stmt:000034`(i)：该行已登记、等级现算 `pre_theorem`（kind 升为 theorem，basis u-000004），条件是 `1≤p<∞` 与任意单位法向 + `n^⊥` 任意单位正交基、值不随基变 —— 与第 3 步用法一致，`consistent`，可引。\n- 第 2、4 步：u、v 的单位正交性与 e(θ) 三坐标分量、`√3cosθ±sinθ = 2cos(θ∓π/6)`、`|e_i| = (2/√6)|·|` 逐项验算无误。\n- 第 5、6 步：`‖e‖_p^p = (2/√6)^p S`、`(2/√6)^{-2} = 3/2`、`(1/2)(3/2) = 3/4` 对。\n- 第 7 步：`∂_xΦ × ∂_yΦ = (1,1,1)`、模 `√3`，`Φ(x,y)∈B_p^3 ⟺ |x|^p+|y|^p+|x+y|^p ≤ 1`，面积公式用法正确。\n- 第 8 步除那一处 `1/2` 外：`g(θ) > 0`（(cosθ,sinθ,cosθ+sinθ) 永不为零向量）、星形与 `r ≤ g^{-1/p}` 的口径、`√3·(1/2) = √3/2` 都对。\n- 第 9 步：p=2 得 `g = 2+sin2θ`，`∫_0^{2π}dθ/(2+sin2θ) = 2π/√3`，A = π；p=1 的三段 `g = 2(cosθ+sinθ) / 2sinθ / -2cosθ`、三段积分各 `1/4`（`∫_0^{π/2}dθ/(cosθ+sinθ)² = 1` 用 `tan u - sec u` 取值确为 1）、`2·(3/4) = 3/2`、A = 3√3/4，全对。\n- 第 10 步：`m^p ≤ g ≤ 3m^p`、`g^{-2/p} ≤ m^{-2} ≤ 2`（`m ≥ 1/√2`）是统一于 p≥1 的控制函数，控制收敛用法成立；`∫_0^{2π} m^{-2} = 2(1+1+1) = 6`，极限 3√3；同一控制 + 逐点连续性给 (iv)，成立。\n- 六条角度（前提 / 计算 / 逻辑 / 强度 / 台账一致 / 依赖面）都过了一遍：结论没有比命题更强，命题 (iv) 的连续性有依据，依赖段点的 `stmt:000034` 与正文第 3 步起的引用一致。\n\n修法就是删一个 `1/2`；改完把同一份稿（新 sha）重新送 V。",
+        "evidence": [
+          "manuscripts/F/f-proof-000002.md",
+          "912a98b82fcc2930b93450c5c259d53f82fc7ac338b02ca5adae50b5166841d1",
+          "verifications/pending/6429ab828f56dcf8dc1bcd14daa2a563187dccb99056e30e89a63b4179c47929.jsonl#u-000011",
+          "verifications/reviews/v-review-000005.md",
+          "stmt:000034"
+        ],
+        "notify": {
+          "to": "F",
+          "summary": "f-proof-000002 判「有毛病」：第 8 步极坐标中间式多乘了一个 1/2，删掉即可过",
+          "body": "被审稿：`manuscripts/F/f-proof-000002.md`（正文 sha 912a98b8…41d1）。结论 **有毛病**，defect_step = 8，findings 一条（level=error）。\n\n**缺陷（第 8 步，唯一一处）**\n原句：`由面积元 r dr dθ 得 ∫∫_D = (1/2)∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ`\n极坐标下 `∫∫_D dxdy = ∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ`，内层 `∫_0^R r dr = R²/2` 已经给出 `1/2`；中间项外面再乘 `1/2` 会得 `(1/4)∫g^{-2/p}`，与该行右端及第 8 步后文（并入 (ii) 用的 `(1/2)∫g^{-2/p}`）差因子 2 ⇒ 该行第一个等号字面不成立。\n\n**最小补法**：删掉中间项那个 `1/2`，写成 `∫∫_D = ∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ`；后文与结论 (ii) 的 `√3/2` 不动。补完这一份可以过。\n\n**其余各处我逐处核过、没有第二处要改的**：第 3 步引 `stmt:000034`(i) 条件/结论一致且该行等级 `pre_theorem`（可引）；第 2/4 步基与分量恒等；第 5/6 步 `(2/√6)^{-2} = 3/2`、`(1/2)(3/2) = 3/4`；第 7 步叉积 `(1,1,1)`、模 `√3` 与 `D` 的定义；第 8 步 `g>0` 与 `r ≤ g^{-1/p}`、`√3·(1/2)`；第 9 步 p=2 得 π（`∫dθ/(2+sin2θ) = 2π/√3`）、p=1 三段各 `1/4` 得 `3√3/4`；第 10 步 `m^p ≤ g ≤ 3m^p`、`g^{-2/p} ≤ m^{-2} ≤ 2` 为统一控制函数，`∫_0^{2π}m^{-2} = 6`，极限 3√3，同样控制给 (iv) 连续性。\n\n台账：`verifications/pending/6429ab82…c47929.jsonl#u-000011`；V 稿 `verifications/reviews/v-review-000005.md`。负判不写手稿签块、不签第 3 位。改完把同一份稿（新 sha）重新送 V。",
+          "refs": [
+            "stmt:000034"
+          ]
+        }
+      },
+      "result": {
+        "notify_handoff": {
+          "handoff": "000009",
+          "ok": true,
+          "id": "000009",
+          "path": "work/handoffs.jsonl#000009",
+          "to": "F",
+          "brief": "f-proof-000002 判「有毛病」：第 8 步极坐标中间式多乘了一个 1/2，删掉即可过",
+          "addressing": {
+            "checked": true,
+            "how": "parent",
+            "to": "F",
+            "kind": "parent",
+            "name": "F1",
+            "task_id": "t-000083",
+            "role": "F",
+            "brief": "",
+            "candidates": [],
+            "callable": "父 F1（t-000083）",
+            "why": "名册成员（parent）⇒ 手稿写角色 F，通知投实例 F",
+            "delivery": "roster",
+            "manuscript_to": "F",
+            "addressed_by": "role_fallback"
+          },
+          "notify_channel": "roster",
+          "revises": "",
+          "existing_same_summary": {
+            "count": 0,
+            "ids": [],
+            "note": "查过了：没有同一句话的既有交接"
+          },
+          "notified": "t-000090",
+          "error": "",
+          "note": "收件人下次运行时（或本步之后）会在收件箱/板上看到编号；它用 `manuscripts.read` 读全文"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 45952,
+        "prompt_cache_miss_tokens": 3957,
+        "tokens_in": 49909,
+        "tokens_out": 5557,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000085"
+    }
+  ],
+  "final": "结论：**有毛病**（defect_step = 8；findings 一条，level=error）\n\n被审稿：`manuscripts/F/f-proof-000002.md`（稿号 000002，正文 sha 912a98b82fcc2930b93450c5c259d53f82fc7ac338b02ca5adae50b5166841d1）。已按派活要求只给 `proof_manuscript`（不带命题号）调用 `verify.verify_proof`，两态结论与 findings 已落 `verifications/pending/6429ab828f56dcf8dc1bcd14daa2a563187dccb99056e30e89a63b4179c47929.jsonl#u-000011`，V 稿 `verifications/reviews/v-review-000005.md` 已投给 F（板项 t-000089）。负判不写手稿签块、不签第 3 位（那是收方秘书的事）。\n\n**唯一缺陷（第 8 步）**\n- 原句：`由面积元 r dr dθ 得 ∫∫_D = (1/2)∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ`\n- 为何不成立：极坐标下 `∫∫_D dxdy = ∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ`，内层已经给出因子 `(1/2)`（`∫_0^{R} r dr = R²/2`）；中间那一项外面再乘 `(1/2)` 会得 `(1/4)∫g^{-2/p}`，与该行最右端（以及第 8 步合并进 (ii) 后面用到的 `(1/2)∫g^{-2/p}`）差一个因子 2，故该行第一个等号字面不成立。\n- 最小补法：删掉中间项那个 `1/2`，写成 `∫∫_D = ∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ`，后面不用动（结论 (ii) 的系数 `√3/2` 正确）。补完之后这份可以过。\n\n**其余各处我都逐处核过、没有第二处要改的**\n- 第 3 步引 `stmt:000034`(i)：该行已登记、等级现算 `pre_theorem`（kind 升为 theorem，basis u-000004），条件是 `1≤p<∞` 与任意单位法向 + `n^⊥` 任意单位正交基、值不随基变 —— 与第 3 步用法一致，`consistent`，可引。\n- 第 2、4 步：u、v 的单位正交性与 e(θ) 三坐标分量、`√3cosθ±sinθ = 2cos(θ∓π/6)`、`|e_i| = (2/√6)|·|` 逐项验算无误。\n- 第 5、6 步：`‖e‖_p^p = (2/√6)^p S`、`(2/√6)^{-2} = 3/2`、`(1/2)(3/2) = 3/4` 对。\n- 第 7 步：`∂_xΦ × ∂_yΦ = (1,1,1)`、模 `√3`，`Φ(x,y)∈B_p^3 ⟺ |x|^p+|y|^p+|x+y|^p ≤ 1`，面积公式用法正确。\n- 第 8 步除那一处 `1/2` 外：`g(θ) > 0`（(cosθ,sinθ,cosθ+sinθ) 永不为零向量）、星形与 `r ≤ g^{-1/p}` 的口径、`√3·(1/2) = √3/2` 都对。\n- 第 9 步：p=2 得 `g = 2+sin2θ`，`∫_0^{2π}dθ/(2+sin2θ) = 2π/√3`，A = π；p=1 的三段 `g = 2(cosθ+sinθ) / 2sinθ / -2cosθ`、三段积分各 `1/4`（`∫_0^{π/2}dθ/(cosθ+sinθ)² = 1` 用 `tan u - sec u` 取值确为 1）、`2·(3/4) = 3/2`、A = 3√3/4，全对。\n- 第 10 步：`m^p ≤ g ≤ 3m^p`、`g^{-2/p} ≤ m^{-2} ≤ 2`（`m ≥ 1/√2`）是统一于 p≥1 的控制函数，控制收敛用法成立；`∫_0^{2π} m^{-2} = 2(1+1+1) = 6`，极限 3√3；同一控制 + 逐点连续性给 (iv)，成立。\n- 六条角度（前提 / 计算 / 逻辑 / 强度 / 台账一致 / 依赖面）都过了一遍：结论没有比命题更强，命题 (iv) 的连续性有依据，依赖段点的 `stmt:000034` 与正文第 3 步起的引用一致。\n\n修法就是删一个 `1/2`；改完把同一份稿（新 sha）重新送 V。",
+  "evidence": [
+    "manuscripts/F/f-proof-000002.md",
+    "912a98b82fcc2930b93450c5c259d53f82fc7ac338b02ca5adae50b5166841d1",
+    "verifications/pending/6429ab828f56dcf8dc1bcd14daa2a563187dccb99056e30e89a63b4179c47929.jsonl#u-000011",
+    "verifications/reviews/v-review-000005.md",
+    "stmt:000034"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 0,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 4,
+  "compactions": 0,
+  "mailbox_items": [],
+  "mailbox_msgs": [],
+  "mailbox_delivered": 0,
+  "monitor_turns": 0,
+  "wakes": 0,
+  "wake_ids": [],
+  "wake_events": [],
+  "clock_pumps": 7,
+  "clock_fired": 0,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "V 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "V",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    }
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [
+    "000009"
+  ],
+  "summons": [],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [],
+  "summons_total": 0,
+  "summons_consumed": 0,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 0,
+    "summons_consumed": 0,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p328",
+    "role": "V",
+    "prompt_sha256": "171b42af018313bbcc69a25b1530f2ab9412256a4419f69333b5f3b963dad68e",
+    "prompt_chars": 46343,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "FACULTIES_07",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_STOP",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 4,
+    "tokens_in": 175928,
+    "tokens_out": 48582,
+    "usd": 0.031982,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 4,
+    "no_request_calls": 0,
+    "hit": 160256,
+    "miss": 15672,
+    "unknown_calls": 0,
+    "tokens_in": 175928,
+    "hit_rate": 0.9109,
+    "mismatched_calls": 0,
+    "saved_usd": 0.023557,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 371.641,
+  "end_ts": "2026-11-24T19:57:39+08:00",
+  "notes": [
+    "缓存读数：命中 160256 / 未命中 15672 token，命中率 91.1%（4 次调用）；按 modelcost 口径估算可省 约 0.023557 美元",
+    "子产出处理读数：summons_total=0（这一趟没派过子代理 ⇒ 没有要处理的子产出；判据没有对象，不红）"
+  ],
+  "final_payload": {
+    "final": "结论：**有毛病**（defect_step = 8；findings 一条，level=error）\n\n被审稿：`manuscripts/F/f-proof-000002.md`（稿号 000002，正文 sha 912a98b82fcc2930b93450c5c259d53f82fc7ac338b02ca5adae50b5166841d1）。已按派活要求只给 `proof_manuscript`（不带命题号）调用 `verify.verify_proof`，两态结论与 findings 已落 `verifications/pending/6429ab828f56dcf8dc1bcd14daa2a563187dccb99056e30e89a63b4179c47929.jsonl#u-000011`，V 稿 `verifications/reviews/v-review-000005.md` 已投给 F（板项 t-000089）。负判不写手稿签块、不签第 3 位（那是收方秘书的事）。\n\n**唯一缺陷（第 8 步）**\n- 原句：`由面积元 r dr dθ 得 ∫∫_D = (1/2)∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ`\n- 为何不成立：极坐标下 `∫∫_D dxdy = ∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ`，内层已经给出因子 `(1/2)`（`∫_0^{R} r dr = R²/2`）；中间那一项外面再乘 `(1/2)` 会得 `(1/4)∫g^{-2/p}`，与该行最右端（以及第 8 步合并进 (ii) 后面用到的 `(1/2)∫g^{-2/p}`）差一个因子 2，故该行第一个等号字面不成立。\n- 最小补法：删掉中间项那个 `1/2`，写成 `∫∫_D = ∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ`，后面不用动（结论 (ii) 的系数 `√3/2` 正确）。补完之后这份可以过。\n\n**其余各处我都逐处核过、没有第二处要改的**\n- 第 3 步引 `stmt:000034`(i)：该行已登记、等级现算 `pre_theorem`（kind 升为 theorem，basis u-000004），条件是 `1≤p<∞` 与任意单位法向 + `n^⊥` 任意单位正交基、值不随基变 —— 与第 3 步用法一致，`consistent`，可引。\n- 第 2、4 步：u、v 的单位正交性与 e(θ) 三坐标分量、`√3cosθ±sinθ = 2cos(θ∓π/6)`、`|e_i| = (2/√6)|·|` 逐项验算无误。\n- 第 5、6 步：`‖e‖_p^p = (2/√6)^p S`、`(2/√6)^{-2} = 3/2`、`(1/2)(3/2) = 3/4` 对。\n- 第 7 步：`∂_xΦ × ∂_yΦ = (1,1,1)`、模 `√3`，`Φ(x,y)∈B_p^3 ⟺ |x|^p+|y|^p+|x+y|^p ≤ 1`，面积公式用法正确。\n- 第 8 步除那一处 `1/2` 外：`g(θ) > 0`（(cosθ,sinθ,cosθ+sinθ) 永不为零向量）、星形与 `r ≤ g^{-1/p}` 的口径、`√3·(1/2) = √3/2` 都对。\n- 第 9 步：p=2 得 `g = 2+sin2θ`，`∫_0^{2π}dθ/(2+sin2θ) = 2π/√3`，A = π；p=1 的三段 `g = 2(cosθ+sinθ) / 2sinθ / -2cosθ`、三段积分各 `1/4`（`∫_0^{π/2}dθ/(cosθ+sinθ)² = 1` 用 `tan u - sec u` 取值确为 1）、`2·(3/4) = 3/2`、A = 3√3/4，全对。\n- 第 10 步：`m^p ≤ g ≤ 3m^p`、`g^{-2/p} ≤ m^{-2} ≤ 2`（`m ≥ 1/√2`）是统一于 p≥1 的控制函数，控制收敛用法成立；`∫_0^{2π} m^{-2} = 2(1+1+1) = 6`，极限 3√3；同一控制 + 逐点连续性给 (iv)，成立。\n- 六条角度（前提 / 计算 / 逻辑 / 强度 / 台账一致 / 依赖面）都过了一遍：结论没有比命题更强，命题 (iv) 的连续性有依据，依赖段点的 `stmt:000034` 与正文第 3 步起的引用一致。\n\n修法就是删一个 `1/2`；改完把同一份稿（新 sha）重新送 V。",
+    "evidence": [
+      "manuscripts/F/f-proof-000002.md",
+      "912a98b82fcc2930b93450c5c259d53f82fc7ac338b02ca5adae50b5166841d1",
+      "verifications/pending/6429ab828f56dcf8dc1bcd14daa2a563187dccb99056e30e89a63b4179c47929.jsonl#u-000011",
+      "verifications/reviews/v-review-000005.md",
+      "stmt:000034"
+    ],
+    "notify": {
+      "to": "F",
+      "summary": "f-proof-000002 判「有毛病」：第 8 步极坐标中间式多乘了一个 1/2，删掉即可过",
+      "body": "被审稿：`manuscripts/F/f-proof-000002.md`（正文 sha 912a98b8…41d1）。结论 **有毛病**，defect_step = 8，findings 一条（level=error）。\n\n**缺陷（第 8 步，唯一一处）**\n原句：`由面积元 r dr dθ 得 ∫∫_D = (1/2)∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ`\n极坐标下 `∫∫_D dxdy = ∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ`，内层 `∫_0^R r dr = R²/2` 已经给出 `1/2`；中间项外面再乘 `1/2` 会得 `(1/4)∫g^{-2/p}`，与该行右端及第 8 步后文（并入 (ii) 用的 `(1/2)∫g^{-2/p}`）差因子 2 ⇒ 该行第一个等号字面不成立。\n\n**最小补法**：删掉中间项那个 `1/2`，写成 `∫∫_D = ∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ`；后文与结论 (ii) 的 `√3/2` 不动。补完这一份可以过。\n\n**其余各处我逐处核过、没有第二处要改的**：第 3 步引 `stmt:000034`(i) 条件/结论一致且该行等级 `pre_theorem`（可引）；第 2/4 步基与分量恒等；第 5/6 步 `(2/√6)^{-2} = 3/2`、`(1/2)(3/2) = 3/4`；第 7 步叉积 `(1,1,1)`、模 `√3` 与 `D` 的定义；第 8 步 `g>0` 与 `r ≤ g^{-1/p}`、`√3·(1/2)`；第 9 步 p=2 得 π（`∫dθ/(2+sin2θ) = 2π/√3`）、p=1 三段各 `1/4` 得 `3√3/4`；第 10 步 `m^p ≤ g ≤ 3m^p`、`g^{-2/p} ≤ m^{-2} ≤ 2` 为统一控制函数，`∫_0^{2π}m^{-2} = 6`，极限 3√3，同样控制给 (iv) 连续性。\n\n台账：`verifications/pending/6429ab82…c47929.jsonl#u-000011`；V 稿 `verifications/reviews/v-review-000005.md`。负判不写手稿签块、不签第 3 位。改完把同一份稿（新 sha）重新送 V。",
+      "refs": [
+        "stmt:000034"
+      ]
+    }
+  },
+  "task_id": "t-000085"
+}

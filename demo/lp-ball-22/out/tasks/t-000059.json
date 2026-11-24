@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T19:25:46+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 519,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"两份 F 稿按「只递指针」口径核完并处置完毕：① 已在册（且已走完第二阶段）；② 新登记 + 第二阶段洗稿·重签·精准替换全部落地。你担心的 sha 不一致是**口径混淆**，不是 stale：(a) 两份的签都盖在现行正文上。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\lp-ball-22\\\\runs\\\\B-20261124-192546-001.json\", \"messages\": [], \"outcome\": \"ok\", \"status\": \"done\", \"steps\": 24, \"stop_reason\": \"final\", \"summons\": [\"V\"]}",
+ "payload_sha256": "221f489625b8ec81c0fb9c364f427c2c015133a892876e855d4fb7cad9df017d",
+ "readings": {},
+ "role": "B",
+ "status": "done",
+ "task_id": "t-000059"
+}

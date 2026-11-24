@@ -1,0 +1,24 @@
+{
+ "action": "run_once",
+ "at": "2026-11-24T22:12:31+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 3447,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"A.run_once 这一趟跑完：没有新的检索可领，真正的欠账是「只入库未收编」的 11 篇已入库文献，已两趟派 B 收编并拿到逐篇回执。\\n\\n【检索面】own.run_once(request_ids=[r-000002, r-000003]) 回报 processed=0、skipped_reason=no_pending_delegation、pending_total=0、pending_by_delegation=[]；lit.stage_list(request_id=\\\"*\\\") 全表 30 行候选里 pending=0（admitted 25 / rejected 5），三个委托 r-000001/2/3 的每一行都已打 cleared_at（clear_stage.settled 三条、cleared=[]、refused=[]）。⇒ 本轮没有要新增的检索请求，也没有待裁表要清。\\n\\n【收尾判据三项】① outcome 终局：r-000001 ok(+done)、r-000002 ok、r-000003 ok、r-000004 ok —— 没有 pending；② result_lit_ids 可读：literature 表 25 行，r-000002 的 000010–000019 与 r-000003 的 000020–000024 逐条在表（连带 000000–000009），盘上 path 齐；③ 已派 B 收编、B 回执给到条数：见下。\\n\\n【B 收编回执（两趟）】\\n- 手稿 000028（t-000188）：lit:000014《The geometry of Minkowski spaces: a survey, part I》收 30 条概念（stmt 000043–000072，page_range p.35–36）+ 25 条关系（rel 000021–000045，quote_verified 全 true，p.35–43）；其余 10 篇 0/0，卡点是机械抽取器的「概念配额 30 条/趟累计封顶」，不是缺正文。\\n- 手稿 000029（t-000197）：接着做 5 篇截面主线文献，走手工路径（register_statement kind=concept + table.create relations + 逐字回验），落 8 条概念 + 7 条关系（quote_verified 全 true）；B 点名 000020/000021/000022/000016 是手工收编的，机械器 30 条配额跨趟累计不重置是这一批只能手工做的原因。\\n\\n【如实报的三处缺口，不折成「没有问题」】\\n1) 仍有 6 篇已入库文献没有消化痕迹（000015《Szarek and Ball made simple》、000017《Paraconsistent dominated convergence》、000018《Generalized integrals and convergence theorems》、000019《An introduction to measure theory》、000023《Measure, integration & real analysis》、000024《Measure theory and integration by and for the learner》）—— 主体是测度论背景，B 报的原因是概念配额跨趟累计封顶（concept_quota limit:30/written:30、concepts_refused=105、relations_deferred=31），不是没下到全文；要它们的命题线索得先解配额或继续走手工路径。\\n2) r-000002、r-000003 的 done 旗仍为 false，而 outcome=ok、候选已逐条清表、result_lit_ids 逐条可读 —— done 不是我写的字段，不擅自改，留给 M/D 裁。\\n3) lit.stage_list 报了 4 组重复（title 归一后 000010/000025、000011/000026、000023/000028、000024/000029）；它们在候选表里已落 rejected 档，不影响 literature 表（25 行无同 DOI/同题重复）。\\n\\n【这一趟的经验】本地已声明 PDF 的收编链是通的（发现→候选→抽读→判收→admit_all→清表，全表 0 待裁可复核）；真正的瓶颈在 B 侧的「概念配额 30 条/趟且跨趟累计」—— 同一条委托的第二批只能改手工，这是下一",
+ "payload_sha256": "1008730d239c13cf4df3943dc4342aa548319e19c1827296664f83f91f729a49",
+ "readings": {},
+ "role": "A",
+ "status": "done",
+ "task_id": "t-000187"
+}

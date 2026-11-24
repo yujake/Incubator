@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-25T00:10:04+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 2263,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"lit:000003 首部核实已完成：A 取回、B 收录，三样逐字读数已落在盘上，但其中两项（作者、期刊/年份）受结构限制，写不进 literature 的“身份格”，只能落在交接手稿与关系行里。以下只给指针，不夹带正文。\\n\\n**落点（可核指针）**\\n1. 三样逐字读数（① 作者全名按出现顺序、② arXiv 编号+年份+页数、③ 摘要/引言里那句主题相关英文原句）的正文落点：**交接手稿 000039**（`manuscripts.read(id=\\\"000039\\\")`，sender=A，task=t-000252，refs 含 lit:000003）。\\n2. 台账已写的两格：**`lit:000003.pages`** = 「12 pp.（PDF 共 12 页；期刊卷期页 PDF 上取不到）」；**`lit:000003.summary`** = 按本地 PDF 首部逐字读出的题录（单作者、arXiv:2107.14778v3 [math.MG]、22 Jun 2023、12 页；期刊名与卷期页 PDF 上取不到，如实记取不到，未从外部补）。\\n3. 逐字引文落成的关系行：**`rel:000077`–`rel:000080`**（lit_id=000003，均 `quote_verified=true`，page_range p.1–p.2），与本轮同一批登记。哪一条逐字对应 ③ 原句，请看手稿 000039 的正文对照。\\n\\n**如实报告的一格缺口（不许写成没有）**\\n`lit:000003` 的 **`authors` / `venue` / `year` 三个身份格仍是空**：通用写口改它们被受控拒 `identity_cell_refused`（身份格只由收编口/provider 写，硬改会造出第二个 dedup 主键）；A 已试过重走登记口，命中去重（duplicate）只复用 lit_id、不更新身份格。⇒ **这三个格在本框架里目前没有可用的写入路径**，读数是「取回了但写不进身份格」，不是「PDF 上没有」。\\n\\n**对正文引用是否站得住的判断依据**：③ 的原句在 `rel:000077`/`rel:000078`（`quote_verified=true`，p.2）里，据此可判断正文把 lit:000003 当作“cube 中心截面随方向变化的临界点”背景是否站得住——具体判定请你读 000039 正文后自己定，我不替你转述原句。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\lp-ball-22\\\\runs\\\\D-20261125-001004-001.json\", \"messages\": [], \"outcome\": \"ok\", \"status\": \"done\", \"steps\": 11, \"stop_reason\": \"final\", \"summons\": [\"A\"]}",
+ "payload_sha256": "721e6a1acc92e07264b3a1c4fd2e437466fdbf66fc23d777a63bf3b26a896fc5",
+ "readings": {},
+ "role": "D",
+ "status": "done",
+ "task_id": "t-000251"
+}

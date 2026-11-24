@@ -1,0 +1,1 @@
+{"at": "2026-11-25T03:13:08+08:00", "branch": "waiting_no_children", "name": "G2", "owner": "t-000292", "reason": "论文正文补引与重编已交差（main.tex sha=62efb2f6…、回执 tex_sha256 同、10 页），claim-6 那一格它明确报了被拒原因（doc:000001 归已销号的 G1），名下无未消板项，不再派新活", "role": "G", "seq": 1, "task_id": "t-000293"}

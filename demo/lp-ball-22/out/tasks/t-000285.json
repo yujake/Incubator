@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-25T03:00:41+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 1570,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"lit:000024 已消化，`literature.unprocessed` 归 0（R8 那一格清掉）。\\n\\n三行回执：\\n① `table.count(literature, processed=false)` = **0**（meta.total=0，全库已消化）。\\n② `lit:000024` 的 `processed` = **true**。路径：连续 9 拍 `own.run_once`（无参数，单篇待处理文献），每拍吃满 240s 抽取预算停在块边界，`extract_resume.chunks_done` 45 → 50 → 54 → … → 68/78 一路推进，最后一拍回执 `processed=1`（quotes_verified=4, failed=0）。不是缺正文（726/726 页文本早已抽完）、不是写盘被拒、无任何拒码。\\n③ 这一篇抽到的条数：`statements` 里 `source_lit_id=000024` 共 **30 条**（概念/命题行）；`relations` 里 `lit_id=000024` 共 **25 条**（都是逐字回验过的关系行，quote_verified=true）。\\n\\n未碰其余 24 行、未开新文献、未动任何别人的稿。\\n\\n需要 M 知道的一条欠账（不在本委托范围内、未处置）：run_once 回执的 `stage_two` 读数里仍有 2 份证明没洗 —— `stmt:000030`（kind=conjecture，优化稿已开：B 副本 000003/000004）与 `stmt:000112`（kind=theorem，优化稿未开）。这两条是此前批次的二阶段欠账，不是这一篇进来的；按委托要求的范围我没有动它们，请 M 决定是否另派一趟洗稿。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\lp-ball-22\\\\runs\\\\B-20261125-030041-001.json\", \"messages\": [], \"outcome\": \"ok\", \"status\": \"done\", \"steps\": 16, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "87463a6ccbae305c82f19ef97c8c11a73396a0d3e7d8714a5c6086eb2a0a0b73",
+ "readings": {},
+ "role": "B",
+ "status": "done",
+ "task_id": "t-000285"
+}

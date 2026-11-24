@@ -1,0 +1,2057 @@
+===== page 1 =====
+On a reverse form of the Brascamp-Lieb inequality
+Franck Barthe*
+Equipe d'Analyse et de MatheÂ matiques AppliqueÂ es, UniversiteÂ de Marne-la-ValleÂ e,
+CiteÂ Descartes, 5 boulevard Descartes, F-77454 Marne-la-ValleÂ e Cedex 2, France
+(e-mail: barthe@clipper.ens.fr)
+Oblatum 12-VI-1997 & 21-XI-1997
+Abstract. We prove a reverse form of the multidimensional Bra-
+scamp-Lieb inequality. Our method also gives a new way to derive
+the Brascamp-Lieb inequality and is rather convenient for the study
+of equality cases.
+Introduction
+We work on Rn with its usual Euclidean structure and we denote by
+h; i the canonical scalar product. In [BL], H. J. Brascamp and E. H.
+Lieb showed that for m; n 2 N, p1; . . . ; pm > 1 and a1; . . . ; am 2 Rn,
+the norm of the multilinear operator U from Lp1R      LpmR
+into R de®ned by
+Uf1; . . . ; fm 
+Z
+Rn
+Y
+m
+i1
+fihx; aiidx
+can be computed as the supremum over centered Gaussian functions
+g1; . . . ; gm of
+Ug1; . . . ; gm
+Qm
+i1 kgikpi
+
+Invent. math. 134, 335±361 (1998)
+* This work will form part of a doctoral thesis under the supervision of professors
+B. Maurey and A. Pajor. Their advice and encouragement have been invaluable.
+===== page 2 =====
+In other words, U is ``saturated'' by Gaussian functions. This theorem
+is a very convenient tool to derive sharp inequalities. Brascamp and
+Lieb applied it successfully to prove the optimal version of Young's
+convolution inequality (also established independently by Beckner
+[Bec]), to rederive Nelson's hypercontractivity. Their proof is based
+on a rearrangement inequality of Brascamp, Lieb and Luttinger
+[BLL] and on the fact that radial functions of a large number of
+variables behave like Gaussians. However, their method left open,
+except in some special cases, the multidimensional problem. Let
+m  n, p1; . . . ; pm > 1 and let n1; . . . ; nm be integers. For each i  m let
+Bi be a linear mapping from Rn into Rni. Is the multilinear operator
+on Lp1Rn1      LpmRnm de®ned by
+Wfi; . . . ; fm 
+Z
+Rn
+Y
+m
+i1
+fiBixdx
+saturated by Gaussian functions?
+This question was solved positively by Lieb in his article
+``Gaussian kernels have only Gaussian maximizers'' [Lie]. The key
+point is that W can be viewed as a limit case of multilinear operators
+with Gaussian kernels.
+In [Bar3], we gave a simple proof, for functions of one real vari-
+able, of the Brascamp-Lieb inequality and of a new family of in-
+equalities which can be understood as a reverse form, or as a dual
+form of the Brascamp-Lieb inequalities. These inequalities can be
+stated as follows: let m  n, p1; . . . ; pm > 1 and a1; . . . ; am 2 Rn; the
+largest constant E such that
+Z
+Rn
+sup
+xP
+cihiai
+Y
+m
+i1
+fihidx  E
+Y
+m
+i1
+kfikpi
+holds for all fi; . . . ; fm is also the largest constant such that the in-
+equality holds for centered Gaussian functions, where
+R  is the outer
+integral. Again, Gaussian functions play an extremal role. This new
+inequality was inspired by convexity theory. The strength of the
+Brascamp-Lieb inequality for volume estimates of convex bodies was
+noticed by K. Ball (see [Bal1], [Bal2] and [Bal3]), who also remarked
+in [Bal3] that a reverse inequality would give dual results. For geo-
+metric applications of the reverse Brascamp-Lieb inequality, see
+[Bar1] and also section III of the present paper.
+In the ®rst section, we prove a fully multidimensional version of
+the reverse Brascamp-Lieb inequality. Our method also gives a new
+336
+F. Barthe
+===== page 3 =====
+proof of the multidimensional Brascamp-Lieb inequality. It is very
+similar to the one we used for the one-dimensional case and uses
+a theorem of Brenier ([Bre1], [Bre2]) re®ned by McCann ([McC1],
+[McC2]) on measure preserving mappings deriving from convex
+potentials. Notice that this result was applied by McCann in [McC1]
+to prove the PreÂ kopa-Leindler inequality ([PreÂ ], [Lei]), which is a
+particular case of the reverse Brascamp-Lieb inequalities.
+In section II, we focus on the one-dimensional case in order to deal
+in detail with equality cases. This problem was left open for the Bra-
+scamp-Lieb inequality because the previous proofs depended on limit
+processes. We push further the study of [BL] in the spirit of [Lie] to see
+when there is a Gaussian maximizer for the Brascamp-Lieb inequality
+(or a Gaussian minimizer for the reverse form) and whether it is unique.
+In section III, we study the particular case of the Brascamp-Lieb
+inequality which was pointed out by K. Ball [Bal1] and which is so
+useful in convexity. We state the corresponding converse inequality.
+The equality cases are completely solved, which allows us to ®nd new
+characteristic properties of simplices and parallelotopes. The multi-
+dimensional version of the reverse Brascamp-Lieb inequality implies
+a Brunn-Minkowski type theorem for sets that are contained in
+subspaces.
+1 Proof of the Brascamp-Lieb inequality and its converse
+We ®rst introduce some notation. Let SRn be the set of n  n
+symmetric de®nite positive matrices. For A 2 SRn we denote by
+GA the centered Gaussian function on Rn
+GAx  expÿhAx; xi :
+We also denote by LRn; Rm the set of linear mappings from Rn to
+Rm,
+identi®ed
+with
+m  n-matrices.
+If
+B 2 LRn; Rm,
+then
+B 2 LRm; Rn will be its Euclidean adjoint. We work with the set
+L
+1 Rn of integrable non-negative functions on Rn.
+The fully multidimensional version of the Brascamp-Lieb in-
+equality and its converse is as follows:
+Theorem 1 Let m; n be integers. Let cim
+i1 be positive real numbers and
+nim
+i1 be integers smaller than n such that
+X
+m
+i1
+cini  n :
+On a reverse form of the Brascamp-Lieb inequality
+337
+===== page 4 =====
+For i  1; . . . ; m; let Bi be a linear surjective map from Rn onto Rni.
+Assume that
+\
+im
+ker Bi  f0g :
+We de®ne two functions I and J on L
+1 Rn1      L
+1 Rnm as
+follows: if fi 2 L
+1 Rni, i  1; . . . ; m then
+Ifim
+i1 
+Z
+Rn
+sup
+Y
+m
+i1
+f ci
+i yi;
+X
+m
+i1
+ciB
+i yi  x and yi 2 Rni
+(
+)
+dx ;
+and
+Jfim
+i1 
+Z
+Rn
+Y
+m
+i1
+f ci
+i Bixdx :
+Let E be the largest constant such that for all fim
+i1,
+Ifim
+i1  E
+Y
+m
+i1
+Z
+Rni
+fi
+0
+@
+1
+A
+ci
+;
+RBL
+and let F be the smallest one such that for all fim
+i1,
+Jfim
+i1  F
+Y
+m
+i1
+Z
+Rni
+fi
+0
+@
+1
+A
+ci
+:
+BL
+Then E and F can be computed using centered Gaussian functions only,
+that is
+E  inf
+Igim
+i1
+Qm
+i1
+R
+Rni gi
+ÿ
+ci ; gi centered Gaussian on Rni; i  1; . . . ; m
+(
+)
+;
+and
+F  sup
+Jgim
+i1
+Qm
+i1
+R
+Rni gi
+ÿ
+ci ;
+(
+gi centered Gaussian on Rni; i  1; . . . ; m
+)
+;
+Moreover, if we denote by D the largest real number such that
+338
+F. Barthe
+===== page 5 =====
+det
+X
+m
+i1
+ciB
+i AiBi
+ 
+!
+ D
+Y
+m
+i1
+det Ai
+
+ci ;
+for all Ai 2 SRni; i  1; . . . ; m, then
+E 
+
+D
+p
+and
+F  1
+D
+p
+
+Remark 1. The hypothesis Pm
+i1 cini  n is just a necessary homoge-
+neity condition for E to be positive and for F to be ®nite. The con-
+dition on \ ker Bi ensures that Pm
+i1 ciB
+i AiBi is an isomorphism.
+Actually, the conclusion of the theorem remains obviously valid
+without this condition, since D  0 when it is not satis®ed.
+Remark 2. Notice that the reverse Brascamp-Lieb inequality for
+m  2, n1  n2  n, B1  B2  B
+1  B
+2  In and c1  a  1 ÿ c2,
+where In is the identity map on Rn and 0 < a < 1, is the inequality of
+PreÂ kopa-Leindler [PreÂ ] [Lei]. Indeed the constant D is
+D 
+inf
+A1;A22SRn
+detaA1  1 ÿ aA2
+det A1adet A21ÿa  1
+by the arithmetic-geometric inequality. So (RBL) becomes, for all
+f ; g 2 L
+1 Rn,
+Z
+Rn
+sup
+xau1ÿav
+f aug1ÿavdx 
+Z
+Rn
+f
+0
+@
+1
+A
+a
+Z
+Rn
+g
+0
+@
+1
+A
+1ÿa
+:
+It is well-known that this inequality implies the Brunn-Minkowski
+theorem: for A; B compact non-void subsets of Rn,
+Vol
+1
+nA  B  Vol
+1
+nA  Vol
+1
+nB :
+The proof of Theorem 1 is divided into lemmas. We ®rst deal with
+the study of the behavior of I and J with respect to centered Gaussian
+functions. We set
+Eg  inf
+Igim
+i1
+Qm
+i1
+R
+Rni gi
+ÿ
+ci ; gi centered Gaussian on Rni; i  1; . . . ; m
+(
+)
+;
+On a reverse form of the Brascamp-Lieb inequality
+339
+===== page 6 =====
+and
+Fg  sup
+Jgim
+i1
+Qm
+i1
+R
+Rni gi
+ÿ
+ci ; gi centered Gaussian on Rni; i  1; . . . ; m
+(
+)
+
+Our aim is to prove that E  Eg 
+
+D
+p
+and F  Fg  Dÿ1=2: We begin
+with a classical computation, taken from [BL]; it only uses the fact
+that if M 2 SRk, then
+Z
+Rk
+expÿhx; Mxidx 
+
+pk
+det M
+r
+
+Lemma 1 With the notation of Theorem 1, we have
+Fg  1
+D
+p
+
+Our next lemma links Eg and Fg by means of duality between
+quadratic forms.
+Lemma 2 With the previous notation, we have
+Eg  Fg  1 ;
+and Eg  0 if and only if Fg  1.
+Proof. For i  1; . . . ; m, let Ai 2 SRni and let Q be the quadratic
+form on Rn de®ned by
+Qy 
+* X
+m
+i1
+ciB
+i AiBiy; y
++
+:
+Let Q be the dual quadratic form of Q. We recall that it is de®ned on
+Rn by
+Qx  sup jhx; yij2; Qy  1
+n
+o
+:
+We also introduce the function R on Rn such that for all x 2 Rn,
+Rx  inf
+X
+m
+i1
+cihAÿ1
+i xi; xii; x 
+X
+m
+i1
+ciB
+i xi and for all i; xi 2 Rni
+(
+)
+:
+340
+F. Barthe
+===== page 7 =====
+We now show that R  Q. Indeed, assume that x  Pm
+i1 ciB
+i xi with
+xi 2 Rn1 for i  1; . . . ; m, then
+jhx; yij2 
+*X
+m
+i1
+ciB
+i xi; y
++
+
+
+2
+
+X
+m
+i1
+h
+ci
+p Aÿ1=2
+i
+xi;
+ci
+p A1=2
+i
+Biyi
+
+
+2
+:
+By the Cauchy-Schwarz inequality, applied to the quadratic form /
+on Rn1      Rnm de®ned by /Xi; . . . ; Xm  Pm
+i1hXi; Xii, one gets:
+jhx; yij2 
+X
+m
+i1
+j
+ci
+p Aÿ1=2
+i
+xij2
+ 
+! X
+m
+i1
+j
+ci
+p A1=2
+i
+Biyj2
+ 
+!
+
+X
+m
+i1
+cihxi; Aÿ1
+i xii
+ 
+!
+DX
+m
+i1
+ciB
+i AiBiy; y
+E
+ 
+!
+:
+In fact, one easily checks that there is equality in the previous
+argument if one takes
+y 
+X
+m
+i1
+ciB
+i AiBi
+ 
+!ÿ1
+x
+and
+xi  AiBiy
+i  1; . . . ; m :
+It follows that R  Q.
+We apply this result to our integrals of Gaussian functions.
+Straightforward computations give that
+JGA1; . . . ; GAm
+Qm
+i1
+R
+GAi
+ÿ
+ci
+
+
+Qm
+i1det Aici
+det Q
+s
+;
+and
+IGAÿ1
+1 ; . . . ; GAÿ1
+m 
+Qm
+i1
+R
+GAÿ1
+i
+
+ci 
+
+Qm
+i1det Aiÿci
+det R
+r
+:
+Using that R  Q and the classical duality relation det Q  det Q  1,
+one has
+JGA1; . . . ; GAm
+Qm
+i1
+R
+GAi
+ÿ
+ci 
+IGAÿ1
+1 ; . . . ; GAÿ1
+m 
+Qm
+i1
+R
+GAÿ1
+i
+
+ci  1 ;
+and therefore Eg  F ÿ1
+g .
+(
+On a reverse form of the Brascamp-Lieb inequality
+341
+===== page 8 =====
+Remark.
+Let
+us
+emphasize
+the
+equivalence
+for
+Ai 2 SRn,
+i  1; . . . ; m of the assertions
+ det Pm
+i1 ciB
+i AiBi
+ÿ
+
+ D Qm
+i1 det Ai
+
+ci:
+ The m-tuple of centered Gaussians GA1; . . . ; GAm is a maximizer
+for (BL).
+ The m-tuple of centered Gaussians GAÿ1
+1 ; . . . ; GAÿ1
+m  is a mini-
+mizer for (RBL).
+Lemma 3 For i  1; . . . ; m, let fi and hi belong to L
+1 Rni and satisfy
+R
+Rni fi 
+R
+Rni hi  1: Then
+If1; . . . ; fm  D  Jh1; . . . ; hm :
+Taking the supremum over him
+i1 and the in®mum over fim
+i1 in
+the previous inequality yields E  DF . So Lemmas 1, 2 and 3 imply
+
+D
+p
+ Eg  E  DF  DFg 
+
+D
+p
+. Thus the proof of Theorem 1 will
+be complete as soon as Lemma 3 is established.
+In [Bar3], we proved Lemma 3 for functions of one real variable,
+using measure-preserving mappings. Given two non-negative func-
+tions f and h on R with integral one, there exists a non-decreasing
+mapping u such that for all x 2 R:
+Zux
+ÿ1
+f 
+Zx
+ÿ1
+h :
+In other words, u maps the probability measure of density h onto the
+probability measure of density f . Our proof in the general case (i.e.
+for functions of several variables) is also based on measure-preserving
+mappings. But, in dimension larger than one, there is a large choice of
+such mappings between two suciently regular probability measures.
+For our purpose, the Brenier mapping (see [Bre1], [Bre2]) ®ts per-
+fectly; it has the additional convenient property of deriving from a
+convex potential. Brenier proved its existence and uniqueness under
+certain integrability assumptions on the moments of the measures,
+which where later removed by McCann [McC1], [McC2]. Let us state
+the result that we need.
+Theorem 2 Let f1; f2 be non-negative measurable functions on Rn with
+integral one. There exists a convex function / on Rn such that the map
+u  r/ has the following property: for every non-negative Borel
+function b on Rn,
+342
+F. Barthe
+===== page 9 =====
+Z
+Rn
+buxf2xdx 
+Z
+Rn
+bxf1xdx :
+The function / given by this theorem represents a generalized solu-
+tion of the Monge-AmpeÁ re equation
+detr2/xf2r/x  f1x :
+In fact, the gradient of / is unique f1 dx-almost everywhere. Since it is
+convenient to work with strong solutions, we recall here a corollary
+of a theorem of Caarelli [Caf], who has developed a regularity
+theory for these convex solutions.
+Theorem 3 For i  1; 2; let Xi be bounded domains of Rn and let fi be
+non-negative functions, supported on Xi. Assume that fi and 1=fi are
+bounded on Xi and that X2 is convex. If fi, i  1; 2 are Lipschitz then
+the Brenier mapping / is twice continuously dierentiable.
+Let CLRn be the set of functions f 2 L
+1 Rn which are the re-
+striction to some open Euclidean ball of a positive Lipschitz function
+on Rn.
+Let us remark that it suces to establish (BL) and (RBL) for
+functions in CLRni. We strongly rely on the monotonicity of the
+functions I and J. Assume that (RBL) holds for functions in CLRni.
+Then it is clearly true for positive Lipschitz functions. By classical
+monotone convergence arguments, this yields (RBL) for functions in
+the classes DLRni of pointwise limits of decreasing sequences of
+positive Lipschitz functions. Let fi 2 L
+1 Rni; i  1; . . . ; m, and let
+e > 0. Then there exist m functions sim
+i1, which are positive linear
+combination of characteristic functions of compact sets and such that
+fi  si and
+Z
+fi ÿ
+Z
+si  e :
+Since si belongs to DLRni, (RBL) holds for sim
+i1. Thus
+Ifim
+i1  Isim
+i1  E
+Y
+m
+i1
+Z
+si
+
+ci
+ E
+Y
+m
+i1
+ÿe 
+Z
+fi
+
+ci
+:
+Hence (RBL) is always true. The same kind of argument is valid for
+(BL).
+On a reverse form of the Brascamp-Lieb inequality
+343
+===== page 10 =====
+Proof of Lemma 3. We assume that D > 0. By homogeneity we can
+also assume that
+R
+fi 
+R
+hi  1 for all i. The previous remark allows
+us to work with functions fi; hi belonging to CLRni, so that we can
+use Caarelli's regularity result and Brenier's theorem. We denote by
+Xhi the domain where hi is positive. For i  1; . . . ; m, we get a dif-
+ferentiable function Ti deriving from a convex potential and such that
+for all x 2 Xhi,
+det dTix
+
+  fiTix  hix :
+Since Ti derives from a convex potential, its dierential is symmetric
+semi-de®nite positive and because of the previous equation and of
+the non-vanishing property of hi, we know that for all x 2 Xhi,
+dTix 2 SRni.
+We de®ne a function H from Tm
+i1 Bÿ1
+i Xhi  Rn into Rn by
+Hy 
+X
+m
+i1
+ciB
+i TiBiy :
+Its dierential is symmetric semi-de®nite positive
+dHy 
+X
+m
+i1
+ciB
+i dTiBiyBi ;
+and it is actually de®nite positive because:
+det
+X
+m
+i1
+ciB
+i dTiBiyBi
+ 
+!
+ D
+Y
+m
+i1
+det dTiBiy
+
+ci> 0
+In particular for all v 6 0 in Rn,
+hdHy  v; vi > 0
+so H is injective. Denoting S  Tm
+i1 Bÿ1
+i Xhi, we can write
+Z
+Rn
+Y
+m
+i1
+hci
+i Biy dy 
+Z
+S
+Y
+m
+i1
+hci
+i Biy dy
+
+Z
+S
+Y
+m
+i1
+ÿ
+fiTiBiy det dTiBiy
+ci dy
+344
+F. Barthe
+===== page 11 =====
+ 1
+D
+Z
+S
+Y
+m
+i1
+fiTiBiyci det
+X
+m
+i1
+ciB
+i dTiBiyBi
+ 
+!
+dy
+ 1
+D
+Z
+S
+sup
+HyPm
+i1 ciB
+i xi
+Y
+m
+i1
+fixici
+ 
+!
+detdHy dy
+ 1
+D
+Z
+Rn
+sup
+xPm
+i1 ciB
+i xi
+Y
+m
+i1
+fixici
+ 
+!
+dx
+which concludes the proof of Lemma 3.
+(
+2 Equality cases
+In this section, we restrict to functions of one real variable. With the
+notation of Theorem 1 there are vectors v1; . . . ; vm in Rn such that
+spanvim
+i1  Rn and for all x 2 Rn and t 2 R,
+Bix  hx; vii;
+B
+i t  tvi
+and
+B
+i Bi  vi 
+ vi :
+We are going to study the best constant in inequalities (BL) and
+(RBL) and to characterize equality cases. We call maximizers the
+non-zero functions that give equality in (BL) and minimizers those
+that provide equality in (RBL).
+2.1 The geometric structure of the problem
+Given vim
+i1 which span Rn, we introduce some notation. For a
+subset K of f1; . . . ; mg, we denote by EK the linear span in Rn of the
+vectors vkk2K. We call adapted partition a partition S of f1; . . . ; mg
+such that:
+Rn  a
+K2S
+EK :
+These partitions are useful because this splitting of the space Rn
+yields a splitting of the Brascamp-Lieb inequality and of its converse,
+so that one can work separately on each piece. We shall ®rst show
+that there exists a best adapted partition.
+Proposition 1 Let  be the relation on Nm  f1; . . . ; mg de®ned by as
+follows: i  j if and only if there exists a subset K of Nm of cardinality
+On a reverse form of the Brascamp-Lieb inequality
+345
+===== page 12 =====
+n ÿ 1 such that both vi; vkk2K and vj; vkk2K are bases of Rn. Let
+ be the transitive completion of  (i  j means that there exists a path
+between i and j in which two consecutive elements are in relation for ).
+Then  is an equivalence relation and the subdivision C of Nm into
+equivalence classes for  is the ®nest adapted partition.
+Proof. We ®rst establish that C is more accurate than any adapted
+partition S. Let I; J 2 S, I 6 J and let i 2 I, j 2 J. It suces to show
+that i  j is impossible.
+Assume precisely that i  j. Then there exists K  Nm such that
+ei  vi; vkk2K and ej  vj; vkk2K
+are bases of Rn. As S is adapted, we have Rn  aH2SEH, each of
+them being spanned by some vi's. So, every basis of Rn with elements
+taken among the vi's must contain dimEH elements in EH. But our
+bases ei and ej do not have the same number of vectors in EI because
+vi 2 EI and vj 2 EJ. Thus we have a contradiction.
+We now show that the partition C is adapted to our geometric
+setting. Let I be an equivalence class for  and let EI be the corre-
+sponding space. Since the vectors vim
+i1 span Rn, we ®nd a permu-
+tation of indices such that b  v1; . . . ; vn is a basis of Rn and
+v1; . . . ; vr is a basis of EI for some r  n. Let us denote by F the span
+of vr1; . . . ; vn.
+Let i 2 Nm; the vector vi can be decomposed in the basis b:
+vi 
+X
+n
+k1
+akvk :
+For any j  n, we notice that
+det
+b v1; . . . ; vjÿ1; vi; vj1; . . . ; vn  aj ;
+hence aj 6 0 implies that vi and vj belong to neighbor bases, that is
+i  j. So, if i 2 I, as i can be in relation for  only with elements of I
+we have ar1; . . . ; an  0. Thus i 2 I implies vi 2 EI. By a similar ar-
+gument, if i 62 I, a1; . . . ; ar  0 and vi belongs to F . We have proved
+that Rn  spanfvi; i 2 Ig a spanfvi; i 62 Ig, this is the ®rst step of the
+decomposition. The result follows by induction, noticing that the
+relation  can be restricted to F .
+(
+As a consequence of Proposition 1, let us observe that it is su-
+cient to study the case when the relation  has only one equivalence
+class. In this case we say that Rn; vim
+i1 is irreducible.
+346
+F. Barthe
+===== page 13 =====
+2.2 The Gaussian case
+Let v1; . . . ; vm be vectors of Rn such that Rn  spanvim
+i1. For
+I  f1; . . . ; mg of cardinality jIj  n, we denote
+dI  detvii2I2 :
+For each m-tuple c  cim
+i1 of positive numbers, we study the con-
+stant Dc de®ned by
+Dc  inf detPm
+i1 kivi 
+ vi
+Qm
+i1 kci
+i
+; ki > 0; i  1 . . . m
+
+
+:
+We wish to know when Dc is positive and when the in®mum is
+achieved. We will sometimes call minimizers the m-tuples kim
+i1 for
+which Dc is achieved.
+The computation of the previous determinant is made possible by
+the Cauchy-Binet formula which we recall:
+Proposition 2 Let m  n be integers; let A be a n  m matrix and let B
+be a m  n matrix. For I  Nm of cardinality n we denote by AI the
+square matrix obtained from
+A by keeping only the columns with
+indices in I; we denote by BI the square matrix obtained from B by
+keeping the rows with indices in I. Then we have the formula
+detAB 
+X
+jIjn
+detAI detBI
+where the sum is over all subsets of cardinality n of Nm.
+The relevance of this formula is clear from
+Corollary 1 Let m  n and let v1; . . . ; vm be vectors in Rn. Then
+det
+X
+m
+i1
+kivi 
+ vi
+ 
+!
+
+X
+jIjn
+kI detvii2I
+ÿ
+2
+X
+jIjn
+kIdI ;
+where for I  Nm, we have set kI  Q
+i2I ki.
+The condition for Dc to be non-zero has a rather nice geometric
+description which requires some notation. For I  f1; . . . ; mg, let 1I
+be the vector of Rm of coordinates 1Ii  di2I (it is the characteristic
+function of I). One has the following result:
+On a reverse form of the Brascamp-Lieb inequality
+347
+===== page 14 =====
+Proposition 3 The in®mum Dc is positive if and only if the vector
+c 2 Rm belongs to the convex hull of the characteristic vectors 1I of the
+subsets I of cardinality n such that the vectors vii2I form a basis of Rn.
+Proof. We shall ®rst show that the condition is sucient. Assume that
+we have a family of non-negative real numbers tIjIjn indexed by the
+subsets of cardinality n of f1; . . . ; mg, such that
+tI  0 whenever dI  0 ;
+ci 
+X
+jIjn;i2I
+tI; for all i :
+Let ki, i  1; . . . ; m be positive. By the Cauchy-Binet formula and the
+arithmetic mean-geometric mean inequality with coecients tI (their
+sum is indeed one), we have:
+det
+X
+m
+i1
+kivi 
+ vi
+ 
+!
+
+X
+jIjn
+kIdI 
+X
+tI60
+tI
+kI
+tI
+dI
+
+
+
+X
+tI0
+kIdI 
+Y
+tI60
+kIdI
+tI
+
+tI
+:
+Each ki appears with the total exponent
+X
+i2I;tI60
+tI ;
+equal to ci by hypothesis. Thus we have
+det
+X
+m
+i1
+kivi 
+ vi
+ 
+!
+
+Y
+tI60
+dI
+tI
+
+tIY
+m
+i1
+kci
+i
+:
+Since tI 6 0 implies dI 6 0, the constant Dc is positive.
+Let us now prove that the condition is necessary. For all ki > 0,
+i  1; . . . ; m; let
+Dk1; . . . ; km :
+P
+jIjn dIkI
+Qm
+i1 kci
+i
+
+Let xim
+i1 2 Rn and let N > 0. There always exists a positive a such
+that the quantity DeÿNxim
+i1 is equivalent when N tends to in®nity to
+a  exp N
+X
+m
+i1
+xici  max
+ÿ
+X
+i2I
+xi; jIj  n and dI 6 0
+(
+)
+ 
+!
+:
+348
+F. Barthe
+===== page 15 =====
+If we assume that Dc is positive, then DeÿNxim
+i1  Dc > 0 cannot
+tend to zero. Necessarily, for all xim
+i1 2 Rm, one has:
+X
+m
+i1
+xici  min
+X
+i2I
+xi; jIj  n and dI 6 0
+(
+)
+:
+This can be reformulated in terms of convex cones as \dI60C1I  Cc,
+where, for y 2 Rm, Cy  fx 2 Rm; hx; yi  0g: By duality of convex
+cones, this implies that the vector c belongs to the convex cone
+generated by the vectors 1I such that dI 6 0. Thus there exist non-
+negative real numbers tII;dI60 such that for all i  m,
+ci 
+X
+jIjn and i2I
+tI :
+Summing over i yields P
+dI60 tI  Pm
+i1 ci=n. But the hypothesis
+Dc > 0 implies that the numerator and the denominator of D have the
+same homogeneity degree in the variables. So Pm
+i1 ci  n and we
+have shown that c belongs to the convex hull of the 1I such that
+dI 6 0.
+(
+Remark. Let K  fx 2 0; 1m; Pm
+i1 xi  ng, it is the convex hull of
+the vectors 1IjIjn. By the previous result, Dc is non-zero only if c is
+in K. If the vectors vi are in generic position, Dc 6 0 if and only if
+c 2 K. But as the 1I are clearly the only extremal points of K,
+any geometrical degeneracy (i.e. any dI equal to zero) will imply a
+reduction of the domain where c must be.
+We know that Dc is positive if and only if c can be written as a
+convex combination of certain vectors. The next proposition states
+that Dc is achieved if and only if there exists a convex combination
+with some additional property.
+Proposition 4 The constant Dc is achieved if and only if there exist
+positive numbers tIjIjn and kim
+i1 such that
+c 
+X
+jIjn
+tI1I
+and for all I
+tI  dI
+Y
+i2I
+ki :
+On a reverse form of the Brascamp-Lieb inequality
+349
+===== page 16 =====
+Notice that dI  0 implies tI  0, so the result is coherent with the
+previous one.
+Proof. The if part comes from a precise study of the ®rst half of the
+proof of Proposition 3. All inequalities stated in this proof become
+equalities for the particular m-tuple kim
+i1. The arithmetic-geometric
+inequality is an equality because for all I, kIdI=tI  1. Moreover, the
+term P
+I;tI0 kIdI is zero.
+The only if part is obvious by dierentiation.
+(
+We are going to rewrite our problem in the setting of Fenchel
+duality for convex functions in order to use the following result (see
+[Roc] p. 264):
+Proposition 5 Let / be a l.s.c. convex function on Rm and let / be its
+Fenchel conjugate, de®ned for x 2 Rm by
+/x  sup
+y2Rmhx; yi ÿ /y :
+Then /x, which is a supremum, is achieved if and only if / is
+subdierentiable at the point x. In particular, it is achieved when x
+belongs to the relative interior of dom/  fy 2 Rm; /y < 1g.
+Let us de®ne the function / on Rm by
+/x1; . . . ; xm  log det
+X
+m
+i1
+etivi 
+ vi
+ 
+!
+:
+The next proposition links our problem on Dc with the study of the
+Fenchel conjugate of /.
+Proposition 6 1. The function / is convex.
+2. The constant Dc is equal to expÿ/c.
+3. Dc is positive if and only if c 2 dom/.
+4. Dc is achieved if and only if /c is.
+5. dom / is equal to K  convf1I; dI 6 0g.
+6. The constant Dc is achieved when c belongs to the relative interior
+of K.
+Proof. The convexity of / is a consequence of the Cauchy-Schwarz
+inequality: let s; t 2 Rm,
+350
+F. Barthe
+===== page 17 =====
+/ t  s
+2
+
+
+ log
+X
+jIjn
+dI exp
+X
+i2I
+ti
+ 
+!
+(
+)1
+2
+dI exp
+X
+i2I
+si
+ 
+!
+(
+)1
+2
+0
+@
+1
+A
+ log
+X
+i2I
+dI exp
+X
+i2I
+ti
+ 
+!
+(
+)1
+2
+X
+i2I
+dI exp
+X
+i2I
+si
+ 
+!
+(
+)1
+2
+0
+@
+1
+A
+ /t  /s
+2
+:
+The other assertions are also very simple.
+(
+The last statement of the previous proposition allows us to recover
+a result of [BL].
+Corollary 2 If for all I  Nm of cardinality n, dI  detvii2I is not
+zero, then for all c  cim
+i1 such that:
+X
+m
+i1
+ci  n
+and
+0 < ci < 1 for all i ;
+the constant Dc is achieved for a certain km
+i1.
+The following result shows that the reciprocal statement is almost
+true.
+Proposition 7 If Rn; vim
+i1 is irreducible and if c1  1, then Dc is
+achieved only when m  n  1.
+We come to unicity results: if Dc is achieved, there is a unique
+minimizer, up to scalar multiplication.
+Proposition 8 Assume that Rn; vim
+i1 has the irreducibility property.
+If kim
+i1 and lim
+i1 are two minimizers, then there exists r 2 R such
+that for all i, ki  rli.
+Proof. Let t  tim
+i1 and s  sim
+i1 such that for all i, ki  eti and
+li  esi: Let w be the function on Rm de®ned for all xim
+i1 by
+wxi  /xi ÿ
+X
+m
+i1
+cixi :
+Then w reaches its minimum at the points t, s and also at t  s=2
+because it is convex. So we have
+On a reverse form of the Brascamp-Lieb inequality
+351
+===== page 18 =====
+/t  /s
+2
+ / t  s
+2
+
+
+;
+and there must be equality in the Cauchy-Schwarz inequality in the
+proof of Proposition 6. Hence, there exists a 2 R such that for all I,
+jIj  n,
+dI exp
+X
+i2I
+ti
+ 
+!
+ a  dI exp
+X
+i2I
+si
+ 
+!
+:
+In particular, if dI 6 0, one has
+Y
+i2I
+ki
+li
+ 
+ a :
+Let i; j 2 Nm such that i  j. By de®nition, there exists K  Nm of
+cardinality n ÿ 1, such that dfig[K and dfjg[K are both non-zero. So,
+we have
+Y
+l2fig[K
+kl
+ll
+
+
+
+Y
+l2fjg[K
+kl
+ll
+
+
+;
+and after simpli®cation
+ki
+li
+ kj
+lj
+:
+By the irreducibility property (see Proposition 1), this implies
+k1
+l1      km
+lm.
+(
+2.3 The general case
+We studied existence and uniqueness of centered Gaussian maxi-
+mizers for (BL) and minimizers for (RBL). Now, we turn to the
+general study. As explained before, we may assume that Rn; vim
+i1
+is irreducible. The behavior of extremal functions is very dierent for
+n  1 and for n  2.
+2.3.1 The case n  1
+If n  1, then ni  1 for all i  m, the condition on cim
+i1 is just
+Pm
+i1 ci  1, and the vi's are just real numbers. The inequality (BL) is
+nothing else than HoÈ lder's inequality for the functions x 7! fivix,
+whereas (RBL) is the PreÂ kopa-Leindler inequality for x 7! fix=vi.
+352
+F. Barthe
+===== page 19 =====
+The equality cases can be settled from our proof; we will not do
+it because they are well-known: if Pm
+i1 ci  1, and fi 2 L
+1 R,
+i  1; . . . ; m are non identically zero, then
+Z
+R
+Y
+m
+i1
+f ci
+i xdx 
+Y
+m
+i1
+Z
+R
+fi
+
+ci
+holds if and only if
+f1
+R
+R f1
+    
+fm
+R
+R fm
+:
+Under the same assumptions,
+Z
+R
+sup
+P
+cixix
+Y
+m
+i1
+f ci
+i xidx 
+Y
+m
+i1
+Z
+R
+fi
+0
+@
+1
+A
+ci
+holds if and only if there exists yim
+i1 2 Rm such that
+f1 ÿ y1
+R
+R f1
+     fm ÿ ym
+R
+R fm
+is a log-concave function :
+2.3.2 The case n  2
+We prove that if there is a centered Gaussian extremizer, then up to
+dilatation and scalar multiplication, it is the only extremizer.
+Theorem 4 Let n  2 and let Rn; vim
+i1 be irreducible. Let cim
+i1 and
+kim
+i1 be positive numbers such that Dc is achieved for kim
+i1:
+det
+X
+m
+i1
+kivi 
+ vi
+ 
+!
+ Dc
+Y
+m
+i1
+kci
+i
+:
+Then him
+i1 is a maximizer for (BL) if and only if there exist a > 0,
+aim
+i1 positive and y 2 Rn such that for all i and for all t 2 R,
+hit  ai expÿkiat ÿ hy; vii2 :
+1
+The m-tuple him
+i1 is a minimizer for (RBL) if and only if there exist
+b > 0, bim
+i1 positive and tim
+i1 real such that for all i and for all
+t 2 R,
+hit  bi expÿbt ÿ ti2=ki :
+On a reverse form of the Brascamp-Lieb inequality
+353
+===== page 20 =====
+Proof. By Lemma 1 and by the proof of Lemma 2, we know that
+Gkim
+i1 is a maximizer for (BL) and Gkÿ1
+i m
+i1 a minimizer for (RBL),
+so by simple changes of variables in Rn, one can check that the
+previous functions are extremizers.
+Let him
+i1 be a maximizer for (BL) and fim
+i1 be a minimizer for
+(RBL). We may assume that fi; hi are positive and continuous for all
+i. Indeed by the following lemma (which was communicated to us by
+K. Ball) we know that hi  Gkim
+i1 is a positive and continuous
+maximizer for (BL). If we know that it is Gaussian, then so is him
+i1
+by the properties of the Fourier transform. The same argument is
+relevant for (RBL).
+Lemma 4 If fim
+i1 and gim
+i1 are maximizers for (BL), then so is
+fi  gim
+i1. If fim
+i1 and gim
+i1 are minimizers for (RBL), then so is
+fi  gim
+i1.
+A proof of the ®rst part of this lemma appears in [Bar2], the proof
+of the second part is similar. Notice that this lemma is valid for the
+multidimensional version of the inequalities.
+Let us now prove that positive continuous maximizers for (BL) are
+of the form (1); the proof for (RBL) is analogous and a bit simpler.
+Let fim
+i1 such that fix  exp ÿx2=ki
+ÿ
+
+; it is a minimizer for (RBL).
+Let him
+i1 be a positive continuous maximimizer for (BL). We study
+precisely the proof of Lemma 3 applied with him
+i1 and fim
+i1. Since
+our functions are positive, the changes of variables Ti's are increasing
+dierentiable bijections of R, such that for all t 2 R,
+T 0
+i t  fiTit  hit :
+There must be equality in every step of the proof. In particular, for all
+y 2 Rn, one has
+det
+X
+m
+i1
+T 0
+i hy; viivi 
+ vi
+ 
+!
+ Dc
+Y
+m
+i1
+T 0
+i hy; viici :
+By irreducibility and Proposition 8, one gets for all y 2 Rn,
+T 0
+1hy; vii
+k1
+     T 0
+mhy; vii
+km
+:
+Since n  2, for all i  m there exists j  m such that vi and vj are not
+collinear; so there exists z 2 R such that hz; vii  1 and hz; vii  0:
+The previous relation for y  tz means that for all t 2 R
+354
+F. Barthe
+===== page 21 =====
+T 0
+i t
+ki
+
+T 0
+j0
+kj
+:
+Consequently, there exist a > 0 and real numbers sim
+i1 such that for
+all i and for all t 2 R,
+Tit  akit  si
+and by the change of variable formula between hi and fi we get
+hit  T 0
+i t exp ÿT 2
+i t=ki
+ÿ
+
+ li expÿkiat ÿ ti2 ;
+for some positive li and some real ti.
+It remains to ®nd which translates of a centered Gaussian maxi-
+mizer are still maximizers. Let gim
+i1 be a maximizer,
+git  expÿkit2 ;
+and let x  xim
+i1 2 Rm and for i  m; hit  git ÿ xi. Let us
+consider Rm with the Euclidean metric given by
+N2w 
+X
+m
+i1
+cikiw2
+i ;
+and the subspace
+K 
+hy; viim
+i1; y 2 Rn
+
+	
+:
+Let s be the orthogonal projection of x onto A. Then there exists
+z 2 Rn satisfying si  hz; vii for all i; moreover, by the Pythagore
+Theorem
+N hy; vii ÿ xim
+i1
+ÿ
+
+ N hy; vii ÿ hz; viim
+i1
+ÿ
+
+with
+equality
+only
+if
+x
+belongs
+to
+A,
+that
+is
+x  s.
+Thus
+Jhim
+i1  Jgim
+i1, with equality only if xi  hz; vii for all i.
+(
+Remark. There are, for n  2, some remaining questions. If there is
+no centered Gaussian maximizer, is there any maximizer at all? The
+answer seems to be no: if fim
+i1 is a maximizer then by the Brascamp-
+Lieb-Luttinger inequality [BLL] so is f 
+i m
+i1, where f  is the sym-
+metric rearrangement. As K. Ball noticed it, for every integer k
+
+
+k
+p
+f 
+i      f 
+i
+|{z}
+k times
+
+
+k
+p
+
+m
+i1
+On a reverse form of the Brascamp-Lieb inequality
+355
+===== page 22 =====
+is also a maximizer. Moreover, under some integrability assumptions,
+it converges to a centered Gaussian m-tuple by the Central Limit
+Theorem.
+Notice that our method gives the answer when there are positive
+continuous maximizers for (BL) and positive continuous minimizers
+for the corresponding (RBL). The study of the equality case of
+Lemma 3 shows that the constant D must be achieved, so there is a
+centered Gaussian maximizer.
+3 Applications to convex geometry
+3.1. Dimension one
+K. Ball noticed that an additional geometrical hypothesis, which is
+often available in convexity, supports an easy computation of the
+optimal constant in the Brascamp-Lieb inequality. His version of (BL)
+gives sharp upper estimates for the volume of sections of the unit ball
+of `m
+p  Rm; k  kp (see [Bal1] and Proposition 8 of [Bal3]). Using
+(BL), K. Ball also proved that simplices have maximal volume ratio
+[Bal3], and that among symmetric convex bodies, parallelotopes do
+have [Bal1]. We recall that the volume ratio vrK of a convex body
+K  Rn is the ratio of the volume of K to the volume of the maximal
+volume ellipsoid contained in K (called the John ellipsoid, see [Joh]).
+However, the question of equality cases in Ball's version of (BL)
+and in applications was open. Moreover, one needed a corresponding
+tool for dual problems such as minorizing the volume of n-dimen-
+sional projections of the unit ball of `m
+p . In this section, we point out
+a version of (RBL) which applies to such dual problems and we
+characterize equality cases in (BL), (RBL) and in the applications.
+Ball's version of the Brascamp-Lieb inequality and our reverse
+version are as follows:
+Theorem 5 Let m  n, let uim
+i1 be unit vectors in Rn and let cim
+i1 be
+positive real numbers such that
+X
+m
+i1
+ciui 
+ ui  In :
+Then for all fi 2 L
+1 R, i  1; . . . ; m one has
+Z
+Rn
+Y
+m
+i1
+f ci
+i hx; uiidx 
+Y
+m
+i1
+Z
+fi
+
+ci
+;
+356
+F. Barthe
+===== page 23 =====
+and
+Z
+Rn
+sup
+xP
+cihiui
+Y
+m
+i1
+f ci
+i hidx 
+Y
+m
+i1
+Z
+fi
+
+ci
+:
+This result follows from Theorem 1. The optimal constant (equal to
+1) is provided by Ball's observation:
+Proposition 9 Let m  n, let v1; . . . ; vm be vectors in Rn such that
+Pm
+i1 vi 
+ vi  In; where In stands for the identity map. Then for every
+m-tuple kim
+i1 of positive numbers
+det
+X
+m
+i1
+kivi 
+ vi
+ 
+!
+
+Y
+m
+i1
+kjvij2
+i
+:
+There is equality when k1      km .
+Proof. By the Cauchy-Binet formula, we have
+1  det In  det
+X
+m
+i1
+vi 
+ vi
+ 
+!
+
+X
+jIjn
+dI :
+Hence we can use the arithmetic-geometric inequality with coe-
+cients dI:
+det
+X
+m
+i1
+kivi 
+ vi
+ 
+!
+
+X
+jIjn
+kIdI 
+Y
+jIjn
+kdI
+I
+:
+Each ki appears with the total exponent P
+I;i2I dI. Applying Corol-
+lary 1 to the m-tuple v1; . . . ; viÿ1; 0; vi1; . . . ; vm, we get:
+X
+I;i2I
+dI 
+X
+I
+dI ÿ
+X
+I;i62I
+dI
+ 1 ÿ detv1 
+ v1      viÿ1 
+ viÿ1  vi1
+
+ vi1      vm 
+ vm
+ 1 ÿ detIn ÿ vi 
+ vi  jvij2 :
+(
+The equality cases in Theorem 5 are completely settled by Prop-
+osition 1 and Theorem 4. The space Rn is the direct sum of irre-
+ducible subspaces. The additional hypothesis on uim
+i1 clearly
+implies that the sum is orthogonal. On irreducible subspaces of di-
+mension one there is equality for (BL) if and only if the functions are
+On a reverse form of the Brascamp-Lieb inequality
+357
+===== page 24 =====
+equal up to scalar multiplication and, for (RBL), if and only if all the
+functions are equal, up to multiplication and translation, to a com-
+mon log-concave function. On irreducible spaces of dimension  2,
+there is equality if and only if the functions are (up to scalar multi-
+plications, up to translations and only coherent translations in the
+direct form) equal to a common centered Gaussian function. In
+particular, we get
+Corollary 3 Let m  n, let uim
+i1 be m distinct unit vectors in Rn and
+let cim
+i1 be positive real numbers such that
+X
+m
+i1
+ciui 
+ ui  In :
+If fim
+i1 are non-identically-zero functions in L
+1 R such that none of
+them is a Gaussian and
+Z
+Rn
+Y
+m
+i1
+f ci
+i hx; uiidx 
+Y
+m
+i1
+Z
+fi
+
+ci
+;
+then m  n and uim
+i1 is an orthonormal basis of Rn.
+This result allows us to settle equality cases in Ball's volume ratio
+estimates. We denote by Qn the unit cube and by Dn the regular
+simplex.
+Proposition 10 Let K  Rn a convex body.
+ If K is symmetric and vrK  vrQn then K is a parallelotope.
+ If vrK  vrDn then K is a simplex.
+As mentioned by Ball in [Bal3], one gets, as a consequence of (RBL),
+the sharp lower bounds of the outer volume ratio, which involves the
+minimal volume ellipsoid containing a body K. A proof of such lower
+estimates relies on the following dual version of Proposition 8 of
+[Bal3].
+Proposition 11 Let m  n, let uim
+i1 be unit vectors in Rn and cim
+i1
+positive numbers such that Pm
+i1 ciui 
+ ui  In: Let aim
+i1 be positive
+numbers and let p  1. If K is the unit ball of Rn with the norm
+kxk 
+sup
+xPm
+i1 cihiui
+X
+m
+i1
+aijhijp
+ 
+!1
+p
+;
+358
+F. Barthe
+===== page 25 =====
+then
+VolK  2nC1  1=pn
+C1  n=p
+Y
+m
+i1
+ci
+ai
+ ci
+p
+:
+Proof. We apply (RBL) in the form of Theorem 5 to the functions fi
+such that fit  expÿaijtjp=ci for all t 2 R. We get
+VolK 
+1
+C1  n=p
+Z
+Rn
+eÿkxkpdx
+
+1
+C1  n=p
+Z
+Rn
+sup
+xP
+cihiui
+Y
+m
+i1
+f ci
+i hidx
+
+1
+C1  n=p
+Y
+m
+i1
+2 ci
+ai
+ 1
+p
+C1  1=p
+ 
+!ci
+:
+(
+Remark. Applying (RBL) with the functions fi  1ÿbi=ci;bi=ci yields
+Ball's lower estimate for the volume of zonoids [Bal2]: under the same
+assumptions on uim
+i1 and cim
+i1, one has
+Vol
+X
+m
+i1
+biÿui; ui
+ 
+!
+ 2n Y
+m
+i1
+bi
+ci
+ ci
+:
+3.2 Larger dimensions
+We obtain a multidimensional generalization of Ball's version of
+the Brascamp-Lieb inequality and its converse. It follows from
+Theorem 1. The computation of the optimal constant, here equal to 1,
+comes from a simple extension of Proposition 9.
+Theorem 6 Let m; n be integers. For i  1; . . . ; m let Ei be a subspace
+of Rn of dimension ni and let Pi be the orthogonal projection onto Ei
+(on each Ei there is a Lebesgue measure compatible with the induced
+Euclidean structure). Assume that there exist positive numbers
+cim
+i1 satisfying
+X
+m
+i1
+ciPi  In :
+On a reverse form of the Brascamp-Lieb inequality
+359
+===== page 26 =====
+If for i  1; . . . ; m, fi is a non-negative integrable function on Ei, then
+one has
+Z
+Rn
+Y
+m
+i1
+f ci
+i Pix dnx 
+Y
+m
+i1
+Z
+Ei
+fi
+
+ci
+;
+and
+Z
+Rn
+sup
+xPm
+i1 cixi; xi2Ei
+Y
+m
+i1
+f ci
+i xi dnx 
+Y
+m
+i1
+Z
+Ei
+fi
+
+ci
+:
+Remark. When the fi's are characteristic functions of sets, the reverse
+inequality provides a Brunn-Minkowski type result for compact
+subsets of subspaces: if Ki  Ei then
+Voln
+X
+m
+i1
+ciKi
+ 
+!
+
+Y
+m
+i1
+VolEiKi
+
+ci :
+References
+[Bal1]
+K.M. Ball. Volumes of sections of cubes and related problems. In J.
+Lindenstrauss and V.D. Milman, editors, Israel seminar on Geometric
+Aspects of Functional Analysis, number 1376 in Lectures Notes in
+Mathematics. Springer-Verlag, 1989
+[Bal2]
+K.M. Ball. Shadows of convex bodies. Transactions of the American
+Mathematical Society, 327(2), 891±901 (1991)
+[Bal3]
+K.M. Ball. Volume ratio and a reverse isoperimetric inequality. Journal of
+the London Math. Soc., 44(2), 351±359 (1991)
+[Bar1]
+F. Barthe. An extremal property of the mean width of the simplex. To
+appear in Math. Annalen
+[Bar2]
+F. Barthe. Optimal Young's inequality and its converse: a simple proof.
+Geom. funct. anal., 8, 234±242 (1998)
+[Bar3]
+F. Barthe. IneÂ galiteÂ s de Brascamp-Lieb et convexiteÂ . C. R. Acad. Sci. Paris,
+324, 885±888 (1997)
+[Bec]
+W. Beckner. Inequalities in Fourier analysis. Annals of Math., 102, 159±182
+(1975)
+[BL]
+H.J. Brascamp, E.H. Lieb. Best constants in Young's inequality, its
+converse and its generalization to more than three functions. Adv. Math.,
+20, 151±173 (1976)
+[BLL]
+H.J. Brascamp, E.H. Lieb, and J.M. Luttinger. A general rearrangement
+inequality for multiple integrals. J. Funct. Anal., 17, 227±237 (1974)
+[Bre1]
+Y. Brenier. DeÂ composition polaire et reÂ arrangement monotone des champs
+de vecteurs. C. R. Acad. Sci. Paris SeÂ r. I Math., 305, 805±808 (1987)
+360
+F. Barthe
+===== page 27 =====
+[Bre2]
+Y. Brenier. Polar factorization and monotone rearrangement of vector-
+valued functions. Comm. Pure Appl. Math, 44, 375±417 (1991)
+[Caf]
+L. Caarelli. The regularity of mappings with a convex potential. J. Amer.
+Math. Soc., 4, 99±104 (1992)
+[Joh]
+F.John. Extremum problems with inequalities as subsidiary conditions. In
+Courant Anniversary Volume, pages 187±204, New York, 1948. Intersci-
+ence
+[Lei]
+L. Leindler. On a certain converse of HoÈ lder's inequality. II. Acta Sci.
+Math. Szeged, 33, 217±223 (1972)
+[Lie]
+E.H. Lieb. Gaussian kernels have only Gaussian maximizers. Inventiones
+Mathematicae, 102, 179±208 (1990)
+[McC1] R.J. McCann. A Convexity Theory for Interacting Gases and Equilibrium
+Crystals. PhD thesis, Princeton University, 1994
+[McC2] R.J. McCann. Existence and uniqueness of monotone measure-preserving
+maps. Duke Math. Journal, 80(2), 309±323 (1995)
+[PreÂ ]
+A. PreÂ kopa. On logarithmic concave measures and functions. Acta Scient.
+Math., 34, 335±343 (1973)
+[Roc]
+R.T. Rockafellar. Convex Analysis. Princeton University Press, Princeton,
+1972
+On a reverse form of the Brascamp-Lieb inequality
+361

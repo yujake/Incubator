@@ -1,0 +1,964 @@
+{
+  "action_refusals": {
+    "by_reason": {},
+    "recent": [],
+    "total": 0
+  },
+  "attack_rounds": {
+    "no_product_count": 5,
+    "no_product_rounds": [
+      "000000#1(outcome=no_change)",
+      "000000#2(outcome=no_change)",
+      "000001#8(outcome=no_change)",
+      "000002#2(outcome=no_change)",
+      "000002#3(outcome=None)"
+    ],
+    "products": {
+      "proof": 12,
+      "reduction": 2
+    },
+    "rounds": 19,
+    "strategies": {
+      "套用已知定理": 1,
+      "局部—整体": 1,
+      "归约": 1,
+      "极值与双重计数": 2
+    }
+  },
+  "faculty": {
+    "claim_strength": {
+      "checked": true,
+      "criterion_source": "claimanatomy.overclaim",
+      "findings": [],
+      "missing_evidence": [],
+      "overclaimed": [],
+      "problem_count": 0,
+      "total": 14,
+      "verdict": "within_evidence"
+    },
+    "conjecture_hygiene": {
+      "by_kind": {},
+      "checked": true,
+      "conjectures": 27,
+      "findings": [],
+      "problem_count": 0
+    }
+  },
+  "five_bit": {
+    "grades": {
+      "conjecture": 1,
+      "not_applicable": 130,
+      "pre_theorem": 4,
+      "strong_conjecture": 9
+    },
+    "problems": 0
+  },
+  "generated_at": "2026-11-25T03:59:31+08:00",
+  "in_flight": {
+    "active_child_count": 0,
+    "calibers": {
+      "action_refusals": "动作被拒的行：tasks 里 outcome=refused 的那些（按 refusal_reason 分档）。口径：三个『被拒』各是一个量 —— 这里是动作被拒；收工被拒的 final_refused 事件在 clock.patrol_anomalies 的 final_refusals；名册写口拒过的号是 registration_refusals（上一条）。三者不许互相代替",
+      "active_child_count": "上述名册项里『非静默』的数量（业主 2026-10-26 后一句：活跃子代理数 = 非静默子代理数）：非静默 = 在飞 + 待机，三态判定只有 conductor.agent_state 一处；unknown（判不了）既不算活跃也不算静默，它进 states['unknown'] 并让 complete=false。所以『自己收口了但在等活跃的下级』仍算活跃（它在待机），而『名册还挂着、活干完了且没有下级』是静默、不算活跃",
+      "children_unretired": "名册里未销号的名册项（out/roster/<父>.jsonl 折叠后 retired 为假的那几项；口径只有 secretary.Secretary.child_counts 一处）",
+      "pending_questions": "全工作区的待答（`userio.workspace_pending_view`，与「在飞」页同一来源；不是只读默认会话）",
+      "registration_refusals": "名册写口拒过的号（out/roster/refusals/<父>.jsonl 的全部行；口径只有 secretary.registration_refusals 一处）。checked=false 是『这一份流水读不出来』，不是『没人被拒』——两件事折平会把一次有记录的拒绝读成没有发生过",
+      "running_tasks": "tasks 里『活着的代理行』+『还没收工的顶趟行 action=run』（含顶趟行、不含板项行 message/notice/report/delegation；判据只有 secretary.row_axis / secretary.is_live_agent 一处，2026-10-26 Q27）",
+      "top_level_runs": "tasks 里 action==run 的行 = 用户发起的顶趟（不是召唤；召唤看 conductor.stats() 的 started_total）"
+    },
+    "child_counts": {
+      "active_child_count": 0,
+      "bad_roster_lines": [],
+      "by_owner": {},
+      "checked": true,
+      "children_unretired": 0,
+      "complete": true,
+      "labels": {
+        "active_child_count": "活跃子代理数",
+        "children_unretired": "子代理数"
+      },
+      "note": "子代理数=0，活跃子代理数=0（在飞 0 · 待机 0 · 静默 0）",
+      "owner": "",
+      "reason": "",
+      "state_labels": {
+        "flying": "在飞",
+        "silent": "静默",
+        "standby": "待机",
+        "unknown": "未读到"
+      },
+      "states": {
+        "active": 0,
+        "flying": 0,
+        "silent": 0,
+        "standby": 0,
+        "total": 0,
+        "unknown": 0
+      },
+      "unjudged": [],
+      "waiting_only": []
+    },
+    "children_unretired": 0,
+    "last_stop_history": [],
+    "live_pids": [],
+    "registration_refusals": {
+      "bad": [],
+      "checked": true,
+      "count": 2,
+      "items": [
+        {
+          "at": "2026-11-25T03:16:50+08:00",
+          "problem": "名册里没有 G1 ⇒ 不猜（复用必须父先看名册）",
+          "refusal_code": "not_in_roster",
+          "requested_name": "G1",
+          "task_id": "t-000297"
+        },
+        {
+          "at": "2026-11-25T03:47:59+08:00",
+          "problem": "G1 已经用过（已销号）⇒ 受控拒绝（name_taken）：用过的名字不再发给另一个子代理（要新建一个同类子代理，让秘书按序号发下一个未用名，或显式给一个没用过的名字）",
+          "refusal_code": "name_taken",
+          "requested_name": "G1",
+          "task_id": "t-000322"
+        }
+      ],
+      "owner": "",
+      "path": "D:\\Incubator\\projects\\lp-ball-22\\out\\roster\\refusals\\t-000296.jsonl"
+    },
+    "running_loops": [
+      {
+        "evidence": "会话面",
+        "role": "M",
+        "sid": "2026-11-22n",
+        "since": "2026-11-25T03:56:59+08:00",
+        "task_id": "t-000328"
+      }
+    ],
+    "running_loops_answer": "有",
+    "running_task_ids": [
+      "t-000328"
+    ],
+    "running_tasks": 1,
+    "stop_switch": false,
+    "top_level_runs": 6,
+    "unreadable_sessions": []
+  },
+  "interjections": {
+    "changed_action": 0,
+    "recent": [
+      {
+        "from": "用户",
+        "id": "i-000001",
+        "is_stop": false,
+        "subject": "用户插话",
+        "to": "M"
+      },
+      {
+        "from": "用户",
+        "id": "i-000002",
+        "is_stop": false,
+        "subject": "收口：acceptance 那一格",
+        "to": "M"
+      },
+      {
+        "from": "用户",
+        "id": "i-000003",
+        "is_stop": false,
+        "subject": "收口：acceptance 那一格",
+        "to": "M"
+      },
+      {
+        "from": "用户",
+        "id": "i-000004",
+        "is_stop": false,
+        "subject": "收口：acceptance 那一格",
+        "to": "M"
+      },
+      {
+        "from": "用户",
+        "id": "i-000005",
+        "is_stop": false,
+        "subject": "收口：acceptance 那一格",
+        "to": "M"
+      }
+    ],
+    "seen_events": 5,
+    "sent": 5,
+    "unchanged_action": 0
+  },
+  "manuscripts": {
+    "bad_lines": [],
+    "derived": 13,
+    "model_authored": 4,
+    "recent": [
+      {
+        "at": "2026-11-25T03:36:12+08:00",
+        "id": "000055",
+        "sender": "E",
+        "source": "未注明",
+        "summary": "E：7 条 inconclusive 一条也没落成——七行归属 E1、我是 E2，table.update 逐条 row_not_yours（附七条拒码原话与一",
+        "to": "M"
+      },
+      {
+        "at": "2026-11-25T03:36:35+08:00",
+        "id": "000056",
+        "sender": "M",
+        "source": "框架派生",
+        "summary": "派活：E（派活：只做一件事：把 `experiments` 台账里 7 条 `result=inconclusive` 的行落成**确定结论**（收工门 acc",
+        "to": "E"
+      },
+      {
+        "at": "2026-11-25T03:47:12+08:00",
+        "id": "000057",
+        "sender": "E",
+        "source": "未注明",
+        "summary": "7 条 inconclusive 全部落定 supports，inconclusive 余 0；附三条被拒原话与「哪些是重复核验」的标注",
+        "to": "M"
+      },
+      {
+        "at": "2026-11-25T03:50:59+08:00",
+        "id": "000058",
+        "sender": "M",
+        "source": "框架派生",
+        "summary": "派活：G（派活：只做一件已定下来的收口 + 重编：收工门 acceptance 现在只剩一条 blocker —— 「论文没有在**正文结果章节**里引本轮台账",
+        "to": "G"
+      },
+      {
+        "at": "2026-11-25T03:54:00+08:00",
+        "id": "000059",
+        "sender": "H",
+        "source": "未注明",
+        "summary": "doc 000001 第 13 轮复审通过：status=accepted，签名钉在 content_sha256=7b558cb6…，§3 引台账与强度两档均",
+        "to": "G"
+      },
+      {
+        "at": "2026-11-25T03:54:18+08:00",
+        "id": "000060",
+        "sender": "G",
+        "source": "未注明",
+        "summary": "doc:000001 结果章节 claims 已补台账引用并改章节归属，H 复审 accepted；main.tex 未动无需重编",
+        "to": "M"
+      },
+      {
+        "at": "2026-11-25T03:58:38+08:00",
+        "id": "000061",
+        "sender": "G",
+        "source": "未注明",
+        "summary": "Main results 四条定理后各加一行台账依据（stmt/exp），main.tex 已重编、回执 tex_sha256 与新正文逐字相等",
+        "to": "M"
+      },
+      {
+        "at": "2026-11-25T03:58:40+08:00",
+        "id": "000062",
+        "sender": "M",
+        "source": "模型填的 notify",
+        "summary": "派 G 在论文结果章节就地引用台账（stmt:/exp:）并重编",
+        "to": "G"
+      }
+    ],
+    "rows": 63
+  },
+  "next_steps": [
+    "有 1 条任务还在飞 ⇒ 现在别改口径，等它们收工（这份报告本身不打断它们）",
+    "有 66 个动作声明了却一次都没被召唤过（例如 A.ingest_local、A.run、A.search_literature、A.shelf_search）⇒ 该不该派归秘书/主控判断（`44 S-02` 只做读数，不进闸门）；要动它们就派活，别让它们在声明表里挂着",
+    "有 5 轮攻坚**没有产物**（['000000#1(outcome=no_change)', '000000#2(outcome=no_change)', '000001#8(outcome=no_change)', '000002#2(outcome=no_change)', '000002#3(outcome=None)']）⇒ §3.16 要求每轮交一件（reduction/proof/counterexample_request/dead_end），先把形态补齐"
+  ],
+  "pending_questions": 0,
+  "pending_questions_sids": [],
+  "quote_evidence": {
+    "checked": true,
+    "checked_from": "statements+relations",
+    "clean": true,
+    "clean_rows": 107,
+    "dirty": [],
+    "reason": "查过了：107 行自称通过，全都带区间",
+    "scanned": 251,
+    "verified_rows": 107
+  },
+  "report_landing": {
+    "caliber": "按 store.rows(\"tasks\") 数（tasks 台账的落盘行，可能只是缓存/最近一次落盘）；权威读数是 sessions/*.jsonl 的 events 重放 —— 两个口径的数不许互相比",
+    "calls": 0,
+    "checked": true,
+    "kind_writable": true,
+    "landed": 1,
+    "landed_rows": 1,
+    "landing_tables": [
+      "documents"
+    ],
+    "note": "D 的 `write_report` 现在有落点：`documents` 里 `kind=research` 的那一行（写侧 `agent_d.write_report` → `doc_tools.record_research_report`，行与那份 markdown 同一笔事务）。这一格数的是台账里的行，不是盘上的文件 ——`report_files` 数文件、这一格数行，两者对不上本身就是一条读数。",
+    "paths": [
+      "manuscripts/D/000000-research.md"
+    ],
+    "reason": "",
+    "task_ids": []
+  },
+  "since": "",
+  "statement_body": {
+    "checked": true,
+    "checked_from": "statements",
+    "gaps": [],
+    "reason": "查过了：每一行的真身与短版都在",
+    "scanned": 144
+  },
+  "tables": {
+    "attack_plans": {
+      "count": 3,
+      "recent": [
+        {
+          "at": "2026-11-24T18:30:50+08:00",
+          "hint": "attacking（history 8 条）",
+          "id": "000000"
+        },
+        {
+          "at": "2026-11-24T19:47:34+08:00",
+          "hint": "stalled（history 8 条）",
+          "id": "000001"
+        },
+        {
+          "at": "2026-11-24T20:50:13+08:00",
+          "hint": "abandoned（history 3 条）",
+          "id": "000002"
+        }
+      ]
+    },
+    "conjectures": {
+      "count": 27,
+      "recent": [
+        {
+          "at": "2026-11-24T20:19:20+08:00",
+          "hint": "testing：对 p∈{2.5,3,4,6,10} 与 t∈[10^{-3},10^{3}]，令 ΔK(t)=∫_",
+          "id": "000019"
+        },
+        {
+          "at": "2026-11-24T20:19:56+08:00",
+          "hint": "supported_not_proved：对 p∈{2.5,3,4,6,10} 与 t∈[10^{-3},10^{3}]，令 ΔK(t)=∫_",
+          "id": "000020"
+        },
+        {
+          "at": "2026-11-24T20:20:28+08:00",
+          "hint": "refuted：令 ρ(p)=A_diag(p)/A_face(p)（A_diag 为 B_p^3∩{x+y+z=0",
+          "id": "000021"
+        },
+        {
+          "at": "2026-11-24T20:31:17+08:00",
+          "hint": "refuted：承接 exp:000014/000016 的同一套口径（A_diag(p)=(3/4)∫_0^{2π",
+          "id": "000022"
+        },
+        {
+          "at": "2026-11-24T20:34:07+08:00",
+          "hint": "testing：承接 exp:000014/000016/000020 的同一口径（A_diag(p)=(3/4)∫",
+          "id": "000023"
+        },
+        {
+          "at": "2026-11-24T20:36:30+08:00",
+          "hint": "refuted：承接 exp:000014/000016/000020/000021 的同一口径（A_diag(p)",
+          "id": "000024"
+        },
+        {
+          "at": "2026-11-24T20:39:46+08:00",
+          "hint": "supported_not_proved：承接 exp:000014/000016/000020/000022 的同一口径（Δ(p)=A_fa",
+          "id": "000025"
+        },
+        {
+          "at": "2026-11-24T20:51:08+08:00",
+          "hint": "refuted：设 1 ≤ p < ∞，B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ",
+          "id": "000026"
+        }
+      ]
+    },
+    "documents": {
+      "count": 2,
+      "recent": [
+        {
+          "at": "2026-11-24T19:27:47+08:00",
+          "hint": "research D 初步研究报告（1 个研究问题）（draft）",
+          "id": "000000"
+        },
+        {
+          "at": "2026-11-24T23:49:04+08:00",
+          "hint": "paper Maximal-area central sections of the three-dimensional l_p ball（accepted）",
+          "id": "000001"
+        }
+      ]
+    },
+    "experiments": {
+      "count": 24,
+      "recent": [
+        {
+          "at": "2026-11-24T20:18:40+08:00",
+          "hint": "numeric/cross_check supports",
+          "id": "000016"
+        },
+        {
+          "at": "2026-11-24T20:19:20+08:00",
+          "hint": "numeric/cross_check supports",
+          "id": "000017"
+        },
+        {
+          "at": "2026-11-24T20:19:56+08:00",
+          "hint": "numeric/cross_check supports",
+          "id": "000018"
+        },
+        {
+          "at": "2026-11-24T20:20:28+08:00",
+          "hint": "numeric/cross_check refutes",
+          "id": "000019"
+        },
+        {
+          "at": "2026-11-24T20:31:17+08:00",
+          "hint": "numeric/cross_check refutes",
+          "id": "000020"
+        },
+        {
+          "at": "2026-11-24T20:34:07+08:00",
+          "hint": "numeric/cross_check supports",
+          "id": "000021"
+        },
+        {
+          "at": "2026-11-24T20:36:30+08:00",
+          "hint": "numeric/cross_check refutes",
+          "id": "000022"
+        },
+        {
+          "at": "2026-11-24T20:39:46+08:00",
+          "hint": "numeric/cross_check supports",
+          "id": "000023"
+        }
+      ]
+    },
+    "literature": {
+      "count": 25,
+      "recent": [
+        {
+          "at": "2026-11-24T18:05:15+08:00",
+          "hint": "",
+          "id": "000017"
+        },
+        {
+          "at": "2026-11-24T18:05:15+08:00",
+          "hint": "",
+          "id": "000018"
+        },
+        {
+          "at": "2026-11-24T18:05:15+08:00",
+          "hint": "",
+          "id": "000019"
+        },
+        {
+          "at": "2026-11-24T18:05:15+08:00",
+          "hint": "",
+          "id": "000020"
+        },
+        {
+          "at": "2026-11-24T18:05:15+08:00",
+          "hint": "",
+          "id": "000021"
+        },
+        {
+          "at": "2026-11-24T18:05:15+08:00",
+          "hint": "",
+          "id": "000022"
+        },
+        {
+          "at": "2026-11-24T18:05:15+08:00",
+          "hint": "",
+          "id": "000023"
+        },
+        {
+          "at": "2026-11-24T18:05:16+08:00",
+          "hint": "",
+          "id": "000024"
+        }
+      ]
+    },
+    "review_findings": {
+      "count": 8,
+      "recent": [
+        {
+          "at": "2026-11-24T23:57:46+08:00",
+          "hint": "warning/overclaim fixed",
+          "id": "000001"
+        },
+        {
+          "at": "2026-11-24T23:58:10+08:00",
+          "hint": "warning/garbled fixed",
+          "id": "000001"
+        },
+        {
+          "at": "2026-11-24T23:58:11+08:00",
+          "hint": "warning/garbled fixed",
+          "id": "000001"
+        },
+        {
+          "at": "2026-11-25T00:13:05+08:00",
+          "hint": "error/dangling_dep fixed",
+          "id": "000001"
+        },
+        {
+          "at": "2026-11-25T00:15:01+08:00",
+          "hint": "error/dangling_dep fixed",
+          "id": "000001"
+        },
+        {
+          "at": "2026-11-25T03:21:53+08:00",
+          "hint": "info/unsupported_claim wontfix",
+          "id": "000001"
+        },
+        {
+          "at": "2026-11-25T03:22:26+08:00",
+          "hint": "warning/overclaim superseded",
+          "id": "000001"
+        },
+        {
+          "at": "2026-11-25T03:26:33+08:00",
+          "hint": "warning/overclaim fixed",
+          "id": "000001"
+        }
+      ]
+    },
+    "search_requests": {
+      "count": 4,
+      "recent": [
+        {
+          "at": "",
+          "hint": "",
+          "id": "r-000001"
+        },
+        {
+          "at": "",
+          "hint": "",
+          "id": "r-000002"
+        },
+        {
+          "at": "",
+          "hint": "",
+          "id": "r-000003"
+        },
+        {
+          "at": "",
+          "hint": "",
+          "id": "r-000004"
+        }
+      ]
+    },
+    "statements": {
+      "count": 144,
+      "recent": [
+        {
+          "at": "2026-11-25T02:32:10+08:00",
+          "hint": "external_lit active",
+          "id": "000136"
+        },
+        {
+          "at": "2026-11-25T02:32:10+08:00",
+          "hint": "external_lit active",
+          "id": "000137"
+        },
+        {
+          "at": "2026-11-25T02:32:10+08:00",
+          "hint": "external_lit active",
+          "id": "000138"
+        },
+        {
+          "at": "2026-11-25T02:32:10+08:00",
+          "hint": "external_lit active",
+          "id": "000139"
+        },
+        {
+          "at": "2026-11-25T02:32:10+08:00",
+          "hint": "external_lit active",
+          "id": "000140"
+        },
+        {
+          "at": "2026-11-25T02:32:10+08:00",
+          "hint": "external_lit active",
+          "id": "000141"
+        },
+        {
+          "at": "2026-11-25T02:32:10+08:00",
+          "hint": "external_lit active",
+          "id": "000142"
+        },
+        {
+          "at": "2026-11-25T02:32:10+08:00",
+          "hint": "external_lit active",
+          "id": "000143"
+        }
+      ]
+    },
+    "tasks": {
+      "count": 331,
+      "recent": [
+        {
+          "at": "",
+          "hint": "G.message 板项 done/acked",
+          "id": "t-000324"
+        },
+        {
+          "at": "",
+          "hint": "G.notice 板项 done/acked",
+          "id": "t-000325"
+        },
+        {
+          "at": "",
+          "hint": "M.notice 板项 done/acked",
+          "id": "t-000326"
+        },
+        {
+          "at": "",
+          "hint": "M.notice 板项 done/acked",
+          "id": "t-000327"
+        },
+        {
+          "at": "2026-11-25T03:56:55+08:00",
+          "hint": "M.run running/None（顶趟：用户发起的那一趟，不是召唤）",
+          "id": "t-000328"
+        },
+        {
+          "at": "2026-11-25T03:57:14+08:00",
+          "hint": "G. done/ok",
+          "id": "t-000329"
+        },
+        {
+          "at": "",
+          "hint": "M.message 板项 done/acked",
+          "id": "t-000330"
+        },
+        {
+          "at": "",
+          "hint": "M.notice 板项 done/acked",
+          "id": "t-000331"
+        }
+      ]
+    }
+  },
+  "uncalled_actions": {
+    "caliber": "按 store.rows(\"tasks\") 数（tasks 台账的落盘行，可能只是缓存/最近一次落盘）；权威读数是 sessions/*.jsonl 的 events 重放 —— 两个口径的数不许互相比",
+    "called_total": 1,
+    "checked": true,
+    "count": 66,
+    "declared_total": 67,
+    "note": "这条读数只回答\"声明了但没被召唤过\"：为什么没人派、该不该派，归秘书判断（`J-37`）；本读数不构成任何门的通过条件。",
+    "reason": "",
+    "uncalled": [
+      {
+        "action": "ingest_local",
+        "role": "A"
+      },
+      {
+        "action": "run",
+        "role": "A"
+      },
+      {
+        "action": "search_literature",
+        "role": "A"
+      },
+      {
+        "action": "shelf_search",
+        "role": "A"
+      },
+      {
+        "action": "walk_citations",
+        "role": "A"
+      },
+      {
+        "action": "decide_structural_duplicate",
+        "role": "B"
+      },
+      {
+        "action": "ingest_manuscript",
+        "role": "B"
+      },
+      {
+        "action": "land_manuscript",
+        "role": "B"
+      },
+      {
+        "action": "open_polish_copy",
+        "role": "B"
+      },
+      {
+        "action": "register_statement",
+        "role": "B"
+      },
+      {
+        "action": "reprocess_once",
+        "role": "B"
+      },
+      {
+        "action": "resolve_structural_duplicate",
+        "role": "B"
+      },
+      {
+        "action": "run",
+        "role": "B"
+      },
+      {
+        "action": "run_once",
+        "role": "B"
+      },
+      {
+        "action": "run_reprocess",
+        "role": "B"
+      },
+      {
+        "action": "cold",
+        "role": "C"
+      },
+      {
+        "action": "contradictions",
+        "role": "C"
+      },
+      {
+        "action": "gaps",
+        "role": "C"
+      },
+      {
+        "action": "handle",
+        "role": "C"
+      },
+      {
+        "action": "hottest",
+        "role": "C"
+      },
+      {
+        "action": "neighbors",
+        "role": "C"
+      },
+      {
+        "action": "paths",
+        "role": "C"
+      },
+      {
+        "action": "proof_chain",
+        "role": "C"
+      },
+      {
+        "action": "relations_between",
+        "role": "C"
+      },
+      {
+        "action": "structural_duplicates",
+        "role": "C"
+      },
+      {
+        "action": "adjudicate",
+        "role": "D"
+      },
+      {
+        "action": "assess",
+        "role": "D"
+      },
+      {
+        "action": "consider",
+        "role": "D"
+      },
+      {
+        "action": "ingest",
+        "role": "D"
+      },
+      {
+        "action": "ingest_detailed",
+        "role": "D"
+      },
+      {
+        "action": "poll",
+        "role": "D"
+      },
+      {
+        "action": "probe_c",
+        "role": "D"
+      },
+      {
+        "action": "propose_question",
+        "role": "D"
+      },
+      {
+        "action": "research",
+        "role": "D"
+      },
+      {
+        "action": "run_round",
+        "role": "D"
+      },
+      {
+        "action": "submit_gaps",
+        "role": "D"
+      },
+      {
+        "action": "trace_l3",
+        "role": "D"
+      },
+      {
+        "action": "trace_question",
+        "role": "D"
+      },
+      {
+        "action": "write_report",
+        "role": "D"
+      },
+      {
+        "action": "evidence_for",
+        "role": "E"
+      },
+      {
+        "action": "list_experiments",
+        "role": "E"
+      },
+      {
+        "action": "run_experiment",
+        "role": "E"
+      },
+      {
+        "action": "run_script_experiment",
+        "role": "E"
+      },
+      {
+        "action": "abandon_plan",
+        "role": "F"
+      },
+      {
+        "action": "create_plan",
+        "role": "F"
+      },
+      {
+        "action": "list_plans",
+        "role": "F"
+      },
+      {
+        "action": "status",
+        "role": "F"
+      },
+      {
+        "action": "step",
+        "role": "F"
+      },
+      {
+        "action": "build_document",
+        "role": "G"
+      },
+      {
+        "action": "compose_claim",
+        "role": "G"
+      },
+      {
+        "action": "refresh_markdown",
+        "role": "G"
+      },
+      {
+        "action": "register_dependency",
+        "role": "G"
+      },
+      {
+        "action": "render",
+        "role": "G"
+      },
+      {
+        "action": "revise",
+        "role": "G"
+      },
+      {
+        "action": "write_mapping",
+        "role": "G"
+      },
+      {
+        "action": "judge_quote_semantics",
+        "role": "H"
+      },
+      {
+        "action": "list_findings",
+        "role": "H"
+      },
+      {
+        "action": "review",
+        "role": "H"
+      },
+      {
+        "action": "review_report",
+        "role": "H"
+      },
+      {
+        "action": "verify_fixes",
+        "role": "H"
+      },
+      {
+        "action": "check_formal",
+        "role": "L"
+      },
+      {
+        "action": "formalize",
+        "role": "L"
+      },
+      {
+        "action": "record",
+        "role": "L"
+      },
+      {
+        "action": "list_verifications",
+        "role": "V"
+      },
+      {
+        "action": "read_proof",
+        "role": "V"
+      },
+      {
+        "action": "verify_proof",
+        "role": "V"
+      }
+    ]
+  },
+  "wellformed": {
+    "by_kind": {
+      "acceptance": 0,
+      "artifacts": 0,
+      "layout": 0,
+      "lit_candidates": 0,
+      "literature": 0,
+      "manuscripts": 0,
+      "paper_package": 0,
+      "proof_reports": 0,
+      "relations": 0,
+      "roster_retired": 0,
+      "sessions": 0,
+      "statements": 1,
+      "tasks": 0,
+      "usage_ledger": 0,
+      "vsigns": 0
+    },
+    "by_severity": {
+      "error": 0,
+      "info": 0,
+      "warning": 1
+    },
+    "checked": true,
+    "examples": [
+      {
+        "code": "statement_proof_no_without_text",
+        "detail": "`proof_no`=2，而 `proof_text` 是空的 ⇒ 有证明号没有正文",
+        "kind": "statements",
+        "severity": "warning",
+        "where": "data/statements.json#第31条.proof_no"
+      }
+    ],
+    "exit_code": 1,
+    "findings": 1,
+    "kinds": {
+      "acceptance": "ok",
+      "artifacts": "ok",
+      "layout": "ok",
+      "lit_candidates": "ok",
+      "literature": "ok",
+      "manuscripts": "ok",
+      "paper_package": "ok",
+      "proof_reports": "ok",
+      "relations": "ok",
+      "roster_retired": "ok",
+      "sessions": "ok",
+      "statements": "malformed",
+      "tasks": "ok",
+      "usage_ledger": "ok",
+      "vsigns": "ok"
+    },
+    "reason": "",
+    "state": "malformed",
+    "unchecked": []
+  },
+  "workspace": "D:\\Incubator\\projects\\lp-ball-22"
+}

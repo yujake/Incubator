@@ -1,0 +1,84 @@
+{
+  "rows": [
+    {
+      "kind": "theorem",
+      "label": "thm:integral",
+      "env_no": 1,
+      "ledger_id": "stmt:000034",
+      "proof_no": 1,
+      "file": "main.tex",
+      "ledger_kind": "theorem",
+      "reviewed": "已签（判决：成立）",
+      "optimized": "已优化",
+      "proof_source": "own",
+      "citation_loc_reason": "Own result of the present paper, proved in Section 3 (proof of Theorem thm:integral); it is not quoted from any literature source, so there is no page or line location to point at.",
+      "evidence_kind": "proof",
+      "evidence_path": "manuscripts/B/b-proof-000000.md",
+      "evidence_sha256": "e8f5eec99ab03a9036ddbe36a376f073aa03e50665d3d3f3af32e15f5d908fb8",
+      "v_signature": {
+        "verdict": "成立",
+        "sha256": "e8f5eec99ab03a9036ddbe36a376f073aa03e50665d3d3f3af32e15f5d908fb8"
+      }
+    },
+    {
+      "kind": "theorem",
+      "label": "thm:zero",
+      "env_no": 2,
+      "ledger_id": "stmt:000035",
+      "proof_no": 1,
+      "file": "main.tex",
+      "ledger_kind": "theorem",
+      "reviewed": "已签（判决：成立）",
+      "optimized": "已优化",
+      "proof_source": "own",
+      "citation_loc_reason": "Own result of the present paper, proved in Section 3 (proof of Theorem thm:zero); it is not quoted from any literature source, so there is no page or line location to point at.",
+      "evidence_kind": "proof",
+      "evidence_path": "manuscripts/B/b-proof-000001.md",
+      "evidence_sha256": "11164aee4f1b379663f59e8155dfd0f949925ac6c88d270f06af6871054c904a",
+      "v_signature": {
+        "verdict": "成立",
+        "sha256": "11164aee4f1b379663f59e8155dfd0f949925ac6c88d270f06af6871054c904a"
+      }
+    },
+    {
+      "kind": "theorem",
+      "label": "thm:diag",
+      "env_no": 3,
+      "ledger_id": "stmt:000041",
+      "proof_no": 1,
+      "file": "main.tex",
+      "ledger_kind": "theorem",
+      "reviewed": "已签（判决：成立）",
+      "optimized": "已优化",
+      "proof_source": "own",
+      "citation_loc_reason": "Own result of the present paper, proved in Section 3 (proof of Theorem thm:diag); it is not quoted from any literature source, so there is no page or line location to point at.",
+      "evidence_kind": "proof",
+      "evidence_path": "manuscripts/B/b-proof-000002.md",
+      "evidence_sha256": "12847fcc3abb631b4429c457172eb56b1e3d7b23899025ca93bac7a6a9cb9345",
+      "v_signature": {
+        "verdict": "成立",
+        "sha256": "12847fcc3abb631b4429c457172eb56b1e3d7b23899025ca93bac7a6a9cb9345"
+      }
+    },
+    {
+      "kind": "theorem",
+      "label": "thm:delta",
+      "env_no": 4,
+      "ledger_id": "stmt:000042",
+      "proof_no": 1,
+      "file": "main.tex",
+      "ledger_kind": "theorem",
+      "reviewed": "已签（判决：成立）",
+      "optimized": "已优化",
+      "proof_source": "own",
+      "citation_loc_reason": "Own result of the present paper, proved in Section 3 (proof of Theorem thm:delta); it is not quoted from any literature source, so there is no page or line location to point at.",
+      "evidence_kind": "proof",
+      "evidence_path": "manuscripts/B/b-proof-000003.md",
+      "evidence_sha256": "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6",
+      "v_signature": {
+        "verdict": "成立",
+        "sha256": "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6"
+      }
+    }
+  ]
+}

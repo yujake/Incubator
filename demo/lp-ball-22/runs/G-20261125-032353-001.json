@@ -1,0 +1,2150 @@
+{
+  "role": "G",
+  "task": "G：这一趟派给你的活是 —— 只做一件事，别重写论文：`documents` 表里 `doc:000001` 的 **claim-6** 引了一条跑题的文献 —— 现引 `lit:000000`（题名《Cube slicing in R^n》），而 claim-6 断言的是 A_face(p)=2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p) 与 A_face vs A_coord 在 p<2 / p=2 / p>2 的分段比较，收工门的确定性判据判「断言实词与该文献题名/摘要无交集 ⇒ 引文跑题」（这一条是从 documents 现算的，写 na 关不掉）。\n\n这条行归你（G1）那一支笔：另一个 G 实例读它拿 row_not_visible、改它拿 row_not_yours，所以只有你能改。\n\n处置二选一（优先第一条）：\n(1) 把 claim-6 的 citations 换成**真的讲 l_p 球中心/超平面截面**的那几行 —— 在 `literature`（lit:000000–lit:000024）里挑，逐条先读该行的 title + summary，确认它讲的是同一件事再挂（候选方向：plane sections of the unit ball of l_p、on maximal hyperplane sections of the unit ball of l_p^n、on extremal sections of subspaces of l_p 这几篇的题名对应行）；必要时把 claim-6 的措辞收敛成「三个方向的截面面积表达式与数值比较」，让它与所挂文献讲的是同一件事。\n(2) 若找不到对得上的 lit 行，就删掉那几条跑题引用，把 claim-6 写成只由 `stmt:000042`（体对角向截面面积表达式，V 判「成立」）与 `exp:000004`（12 个 p 的球面扫描）支持的形式。\n\n落盘方式用你自己的 `own.revise(doc_id=\"000001\", new_claims=[…])`（只动 claim-6，其余 claims 原样保留，别整份重写）。**这一步只动 claims 台账，不动 `out/package/main.tex`** —— 若你确实没动 main.tex，就不要重编 PDF；若动了，必须自己调 `doc.paper_compile` 重编并回报回执 tex_sha256 是否等于盘上 main.tex 的 sha。\n\n回执必须给四行：① 改后 claim-6 的 citations 逐条（lit/stmt/exp 号 + 该 lit 行 title 前 40 字）；② claim-6 改后的断言原文；③ main.tex 有没有动（没动就写「未动，无需重编」）；④ 若某一步被受控拒，逐条贴拒码 + 原话，不要自己宣布通过。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "documents",
+          "id": "000001"
+        },
+        "why": "读 doc:000001 的 claims，确认 claim-6 现文与其余 claims"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "doc_id": "000001",
+          "kind": "paper",
+          "title": "Maximal-area central sections of the three-dimensional l_p ball",
+          "markdown_path": "manuscripts/G/000001.md",
+          "sections": [
+            {
+              "heading": "1 Introduction",
+              "body": "Ball determined the maximal hyperplane section of the cube. The present note treats the three-dimensional l_p ball B_p^3 and asks which central section has maximal area, comparing the coordinate, body-diagonal and face-diagonal normal directions."
+            },
+            {
+              "heading": "2 Definitions and notation",
+              "body": "Write B_p^3 = {(x,y,z) : |x|^p+|y|^p+|z|^p <= 1} and let A_p(n) be the two-dimensional Lebesgue area of B_p^3 intersected with the plane through the origin with unit normal n. The candidate areas are A_coord(p) = A_p(e_3), A_diag(p) = A_p((1,1,1)/sqrt(3)) and A_face(p) = A_p((1,1,0)/sqrt(2))."
+            },
+            {
+              "heading": "3 Main results",
+              "body": "The integral representation and the two closed forms are recorded, then the two transition parameters are located: p = 2 where the coordinate and body-diagonal areas coincide, and p-star = 4.998215596862 where the body-diagonal and face-diagonal areas coincide. The three-regime description is stated as a numerically supported conjecture."
+            },
+            {
+              "heading": "4 Discussion and open problems",
+              "body": "The scans support a three-regime picture but do not exclude intermediate maximizing normals; an analytic treatment of the ordered absolute-value domain and a sharp value of p-star remain open."
+            }
+          ],
+          "claims": [
+            {
+              "text": "Ball determined the largest hyperplane section of the unit cube: among all hyperplane sections of the cube, a section perpendicular to 2^{-1/2}(1,1,0,...,0) has the largest volume.",
+              "citations": [
+                "lit:000000"
+              ],
+              "evidence_kind": "heuristic",
+              "section": "1",
+              "claim_id": "claim-1",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "Koenig studies the largest hyperplane sections of the unit ball of l_p^n for p > 2 and shows that the cube-slicing phenomenon persists for suitable normals when p is large.",
+              "citations": [
+                "lit:000001"
+              ],
+              "evidence_kind": "heuristic",
+              "section": "1",
+              "claim_id": "claim-2",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "The literature on plane sections of the unit ball of l_p, on critical central sections of the cube and on extremal sections of subspaces of l_p supplies the general circle of questions addressed by the computations reported here.",
+              "citations": [
+                "lit:000002",
+                "lit:000003",
+                "lit:000006"
+              ],
+              "evidence_kind": "heuristic",
+              "section": "1",
+              "claim_id": "claim-3",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "For every p in [1,infinity) and every unit vector n, the area A_p(n) of the central section B_p^3 intersected with the plane n^perp depends only on that plane, is invariant under signed coordinate permutations, and equals (1/2) integral_0^{2 pi} ||cos(psi) u + sin(psi) v||_p^{-2} dpsi for any orthonormal basis {u,v} of n^perp.",
+              "citations": [
+                "stmt:000034"
+              ],
+              "evidence_kind": "proof_review",
+              "disclaimer": "逐行审阅过的证明，未经机器检查",
+              "section": "2",
+              "claim_id": "claim-4",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "For every p in [1,infinity) the coordinate normal gives A_coord(p) = 4 Gamma(1+1/p)^2 / Gamma(1+2/p); this equals pi at p = 2 and tends to 4 as p tends to infinity, and the quadrature kernel reproduces these values to relative deviation at most 1e-13.",
+              "citations": [
+                "stmt:000034",
+                "exp:000003"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "section": "3",
+              "claim_id": "claim-5",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "For every p in [1,infinity) the face-diagonal normal (1,1,0)/sqrt(2) gives A_face(p) = 2^{1/2-1/p} * 4 Gamma(1+1/p)^2 / Gamma(1+2/p), with A_face(1) = sqrt(2), A_face(2) = pi and A_face(p) tending to 4 sqrt(2); moreover A_face(p) < A_coord(p) exactly when p < 2, with equality at p = 2 and the reverse inequality for p > 2.",
+              "citations": [
+                "stmt:000034",
+                "stmt:000042",
+                "lit:000000"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "section": "3",
+              "claim_id": "claim-6",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "If a unit normal n has at least one vanishing coordinate, then A_p(n) = C_p (sum over j not equal i of |n_j|^p)^{-1/p} with C_p = 4 Gamma(1+1/p)^2 / Gamma(1+2/p); consequently for 1 <= p < 2 every such normal gives A_p(n) <= C_p with equality only at coordinate normals, and for p > 2 the same expression holds with the reverse inequality.",
+              "citations": [
+                "stmt:000035",
+                "exp:000003"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "section": "3",
+              "claim_id": "claim-7",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "For every p in [1,infinity) the body-diagonal section area satisfies A_diag(p) = (3/4) integral_0^{2 pi} (|cos(theta - pi/6)|^p + |cos(theta + pi/6)|^p + |sin theta|^p)^{-2/p} d theta; moreover A_diag(1) = 3 sqrt(3)/4, A_diag(2) = pi, the limit of A_diag(p) as p tends to infinity is 3 sqrt(3), and p maps to A_diag(p) is continuous on [1,infinity).",
+              "citations": [
+                "stmt:000041",
+                "exp:000003"
+              ],
+              "evidence_kind": "proof_review",
+              "disclaimer": "逐行审阅过的证明，未经机器检查",
+              "section": "3",
+              "claim_id": "claim-8",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "The difference Delta(p) = A_face(p) - A_diag(p) is continuous on [1,infinity), Delta(2) = 0, Delta(1) = sqrt(2) - 3 sqrt(3)/4 > 0 and the limit of Delta(p) as p tends to infinity is 4 sqrt(2) - 3 sqrt(3) > 0; hence there is P0 in [1,infinity) with A_face(p) > A_diag(p) for every p >= P0.",
+              "citations": [
+                "stmt:000042",
+                "stmt:000041"
+              ],
+              "evidence_kind": "proof_review",
+              "disclaimer": "逐行审阅过的证明，未经机器检查",
+              "section": "3",
+              "claim_id": "claim-9",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "Numerically supported strong conjecture, not established here: for the twelve values p in {1.05,1.1,1.2,1.5,2,2.5,3,4,5,8,16,1000} the largest central section of B_p^3 is attained at the coordinate normal when p < 2, at the body-diagonal normal when 2 < p < p-star and at the face-diagonal normal when p > p-star, where p-star = 4.998215596862.",
+              "citations": [
+                "exp:000004",
+                "exp:000006",
+                "exp:000007"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "section": "3",
+              "claim_id": "claim-10",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "Two transition parameters separate the three regimes in the scanned range: the ratio A_diag/A_coord crosses 1 exactly at p = 2, and A_diag and A_face cross at p-star = 4.998215596862 located by bisection with six rounds of local refinement; along the boundary arcs of normals of the form (0,1,t) and (1,1,t) the section area is largest at an endpoint t in {0,1,infinity}, and any strictly intermediate t gives a strictly smaller value for p not equal to 2.",
+              "citations": [
+                "exp:000006",
+                "exp:000007"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "section": "3",
+              "claim_id": "claim-11",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "The quadrature kernel used for all scans was validated independently: it returns pi for every central section at p = 2 with deviation at most 1e-15, matches the octahedron clipping values at p = 1, approaches the cube values 4, 3 sqrt(3) and 4 sqrt(2) at p = 1000, reproduces 4 Gamma(1+1/p)^2 / Gamma(1+2/p) to relative deviation at most 1e-13, and is invariant under rotation of the plane basis to 1e-12.",
+              "citations": [
+                "exp:000003"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "section": "4",
+              "claim_id": "claim-12",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "The three-regime picture obtained here is a three-dimensional finite-p counterpart of the cube-slicing result of Ball and of the p > 2 analysis of Koenig: as p tends to infinity the three candidate areas tend to 4, 3 sqrt(3) and 4 sqrt(2), so the face-diagonal normal is the largest in the limit, in agreement with the cube case.",
+              "citations": [
+                "lit:000000",
+                "lit:000001",
+                "stmt:000042"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "section": "4",
+              "claim_id": "claim-13",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "Limitation: no analytic argument is offered here for the absence of intermediate maximizing normals; the evidence is a boundary-arc scan together with a grid in the ordered absolute-value domain 0 <= a <= b <= c, so a normal with three distinct non-zero coordinates lying outside the scanned grid is not excluded by these computations.",
+              "citations": [
+                "exp:000004",
+                "exp:000007"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "section": "4",
+              "claim_id": "claim-14",
+              "is_negative": false,
+              "negation_kind": null
+            }
+          ],
+          "open_problems": [
+            "Give an analytic argument that no normal with three distinct non-zero coordinates maximizes the section area for any p in [1,infinity).",
+            "Determine p-star in closed form, or prove that it is transcendental, and prove that the crossing of A_diag and A_face is unique."
+          ],
+          "status": "accepted",
+          "review_rounds": 7,
+          "review_verdict": "成立",
+          "reviewed_at": "2026-11-25T00:17:32+08:00",
+          "reviewed_by": "agent-H",
+          "created_at": "2026-11-24T23:49:04+08:00",
+          "updated_at": "2026-11-24T23:49:04+08:00",
+          "revision": 1,
+          "content_sha256": "a19740ff03059d7430f3fb8306356794bd238baeb509925953c7b32015a1a281",
+          "owner_task": "t-000244",
+          "owner_instance": "G1",
+          "created_by": "agent-G-G1"
+        },
+        "error": "",
+        "meta": {
+          "table": "documents",
+          "id": "000001",
+          "id_field": "doc_id",
+          "found": true,
+          "row_scope": "own-instance（G1 这一支笔的行 + 角色级老行）"
+        },
+        "multi_call": {
+          "turn_index": 0,
+          "call_index": 0,
+          "calls": 2,
+          "step_index": 0
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 64768,
+        "prompt_cache_miss_tokens": 2056,
+        "tokens_in": 66824,
+        "tokens_out": 217,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000297"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "literature",
+          "limit": 30,
+          "fields": [
+            "lit_id",
+            "title",
+            "summary",
+            "year",
+            "authors"
+          ]
+        },
+        "why": "列出全部 lit 行，挑真的讲 l_p 球截面那几篇"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "literature",
+          "rows": [
+            {
+              "lit_id": "000000",
+              "title": "Cube slicing in R^n",
+              "summary": "",
+              "year": null,
+              "authors": []
+            },
+            {
+              "lit_id": "000001",
+              "title": "On maximal hyperplane sections of the unit ball of l_p^n for (filename truncated after 'for')",
+              "summary": "",
+              "year": null,
+              "authors": []
+            },
+            {
+              "lit_id": "000002",
+              "title": "Plane sections of the unit ball of l_p",
+              "summary": "",
+              "year": null,
+              "authors": []
+            },
+            {
+              "lit_id": "000003",
+              "title": "Critical central sections of the cube",
+              "summary": "题录（按本地 PDF 首部逐字读数，非推测）：作者 GERGELY AMBRUS（首部全大写，单作者）；arXiv:2107.14778v3 [math.MG]，22 Jun 2023；PDF 共 12 页；期刊名与卷期页 PDF 上取不到。身份格 authors/venue/year 由收编口写，通用写口拒改（identity_cell_refused），逐字读数另见本趟回执。",
+              "year": null,
+              "authors": []
+            },
+            {
+              "lit_id": "000004",
+              "title": "Non-diagonal critical central sections of the cube",
+              "summary": "",
+              "year": null,
+              "authors": []
+            },
+            {
+              "lit_id": "000005",
+              "title": "Resilience of cube slicing in l_p",
+              "summary": "",
+              "year": null,
+              "authors": []
+            },
+            {
+              "lit_id": "000006",
+              "title": "On extremal sections of subspaces of l_p",
+              "summary": "",
+              "year": null,
+              "authors": []
+            },
+            {
+              "lit_id": "000007",
+              "title": "Hyperplane projections of the unit ball of l_p^n",
+              "summary": "",
+              "year": null,
+              "authors": []
+            },
+            {
+              "lit_id": "000008",
+              "title": "Plane sections of convex bodies of maximal volume",
+              "summary": "",
+              "year": null,
+              "authors": []
+            },
+            {
+              "lit_id": "000009",
+              "title": "A cube slice that is not a zonoid",
+              "summary": "",
+              "year": null,
+              "authors": []
+            },
+            {
+              "lit_id": "000010",
+              "title": "Non-central sections of convex bodies",
+              "summary": "",
+              "year": null,
+              "authors": []
+            },
+            {
+              "lit_id": "000011",
+              "title": "Non-central sections of the regular n-simplex",
+              "summary": "",
+              "year": null,
+              "authors": []
+            },
+            {
+              "lit_id": "000012",
+              "title": "An isoperimetric inequality for hyperplane sections of a convex body",
+              "summary": "",
+              "year": null,
+              "authors": []
+            },
+            {
+              "lit_id": "000013",
+              "title": "On a reverse form of the Brascamp-Lieb inequality",
+              "summary": "",
+              "year": null,
+              "authors": []
+            },
+            {
+              "lit_id": "000014",
+              "title": "The geometry of Minkowski spaces: a survey, part I",
+              "summary": "",
+              "year": null,
+              "authors": []
+            },
+            {
+              "lit_id": "000015",
+              "title": "Szarek and Ball made simple",
+              "summary": "",
+              "year": null,
+              "authors": []
+            },
+            {
+              "lit_id": "000016",
+              "title": "Estimates on the decay of the Laplace-Polya integral",
+              "summary": "",
+              "year": null,
+              "authors": []
+            },
+            {
+              "lit_id": "000017",
+              "title": "Paraconsistent dominated convergence",
+              "summary": "",
+              "year": null,
+              "authors": []
+            },
+            {
+              "lit_id": "000018",
+              "title": "Generalized integrals and convergence theorems",
+              "summary": "",
+              "year": null,
+              "authors": []
+            },
+            {
+              "lit_id": "000019",
+              "title": "An introduction to measure theory",
+              "summary": "",
+              "year": null,
+              "authors": []
+            },
+            {
+              "lit_id": "000020",
+              "title": "On the volume of hyperplane sections of a d-cube",
+              "summary": "",
+              "year": null,
+              "authors": []
+            },
+            {
+              "lit_id": "000021",
+              "title": "Maximal perimeters of polytope sections and origin-symmetry",
+              "summary": "",
+              "year": null,
+              "authors": []
+            },
+            {
+              "lit_id": "000022",
+              "title": "The cross-section body, plane sections of convex bodies and approximation of convex bodies",
+              "summary": "",
+              "year": null,
+              "authors": []
+            },
+            {
+              "lit_id": "000023",
+              "title": "Measure, integration & real analysis",
+              "summary": "",
+              "year": null,
+              "authors": []
+            },
+            {
+              "lit_id": "000024",
+              "title": "Measure theory and integration by and for the learner",
+              "summary": "",
+              "year": null,
+              "authors": []
+            }
+          ],
+          "total": 25,
+          "returned": 25,
+          "limit": 30,
+          "offset": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "literature",
+          "total": 25,
+          "returned": 25,
+          "offset": 0,
+          "limit": 30,
+          "fields": [
+            "lit_id",
+            "title",
+            "summary",
+            "year",
+            "authors"
+          ]
+        },
+        "warn": "这一步给了 2 条调用，已按顺序逐条：第 1 条 table.get 成功；第 2 条 table.list 成功：25。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 0,
+          "call_index": 1,
+          "calls": 2,
+          "step_index": 1,
+          "summary": "这一步给了 2 条调用，已按顺序逐条：第 1 条 table.get 成功；第 2 条 table.list 成功：25。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 0,
+            "calls": 2,
+            "items": 2,
+            "steps": [
+              0,
+              1
+            ],
+            "executed": 2,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000297"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "literature",
+          "id": "000002"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "lit_id": "000002",
+          "title": "Plane sections of the unit ball of l_p",
+          "type": "J",
+          "summary": "",
+          "path": "a7344ad13416-plane-sections-of-the-unit-ball-of-l-p.pdf",
+          "processed": true,
+          "source_request_ids": [
+            "r-000001"
+          ],
+          "dedup_key": "title:plane sections of the unit ball of l p|*",
+          "doi": null,
+          "year": null,
+          "authors": [],
+          "venue": null,
+          "language": null,
+          "added_at": "2026-11-24T18:05:13+08:00",
+          "download": {
+            "status": "ok",
+            "http_status": null,
+            "bytes": 385104,
+            "sha256": "a7344ad13416e8c3ffa43f67614d50bdf9b6008f2a10bd64acc7fc4e3b595fc5",
+            "error": null,
+            "fulltext": "ok",
+            "note": "text.extract: 抽出的文本可读"
+          },
+          "pages": "",
+          "matched": "",
+          "claimed_by": null,
+          "lease_until": null,
+          "mine_attempts": 1,
+          "last_mine_error": null,
+          "_keys": [
+            "title:plane sections of the unit ball of l p|*"
+          ]
+        },
+        "error": "",
+        "meta": {
+          "table": "literature",
+          "id": "000002",
+          "id_field": "lit_id",
+          "found": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 66048,
+        "prompt_cache_miss_tokens": 3988,
+        "tokens_in": 70036,
+        "tokens_out": 1372,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000297"
+    },
+    {
+      "index": 3,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "literature",
+          "id": "000006"
+        },
+        "why": "读 lit:000006 的 title/summary，确认它讲的是 l_p 子空间的极值截面，可作 claim-6 的新引用"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "lit_id": "000006",
+          "title": "On extremal sections of subspaces of l_p",
+          "type": "J",
+          "summary": "",
+          "path": "9ec6189b98ee-on-extremal-sections-of-subspaces-of-l-p.pdf",
+          "processed": true,
+          "source_request_ids": [
+            "r-000001"
+          ],
+          "dedup_key": "title:on extremal sections of subspaces of l p|*",
+          "doi": null,
+          "year": null,
+          "authors": [],
+          "venue": null,
+          "language": null,
+          "added_at": "2026-11-24T18:05:13+08:00",
+          "download": {
+            "status": "ok",
+            "http_status": null,
+            "bytes": 490751,
+            "sha256": "9ec6189b98ee3fa3fb1c05aa6cd672a2867f4723d196bb9ead95cfb7680ac1cc",
+            "error": null,
+            "fulltext": "ok",
+            "note": "text.extract: 抽出的文本可读"
+          },
+          "pages": "",
+          "matched": "",
+          "claimed_by": null,
+          "lease_until": null,
+          "mine_attempts": 1,
+          "last_mine_error": null,
+          "_keys": [
+            "title:on extremal sections of subspaces of l p|*"
+          ]
+        },
+        "error": "",
+        "meta": {
+          "table": "literature",
+          "id": "000006",
+          "id_field": "lit_id",
+          "found": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 69248,
+        "prompt_cache_miss_tokens": 1781,
+        "tokens_in": 71029,
+        "tokens_out": 1524,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000297"
+    },
+    {
+      "index": 4,
+      "shape": "tool",
+      "payload": {
+        "name": "own.revise",
+        "args": {},
+        "why": "",
+        "shape_alias": "name"
+      },
+      "result": {
+        "tool": "own.revise",
+        "ok": false,
+        "data": null,
+        "error": "参数错误：缺少必填参数：doc_id（补上它再交）",
+        "meta": {
+          "tool": "own.revise",
+          "kind": "param_error"
+        },
+        "参数表": "【参数表】被拒的是参数形状/取值，不是这件事不能做。照下面这张声明表重写一次（键名与类型都要对；表里没列的键一律不许传）：\n- own.revise 的参数表：doc_id: string，必填；fixed_findings: array；new_claims: array；note: string（参数表是封闭集合：多传一个键会被拒）",
+        "warn": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.revise 被拒：参数错误：缺少必填参数：doc_id（补上它再交）。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 4,
+          "call_index": 0,
+          "calls": 1,
+          "step_index": 4,
+          "summary": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.revise 被拒：参数错误：缺少必填参数：doc_id（补上它再交）。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 4,
+            "calls": 1,
+            "items": 1,
+            "steps": [
+              4
+            ],
+            "executed": 1,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 70272,
+        "prompt_cache_miss_tokens": 1759,
+        "tokens_in": 72031,
+        "tokens_out": 1847,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000297"
+    },
+    {
+      "index": 5,
+      "shape": "tool",
+      "payload": {
+        "name": "own.revise",
+        "args": {
+          "doc_id": "000001",
+          "new_claims": [
+            {
+              "citations": [
+                "stmt:000034",
+                "stmt:000042",
+                "lit:000002",
+                "lit:000006"
+              ],
+              "claim_id": "claim-6",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "evidence_kind": "cross_check",
+              "is_negative": false,
+              "negation_kind": null,
+              "section": "3",
+              "text": "For every p in [1,infinity), the central plane section of the unit ball of l_p^3 by the hyperplane with face-diagonal normal (1,1,0)/sqrt(2) has area A_face(p) = 2^{1/2-1/p} * 4 Gamma(1+1/p)^2 / Gamma(1+2/p), with A_face(1) = sqrt(2), A_face(2) = pi and A_face(p) tending to 4 sqrt(2); moreover A_face(p) < A_coord(p) exactly when p < 2, with equality at p = 2 and the reverse inequality for p > 2."
+            }
+          ],
+          "note": "claim-6 的引文由跑题的 lit:000000（Cube slicing in R^n）换成两行真的讲 l_p 球截面/超平面截面的文献：lit:000002（Plane sections of the unit ball of l_p）与 lit:000006（On extremal sections of subspaces of l_p）；同时把断言措辞收敛为「单位球 l_p^3 的中心平面截面 / 超平面法向 / 面积」，使其与所挂文献讲的是同一件事。数学内容一字未改：A_face(p) 闭式、A_face(1)=sqrt(2)、A_face(2)=pi、A_face(p)->4sqrt(2)、以及 A_face 与 A_coord 在 p<2 / p=2 / p>2 的分段比较全部保留；支撑仍为 stmt:000034、stmt:000042 与本稿的数值扫描。"
+        },
+        "why": "收工门确定性判据判 claim-6 引文跑题（lit:000000 题名/摘要与断言实词无交集），按处置(1)换成同题材的 lit 行并收敛措辞"
+      },
+      "result": {
+        "tool": "own.revise",
+        "ok": true,
+        "data": {
+          "doc_id": "000001",
+          "review_rounds": 7,
+          "status": "revised",
+          "claim_count": 14,
+          "replaced_claim_ids": [
+            "claim-6"
+          ],
+          "appended_claim_ids": [],
+          "fixed_findings": [],
+          "markdown_path": "manuscripts/G/000001.md",
+          "rendered_path": "D:\\Incubator\\projects\\lp-ball-22\\manuscripts\\G\\000001.md",
+          "body_path": "out/package/main.tex",
+          "body_sha256": "62efb2f6835297672a4839e2d374bcf36c9a1ba56707f36f4280250f37166b4e",
+          "body_bytes": 32396,
+          "body_problem": "",
+          "content_sha256": "66c671e9a0e7361f564a9cfaa7521ca4a647063db9c22f475656cd1d1ee23914",
+          "next_step": "改完之后要再复核：派 `H.verify_fixes`（它按 `round_no` 复核这一版）或 `H.review`，让签名钉到现行版上；改完不复核的稿子不许当成交付。",
+          "citation_coverage": {
+            "own": {
+              "lit": [
+                "lit:000000",
+                "lit:000001",
+                "lit:000002",
+                "lit:000003",
+                "lit:000006"
+              ],
+              "rel": [],
+              "exp": [
+                "exp:000003",
+                "exp:000004",
+                "exp:000006",
+                "exp:000007"
+              ],
+              "stmt": [
+                "stmt:000034",
+                "stmt:000042",
+                "stmt:000035",
+                "stmt:000041"
+              ],
+              "doc": [],
+              "eval": []
+            },
+            "counts": {
+              "lit": 5,
+              "rel": 0,
+              "exp": 4,
+              "stmt": 4,
+              "doc": 0,
+              "eval": 0
+            },
+            "available": {
+              "literature_total": 25,
+              "literature_processed": 25,
+              "literature_with_fulltext": 25,
+              "relations": 107,
+              "experiments": 24,
+              "statements": 144,
+              "eval_results": 0,
+              "research_questions": -1
+            },
+            "readable": true,
+            "gaps": [
+              "这份稿子 0 条 `rel:` 引用，而库里有 **107 条关系**（例：000000、000001、000002） —— C 的关系读数要能被交付物引到（用户点名过「重点考察 C」）"
+            ],
+            "fit": {
+              "fit": 12,
+              "mismatch": 0,
+              "unjudged": 2
+            },
+            "fit_rows": [
+              {
+                "claim_id": "claim-1",
+                "citations": [
+                  "lit:000000"
+                ],
+                "verdict": "fit",
+                "why": []
+              },
+              {
+                "claim_id": "claim-2",
+                "citations": [
+                  "lit:000001"
+                ],
+                "verdict": "fit",
+                "why": []
+              },
+              {
+                "claim_id": "claim-3",
+                "citations": [
+                  "lit:000002",
+                  "lit:000003",
+                  "lit:000006"
+                ],
+                "verdict": "fit",
+                "why": []
+              },
+              {
+                "claim_id": "claim-4",
+                "citations": [
+                  "stmt:000034"
+                ],
+                "verdict": "unjudged",
+                "why": []
+              },
+              {
+                "claim_id": "claim-5",
+                "citations": [
+                  "stmt:000034",
+                  "exp:000003"
+                ],
+                "verdict": "fit",
+                "why": []
+              },
+              {
+                "claim_id": "claim-6",
+                "citations": [
+                  "stmt:000034",
+                  "stmt:000042",
+                  "lit:000002",
+                  "lit:000006"
+                ],
+                "verdict": "fit",
+                "why": []
+              },
+              {
+                "claim_id": "claim-7",
+                "citations": [
+                  "stmt:000035",
+                  "exp:000003"
+                ],
+                "verdict": "fit",
+                "why": []
+              },
+              {
+                "claim_id": "claim-8",
+                "citations": [
+                  "stmt:000041",
+                  "exp:000003"
+                ],
+                "verdict": "fit",
+                "why": []
+              },
+              {
+                "claim_id": "claim-9",
+                "citations": [
+                  "stmt:000042",
+                  "stmt:000041"
+                ],
+                "verdict": "unjudged",
+                "why": []
+              },
+              {
+                "claim_id": "claim-10",
+                "citations": [
+                  "exp:000004",
+                  "exp:000006",
+                  "exp:000007"
+                ],
+                "verdict": "fit",
+                "why": []
+              },
+              {
+                "claim_id": "claim-11",
+                "citations": [
+                  "exp:000006",
+                  "exp:000007"
+                ],
+                "verdict": "fit",
+                "why": []
+              },
+              {
+                "claim_id": "claim-12",
+                "citations": [
+                  "exp:000003"
+                ],
+                "verdict": "fit",
+                "why": []
+              },
+              {
+                "claim_id": "claim-13",
+                "citations": [
+                  "lit:000000",
+                  "lit:000001",
+                  "stmt:000042"
+                ],
+                "verdict": "fit",
+                "why": []
+              },
+              {
+                "claim_id": "claim-14",
+                "citations": [
+                  "exp:000004",
+                  "exp:000007"
+                ],
+                "verdict": "fit",
+                "why": []
+              }
+            ],
+            "misfit": [],
+            "questions_vs_claims": {
+              "research_questions": -1,
+              "claims_with_citations": 14,
+              "short": -1
+            },
+            "suggest_lit": [
+              {
+                "lit_id": "000000",
+                "title": "Cube slicing in R^n"
+              },
+              {
+                "lit_id": "000001",
+                "title": "On maximal hyperplane sections of the unit ball of l_p^n for (filename truncated after 'for')"
+              },
+              {
+                "lit_id": "000002",
+                "title": "Plane sections of the unit ball of l_p"
+              },
+              {
+                "lit_id": "000003",
+                "title": "Critical central sections of the cube"
+              },
+              {
+                "lit_id": "000004",
+                "title": "Non-diagonal critical central sections of the cube"
+              }
+            ],
+            "suggest_rel": [
+              {
+                "relation_id": "000000",
+                "description": "The paper studies (n-1)-dimensional sections of the unit cube."
+              },
+              {
+                "relation_id": "000001",
+                "description": "Hensley conjectured that the volume is at most sqrt(2)."
+              },
+              {
+                "relation_id": "000002",
+                "description": "The text asks for the maximum volume, in terms of k and n, of the intersection of Qn with a k-dimensional subs"
+              },
+              {
+                "relation_id": "000003",
+                "description": "Ball’s theorem bounds the normalized section function for p=∞ by its value at a(2), equal to √2."
+              },
+              {
+                "relation_id": "000004",
+                "description": "Eskenazis, Nayar and Tkocz extended the Ball-type maximal section result to l^n_p-balls for very large p."
+              }
+            ],
+            "note": "只报数、不拦：引用的**存在性**由 `check_citations` 判（fail-closed）；这一格是把「引了什么 / 库里有什么」放到写稿那一刻看得见。`own` 里的号都是这份稿子真的写了的前缀引用（`doc:` 收在 `doc` 那一格）；`library_root` 没给 ⇒ 「有全文」那一格只按 `download.status` 算（没看盘）"
+          },
+          "hard_to_prove": {
+            "checked": true,
+            "why": "",
+            "rows": [],
+            "held_back": [],
+            "attributed": [],
+            "report": {
+              "checked": true,
+              "sent": false,
+              "to": "",
+              "msg_id": "",
+              "why": "这一趟没有承重条目需要上报"
+            }
+          }
+        },
+        "error": "",
+        "meta": {},
+        "warn": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.revise 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 5,
+          "call_index": 0,
+          "calls": 1,
+          "step_index": 5,
+          "summary": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.revise 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 5,
+            "calls": 1,
+            "items": 1,
+            "steps": [
+              5
+            ],
+            "executed": 1,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 71168,
+        "prompt_cache_miss_tokens": 1915,
+        "tokens_in": 73083,
+        "tokens_out": 1206,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000297"
+    },
+    {
+      "index": 6,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.stat",
+        "args": {
+          "path": "out/package/main.tex"
+        },
+        "why": "revise 回执里 body_path 指向 out/package/main.tex（body_sha256=62efb2f6…）—— 先核盘上这份正文的字节指纹与大小，判断它有没有被这次改稿动过"
+      },
+      "result": {
+        "tool": "fs.stat",
+        "ok": true,
+        "data": {
+          "path": "out/package/main.tex",
+          "exists": true,
+          "is_dir": false,
+          "is_file": true,
+          "is_symlink": false,
+          "size": 32396,
+          "mtime": "2026-11-25T03:11:30+08:00",
+          "mtime_epoch": 1795547490.118,
+          "link_target": null,
+          "sha256": "62efb2f6835297672a4839e2d374bcf36c9a1ba56707f36f4280250f37166b4e"
+        },
+        "error": "",
+        "meta": {
+          "path": "out/package/main.tex",
+          "size": 32396,
+          "sha256": "62efb2f6835297672a4839e2d374bcf36c9a1ba56707f36f4280250f37166b4e"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 72320,
+        "prompt_cache_miss_tokens": 3543,
+        "tokens_in": 75863,
+        "tokens_out": 796,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000297"
+    },
+    {
+      "index": 7,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/package/main.tex",
+          "start_line": 1,
+          "max_lines": 40
+        },
+        "why": "revise 回执的 body_path 指向 out/package/main.tex 且盘上 sha 与回执一致 —— 必须先读回这份文件的头几行，判断它是 LaTeX 正文还是被改稿渲染覆盖成了 markdown"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "\\documentclass[11pt]{article}\n\\usepackage[margin=2.5cm]{geometry}\n\\usepackage{amsmath,amssymb,amsthm}\n\\usepackage{booktabs}\n\\usepackage{url}\n\\usepackage[hidelinks]{hyperref}\n\\theoremstyle{plain}\n\\newtheorem{theorem}{Theorem}\n\\numberwithin{theorem}{section}\n\n\\title{Maximal-area central sections of the three-dimensional $\\ell_p$ ball}\n\\author{G}\n\\date{}\n\n\\begin{document}\n\\maketitle\n\n\\begin{abstract}\nWe study the two-dimensional area of central hyperplane sections of the unit ball $B_p^3$ of $\\ell_p^3$, and we compare three explicit families of normals: the coordinate direction $e_3$, the body diagonal $(1,1,1)/\\sqrt3$ and the face diagonal $(1,1,0)/\\sqrt2$. We record an integral representation of the section area that is valid for every normal, and we derive closed or single-integral expressions for the three families: $A_{\\mathrm{coord}}(p)=4\\Gamma(1+1/p)^2/\\Gamma(1+2/p)$, a one-dimensional integral for the body-diagonal section, and the scaled planar expression $2^{1/2-1/p}\\,4\\Gamma(1+1/p)^2/\\Gamma(1+2/p)$ for the face-diagonal section. For normals with a vanishing coordinate we obtain the exact formula $A_p(n)=A_{\\mathrm{coord}}(p)\\,(\\sum_{j\\ne i}|n_j|^p)^{-1/p}$, from which the comparison with the coordinate direction follows at once. We further show that the difference between the face-diagonal and the body-diagonal areas is continuous, vanishes at $p=2$ and is positive both at $p=1$ and in the limit $p\\to\\infty$, so that the face-diagonal direction dominates for all sufficiently large $p$. The transition between the body-diagonal and the face-diagonal regimes is located numerically at $p_*\\approx 4.998215596862$; the three-regime picture as a whole is supported by numerics but is not proved here. All supporting computations are collected in an appendix.\n\\end{abstract}\n\n\\section{Introduction}\n\nThe determination of extremal hyperplane sections of concrete convex bodies is a classical and still active problem. For the unit cube $Q_n=[-1/2,1/2]^n$, Ball \\cite{ball} …（落档截断，原 4919 字）",
+        "error": "",
+        "meta": {
+          "path": "out/package/main.tex",
+          "encoding": "utf-8",
+          "bytes_read": 32396,
+          "total_bytes": 32396,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 40,
+          "total_lines": 231,
+          "next_line": 41,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 1–40 行（共 231 行）；续读 start_line=41",
+          "sha256": "62efb2f6835297672a4839e2d374bcf36c9a1ba56707f36f4280250f37166b4e"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 75008,
+        "prompt_cache_miss_tokens": 1701,
+        "tokens_in": 76709,
+        "tokens_out": 391,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000297"
+    },
+    {
+      "index": 8,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/package/COMPILE-RECEIPT.json"
+        },
+        "why": "核盘上 main.tex 的 sha 是否就是上次编译回执里那一份 —— 判断 revise 有没有动正文、要不要重编"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "{\n  \"tex_sha256\": \"62efb2f6835297672a4839e2d374bcf36c9a1ba56707f36f4280250f37166b4e\",\n  \"pdf_sha256\": \"4375d9bca220e8da6677bc2873bfef961622f87a4b4fedd24dd2f6887f2abefe\",\n  \"engine\": \"pdflatex\",\n  \"runs\": 2,\n  \"exit_codes\": [\n    0,\n    0\n  ],\n  \"pages\": 10,\n  \"pdf_bytes\": 316793,\n  \"pdf_fresh\": true,\n  \"compiled_at\": \"2026-11-25T03:11:56+08:00\",\n  \"written_by\": \"agentflow.papercompile（框架内置编译）\",\n  \"stderr_tail\": \"\",\n  \"compile_log\": \"compile-20261125-031156.log\",\n  \"compile_stderr_log\": \"\"\n}\n",
+        "error": "",
+        "meta": {
+          "path": "out/package/COMPILE-RECEIPT.json",
+          "encoding": "utf-8",
+          "bytes_read": 512,
+          "total_bytes": 512,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 18,
+          "total_lines": 18,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 18 行",
+          "sha256": "525644d1d8622c3207ed243f2fae78f520fd5c2e1d02f34a1f3cdffe366f9c60"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 75904,
+        "prompt_cache_miss_tokens": 2796,
+        "tokens_in": 78700,
+        "tokens_out": 1086,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000297"
+    },
+    {
+      "index": 9,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.search",
+        "args": {
+          "pattern": "central plane section of the unit ball",
+          "path": "manuscripts/G/000001.md",
+          "limit": 5
+        },
+        "why": "核 claim-6 改后的正文措辞已落进稿件 markdown（回执第②行要逐字引用）"
+      },
+      "result": {
+        "tool": "fs.search",
+        "ok": true,
+        "data": {
+          "pattern": "central plane section of the unit ball",
+          "path": "manuscripts/G/000001.md",
+          "matches": [
+            {
+              "path": "manuscripts/G/000001.md",
+              "line": 72,
+              "text": "For every p in [1,infinity), the central plane section of the unit ball of l_p^3 by the hyperplane with face-diagonal normal (1,1,0)/sqrt(2) has area A_face(p) = 2^{1/2-1/p} * 4 Gamma(1+1/p)^2 / Gamma(1+2/p), with A_face(1) = sqrt(2), A_face(2) = pi and A_face(p) tending to 4 sqrt(2); moreover A_face(p) < A_coord(p) exactly when p < 2, with equality at p = 2 and the reverse inequality for p > 2."
+            }
+          ],
+          "lines": [
+            "manuscripts/G/000001.md:72: For every p in [1,infinity), the central plane section of the unit ball of l_p^3 by the hyperplane with face-diagonal normal (1,1,0)/sqrt(2) has area A_face(p) = 2^{1/2-1/p} * 4 Gamma(1+1/p)^2 / Gamma(1+2/p), with A_face(1) = sqrt(2), A_face(2) = pi and A_face(p) tending to 4 sqrt(2); moreover A_face(p) < A_coord(p) exactly when p < 2, with equality at p = 2 and the reverse inequality for p > 2."
+          ],
+          "total": 1,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        },
+        "error": "",
+        "meta": {
+          "total": 1,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 77952,
+        "prompt_cache_miss_tokens": 1875,
+        "tokens_in": 79827,
+        "tokens_out": 1605,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000297"
+    },
+    {
+      "index": 10,
+      "shape": "summon",
+      "payload": {
+        "role": "H",
+        "action": "",
+        "params": {
+          "doc_id": "000001",
+          "changed_claim": "claim-6",
+          "new_citations": [
+            "stmt:000034",
+            "stmt:000042",
+            "lit:000002",
+            "lit:000006"
+          ],
+          "removed_citations": [
+            "lit:000000"
+          ],
+          "paper_tex": "out/package/main.tex",
+          "paper_pdf": "out/package/main.pdf",
+          "compile_receipt": "out/package/COMPILE-RECEIPT.json",
+          "manuscript": "manuscripts/G/000001.md"
+        },
+        "why": "改稿把签名钉到了旧版本上；按纪律改完必须由 H 复核把审校记录钉到现行版，否则这份稿子不算交付。",
+        "brief": "复核 doc:000001 现行版（仅 claim-6 引文与措辞改动）",
+        "task": "复核 G 的稿件 doc:000001 现行版（刚由 own.revise 推成 revised，rounds=7）。这次只改了一条断言：claim-6 的 citations 由 [stmt:000034, stmt:000042, lit:000000] 换成 [stmt:000034, stmt:000042, lit:000002, lit:000006]，并把措辞收敛成「the central plane section of the unit ball of l_p^3 by the hyperplane with face-diagonal normal …」；其余 13 条断言一字未动。请按现行版复核并落裁决（accepted / 不通过则给 findings，每条指到 claim-N 或正文行）。只读：不要改 claims、不要改 out/package/main.tex。正文与 PDF 在 out/package/main.tex 与 out/package/main.pdf（回执 out/package/COMPILE-RECEIPT.json，tex_sha256=62efb2f6…），稿件 markdown 在 manuscripts/G/000001.md。"
+      },
+      "result": {
+        "summoned": "H",
+        "action": "",
+        "ok": true,
+        "task_id": "t-000298",
+        "status": "running",
+        "outcome": null,
+        "refusal_reason": null,
+        "preemptible": true,
+        "dispatched": [
+          "t-000298"
+        ],
+        "running": [
+          "t-000298"
+        ],
+        "detail": "还在跑：本步先不等（可抢占）。它回来之后结论会在你下一次被问之前以【子代理返场】投给你 —— 不要因为 status=running 就重派；收工会被拒到它回齐",
+        "roster_considered": true,
+        "roster_name": "H1",
+        "秘书": {
+          "alarms": [],
+          "fail_open": false,
+          "wash": {
+            "checked": true,
+            "washed": false,
+            "refused": "",
+            "reason": ""
+          },
+          "changes": [],
+          "surface_fit": {
+            "checked": false,
+            "fits": null,
+            "paths": [],
+            "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+            "shape": "summon",
+            "reach": {
+              "checked": true,
+              "verdict": "unknown",
+              "hops": [],
+              "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+            }
+          },
+          "reach_fit": {
+            "checked": true,
+            "verdict": "unknown",
+            "hops": [],
+            "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+          },
+          "assessment": {
+            "decision": "可派",
+            "reason": "这一条没点名具体动作（role 级派活）⇒ 不拿动作表去卡它；角色存在性由预筛管",
+            "basis": [
+              "specs/<role>.py 的动作表",
+              "tasks: 同 key 的既有终态行",
+              "没点名动作 ⇒ 动作表那一格不适用"
+            ],
+            "duplicates": [],
+            "alarms": [],
+            "novel": false,
+            "surface": {
+              "checked": false,
+              "fits": null,
+              "paths": [],
+              "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+              "shape": "summon",
+              "reach": {
+                "checked": true,
+                "verdict": "unknown",
+                "hops": [],
+                "reason": "角色 '' 不在能力表里（['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'L', 'M', 'V']）⇒ 判不了"
+              }
+            },
+            "judge": {
+              "checked": false,
+              "reason": "预筛没有报警、也没有重复候选 ⇒ 不必判断"
+            },
+            "engaged": false,
+            "seq": 2
+          }
+        },
+        "新消息": [
+          {
+            "id": "m000041",
+            "from": "M",
+            "channel": "private",
+            "subject": "手稿 000048：派活：G（派活：只做一件事，别重写论文：`documents` 表里 `doc:000001` 的 **claim-6** 引了一条跑题的文献 —— 现引 `lit:000000`（题名《Cube slicing in R^n》），而 claim-6 断言的是 A_face(p)=2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p) 与 A_face vs A_coord 在 p<2 / p=2 / p>2 的分段比较，收工门的确定性判据判「断言实词与该文献题名/摘要无交集 ⇒ 引文跑题」（这一条是从 documents 现算的，写 na 关不掉）。\n\n这条行归你（G1）那一支笔：另一个 G 实例读它拿 row_not_visible、改它拿 row_not_yours，所以只有你能改。\n\n处置二选一（优先第一条）：\n(1) 把 claim-6 的 citations 换成**真的讲 l_p 球中心/超平面截面**的那几行 —— 在 `literature`（lit:000000–lit:000024）里挑，逐条先读该行的 title + summary，确认它讲的是同一件事再挂（候选方向：plane sections of the unit ball of l_p、on maximal hyperplane sections of the unit ball of l_p^n、on extremal sections of subspaces of l_p 这几篇的题名对应行）；必要时把 claim-6 的措辞收敛成「三个方向的截面面积表达式与数值比较」，让它与所挂文献讲的是同一件事。\n(2) 若找不到对得上的 lit 行，就删掉那几条跑题引用，把 claim-6 写成只由 `stmt:000042`（体对角向截面面积表达式，V 判「成立」）与 `exp:000004`（12 个 p 的球面扫描）支持的形式。\n\n落盘方式用你自己的 `own.revise(doc_id=\"000001\", new_claims=[…])`（只动 claim-6，其余 claims 原样保留，别整份重写）。**这一步只动 claims 台账，不动 `out/package/main.tex`** —— 若你确实没动 main.tex，就不要重编 PDF；若动了，必须自己调 `doc.paper_compile` 重编并回报回执 tex_sha256 是否等于盘上 main.tex 的 sha。\n\n回执必须给四行：① 改后 claim-6 的 citations 逐条（lit/stmt/exp 号 + 该 lit 行 title 前 40 字）；② claim-6 改后的断言原文；③ main.tex 有没有动（没动就写「未动，无需重编」）；④ 若某一步被受控拒，逐条贴拒码 + 原话，不要自己宣布通过。）",
+            "body": "[手稿 000048] 派活：G（派活：只做一件事，别重写论文：`documents` 表里 `doc:000001` 的 **claim-6** 引了一条跑题的文献 —— 现引 `lit:000000`（题名《Cube slicing in R^n》），而 claim-6 断言的是 A_face(p)=2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p) 与 A_face vs A_coord 在 p<2 / p=2 / p>2 的分段比较，收工门的确定性判据判「断言实词与该文献题名/摘要无交集 ⇒ 引文跑题」（这一条是从 documents 现算的，写 na 关不掉）。\n\n这条行归你（G1）那一支笔：另一个 G 实例读它拿 row_not_visible、改它拿 row_not_yours，所以只有你能改。\n\n处置二选一（优先第一条）：\n(1) 把 claim-6 的 cit…（原文 1410 字，已截断）",
+            "source": {
+              "kind": "message",
+              "form": "notice",
+              "summary": "手稿 000048：派活：G（派活：只做一件事，别重写论文：`documents` 表里 `doc:000001` 的 **claim-6** 引了一条跑题的文献 —— 现引 `lit:000000`（题名《Cube slicing in R^n》），而 claim-6 断言的是 A_face(p)=2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p) 与 A_face vs A_coord 在 p<2 / p=2 / p>2 的分段比较，收工门的确定性判据判「断言实词与该文献题名/摘要无交集 ⇒ 引文跑题」（这一条是从 documents 现算的，写 na 关不掉）。\n\n这条行归你（G1）那一支笔：另一个 G 实例读它拿 row_not_visible、改它拿 row_not_yours，所以只有你能改。\n\n处置二选一（优先第一条）：\n(1) 把 claim-6 的 citations 换成**真的讲 l_p 球中心/超平面截面**的那几行 —— 在 `literature`（lit:000000–lit:000024）里挑，逐条先读该行的 title + summary，确认它讲的是同一件事再挂（候选方向：plane sections of the unit ball of l_p、on maximal hyperplane sections of the unit ball of l_p^n、on extremal sections of subspaces of l_p 这几篇的题名对应行）；必要时把 claim-6 的措辞收敛成「三个方向的截面面积表达式与数值比较」，让它与所挂文献讲的是同一件事。\n(2) 若找不到对得上的 lit 行，就删掉那几条跑题引用，把 claim-6 写成只由 `stmt:000042`（体对角向截面面积表达式，V 判「成立」）与 `exp:000004`（12 个 p 的球面扫描）支持的形式。\n\n落盘方式用你自己的 `own.revise(doc_id=\"000001\", new_claims=[…])`（只动 claim-6，其余 claims 原样保留，别整份重写）。**这一步只动 claims 台账，不动 `out/package/main.tex`** —— 若你确实没动 main.tex，就不要重编 PDF；若动了，必须自己调 `doc.paper_compile` 重编并回报回执 tex_sha256 是否等于盘上 main.tex 的 sha。\n\n回执必须给四行：① 改后 claim-6 的 citations 逐条（lit/stmt/exp 号 + 该 lit 行 title 前 40 字）；② claim-6 改后的断言原文；③ main.tex 有没有动（没动就写「未动，无需重编」）；④ 若某一步被受控拒，逐条贴拒码 + 原话，不要自己宣布通过。）"
+            }
+          }
+        ],
+        "秘书加工": {
+          "reworked": [
+            {
+              "item": {
+                "id": "m000041",
+                "from": "M",
+                "channel": "private",
+                "subject": "手稿 000048：派活：G（派活：只做一件事，别重写论文：`documents` 表里 `doc:000001` 的 **claim-6** 引了一条跑题的文献 —— 现引 `lit:000000`（题名《Cube slicing in R^n》），而 claim-6 断言的是 A_face(p)=2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p) 与 A_face vs A_coord 在 p<2 / p=2 / p>2 的分段比较，收工门的确定性判据判「断言实词与该文献题名/摘要无交集 ⇒ 引文跑题」（这一条是从 documents 现算的，写 na 关不掉）。\n\n这条行归你（G1）那一支笔：另一个 G 实例读它拿 row_not_visible、改它拿 row_not_yours，所以只有你能改。\n\n处置二选一（优先第一条）：\n(1) 把 claim-6 的 citations 换成**真的讲 l_p 球中心/超平面截面**的那几行 —— 在 `literature`（lit:000000–lit:000024）里挑，逐条先读该行的 title + summary，确认它讲的是同一件事再挂（候选方向：plane sections of the unit ball of l_p、on maximal hyperplane sections of the unit ball of l_p^n、on extremal sections of subspaces of l_p 这几篇的题名对应行）；必要时把 claim-6 的措辞收敛成「三个方向的截面面积表达式与数值比较」，让它与所挂文献讲的是同一件事。\n(2) 若找不到对得上的 lit 行，就删掉那几条跑题引用，把 claim-6 写成只由 `stmt:000042`（体对角向截面面积表达式，V 判「成立」）与 `exp:000004`（12 个 p 的球面扫描）支持的形式。\n\n落盘方式用你自己的 `own.revise(doc_id=\"000001\", new_claims=[…])`（只动 claim-6，其余 claims 原样保留，别整份重写）。**这一步只动 claims 台账，不动 `out/package/main.tex`** —— 若你确实没动 main.tex，就不要重编 PDF；若动了，必须自己调 `doc.paper_compile` 重编并回报回执 tex_sha256 是否等于盘上 main.tex 的 sha。\n\n回执必须给四行：① 改后 claim-6 的 citations 逐条（lit/stmt/exp 号 + 该 lit 行 title 前 40 字）；② claim-6 改后的断言原文；③ main.tex 有没有动（没动就写「未动，无需重编」）；④ 若某一步被受控拒，逐条贴拒码 + 原话，不要自己宣布通过。）",
+                "body": "[手稿 000048] 派活：G（派活：只做一件事，别重写论文：`documents` 表里 `doc:000001` 的 **claim-6** 引了一条跑题的文献 —— 现引 `lit:000000`（题名《Cube slicing in R^n》），而 claim-6 断言的是 A_face(p)=2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p) 与 A_face vs A_coord 在 p<2 / p=2 / p>2 的分段比较，收工门的确定性判据判「断言实词与该文献题名/摘要无交集 ⇒ 引文跑题」（这一条是从 documents 现算的，写 na 关不掉）。\n\n这条行归你（G1）那一支笔：另一个 G 实例读它拿 row_not_visible、改它拿 row_not_yours，所以只有你能改。\n\n处置二选一（优先第一条）：\n(1) 把 claim-6 的 cit…（原文 1410 字，已截断）",
+                "source": {
+                  "kind": "message",
+                  "form": "notice",
+                  "summary": "手稿 000048：派活：G（派活：只做一件事，别重写论文：`documents` 表里 `doc:000001` 的 **claim-6** 引了一条跑题的文献 —— 现引 `lit:000000`（题名《Cube slicing in R^n》），而 claim-6 断言的是 A_face(p)=2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p) 与 A_face vs A_coord 在 p<2 / p=2 / p>2 的分段比较，收工门的确定性判据判「断言实词与该文献题名/摘要无交集 ⇒ 引文跑题」（这一条是从 documents 现算的，写 na 关不掉）。\n\n这条行归你（G1）那一支笔：另一个 G 实例读它拿 row_not_visible、改它拿 row_not_yours，所以只有你能改。\n\n处置二选一（优先第一条）：\n(1) 把 claim-6 的 citations 换成**真的讲 l_p 球中心/超平面截面**的那几行 —— 在 `literature`（lit:000000–lit:000024）里挑，逐条先读该行的 title + summary，确认它讲的是同一件事再挂（候选方向：plane sections of the unit ball of l_p、on maximal hyperplane sections of the unit ball of l_p^n、on extremal sections of subspaces of l_p 这几篇的题名对应行）；必要时把 claim-6 的措辞收敛成「三个方向的截面面积表达式与数值比较」，让它与所挂文献讲的是同一件事。\n(2) 若找不到对得上的 lit 行，就删掉那几条跑题引用，把 claim-6 写成只由 `stmt:000042`（体对角向截面面积表达式，V 判「成立」）与 `exp:000004`（12 个 p 的球面扫描）支持的形式。\n\n落盘方式用你自己的 `own.revise(doc_id=\"000001\", new_claims=[…])`（只动 claim-6，其余 claims 原样保留，别整份重写）。**这一步只动 claims 台账，不动 `out/package/main.tex`** —— 若你确实没动 main.tex，就不要重编 PDF；若动了，必须自己调 `doc.paper_compile` 重编并回报回执 tex_sha256 是否等于盘上 main.tex 的 sha。\n\n回执必须给四行：① 改后 claim-6 的 citations 逐条（lit/stmt/exp 号 + 该 lit 行 title 前 40 字）；② claim-6 改后的断言原文；③ main.tex 有没有动（没动就写「未动，无需重编」）；④ 若某一步被受控拒，逐条贴拒码 + 原话，不要自己宣布通过。）"
+                }
+              },
+              "addendum": "我的产出物口径：交付状态 —— 交给谁：H（送审）+ 派你这趟活的父（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名）+ M（打包）；形态：`documents` 行 + `manuscripts/G/<doc_id>.md` + 成文阶段的 `out/package/main.tex` / `out/package/main.pdf` + `out/package/MAPPING.json`；可核字段：`documents.doc_id` / `documents.kind` / `documents.markdown_path` / `documents.content_sha256` / `documents.claims` / `documents.status`；算做完：`build_document` 回了 `doc_id`、每条 claim 的 `citations` 都指得到台账已有的号（`stmt:` / `lit:` / `exp:`），且 H 审到 `documents.status=accepted`（不通过就按 findings 改）。\n我在本条线上的位置：论文撰写：把台账里的结论汇编成可审校的稿件，附带每条断言的来路",
+              "problem": "",
+              "fail_open": false
+            }
+          ],
+          "handoffs_digest": "- 000044 M→B：派 B 只消化 lit:000024，清掉验收表 R8 最后一格\n- 000045 B→M：R8 最后一格清掉：lit:000024 已 processed=true，literature.unprocessed 由 1 归 0（另报 2 份二阶段欠账）\n- 000046 M→G：派活：G（派活：收工门 acceptance 只剩一条确定性失败，定点修它，不要重写论文：论文 doc 000001 的 claim-6 引了 `lit:000000`（Cube slicing in R^n），而 claim-6 的正文讲的是 A_face(p)=2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p) 与 A_face vs A_coord 在 p<2 / p=2 / p>2 的分段比较 —— 判据判「断言实词与那篇题名/摘要无交集 ⇒ 引文跑题」。处置二选一（优先第一条）：(1) 把 claim-6 的 citations 换成**真的讲 l_p 球中心/超平面截面**的那几行（在 `literature` 里挑，例如题名含 plane sections of the unit ball of l_p / maximal hyperplane sections of the unit ball of l_p^n / on extremal sections of subspaces of l_p 的那几行；逐条先读该 lit 行的 title+summary 确认讲的是同一件事再挂上去，不要瞎挂），必要时把 claim-6 的断言措辞收敛到「这三个方向的截面面积表达式与数值比较」，使它和所挂文献讲的是同一件事；(2) 若找不到对得上的 lit 行，就**删掉**该 claim 上那几条跑题引用（claims 允许只挂 stmt:/exp:），并把断言写成只由 stmt:000042 / exp:000004 支持的形式。另附一条同格要求（能顺手做就做，做不了如实报）：正文结果章节里补一处对本轮台账的引用（`exp:000004` 的 12 个 p 扫描、`stmt:000042` 的 A_diag 表达式），不要只把台账引用放在核查章节。改完如果动了 `out/package/main.tex`，必须自己调 `doc.paper_compile` 重编 `out/package/main.pdf`，并回报回执里的 tex_sha256 是否等于盘上 main.tex 的 sha。回执必须给：① claim-6 改后的 citations 逐条（lit 号 + 该行 title 前 40 字）；② 是否动了 main.tex，动了的话新 sha256 与回执 pages；③ 若哪一步被拒，贴拒码原话，不要自己宣布通过。）\n- 000047 G→M：claim-6 改不动（doc:000001 归 G1，row_not_yours）；第二条已做：main.tex 加一句指向附录 A 的数值比较，重编后回执 tex_sha256=62efb2f6… 与盘上正文一致，10 页\n- 000048 M→G：派活：G（派活：只做一件事，别重写论文：`documents` 表里 `doc:000001` 的 **claim-6** 引了一条跑题的文献 —— 现引 `lit:000000`（题名《Cube slicing in R^n》），而 claim-6 断言的是 A_face(p)=2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p) 与 A_face vs A_coord 在 p<2 / p=2 / p>2 的分段比较，收工门的确定性判据判「断言实词与该文献题名/摘要无交集 ⇒ 引文跑题」（这一条是从 documents 现算的，写 na 关不掉）。\n\n这条行归你（G1）那一支笔：另一个 G 实例读它拿 row_not_visible、改它拿 row_not_yours，所以只有你能改。\n\n处置二选一（优先第一条）：\n(1) 把 claim-6 的 citations 换成**真的讲 l_p 球中心/超平面截面**的那几行 —— 在 `literature`（lit:000000–lit:000024）里挑，逐条先读该行的 title + summary，确认它讲的是同一件事再挂（候选方向：plane sections of the unit ball of l_p、on maximal hyperplane sections of the unit ball of l_p^n、on extremal sections of subspaces of l_p 这几篇的题名对应行）；必要时把 claim-6 的措辞收敛成「三个方向的截面面积表达式与数值比较」，让它与所挂文献讲的是同一件事。\n(2) 若找不到对得上的 lit 行，就删掉那几条跑题引用，把 claim-6 写成只由 `stmt:000042`（体对角向截面面积表达式，V 判「成立」）与 `exp:000004`（12 个 p 的球面扫描）支持的形式。\n\n落盘方式用你自己的 `own.revise(doc_id=\"000001\", new_claims=[…])`（只动 claim-6，其余 claims 原样保留，别整份重写）。**这一步只动 claims 台账，不动 `out/package/main.tex`** —— 若你确实没动 main.tex，就不要重编 PDF；若动了，必须自己调 `doc.paper_compile` 重编并回报回执 tex_sha256 是否等于盘上 main.tex 的 sha。\n\n回执必须给四行：① 改后 claim-6 的 citations 逐条（lit/stmt/exp 号 + 该 lit 行 title 前 40 字）；② claim-6 改后的断言原文；③ main.tex 有没有动（没动就写「未动，无需重编」）；④ 若某一步被受控拒，逐条贴拒码 + 原话，不要自己宣布通过。）"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 78976,
+        "prompt_cache_miss_tokens": 2032,
+        "tokens_in": 81008,
+        "tokens_out": 886,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000297"
+    },
+    {
+      "index": 11,
+      "shape": "tool",
+      "payload": {
+        "name": "clock.timer_start",
+        "args": {
+          "wait_for": "H1",
+          "reason": "等 H1 复核 doc:000001 现行版（claim-6 引文已改），拿到判词再收工"
+        },
+        "why": "子代理 H1 还在跑，收工会被拒到它回齐；用时钟等它收口，不空转"
+      },
+      "result": {
+        "tool": "clock.timer_start",
+        "ok": true,
+        "data": {
+          "timer_id": "tm-000324",
+          "kind": "timer",
+          "state": "pending",
+          "to": "self",
+          "task_id": "t-000297",
+          "role": "G",
+          "reason": "等 H1 复核 doc:000001 现行版（claim-6 引文已改），拿到判词再收工",
+          "after_sec": null,
+          "due_at": "",
+          "at": "",
+          "remaining_sec": null,
+          "created_at": "2026-11-24T19:21:13.949688+00:00",
+          "clock_status": "ok",
+          "wait_for": "H1",
+          "wait_for_resolved": "task:t-000271",
+          "wait_state": "closed",
+          "max_wait_sec": null,
+          "park_state": "parked",
+          "parked_at": "2026-11-24T19:21:13.949688+00:00",
+          "parked_sec": 0.102242,
+          "parked_steps": 0,
+          "parked_calls": 0,
+          "purpose": "等 H1 复核 doc:000001 现行版（claim-6 引文已改），拿到判词再收工",
+          "purpose_missing": false,
+          "purpose_prompt": ""
+        },
+        "error": "",
+        "meta": {
+          "timer_id": "tm-000324"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 80256,
+        "prompt_cache_miss_tokens": 4984,
+        "tokens_in": 85240,
+        "tokens_out": 257,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000297"
+    },
+    {
+      "index": 12,
+      "shape": "tool",
+      "payload": {
+        "name": "trace.children",
+        "args": {
+          "depth": 1,
+          "window": 5
+        },
+        "why": "H1（t-000298）复核是否已交差：时钟等了 39 秒报醒，先看它现在的状态再决定是否继续等"
+      },
+      "result": {
+        "tool": "trace.children",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "me": {
+            "task_id": "t-000297",
+            "role": "G",
+            "parent_task_id": "t-000296"
+          },
+          "depth_requested": 1,
+          "depth_granted": 1,
+          "one_layer_only": true,
+          "children": [
+            {
+              "task_id": "t-000298",
+              "role": "H",
+              "action": "",
+              "kind": "",
+              "status": "running",
+              "outcome": null,
+              "refusal_reason": null,
+              "depth": 3,
+              "instance": "",
+              "called_by": "G",
+              "parent_task_id": "t-000297",
+              "detail": "派活（不点动作）：由该角色按自己的能力范围自己选动作。**要 H 落库，就再派一次并点名动作 `review`（带 `doc_id`）** —— 派空动作时它只能读，审出来的发现只会留在回复里，不会进 `review_findings`。",
+              "tokens": 1303465,
+              "usd": 0.034638,
+              "started_at": "2026-11-25T03:18:08+08:00",
+              "ended_at": null,
+              "recent_steps": {
+                "checked": true,
+                "found": true,
+                "count": 25,
+                "reason": "",
+                "window": 5,
+                "shown": [
+                  {
+                    "step": 20,
+                    "shape": "tool",
+                    "what": "",
+                    "ok": true,
+                    "error": "",
+                    "line": "第 20 步（tool）："
+                  },
+                  {
+                    "step": 21,
+                    "shape": "tool",
+                    "what": "",
+                    "ok": true,
+                    "error": "",
+                    "line": "第 21 步（tool）："
+                  },
+                  {
+                    "step": 22,
+                    "shape": "tool",
+                    "what": "",
+                    "ok": true,
+                    "error": "",
+                    "line": "第 22 步（tool）："
+                  },
+                  {
+                    "step": 23,
+                    "shape": "tool",
+                    "what": "",
+                    "ok": true,
+                    "error": "",
+                    "line": "第 23 步（tool）："
+                  },
+                  {
+                    "step": 24,
+                    "shape": "tool",
+                    "what": "",
+                    "ok": true,
+                    "error": "",
+                    "line": "第 24 步（tool）："
+                  }
+                ],
+                "session": {
+                  "checked": true,
+                  "files": 3,
+                  "records": 4864,
+                  "bad_lines": 0,
+                  "unreadable_files": [],
+                  "reason": ""
+                }
+              },
+              "subtask_refusals": {
+                "count": 2,
+                "by_category": {
+                  "param_invalid": 2
+                },
+                "samples": [
+                  {
+                    "code": "参数错误：",
+                    "category": "param_invalid",
+                    "text": "参数错误：出现未声明的参数：['what']（schema 只允许 ['include', 'limit', 'path', 'pattern']）。最接近的已声明键是 'path' —— 是不是想写它？"
+                  },
+                  {
+                    "code": "参数错误：",
+                    "category": "param_invalid",
+                    "text": "参数错误：出现未声明的参数：['what']（schema 只允许 ['include', 'limit', 'path', 'pattern']）。最接近的已声明键是 'path' —— 是不是想写它？"
+                  }
+                ],
+                "unclassified": 0,
+                "checked": true
+              },
+              "products": {
+                "checked": true,
+                "count": 0,
+                "tables": {
+                  "experiments": {
+                    "checked": true,
+                    "count": 0,
+                    "ids": [],
+                    "reason": ""
+                  },
+                  "statements": {
+                    "checked": true,
+                    "count": 0,
+                    "ids": [],
+                    "reason": ""
+                  },
+                  "documents": {
+                    "checked": true,
+                    "count": 0,
+                    "ids": [],
+                    "reason": ""
+                  }
+                },
+                "artifacts": {
+                  "refs": [],
+                  "exists": 0,
+                  "missing": [],
+                  "unchecked": []
+                },
+                "time_window_checked": true
+              },
+              "last_handoff": {
+                "checked": true,
+                "found": false,
+                "summary": "",
+                "to": "",
+                "id": "",
+                "created_at": "",
+                "reason": "台账里没有这一趟署名的交接手稿"
+              },
+              "level": 1,
+              "chain": [
+                "t-000296",
+                "t-000297",
+                "t-000298"
+              ],
+              "chain_text": "t-000296->t-000297->t-000298"
+            }
+          ],
+          "count": 1,
+          "deeper": {
+            "tool": "conductor.escalate",
+            "call": "conductor.escalate(need=\"深看请求：请 M 用 conductor.watch 看 t-000297 的第 2 层以下分支\", kind=\"other\")",
+            "who": "M",
+            "note": "你只能向下看 1 层（追子代理的层数，与召唤链的深度锁不是同一个数）；你传的 depth=1 已被按 1 处理。要看更深的分支请向 M 请求：用已有的上行工具 conductor.escalate（它把请求写进召唤者的收件箱并沿链上行到 M，不新造一条边）；M 用 conductor.watch 看全树（每行都带 chain / chain_text：从顶趟到这个节点的绝对编号链），再用 conductor.guide 把指导意见沿秘书链逐级传到那一个代理手上（`to` 直接贴那一行的 chain 即可；中间各级代理本人看不到内容）。"
+          },
+          "session": {
+            "checked": true,
+            "files": 3,
+            "records": 4864,
+            "bad_lines": 0,
+            "unreadable_files": [],
+            "reason": ""
+          }
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 84480,
+        "prompt_cache_miss_tokens": 1602,
+        "tokens_in": 86082,
+        "tokens_out": 228,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000297"
+    },
+    {
+      "index": 14,
+      "shape": "final",
+      "payload": {
+        "final": "claim-6 已定点改完（own.revise 成功，replaced_claim_ids=[\"claim-6\"]，其余 13 条 claims 与 append 均为空），H1 复核现行版判 accepted_with_warnings（一条 warning 在第 4 节正文，不在我这一趟的授权范围）。四行回执：\n\n① 改后 claim-6 的 citations 逐条：\n- stmt:000034 —— kind=theorem（A_p(n) 积分表示 + 坐标向/面对角向闭式），非文献行\n- stmt:000042 —— kind=theorem（体对角向与面对角向公式、Δ(p) 尾段符号），非文献行\n- lit:000002 —— title 前 40 字：\"Plane sections of the unit ball of l_p\"（逐字读了该行：title/summary 空、download.fulltext=ok、path=a7344ad134-plane-sections-of-the-unit-ball-of-l-p.pdf）\n- lit:000006 —— title 前 40 字：\"On extremal sections of subspaces of l_p\"（同样逐字读过该行，download.fulltext=ok）\n（原跑题引用 lit:000000《Cube slicing in R^n》已从 claim-6 上撤掉；revise 回执的 fit_rows 里 claim-6 verdict=\"fit\"，misfit=[]。）\n\n② 改后 claim-6 断言原文（manuscripts/G/000001.md:72 逐字）：\"For every p in [1,infinity), the central plane section of the unit ball of l_p^3 by the hyperplane with face-diagonal normal (1,1,0)/sqrt(2) has area A_face(p) = 2^{1/2-1/p} * 4 Gamma(1+1/p)^2 / Gamma(1+2/p), with A_face(1) = sqrt(2), A_face(2) = pi and A_face(p) tending to 4 sqrt(2); moreover A_face(p) < A_coord(p) exactly when p < 2, with equality at p = 2 and the reverse inequality for p > 2.\"（数学与改前完全一致，只把措辞收敛到「central plane section / unit ball of l_p^3 / hyperplane」，使其与所挂两条文献讲的是同一件事；evidence_kind 仍为 cross_check，disclaimer「数值交叉验证，不构成证明」原样保留。）\n\n③ main.tex 未动，无需重编：盘上 out/package/main.tex sha256=62efb2f6835297672a4839e2d374bcf36c9a1ba56707f36f4280250f37166b4e，32396 字节，mtime 03:11:30；该 sha 与 out/package/COMPILE-RECEIPT.json 里的 tex_sha256 逐字相同（pages=10，pdf_bytes=316793，compiled_at 03:11:56，引擎退出码 [0,0]）—— 我这一趟的 revise 只改 claims 台账与 manuscripts/G/000001.md，没有写 out/package/main.tex，所以不重编、PDF 不陈旧。\n\n④ 受控拒逐条（不自行宣布通过）：\n- 第 5 步 own.revise：meta.kind=param_error，原话「参数错误：缺少必填参数：doc_id（补上它再交）」—— 我漏传 doc_id，按参数表补上后第 6 步成功；这不是权限拒。\n- 另记 H1 侧（它的台账，不是我的）：subtask_refusals 2 条 param_invalid，原话「参数错误：出现未声明的参数：['what']（schema 只允许 ['include','limit','path','pattern']）」—— H 自己改了参数继续跑完，判词照出。\n\n未收口的一项（不在本趟授权内，已如实上报）：H 的 1 条 warning 级 finding —— 第 4 节「(face-diagonal) dominates from p_* on」强过 thm:delta（thm:delta 只给连续性 + p=1 与 p→∞ 两端符号）。要改它得动 out/package/main.tex 并重编 PDF，属于另一趟活。",
+        "evidence": [
+          "doc:000001",
+          "stmt:000034",
+          "stmt:000042",
+          "lit:000002",
+          "lit:000006",
+          "exp:000004"
+        ],
+        "notify": {
+          "to": "M",
+          "summary": "claim-6 引文已从跑题的 lit:000000 换成 lit:000002/lit:000006（并收敛措辞），main.tex 未动；H 复核判 accepted_with_warnings，剩 1 条在第 4 节的 warning 待另派",
+          "body": "## 做了什么\n- `own.revise(doc_id=\"000001\", new_claims=[claim-6])` 成功：`replaced_claim_ids=[\"claim-6\"]`，`appended_claim_ids=[]`，其余 13 条 claims 一字未改。\n- claim-6 citations：`[stmt:000034, stmt:000042, lit:000000]` → `[stmt:000034, stmt:000042, lit:000002, lit:000006]`（撤掉跑题的《Cube slicing in R^n》）。挂之前逐条 `table.get` 读过 lit:000002 / lit:000006 两行：题名分别是 *Plane sections of the unit ball of l_p* 与 *On extremal sections of subspaces of l_p*，`download.fulltext=ok`、PDF 在盘上。\n- claim-6 措辞收敛为「central plane section of the unit ball of l_p^3 by the hyperplane with face-diagonal normal …」，数学内容不变；`evidence_kind=cross_check` + `disclaimer=数值交叉验证，不构成证明` 原样保留。\n- 改稿回执的 `fit_rows` 里 claim-6 `verdict=\"fit\"`、`misfit=[]`（收工门那条「引文跑题」的确定性判据现在对这一条不再命中）。\n\n## 正文\n- **`out/package/main.tex` 未动**：盘上 sha256=`62efb2f6…37166b4e`（32396 字节，mtime 03:11:30），与 `out/package/COMPILE-RECEIPT.json` 的 `tex_sha256` 逐字相同，`pages=10`、`pdf_bytes=316793`、`compiled_at=03:11:56`、退出码 `[0,0]` ⇒ PDF 不陈旧，**不需要也不应该重编**。\n- 改的是 `documents.claims` 与 `manuscripts/G/000001.md`（revise 自动重画）。\n\n## H 复核（H1 / t-000298）\n- 现行版判 `accepted_with_warnings`（rounds 7 → 第 9 轮）：claim-6 四条引用全部解析得到行、措辞已收敛，不判 rejected；但也不能判 accepted，剩 1 条 warning 级 finding：**第 4 节「dominates from p_* on」强过 thm:delta**（thm:delta 只给连续性 + p=1 与 p→∞ 两端符号）。\n\n## 要你（M）定的一件事\n那条 warning 落在**正文**第 4 节，要改就得动 `out/package/main.tex` 并自己 `doc.paper_compile` 重编——这超出「只动 claims 台账、不动 main.tex」的本次授权，所以我没动。若收工门还卡这一条，请另派一趟（派给 G 并点明「改第 4 节那句话 + 重编 + 回报回执 tex_sha256」）。\n\n## 拒码（如实贴，不宣布通过）\n- 我自己：第 5 步 `own.revise` 被拒 `param_error`，原话「参数错误：缺少必填参数：doc_id（补上它再交）」；补 doc_id 后成功。\n- H 侧（它的台账）：`subtask_refusals` 2 条 `param_invalid`，原话「参数错误：出现未声明的参数：['what']（schema 只允许 ['include','limit','path','pattern']）」—— 它自行改正后跑完。",
+          "refs": [
+            "doc:000001",
+            "stmt:000034",
+            "stmt:000042",
+            "lit:000002",
+            "lit:000006"
+          ]
+        }
+      },
+      "result": {
+        "notify_problem": "notify.refs 里的 'doc:000001' 立不住：引用 'doc:000001' 的前缀不认识：认 c/exp/lit/q/rel/stmt: 这几种，或者四位手稿编号"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 85248,
+        "prompt_cache_miss_tokens": 5773,
+        "tokens_in": 91021,
+        "tokens_out": 3516,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000297"
+    }
+  ],
+  "final": "claim-6 已定点改完（own.revise 成功，replaced_claim_ids=[\"claim-6\"]，其余 13 条 claims 与 append 均为空），H1 复核现行版判 accepted_with_warnings（一条 warning 在第 4 节正文，不在我这一趟的授权范围）。四行回执：\n\n① 改后 claim-6 的 citations 逐条：\n- stmt:000034 —— kind=theorem（A_p(n) 积分表示 + 坐标向/面对角向闭式），非文献行\n- stmt:000042 —— kind=theorem（体对角向与面对角向公式、Δ(p) 尾段符号），非文献行\n- lit:000002 —— title 前 40 字：\"Plane sections of the unit ball of l_p\"（逐字读了该行：title/summary 空、download.fulltext=ok、path=a7344ad134-plane-sections-of-the-unit-ball-of-l-p.pdf）\n- lit:000006 —— title 前 40 字：\"On extremal sections of subspaces of l_p\"（同样逐字读过该行，download.fulltext=ok）\n（原跑题引用 lit:000000《Cube slicing in R^n》已从 claim-6 上撤掉；revise 回执的 fit_rows 里 claim-6 verdict=\"fit\"，misfit=[]。）\n\n② 改后 claim-6 断言原文（manuscripts/G/000001.md:72 逐字）：\"For every p in [1,infinity), the central plane section of the unit ball of l_p^3 by the hyperplane with face-diagonal normal (1,1,0)/sqrt(2) has area A_face(p) = 2^{1/2-1/p} * 4 Gamma(1+1/p)^2 / Gamma(1+2/p), with A_face(1) = sqrt(2), A_face(2) = pi and A_face(p) tending to 4 sqrt(2); moreover A_face(p) < A_coord(p) exactly when p < 2, with equality at p = 2 and the reverse inequality for p > 2.\"（数学与改前完全一致，只把措辞收敛到「central plane section / unit ball of l_p^3 / hyperplane」，使其与所挂两条文献讲的是同一件事；evidence_kind 仍为 cross_check，disclaimer「数值交叉验证，不构成证明」原样保留。）\n\n③ main.tex 未动，无需重编：盘上 out/package/main.tex sha256=62efb2f6835297672a4839e2d374bcf36c9a1ba56707f36f4280250f37166b4e，32396 字节，mtime 03:11:30；该 sha 与 out/package/COMPILE-RECEIPT.json 里的 tex_sha256 逐字相同（pages=10，pdf_bytes=316793，compiled_at 03:11:56，引擎退出码 [0,0]）—— 我这一趟的 revise 只改 claims 台账与 manuscripts/G/000001.md，没有写 out/package/main.tex，所以不重编、PDF 不陈旧。\n\n④ 受控拒逐条（不自行宣布通过）：\n- 第 5 步 own.revise：meta.kind=param_error，原话「参数错误：缺少必填参数：doc_id（补上它再交）」—— 我漏传 doc_id，按参数表补上后第 6 步成功；这不是权限拒。\n- 另记 H1 侧（它的台账，不是我的）：subtask_refusals 2 条 param_invalid，原话「参数错误：出现未声明的参数：['what']（schema 只允许 ['include','limit','path','pattern']）」—— H 自己改了参数继续跑完，判词照出。\n\n未收口的一项（不在本趟授权内，已如实上报）：H 的 1 条 warning 级 finding —— 第 4 节「(face-diagonal) dominates from p_* on」强过 thm:delta（thm:delta 只给连续性 + p=1 与 p→∞ 两端符号）。要改它得动 out/package/main.tex 并重编 PDF，属于另一趟活。",
+  "evidence": [
+    "doc:000001",
+    "stmt:000034",
+    "stmt:000042",
+    "lit:000002",
+    "lit:000006",
+    "exp:000004"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 1,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 14,
+  "compactions": 0,
+  "mailbox_items": [
+    "t-000299",
+    "t-000300"
+  ],
+  "mailbox_msgs": [
+    "m000041",
+    "m000042"
+  ],
+  "mailbox_delivered": 4,
+  "monitor_turns": 1,
+  "wakes": 1,
+  "wake_ids": [
+    "wk-000100"
+  ],
+  "wake_events": [
+    {
+      "wake_id": "wk-000100",
+      "task_id": "t-000297",
+      "role": "G",
+      "timer_id": "tm-000324",
+      "kind": "timer",
+      "reason": "等 H1 复核 doc:000001 现行版（claim-6 引文已改），拿到判词再收工",
+      "purpose": "等 H1 复核 doc:000001 现行版（claim-6 引文已改），拿到判词再收工",
+      "purpose_missing": false,
+      "message": "时间到：等 H1 复核 doc:000001 现行版（claim-6 引文已改），拿到判词再收工｜等了 39 秒（起于 03:21:13，到于 03:21:52）",
+      "waited_sec": 39.212984,
+      "triggered_by": "target_closed",
+      "wait_for": "H1",
+      "due_at": "",
+      "fired_at": "2026-11-24T19:21:53.162672+00:00",
+      "mailbox_item_id": "t-000299",
+      "state": "pending"
+    }
+  ],
+  "clock_pumps": 27,
+  "clock_fired": 0,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [
+      {
+        "timer_id": "tm-000320",
+        "wait_for": "task:t-000298",
+        "purpose": "复核 G 的稿件 doc:000001 现行版（刚由 own.revise 推成 revised，rounds=7）。这次只改了一条断言：claim-6 的 citations 由 [stmt:000034, stmt:000042, lit:000000] 换成 [stmt:000034, stmt:000042, lit:000002, lit:000006]，并把措辞收敛成「the cent",
+        "parked_sec": 325.294951,
+        "parked_steps": 3,
+        "parked_calls": 3
+      }
+    ],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "G 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "G",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    },
+    "own_children": [
+      "t-000298"
+    ],
+    "return_given": [
+      "t-000298"
+    ],
+    "reentry_turns": 1,
+    "reentry_reasons": [
+      "派活之后还没给过模型回合：这一批 1 项还在跑（t-000298），这一拍的 waiter 全是在等它们 ⇒ 这一拍返场问模型一次，下一拍起才按挂机口径走"
+    ],
+    "woke_turns": 1,
+    "skip_calls": 1,
+    "woke_reasons": [
+      "closed"
+    ]
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [],
+  "summons": [
+    "H"
+  ],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [
+    {
+      "kind": "summon",
+      "counted": true,
+      "task_id": "t-000298",
+      "role": "H",
+      "step": 10,
+      "status": "running",
+      "outcome": "",
+      "handoff_id": "",
+      "outputs": [
+        "t-000298"
+      ],
+      "disposition": ""
+    }
+  ],
+  "summons_total": 1,
+  "summons_consumed": 1,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 1,
+    "summons_consumed": 1,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [
+      {
+        "kind": "summon",
+        "counted": true,
+        "task_id": "t-000298",
+        "role": "H",
+        "step": 10,
+        "status": "running",
+        "outcome": "",
+        "handoff_id": "",
+        "outputs": [
+          "t-000298"
+        ],
+        "disposition": "consumed",
+        "evidence": {
+          "step": 12,
+          "shape": "tool",
+          "effect": "工具 trace.children",
+          "refs": [
+            "t-000298"
+          ]
+        }
+      }
+    ],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p328",
+    "role": "G",
+    "prompt_sha256": "655e347ab428586de744b5f83e53e1747b2bdca18bcb6f41bc314d1092cb0ebb",
+    "prompt_chars": 81799,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "FACULTIES_07",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "TOOL_29",
+      "TOOL_30",
+      "TOOL_31",
+      "TOOL_32",
+      "TOOL_33",
+      "TOOL_34",
+      "TOOL_35",
+      "TOOL_36",
+      "TOOL_37",
+      "TOOL_38",
+      "TOOL_39",
+      "TOOL_40",
+      "TOOL_41",
+      "TOOL_42",
+      "TOOL_43",
+      "TOOL_44",
+      "TOOL_45",
+      "TOOL_46",
+      "TOOL_47",
+      "TOOL_48",
+      "TOOL_49",
+      "TOOL_50",
+      "TOOL_51",
+      "TOOL_52",
+      "TOOL_53",
+      "TOOL_54",
+      "TOOL_55",
+      "TOOL_56",
+      "TOOL_57",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "PAPER_PACK",
+      "PAPER_01",
+      "PAPER_02",
+      "PAPER_03",
+      "PAPER_04",
+      "PAPER_05",
+      "PAPER_06",
+      "PAPER_07",
+      "PAPER_07_BODY",
+      "PAPER_08",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_LIMITS",
+      "COLLAB_NAMES",
+      "PARENT_STOP",
+      "PARENT_ROSTER",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 13,
+    "tokens_in": 1007453,
+    "tokens_out": 14931,
+    "usd": 0.017245,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 13,
+    "no_request_calls": 0,
+    "hit": 971648,
+    "miss": 35805,
+    "unknown_calls": 0,
+    "tokens_in": 1007453,
+    "hit_rate": 0.9645,
+    "mismatched_calls": 0,
+    "saved_usd": 0.142833,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 422.531,
+  "end_ts": "2026-11-25T03:23:53+08:00",
+  "notes": [
+    "第 11 步返场：子代理回来 0 条，还在跑 1 条（这一拍为了返场没等子：返场判据给过之后才等）",
+    "返场（Q22）：派活之后还没给过模型回合：这一批 1 项还在跑（t-000298），这一拍的 waiter 全是在等它们 ⇒ 这一拍返场问模型一次，下一拍起才按挂机口径走",
+    "第 12 步返场：子代理回来 0 条，还在跑 1 条（等待 38.5s，原因 wake）",
+    "第 13 步返场：子代理回来 0 条，还在跑 1 条（等待 0.0s，原因 wake）",
+    "第 14 步返场：子代理回来 1 条，还在跑 0 条（等待 94.9s，原因 settled）",
+    "收工没有可用 notify 表（notify.refs 里的 'doc:000001' 立不住：引用 'doc:000001' 的前缀不认识：认 c/exp/lit/q/rel/stmt: 这几种，或者四位手稿编号）⇒ 这一趟没有交接手稿（不打回、不代填）",
+    "收工时名下还有 1 条证明没有 V 的签字（读数，不拦收工；明细：000112）",
+    "缓存读数：命中 971648 / 未命中 35805 token，命中率 96.5%（13 次调用）；按 modelcost 口径估算可省 约 0.142833 美元",
+    "子产出处理读数：summons_total=1，consumed=1，waived=0，unknown=0，unconsumed=0",
+    "终态回报已落板：t-000301（框架通报；模型没填 notify）"
+  ],
+  "final_payload": {
+    "final": "claim-6 已定点改完（own.revise 成功，replaced_claim_ids=[\"claim-6\"]，其余 13 条 claims 与 append 均为空），H1 复核现行版判 accepted_with_warnings（一条 warning 在第 4 节正文，不在我这一趟的授权范围）。四行回执：\n\n① 改后 claim-6 的 citations 逐条：\n- stmt:000034 —— kind=theorem（A_p(n) 积分表示 + 坐标向/面对角向闭式），非文献行\n- stmt:000042 —— kind=theorem（体对角向与面对角向公式、Δ(p) 尾段符号），非文献行\n- lit:000002 —— title 前 40 字：\"Plane sections of the unit ball of l_p\"（逐字读了该行：title/summary 空、download.fulltext=ok、path=a7344ad134-plane-sections-of-the-unit-ball-of-l-p.pdf）\n- lit:000006 —— title 前 40 字：\"On extremal sections of subspaces of l_p\"（同样逐字读过该行，download.fulltext=ok）\n（原跑题引用 lit:000000《Cube slicing in R^n》已从 claim-6 上撤掉；revise 回执的 fit_rows 里 claim-6 verdict=\"fit\"，misfit=[]。）\n\n② 改后 claim-6 断言原文（manuscripts/G/000001.md:72 逐字）：\"For every p in [1,infinity), the central plane section of the unit ball of l_p^3 by the hyperplane with face-diagonal normal (1,1,0)/sqrt(2) has area A_face(p) = 2^{1/2-1/p} * 4 Gamma(1+1/p)^2 / Gamma(1+2/p), with A_face(1) = sqrt(2), A_face(2) = pi and A_face(p) tending to 4 sqrt(2); moreover A_face(p) < A_coord(p) exactly when p < 2, with equality at p = 2 and the reverse inequality for p > 2.\"（数学与改前完全一致，只把措辞收敛到「central plane section / unit ball of l_p^3 / hyperplane」，使其与所挂两条文献讲的是同一件事；evidence_kind 仍为 cross_check，disclaimer「数值交叉验证，不构成证明」原样保留。）\n\n③ main.tex 未动，无需重编：盘上 out/package/main.tex sha256=62efb2f6835297672a4839e2d374bcf36c9a1ba56707f36f4280250f37166b4e，32396 字节，mtime 03:11:30；该 sha 与 out/package/COMPILE-RECEIPT.json 里的 tex_sha256 逐字相同（pages=10，pdf_bytes=316793，compiled_at 03:11:56，引擎退出码 [0,0]）—— 我这一趟的 revise 只改 claims 台账与 manuscripts/G/000001.md，没有写 out/package/main.tex，所以不重编、PDF 不陈旧。\n\n④ 受控拒逐条（不自行宣布通过）：\n- 第 5 步 own.revise：meta.kind=param_error，原话「参数错误：缺少必填参数：doc_id（补上它再交）」—— 我漏传 doc_id，按参数表补上后第 6 步成功；这不是权限拒。\n- 另记 H1 侧（它的台账，不是我的）：subtask_refusals 2 条 param_invalid，原话「参数错误：出现未声明的参数：['what']（schema 只允许 ['include','limit','path','pattern']）」—— H 自己改了参数继续跑完，判词照出。\n\n未收口的一项（不在本趟授权内，已如实上报）：H 的 1 条 warning 级 finding —— 第 4 节「(face-diagon…（落档截断，原 2115 字）",
+    "evidence": [
+      "doc:000001",
+      "stmt:000034",
+      "stmt:000042",
+      "lit:000002",
+      "lit:000006",
+      "exp:000004"
+    ],
+    "notify": {
+      "to": "M",
+      "summary": "claim-6 引文已从跑题的 lit:000000 换成 lit:000002/lit:000006（并收敛措辞），main.tex 未动；H 复核判 accepted_with_warnings，剩 1 条在第 4 节的 warning 待另派",
+      "body": "## 做了什么\n- `own.revise(doc_id=\"000001\", new_claims=[claim-6])` 成功：`replaced_claim_ids=[\"claim-6\"]`，`appended_claim_ids=[]`，其余 13 条 claims 一字未改。\n- claim-6 citations：`[stmt:000034, stmt:000042, lit:000000]` → `[stmt:000034, stmt:000042, lit:000002, lit:000006]`（撤掉跑题的《Cube slicing in R^n》）。挂之前逐条 `table.get` 读过 lit:000002 / lit:000006 两行：题名分别是 *Plane sections of the unit ball of l_p* 与 *On extremal sections of subspaces of l_p*，`download.fulltext=ok`、PDF 在盘上。\n- claim-6 措辞收敛为「central plane section of the unit ball of l_p^3 by the hyperplane with face-diagonal normal …」，数学内容不变；`evidence_kind=cross_check` + `disclaimer=数值交叉验证，不构成证明` 原样保留。\n- 改稿回执的 `fit_rows` 里 claim-6 `verdict=\"fit\"`、`misfit=[]`（收工门那条「引文跑题」的确定性判据现在对这一条不再命中）。\n\n## 正文\n- **`out/package/main.tex` 未动**：盘上 sha256=`62efb2f6…37166b4e`（32396 字节，mtime 03:11:30），与 `out/package/COMPILE-RECEIPT.json` 的 `tex_sha256` 逐字相同，`pages=10`、`pdf_bytes=316793`、`compiled_at=03:11:56`、退出码 `[0,0]` ⇒ PDF 不陈旧，**不需要也不应该重编**。\n- 改的是 `documents.claims` 与 `manuscripts/G/000001.md`（revise 自动重画）。\n\n## H 复核（H1 / t-000298）\n- 现行版判 `accepted_with_warnings`（rounds 7 → 第 9 轮）：claim-6 四条引用全部解析得到行、措辞已收敛，不判 rejected；但也不能判 accepted，剩 1 条 warning 级 finding：**第 4 节「dominates from p_* on」强过 thm:delta**（thm:delta 只给连续性 + p=1 与 p→∞ 两端符号）。\n\n## 要你（M）定的一件事\n那条 warning 落在**正文**第 4 节，要改就得动 `out/package/main.tex` 并自己 `doc.paper_compile` 重编——这超出「只动 claims 台账、不动 main.tex」的本次授权，所以我没动。若收工门还卡这一条，请另派一趟（派给 G 并点明「改第 4 节那句话 + 重编 + 回报回执 tex_sha256」）。\n\n## 拒码（如实贴，不宣布通过）\n- 我自己：第 5 步 `own.revise` 被拒 `param_error`，原话「参数错误：缺少必填参数：doc_id（补上它再交）」；补 doc_id 后成功。\n- H 侧（它的台账）：`subtask_refusals` 2 条 `param_invalid`，原话「参数错误：出现未声明的参数：['what']（schema 只允许 ['include','limit','path','pattern']）」—— 它自行改正后跑完。",
+      "refs": [
+        "doc:000001",
+        "stmt:000034",
+        "stmt:000042",
+        "lit:000002",
+        "lit:000006"
+      ]
+    }
+  },
+  "task_id": "t-000297"
+}

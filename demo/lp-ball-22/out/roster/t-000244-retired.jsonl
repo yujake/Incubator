@@ -1,0 +1,5 @@
+{"at": "2026-11-25T00:18:11+08:00", "branch": "waiting_no_children", "name": "H1", "owner": "t-000244", "reason": "销号退场：waiting_no_children（发起 t-000244）", "role": "H", "seq": 1, "task_id": "t-000247"}
+{"at": "2026-11-25T00:18:11+08:00", "branch": "waiting_no_children", "name": "H1", "owner": "t-000244", "reason": "销号退场：waiting_no_children（发起 t-000244）", "role": "H", "seq": 2, "task_id": "t-000265"}
+{"at": "2026-11-25T00:18:11+08:00", "branch": "waiting_no_children", "name": "H1", "owner": "t-000244", "reason": "销号退场：waiting_no_children（发起 t-000244）", "role": "H", "seq": 3, "task_id": "t-000268"}
+{"at": "2026-11-25T00:18:11+08:00", "branch": "waiting_no_children", "name": "H1", "owner": "t-000244", "reason": "销号退场：waiting_no_children（发起 t-000244）", "role": "H", "seq": 4, "task_id": "t-000271"}
+{"at": "2026-11-25T03:01:17+08:00", "branch": "waiting_no_children", "name": "D1", "owner": "t-000244", "reason": "论文三件已交差并经我独立核过（main.tex sha=b9d15967… / COMPILE-RECEIPT tex_sha256 同 / pages=10 / MAPPING.json sha=4527b18a…），H 三轮复审 accepted，名下 ack 项已作废，不再派新活；级联销号：随 G1（t-000244） 一起退场", "role": "D", "seq": 5, "task_id": "t-000251"}

@@ -1,0 +1,4159 @@
+{
+  "role": "H",
+  "task": "H：这一趟派给你的活是 —— 审校并签在**现行版**上（收工门 acceptance 唯一 blocker：doc 000001 的现行版没有被审校记录钉住 —— 现行内容 sha 是 66c671e9a0e7…，而签名钉的还是旧的 a19740ff0305…，status=in_review）。要你做三件事：(1) 读 `documents` 里 doc_id=000001 的**现行**内容与 `out/package/main.tex`（32396 B，sha256=62efb2f6835297672a4839e2d374bcf36c9a1ba56707f36f4280250f37166b4e）与 `out/package/main.pdf`（10 页）；(2) 只判这份稿有没有把自己说清楚（表述/引文对齐/结论强度不超过证据），不改一个字；若没有实质问题就裁决 `accepted` 并**把签名钉在现行内容 sha 上**（这是本轮唯一目的：让「现行版本被审校记录钉住」这一格转真）；(3) 若确有问题，逐条落 `review_findings`（每条指到节/行），裁决 `in_review` 并写清是哪一条、下一趟怎么修。已知的既有读数（不必重查）：H 前几轮已复审过这份稿、最后一轮判 accepted；本轮之后 G 只改了 claims 台账里 claim-6 的引文（改为 stmt:000034 / stmt:000042 / lit:000002「Plane sections of the unit ball of l_p」），正文 main.tex 未随之改动。回执必须给：裁决（accepted / in_review）、签钉住的内容 sha 前 12 位、以及 findings 条数（accepted 时应为 0）。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "documents",
+          "id": "000001"
+        },
+        "why": "读 doc 000001 现行内容与 claims 台账（本轮要签在现行 sha 上）"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "doc_id": "000001",
+          "kind": "paper",
+          "title": "Maximal-area central sections of the three-dimensional l_p ball",
+          "markdown_path": "manuscripts/G/000001.md",
+          "sections": [
+            {
+              "heading": "1 Introduction",
+              "body": "Ball determined the maximal hyperplane section of the cube. The present note treats the three-dimensional l_p ball B_p^3 and asks which central section has maximal area, comparing the coordinate, body-diagonal and face-diagonal normal directions."
+            },
+            {
+              "heading": "2 Definitions and notation",
+              "body": "Write B_p^3 = {(x,y,z) : |x|^p+|y|^p+|z|^p <= 1} and let A_p(n) be the two-dimensional Lebesgue area of B_p^3 intersected with the plane through the origin with unit normal n. The candidate areas are A_coord(p) = A_p(e_3), A_diag(p) = A_p((1,1,1)/sqrt(3)) and A_face(p) = A_p((1,1,0)/sqrt(2))."
+            },
+            {
+              "heading": "3 Main results",
+              "body": "The integral representation and the two closed forms are recorded, then the two transition parameters are located: p = 2 where the coordinate and body-diagonal areas coincide, and p-star = 4.998215596862 where the body-diagonal and face-diagonal areas coincide. The three-regime description is stated as a numerically supported conjecture."
+            },
+            {
+              "heading": "4 Discussion and open problems",
+              "body": "The scans support a three-regime picture but do not exclude intermediate maximizing normals; an analytic treatment of the ordered absolute-value domain and a sharp value of p-star remain open."
+            }
+          ],
+          "claims": [
+            {
+              "text": "Ball determined the largest hyperplane section of the unit cube: among all hyperplane sections of the cube, a section perpendicular to 2^{-1/2}(1,1,0,...,0) has the largest volume.",
+              "citations": [
+                "lit:000000"
+              ],
+              "evidence_kind": "heuristic",
+              "section": "1",
+              "claim_id": "claim-1",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "Koenig studies the largest hyperplane sections of the unit ball of l_p^n for p > 2 and shows that the cube-slicing phenomenon persists for suitable normals when p is large.",
+              "citations": [
+                "lit:000001"
+              ],
+              "evidence_kind": "heuristic",
+              "section": "1",
+              "claim_id": "claim-2",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "The literature on plane sections of the unit ball of l_p, on critical central sections of the cube and on extremal sections of subspaces of l_p supplies the general circle of questions addressed by the computations reported here.",
+              "citations": [
+                "lit:000002",
+                "lit:000003",
+                "lit:000006"
+              ],
+              "evidence_kind": "heuristic",
+              "section": "1",
+              "claim_id": "claim-3",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "For every p in [1,infinity) and every unit vector n, the area A_p(n) of the central section B_p^3 intersected with the plane n^perp depends only on that plane, is invariant under signed coordinate permutations, and equals (1/2) integral_0^{2 pi} ||cos(psi) u + sin(psi) v||_p^{-2} dpsi for any orthonormal basis {u,v} of n^perp.",
+              "citations": [
+                "stmt:000034"
+              ],
+              "evidence_kind": "proof_review",
+              "disclaimer": "逐行审阅过的证明，未经机器检查",
+              "section": "2",
+              "claim_id": "claim-4",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "For every p in [1,infinity) the coordinate normal gives A_coord(p) = 4 Gamma(1+1/p)^2 / Gamma(1+2/p); this equals pi at p = 2 and tends to 4 as p tends to infinity, and the quadrature kernel reproduces these values to relative deviation at most 1e-13.",
+              "citations": [
+                "stmt:000034",
+                "exp:000003"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "section": "3",
+              "claim_id": "claim-5",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "citations": [
+                "stmt:000034",
+                "stmt:000042",
+                "lit:000002",
+                "lit:000006"
+              ],
+              "claim_id": "claim-6",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "evidence_kind": "cross_check",
+              "is_negative": false,
+              "negation_kind": null,
+              "section": "3",
+              "text": "For every p in [1,infinity), the central plane section of the unit ball of l_p^3 by the hyperplane with face-diagonal normal (1,1,0)/sqrt(2) has area A_face(p) = 2^{1/2-1/p} * 4 Gamma(1+1/p)^2 / Gamma(1+2/p), with A_face(1) = sqrt(2), A_face(2) = pi and A_face(p) tending to 4 sqrt(2); moreover A_face(p) < A_coord(p) exactly when p < 2, with equality at p = 2 and the reverse inequality for p > 2."
+            },
+            {
+              "text": "If a unit normal n has at least one vanishing coordinate, then A_p(n) = C_p (sum over j not equal i of |n_j|^p)^{-1/p} with C_p = 4 Gamma(1+1/p)^2 / Gamma(1+2/p); consequently for 1 <= p < 2 every such normal gives A_p(n) <= C_p with equality only at coordinate normals, and for p > 2 the same expression holds with the reverse inequality.",
+              "citations": [
+                "stmt:000035",
+                "exp:000003"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "section": "3",
+              "claim_id": "claim-7",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "For every p in [1,infinity) the body-diagonal section area satisfies A_diag(p) = (3/4) integral_0^{2 pi} (|cos(theta - pi/6)|^p + |cos(theta + pi/6)|^p + |sin theta|^p)^{-2/p} d theta; moreover A_diag(1) = 3 sqrt(3)/4, A_diag(2) = pi, the limit of A_diag(p) as p tends to infinity is 3 sqrt(3), and p maps to A_diag(p) is continuous on [1,infinity).",
+              "citations": [
+                "stmt:000041",
+                "exp:000003"
+              ],
+              "evidence_kind": "proof_review",
+              "disclaimer": "逐行审阅过的证明，未经机器检查",
+              "section": "3",
+              "claim_id": "claim-8",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "The difference Delta(p) = A_face(p) - A_diag(p) is continuous on [1,infinity), Delta(2) = 0, Delta(1) = sqrt(2) - 3 sqrt(3)/4 > 0 and the limit of Delta(p) as p tends to infinity is 4 sqrt(2) - 3 sqrt(3) > 0; hence there is P0 in [1,infinity) with A_face(p) > A_diag(p) for every p >= P0.",
+              "citations": [
+                "stmt:000042",
+                "stmt:000041"
+              ],
+              "evidence_kind": "proof_review",
+              "disclaimer": "逐行审阅过的证明，未经机器检查",
+              "section": "3",
+              "claim_id": "claim-9",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "Numerically supported strong conjecture, not established here: for the twelve values p in {1.05,1.1,1.2,1.5,2,2.5,3,4,5,8,16,1000} the largest central section of B_p^3 is attained at the coordinate normal when p < 2, at the body-diagonal normal when 2 < p < p-star and at the face-diagonal normal when p > p-star, where p-star = 4.998215596862.",
+              "citations": [
+                "exp:000004",
+                "exp:000006",
+                "exp:000007"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "section": "3",
+              "claim_id": "claim-10",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "Two transition parameters separate the three regimes in the scanned range: the ratio A_diag/A_coord crosses 1 exactly at p = 2, and A_diag and A_face cross at p-star = 4.998215596862 located by bisection with six rounds of local refinement; along the boundary arcs of normals of the form (0,1,t) and (1,1,t) the section area is largest at an endpoint t in {0,1,infinity}, and any strictly intermediate t gives a strictly smaller value for p not equal to 2.",
+              "citations": [
+                "exp:000006",
+                "exp:000007"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "section": "3",
+              "claim_id": "claim-11",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "The quadrature kernel used for all scans was validated independently: it returns pi for every central section at p = 2 with deviation at most 1e-15, matches the octahedron clipping values at p = 1, approaches the cube values 4, 3 sqrt(3) and 4 sqrt(2) at p = 1000, reproduces 4 Gamma(1+1/p)^2 / Gamma(1+2/p) to relative deviation at most 1e-13, and is invariant under rotation of the plane basis to 1e-12.",
+              "citations": [
+                "exp:000003"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "section": "4",
+              "claim_id": "claim-12",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "The three-regime picture obtained here is a three-dimensional finite-p counterpart of the cube-slicing result of Ball and of the p > 2 analysis of Koenig: as p tends to infinity the three candidate areas tend to 4, 3 sqrt(3) and 4 sqrt(2), so the face-diagonal normal is the largest in the limit, in agreement with the cube case.",
+              "citations": [
+                "lit:000000",
+                "lit:000001",
+                "stmt:000042"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "section": "4",
+              "claim_id": "claim-13",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "Limitation: no analytic argument is offered here for the absence of intermediate maximizing normals; the evidence is a boundary-arc scan together with a grid in the ordered absolute-value domain 0 <= a <= b <= c, so a normal with three distinct non-zero coordinates lying outside the scanned grid is not excluded by these computations.",
+              "citations": [
+                "exp:000004",
+                "exp:000007"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "section": "4",
+              "claim_id": "claim-14",
+              "is_negative": false,
+              "negation_kind": null
+            }
+          ],
+          "open_problems": [
+            "Give an analytic argument that no normal with three distinct non-zero coordinates maximizes the section area for any p in [1,infinity).",
+            "Determine p-star in closed form, or prove that it is transcendental, and prove that the crossing of A_diag and A_face is unique."
+          ],
+          "status": "in_review",
+          "review_rounds": 9,
+          "review_verdict": "有毛病",
+          "reviewed_at": "2026-11-25T03:23:33+08:00",
+          "reviewed_by": "agent-H",
+          "created_at": "2026-11-24T23:49:04+08:00",
+          "updated_at": "2026-11-25T03:17:33+08:00",
+          "revision": 2,
+          "content_sha256": "66c671e9a0e7361f564a9cfaa7521ca4a647063db9c22f475656cd1d1ee23914",
+          "owner_task": "t-000244",
+          "owner_instance": "G1",
+          "created_by": "agent-G-G1"
+        },
+        "error": "",
+        "meta": {
+          "table": "documents",
+          "id": "000001",
+          "id_field": "doc_id",
+          "found": true,
+          "row_scope": "workspace（别的角色读这张表的全部行：证据是公共的；写权仍按归属判）"
+        },
+        "multi_call": {
+          "turn_index": 0,
+          "call_index": 0,
+          "calls": 4,
+          "step_index": 0
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 51072,
+        "prompt_cache_miss_tokens": 1790,
+        "tokens_in": 52862,
+        "tokens_out": 598,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000306"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.stat",
+        "args": {
+          "path": "out/package/main.tex"
+        },
+        "why": "核正文大小与 sha256 是否与派活给的 62efb2f6… 一致"
+      },
+      "result": {
+        "tool": "fs.stat",
+        "ok": true,
+        "data": {
+          "path": "out/package/main.tex",
+          "exists": true,
+          "is_dir": false,
+          "is_file": true,
+          "is_symlink": false,
+          "size": 32396,
+          "mtime": "2026-11-25T03:11:30+08:00",
+          "mtime_epoch": 1795547490.118,
+          "link_target": null,
+          "sha256": "62efb2f6835297672a4839e2d374bcf36c9a1ba56707f36f4280250f37166b4e"
+        },
+        "error": "",
+        "meta": {
+          "path": "out/package/main.tex",
+          "size": 32396,
+          "sha256": "62efb2f6835297672a4839e2d374bcf36c9a1ba56707f36f4280250f37166b4e"
+        },
+        "multi_call": {
+          "turn_index": 0,
+          "call_index": 1,
+          "calls": 4,
+          "step_index": 1
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000306"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.stat",
+        "args": {
+          "path": "out/package/main.pdf"
+        },
+        "why": "核 PDF 落点与大小（10 页那份）"
+      },
+      "result": {
+        "tool": "fs.stat",
+        "ok": true,
+        "data": {
+          "path": "out/package/main.pdf",
+          "exists": true,
+          "is_dir": false,
+          "is_file": true,
+          "is_symlink": false,
+          "size": 316793,
+          "mtime": "2026-11-25T03:11:56+08:00",
+          "mtime_epoch": 1795547516.341,
+          "link_target": null,
+          "sha256": "4375d9bca220e8da6677bc2873bfef961622f87a4b4fedd24dd2f6887f2abefe"
+        },
+        "error": "",
+        "meta": {
+          "path": "out/package/main.pdf",
+          "size": 316793,
+          "sha256": "4375d9bca220e8da6677bc2873bfef961622f87a4b4fedd24dd2f6887f2abefe"
+        },
+        "multi_call": {
+          "turn_index": 0,
+          "call_index": 2,
+          "calls": 4,
+          "step_index": 2
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000306"
+    },
+    {
+      "index": 3,
+      "shape": "tool",
+      "payload": {
+        "name": "review.scan",
+        "args": {
+          "kinds": [
+            "text_integrity",
+            "cites",
+            "inputs",
+            "refs",
+            "proofs",
+            "duplicates",
+            "ledger_match"
+          ],
+          "project": ".",
+          "limit": 200
+        },
+        "why": "七类机械读数一次拿全，再决定读哪几段"
+      },
+      "result": {
+        "tool": "review.scan",
+        "ok": true,
+        "data": {
+          "checked": false,
+          "kinds": [
+            "text_integrity",
+            "cites",
+            "inputs",
+            "refs",
+            "proofs",
+            "duplicates",
+            "ledger_match"
+          ],
+          "findings": [],
+          "counts": {
+            "files": 3,
+            "findings": 0,
+            "by_kind": {
+              "text_integrity": 0,
+              "cites": 0,
+              "inputs": 0,
+              "refs": 0,
+              "proofs": 0,
+              "duplicates": 0,
+              "ledger_match": 0
+            },
+            "by_severity": {
+              "error": 0,
+              "warning": 0,
+              "info": 0
+            },
+            "facts": {
+              "cjk": 0,
+              "control": 0,
+              "zero_width": 0,
+              "replacement": 0,
+              "bidi": 0,
+              "nbsp": 0,
+              "cite_keys": 5,
+              "bibitem_keys": 5,
+              "uncited": 0,
+              "cite_commands": [
+                "cite",
+                "citep",
+                "citet",
+                "citealp",
+                "citeauthor",
+                "citeyear",
+                "nocite"
+              ],
+              "files_read": 2,
+              "directives": 1,
+              "ref_keys": 5,
+              "label_keys": 5,
+              "unused_labels": 0,
+              "ref_commands": [
+                "ref",
+                "eqref",
+                "autoref",
+                "pageref",
+                "cref",
+                "Cref"
+              ],
+              "proof_envs": 4,
+              "statement_envs": 4,
+              "proof_without_statement": 0,
+              "statement_without_proof": 0,
+              "proof_unclosed": 0,
+              "statement_env_names": [
+                "corollary",
+                "lemma",
+                "proposition",
+                "theorem"
+              ],
+              "labels": 5,
+              "duplicate_labels": 0,
+              "newtheorem_names": 1,
+              "duplicate_newtheorem": 0,
+              "statement_ledger_rows": 144,
+              "ledger_propositions": 14,
+              "ledger_theorem_kinds": 5,
+              "ledger_theorem_kinds_projected": 5,
+              "mapping_rows": 4,
+              "statement_surplus": [],
+              "mapping_state": "pass"
+            }
+          },
+          "bad": [
+            {
+              "kind": "text_integrity",
+              "reason": "paths 是空的（或不是数组）⇒ 这一趟什么都没扫，不是「查过了、干净」"
+            }
+          ],
+          "detail": [
+            {
+              "kind": "text_integrity",
+              "checked": false,
+              "reason": "paths 是空的（或不是数组）⇒ 这一趟什么都没扫，不是「查过了、干净」",
+              "scanned": [],
+              "counts": {
+                "findings": 0
+              },
+              "returned": 0
+            },
+            {
+              "kind": "cites",
+              "checked": true,
+              "reason": "",
+              "scanned": [
+                "out/package/main.tex"
+              ],
+              "counts": {
+                "findings": 0
+              },
+              "returned": 0
+            },
+            {
+              "kind": "inputs",
+              "checked": true,
+              "reason": "",
+              "scanned": [
+                "out/package/main.tex",
+                "out/package/mapping-appendix.tex"
+              ],
+              "counts": {
+                "findings": 0
+              },
+              "returned": 0
+            },
+            {
+              "kind": "refs",
+              "checked": true,
+              "reason": "",
+              "scanned": [
+                "out/package/main.tex"
+              ],
+              "counts": {
+                "findings": 0
+              },
+              "returned": 0
+            },
+            {
+              "kind": "proofs",
+              "checked": true,
+              "reason": "",
+              "scanned": [
+                "out/package/main.tex"
+              ],
+              "counts": {
+                "findings": 0
+              },
+              "returned": 0
+            },
+            {
+              "kind": "duplicates",
+              "checked": true,
+              "reason": "",
+              "scanned": [
+                "out/package/main.tex"
+              ],
+              "counts": {
+                "findings": 0
+              },
+              "returned": 0
+            },
+            {
+              "kind": "ledger_match",
+              "checked": true,
+              "reason": "",
+              "scanned": [
+                "D:\\Incubator\\projects\\lp-ball-22\\out\\package\\MAPPING.json"
+              ],
+              "counts": {
+                "findings": 0
+              },
+              "returned": 0
+            }
+          ],
+          "scanned": [
+            "out/package/main.tex",
+            "out/package/mapping-appendix.tex",
+            "D:\\Incubator\\projects\\lp-ball-22\\out\\package\\MAPPING.json"
+          ],
+          "reason": "text_integrity 没查成：paths 是空的（或不是数组）⇒ 这一趟什么都没扫，不是「查过了、干净」"
+        },
+        "error": "",
+        "meta": {},
+        "warn": "这一步给了 4 条调用，已按顺序逐条：第 1 条 table.get 成功；第 2 条 fs.stat 成功；第 3 条 fs.stat 成功；第 4 条 review.scan 成功。（真的执行 4 / 4 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 0,
+          "call_index": 3,
+          "calls": 4,
+          "step_index": 3,
+          "summary": "这一步给了 4 条调用，已按顺序逐条：第 1 条 table.get 成功；第 2 条 fs.stat 成功；第 3 条 fs.stat 成功；第 4 条 review.scan 成功。（真的执行 4 / 4 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 0,
+            "calls": 4,
+            "items": 4,
+            "steps": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "executed": 4,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000306"
+    },
+    {
+      "index": 4,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/package/main.tex",
+          "max_bytes": 40000
+        },
+        "why": "通读现行正文，判它有没有把自己说清楚（内部编号、自审小节、结构、附录、结论强度）"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "\\documentclass[11pt]{article}\n\\usepackage[margin=2.5cm]{geometry}\n\\usepackage{amsmath,amssymb,amsthm}\n\\usepackage{booktabs}\n\\usepackage{url}\n\\usepackage[hidelinks]{hyperref}\n\\theoremstyle{plain}\n\\newtheorem{theorem}{Theorem}\n\\numberwithin{theorem}{section}\n\n\\title{Maximal-area central sections of the three-dimensional $\\ell_p$ ball}\n\\author{G}\n\\date{}\n\n\\begin{document}\n\\maketitle\n\n\\begin{abstract}\nWe study the two-dimensional area of central hyperplane sections of the unit ball $B_p^3$ of $\\ell_p^3$, and we compare three explicit families of normals: the coordinate direction $e_3$, the body diagonal $(1,1,1)/\\sqrt3$ and the face diagonal $(1,1,0)/\\sqrt2$. We record an integral representation of the section area that is valid for every normal, and we derive closed or single-integral expressions for the three families: $A_{\\mathrm{coord}}(p)=4\\Gamma(1+1/p)^2/\\Gamma(1+2/p)$, a one-dimensional integral for the body-diagonal section, and the scaled planar expression $2^{1/2-1/p}\\,4\\Gamma(1+1/p)^2/\\Gamma(1+2/p)$ for the face-diagonal section. For normals with a vanishing coordinate we obtain the exact formula $A_p(n)=A_{\\mathrm{coord}}(p)\\,(\\sum_{j\\ne i}|n_j|^p)^{-1/p}$, from which the comparison with the coordinate direction follows at once. We further show that the difference between the face-diagonal and the body-diagonal areas is continuous, vanishes at $p=2$ and is positive both at $p=1$ and in the limit $p\\to\\infty$, so that the face-diagonal direction dominates for all sufficiently large $p$. The transition between the body-diagonal and the face-diagonal regimes is located numerically at $p_*\\approx 4.998215596862$; the three-regime picture as a whole is supported by numerics but is not proved here. All supporting computations are collected in an appendix.\n\\end{abstract}\n\n\\section{Introduction}\n\nThe determination of extremal hyperplane sections of concrete convex bodies is a classical and still active problem. For the unit cube $Q_n=[-1/2,1/2]^n$, Ball \\cite{ball} …（落档截断，原 32396 字）",
+        "error": "",
+        "meta": {
+          "path": "out/package/main.tex",
+          "encoding": "utf-8",
+          "bytes_read": 32396,
+          "total_bytes": 32396,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 231,
+          "total_lines": 231,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 231 行",
+          "sha256": "62efb2f6835297672a4839e2d374bcf36c9a1ba56707f36f4280250f37166b4e"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 52096,
+        "prompt_cache_miss_tokens": 4820,
+        "tokens_in": 56916,
+        "tokens_out": 411,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000306"
+    },
+    {
+      "index": 5,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/package/main.tex",
+          "start_line": 100,
+          "max_lines": 140
+        },
+        "why": "读正文后半（第 3–4 节、References、Appendix A），核内部编号、附录标题、结论强度与 claim-6 对应段落"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "\\item[(iii)] if $p>2$, then $A_p(n)\\ge C_p$, with equality exactly for the $\\pm$coordinate vectors;\n\\item[(iv)] $A_2(n)=\\pi=C_2$ for all such $n$, and the threshold $p=2$ is sharp: for $p\\ne2$ the face-diagonal normal $f$ gives $A_p(f)\\ne C_p$.\n\\end{enumerate}\n\\end{theorem}\n\n\\begin{proof}\n(1) \\emph{Reduction to a planar computation.} By the signed-permutation invariance of Theorem~\\ref{thm:integral}(i) we may suppose $n=(a,b,0)$ with $a^2+b^2=1$. Take the orthonormal basis $u=(b,-a,0)$, $v=e_3$ of $n^{\\perp}$; then $e_n(\\psi)=\\cos\\psi\\,(b,-a,0)+\\sin\\psi\\,e_3$, so\n\\[\n\\big\\|e_n(\\psi)\\big\\|_p^p=|\\cos\\psi|^p\\big(|a|^p+|b|^p\\big)+|\\sin\\psi|^p .\n\\]\nWriting $\\alpha=|a|^p+|b|^p$ and applying Theorem~\\ref{thm:integral}(i),\n\\[\nA_p(n)=\\frac12\\int_0^{2\\pi}\\big(\\alpha|\\cos\\psi|^p+|\\sin\\psi|^p\\big)^{-2/p}d\\psi .\n\\]\n\n(2) \\emph{Factoring out $\\alpha$.} By the substitution $\\psi\\mapsto\\psi$ combined with $x\\mapsto\\alpha^{-1/p}x$ in the plane $n^{\\perp}$, the section $B_p^3\\cap n^{\\perp}$ is the image of $B_p^3\\cap f^{\\perp}$ under the linear map that scales the direction $u$ by $\\alpha^{-1/p}$ and fixes $v$; equivalently, the same change of variables $c\\mapsto\\alpha^{-1/p}c$ in the one-dimensional integral above gives\n\\[\nA_p(n)=\\alpha^{-1/p}\\cdot\\frac12\\int_0^{2\\pi}\\big(|\\cos\\psi|^p+|\\sin\\psi|^p\\big)^{-2/p}d\\psi=\\frac{C_p}{\\big(|a|^p+|b|^p\\big)^{1/p}},\n\\]\nwhere the last identity is Theorem~\\ref{thm:integral}(ii) read through Theorem~\\ref{thm:integral}(i). This is (i); the independence of $i$ is immediate because only the two non-vanishing coordinates enter.\n\n(3) \\emph{Comparison with the coordinate direction.} Since $a^2+b^2=1$ and $p<2$, the power-mean inequality gives $|a|^p+|b|^p\\ge(a^2+b^2)^{p/2}=1$, with equality exactly when one of $a,b$ vanishes; hence $A_p(n)=C_p(|a|^p+|b|^p)^{-1/p}\\le C_p$, and equality holds exactly for the $\\pm$coordinate vectors. For $p>2$ the same argument with the reversed power-mean inequality gives $|a|^p+|b|^p\\le1$, hence $A_p(n)\\ge C_p$ with the sa…（落档截断，原 20483 字）",
+        "error": "",
+        "meta": {
+          "path": "out/package/main.tex",
+          "encoding": "utf-8",
+          "bytes_read": 32396,
+          "total_bytes": 32396,
+          "truncated": false,
+          "start_line": 100,
+          "lines_read": 132,
+          "total_lines": 231,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 100–231 行（共 231 行）",
+          "sha256": "62efb2f6835297672a4839e2d374bcf36c9a1ba56707f36f4280250f37166b4e"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 56064,
+        "prompt_cache_miss_tokens": 3183,
+        "tokens_in": 59247,
+        "tokens_out": 198,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000306"
+    },
+    {
+      "index": 6,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/package/main.tex",
+          "start_line": 140,
+          "max_lines": 26
+        },
+        "why": "继续读正文（第 3 节余下部分），核结论强度与证明粒度；分段以免被观测层截断"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "\n(3) \\emph{The three coordinates of $e(\\theta)$.} From the components of $u$ and $v$,\n\\[\ne_1=\\frac{\\cos\\theta}{\\sqrt2}+\\frac{\\sin\\theta}{\\sqrt6}=\\frac{\\sqrt3\\cos\\theta+\\sin\\theta}{\\sqrt6},\\quad\ne_2=-\\frac{\\cos\\theta}{\\sqrt2}+\\frac{\\sin\\theta}{\\sqrt6}=-\\frac{\\sqrt3\\cos\\theta-\\sin\\theta}{\\sqrt6},\\quad\ne_3=-\\frac{2\\sin\\theta}{\\sqrt6}.\n\\]\nUsing $\\sqrt3\\cos\\theta+\\sin\\theta=2\\cos(\\theta-\\pi/6)$ and $\\sqrt3\\cos\\theta-\\sin\\theta=2\\cos(\\theta+\\pi/6)$ we get $|e_1|=|\\cos(\\theta-\\pi/6)|/\\sqrt{3/2}$, $|e_2|=|\\cos(\\theta+\\pi/6)|/\\sqrt{3/2}$ and $|e_3|=\\sqrt{2/3}\\,|\\sin\\theta|$. Factoring $(3/2)^{-1/2}$ out of the three entries yields\n\\[\n\\|e(\\theta)\\|_p^p=\\Big(\\tfrac32\\Big)^{-p/2}\\big(|\\cos(\\theta-\\pi/6)|^p+|\\cos(\\theta+\\pi/6)|^p+|\\sin\\theta|^p\\big),\n\\]\nso $\\|e(\\theta)\\|_p^{-2}=\\tfrac32\\big(|\\cos(\\theta-\\pi/6)|^p+|\\cos(\\theta+\\pi/6)|^p+|\\sin\\theta|^p\\big)^{-2/p}$, and multiplying by $\\frac12$ gives the second equality of (i).\n\n(4) \\emph{The planar form.} A point of $H$ is $(x,y,-x-y)$ with $(x,y)\\in\\mathbb{R}^2$, and the map $(x,y)\\mapsto(x,y,-x-y)$ has Jacobian $\\sqrt3$ in the sense that it multiplies two-dimensional areas by $\\sqrt3$. Hence $A_{\\mathrm{diag}}(p)=\\sqrt3\\,\\mathrm{area}\\{(x,y):|x|^p+|y|^p+|x+y|^p\\le1\\}$, which is the first equality of (ii); applying the polar formula of step (2) in these coordinates gives the second.\n\n(5) \\emph{Special values and continuity.} For $p=2$ the integrand of (i) is identically $1$ because $\\|e(\\theta)\\|_2=1$, so $A_{\\mathrm{diag}}(2)=\\frac12\\cdot2\\pi=\\pi$; the same value is forced by the Euclidean case of Theorem~\\ref{thm:integral}(iv). For $p=1$ the section of the octahedron by $H$ is the hexagon of Theorem~\\ref{thm:integral}(v), of area $3\\sqrt3/4$. As $p\\to\\infty$ the integrand converges pointwise to the indicator-type limit whose integral over the four arcs where one of the three cosines dominates equals $6\\sqrt3$, and since the integrand is bounded uniformly in $p$ and $\\theta$, dominated convergence gives $\\lim_{p\\to\\infty}A_{\\ma…（落档截断，原 3354 字）",
+        "error": "",
+        "meta": {
+          "path": "out/package/main.tex",
+          "encoding": "utf-8",
+          "bytes_read": 32396,
+          "total_bytes": 32396,
+          "truncated": false,
+          "start_line": 140,
+          "lines_read": 26,
+          "total_lines": 231,
+          "next_line": 166,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 140–165 行（共 231 行）；续读 start_line=166",
+          "sha256": "62efb2f6835297672a4839e2d374bcf36c9a1ba56707f36f4280250f37166b4e"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 58496,
+        "prompt_cache_miss_tokens": 3701,
+        "tokens_in": 62197,
+        "tokens_out": 673,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000306"
+    },
+    {
+      "index": 7,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/package/main.tex",
+          "start_line": 166,
+          "max_lines": 30
+        },
+        "why": "继续读正文（thm:delta 的证明与第 4 节开头），核证明粒度与结论强度"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "\n\\begin{proof}\n(1) \\emph{Item (i)} is Theorem~\\ref{thm:diag}(ii) together with the three values in Theorem~\\ref{thm:diag}(iii), restated here only to have the two competing areas in one place.\n\n(2) \\emph{Item (ii).} The closed form and the value at $p=2$ are Theorem~\\ref{thm:integral}(iii) and Theorem~\\ref{thm:integral}(ii). At $p=1$ the factor is $2^{-1/2}$ and $A_{\\mathrm{coord}}(1)=2$, giving $A_{\\mathrm{face}}(1)=\\sqrt2$. As $p\\to\\infty$ we have $\\Gamma(1+1/p)^2/\\Gamma(1+2/p)\\to\\Gamma(1)^2/\\Gamma(1)=1$ by continuity of $\\Gamma$ at $1$, while the factor tends to $2^{1/2}$; hence the limit is $2^{1/2}\\cdot4=4\\sqrt2$, which is the area of the section of the cube $[-1,1]^3$ by the plane $x+y=0$, as it must be.\n\n(3) \\emph{Continuity of $\\Delta$.} By (i) and (ii) both summands are continuous functions of $p$ on $[1,\\infty)$: the first by Theorem~\\ref{thm:diag}(iv), the second because $\\Gamma$ is continuous and positive on $(0,\\infty)$ and $p\\mapsto2^{1/2-1/p}$ is continuous. A difference of continuous functions is continuous, so $\\Delta$ is continuous.\n\n(4) \\emph{The two signs.} $\\Delta(2)=A_{\\mathrm{face}}(2)-A_{\\mathrm{diag}}(2)=\\pi-\\pi=0$ by (i) and (ii). $\\Delta(1)=\\sqrt2-3\\sqrt3/4$, and this is positive because squaring the positive numbers $\\sqrt2$ and $3\\sqrt3/4$ gives $2>27/16$. Finally $\\lim_{p\\to\\infty}\\Delta(p)=4\\sqrt2-3\\sqrt3$, which is positive because $32>27$ after squaring.\n\n(5) \\emph{The tail.} Since $\\Delta(p)\\to4\\sqrt2-3\\sqrt3>0$ as $p\\to\\infty$, there is $P_0$ with $\\Delta(p)>0$ for all $p\\ge P_0$. The proof has been reviewed line by line by an independent reviewer; it has not been machine-checked.\n\\end{proof}\n\nTaken together, Theorems~\\ref{thm:integral}, \\ref{thm:diag} and \\ref{thm:delta} give the body-diagonal area in closed form as the one-dimensional integral of Theorem~\\ref{thm:diag}(i), with its values at $p=1,2$ and at $p=\\infty$, and they compare the face-diagonal and body-diagonal areas only through those special values. The finer ordering …（落档截断，原 7906 字）",
+        "error": "",
+        "meta": {
+          "path": "out/package/main.tex",
+          "encoding": "utf-8",
+          "bytes_read": 32396,
+          "total_bytes": 32396,
+          "truncated": false,
+          "start_line": 166,
+          "lines_read": 30,
+          "total_lines": 231,
+          "next_line": 196,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 166–195 行（共 231 行）；续读 start_line=196",
+          "sha256": "62efb2f6835297672a4839e2d374bcf36c9a1ba56707f36f4280250f37166b4e"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 61440,
+        "prompt_cache_miss_tokens": 2952,
+        "tokens_in": 64392,
+        "tokens_out": 181,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000306"
+    },
+    {
+      "index": 8,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/package/main.tex",
+          "start_line": 196,
+          "max_lines": 30
+        },
+        "why": "读正文末段：第 4 节余下部分、References、Appendix A 标题与附录内容形态"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "\\item[(b)] Determine $p_*$ in closed form, or prove that it is not the root of any element of a natural class of elementary expressions, and prove that the intersection of the graphs of $A_{\\mathrm{diag}}$ and $A_{\\mathrm{face}}$ is unique.\n\\item[(c)] Prove the monotonicity, in $p$, of the ratios $A_{\\mathrm{diag}}/A_{\\mathrm{coord}}$ and $A_{\\mathrm{face}}/A_{\\mathrm{coord}}$, which is the numerically observed mechanism behind the single crossing at $p=2$.\n\\item[(d)] Extend the three-regime description to $\\ell_p^n$ for $n\\ge4$ and decide whether the threshold $p_*$ depends on $n$.\n\\end{enumerate}\n\n\\begin{thebibliography}{9}\n\n\\bibitem{ball} K.~Ball, \\emph{Cube slicing in $\\mathbb{R}^n$}, Proc. Amer. Math. Soc. \\textbf{97} (1986), no.~3, 465--473.\n\n\\bibitem{konig} H.~K\\\"onig, \\emph{On maximal hyperplane sections of the unit ball of $\\ell_p^n$ for $p>2$}, Advances in Operator Theory \\textbf{10} (2025), paper no.~15.\n\n\\bibitem{grzaslewicz} R.~Grz\\'slewicz, \\emph{Plane sections of the unit ball of $L_p$}, Acta Math. Hungar. \\textbf{52} (1988), no.~3--4, 219--227.\n\n\\bibitem{ambrus} G.~Ambrus, \\emph{Critical central sections of the cube}, arXiv:2107.14778v3 (2023), 12~pp.\n\n\\bibitem{eskenazis} A.~Eskenazis, \\emph{On extremal sections of subspaces of $L_p$}, preprint.\n\n\\end{thebibliography}\n\n\\appendix\n\\section{Computational evidence}\\label{app:computational}\n\nThis appendix documents the computations behind the numerical statements of Section~4. All programs are run from the repository root; the paths are relative to it.\n\n\\paragraph{Quadrature kernel and its self-check.} All section areas are evaluated in polar coordinates in the section plane, by a tanh-sinh (double-exponential) quadrature applied on panels whose breakpoints are the zeros of $A\\cos\\psi+B\\sin\\psi$ and the crossings $|w_i|=|w_j|$ of the three coordinate functions, so that the integrand is real-analytic on each panel. The kernel is validated in \\texttt{exp:000003} with the program \\path{code/exp/lpsec_validat…（落档截断，原 3873 字）",
+        "error": "",
+        "meta": {
+          "path": "out/package/main.tex",
+          "encoding": "utf-8",
+          "bytes_read": 32396,
+          "total_bytes": 32396,
+          "truncated": false,
+          "start_line": 196,
+          "lines_read": 30,
+          "total_lines": 231,
+          "next_line": 226,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 196–225 行（共 231 行）；续读 start_line=226",
+          "sha256": "62efb2f6835297672a4839e2d374bcf36c9a1ba56707f36f4280250f37166b4e"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 63616,
+        "prompt_cache_miss_tokens": 2909,
+        "tokens_in": 66525,
+        "tokens_out": 502,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000306"
+    },
+    {
+      "index": 9,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.search",
+        "args": {
+          "pattern": "^\\\\\\\\(section|appendix|input)|(exp|stmt|lit|rel|eval|doc):[0-9]+",
+          "path": "out/package/main.tex"
+        },
+        "why": "一次性拿章节标题的行号与正文内部编号（exp:/stmt:/lit: 等）出现的行号，核对禁令②③与骨架顺序"
+      },
+      "result": {
+        "tool": "fs.search",
+        "ok": true,
+        "data": {
+          "pattern": "^\\\\\\\\(section|appendix|input)|(exp|stmt|lit|rel|eval|doc):[0-9]+",
+          "path": "out/package/main.tex",
+          "matches": [
+            {
+              "path": "out/package/main.tex",
+              "line": 220,
+              "text": "\\paragraph{Quadrature kernel and its self-check.} All section areas are evaluated in polar coordinates in the section plane, by a tanh-sinh (double-exponential) quadrature applied on panels whose breakpoints are the zeros of $A\\cos\\psi+B\\sin\\psi$ and the crossings $|w_i|=|w_j|$ of the three coordinate functions, so that the integrand is real-analytic on each panel. The kernel is validated in \\texttt{exp:000003} with the program \\path{code/exp/lpsec_validate.py}: at $p=2$ every tested normal retu…"
+            },
+            {
+              "path": "out/package/main.tex",
+              "line": 222,
+              "text": "\\paragraph{Sweep over $p$.} The program \\path{code/exp/lpsec_sweep.py} sweeps the twelve values $p\\in\\{1.05,1.1,1.2,1.5,2,2.5,3,4,5,8,16,1000\\}$ and evaluates $A_p(n)$ on a grid of the unit sphere of normals, parametrised by the ordering cone $0\\le a\\le b\\le c$ together with the two boundary arcs $(0,1,t)$ and $(1,1,t)$, $t\\in[0,1]$, and their limit points $t\\to\\infty$. The sweep (\\texttt{exp:000004}) places the maximal area on the boundary of the ordering cone at every tested $p$ and returns th…"
+            },
+            {
+              "path": "out/package/main.tex",
+              "line": 224,
+              "text": "\\paragraph{The two thresholds.} The program \\path{code/exp/lpsec_critical.py} (\\texttt{exp:000006}) refines the neighbourhood of the winner in six rounds of local refinement and reports: the ratios $A_{\\mathrm{face}}/A_{\\mathrm{coord}}$ and $A_{\\mathrm{diag}}/A_{\\mathrm{coord}}$ increase monotonically in $p$ and each equals $1$ at $p=2$; the crossing $A_{\\mathrm{diag}}(p)=A_{\\mathrm{face}}(p)$ is unique and lies in $(4,5)$; and no strictly interior direction of the ordering cone exceeds the maxi…"
+            },
+            {
+              "path": "out/package/main.tex",
+              "line": 226,
+              "text": "\\paragraph{The boundary arcs.} The program \\path{code/exp/lpsec_arcs.py} (\\texttt{exp:000007}) evaluates the area on dense grids of the two boundary arcs $(0,1,t)$ and $(1,1,t)$, $t\\in[0,1]$, together with the endpoint $t\\to\\infty$, for the same twelve values of $p$. On both arcs the maximum is attained at an endpoint $t\\in\\{0,1,\\infty\\}$: the coordinate normal for $p<2$, the body diagonal for $2\\le p<4.998$, and the face diagonal for $p>4.998$; every strictly intermediate $t$ gives a smaller ar…"
+            }
+          ],
+          "lines": [
+            "out/package/main.tex:220: \\paragraph{Quadrature kernel and its self-check.} All section areas are evaluated in polar coordinates in the section plane, by a tanh-sinh (double-exponential) quadrature applied on panels whose breakpoints are the zeros of $A\\cos\\psi+B\\sin\\psi$ and the crossings $|w_i|=|w_j|$ of the three coordinate functions, so that the integrand is real-analytic on each panel. The kernel is validated in \\texttt{exp:000003} with the program \\path{code/exp/lpsec_validate.py}: at $p=2$ every tested normal retu…",
+            "out/package/main.tex:222: \\paragraph{Sweep over $p$.} The program \\path{code/exp/lpsec_sweep.py} sweeps the twelve values $p\\in\\{1.05,1.1,1.2,1.5,2,2.5,3,4,5,8,16,1000\\}$ and evaluates $A_p(n)$ on a grid of the unit sphere of normals, parametrised by the ordering cone $0\\le a\\le b\\le c$ together with the two boundary arcs $(0,1,t)$ and $(1,1,t)$, $t\\in[0,1]$, and their limit points $t\\to\\infty$. The sweep (\\texttt{exp:000004}) places the maximal area on the boundary of the ordering cone at every tested $p$ and returns th…",
+            "out/package/main.tex:224: \\paragraph{The two thresholds.} The program \\path{code/exp/lpsec_critical.py} (\\texttt{exp:000006}) refines the neighbourhood of the winner in six rounds of local refinement and reports: the ratios $A_{\\mathrm{face}}/A_{\\mathrm{coord}}$ and $A_{\\mathrm{diag}}/A_{\\mathrm{coord}}$ increase monotonically in $p$ and each equals $1$ at $p=2$; the crossing $A_{\\mathrm{diag}}(p)=A_{\\mathrm{face}}(p)$ is unique and lies in $(4,5)$; and no strictly interior direction of the ordering cone exceeds the maxi…",
+            "out/package/main.tex:226: \\paragraph{The boundary arcs.} The program \\path{code/exp/lpsec_arcs.py} (\\texttt{exp:000007}) evaluates the area on dense grids of the two boundary arcs $(0,1,t)$ and $(1,1,t)$, $t\\in[0,1]$, together with the endpoint $t\\to\\infty$, for the same twelve values of $p$. On both arcs the maximum is attained at an endpoint $t\\in\\{0,1,\\infty\\}$: the coordinate normal for $p<2$, the body diagonal for $2\\le p<4.998$, and the face diagonal for $p>4.998$; every strictly intermediate $t$ gives a smaller ar…"
+          ],
+          "total": 4,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        },
+        "error": "",
+        "meta": {
+          "total": 4,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 65664,
+        "prompt_cache_miss_tokens": 2813,
+        "tokens_in": 68477,
+        "tokens_out": 906,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000306"
+    },
+    {
+      "index": 10,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/package/main.tex",
+          "start_line": 55,
+          "max_lines": 45
+        },
+        "why": "核第 3 节标题与定理环境（骨架顺序、每个定理带 proof）"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "\\item[(i)] for every orthonormal basis $\\{u,v\\}$ of $n^{\\perp}$,\n\\[\nA_p(n)=\\frac12\\int_0^{2\\pi}\\big\\|\\cos\\psi\\,u+\\sin\\psi\\,v\\big\\|_p^{-2}\\,d\\psi;\n\\]\nthe right-hand side does not depend on the choice of the basis, $A_p$ depends only on the plane $n^{\\perp}$ (so that $A_p(n)=A_p(-n)$), and $A_p$ is invariant under $\\Sigma_3^{\\pm}$;\n\\item[(ii)] $A_{\\mathrm{coord}}(p)=4\\Gamma(1+1/p)^2/\\Gamma(1+2/p)$;\n\\item[(iii)] $A_{\\mathrm{face}}(p)=2^{1/2-1/p}\\,4\\Gamma(1+1/p)^2/\\Gamma(1+2/p)$, hence $A_{\\mathrm{face}}(p)<A_{\\mathrm{coord}}(p)$ for $p<2$, $A_{\\mathrm{face}}(2)=A_{\\mathrm{coord}}(2)$, and $A_{\\mathrm{face}}(p)>A_{\\mathrm{coord}}(p)$ for $p>2$;\n\\item[(iv)] for $p=2$ one has $A_2(n)=\\pi$ for every unit vector $n$;\n\\item[(v)] for $p=1$ one has $A_{\\mathrm{coord}}(1)=2$, $A_{\\mathrm{face}}(1)=\\sqrt2$ and $A_1(d)=3\\sqrt3/4$.\n\\end{enumerate}\n\\end{theorem}\n\n\\begin{proof}\n(1) \\emph{Polar coordinates in the section plane.} Fix a unit normal $n$ and an orthonormal basis $\\{u,v\\}$ of $n^{\\perp}$. Every $x\\in n^{\\perp}$ has a unique representation $x=r\\,e_n(\\psi)$ with $r\\ge0$ and $\\psi\\in[0,2\\pi)$, and the area element of the plane in these coordinates is $r\\,dr\\,d\\psi$. By positive homogeneity of $\\|\\cdot\\|_p$ we have $\\|x\\|_p=r\\,\\|e_n(\\psi)\\|_p$, so $x\\in B_p^3$ holds exactly when $r\\le\\|e_n(\\psi)\\|_p^{-1}$. Therefore\n\\[\nA_p(n)=\\int_0^{2\\pi}\\int_0^{\\|e_n(\\psi)\\|_p^{-1}}r\\,dr\\,d\\psi=\\frac12\\int_0^{2\\pi}\\big\\|e_n(\\psi)\\big\\|_p^{-2}\\,d\\psi,\n\\]\nwhich is the stated formula. If $\\{u',v'\\}$ is another orthonormal basis of $n^{\\perp}$, then $u'=\\cos\\alpha\\,u+\\sin\\alpha\\,v$ and $v'=-\\sin\\alpha\\,u+\\cos\\alpha\\,v$ for some $\\alpha$, whence $\\cos\\psi\\,u'+\\sin\\psi\\,v'=e_n(\\psi+\\alpha)$; the substitution $\\psi\\mapsto\\psi+\\alpha$ over a full period leaves the integral unchanged, so the value does not depend on the basis. Replacing $n$ by $-n$ leaves the plane unchanged, and every $S\\in\\Sigma_3^{\\pm}$ satisfies $S(B_p^3)=B_p^3$ and preserves areas and orthogonality, so $A_p(Sn)=A_p(n)$.\n\n(2) \\e…（落档截断，原 5266 字）",
+        "error": "",
+        "meta": {
+          "path": "out/package/main.tex",
+          "encoding": "utf-8",
+          "bytes_read": 32396,
+          "total_bytes": 32396,
+          "truncated": false,
+          "start_line": 55,
+          "lines_read": 45,
+          "total_lines": 231,
+          "next_line": 100,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 55–99 行（共 231 行）；续读 start_line=100",
+          "sha256": "62efb2f6835297672a4839e2d374bcf36c9a1ba56707f36f4280250f37166b4e"
+        },
+        "multi_call": {
+          "turn_index": 10,
+          "call_index": 0,
+          "calls": 4,
+          "step_index": 10
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 67712,
+        "prompt_cache_miss_tokens": 3001,
+        "tokens_in": 70713,
+        "tokens_out": 1952,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000306"
+    },
+    {
+      "index": 11,
+      "shape": "tool",
+      "payload": {
+        "name": "review.scan_text_integrity",
+        "args": {
+          "paths": [
+            "out/package"
+          ]
+        },
+        "why": "补扫异常字符（上一轮 review.scan 的 text_integrity 因 paths 为空没查成）"
+      },
+      "result": {
+        "tool": "review.scan_text_integrity",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "reason": "",
+          "scanned": [
+            "out/package/main.tex",
+            "out/package/mapping-appendix.tex",
+            "out/package/MAPPING.md"
+          ],
+          "findings": [
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 1,
+              "column": 3,
+              "char": "论",
+              "codepoint": "U+8BBA",
+              "kind": "cjk",
+              "excerpt": "# 论文对应表（`MAPPING.json` 的人读版）"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 1,
+              "column": 4,
+              "char": "文",
+              "codepoint": "U+6587",
+              "kind": "cjk",
+              "excerpt": "# 论文对应表（`MAPPING.json` 的人读版）"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 1,
+              "column": 5,
+              "char": "对",
+              "codepoint": "U+5BF9",
+              "kind": "cjk",
+              "excerpt": "# 论文对应表（`MAPPING.json` 的人读版）"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 1,
+              "column": 6,
+              "char": "应",
+              "codepoint": "U+5E94",
+              "kind": "cjk",
+              "excerpt": "# 论文对应表（`MAPPING.json` 的人读版）"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 1,
+              "column": 7,
+              "char": "表",
+              "codepoint": "U+8868",
+              "kind": "cjk",
+              "excerpt": "# 论文对应表（`MAPPING.json` 的人读版）"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 1,
+              "column": 8,
+              "char": "（",
+              "codepoint": "U+FF08",
+              "kind": "cjk",
+              "excerpt": "# 论文对应表（`MAPPING.json` 的人读版）"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 1,
+              "column": 24,
+              "char": "的",
+              "codepoint": "U+7684",
+              "kind": "cjk",
+              "excerpt": "# 论文对应表（`MAPPING.json` 的人读版）"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 1,
+              "column": 25,
+              "char": "人",
+              "codepoint": "U+4EBA",
+              "kind": "cjk",
+              "excerpt": "# 论文对应表（`MAPPING.json` 的人读版）"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 1,
+              "column": 26,
+              "char": "读",
+              "codepoint": "U+8BFB",
+              "kind": "cjk",
+              "excerpt": "# 论文对应表（`MAPPING.json` 的人读版）"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 1,
+              "column": 27,
+              "char": "版",
+              "codepoint": "U+7248",
+              "kind": "cjk",
+              "excerpt": "# 论文对应表（`MAPPING.json` 的人读版）"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 1,
+              "column": 28,
+              "char": "）",
+              "codepoint": "U+FF09",
+              "kind": "cjk",
+              "excerpt": "# 论文对应表（`MAPPING.json` 的人读版）"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 1,
+              "char": "这",
+              "codepoint": "U+8FD9",
+              "kind": "cjk",
+              "excerpt": "这一份由 `MAPPING.json` 生成，不许手写第二份 —— 两份不一致时，…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 2,
+              "char": "一",
+              "codepoint": "U+4E00",
+              "kind": "cjk",
+              "excerpt": "这一份由 `MAPPING.json` 生成，不许手写第二份 —— 两份不一致时，读…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 3,
+              "char": "份",
+              "codepoint": "U+4EFD",
+              "kind": "cjk",
+              "excerpt": "这一份由 `MAPPING.json` 生成，不许手写第二份 —— 两份不一致时，读 …"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 4,
+              "char": "由",
+              "codepoint": "U+7531",
+              "kind": "cjk",
+              "excerpt": "这一份由 `MAPPING.json` 生成，不许手写第二份 —— 两份不一致时，读 m…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 21,
+              "char": "生",
+              "codepoint": "U+751F",
+              "kind": "cjk",
+              "excerpt": "这一份由 `MAPPING.json` 生成，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 22,
+              "char": "成",
+              "codepoint": "U+6210",
+              "kind": "cjk",
+              "excerpt": "这一份由 `MAPPING.json` 生成，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 23,
+              "char": "，",
+              "codepoint": "U+FF0C",
+              "kind": "cjk",
+              "excerpt": "这一份由 `MAPPING.json` 生成，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 24,
+              "char": "不",
+              "codepoint": "U+4E0D",
+              "kind": "cjk",
+              "excerpt": "这一份由 `MAPPING.json` 生成，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 25,
+              "char": "许",
+              "codepoint": "U+8BB8",
+              "kind": "cjk",
+              "excerpt": "这一份由 `MAPPING.json` 生成，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 26,
+              "char": "手",
+              "codepoint": "U+624B",
+              "kind": "cjk",
+              "excerpt": "这一份由 `MAPPING.json` 生成，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 27,
+              "char": "写",
+              "codepoint": "U+5199",
+              "kind": "cjk",
+              "excerpt": "这一份由 `MAPPING.json` 生成，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 28,
+              "char": "第",
+              "codepoint": "U+7B2C",
+              "kind": "cjk",
+              "excerpt": "这一份由 `MAPPING.json` 生成，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 29,
+              "char": "二",
+              "codepoint": "U+4E8C",
+              "kind": "cjk",
+              "excerpt": "这一份由 `MAPPING.json` 生成，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 30,
+              "char": "份",
+              "codepoint": "U+4EFD",
+              "kind": "cjk",
+              "excerpt": "这一份由 `MAPPING.json` 生成，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 35,
+              "char": "两",
+              "codepoint": "U+4E24",
+              "kind": "cjk",
+              "excerpt": "这一份由 `MAPPING.json` 生成，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 36,
+              "char": "份",
+              "codepoint": "U+4EFD",
+              "kind": "cjk",
+              "excerpt": "这一份由 `MAPPING.json` 生成，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 37,
+              "char": "不",
+              "codepoint": "U+4E0D",
+              "kind": "cjk",
+              "excerpt": "这一份由 `MAPPING.json` 生成，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 38,
+              "char": "一",
+              "codepoint": "U+4E00",
+              "kind": "cjk",
+              "excerpt": "这一份由 `MAPPING.json` 生成，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 39,
+              "char": "致",
+              "codepoint": "U+81F4",
+              "kind": "cjk",
+              "excerpt": "这一份由 `MAPPING.json` 生成，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 40,
+              "char": "时",
+              "codepoint": "U+65F6",
+              "kind": "cjk",
+              "excerpt": "这一份由 `MAPPING.json` 生成，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 41,
+              "char": "，",
+              "codepoint": "U+FF0C",
+              "kind": "cjk",
+              "excerpt": "这一份由 `MAPPING.json` 生成，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 42,
+              "char": "读",
+              "codepoint": "U+8BFB",
+              "kind": "cjk",
+              "excerpt": "…一份由 `MAPPING.json` 生成，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 47,
+              "char": "的",
+              "codepoint": "U+7684",
+              "kind": "cjk",
+              "excerpt": "…MAPPING.json` 生成，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 48,
+              "char": "人",
+              "codepoint": "U+4EBA",
+              "kind": "cjk",
+              "excerpt": "…APPING.json` 生成，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 49,
+              "char": "与",
+              "codepoint": "U+4E0E",
+              "kind": "cjk",
+              "excerpt": "…PPING.json` 生成，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 50,
+              "char": "读",
+              "codepoint": "U+8BFB",
+              "kind": "cjk",
+              "excerpt": "…PING.json` 生成，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 57,
+              "char": "的",
+              "codepoint": "U+7684",
+              "kind": "cjk",
+              "excerpt": "…on` 生成，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 58,
+              "char": "机",
+              "codepoint": "U+673A",
+              "kind": "cjk",
+              "excerpt": "…n` 生成，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 59,
+              "char": "器",
+              "codepoint": "U+5668",
+              "kind": "cjk",
+              "excerpt": "…` 生成，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 60,
+              "char": "会",
+              "codepoint": "U+4F1A",
+              "kind": "cjk",
+              "excerpt": "… 生成，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 61,
+              "char": "得",
+              "codepoint": "U+5F97",
+              "kind": "cjk",
+              "excerpt": "…生成，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 62,
+              "char": "出",
+              "codepoint": "U+51FA",
+              "kind": "cjk",
+              "excerpt": "…成，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 63,
+              "char": "两",
+              "codepoint": "U+4E24",
+              "kind": "cjk",
+              "excerpt": "…，不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 64,
+              "char": "个",
+              "codepoint": "U+4E2A",
+              "kind": "cjk",
+              "excerpt": "…不许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 65,
+              "char": "结",
+              "codepoint": "U+7ED3",
+              "kind": "cjk",
+              "excerpt": "…许手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 66,
+              "char": "论",
+              "codepoint": "U+8BBA",
+              "kind": "cjk",
+              "excerpt": "…手写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 67,
+              "char": "，",
+              "codepoint": "U+FF0C",
+              "kind": "cjk",
+              "excerpt": "…写第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 68,
+              "char": "而",
+              "codepoint": "U+800C",
+              "kind": "cjk",
+              "excerpt": "…第二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 69,
+              "char": "没",
+              "codepoint": "U+6CA1",
+              "kind": "cjk",
+              "excerpt": "…二份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 70,
+              "char": "有",
+              "codepoint": "U+6709",
+              "kind": "cjk",
+              "excerpt": "…份 —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 71,
+              "char": "东",
+              "codepoint": "U+4E1C",
+              "kind": "cjk",
+              "excerpt": "… —— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 72,
+              "char": "西",
+              "codepoint": "U+897F",
+              "kind": "cjk",
+              "excerpt": "…—— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 73,
+              "char": "会",
+              "codepoint": "U+4F1A",
+              "kind": "cjk",
+              "excerpt": "…— 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 74,
+              "char": "报",
+              "codepoint": "U+62A5",
+              "kind": "cjk",
+              "excerpt": "… 两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 75,
+              "char": "错",
+              "codepoint": "U+9519",
+              "kind": "cjk",
+              "excerpt": "…两份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 3,
+              "column": 76,
+              "char": "。",
+              "codepoint": "U+3002",
+              "kind": "cjk",
+              "excerpt": "…份不一致时，读 md 的人与读 json 的机器会得出两个结论，而没有东西会报错。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 5,
+              "column": 1,
+              "char": "重",
+              "codepoint": "U+91CD",
+              "kind": "cjk",
+              "excerpt": "重生成：`sync_markdown(项目根)`（`agentflow.paper…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 5,
+              "column": 2,
+              "char": "生",
+              "codepoint": "U+751F",
+              "kind": "cjk",
+              "excerpt": "重生成：`sync_markdown(项目根)`（`agentflow.paperm…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 5,
+              "column": 3,
+              "char": "成",
+              "codepoint": "U+6210",
+              "kind": "cjk",
+              "excerpt": "重生成：`sync_markdown(项目根)`（`agentflow.paperma…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 5,
+              "column": 4,
+              "char": "：",
+              "codepoint": "U+FF1A",
+              "kind": "cjk",
+              "excerpt": "重生成：`sync_markdown(项目根)`（`agentflow.papermap…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 5,
+              "column": 20,
+              "char": "项",
+              "codepoint": "U+9879",
+              "kind": "cjk",
+              "excerpt": "重生成：`sync_markdown(项目根)`（`agentflow.papermapping`）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 5,
+              "column": 21,
+              "char": "目",
+              "codepoint": "U+76EE",
+              "kind": "cjk",
+              "excerpt": "重生成：`sync_markdown(项目根)`（`agentflow.papermapping`）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 5,
+              "column": 22,
+              "char": "根",
+              "codepoint": "U+6839",
+              "kind": "cjk",
+              "excerpt": "重生成：`sync_markdown(项目根)`（`agentflow.papermapping`）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 5,
+              "column": 25,
+              "char": "（",
+              "codepoint": "U+FF08",
+              "kind": "cjk",
+              "excerpt": "重生成：`sync_markdown(项目根)`（`agentflow.papermapping`）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 5,
+              "column": 50,
+              "char": "）",
+              "codepoint": "U+FF09",
+              "kind": "cjk",
+              "excerpt": "…_markdown(项目根)`（`agentflow.papermapping`）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 5,
+              "column": 51,
+              "char": "。",
+              "codepoint": "U+3002",
+              "kind": "cjk",
+              "excerpt": "…markdown(项目根)`（`agentflow.papermapping`）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 1,
+              "char": "正",
+              "codepoint": "U+6B63",
+              "kind": "cjk",
+              "excerpt": "正文附录里印的就是这张表（「附录：产出对应表」，由 `render_appendi…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 2,
+              "char": "文",
+              "codepoint": "U+6587",
+              "kind": "cjk",
+              "excerpt": "正文附录里印的就是这张表（「附录：产出对应表」，由 `render_appendix…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 3,
+              "char": "附",
+              "codepoint": "U+9644",
+              "kind": "cjk",
+              "excerpt": "正文附录里印的就是这张表（「附录：产出对应表」，由 `render_appendix`…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 4,
+              "char": "录",
+              "codepoint": "U+5F55",
+              "kind": "cjk",
+              "excerpt": "正文附录里印的就是这张表（「附录：产出对应表」，由 `render_appendix` …"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 5,
+              "char": "里",
+              "codepoint": "U+91CC",
+              "kind": "cjk",
+              "excerpt": "正文附录里印的就是这张表（「附录：产出对应表」，由 `render_appendix` 渲…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 6,
+              "char": "印",
+              "codepoint": "U+5370",
+              "kind": "cjk",
+              "excerpt": "正文附录里印的就是这张表（「附录：产出对应表」，由 `render_appendix` 渲染…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 7,
+              "char": "的",
+              "codepoint": "U+7684",
+              "kind": "cjk",
+              "excerpt": "正文附录里印的就是这张表（「附录：产出对应表」，由 `render_appendix` 渲染）…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 8,
+              "char": "就",
+              "codepoint": "U+5C31",
+              "kind": "cjk",
+              "excerpt": "正文附录里印的就是这张表（「附录：产出对应表」，由 `render_appendix` 渲染）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 9,
+              "char": "是",
+              "codepoint": "U+662F",
+              "kind": "cjk",
+              "excerpt": "正文附录里印的就是这张表（「附录：产出对应表」，由 `render_appendix` 渲染）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 10,
+              "char": "这",
+              "codepoint": "U+8FD9",
+              "kind": "cjk",
+              "excerpt": "正文附录里印的就是这张表（「附录：产出对应表」，由 `render_appendix` 渲染）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 11,
+              "char": "张",
+              "codepoint": "U+5F20",
+              "kind": "cjk",
+              "excerpt": "正文附录里印的就是这张表（「附录：产出对应表」，由 `render_appendix` 渲染）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 12,
+              "char": "表",
+              "codepoint": "U+8868",
+              "kind": "cjk",
+              "excerpt": "正文附录里印的就是这张表（「附录：产出对应表」，由 `render_appendix` 渲染）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 13,
+              "char": "（",
+              "codepoint": "U+FF08",
+              "kind": "cjk",
+              "excerpt": "正文附录里印的就是这张表（「附录：产出对应表」，由 `render_appendix` 渲染）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 14,
+              "char": "「",
+              "codepoint": "U+300C",
+              "kind": "cjk",
+              "excerpt": "正文附录里印的就是这张表（「附录：产出对应表」，由 `render_appendix` 渲染）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 15,
+              "char": "附",
+              "codepoint": "U+9644",
+              "kind": "cjk",
+              "excerpt": "正文附录里印的就是这张表（「附录：产出对应表」，由 `render_appendix` 渲染）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 16,
+              "char": "录",
+              "codepoint": "U+5F55",
+              "kind": "cjk",
+              "excerpt": "正文附录里印的就是这张表（「附录：产出对应表」，由 `render_appendix` 渲染）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 17,
+              "char": "：",
+              "codepoint": "U+FF1A",
+              "kind": "cjk",
+              "excerpt": "正文附录里印的就是这张表（「附录：产出对应表」，由 `render_appendix` 渲染）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 18,
+              "char": "产",
+              "codepoint": "U+4EA7",
+              "kind": "cjk",
+              "excerpt": "正文附录里印的就是这张表（「附录：产出对应表」，由 `render_appendix` 渲染）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 19,
+              "char": "出",
+              "codepoint": "U+51FA",
+              "kind": "cjk",
+              "excerpt": "正文附录里印的就是这张表（「附录：产出对应表」，由 `render_appendix` 渲染）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 20,
+              "char": "对",
+              "codepoint": "U+5BF9",
+              "kind": "cjk",
+              "excerpt": "正文附录里印的就是这张表（「附录：产出对应表」，由 `render_appendix` 渲染）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 21,
+              "char": "应",
+              "codepoint": "U+5E94",
+              "kind": "cjk",
+              "excerpt": "正文附录里印的就是这张表（「附录：产出对应表」，由 `render_appendix` 渲染）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 22,
+              "char": "表",
+              "codepoint": "U+8868",
+              "kind": "cjk",
+              "excerpt": "正文附录里印的就是这张表（「附录：产出对应表」，由 `render_appendix` 渲染）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 23,
+              "char": "」",
+              "codepoint": "U+300D",
+              "kind": "cjk",
+              "excerpt": "正文附录里印的就是这张表（「附录：产出对应表」，由 `render_appendix` 渲染）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 24,
+              "char": "，",
+              "codepoint": "U+FF0C",
+              "kind": "cjk",
+              "excerpt": "正文附录里印的就是这张表（「附录：产出对应表」，由 `render_appendix` 渲染）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 25,
+              "char": "由",
+              "codepoint": "U+7531",
+              "kind": "cjk",
+              "excerpt": "正文附录里印的就是这张表（「附录：产出对应表」，由 `render_appendix` 渲染）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 45,
+              "char": "渲",
+              "codepoint": "U+6E32",
+              "kind": "cjk",
+              "excerpt": "…里印的就是这张表（「附录：产出对应表」，由 `render_appendix` 渲染）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 46,
+              "char": "染",
+              "codepoint": "U+67D3",
+              "kind": "cjk",
+              "excerpt": "…印的就是这张表（「附录：产出对应表」，由 `render_appendix` 渲染）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 47,
+              "char": "）",
+              "codepoint": "U+FF09",
+              "kind": "cjk",
+              "excerpt": "…的就是这张表（「附录：产出对应表」，由 `render_appendix` 渲染）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 6,
+              "column": 48,
+              "char": "。",
+              "codepoint": "U+3002",
+              "kind": "cjk",
+              "excerpt": "…就是这张表（「附录：产出对应表」，由 `render_appendix` 渲染）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 10,
+              "char": "的",
+              "codepoint": "U+7684",
+              "kind": "cjk",
+              "excerpt": "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 11,
+              "char": "口",
+              "codepoint": "U+53E3",
+              "kind": "cjk",
+              "excerpt": "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 12,
+              "char": "径",
+              "codepoint": "U+5F84",
+              "kind": "cjk",
+              "excerpt": "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、l…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 13,
+              "char": "：",
+              "codepoint": "U+FF1A",
+              "kind": "cjk",
+              "excerpt": "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、le…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 14,
+              "char": "正",
+              "codepoint": "U+6B63",
+              "kind": "cjk",
+              "excerpt": "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lem…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 15,
+              "char": "文",
+              "codepoint": "U+6587",
+              "kind": "cjk",
+              "excerpt": "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemm…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 16,
+              "char": "里",
+              "codepoint": "U+91CC",
+              "kind": "cjk",
+              "excerpt": "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 17,
+              "char": "第",
+              "codepoint": "U+7B2C",
+              "kind": "cjk",
+              "excerpt": "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma …"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 18,
+              "char": "几",
+              "codepoint": "U+51E0",
+              "kind": "cjk",
+              "excerpt": "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 19,
+              "char": "个",
+              "codepoint": "U+4E2A",
+              "kind": "cjk",
+              "excerpt": "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 20,
+              "char": "该",
+              "codepoint": "U+8BE5",
+              "kind": "cjk",
+              "excerpt": "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 21,
+              "char": "环",
+              "codepoint": "U+73AF",
+              "kind": "cjk",
+              "excerpt": "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数）…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 22,
+              "char": "境",
+              "codepoint": "U+5883",
+              "kind": "cjk",
+              "excerpt": "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 23,
+              "char": "，",
+              "codepoint": "U+FF0C",
+              "kind": "cjk",
+              "excerpt": "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 26,
+              "char": "起",
+              "codepoint": "U+8D77",
+              "kind": "cjk",
+              "excerpt": "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 27,
+              "char": "，",
+              "codepoint": "U+FF0C",
+              "kind": "cjk",
+              "excerpt": "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 28,
+              "char": "按",
+              "codepoint": "U+6309",
+              "kind": "cjk",
+              "excerpt": "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 29,
+              "char": "正",
+              "codepoint": "U+6B63",
+              "kind": "cjk",
+              "excerpt": "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 30,
+              "char": "文",
+              "codepoint": "U+6587",
+              "kind": "cjk",
+              "excerpt": "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 31,
+              "char": "出",
+              "codepoint": "U+51FA",
+              "kind": "cjk",
+              "excerpt": "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 32,
+              "char": "现",
+              "codepoint": "U+73B0",
+              "kind": "cjk",
+              "excerpt": "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 33,
+              "char": "顺",
+              "codepoint": "U+987A",
+              "kind": "cjk",
+              "excerpt": "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 34,
+              "char": "序",
+              "codepoint": "U+5E8F",
+              "kind": "cjk",
+              "excerpt": "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 35,
+              "char": "按",
+              "codepoint": "U+6309",
+              "kind": "cjk",
+              "excerpt": "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 36,
+              "char": "类",
+              "codepoint": "U+7C7B",
+              "kind": "cjk",
+              "excerpt": "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 37,
+              "char": "计",
+              "codepoint": "U+8BA1",
+              "kind": "cjk",
+              "excerpt": "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 38,
+              "char": "数",
+              "codepoint": "U+6570",
+              "kind": "cjk",
+              "excerpt": "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 39,
+              "char": "（",
+              "codepoint": "U+FF08",
+              "kind": "cjk",
+              "excerpt": "`env_no` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 48,
+              "char": "单",
+              "codepoint": "U+5355",
+              "kind": "cjk",
+              "excerpt": "…` 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 49,
+              "char": "独",
+              "codepoint": "U+72EC",
+              "kind": "cjk",
+              "excerpt": "… 的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 50,
+              "char": "数",
+              "codepoint": "U+6570",
+              "kind": "cjk",
+              "excerpt": "…的口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 51,
+              "char": "、",
+              "codepoint": "U+3001",
+              "kind": "cjk",
+              "excerpt": "…口径：正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 58,
+              "char": "单",
+              "codepoint": "U+5355",
+              "kind": "cjk",
+              "excerpt": "…几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 59,
+              "char": "独",
+              "codepoint": "U+72EC",
+              "kind": "cjk",
+              "excerpt": "…个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 60,
+              "char": "数",
+              "codepoint": "U+6570",
+              "kind": "cjk",
+              "excerpt": "…该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 61,
+              "char": "）",
+              "codepoint": "U+FF09",
+              "kind": "cjk",
+              "excerpt": "…环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 7,
+              "column": 62,
+              "char": "。",
+              "codepoint": "U+3002",
+              "kind": "cjk",
+              "excerpt": "…境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数）。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 12,
+              "char": "的",
+              "codepoint": "U+7684",
+              "kind": "cjk",
+              "excerpt": "`proof_no` 的口径：1 = canonical（台账行上的 `proof_text`）；2 及…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 13,
+              "char": "口",
+              "codepoint": "U+53E3",
+              "kind": "cjk",
+              "excerpt": "`proof_no` 的口径：1 = canonical（台账行上的 `proof_text`）；2 及以…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 14,
+              "char": "径",
+              "codepoint": "U+5F84",
+              "kind": "cjk",
+              "excerpt": "`proof_no` 的口径：1 = canonical（台账行上的 `proof_text`）；2 及以上…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 15,
+              "char": "：",
+              "codepoint": "U+FF1A",
+              "kind": "cjk",
+              "excerpt": "`proof_no` 的口径：1 = canonical（台账行上的 `proof_text`）；2 及以上 …"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 29,
+              "char": "（",
+              "codepoint": "U+FF08",
+              "kind": "cjk",
+              "excerpt": "`proof_no` 的口径：1 = canonical（台账行上的 `proof_text`）；2 及以上 = 该行 `proofs` …"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 30,
+              "char": "台",
+              "codepoint": "U+53F0",
+              "kind": "cjk",
+              "excerpt": "`proof_no` 的口径：1 = canonical（台账行上的 `proof_text`）；2 及以上 = 该行 `proofs` 清…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 31,
+              "char": "账",
+              "codepoint": "U+8D26",
+              "kind": "cjk",
+              "excerpt": "`proof_no` 的口径：1 = canonical（台账行上的 `proof_text`）；2 及以上 = 该行 `proofs` 清单…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 32,
+              "char": "行",
+              "codepoint": "U+884C",
+              "kind": "cjk",
+              "excerpt": "`proof_no` 的口径：1 = canonical（台账行上的 `proof_text`）；2 及以上 = 该行 `proofs` 清单里…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 33,
+              "char": "上",
+              "codepoint": "U+4E0A",
+              "kind": "cjk",
+              "excerpt": "`proof_no` 的口径：1 = canonical（台账行上的 `proof_text`）；2 及以上 = 该行 `proofs` 清单里那…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 34,
+              "char": "的",
+              "codepoint": "U+7684",
+              "kind": "cjk",
+              "excerpt": "`proof_no` 的口径：1 = canonical（台账行上的 `proof_text`）；2 及以上 = 该行 `proofs` 清单里那一…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 48,
+              "char": "）",
+              "codepoint": "U+FF09",
+              "kind": "cjk",
+              "excerpt": "…no` 的口径：1 = canonical（台账行上的 `proof_text`）；2 及以上 = 该行 `proofs` 清单里那一份。多证明时每一条证明各占一…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 49,
+              "char": "；",
+              "codepoint": "U+FF1B",
+              "kind": "cjk",
+              "excerpt": "…o` 的口径：1 = canonical（台账行上的 `proof_text`）；2 及以上 = 该行 `proofs` 清单里那一份。多证明时每一条证明各占一行…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 52,
+              "char": "及",
+              "codepoint": "U+53CA",
+              "kind": "cjk",
+              "excerpt": "…的口径：1 = canonical（台账行上的 `proof_text`）；2 及以上 = 该行 `proofs` 清单里那一份。多证明时每一条证明各占一行。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 53,
+              "char": "以",
+              "codepoint": "U+4EE5",
+              "kind": "cjk",
+              "excerpt": "…口径：1 = canonical（台账行上的 `proof_text`）；2 及以上 = 该行 `proofs` 清单里那一份。多证明时每一条证明各占一行。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 54,
+              "char": "上",
+              "codepoint": "U+4E0A",
+              "kind": "cjk",
+              "excerpt": "…径：1 = canonical（台账行上的 `proof_text`）；2 及以上 = 该行 `proofs` 清单里那一份。多证明时每一条证明各占一行。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 58,
+              "char": "该",
+              "codepoint": "U+8BE5",
+              "kind": "cjk",
+              "excerpt": "…= canonical（台账行上的 `proof_text`）；2 及以上 = 该行 `proofs` 清单里那一份。多证明时每一条证明各占一行。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 59,
+              "char": "行",
+              "codepoint": "U+884C",
+              "kind": "cjk",
+              "excerpt": "… canonical（台账行上的 `proof_text`）；2 及以上 = 该行 `proofs` 清单里那一份。多证明时每一条证明各占一行。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 70,
+              "char": "清",
+              "codepoint": "U+6E05",
+              "kind": "cjk",
+              "excerpt": "…台账行上的 `proof_text`）；2 及以上 = 该行 `proofs` 清单里那一份。多证明时每一条证明各占一行。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 71,
+              "char": "单",
+              "codepoint": "U+5355",
+              "kind": "cjk",
+              "excerpt": "…账行上的 `proof_text`）；2 及以上 = 该行 `proofs` 清单里那一份。多证明时每一条证明各占一行。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 72,
+              "char": "里",
+              "codepoint": "U+91CC",
+              "kind": "cjk",
+              "excerpt": "…行上的 `proof_text`）；2 及以上 = 该行 `proofs` 清单里那一份。多证明时每一条证明各占一行。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 73,
+              "char": "那",
+              "codepoint": "U+90A3",
+              "kind": "cjk",
+              "excerpt": "…上的 `proof_text`）；2 及以上 = 该行 `proofs` 清单里那一份。多证明时每一条证明各占一行。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 74,
+              "char": "一",
+              "codepoint": "U+4E00",
+              "kind": "cjk",
+              "excerpt": "…的 `proof_text`）；2 及以上 = 该行 `proofs` 清单里那一份。多证明时每一条证明各占一行。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 75,
+              "char": "份",
+              "codepoint": "U+4EFD",
+              "kind": "cjk",
+              "excerpt": "… `proof_text`）；2 及以上 = 该行 `proofs` 清单里那一份。多证明时每一条证明各占一行。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 76,
+              "char": "。",
+              "codepoint": "U+3002",
+              "kind": "cjk",
+              "excerpt": "…`proof_text`）；2 及以上 = 该行 `proofs` 清单里那一份。多证明时每一条证明各占一行。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 77,
+              "char": "多",
+              "codepoint": "U+591A",
+              "kind": "cjk",
+              "excerpt": "…proof_text`）；2 及以上 = 该行 `proofs` 清单里那一份。多证明时每一条证明各占一行。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 78,
+              "char": "证",
+              "codepoint": "U+8BC1",
+              "kind": "cjk",
+              "excerpt": "…roof_text`）；2 及以上 = 该行 `proofs` 清单里那一份。多证明时每一条证明各占一行。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 79,
+              "char": "明",
+              "codepoint": "U+660E",
+              "kind": "cjk",
+              "excerpt": "…oof_text`）；2 及以上 = 该行 `proofs` 清单里那一份。多证明时每一条证明各占一行。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 80,
+              "char": "时",
+              "codepoint": "U+65F6",
+              "kind": "cjk",
+              "excerpt": "…of_text`）；2 及以上 = 该行 `proofs` 清单里那一份。多证明时每一条证明各占一行。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 81,
+              "char": "每",
+              "codepoint": "U+6BCF",
+              "kind": "cjk",
+              "excerpt": "…f_text`）；2 及以上 = 该行 `proofs` 清单里那一份。多证明时每一条证明各占一行。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 82,
+              "char": "一",
+              "codepoint": "U+4E00",
+              "kind": "cjk",
+              "excerpt": "…_text`）；2 及以上 = 该行 `proofs` 清单里那一份。多证明时每一条证明各占一行。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 83,
+              "char": "条",
+              "codepoint": "U+6761",
+              "kind": "cjk",
+              "excerpt": "…text`）；2 及以上 = 该行 `proofs` 清单里那一份。多证明时每一条证明各占一行。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 84,
+              "char": "证",
+              "codepoint": "U+8BC1",
+              "kind": "cjk",
+              "excerpt": "…ext`）；2 及以上 = 该行 `proofs` 清单里那一份。多证明时每一条证明各占一行。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 85,
+              "char": "明",
+              "codepoint": "U+660E",
+              "kind": "cjk",
+              "excerpt": "…xt`）；2 及以上 = 该行 `proofs` 清单里那一份。多证明时每一条证明各占一行。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 86,
+              "char": "各",
+              "codepoint": "U+5404",
+              "kind": "cjk",
+              "excerpt": "…t`）；2 及以上 = 该行 `proofs` 清单里那一份。多证明时每一条证明各占一行。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 87,
+              "char": "占",
+              "codepoint": "U+5360",
+              "kind": "cjk",
+              "excerpt": "…`）；2 及以上 = 该行 `proofs` 清单里那一份。多证明时每一条证明各占一行。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 88,
+              "char": "一",
+              "codepoint": "U+4E00",
+              "kind": "cjk",
+              "excerpt": "…）；2 及以上 = 该行 `proofs` 清单里那一份。多证明时每一条证明各占一行。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 89,
+              "char": "行",
+              "codepoint": "U+884C",
+              "kind": "cjk",
+              "excerpt": "…；2 及以上 = 该行 `proofs` 清单里那一份。多证明时每一条证明各占一行。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 8,
+              "column": 90,
+              "char": "。",
+              "codepoint": "U+3002",
+              "kind": "cjk",
+              "excerpt": "…2 及以上 = 该行 `proofs` 清单里那一份。多证明时每一条证明各占一行。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 8,
+              "char": "与",
+              "codepoint": "U+4E0E",
+              "kind": "cjk",
+              "excerpt": "`file` 与 `citation_loc.file` 都是论文包内的相对路径：绝对路径在别人…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 30,
+              "char": "都",
+              "codepoint": "U+90FD",
+              "kind": "cjk",
+              "excerpt": "`file` 与 `citation_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上等于不存在，指到包外的相对路径同样过…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 31,
+              "char": "是",
+              "codepoint": "U+662F",
+              "kind": "cjk",
+              "excerpt": "`file` 与 `citation_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上等于不存在，指到包外的相对路径同样过不…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 32,
+              "char": "论",
+              "codepoint": "U+8BBA",
+              "kind": "cjk",
+              "excerpt": "`file` 与 `citation_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上等于不存在，指到包外的相对路径同样过不了…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 33,
+              "char": "文",
+              "codepoint": "U+6587",
+              "kind": "cjk",
+              "excerpt": "`file` 与 `citation_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上等于不存在，指到包外的相对路径同样过不了复…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 34,
+              "char": "包",
+              "codepoint": "U+5305",
+              "kind": "cjk",
+              "excerpt": "`file` 与 `citation_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上等于不存在，指到包外的相对路径同样过不了复核…"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 35,
+              "char": "内",
+              "codepoint": "U+5185",
+              "kind": "cjk",
+              "excerpt": "`file` 与 `citation_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上等于不存在，指到包外的相对路径同样过不了复核。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 36,
+              "char": "的",
+              "codepoint": "U+7684",
+              "kind": "cjk",
+              "excerpt": "`file` 与 `citation_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上等于不存在，指到包外的相对路径同样过不了复核。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 37,
+              "char": "相",
+              "codepoint": "U+76F8",
+              "kind": "cjk",
+              "excerpt": "`file` 与 `citation_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上等于不存在，指到包外的相对路径同样过不了复核。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 38,
+              "char": "对",
+              "codepoint": "U+5BF9",
+              "kind": "cjk",
+              "excerpt": "`file` 与 `citation_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上等于不存在，指到包外的相对路径同样过不了复核。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 39,
+              "char": "路",
+              "codepoint": "U+8DEF",
+              "kind": "cjk",
+              "excerpt": "`file` 与 `citation_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上等于不存在，指到包外的相对路径同样过不了复核。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 40,
+              "char": "径",
+              "codepoint": "U+5F84",
+              "kind": "cjk",
+              "excerpt": "`file` 与 `citation_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上等于不存在，指到包外的相对路径同样过不了复核。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 41,
+              "char": "：",
+              "codepoint": "U+FF1A",
+              "kind": "cjk",
+              "excerpt": "`file` 与 `citation_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上等于不存在，指到包外的相对路径同样过不了复核。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 42,
+              "char": "绝",
+              "codepoint": "U+7EDD",
+              "kind": "cjk",
+              "excerpt": "…file` 与 `citation_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上等于不存在，指到包外的相对路径同样过不了复核。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 43,
+              "char": "对",
+              "codepoint": "U+5BF9",
+              "kind": "cjk",
+              "excerpt": "…ile` 与 `citation_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上等于不存在，指到包外的相对路径同样过不了复核。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 44,
+              "char": "路",
+              "codepoint": "U+8DEF",
+              "kind": "cjk",
+              "excerpt": "…le` 与 `citation_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上等于不存在，指到包外的相对路径同样过不了复核。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 45,
+              "char": "径",
+              "codepoint": "U+5F84",
+              "kind": "cjk",
+              "excerpt": "…e` 与 `citation_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上等于不存在，指到包外的相对路径同样过不了复核。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 46,
+              "char": "在",
+              "codepoint": "U+5728",
+              "kind": "cjk",
+              "excerpt": "…` 与 `citation_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上等于不存在，指到包外的相对路径同样过不了复核。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 47,
+              "char": "别",
+              "codepoint": "U+522B",
+              "kind": "cjk",
+              "excerpt": "… 与 `citation_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上等于不存在，指到包外的相对路径同样过不了复核。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 48,
+              "char": "人",
+              "codepoint": "U+4EBA",
+              "kind": "cjk",
+              "excerpt": "…与 `citation_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上等于不存在，指到包外的相对路径同样过不了复核。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 49,
+              "char": "的",
+              "codepoint": "U+7684",
+              "kind": "cjk",
+              "excerpt": "… `citation_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上等于不存在，指到包外的相对路径同样过不了复核。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 50,
+              "char": "机",
+              "codepoint": "U+673A",
+              "kind": "cjk",
+              "excerpt": "…`citation_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上等于不存在，指到包外的相对路径同样过不了复核。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 51,
+              "char": "器",
+              "codepoint": "U+5668",
+              "kind": "cjk",
+              "excerpt": "…citation_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上等于不存在，指到包外的相对路径同样过不了复核。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 52,
+              "char": "上",
+              "codepoint": "U+4E0A",
+              "kind": "cjk",
+              "excerpt": "…itation_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上等于不存在，指到包外的相对路径同样过不了复核。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 53,
+              "char": "等",
+              "codepoint": "U+7B49",
+              "kind": "cjk",
+              "excerpt": "…tation_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上等于不存在，指到包外的相对路径同样过不了复核。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 54,
+              "char": "于",
+              "codepoint": "U+4E8E",
+              "kind": "cjk",
+              "excerpt": "…ation_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上等于不存在，指到包外的相对路径同样过不了复核。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 55,
+              "char": "不",
+              "codepoint": "U+4E0D",
+              "kind": "cjk",
+              "excerpt": "…tion_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上等于不存在，指到包外的相对路径同样过不了复核。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 56,
+              "char": "存",
+              "codepoint": "U+5B58",
+              "kind": "cjk",
+              "excerpt": "…ion_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上等于不存在，指到包外的相对路径同样过不了复核。"
+            },
+            {
+              "path": "out/package/MAPPING.md",
+              "line": 9,
+              "column": 57,
+              "char": "在",
+              "codepoint": "U+5728",
+              "kind": "cjk",
+              "excerpt": "…on_loc.file` 都是论文包内的相对路径：绝对路径在别人的机器上等于不存在，指到包外的相对路径同样过不了复核。"
+            }
+          ],
+          "counts": {
+            "cjk": 983,
+            "control": 0,
+            "zero_width": 0,
+            "replacement": 0,
+            "bidi": 0,
+            "nbsp": 0
+          },
+          "detail": [
+            {
+              "path": "out/package",
+              "checked": true,
+              "reason": "",
+              "files": [
+                "out/package/main.tex",
+                "out/package/mapping-appendix.tex",
+                "out/package/MAPPING.md"
+              ],
+              "counts": {
+                "cjk": 983,
+                "control": 0,
+                "zero_width": 0,
+                "replacement": 0,
+                "bidi": 0,
+                "nbsp": 0
+              },
+              "returned": 200
+            }
+          ]
+        },
+        "error": "",
+        "meta": {},
+        "multi_call": {
+          "turn_index": 10,
+          "call_index": 1,
+          "calls": 4,
+          "step_index": 11
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000306"
+    },
+    {
+      "index": 12,
+      "shape": "tool",
+      "payload": {
+        "name": "verify.list_experiments",
+        "args": {
+          "limit": 20
+        },
+        "why": "核正文/附录引用的 exp:000003/000004/000006/000007 在 experiments 台账里有没有行"
+      },
+      "result": {
+        "tool": "verify.list_experiments",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "total": 24,
+          "returned": 20,
+          "truncated": true,
+          "scope": "own-instance（H2）",
+          "experiments": [
+            {
+              "experiment_id": "000000",
+              "claim_key": "lp3-section-validate",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "refutes",
+              "negation_kind": "disproved",
+              "exit_code": 0,
+              "code_path": "code/exp/lpsec_validate.py",
+              "code_hash": "e6a419151a7111fe",
+              "for_question_id": null,
+              "created_at": "2026-11-24T18:12:11+08:00"
+            },
+            {
+              "experiment_id": "000001",
+              "claim_key": "lp3-section-validate",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "refutes",
+              "negation_kind": "disproved",
+              "exit_code": 0,
+              "code_path": "code/exp/lpsec_validate.py",
+              "code_hash": "7bf57c79f10600a7",
+              "for_question_id": null,
+              "created_at": "2026-11-24T18:14:18+08:00"
+            },
+            {
+              "experiment_id": "000002",
+              "claim_key": "lp3-section-validate-v2",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "refutes",
+              "negation_kind": "disproved",
+              "exit_code": 0,
+              "code_path": "code/exp/lpsec_validate.py",
+              "code_hash": "6710f2f7afa90451",
+              "for_question_id": null,
+              "created_at": "2026-11-24T18:15:46+08:00"
+            },
+            {
+              "experiment_id": "000003",
+              "claim_key": "lp3-section-validate-v3",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "supports",
+              "negation_kind": "not_proved",
+              "exit_code": 0,
+              "code_path": "code/exp/lpsec_validate.py",
+              "code_hash": "226a5da3ceebc6ed",
+              "for_question_id": null,
+              "created_at": "2026-11-24T18:19:01+08:00"
+            },
+            {
+              "experiment_id": "000004",
+              "claim_key": "lp3-section-max",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "supports",
+              "negation_kind": "not_proved",
+              "exit_code": 0,
+              "code_path": "code/exp/lpsec_sweep.py",
+              "code_hash": "cee87cd85e5bfb84",
+              "for_question_id": null,
+              "created_at": "2026-11-24T18:20:03+08:00"
+            },
+            {
+              "experiment_id": "000005",
+              "claim_key": "lp3-section-critical",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "refutes",
+              "negation_kind": "disproved",
+              "exit_code": 0,
+              "code_path": "code/exp/lpsec_critical.py",
+              "code_hash": "1985d95fe6ca0406",
+              "for_question_id": null,
+              "created_at": "2026-11-24T18:20:58+08:00"
+            },
+            {
+              "experiment_id": "000006",
+              "claim_key": "lp3-section-critical-v2",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "supports",
+              "negation_kind": "not_proved",
+              "exit_code": 0,
+              "code_path": "code/exp/lpsec_critical.py",
+              "code_hash": "861779663909594d",
+              "for_question_id": null,
+              "created_at": "2026-11-24T18:21:29+08:00"
+            },
+            {
+              "experiment_id": "000007",
+              "claim_key": "lp3-section-arcs",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "supports",
+              "negation_kind": "not_proved",
+              "exit_code": 0,
+              "code_path": "code/exp/lpsec_arcs.py",
+              "code_hash": "b13eb9eb12509023",
+              "for_question_id": null,
+              "created_at": "2026-11-24T18:22:16+08:00"
+            },
+            {
+              "experiment_id": "000008",
+              "claim_key": "lp3-diag-vs-face",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "refutes",
+              "negation_kind": "disproved",
+              "exit_code": 0,
+              "code_path": "code/exp/e1_diag_crosscheck.py",
+              "code_hash": "68acfb8ff6c633a1",
+              "for_question_id": null,
+              "created_at": "2026-11-24T20:00:37+08:00"
+            },
+            {
+              "experiment_id": "000009",
+              "claim_key": "lp3-diag-vs-face",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "inconclusive",
+              "negation_kind": "no_local_evidence",
+              "exit_code": 0,
+              "code_path": "code/exp/e1_diag_crosscheck_v2.py",
+              "code_hash": "ec5b7d2cf4cc5acf",
+              "for_question_id": null,
+              "created_at": "2026-11-24T20:03:54+08:00"
+            },
+            {
+              "experiment_id": "000010",
+              "claim_key": "lp3-diag-vs-face",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "inconclusive",
+              "negation_kind": "no_local_evidence",
+              "exit_code": 0,
+              "code_path": "code/exp/e1_diag_crosscheck_v3.py",
+              "code_hash": "2f55b6d159d9b004",
+              "for_question_id": null,
+              "created_at": "2026-11-24T20:08:18+08:00"
+            },
+            {
+              "experiment_id": "000011",
+              "claim_key": "lp3-diag-vs-face",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "inconclusive",
+              "negation_kind": "no_local_evidence",
+              "exit_code": 0,
+              "code_path": "code/exp/e1_diag_crosscheck_v4.py",
+              "code_hash": "2882015f89c79c02",
+              "for_question_id": null,
+              "created_at": "2026-11-24T20:10:28+08:00"
+            },
+            {
+              "experiment_id": "000012",
+              "claim_key": "lp3-diag-vs-face",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "inconclusive",
+              "negation_kind": "no_local_evidence",
+              "exit_code": 0,
+              "code_path": "code/exp/e1_diag_crosscheck_v5.py",
+              "code_hash": "449b5a6eaa037639",
+              "for_question_id": null,
+              "created_at": "2026-11-24T20:13:25+08:00"
+            },
+            {
+              "experiment_id": "000013",
+              "claim_key": "lp3-diag-vs-face",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "inconclusive",
+              "negation_kind": "no_local_evidence",
+              "exit_code": 0,
+              "code_path": "code/exp/e1_diag_crosscheck_v6.py",
+              "code_hash": "7c8582fff1f16832",
+              "for_question_id": null,
+              "created_at": "2026-11-24T20:14:42+08:00"
+            },
+            {
+              "experiment_id": "000014",
+              "claim_key": "lp3-diag-vs-face",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "supports",
+              "negation_kind": "not_proved",
+              "exit_code": 0,
+              "code_path": "code/exp/e1_diag_crosscheck_v7.py",
+              "code_hash": "2fd0f6bde18582b9",
+              "for_question_id": null,
+              "created_at": "2026-11-24T20:16:41+08:00"
+            },
+            {
+              "experiment_id": "000015",
+              "claim_key": "lp3-face-closed-form",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "supports",
+              "negation_kind": "not_proved",
+              "exit_code": 0,
+              "code_path": "code/exp/e2_face_closed_vs_integral.py",
+              "code_hash": "74d6dc9b61912921",
+              "for_question_id": null,
+              "created_at": "2026-11-24T20:17:37+08:00"
+            },
+            {
+              "experiment_id": "000016",
+              "claim_key": "lp3-pstar-diag-vs-face",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "supports",
+              "negation_kind": "not_proved",
+              "exit_code": 0,
+              "code_path": "code/exp/e3_pstar_scan.py",
+              "code_hash": "bfbfc8ae0cd29e35",
+              "for_question_id": null,
+              "created_at": "2026-11-24T20:18:40+08:00"
+            },
+            {
+              "experiment_id": "000017",
+              "claim_key": "lp3-kernel-scaling-deltak",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "inconclusive",
+              "negation_kind": "no_local_evidence",
+              "exit_code": 0,
+              "code_path": "code/exp/e4_kernel_scan.py",
+              "code_hash": "6c174afa761fceb7",
+              "for_question_id": null,
+              "created_at": "2026-11-24T20:19:20+08:00"
+            },
+            {
+              "experiment_id": "000018",
+              "claim_key": "lp3-kernel-scaling-deltak",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "supports",
+              "negation_kind": "not_proved",
+              "exit_code": 0,
+              "code_path": "code/exp/e4_kernel_scan_v2.py",
+              "code_hash": "df9bb1248053b5ce",
+              "for_question_id": null,
+              "created_at": "2026-11-24T20:19:56+08:00"
+            },
+            {
+              "experiment_id": "000019",
+              "claim_key": "lp3-rho-monotone",
+              "method": "numeric",
+              "evidence_kind": "cross_check",
+              "result": "refutes",
+              "negation_kind": "disproved",
+              "exit_code": 0,
+              "code_path": "code/exp/e3b_rho_monotone.py",
+              "code_hash": "f16457f5acaa90ff",
+              "for_question_id": null,
+              "created_at": "2026-11-24T20:20:28+08:00"
+            }
+          ],
+          "reason": "共 24 条实验记录，返回 20 条"
+        },
+        "error": "",
+        "meta": {},
+        "multi_call": {
+          "turn_index": 10,
+          "call_index": 2,
+          "calls": 4,
+          "step_index": 12
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000306"
+    },
+    {
+      "index": 13,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "statements",
+          "filter": {
+            "stmt_id": "000042"
+          },
+          "fields": [
+            "stmt_id",
+            "label",
+            "kind",
+            "evidence_kind",
+            "status"
+          ]
+        },
+        "why": "核 claim-6 新引的 stmt:000042 在命题台账里能不能解析到"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "statements",
+          "rows": [
+            {
+              "stmt_id": "000042",
+              "label": "B_p^3 对角与面对角截面面积公式及 Δ(p) 的最终正性",
+              "kind": "theorem",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            }
+          ],
+          "total": 1,
+          "returned": 1,
+          "limit": 50,
+          "offset": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "total": 1,
+          "returned": 1,
+          "offset": 0,
+          "limit": 50,
+          "fields": [
+            "stmt_id",
+            "label",
+            "kind",
+            "evidence_kind",
+            "status"
+          ]
+        },
+        "warn": "这一步给了 4 条调用，已按顺序逐条：第 1 条 fs.read 成功；第 2 条 review.scan_text_integrity 成功；第 3 条 verify.list_experiments 成功：24；第 4 条 table.list 成功：1。（真的执行 4 / 4 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 10,
+          "call_index": 3,
+          "calls": 4,
+          "step_index": 13,
+          "summary": "这一步给了 4 条调用，已按顺序逐条：第 1 条 fs.read 成功；第 2 条 review.scan_text_integrity 成功；第 3 条 verify.list_experiments 成功：24；第 4 条 table.list 成功：1。（真的执行 4 / 4 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 10,
+            "calls": 4,
+            "items": 4,
+            "steps": [
+              10,
+              11,
+              12,
+              13
+            ],
+            "executed": 4,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000306"
+    },
+    {
+      "index": 14,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.search",
+        "args": {
+          "pattern": "\\\\section\\{|\\\\appendix|\\\\begin\\{abstract\\}|\\\\bibitem",
+          "path": "out/package/main.tex"
+        },
+        "why": "拿章节标题/附录/摘要/文献条目的行号，核骨架顺序与禁令②③的边界（附录 A 之前不许有内部编号）"
+      },
+      "result": {
+        "tool": "fs.search",
+        "ok": true,
+        "data": {
+          "pattern": "\\\\section\\{|\\\\appendix|\\\\begin\\{abstract\\}|\\\\bibitem",
+          "path": "out/package/main.tex",
+          "matches": [
+            {
+              "path": "out/package/main.tex",
+              "line": 18,
+              "text": "\\begin{abstract}"
+            },
+            {
+              "path": "out/package/main.tex",
+              "line": 22,
+              "text": "\\section{Introduction}"
+            },
+            {
+              "path": "out/package/main.tex",
+              "line": 30,
+              "text": "\\section{Definitions and notation}"
+            },
+            {
+              "path": "out/package/main.tex",
+              "line": 50,
+              "text": "\\section{Main results}"
+            },
+            {
+              "path": "out/package/main.tex",
+              "line": 181,
+              "text": "\\section{Discussion and open problems}"
+            },
+            {
+              "path": "out/package/main.tex",
+              "line": 203,
+              "text": "\\bibitem{ball} K.~Ball, \\emph{Cube slicing in $\\mathbb{R}^n$}, Proc. Amer. Math. Soc. \\textbf{97} (1986), no.~3, 465--473."
+            },
+            {
+              "path": "out/package/main.tex",
+              "line": 205,
+              "text": "\\bibitem{konig} H.~K\\\"onig, \\emph{On maximal hyperplane sections of the unit ball of $\\ell_p^n$ for $p>2$}, Advances in Operator Theory \\textbf{10} (2025), paper no.~15."
+            },
+            {
+              "path": "out/package/main.tex",
+              "line": 207,
+              "text": "\\bibitem{grzaslewicz} R.~Grz\\'slewicz, \\emph{Plane sections of the unit ball of $L_p$}, Acta Math. Hungar. \\textbf{52} (1988), no.~3--4, 219--227."
+            },
+            {
+              "path": "out/package/main.tex",
+              "line": 209,
+              "text": "\\bibitem{ambrus} G.~Ambrus, \\emph{Critical central sections of the cube}, arXiv:2107.14778v3 (2023), 12~pp."
+            },
+            {
+              "path": "out/package/main.tex",
+              "line": 211,
+              "text": "\\bibitem{eskenazis} A.~Eskenazis, \\emph{On extremal sections of subspaces of $L_p$}, preprint."
+            },
+            {
+              "path": "out/package/main.tex",
+              "line": 215,
+              "text": "\\appendix"
+            },
+            {
+              "path": "out/package/main.tex",
+              "line": 216,
+              "text": "\\section{Computational evidence}\\label{app:computational}"
+            }
+          ],
+          "lines": [
+            "out/package/main.tex:18: \\begin{abstract}",
+            "out/package/main.tex:22: \\section{Introduction}",
+            "out/package/main.tex:30: \\section{Definitions and notation}",
+            "out/package/main.tex:50: \\section{Main results}",
+            "out/package/main.tex:181: \\section{Discussion and open problems}",
+            "out/package/main.tex:203: \\bibitem{ball} K.~Ball, \\emph{Cube slicing in $\\mathbb{R}^n$}, Proc. Amer. Math. Soc. \\textbf{97} (1986), no.~3, 465--473.",
+            "out/package/main.tex:205: \\bibitem{konig} H.~K\\\"onig, \\emph{On maximal hyperplane sections of the unit ball of $\\ell_p^n$ for $p>2$}, Advances in Operator Theory \\textbf{10} (2025), paper no.~15.",
+            "out/package/main.tex:207: \\bibitem{grzaslewicz} R.~Grz\\'slewicz, \\emph{Plane sections of the unit ball of $L_p$}, Acta Math. Hungar. \\textbf{52} (1988), no.~3--4, 219--227.",
+            "out/package/main.tex:209: \\bibitem{ambrus} G.~Ambrus, \\emph{Critical central sections of the cube}, arXiv:2107.14778v3 (2023), 12~pp.",
+            "out/package/main.tex:211: \\bibitem{eskenazis} A.~Eskenazis, \\emph{On extremal sections of subspaces of $L_p$}, preprint.",
+            "out/package/main.tex:215: \\appendix",
+            "out/package/main.tex:216: \\section{Computational evidence}\\label{app:computational}"
+          ],
+          "total": 12,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        },
+        "error": "",
+        "meta": {
+          "total": 12,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 69888,
+        "prompt_cache_miss_tokens": 10127,
+        "tokens_in": 80015,
+        "tokens_out": 1837,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000306"
+    },
+    {
+      "index": 15,
+      "shape": "tool",
+      "payload": {
+        "name": "review.review_document",
+        "args": {
+          "doc_id": "000001",
+          "round_no": 10
+        },
+        "why": "现行正文与台账机械读数全清（statement_surplus 空、proofs 4/4、cites/refs/duplicates 零发现、exp: 仅出现在附录），据此出本轮裁决并把签名钉在现行内容 sha 66c671e9a0e7… 上"
+      },
+      "result": {
+        "tool": "review.review_document",
+        "ok": true,
+        "data": {
+          "doc_id": "000001",
+          "checked": true,
+          "round": 10,
+          "new_findings": [],
+          "duplicate_skipped": 0,
+          "reopened": [],
+          "error_count": 0,
+          "warning_count": 0,
+          "info_count": 0,
+          "dep_check": {
+            "checked": true,
+            "reason": "检查了 0 条依赖",
+            "open": []
+          },
+          "semantic_check": {
+            "checked": false,
+            "judge": "",
+            "reason": "没接线：语义级判据（「结论是否强于引文」）需要 LLM 或人，本框架默认零 LLM 调用。接法：`scan_document(..., semantic_judge=<可调用>)`，签名见 `SemanticJudge`。⇒ 这一格的状态是**没查**，不是'查过、没问题' —— 措辞级判据仍然跑过（见 findings）",
+            "claims_judged": 0,
+            "claims_unknown": 0,
+            "checker_errors": 0,
+            "stronger_than_evidence": 0
+          },
+          "coverage": {
+            "claims_total": 14,
+            "claims_reviewed": 14,
+            "claims_decided": 14,
+            "claims_semantically_judged": 0,
+            "note": "`claims_reviewed` = 逐条字段/引用/证据档位检查真的跑过的断言数；`claims_decided` = 其中校验器判成了的（判不了的另计）；`claims_semantically_judged` = 语义级判据（「结论是否强于引文」）真的判过的条数（没接线时为 0 = **没查**，不是'没问题'）。本覆盖率只覆盖「稿件有没有把自己说清楚」，不覆盖「数学对不对」——后者要 proof 级证据（FC-22），不由本函数给出。"
+          },
+          "status": "in_review",
+          "status_updated": true,
+          "status_error": null,
+          "signature": null,
+          "signature_error": null,
+          "verdict": "accepted",
+          "open_findings": {
+            "checked": true,
+            "total": 1,
+            "error": 0,
+            "warning": 1,
+            "finding_ids": [
+              "000006"
+            ],
+            "review_round": 10,
+            "review_rounds": 10,
+            "blocks_accept": true,
+            "why": "还有 1 条 open findings 没被本轮复审收口（000006）"
+          },
+          "paper_body": {
+            "checked": true,
+            "source": "tex",
+            "path": "out/package/main.tex",
+            "sha256": "62efb2f6835297672a4839e2d374bcf36c9a1ba56707f36f4280250f37166b4e",
+            "bytes": 32396,
+            "lines": 232,
+            "chars": 32396,
+            "reason": "",
+            "documents_row": "present"
+          },
+          "reason": "被审正文：out/package/main.tex（tex，sha256=62efb2f683529767…，232 行）；机械检查发现 error=0、warning=0、info=0；依赖闭合已检查（检查了 0 条依赖）；新增发现 0 条、与已有发现重复被跳过 0 条；覆盖率 14/14（判成 14）；语义级判据**没查**（未接线）—— '措辞干净而结论强于引文'这一形态看不见；⛔ 有 open findings ⇒ **不判 accepted**（status=in_review）：还有 1 条 open findings 没被本轮复审收口（000006）；本轮 round=10、documents.review_rounds=10 —— 先去 `review.verify_fixes` 逐条判 fixed / 仍 open（手工判词只有 H 的显式复核通道能判掉），收口之后再复审。"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 79232,
+        "prompt_cache_miss_tokens": 2617,
+        "tokens_in": 81849,
+        "tokens_out": 2243,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000306"
+    },
+    {
+      "index": 16,
+      "shape": "tool",
+      "payload": {
+        "name": "review.list_findings",
+        "args": {
+          "doc_id": "000001",
+          "status": "open"
+        },
+        "why": "先看清 000006 这条 open 发现说的是什么，再决定它是否已被 G 改 claim-6 引文修好"
+      },
+      "result": {
+        "tool": "review.list_findings",
+        "ok": true,
+        "data": {
+          "count": 1,
+          "findings": [
+            {
+              "finding_id": "000006",
+              "doc_id": "000001",
+              "kind": "overclaim",
+              "level": "warning",
+              "target": "section:4",
+              "message": "第 4 节 Relation with the literature 把 thm:delta 说成「已证明从 p_* 起面对角向占优」，但 thm:delta(iii) 只给出「存在 P_0 使 p≥P_0 时 Δ>0」，未界定 P_0、也未证明 Δ 在 (2,p_*) 上的符号；同节第一点自己写着 thm:delta 只保证 Δ 在 p 大时为正，定出零点需要整个区间上的信息。",
+              "evidence": "① 正文 Theorem thm:delta(iii)（第 160–174 行，逐字）：「consequently there is $P_0\\in[1,\\infty)$ such that $A_{\\mathrm{face}}(p)>A_{\\mathrm{diag}}(p)$ for every $p\\ge P_0$.」——只断言存在 P_0，没有任何一句把 P_0 钉到 p_* 上，也没有 Δ 在 (2,p_*) 内为负的结论。② 同节「Three features deserve comment」第一点（第 186 行起，逐字）：「Theorem~\\ref{thm:delta} guarantees only that $\\Delta$ is positive for large $p$, and locating the zero requires information about $\\Delta$ on the whole interval.」③ 第 4 节「Numerically supported strong conjecture (not proved here)」段自述 p_* = 4.998215596862 是「(numerically), the unique solution of A_diag(p)=A_face(p)」，即 p_* 的位置是数值结论。三处互相对照：把「存在 P_0」写成「从 p_* 起占优」超出 thm:delta 能支撑的强度，与 round 1 finding 000000 同一类（该条当时判为 overclaim 并改弱）。④ 此判为我逐句读本版正文所得，不涉及数值对错。",
+              "status": "open",
+              "round": 8,
+              "resolution_note": "[manual] 手工判词：H 自己读出来的发现（record_finding 落库）",
+              "superseded_by": ""
+            }
+          ]
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 81024,
+        "prompt_cache_miss_tokens": 2448,
+        "tokens_in": 83472,
+        "tokens_out": 422,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000306"
+    },
+    {
+      "index": 17,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/package/main.tex",
+          "start_line": 184,
+          "max_lines": 18
+        },
+        "why": "核 finding 000006 点的那一段（第 4 节 Relation with the literature）在现行版里是否仍把 thm:delta 说成「从 p_* 起占优」"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "\n\\emph{Numerically supported strong conjecture (not proved here).} For $1\\le p<\\infty$ the maximal area of a central section of $B_p^3$ is attained at one of the three normals $e_3$, $d$, $f$, and the winner depends on $p$ in three regimes: for $1\\le p<2$ the coordinate direction $e_3$ gives the largest area; for $2<p<p_*$ the body diagonal $d$ gives the largest area; for $p>p_*$ the face diagonal $f$ gives the largest area. At $p=2$ all directions give the same area $\\pi$. The threshold is $p_*=4.998215596862$ (numerically), the unique solution of $A_{\\mathrm{diag}}(p)=A_{\\mathrm{face}}(p)$ in $(1,\\infty)$. This statement is supported by a sweep over twelve values of $p$, by local refinement along the two boundary arcs of the ordering cone $0\\le a\\le b\\le c$, and by bisection on both thresholds; it is not established by proof, and in particular the absence of a strictly interior maximizing direction is only verified numerically. The word ``conjecture'' is meant literally: the three-regime description should not be cited as a theorem.\n\nThree features deserve comment. First, the two thresholds are of different natures. The threshold $p=2$ is exact and follows from Theorem~\\ref{thm:integral}(iii): the face-diagonal factor $2^{1/2-1/p}$ passes through $1$ exactly at $p=2$, and at $p=2$ the body is Euclidean, so all central sections are congruent discs. The threshold $p_*$ is not of this type: it is the zero of the continuous function $\\Delta$ of Theorem~\\ref{thm:delta}, whose endpoints signs are both positive; Theorem~\\ref{thm:delta} guarantees only that $\\Delta$ is positive for large $p$, and locating the zero requires information about $\\Delta$ on the whole interval. Second, the two transitions have opposite directions: passing $p=2$ the maximal area leaves the coordinate direction and moves to the body diagonal, while passing $p_*$ it moves from the body diagonal to the face diagonal, which is the direction that is extremal for the cube, in accordance with Ball's th…（落档截断，原 5512 字）",
+        "error": "",
+        "meta": {
+          "path": "out/package/main.tex",
+          "encoding": "utf-8",
+          "bytes_read": 32396,
+          "total_bytes": 32396,
+          "truncated": false,
+          "start_line": 184,
+          "lines_read": 18,
+          "total_lines": 231,
+          "next_line": 202,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 184–201 行（共 231 行）；续读 start_line=202",
+          "sha256": "62efb2f6835297672a4839e2d374bcf36c9a1ba56707f36f4280250f37166b4e"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 82688,
+        "prompt_cache_miss_tokens": 1794,
+        "tokens_in": 84482,
+        "tokens_out": 780,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000306"
+    },
+    {
+      "index": 18,
+      "shape": "tool",
+      "payload": {
+        "name": "review.record_finding",
+        "args": {
+          "doc_id": "000001",
+          "kind": "overclaim",
+          "level": "warning",
+          "axis": "证据",
+          "target": "section:4",
+          "line": 189,
+          "round_no": 10,
+          "message": "第 4 节 Relation with the literature 仍把 thm:delta 说成「已证从 p_* 起面对角向占优」，而 thm:delta(iii) 只给出「存在 P_0 使 p≥P_0 时 Δ>0」；同节第 187 行又自述 thm:delta 只保证大 p 时为正、定出零点需要整个区间上的信息 —— 正文自相矛盾，结论强度超出定理能支撑的范围。",
+          "evidence": "现行正文 out/package/main.tex（sha256=62efb2f683529767…，文件 stat 核过；documents.content_sha256=66c671e9a0e7…）第 189 行逐字：「Theorem~\\ref{thm:delta} shows that the cube behaviour already dominates from $p_*$ on.」；对照同节第 187 行逐字：「Theorem~\\ref{thm:delta} guarantees only that $\\Delta$ is positive for large $p$, and locating the zero requires information about $\\Delta$ on the whole interval.」；再对照 thm:delta 的 (iii)（第 160–174 行区域）逐字：「consequently there is $P_0\\in[1,\\infty)$ such that $A_{\\mathrm{face}}(p)>A_{\\mathrm{diag}}(p)$ for every $p\\ge P_0$.」——只断言存在 P_0，未界定 P_0、未证 Δ 在 (2,p_*) 上的符号；p_* 在第 185 行自述为「(numerically), the unique solution」。本轮 review.review_document(round_no=10) 读数：error=0、warning=0、新增发现 0 条，但 open findings 里仍有 000006（同一处，round 8 落库、status=open），故 signature=null、status=in_review —— 即现行版仍未被签名钉住。G 本轮只改 claims 台账 claim-6 的引文（stmt:000034 / stmt:000042 / lit:000002 / lit:000006，其中 stmt:000042 已核在 statements 表可解析），正文未随之改动，该句仍在。",
+          "verbatim_quote": "Theorem~\\ref{thm:delta} shows that the cube behaviour already dominates from $p_*$ on.",
+          "suggestion": "把第 189 行该句改弱为「Theorem~\\ref{thm:delta} shows only that the cube behaviour wins for all sufficiently large $p$; the crossing with the body-diagonal regime is located numerically at $p_*$ (Section~4, Appendix~A)」—— 一句话的改弱，与同节第 187 行的自述一致，不需要新增证据；改完由 G 重编 PDF 后再由 H 复审签现行 sha。",
+          "why": "这是本轮唯一实质问题：它让「通过」不成立（自相矛盾 + 结论强度超过定理），且与既有 open 发现 000006 同一处，须在现行版上留一条指得到行的记录"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "review.record_finding",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "created": true,
+          "duplicate_skipped": 0,
+          "finding_id": "000007",
+          "doc_id": "000001",
+          "kind": "overclaim",
+          "level": "warning",
+          "round": 10,
+          "status": "open"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 83712,
+        "prompt_cache_miss_tokens": 3091,
+        "tokens_in": 86803,
+        "tokens_out": 4071,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000306"
+    },
+    {
+      "index": 19,
+      "shape": "tool",
+      "payload": {
+        "name": "review.verify_fixes",
+        "args": {
+          "doc_id": "000001",
+          "round_no": 11
+        },
+        "why": "复审上一轮 open 发现（000006 + 我本轮落的 000007）：判它们在这版正文上是已修还是仍开，并把复核记录落进台账"
+      },
+      "result": {
+        "tool": "review.verify_fixes",
+        "ok": true,
+        "data": {
+          "doc_id": "000001",
+          "round": 11,
+          "resolved": [
+            {
+              "finding_id": "000000",
+              "kind": "overclaim",
+              "level": "warning",
+              "target": "section:4",
+              "message": "第 4 节把 Theorem thm:zero 说成「解释了为什么只有这三个方向能竞争」，但 thm:zero 只覆盖「至少一个坐标为 0」的法向，对三个坐标都非零的法向没有给出任何结论，这句话的强度超过它引的证据。",
+              "evidence": "main.tex 第 185 行逐字：「the result of Theorem~\\ref{thm:zero} explains why only these three directions can compete: for normals with a vanishing coordinate the area is an explicit decreasing function of $|a|^p+|b|^p$, so within that class the extremum is always at a coordinate vector or at the face diagonal, never in between.」而 thm:zero（main.tex 第 97–115 行；台账 stmt:000035）的前提是「at least one coordinate equal to 0」；三个坐标都非零的情形在本文里只有附录 A（行 218–224）的数值读数，正文第 4 节同一页自己也承认「the absence of a strictly interior maximizing direction is only verified numerically」（行 183）。同一节行 193 还把它列为 open problem (a)。",
+              "round": 1,
+              "status": "fixed",
+              "source": "manual_rechecked"
+            },
+            {
+              "finding_id": "000001",
+              "kind": "garbled",
+              "level": "warning",
+              "target": "section:4",
+              "message": "第 4 节用一个从未定义过的「ordering cone $0\\le a\\le b\\le c$」描述数值扫描的参数化（第 183 行、第 193 行、附录第 220 行），读者无从知道 a,b,c 指什么、凭什么可以假定这一顺序、两条边界弧 $(0,1,t)$ 与 $(1,1,t)$ 里的 t 又是什么——这三处都缺定义。",
+              "evidence": "逐字引文（main.tex 第 183 行）：「by local refinement along the two boundary arcs of the ordering cone $0\\le a\\le b\\le c$」；第 193 行「the critical points of $A_p$ on the ordering cone」；附录第 220 行「parametrised by the ordering cone $0\\le a\\le b\\le c$ together with the two boundary arcs $(0,1,t)$ and $(1,1,t)$, $t\\in[0,1]$」。第 2 节（Definitions and notation，第 30–54 行）只定义了 $B_p^3$、$A_p(n)$、$e_n(\\psi)$、$\\Sigma_3^{\\pm}$、$u,v$，没有定义这个锥、也没有写出「由 $\\Sigma_3^{\\pm}$ 不变性可设法向各分量满足 $0\\le a\\le b\\le c$」这一步约化；按我在正文里的通读，该词在正文首次出现即在第 4 节。",
+              "round": 1,
+              "status": "fixed",
+              "source": "manual_rechecked"
+            },
+            {
+              "finding_id": "000002",
+              "kind": "garbled",
+              "level": "warning",
+              "target": "references",
+              "message": "参考文献项 \\bibitem{critical} 缺作者与出处，条目里还写着内部的核验备注（「Author metadata for this item could not be verified from the sources available to us」）——读者据此找不到这篇文献，而正文第 1 节与第 4 节至少两处 \\cite{critical} 把它当作已知工作引用，两处因此都不可核。",
+              "evidence": "逐字引文（main.tex 第 207 行）：「\\bibitem{critical} \\emph{Critical central sections of the cube}, preprint. (Author metadata for this item could not be verified from the sources available to us; the title is quoted as recorded.)」；正文引它的位置：第 1 节「The cube's critical central sections and the extremal sections of subspaces of $L_p$ are treated in \\cite{critical} and \\cite{eskenazis}.」与第 4 节 Relation with the literature 一段的 \\cite{ball,konig,grzaslewicz,critical,eskenazis}。台账侧：literature 里有同名行 lit:000003「Critical central sections of the cube」（table.list 读数），补齐元数据的材料在盘上是有的。",
+              "round": 1,
+              "status": "fixed",
+              "source": "manual_rechecked"
+            },
+            {
+              "finding_id": "000003",
+              "kind": "dangling_dep",
+              "level": "error",
+              "target": "references",
+              "message": "参考文献条目改为 \\bibitem{ambrus} 之后，正文第 26 行与第 187 行仍写 \\cite{critical}：引键在参考文献表里已不存在，两处引用都悬空（scan 判 cites error，且 bibitem{ambrus} 无人引用、uncited=1）。",
+              "evidence": "review.scan(kinds=[\"cites\",...], project=\".\") 读数：findings[0] = {kind: cites, severity: error, file: out/package/main.tex, line: 26, ref: critical, why: 「这条 \\cite 的键 'critical' 在参考文献里没有对应的 \\bibitem —— 正文引了一份不存在于参考文献表的文献（读的人点不过去）」}；facts.bibitem_keys=5、cite_keys=5、uncited=1。fs.search(pattern=\"critical\") 读数：第 26 行「The cube's critical central sections and the extremal sections of subspaces of $L_p$ are treated in \\cite{critical} and \\cite{eskenazis}.」；第 187 行 Relation with the literature 段「The papers \\cite{critical} and \\cite{eskenazis} study critical central sections of the cube and extremal sections of subspaces of $L_p$ respectively」。参考文献表（第 205–211 行）现在是 \\bibitem{grzaslewicz} / \\bibitem{ambrus} G.~Ambrus, arXiv:2107.14778v3 (2023), 12 pp. / \\bibitem{eskenazis}，已没有 \\bibitem{critical} —— 条目改名而正文引键没跟着改，两处都不再解析。",
+              "round": 2,
+              "status": "fixed",
+              "source": "manual_rechecked"
+            },
+            {
+              "finding_id": "000004",
+              "kind": "dangling_dep",
+              "level": "error",
+              "target": "section:1",
+              "message": "finding 000003 只改了一半：第 26 行与第 187 行的 \\cite{critical} 已改为 \\cite{ambrus}，但第 28 行（Introduction 的贡献清单）仍写 \\cite{critical}，而参考文献表里已无 \\bibitem{critical}（只有第 207 行的 \\bibitem{ambrus}）—— 这一处引用仍然悬空。",
+              "evidence": "review.scan(kinds=[\"cites\",...], project=\".\") 本版读数：findings[0] = {kind: cites, severity: error, file: out/package/main.tex, line: 28, ref: \"critical\", text: \"\\cite{critical}\", why: 「这条 \\cite 的键 'critical' 在参考文献里没有对应的 \\bibitem」}；facts.bibitem_keys=5、cite_keys=6、uncited=0（五个 bibitem 全被引，多出来的那个 cite 键就是 critical）。fs.read(out/package/main.tex, start_line=28, max_lines=1) 逐字：「…discusses the relation with \\cite{ball,konig,grzaslewicz,critical,eskenazis} and lists the open problems.」fs.search(pattern=\"critical|ambrus|bibitem\") 读数：第 201/203/205/207/209 行的 bibitem 键依次为 ball / konig / grzaslewicz / ambrus / eskenazis，全表无 \\bibitem{critical}。正文 sha256=098f73a84288d7f8d7f0949db845aeab122642c7e5a9c88cf69d146bded4cc6e（与 G 报的回执一致）。",
+              "round": 4,
+              "status": "fixed",
+              "source": "manual_rechecked"
+            },
+            {
+              "finding_id": "000005",
+              "kind": "unsupported_claim",
+              "level": "info",
+              "target": "claim-6",
+              "message": "claim-6 新加的 lit:000006（On extremal sections of subspaces of l_p）与本题相关但不是这条断言的来源：claim-6 的内容（l_p^3 面对角截面闭式 A_face(p)=2^{1/2-1/p}A_coord(p)、以及 p<2 时严格小于 A_coord）由 Theorem thm:integral (ii)(iii) 证明，台账上是 stmt:000034；另一条 lit:000002（Plane sections of the unit ball of l_p）是极坐标公式的出处，与本题相称。四条引用都能在台账里查到行，这不是「指不到行」，是「其中一条只是 related work」。",
+              "evidence": "① table.list(literature, fields=[lit_id,title,summary]) 读数：lit_id 000002 =「Plane sections of the unit ball of l_p」；lit_id 000006 =「On extremal sections of subspaces of l_p」（其余条目 000000/000001/000003/000004/000005/000007… 共 25 行）。② table.list(statements, fields=stmt_id/label/kind) 读数：000034 = kind theorem「B_p^3 中心截面面积 A_p(n) 的积分表示与坐标向/面对角向闭式面积公式」；000042 = kind theorem「B_p^3 对角与面对角截面面积公式及 Δ(p) 的最终正性」。③ 正文第 189 行段末自述这两篇研究的是「the limiting and in the infinite-dimensional setting」，与 claim-6 的三维闭式不是同一件事。④ 本版 claim-6 逐字：「For every p in [1,infinity), the central plane section of the unit ball of l_p^3 by the hyperplane with face-diagonal normal (1,1,0)/sqrt(2) has area A_face(p) = 2^{1/2-1/p} * 4 Gamma(1+1/p)^2 / Gamma(1+2/p), with A_face(1) = sqrt(2), A_face(2) = pi and A_face(p) tending to 4 sqrt(2); moreover A_face(p) < A_coord(p) exactly when p < 2, …」——措辞已收敛到面对角法向本身，与 Theorem thm:integral(iii) 逐字对得上。⑤ evidence_kind=cross_check、disclaimer=「数值交叉验证，不构成证明」：这条断言等级低于它实际有的证明（有 V 签的 thm:integral），属保守写法，不构成 overclaim。",
+              "round": 7,
+              "status": "wontfix",
+              "source": "manual_rechecked"
+            }
+          ],
+          "still_open": [
+            {
+              "finding_id": "000007",
+              "kind": "overclaim",
+              "level": "warning",
+              "target": "section:4",
+              "message": "第 4 节 Relation with the literature 仍把 thm:delta 说成「已证从 p_* 起面对角向占优」，而 thm:delta(iii) 只给出「存在 P_0 使 p≥P_0 时 Δ>0」；同节第 187 行又自述 thm:delta 只保证大 p 时为正、定出零点需要整个区间上的信息 —— 正文自相矛盾，结论强度超出定理能支撑的范围。",
+              "evidence": "现行正文 out/package/main.tex（sha256=62efb2f683529767…，文件 stat 核过；documents.content_sha256=66c671e9a0e7…）第 189 行逐字：「Theorem~\\ref{thm:delta} shows that the cube behaviour already dominates from $p_*$ on.」；对照同节第 187 行逐字：「Theorem~\\ref{thm:delta} guarantees only that $\\Delta$ is positive for large $p$, and locating the zero requires information about $\\Delta$ on the whole interval.」；再对照 thm:delta 的 (iii)（第 160–174 行区域）逐字：「consequently there is $P_0\\in[1,\\infty)$ such that $A_{\\mathrm{face}}(p)>A_{\\mathrm{diag}}(p)$ for every $p\\ge P_0$.」——只断言存在 P_0，未界定 P_0、未证 Δ 在 (2,p_*) 上的符号；p_* 在第 185 行自述为「(numerically), the unique solution」。本轮 review.review_document(round_no=10) 读数：error=0、warning=0、新增发现 0 条，但 open findings 里仍有 000006（同一处，round 8 落库、status=open），故 signature=null、status=in_review —— 即现行版仍未被签名钉住。G 本轮只改 claims 台账 claim-6 的引文（stmt:000034 / stmt:000042 / lit:000002 / lit:000006，其中 stmt:000042 已核在 statements 表可解析），正文未随之改动，该句仍在。",
+              "round": 10,
+              "status": "open",
+              "source": "manual_not_rechecked",
+              "note": "[round 11] 手工判词（`review.record_finding` 落的散文发现）**不能被自动复跑判掉**：它的去重键不在机械 scan 的可产出集合里，「本轮没复现」不等于「H 复核过」。离场只有一条路：H 用 `review.record_finding` 以同一去重键再登记一次，`evidence` 以 `复核 fixed：` 或 `复核 wontfix：` 开头"
+            }
+          ],
+          "unresolved_findings": [],
+          "not_rechecked": [
+            {
+              "finding_id": "000007",
+              "kind": "overclaim",
+              "level": "warning",
+              "target": "section:4",
+              "message": "第 4 节 Relation with the literature 仍把 thm:delta 说成「已证从 p_* 起面对角向占优」，而 thm:delta(iii) 只给出「存在 P_0 使 p≥P_0 时 Δ>0」；同节第 187 行又自述 thm:delta 只保证大 p 时为正、定出零点需要整个区间上的信息 —— 正文自相矛盾，结论强度超出定理能支撑的范围。",
+              "evidence": "现行正文 out/package/main.tex（sha256=62efb2f683529767…，文件 stat 核过；documents.content_sha256=66c671e9a0e7…）第 189 行逐字：「Theorem~\\ref{thm:delta} shows that the cube behaviour already dominates from $p_*$ on.」；对照同节第 187 行逐字：「Theorem~\\ref{thm:delta} guarantees only that $\\Delta$ is positive for large $p$, and locating the zero requires information about $\\Delta$ on the whole interval.」；再对照 thm:delta 的 (iii)（第 160–174 行区域）逐字：「consequently there is $P_0\\in[1,\\infty)$ such that $A_{\\mathrm{face}}(p)>A_{\\mathrm{diag}}(p)$ for every $p\\ge P_0$.」——只断言存在 P_0，未界定 P_0、未证 Δ 在 (2,p_*) 上的符号；p_* 在第 185 行自述为「(numerically), the unique solution」。本轮 review.review_document(round_no=10) 读数：error=0、warning=0、新增发现 0 条，但 open findings 里仍有 000006（同一处，round 8 落库、status=open），故 signature=null、status=in_review —— 即现行版仍未被签名钉住。G 本轮只改 claims 台账 claim-6 的引文（stmt:000034 / stmt:000042 / lit:000002 / lit:000006，其中 stmt:000042 已核在 statements 表可解析），正文未随之改动，该句仍在。",
+              "round": 10,
+              "status": "open",
+              "source": "manual_not_rechecked",
+              "note": "[round 11] 手工判词（`review.record_finding` 落的散文发现）**不能被自动复跑判掉**：它的去重键不在机械 scan 的可产出集合里，「本轮没复现」不等于「H 复核过」。离场只有一条路：H 用 `review.record_finding` 以同一去重键再登记一次，`evidence` 以 `复核 fixed：` 或 `复核 wontfix：` 开头"
+            }
+          ],
+          "semantic_check": {
+            "checked": false,
+            "judge": "",
+            "reason": "没接线：语义级判据（「结论是否强于引文」）需要 LLM 或人，本框架默认零 LLM 调用。接法：`scan_document(..., semantic_judge=<可调用>)`，签名见 `SemanticJudge`。⇒ 这一格的状态是**没查**，不是'查过、没问题' —— 措辞级判据仍然跑过（见 findings）",
+            "claims_judged": 0,
+            "claims_unknown": 0,
+            "checker_errors": 0,
+            "stronger_than_evidence": 0
+          },
+          "verdict": "revise_again",
+          "reason": "第 11 轮复审：上一轮 7 条发现里 resolved=6、仍复现=1；error 级未解决 0 条；；其中 1 条是**手工判词**（`record_finding` 落的散文发现）、本轮**没有 H 的显式复核** ⇒ 留在 open，不许判 fixed（手工判词不能被自动复跑判掉；逐条见 `not_rechecked`）；6 条手工判词已由 H 显式复核过（fixed / wontfix 带理由）⇒ 本轮不改写它们。",
+          "error_count": 0,
+          "warning_count": 0,
+          "info_count": 0,
+          "dep_check": {
+            "checked": true,
+            "reason": "检查了 0 条依赖",
+            "open": []
+          },
+          "finding_updates": [],
+          "status": "in_review",
+          "status_updated": true,
+          "status_error": null,
+          "paper_body": {
+            "checked": true,
+            "source": "tex",
+            "path": "out/package/main.tex",
+            "sha256": "62efb2f6835297672a4839e2d374bcf36c9a1ba56707f36f4280250f37166b4e",
+            "bytes": 32396,
+            "lines": 232,
+            "chars": 32396,
+            "reason": ""
+          }
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 86016,
+        "prompt_cache_miss_tokens": 1668,
+        "tokens_in": 87684,
+        "tokens_out": 2305,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000306"
+    },
+    {
+      "index": 20,
+      "shape": "final",
+      "payload": {
+        "final": "裁决：in_review（签名没有钉住，signature=null）。现行内容 sha = 66c671e9a0e7…（与 documents.content_sha256 逐字相符）；正文 out/package/main.tex = 62efb2f6835297672a4839e2d374bcf36c9a1ba56707f36f4280250f37166b4e（32396 B，231 行，我用 fs.stat 独立算过）；PDF = 4375d9bca220…（316793 B）。\n\nfindings：open 2 条（000006、000007），error 0 条，warning 2 条 —— 两条指的是同一处，同一处问题没有被修掉，本轮我按新的正文又确认了一次。\n\n关键那条（000006 ｜ 000007，overclaim，warning，section:4）：main.tex 第 189 行逐字「Theorem~\\ref{thm:delta} shows that the cube behaviour already dominates from $p_*$ on.」；而 thm:delta(iii) 只写到「consequently there is $P_0\\in[1,\\infty)$ such that $A_face(p)>A_diag(p)$ for every $p\\ge P_0$」，既没有界定 P_0，也没有证 Δ 在 (2,p_*) 上的符号；同节第 187 行自己还写着「Theorem~\\ref{thm:delta} guarantees only that $\\Delta$ is positive for large $p$」；p_* 在第 185 行自述为「(numerically), the unique solution」。也就是说，「数值定出的零点」被写成了「定理的结论」——同一节里两句自相矛盾，这正是我这一岗要抓的那一类。最小修法（交给 G）：把第 189 行那半句改成「Theorem~\\ref{thm:delta} together with the numerical location of the zero at $p_*$ gives $A_face(p)>A_diag(p)$ for $p\\ge p_*$ (numerically)」，或者直接删掉这半句；改完需要重编 PDF。\n\n我这轮核查了什么（都指得到位置）：① review.scan（七类）读数：proof_envs=4、statement_envs=4、statement_without_proof=0、proof_without_statement=0、statement_surplus=[]、ledger_match 判定 pass、mapping_state=pass、mapping_rows=4、duplicate_labels=0、cite_keys 5 ⊆ bibitem_keys 5、ref_keys 5 ⊆ label_keys 5、inputs 0 findings；text_integrity 那一类第一遍没有查成（paths 为空），我改用 review.scan_text_integrity(paths=['out/package']) 补扫：zero_width/control/replacement/bidi/nbsp 全 0，只有 MAPPING.md 里 983 个 CJK（这是人读版对应表的正常内容，不是 main.tex）。② 内部编号（禁令②）：exp: 只在第 220、222、224、226 行出现，共 4 处，全部在 \\appendix（第 215 行）之后；附录之前 0 处。③ 没有「数值实验」类小节：第 3 节 Main results（第 50 行）、第 4 节 Discussion and open problems（第 181 行）、References（第 203–211 行）、\\appendix（第 215 行）、\\section{Computational evidence}（第 216 行）；节内只有指向附录的话，参数扫描与读数清单都在附录里。④ 三件齐全：\\begin{abstract}（第 18 行）、5 条 \\bibitem、附录 A「Computational evidence」（第 216 行）。骨架顺序为 Title/Author/Date → Abstract → 1 Introduction → 2 Definitions and notation → 3 Main results → 4 Discussion and open problems → References → Appendix A，完整。⑤ 正文与台账的对应：4 个定理各带一个 proof，且分 (1)(2)…(5) 步；附录引到的 exp:000003/000004/000006/000007 在 experiments 台账里各有一行（exit_code 都是整数 0，并且都带 code_hash）；claim-6 新引的 stmt:000042 在 statements 表能解析到（kind=theorem，status=active）。\n\n必须讲清的两处限制（不许折平）：(a) 语义级判据没有接上（review.review_document 的 semantic_check.checked=false，claims_semantically_judged=0），所以「措辞干净而结论强于引文」这一形态，我靠的是逐句读正文，不是机器判；(b) 000006/000007 是 record_finding 落下的散文发现，自动复跑判不掉——下一轮 H 复核后要**以同一去重键重新登记**，evidence 以「复核 fixed：」或「复核 wontfix：」开头，它才能离场；离场之后，review.review_document 才会把签名钉在现行 sha 上。\n\n所以我没能完成这趟的唯一目的（把签名钉在 66c671e9a0e7 上）：现行版上确实还留着一处结论强于证据的话，按采信规则我不能在没有清掉 open finding 的前提下判 accepted。",
+        "evidence": [
+          "documents:000001",
+          "main.tex sha256=62efb2f6835297672a4839e2d374bcf36c9a1ba56707f36f4280250f37166b4e",
+          "documents.content_sha256=66c671e9a0e7361f564a9cfaa7521ca4a647063db9c22f475656cd1d1ee23914",
+          "review_findings:000006",
+          "review_findings:000007",
+          "review.scan(7 kinds) statement_surplus=[] mapping_state=pass",
+          "review.scan_text_integrity(out/package)",
+          "review.review_document(round_no=10) verdict=accepted but signature=null, open_findings.blocks_accept=true",
+          "review.verify_fixes(round_no=11) verdict=revise_again still_open=[000007]",
+          "experiments:000003",
+          "experiments:000004",
+          "experiments:000006",
+          "experiments:000007",
+          "statements:000042"
+        ],
+        "notify": {
+          "to": "t-000296",
+          "summary": "H 第 10/11 轮审校：现行版仍留一处 overclaim（main.tex:189），裁决 in_review、签名未钉住（66c671e9a0e7 未被签）",
+          "body": "## 做了什么\n\n读 doc 000001 现行内容 + out/package/main.tex（32396 B，sha256=62efb2f6…，我独立 fs.stat 核过）+ main.pdf（316793 B）；跑 review.scan 七类、review.scan_text_integrity、review.review_document(round_no=10)、review.verify_fixes(round_no=11)、verify.list_experiments、table.list(statements, 000042)。\n\n## 结论（回执三件）\n\n- **裁决**：`in_review`\n- **签钉住的内容 sha 前 12 位**：无（`signature=null`）。现行内容 sha 前 12 位是 `66c671e9a0e7`，**没有被钉住**\n- **findings 条数**：open 2 条（`000006`、`000007`，同一处、均为 warning），error 0 条\n\n## 卡在哪（唯一 blocker）\n\nmain.tex **第 189 行**逐字：「Theorem~\\ref{thm:delta} shows that the cube behaviour already dominates from $p_*$ on.」\n\n- thm:delta(iii) 只给出「there is $P_0$ such that $A_face(p)>A_diag(p)$ for every $p\\ge P_0$」，没有界定 P_0，也没有证 Δ 在 (2,p_*) 上的符号；\n- 同节第 187 行自己写着 thm:delta 只保证大 p 时 Δ>0，「locating the zero requires information about $\\Delta$ on the whole interval」；\n- p_* 在第 185 行自述为「(numerically), the unique solution」。\n\n也就是说：一个数值定出来的零点，被写成了定理的结论 —— 同一节里两句互相打脸。按规则，open findings 没清掉就不许判 accepted，所以我没有签；把签名钉在 66c671e9a0e7 这件事**这一趟没做到**，不是「做了但门没开」。\n\n## 要谁做什么\n\n1. **G（改正文，只能它做）**：把第 189 行那半句改成「Theorem~\\ref{thm:delta} together with the numerical location of the zero at $p_*$ gives $A_face(p)>A_diag(p)$ for $p\\ge p_*$ (numerically)」，或者直接删掉这半句；改完必须重调 doc.paper_compile，让回执的 tex_sha256 对上新的 main.tex。\n2. **下一趟 H**：对 000006 / 000007 做显式复核 —— 用 `review.record_finding` 以同一去重键重新登记，evidence 以「复核 fixed：」开头（这两条是散文发现，自动复跑判不掉，不显式复核就一直在 open 里）；然后 review.review_document 才能把签名钉到新 sha 上。\n3. 如果 M 判断这一处**不值得再改**（就是半句措辞），那就让 H 下一趟按「复核 wontfix：理由」收口 —— 但那要是明确的判断，不能默认放着。\n\n## 我这轮读出来、但不拦门的（不构成 finding）\n\n- 机械读数全清：4 个定理各带 1 个 proof、分步证完，statement_surplus=[]，cites/refs/inputs/duplicates 零发现，mapping_state=pass；\n- 内部编号 `exp:` 唯 4 处（第 220/222/224/226 行），全部在 \\appendix（第 215 行）之后，附录前 0 处；正文没有数值实验小节（扫描与读数清单都在附录 A）；Abstract、5 条 \\bibitem、附录 A「Computational evidence」三件齐；骨架顺序完整；\n- 附录引到的 exp:000003/000004/000006/000007 在 experiments 各有一行（exit_code 都是整数 0，并且都带 code_hash）；claim-6 新引的 stmt:000042 在 statements 里能解析。\n- **没查成的一格**：语义级判据没接线（semantic_check.checked=false，claims_semantically_judged=0）—— 「结论是否强于引文」这一档我靠逐句读正文，不是机器判；这一格在台账里是「没查」，不是「没问题」。",
+          "refs": [
+            "documents:000001",
+            "review_findings:000006",
+            "review_findings:000007",
+            "stmt:000034",
+            "stmt:000042",
+            "exp:000003",
+            "exp:000004",
+            "exp:000006",
+            "exp:000007"
+          ],
+          "why": "这一趟的裁决与唯一 blocker 必须落到父代理手上：签名没钉住，G 要改的是正文第 189 行，下一趟 H 要显式复核 000006/000007 才能收口。"
+        }
+      },
+      "result": {
+        "notify_problem": "notify.refs 里的 'documents:000001' 立不住：引用 'documents:000001' 的前缀不认识：认 c/exp/lit/q/rel/stmt: 这几种，或者四位手稿编号"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 86912,
+        "prompt_cache_miss_tokens": 4002,
+        "tokens_in": 90914,
+        "tokens_out": 4758,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000306"
+    }
+  ],
+  "final": "裁决：in_review（签名没有钉住，signature=null）。现行内容 sha = 66c671e9a0e7…（与 documents.content_sha256 逐字相符）；正文 out/package/main.tex = 62efb2f6835297672a4839e2d374bcf36c9a1ba56707f36f4280250f37166b4e（32396 B，231 行，我用 fs.stat 独立算过）；PDF = 4375d9bca220…（316793 B）。\n\nfindings：open 2 条（000006、000007），error 0 条，warning 2 条 —— 两条指的是同一处，同一处问题没有被修掉，本轮我按新的正文又确认了一次。\n\n关键那条（000006 ｜ 000007，overclaim，warning，section:4）：main.tex 第 189 行逐字「Theorem~\\ref{thm:delta} shows that the cube behaviour already dominates from $p_*$ on.」；而 thm:delta(iii) 只写到「consequently there is $P_0\\in[1,\\infty)$ such that $A_face(p)>A_diag(p)$ for every $p\\ge P_0$」，既没有界定 P_0，也没有证 Δ 在 (2,p_*) 上的符号；同节第 187 行自己还写着「Theorem~\\ref{thm:delta} guarantees only that $\\Delta$ is positive for large $p$」；p_* 在第 185 行自述为「(numerically), the unique solution」。也就是说，「数值定出的零点」被写成了「定理的结论」——同一节里两句自相矛盾，这正是我这一岗要抓的那一类。最小修法（交给 G）：把第 189 行那半句改成「Theorem~\\ref{thm:delta} together with the numerical location of the zero at $p_*$ gives $A_face(p)>A_diag(p)$ for $p\\ge p_*$ (numerically)」，或者直接删掉这半句；改完需要重编 PDF。\n\n我这轮核查了什么（都指得到位置）：① review.scan（七类）读数：proof_envs=4、statement_envs=4、statement_without_proof=0、proof_without_statement=0、statement_surplus=[]、ledger_match 判定 pass、mapping_state=pass、mapping_rows=4、duplicate_labels=0、cite_keys 5 ⊆ bibitem_keys 5、ref_keys 5 ⊆ label_keys 5、inputs 0 findings；text_integrity 那一类第一遍没有查成（paths 为空），我改用 review.scan_text_integrity(paths=['out/package']) 补扫：zero_width/control/replacement/bidi/nbsp 全 0，只有 MAPPING.md 里 983 个 CJK（这是人读版对应表的正常内容，不是 main.tex）。② 内部编号（禁令②）：exp: 只在第 220、222、224、226 行出现，共 4 处，全部在 \\appendix（第 215 行）之后；附录之前 0 处。③ 没有「数值实验」类小节：第 3 节 Main results（第 50 行）、第 4 节 Discussion and open problems（第 181 行）、References（第 203–211 行）、\\appendix（第 215 行）、\\section{Computational evidence}（第 216 行）；节内只有指向附录的话，参数扫描与读数清单都在附录里。④ 三件齐全：\\begin{abstract}（第 18 行）、5 条 \\bibitem、附录 A「Computational evidence」（第 216 行）。骨架顺序为 Title/Author/Date → Abstract → 1 Introduction → 2 Definitions and notation → 3 Main results → 4 Discussion and open problems → References → Appendix A，完整。⑤ 正文与台账的对应：4 个定理各带一个 proof，且分 (1)(2)…(5) 步；附录引到的 exp:000003/000004/000006/000007 在 experiments 台账里各有一行（exit_code 都是整数 0，并且都带 code_hash）；claim-6 新引的 stmt:000042 在 statements 表能解析到（kind=theorem，status=active）。\n\n必须讲清的两处限制（不许折平）：(a) 语义级判据没有接上（review.review_document 的 semantic_check.checked=false，claims_semantically_judged=0），所以「措辞干净而结论强于引文」这一形态，我靠的是逐句读正文，不是机器判；(b) 000006/000007 是 record_finding 落下的散文发现，自动复跑判不掉——下一轮 H 复核后要**以同一去重键重新登记**，evidence 以「复核 fixed：」或「复核 wontfix：」开头，它才能离场；离场之后，review.review_document 才会把签名钉在现行 sha 上。\n\n所以我没能完成这趟的唯一目的（把签名钉在 66c671e9a0e7 上）：现行版上确实还留着一处结论强于证据的话，按采信规则我不能在没有清掉 open finding 的前提下判 accepted。",
+  "evidence": [
+    "documents:000001",
+    "main.tex sha256=62efb2f6835297672a4839e2d374bcf36c9a1ba56707f36f4280250f37166b4e",
+    "documents.content_sha256=66c671e9a0e7361f564a9cfaa7521ca4a647063db9c22f475656cd1d1ee23914",
+    "review_findings:000006",
+    "review_findings:000007",
+    "review.scan(7 kinds) statement_surplus=[] mapping_state=pass",
+    "review.scan_text_integrity(out/package)",
+    "review.review_document(round_no=10) verdict=accepted but signature=null, open_findings.blocks_accept=true",
+    "review.verify_fixes(round_no=11) verdict=revise_again still_open=[000007]",
+    "experiments:000003",
+    "experiments:000004",
+    "experiments:000006",
+    "experiments:000007",
+    "statements:000042"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 0,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 21,
+  "compactions": 0,
+  "mailbox_items": [],
+  "mailbox_msgs": [],
+  "mailbox_delivered": 0,
+  "monitor_turns": 0,
+  "wakes": 0,
+  "wake_ids": [],
+  "wake_events": [],
+  "clock_pumps": 35,
+  "clock_fired": 0,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "H 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "H",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    }
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [],
+  "summons": [],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [],
+  "summons_total": 0,
+  "summons_consumed": 0,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 0,
+    "summons_consumed": 0,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p328",
+    "role": "H",
+    "prompt_sha256": "645adc6fef3b8b55f06c84fa13e004bee42429d0b4ae3c979839f1cea5919979",
+    "prompt_chars": 66825,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "FACULTIES_07",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "TOOL_29",
+      "TOOL_30",
+      "TOOL_31",
+      "TOOL_32",
+      "TOOL_33",
+      "TOOL_34",
+      "TOOL_35",
+      "TOOL_36",
+      "TOOL_37",
+      "TOOL_38",
+      "TOOL_39",
+      "TOOL_40",
+      "TOOL_41",
+      "TOOL_42",
+      "TOOL_43",
+      "TOOL_44",
+      "TOOL_45",
+      "TOOL_46",
+      "TOOL_47",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "PAPER_PACK",
+      "PAPER_01",
+      "PAPER_02",
+      "PAPER_03",
+      "PAPER_04",
+      "PAPER_05",
+      "PAPER_06",
+      "PAPER_07",
+      "PAPER_07_BODY",
+      "PAPER_08",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_LIMITS",
+      "COLLAB_NAMES",
+      "PARENT_STOP",
+      "PARENT_ROSTER",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 15,
+    "tokens_in": 1096548,
+    "tokens_out": 21837,
+    "usd": 0.023875,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 15,
+    "no_request_calls": 0,
+    "hit": 1045632,
+    "miss": 50916,
+    "unknown_calls": 0,
+    "tokens_in": 1096548,
+    "hit_rate": 0.9536,
+    "mismatched_calls": 0,
+    "saved_usd": 0.153708,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 155.063,
+  "end_ts": "2026-11-25T03:27:16+08:00",
+  "notes": [
+    "收工没有可用 notify 表（notify.refs 里的 'documents:000001' 立不住：引用 'documents:000001' 的前缀不认识：认 c/exp/lit/q/rel/stmt: 这几种，或者四位手稿编号）⇒ 这一趟没有交接手稿（不打回、不代填）",
+    "收工时名下还有 1 条证明没有 V 的签字（读数，不拦收工；明细：000112）",
+    "缓存读数：命中 1045632 / 未命中 50916 token，命中率 95.4%（15 次调用）；按 modelcost 口径估算可省 约 0.153708 美元",
+    "子产出处理读数：summons_total=0（这一趟没派过子代理 ⇒ 没有要处理的子产出；判据没有对象，不红）",
+    "终态回报已落板：t-000307（框架通报；模型没填 notify）",
+    "H 的 finding 判词已回写 documents：000001（1 条 open finding，最新 2026-11-25T03:26:33+08:00）（这一趟没有可回写的 review.report 判词 ⇒ 按最新一条 open finding 更新；阳性判词只走报告与签名链）"
+  ],
+  "final_payload": {
+    "final": "裁决：in_review（签名没有钉住，signature=null）。现行内容 sha = 66c671e9a0e7…（与 documents.content_sha256 逐字相符）；正文 out/package/main.tex = 62efb2f6835297672a4839e2d374bcf36c9a1ba56707f36f4280250f37166b4e（32396 B，231 行，我用 fs.stat 独立算过）；PDF = 4375d9bca220…（316793 B）。\n\nfindings：open 2 条（000006、000007），error 0 条，warning 2 条 —— 两条指的是同一处，同一处问题没有被修掉，本轮我按新的正文又确认了一次。\n\n关键那条（000006 ｜ 000007，overclaim，warning，section:4）：main.tex 第 189 行逐字「Theorem~\\ref{thm:delta} shows that the cube behaviour already dominates from $p_*$ on.」；而 thm:delta(iii) 只写到「consequently there is $P_0\\in[1,\\infty)$ such that $A_face(p)>A_diag(p)$ for every $p\\ge P_0$」，既没有界定 P_0，也没有证 Δ 在 (2,p_*) 上的符号；同节第 187 行自己还写着「Theorem~\\ref{thm:delta} guarantees only that $\\Delta$ is positive for large $p$」；p_* 在第 185 行自述为「(numerically), the unique solution」。也就是说，「数值定出的零点」被写成了「定理的结论」——同一节里两句自相矛盾，这正是我这一岗要抓的那一类。最小修法（交给 G）：把第 189 行那半句改成「Theorem~\\ref{thm:delta} together with the numerical location of the zero at $p_*$ gives $A_face(p)>A_diag(p)$ for $p\\ge p_*$ (numerically)」，或者直接删掉这半句；改完需要重编 PDF。\n\n我这轮核查了什么（都指得到位置）：① review.scan（七类）读数：proof_envs=4、statement_envs=4、statement_without_proof=0、proof_without_statement=0、statement_surplus=[]、ledger_match 判定 pass、mapping_state=pass、mapping_rows=4、duplicate_labels=0、cite_keys 5 ⊆ bibitem_keys 5、ref_keys 5 ⊆ label_keys 5、inputs 0 findings；text_integrity 那一类第一遍没有查成（paths 为空），我改用 review.scan_text_integrity(paths=['out/package']) 补扫：zero_width/control/replacement/bidi/nbsp 全 0，只有 MAPPING.md 里 983 个 CJK（这是人读版对应表的正常内容，不是 main.tex）。② 内部编号（禁令②）：exp: 只在第 220、222、224、226 行出现，共 4 处，全部在 \\appendix（第 215 行）之后；附录之前 0 处。③ 没有「数值实验」类小节：第 3 节 Main results（第 50 行）、第 4 节 Discussion and open problems（第 181 行）、References（第 203–211 行）、\\appendix（第 215 行）、\\section{Computational evidence}（第 216 行）；节内只有指向附录的话，参数扫描与读数清单都在附录里。④ 三件齐全：\\begin{abstract}（第 18 行）、5 条 \\bibitem、附录 A「Computational evidence」（第 216 行）。骨架顺序为 Title/Author/Date → Abstract → 1 Introduction → 2 Definitions and notation → 3 Main results → 4 Discussion and open prob…（落档截断，原 2659 字）",
+    "evidence": [
+      "documents:000001",
+      "main.tex sha256=62efb2f6835297672a4839e2d374bcf36c9a1ba56707f36f4280250f37166b4e",
+      "documents.content_sha256=66c671e9a0e7361f564a9cfaa7521ca4a647063db9c22f475656cd1d1ee23914",
+      "review_findings:000006",
+      "review_findings:000007",
+      "review.scan(7 kinds) statement_surplus=[] mapping_state=pass",
+      "review.scan_text_integrity(out/package)",
+      "review.review_document(round_no=10) verdict=accepted but signature=null, open_findings.blocks_accept=true",
+      "review.verify_fixes(round_no=11) verdict=revise_again still_open=[000007]",
+      "experiments:000003",
+      "experiments:000004",
+      "experiments:000006",
+      "experiments:000007",
+      "statements:000042"
+    ],
+    "notify": {
+      "to": "t-000296",
+      "summary": "H 第 10/11 轮审校：现行版仍留一处 overclaim（main.tex:189），裁决 in_review、签名未钉住（66c671e9a0e7 未被签）",
+      "body": "## 做了什么\n\n读 doc 000001 现行内容 + out/package/main.tex（32396 B，sha256=62efb2f6…，我独立 fs.stat 核过）+ main.pdf（316793 B）；跑 review.scan 七类、review.scan_text_integrity、review.review_document(round_no=10)、review.verify_fixes(round_no=11)、verify.list_experiments、table.list(statements, 000042)。\n\n## 结论（回执三件）\n\n- **裁决**：`in_review`\n- **签钉住的内容 sha 前 12 位**：无（`signature=null`）。现行内容 sha 前 12 位是 `66c671e9a0e7`，**没有被钉住**\n- **findings 条数**：open 2 条（`000006`、`000007`，同一处、均为 warning），error 0 条\n\n## 卡在哪（唯一 blocker）\n\nmain.tex **第 189 行**逐字：「Theorem~\\ref{thm:delta} shows that the cube behaviour already dominates from $p_*$ on.」\n\n- thm:delta(iii) 只给出「there is $P_0$ such that $A_face(p)>A_diag(p)$ for every $p\\ge P_0$」，没有界定 P_0，也没有证 Δ 在 (2,p_*) 上的符号；\n- 同节第 187 行自己写着 thm:delta 只保证大 p 时 Δ>0，「locating the zero requires information about $\\Delta$ on the whole interval」；\n- p_* 在第 185 行自述为「(numerically), the unique solution」。\n\n也就是说：一个数值定出来的零点，被写成了定理的结论 —— 同一节里两句互相打脸。按规则，open findings 没清掉就不许判 accepted，所以我没有签；把签名钉在 66c671e9a0e7 这件事**这一趟没做到**，不是「做了但门没开」。\n\n## 要谁做什么\n\n1. **G（改正文，只能它做）**：把第 189 行那半句改成「Theorem~\\ref{thm:delta} together with the numerical location of the zero at $p_*$ gives $A_face(p)>A_diag(p)$ for $p\\ge p_*$ (numerically)」，或者直接删掉这半句；改完必须重调 doc.paper_compile，让回执的 tex_sha256 对上新的 main.tex。\n2. **下一趟 H**：对 000006 / 000007 做显式复核 —— 用 `review.record_finding` 以同一去重键重新登记，evidence 以「复核 fixed：」开头（这两条是散文发现，自动复跑判不掉，不显式复核就一直在 open 里）；然后 review.review_document 才能把签名钉到新 sha 上。\n3. 如果 M 判断这一处**不值得再改**（就是半句措辞），那就让 H 下一趟按「复核 wontfix：理由」收口 —— 但那要是明确的判断，不能默认放着。\n\n## 我这轮读出来、但不拦门的（不构成 finding）\n\n- 机械读数全清：4 个定理各带 1 个 proof、分步证完，statement_surplus=[]，cites/refs/inputs/duplicates 零发现，mapping_state=pass；\n- 内部编号 `exp:` 唯 4 处（第 220/222/224/226 行），全部在 \\appendix（第 215 行）之后，附录前 0 处；正文没有数值实验小节（扫描与读数清单都在附录 A）；Abstract、5 条 \\bibitem、附录 A「Computational evidence」三件齐；骨架顺序完整；\n- 附录引到的 exp:000003/000004/000006/000007 在 experiments 各有一行（exit_code 都是整数 0，并且都带 code_hash）；claim-6 新引的 stmt:000042 在 statements 里能解析。\n- **没查成的一格**：语义级判据没接线（semantic_check.checked=false，claims_semantically_judged=0）—— 「结论是否强于引文」这一档我靠逐句读正文，不是机器判；这一格在台账里是「没查」，不是「没问题」。",
+      "refs": [
+        "documents:000001",
+        "review_findings:000006",
+        "review_findings:000007",
+        "stmt:000034",
+        "stmt:000042",
+        "exp:000003",
+        "exp:000004",
+        "exp:000006",
+        "exp:000007"
+      ],
+      "why": "这一趟的裁决与唯一 blocker 必须落到父代理手上：签名没钉住，G 要改的是正文第 189 行，下一趟 H 要显式复核 000006/000007 才能收口。"
+    }
+  },
+  "task_id": "t-000306"
+}

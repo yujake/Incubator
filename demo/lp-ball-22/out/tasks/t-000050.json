@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T19:13:02+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 3049,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"V 复核结论：**成立**（零 finding，`defect_step` 为 null）。被审对象：`manuscripts/F/f-proof-000001.md`（稿号 000001），正文 sha `6c6accee9f0db73f1db0526a3bbbdeda9cc2f1dc61d376e5cc36439d35874625`；判定与记录落在 `verifications/pending/e7fe441c9e14f4a55e963c14793341a76654496a78c17a57607ccc55053c5e7f.jsonl#u-000010`，签块已由收方秘书 secretary:F 落回该稿第 4 行（连续 3/3 成立），收编义务 t-000051 已挂在 B 名下（按角色地址领取，按正文 sha 认领）。逐条核对记录：第 1 步（有符号坐标置换 + 平面正交不变性 ⇒ 不妨设 i=3、n=(a,b,0)，a²+b²=1）合法；第 2 步（u=(b,-a,0)、v=(0,0,1)：‖u‖²=a²+b²=1、u·n=ab-ab=0、u·v=v·n=0，参数化 (s,z)↦(sb,-sa,z) 保距，因 b²+a²=1）✓；第 3 步（|sb|^p+|sa|^p+|z|^p=|s|^p(|a|^p+|b|^p)+|z|^p=m|s|^p+|z|^p，m>0 由 a²+b²=1）✓；第 4 步（c=m^{1/p}>0、|cs|^p=m|s|^p、T 双射，det T=c）✓；第 5 步（area(T(E))=|det T|area(E) ⇒ area(E)=m^{-1/p}area(D_p)）✓；第 6 步（四象限对称 4∫_0^1(1-t^p)^{1/p}dt；u=t^p、dt=p^{-1}u^{1/p-1}du ⇒ p^{-1}B(1/p,1+1/p)，a=1/p、b=1+1/p；再用 Γ(1/p)=pΓ(1+1/p) 约去 p 得 C_p=4Γ(1+1/p)²/Γ(1+2/p)，并验 C_1=2、C_2=π 两个端点）✓；第 7 步（1≤p<2：t^p≥t² ⟺ t^{2-p}≤1，0<t≤1 仅在 t=1 取等，t=0 两边为 0）✓；第 8 步（p>2 同法反向，t^p≤t²，等号同为 {0,1}）✓；第 9 步（m=|a|^p+|b|^p 与 |a|²+|b|²=1 比较，等号刻画 a,b∈{0,±1} 配合 a²+b²=1 即 n=±坐标向量；p=2 时 m=1、C_2=4Γ(3/2)²/Γ(2)=4·π/4=π）✓；第 10 步（a=b=1/√2 ⇒ m=2^{1-p/2}、m^{-1/p}=2^{-(1-p/2)/p}=2^{1/2-1/p}，指数符号本版已改正；1≤p<2 时 (p-2)/(2p)<0 ⇒ A_p<C_p，p>2 时 A_p>C_p，p=2 指数为 0 与第 9 步一致）✓。六条角度：①前提（p∈[1,∞)、n 单位且有一零坐标、WLOG 与 m>0 均被真用到，无偷偷多用假设）；②计算（积分换元、Beta 函数参数、Γ 递推、指数与端点逐处重算）；③逻辑（等距同构 ⇒ 面积相等、双射+det ⇒ 面积变换、两区间等号刻画穷尽 t∈{0,1} 与 a,b∈{0,±1}）；④强度（只用到 m^{-1/p} 的显式恒等式与端点比较，未超出得到的东西；(iv)「门槛精确」由显式见证 n=(1,1,0)/√2 给出，未夸大）；⑤台账一致（未在册，正文 sha 与稿头 6c6accee… 逐字一致，pending 档按 sha 记，不假定命题号）；⑥依赖面（`## 依赖` 为空表且为自足证明，无可引在册命题 ⇒ not_applicable 合法，不引则不缺）。未找到任何要改之处（沿六条角度都试过，含逐处构造反例：p=1 端点、a=0 或 b=0 退化、p→2 极限三种情形均成立，反例构造失败），故判『成立』。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\lp-ball-22\\\\runs\\\\V-20261124-191302-001.json\", \"messages\": [], \"outcome\": \"ok\", \"status\": \"done\", \"steps\": 3, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "df49f3ae5d1a985a3a9f4cf1d7f4ef890bebdb4bd006fba27ad9a99b477f646f",
+ "readings": {},
+ "role": "V",
+ "status": "done",
+ "task_id": "t-000050"
+}

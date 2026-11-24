@@ -1,0 +1,4 @@
+{"at": "2026-11-24T23:04:24+08:00", "branch": "waiting_no_children", "name": "V2", "owner": "t-000151", "reason": "研究主线已交差（RESEARCH.md 七节、三段结构与两临界点、statements/签处置回执），名下子代理与板项均已收口，不再派新活；级联销号：随 D1（t-000011） 一起退场", "role": "V", "seq": 1, "task_id": "t-000160"}
+{"at": "2026-11-24T23:04:24+08:00", "branch": "waiting_no_children", "name": "V2", "owner": "t-000151", "reason": "研究主线已交差（RESEARCH.md 七节、三段结构与两临界点、statements/签处置回执），名下子代理与板项均已收口，不再派新活；级联销号：随 D1（t-000011） 一起退场", "role": "V", "seq": 2, "task_id": "t-000166"}
+{"at": "2026-11-24T23:04:24+08:00", "branch": "waiting_no_children", "name": "V2", "owner": "t-000151", "reason": "研究主线已交差（RESEARCH.md 七节、三段结构与两临界点、statements/签处置回执），名下子代理与板项均已收口，不再派新活；级联销号：随 D1（t-000011） 一起退场", "role": "V", "seq": 3, "task_id": "t-000171"}
+{"at": "2026-11-25T03:02:29+08:00", "branch": "waiting_no_children", "name": "V1", "owner": "t-000151", "reason": "收工前自动收尾：静默且无未消项（R9FIX-D5）", "role": "V", "seq": 4, "task_id": "t-000155"}

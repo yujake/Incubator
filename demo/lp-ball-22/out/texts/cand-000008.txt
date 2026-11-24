@@ -1,0 +1,913 @@
+===== page 1 =====
+DOI: 10.1007/s004540010070
+Discrete Comput Geom 25:33–49 (2001)
+Discrete & Computational
+Geometry
+© 2001 Springer-Verlag New York Inc.
+Plane Sections of Convex Bodies of Maximal Volume∗
+E. Makai,1 S. Vre´cica,2 and R. ˇZivaljevi´c3
+1 Mathematical Institute of the Hungarian Academy of Sciences,
+H-1364 Budapest, PF. 127, Hungary
+makai@math-inst.hu
+2 Faculty of Mathematics, University of Belgrade,
+Studentski trg 16, 11001 Belgrade, p.p. 550, Yugoslavia
+vrecica@matf.bg.ac.yu
+3 Mathematical Institute of the Serbian Academy of Sciences and Arts,
+Knez Mihajlova 35/1, 11001 Belgrade, p.p. 367, Yugoslavia
+rade@turing.mi.sanu.ac.yu
+Abstract.
+Let K = {K0, . . . , Kk} be a family of convex bodies in Rn, 1 ≤k ≤n −1. We
+prove, generalizing results from [9], [10], [13], and [14], that there always exists an afﬁne
+k-dimensional plane Ak ⊆Rn, called a common maximal k-transversal of K, such that, for
+each i ∈{0, . . . , k} and each x ∈Rn,
+Vk(Ki ∩Ak) ≥Vk(Ki ∩(Ak + x)),
+where Vk is the k-dimensional Lebesgue measure in Ak and Ak + x. Given a family
+K = {Ki}l
+i=0 of convex bodies in Rn, l < k, the set Ck(K) of all common maximal
+k-transversals of K is not only nonempty but has to be “large” both from the measure
+theoretic and the topological point of view. It is shown that Ck(K) cannot be included in a
+ν-dimensional C1 submanifold (or more generally in an (Hν, ν)-rectiﬁable, Hν-measurable
+subset) of the afﬁne Grassmannian AGrn,k of all afﬁne k-dimensional planes of Rn, of
+O(n + 1)-invariant ν-dimensional (Hausdorff) measure less than some positive constant
+cn,k,l, where ν = (k −l)(n −k). As usual, the “afﬁne” Grassmannian AGrn,k is viewed
+as a subspace of the Grassmannian Grn+1,k+1 of all linear (k + 1)-dimensional subspaces
+of Rn+1. On the topological side we show that there exists a nonzero cohomology class
+θ ∈H n−k(Gn+1,k+1; Z2) such that the class θl+1 is concentrated in an arbitrarily small
+neighborhood of Ck(K). As an immediate consequence we deduce that the Lyusternik–
+∗The research of the ﬁrst author was (partially) supported by the Hungarian National Foundation for
+Scientiﬁc Research, Grant No. T-016094, and the research of the second and third authors was (partially)
+supported by the Serbian Science Foundation, Grants No. 04M01 and 04M03.
+===== page 2 =====
+34
+E. Makai, S. Vre´cica, and R. ˇZivaljevi´c
+Shnirel’man category of the space Ck(K) relative to Grn+1,k+1 is ≥k −l. Finally, we show
+that there exists a link between these two results by showing that a cohomologically “big”
+subspace of Grn+1,k+1 has to be large also in a measure theoretic sense.
+1.
+Introduction
+A convex body K ⊆Rn is a compact convex set with nonempty interior. A maximal
+k-section of a convex body K ⊆Rn is a set K ∩Ak, where Ak ⊆Rn is an afﬁne
+k-dimensional plane such that, for each x ∈Rn,
+Vk(K ∩Ak) ≥Vk(K ∩(Ak + x)).
+Here Vk denotes the normalized Lebesgue measure deﬁned on afﬁne k-dimensional
+subspaces in Rn (i.e., the measure of a unit cube is 1). Given a family K of convex bodies,
+a common maximal k-transversal of K is an afﬁne k-dimensional plane Ak for which
+K ∩Ak is a maximal k-section of K for each element K of K.
+In this paper we give lower bounds on the size of the set Ck(K) of all common maxi-
+mal k-transversals of K, both from the measure theoretic and topological point of view.
+It is obvious that Ck(K) is “in general” empty if |K| > k +1, where |K| is the cardinality
+of the family K. We show that the condition |K| ≤k +1 that is “in general” necessary for
+the existence of a common maximal k-transversal of K is also sufﬁcient (Theorem 6).
+When the size of the family K decreases below k + 1, we show that the set Ck(K)
+increases both measure theoretically and topologically (Theorems 7 and 8). Theorem 9
+is a link between these two results, which shows that a sufﬁciently cohomologically
+nontrivial compact C1 submanifold (or more generally a compact (Hν, ν)-rectiﬁable,
+Hν-measurable subset) of a Grassmannian must also have a sufﬁciently large measure
+in its own dimension. Our methods are: reduction to a topological coincidence question
+for a family of continuous cross sections of a vector-bundle, integral geometry in ho-
+mogeneous spaces, topology of Grassmannians, cohomological technique, and Poincar´e
+duality. Before we formulate precise statements of these theorems, we review some other
+related combinatorial geometric results which serve as a motivation for studying these
+questions.
+2.
+A Review of Motivating Results
+We always assume that n ≥2. For C ⊆Rn, we denote by lin C and aff C the linear and
+afﬁne subspace of Rn spanned by C, respectively. O(n) denotes the orthogonal group in
+Rn, that is, the group of all linear isometries of Rn, while SO(n) is the special orthogonal
+group {T ∈O(n) | det T = 1}. The line segment with endpoints x and y is denoted by
+[x, y].
+Now we recall some deﬁnitions, see also 2.10.1–2 of [6]. For a metric space X and
+m ≥0 the m-dimensional Hausdorff-measure Hm is an outer measure deﬁned on all
+===== page 3 =====
+Plane Sections of Convex Bodies of Maximal Volume
+35
+subsets of X as follows: for A ⊂X,
+Hm(A) = sup
+δ>0
+Ã
+inf
+( ∞
+X
+i=1
+diam(Ai)m · πm/2 .³
+2m0
+³
+1 + m
+2
+´´ ¯¯¯
+A ⊂
+∞
+[
+i=1
+Ai ⊂X, ∀i, diam(Ai) ≤δ
+)!
+,
+where diam means diameter. All closed subsets of X are Hm-measurable (see pp. 54 and
+170 of [6]). If m is a positive integer, one calls A ⊂X, with Hm(A) < ∞, (Hm, m)-
+rectiﬁable, if,
+∀ε > 0,
+∃Aε ⊂X,
+Hm(A\Aε) < ε,
+and Aε is the image of a bounded subset of Rm by a Lipschitz map deﬁned on this
+subset, see pp. 251–252 of [6]. The zero-dimensional Hausdorff-measure H0(A) of
+a set A equals its cardinality, if A is ﬁnite, and equals ∞if A is inﬁnite. One calls
+A ⊂X(H0, 0)-rectiﬁable if A is ﬁnite [6, p. 252].
+If X is a Euclidean space and A is a compact C1 m-dimensional submanifold, then A is
+(Hm, m)-rectiﬁable,andHm(A)coincideswiththedifferentialgeometricm-dimensional
+volume (Theorems 3.2.26 and 3.2.39 in [6]).
+There are several star-shaped sets associated with a convex body K ⊆Rn. For
+0 ∈int K the double chordal symmetral 2 ˜1K of K (see Deﬁnition 5.1.3 of [7]) is deﬁned
+by 2 ˜1K := {λu | u ∈Sn−1, |λ| ≤V1(K ∩(Ru))}, where Ru = {ru | r ∈R}; ˜1K is a
+0-symmetric star-shaped set having the same chord lengths through 0 in all directions as
+K.Thedifferencebodyof K (see§12,Section53of[1],orSection3.2of[7])is K+(−K);
+equivalently, it can be deﬁned as {λu | u ∈Sn−1, |λ| ≤max{V1(K ∩(Ru + x)) | x ∈
+Rn}}. The inclusion 2 ˜1K ⊆K + (−K) readily follows from the deﬁnitions.
+Theorem 1 [10, Theorem 3.1], [17, proof of Theorem 4].
+For any convex body K ⊆
+Rn with 0 ∈int K the boundaries of the associated double chordal symmetral and the
+difference body have a nonempty intersection:
+bd (2 ˜1K) ∩bd (K + (−K))̸ = ∅
+Geometrically, this theorem says that 0 belongs to some afﬁne diameter [x, y] of
+K, that is, to a nondegenerate line segment [x, y] = aff{x, y} ∩K such that, for each
+z ∈Rn, V1([x, y]) ≥V1(K ∩(aff{x, y}+z)). Equivalently, in a more usual formulation,
+there exist two different parallel supporting hyperplanes of K, passing through x and y,
+respectively, see p. 293 of [10]. The geometrical reformulation of the statement of the
+theorem remains true even without the assumption 0 ∈int K. A purely geometrical proof
+can be found in [10], while the proof in [17] uses elementary index theory as presented
+in [18]. Theorem 1 of [9] proves the geometrical reformulation in the case 0̸ ∈K, but
+its arguments are easily modiﬁable to obtain the case 0 ∈K as well.
+For 0 ∈int K the intersection body IK of K, introduced in [12] (see also Deﬁ-
+nition 8.1.1 of [7]), is deﬁned by IK := {λu | u ∈Sn−1, |λ| ≤Vn−1(K ∩u⊥)},
+where u⊥= {x ∈Rn | ⟨x, u⟩= 0}. The cross-section body CK of K, introduced in
+[15] (see also Deﬁnition 8.3.1 of [7]) is deﬁned by CK := {λu | u ∈Sn−1, |λ| ≤
+===== page 4 =====
+36
+E. Makai, S. Vre´cica, and R. ˇZivaljevi´c
+max{Vn−1(K ∩(u⊥+ x)) | x ∈Rn}}. Again there is an inclusion of the form IK ⊆CK
+and a theorem relating the boundaries of these bodies.
+Theorem 2 [13, Theorem 1 obtained jointly with R. Gardner].
+For any convex body
+K ⊆Rn with 0 ∈int K one has bd (IK) ∩bd (CK)̸ = ∅.
+Geometrically, this theorem says that 0 belongs to a maximal (n −1)-dimensional
+section K ∩u⊥of K, for some u ∈Sn−1. In other words the section K ∩u⊥has the
+property that, for each x ∈Rn, Vn−1(K ∩u⊥) ≥Vn−1(K ∩(u⊥+ x)). This geometrical
+reformulation holds even without the assumption 0 ∈int K. Actually, not only must there
+exist some u ∈Sn−1 for which K ∩u⊥is maximal in the sense above, but the set of all
+such unit vectors cannot be included in a compact C1(n −2)-dimensional submanifold
+(or more generally in an (Hn−2, n −2)-rectiﬁable, Hn−2-measurable subset) of Sn−1,
+of (n −2)-volume (or more generally (n −2)-dimensional Hausdorff-measure) less
+than cn−2, where cn−2 is the volume of the sphere Sn−2. Moreover, here cn−2 cannot be
+replaced by any larger number. It is implicit in the proof of Theorem 2 that there always
+exists a maximal (n −1)-section K ∩u⊥of K such that u⊥contains any given linear
+(n −2)-dimensional subspace of Rn prescribed in advance. The proof of this result is
+purely geometrical in combination with a simple continuity argument.
+It was natural to try to generalize Theorems 1 and 2 both to the case of families of
+convex bodies and to the case of arbitrary k-dimensional maximal sections. As before
+Grn,k is the Grassmann manifold of all linear k-dimensional subspaces of Rn.
+Theorem 3 [14, Theorem 4].
+For any convex bodies K0, K1 ⊆Rn there exists a line
+A1 ⊆Rn such that K0 ∩A1 is an afﬁne diameter of K0 and K1 ∩A1 is an afﬁne diameter
+of K1.
+Theorem 4 [14, Theorem 3].
+Let 1 ≤k ≤n −1 be an integer. Then for any convex
+body K ⊆Rn the origin 0 belongs to some maximal k-section K ∩Ak of K. Actually, the
+set of all such k-dimensional linear subspaces Ak cannot be included in a ν-dimensional
+compact C1 submanifold (or, more generally, in an (Hν, ν)-rectiﬁable, Hν-measurable
+subset) of the Grassmannian Grn,k, of O(n)-invariant ν-measure (or, more generally,
+ν-dimensional Hausdorff measure) less than some positive constant cn,k, where ν =
+(k −1)(n −k). This is sharp in the sense that there exists some convex body K such that
+the above set is a smooth compact ν-dimensional submanifold of ﬁnite O(n)-invariant
+ν-measure.
+The O(n)-invariant ν-dimensional Hausdorff measure (ν = (k −1)(n −k)) is meant
+with respect to an O(n)-invariant Riemannian metric ds2 on Grn,k. This O(n)-invariant
+metric is described at the linear k-dimensional subspace L0
+k = lin{e1, . . . , ek} spanned
+by the ﬁrst k basic vectors e1, . . . , ek as follows. The tangent space to Grn,k at the point
+L0
+k is the set of all linear functions A: lin{e1, . . . , ek} →lin{ek+1, . . . , en}, and the
+Riemannian metric at L0
+k is given by
+ds2 =
+k
+X
+i=1
+n
+X
+j=k+1
+⟨Aei, ej⟩2 = Tr(A∗· A),
+===== page 5 =====
+Plane Sections of Convex Bodies of Maximal Volume
+37
+where Tr means trace. Since O(n) acts transitively on Grn,k, this extends uniquely to
+a Riemannian metric on Grn,k, by the formula that ds2 at the left-translate g′(A) of A,
+for g ∈O(n), equals ds2 at A, as given above. (Here g′ denotes the derivative of the
+action by g, between the respective tangent spaces at L0
+k and gL0
+k.) Still we have to see
+that this extension exists, i.e., if g′
+1(A1) = g′
+2(A2), then Tr(A∗
+1 · A1) = Tr(A∗
+2 · A2).
+Letting g = g−1
+2 g1, we have gL0
+k = L0
+k and A2 = g′(A1). That is, g is the direct
+sum of two orthogonal matrices h1 acting on L0
+k and h2 acting on lin{ek+1, . . . , en}
+and graph A2 = g · graph A1, or A2 = h2A1h−1
+1 . (For the relation about the graphs
+observe that at L0
+k locally Grn,k can be considered as the vector space of all linear
+maps L0
+k →lin{ek+1, . . . , en}, by identifying these linear functions with their graphs.
+Then the action by g becomes a linear map, whose derivative g′ is a linear transfor-
+mation, that pointwise coincides with g, after this identiﬁcation.) Then Tr(A∗
+2 · A2) =
+Tr((h−1
+1 )∗A∗
+1h∗
+2h2A1h−1
+1 ) = Tr((h−1
+1 )∗A∗
+1 A1h−1
+1 ) = Tr(h1A∗
+1 A1h−1
+1 ) = Tr(A∗
+1 A1), as
+required. It is implicit in the proof of Theorem 4 that there always exists a maximal
+k-section K ∩Ak of K such that Ak contains any linear (k −1)-dimensional subspace
+Lk−1 prescribed in advance.
+Theorem 5 [14, Theorem 5].
+For any convex bodies K0, . . . , Kn−1 ⊆Rn there exists
+an afﬁne (n −1)-dimensional plane An−1 ⊆Rn such that for any i ∈{0, . . . , n −
+1}, Ki ∩An−1 is a maximal (n −1)-section of Ki.
+The proofs of Theorems 3–5 used partly geometrical arguments, sometimes involved
+ones, together with elementary topological tools like Gr¨unbaum’s theorem on the non-
+existence of continuous even unit tangent vector ﬁelds on Sn−1, Brouwer’s ﬁxed point
+theorem, and the Borsuk–Ulam theorem on the nonexistence of odd continuous map-
+pings Sn−1 →Sn−2.
+Observe that the equivalent (geometrical) form of Theorem 1 which refers to the
+maximal 1-sections (without assuming 0 ∈int K) is a special case of Theorem 3, when
+one body is chosen to be the unit ball centered at 0. Similarly, the geometrical form
+of Theorem 2 (again without assuming 0 ∈int K) is a particular case of Theorem 4
+(up to the value of the constant cn,k). Moreover, the assertion after Theorem 2 about
+the existence of a maximal (n −1)-section K ∩u⊥of K such that u⊥contains any
+linear (n −2)-dimensional subspace Ln−2 ⊆Rn, prescribed in advance, is a special
+case of Theorem 5 as well. Indeed, it is sufﬁcient to apply Theorem 5 to the family
+{K, B1, . . . , Bn−1}, where Bi are unit balls which have the property that the afﬁne hull
+of their centers is equal to Ln−2.
+The main objective of this paper is to extend Theorems 3–5 to the general case of
+k-sections, where 1 ≤k ≤n −1.
+3.
+Statements of New Results
+In this section we formulate several results about common maximal k-sections for
+families of convex bodies in Rn. The ﬁrst result is an existence result. It is shown
+that common maximal k-transversals exist if the given family K = {Ki}l
+i=0 of con-
+vex bodies consists of l +1 ≤k +1 elements. The proof of this theorem is topological
+===== page 6 =====
+38
+E. Makai, S. Vre´cica, and R. ˇZivaljevi´c
+and follows from the assertion that (wn−k)k ∈H k(n−k)(Grn,n−k; Z2) is nonzero, where
+wn−k is the top Stiefel–Whitney class of the canonical (n−k)-plane bundle over Grn,n−k.
+The following two theorems (Theorems 7 and 8) are of more quantitative nature. In
+Theorem 7 we show that measure theoretically the set Ck(K) of all common maxi-
+mal k-transversals of K is “sufﬁciently large” with respect to a measure deﬁned on the
+Grassmannian Grn+1,k+1. The argument is based on a generalized Cauchy–Crofton–
+Poincar´e formula from integral geometry. In Theorem 8 we show that the set Ck(K) is
+cohomologically nontrivial in the following sense. There exists a cohomology class
+θ ∈H n−k(Grn+1,k+1; Z2) such that for each open neighborhood U of Ck(K), the
+class θl+1 is contained in the image of the homomorphism H (l+1)(n−k)(Gr, Gr\U) →
+H (l+1)(n−k)(Gr), where Gr := Grn+1,k+1 and the cohomology is taken with Z2-coefﬁ-
+cients. Finally, in Theorem 9 we establish a link between Theorems 7 and 8 by
+showing that any compact subset cohomologically nontrivial in the sense of Theorem
+8 must be measure theoretically “large” in the sense of Theorem 7. This means
+that Theorem 8 is formally more general than Theorem 7. Note however that the
+key nontopological ideas in the proof of Theorem 9 are already present in the proof of
+Theorem 7, so this theorem can also be seen as a companion of Theorem 7.
+Theorem 6.
+Let 1 ≤k ≤n −1 be an integer. Then for each family K = {K0, K1, . . . ,
+Kk} of convex bodies in Rn there exists an afﬁne common maximal k-transversal. In
+other words there exists an afﬁne k-dimensional plane Ak such that, for each x ∈Rn
+and each i ∈{0, . . . , k}, Vk(Ki ∩Ak) ≥Vk(Ki ∩(Ak + x)), where Vk is the normalized
+Lebesgue measure deﬁned on afﬁne k-dimensional subspaces of Rn.
+Simple examples show that there exist families K = {Ki}k
+i=0 of convex bodies in Rn
+such that the common maximal k-section, whose existence was asserted in the previous
+theorem, is unique (see the remarks following Theorem 9). If the size of the family K is
+l + 1, where l < k, then the set Ck(K) of all common maximal k-sections is not only
+nonempty but is quite big both from a measure theoretic and a topological point of view.
+The exact statements are given in the following two theorems.
+We assume that Rn is embedded in the real projective space RPn in the usual way.
+Thusan afﬁnek-dimensionalplane Ak of Rn becomesaprojectivek-dimensionalplaneof
+RPn, that can be identiﬁed with a linear (k+1)-dimensional plane of Rn+1 (namely, with
+lin(Lk+en+1), where Lk ⊆Rn is embedded in Rn+1 by (x1, . . . , xn) 7→(x1, . . . , xn, 0)).
+Thus the set of all afﬁne k-dimensional planes of Rn will be considered as a (dense open)
+subset of the Grassmannian Grn+1,k+1, and the O(n+1)-invariant (k−l)(n−k)-measure
+is deﬁned as the (k −l)(n −k)-dimensional Hausdorff-measure with respect to the
+O(n + 1)-invariant Riemannian metric ds2 on Grn+1,k+1, deﬁned like after Theorem 4
+(for n, k rather than n + 1, k + 1).
+Theorem 7.
+Let 1 ≤k ≤n −1 and 0 ≤l ≤k be integers and let ν := (k −l)(n −k).
+Suppose that K = {K0, K1, . . . , Kl} is a family ofl+1 convex bodies in Rn and let Ck(K)
+be the space of all common maximal k-transversals of K. Then Ck(K) cannot be included
+in an (Hν, ν)-rectiﬁable, Hν-measurable subset of Grn+1,k+1, of O(n + 1)-invariant ν-
+dimensional Hausdorff-measure less than some positive constant cn,k,l. This is sharp in
+===== page 7 =====
+Plane Sections of Convex Bodies of Maximal Volume
+39
+the sense that there are choices of K such that Ck(K) is a compact C∞ν-dimensional
+manifold of ﬁnite O(n + 1)-invariant ν-measure.
+Deﬁnition 1.
+Let K be a compact subset of a compact manifold M. We say that a
+cohomology class θ ∈H p(M; Z2) is concentrated in an arbitrarily small neighborhood
+of K if, for each open neighborhood U of K, the class θ is contained in the image of the
+map H p(M, M\U; Z2) →H p(M; Z2).
+Deﬁnition 2.
+Suppose that A is a subspace of the topological space X. The Lyusternik–
+Shnirel’man category CatX(A) of A relative to X is the minimum cardinality of a family
+F of closed sets such that S F = A and each element F ∈F is contractible to a point
+by a homotopy that moves F inside X.
+As before, we consider the afﬁne Grassmannian AGrn,k of all afﬁne k-dimensional
+planes in Rn as a subspace of the manifold of all k-dimensional planes in the projective
+space RPn which can be considered also as the Grassmannian Gr = Grn+1,k+1 of all
+linear (k + 1)-dimensional subspaces of Rn+1.
+Theorem 8.
+We make the same assumptions about n, k,l, and K as in Theorem 7.
+Given v ∈Rn, let [Mv] be the Z2-fundamental class of the submanifold Mv := {L ∈
+AGrn,k | v ∈L}. Let θ ∈H n−k(Grn+1,k+1; Z2) be the cohomology class which is the
+Poincar´e dual of [Mv]. Then θk+1̸ = 0 and the class θl+1 is concentrated in an arbitrarily
+small neighborhood of Ck(K) in Grn+1,k+1, in the sense of Deﬁnition 1.
+Corollary 1.
+The Lyusternik–Shnirel’man category of the space Ck(K) of all common
+maximal k-transversals relative to Gr := Grn+1,k+1 is at least k −l + 1,
+CatGr(Ck(K)) ≥k −l + 1.
+Theorem 9.
+Suppose thatC ⊆Grn+1,k+1 is a compact subset such that the class θl+1 ∈
+H (n−k)(l+1)(Grn+1,k+1; Z2), deﬁned in Theorem 8, is concentrated in an arbitrarily small
+neighborhood of the subset C. Then the conclusion of Theorem 7 holds for the subset
+C. In other words, for ν = (k −l)(n −k), the O(n + 1)-invariant ν-measure of any
+(Hν, ν)-rectiﬁable, Hν-measurable subset of Grn+1,k+1 containing C is at least cn,k,l,
+where cn,k,l is the same constant as in Theorem 7.
+Before turning to the proofs we make some remarks. For l = k, Theorem 7 reduces
+to Theorem 6. Theorem 6 is sharp in the sense that in general for k + 2 convex bodies
+K0, . . . , Kk+1 ⊆Rn there does not exist an afﬁne k-dimensional plane Ak such that
+Ki ∩Ak is a maximal k-section of Ki: take k + 2 unit balls with centers not lying in
+an afﬁne k-dimensional plane. Similarly, for k + 1 convex bodies K0, . . . , Kk ⊆Rn in
+general there do not exist two afﬁne k-dimensional planes with the stated property: take
+k + 1 unit balls with centers not lying in an afﬁne (k −1)-dimensional plane. Moreover,
+Theorem6includesTheorems3and5,whileTheorem7includesTheorem4,bychoosing
+l = 1, K0 = K, K1 the unit ball with center 0.
+===== page 8 =====
+40
+E. Makai, S. Vre´cica, and R. ˇZivaljevi´c
+4.
+Proofs of the Theorems
+Proof of Theorem 6.
+We begin with the observation that it sufﬁces to prove the theorem
+for strictly convex bodies. Recall that a convex body K is strictly convex if bd K does
+not contain a line segment. This observation is based on the fact that each convex body
+can be approximated (in the sense of the Hausdorff distance) by strictly convex smooth
+(C1) bodies [1, §6, Section 27]. Also, if K m ⊆Rn, m ∈N, is a sequence of convex
+bodies converging in the Hausdorff metric to a convex body K ⊆Rn and Am
+k ⊆Rn is
+a sequence of afﬁne k-dimensional planes converging to an afﬁne k-dimensional plane
+Ak ⊆Rn (in the topology inherited from Grn+1,k+1) then, if K m ∩Am
+k is a maximal
+k-section of K m for all m, then K ∩Ak is a maximal k-section of K. The details of this
+argument can be found in [14]. We conclude from here that the general result follows
+from the result in the special case of strictly convex bodies, so from hereon we assume
+that all bodies Ki are strictly convex.
+Our general plan of the proof is to reduce the problem of the existence of common
+maximal k-transversals to a topological coincidence question for a family of continuous
+cross sections of a vector bundle over a Grassmannian manifold. A similar plan was
+applied in [14] and to other combinatorial geometric problems in [20] and [4]. Let
+Lk ⊆Rn be a linear k-dimensional subspace in Rn. Then any k-dimensional afﬁne
+subspace of Rn, parallel to Lk, is of the form Lk + x, where we may choose x from the
+linear subspace L⊥
+k that is the orthogonal complement of Lk. Let π: Rn →L⊥
+k be the
+orthogonal projection onto L⊥
+k . For x ∈π(Ki) let fi(x) = Vk(Ki ∩(Lk + x))1/k. By
+the Brunn–Minkowski theorem [1, §11, Section 48] fi is a concave function on π(Ki).
+By strict convexity of Ki, for x ∈relbd(π(Ki)) the intersection Ki ∩(Lk + x) consists
+of one point, hence fi(x) = 0 for such x. (The relative boundary (relbd) and relative
+interior (relint) are taken with respect to L⊥
+k .) Hence fi(x) is a continuous function on
+π(Ki) which attains its maximum in relint(π(Ki)), and for such a point of maximum x
+we have that Ki ∩(Lk + x) is a k-dimensional convex body.
+Moreover, this maximum point x is unique. Indeed, if there were two maximum
+points x1, x2 ∈relint(π(Ki)), then by concavity of fi on π(Ki) we would have f (x1) =
+f ( 1
+2(x1 + x2)) = f (x2). From here and the well-known fact that the Brunn–Minkowski
+inequality is strict unless the convex bodies are homothetic (see §11, Section 48 of [1]),
+we deduce that Ki ∩(Lk + x1) and Ki ∩(Lk + x2) are translates of each other. Since
+Vk(Ki ∩(Lk + x1)) = Vk(Ki ∩(Lk + 1
+2(x1 + x2))), the inclusion 1
+2[(Ki ∩(Lk + x1)) +
+(Ki ∩(Lk + x2))] ⊆Ki ∩(Lk + 1
+2(x1 + x2)) turns out to be an equality, hence also
+Ki ∩(Lk + 1
+2(x1 + x2)) is a translate of Ki ∩(Lk + x1). Therefore bd Ki contains a line
+segment, contradicting strict convexity of Ki.
+So we have a function L⊥
+k 7→xi(L⊥
+k ) where xi(L⊥
+k ) is the unique point where fi
+attains its maximum. It is not difﬁcult to show that this function is continuous. Indeed,
+if Lm
+k →Lk is a convergent sequence in Grn,k, then any limit point of xi((Lm
+k )⊥) equals
+xi(L⊥
+k ) and all xi((Lm
+k )⊥) lie in a compact set. This is sufﬁcient to imply the continuity
+of the function L⊥
+k 7→xi(L⊥
+k ). The details of the above arguments can be found in [14].
+The theorem clearly follows if we can ﬁnd a plane Lk ∈Grn,k and some x ∈L⊥
+k such
+that Ki ∩(Lk +x) is a maximal k-section of Ki for each i ∈{0, . . . , k}. In other words we
+have to prove that for some Lk ∈Grn,k we have a coincidence x0(L⊥
+k ) = · · · = xk(L⊥
+k ).
+Note that each of the functions xi can be considered as a continuous cross section of the
+===== page 9 =====
+Plane Sections of Convex Bodies of Maximal Volume
+41
+canonical (n −k)-plane bundle over the Grassmann manifold Grn,n−k. Recall that the
+total space of this bundle is {(L⊥
+k , x) | L⊥
+k ∈Grn,n−k, x ∈L⊥
+k ⊆Rn} with the topology
+inherited from the product space Grn,n−k × Rn, and its projection is (L⊥
+k , x) 7→L⊥
+k .
+We consider the k continuous cross sections x1(L⊥
+k ) −x0(L⊥
+k ), . . . , xk(L⊥
+k ) −x0(L⊥
+k )
+of this bundle. By [5] or Proposition 2 of [20], any k continuous cross sections of this
+bundle have a common zero. In other words, there exists a plane L⊥
+k ∈Grn,n−k such that
+x0(L⊥
+k ) = · · · = xk(L⊥
+k ), which completes the proof of the theorem.
+In the proof of the following theorem the integral geometric considerations, leading
+to the proof of (3) in the (Hν, ν)-rectiﬁable, Hν-measurable case, were kindly commu-
+nicated to us by R. Howard.
+Proof of Theorem 7.
+1. We want to prove that the set Ck(K) cannot be included in an
+(Hν, ν)-rectiﬁable, Hν-measurable subset of O(n + 1)-invariant ν-dimensional Haus-
+dorff measure smaller than a positive constant cn,k,l. For l = k the set Ck(K) is not empty,
+an (H0, 0)-rectiﬁable set is just a ﬁnite set, and a zero-dimensional Hausdorff-measure
+of a ﬁnite set is just the cardinality of the set. Hence we may choose cn,k,k = 1. Now let
+0 ≤l < k. We choose k −l additional bodies Kl+1, . . . , Kk. It is convenient to choose
+these bodies to be unit balls such that their centers are afﬁnely independent. Obviously
+each afﬁne (k−l−1)-dimensional plane can arise as the afﬁne hull of these centers, for an
+appropriate choice of these balls. Then by Theorem 6 there exists an afﬁne k-dimensional
+plane Ak ⊆Rn such that for each i ∈{0, . . . ,l} we have that Ki ∩Ak is a maximal
+k-section of Ki, and Ak contains an arbitrary afﬁne (k −l −1)-dimensional plane Ak−l−1
+given in advance. Moreover, we may also take projective (k −l −1)-dimensional planes
+Pk−l−1 rather than afﬁne ones. In fact, if a projective (k−l−1)-dimensional plane Pk−l−1
+lies in the inﬁnite hyperplane of Rn, e.g., is the inﬁnite hyperplane of lin{e1, . . . , ek−l},
+then we choose the centers of the unit balls Kl+1, . . . , Kk at λe1, . . . , λek−l, and let
+λ →∞. Again by Theorem 6 there exist afﬁne k-dimensional planes Ak(λ) which
+give maximal k-sections of all bodies K0, . . . , Kl and which converge to a (projec-
+tive) k-dimensional plane Ak that necessarily contains Pk−l−1. However, then for each
+i ∈{0, . . . ,l} we have that Ki ∩Ak is a maximal k-section of Ki (see [14], cited in the
+beginning of the proof of Theorem 6).
+For a projective (k −l −1)-dimensional plane Pk−l−1 ⊆RPn (real projective n-
+dimensional space) let
+Sk(Pk−l−1) = {Pk | Pk ⊆RPn is a projective k-dimensional plane, Pk−l−1 ⊆Pk}.
+Recall that Ck(K) = {Ak | Ak ⊆Rn is an afﬁne k-dimensional plane such that (∀i ∈
+{0, . . . ,l}) Ki ∩Ak is a maximal k-section of Ki}. Henceforward we consider Ck(K)
+as a set of projective k-dimensional planes. Then the above assertion about projective
+(k −l −1)-dimensional planes can be reformulated as follows:
+for each projective (k −l −1)-dimensional plane Pk−l−1 ⊆RPn,
+Ck(K) ∩Sk(Pk−l−1)̸ = ∅.
+(1)
+The set Ck(K) of afﬁne, thus projective, k-dimensional planes in Rn is considered as a
+subset of Grn+1,k+1, and we identify the projective (k −l −1)-dimensional plane Pk−l−1
+===== page 10 =====
+42
+E. Makai, S. Vre´cica, and R. ˇZivaljevi´c
+with a linear (k −l)-dimensional subspace Lk−l of Rn+1. Moreover, we write Sk(Pk−l−1)
+as Sk+1(Lk−l), and we consider it as a set of linear (k + 1)-dimensional subspaces of
+Rn+1. Thus
+for each Lk−l ∈Grn+1,k−l,
+Ck(K) ∩Sk+1(Lk−l)̸ = ∅.
+(2)
+Now we recall some integral geometric considerations from [3] and [11]. We follow
+the notation of [11] but assume that the results hold in the generality given in [3]. Let
+G be a Lie group, let K ⊆G be a compact (thus Lie) subgroup of G, and let G/K
+be the homogeneous space of left cosets ξ K of K in G. Then G acts on G/K by
+g(ξ K) = (gξ)K. Let π: G →G/K denote the natural projection, whose derivative
+will be denoted by π′. Suppose that G has a Riemannian metric ds2, that is left invariant
+on G, moreover is right invariant under elements of K. We denote the corresponding
+bilinear form on G by ⟨, ⟩. This induces a G-invariant Riemannian metric ds′2 on G/K.
+The corresponding bilinear form is denoted by ⟨, ⟩′, and it is described as follows:
+⟨X, X⟩′
+T (G/K)x = ⟨[π′|(ker π′(ξ))⊥]−1X, [π′|(ker π′(ξ))⊥]−1X⟩T Gξ ,
+where x ∈G/K, and ξ is any element of π−1(x). (Observe that π′|(ker π′(ξ))⊥is a
+linear isomorphism of the orthogonal complement (ker π′(ξ))⊥of ker π′(ξ) in T Gξ onto
+T (G/K)x, and that this deﬁnition is independent of the choice of ξ.)
+Let Hp be the p-dimensional Hausdorff measure on G/K and let M be an (Hp, p)-
+rectiﬁable subset of G/K. (See Section 3.2.14 of [6] or Section 2 of this paper for the
+deﬁnition.) Basically these are subsets of ﬁnite Hp measure that can be covered up to a
+set of Hp zero by a countable number of Lipschitz images of subsets of R p. This includes
+the class of rectiﬁable sets (which are the Lipschitz images of bounded subsets of R p).
+If M is also Hp measurable, then (see Theorem 3.2.19 of [6]) for Hp almost all x ∈M
+there is a p-dimensional subspace tangent space Tanp(Hp⌊M, x) which we just denote
+by T (M)x and its orthogonal complement in T (G/K)x will be denoted by T ⊥(M)x.
+(To simplify notation we sometimes suppress the dimension and just say that M is
+H rectiﬁable and measurable.) If M is an embedded p-dimensional submanifold of class
+C1 and ﬁnite volume, then M is H rectiﬁable and measurable and Vol(M) = Hp(M).
+Let M ⊂G/K be an (Hp, p)-rectiﬁable subset of G/K which is Hp measurable
+and let N ⊂G/K be an (Hq, q)-rectiﬁable subset of G/K which is Hq-measurable and
+p + q ≥dim(G/K). Set m = dim(G/K). Then for almost all g ∈G the intersection
+M ∩gN is an Hp+q−m-measurable (Hp+q−m, p + q −m)-rectiﬁable subset of G/K.
+Moreover, if G is unimodular (in particular, compact, see Remark 2.4 of [11]), then the
+integral geometric formula, the so-called Poincar´e’s formula (compare Theorem 3.8 of
+[11] stated for the smooth case),
+Z
+G
+Hp+q−n(M ∩gN) dg =
+Z Z
+M×N
+σK(T ⊥(M)x, T ⊥(N)y) dHp × dHq(x, y)
+holds. Here dg is the volume form on G associated with the Riemannian metric ds2
+on G, see Remark 2.6 of [11], and the Hausdorff measures are taken with respect to
+the Riemannian metric ds′2. Further, σK(T ⊥(M)x, T ⊥(N)y) (see Deﬁnition 3.3 of [11])
+is a type of “integrated absolute value of sine of angle” and for our purposes all that
+===== page 11 =====
+Plane Sections of Convex Bodies of Maximal Volume
+43
+matters is that 0 ≤σK(T ⊥(M)x, T ⊥(N)y) ≤Vol(K) (Vol(K) taken in the sense of the
+Riemannian metric ds2, see the inequality 0 ≤σ(V, W) ≤1 from 2.1 of [11]) so that
+Z
+G
+Hp+q−m(M ∩gN) dg ≤Vol(K) · Hp(M) · Hq(N).
+(3)
+This can be seen by modifying the arguments in either [3] or [11]. We brieﬂy indicate how
+to do the modiﬁcations of the arguments of [11]. First note that the proof of the Basic
+Integral Formula ([11, p. 7]; assuming G is unimodular this is essentially the special
+case of the formula above where K = {e} is the trivial subgroup of G) only depends
+on Sard’s theorem, the coarea formula, and some changes of variables in integrals.
+If in deriving formula (2-12) on p. 8 of [11] the smooth coarea formula is replaced
+by the form given by Federer (see Theorem 3.2.22, p. 258, of [6]) we get the same
+formula except that now M and N are as above and (using the notation of [11, p. 8])
+the ﬁbers f −1[g] are H p+q−n-measurable, (Hp+q−n, p + q −n)-rectiﬁable subsets of
+G for almost all g ∈G. The rest of the proof is pretty much word for word the same.
+Therefore the Basic Integral Formula of [11] holds when M and N are H-rectiﬁable
+and measurable subsets of G. Poincar´e’s formula [11, Theorem 3.8, p. 15] follows
+from the Basic Integral Formula by purely formal considerations (basically changes
+of variables in integrals) so it will also hold for H-rectiﬁable and measurable sets M
+and N.
+We apply this inequality to G = SO(n + 1), K = [SO(k + 1) × SO(n −k)] ∪
+[(O(k+1)\SO(k+1))×(O(n−k)\SO(n−k))],where O(k+1)actsonlin{e1, . . . , ek+1}
+and O(n −k) acts on lin{ek+2, . . . , en+1}, where {e1, . . . , en+1} is the standard or-
+thonormal base of Rn+1. Then K is the stabilizer of lin{e1, . . . , ek+1} in SO(n + 1),
+hence G/K can be identiﬁed with Grn+1,k+1, with π: G →G/K given by π(g) =
+g(lin{e1, . . . , ek+1}) for g ∈SO(n + 1).
+We deﬁne the bi-invariant Riemannian metric ds2 on G as follows. We have that T G I,
+the tangent space of G at I, i.e., the Lie algebra of G, is the set of all skew-symmetric
+n+1 by n+1 matrices. Then for T G I ∋(ai j) we let ds2 = P
+i< j a2
+i j = 1
+2 Tr[(ai j)∗(ai j)].
+This has a left-invariant and a right-invariant extension to G, which however coincide,
+to give a bi-invariant extension [11, 3.12a].
+Next we consider the derivative of π at I, i.e., π′(I): T G I →T (G/K)π(I). We
+recall from the remarks following Theorem 4 that T (G/K)π(I) is the set of all linear
+transformations lin{e1, . . . , ek+1} →lin{ek+2, . . . , en+1}. Then we have for (ai j) ∈T G I
+that π′(I)(ai j) = (ai j)1≤j≤k+1
+k+2≤i≤n+1 ∈T (G/K)π(I). Therefore ker π′(I) = {(ai j) ∈T G I |
+ai j = 0 for j ≤k + 1 < i}. Hence for its orthogonal complement (ker π′(I))⊥in T G I
+in the sense of the above Riemannian metric ds2 we have (ker π′(I))⊥= {(ai j) ∈T G I |
+ai j = 0 for i, j ≤k + 1 and for i, j > k + 1}.
+By deﬁnition, ds′2 in G/K, at (ai j)1≤j≤k+1
+k+2≤i≤n+1 ∈T (G/K)π(I) is obtained the following
+way. We extend (ai j)1≤j≤k+1
+k+2≤i≤n+1 to an n + 1 by n + 1 matrix (ai j) ∈(ker π′(I))⊥, i.e.,
+to a skew-symmetric matrix satisfying ai j = 0 for i, j ≤k + 1 and for i, j > k + 1,
+and evaluate ds2 for the obtained matrix. This however gives us P
+i< j a2
+i j = P
+i> j a2
+i j =
+Pn+1
+i=k+2
+Pk+1
+j=1 a2
+i j. That is, on T (G/K)π(I) the SO(n + 1)-invariant Riemannian metric
+ds′2 on G/K = Grn+1,k+1 considered in [11] equals the O(n +1)-invariant Riemannian
+===== page 12 =====
+44
+E. Makai, S. Vre´cica, and R. ˇZivaljevi´c
+metric ds2 on Grn+1,k+1, introduced after Theorem 4 (for n, k rather than n + 1, k + 1),
+and considered in this theorem. Since both of these Riemannian metrics are SO(n + 1)-
+invariant, they coincide on the whole G/K.
+Now suppose that Ck(K) is included in an (Hν, ν)-rectiﬁable, Hν-measurable subset
+M of Grn+1,k+1, where ν = (k −l)(n −k). We are going to show that the O(n + 1)-
+invariant ν-dimensional Hausdorff-measure of M, in the sense of the O(n +1)-invariant
+Riemannian metric ds′2 on Grn+1,k+1 considered in this theorem, is at least a suitably
+chosen positive constant cn,k,l.
+By (2) we have for each Lk−l ∈Grn+1,k−l that M ∩Sk+1(Lk−l)̸ = ∅. Observe that for
+any Lk−l ∈Grn+1,k−l we have that Sk+1(Lk−l) is a compact C∞manifold, diffeomorphic
+to Grn−k+l+1,l+1, that has dimension (l + 1)(n −k). We ﬁx some L0
+k−l ∈Grn+1,k−l. We
+haveforany g ∈SO(n+1)that Sk+1(gL0
+k−l) = gSk+1(L0
+k−l).Let N = Sk+1(L0
+k−l).Then
+for each g ∈SO(n +1) we have M ∩gN = M ∩gSk+1(L0
+k−l) = M ∩Sk+1(gL0
+k−l)̸ = ∅.
+Further, ν+dim N = (k−l)(n−k)+(l+1)(n−k) = (k+1)(n−k) = dim Grn+1,k+1 =
+dim(G/K).
+Applying the above cited results from [11], for almost all g ∈SO(n + 1) we have
+that M ∩gN is a ﬁnite subset of Grn+1,k+1, and we have by (3)
+Z
+SO(n+1)
+H0(M ∩gN) dg ≤Vol(K) · Hν(M) · H(l+1)(n−k)(N),
+(4)
+where
+K = [SO(k + 1) × SO(n −k)] ∪[(O(k + 1)\SO(k + 1)) × (O(n −k)\SO(n −k))].
+Since for almost all g ∈SO(n + 1) we have that M ∩gN is a ﬁnite set, in which
+case 1 ≤H0(M ∩gN), we have
+Vol(SO(n + 1)) ≤
+Z
+SO(n+1)
+H0(M ∩gN) dg.
+(5)
+The inequalities (4) and (5) together imply
+Hν(M) ≥cn,k,l,
+(6)
+for a suitably chosen positive constant cn,k,l, as asserted.
+2. It remains to be shown that, for some choice of the convex bodies K0, . . . , Kl in Rn,
+the set Ck(K) of afﬁne k-dimensional planes Ak ⊆Rn in question is a compact C∞ν-
+dimensional submanifold of Grn+1,k+1, of the considered O(n +1)-invariant ν-measure
+some ﬁnite number, for ν = (k −l)(n −k).
+Let K0, . . . , Kl ⊆Rn be unit balls, whose centers span an afﬁne l-dimensional
+plane A0
+l
+⊆Rn. Then Ck(K) = Sk(A0
+l ) = Sk+1(L0
+l+1), where L0
+l+1 is the linear
+(l + 1)-dimensional subspace of Rn+1, corresponding to the afﬁne (thus projective)
+l-dimensional plane A0
+l . Further Sk+1(L0
+l+1) is diffeomorphic to Grn−l,k−l, therefore
+Sk+1(L0
+l+1) is a compact C∞ν-dimensional submanifold of Grn+1,k+1, hence has a
+ﬁnite O(n + 1)-invariant ν-measure.
+Remark.
+Using [11] it is not difﬁcult to give the constant cn,k,l from the above proof
+explicitly also for l < k. In fact, (4) and (5) give Hν(M) ≥Vol(SO(n + 1))/[Vol(K) ·
+===== page 13 =====
+Plane Sections of Convex Bodies of Maximal Volume
+45
+Vol(N)]. Here Vol(K) = 2 Vol(SO(k + 1)) · Vol(SO(n −k)). Moreover, we have
+N = Sk+1(L0
+k−l) ∼= Grn−k+l+1,l+1. Further, like in 3.12.(a) of [11], since ds2 is bi-
+invariant on G and π is a Riemannian submersion, we have Vol(Grn−k+l+1,l+1) =
+Vol(SO(n −k +l +1))/[2 Vol(SO(l +1))·Vol(SO(n −k))]. It remains to observe that
+by 3.12(a), formula (3–15), of [11] for any natural number m we have Vol(SO(m)) =
+Vol(S1) Vol(S2) · · · Vol(Sm−1).
+Proof of Theorem 8.
+Like in Theorem 6, it also sufﬁces to prove this theorem for strictly
+convex bodies only. Namely, let K m
+0 , . . . , K m
+l , m ∈N, be strictly convex bodies con-
+verging (in the sense of the Hausdorff distance) to K0, . . . , Kl. As in the beginning of the
+proof of Theorem 6, by the arguments in [14], for Km = {K m
+0 , . . . , K m
+l } we have for any
+subsequence mi ∈N that Ami
+k
+∈Ck(Kmi), Ami
+k
+→Ak imply Ak ∈Ck(K). Therefore
+Ck(Km) (which are contained in a compact subset of Grn+1,k+1 independent of m), lie,
+for m sufﬁciently large, in an arbitrarily small open neighborhood of Ck(K), prescribed
+in advance.
+Next we recall some well-known facts about the topology of Grassmannians. Standard
+references are [16], [8], and [2] as well as other more elementary topological textbooks.
+We include the relevant details to make the proof as self-contained as possible.
+The direct sum decomposition Rn+1 ∼= Rn ⊕R and the identiﬁcation of Rn with
+the hyperplane H := {x ∈Rn+1 | xn+1 = 1} allows us to view the afﬁne Grassmann
+manifold AGrn,k of all afﬁne k-dimensional planes in Rn as a submanifold of Grn+1,k+1.
+More precisely, the manifold AGrn,k is embedded in Grn+1,k+1 by the map which sends
+a k-dimensional plane L ∈AGrn,k to the (k + 1)-dimensional linear subspace of Rn+1
+spanned by L. From now on, AGrn,k will often be identiﬁed with its image in Grn+1,k+1.
+The space N0 := Grn+1,k+1\AGrn,k is identiﬁed as the Grassmann manifold Grn,k+1 of
+all “horizontal” (k + 1)-dimensional planes in Grn+1,k+1. The “dual” manifold N1 of all
+“vertical”(k+1)-dimensionalplanesin Grn+1,k+1,i.e.,theplaneswhichcontainthebasic
+vector en+1, is clearly homeomorphic to Grn,k. Indeed, each vertical (k +1)-dimensional
+plane L in Rn+1 = Rn ⊕R intersects the horizontal space Rn in a k-dimensional plane L′
+and conversely each L′ ∈Grn,k determines the corresponding L ∈N1. A very important
+observation, already used in the proof of Theorem 6, is that the space
+AGrn,k = Grn+1,k+1\Grn,k+1
+of all nonhorizontal (k+1)-dimensional linear subspaces of Rn+1 is homeomorphic to the
+total space of the canonical (tautological) (n −k)-dimensional bundle ξn−k over Grn,k ∼=
+Grn,n−k. Recall that a k-dimensional plane P ∈AGrn,k is of the form P = Lk +en+1+v
+where Lk is the unique parallel horizontal k-dimensional linear subspace in Rn and v ∈
+Rn. Note that there exists a unique vector v ∈L⊥
+k in the linear subspace of Rn orthogonal
+to Lk such that P = Lk +en+1+v. This deﬁnes a bijective correspondence P 7→(Lk, v)
+which proves the assertion that AGrn,k is a tautological, (n−k)-dimensional bundle over
+Grn,k. Note that the zero section of this bundle is naturally identiﬁed with the manifold
+N1. This follows from the fact that the zero section consists of the planes P = (Lk, v)
+for which v = 0. Note that this implies that AGrn,k = Grn+1,k+1\Grn,k+1 is an open
+“tubular” neighborhood of N1 which can also be seen as the normal bundle ν(N1) to
+N1 in Grn+1,k+1. All the (co)homologies are understood to be with Z2 coefﬁcients. Let
+===== page 14 =====
+46
+E. Makai, S. Vre´cica, and R. ˇZivaljevi´c
+[N1] be the fundamental class of N1, i.e., the generator of the group Hk(n−k)(N1) ∼=
+Hk(n−k)(Grn,k) ∼= Z2. By a slight abuse of notation, let [N1] also be the image of this
+class in Hk(n−k)(Grn+1,k+1) upon the embedding N1 →Grn+1,k+1. The Poincar´e dual of
+the class [N1], denoted by θ, is a cohomology class in H n−k(Grn+1,k+1). Actually, by the
+usual link between the Poincar´e duality and the Thom isomorphism theorem, see, e.g.,
+[2] or Theorem 10.2, Chapter VI, especially Section 11, of [16], θ can be seen as a class
+in H ∗(ν(N1), ν(N1)\N1) ∼= H ∗(Grn+1,k+1, Grn+1,k+1\Grn,k+1). Moreover, the Thom
+isomorphism theorem says that each class ω ∈H ∗(ν(N1), ν(N1)\N1) has a unique
+decomposition of the form ω = wθ where w ∈H ∗(ν(N1)) ∼= H ∗(N1). In particular
+θ2 = wn−kθ where wn−k is the top Stiefel–Whitney class of the bundle ν(N1) →N1 or
+equivalently the Z2-Euler class of the bundle ξn−k over Grn,k deﬁned above. Hence,
+θk+1 = (wn−k)kθ.
+(7)
+It is a well-known fact, already used in the proof of Theorem 6, that (wn−k)k̸ = 0. A
+cohomological proof of this observation can be found in [5], see also [20], while an
+alternative proof, based on Schubert calculus, is in Section 1.5 of [8]. From here we
+deduce that θk+1 = wk
+n−kθ̸ = 0 which follows from wk
+n−k̸ = 0.
+Let xi: Grn,n−k →ξn−k, i = 0, . . . ,l, be the sections of the bundle ξn−k ∼= ν(N1) ∼=
+AGrn,k, introduced in the proof of Theorem 6. Recall that xi(L⊥
+k ) = x′
+i(Lk) is by
+deﬁnition the unique point in L⊥
+k such that Lk + xi(L⊥
+k ) is the maximal k-section of the
+strictly convex body Ki. Let Xi = Im(xi), considered as a subset of ξn−k ⊂Grn+1,k+1.
+By deﬁnition, Ck(K) = Tl
+i=0 Xi. Note that Xi is a C0 submanifold of ξn−k since xi is
+a continuous cross section, and that the fundamental class [Xi] of Xi, seen as a class in
+H ∗(Grn+1,k+1), is equal to [N1]. The last assertion follows from the fact that xi is linearly
+homotopic to the zero cross section. The same argument shows that θ is the Poincar´e
+dual of any class of the form [Mv], where Mv is the submanifold of AGrn,k deﬁned in the
+statement of Theorem 8. We conclude that θ, the Poincar´e dual of [N1] = [Xi] = [Mv],
+is concentrated in an arbitrarily small open neighborhood Ui of Xi, which means that θ
+is in the image of the map
+H n−k(Grn+1,k+1, Grn+1,k+1\Ui) −→H n−k(Grn+1,k+1).
+From here it follows, essentially by the argument of Theorem 11.10 in Chapter VI, p. 373,
+of [2], that θl+1 is in the image of the map
+H (l+1)(n−k)
+Ã
+Grn+1,k+1, Grn+1,k+1\
+l\
+i=0
+Ui
+!
+−→H (l+1)(n−k)(Grn+1,k+1),
+which means that θl+1 is concentrated in an arbitrarily small neighborhood of the set
+Ck(K), in the sense of Deﬁnition 1.
+In the proof of Corollary 1 we assume that the cohomology we work with is a con-
+tinuous extension of the singular cohomology theory, say the ˇCech or the Alexander–
+Spanier–Kolmogoroff cohomology theory. This is only a technical assumption, similar
+to the corresponding assumptions in Poincar´e–Lefschetz duality theorems.
+===== page 15 =====
+Plane Sections of Convex Bodies of Maximal Volume
+47
+Proof of Corollary 1.
+Suppose that CatGr(Ck(K)) ≤k −l. This means that there ex-
+ists a family F = {F1, . . . , Fk−l} of closed subspaces of Gr = Grn+1,k+1 such that
+Sk−l
+j=1 Fj = Ck(K) and each Fi is contractible to a point by a homotopy which moves
+Fi inside Gr. More precisely, this means that the inclusion map Fi ,→Gr is homotopic
+to a constant map and as a consequence of this, the induced map H n−k(Gr, Z2) →
+H n−k(Fi, Z2) is trivial. Moreover, by the continuity of the cohomology theory, there ex-
+ists an open set Vi ⊃Fi such that the homomorphism H n−k(Gr, Z2) →H n−k(Vi, Z2)
+is also trivial. From the cohomology exact sequence of a pair we conclude that there
+exists a class θi ∈H n−k(Gr, Vi; Z2) which is mapped to the class θ by the homo-
+morphism H n−k(Gr, Fi; Z2) →H n−k(Gr, Z2). By Theorem 8, the class θl+1 is con-
+centrated in an arbitrarily small neighborhood of Ck(K). It follows that there exists a
+class θ0 ∈H (n−k)(l+1)(Gr, Gr\V ; Z2), where V := Sk−l
+i=1 Vi, which is mapped to the
+class θl+1. We conclude that the class θ0θ1 · · · θk−l ∈H (n−k)(k+1)(Gr, Gr; Z2) ∼= 0
+is mapped to the class θk+1. This is a contradiction to the fact from Theorem 8, that
+θk+1̸ = 0.
+Proof of Theorem 9.
+The key topological property of the set Ck(K), used in the proof
+of Theorem 7, was the relation (1). We will show that the set C has the same property,
+i.e., that
+for each projective (k −l −1)-dimensional plane Pk−l−1 ⊆RPn,
+C ∩Sk(Pk−l−1)̸ = ∅.
+(1a)
+After we establish (1a), the rest of the proof will be just the repetition of the proof of
+Theorem 7. So we concentrate on the proof of (1a). Given a (k −l −1)-dimensional
+plane Pk−l−1, let M be the manifold of all projective k-dimensional planes P such that
+Pk−l−1 ⊆P and let [M] be its fundamental class. Alternatively, the manifold M can be
+described as the space of all linear (k +1)-dimensional subspaces in Rn+1 which contain
+the (k −l)-dimensional linear space Lk−l associated to Pk−l−1. The Poincar´e dual of the
+class[M]istheclassθk−l,whereθ istheclassintroducedintheformulationofTheorem8.
+One way to see this is, in light of the fact that θ is the Poincar´e dual of classes [Mv] (see
+Theorem 8), to observe that [M] = [Mv1] ∩· · · ∩[Mvk−l], where vi are points which
+span Lk−l. In other words, the class θl+1 is, by assumption, concentrated in an arbitrarily
+small neighborhood of C and θk−l, being a Poincar´e dual, is concentrated in an arbitrarily
+small neighborhood of the manifold M. Since the nonzero class θk+1 = θl+1θk−l is
+concentrated in an arbitrarily small neighborhood of C ∩M, we conclude that this set is
+nonempty and the relation (1a) follows. Note that this proof is essentially a repetition of
+the argument already used in the proof of Corollary 1, see also the proof of Theorem 11.10
+in Chapter VI, p. 373, of [2].
+5.
+Counterexamples for Nonconvex Bodies
+One can ask if one could replace the convex bodies Ki with more general, say compact,
+sets. However, for one-dimensional sections this is not the case, as shown by an example
+kindly communicated to us by J. Matouˇsek.
+===== page 16 =====
+48
+E. Makai, S. Vre´cica, and R. ˇZivaljevi´c
+Example 1 (J. Matouˇsek).
+The geometrical form of Theorem 1, without assuming 0 ∈
+int K (and hence the stronger Theorem 3), is false for the compact set K = {x ∈
+Rn | r1 ≤∥x∥≤r2}, where 0 < r1 < r2 (and for K1 = K and K2 the unit ball of
+Rn, respectively). In particular, for n = 2 the (geometrical forms) of Theorems 1–8
+and Corollary 1 (without assuming 0 ∈int K at Theorems 1 and 2), with the maximal
+k-sections, are not valid for all compact sets.
+Proof.
+If a line A1 in Rn has a distance x from 0, then
+V1(K ∩A1) = 2
+µq
+max(r2
+2 −x2, 0) −
+q
+max(r2
+1 −x2, 0)
+¶
+,
+that attains its maximum for x = r1. Hence all maximal 1-sections are those with A1
+being tangent to the ball of radius r1 about 0, and none of these lines A1 contains 0.
+Based on this example, we can give further examples, for k-dimensional sections, 1 ≤
+k ≤n −1.
+Example 2.
+For each k ∈{1, . . . , n −1} the statement of Theorem 6 (and that of its
+special case Theorem 5) is not valid for all compact sets Ki.
+Proof.
+Let K1 = K × Bk−1, where K = {x ∈lin{e1, . . . , en−k+1} | r1 ≤∥x∥≤r2}
+(with 0 < r1 < r2) and Bk−1 = {x ∈lin{en−k+2, . . . , en} | ∥x∥≤1}, and let
+K2, . . . , Kk+1 be k unit balls centered at 0, en−k+2, . . . , en. Let Ak ⊆Rn be an afﬁne
+k-dimensional plane, and suppose that Ki ∩Ak is a maximal k-section of Ki for any
+i ∈{2, . . . , k + 1}. Then Ak passes through the centers of K2, . . . , Kk+1, hence is of the
+form Ak = A1×lin{en−k+2, . . . , en}, where 0 ∈A1 ⊆lin{e1, . . . , en−k+1} is a linear one-
+dimensional subspace. Then, by Example 1, Vk(K1 ∩Ak) = V1(K ∩A1)·Vk−1(Bk−1) <
+V1(K ∩(A1 + x)) · Vk−1(Bk−1) = Vk(K1 ∩(Ak + x)) for x ∈lin{e1, . . . , en−k+1}
+orthogonal to A1 and ∥x∥= r1, hence K1 ∩Ak is not a maximal k-section of K1.
+Acknowledgments
+The authors would like to express their gratitude to Imre B´ar´any, organizer of a minicon-
+ference on topological methods in combinatorics and convexity (Budapest, November
+1996), where this work began, to J. Matouˇsek for contributing Example 1, to R. Howard
+for communicating to us the proof of the integral geometric formula (3) for the (Hν, ν)-
+rectiﬁable and Hν-measurable case and kindly agreeing to include it in this paper, and
+to the referees for their detailed remarks improving this paper. (One referee also noted
+the extendability of our results to the (Hν, ν)-rectiﬁable and Hν-measurable case. Our
+original version of Theorems 7 and 9 concerned only the C∞case.)
+References
+1. T. Bonnesen and W. Fenchel, Theorie der konvexen K¨orper, Springer-Verlag, Berlin, 1934.
+2. G. E. Bredon, Topology and Geometry, Springer-Verlag, New York, 1993.
+===== page 17 =====
+Plane Sections of Convex Bodies of Maximal Volume
+49
+3. J. E. Brothers, Integral geometry in homogenous spaces, Trans. Amer. Math. Soc. 124 (1966), 480–517.
+4. V. L. Dol’nikov, Transversals of families of sets in Rn and a connection between the Helly and Borsuk
+theorems, Russian Acad. Sci. Sb. Math. 79(1) (1994), 93–107.
+5. E. Fadell and S. Husseini, An ideal-valued cohomological index theory with applications to Borsuk–Ulam
+and Bourgin–Yang theorems, Ergodic Theory Dynamical Systems 8 (1988), 73–85.
+6. H. Federer, Geometric Measure Theory, Springer-Verlag, New York, 1969.
+7. R. J. Gardner, Geometric Tomography, Cambridge University Press, Cambridge, 1996.
+8. P. Grifﬁths and J. Harris, Principles of Algebraic Geometry, Wiley-Interscience, New York, 1978.
+9. P. C. Hammer, Convex bodies associated with a convex body, Proc. Amer. Math. Soc. 2 (1951), 781–793.
+10. P. C. Hammer, Convex curves of constant Minkowski breadth, in Convexity (Proc. Symposia in Pure
+Math. 7) (V. Klee, ed.), Amer. Math. Soc., Providence, RI, 1963, pp. 291–304.
+11. R. Howard, The Kinematic Formula in Riemannian Homogeneous Spaces, Memoirs of the Amer. Math.
+Soc. 509, Amer. Math. Soc., Providence, RI, 1993.
+12. E. Lutwak, Intersection bodies and dual mixed volumes, Adv. in Math. 71 (1988), 232–261.
+13. E. Makai, Jr., and H. Martini, On bodies associated with a given convex body, Canad. Math. Bull. 39
+(1996), 448–459.
+14. E. Makai, Jr., and H. Martini, On maximal k-sections and related common transversals of convex bodies,
+Canad. Math. Bull., to appear.
+15. H. Martini, Extremal equalities for cross-sectional measures of convex bodies, Proc. of the Third Geometry
+Congress (Thessaloniki, 1991), Aristoteles University Press, Thessaloniki, 1992, pp. 285–296.
+16. J. Milnor and J. D. Stasheff, Characteristic Classes, Princeton University Press, Princeton, NJ, 1974.
+17. C. M. Petty and J. M. Crotty, Characterizations of spherical neighborhoods, Canad. J. Math. 22 (1970),
+431–435.
+18. E. F. Whittlesey, Fixed points and antipodal points, Amer. Math. Monthly 70 (1963), 807–821.
+19. R. ˇZivaljevi´c,Topologicalmethods,inHandbookofDiscreteandComputationalGeometry(J.E.Goodman
+and J. O’Rourke, eds.), CRC Press, New York, 1997, pp. 209–224.
+20. R. ˇZivaljevi´c and S. Vre´cica, An extension of the ham-sandwich theorem, Bull. London Math. Soc. 22
+(1990), 183–186.
+Received May 22, 1998, and in revised form March 27, 2000. Online publication September 22, 2000.

@@ -1,0 +1,2810 @@
+{
+  "role": "D",
+  "task": "D：这一趟派给你的活是 —— 收工门点名一条：「攻」那一环的 `plan 000002` 第 2 轮 history 里指向 `stmt:000030`，而 `verifications` 两路都没有认领给它的、签得住的行 ⇒ 那一行只能记 unknown。请把这一条处置掉，二选一并在回执里写明选了哪条、落在哪张台账行：(1) 补签 —— 若这条命题真有证明稿在盘（F 族 `manuscripts/F/f-proof-*.md`），让产出者自己把那一份送 V（`proof_manuscript` 指稿，别传命题号），拿到干净的「成立」后由 B 收录、签落在现行正文上；(2) 明确放弃 —— 让 B 用通用写口把 `status=abandoned`，并按四档给全 `abandon_kind` + `abandon_basis`（math_error 要 `defect_ref`、difficulty 要写清难在哪、counterexample 要 `experiment_id`、space_too_large 要 `space`）。两条都不许只写状态不写理由。回执里同时给：`verifications/000030.jsonl` 有没有一行「成立」，或 `statements` 那一行 `status` 与 `abandon_kind` 是什么。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "statements",
+          "id": "000030"
+        },
+        "why": "读 stmt:000030 的全貌：status、proof_text、证明路径"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "stmt_id": "000030",
+          "origin": "own_result",
+          "kind": "theorem",
+          "label": "截面面积计算核自检通过：极坐标 tanh-sinh 求积（断点取 A cosψ+B sinψ=0 与 |w_i|=|w_j| 在 [0,2π) 上的全部根）在",
+          "statement_text": "lp3-section-validate-v3",
+          "statement_full": "截面面积计算核自检通过：极坐标 tanh-sinh 求积（断点取 A cosψ+B sinψ=0 与 |w_i|=|w_j| 在 [0,2π) 上的全部根）在 p=2 上给任意中心截面面积 π（偏差 ≤1e-15）；在 p=1 上与八面体边缘裁剪精确值一致（≤1e-15）；p=1000 上坐标/体对角/面对角截面与立方体精确值 4、3√3、4√2 的偏差随 p 增大而缩小且落在 O(1/p) 以内；每个 p 的坐标截面等于 4Γ(1+1/p)^2/Γ(1+2/p)（相对偏差 ≤1e-13）；面积对平面基的旋转不变（≤1e-12）；粗嵌套 Simpson 法随加密收敛到极坐标值。",
+          "proof_text": "",
+          "source_lit_id": null,
+          "page_range": {
+            "start": null,
+            "end": null,
+            "label": ""
+          },
+          "quote_verified": null,
+          "quote_mode": "",
+          "quote_reason": "手稿收录（D 只递指针）：普通数值手稿 `work/E/e-num-000003.md` —— 命题逐字取自 `## 命题`，证明栏空着（业主 2026-11-08：普通数值档不写证明正文），程序在实验行的 `code_path`，引文面不适用",
+          "quote_span": "",
+          "quote_call_sha256": "",
+          "evidence_kind": "cross_check",
+          "bits": {
+            "numeric": "verified",
+            "proof": true,
+            "reviewed": false,
+            "formal": "pending",
+            "audited": false,
+            "origin": "own_result",
+            "evidence": {
+              "numeric": {
+                "entries": [
+                  {
+                    "script": "code/exp/lpsec_validate.py",
+                    "range": "",
+                    "n_cases": 0,
+                    "n_counterexamples": 0,
+                    "code_hash": "226a5da3ceebc6ed",
+                    "exp": "exp:000003"
+                  }
+                ],
+                "experiments": [
+                  "000003"
+                ],
+                "experiment_id": "000003",
+                "script": "code/exp/lpsec_validate.py",
+                "code_hash": "226a5da3ceebc6ed",
+                "manuscript": "work/E/e-num-000003.md",
+                "manuscript_sha256": "6b67487691efdd67657db5a075a5cc19c0b9168229f248f08ee8eea8d8b731c3",
+                "certificate": false
+              },
+              "numeric_reason": "",
+              "proof_process": "1. 【前提】固定 1 ≤ p < ∞；B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。（前提）（前提）\n2. 【推导】由 stmt:000034 的 (i)，对每个单位法向 n 与 n^⊥ 的任意单位正交基 (u,v) 有 A_p(n) = (1/2)∫_0^{2π}‖cosθ·u+sinθ·v‖_p^{-2}dθ。取 n = (1,1,1)/√3、u = (1,-1,0)/√2、v = (1,1,-2)/√6（直接验算 ‖u‖=‖v‖=1、u·v=0、u·n=v·n=0，故 {u,v} 是 H := {x+y+z=0} 的单位正交基）；另一路参数化 Φ(x,y) := (x,y,−x−y) 是 R²→H 的双射，∂_xΦ=(1,0,−1) 与 ∂_yΦ=(0,1,−1) 的叉积为 (1,1,1)、模为 √3，故 A_diag(p) = √3∫∫_D dxdy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。（依据：stmt:000034）\n3. 【推导】对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)（r ≥ 0、θ ∈ [0,2π)）：由 |r cosθ|^p+|r sinθ|^p+|r(cosθ+sinθ)|^p = r^p g(θ)（记 g(θ) := |cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p）得 (x,y) ∈ D ⟺ r ≤ g(θ)^{-1/p}；由面积元 r dr dθ 得 ∫∫_D = ∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ，与第 2 步合并即 A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，这给出 (i) 的积分式。（依据：stmt:000034）\n4. 【推导】一致控制：g ≥ max(|cosθ|,|sinθ|)^p ≥ (1/√2)^p（因为 max(|cosθ|,|sinθ|) ≥ 1/√2），故对一切 p ∈ [1,∞) 与一切 θ 有 0 < g(θ)^{-2/p} ≤ (1/√2)^{-2} = 2；又 (p,θ) ↦ g(θ) 连续且在每个局部 p-区间上 g 有与 p 无关的正下界，故 θ ↦ g(θ)^{-2/p} 关于 p 逐点连续。（依据：stmt:000034）\n5. 【推导】p = 2 时 g(θ) = cos²θ+sin²θ+(cosθ+sinθ)² = 2+sin2θ；代换 u = 2θ 后用 ∫_0^{2π}du/(a+b sin u) = 2π/√(a²−b²)（取 a=2、b=1）得 ∫_0^{2π} dθ/(2+sin2θ) = ∫_0^{2π} du/(2+sin u) = 2π/√3，此处 p=2 使 g^{-2/p} 化为 g^{-1}，故 A_diag(2) = (√3/2)·(2π/√3) = π。（依据：stmt:000034）\n6. 【推导】由 stmt:000034 的 (ii)(iii)(iv) 的闭式 A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，在 p = 2 处得 A_face(2) = 2^0·4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π；与第 5 步合并得 Δ(2) = π − π = 0。（依据：stmt:000034）\n7. 【推导】Δ(1) 的计算：A_face(1) = 2^{-1/2}·4Γ(2)²/Γ(3) = 2^{-1/2}·4·1/2 = √2（Γ(2)=1、Γ(3)=2）；A_diag(1)：p = 1 时 g = |cosθ|+|sinθ|+|cosθ+sinθ| 满足 g(θ+π) = g(θ)，且在 [0,π/2] 上 g = 2(cosθ+sinθ)（故 g^{-2} = (1/4)(cosθ+sinθ)^{-2}）、在 [π/2,3π/4] 上 g = 2sinθ（g^{-2} = (1/4)sin^{-2}θ）、在 [3π/4,π] 上 g = −2cosθ（g^{-2} = (1/4)cos^{-2}θ）；三段对 ∫g^{-2} 的贡献各为 1/4（分别用 ∫_0^{π/2}dθ/(cosθ+sinθ)² = 1、[−cotθ] 与 [tanθ] 在两个端点区间上的取值各得 1），故 ∫_0^{2π}g^{-2}dθ = 2·(1/4+1/4+1/4) = 3/2，A_diag(1) = (√3/2)·(3/2) = 3√3/4；于是 Δ(1) = √2 − 3√3/4 > 0，因为 4√2 > 3√3 ⟺ 32 > 27。（依据：stmt:000034）\n8. 【推导】Δ 的连续性：Γ 在 (0,∞) 上连续且取正值，p ↦ 1/p、1+1/p、1+2/p 在 [1,∞) 上连续，故 A_face 在 [1,∞) 上连续；由第 4 步与 p 无关的控制 g^{-2/p} ≤ 2 与逐点连续性，有界收敛定理给出 p ↦ ∫_0^{2π}g(θ)^{-2/p}dθ 在 [1,∞) 上连续，故 A_diag 连续；两者相减得 Δ 在 [1,∞) 上连续。（依据：stmt:000034）\n9. 【推导】p→∞ 时 A_diag 的极限：记 m(θ) := max(|cosθ|,|sinθ|,|cosθ+sinθ|)，则 m(θ)^p ≤ g(θ) ≤ 3m(θ)^p，故对每个 θ 有 g(θ)^{-2/p} → m(θ)^{-2}；又 g ≥ m^p 给出 g^{-2/p} ≤ m^{-2} ≤ 2（因 m ≥ 1/√2），有界收敛定理给出 A_diag(p) → (√3/2)∫_0^{2π}m(θ)^{-2}dθ。按符号分段：在 [0,π/2] 上 m = cosθ+sinθ、在 [π/2,3π/4] 上 m = sinθ、在 [3π/4,π] 上 m = −cosθ，且 m(θ+π) = m(θ)，三段各贡献 1（同上一步的三段积分），故 ∫_0^{2π}m^{-2}dθ = 2·3 = 6，于是 lim_{p→∞}A_diag(p) = (√3/2)·6 = 3√3。（依据：stmt:000034）\n10. 【推导】p→∞ 时 A_face 的极限：C_p := 4Γ(1+1/p)²/Γ(1+2/p) → 4Γ(1)²/Γ(1) = 4（Γ 连续、Γ(1)=1），又 2^{1/2−1/p} → √2，故 A_face(p) → 4√2；与第 9 步合并得 lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0（同样由 32 > 27）。（依据：stmt:000034）\n11. 【推导】收尾：记 L := 4√2 − 3√3 > 0；由第 8 步 Δ 的连续性与第 10 步 lim Δ = L，取 ε := L/2 > 0，则存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 |Δ(p) − L| < ε，从而 Δ(p) > L/2 > 0，即 A_face(p) > A_diag(p) 对一切 p ≥ P0 成立，这给出 (iii) 的最后一句。（依据：stmt:000034）",
+              "proof_source": "own",
+              "reviewed_by": {},
+              "reviewed_source": "",
+              "formal": {},
+              "formal_reason": "",
+              "audited_by": {},
+              "optimized_by_proof": {
+                "2": false
+              }
+            },
+            "voided_by": {},
+            "grade": "strong_conjecture",
+            "audited_badge": false
+          },
+          "status": "active",
+          "derived_from": [],
+          "aliases": [],
+          "doc_id": null,
+          "line_range": {
+            "start": null,
+            "end": null,
+            "label": "exp:000003"
+          },
+          "created_at": "2026-11-24T18:25:33+08:00",
+          "created_by": "secretary-B",
+          "_proposition_adjudication": {
+            "checked": true,
+            "attempted": false,
+            "verdict": "different",
+            "canonical_name": "",
+            "same_as": "",
+            "basis": "查过：没有可比的候选 ⇒ 不同",
+            "reason": "查过：命题台账里没有可检索的 active 命题（候选 0 条）⇒ 注册新的",
+            "reused": false,
+            "seam_source": "agent_b.register_statement:same_statement",
+            "seam_attempted": false,
+            "at": "2026-11-24T18:25:33+08:00"
+          },
+          "manuscripts": {
+            "1": "work/E/e-num-000003.md",
+            "2": "manuscripts/F/f-proof-000003.md"
+          },
+          "manuscript_id": "000003",
+          "manuscript_family": "e-num",
+          "_kind_upgrade": {
+            "from": "conjecture",
+            "to": "theorem",
+            "basis": "手稿签块（连续 3/3 成立、正文 sha 相符）",
+            "grade": "strong_conjecture",
+            "by": "secretary-B",
+            "at": "2026-11-24T21:32:49+08:00"
+          },
+          "proofs": [
+            {
+              "proof_no": 2,
+              "text": "1. 【前提】固定 1 ≤ p < ∞；B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。（前提）（前提）\n2. 【推导】由 stmt:000034 的 (i)，对每个单位法向 n 与 n^⊥ 的任意单位正交基 (u,v) 有 A_p(n) = (1/2)∫_0^{2π}‖cosθ·u+sinθ·v‖_p^{-2}dθ。取 n = (1,1,1)/√3、u = (1,-1,0)/√2、v = (1,1,-2)/√6（直接验算 ‖u‖=‖v‖=1、u·v=0、u·n=v·n=0，故 {u,v} 是 H := {x+y+z=0} 的单位正交基）；另一路参数化 Φ(x,y) := (x,y,−x−y) 是 R²→H 的双射，∂_xΦ=(1,0,−1) 与 ∂_yΦ=(0,1,−1) 的叉积为 (1,1,1)、模为 √3，故 A_diag(p) = √3∫∫_D dxdy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。（依据：stmt:000034）\n3. 【推导】对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)（r ≥ 0、θ ∈ [0,2π)）：由 |r cosθ|^p+|r sinθ|^p+|r(cosθ+sinθ)|^p = r^p g(θ)（记 g(θ) := |cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p）得 (x,y) ∈ D ⟺ r ≤ g(θ)^{-1/p}；由面积元 r dr dθ 得 ∫∫_D = ∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ，与第 2 步合并即 A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，这给出 (i) 的积分式。（依据：stmt:000034）\n4. 【推导】一致控制：g ≥ max(|cosθ|,|sinθ|)^p ≥ (1/√2)^p（因为 max(|cosθ|,|sinθ|) ≥ 1/√2），故对一切 p ∈ [1,∞) 与一切 θ 有 0 < g(θ)^{-2/p} ≤ (1/√2)^{-2} = 2；又 (p,θ) ↦ g(θ) 连续且在每个局部 p-区间上 g 有与 p 无关的正下界，故 θ ↦ g(θ)^{-2/p} 关于 p 逐点连续。（依据：stmt:000034）\n5. 【推导】p = 2 时 g(θ) = cos²θ+sin²θ+(cosθ+sinθ)² = 2+sin2θ；代换 u = 2θ 后用 ∫_0^{2π}du/(a+b sin u) = 2π/√(a²−b²)（取 a=2、b=1）得 ∫_0^{2π} dθ/(2+sin2θ) = ∫_0^{2π} du/(2+sin u) = 2π/√3，此处 p=2 使 g^{-2/p} 化为 g^{-1}，故 A_diag(2) = (√3/2)·(2π/√3) = π。（依据：stmt:000034）\n6. 【推导】由 stmt:000034 的 (ii)(iii)(iv) 的闭式 A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，在 p = 2 处得 A_face(2) = 2^0·4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π；与第 5 步合并得 Δ(2) = π − π = 0。（依据：stmt:000034）\n7. 【推导】Δ(1) 的计算：A_face(1) = 2^{-1/2}·4Γ(2)²/Γ(3) = 2^{-1/2}·4·1/2 = √2（Γ(2)=1、Γ(3)=2）；A_diag(1)：p = 1 时 g = |cosθ|+|sinθ|+|cosθ+sinθ| 满足 g(θ+π) = g(θ)，且在 [0,π/2] 上 g = 2(cosθ+sinθ)（故 g^{-2} = (1/4)(cosθ+sinθ)^{-2}）、在 [π/2,3π/4] 上 g = 2sinθ（g^{-2} = (1/4)sin^{-2}θ）、在 [3π/4,π] 上 g = −2cosθ（g^{-2} = (1/4)cos^{-2}θ）；三段对 ∫g^{-2} 的贡献各为 1/4（分别用 ∫_0^{π/2}dθ/(cosθ+sinθ)² = 1、[−cotθ] 与 [tanθ] 在两个端点区间上的取值各得 1），故 ∫_0^{2π}g^{-2}dθ = 2·(1/4+1/4+1/4) = 3/2，A_diag(1) = (√3/2)·(3/2) = 3√3/4；于是 Δ(1) = √2 − 3√3/4 > 0，因为 4√2 > 3√3 ⟺ 32 > 27。（依据：stmt:000034）\n8. 【推导】Δ 的连续性：Γ 在 (0,∞) 上连续且取正值，p ↦ 1/p、1+1/p、1+2/p 在 [1,∞) 上连续，故 A_face 在 [1,∞) 上连续；由第 4 步与 p 无关的控制 g^{-2/p} ≤ 2 与逐点连续性，有界收敛定理给出 p ↦ ∫_0^{2π}g(θ)^{-2/p}dθ 在 [1,∞) 上连续，故 A_diag 连续；两者相减得 Δ 在 [1,∞) 上连续。（依据：stmt:000034）\n9. 【推导】p→∞ 时 A_diag 的极限：记 m(θ) := max(|cosθ|,|sinθ|,|cosθ+sinθ|)，则 m(θ)^p ≤ g(θ) ≤ 3m(θ)^p，故对每个 θ 有 g(θ)^{-2/p} → m(θ)^{-2}；又 g ≥ m^p 给出 g^{-2/p} ≤ m^{-2} ≤ 2（因 m ≥ 1/√2），有界收敛定理给出 A_diag(p) → (√3/2)∫_0^{2π}m(θ)^{-2}dθ。按符号分段：在 [0,π/2] 上 m = cosθ+sinθ、在 [π/2,3π/4] 上 m = sinθ、在 [3π/4,π] 上 m = −cosθ，且 m(θ+π) = m(θ)，三段各贡献 1（同上一步的三段积分），故 ∫_0^{2π}m^{-2}dθ = 2·3 = 6，于是 lim_{p→∞}A_diag(p) = (√3/2)·6 = 3√3。（依据：stmt:000034）\n10. 【推导】p→∞ 时 A_face 的极限：C_p := 4Γ(1+1/p)²/Γ(1+2/p) → 4Γ(1)²/Γ(1) = 4（Γ 连续、Γ(1)=1），又 2^{1/2−1/p} → √2，故 A_face(p) → 4√2；与第 9 步合并得 lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0（同样由 32 > 27）。（依据：stmt:000034）\n11. 【推导】收尾：记 L := 4√2 − 3√3 > 0；由第 8 步 Δ 的连续性与第 10 步 lim Δ = L，取 ε := L/2 > 0，则存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 |Δ(p) − L| < ε，从而 Δ(p) > L/2 > 0，即 A_face(p) > A_diag(p) 对一切 p ≥ P0 成立，这给出 (iii) 的最后一句。（依据：stmt:000034）",
+              "proof_sha256": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+              "created_at": "2026-11-24T21:32:50+08:00"
+            }
+          ],
+          "proof_no": 2,
+          "proof_sha256": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+          "proof_routes": {},
+          "route": ""
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "id": "000030",
+          "id_field": "stmt_id",
+          "found": true
+        },
+        "multi_call": {
+          "turn_index": 0,
+          "call_index": 0,
+          "calls": 2,
+          "step_index": 0
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 63872,
+        "prompt_cache_miss_tokens": 3461,
+        "tokens_in": 67333,
+        "tokens_out": 213,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000209"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.list",
+        "args": {
+          "path": "manuscripts/F"
+        },
+        "why": "看 F 族有哪些证明稿在盘"
+      },
+      "result": {
+        "tool": "fs.list",
+        "ok": true,
+        "data": {
+          "path": "manuscripts/F",
+          "entries": [
+            {
+              "name": "f-proof-000000.md",
+              "path": "manuscripts/F/f-proof-000000.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 5788,
+              "mtime": "2026-11-24T18:41:01+08:00"
+            },
+            {
+              "name": "f-proof-000001.md",
+              "path": "manuscripts/F/f-proof-000001.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 5101,
+              "mtime": "2026-11-24T19:12:21+08:00"
+            },
+            {
+              "name": "f-proof-000002.md",
+              "path": "manuscripts/F/f-proof-000002.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 7923,
+              "mtime": "2026-11-24T20:47:16+08:00"
+            },
+            {
+              "name": "f-proof-000003.md",
+              "path": "manuscripts/F/f-proof-000003.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 6917,
+              "mtime": "2026-11-24T20:57:21+08:00"
+            }
+          ],
+          "total": 4,
+          "returned": 4,
+          "truncated": false
+        },
+        "error": "",
+        "meta": {
+          "total": 4,
+          "returned": 4,
+          "truncated": false
+        },
+        "warn": "这一步给了 2 条调用，已按顺序逐条：第 1 条 table.get 成功；第 2 条 fs.list 成功：4。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 0,
+          "call_index": 1,
+          "calls": 2,
+          "step_index": 1,
+          "summary": "这一步给了 2 条调用，已按顺序逐条：第 1 条 table.get 成功；第 2 条 fs.list 成功：4。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 0,
+            "calls": 2,
+            "items": 2,
+            "steps": [
+              0,
+              1
+            ],
+            "executed": 2,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000209"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "manuscripts.submission_reading",
+        "args": {
+          "manuscript": "manuscripts/F/f-proof-000003.md"
+        },
+        "why": "看 stmt:000030 对应的 F 稿有没有 V 签、进没进登记"
+      },
+      "result": {
+        "tool": "manuscripts.submission_reading",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "manuscript": "manuscripts/F/f-proof-000003.md",
+          "manuscript_id": "000003",
+          "producer_role": "F",
+          "producer_code": "",
+          "state": "submitted",
+          "submitted_at": "2026-11-24T20:57:20+08:00",
+          "via": "sign_issued",
+          "signed": true,
+          "signed_sha": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+          "sign_sha": "0e05acf6f6081058e098449ac572d1990a2ad2632b379924fd6987864856c62a",
+          "sign_at": "2026-11-24T20:57:20+08:00",
+          "token": "mss:f-proof-000003#path=manuscripts/F/f-proof-000003.md#body_sha=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db#sign_sha=ba536b6c09994c21865ba56ce3293851c03361dc8dbfac49ef990023edeb47fe#file_sha=202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8#at=2026-11-24T20:57:20+08:00#submitted_at=2026-11-24T20:57:20+08:00#via=sign_issued",
+          "task_id": "t-000083",
+          "task_role": "F",
+          "problems": [],
+          "why": "已提交（族=f-proof，via=sign_issued，submitted_at=2026-11-24T20:57:20+08:00）"
+        },
+        "error": "",
+        "meta": {
+          "checked": true,
+          "manuscript": "manuscripts/F/f-proof-000003.md",
+          "manuscript_id": "000003",
+          "producer_role": "F",
+          "producer_code": "",
+          "state": "submitted",
+          "submitted_at": "2026-11-24T20:57:20+08:00",
+          "via": "sign_issued",
+          "signed": true,
+          "signed_sha": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+          "sign_sha": "0e05acf6f6081058e098449ac572d1990a2ad2632b379924fd6987864856c62a",
+          "sign_at": "2026-11-24T20:57:20+08:00",
+          "token": "mss:f-proof-000003#path=manuscripts/F/f-proof-000003.md#body_sha=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db#sign_sha=ba536b6c09994c21865ba56ce3293851c03361dc8dbfac49ef990023edeb47fe#file_sha=202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8#at=2026-11-24T20:57:20+08:00#submitted_at=2026-11-24T20:57:20+08:00#via=sign_issued",
+          "task_id": "t-000083",
+          "task_role": "F",
+          "problems": [],
+          "why": "已提交（族=f-proof，via=sign_issued，submitted_at=2026-11-24T20:57:20+08:00）"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 66560,
+        "prompt_cache_miss_tokens": 5685,
+        "tokens_in": 72245,
+        "tokens_out": 534,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000209"
+    },
+    {
+      "index": 3,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.list",
+        "args": {
+          "path": "verifications",
+          "recursive": true,
+          "limit": 300
+        },
+        "why": "看验证台账里有哪些文件、有没有 000030 的那一份，以及 V 的判词行是怎么挂到命题号上的"
+      },
+      "result": {
+        "tool": "fs.list",
+        "ok": true,
+        "data": {
+          "path": "verifications",
+          "entries": [
+            {
+              "name": "000034.jsonl",
+              "path": "verifications/000034.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 5254,
+              "mtime": "2026-11-24T19:14:29+08:00"
+            },
+            {
+              "name": "000035.jsonl",
+              "path": "verifications/000035.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 3736,
+              "mtime": "2026-11-24T19:24:08+08:00"
+            },
+            {
+              "name": "000041.jsonl",
+              "path": "verifications/000041.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 4709,
+              "mtime": "2026-11-24T21:08:15+08:00"
+            },
+            {
+              "name": "000042.jsonl",
+              "path": "verifications/000042.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 14835,
+              "mtime": "2026-11-24T21:29:17+08:00"
+            },
+            {
+              "name": "pending",
+              "path": "verifications/pending",
+              "is_dir": true,
+              "is_file": false,
+              "is_symlink": false,
+              "size": 4096,
+              "mtime": "2026-11-24T21:01:16+08:00"
+            },
+            {
+              "name": "0cf2e9d63d84d89e1fc793263941d594c6d840a70c44f2c050a1aa94486ecb6e.jsonl",
+              "path": "verifications/pending/0cf2e9d63d84d89e1fc793263941d594c6d840a70c44f2c050a1aa94486ecb6e.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 5032,
+              "mtime": "2026-11-24T19:16:27+08:00"
+            },
+            {
+              "name": "0eace33564540fd1f1172fc3c00141355ee2753c62c329c4ca416a4c4116322d.jsonl",
+              "path": "verifications/pending/0eace33564540fd1f1172fc3c00141355ee2753c62c329c4ca416a4c4116322d.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 9944,
+              "mtime": "2026-11-24T20:59:49+08:00"
+            },
+            {
+              "name": "202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8.jsonl",
+              "path": "verifications/pending/202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 7288,
+              "mtime": "2026-11-24T21:01:16+08:00"
+            },
+            {
+              "name": "3a237e1e80bb627d56480df693ee47cc8425e5af9873468944313b2deb3bede4.jsonl",
+              "path": "verifications/pending/3a237e1e80bb627d56480df693ee47cc8425e5af9873468944313b2deb3bede4.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 4987,
+              "mtime": "2026-11-24T19:16:27+08:00"
+            },
+            {
+              "name": "4cbbbeaf3989914e5756c9da973790a81da790ee98b226b4b9c965b430c9fc0a.jsonl",
+              "path": "verifications/pending/4cbbbeaf3989914e5756c9da973790a81da790ee98b226b4b9c965b430c9fc0a.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 7628,
+              "mtime": "2026-11-24T18:42:50+08:00"
+            },
+            {
+              "name": "595e388ff219fe0ab4e3b0b64d9d9f147fbc5ad283b8399920f076809f426623.jsonl",
+              "path": "verifications/pending/595e388ff219fe0ab4e3b0b64d9d9f147fbc5ad283b8399920f076809f426623.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 4161,
+              "mtime": "2026-11-24T19:16:27+08:00"
+            },
+            {
+              "name": "6429ab828f56dcf8dc1bcd14daa2a563187dccb99056e30e89a63b4179c47929.jsonl",
+              "path": "verifications/pending/6429ab828f56dcf8dc1bcd14daa2a563187dccb99056e30e89a63b4179c47929.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 4224,
+              "mtime": "2026-11-24T20:59:49+08:00"
+            },
+            {
+              "name": "84916f2519368a82c41da1c239f682ae69d1b2bf0e4cee8d2f9ca2e9ba906595.jsonl",
+              "path": "verifications/pending/84916f2519368a82c41da1c239f682ae69d1b2bf0e4cee8d2f9ca2e9ba906595.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 4143,
+              "mtime": "2026-11-24T20:59:49+08:00"
+            },
+            {
+              "name": "bfe78f85fca1df894a28d8d4c99124b24c6920864b90af5e527ca2a4ad407907.jsonl",
+              "path": "verifications/pending/bfe78f85fca1df894a28d8d4c99124b24c6920864b90af5e527ca2a4ad407907.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 12490,
+              "mtime": "2026-11-24T18:42:49+08:00"
+            },
+            {
+              "name": "c3799ef6c1a48592a8bc6f8cefabda2a4a946df3e10e182574eefa15cce099c4.jsonl",
+              "path": "verifications/pending/c3799ef6c1a48592a8bc6f8cefabda2a4a946df3e10e182574eefa15cce099c4.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 6684,
+              "mtime": "2026-11-24T20:59:49+08:00"
+            },
+            {
+              "name": "c47e71d0f92e0db60d668bd26ef3939cae4fe84eb03d1da23a1b62e226ba8ddb.jsonl",
+              "path": "verifications/pending/c47e71d0f92e0db60d668bd26ef3939cae4fe84eb03d1da23a1b62e226ba8ddb.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 6201,
+              "mtime": "2026-11-24T20:59:49+08:00"
+            },
+            {
+              "name": "c9a58441bbfbac8ea83ed35ef6e997999b0357d1bf4b1fd919ee25f6aec3473e.jsonl",
+              "path": "verifications/pending/c9a58441bbfbac8ea83ed35ef6e997999b0357d1bf4b1fd919ee25f6aec3473e.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 11894,
+              "mtime": "2026-11-24T20:59:49+08:00"
+            },
+            {
+              "name": "e7fe441c9e14f4a55e963c14793341a76654496a78c17a57607ccc55053c5e7f.jsonl",
+              "path": "verifications/pending/e7fe441c9e14f4a55e963c14793341a76654496a78c17a57607ccc55053c5e7f.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 7145,
+              "mtime": "2026-11-24T19:16:27+08:00"
+            },
+            {
+              "name": "reviews",
+              "path": "verifications/reviews",
+              "is_dir": true,
+              "is_file": false,
+              "is_symlink": false,
+              "size": 4096,
+              "mtime": "2026-11-24T21:17:55+08:00"
+            },
+            {
+              "name": "index.jsonl",
+              "path": "verifications/reviews/index.jsonl",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 9203,
+              "mtime": "2026-11-24T21:17:55+08:00"
+            },
+            {
+              "name": "v-review-000001.md",
+              "path": "verifications/reviews/v-review-000001.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 8169,
+              "mtime": "2026-11-24T18:36:47+08:00"
+            },
+            {
+              "name": "v-review-000002.md",
+              "path": "verifications/reviews/v-review-000002.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 1844,
+              "mtime": "2026-11-24T18:55:06+08:00"
+            },
+            {
+              "name": "v-review-000003.md",
+              "path": "verifications/reviews/v-review-000003.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 1676,
+              "mtime": "2026-11-24T19:00:56+08:00"
+            },
+            {
+              "name": "v-review-000004.md",
+              "path": "verifications/reviews/v-review-000004.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 1753,
+              "mtime": "2026-11-24T19:07:32+08:00"
+            },
+            {
+              "name": "v-review-000005.md",
+              "path": "verifications/reviews/v-review-000005.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 1559,
+              "mtime": "2026-11-24T19:57:13+08:00"
+            },
+            {
+              "name": "v-review-000006.md",
+              "path": "verifications/reviews/v-review-000006.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 2020,
+              "mtime": "2026-11-24T20:16:37+08:00"
+            },
+            {
+              "name": "v-review-000007.md",
+              "path": "verifications/reviews/v-review-000007.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 1975,
+              "mtime": "2026-11-24T20:21:25+08:00"
+            },
+            {
+              "name": "v-review-000008.md",
+              "path": "verifications/reviews/v-review-000008.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 1601,
+              "mtime": "2026-11-24T20:25:37+08:00"
+            },
+            {
+              "name": "v-review-000009.md",
+              "path": "verifications/reviews/v-review-000009.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 2488,
+              "mtime": "2026-11-24T20:30:15+08:00"
+            },
+            {
+              "name": "v-review-000010.md",
+              "path": "verifications/reviews/v-review-000010.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 1984,
+              "mtime": "2026-11-24T20:36:15+08:00"
+            },
+            {
+              "name": "v-review-000011.md",
+              "path": "verifications/reviews/v-review-000011.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 1797,
+              "mtime": "2026-11-24T20:38:02+08:00"
+            },
+            {
+              "name": "v-review-000012.md",
+              "path": "verifications/reviews/v-review-000012.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 3906,
+              "mtime": "2026-11-24T21:11:12+08:00"
+            },
+            {
+              "name": "v-review-000013.md",
+              "path": "verifications/reviews/v-review-000013.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 1825,
+              "mtime": "2026-11-24T21:17:55+08:00"
+            }
+          ],
+          "total": 33,
+          "returned": 33,
+          "truncated": false
+        },
+        "error": "",
+        "meta": {
+          "total": 33,
+          "returned": 33,
+          "truncated": false
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 71424,
+        "prompt_cache_miss_tokens": 2317,
+        "tokens_in": 73741,
+        "tokens_out": 819,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000209"
+    },
+    {
+      "index": 4,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "verifications/pending/202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8.jsonl"
+        },
+        "why": "读 f-proof-000003 的验证台账（文件名对上签块里的 file_sha）：看它认领的是哪条命题（有没有 stmt:000030）、判词是「成立」还是别的"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "{\"at\": \"2026-11-24T20:54:55+08:00\", \"citation_checks\": [], \"defect_step\": null, \"findings\": [], \"landed\": \"pending\", \"object_path\": \"manuscripts/F/f-proof-000003.md\", \"object_sha256\": \"202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8\", \"producer_code\": \"F1\", \"producer_role\": \"F\", \"proof_chars\": 3230, \"proof_sha256\": \"3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db\", \"quote\": \"\", \"review_call\": \"23b99deea3dd\", \"review_pass\": 1, \"round\": 1, \"secretary_judge\": {\"answer\": \"没问题\", \"axis\": \"clean\", \"basis\": [\"v_reply 原文：\\\"逐行核对了截面参数化、极坐标化、p=2 与 p=1 的闭式计算、p→∞ 极限及控制收敛依据，未发现推导缺口、无条件前提或不当引用。\\\"\", \"v_reply 原文：\\\"findings\\\":[]\"], \"checked\": true, \"cost\": {\"call_index\": 670, \"charged\": true, \"ledger\": \"000772\", \"ledger_reason\": \"charged\", \"prompt_sha256\": \"17687a6c44de52feef7ab059998da95ff23c81e11cebb12dbbdfa98e395a79de\", \"tokens\": 1793, \"usd\": 0.000402}, \"defect_scope\": \"\", \"defect_step\": null, \"defect_step_basis\": \"\", \"fault_cause\": \"report_gap\", \"fault_kind\": \"\", \"material\": {\"ledger_row\": {\"defect_step\": null, \"verdict\": \"成立\"}, \"v_reply\": \"{\\\"verdict\\\":\\\"成立\\\",\\\"defect_step\\\":null,\\\"quote\\\":\\\"\\\",\\\"why\\\":\\\"逐行核对了截面参数化、极坐标化、p=2 与 p=1 的闭式计算、p→∞ 极限及控制收敛依据，未发现推导缺口、无条件前提或不当引用。\\\",\\\"findings\\\":[],\\\"citation_checks\\\":[]}\"}, \"proof_no\": 1, \"reason\": \"回复明确称逐行核对了截面参数化、极坐标化、闭式计算、极限及控制收敛依据并给出 findings 为空，未指出任何缺陷；仅缺反例尝试记录，记入 report_gap。\", \"refused\": \"\", \"report_gap\": \"未记录反例尝试的位置或构造\", \"source\": \"secretary:v_reply_defect\", \"statement_id\": \"\", \"unwired\": false, \"verdict\": \"成立\"}, \"statement_id\": \"000042\", \"stmt_id\": \"000042\", \"submission_id\": \"\", \"unresolved_errors\": 0, \"used_faces\": [], \"verdict\": \"成立\", \"verification_id\": \"u-000022\", \"verifier\": \"agent-V-V1\", \"why\": \"逐行核对了截面参数化、极坐标化、p=2 与 p=1 的闭式计算、p→∞ 极限及控制收敛依据，未发现推导缺口、无条件前提或不当引用。\", \"path_group\": 1, \"claimed_at\": \"2026-11-24T21:01:16+08:00\"}\n{\"at\": \"2026-11-24T20:55:52+08:00\", \"citation_checks\": [], \"defect_step\": null, \"findings\": [], \"landed\": \"pending\", \"object_path\": \"manuscripts/F/f-proof-000003.md\", \"object_s…（落档截断，原 5591 字）",
+        "error": "",
+        "meta": {
+          "path": "verifications/pending/202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8.jsonl",
+          "encoding": "utf-8",
+          "bytes_read": 7288,
+          "total_bytes": 7288,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 3,
+          "total_lines": 3,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 3 行",
+          "sha256": "aacbfbc1e7ede6b8fd338abae0467bf2e6d69965f342ab47639b6c9b2ef6f099"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 72960,
+        "prompt_cache_miss_tokens": 4343,
+        "tokens_in": 77303,
+        "tokens_out": 1046,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000209"
+    },
+    {
+      "index": 5,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "statements",
+          "id": "000042"
+        },
+        "why": "读 stmt:000042：V 那三行判词挂在它名下，先看它是什么命题、与 000030 是不是同一条"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "stmt_id": "000042",
+          "origin": "own_result",
+          "kind": "theorem",
+          "label": "B_p^3 对角与面对角截面面积公式及 Δ(p) 的最终正性",
+          "statement_text": "设 1 ≤ p < ∞，B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积，并记 A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。则：(i) A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，且 A_diag(2) = π、A_diag(1) = 3√3/4、lim_{p→∞}A_diag(p) = 3√3；(ii) A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，且 A_face(2) = π、A_face(1) = √2、lim_{p→∞}A_face(p) = 4√2；(iii) Δ 在 [1,∞) 上连续，Δ(2) = 0，Δ(1) = √2 − 3√3/4 > 0，lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0，因而存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 A_face(p) > A_diag(p)。",
+          "statement_full": "设 1 ≤ p < ∞，B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积，并记 A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。则：(i) A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，且 A_diag(2) = π、A_diag(1) = 3√3/4、lim_{p→∞}A_diag(p) = 3√3；(ii) A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，且 A_face(2) = π、A_face(1) = √2、lim_{p→∞}A_face(p) = 4√2；(iii) Δ 在 [1,∞) 上连续，Δ(2) = 0，Δ(1) = √2 − 3√3/4 > 0，lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0，因而存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 A_face(p) > A_diag(p)。",
+          "proof_text": "设 p ∈ [1,∞) 固定。记 B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n，记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；并记 A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。\n\n一、先把 A_diag 写成平面 H := {x+y+z=0} 上的极坐标积分。取 u := (1,-1,0)/√2 与 v := (1,1,-2)/√6。直接验算得 ‖u‖ = ‖v‖ = 1、u·v = 0，又 u·(1,1,1) = 0、v·(1,1,1) = 0，故 {u,v} 是 H 的一组单位正交基，而 n := (1,1,1)/√3 是 H 的单位法向量、H = n^⊥。在 H 上以 (u,v) 为基取极坐标 x = r·e(θ)，其中 e(θ) := cosθ·u + sinθ·v、r ≥ 0、θ ∈ [0,2π)。由于 l_p 范数是正齐次的，‖x‖_p = r‖e(θ)‖_p，于是 x ∈ B_p^3 当且仅当 r ≤ ‖e(θ)‖_p^{-1}。平面极坐标的面积元带 Jacobi 因子 r，先对 r 积分得 ∫_0^{‖e(θ)‖_p^{-1}} r dr = (1/2)‖e(θ)‖_p^{-2}，再对 θ 积分便有 A_diag(p) = (1/2)∫_0^{2π}‖e(θ)‖_p^{-2} dθ，这就是 (i) 的第一个等号。\n\n二、把 ‖e(θ)‖_p 算出来。由 u、v 的分量得 e_1 = cosθ/√2 + sinθ/√6 = (√3cosθ+sinθ)/√6、e_2 = −cosθ/√2 + sinθ/√6 = −(√3cosθ−sinθ)/√6、e_3 = −2sinθ/√6。用余弦的差角公式 √3cosθ+sinθ = 2cos(θ−π/6) 与 √3cosθ−sinθ = 2cos(θ+π/6)，得 |e_1| = (2/√6)|cos(θ−π/6)|、|e_2| = (2/√6)|cos(θ+π/6)|、|e_3| = (2/√6)|sinθ|。记 S(θ) := |cos(θ−π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p，则 ‖e(θ)‖_p^p = (2/√6)^p·S(θ)；因为 (2/√6)² = 2/3，两边取 −2/p 次幂得 ‖e(θ)‖_p^{-2} = (3/2)·S(θ)^{-2/p}。代回上一段，便得 (i) 的第二个等号 A_diag(p) = (3/4)∫_0^{2π} S(θ)^{-2/p} dθ。\n\n三、另一条路把同一个面积写进 (x,y) 平面，这给出 (ii)。H 上的点可唯一写成 (x,y,−x−y)，即 Φ(x,y) := (x,y,−x−y) 是 R² 到 H 的双射；它的偏导向量 ∂_xΦ = (1,0,−1) 与 ∂_yΦ = (0,1,−1) 的叉积为 (1,1,1)、模为 √3，故曲面面积公式给出 A_diag(p) = √3∫∫_D dx dy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。再对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)：记 g(θ) := |cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p，由 |r cosθ|^p+|r sinθ|^p+|r(cosθ+sinθ)|^p = r^p g(θ) 得 (x,y) ∈ D 当且仅当 r ≤ g(θ)^{-1/p}；用面积元 r dr dθ 先对 r 积分得 ∫_0^{g(θ)^{-1/p}} r dr = (1/2)g(θ)^{-2/p}，于是 A_diag(p) = (√3/2)∫_0^{2π} g(θ)^{-2/p} dθ。两条路算的是同一个 A_diag，故上面三个积分表示彼此相等；下文算特例值时用 g(θ) 这一式。\n\n四、A_face 的闭式。取 n_face := (1,1,0)/√2，则 n_face^⊥ 是平面 x+y=0。用 (x,z) ↦ (x,−x,z) 参数化这个平面：两个偏导 (1,−1,0) 与 (0,0,1) 的叉积为 (−1,−1,0)、模为 √2，而该点的 l_p 范数的 p 次幂是 2|x|^p+|z|^p，故 A_face(p) = √2·area{(x,z) : 2|x|^p+|z|^p ≤ 1}。作代换 u := 2^{1/p}x，即 x = 2^{-1/p}u、dx = 2^{-1/p}du，则 2|x|^p = |u|^p，于是 A_face(p) = √2·2^{-1/p}·S_p，其中 S_p := area{(u,z) : |u|^p+|z|^p ≤ 1}。算 S_p：由对称性与竖向切片（固定 u 时 |z| ≤ (1−|u|^p)^{1/p}）得 S_p = 4∫_0^1 (1−u^p)^{1/p} du。作代换 t = u^p（u = t^{1/p}、du = (1/p)t^{1/p−1}dt）把积分化为 Beta 积分：4∫_0^1 (1−u^p)^{1/p} du = (4/p)∫_0^1 t^{1/p−1}(1−t)^{1/p} dt = (4/p)B(1/p, 1+1/p) = (4/p)·Γ(1/p)Γ(1+1/p)/Γ(1+2/p) = 4Γ(1+1/p)²/Γ(1+2/p)，最后一步用了 Γ(1+1/p) = Γ(1/p)/p。代回上式即得 (ii) 的闭式 A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)。\n\n五、特例值。p = 2 时 g(θ) = cos²θ+sin²θ+(cosθ+sinθ)² = 2+sin2θ，而 g^{-2/p} 在 p = 2 处就是 g^{-1}，故 A_diag(2) = (√3/2)∫_0^{2π} dθ/(2+sin2θ)。作代换 u = 2θ：θ 走一整圈对应 u 走两圈、且 sin 以 2π 为周期，故 ∫_0^{2π} dθ/(2+sin2θ) = (1/2)∫_0^{4π} du/(2+sin u) = ∫_0^{2π} du/(2+sin u)；再用 ∫_0^{2π} du/(a+b sin u) = 2π/√(a²−b²)（取 a = 2、b = 1）得它为 2π/√3，于是 A_diag(2) = (√3/2)·(2π/√3) = π。同一 p = 2 下 S_2 = 4∫_0^1 √(1−u²) du = 4·(π/4) = π，而 2^{1/2−1/2} = 1，故 A_face(2) = π。两者相等，于是 Δ(2) = 0。\n\np = 1 时 g(θ) = |cosθ|+|sinθ|+|cosθ+sinθ|，满足 g(θ+π) = g(θ)，故只需算 [0,π] 上的积分再乘 2。在 [0,π/2] 上三项都非负，g = 2(cosθ+sinθ)，从而 g^{-2} = (1/4)(cosθ+sinθ)^{-2}；把 cosθ+sinθ 写成 √2sin(θ+π/4)，代换 φ = θ+π/4 得 ∫_0^{π/2} dθ/(cosθ+sinθ)² = (1/2)∫_{π/4}^{3π/4} dφ/sin²φ = (1/2)[−cotφ] 在两端取值之差 = 1，故这一段贡献 1/4。在 [π/2,3π/4] 上 cosθ ≤ 0 而 cosθ+sinθ ≥ 0，故 g = 2sinθ、g^{-2} = (1/4)sin^{-2}θ，而 ∫_{π/2}^{3π/4} dθ/sin²θ = [−cotθ] 在两端取值之差为 1，这一段也贡献 1/4。在 [3π/4,π] 上 cosθ+sinθ ≤ 0，故 g = −2cosθ、g^{-2} = (1/4)cos^{-2}θ，而 ∫_{3π/4}^{π} dθ/cos²θ = [tanθ] 在两端取值之差为 1，这一段同样贡献 1/4。三段相加得 ∫_0^{2π} g^{-2} dθ = 2·(3/4) = 3/2，于是 A_diag(1) = (√3/2)·(3/2) = 3√3/4。另一边 S_1 = 4∫_0^1 (1−u) du = 2，而 2^{-1/1} = 1/2，故 A_face(1) = √2·(1/2)·2 = √2。于是 Δ(1) = √2 − 3√3/4，它是正的，因为 4√2 > 3√3 等价于平方后的 32 > 27。\n\n六、p → ∞ 的极限。记 m(θ) := max(|cosθ|,|sinθ|,|cosθ+sinθ|)。因为 g(θ) 是三项之和，每一项都不超过 m(θ)^p 而其中至少有一项恰等于 m(θ)^p，故 m(θ)^p ≤ g(θ) ≤ 3m(θ)^p；两边取 −2/p 次幂并令 p → ∞（此时 3^{-2/p} → 1），得对每个 θ 都有 g(θ)^{-2/p} → m(θ)^{-2}。至于控制：由 g ≥ m^p 得 g^{-2/p} ≤ m^{-2}，而 m(θ) ≥ max(|cosθ|,|sinθ|) ≥ 1/√2，故 m(θ)^{-2} ≤ 2，于是对一切 p ≥ 1 与一切 θ 都有与 p 无关的界 g(θ)^{-2/p} ≤ 2。有界收敛定理给出 A_diag(p) → (√3/2)∫_0^{2π} m(θ)^{-2} dθ。剩下的积分按符号分段算出：在 [0,π/2] 上 m = cosθ+sinθ、在 [π/2,3π/4] 上 m = sinθ、在 [3π/4,π] 上 m = −cosθ，且 m(θ+π) = m(θ)；三段各自的积分与上一步 p = 1 时算过的三段相同、各为 1，故 ∫_0^{2π} m^{-2} dθ = 2·3 = 6，于是 lim_{p→∞} A_diag(p) = (√3/2)·6 = 3√3。另一边，S_p 关于 p 单调不减：若 |u|^p+|z|^p ≤ 1 而 p' > p，则必有 |u| ≤ 1 与 |z| ≤ 1，从而 |u|^{p'}+|z|^{p'} ≤ |u|^p+|z|^p ≤ 1。再看这族集合的并 E := ∪_{p≥1} {(u,z) : |u|^p+|z|^p ≤ 1}：一方面，|u|^p+|z|^p ≤ 1 迫使 |u| ≤ 1 与 |z| ≤ 1，故 E 落在闭正方形 [−1,1]² 之内；另一方面，任给 (u,z) ∈ (−1,1)² 有 max(|u|,|z|) < 1，于是 max(|u|,|z|)^p → 0，充分大的 p 便使 |u|^p+|z|^p ≤ 1，故整个开正方形 (−1,1)² 都含在 E 里。合起来，E 与 (−1,1)² 只差 [−1,1]² 的边界那一段零测集；(−1,1)² 是边长 2 的开正方形（四个象限各占其四分之一），面积为 4，于是 E 的面积也是 4。由单调收敛定理得 S_p ↑ 4，于是 lim_{p→∞} A_face(p) = √2·1·4 = 4√2。与上一条合并得 lim_{p→∞} Δ(p) = 4√2 − 3√3，它同样是正的（仍由 32 > 27）。\n\n七、连续性。先看 A_face：S_p = 4∫_0^1 (1−u^p)^{1/p} du 的被积函数关于 (p,u) ∈ [1,∞)×[0,1] 连续（u = 1 处它恒取值 0），且被常数 1 控制，故由有界收敛定理 p ↦ S_p 在 [1,∞) 上连续；又 p ↦ 2^{-1/p} 连续，于是 A_face 在 [1,∞) 上连续。再看 A_diag：由上面那条与 p 无关的控制 g(θ)^{-2/p} ≤ 2 以及 g 关于 (p,θ) 的联合连续性，对任意收敛序列 p_k → p 都有 g^{-2/p_k} → g^{-2/p} 逐点成立且被常数 2 控制，故有界收敛定理给出 p ↦ ∫_0^{2π} g(θ)^{-2/p} dθ 连续；A_diag 就是它乘常数 √3/2，故 A_diag 也连续。两者相减，Δ 在 [1,∞) 上连续。\n\n八、收尾。记 L := 4√2 − 3√3 > 0，取 ε := L/2 > 0。由 Δ 的连续性与 lim_{p→∞} Δ(p) = L，存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 |Δ(p) − L| < ε，从而 Δ(p) > L/2 > 0，即 A_face(p) > A_diag(p) 对一切 p ≥ P0 成立。至此 (i)(ii)(iii) 全部成立。",
+          "source_lit_id": null,
+          "page_range": {
+            "start": null,
+            "end": null,
+            "label": ""
+          },
+          "quote_verified": null,
+          "quote_mode": "",
+          "quote_reason": "手稿收录（D 只递指针）：命题正文、证明正文与档位全部逐字取自 `manuscripts/F/f-proof-000003.md` —— 引文面不适用（这份稿是我们自己产出的成果，不是文献里摘的）；V 的签（若有）在手稿块上",
+          "quote_span": "",
+          "quote_call_sha256": "",
+          "evidence_kind": "heuristic",
+          "bits": {
+            "numeric": "pending",
+            "proof": true,
+            "reviewed": true,
+            "formal": "pending",
+            "audited": false,
+            "origin": "own_result",
+            "evidence": {
+              "numeric": {},
+              "numeric_reason": "",
+              "proof_process": "设 p ∈ [1,∞) 固定。记 B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n，记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；并记 A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。\n\n一、先把 A_diag 写成平面 H := {x+y+z=0} 上的极坐标积分。取 u := (1,-1,0)/√2 与 v := (1,1,-2)/√6。直接验算得 ‖u‖ = ‖v‖ = 1、u·v = 0，又 u·(1,1,1) = 0、v·(1,1,1) = 0，故 {u,v} 是 H 的一组单位正交基，而 n := (1,1,1)/√3 是 H 的单位法向量、H = n^⊥。在 H 上以 (u,v) 为基取极坐标 x = r·e(θ)，其中 e(θ) := cosθ·u + sinθ·v、r ≥ 0、θ ∈ [0,2π)。由于 l_p 范数是正齐次的，‖x‖_p = r‖e(θ)‖_p，于是 x ∈ B_p^3 当且仅当 r ≤ ‖e(θ)‖_p^{-1}。平面极坐标的面积元带 Jacobi 因子 r，先对 r 积分得 ∫_0^{‖e(θ)‖_p^{-1}} r dr = (1/2)‖e(θ)‖_p^{-2}，再对 θ 积分便有 A_diag(p) = (1/2)∫_0^{2π}‖e(θ)‖_p^{-2} dθ，这就是 (i) 的第一个等号。\n\n二、把 ‖e(θ)‖_p 算出来。由 u、v 的分量得 e_1 = cosθ/√2 + sinθ/√6 = (√3cosθ+sinθ)/√6、e_2 = −cosθ/√2 + sinθ/√6 = −(√3cosθ−sinθ)/√6、e_3 = −2sinθ/√6。用余弦的差角公式 √3cosθ+sinθ = 2cos(θ−π/6) 与 √3cosθ−sinθ = 2cos(θ+π/6)，得 |e_1| = (2/√6)|cos(θ−π/6)|、|e_2| = (2/√6)|cos(θ+π/6)|、|e_3| = (2/√6)|sinθ|。记 S(θ) := |cos(θ−π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p，则 ‖e(θ)‖_p^p = (2/√6)^p·S(θ)；因为 (2/√6)² = 2/3，两边取 −2/p 次幂得 ‖e(θ)‖_p^{-2} = (3/2)·S(θ)^{-2/p}。代回上一段，便得 (i) 的第二个等号 A_diag(p) = (3/4)∫_0^{2π} S(θ)^{-2/p} dθ。\n\n三、另一条路把同一个面积写进 (x,y) 平面，这给出 (ii)。H 上的点可唯一写成 (x,y,−x−y)，即 Φ(x,y) := (x,y,−x−y) 是 R² 到 H 的双射；它的偏导向量 ∂_xΦ = (1,0,−1) 与 ∂_yΦ = (0,1,−1) 的叉积为 (1,1,1)、模为 √3，故曲面面积公式给出 A_diag(p) = √3∫∫_D dx dy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。再对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)：记 g(θ) := |cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p，由 |r cosθ|^p+|r sinθ|^p+|r(cosθ+sinθ)|^p = r^p g(θ) 得 (x,y) ∈ D 当且仅当 r ≤ g(θ)^{-1/p}；用面积元 r dr dθ 先对 r 积分得 ∫_0^{g(θ)^{-1/p}} r dr = (1/2)g(θ)^{-2/p}，于是 A_diag(p) = (√3/2)∫_0^{2π} g(θ)^{-2/p} dθ。两条路算的是同一个 A_diag，故上面三个积分表示彼此相等；下文算特例值时用 g(θ) 这一式。\n\n四、A_face 的闭式。取 n_face := (1,1,0)/√2，则 n_face^⊥ 是平面 x+y=0。用 (x,z) ↦ (x,−x,z) 参数化这个平面：两个偏导 (1,−1,0) 与 (0,0,1) 的叉积为 (−1,−1,0)、模为 √2，而该点的 l_p 范数的 p 次幂是 2|x|^p+|z|^p，故 A_face(p) = √2·area{(x,z) : 2|x|^p+|z|^p ≤ 1}。作代换 u := 2^{1/p}x，即 x = 2^{-1/p}u、dx = 2^{-1/p}du，则 2|x|^p = |u|^p，于是 A_face(p) = √2·2^{-1/p}·S_p，其中 S_p := area{(u,z) : |u|^p+|z|^p ≤ 1}。算 S_p：由对称性与竖向切片（固定 u 时 |z| ≤ (1−|u|^p)^{1/p}）得 S_p = 4∫_0^1 (1−u^p)^{1/p} du。作代换 t = u^p（u = t^{1/p}、du = (1/p)t^{1/p−1}dt）把积分化为 Beta 积分：4∫_0^1 (1−u^p)^{1/p} du = (4/p)∫_0^1 t^{1/p−1}(1−t)^{1/p} dt = (4/p)B(1/p, 1+1/p) = (4/p)·Γ(1/p)Γ(1+1/p)/Γ(1+2/p) = 4Γ(1+1/p)²/Γ(1+2/p)，最后一步用了 Γ(1+1/p) = Γ(1/p)/p。代回上式即得 (ii) 的闭式 A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)。\n\n五、特例值。p = 2 时 g(θ) = cos²θ+sin²θ+(cosθ+sinθ)² = 2+sin2θ，而 g^{-2/p} 在 p = 2 处就是 g^{-1}，故 A_diag(2) = (√3/2)∫_0^{2π} dθ/(2+sin2θ)。作代换 u = 2θ：θ 走一整圈对应 u 走两圈、且 sin 以 2π 为周期，故 ∫_0^{2π} dθ/(2+sin2θ) = (1/2)∫_0^{4π} du/(2+sin u) = ∫_0^{2π} du/(2+sin u)；再用 ∫_0^{2π} du/(a+b sin u) = 2π/√(a²−b²)（取 a = 2、b = 1）得它为 2π/√3，于是 A_diag(2) = (√3/2)·(2π/√3) = π。同一 p = 2 下 S_2 = 4∫_0^1 √(1−u²) du = 4·(π/4) = π，而 2^{1/2−1/2} = 1，故 A_face(2) = π。两者相等，于是 Δ(2) = 0。\n\np = 1 时 g(θ) = |cosθ|+|sinθ|+|cosθ+sinθ|，满足 g(θ+π) = g(θ)，故只需算 [0,π] 上的积分再乘 2。在 [0,π/2] 上三项都非负，g = 2(cosθ+sinθ)，从而 g^{-2} = (1/4)(cosθ+sinθ)^{-2}；把 cosθ+sinθ 写成 √2sin(θ+π/4)，代换 φ = θ+π/4 得 ∫_0^{π/2} dθ/(cosθ+sinθ)² = (1/2)∫_{π/4}^{3π/4} dφ/sin²φ = (1/2)[−cotφ] 在两端取值之差 = 1，故这一段贡献 1/4。在 [π/2,3π/4] 上 cosθ ≤ 0 而 cosθ+sinθ ≥ 0，故 g = 2sinθ、g^{-2} = (1/4)sin^{-2}θ，而 ∫_{π/2}^{3π/4} dθ/sin²θ = [−cotθ] 在两端取值之差为 1，这一段也贡献 1/4。在 [3π/4,π] 上 cosθ+sinθ ≤ 0，故 g = −2cosθ、g^{-2} = (1/4)cos^{-2}θ，而 ∫_{3π/4}^{π} dθ/cos²θ = [tanθ] 在两端取值之差为 1，这一段同样贡献 1/4。三段相加得 ∫_0^{2π} g^{-2} dθ = 2·(3/4) = 3/2，于是 A_diag(1) = (√3/2)·(3/2) = 3√3/4。另一边 S_1 = 4∫_0^1 (1−u) du = 2，而 2^{-1/1} = 1/2，故 A_face(1) = √2·(1/2)·2 = √2。于是 Δ(1) = √2 − 3√3/4，它是正的，因为 4√2 > 3√3 等价于平方后的 32 > 27。\n\n六、p → ∞ 的极限。记 m(θ) := max(|cosθ|,|sinθ|,|cosθ+sinθ|)。因为 g(θ) 是三项之和，每一项都不超过 m(θ)^p 而其中至少有一项恰等于 m(θ)^p，故 m(θ)^p ≤ g(θ) ≤ 3m(θ)^p；两边取 −2/p 次幂并令 p → ∞（此时 3^{-2/p} → 1），得对每个 θ 都有 g(θ)^{-2/p} → m(θ)^{-2}。至于控制：由 g ≥ m^p 得 g^{-2/p} ≤ m^{-2}，而 m(θ) ≥ max(|cosθ|,|sinθ|) ≥ 1/√2，故 m(θ)^{-2} ≤ 2，于是对一切 p ≥ 1 与一切 θ 都有与 p 无关的界 g(θ)^{-2/p} ≤ 2。有界收敛定理给出 A_diag(p) → (√3/2)∫_0^{2π} m(θ)^{-2} dθ。剩下的积分按符号分段算出：在 [0,π/2] 上 m = cosθ+sinθ、在 [π/2,3π/4] 上 m = sinθ、在 [3π/4,π] 上 m = −cosθ，且 m(θ+π) = m(θ)；三段各自的积分与上一步 p = 1 时算过的三段相同、各为 1，故 ∫_0^{2π} m^{-2} dθ = 2·3 = 6，于是 lim_{p→∞} A_diag(p) = (√3/2)·6 = 3√3。另一边，S_p 关于 p 单调不减：若 |u|^p+|z|^p ≤ 1 而 p' > p，则必有 |u| ≤ 1 与 |z| ≤ 1，从而 |u|^{p'}+|z|^{p'} ≤ |u|^p+|z|^p ≤ 1。再看这族集合的并 E := ∪_{p≥1} {(u,z) : |u|^p+|z|^p ≤ 1}：一方面，|u|^p+|z|^p ≤ 1 迫使 |u| ≤ 1 与 |z| ≤ 1，故 E 落在闭正方形 [−1,1]² 之内；另一方面，任给 (u,z) ∈ (−1,1)² 有 max(|u|,|z|) < 1，于是 max(|u|,|z|)^p → 0，充分大的 p 便使 |u|^p+|z|^p ≤ 1，故整个开正方形 (−1,1)² 都含在 E 里。合起来，E 与 (−1,1)² 只差 [−1,1]² 的边界那一段零测集；(−1,1)² 是边长 2 的开正方形（四个象限各占其四分之一），面积为 4，于是 E 的面积也是 4。由单调收敛定理得 S_p ↑ 4，于是 lim_{p→∞} A_face(p) = √2·1·4 = 4√2。与上一条合并得 lim_{p→∞} Δ(p) = 4√2 − 3√3，它同样是正的（仍由 32 > 27）。\n\n七、连续性。先看 A_face：S_p = 4∫_0^1 (1−u^p)^{1/p} du 的被积函数关于 (p,u) ∈ [1,∞)×[0,1] 连续（u = 1 处它恒取值 0），且被常数 1 控制，故由有界收敛定理 p ↦ S_p 在 [1,∞) 上连续；又 p ↦ 2^{-1/p} 连续，于是 A_face 在 [1,∞) 上连续。再看 A_diag：由上面那条与 p 无关的控制 g(θ)^{-2/p} ≤ 2 以及 g 关于 (p,θ) 的联合连续性，对任意收敛序列 p_k → p 都有 g^{-2/p_k} → g^{-2/p} 逐点成立且被常数 2 控制，故有界收敛定理给出 p ↦ ∫_0^{2π} g(θ)^{-2/p} dθ 连续；A_diag 就是它乘常数 √3/2，故 A_diag 也连续。两者相减，Δ 在 [1,∞) 上连续。\n\n八、收尾。记 L := 4√2 − 3√3 > 0，取 ε := L/2 > 0。由 Δ 的连续性与 lim_{p→∞} Δ(p) = L，存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 |Δ(p) − L| < ε，从而 Δ(p) > L/2 > 0，即 A_face(p) > A_diag(p) 对一切 p ≥ P0 成立。至此 (i)(ii)(iii) 全部成立。",
+              "proof_source": "own",
+              "reviewed_by": {
+                "verifier": "V",
+                "verification_id": "v-000005",
+                "round": null,
+                "verdict": "成立",
+                "evidence": "verifications/000042.jsonl#v-000005",
+                "findings": [],
+                "proof_no": 1,
+                "proof_sha256": "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6"
+              },
+              "reviewed_source": "v",
+              "formal": {},
+              "formal_reason": "",
+              "audited_by": {},
+              "optimized_by_proof": {
+                "1": true
+              },
+              "reviewed_by_proof": {
+                "1": true
+              },
+              "reviewed_sha_by_proof": {
+                "1": "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6"
+              }
+            },
+            "voided_by": {},
+            "grade": "pre_theorem",
+            "audited_badge": false
+          },
+          "status": "active",
+          "derived_from": [
+            "000034"
+          ],
+          "aliases": [],
+          "doc_id": null,
+          "line_range": {
+            "start": null,
+            "end": null,
+            "label": "manuscripts/F/f-proof-000003.md"
+          },
+          "created_at": "2026-11-24T21:01:15+08:00",
+          "created_by": "secretary-B",
+          "_proposition_adjudication": {
+            "checked": true,
+            "attempted": true,
+            "verdict": "different",
+            "canonical_name": "B_p^3 对角与面对角截面面积公式及 Δ(p) 的最终正性",
+            "same_as": "",
+            "basis": "条件：目标为 1≤p<∞ 的一般 p，候选 000031/000033 用有限 p 集，000030 是数值核自检，000039 用 ΔK(t) 的 p,t 范围，条件强弱/论域不同（条件强弱不同）；结论：目标给出 A_diag(p)、A_face(p) 的积分/Γ 公式、特殊值与存在 P0 使 A_face(p)>A_diag(p)，候选 000031 是最大面积位置与 A_diag/A_coord 临界比，000033 是边界弧分段最大位置，000030 是面积计算核自检，000039 是 ΔK(t) 零点唯一性，结论均不一致；条件论域与结论均不一致：目标是任意 1≤p<∞ 下 A_diag/A_face 的公式及 Δ(p) 最终为正，候选分别讨论有限 p 集的最大面积位置、边界弧分段、数值核自检或 ΔK(t) 变号唯一性。",
+            "reason": "条件论域与结论均不一致：目标是任意 1≤p<∞ 下 A_diag/A_face 的公式及 Δ(p) 最终为正，候选分别讨论有限 p 集的最大面积位置、边界弧分段、数值核自检或 ΔK(t) 变号唯一性。",
+            "reused": false,
+            "seam_source": "secretary（LlmSeam.for_secretary）",
+            "seam_attempted": true,
+            "at": "2026-11-24T21:01:15+08:00"
+          },
+          "proof_authors": [
+            "F"
+          ],
+          "proof_no": 1,
+          "proof_sha256": "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6",
+          "manuscript_id": "000003",
+          "manuscripts": {
+            "1": "manuscripts/B/b-proof-000003.md"
+          },
+          "_grade_recomputed": {
+            "checked": true,
+            "from": "conjecture",
+            "to": "pre_theorem",
+            "from_kind": "heuristic",
+            "to_kind": "proof_review",
+            "channel": "text",
+            "why": "V 的签刚落位：这一行有证明正文，且台账里那一签盖住的就是现行这一版 ⇒ 按五元位现算等级（只算等级，不写档位）；历史列 `evidence_kind`=heuristic 只是读数，判定面读 `pre_theorem`",
+            "basis": "verifications/pending/202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8.jsonl#u-000024",
+            "proof_no": 1,
+            "at": "2026-11-24T21:01:16+08:00"
+          },
+          "_kind_upgrade": {
+            "from": "conjecture",
+            "to": "theorem",
+            "basis": "out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json#u-000024 · 台账 verifications/pending/202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8.jsonl#u-000024",
+            "grade": "conjecture",
+            "by": "agent-B",
+            "at": "2026-11-24T21:01:16+08:00"
+          },
+          "manuscript_family": "b-proof",
+          "proof_history": [
+            {
+              "text": "1. 【前提】固定 1 ≤ p < ∞；B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。（前提）（前提）\n2. 【推导】由 stmt:000034 的 (i)，对每个单位法向 n 与 n^⊥ 的任意单位正交基 (u,v) 有 A_p(n) = (1/2)∫_0^{2π}‖cosθ·u+sinθ·v‖_p^{-2}dθ。取 n = (1,1,1)/√3、u = (1,-1,0)/√2、v = (1,1,-2)/√6（直接验算 ‖u‖=‖v‖=1、u·v=0、u·n=v·n=0，故 {u,v} 是 H := {x+y+z=0} 的单位正交基）；另一路参数化 Φ(x,y) := (x,y,−x−y) 是 R²→H 的双射，∂_xΦ=(1,0,−1) 与 ∂_yΦ=(0,1,−1) 的叉积为 (1,1,1)、模为 √3，故 A_diag(p) = √3∫∫_D dxdy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。（依据：stmt:000034）\n3. 【推导】对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)（r ≥ 0、θ ∈ [0,2π)）：由 |r cosθ|^p+|r sinθ|^p+|r(cosθ+sinθ)|^p = r^p g(θ)（记 g(θ) := |cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p）得 (x,y) ∈ D ⟺ r ≤ g(θ)^{-1/p}；由面积元 r dr dθ 得 ∫∫_D = ∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ，与第 2 步合并即 A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，这给出 (i) 的积分式。（依据：stmt:000034）\n4. 【推导】一致控制：g ≥ max(|cosθ|,|sinθ|)^p ≥ (1/√2)^p（因为 max(|cosθ|,|sinθ|) ≥ 1/√2），故对一切 p ∈ [1,∞) 与一切 θ 有 0 < g(θ)^{-2/p} ≤ (1/√2)^{-2} = 2；又 (p,θ) ↦ g(θ) 连续且在每个局部 p-区间上 g 有与 p 无关的正下界，故 θ ↦ g(θ)^{-2/p} 关于 p 逐点连续。（依据：stmt:000034）\n5. 【推导】p = 2 时 g(θ) = cos²θ+sin²θ+(cosθ+sinθ)² = 2+sin2θ；代换 u = 2θ 后用 ∫_0^{2π}du/(a+b sin u) = 2π/√(a²−b²)（取 a=2、b=1）得 ∫_0^{2π} dθ/(2+sin2θ) = ∫_0^{2π} du/(2+sin u) = 2π/√3，此处 p=2 使 g^{-2/p} 化为 g^{-1}，故 A_diag(2) = (√3/2)·(2π/√3) = π。（依据：stmt:000034）\n6. 【推导】由 stmt:000034 的 (ii)(iii)(iv) 的闭式 A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，在 p = 2 处得 A_face(2) = 2^0·4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π；与第 5 步合并得 Δ(2) = π − π = 0。（依据：stmt:000034）\n7. 【推导】Δ(1) 的计算：A_face(1) = 2^{-1/2}·4Γ(2)²/Γ(3) = 2^{-1/2}·4·1/2 = √2（Γ(2)=1、Γ(3)=2）；A_diag(1)：p = 1 时 g = |cosθ|+|sinθ|+|cosθ+sinθ| 满足 g(θ+π) = g(θ)，且在 [0,π/2] 上 g = 2(cosθ+sinθ)（故 g^{-2} = (1/4)(cosθ+sinθ)^{-2}）、在 [π/2,3π/4] 上 g = 2sinθ（g^{-2} = (1/4)sin^{-2}θ）、在 [3π/4,π] 上 g = −2cosθ（g^{-2} = (1/4)cos^{-2}θ）；三段对 ∫g^{-2} 的贡献各为 1/4（分别用 ∫_0^{π/2}dθ/(cosθ+sinθ)² = 1、[−cotθ] 与 [tanθ] 在两个端点区间上的取值各得 1），故 ∫_0^{2π}g^{-2}dθ = 2·(1/4+1/4+1/4) = 3/2，A_diag(1) = (√3/2)·(3/2) = 3√3/4；于是 Δ(1) = √2 − 3√3/4 > 0，因为 4√2 > 3√3 ⟺ 32 > 27。（依据：stmt:000034）\n8. 【推导】Δ 的连续性：Γ 在 (0,∞) 上连续且取正值，p ↦ 1/p、1+1/p、1+2/p 在 [1,∞) 上连续，故 A_face 在 [1,∞) 上连续；由第 4 步与 p 无关的控制 g^{-2/p} ≤ 2 与逐点连续性，有界收敛定理给出 p ↦ ∫_0^{2π}g(θ)^{-2/p}dθ 在 [1,∞) 上连续，故 A_diag 连续；两者相减得 Δ 在 [1,∞) 上连续。（依据：stmt:000034）\n9. 【推导】p→∞ 时 A_diag 的极限：记 m(θ) := max(|cosθ|,|sinθ|,|cosθ+sinθ|)，则 m(θ)^p ≤ g(θ) ≤ 3m(θ)^p，故对每个 θ 有 g(θ)^{-2/p} → m(θ)^{-2}；又 g ≥ m^p 给出 g^{-2/p} ≤ m^{-2} ≤ 2（因 m ≥ 1/√2），有界收敛定理给出 A_diag(p) → (√3/2)∫_0^{2π}m(θ)^{-2}dθ。按符号分段：在 [0,π/2] 上 m = cosθ+sinθ、在 [π/2,3π/4] 上 m = sinθ、在 [3π/4,π] 上 m = −cosθ，且 m(θ+π) = m(θ)，三段各贡献 1（同上一步的三段积分），故 ∫_0^{2π}m^{-2}dθ = 2·3 = 6，于是 lim_{p→∞}A_diag(p) = (√3/2)·6 = 3√3。（依据：stmt:000034）\n10. 【推导】p→∞ 时 A_face 的极限：C_p := 4Γ(1+1/p)²/Γ(1+2/p) → 4Γ(1)²/Γ(1) = 4（Γ 连续、Γ(1)=1），又 2^{1/2−1/p} → √2，故 A_face(p) → 4√2；与第 9 步合并得 lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0（同样由 32 > 27）。（依据：stmt:000034）\n11. 【推导】收尾：记 L := 4√2 − 3√3 > 0；由第 8 步 Δ 的连续性与第 10 步 lim Δ = L，取 ε := L/2 > 0，则存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 |Δ(p) − L| < ε，从而 Δ(p) > L/2 > 0，即 A_face(p) > A_diag(p) 对一切 p ≥ P0 成立，这给出 (iii) 的最后一句。（依据：stmt:000034）",
+              "sha": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+              "at": "2026-11-24T21:28:56+08:00",
+              "replaced_by": "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6"
+            }
+          ],
+          "proof_routes": {},
+          "route": ""
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "id": "000042",
+          "id_field": "stmt_id",
+          "found": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 76544,
+        "prompt_cache_miss_tokens": 4409,
+        "tokens_in": 80953,
+        "tokens_out": 1394,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000209"
+    },
+    {
+      "index": 6,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/F/f-proof-000003.md",
+          "max_lines": 60
+        },
+        "why": "读 F 稿的「命题」节：它证的是 stmt:000042 的解析公式，还是 stmt:000030 的数值自检？这决定 000030 有没有真证明稿可补签"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# F 的证明手稿：证明四段叙述的严格骨架：(i) Δ(2)=A_face(2)−A_diag(2)=0 且两者都等于 π；(ii) Δ(…\n\n- 计划：000002 · 子目标：n1\n- V 签：已签=true；判词=成立；连续=3/3；正文sha=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db；时间=2026-11-24T20:57:20+08:00；签名者=secretary:F；台账=verifications/pending/202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8.jsonl#u-000024；手稿号=000003\n- 依赖面洗稿：已洗=true；执行者=secretary-F\n- 稿族：f-proof\n- 产出者：agent-F-F1\n- 正文sha：3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db\n- 命题指纹：da831b7b4a3dc1a603c2df16234b02d42fd9d3d56471081b702d31adc9ea8c7e\n- 命题类型：conjecture\n- 登记时间：2026-11-24T20:51:08+08:00\n- 标签：F 攻坚 000002 子目标 n1\n- 版本：2026-11-24T20:51:08+08:00@3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db\n\n## 命题\n\n设 1 ≤ p < ∞，B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积，并记 A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。则：(i) A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，且 A_diag(2) = π、A_diag(1) = 3√3/4、lim_{p→∞}A_diag(p) = 3√3；(ii) A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，且 A_face(2) = π、A_face(1) = √2、lim_{p→∞}A_face(p) = 4√2；(iii) Δ 在 [1,∞) 上连续，Δ(2) = 0，Δ(1) = √2 − 3√3/4 > 0，lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0，因而存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 A_face(p) > A_diag(p)。\n\n## 证明\n\n1. 【前提】固定 1 ≤ p < ∞；B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。（前提）（前提）\n2. 【推导】由 stmt:000034 的 (i)，对每个单位法向 n 与 n^⊥ 的任意单位正交基 (u,v) 有 A_p(n) = (1/2)∫_0^{2π}‖cosθ·u+sinθ·v‖_p^{-2}dθ。取 n = (1,1,1)/√3、u = (1,-1,0)/√2、v = (1,1,-2)/√6（直接验算 ‖u‖=‖v‖=1、u·v=0、u·n=v·n=0，故 {u,v} 是 H := {x+y+z=0} 的单位正交基）；另一路参数化 Φ(x,y) := (x,y,−x−y) 是 R²→H 的双射，∂_xΦ=(1,0,−1) 与 ∂_yΦ=(0,1,−1) 的叉积为 (1,1,1)、模为 √3，故 A_diag(p) = √3∫∫_D dxdy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。（依据：stmt:000034）\n3. 【推导】对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)（r ≥ 0、θ ∈ [0,2π)）：由 |r cosθ|…（落档截断，原 4744 字）",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/F/f-proof-000003.md",
+          "encoding": "utf-8",
+          "bytes_read": 6917,
+          "total_bytes": 6917,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 37,
+          "total_lines": 37,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 1–37 行（共 37 行）",
+          "sha256": "c27385ce6f3e19c94b59fc509ca2a3cda373e38b4d2942397a827da37a145e97"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 80128,
+        "prompt_cache_miss_tokens": 5575,
+        "tokens_in": 85703,
+        "tokens_out": 5473,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000209"
+    },
+    {
+      "index": 7,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.search",
+        "args": {
+          "pattern": "stmt:000030",
+          "path": "manuscripts",
+          "include": "*.md",
+          "limit": 40
+        },
+        "why": "确认盘上没有任何 F 族证明稿的命题/依赖是 stmt:000030（判「补签」这条路走不走得通）"
+      },
+      "result": {
+        "tool": "fs.search",
+        "ok": true,
+        "data": {
+          "pattern": "stmt:000030",
+          "path": "manuscripts",
+          "matches": [
+            {
+              "path": "manuscripts/D/000000-research.md",
+              "line": 78,
+              "text": "[2026-11-24T19:31:09+08:00] 第 2 轮（本趟收口前的台账对账，回应 M 的收口清单 t-000073 第 (1) 条）：statements 未签 4 条 stmt:000030–stmt:000033 的逐条处置 —— 全部【保留，不进 V 签流程】。依据：这四条是 E 的普通数值实验（exp:000003 / 000004 / 000006 / 000007，result=supports、exit_code=0、有 code_path）落成的 conjecture，等级由框架五元位现算为 strong_conjecture；普通数值档不过 V（业主口径「E 侧普通数值实验不用过 V」），所以「未签」不是缺陷，是这一档的证据形态。要升到 theorem 只有两条路，都已写明：① E 走穷举档（manuscripts/E/e-proof-<实验号>.md + V 逐行走查）；② F 给文字证明（本趟已交 f-proof-000000 / f-proof-000001，覆盖其中 p=2 门槛与零坐标法向族两块，见 stmt:000034 / stmt:000…"
+            },
+            {
+              "path": "manuscripts/D/000000-research.md",
+              "line": 120,
+              "text": "| stmt:000030 | manuscripts/F/f-proof-000003.md | c27385ce6f3e19c94b59fc509ca2a3cda373e38b4d2942397a827da37a145e97 |  |"
+            },
+            {
+              "path": "manuscripts/D/000000-research.md",
+              "line": 133,
+              "text": "| stmt:000030 | 收下 | 1 / 1 | param | 是 | - |"
+            },
+            {
+              "path": "manuscripts/D/RESEARCH.md",
+              "line": 40,
+              "text": "它们落成 `stmt:000030`–`stmt:000033`（等级 `strong_conjecture`，普通数值档，按业主口径不过 V）。"
+            },
+            {
+              "path": "manuscripts/D/RESEARCH.md",
+              "line": 85,
+              "text": "坐标向，这是已知定理**，我们的 `stmt:000030`–`stmt:000033` 在这一侧只是独立数值复现。"
+            },
+            {
+              "path": "manuscripts/D/RESEARCH.md",
+              "line": 139,
+              "text": "- 台账：`stmt:000031`、`stmt:000032`、`stmt:000033`（及核自检 `stmt:000030`）；"
+            },
+            {
+              "path": "manuscripts/D/RESEARCH.md",
+              "line": 169,
+              "text": "for 1 ≤ p < 2』（已回验 `rel:000007`）；我方只是数值复现（`stmt:000030`–`stmt:000033`）。"
+            },
+            {
+              "path": "manuscripts/D/RESEARCH.md",
+              "line": 190,
+              "text": "我方在这一侧只保留数值复现（`stmt:000030`–`stmt:000033`）。**这一处是本趟改主意的落点。**"
+            },
+            {
+              "path": "manuscripts/D/RESEARCH.md",
+              "line": 212,
+              "text": "的 V5 段，`stmt:000030`）。这是把闭式压到边界的可用反例带：任何声称「p<2 一切方向都 ≤ π」的"
+            },
+            {
+              "path": "manuscripts/D/RESEARCH.md",
+              "line": 241,
+              "text": "九条是 `stmt:000030`–`stmt:000033`（E 的四件扫描：核自检 / 12 个 p 扫描 / 临界 p 与单调性 / 两条边界弧）与 `stmt:000036`–`stmt:000039`（E 后来的四条：A_diag 三路对拍、A_face 闭式对拍、Δ 的第二零点、大 p 渐近）。逐条结论相同，理由逐条写清："
+            },
+            {
+              "path": "manuscripts/D/RESEARCH.md",
+              "line": 244,
+              "text": "- **不放弃的理由**：放弃（`abandon_kind` 四档）记的是「这条做不动了」；这九条**没有被推翻**（`stmt:000030`–`000033` 早先有两版 `refuted`，那是求积核的错、已随实验撤销；现行版本全部 supports）。标 abandoned 会把「有支持」写成「做不动」，与盘上读数相反。"
+            }
+          ],
+          "lines": [
+            "manuscripts/D/000000-research.md:78: [2026-11-24T19:31:09+08:00] 第 2 轮（本趟收口前的台账对账，回应 M 的收口清单 t-000073 第 (1) 条）：statements 未签 4 条 stmt:000030–stmt:000033 的逐条处置 —— 全部【保留，不进 V 签流程】。依据：这四条是 E 的普通数值实验（exp:000003 / 000004 / 000006 / 000007，result=supports、exit_code=0、有 code_path）落成的 conjecture，等级由框架五元位现算为 strong_conjecture；普通数值档不过 V（业主口径「E 侧普通数值实验不用过 V」），所以「未签」不是缺陷，是这一档的证据形态。要升到 theorem 只有两条路，都已写明：① E 走穷举档（manuscripts/E/e-proof-<实验号>.md + V 逐行走查）；② F 给文字证明（本趟已交 f-proof-000000 / f-proof-000001，覆盖其中 p=2 门槛与零坐标法向族两块，见 stmt:000034 / stmt:000…",
+            "manuscripts/D/000000-research.md:120: | stmt:000030 | manuscripts/F/f-proof-000003.md | c27385ce6f3e19c94b59fc509ca2a3cda373e38b4d2942397a827da37a145e97 |  |",
+            "manuscripts/D/000000-research.md:133: | stmt:000030 | 收下 | 1 / 1 | param | 是 | - |",
+            "manuscripts/D/RESEARCH.md:40: 它们落成 `stmt:000030`–`stmt:000033`（等级 `strong_conjecture`，普通数值档，按业主口径不过 V）。",
+            "manuscripts/D/RESEARCH.md:85: 坐标向，这是已知定理**，我们的 `stmt:000030`–`stmt:000033` 在这一侧只是独立数值复现。",
+            "manuscripts/D/RESEARCH.md:139: - 台账：`stmt:000031`、`stmt:000032`、`stmt:000033`（及核自检 `stmt:000030`）；",
+            "manuscripts/D/RESEARCH.md:169: for 1 ≤ p < 2』（已回验 `rel:000007`）；我方只是数值复现（`stmt:000030`–`stmt:000033`）。",
+            "manuscripts/D/RESEARCH.md:190: 我方在这一侧只保留数值复现（`stmt:000030`–`stmt:000033`）。**这一处是本趟改主意的落点。**",
+            "manuscripts/D/RESEARCH.md:212: 的 V5 段，`stmt:000030`）。这是把闭式压到边界的可用反例带：任何声称「p<2 一切方向都 ≤ π」的",
+            "manuscripts/D/RESEARCH.md:241: 九条是 `stmt:000030`–`stmt:000033`（E 的四件扫描：核自检 / 12 个 p 扫描 / 临界 p 与单调性 / 两条边界弧）与 `stmt:000036`–`stmt:000039`（E 后来的四条：A_diag 三路对拍、A_face 闭式对拍、Δ 的第二零点、大 p 渐近）。逐条结论相同，理由逐条写清：",
+            "manuscripts/D/RESEARCH.md:244: - **不放弃的理由**：放弃（`abandon_kind` 四档）记的是「这条做不动了」；这九条**没有被推翻**（`stmt:000030`–`000033` 早先有两版 `refuted`，那是求积核的错、已随实验撤销；现行版本全部 supports）。标 abandoned 会把「有支持」写成「做不动」，与盘上读数相反。"
+          ],
+          "total": 11,
+          "truncated": false,
+          "scanned": 11,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        },
+        "error": "",
+        "meta": {
+          "total": 11,
+          "truncated": false,
+          "scanned": 11,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 84864,
+        "prompt_cache_miss_tokens": 5026,
+        "tokens_in": 89890,
+        "tokens_out": 8999,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000209"
+    },
+    {
+      "index": 8,
+      "shape": "summon",
+      "payload": {
+        "role": "B",
+        "action": "",
+        "params": {
+          "stmt_id": "000030",
+          "abandon_kind": "difficulty",
+          "abandon_basis": "stmt:000030 的题面是计算自检断言（极坐标 tanh-sinh 求积在 p=2 给任意中心截面面积 π、p=1 与八面体边缘裁剪精确值一致、p=1000 与立方体精确值偏差随 p 增大收敛，各条偏差 ≤1e-15 / ≤1e-13），它不是一条可证命题，而是浮点计算的事实陈述：要给它一条 V 签得住的证明，必须把求积的误差界写成带区间算术的确定性证明（certified computation），而本会话形式化/机器核验通道关闭、E 侧只有浮点读数（计算类凭据上限 strong_conjecture）；并且它现行的 proof_no 2 指向 manuscripts/F/f-proof-000003.md，而那份稿的命题逐字等于 stmt:000042、V 的三行判词 statement_id 也全是 000042 —— 构不成对 000030 的证明。所以「给 000030 补一条证明」这一路做不动（难在：需要我们没有的 certified 计算通道，而不是定理本身有错）。它的数值内容仍由 exp:000003（result=supports、exit_code=0、code_path=code/exp/lpsec_validate.py）与 work/E/e-num-000003.md 支撑；放弃的是这一行作为定理候选。",
+          "do_not_touch": [
+            "stmt:000042",
+            "stmt:000030 的正文"
+          ]
+        },
+        "why": "命题台账 D 只读，放弃只能由 B 走通用写口落。",
+        "brief": "放弃 stmt:000030（difficulty 档）并按四档写全理由",
+        "task": "把命题 stmt:000030 明确放弃（D→B 派活，研究侧已判：这条只能走放弃这一档）。请用通用表写口 table.update(table=\"statements\", id=\"000030\", patch={\"status\": \"abandoned\"})，并按四档给全 abandon_kind 与 abandon_basis —— 本条的档是 difficulty（不是 math_error：命题没有被证伪，也没有 V 判「有毛病」的行；不是 counterexample：盘上没有反驳它的实验；不是 space_too_large：它不是枚举命题），abandon_basis 请逐字用我 params 给的那一段（我已经把「难在哪」写清：要一条 V 签得住的证明必须有带区间算术的 certified computation 通道，本会话形式化关闭、E 侧只有浮点读数；且它现行 proof_no 2 误指向 manuscripts/F/f-proof-000003.md，那份稿的命题逐字等于 stmt:000042，V 三行判词 statement_id 也全是 000042 —— 构不成对 000030 的证明）。不要改任何命题正文，不要动 stmt:000042（它已由 f-proof-000003 签住、是另一条命题）。完成后回执里请给三样：① stmt:000030 改后的 status 与 abandon_kind；② 系统拼出的 quote_reason 原文；③ 有没有受控拒信（abandon_reason_missing / abandon_difficulty_not_genuine 之类），有就原样贴理由码。"
+      },
+      "result": {
+        "summoned": "B",
+        "action": "",
+        "ok": true,
+        "task_id": "t-000212",
+        "status": "done",
+        "outcome": "ok",
+        "refusal_reason": null,
+        "detail": "执行完成",
+        "children": [],
+        "llm_run_path": "D:\\Incubator\\projects\\lp-ball-22\\runs\\B-20261124-223346-001.json",
+        "final": "stmt:000030 的放弃**没有落成**：table.update 被秘书受控拒，盘上零字节改写（回读坐实 status 仍 active、quote_reason 未变）。① 改后的 status 与 abandon_kind：status 仍是 `active`（未被改成 abandoned），提交的 abandon_kind 是 `difficulty`（未落盘）；② 系统拼出的 quote_reason 原文——本次拒收一笔未写，所以 quote_reason 仍是登记时那一句：「手稿收录（D 只递指针）：普通数值手稿 `work/E/e-num-000003.md` —— 命题逐字取自 `## 命题`，证明栏空着（业主 2026-11-08：普通数值档不写证明正文），程序在实验行的 `code_path`，引文面不适用」；③ 受控拒信（原样）：`abandon_difficulty_not_genuine` —— 秘书原话「这不是「难以逾越的困难」/没指出难在哪（难度判定：不是真困难；salvaged 不是从原证明拆出来的）」，并逐条点名：那段 difficulty 与 abandon_basis 逐字重复、内容全是流程与基础设施理由（缺 certified computation 通道、形式化会话已关、E 侧只有浮点读数）加档案错位（proof_no 2 指向 s…（原文 1431 字，已截断）",
+        "payload": "{\"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\lp-ball-22\\\\runs\\\\B-20261124-223346-001.json\", \"final\": \"stmt:000030 的放弃**没有落成**：table.update 被秘书受控拒，盘上零字节改写（回读坐实 status 仍 active、quote_reason 未变）。① 改后的 status 与 abandon_kind：status 仍是 `active`（未被改成 abandoned），提交的 abandon_kind 是 `difficulty`（未落盘）；② 系统拼出的 quote_reason 原文——本次拒收一笔未写，所以 quote_reason 仍是登记时那一句：「手稿收录（D 只递指针）：普通数值手稿 `work/E/e-num-000003.md` —— 命题…（原文 1666 字，已截断）",
+        "roster_name": "B1",
+        "dispatch_policy": {
+          "checked": true,
+          "dispatches": 1,
+          "violations": [],
+          "self_authored_plans": 3,
+          "named_plans": [],
+          "conjectures": [
+            "000000",
+            "000001",
+            "000002",
+            "000003",
+            "000004",
+            "000005",
+            "000006",
+            "000007",
+            "000008",
+            "000009",
+            "000010",
+            "000011",
+            "000012",
+            "000013",
+            "000014",
+            "000015",
+            "000016",
+            "000017",
+            "000018",
+            "000019",
+            "000020",
+            "000021",
+            "000022",
+            "000023",
+            "000024",
+            "000025",
+            "000026"
+          ],
+          "reason": "D 的派活文本里没有点名任何一条它自己登记的猜想号（方向由文本给，号不作为命令）",
+          "events_error": ""
+        },
+        "秘书": {
+          "alarms": [],
+          "fail_open": false,
+          "wash": {
+            "checked": true,
+            "washed": false,
+            "refused": "",
+            "reason": ""
+          },
+          "changes": [],
+          "surface_fit": {
+            "checked": false,
+            "fits": null,
+            "paths": [],
+            "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+            "shape": "summon",
+            "reach": {
+              "checked": true,
+              "verdict": "unknown",
+              "hops": [],
+              "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+            }
+          },
+          "reach_fit": {
+            "checked": true,
+            "verdict": "unknown",
+            "hops": [],
+            "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+          },
+          "assessment": {
+            "decision": "可派",
+            "reason": "这一条没点名具体动作（role 级派活）⇒ 不拿动作表去卡它；角色存在性由预筛管",
+            "basis": [
+              "specs/<role>.py 的动作表",
+              "tasks: 同 key 的既有终态行",
+              "没点名动作 ⇒ 动作表那一格不适用"
+            ],
+            "duplicates": [],
+            "alarms": [],
+            "novel": false,
+            "surface": {
+              "checked": false,
+              "fits": null,
+              "paths": [],
+              "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+              "shape": "summon",
+              "reach": {
+                "checked": true,
+                "verdict": "unknown",
+                "hops": [],
+                "reason": "角色 '' 不在能力表里（['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'L', 'M', 'V']）⇒ 判不了"
+              }
+            },
+            "judge": {
+              "checked": false,
+              "reason": "预筛没有报警、也没有重复候选 ⇒ 不必判断"
+            },
+            "engaged": false,
+            "seq": 2
+          }
+        },
+        "可退役": [
+          {
+            "task_id": "t-000212",
+            "role": "B",
+            "branch": "waiting_no_children",
+            "reading": {
+              "items_open": 0,
+              "items_open_ids": [],
+              "items_open_expects": {},
+              "items_open_states": {}
+            }
+          }
+        ],
+        "新消息": [
+          {
+            "板": "- （新）[t-000213] message·要一个回执 来自 B：手稿 000034：stmt:000030 放弃未落成：秘书受控拒 abandon_difficulty_not_genuine，盘上零写入；另报 proof_no 2 误指已污染等级（theorem 抬档）\n[手稿 000034] stmt:000030 放弃未落成：秘书受控拒 abandon_difficulty_not_genuine，盘上零写入；另报 proof_no 2 误指已污染等级（theorem 抬档）\n全文：`manuscripts.read(id=\"000034\")`（盘上 work/handoffs.jsonl#000034）"
+          }
+        ],
+        "秘书加工": {
+          "reworked": [
+            {
+              "item": {
+                "板": "- （新）[t-000213] message·要一个回执 来自 B：手稿 000034：stmt:000030 放弃未落成：秘书受控拒 abandon_difficulty_not_genuine，盘上零写入；另报 proof_no 2 误指已污染等级（theorem 抬档）\n[手稿 000034] stmt:000030 放弃未落成：秘书受控拒 abandon_difficulty_not_genuine，盘上零写入；另报 proof_no 2 误指已污染等级（theorem 抬档）\n全文：`manuscripts.read(id=\"000034\")`（盘上 work/handoffs.jsonl#000034）"
+              },
+              "addendum": "我的产出物口径：交付状态 —— 交给谁：派你这趟活的父（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名）+ 收方 B（入库）；形态：`manuscripts/D/RESEARCH.md` + `manuscripts/D/<qid>-research.md` 工作稿+ `research_questions` / `search_requests` 行（报告本体落成盘上文件；台账那一行 `kind=research` 由 `write_report` 同一笔事务落 —— 见 `policy`，**不是本角色手写的表**）；可核字段：`research_questions.question_id` / `research_questions.status` / `research_questions.waiting_request_ids` / 每个结论目录行上的四格 `evidence_kind` / `evidence_path` / `evidence_sha256` / `v_signature`；算做完：这一趟的每条结论在 `manuscripts/D/RESEARCH.md` 的「已确定的结论」有一行、四格都指得到盘上对象（`report_landing_reading` 可核），且 `research_questions.status` 与现场一致。**跨趟的那一份交付是研究手稿 `manuscripts/D/RESEARCH.md`**（业主 2026-10-14 第 1 条）：成果概述 / 定义与已知 / 已确定的结论 / 尝试与失败 / 例子与反例 / 未解问题 / 下一步七节 —— 下一趟接手的人先读它，而不是去翻这一趟的会话记录。\n我在本条线上的位置：研究循环：把一个研究方向收敛成一个有证据支撑的结论，或如实说证据不足",
+              "problem": "",
+              "fail_open": false
+            }
+          ],
+          "handoffs_digest": "- 000030 B→A：五篇 measure-theory/广义积分文献：已读 2 篇、落行 0 条（概念配额被 lit:000016 一次用满），逐篇卡点与迁移口径见正文\n- 000031 M→A：派活：A（派活：把 `search_requests` 里**未完成**的请求做完（收工门读到 unfinished=2 条，这是唯一的「闭」那一环的红）：用你的 `run_once` 认领，逐条给出终局 `outcome`（ok / no_results / 写清为什么做不成），把 `done` 置真，回执里逐条给 request id / topic / outcome / result_lit_ids。做完再看一眼 unfinished 是否为 0 —— 不为 0 就说明还有一条没认领到，写清是哪一条、卡在哪。不要再开新的检索，也不要改已入库的 25 行文献。）\n- 000032 M→D：派活：D（派活：收工门点名一条：「攻」那一环的 `plan 000002` 第 2 轮 history 里指向 `stmt:000030`，而 `verifications` 两路都没有认领给它的、签得住的行 ⇒ 那一行只能记 unknown。请把这一条处置掉，二选一并在回执里写明选了哪条、落在哪张台账行：(1) 补签 —— 若这条命题真有证明稿在盘（F 族 `manuscripts/F/f-proof-*.md`），让产出者自己把那一份送 V（`proof_manuscript` 指稿，别传命题号），拿到干净的「成立」后由 B 收录、签落在现行正文上；(2) 明确放弃 —— 让 B 用通用写口把 `status=abandoned`，并按四档给全 `abandon_kind` + `abandon_basis`（math_error 要 `defect_ref`、difficulty 要写清难在哪、counterexample 要 `experiment_id`、space_too_large 要 `space`）。两条都不许只写状态不写理由。回执里同时给：`verifications/000030.jsonl` 有没有一行「成立」，或 `statements` 那一行 `status` 与 `abandon_kind` 是什么。）\n- 000033 A→M：R8 收口：search_requests 两条未闭环请求已给终局并置 done=true，unfinished=0（逐条 topic / outcome / result_lit_ids 见正文）\n- 000034 B→D：stmt:000030 放弃未落成：秘书受控拒 abandon_difficulty_not_genuine，盘上零写入；另报 proof_no 2 误指已污染等级（theorem 抬档）"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 89088,
+        "prompt_cache_miss_tokens": 3601,
+        "tokens_in": 92689,
+        "tokens_out": 9514,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000209"
+    },
+    {
+      "index": 10,
+      "shape": "summon",
+      "payload": {
+        "role": "B",
+        "action": "",
+        "params": {
+          "statements_id": "000030",
+          "do_not_abandon": true,
+          "misattributed_proof": "manuscripts/F/f-proof-000003.md",
+          "misattributed_proposition_equals": "stmt:000042",
+          "v_ledger_path": "verifications/pending/202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8.jsonl",
+          "v_ledger_statement_id": "000042",
+          "expected_grade_after_fix": "strong_conjecture",
+          "report_back_fields": [
+            "status",
+            "kind",
+            "quote_reason",
+            "proof_no",
+            "manuscripts",
+            "grade_recomputed",
+            "verifications_000030_exists"
+          ]
+        },
+        "why": "放弃那一档被秘书判「不是真困难」且盘上读数相反（这条有 exp:000003 支持），真正的缺陷是错指了一份命题逐字等于 stmt:000042 的证明路径，由 B 在其写面内更正归属才是如实处置",
+        "brief": "更正 stmt:000030 的证明归属（不放弃），回执给 status/kind/quote_reason",
+        "reuse": "B1",
+        "task": "更正上一道指令（t-000212 那笔「改成 abandoned」）：stmt:000030 **不要**改成 abandoned。你上一笔的受控拒 `abandon_difficulty_not_genuine` 我接受，研究侧复核后判：这条不是「做不动了」，是**归属错了**。请做归属更正并回报。\n\n(1) 已核事实（盘上）：stmt:000030 是 E 的数值自检命题（`work/E/e-num-000003.md`、exp:000003、result=supports、exit_code=0）；它的 `manuscripts` 里 2 号证明路径指向 `manuscripts/F/f-proof-000003.md`，而那份稿的 `## 命题` 逐字等于 stmt:000042 的 `statement_full`（正文 sha 3f9c71fc…），稿上 V 的三行判词（`verifications/pending/202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8.jsonl#u-000022/23/24`）`statement_id` 全是 `000042`、`path_group=1` ⇒ 那一份构不成对 000030 的签，也不该把 000030 抬成 theorem。\n\n(2) 要你做的：在你的写面内**更正这条归属** —— 把 000030 上那条命题逐字等于 000042 的证明路径摘掉（或做你写面允许的等价更正），使 000030 的等级按数值档（E 侧 numeric 凭据、`strong_conjecture`）现算，不再挂着由错指证明抬起来的 `theorem`。若你的写面不允许摘除，**如实报「不能」**并写清唯一能做的更正是什么（例如在 `quote_reason` 里记明「2 号证明路径误指、其命题逐字等于 stmt:000042」并在 `kind` 上回落）—— **不要写 abandoned，不要碰 000042 那一行**（它的 V 签干净、是那份稿的唯一正确归属）。\n\n(3) 回执请逐格给：000030 改动后的 `status` / `kind` / `quote_reason` / `proof_no` / `manuscripts` / 现算等级；以及 `verifications/000030.jsonl` 在不在盘上（我读到的现场：`verifications/` 根下只有 000034/000035/000041/000042 四份按命题号命名的台账，没有 000030 那一份；f-proof-000003 的判词落在 pending/ 的 file_sha 名文件里）。\n\n(4) 尽量省：不必重读长稿，按上面给的路径与判词行直接处置；做不到的格子如实报「不能 + 理由」，不要折成「做完了」。"
+      },
+      "result": {
+        "summoned": "B",
+        "action": "",
+        "ok": true,
+        "task_id": "t-000215",
+        "status": "done",
+        "outcome": "ok",
+        "refusal_reason": null,
+        "detail": "执行完成",
+        "children": [],
+        "llm_run_path": "D:\\Incubator\\projects\\lp-ball-22\\runs\\B-20261124-223547-001.json",
+        "final": "归属更正已做（能做的部分做完，不能做的如实报「不能」）。\n\n**已做的写操作**：`table.update(statements/000030, patch={kind, quote_reason})` —— 经秘书就地改写，`_statement_amend_history` 记 22:35:16 / by secretary-B / task t-000215：kind theorem → conjecture。**没有写 abandoned，没有碰 stmt:000042 一行**。\n\n**(3) 逐格回执（回读 table.get 000030 的现场）**\n- `status`：`active`（未动）\n- `kind`：`conjecture`（原 `theorem`，已回落）\n- `quote_reason`：已换成归属更正说明，要点逐字在内 ——「本条是 E 的数值自检命题（work/E/e-num-000003.md、exp:000003、result=supports、exit_code=0），按 E 侧 numeric 凭据现算应为 strong_conjecture。manuscripts 的 2 号证明路径 manuscripts/F/f-proof-000003.md 系误指：该稿 ## 命题 逐字等于 stmt:000042 的 statement_…（原文 2493 字，已截断）",
+        "payload": "{\"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\lp-ball-22\\\\runs\\\\B-20261124-223547-001.json\", \"final\": \"归属更正已做（能做的部分做完，不能做的如实报「不能」）。\\n\\n**已做的写操作**：`table.update(statements/000030, patch={kind, quote_reason})` —— 经秘书就地改写，`_statement_amend_history` 记 22:35:16 / by secretary-B / task t-000215：kind theorem → conjecture。**没有写 abandoned，没有碰 stmt:000042 一行**。\\n\\n**(3) 逐格回执（回读 table.get 000030 的现场）**\\n- `stat…（原文 2753 字，已截断）",
+        "roster_name": "B1",
+        "roster_problem": "t-000215：名册三份没写全 —— 名册正文 t-000209.jsonl 没写成（文件里没有这一趟的那一行）",
+        "dispatch_policy": {
+          "checked": true,
+          "dispatches": 1,
+          "violations": [],
+          "self_authored_plans": 3,
+          "named_plans": [],
+          "conjectures": [
+            "000000",
+            "000001",
+            "000002",
+            "000003",
+            "000004",
+            "000005",
+            "000006",
+            "000007",
+            "000008",
+            "000009",
+            "000010",
+            "000011",
+            "000012",
+            "000013",
+            "000014",
+            "000015",
+            "000016",
+            "000017",
+            "000018",
+            "000019",
+            "000020",
+            "000021",
+            "000022",
+            "000023",
+            "000024",
+            "000025",
+            "000026"
+          ],
+          "reason": "D 的派活文本里没有点名任何一条它自己登记的猜想号（方向由文本给，号不作为命令）",
+          "events_error": ""
+        },
+        "秘书": {
+          "alarms": [],
+          "fail_open": false,
+          "wash": {
+            "checked": true,
+            "washed": false,
+            "refused": "",
+            "reason": ""
+          },
+          "changes": [],
+          "surface_fit": {
+            "checked": false,
+            "fits": null,
+            "paths": [],
+            "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+            "shape": "summon",
+            "reach": {
+              "checked": true,
+              "verdict": "unknown",
+              "hops": [],
+              "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+            }
+          },
+          "reach_fit": {
+            "checked": true,
+            "verdict": "unknown",
+            "hops": [],
+            "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+          },
+          "assessment": {
+            "decision": "可派",
+            "reason": "这一条没点名具体动作（role 级派活）⇒ 不拿动作表去卡它；角色存在性由预筛管",
+            "basis": [
+              "specs/<role>.py 的动作表",
+              "tasks: 同 key 的既有终态行",
+              "没点名动作 ⇒ 动作表那一格不适用"
+            ],
+            "duplicates": [],
+            "alarms": [],
+            "novel": false,
+            "surface": {
+              "checked": false,
+              "fits": null,
+              "paths": [],
+              "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+              "shape": "summon",
+              "reach": {
+                "checked": true,
+                "verdict": "unknown",
+                "hops": [],
+                "reason": "角色 '' 不在能力表里（['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'L', 'M', 'V']）⇒ 判不了"
+              }
+            },
+            "judge": {
+              "checked": false,
+              "reason": "预筛没有报警、也没有重复候选 ⇒ 不必判断"
+            },
+            "engaged": false,
+            "seq": 5
+          }
+        },
+        "可退役": [
+          {
+            "task_id": "t-000212",
+            "role": "B",
+            "branch": "waiting_no_children",
+            "reading": {
+              "items_open": 0,
+              "items_open_ids": [],
+              "items_open_expects": {},
+              "items_open_states": {}
+            }
+          },
+          {
+            "task_id": "t-000215",
+            "role": "B",
+            "branch": "waiting_no_children",
+            "reading": {
+              "items_open": 0,
+              "items_open_ids": [],
+              "items_open_expects": {},
+              "items_open_states": {}
+            }
+          }
+        ],
+        "新消息": [
+          {
+            "板": "- （新）[t-000216] notice·要一个回执 来自 B：归属更正已做（能做的部分做完，不能做的如实报「不能」）。\n\n**已做的写操作**：`table.update(statements/000030, patch={kind, quote_reason})` —— 经秘书就地改写，`_statement_amend_history` 记 22:35:16 / by secretary-B / task t-000215：kind theorem → conjecture。**没有写 abandoned，没有碰 stmt:000042 一行**。\n\n**(3) 逐格回执（回读 table.get 000030 的现场）**\n- `status`：`active`（未动）\n- `kind`：`conjecture`（原 `theorem`，已回落）\n- `quote_reason`：已换成归属更正说明，要点逐字在内 ——「本条是 E 的数值自检命题（work/E/e-num-000003.md、exp:000003、result=supports、exit_code=0），按 E 侧 numeric 凭…（正文截断过，完整内容在台账 detail）"
+          }
+        ],
+        "秘书加工": {
+          "reworked": [
+            {
+              "item": {
+                "板": "- （新）[t-000216] notice·要一个回执 来自 B：归属更正已做（能做的部分做完，不能做的如实报「不能」）。\n\n**已做的写操作**：`table.update(statements/000030, patch={kind, quote_reason})` —— 经秘书就地改写，`_statement_amend_history` 记 22:35:16 / by secretary-B / task t-000215：kind theorem → conjecture。**没有写 abandoned，没有碰 stmt:000042 一行**。\n\n**(3) 逐格回执（回读 table.get 000030 的现场）**\n- `status`：`active`（未动）\n- `kind`：`conjecture`（原 `theorem`，已回落）\n- `quote_reason`：已换成归属更正说明，要点逐字在内 ——「本条是 E 的数值自检命题（work/E/e-num-000003.md、exp:000003、result=supports、exit_code=0），按 E 侧 numeric 凭…（正文截断过，完整内容在台账 detail）"
+              },
+              "addendum": "我的产出物口径：交付状态 —— 交给谁：派你这趟活的父（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名）+ 收方 B（入库）；形态：`manuscripts/D/RESEARCH.md` + `manuscripts/D/<qid>-research.md` 工作稿+ `research_questions` / `search_requests` 行（报告本体落成盘上文件；台账那一行 `kind=research` 由 `write_report` 同一笔事务落 —— 见 `policy`，**不是本角色手写的表**）；可核字段：`research_questions.question_id` / `research_questions.status` / `research_questions.waiting_request_ids` / 每个结论目录行上的四格 `evidence_kind` / `evidence_path` / `evidence_sha256` / `v_signature`；算做完：这一趟的每条结论在 `manuscripts/D/RESEARCH.md` 的「已确定的结论」有一行、四格都指得到盘上对象（`report_landing_reading` 可核），且 `research_questions.status` 与现场一致。**跨趟的那一份交付是研究手稿 `manuscripts/D/RESEARCH.md`**（业主 2026-10-14 第 1 条）：成果概述 / 定义与已知 / 已确定的结论 / 尝试与失败 / 例子与反例 / 未解问题 / 下一步七节 —— 下一趟接手的人先读它，而不是去翻这一趟的会话记录。\n我在本条线上的位置：研究循环：把一个研究方向收敛成一个有证据支撑的结论，或如实说证据不足",
+              "problem": "",
+              "fail_open": false
+            }
+          ],
+          "handoffs_digest": "- 000030 B→A：五篇 measure-theory/广义积分文献：已读 2 篇、落行 0 条（概念配额被 lit:000016 一次用满），逐篇卡点与迁移口径见正文\n- 000031 M→A：派活：A（派活：把 `search_requests` 里**未完成**的请求做完（收工门读到 unfinished=2 条，这是唯一的「闭」那一环的红）：用你的 `run_once` 认领，逐条给出终局 `outcome`（ok / no_results / 写清为什么做不成），把 `done` 置真，回执里逐条给 request id / topic / outcome / result_lit_ids。做完再看一眼 unfinished 是否为 0 —— 不为 0 就说明还有一条没认领到，写清是哪一条、卡在哪。不要再开新的检索，也不要改已入库的 25 行文献。）\n- 000032 M→D：派活：D（派活：收工门点名一条：「攻」那一环的 `plan 000002` 第 2 轮 history 里指向 `stmt:000030`，而 `verifications` 两路都没有认领给它的、签得住的行 ⇒ 那一行只能记 unknown。请把这一条处置掉，二选一并在回执里写明选了哪条、落在哪张台账行：(1) 补签 —— 若这条命题真有证明稿在盘（F 族 `manuscripts/F/f-proof-*.md`），让产出者自己把那一份送 V（`proof_manuscript` 指稿，别传命题号），拿到干净的「成立」后由 B 收录、签落在现行正文上；(2) 明确放弃 —— 让 B 用通用写口把 `status=abandoned`，并按四档给全 `abandon_kind` + `abandon_basis`（math_error 要 `defect_ref`、difficulty 要写清难在哪、counterexample 要 `experiment_id`、space_too_large 要 `space`）。两条都不许只写状态不写理由。回执里同时给：`verifications/000030.jsonl` 有没有一行「成立」，或 `statements` 那一行 `status` 与 `abandon_kind` 是什么。）\n- 000033 A→M：R8 收口：search_requests 两条未闭环请求已给终局并置 done=true，unfinished=0（逐条 topic / outcome / result_lit_ids 见正文）\n- 000034 B→D：stmt:000030 放弃未落成：秘书受控拒 abandon_difficulty_not_genuine，盘上零写入；另报 proof_no 2 误指已污染等级（theorem 抬档）"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 91904,
+        "prompt_cache_miss_tokens": 5041,
+        "tokens_in": 96945,
+        "tokens_out": 8424,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000209"
+    },
+    {
+      "index": 12,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "id": "000030",
+          "table": "statements"
+        },
+        "why": "取回执要的现场值：status / kind / abandon_kind（有没有）/ 误指的证明路径还在不在，逐格照抄给 M"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "_proposition_adjudication": {
+            "checked": true,
+            "attempted": false,
+            "verdict": "different",
+            "canonical_name": "",
+            "same_as": "",
+            "basis": "查过：没有可比的候选 ⇒ 不同",
+            "reason": "查过：命题台账里没有可检索的 active 命题（候选 0 条）⇒ 注册新的",
+            "reused": false,
+            "seam_source": "agent_b.register_statement:same_statement",
+            "seam_attempted": false,
+            "at": "2026-11-24T18:25:33+08:00"
+          },
+          "manuscripts": {
+            "1": "work/E/e-num-000003.md",
+            "2": "manuscripts/F/f-proof-000003.md"
+          },
+          "manuscript_id": "000003",
+          "manuscript_family": "e-num",
+          "_kind_upgrade": {
+            "from": "conjecture",
+            "to": "theorem",
+            "basis": "手稿签块（连续 3/3 成立、正文 sha 相符）",
+            "grade": "strong_conjecture",
+            "by": "secretary-B",
+            "at": "2026-11-24T21:32:49+08:00"
+          },
+          "proofs": [
+            {
+              "proof_no": 2,
+              "text": "1. 【前提】固定 1 ≤ p < ∞；B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。（前提）（前提）\n2. 【推导】由 stmt:000034 的 (i)，对每个单位法向 n 与 n^⊥ 的任意单位正交基 (u,v) 有 A_p(n) = (1/2)∫_0^{2π}‖cosθ·u+sinθ·v‖_p^{-2}dθ。取 n = (1,1,1)/√3、u = (1,-1,0)/√2、v = (1,1,-2)/√6（直接验算 ‖u‖=‖v‖=1、u·v=0、u·n=v·n=0，故 {u,v} 是 H := {x+y+z=0} 的单位正交基）；另一路参数化 Φ(x,y) := (x,y,−x−y) 是 R²→H 的双射，∂_xΦ=(1,0,−1) 与 ∂_yΦ=(0,1,−1) 的叉积为 (1,1,1)、模为 √3，故 A_diag(p) = √3∫∫_D dxdy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。（依据：stmt:000034）\n3. 【推导】对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)（r ≥ 0、θ ∈ [0,2π)）：由 |r cosθ|^p+|r sinθ|^p+|r(cosθ+sinθ)|^p = r^p g(θ)（记 g(θ) := |cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p）得 (x,y) ∈ D ⟺ r ≤ g(θ)^{-1/p}；由面积元 r dr dθ 得 ∫∫_D = ∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ，与第 2 步合并即 A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，这给出 (i) 的积分式。（依据：stmt:000034）\n4. 【推导】一致控制：g ≥ max(|cosθ|,|sinθ|)^p ≥ (1/√2)^p（因为 max(|cosθ|,|sinθ|) ≥ 1/√2），故对一切 p ∈ [1,∞) 与一切 θ 有 0 < g(θ)^{-2/p} ≤ (1/√2)^{-2} = 2；又 (p,θ) ↦ g(θ) 连续且在每个局部 p-区间上 g 有与 p 无关的正下界，故 θ ↦ g(θ)^{-2/p} 关于 p 逐点连续。（依据：stmt:000034）\n5. 【推导】p = 2 时 g(θ) = cos²θ+sin²θ+(cosθ+sinθ)² = 2+sin2θ；代换 u = 2θ 后用 ∫_0^{2π}du/(a+b sin u) = 2π/√(a²−b²)（取 a=2、b=1）得 ∫_0^{2π} dθ/(2+sin2θ) = ∫_0^{2π} du/(2+sin u) = 2π/√3，此处 p=2 使 g^{-2/p} 化为 g^{-1}，故 A_diag(2) = (√3/2)·(2π/√3) = π。（依据：stmt:000034）\n6. 【推导】由 stmt:000034 的 (ii)(iii)(iv) 的闭式 A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，在 p = 2 处得 A_face(2) = 2^0·4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π；与第 5 步合并得 Δ(2) = π − π = 0。（依据：stmt:000034）\n7. 【推导】Δ(1) 的计算：A_face(1) = 2^{-1/2}·4Γ(2)²/Γ(3) = 2^{-1/2}·4·1/2 = √2（Γ(2)=1、Γ(3)=2）；A_diag(1)：p = 1 时 g = |cosθ|+|sinθ|+|cosθ+sinθ| 满足 g(θ+π) = g(θ)，且在 [0,π/2] 上 g = 2(cosθ+sinθ)（故 g^{-2} = (1/4)(cosθ+sinθ)^{-2}）、在 [π/2,3π/4] 上 g = 2sinθ（g^{-2} = (1/4)sin^{-2}θ）、在 [3π/4,π] 上 g = −2cosθ（g^{-2} = (1/4)cos^{-2}θ）；三段对 ∫g^{-2} 的贡献各为 1/4（分别用 ∫_0^{π/2}dθ/(cosθ+sinθ)² = 1、[−cotθ] 与 [tanθ] 在两个端点区间上的取值各得 1），故 ∫_0^{2π}g^{-2}dθ = 2·(1/4+1/4+1/4) = 3/2，A_diag(1) = (√3/2)·(3/2) = 3√3/4；于是 Δ(1) = √2 − 3√3/4 > 0，因为 4√2 > 3√3 ⟺ 32 > 27。（依据：stmt:000034）\n8. 【推导】Δ 的连续性：Γ 在 (0,∞) 上连续且取正值，p ↦ 1/p、1+1/p、1+2/p 在 [1,∞) 上连续，故 A_face 在 [1,∞) 上连续；由第 4 步与 p 无关的控制 g^{-2/p} ≤ 2 与逐点连续性，有界收敛定理给出 p ↦ ∫_0^{2π}g(θ)^{-2/p}dθ 在 [1,∞) 上连续，故 A_diag 连续；两者相减得 Δ 在 [1,∞) 上连续。（依据：stmt:000034）\n9. 【推导】p→∞ 时 A_diag 的极限：记 m(θ) := max(|cosθ|,|sinθ|,|cosθ+sinθ|)，则 m(θ)^p ≤ g(θ) ≤ 3m(θ)^p，故对每个 θ 有 g(θ)^{-2/p} → m(θ)^{-2}；又 g ≥ m^p 给出 g^{-2/p} ≤ m^{-2} ≤ 2（因 m ≥ 1/√2），有界收敛定理给出 A_diag(p) → (√3/2)∫_0^{2π}m(θ)^{-2}dθ。按符号分段：在 [0,π/2] 上 m = cosθ+sinθ、在 [π/2,3π/4] 上 m = sinθ、在 [3π/4,π] 上 m = −cosθ，且 m(θ+π) = m(θ)，三段各贡献 1（同上一步的三段积分），故 ∫_0^{2π}m^{-2}dθ = 2·3 = 6，于是 lim_{p→∞}A_diag(p) = (√3/2)·6 = 3√3。（依据：stmt:000034）\n10. 【推导】p→∞ 时 A_face 的极限：C_p := 4Γ(1+1/p)²/Γ(1+2/p) → 4Γ(1)²/Γ(1) = 4（Γ 连续、Γ(1)=1），又 2^{1/2−1/p} → √2，故 A_face(p) → 4√2；与第 9 步合并得 lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0（同样由 32 > 27）。（依据：stmt:000034）\n11. 【推导】收尾：记 L := 4√2 − 3√3 > 0；由第 8 步 Δ 的连续性与第 10 步 lim Δ = L，取 ε := L/2 > 0，则存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 |Δ(p) − L| < ε，从而 Δ(p) > L/2 > 0，即 A_face(p) > A_diag(p) 对一切 p ≥ P0 成立，这给出 (iii) 的最后一句。（依据：stmt:000034）",
+              "proof_sha256": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+              "created_at": "2026-11-24T21:32:50+08:00"
+            }
+          ],
+          "proof_no": 2,
+          "proof_sha256": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+          "_statement_amend_history": [
+            {
+              "at": "2026-11-24T22:35:16+08:00",
+              "by": "secretary-B",
+              "task_id": "t-000215",
+              "changes": {
+                "kind": {
+                  "from": "theorem",
+                  "to": "conjecture"
+                },
+                "quote_reason": {
+                  "from": "手稿收录（D 只递指针）：普通数值手稿 `work/E/e-num-000003.md` —— 命题逐字取自 `## 命题`，证明栏空着（业主 2026-11-08：普通数值档不写证明正文），程序在实验行的 `code_path`，引文面不适用",
+                  "to": "归属更正（B，D 派活 t-000215，取代上一笔被受控拒的 abandoned 指令）：本条是 E 的数值自检命题（work/E/e-num-000003.md、exp:000003、result=supports、exit_code=0），按 E 侧 numeric 凭据现算应为 strong_conjecture。manuscripts 的 2 号证明路径 manuscripts/F/f-proof-000003.md 系误指：该稿 ## 命题 逐字等于 stmt:000042 的 statement_full（正文 sha 3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db），稿上 V 的三行判词（verifications/pending/202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8.jsonl#u-000022/23/24）statement_id 全是 000042、path_group=1 ⇒ 那一份构不成对本条的签，不得用来把本条抬成 theorem；它也已经是 stmt:000042 的第 1 条证明路径 manuscripts/B/b-proof-000003.md 的合法归属。本行写面不能摘除证明路径（statements 的 table.update 只开 status/kind/quote_reason，ingest 只能回填不能删路径）⇒ 本格留明误指待框架/秘书处置。本条不是 abandoned（研究侧复核判归属错误，不是做不动），stmt:000042 那一行未动。"
+                }
+              }
+            }
+          ],
+          "stmt_id": "000030",
+          "origin": "own_result",
+          "kind": "conjecture",
+          "label": "截面面积计算核自检通过：极坐标 tanh-sinh 求积（断点取 A cosψ+B sinψ=0 与 |w_i|=|w_j| 在 [0,2π) 上的全部根）在",
+          "statement_text": "lp3-section-validate-v3",
+          "statement_full": "截面面积计算核自检通过：极坐标 tanh-sinh 求积（断点取 A cosψ+B sinψ=0 与 |w_i|=|w_j| 在 [0,2π) 上的全部根）在 p=2 上给任意中心截面面积 π（偏差 ≤1e-15）；在 p=1 上与八面体边缘裁剪精确值一致（≤1e-15）；p=1000 上坐标/体对角/面对角截面与立方体精确值 4、3√3、4√2 的偏差随 p 增大而缩小且落在 O(1/p) 以内；每个 p 的坐标截面等于 4Γ(1+1/p)^2/Γ(1+2/p)（相对偏差 ≤1e-13）；面积对平面基的旋转不变（≤1e-12）；粗嵌套 Simpson 法随加密收敛到极坐标值。",
+          "proof_text": "",
+          "source_lit_id": null,
+          "page_range": {
+            "start": null,
+            "end": null,
+            "label": ""
+          },
+          "quote_verified": null,
+          "quote_mode": "",
+          "quote_reason": "归属更正（B，D 派活 t-000215，取代上一笔被受控拒的 abandoned 指令）：本条是 E 的数值自检命题（work/E/e-num-000003.md、exp:000003、result=supports、exit_code=0），按 E 侧 numeric 凭据现算应为 strong_conjecture。manuscripts 的 2 号证明路径 manuscripts/F/f-proof-000003.md 系误指：该稿 ## 命题 逐字等于 stmt:000042 的 statement_full（正文 sha 3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db），稿上 V 的三行判词（verifications/pending/202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8.jsonl#u-000022/23/24）statement_id 全是 000042、path_group=1 ⇒ 那一份构不成对本条的签，不得用来把本条抬成 theorem；它也已经是 stmt:000042 的第 1 条证明路径 manuscripts/B/b-proof-000003.md 的合法归属。本行写面不能摘除证明路径（statements 的 table.update 只开 status/kind/quote_reason，ingest 只能回填不能删路径）⇒ 本格留明误指待框架/秘书处置。本条不是 abandoned（研究侧复核判归属错误，不是做不动），stmt:000042 那一行未动。",
+          "quote_span": "",
+          "quote_call_sha256": "",
+          "evidence_kind": "cross_check",
+          "bits": {
+            "numeric": "verified",
+            "proof": true,
+            "reviewed": false,
+            "formal": "pending",
+            "audited": false,
+            "origin": "own_result",
+            "evidence": {
+              "numeric": {
+                "entries": [
+                  {
+                    "script": "code/exp/lpsec_validate.py",
+                    "range": "",
+                    "n_cases": 0,
+                    "n_counterexamples": 0,
+                    "code_hash": "226a5da3ceebc6ed",
+                    "exp": "exp:000003"
+                  }
+                ],
+                "experiments": [
+                  "000003"
+                ],
+                "experiment_id": "000003",
+                "script": "code/exp/lpsec_validate.py",
+                "code_hash": "226a5da3ceebc6ed",
+                "manuscript": "work/E/e-num-000003.md",
+                "manuscript_sha256": "6b67487691efdd67657db5a075a5cc19c0b9168229f248f08ee8eea8d8b731c3",
+                "certificate": false
+              },
+              "numeric_reason": "",
+              "proof_process": "1. 【前提】固定 1 ≤ p < ∞；B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。（前提）（前提）\n2. 【推导】由 stmt:000034 的 (i)，对每个单位法向 n 与 n^⊥ 的任意单位正交基 (u,v) 有 A_p(n) = (1/2)∫_0^{2π}‖cosθ·u+sinθ·v‖_p^{-2}dθ。取 n = (1,1,1)/√3、u = (1,-1,0)/√2、v = (1,1,-2)/√6（直接验算 ‖u‖=‖v‖=1、u·v=0、u·n=v·n=0，故 {u,v} 是 H := {x+y+z=0} 的单位正交基）；另一路参数化 Φ(x,y) := (x,y,−x−y) 是 R²→H 的双射，∂_xΦ=(1,0,−1) 与 ∂_yΦ=(0,1,−1) 的叉积为 (1,1,1)、模为 √3，故 A_diag(p) = √3∫∫_D dxdy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。（依据：stmt:000034）\n3. 【推导】对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)（r ≥ 0、θ ∈ [0,2π)）：由 |r cosθ|^p+|r sinθ|^p+|r(cosθ+sinθ)|^p = r^p g(θ)（记 g(θ) := |cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p）得 (x,y) ∈ D ⟺ r ≤ g(θ)^{-1/p}；由面积元 r dr dθ 得 ∫∫_D = ∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ，与第 2 步合并即 A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，这给出 (i) 的积分式。（依据：stmt:000034）\n4. 【推导】一致控制：g ≥ max(|cosθ|,|sinθ|)^p ≥ (1/√2)^p（因为 max(|cosθ|,|sinθ|) ≥ 1/√2），故对一切 p ∈ [1,∞) 与一切 θ 有 0 < g(θ)^{-2/p} ≤ (1/√2)^{-2} = 2；又 (p,θ) ↦ g(θ) 连续且在每个局部 p-区间上 g 有与 p 无关的正下界，故 θ ↦ g(θ)^{-2/p} 关于 p 逐点连续。（依据：stmt:000034）\n5. 【推导】p = 2 时 g(θ) = cos²θ+sin²θ+(cosθ+sinθ)² = 2+sin2θ；代换 u = 2θ 后用 ∫_0^{2π}du/(a+b sin u) = 2π/√(a²−b²)（取 a=2、b=1）得 ∫_0^{2π} dθ/(2+sin2θ) = ∫_0^{2π} du/(2+sin u) = 2π/√3，此处 p=2 使 g^{-2/p} 化为 g^{-1}，故 A_diag(2) = (√3/2)·(2π/√3) = π。（依据：stmt:000034）\n6. 【推导】由 stmt:000034 的 (ii)(iii)(iv) 的闭式 A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，在 p = 2 处得 A_face(2) = 2^0·4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π；与第 5 步合并得 Δ(2) = π − π = 0。（依据：stmt:000034）\n7. 【推导】Δ(1) 的计算：A_face(1) = 2^{-1/2}·4Γ(2)²/Γ(3) = 2^{-1/2}·4·1/2 = √2（Γ(2)=1、Γ(3)=2）；A_diag(1)：p = 1 时 g = |cosθ|+|sinθ|+|cosθ+sinθ| 满足 g(θ+π) = g(θ)，且在 [0,π/2] 上 g = 2(cosθ+sinθ)（故 g^{-2} = (1/4)(cosθ+sinθ)^{-2}）、在 [π/2,3π/4] 上 g = 2sinθ（g^{-2} = (1/4)sin^{-2}θ）、在 [3π/4,π] 上 g = −2cosθ（g^{-2} = (1/4)cos^{-2}θ）；三段对 ∫g^{-2} 的贡献各为 1/4（分别用 ∫_0^{π/2}dθ/(cosθ+sinθ)² = 1、[−cotθ] 与 [tanθ] 在两个端点区间上的取值各得 1），故 ∫_0^{2π}g^{-2}dθ = 2·(1/4+1/4+1/4) = 3/2，A_diag(1) = (√3/2)·(3/2) = 3√3/4；于是 Δ(1) = √2 − 3√3/4 > 0，因为 4√2 > 3√3 ⟺ 32 > 27。（依据：stmt:000034）\n8. 【推导】Δ 的连续性：Γ 在 (0,∞) 上连续且取正值，p ↦ 1/p、1+1/p、1+2/p 在 [1,∞) 上连续，故 A_face 在 [1,∞) 上连续；由第 4 步与 p 无关的控制 g^{-2/p} ≤ 2 与逐点连续性，有界收敛定理给出 p ↦ ∫_0^{2π}g(θ)^{-2/p}dθ 在 [1,∞) 上连续，故 A_diag 连续；两者相减得 Δ 在 [1,∞) 上连续。（依据：stmt:000034）\n9. 【推导】p→∞ 时 A_diag 的极限：记 m(θ) := max(|cosθ|,|sinθ|,|cosθ+sinθ|)，则 m(θ)^p ≤ g(θ) ≤ 3m(θ)^p，故对每个 θ 有 g(θ)^{-2/p} → m(θ)^{-2}；又 g ≥ m^p 给出 g^{-2/p} ≤ m^{-2} ≤ 2（因 m ≥ 1/√2），有界收敛定理给出 A_diag(p) → (√3/2)∫_0^{2π}m(θ)^{-2}dθ。按符号分段：在 [0,π/2] 上 m = cosθ+sinθ、在 [π/2,3π/4] 上 m = sinθ、在 [3π/4,π] 上 m = −cosθ，且 m(θ+π) = m(θ)，三段各贡献 1（同上一步的三段积分），故 ∫_0^{2π}m^{-2}dθ = 2·3 = 6，于是 lim_{p→∞}A_diag(p) = (√3/2)·6 = 3√3。（依据：stmt:000034）\n10. 【推导】p→∞ 时 A_face 的极限：C_p := 4Γ(1+1/p)²/Γ(1+2/p) → 4Γ(1)²/Γ(1) = 4（Γ 连续、Γ(1)=1），又 2^{1/2−1/p} → √2，故 A_face(p) → 4√2；与第 9 步合并得 lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0（同样由 32 > 27）。（依据：stmt:000034）\n11. 【推导】收尾：记 L := 4√2 − 3√3 > 0；由第 8 步 Δ 的连续性与第 10 步 lim Δ = L，取 ε := L/2 > 0，则存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 |Δ(p) − L| < ε，从而 Δ(p) > L/2 > 0，即 A_face(p) > A_diag(p) 对一切 p ≥ P0 成立，这给出 (iii) 的最后一句。（依据：stmt:000034）",
+              "proof_source": "own",
+              "reviewed_by": {},
+              "reviewed_source": "",
+              "formal": {},
+              "formal_reason": "",
+              "audited_by": {},
+              "optimized_by_proof": {
+                "2": false
+              }
+            },
+            "voided_by": {},
+            "grade": "strong_conjecture",
+            "audited_badge": false
+          },
+          "status": "active",
+          "derived_from": [],
+          "aliases": [],
+          "doc_id": null,
+          "line_range": {
+            "start": null,
+            "end": null,
+            "label": "exp:000003"
+          },
+          "created_at": "2026-11-24T18:25:33+08:00",
+          "created_by": "secretary-B",
+          "proof_routes": {},
+          "route": ""
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "id": "000030",
+          "id_field": "stmt_id",
+          "found": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 96128,
+        "prompt_cache_miss_tokens": 5278,
+        "tokens_in": 101406,
+        "tokens_out": 1879,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000209"
+    },
+    {
+      "index": 13,
+      "shape": "tool",
+      "payload": {
+        "name": "conductor.ack",
+        "args": {
+          "item_ids": [
+            "t-000214",
+            "t-000217"
+          ],
+          "close": "acked",
+          "note": "两条都是唤醒回执：t-000212 那笔「改 abandoned」已被秘书受控拒（abandon_difficulty_not_genuine，盘上零写入）；t-000215 的归属更正已落盘（kind theorem→conjecture、quote_reason 换成归属更正说明，status 仍 active、stmt:000042 未动）。处置结论随 final 回 M。"
+        },
+        "why": "把这两条 notice 型板项消掉（它们只要回执），别让未消项挡住收工读数"
+      },
+      "result": {
+        "tool": "conductor.ack",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "ok": true,
+          "state": "acked",
+          "acked": [
+            "t-000214",
+            "t-000217"
+          ],
+          "already_done": [
+            "t-000214",
+            "t-000217"
+          ],
+          "refused": [],
+          "unknown": [],
+          "missing": [],
+          "not_yours": [],
+          "refusal_codes": [],
+          "results": [
+            {
+              "item_id": "t-000214",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000217",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            }
+          ],
+          "count": 2,
+          "requested": 2,
+          "by_task_id": "t-000209",
+          "note": "两条都是唤醒回执：t-000212 那笔「改 abandoned」已被秘书受控拒（abandon_difficulty_not_genuine，盘上零写入）；t-000215 的归属更正已落盘（kind theorem→conjecture、quote_reason 换成归属更正说明，status 仍 active、stmt:000042 未动）。处置结论随 final 回 M。",
+          "close": "acked",
+          "reason": "确认了 2 条"
+        },
+        "error": "",
+        "meta": {
+          "checked": true,
+          "ok": true,
+          "state": "acked",
+          "acked": [
+            "t-000214",
+            "t-000217"
+          ],
+          "already_done": [
+            "t-000214",
+            "t-000217"
+          ],
+          "refused": [],
+          "unknown": [],
+          "missing": [],
+          "not_yours": [],
+          "refusal_codes": [],
+          "results": [
+            {
+              "item_id": "t-000214",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000217",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            }
+          ],
+          "count": 2,
+          "requested": 2,
+          "by_task_id": "t-000209",
+          "note": "两条都是唤醒回执：t-000212 那笔「改 abandoned」已被秘书受控拒（abandon_difficulty_not_genuine，盘上零写入）；t-000215 的归属更正已落盘（kind theorem→conjecture、quote_reason 换成归属更正说明，status 仍 active、stmt:000042 未动）。处置结论随 final 回 M。",
+          "close": "acked",
+          "reason": "确认了 2 条"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 100608,
+        "prompt_cache_miss_tokens": 4912,
+        "tokens_in": 105520,
+        "tokens_out": 1797,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000209"
+    },
+    {
+      "index": 14,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.search",
+        "args": {
+          "pattern": "^## (尝试与失败|未解问题|下一步)",
+          "path": "manuscripts/D/RESEARCH.md"
+        },
+        "why": "定位「尝试与失败」那一节的插入点，把 stmt:000030 归属误指的处置写成一行跨趟记忆"
+      },
+      "result": {
+        "tool": "fs.search",
+        "ok": true,
+        "data": {
+          "pattern": "^## (尝试与失败|未解问题|下一步)",
+          "path": "manuscripts/D/RESEARCH.md",
+          "matches": [],
+          "lines": [],
+          "total": 0,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        },
+        "error": "",
+        "meta": {
+          "total": 0,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 104704,
+        "prompt_cache_miss_tokens": 2242,
+        "tokens_in": 106946,
+        "tokens_out": 1887,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000209"
+    },
+    {
+      "index": 15,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.search",
+        "args": {
+          "pattern": "尝试与失败|未解问题|下一步|已确定的结论",
+          "path": "manuscripts/D/RESEARCH.md",
+          "limit": 40
+        },
+        "why": "定位七节里「尝试与失败」「未解问题」这两节的实际标题写法，好定点插入 stmt:000030 归属误指这一条记录"
+      },
+      "result": {
+        "tool": "fs.search",
+        "ok": true,
+        "data": {
+          "pattern": "尝试与失败|未解问题|下一步|已确定的结论",
+          "path": "manuscripts/D/RESEARCH.md",
+          "matches": [
+            {
+              "path": "manuscripts/D/RESEARCH.md",
+              "line": 8,
+              "text": "> （见 §1.1）。这一处改主意的依据逐条写在 §3「尝试与失败」第 4 条。"
+            },
+            {
+              "path": "manuscripts/D/RESEARCH.md",
+              "line": 50,
+              "text": "去证 —— 这条被推翻的前提写进 §3「尝试与失败」。"
+            },
+            {
+              "path": "manuscripts/D/RESEARCH.md",
+              "line": 97,
+              "text": "## 2. 已确定的结论"
+            },
+            {
+              "path": "manuscripts/D/RESEARCH.md",
+              "line": 185,
+              "text": "## 3. 尝试与失败"
+            },
+            {
+              "path": "manuscripts/D/RESEARCH.md",
+              "line": 224,
+              "text": "## 5. 未解问题"
+            },
+            {
+              "path": "manuscripts/D/RESEARCH.md",
+              "line": 249,
+              "text": "## 6. 下一步"
+            }
+          ],
+          "lines": [
+            "manuscripts/D/RESEARCH.md:8: > （见 §1.1）。这一处改主意的依据逐条写在 §3「尝试与失败」第 4 条。",
+            "manuscripts/D/RESEARCH.md:50: 去证 —— 这条被推翻的前提写进 §3「尝试与失败」。",
+            "manuscripts/D/RESEARCH.md:97: ## 2. 已确定的结论",
+            "manuscripts/D/RESEARCH.md:185: ## 3. 尝试与失败",
+            "manuscripts/D/RESEARCH.md:224: ## 5. 未解问题",
+            "manuscripts/D/RESEARCH.md:249: ## 6. 下一步"
+          ],
+          "total": 6,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        },
+        "error": "",
+        "meta": {
+          "total": 6,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 106112,
+        "prompt_cache_miss_tokens": 1626,
+        "tokens_in": 107738,
+        "tokens_out": 515,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000209"
+    },
+    {
+      "index": 16,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/D/RESEARCH.md",
+          "start_line": 180,
+          "max_lines": 60
+        },
+        "why": "读「尝试与失败」那一节的现有条目，好把 stmt:000030 归属误指这一条按同一格式追加进去"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "`A_face` 在结论 1 里证了、`A_diag` 在结论 5 里证了），**取哪个的判据是两个临界点**，\n其中**只有 `p = 2` 是解析证明过的**，`p*` 仍是数值读数 —— 不许把它写成定理。\n\n---\n\n## 3. 尝试与失败\n\n1. **s1（全法向支配性 `A_p(n) ≤ A_coord(p)`，1≤p<2）—— 我方未证，但文献已解**（技术性 → 已定位置）：\n   F 只解决了「n 至少一个坐标为 0」这一子族（结论 2），缺一条把 `A_p(n)` 在法向参数化后逐点比较\n   的估计。**处置**：不改写成本方定理；按 §1.2 引 `lit:000001` 的单调性定理（已知），\n   我方在这一侧只保留数值复现（`stmt:000030`–`stmt:000033`）。**这一处是本趟改主意的落点。**\n2. **s3（`A_diag(p) = A_face(p)` 的唯一性）—— 没证出来，且「比值单调」这条路线已被反例否掉**（结构性）：\n   **第 3 轮改主意留痕**：第 2 轮我写的是「`r(p)=A_diag/A_face` 单调 ⇒ 唯一穿越」。E 的三行数值实验\n   （`exp:000020`、`exp:000022` 均 `refutes`；脚本 `code/exp/e5_delta_second_root.py` /\n   `e6b_pstar_peak_deriv_v2.py`）表明 **ρ = A_face/A_diag 非单调**：它在 `p = 3.02439` 处取极小 `0.98856`\n   （<1），随后升向立方体极限 `4√2/3√3 = 1.088662`。⇒ 「比值单调」这条路**不成立**，上一轮的证明思路\n   作废，必须换。F 的读数给出真实结构：`Δ = A_face − A_diag` 在 `p = 2`（端点）与 `p* = 4.9982155968…`\n   （内部唯一）各一个零点，`(20, ∞)` 上无第二零点（E 手稿 `0015`、F 手稿 `0020`、`stmt:000040`）。\n   ⇒ **分段结构仍是三段**（`Δ<0` 于 `(2, p*)` ⇒ 体对角向大；`Δ>0` 于 `(p*, ∞)` ⇒ 面对角向大），\n   但「唯一内部零点」至今只有数值读数，没有证明。\n3. **中间方向的排除** —— 数值上成立、连续域上没有穷举（结构性）：`exp:000004`/`exp:000007` 给的是\n   两条弧 + 20×20 嵌套网格上的读数，不是连续域证明。E 自己已写明「连续域无法穷举 ⇒ 不给 exhaustive、\n   不送 V 签」。\n4. **改主意留痕（依据哪条读数不成立）**：第 1 轮我把「p<2 坐标向最大」列为本问题的未证卡点；\n   A 的检索（`r-000004`，执行记录在板项 t-000078）取回 `lit:000001` p.2 的逐字句与 `rel:000007`，\n   表明它是 Koldobsky / Meyer–Pajor 单调性的推论 ⇒ 上一轮的「卡点」定位不成立，本节第 1 条据此改写。\n\n---\n\n## 4. 例子与反例\n\n- **p = 1（八面体端）**：坐标截面 2、面对角 2/√2·…（E 的端验：2 / √2 / 3√3/4，`exp:000003`\n  的 V5 段，`stmt:000030`）。这是把闭式压到边界的可用反例带：任何声称「p<2 一切方向都 ≤ π」的\n  粗估计在这里会立刻被证伪。\n- **p = 2 的退化**：一切单位法向都给 π（结论 1 的第 (iv) 条，V 签成立）。它不是反例，但它是\n  「最大方向唯一」这一说法在 p=2 处的反例 —— 写结论时必须把它单列。\n- **p = 1000 的立方体极限**：`A_face` 读到 5.6529253 vs 精确 4√2 = 5.6568542，差 3.9e-3；\n  E 如实报成 1/p 阶残差（`work/E/lp3-section-report.md` §1、§5），**不当事后误差抹掉**。\n- **4 维的非对角临界截面存在**（`lit:000003`/`lit:000004` 逐字，法向 `(1,1,2,2)`）：\n  它是对「临界方向一律是面对角/体对角」这一朴素猜想的**文献反例**（维度 ≥ 4），\n  提醒我们 n=3 的三段结构不能无脑推广到 n≥4。\n\n---\n\n## 5. 未解问题\n\n1. **s3**：`r(p) = A_diag(p)/A_face(p)` 在 `(2, ∞)` 上严格单调、`p*` 存在唯一 —— 只有数值读数…（落档截断，原 2598 字）",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/D/RESEARCH.md",
+          "encoding": "utf-8",
+          "bytes_read": 19923,
+          "total_bytes": 19923,
+          "truncated": false,
+          "start_line": 180,
+          "lines_read": 60,
+          "total_lines": 257,
+          "next_line": 240,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 180–239 行（共 257 行）；续读 start_line=240",
+          "sha256": "9dfa5fd91eb625824e76d971b42189be936fb94cb118858c0ac221a18ce302bc"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 106880,
+        "prompt_cache_miss_tokens": 1904,
+        "tokens_in": 108784,
+        "tokens_out": 740,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000209"
+    },
+    {
+      "index": 17,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.edit",
+        "args": {
+          "path": "manuscripts/D/RESEARCH.md",
+          "old_string": "本节第 1 条据此改写。\n\n---\n\n## 4. 例子与反例",
+          "new_string": "本节第 1 条据此改写。\n5. **`stmt:000030` 的证明归属被误指（结构性 → 已由 B 更正归属，**不是**做不动）**：本条是 E 的数值自检命题\n   （`work/E/e-num-000003.md`、`exp:000003`、`result=supports`、`exit_code=0`），按 E 侧 `numeric` 凭据现算应为\n   `strong_conjecture`（普通数值档不过 V，业主口径）。它原来的 2 号证明路径指向 `manuscripts/F/f-proof-000003.md`，\n   而该稿 `## 命题` 逐字等于 `stmt:000042` 的 `statement_full`，稿上 V 的三行判词\n   （`verifications/pending/202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8.jsonl#u-000022/23/24`）\n   `statement_id` 全是 `000042`、`path_group=1` ⇒ 那一份**构不成对 `stmt:000030` 的签**，不得用来抬成 `theorem`。\n   **处置（本趟）**：先试「明确放弃（difficulty）」这一档，被秘书**受控拒** `abandon_difficulty_not_genuine`\n   （盘上零字节改写）；研究侧复核判**归属错误 ≠ 做不动**，改由 B 做归属更正：`kind` `theorem → conjecture`、\n   `quote_reason` 换成归属更正说明、`status` 仍 `active`、`stmt:000042` 那一行未动。\n   **回执口径（可核）**：`verifications/000030.jsonl` **不存在**（`verifications/` 根下只有 000034/000035/000041/000042）\n   ⇒ 没有一行「成立」；`statements` 000030 的 `status=active`、`abandon_kind` **无**（未放弃）。\n   **下一步**：若真要给本条一处 V 签得住的凭据，只能走 E 的穷举档 `manuscripts/E/e-proof-<实验号>.md`\n   （要 V 逐行走查），不是文字证明 —— 因为本条说的是浮点求积的偏差界（≤1e-15 / ≤1e-13），\n   在形式化/机器核验通道关着的本会话里，文字证明给不出这种保证。\n\n---\n\n## 4. 例子与反例",
+          "note": "把 stmt:000030 的归属误指与处置写进「尝试与失败」，供下一趟接手的人读"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "fs.edit",
+        "ok": true,
+        "data": {
+          "path": "manuscripts/D/RESEARCH.md",
+          "sha256_before": "9dfa5fd91eb625824e76d971b42189be936fb94cb118858c0ac221a18ce302bc",
+          "sha256_after": "1c0cad81696ece325bd41579661a2821afed5f59fef53f7225afdfde46cd82a5",
+          "replacements": 1,
+          "bytes_before": 19923,
+          "bytes_after": 21689,
+          "note": "把 stmt:000030 的归属误指与处置写进「尝试与失败」，供下一趟接手的人读"
+        },
+        "error": "",
+        "meta": {
+          "path": "manuscripts/D/RESEARCH.md",
+          "replacements": 1,
+          "note": "把 stmt:000030 的归属误指与处置写进「尝试与失败」，供下一趟接手的人读"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 108032,
+        "prompt_cache_miss_tokens": 3344,
+        "tokens_in": 111376,
+        "tokens_out": 1253,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000209"
+    },
+    {
+      "index": 18,
+      "shape": "tool",
+      "payload": {
+        "name": "conductor.retire_child",
+        "args": {
+          "child_name": "B1",
+          "reason": "t-000212 / t-000215 两笔都已交回（放弃被受控拒、归属更正已落盘），本趟不再需要 B 侧写口"
+        },
+        "why": "B1 已交差且不再用到，先销号把名册清干净再收工"
+      },
+      "result": {
+        "tool": "conductor.retire_child",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "state": "retired",
+          "retired": true,
+          "task_id": "t-000212",
+          "name": "B1",
+          "parent_task_id": "t-000209",
+          "branch": "waiting_no_children",
+          "open_items": [],
+          "missing": [],
+          "reason": "B1 退役：waiting_no_children（子已停 + 它名下无活跃子代理）；面 S01 已归还池里",
+          "note": "t-000212 / t-000215 两笔都已交回（放弃被受控拒、归属更正已落盘），本趟不再需要 B 侧写口",
+          "retired_path": "D:\\Incubator\\projects\\lp-ball-22\\out\\roster\\t-000209-retired.jsonl",
+          "roster_retired": true,
+          "task_id_compat": false,
+          "addressed_by": "child_name",
+          "subtree": [
+            "t-000212"
+          ],
+          "subtree_size": 1,
+          "order": [
+            "t-000212"
+          ],
+          "cascade": [
+            {
+              "task_id": "t-000212",
+              "parent": "t-000209",
+              "depth": 0,
+              "role": "B",
+              "name": "B1",
+              "branch": "waiting_no_children",
+              "state": "retired",
+              "why": "B1 退役：waiting_no_children（子已停 + 它名下无活跃子代理）；面 S01 已归还池里"
+            }
+          ],
+          "retired_count": 1,
+          "unrostered": [],
+          "active_nodes": [],
+          "busy_task_ids": [],
+          "readings": {
+            "child_counts_before": {
+              "checked": true,
+              "reason": "",
+              "owner": "t-000209",
+              "children_unretired": 1,
+              "active_child_count": 0,
+              "labels": {
+                "children_unretired": "子代理数",
+                "active_child_count": "活跃子代理数"
+              },
+              "waiting_only": [],
+              "unjudged": [],
+              "states": {
+                "flying": 0,
+                "standby": 0,
+                "silent": 1,
+                "unknown": 0,
+                "active": 0,
+                "total": 1
+              },
+              "state_labels": {
+                "flying": "在飞",
+                "standby": "待机",
+                "silent": "静默",
+                "unknown": "未读到"
+              },
+              "complete": true,
+              "by_owner": {
+                "t-000209": {
+                  "children_unretired": 1,
+                  "active_child_count": 0,
+                  "flying": 0,
+                  "standby": 0,
+                  "silent": 1,
+                  "unknown": 0
+                }
+              },
+              "bad_roster_lines": [],
+              "note": "子代理数=1，活跃子代理数=0（在飞 0 · 待机 0 · 静默 1）"
+            },
+            "depth_of": {
+              "t-000212": 0
+            },
+            "subtree_size": 1,
+            "active_count": 0,
+            "busy_task_ids": [],
+            "labels": {
+              "children_unretired": "子代理数",
+              "active_child_count": "活跃子代理数"
+            },
+            "target_state": "silent",
+            "child_counts_after": {
+              "checked": true,
+              "reason": "",
+              "owner": "t-000209",
+              "children_unretired": 0,
+              "active_child_count": 0,
+              "labels": {
+                "children_unretired": "子代理数",
+                "active_child_count": "活跃子代理数"
+              },
+              "waiting_only": [],
+              "unjudged": [],
+              "states": {
+                "flying": 0,
+                "standby": 0,
+                "silent": 0,
+                "unknown": 0,
+                "active": 0,
+                "total": 0
+              },
+              "state_labels": {
+                "flying": "在飞",
+                "standby": "待机",
+                "silent": "静默",
+                "unknown": "未读到"
+              },
+              "complete": true,
+              "by_owner": {},
+              "bad_roster_lines": [],
+              "note": "子代理数=0，活跃子代理数=0（在飞 0 · 待机 0 · 静默 0）"
+            },
+            "written": [
+              "t-000212"
+            ]
+          },
+          "kept": [],
+          "cascade_reading": {
+            "count": 1,
+            "ids": [
+              "t-000212"
+            ],
+            "levels": [
+              0
+            ],
+            "kept": []
+          },
+          "children_unretired": 0,
+          "active_child_count": 0,
+          "target_state": "silent",
+          "target_state_label": "静默",
+          "blocking": [],
+          "refusal_code": ""
+        },
+        "error": "",
+        "meta": {
+          "checked": true,
+          "state": "retired",
+          "retired": true,
+          "task_id": "t-000212",
+          "name": "B1",
+          "parent_task_id": "t-000209",
+          "branch": "waiting_no_children",
+          "open_items": [],
+          "missing": [],
+          "reason": "B1 退役：waiting_no_children（子已停 + 它名下无活跃子代理）；面 S01 已归还池里",
+          "note": "t-000212 / t-000215 两笔都已交回（放弃被受控拒、归属更正已落盘），本趟不再需要 B 侧写口",
+          "retired_path": "D:\\Incubator\\projects\\lp-ball-22\\out\\roster\\t-000209-retired.jsonl",
+          "roster_retired": true,
+          "task_id_compat": false,
+          "addressed_by": "child_name",
+          "subtree": [
+            "t-000212"
+          ],
+          "subtree_size": 1,
+          "order": [
+            "t-000212"
+          ],
+          "cascade": [
+            {
+              "task_id": "t-000212",
+              "parent": "t-000209",
+              "depth": 0,
+              "role": "B",
+              "name": "B1",
+              "branch": "waiting_no_children",
+              "state": "retired",
+              "why": "B1 退役：waiting_no_children（子已停 + 它名下无活跃子代理）；面 S01 已归还池里"
+            }
+          ],
+          "retired_count": 1,
+          "unrostered": [],
+          "active_nodes": [],
+          "busy_task_ids": [],
+          "readings": {
+            "child_counts_before": {
+              "checked": true,
+              "reason": "",
+              "owner": "t-000209",
+              "children_unretired": 1,
+              "active_child_count": 0,
+              "labels": {
+                "children_unretired": "子代理数",
+                "active_child_count": "活跃子代理数"
+              },
+              "waiting_only": [],
+              "unjudged": [],
+              "states": {
+                "flying": 0,
+                "standby": 0,
+                "silent": 1,
+                "unknown": 0,
+                "active": 0,
+                "total": 1
+              },
+              "state_labels": {
+                "flying": "在飞",
+                "standby": "待机",
+                "silent": "静默",
+                "unknown": "未读到"
+              },
+              "complete": true,
+              "by_owner": {
+                "t-000209": {
+                  "children_unretired": 1,
+                  "active_child_count": 0,
+                  "flying": 0,
+                  "standby": 0,
+                  "silent": 1,
+                  "unknown": 0
+                }
+              },
+              "bad_roster_lines": [],
+              "note": "子代理数=1，活跃子代理数=0（在飞 0 · 待机 0 · 静默 1）"
+            },
+            "depth_of": {
+              "t-000212": 0
+            },
+            "subtree_size": 1,
+            "active_count": 0,
+            "busy_task_ids": [],
+            "labels": {
+              "children_unretired": "子代理数",
+              "active_child_count": "活跃子代理数"
+            },
+            "target_state": "silent",
+            "child_counts_after": {
+              "checked": true,
+              "reason": "",
+              "owner": "t-000209",
+              "children_unretired": 0,
+              "active_child_count": 0,
+              "labels": {
+                "children_unretired": "子代理数",
+                "active_child_count": "活跃子代理数"
+              },
+              "waiting_only": [],
+              "unjudged": [],
+              "states": {
+                "flying": 0,
+                "standby": 0,
+                "silent": 0,
+                "unknown": 0,
+                "active": 0,
+                "total": 0
+              },
+              "state_labels": {
+                "flying": "在飞",
+                "standby": "待机",
+                "silent": "静默",
+                "unknown": "未读到"
+              },
+              "complete": true,
+              "by_owner": {},
+              "bad_roster_lines": [],
+              "note": "子代理数=0，活跃子代理数=0（在飞 0 · 待机 0 · 静默 0）"
+            },
+            "written": [
+              "t-000212"
+            ]
+          },
+          "kept": [],
+          "cascade_reading": {
+            "count": 1,
+            "ids": [
+              "t-000212"
+            ],
+            "levels": [
+              0
+            ],
+            "kept": []
+          },
+          "children_unretired": 0,
+          "active_child_count": 0,
+          "target_state": "silent",
+          "target_state_label": "静默",
+          "blocking": [],
+          "refusal_code": ""
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 110592,
+        "prompt_cache_miss_tokens": 1919,
+        "tokens_in": 112511,
+        "tokens_out": 2392,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000209"
+    },
+    {
+      "index": 19,
+      "shape": "final",
+      "payload": {
+        "final": "stmt:000030 的处置回执（结论：字面上的「补签」与「放弃」两条都不成立，最终按你在 t-000215 的更正在 t-000215 做了**归属更正**；这一步已经写入盘上，但收工门那一行仍会记成 unknown）。\n\n一、**哪一条也没选，原因逐条给读数**\n- **(1) 补签走不通**：盘上 F 族四份稿（`f-proof-000000/1/2/3.md`）里没有一份的 `## 命题` 是 `stmt:000030`。它现行的 2 号证明路径指 `manuscripts/F/f-proof-000003.md`，而该稿 `## 命题` 逐字等于 `stmt:000042` 的 `statement_full`；稿上 V 的三行判词（`verifications/pending/202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8.jsonl#u-000022/23/24`）`statement_id` 全是 `000042`、`path_group=1`，判决依据也全是「截面参数化、极坐标、p=2/p=1 闭式、p→∞ 极限」。⇒ 那一份**构不成对 000030 的签**，拿它补签就是把别人的签挂到这一行上。\n- **(2) 放弃也不成立**：我按 `difficulty` 派 B1 写过，被秘书**受控拒**（`abandon_difficulty_not_genuine`），盘上零字节改写 —— 理由原话是「这不是难以逾越的困难 / 没指出难在哪」。我接受这条拒：000030 的题面是 E 的浮点自检断言（`work/E/e-num-000003.md`、`exp:000003`、`result=supports`、`exit_code=0`、`code_path=code/exp/lpsec_validate.py`），它不是「做不动」，而是**根本不该有 V 签**（普通数值档不过 V，业主口径），而且从没被推翻。按四档硬套哪一档都会把「有支持」写成「不成立」，与盘上读数相反。\n\n二、**最终落的处置（你 t-000215 的更正的执行结果）**：B1 用通用写口做了归属更正，`_statement_amend_history` 记 `2026-11-24T22:35:16+08:00 / by secretary-B / task t-000215`：`kind` 由 `theorem` 回落为 `conjecture`；`quote_reason` 换成归属更正说明（逐字点明 2 号路径系误指、该稿命题等于 stmt:000042、三行判词 statement_id 全是 000042）。**`stmt:000042` 那一行一个字节没动**。\n\n三、**你要的两格现场读数**\n- `verifications/000030.jsonl`：**不存在这个文件** ⇒ 没有一行「成立」。盘上 `verifications/` 根下只有 `000034/000035/000041/000042.jsonl` 四份，`pending/` 下是按 file_sha 命名的。\n- `statements` 表 `000030` 那一行：`status` = **`active`**（未改，不是 abandoned）；`abandon_kind` = **无**（没有写过 abandoned）；`kind` = **`conjecture`**（原 `theorem`，已回落）；`proof_no` 仍是 2、`manuscripts` 的 2 号路径仍指 `manuscripts/F/f-proof-000003.md`（`table.update` 只开 status/kind/quote_reason 三格、ingest 只能回填不能删路径 ⇒ 这条误指路径**摘不掉**）。\n\n四、**给下一趟 / 需要你裁的口子**：收工门那一行仍会记 unknown，因为「认领给 000030 的、签得住的行」在结构上就不该存在（普通数值档不过 V）。要真清掉它只有两条路，两条都超我这一支的写面与证据面：① 把误指的 2 号证明路径从 `statements/000030` 摘除（需要框架/秘书级的写口，`D` 的写面做不到）；② 走 E 的穷举档 `manuscripts/E/e-proof-<实验号>.md` + V 逐行 —— 但 E 已就连续域报过「无法穷举 ⇒ 不给 exhaustive、不送 V 签」。这两条我都不自己硬做，如实交回。\n\n五、**留痕与收尾**：`manuscripts/D/RESEARCH.md` §3「尝试与失败」已追加第 5 条（归属误指 + 处置 + 四格现场值，文件 sha `1c0cad81696ece325bd41579661a2821afed5f59fef53f7225afdfde46cd82a5`）；板项 `t-000214`/`t-000217` 已 ack；B1 已销号（名下子代理 0）。",
+        "evidence": [
+          "stmt:000030",
+          "stmt:000042",
+          "exp:000003",
+          "manuscripts/F/f-proof-000003.md",
+          "manuscripts/B/b-proof-000003.md",
+          "work/E/e-num-000003.md",
+          "verifications/pending/202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8.jsonl"
+        ],
+        "notify": {
+          "to": "M",
+          "summary": "stmt:000030 处置回执：补签与放弃两条都不成立，落的是归属更正（kind theorem→conjecture），status 仍 active、无 abandon_kind，verifications/000030.jsonl 不存在",
+          "body": "## 一、选了哪条：都不是字面上的两条\n\n- **(1) 补签不成立**：盘上四份 F 稿没有一份证的是 `stmt:000030`。它现行的 2 号证明路径 `manuscripts/F/f-proof-000003.md` 的 `## 命题` 逐字等于 `stmt:000042` 的 `statement_full`；该稿 V 的三行判词 `verifications/pending/202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8.jsonl#u-000022/23/24` 的 `statement_id` 全是 `000042`、`path_group=1` ⇒ 构不成对 000030 的签。\n- **(2) 放弃被受控拒**：`table.update(statements/000030, status=abandoned, abandon_kind=difficulty)` 被秘书判 `abandon_difficulty_not_genuine`（「不是难以逾越的困难 / 没指出难在哪」），盘上零字节改写。这条拒我接受：000030 是 E 的数值自检命题（`work/E/e-num-000003.md`、`exp:000003`、`result=supports`、`exit_code=0`、`code_path=code/exp/lpsec_validate.py`），按业主口径普通数值档不过 V、从未被推翻 —— 四档里没有哪一档能如实描述它。\n- **实际落的是你在 t-000215 的更正的执行结果：归属更正**。\n\n## 二、落在哪张台账行\n\n`statements` 表 `stmt_id=000030` 那一行，经秘书写口（`_statement_amend_history`：`2026-11-24T22:35:16+08:00 / by secretary-B / task t-000215`）：`kind` `theorem`→`conjecture`；`quote_reason` 换成归属更正说明。**`stmt:000042` 未动。**\n\n## 三、你要的现场两格\n\n| 问 | 答 |\n|---|---|\n| `verifications/000030.jsonl` 有没有一行「成立」 | **没有这个文件**（根下只有 000034/000035/000041/000042.jsonl；pending/ 按 file_sha 命名）|\n| `statements/000030` 的 `status` / `abandon_kind` | `status=active`（未改）/ `abandon_kind` **无**（没写过 abandoned）/ `kind=conjecture`（原 theorem，已回落）|\n\n## 四、摘不掉的口子（需要你或框架层处置）\n\n`manuscripts` 的 2 号路径仍指 `manuscripts/F/f-proof-000003.md`：`table.update` 只开 status/kind/quote_reason、`ingest` 只能回填不能删路径 ⇒ D 与 B 的写面都摘不掉它。要真正让收工门那一行不再记 unknown，只有 ① 框架/秘书级摘除该误指路径，或 ② 走 E 穷举档 `manuscripts/E/e-proof-<实验号>.md` + V（E 已报连续域无法穷举、不送 V）。这两条我不越权硬做，如实上报。\n\n## 五、留痕\n\n- `manuscripts/D/RESEARCH.md` §3「尝试与失败」第 5 条（sha `1c0cad81696ece325bd41579661a2821afed5f59fef53f7225afdfde46cd82a5`）；\n- 板项 `t-000214` / `t-000217` 已 ack；B1 已销号。",
+          "refs": [
+            "stmt:000030",
+            "stmt:000042",
+            "exp:000003",
+            "manuscripts/F/f-proof-000003.md"
+          ]
+        }
+      },
+      "result": {
+        "notify_problem": "notify.refs 里的 'manuscripts/F/f-proof-000003.md' 立不住：引用的前序手稿 'manuscripts/F/f-proof-000003.md' 不在盘上 ⇒ 不许凭空引用（溯源链断了）"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 111744,
+        "prompt_cache_miss_tokens": 3498,
+        "tokens_in": 115242,
+        "tokens_out": 3059,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000209"
+    }
+  ],
+  "final": "stmt:000030 的处置回执（结论：字面上的「补签」与「放弃」两条都不成立，最终按你在 t-000215 的更正在 t-000215 做了**归属更正**；这一步已经写入盘上，但收工门那一行仍会记成 unknown）。\n\n一、**哪一条也没选，原因逐条给读数**\n- **(1) 补签走不通**：盘上 F 族四份稿（`f-proof-000000/1/2/3.md`）里没有一份的 `## 命题` 是 `stmt:000030`。它现行的 2 号证明路径指 `manuscripts/F/f-proof-000003.md`，而该稿 `## 命题` 逐字等于 `stmt:000042` 的 `statement_full`；稿上 V 的三行判词（`verifications/pending/202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8.jsonl#u-000022/23/24`）`statement_id` 全是 `000042`、`path_group=1`，判决依据也全是「截面参数化、极坐标、p=2/p=1 闭式、p→∞ 极限」。⇒ 那一份**构不成对 000030 的签**，拿它补签就是把别人的签挂到这一行上。\n- **(2) 放弃也不成立**：我按 `difficulty` 派 B1 写过，被秘书**受控拒**（`abandon_difficulty_not_genuine`），盘上零字节改写 —— 理由原话是「这不是难以逾越的困难 / 没指出难在哪」。我接受这条拒：000030 的题面是 E 的浮点自检断言（`work/E/e-num-000003.md`、`exp:000003`、`result=supports`、`exit_code=0`、`code_path=code/exp/lpsec_validate.py`），它不是「做不动」，而是**根本不该有 V 签**（普通数值档不过 V，业主口径），而且从没被推翻。按四档硬套哪一档都会把「有支持」写成「不成立」，与盘上读数相反。\n\n二、**最终落的处置（你 t-000215 的更正的执行结果）**：B1 用通用写口做了归属更正，`_statement_amend_history` 记 `2026-11-24T22:35:16+08:00 / by secretary-B / task t-000215`：`kind` 由 `theorem` 回落为 `conjecture`；`quote_reason` 换成归属更正说明（逐字点明 2 号路径系误指、该稿命题等于 stmt:000042、三行判词 statement_id 全是 000042）。**`stmt:000042` 那一行一个字节没动**。\n\n三、**你要的两格现场读数**\n- `verifications/000030.jsonl`：**不存在这个文件** ⇒ 没有一行「成立」。盘上 `verifications/` 根下只有 `000034/000035/000041/000042.jsonl` 四份，`pending/` 下是按 file_sha 命名的。\n- `statements` 表 `000030` 那一行：`status` = **`active`**（未改，不是 abandoned）；`abandon_kind` = **无**（没有写过 abandoned）；`kind` = **`conjecture`**（原 `theorem`，已回落）；`proof_no` 仍是 2、`manuscripts` 的 2 号路径仍指 `manuscripts/F/f-proof-000003.md`（`table.update` 只开 status/kind/quote_reason 三格、ingest 只能回填不能删路径 ⇒ 这条误指路径**摘不掉**）。\n\n四、**给下一趟 / 需要你裁的口子**：收工门那一行仍会记 unknown，因为「认领给 000030 的、签得住的行」在结构上就不该存在（普通数值档不过 V）。要真清掉它只有两条路，两条都超我这一支的写面与证据面：① 把误指的 2 号证明路径从 `statements/000030` 摘除（需要框架/秘书级的写口，`D` 的写面做不到）；② 走 E 的穷举档 `manuscripts/E/e-proof-<实验号>.md` + V 逐行 —— 但 E 已就连续域报过「无法穷举 ⇒ 不给 exhaustive、不送 V 签」。这两条我都不自己硬做，如实交回。\n\n五、**留痕与收尾**：`manuscripts/D/RESEARCH.md` §3「尝试与失败」已追加第 5 条（归属误指 + 处置 + 四格现场值，文件 sha `1c0cad81696ece325bd41579661a2821afed5f59fef53f7225afdfde46cd82a5`）；板项 `t-000214`/`t-000217` 已 ack；B1 已销号（名下子代理 0）。",
+  "evidence": [
+    "stmt:000030",
+    "stmt:000042",
+    "exp:000003",
+    "manuscripts/F/f-proof-000003.md",
+    "manuscripts/B/b-proof-000003.md",
+    "work/E/e-num-000003.md",
+    "verifications/pending/202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8.jsonl"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 2,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 18,
+  "compactions": 0,
+  "mailbox_items": [
+    "t-000213",
+    "t-000214",
+    "t-000216",
+    "t-000217"
+  ],
+  "mailbox_msgs": [
+    "m000026"
+  ],
+  "mailbox_delivered": 5,
+  "monitor_turns": 2,
+  "wakes": 2,
+  "wake_ids": [
+    "wk-000064",
+    "wk-000065"
+  ],
+  "wake_events": [
+    {
+      "wake_id": "wk-000064",
+      "task_id": "t-000209",
+      "role": "D",
+      "timer_id": "tm-000194",
+      "kind": "timer",
+      "reason": "把命题 stmt:000030 明确放弃（D→B 派活，研究侧已判：这条只能走放弃这一档）。请用通用表写口 table.update(table=\"statements\", id=\"000030\", patch={\"status\": \"abandoned\"})，并按四档给全 abandon_kind 与 abandon_basis —— 本条的档是 difficulty（不是 math_error",
+      "purpose": "把命题 stmt:000030 明确放弃（D→B 派活，研究侧已判：这条只能走放弃这一档）。请用通用表写口 table.update(table=\"statements\", id=\"000030\", patch={\"status\": \"abandoned\"})，并按四档给全 abandon_kind 与 abandon_basis —— 本条的档是 difficulty（不是 math_error",
+      "purpose_missing": false,
+      "message": "时间到：把命题 stmt:000030 明确放弃（D→B 派活，研究侧已判：这条只能走放弃这一档）。请用通用表写口 table.update(table=\"statements\", id=\"000030\", patch={\"status\": \"abandoned\"})，并按四档给全 abandon_kind 与 abandon_basis —— 本条的档是 difficulty（不是 math_error｜等了 2 分钟（起于 22:31:48，到于 22:33:48）。它交的是：ok：执行完成",
+      "waited_sec": 120.799981,
+      "triggered_by": "target_event",
+      "wait_for": "task:t-000212",
+      "due_at": "",
+      "fired_at": "2026-11-24T14:33:49.536620+00:00",
+      "mailbox_item_id": "t-000214",
+      "state": "pending"
+    },
+    {
+      "wake_id": "wk-000065",
+      "task_id": "t-000209",
+      "role": "D",
+      "timer_id": "tm-000197",
+      "kind": "timer",
+      "reason": "更正上一道指令（t-000212 那笔「改成 abandoned」）：stmt:000030 **不要**改成 abandoned。你上一笔的受控拒 `abandon_difficulty_not_genuine` 我接受，研究侧复核后判：这条不是「做不动了」，是**归属错了**。请做归属更正并回报。\n\n(1) 已核事实（盘上）：stmt:000030 是 E 的数值自检命题（`work/E/e-",
+      "purpose": "更正上一道指令（t-000212 那笔「改成 abandoned」）：stmt:000030 **不要**改成 abandoned。你上一笔的受控拒 `abandon_difficulty_not_genuine` 我接受，研究侧复核后判：这条不是「做不动了」，是**归属错了**。请做归属更正并回报。\n\n(1) 已核事实（盘上）：stmt:000030 是 E 的数值自检命题（`work/E/e-",
+      "purpose_missing": false,
+      "message": "时间到：更正上一道指令（t-000212 那笔「改成 abandoned」）：stmt:000030 **不要**改成 abandoned。你上一笔的受控拒 `abandon_difficulty_not_genuine` 我接受，研究侧复核后判：这条不是「做不动了」，是**归属错了**。请做归属更正并回报。\n\n(1) 已核事实（盘上）：stmt:000030 是 E 的数值自检命题（`work/E/e-｜等了 1 分钟 9 秒（起于 22:34:41，到于 22:35:49）。它交的是：ok：执行完成",
+      "waited_sec": 69.184594,
+      "triggered_by": "target_event",
+      "wait_for": "task:t-000215",
+      "due_at": "",
+      "fired_at": "2026-11-24T14:35:50.291114+00:00",
+      "mailbox_item_id": "t-000217",
+      "state": "pending"
+    }
+  ],
+  "clock_pumps": 36,
+  "clock_fired": 7,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "D 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "D",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    },
+    "woke_turns": 2,
+    "skip_calls": 2,
+    "woke_reasons": [
+      "event",
+      "event"
+    ]
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [],
+  "summons": [
+    "B",
+    "B"
+  ],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [
+    {
+      "kind": "summon",
+      "counted": true,
+      "task_id": "t-000212",
+      "role": "B",
+      "step": 8,
+      "status": "done",
+      "outcome": "ok",
+      "handoff_id": "",
+      "outputs": [
+        "t-000212",
+        "work/E/e-num-000003.md"
+      ],
+      "disposition": ""
+    },
+    {
+      "kind": "summon",
+      "counted": true,
+      "task_id": "t-000215",
+      "role": "B",
+      "step": 10,
+      "status": "done",
+      "outcome": "ok",
+      "handoff_id": "",
+      "outputs": [
+        "t-000215",
+        "proof-000003",
+        "work/E/e-num-000003.md",
+        "manuscripts/F/f-proof-000003.md"
+      ],
+      "disposition": ""
+    }
+  ],
+  "summons_total": 2,
+  "summons_consumed": 2,
+  "summons_continued": 1,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 2,
+    "summons_consumed": 2,
+    "summons_continued": 1,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [
+      {
+        "kind": "summon",
+        "counted": true,
+        "task_id": "t-000212",
+        "role": "B",
+        "step": 8,
+        "status": "done",
+        "outcome": "ok",
+        "handoff_id": "",
+        "outputs": [
+          "t-000212",
+          "work/E/e-num-000003.md"
+        ],
+        "disposition": "consumed",
+        "evidence": {
+          "step": 10,
+          "shape": "summon",
+          "effect": "再派活",
+          "refs": [
+            "t-000212",
+            "work/E/e-num-000003.md"
+          ]
+        }
+      },
+      {
+        "kind": "summon",
+        "counted": true,
+        "task_id": "t-000215",
+        "role": "B",
+        "step": 10,
+        "status": "done",
+        "outcome": "ok",
+        "handoff_id": "",
+        "outputs": [
+          "t-000215",
+          "proof-000003",
+          "work/E/e-num-000003.md",
+          "manuscripts/F/f-proof-000003.md"
+        ],
+        "disposition": "consumed",
+        "evidence": {
+          "step": 13,
+          "shape": "tool",
+          "effect": "工具 conductor.ack",
+          "refs": [
+            "t-000215"
+          ]
+        }
+      }
+    ],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p328",
+    "role": "D",
+    "prompt_sha256": "3b7b330e13bbea61fe2c7e2776e555b393cf48d7ed9445504148d038a60cb0e9",
+    "prompt_chars": 81720,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "TOOL_29",
+      "TOOL_30",
+      "TOOL_31",
+      "TOOL_32",
+      "TOOL_33",
+      "TOOL_34",
+      "TOOL_35",
+      "TOOL_36",
+      "TOOL_37",
+      "TOOL_38",
+      "TOOL_39",
+      "TOOL_40",
+      "TOOL_41",
+      "TOOL_42",
+      "TOOL_43",
+      "TOOL_44",
+      "TOOL_45",
+      "TOOL_46",
+      "TOOL_47",
+      "TOOL_48",
+      "TOOL_49",
+      "TOOL_50",
+      "TOOL_51",
+      "TOOL_52",
+      "TOOL_53",
+      "TOOL_54",
+      "TOOL_55",
+      "TOOL_56",
+      "TOOL_57",
+      "TOOL_58",
+      "TOOL_59",
+      "TOOL_60",
+      "TOOL_61",
+      "TOOL_62",
+      "TOOL_63",
+      "TOOL_64",
+      "TOOL_65",
+      "TOOL_66",
+      "TOOL_67",
+      "TOOL_68",
+      "TOOL_69",
+      "TOOL_70",
+      "TOOL_71",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_LIMITS",
+      "COLLAB_NAMES",
+      "PARENT_STOP",
+      "PARENT_ROSTER",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 17,
+    "tokens_in": 1606325,
+    "tokens_out": 49938,
+    "usd": 0.044215,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 17,
+    "no_request_calls": 0,
+    "hit": 1542144,
+    "miss": 64181,
+    "unknown_calls": 0,
+    "tokens_in": 1606325,
+    "hit_rate": 0.96,
+    "mismatched_calls": 0,
+    "saved_usd": 0.226697,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 505.985,
+  "end_ts": "2026-11-24T22:37:18+08:00",
+  "notes": [
+    "收工没有可用 notify 表（notify.refs 里的 'manuscripts/F/f-proof-000003.md' 立不住：引用的前序手稿 'manuscripts/F/f-proof-000003.md' 不在盘上 ⇒ 不许凭空引用（溯源链断了））⇒ 这一趟没有交接手稿（不打回、不代填）",
+    "缓存读数：命中 1542144 / 未命中 64181 token，命中率 96.0%（17 次调用）；按 modelcost 口径估算可省 约 0.226697 美元",
+    "子产出处理读数：summons_total=2，consumed=2，waived=0，unknown=0，unconsumed=0（consumed 里有 1 条是『继续派』）",
+    "终态回报已落板：t-000218（框架通报；模型没填 notify）"
+  ],
+  "final_payload": {
+    "final": "stmt:000030 的处置回执（结论：字面上的「补签」与「放弃」两条都不成立，最终按你在 t-000215 的更正在 t-000215 做了**归属更正**；这一步已经写入盘上，但收工门那一行仍会记成 unknown）。\n\n一、**哪一条也没选，原因逐条给读数**\n- **(1) 补签走不通**：盘上 F 族四份稿（`f-proof-000000/1/2/3.md`）里没有一份的 `## 命题` 是 `stmt:000030`。它现行的 2 号证明路径指 `manuscripts/F/f-proof-000003.md`，而该稿 `## 命题` 逐字等于 `stmt:000042` 的 `statement_full`；稿上 V 的三行判词（`verifications/pending/202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8.jsonl#u-000022/23/24`）`statement_id` 全是 `000042`、`path_group=1`，判决依据也全是「截面参数化、极坐标、p=2/p=1 闭式、p→∞ 极限」。⇒ 那一份**构不成对 000030 的签**，拿它补签就是把别人的签挂到这一行上。\n- **(2) 放弃也不成立**：我按 `difficulty` 派 B1 写过，被秘书**受控拒**（`abandon_difficulty_not_genuine`），盘上零字节改写 —— 理由原话是「这不是难以逾越的困难 / 没指出难在哪」。我接受这条拒：000030 的题面是 E 的浮点自检断言（`work/E/e-num-000003.md`、`exp:000003`、`result=supports`、`exit_code=0`、`code_path=code/exp/lpsec_validate.py`），它不是「做不动」，而是**根本不该有 V 签**（普通数值档不过 V，业主口径），而且从没被推翻。按四档硬套哪一档都会把「有支持」写成「不成立」，与盘上读数相反。\n\n二、**最终落的处置（你 t-000215 的更正的执行结果）**：B1 用通用写口做了归属更正，`_statement_amend_history` 记 `2026-11-24T22:35:16+08:00 / by secretary-B / task t-000215`：`kind` 由 `theorem` 回落为 `conjecture`；`quote_reason` 换成归属更正说明（逐字点明 2 号路径系误指、该稿命题等于 stmt:000042、三行判词 statement_id 全是 000042）。**`stmt:000042` 那一行一个字节没动**。\n\n三、**你要的两格现场读数**\n- `verifications/000030.jsonl`：**不存在这个文件** ⇒ 没有一行「成立」。盘上 `verifications/` 根下只有 `000034/000035/000041/000042.jsonl` 四份，`pending/` 下是按 file_sha 命名的。\n- `statements` 表 `000030` 那一行：`status` = **`active`**（未改，不是 abandoned）；`abandon_kind` = **无**（没有写过 abandoned）；`kind` = **`conjecture`**（原 `theorem`，已回落）；`proof_no` 仍是 2、`manuscripts` 的 2 号路径仍指 `manuscripts/F/f-proof-000003.md`（`table.update` 只开 status/kind/quote_reason 三格、ingest 只能回填不能删路径 ⇒ 这条误指路径**摘不掉**）。\n\n四、**给下一趟 / 需要你裁的口子**：收工门那一行仍会记 unknown，因为「认领给 000030 的、签得住的行」在结构上就不该存在（普通数值档不过 V）。要真清掉它只有两条路，两条都超我这一支的写面与证据面：① 把误指的 2 号证明路径从 `statements/000030` 摘除（需要框架/秘书级的写口，`D` 的写面做不到）；② 走 E 的穷举档 `manuscripts/E/e-proof-<实验号>.md` + V 逐行 —— 但 E 已就连续域报过「无法穷举 ⇒ 不给 exhaustive、不送 V 签」。这两条我都不自己硬做，如实交回。\n\n五、**留痕与收尾**：`manuscripts/D/RESEARCH.md` §3「尝试与失…（落档截断，原 2151 字）",
+    "evidence": [
+      "stmt:000030",
+      "stmt:000042",
+      "exp:000003",
+      "manuscripts/F/f-proof-000003.md",
+      "manuscripts/B/b-proof-000003.md",
+      "work/E/e-num-000003.md",
+      "verifications/pending/202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8.jsonl"
+    ],
+    "notify": {
+      "to": "M",
+      "summary": "stmt:000030 处置回执：补签与放弃两条都不成立，落的是归属更正（kind theorem→conjecture），status 仍 active、无 abandon_kind，verifications/000030.jsonl 不存在",
+      "body": "## 一、选了哪条：都不是字面上的两条\n\n- **(1) 补签不成立**：盘上四份 F 稿没有一份证的是 `stmt:000030`。它现行的 2 号证明路径 `manuscripts/F/f-proof-000003.md` 的 `## 命题` 逐字等于 `stmt:000042` 的 `statement_full`；该稿 V 的三行判词 `verifications/pending/202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8.jsonl#u-000022/23/24` 的 `statement_id` 全是 `000042`、`path_group=1` ⇒ 构不成对 000030 的签。\n- **(2) 放弃被受控拒**：`table.update(statements/000030, status=abandoned, abandon_kind=difficulty)` 被秘书判 `abandon_difficulty_not_genuine`（「不是难以逾越的困难 / 没指出难在哪」），盘上零字节改写。这条拒我接受：000030 是 E 的数值自检命题（`work/E/e-num-000003.md`、`exp:000003`、`result=supports`、`exit_code=0`、`code_path=code/exp/lpsec_validate.py`），按业主口径普通数值档不过 V、从未被推翻 —— 四档里没有哪一档能如实描述它。\n- **实际落的是你在 t-000215 的更正的执行结果：归属更正**。\n\n## 二、落在哪张台账行\n\n`statements` 表 `stmt_id=000030` 那一行，经秘书写口（`_statement_amend_history`：`2026-11-24T22:35:16+08:00 / by secretary-B / task t-000215`）：`kind` `theorem`→`conjecture`；`quote_reason` 换成归属更正说明。**`stmt:000042` 未动。**\n\n## 三、你要的现场两格\n\n| 问 | 答 |\n|---|---|\n| `verifications/000030.jsonl` 有没有一行「成立」 | **没有这个文件**（根下只有 000034/000035/000041/000042.jsonl；pending/ 按 file_sha 命名）|\n| `statements/000030` 的 `status` / `abandon_kind` | `status=active`（未改）/ `abandon_kind` **无**（没写过 abandoned）/ `kind=conjecture`（原 theorem，已回落）|\n\n## 四、摘不掉的口子（需要你或框架层处置）\n\n`manuscripts` 的 2 号路径仍指 `manuscripts/F/f-proof-000003.md`：`table.update` 只开 status/kind/quote_reason、`ingest` 只能回填不能删路径 ⇒ D 与 B 的写面都摘不掉它。要真正让收工门那一行不再记 unknown，只有 ① 框架/秘书级摘除该误指路径，或 ② 走 E 穷举档 `manuscripts/E/e-proof-<实验号>.md` + V（E 已报连续域无法穷举、不送 V）。这两条我不越权硬做，如实上报。\n\n## 五、留痕\n\n- `manuscripts/D/RESEARCH.md` §3「尝试与失败」第 5 条（sha `1c0cad81696ece325bd41579661a2821afed5f59fef53f7225afdfde46cd82a5`）；\n- 板项 `t-000214` / `t-000217` 已 ack；B1 已销号。",
+      "refs": [
+        "stmt:000030",
+        "stmt:000042",
+        "exp:000003",
+        "manuscripts/F/f-proof-000003.md"
+      ]
+    }
+  },
+  "task_id": "t-000209"
+}

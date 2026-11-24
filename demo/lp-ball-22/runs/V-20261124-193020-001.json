@@ -1,0 +1,2371 @@
+{
+  "role": "V",
+  "task": "V：这一趟派给你的活是 —— 逐行走查 manuscripts/B/b-proof-000001.md 这一份证明稿（正文 sha 11164aee4f1b…，B 产出、尚未拿签）：按写成后的样子整体重读，逐条查硬禁令与同段依据，给两态结论（成立 ⇒ findings 为空；有毛病 ⇒ 每条 findings 带步号与非空 defect_step），并把签落在这一版正文上。稿头的命题号/标签我这一侧还请你照原样认；若稿上标的命题行与正文对不上，请在 findings 里点名，不要替我改稿。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/B/b-proof-000001.md"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# F 的证明手稿：给出显式门槛 P0，使 p ≥ P0 时面对角截面面积大于坐标向与体对角向（用 ‖·‖_p 与 ‖·‖_∞ 的夹逼 3…\n\n- 计划：000000 · 子目标：s3\n- 依赖面洗稿：已洗=true；执行者=secretary-F\n- 稿族：b-proof\n- 产出者：agent-B-B1\n- 正文sha：11164aee4f1b379663f59e8155dfd0f949925ac6c88d270f06af6871054c904a\n- 命题指纹：92396aa5a2eba07e4d1cfb51d32e8910632707ea05ae220189320627ada7b33f\n- 命题类型：conjecture\n- 登记时间：2026-11-24T18:45:47+08:00\n- 标签：B_p^3 中心截面面积公式与坐标向极值\n- 版本：2026-11-24T19:17:57+08:00@11164aee4f1b379663f59e8155dfd0f949925ac6c88d270f06af6871054c904a\n\n## 命题\n\n设 1 ≤ p < ∞，n ∈ R³ 为单位向量且 n 至少有一个坐标为 0。记 A_p(n) 为 B_p^3 = {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1} 与平面 n^⊥ 的交的二维 Lebesgue 面积，C_p := A_p(e_3)。则：(i) 若 i 是使 n_i = 0 的任一下标，则 A_p(n) = C_p·(Σ_{j≠i}|n_j|^p)^{-1/p}，右端不依赖 i 的选取，且 C_p = 4Γ(1+1/p)²/Γ(1+2/p)；(ii) 当 1 ≤ p < 2 时 A_p(n) ≤ C_p，等号成立当且仅当 n 是 ±坐标向量；(iii) 当 p > 2 时 A_p(n) ≥ C_p，等号成立当且仅当 n 是 ±坐标向量；(iv) p = 2 时对一切这样的 n 有 A_2(n) = π = C_2，且门槛 p = 2 是精确的：对每个 p ≠ 2，法向 n = (1,1,0)/√2 给出 A_p(n) ≠ C_p（p < 2 时严格小、p > 2 时严格大）。\n\n## 证明\n\n设 1 ≤ p < ∞，n 是 R³ 中的单位向量且至少有一个坐标为零。记 B_p^3 = {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}，A_p(n) 为 B_p^3 与平面 n^⊥ 的交在该平面上的二维 Lebesgue 面积，并记 C_p := A_p(e_3)。以下分四步：先把问题化到标准位置，再写出 A_p(n) 的闭式，然后比较它与 C_p 的大小，最后说明门槛 p = 2 是精确的。\n\n第一步是把问题化到标准位置。由于 B_p^3 在带符号坐标置换下不变（这类变换只是把 |x_1|,|x_2|,|x_3| 重新排列），而二维 Lebesgue 面积在平面的等距变换下不变，我们可以假设那个为零的坐标就是第三个，即 n = (a,b,0)，其中 a²+b² = 1。由这一对称性，一般情形的结论随之成立，而且最终表达式对「哪一个下标取零」并不敏感，这正是 (i) 中「右端不依赖 i 的选取」的来源。\n\n第二步取 n^⊥ 的一组单位正交基。令 u = (b,-a,0)、v = (0,0,1)。由 a²+b² = 1 直接验得 ‖u‖ = ‖v‖ = 1、u·v = 0、u·n = ab - ab = 0、v·n = 0，所以 {u,v} 确实是 n^⊥ 的单位正交基，映射 (s,z) ↦ s·u + z·v = (sb,-sa,z) 是 R² 到 n^⊥ 的等距同构，从而保持二维面积。\n\n把这个参数化代入约束：点 (sb,-sa,z) 落在 B_p^3 内当且仅当 |sb|^p + |sa|^p + |z|^p ≤ 1，也就是 m|s|^p + |z|^p ≤ 1，其中 m := |a|^p + |b|^p。因为 a²+b² = 1，故 m > 0，这一步不会退化。记 E := {(s,z) : m|s|^p+|z|^p ≤ 1}；由上面那个等距同构，A_p(n) = area(E)。\n\n第三步把 E 拉回标准区域 D_p := {(X,Y) : |X|^p+|Y|^p ≤ 1}。令 c := m^{1/p} > 0，考虑线性映射 T(s,z) := (cs,z)，其行列式为 det T = c。由 |cs|^p = m|s|^p 得：(s,z) ∈ E 当且仅当 T(s,z) ∈ D_p，即 T(E) = D_p；并且 T 是双射，逆映射为 (X,Y) ↦ (X/c,Y)。由面积在可逆线性映射下的变换律 area(T(E)) = |d…（落档截断，原 3619 字）",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/B/b-proof-000001.md",
+          "encoding": "utf-8",
+          "bytes_read": 5837,
+          "total_bytes": 5837,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 43,
+          "total_lines": 43,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 43 行",
+          "sha256": "0ce479010b27002734b63e61001887d9db6c5204d038b26574126f36bdc8dd28"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 36608,
+        "prompt_cache_miss_tokens": 1249,
+        "tokens_in": 37857,
+        "tokens_out": 63,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000064"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "statements",
+          "id": "000001"
+        },
+        "why": "读出在册命题 000001 的字面，与稿上 ## 命题 段逐条对照（台账一致角度）"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "stmt_id": "000001",
+          "origin": "external_lit",
+          "kind": "concept",
+          "label": "section",
+          "statement_text": "intersection of the unit cube with an (n-1)-dimensional subspace or hyperplane",
+          "statement_full": "intersection of the unit cube with an (n-1)-dimensional subspace or hyperplane",
+          "proof_text": "",
+          "source_lit_id": "000000",
+          "page_range": {
+            "start": 1,
+            "end": 1,
+            "label": "p. 1"
+          },
+          "quote_verified": null,
+          "quote_mode": "",
+          "quote_reason": "概念不参与等级链（`evidencebits.derive_grade` 对 concept 短路成 `not_applicable`）；定义来自 lit:000000",
+          "quote_span": "",
+          "quote_call_sha256": "",
+          "evidence_kind": "heuristic",
+          "bits": {
+            "numeric": "pending",
+            "proof": false,
+            "reviewed": false,
+            "formal": "pending",
+            "audited": false,
+            "origin": "external_lit",
+            "evidence": {
+              "numeric": {},
+              "numeric_reason": "",
+              "proof_process": "",
+              "proof_source": "",
+              "reviewed_by": {},
+              "reviewed_source": "",
+              "formal": {},
+              "formal_reason": "",
+              "audited_by": {}
+            },
+            "voided_by": {},
+            "grade": "not_applicable",
+            "audited_badge": false
+          },
+          "status": "active",
+          "derived_from": [],
+          "aliases": [
+            "hyperplane section"
+          ],
+          "doc_id": null,
+          "line_range": "",
+          "created_at": "2026-11-24T18:07:35+08:00",
+          "created_by": "secretary-B",
+          "proof_routes": {},
+          "route": ""
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "id": "000001",
+          "id_field": "stmt_id",
+          "found": true
+        },
+        "multi_call": {
+          "turn_index": 1,
+          "call_index": 0,
+          "calls": 2,
+          "step_index": 1
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 36992,
+        "prompt_cache_miss_tokens": 3592,
+        "tokens_in": 40584,
+        "tokens_out": 11429,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000064"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "attack_plans",
+          "id": "000000"
+        },
+        "why": "核对稿头「计划 000000 · 子目标 s3」与稿上命题是否对得上（B 让我点名对不上的命题行）"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "plan_id": "000000",
+          "problem": "三维 l^p 球 B_p^3 的中心截面面积 A(n) = area(B_p^3 ∩ n^⊥) 的最大方向问题，含三件事：(1) 1 ≤ p < 2 时坐标截面（闭式 4Γ(1+1/p)^2/Γ(1+2/p)）是否支配一切中心截面、等号是否只在 ±坐标向；(2) p 足够大时面对角向 (1,1,0)/√2 是否最大并给出显式门槛；(3) A_(1,1,1)(p) 与 A_(1,1,0)(p) 的交叉点 p* 的存在唯一性与两侧单调性。",
+          "problem_key": "lp3-max-central-section",
+          "for_question_id": null,
+          "status": "attacking",
+          "rounds": 8,
+          "budget": {
+            "max_rounds": 8,
+            "max_parallel_subgoals": 3,
+            "max_persist_attempts": 3,
+            "max_depth": 2
+          },
+          "subgoals": [
+            {
+              "sid": "s1",
+              "text": "把截面面积写成极坐标积分 A_p(n)=(1/2)∫_0^{2π}‖cosψ·u+sinψ·v‖_p^{-2}dψ（与基选取无关），定出坐标截面闭式 4Γ(1+1/p)^2/Γ(1+2/p)，并给出 p=1、p=2、p→∞ 在三类法向上的精确对照值",
+              "owner": "F",
+              "status": "blocked",
+              "evidence_ids": [],
+              "experiment_ids": [],
+              "proof_experiment_ids": [],
+              "blocked_reason": "交进来的产物没过既有校验（10 条）：steps[2] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）；steps[3] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）；steps[4] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）；steps[5] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）；steps[6] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）；steps[7] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）；steps[8] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）；steps[9] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）；steps[10] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）；steps[11] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）",
+              "attempts": 0,
+              "negation_kind": null,
+              "testable": "落成 manuscripts/F/f-proof-<稿号>.md（命题/证明/依赖三节），由 V 逐行走查后判『成立』",
+              "in_flight": false
+            },
+            {
+              "sid": "s2",
+              "text": "在 1 ≤ p < 2 上证明对每个单位法向 n 有 A_p(n) ≤ A_coord(p)，且等号只在 n 为 ±坐标向时取到",
+              "owner": "F",
+              "status": "in_progress",
+              "evidence_ids": [],
+              "experiment_ids": [],
+              "proof_experiment_ids": [],
+              "blocked_reason": "",
+              "attempts": 3,
+              "negation_kind": null,
+              "testable": "要么拿出 V 判『成立』的手稿；要么如实记卡点并点名缺的那一条引理（正定核/稳定分布表示）与它要证的式子",
+              "in_flight": false,
+              "tried_strategies": [
+                "归约"
+              ],
+              "waiting_on": [
+                "s5",
+                "s6",
+                "s7"
+              ]
+            },
+            {
+              "sid": "s3",
+              "text": "给出显式门槛 P0，使 p ≥ P0 时面对角截面面积大于坐标向与体对角向（用 ‖·‖_p 与 ‖·‖_∞ 的夹逼 3^{-2/p}A_∞ ≤ A_p ≤ A_∞ 与三个极限值 4、4√2、3√3 定常数）",
+              "owner": "F",
+              "status": "in_progress",
+              "evidence_ids": [],
+              "experiment_ids": [],
+              "proof_experiment_ids": [],
+              "blocked_reason": "",
+              "attempts": 4,
+              "negation_kind": null,
+              "testable": "显式常数 P0 与逐步不等式链落成手稿，并经 V 判『成立』（或如实报不等式链断在哪一步）",
+              "in_flight": false,
+              "tried_strategies": [
+                "套用已知定理"
+              ]
+            },
+            {
+              "sid": "s4",
+              "text": "交叉点 p*（A_(1,1,1)(p)=A_(1,1,0)(p)）的存在唯一性，以及 r_face=A_face/A_coord、r_diag=A_diag/A_coord 在 p 上的单调性",
+              "owner": "F",
+              "status": "todo",
+              "evidence_ids": [],
+              "experiment_ids": [],
+              "proof_experiment_ids": [],
+              "blocked_reason": "",
+              "attempts": 0,
+              "negation_kind": null,
+              "testable": "给出可判的单调性引理（含对 p 求导的符号判定）或闭式；做不到则记卡点并点名缺的引理，不写成定理"
+            },
+            {
+              "sid": "s5",
+              "text": "R1 极坐标表示：对每个单位 n∈R^3 和 n⊥ 的标准正交基 (u,v)，令 eθ=cosθ u+sinθ v，则 A_p(n)=(1/2)∫_0^{2π} ||eθ||_p^{-2} dθ；这给出任意法向截面的二维积分表达式。",
+              "owner": "F",
+              "status": "todo",
+              "evidence_ids": [],
+              "experiment_ids": [],
+              "proof_experiment_ids": [],
+              "blocked_reason": "",
+              "attempts": 0,
+              "negation_kind": null,
+              "testable": "取 p∈{1,1.5,1.9}，n∈{e3,(1,1,0)/√2,(1,1,1)/√3}；对 e3 与 (1,1,0)/√2 将 RHS 的 256 点周期 Gauss 积分与 stmt:000034 的闭式比较，要求相对误差<1e-9；对 (1,1,1)/√3 用自适应二维积分直接算 B_p^3∩n⊥ 的面积，要求相对误差<1e-5。"
+            },
+            {
+              "sid": "s6",
+              "text": "R2 正定核逐 t 比较：对每个 1≤p<2、t>0 以及任意 n⊥ 的标准正交基 (u,v)，有 ∫_0^{2π} exp(-t||cosθ u+sinθ v||_p^p) dθ ≤ ∫_0^{2π} exp(-t(|cosθ|^p+|sinθ|^p)) dθ。",
+              "owner": "F",
+              "status": "todo",
+              "evidence_ids": [],
+              "experiment_ids": [],
+              "proof_experiment_ids": [],
+              "blocked_reason": "",
+              "attempts": 0,
+              "negation_kind": null,
+              "testable": "在 p∈{1,1.1,...,1.9}、n 的球坐标网格 30×60、t∈{0.01,0.1,1,10,100} 上，用 256 点 θ 周期梯形积分计算左右差；要求所有网格点差值≥-1e-10；若某点<-1e-10，记录 (p,n,t) 作为反例请求复核。"
+            },
+            {
+              "sid": "s7",
+              "text": "R3 严格性判据：令 a_i=1-n_i^2，证明 ∫_0^{2π}||cosθ u+sinθ v||_p^p dθ=C_p∑_{i=1}^3 a_i^{p/2}，且 ∑ a_i^{p/2}≥2，等号只在 a 为 (1,1,0) 的排列；由此非坐标 n 时小 t 展开中核不等式严格，结合 R2 得到 A_p(n)<A_coord(p)。",
+              "owner": "F",
+              "status": "todo",
+              "evidence_ids": [],
+              "experiment_ids": [],
+              "proof_experiment_ids": [],
+              "blocked_reason": "",
+              "attempts": 0,
+              "negation_kind": null,
+              "testable": "对 p∈{1,1.25,1.5,1.75,1.9}，在 a_i∈[0,1]、∑a_i=2 的 2000 点网格上计算 S=∑a_i^{p/2}-2，检查最小值为 0 且仅在 (1,1,0) 排列处取到；再取 n(ε)=(sinε,0,cosε)，ε=1e-3，计算 L0(t)-Ln(t) 在 t=1e-4 的符号，要求为正。"
+            }
+          ],
+          "history": [
+            {
+              "round": 1,
+              "sid": "s1",
+              "action": "no_change",
+              "outcome": "no_change",
+              "detail": "子目标 s1 的这一轮**拒收**：你用 `attack.step(product=…)` 交进来的这一份没通过**既有的产物校验**（一条闸都没有放宽）。逐条如下：\n- steps[2] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）\n- steps[3] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）\n- steps[4] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）\n- steps[5] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）\n- steps[6] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）\n- steps[7] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）\n- steps[8] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）\n- steps[9] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）\n- steps[10] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）\n- steps[11] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）\n改这几处，再把同一份交一次（这一轮**没有落稿、没有登记**，也没有花推理的那一笔）",
+              "evidence": [],
+              "at": "2026-11-24T18:32:17+08:00",
+              "refusal": {
+                "kind": "handed_product_refused",
+                "problems": [
+                  "steps[2] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）",
+                  "steps[3] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）",
+                  "steps[4] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）",
+                  "steps[5] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）",
+                  "steps[6] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）",
+                  "steps[7] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）",
+                  "steps[8] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）",
+                  "steps[9] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）",
+                  "steps[10] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）",
+                  "steps[11] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）"
+                ],
+                "next_step": "按上面逐条改那几步 / 那几格，再把同一份 `product` 交一次（`attack.step(plan_id=…, product=…)`）",
+                "label": "B_p^3 截面极坐标公式、48 阶对称归约、坐标与面对角截面闭式（门槛精确为 p=2）"
+              }
+            },
+            {
+              "round": 2,
+              "sid": "s2",
+              "action": "no_change",
+              "outcome": "no_change",
+              "detail": "打回重写：依赖面这一遍核不过（dependency_row_unverified）⇒ 这一份**没有提交给 V**、也没有登记；共 4 条：第 27 行「【推导】B_p^3 就是 l_p 范数 ‖x‖_p = (／x／^p+／y／^…（已截断，原长 80 字）」写的是 stmt:000017（not_applicable），第 27 行点名的 `stmt:000017` 现在是 `not_applicable`，引用要求 pre_theorem 级及以上 ⇒ 怎么改：先让它过 V 的逐行走审站到 pre_theorem 级（或换一条已经够格的命题），再来引它；第 28 行「【推导】在平面 n^⊥ 内取正交基 u,v，把点写成 x = r(cosψ·u…（已截断，原长 80 字）」写的是 stmt:000018（not_applicable），第 28 行点名的 `stmt:000018` 现在是 `not_applicable`，引用要求 pre_theorem 级及以上 ⇒ 怎么改：先让它过 V 的逐行走审站到 pre_theorem 级（或换一条已经够格的命题），再来引它；第 29 行「【推导】(i) 中不变性的两条剩余部分：A_p(n) 只依赖平面 n^⊥（因为…（已截断，原长 80 字）」写的是 stmt:000016（not_applicable），第 29 行点名的 `stmt:000016` 现在是 `not_applicable`，引用要求 pre_theorem 级及以上 ⇒ 怎么改：先让它过 V 的逐行走审站到 pre_theorem 级（或换一条已经够格的命题），再来引它；第 30 行「【推导】取 n = e_3，则 n^⊥ = {(x,y,0)}，且 B_p^3…（已截断，原长 80 字）」写的是 stmt:000001（not_applicable），第 30 行点名的 `stmt:000001` 现在是 `not_applicable`，引用要求 pre_theorem 级及以上 ⇒ 怎么改：先让它过 V 的逐行走审站到 pre_theorem 级（或换一条已经够格的命题），再来引它；V 签：待签（这一份正文还没有一份能算数的签（state=unsigned）：这一版（1f6095c1b769…）没有任何台账行 ⇒ 一次都没送过 V（真的没审） ⇒ 派 V 审这一份、拿到签才算交差）—— 没签 ⇒ 这一趟不算交差；下一步：改完稿再跑一轮、由你派 V 审这一份；交差（逐条）：已签 0/0（待签 0 条、未签 0 条）。这一轮用的是你通过 `attack.step(product=…)` 交进来的那一份（label=截面极坐标公式、对称归约、坐标与面对角截面闭式及门槛精确为 p=2）",
+              "evidence": [],
+              "at": "2026-11-24T18:33:35+08:00",
+              "v_sign": {
+                "state": "waiting",
+                "label": "待签",
+                "delivered": false,
+                "channel": "",
+                "ledger": "",
+                "submitted": false,
+                "skipped": false,
+                "why": "这一份正文还没有一份能算数的签（state=unsigned）：这一版（1f6095c1b769…）没有任何台账行 ⇒ 一次都没送过 V（真的没审） ⇒ 派 V 审这一份、拿到签才算交差"
+              },
+              "delivery": {
+                "checked": true,
+                "total": 0,
+                "signed_count": 0,
+                "pending_count": 0,
+                "unsigned_count": 0,
+                "proof_count": 0,
+                "abandoned_count": 0,
+                "unfinished_count": 0,
+                "coverage": "",
+                "state": "researched_no_output",
+                "legal_stop": false,
+                "delivered": false
+              },
+              "delivered": false,
+              "self_assessment": {
+                "comprehensive": "partial",
+                "enough_output": "some_output",
+                "partial_output": "partial_output",
+                "next_move": "先把这一份（极坐标公式 + 48 阶对称归约 + 坐标/面对角闭式与门槛精确为 p=2）派 V 逐行走查；下一轮攻 (1) 的支配性 A_p(n) ≤ A_coord(p)（1≤p<2，等号只在 ±坐标向），卡点具体是：缺一条把球面平均化的上界工具（候选：(1/2)∫‖w‖_p^{-2} 在「法向变动」下的球谐展开首项非负性，或对 1≤p≤2 用 Fourier/正定分布那一类引理），可引池里没有任何 pre_theorem 级引理可用 ⇒ 这条要么补 A 的检索（Koldobsky 型定理），要么只到「有数值证据支持的猜想」那一档；(3) 的 p*≈4.9982 存在唯一性目前只有 E 的二分读数，缺体对角截面的闭式或单调性论证。",
+                "why": "本轮只交了能严格写下来的那部分（结构性/闭式/门槛），不用数值读数冒充定理；其余两块如实记为卡点，不写成定理。"
+              },
+              "deps_refused_findings": [
+                {
+                  "line": 27,
+                  "quote": "【推导】B_p^3 就是 l_p 范数 ‖x‖_p = (／x／^p+／y／^p+／z／^p)^{1/p} 的单位球（这正是该范数单位球的定义）；于是对任意 …",
+                  "got": "stmt:000017（not_applicable）",
+                  "expected": "pre_theorem 级及以上",
+                  "why": "第 27 行点名的 `stmt:000017` 现在是 `not_applicable`，引用要求 pre_theorem 级及以上",
+                  "how_to_fix": "先让它过 V 的逐行走审站到 pre_theorem 级（或换一条已经够格的命题），再来引它",
+                  "stmt_id": "000017",
+                  "where": "依赖段第 27 行（表里写用在哪一步：第 3 步）",
+                  "kind": "citation_below_proof_review",
+                  "fix": "先让它过 V 的逐行走审站到 pre_theorem 级（或换一条已经够格的命题），再来引它",
+                  "detail": "`stmt:000017`（在哪一步：依赖段第 27 行（表里写用在哪一步：第 3 步））· 类别：等级不到可引门槛（`citation_below_proof_review`） · 期望：pre_theorem 级及以上 · 实得：stmt:000017（not_applicable）（表里那一行的引文：【推导】B_p^3 就是 l_p 范数 ‖x‖_p = (／x／^p+／y／^p+／z／^p)^…） · 怎么改：先让它过 V 的逐行走审站到 pre_theorem 级（或换一条已经够格的命题），再来引它"
+                },
+                {
+                  "line": 28,
+                  "quote": "【推导】在平面 n^⊥ 内取正交基 u,v，把点写成 x = r(cosψ·u + sinψ·v)，则 x ∈ B_p^3 当且仅当 r ≤ ‖cosψ·u …",
+                  "got": "stmt:000018（not_applicable）",
+                  "expected": "pre_theorem 级及以上",
+                  "why": "第 28 行点名的 `stmt:000018` 现在是 `not_applicable`，引用要求 pre_theorem 级及以上",
+                  "how_to_fix": "先让它过 V 的逐行走审站到 pre_theorem 级（或换一条已经够格的命题），再来引它",
+                  "stmt_id": "000018",
+                  "where": "依赖段第 28 行（表里写用在哪一步：第 4 步）",
+                  "kind": "citation_below_proof_review",
+                  "fix": "先让它过 V 的逐行走审站到 pre_theorem 级（或换一条已经够格的命题），再来引它",
+                  "detail": "`stmt:000018`（在哪一步：依赖段第 28 行（表里写用在哪一步：第 4 步））· 类别：等级不到可引门槛（`citation_below_proof_review`） · 期望：pre_theorem 级及以上 · 实得：stmt:000018（not_applicable）（表里那一行的引文：【推导】在平面 n^⊥ 内取正交基 u,v，把点写成 x = r(cosψ·u + sinψ·v…） · 怎么改：先让它过 V 的逐行走审站到 pre_theorem 级（或换一条已经够格的命题），再来引它"
+                },
+                {
+                  "line": 29,
+                  "quote": "【推导】(i) 中不变性的两条剩余部分：A_p(n) 只依赖平面 n^⊥（因为它只由 n^⊥ 上的极坐标表达式决定），故 A_p(n) = A_p(-n)；又…",
+                  "got": "stmt:000016（not_applicable）",
+                  "expected": "pre_theorem 级及以上",
+                  "why": "第 29 行点名的 `stmt:000016` 现在是 `not_applicable`，引用要求 pre_theorem 级及以上",
+                  "how_to_fix": "先让它过 V 的逐行走审站到 pre_theorem 级（或换一条已经够格的命题），再来引它",
+                  "stmt_id": "000016",
+                  "where": "依赖段第 29 行（表里写用在哪一步：第 5 步）",
+                  "kind": "citation_below_proof_review",
+                  "fix": "先让它过 V 的逐行走审站到 pre_theorem 级（或换一条已经够格的命题），再来引它",
+                  "detail": "`stmt:000016`（在哪一步：依赖段第 29 行（表里写用在哪一步：第 5 步））· 类别：等级不到可引门槛（`citation_below_proof_review`） · 期望：pre_theorem 级及以上 · 实得：stmt:000016（not_applicable）（表里那一行的引文：【推导】(i) 中不变性的两条剩余部分：A_p(n) 只依赖平面 n^⊥（因为它只由 n^⊥ 上…） · 怎么改：先让它过 V 的逐行走审站到 pre_theorem 级（或换一条已经够格的命题），再来引它"
+                },
+                {
+                  "line": 30,
+                  "quote": "【推导】取 n = e_3，则 n^⊥ = {(x,y,0)}，且 B_p^3 ∩ n^⊥ = {(x,y,0) : ／x／^p+／y／^p ≤ 1}，即平面…",
+                  "got": "stmt:000001（not_applicable）",
+                  "expected": "pre_theorem 级及以上",
+                  "why": "第 30 行点名的 `stmt:000001` 现在是 `not_applicable`，引用要求 pre_theorem 级及以上",
+                  "how_to_fix": "先让它过 V 的逐行走审站到 pre_theorem 级（或换一条已经够格的命题），再来引它",
+                  "stmt_id": "000001",
+                  "where": "依赖段第 30 行（表里写用在哪一步：第 7 步）",
+                  "kind": "citation_below_proof_review",
+                  "fix": "先让它过 V 的逐行走审站到 pre_theorem 级（或换一条已经够格的命题），再来引它",
+                  "detail": "`stmt:000001`（在哪一步：依赖段第 30 行（表里写用在哪一步：第 7 步））· 类别：等级不到可引门槛（`citation_below_proof_review`） · 期望：pre_theorem 级及以上 · 实得：stmt:000001（not_applicable）（表里那一行的引文：【推导】取 n = e_3，则 n^⊥ = {(x,y,0)}，且 B_p^3 ∩ n^⊥ = …） · 怎么改：先让它过 V 的逐行走审站到 pre_theorem 级（或换一条已经够格的命题），再来引它"
+                }
+              ],
+              "deps_refused": "dependency_row_unverified",
+              "manuscript_path": "manuscripts/F/f-proof-000000.md"
+            },
+            {
+              "round": 3,
+              "sid": "s2",
+              "action": "proof",
+              "outcome": "progress",
+              "detail": "论证（（未声明））：10 步；这一轮是论证不是机器核验 ⇒ 子目标不关闭（FC-22）；手稿登记：`manuscripts/F/f-proof-000000.md`（一稿一份，正文 sha 4cb054c6745e…）；这一条还没有 statements 行 —— 等 B 在 V 签之后收录（既有认领路径）；登记那一刻手上的稿：`manuscript_source=param`、3140 字、依赖段 0 行；V 签：待签（这一份正文还没有一份能算数的签（state=unsigned）：这一版（4cb054c6745e…）没有任何台账行 ⇒ 一次都没送过 V（真的没审） ⇒ 派 V 审这一份、拿到签才算交差） —— 没签 ⇒ 这一趟不算交差；下一步：派 V 审这一份（`framework_summon` 形状：`role=\"V\"`，`task` 写清「审这一份证明稿 manuscripts/F/f-proof-000000.md」与要审什么）—— 拿到 V 签才算交差；派不出去（深度 / 边）就照实写进回报；秘书洗稿（secretary-F）：依赖面本来就合规（未改动） —— 交出去的是这一份；台账 `work/F/attack-000000.md`；交差（逐条）：已签 0/1（待签 1 条、未签 0 条） —— 不是「有一条签了」就算交差；还没签的成果（逐条）：mss:000000（手稿 manuscripts/F/f-proof-000000.md）[待签（还没 V 签，不算证明）] 共 1 条；怎么办由你定（举例：换一条证明路线重做那一步、把这条命题拆成几条更弱的引理、去补原证明里缺的工具/引理、减弱自己的断言（定理→条件性结论/猜想）），并把选择与理由写进 self_assessment.next_move / why。这一轮用的是你通过 `attack.step(product=…)` 交进来的那一份（label=截面极坐标公式 + 48 阶对称归约 + 坐标/面对角截面闭式（换元方向已按 V 的 finding 改正，门槛精确为 p=2））",
+              "evidence": [],
+              "at": "2026-11-24T18:37:57+08:00",
+              "product_detail": {
+                "product": "proof",
+                "label": "截面极坐标公式 + 48 阶对称归约 + 坐标/面对角截面闭式（换元方向已按 V 的 finding 改正，门槛精确为 p=2）",
+                "manuscript_id": "000000",
+                "self_assessment": {
+                  "comprehensive": "partial",
+                  "enough_output": "some_output",
+                  "partial_output": "partial_output",
+                  "next_move": "这一份改完立刻派 V 重审 manuscripts/F/f-proof-000000.md（只带 proof_manuscript）；拿到签后继续攻 s1（1≤p<2 的支配性 A_p(n) ≤ A_coord(p)）与 s3（p* 存在唯一与两侧单调），卡点是可引池 0 条 pre_theorem ⇒ 支配性缺一条把 A_p(n) 逐法向平均化的上界工具。",
+                  "why": "只交能严格写下来的结构性/闭式/门槛这一块；数值读数不当定理，其余如实记为卡点。"
+                },
+                "proposition": "设 1 ≤ p < ∞，n ∈ R³ 为单位向量，A_p(n) 表示 B_p^3 = {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1} 与平面 n^⊥ 的交的二维 Lebesgue 面积。则对每个这样的 p 与每个单位 n：(i) A_p(n) = (1/2)∫_0^{2π} ‖cosψ·u + sinψ·v‖_p^{-2} dψ，其中 u,v 是 n^⊥ 的任意一组单位正交基，该值不随基的选取而变，A_p(n) 只依赖 n^⊥（从而 A_p(n) = A_p(-n)），并且在带符号坐标置换（把 B_p^3 映到自身的 48 阶变换）下不变；(ii) A_p(e_3) = 4Γ(1+1/p)²/Γ(1+2/p)；(iii) A_p((1,1,0)/√2) = 2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p)，故 A_p((1,1,0)/√2) < A_p(e_3) 当且仅当 p < 2，两者相等当且仅当 p = 2，前者大于后者当且仅当 p > 2；(iv) p = 2 时 A_2(n) = π 对一切单位 n 成立；(v) p = 1 时 A_1(e_3) = 2、A_1((1,1,0)/√2) = √2、A_1((1,1,1)/√3) = 3√3/4。",
+                "steps": [
+                  {
+                    "n": 1,
+                    "text": "【前提】固定 1 ≤ p < ∞ 与单位向量 n ∈ R³；B_p^3 := {x ∈ R³ : |x_1|^p + |x_2|^p + |x_3|^p ≤ 1}；A_p(n) := B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；取 n^⊥ 的一对单位正交基 (u, v)。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "前提步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 2,
+                    "text": "【前提】在 n^⊥ 上取极坐标 x = r(cosψ·u + sinψ·v)，r ≥ 0，ψ ∈ [0, 2π)，记 w(ψ) := cosψ·u + sinψ·v；对 x = r·w(ψ) 有 ‖x‖_p = r‖w(ψ)‖_p（r ≥ 0，l_p 范数正齐次），故 x ∈ B_p^3 ⟺ r ≤ 1/‖w(ψ)‖_p。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 2 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  },
+                  {
+                    "n": 3,
+                    "text": "【推导】由平面极坐标面积公式（Jacobi 因子 r）得 A_p(n) = ∫_0^{2π}∫_0^{1/‖w(ψ)‖_p} r dr dψ = (1/2)∫_0^{2π}‖w(ψ)‖_p^{-2} dψ。换成另一对单位正交基 (u',v') 只使 ψ ↦ ±ψ + ψ_0（整周期上的平移与反向），积分值不变；又 n^⊥ = (-n)^⊥，故 A_p(n) = A_p(-n)。这给出 (i) 的前半。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 3 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  },
+                  {
+                    "n": 4,
+                    "text": "【推导】设 σ 为任一带符号坐标置换矩阵（2³·3! = 48 个），则 σ 正交且 |(σx)_i| 只是 |x_j| 的重排，故 σ(B_p^3) = B_p^3；同时 σ(n^⊥) = (σn)^⊥，而 σ 是等距同构、保二维 Lebesgue 面积，故 A_p(σn) = A_p(n)。这给出 (i) 的后半：A_p 只依赖排序后的 (|n_1|,|n_2|,|n_3|)。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 4 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  },
+                  {
+                    "n": 5,
+                    "text": "【推导】(ii)：n = e_3 时 n^⊥ = {(x,y,0)}，A_p(e_3) = area{(x,y) : |x|^p+|y|^p ≤ 1} = 4∫_0^1 (1-x^p)^{1/p} dx。代换 u = x^p（dx = (1/p)u^{1/p-1}du）得 A_p(e_3) = (4/p)∫_0^1 u^{1/p-1}(1-u)^{1/p}du = (4/p)B(1/p, 1+1/p) = (4/p)·Γ(1/p)Γ(1+1/p)/Γ(1+2/p)；再用 Γ(1+1/p) = (1/p)Γ(1/p)（即 Γ(1/p) = pΓ(1+1/p)）得 A_p(e_3) = 4Γ(1+1/p)²/Γ(1+2/p)。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "前提步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 6,
+                    "text": "【推导】(iii) 之截面形状：n = (1,1,0)/√2 时 n^⊥ = span{(1,-1,0)/√2, (0,0,1)}，这两向量单位正交；把 x ∈ n^⊥ 写成 x = s·(1,-1,0)/√2 + z·(0,0,1)，则 ‖x‖_p^p = 2|s/√2|^p + |z|^p = 2^{1-p/2}|s|^p + |z|^p，且 (s,z) 是正交坐标、面积元为 ds dz，故截面 = {(s,z) : 2^{1-p/2}|s|^p + |z|^p ≤ 1}。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 6 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  },
+                  {
+                    "n": 7,
+                    "text": "【推导】(iii) 之面积（上一版此处换元方向取反，现改正）：令 c := 2^{1/p-1/2} > 0，则 c^p = 2^{1-p/2}，于是「(s,z) 属于第 6 步的截面 ⟺ |cs|^p + |z|^p ≤ 1 ⟺ (cs,z) 属于 D_p := {(X,Y) : |X|^p+|Y|^p ≤ 1}」（两个方向是同一个等价式，故是双射）。取线性映射 T(s,z) := (cs,z)，det T = c，由 area(T(E)) = |det T|·area(E) 及 T(截面) = D_p 得 c·area(截面) = area(D_p)，即 area(截面) = c^{-1}·area(D_p) = 2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p)（末一步用第 5 步的 (ii)）。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 7 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  },
+                  {
+                    "n": 8,
+                    "text": "【推导】(iii) 之比较：正因子 2^{1/2-1/p} 与 1 的大小比较等价于 1/2 - 1/p 与 0 的比较，等价于 p 与 2 的比较（p > 0）；结合第 7 步与第 5 步即得 (iii) 的三个结论（p < 2 时小、p = 2 时等、p > 2 时大）。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "前提步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 9,
+                    "text": "【推导】(iv)：p = 2 时 B_2^3 是欧氏单位球，任一过原点的平面截得半径 1 的圆盘，面积 π；与 (ii) 的闭式在 p = 2 的取值对照：4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π，两者一致。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "前提步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 10,
+                    "text": "【推导】(v)：p = 1 时 B_1^3 是正八面体。(a) n = e_3：截面 {|x|+|y| ≤ 1} 是两条对角线长都为 2 的菱形，面积 2。(b) n = (1,1,0)/√2：由第 6 步在 p = 1 的特例（2^{1-1/2} = √2）截面为 √2|s| + |z| ≤ 1，顶点为 (±1/√2, 0), (0, ±1)，面积 = (1/2)·(2/√2)·2 = √2（与 (iii) 在 p = 1 的取值 2^{1/2-1}·2 = √2 一致）。(c) n = (1,1,1)/√3：n^⊥ = {x+y+z = 0}，B_1^3 ∩ n^⊥ 的顶点是 (±1/2, ∓1/2, 0) 一类共 6 个点（坐标置换与取反），它们共面、外接半径 |(1/2,-1/2,0)| = 1/√2，构成正六边形，面积 = (3√3/2)·(1/√2)² = 3√3/4。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "前提步",
+                    "problem": ""
+                  }
+                ],
+                "problems": [
+                  "第 2 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。",
+                  "第 3 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。",
+                  "第 4 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。",
+                  "第 6 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。",
+                  "第 7 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                ]
+              },
+              "product": "proof",
+              "strategy": "",
+              "best_partial": [],
+              "v_sign": {
+                "state": "waiting",
+                "label": "待签",
+                "delivered": false,
+                "channel": "",
+                "ledger": "",
+                "submitted": false,
+                "skipped": false,
+                "why": "这一份正文还没有一份能算数的签（state=unsigned）：这一版（4cb054c6745e…）没有任何台账行 ⇒ 一次都没送过 V（真的没审） ⇒ 派 V 审这一份、拿到签才算交差"
+              },
+              "delivery": {
+                "checked": true,
+                "total": 1,
+                "signed_count": 0,
+                "pending_count": 1,
+                "unsigned_count": 0,
+                "proof_count": 0,
+                "abandoned_count": 0,
+                "unfinished_count": 1,
+                "coverage": "0/1",
+                "state": "outputs_unsigned",
+                "legal_stop": false,
+                "delivered": false
+              },
+              "delivered": false,
+              "self_assessment": {
+                "comprehensive": "partial",
+                "enough_output": "some_output",
+                "partial_output": "partial_output",
+                "next_move": "这一份改完立刻派 V 重审 manuscripts/F/f-proof-000000.md（只带 proof_manuscript）；拿到签后继续攻 s1（1≤p<2 的支配性 A_p(n) ≤ A_coord(p)）与 s3（p* 存在唯一与两侧单调），卡点是可引池 0 条 pre_theorem ⇒ 支配性缺一条把 A_p(n) 逐法向平均化的上界工具。",
+                "why": "只交能严格写下来的结构性/闭式/门槛这一块；数值读数不当定理，其余如实记为卡点。"
+              },
+              "report_path": "work/F/attack-000000.md",
+              "proof_mode": "registered",
+              "proof_registered": true,
+              "proof_rewritten": false,
+              "proof_sha256": "4cb054c6745ec737591bd41c456ea83a22efa7fa072fbd8f529843d22bfa3c9f",
+              "proof_label": "F 攻坚 000000 子目标 s2",
+              "proof_section_hashes": {
+                "## 命题": "8ffdf8adf938d23a7116a86305621458a66cff13edcaafedbd80dd6abd7615f6",
+                "## 证明": "4cb054c6745ec737591bd41c456ea83a22efa7fa072fbd8f529843d22bfa3c9f",
+                "## 依赖": "7fcd8abd5277883007e9afe22310a4c0b10eb4c925a8a6e0a5e3221ff8a071a2"
+              },
+              "manuscript_migrated": false,
+              "manuscript_path": "manuscripts/F/f-proof-000000.md",
+              "manuscript_id": "000000",
+              "manuscript_id_source": "given"
+            },
+            {
+              "round": 4,
+              "sid": "s2",
+              "action": "reduction",
+              "outcome": "progress",
+              "detail": "归约（归约）：当前直接证明三维截面面积不等式缺少可操作的中间命题；选择归约是因为 R1 把目标降为二维周期积分，R2 把它降为可逐 t 检验的稳定核不等式，R3 把严格性降为凹函数端点极值。三条子目标都有明确参数域和数值判据，且合起来覆盖原子目标。；新子目标 ['s5', 's6', 's7']（每条都带可检验形式）；台账 `work/F/attack-000000.md`；交差（逐条）：已签 1/1（待签 0 条、未签 0 条）",
+              "evidence": [
+                "s5",
+                "s6",
+                "s7"
+              ],
+              "at": "2026-11-24T18:44:41+08:00",
+              "product_detail": {
+                "product": "reduction",
+                "strategy": "归约",
+                "why_strategy": "当前直接证明三维截面面积不等式缺少可操作的中间命题；选择归约是因为 R1 把目标降为二维周期积分，R2 把它降为可逐 t 检验的稳定核不等式，R3 把严格性降为凹函数端点极值。三条子目标都有明确参数域和数值判据，且合起来覆盖原子目标。",
+                "new_subgoals": [
+                  {
+                    "goal": "R1 极坐标表示：对每个单位 n∈R^3 和 n⊥ 的标准正交基 (u,v)，令 eθ=cosθ u+sinθ v，则 A_p(n)=(1/2)∫_0^{2π} ||eθ||_p^{-2} dθ；这给出任意法向截面的二维积分表达式。",
+                    "testable": "取 p∈{1,1.5,1.9}，n∈{e3,(1,1,0)/√2,(1,1,1)/√3}；对 e3 与 (1,1,0)/√2 将 RHS 的 256 点周期 Gauss 积分与 stmt:000034 的闭式比较，要求相对误差<1e-9；对 (1,1,1)/√3 用自适应二维积分直接算 B_p^3∩n⊥ 的面积，要求相对误差<1e-5。"
+                  },
+                  {
+                    "goal": "R2 正定核逐 t 比较：对每个 1≤p<2、t>0 以及任意 n⊥ 的标准正交基 (u,v)，有 ∫_0^{2π} exp(-t||cosθ u+sinθ v||_p^p) dθ ≤ ∫_0^{2π} exp(-t(|cosθ|^p+|sinθ|^p)) dθ。",
+                    "testable": "在 p∈{1,1.1,...,1.9}、n 的球坐标网格 30×60、t∈{0.01,0.1,1,10,100} 上，用 256 点 θ 周期梯形积分计算左右差；要求所有网格点差值≥-1e-10；若某点<-1e-10，记录 (p,n,t) 作为反例请求复核。"
+                  },
+                  {
+                    "goal": "R3 严格性判据：令 a_i=1-n_i^2，证明 ∫_0^{2π}||cosθ u+sinθ v||_p^p dθ=C_p∑_{i=1}^3 a_i^{p/2}，且 ∑ a_i^{p/2}≥2，等号只在 a 为 (1,1,0) 的排列；由此非坐标 n 时小 t 展开中核不等式严格，结合 R2 得到 A_p(n)<A_coord(p)。",
+                    "testable": "对 p∈{1,1.25,1.5,1.75,1.9}，在 a_i∈[0,1]、∑a_i=2 的 2000 点网格上计算 S=∑a_i^{p/2}-2，检查最小值为 0 且仅在 (1,1,0) 排列处取到；再取 n(ε)=(sinε,0,cosε)，ε=1e-3，计算 L0(t)-Ln(t) 在 t=1e-4 的符号，要求为正。"
+                  }
+                ],
+                "reason": "把 s2 的三维截面面积比较拆成三步：R1 将 A_p(n) 精确化为平面单位圆上的 l_p 范数倒数平方积分；R2 用 p-稳定分布特征函数 exp(-||·||_p^p) 把面积比较化为逐 t 的正定核平均值比较，不再直接处理三维凸体；R3 只用小 t 展开和凹函数 ∑a_i^{p/2} 的极值给出等号分类。R2 与 R3 合起来经 R1 的积分表示直接推出 A_p(n)≤A_coord(p) 且等号只在坐标法向。",
+                "self_assessment": {
+                  "comprehensive": "partial",
+                  "enough_output": "some_output",
+                  "partial_output": "partial_output",
+                  "next_move": "先按流程用 V 审 manuscripts/F/f-proof-000000.md；同时执行 R1 的 256 点 Gauss 校验和 R3 的 a_i 网格极值搜索，再把 R2 的核不等式按 t 与 p 分片，先证小 t 与大 t 两个端段。",
+                  "why": "上一轮已有证明稿待复核，本轮归约给出了可检验的中间命题；先让稿进入复核，再用数值网格锁定 R2 的分段策略，避免继续重写整条证明。"
+                }
+              },
+              "product": "reduction",
+              "strategy": "归约",
+              "best_partial": [],
+              "delivery": {
+                "checked": true,
+                "total": 1,
+                "signed_count": 1,
+                "pending_count": 0,
+                "unsigned_count": 0,
+                "proof_count": 1,
+                "abandoned_count": 0,
+                "unfinished_count": 0,
+                "coverage": "1/1",
+                "state": "signed_all",
+                "legal_stop": true,
+                "delivered": true
+              },
+              "delivered": true,
+              "self_assessment": {
+                "comprehensive": "partial",
+                "enough_output": "some_output",
+                "partial_output": "partial_output",
+                "next_move": "先按流程用 V 审 manuscripts/F/f-proof-000000.md；同时执行 R1 的 256 点 Gauss 校验和 R3 的 a_i 网格极值搜索，再把 R2 的核不等式按 t 与 p 分片，先证小 t 与大 t 两个端段。",
+                "why": "上一轮已有证明稿待复核，本轮归约给出了可检验的中间命题；先让稿进入复核，再用数值网格锁定 R2 的分段策略，避免继续重写整条证明。"
+              },
+              "report_path": "work/F/attack-000000.md",
+              "proof_registered": false,
+              "proof_rewritten": false,
+              "manuscript_migrated": false
+            },
+            {
+              "round": 5,
+              "sid": "s3",
+              "action": "proof",
+              "outcome": "progress",
+              "detail": "论证（（未声明））：10 步；这一轮是论证不是机器核验 ⇒ 子目标不关闭（FC-22）；手稿登记：`manuscripts/F/f-proof-000001.md`（一稿一份，正文 sha 6a6444ab3ab7…）；这一条还没有 statements 行 —— 等 B 在 V 签之后收录（既有认领路径）；登记那一刻手上的稿：`manuscript_source=param`、3103 字、依赖段 0 行；V 签：待签（这一份正文还没有一份能算数的签（state=unsigned）：这一版（6a6444ab3ab7…）没有任何台账行 ⇒ 一次都没送过 V（真的没审） ⇒ 派 V 审这一份、拿到签才算交差） —— 没签 ⇒ 这一趟不算交差；下一步：派 V 审这一份（`framework_summon` 形状：`role=\"V\"`，`task` 写清「审这一份证明稿 manuscripts/F/f-proof-000001.md」与要审什么）—— 拿到 V 签才算交差；派不出去（深度 / 边）就照实写进回报；秘书洗稿（secretary-F）：依赖面本来就合规（未改动） —— 交出去的是这一份；台账 `work/F/attack-000000.md`；交差（逐条）：已签 1/2（待签 1 条、未签 0 条） —— 不是「有一条签了」就算交差；还没签的成果（逐条）：mss:000001（手稿 manuscripts/F/f-proof-000001.md）[待签（还没 V 签，不算证明）] 共 1 条；怎么办由你定（举例：换一条证明路线重做那一步、把这条命题拆成几条更弱的引理、去补原证明里缺的工具/引理、减弱自己的断言（定理→条件性结论/猜想）），并把选择与理由写进 self_assessment.next_move / why。这一轮用的是你通过 `attack.step(product=…)` 交进来的那一份（label=零坐标法向族（n^⊥ 含坐标轴）的截面闭式与 p=2 精确门槛：坐标向在 1≤p<2 唯一最大、在 p>2 严格最小）",
+              "evidence": [],
+              "at": "2026-11-24T18:45:47+08:00",
+              "product_detail": {
+                "product": "proof",
+                "label": "零坐标法向族（n^⊥ 含坐标轴）的截面闭式与 p=2 精确门槛：坐标向在 1≤p<2 唯一最大、在 p>2 严格最小",
+                "manuscript_id": "000001",
+                "self_assessment": {
+                  "comprehensive": "partial",
+                  "enough_output": "some_output",
+                  "partial_output": "partial_output",
+                  "next_move": "把这一份（零坐标法向族 = n^⊥ 含坐标轴的那一族，含面对角向与全部坐标平面内的法向）立刻派 V 逐行走查；s2（结构与闭式、p=2 门槛）已有 V 签（mss:000000，sha 4cb054c6…，判『成立』）可交 D 携带给 B 收录。仍开着的两块如实记为卡点：(a) s1 的**全法向**支配性 A_p(n) ≤ C_p（1≤p<2，n 三坐标全非零的情形）—— 缺一条把法向参数化后逐点比较的上界工具（候选：对 n=(a,b,c) 用 n^⊥ 上的极坐标积分 + 对参数 (a,b,c) 的凹性/二阶变分，或 1≤p≤2 时 Koldobsky 型 Fourier/正定分布定理），可引池 0 条 pre_theorem ⇒ 无法把外部定理当引理引，需要 A 检索与 E 的更细方向扫描（尤其基本域内部 a<b<c 的网格加密与反例搜索）支撑到「有数值证据支持的猜想」；(b) s3 的 p* 存在唯一与两侧单调 —— 缺 A_(1,1,1)(p) 的闭式或单调性论证，目前只有 E 的二分读数 p*≈4.9982155968。",
+                  "why": "这一份是可严格写下来的**部分结果**：它把 E 扫描过的『面对角弧 + 坐标平面内一切法向』这一整族方向对全部 p 一次性解决（1≤p<2 坐标向唯一最大、p>2 坐标向严格最小、门槛恰好 p=2），但它**不是** s1 的全部（三坐标全非零的法向不在射程内），所以只按 partial_output 报，不当定理用。"
+                },
+                "proposition": "设 1 ≤ p < ∞，n ∈ R³ 为单位向量且 n 至少有一个坐标为 0。记 A_p(n) 为 B_p^3 = {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1} 与平面 n^⊥ 的交的二维 Lebesgue 面积，C_p := A_p(e_3)。则：(i) 若 i 是使 n_i = 0 的任一下标，则 A_p(n) = C_p·(Σ_{j≠i}|n_j|^p)^{-1/p}，右端不依赖 f(i) 的选取，且 C_p = 4Γ(1+1/p)²/Γ(1+2/p)；(ii) 当 1 ≤ p < 2 时 A_p(n) ≤ C_p，等号成立当且仅当 n 是 ±坐标向量（即 n 的三个坐标中恰有一个的绝对值为 1）；(iii) 当 p > 2 时 A_p(n) ≥ C_p，等号成立当且仅当 n 是 ±坐标向量；(iv) p = 2 时对一切这样的 n 有 A_2(n) = π，且门槛 p = 2 是精确的：对每个 p ≠ 2 都存在坐标为零的单位法向 n 使 A_p(n) ≠ C_p（例如 n = (0,1,1)/√2 给 A_p(n) = C_p·2^{1/2-1/p}）。",
+                "steps": [
+                  {
+                    "n": 1,
+                    "text": "设定与记号：1 ≤ p < ∞，n ∈ R³ 为单位向量，且存在下标 i 使 n_i = 0；把另外两个下标记为 j、k。A_p(n) 按命题定义为 B_p^3 ∩ n^⊥ 的二维 Lebesgue 面积，C_p := A_p(e_3)。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "前提步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 2,
+                    "text": "正交基与参数化：取 u := e_i（第 i 个坐标向量）、v := n_k e_j − n_j e_k。由 n_i = 0 与 |n| = 1 得 n_j² + n_k² = 1，故 |v| = sqrt(n_k² + n_j²) = 1、u·v = 0、u·n = n_i = 0、v·n = n_k n_j − n_j n_k = 0；于是 v ∈ n^⊥、u ∈ n^⊥，且 (u,v) 是 n^⊥ 的单位正交基，映射 (s,t) ↦ s·u + t·v 是 R² 到 n^⊥ 的等距线性双射，因而把二维 Lebesgue 测度原样搬过去（面积守恒）。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 2 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  },
+                  {
+                    "n": 3,
+                    "text": "平面内点的 l_p 范数：s·u + t·v = s·e_i + t·n_k·e_j − t·n_j·e_k，三个坐标分别是 s、t·n_k、−t·n_j，故 ‖s·u + t·v‖_p^p = |s|^p + |t·n_k|^p + |t·n_j|^p = |s|^p + σ|t|^p，其中 σ := |n_j|^p + |n_k|^p ≥ 0。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 3 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  },
+                  {
+                    "n": 4,
+                    "text": "截面的显式形状：由第 2 步的面积守恒与第 3 步的范数计算，A_p(n) = area{(s,t) ∈ R² : |s|^p + σ|t|^p ≤ 1} =: area(E_σ)。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "前提步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 5,
+                    "text": "把 E_σ 送到标准圆盘：线性映射 Φ(s,t) := (s, σ^{1/p} t) 的行列式为 σ^{1/p}，且 (s,t) ∈ E_σ ⇔ |s|^p + |σ^{1/p}t|^p ≤ 1 ⇔ Φ(s,t) ∈ D_p := {(y_1,y_2) : |y_1|^p + |y_2|^p ≤ 1}；故 area(E_σ) = σ^{-1/p}·area(D_p)。又 e_3^⊥ = {(x,y,0)} 与 B_p^3 的交恰是 D_p（第三坐标贡献 0），故 area(D_p) = A_p(e_3) = C_p，于是 A_p(n) = C_p·σ^{-1/p} = C_p·(Σ_{j≠i}|n_j|^p)^{-1/p}；由于 n_i = 0 时 n_j² + n_k² = 1 与 i 的选取无关，右端不依赖 i 的选取 —— 这就是 (i)。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 5 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  },
+                  {
+                    "n": 6,
+                    "text": "C_p 的闭式：C_p = area(D_p) = 4∫_0^1 (1−x^p)^{1/p} dx（第一象限内的矩形切片积分，四倍对称）。令 u = x^p，则 x = u^{1/p}、dx = (1/p)u^{1/p−1}du，故 C_p = (4/p)∫_0^1 u^{1/p−1}(1−u)^{1/p}du = (4/p)·B(1/p, 1+1/p) = (4/p)·Γ(1/p)Γ(1+1/p)/Γ(1+2/p)；再用 Γ(1+1/p) = (1/p)Γ(1/p) 即 Γ(1/p) = p·Γ(1+1/p)，得 C_p = 4Γ(1+1/p)²/Γ(1+2/p)。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 6 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  },
+                  {
+                    "n": 7,
+                    "text": "1 ≤ p < 2 的比较：由 n 为单位向量且 n_i = 0 得 |n_j|² + |n_k|² = 1。对 0 ≤ t ≤ 1 与 1 ≤ p ≤ 2 有 t^p ≥ t²（等号当且仅当 t ∈ {0,1}），故 σ = |n_j|^p + |n_k|^p ≥ |n_j|² + |n_k|² = 1，于是 A_p(n) = C_p·σ^{-1/p} ≤ C_p。若等号成立则 σ = 1，即逐项等号 |n_j|^p = |n_j|²、|n_k|^p = |n_k|²（1 ≤ p < 2 时被加项非负且每一项都满足 ≥，总和相等迫使逐项相等），于是 |n_j|,|n_k| ∈ {0,1}，配合 |n_j|²+|n_k|² = 1 得恰有一个为 1、另一个为 0，即 n 是 ±坐标向量（这就是 (ii)）。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 7 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  },
+                  {
+                    "n": 8,
+                    "text": "p > 2 的比较：对 0 ≤ t ≤ 1 与 p ≥ 2 有 t^p ≤ t²（等号当且仅当 t ∈ {0,1}），故 σ = |n_j|^p + |n_k|^p ≤ |n_j|² + |n_k|² = 1，于是 A_p(n) = C_p·σ^{-1/p} ≥ C_p；等号成立迫使 σ = 1 并逐项等号，与第 7 步同样的推理给出 |n_j|,|n_k| ∈ {0,1}，即 n 是 ±坐标向量（这就是 (iii)）。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 8 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  },
+                  {
+                    "n": 9,
+                    "text": "p = 2 与门槛的精确性：p = 2 时 σ = |n_j|² + |n_k|² = 1，故 A_2(n) = C_2 = 4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π，对一切这样的 n 成立（(iv) 的前半）。另一方面取 n = (0,1,1)/√2（单位、有零坐标，且 σ = 2·2^{-p/2} = 2^{1-p/2}），第 5 步给出 A_p(n) = C_p·2^{(p/2-1)/p} = C_p·2^{1/2-1/p}，它与 C_p 相等当且仅当 1/2 − 1/p = 0 即 p = 2；故对每个 p ≠ 2 都存在坐标为零的单位法向使 A_p(n) ≠ C_p，门槛 p = 2 精确（(iv) 的后半）。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 9 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  },
+                  {
+                    "n": 10,
+                    "text": "合并第 5、6 步得 (i) 的两部分；合并第 7 步得 (ii)；合并第 8 步得 (iii)；合并第 9 步得 (iv)。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "前提步",
+                    "problem": ""
+                  }
+                ],
+                "problems": [
+                  "第 2 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。",
+                  "第 3 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。",
+                  "第 5 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。",
+                  "第 6 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。",
+                  "第 7 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。",
+                  "第 8 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。",
+                  "第 9 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                ]
+              },
+              "product": "proof",
+              "strategy": "",
+              "best_partial": [],
+              "v_sign": {
+                "state": "waiting",
+                "label": "待签",
+                "delivered": false,
+                "channel": "",
+                "ledger": "",
+                "submitted": false,
+                "skipped": false,
+                "why": "这一份正文还没有一份能算数的签（state=unsigned）：这一版（6a6444ab3ab7…）没有任何台账行 ⇒ 一次都没送过 V（真的没审） ⇒ 派 V 审这一份、拿到签才算交差"
+              },
+              "delivery": {
+                "checked": true,
+                "total": 2,
+                "signed_count": 1,
+                "pending_count": 1,
+                "unsigned_count": 0,
+                "proof_count": 1,
+                "abandoned_count": 0,
+                "unfinished_count": 1,
+                "coverage": "1/2",
+                "state": "outputs_unsigned",
+                "legal_stop": false,
+                "delivered": false
+              },
+              "delivered": false,
+              "self_assessment": {
+                "comprehensive": "partial",
+                "enough_output": "some_output",
+                "partial_output": "partial_output",
+                "next_move": "把这一份（零坐标法向族 = n^⊥ 含坐标轴的那一族，含面对角向与全部坐标平面内的法向）立刻派 V 逐行走查；s2（结构与闭式、p=2 门槛）已有 V 签（mss:000000，sha 4cb054c6…，判『成立』）可交 D 携带给 B 收录。仍开着的两块如实记为卡点：(a) s1 的**全法向**支配性 A_p(n) ≤ C_p（1≤p<2，n 三坐标全非零的情形）—— 缺一条把法向参数化后逐点比较的上界工具（候选：对 n=(a,b,c) 用 n^⊥ 上的极坐标积分 + 对参数 (a,b,c) 的凹性/二阶变分，或 1≤p≤2 时 Koldobsky 型 Fourier/正定分布定理），可引池 0 条 pre_theorem ⇒ 无法把外部定理当引理引，需要 A 检索与 E 的更细方向扫描（尤其基本域内部 a<b<c 的网格加密与反例搜索）支撑到「有数值证据支持的猜想」；(b) s3 的 p* 存在唯一与两侧单调 —— 缺 A_(1,1,1)(p) 的闭式或单调性论证，目前只有 E 的二分读数 p*≈4.9982155968。",
+                "why": "这一份是可严格写下来的**部分结果**：它把 E 扫描过的『面对角弧 + 坐标平面内一切法向』这一整族方向对全部 p 一次性解决（1≤p<2 坐标向唯一最大、p>2 坐标向严格最小、门槛恰好 p=2），但它**不是** s1 的全部（三坐标全非零的法向不在射程内），所以只按 partial_output 报，不当定理用。"
+              },
+              "report_path": "work/F/attack-000000.md",
+              "proof_mode": "registered",
+              "proof_registered": true,
+              "proof_rewritten": false,
+              "proof_sha256": "6a6444ab3ab747d5b0738f14525ce27cb01a79a84a957c8c96ae2d82e1506640",
+              "proof_label": "F 攻坚 000000 子目标 s3",
+              "proof_section_hashes": {
+                "## 命题": "41447b17c390aa86bd72f3a1214d046c99b3a15a399075deb73d8393e477e5aa",
+                "## 证明": "6a6444ab3ab747d5b0738f14525ce27cb01a79a84a957c8c96ae2d82e1506640",
+                "## 依赖": "7fcd8abd5277883007e9afe22310a4c0b10eb4c925a8a6e0a5e3221ff8a071a2"
+              },
+              "manuscript_migrated": false,
+              "manuscript_path": "manuscripts/F/f-proof-000001.md",
+              "manuscript_id": "000001",
+              "manuscript_id_source": "given"
+            },
+            {
+              "round": 6,
+              "sid": "s3",
+              "action": "proof",
+              "outcome": "progress",
+              "detail": "论证（（未声明））：10 步；这一轮是论证不是机器核验 ⇒ 子目标不关闭（FC-22）；证明重写：`manuscripts/F/f-proof-000001.md`（一稿一份，正文 sha 98dcb95e251c…）；这一条还没有 statements 行 —— 等 B 在 V 签之后收录（既有认领路径）；只换了 `## 证明` 那一节（命题正文逐字节未动、没再登记）；登记那一刻手上的稿：`manuscript_source=param`、2441 字、依赖段 0 行；V 签：待签（这一份正文还没有一份能算数的签（state=unsigned）：这一版（98dcb95e251c…）没有任何台账行 ⇒ 一次都没送过 V（真的没审） ⇒ 派 V 审这一份、拿到签才算交差） —— 没签 ⇒ 这一趟不算交差；下一步：派 V 审这一份（`framework_summon` 形状：`role=\"V\"`，`task` 写清「审这一份证明稿 manuscripts/F/f-proof-000001.md」与要审什么）—— 拿到 V 签才算交差；派不出去（深度 / 边）就照实写进回报；秘书洗稿（secretary-F）：依赖面本来就合规（未改动） —— 交出去的是这一份；台账 `work/F/attack-000000.md`；交差（逐条）：已签 1/2（待签 1 条、未签 0 条） —— 不是「有一条签了」就算交差；还没签的成果（逐条）：mss:000001（手稿 manuscripts/F/f-proof-000001.md）[待签（还没 V 签，不算证明）] 共 1 条；怎么办由你定（举例：换一条证明路线重做那一步、把这条命题拆成几条更弱的引理、去补原证明里缺的工具/引理、减弱自己的断言（定理→条件性结论/猜想）），并把选择与理由写进 self_assessment.next_move / why。这一轮用的是你通过 `attack.step(product=…)` 交进来的那一份（label=零坐标法向族截面闭式与 p=2 精确门槛（按 V finding 收窄第 7/8 步的 p 区间后重交））",
+              "evidence": [],
+              "at": "2026-11-24T18:55:56+08:00",
+              "product_detail": {
+                "product": "proof",
+                "label": "零坐标法向族截面闭式与 p=2 精确门槛（按 V finding 收窄第 7/8 步的 p 区间后重交）",
+                "manuscript_id": "000001",
+                "self_assessment": {
+                  "comprehensive": "partial",
+                  "enough_output": "some_output",
+                  "partial_output": "partial_output",
+                  "next_move": "改稿（第 7 步 1≤p<2、第 8 步 p>2、第 10 步单独处理 p=2 与门槛精确性）已按 V 的两条 finding 定点修好，这一拍立刻派 V 重审 manuscripts/F/f-proof-000001.md（只带 proof_manuscript，不给命题号）；拿到『成立』就把 mss:000000 与 mss:000001 一起交 D 携带给 B 收录。仍开着的两块如实记为卡点：(a) s1 的全法向支配性（n 三个坐标全非零）—— 缺一条把法向参数化后逐点比较的上界工具，可引池 0 条 pre_theorem，需要 A 检索 l_p ball maximal hyperplane section 的已知定理 + E 在基本域内部做加密扫描/反例搜索；(b) s3 的 p* 存在唯一与两侧单调 —— 缺 A_(1,1,1)(p) 的闭式或单调性论证，目前只有 E 的二分读数 p*≈4.9982155968。",
+                  "why": "这一份是可严格写下来的部分结果（零坐标法向这一整族对全部 p 一次解决），不是 s1 的全部，所以只按 partial_output 报，不当定理用；V 的两条 finding 只动等号刻画的 p 区间，不重写整篇。"
+                },
+                "proposition": "设 1 ≤ p < ∞，n ∈ R³ 为单位向量且 n 至少有一个坐标为 0。记 A_p(n) 为 B_p^3 = {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1} 与平面 n^⊥ 的交的二维 Lebesgue 面积，C_p := A_p(e_3)。则：(i) 若 i 是使 n_i = 0 的任一下标，则 A_p(n) = C_p·(Σ_{j≠i}|n_j|^p)^{-1/p}，右端不依赖 i 的选取，且 C_p = 4Γ(1+1/p)²/Γ(1+2/p)；(ii) 当 1 ≤ p < 2 时 A_p(n) ≤ C_p，等号成立当且仅当 n 是 ±坐标向量；(iii) 当 p > 2 时 A_p(n) ≥ C_p，等号成立当且仅当 n 是 ±坐标向量；(iv) p = 2 时对一切这样的 n 有 A_2(n) = π = C_2，且门槛 p = 2 是精确的：对每个 p ≠ 2，法向 n = (1,1,0)/√2 给出 A_p(n) ≠ C_p（p < 2 时严格小、p > 2 时严格大）。",
+                "steps": [
+                  {
+                    "n": 1,
+                    "text": "前提：p ∈ [1,∞)，n 为单位向量且存在 i 使 n_i = 0；B_p^3 在带符号坐标置换下不变、二维面积在正交变换下不变，故不妨设 i = 3、n = (a,b,0) 且 a²+b² = 1。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 1 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  },
+                  {
+                    "n": 2,
+                    "text": "设 u = (b,-a,0)、v = (0,0,1)。由 a²+b² = 1 得 ‖u‖ = ‖v‖ = 1、u·v = 0、u·n = ab - ab = 0、v·n = 0，所以 {u,v} 是 n^⊥ 的单位正交基，参数化 x = s·u + z·v = (sb,-sa,z) 是 R² → n^⊥ 的等距同构。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 2 步：这一步被声明成前提，但它是推导步（正文带「所以」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  },
+                  {
+                    "n": 3,
+                    "text": "把该参数化代入约束：x ∈ B_p^3 ⟺ |sb|^p + |−sa|^p + |z|^p ≤ 1 ⟺ m|s|^p + |z|^p ≤ 1，其中 m := |a|^p+|b|^p ∈ (0,∞)（m > 0 因为 a²+b² = 1）。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "前提步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 4,
+                    "text": "记 E := {(s,z) : m|s|^p+|z|^p ≤ 1}。取 c := m^{1/p} > 0 与线性映射 T(s,z) := (cs,z)，则 det T = c，且 (s,z) ∈ E ⟺ |cs|^p+|z|^p ≤ 1 ⟺ T(s,z) ∈ D_p := {(X,Y) : |X|^p+|Y|^p ≤ 1}，即 T(E) = D_p。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "前提步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 5,
+                    "text": "由 area(T(E)) = |det T|·area(E) 与 T(E) = D_p 得 c·area(E) = area(D_p)，即 area(E) = c^{-1}·area(D_p) = m^{-1/p}·area(D_p)。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "前提步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 6,
+                    "text": "D_p 的面积为 C_p := 4Γ(1+1/p)²/Γ(1+2/p)：在第一象限用代换把 ∫∫_{|X|^p+|Y|^p≤1} 化为 ∫_0^1 4(1-u^p)^{1/p}du，再令 u = t^{1/p} 得 4p^{-1}B(1/p,1+1/p) = 4Γ(1/p)Γ(1+1/p)/Γ(1+2/p)，用 Γ(1/p) = pΓ(1+1/p) 即得（自足的 Beta 积分计算）。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "前提步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 7,
+                    "text": "合并上两步：A_p(n) = area(E) = C_p·m^{-1/p} = C_p·(|a|^p+|b|^p)^{-1/p} = C_p·(Σ_{j≠i}|n_j|^p)^{-1/p}；而 (a,b,0) 中两个非零坐标的对称性与所取零坐标位置的对称性说明右端与 i 的选取无关，故 (i) 成立。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 7 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  },
+                  {
+                    "n": 8,
+                    "text": "（p < 2 档，按上一条 finding 已把区间收窄为 1 ≤ p < 2）若 0 ≤ t ≤ 1 且 1 ≤ p < 2，则 t^p ≥ t²，且当 t ∈ (0,1) 时严格大于；等号当且仅当 t ∈ {0,1}。于是 m = |a|^p+|b|^p ≥ a²+b² = 1，故 A_p(n) = C_p·m^{-1/p} ≤ C_p，等号当且仅当 m = 1，即 |a|,|b| ∈ {0,1}，即 n 为 ±坐标向量：这是 (ii)。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 8 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  },
+                  {
+                    "n": 9,
+                    "text": "（p > 2 档，同理收窄为 p > 2）若 0 ≤ t ≤ 1 且 p > 2，则 t^p ≤ t²，且当 t ∈ (0,1) 时严格小于；等号当且仅当 t ∈ {0,1}。于是 m ≤ a²+b² = 1，故 A_p(n) = C_p·m^{-1/p} ≥ C_p，等号当且仅当 n 为 ±坐标向量：这是 (iii)。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 9 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  },
+                  {
+                    "n": 10,
+                    "text": "（p = 2 档与门槛精确性，不含 t^p = t² 对全部 t 取等的断言）p = 2 时 m = |a|²+|b|² = a²+b² = 1，故 A_2(n) = C_2 = π 对每个这样的 n 成立，(iv) 前半成立；又对 n = (1,1,0)/√2 有 a = b = 2^{-1/2}，m = 2·2^{-p/2} = 2^{1-p/2}，故 p < 2 时 m > 1 ⇒ A_p(n) < C_p，p > 2 时 m < 1 ⇒ A_p(n) > C_p，即门槛 p = 2 精确，(iv) 后半成立。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 10 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  }
+                ],
+                "problems": [
+                  "第 1 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。",
+                  "第 2 步：这一步被声明成前提，但它是推导步（正文带「所以」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。",
+                  "第 7 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。",
+                  "第 8 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。",
+                  "第 9 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。",
+                  "第 10 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                ]
+              },
+              "product": "proof",
+              "strategy": "",
+              "best_partial": [],
+              "v_sign": {
+                "state": "waiting",
+                "label": "待签",
+                "delivered": false,
+                "channel": "",
+                "ledger": "",
+                "submitted": false,
+                "skipped": false,
+                "why": "这一份正文还没有一份能算数的签（state=unsigned）：这一版（98dcb95e251c…）没有任何台账行 ⇒ 一次都没送过 V（真的没审） ⇒ 派 V 审这一份、拿到签才算交差"
+              },
+              "delivery": {
+                "checked": true,
+                "total": 2,
+                "signed_count": 1,
+                "pending_count": 1,
+                "unsigned_count": 0,
+                "proof_count": 1,
+                "abandoned_count": 0,
+                "unfinished_count": 1,
+                "coverage": "1/2",
+                "state": "outputs_unsigned",
+                "legal_stop": false,
+                "delivered": false
+              },
+              "delivered": false,
+              "self_assessment": {
+                "comprehensive": "partial",
+                "enough_output": "some_output",
+                "partial_output": "partial_output",
+                "next_move": "改稿（第 7 步 1≤p<2、第 8 步 p>2、第 10 步单独处理 p=2 与门槛精确性）已按 V 的两条 finding 定点修好，这一拍立刻派 V 重审 manuscripts/F/f-proof-000001.md（只带 proof_manuscript，不给命题号）；拿到『成立』就把 mss:000000 与 mss:000001 一起交 D 携带给 B 收录。仍开着的两块如实记为卡点：(a) s1 的全法向支配性（n 三个坐标全非零）—— 缺一条把法向参数化后逐点比较的上界工具，可引池 0 条 pre_theorem，需要 A 检索 l_p ball maximal hyperplane section 的已知定理 + E 在基本域内部做加密扫描/反例搜索；(b) s3 的 p* 存在唯一与两侧单调 —— 缺 A_(1,1,1)(p) 的闭式或单调性论证，目前只有 E 的二分读数 p*≈4.9982155968。",
+                "why": "这一份是可严格写下来的部分结果（零坐标法向这一整族对全部 p 一次解决），不是 s1 的全部，所以只按 partial_output 报，不当定理用；V 的两条 finding 只动等号刻画的 p 区间，不重写整篇。"
+              },
+              "report_path": "work/F/attack-000000.md",
+              "proof_mode": "rewritten",
+              "proof_registered": false,
+              "proof_rewritten": true,
+              "proof_sha256": "98dcb95e251c610c23787098370515d5602c98c98b1a8b85995ebad682d4dec0",
+              "proof_label": "F 攻坚 000000 子目标 s3",
+              "proof_section_hashes": {
+                "## 命题": "92396aa5a2eba07e4d1cfb51d32e8910632707ea05ae220189320627ada7b33f",
+                "## 证明": "98dcb95e251c610c23787098370515d5602c98c98b1a8b85995ebad682d4dec0",
+                "## 依赖": "7fcd8abd5277883007e9afe22310a4c0b10eb4c925a8a6e0a5e3221ff8a071a2"
+              },
+              "manuscript_migrated": false,
+              "manuscript_path": "manuscripts/F/f-proof-000001.md",
+              "manuscript_id": "000001",
+              "manuscript_id_source": "given"
+            },
+            {
+              "round": 7,
+              "sid": "s3",
+              "action": "proof",
+              "outcome": "progress",
+              "detail": "论证（套用已知定理）：10 步；这一轮是论证不是机器核验 ⇒ 子目标不关闭（FC-22）；证明重写：`manuscripts/F/f-proof-000001.md`（一稿一份，正文 sha 4bf6d5a13be8…）；这一条还没有 statements 行 —— 等 B 在 V 签之后收录（既有认领路径）；只换了 `## 证明` 那一节（命题正文逐字节未动、没再登记）；登记那一刻手上的稿：`manuscript_source=param`、3435 字、依赖段 0 行；V 签：待签（这一份正文还没有一份能算数的签（state=unsigned）：这一版（4bf6d5a13be8…）没有任何台账行 ⇒ 一次都没送过 V（真的没审） ⇒ 派 V 审这一份、拿到签才算交差） —— 没签 ⇒ 这一趟不算交差；下一步：派 V 审这一份（`framework_summon` 形状：`role=\"V\"`，`task` 写清「审这一份证明稿 manuscripts/F/f-proof-000001.md」与要审什么）—— 拿到 V 签才算交差；派不出去（深度 / 边）就照实写进回报；秘书洗稿（secretary-F）：依赖面本来就合规（未改动） —— 交出去的是这一份；台账 `work/F/attack-000000.md`；交差（逐条）：已签 1/2（待签 1 条、未签 0 条） —— 不是「有一条签了」就算交差；还没签的成果（逐条）：mss:000001（手稿 manuscripts/F/f-proof-000001.md）[待签（还没 V 签，不算证明）] 共 1 条；怎么办由你定（举例：换一条证明路线重做那一步、把这条命题拆成几条更弱的引理、去补原证明里缺的工具/引理、减弱自己的断言（定理→条件性结论/猜想）），并把选择与理由写进 self_assessment.next_move / why。这一轮用的是你通过 `attack.step(product=…)` 交进来的那一份（label=零坐标法向族截面闭式与 p=2 精确门槛（第 6 步按 V 的 finding 补回 u=t^{1/p} 的 p^{-1} 因子后重交））",
+              "evidence": [],
+              "at": "2026-11-24T19:02:10+08:00",
+              "product_detail": {
+                "product": "proof",
+                "label": "零坐标法向族截面闭式与 p=2 精确门槛（第 6 步按 V 的 finding 补回 u=t^{1/p} 的 p^{-1} 因子后重交）",
+                "strategy": "套用已知定理",
+                "why_strategy": "核心是把截面在等距参数化下拉成「标准圆盘 + 一维尺度」，再用 Beta 积分闭式与 t^p 与 t² 的大小比较（1≤p<2 与 p>2 两个方向）一次定出整族的比较关系。",
+                "manuscript_id": "000001",
+                "self_assessment": {
+                  "comprehensive": "partial",
+                  "enough_output": "some_output",
+                  "partial_output": "partial_output",
+                  "next_move": "第 6 步按 V 的 finding 补回 u = t^{1/p} 的 p^{-1} 因子（并把第 7/8/10 步的 p 区间与等号刻画对齐），这一拍立刻派 V 重审 manuscripts/F/f-proof-000001.md 的现行正文；拿到干净『成立』之后把 mss:000000 与 mss:000001 一起交 D 携带给 B 收录。仍开着的两块如实记卡点：(a) s1 的全法向支配性 A_p(n) ≤ C_p（n 三个坐标全非零，1 ≤ p < 2）—— 缺一条把法向参数化后逐点比较的上界工具（候选：对 n=(a,b,c) 在 n^⊥ 上做极坐标积分再对参数做二阶变分，或 1≤p≤2 的 Fourier/正定分布型定理），可引池 0 条 pre_theorem ⇒ 外部定理不能当引理引，需要 A 检索 + E 在基本域内部加密扫描/找反例；(b) s3 的 p* 存在唯一与两侧单调 —— 缺 A_(1,1,1)(p) 的闭式或单调性论证，目前只有 E 的二分读数 p* ≈ 4.9982155968。",
+                  "why": "这一份是可严格写下来的部分结果（零坐标法向这一整族对全部 p 一次解决），不是 s1 的全部，所以按 partial_output 报、不当定理用；V 的两条 finding 都只动局部：第 6 步补因子、第 7/8 步收窄 p 区间，不重写整篇。"
+                },
+                "proposition": "设 1 ≤ p < ∞，n ∈ R³ 为单位向量且 n 至少有一个坐标为 0。记 A_p(n) 为 B_p^3 = {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1} 与平面 n^⊥ 的交的二维 Lebesgue 面积，C_p := A_p(e_3)。则：(i) 若 i 是使 n_i = 0 的任一下标，则 A_p(n) = C_p·(Σ_{j≠i}|n_j|^p)^{-1/p}，右端不依赖 i 的选取，且 C_p = 4Γ(1+1/p)²/Γ(1+2/p)；(ii) 当 1 ≤ p < 2 时 A_p(n) ≤ C_p，等号成立当且仅当 n 是 ±坐标向量；(iii) 当 p > 2 时 A_p(n) ≥ C_p，等号成立当且仅当 n 是 ±坐标向量；(iv) p = 2 时对一切这样的 n 有 A_2(n) = π = C_2，且门槛 p = 2 是精确的：对每个 p ≠ 2，法向 n = (1,1,0)/√2 给出 A_p(n) ≠ C_p（p < 2 时严格小、p > 2 时严格大）。",
+                "steps": [
+                  {
+                    "n": 1,
+                    "text": "前提：p ∈ [1,∞)，n 为单位向量且存在 i 使 n_i = 0；B_p^3 在带符号坐标置换下不变、二维 Lebesgue 面积在正交变换下不变，故不妨设 i = 3、n = (a,b,0) 且 a²+b² = 1。（前提：这一族法向恰是「n^⊥ 含某条坐标轴」的那些）",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 1 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  },
+                  {
+                    "n": 2,
+                    "text": "设 u = (b,-a,0)、v = (0,0,1)。由 a²+b² = 1 得 ‖u‖ = ‖v‖ = 1、u·v = 0、u·n = ab - ab = 0、v·n = 0，所以 {u,v} 是 n^⊥ 的单位正交基，参数化 x = s·u + z·v = (sb,-sa,z) 是 R² → n^⊥ 的等距同构。（前提：正交基的取法由 a²+b²=1 直接验出）",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 2 步：这一步被声明成前提，但它是推导步（正文带「所以」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  },
+                  {
+                    "n": 3,
+                    "text": "把参数化代入约束：x ∈ B_p^3 ⟺ |sb|^p + |-sa|^p + |z|^p ≤ 1 ⟺ m|s|^p + |z|^p ≤ 1，其中 m := |a|^p+|b|^p ∈ (0,∞)（m > 0 因为 a²+b² = 1）。（前提：这一步只是把定义代进去）",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "前提步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 4,
+                    "text": "记 E := {(s,z) : m|s|^p+|z|^p ≤ 1}。取 c := m^{1/p} > 0 与线性映射 T(s,z) := (cs,z)，则 det T = c，且 (s,z) ∈ E ⟺ |cs|^p+|z|^p ≤ 1 ⟺ T(s,z) ∈ D_p := {(X,Y) : |X|^p+|Y|^p ≤ 1}，即 T(E) = D_p（注意这一步的方向：c^p = m 保证把 E 送到标准圆盘，不是反过来）。（前提：c 的取法使两边的 |·|^p 系数对齐）",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "前提步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 5,
+                    "text": "由 area(T(E)) = |det T|·area(E) 与 T(E) = D_p 得 c·area(E) = area(D_p)，即 area(E) = c^{-1}·area(D_p) = area(D_p)·m^{-1/p}；记 C_p := area(D_p)，则 A_p(n) = area(E) = C_p·(|a|^p+|b|^p)^{-1/p}，这正是 (i) 的公式（右端只依赖那两个非零坐标的 |·|^p 之和，与「哪一个坐标为零」的选法无关）。（前提：面积在相似变换下的伸缩律）",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "前提步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 6,
+                    "text": "计算 C_p：由四个象限的对称性 C_p = 4∫_0^1 (1-t^p)^{1/p} dt；令 u = t^p（即 t = u^{1/p}、dt = p^{-1}u^{1/p-1}du，这里 p^{-1} 因子不可省）得 C_p = 4p^{-1}∫_0^1 (1-u)^{1/p} u^{1/p-1} du = 4p^{-1}B(1/p, 1+1/p) = 4Γ(1/p)Γ(1+1/p)/(p·Γ(1+2/p))，再由 Γ(1/p) = pΓ(1+1/p) 得 C_p = 4Γ(1+1/p)²/Γ(1+2/p)。（前提：Beta 积分的定义式与 Γ(x+1)=xΓ(x)；V 上一轮指出的漏因子 p^{-1} 已在此处补回）",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "前提步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 7,
+                    "text": "证 (ii)：设 1 ≤ p < 2，并设 n 是零坐标单位法向。由 |a| ≤ 1、|b| ≤ 1 与 1 ≤ p < 2 得 |a|^p ≥ |a|²、|b|^p ≥ |b|²，故 m = |a|^p+|b|^p ≥ a²+b² = 1，于是 A_p(n) = C_p·m^{-1/p} ≤ C_p。等号成立 ⟺ m = 1 ⟺ |a|^p = |a|² 且 |b|^p = |b|²（1 ≤ p < 2 时 t ↦ t^p 与 t ↦ t² 在 [0,1] 上只在 t ∈ {0,1} 取同值）⟺ |a|,|b| ∈ {0,1} ⟺ 结合 a²+b² = 1 得 (|a|,|b|) = (1,0) 或 (0,1)，即 n = ±e_1 或 ±e_2 为坐标向量。（前提：这一步只对 1 ≤ p < 2 成立，p = 2 由第 9 步单独处理）",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 7 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  },
+                  {
+                    "n": 8,
+                    "text": "证 (iii)：设 p > 2，并设 n 是零坐标单位法向。由 |a| ≤ 1、|b| ≤ 1 与 p > 2 得 |a|^p ≤ |a|²、|b|^p ≤ |b|²，故 m ≤ a²+b² = 1，于是 A_p(n) = C_p·m^{-1/p} ≥ C_p。等号成立 ⟺ m = 1 ⟺ |a|,|b| ∈ {0,1} ⟺ n 为 ±坐标向量。（前提：这一步只对 p > 2 成立）",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 8 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  },
+                  {
+                    "n": 9,
+                    "text": "证 (iv) 的前半：p = 2 时 m = a²+b² = 1，故 A_2(n) = C_2·1 = C_2，而 C_2 = 4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π，即一切零坐标单位法向都给 π。（前提：把 p=2 代回第 5、6 两步的公式）",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 9 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  },
+                  {
+                    "n": 10,
+                    "text": "证 (iv) 的后半（门槛精确性）：取 n = (1,1,0)/√2，则 a = b = 1/√2、m = 2·2^{-p/2} = 2^{1-p/2}，故 A_p(n) = C_p·m^{-1/p} = C_p·2^{1/p-1/2}。当 p < 2 时 1/p - 1/2 > 0 给 A_p(n) > C_p 的系数大于 1？不：1/p - 1/2 > 0 时 2^{1/p-1/2} > 1 —— 与 (ii) 的结论 A_p(n) ≤ C_p 矛盾，故改用 C_p 本身的含义核对：此处 m^{-1/p} = 2^{1/p-1/2}，在 p < 2 时 1/p > 1/2 给出 2^{1/p-1/2} > 1，而 (ii) 断言 A_p(n) ≤ C_p，两者只在 m ≥ 1 时相容；由 m = 2^{1-p/2} 与 p < 2 得 1 - p/2 > 0，m > 1，所以 m^{-1/p} < 1，即 2^{1/p-1/2} < 1，故 1/p - 1/2 < 0，即 p > 2 —— 这与 p < 2 冲突。（该子句按此改写：门槛精确性只由下表给出）对 n = (1,1,0)/√2：A_p(n) = C_p ✓ 当且仅当 m^{-1/p} = 1 当且仅当 m = 1 当且仅当 2^{1-p/2} = 1 当且仅当 p = 2；而 p < 2 时 m > 1 给 A_p(n) < C_p、p > 2 时 m < 1 给 A_p(n) > C_p。故 p = 2 是精确门槛。（前提：把 n = (1,1,0)/√2 代回 (i) 的公式并解 m = 1）",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 10 步：这一步被声明成前提，但它是推导步（正文带「所以」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  }
+                ],
+                "problems": [
+                  "第 1 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。",
+                  "第 2 步：这一步被声明成前提，但它是推导步（正文带「所以」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。",
+                  "第 7 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。",
+                  "第 8 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。",
+                  "第 9 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。",
+                  "第 10 步：这一步被声明成前提，但它是推导步（正文带「所以」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                ]
+              },
+              "product": "proof",
+              "strategy": "套用已知定理",
+              "best_partial": [],
+              "v_sign": {
+                "state": "waiting",
+                "label": "待签",
+                "delivered": false,
+                "channel": "",
+                "ledger": "",
+                "submitted": false,
+                "skipped": false,
+                "why": "这一份正文还没有一份能算数的签（state=unsigned）：这一版（4bf6d5a13be8…）没有任何台账行 ⇒ 一次都没送过 V（真的没审） ⇒ 派 V 审这一份、拿到签才算交差"
+              },
+              "delivery": {
+                "checked": true,
+                "total": 2,
+                "signed_count": 1,
+                "pending_count": 1,
+                "unsigned_count": 0,
+                "proof_count": 1,
+                "abandoned_count": 0,
+                "unfinished_count": 1,
+                "coverage": "1/2",
+                "state": "outputs_unsigned",
+                "legal_stop": false,
+                "delivered": false
+              },
+              "delivered": false,
+              "self_assessment": {
+                "comprehensive": "partial",
+                "enough_output": "some_output",
+                "partial_output": "partial_output",
+                "next_move": "第 6 步按 V 的 finding 补回 u = t^{1/p} 的 p^{-1} 因子（并把第 7/8/10 步的 p 区间与等号刻画对齐），这一拍立刻派 V 重审 manuscripts/F/f-proof-000001.md 的现行正文；拿到干净『成立』之后把 mss:000000 与 mss:000001 一起交 D 携带给 B 收录。仍开着的两块如实记卡点：(a) s1 的全法向支配性 A_p(n) ≤ C_p（n 三个坐标全非零，1 ≤ p < 2）—— 缺一条把法向参数化后逐点比较的上界工具（候选：对 n=(a,b,c) 在 n^⊥ 上做极坐标积分再对参数做二阶变分，或 1≤p≤2 的 Fourier/正定分布型定理），可引池 0 条 pre_theorem ⇒ 外部定理不能当引理引，需要 A 检索 + E 在基本域内部加密扫描/找反例；(b) s3 的 p* 存在唯一与两侧单调 —— 缺 A_(1,1,1)(p) 的闭式或单调性论证，目前只有 E 的二分读数 p* ≈ 4.9982155968。",
+                "why": "这一份是可严格写下来的部分结果（零坐标法向这一整族对全部 p 一次解决），不是 s1 的全部，所以按 partial_output 报、不当定理用；V 的两条 finding 都只动局部：第 6 步补因子、第 7/8 步收窄 p 区间，不重写整篇。"
+              },
+              "report_path": "work/F/attack-000000.md",
+              "proof_mode": "rewritten",
+              "proof_registered": false,
+              "proof_rewritten": true,
+              "proof_sha256": "4bf6d5a13be895edf10e13a0946081681cdf5220693093eb013c5ae787732d56",
+              "proof_label": "F 攻坚 000000 子目标 s3",
+              "proof_section_hashes": {
+                "## 命题": "92396aa5a2eba07e4d1cfb51d32e8910632707ea05ae220189320627ada7b33f",
+                "## 证明": "4bf6d5a13be895edf10e13a0946081681cdf5220693093eb013c5ae787732d56",
+                "## 依赖": "7fcd8abd5277883007e9afe22310a4c0b10eb4c925a8a6e0a5e3221ff8a071a2"
+              },
+              "manuscript_migrated": false,
+              "manuscript_path": "manuscripts/F/f-proof-000001.md",
+              "manuscript_id": "000001",
+              "manuscript_id_source": "given"
+            },
+            {
+              "round": 8,
+              "sid": "s3",
+              "action": "proof",
+              "outcome": "progress",
+              "detail": "论证（（未声明））：10 步；这一轮是论证不是机器核验 ⇒ 子目标不关闭（FC-22）；证明重写：`manuscripts/F/f-proof-000001.md`（一稿一份，正文 sha 6c6accee9f0d…）；这一条还没有 statements 行 —— 等 B 在 V 签之后收录（既有认领路径）；只换了 `## 证明` 那一节（命题正文逐字节未动、没再登记）；登记那一刻手上的稿：`manuscript_source=param`、2823 字、依赖段 0 行；V 签：待签（这一份正文还没有一份能算数的签（state=unsigned）：这一版（6c6accee9f0d…）没有任何台账行 ⇒ 一次都没送过 V（真的没审） ⇒ 派 V 审这一份、拿到签才算交差） —— 没签 ⇒ 这一趟不算交差；下一步：派 V 审这一份（`framework_summon` 形状：`role=\"V\"`，`task` 写清「审这一份证明稿 manuscripts/F/f-proof-000001.md」与要审什么）—— 拿到 V 签才算交差；派不出去（深度 / 边）就照实写进回报；秘书洗稿（secretary-F）：依赖面本来就合规（未改动） —— 交出去的是这一份；台账 `work/F/attack-000000.md`；交差（逐条）：已签 1/2（待签 1 条、未签 0 条） —— 不是「有一条签了」就算交差；还没签的成果（逐条）：mss:000001（手稿 manuscripts/F/f-proof-000001.md）[待签（还没 V 签，不算证明）] 共 1 条；怎么办由你定（举例：换一条证明路线重做那一步、把这条命题拆成几条更弱的引理、去补原证明里缺的工具/引理、减弱自己的断言（定理→条件性结论/猜想）），并把选择与理由写进 self_assessment.next_move / why。这一轮用的是你通过 `attack.step(product=…)` 交进来的那一份（label=零坐标法向族截面闭式与 p=2 精确门槛（第 10 步指数 2^{1/2-1/p} 按 V 的 defect_step=10 改正后重交））",
+              "evidence": [],
+              "at": "2026-11-24T19:08:26+08:00",
+              "product_detail": {
+                "product": "proof",
+                "label": "零坐标法向族截面闭式与 p=2 精确门槛（第 10 步指数 2^{1/2-1/p} 按 V 的 defect_step=10 改正后重交）",
+                "manuscript_id": "000001",
+                "self_assessment": {
+                  "comprehensive": "partial",
+                  "enough_output": "some_output",
+                  "partial_output": "partial_output",
+                  "next_move": "这一份改完立刻派 V 重审 manuscripts/F/f-proof-000001.md 的现行正文（只带 proof_manuscript，不给命题号）；拿到干净『成立』就把 mss:000000（已签）与 mss:000001 一起交 D 携带给 B 收录。仍开着的两块如实记卡点：(a) s1 的全法向支配性 A_p(n) ≤ C_p（n 三个坐标全非零，1 ≤ p < 2）—— 缺一条把法向参数化后逐点比较的上界工具，可引池 0 条 pre_theorem，需要 A 检索 l_p ball maximal hyperplane section 的已知定理 + E 在基本域内部加密扫描/找反例；(b) s3 的 p* 存在唯一与两侧单调 —— 缺 A_(1,1,1)(p) 的闭式或单调性论证，目前只有 E 的二分读数 p* ≈ 4.9982155968。",
+                  "why": "V 这一条的 finding 是纯符号错误（m^{-1/p} = 2^{1/2-1/p}，原稿写成 2^{1/p-1/2}），只改第 10 步那一处指数与据此的后段文字，其余九步逐字保留，不重写整篇。"
+                },
+                "proposition": "设 1 ≤ p < ∞，n ∈ R³ 为单位向量且 n 至少有一个坐标为 0。记 A_p(n) 为 B_p^3 = {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1} 与平面 n^⊥ 的交的二维 Lebesgue 面积，C_p := A_p(e_3)。则：(i) 若 i 是使 n_i = 0 的任一下标，则 A_p(n) = C_p·(Σ_{j≠i}|n_j|^p)^{-1/p}，右端不依赖 i 的选取，且 C_p = 4Γ(1+1/p)²/Γ(1+2/p)；(ii) 当 1 ≤ p < 2 时 A_p(n) ≤ C_p，等号成立当且仅当 n 是 ±坐标向量；(iii) 当 p > 2 时 A_p(n) ≥ C_p，等号成立当且仅当 n 是 ±坐标向量；(iv) p = 2 时对一切这样的 n 有 A_2(n) = π = C_2，且门槛 p = 2 是精确的：对每个 p ≠ 2，法向 n = (1,1,0)/√2 给出 A_p(n) ≠ C_p（p < 2 时严格小、p > 2 时严格大）。",
+                "steps": [
+                  {
+                    "n": 1,
+                    "text": "前提：p ∈ [1,∞)；n 为单位向量且存在下标 i 使 n_i = 0；B_p^3 在带符号坐标置换下不变、二维 Lebesgue 面积在平面的正交变换下不变，故不妨设 i = 3、n = (a,b,0) 且 a²+b² = 1。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 1 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  },
+                  {
+                    "n": 2,
+                    "text": "前提：取 u = (b,-a,0)、v = (0,0,1)。由 a²+b² = 1 直接验得 ‖u‖ = ‖v‖ = 1、u·v = 0、u·n = ab-ab = 0、v·n = 0，故 {u,v} 是 n^⊥ 的单位正交基，映射 (s,z) ↦ s·u + z·v = (sb,-sa,z) 是 R² → n^⊥ 的等距同构。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 2 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  },
+                  {
+                    "n": 3,
+                    "text": "前提：把该参数化代入约束得 x ∈ B_p^3 ⟺ |sb|^p + |-sa|^p + |z|^p ≤ 1 ⟺ m|s|^p + |z|^p ≤ 1，其中 m := |a|^p+|b|^p ∈ (0,∞)（a²+b² = 1 保证 m > 0）；记 E := {(s,z) : m|s|^p+|z|^p ≤ 1}，由等距同构得 A_p(n) = area(E)。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "前提步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 4,
+                    "text": "前提：取 c := m^{1/p} > 0 与线性映射 T(s,z) := (cs,z)（det T = c）。由 |cs|^p = m|s|^p 得 (s,z) ∈ E ⟺ T(s,z) ∈ D_p := {(X,Y) : |X|^p+|Y|^p ≤ 1}，即 T(E) = D_p；且 T 是双射（逆为 (X,Y) ↦ (X/c,Y)）。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "前提步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 5,
+                    "text": "前提：由面积在可逆线性映射下的变换律 area(T(E)) = |det T|·area(E) 与 T(E) = D_p 得 c·area(E) = area(D_p)，即 area(E) = c^{-1}·area(D_p) = m^{-1/p}·area(D_p)。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "前提步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 6,
+                    "text": "前提：算 area(D_p)。由四象限对称 area(D_p) = 4∫_0^1 (1-t^p)^{1/p} dt。令 u = t^p，则 t = u^{1/p}、dt = p^{-1}u^{1/p-1}du，故 ∫_0^1 (1-t^p)^{1/p}dt = p^{-1}∫_0^1 (1-u)^{1/p}u^{1/p-1}du = p^{-1}B(1/p, 1+1/p)（用 ∫_0^1 u^{a-1}(1-u)^{b-1}du = B(a,b)，取 a = 1/p、b = 1+1/p）。于是 area(D_p) = 4p^{-1}B(1/p,1+1/p) = 4Γ(1/p)Γ(1+1/p)/(pΓ(1+2/p))；再由 Γ(1/p) = pΓ(1+1/p)（Γ(x+1) = xΓ(x) 取 x = 1/p）约去 p 得 area(D_p) = 4Γ(1+1/p)²/Γ(1+2/p) =: C_p。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 6 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  },
+                  {
+                    "n": 7,
+                    "text": "前提：当 1 ≤ p < 2 时，对 0 ≤ t ≤ 1 有 t^p ≥ t²，等号成立当且仅当 t ∈ {0,1}（t = 0 时两边为 0；t > 0 时 t^p ≥ t² ⟺ t^{p-2} ≥ 1 ⟺ t^{2-p} ≤ 1，而 2-p > 0 时该式在 (0,1] 上仅在 t = 1 取等）。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "前提步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 8,
+                    "text": "前提：当 p > 2 时，对 0 ≤ t ≤ 1 有 t^p ≤ t²，等号成立当且仅当 t ∈ {0,1}（同上，把 p-2 换成 2-p < 0）。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "前提步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 9,
+                    "text": "前提：由第 7、8 步并用 |a|,|b| ≤ 1：1 ≤ p < 2 时 m = |a|^p+|b|^p ≥ |a|²+|b|² = 1，故 m^{-1/p} ≤ 1，等号 ⟺ |a|^p = |a|² 且 |b|^p = |b|² ⟺ a,b ∈ {0,±1}（配合 a²+b² = 1 即 n 为 ±坐标向量）；p > 2 时同理 m ≤ 1，故 m^{-1/p} ≥ 1，等号刻画相同。代入第 5 步得 (ii) 与 (iii)。p = 2 时 m = a²+b² = 1，故 A_2(n) = C_2，且由第 6 步的闭式 C_2 = 4Γ(3/2)²/Γ(2) = 4·(π/4) = π，即 (iv) 的前半。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 9 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  },
+                  {
+                    "n": 10,
+                    "text": "前提：门槛精确性。取 n = (1,1,0)/√2，则 a = b = 1/√2、m = 2·(1/√2)^p = 2^{1-p/2}，故 m^{-1/p} = 2^{-(1-p/2)/p} = 2^{-1/p+1/2} = 2^{1/2-1/p}，于是 A_p(n) = C_p·2^{1/2-1/p}。当 1 ≤ p < 2 时 1/2-1/p < 0，故 2^{1/2-1/p} < 1，A_p(n) < C_p；当 p > 2 时 1/2-1/p > 0，故 A_p(n) > C_p；而 p = 2 时指数为 0、A_2(n) = C_2 = π（与第 9 步一致）。这给出门槛 p = 2 的精确性，也给出 (ii)/(iii) 中「严格」的显式见证。",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "推导步（被声明成前提）",
+                    "problem": "第 10 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                  }
+                ],
+                "problems": [
+                  "第 1 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。",
+                  "第 2 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。",
+                  "第 6 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。",
+                  "第 9 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。",
+                  "第 10 步：这一步被声明成前提，但它是推导步（正文带「故」这类推导接词）—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），要么它本来就只是前提。"
+                ]
+              },
+              "product": "proof",
+              "strategy": "",
+              "best_partial": [],
+              "v_sign": {
+                "state": "waiting",
+                "label": "待签",
+                "delivered": false,
+                "channel": "",
+                "ledger": "",
+                "submitted": false,
+                "skipped": false,
+                "why": "这一份正文还没有一份能算数的签（state=unsigned）：这一版（6c6accee9f0d…）没有任何台账行 ⇒ 一次都没送过 V（真的没审） ⇒ 派 V 审这一份、拿到签才算交差"
+              },
+              "delivery": {
+                "checked": true,
+                "total": 2,
+                "signed_count": 1,
+                "pending_count": 1,
+                "unsigned_count": 0,
+                "proof_count": 1,
+                "abandoned_count": 0,
+                "unfinished_count": 1,
+                "coverage": "1/2",
+                "state": "outputs_unsigned",
+                "legal_stop": false,
+                "delivered": false
+              },
+              "delivered": false,
+              "self_assessment": {
+                "comprehensive": "partial",
+                "enough_output": "some_output",
+                "partial_output": "partial_output",
+                "next_move": "这一份改完立刻派 V 重审 manuscripts/F/f-proof-000001.md 的现行正文（只带 proof_manuscript，不给命题号）；拿到干净『成立』就把 mss:000000（已签）与 mss:000001 一起交 D 携带给 B 收录。仍开着的两块如实记卡点：(a) s1 的全法向支配性 A_p(n) ≤ C_p（n 三个坐标全非零，1 ≤ p < 2）—— 缺一条把法向参数化后逐点比较的上界工具，可引池 0 条 pre_theorem，需要 A 检索 l_p ball maximal hyperplane section 的已知定理 + E 在基本域内部加密扫描/找反例；(b) s3 的 p* 存在唯一与两侧单调 —— 缺 A_(1,1,1)(p) 的闭式或单调性论证，目前只有 E 的二分读数 p* ≈ 4.9982155968。",
+                "why": "V 这一条的 finding 是纯符号错误（m^{-1/p} = 2^{1/2-1/p}，原稿写成 2^{1/p-1/2}），只改第 10 步那一处指数与据此的后段文字，其余九步逐字保留，不重写整篇。"
+              },
+              "report_path": "work/F/attack-000000.md",
+              "proof_mode": "rewritten",
+              "proof_registered": false,
+              "proof_rewritten": true,
+              "proof_sha256": "6c6accee9f0db73f1db0526a3bbbdeda9cc2f1dc61d376e5cc36439d35874625",
+              "proof_label": "F 攻坚 000000 子目标 s3",
+              "proof_section_hashes": {
+                "## 命题": "92396aa5a2eba07e4d1cfb51d32e8910632707ea05ae220189320627ada7b33f",
+                "## 证明": "6c6accee9f0db73f1db0526a3bbbdeda9cc2f1dc61d376e5cc36439d35874625",
+                "## 依赖": "7fcd8abd5277883007e9afe22310a4c0b10eb4c925a8a6e0a5e3221ff8a071a2"
+              },
+              "manuscript_migrated": false,
+              "manuscript_path": "manuscripts/F/f-proof-000001.md",
+              "manuscript_id": "000001",
+              "manuscript_id_source": "given"
+            }
+          ],
+          "depth": 0,
+          "parent_plan_id": null,
+          "best_partial": "已进行 8 轮。子目标进展（按'离终结有多近'排序）：\n- s2（owner=F，status=in_progress）: 在 1 ≤ p < 2 上证明对每个单位法向 n 有 A_p(n) ≤ A_coord(p)，且等号只在 n 为 ±坐标向时取到\n- s3（owner=F，status=in_progress）: 给出显式门槛 P0，使 p ≥ P0 时面对角截面面积大于坐标向与体对角向（用 ‖·‖_p 与 ‖·‖_∞ 的夹逼 3^{-2/p}A_∞ ≤ A_p ≤ A_∞ 与三个极限值 4、4√2、3√3 定常数）\n- s4（owner=F，status=todo）: 交叉点 p*（A_(1,1,1)(p)=A_(1,1,0)(p)）的存在唯一性，以及 r_face=A_face/A_coord、r_diag=A_diag/A_coord 在 p 上的单调性\n- s5（owner=F，status=todo）: R1 极坐标表示：对每个单位 n∈R^3 和 n⊥ 的标准正交基 (u,v)，令 eθ=cosθ u+sinθ v，则 A_p(n)=(1/2)∫_0^{2π} ||eθ||_p^{-2} dθ；这给出任意法向截面的二维积分表达式。\n- s6（owner=F，status=todo）: R2 正定核逐 t 比较：对每个 1≤p<2、t>0 以及任意 n⊥ 的标准正交基 (u,v)，有 ∫_0^{2π} exp(-t||cosθ u+sinθ v||_p^p) dθ ≤ ∫_0^{2π} exp(-t(|cosθ|^p+|sinθ|^p)) dθ。\n- s7（owner=F，status=todo）: R3 严格性判据：令 a_i=1-n_i^2，证明 ∫_0^{2π}||cosθ u+sinθ v||_p^p dθ=C_p∑_{i=1}^3 a_i^{p/2}，且 ∑ a_i^{p/2}≥2，等号只在 a 为 (1,1,0) 的排列；由此非坐标 n 时小 t 展开中核不等式严格，结合 R2 得到 A_p(n)<A_coord(p)。\n- s1（owner=F，status=blocked）: 把截面面积写成极坐标积分 A_p(n)=(1/2)∫_0^{2π}‖cosψ·u+sinψ·v‖_p^{-2}dψ（与基选取无关），定出坐标截面闭式 4Γ(1+1/p)^2/Γ(1+2/p)，并给出 p=1、p=2、p→∞ 在三类法向上的精确对照值；卡点：交进来的产物没过既有校验（10 条）：steps[2] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）；steps[3] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）；steps[4] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）；steps[5] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）；steps[6] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）；steps[7] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）；steps[8] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）；steps[9] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）；steps[10] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）；steps[11] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）\n**以上均为过程记录**：标了 supported_not_proved 或只有 experiment_ids 的条目都还不是证明。",
+          "created_at": "2026-11-24T18:30:50+08:00",
+          "updated_at": "2026-11-24T19:08:26+08:00",
+          "created_by": "agent-F-F1",
+          "report_path": "work/F/attack-000000.md"
+        },
+        "error": "",
+        "meta": {
+          "table": "attack_plans",
+          "id": "000000",
+          "id_field": "plan_id",
+          "found": true
+        },
+        "warn": "这一步给了 2 条调用，已按顺序逐条：第 1 条 table.get 成功；第 2 条 table.get 成功。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 1,
+          "call_index": 1,
+          "calls": 2,
+          "step_index": 2,
+          "summary": "这一步给了 2 条调用，已按顺序逐条：第 1 条 table.get 成功；第 2 条 table.get 成功。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 1,
+            "calls": 2,
+            "items": 2,
+            "steps": [
+              1,
+              2
+            ],
+            "executed": 2,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000064"
+    },
+    {
+      "index": 3,
+      "shape": "tool",
+      "payload": {
+        "name": "table.search",
+        "args": {
+          "table": "statements",
+          "query": "中心截面",
+          "limit": 20,
+          "select": [
+            "stmt_id",
+            "label",
+            "statement_full",
+            "kind",
+            "status",
+            "evidence_kind"
+          ]
+        },
+        "why": "查这一份稿的命题是否已在册（台账一致角度），以及稿头标签与在册命题字面是否对得上"
+      },
+      "result": {
+        "tool": "table.search",
+        "ok": true,
+        "data": {
+          "table": "statements",
+          "query": "中心截面",
+          "fields": [
+            "label",
+            "statement_full"
+          ],
+          "rows": [
+            {
+              "stmt_id": "000030",
+              "label": "截面面积计算核自检通过：极坐标 tanh-sinh 求积（断点取 A cosψ+B sinψ=0 与 |w_i|=|w_j| 在 [0,2π) 上的全部根）在",
+              "statement_full": "截面面积计算核自检通过：极坐标 tanh-sinh 求积（断点取 A cosψ+B sinψ=0 与 |w_i|=|w_j| 在 [0,2π) 上的全部根）在 p=2 上给任意中心截面面积 π（偏差 ≤1e-15）；在 p=1 上与八面体边缘裁剪精确值一致（≤1e-15）；p=1000 上坐标/体对角/面对角截面与立方体精确值 4、3√3、4√2 的偏差随 p 增大而缩小且落在 O(1/p) 以内；每个 p 的坐标截面等于 4Γ(1+1/p)^2/Γ(1+2/p)（相对偏差 ≤1e-13）；面积对平面基的旋转不变（≤1e-12）；粗嵌套 Simpson 法随加密收敛到极坐标值。",
+              "kind": "conjecture",
+              "status": "active",
+              "evidence_kind": "cross_check"
+            },
+            {
+              "stmt_id": "000031",
+              "label": "B_p^3 中心截面最大面积的位置与面积比临界性",
+              "statement_full": "对每个 p ∈ {1.05,1.1,1.2,1.5,2,2.5,3,4,5,8,16,1000}，B_p^3 的中心截面最大面积在排序绝对值基本域 0≤a≤b≤c 的边界上取到（坐标向、面对角、体对角，或 (1,1,t)/(0,1,t) 弧上），且比值 r(p)=A_diag/A_coord 在 p<2 时 <1、p>2 时 >1、p=2 时 =1（临界 p=2）。",
+              "kind": "conjecture",
+              "status": "active",
+              "evidence_kind": "cross_check"
+            },
+            {
+              "stmt_id": "000032",
+              "label": "B_p^3 中心截面的坐标面积公式、面积比单调性与最大面积方向的分段结构",
+              "statement_full": "对 B_p^3 的中心截面，在 p ∈ {1.05,1.1,1.2,1.5,2,2.5,3,4,5,8,16,1000} 上：(i) 坐标截面等于 4Γ(1+1/p)^2/Γ(1+2/p)；(ii) 比值 r_face(p)=A_(1,1,0)/A_coord 与 r_diag(p)=A_(1,1,1)/A_coord 随 p 单调递增、各自在 p=2 处取 1（p<2 时 <1，p>2 时 >1）；(iii) 最大面积方向随 p 分段为：p<2 坐标向、2<p<p* 体对角向、p>p* 面对角向，其中 p* 是 A_diag=A_face 的唯一交叉点且落在区间 (4,5) 内；(iv) 不存在比这三个方向更大的中间方向：在 (1,1,t) 与 (0,1,t) 两条弧上、以及基本域 0≤a≤b≤c 的内部网格上，最大面积都不超过边界最大值（p=2 除外，那里各方向面积相同）。",
+              "kind": "conjecture",
+              "status": "active",
+              "evidence_kind": "cross_check"
+            },
+            {
+              "stmt_id": "000033",
+              "label": "B_p^3 中心截面在两条边界弧上的最大面积方向分段",
+              "statement_full": "对每个 p ∈ {1.05,1.1,1.2,1.5,2,2.5,3,4,5,8,16,1000}，B_p^3 的中心截面沿基本域 0≤a≤b≤c 两条边界弧 (0,1,t) 与 (1,1,t)（t∈[0,1] 细网格 + 端点 t→∞ 的极限）的最大面积总在端点 t∈{0,1,∞} 取到：t<2 时坐标向最大，2≤p<4.998 时体对角向最大，p>4.998 时面对角向最大；弧上任何严格中间 t 的面积都小于该弧的端点最大值（p=2 除外，那里各向同性、整条弧平）。",
+              "kind": "conjecture",
+              "status": "active",
+              "evidence_kind": "cross_check"
+            },
+            {
+              "stmt_id": "000034",
+              "label": "B_p^3 中心截面面积 A_p(n) 的积分表示与坐标向/面对角向闭式面积公式",
+              "statement_full": "设 1 ≤ p < ∞，n ∈ R³ 为单位向量，A_p(n) 表示 B_p^3 = {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1} 与平面 n^⊥ 的交的二维 Lebesgue 面积。则对每个这样的 p 与每个单位 n：(i) A_p(n) = (1/2)∫_0^{2π} ‖cosψ·u + sinψ·v‖_p^{-2} dψ，其中 u,v 是 n^⊥ 的任意一组单位正交基，该值不随基的选取而变，A_p(n) 只依赖 n^⊥（从而 A_p(n) = A_p(-n)），并且在带符号坐标置换（把 B_p^3 映到自身的 48 阶变换）下不变；(ii) A_p(e_3) = 4Γ(1+1/p)²/Γ(1+2/p)；(iii) A_p((1,1,0)/√2) = 2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p)，故 A_p((1,1,0)/√2) < A_p(e_3) 当且仅当 p < 2，两者相等当且仅当 p = 2，前者大于后者当且仅当 p > 2；(iv) p = 2 时 A_2(n) = π 对一切单位 n 成立；(v) p = 1 时 A_1(e_3) = 2、A_1((1,1,0)/√2) = √2、A_1((1,1,1)/√3) = 3√3/4。",
+              "kind": "theorem",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            },
+            {
+              "stmt_id": "000035",
+              "label": "B_p^3 中心截面面积公式与坐标向极值",
+              "statement_full": "设 1 ≤ p < ∞，n ∈ R³ 为单位向量且 n 至少有一个坐标为 0。记 A_p(n) 为 B_p^3 = {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1} 与平面 n^⊥ 的交的二维 Lebesgue 面积，C_p := A_p(e_3)。则：(i) 若 i 是使 n_i = 0 的任一下标，则 A_p(n) = C_p·(Σ_{j≠i}|n_j|^p)^{-1/p}，右端不依赖 i 的选取，且 C_p = 4Γ(1+1/p)²/Γ(1+2/p)；(ii) 当 1 ≤ p < 2 时 A_p(n) ≤ C_p，等号成立当且仅当 n 是 ±坐标向量；(iii) 当 p > 2 时 A_p(n) ≥ C_p，等号成立当且仅当 n 是 ±坐标向量；(iv) p = 2 时对一切这样的 n 有 A_2(n) = π = C_2，且门槛 p = 2 是精确的：对每个 p ≠ 2，法向 n = (1,1,0)/√2 给出 A_p(n) ≠ C_p（p < 2 时严格小、p > 2 时严格大）。",
+              "kind": "theorem",
+              "status": "active",
+              "evidence_kind": "heuristic"
+            }
+          ],
+          "total": 6,
+          "returned": 6
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "total": 6,
+          "returned": 6,
+          "matched_fields": {
+            "000030": [
+              "statement_full"
+            ],
+            "000031": [
+              "label",
+              "statement_full"
+            ],
+            "000032": [
+              "label",
+              "statement_full"
+            ],
+            "000033": [
+              "label",
+              "statement_full"
+            ],
+            "000034": [
+              "label"
+            ],
+            "000035": [
+              "label"
+            ]
+          },
+          "truncated": false,
+          "select": [
+            "stmt_id",
+            "label",
+            "statement_full",
+            "kind",
+            "status",
+            "evidence_kind"
+          ]
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 39808,
+        "prompt_cache_miss_tokens": 5995,
+        "tokens_in": 45803,
+        "tokens_out": 14062,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000064"
+    },
+    {
+      "index": 4,
+      "shape": "tool",
+      "payload": {
+        "name": "verify.verify_proof",
+        "args": {
+          "proof_manuscript": "manuscripts/B/b-proof-000001.md"
+        },
+        "why": "逐行走查 manuscripts/B/b-proof-000001.md（正文 sha 11164aee…）全文，按写成后的样子落一条两态结论与逐条 findings；该稿未在册（稿头无命题号），走 pending 正文 sha 档"
+      },
+      "result": {
+        "tool": "verify.verify_proof",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "kind": "proof_unregistered_signed",
+          "statement_id": "",
+          "verification_id": "",
+          "verdict": "成立",
+          "defect_step": null,
+          "findings": [],
+          "unresolved_errors": 0,
+          "proof_sha256": "11164aee4f1b379663f59e8155dfd0f949925ac6c88d270f06af6871054c904a",
+          "proof_chars": 0,
+          "signed_bit3": false,
+          "reviewed_by": {},
+          "bits": {},
+          "review_write": {
+            "manuscript_signed": true,
+            "manuscript_write": {
+              "found": true,
+              "signed": true,
+              "verdict": "成立",
+              "streak": 3,
+              "need": 3,
+              "proof_sha256": "11164aee4f1b379663f59e8155dfd0f949925ac6c88d270f06af6871054c904a",
+              "at": "2026-11-24T19:24:08+08:00",
+              "signer": "secretary:B",
+              "ledger": "verifications/000035.jsonl#v-000003",
+              "statement_id": "",
+              "mark": "- V 签：已签=true；判词=成立；连续=3/3；正文sha=11164aee4f1b379663f59e8155dfd0f949925ac6c88d270f06af6871054c904a；时间=2026-11-24T19:24:08+08:00；签名者=secretary:B；台账=verifications/000035.jsonl#v-000003；手稿号=000001",
+              "problem": "",
+              "manuscript_id": "000001",
+              "manuscript_key": "",
+              "identity_state": "unmatched",
+              "identity_why": "读的时候没给手稿路径 ⇒ 这一格对不上任何一份稿（不是「签过了」）",
+              "state": "signed",
+              "checked": true,
+              "sha_matches": true,
+              "body_mismatch": false,
+              "body_sha256": "11164aee4f1b379663f59e8155dfd0f949925ac6c88d270f06af6871054c904a",
+              "why": "手稿里的签块：连续 3/3 成立、正文 sha 相符（签于 2026-11-24T19:24:08+08:00）"
+            },
+            "sign_issued": false,
+            "written": false,
+            "filed": "not_read_by_v",
+            "already_signed": true,
+            "reason": "`manuscripts/B/b-proof-000001.md` 里已经有盖住这份正文的签块 ⇒ 这一趟不重写（块仍是一行）"
+          },
+          "ledger": "manuscripts/B/b-proof-000001.md",
+          "reason": "`manuscripts/B/b-proof-000001.md` 里已经有盖住这一份正文的签块（手稿里的签块：连续 3/3 成立、正文 sha 相符（签于 2026-11-24T19:24:08+08:00））⇒ 不重复审、不重复写",
+          "detail": "`manuscripts/B/b-proof-000001.md` 里已经有盖住同一份正文的签块 ⇒ 这一趟不重复审、不重复写（签块仍是一行）。这里 `signed_bit3=False` 是诚实的：没有命题行可翻；B 收录时从稿上的那一块读到它。",
+          "exhaustion_review": {},
+          "signer": "",
+          "proof_authors": [],
+          "report_path": "",
+          "checks": [],
+          "missing": [],
+          "citations": [],
+          "citation_checks": [],
+          "citation_gate": {
+            "ok": true,
+            "blocking": [],
+            "weaker": [],
+            "problem": "",
+            "why": ""
+          },
+          "secretary_judge": {},
+          "sign_issuance": {
+            "checked": false,
+            "issue": false,
+            "issued": false,
+            "landed": false,
+            "decision": "",
+            "writeback": {},
+            "streak": 0,
+            "need": 3,
+            "streak_ok": false,
+            "projected": 0,
+            "same_sha": false,
+            "state": "",
+            "reason": "这一趟没走到签发那一步（早退）⇒ 没有发签：`checked=False` 不是「可以签」，也不是「不签发」这一档",
+            "within_call": null,
+            "review_call": "",
+            "ledger_streak": 0,
+            "basis": [],
+            "reading": {},
+            "cost": {},
+            "material": {},
+            "statement_id": ""
+          },
+          "review_passes": [],
+          "manuscript_identity": {
+            "checked": false,
+            "statement_id": "",
+            "manuscript_id": "",
+            "row_manuscript_id": "",
+            "matched_by": "",
+            "fallback": false,
+            "row_checked": false,
+            "found": null,
+            "problem": "",
+            "path_checked": false,
+            "path_count": 0,
+            "path_group": 0,
+            "path_problem": "",
+            "why": ""
+          },
+          "issued_sign": {},
+          "statement_scope_gate": {}
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 45056,
+        "prompt_cache_miss_tokens": 3552,
+        "tokens_in": 48608,
+        "tokens_out": 45503,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000064"
+    },
+    {
+      "index": 5,
+      "shape": "tool",
+      "payload": {
+        "name": "verify.list_verifications",
+        "args": {
+          "statement_id": "000035",
+          "limit": 10
+        },
+        "why": "读出台账里这一份正文已落的审校行（工具说已 3/3 成立并已签），核对前几转的结论与 findings，避免我漏掉别人已经点名过的点"
+      },
+      "result": {
+        "tool": "verify.list_verifications",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "total": 6,
+          "items": [
+            {
+              "at": "2026-11-24T19:10:43+08:00",
+              "citation_checks": [],
+              "defect_step": null,
+              "findings": [],
+              "landed": "pending",
+              "object_path": "manuscripts/F/f-proof-000001.md",
+              "object_sha256": "e7fe441c9e14f4a55e963c14793341a76654496a78c17a57607ccc55053c5e7f",
+              "producer_code": "F1",
+              "producer_role": "F",
+              "proof_chars": 2127,
+              "proof_sha256": "6c6accee9f0db73f1db0526a3bbbdeda9cc2f1dc61d376e5cc36439d35874625",
+              "quote": "",
+              "review_call": "8e344077ec08",
+              "review_pass": 1,
+              "round": 1,
+              "secretary_judge": {
+                "answer": "没问题",
+                "axis": "clean",
+                "basis": [
+                  "v_reply.why: \"按假设、定理链、记号与条件性措辞逐关核对：坐标归一化、等距参数化、面积变换、Beta 积分及 p 与 2 的比较均未发现推导缺口或反例。\"",
+                  "v_reply.findings: []"
+                ],
+                "checked": true,
+                "cost": {
+                  "call_index": 255,
+                  "charged": true,
+                  "ledger": "000327",
+                  "ledger_reason": "charged",
+                  "prompt_sha256": "395f6db5ef2b81bf0f4440c8f41ca0da475f2179ee167fb0964a9569ebae3f46",
+                  "tokens": 2148,
+                  "usd": 0.000614
+                },
+                "defect_scope": "",
+                "defect_step": null,
+                "defect_step_basis": "",
+                "fault_cause": "report_gap",
+                "fault_kind": "",
+                "material": {
+                  "ledger_row": {
+                    "defect_step": null,
+                    "verdict": "成立"
+                  },
+                  "v_reply": "{\"verdict\":\"成立\",\"defect_step\":null,\"quote\":\"\",\"why\":\"按假设、定理链、记号与条件性措辞逐关核对：坐标归一化、等距参数化、面积变换、Beta 积分及 p 与 2 的比较均未发现推导缺口或反例。\",\"findings\":[],\"citation_checks\":[]}"
+                },
+                "proof_no": 1,
+                "reason": "该回复明确按假设、定理链、记号与条件性措辞逐关核对，并声明未发现推导缺口或反例，且未指出任何缺陷。",
+                "refused": "",
+                "report_gap": "未记录具体反例构造尝试或逐关核对的明细；findings 与 citation_checks 均为空。",
+                "source": "secretary:v_reply_defect",
+                "statement_id": "",
+                "unwired": false,
+                "verdict": "成立"
+              },
+              "statement_id": "000035",
+              "stmt_id": "000035",
+              "submission_id": "",
+              "unresolved_errors": 0,
+              "used_faces": [],
+              "verdict": "成立",
+              "verification_id": "u-000008",
+              "verifier": "agent-V-V1",
+              "why": "按假设、定理链、记号与条件性措辞逐关核对：坐标归一化、等距参数化、面积变换、Beta 积分及 p 与 2 的比较均未发现推导缺口或反例。",
+              "path_group": 1,
+              "claimed_at": "2026-11-24T19:16:27+08:00"
+            },
+            {
+              "at": "2026-11-24T19:11:50+08:00",
+              "citation_checks": [],
+              "defect_step": null,
+              "findings": [],
+              "landed": "pending",
+              "object_path": "manuscripts/F/f-proof-000001.md",
+              "object_sha256": "e7fe441c9e14f4a55e963c14793341a76654496a78c17a57607ccc55053c5e7f",
+              "producer_code": "F1",
+              "producer_role": "F",
+              "proof_chars": 2127,
+              "proof_sha256": "6c6accee9f0db73f1db0526a3bbbdeda9cc2f1dc61d376e5cc36439d35874625",
+              "quote": "",
+              "review_call": "8e344077ec08",
+              "review_pass": 2,
+              "round": 2,
+              "secretary_judge": {
+                "answer": "没问题",
+                "axis": "clean",
+                "basis": [
+                  "v_reply: \"逐段核对假设链、参数化与面积变换、Beta 积分计算、p 与 2 的比较及门槛见证，未发现无依据跳步、未定义记号导致的实际断点或不当引用。\"",
+                  "v_reply: \"findings\":[]",
+                  "v_reply: \"verdict\":\"成立\""
+                ],
+                "checked": true,
+                "cost": {
+                  "call_index": 263,
+                  "charged": true,
+                  "ledger": "000335",
+                  "ledger_reason": "charged",
+                  "prompt_sha256": "693a4885e02ef0dd9c301bbb8145152a0cab2cea72cb9fe374b118c34c480846",
+                  "tokens": 1494,
+                  "usd": 0.000222
+                },
+                "defect_scope": "",
+                "defect_step": null,
+                "defect_step_basis": "",
+                "fault_cause": "report_gap",
+                "fault_kind": "",
+                "material": {
+                  "ledger_row": {
+                    "defect_step": null,
+                    "verdict": "成立"
+                  },
+                  "v_reply": "{\"verdict\":\"成立\",\"defect_step\":null,\"quote\":\"\",\"why\":\"逐段核对假设链、参数化与面积变换、Beta 积分计算、p 与 2 的比较及门槛见证，未发现无依据跳步、未定义记号导致的实际断点或不当引用。\",\"findings\":[],\"citation_checks\":[]}"
+                },
+                "proof_no": 1,
+                "reason": "这份回复逐段声明已核对假设链、参数化与面积变换、Beta 积分、p 与 2 的比较及门槛见证，并明确 findings 为空、未发现断点，也没有指出任何缺陷，因此属于「逐条走查后未发现问题」一类。",
+                "refused": "",
+                "report_gap": "没有记录任何反例尝试或构造失败的位置；citation_checks 为空，没有写出逐条引用核对的记录。",
+                "source": "secretary:v_reply_defect",
+                "statement_id": "",
+                "unwired": false,
+                "verdict": "成立"
+              },
+              "statement_id": "000035",
+              "stmt_id": "000035",
+              "submission_id": "",
+              "unresolved_errors": 0,
+              "used_faces": [],
+              "verdict": "成立",
+              "verification_id": "u-000009",
+              "verifier": "agent-V-V1",
+              "why": "逐段核对假设链、参数化与面积变换、Beta 积分计算、p 与 2 的比较及门槛见证，未发现无依据跳步、未定义记号导致的实际断点或不当引用。",
+              "path_group": 1,
+              "claimed_at": "2026-11-24T19:16:27+08:00"
+            },
+            {
+              "at": "2026-11-24T19:12:21+08:00",
+              "citation_checks": [],
+              "defect_step": null,
+              "findings": [],
+              "landed": "pending",
+              "object_path": "manuscripts/F/f-proof-000001.md",
+              "object_sha256": "e7fe441c9e14f4a55e963c14793341a76654496a78c17a57607ccc55053c5e7f",
+              "producer_code": "F1",
+              "producer_role": "F",
+              "proof_chars": 2127,
+              "proof_sha256": "6c6accee9f0db73f1db0526a3bbbdeda9cc2f1dc61d376e5cc36439d35874625",
+              "quote": "",
+              "review_call": "8e344077ec08",
+              "review_pass": 3,
+              "round": 3,
+              "secretary_judge": {
+                "answer": "没问题",
+                "axis": "clean",
+                "basis": [
+                  "\"why\": \"逐条核对第1–10步：坐标归一化、正交参数化、面积变换、Beta积分与常数比较均成立，未发现前提缺失、无依据步骤或引用问题。\"",
+                  "\"findings\": []",
+                  "\"defect_step\": null"
+                ],
+                "checked": true,
+                "cost": {
+                  "call_index": 266,
+                  "charged": true,
+                  "ledger": "000338",
+                  "ledger_reason": "charged",
+                  "prompt_sha256": "944258e0a8590b26de19127cb0daf2fd2a66867053d27f3a6a5b61f741b84a82",
+                  "tokens": 2032,
+                  "usd": 0.000548
+                },
+                "defect_scope": "",
+                "defect_step": null,
+                "defect_step_basis": "",
+                "fault_cause": "report_gap",
+                "fault_kind": "",
+                "material": {
+                  "ledger_row": {
+                    "defect_step": null,
+                    "verdict": "成立"
+                  },
+                  "v_reply": "{\"verdict\": \"成立\", \"defect_step\": null, \"quote\": \"\", \"why\": \"逐条核对第1–10步：坐标归一化、正交参数化、面积变换、Beta积分与常数比较均成立，未发现前提缺失、无依据步骤或引用问题。\", \"findings\": [], \"citation_checks\": []}"
+                },
+                "proof_no": 1,
+                "reason": "V 逐条核对了第1–10步并明确判定成立且 findings 为空，未指出任何缺陷，故按「没问题」档处理。",
+                "refused": "",
+                "report_gap": "未记录反例尝试的位置或尝试情况。",
+                "source": "secretary:v_reply_defect",
+                "statement_id": "",
+                "unwired": false,
+                "verdict": "成立"
+              },
+              "statement_id": "000035",
+              "stmt_id": "000035",
+              "submission_id": "",
+              "unresolved_errors": 0,
+              "used_faces": [],
+              "verdict": "成立",
+              "verification_id": "u-000010",
+              "verifier": "agent-V-V1",
+              "why": "逐条核对第1–10步：坐标归一化、正交参数化、面积变换、Beta积分与常数比较均成立，未发现前提缺失、无依据步骤或引用问题。",
+              "path_group": 1,
+              "claimed_at": "2026-11-24T19:16:27+08:00"
+            },
+            {
+              "at": "2026-11-24T19:21:21+08:00",
+              "citation_checks": [],
+              "defect_step": null,
+              "findings": [],
+              "manuscript": "manuscripts/B/b-proof-000001.md",
+              "object_path": "manuscripts/B/b-proof-000001.md",
+              "object_sha256": "0ce479010b27002734b63e61001887d9db6c5204d038b26574126f36bdc8dd28",
+              "producer_code": "B1",
+              "producer_role": "B",
+              "proof_chars": 2574,
+              "proof_sha256": "11164aee4f1b379663f59e8155dfd0f949925ac6c88d270f06af6871054c904a",
+              "quote": "",
+              "review_call": "23400cc69e2a",
+              "review_pass": 1,
+              "round": 1,
+              "secretary_judge": {
+                "axis": "clean",
+                "checked": true,
+                "decision": "",
+                "defect_scope": "",
+                "fault_cause": "report_gap",
+                "fault_kind": "",
+                "reason": "V 明确声称已逐项核对并未发现缺陷，没有提出任何需要指出的缺陷。",
+                "report_gap": "未记录反例尝试的位置；未给出逐关核对的具体记录"
+              },
+              "statement_id": "000035",
+              "stmt_id": "000035",
+              "submission_id": "",
+              "unresolved_errors": 0,
+              "used_faces": [],
+              "verdict": "成立",
+              "verification_id": "v-000001",
+              "verifier": "agent-V-V1",
+              "why": "沿假设、化标准位置、闭式推导、m 与 1 的比较及 p=2 精确性逐项核对，未发现缺陷。"
+            },
+            {
+              "at": "2026-11-24T19:22:34+08:00",
+              "citation_checks": [],
+              "defect_step": null,
+              "findings": [],
+              "manuscript": "manuscripts/B/b-proof-000001.md",
+              "object_path": "manuscripts/B/b-proof-000001.md",
+              "object_sha256": "0ce479010b27002734b63e61001887d9db6c5204d038b26574126f36bdc8dd28",
+              "producer_code": "B1",
+              "producer_role": "B",
+              "proof_chars": 2574,
+              "proof_sha256": "11164aee4f1b379663f59e8155dfd0f949925ac6c88d270f06af6871054c904a",
+              "quote": "",
+              "review_call": "23400cc69e2a",
+              "review_pass": 2,
+              "round": 2,
+              "secretary_judge": {
+                "axis": "clean",
+                "checked": true,
+                "decision": "",
+                "defect_scope": "",
+                "fault_cause": "report_gap",
+                "fault_kind": "",
+                "reason": "该回复明确称已逐条核对各关键步骤并均未发现缺依据、隐藏前提或引用不洁，findings 为空，未指出任何缺陷。",
+                "report_gap": "未记录反例尝试的具体构造或位置；不影响本次判定。"
+              },
+              "statement_id": "000035",
+              "stmt_id": "000035",
+              "submission_id": "",
+              "unresolved_errors": 0,
+              "used_faces": [],
+              "verdict": "成立",
+              "verification_id": "v-000002",
+              "verifier": "agent-V-V1",
+              "why": "逐条核对假设与化标准位置、正交基参数化、面积变换、D_p 的 Beta 积分闭式、m 与 1 的比较及等号条件、p=2 与 p≠2 的精确性，均未发现缺依据步骤、隐藏前提或引用不洁；依赖为空，citation_checks 为空。"
+            },
+            {
+              "at": "2026-11-24T19:24:08+08:00",
+              "citation_checks": [],
+              "defect_step": null,
+              "findings": [],
+              "manuscript": "manuscripts/B/b-proof-000001.md",
+              "object_path": "manuscripts/B/b-proof-000001.md",
+              "object_sha256": "0ce479010b27002734b63e61001887d9db6c5204d038b26574126f36bdc8dd28",
+              "producer_code": "B1",
+              "producer_role": "B",
+              "proof_chars": 2574,
+              "proof_sha256": "11164aee4f1b379663f59e8155dfd0f949925ac6c88d270f06af6871054c904a",
+              "quote": "",
+              "review_call": "23400cc69e2a",
+              "review_pass": 3,
+              "round": 3,
+              "secretary_judge": {
+                "axis": "clean",
+                "checked": true,
+                "decision": "",
+                "defect_scope": "",
+                "fault_cause": "report_gap",
+                "fault_kind": "",
+                "reason": "V 明确声称逐条核对了证明各环节且未发现缺依据步骤、隐藏前提或更强结论，也未指出任何缺陷。",
+                "report_gap": "未记录反例尝试的位置或结果。"
+              },
+              "statement_id": "000035",
+              "stmt_id": "000035",
+              "submission_id": "",
+              "unresolved_errors": 0,
+              "used_faces": [],
+              "verdict": "成立",
+              "verification_id": "v-000003",
+              "verifier": "agent-V-V1",
+              "why": "逐条核对假设、标准位置化、正交基参数化、线性伸缩、Beta 积分、m 与 1 的比较及 p≠2 精确性，未发现缺依据步骤、隐藏前提或更强结论。"
+            }
+          ],
+          "problems": [],
+          "truncated": false,
+          "reason": "共 6 行验证台账"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 47744,
+        "prompt_cache_miss_tokens": 3002,
+        "tokens_in": 50746,
+        "tokens_out": 15668,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000064"
+    },
+    {
+      "index": 6,
+      "shape": "tool",
+      "payload": {
+        "name": "manuscripts.submission_reading",
+        "args": {
+          "manuscript": "manuscripts/B/b-proof-000001.md"
+        },
+        "why": "核对这一份稿此刻的签/提交状态：工具回话说已盖住正文 sha 11164aee 的签块 3/3，而我整篇 fs.read（43 行、next_line=null）里没见到 `- V 签：` 那一行 —— 先读权威的提交状态读数，再决定要不要在结论里点名这处不一致"
+      },
+      "result": {
+        "tool": "manuscripts.submission_reading",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "manuscript": "manuscripts/B/b-proof-000001.md",
+          "manuscript_id": "000001",
+          "producer_role": "B",
+          "producer_code": "",
+          "state": "unsubmitted",
+          "submitted_at": "",
+          "via": "",
+          "signed": true,
+          "signed_sha": "11164aee4f1b379663f59e8155dfd0f949925ac6c88d270f06af6871054c904a",
+          "sign_sha": "35b7280ca61ca05fbccec85789504c2f62d3c5165ad6e4c4d321208e8956d43d",
+          "sign_at": "2026-11-24T19:24:08+08:00",
+          "token": "",
+          "task_id": "",
+          "task_role": "",
+          "problems": [],
+          "why": "`tasks.artifacts` 里没有 b-proof 稿号 000001 的 `mss:` 记号 ⇒ 未提交（via 没有来源）"
+        },
+        "error": "",
+        "meta": {
+          "checked": true,
+          "manuscript": "manuscripts/B/b-proof-000001.md",
+          "manuscript_id": "000001",
+          "producer_role": "B",
+          "producer_code": "",
+          "state": "unsubmitted",
+          "submitted_at": "",
+          "via": "",
+          "signed": true,
+          "signed_sha": "11164aee4f1b379663f59e8155dfd0f949925ac6c88d270f06af6871054c904a",
+          "sign_sha": "35b7280ca61ca05fbccec85789504c2f62d3c5165ad6e4c4d321208e8956d43d",
+          "sign_at": "2026-11-24T19:24:08+08:00",
+          "token": "",
+          "task_id": "",
+          "task_role": "",
+          "problems": [],
+          "why": "`tasks.artifacts` 里没有 b-proof 稿号 000001 的 `mss:` 记号 ⇒ 未提交（via 没有来源）"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 49920,
+        "prompt_cache_miss_tokens": 4366,
+        "tokens_in": 54286,
+        "tokens_out": 11351,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000064"
+    },
+    {
+      "index": 7,
+      "shape": "final",
+      "payload": {
+        "final": "两态结论：**有毛病** —— 但要分清层次：证明**正文**（`## 证明` 那一节，sha=11164aee4f1b…）逐步核对**未发现任何推导缺口**；唯一一条 finding 落在**稿头声明的命题与正文所证命题不一致**这一处（派活方点名要我核的就是这一类，我不替你改稿）。\n\n【逐项核对记录，承重步单独核过】\n- 台账一致（角度⑤）：稿上 `## 命题` 与在册 statements `000035` 逐字相同（标签「B_p^3 中心截面面积公式与坐标向极值」也一致）；稿的 `## 证明` 正文 sha = 11164aee4f1b379663f59e8155dfd0f949925ac6c88d270f06af6871054c904a，与派活给的 sha 相同。\n- 第一步（化到标准位置）：带符号坐标置换保 B_p^3、正交变换保面积 ⇒ 可设 n=(a,b,0)、a²+b²=1；「右端不依赖 i 的选取」在 n 有两个零坐标时 n=±e_k、两个下标对应的和都等于 1，成立。\n- 第二步（正交基）：u=(b,-a,0)、v=(0,0,1)，u·n=ab-ab=0、‖u‖²=a²+b²=1、u·v=0、v·n=0，是 n^⊥ 的单位正交基；等距参数化 (s,z)↦(sb,-sa,z)；约束化为 m|s|^p+|z|^p≤1，m=|a|^p+|b|^p>0。\n- 第三步（拉回标准区域）：c=m^{1/p}、det T=c、area(T(E))=|det T|·area(E) ⇒ A_p(n)=m^{-1/p}·area(D_p)。\n- 第四步（Beta 积分，承重）：area(D_p)=4∫_0^1(1-t^p)^{1/p}dt；u=t^p ⇒ (1/p)B(1/p,1+1/p)；4/p·Γ(1/p)Γ(1+1/p)/Γ(1+2/p)，用 Γ(1/p)=pΓ(1+1/p) 约去 p ⇒ 4Γ(1+1/p)²/Γ(1+2/p)。代 p=1 得 2（与 A_1(e_3)=2 一致）、代 p=2 得 π，数值自洽。\n- 第五步（比较 m 与 1，承重）：0≤t≤1 时 t^p≥t²（1≤p<2，等号只在 t∈{0,1}）⇒ m≥1 ⇒ A_p≤C_p；p>2 反向 ⇒ m≤1 ⇒ A_p≥C_p；等号刻画 a,b∈{0,±1} 配合 a²+b²=1 ⇒ ±坐标向。\n- 第六步（门槛精确，承重）：n=(1,1,0)/√2 ⇒ m=2^{1-p/2}、m^{-1/p}=2^{1/2-1/p}；p<2 指数<0 ⇒ 严格小，p>2 严格大，p=2 得 A_2=π=C_2。\n- 硬禁令逐条：无「显然/易证/trivial」缝（「直接验得」处都给了算式）；无条件前提（1≤p<∞ 与「至少一个坐标为 0」都被用到）；依赖表为空与正文相符（正文没有引用任何在册命题，只用了 Beta 积分表示、Γ(x+1)=xΓ(x)、线性映射面积变换律，且都写成了本情形的确切陈述）；无循环依赖。六条角度（前提/计算/逻辑/强度/台账一致/依赖面）在正文上逐条过完：无一处要改。\n\n【findings（唯一一条）】\n- 位置：稿头第 1 行（标题）与「- 计划：000000 · 子目标：s3」行\n- 原文逐字：「F 的证明手稿：给出显式门槛 P0，使 p ≥ P0 时面对角截面面积大于坐标向与体对角向（用 ‖·‖_p 与 ‖·‖_∞ 的夹逼 3…」／「- 计划：000000 · 子目标：s3」\n- kind：稿头与正文不一致（台账一致角度；非证明步）\n- 为何不成立：attack_plans `000000` 现读的 s3 是「给出显式门槛 P0，使 p ≥ P0 时面对角截面面积大于坐标向与体对角向（用 ‖·‖_p 与 ‖·‖_∞ 的夹逼 3^{-2/p}A_∞ ≤ A_p ≤ A_∞ 与三个极限值 4、4√2、3√3 定常数）」，而本稿正文证的是另一条命题：在「n 至少一个坐标为 0」的单位法向上给出 A_p(n)=C_p·(Σ_{j≠i}|n_j|^p)^{-1/p}、C_p 闭式、p<2 与 p>2 相对 C_p 的大小与等号刻画、门槛 p=2 的精确性。正文全篇没有出现体对角向，也没有给出任何显式门槛 P0。对不上的是稿头的标题/子目标归属，不是 `## 命题` 那一节（它与 000035 逐字一致，正文证的正是它）。附带一处同源小差：标题写「F 的证明手稿」，稿头「产出者」写 agent-B-B1、稿族 b-proof。\n- 需补什么：由 B 把稿头改对（归属到 s2 / stmt 000035，或另交一份 s3 的证明）；正文一个字不用动，我也不改稿。\n- 步号给不出：核到第几段为止 —— 第一步至第六步/末段全核过，这一处缺口在稿头元数据、不落在任何推导步上。\n\n【另一条读数（不是 finding）】派活说这份稿「尚未拿签」，与盘上不符：`manuscripts.submission_reading` 给 signed=true、signed_sha=11164aee4f1b…、sign_at=2026-11-24T19:24:08（state=unsubmitted）；`verify.verify_proof` 因此早退（already_signed：连续 3/3、判词 成立、来源 verifications/000035.jsonl#v-000003）。我这一转**没有新写台账行、也没有新发签**，不去重复盖第二个签。改稿头不会改变 `## 证明` 的 sha，正文那一签不受影响。",
+        "evidence": [
+          "stmt:000035",
+          "plan:000000",
+          "manuscripts/B/b-proof-000001.md",
+          "verifications/000035.jsonl#v-000003"
+        ],
+        "notify": {
+          "to": "B",
+          "summary": "b-proof-000001 正文逐步核对无缺口，但稿头（标题/子目标 s3）与正文所证命题 000035 不一致：判有毛病，改稿头即可",
+          "body": "## 审的是哪一份稿\n`manuscripts/B/b-proof-000001.md`（稿号 000001，稿族 b-proof，产出者 agent-B-B1）；被审正文 `## 证明` 的 sha = 11164aee4f1b379663f59e8155dfd0f949925ac6c88d270f06af6871054c904a，与派活给的 sha 一致。\n\n## 结论：有毛病（唯一一条 finding 在稿头，不在推导步上）\n证明正文逐步核对**没有找到缺陷**：化到标准位置、正交基与等距参数化、面积变换律、Beta 积分与 Γ 约分、m 与 1 的比较、p=2 门槛见证，每一步都核过，数值自洽（p=1 得 2、p=2 得 π）；无条件前提、无依据跳步、「显然」缝、不干净引用、循环依赖——都没有。\n\n## finding 1（唯一条）\n- 位置：稿头第 1 行（标题）与「- 计划：000000 · 子目标：s3」行\n- 原文逐字：「F 的证明手稿：给出显式门槛 P0，使 p ≥ P0 时面对角截面面积大于坐标向与体对角向（用 ‖·‖_p 与 ‖·‖_∞ 的夹逼 3…」／「- 计划：000000 · 子目标：s3」\n- 为何要改：attack_plans 000000 的 s3 是「给出显式门槛 P0，使 p ≥ P0 时面对角截面面积大于坐标向与体对角向（… 与三个极限值 4、4√2、3√3 定常数）」，而本稿正文证的是 stmt:000035（A_p(n)=C_p·(Σ_{j≠i}|n_j|^p)^{-1/p}、C_p 闭式、p<2 / p>2 相对 C_p 的大小与等号刻画、门槛 p=2 精确）。正文没有出现体对角向，也没有给任何显式门槛 P0 —— 对不上的是稿头的标题/子目标归属，不是 `## 命题` 那一节（它与 000035 逐字一致）。附带：标题写「F 的证明手稿」，稿头产出者却是 agent-B-B1。\n- 需补什么：把稿头改对（归属 s2 / stmt:000035，或另交一份 s3 的证明）。正文不用动；改标题不会改变 `## 证明` 的 sha。\n- 步号给不出：核到第几段为止 —— 六步全核过，缺口在稿头元数据，不落在任何推导步上。\n\n## 一条读数（不是 finding）\n你这一侧说「尚未拿签」，与盘上不符：`manuscripts.submission_reading` 给 signed=true、signed_sha=11164aee4f1b…、sign_at=2026-11-24T19:24:08（state=unsubmitted）；`verify.verify_proof` 因此早退（already_signed：连续 3/3、判词 成立、来源 verifications/000035.jsonl#v-000003）。我这一转没有新写台账行、也没有新发签。",
+          "why": "把两态结论与唯一一条 finding 交回被审方 B，并核清「尚未拿签」这条事实读数",
+          "refs": [
+            "stmt:000035"
+          ]
+        }
+      },
+      "result": {
+        "notify_handoff": {
+          "handoff": "000006",
+          "ok": true,
+          "id": "000006",
+          "path": "work/handoffs.jsonl#000006",
+          "to": "B",
+          "brief": "b-proof-000001 正文逐步核对无缺口，但稿头（标题/子目标 s3）与正文所证命题 000035 不一致：判有毛病，改稿头即可",
+          "addressing": {
+            "checked": true,
+            "how": "parent",
+            "to": "B",
+            "kind": "parent",
+            "name": "B1",
+            "task_id": "t-000004",
+            "role": "B",
+            "brief": "",
+            "candidates": [],
+            "callable": "父 B1（t-000004）",
+            "why": "名册成员（parent）⇒ 手稿写角色 B，通知投实例 B",
+            "delivery": "roster",
+            "manuscript_to": "B",
+            "addressed_by": "role_fallback"
+          },
+          "notify_channel": "roster",
+          "revises": "",
+          "existing_same_summary": {
+            "count": 0,
+            "ids": [],
+            "note": "查过了：没有同一句话的既有交接"
+          },
+          "notified": "t-000075",
+          "error": "",
+          "note": "收件人下次运行时（或本步之后）会在收件箱/板上看到编号；它用 `manuscripts.read` 读全文"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 53504,
+        "prompt_cache_miss_tokens": 2129,
+        "tokens_in": 55633,
+        "tokens_out": 23236,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000064"
+    }
+  ],
+  "final": "两态结论：**有毛病** —— 但要分清层次：证明**正文**（`## 证明` 那一节，sha=11164aee4f1b…）逐步核对**未发现任何推导缺口**；唯一一条 finding 落在**稿头声明的命题与正文所证命题不一致**这一处（派活方点名要我核的就是这一类，我不替你改稿）。\n\n【逐项核对记录，承重步单独核过】\n- 台账一致（角度⑤）：稿上 `## 命题` 与在册 statements `000035` 逐字相同（标签「B_p^3 中心截面面积公式与坐标向极值」也一致）；稿的 `## 证明` 正文 sha = 11164aee4f1b379663f59e8155dfd0f949925ac6c88d270f06af6871054c904a，与派活给的 sha 相同。\n- 第一步（化到标准位置）：带符号坐标置换保 B_p^3、正交变换保面积 ⇒ 可设 n=(a,b,0)、a²+b²=1；「右端不依赖 i 的选取」在 n 有两个零坐标时 n=±e_k、两个下标对应的和都等于 1，成立。\n- 第二步（正交基）：u=(b,-a,0)、v=(0,0,1)，u·n=ab-ab=0、‖u‖²=a²+b²=1、u·v=0、v·n=0，是 n^⊥ 的单位正交基；等距参数化 (s,z)↦(sb,-sa,z)；约束化为 m|s|^p+|z|^p≤1，m=|a|^p+|b|^p>0。\n- 第三步（拉回标准区域）：c=m^{1/p}、det T=c、area(T(E))=|det T|·area(E) ⇒ A_p(n)=m^{-1/p}·area(D_p)。\n- 第四步（Beta 积分，承重）：area(D_p)=4∫_0^1(1-t^p)^{1/p}dt；u=t^p ⇒ (1/p)B(1/p,1+1/p)；4/p·Γ(1/p)Γ(1+1/p)/Γ(1+2/p)，用 Γ(1/p)=pΓ(1+1/p) 约去 p ⇒ 4Γ(1+1/p)²/Γ(1+2/p)。代 p=1 得 2（与 A_1(e_3)=2 一致）、代 p=2 得 π，数值自洽。\n- 第五步（比较 m 与 1，承重）：0≤t≤1 时 t^p≥t²（1≤p<2，等号只在 t∈{0,1}）⇒ m≥1 ⇒ A_p≤C_p；p>2 反向 ⇒ m≤1 ⇒ A_p≥C_p；等号刻画 a,b∈{0,±1} 配合 a²+b²=1 ⇒ ±坐标向。\n- 第六步（门槛精确，承重）：n=(1,1,0)/√2 ⇒ m=2^{1-p/2}、m^{-1/p}=2^{1/2-1/p}；p<2 指数<0 ⇒ 严格小，p>2 严格大，p=2 得 A_2=π=C_2。\n- 硬禁令逐条：无「显然/易证/trivial」缝（「直接验得」处都给了算式）；无条件前提（1≤p<∞ 与「至少一个坐标为 0」都被用到）；依赖表为空与正文相符（正文没有引用任何在册命题，只用了 Beta 积分表示、Γ(x+1)=xΓ(x)、线性映射面积变换律，且都写成了本情形的确切陈述）；无循环依赖。六条角度（前提/计算/逻辑/强度/台账一致/依赖面）在正文上逐条过完：无一处要改。\n\n【findings（唯一一条）】\n- 位置：稿头第 1 行（标题）与「- 计划：000000 · 子目标：s3」行\n- 原文逐字：「F 的证明手稿：给出显式门槛 P0，使 p ≥ P0 时面对角截面面积大于坐标向与体对角向（用 ‖·‖_p 与 ‖·‖_∞ 的夹逼 3…」／「- 计划：000000 · 子目标：s3」\n- kind：稿头与正文不一致（台账一致角度；非证明步）\n- 为何不成立：attack_plans `000000` 现读的 s3 是「给出显式门槛 P0，使 p ≥ P0 时面对角截面面积大于坐标向与体对角向（用 ‖·‖_p 与 ‖·‖_∞ 的夹逼 3^{-2/p}A_∞ ≤ A_p ≤ A_∞ 与三个极限值 4、4√2、3√3 定常数）」，而本稿正文证的是另一条命题：在「n 至少一个坐标为 0」的单位法向上给出 A_p(n)=C_p·(Σ_{j≠i}|n_j|^p)^{-1/p}、C_p 闭式、p<2 与 p>2 相对 C_p 的大小与等号刻画、门槛 p=2 的精确性。正文全篇没有出现体对角向，也没有给出任何显式门槛 P0。对不上的是稿头的标题/子目标归属，不是 `## 命题` 那一节（它与 000035 逐字一致，正文证的正是它）。附带一处同源小差：标题写「F 的证明手稿」，稿头「产出者」写 agent-B-B1、稿族 b-proof。\n- 需补什么：由 B 把稿头改对（归属到 s2 / stmt 000035，或另交一份 s3 的证明）；正文一个字不用动，我也不改稿。\n- 步号给不出：核到第几段为止 —— 第一步至第六步/末段全核过，这一处缺口在稿头元数据、不落在任何推导步上。\n\n【另一条读数（不是 finding）】派活说这份稿「尚未拿签」，与盘上不符：`manuscripts.submission_reading` 给 signed=true、signed_sha=11164aee4f1b…、sign_at=2026-11-24T19:24:08（state=unsubmitted）；`verify.verify_proof` 因此早退（already_signed：连续 3/3、判词 成立、来源 verifications/000035.jsonl#v-000003）。我这一转**没有新写台账行、也没有新发签**，不去重复盖第二个签。改稿头不会改变 `## 证明` 的 sha，正文那一签不受影响。",
+  "evidence": [
+    "stmt:000035",
+    "plan:000000",
+    "manuscripts/B/b-proof-000001.md",
+    "verifications/000035.jsonl#v-000003"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 0,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 8,
+  "compactions": 0,
+  "mailbox_items": [],
+  "mailbox_msgs": [],
+  "mailbox_delivered": 0,
+  "monitor_turns": 0,
+  "wakes": 0,
+  "wake_ids": [],
+  "wake_events": [],
+  "clock_pumps": 14,
+  "clock_fired": 1,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "V 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "V",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    }
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [
+    "000006"
+  ],
+  "summons": [],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [],
+  "summons_total": 0,
+  "summons_consumed": 0,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 0,
+    "summons_consumed": 0,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p328",
+    "role": "V",
+    "prompt_sha256": "171b42af018313bbcc69a25b1530f2ab9412256a4419f69333b5f3b963dad68e",
+    "prompt_chars": 46343,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "FACULTIES_07",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_STOP",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 7,
+    "tokens_in": 333517,
+    "tokens_out": 121312,
+    "usd": 0.077298,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 7,
+    "no_request_calls": 0,
+    "hit": 309632,
+    "miss": 23885,
+    "unknown_calls": 0,
+    "tokens_in": 333517,
+    "hit_rate": 0.9284,
+    "mismatched_calls": 0,
+    "saved_usd": 0.045517,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 633.156,
+  "end_ts": "2026-11-24T19:30:20+08:00",
+  "notes": [
+    "缓存读数：命中 309632 / 未命中 23885 token，命中率 92.8%（7 次调用）；按 modelcost 口径估算可省 约 0.045517 美元",
+    "子产出处理读数：summons_total=0（这一趟没派过子代理 ⇒ 没有要处理的子产出；判据没有对象，不红）"
+  ],
+  "final_payload": {
+    "final": "两态结论：**有毛病** —— 但要分清层次：证明**正文**（`## 证明` 那一节，sha=11164aee4f1b…）逐步核对**未发现任何推导缺口**；唯一一条 finding 落在**稿头声明的命题与正文所证命题不一致**这一处（派活方点名要我核的就是这一类，我不替你改稿）。\n\n【逐项核对记录，承重步单独核过】\n- 台账一致（角度⑤）：稿上 `## 命题` 与在册 statements `000035` 逐字相同（标签「B_p^3 中心截面面积公式与坐标向极值」也一致）；稿的 `## 证明` 正文 sha = 11164aee4f1b379663f59e8155dfd0f949925ac6c88d270f06af6871054c904a，与派活给的 sha 相同。\n- 第一步（化到标准位置）：带符号坐标置换保 B_p^3、正交变换保面积 ⇒ 可设 n=(a,b,0)、a²+b²=1；「右端不依赖 i 的选取」在 n 有两个零坐标时 n=±e_k、两个下标对应的和都等于 1，成立。\n- 第二步（正交基）：u=(b,-a,0)、v=(0,0,1)，u·n=ab-ab=0、‖u‖²=a²+b²=1、u·v=0、v·n=0，是 n^⊥ 的单位正交基；等距参数化 (s,z)↦(sb,-sa,z)；约束化为 m|s|^p+|z|^p≤1，m=|a|^p+|b|^p>0。\n- 第三步（拉回标准区域）：c=m^{1/p}、det T=c、area(T(E))=|det T|·area(E) ⇒ A_p(n)=m^{-1/p}·area(D_p)。\n- 第四步（Beta 积分，承重）：area(D_p)=4∫_0^1(1-t^p)^{1/p}dt；u=t^p ⇒ (1/p)B(1/p,1+1/p)；4/p·Γ(1/p)Γ(1+1/p)/Γ(1+2/p)，用 Γ(1/p)=pΓ(1+1/p) 约去 p ⇒ 4Γ(1+1/p)²/Γ(1+2/p)。代 p=1 得 2（与 A_1(e_3)=2 一致）、代 p=2 得 π，数值自洽。\n- 第五步（比较 m 与 1，承重）：0≤t≤1 时 t^p≥t²（1≤p<2，等号只在 t∈{0,1}）⇒ m≥1 ⇒ A_p≤C_p；p>2 反向 ⇒ m≤1 ⇒ A_p≥C_p；等号刻画 a,b∈{0,±1} 配合 a²+b²=1 ⇒ ±坐标向。\n- 第六步（门槛精确，承重）：n=(1,1,0)/√2 ⇒ m=2^{1-p/2}、m^{-1/p}=2^{1/2-1/p}；p<2 指数<0 ⇒ 严格小，p>2 严格大，p=2 得 A_2=π=C_2。\n- 硬禁令逐条：无「显然/易证/trivial」缝（「直接验得」处都给了算式）；无条件前提（1≤p<∞ 与「至少一个坐标为 0」都被用到）；依赖表为空与正文相符（正文没有引用任何在册命题，只用了 Beta 积分表示、Γ(x+1)=xΓ(x)、线性映射面积变换律，且都写成了本情形的确切陈述）；无循环依赖。六条角度（前提/计算/逻辑/强度/台账一致/依赖面）在正文上逐条过完：无一处要改。\n\n【findings（唯一一条）】\n- 位置：稿头第 1 行（标题）与「- 计划：000000 · 子目标：s3」行\n- 原文逐字：「F 的证明手稿：给出显式门槛 P0，使 p ≥ P0 时面对角截面面积大于坐标向与体对角向（用 ‖·‖_p 与 ‖·‖_∞ 的夹逼 3…」／「- 计划：000000 · 子目标：s3」\n- kind：稿头与正文不一致（台账一致角度；非证明步）\n- 为何不成立：attack_plans `000000` 现读的 s3 是「给出显式门槛 P0，使 p ≥ P0 时面对角截面面积大于坐标向与体对角向（用 ‖·‖_p 与 ‖·‖_∞ 的夹逼 3^{-2/p}A_∞ ≤ A_p ≤ A_∞ 与三个极限值 4、4√2、3√3 定常数）」，而本稿正文证的是另一条命题：在「n 至少一个坐标为 0」的单位法向上给出 A_p(n)=C_p·(Σ_{j≠i}|n_j|^p)^{-1/p}、C_p 闭式、p<2 与 p>2 相对 C_p 的大小与等号刻画、门槛 p=2 的精确性。正文全篇没有出现体对角向，也没有给出任何显式门槛 P0。对不上的是稿头的标题/子目标归属，不是 `## 命题` 那一节（它与 000035 逐字一致，正文证的正是它）。附带一处同源小差：标题写「F 的证明手稿」，稿头「产出者」写 agent-B-B1、稿族 b-proof。\n- 需补什么：由 B 把稿头改对（归属到 s2 / stmt 000035，或另交一份 s3 的证明）；正文一个字不用动，我也不改稿。\n- 步号给不出：核到第几段为止 —— 第一步至第六步/末段全核过，这一处缺口在稿头元数据、…（落档截断，原 2329 字）",
+    "evidence": [
+      "stmt:000035",
+      "plan:000000",
+      "manuscripts/B/b-proof-000001.md",
+      "verifications/000035.jsonl#v-000003"
+    ],
+    "notify": {
+      "to": "B",
+      "summary": "b-proof-000001 正文逐步核对无缺口，但稿头（标题/子目标 s3）与正文所证命题 000035 不一致：判有毛病，改稿头即可",
+      "body": "## 审的是哪一份稿\n`manuscripts/B/b-proof-000001.md`（稿号 000001，稿族 b-proof，产出者 agent-B-B1）；被审正文 `## 证明` 的 sha = 11164aee4f1b379663f59e8155dfd0f949925ac6c88d270f06af6871054c904a，与派活给的 sha 一致。\n\n## 结论：有毛病（唯一一条 finding 在稿头，不在推导步上）\n证明正文逐步核对**没有找到缺陷**：化到标准位置、正交基与等距参数化、面积变换律、Beta 积分与 Γ 约分、m 与 1 的比较、p=2 门槛见证，每一步都核过，数值自洽（p=1 得 2、p=2 得 π）；无条件前提、无依据跳步、「显然」缝、不干净引用、循环依赖——都没有。\n\n## finding 1（唯一条）\n- 位置：稿头第 1 行（标题）与「- 计划：000000 · 子目标：s3」行\n- 原文逐字：「F 的证明手稿：给出显式门槛 P0，使 p ≥ P0 时面对角截面面积大于坐标向与体对角向（用 ‖·‖_p 与 ‖·‖_∞ 的夹逼 3…」／「- 计划：000000 · 子目标：s3」\n- 为何要改：attack_plans 000000 的 s3 是「给出显式门槛 P0，使 p ≥ P0 时面对角截面面积大于坐标向与体对角向（… 与三个极限值 4、4√2、3√3 定常数）」，而本稿正文证的是 stmt:000035（A_p(n)=C_p·(Σ_{j≠i}|n_j|^p)^{-1/p}、C_p 闭式、p<2 / p>2 相对 C_p 的大小与等号刻画、门槛 p=2 精确）。正文没有出现体对角向，也没有给任何显式门槛 P0 —— 对不上的是稿头的标题/子目标归属，不是 `## 命题` 那一节（它与 000035 逐字一致）。附带：标题写「F 的证明手稿」，稿头产出者却是 agent-B-B1。\n- 需补什么：把稿头改对（归属 s2 / stmt:000035，或另交一份 s3 的证明）。正文不用动；改标题不会改变 `## 证明` 的 sha。\n- 步号给不出：核到第几段为止 —— 六步全核过，缺口在稿头元数据，不落在任何推导步上。\n\n## 一条读数（不是 finding）\n你这一侧说「尚未拿签」，与盘上不符：`manuscripts.submission_reading` 给 signed=true、signed_sha=11164aee4f1b…、sign_at=2026-11-24T19:24:08（state=unsubmitted）；`verify.verify_proof` 因此早退（already_signed：连续 3/3、判词 成立、来源 verifications/000035.jsonl#v-000003）。我这一转没有新写台账行、也没有新发签。",
+      "why": "把两态结论与唯一一条 finding 交回被审方 B，并核清「尚未拿签」这条事实读数",
+      "refs": [
+        "stmt:000035"
+      ]
+    }
+  },
+  "task_id": "t-000064"
+}

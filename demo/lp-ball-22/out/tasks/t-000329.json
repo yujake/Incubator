@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-25T03:58:39+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 2809,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"做完了：在 `out/package/main.tex` 的 `\\\\section{Main results}`（第 50 行起）里，四条定理之后各就地加了一行依据注释，未动任何定理陈述、结论强度与别处文字；随后重编，回执 tex_sha256 与盘上正文逐字相等。\\n\\n① 新增的四行（逐字，行号为新增后盘上现状）：\\n- 第 66 行（`thm:integral`，Integral representation and the coordinate and face-diagonal closed forms，`\\\\end{theorem}` 之后、proof 之前）：`% evidence: stmt:000034, exp:000003`\\n- 第 105 行（`thm:zero`，Normals with a vanishing coordinate 之后）：`% evidence: stmt:000035, exp:000004`\\n- 第 137 行（`thm:diag`，The body-diagonal section 之后）：`% evidence: stmt:000041, exp:000006`\\n- 第 169 行（`thm:delta`，The face-diagonal versus the body-diagonal area 之后）：`% evidence: stmt:000042, exp:000007`\\n四条全部落在 Main results（50–180 行区间）内，核查/证据章节（第 216 行 `\\\\section{Computational evidence}`）未加任何新引用；覆盖了要求的 stmt:000034 / 000035 / 000041 / 000042 与 exp:000003 / 000004 / 000006 / 000007。\\n\\n② main.tex 现况：sha256=9b54c2e3403b44b96b741580ac5584f5d3d46cb7f5d583a42d04e12f3f972e97，字节数 32673（原 32529，四次 fs.edit 各 +36，replacements 均为 1，无一处 allow_multiple）。\\n\\n③ 编译回执（out/package/COMPILE-RECEIPT.json）：tex_sha256=9b54c2e3403b44b96b741580ac5584f5d3d46cb7f5d583a42d04e12f3f972e97（与②逐字相等 ⇒ PDF 由本次正文编出，pdf_fresh=true）；pages=10；pdf_bytes=316925；engine=pdflatex，runs=2，exit_codes=[0,0]；compiled_at=2026-11-25T03:58:19+08:00。编译日志有 1 条 `Overfull \\\\vbox (254.99376pt too high)`（正文段 Overfull \\\\hbox >20pt 为 0 条，本趟新增的是注释，不产生排版宽度）。\\n\\n④ 无拒绝：四次 fs.edit 全部 ok（每次带上次 sha 校验，未出现 sha 不符）；首次 `doc.paper_compile(project=\\\"projects/lp-ball-22\\\")` 被受控拒 `bad_project`（原话：『论文包：项目目录不在盘上：D:\\\\\\\\Incubator\\\\\\\\projects\\\\\\\\lp-ball-22\\\\\\\\projects\\\\\\\\lp-ball-22』），改用 `project=\\\".\\\"` 后成功——这一条是路径口径问题，不是内容被拒，如实记下。\\n\\n未做的事（不宣布通过）：本趟只做了加引用行与重编，没有改动 claims 台账、没有把正文里的注释行换成正文可见的交叉引用形式；`% evidence:` 是注释，PDF 面上不可见，若判据要求正文可见引用则仍需另改（这一档需上级裁定口径）。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\lp-ball-22\\\\runs\\\\G-20261125-035839-001.json\", \"messages\": [], \"outcome\": \"ok\", \"status\": \"done\", \"steps\": 17, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "7492135f289394258f4852d615ca2ee832f74b348c9af5ae037ac9aeb5f63464",
+ "readings": {},
+ "role": "G",
+ "status": "done",
+ "task_id": "t-000329"
+}

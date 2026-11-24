@@ -1,0 +1,410 @@
+===== page 1 =====
+Acta Math. Hung. 
+52 (3--4) (1988), 219--22Y. 
+PLANE SECTIONS OF THE UNIT BALL OF L ~ 
+R. GRZA~]LEWICZ (Wroc~aw) 
+1. Introduction 
+The intersection of a symmetric convex set C with an n-dimensional plane 
+through its centre O will be termed a plane section of C. At the end of his paper 
+[9], V. Klee proved that every finite-dimensional section of the unit ball of the space 
+Co is a polyhedral and posed the problem of determining all the finite-dimensional 
+sections of the unit balls of other well-known Banach spaces. The purpose of this 
+paper is to describe the plane sections of the unit balls of LP[0, 1] and l p, 1 =<p< co 
+(Theorems 1 and 2). This description is an extension of the results of [3] from the 
+case p = 1 to arbitrary p. We also establish a class of convex sets which is called 
+p-cozonoids. Briefly we say that p-cozonoids are the plane sections of the unit ball 
+of LP[0, 1]. Some ideas we use here were presented earlier by Levy [11]. For other 
+result connected with plane sections of the LP-spaces see [4], [5], [14]. 
+A convex body (non-void, compact convex set) in the Euclidean space R", 
+which is a finite sum of line segments is called a zonotope. For a zonotope P, which 
+is the sum of the line segments [-xixi] (i=1, 2, ..., k), the support function Hp 
+of the zonotope P (Hp(u)= sup (u, x), u~R") may be written in the form 
+xEP 
+= 
+, u e~ (uCR"), 
+i=1 
+where (,, .) denotes the scalar product in R ". 
+It is easy to see that there exists a compact convex set K in R ~ such that its 
+support functions can be represented in continuous form of the above, i.e. 
+9 zK(u) = 
+f i(x, u)ldtz(x) 
+Sn-1 
+where # is measure on the unit sphere S~-I={x~R": [txlt=l} (by measure on 
+S ~-1 we mean a nonnegative, finite, a-additive set function on the a-algebra of 
+the Borel subsets of S"-1). A convex subset of R ~ whose support functions have the 
+above integral representation are called zonoids. Zonoids are limits of zonotopes 
+in the Hausdorff metric. In R 2 the set of zonoids coincides with the set of all cen- 
+trally symmetric convex bodies. W. Well [18] presented an example of an n-dimen- 
+sional convex body (n_~3) which is not a zonoid, although all of its k-dimensional 
+projections are zonoids (k =2, 3, ..., n- 1). The set of all zonoids is a closed con- 
+vex cone in the space of all centrally symmetric convex bodies equipped with the 
+Hausdorff metric. Since the simplicial polytope (i.e. all faces of which are simplices) 
+is not a zonoid and the set of simplicial polytopes is dense, the set of all zonoids is 
+nowhere dense. More details can be found in [12], [19], [20], [17]. 
+3* 
+===== page 2 =====
+220 
+R. GRZAgLEW[CZ 
+2. p-eozonoids 
+In this paper we consider the convex bodies which are adjoint to zonoids and 
+also their certain generalization. This class of convex bodies is used to characterize 
+the plane sections of the unit ball of LP-spaces. 
+To each norm N on R" there corresponds naturally a convex centrally sym- 
+metric body in R" with non-empty interior, namely its unit ball {xER"; N(x)~_ 1}. 
+Let 1 ~p< oo. We say that the norm N on R" is p-cozonoidal, if it can be represented 
+in the form 
+(*) 
+N(u)= [ f I(u, 
+(u<R"), 
+Sn-1 
+where # is a suitable measure on S "-~. We may and do assume that # is symmetric, 
+i.e. #(A)=#(-A) 
+for any Borel set AcS"-L A convex subset of R" which 
+is a unit ball of some p-cozonoidal norm is called p-eozonoid. The set of all 
+p-cozonoids in R" is denoted by ~.~. We have directly from the definition that if 
+K~E~g. p and K1 is linearly equivalent to/s 
+then K..ECg. p. If # in (.) is a discrete 
+measure with Z,, point mass equal to 1/2 at 
+(+l, 0, ..., 0), (0, _+_1, 0, ..., 0) .... , (0, 0 ..... 0, !l)ES "-1, 
+then the corresponding norm is an lP-norm on R", i.e. B(I,P)ECgg (B(P,) denotes 
+the unit ball of l,P). Note that for any arbitrary measure # on S "-1, (.) defines a 
+seminorm on R" such that N(u0)=0 if and only if supp#cu~NS"-L 
+Thus 
+throughout this paper we assume that there does not exist an (n-1)-dimensional 
+plane P such that supp #cS"-~(qP. 
+Let N be a norm on R ". Let B(N) and B(N*) denote the unit balls of (R", N) 
+and its dual (R ", N)*, respectively. Then B(N) is an n-dimensional zonoid if and 
+only if B(N*) is an n-dimensional 1-cozonoid. Therefore cg~ coincides with the 
+set of all symmetric convex bodies with interior points in R 2. For n-_>3 there exists 
+an n-dimensional symmetric convex body which does not belong to cg~. 
+3. Uniqueness of representation 
+C. Hardin ([7] Theorem 1.1a) proved that for 0<p~2N and p,v positive meas- 
+ures on R" the condition 
+R n 
+i=1 
+RJ, 
+i=1 
+for all 21, 23 ..... )..ER implies #=v. By a simple modification of the above con- 
+siderations of Hardin we may obtain: 
+Let 0<pE2N and #, v be a symmetric positive measure on S "-1. If 
+n 
+sn-1 
+i=l 
+Sn-x 
+for all 2iER, then #=v. 
+Acta Mathemat[ca Hungarica 52, 1988 
+===== page 3 =====
+PLANE SECTIONS OF THE UNIT BALL OF L p 
+221 
+This implication shows that in the representation (2) of p-cozonoidal norms 
+the measure /z is unique (up to a symmetry) for l<=p~2N. For p=2,4,6, ..., 
+this is not true. Indeed, the Euclidean ball could be represented by infinitely many 
+different measures. First of all if g is the Lebesgue measure on S ~-i then we obtain 
+the Euclidean norm. Now suppose that p=2m, mEN. Let p,, be a discrete measure 
+on S ~ with mass equal to 1 at 4m points: 
+cos 2-m'm' sin 
+k= i, 2, ..., 4m. 
+We have 
+2m 
+kiz , 
+k7~ 2mll/O~m 
+N(x, y) = [s( l(., y),(zi, z2))lPd#(z)]iiP = [2k_Z~i xcos.~--~m-r-ysin-f~ 
+m 
+J 
+. 
+Let cpE[O, 2n] be such that 
+x 
+y 
+cosq~-- ~
+,
+ 
+sin~p-- ~y~ 
+Then N((x, y))=r 
+Where 
+am / 
+/~7~ i/ 
+f(<p) = 
+2 2,"cos 
+i,<p- 
+Ejj 
+. 
+k=l 
+Since the derivative off(~o) is equal to 0, we obtain that f((0) is constant, so N is the 
+Euclidean norm. 
+R~RK. 
+W. Blaschke [2] (pp. 154---155) considered a wider class of convex 
+bodies, which is called generalized zonoids. A centrally symmetric convex body 
+whose support function is of the form (2) with p = 1, but a measure # is a suitably 
+signed Borel measure on S ~-1, is called a generalized zonoid. Blaschke showed 
+that all sufficiently high differentiable convex bodies are generalized zonoids. Gen- 
+eralized zonoids are dense in the space of all symmetric convex bodies equipped with 
+the Hausdorff metric. Schneider ([15], [16]) has also treated generalized zonoids. In 
+particular, he presented generalized zonoids which are not zonoids and symmetric 
+convex bodies which are not zonoids. 
+One may also consider generalized p-cozonoids. It would be interesting to deter- 
+mine such convex bodies. In particular there arises the question, whether the set 
+of all generalizedp-cozonoids is dense? From the corresponding result for generalized 
+zonoids the answer is affirmative if p = 1. Note that there exist signed measures 
+such that (2) defines a norm, For instance, let p=4, n=2 and /x be a measure 
+supported on 10 points such that 
+p((-t-l, 0))= ~, 
+# 
+4- 
+, • 
+=--~-, 
+/~ 
++__~--~, zk 
+= 4-'8"" 
+Indeed, we have 
+[N((x, y))]' = f (xu+ yv)'d# = 
+Sl 
+5 
+4 
+1 
+4 
+4 
+1 
+= T x - ~- [(x + y) + (x- y) ] + ~ 
+[(x + 2y) 4 + (x- 2y)'] = x 4 + y'. 
+Aeta Mathematica Hungarica 52, 1988 
+===== page 4 =====
+222 
+R. GRZ/~LEWICZ 
+4, Plane sections of LP[O, 1] and I p 
+Tm~OrtEM 1. Let 1 ~_p< oo. The set of all n-dimensional plane sections of the 
+unit ball of L~[0, 1] coincides with the set cg~. 
+P~ooF. Let fl,f~, ...,f,6LP[ O, 1] be linearly independent. First we construct 
+the subspace of L p generated by: {f~}7=I. Let (x~,x~ .... ,x,)ER ~. Put r(t)= 
+--- 
+(O, and define a measurable function 0: [0, I]~S "-1 by 
+(A(t) 
+Aft) 
+f,(t)] 
+~,(0 = ~ ~(t) ' 
+r(O '" 
+~(6 )" 
+We have 
+n 
+1 
+I 
+" 
+/ 
+lY~,x'fi(t)IPdt= oi ~xi~] 
+r'(t)dt= 
+= 
+1, x~ .... , x.), t~i~ 
+' r(t) ..... 
+-7(6J/I 
+0 
+1 
+= f I((x,), #J(t)>lPrp(t)dt 
+= 
+f I<(x,), (y,)>[.dy(y), 
+0 
+S n-x 
+where /~ is a measure on 
+S "-1 such that 
+#(A)= f rP(t)dt, AcS "-1 
+~-l(a) 
+(weassumethat O =0). Note that iff~ are simple functions then/z is a discrete 
+measure on S ~-1. Observe that # is positive. The measure # is also finite. Indeed, 
+1 
+1 
+n 
+f d.(y)--- f r.(t)at= f (,~f?(t))'/'dt <= 
+1 
+" 
+" 
+~ lI~,LI ) 
+. f E(,=~lf,<ol)21 "~dt = LI,~_ .f,)ll~ ~ (,=1 
+"" <~ 
+Therefore the section of the unit ball of LV[0, 1] is a p-cozonoid. 
+Now suppose that KEcg~ i.e. the corresponding norm NK has the form 
+NK(x) = ( f [(u,x>l'd#(x)) I/p. 
+3n-t 
+Let LP(S "-x, #) denote the Banach space of all classes of real measurable func- 
+tions f such that 
+f If(u)l'd#(u) < 
+Sn-I 
+Aeta Mathematica Hungarica 52, 1988 
+===== page 5 =====
+PLANE SECTIONS OF THE UNIT BALL OF L ~' 
+223 
+with the LP-norm. The space LP(S ~-:, It) can be embedded isometrically in LP[0, i] 
+([10], Theorem 14, w 15 p. 130). Let ~: LP(S ~-~,/t)~LP[0, 1] be a linear isometry. 
+Define gIELP(S ~-~, I0, i=1, 2, ..., n by g~(u)=u~, u=(u~, u2 .... , u,)ES'-L 
+Put 
+fc=~(g0- We have 
+::,,(x.x,, 
+,x.)=( 
+f' 
+" 
+. 
+~" 
+9 .. 
+= 
+Sn - 1 
+= t1,  x,g, fIL.,s.-...,: II 
+x, Afl, 
+Therefore K is the unit ball of a subspace of LP[O, 1] generated by {f}L-a, i.e. K 
+is a plane section of the unit ball of LP[O, 1]. 
+RrMARK. J. Lindenstrauss proved in [13] that L:[0, 1] is a universal space for 
+all two-dimensional Banach spaces of equivalently two-dimensional sections of the 
+unit ball of La[O, 1] give us (up to an affine equivalence) all two-dimensional sym- 
+metric convex bodies. This result is an immediate consequence of Theorem 1, be- 
+cause every norm on R 2 is 1-cozonoidal. On the other hand, from Theorem 1 every 
+1-cozonoidal finite-dimensional Banach space is a subspace of U[O, 1]. Independ- 
+ently this result was obtained by Herz [8], who uses convex set theory language 
+Note that for n~3 there exists an n-dimensional Banach space, which is not 
+1-cozonoidal, so L~[0, 1] is not universal for n-dimensional Banach spaces (cf. 
+also [3]). 
+< < 
+The set K is the unit ball of the n-dimensional sub- 
+THEOREM 2. Let 1 :p 
+oo. 
+space of l p if and only if its correspOnding norm NK has the representation (.) with 
+a measure which is a countable sum of mass points. 
+PROOF. The method we use is similar to that in the proof of Theorem 1. Let 
+(f~), (f~), ..., (f~)E1 p be n linearly independent vectors and let (xl, x2 .... , x,)ER". 
+We have 
+E2V((x,, 
+x,, 
+..., 
+x.))]. 
+= 
+rr, 
+ 
+= 
+: 
+u>:..(u), 
+9 ~ 
+-~ 
+-~ 
+Sn_ 
+1 
+where the measure # is a sum of mass points r~ ~.j, 
+u1 
+~rj 
+O 
+O) 
+rj= 
+= IAJI~] x/~ 
+The measure/~ is finite because 
+Z re -- 
+(Am)'] "/. < Z 
+If/ 
+' -- 
+< 
+IIAII,, 
+J 
+./ 
+- 
+. 
+. 
+Conversely, if we have a measure # on S n-: which is a countable sum of point 
+masses mj>=O at uj=(u},u~, ...,~)ES ~-~ and the corresponding p-cozonoid K, 
+then by analogous arguments K is the unit ball of subspaces of l p generated by the 
+vectors fx,f2, ..., f,, where 
+P 
+= 
+(u~r 
+i= 1,2, ... n. 
+(A 
+= 
+(AJ)7=~ 
+' 
+-- 
+" 
+===== page 6 =====
+224 
+R. GRZA~LEWICZ 
+We have 
+Z Ifdl p = Z lu$1 p mj _--< ~ m r ---- #(Sn-X) <~, 
+J 
+2 
+J 
+i.e. f~61 p. The proof is complete. 
+Using analogous arguments to those in the proof of Theorem 2, the following 
+result can be obtained. 
+PRoPosmor~. Let l<_-p< oo. The set K is an n-dimensional plane section of the 
+unit ball of I g if and only if its corresponding norm Nr has representation (.) with 
+symmetric measure supported on at most 2m points. 
+REMARK. Let us also mention the plane sections of 10% By the well-known 
+result of S. Banach and S. Mazur [1], the space of continuous functions C[0, 1] 
+is universal for all separable Banach spaces and by the fact that C[0, 1] is con- 
+tained in l =, every symmetric convex body in R n can be obtained as a plane sec- 
+tion of B(l*O. Plane sections of B(l ~) might be considered directly using the method 
+presented above. Let Y be a linear subspace of l = generated by (u~), (u~), ..., (u~). 
+Then 
+a = conv {+ (u, ~, u~, ..., u~)ER", jEN} 
+is the unit ball of Y* and B(Y)=Q* (Q* is the dual convex body to Q). Con- 
+versely, let Q be an n-dimensional symmetric convex body. Denote by Q* its dual 
+convex body. Choose the sequence vj=(v), ..., v~)CR n, j6N such that Q*= 
+=cony {vj: jEN}. Then 
+n 
+n 
+NO(x)= sup [(x, y)[ = sup 1,~1 x,v~l = II,~x'u'l!~ 
+YEQ 
+= 
+where ui=(v~, v 12, ...)CI ~*, i=1, ..., n. Therefore Q is the unit ball of the subspace 
+of l'* generated by the vectors {ul, us, ..., u~}. In particular we have 
+2 
+2 
+where ux=(cos 1, cos 2, ...), u2=(sin 1, sin 2 .... )El ~. Thus we obtain the Euclidean 
+ball as a plane section of B(l~). 
+Since the Lebesgue measure can be obtained as a weak limit of discrete measures, 
+the space l" (1 <=p< ~o) is sufficiently Euclidean (cf. Dvoretzky's result [6]). Ob- 
+viously LP[0, 1] contains a subspace isometrically isomorphic to l]. 
+QUESTIONS. The set c~ forms a convex cone. Since ~] consists of all n-dimen- 
+sional ellipses, it is also a convex cone. Are the sets c~v convex for other p? We 
+have c~]cc~v. Do we have the sequence of inclusions cg]cc~]=c~]ccg~8c...? 
+We have 
+B(l~)Ecr 
+for 
+n_~3, 
+1<_-p~_2 
+(cf. [3], Theorem 6.6). For which p, r, n do we have B(I~)C(C~v? 
+Acta Mathematica Hungarica 52. 1988 
+===== page 7 =====
+PLANE SECTIONS OF THE UNIT BALL OF L v 
+225 
+References 
+[1] S. Banach and S. Mazur, Zur Theorie der linearen Dimension, Studia Math., 4 (1933), 100-- 
+112. 
+[2] W. Blaschke, Kreis undKugel(Leipzig, 1916). 
+[3] E. Ds Bolker, A class of convex bodies, Trans. Amer. Math. Soc., 145 (1969), 323--345. 
+[4] J. Bretagnolle, D. Dacunha Castelle, J. Krivine, Lois stables et espaces L', Ann, Inst. H. 
+Poincard, N. S., 2 (1966), 231--259. 
+[5] G. Choquet, Lectures on Analysis, Vol. III. W. A. Benjamin (Reading, Mass, etc. 1969). 
+[6] A. Dvoretzky, Some results on convex bodies and Banach spaces, Pro& Syrup. on Linear 
+Spaces (Jerusalem, 1961), 123--174. 
+[7] C. D. Hardin, Jr., Isometries on subspaces of L p, lndiana Univ. Math. J., 30 (1981), 449---463. 
+[8] C. S. Herz, A class of negative definite functions, Proe. Amer. Math. Soc., 14 (1963), 670---676. 
+[9] V. Klee, Polyhedral sections of convex bodies, Acta Math., 103 (1960), 243--267. 
+[10] H. E. Lacey, The Isometric Theory of Classical Banach Spaces, Springer-Verlag (New York, 
+1974). 
+[11] P. L6vy, Thdorie de ldddition des variables eldatories, Gauthier-Villars (Paris, 1937). 
+[12] N. F. Lindquist, Support functions of central convex bodies, Portugaliae Math., 34 (1975), 
+241--252. 
+[13] J. Lindenstrauss, On the extension of operators with finite dimensional range, lllinois J. Math., 
+8 (1964), 488---499. 
+[14] A. Neyman, Representation of Lfnorms and isometric embedding in Lp-spaces, IsraelJ. Math., 
+48 (1984), 129--138. 
+[15] R. Schneider, Zu einem Problem von Shephard fiber die Projektionen konvexer K/Srper, 
+Math. Z., 101 (1967), 71--82. 
+[16] R. Schneider, ~ber eine Integralgleichung in der Theorie der konvexen KiSrper, Math. Nachr., 
+44 (1970), 55--75. 
+[17] R. Schneider and W. Well, Zonoids and Related Topics, Convexity and lts Applications. Eds. 
+P. Gruber and J. M. Wills, Birkh/iuser (Basel et al., 1983). 
+[18] W. Well, Zonoide und verwandte Klassen konvexer K~Srper, Monatsh. Math., 94 (1982), 
+73--84. 
+[19] W. Weft, Kontinuierliche Linearkombination von Strecken, Math. Z., 148 (1976), 71--84. 
+[20] W. Well, Centrally symmetric convex bodies and distributions II, Israel J. Math., 32 (1979), 
+173--182. 
+(Received June 28, 1985; revised November 4, 1985) 
+INSTITUTE OF MATHEMATICS 
+TECHNICAL UNIVERSITY OF WROCLAW 
+WYB. WYSPIA]QSKIEGO 27 
+50370 WROCLAW 
+POLAND 
+Acta Mathematica Hungarica 52, 1988 

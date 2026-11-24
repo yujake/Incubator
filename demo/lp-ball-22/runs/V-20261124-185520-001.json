@@ -1,0 +1,1290 @@
+{
+  "role": "V",
+  "task": "V：这一趟派给你的活是 —— 审这一份证明稿 manuscripts/F/f-proof-000001.md（稿号 000001，正文 sha 6a6444ab3ab7…）：按 `## 命题` / `## 证明` / `## 依赖` 三节逐行走查，判『成立』（没找到缺陷）或『有毛病』（找到缺陷，每条 finding 带步号与那一句原话）。要审的东西是这一份的材料：设 n 为单位向量且至少一个坐标为 0，则 A_p(n) = C_p·(Σ_{j≠i}|n_j|^p)^{-1/p}（C_p = 4Γ(1+1/p)²/Γ(1+2/p)），于是 1≤p<2 时 A_p(n) ≤ C_p 且等号只在 ±坐标向、p>2 时反向；门槛 p=2 精确。请重点核两处：(a) 第 3–5 步把 n^⊥ 的参数化与二维 l_p 圆盘面积 C_p 的换算（换元尺度方向要对，上一稿正是在这里反过方向），(b) 第 7–9 步由 (Σ|n_j|^p)^{-1/p} ≤ 1（p<2 时为严格 < 除非向量退化）推出唯一性的那一步是否真的用到了「两个非零坐标」这一条件而没多推。这一份是自足证明：台账 34 行里 30 条 concept（not_applicable）+ 4 条 conjecture（E 的数值读数），可引池为空，依赖面 not_applicable 是合法的。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/F/f-proof-000001.md"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# F 的证明手稿：给出显式门槛 P0，使 p ≥ P0 时面对角截面面积大于坐标向与体对角向（用 ‖·‖_p 与 ‖·‖_∞ 的夹逼 3…\n\n- 计划：000000 · 子目标：s3\n- 依赖面洗稿：已洗=true；执行者=secretary-F\n- 稿族：f-proof\n- 产出者：agent-F-F1\n- 正文sha：6a6444ab3ab747d5b0738f14525ce27cb01a79a84a957c8c96ae2d82e1506640\n- 命题指纹：41447b17c390aa86bd72f3a1214d046c99b3a15a399075deb73d8393e477e5aa\n- 命题类型：conjecture\n- 登记时间：2026-11-24T18:45:47+08:00\n- 标签：F 攻坚 000000 子目标 s3\n- 版本：2026-11-24T18:45:47+08:00@6a6444ab3ab747d5b0738f14525ce27cb01a79a84a957c8c96ae2d82e1506640\n\n## 命题\n\n设 1 ≤ p < ∞，n ∈ R³ 为单位向量且 n 至少有一个坐标为 0。记 A_p(n) 为 B_p^3 = {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1} 与平面 n^⊥ 的交的二维 Lebesgue 面积，C_p := A_p(e_3)。则：(i) 若 i 是使 n_i = 0 的任一下标，则 A_p(n) = C_p·(Σ_{j≠i}|n_j|^p)^{-1/p}，右端不依赖 f(i) 的选取，且 C_p = 4Γ(1+1/p)²/Γ(1+2/p)；(ii) 当 1 ≤ p < 2 时 A_p(n) ≤ C_p，等号成立当且仅当 n 是 ±坐标向量（即 n 的三个坐标中恰有一个的绝对值为 1）；(iii) 当 p > 2 时 A_p(n) ≥ C_p，等号成立当且仅当 n 是 ±坐标向量；(iv) p = 2 时对一切这样的 n 有 A_2(n) = π，且门槛 p = 2 是精确的：对每个 p ≠ 2 都存在坐标为零的单位法向 n 使 A_p(n) ≠ C_p（例如 n = (0,1,1)/√2 给 A_p(n) = C_p·2^{1/2-1/p}）。\n\n## 证明\n\n1. 设定与记号：1 ≤ p < ∞，n ∈ R³ 为单位向量，且存在下标 i 使 n_i = 0；把另外两个下标记为 j、k。A_p(n) 按命题定义为 B_p^3 ∩ n^⊥ 的二维 Lebesgue 面积，C_p := A_p(e_3)。（前提）\n2. 正交基与参数化：取 u := e_i（第 i 个坐标向量）、v := n_k e_j − n_j e_k。由 n_i = 0 与 |n| = 1 得 n_j² + n_k² = 1，故 |v| = sqrt(n_k² + n_j²) = 1、u·v = 0、u·n = n_i = 0、v·n = n_k n_j − n_j n_k = 0；于是 v ∈ n^⊥、u ∈ n^⊥，且 (u,v) 是 n^⊥ 的单位正交基，映射 (s,t) ↦ s·u + t·v 是 R² 到 n^⊥ 的等距线性双射，因而把二维 Lebesgue 测度原样搬过去（面积守恒）。（前提）\n3. 平面内点的 l_p 范数：s·u + t·v = s·e_i + t·n_k·e_j − t·n_j·e_k，三个坐标分别是 s、t·n_k、−t·n_j，故 ‖s·u + t·v‖_p^p = |s|^p + |t·n_k|^p + |t·n_j|^p = |s|^p + σ|t|^p，其中 σ := |n_j|^p + |n_k|^p ≥ 0。（前提）\n4. 截面的显式形状：由第 2 步的面积守恒与第 3 步的范数计算，A_p(n) = area{(s,t) ∈ R² : |s|^p + σ|t|^p ≤ 1} =: area(E_σ)。（前提）\n5. 把 E_σ 送到标准圆盘：线性映射 Φ(s,t) := (s, σ^{1/p} t) 的行列式为 σ^{1/p}，且 (s,t) ∈ E_σ ⇔ |s|^p + |σ^{1/p}t|^p ≤ 1 ⇔ Φ(s,t) ∈ D_p := {(y_1,y_2) : |y_1|^p + |y_2|^p ≤ 1}；故 area(E_σ) = σ^{-1/p}·area(D_p)。又 e_3^⊥ = {(x,y,0)} 与 B_p^3 的交恰是 D_p（第三坐标贡献 0），故 area(D_p) = A_p(e_3) = C_p，于是 A_p(n) = C_p·σ^{-1/p} = C_p·(Σ_{j≠i}|n_j|^p)^{-1…（落档截断，原 3450 字）",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/F/f-proof-000001.md",
+          "encoding": "utf-8",
+          "bytes_read": 5449,
+          "total_bytes": 5449,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 36,
+          "total_lines": 36,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 36 行",
+          "sha256": "0cf2e9d63d84d89e1fc793263941d594c6d840a70c44f2c050a1aa94486ecb6e"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 36608,
+        "prompt_cache_miss_tokens": 1480,
+        "tokens_in": 38088,
+        "tokens_out": 55,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000028"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.search",
+        "args": {
+          "pattern": "f\\(i\\)|不依赖.{0,6}的选取",
+          "path": "manuscripts/F/f-proof-000001.md"
+        },
+        "why": "核对命题里「右端不依赖……的选取」的逐字写法"
+      },
+      "result": {
+        "tool": "fs.search",
+        "ok": true,
+        "data": {
+          "pattern": "f\\(i\\)|不依赖.{0,6}的选取",
+          "path": "manuscripts/F/f-proof-000001.md",
+          "matches": [
+            {
+              "path": "manuscripts/F/f-proof-000001.md",
+              "line": 16,
+              "text": "设 1 ≤ p < ∞，n ∈ R³ 为单位向量且 n 至少有一个坐标为 0。记 A_p(n) 为 B_p^3 = {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1} 与平面 n^⊥ 的交的二维 Lebesgue 面积，C_p := A_p(e_3)。则：(i) 若 i 是使 n_i = 0 的任一下标，则 A_p(n) = C_p·(Σ_{j≠i}|n_j|^p)^{-1/p}，右端不依赖 f(i) 的选取，且 C_p = 4Γ(1+1/p)²/Γ(1+2/p)；(ii) 当 1 ≤ p < 2 时 A_p(n) ≤ C_p，等号成立当且仅当 n 是 ±坐标向量（即 n 的三个坐标中恰有一个的绝对值为 1）；(iii) 当 p > 2 时 A_p(n) ≥ C_p，等号成立当且仅当 n 是 ±坐标向量；(iv) p = 2 时对一切这样的 n 有 A_2(n) = π，且门槛 p = 2 是精确的：对每个 p ≠ 2 都存在坐标为零的单位法向 n 使 A_p(n) ≠ C_p（例如 n = (0,1,1)/√2 给 A_p(n) = C_p·2^{1/2-1/p}）。"
+            },
+            {
+              "path": "manuscripts/F/f-proof-000001.md",
+              "line": 24,
+              "text": "5. 把 E_σ 送到标准圆盘：线性映射 Φ(s,t) := (s, σ^{1/p} t) 的行列式为 σ^{1/p}，且 (s,t) ∈ E_σ ⇔ |s|^p + |σ^{1/p}t|^p ≤ 1 ⇔ Φ(s,t) ∈ D_p := {(y_1,y_2) : |y_1|^p + |y_2|^p ≤ 1}；故 area(E_σ) = σ^{-1/p}·area(D_p)。又 e_3^⊥ = {(x,y,0)} 与 B_p^3 的交恰是 D_p（第三坐标贡献 0），故 area(D_p) = A_p(e_3) = C_p，于是 A_p(n) = C_p·σ^{-1/p} = C_p·(Σ_{j≠i}|n_j|^p)^{-1/p}；由于 n_i = 0 时 n_j² + n_k² = 1 与 i 的选取无关，右端不依赖 i 的选取 —— 这就是 (i)。（前提）"
+            }
+          ],
+          "lines": [
+            "manuscripts/F/f-proof-000001.md:16: 设 1 ≤ p < ∞，n ∈ R³ 为单位向量且 n 至少有一个坐标为 0。记 A_p(n) 为 B_p^3 = {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1} 与平面 n^⊥ 的交的二维 Lebesgue 面积，C_p := A_p(e_3)。则：(i) 若 i 是使 n_i = 0 的任一下标，则 A_p(n) = C_p·(Σ_{j≠i}|n_j|^p)^{-1/p}，右端不依赖 f(i) 的选取，且 C_p = 4Γ(1+1/p)²/Γ(1+2/p)；(ii) 当 1 ≤ p < 2 时 A_p(n) ≤ C_p，等号成立当且仅当 n 是 ±坐标向量（即 n 的三个坐标中恰有一个的绝对值为 1）；(iii) 当 p > 2 时 A_p(n) ≥ C_p，等号成立当且仅当 n 是 ±坐标向量；(iv) p = 2 时对一切这样的 n 有 A_2(n) = π，且门槛 p = 2 是精确的：对每个 p ≠ 2 都存在坐标为零的单位法向 n 使 A_p(n) ≠ C_p（例如 n = (0,1,1)/√2 给 A_p(n) = C_p·2^{1/2-1/p}）。",
+            "manuscripts/F/f-proof-000001.md:24: 5. 把 E_σ 送到标准圆盘：线性映射 Φ(s,t) := (s, σ^{1/p} t) 的行列式为 σ^{1/p}，且 (s,t) ∈ E_σ ⇔ |s|^p + |σ^{1/p}t|^p ≤ 1 ⇔ Φ(s,t) ∈ D_p := {(y_1,y_2) : |y_1|^p + |y_2|^p ≤ 1}；故 area(E_σ) = σ^{-1/p}·area(D_p)。又 e_3^⊥ = {(x,y,0)} 与 B_p^3 的交恰是 D_p（第三坐标贡献 0），故 area(D_p) = A_p(e_3) = C_p，于是 A_p(n) = C_p·σ^{-1/p} = C_p·(Σ_{j≠i}|n_j|^p)^{-1/p}；由于 n_i = 0 时 n_j² + n_k² = 1 与 i 的选取无关，右端不依赖 i 的选取 —— 这就是 (i)。（前提）"
+          ],
+          "total": 2,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        },
+        "error": "",
+        "meta": {
+          "total": 2,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        },
+        "multi_call": {
+          "turn_index": 1,
+          "call_index": 0,
+          "calls": 2,
+          "step_index": 1
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 37248,
+        "prompt_cache_miss_tokens": 3491,
+        "tokens_in": 40739,
+        "tokens_out": 10084,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000028"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "table.count",
+        "args": {
+          "table": "statements"
+        },
+        "why": "核对可引池规模的读数"
+      },
+      "result": {
+        "tool": "table.count",
+        "ok": true,
+        "data": 35,
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "total": 35,
+          "filtered": false
+        },
+        "warn": "这一步给了 2 条调用，已按顺序逐条：第 1 条 fs.search 成功：2；第 2 条 table.count 成功。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 1,
+          "call_index": 1,
+          "calls": 2,
+          "step_index": 2,
+          "summary": "这一步给了 2 条调用，已按顺序逐条：第 1 条 fs.search 成功：2；第 2 条 table.count 成功。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 1,
+            "calls": 2,
+            "items": 2,
+            "steps": [
+              1,
+              2
+            ],
+            "executed": 2,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000028"
+    },
+    {
+      "index": 3,
+      "shape": "tool",
+      "payload": {
+        "name": "table.search",
+        "args": {
+          "table": "statements",
+          "query": "至少一个坐标为",
+          "select": [
+            "stmt_id",
+            "label",
+            "kind",
+            "evidence_kind",
+            "status"
+          ]
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "table.search",
+        "ok": true,
+        "data": {
+          "table": "statements",
+          "query": "至少一个坐标为",
+          "fields": [
+            "label",
+            "statement_full"
+          ],
+          "rows": [],
+          "total": 0,
+          "returned": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "total": 0,
+          "returned": 0,
+          "matched_fields": {},
+          "truncated": false,
+          "select": [
+            "stmt_id",
+            "label",
+            "kind",
+            "evidence_kind",
+            "status"
+          ]
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 39936,
+        "prompt_cache_miss_tokens": 3550,
+        "tokens_in": 43486,
+        "tokens_out": 16331,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000028"
+    },
+    {
+      "index": 4,
+      "shape": "tool",
+      "payload": {
+        "name": "table.search",
+        "args": {
+          "table": "statements",
+          "query": "B_p^3",
+          "select": [
+            "stmt_id",
+            "label",
+            "kind",
+            "evidence_kind",
+            "status"
+          ]
+        },
+        "why": "确认这条命题是否已在册（决定签落 pending 还是 statements 号下）"
+      },
+      "result": {
+        "tool": "table.search",
+        "ok": true,
+        "data": {
+          "table": "statements",
+          "query": "B_p^3",
+          "fields": [
+            "label",
+            "statement_full"
+          ],
+          "rows": [
+            {
+              "stmt_id": "000031",
+              "label": "B_p^3 中心截面最大面积的位置与面积比临界性",
+              "kind": "conjecture",
+              "evidence_kind": "cross_check",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000032",
+              "label": "B_p^3 中心截面的坐标面积公式、面积比单调性与最大面积方向的分段结构",
+              "kind": "conjecture",
+              "evidence_kind": "cross_check",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000033",
+              "label": "B_p^3 中心截面在两条边界弧上的最大面积方向分段",
+              "kind": "conjecture",
+              "evidence_kind": "cross_check",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000034",
+              "label": "B_p^3 中心截面面积 A_p(n) 的积分表示与坐标向/面对角向闭式面积公式",
+              "kind": "theorem",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            }
+          ],
+          "total": 4,
+          "returned": 4
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "total": 4,
+          "returned": 4,
+          "matched_fields": {
+            "000031": [
+              "label",
+              "statement_full"
+            ],
+            "000032": [
+              "label",
+              "statement_full"
+            ],
+            "000033": [
+              "label",
+              "statement_full"
+            ],
+            "000034": [
+              "label",
+              "statement_full"
+            ]
+          },
+          "truncated": false,
+          "select": [
+            "stmt_id",
+            "label",
+            "kind",
+            "evidence_kind",
+            "status"
+          ]
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 42624,
+        "prompt_cache_miss_tokens": 1952,
+        "tokens_in": 44576,
+        "tokens_out": 15511,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000028"
+    },
+    {
+      "index": 5,
+      "shape": "tool",
+      "payload": {
+        "name": "table.search",
+        "args": {
+          "table": "statements",
+          "query": "坐标向量",
+          "select": [
+            "stmt_id",
+            "label",
+            "kind",
+            "evidence_kind",
+            "status"
+          ]
+        },
+        "why": "确认这份证明对应的在册命题号（决定签落 statements 号下还是 pending）"
+      },
+      "result": {
+        "tool": "table.search",
+        "ok": true,
+        "data": {
+          "table": "statements",
+          "query": "坐标向量",
+          "fields": [
+            "label",
+            "statement_full"
+          ],
+          "rows": [],
+          "total": 0,
+          "returned": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "total": 0,
+          "returned": 0,
+          "matched_fields": {},
+          "truncated": false,
+          "select": [
+            "stmt_id",
+            "label",
+            "kind",
+            "evidence_kind",
+            "status"
+          ]
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 43776,
+        "prompt_cache_miss_tokens": 2130,
+        "tokens_in": 45906,
+        "tokens_out": 15305,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000028"
+    },
+    {
+      "index": 6,
+      "shape": "tool",
+      "payload": {
+        "name": "table.search",
+        "args": {
+          "table": "statements",
+          "query": "恰有一个的绝对值为 1",
+          "select": [
+            "stmt_id",
+            "label",
+            "kind",
+            "evidence_kind",
+            "status"
+          ]
+        },
+        "why": "确认被审命题是否已在册，决定 verify_proof 是否带 statement_id"
+      },
+      "result": {
+        "tool": "table.search",
+        "ok": true,
+        "data": {
+          "table": "statements",
+          "query": "恰有一个的绝对值为 1",
+          "fields": [
+            "label",
+            "statement_full"
+          ],
+          "rows": [],
+          "total": 0,
+          "returned": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "total": 0,
+          "returned": 0,
+          "matched_fields": {},
+          "truncated": false,
+          "select": [
+            "stmt_id",
+            "label",
+            "kind",
+            "evidence_kind",
+            "status"
+          ]
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 45056,
+        "prompt_cache_miss_tokens": 1933,
+        "tokens_in": 46989,
+        "tokens_out": 18893,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000028"
+    },
+    {
+      "index": 7,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "statements",
+          "fields": [
+            "stmt_id",
+            "label",
+            "kind",
+            "evidence_kind",
+            "status"
+          ],
+          "limit": 50
+        },
+        "why": "先看全表，判断被审手稿的命题是否已在册（决定送审带不带 statement_id）"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "statements",
+          "rows": [
+            {
+              "stmt_id": "000000",
+              "label": "unit cube",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000001",
+              "label": "section",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000002",
+              "label": "volume",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000003",
+              "label": "Hensley conjectured",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000004",
+              "label": "random variable",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000005",
+              "label": "probability density function",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000006",
+              "label": "derivative",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000007",
+              "label": "Khintchine inequality",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000008",
+              "label": "maximum volume",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000009",
+              "label": "intersection of Qn with a k-dimensional subspace",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000010",
+              "label": "independent random variables",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000011",
+              "label": "maximal hyperplane section",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000012",
+              "label": "ln p-balls",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000013",
+              "label": "n-cube",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000014",
+              "label": "Ball’s result",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000015",
+              "label": "main diagonal",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000016",
+              "label": "normalized section function An,p",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000017",
+              "label": "unit ball Bn p",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000018",
+              "label": "central hyperplane sections",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000019",
+              "label": "projections",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000020",
+              "label": "Khintchine-type inequality",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000021",
+              "label": "random variables",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000022",
+              "label": "resilience of cubic sections",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000023",
+              "label": "Ball’s cube slicing result",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000024",
+              "label": "Fourier transform representations of moments of independent sums",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000025",
+              "label": "Pólya’s formula",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000026",
+              "label": "normalized Fourier transform γp(s) of exp(−|r|p)",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000027",
+              "label": "Ball’s integral inequality",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000028",
+              "label": "Hölder’s inequality",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000029",
+              "label": "Nazarov and Podkorytov’s method",
+              "kind": "concept",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000030",
+              "label": "截面面积计算核自检通过：极坐标 tanh-sinh 求积（断点取 A cosψ+B sinψ=0 与 |w_i|=|w_j| 在 [0,2π) 上的全部根）在",
+              "kind": "conjecture",
+              "evidence_kind": "cross_check",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000031",
+              "label": "B_p^3 中心截面最大面积的位置与面积比临界性",
+              "kind": "conjecture",
+              "evidence_kind": "cross_check",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000032",
+              "label": "B_p^3 中心截面的坐标面积公式、面积比单调性与最大面积方向的分段结构",
+              "kind": "conjecture",
+              "evidence_kind": "cross_check",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000033",
+              "label": "B_p^3 中心截面在两条边界弧上的最大面积方向分段",
+              "kind": "conjecture",
+              "evidence_kind": "cross_check",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000034",
+              "label": "B_p^3 中心截面面积 A_p(n) 的积分表示与坐标向/面对角向闭式面积公式",
+              "kind": "theorem",
+              "evidence_kind": "heuristic",
+              "status": "active"
+            }
+          ],
+          "total": 35,
+          "returned": 35,
+          "limit": 50,
+          "offset": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "total": 35,
+          "returned": 35,
+          "offset": 0,
+          "limit": 50,
+          "fields": [
+            "stmt_id",
+            "label",
+            "kind",
+            "evidence_kind",
+            "status"
+          ]
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 46208,
+        "prompt_cache_miss_tokens": 1901,
+        "tokens_in": 48109,
+        "tokens_out": 9549,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000028"
+    },
+    {
+      "index": 8,
+      "shape": "tool",
+      "payload": {
+        "name": "verify.verify_proof",
+        "args": {
+          "proof_manuscript": "manuscripts/F/f-proof-000001.md"
+        },
+        "why": "对这份稿（正文 sha 6a6444ab3ab7…）整体重读并落验证台账；命题未在册（台账 34 条为 concept/数值 conjecture，无可引行），故不给 statement_id，签按正文 sha 走 pending"
+      },
+      "result": {
+        "tool": "verify.verify_proof",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "kind": "proof_unregistered_rejected",
+          "statement_id": "",
+          "verification_id": "u-000005",
+          "verdict": "有毛病",
+          "defect_step": 7,
+          "findings": [
+            {
+              "level": "warning",
+              "step": 7,
+              "kind": "等号条件过宽",
+              "detail": "第7步标题为 1≤p<2，但句中写 1≤p≤2 并断言等号仅在 t∈{0,1}；p=2 时等号对所有 t∈[0,1] 成立。应限制为 p<2，p=2 已由第9步单独处理。"
+            },
+            {
+              "level": "warning",
+              "step": 8,
+              "kind": "等号条件过宽",
+              "detail": "第8步标题为 p>2，但句中写 p≥2 并断言等号仅在 t∈{0,1}；p=2 时等号对所有 t∈[0,1] 成立。应限制为 p>2。"
+            }
+          ],
+          "unresolved_errors": 0,
+          "proof_sha256": "6a6444ab3ab747d5b0738f14525ce27cb01a79a84a957c8c96ae2d82e1506640",
+          "proof_chars": 0,
+          "signed_bit3": false,
+          "reviewed_by": {},
+          "bits": {},
+          "review_write": {
+            "manuscript_signed": false,
+            "manuscript_write": {
+              "written": false,
+              "idempotent": false,
+              "missing": false,
+              "state": "not_attempted",
+              "path": "manuscripts/F/f-proof-000001.md",
+              "line": 0,
+              "reading": {},
+              "code": "",
+              "body_mismatch": false,
+              "body_sha256": "",
+              "signed_sha256": "",
+              "why": "负判不写手稿块（甲：V 只颁发；块只由收方秘书落）"
+            },
+            "sign_issued": false,
+            "written": false,
+            "filed": "not_read_by_v",
+            "already_signed": false,
+            "reason": "负判不写手稿块（甲：V 只颁发；块只由收方秘书落）",
+            "v_review": {
+              "checked": true,
+              "review_id": "v-review-000002",
+              "written": true,
+              "idempotent": false,
+              "path": "verifications/reviews/v-review-000002.md",
+              "delivery": {
+                "checked": true,
+                "state": "dispatched",
+                "item_id": "t-000031",
+                "key": "v-review@v-review-000002",
+                "role": "F",
+                "parent_task_id": "t-000015",
+                "reason": "已投给 t-000015 的板项 t-000031",
+                "detail_path": "V 的审阅报告：`verifications/reviews/v-review-000002.md`\n- 被审稿：`manuscripts/F/f-proof-000001.md`\n- 结论：有毛病（V 的秘书语义判定：fault）\n- 台账锚点：`verifications/pending/0cf2e9d63d84d89e1fc793263941d594c6d840a70c44f2c050a1aa94486ecb6e.jsonl#u-000005`\nV 的原文不转达；这份报告就是给你的审阅意见。改完把同一份稿重新送 V。\n",
+                "existing": false
+              },
+              "reason": "V 稿已落盘：verifications/reviews/v-review-000002.md"
+            },
+            "registration": {},
+            "signed_delivery": {}
+          },
+          "ledger": "verifications/pending/0cf2e9d63d84d89e1fc793263941d594c6d840a70c44f2c050a1aa94486ecb6e.jsonl#u-000005",
+          "reason": "（未在册）判「有毛病」：负判不写手稿块，判词落 `verifications/pending/`（u-000005）",
+          "detail": "这一份判「有毛病」：负判不写手稿块（甲口径：`draft/178`「V 不写手稿里的签块」，块只由收方秘书落；负判不是签）。判词已落 `verifications/pending/0cf2e9d63d84d89e1fc793263941d594c6d840a70c44f2c050a1aa94486ecb6e.jsonl#u-000005`，F 的读数是「未通过」；按缺陷改稿后再送，不签第 3 位、也不写重复块。",
+          "exhaustion_review": {},
+          "signer": "",
+          "proof_authors": [],
+          "report_path": "",
+          "checks": [],
+          "missing": [],
+          "citations": [],
+          "citation_checks": [],
+          "citation_gate": {
+            "ok": true,
+            "blocking": [],
+            "weaker": [],
+            "problem": "",
+            "why": ""
+          },
+          "secretary_judge": {
+            "checked": true,
+            "answer": "有缺陷要指出",
+            "axis": "fault",
+            "unwired": false,
+            "reason": "回复明确指出第7步把 p=2 纳入等号刻画导致等号条件为假，并指出第8步同病，属于证明链上的具体数学错误。",
+            "basis": [
+              "第7步把 p=2 纳入等号刻画，但 p=2 时 t^p=t^2 对所有 t∈[0,1] 成立，故该等号条件为假；第8步同病。",
+              "第7步标题为 1≤p<2，但句中写 1≤p≤2 并断言等号仅在 t∈{0,1}；p=2 时等号对所有 t∈[0,1] 成立。应限制为 p<2，p=2 已由第9步单独处理。"
+            ],
+            "refused": "",
+            "cost": {
+              "ledger": "000256",
+              "charged": true,
+              "ledger_reason": "charged",
+              "call_index": 199,
+              "prompt_sha256": "9b9cff3f00f24d6e1394ced57ee270ece6f6a69c9fe5ab9153842e53c2624fcb",
+              "tokens": 2087,
+              "usd": 0.000473
+            },
+            "verdict": "有毛病",
+            "defect_step": 7,
+            "fault_kind": "math",
+            "fault_cause": "",
+            "report_gap": "",
+            "statement_id": "",
+            "proof_no": 1,
+            "material": {
+              "v_reply": "{\"verdict\": \"有毛病\", \"defect_step\": 7, \"quote\": \"对 0 ≤ t ≤ 1 与 1 ≤ p ≤ 2 有 t^p ≥ t²（等号当且仅当 t ∈ {0,1}）\", \"why\": \"第7步把 p=2 纳入等号刻画，但 p=2 时 t^p=t^2 对所有 t∈[0,1] 成立，故该等号条件为假；第8步同病。\", \"findings\": [{\"level\": \"warning\", \"step\": 7, \"kind\": \"等号条件过宽\", \"detail\": \"第7步标题为 1≤p<2，但句中写 1≤p≤2 并断言等号仅在 t∈{0,1}；p=2 时等号对所有 t∈[0,1] 成立。应限制为 p<2，p=2 已由第9步单独处理。\"}, {\"level\": \"warning\", \"step\": 8, \"kind\": \"等号条件过宽\", \"detail\": \"第8步标题为 p>2，但句中写 p≥2 并断言等号仅在 t∈{0,1}；p=2 时等号对所有 t∈[0,1] 成立。应限制为 p>2。\"}], \"citation_checks\": []}",
+              "ledger_row": {
+                "verdict": "有毛病",
+                "defect_step": 7
+              }
+            },
+            "defect_scope": "proof",
+            "defect_step_basis": "",
+            "source": "secretary:v_reply_defect"
+          },
+          "sign_issuance": {
+            "checked": false,
+            "issue": false,
+            "issued": false,
+            "landed": false,
+            "decision": "",
+            "writeback": {},
+            "streak": 0,
+            "need": 3,
+            "streak_ok": false,
+            "projected": 0,
+            "same_sha": false,
+            "state": "",
+            "reason": "这一趟没走到签发那一步（早退）⇒ 没有发签：`checked=False` 不是「可以签」，也不是「不签发」这一档",
+            "within_call": null,
+            "review_call": "",
+            "ledger_streak": 0,
+            "basis": [],
+            "reading": {},
+            "cost": {},
+            "material": {},
+            "statement_id": ""
+          },
+          "review_passes": [
+            {
+              "pass": 1,
+              "axis": "fault",
+              "verdict": "有毛病",
+              "fault_kind": "math",
+              "fault_cause": "",
+              "unresolved_errors": 0,
+              "defect_step": 7,
+              "terminal": "rejected"
+            }
+          ],
+          "manuscript_identity": {
+            "checked": false,
+            "statement_id": "",
+            "manuscript_id": "",
+            "row_manuscript_id": "",
+            "matched_by": "",
+            "fallback": false,
+            "row_checked": false,
+            "found": null,
+            "problem": "",
+            "path_checked": false,
+            "path_count": 0,
+            "path_group": 0,
+            "path_problem": "",
+            "why": ""
+          },
+          "issued_sign": {},
+          "statement_scope_gate": {}
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 47360,
+        "prompt_cache_miss_tokens": 3152,
+        "tokens_in": 50512,
+        "tokens_out": 14460,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000028"
+    },
+    {
+      "index": 9,
+      "shape": "final",
+      "payload": {
+        "final": "复核完成，结论【有毛病】（defect_step = 7），验证台账已落：verifications/pending/0cf2e9d63d84d89e1fc793263941d594c6d840a70c44f2c050a1aa94486ecb6e.jsonl#u-000005；V 稿 verifications/reviews/v-review-000002.md 已投给 F（板项 t-000031）。被审正文 sha 6a6444ab3ab747d5b0738f14525ce27cb01a79a84a957c8c96ae2d82e1506640（稿 manuscripts/F/f-proof-000001.md）。命题未在册（statements 35 行里无可引行，可引池为空，依赖段空表合法），故不带 statement_id、签按正文 sha 走 pending 档；负判不写手稿签块、不发第 3 位。\n\nfindings（两条，均指到步号与原句）：\n1. 第 7 步（warning，等号条件过宽）：原句「对 0 ≤ t ≤ 1 与 1 ≤ p ≤ 2 有 t^p ≥ t²（等号当且仅当 t ∈ {0,1}）」——p=2 时 t^p=t² 对一切 t∈[0,1] 成立，故该步把 p=2 纳入等号刻画的附加断言为假；本步标题即「1 ≤ p < 2 的比较」，应用范围只到 p<2，p=2 已由第 9 步单独处理。最小补法：把范围改写成 1 ≤ p < 2（等号仅 t∈{0,1}）。\n2. 第 8 步（warning，等号条件过宽）：原句「对 0 ≤ t ≤ 1 与 p ≥ 2 有 t^p ≤ t²（等号当且仅当 t ∈ {0,1}）」——同病，p=2 时等号对一切 t 成立。最小补法：范围改写为 p > 2。\n两处只影响辅助不等式的陈述范围，推理主线（σ≥1 / σ≤1、σ^{-1/p} 的比较方向）不受影响，改完这两句即可重新送审。\n\n你点名要重点核的两处：\n(a) 第 3–5 步换元方向 —— 通过。第 3 步 s·u+t·v 坐标 (s, t n_k, −t n_j)、范数 |s|^p+σ|t|^p（σ=|n_j|^p+|n_k|^p）；第 5 步 Φ(s,t)=(s,σ^{1/p}t) det=σ^{1/p}>0，E_σ=Φ^{-1}(D_p) ⇒ area(E_σ)=σ^{-1/p}area(D_p)，方向为正（上一稿反向处已修正），σ>0 由 n_j²+n_k²=1 保证，p=1 的 ∫_0^1(1−x^p)^{1/p}dx 收敛也成立。第 6 步 Beta 换元与 Γ(1/p)=pΓ(1+1/p) 化简逐字核过：C_p=4Γ(1+1/p)²/Γ(1+2/p) 正确。\n(b) 第 7–9 步唯一性 —— 主线通过、但陈述有上述两处缺陷。第 7 步 σ≥1（t^p≥t² 在 t∈[0,1]、p<2）⇒ A_p≤C_p；等号迫使 σ=1 并逐项等号（非负项之和相等 ⇒ 逐项相等，这一步成立）⇒ |n_j|,|n_k|∈{0,1}，配合 |n_j|²+|n_k|²=1 得恰一个为 1 ⇒ 是 ±坐标向量，没有多用「两个非零坐标」之外的假设，也没有多推。第 8 步方向正确。第 9 步 p=2 得 π；n=(0,1,1)/√2 给 σ=2^{1−p/2}、A_p=C_p·2^{1/2−1/p}，等于 C_p 当且仅当 p=2，门槛精确性成立（代数核过）。\n\n另有两处是顺带看到、未进本次台账 findings 的（下次改稿可一并处理）：第 5 步「由于 n_i = 0 时 n_j² + n_k² = 1 与 i 的选取无关 ⇒ 右端不依赖 i」这个理由不充分 —— n_j²+n_k²=1 只给出二元组的 2-范数，独立性还需补一句「若有两个零坐标则第三个为 ±1，两种取法 Σ_{j≠i}|n_j|^p 均为 1」（结论本身是对的）；命题 (i) 里「右端不依赖 f(i) 的选取」的 f(i) 是笔误，应为 i。\n\n我不改稿、不写签块：F 按上面两条改这两句范围后，用同一份稿（或其新版）重新送 V 即可。",
+        "evidence": [
+          "manuscripts/F/f-proof-000001.md",
+          "u-000005",
+          "v-review-000002",
+          "statements:000030-000034"
+        ]
+      },
+      "result": {
+        "notify_problem": "没有 notify 表（`final` 要给一个 notify 对象，字段：['to', 'summary', 'body', 'refs', 'why']）—— 除主控外每个角色收工都要留一份交接手稿，这是用户点名的强制项"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 49664,
+        "prompt_cache_miss_tokens": 4075,
+        "tokens_in": 53739,
+        "tokens_out": 2406,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000028"
+    }
+  ],
+  "final": "复核完成，结论【有毛病】（defect_step = 7），验证台账已落：verifications/pending/0cf2e9d63d84d89e1fc793263941d594c6d840a70c44f2c050a1aa94486ecb6e.jsonl#u-000005；V 稿 verifications/reviews/v-review-000002.md 已投给 F（板项 t-000031）。被审正文 sha 6a6444ab3ab747d5b0738f14525ce27cb01a79a84a957c8c96ae2d82e1506640（稿 manuscripts/F/f-proof-000001.md）。命题未在册（statements 35 行里无可引行，可引池为空，依赖段空表合法），故不带 statement_id、签按正文 sha 走 pending 档；负判不写手稿签块、不发第 3 位。\n\nfindings（两条，均指到步号与原句）：\n1. 第 7 步（warning，等号条件过宽）：原句「对 0 ≤ t ≤ 1 与 1 ≤ p ≤ 2 有 t^p ≥ t²（等号当且仅当 t ∈ {0,1}）」——p=2 时 t^p=t² 对一切 t∈[0,1] 成立，故该步把 p=2 纳入等号刻画的附加断言为假；本步标题即「1 ≤ p < 2 的比较」，应用范围只到 p<2，p=2 已由第 9 步单独处理。最小补法：把范围改写成 1 ≤ p < 2（等号仅 t∈{0,1}）。\n2. 第 8 步（warning，等号条件过宽）：原句「对 0 ≤ t ≤ 1 与 p ≥ 2 有 t^p ≤ t²（等号当且仅当 t ∈ {0,1}）」——同病，p=2 时等号对一切 t 成立。最小补法：范围改写为 p > 2。\n两处只影响辅助不等式的陈述范围，推理主线（σ≥1 / σ≤1、σ^{-1/p} 的比较方向）不受影响，改完这两句即可重新送审。\n\n你点名要重点核的两处：\n(a) 第 3–5 步换元方向 —— 通过。第 3 步 s·u+t·v 坐标 (s, t n_k, −t n_j)、范数 |s|^p+σ|t|^p（σ=|n_j|^p+|n_k|^p）；第 5 步 Φ(s,t)=(s,σ^{1/p}t) det=σ^{1/p}>0，E_σ=Φ^{-1}(D_p) ⇒ area(E_σ)=σ^{-1/p}area(D_p)，方向为正（上一稿反向处已修正），σ>0 由 n_j²+n_k²=1 保证，p=1 的 ∫_0^1(1−x^p)^{1/p}dx 收敛也成立。第 6 步 Beta 换元与 Γ(1/p)=pΓ(1+1/p) 化简逐字核过：C_p=4Γ(1+1/p)²/Γ(1+2/p) 正确。\n(b) 第 7–9 步唯一性 —— 主线通过、但陈述有上述两处缺陷。第 7 步 σ≥1（t^p≥t² 在 t∈[0,1]、p<2）⇒ A_p≤C_p；等号迫使 σ=1 并逐项等号（非负项之和相等 ⇒ 逐项相等，这一步成立）⇒ |n_j|,|n_k|∈{0,1}，配合 |n_j|²+|n_k|²=1 得恰一个为 1 ⇒ 是 ±坐标向量，没有多用「两个非零坐标」之外的假设，也没有多推。第 8 步方向正确。第 9 步 p=2 得 π；n=(0,1,1)/√2 给 σ=2^{1−p/2}、A_p=C_p·2^{1/2−1/p}，等于 C_p 当且仅当 p=2，门槛精确性成立（代数核过）。\n\n另有两处是顺带看到、未进本次台账 findings 的（下次改稿可一并处理）：第 5 步「由于 n_i = 0 时 n_j² + n_k² = 1 与 i 的选取无关 ⇒ 右端不依赖 i」这个理由不充分 —— n_j²+n_k²=1 只给出二元组的 2-范数，独立性还需补一句「若有两个零坐标则第三个为 ±1，两种取法 Σ_{j≠i}|n_j|^p 均为 1」（结论本身是对的）；命题 (i) 里「右端不依赖 f(i) 的选取」的 f(i) 是笔误，应为 i。\n\n我不改稿、不写签块：F 按上面两条改这两句范围后，用同一份稿（或其新版）重新送 V 即可。",
+  "evidence": [
+    "manuscripts/F/f-proof-000001.md",
+    "u-000005",
+    "v-review-000002",
+    "statements:000030-000034"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 0,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 10,
+  "compactions": 0,
+  "mailbox_items": [],
+  "mailbox_msgs": [],
+  "mailbox_delivered": 0,
+  "monitor_turns": 0,
+  "wakes": 0,
+  "wake_ids": [],
+  "wake_events": [],
+  "clock_pumps": 18,
+  "clock_fired": 0,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "V 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "V",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    }
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [],
+  "summons": [],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [],
+  "summons_total": 0,
+  "summons_consumed": 0,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 0,
+    "summons_consumed": 0,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p328",
+    "role": "V",
+    "prompt_sha256": "171b42af018313bbcc69a25b1530f2ab9412256a4419f69333b5f3b963dad68e",
+    "prompt_chars": 46343,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "FACULTIES_07",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_STOP",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 9,
+    "tokens_in": 412144,
+    "tokens_out": 102594,
+    "usd": 0.066272,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 9,
+    "no_request_calls": 0,
+    "hit": 388480,
+    "miss": 23664,
+    "unknown_calls": 0,
+    "tokens_in": 412144,
+    "hit_rate": 0.9426,
+    "mismatched_calls": 0,
+    "saved_usd": 0.057105,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 568.36,
+  "end_ts": "2026-11-24T18:55:20+08:00",
+  "notes": [
+    "收工没有可用 notify 表（没有 notify 表（`final` 要给一个 notify 对象，字段：['to', 'summary', 'body', 'refs', 'why']）—— 除主控外每个角色收工都要留一份交接手稿，这是用户点名的强制项）⇒ 这一趟没有交接手稿（不打回、不代填）",
+    "缓存读数：命中 388480 / 未命中 23664 token，命中率 94.3%（9 次调用）；按 modelcost 口径估算可省 约 0.057105 美元",
+    "子产出处理读数：summons_total=0（这一趟没派过子代理 ⇒ 没有要处理的子产出；判据没有对象，不红）",
+    "终态回报已落板：t-000032（框架通报；模型没填 notify）"
+  ],
+  "final_payload": {
+    "final": "复核完成，结论【有毛病】（defect_step = 7），验证台账已落：verifications/pending/0cf2e9d63d84d89e1fc793263941d594c6d840a70c44f2c050a1aa94486ecb6e.jsonl#u-000005；V 稿 verifications/reviews/v-review-000002.md 已投给 F（板项 t-000031）。被审正文 sha 6a6444ab3ab747d5b0738f14525ce27cb01a79a84a957c8c96ae2d82e1506640（稿 manuscripts/F/f-proof-000001.md）。命题未在册（statements 35 行里无可引行，可引池为空，依赖段空表合法），故不带 statement_id、签按正文 sha 走 pending 档；负判不写手稿签块、不发第 3 位。\n\nfindings（两条，均指到步号与原句）：\n1. 第 7 步（warning，等号条件过宽）：原句「对 0 ≤ t ≤ 1 与 1 ≤ p ≤ 2 有 t^p ≥ t²（等号当且仅当 t ∈ {0,1}）」——p=2 时 t^p=t² 对一切 t∈[0,1] 成立，故该步把 p=2 纳入等号刻画的附加断言为假；本步标题即「1 ≤ p < 2 的比较」，应用范围只到 p<2，p=2 已由第 9 步单独处理。最小补法：把范围改写成 1 ≤ p < 2（等号仅 t∈{0,1}）。\n2. 第 8 步（warning，等号条件过宽）：原句「对 0 ≤ t ≤ 1 与 p ≥ 2 有 t^p ≤ t²（等号当且仅当 t ∈ {0,1}）」——同病，p=2 时等号对一切 t 成立。最小补法：范围改写为 p > 2。\n两处只影响辅助不等式的陈述范围，推理主线（σ≥1 / σ≤1、σ^{-1/p} 的比较方向）不受影响，改完这两句即可重新送审。\n\n你点名要重点核的两处：\n(a) 第 3–5 步换元方向 —— 通过。第 3 步 s·u+t·v 坐标 (s, t n_k, −t n_j)、范数 |s|^p+σ|t|^p（σ=|n_j|^p+|n_k|^p）；第 5 步 Φ(s,t)=(s,σ^{1/p}t) det=σ^{1/p}>0，E_σ=Φ^{-1}(D_p) ⇒ area(E_σ)=σ^{-1/p}area(D_p)，方向为正（上一稿反向处已修正），σ>0 由 n_j²+n_k²=1 保证，p=1 的 ∫_0^1(1−x^p)^{1/p}dx 收敛也成立。第 6 步 Beta 换元与 Γ(1/p)=pΓ(1+1/p) 化简逐字核过：C_p=4Γ(1+1/p)²/Γ(1+2/p) 正确。\n(b) 第 7–9 步唯一性 —— 主线通过、但陈述有上述两处缺陷。第 7 步 σ≥1（t^p≥t² 在 t∈[0,1]、p<2）⇒ A_p≤C_p；等号迫使 σ=1 并逐项等号（非负项之和相等 ⇒ 逐项相等，这一步成立）⇒ |n_j|,|n_k|∈{0,1}，配合 |n_j|²+|n_k|²=1 得恰一个为 1 ⇒ 是 ±坐标向量，没有多用「两个非零坐标」之外的假设，也没有多推。第 8 步方向正确。第 9 步 p=2 得 π；n=(0,1,1)/√2 给 σ=2^{1−p/2}、A_p=C_p·2^{1/2−1/p}，等于 C_p 当且仅当 p=2，门槛精确性成立（代数核过）。\n\n另有两处是顺带看到、未进本次台账 findings 的（下次改稿可一并处理）：第 5 步「由于 n_i = 0 时 n_j² + n_k² = 1 与 i 的选取无关 ⇒ 右端不依赖 i」这个理由不充分 —— n_j²+n_k²=1 只给出二元组的 2-范数，独立性还需补一句「若有两个零坐标则第三个为 ±1，两种取法 Σ_{j≠i}|n_j|^p 均为 1」（结论本身是对的）；命题 (i) 里「右端不依赖 f(i) 的选取」的 f(i) 是笔误，应为 i。\n\n我不改稿、不写签块：F 按上面两条改这两句范围后，用同一份稿（或其新版）重新送 V 即可。",
+    "evidence": [
+      "manuscripts/F/f-proof-000001.md",
+      "u-000005",
+      "v-review-000002",
+      "statements:000030-000034"
+    ]
+  },
+  "task_id": "t-000028"
+}

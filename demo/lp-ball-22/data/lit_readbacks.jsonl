@@ -1,0 +1,6 @@
+{"actor": "agent-A-ingest", "at": "2026-11-24T18:02:33+08:00", "count": 0, "instance": "ingest", "invalidated": true, "request_id": "r-000001", "slots": []}
+{"actor": "agent-A-ingest", "at": "2026-11-24T18:02:40+08:00", "count": 0, "instance": "ingest", "invalidated": true, "request_id": "r-000002", "slots": []}
+{"actor": "agent-A-ingest", "at": "2026-11-24T18:04:08+08:00", "count": 13, "instance": "ingest", "request_id": "r-000001", "slots": ["000000", "000001", "000002", "000003", "000004", "000005", "000006", "000007", "000008", "000009", "000010", "000011", "000012"]}
+{"actor": "agent-A-ingest", "at": "2026-11-24T18:04:17+08:00", "count": 12, "instance": "ingest", "request_id": "r-000002", "slots": ["000013", "000014", "000015", "000016", "000017", "000018", "000019", "000020", "000021", "000022", "000023", "000024"]}
+{"actor": "agent-A-ingest", "at": "2026-11-24T18:04:43+08:00", "count": 0, "instance": "ingest", "invalidated": true, "request_id": "r-000003", "slots": []}
+{"actor": "agent-A-ingest", "at": "2026-11-24T18:04:45+08:00", "count": 5, "instance": "ingest", "request_id": "r-000003", "slots": ["000025", "000026", "000027", "000028", "000029"]}

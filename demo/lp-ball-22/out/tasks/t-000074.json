@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T19:34:23+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 3288,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"A 腿收工：r-000004 已终局（outcome=ok, done=true, result_lit_ids=[000001,000003,000004]），待裁表全表 30 行、pending=0（25 admitted + 5 rejected），本腿未新开收编故无新委托/cleared_at；四个问题 (a)–(d) 与泛化三档见下（逐字引文见 notify body）。\\n\\n(a) p<2 一侧【已知，是定理，但方向不是 (a(2)) 也不是 (a(n))】：lit:000001（König, p.2 框架页码）逐字：『They proved that the normalized volume of central hyperplane sections of the unit ball Bn p of ln p is monotone increasing in p, implying that coordinate hyperplanes provide the minimal sections for 2 < p < ∞ and the maximal sections for 1 ≤ p < 2. The minimal sections of Bn p for 1 ≤ p < 2 are those orthogonal to the main diagonals』⇒ 1≤p<2 时极大超平面截面 = 坐标向 (1,0,0)，极小 = 体对角向（Koldobsky；lit:000006 p.2 亦逐字引其 (6) 式）。lit:000002（Grząślewicz）只有 p-cozonoid/平面截面的结构刻画（Theorem 1/2），没有极值截面定理 —— 如实说：这一篇里没有，不等于这篇不存在。\\n\\n(b) n=3 特例【两端口已解，中间段未见显式定理】：p=∞ 已解（lit:000003 p.1 逐字 Ball：面对角向、体积 √2·2^{n−1} ⇒ n=3 得 4√2）；p<2 由 Meyer–Pajor 单调性定（坐标向）；2<p<∞ 的一般 n=3 未在所查文献里找到显式结论 —— lit:000001 只覆盖 p≥p0（Thm 1.1，含 a1∈Ip 例外）与 20<p<p0（Thm 1.2 渐近）两档，lit:000006 p.2 逐字说『The question of determining the maximal hyperplane sections of Bn p (R) for p ∈(2, ∞) remains open』。故我们的三段结构只在 2<p<p0 / n=3 这一档是新的。\\n\\n(c) lit:000003/lit:000004【已知】：p.1 逐字含『Ball [B86] proved that maximal hyperplane sections are orthogonal to a main diagonal of a 2-dimensional face of Qn, hence, their volume is √2·2^{n−1}』（n=3 ⇒ 4√2），并逐字给出 3 维临界方向判据『critical central hyperplane sections in the 3-dimensional case are all diagonal to a (possibly lower dimensional) face of the cube』，以及非对角临界截面的存在（4 维，法向 (1,1,2,2)）。\\n\\n(d) 类比档：截面↔投影的对偶（p↔p′、极↔极互换）与 Khintchine 型最佳常数同构（rel:000008/000009/000010，lit:000001 p.2 逐字）。迁移的是「极值截面 = 某型 Khintchine 最佳常数」这一等价结构；**不迁移**的是体积本身 —— 逐字『a consequence of the fact that volume does not behave well under duality』，所以不能把投影侧结论直接搬到 n=3 截面极值上。\\n\\n检索记录（纪律项）：OpenAlex 首查 HTTP 429（未查成，非无结果）⇒ 换源 crossref 同一英文规范式成功（10 条 / 1.0s，3 条已在库、7 条新），7 条新候选未入库（未取全文 ⇒ 不许判收；且 M 指导不再新开收编），标题逐条记在 r-000004.submit_note，不折成「不存在」。topic 由题面式中文换成 'max",
+ "payload_sha256": "4b02d383670141f22eed14c787a7a2e000be8b4696fbdd748d1aa2aeb7e97f97",
+ "readings": {},
+ "role": "A",
+ "status": "done",
+ "task_id": "t-000074"
+}

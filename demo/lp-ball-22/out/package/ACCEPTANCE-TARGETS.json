@@ -1,0 +1,68 @@
+{
+  "checks": [
+    {
+      "id": "R1",
+      "name": "立题：研究问题在册",
+      "kind": "research_question_rows",
+      "min": 1,
+      "note": "research_questions 一行（qid 000000）：B_p^3 最大面积中心截面的方向等价类与 A_max(p) 分段表达式"
+    },
+    {
+      "id": "R2",
+      "name": "检索：真的取回并入库",
+      "kind": "retrieval_ok_rows",
+      "min": 1,
+      "note": "search_requests 4 行 unfinished=0；reference/ 下用户逐字声明的 25 份 PDF 收编为 lit:000000–lit:000024，待裁表 30 行 pending=0（admitted 25 / rejected 5，cleared_at 已回填）"
+    },
+    {
+      "id": "R3",
+      "name": "造：V 逐行走查签住的证明",
+      "kind": "reviewed_proof_rows",
+      "min": 1,
+      "note": "V 判「成立」的命题 4 条：stmt:000034 / 000035 / 000041 / 000042（verifications/<号>.jsonl 有「成立」行 + out/vsigns/<sha>.json 签发文件）"
+    },
+    {
+      "id": "R4",
+      "name": "想：命题与猜想在册",
+      "kind": "statement_rows",
+      "min": 6,
+      "note": "statements 里的概念行 + 命题行 + strong_conjecture 猜想行"
+    },
+    {
+      "id": "R5",
+      "name": "看：关系分析跑过",
+      "kind": "c_analysis_runs",
+      "min": 1,
+      "note": "C 跑过关系分析（analysis_reports 000000 gaps / 000001 proof_chain / 000002 gaps：概念图 30 概念、21 关系、18 组）"
+    },
+    {
+      "id": "R6",
+      "name": "攻：攻坚计划有真推进",
+      "kind": "plan_progress_rows",
+      "min": 1,
+      "note": "F 的 plan 000002 有一轮 outcome=progress；其 history 的 statement_id 已由 D 更正为 stmt:000042（verifications/000042.jsonl 有「成立」行）"
+    },
+    {
+      "id": "R7",
+      "name": "交：手稿与论文落盘",
+      "kind": "document_rows",
+      "min": 1,
+      "note": "documents 两行：D 的研究手稿 manuscripts/D/RESEARCH.md（七节齐）+ G 的论文行 doc_id=000001（H 三轮审后 accepted）；论文包 out/package/main.tex（31651 B, sha256 b9d15967…）+ main.pdf（10 页, 315097 B）+ MAPPING.json"
+    },
+    {
+      "id": "R8",
+      "name": "闭：请求闭环（上限 0）",
+      "kind": "unfinished_request_rows",
+      "max": 0,
+      "unprocessed_reason": "第三条队列 literature.unprocessed 带着收工的理由：lib:000019–000024 这 6 篇已登记、已读，但 B 一侧的概念抽取配额（30 条/趟累计封顶、跨趟不重置）在 lit:000016 那一趟一次性用满，B 对它们的回执是「已读、落行 0 条（配额封顶，非缺正文）」（手稿 000028 / 000030 逐篇写明）；它们的 processed 位因此不会转真，而内容层面已完成读取与判定。检索两条队列（search_requests unfinished=0、reprocess_requests unfinished=0）已全部闭环。",
+      "note": "search_requests 与 reprocess_requests 的 unfinished 均为 0"
+    },
+    {
+      "id": "R9",
+      "name": "论文对应表（论文包必填）",
+      "kind": "paper_mapping_rows",
+      "min": 1,
+      "note": "out/package/MAPPING.json 已落盘（3405 B, sha256 4527b18a…），由 G 的 doc.write_mapping 一次落三份（MAPPING.json / MAPPING.md / 正文附录），每条断言指到 stmt:/exp:/lit: 台账行"
+    }
+  ]
+}

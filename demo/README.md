@@ -11,9 +11,11 @@ web UI the operators used — before installing anything.
 | dir | problem | paper | closing gate | spend / wall clock |
 |---|---|---|---|---|
 | [`sylow-4`](sylow-4/) | Prove Sylow I/II/III for a finite group: existence, conjugacy, counting | `sylow-4/out/package/main.pdf` (7 pages) | **8/8 pass · can_close=true · exit 0** | $1.93 / 114 min |
-| [`lp-ball-22`](lp-ball-22/) | Largest-area central section of the 3-D ℓ^p ball: direction and A_max(p) | `lp-ball-22/out/package/main.pdf` | 待加入 — 大真机跑完后放进来 | — |
+| [`lp-ball-22`](lp-ball-22/) | Largest-area central section of the 3-D ℓ^p ball: direction and A_max(p) | `lp-ball-22/out/package/main.pdf` (10 pages) | **8/8 pass · can_close=true · exit 0** | $7.17 / 10 h 0 min |
 
-> `lp-ball-22/` will appear next to `sylow-4/` with the same layout once that run closes.
+Both runs closed the same way: eight gate cells pass, `can_close=true`, exit `0`. The lp-ball
+export also carries `MAPPING.json` with four rows (paper theorem ↔ ledger statement ↔ proof
+manuscript ↔ body sha ↔ V verdict), 144 statements, 24 experiments and 107 relations.
 
 ## Open the web UI for a demo
 

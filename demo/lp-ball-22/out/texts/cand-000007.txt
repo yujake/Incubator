@@ -1,0 +1,997 @@
+===== page 1 =====
+DOI: 10.1007/s00454-001-0066-3
+Discrete Comput Geom 27:215–226 (2002)
+Discrete & Computational
+Geometry
+© 2001 Springer-Verlag New York Inc.
+Hyperplane Projections of the Unit Ball of ℓn
+p
+∗
+F. Barthe1 and A. Naor2
+1Equipe d’analyse et de math´ematiques appliqu´ees,
+CNRS-Universit´e de Marne-la-Vall´ee,
+Cit´e Descartes, Champs-sur-Marne,
+77454 Marne-la-Vall´ee cedex 2, France
+barthe@math.univ-mlv.fr
+2Department of Mathematics, Hebrew University,
+Givaat-Ram, Jerusalem, Israel
+naor@math.huji.ac.il
+Abstract.
+Let Bn
+p = {x ∈Rn; Pn
+i=1 |xi|p ≤1}, 1 ≤p ≤+∞. We study the extreme
+values of the volume of the orthogonal projection of Bn
+p onto hyperplanes H ⊂Rn. For a
+ﬁxed H, we prove that the ratio vol(PH Bn
+p)/vol(Bn−1
+p
+) is non-decreasing in p ∈[1, +∞].
+1.
+Introduction
+Computing the volume of sections or projections of convex sets is not easy, even in
+speciﬁc cases. However, in the last decades several authors managed to produce workable
+formulas, often related to probability and to Fourier analysis, and to determine extremal
+volumes of sections of certain bodies. The example of the cube Bn
+∞= [−1, 1]n was
+settled ﬁrst: Hadwiger’s result in [11] implies that the hyperplane sections through the
+origin have no less volume than the canonical sections. Vaaler [22] was able to show
+this for sections of arbitrary dimension. The largest hyperplane section of the cube was
+found by Ball [2], an important result which led to a negative answer to the Busemann–
+Petty problem in dimensions larger than 10 (see [3] for results in larger codimension).
+Denoting for 1 ≤k ≤n, Hk = {x ∈Rn; Pk
+i=1 xi = 0}, the best control on hyperplane
+sections of the cube reads as
+vol(Bn
+∞∩H1) ≤vol(Bn
+∞∩H) ≤vol(Bn
+∞∩H2),
+∗Work by the ﬁrst author was partially supported by EPSRC Grant GR/R37210, and that by the second
+author was partially supported by the BSF, Clore Foundation and the EU Grant HPMT-CT-2000-00037.
+===== page 2 =====
+216
+F. Barthe and A. Naor
+for every vector-hyperplane H ⊂Rn. Here “vol” stands for the Lebesgue measure on
+the corresponding subspace.
+Vaaler’s result was considerably extended by Meyer and Pajor [14], who studied the
+unit balls of ℓn
+p for p ≥1, Bn
+p = {x ∈Rn; Pn
+i=1 |xi|p ≤1}. They showed that for any
+k-dimensional vector subspace E, the ratio
+vol(Bn
+p ∩E)
+vol(Bkp)
+is a non-decreasing function of p ≥1. Since this quantity is always equal to 1 for p = 2,
+this settles the question of minimal sections for p ≥2 and of maximal sections for p ≤2.
+These results were later extended to p ∈(0, 1) by Caetano [7] and the ﬁrst named author
+[5]. Meyer and Pajor also found the extremal hyperplane sections for p = 1. They proved
+that for any hyperplane H ⊂Rn,
+vol(Bn
+1 ∩Hn) ≤vol(Bn
+1 ∩H) ≤vol(Bn
+1 ∩H1),
+and conjectured the same lower bound for p ∈(1, 2), which was proved by Koldobsky
+[12] even for p ∈(0, 2). We mention related works by Webb [23] about the sections
+of the regular simplex and by Oleszkiewicz and Pelczy´nski [16], concerning a complex
+version of Ball’s upper bound.
+The study of extremal volume projections is much less advanced, even though sections
+and projections are related via duality. The problem is that volume does not behave well
+under duality. Hence results for sections do not transfer to projections. However, in the
+few known cases, the results for hyperplane projections are in perfect duality with the
+ones for sections. The case of the Euclidean ball Bn
+2 is trivial, the one of the cube is
+very simple: if H = {a}⊥where a ∈Rn satisﬁes Pn
+i=1 a2
+i = 1, then denoting by PH
+the orthogonal projection onto H, one has vol(PH Bn
+∞) = vol(Bn−1
+∞)(Pn
+i=1 |ai|) and
+therefore
+vol(Bn−1
+∞) = vol(PH1 Bn
+∞) ≤vol(PH Bn
+∞) ≤vol(PHn Bn
+∞) = √n vol(Bn−1
+∞).
+We refer to [8] for more details on this and projections onto lower dimensions, and to [9]
+for projections of the regular simplex. The case of the unit ball of ℓn
+1 is more interesting.
+It is well known to be related to Khinchine inequalities, see [4]. Since all the facets of Bn
+1
+have the same volume, and their outer normals are corresponding to the vertices of the
+cube (its dual body), the usual formula for volumes of projections of polytopes yields
+vol(PH Bn
+1 )
+vol(Bn−1
+1
+)
+=
+E| Pn
+i=1 εiai|
+q
+E| Pn
+i=1 εiai|2
+,
+where εi are independent symmetric Bernoulli variables. Finding extremal projections
+reduces to computing the sharp constants in the Khinchine inequality for these vari-
+ables, which was done by Szarek [21] (see also [13] for a short proof). The result for
+projections is
+vol(PH2 Bn
+1 ) ≤vol(PH Bn
+1 ) ≤vol(PH1 Bn
+1 ).
+===== page 3 =====
+Hyperplane Projections of the Unit Ball of ℓn
+p
+217
+The aim of the present paper is to study the extremal projections of Bn
+p for p ∈
+(1, +∞). We bring the knowledge on this problem to the same level as it is for sections.
+Although we do not use duality in our proof, the reader will see that there is a continuous
+analogy between our methods and the ones used for sections, but not an obvious one.
+2.
+A Khinchine Formula for Volumes of Projections
+In this section we derive a simple formula for the volume of a hyperplane projection of the
+unit ball of ℓn
+p. In what follows we work on the standard Euclidean space (Rn, ∥·∥2, ⟨·, ·⟩).
+Let K be a convex symmetric body in Rn. We denote by area(K) the surface area
+of K. Let σK be the normalized surface area measure on ∂K. One can deﬁne another
+natural probability measure on ∂K, the so-called “cone measure,” which we denote by
+µK. For any A ⊂∂K, µK(A) is deﬁned as follows:
+µK(A) = vol([0, 1]A)
+vol(K)
+= vol(ta; a ∈A, 0 ≤t ≤1)
+vol(K)
+,
+i.e., µK(A) is the volume of the cone with base A and cusp 0, normalized by the volume
+of K. It was proved in [15] that for almost every x ∈∂K,
+dσK
+dµK
+(x) = n · vol(K)
+area(K) ∥∇(∥· ∥K)(x)∥2,
+where ∥· ∥K is the Minkowski functional of K. Fix some a in the unit sphere Sn−1. By
+a well-known formula of Cauchy,
+2 vol(Pa⊥K) = area(K)
+Z
+∂K
+|⟨n(x), a⟩| dσK(x),
+where n(x) is the outer unit normal to ∂K at x, see, e.g., [20]. Hence,
+2 vol(Pa⊥K) = area(K)
+Z
+∂K
+¯¯⟨∇(∥· ∥K)(x), a⟩
+¯¯
+∥∇(∥· ∥K)(x)∥2
+· dσK
+dµK
+(x) dµK(x)
+= n · vol(K)
+Z
+∂K
+¯¯⟨∇(∥· ∥K)(x), a⟩
+¯¯dµK(x).
+Specializing to K = Bn
+p we get that for some constant C(p, n),
+vol(Pa⊥Bn
+p) = C(p, n)
+Z
+∂Bn
+p
+¯¯¯¯¯
+n
+X
+i=1
+|xi|p−1 sign(xi)ai
+¯¯¯¯¯ dµBn
+p(x).
+This formula is useful since µBn
+p has a concrete probabilistic description. Let g be a
+random variable with density 1/(20(1 + 1/p))e−|t|p (t ∈R). If g1, . . . , gn are i.i.d.
+copies of g, set
+S =
+Ã n
+X
+i=1
+|gi|p
+!1/p
+,
+===== page 4 =====
+218
+F. Barthe and A. Naor
+and consider the random vector
+Z =
+³g1
+S , . . . , gn
+S
+´
+∈Rn.
+The following result appeared in [19], and later independently also in [18]:
+Theorem 1.
+The random vector Z is independent of S. Moreover, for every measurable
+A ⊂∂Bn
+p we have
+µBn
+p(A) = P(Z ∈A).
+Plugging this in the above formula for vol(Pa⊥Bn
+p) we get
+vol(Pa⊥Bn
+p) = C(p, n)E
+"¯¯Pn
+i=1 |gi|p−1 sign(gi/S)ai
+¯¯
+S p−1
+#
+= C(p, n)ES p−1
+ES p−1 · E
+"¯¯Pn
+i=1 |gi|p−1 sign(gi/S)ai
+¯¯
+S p−1
+#
+= C(p, n)
+ES p−1 E
+¯¯¯¯¯
+n
+X
+i=1
+|gi|p−1 sign(gi)ai
+¯¯¯¯¯ ,
+where we have used in the last equality the independence of S and Z.
+Let X be the random variable |g|p−1 sign(g). For p = 1, X is a Rademacher. It is
+easy to check that for p > 1 the density of X is
+p
+2(p −1)0(1/p)|t|(2−p)/(p−1)e−|t|p/(p−1).
+Summing up, we have proved the following extension of the formula for the volume of
+projections of Bn
+1 which appeared in the introduction:
+Proposition 2.
+Let X1, . . . , Xn be i.i.d. random variables with density proportional to
+|t|(2−p)/(p−1)e−|t|p/(p−1), p > 1. Then for every a ∈Sn−1,
+vol(Pa⊥Bn
+p)
+vol(Bn−1
+p
+)
+= E
+¯¯Pn
+i=1 ai Xi
+¯¯
+E|X1|
+.
+Remark.
+In the case 0 < p < 1, Bn
+p is no longer convex, and the Cauchy formula
+fails. Although some estimates can be made, more work needs to be done in the study
+of hyperplane projections of Bn
+p when 0 < p < 1.
+===== page 5 =====
+Hyperplane Projections of the Unit Ball of ℓn
+p
+219
+3.
+An Analogue of the Meyer–Pajor Theorem
+The aim of this section is to establish the following:
+Theorem 3.
+Let 1 ≤p ≤q ≤+∞and let H be a hyperplane in Rn. Then
+vol(PH Bn
+p)
+vol(Bn−1
+p
+)
+≤
+vol(PH Bn
+q )
+vol(Bn−1
+q
+)
+.
+We prove this fact by an induction argument, which is nicely explained in terms of
+the Choquet ordering of measures. The Choquet ordering originated from the proof of
+the classical Choquet representation theorem, where the main interest focused on the
+study of maximal measures, see, e.g., [17] and [10]. It turns out that this notion has some
+purely probabilistic applications. We start with some deﬁnitions and useful facts. Since
+we are interested in symmetric measures, we formulate the deﬁnition in this case only.
+Deﬁnition 4.
+Let µ and ν be symmetric Radon measures on Rn. We say that µ is
+smaller than ν with respect to the symmetric Choquet order and write µ ≺ν if, for every
+even non-negative convex function c: Rn →[0, +∞], one has
+Z
+Rn c dµ ≤
+Z
+Rn c dν.
+Switching to probabilistic notation, for any two symmetric random vectors U, V ∈Rn,
+we say that U ≺V if for every even non-negative convex function c: Rn →R we have
+E c(U) ≤E c(V ).
+This ordering behaves well under products:
+Lemma 5.
+Let µ, ν be symmetric Radon measures on Rn such that µ ≺ν. Then for
+any k ≥2, the product measures compare:
+µk ≺νk.
+Proof.
+By induction, it is enough to show the following: if µ ≺ν are symmetric
+measures on Rn and λ is a symmetric measure on Rℓ, then µ ⊗λ ≺ν ⊗λ. To see this,
+consider an even non-negative convex function c on Rn+ℓand notice that the function
+s(x) :=
+Z
+Rℓc(x, y) dλ(y)
+is also convex and even, because both c and λ are symmetric with respect to the origin.
+Therefore
+Z
+Rn+ℓc dµ dλ =
+Z
+Rn s dµ ≤
+Z
+Rn s dν =
+Z
+Rn+ℓc dν dλ.
+To apply this lemma, we need to characterize the symmetric Choquet ordering for
+measures on R.
+===== page 6 =====
+220
+F. Barthe and A. Naor
+Lemma 6.
+Let U and V be symmetric, real-valued random variables with E |U| =
+E |V | < ∞. Then U ≺V if and only if for every t ≥0,
+E
+£
+(|U| −t) · 1{|U|≥t}
+¤
+≤E
+£
+(|V | −t) · 1{|V |≥t}
+¤
+.
+Proof.
+Let c: R →R be an even, non-negative, convex, twice differentiable function.
+Taylor’s formula gives
+c(a) = c(0) + c′(0)a +
+Z a
+0
+c′′(t)(a −t) dt.
+Hence, by Fubini’s theorem,
+E c(U) = E c(|U|) = c(0) + c′(0)E|U| +
+Z ∞
+0
+c′′(t)E
+£
+(|U| −t) · 1{|U|≥t}
+¤
+dt,
+and similarly for V . Hence, by approximating a general non-negative even convex func-
+tion on R by a twice differentiable one, we get that U ≺V if and only if for every
+measurable θ: [0, ∞) →[0, ∞),
+Z ∞
+0
+θ(t)E
+£
+(|U| −t) · 1{|U|≥t}
+¤
+dt ≤
+Z ∞
+0
+θ(t)E
+£
+(|V | −t) · 1{|V |≥t}
+¤
+dt,
+and this implies the required result.
+For absolutely continuous measures, the above condition could be expressed more
+explicitly. For any integrable f : R →R denote f (−1)(x) = −
+R ∞
+x
+f (t) dt, and if f (−1)
+is also integrable, set f (−2) = [ f (−1)](−1).
+Corollary 7.
+Let f, g: R →R be non-negative even integrable functions which are
+continuous on R\{0} and such that
+Z ∞
+0
+f (t) dt =
+Z ∞
+0
+g(t) dt < ∞
+and
+Z ∞
+0
+t f (t) dt =
+Z ∞
+0
+tg(t) dt < ∞.
+Then f dx ≺g dx if and only if f (−2) ≤g(−2) on R+.
+Proof.
+One just has to notice that
+f (−2)(t)=
+Z ∞
+t
+Z ∞
+s
+f (u) du ds =
+Z Z
+{u>s>t}
+f (u) ds du =
+Z ∞
+t
+f (u)(u −t) du.
+We apply this by using the following convenient necessary condition:
+Lemma 8.
+Let f, g: R →R be non-negative even integrable functions such that
+Z ∞
+0
+f (t) dt =
+Z ∞
+0
+g(t) dt < ∞
+and
+Z ∞
+0
+t f (t) dt =
+Z ∞
+0
+tg(t) dt < ∞.
+Assume that there are 0 < x < y < ∞such that {t ≥0; g(t) < f (t)} = (x, y). Then
+f dx ≺g dx.
+===== page 7 =====
+Hyperplane Projections of the Unit Ball of ℓn
+p
+221
+Proof.
+For every t ≥0 deﬁne ϕ(t) = g(−2)(t) −f (−2)(t). By the construction,
+limt→∞ϕ(t) = 0. Moreover, as explained before, f (−2)(0) =
+R ∞
+0 t f (t) dt = g(−2)(0),
+so that ϕ(0) = 0. Now, ϕ′′ = g −f so that by our assumption ϕ′ is increasing on
+[0, x], decreasing on (x, y), and increasing again on [y, ∞). However, by the deﬁnition,
+limt→∞ϕ′(t) = 0 and ϕ′(0) =
+R ∞
+0 ( f −g) = 0. Thus there is some u > 0 such that
+ϕ′ ≥0 on [0, u] and ϕ′ ≤0 on [u, ∞). Finally, since ϕ equals zero at 0 and ∞, ﬁrst
+increases, and then decreases, we conclude that ϕ ≥0, and the previous corollary gives
+the result.
+The latter criterion is easily checked for exponential type densities:
+Lemma 9.
+Let α1, α2 be real numbers and let β1, β2, c1, c2, d1, d2 be positive real
+numbers. For i = 1, 2, consider the function
+fi(t) = citαie−(t/di)βi ,
+t ∈(0, +∞).
+If α1 < α2 and 0 < β1 < β2, then either the function f1 −f2 is non-negative or there
+exist 0 < x < y < +∞such that f1 −f2 is negative exactly on the set (x, y).
+Proof.
+Taking logarithms, f1(t) ≥f2(t) amounts to ϕ(t) ≥0, where for t > 0,
+ϕ(t) = log
+µc1
+c2
+¶
++ (α1 −α2) log t +
+µ t
+d2
+¶β2
+−
+µ t
+d1
+¶β1
+.
+This function clearly tends to +∞at 0 and +∞. We study the sign of its derivative, or
+rather of the more convenient function
+ψ(t) = tϕ′(t) = α1 −α2 + β2
+µ t
+d2
+¶β2
+−β1
+µ t
+d1
+¶β1
+.
+This function has a negative value at 0 and tends to +∞at +∞. Next,
+ψ′(t) = β2
+2
+tβ2−1
+dβ2
+2
+−β2
+1
+tβ1−1
+dβ1
+1
+is non-negative if and only if tβ2−β1 ≥β2
+1dβ2
+2 β−2
+2 d−β1
+1
+. Since β2 > β1, this happens
+exactly on an interval of the form [z, +∞) for some z > 0. Hence, ψ starts from a
+negative value at zero, decreases, and then increases to +∞. It is therefore ﬁrst negative
+and then positive. So the original function ϕ is +∞at 0, ﬁrst decreases, and then increases
+to +∞. The conclusion follows.
+Proof of Theorem 3. We can restrict to 1 < p < q < ∞. For r > 1, let X(r) be the
+random variable with density:
+r
+2(r −1)0(1/r)|t|(2−r)/(r−1)e−|t|r/(r−1),
+===== page 8 =====
+222
+F. Barthe and A. Naor
+and let Y (r) = X(r)/(E|X(r)|). Its density is given by
+r′
+0(1/r)r′ |t|(2−r)/(r−1) exp
+"
+−
+µ
+|t|
+0(1/r)
+¶r′#
+,
+where 1/r + 1/r′ = 1. Using the previous lemmas, we get Y (p) ≺Y (q). Tensorizing
+this inequality we get that (Y (p)
+1
+, . . . , Y (p)
+n
+) ≺(Y (q)
+1 , . . . , Y (q)
+n ) where Y (p)
+1
+, . . . , Y (p)
+n
+are
+i.i.d. copies of Y (p) and similarly for q. Therefore for every a ∈Sn−1, one has
+E
+¯¯¯Pn
+i=1 ai X(p)
+i
+¯¯¯
+E|X(p)|
+= E
+¯¯¯¯¯
+n
+X
+i=1
+aiY (p)
+i
+¯¯¯¯¯ ≤E
+¯¯¯¯¯
+n
+X
+i=1
+aiY (q)
+i
+¯¯¯¯¯ =
+E
+¯¯¯Pn
+i=1 ai X(q)
+i
+¯¯¯
+E|X(q)|
+.
+The theorem then follows from Proposition 2.
+2
+4.
+Extremal Projections when p ≥2
+This section is devoted to the proof of the following result:
+Theorem 10.
+Let p ≥2 and H be a hyperplane of Rn, then
+vol(PH1 Bn
+p) ≤vol(PH Bn
+p) ≤vol(PHn Bn
+p).
+The lower bound is a consequence of Theorem 3 applied with 2 and p. It also follows
+from Meyer and Pajor’s result [14]. Indeed, for every hyperplane H containing the origin
+Bn
+p ∩H ⊂PH Bn
+p so vol(PH Bn
+p) ≥vol(Bn
+p ∩H) ≥vol(Bn−1
+p
+). Our argument for the
+upper bound will provide yet another proof of the lower bound.
+We begin with a lemma, which originates from Koldobsky’s article [12]. First recall
+that an inﬁnitely differentiable function f : (0, +∞) →R+ is said to be completely
+monotonic if for every n = 0, 1, 2, . . . , (−1)n f (n) ≥0. Direct differentiation shows that
+f (t) = t−α, α > 0, is completely monotonic. A straightforward induction shows also
+that f (t) = e−tβ is completely monotonic provided 0 < β ≤1. Similarly, the product
+of completely monotonic functions is still completely monotonic. A classical theorem
+of Bernstein, see, for example, [24], asserts that f is completely monotonic if and only
+if there is a non-negative Borel measure µ on R+ such that µ([0, ∞)) = f (0+) and for
+each x > 0,
+f (x) =
+Z ∞
+0
+e−tx dµ(t).
+For complete proofs of the above facts, refer to [24].
+Lemma 11.
+Let g: R →R+ be an even integrable function such that g(√t) is com-
+pletely monotonic. Then the function
+t 7→log ˆg(
+√
+t),
+t > 0,
+is convex. Here ˆg(ξ) =
+R
+R eisξg(s) ds is the Fourier transform of g.
+===== page 9 =====
+Hyperplane Projections of the Unit Ball of ℓn
+p
+223
+Proof.
+By Bernstein’s theorem, there is a non-negative measure µ on R+ such that for
+every t ≥0,
+g(
+√
+t) =
+Z ∞
+0
+e−tx dµ(x).
+So for every t ∈R,
+g(t) =
+Z ∞
+0
+e−t2x dµ(x).
+Taking Fourier transforms in t and using Fubini’s theorem, we get
+ˆg(u) =
+Z ∞
+0
+e−u2/(4x)
+rπ
+x dµ(x).
+Hence, for u ≥0,
+ˆg(√u) =
+Z ∞
+0
+¡
+e−1/(4x)¢u
+rπ
+x dµ(x),
+which is log-convex by H¨older’s inequality.
+Remark.
+It follows from the above proof that if g(√u) is completely monotonic, then
+also ˆg(√u) is completely monotonic.
+Proof of Theorem 10. Let a be a unit vector orthogonal to H. Using the representation
+|s| = c
+Z ∞
+0
+1 −cos(us)
+u2
+du,
+and the notation of Proposition 2, we get that
+E
+¯¯¯¯¯
+n
+X
+k=1
+ak Xk
+¯¯¯¯¯ = c E
+Z ∞
+0
+1 −Re
+³
+eiu Pn
+k=1 ak Xk´
+u2
+du
+= c
+Z ∞
+0
+1 −Qn
+k=1 E
+¡
+eiuak X¢
+u2
+du,
+where we also used the symmetry of X. Let f be the density of X. For t ≥0,
+f (
+√
+t) = cpt(2−p)/(2p−2)e−t p/(2p−2).
+Since, for p > 2, (2 −p)/(2p −2) < 0 and p/(2p −2) ∈(0, 1], we get by the
+preceding remarks that f (√t) is a product of two completely monotonic functions, and
+is therefore completely monotonic. Lemma 11 implies that log ˆf (√t) is convex. So
+for every u ≥0, the function (αj)n
+j=1 7→Pn
+j=1 log ˆf (√αju) is convex on the simplex
+{α ≥0; Pn
+j=1 αj = 1}. Thus, it attains its minimum at the barycenter of the simplex
+and its maximum at the vertices. Since Pn
+j=1 a2
+j = 1, we get that
+ˆf
+µ u
+√n
+¶n
+≤
+nY
+j=1
+ˆf (aju) ≤ˆf (u) ˆf (0)n−1 = ˆf (u).
+===== page 10 =====
+224
+F. Barthe and A. Naor
+Combining this estimate with the relation
+vol(Pa⊥Bn
+p) = c′
+p,n
+Z ∞
+0
+1 −Qn
+j=1 ˆf (aju)
+u2
+du,
+we obtain that
+vol(P(1,0,...,0)⊥Bn
+p) ≤vol(Pa⊥Bn
+p) ≤vol(P(1/√n,...,1/√n)⊥Bn
+p).
+5.
+The Case 1 ≤p ≤2
+Theorem 12.
+Let 1 ≤p ≤2 and let H be a hyperplane of Rn, then
+max
+µ 1
+√
+2
+,
+³n −1
+n
+´(n−1)(1/p−1/2)¶
+vol(Bn−1
+p
+) ≤vol(PH Bn
+p) ≤vol(PH1 Bn
+p).
+The lower bound is sharp only for p = 1 or 2.
+Proof.
+The upper bound follows from Theorem 3 with q = 2. The 1/
+√
+2 lower bound
+can be viewed as a consequence of it too, and of the optimal lower bound on projections
+of Bn
+1 :
+vol(PH Bn
+p)
+vol(Bn−1
+p
+)
+≥vol(PH Bn
+1 )
+vol(Bn−1
+1
+)
+≥vol(PH2 Bn
+1 )
+vol(Bn−1
+1
+)
+=
+1
+√
+2
+.
+There is however a shorter argument: introduce ε1, . . . , εn symmetric i.i.d. Bernoulli
+variables, independent from the vector (X1, . . . , Xn). Since the Xi’s are symmetric, the
+vectors (ε1|X1|, . . . , εn|Xn|) and (X1, . . . , Xn) have the same law, therefore, using only
+the Khinchine inequality for Bernoulli laws,
+vol(Pa⊥Bn
+p)
+vol(Bn−1
+p
+)
+=
+EεEX
+¯¯¯ Pn
+i=1 aiεi|Xi|
+¯¯¯
+E|X1|
+≥
+Eε
+¯¯¯ Pn
+i=1 aiεiE|Xi|
+¯¯¯
+E|X1|
+≥
+1
+√
+2
+
+E
+Ã n
+X
+i=1
+aiεi
+!2
+
+1/2
+=
+1
+√
+2
+,
+for any a ∈Sn−1. The other part of the lower bound is proved in [6] using the reverse
+Brascamp–Lieb inequality.
+The calculation of the minimal volume hyperplane projection of Bn
+p, 1 < p < 2,
+seems more difﬁcult. This reﬂects the situation for maximal sections of Bn
+p in the case
+2 < p < ∞. Ball’s calculation of the maximal section of the cube has not been extended
+so far to any p < ∞. Moreover, recent results of Oleszkiewicz (private communication)
+show that for 2 < p < 24 and large n, vol(Bn
+p ∩Hn) > vol(Bn
+p ∩H2), so that the
+direction of the maximal hyperplane changes with p.
+===== page 11 =====
+Hyperplane Projections of the Unit Ball of ℓn
+p
+225
+A similar phenomenon occurs for hyperplane projections in the case 1 ≤p ≤2. As
+remarked in the Introduction, the minimal hyperplane projection for p = 1 is orthogonal
+to the direction (1, 1, 0, . . . , 0). Now, by the central limit theorem,
+lim
+n→∞
+vol(PHn Bn
+p)
+vol(Bn−1
+p
+)
+= lim
+n→∞
+E
+¯¯(Pn
+i=1 Xi)/√n
+¯¯
+E|X|
+= (EX2)1/2
+E|X|
+Z ∞
+−∞
+|u|e−u2/2 du
+√
+2π
+=
+s
+2
+π · 0
+µ 1
+p
+¶
+0
+µ
+2 −1
+p
+¶
+.
+On the other hand,
+vol(PH2 Bn
+p)
+vol(Bn−1
+p
+)
+=
+E
+¯¯¯(X1 + X2)/
+√
+2
+¯¯¯
+E|X|
+=
+vol(P(1,1)⊥B2
+p)
+vol(B1p)
+= 21/2−1/p.
+So that
+lim
+n→∞
+vol(PHn Bn
+p)
+vol(PH2 Bnp) = 21/p
+√π ·
+s
+0
+µ 1
+p
+¶
+0
+µ
+2 −1
+p
+¶
+.
+Set y = 1 −1/p ∈[0, 1). The previous limit is
+ψ(y) = 21−y
+√π ·
+p
+0(1 −y) 0(1 + y).
+The function ψ is clearly strictly log-convex, ψ(0) > 1 = ψ( 1
+2) and limy→1 ψ(y) = ∞.
+Moreover, by the complement formula (see [1]),
+ψ( 1
+4) = 23/4
+√π
+q
+0( 3
+4)0( 1
+4)/4 = 2−1/4
+√π
+r
+π
+sin(π/4) = 1 = ψ( 1
+2).
+It follows that ψ(y) < 1 for 1
+4 < y <
+1
+2 and ψ(y) > 1 for 0 < y <
+1
+4. Hence
+for 1 < p < 4
+3 and n large enough, vol(PH2 Bn
+p) < vol(PHn Bn
+p), whereas the reverse
+inequality holds for 4
+3 < p < 2 and large n.
+It is plausible that for p < 2 close to 2, the minimal volume projection is the one
+onto Hn. Indeed, for any hyperplane H and p ≥2, we have shown that vol(PH Bn
+p) ≤
+vol(PHn Bn
+p). Since these quantities are differentiable in p and coincide for p = 2, it
+follows that
+d
+dp vol(PH Bn
+p)|p=2 ≤d
+dp vol(PHn Bn
+p)|p=2,
+which also gives information for p < 2 very close to 2. If the previous inequality were
+strict for some direction H, then vol(PH Bn
+p) ≥vol(PHn Bn
+p) would hold for p ∈(2−ε, 2].
+It would be nice to prove the strict inequality for hyperplanes which are not orthogonal to
+the main diagonal. Note that the same reasoning applies for sections and that, for once,
+any result on projections would yield the corresponding result for sections and vice versa.
+Indeed, for any H and p, vol(Bn
+p ∩H) ≤vol(PH Bn
+p) with equality for p = 2, so their
+derivatives at p = 2 coincide.
+===== page 12 =====
+226
+F. Barthe and A. Naor
+Acknowledgments
+This work was done while we were visiting the Department of Mathematics of University
+College London. We express our gratitude for the generous hospitality and support of
+our hosts. We particularly thank Professor Keith M. Ball and Professor David Preiss for
+their invitation.
+References
+1. E. Artin. The Gamma Function. Holt, Rinehart and Winston, New York, 1964.
+2. K. M. Ball. Cube slicing in Rn. Proc. Amer. Math. Soc., 97:465–473, 1986.
+3. K. M. Ball. Volumes of sections of cubes and related problems. In J. Lindenstrauss and V. D. Milman,
+editors, Israel Seminar on Geometric Aspects of Functional Analysis, number 1376 in Lectures Notes in
+Mathematics. Springer-Verlag, Berlin, 1989.
+4. K. M. Ball. Mahler’s conjecture and wavelets. Discrete Comput. Geom., 13(3–4):271–277, 1995.
+5. F. Barthe. Mesures unimodales et sections des boules Bn
+p. C. R. Acad. Sci. Paris S´er. I, 321:865–868, 1995.
+6. F. Barthe. Extremal properties of central half-spaces for product measures. J. Funct. Anal., 182:81–107,
+2001.
+7. A. M. Caetano. Weyl numbers in sequence spaces and sections of unit balls. J. Funct. Anal., 106:1–17,
+1992.
+8. G. D. Chakerian and P. Filliman. The measures of the projections of a cube. Studia Sci. Math. Hungar.,
+21(1–2):103–110, 1986.
+9. P. Filliman. The extreme projections of the regular simplex. Trans. Amer. Math. Soc., 317(2):611–629,
+1990.
+10. V. P. Fonf, J. Lindenstrauss, and R. R. Phelps. Inﬁnite dimensional convexity. In W. B. Johnson and J.
+Lindenstrauss, editors, Handbook of the Geometry of Banach Spaces, volume I, pages 599–670. North-
+Holland, Amsterdam, 2001.
+11. H. Hadwiger. Gitterperiodische Punktmengen und Isoperimetrie. Monatsh. Math., 76:410–418, 1972.
+12. A. Koldobsky. An application of the Fourier transform to sections of star bodies. Israel J. Math., 106:157–
+164, 1998.
+13. R. Latala and K. Oleszkiewicz. On the best constant in the Khinchin–Kahane inequality. Studia Math.,
+109(1):101–104, 1994.
+14. M. Meyer and A. Pajor. Sections of the unit ball of ℓn
+p. J. Funct. Anal., 80:109–123, 1988.
+15. A. Naor and D. Romik. Projecting the surface measure of the sphere of ℓn
+p. Preprint, 2001.
+16. K. Oleszkiewicz and A. Pelczy´nski. Polydisc slicing in Cm. Studia Math., 142(3):281–294, 2000.
+17. R. R. Phelps. Lectures on Choquet’s Theorem, volume 7. Van Nostrand Mathematical Studies. Van
+Nostrand, New York, 1966.
+18. S. T. Rachev and L. R¨uschendorf. Approximate independence of distributions on spheres and their stability
+properties. Ann. Probab., 19(3):1311–1337, 1991.
+19. G. Schechtman and J. Zinn. On the volume of intersection of two Ln
+p balls. Proc. Amer. Math. Soc,
+110(1):217–224, 1990.
+20. R. Schneider. Convex Bodies: The Brunn–Minkowski Theory. Cambridge University Press, Cambridge,
+1993.
+21. S. J. Szarek. On the best constants in the Khinchin inequality. Studia. Math., 58(2):197–208, 1976.
+22. J. D. Vaaler. A geometric inequality with applications to linear forms. Paciﬁc J. Math., 83:543–553, 1979.
+23. S. Webb. Central slices of the regular simplex. Geom. Dedicata, 61(1):19–28, 1996.
+24. D. V. Widder. The Laplace Transform. Princeton University Press, Princeton, NJ, 1941.
+Received May 21, 2001, and in revised form September 2, 2001. Online publication December 17, 2001.

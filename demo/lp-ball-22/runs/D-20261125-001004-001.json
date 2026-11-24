@@ -1,0 +1,1725 @@
+{
+  "role": "D",
+  "task": "D：这一趟派给你的活是 —— 补一条文献元数据（缺的是「题名 → 作者/期刊/年份」这一格，正文参考文献因此不可核）：请让 A 取回并核实在册文献 lit:000003（题名 \"Critical central sections of the cube\"，PDF 在 reference/5d236efcb7ea-critical-central-sections-of-the-cube.pdf）的首部信息，要三样逐字读数：① 作者全名（按文中出现顺序，逐字）；② 期刊或 arXiv 编号 + 年份 + 卷期页（能取到几样给几样，取不到的如实说取不到，不许与 PDF 不符）；③ 该文摘要或引言里与「cube 的中心截面在方向变化时的临界点」这一主题直接相关的一句话（逐字英文），以便我判断正文引它做背景是否站得住。取到后请把这三样落在台账（A 取回、B 收录）并在你的汇报里只给指针（lit: 号 + 你落了哪一个文件/哪一行），不要夹带正文。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "literature",
+          "id": "000003"
+        },
+        "why": "先读 lit:000003 现有行，确认缺哪一格元数据，再决定派 A 取什么"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "lit_id": "000003",
+          "title": "Critical central sections of the cube",
+          "type": "J",
+          "summary": "",
+          "path": "5d236efcb7ea-critical-central-sections-of-the-cube.pdf",
+          "processed": true,
+          "source_request_ids": [
+            "r-000001"
+          ],
+          "dedup_key": "title:critical central sections of the cube|*",
+          "doi": null,
+          "year": null,
+          "authors": [],
+          "venue": null,
+          "language": null,
+          "added_at": "2026-11-24T18:05:13+08:00",
+          "download": {
+            "status": "ok",
+            "http_status": null,
+            "bytes": 955094,
+            "sha256": "5d236efcb7ea803dd7b7641b3d6f0f8fe5d8a2c9a6d0b2825c0becb5c7351611",
+            "error": null,
+            "fulltext": "ok",
+            "note": "候选期已抽读：27933 字（指纹 7f80d6808d55）"
+          },
+          "pages": "",
+          "matched": "",
+          "claimed_by": null,
+          "lease_until": null,
+          "mine_attempts": 1,
+          "last_mine_error": null,
+          "_keys": [
+            "title:critical central sections of the cube|*"
+          ]
+        },
+        "error": "",
+        "meta": {
+          "table": "literature",
+          "id": "000003",
+          "id_field": "lit_id",
+          "found": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 63872,
+        "prompt_cache_miss_tokens": 1686,
+        "tokens_in": 65558,
+        "tokens_out": 214,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000251"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.stat",
+        "args": {
+          "path": "reference/5d236efcb7ea-critical-central-sections-of-the-cube.pdf"
+        },
+        "why": "确认 A 要读的 PDF 在盘上、拿到字节数与 sha256 作为取回读数的落点"
+      },
+      "result": {
+        "tool": "fs.stat",
+        "ok": true,
+        "data": {
+          "path": "reference/5d236efcb7ea-critical-central-sections-of-the-cube.pdf",
+          "exists": true,
+          "is_dir": false,
+          "is_file": true,
+          "is_symlink": false,
+          "size": 955094,
+          "mtime": "2026-11-21T12:33:26+08:00",
+          "mtime_epoch": 1795235606.652,
+          "link_target": null,
+          "sha256": "5d236efcb7ea803dd7b7641b3d6f0f8fe5d8a2c9a6d0b2825c0becb5c7351611"
+        },
+        "error": "",
+        "meta": {
+          "path": "reference/5d236efcb7ea-critical-central-sections-of-the-cube.pdf",
+          "size": 955094,
+          "sha256": "5d236efcb7ea803dd7b7641b3d6f0f8fe5d8a2c9a6d0b2825c0becb5c7351611"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 64768,
+        "prompt_cache_miss_tokens": 1368,
+        "tokens_in": 66136,
+        "tokens_out": 545,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000251"
+    },
+    {
+      "index": 2,
+      "shape": "summon",
+      "payload": {
+        "role": "A",
+        "action": "",
+        "params": {
+          "lit_id": "000003",
+          "title": "Critical central sections of the cube",
+          "pdf_path": "reference/5d236efcb7ea-critical-central-sections-of-the-cube.pdf",
+          "pdf_sha256": "5d236efcb7ea803dd7b7641b3d6f0f8fe5d8a2c9a6d0b2825c0becb5c7351611",
+          "pdf_bytes": 955094,
+          "fields_to_fill": [
+            "authors",
+            "venue",
+            "year",
+            "pages"
+          ],
+          "verbatim_target": "abstract or introduction sentence on critical points of central sections of the cube under direction change",
+          "no_network_needed": true,
+          "no_new_literature_row": true
+        },
+        "why": "A 是取文献、核实并落 literature 行的角色；这一格缺的正是「题名 → 作者/期刊/年份」的元数据与一句逐字主题引文",
+        "brief": "核实 lit:000003 的 PDF 首部信息并补齐元数据四格 + 一句逐字主题引文",
+        "name": "probe-a-1",
+        "task": "核实并把在册文献 lit:000003 的首部元数据补齐，三样逐字读数：① 作者全名（按文中出现顺序，逐字照抄）；② 期刊名或 arXiv 编号 + 年份 + 卷期页（能取到几样给几样，取不到的如实写「PDF 上取不到」，不许与 PDF 不符）；③ 摘要或引言里与「cube 的中心截面随方向变化时的临界点」这一主题直接相关的一句话（逐字英文原文，不要改写、不要缩写）。PDF 已在本地：reference/5d236efcb7ea-critical-central-sections-of-the-cube.pdf（955094 字节，sha256 5d236efcb7ea803dd7b7641b3d6f0f8fe5d8a2c9a6d0b2825c0becb5c7351611），不需要联网检索、也不需要新建文献行。请把这三样写进 literature 表 lit:000003 那一行的 authors / venue / year / pages 四格（作者按文中出现顺序逐字，取不到就留空并在回执里如实说取不到），③ 那一句逐字原文随你的回执交回给我（我要用它判断正文引这篇做背景站不站得住）。之后按你自己的流程派 B 收编。回执里请给：改前→改后的四格、③ 的逐字原文及其所在位置（摘要 / 引言第几段 / 页码口径按框架分页标记）。如果 PDF 取不出文字层或首部缺页，如实报「取不到」，不要按题名猜作者与期刊。"
+      },
+      "result": {
+        "summoned": "A",
+        "action": "",
+        "ok": true,
+        "task_id": "t-000252",
+        "status": "running",
+        "outcome": null,
+        "refusal_reason": null,
+        "preemptible": true,
+        "dispatched": [
+          "t-000252"
+        ],
+        "running": [
+          "t-000252"
+        ],
+        "detail": "还在跑：本步先不等（可抢占）。它回来之后结论会在你下一次被问之前以【子代理返场】投给你 —— 不要因为 status=running 就重派；收工会被拒到它回齐",
+        "roster_considered": true,
+        "roster_name": "probe-a-1",
+        "dispatch_policy": {
+          "checked": true,
+          "dispatches": 1,
+          "violations": [],
+          "self_authored_plans": 3,
+          "named_plans": [],
+          "conjectures": [
+            "000000",
+            "000001",
+            "000002",
+            "000003",
+            "000004",
+            "000005",
+            "000006",
+            "000007",
+            "000008",
+            "000009",
+            "000010",
+            "000011",
+            "000012",
+            "000013",
+            "000014",
+            "000015",
+            "000016",
+            "000017",
+            "000018",
+            "000019",
+            "000020",
+            "000021",
+            "000022",
+            "000023",
+            "000024",
+            "000025",
+            "000026"
+          ],
+          "reason": "D 的派活文本里没有点名任何一条它自己登记的猜想号（方向由文本给，号不作为命令）",
+          "events_error": ""
+        },
+        "秘书": {
+          "alarms": [
+            "'probe-a-1' 不是注册表里的真名；并列候选：['own.probe_c']"
+          ],
+          "fail_open": false,
+          "problem": "'probe-a-1' 不是注册表里的真名；并列候选：['own.probe_c']",
+          "wash": {
+            "checked": true,
+            "washed": false,
+            "refused": "",
+            "reason": ""
+          },
+          "changes": [],
+          "surface_fit": {
+            "checked": false,
+            "fits": null,
+            "paths": [],
+            "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+            "shape": "summon",
+            "reach": {
+              "checked": true,
+              "verdict": "unknown",
+              "hops": [],
+              "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+            }
+          },
+          "reach_fit": {
+            "checked": true,
+            "verdict": "unknown",
+            "hops": [],
+            "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+          },
+          "assessment": {
+            "decision": "可派",
+            "reason": "这一条没点名具体动作（role 级派活）⇒ 不拿动作表去卡它；角色存在性由预筛管",
+            "basis": [
+              "specs/<role>.py 的动作表",
+              "tasks: 同 key 的既有终态行",
+              "没点名动作 ⇒ 动作表那一格不适用"
+            ],
+            "duplicates": [],
+            "alarms": [],
+            "novel": false,
+            "surface": {
+              "checked": false,
+              "fits": null,
+              "paths": [],
+              "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+              "shape": "summon",
+              "reach": {
+                "checked": true,
+                "verdict": "unknown",
+                "hops": [],
+                "reason": "角色 '' 不在能力表里（['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'L', 'M', 'V']）⇒ 判不了"
+              }
+            },
+            "judge": {
+              "checked": false,
+              "reason": "预筛没有报警、也没有重复候选 ⇒ 不必判断"
+            },
+            "engaged": false,
+            "seq": 3
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 65280,
+        "prompt_cache_miss_tokens": 1593,
+        "tokens_in": 66873,
+        "tokens_out": 778,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000251"
+    },
+    {
+      "index": 3,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/D/RESEARCH.md",
+          "max_lines": 120
+        },
+        "why": "先读我这份跨趟研究手稿，确认「定义与已知」那一节现在怎么写 lit:000003，A 回来之后好定点补一行"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# 三维 l^p 球 B_p^3 的中心截面最大面积 —— 研究手稿（D）\n\n问题号：`research_questions` 000000（kind=gap，priority=high）\n本趟接手：先读本文；会话记录不会自己走到下一趟。\n\n> **第 2 轮改写（A 腿文献读数回来后）**：第 0 节的「新」字已按 `lit:` 收窄。第 1 轮里我把\n> 「1≤p<2 坐标向最大」当成本问题的未证卡点（s1），A 的检索读数表明这条在文献里**已经是定理**\n> （见 §1.1）。这一处改主意的依据逐条写在 §3「尝试与失败」第 4 条。\n\n---\n\n## 0. 成果概述\n\n### 0.1 文献定位：谁已知、谁是新（本趟最重要的一条判断）\n\n| 结论 | 状态 | 落点 |\n|---|---|---|\n| 1 ≤ p < 2 时坐标超平面给**最大**中心截面（体对角向给最小） | **已知（定理）** | `lit:000001` p.2 逐字；已回验关系 `rel:000007` |\n| p = ∞（立方体）时极大中心截面正交于二维面的主对角，体积 √2·2^{n−1}（n=3 ⇒ 4√2） | **已知（Ball）** | `lit:000003` p.1 逐字；`rel:000000`/`rel:000001`/`rel:000002`（立方体切片那一支） |\n| 2 < p < ∞、n=3 的**完整三段结构** + 临界 p\\* ≈ 4.9982 | **新**（所查文献无显式结论） | 见 `lit:000006` p.2 逐字「The question of determining the maximal hyperplane sections of B^p_n(R) for p ∈ (2, ∞) remains open」；`lit:000001` 只覆盖 p ≥ p_0 与 20 < p < p_0 两档 |\n\n⇒ **本问题真正的新东西是 `2 < p < ∞` 这一段的 n=3 解**（三段切换点 + p\\* 的数值位置 +\n三个候选方向闭式的两两比较），不是 p<2 一侧的定性结论。\n\n### 0.2 有 V 签的（我方证明，等级 `proof` 那一档）\n\n1. **极坐标公式 + 48 阶对称归约 + 坐标/面对角闭式 + p=2 门槛**：`manuscripts/F/f-proof-000000.md`\n   （V 判「成立」，零 finding），收录为 **`stmt:000034`**。\n2. **零坐标法向族的闭式与族内极值**（n^⊥ 含某条坐标轴的全部法向）：\n   `manuscripts/F/f-proof-000001.md`（V 判「成立」），收录为 **`stmt:000035`**。\n   B 的第二阶段副本 `manuscripts/B/b-proof-000001.md` 被 V 判「有毛病」—— 理由**只**是稿头\n   （标题 / 子目标 s3）与正文所证命题 000035 不一致，正文逐步核对无缺口，改稿头即可\n   （V 的交接手稿 000006）。**这不影响 `stmt:000035` 所依据的 F 原稿**。\n\n### 0.3 数值实验（E）\n\nE 四件：`exp:000003`（求积核自检 `code/exp/lpsec_validate.py`）、`exp:000004`（12 个 p 的球面扫描\n`code/exp/lpsec_sweep.py`）、`exp:000006`（临界 p 与单调性 `code/exp/lpsec_critical.py`）、\n`exp:000007`（两条边界弧细扫描 `code/exp/lpsec_arcs.py`），全部 `result=supports`、`exit_code=0`。\n它们落成 `stmt:000030`–`stmt:000033`（等级 `strong_conjecture`，普通数值档，按业主口径不过 V）。\n\n### 0.3b 第 3 轮补记（E 的反例读数，2026-11-24 晚）\n\nE 后续三行 `method=numeric` 实验（`exp:000020` **refutes**、`exp:000022` **refutes**、`exp:000023` supports，\n全部 `exit_code=0`；脚本 `code/exp/e5_delta_second_root.py` / `e6b_pstar_peak_deriv_v2.py` /\n`e7_largep_asymptotics.py`）把「ρ 单调」这条**自然证明路线否掉了**：`ρ = A_face/A_…（落档截断，原 5416 字）",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/D/RESEARCH.md",
+          "encoding": "utf-8",
+          "bytes_read": 21689,
+          "total_bytes": 21689,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 120,
+          "total_lines": 271,
+          "next_line": 121,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 1–120 行（共 271 行）；续读 start_line=121",
+          "sha256": "1c0cad81696ece325bd41579661a2821afed5f59fef53f7225afdfde46cd82a5"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 66048,
+        "prompt_cache_miss_tokens": 2108,
+        "tokens_in": 68156,
+        "tokens_out": 254,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000251"
+    },
+    {
+      "index": 5,
+      "shape": "tool",
+      "payload": {
+        "name": "manuscripts.read",
+        "args": {
+          "id": "000039"
+        },
+        "why": "读 A 交回的手稿 000039，拿到三样逐字读数的落点与哪一格被 identity_cell_refused 挡住"
+      },
+      "result": {
+        "tool": "manuscripts.read",
+        "ok": true,
+        "data": {
+          "body": "# A → D｜lit:000003 首部核实：作者 GERGELY AMBRUS／arXiv:2107.14778v3 22 Jun 2023／12 页，无期刊卷期页；authors·venue·year 三个身份格受 identity_cell_refused 挡住未写入，pages 已补，③ 逐字原句见正文\n\n- 从：A\n- 到：D\n- 一句话：lit:000003 首部核实：作者 GERGELY AMBRUS／arXiv:2107.14778v3 22 Jun 2023／12 页，无期刊卷期页；authors·venue·year 三个身份格受 identity_cell_refused 挡住未写入，pages 已补，③ 逐字原句见正文\n- 时间：2026-11-25T00:09:01+08:00\n- 引用（前序手稿 / 台账对象）：lit:000003、stmt:000111、stmt:000113、rel:000018\n- 台账：t-000252 / sid 2026-11-22n\n\n## 做了什么\n按你点名的文件 `reference/5d236efcb7ea-critical-central-sections-of-the-cube.pdf`（sha256 与 955094 字节与派活一致）核 lit:000003 的首部元数据。抽读链：`text.extract(path=\"5d236efcb7ea-…pdf\", lit_id=\"000003\")` → `library/000003.txt`（12 页 / 27933 字 / 可读）→ `fs.read` 读了首部与 §1。\n\n## 四格的改前 → 改后\n| 格 | 改前 | 改后 | 依据 |\n|---|---|---|---|\n| authors | `[]` | `[]`（**未写入**） | 逐字读数 **GERGELY AMBRUS**（首部全大写、单作者）。`table.update` 受控拒 `identity_cell_refused`（身份格只由收编口/provider 记录写）；`search.register` 判重命中只复用 lit_id；`lit.stage_*` items 不收 authors ⇒ 无写口 |\n| venue | `null` | `null`（**未写入**） | 逐字读数 **arXiv:2107.14778v3**；PDF 上**取不到期刊名**（首部只有 2020 MSC 52A40/52A38/49Q20、Key words、致谢、arXiv 戳） |\n| year | `null` | `null`（**未写入**） | 逐字读数 **22 Jun 2023**（arXiv v3 日期） |\n| pages | `\"\"` | `\"12 pp.（PDF 共 12 页；期刊卷期页 PDF 上取不到）\"` | 12 页是 PDF 页数；**期刊卷期页 PDF 上取不到**（正文只有内部页码） |\n附带把 `summary` 写成同一份逐字题录（可写状态格）。**没有按题名猜作者或期刊**；不存在的格留空并在此如实说明。\n\n## ③ 你要的那一句（逐字，未改写未缩写）\n**位置**：`===== page 2 =====`（框架分页标记，PDF 第 2 页），§1 «History and results» 第二段（段首 \"In this note we apply…\"，段末 \"…see the remark following the proof of Theorem 1.\"）；`library/000003.txt` 第 79–83 行，正文 sha256 `7f80d6808d557f09ad03516437b27c7b47878a0e41cba6a73711f564a7979820`。\n\n> In this note we apply Fourier analytic methods to study critical central hyperplane sections: these are the sections a⊥∩Qn whose normal vector a is a critical point on Sn−1 with respect to the volume of the central section of Qn. Such normal vectors will be referred to as critical directions.\n\n摘要口径的备选（page 1）：「Using Fourier analytic and variational methods, we retrieve a geometric condition characterizing critical sections which, by entirely different methods, was recently proven by Ivanov and Tsiutsiurupa.」\n两处都直接落在「cube 中心截面体积作为方向函数的临界点」这个主题上，且都点名了 Ivanov–Tsiutsiurupa [IT21] 的既有特征刻画 —— 拿它做背景站得住（它把 IT21 的必要条件换了 Fourier 解析与变分方法重证，并把临界截面在 n=3,4 情形分类，含非对角临界截面）。\n\n## B 收编\n已派 B 收编（t-000253，outcome=ok）：概念行 **stmt:000111**（临界方向与临界中心超平面截面，出处 p.2）、**stmt:000113**（k-对角方向与对角截面）；关系行该文献侧原有 **rel:000018**（quote 逐字核过 / p.1），本趟按「补录」口径新增关系（我这一步只读到 B 摘要的截断段，条数以 B 台账为准）。\n\n## 卡在哪 / 要你做什么\n唯一缺口：**authors / venue / year 三个身份格本会话无写口**（受控拒绝，不是查不到）。要落进那三格，需要走收编口（provider 记录 / 重新登记），或由你在结论里直接引用本回执的逐字读数。待裁表：`lit.stage_list(request_id=\"*\")` = 0 条 pending（25 admitted / 5 rejected），本趟无新检索、无新文献行。\n",
+          "bytes": 4164,
+          "created_at": "2026-11-25T00:09:01+08:00",
+          "format": "jsonl",
+          "id": "000039",
+          "note": "",
+          "path": "work/handoffs.jsonl#000039",
+          "refs": [
+            "lit:000003",
+            "stmt:000111",
+            "stmt:000113",
+            "rel:000018"
+          ],
+          "sender": "A",
+          "sha256": "e7bfc0f362aa36237cd696e8aefc2b3b2edcf415354c5b5994327bd1039e79cf",
+          "sid": "2026-11-22n",
+          "summary": "lit:000003 首部核实：作者 GERGELY AMBRUS／arXiv:2107.14778v3 22 Jun 2023／12 页，无期刊卷期页；authors·venue·year 三个身份格受 identity_cell_refused 挡住未写入，pages 已补，③ 逐字原句见正文",
+          "task_id": "t-000252",
+          "to": "D",
+          "to_task_id": "t-000251",
+          "text": "# A → D｜lit:000003 首部核实：作者 GERGELY AMBRUS／arXiv:2107.14778v3 22 Jun 2023／12 页，无期刊卷期页；authors·venue·year 三个身份格受 identity_cell_refused 挡住未写入，pages 已补，③ 逐字原句见正文\n\n- 从：A\n- 到：D\n- 一句话：lit:000003 首部核实：作者 GERGELY AMBRUS／arXiv:2107.14778v3 22 Jun 2023／12 页，无期刊卷期页；authors·venue·year 三个身份格受 identity_cell_refused 挡住未写入，pages 已补，③ 逐字原句见正文\n- 时间：2026-11-25T00:09:01+08:00\n- 引用（前序手稿 / 台账对象）：lit:000003、stmt:000111、stmt:000113、rel:000018\n- 台账：t-000252 / sid 2026-11-22n\n\n## 做了什么\n按你点名的文件 `reference/5d236efcb7ea-critical-central-sections-of-the-cube.pdf`（sha256 与 955094 字节与派活一致）核 lit:000003 的首部元数据。抽读链：`text.extract(path=\"5d236efcb7ea-…pdf\", lit_id=\"000003\")` → `library/000003.txt`（12 页 / 27933 字 / 可读）→ `fs.read` 读了首部与 §1。\n\n## 四格的改前 → 改后\n| 格 | 改前 | 改后 | 依据 |\n|---|---|---|---|\n| authors | `[]` | `[]`（**未写入**） | 逐字读数 **GERGELY AMBRUS**（首部全大写、单作者）。`table.update` 受控拒 `identity_cell_refused`（身份格只由收编口/provider 记录写）；`search.register` 判重命中只复用 lit_id；`lit.stage_*` items 不收 authors ⇒ 无写口 |\n| venue | `null` | `null`（**未写入**） | 逐字读数 **arXiv:2107.14778v3**；PDF 上**取不到期刊名**（首部只有 2020 MSC 52A40/52A38/49Q20、Key words、致谢、arXiv 戳） |\n| year | `null` | `null`（**未写入**） | 逐字读数 **22 Jun 2023**（arXiv v3 日期） |\n| pages | `\"\"` | `\"12 pp.（PDF 共 12 页；期刊卷期页 PDF 上取不到）\"` | 12 页是 PDF 页数；**期刊卷期页 PDF 上取不到**（正文只有内部页码） |\n附带把 `summary` 写成同一份逐字题录（可写状态格）。**没有按题名猜作者或期刊**；不存在的格留空并在此如实说明。\n\n## ③ 你要的那一句（逐字，未改写未缩写）\n**位置**：`===== page 2 =====`（框架分页标记，PDF 第 2 页），§1 «History and results» 第二段（段首 \"In this note we apply…\"，段末 \"…see the remark following the proof of Theorem 1.\"）；`library/000003.txt` 第 79–83 行，正文 sha256 `7f80d6808d557f09ad03516437b27c7b47878a0e41cba6a73711f564a7979820`。\n\n> In this note we apply Fourier analytic methods to study critical central hyperplane sections: these are the sections a⊥∩Qn whose normal vector a is a critical point on Sn−1 with respect to the volume of the central section of Qn. Such normal vectors will be referred to as critical directions.\n\n摘要口径的备选（page 1）：「Using Fourier analytic and variational methods, we retrieve a geometric condition characterizing critical sections which, by entirely different methods, was recently proven by Ivanov and Tsiutsiurupa.」\n两处都直接落在「cube 中心截面体积作为方向函数的临界点」这个主题上，且都点名了 Ivanov–Tsiutsiurupa [IT21] 的既有特征刻画 —— 拿它做背景站得住（它把 IT21 的必要条件换了 Fourier 解析与变分方法重证，并把临界截面在 n=3,4 情形分类，含非对角临界截面）。\n\n## B 收编\n已派 B 收编（t-000253，outcome=ok）：概念行 **stmt:000111**（临界方向与临界中心超平面截面，出处 p.2）、**stmt:000113**（k-对角方向与对角截面）；关系行该文献侧原有 **rel:000018**（quote 逐字核过 / p.1），本趟按「补录」口径新增关系（我这一步只读到 B 摘要的截断段，条数以 B 台账为准）。\n\n## 卡在哪 / 要你做什么\n唯一缺口：**authors / venue / year 三个身份格本会话无写口**（受控拒绝，不是查不到）。要落进那三格，需要走收编口（provider 记录 / 重新登记），或由你在结论里直接引用本回执的逐字读数。待裁表：`lit.stage_list(request_id=\"*\")` = 0 条 pending（25 admitted / 5 rejected），本趟无新检索、无新文献行。\n"
+        },
+        "error": "",
+        "meta": {
+          "body": "# A → D｜lit:000003 首部核实：作者 GERGELY AMBRUS／arXiv:2107.14778v3 22 Jun 2023／12 页，无期刊卷期页；authors·venue·year 三个身份格受 identity_cell_refused 挡住未写入，pages 已补，③ 逐字原句见正文\n\n- 从：A\n- 到：D\n- 一句话：lit:000003 首部核实：作者 GERGELY AMBRUS／arXiv:2107.14778v3 22 Jun 2023／12 页，无期刊卷期页；authors·venue·year 三个身份格受 identity_cell_refused 挡住未写入，pages 已补，③ 逐字原句见正文\n- 时间：2026-11-25T00:09:01+08:00\n- 引用（前序手稿 / 台账对象）：lit:000003、stmt:000111、stmt:000113、rel:000018\n- 台账：t-000252 / sid 2026-11-22n\n\n## 做了什么\n按你点名的文件 `reference/5d236efcb7ea-critical-central-sections-of-the-cube.pdf`（sha256 与 955094 字节与派活一致）核 lit:000003 的首部元数据。抽读链：`text.extract(path=\"5d236efcb7ea-…pdf\", lit_id=\"000003\")` → `library/000003.txt`（12 页 / 27933 字 / 可读）→ `fs.read` 读了首部与 §1。\n\n## 四格的改前 → 改后\n| 格 | 改前 | 改后 | 依据 |\n|---|---|---|---|\n| authors | `[]` | `[]`（**未写入**） | 逐字读数 **GERGELY AMBRUS**（首部全大写、单作者）。`table.update` 受控拒 `identity_cell_refused`（身份格只由收编口/provider 记录写）；`search.register` 判重命中只复用 lit_id；`lit.stage_*` items 不收 authors ⇒ 无写口 |\n| venue | `null` | `null`（**未写入**） | 逐字读数 **arXiv:2107.14778v3**；PDF 上**取不到期刊名**（首部只有 2020 MSC 52A40/52A38/49Q20、Key words、致谢、arXiv 戳） |\n| year | `null` | `null`（**未写入**） | 逐字读数 **22 Jun 2023**（arXiv v3 日期） |\n| pages | `\"\"` | `\"12 pp.（PDF 共 12 页；期刊卷期页 PDF 上取不到）\"` | 12 页是 PDF 页数；**期刊卷期页 PDF 上取不到**（正文只有内部页码） |\n附带把 `summary` 写成同一份逐字题录（可写状态格）。**没有按题名猜作者或期刊**；不存在的格留空并在此如实说明。\n\n## ③ 你要的那一句（逐字，未改写未缩写）\n**位置**：`===== page 2 =====`（框架分页标记，PDF 第 2 页），§1 «History and results» 第二段（段首 \"In this note we apply…\"，段末 \"…see the remark following the proof of Theorem 1.\"）；`library/000003.txt` 第 79–83 行，正文 sha256 `7f80d6808d557f09ad03516437b27c7b47878a0e41cba6a73711f564a7979820`。\n\n> In this note we apply Fourier analytic methods to study critical central hyperplane sections: these are the sections a⊥∩Qn whose normal vector a is a critical point on Sn−1 with respect to the volume of the central section of Qn. Such normal vectors will be referred to as critical directions.\n\n摘要口径的备选（page 1）：「Using Fourier analytic and variational methods, we retrieve a geometric condition characterizing critical sections which, by entirely different methods, was recently proven by Ivanov and Tsiutsiurupa.」\n两处都直接落在「cube 中心截面体积作为方向函数的临界点」这个主题上，且都点名了 Ivanov–Tsiutsiurupa [IT21] 的既有特征刻画 —— 拿它做背景站得住（它把 IT21 的必要条件换了 Fourier 解析与变分方法重证，并把临界截面在 n=3,4 情形分类，含非对角临界截面）。\n\n## B 收编\n已派 B 收编（t-000253，outcome=ok）：概念行 **stmt:000111**（临界方向与临界中心超平面截面，出处 p.2）、**stmt:000113**（k-对角方向与对角截面）；关系行该文献侧原有 **rel:000018**（quote 逐字核过 / p.1），本趟按「补录」口径新增关系（我这一步只读到 B 摘要的截断段，条数以 B 台账为准）。\n\n## 卡在哪 / 要你做什么\n唯一缺口：**authors / venue / year 三个身份格本会话无写口**（受控拒绝，不是查不到）。要落进那三格，需要走收编口（provider 记录 / 重新登记），或由你在结论里直接引用本回执的逐字读数。待裁表：`lit.stage_list(request_id=\"*\")` = 0 条 pending（25 admitted / 5 rejected），本趟无新检索、无新文献行。\n",
+          "bytes": 4164,
+          "created_at": "2026-11-25T00:09:01+08:00",
+          "format": "jsonl",
+          "id": "000039",
+          "note": "",
+          "path": "work/handoffs.jsonl#000039",
+          "refs": [
+            "lit:000003",
+            "stmt:000111",
+            "stmt:000113",
+            "rel:000018"
+          ],
+          "sender": "A",
+          "sha256": "e7bfc0f362aa36237cd696e8aefc2b3b2edcf415354c5b5994327bd1039e79cf",
+          "sid": "2026-11-22n",
+          "summary": "lit:000003 首部核实：作者 GERGELY AMBRUS／arXiv:2107.14778v3 22 Jun 2023／12 页，无期刊卷期页；authors·venue·year 三个身份格受 identity_cell_refused 挡住未写入，pages 已补，③ 逐字原句见正文",
+          "task_id": "t-000252",
+          "to": "D",
+          "to_task_id": "t-000251",
+          "text": "# A → D｜lit:000003 首部核实：作者 GERGELY AMBRUS／arXiv:2107.14778v3 22 Jun 2023／12 页，无期刊卷期页；authors·venue·year 三个身份格受 identity_cell_refused 挡住未写入，pages 已补，③ 逐字原句见正文\n\n- 从：A\n- 到：D\n- 一句话：lit:000003 首部核实：作者 GERGELY AMBRUS／arXiv:2107.14778v3 22 Jun 2023／12 页，无期刊卷期页；authors·venue·year 三个身份格受 identity_cell_refused 挡住未写入，pages 已补，③ 逐字原句见正文\n- 时间：2026-11-25T00:09:01+08:00\n- 引用（前序手稿 / 台账对象）：lit:000003、stmt:000111、stmt:000113、rel:000018\n- 台账：t-000252 / sid 2026-11-22n\n\n## 做了什么\n按你点名的文件 `reference/5d236efcb7ea-critical-central-sections-of-the-cube.pdf`（sha256 与 955094 字节与派活一致）核 lit:000003 的首部元数据。抽读链：`text.extract(path=\"5d236efcb7ea-…pdf\", lit_id=\"000003\")` → `library/000003.txt`（12 页 / 27933 字 / 可读）→ `fs.read` 读了首部与 §1。\n\n## 四格的改前 → 改后\n| 格 | 改前 | 改后 | 依据 |\n|---|---|---|---|\n| authors | `[]` | `[]`（**未写入**） | 逐字读数 **GERGELY AMBRUS**（首部全大写、单作者）。`table.update` 受控拒 `identity_cell_refused`（身份格只由收编口/provider 记录写）；`search.register` 判重命中只复用 lit_id；`lit.stage_*` items 不收 authors ⇒ 无写口 |\n| venue | `null` | `null`（**未写入**） | 逐字读数 **arXiv:2107.14778v3**；PDF 上**取不到期刊名**（首部只有 2020 MSC 52A40/52A38/49Q20、Key words、致谢、arXiv 戳） |\n| year | `null` | `null`（**未写入**） | 逐字读数 **22 Jun 2023**（arXiv v3 日期） |\n| pages | `\"\"` | `\"12 pp.（PDF 共 12 页；期刊卷期页 PDF 上取不到）\"` | 12 页是 PDF 页数；**期刊卷期页 PDF 上取不到**（正文只有内部页码） |\n附带把 `summary` 写成同一份逐字题录（可写状态格）。**没有按题名猜作者或期刊**；不存在的格留空并在此如实说明。\n\n## ③ 你要的那一句（逐字，未改写未缩写）\n**位置**：`===== page 2 =====`（框架分页标记，PDF 第 2 页），§1 «History and results» 第二段（段首 \"In this note we apply…\"，段末 \"…see the remark following the proof of Theorem 1.\"）；`library/000003.txt` 第 79–83 行，正文 sha256 `7f80d6808d557f09ad03516437b27c7b47878a0e41cba6a73711f564a7979820`。\n\n> In this note we apply Fourier analytic methods to study critical central hyperplane sections: these are the sections a⊥∩Qn whose normal vector a is a critical point on Sn−1 with respect to the volume of the central section of Qn. Such normal vectors will be referred to as critical directions.\n\n摘要口径的备选（page 1）：「Using Fourier analytic and variational methods, we retrieve a geometric condition characterizing critical sections which, by entirely different methods, was recently proven by Ivanov and Tsiutsiurupa.」\n两处都直接落在「cube 中心截面体积作为方向函数的临界点」这个主题上，且都点名了 Ivanov–Tsiutsiurupa [IT21] 的既有特征刻画 —— 拿它做背景站得住（它把 IT21 的必要条件换了 Fourier 解析与变分方法重证，并把临界截面在 n=3,4 情形分类，含非对角临界截面）。\n\n## B 收编\n已派 B 收编（t-000253，outcome=ok）：概念行 **stmt:000111**（临界方向与临界中心超平面截面，出处 p.2）、**stmt:000113**（k-对角方向与对角截面）；关系行该文献侧原有 **rel:000018**（quote 逐字核过 / p.1），本趟按「补录」口径新增关系（我这一步只读到 B 摘要的截断段，条数以 B 台账为准）。\n\n## 卡在哪 / 要你做什么\n唯一缺口：**authors / venue / year 三个身份格本会话无写口**（受控拒绝，不是查不到）。要落进那三格，需要走收编口（provider 记录 / 重新登记），或由你在结论里直接引用本回执的逐字读数。待裁表：`lit.stage_list(request_id=\"*\")` = 0 条 pending（25 admitted / 5 rejected），本趟无新检索、无新文献行。\n"
+        },
+        "可退役": [
+          {
+            "task_id": "t-000252",
+            "role": "A",
+            "branch": "waiting_no_children",
+            "reading": {
+              "items_open": 0,
+              "items_open_ids": [],
+              "items_open_expects": {},
+              "items_open_states": {}
+            }
+          }
+        ],
+        "新消息": [
+          {
+            "板": "- （新）[t-000262] notice·要一个回执 来自 clock：时间到：核实并把在册文献 lit:000003 的首部元数据补齐，三样逐字读数：① 作者全名（按文中出现顺序，逐字照抄）；② 期刊名或 arXiv 编号 + 年份 + 卷期页（能取到几样给几样，取不到的如实写「PDF 上取不到」，不许与 PDF 不符）；③ 摘要或引言里与「cube 的中心截面随方向变化时的临界点」这一主题直接相关的一句话（逐字英文原文，不要改写、不要缩写）。PDF 已在本地：refere｜等了 9 分钟 21 秒（起于 23:59:48，到于 00:09:09）。它交的是：ok：执行完成"
+          }
+        ],
+        "秘书加工": {
+          "reworked": [
+            {
+              "item": {
+                "板": "- （新）[t-000262] notice·要一个回执 来自 clock：时间到：核实并把在册文献 lit:000003 的首部元数据补齐，三样逐字读数：① 作者全名（按文中出现顺序，逐字照抄）；② 期刊名或 arXiv 编号 + 年份 + 卷期页（能取到几样给几样，取不到的如实写「PDF 上取不到」，不许与 PDF 不符）；③ 摘要或引言里与「cube 的中心截面随方向变化时的临界点」这一主题直接相关的一句话（逐字英文原文，不要改写、不要缩写）。PDF 已在本地：refere｜等了 9 分钟 21 秒（起于 23:59:48，到于 00:09:09）。它交的是：ok：执行完成"
+              },
+              "addendum": "我的产出物口径：交付状态 —— 交给谁：派你这趟活的父（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名）+ 收方 B（入库）；形态：`manuscripts/D/RESEARCH.md` + `manuscripts/D/<qid>-research.md` 工作稿+ `research_questions` / `search_requests` 行（报告本体落成盘上文件；台账那一行 `kind=research` 由 `write_report` 同一笔事务落 —— 见 `policy`，**不是本角色手写的表**）；可核字段：`research_questions.question_id` / `research_questions.status` / `research_questions.waiting_request_ids` / 每个结论目录行上的四格 `evidence_kind` / `evidence_path` / `evidence_sha256` / `v_signature`；算做完：这一趟的每条结论在 `manuscripts/D/RESEARCH.md` 的「已确定的结论」有一行、四格都指得到盘上对象（`report_landing_reading` 可核），且 `research_questions.status` 与现场一致。**跨趟的那一份交付是研究手稿 `manuscripts/D/RESEARCH.md`**（业主 2026-10-14 第 1 条）：成果概述 / 定义与已知 / 已确定的结论 / 尝试与失败 / 例子与反例 / 未解问题 / 下一步七节 —— 下一趟接手的人先读它，而不是去翻这一趟的会话记录。\n我在本条线上的位置：研究循环：把一个研究方向收敛成一个有证据支撑的结论，或如实说证据不足",
+              "problem": "",
+              "fail_open": false
+            }
+          ],
+          "handoffs_digest": "- 000035 M→D：派活：D（派活：这是收工唯一的 blocker（acceptance 的 R6 = plan_progress_rows 记 unknown）。事实你上一轮已核死：`data/attack_plans.json` 的 plan 000002 第 2 轮 history 里 `statement_id=\"000030\"`，而真正被那份稿证明的是 `stmt:000042`（`manuscripts/F/f-proof-000003.md` 的「## 命题」逐字 = 000042 的 statement_full；`verifications/000042.jsonl` 有 8 行、含「成立」；`verifications/000030.jsonl` 根本不存在）。本轮要做的只有一件事：**让 attack_plans 里那一格不再指向一条无签的命题**。走 F 那一侧（attack_plans 是 F 的写口，D 自己改不动）：让 F 用它的 step / 更正入口做下面任一种，哪种真能落盘就用哪种，并在回执里贴改后 `fs.search` 的逐字结果：(1) 把 plan 000002 第 2 轮的 `statement_id` 就地更正为 `000042`（归属更正，不重写整条 history）；(2) 若不能就地改，就 append 一条新的 round（如 round 3），在 `notes`/`cites` 里逐字写明「更正第 2 轮归属：该稿的命题是 stmt:000042，000030 是旧号」，且这一轮的 `statement_id` 只填 `000042`；(3) 若 F 的写口两种都做不到，就让它明确回「做不到 + 拒在哪一格」，不要硬写。回执必须给三样：① 改后 `data/attack_plans.json` 里 plan 000002 全部 history 的 `round` / `statement_id` / `cites` 逐条；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 你认为改完之后收工门 plan_progress_rows 会不会转 pass，判据是什么。不要再开新方向、不要动 statements 的正文。）\n- 000036 M→D：派活：D（派活：这是收工门最后一格（acceptance 的 R6 = plan_progress_rows 记 unknown），你上一轮（t-000227）得出的结论是「F 的两条写口都改不动那一格」。本轮换两个具体做法，仍然只让 F 去改它自己名下的 `attack_plans`（那是它的产出面，不是框架账本区）：(1) 首选：让 F 用 `table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 的完整数组>})` —— 你自己先把 `data/attack_plans.json` 里 plan 000002 的 `history` 逐字读出来，只把第 2 条（`round=2`，`manuscript_path=manuscripts/F/f-proof-000003.md`，`proof_sha256=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db`）里的 `\"statement_id\": \"000030\"` 改成 `\"000042\"`，并在该条加一句 `\"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"`，其余字段与其余轮次一个字节不动，整份数组原样回写（这是 F 对自己产出的更正，不是改别人台账）。(2) 若 (1) 仍被拒，让 F 用它的 `step` 追加一条 `round=3` 的新 history，`statement_id` 只填 `000042`、`cites` 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」。回执必须给三样逐字读数：① 改后 `fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\")` 在 `data/attack_plans.json` 的全部命中行（行号 + 内容）；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 若两条都做不到，逐条贴拒信原文（拒码 + 那句话），不要自己下结论说「做不到」就停。）\n- 000037 M→B：派 B 把 literature 剩 6 条未消化文献处理完，让 unprocessed 归 0\n- 000038 M→G：派活：G（派活：写论文正文并编出 PDF（这是用户插话明确要求的交付物：最终产出论文）。要你做什么：\n1) **正文由你自己写**到 `out/package/main.tex`（用 fs.write，一段段写，不要只给骨架：每一节 body 都要非空）。论文题：三维 l^p 球 B_p^3 的最大面积中心截面。内容必须覆盖：问题与背景、三个候选方向族（坐标向 (1,0,0)、体对角向 (1,1,1)/√3、面对角向 (1,1,0)/√2）的截面面积表达式（A_coord(p)=4Γ(1+1/p)²/Γ(1+2/p)；A_diag(p)=(3/4)∫_0^{2π}(|cos(θ−π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p)^{−2/p}dθ；A_face(p) 为平面 x+y=0 上的二重积分、p→∞ 时 →4√2）、三段结构与两个临界点（p=2 处 r(p) 过 1；p*=4.998215596862 处 A_diag=A_face 换向）、数值证据（12 个 p 的球面扫描 + 6 轮局部加密 + 两临界点二分 + 求积核解析自检 1e-15 级）、已签证明（V 判「成立」的命题）、与文献的关系（引 lit: 行）、局限与未解问题。\n2) 每条承重断言带 `\\\\cite` 或台账引用：引文献用 lit:000000–lit:000024 里直接对口的几篇（plane sections of the unit ball of l_p、on maximal hyperplane sections of the unit ball of l_p^n for p<2、cube slicing in r^n、critical central sections of the cube、on extremal sections of subspaces of l_p）；引实验用 exp:000003（求积核自检）、exp:000004（12 个 p 扫描）、exp:000006（临界 p）、exp:000007（边界弧端点性）。**结论强度不许超过证据**：三段结构里「p<2 坐标向占优」「2<p<p* 体对角向占优」这两条目前只有数值支持（strong_conjecture 级），必须写明「数值支持的强猜想，未证明」；只有已拿 V「成立」签的那几条（体对角向截面积表达式、Δ 连续性与尾段符号）可以写「定理/证明」并注明「逐行审阅过的证明，未经机器检查」。\n3) 编 PDF：自己调 `doc.paper_compile` 编出 `out/package/main.pdf` 并确认回执里的 tex_sha256 等于盘上这份 main.tex。\n4) 落论文对应表：自己调 `doc.write_mapping` 一次落 MAPPING.json / MAPPING.md / 正文附录。\n5) 回执请给：main.tex 的 sha256 与字节数、回执里的 tex_sha256 / pages / pdf_bytes、MAPPING 的落点、每节标题清单、以及你引了哪些 lit:/exp:/stmt:。若某一步做不出来，逐条写清卡在哪（拒码 + 原话），不要自己宣布通过。）\n- 000039 A→D：lit:000003 首部核实：作者 GERGELY AMBRUS／arXiv:2107.14778v3 22 Jun 2023／12 页，无期刊卷期页；authors·venue·year 三个身份格受 identity_cell_refused 挡住未写入，pages 已补，③ 逐字原句见正文"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 67328,
+        "prompt_cache_miss_tokens": 5000,
+        "tokens_in": 72328,
+        "tokens_out": 721,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000251"
+    },
+    {
+      "index": 7,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "literature",
+          "id": "000003"
+        },
+        "why": "读回 lit:000003 的现状：确认 A 报道的 pages 已补、authors/venue/year 是否真的仍为空，作为汇报里的可核指针"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "_keys": [
+            "title:critical central sections of the cube|*"
+          ],
+          "lit_id": "000003",
+          "title": "Critical central sections of the cube",
+          "type": "J",
+          "summary": "题录（按本地 PDF 首部逐字读数，非推测）：作者 GERGELY AMBRUS（首部全大写，单作者）；arXiv:2107.14778v3 [math.MG]，22 Jun 2023；PDF 共 12 页；期刊名与卷期页 PDF 上取不到。身份格 authors/venue/year 由收编口写，通用写口拒改（identity_cell_refused），逐字读数另见本趟回执。",
+          "path": "5d236efcb7ea-critical-central-sections-of-the-cube.pdf",
+          "processed": true,
+          "source_request_ids": [
+            "r-000001"
+          ],
+          "dedup_key": "title:critical central sections of the cube|*",
+          "doi": null,
+          "year": null,
+          "authors": [],
+          "venue": null,
+          "language": null,
+          "added_at": "2026-11-24T18:05:13+08:00",
+          "download": {
+            "status": "ok",
+            "http_status": null,
+            "bytes": 955094,
+            "sha256": "5d236efcb7ea803dd7b7641b3d6f0f8fe5d8a2c9a6d0b2825c0becb5c7351611",
+            "error": null,
+            "fulltext": "ok",
+            "note": "text.extract: 抽出的文本可读"
+          },
+          "pages": "12 pp.（PDF 共 12 页；期刊卷期页 PDF 上取不到）",
+          "matched": "",
+          "claimed_by": null,
+          "lease_until": null,
+          "mine_attempts": 1,
+          "last_mine_error": null
+        },
+        "error": "",
+        "meta": {
+          "table": "literature",
+          "id": "000003",
+          "id_field": "lit_id",
+          "found": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 71552,
+        "prompt_cache_miss_tokens": 5462,
+        "tokens_in": 77014,
+        "tokens_out": 1100,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000251"
+    },
+    {
+      "index": 8,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "relations",
+          "filter": {
+            "lit_id": "000003"
+          },
+          "fields": [
+            "relation_id",
+            "lit_id",
+            "status",
+            "quote_verified",
+            "page_range",
+            "description"
+          ],
+          "limit": 30
+        },
+        "why": "读回 lit:000003 名下已登记的关系行，确认 B 是否已把 A 核出的逐字读数（尤其 ③ 那句）落成关系行，好给 G 只报指针"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "relations",
+          "rows": [
+            {
+              "relation_id": "000018",
+              "lit_id": "000003",
+              "status": "active",
+              "quote_verified": true,
+              "page_range": {
+                "start": 1,
+                "end": 1,
+                "label": "p. 1"
+              },
+              "description": "Central hyperplane sections are sections of the cube Qn by hyperplanes containing 0, and their (n−1)-dimensional volume is a classical object of study."
+            },
+            {
+              "relation_id": "000077",
+              "lit_id": "000003",
+              "status": "active",
+              "quote_verified": true,
+              "page_range": {
+                "start": 2,
+                "end": 2,
+                "label": "p. 2"
+              },
+              "description": "临界方向（critical direction）是使中心截面体积函数 Vol_{n−1}(Q_n ∩ a^⊥) 在 S^{n−1} 上成为临界点的单位法向 a；它与 central hyperplane sections（以 0 为过点的超平面截 Q_n 所得的 (n−1) 维截面）指的是同一族截面的两个层面：一个说法指法向，一个说法指截面本身。"
+            },
+            {
+              "relation_id": "000078",
+              "lit_id": "000003",
+              "status": "active",
+              "quote_verified": true,
+              "page_range": {
+                "start": 2,
+                "end": 2,
+                "label": "p. 2"
+              },
+              "description": "临界方向与主对角线的关系（Theorem 1 的第一种情形）：单位向量 a 是临界方向当且仅当它平行于 Q_n 某个二维面的主对角线（或满足 µ 型充要等式）；即「面对角方向」（2-diagonal directions）都是临界方向。"
+            },
+            {
+              "relation_id": "000079",
+              "lit_id": "000003",
+              "status": "active",
+              "quote_verified": true,
+              "page_range": {
+                "start": 1,
+                "end": 1,
+                "label": "p. 1"
+              },
+              "description": "极大中心超平面截面与主对角线的关系（Ball [B86]）：体积极大的中心超平面截面垂直于 Q_n 某个二维面的主对角线 —— 即球面 S^{n−1} 上体积函数的最大值点在 2-对角方向上；这与 Theorem 1 里「临界方向要么平行于某二维面主对角线、要么满足 µ 型等式」的第一个分支相通。"
+            },
+            {
+              "relation_id": "000080",
+              "lit_id": "000003",
+              "status": "active",
+              "quote_verified": true,
+              "page_range": {
+                "start": 2,
+                "end": 2,
+                "label": "p. 2"
+              },
+              "description": "k-对角方向 / k-对角截面与主对角线的关系（§1 术语层）：一个方向若垂直于 Q_n 某个 k 维面的主对角线，就称为 k-对角方向（k-diagonal direction），相应的超平面截面称为 k-对角截面；k=2 时 k-对角方向即二维面主对角线方向，也就是 Theorem 1 第一个分支里与临界方向对齐的那一族方向。"
+            }
+          ],
+          "total": 5,
+          "returned": 5,
+          "limit": 30,
+          "offset": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "relations",
+          "total": 5,
+          "returned": 5,
+          "offset": 0,
+          "limit": 30,
+          "fields": [
+            "relation_id",
+            "lit_id",
+            "status",
+            "quote_verified",
+            "page_range",
+            "description"
+          ]
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 76160,
+        "prompt_cache_miss_tokens": 1982,
+        "tokens_in": 78142,
+        "tokens_out": 1004,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000251"
+    },
+    {
+      "index": 9,
+      "shape": "tool",
+      "payload": {
+        "name": "manuscripts.list",
+        "args": {
+          "to": "D",
+          "limit": 8
+        },
+        "why": "看 B 这一趟是否给我留了交接手稿（它已 done，名下还有 1 未消项），好决定我这边还要落什么指针"
+      },
+      "result": {
+        "tool": "manuscripts.list",
+        "ok": true,
+        "data": {
+          "count": 8,
+          "items": [
+            {
+              "body": "# B → D｜E 的数值猜想已收录为 stmt:000040（等级 strong_conjecture），稿与 exp:000023 三处对得上\n\n- 从：B\n- 到：D\n- 一句话：E 的数值猜想已收录为 stmt:000040（等级 strong_conjecture），稿与 exp:000023 三处对得上\n- 时间：2026-11-24T20:46:17+08:00\n- 引用（前序手稿 / 台账对象）：stmt:000040、exp:000023\n- 台账：t-000138 / sid 2026-11-22n\n\n## 做了什么\n按你给的「只递指针」口径收录 E 的普通数值手稿，未内联正文、未改写措辞。\n\n- stmt 号：**000040**（status=active，kind=conjecture）\n- 现算等级：**strong_conjecture**（numeric=verified，proof/reviewed 未签，formal=pending —— 等级是现算，不是自报）\n- evidence_kind=cross_check；manuscript_id=000023；manuscripts[1]=work/E/e-num-000023.md\n- proof_text 留空（普通数值档口径）；quote_verified=null + quote_reason 已写明原因（不是把没查写成通过）\n- 标签被秘书洗过：原「承接 exp:000014/000016/000020/000022 的同一口径…」→ 「Δ(p)=A_face(p)−A_diag(p) 的单调收敛性与 ρ 无第二零点」\n\n## 稿与实验行对得上（三处）\n1. 稿「## 命题」逐字 = experiments 行 exp:000023 的 claim（claim_key=lp3-largep-both-approach-from-below）；\n2. 稿头「实验号：exp:000023」与行主键一致；\n3. 实验行 code_path=code/exp/e7_largep_asymptotics.py（code_hash cd665d73ae4ad472）已落进 bits.evidence.numeric；稿 sha256 294146538…b27e2 与该行 observations.numeric_manuscript 记录一致。\n\n## 过程读数（如实）\n第一次提交被秘书的同一性判定返回坏 JSON（judge_bad_json，零写入）受控拒；按拒信改法原样重交一次成功。秘书判定与 9 条候选均不同，经 conjecture_ledger 落到 000040，并顺手收口了携带项 t-000131。\n\n## 第二阶段\n这一批只有这一份，且为普通数值档（无证明正文可洗、不走 V 签）⇒ 洗稿/重签/替换对它不适用；没有 unwashed 欠账留到下一拍。\n",
+              "bytes": 2035,
+              "created_at": "2026-11-24T20:46:17+08:00",
+              "format": "jsonl",
+              "id": "000018",
+              "note": "",
+              "path": "work/handoffs.jsonl#000018",
+              "refs": [
+                "stmt:000040",
+                "exp:000023"
+              ],
+              "sender": "B",
+              "sha256": "9185d9207d619a2230f64d33c4f85b23ef24c2030ce2515e74ce41e43218a6d9",
+              "sid": "2026-11-22n",
+              "summary": "E 的数值猜想已收录为 stmt:000040（等级 strong_conjecture），稿与 exp:000023 三处对得上",
+              "task_id": "t-000138",
+              "to": "D",
+              "to_task_id": "t-000011"
+            },
+            {
+              "body": "# F → D｜s1 体对角向面积表达式稿已拿 V 签「成立」（f-proof-000002，sha 099eb364）；s2 的比较如实报缺口与真实符号结构（Δ 在 (2,∞) 有两个零点，不是单调支配）\n\n- 从：F\n- 到：D\n- 一句话：s1 体对角向面积表达式稿已拿 V 签「成立」（f-proof-000002，sha 099eb364）；s2 的比较如实报缺口与真实符号结构（Δ 在 (2,∞) 有两个零点，不是单调支配）\n- 时间：2026-11-24T20:48:25+08:00\n- 引用（前序手稿 / 台账对象）：stmt:000034、stmt:000035、exp:000014、exp:000015、exp:000016、exp:000019、exp:000020\n- 台账：t-000083 / sid 2026-11-22n\n\nD：这一趟的成果与缺口，分三层。\n\n一、已拿 V 签的证明（请携带给 B 收录，按正文 sha 认领）\nmanuscripts/F/f-proof-000002.md · 稿号 000002 · 正文 sha `099eb36449cf134dd531f1a7d7e34e4d13e987904a2738315c60f28220cd1148`；V 的判词=成立、findings 为空（台账位 verifications/pending/c3799ef6c1a4…jsonl#u-000021，签文件 out/vsigns/099eb364….json）。\n它证的是：A_diag(p) := area(B_p^3 ∩ {x+y+z=0}) 的三条等价可算形式，以及 p=1、p=2、p→∞ 三个精确值：\n(1) A_diag(p) = (1/2)∫_0^{2π}‖e(θ)‖_p^{-2}dθ（e(θ)=cosθ·u+sinθ·v，u=(1,-1,0)/√2、v=(1,1,-2)/√6，引 stmt:000034 的极坐标表示）；\n(2) = (3/4)∫_0^{2π}(|cos(θ-π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p)^{-2/p}dθ（用 √3cosθ±sinθ=2cos(θ∓π/6) 对齐被积函数）；\n(3) = √3·area{(x,y): |x|^p+|y|^p+|x+y|^p≤1}（平面参数化的面积因子 √3，极坐标化为二重积分）。\n三个精确值：A_diag(1)=3√3/4、A_diag(2)=π、lim_{p→∞}A_diag(p)=3√3；并把 p↦A_diag(p) 在 [1,∞) 上的连续性证了（控制 g^{-2/p} ≤ m^{-2} ≤ 2 对一切 p≥1）。\n数值对拍（E 的 exp:000014）：三路独立算法在 11 个 p 上最大相对差 1.40e-15，A_diag(1)、A_diag(2) 自检 1e-16 档 ⇒ 表达式有确定性背书。\n送审经过（供你复核）：V 先后判过四次「有毛病」，都是我按步号定点修的：第 8 步极坐标中间式外层多乘 1/2、第 9 步(a) p=2 时 g^{-2/p}=g^{-1} 写成 g^{-2}、第 9 步(b) [0,π/2] 段漏 1/4 因子、第 10 步 3^{2/p} 控制只在 p≥2 成立。另有两条「第 3 步依赖未登记」是判读器没拿到未在册稿的依赖段的误判（V 自己在 handoff 000016 里确认稿面 ## 依赖 有 1 行 stmt:000034、在册 pre_theorem），我仍把第 3 步改成同段自足推导，让它在任何读法下都站得住。\n\n二、s2（体对角向 vs 面对角向）：**没证成，如实报缺口**\n可用的硬读数（全是确定性的，不是模型判）：\n- 闭式一侧：A_face(p)=C_p·2^{1/2-1/p}，C_p=4Γ(1+1/p)²/Γ(1+2/p)（stmt:000034 的 (ii)/(iii)、stmt:000035 的零坐标族闭式；E 的 exp:000015 对拍到 1e-12）。\n- 符号结构（E 的 exp:000016 / exp:000019 / exp:000020，脚本 code/exp/，原始日志 out/exp-logs/）：ρ(p):=A_face/A_diag 满足 ρ(2)=1、在 p≈3.02439 处取极小 0.98856、再单调升向 ρ(∞)=4√2/(3√3)=1.088662；Δ:=A_face−A_diag 在 (2,∞) 上**恰有两个零点**（一个在 (2,3.024)，一个在 4.998215596840938±7.5e-11），**不是**「恰一个零点」，也**不是**「p>2 上 A_face 恒大于 A_diag」。\n- 我自己的 p=2 展开（草稿，未成引理）：d/dp log A_face|_2 = (5/4)ln2−1/2 ≈ +0.3664；d/dp log A_diag|_2 ≈ −0.0144 ⇒ p=2 右侧 A_face 立刻拉开（这段趋势与上面的第一个零点相容）。\n缺的那条引理（这就是 s2 的卡点，写清不装作证了）：**要证「对固定 p>2，A_p((1,1,t)/√(2+t²)) 在 t∈[0,1] 上严格递减」**，它等价于 A_face(p)>A_diag(p)；现有工具只能给两端（p→∞ 是 4√2>3√3，p=2 相等）与 p=2 的导数符号，缺的是对 t（或对 p）的整段单调性论证；把它写成 Beta 型积分比较后，被积函数对齐（体对角向的 |cos(θ-π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p 对面对角向的 2^{1-p/2}|cosθ|^p+|sinθ|^p）之后我没有找到逐点不等式或凸性/二阶导定号的路径，也没找到能覆盖整个 (2,∞) 的单一控制。\n\n三、s3（四段叙述）：按真实结构，**不能写成「p>p* 面对角向最大」这样一句**\n老实的分段是：\n- 1≤p<2：坐标向最大是已知定理（文献侧读数，本轮不重攻）；面对角向与体对角向都小于坐标向。\n- p=2：一切方向面积都是 π，三者相等（A_coord=A_face=A_diag=π）。\n- 2<p<p1（p1∈(2,3.024)）：A_face>A_diag。\n- p1<p<p*（p*≈4.9982）：A_diag>A_face（ρ 跌破 1 的那一段，极小 0.9886 在 p≈3.024）。\n- p>p*：A_face>A_diag 重新成立，且 ρ↑1.08866。\n即「体对角向与面对角向谁大」在 p>2 上**不是**一次性换号，而是换两次；p=2 不是这两者的分界点，只是三者同为 π 的公共点。原先设想的四段（p<2/p=2/2<p<p*/p>p*）里，「2<p<p* 上面对角向占优」这一句被 E 的读数否掉。\n\n四、要你做什么\n1) 把上面那份已签的 f-proof-000002 交给 B 收录（按正文 sha 认领），落成 statements 一行；\n2) s2 的缺口按「缺一条整段单调性引理」记进你的研究手稿，不要把它写成已证；s3 按上面五段（不是四段）叙述；\n3) 计划 000001 的轮数预算已用尽（max_rounds=6、rounds=6），若你还要攻 s2 的单调性引理，请给新预算/新方向；我这一趟不再自行新开计划。\n\n卡点一句话：s1 闭环且已签；s2 差一条「A_p((1,1,t)/√(2+t²)) 对 t 整段递减」的引理，且真实符号结构是两个零点（p1∈(2,3.024)、p*≈4.9982），不是单调支配。\n",
+              "bytes": 5734,
+              "created_at": "2026-11-24T20:48:25+08:00",
+              "format": "jsonl",
+              "id": "000020",
+              "note": "",
+              "path": "work/handoffs.jsonl#000020",
+              "refs": [
+                "stmt:000034",
+                "stmt:000035",
+                "exp:000014",
+                "exp:000015",
+                "exp:000016",
+                "exp:000019",
+                "exp:000020"
+              ],
+              "sender": "F",
+              "sha256": "0ee4e50346dbb05daecb6c51ba3c14961117cb08a998a0b8baf97d79dc210a38",
+              "sid": "2026-11-22n",
+              "summary": "s1 体对角向面积表达式稿已拿 V 签「成立」（f-proof-000002，sha 099eb364）；s2 的比较如实报缺口与真实符号结构（Δ 在 (2,∞) 有两个零点，不是单调支配）",
+              "task_id": "t-000083",
+              "to": "D",
+              "to_task_id": "t-000011"
+            },
+            {
+              "body": "# F → D｜F 收口：体对角向面积表达式已签（f-proof-000002）+ Δ 连续性与尾段符号已签（f-proof-000003/在册 stmt:000030）；2<p<p* 段只有 strong_conjecture 数值（两零点），缺一条单调性引理\n\n- 从：F\n- 到：D\n- 一句话：F 收口：体对角向面积表达式已签（f-proof-000002）+ Δ 连续性与尾段符号已签（f-proof-000003/在册 stmt:000030）；2<p<p* 段只有 strong_conjecture 数值（两零点），缺一条单调性引理\n- 时间：2026-11-24T21:01:58+08:00\n- 引用（前序手稿 / 台账对象）：stmt:000030、stmt:000034、stmt:000035、stmt:000036、stmt:000037、stmt:000038、stmt:000039、stmt:000040、exp:000014、exp:000015、exp:000016、exp:000020、exp:000023、000020\n- 台账：t-000083 / sid 2026-11-22n\n\n## 一、两份已签证明（请收进研究手稿 / 携带给 B）\n\n1. `manuscripts/F/f-proof-000002.md` · 正文 sha `099eb36449cf134dd531f1a7d7e34e4d13e987904a2738315c60f28220cd1148` · V 判「成立、零 finding」· 台账 `verifications/pending/c3799ef6…jsonl#u-000021` · 签文件 `out/vsigns/099eb364….json`\n   A_diag(p)=area(B_p^3∩{x+y+z=0}) 的三条等价可算形式：\n   (a) (1/2)∫_0^{2π}‖e(θ)‖_p^{-2}dθ，e(θ)=cosθ·u+sinθ·v，u=(1,-1,0)/√2、v=(1,1,-2)/√6（引 stmt:000034 的极坐标表示）；\n   (b) (3/4)∫_0^{2π}(|cos(θ-π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p)^{-2/p}dθ（√3cosθ±sinθ=2cos(θ∓π/6) 对齐被积函数）；\n   (c) √3·area{(x,y): |x|^p+|y|^p+|x+y|^p≤1}（平面参数化面积因子 √3 + 极坐标）。\n   三点值：A_diag(1)=3√3/4、A_diag(2)=π、lim_{p→∞}A_diag(p)=3√3；[1,∞) 上连续（控制 g^{-2/p} ≤ m^{-2} ≤ 2 与 p 无关）。\n   数值背书：exp:000014 三路对拍，11 个 p 上最大相对差 1.40e-15。\n\n2. `manuscripts/F/f-proof-000003.md` · 在册 `stmt:000030` · V 判「成立 3/3」· 签 `out/vsigns/3f9c71fc….json`\n   Δ:=A_face−A_diag 在 [1,∞) 上连续、Δ(1)=√2−3√3/4>0、Δ(2)=0、lim_{p→∞}Δ=4√2−3√3>0 ⇒ 存在尾门槛 P0 使 p≥P0 时 A_face(p)>A_diag(p)。\n\n## 二、没证出来的那一环（如实，别写成已证）\n\n缺的引理一句话：**对固定 p>2，A_p((1,1,t)/√(2+t²)) 在 t∈[0,1] 上严格递减**（等价于 A_face(p)>A_diag(p) 对一切 p>2）。\n\n现有确定性读数（strong_conjecture 级，已入库 stmt:000036–000040）：ρ=A_face/A_diag 满足 ρ(2)=1、极小 0.98856 @ p≈3.02439、升向 ρ(∞)=4√2/(3√3)=1.088662；Δ 在 (2,∞) 上**两个零点**（p1∈(2,3.024)、p*≈4.998215596840938，夹逼宽 7.5e-11），(20,1e6] 上无第二零点。\n\n## 三、分段叙述按五段（不是四段）\n\n- 1≤p<2：坐标向最大（已知定理，本轮不重攻）；face 与 diag 都小于坐标向。\n- p=2：全向面积 π，三者相等。\n- 2<p<p1：A_face>A_diag。\n- p1<p<p*：A_diag>A_face（ρ 跌破 1）。\n- p>p*：A_face>A_diag，ρ↑1.08866。\n「2<p<p* 上面对角向占优」被读数否掉。\n\n## 四、两处要你知道的读数\n\n- f-proof-000003 已签之后，V 另一次复核给了三处**纯稿面** finding（第 2 步 (u,v) 不承重、第 4 步连续性表述、第 5 步换元漏 dθ=du/2 与 |b|<a），数学结论 V 复算无误；我按原句改稿重交被 `manuscript_frozen` 拒（已签稿只读），三处未落进现行正文 —— 要润色请走 B.open_polish_copy。\n- 计划 000001 轮数用尽被判 stalled；计划 000002 我按「不再需要」明确放弃（可证核心已闭环）。要继续攻上面那条单调性引理，请给新方向与新预算。\n\n卡点一句话：s1 闭环已签；s2 只差「A_p((1,1,t)/√(2+t²)) 对 t 整段递减」这一条引理，且真实符号结构是两个零点，不是单调支配。\n",
+              "bytes": 3794,
+              "created_at": "2026-11-24T21:01:58+08:00",
+              "format": "jsonl",
+              "id": "000022",
+              "note": "",
+              "path": "work/handoffs.jsonl#000022",
+              "refs": [
+                "stmt:000030",
+                "stmt:000034",
+                "stmt:000035",
+                "stmt:000036",
+                "stmt:000037",
+                "stmt:000038",
+                "stmt:000039",
+                "stmt:000040",
+                "exp:000014",
+                "exp:000015",
+                "exp:000016",
+                "exp:000020",
+                "exp:000023",
+                "000020"
+              ],
+              "sender": "F",
+              "sha256": "bd25ee671ed25a058a04889397f13a1b74359aa6a022b9d2ac3ab0072463a198",
+              "sid": "2026-11-22n",
+              "summary": "F 收口：体对角向面积表达式已签（f-proof-000002）+ Δ 连续性与尾段符号已签（f-proof-000003/在册 stmt:000030）；2<p<p* 段只有 strong_conjecture 数值（两零点），缺一条单调性引理",
+              "task_id": "t-000083",
+              "to": "D",
+              "to_task_id": "t-000011"
+            },
+            {
+              "body": "# M → D｜派活：D（派活：收工门点名一条：「攻」那一环的 `plan 000002` 第 2 轮 history 里指向 `stmt:000030`，而 `verifications` 两路都没有认领给它的、签得住的行 ⇒ 那一行只能记 unknown。请把这一条处置掉，二选一并在回执里写明选了哪条、落在哪张台账行：(1) 补签 —— 若这条命题真有证明稿在盘（F 族 `manuscripts/F/f-proof-*.md`），让产出者自己把那一份送 V（`proof_manuscript` 指稿，别传命题号），拿到干净的「成立」后由 B 收录、签落在现行正文上；(2) 明确放弃 —— 让 B 用通用写口把 `status=abandoned`，并按四档给全 `abandon_kind` + `abandon_basis`（math_error 要 `defect_ref`、difficulty 要写清难在哪、counterexample 要 `experiment_id`、space_too_large 要 `space`）。两条都不许只写状态不写理由。回执里同时给：`verifications/000030.jsonl` 有没有一行「成立」，或 `statements` 那一行 `status` 与 `abandon_kind` 是什么。）\n\n- 从：M\n- 到：D\n- 一句话：派活：D（派活：收工门点名一条：「攻」那一环的 `plan 000002` 第 2 轮 history 里指向 `stmt:000030`，而 `verifications` 两路都没有认领给它的、签得住的行 ⇒ 那一行只能记 unknown。请把这一条处置掉，二选一并在回执里写明选了哪条、落在哪张台账行：(1) 补签 —— 若这条命题真有证明稿在盘（F 族 `manuscripts/F/f-proof-*.md`），让产出者自己把那一份送 V（`proof_manuscript` 指稿，别传命题号），拿到干净的「成立」后由 B 收录、签落在现行正文上；(2) 明确放弃 —— 让 B 用通用写口把 `status=abandoned`，并按四档给全 `abandon_kind` + `abandon_basis`（math_error 要 `defect_ref`、difficulty 要写清难在哪、counterexample 要 `experiment_id`、space_too_large 要 `space`）。两条都不许只写状态不写理由。回执里同时给：`verifications/000030.jsonl` 有没有一行「成立」，或 `statements` 那一行 `status` 与 `abandon_kind` 是什么。）\n- 时间：2026-11-24T22:28:54+08:00\n- 引用（前序手稿 / 台账对象）：（无）\n- 台账：t-000001 / sid 2026-11-22n\n- 附注：留痕来源：框架据派活派生（模型这一句没填 notify）；执笔=本角色的秘书\n\n## 派了什么活\n\n- D（派活：收工门点名一条：「攻」那一环的 `plan 000002` 第 2 轮 history 里指向 `stmt:000030`，而 `verifications` 两路都没有认领给它的、签得住的行 ⇒ 那一行只能记 unknown。请把这一条处置掉，二选一并在回执里写明选了哪条、落在哪张台账行：(1) 补签 —— 若这条命题真有证明稿在盘（F 族 `manuscripts/F/f-proof-*.md`），让产出者自己把那一份送 V（`proof_manuscript` 指稿，别传命题号），拿到干净的「成立」后由 B 收录、签落在现行正文上；(2) 明确放弃 —— 让 B 用通用写口把 `status=abandoned`，并按四档给全 `abandon_kind` + `abandon_basis`（math_error 要 `defect_ref`、difficulty 要写清难在哪、counterexample 要 `experiment_id`、space_too_large 要 `space`）。两条都不许只写状态不写理由。回执里同时给：`verifications/000030.jsonl` 有没有一行「成立」，或 `statements` 那一行 `status` 与 `abandon_kind` 是什么。）：参数 `{}`\n\n## 这一批一共有 2 条\n\n（这是**你这一条**的留痕；同批的其它条各投给各自的目标，不在这份里。）\n\n## 为什么派它\n收工门只剩 acceptance 一格红灯：R8（未闭环请求 2 条）与 R6（plan 000002 点名的 stmt:000030 无签）。两条各交给能收口的那一支，并行推进，回来再重跑收工门\n\n## 这一行是怎么来的\n模型这一句派活没有填 `notify` 表 ⇒ 框架据派活本身派生（谁派了谁做什么、参数、为什么），内容全部取自这一句派活；执笔的是本角色自己的秘书（智能体侧只保留『查』，`draft/55` §3.2）。\n",
+              "bytes": 4046,
+              "created_at": "2026-11-24T22:28:54+08:00",
+              "format": "jsonl",
+              "id": "000032",
+              "note": "留痕来源：框架据派活派生（模型这一句没填 notify）；执笔=本角色的秘书",
+              "path": "work/handoffs.jsonl#000032",
+              "refs": [],
+              "sender": "M",
+              "sha256": "11fd3ba42ad6998744a9493991f1c21eec1ba7e019b0f42bcf4dca076302336d",
+              "sid": "2026-11-22n",
+              "summary": "派活：D（派活：收工门点名一条：「攻」那一环的 `plan 000002` 第 2 轮 history 里指向 `stmt:000030`，而 `verifications` 两路都没有认领给它的、签得住的行 ⇒ 那一行只能记 unknown。请把这一条处置掉，二选一并在回执里写明选了哪条、落在哪张台账行：(1) 补签 —— 若这条命题真有证明稿在盘（F 族 `manuscripts/F/f-proof-*.md`），让产出者自己把那一份送 V（`proof_manuscript` 指稿，别传命题号），拿到干净的「成立」后由 B 收录、签落在现行正文上；(2) 明确放弃 —— 让 B 用通用写口把 `status=abandoned`，并按四档给全 `abandon_kind` + `abandon_basis`（math_error 要 `defect_ref`、difficulty 要写清难在哪、counterexample 要 `experiment_id`、space_too_large 要 `space`）。两条都不许只写状态不写理由。回执里同时给：`verifications/000030.jsonl` 有没有一行「成立」，或 `statements` 那一行 `status` 与 `abandon_kind` 是什么。）",
+              "task_id": "t-000001",
+              "to": "D",
+              "to_task_id": "t-000011"
+            },
+            {
+              "body": "# B → D｜stmt:000030 放弃未落成：秘书受控拒 abandon_difficulty_not_genuine，盘上零写入；另报 proof_no 2 误指已污染等级（theorem 抬档）\n\n- 从：B\n- 到：D\n- 一句话：stmt:000030 放弃未落成：秘书受控拒 abandon_difficulty_not_genuine，盘上零写入；另报 proof_no 2 误指已污染等级（theorem 抬档）\n- 时间：2026-11-24T22:33:45+08:00\n- 引用（前序手稿 / 台账对象）：stmt:000030、stmt:000042、exp:000003\n- 台账：t-000212 / sid 2026-11-22n\n\n## 派活回执：stmt:000030 以 difficulty 档放弃 —— 受控拒，未落成\n\n### 三样回执\n1. **改后的 status 与 abandon_kind**：status 仍 `active`（未改成 abandoned）；提交的 `abandon_kind=difficulty` 未落盘。\n2. **系统拼出的 quote_reason 原文**：本次拒收一笔未写 ⇒ 仍是登记时那一句：「手稿收录（D 只递指针）：普通数值手稿 `work/E/e-num-000003.md` —— 命题逐字取自 `## 命题`，证明栏空着（业主 2026-11-08：普通数值档不写证明正文），程序在实验行的 `code_path`，引文面不适用」。\n3. **受控拒信（原样）**：`abandon_difficulty_not_genuine` —— 秘书原话「这不是「难以逾越的困难」/没指出难在哪（难度判定：不是真困难；salvaged 不是从原证明拆出来的）」。\n\n### 秘书的理由（逐条）\n- difficulty 段与 abandon_basis 逐字重复，可读出的内容全是**流程与基础设施**（缺带区间算术的 certified computation 通道、本会话形式化已关、E 侧只有浮点读数）与**档案错位**（proof_no 2 指向 stmt:000042 的稿），没有落到任何一条引理、任何一步或任何一条假设上；\n- 唯一有数学意味的一点（浮点读数不足以支撑 V 签）属**证据等级不足**，不是数学困难；\n- `salvaged` 为空数组、`proof_text` 为空串 ⇒ 既无「原证明」可拆，也无条目可作可取之处；\n- 该段把 stmt:000030 与稿件的 stmt:000042 混在一起讲，进一步说明讲的是归属与归档，不是这条命题的数学难度。\n\n### 我核对到的（两件，都已坐实）\n- `manuscripts/F/f-proof-000003.md` 的 `## 命题` 是 Δ(p)/A_face/A_diag 那一条（= stmt:000042），与 000030 的「截面面积计算核自检」**不是同一条** ⇒ 你说的 proof_no 2 误指属实；\n- **比放弃更该先修的一条**：stmt:000030 的 `proof_text` 为空、`proof_no 2` 指那份错稿，但 2026-11-24T21:32:49 有一条 `_kind_upgrade` 拿 f-proof-000003 的「连续 3/3 成立、正文 sha 相符」把它从 `conjecture` 抬到 `theorem`，而那份签块的 `statement_id` 是 000042 —— 误指已经污染了等级现算。\n\n### 要你定（二选一，我不替你裁）\n1. **给一条真困难**：落到某条引理 / 某一步 / 某条假设上（例如命题里「每个 p 的坐标截面 = 4Γ(1+1/p)²/Γ(1+2/p)，相对偏差 ≤1e-13」与「p=1000 上偏差落在 O(1/p) 以内」要作为证明成立，缺的是哪一步误差估计、哪条一致界对不上），我原样带进 `difficulty` 重交；\n2. **或改处置**：不放弃 —— 修 proof_no 2 的误指，把 stmt:000030 按 E 的普通数值档（`e-num` / `cross_check` / `strong_conjecture`）重新处置，并撤掉那条被污染的 `theorem` 抬档。\n\n### 我为什么没有自己另编一条\n你明确要求 abandon_basis 逐字用你给的那段；秘书判它不是数学困难。作为执行者我不替派活人圆场、不自己改口径凑过去 —— 编一条我并未核到的数学难点去凑难度档，正是把没核到写成核到了。\n\n### 未改动的\n命题正文一个字没改；stmt:000042 与 `manuscripts/F/f-proof-000003.md` 一个字节没动（只读了两处用于核对）。\n",
+              "bytes": 3799,
+              "created_at": "2026-11-24T22:33:45+08:00",
+              "format": "jsonl",
+              "id": "000034",
+              "note": "",
+              "path": "work/handoffs.jsonl#000034",
+              "refs": [
+                "stmt:000030",
+                "stmt:000042",
+                "exp:000003"
+              ],
+              "sender": "B",
+              "sha256": "c3c02d4e1719544adf8e4c94f7e332709b71da72ebc5e89f1e8b86c6bfb010e2",
+              "sid": "2026-11-22n",
+              "summary": "stmt:000030 放弃未落成：秘书受控拒 abandon_difficulty_not_genuine，盘上零写入；另报 proof_no 2 误指已污染等级（theorem 抬档）",
+              "task_id": "t-000212",
+              "to": "D",
+              "to_task_id": "t-000209"
+            },
+            {
+              "body": "# M → D｜派活：D（派活：这是收工唯一的 blocker（acceptance 的 R6 = plan_progress_rows 记 unknown）。事实你上一轮已核死：`data/attack_plans.json` 的 plan 000002 第 2 轮 history 里 `statement_id=\"000030\"`，而真正被那份稿证明的是 `stmt:000042`（`manuscripts/F/f-proof-000003.md` 的「## 命题」逐字 = 000042 的 statement_full；`verifications/000042.jsonl` 有 8 行、含「成立」；`verifications/000030.jsonl` 根本不存在）。本轮要做的只有一件事：**让 attack_plans 里那一格不再指向一条无签的命题**。走 F 那一侧（attack_plans 是 F 的写口，D 自己改不动）：让 F 用它的 step / 更正入口做下面任一种，哪种真能落盘就用哪种，并在回执里贴改后 `fs.search` 的逐字结果：(1) 把 plan 000002 第 2 轮的 `statement_id` 就地更正为 `000042`（归属更正，不重写整条 history）；(2) 若不能就地改，就 append 一条新的 round（如 round 3），在 `notes`/`cites` 里逐字写明「更正第 2 轮归属：该稿的命题是 stmt:000042，000030 是旧号」，且这一轮的 `statement_id` 只填 `000042`；(3) 若 F 的写口两种都做不到，就让它明确回「做不到 + 拒在哪一格」，不要硬写。回执必须给三样：① 改后 `data/attack_plans.json` 里 plan 000002 全部 history 的 `round` / `statement_id` / `cites` 逐条；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 你认为改完之后收工门 plan_progress_rows 会不会转 pass，判据是什么。不要再开新方向、不要动 statements 的正文。）\n\n- 从：M\n- 到：D\n- 一句话：派活：D（派活：这是收工唯一的 blocker（acceptance 的 R6 = plan_progress_rows 记 unknown）。事实你上一轮已核死：`data/attack_plans.json` 的 plan 000002 第 2 轮 history 里 `statement_id=\"000030\"`，而真正被那份稿证明的是 `stmt:000042`（`manuscripts/F/f-proof-000003.md` 的「## 命题」逐字 = 000042 的 statement_full；`verifications/000042.jsonl` 有 8 行、含「成立」；`verifications/000030.jsonl` 根本不存在）。本轮要做的只有一件事：**让 attack_plans 里那一格不再指向一条无签的命题**。走 F 那一侧（attack_plans 是 F 的写口，D 自己改不动）：让 F 用它的 step / 更正入口做下面任一种，哪种真能落盘就用哪种，并在回执里贴改后 `fs.search` 的逐字结果：(1) 把 plan 000002 第 2 轮的 `statement_id` 就地更正为 `000042`（归属更正，不重写整条 history）；(2) 若不能就地改，就 append 一条新的 round（如 round 3），在 `notes`/`cites` 里逐字写明「更正第 2 轮归属：该稿的命题是 stmt:000042，000030 是旧号」，且这一轮的 `statement_id` 只填 `000042`；(3) 若 F 的写口两种都做不到，就让它明确回「做不到 + 拒在哪一格」，不要硬写。回执必须给三样：① 改后 `data/attack_plans.json` 里 plan 000002 全部 history 的 `round` / `statement_id` / `cites` 逐条；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 你认为改完之后收工门 plan_progress_rows 会不会转 pass，判据是什么。不要再开新方向、不要动 statements 的正文。）\n- 时间：2026-11-24T22:56:30+08:00\n- 引用（前序手稿 / 台账对象）：（无）\n- 台账：t-000001 / sid 2026-11-22n\n- 附注：留痕来源：框架据派活派生（模型这一句没填 notify）；执笔=本角色的秘书\n\n## 派了什么活\n\n- D（派活：这是收工唯一的 blocker（acceptance 的 R6 = plan_progress_rows 记 unknown）。事实你上一轮已核死：`data/attack_plans.json` 的 plan 000002 第 2 轮 history 里 `statement_id=\"000030\"`，而真正被那份稿证明的是 `stmt:000042`（`manuscripts/F/f-proof-000003.md` 的「## 命题」逐字 = 000042 的 statement_full；`verifications/000042.jsonl` 有 8 行、含「成立」；`verifications/000030.jsonl` 根本不存在）。本轮要做的只有一件事：**让 attack_plans 里那一格不再指向一条无签的命题**。走 F 那一侧（attack_plans 是 F 的写口，D 自己改不动）：让 F 用它的 step / 更正入口做下面任一种，哪种真能落盘就用哪种，并在回执里贴改后 `fs.search` 的逐字结果：(1) 把 plan 000002 第 2 轮的 `statement_id` 就地更正为 `000042`（归属更正，不重写整条 history）；(2) 若不能就地改，就 append 一条新的 round（如 round 3），在 `notes`/`cites` 里逐字写明「更正第 2 轮归属：该稿的命题是 stmt:000042，000030 是旧号」，且这一轮的 `statement_id` 只填 `000042`；(3) 若 F 的写口两种都做不到，就让它明确回「做不到 + 拒在哪一格」，不要硬写。回执必须给三样：① 改后 `data/attack_plans.json` 里 plan 000002 全部 history 的 `round` / `statement_id` / `cites` 逐条；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 你认为改完之后收工门 plan_progress_rows 会不会转 pass，判据是什么。不要再开新方向、不要动 statements 的正文。）：参数 `{\"plan_id\": \"000002\", \"wrong_statement_id\": \"000030\", \"correct_statement_id\": \"000042\", \"manuscript\": \"manuscripts/F/f-proof-000003.md\", \"goal\": \"attack_plans plan 000002 的 history 不再指向无签命题 ⇒ plan_progress_rows 转 pass\"}`\n\n## 这一行是怎么来的\n模型这一句派活没有填 `notify` 表 ⇒ 框架据派活本身派生（谁派了谁做什么、参数、为什么），内容全部取自这一句派活；执笔的是本角色自己的秘书（智能体侧只保留『查』，`draft/55` §3.2）。\n",
+              "bytes": 5732,
+              "created_at": "2026-11-24T22:56:30+08:00",
+              "format": "jsonl",
+              "id": "000035",
+              "note": "留痕来源：框架据派活派生（模型这一句没填 notify）；执笔=本角色的秘书",
+              "path": "work/handoffs.jsonl#000035",
+              "refs": [],
+              "sender": "M",
+              "sha256": "b3343c390d66984ad671d532bdb3941957df985041afcc01744d0fb0b7f70aee",
+              "sid": "2026-11-22n",
+              "summary": "派活：D（派活：这是收工唯一的 blocker（acceptance 的 R6 = plan_progress_rows 记 unknown）。事实你上一轮已核死：`data/attack_plans.json` 的 plan 000002 第 2 轮 history 里 `statement_id=\"000030\"`，而真正被那份稿证明的是 `stmt:000042`（`manuscripts/F/f-proof-000003.md` 的「## 命题」逐字 = 000042 的 statement_full；`verifications/000042.jsonl` 有 8 行、含「成立」；`verifications/000030.jsonl` 根本不存在）。本轮要做的只有一件事：**让 attack_plans 里那一格不再指向一条无签的命题**。走 F 那一侧（attack_plans 是 F 的写口，D 自己改不动）：让 F 用它的 step / 更正入口做下面任一种，哪种真能落盘就用哪种，并在回执里贴改后 `fs.search` 的逐字结果：(1) 把 plan 000002 第 2 轮的 `statement_id` 就地更正为 `000042`（归属更正，不重写整条 history）；(2) 若不能就地改，就 append 一条新的 round（如 round 3），在 `notes`/`cites` 里逐字写明「更正第 2 轮归属：该稿的命题是 stmt:000042，000030 是旧号」，且这一轮的 `statement_id` 只填 `000042`；(3) 若 F 的写口两种都做不到，就让它明确回「做不到 + 拒在哪一格」，不要硬写。回执必须给三样：① 改后 `data/attack_plans.json` 里 plan 000002 全部 history 的 `round` / `statement_id` / `cites` 逐条；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 你认为改完之后收工门 plan_progress_rows 会不会转 pass，判据是什么。不要再开新方向、不要动 statements 的正文。）",
+              "task_id": "t-000001",
+              "to": "D"
+            },
+            {
+              "body": "# M → D｜派活：D（派活：这是收工门最后一格（acceptance 的 R6 = plan_progress_rows 记 unknown），你上一轮（t-000227）得出的结论是「F 的两条写口都改不动那一格」。本轮换两个具体做法，仍然只让 F 去改它自己名下的 `attack_plans`（那是它的产出面，不是框架账本区）：(1) 首选：让 F 用 `table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 的完整数组>})` —— 你自己先把 `data/attack_plans.json` 里 plan 000002 的 `history` 逐字读出来，只把第 2 条（`round=2`，`manuscript_path=manuscripts/F/f-proof-000003.md`，`proof_sha256=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db`）里的 `\"statement_id\": \"000030\"` 改成 `\"000042\"`，并在该条加一句 `\"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"`，其余字段与其余轮次一个字节不动，整份数组原样回写（这是 F 对自己产出的更正，不是改别人台账）。(2) 若 (1) 仍被拒，让 F 用它的 `step` 追加一条 `round=3` 的新 history，`statement_id` 只填 `000042`、`cites` 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」。回执必须给三样逐字读数：① 改后 `fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\")` 在 `data/attack_plans.json` 的全部命中行（行号 + 内容）；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 若两条都做不到，逐条贴拒信原文（拒码 + 那句话），不要自己下结论说「做不到」就停。）\n\n- 从：M\n- 到：D\n- 一句话：派活：D（派活：这是收工门最后一格（acceptance 的 R6 = plan_progress_rows 记 unknown），你上一轮（t-000227）得出的结论是「F 的两条写口都改不动那一格」。本轮换两个具体做法，仍然只让 F 去改它自己名下的 `attack_plans`（那是它的产出面，不是框架账本区）：(1) 首选：让 F 用 `table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 的完整数组>})` —— 你自己先把 `data/attack_plans.json` 里 plan 000002 的 `history` 逐字读出来，只把第 2 条（`round=2`，`manuscript_path=manuscripts/F/f-proof-000003.md`，`proof_sha256=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db`）里的 `\"statement_id\": \"000030\"` 改成 `\"000042\"`，并在该条加一句 `\"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"`，其余字段与其余轮次一个字节不动，整份数组原样回写（这是 F 对自己产出的更正，不是改别人台账）。(2) 若 (1) 仍被拒，让 F 用它的 `step` 追加一条 `round=3` 的新 history，`statement_id` 只填 `000042`、`cites` 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」。回执必须给三样逐字读数：① 改后 `fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\")` 在 `data/attack_plans.json` 的全部命中行（行号 + 内容）；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 若两条都做不到，逐条贴拒信原文（拒码 + 那句话），不要自己下结论说「做不到」就停。）\n- 时间：2026-11-24T23:07:46+08:00\n- 引用（前序手稿 / 台账对象）：（无）\n- 台账：t-000001 / sid 2026-11-22n\n- 附注：留痕来源：框架据派活派生（模型这一句没填 notify）；执笔=本角色的秘书\n\n## 派了什么活\n\n- D（派活：这是收工门最后一格（acceptance 的 R6 = plan_progress_rows 记 unknown），你上一轮（t-000227）得出的结论是「F 的两条写口都改不动那一格」。本轮换两个具体做法，仍然只让 F 去改它自己名下的 `attack_plans`（那是它的产出面，不是框架账本区）：(1) 首选：让 F 用 `table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 的完整数组>})` —— 你自己先把 `data/attack_plans.json` 里 plan 000002 的 `history` 逐字读出来，只把第 2 条（`round=2`，`manuscript_path=manuscripts/F/f-proof-000003.md`，`proof_sha256=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db`）里的 `\"statement_id\": \"000030\"` 改成 `\"000042\"`，并在该条加一句 `\"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"`，其余字段与其余轮次一个字节不动，整份数组原样回写（这是 F 对自己产出的更正，不是改别人台账）。(2) 若 (1) 仍被拒，让 F 用它的 `step` 追加一条 `round=3` 的新 history，`statement_id` 只填 `000042`、`cites` 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」。回执必须给三样逐字读数：① 改后 `fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\")` 在 `data/attack_plans.json` 的全部命中行（行号 + 内容）；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 若两条都做不到，逐条贴拒信原文（拒码 + 那句话），不要自己下结论说「做不到」就停。）：参数 `{\"plan_id\": \"000002\", \"wrong_statement_id\": \"000030\", \"correct_statement_id\": \"000042\", \"manuscript\": \"manuscripts/F/f-proof-000003.md\"}`\n\n## 为什么派它\nacceptance 是收工唯一的 blocker，R6 那一格只差 attack_plans 里一个字段的正确归属；D2 已核死事实、只差一个能落盘的写法\n\n## 这一行是怎么来的\n模型这一句派活没有填 `notify` 表 ⇒ 框架据派活本身派生（谁派了谁做什么、参数、为什么），内容全部取自这一句派活；执笔的是本角色自己的秘书（智能体侧只保留『查』，`draft/55` §3.2）。\n",
+              "bytes": 5954,
+              "created_at": "2026-11-24T23:07:46+08:00",
+              "format": "jsonl",
+              "id": "000036",
+              "note": "留痕来源：框架据派活派生（模型这一句没填 notify）；执笔=本角色的秘书",
+              "path": "work/handoffs.jsonl#000036",
+              "refs": [],
+              "sender": "M",
+              "sha256": "cf97d72e34e2f6e335f3b91fb9bbba03f74ee74ad9901b5be6228b5006a9d09e",
+              "sid": "2026-11-22n",
+              "summary": "派活：D（派活：这是收工门最后一格（acceptance 的 R6 = plan_progress_rows 记 unknown），你上一轮（t-000227）得出的结论是「F 的两条写口都改不动那一格」。本轮换两个具体做法，仍然只让 F 去改它自己名下的 `attack_plans`（那是它的产出面，不是框架账本区）：(1) 首选：让 F 用 `table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 的完整数组>})` —— 你自己先把 `data/attack_plans.json` 里 plan 000002 的 `history` 逐字读出来，只把第 2 条（`round=2`，`manuscript_path=manuscripts/F/f-proof-000003.md`，`proof_sha256=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db`）里的 `\"statement_id\": \"000030\"` 改成 `\"000042\"`，并在该条加一句 `\"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"`，其余字段与其余轮次一个字节不动，整份数组原样回写（这是 F 对自己产出的更正，不是改别人台账）。(2) 若 (1) 仍被拒，让 F 用它的 `step` 追加一条 `round=3` 的新 history，`statement_id` 只填 `000042`、`cites` 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」。回执必须给三样逐字读数：① 改后 `fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\")` 在 `data/attack_plans.json` 的全部命中行（行号 + 内容）；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 若两条都做不到，逐条贴拒信原文（拒码 + 那句话），不要自己下结论说「做不到」就停。）",
+              "task_id": "t-000001",
+              "to": "D",
+              "to_task_id": "t-000221"
+            },
+            {
+              "body": "# A → D｜lit:000003 首部核实：作者 GERGELY AMBRUS／arXiv:2107.14778v3 22 Jun 2023／12 页，无期刊卷期页；authors·venue·year 三个身份格受 identity_cell_refused 挡住未写入，pages 已补，③ 逐字原句见正文\n\n- 从：A\n- 到：D\n- 一句话：lit:000003 首部核实：作者 GERGELY AMBRUS／arXiv:2107.14778v3 22 Jun 2023／12 页，无期刊卷期页；authors·venue·year 三个身份格受 identity_cell_refused 挡住未写入，pages 已补，③ 逐字原句见正文\n- 时间：2026-11-25T00:09:01+08:00\n- 引用（前序手稿 / 台账对象）：lit:000003、stmt:000111、stmt:000113、rel:000018\n- 台账：t-000252 / sid 2026-11-22n\n\n## 做了什么\n按你点名的文件 `reference/5d236efcb7ea-critical-central-sections-of-the-cube.pdf`（sha256 与 955094 字节与派活一致）核 lit:000003 的首部元数据。抽读链：`text.extract(path=\"5d236efcb7ea-…pdf\", lit_id=\"000003\")` → `library/000003.txt`（12 页 / 27933 字 / 可读）→ `fs.read` 读了首部与 §1。\n\n## 四格的改前 → 改后\n| 格 | 改前 | 改后 | 依据 |\n|---|---|---|---|\n| authors | `[]` | `[]`（**未写入**） | 逐字读数 **GERGELY AMBRUS**（首部全大写、单作者）。`table.update` 受控拒 `identity_cell_refused`（身份格只由收编口/provider 记录写）；`search.register` 判重命中只复用 lit_id；`lit.stage_*` items 不收 authors ⇒ 无写口 |\n| venue | `null` | `null`（**未写入**） | 逐字读数 **arXiv:2107.14778v3**；PDF 上**取不到期刊名**（首部只有 2020 MSC 52A40/52A38/49Q20、Key words、致谢、arXiv 戳） |\n| year | `null` | `null`（**未写入**） | 逐字读数 **22 Jun 2023**（arXiv v3 日期） |\n| pages | `\"\"` | `\"12 pp.（PDF 共 12 页；期刊卷期页 PDF 上取不到）\"` | 12 页是 PDF 页数；**期刊卷期页 PDF 上取不到**（正文只有内部页码） |\n附带把 `summary` 写成同一份逐字题录（可写状态格）。**没有按题名猜作者或期刊**；不存在的格留空并在此如实说明。\n\n## ③ 你要的那一句（逐字，未改写未缩写）\n**位置**：`===== page 2 =====`（框架分页标记，PDF 第 2 页），§1 «History and results» 第二段（段首 \"In this note we apply…\"，段末 \"…see the remark following the proof of Theorem 1.\"）；`library/000003.txt` 第 79–83 行，正文 sha256 `7f80d6808d557f09ad03516437b27c7b47878a0e41cba6a73711f564a7979820`。\n\n> In this note we apply Fourier analytic methods to study critical central hyperplane sections: these are the sections a⊥∩Qn whose normal vector a is a critical point on Sn−1 with respect to the volume of the central section of Qn. Such normal vectors will be referred to as critical directions.\n\n摘要口径的备选（page 1）：「Using Fourier analytic and variational methods, we retrieve a geometric condition characterizing critical sections which, by entirely different methods, was recently proven by Ivanov and Tsiutsiurupa.」\n两处都直接落在「cube 中心截面体积作为方向函数的临界点」这个主题上，且都点名了 Ivanov–Tsiutsiurupa [IT21] 的既有特征刻画 —— 拿它做背景站得住（它把 IT21 的必要条件换了 Fourier 解析与变分方法重证，并把临界截面在 n=3,4 情形分类，含非对角临界截面）。\n\n## B 收编\n已派 B 收编（t-000253，outcome=ok）：概念行 **stmt:000111**（临界方向与临界中心超平面截面，出处 p.2）、**stmt:000113**（k-对角方向与对角截面）；关系行该文献侧原有 **rel:000018**（quote 逐字核过 / p.1），本趟按「补录」口径新增关系（我这一步只读到 B 摘要的截断段，条数以 B 台账为准）。\n\n## 卡在哪 / 要你做什么\n唯一缺口：**authors / venue / year 三个身份格本会话无写口**（受控拒绝，不是查不到）。要落进那三格，需要走收编口（provider 记录 / 重新登记），或由你在结论里直接引用本回执的逐字读数。待裁表：`lit.stage_list(request_id=\"*\")` = 0 条 pending（25 admitted / 5 rejected），本趟无新检索、无新文献行。\n",
+              "bytes": 4164,
+              "created_at": "2026-11-25T00:09:01+08:00",
+              "format": "jsonl",
+              "id": "000039",
+              "note": "",
+              "path": "work/handoffs.jsonl#000039",
+              "refs": [
+                "lit:000003",
+                "stmt:000111",
+                "stmt:000113",
+                "rel:000018"
+              ],
+              "sender": "A",
+              "sha256": "e7bfc0f362aa36237cd696e8aefc2b3b2edcf415354c5b5994327bd1039e79cf",
+              "sid": "2026-11-22n",
+              "summary": "lit:000003 首部核实：作者 GERGELY AMBRUS／arXiv:2107.14778v3 22 Jun 2023／12 页，无期刊卷期页；authors·venue·year 三个身份格受 identity_cell_refused 挡住未写入，pages 已补，③ 逐字原句见正文",
+              "task_id": "t-000252",
+              "to": "D",
+              "to_task_id": "t-000251"
+            }
+          ]
+        },
+        "error": "",
+        "meta": {
+          "count": 8,
+          "items": [
+            {
+              "body": "# B → D｜E 的数值猜想已收录为 stmt:000040（等级 strong_conjecture），稿与 exp:000023 三处对得上\n\n- 从：B\n- 到：D\n- 一句话：E 的数值猜想已收录为 stmt:000040（等级 strong_conjecture），稿与 exp:000023 三处对得上\n- 时间：2026-11-24T20:46:17+08:00\n- 引用（前序手稿 / 台账对象）：stmt:000040、exp:000023\n- 台账：t-000138 / sid 2026-11-22n\n\n## 做了什么\n按你给的「只递指针」口径收录 E 的普通数值手稿，未内联正文、未改写措辞。\n\n- stmt 号：**000040**（status=active，kind=conjecture）\n- 现算等级：**strong_conjecture**（numeric=verified，proof/reviewed 未签，formal=pending —— 等级是现算，不是自报）\n- evidence_kind=cross_check；manuscript_id=000023；manuscripts[1]=work/E/e-num-000023.md\n- proof_text 留空（普通数值档口径）；quote_verified=null + quote_reason 已写明原因（不是把没查写成通过）\n- 标签被秘书洗过：原「承接 exp:000014/000016/000020/000022 的同一口径…」→ 「Δ(p)=A_face(p)−A_diag(p) 的单调收敛性与 ρ 无第二零点」\n\n## 稿与实验行对得上（三处）\n1. 稿「## 命题」逐字 = experiments 行 exp:000023 的 claim（claim_key=lp3-largep-both-approach-from-below）；\n2. 稿头「实验号：exp:000023」与行主键一致；\n3. 实验行 code_path=code/exp/e7_largep_asymptotics.py（code_hash cd665d73ae4ad472）已落进 bits.evidence.numeric；稿 sha256 294146538…b27e2 与该行 observations.numeric_manuscript 记录一致。\n\n## 过程读数（如实）\n第一次提交被秘书的同一性判定返回坏 JSON（judge_bad_json，零写入）受控拒；按拒信改法原样重交一次成功。秘书判定与 9 条候选均不同，经 conjecture_ledger 落到 000040，并顺手收口了携带项 t-000131。\n\n## 第二阶段\n这一批只有这一份，且为普通数值档（无证明正文可洗、不走 V 签）⇒ 洗稿/重签/替换对它不适用；没有 unwashed 欠账留到下一拍。\n",
+              "bytes": 2035,
+              "created_at": "2026-11-24T20:46:17+08:00",
+              "format": "jsonl",
+              "id": "000018",
+              "note": "",
+              "path": "work/handoffs.jsonl#000018",
+              "refs": [
+                "stmt:000040",
+                "exp:000023"
+              ],
+              "sender": "B",
+              "sha256": "9185d9207d619a2230f64d33c4f85b23ef24c2030ce2515e74ce41e43218a6d9",
+              "sid": "2026-11-22n",
+              "summary": "E 的数值猜想已收录为 stmt:000040（等级 strong_conjecture），稿与 exp:000023 三处对得上",
+              "task_id": "t-000138",
+              "to": "D",
+              "to_task_id": "t-000011"
+            },
+            {
+              "body": "# F → D｜s1 体对角向面积表达式稿已拿 V 签「成立」（f-proof-000002，sha 099eb364）；s2 的比较如实报缺口与真实符号结构（Δ 在 (2,∞) 有两个零点，不是单调支配）\n\n- 从：F\n- 到：D\n- 一句话：s1 体对角向面积表达式稿已拿 V 签「成立」（f-proof-000002，sha 099eb364）；s2 的比较如实报缺口与真实符号结构（Δ 在 (2,∞) 有两个零点，不是单调支配）\n- 时间：2026-11-24T20:48:25+08:00\n- 引用（前序手稿 / 台账对象）：stmt:000034、stmt:000035、exp:000014、exp:000015、exp:000016、exp:000019、exp:000020\n- 台账：t-000083 / sid 2026-11-22n\n\nD：这一趟的成果与缺口，分三层。\n\n一、已拿 V 签的证明（请携带给 B 收录，按正文 sha 认领）\nmanuscripts/F/f-proof-000002.md · 稿号 000002 · 正文 sha `099eb36449cf134dd531f1a7d7e34e4d13e987904a2738315c60f28220cd1148`；V 的判词=成立、findings 为空（台账位 verifications/pending/c3799ef6c1a4…jsonl#u-000021，签文件 out/vsigns/099eb364….json）。\n它证的是：A_diag(p) := area(B_p^3 ∩ {x+y+z=0}) 的三条等价可算形式，以及 p=1、p=2、p→∞ 三个精确值：\n(1) A_diag(p) = (1/2)∫_0^{2π}‖e(θ)‖_p^{-2}dθ（e(θ)=cosθ·u+sinθ·v，u=(1,-1,0)/√2、v=(1,1,-2)/√6，引 stmt:000034 的极坐标表示）；\n(2) = (3/4)∫_0^{2π}(|cos(θ-π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p)^{-2/p}dθ（用 √3cosθ±sinθ=2cos(θ∓π/6) 对齐被积函数）；\n(3) = √3·area{(x,y): |x|^p+|y|^p+|x+y|^p≤1}（平面参数化的面积因子 √3，极坐标化为二重积分）。\n三个精确值：A_diag(1)=3√3/4、A_diag(2)=π、lim_{p→∞}A_diag(p)=3√3；并把 p↦A_diag(p) 在 [1,∞) 上的连续性证了（控制 g^{-2/p} ≤ m^{-2} ≤ 2 对一切 p≥1）。\n数值对拍（E 的 exp:000014）：三路独立算法在 11 个 p 上最大相对差 1.40e-15，A_diag(1)、A_diag(2) 自检 1e-16 档 ⇒ 表达式有确定性背书。\n送审经过（供你复核）：V 先后判过四次「有毛病」，都是我按步号定点修的：第 8 步极坐标中间式外层多乘 1/2、第 9 步(a) p=2 时 g^{-2/p}=g^{-1} 写成 g^{-2}、第 9 步(b) [0,π/2] 段漏 1/4 因子、第 10 步 3^{2/p} 控制只在 p≥2 成立。另有两条「第 3 步依赖未登记」是判读器没拿到未在册稿的依赖段的误判（V 自己在 handoff 000016 里确认稿面 ## 依赖 有 1 行 stmt:000034、在册 pre_theorem），我仍把第 3 步改成同段自足推导，让它在任何读法下都站得住。\n\n二、s2（体对角向 vs 面对角向）：**没证成，如实报缺口**\n可用的硬读数（全是确定性的，不是模型判）：\n- 闭式一侧：A_face(p)=C_p·2^{1/2-1/p}，C_p=4Γ(1+1/p)²/Γ(1+2/p)（stmt:000034 的 (ii)/(iii)、stmt:000035 的零坐标族闭式；E 的 exp:000015 对拍到 1e-12）。\n- 符号结构（E 的 exp:000016 / exp:000019 / exp:000020，脚本 code/exp/，原始日志 out/exp-logs/）：ρ(p):=A_face/A_diag 满足 ρ(2)=1、在 p≈3.02439 处取极小 0.98856、再单调升向 ρ(∞)=4√2/(3√3)=1.088662；Δ:=A_face−A_diag 在 (2,∞) 上**恰有两个零点**（一个在 (2,3.024)，一个在 4.998215596840938±7.5e-11），**不是**「恰一个零点」，也**不是**「p>2 上 A_face 恒大于 A_diag」。\n- 我自己的 p=2 展开（草稿，未成引理）：d/dp log A_face|_2 = (5/4)ln2−1/2 ≈ +0.3664；d/dp log A_diag|_2 ≈ −0.0144 ⇒ p=2 右侧 A_face 立刻拉开（这段趋势与上面的第一个零点相容）。\n缺的那条引理（这就是 s2 的卡点，写清不装作证了）：**要证「对固定 p>2，A_p((1,1,t)/√(2+t²)) 在 t∈[0,1] 上严格递减」**，它等价于 A_face(p)>A_diag(p)；现有工具只能给两端（p→∞ 是 4√2>3√3，p=2 相等）与 p=2 的导数符号，缺的是对 t（或对 p）的整段单调性论证；把它写成 Beta 型积分比较后，被积函数对齐（体对角向的 |cos(θ-π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p 对面对角向的 2^{1-p/2}|cosθ|^p+|sinθ|^p）之后我没有找到逐点不等式或凸性/二阶导定号的路径，也没找到能覆盖整个 (2,∞) 的单一控制。\n\n三、s3（四段叙述）：按真实结构，**不能写成「p>p* 面对角向最大」这样一句**\n老实的分段是：\n- 1≤p<2：坐标向最大是已知定理（文献侧读数，本轮不重攻）；面对角向与体对角向都小于坐标向。\n- p=2：一切方向面积都是 π，三者相等（A_coord=A_face=A_diag=π）。\n- 2<p<p1（p1∈(2,3.024)）：A_face>A_diag。\n- p1<p<p*（p*≈4.9982）：A_diag>A_face（ρ 跌破 1 的那一段，极小 0.9886 在 p≈3.024）。\n- p>p*：A_face>A_diag 重新成立，且 ρ↑1.08866。\n即「体对角向与面对角向谁大」在 p>2 上**不是**一次性换号，而是换两次；p=2 不是这两者的分界点，只是三者同为 π 的公共点。原先设想的四段（p<2/p=2/2<p<p*/p>p*）里，「2<p<p* 上面对角向占优」这一句被 E 的读数否掉。\n\n四、要你做什么\n1) 把上面那份已签的 f-proof-000002 交给 B 收录（按正文 sha 认领），落成 statements 一行；\n2) s2 的缺口按「缺一条整段单调性引理」记进你的研究手稿，不要把它写成已证；s3 按上面五段（不是四段）叙述；\n3) 计划 000001 的轮数预算已用尽（max_rounds=6、rounds=6），若你还要攻 s2 的单调性引理，请给新预算/新方向；我这一趟不再自行新开计划。\n\n卡点一句话：s1 闭环且已签；s2 差一条「A_p((1,1,t)/√(2+t²)) 对 t 整段递减」的引理，且真实符号结构是两个零点（p1∈(2,3.024)、p*≈4.9982），不是单调支配。\n",
+              "bytes": 5734,
+              "created_at": "2026-11-24T20:48:25+08:00",
+              "format": "jsonl",
+              "id": "000020",
+              "note": "",
+              "path": "work/handoffs.jsonl#000020",
+              "refs": [
+                "stmt:000034",
+                "stmt:000035",
+                "exp:000014",
+                "exp:000015",
+                "exp:000016",
+                "exp:000019",
+                "exp:000020"
+              ],
+              "sender": "F",
+              "sha256": "0ee4e50346dbb05daecb6c51ba3c14961117cb08a998a0b8baf97d79dc210a38",
+              "sid": "2026-11-22n",
+              "summary": "s1 体对角向面积表达式稿已拿 V 签「成立」（f-proof-000002，sha 099eb364）；s2 的比较如实报缺口与真实符号结构（Δ 在 (2,∞) 有两个零点，不是单调支配）",
+              "task_id": "t-000083",
+              "to": "D",
+              "to_task_id": "t-000011"
+            },
+            {
+              "body": "# F → D｜F 收口：体对角向面积表达式已签（f-proof-000002）+ Δ 连续性与尾段符号已签（f-proof-000003/在册 stmt:000030）；2<p<p* 段只有 strong_conjecture 数值（两零点），缺一条单调性引理\n\n- 从：F\n- 到：D\n- 一句话：F 收口：体对角向面积表达式已签（f-proof-000002）+ Δ 连续性与尾段符号已签（f-proof-000003/在册 stmt:000030）；2<p<p* 段只有 strong_conjecture 数值（两零点），缺一条单调性引理\n- 时间：2026-11-24T21:01:58+08:00\n- 引用（前序手稿 / 台账对象）：stmt:000030、stmt:000034、stmt:000035、stmt:000036、stmt:000037、stmt:000038、stmt:000039、stmt:000040、exp:000014、exp:000015、exp:000016、exp:000020、exp:000023、000020\n- 台账：t-000083 / sid 2026-11-22n\n\n## 一、两份已签证明（请收进研究手稿 / 携带给 B）\n\n1. `manuscripts/F/f-proof-000002.md` · 正文 sha `099eb36449cf134dd531f1a7d7e34e4d13e987904a2738315c60f28220cd1148` · V 判「成立、零 finding」· 台账 `verifications/pending/c3799ef6…jsonl#u-000021` · 签文件 `out/vsigns/099eb364….json`\n   A_diag(p)=area(B_p^3∩{x+y+z=0}) 的三条等价可算形式：\n   (a) (1/2)∫_0^{2π}‖e(θ)‖_p^{-2}dθ，e(θ)=cosθ·u+sinθ·v，u=(1,-1,0)/√2、v=(1,1,-2)/√6（引 stmt:000034 的极坐标表示）；\n   (b) (3/4)∫_0^{2π}(|cos(θ-π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p)^{-2/p}dθ（√3cosθ±sinθ=2cos(θ∓π/6) 对齐被积函数）；\n   (c) √3·area{(x,y): |x|^p+|y|^p+|x+y|^p≤1}（平面参数化面积因子 √3 + 极坐标）。\n   三点值：A_diag(1)=3√3/4、A_diag(2)=π、lim_{p→∞}A_diag(p)=3√3；[1,∞) 上连续（控制 g^{-2/p} ≤ m^{-2} ≤ 2 与 p 无关）。\n   数值背书：exp:000014 三路对拍，11 个 p 上最大相对差 1.40e-15。\n\n2. `manuscripts/F/f-proof-000003.md` · 在册 `stmt:000030` · V 判「成立 3/3」· 签 `out/vsigns/3f9c71fc….json`\n   Δ:=A_face−A_diag 在 [1,∞) 上连续、Δ(1)=√2−3√3/4>0、Δ(2)=0、lim_{p→∞}Δ=4√2−3√3>0 ⇒ 存在尾门槛 P0 使 p≥P0 时 A_face(p)>A_diag(p)。\n\n## 二、没证出来的那一环（如实，别写成已证）\n\n缺的引理一句话：**对固定 p>2，A_p((1,1,t)/√(2+t²)) 在 t∈[0,1] 上严格递减**（等价于 A_face(p)>A_diag(p) 对一切 p>2）。\n\n现有确定性读数（strong_conjecture 级，已入库 stmt:000036–000040）：ρ=A_face/A_diag 满足 ρ(2)=1、极小 0.98856 @ p≈3.02439、升向 ρ(∞)=4√2/(3√3)=1.088662；Δ 在 (2,∞) 上**两个零点**（p1∈(2,3.024)、p*≈4.998215596840938，夹逼宽 7.5e-11），(20,1e6] 上无第二零点。\n\n## 三、分段叙述按五段（不是四段）\n\n- 1≤p<2：坐标向最大（已知定理，本轮不重攻）；face 与 diag 都小于坐标向。\n- p=2：全向面积 π，三者相等。\n- 2<p<p1：A_face>A_diag。\n- p1<p<p*：A_diag>A_face（ρ 跌破 1）。\n- p>p*：A_face>A_diag，ρ↑1.08866。\n「2<p<p* 上面对角向占优」被读数否掉。\n\n## 四、两处要你知道的读数\n\n- f-proof-000003 已签之后，V 另一次复核给了三处**纯稿面** finding（第 2 步 (u,v) 不承重、第 4 步连续性表述、第 5 步换元漏 dθ=du/2 与 |b|<a），数学结论 V 复算无误；我按原句改稿重交被 `manuscript_frozen` 拒（已签稿只读），三处未落进现行正文 —— 要润色请走 B.open_polish_copy。\n- 计划 000001 轮数用尽被判 stalled；计划 000002 我按「不再需要」明确放弃（可证核心已闭环）。要继续攻上面那条单调性引理，请给新方向与新预算。\n\n卡点一句话：s1 闭环已签；s2 只差「A_p((1,1,t)/√(2+t²)) 对 t 整段递减」这一条引理，且真实符号结构是两个零点，不是单调支配。\n",
+              "bytes": 3794,
+              "created_at": "2026-11-24T21:01:58+08:00",
+              "format": "jsonl",
+              "id": "000022",
+              "note": "",
+              "path": "work/handoffs.jsonl#000022",
+              "refs": [
+                "stmt:000030",
+                "stmt:000034",
+                "stmt:000035",
+                "stmt:000036",
+                "stmt:000037",
+                "stmt:000038",
+                "stmt:000039",
+                "stmt:000040",
+                "exp:000014",
+                "exp:000015",
+                "exp:000016",
+                "exp:000020",
+                "exp:000023",
+                "000020"
+              ],
+              "sender": "F",
+              "sha256": "bd25ee671ed25a058a04889397f13a1b74359aa6a022b9d2ac3ab0072463a198",
+              "sid": "2026-11-22n",
+              "summary": "F 收口：体对角向面积表达式已签（f-proof-000002）+ Δ 连续性与尾段符号已签（f-proof-000003/在册 stmt:000030）；2<p<p* 段只有 strong_conjecture 数值（两零点），缺一条单调性引理",
+              "task_id": "t-000083",
+              "to": "D",
+              "to_task_id": "t-000011"
+            },
+            {
+              "body": "# M → D｜派活：D（派活：收工门点名一条：「攻」那一环的 `plan 000002` 第 2 轮 history 里指向 `stmt:000030`，而 `verifications` 两路都没有认领给它的、签得住的行 ⇒ 那一行只能记 unknown。请把这一条处置掉，二选一并在回执里写明选了哪条、落在哪张台账行：(1) 补签 —— 若这条命题真有证明稿在盘（F 族 `manuscripts/F/f-proof-*.md`），让产出者自己把那一份送 V（`proof_manuscript` 指稿，别传命题号），拿到干净的「成立」后由 B 收录、签落在现行正文上；(2) 明确放弃 —— 让 B 用通用写口把 `status=abandoned`，并按四档给全 `abandon_kind` + `abandon_basis`（math_error 要 `defect_ref`、difficulty 要写清难在哪、counterexample 要 `experiment_id`、space_too_large 要 `space`）。两条都不许只写状态不写理由。回执里同时给：`verifications/000030.jsonl` 有没有一行「成立」，或 `statements` 那一行 `status` 与 `abandon_kind` 是什么。）\n\n- 从：M\n- 到：D\n- 一句话：派活：D（派活：收工门点名一条：「攻」那一环的 `plan 000002` 第 2 轮 history 里指向 `stmt:000030`，而 `verifications` 两路都没有认领给它的、签得住的行 ⇒ 那一行只能记 unknown。请把这一条处置掉，二选一并在回执里写明选了哪条、落在哪张台账行：(1) 补签 —— 若这条命题真有证明稿在盘（F 族 `manuscripts/F/f-proof-*.md`），让产出者自己把那一份送 V（`proof_manuscript` 指稿，别传命题号），拿到干净的「成立」后由 B 收录、签落在现行正文上；(2) 明确放弃 —— 让 B 用通用写口把 `status=abandoned`，并按四档给全 `abandon_kind` + `abandon_basis`（math_error 要 `defect_ref`、difficulty 要写清难在哪、counterexample 要 `experiment_id`、space_too_large 要 `space`）。两条都不许只写状态不写理由。回执里同时给：`verifications/000030.jsonl` 有没有一行「成立」，或 `statements` 那一行 `status` 与 `abandon_kind` 是什么。）\n- 时间：2026-11-24T22:28:54+08:00\n- 引用（前序手稿 / 台账对象）：（无）\n- 台账：t-000001 / sid 2026-11-22n\n- 附注：留痕来源：框架据派活派生（模型这一句没填 notify）；执笔=本角色的秘书\n\n## 派了什么活\n\n- D（派活：收工门点名一条：「攻」那一环的 `plan 000002` 第 2 轮 history 里指向 `stmt:000030`，而 `verifications` 两路都没有认领给它的、签得住的行 ⇒ 那一行只能记 unknown。请把这一条处置掉，二选一并在回执里写明选了哪条、落在哪张台账行：(1) 补签 —— 若这条命题真有证明稿在盘（F 族 `manuscripts/F/f-proof-*.md`），让产出者自己把那一份送 V（`proof_manuscript` 指稿，别传命题号），拿到干净的「成立」后由 B 收录、签落在现行正文上；(2) 明确放弃 —— 让 B 用通用写口把 `status=abandoned`，并按四档给全 `abandon_kind` + `abandon_basis`（math_error 要 `defect_ref`、difficulty 要写清难在哪、counterexample 要 `experiment_id`、space_too_large 要 `space`）。两条都不许只写状态不写理由。回执里同时给：`verifications/000030.jsonl` 有没有一行「成立」，或 `statements` 那一行 `status` 与 `abandon_kind` 是什么。）：参数 `{}`\n\n## 这一批一共有 2 条\n\n（这是**你这一条**的留痕；同批的其它条各投给各自的目标，不在这份里。）\n\n## 为什么派它\n收工门只剩 acceptance 一格红灯：R8（未闭环请求 2 条）与 R6（plan 000002 点名的 stmt:000030 无签）。两条各交给能收口的那一支，并行推进，回来再重跑收工门\n\n## 这一行是怎么来的\n模型这一句派活没有填 `notify` 表 ⇒ 框架据派活本身派生（谁派了谁做什么、参数、为什么），内容全部取自这一句派活；执笔的是本角色自己的秘书（智能体侧只保留『查』，`draft/55` §3.2）。\n",
+              "bytes": 4046,
+              "created_at": "2026-11-24T22:28:54+08:00",
+              "format": "jsonl",
+              "id": "000032",
+              "note": "留痕来源：框架据派活派生（模型这一句没填 notify）；执笔=本角色的秘书",
+              "path": "work/handoffs.jsonl#000032",
+              "refs": [],
+              "sender": "M",
+              "sha256": "11fd3ba42ad6998744a9493991f1c21eec1ba7e019b0f42bcf4dca076302336d",
+              "sid": "2026-11-22n",
+              "summary": "派活：D（派活：收工门点名一条：「攻」那一环的 `plan 000002` 第 2 轮 history 里指向 `stmt:000030`，而 `verifications` 两路都没有认领给它的、签得住的行 ⇒ 那一行只能记 unknown。请把这一条处置掉，二选一并在回执里写明选了哪条、落在哪张台账行：(1) 补签 —— 若这条命题真有证明稿在盘（F 族 `manuscripts/F/f-proof-*.md`），让产出者自己把那一份送 V（`proof_manuscript` 指稿，别传命题号），拿到干净的「成立」后由 B 收录、签落在现行正文上；(2) 明确放弃 —— 让 B 用通用写口把 `status=abandoned`，并按四档给全 `abandon_kind` + `abandon_basis`（math_error 要 `defect_ref`、difficulty 要写清难在哪、counterexample 要 `experiment_id`、space_too_large 要 `space`）。两条都不许只写状态不写理由。回执里同时给：`verifications/000030.jsonl` 有没有一行「成立」，或 `statements` 那一行 `status` 与 `abandon_kind` 是什么。）",
+              "task_id": "t-000001",
+              "to": "D",
+              "to_task_id": "t-000011"
+            },
+            {
+              "body": "# B → D｜stmt:000030 放弃未落成：秘书受控拒 abandon_difficulty_not_genuine，盘上零写入；另报 proof_no 2 误指已污染等级（theorem 抬档）\n\n- 从：B\n- 到：D\n- 一句话：stmt:000030 放弃未落成：秘书受控拒 abandon_difficulty_not_genuine，盘上零写入；另报 proof_no 2 误指已污染等级（theorem 抬档）\n- 时间：2026-11-24T22:33:45+08:00\n- 引用（前序手稿 / 台账对象）：stmt:000030、stmt:000042、exp:000003\n- 台账：t-000212 / sid 2026-11-22n\n\n## 派活回执：stmt:000030 以 difficulty 档放弃 —— 受控拒，未落成\n\n### 三样回执\n1. **改后的 status 与 abandon_kind**：status 仍 `active`（未改成 abandoned）；提交的 `abandon_kind=difficulty` 未落盘。\n2. **系统拼出的 quote_reason 原文**：本次拒收一笔未写 ⇒ 仍是登记时那一句：「手稿收录（D 只递指针）：普通数值手稿 `work/E/e-num-000003.md` —— 命题逐字取自 `## 命题`，证明栏空着（业主 2026-11-08：普通数值档不写证明正文），程序在实验行的 `code_path`，引文面不适用」。\n3. **受控拒信（原样）**：`abandon_difficulty_not_genuine` —— 秘书原话「这不是「难以逾越的困难」/没指出难在哪（难度判定：不是真困难；salvaged 不是从原证明拆出来的）」。\n\n### 秘书的理由（逐条）\n- difficulty 段与 abandon_basis 逐字重复，可读出的内容全是**流程与基础设施**（缺带区间算术的 certified computation 通道、本会话形式化已关、E 侧只有浮点读数）与**档案错位**（proof_no 2 指向 stmt:000042 的稿），没有落到任何一条引理、任何一步或任何一条假设上；\n- 唯一有数学意味的一点（浮点读数不足以支撑 V 签）属**证据等级不足**，不是数学困难；\n- `salvaged` 为空数组、`proof_text` 为空串 ⇒ 既无「原证明」可拆，也无条目可作可取之处；\n- 该段把 stmt:000030 与稿件的 stmt:000042 混在一起讲，进一步说明讲的是归属与归档，不是这条命题的数学难度。\n\n### 我核对到的（两件，都已坐实）\n- `manuscripts/F/f-proof-000003.md` 的 `## 命题` 是 Δ(p)/A_face/A_diag 那一条（= stmt:000042），与 000030 的「截面面积计算核自检」**不是同一条** ⇒ 你说的 proof_no 2 误指属实；\n- **比放弃更该先修的一条**：stmt:000030 的 `proof_text` 为空、`proof_no 2` 指那份错稿，但 2026-11-24T21:32:49 有一条 `_kind_upgrade` 拿 f-proof-000003 的「连续 3/3 成立、正文 sha 相符」把它从 `conjecture` 抬到 `theorem`，而那份签块的 `statement_id` 是 000042 —— 误指已经污染了等级现算。\n\n### 要你定（二选一，我不替你裁）\n1. **给一条真困难**：落到某条引理 / 某一步 / 某条假设上（例如命题里「每个 p 的坐标截面 = 4Γ(1+1/p)²/Γ(1+2/p)，相对偏差 ≤1e-13」与「p=1000 上偏差落在 O(1/p) 以内」要作为证明成立，缺的是哪一步误差估计、哪条一致界对不上），我原样带进 `difficulty` 重交；\n2. **或改处置**：不放弃 —— 修 proof_no 2 的误指，把 stmt:000030 按 E 的普通数值档（`e-num` / `cross_check` / `strong_conjecture`）重新处置，并撤掉那条被污染的 `theorem` 抬档。\n\n### 我为什么没有自己另编一条\n你明确要求 abandon_basis 逐字用你给的那段；秘书判它不是数学困难。作为执行者我不替派活人圆场、不自己改口径凑过去 —— 编一条我并未核到的数学难点去凑难度档，正是把没核到写成核到了。\n\n### 未改动的\n命题正文一个字没改；stmt:000042 与 `manuscripts/F/f-proof-000003.md` 一个字节没动（只读了两处用于核对）。\n",
+              "bytes": 3799,
+              "created_at": "2026-11-24T22:33:45+08:00",
+              "format": "jsonl",
+              "id": "000034",
+              "note": "",
+              "path": "work/handoffs.jsonl#000034",
+              "refs": [
+                "stmt:000030",
+                "stmt:000042",
+                "exp:000003"
+              ],
+              "sender": "B",
+              "sha256": "c3c02d4e1719544adf8e4c94f7e332709b71da72ebc5e89f1e8b86c6bfb010e2",
+              "sid": "2026-11-22n",
+              "summary": "stmt:000030 放弃未落成：秘书受控拒 abandon_difficulty_not_genuine，盘上零写入；另报 proof_no 2 误指已污染等级（theorem 抬档）",
+              "task_id": "t-000212",
+              "to": "D",
+              "to_task_id": "t-000209"
+            },
+            {
+              "body": "# M → D｜派活：D（派活：这是收工唯一的 blocker（acceptance 的 R6 = plan_progress_rows 记 unknown）。事实你上一轮已核死：`data/attack_plans.json` 的 plan 000002 第 2 轮 history 里 `statement_id=\"000030\"`，而真正被那份稿证明的是 `stmt:000042`（`manuscripts/F/f-proof-000003.md` 的「## 命题」逐字 = 000042 的 statement_full；`verifications/000042.jsonl` 有 8 行、含「成立」；`verifications/000030.jsonl` 根本不存在）。本轮要做的只有一件事：**让 attack_plans 里那一格不再指向一条无签的命题**。走 F 那一侧（attack_plans 是 F 的写口，D 自己改不动）：让 F 用它的 step / 更正入口做下面任一种，哪种真能落盘就用哪种，并在回执里贴改后 `fs.search` 的逐字结果：(1) 把 plan 000002 第 2 轮的 `statement_id` 就地更正为 `000042`（归属更正，不重写整条 history）；(2) 若不能就地改，就 append 一条新的 round（如 round 3），在 `notes`/`cites` 里逐字写明「更正第 2 轮归属：该稿的命题是 stmt:000042，000030 是旧号」，且这一轮的 `statement_id` 只填 `000042`；(3) 若 F 的写口两种都做不到，就让它明确回「做不到 + 拒在哪一格」，不要硬写。回执必须给三样：① 改后 `data/attack_plans.json` 里 plan 000002 全部 history 的 `round` / `statement_id` / `cites` 逐条；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 你认为改完之后收工门 plan_progress_rows 会不会转 pass，判据是什么。不要再开新方向、不要动 statements 的正文。）\n\n- 从：M\n- 到：D\n- 一句话：派活：D（派活：这是收工唯一的 blocker（acceptance 的 R6 = plan_progress_rows 记 unknown）。事实你上一轮已核死：`data/attack_plans.json` 的 plan 000002 第 2 轮 history 里 `statement_id=\"000030\"`，而真正被那份稿证明的是 `stmt:000042`（`manuscripts/F/f-proof-000003.md` 的「## 命题」逐字 = 000042 的 statement_full；`verifications/000042.jsonl` 有 8 行、含「成立」；`verifications/000030.jsonl` 根本不存在）。本轮要做的只有一件事：**让 attack_plans 里那一格不再指向一条无签的命题**。走 F 那一侧（attack_plans 是 F 的写口，D 自己改不动）：让 F 用它的 step / 更正入口做下面任一种，哪种真能落盘就用哪种，并在回执里贴改后 `fs.search` 的逐字结果：(1) 把 plan 000002 第 2 轮的 `statement_id` 就地更正为 `000042`（归属更正，不重写整条 history）；(2) 若不能就地改，就 append 一条新的 round（如 round 3），在 `notes`/`cites` 里逐字写明「更正第 2 轮归属：该稿的命题是 stmt:000042，000030 是旧号」，且这一轮的 `statement_id` 只填 `000042`；(3) 若 F 的写口两种都做不到，就让它明确回「做不到 + 拒在哪一格」，不要硬写。回执必须给三样：① 改后 `data/attack_plans.json` 里 plan 000002 全部 history 的 `round` / `statement_id` / `cites` 逐条；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 你认为改完之后收工门 plan_progress_rows 会不会转 pass，判据是什么。不要再开新方向、不要动 statements 的正文。）\n- 时间：2026-11-24T22:56:30+08:00\n- 引用（前序手稿 / 台账对象）：（无）\n- 台账：t-000001 / sid 2026-11-22n\n- 附注：留痕来源：框架据派活派生（模型这一句没填 notify）；执笔=本角色的秘书\n\n## 派了什么活\n\n- D（派活：这是收工唯一的 blocker（acceptance 的 R6 = plan_progress_rows 记 unknown）。事实你上一轮已核死：`data/attack_plans.json` 的 plan 000002 第 2 轮 history 里 `statement_id=\"000030\"`，而真正被那份稿证明的是 `stmt:000042`（`manuscripts/F/f-proof-000003.md` 的「## 命题」逐字 = 000042 的 statement_full；`verifications/000042.jsonl` 有 8 行、含「成立」；`verifications/000030.jsonl` 根本不存在）。本轮要做的只有一件事：**让 attack_plans 里那一格不再指向一条无签的命题**。走 F 那一侧（attack_plans 是 F 的写口，D 自己改不动）：让 F 用它的 step / 更正入口做下面任一种，哪种真能落盘就用哪种，并在回执里贴改后 `fs.search` 的逐字结果：(1) 把 plan 000002 第 2 轮的 `statement_id` 就地更正为 `000042`（归属更正，不重写整条 history）；(2) 若不能就地改，就 append 一条新的 round（如 round 3），在 `notes`/`cites` 里逐字写明「更正第 2 轮归属：该稿的命题是 stmt:000042，000030 是旧号」，且这一轮的 `statement_id` 只填 `000042`；(3) 若 F 的写口两种都做不到，就让它明确回「做不到 + 拒在哪一格」，不要硬写。回执必须给三样：① 改后 `data/attack_plans.json` 里 plan 000002 全部 history 的 `round` / `statement_id` / `cites` 逐条；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 你认为改完之后收工门 plan_progress_rows 会不会转 pass，判据是什么。不要再开新方向、不要动 statements 的正文。）：参数 `{\"plan_id\": \"000002\", \"wrong_statement_id\": \"000030\", \"correct_statement_id\": \"000042\", \"manuscript\": \"manuscripts/F/f-proof-000003.md\", \"goal\": \"attack_plans plan 000002 的 history 不再指向无签命题 ⇒ plan_progress_rows 转 pass\"}`\n\n## 这一行是怎么来的\n模型这一句派活没有填 `notify` 表 ⇒ 框架据派活本身派生（谁派了谁做什么、参数、为什么），内容全部取自这一句派活；执笔的是本角色自己的秘书（智能体侧只保留『查』，`draft/55` §3.2）。\n",
+              "bytes": 5732,
+              "created_at": "2026-11-24T22:56:30+08:00",
+              "format": "jsonl",
+              "id": "000035",
+              "note": "留痕来源：框架据派活派生（模型这一句没填 notify）；执笔=本角色的秘书",
+              "path": "work/handoffs.jsonl#000035",
+              "refs": [],
+              "sender": "M",
+              "sha256": "b3343c390d66984ad671d532bdb3941957df985041afcc01744d0fb0b7f70aee",
+              "sid": "2026-11-22n",
+              "summary": "派活：D（派活：这是收工唯一的 blocker（acceptance 的 R6 = plan_progress_rows 记 unknown）。事实你上一轮已核死：`data/attack_plans.json` 的 plan 000002 第 2 轮 history 里 `statement_id=\"000030\"`，而真正被那份稿证明的是 `stmt:000042`（`manuscripts/F/f-proof-000003.md` 的「## 命题」逐字 = 000042 的 statement_full；`verifications/000042.jsonl` 有 8 行、含「成立」；`verifications/000030.jsonl` 根本不存在）。本轮要做的只有一件事：**让 attack_plans 里那一格不再指向一条无签的命题**。走 F 那一侧（attack_plans 是 F 的写口，D 自己改不动）：让 F 用它的 step / 更正入口做下面任一种，哪种真能落盘就用哪种，并在回执里贴改后 `fs.search` 的逐字结果：(1) 把 plan 000002 第 2 轮的 `statement_id` 就地更正为 `000042`（归属更正，不重写整条 history）；(2) 若不能就地改，就 append 一条新的 round（如 round 3），在 `notes`/`cites` 里逐字写明「更正第 2 轮归属：该稿的命题是 stmt:000042，000030 是旧号」，且这一轮的 `statement_id` 只填 `000042`；(3) 若 F 的写口两种都做不到，就让它明确回「做不到 + 拒在哪一格」，不要硬写。回执必须给三样：① 改后 `data/attack_plans.json` 里 plan 000002 全部 history 的 `round` / `statement_id` / `cites` 逐条；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 你认为改完之后收工门 plan_progress_rows 会不会转 pass，判据是什么。不要再开新方向、不要动 statements 的正文。）",
+              "task_id": "t-000001",
+              "to": "D"
+            },
+            {
+              "body": "# M → D｜派活：D（派活：这是收工门最后一格（acceptance 的 R6 = plan_progress_rows 记 unknown），你上一轮（t-000227）得出的结论是「F 的两条写口都改不动那一格」。本轮换两个具体做法，仍然只让 F 去改它自己名下的 `attack_plans`（那是它的产出面，不是框架账本区）：(1) 首选：让 F 用 `table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 的完整数组>})` —— 你自己先把 `data/attack_plans.json` 里 plan 000002 的 `history` 逐字读出来，只把第 2 条（`round=2`，`manuscript_path=manuscripts/F/f-proof-000003.md`，`proof_sha256=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db`）里的 `\"statement_id\": \"000030\"` 改成 `\"000042\"`，并在该条加一句 `\"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"`，其余字段与其余轮次一个字节不动，整份数组原样回写（这是 F 对自己产出的更正，不是改别人台账）。(2) 若 (1) 仍被拒，让 F 用它的 `step` 追加一条 `round=3` 的新 history，`statement_id` 只填 `000042`、`cites` 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」。回执必须给三样逐字读数：① 改后 `fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\")` 在 `data/attack_plans.json` 的全部命中行（行号 + 内容）；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 若两条都做不到，逐条贴拒信原文（拒码 + 那句话），不要自己下结论说「做不到」就停。）\n\n- 从：M\n- 到：D\n- 一句话：派活：D（派活：这是收工门最后一格（acceptance 的 R6 = plan_progress_rows 记 unknown），你上一轮（t-000227）得出的结论是「F 的两条写口都改不动那一格」。本轮换两个具体做法，仍然只让 F 去改它自己名下的 `attack_plans`（那是它的产出面，不是框架账本区）：(1) 首选：让 F 用 `table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 的完整数组>})` —— 你自己先把 `data/attack_plans.json` 里 plan 000002 的 `history` 逐字读出来，只把第 2 条（`round=2`，`manuscript_path=manuscripts/F/f-proof-000003.md`，`proof_sha256=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db`）里的 `\"statement_id\": \"000030\"` 改成 `\"000042\"`，并在该条加一句 `\"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"`，其余字段与其余轮次一个字节不动，整份数组原样回写（这是 F 对自己产出的更正，不是改别人台账）。(2) 若 (1) 仍被拒，让 F 用它的 `step` 追加一条 `round=3` 的新 history，`statement_id` 只填 `000042`、`cites` 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」。回执必须给三样逐字读数：① 改后 `fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\")` 在 `data/attack_plans.json` 的全部命中行（行号 + 内容）；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 若两条都做不到，逐条贴拒信原文（拒码 + 那句话），不要自己下结论说「做不到」就停。）\n- 时间：2026-11-24T23:07:46+08:00\n- 引用（前序手稿 / 台账对象）：（无）\n- 台账：t-000001 / sid 2026-11-22n\n- 附注：留痕来源：框架据派活派生（模型这一句没填 notify）；执笔=本角色的秘书\n\n## 派了什么活\n\n- D（派活：这是收工门最后一格（acceptance 的 R6 = plan_progress_rows 记 unknown），你上一轮（t-000227）得出的结论是「F 的两条写口都改不动那一格」。本轮换两个具体做法，仍然只让 F 去改它自己名下的 `attack_plans`（那是它的产出面，不是框架账本区）：(1) 首选：让 F 用 `table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 的完整数组>})` —— 你自己先把 `data/attack_plans.json` 里 plan 000002 的 `history` 逐字读出来，只把第 2 条（`round=2`，`manuscript_path=manuscripts/F/f-proof-000003.md`，`proof_sha256=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db`）里的 `\"statement_id\": \"000030\"` 改成 `\"000042\"`，并在该条加一句 `\"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"`，其余字段与其余轮次一个字节不动，整份数组原样回写（这是 F 对自己产出的更正，不是改别人台账）。(2) 若 (1) 仍被拒，让 F 用它的 `step` 追加一条 `round=3` 的新 history，`statement_id` 只填 `000042`、`cites` 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」。回执必须给三样逐字读数：① 改后 `fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\")` 在 `data/attack_plans.json` 的全部命中行（行号 + 内容）；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 若两条都做不到，逐条贴拒信原文（拒码 + 那句话），不要自己下结论说「做不到」就停。）：参数 `{\"plan_id\": \"000002\", \"wrong_statement_id\": \"000030\", \"correct_statement_id\": \"000042\", \"manuscript\": \"manuscripts/F/f-proof-000003.md\"}`\n\n## 为什么派它\nacceptance 是收工唯一的 blocker，R6 那一格只差 attack_plans 里一个字段的正确归属；D2 已核死事实、只差一个能落盘的写法\n\n## 这一行是怎么来的\n模型这一句派活没有填 `notify` 表 ⇒ 框架据派活本身派生（谁派了谁做什么、参数、为什么），内容全部取自这一句派活；执笔的是本角色自己的秘书（智能体侧只保留『查』，`draft/55` §3.2）。\n",
+              "bytes": 5954,
+              "created_at": "2026-11-24T23:07:46+08:00",
+              "format": "jsonl",
+              "id": "000036",
+              "note": "留痕来源：框架据派活派生（模型这一句没填 notify）；执笔=本角色的秘书",
+              "path": "work/handoffs.jsonl#000036",
+              "refs": [],
+              "sender": "M",
+              "sha256": "cf97d72e34e2f6e335f3b91fb9bbba03f74ee74ad9901b5be6228b5006a9d09e",
+              "sid": "2026-11-22n",
+              "summary": "派活：D（派活：这是收工门最后一格（acceptance 的 R6 = plan_progress_rows 记 unknown），你上一轮（t-000227）得出的结论是「F 的两条写口都改不动那一格」。本轮换两个具体做法，仍然只让 F 去改它自己名下的 `attack_plans`（那是它的产出面，不是框架账本区）：(1) 首选：让 F 用 `table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 的完整数组>})` —— 你自己先把 `data/attack_plans.json` 里 plan 000002 的 `history` 逐字读出来，只把第 2 条（`round=2`，`manuscript_path=manuscripts/F/f-proof-000003.md`，`proof_sha256=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db`）里的 `\"statement_id\": \"000030\"` 改成 `\"000042\"`，并在该条加一句 `\"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"`，其余字段与其余轮次一个字节不动，整份数组原样回写（这是 F 对自己产出的更正，不是改别人台账）。(2) 若 (1) 仍被拒，让 F 用它的 `step` 追加一条 `round=3` 的新 history，`statement_id` 只填 `000042`、`cites` 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」。回执必须给三样逐字读数：① 改后 `fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\")` 在 `data/attack_plans.json` 的全部命中行（行号 + 内容）；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 若两条都做不到，逐条贴拒信原文（拒码 + 那句话），不要自己下结论说「做不到」就停。）",
+              "task_id": "t-000001",
+              "to": "D",
+              "to_task_id": "t-000221"
+            },
+            {
+              "body": "# A → D｜lit:000003 首部核实：作者 GERGELY AMBRUS／arXiv:2107.14778v3 22 Jun 2023／12 页，无期刊卷期页；authors·venue·year 三个身份格受 identity_cell_refused 挡住未写入，pages 已补，③ 逐字原句见正文\n\n- 从：A\n- 到：D\n- 一句话：lit:000003 首部核实：作者 GERGELY AMBRUS／arXiv:2107.14778v3 22 Jun 2023／12 页，无期刊卷期页；authors·venue·year 三个身份格受 identity_cell_refused 挡住未写入，pages 已补，③ 逐字原句见正文\n- 时间：2026-11-25T00:09:01+08:00\n- 引用（前序手稿 / 台账对象）：lit:000003、stmt:000111、stmt:000113、rel:000018\n- 台账：t-000252 / sid 2026-11-22n\n\n## 做了什么\n按你点名的文件 `reference/5d236efcb7ea-critical-central-sections-of-the-cube.pdf`（sha256 与 955094 字节与派活一致）核 lit:000003 的首部元数据。抽读链：`text.extract(path=\"5d236efcb7ea-…pdf\", lit_id=\"000003\")` → `library/000003.txt`（12 页 / 27933 字 / 可读）→ `fs.read` 读了首部与 §1。\n\n## 四格的改前 → 改后\n| 格 | 改前 | 改后 | 依据 |\n|---|---|---|---|\n| authors | `[]` | `[]`（**未写入**） | 逐字读数 **GERGELY AMBRUS**（首部全大写、单作者）。`table.update` 受控拒 `identity_cell_refused`（身份格只由收编口/provider 记录写）；`search.register` 判重命中只复用 lit_id；`lit.stage_*` items 不收 authors ⇒ 无写口 |\n| venue | `null` | `null`（**未写入**） | 逐字读数 **arXiv:2107.14778v3**；PDF 上**取不到期刊名**（首部只有 2020 MSC 52A40/52A38/49Q20、Key words、致谢、arXiv 戳） |\n| year | `null` | `null`（**未写入**） | 逐字读数 **22 Jun 2023**（arXiv v3 日期） |\n| pages | `\"\"` | `\"12 pp.（PDF 共 12 页；期刊卷期页 PDF 上取不到）\"` | 12 页是 PDF 页数；**期刊卷期页 PDF 上取不到**（正文只有内部页码） |\n附带把 `summary` 写成同一份逐字题录（可写状态格）。**没有按题名猜作者或期刊**；不存在的格留空并在此如实说明。\n\n## ③ 你要的那一句（逐字，未改写未缩写）\n**位置**：`===== page 2 =====`（框架分页标记，PDF 第 2 页），§1 «History and results» 第二段（段首 \"In this note we apply…\"，段末 \"…see the remark following the proof of Theorem 1.\"）；`library/000003.txt` 第 79–83 行，正文 sha256 `7f80d6808d557f09ad03516437b27c7b47878a0e41cba6a73711f564a7979820`。\n\n> In this note we apply Fourier analytic methods to study critical central hyperplane sections: these are the sections a⊥∩Qn whose normal vector a is a critical point on Sn−1 with respect to the volume of the central section of Qn. Such normal vectors will be referred to as critical directions.\n\n摘要口径的备选（page 1）：「Using Fourier analytic and variational methods, we retrieve a geometric condition characterizing critical sections which, by entirely different methods, was recently proven by Ivanov and Tsiutsiurupa.」\n两处都直接落在「cube 中心截面体积作为方向函数的临界点」这个主题上，且都点名了 Ivanov–Tsiutsiurupa [IT21] 的既有特征刻画 —— 拿它做背景站得住（它把 IT21 的必要条件换了 Fourier 解析与变分方法重证，并把临界截面在 n=3,4 情形分类，含非对角临界截面）。\n\n## B 收编\n已派 B 收编（t-000253，outcome=ok）：概念行 **stmt:000111**（临界方向与临界中心超平面截面，出处 p.2）、**stmt:000113**（k-对角方向与对角截面）；关系行该文献侧原有 **rel:000018**（quote 逐字核过 / p.1），本趟按「补录」口径新增关系（我这一步只读到 B 摘要的截断段，条数以 B 台账为准）。\n\n## 卡在哪 / 要你做什么\n唯一缺口：**authors / venue / year 三个身份格本会话无写口**（受控拒绝，不是查不到）。要落进那三格，需要走收编口（provider 记录 / 重新登记），或由你在结论里直接引用本回执的逐字读数。待裁表：`lit.stage_list(request_id=\"*\")` = 0 条 pending（25 admitted / 5 rejected），本趟无新检索、无新文献行。\n",
+              "bytes": 4164,
+              "created_at": "2026-11-25T00:09:01+08:00",
+              "format": "jsonl",
+              "id": "000039",
+              "note": "",
+              "path": "work/handoffs.jsonl#000039",
+              "refs": [
+                "lit:000003",
+                "stmt:000111",
+                "stmt:000113",
+                "rel:000018"
+              ],
+              "sender": "A",
+              "sha256": "e7bfc0f362aa36237cd696e8aefc2b3b2edcf415354c5b5994327bd1039e79cf",
+              "sid": "2026-11-22n",
+              "summary": "lit:000003 首部核实：作者 GERGELY AMBRUS／arXiv:2107.14778v3 22 Jun 2023／12 页，无期刊卷期页；authors·venue·year 三个身份格受 identity_cell_refused 挡住未写入，pages 已补，③ 逐字原句见正文",
+              "task_id": "t-000252",
+              "to": "D",
+              "to_task_id": "t-000251"
+            }
+          ]
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 77312,
+        "prompt_cache_miss_tokens": 2314,
+        "tokens_in": 79626,
+        "tokens_out": 1857,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000251"
+    },
+    {
+      "index": 10,
+      "shape": "tool",
+      "payload": {
+        "name": "conductor.ack",
+        "args": {
+          "item_ids": [
+            "t-000261",
+            "t-000262"
+          ],
+          "close": "acked",
+          "note": "A 的 lit:000003 首部核实回执（手稿 000039）与 clock 到点提醒都已读；结论转进 RESEARCH.md 与给 G 的汇报"
+        },
+        "why": "读完 A 的回执与 clock 提醒，消板"
+      },
+      "result": {
+        "tool": "conductor.ack",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "ok": true,
+          "state": "acked",
+          "acked": [
+            "t-000261",
+            "t-000262"
+          ],
+          "already_done": [
+            "t-000261",
+            "t-000262"
+          ],
+          "refused": [],
+          "unknown": [],
+          "missing": [],
+          "not_yours": [],
+          "refusal_codes": [],
+          "results": [
+            {
+              "item_id": "t-000261",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000262",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            }
+          ],
+          "count": 2,
+          "requested": 2,
+          "by_task_id": "t-000251",
+          "note": "A 的 lit:000003 首部核实回执（手稿 000039）与 clock 到点提醒都已读；结论转进 RESEARCH.md 与给 G 的汇报",
+          "close": "acked",
+          "reason": "确认了 2 条"
+        },
+        "error": "",
+        "meta": {
+          "checked": true,
+          "ok": true,
+          "state": "acked",
+          "acked": [
+            "t-000261",
+            "t-000262"
+          ],
+          "already_done": [
+            "t-000261",
+            "t-000262"
+          ],
+          "refused": [],
+          "unknown": [],
+          "missing": [],
+          "not_yours": [],
+          "refusal_codes": [],
+          "results": [
+            {
+              "item_id": "t-000261",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000262",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            }
+          ],
+          "count": 2,
+          "requested": 2,
+          "by_task_id": "t-000251",
+          "note": "A 的 lit:000003 首部核实回执（手稿 000039）与 clock 到点提醒都已读；结论转进 RESEARCH.md 与给 G 的汇报",
+          "close": "acked",
+          "reason": "确认了 2 条"
+        },
+        "multi_call": {
+          "turn_index": 10,
+          "call_index": 0,
+          "calls": 2,
+          "step_index": 10
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 78848,
+        "prompt_cache_miss_tokens": 4978,
+        "tokens_in": 83826,
+        "tokens_out": 1787,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000251"
+    },
+    {
+      "index": 11,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.edit",
+        "args": {
+          "path": "manuscripts/D/RESEARCH.md",
+          "old_string": "- **Ball（立方体切片）**：`lit:000003` p.1 逐字",
+          "new_string": "- **`lit:000003` 的题录（A 按本地 PDF 首部核实，交接手稿 000039）**：作者 GERGELY AMBRUS（首部全大写，单作者）；\n  arXiv:2107.14778v3 [math.MG]，22 Jun 2023；PDF 共 12 页；期刊名与卷期页 PDF 上取不到（如实记取不到，不从外部补）。\n  台账落点：`lit:000003.pages`（12 pp.）与 `.summary`（含题录读数）已写；`authors`/`venue`/`year` 三个**身份格**\n  被 `identity_cell_refused` 挡住（通用写口不改身份格，改它会造出第二个 dedup 主键）⇒ 逐字读数落在手稿 000039，\n  关系行落 `rel:000077`–`rel:000080`（均 `quote_verified=true`）。\n- **Ball（立方体切片）**：`lit:000003` p.1 逐字",
+          "note": "补 lit:000003 的题录读数与三个身份格被挡的来路（G 点名缺的正是这一格）"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "fs.edit",
+        "ok": true,
+        "data": {
+          "path": "manuscripts/D/RESEARCH.md",
+          "sha256_before": "1c0cad81696ece325bd41579661a2821afed5f59fef53f7225afdfde46cd82a5",
+          "sha256_after": "e5db540f6db4aaf17e9121915093a58bfbaa16d3fe75ba2f6ef8f850c17affad",
+          "replacements": 1,
+          "bytes_before": 21689,
+          "bytes_after": 22343,
+          "note": "补 lit:000003 的题录读数与三个身份格被挡的来路（G 点名缺的正是这一格）"
+        },
+        "error": "",
+        "meta": {
+          "path": "manuscripts/D/RESEARCH.md",
+          "replacements": 1,
+          "note": "补 lit:000003 的题录读数与三个身份格被挡的来路（G 点名缺的正是这一格）"
+        },
+        "warn": "这一步给了 2 条调用，已按顺序逐条：第 1 条 conductor.ack 成功：2；第 2 条 fs.edit 成功。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 10,
+          "call_index": 1,
+          "calls": 2,
+          "step_index": 11,
+          "summary": "这一步给了 2 条调用，已按顺序逐条：第 1 条 conductor.ack 成功：2；第 2 条 fs.edit 成功。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 10,
+            "calls": 2,
+            "items": 2,
+            "steps": [
+              10,
+              11
+            ],
+            "executed": 2,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000251"
+    },
+    {
+      "index": 12,
+      "shape": "final",
+      "payload": {
+        "final": "lit:000003 首部核实已完成：A 取回、B 收录，三样逐字读数已落在盘上，但其中两项（作者、期刊/年份）受结构限制，写不进 literature 的“身份格”，只能落在交接手稿与关系行里。以下只给指针，不夹带正文。\n\n**落点（可核指针）**\n1. 三样逐字读数（① 作者全名按出现顺序、② arXiv 编号+年份+页数、③ 摘要/引言里那句主题相关英文原句）的正文落点：**交接手稿 000039**（`manuscripts.read(id=\"000039\")`，sender=A，task=t-000252，refs 含 lit:000003）。\n2. 台账已写的两格：**`lit:000003.pages`** = 「12 pp.（PDF 共 12 页；期刊卷期页 PDF 上取不到）」；**`lit:000003.summary`** = 按本地 PDF 首部逐字读出的题录（单作者、arXiv:2107.14778v3 [math.MG]、22 Jun 2023、12 页；期刊名与卷期页 PDF 上取不到，如实记取不到，未从外部补）。\n3. 逐字引文落成的关系行：**`rel:000077`–`rel:000080`**（lit_id=000003，均 `quote_verified=true`，page_range p.1–p.2），与本轮同一批登记。哪一条逐字对应 ③ 原句，请看手稿 000039 的正文对照。\n\n**如实报告的一格缺口（不许写成没有）**\n`lit:000003` 的 **`authors` / `venue` / `year` 三个身份格仍是空**：通用写口改它们被受控拒 `identity_cell_refused`（身份格只由收编口/provider 写，硬改会造出第二个 dedup 主键）；A 已试过重走登记口，命中去重（duplicate）只复用 lit_id、不更新身份格。⇒ **这三个格在本框架里目前没有可用的写入路径**，读数是「取回了但写不进身份格」，不是「PDF 上没有」。\n\n**对正文引用是否站得住的判断依据**：③ 的原句在 `rel:000077`/`rel:000078`（`quote_verified=true`，p.2）里，据此可判断正文把 lit:000003 当作“cube 中心截面随方向变化的临界点”背景是否站得住——具体判定请你读 000039 正文后自己定，我不替你转述原句。",
+        "evidence": [
+          "lit:000003",
+          "rel:000077",
+          "rel:000078",
+          "rel:000079",
+          "rel:000080",
+          "手稿000039",
+          "t-000252",
+          "t-000253",
+          "t-000254"
+        ],
+        "notify": {
+          "to": "G",
+          "summary": "lit:000003 首部已核实：三样逐字读数落手稿 000039；pages/summary 已写、rel:000077–000080 已登记；authors/venue/year 三个身份格被 identity_cell_refused 挡住，如实报缺口",
+          "body": "# D → G｜lit:000003 首部核实结果（只给指针，不夹带正文）\n\n## 做了什么\n按你点名的文件 `reference/5d236efcb7ea-critical-central-sections-of-the-cube.pdf`（sha256 `5d236efc…51611`，955094 字节，与 literature 行 `download.sha256` 一致）：派 A（t-000252）抽读首部与 §1 取三样逐字读数；A 转 B（t-000253）登记关系行、并由 V（t-000254）复核；我这边落手稿与台账核对。\n\n## 落点（全部可核）\n| 三样里的哪一样 | 落点 | 状态 |\n|---|---|---|\n| ① 作者全名（按文中出现顺序，逐字） | **手稿 000039**（`manuscripts.read(id=\"000039\")`） | 逐字读数在；未写进 `lit:000003.authors`（见缺口） |\n| ② arXiv 编号 + 年份 + 页数；期刊卷期页 | **手稿 000039** + **`lit:000003.summary`** + **`lit:000003.pages`** | 已写；期刊名与卷期页 **PDF 上取不到**，如实记取不到，未从外部补 |\n| ③ 摘要/引言里那句主题相关英文原句 | **手稿 000039** 正文；关系行 **`rel:000077`–`rel:000080`**（`quote_verified=true`，p.1–p.2） | 已登记 |\n\n## 我卡在哪（如实，不写成「没有」）\n`lit:000003` 的 `authors` / `venue` / `year` 三个**身份格仍为空**：通用写口改它们被受控拒 `identity_cell_refused`（身份格只由收编口/provider 写，硬改会造出第二个 dedup 主键）；A 重走登记口命中去重（duplicate），只复用 lit_id、不更新身份格。⇒ 读数是「**取回了、但当前没有写入身份格的路径**」，不是「PDF 上没有这份信息」。正文若要按「作者+年份」引用 lit:000003，需引用**手稿 000039** 的逐字读数，或等框架给出身份格的写入口。\n\n## 我这边落下的东西\n`manuscripts/D/RESEARCH.md` §1.2 已补一条：lit:000003 题录读数来源（手稿 000039）+ 三个身份格被 `identity_cell_refused` 挡住这一事实，供下一趟直接读得到。\n\n## 请你做什么\n正文引它做背景时，请按 000039 的逐字读数判定 ③ 那句是否支撑你的用法；需要作者/年份出现在参考文献格式里时，请明确要「引用 000039 的读数」而不是 `lit:000003` 的身份格（那三格暂时读不出值）。",
+          "refs": [
+            "lit:000003",
+            "rel:000077",
+            "rel:000078",
+            "rel:000079",
+            "rel:000080"
+          ]
+        }
+      },
+      "result": {
+        "notify_handoff": {
+          "handoff": "000040",
+          "ok": true,
+          "id": "000040",
+          "path": "work/handoffs.jsonl#000040",
+          "to": "G",
+          "brief": "lit:000003 首部已核实：三样逐字读数落手稿 000039；pages/summary 已写、rel:000077–000080 已登记；authors/venue/year 三个身份格被 identity_cell_refused 挡住，如实报缺口",
+          "addressing": {
+            "checked": true,
+            "how": "parent",
+            "to": "G",
+            "kind": "parent",
+            "name": "G1",
+            "task_id": "t-000244",
+            "role": "G",
+            "brief": "",
+            "candidates": [],
+            "callable": "父 G1（t-000244）、子 probe-a-1（t-000252）",
+            "why": "名册成员（parent）⇒ 手稿写角色 G，通知投实例 G",
+            "delivery": "roster",
+            "manuscript_to": "G",
+            "addressed_by": "role_fallback"
+          },
+          "notify_channel": "roster",
+          "revises": "",
+          "existing_same_summary": {
+            "count": 0,
+            "ids": [],
+            "note": "查过了：没有同一句话的既有交接"
+          },
+          "notified": "t-000263",
+          "error": "",
+          "note": "收件人下次运行时（或本步之后）会在收件箱/板上看到编号；它用 `manuscripts.read` 读全文"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 83072,
+        "prompt_cache_miss_tokens": 2898,
+        "tokens_in": 85970,
+        "tokens_out": 1853,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000251"
+    }
+  ],
+  "final": "lit:000003 首部核实已完成：A 取回、B 收录，三样逐字读数已落在盘上，但其中两项（作者、期刊/年份）受结构限制，写不进 literature 的“身份格”，只能落在交接手稿与关系行里。以下只给指针，不夹带正文。\n\n**落点（可核指针）**\n1. 三样逐字读数（① 作者全名按出现顺序、② arXiv 编号+年份+页数、③ 摘要/引言里那句主题相关英文原句）的正文落点：**交接手稿 000039**（`manuscripts.read(id=\"000039\")`，sender=A，task=t-000252，refs 含 lit:000003）。\n2. 台账已写的两格：**`lit:000003.pages`** = 「12 pp.（PDF 共 12 页；期刊卷期页 PDF 上取不到）」；**`lit:000003.summary`** = 按本地 PDF 首部逐字读出的题录（单作者、arXiv:2107.14778v3 [math.MG]、22 Jun 2023、12 页；期刊名与卷期页 PDF 上取不到，如实记取不到，未从外部补）。\n3. 逐字引文落成的关系行：**`rel:000077`–`rel:000080`**（lit_id=000003，均 `quote_verified=true`，page_range p.1–p.2），与本轮同一批登记。哪一条逐字对应 ③ 原句，请看手稿 000039 的正文对照。\n\n**如实报告的一格缺口（不许写成没有）**\n`lit:000003` 的 **`authors` / `venue` / `year` 三个身份格仍是空**：通用写口改它们被受控拒 `identity_cell_refused`（身份格只由收编口/provider 写，硬改会造出第二个 dedup 主键）；A 已试过重走登记口，命中去重（duplicate）只复用 lit_id、不更新身份格。⇒ **这三个格在本框架里目前没有可用的写入路径**，读数是「取回了但写不进身份格」，不是「PDF 上没有」。\n\n**对正文引用是否站得住的判断依据**：③ 的原句在 `rel:000077`/`rel:000078`（`quote_verified=true`，p.2）里，据此可判断正文把 lit:000003 当作“cube 中心截面随方向变化的临界点”背景是否站得住——具体判定请你读 000039 正文后自己定，我不替你转述原句。",
+  "evidence": [
+    "lit:000003",
+    "rel:000077",
+    "rel:000078",
+    "rel:000079",
+    "rel:000080",
+    "手稿000039",
+    "t-000252",
+    "t-000253",
+    "t-000254"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 1,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 11,
+  "compactions": 0,
+  "mailbox_items": [
+    "t-000261",
+    "t-000262"
+  ],
+  "mailbox_msgs": [],
+  "mailbox_delivered": 2,
+  "monitor_turns": 1,
+  "wakes": 1,
+  "wake_ids": [
+    "wk-000081"
+  ],
+  "wake_events": [
+    {
+      "wake_id": "wk-000081",
+      "task_id": "t-000251",
+      "role": "D",
+      "timer_id": "tm-000259",
+      "kind": "timer",
+      "reason": "核实并把在册文献 lit:000003 的首部元数据补齐，三样逐字读数：① 作者全名（按文中出现顺序，逐字照抄）；② 期刊名或 arXiv 编号 + 年份 + 卷期页（能取到几样给几样，取不到的如实写「PDF 上取不到」，不许与 PDF 不符）；③ 摘要或引言里与「cube 的中心截面随方向变化时的临界点」这一主题直接相关的一句话（逐字英文原文，不要改写、不要缩写）。PDF 已在本地：refere",
+      "purpose": "核实并把在册文献 lit:000003 的首部元数据补齐，三样逐字读数：① 作者全名（按文中出现顺序，逐字照抄）；② 期刊名或 arXiv 编号 + 年份 + 卷期页（能取到几样给几样，取不到的如实写「PDF 上取不到」，不许与 PDF 不符）；③ 摘要或引言里与「cube 的中心截面随方向变化时的临界点」这一主题直接相关的一句话（逐字英文原文，不要改写、不要缩写）。PDF 已在本地：refere",
+      "purpose_missing": false,
+      "message": "时间到：核实并把在册文献 lit:000003 的首部元数据补齐，三样逐字读数：① 作者全名（按文中出现顺序，逐字照抄）；② 期刊名或 arXiv 编号 + 年份 + 卷期页（能取到几样给几样，取不到的如实写「PDF 上取不到」，不许与 PDF 不符）；③ 摘要或引言里与「cube 的中心截面随方向变化时的临界点」这一主题直接相关的一句话（逐字英文原文，不要改写、不要缩写）。PDF 已在本地：refere｜等了 9 分钟 21 秒（起于 23:59:48，到于 00:09:09）。它交的是：ok：执行完成",
+      "waited_sec": 561.764409,
+      "triggered_by": "target_event",
+      "wait_for": "task:t-000252",
+      "due_at": "",
+      "fired_at": "2026-11-24T16:09:10.395337+00:00",
+      "mailbox_item_id": "t-000262",
+      "state": "pending"
+    }
+  ],
+  "clock_pumps": 22,
+  "clock_fired": 2,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "D 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "D",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    },
+    "own_children": [
+      "t-000252"
+    ],
+    "return_given": [
+      "t-000252"
+    ],
+    "reentry_turns": 2,
+    "reentry_reasons": [
+      "派活之后还没给过模型回合：这一批 1 项还在跑（t-000252），这一拍的 waiter 全是在等它们 ⇒ 这一拍返场问模型一次，下一拍起才按挂机口径走",
+      "上一拍是等谁的唤醒（t-000252 回来）—— 那一拍按 ③ 跳过，那一批的产出现在就在上下文里 ⇒ 这一拍返场问模型（不许再睡一拍）"
+    ],
+    "research_fp": "",
+    "patrol": {
+      "checked": true,
+      "mounted": false,
+      "skipped": "role",
+      "timer_id": "",
+      "interval_sec": 1200.0,
+      "remaining_sec": null,
+      "reason": "轮查计时器只挂给主控（M）：这一趟是 D ⇒ 不挂"
+    },
+    "asked_sec": 0.5,
+    "slice_sec": 1.0,
+    "parked_turns": 1,
+    "skip_calls": 2,
+    "woke_turns": 1,
+    "woke_reasons": [
+      "event"
+    ]
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [
+    "000040"
+  ],
+  "summons": [
+    "A"
+  ],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [
+    {
+      "kind": "summon",
+      "counted": true,
+      "task_id": "t-000252",
+      "role": "A",
+      "step": 2,
+      "status": "running",
+      "outcome": "",
+      "handoff_id": "",
+      "outputs": [
+        "t-000252"
+      ],
+      "disposition": ""
+    }
+  ],
+  "summons_total": 1,
+  "summons_consumed": 1,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 1,
+    "summons_consumed": 1,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [
+      {
+        "kind": "summon",
+        "counted": true,
+        "task_id": "t-000252",
+        "role": "A",
+        "step": 2,
+        "status": "running",
+        "outcome": "",
+        "handoff_id": "",
+        "outputs": [
+          "t-000252"
+        ],
+        "disposition": "consumed",
+        "evidence": {
+          "step": 12,
+          "shape": "final",
+          "effect": "收工结论里的具体产物指涉",
+          "refs": [
+            "t-000252"
+          ]
+        }
+      }
+    ],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p328",
+    "role": "D",
+    "prompt_sha256": "3b7b330e13bbea61fe2c7e2776e555b393cf48d7ed9445504148d038a60cb0e9",
+    "prompt_chars": 81720,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "TOOL_29",
+      "TOOL_30",
+      "TOOL_31",
+      "TOOL_32",
+      "TOOL_33",
+      "TOOL_34",
+      "TOOL_35",
+      "TOOL_36",
+      "TOOL_37",
+      "TOOL_38",
+      "TOOL_39",
+      "TOOL_40",
+      "TOOL_41",
+      "TOOL_42",
+      "TOOL_43",
+      "TOOL_44",
+      "TOOL_45",
+      "TOOL_46",
+      "TOOL_47",
+      "TOOL_48",
+      "TOOL_49",
+      "TOOL_50",
+      "TOOL_51",
+      "TOOL_52",
+      "TOOL_53",
+      "TOOL_54",
+      "TOOL_55",
+      "TOOL_56",
+      "TOOL_57",
+      "TOOL_58",
+      "TOOL_59",
+      "TOOL_60",
+      "TOOL_61",
+      "TOOL_62",
+      "TOOL_63",
+      "TOOL_64",
+      "TOOL_65",
+      "TOOL_66",
+      "TOOL_67",
+      "TOOL_68",
+      "TOOL_69",
+      "TOOL_70",
+      "TOOL_71",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_LIMITS",
+      "COLLAB_NAMES",
+      "PARENT_STOP",
+      "PARENT_ROSTER",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 11,
+    "tokens_in": 743854,
+    "tokens_out": 10766,
+    "usd": 0.013046,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 10,
+    "no_request_calls": 0,
+    "hit": 714240,
+    "miss": 29389,
+    "unknown_calls": 0,
+    "tokens_in": 743629,
+    "hit_rate": 0.9605,
+    "mismatched_calls": 0,
+    "saved_usd": 0.104992,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 636.281,
+  "end_ts": "2026-11-25T00:10:04+08:00",
+  "notes": [
+    "第 3 步返场：子代理回来 0 条，还在跑 1 条（这一拍为了返场没等子：返场判据给过之后才等）",
+    "返场（Q22）：派活之后还没给过模型回合：这一批 1 项还在跑（t-000252），这一拍的 waiter 全是在等它们 ⇒ 这一拍返场问模型一次，下一拍起才按挂机口径走",
+    "第 4 步返场：子代理回来 0 条，还在跑 1 条（等待 300.0s，原因 slice）",
+    "第 5 步返场：子代理回来 1 条，还在跑 0 条（等待 68.2s，原因 settled）",
+    "返场（Q22）：上一拍是等谁的唤醒（t-000252 回来）—— 那一拍按 ③ 跳过，那一批的产出现在就在上下文里 ⇒ 这一拍返场问模型（不许再睡一拍）",
+    "收工时名下还有 1 条证明没有 V 的签字（读数，不拦收工；明细：000112）",
+    "缓存读数：命中 714240 / 未命中 29389 token，命中率 96.0%（10 次调用）；按 modelcost 口径估算可省 约 0.104992 美元",
+    "子产出处理读数：summons_total=1，consumed=1，waived=0，unknown=0，unconsumed=0"
+  ],
+  "final_payload": {
+    "final": "lit:000003 首部核实已完成：A 取回、B 收录，三样逐字读数已落在盘上，但其中两项（作者、期刊/年份）受结构限制，写不进 literature 的“身份格”，只能落在交接手稿与关系行里。以下只给指针，不夹带正文。\n\n**落点（可核指针）**\n1. 三样逐字读数（① 作者全名按出现顺序、② arXiv 编号+年份+页数、③ 摘要/引言里那句主题相关英文原句）的正文落点：**交接手稿 000039**（`manuscripts.read(id=\"000039\")`，sender=A，task=t-000252，refs 含 lit:000003）。\n2. 台账已写的两格：**`lit:000003.pages`** = 「12 pp.（PDF 共 12 页；期刊卷期页 PDF 上取不到）」；**`lit:000003.summary`** = 按本地 PDF 首部逐字读出的题录（单作者、arXiv:2107.14778v3 [math.MG]、22 Jun 2023、12 页；期刊名与卷期页 PDF 上取不到，如实记取不到，未从外部补）。\n3. 逐字引文落成的关系行：**`rel:000077`–`rel:000080`**（lit_id=000003，均 `quote_verified=true`，page_range p.1–p.2），与本轮同一批登记。哪一条逐字对应 ③ 原句，请看手稿 000039 的正文对照。\n\n**如实报告的一格缺口（不许写成没有）**\n`lit:000003` 的 **`authors` / `venue` / `year` 三个身份格仍是空**：通用写口改它们被受控拒 `identity_cell_refused`（身份格只由收编口/provider 写，硬改会造出第二个 dedup 主键）；A 已试过重走登记口，命中去重（duplicate）只复用 lit_id、不更新身份格。⇒ **这三个格在本框架里目前没有可用的写入路径**，读数是「取回了但写不进身份格」，不是「PDF 上没有」。\n\n**对正文引用是否站得住的判断依据**：③ 的原句在 `rel:000077`/`rel:000078`（`quote_verified=true`，p.2）里，据此可判断正文把 lit:000003 当作“cube 中心截面随方向变化的临界点”背景是否站得住——具体判定请你读 000039 正文后自己定，我不替你转述原句。",
+    "evidence": [
+      "lit:000003",
+      "rel:000077",
+      "rel:000078",
+      "rel:000079",
+      "rel:000080",
+      "手稿000039",
+      "t-000252",
+      "t-000253",
+      "t-000254"
+    ],
+    "notify": {
+      "to": "G",
+      "summary": "lit:000003 首部已核实：三样逐字读数落手稿 000039；pages/summary 已写、rel:000077–000080 已登记；authors/venue/year 三个身份格被 identity_cell_refused 挡住，如实报缺口",
+      "body": "# D → G｜lit:000003 首部核实结果（只给指针，不夹带正文）\n\n## 做了什么\n按你点名的文件 `reference/5d236efcb7ea-critical-central-sections-of-the-cube.pdf`（sha256 `5d236efc…51611`，955094 字节，与 literature 行 `download.sha256` 一致）：派 A（t-000252）抽读首部与 §1 取三样逐字读数；A 转 B（t-000253）登记关系行、并由 V（t-000254）复核；我这边落手稿与台账核对。\n\n## 落点（全部可核）\n| 三样里的哪一样 | 落点 | 状态 |\n|---|---|---|\n| ① 作者全名（按文中出现顺序，逐字） | **手稿 000039**（`manuscripts.read(id=\"000039\")`） | 逐字读数在；未写进 `lit:000003.authors`（见缺口） |\n| ② arXiv 编号 + 年份 + 页数；期刊卷期页 | **手稿 000039** + **`lit:000003.summary`** + **`lit:000003.pages`** | 已写；期刊名与卷期页 **PDF 上取不到**，如实记取不到，未从外部补 |\n| ③ 摘要/引言里那句主题相关英文原句 | **手稿 000039** 正文；关系行 **`rel:000077`–`rel:000080`**（`quote_verified=true`，p.1–p.2） | 已登记 |\n\n## 我卡在哪（如实，不写成「没有」）\n`lit:000003` 的 `authors` / `venue` / `year` 三个**身份格仍为空**：通用写口改它们被受控拒 `identity_cell_refused`（身份格只由收编口/provider 写，硬改会造出第二个 dedup 主键）；A 重走登记口命中去重（duplicate），只复用 lit_id、不更新身份格。⇒ 读数是「**取回了、但当前没有写入身份格的路径**」，不是「PDF 上没有这份信息」。正文若要按「作者+年份」引用 lit:000003，需引用**手稿 000039** 的逐字读数，或等框架给出身份格的写入口。\n\n## 我这边落下的东西\n`manuscripts/D/RESEARCH.md` §1.2 已补一条：lit:000003 题录读数来源（手稿 000039）+ 三个身份格被 `identity_cell_refused` 挡住这一事实，供下一趟直接读得到。\n\n## 请你做什么\n正文引它做背景时，请按 000039 的逐字读数判定 ③ 那句是否支撑你的用法；需要作者/年份出现在参考文献格式里时，请明确要「引用 000039 的读数」而不是 `lit:000003` 的身份格（那三格暂时读不出值）。",
+      "refs": [
+        "lit:000003",
+        "rel:000077",
+        "rel:000078",
+        "rel:000079",
+        "rel:000080"
+      ]
+    }
+  },
+  "task_id": "t-000251"
+}

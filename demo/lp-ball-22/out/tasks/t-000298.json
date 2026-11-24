@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-25T03:23:33+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 5094,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"复核完成：doc:000001 现行版（revised, rounds=7→本轮第 9 轮）判 **accepted_with_warnings**，不判 rejected，但也不能判 accepted —— 还有一条 warning 级 finding 未收口。\\n\\n一、唯一改动的那条断言（claim-6）\\n- 四条引用全部解析得到行：stmt:000034（kind=theorem，积分表示＋坐标向/面对角向闭式）、stmt:000042（kind=theorem，对角与面对角公式及 Δ(p) 最终正性）、lit:000002（Plane sections of the unit ball of l_p）、lit:000006（On extremal sections of subspaces of l_p）——table.list(statements)/table.list(literature) 读数，共 144 条命题行、25 条文献行。\\n- 措辞已收敛到面对角法向本身（(1,1,0)/sqrt(2)），与 Theorem thm:integral (ii)(iii) 对得上；evidence_kind=cross_check 低于它实际有的证明，属保守写法，不构成 overclaim。\\n- 落 finding 000005（info，unsupported_claim）：新加的 lit:000006 是 related-work 而非本条断言的来源 —— 已用同键重登记，evidence 以「复核 wontfix：」开头，**status=wontfix**，不挡门。\\n\\n二、四条审稿清单（逐条有读数）\\n① 定理那一档先取读数：review.scan(kinds=[proofs,ledger_match], project=\\\".\\\") → proof_envs=4、statement_envs=4、ledger_propositions=14、ledger_theorem_kinds=5、mapping_rows=4、**statement_surplus=[]**、statement_without_proof=0、proof_unclosed=0、mapping_state=pass（没有「正文有、台账/对应表里没有」的环境；也没有拿两个数去比等号）。四个 theorem 的 proof 都分 (1)(2)(3)… 步。\\n② 正文内部编号数：fs.search 读数共 8 处命中 —— main.tex 第 220/222/224/226 行（exp:000003/000004/000006/000007）**全部在 \\\\appendix（第 215 行）之后**；另 4 处在 mapping-appendix.tex 第 13/15/17/19 行的 % MAPPING-ROW 注释里（附录内）。**\\\\appendix 之前 0 处** ⇒ 合格。\\n③ 正文没有「数值实验」类小节：main.tex 全文 table/tabular/longtable/center 环境 0 个；全部求积、p 扫描、双阈值的读数在附录 A（第 216–230 行）；第 3 节末只以散文指向 Appendix~\\\\ref{app:computational} ⇒ 合格。\\n④ 三件齐全：Abstract（第 18 行）、\\\\bibitem 5 条（第 203–211 行：ball/konig/grzaslewicz/ambrus/eskenazis）、Appendix A: Computational evidence（第 215–216 行）；cites 读数 cite_keys=5 / bibitem_keys=5 / uncited=0 ⇒ \\\\cite 全部对得上。\\n\\n三、其他机械读数\\n- 骨架顺序对：Title+Author → Abstract(18) → 1 Introduction(22) → 2 Definitions and notation(30) → 3 Main results(50) → 4 Discussion and open problems(181) → References(201) → Appendix A(215)；第 2 节已补 ordering cone 与两条边界弧定义（第 40–54 行），第 3 节不再出现「见附录表 N」代替论证。\\n- text_integrity：checked=true，cjk=983（200 条）——**全部落在 MAPPING.md（人读生成件）**；",
+ "payload_sha256": "16121fb36e0c96064b7bb4a19b1e9ac0b77cafaafef3282de2466574fcf81847",
+ "readings": {},
+ "role": "H",
+ "status": "done",
+ "task_id": "t-000298"
+}

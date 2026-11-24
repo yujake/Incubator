@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T23:58:49+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 4334,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"审校完成，裁决 in_review（不通过，逐条给了改哪一处）；报告已落 out/report/000001-review.md（verdict=unverified：pass 10 / fail 0 / unknown 2(G9、G11) / n/a 3）。\\n\\n【任务① 四定理 vs 台账】review.scan(project=\\\".\\\") 读数：statement_envs=4、proof_envs=4、statement_without_proof=0、proof_without_statement=0、statement_surplus=[]、ledger_propositions=13、ledger_theorem_kinds=4、mapping_rows=4、mapping_state=pass。四条与 statements 的 statement_full（中文台账）逐条对读，判为**语义一致**（不是逐字串一致：thm:zero 把 C_p 的定义挪到定理导语、thm:diag(i) 书写顺序不同，两处已写进 own_errors）。每个都带 proof 环境且分 (1)…(5) 步（thm:integral 第 56–92 行、thm:zero 第 97–123 行、thm:diag 第 126–155 行、thm:delta 第 165–176 行）。\\n\\n【任务② 强度 vs 证据】在这一点上稿件是干净的，**没有落发现**：p<2 坐标向占优/2<p<p* 体对角向占优写在 main.tex 第 183 行，明确冠以「Numerically supported strong conjecture (not proved here)」，并写「it is not established by proof, and in particular the absence of a strictly interior maximizing direction is only verified numerically」「The word ``conjecture'' is meant literally」；p*=4.998215596862 只作数值读数出现（第 183 行带 (numerically) 限定，第 222 行说明它由二分法得到、落在 (4,5)）。四个定理按 pre_theorem 档用词，每条证明末尾都带「reviewed line by line … not machine-checked」，没有出现「已形式化验证」。\\n\\n【任务③ 编号/中文/引用】`exp:`/`stmt:` 前缀在 `\\\\appendix` 之前 **0 处**（fs.search 命中 8 行：main.tex 第 218/220/222/224 行 + mapping-appendix.tex 第 13/15/17/19 行的 MAPPING-ROW 注释，全部在附录 A 内）；全文 cjk=0、zero_width=0、control=0、nbsp=0、replacement=0、bidi=0；cite_keys=5 与 bibitem_keys=5 一一对上（scan cites 0 findings）；Abstract、\\\\bibitem、Appendix A「Computational evidence」三件齐。\\n\\n【任务④ 对应表】MAPPING.json 4 行 ↔ 正文 4 个定理环境一一对应：label/env_no 对得上，ledger_id 在 statements 里解析得到（kind=theorem），file=\\\"main.tex\\\" 是包内相对路径，evidence_kind=\\\"proof\\\" + evidence_path manuscripts/B/b-proof-0000{00..03}.md + v_signature（判决=成立，sha 与 evidence_sha256 逐行相等）；四行**都没有** lean_file/lean_target（proof 通道下本来就该为空），因此没有无依据的声称。\\n\\n【落盘的 3 条发现（warning 级，均指到行）】000000 overclaim @第 185 行：「the result of Theorem~\\\\ref{thm:zero} explains why only these three directions can compete」—— thm:zero 的前提是 n 至少一个坐标为 0，管不到三坐标全非零的情形，改写为「在其适用范围",
+ "payload_sha256": "5e829cfde957dda3f68d018fe30a21aee0ddd6152e0754341f0b7188c848b95c",
+ "readings": {},
+ "role": "H",
+ "status": "done",
+ "task_id": "t-000247"
+}

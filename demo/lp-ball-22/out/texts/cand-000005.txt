@@ -1,0 +1,3354 @@
+===== page 1 =====
+RESILIENCE OF CUBE SLICING IN ℓp
+ALEXANDROS ESKENAZIS, PIOTR NAYAR, AND TOMASZ TKOCZ
+Abstract. Ball’s celebrated cube slicing theorem (1986) asserts that among hyperplane sec-
+tions of the cube in Rn, the central section orthogonal to (1, 1, 0, . . . , 0) has the greatest volume.
+We show that the same continues to hold for slicing ℓp balls when p > 1015, as well as that
+the same hyperplane minimizes the volume of projections of ℓq balls for 1 < q < 1 + 10−12.
+This extends Szarek’s optimal Khinchin inequality (1976) which corresponds to q = 1. These
+results thus address the resilience of the Ball–Szarek hyperplane in the ranges 2 < p < ∞and
+1 < q < 2, where analysis of the extremizers has been elusive since the works of Koldobsky
+(1998), Barthe–Naor (2002) and Oleszkiewicz (2003).
+2020 Mathematics Subject Classification. Primary: 52A40; Secondary: 52A20, 52A38, 60E15.
+Key words. Sections of convex sets, projections of convex sets, ℓn
+p-balls, Khinchin-type inequalities.
+1. Introduction
+Fix p ∈[1, ∞] and n ∈N. The present paper is devoted to the study of geometric parameters
+of the origin symmetric convex bodies
+Bn
+p =
+
+x ∈Rn : ∥x∥p ≤1
+	
+,
+which are the closed unit balls of the normed spaces ℓn
+p = (Rn, ∥· ∥p), where for p ∈[1, ∞),
+∥x∥p =
+|x1|p + . . . + |xn|p1/p
+and ∥x∥∞= maxi=1,...,n |xi|, when x = (x1, . . . , xn) ∈Rn. More specifically, we shall address
+the classical problem of identifying volume extremizing sections and projections of these bodies
+with respect to hyperplanes passing through the origin. This subject has attracted the interest
+of mathematicians for decades and a range of tools from probability and Fourier analysis have
+been employed in its study. We refer to the survey [27] for a detailed account of classical results,
+recent advances and further references.
+1.1. Sections. Fix p ∈[1, ∞], n ∈N and consider the following question for sections of Bn
+p.
+Question 1. For which unit vectors a in Rn is the volume of Bn
+p ∩a⊥maximal or minimal?
+This problem and its variations has been intensively studied for five decades, since Hadwiger
+and Hensley showed in [12, 13] that sections of the cube Bn
+∞with coordinate hyperplanes e⊥
+i
+have minimal volume. The reverse question of identifying the volume maximizing sections of
+the cube was answered the monumental work [2] of Ball, who proved that
+vol
+Bn
+∞∩a⊥
+≤vol
+Bn
+∞∩
+ e1+e2
+√
+2
+⊥
+.
+(1)
+For p < ∞, the study of Question 1 was initiated by Meyer and Pajor. In [26], they extended
+the result of Hadwiger and Hensley by proving that sections of Bn
+p with coordinate hyperplanes
+e⊥
+i have minimal volume for any p ≥2 and maximal volume when p ∈[1, 2]. In the reverse
+direction, they showed that when p = 1, the section of the cross-polytope Bn
+1 with the hyperplane
+orthogonal to e1+···+en
+√n
+has minimal volume, a result which was later extended to all values of
+p ∈[1, 2] by Koldobsky [16] (see also [10] for a different probabilistic proof).
+This material is based upon work supported by the NSF grant DMS-1929284 while A. E. was in residence at
+ICERM for the Harmonic Analysis and Convexity program. P.N.’s research was supported by the National Science
+Centre, Poland, grant 2018/31/D/ST1/0135. T.T.’s research was supported by the NSF grant DMS-2246484.
+1
+arXiv:2211.01986v2  [math.FA]  16 Jan 2024
+===== page 2 =====
+In view of the aforementioned results, the only missing case in the study of Question 1 is the
+identification of volume maximizing sections of Bn
+p when p ∈(2, ∞), a problem that has explicitly
+appeared in the literature multiple times [17, 4, 29, 20, 18, 24, 9, 27]. In [29], Oleszkiewicz made
+a crucial remark, showing that for p ∈(2, 26) and n large enough the section of Bn
+p with the
+hyperplane
+ e1+···+en
+√n
+⊥has in fact larger volume than the section with
+ e1+e2
+√
+2
+⊥and thus one
+cannot expect a Ball-type extremal for all p > 2. In the same work, he speculated that Ball-type
+hyperplanes may maximize the volume of sections for sufficiently large values of p. The first
+theorem of this work provides a positive answer to Oleszkiewicz’s question.
+Theorem 1. There exists 26 < p0 < 1015 such that for every n ∈N, p ≥p0 and every unit
+vector a in Rn, we have
+vol
+Bn
+p ∩a⊥
+≤vol
+Bn
+p ∩
+ e1+e2
+√
+2
+⊥
+.
+(2)
+This is the first available result on maximal sections of Bn
+p for p ∈(2, ∞) and any dimension
+n ≥3. A general conjecture for all choices of p and n, predicting that the extremals undergo a
+phase transition, was proposed in [31] and [27, Conjecture 2]. Theorem 1 partially confirms it.
+Let us formulate a more precise version of this conjecture.
+Conjecture 2. For every n ≥3, there is a unique p0(n) such that
+max
+a∈Sn−1 vol(Bn
+p ∩a⊥) =
+(
+vol
+Bn
+p ∩
+ e1+...+en
+√n
+⊥
+,
+2 < p ≤p0(n),
+vol
+Bn
+p ∩
+ e1+e2
+√
+2
+⊥
+,
+p ≥p0(n).
+(3)
+Moreover, limn→∞p0(n) = 26.265... is the unique solution to the equation 22/pΓ( 1
+p)3 = πp2Γ( 3
+p)
+in the interval (1, ∞).
+Let us remark that in the above conjecture the critical value p = p0(n) is given by the equation
+vol
+Bn
+p ∩
+e1 + . . . + en
+√n
+⊥
+= vol
+Bn
+p ∩
+ e1+e2
+√
+2
+⊥
+.
+(4)
+The limit of the ratio of these two volumes is equal to
+22/pΓ( 1
+p)3
+πp2Γ( 3
+p) , as was proved by Oleszkiewicz
+in [29] using Central Limit Theorem.
+1.2. Projections. Fix q ∈[1, ∞], n ∈N and consider the dual question for projections of Bn
+q .
+Question 2. For which unit vectors a in Rn is the volume of Proja⊥Bn
+q maximal or minimal?
+The current status of Question 2 is basically identical to that of Question 1. When q = ∞,
+Cauchy’s projection formula shows that for every unit vector a, we have
+vol
+Proja⊥Bn
+∞
+
+= ∥a∥1vol
+Bn−1
+∞
+
+,
+(5)
+which proves that the volume is minimized for a = ei and maximized for a = e1+···+en
+√n
+. In the
+case of the cross-polytope Bn
+1, similar reasoning based on Cauchy’s formula (see [3]) shows that
+vol
+Proja⊥Bn
+1
+
+=
+2n−1
+(n −1)!E
+
+n
+X
+j=1
+ajεj
+,
+(6)
+where ε1, ε2, . . . is a sequence of independent symmetric ±1 random variables.
+Therefore,
+Jensen’s inequality shows that vol
+Proja⊥Bn
+1
+
+is maximal when a = ei. In view of (6), iden-
+tifying the volume minimizing projections of Bn
+1 amounts to finding the sharp constant in the
+classical L1-L2 Khinchin inequality [15] which was famously discovered by Szarek. In geometric
+terms, the important result of [30] asserts that vol(Proja⊥Bn
+1) is minimized for a = e1+e2
+√
+2 .
+The study of Question 2 for 1 < q < ∞was initiated by Barthe and Naor in [4]. In analogy to
+[26], they showed that projections of Bn
+q onto coordinate hyperplanes e⊥
+i have minimal volume
+for q ≥2 and maximal volume for q ∈[1, 2]. Moreover, in the spirit of [26, 16], they proved that
+2
+===== page 3 =====
+when q ≥2, the projections of Bn
+q onto the hyperplane orthogonal to e1+···+en
+√n
+have maximal
+volume (see also [19] for a different proof using the Fourier transform).
+The volume minimizing hyperplane projections of Bn
+q remain unknown for q ∈(1, 2).
+In
+analogy with Oleszkiewicz’s observation [29] mentioned earlier, Barthe and Naor noticed that
+for q ∈
+ 4
+3, 2
+
+, the projection of Bn
+q onto the hyperplane
+ e1+···+en
+√n
+⊥has smaller volume than the
+projection onto
+ e1+e2
+√
+2
+⊥and thus one cannot expect a Szarek-type extremal for all q ∈[1, 2).
+Our second theorem is the dual to Theorem 1 and addresses Question 2 for q near 1.
+Theorem 3. There exists q0 ∈
+1 + 10−12, 4
+3
+
+such that for every n ∈N, q ∈[1, q0] and every
+unit vector a in Rn, we have
+vol
+Proja⊥Bn
+q
+
+≥vol
+Proj e1+e2
+√
+2
+⊥Bn
+q
+
+.
+(7)
+One can formulate a similar conjecture to the one for sections.
+Conjecture 4. For every n ≥3, there is a unique q0(n) such that
+min
+a∈Sn−1 vol(Proja⊥Bn
+q ) =
+
+
+
+
+
+vol(Proj e1+···+en
+√n
+⊥Bn
+q
+
+,
+q0(n) < q ≤2,
+vol
+Proj e1+e2
+√
+2
+⊥Bn
+q
+
+,
+1 ≤q ≤q0(n).
+(8)
+Moreover, limn→∞q0(n) = 4
+3.
+1.3. Methods. The delicacy of, say, Theorem 1 lies in the need to find a universal p0, indepen-
+dent of the unit vector a and the dimension n ∈N, such that for every p ≥p0,
+vol
+Bn
+p ∩a⊥
+≤vol
+Bn
+p ∩
+ e1+e2
+√
+2
+⊥
+.
+(9)
+On the other hand, finding such a p0(a) for a fixed unit vector a in Rn is an immediate conse-
+quence of the continuity of the section function p 7→vol(Bn
+p ∩a⊥), as the equality cases in Ball’s
+inequality (1) are known to be only the vectors of the form ±ei±ej
+√
+2
+, where i̸ = j.
+Let a = (a1, . . . , an) be a unit vector and without loss of generality assume that its coordinates
+are positive and ordered, i.e. a1 ≥a2 ≥. . . ≥an ≥0. Choosing p0 uniformly for (9) to hold
+requires radically different arguments in the following ranges for a.
+Case 1. The vector a is far from the extremizer e1+e2
+√
+2 , say
+a −e1+e2
+√
+2
+ ≥δ0 for some δ0 > 0.
+Here the constant δ0 depends on p and | · | stands for the standard Euclidean norm. The key
+ingredient in this range is the dimension-free stability of Ball’s inequality (1) with respect to the
+unit vector a which has been established in recent works [7, 25] (see also Theorem 9 below for
+a statement with explicit constants). These works imply that, under the assumption of Case 1,
+there is a positive deficit in Ball’s inequality. Building on the simple-minded argument based on
+continuity described above, one needs to reason that all functions of the form p 7→vol(Bn
+p ∩a⊥)
+are equi-continuous at p = ∞with a dimension-independent modulus. This strategy is imple-
+mented in Lemma 14 and relies on a combination of Busemann’s theorem [5] with a probabilistic
+formula expressing the volume of sections of Bn
+p as a negative moment of a sum of independent
+rotationally invariant random vectors in R3, following [14, 21, 6].
+Case 2. The vector a is near the extremizer e1+e2
+√
+2 , say
+a −e1+e2
+√
+2
+ < δ0.
+This range is evidently the more subtle one, as soft continuity-based arguments are deemed to
+fail near the equality case. In order to amend this, we introduce a novel inductive strategy. As
+our starting point, we express again the section function vol(Bn
+p ∩a⊥) as a negative moment of a
+sum of independent random variables. After a suitable application of Jensen’s inequality, we use
+the inductive hypothesis according to which the desired inequality holds in dimension n −2 and
+this reduces the problem to an explicit two-dimensional estimate. Quite stunningly, the resulting
+estimate does not hold when the unit vector a is far from the extremizer e1+e2
+√
+2
+and thus our
+3
+===== page 4 =====
+inductive argument cannot circumvent the stability results which were crucially used in Case 1.
+Nevertheless, a delicate analysis allows us to deduce the technical estimate under the assumptions
+of Case 2 for δ0 small enough as a function of p and p sufficiently large, thus proving Theorem 1.
+The proof of Ball’s inequality (1) and its stability from [7] crucially use the Fourier transform
+representation for the volume of sections and properties of a certain special function. However,
+even in Ball’s original proof [2], the Fourier transform method is unable to analyze the case
+that the largest component a1 of a is greater than
+1
+√
+2, which is instead handled by an elegant
+geometric argument. Unfortunately, a similar geometric argument applied to Bn
+p for p < ∞does
+not yield the optimal bound (9) for a1 slightly larger than
+1
+√
+2, which creates the need for a
+different method. Surprisingly, our inductive approach outlined above does not use the Fourier
+transform directly, even though it uses Ball’s inequality (1) and its stability as a black box. In
+a way, this method complements the Fourier analytic approach with a probabilistic component
+which permits an analysis near the extremizer.
+The proof of Theorem 3 relies on a very similar strategy apart from purely technical differences.
+In this case, the probabilistic representation for the volume of projections is due to [4] and the
+stability of Szarek’s inequality was obtained in [8].
+2. Preliminaries
+In this section we present some probabilistic representations for the volume of sections and
+projections of Bn
+p (see also [27] and the references therein) along with some crucial technical
+estimates which will be used in the proofs of Theorems 1 and 3.
+2.1. Probabilistic representation of the volume of sections. In [14], Kalton and Koldob-
+sky discovered an elegant probabilistic representation of the volume of sections of a convex set
+K in Rn in terms of negative moments of a random vector X uniformly distributed on K. In the
+case of K = Bn
+p, this representation takes the following explicit form (see [6] or [27, Lemma 42]).
+Lemma 5. Fix p ∈[1, ∞), n ∈N and let Y1, Y2, . . . be i.i.d. random variables with density
+e−βp
+p|x|p, where βp = 2Γ
+1 + 1
+p
+
+. Then, for every unit vector a in Rn we have
+vol(Bn
+p ∩a⊥)
+vol(Bn−1
+p
+)
+= lim
+s↓−1
+1 + s
+2
+E
+
+n
+X
+j=1
+ajYj
+
+s
+.
+(10)
+When p = ∞, the same identity holds with Y1, Y2, . . . being i.i.d. uniform on [−1, 1].
+Using the representation (10), we derive the following crucial formula for our analysis.
+Proposition 6. Fix p ∈[1, ∞) and n ∈N. Let R1, R2, . . . be i.i.d. positive random variables
+with density α−1
+p xpe−xp1x>0, where αp =
+1
+pΓ
+1 + 1
+p
+
+and ξ1, ξ2, . . . be i.i.d. random vectors
+uniformly distributed on the unit sphere S2, independent of the random variables Ri. Then, for
+every unit vector a in Rn we have
+vol(Bn
+p ∩a⊥)
+vol(Bn−1
+p
+)
+= Γ
+
+1 + 1
+p
+
+E
+
+n
+X
+j=1
+ajRjξj
+
+−1
+,
+(11)
+where | · | denotes the Euclidean norm on the right-hand side. When p = ∞, the same identity
+holds with deterministic coefficients R1 = · · · = Rn = 1.
+Proof. We shall assume that p < ∞and the endpoint case follows (see also [21]). Let Y have
+density e−βp
+p|x|p, R have density α−1
+p xpe−xp1x>0 and U be uniform on [−1, 1], independent of
+R. Then Y has the same distribution as β−1
+p RU. More generally, if V is a random variable
+with even density g which is nonincreasing and of class C1 on (0, +∞), then V has the same
+4
+===== page 5 =====
+distribution as R0U, where R0 has density −2rg′(r) on (0, ∞). Indeed, for t > 0 we have
+P {R0U > t} = P
+
+U >
+t
+R0
+
+=
+Z ∞
+0
+P
+
+U > t
+r
+
+(−2rg′(r))dr = −
+Z ∞
+t
+
+1 −t
+r
+
+rg′(r)dr
+= −
+Z ∞
+t
+(r −t) g′(r)dr =
+Z ∞
+t
+g(r)dr = P {V > t} .
+Therefore, (10) can be rewritten as
+vol(Bn
+p ∩a⊥)
+vol(Bn−1
+p
+)
+= lim
+s↓−1
+1 + s
+2βsp
+E
+
+n
+X
+j=1
+ajRjUj
+
+s
+.
+(12)
+By a result of König and Kwapień [23, Proposition 4], for every x1, . . . , xn ∈R and s > −1,
+E
+
+n
+X
+j=1
+xjξj
+
+s
+= (1 + s)E
+
+n
+X
+j=1
+xjUj
+
+s
+.
+(13)
+Substituting (13) in (12) conditionally on Rj and substituting the value of βp proves (11).
+□
+2.2. Probabilistic representation of the volume of projections. The analogue of Propo-
+sition 6 for projections, expressing the normalized volume of projections of Bn
+q as an L1-moment
+of a sum of independent random variables has been established in [4, Proposition 2].
+Proposition 7 (Barthe–Naor, [4]). Fix q ∈(1, ∞) and n ∈N. Let X1, X2, . . . be i.i.d. random
+variables with density γ−1
+q |x|
+2−q
+q−1 e−|x|
+q
+q−1 , where γq = 2(q −1)Γ
+1 + 1
+q
+
+. Then, for every unit
+vector a in Rn we have
+vol(Proja⊥Bn
+q )
+vol(Bn−1
+q
+)
+= Γ
+1
+q
+
+E
+
+n
+X
+j=1
+ajXj
+.
+(14)
+When q = 1, the identity reduces to the consequence (6) of the Cauchy projection formula.
+2.3. Stability estimates. As explained in the introduction, a crucial step in the proofs of
+Theorems 1 and 3 is a reduction to sections and projections with respect to hyperplanes near
+the extremizer
+ e1+e2
+√
+2
+⊥. This will be a consequence of two recent works [8, 7] establishing the
+stability of the inequalities of Szarek [30] and Ball [2] with respect to the unit normal vector a.
+For the case of projections, we will use the following robust Szarek inequality proven in [8].
+Theorem 8 (De–Diakonikolas–Servedio, [8]). There exists κ1 > 0 such that for every n ∈N
+and every unit vector a in Rn with a1 ≥· · · ≥an ≥0, we have
+E
+
+n
+X
+j=1
+ajεj
+ ≥
+1
+√
+2 + κ1
+a −e1 + e2
+√
+2
+.
+(15)
+We can take κ1 = 8 · 10−5 in this inequality.
+For the case of sections, we will use the following robust Ball inequality of [7]. We express it
+in the equivalent negative moment formulation which follows from Proposition 6.
+Theorem 9 (Chasapis–Nayar–Tkocz, [7]). There exists κ∞> 0 such that for every n ∈N and
+every unit vector a in Rn with a1 ≥· · · ≥an ≥0, we have
+E
+
+n
+X
+j=1
+ajξj
+
+−1
+≤
+√
+2 −κ∞
+a −e1 + e2
+√
+2
+.
+(16)
+We can take κ∞= 6 · 10−5 in this inequality.
+Unfortunately, a direct implementation of the arguments of [8, 7] does not yield explicit values
+for the constants κ1 and κ∞which are needed for our estimation of p0 and q0 in Theorems 1
+and 3. In Section 5, we shall present a new short proof of Theorem 8 which is in the spirit of [7]
+and gives the numerical constant κ1 = 8 · 10−5. Moreover, we will explain how to quantify an
+existential argument used in [7] in order to prove Theorem 9 with κ∞= 6 · 10−5.
+5
+===== page 6 =====
+2.4. A technical lemma. In this section we present the following key lemma, which is crucial
+for the induction argument sketched in Section 1.3 to work.
+Lemma 10. Let c ≥1 and p > 4
+√
+2c.
+If 0 < a2 ≤a1 satisfy ∥(a1, a2)∥p ≤2
+1
+p−1
+2 and
+|ai −
+1
+√
+2| ≤c
+p for i = 1, 2, then we have
+|a1 −a2| ≤3.65
+r
+c
+p −2
+q
+1 −a2
+1 −a2
+2.
+(17)
+To prove it, we need an elementary inequality between p-means with a deficit.
+Lemma 11. Let σ > 0, r ≥max{σ, 2} and b1, b2 ∈(0, 1] with 1 −σ
+r ≤b2
+b1 ≤1. Then, we have
+br
+1 + br
+2
+2
+ 1
+r
+≥b1 + b2
+2
++ (r −1)1 −e−σ
+2
+4σ
+|b1 −b2|2.
+(18)
+Proof. Denote cr
+def
+= (r −1)1−e−σ
+2
+4σ
+. Dividing both sides by b1, introducing δ def
+= 1 −b2
+b1 , raising
+the inequality to the power r and using that b1 ≤1, we see that (18) follows from
+1 + (1 −δ)r
+2
+≥
+
+1 −δ
+2 + crδ2
+r
+,
+δ ∈
+h
+0, σ
+r
+i
+.
+We have equality for δ = 0 and thus it is enough to show that on [0, σ
+r ] the derivatives compare,
+−r
+2(1 −δ)r−1 ≥r
+
+1 −δ
+2 + crδ2
+r−1 
+−1
+2 + 2crδ
+
+.
+Multiplying both sides by 2
+r and rearranging gives an equivalent form
+1 −4crδ ≥
+ 
+1 −δ
+1 −δ
+2 + crδ2
+!r−1
+,
+since 1 −δ
+2 + crδ2 > 0 on
+
+0, σ
+r
+
+. To prove the last inequality, observe that
+ 
+1 −δ
+1 −δ
+2 + crδ2
+!r−1
+≤
+ 
+1 −δ
+1 −δ
+2
+!r−1
+≤
+
+1 −δ
+2
+r−1
+.
+It is enough to check the inequality
+1 −δ
+2
+r−1 ≤1−4crδ only for δ ∈{0, σ
+r }, since the left-hand
+side is convex in δ. For δ = σ
+r we have (1 −σ
+2r)r−1 ≤e−σ
+2 · r−1
+r , so we would like to prove that
+e−σ
+2 · r−1
+r
+≤1 −r −1
+r
+(1 −e−σ
+2 ).
+Since u = r−1
+r
+∈[0, 1] we want to verify e−σ
+2 u ≤1 −u(1 −e−σ
+2 ), which follows by observing that
+the left-hand side is a convex function of u and we have equality for u ∈{0, 1}.
+□
+Proof of Lemma 10. Since p >
+√
+2c, we have
+a2
+a1
+≥
+1
+√
+2 −c
+p
+1
+√
+2 + c
+p
+=
+1 −
+√
+2c
+p
+1 +
+√
+2c
+p
+≥
+ 
+1 −
+√
+2c
+p
+!2
+≥1 −2
+√
+2c
+p,
+so a2
+2
+a2
+1 ≥1 −4
+√
+2 c
+p = 1 −2
+√
+2c
+p/2 . We can apply Lemma 11 with r = p
+2, bi = a2
+i and σ = 2
+√
+2c to
+get
+1
+2 ≥
+ap
+1 + ap
+2
+2
+ 2
+p
+≥a2
+1 + a2
+2
+2
++
+p
+2 −1
+ 1 −e−
+√
+2c
+8
+√
+2c
+|a2
+1 −a2
+2|2,
+6
+===== page 7 =====
+where the leftmost inequality is equivalent to ∥(a1, a2)∥p ≤2
+1
+p−1
+2 . By the assumptions, we also
+have a1 + a2 ≥
+√
+2 −2c
+p ≥
+√
+2 −
+1
+2
+√
+2 and e−c
+√
+2 < e−
+√
+2. Therefore, rearranging gives
+1 −a2
+1 −a2
+2 ≥c0
+c (p −2)|a1 −a2|2,
+c0 =
+√
+2 −
+1
+2
+√
+2
+2
+8
+√
+2
+(1 −e−
+√
+2).
+Thus, we conclude that
+|a1 −a2| ≤
+√c
+p
+c0(p −2)
+q
+1 −a2
+1 −a2
+2,
+1
+√c0
+< 3.65,
+which completes the proof.
+□
+3. Sections
+3.1. Ancillary results. We begin with a simple L2-bound quantifying that the distribution of
+the random magnitudes Rj from (11) is close to the point mass at 1 as p gets large. Explicit
+computations using the density show that for every s > −p −1, the s-th moment of R1 is
+ERs
+1 =
+Γ
+1 + s+1
+p
+
+Γ
+1 + 1
+p
+ .
+(19)
+Lemma 12. For p > 5, we have
+E|R1 −1|2 ≤
+2
+Γ(1 + 1/p)p−2.
+(20)
+Proof. By (19), we can write
+E|R1 −1|2 = ER2
+1 −2ER1 + 1 = Γ(1 + 3/p) −2Γ(1 + 2/p) + Γ(1 + 1/p)
+Γ(1 + 1/p)
+.
+The function
+h(x) def
+= Γ(1 + 3x) −2Γ(1 + 2x) + Γ(1 + x)
+satisfies h(0) = h′(0) = 0, so for every 0 < x <
+1
+5, by Taylor’s expansion with Lagrange’s
+remainder, there exists 0 < θ < x such that
+h(x) = 1
+2x2h′′(θ) = 1
+2x2(9Γ′′(1 + 3θ) −8Γ′′(1 + 2θ) + Γ′′(1 + θ)).
+(21)
+Lemma 13. The function Γ′′ is decreasing on (0, 8
+5).
+Taking this for granted, Γ′′(1 + 3θ) < Γ′′(1 + 2θ) and Γ′′(s) < Γ′′(1) = γ2 + π2
+6 < 2 for
+s ∈(1, 8
+5) (as usual γ = 0.577.. is the Euler-Mascheroni constant, and this calculation of Γ′′(1)
+can be done with the aid of the polygamma function, see for instance 6.4.2 in the standard
+reference [1]). Equation (21) thus gives h(x) ≤2x2. This applied to x = 1
+p leads to (20).
+□
+Proof of Lemma 13. Note that clearly Γ(4) > 0, so Γ(3) increases, so for s ∈(0, 8
+5), we have
+Γ(3)(s) < Γ(3)(8
+5) = −0.33.. (to obtain such numerical values, we refer again to [1]). Therefore,
+Γ′′ is decreasing on (0, 8
+5).
+□
+To deal with hyperplanes far from the extremizer, we will crucially rely on the equi-continuity
+of the section functions at p = ∞which we will now verify. For p ∈[1, ∞] we introduce the
+normalized section function,
+An,p(a) def
+= vol(Bn
+p ∩a⊥)
+vol(Bn−1
+p
+) ,
+(22)
+where a is a unit vector in Rn. Additionally, observe that
+An,∞(a) = vol(Bn
+∞∩a⊥)
+vol(Bn−1
+∞)
+= vol
+Qn ∩a⊥
+,
+7
+===== page 8 =====
+where Qn = [−1
+2, 1
+2]n is the unit-volume cube in Rn. Recall that from Proposition 6,
+An,p(a) = Γ
+
+1 + 1
+p
+
+E
+
+n
+X
+j=1
+ajRjξj
+
+−1
+.
+Lemma 14. Let p > 5. For every unit vector a in Rn, we have
+An,p(a) −An,∞(a)
+ ≤5
+p.
+(23)
+Proof. First recall that for an arbitrary nonzero vector x in Rn,
+N(x) def
+=
+|x|
+vol(Qn ∩x⊥) =
+
+E
+
+n
+X
+j=1
+xjξj
+
+−1−1
+is a norm by Busemann’s theorem [5]. In particular, using 1 ≤vol(Qn ∩x⊥) ≤
+√
+2, we get
+N(y)−1 −N(x)−1 = |N(x) −N(y)|
+N(x)N(y)
+≤N(x −y)
+N(x)N(y)
+= |x −y|
+|x||y|
+vol(Qn ∩x⊥)vol(Qn ∩y⊥)
+vol(Qn ∩(x −y)⊥)
+≤2|x −y|
+|x||y| ,
+where x, y ∈Rn \ {0}. Evoking (11), we can write
+An,p(a)
+Γ(1 + 1/p) = EREξ
+
+n
+X
+j=1
+ajRjξj
+
+−1
+= ERN(aR)−1,
+where we use the ad hoc notation aR for the vector (a1R1, . . . , anRn) in Rn. From the previous
+bound on 1/N, we thus obtain
+
+An,p(a)
+Γ(1 + 1/p) −An,∞(a)
+ =
+EN(aR)−1 −N(a)−1 ≤2E|a −aR|
+|a| · |aR| = 2E|a −aR|
+|aR|
+.
+By the Cauchy-Schwarz inequality,
+E|a −aR|
+|aR|
+≤
+p
+E|a −aR|2p
+E|aR|−2 =
+v
+u
+u
+tE
+n
+X
+j=1
+a2
+j(Rj −1)2
+v
+u
+u
+tE
+
+n
+X
+j=1
+a2
+jR2
+j
+−1
+.
+The first factor in the right-hand side is equal to ∥R1 −1∥2. By the convexity of the function
+s 7→1
+s,
+E
+
+n
+X
+j=1
+a2
+jR2
+j
+−1
+≤
+n
+X
+j=1
+a2
+jER−2
+j
+(19)
+=
+Γ
+1 −1
+p
+
+Γ
+1 + 1
+p
+.
+Combining all the above, yields
+An,p(a) −Γ(1 + 1/p)An,∞(a)
+ ≤2∥R1 −1∥2
+p
+Γ(1 −1/p)Γ(1 + 1/p).
+Using Lemma 12, the right-hand side gets upper-bounded by
+2
+s
+2
+Γ(1 + 1/p)p−2p
+Γ(1 −1/p)Γ(1 + 1/p) < 2
+p
+2Γ(1/2)
+p
+= 2
+√
+2 4√π
+p
+using p > 2. Consequently,
+An,p(a) −An,∞(a)
+ ≤2
+√
+2 4√π
+p
++
+1 −Γ(1 + 1/p)
+
+An,∞(a) ≤2
+√
+2 4√π
+p
++
+√
+2γ
+p
+< 5
+p,
+because 1 −Γ(1 + x) < −Γ′(1)x = γx for 0 < x < 1, by convexity of Γ on (0, ∞). Here,
+γ = 0.577.. is the Euler–Mascheroni constant.
+□
+8
+===== page 9 =====
+3.2. Proof of Theorem 1. Following notation (22), our goal is to prove that for every p ≥p0
+and every unit vector a in Rn, we have
+An,p(a) ≤An,p
+e1 + e2
+√
+2
+
+,
+(24)
+where the right-hand side is explicitly given by
+An,p
+e1 + e2
+√
+2
+
+= Γ
+
+1 + 1
+p
+
+E
+
+R1ξ1 + R2ξ2
+√
+2
+
+−1
+= A2,p
+e1 + e2
+√
+2
+
+=
+1
+∥( 1
+√
+2,
+1
+√
+2)∥p
+= 2
+1
+2 −1
+p .
+Our proof will proceed by induction on n. It is directly checked that the theorem holds when
+n = 2, as A2,p(a) = ∥a∥−1
+p
+for every unit vector a in R2. We therefore assume that n ≥3 and a1 ≥
+· · · ≥an > 0. Our analysis will differ depending on the distance of a to the extremizer. Let
+δ(a) def
+=
+a −e1 + e2
+√
+2
+
+2
+= 2 −
+√
+2(a1 + a2).
+(25)
+3.2.1. The vector a is far from the extremizer. Suppose that
+p
+δ(a) ≥c
+p with c = 105. Then,
+by the equi-continuity proven in Lemma 14 and the stability of Ball’s inequality from Theorem
+9 with constant κ∞= 6 · 10−5, we obtain
+An,p(a) ≤5
+p + An,∞(a) ≤5
+p +
+√
+2 −κ∞
+p
+δ(a) ≤
+√
+2 −κ∞c −5
+p
+.
+Since
+c ≥
+√
+2 log 2 + 5
+κ∞
+=
+√
+2 log 2 + 5
+6
+105 = 0.996.. · 105,
+we have
+√
+2 −κ∞c −5
+p
+≤
+√
+2
+
+1 −log 2
+p
+
+≤
+√
+2e−log 2
+p
+= 2
+1
+2 −1
+p ,
+which finishes the proof in this case (without using the inductive hypothesis) for c = 105.
+□
+3.2.2. The vector a is close to the extremizer. Now, suppose that
+p
+δ(a) < c
+p,
+where c = 105. This in particular implies that (as we already assume that a2 ≤a1),
+1
+√
+2 −c
+p ≤a2 ≤a1 ≤
+1
+√
+2 + c
+p.
+Let us also notice for further use that a2 ≤
+1
+√
+2 since 2a2
+2 ≤a2
+1 + a2
+2 ≤1. We shall consider
+p > Lc + 2 for a large numerical constant L. With hindsight, we put L = 7.9 · 109. Observe that
+our goal (24) is equivalent to the inequality
+E
+
+n
+X
+j=1
+ajRjξj
+
+−1
+≤Cp
+(26)
+with
+Cp = E
+
+R1ξ1 + R2ξ2
+√
+2
+
+−1
+=
+2
+1
+2 −1
+p
+Γ(1 + 1/p),
+(27)
+which we will now prove by induction on n. We record for future estimates that when p > Lc+2,
+we have
+1.41 < Cp < 1.42,
+(28)
+since 210−6 > 21/pΓ(1 + 1/p) > Γ(1 + 10−6).
+9
+===== page 10 =====
+Consider the random vectors X = a1R1ξ1 + a2R2ξ2 and Y = P
+j>2 ajRjξj in R3. Since X
+and Y are independent and rotationally invariant, the representation
+E
+
+n
+X
+j=1
+ajRjξj
+
+−1
+= E min
+
+|X|−1, |Y |−1	
+holds (see, e.g., [7, Lemma 6.6]). By the inductive hypothesis,
+E|Y |−1 =
+1
+p
+1 −a2
+1 −a2
+2
+E
+
+P
+j>2 ajRjξj
+p
+1 −a2
+1 −a2
+2
+
+−1
+≤
+Cp
+p
+1 −a2
+1 −a2
+2
+,
+and hence (by the concavity and monotonicity of the function t 7→min{|X|−1, t}), we get
+E
+
+n
+X
+j=1
+ajRjξj
+
+−1
+= E min
+
+|X|−1, |Y |−1	
+≤E min
+
+|X|−1, α−1	
+,
+(29)
+where we set
+α def
+=
+1
+Cp
+q
+1 −a2
+1 −a2
+2.
+(30)
+Observe that
+E min
+
+|X|−1, α−1	
+= E|X|−1 −E
+|X|−1 −α−1
++
+(31)
+and
+E|X|−1 =
+1
+p
+a2
+1 + a2
+2
+E
+
+a1R1ξ1 + a2R2ξ2
+p
+a2
+1 + a2
+2
+
+−1
+(11)
+=
+1
+p
+a2
+1 + a2
+2
+1
+
+(a1,a2)
+√
+a2
+1+a2
+2
+
+p
+Γ(1 + 1/p)
+=
+1
+∥(a1, a2)∥pΓ(1 + 1/p).
+(32)
+In view of the inductive step (29) and the identities (27), (31), (32), the desired inequality (26)
+is a consequence of the following proposition.
+Proposition 15. Under the assumptions and notation above, for p ≥1015 we have
+E
+|X|−1 −α−1
++ ≥Cp
+ 
+2
+1
+p−1
+2
+∥(a1, a2)∥p
+−1
+!
+.
+(33)
+Proof. If the right-hand side is nonpositive, we are done. Otherwise,
+∥(a1, a2)∥p < 2
+1
+p−1
+2 .
+Since
+ai −
+1
+√
+2
+ < c
+p, Lemma 10 gives
+|a1 −a2| ≤3.65
+r
+c
+p −2
+q
+1 −a2
+1 −a2
+2
+(30)
+= 3.65
+r
+c
+p −2Cpα
+(28)
+≤5.25α
+√
+L
+.
+(34)
+To simplify, note that ∥(a1, a2)∥p ≥21/p−1/2∥(a1, a2)∥2, so
+2
+1
+p−1
+2
+∥(a1, a2)∥p
+−1 ≤
+1
+∥(a1, a2)∥2
+−1 =
+1 −(a2
+1 + a2
+2)
+p
+a2
+1 + a2
+2(1 +
+p
+a2
+1 + a2
+2)
+< C2
+pα2
+1.95 ,
+where we used that
+a2
+1 + a2
+2 ≥2a2
+2 ≥2
+ 1
+√
+2 −c
+p
+2
+> 1 −2
+√
+2c
+p
+> 1 −2
+√
+2
+L
+> 0.97
+(35)
+and √u(1 + √u) > 1.95 for u > 0.97. Since
+C3
+p
+1.95 < 1.423
+1.95 < 3
+2, (33) will follow from
+E
+|X|−1 −α−1
++ ≥3
+2α2.
+(36)
+10
+===== page 11 =====
+Consider the event
+E def
+=
+
+R1 ≤1, |R1 −R2| < α, |a1ξ1 + a2ξ2| < 1
+4α
+
+.
+On E, we have
+|X| = |a1R1ξ1 + a2R2ξ2| ≤|a1R1ξ1 + a2R1ξ2| + |a2R2ξ2 −a2R1ξ2|
+= R1|a1ξ1 + a2ξ2| + a2|R2 −R1| < 1
+4α + 1
+√
+2α < 24
+25α,
+so
+E
+|X|−1 −α−1
++ ≥
+1
+24αP (E) =
+1
+24αP
+
+R1 ≤1, |R1 −R2| < α
+	
+P
+n
+|a1ξ1 + a2ξ2| < 1
+4α
+o
+. (37)
+For the second probability in (37), observe that the random variable |a1ξ1 +a2ξ2|2 has the same
+distribution as a2
+1 + a2
+2 + 2a1a2U, with U being uniform on [−1, 1]. Therefore,
+P
+n
+|a1ξ1 + a2ξ2| < 1
+4α
+o
+= P
+n
+U < α2/16 −a2
+1 −a2
+2
+2a1a2
+o
+.
+Note that the condition
+−1 < α2/16 −a2
+1 −a2
+2
+2a1a2
+< 1
+(38)
+is equivalent to
+|a1 −a2| < α
+4 < a1 + a2.
+The left inequality holds thanks to (34), provided that L > (5.25 · 4)2 = 441, whereas the right
+inequality holds since a1 + a2 ≥2a2 >
+√
+2 −2c
+p >
+√
+2 −2
+L > 1.2 which is greater than α
+4 since
+α ≤1
+Cp
+q
+1 −2a2
+2
+(28)
+<
+1
+1.41
+s
+1 −2
+ 1
+√
+2 −c
+p
+2
+<
+1
+1.41
+r
+2
+√
+2c
+p < 1.2
+√
+L
+.
+(39)
+As (38) holds, we have
+P
+n
+|a1ξ1 + a2ξ2| < 1
+4α
+o
+= 1
+2
+α2/16 −a2
+1 −a2
+2
+2a1a2
++ 1
+
+= α2/16 −(a1 −a2)2
+4a1a2
+.
+Using (34) and the estimate 4a1a2 ≤2(a2
+1 + a2
+2) < 2, we get
+P
+n
+|a1ξ1 + a2ξ2| < 1
+4α
+o
+> 1 −441L−1
+32
+α2.
+(40)
+For the other probability in (37), it is convenient to place a uniform function of constant mass
+under the density of R1, which is doable due to the following technical lemma.
+Lemma 16. Fix p ∈(1, ∞) and let gp : R+ →R+ be the density of R1. Then, we have
+∀x > 0,
+gp(x) ≥p
+41[1−1
+2p,1](x).
+(41)
+Proof. Recall from Proposition 6 that gp(x) = pΓ(1 + 1/p)−1xpe−xp for x > 0.
+Since gp is
+log-concave, it suffices to check the inequality at the endpoints x = 1 −1
+2p and x = 1. For the
+first endpoint, we have
+gp
+1 −1
+2p
+
+=
+p
+Γ(1 + 1/p)
+1 −1
+2p
+pe−(1−1
+2p)p > p
+2e−e−1/2 > p
+4,
+using that (1 −1
+2p)p < e−1/2 and (1 −1
+2p)p > 1
+2. Moreover, for the second endpoint,
+gp(1) =
+p
+eΓ(1 + 1/p) > p
+4.
+□
+11
+===== page 12 =====
+Finishing the proof of Proposition 15. We estimate the first probability in (37) using Lemma 16,
+P
+
+R1 ≤1, |R1 −R2| < α
+	
+≥
+ZZ
+{x≤1, |x−y|<α}
+p
+4
+2
+1[1−1
+2p,1](x)1[1−1
+2p,1](y) dx dy
+=
+( 1
+64,
+if α > 1
+2p
+p2α
+16
+
+1
+p −α
+
+,
+if α ≤1
+2p
+,
+(42)
+where the equality is an elementary computation. In the case α ≤1
+2p, we further have 1
+p −α ≥1
+2p,
+so the probability is further bounded from below by pα
+32 , which we will use.
+• If α > 1
+2p, inequalities (37), (40) and (42) yield the lower bound
+E(|X|−1−α−1)+ ≥
+1
+24α · 1
+64 · 1 −441L−1
+32
+α2 =
+1 −441L−1
+214 · 3
+· 1
+α
+
+α2 (39)
+>
+1 −441L−1
+214 · 3 · 1.2
+√
+L
+
+α2.
+Since L = 7.9 · 109, this gives the desired bound (36) by 3
+2α2.
+• If α ≤1
+2p, inequalities (37), (40) and (42) yield the lower bound
+E(|X|−1 −α−1)+ ≥
+1
+24α · pα
+32 · 1 −441L−1
+32
+α2 = p(1 −441L−1)
+213 · 3
+α2 > (L −441)c
+213 · 3
+α2.
+This is at least 3
+2α2 for the chosen L, which completes the proof of (36) for p ≥p0, where
+p0 = Lc + 2 < 8 · 109 · 105 < 1015.
+□
+4. Projections
+The proof here parallels the one from Section 3. For the readers’ convenience, we include all
+the details (which are in fact easier in several places).
+4.1. Ancillary results. We start by quantifying how close the distribution of the Xj from (14)
+is to that of a Rademacher variable (in the Wasserstein-2 distance). Explicit computations using
+the density show that for every s > −
+1
+q−1, the s-th moment of |X1| is
+E|X1|s =
+Γ
+1 + (s−1)(q−1)
+q
+
+Γ
+ 1
+q
+
+.
+(43)
+Lemma 17. For 1 < q < 2, we have
+E|X1 −sgn(X1)|2 ≤9
+
+1 −1
+q
+2
+.
+(44)
+Proof. Observe that
+E|X1 −sgn(X1)|2 = EX2
+1 −2E|X1| + 1
+(43)
+= Γ(2 −1/q) −2 + Γ(1/q)
+Γ(1/q)
+.
+Since Γ is decreasing on (0, 1), Γ(1/q) ≥Γ(1) = 1. Using Taylor’s expansion with Lagrange’s
+remainder, for every 0 < x < 1 there exists 0 < θ < x such that
+h(x) def
+= Γ(1 −x) + Γ(1 + x) −2 = 1
+2x2Γ′′(1 −θ) + Γ′′(1 + θ)
+
+.
+Thus for 0 < x < 1/2, we have
+h(x) ≤1
+2x2∥Γ′′∥L∞( 1
+2 ,1) + ∥Γ′′∥L∞(1, 3
+2 )
+
+= 1
+2x2Γ′′(1/2) + Γ′′(1)
+
+< 9x2
+since Γ′′ decreases on (1
+2, 3
+2), by Lemma 13. Applying this to x = 1 −1
+q, we indeed obtain
+E|X1 −sgn(X1)|2 ≤h
+
+1 −1
+q
+
+≤9
+
+1 −1
+q
+2
+.
+□
+From this estimate, we can easily deduce the equi-continuity of the normalized projection
+functions, which we state directly in probabilistic terms in view of Proposition 7.
+12
+===== page 13 =====
+Lemma 18. Let 1 < q < 2, X1, X2, . . . be i.i.d. random variables from (14) and ε1, ε2, . . . be
+i.i.d. Rademacher random variables. For every unit vector a in Rn, we have
+E
+
+n
+X
+j=1
+ajXj
+ −E
+
+n
+X
+j=1
+ajεj
+
+ ≤3
+
+1 −1
+q
+
+.
+(45)
+Proof. Since εj has the same distribution as sgn(Xj), we have
+E
+
+n
+X
+j=1
+ajXj
+ −E
+
+n
+X
+j=1
+ajεj
+
+ =
+E
+
+n
+X
+j=1
+ajXj
+ −E
+
+n
+X
+j=1
+aj sgn(Xj)
+
+
+≤E
+
+n
+X
+j=1
+aj
+Xj −sgn(Xj)
+ ≤
+v
+u
+u
+tE
+
+n
+X
+j=1
+aj
+Xj −sgn(Xj)
+
+2
+=
+p
+E|X1 −sgn(X1)|2
+and Lemma 17 finishes the proof.
+□
+4.2. Proof of Theorem 3. By virtue of (14), our goal is to show that for every 1 < q < q0
+and every unit vector a in Rn, we have
+E
+
+n
+X
+j=1
+ajXj
+ ≥E
+X1 + X2
+√
+2
+
+def
+= cq.
+(46)
+For later use, we note that thanks to (14), for every vector a in R2,
+E|a1X1 + a2X2| = |a|vol(Proja⊥B2
+q)
+2Γ(1/q)
+=
+|a|
+Γ(1/q) sup
+x∈∂B2q
+
+
+x, 1
+|a|(−a2, a1)
+ =
+∥a∥
+q
+q−1
+Γ(1/q) .
+(47)
+In particular, we have
+cq = E
+X1 + X2
+√
+2
+ = 2
+1
+2 −1
+q
+Γ(1/q).
+(48)
+In view of the above explicit expression, inequality (46) clearly holds for n = 2. We therefore
+assume that n ≥3, a1 ≥· · · ≥an > 0 and proceed by induction on n. Recall the definition of
+the deficit parameter used earlier,
+δ(a) =
+a −e1 + e2
+√
+2
+
+2
+= 2 −
+√
+2(a1 + a2).
+4.2.1. The vector a is far from the extremizer. Here we consider the case
+p
+δ(a) ≥
+1 −1
+q
+
+c for
+a numerical constant c > 0. With hindsight, we set
+c = 5 −
+√
+2
+8
+· 105.
+Using the equi-continuity from Lemma 18 and the robust version of Szarek’s inequality from
+Theorem 8, we obtain
+E
+
+n
+X
+j=1
+ajXj
+ ≥E
+
+n
+X
+j=1
+ajεj
+ −3
+
+1 −1
+q
+
+≥
+1
+√
+2 + κ1
+p
+δ(a) −3
+
+1 −1
+q
+
+≥
+1
+√
+2 + (κ1c −3)
+
+1 −1
+q
+
+.
+Note that by convexity, 2x < 1 + 2(
+√
+2 −1)x for 0 < x < 1
+2, which with x = 1 −1
+q gives
+cq = 2
+1
+2 −1
+q
+Γ(1/q) ≤2
+1
+2 −1
+q =
+1
+√
+221−1
+q <
+1
+√
+2 + (2 −
+√
+2)
+
+1 −1
+q
+
+.
+Since
+c = 5 −
+√
+2
+κ1
+= 5 −
+√
+2
+8
+· 105,
+we get the desired bound (46) (nota bene, without the inductive argument).
+□
+13
+===== page 14 =====
+4.2.2. The vector a is close to the extremizer. It is left to consider the case when
+p
+δ(a) <
+
+1 −1
+q
+
+c,
+where c = 5−
+√
+2
+8
+· 105, as in the previous case. In particular, we also have that
+1
+√
+2 −c
+
+1 −1
+q
+
+≤a2 ≤a1 ≤
+1
+√
+2 + c
+
+1 −1
+q
+
+.
+(49)
+Letting p =
+q
+q−1, we shall assume that p is large relative to c, say p > Lc + 2 with a positive
+numerical constant L, with hindsight set to be
+L = 8 294 400.
+In particular, when 1
+p = 1 −1
+q < 10−5,
+0.7 < cq < 0.71,
+(50)
+since 0.7 <
+2−1/2
+Γ(1−10−5) < 21/2−1/q
+Γ(1/q) < 2−1/2+10−5 < 0.71.
+To run an inductive argument in order to prove (46), we consider the random variables
+X = a1X1 + a2X2 and Y = P
+j>2 ajXj. By the independence and symmetry of X and Y ,
+E
+
+n
+X
+j=1
+ajXj
+ = E|X + Y | = E max{|X|, |Y |}.
+Using the inductive hypothesis,
+E|Y | =
+q
+1 −a2
+1 −a2
+2E
+
+P
+j>2 ajXj
+p
+1 −a2
+1 −a2
+2
+ ≥cq
+q
+1 −a2
+1 −a2
+2,
+hence (by the convexity of the nondecreasing function t 7→max{|X|, t}), we get
+E
+
+n
+X
+j=1
+ajXj
+ = E max {|X|, |Y |} ≥E max {|X|, α} ,
+(51)
+where we set
+α def
+= cq
+q
+1 −a2
+1 −a2
+2.
+(52)
+Observe that
+E max {|X|, α} = E|X| + E(α −|X|)+
+(53)
+and, by (47),
+E|X| =
+∥(a1, a2)∥
+q
+q−1
+Γ(1/q)
+(48)
+= cq2
+1
+q −1
+2 ∥(a1, a2)∥
+q
+q−1 .
+(54)
+In view of the inductive step (51) and the identities (53) and (54), the desired inequality (46) is
+a consequence of the following proposition.
+Proposition 19. Under the assumptions and notation above, for 1 ≤q ≤1 + 10−12 we have
+E
+α −|X|
+
++ ≥
+
+1 −2
+1
+q −1
+2 ∥(a1, a2)∥
+q
+q−1
+
+cq.
+(55)
+Proof. If the right-hand side is nonpositive, we are done. Otherwise,
+∥(a1, a2)∥
+q
+q−1 < 2
+1
+2 −1
+q .
+Letting p =
+q
+q−1 and recalling (49), we see that we can apply Lemma 10 to conclude that
+|a1 −a2| ≤3.65
+r
+c
+p −2
+q
+1 −a2
+1 −a2
+2
+(52)
+= 3.65
+cq
+r
+c
+p −2α
+(50)
+< 5.25α
+√
+L
+.
+(56)
+14
+===== page 15 =====
+To simplify the right-hand side of (55), we write
+cq
+
+1 −2
+1
+q −1
+2 ∥(a1, a2)∥
+q
+q−1
+
+≤cq
+1 −∥(a1, a2)∥2
+
+= cq
+1 −(a2
+1 + a2
+2)
+1 +
+p
+a2
+1 + a2
+2
+(52)
+=
+α2
+cq(1 +
+p
+a2
+1 + a2
+2)
+(50)
+<
+α2
+0.7(1 +
+√
+0.97) < 3
+4α2,
+as we have a2
+1 + a2
+2 > 0.97, see (35). Therefore, it suffices to show that
+E(α −|X|)+ ≥3
+4α2.
+(57)
+Since the Xj are symmetric random variables, each Xj has the same distribution as εj|Xj|, for
+independent random signs εj, also independent of all the other random variables. We consider
+the event
+E def
+=
+
+|X1| ≤1,
+|X1| −|X2|
+ < α, |a1ε1 + a2ε2| < 1
+4α
+
+,
+on which we have
+a1ε1|X1| + a2ε2|X2|
+ ≤|X1||a1ε1 + a2ε2| + a2
+|X2| −|X1|
+ < 1
+4α + 1
+√
+2α < 24
+25α
+and thus, since X has the same distribution as a1ε1|X1| + a2ε2|X2|, we obtain the lower bound
+E(α −|X|)+ ≥α
+25P (E) = α
+25P
+
+|X1| ≤1,
+|X1| −|X2|
+ < α
+	
+P
+n
+|a1ε1 + a2ε2| < 1
+4α
+o
+.
+(58)
+The second probability in (58) is clearly at least 1
+2 provided that
+|a1 −a2| < α
+4 .
+For this to hold, it suffices that L > (5.25·4)2 = 441, by virtue of (56). For the first probability,
+analogously to Lemma 16, we will place a constant function under the density fq of |X1|.
+Lemma 20. Fix q ∈(1, 3
+2) and let fq : R+ →R+ be the density of |X1|. Then, we have
+fq(x) ≥
+1
+4(q −1)1[1−q−1
+2 ,1](x),
+x > 0.
+(59)
+Proof. Recall from Proposition 7,
+fq(x) =
+1
+(q −1)Γ(1 + 1
+q)x
+2−q
+q−1 e−x
+q
+q−1 ,
+x > 0.
+The proof is almost identical to that of Lemma 16. It suffices to check that the inequality holds
+for x = 1 −q−1
+2
+and x = 1. Since (1 −q−1
+2 )
+2−q
+q−1 > 1 −2−q
+q−1
+q−1
+2
+=
+q
+2 >
+1
+2, for 1 < q <
+3
+2,
+(1 −q−1
+2 )
+q
+q−1 < e−q
+2 < e−1
+2 and Γ(1 + 1
+q) < 1, we obtain
+fq
+
+1 −q −1
+2
+
+>
+1
+(q −1)
+1
+2e−e−1
+2 >
+1
+4(q −1).
+Moreover,
+fq(1) =
+1
+(q −1)Γ(1 + 1
+q)e−1 >
+1
+e(q −1) >
+1
+4(q −1).
+□
+Finishing the proof of Proposition 19. As earlier, Lemma 20 gives
+P
+
+|X1| ≤1,
+|X1| −|X2|
+ < α
+	
+≥
+ZZ
+{x≤1, |x−y|<α}
+
+1
+4(q −1)
+2
+1[1−q−1
+2 ,1](x)1[1−q−1
+2 ,1](y) dx dy
+≥
+( 1
+64,
+α > q−1
+2 ,
+α
+32(q−1),
+α ≤q−1
+2 ,
+(60)
+15
+===== page 16 =====
+where the last inequality follows from (42) with p replaced by
+1
+q−1.
+• If α > q−1
+2 , inequalities (58) and (60) yield the lower bound
+E
+α −|X|
+
++ ≥α
+25 · 1
+64 · 1
+2 =
+α
+3200.
+Since
+α
+(52)
+≤cq
+q
+1 −2a2
+2
+(50)
+< 0.71
+s
+1 −2
+ 1
+√
+2 −c
+p
+2
+< 0.71
+r
+2
+√
+2c
+p < 1.2
+√
+L
+,
+and L ≥8 294 400, we obtain the desired bound (57).
+• If α ≤q−1
+2 , inequalities (58) and (60) give
+E
+α −|X|
+
++ ≥α
+25 ·
+α
+32(q −1) · 1
+2 =
+α2
+1600(q −1).
+As we assume 1 −1
+q ≤
+1
+cL+2, this is at least the desired 3
+4α2 by a large margin for L = 8 294 400.
+The proof is complete for every 1 ≤q ≤q0, where
+q0 = Lc + 2
+Lc + 1 > 1 + 10−12.
+□
+5. Stability estimates with explicit constants
+The proofs of both Theorems 8 and 9 presented here follow the same strategy taken from [7],
+which we shall now outline. For a unit vector a in Rn, consider again the deficit
+δ(a) =
+a −e1 + e1
+√
+2
+
+2
+= 2 −
+√
+2(a1 + a2).
+Let a be a unit vector and without loss of generality assume that a1 ≥· · · ≥an ≥0. The
+approach leading to the stability of the inequalities of Szarek and Ball differs depending on
+whether the vector a is close to or far from the extremizer e1+e2
+√
+2 , as measured by δ(a).
+Case 1. When a is close to e1+e2
+√
+2 , we quantitatively sharpen the inequalities of Szarek and Ball
+by reapplying them only to a portion of the vector a, thus exhibiting their self-improving feature.
+The probabilistic formulae are crucial for this part.
+When a is far from the extremizer, three things can happen.
+Case 2. If the largest magnitude of the coordinates of a is below
+1
+√
+2, the second largest magnitude
+has to drop well below
+1
+√
+2 on the account of δ(a) being large and the classical Fourier-analytic
+approach of Haagerup [11] and Ball [2] allows to track the deficit.
+Case 3. If the largest magnitude is barely above
+1
+√
+2, a Lipschitz property of the section and
+projection functions allows to reduce this case to the one from Case 2.
+Case 4. If the largest magnitude is bounded below away from
+1
+√
+2, an easy convexity/projection
+argument gives a strict inequality with a margin.
+5.1. Stability of Szarek’s inequality. We first deal with the sharp Khinchin inequality of [30].
+Case 1. We begin with the case that a is near the extremizer.
+Lemma 21. Let 0 < δ0 < 2
+3 and take c0 =
+1
+2
+√
+2(
+q
+1
+5(4 −δ0) −√δ0) > 0. For every unit vector
+a in Rn with a1 ≥· · · ≥an ≥0 satisfying δ(a) ≤δ0, we have
+E
+
+n
+X
+j=1
+ajεj
+ ≥
+1
+√
+2 + c0
+p
+δ(a).
+(61)
+16
+===== page 17 =====
+Proof. We will assume without loss of generality that n ≥3 and a2
+1 + a2
+2 < 1 (the remaining
+cases can be obtained by taking a limit). Let
+θ def
+=
+1
+√
+2
+q
+1 −a2
+1 −a2
+2.
+Arguing as in the induction of Section 4 and using Jensen’s and Szarek’s inequalities, we get
+E
+
+n
+X
+j=1
+ajεj
+ = E max
+n
+|a1ε1 + a2ε2|,
+
+n
+X
+j=3
+ajεj
+
+o
+≥E max
+n
+|a1ε1 + a2ε2|, E
+
+n
+X
+j=3
+ajεj
+
+o
+≥E max
+
+|a1ε1 + a2ε2|, θ
+	
+= 1
+2 max{a1 + a2, θ} + 1
+2 max{a1 −a2, θ}
+≥a1 + a2
+2
++ 1
+2
+r
+1
+5(a1 −a2)2 + 4
+5θ2 = 2 −δ(a)
+2
+√
+2
++
+1
+2
+√
+2
+r
+1
+5(4 −δ(a))
+p
+δ(a)
+=
+1
+√
+2 +
+1
+2
+√
+2
+ r
+1
+5(4 −δ(a)) −
+p
+δ(a)
+!
+p
+δ(a) ≥
+1
+√
+2 + c0
+p
+δ(a),
+whenever δ(a) ≤δ0.
+□
+Case 2. We assume that a is far from the extremizer and a1 is at most
+1
+√
+2. A key step in
+Haagerup’s slick Fourier-analytic proof of Szarek’s inequality from [11] is the bound
+E
+
+n
+X
+j=1
+ajεj
+ ≥
+n
+X
+j=1
+a2
+jF(a−2
+j ),
+(62)
+for every unit vector a in Rn, where the function F : (0, ∞) →R is given by
+F(s) =
+2
+√πs · Γ
+ s+1
+2
+
+Γ
+ s
+2
+ ,
+s > 0.
+Haagerup showed that the function F(s) is increasing on (0, ∞), which will be crucial for us.
+Lemma 22. Let 0 < δ0 < 2. For every unit vector a in Rn with a1 ≥· · · ≥an ≥0 satisfying
+δ(a) ≥δ0 and a1 ≤
+1
+√
+2, we have
+E
+
+n
+X
+j=1
+ajεj
+ ≥
+1
+√
+2 + c1
+p
+δ(a),
+(63)
+with c1 =
+1
+2
+√
+2
+
+F
+
+8
+(2−δ0)2
+
+−F(2)
+
+.
+Proof. We have
+a2 ≤a1 + a2
+2
+= 2 −δ(a)
+2
+√
+2
+≤2 −δ0
+2
+√
+2 ,
+which shows that a−2
+j
+≥l0, for all j ≥2, with l0 =
+8
+(2−δ0)2 > 2. Employing (62) and using the
+monotonicity of F, we therefore have
+E
+
+n
+X
+j=1
+ajεj
+ ≥a2
+1F(2) +
+X
+j≥2
+a2
+jF(l0) = a2
+1F(2) + (1 −a2
+1)F(l0)
+= F(l0) + a2
+1
+F(2) −F(l0)
+
+≥F(l0) + 1
+2
+F(2) −F(l0)
+
+= 1
+2
+F(2) + F(l0)
+
+=
+1
+√
+2 + 1
+2(F(l0) −F(2)),
+since F(2) =
+1
+√
+2. The conclusion follows since δ(a) ≤2.
+□
+17
+===== page 18 =====
+Case 3. We assume that a is far from the extremizer but a1 is barely larger than
+1
+√
+2.
+Lemma 23. Let γ0 ≤1−1
+√
+2 and 2√γ0 < δ0 < 2. For every unit vector a in Rn with coordinates
+a1 ≥· · · ≥an ≥0 satisfying
+1
+√
+2 ≤a1 ≤
+1
+√
+2 + γ0 and δ(a) ≥δ0, we have
+E
+
+n
+X
+j=1
+ajεj
+ ≥
+1
+√
+2 + c2
+p
+δ(a),
+(64)
+with
+c2 =
+1
+2
+√
+2
+
+F
+
+8
+(2 + 2√γ0 −δ0)2
+
+−F(2)
+ q
+δ0 −2√γ0 −
+q
+2γ0 + γ2
+0.
+(65)
+Proof. We can assume that c2 ≥0 since otherwise it is enough to observe that
+E
+
+n
+X
+j=1
+ajεj
+ = E
+a1 +
+n
+X
+j=2
+ajεj
+ ≥
+a1 +
+n
+X
+j=2
+ajEεj
+ = |a1| ≥
+1
+√
+2.
+Consider the unit vector
+b def
+=
+ 
+1
+√
+2,
+r
+a2
+1 + a2
+2 −1
+2, a3, . . . , an
+!
+.
+Then by the triangle inequality, we obtain the following Lipschitz property,
+E
+
+n
+X
+j=1
+ajεj
+ ≥E
+
+n
+X
+j=1
+bjεj
+ −E
+
+n
+X
+j=1
+(aj −bj)εj
+
+≥E
+
+n
+X
+j=1
+bjεj
+ −
+
+E
+
+n
+X
+j=1
+(aj −bj)εj
+
+21/2
+=
+
+n
+X
+j=1
+bjεj
+ −|a −b|.
+Note that b1 ≥b2 and since b2 ≥a2, also b2 ≥b3 ≥· · · ≥bn. Moreover,
+r
+a2
+1 + a2
+2 −1
+2 −a2 =
+a2
+1 −1
+2
+q
+a2
+1 + a2
+2 −1
+2 + a2
+≤
+r
+a2
+1 −1
+2 ≤
+q√
+2γ0 + γ2
+0 <
+p
+2γ0,
+(66)
+thus
+|a −b|2 =
+
+a1 −1
+√
+2
+2
++
+ r
+a2
+1 + a2
+2 −1
+2 −a2
+!2
+< γ2
+0 + 2γ0.
+Observe that, since a1 ≥
+1
+√
+2, we have
+δ(b) = 2 −
+√
+2
+ 
+1
+√
+2 +
+r
+a2
+1 + a2
+2 −1
+2
+!
+= δ(a) −
+√
+2
+ 
+1
+√
+2 +
+r
+a2
+1 + a2
+2 −1
+2 −a1 −a2
+!
+≥δ0 −
+√
+2
+ r
+a2
+1 + a2
+2 −1
+2 −a2
+!
+(66)
+> δ0 −2√γ0.
+Thus, applying Lemma 22 to the vector b and using the above estimates, we get
+E
+
+n
+X
+j=1
+ajεj
+ ≥
+1
+√
+2 +
+1
+2
+√
+2
+
+F
+
+8
+(2 + 2√γ0 −δ0)2
+
+−F(2)
+ p
+δ(b) −
+q
+2γ0 + γ2
+0
+≥
+1
+√
+2 +
+1
+2
+√
+2
+
+F
+
+8
+(2 + 2√γ0 −δ0)2
+
+−F(2)
+ q
+δ0 −2√γ0 −
+q
+2γ0 + γ2
+0.
+Finally, as a1 ≥
+1
+√
+2, we have δ(a) = 2−
+√
+2(a1+a2) ≤1−
+√
+2a2 ≤1 and the proof is complete.
+□
+18
+===== page 19 =====
+Case 4. Finally, there is also a simple bound for the case that a1 is much larger than
+1
+√
+2.
+Lemma 24. Let γ0 > 0. For every unit vector a in Rn with a1 ≥
+1
+√
+2 + γ0, we have
+E
+
+n
+X
+j=1
+ajεj
+ ≥
+1
+√
+2 + γ0
+p
+δ(a).
+(67)
+Proof. By Jensen’s inequality and the fact that δ(a) ≤1,
+E
+
+n
+X
+j=1
+ajεj
+ ≥|a1| ≥
+1
+√
+2 + γ0 ≥
+1
+√
+2 + γ0
+p
+δ(a).
+□
+Constants. Combining Lemmas 21, 22, 23 and 24 with δ0 = 0.66 (almost the maximal value
+allowed in Lemma 21) and γ0 = 8 · 10−5, we conclude that for all unit vectors a in Rn,
+E
+
+n
+X
+j=1
+ajεj
+ ≥
+1
+√
+2 + κ1
+p
+δ(a)
+with
+κ1 ≥min {c0, c1, c2, γ0} > min
+
+1.7 · 10−3, 1.6 · 10−2, 5.1 · 10−4, 8 · 10−5	
+= 8 · 10−5.
+This completes the proof of Theorem 8.
+□
+5.2. Stability of Ball’s inequality. We now turn to the study of Ball’s inequality (1). Through-
+out this section we denote by Qn = [−1
+2, 1
+2]n the cube of unit volume.
+Case 1. We begin with the case that a is near the extremizer.
+Lemma 25. For every n ≥2 and every unit vector a in Rn with a1 ≥· · · ≥an ≥0 satisfying
+δ(a) ≤1
+4, we have
+vol
+Qn ∩a⊥
+≤
+√
+2 −c1
+p
+δ(a),
+(68)
+where c1 = 0.12.
+Proof. We can assume that n ≥3 and a2
+1 + a2
+2 < 1 (the missing cases follow by taking a limit).
+Leveraging a self-improving feature of Ball’s inequality, the proof of [7, Lemma 6.7] yields
+vol
+Qn ∩a⊥
+≤
+√
+2 max
+
+
+
+ 
+1 −δ +
+r
+δ(2 −δ)
+5
+!−1
+, (1 −δ)−2
+ 
+1 −δ −
+p
+δ(2 −δ)
+2
+√
+2
+!
+
+,
+where δ = δ(a). Denoting the maximum on the right-hand side by M(δ), we can take
+c1 =
+inf
+0<δ<1/4
+√
+21 −M(δ)
+√
+δ
+.
+Direct numerical calculations show that c1 > 0.12.
+□
+Cases 2 and 3. We assume that a is far from the extremizer but a1 is not much larger than
+1
+√
+2.
+Lemma 26. For every n ≥2 and every unit vector a in Rn with a1 ≥· · · ≥an ≥0 satisfying
+δ(a) ≥1
+4 and a1 ≤
+1
+√
+2 + γ0, we have
+vol
+Qn ∩a⊥
+≤
+√
+2 −c2,
+(69)
+where γ0 = 3.2 · 10−5 and c2 = 0.0002.
+19
+===== page 20 =====
+Proof. Here the proof relies on Fourier-analytic arguments. For the special function
+Ψ(s) = 2
+π
+√s
+Z ∞
+0
+
+sin t
+t
+
+s
+dt,
+Ball showed in [2] that Ψ(s) < Ψ(2) =
+√
+2, for every s > 2. We need a robust version of this
+estimate. Using the Nazarov–Podkorytov lemma [28], König and Koldobsky [22] proved that
+∀s ≥9
+4,
+Ψ(s) ≤Ψ(∞) =
+r
+6
+π =
+√
+2
+ 3
+π
+1/2
+(70)
+(that is, θ0 =
+ 3
+π
+1/2 in the notation of [7, Lemma 6.8]). The argument now splits in two cases.
+• Assume that a1 ≤
+1
+√
+2. Provided that
+s(a) def
+= 2
+
+1 −δ(a)
+2
+−2
+≥9
+4,
+which holds as long as δ(a) ≥2
+1 −2
+√
+2
+3
+
+= 0.11.., with the aid of (70), the arguments from [7,
+Lemma 6.8] give the explicit estimate
+vol
+Qn ∩a⊥
+≤
+ 3
+π
+1/4 √
+2 =
+√
+2 −
+√
+2(1 −(3/π)1/4).
+Therefore, we can take any
+c2 ≤
+√
+2(1 −(3/π)1/4) = 0.016...
+• Assume that
+1
+√
+2 < a1 ≤
+1
+√
+2 + γ0. Using Busemann’s theorem [5], this case is reduced in [7,
+Lemma 6.8] to the previous range, which yields the bound
+vol
+Qn ∩a⊥
+≤
+√
+2 −
+√
+2 min
+
+c1
+q
+1
+8 −√γ0, 1 −(3/π)1/4
+
++ 2
+q
+γ2
+0 + 2γ0,
+where c1 is the constant from Lemma 25. With the choice of parameters γ0 = 3.2 · 10−5 and
+c1 = 0.12, this estimate yields vol(Qn ∩a⊥) ≤
+√
+2 −0.00021.. and thus completes the proof.
+□
+Case 4. Finally, there is also a simple bound for the case that a1 is much larger than
+1
+√
+2.
+Lemma 27. For every n ≥2 and every unit vector a in Rn satisfying a1 ≥
+1
+√
+2 + γ0, we have
+vol
+Qn ∩a⊥
+≤
+√
+2 −
+2γ0
+1 + γ0
+√
+2
+p
+δ(a),
+(71)
+where γ0 = 3.2 · 10−5.
+Proof. By Ball’s geometric projection argument (see [2, 28]), we have vol(Qn ∩a⊥) ≤
+1
+a1 . Since
+a1 ≥
+1
+√
+2 + γ0 and hence δ(a) < 1, we deduce that
+vol(Qn ∩a⊥) ≤
+1
+1
+√
+2 + γ0
+=
+√
+2 −
+√
+2
+
+1 −
+1
+1 + γ0
+√
+2
+
+≤
+√
+2 −
+2γ0
+1 + γ0
+√
+2
+p
+δ(a).
+□
+Constants. Combining Lemmas 25, 26 and 27, and using that always δ(a) < 2, we conclude that
+for all unit vectors a in Rn, we have the inequality
+vol
+Qn ∩a⊥
+≤
+√
+2 −κ∞
+p
+δ(a)
+with
+κ∞≥min
+
+c1, c2
+√
+2,
+2γ0
+1 + γ0
+√
+2
+
+> 6 · 10−5.
+This completes the proof of Theorem 9.
+□
+20
+===== page 21 =====
+Remark 28. We would like to stress that the arguments of this paper have not been optimized
+to give the best possible constants p0 and q0 in Theorems 1 and 3. We instead chose to be fairly
+generous in various parts of the proof for the sake of clarity of the exposition.
+Acknowledgments. We should very much like to thank the anonymous referees for reading
+carefully our manuscript and sharing many valuable comments which helped significantly im-
+prove the paper.
+References
+[1] Milton Abramowitz and Irene A. Stegun. Handbook of mathematical functions with formulas, graphs, and
+mathematical tables, volume No. 55 of National Bureau of Standards Applied Mathematics Series. U. S.
+Government Printing Office, Washington, DC, 1964. For sale by the Superintendent of Documents.
+[2] Keith Ball. Cube slicing in Rn. Proc. Amer. Math. Soc., 97(3):465–473, 1986.
+[3] Keith Ball. Mahler’s conjecture and wavelets. Discrete Comput. Geom., 13(3-4):271–277, 1995.
+[4] Franck Barthe and Assaf Naor. Hyperplane projections of the unit ball of ln
+p . Discrete Comput. Geom.,
+27(2):215–226, 2002.
+[5] Herbert Busemann. A theorem on convex bodies of the Brunn-Minkowski type. Proc. Nat. Acad. Sci. U.S.A.,
+35:27–31, 1949.
+[6] Giorgos Chasapis, Hermann König, and Tomasz Tkocz. From Ball’s cube slicing inequality to Khinchin-type
+inequalities for negative moments. J. Funct. Anal., 281(9):Paper No. 109185, 23, 2021.
+[7] Giorgos Chasapis, Piotr Nayar, and Tomasz Tkocz. Slicing ℓp-balls reloaded: Stability, planar sections in ℓ1.
+Ann. Probab., 50(6):2344 – 2372, 2022.
+[8] Anindya De, Ilias Diakonikolas, and Rocco A. Servedio. A robust Khintchine inequality, and algorithms for
+computing optimal constants in Fourier analysis and high-dimensional geometry. SIAM J. Discrete Math.,
+30(2):1058–1094, 2016.
+[9] Alexandros Eskenazis. On extremal sections of subspaces of Lp. Discrete Comput. Geom., 65(2):489–509,
+2021.
+[10] Alexandros Eskenazis, Piotr Nayar, and Tomasz Tkocz. Gaussian mixtures: entropy and geometric inequal-
+ities. Ann. Probab., 46(5):2908–2945, 2018.
+[11] Uffe Haagerup. The best constants in the Khintchine inequality. Studia Math., 70(3):231–283 (1982), 1981.
+[12] Hugo Hadwiger. Gitterperiodische Punktmengen und Isoperimetrie. Monatsh. Math., 76:410–418, 1972.
+[13] Douglas Hensley. Slicing the cube in Rn and probability (bounds for the measure of a central cube slice in
+Rn by probability methods). Proc. Amer. Math. Soc., 73(1):95–100, 1979.
+[14] Nigel J. Kalton and Alexander Koldobsky. Intersection bodies and Lp-spaces. Adv. Math., 196(2):257–275,
+2005.
+[15] Aleksandr Khintchine. Über dyadische Brüche. Math. Z., 18(1):109–116, 1923.
+[16] Alexander Koldobsky. An application of the Fourier transform to sections of star bodies. Israel J. Math.,
+106:157–164, 1998.
+[17] Alexander Koldobsky. Sections of star bodies and the Fourier transform. In Harmonic analysis at Mount
+Holyoke (South Hadley, MA, 2001), volume 320 of Contemp. Math., pages 225–247. Amer. Math. Soc.,
+Providence, RI, 2003.
+[18] Alexander Koldobsky. Fourier analysis in convex geometry, volume 116 of Mathematical Surveys and Mono-
+graphs. American Mathematical Society, Providence, RI, 2005.
+[19] Alexander Koldobsky, Dmitry Ryabogin, and Artem Zvavitch. Projections of convex bodies and the Fourier
+transform. Israel J. Math., 139:361–380, 2004.
+[20] Alexander Koldobsky and Marisa Zymonopoulou. Extremal sections of complex lp-balls, 0 < p ≤2. volume
+159, pages 185–194. 2003. Dedicated to Professor Aleksander Pełczyński on the occasion of his 70th birthday
+(Polish).
+[21] Hermann König and Alexander Koldobsky. Volumes of low-dimensional slabs and sections in the cube. Adv.
+in Appl. Math., 47(4):894–907, 2011.
+[22] Hermann König and Alexander Koldobsky. On the maximal perimeter of sections of the cube. Adv. Math.,
+346:773–804, 2019.
+[23] Hermann König and Stanisław Kwapień. Best Khintchine type inequalities for sums of independent, rota-
+tionally invariant random vectors. Positivity, 5(2):115–152, 2001.
+[24] Dan Ma and Binwu He. Estimates for the extremal sections of ℓn
+p-balls. J. Math. Anal. Appl., 376(2):725–731,
+2011.
+[25] James Melbourne and Cyril Roberto. Quantitative form of Ball’s cube slicing in Rn and equality cases in
+the min-entropy power inequality. Proc. Amer. Math. Soc., 150(8):3595–3611, 2022.
+[26] Mathieu Meyer and Alain Pajor. Sections of the unit ball of Ln
+p. J. Funct. Anal., 80(1):109–123, 1988.
+[27] Piotr Nayar and Tomasz Tkocz. Extremal sections and projections of certain convex bodies: a survey. Preprint
+available at https://arxiv.org/abs/2210.00885, 2022.
+21
+===== page 22 =====
+[28] Fedor L. Nazarov and Anatoliy N. Podkorytov. Ball, Haagerup, and distribution functions. In Complex
+analysis, operators, and related topics, volume 113 of Oper. Theory Adv. Appl., pages 247–267. Birkhäuser,
+Basel, 2000.
+[29] Krzysztof Oleszkiewicz. On p-pseudostable random variables, Rosenthal spaces and ln
+p ball slicing. In Geo-
+metric aspects of functional analysis, volume 1807 of Lecture Notes in Math., pages 188–210. Springer, Berlin,
+2003.
+[30] Stanisław J. Szarek. On the best constants in the Khinchin inequality. Studia Math., 58(2):197–208, 1976.
+[31] Tomasz Tkocz. Khinchin inequalities and sections of convex bodies. Oberwolfach Rep. 19, 2021.
+(A. E.) CNRS, Institut de Mathématiques de Jussieu, Sorbonne Université, France and Trinity
+College, University of Cambridge, UK.
+Email address: alexandros.eskenazis@imj-prg.fr, ae466@cam.ac.uk
+(P. N.) University of Warsaw, 02-097 Warsaw, Poland.
+Email address: nayar@mimuw@edu.pl
+(T. T.) Carnegie Mellon University, Pittsburgh, PA 15213, USA.
+Email address: ttkocz@andrew.cmu.edu
+22

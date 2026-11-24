@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T21:55:25+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 3114,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"结论：有毛病（defect_step=1）。\\n\\n先说清核到哪一步：这份稿的证明正文（一～八段）我按写成后的样子逐段走查过 —— 正交基与叉积、Jacobi 因子与平面极坐标、Beta 积分化简、p=2 与 p=1 的分段积分、p→∞ 的被 2 控制的收敛与 S_p↑4、连续性、收尾的 ε=L/2 —— 前提/计算/逻辑三轴没有查出数学断点；下面四条都是「字面与命题身份」层面的要改项，按规矩任一条即判有毛病（零 finding 才是成立）。\\n\\nF1｜step=1（稿的 `## 命题` 与证明首段「设 p ∈ [1,∞) 固定。记 B_p^3 := …」）｜命题身份不符（台账一致这一轴）：稿内 `## 命题` 逐字是 stmt:000042 的 statement_full（「设 1 ≤ p < ∞，B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) … 则：(i) A_diag(p) = (√3/2)∫…；(ii) A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)…；(iii) …存在 P0…」），而这一趟给的 statement_id=000030 的 statement_full 是另一条（「截面面积计算核自检通过：极坐标 tanh-sinh 求积…」，evidence_kind=cross_check、证明栏空着）。按 000030 把签盖在这一份正文上＝把甲稿的签借给乙稿。最小补法：改挂 stmt:000042 送审（这一版正文 sha 43f4c2ab… 就是 000042 行的 proof_sha256）；或由 B 先给这一份稿登记一条与稿内 `## 命题` 逐字一致的命题行，再按新号重送。\\n\\nF2｜step=1（一、末句）｜原文逐字：「这就是 (i) 的第一个等号」。稿内 (i) 只有一条等式（g(θ) 那一式），(1/2)∫_0^{2π}‖e(θ)‖_p^{-2}dθ 并不出现在 (i) 里，读者对不上「第一个等号」。补法：改为「这给出 (i) 的积分表示（化成 g 的形式见下）」或删掉序数。\\n\\nF3｜step=2（二、末句）｜原文逐字：「代回上一段，便得 (i) 的第二个等号 A_diag(p) = (3/4)∫_0^{2π} S(θ)^{-2/p} dθ」。同上：(i) 里没有第二个等号，(3/4)∫S^{-2/p} 也不是 (i) 的字面。补法同 F2。\\n\\nF4｜step=3（三、首句）｜原文逐字：「三、另一条路把同一个面积写进 (x,y) 平面，这给出 (ii)。」序数错：这一段推的是 A_diag 的 g 形式，即 (i)；(ii) 是 A_face 的闭式，由第四段给出。补法：把「(ii)」改成「(i)」。\\n\\n程序性读数（如实报，不当结论用）：verify.verify_proof 这一趟以 already_signed 短接 —— 这一份正文 sha 43f4c2ab… 在稿上带着 sign block（连续 3/3、判词=成立，台账 verifications/000042.jsonl#v-000008），工具因此没有写新台账行（review_write.written=false）、sign_issuance.checked=false。这既不是「可以签」也不是「已签发」；要按本号重新审这一版，须先改稿（正文 sha 变了才不短接），并按 F1 把命题号挂对后重送。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\lp-ball-22\\\\runs\\\\V-20261124-215525-001.json\", \"messages\": [], \"outcome\": \"ok\", \"status\": \"done\", \"steps\": 8, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "8523c4196b3df86d3b1a2a4c942f147901fb9dd0754f68ff69d1a4310ff658c1",
+ "readings": {},
+ "role": "V",
+ "status": "done",
+ "task_id": "t-000190"
+}

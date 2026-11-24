@@ -1,0 +1,2 @@
+{"at": "2026-11-25T03:16:50+08:00", "kind": "refused", "owner": "t-000296", "problem": "名册里没有 G1 ⇒ 不猜（复用必须父先看名册）", "refusal_code": "not_in_roster", "requested_name": "G1", "seq": 1, "task_id": "t-000297"}
+{"at": "2026-11-25T03:47:59+08:00", "kind": "refused", "owner": "t-000296", "problem": "G1 已经用过（已销号）⇒ 受控拒绝（name_taken）：用过的名字不再发给另一个子代理（要新建一个同类子代理，让秘书按序号发下一个未用名，或显式给一个没用过的名字）", "refusal_code": "name_taken", "requested_name": "G1", "seq": 2, "task_id": "t-000322"}

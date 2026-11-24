@@ -1,0 +1,108 @@
+2026-11-24 23:51:48,350+0800 INFO  pdflatex - this process (22092) started by python in directory D:\Incubator\projects\lp-ball-22\out\package with command line: pdflatex -interaction=nonstopmode -halt-on-error main.tex
+2026-11-24 23:51:48,350+0800 INFO  pdflatex - running on Windows 10.0.26200
+2026-11-24 23:51:48,367+0800 INFO  pdflatex - running One MiKTeX Utility to refresh the file name database
+2026-11-24 23:51:48,374+0800 INFO  pdflatex.core - start process: miktex --enable-installer --quiet fndb refresh
+2026-11-24 23:51:53,230+0800 INFO  pdflatex - running One MiKTeX Utility to create font map files
+2026-11-24 23:51:53,230+0800 INFO  pdflatex.core - start process: miktex --enable-installer --quiet fontmaps configure
+2026-11-24 23:51:58,797+0800 INFO  pdflatex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-24 23:51:58,831+0800 INFO  pdflatex - allowing known shell commands
+2026-11-24 23:51:58,893+0800 INFO  pdflatex - going to create file: pdflatex.fmt
+2026-11-24 23:51:58,894+0800 INFO  pdflatex.core - start process: miktex --enable-installer formats build pdflatex --engine pdftex
+2026-11-24 23:52:14,024+0800 INFO  pdflatex - this process (22092) finishes with exit code 1
+2026-11-24 23:52:14,041+0800 WARN  pdflatex - minor issue: It has been a long time since a MiKTeX administrator has checked for updates.
+2026-11-24 23:52:14,042+0800 WARN  pdflatex.core - still open: main.tex
+2026-11-24 23:52:14,550+0800 INFO  pdflatex - this process (29376) started by python in directory D:\Incubator\projects\lp-ball-22\out\package with command line: pdflatex -interaction=nonstopmode -halt-on-error main.tex
+2026-11-24 23:52:14,551+0800 INFO  pdflatex - running on Windows 10.0.26200
+2026-11-24 23:52:14,553+0800 INFO  pdflatex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-24 23:52:14,557+0800 INFO  pdflatex - allowing known shell commands
+2026-11-24 23:52:15,365+0800 INFO  pdflatex - this process (29376) finishes with exit code 1
+2026-11-24 23:52:15,367+0800 WARN  pdflatex - minor issue: It has been a long time since a MiKTeX administrator has checked for updates.
+2026-11-24 23:52:15,367+0800 WARN  pdflatex.core - still open: main.tex
+2026-11-24 23:52:35,946+0800 INFO  pdflatex - this process (28332) started by python in directory D:\Incubator\projects\lp-ball-22\out\package with command line: pdflatex -interaction=nonstopmode -halt-on-error main.tex
+2026-11-24 23:52:35,947+0800 INFO  pdflatex - running on Windows 10.0.26200
+2026-11-24 23:52:35,949+0800 INFO  pdflatex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-24 23:52:35,955+0800 INFO  pdflatex - allowing known shell commands
+2026-11-24 23:52:36,911+0800 INFO  pdflatex - this process (28332) finishes with exit code 0
+2026-11-24 23:52:36,913+0800 WARN  pdflatex - minor issue: It has been a long time since a MiKTeX administrator has checked for updates.
+2026-11-24 23:52:37,414+0800 INFO  pdflatex - this process (6352) started by python in directory D:\Incubator\projects\lp-ball-22\out\package with command line: pdflatex -interaction=nonstopmode -halt-on-error main.tex
+2026-11-24 23:52:37,414+0800 INFO  pdflatex - running on Windows 10.0.26200
+2026-11-24 23:52:37,417+0800 INFO  pdflatex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-24 23:52:37,421+0800 INFO  pdflatex - allowing known shell commands
+2026-11-24 23:52:38,292+0800 INFO  pdflatex - this process (6352) finishes with exit code 0
+2026-11-24 23:52:38,294+0800 WARN  pdflatex - minor issue: It has been a long time since a MiKTeX administrator has checked for updates.
+2026-11-25 00:10:40,399+0800 INFO  pdflatex - this process (11964) started by python in directory D:\Incubator\projects\lp-ball-22\out\package with command line: pdflatex -interaction=nonstopmode -halt-on-error main.tex
+2026-11-25 00:10:40,399+0800 INFO  pdflatex - running on Windows 10.0.26200
+2026-11-25 00:10:40,402+0800 INFO  pdflatex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-25 00:10:40,408+0800 INFO  pdflatex - allowing known shell commands
+2026-11-25 00:10:40,471+0800 INFO  pdflatex - going to create file: pdflatex.fmt
+2026-11-25 00:10:40,471+0800 INFO  pdflatex.core - start process: miktex --enable-installer formats build pdflatex --engine pdftex
+2026-11-25 00:10:53,852+0800 INFO  pdflatex - this process (11964) finishes with exit code 0
+2026-11-25 00:10:53,853+0800 WARN  pdflatex - minor issue: It has been a long time since a MiKTeX administrator has checked for updates.
+2026-11-25 00:10:54,319+0800 INFO  pdflatex - this process (25288) started by python in directory D:\Incubator\projects\lp-ball-22\out\package with command line: pdflatex -interaction=nonstopmode -halt-on-error main.tex
+2026-11-25 00:10:54,320+0800 INFO  pdflatex - running on Windows 10.0.26200
+2026-11-25 00:10:54,322+0800 INFO  pdflatex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-25 00:10:54,326+0800 INFO  pdflatex - allowing known shell commands
+2026-11-25 00:10:55,181+0800 INFO  pdflatex - this process (25288) finishes with exit code 0
+2026-11-25 00:10:55,182+0800 WARN  pdflatex - minor issue: It has been a long time since a MiKTeX administrator has checked for updates.
+2026-11-25 00:14:03,100+0800 INFO  pdflatex - this process (14984) started by python in directory D:\Incubator\projects\lp-ball-22\out\package with command line: pdflatex -interaction=nonstopmode -halt-on-error main.tex
+2026-11-25 00:14:03,101+0800 INFO  pdflatex - running on Windows 10.0.26200
+2026-11-25 00:14:03,103+0800 INFO  pdflatex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-25 00:14:03,107+0800 INFO  pdflatex - allowing known shell commands
+2026-11-25 00:14:03,927+0800 INFO  pdflatex - this process (14984) finishes with exit code 0
+2026-11-25 00:14:03,928+0800 WARN  pdflatex - minor issue: It has been a long time since a MiKTeX administrator has checked for updates.
+2026-11-25 00:14:04,340+0800 INFO  pdflatex - this process (17572) started by python in directory D:\Incubator\projects\lp-ball-22\out\package with command line: pdflatex -interaction=nonstopmode -halt-on-error main.tex
+2026-11-25 00:14:04,340+0800 INFO  pdflatex - running on Windows 10.0.26200
+2026-11-25 00:14:04,342+0800 INFO  pdflatex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-25 00:14:04,345+0800 INFO  pdflatex - allowing known shell commands
+2026-11-25 00:14:05,064+0800 INFO  pdflatex - this process (17572) finishes with exit code 0
+2026-11-25 00:14:05,065+0800 WARN  pdflatex - minor issue: It has been a long time since a MiKTeX administrator has checked for updates.
+2026-11-25 00:16:05,022+0800 INFO  pdflatex - this process (16432) started by python in directory D:\Incubator\projects\lp-ball-22\out\package with command line: pdflatex -interaction=nonstopmode -halt-on-error main.tex
+2026-11-25 00:16:05,022+0800 INFO  pdflatex - running on Windows 10.0.26200
+2026-11-25 00:16:05,024+0800 INFO  pdflatex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-25 00:16:05,028+0800 INFO  pdflatex - allowing known shell commands
+2026-11-25 00:16:05,836+0800 INFO  pdflatex - this process (16432) finishes with exit code 0
+2026-11-25 00:16:05,838+0800 WARN  pdflatex - minor issue: It has been a long time since a MiKTeX administrator has checked for updates.
+2026-11-25 00:16:06,254+0800 INFO  pdflatex - this process (21956) started by python in directory D:\Incubator\projects\lp-ball-22\out\package with command line: pdflatex -interaction=nonstopmode -halt-on-error main.tex
+2026-11-25 00:16:06,254+0800 INFO  pdflatex - running on Windows 10.0.26200
+2026-11-25 00:16:06,257+0800 INFO  pdflatex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-25 00:16:06,261+0800 INFO  pdflatex - allowing known shell commands
+2026-11-25 00:16:07,011+0800 INFO  pdflatex - this process (21956) finishes with exit code 0
+2026-11-25 00:16:07,012+0800 WARN  pdflatex - minor issue: It has been a long time since a MiKTeX administrator has checked for updates.
+2026-11-25 03:11:41,174+0800 INFO  pdflatex - this process (28276) started by python in directory D:\Incubator\projects\lp-ball-22\out\package with command line: pdflatex -interaction=nonstopmode -halt-on-error main.tex
+2026-11-25 03:11:41,174+0800 INFO  pdflatex - running on Windows 10.0.26200
+2026-11-25 03:11:41,177+0800 INFO  pdflatex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-25 03:11:41,180+0800 INFO  pdflatex - allowing known shell commands
+2026-11-25 03:11:41,231+0800 INFO  pdflatex - going to create file: pdflatex.fmt
+2026-11-25 03:11:41,231+0800 INFO  pdflatex.core - start process: miktex --enable-installer formats build pdflatex --engine pdftex
+2026-11-25 03:11:54,508+0800 INFO  pdflatex - this process (28276) finishes with exit code 0
+2026-11-25 03:11:54,509+0800 WARN  pdflatex - minor issue: It has been a long time since a MiKTeX administrator has checked for updates.
+2026-11-25 03:11:55,515+0800 INFO  pdflatex - this process (22440) started by python in directory D:\Incubator\projects\lp-ball-22\out\package with command line: pdflatex -interaction=nonstopmode -halt-on-error main.tex
+2026-11-25 03:11:55,515+0800 INFO  pdflatex - running on Windows 10.0.26200
+2026-11-25 03:11:55,518+0800 INFO  pdflatex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-25 03:11:55,524+0800 INFO  pdflatex - allowing known shell commands
+2026-11-25 03:11:56,343+0800 INFO  pdflatex - this process (22440) finishes with exit code 0
+2026-11-25 03:11:56,344+0800 WARN  pdflatex - minor issue: It has been a long time since a MiKTeX administrator has checked for updates.
+2026-11-25 03:28:02,553+0800 INFO  pdflatex - this process (23528) started by python in directory D:\Incubator\projects\lp-ball-22\out\package with command line: pdflatex -interaction=nonstopmode -halt-on-error main.tex
+2026-11-25 03:28:02,553+0800 INFO  pdflatex - running on Windows 10.0.26200
+2026-11-25 03:28:02,556+0800 INFO  pdflatex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-25 03:28:02,560+0800 INFO  pdflatex - allowing known shell commands
+2026-11-25 03:28:03,363+0800 INFO  pdflatex - this process (23528) finishes with exit code 0
+2026-11-25 03:28:03,366+0800 WARN  pdflatex - minor issue: It has been a long time since a MiKTeX administrator has checked for updates.
+2026-11-25 03:28:03,788+0800 INFO  pdflatex - this process (28188) started by python in directory D:\Incubator\projects\lp-ball-22\out\package with command line: pdflatex -interaction=nonstopmode -halt-on-error main.tex
+2026-11-25 03:28:03,788+0800 INFO  pdflatex - running on Windows 10.0.26200
+2026-11-25 03:28:03,790+0800 INFO  pdflatex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-25 03:28:03,794+0800 INFO  pdflatex - allowing known shell commands
+2026-11-25 03:28:04,544+0800 INFO  pdflatex - this process (28188) finishes with exit code 0
+2026-11-25 03:28:04,546+0800 WARN  pdflatex - minor issue: It has been a long time since a MiKTeX administrator has checked for updates.
+2026-11-25 03:58:17,475+0800 INFO  pdflatex - this process (24540) started by python in directory D:\Incubator\projects\lp-ball-22\out\package with command line: pdflatex -interaction=nonstopmode -halt-on-error main.tex
+2026-11-25 03:58:17,476+0800 INFO  pdflatex - running on Windows 10.0.26200
+2026-11-25 03:58:17,479+0800 INFO  pdflatex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-25 03:58:17,483+0800 INFO  pdflatex - allowing known shell commands
+2026-11-25 03:58:18,291+0800 INFO  pdflatex - this process (24540) finishes with exit code 0
+2026-11-25 03:58:18,292+0800 WARN  pdflatex - minor issue: It has been a long time since a MiKTeX administrator has checked for updates.
+2026-11-25 03:58:18,715+0800 INFO  pdflatex - this process (24188) started by python in directory D:\Incubator\projects\lp-ball-22\out\package with command line: pdflatex -interaction=nonstopmode -halt-on-error main.tex
+2026-11-25 03:58:18,715+0800 INFO  pdflatex - running on Windows 10.0.26200
+2026-11-25 03:58:18,717+0800 INFO  pdflatex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-25 03:58:18,721+0800 INFO  pdflatex - allowing known shell commands
+2026-11-25 03:58:19,435+0800 INFO  pdflatex - this process (24188) finishes with exit code 0
+2026-11-25 03:58:19,437+0800 WARN  pdflatex - minor issue: It has been a long time since a MiKTeX administrator has checked for updates.

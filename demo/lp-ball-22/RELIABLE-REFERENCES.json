@@ -1,0 +1,9 @@
+{
+  "paths": [
+    "reference/"
+  ],
+  "verbatim": "reference/ 里的文件都是用户提供的可靠参考文献，可入库；其它地方的文件只作参考、不可入库",
+  "note": "由 temp/realrun-lpball/seed.ps1 按 draft/200 §2 投放：25 份种子 PDF 在 reference/；reference/ 之外的文件只作参考、不可入库。verbatim 逐字等于 seedinject.DECLARATION_VERBATIM。",
+  "declared_at": "2026-11-24T14:03:52.8982784+08:00",
+  "declared_by": "LPBALL-PREP seed.ps1"
+}

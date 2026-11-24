@@ -1,0 +1,1133 @@
+{
+  "role": "V",
+  "task": "V：这一趟派给你的活是 —— 审这一份证明稿 manuscripts/B/b-proof-000003.md（稿号 000003，对应在册命题 stmt:000042）：V 上一轮判「有毛病」的两条 finding 已按定点修处置 —— ① 正文与依赖表自相矛盾：这一版正文已写成自足的极坐标推导、不再引用 stmt:000034（改由本稿第「一」段自己从 H 上的极坐标出发重算），故「## 依赖」空表与正文一致；② 被引命题 stmt:000034 的手稿不在你读的 F 族路径这一条随引用一并消失。当前这一版 ## 证明 正文 sha256 = ee312d374be0629a7811a526759909590d8887b624adf6600e7865dfce849d82。请重新走查并把签盖在这一版上；判成立 / 有毛病，有毛病时每条 findings 带步号与 defect_step。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/B/b-proof-000003.md"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# F 的证明手稿：证明四段叙述的严格骨架：(i) Δ(2)=A_face(2)−A_diag(2)=0 且两者都等于 π；(ii) Δ(…\n\n- 计划：000002 · 子目标：n1\n- 依赖面洗稿：已洗=true；执行者=secretary-F\n- 稿族：b-proof\n- 产出者：agent-B-B1\n- 正文sha：ee312d374be0629a7811a526759909590d8887b624adf6600e7865dfce849d82\n- 命题指纹：da831b7b4a3dc1a603c2df16234b02d42fd9d3d56471081b702d31adc9ea8c7e\n- 命题类型：conjecture\n- 登记时间：2026-11-24T20:51:08+08:00\n- 标签：B_p^3 对角与面对角截面面积公式及 Δ(p) 的最终正性\n- 版本：2026-11-24T21:14:23+08:00@ee312d374be0629a7811a526759909590d8887b624adf6600e7865dfce849d82\n\n## 命题\n\n设 1 ≤ p < ∞，B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积，并记 A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。则：(i) A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，且 A_diag(2) = π、A_diag(1) = 3√3/4、lim_{p→∞}A_diag(p) = 3√3；(ii) A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，且 A_face(2) = π、A_face(1) = √2、lim_{p→∞}A_face(p) = 4√2；(iii) Δ 在 [1,∞) 上连续，Δ(2) = 0，Δ(1) = √2 − 3√3/4 > 0，lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0，因而存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 A_face(p) > A_diag(p)。\n\n## 证明\n\n设 p ∈ [1,∞) 固定。记 B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n，记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；并记 A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。\n\n一、先把 A_diag 写成平面 H := {x+y+z=0} 上的极坐标积分。取 u := (1,-1,0)/√2 与 v := (1,1,-2)/√6。直接验算得 ‖u‖ = ‖v‖ = 1、u·v = 0，又 u·(1,1,1) = 0、v·(1,1,1) = 0，故 {u,v} 是 H 的一组单位正交基，而 n := (1,1,1)/√3 是 H 的单位法向量、H = n^⊥。在 H 上以 (u,v) 为基取极坐标 x = r·e(θ)，其中 e(θ) := cosθ·u + sinθ·v、r ≥ 0、θ ∈ [0,2π)。由于 l_p 范数是正齐次的，‖x‖_p = r‖e(θ)‖_p，于是 x ∈ B_p^3 当且仅当 r ≤ ‖e(θ)‖_p^{-1}。平面极坐标的面积元带 Jacobi 因子 r，先对 r 积分得 ∫_0^{‖e(θ)‖_p^{-1}} r dr = (1/2)‖e(θ)‖_p^{-2}，再对 θ 积分便有 A_diag(p) = (1/2)∫_0^{2π}‖e(θ)‖_p^{-2} dθ，这就是 (i) 的第一个等号。\n\n二、把 ‖e(θ)‖_p 算出来。由 u、v 的分量得 e_1 = cosθ/√2 + sinθ/√6 = (√3cosθ+sinθ)/√6、e_2 = −cosθ/√2 + sinθ/√6 = −(√3cosθ−sinθ)/√6、e_3 = −2sinθ/√6。用余弦的差角公式 √3cosθ+sinθ = 2cos(θ−π/6) 与 √3cosθ−sinθ = 2cos(θ+π/6)，得 |e_1| = (2/√6)|cos(θ−π/6)|、|e_2| …（落档截断，原 6288 字）",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/B/b-proof-000003.md",
+          "encoding": "utf-8",
+          "bytes_read": 9575,
+          "total_bytes": 9575,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 45,
+          "total_lines": 45,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 45 行",
+          "sha256": "0e66740a0737c495ffc53ce03c56ae690ee06fc49441d3e5b66e8987813cb1f7"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 36608,
+        "prompt_cache_miss_tokens": 1335,
+        "tokens_in": 37943,
+        "tokens_out": 55,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000166"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/B/b-proof-000003.md",
+          "start_line": 40,
+          "max_lines": 10
+        },
+        "why": "读上一段被观测层截断的尾部（第七段连续性之后的部分），整篇读完再下结论"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |\n|---|---|---|\n\n（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/B/b-proof-000003.md",
+          "encoding": "utf-8",
+          "bytes_read": 9575,
+          "total_bytes": 9575,
+          "truncated": false,
+          "start_line": 40,
+          "lines_read": 6,
+          "total_lines": 45,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 40–45 行（共 45 行）",
+          "sha256": "0e66740a0737c495ffc53ce03c56ae690ee06fc49441d3e5b66e8987813cb1f7"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 37120,
+        "prompt_cache_miss_tokens": 5232,
+        "tokens_in": 42352,
+        "tokens_out": 300,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000166"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/B/b-proof-000003.md",
+          "start_line": 33,
+          "max_lines": 8
+        },
+        "why": "补读第七段（连续性）被观测层截断的尾部，整篇读完再下结论"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "\n六、p → ∞ 的极限。记 m(θ) := max(|cosθ|,|sinθ|,|cosθ+sinθ|)。因为 g(θ) 是三项之和，每一项都不超过 m(θ)^p 而其中至少有一项恰等于 m(θ)^p，故 m(θ)^p ≤ g(θ) ≤ 3m(θ)^p；两边取 −2/p 次幂并令 p → ∞（此时 3^{-2/p} → 1），得对每个 θ 都有 g(θ)^{-2/p} → m(θ)^{-2}。至于控制：由 g ≥ m^p 得 g^{-2/p} ≤ m^{-2}，而 m(θ) ≥ max(|cosθ|,|sinθ|) ≥ 1/√2，故 m(θ)^{-2} ≤ 2，于是对一切 p ≥ 1 与一切 θ 都有与 p 无关的界 g(θ)^{-2/p} ≤ 2。有界收敛定理给出 A_diag(p) → (√3/2)∫_0^{2π} m(θ)^{-2} dθ。剩下的积分按符号分段算出：在 [0,π/2] 上 m = cosθ+sinθ、在 [π/2,3π/4] 上 m = sinθ、在 [3π/4,π] 上 m = −cosθ，且 m(θ+π) = m(θ)；三段各自的积分与上一步 p = 1 时算过的三段相同、各为 1，故 ∫_0^{2π} m^{-2} dθ = 2·3 = 6，于是 lim_{p→∞} A_diag(p) = (√3/2)·6 = 3√3。另一边，S_p 关于 p 单调不减：若 |u|^p+|z|^p ≤ 1 而 p' > p，则必有 |u|,|z| ≤ 1，从而 |u|^{p'}+|z|^{p'} ≤ |u|^p+|z|^p ≤ 1。又并集 ∪_{p≥1}{(u,z) : |u|^p+|z|^p ≤ 1} 与开正方形 (0,1)² 只差一个零测集（任给 (u,z) ∈ (0,1)²，max(|u|,|z|)^p → 0，故充分大的 p 使 |u|^p+|z|^p ≤ 1），其面积是 4；由单调收敛得 S_p ↑ 4，于是 lim_{p→∞} A_face(p) = √2·1·4 = 4√2。与上一条合并得 lim_{p→∞} Δ(p) = 4√2 − 3√3，它同样是正的（仍由 32 > 27）。\n\n七、连续性。先看 A_face：S_p = 4∫_0^1 (1−u^p)^{1/p} du 的被积函数关于 (p,u) ∈ [1,∞)×[0,1] 连续（u = 1 处它恒取值 0），且被常数 1 控制，故由有界收敛定理 p ↦ S_p 在 [1,∞) 上连续；又 p ↦ 2^{-1/p} 连续，于是 A_face 在 [1,∞) 上连续。再看 A_diag：由上面那条与 p 无关的控制 g(θ)^{-2/p} ≤ 2 以及 g 关于 (p,θ) 的联合连续性，对任意收敛序列 p_k → p 都有 g^{-2/p_k} → g^{-2/p} 逐点成立且被常数 2 控制，故有界收敛定理给出 p ↦ ∫_0^{2π} g(θ)^{-2/p} dθ 连续；A_diag 就是它乘常数 √3/2，故 A_diag 也连续。两者相减，Δ 在 [1,∞) 上连续。\n\n八、收尾。记 L := 4√2 − 3√3 > 0，取 ε := L/2 > 0。由 Δ 的连续性与 lim_{p→∞} Δ(p) = L，存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 |Δ(p) − L| < ε，从而 Δ(p) > L/2 > 0，即 A_face(p) > A_diag(p) 对一切 p ≥ P0 成立。至此 (i)(ii)(iii) 全部成立。\n\n## 依赖\n",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/B/b-proof-000003.md",
+          "encoding": "utf-8",
+          "bytes_read": 9575,
+          "total_bytes": 9575,
+          "truncated": false,
+          "start_line": 33,
+          "lines_read": 8,
+          "total_lines": 45,
+          "next_line": 41,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 33–40 行（共 45 行）；续读 start_line=41",
+          "sha256": "0e66740a0737c495ffc53ce03c56ae690ee06fc49441d3e5b66e8987813cb1f7"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 41600,
+        "prompt_cache_miss_tokens": 1275,
+        "tokens_in": 42875,
+        "tokens_out": 262,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000166"
+    },
+    {
+      "index": 3,
+      "shape": "tool",
+      "payload": {
+        "name": "verify.verify_proof",
+        "args": {
+          "statement_id": "000042",
+          "proof_manuscript": "manuscripts/B/b-proof-000003.md"
+        },
+        "why": "按在册命题 000042 重新走查 B 的证明稿 000003（正文 sha ee312d…），走完整篇再判"
+      },
+      "result": {
+        "tool": "verify.verify_proof",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "kind": "",
+          "statement_id": "000042",
+          "verification_id": "v-000002",
+          "verdict": "有毛病",
+          "defect_step": 6,
+          "findings": [
+            {
+              "level": "error",
+              "step": 6,
+              "kind": "区间/面积错误",
+              "detail": "并集 ∪_{p≥1}{(u,z) : |u|^p+|z|^p ≤ 1} 关于原点对称，包含四个象限；它与 (0,1)² 不只差一个零测集，且 (0,1)² 的面积为1，不是文中紧接着断言的4。应改为 (-1,1)²（或四个开象限之并）后，才能得到并集面积4并用单调收敛推出 S_p↑4。"
+            }
+          ],
+          "unresolved_errors": 1,
+          "proof_sha256": "ee312d374be0629a7811a526759909590d8887b624adf6600e7865dfce849d82",
+          "proof_chars": 5118,
+          "signed_bit3": false,
+          "reviewed_by": {},
+          "bits": {
+            "numeric": "pending",
+            "proof": true,
+            "reviewed": false,
+            "formal": "pending",
+            "audited": false,
+            "origin": "own_result",
+            "evidence": {
+              "numeric": {},
+              "numeric_reason": "",
+              "proof_process": "设 p ∈ [1,∞) 固定。记 B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n，记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；并记 A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。\n\n一、先把 A_diag 写成平面 H := {x+y+z=0} 上的极坐标积分。取 u := (1,-1,0)/√2 与 v := (1,1,-2)/√6。直接验算得 ‖u‖ = ‖v‖ = 1、u·v = 0，又 u·(1,1,1) = 0、v·(1,1,1) = 0，故 {u,v} 是 H 的一组单位正交基，而 n := (1,1,1)/√3 是 H 的单位法向量、H = n^⊥。在 H 上以 (u,v) 为基取极坐标 x = r·e(θ)，其中 e(θ) := cosθ·u + sinθ·v、r ≥ 0、θ ∈ [0,2π)。由于 l_p 范数是正齐次的，‖x‖_p = r‖e(θ)‖_p，于是 x ∈ B_p^3 当且仅当 r ≤ ‖e(θ)‖_p^{-1}。平面极坐标的面积元带 Jacobi 因子 r，先对 r 积分得 ∫_0^{‖e(θ)‖_p^{-1}} r dr = (1/2)‖e(θ)‖_p^{-2}，再对 θ 积分便有 A_diag(p) = (1/2)∫_0^{2π}‖e(θ)‖_p^{-2} dθ，这就是 (i) 的第一个等号。\n\n二、把 ‖e(θ)‖_p 算出来。由 u、v 的分量得 e_1 = cosθ/√2 + sinθ/√6 = (√3cosθ+sinθ)/√6、e_2 = −cosθ/√2 + sinθ/√6 = −(√3cosθ−sinθ)/√6、e_3 = −2sinθ/√6。用余弦的差角公式 √3cosθ+sinθ = 2cos(θ−π/6) 与 √3cosθ−sinθ = 2cos(θ+π/6)，得 |e_1| = (2/√6)|cos(θ−π/6)|、|e_2| = (2/√6)|cos(θ+π/6)|、|e_3| = (2/√6)|sinθ|。记 S(θ) := |cos(θ−π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p，则 ‖e(θ)‖_p^p = (2/√6)^p·S(θ)；因为 (2/√6)² = 2/3，两边取 −2/p 次幂得 ‖e(θ)‖_p^{-2} = (3/2)·S(θ)^{-2/p}。代回上一段，便得 (i) 的第二个等号 A_diag(p) = (3/4)∫_0^{2π} S(θ)^{-2/p} dθ。\n\n三、另一条路把同一个面积写进 (x,y) 平面，这给出 (ii)。H 上的点可唯一写成 (x,y,−x−y)，即 Φ(x,y) := (x,y,−x−y) 是 R² 到 H 的双射；它的偏导向量 ∂_xΦ = (1,0,−1) 与 ∂_yΦ = (0,1,−1) 的叉积为 (1,1,1)、模为 √3，故曲面面积公式给出 A_diag(p) = √3∫∫_D dx dy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。再对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)：记 g(θ) := |cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p，由 |r cosθ|^p+|r sinθ|^p+|r(cosθ+sinθ)|^p = r^p g(θ) 得 (x,y) ∈ D 当且仅当 r ≤ g(θ)^{-1/p}；用面积元 r dr dθ 先对 r 积分得 ∫_0^{g(θ)^{-1/p}} r dr = (1/2)g(θ)^{-2/p}，于是 A_diag(p) = (√3/2)∫_0^{2π} g(θ)^{-2/p} dθ。两条路算的是同一个 A_diag，故上面三个积分表示彼此相等；下文算特例值时用 g(θ) 这一式。\n\n四、A_face 的闭式。取 n_face := (1,1,0)/√2，则 n_face^⊥ 是平面 x+y=0。用 (x,z) ↦ (x,−x,z) 参数化这个平面：两个偏导 (1,−1,0) 与 (0,0,1) 的叉积为 (−1,−1,0)、模为 √2，而该点的 l_p 范数的 p 次幂是 2|x|^p+|z|^p，故 A_face(p) = √2·area{(x,z) : 2|x|^p+|z|^p ≤ 1}。作代换 u := 2^{1/p}x，即 x = 2^{-1/p}u、dx = 2^{-1/p}du，则 2|x|^p = |u|^p，于是 A_face(p) = √2·2^{-1/p}·S_p，其中 S_p := area{(u,z) : |u|^p+|z|^p ≤ 1}。算 S_p：由对称性与竖向切片（固定 u 时 |z| ≤ (1−|u|^p)^{1/p}）得 S_p = 4∫_0^1 (1−u^p)^{1/p} du。作代换 t = u^p（u = t^{1/p}、du = (1/p)t^{1/p−1}dt）把积分化为 Beta 积分：4∫_0^1 (1−u^p)^{1/p} du = (4/p)∫_0^1 t^{1/p−1}(1−t)^{1/p} dt = (4/p)B(1/p, 1+1/p) = (4/p)·Γ(1/p)Γ(1+1/p)/Γ(1+2/p) = 4Γ(1+1/p)²/Γ(1+2/p)，最后一步用了 Γ(1+1/p) = Γ(1/p)/p。代回上式即得 (ii) 的闭式 A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)。\n\n五、特例值。p = 2 时 g(θ) = cos²θ+sin²θ+(cosθ+sinθ)² = 2+sin2θ，而 g^{-2/p} 在 p = 2 处就是 g^{-1}，故 A_diag(2) = (√3/2)∫_0^{2π} dθ/(2+sin2θ)。作代换 u = 2θ：θ 走一整圈对应 u 走两圈、且 sin 以 2π 为周期，故 ∫_0^{2π} dθ/(2+sin2θ) = (1/2)∫_0^{4π} du/(2+sin u) = ∫_0^{2π} du/(2+sin u)；再用 ∫_0^{2π} du/(a+b sin u) = 2π/√(a²−b²)（取 a = 2、b = 1）得它为 2π/√3，于是 A_diag(2) = (√3/2)·(2π/√3) = π。同一 p = 2 下 S_2 = 4∫_0^1 √(1−u²) du = 4·(π/4) = π，而 2^{1/2−1/2} = 1，故 A_face(2) = π。两者相等，于是 Δ(2) = 0。\n\np = 1 时 g(θ) = |cosθ|+|sinθ|+|cosθ+sinθ|，满足 g(θ+π) = g(θ)，故只需算 [0,π] 上的积分再乘 2。在 [0,π/2] 上三项都非负，g = 2(cosθ+sinθ)，从而 g^{-2} = (1/4)(cosθ+sinθ)^{-2}；把 cosθ+sinθ 写成 √2sin(θ+π/4)，代换 φ = θ+π/4 得 ∫_0^{π/2} dθ/(cosθ+sinθ)² = (1/2)∫_{π/4}^{3π/4} dφ/sin²φ = (1/2)[−cotφ] 在两端取值之差 = 1，故这一段贡献 1/4。在 [π/2,3π/4] 上 cosθ ≤ 0 而 cosθ+sinθ ≥ 0，故 g = 2sinθ、g^{-2} = (1/4)sin^{-2}θ，而 ∫_{π/2}^{3π/4} dθ/sin²θ = [−cotθ] 在两端取值之差为 1，这一段也贡献 1/4。在 [3π/4,π] 上 cosθ+sinθ ≤ 0，故 g = −2cosθ、g^{-2} = (1/4)cos^{-2}θ，而 ∫_{3π/4}^{π} dθ/cos²θ = [tanθ] 在两端取值之差为 1，这一段同样贡献 1/4。三段相加得 ∫_0^{2π} g^{-2} dθ = 2·(3/4) = 3/2，于是 A_diag(1) = (√3/2)·(3/2) = 3√3/4。另一边 S_1 = 4∫_0^1 (1−u) du = 2，而 2^{-1/1} = 1/2，故 A_face(1) = √2·(1/2)·2 = √2。于是 Δ(1) = √2 − 3√3/4，它是正的，因为 4√2 > 3√3 等价于平方后的 32 > 27。\n\n六、p → ∞ 的极限。记 m(θ) := max(|cosθ|,|sinθ|,|cosθ+sinθ|)。因为 g(θ) 是三项之和，每一项都不超过 m(θ)^p 而其中至少有一项恰等于 m(θ)^p，故 m(θ)^p ≤ g(θ) ≤ 3m(θ)^p；两边取 −2/p 次幂并令 p → ∞（此时 3^{-2/p} → 1），得对每个 θ 都有 g(θ)^{-2/p} → m(θ)^{-2}。至于控制：由 g ≥ m^p 得 g^{-2/p} ≤ m^{-2}，而 m(θ) ≥ max(|cosθ|,|sinθ|) ≥ 1/√2，故 m(θ)^{-2} ≤ 2，于是对一切 p ≥ 1 与一切 θ 都有与 p 无关的界 g(θ)^{-2/p} ≤ 2。有界收敛定理给出 A_diag(p) → (√3/2)∫_0^{2π} m(θ)^{-2} dθ。剩下的积分按符号分段算出：在 [0,π/2] 上 m = cosθ+sinθ、在 [π/2,3π/4] 上 m = sinθ、在 [3π/4,π] 上 m = −cosθ，且 m(θ+π) = m(θ)；三段各自的积分与上一步 p = 1 时算过的三段相同、各为 1，故 ∫_0^{2π} m^{-2} dθ = 2·3 = 6，于是 lim_{p→∞} A_diag(p) = (√3/2)·6 = 3√3。另一边，S_p 关于 p 单调不减：若 |u|^p+|z|^p ≤ 1 而 p' > p，则必有 |u|,|z| ≤ 1，从而 |u|^{p'}+|z|^{p'} ≤ |u|^p+|z|^p ≤ 1。又并集 ∪_{p≥1}{(u,z) : |u|^p+|z|^p ≤ 1} 与开正方形 (0,1)² 只差一个零测集（任给 (u,z) ∈ (0,1)²，max(|u|,|z|)^p → 0，故充分大的 p 使 |u|^p+|z|^p ≤ 1），其面积是 4；由单调收敛得 S_p ↑ 4，于是 lim_{p→∞} A_face(p) = √2·1·4 = 4√2。与上一条合并得 lim_{p→∞} Δ(p) = 4√2 − 3√3，它同样是正的（仍由 32 > 27）。\n\n七、连续性。先看 A_face：S_p = 4∫_0^1 (1−u^p)^{1/p} du 的被积函数关于 (p,u) ∈ [1,∞)×[0,1] 连续（u = 1 处它恒取值 0），且被常数 1 控制，故由有界收敛定理 p ↦ S_p 在 [1,∞) 上连续；又 p ↦ 2^{-1/p} 连续，于是 A_face 在 [1,∞) 上连续。再看 A_diag：由上面那条与 p 无关的控制 g(θ)^{-2/p} ≤ 2 以及 g 关于 (p,θ) 的联合连续性，对任意收敛序列 p_k → p 都有 g^{-2/p_k} → g^{-2/p} 逐点成立且被常数 2 控制，故有界收敛定理给出 p ↦ ∫_0^{2π} g(θ)^{-2/p} dθ 连续；A_diag 就是它乘常数 √3/2，故 A_diag 也连续。两者相减，Δ 在 [1,∞) 上连续。\n\n八、收尾。记 L := 4√2 − 3√3 > 0，取 ε := L/2 > 0。由 Δ 的连续性与 lim_{p→∞} Δ(p) = L，存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 |Δ(p) − L| < ε，从而 Δ(p) > L/2 > 0，即 A_face(p) > A_diag(p) 对一切 p ≥ P0 成立。至此 (i)(ii)(iii) 全部成立。",
+              "proof_source": "own",
+              "reviewed_by": {},
+              "reviewed_source": "",
+              "formal": {},
+              "formal_reason": "",
+              "audited_by": {}
+            },
+            "voided_by": {},
+            "grade": "conjecture",
+            "audited_badge": false
+          },
+          "review_write": {
+            "written": false,
+            "rolled_back": false,
+            "append_state": "appended",
+            "re_sign_required": false,
+            "grade": "",
+            "statement_id": "000042",
+            "proof_no": 1,
+            "proof_sha256": "ee312d374be0629a7811a526759909590d8887b624adf6600e7865dfce849d82",
+            "kind_upgrade": {},
+            "upgrade_note": "",
+            "grade_recomputed": {},
+            "streak": 0,
+            "need": 3,
+            "streak_ok": false,
+            "deferred_to": "secretary",
+            "reason": "发签这一步不在这一支：在册档由 V 的秘书判定并发（业主 2026-10-29），未在册档由 V 自己颁发签信封。台账那一行已落（v-000002）",
+            "manuscript_signed": false,
+            "filed": "not_read_by_v",
+            "v_review": {
+              "checked": true,
+              "review_id": "v-review-000013",
+              "written": true,
+              "idempotent": false,
+              "path": "verifications/reviews/v-review-000013.md",
+              "delivery": {
+                "checked": true,
+                "state": "dispatched",
+                "item_id": "t-000167",
+                "key": "v-review@v-review-000013",
+                "role": "B",
+                "parent_task_id": "t-000151",
+                "reason": "已投给 t-000151 的板项 t-000167",
+                "detail_path": "V 的审阅报告：`verifications/reviews/v-review-000013.md`\n- 被审稿：`manuscripts/B/b-proof-000003.md`\n- 结论：有毛病（V 的秘书语义判定：fault）\n- 台账锚点：`verifications/000042.jsonl#v-000002`\nV 的原文不转达；这份报告就是给你的审阅意见。改完把同一份稿重新送 V。\n",
+                "existing": false
+              },
+              "reason": "V 稿已落盘：verifications/reviews/v-review-000013.md"
+            },
+            "signed_delivery": {}
+          },
+          "ledger": "verifications/000042.jsonl#v-000002",
+          "reason": "v-000002：有毛病（不签：签没落成）",
+          "detail": "",
+          "exhaustion_review": {},
+          "signer": "",
+          "proof_authors": [],
+          "report_path": "",
+          "checks": [],
+          "missing": [],
+          "citations": [],
+          "citation_checks": [],
+          "citation_gate": {
+            "ok": true,
+            "blocking": [],
+            "weaker": [],
+            "problem": "",
+            "why": ""
+          },
+          "secretary_judge": {
+            "checked": true,
+            "answer": "有缺陷要指出",
+            "axis": "fault",
+            "unwired": false,
+            "reason": "V 明确点出第6步中并集与开正方形 (0,1)² 的面积/集合比较错误，并指出该错误影响 S_p↑4 的推导，属于证明链缺陷。",
+            "basis": [
+              "第6步把并集与开正方形 (0,1)² 比较，但 (0,1)² 面积为1而非4",
+              "该句按原文不成立，并影响 S_p↑4 的推导",
+              "应改为 (-1,1)²（或四个开象限之并）后，才能得到并集面积4并用单调收敛推出 S_p↑4。"
+            ],
+            "refused": "",
+            "cost": {
+              "ledger": "000855",
+              "charged": true,
+              "ledger_reason": "charged",
+              "call_index": 749,
+              "prompt_sha256": "67a240f3a7b9d8bdf3bf123e7e8d94b81b542f8adfa1ee4202611da6624257eb",
+              "tokens": 2215,
+              "usd": 0.000539
+            },
+            "verdict": "有毛病",
+            "defect_step": 6,
+            "fault_kind": "math",
+            "fault_cause": "",
+            "report_gap": "",
+            "statement_id": "000042",
+            "proof_no": 1,
+            "material": {
+              "v_reply": "{\"verdict\":\"有毛病\",\"defect_step\":6,\"quote\":\"又并集 ∪_{p≥1}{(u,z) : |u|^p+|z|^p ≤ 1} 与开正方形 (0,1)² 只差一个零测集（任给 (u,z) ∈ (0,1)²，max(|u|,|z|)^p → 0，故充分大的 p 使 |u|^p+|z|^p ≤ 1），其面积是 4；\",\"why\":\"第6步把并集与开正方形 (0,1)² 比较，但 (0,1)² 面积为1而非4，且该并集关于原点对称、含四个象限，并不只与第一象限开正方形差零测集；该句按原文不成立，并影响 S_p↑4 的推导。\",\"findings\":[{\"level\":\"error\",\"step\":6,\"kind\":\"区间/面积错误\",\"detail\":\"并集 ∪_{p≥1}{(u,z) : |u|^p+|z|^p ≤ 1} 关于原点对称，包含四个象限；它与 (0,1)² 不只差一个零测集，且 (0,1)² 的面积为1，不是文中紧接着断言的4。应改为 (-1,1)²（或四个开象限之并）后，才能得到并集面积4并用单调收敛推出 S_p↑4。\"}],\"citation_checks\":[]}",
+              "ledger_row": {
+                "verdict": "有毛病",
+                "defect_step": 6
+              }
+            },
+            "defect_scope": "proof",
+            "defect_step_basis": ""
+          },
+          "sign_issuance": {
+            "checked": true,
+            "issue": false,
+            "issued": false,
+            "landed": false,
+            "decision": "不签发",
+            "streak": 0,
+            "need": 3,
+            "streak_ok": false,
+            "projected": 0,
+            "same_sha": true,
+            "state": "rejected",
+            "fault_kind": "math",
+            "reason": "这一转秘书语义判定说「有毛病」（fault）⇒ 不发签；这一转就是终局：已按 fault 打回 F（错在第几步见洗过的转达与 findings）",
+            "basis": [
+              "秘书判定 checked=True axis=fault",
+              "continuous=0/3",
+              "row=v-000002"
+            ],
+            "reading": {
+              "checked": true,
+              "state": "rejected",
+              "ok": false,
+              "in_sync": true,
+              "ledger_present": true,
+              "statement_id": "000042",
+              "proof_no": 1,
+              "sha": "ee312d374be0629a7811a526759909590d8887b624adf6600e7865dfce849d82",
+              "verification_id": "v-000002",
+              "verdict": "有毛病",
+              "round": 2,
+              "unresolved_errors": 1,
+              "rows": 2,
+              "proof_rows": 2,
+              "problems": [],
+              "superseded": [
+                {
+                  "verification_id": "v-000001",
+                  "verdict": "有毛病",
+                  "round": 1,
+                  "at": "2026-11-24T21:11:12+08:00",
+                  "proof_no": 1,
+                  "proof_sha256": "c41c0cfc4384f4c61ebd8f6c28a51c5ed92800bf7cd03fbd7d8a272a46eb291c",
+                  "signed_bit3": false,
+                  "unresolved_errors": 2,
+                  "why": "逐段核对：A_diag 的参数化与极坐标换元正确；p=1、p=2 特例常数一致；连续性有统一界 2 与有界收敛依据；p→∞ 时 m(θ) 极限、分段积分、Γ 常数与收尾均无断点，未发现可指到步号的缺陷。；`stmt:000034`（在哪一步：证明正文（未标步号的行））· 类别：等级读不出来（判不了）（`citation_level_unreadable`） · 期望：盘上有一份这一条命题的手稿（`"
+                }
+              ],
+              "superseded_total": 1,
+              "streak": 0,
+              "need": 3,
+              "streak_ok": false,
+              "legacy_rows": 0,
+              "counted_by": "legacy:ledger_tail",
+              "ledger": "verifications/000042.jsonl",
+              "why": "000042#p1 的现行正文（sha ee312d374be0…）最近一签是 v-000002：秘书语义判定轴=fault ⇒ 这一份要打回，按缺陷处理（V 写下的陈述：'有毛病'；unresolved_errors=1；why：第6步把并集与开正方形 (0,1)² 比较，但 (0,1)² 面积为1而非4，且该并集关于原点对称、含四个象限，并不只与第一象限开正方形差零测集；该句按原文不成立，并影响 S_p↑4 的推导。）；更早的 1 签已降为历史（见 superseded），不能把它翻回「成立」",
+              "hard_ban_markers": [],
+              "secretary_axis": "fault",
+              "secretary_fault": true,
+              "secretary_judged": true,
+              "secretary_unjudged": false
+            },
+            "cost": {},
+            "material": {},
+            "writeback": {},
+            "statement_id": "000042"
+          },
+          "review_passes": [
+            {
+              "pass": 1,
+              "axis": "fault",
+              "fault_kind": "math",
+              "fault_cause": "",
+              "decision": "不签发",
+              "streak": 0,
+              "need": 3,
+              "streak_ok": false,
+              "issue": false,
+              "issued": false,
+              "verdict": "有毛病",
+              "verification_id": "v-000002",
+              "review_call": "3414ea000c79",
+              "terminal": "rejected"
+            }
+          ],
+          "manuscript_identity": {
+            "checked": true,
+            "statement_id": "000042",
+            "manuscript_id": "000003",
+            "row_manuscript_id": "000003",
+            "matched_by": "manuscript_id",
+            "fallback": false,
+            "row_checked": true,
+            "found": true,
+            "problem": "",
+            "path_checked": true,
+            "path_count": 1,
+            "path_group": 1,
+            "path_problem": "",
+            "why": "稿号 000003 == stmt:000042 行上的 `manuscript_id`，也在第 1 条逐路径记录上 ⇒ 这是这一条命题的稿"
+          },
+          "issued_sign": {},
+          "statement_scope_gate": {
+            "checked": true,
+            "blocked": false,
+            "refused": "",
+            "why": "台账里没有「判 fault 且 defect_scope=statement」的行 ⇒ 这道闸不适用（判的是证明层 / 老行没这一格）",
+            "statement_id": "000042",
+            "rows": 4,
+            "problems": [],
+            "trigger": {},
+            "retraction": {},
+            "amend": {}
+          },
+          "wash_v_reply": {
+            "checked": true,
+            "washed": true,
+            "text": "审阅意见指向第 6 步。该步拿并集 ∪_{p≥1}{(u,z) : |u|^p+|z|^p ≤ 1} 与开正方形 (0,1)² 相比，称两者只差一个零测集、并集面积为 4；核对结果是 (0,1)² 的面积为 1，而该并集关于原点对称、覆盖四个象限，它与 (0,1)² 相差的并不是零测集，所以原句按原样不成立，并且会连带影响 S_p↑4 的推导。下一步要把比较对象改为 (-1,1)²（或四个开象限之并），据此得出该并集面积为 4，再用单调收敛推出 S_p↑4。",
+            "findings": [
+              {
+                "quote": "第6步把并集与开正方形 (0,1)² 比较，但 (0,1)² 面积为1而非4",
+                "why": "指出第 6 步用来比较的对象及其面积数值都不对，该句断言不成立。"
+              },
+              {
+                "quote": "且该并集关于原点对称、含四个象限，并不只与第一象限开正方形差零测集",
+                "why": "说明并集与 (0,1)² 的差别不是零测集，原文对二者关系的判断有误。"
+              },
+              {
+                "quote": "该句按原文不成立，并影响 S_p↑4 的推导",
+                "why": "指出这一处错误会连带影响后续 S_p↑4 的结论。"
+              },
+              {
+                "quote": "应改为 (-1,1)²（或四个开象限之并）后，才能得到并集面积4并用单调收敛推出 S_p↑4",
+                "why": "给出可执行的补正方向：换比较对象后可得到面积 4，并由此推出 S_p↑4。"
+              }
+            ],
+            "dropped": [],
+            "refused": "",
+            "reason": "洗过：4 条 findings 逐字落回原文",
+            "actor": "secretary-V",
+            "changes": [
+              {
+                "field": "text",
+                "from": "（V 的原文，不转达）",
+                "to": "审阅意见指向第 6 步。该步拿并集 ∪_{p≥1}{(u,z) : |u|^p+|z|^p ≤ 1} 与开正方形 (0,1)² 相比，称两者只差一个零测集、并集面积为 4；核对结果是 (0,1)² 的面积为 1，而该并集关于原点对称、覆盖四个象限，它与 (0,1)² 相差的并不是零测集，所以原句按原样不成立，并且会连带影响 S_p↑4 的推导。下一步要把比较对象改为 (-1,1)²（或四个开象限之并），据此得出该并集面积为 4，再用单调收敛推出 S_p↑4。",
+                "why": "洗稿转达：原文不外发（业主 2026-10-29 的 C 段）"
+              }
+            ],
+            "cost": {},
+            "material": {
+              "v_reply": "{\"verdict\":\"有毛病\",\"defect_step\":6,\"quote\":\"又并集 ∪_{p≥1}{(u,z) : |u|^p+|z|^p ≤ 1} 与开正方形 (0,1)² 只差一个零测集（任给 (u,z) ∈ (0,1)²，max(|u|,|z|)^p → 0，故充分大的 p 使 |u|^p+|z|^p ≤ 1），其面积是 4；\",\"why\":\"第6步把并集与开正方形 (0,1)² 比较，但 (0,1)² 面积为1而非4，且该并集关于原点对称、含四个象限，并不只与第一象限开正方形差零测集；该句按原文不成立，并影响 S_p↑4 的推导。\",\"findings\":[{\"level\":\"error\",\"step\":6,\"kind\":\"区间/面积错误\",\"detail\":\"并集 ∪_{p≥1}{(u,z) : |u|^p+|z|^p ≤ 1} 关于原点对称，包含四个象限；它与 (0,1)² 不只差一个零测集，且 (0,1)² 的面积为1，不是文中紧接着断言的4。应改为 (-1,1)²（或四个开象限之并）后，才能得到并集面积4并用单调收敛推出 S_p↑4。\"}],\"citation_checks\":[]}",
+              "ledger_row": {
+                "verdict": "有毛病",
+                "defect_step": 6
+              },
+              "label": ""
+            },
+            "statement_id": "000042",
+            "proof_no": 1
+          }
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 42112,
+        "prompt_cache_miss_tokens": 2276,
+        "tokens_in": 44388,
+        "tokens_out": 25561,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000166"
+    },
+    {
+      "index": 4,
+      "shape": "tool",
+      "payload": {
+        "name": "verify.list_verifications",
+        "args": {
+          "statement_id": "000042",
+          "limit": 10
+        },
+        "why": "核对这一份稿（sha ee312d…）在台账上有几行、上一轮那两条 finding 分别落在哪一行，免得把轮次与结论说错"
+      },
+      "result": {
+        "tool": "verify.list_verifications",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "total": 5,
+          "items": [
+            {
+              "at": "2026-11-24T20:54:55+08:00",
+              "citation_checks": [],
+              "defect_step": null,
+              "findings": [],
+              "landed": "pending",
+              "object_path": "manuscripts/F/f-proof-000003.md",
+              "object_sha256": "202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8",
+              "producer_code": "F1",
+              "producer_role": "F",
+              "proof_chars": 3230,
+              "proof_sha256": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+              "quote": "",
+              "review_call": "23b99deea3dd",
+              "review_pass": 1,
+              "round": 1,
+              "secretary_judge": {
+                "answer": "没问题",
+                "axis": "clean",
+                "basis": [
+                  "v_reply 原文：\"逐行核对了截面参数化、极坐标化、p=2 与 p=1 的闭式计算、p→∞ 极限及控制收敛依据，未发现推导缺口、无条件前提或不当引用。\"",
+                  "v_reply 原文：\"findings\":[]"
+                ],
+                "checked": true,
+                "cost": {
+                  "call_index": 670,
+                  "charged": true,
+                  "ledger": "000772",
+                  "ledger_reason": "charged",
+                  "prompt_sha256": "17687a6c44de52feef7ab059998da95ff23c81e11cebb12dbbdfa98e395a79de",
+                  "tokens": 1793,
+                  "usd": 0.000402
+                },
+                "defect_scope": "",
+                "defect_step": null,
+                "defect_step_basis": "",
+                "fault_cause": "report_gap",
+                "fault_kind": "",
+                "material": {
+                  "ledger_row": {
+                    "defect_step": null,
+                    "verdict": "成立"
+                  },
+                  "v_reply": "{\"verdict\":\"成立\",\"defect_step\":null,\"quote\":\"\",\"why\":\"逐行核对了截面参数化、极坐标化、p=2 与 p=1 的闭式计算、p→∞ 极限及控制收敛依据，未发现推导缺口、无条件前提或不当引用。\",\"findings\":[],\"citation_checks\":[]}"
+                },
+                "proof_no": 1,
+                "reason": "回复明确称逐行核对了截面参数化、极坐标化、闭式计算、极限及控制收敛依据并给出 findings 为空，未指出任何缺陷；仅缺反例尝试记录，记入 report_gap。",
+                "refused": "",
+                "report_gap": "未记录反例尝试的位置或构造",
+                "source": "secretary:v_reply_defect",
+                "statement_id": "",
+                "unwired": false,
+                "verdict": "成立"
+              },
+              "statement_id": "000042",
+              "stmt_id": "000042",
+              "submission_id": "",
+              "unresolved_errors": 0,
+              "used_faces": [],
+              "verdict": "成立",
+              "verification_id": "u-000022",
+              "verifier": "agent-V-V1",
+              "why": "逐行核对了截面参数化、极坐标化、p=2 与 p=1 的闭式计算、p→∞ 极限及控制收敛依据，未发现推导缺口、无条件前提或不当引用。",
+              "path_group": 1,
+              "claimed_at": "2026-11-24T21:01:16+08:00"
+            },
+            {
+              "at": "2026-11-24T20:55:52+08:00",
+              "citation_checks": [],
+              "defect_step": null,
+              "findings": [],
+              "landed": "pending",
+              "object_path": "manuscripts/F/f-proof-000003.md",
+              "object_sha256": "202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8",
+              "producer_code": "F1",
+              "producer_role": "F",
+              "proof_chars": 3230,
+              "proof_sha256": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+              "quote": "",
+              "review_call": "23b99deea3dd",
+              "review_pass": 2,
+              "round": 2,
+              "secretary_judge": {
+                "answer": "没问题",
+                "axis": "clean",
+                "basis": [
+                  "逐行复核：第2步基、参数化与面积元正确；第3步极坐标与指数记账正确；第4/8/9步控制收敛的逐点连续与常数控制成立；第5/6/7/9/10步积分、Γ闭式、p=1/2 与 p→∞ 极限均逐步对得上；第11步由极限正性与 L/2 邻域收尾成立；引用核对面为空，未发现缺陷。",
+                  "findings:[]"
+                ],
+                "checked": true,
+                "cost": {
+                  "call_index": 672,
+                  "charged": true,
+                  "ledger": "000774",
+                  "ledger_reason": "charged",
+                  "prompt_sha256": "2d88b3e901b2bca92e652ddf519af9e481ce7cd7ee44859aa335477b69d03eb6",
+                  "tokens": 2174,
+                  "usd": 0.000605
+                },
+                "defect_scope": "",
+                "defect_step": null,
+                "defect_step_basis": "",
+                "fault_cause": "report_gap",
+                "fault_kind": "",
+                "material": {
+                  "ledger_row": {
+                    "defect_step": null,
+                    "verdict": "成立"
+                  },
+                  "v_reply": "{\"verdict\":\"成立\",\"defect_step\":null,\"quote\":\"\",\"why\":\"逐行复核：第2步基、参数化与面积元正确；第3步极坐标与指数记账正确；第4/8/9步控制收敛的逐点连续与常数控制成立；第5/6/7/9/10步积分、Γ闭式、p=1/2 与 p→∞ 极限均逐步对得上；第11步由极限正性与 L/2 邻域收尾成立；引用核对面为空，未发现缺陷。\",\"findings\":[],\"citation_checks\":[]}"
+                },
+                "proof_no": 1,
+                "reason": "V 逐条走查了第2—11步并明确写明未发现缺陷，属于真正逐条核对且没有指出任何缺陷。",
+                "refused": "",
+                "report_gap": "未记录反例尝试或未发现缺陷以外的核验记录。",
+                "source": "secretary:v_reply_defect",
+                "statement_id": "",
+                "unwired": false,
+                "verdict": "成立"
+              },
+              "statement_id": "000042",
+              "stmt_id": "000042",
+              "submission_id": "",
+              "unresolved_errors": 0,
+              "used_faces": [],
+              "verdict": "成立",
+              "verification_id": "u-000023",
+              "verifier": "agent-V-V1",
+              "why": "逐行复核：第2步基、参数化与面积元正确；第3步极坐标与指数记账正确；第4/8/9步控制收敛的逐点连续与常数控制成立；第5/6/7/9/10步积分、Γ闭式、p=1/2 与 p→∞ 极限均逐步对得上；第11步由极限正性与 L/2 邻域收尾成立；引用核对面为空，未发现缺陷。",
+              "path_group": 1,
+              "claimed_at": "2026-11-24T21:01:16+08:00"
+            },
+            {
+              "at": "2026-11-24T20:57:20+08:00",
+              "citation_checks": [],
+              "defect_step": null,
+              "findings": [],
+              "landed": "pending",
+              "object_path": "manuscripts/F/f-proof-000003.md",
+              "object_sha256": "202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8",
+              "producer_code": "F1",
+              "producer_role": "F",
+              "proof_chars": 3230,
+              "proof_sha256": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+              "quote": "",
+              "review_call": "23b99deea3dd",
+              "review_pass": 3,
+              "round": 3,
+              "secretary_judge": {
+                "answer": "没问题",
+                "axis": "clean",
+                "basis": [
+                  "v_reply: \"逐关核对步骤1–11：定义与参数化清楚，积分、分段计算、一致控制与两次极限运算均正确，未发现缺陷。\"",
+                  "v_reply: \"findings\": []",
+                  "v_reply: \"verdict\": \"成立\""
+                ],
+                "checked": true,
+                "cost": {
+                  "call_index": 674,
+                  "charged": true,
+                  "ledger": "000776",
+                  "ledger_reason": "charged",
+                  "prompt_sha256": "bd5aa84dd5002cbe65df209ad029b408fc3c22e58f0fd99516b9d04d9dade8aa",
+                  "tokens": 1543,
+                  "usd": 0.000258
+                },
+                "defect_scope": "",
+                "defect_step": null,
+                "defect_step_basis": "",
+                "fault_cause": "report_gap",
+                "fault_kind": "",
+                "material": {
+                  "ledger_row": {
+                    "defect_step": null,
+                    "verdict": "成立"
+                  },
+                  "v_reply": "{\"verdict\": \"成立\", \"defect_step\": null, \"quote\": \"\", \"why\": \"逐关核对步骤1–11：定义与参数化清楚，积分、分段计算、一致控制与两次极限运算均正确，未发现缺陷。\", \"findings\": [], \"citation_checks\": []}"
+                },
+                "proof_no": 1,
+                "reason": "这份回复声称逐关核对步骤1–11，并明确给出「未发现缺陷」的判定，没有指出任何缺陷。",
+                "refused": "",
+                "report_gap": "没有记录反例尝试的位置，也没有给出逐关核对的明细，只给出了概括性的结论",
+                "source": "secretary:v_reply_defect",
+                "statement_id": "",
+                "unwired": false,
+                "verdict": "成立"
+              },
+              "statement_id": "000042",
+              "stmt_id": "000042",
+              "submission_id": "",
+              "unresolved_errors": 0,
+              "used_faces": [],
+              "verdict": "成立",
+              "verification_id": "u-000024",
+              "verifier": "agent-V-V1",
+              "why": "逐关核对步骤1–11：定义与参数化清楚，积分、分段计算、一致控制与两次极限运算均正确，未发现缺陷。",
+              "path_group": 1,
+              "claimed_at": "2026-11-24T21:01:16+08:00"
+            },
+            {
+              "at": "2026-11-24T21:11:12+08:00",
+              "citation_checks": [],
+              "defect_step": 1,
+              "findings": [
+                {
+                  "detail": "`stmt:000034`（在哪一步：证明正文（未标步号的行））· 类别：等级读不出来（判不了）（`citation_level_unreadable`） · 期望：盘上有一份这一条命题的手稿（`manuscripts/F/f-proof-<号>.md`；V 只读手稿：正文与签都在稿上） · 实得：盘上没有这一条命题的手稿（找过：（没记））⇒ 读不到它的正文，也读不到它的签 · 怎么改：先把这一条命题的证明落成一份手稿（`manuscripts/F/f-proof-<号>.md`，`## 命题` / `## 证明` / `## 依赖` 三节），再引它；V 不从台账读正文",
+                  "kind": "citation_level_unreadable",
+                  "level": "error",
+                  "step": null
+                },
+                {
+                  "detail": "`stmt:000034`（在哪一步：证明正文（未标步号的行））· 类别：表述错误·表与正文的引用集合不一致（`deps_table_disagrees_with_proof`） · 期望：手稿的 `## 依赖` 表里有一行 `stmt:000034`（写明它用在哪一步） · 实得：表里没有这一行 · 怎么改：把表里那一行补上（号与用在哪一步都写对）；正文是 F 的署名作品，表按它补齐 —— 两处必须说的是同一件事",
+                  "kind": "deps_table_disagrees_with_proof",
+                  "level": "error",
+                  "step": null
+                }
+              ],
+              "manuscript": "manuscripts/B/b-proof-000003.md",
+              "object_path": "manuscripts/B/b-proof-000003.md",
+              "object_sha256": "d5b16c8825d876e7b1c6b8c2c0d63777efd2be242986b6081ed8f6b3d5b0cb1c",
+              "producer_code": "B1",
+              "producer_role": "B",
+              "proof_chars": 3576,
+              "proof_sha256": "c41c0cfc4384f4c61ebd8f6c28a51c5ed92800bf7cd03fbd7d8a272a46eb291c",
+              "quote": "",
+              "review_call": "e0c2d1882da3",
+              "review_pass": 1,
+              "round": 1,
+              "secretary_judge": {
+                "axis": "clean",
+                "checked": true,
+                "decision": "",
+                "defect_scope": "",
+                "fault_cause": "report_gap",
+                "fault_kind": "",
+                "reason": "这段回复声称已逐段核对，并给出了具体核对点（参数化与极坐标换元、p=1/p=2 常数、连续性统一界、p→∞ 极限与 Γ 常数收尾），且未指出任何缺陷，属于「逐条走查、未发现问题」的一档。",
+                "report_gap": "未记录反例构造尝试的位置；findings 与 citation_checks 均为空，没有逐关核对的可查明细。"
+              },
+              "statement_id": "000042",
+              "stmt_id": "000042",
+              "submission_id": "",
+              "unresolved_errors": 2,
+              "used_faces": [],
+              "verdict": "有毛病",
+              "verification_id": "v-000001",
+              "verifier": "agent-V-V2",
+              "why": "逐段核对：A_diag 的参数化与极坐标换元正确；p=1、p=2 特例常数一致；连续性有统一界 2 与有界收敛依据；p→∞ 时 m(θ) 极限、分段积分、Γ 常数与收尾均无断点，未发现可指到步号的缺陷。；`stmt:000034`（在哪一步：证明正文（未标步号的行））· 类别：等级读不出来（判不了）（`citation_level_unreadable`） · 期望：盘上有一份这一条命题的手稿（`manuscripts/F/f-proof-<号>.md`；V 只读手稿：正文与签都在稿上） · 实得：盘上没有这一条命题的手稿（找过：（没记））⇒ 读不到它的正文，也读不到它的签 · 怎么改：先把这一条命题的证明落成一份手稿（`manuscripts/F/f-proof-<号>.md`，`## 命题` / `## 证明` / `## 依赖` 三节），再引它；V 不从台账读正文；`stmt:000034`（在哪一步：证明正文（未标步号的行））· 类别：表述错误·表与正文的引用集合不一致（`deps_table_disagrees_with_proof`） · 期望：手稿的 `## 依赖` 表里有一行 `stmt:000034`（写明它用在哪一步） · 实得：表里没有这一行 · 怎么改：把表里那一行补上（号与用在哪一步都写对）；正文是 F 的署名作品，表按它补齐 —— 两处必须说的是同一件事"
+            },
+            {
+              "at": "2026-11-24T21:17:55+08:00",
+              "citation_checks": [],
+              "defect_step": 6,
+              "findings": [
+                {
+                  "detail": "并集 ∪_{p≥1}{(u,z) : |u|^p+|z|^p ≤ 1} 关于原点对称，包含四个象限；它与 (0,1)² 不只差一个零测集，且 (0,1)² 的面积为1，不是文中紧接着断言的4。应改为 (-1,1)²（或四个开象限之并）后，才能得到并集面积4并用单调收敛推出 S_p↑4。",
+                  "kind": "区间/面积错误",
+                  "level": "error",
+                  "step": 6
+                }
+              ],
+              "manuscript": "manuscripts/B/b-proof-000003.md",
+              "object_path": "manuscripts/B/b-proof-000003.md",
+              "object_sha256": "0e66740a0737c495ffc53ce03c56ae690ee06fc49441d3e5b66e8987813cb1f7",
+              "producer_code": "B1",
+              "producer_role": "B",
+              "proof_chars": 5118,
+              "proof_sha256": "ee312d374be0629a7811a526759909590d8887b624adf6600e7865dfce849d82",
+              "quote": "又并集 ∪_{p≥1}{(u,z) : |u|^p+|z|^p ≤ 1} 与开正方形 (0,1)² 只差一个零测集（任给 (u,z) ∈ (0,1)²，max(|u|,|z|)^p → 0，故充分大的 p 使 |u|^p+|z|^p ≤ 1），其面积是 4；",
+              "review_call": "3414ea000c79",
+              "review_pass": 1,
+              "round": 2,
+              "secretary_judge": {
+                "axis": "fault",
+                "checked": true,
+                "decision": "",
+                "defect_scope": "proof",
+                "fault_cause": "",
+                "fault_kind": "math",
+                "reason": "V 明确点出第6步中并集与开正方形 (0,1)² 的面积/集合比较错误，并指出该错误影响 S_p↑4 的推导，属于证明链缺陷。",
+                "report_gap": ""
+              },
+              "statement_id": "000042",
+              "stmt_id": "000042",
+              "submission_id": "",
+              "unresolved_errors": 1,
+              "used_faces": [],
+              "verdict": "有毛病",
+              "verification_id": "v-000002",
+              "verifier": "agent-V-V2",
+              "washed_relay": {
+                "dropped": [],
+                "findings": [
+                  {
+                    "quote": "第6步把并集与开正方形 (0,1)² 比较，但 (0,1)² 面积为1而非4",
+                    "why": "指出第 6 步用来比较的对象及其面积数值都不对，该句断言不成立。"
+                  },
+                  {
+                    "quote": "且该并集关于原点对称、含四个象限，并不只与第一象限开正方形差零测集",
+                    "why": "说明并集与 (0,1)² 的差别不是零测集，原文对二者关系的判断有误。"
+                  },
+                  {
+                    "quote": "该句按原文不成立，并影响 S_p↑4 的推导",
+                    "why": "指出这一处错误会连带影响后续 S_p↑4 的结论。"
+                  },
+                  {
+                    "quote": "应改为 (-1,1)²（或四个开象限之并）后，才能得到并集面积4并用单调收敛推出 S_p↑4",
+                    "why": "给出可执行的补正方向：换比较对象后可得到面积 4，并由此推出 S_p↑4。"
+                  }
+                ],
+                "text": "审阅意见指向第 6 步。该步拿并集 ∪_{p≥1}{(u,z) : |u|^p+|z|^p ≤ 1} 与开正方形 (0,1)² 相比，称两者只差一个零测集、并集面积为 4；核对结果是 (0,1)² 的面积为 1，而该并集关于原点对称、覆盖四个象限，它与 (0,1)² 相差的并不是零测集，所以原句按原样不成立，并且会连带影响 S_p↑4 的推导。下一步要把比较对象改为 (-1,1)²（或四个开象限之并），据此得出该并集面积为 4，再用单调收敛推出 S_p↑4。"
+              },
+              "why": "第6步把并集与开正方形 (0,1)² 比较，但 (0,1)² 面积为1而非4，且该并集关于原点对称、含四个象限，并不只与第一象限开正方形差零测集；该句按原文不成立，并影响 S_p↑4 的推导。"
+            }
+          ],
+          "problems": [],
+          "truncated": false,
+          "reason": "共 5 行验证台账"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 43520,
+        "prompt_cache_miss_tokens": 5549,
+        "tokens_in": 49069,
+        "tokens_out": 10559,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000166"
+    },
+    {
+      "index": 5,
+      "shape": "final",
+      "payload": {
+        "final": "V 的复核结论：有毛病（不签发）。被审稿 `manuscripts/B/b-proof-000003.md`（稿号 000003，在册命题 stmt:000042，`## 证明` 正文 sha256 = ee312d374be0629a7811a526759909590d8887b624adf6600e7865dfce849d82，与送审一致）；台账行 `verifications/000042.jsonl#v-000002`。\n\n**上一轮两条 finding 已确认修好**：①「## 依赖」现为空表，正文第一段起就是自足的极坐标推导（H := {x+y+z=0} 上取 u=(1,-1,0)/√2、v=(1,1,-2)/√6 作单位正交基，面积元 r dr dθ，得 A_diag = (1/2)∫‖e(θ)‖_p^{-2}dθ；第三段另走 (x,y) 平面参数化得 A_diag = (√3/2)∫g^{-2/p}）—— 空依赖表与正文一致，我逐条比对未再发现「引而不列」；② 正文全文已不再出现 stmt:000034，随引用一并无须再读 F 族路径那一条，此条消解。\n\n**本轮发现（一条，承重性缺陷，指到第 6 段「六、p → ∞ 的极限」）**：\n- 原文逐字：「又并集 ∪_{p≥1}{(u,z) : |u|^p+|z|^p ≤ 1} 与开正方形 (0,1)² 只差一个零测集（任给 (u,z) ∈ (0,1)²，max(|u|,|z|)^p → 0，故充分大的 p 使 |u|^p+|z|^p ≤ 1），其面积是 4；由单调收敛得 S_p ↑ 4」\n- 为什么不成立：该并集关于原点对称、覆盖四个象限，实际等于开正方形 (−1,1)²（|u|>1 或 |z|>1 的点对一切 p≥1 都不在集内；|u|<1 且 |z|<1 的点充分大 p 后必在），与 (0,1)² 相差的不是零测集，而 (0,1)² 的面积为 1 而非文中所称的 4。因此该句按原样是假命题，且「S_p ↑ 4」这一步的正当性正是搭在这句上（须先把比较对象换对，再谈并集面积 4）。\n- 最小补法：把比较对象改为 (−1,1)²（或四个开象限之并），说明并集 = (−1,1)²、面积为 4，再由 S_p 关于 p 单调不减 + 单调收敛得 S_p ↑ 4，于是 lim A_face(p) = √2·1·4 = 4√2。改这一句即可，其余段落不必重写。\n\n**其余各段逐段走查，未再发现要改的**：第 1–2 段基与齐次性、‖e(θ)‖_p^{-2} = (3/2)S(θ)^{-2/p} 的指数记账正确；第 3 段 ∂_xΦ×∂_yΦ=(1,1,1)、模 √3 与 r 积分正确；第 4 段叉积 (−1,−1,0) 模 √2、代换 u=2^{1/p}x 与 Beta 积分 → 4Γ(1+1/p)²/Γ(1+2/p) 正确；第 5 段 p=2（g=2+sin2θ、2π/√3）与 p=1 三段各得 1/4、总和 3/2 均复核无误；第 6 段除上述一句外，m^p ≤ g ≤ 3m^p、控制 g^{-2/p} ≤ m^{-2} ≤ 2、∫_0^{2π}m^{-2}=6 均正确；第 7 段两处有界收敛（被积函数联合连续 + 常数 1 / 2 控制）成立；第 8 段取 ε=L/2 收尾成立。硬禁令逐条查：无条件前提、无依据跳步、以「易证/显然」代证、引用到不干净命题（本稿依赖面为空，无从继承）—— 均未出现。结论强度与原文一致，没有把命题写得比原文更强。\n\n按两态纪律：只要有一处要改的就是「有毛病」，故本版不判成立、不发签（签块与五元位第 3 位不动；V 的审阅报告 `verifications/reviews/v-review-000013.md` 已随流程投给 t-000151 的板项 t-000167）。改完把同一份稿重新送 V，按这一趟重新走查、跨趟不累计。",
+        "evidence": [
+          "stmt:000042",
+          "manuscripts/B/b-proof-000003.md",
+          "verifications/000042.jsonl#v-000002",
+          "verifications/reviews/v-review-000013.md"
+        ]
+      },
+      "result": {
+        "notify_problem": "没有 notify 表（`final` 要给一个 notify 对象，字段：['to', 'summary', 'body', 'refs', 'why']）—— 除主控外每个角色收工都要留一份交接手稿，这是用户点名的强制项"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 48256,
+        "prompt_cache_miss_tokens": 4588,
+        "tokens_in": 52844,
+        "tokens_out": 7081,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000166"
+    }
+  ],
+  "final": "V 的复核结论：有毛病（不签发）。被审稿 `manuscripts/B/b-proof-000003.md`（稿号 000003，在册命题 stmt:000042，`## 证明` 正文 sha256 = ee312d374be0629a7811a526759909590d8887b624adf6600e7865dfce849d82，与送审一致）；台账行 `verifications/000042.jsonl#v-000002`。\n\n**上一轮两条 finding 已确认修好**：①「## 依赖」现为空表，正文第一段起就是自足的极坐标推导（H := {x+y+z=0} 上取 u=(1,-1,0)/√2、v=(1,1,-2)/√6 作单位正交基，面积元 r dr dθ，得 A_diag = (1/2)∫‖e(θ)‖_p^{-2}dθ；第三段另走 (x,y) 平面参数化得 A_diag = (√3/2)∫g^{-2/p}）—— 空依赖表与正文一致，我逐条比对未再发现「引而不列」；② 正文全文已不再出现 stmt:000034，随引用一并无须再读 F 族路径那一条，此条消解。\n\n**本轮发现（一条，承重性缺陷，指到第 6 段「六、p → ∞ 的极限」）**：\n- 原文逐字：「又并集 ∪_{p≥1}{(u,z) : |u|^p+|z|^p ≤ 1} 与开正方形 (0,1)² 只差一个零测集（任给 (u,z) ∈ (0,1)²，max(|u|,|z|)^p → 0，故充分大的 p 使 |u|^p+|z|^p ≤ 1），其面积是 4；由单调收敛得 S_p ↑ 4」\n- 为什么不成立：该并集关于原点对称、覆盖四个象限，实际等于开正方形 (−1,1)²（|u|>1 或 |z|>1 的点对一切 p≥1 都不在集内；|u|<1 且 |z|<1 的点充分大 p 后必在），与 (0,1)² 相差的不是零测集，而 (0,1)² 的面积为 1 而非文中所称的 4。因此该句按原样是假命题，且「S_p ↑ 4」这一步的正当性正是搭在这句上（须先把比较对象换对，再谈并集面积 4）。\n- 最小补法：把比较对象改为 (−1,1)²（或四个开象限之并），说明并集 = (−1,1)²、面积为 4，再由 S_p 关于 p 单调不减 + 单调收敛得 S_p ↑ 4，于是 lim A_face(p) = √2·1·4 = 4√2。改这一句即可，其余段落不必重写。\n\n**其余各段逐段走查，未再发现要改的**：第 1–2 段基与齐次性、‖e(θ)‖_p^{-2} = (3/2)S(θ)^{-2/p} 的指数记账正确；第 3 段 ∂_xΦ×∂_yΦ=(1,1,1)、模 √3 与 r 积分正确；第 4 段叉积 (−1,−1,0) 模 √2、代换 u=2^{1/p}x 与 Beta 积分 → 4Γ(1+1/p)²/Γ(1+2/p) 正确；第 5 段 p=2（g=2+sin2θ、2π/√3）与 p=1 三段各得 1/4、总和 3/2 均复核无误；第 6 段除上述一句外，m^p ≤ g ≤ 3m^p、控制 g^{-2/p} ≤ m^{-2} ≤ 2、∫_0^{2π}m^{-2}=6 均正确；第 7 段两处有界收敛（被积函数联合连续 + 常数 1 / 2 控制）成立；第 8 段取 ε=L/2 收尾成立。硬禁令逐条查：无条件前提、无依据跳步、以「易证/显然」代证、引用到不干净命题（本稿依赖面为空，无从继承）—— 均未出现。结论强度与原文一致，没有把命题写得比原文更强。\n\n按两态纪律：只要有一处要改的就是「有毛病」，故本版不判成立、不发签（签块与五元位第 3 位不动；V 的审阅报告 `verifications/reviews/v-review-000013.md` 已随流程投给 t-000151 的板项 t-000167）。改完把同一份稿重新送 V，按这一趟重新走查、跨趟不累计。",
+  "evidence": [
+    "stmt:000042",
+    "manuscripts/B/b-proof-000003.md",
+    "verifications/000042.jsonl#v-000002",
+    "verifications/reviews/v-review-000013.md"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 0,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 6,
+  "compactions": 0,
+  "mailbox_items": [],
+  "mailbox_msgs": [],
+  "mailbox_delivered": 0,
+  "monitor_turns": 0,
+  "wakes": 0,
+  "wake_ids": [],
+  "wake_events": [],
+  "clock_pumps": 11,
+  "clock_fired": 0,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "V 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "V",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    }
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [],
+  "summons": [],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [],
+  "summons_total": 0,
+  "summons_consumed": 0,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 0,
+    "summons_consumed": 0,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p328",
+    "role": "V",
+    "prompt_sha256": "171b42af018313bbcc69a25b1530f2ab9412256a4419f69333b5f3b963dad68e",
+    "prompt_chars": 46343,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "FACULTIES_07",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_STOP",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 6,
+    "tokens_in": 269471,
+    "tokens_out": 43818,
+    "usd": 0.030076,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 6,
+    "no_request_calls": 0,
+    "hit": 249216,
+    "miss": 20255,
+    "unknown_calls": 0,
+    "tokens_in": 269471,
+    "hit_rate": 0.9248,
+    "mismatched_calls": 0,
+    "saved_usd": 0.036635,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 271.813,
+  "end_ts": "2026-11-24T21:19:14+08:00",
+  "notes": [
+    "收工没有可用 notify 表（没有 notify 表（`final` 要给一个 notify 对象，字段：['to', 'summary', 'body', 'refs', 'why']）—— 除主控外每个角色收工都要留一份交接手稿，这是用户点名的强制项）⇒ 这一趟没有交接手稿（不打回、不代填）",
+    "收工时名下还有 1 条证明没有 V 的签字（读数，不拦收工；明细：000042）",
+    "缓存读数：命中 249216 / 未命中 20255 token，命中率 92.5%（6 次调用）；按 modelcost 口径估算可省 约 0.036635 美元",
+    "子产出处理读数：summons_total=0（这一趟没派过子代理 ⇒ 没有要处理的子产出；判据没有对象，不红）",
+    "终态回报已落板：t-000169（框架通报；模型没填 notify）"
+  ],
+  "final_payload": {
+    "final": "V 的复核结论：有毛病（不签发）。被审稿 `manuscripts/B/b-proof-000003.md`（稿号 000003，在册命题 stmt:000042，`## 证明` 正文 sha256 = ee312d374be0629a7811a526759909590d8887b624adf6600e7865dfce849d82，与送审一致）；台账行 `verifications/000042.jsonl#v-000002`。\n\n**上一轮两条 finding 已确认修好**：①「## 依赖」现为空表，正文第一段起就是自足的极坐标推导（H := {x+y+z=0} 上取 u=(1,-1,0)/√2、v=(1,1,-2)/√6 作单位正交基，面积元 r dr dθ，得 A_diag = (1/2)∫‖e(θ)‖_p^{-2}dθ；第三段另走 (x,y) 平面参数化得 A_diag = (√3/2)∫g^{-2/p}）—— 空依赖表与正文一致，我逐条比对未再发现「引而不列」；② 正文全文已不再出现 stmt:000034，随引用一并无须再读 F 族路径那一条，此条消解。\n\n**本轮发现（一条，承重性缺陷，指到第 6 段「六、p → ∞ 的极限」）**：\n- 原文逐字：「又并集 ∪_{p≥1}{(u,z) : |u|^p+|z|^p ≤ 1} 与开正方形 (0,1)² 只差一个零测集（任给 (u,z) ∈ (0,1)²，max(|u|,|z|)^p → 0，故充分大的 p 使 |u|^p+|z|^p ≤ 1），其面积是 4；由单调收敛得 S_p ↑ 4」\n- 为什么不成立：该并集关于原点对称、覆盖四个象限，实际等于开正方形 (−1,1)²（|u|>1 或 |z|>1 的点对一切 p≥1 都不在集内；|u|<1 且 |z|<1 的点充分大 p 后必在），与 (0,1)² 相差的不是零测集，而 (0,1)² 的面积为 1 而非文中所称的 4。因此该句按原样是假命题，且「S_p ↑ 4」这一步的正当性正是搭在这句上（须先把比较对象换对，再谈并集面积 4）。\n- 最小补法：把比较对象改为 (−1,1)²（或四个开象限之并），说明并集 = (−1,1)²、面积为 4，再由 S_p 关于 p 单调不减 + 单调收敛得 S_p ↑ 4，于是 lim A_face(p) = √2·1·4 = 4√2。改这一句即可，其余段落不必重写。\n\n**其余各段逐段走查，未再发现要改的**：第 1–2 段基与齐次性、‖e(θ)‖_p^{-2} = (3/2)S(θ)^{-2/p} 的指数记账正确；第 3 段 ∂_xΦ×∂_yΦ=(1,1,1)、模 √3 与 r 积分正确；第 4 段叉积 (−1,−1,0) 模 √2、代换 u=2^{1/p}x 与 Beta 积分 → 4Γ(1+1/p)²/Γ(1+2/p) 正确；第 5 段 p=2（g=2+sin2θ、2π/√3）与 p=1 三段各得 1/4、总和 3/2 均复核无误；第 6 段除上述一句外，m^p ≤ g ≤ 3m^p、控制 g^{-2/p} ≤ m^{-2} ≤ 2、∫_0^{2π}m^{-2}=6 均正确；第 7 段两处有界收敛（被积函数联合连续 + 常数 1 / 2 控制）成立；第 8 段取 ε=L/2 收尾成立。硬禁令逐条查：无条件前提、无依据跳步、以「易证/显然」代证、引用到不干净命题（本稿依赖面为空，无从继承）—— 均未出现。结论强度与原文一致，没有把命题写得比原文更强。\n\n按两态纪律：只要有一处要改的就是「有毛病」，故本版不判成立、不发签（签块与五元位第 3 位不动；V 的审阅报告 `verifications/reviews/v-review-000013.md` 已随流程投给 t-000151 的板项 t-000167）。改完把同一份稿重新送 V，按这一趟重新走查、跨趟不累计。",
+    "evidence": [
+      "stmt:000042",
+      "manuscripts/B/b-proof-000003.md",
+      "verifications/000042.jsonl#v-000002",
+      "verifications/reviews/v-review-000013.md"
+    ]
+  },
+  "task_id": "t-000166"
+}

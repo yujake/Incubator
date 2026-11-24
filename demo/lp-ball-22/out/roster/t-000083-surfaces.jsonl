@@ -1,0 +1,4 @@
+{"at": "2026-11-24T19:51:27+08:00", "kind": "alloc", "name": "V1", "owner": "t-000083", "seq": 1, "slot": "S01"}
+{"at": "2026-11-24T19:55:48+08:00", "kind": "alloc", "name": "E1", "owner": "t-000083", "seq": 2, "slot": "S02"}
+{"at": "2026-11-24T23:04:23+08:00", "kind": "release", "name": "E1", "owner": "t-000083", "seq": 3, "slot": "S02"}
+{"at": "2026-11-25T03:02:29+08:00", "kind": "release", "name": "V1", "owner": "t-000083", "seq": 4, "slot": "S01"}

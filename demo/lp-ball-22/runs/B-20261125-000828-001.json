@@ -1,0 +1,4177 @@
+{
+  "role": "B",
+  "task": "B：这一趟派给你的活是 —— 收编在册文献 lit:000003（Critical central sections of the cube，单作者 GERGELY AMBRUS，arXiv:2107.14778v3 [math.MG]，22 Jun 2023，12 页）——抽概念、建关系、落命题线索。全文抽读件已在盘：library/000003.txt（27933 字，sha256 7f80d6808d55…，页间有 `===== page N =====` 标记），PDF 在 library/5d236efcb7ea-critical-central-sections-of-the-cube.pdf。本趟给它的主题口径是「立方体的中心超平面截面随法向 a∈S^{n−1} 变化时的临界点（critical central hyperplane sections）」。要求：① 关系行的 quote 必须逐字取自 library/000003.txt（含 ⊥ ∩ − 等原字符，不许改写/缩写），页码按框架 ===== page N ===== 标记给；② 这一篇是 §1 引言里给出 critical direction 定义与 Theorem 1（临界方向的充要条件）的那篇，优先把这两处落成可溯源的行；③ 若 lit:000003 此前已被收编（literature 行 processed=true），先查已有的 statements/relations 行，回报已有行号与本趟补了什么，不必重复洗稿；④ 逐条回报概念行与关系行的条数。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "literature",
+          "id": "000003"
+        },
+        "why": "先读这一篇文献行，确认 processed 状态与已有收编情况"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "_keys": [
+            "title:critical central sections of the cube|*"
+          ],
+          "lit_id": "000003",
+          "title": "Critical central sections of the cube",
+          "type": "J",
+          "summary": "题录（按本地 PDF 首部逐字读数，非推测）：作者 GERGELY AMBRUS（首部全大写，单作者）；arXiv:2107.14778v3 [math.MG]，22 Jun 2023；PDF 共 12 页；期刊名与卷期页 PDF 上取不到。身份格 authors/venue/year 由收编口写，通用写口拒改（identity_cell_refused），逐字读数另见本趟回执。",
+          "path": "5d236efcb7ea-critical-central-sections-of-the-cube.pdf",
+          "processed": true,
+          "source_request_ids": [
+            "r-000001"
+          ],
+          "dedup_key": "title:critical central sections of the cube|*",
+          "doi": null,
+          "year": null,
+          "authors": [],
+          "venue": null,
+          "language": null,
+          "added_at": "2026-11-24T18:05:13+08:00",
+          "download": {
+            "status": "ok",
+            "http_status": null,
+            "bytes": 955094,
+            "sha256": "5d236efcb7ea803dd7b7641b3d6f0f8fe5d8a2c9a6d0b2825c0becb5c7351611",
+            "error": null,
+            "fulltext": "ok",
+            "note": "text.extract: 抽出的文本可读"
+          },
+          "pages": "12 pp.（PDF 共 12 页；期刊卷期页 PDF 上取不到）",
+          "matched": "",
+          "claimed_by": null,
+          "lease_until": null,
+          "mine_attempts": 1,
+          "last_mine_error": null
+        },
+        "error": "",
+        "meta": {
+          "table": "literature",
+          "id": "000003",
+          "id_field": "lit_id",
+          "found": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 64384,
+        "prompt_cache_miss_tokens": 1739,
+        "tokens_in": 66123,
+        "tokens_out": 46,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000253"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "statements",
+          "filter": {
+            "source_lit_id": "000003"
+          },
+          "fields": [
+            "stmt_id",
+            "kind",
+            "label",
+            "status",
+            "quote_verified"
+          ]
+        },
+        "why": "查这一篇文献此前是否已有登记行，避免重复洗稿"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "statements",
+          "rows": [],
+          "total": 0,
+          "returned": 0,
+          "limit": 50,
+          "offset": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "total": 0,
+          "returned": 0,
+          "offset": 0,
+          "limit": 50,
+          "fields": [
+            "stmt_id",
+            "kind",
+            "label",
+            "status",
+            "quote_verified"
+          ]
+        },
+        "multi_call": {
+          "turn_index": 1,
+          "call_index": 0,
+          "calls": 2,
+          "step_index": 1
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 65280,
+        "prompt_cache_miss_tokens": 1401,
+        "tokens_in": 66681,
+        "tokens_out": 285,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000253"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "relations",
+          "fields": [
+            "rel_id",
+            "from_concept",
+            "to_concept",
+            "kind",
+            "quote_verified",
+            "source_lit_id"
+          ],
+          "limit": 200
+        },
+        "why": "查已有关系行（关系表可能不带 source_lit_id 字段，先看全量结构）"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": false,
+        "data": null,
+        "error": "relations 没有字段 ['from_concept', 'kind', 'rel_id', 'source_lit_id', 'to_concept']；可投影的字段：['concept_group_key', 'concept_ids', 'created_at', 'dedup_key', 'description', 'duplicate_of', 'lit_id', 'merged_at', 'page_range', 'quote', 'quote_call_sha256', 'quote_mode', 'quote_normalized', 'quote_reason', 'quote_span', 'quote_verified', 'relation_id', 'statement', 'status', 'supporting_lit_ids']（投影只回你点的键，写错一个字就会少一格，所以这里直接拒）",
+        "meta": {
+          "table": "relations",
+          "kind": "param_error"
+        },
+        "参数表": "【参数表】被拒的是参数形状/取值，不是这件事不能做。照下面这张声明表重写一次（键名与类型都要对；表里没列的键一律不许传）：\n- table.list 的参数表：table: string，必填，枚举 [search_requests/literature/relations/research_questions/conjectures/analysis_reports/reprocess_requests/experiments]，16 张表之一；limit: integer，返回条数上限（1-500）；offset: integer，跳过的行数；filter: object，等值过滤：{字段: 期望值}；模糊匹配请用 table.search；fields: array，字段投影：只回这几个键（例如 statements 的 stmt_id / label / kind / evidence_kind）；省略=整行（与改前逐字相同，含 proof_text 全文）（参数表是封闭集合：多传一个键会被拒）",
+        "warn": "这一步给了 2 条调用，已按顺序逐条：第 1 条 table.list 成功；第 2 条 table.list 被拒：relations 没有字段 ['from_concept', 'kind', 'rel_id', …。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 1,
+          "call_index": 1,
+          "calls": 2,
+          "step_index": 2,
+          "summary": "这一步给了 2 条调用，已按顺序逐条：第 1 条 table.list 成功；第 2 条 table.list 被拒：relations 没有字段 ['from_concept', 'kind', 'rel_id', …。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 1,
+            "calls": 2,
+            "items": 2,
+            "steps": [
+              1,
+              2
+            ],
+            "executed": 2,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000253"
+    },
+    {
+      "index": 3,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "relations",
+          "filter": {
+            "lit_id": "000003"
+          },
+          "fields": [
+            "relation_id",
+            "statement",
+            "quote_verified",
+            "page_range",
+            "status"
+          ],
+          "limit": 200
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "relations",
+          "rows": [
+            {
+              "relation_id": "000018",
+              "statement": "Central hyperplane sections are sections of the cube Qn by hyperplanes containing 0, and their (n−1)-dimensional volume is a classical object of study.",
+              "quote_verified": true,
+              "page_range": {
+                "start": 1,
+                "end": 1,
+                "label": "p. 1"
+              },
+              "status": "active"
+            }
+          ],
+          "total": 1,
+          "returned": 1,
+          "limit": 200,
+          "offset": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "relations",
+          "total": 1,
+          "returned": 1,
+          "offset": 0,
+          "limit": 200,
+          "fields": [
+            "relation_id",
+            "statement",
+            "quote_verified",
+            "page_range",
+            "status"
+          ]
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 65920,
+        "prompt_cache_miss_tokens": 1817,
+        "tokens_in": 67737,
+        "tokens_out": 169,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000253"
+    },
+    {
+      "index": 4,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "library/000003.txt",
+          "max_lines": 120
+        },
+        "why": "读 §1 引言，定位 critical direction 定义与 Theorem 1"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "===== page 1 =====\nCRITICAL CENTRAL SECTIONS OF THE CUBE\nGERGELY AMBRUS\nAbstract. We study the volume of central hyperplane sections of the cube. Using Fourier\nanalytic and variational methods, we retrieve a geometric condition characterizing critical\nsections which, by entirely different methods, was recently proven by Ivanov and Tsi-\nutsiurupa. Using this characterization result, we prove that critical central hyperplane\nsections in the 3-dimensional case are all diagonal to a (possibly lower dimensional) face\nof the cube, while in the 4-dimensional case, they are either diagonal to a face, or, up to\npermuting the coordinates and sign changes, perpendicular to the vector (1, 1, 2, 2). This\nshows the existence of non-diagonal critical central sections.\n1. History and results\nLet Qn = [−1, 1]n denote the standard n-dimensional cube, which is the unit ball of\nthe ℓ∞-norm on Rn. It is a classical question to study the (n −1)-dimensional volume of\nsections of Qn with hyperplanes containing 0. Determining which central sections are of\nminimal and maximal volume had been at the center of attention for over a century, as\nthis question was already rooted in the works of Laplace [L1812] and P´olya [P1913]. Yet,\nit was not before the 1970’s that Hadwiger [H71] proved that minimal hyperplane sections\nare parallel to facets of Qn and thus they are of volume 2n−1. A few years later, Hens-\nley [H79] independently re-proved this result using probabilistic methods and also gave\nan upper bound on the volume of central hyperplane sections.\nIn his celebrated work,\nBall [B86] proved that maximal hyperplane sections are orthogonal to a main diagonal of a\n2-dimensional face of Qn, hence, their volume is\n√\n2·2n−1. Extensions of these estimates to\nlower dimensional sections were proven by Vaaler [V79], Ball [B89], and Ivanov and Tsiut-\nsiurupa [IT21], while alternate proofs were given by Nazarov and Podkorytov [NP00], and\nAkopyan, Hubard and Karasev [AHK19]. Non-central sections were esti…（落档截断，原 7042 字）",
+        "error": "",
+        "meta": {
+          "path": "library/000003.txt",
+          "encoding": "utf-8",
+          "bytes_read": 28833,
+          "total_bytes": 28833,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 120,
+          "total_lines": 900,
+          "next_line": 121,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 1–120 行（共 900 行）；续读 start_line=121",
+          "sha256": "7f80d6808d557f09ad03516437b27c7b47878a0e41cba6a73711f564a7979820"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 66944,
+        "prompt_cache_miss_tokens": 1147,
+        "tokens_in": 68091,
+        "tokens_out": 97,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000253"
+    },
+    {
+      "index": 5,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "library/000003.txt",
+          "start_line": 121,
+          "max_lines": 110
+        },
+        "why": "读 Theorem 1 的完整陈述与其后的关键定义"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "n\nY\ni=1\nsin ait\nait\ndt.\nHere and later on, sin(0)\n0\nis understood to be 1.\nWe will use the following generalization of (2.1). For arbitrary non-zero a ∈Rn, introduce\nthe parallel section function sa(.) defined on R as\n(2.2)\nsa(r) = Voln−1(x ∈Qn : ⟨x, a⟩= r).\nNote that sa(r) is the (n−1)-dimensional volume of the hyperplane section of Qn orthogonal\nto a at distance\nr\n|a| from the origin. In particular, sa(r) is not invariant under scaling of a.\nFurthermore, introduce the normalized central section function σ(.) defined on Rn \\ {0}\nas\n(2.3)\nσ(a) =\nπ\n2n−1 sa(0).\nFor a continuous random variable X, let fX(.) denote its density function, FX(.) its\ndistribution function, and φX(.) its characteristic function.\nLet now X1, . . . , Xn be independent random variables, each distributed uniformly on\n[−1, 1].\nThe joint distribution of X1, . . . , Xn induces the normalized Lebesgue measure\non Qn. Accordingly, for arbitrary 0̸ = a ∈Rn and r ∈R,\nP\n\nn\nX\ni=1\naiXi −r\n ⩽ε\n\n= 1\n2n Voln\n\nx ∈Qn :\n⟨x, a⟩−r\n ⩽ε\n\n.\nThus, letting ε →0, we deduce by (2.2) that\n(2.4)\nfPn\ni=1 aiXi(r) =\n1\n2n|a|sa(r)\nas long as fPn\ni=1 aiXi(r) exists, that is, a and r are not of the form a = c · ej and |r| = |c|,\nwhere ej denotes the jth standard basis vector, and c ∈R.\nExcluding the above degenerate cases, we can express fPn\ni=1 aiXi(r) using the inverse\nFourier transform. As is well known, the characteristic function of Pn\ni=1 aiXi is given by\n(2.5)\nφPn\ni=1 aiXi(t) =\nn\nY\ni=1\nsin ait\nait\n.\nHence, by standard Fourier inversion,\n(2.6)\nfPn\ni=1 aiXi(r) = 1\n2π\nZ ∞\n−∞\nn\nY\ni=1\nsin ait\nait\n· cos rt dt.\nTherefore, by (2.4),\n(2.7)\nsa(r) = 2n−1|a|\nπ\nZ ∞\n−∞\nn\nY\ni=1\nsin ait\nait\n· cos rt dt\n===== page 4 =====\n4\nCRITICAL CENTRAL SECTIONS OF THE CUBE\nand, by (2.3), we recover (2.1):\n(2.8)\nσ(a) = |a|\nZ ∞\n−∞\nn\nY\ni=1\nsin ait\nait\ndt.\nProof of Theorem 1. Assume that a ∈Sn−1 is a critical direction. Since the constraint on\na is expressed by the equation a2\n1 + . . . + a2\nn = 1, and σ(a) is differentiable, the method of\n",
+        "error": "",
+        "meta": {
+          "path": "library/000003.txt",
+          "encoding": "utf-8",
+          "bytes_read": 28833,
+          "total_bytes": 28833,
+          "truncated": false,
+          "start_line": 121,
+          "lines_read": 110,
+          "total_lines": 900,
+          "next_line": 231,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 121–230 行（共 900 行）；续读 start_line=231",
+          "sha256": "7f80d6808d557f09ad03516437b27c7b47878a0e41cba6a73711f564a7979820"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 67328,
+        "prompt_cache_miss_tokens": 2727,
+        "tokens_in": 70055,
+        "tokens_out": 225,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000253"
+    },
+    {
+      "index": 6,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "library/000003.txt",
+          "start_line": 95,
+          "max_lines": 55
+        },
+        "why": "补读 Theorem 1 的完整陈述与 critical direction 定义原文"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "Voln−1(conv (0 ∪(Sk ∩a⊥)) = µ(1 −a2\nk)\nholds true for each k = 1, . . . , n.\nThe condition guaranteed by Theorem 1 may be used to calculate critical directions.\nWith the aid of probabilistic methods, we demonstrate this for n ⩽4. Based on compu-\ntational evidence, it has been widely believed that all critical directions are diagonal. We\nconfirm this conjecture in dimension 3, but disprove it in dimension 4.\nTheorem 2. For n = 2, 3, critical central hyperplane sections of Qn are exactly the diagonal\nsections.\nTheorem 3. For n = 4, critical central hyperplane sections of Q4 are either diagonal, or\ntheir normal vector is\n1\n√\n10(1, 1, 2, 2) up to permuting coordinates and changing signs.\n===== page 3 =====\nCRITICAL CENTRAL SECTIONS OF THE CUBE\n3\n2. A geometric characterization of critical sections\nTheorem 1 will be proved using Fourier analytic tools and variational methods – see [K05]\nfor detailed theoretical background. Naturally, the following classical formula, dating back\nto P´olya [P1913], lies at the core of the arguments: For any unit vector a ∈Sn−1,\n(2.1)\nVoln−1(Qn ∩a⊥) = 2n−1\nπ\nZ ∞\n−∞\nn\nY\ni=1\nsin ait\nait\ndt.\nHere and later on, sin(0)\n0\nis understood to be 1.\nWe will use the following generalization of (2.1). For arbitrary non-zero a ∈Rn, introduce\nthe parallel section function sa(.) defined on R as\n(2.2)\nsa(r) = Voln−1(x ∈Qn : ⟨x, a⟩= r).\nNote that sa(r) is the (n−1)-dimensional volume of the hyperplane section of Qn orthogonal\nto a at distance\nr\n|a| from the origin. In particular, sa(r) is not invariant under scaling of a.\nFurthermore, introduce the normalized central section function σ(.) defined on Rn \\ {0}\nas\n(2.3)\nσ(a) =\nπ\n2n−1 sa(0).\nFor a continuous random variable X, let fX(.) denote its density function, FX(.) its\ndistribution function, and φX(.) its characteristic function.\nLet now X1, . . . , Xn be independent random variables, each distributed uniformly on\n[−1, 1].\nThe joint distribution of X1, . . . , Xn induces the normalized Lebesgue measure\non …（落档截断，原 2052 字）",
+        "error": "",
+        "meta": {
+          "path": "library/000003.txt",
+          "encoding": "utf-8",
+          "bytes_read": 28833,
+          "total_bytes": 28833,
+          "truncated": false,
+          "start_line": 95,
+          "lines_read": 55,
+          "total_lines": 900,
+          "next_line": 150,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 95–149 行（共 900 行）；续读 start_line=150",
+          "sha256": "7f80d6808d557f09ad03516437b27c7b47878a0e41cba6a73711f564a7979820"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 69248,
+        "prompt_cache_miss_tokens": 2036,
+        "tokens_in": 71284,
+        "tokens_out": 2490,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000253"
+    },
+    {
+      "index": 7,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "library/000003.txt",
+          "start_line": 76,
+          "max_lines": 26
+        },
+        "why": "补读 Theorem 1 的完整陈述（第 2 页末被截断处）"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "methods, analyzing local modifications, and studying the relationship with frames, Ivanov\nand Tsiutsiurupa [IT21] established necessary conditions for sections in order to have locally\nmaximal volume.\nIn this note we apply Fourier analytic methods to study critical central hyperplane\nsections: these are the sections a⊥∩Qn whose normal vector a is a critical point on Sn−1 with\nrespect to the volume of the central section of Qn. Such normal vectors will be referred to\nas critical directions. We retrieve the main condition of Ivanov and Tsiutsiurupa [IT21] (see\nTheorem 1.1, Condition 4 therein) for (n −1)-dimensional sections being locally maximal.\nYet, the Fourier analytic approach yields a more transparent proof for the statement. Our\nargument is reminiscent of the work of Koldobsky and K¨onig [KK11] – for that connection,\nsee the remark following the proof of Theorem 1.\nBelow and later on, Si denotes the facet of Qn corresponding to the ith coordinate\nbeing 1. That is, Si = {x = (x1, . . . , xn) ∈Qn : xi = 1}. The vectors a, x ∈Rn will always\nhave coordinates a = (a1, . . . , an) and x = (x1, . . . , xn). As mentioned before, Sn−1 is the\nunit sphere of Rn.\nTheorem 1. The unit vector a = (a1, . . . , an) ∈Sn−1 is a critical direction with respect to\nthe central section volume function Voln−1(Qn ∩a⊥) if and only if it is parallel to a main\ndiagonal of a 2-dimensional face of Qn, or there exists some µ > 0 for which\n(1.1)\nVoln−1(conv (0 ∪(Sk ∩a⊥)) = µ(1 −a2\nk)\nholds true for each k = 1, . . . , n.\nThe condition guaranteed by Theorem 1 may be used to calculate critical directions.\nWith the aid of probabilistic methods, we demonstrate this for n ⩽4. Based on compu-\ntational evidence, it has been widely believed that all critical directions are diagonal. We\nconfirm this conjecture in dimension 3, but disprove it in dimension 4.\n",
+        "error": "",
+        "meta": {
+          "path": "library/000003.txt",
+          "encoding": "utf-8",
+          "bytes_read": 28833,
+          "total_bytes": 28833,
+          "truncated": false,
+          "start_line": 76,
+          "lines_read": 26,
+          "total_lines": 900,
+          "next_line": 102,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 76–101 行（共 900 行）；续读 start_line=102",
+          "sha256": "7f80d6808d557f09ad03516437b27c7b47878a0e41cba6a73711f564a7979820"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 70528,
+        "prompt_cache_miss_tokens": 2238,
+        "tokens_in": 72766,
+        "tokens_out": 1982,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000253"
+    },
+    {
+      "index": 8,
+      "shape": "tool",
+      "payload": {
+        "name": "table.schema",
+        "args": {
+          "table": "relations"
+        },
+        "why": "写关系行前先看必填字段与受控词表"
+      },
+      "result": {
+        "tool": "table.schema",
+        "ok": true,
+        "data": {
+          "tables": {
+            "relations": {
+              "file": "relations.json",
+              "primary_key": "relation_id",
+              "id_kind": "relation",
+              "uses_id_counter": true,
+              "fields": [
+                {
+                  "name": "relation_id",
+                  "type": "str",
+                  "required": true,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "concept_ids",
+                  "type": "list[str]",
+                  "required": true,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "description",
+                  "type": "str",
+                  "required": true,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "lit_id",
+                  "type": "str",
+                  "required": true,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "page_range",
+                  "type": "PageRange",
+                  "required": true,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "quote",
+                  "type": "str",
+                  "required": false,
+                  "default": "",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "quote_normalized",
+                  "type": "str",
+                  "required": false,
+                  "default": "",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "quote_verified",
+                  "type": "bool | null",
+                  "required": false,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "quote_mode",
+                  "type": "str",
+                  "required": false,
+                  "default": "",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "quote_reason",
+                  "type": "str",
+                  "required": false,
+                  "default": "",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "quote_span",
+                  "type": "str",
+                  "required": false,
+                  "default": "",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "quote_call_sha256",
+                  "type": "str",
+                  "required": false,
+                  "default": "",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "statement",
+                  "type": "str",
+                  "required": false,
+                  "default": "",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "concept_group_key",
+                  "type": "str",
+                  "required": false,
+                  "default": "",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "dedup_key",
+                  "type": "str",
+                  "required": false,
+                  "default": "",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "status",
+                  "type": "str",
+                  "required": false,
+                  "default": "active",
+                  "literal_values": [],
+                  "vocabulary": "RELATION_STATUS",
+                  "enum": [
+                    "active",
+                    "suspect",
+                    "rejected"
+                  ]
+                },
+                {
+                  "name": "duplicate_of",
+                  "type": "str | null",
+                  "required": false,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "created_at",
+                  "type": "str",
+                  "required": false,
+                  "default": "",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "merged_at",
+                  "type": "str",
+                  "required": false,
+                  "default": "",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "supporting_lit_ids",
+                  "type": "list[str]",
+                  "required": false,
+                  "default": [],
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                }
+              ],
+              "required": [
+                "relation_id",
+                "concept_ids",
+                "description",
+                "lit_id",
+                "page_range"
+              ],
+              "vocabularies": {
+                "status": {
+                  "vocabulary": "RELATION_STATUS",
+                  "values": [
+                    "active",
+                    "suspect",
+                    "rejected"
+                  ]
+                }
+              }
+            }
+          },
+          "vocabularies": {
+            "SEARCH_MODES": [
+              "broad",
+              "topical",
+              "precise"
+            ],
+            "PRIORITIES": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "LIT_TYPES": [
+              "J",
+              "M",
+              "C",
+              "D",
+              "R",
+              "S",
+              "P",
+              "N",
+              "EB",
+              "Z"
+            ],
+            "RELATION_STATUS": [
+              "active",
+              "suspect",
+              "rejected"
+            ],
+            "SEARCH_OUTCOMES": [
+              "ok",
+              "no_results",
+              "search_failed",
+              "gave_up"
+            ],
+            "DOWNLOAD_STATUSES": [
+              "ok",
+              "content_mismatch",
+              "failed",
+              "skipped"
+            ],
+            "CANDIDATE_STATUSES": [
+              "pending",
+              "withdrawn",
+              "rejected",
+              "qualified",
+              "admitted",
+              "cleared"
+            ],
+            "CANDIDATE_REASON_CODES": [
+              "withdrawn_by_reviewer",
+              "rejected_off_topic",
+              "rejected_low_quality",
+              "duplicate_doi",
+              "overlap_without_new_content",
+              "overlap_ok_false",
+              "registration_failed",
+              "over_cap",
+              "not_screened"
+            ],
+            "LIT_MATCH_STATUSES": [
+              "exact",
+              "partial",
+              "mismatch"
+            ],
+            "QUOTE_MODES": [
+              "verbatim",
+              "semantic"
+            ],
+            "REPORT_KINDS": [
+              "hottest",
+              "paths",
+              "cold",
+              "gaps",
+              "proof_chain"
+            ],
+            "QUESTION_STATUSES": [
+              "open",
+              "needs_evidence",
+              "researching",
+              "answered",
+              "dropped"
+            ],
+            "CONTRADICTION_VERDICTS": [
+              "resolved",
+              "unresolved",
+              "new_contradiction",
+              "persistent"
+            ],
+            "QUESTION_KINDS": [
+              "gap",
+              "contradiction"
+            ],
+            "CONJECTURE_STATUSES": [
+              "proposed",
+              "needs_evidence",
+              "testing",
+              "supported_not_proved",
+              "refuted",
+              "proved",
+              "promoted",
+              "known_in_literature",
+              "withdrawn"
+            ],
+            "CONJECTURE_FORMS": [
+              "universal",
+              "existential",
+              "identity",
+              "bound",
+              "structural"
+            ],
+            "CONJECTURE_QUESTION_MARKS": [
+              "?",
+              "？",
+              "是否",
+              "吗"
+            ],
+            "CONJECTURE_QUESTION_PATTERNS": [
+              "^\\s*(谁|什么|哪些|哪类|如何|怎么|为什么)",
+              "(?i)^\\s*(which|what|whether|who|whom|whose|when|where|why|how)\\b",
+              "(?i)^\\s*(is|are|does|do|can|could|should|would|will|has|have)\\b"
+            ],
+            "REPROCESS_REASONS": [
+              "quote_unverifiable",
+              "low_information",
+              "need_context",
+              "structural_duplicate"
+            ],
+            "REPROCESS_STATUSES": [
+              "pending",
+              "done",
+              "rejected"
+            ],
+            "EXPERIMENT_METHODS": [
+              "numeric",
+              "symbolic",
+              "exhaustive_search",
+              "formal"
+            ],
+            "EVIDENCE_KINDS": [
+              "proof",
+              "proof_review",
+              "cross_check",
+              "heuristic"
+            ],
+            "EXPERIMENT_EVIDENCE_KINDS": [
+              "proof",
+              "cross_check",
+              "heuristic"
+            ],
+            "EXPERIMENT_RESULTS": [
+              "supports",
+              "refutes",
+              "inconclusive"
+            ],
+            "EXPERIMENT_STATUSES": [
+              "active",
+              "voided"
+            ],
+            "VOID_REASON_CODES": [
+              "code_changed"
+            ],
+            "NEGATION_KINDS": [
+              "disproved",
+              "not_proved",
+              "not_searched_here",
+              "no_local_evidence"
+            ],
+            "ATTACK_STATUSES": [
+              "open",
+              "attacking",
+              "supported_not_proved",
+              "stalled",
+              "resolved",
+              "abandoned"
+            ],
+            "ATTACK_TERMINAL_STATUSES": [
+              "resolved",
+              "abandoned",
+              "stalled",
+              "supported_not_proved"
+            ],
+            "SUBGOAL_STATUSES": [
+              "todo",
+              "in_progress",
+              "supported_not_proved",
+              "closed",
+              "blocked",
+              "dropped"
+            ],
+            "SUBGOAL_OWNERS": [
+              "F",
+              "A",
+              "B",
+              "C",
+              "D",
+              "E",
+              "G"
+            ],
+            "DOC_KINDS": [
+              "survey",
+              "paper",
+              "note",
+              "research"
+            ],
+            "DOC_STATUSES": [
+              "draft",
+              "in_review",
+              "revised",
+              "accepted",
+              "rejected",
+              "unresolved_review"
+            ],
+            "REVIEW_VERDICTS": [
+              "",
+              "成立",
+              "有毛病"
+            ],
+            "REVIEW_LEGACY_VERDICTS": [
+              "看不出来"
+            ],
+            "DEP_KINDS": [
+              "theorem",
+              "definition",
+              "lemma",
+              "proposition",
+              "experiment",
+              "prior_art"
+            ],
+            "DEP_STATUSES": [
+              "closed",
+              "dangling",
+              "external_unavailable",
+              "refuted",
+              "disputed"
+            ],
+            "STATEMENT_ORIGINS": [
+              "external_lit",
+              "own_result"
+            ],
+            "STATEMENT_STATUSES": [
+              "active",
+              "disputed",
+              "refuted",
+              "superseded",
+              "pending_definition",
+              "abandoned"
+            ],
+            "STATEMENT_UNUSABLE_STATUSES": [
+              "disputed",
+              "refuted",
+              "superseded",
+              "pending_definition",
+              "abandoned"
+            ],
+            "STATEMENT_PROPOSITION_KINDS": [
+              "theorem",
+              "lemma",
+              "proposition",
+              "corollary",
+              "conjecture",
+              "example"
+            ],
+            "STATEMENT_NON_PROPOSITION_KINDS": [
+              "concept",
+              "definition"
+            ],
+            "STATEMENT_KINDS": [
+              "theorem",
+              "lemma",
+              "proposition",
+              "corollary",
+              "conjecture",
+              "example",
+              "concept",
+              "definition"
+            ],
+            "CLAIM_KINDS": [
+              "定义",
+              "定理",
+              "命题",
+              "引理",
+              "推论",
+              "例",
+              "注",
+              "反例"
+            ],
+            "CLAIM_STATUSES": [
+              "证",
+              "验",
+              "待精化",
+              "作废"
+            ],
+            "ALLOWED_USE_KINDS": [
+              "主结果",
+              "Remark only",
+              "移入 open"
+            ],
+            "NUMERIC_EVIDENCE_KEYS": [
+              "script",
+              "range",
+              "n_cases",
+              "n_counterexamples"
+            ],
+            "CLAIM_SOURCE_KINDS": [
+              "文献"
+            ],
+            "CLAIM_CHECK_KINDS": [
+              "证明",
+              "数值",
+              "只读了陈述"
+            ],
+            "FINDING_KINDS": [
+              "unsupported_claim",
+              "dangling_dep",
+              "overclaim",
+              "missing_negation_kind",
+              "scope_drift",
+              "garbled",
+              "inconsistent_number"
+            ],
+            "FINDING_LEVELS": [
+              "error",
+              "warning",
+              "info"
+            ],
+            "FINDING_STATUSES": [
+              "open",
+              "fixed",
+              "wontfix",
+              "disputed",
+              "superseded"
+            ],
+            "FINDING_MATHS_VALUES": [
+              "yes",
+              "no"
+            ],
+            "ROLES": [
+              "A",
+              "B",
+              "C",
+              "D",
+              "E",
+              "F",
+              "G",
+              "H",
+              "V",
+              "L"
+            ],
+            "ITEM_KINDS": [
+              "delegation",
+              "message",
+              "report",
+              "notice"
+            ],
+            "ITEM_EXPECTS": [
+              "ack",
+              "work"
+            ],
+            "ITEM_STATES": [
+              "queued",
+              "claimed",
+              "seen",
+              "done",
+              "block"
+            ],
+            "ITEM_CLOSES": [
+              "acked",
+              "completed",
+              "expired"
+            ],
+            "TASK_STATUSES": [
+              "pending",
+              "running",
+              "done",
+              "cancelled",
+              "failed",
+              "block"
+            ],
+            "TASK_OUTCOMES": [
+              "ok",
+              "no_result",
+              "not_applicable",
+              "refused",
+              "failed",
+              "cancelled",
+              "cut_off_by_parent"
+            ],
+            "CHILD_ENDINGS": [
+              "delivered",
+              "cut_off_by_parent",
+              "stopped"
+            ],
+            "FRAMEWORK_ONLY_OUTCOMES": [
+              "cut_off_by_parent"
+            ],
+            "REFUSAL_REASONS": [
+              "unknown_role",
+              "unknown_action",
+              "forbidden_edge",
+              "invalid_params",
+              "depth_exceeded",
+              "fanout_exceeded",
+              "concurrency_exceeded",
+              "budget_exceeded",
+              "deadline_exceeded",
+              "cycle_detected",
+              "not_wired"
+            ],
+            "USAGE_SCOPES": [
+              "summon",
+              "experiment",
+              "search",
+              "extract",
+              "review",
+              "reason"
+            ],
+            "EVAL_REQUIRED_FIELDS": [
+              "benchmark",
+              "benchmark_version",
+              "split",
+              "k",
+              "decontamination",
+              "date",
+              "source"
+            ]
+          }
+        },
+        "error": "",
+        "meta": {
+          "table_count": 1,
+          "vocabulary_count": 65
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 71936,
+        "prompt_cache_miss_tokens": 2237,
+        "tokens_in": 74173,
+        "tokens_out": 552,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000253"
+    },
+    {
+      "index": 9,
+      "shape": "tool",
+      "payload": {
+        "name": "own.register_statement",
+        "args": {
+          "label": "临界方向（critical direction）与临界中心超平面截面",
+          "statement_full": "设 Q_n = [−1,1]^n 为标准 n 维立方体（ℓ∞ 范数的单位球），a ∈ S^{n−1} 为单位向量。过原点、以 a 为法向的超平面 a^⊥ 与 Q_n 的交 a^⊥∩Q_n 称为 Q_n 的中心超平面截面（central hyperplane section）。若 a 在单位球 S^{n−1} 上是中心截面体积函数 Vol_{n−1}(Q_n ∩ a^⊥)（即该 (n−1) 维截面的体积）的临界点，则称 a 为这个体积函数的临界方向（critical direction），相应的截面 a^⊥∩Q_n 称为临界中心超平面截面（critical central hyperplane section）。",
+          "kind": "concept",
+          "origin": "external_lit",
+          "source_lit_id": "000003",
+          "page_range": {
+            "start": 2,
+            "end": 2,
+            "label": "p. 2"
+          },
+          "quote_verified": null,
+          "quote_reason": "定义原句（第 2 页）为 \"these are the sections a⊥∩Qn whose normal vector a is a critical point on Sn−1 with respect to the volume of the central section of Qn. Such normal vectors will be referred to as critical directions.\"；本行 statement_full 是消化后的中文表述（含完整前提 Q_n=[−1,1]^n、a∈S^{n−1}），逐字回验尚未查 —— 引文已逐字摘出，待框架按来源重算区间后才可记 true。"
+        },
+        "why": "把 §1 引言里的 critical direction 定义落成可溯源的文献侧概念行"
+      },
+      "result": {
+        "tool": "own.register_statement",
+        "ok": true,
+        "data": {
+          "ok": true,
+          "stmt_id": "000111",
+          "source_lit_id": "000003",
+          "self_authored_review": {
+            "needs_v": false,
+            "signed": false,
+            "in_ledger": false,
+            "checked": true,
+            "verification_id": "",
+            "why": "kind='concept' 不在这一条闸的射程里：概念不走等级链（`evidencebits.derive_grade` 对它短路）"
+          },
+          "proposition_form": {
+            "judged": false,
+            "released": true,
+            "checked": false,
+            "model_calls": 0,
+            "ledger_appended": false,
+            "reason": "kind 落在 concept/definition 那一档：它不是命题"
+          },
+          "quote_verified": null,
+          "origin": "external_lit",
+          "quote_mode": "",
+          "quote_span": "",
+          "quote_evidence": {
+            "ok": true,
+            "action": "keep",
+            "why": "",
+            "where": "statements.proof_text"
+          },
+          "evidence_kind": "heuristic",
+          "row": {
+            "stmt_id": "000111",
+            "origin": "external_lit",
+            "kind": "concept",
+            "label": "临界方向（critical direction）与临界中心超平面截面",
+            "statement_text": "设 Q_n = [−1,1]^n 为标准 n 维立方体（ℓ∞ 范数的单位球），a ∈ S^{n−1} 为单位向量。过原点、以 a 为法向的超平面 a^⊥ 与 Q_n 的交 a^⊥∩Q_n 称为 Q_n 的中心超平面截面（central hyperplane section）。若 a 在单位球 S^{n−1} 上是中心截面体积函数 Vol_{n−1}(Q_n ∩ a^⊥)（即该 (n−1) 维截面的体积）的临界点，则称 a 为这个体积函数的临界方向（critical direction），相应的截面 a^⊥∩Q_n 称为临界中心超平面截面（critical central hyperplane section）。",
+            "statement_full": "设 Q_n = [−1,1]^n 为标准 n 维立方体（ℓ∞ 范数的单位球），a ∈ S^{n−1} 为单位向量。过原点、以 a 为法向的超平面 a^⊥ 与 Q_n 的交 a^⊥∩Q_n 称为 Q_n 的中心超平面截面（central hyperplane section）。若 a 在单位球 S^{n−1} 上是中心截面体积函数 Vol_{n−1}(Q_n ∩ a^⊥)（即该 (n−1) 维截面的体积）的临界点，则称 a 为这个体积函数的临界方向（critical direction），相应的截面 a^⊥∩Q_n 称为临界中心超平面截面（critical central hyperplane section）。",
+            "proof_text": "",
+            "source_lit_id": "000003",
+            "page_range": {
+              "start": 2,
+              "end": 2,
+              "label": "p. 2"
+            },
+            "quote_verified": null,
+            "quote_mode": "",
+            "quote_reason": "定义原句（第 2 页）为 \"these are the sections a⊥∩Qn whose normal vector a is a critical point on Sn−1 with respect to the volume of the central section of Qn. Such normal vectors will be referred to as critical directions.\"；本行 statement_full 是消化后的中文表述（含完整前提 Q_n=[−1,1]^n、a∈S^{n−1}），逐字回验尚未查 —— 引文已逐字摘出，待框架按来源重算区间后才可记 true。",
+            "quote_span": "",
+            "quote_call_sha256": "",
+            "evidence_kind": "heuristic",
+            "bits": {
+              "numeric": "pending",
+              "proof": false,
+              "reviewed": false,
+              "formal": "pending",
+              "audited": false,
+              "origin": "external_lit",
+              "evidence": {
+                "numeric": {},
+                "numeric_reason": "",
+                "proof_process": "",
+                "proof_source": "",
+                "reviewed_by": {},
+                "reviewed_source": "",
+                "formal": {},
+                "formal_reason": "",
+                "audited_by": {}
+              },
+              "voided_by": {},
+              "grade": "not_applicable",
+              "audited_badge": false
+            },
+            "status": "active",
+            "derived_from": [],
+            "aliases": [],
+            "doc_id": null,
+            "line_range": {
+              "start": null,
+              "end": null,
+              "label": ""
+            },
+            "created_at": "2026-11-25T00:03:47+08:00",
+            "created_by": "secretary-B",
+            "_proposition_adjudication": {
+              "checked": false,
+              "attempted": true,
+              "verdict": "",
+              "canonical_name": "",
+              "same_as": "",
+              "basis": "",
+              "reason": "kind='concept' 不在命题性的那几档 ['theorem', 'lemma', 'proposition', 'corollary', 'conjecture', 'example'] 里 ⇒ 不是命题，不参与同一性判定（也不洗它的名字）",
+              "reused": false,
+              "seam_source": "secretary（LlmSeam.for_secretary）",
+              "seam_attempted": true,
+              "at": "2026-11-25T00:03:47+08:00"
+            }
+          },
+          "sign_filing": {
+            "checked": false,
+            "manuscript_signed": false,
+            "filed": null,
+            "state": "unreadable",
+            "abandoned": false,
+            "manuscript": {},
+            "statement": {},
+            "why": "这一份没有手稿正文（`manuscript_path` 指的那份稿读不到 / 没给）⇒ 稿上已签这一格没查成"
+          },
+          "adjudication": {
+            "checked": false,
+            "attempted": true,
+            "verdict": "",
+            "canonical_name": "",
+            "same_as": "",
+            "route": "",
+            "condition": "",
+            "conclusion": "",
+            "basis": "",
+            "reason": "kind='concept' 不在命题性的那几档 ['theorem', 'lemma', 'proposition', 'corollary', 'conjecture', 'example'] 里 ⇒ 不是命题，不参与同一性判定（也不洗它的名字）",
+            "reused": false,
+            "cached": false,
+            "seam_source": "secretary（LlmSeam.for_secretary）",
+            "candidates": [],
+            "keywords": [],
+            "hits_total": 0,
+            "hits_named": [],
+            "judged": false,
+            "why": "",
+            "cost": {
+              "ledger": "",
+              "reason": "没发调用（还没判）"
+            },
+            "keyword_checked": false,
+            "candidates_total": 0,
+            "pages_total": 0,
+            "pages_judged": 0,
+            "candidates_seen": 0,
+            "page_exhausted": false
+          },
+          "canonical_name": "",
+          "label_washed": {},
+          "proof_route": "",
+          "deps_state": "none_in_proof",
+          "deps_written": 0,
+          "deps_stmt_edges": 0,
+          "deps_dangling": [],
+          "deps_unmappable": [],
+          "deps_missing": {
+            "state": "not_applicable",
+            "stmt_id": "000111",
+            "proof_no": 1,
+            "proof_chars": 0,
+            "deps_written": 0,
+            "scanned_refs": 0,
+            "derived_from": [],
+            "why": "这一行没有证明正文（概念行 / 还没写证明）⇒ 依赖面这一格不适用（既不是「缺依赖」，也不是「依赖为零」）",
+            "next_step": "",
+            "manuscript_source": "none",
+            "manuscript_washed": false,
+            "manuscript_owner": "",
+            "manuscript_owner_ok": true,
+            "manuscript_probe": {
+              "checked": true,
+              "source": "none",
+              "text": "",
+              "path": "",
+              "tried": [],
+              "matched_by": "",
+              "why": "按约定路径找过 0 处（没有命题号也没有计划号可定位） —— 这几种名一处都不在盘上（或者读不出来，原因逐条见 `tried`）"
+            },
+            "manuscript_carried": {
+              "checked": true,
+              "source": "none",
+              "text": "",
+              "path": "",
+              "sha256": "",
+              "carried_by": "",
+              "tried": [
+                {
+                  "report": "manuscripts/D/RESEARCH.md",
+                  "present": false,
+                  "rows": 0,
+                  "problems": 0
+                },
+                {
+                  "report": "manuscripts/D/000000-research.md",
+                  "present": true,
+                  "rows": 5,
+                  "problems": 5
+                }
+              ],
+              "why": "D 的携带单里有 5 条手稿，按正文 sha 一条都没对上这一笔",
+              "named": false,
+              "address": "",
+              "item": 0,
+              "list_report": "",
+              "list_line": 0,
+              "list_sha256": "",
+              "proof_no": 0,
+              "matched_by": "",
+              "manuscript_id": "",
+              "legacy_reports": [],
+              "ambiguous": {}
+            },
+            "deps_receipt": "依赖边 0 条（其中命题→命题 0 条）",
+            "deps_stmt_edges": 0
+          },
+          "manuscript_source": "none",
+          "proof_text_source": "",
+          "addressing": {
+            "checked": true,
+            "mode": "auto",
+            "source": "none",
+            "hit": false,
+            "address": "",
+            "list_report": "",
+            "list_item": 0,
+            "list_line": 0,
+            "list_sha256": "",
+            "refusal": "",
+            "reason": "",
+            "suggestion": ""
+          },
+          "manuscript_washed": false,
+          "manuscript_wash": {
+            "washed": false,
+            "actor": "",
+            "filled": "",
+            "mark": ""
+          },
+          "proof_vs_source": {
+            "checked": false,
+            "same": null,
+            "matched": "",
+            "source": "none",
+            "chars": 0,
+            "source_chars": 0,
+            "why": "这一笔没有可比对的来源正文（没有手稿、也不是从文献引文来的）⇒ 这一格是「没有对象」，不是「不一致」",
+            "source_state": ""
+          },
+          "has_proof": false,
+          "proof_no": 0,
+          "proof_sha256": "",
+          "proof_no_source": "path_group",
+          "pending_definitions": [],
+          "proof_text_dropped": "",
+          "proofs_dropped": [],
+          "pending": [],
+          "note": "登记 ≠ 核对：quote_verified 是三态（True/False/None），它不是 True 时下游必须按 `quote_reason` 读，不许当成通过。五元位已随这一行落库（现算等级 not_applicable；第 2 位来源 （空））——等级不许自报，判据永远现算。这一笔由秘书落盘（洗格式 / 拿编号 / 查重 / 改表四件一起做完），表格 ['statements', 'dependencies']、路径组 0。；依赖边 0 条（其中命题→命题 0 条）",
+          "conjecture_ledger": {
+            "ok": false,
+            "kind": "validation_error",
+            "error": "status=proposed 时必须给 testable（可检验形式）；给不出就落 needs_evidence"
+          },
+          "statement_tier": {
+            "tier": "",
+            "label": "",
+            "nontriviality": null,
+            "nontriviality_tri": "unjudged",
+            "matched_by": "",
+            "downgraded": false,
+            "decision": "",
+            "reason": "kind='concept' 没有证明正文 ⇒ 判档这一格不适用（不是「判不了」：它是结构上不需要判，不是该判而没判）",
+            "judged_by": "secretary",
+            "judge": "statement_aesthetic"
+          },
+          "nontriviality_record": {
+            "recorded": true,
+            "tri": "not_applicable",
+            "level": null,
+            "label": "",
+            "stmt_id": "000111",
+            "path_group": 1,
+            "reason": ""
+          },
+          "registration_settled": {
+            "checked": true,
+            "settled": [],
+            "left": [],
+            "problems": [],
+            "reason": "收录落成：收口 0 条"
+          },
+          "d_handoff_settled": {
+            "checked": true,
+            "stmt_id": "000111",
+            "closed": [],
+            "expired": [],
+            "left": [],
+            "problems": [],
+            "reason": "收口 0 条、作废 0 条，仍开着 0 条"
+          },
+          "kind_judgement": {
+            "checked": true,
+            "kind": "concept",
+            "declared": "concept",
+            "changed": false,
+            "row_kind": "concept",
+            "basis": "kind='concept' 落在定义 / 术语那一档 ⇒ 这一行不是命题：「定理还是猜想」这一问不适用",
+            "why": ""
+          },
+          "grade": "not_applicable",
+          "grade_why": "",
+          "grade_reading": {
+            "checked": true,
+            "grade": "not_applicable",
+            "stored_grade": "not_applicable",
+            "mismatch": false,
+            "why": ""
+          },
+          "citation_fit": {
+            "checked": true,
+            "lit_id": "000003",
+            "title": "Critical central sections of the cube",
+            "verdict": "fit",
+            "why": [],
+            "words_in_claim": [
+              "central",
+              "critical",
+              "direction",
+              "hyperplane",
+              "section"
+            ],
+            "note": "这条命题的正文与被引文献的题名 / 摘要至少共用一个实词（判据：`closing.claim_evidence_fit`，与收工门那一档同一份实现）。"
+          }
+        },
+        "error": "",
+        "meta": {
+          "statement_tier": {
+            "tier": "",
+            "label": "",
+            "nontriviality": null,
+            "nontriviality_tri": "unjudged",
+            "matched_by": "",
+            "downgraded": false,
+            "decision": "",
+            "reason": "kind='concept' 没有证明正文 ⇒ 判档这一格不适用（不是「判不了」：它是结构上不需要判，不是该判而没判）",
+            "judged_by": "secretary",
+            "judge": "statement_aesthetic"
+          }
+        },
+        "tier": {
+          "tier": "",
+          "label": "",
+          "nontriviality": null,
+          "nontriviality_tri": "unjudged",
+          "matched_by": "",
+          "downgraded": false,
+          "decision": "",
+          "reason": "kind='concept' 没有证明正文 ⇒ 判档这一格不适用（不是「判不了」：它是结构上不需要判，不是该判而没判）",
+          "judged_by": "secretary",
+          "judge": "statement_aesthetic"
+        },
+        "参数表": "【参数表】被拒的是参数形状/取值，不是这件事不能做。照下面这张声明表重写一次（键名与类型都要对；表里没列的键一律不许传）：\n- own.register_statement 的参数表：statement_full: string，含完整假设的命题正文。**只给 `proof_manuscript` 时这一格可以不传**（命题从手稿 `## 命题` 取）；正文与手稿都不给 ⇒ 动作层受控拒 `empty_statement_text`（空正文不能登；source_lit_id: string，origin='external_lit' 必需：论文那一行的 lit_id（必须是 literature 表里真实存在的行，写库前会核）；proof_text: string，文献侧（origin='external_lit'）的逐字证明摘录，`quote_verified` 的比对对象。**自产命题（origin='own_result'）的正文不走这一格**：它由手稿 `proof_man；proofs: array；kind: string，英文词表：theorem / lemma / proposition / corollary / conjecture / concept / definition（中文 kind 如「定理」「引理」不是取值）。它由证据；label: string，这条命题的定理名（例如「第一同构定理」）。只写名字：证明走哪条路线（路线一/二/三、McKay、Wielandt）、是不是自证草稿、要不要 V 审签，都不是定理名的一部分 —— 路线写进证明那一层（那条证明自己的正文说明；statement_text: string；origin: string，枚举 [external_lit/own_result]，来源。**它决定还要给哪些字段**（写库前逐条硬校验）：external_lit（论文里的）⇒ 必须给 source_lit_id + page_range；own_result（我们自己的）⇒ 必须给 doc_id 或；self_authored: boolean，只在 `kind=\"concept\"` + `origin=\"own_result\"` 时有意义：声明这是我们自己定义的新概念（不是从文献里摘的术语）。默认不传 = 不声明 ⇒ 整笔受控拒 `concept_origin；page_range: object，origin='external_lit' 必需：出处页码（start，或 label —— 如「全文未分页」；只给空的 start/end 等于没给）；evidence_kind: string，枚举 [proof/proof_review/cross_check/heuristic]，历史列（写盘时由等级反算，判定面不读它）。等级是唯一的轴：`conjecture` < `strong_conjecture` < `pre_theorem` < `theorem`；判定只看**可观察状态**：**V ；quote_verified: boolean，引文回验是否通过；不传 = 还没查（None）。2026-10-14 起“通过”分两档，方式写进 quote_mode：逐字命中 / 语义相同；quote_mode: string，枚举 [verbatim/semantic]，这条引文是**怎么**通过的（业主 2026-10-14：「回验不应该是十分呆板的逐字验证，而是保持语义相同即可」）：verbatim＝逐字命中（`quoteverify.check_quote` 那一档，不花模型钱，先；quote_reason: string，quote_verified 不是 true 时必需：写清哪里不一致、或者为什么还没查；quote_span: string，引文在来源里命中哪一段。逐字档的口径是 `p{页}:norm[起:止]`：页号从 1 起，起止是该页经 `textutil.normalize_for_quote` 归一化之后的字符偏移（含头不含尾）；语义档这一栏是 H；quote_call_sha256: string，**只有 `quote_mode=semantic` 这一档填**：H 的 `judge_quote_semantics` 回执里 `call.prompt_sha256`（那次语义判定的调用指纹）。逐字档不填 —— 它；derived_from: array；proof_manuscript: string，`proof_manuscript` 是**证明正文的载体**（自产命题在册与否都交它）：F/E 的稿，或 B 自己改写后的 `manuscripts/…（落档截断，原 2258 字）",
+        "warn": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.register_statement 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 9,
+          "call_index": 0,
+          "calls": 1,
+          "step_index": 9,
+          "summary": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.register_statement 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 9,
+            "calls": 1,
+            "items": 1,
+            "steps": [
+              9
+            ],
+            "executed": 1,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 73344,
+        "prompt_cache_miss_tokens": 3476,
+        "tokens_in": 76820,
+        "tokens_out": 7901,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000253"
+    },
+    {
+      "index": 10,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "relations",
+          "id": "000018"
+        },
+        "why": "读已有那条关系行的完整形态（concept_ids / description / quote / quote_span），照它写新关系行"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "relation_id": "000018",
+          "concept_ids": [
+            "000000",
+            "000018"
+          ],
+          "description": "Central hyperplane sections are sections of the cube Qn by hyperplanes containing 0, and their (n−1)-dimensional volume is a classical object of study.",
+          "lit_id": "000003",
+          "page_range": {
+            "start": 1,
+            "end": 1,
+            "label": "p. 1"
+          },
+          "quote": "It is a classical question to study the (n −1)-dimensional volume of\nsections of Qn with hyperplanes containing 0.",
+          "quote_normalized": "it is a classical question to study the (n -1)dimensional volume of sections of qn with hyperplanes containing 0.",
+          "quote_verified": true,
+          "quote_mode": "verbatim",
+          "quote_reason": "逐字命中（substring_match，窗口 declared:1-1，试过 未记）；命中区间 p1:norm[869:982]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+          "quote_span": "p1:norm[869:982]",
+          "quote_call_sha256": "",
+          "statement": "Central hyperplane sections are sections of the cube Qn by hyperplanes containing 0, and their (n−1)-dimensional volume is a classical object of study.",
+          "concept_group_key": "000000|000018",
+          "dedup_key": "000000|000018::d5c28189c19d1250",
+          "status": "active",
+          "duplicate_of": null,
+          "created_at": "2026-11-24T18:21:09+08:00",
+          "merged_at": "2026-11-24T18:21:09+08:00",
+          "supporting_lit_ids": [],
+          "_quote_check": {
+            "verified": true,
+            "matched_page": 1,
+            "window": "declared:1-1",
+            "reason": "substring_match",
+            "tried": []
+          },
+          "_conflict_check": {
+            "checked": true,
+            "conflict": false,
+            "strength": "none",
+            "conflicts_with": [],
+            "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+            "method": "literal",
+            "scope": "same_concept_group",
+            "compared": 0,
+            "hits": [],
+            "weak_signals": []
+          }
+        },
+        "error": "",
+        "meta": {
+          "table": "relations",
+          "id": "000018",
+          "id_field": "relation_id",
+          "found": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 76032,
+        "prompt_cache_miss_tokens": 4677,
+        "tokens_in": 80709,
+        "tokens_out": 1656,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000253"
+    },
+    {
+      "index": 11,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "statements",
+          "filter": {
+            "kind": "concept"
+          },
+          "fields": [
+            "stmt_id",
+            "label",
+            "status"
+          ],
+          "limit": 50
+        },
+        "why": "看已有概念行号，关系行的 concept_ids 必须指向真实在册概念"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "statements",
+          "rows": [
+            {
+              "stmt_id": "000000",
+              "label": "unit cube",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000001",
+              "label": "section",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000002",
+              "label": "volume",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000003",
+              "label": "Hensley conjectured",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000004",
+              "label": "random variable",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000005",
+              "label": "probability density function",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000006",
+              "label": "derivative",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000007",
+              "label": "Khintchine inequality",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000008",
+              "label": "maximum volume",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000009",
+              "label": "intersection of Qn with a k-dimensional subspace",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000010",
+              "label": "independent random variables",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000011",
+              "label": "maximal hyperplane section",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000012",
+              "label": "ln p-balls",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000013",
+              "label": "n-cube",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000014",
+              "label": "Ball’s result",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000015",
+              "label": "main diagonal",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000016",
+              "label": "normalized section function An,p",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000017",
+              "label": "unit ball Bn p",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000018",
+              "label": "central hyperplane sections",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000019",
+              "label": "projections",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000020",
+              "label": "Khintchine-type inequality",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000021",
+              "label": "random variables",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000022",
+              "label": "resilience of cubic sections",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000023",
+              "label": "Ball’s cube slicing result",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000024",
+              "label": "Fourier transform representations of moments of independent sums",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000025",
+              "label": "Pólya’s formula",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000026",
+              "label": "normalized Fourier transform γp(s) of exp(−|r|p)",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000027",
+              "label": "Ball’s integral inequality",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000028",
+              "label": "Hölder’s inequality",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000029",
+              "label": "Nazarov and Podkorytov’s method",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000043",
+              "label": "Auerbach basis",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000044",
+              "label": "normalized Auerbach basis",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000045",
+              "label": "dual normalized basis",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000046",
+              "label": "biorthogonal system",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000047",
+              "label": "Minkowski space",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000048",
+              "label": "cross-polytope",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000049",
+              "label": "parallelotope",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000050",
+              "label": "P-curves",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000051",
+              "label": "Radon curves",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000052",
+              "label": "Minkowski plane",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000053",
+              "label": "circumscribed circle",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000054",
+              "label": "inscribed circle",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000055",
+              "label": "open ball",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000056",
+              "label": "convex body",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000057",
+              "label": "unit ball",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000058",
+              "label": "unit circle",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000059",
+              "label": "circumference",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000060",
+              "label": "area",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000061",
+              "label": "Radon plane",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000062",
+              "label": "aﬃne regular hexagon",
+              "status": "active"
+            }
+          ],
+          "total": 99,
+          "returned": 50,
+          "limit": 50,
+          "offset": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "total": 99,
+          "returned": 50,
+          "offset": 0,
+          "limit": 50,
+          "fields": [
+            "stmt_id",
+            "label",
+            "status"
+          ]
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 79872,
+        "prompt_cache_miss_tokens": 2087,
+        "tokens_in": 81959,
+        "tokens_out": 649,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000253"
+    },
+    {
+      "index": 12,
+      "shape": "tool",
+      "payload": {
+        "name": "own.register_statement",
+        "args": {
+          "kind": "conjecture",
+          "label": "临界方向的充要条件",
+          "origin": "external_lit",
+          "source_lit_id": "000003",
+          "page_range": {
+            "start": 2,
+            "end": 2,
+            "label": "p. 2"
+          },
+          "statement_full": "设 Q_n = [−1,1]^n 为标准 n 维立方体，S^{n−1} 为 R^n 的单位球面；对 k = 1,…,n，记 S_k = {x = (x_1,…,x_n) ∈ Q_n : x_k = 1} 是 Q_n 中第 k 个坐标为 1 的对面；Vol_{n−1}(Q_n ∩ a^⊥) 表示 Q_n 被以单位向量 a 为法向、过原点的超平面所截得的 (n−1) 维截面体积。则单位向量 a = (a_1,…,a_n) ∈ S^{n−1} 关于中心截面体积函数 Vol_{n−1}(Q_n ∩ a^⊥) 是临界方向（即 a 是 Vol_{n−1}(Q_n ∩ ·) 在 S^{n−1} 上的临界点），当且仅当：a 平行于 Q_n 某个二维面的主对角线，或者存在某个 µ > 0，使得 Vol_{n−1}(conv(0 ∪ (S_k ∩ a^⊥))) = µ(1 − a_k^2) 对每个 k = 1,…,n 都成立。",
+          "quote_verified": null,
+          "quote_reason": "出处为第 2 页 Theorem 1 的原句（已逐字读入 library/000003.txt 第 92–97 行）；本行 statement_full 是消化后的完整中文表述而非逐字串，故本笔不记逐字回验——引文逐字核验落在随本趟提交的 relations 行（由关系写口当场 substring 回验）。",
+          "why": "§1 的 Theorem 1 是指派优先落地的两处之一：临界方向的充要条件"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "own.register_statement",
+        "ok": true,
+        "data": {
+          "ok": false,
+          "kind": "citation_manuscript_needs_quote",
+          "reason": "引文侧登记要先落一份 b-稿，而这一笔没有逐字引文正文（`proof_text` 空）⇒ 那份稿的 `## 证明` 会是空的、落不成一份可签的稿。改法：把文献里那一句逐字摘进 `proof_text`（逐字回验要比对的就是它）再重交",
+          "refusal_reason": "invalid_params"
+        },
+        "error": "",
+        "meta": {},
+        "参数表": "【参数表】被拒的是参数形状/取值，不是这件事不能做。照下面这张声明表重写一次（键名与类型都要对；表里没列的键一律不许传）：\n- own.register_statement 的参数表：statement_full: string，含完整假设的命题正文。**只给 `proof_manuscript` 时这一格可以不传**（命题从手稿 `## 命题` 取）；正文与手稿都不给 ⇒ 动作层受控拒 `empty_statement_text`（空正文不能登；source_lit_id: string，origin='external_lit' 必需：论文那一行的 lit_id（必须是 literature 表里真实存在的行，写库前会核）；proof_text: string，文献侧（origin='external_lit'）的逐字证明摘录，`quote_verified` 的比对对象。**自产命题（origin='own_result'）的正文不走这一格**：它由手稿 `proof_man；proofs: array；kind: string，英文词表：theorem / lemma / proposition / corollary / conjecture / concept / definition（中文 kind 如「定理」「引理」不是取值）。它由证据；label: string，这条命题的定理名（例如「第一同构定理」）。只写名字：证明走哪条路线（路线一/二/三、McKay、Wielandt）、是不是自证草稿、要不要 V 审签，都不是定理名的一部分 —— 路线写进证明那一层（那条证明自己的正文说明；statement_text: string；origin: string，枚举 [external_lit/own_result]，来源。**它决定还要给哪些字段**（写库前逐条硬校验）：external_lit（论文里的）⇒ 必须给 source_lit_id + page_range；own_result（我们自己的）⇒ 必须给 doc_id 或；self_authored: boolean，只在 `kind=\"concept\"` + `origin=\"own_result\"` 时有意义：声明这是我们自己定义的新概念（不是从文献里摘的术语）。默认不传 = 不声明 ⇒ 整笔受控拒 `concept_origin；page_range: object，origin='external_lit' 必需：出处页码（start，或 label —— 如「全文未分页」；只给空的 start/end 等于没给）；evidence_kind: string，枚举 [proof/proof_review/cross_check/heuristic]，历史列（写盘时由等级反算，判定面不读它）。等级是唯一的轴：`conjecture` < `strong_conjecture` < `pre_theorem` < `theorem`；判定只看**可观察状态**：**V ；quote_verified: boolean，引文回验是否通过；不传 = 还没查（None）。2026-10-14 起“通过”分两档，方式写进 quote_mode：逐字命中 / 语义相同；quote_mode: string，枚举 [verbatim/semantic]，这条引文是**怎么**通过的（业主 2026-10-14：「回验不应该是十分呆板的逐字验证，而是保持语义相同即可」）：verbatim＝逐字命中（`quoteverify.check_quote` 那一档，不花模型钱，先；quote_reason: string，quote_verified 不是 true 时必需：写清哪里不一致、或者为什么还没查；quote_span: string，引文在来源里命中哪一段。逐字档的口径是 `p{页}:norm[起:止]`：页号从 1 起，起止是该页经 `textutil.normalize_for_quote` 归一化之后的字符偏移（含头不含尾）；语义档这一栏是 H；quote_call_sha256: string，**只有 `quote_mode=semantic` 这一档填**：H 的 `judge_quote_semantics` 回执里 `call.prompt_sha256`（那次语义判定的调用指纹）。逐字档不填 —— 它；derived_from: array；proof_manuscript: string，`proof_manuscript` 是**证明正文的载体**（自产命题在册与否都交它）：F/E 的稿，或 B 自己改写后的 `manuscripts/…（落档截断，原 2258 字）",
+        "warn": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.register_statement 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 12,
+          "call_index": 0,
+          "calls": 1,
+          "step_index": 12,
+          "summary": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.register_statement 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 12,
+            "calls": 1,
+            "items": 1,
+            "steps": [
+              12
+            ],
+            "executed": 1,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 81152,
+        "prompt_cache_miss_tokens": 2686,
+        "tokens_in": 83838,
+        "tokens_out": 2695,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000253"
+    },
+    {
+      "index": 13,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "library/000003.txt",
+          "start_line": 228,
+          "max_lines": 60
+        },
+        "why": "取 Theorem 1 证明正文的逐字开头几段，作为 external_lit 侧的逐字 proof_text（回验比对对象）"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "a is expressed by the equation a2\n1 + . . . + a2\nn = 1, and σ(a) is differentiable, the method of\nLagrange multipliers implies that there exists a constant λ ∈R so that for each k = 1, . . . , n,\n(2.9)\nλak =\n∂\n∂ak\nσ(a).\nReferring to (2.8), the Leibniz integral rule shows that for each k with ak̸ = 0,\n(2.10)\n∂\n∂ak\nσ(a) =\nZ ∞\n−∞\nY\ni̸=k\nsin ait\nait\n·\ncos akt\nak\n−sin akt\na2\nkt\n\ndt.\nTherefore, multiplying (2.9) by ak shows that\n(2.11)\nλa2\nk + σ(a) =\nZ ∞\n−∞\nY\ni̸=k\nsin ait\nait\n· cos akt dt\nwhenever ak̸ = 0. Since\n∂\n∂ak σ(a) = 0 if ak = 0, the above equality holds in fact for all values\nof k = 1, . . . , n.\nNext, we calculate the value of λ. To that end, let φ(t) := φPn\ni=1 aiXi(t). Then by (2.5),\nφ′(t) = 1\nt ·\nn\nX\nk=1\n Y\ni̸=k\nsin ait\nait\n· cos akt\n\n−n\nt · φ(t).\nThus, summing (2.11) over k = 1, . . . , n leads to\nλ = λ\n",
+        "error": "",
+        "meta": {
+          "path": "library/000003.txt",
+          "encoding": "utf-8",
+          "bytes_read": 28833,
+          "total_bytes": 28833,
+          "truncated": false,
+          "start_line": 228,
+          "lines_read": 60,
+          "total_lines": 900,
+          "next_line": 288,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 228–287 行（共 900 行）；续读 start_line=288",
+          "sha256": "7f80d6808d557f09ad03516437b27c7b47878a0e41cba6a73711f564a7979820"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 83072,
+        "prompt_cache_miss_tokens": 3134,
+        "tokens_in": 86206,
+        "tokens_out": 1880,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000253"
+    },
+    {
+      "index": 14,
+      "shape": "tool",
+      "payload": {
+        "name": "own.register_statement",
+        "args": {
+          "args": {
+            "kind": "conjecture",
+            "label": "临界方向的充要条件",
+            "origin": "external_lit",
+            "source_lit_id": "000003",
+            "page_range": {
+              "start": 2,
+              "end": 2,
+              "label": "p. 2"
+            },
+            "statement_full": "设 Q_n = [−1,1]^n 为标准 n 维立方体（ℓ∞ 范数的单位球），S^{n−1} 为 R^n 的单位球面；对 k = 1,…,n 记 S_k = {x = (x_1,…,x_n) ∈ Q_n : x_k = 1} 为 Q_n 中第 k 个坐标为 1 的侧面；对单位向量 a ∈ S^{n−1}，a^⊥ 为过原点、以 a 为法向的超平面，Vol_{n−1}(Q_n ∩ a^⊥) 为对应的中心超平面截面体积函数（a 是它的临界点即称 a 为 critical direction）。则：单位向量 a = (a_1,…,a_n) ∈ S^{n−1} 是临界方向，当且仅当 a 平行于 Q_n 某个二维面的主对角线，或者存在某个常数 µ > 0，使得 Vol_{n−1}(conv(0 ∪ (S_k ∩ a^⊥))) = µ(1 − a_k^2) 对每个 k = 1,…,n 都成立。",
+            "proof_text": "Proof of Theorem 1. Assume that a ∈Sn−1 is a critical direction. Since the constraint on a is expressed by the equation a2 1 + . . . + a2 n = 1, and σ(a) is differentiable, the method of Lagrange multipliers implies that there exists a constant λ ∈R so that for each k = 1, . . . , n, (2.9) λak = ∂ ∂ak σ(a). Referring to (2.8), the Leibniz integral rule shows that for each k with ak̸ = 0, (2.10) ∂ ∂ak σ(a) = Z ∞ −∞ Y i̸=k sin ait ait · cos akt ak −sin akt a2 kt dt.",
+            "quote_verified": null,
+            "quote_reason": "本行 statement_full 是消化后的中文重构（非逐字串）；proof_text 是第 4 页 Theorem 1 证明开头的逐字摘录（对应 library/000003.txt 第 228–240 行），但本笔未跑逐字回验（框架按来源重算 p:norm 区间那一档），故 quote_verified 记「未查」（null），不记 true；逐字回验落在此后由关系写口当场 substring 回验的 relations 行上。"
+          }
+        },
+        "why": "把 §1 的 Theorem 1（临界方向充要条件）落成可溯源命题行：external_lit + 逐字证明摘录 + 第 2 页出处"
+      },
+      "result": {
+        "tool": "own.register_statement",
+        "ok": true,
+        "data": {
+          "ok": true,
+          "stmt_id": "000112",
+          "source_lit_id": "000003",
+          "self_authored_review": {
+            "needs_v": false,
+            "signed": false,
+            "in_ledger": false,
+            "checked": true,
+            "verification_id": "",
+            "why": "有文献出处（origin=external_lit 且 source_lit_id 非空）⇒ 这一条不是我们杜撰的，闸不拦它"
+          },
+          "proposition_form": {
+            "judged": true,
+            "released": false,
+            "checked": true,
+            "well_formed": true,
+            "cached": false,
+            "model_calls": 1,
+            "ledger_appended": false,
+            "reason": "形态合规：前提与结论都读得出来"
+          },
+          "citation_manuscript": {
+            "ok": true,
+            "checked": true,
+            "path": "manuscripts/B/b-proof-000005.md",
+            "manuscript_id": "000005",
+            "text": "# B 的证明手稿：临界方向的充要条件\n\n- 标签：临界方向的充要条件\n\n## 命题\n\n设 Q_n = [−1,1]^n 为标准 n 维立方体（ℓ∞ 范数的单位球），S^{n−1} 为 R^n 的单位球面；对 k = 1,…,n 记 S_k = {x = (x_1,…,x_n) ∈ Q_n : x_k = 1} 为 Q_n 中第 k 个坐标为 1 的侧面；对单位向量 a ∈ S^{n−1}，a^⊥ 为过原点、以 a 为法向的超平面，Vol_{n−1}(Q_n ∩ a^⊥) 为对应的中心超平面截面体积函数（a 是它的临界点即称 a 为 critical direction）。则：单位向量 a = (a_1,…,a_n) ∈ S^{n−1} 是临界方向，当且仅当 a 平行于 Q_n 某个二维面的主对角线，或者存在某个常数 µ > 0，使得 Vol_{n−1}(conv(0 ∪ (S_k ∩ a^⊥))) = µ(1 − a_k^2) 对每个 k = 1,…,n 都成立。\n\n## 证明\n\nProof of Theorem 1. Assume that a ∈Sn−1 is a critical direction. Since the constraint on a is expressed by the equation a2 1 + . . . + a2 n = 1, and σ(a) is differentiable, the method of Lagrange multipliers implies that there exists a constant λ ∈R so that for each k = 1, . . . , n, (2.9) λak = ∂ ∂ak σ(a). Referring to (2.8), the Leibniz integral rule shows that for each k with ak̸ = 0, (2.10) ∂ ∂ak σ(a) = Z ∞ −∞ Y i̸=k sin ait ait · cos akt ak −sin akt a2 kt dt.\n\n## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |\n|---|---|---|\n\n（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n",
+            "written": true,
+            "why": "B 的改写手稿已写成：manuscripts/B/b-proof-000005.md",
+            "refused": "",
+            "problem": {},
+            "fix": "",
+            "next_step": "",
+            "problems": [],
+            "form": {}
+          },
+          "quote_verified": null,
+          "origin": "external_lit",
+          "quote_mode": "",
+          "quote_span": "",
+          "quote_evidence": {
+            "ok": true,
+            "action": "keep",
+            "why": "",
+            "where": "statements.proof_text"
+          },
+          "evidence_kind": "cross_check",
+          "row": {
+            "stmt_id": "000112",
+            "origin": "external_lit",
+            "kind": "theorem",
+            "label": "临界方向的充要条件",
+            "statement_text": "设 Q_n = [−1,1]^n 为标准 n 维立方体（ℓ∞ 范数的单位球），S^{n−1} 为 R^n 的单位球面；对 k = 1,…,n 记 S_k = {x = (x_1,…,x_n) ∈ Q_n : x_k = 1} 为 Q_n 中第 k 个坐标为 1 的侧面；对单位向量 a ∈ S^{n−1}，a^⊥ 为过原点、以 a 为法向的超平面，Vol_{n−1}(Q_n ∩ a^⊥) 为对应的中心超平面截面体积函数（a 是它的临界点即称 a 为 critical direction）。则：单位向量 a = (a_1,…,a_n) ∈ S^{n−1} 是临界方向，当且仅当 a 平行于 Q_n 某个二维面的主对角线，或者存在某个常数 µ > 0，使得 Vol_{n−1}(conv(0 ∪ (S_k ∩ a^⊥))) = µ(1 − a_k^2) 对每个 k = 1,…,n 都成立。",
+            "statement_full": "设 Q_n = [−1,1]^n 为标准 n 维立方体（ℓ∞ 范数的单位球），S^{n−1} 为 R^n 的单位球面；对 k = 1,…,n 记 S_k = {x = (x_1,…,x_n) ∈ Q_n : x_k = 1} 为 Q_n 中第 k 个坐标为 1 的侧面；对单位向量 a ∈ S^{n−1}，a^⊥ 为过原点、以 a 为法向的超平面，Vol_{n−1}(Q_n ∩ a^⊥) 为对应的中心超平面截面体积函数（a 是它的临界点即称 a 为 critical direction）。则：单位向量 a = (a_1,…,a_n) ∈ S^{n−1} 是临界方向，当且仅当 a 平行于 Q_n 某个二维面的主对角线，或者存在某个常数 µ > 0，使得 Vol_{n−1}(conv(0 ∪ (S_k ∩ a^⊥))) = µ(1 − a_k^2) 对每个 k = 1,…,n 都成立。",
+            "proof_text": "Proof of Theorem 1. Assume that a ∈Sn−1 is a critical direction. Since the constraint on a is expressed by the equation a2 1 + . . . + a2 n = 1, and σ(a) is differentiable, the method of Lagrange multipliers implies that there exists a constant λ ∈R so that for each k = 1, . . . , n, (2.9) λak = ∂ ∂ak σ(a). Referring to (2.8), the Leibniz integral rule shows that for each k with ak̸ = 0, (2.10) ∂ ∂ak σ(a) = Z ∞ −∞ Y i̸=k sin ait ait · cos akt ak −sin akt a2 kt dt.",
+            "source_lit_id": "000003",
+            "page_range": {
+              "start": 2,
+              "end": 2,
+              "label": "p. 2"
+            },
+            "quote_verified": null,
+            "quote_mode": "",
+            "quote_reason": "本行 statement_full 是消化后的中文重构（非逐字串）；proof_text 是第 4 页 Theorem 1 证明开头的逐字摘录（对应 library/000003.txt 第 228–240 行），但本笔未跑逐字回验（框架按来源重算 p:norm 区间那一档），故 quote_verified 记「未查」（null），不记 true；逐字回验落在此后由关系写口当场 substring 回验的 relations 行上。",
+            "quote_span": "",
+            "quote_call_sha256": "",
+            "evidence_kind": "cross_check",
+            "bits": {
+              "numeric": "pending",
+              "proof": true,
+              "reviewed": false,
+              "formal": "pending",
+              "audited": false,
+              "origin": "external_lit",
+              "evidence": {
+                "numeric": {},
+                "numeric_reason": "",
+                "proof_process": "Proof of Theorem 1. Assume that a ∈Sn−1 is a critical direction. Since the constraint on a is expressed by the equation a2 1 + . . . + a2 n = 1, and σ(a) is differentiable, the method of Lagrange multipliers implies that there exists a constant λ ∈R so that for each k = 1, . . . , n, (2.9) λak = ∂ ∂ak σ(a). Referring to (2.8), the Leibniz integral rule shows that for each k with ak̸ = 0, (2.10) ∂ ∂ak σ(a) = Z ∞ −∞ Y i̸=k sin ait ait · cos akt ak −sin akt a2 kt dt.",
+                "proof_source": "own",
+                "reviewed_by": {},
+                "reviewed_source": "",
+                "formal": {},
+                "formal_reason": "",
+                "audited_by": {},
+                "optimized_by_proof": {
+                  "1": false
+                }
+              },
+              "voided_by": {},
+              "grade": "conjecture",
+              "audited_badge": false
+            },
+            "status": "active",
+            "derived_from": [],
+            "aliases": [],
+            "doc_id": null,
+            "line_range": {
+              "start": null,
+              "end": null,
+              "label": ""
+            },
+            "created_at": "2026-11-25T00:05:46+08:00",
+            "created_by": "secretary-B",
+            "_proposition_adjudication": {
+              "checked": true,
+              "attempted": true,
+              "verdict": "different",
+              "canonical_name": "临界方向的充要条件",
+              "same_as": "",
+              "basis": "条件：目标是 Q_n 的侧面 S_k、单位向量 a 与超平面截面体积，候选是 1≤p<∞ 下的 B_p^3 及对角/面对角截面面积，条件不一致。；结论：目标结论是临界方向当且仅当平行于某二维面主对角线或满足 µ(1−a_k^2) 恒等式，候选结论是 A_diag、A_face 的公式和 Δ(p) 最终正性，结论不一致。；目标命题讨论立方体中心超平面截面的临界方向充要条件，候选命题讨论 B_p^3 的截面面积公式及 Δ(p) 的正性，条件与结论均不同。",
+              "reason": "目标命题讨论立方体中心超平面截面的临界方向充要条件，候选命题讨论 B_p^3 的截面面积公式及 Δ(p) 的正性，条件与结论均不同。",
+              "reused": false,
+              "seam_source": "secretary（LlmSeam.for_secretary）",
+              "seam_attempted": true,
+              "at": "2026-11-25T00:05:46+08:00"
+            },
+            "quote_carrier": {
+              "pass": "first",
+              "manuscript_id": "000005",
+              "manuscript": "manuscripts/B/b-proof-000005.md",
+              "body_sha256": "1bfbe80eedd58d4adac78d33db9917eb8b82cf2722d29aab38ee7f70e3141e06",
+              "at": "2026-11-25T00:05:46+08:00"
+            },
+            "proof_no": 1,
+            "proof_sha256": "1bfbe80eedd58d4adac78d33db9917eb8b82cf2722d29aab38ee7f70e3141e06",
+            "manuscript_id": "000005",
+            "manuscripts": {
+              "1": "manuscripts/B/b-proof-000005.md"
+            }
+          },
+          "sign_filing": {
+            "checked": true,
+            "manuscript_signed": false,
+            "filed": false,
+            "state": "unsigned",
+            "abandoned": false,
+            "manuscript": {
+              "found": false,
+              "signed": false,
+              "verdict": "",
+              "streak": 0,
+              "need": 0,
+              "proof_sha256": "",
+              "at": "",
+              "signer": "",
+              "ledger": "",
+              "statement_id": "",
+              "mark": "",
+              "problem": "",
+              "manuscript_id": "",
+              "manuscript_key": "000005",
+              "identity_state": "unmatched",
+              "identity_why": "",
+              "state": "unsigned",
+              "checked": true,
+              "sha_matches": null,
+              "body_mismatch": false,
+              "body_sha256": "1bfbe80eedd58d4adac78d33db9917eb8b82cf2722d29aab38ee7f70e3141e06",
+              "why": "手稿里没有 V 签块（这一份还没签）"
+            },
+            "statement": {
+              "found": true,
+              "stmt_id": "000112",
+              "reviewed": false,
+              "proof_no": 1,
+              "grade": "conjecture",
+              "proof_sha256": "1bfbe80eedd58d4adac78d33db9917eb8b82cf2722d29aab38ee7f70e3141e06",
+              "status": "active",
+              "proof_rows": 1,
+              "current_proof_no": 1,
+              "current_proof_sha256": "1bfbe80eedd58d4adac78d33db9917eb8b82cf2722d29aab38ee7f70e3141e06"
+            },
+            "why": "000112 稿上没签、册里这一份也没有第 3 位 （签块：unsigned）",
+            "sign": {
+              "checked": true,
+              "state": "unsigned",
+              "body_state": "present",
+              "votes": 0,
+              "need": 3,
+              "votes_source": "none",
+              "sha": "1bfbe80eedd58d4adac78d33db9917eb8b82cf2722d29aab38ee7f70e3141e06",
+              "statement_id": "000112",
+              "proof_no": 1,
+              "credential": {
+                "path": "",
+                "artifact_sha": "",
+                "at": "",
+                "verification_id": "",
+                "review_call": "",
+                "recomputable": false,
+                "problem": "",
+                "found": false,
+                "tier": "",
+                "got": 0,
+                "why": "",
+                "anchor": {
+                  "used": false,
+                  "checked": false,
+                  "owned": false,
+                  "path": "",
+                  "manuscript_id": "",
+                  "why": ""
+                },
+                "body_backing": {
+                  "checked": false,
+                  "state": "unchecked",
+                  "row_found": false,
+                  "row_kind": "",
+                  "row_shas": [],
+                  "artifact_sha": "",
+                  "why": ""
+                }
+              },
+              "evidence": {
+                "rows": 0,
+                "covering": 0,
+                "last_row": {},
+                "axis": "",
+                "verdict": "",
+                "fault_kind": "",
+                "kind_source": "",
+                "fault_at": "",
+                "void_rows": 0,
+                "last_call": "",
+                "secretary_unjudged": false,
+                "secretary_fault": false
+              },
+              "filed": false,
+              "abandoned": false,
+              "filed_why": "000112#p1 在册；第 3 位=False（命题没有被放弃）",
+              "body_why": "正文取自调用方给的那一段（468 字）",
+              "why": "这一版（1bfbe80eedd5…）没有任何台账行 ⇒ 一次都没送过 V（真的没审）"
+            }
+          },
+          "adjudication": {
+            "checked": true,
+            "attempted": true,
+            "verdict": "different",
+            "canonical_name": "临界方向的充要条件",
+            "same_as": "",
+            "route": "",
+            "condition": "Q_n 为标准 n 维立方体，a∈S^{n−1} 为单位向量，Vol_{n−1}(Q_n∩a^⊥) 为中心超平面截面体积。",
+            "conclusion": "a 是临界方向当且仅当 a 平行于 Q_n 某个二维面的主对角线，或存在常数 µ>0 使 Vol_{n−1}(conv(0∪(S_k∩a^⊥)))=µ(1−a_k^2) 对每个 k=1,…,n 都成立。",
+            "basis": "条件：目标是 Q_n 的侧面 S_k、单位向量 a 与超平面截面体积，候选是 1≤p<∞ 下的 B_p^3 及对角/面对角截面面积，条件不一致。；结论：目标结论是临界方向当且仅当平行于某二维面主对角线或满足 µ(1−a_k^2) 恒等式，候选结论是 A_diag、A_face 的公式和 Δ(p) 最终正性，结论不一致。；目标命题讨论立方体中心超平面截面的临界方向充要条件，候选命题讨论 B_p^3 的截面面积公式及 Δ(p) 的正性，条件与结论均不同。",
+            "reason": "目标命题讨论立方体中心超平面截面的临界方向充要条件，候选命题讨论 B_p^3 的截面面积公式及 Δ(p) 的正性，条件与结论均不同。",
+            "reused": false,
+            "cached": true,
+            "seam_source": "secretary（LlmSeam.for_secretary）",
+            "candidates": [
+              "000034",
+              "000035",
+              "000036",
+              "000037",
+              "000042"
+            ],
+            "keywords": [
+              "临界方向",
+              "n维立方体",
+              "单位球面",
+              "单位向量",
+              "超平面",
+              "截面体积",
+              "二维面",
+              "主对角线",
+              "凸包",
+              "平行",
+              "常数"
+            ],
+            "hits_total": 5,
+            "hits_named": [
+              {
+                "stmt_id": "000034",
+                "hit_words": [
+                  "单位向量"
+                ]
+              },
+              {
+                "stmt_id": "000035",
+                "hit_words": [
+                  "单位向量"
+                ]
+              },
+              {
+                "stmt_id": "000036",
+                "hit_words": [
+                  "二维面"
+                ]
+              },
+              {
+                "stmt_id": "000037",
+                "hit_words": [
+                  "二维面"
+                ]
+              },
+              {
+                "stmt_id": "000042",
+                "hit_words": [
+                  "单位向量"
+                ]
+              }
+            ],
+            "judged": true,
+            "why": "这些词覆盖了命题的核心数学对象、截面体积结构、二维面主对角线判据及平行与常数等式结论，同义条目通常会保留这些数学词。",
+            "cost": {
+              "ledger": "001432",
+              "charged": true,
+              "ledger_reason": "charged",
+              "call_index": 1232,
+              "prompt_sha256": "5862ca17462cd56d3cac8614f544bd4ff4921067516f4da0c2600800d2ebe5bc",
+              "tokens": 2205,
+              "usd": 0.000615
+            },
+            "keyword_checked": true,
+            "candidates_total": 5,
+            "pages_total": 2,
+            "pages_judged": 2,
+            "candidates_seen": 5,
+            "page_exhausted": true
+          },
+          "canonical_name": "临界方向的充要条件",
+          "label_washed": {},
+          "proof_route": "",
+          "deps_state": "none_in_proof",
+          "deps_written": 0,
+          "deps_stmt_edges": 0,
+          "deps_dangling": [],
+          "deps_unmappable": [],
+          "deps_missing": {
+            "state": "missing",
+            "stmt_id": "000112",
+            "proof_no": 1,
+            "proof_chars": 468,
+            "deps_written": 0,
+            "scanned_refs": 0,
+            "derived_from": [],
+            "why": "这一行有 468 字证明正文，而引用扫描一条在册引用都没扫到（扫了 0 条）⇒ 依赖表 0 行。自足的证明合法，但「扫了、确实是空」与「没扫」必须分开读：`deps_state` 给的就是这个三态",
+            "next_step": "如果这份证明其实引用了在册的命题 / 文献 / 实验，请把引用写成带前缀的样子（`stmt:` / `lit:` / `exp:` / `doc:`）再交一次，或在证明正文里逐条点名；如果它确实自足，这一格就是如实的「零依赖」",
+            "manuscript_source": "disk",
+            "manuscript_proof": {
+              "checked": true,
+              "state": "present",
+              "present": true,
+              "heading_line": 9,
+              "body": "\nProof of Theorem 1. Assume that a ∈Sn−1 is a critical direction. Since the constraint on a is expressed by the equation a2 1 + . . . + a2 n = 1, and σ(a) is differentiable, the method of Lagrange multipliers implies that there exists a constant λ ∈R so that for each k = 1, . . . , n, (2.9) λak = ∂ ∂ak σ(a). Referring to (2.8), the Leibniz integral rule shows that for each k with ak̸ = 0, (2.10) ∂ ∂ak σ(a) = Z ∞ −∞ Y i̸=k sin ait ait · cos akt ak −sin akt a2 kt dt.\n",
+              "chars": 468,
+              "why": "稿里有 `## 证明` 那一节（第 9 行起，正文 468 字）"
+            },
+            "proof_body_state": "present",
+            "manuscript_washed": false,
+            "manuscript_owner": "000005",
+            "manuscript_owner_ok": true,
+            "manuscript_probe": {
+              "checked": true,
+              "source": "disk",
+              "path": "manuscripts/B/b-proof-000005.md",
+              "matched_by": "citation_manuscript"
+            },
+            "manuscript_carried": {
+              "checked": true,
+              "source": "none",
+              "text": "",
+              "path": "",
+              "sha256": "",
+              "carried_by": "",
+              "tried": [
+                {
+                  "report": "manuscripts/D/RESEARCH.md",
+                  "present": false,
+                  "rows": 0,
+                  "problems": 0
+                },
+                {
+                  "report": "manuscripts/D/000000-research.md",
+                  "present": true,
+                  "rows": 5,
+                  "problems": 5
+                },
+                {
+                  "statement_id": "000030",
+                  "path": "manuscripts/F/f-proof-000003.md",
+                  "why": "清单里这一份的「## 证明」正文 sha 与这一笔登记的不是同一份 ⇒ 不是它"
+                },
+                {
+                  "statement_id": "000034",
+                  "path": "manuscripts/F/f-proof-000000.md",
+                  "why": "清单里这一份的「## 证明」正文 sha 与这一笔登记的不是同一份 ⇒ 不是它"
+                },
+                {
+                  "statement_id": "000035",
+                  "path": "manuscripts/F/f-proof-000001.md",
+                  "why": "清单里这一份的「## 证明」正文 sha 与这一笔登记的不是同一份 ⇒ 不是它"
+                },
+                {
+                  "statement_id": "000041",
+                  "path": "manuscripts/F/f-proof-000002.md",
+                  "why": "清单里这一份的「## 证明」正文 sha 与这一笔登记的不是同一份 ⇒ 不是它"
+                },
+                {
+                  "statement_id": "000042",
+                  "path": "manuscripts/F/f-proof-000003.md",
+                  "why": "清单里这一份的「## 证明」正文 sha 与这一笔登记的不是同一份 ⇒ 不是它"
+                }
+              ],
+              "why": "D 的携带单里有 5 条手稿，按正文 sha 一条都没对上这一笔",
+              "named": false,
+              "address": "",
+              "item": 0,
+              "list_report": "",
+              "list_line": 0,
+              "list_sha256": "",
+              "proof_no": 0,
+              "matched_by": "",
+              "manuscript_id": "",
+              "legacy_reports": [],
+              "ambiguous": {}
+            },
+            "deps_receipt": "依赖边 0 条（其中命题→命题 0 条）",
+            "deps_stmt_edges": 0
+          },
+          "manuscript_source": "disk",
+          "proof_text_source": "param",
+          "addressing": {
+            "checked": true,
+            "mode": "auto",
+            "source": "none",
+            "hit": false,
+            "address": "",
+            "list_report": "",
+            "list_item": 0,
+            "list_line": 0,
+            "list_sha256": "",
+            "refusal": "",
+            "reason": "",
+            "suggestion": ""
+          },
+          "manuscript_washed": false,
+          "manuscript_wash": {
+            "washed": false,
+            "actor": "",
+            "filled": "",
+            "mark": ""
+          },
+          "proof_vs_source": {
+            "checked": false,
+            "same": null,
+            "matched": "",
+            "source": "none",
+            "chars": 468,
+            "source_chars": 0,
+            "why": "这一笔没有可比对的来源正文（没有手稿、也不是从文献引文来的）⇒ 这一格是「没有对象」，不是「不一致」",
+            "source_state": ""
+          },
+          "has_proof": true,
+          "proof_no": 1,
+          "proof_sha256": "1bfbe80eedd58d4adac78d33db9917eb8b82cf2722d29aab38ee7f70e3141e06",
+          "proof_no_source": "path_group",
+          "pending_definitions": [],
+          "proof_text_dropped": "",
+          "proofs_dropped": [],
+          "pending": [],
+          "note": "登记 ≠ 核对：quote_verified 是三态（True/False/None），它不是 True 时下游必须按 `quote_reason` 读，不许当成通过。五元位已随这一行落库（现算等级 conjecture；第 2 位来源 （空））——等级不许自报，判据永远现算。这一笔由秘书落盘（洗格式 / 拿编号 / 查重 / 改表四件一起做完），表格 ['statements', 'dependencies']、路径组 0。；依赖边 0 条（其中命题→命题 0 条）",
+          "conjecture_ledger": {
+            "ok": false,
+            "kind": "validation_error",
+            "error": "status=proposed 时必须给 testable（可检验形式）；给不出就落 needs_evidence"
+          },
+          "nontriviality_record": {
+            "recorded": true,
+            "tri": "computed",
+            "level": 3,
+            "label": "T3",
+            "stmt_id": "000112",
+            "path_group": 1,
+            "reason": ""
+          },
+          "registration_settled": {
+            "checked": true,
+            "settled": [],
+            "left": [],
+            "problems": [],
+            "reason": "收录落成：收口 0 条"
+          },
+          "d_handoff_settled": {
+            "checked": true,
+            "stmt_id": "000112",
+            "closed": [],
+            "expired": [],
+            "left": [],
+            "problems": [],
+            "reason": "收口 0 条、作废 0 条，仍开着 0 条"
+          },
+          "kind_judgement": {
+            "checked": true,
+            "kind": "theorem",
+            "declared": "conjecture",
+            "changed": true,
+            "row_kind": "theorem",
+            "basis": "`origin=external_lit` 且这一行带着从文献摘下来的命题正文 ⇒ 它是引来的命题（文献里的定理陈述不是我们的猜想：`conjecture` 只留给我们自己提出、还没证的那一档）",
+            "why": ""
+          },
+          "grade": "conjecture",
+          "grade_why": "",
+          "grade_reading": {
+            "checked": true,
+            "grade": "conjecture",
+            "stored_grade": "conjecture",
+            "mismatch": false,
+            "why": ""
+          },
+          "citation_fit": {
+            "checked": true,
+            "lit_id": "000003",
+            "title": "Critical central sections of the cube",
+            "verdict": "fit",
+            "why": [],
+            "words_in_claim": [
+              "conv",
+              "critical",
+              "direction"
+            ],
+            "note": "这条命题的正文与被引文献的题名 / 摘要至少共用一个实词（判据：`closing.claim_evidence_fit`，与收工门那一档同一份实现）。"
+          }
+        },
+        "error": "",
+        "meta": {},
+        "参数表": "【参数表】被拒的是参数形状/取值，不是这件事不能做。照下面这张声明表重写一次（键名与类型都要对；表里没列的键一律不许传）：\n- own.register_statement 的参数表：statement_full: string，含完整假设的命题正文。**只给 `proof_manuscript` 时这一格可以不传**（命题从手稿 `## 命题` 取）；正文与手稿都不给 ⇒ 动作层受控拒 `empty_statement_text`（空正文不能登；source_lit_id: string，origin='external_lit' 必需：论文那一行的 lit_id（必须是 literature 表里真实存在的行，写库前会核）；proof_text: string，文献侧（origin='external_lit'）的逐字证明摘录，`quote_verified` 的比对对象。**自产命题（origin='own_result'）的正文不走这一格**：它由手稿 `proof_man；proofs: array；kind: string，英文词表：theorem / lemma / proposition / corollary / conjecture / concept / definition（中文 kind 如「定理」「引理」不是取值）。它由证据；label: string，这条命题的定理名（例如「第一同构定理」）。只写名字：证明走哪条路线（路线一/二/三、McKay、Wielandt）、是不是自证草稿、要不要 V 审签，都不是定理名的一部分 —— 路线写进证明那一层（那条证明自己的正文说明；statement_text: string；origin: string，枚举 [external_lit/own_result]，来源。**它决定还要给哪些字段**（写库前逐条硬校验）：external_lit（论文里的）⇒ 必须给 source_lit_id + page_range；own_result（我们自己的）⇒ 必须给 doc_id 或；self_authored: boolean，只在 `kind=\"concept\"` + `origin=\"own_result\"` 时有意义：声明这是我们自己定义的新概念（不是从文献里摘的术语）。默认不传 = 不声明 ⇒ 整笔受控拒 `concept_origin；page_range: object，origin='external_lit' 必需：出处页码（start，或 label —— 如「全文未分页」；只给空的 start/end 等于没给）；evidence_kind: string，枚举 [proof/proof_review/cross_check/heuristic]，历史列（写盘时由等级反算，判定面不读它）。等级是唯一的轴：`conjecture` < `strong_conjecture` < `pre_theorem` < `theorem`；判定只看**可观察状态**：**V ；quote_verified: boolean，引文回验是否通过；不传 = 还没查（None）。2026-10-14 起“通过”分两档，方式写进 quote_mode：逐字命中 / 语义相同；quote_mode: string，枚举 [verbatim/semantic]，这条引文是**怎么**通过的（业主 2026-10-14：「回验不应该是十分呆板的逐字验证，而是保持语义相同即可」）：verbatim＝逐字命中（`quoteverify.check_quote` 那一档，不花模型钱，先；quote_reason: string，quote_verified 不是 true 时必需：写清哪里不一致、或者为什么还没查；quote_span: string，引文在来源里命中哪一段。逐字档的口径是 `p{页}:norm[起:止]`：页号从 1 起，起止是该页经 `textutil.normalize_for_quote` 归一化之后的字符偏移（含头不含尾）；语义档这一栏是 H；quote_call_sha256: string，**只有 `quote_mode=semantic` 这一档填**：H 的 `judge_quote_semantics` 回执里 `call.prompt_sha256`（那次语义判定的调用指纹）。逐字档不填 —— 它；derived_from: array；proof_manuscript: string，`proof_manuscript` 是**证明正文的载体**（自产命题在册与否都交它）：F/E 的稿，或 B 自己改写后的 `manuscripts/…（落档截断，原 2258 字）",
+        "warn": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.register_statement 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 14,
+          "call_index": 0,
+          "calls": 1,
+          "step_index": 14,
+          "summary": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.register_statement 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 14,
+            "calls": 1,
+            "items": 1,
+            "steps": [
+              14
+            ],
+            "executed": 1,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 85376,
+        "prompt_cache_miss_tokens": 2106,
+        "tokens_in": 87482,
+        "tokens_out": 2840,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000253"
+    },
+    {
+      "index": 15,
+      "shape": "tool",
+      "payload": {
+        "name": "table.create",
+        "args": {
+          "table": "relations",
+          "row": {
+            "concept_ids": [
+              "000111",
+              "000018"
+            ],
+            "description": "临界方向（critical direction）是使中心截面体积函数 Vol_{n−1}(Q_n ∩ a^⊥) 在 S^{n−1} 上成为临界点的单位法向 a；它与 central hyperplane sections（以 0 为过点的超平面截 Q_n 所得的 (n−1) 维截面）指的是同一族截面的两个层面：一个说法指法向，一个说法指截面本身。",
+            "statement": "Critical directions are the normal vectors a at which the central section volume function Vol_{n−1}(Q_n ∩ a^⊥) is critical on S^{n−1}.",
+            "lit_id": "000003",
+            "page_range": {
+              "start": 2,
+              "end": 2,
+              "label": "p. 2"
+            },
+            "quote": "In this note we apply Fourier analytic methods to study critical central hyperplane sections: these are the sections a⊥∩Qn whose normal vector a is a critical point on Sn−1 with respect to the volume of the central section of Qn. Such normal vectors will be referred to as critical directions.",
+            "quote_mode": "verbatim"
+          }
+        },
+        "why": "把 §1 里 critical direction 的定义落成可溯源的关系行（quote 逐字取自 library/000003.txt 第 2 页）"
+      },
+      "result": {
+        "tool": "table.create",
+        "ok": true,
+        "data": "000077",
+        "error": "",
+        "meta": {
+          "table": "relations",
+          "id": "000077",
+          "id_field": "relation_id",
+          "row": {
+            "relation_id": "000077",
+            "concept_ids": [
+              "000018",
+              "000111"
+            ],
+            "description": "临界方向（critical direction）是使中心截面体积函数 Vol_{n−1}(Q_n ∩ a^⊥) 在 S^{n−1} 上成为临界点的单位法向 a；它与 central hyperplane sections（以 0 为过点的超平面截 Q_n 所得的 (n−1) 维截面）指的是同一族截面的两个层面：一个说法指法向，一个说法指截面本身。",
+            "lit_id": "000003",
+            "page_range": {
+              "start": 2,
+              "end": 2,
+              "label": "p. 2"
+            },
+            "quote": "In this note we apply Fourier analytic methods to study critical central hyperplane sections: these are the sections a⊥∩Qn whose normal vector a is a critical point on Sn−1 with respect to the volume of the central section of Qn. Such normal vectors will be referred to as critical directions.",
+            "quote_normalized": "in this note we apply fourier analytic methods to study critical central hyperplane sections: these are the sections a⊥∩qn whose normal vector a is a critical point on sn-1 with respect to the volume of the central section of qn. such normal vectors will be referred to as critical directions.",
+            "quote_verified": null,
+            "quote_mode": "",
+            "quote_reason": "",
+            "quote_span": "",
+            "quote_call_sha256": "",
+            "statement": "Critical directions are the normal vectors a at which the central section volume function Vol_{n−1}(Q_n ∩ a^⊥) is critical on S^{n−1}.",
+            "concept_group_key": "000018|000111",
+            "dedup_key": "000018|000111::20e1a465393e62cb",
+            "status": "active",
+            "duplicate_of": null,
+            "created_at": "2026-11-25T00:06:02+08:00",
+            "merged_at": "",
+            "supporting_lit_ids": []
+          },
+          "normalized": [
+            "concept_ids"
+          ]
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 86656,
+        "prompt_cache_miss_tokens": 5029,
+        "tokens_in": 91685,
+        "tokens_out": 2597,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000253"
+    },
+    {
+      "index": 16,
+      "shape": "tool",
+      "payload": {
+        "name": "table.update",
+        "args": {
+          "table": "relations",
+          "id": "000077",
+          "patch": {
+            "quote_verified": true,
+            "quote_mode": "verbatim"
+          }
+        },
+        "why": "关系行 000077 的 quote 已逐字取自 library/000003.txt 第 2 页，但落盘时 quote_verified 为空 —— 补上逐字核验（框架按来源重算区间）"
+      },
+      "result": {
+        "tool": "table.update",
+        "ok": true,
+        "data": "000077",
+        "error": "",
+        "meta": {
+          "table": "relations",
+          "id": "000077",
+          "id_field": "relation_id",
+          "row": {
+            "relation_id": "000077",
+            "concept_ids": [
+              "000018",
+              "000111"
+            ],
+            "description": "临界方向（critical direction）是使中心截面体积函数 Vol_{n−1}(Q_n ∩ a^⊥) 在 S^{n−1} 上成为临界点的单位法向 a；它与 central hyperplane sections（以 0 为过点的超平面截 Q_n 所得的 (n−1) 维截面）指的是同一族截面的两个层面：一个说法指法向，一个说法指截面本身。",
+            "lit_id": "000003",
+            "page_range": {
+              "start": 2,
+              "end": 2,
+              "label": "p. 2"
+            },
+            "quote": "In this note we apply Fourier analytic methods to study critical central hyperplane sections: these are the sections a⊥∩Qn whose normal vector a is a critical point on Sn−1 with respect to the volume of the central section of Qn. Such normal vectors will be referred to as critical directions.",
+            "quote_normalized": "in this note we apply fourier analytic methods to study critical central hyperplane sections: these are the sections a⊥∩qn whose normal vector a is a critical point on sn-1 with respect to the volume of the central section of qn. such normal vectors will be referred to as critical directions.",
+            "quote_verified": true,
+            "quote_mode": "verbatim",
+            "quote_reason": "命中区间 p2:norm[1527:1820]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+            "quote_span": "p2:norm[1527:1820]",
+            "quote_call_sha256": "",
+            "statement": "Critical directions are the normal vectors a at which the central section volume function Vol_{n−1}(Q_n ∩ a^⊥) is critical on S^{n−1}.",
+            "concept_group_key": "000018|000111",
+            "dedup_key": "000018|000111::20e1a465393e62cb",
+            "status": "active",
+            "duplicate_of": null,
+            "created_at": "2026-11-25T00:06:02+08:00",
+            "merged_at": "",
+            "supporting_lit_ids": []
+          },
+          "normalized": [],
+          "quote_evidence": {
+            "ok": true,
+            "action": "keep",
+            "why": "落了区间 p2:norm[1527:1820]",
+            "where": "relations.quote（lit:000003）"
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 90880,
+        "prompt_cache_miss_tokens": 2089,
+        "tokens_in": 92969,
+        "tokens_out": 996,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000253"
+    },
+    {
+      "index": 17,
+      "shape": "tool",
+      "payload": {
+        "name": "table.create",
+        "args": {
+          "table": "relations",
+          "row": {
+            "concept_ids": [
+              "000111",
+              "000015"
+            ],
+            "description": "临界方向与主对角线的关系（Theorem 1 的第一种情形）：单位向量 a 是临界方向当且仅当它平行于 Q_n 某个二维面的主对角线（或满足 µ 型充要等式）；即「面对角方向」（2-diagonal directions）都是临界方向。",
+            "lit_id": "000003",
+            "page_range": {
+              "end": 2,
+              "label": "p. 2",
+              "start": 2
+            },
+            "quote": "The unit vector a = (a1, . . . , an) ∈Sn−1 is a critical direction with respect to the central section volume function Voln−1(Qn ∩a⊥) if and only if it is parallel to a main diagonal of a 2-dimensional face of Qn, or there exists some µ > 0 for which",
+            "quote_mode": "verbatim",
+            "quote_verified": true,
+            "statement": "A unit vector is a critical direction if and only if it is parallel to a main diagonal of a 2-dimensional face of the cube, or satisfies the µ-condition (Theorem 1)."
+          }
+        },
+        "why": "把 Theorem 1 的「充要条件」落成一条可溯源的关系行（临界方向 ↔ 主对角线），quote 逐字取自 p.2"
+      },
+      "result": {
+        "tool": "table.create",
+        "ok": true,
+        "data": "000078",
+        "error": "",
+        "meta": {
+          "table": "relations",
+          "id": "000078",
+          "id_field": "relation_id",
+          "row": {
+            "relation_id": "000078",
+            "concept_ids": [
+              "000015",
+              "000111"
+            ],
+            "description": "临界方向与主对角线的关系（Theorem 1 的第一种情形）：单位向量 a 是临界方向当且仅当它平行于 Q_n 某个二维面的主对角线（或满足 µ 型充要等式）；即「面对角方向」（2-diagonal directions）都是临界方向。",
+            "lit_id": "000003",
+            "page_range": {
+              "start": 2,
+              "end": 2,
+              "label": "p. 2"
+            },
+            "quote": "The unit vector a = (a1, . . . , an) ∈Sn−1 is a critical direction with respect to the central section volume function Voln−1(Qn ∩a⊥) if and only if it is parallel to a main diagonal of a 2-dimensional face of Qn, or there exists some µ > 0 for which",
+            "quote_normalized": "the unit vector a = (a1,..., an) ∈sn-1 is a critical direction with respect to the central section volume function voln-1(qn ∩a⊥) if and only if it is parallel to a main diagonal of a 2-dimensional face of qn, or there exists some μ> 0 for which",
+            "quote_verified": true,
+            "quote_mode": "verbatim",
+            "quote_reason": "命中区间 p2:norm[2499:2744]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+            "quote_span": "p2:norm[2499:2744]",
+            "quote_call_sha256": "",
+            "statement": "A unit vector is a critical direction if and only if it is parallel to a main diagonal of a 2-dimensional face of the cube, or satisfies the µ-condition (Theorem 1).",
+            "concept_group_key": "000015|000111",
+            "dedup_key": "000015|000111::b296e38c79da5967",
+            "status": "active",
+            "duplicate_of": null,
+            "created_at": "2026-11-25T00:06:21+08:00",
+            "merged_at": "",
+            "supporting_lit_ids": []
+          },
+          "normalized": [
+            "concept_ids"
+          ],
+          "quote_evidence": {
+            "ok": true,
+            "action": "keep",
+            "why": "落了区间 p2:norm[2499:2744]",
+            "where": "relations.quote（lit:000003）"
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 92160,
+        "prompt_cache_miss_tokens": 2080,
+        "tokens_in": 94240,
+        "tokens_out": 1370,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000253"
+    },
+    {
+      "index": 18,
+      "shape": "tool",
+      "payload": {
+        "name": "own.register_statement",
+        "args": {
+          "args": {
+            "kind": "concept",
+            "label": "k-对角方向与对角截面（k-diagonal directions / diagonal sections）",
+            "origin": "external_lit",
+            "page_range": {
+              "end": 2,
+              "label": "p. 2",
+              "start": 2
+            },
+            "quote_reason": "定义原句（第 2 页）逐字为 \"One is tempted to believe that local extremizers are perpendicular to a main diagonal of a k-dimensional face of Qn – we are going to call these k-diagonal directions and the corresponding hyperplane sections as k-diagonal sections.\"；本行 statement_full 是消化后的中文表述（保留 k 维面、单位法向、坐标形式三个要点），逐字回验尚未在本行走（关系行 000077/000078 已逐字回验通过，这一条概念的引文出处同页同一段）。",
+            "quote_verified": null,
+            "source_lit_id": "000003",
+            "statement_full": "设 Q_n = [−1,1]^n 为标准 n 维立方体，S^{n−1} 为 R^n 的单位球面。若单位法向 a ∈ S^{n−1} 垂直于 Q_n 某个 k 维面（k = 1,…,n）的主对角线，则称 a 为 k-对角方向（k-diagonal direction）；对应的中心超平面截面 a^⊥ ∩ Q_n 称为 k-对角截面（k-diagonal section）。在不指明 k 时统称对角方向与对角截面。按坐标写法，k-对角方向在置换坐标与变号之后形如 (1/√k, …, 1/√k, 0, …, 0)，其中非零坐标的个数恰为 k。",
+            "statement_text": "k-对角方向是对角方向的一般化：垂直于 Q_n 某个 k 维面主对角线的单位法向，其坐标（在置换与变号后）为 (1/√k,…,1/√k,0,…,0)，非零坐标个数为 k。"
+          },
+          "why": "§1 引言把 local extremizer 的候选对象正式命名为 k-diagonal directions 与 k-diagonal sections，这是本文与 Theorem 1/2/3 对话的基准概念，先前台账里只有 main diagonal（000015）而没有 k-对角方向这一层"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "own.register_statement",
+        "ok": true,
+        "data": {
+          "ok": true,
+          "stmt_id": "000113",
+          "source_lit_id": "000003",
+          "self_authored_review": {
+            "needs_v": false,
+            "signed": false,
+            "in_ledger": false,
+            "checked": true,
+            "verification_id": "",
+            "why": "kind='concept' 不在这一条闸的射程里：概念不走等级链（`evidencebits.derive_grade` 对它短路）"
+          },
+          "proposition_form": {
+            "judged": false,
+            "released": true,
+            "checked": false,
+            "model_calls": 0,
+            "ledger_appended": false,
+            "reason": "kind 落在 concept/definition 那一档：它不是命题"
+          },
+          "quote_verified": null,
+          "origin": "external_lit",
+          "quote_mode": "",
+          "quote_span": "",
+          "quote_evidence": {
+            "ok": true,
+            "action": "keep",
+            "why": "",
+            "where": "statements.proof_text"
+          },
+          "evidence_kind": "heuristic",
+          "row": {
+            "stmt_id": "000113",
+            "origin": "external_lit",
+            "kind": "concept",
+            "label": "k-对角方向与对角截面（k-diagonal directions / diagonal sections）",
+            "statement_text": "k-对角方向是对角方向的一般化：垂直于 Q_n 某个 k 维面主对角线的单位法向，其坐标（在置换与变号后）为 (1/√k,…,1/√k,0,…,0)，非零坐标个数为 k。",
+            "statement_full": "设 Q_n = [−1,1]^n 为标准 n 维立方体，S^{n−1} 为 R^n 的单位球面。若单位法向 a ∈ S^{n−1} 垂直于 Q_n 某个 k 维面（k = 1,…,n）的主对角线，则称 a 为 k-对角方向（k-diagonal direction）；对应的中心超平面截面 a^⊥ ∩ Q_n 称为 k-对角截面（k-diagonal section）。在不指明 k 时统称对角方向与对角截面。按坐标写法，k-对角方向在置换坐标与变号之后形如 (1/√k, …, 1/√k, 0, …, 0)，其中非零坐标的个数恰为 k。",
+            "proof_text": "",
+            "source_lit_id": "000003",
+            "page_range": {
+              "start": 2,
+              "end": 2,
+              "label": "p. 2"
+            },
+            "quote_verified": null,
+            "quote_mode": "",
+            "quote_reason": "定义原句（第 2 页）逐字为 \"One is tempted to believe that local extremizers are perpendicular to a main diagonal of a k-dimensional face of Qn – we are going to call these k-diagonal directions and the corresponding hyperplane sections as k-diagonal sections.\"；本行 statement_full 是消化后的中文表述（保留 k 维面、单位法向、坐标形式三个要点），逐字回验尚未在本行走（关系行 000077/000078 已逐字回验通过，这一条概念的引文出处同页同一段）。",
+            "quote_span": "",
+            "quote_call_sha256": "",
+            "evidence_kind": "heuristic",
+            "bits": {
+              "numeric": "pending",
+              "proof": false,
+              "reviewed": false,
+              "formal": "pending",
+              "audited": false,
+              "origin": "external_lit",
+              "evidence": {
+                "numeric": {},
+                "numeric_reason": "",
+                "proof_process": "",
+                "proof_source": "",
+                "reviewed_by": {},
+                "reviewed_source": "",
+                "formal": {},
+                "formal_reason": "",
+                "audited_by": {}
+              },
+              "voided_by": {},
+              "grade": "not_applicable",
+              "audited_badge": false
+            },
+            "status": "active",
+            "derived_from": [],
+            "aliases": [],
+            "doc_id": null,
+            "line_range": {
+              "start": null,
+              "end": null,
+              "label": ""
+            },
+            "created_at": "2026-11-25T00:06:31+08:00",
+            "created_by": "secretary-B",
+            "_proposition_adjudication": {
+              "checked": false,
+              "attempted": true,
+              "verdict": "",
+              "canonical_name": "",
+              "same_as": "",
+              "basis": "",
+              "reason": "kind='concept' 不在命题性的那几档 ['theorem', 'lemma', 'proposition', 'corollary', 'conjecture', 'example'] 里 ⇒ 不是命题，不参与同一性判定（也不洗它的名字）",
+              "reused": false,
+              "seam_source": "secretary（LlmSeam.for_secretary）",
+              "seam_attempted": true,
+              "at": "2026-11-25T00:06:31+08:00"
+            }
+          },
+          "sign_filing": {
+            "checked": false,
+            "manuscript_signed": false,
+            "filed": null,
+            "state": "unreadable",
+            "abandoned": false,
+            "manuscript": {},
+            "statement": {},
+            "why": "这一份没有手稿正文（`manuscript_path` 指的那份稿读不到 / 没给）⇒ 稿上已签这一格没查成"
+          },
+          "adjudication": {
+            "checked": false,
+            "attempted": true,
+            "verdict": "",
+            "canonical_name": "",
+            "same_as": "",
+            "route": "",
+            "condition": "",
+            "conclusion": "",
+            "basis": "",
+            "reason": "kind='concept' 不在命题性的那几档 ['theorem', 'lemma', 'proposition', 'corollary', 'conjecture', 'example'] 里 ⇒ 不是命题，不参与同一性判定（也不洗它的名字）",
+            "reused": false,
+            "cached": false,
+            "seam_source": "secretary（LlmSeam.for_secretary）",
+            "candidates": [],
+            "keywords": [],
+            "hits_total": 0,
+            "hits_named": [],
+            "judged": false,
+            "why": "",
+            "cost": {
+              "ledger": "",
+              "reason": "没发调用（还没判）"
+            },
+            "keyword_checked": false,
+            "candidates_total": 0,
+            "pages_total": 0,
+            "pages_judged": 0,
+            "candidates_seen": 0,
+            "page_exhausted": false
+          },
+          "canonical_name": "",
+          "label_washed": {},
+          "proof_route": "",
+          "deps_state": "none_in_proof",
+          "deps_written": 0,
+          "deps_stmt_edges": 0,
+          "deps_dangling": [],
+          "deps_unmappable": [],
+          "deps_missing": {
+            "state": "not_applicable",
+            "stmt_id": "000113",
+            "proof_no": 1,
+            "proof_chars": 0,
+            "deps_written": 0,
+            "scanned_refs": 0,
+            "derived_from": [],
+            "why": "这一行没有证明正文（概念行 / 还没写证明）⇒ 依赖面这一格不适用（既不是「缺依赖」，也不是「依赖为零」）",
+            "next_step": "",
+            "manuscript_source": "none",
+            "manuscript_washed": false,
+            "manuscript_owner": "",
+            "manuscript_owner_ok": true,
+            "manuscript_probe": {
+              "checked": true,
+              "source": "none",
+              "text": "",
+              "path": "",
+              "tried": [],
+              "matched_by": "",
+              "why": "按约定路径找过 0 处（没有命题号也没有计划号可定位） —— 这几种名一处都不在盘上（或者读不出来，原因逐条见 `tried`）"
+            },
+            "manuscript_carried": {
+              "checked": true,
+              "source": "none",
+              "text": "",
+              "path": "",
+              "sha256": "",
+              "carried_by": "",
+              "tried": [
+                {
+                  "report": "manuscripts/D/RESEARCH.md",
+                  "present": false,
+                  "rows": 0,
+                  "problems": 0
+                },
+                {
+                  "report": "manuscripts/D/000000-research.md",
+                  "present": true,
+                  "rows": 5,
+                  "problems": 5
+                }
+              ],
+              "why": "D 的携带单里有 5 条手稿，按正文 sha 一条都没对上这一笔",
+              "named": false,
+              "address": "",
+              "item": 0,
+              "list_report": "",
+              "list_line": 0,
+              "list_sha256": "",
+              "proof_no": 0,
+              "matched_by": "",
+              "manuscript_id": "",
+              "legacy_reports": [],
+              "ambiguous": {}
+            },
+            "deps_receipt": "依赖边 0 条（其中命题→命题 0 条）",
+            "deps_stmt_edges": 0
+          },
+          "manuscript_source": "none",
+          "proof_text_source": "",
+          "addressing": {
+            "checked": true,
+            "mode": "auto",
+            "source": "none",
+            "hit": false,
+            "address": "",
+            "list_report": "",
+            "list_item": 0,
+            "list_line": 0,
+            "list_sha256": "",
+            "refusal": "",
+            "reason": "",
+            "suggestion": ""
+          },
+          "manuscript_washed": false,
+          "manuscript_wash": {
+            "washed": false,
+            "actor": "",
+            "filled": "",
+            "mark": ""
+          },
+          "proof_vs_source": {
+            "checked": false,
+            "same": null,
+            "matched": "",
+            "source": "none",
+            "chars": 0,
+            "source_chars": 0,
+            "why": "这一笔没有可比对的来源正文（没有手稿、也不是从文献引文来的）⇒ 这一格是「没有对象」，不是「不一致」",
+            "source_state": ""
+          },
+          "has_proof": false,
+          "proof_no": 0,
+          "proof_sha256": "",
+          "proof_no_source": "path_group",
+          "pending_definitions": [],
+          "proof_text_dropped": "",
+          "proofs_dropped": [],
+          "pending": [],
+          "note": "登记 ≠ 核对：quote_verified 是三态（True/False/None），它不是 True 时下游必须按 `quote_reason` 读，不许当成通过。五元位已随这一行落库（现算等级 not_applicable；第 2 位来源 （空））——等级不许自报，判据永远现算。这一笔由秘书落盘（洗格式 / 拿编号 / 查重 / 改表四件一起做完），表格 ['statements', 'dependencies']、路径组 0。；依赖边 0 条（其中命题→命题 0 条）",
+          "conjecture_ledger": {
+            "ok": false,
+            "kind": "validation_error",
+            "error": "status=proposed 时必须给 testable（可检验形式）；给不出就落 needs_evidence"
+          },
+          "statement_tier": {
+            "tier": "",
+            "label": "",
+            "nontriviality": null,
+            "nontriviality_tri": "unjudged",
+            "matched_by": "",
+            "downgraded": false,
+            "decision": "",
+            "reason": "kind='concept' 没有证明正文 ⇒ 判档这一格不适用（不是「判不了」：它是结构上不需要判，不是该判而没判）",
+            "judged_by": "secretary",
+            "judge": "statement_aesthetic"
+          },
+          "nontriviality_record": {
+            "recorded": true,
+            "tri": "not_applicable",
+            "level": null,
+            "label": "",
+            "stmt_id": "000113",
+            "path_group": 1,
+            "reason": ""
+          },
+          "registration_settled": {
+            "checked": true,
+            "settled": [],
+            "left": [],
+            "problems": [],
+            "reason": "收录落成：收口 0 条"
+          },
+          "d_handoff_settled": {
+            "checked": true,
+            "stmt_id": "000113",
+            "closed": [],
+            "expired": [],
+            "left": [],
+            "problems": [],
+            "reason": "收口 0 条、作废 0 条，仍开着 0 条"
+          },
+          "kind_judgement": {
+            "checked": true,
+            "kind": "concept",
+            "declared": "concept",
+            "changed": false,
+            "row_kind": "concept",
+            "basis": "kind='concept' 落在定义 / 术语那一档 ⇒ 这一行不是命题：「定理还是猜想」这一问不适用",
+            "why": ""
+          },
+          "grade": "not_applicable",
+          "grade_why": "",
+          "grade_reading": {
+            "checked": true,
+            "grade": "not_applicable",
+            "stored_grade": "not_applicable",
+            "mismatch": false,
+            "why": ""
+          },
+          "citation_fit": {
+            "checked": true,
+            "lit_id": "000003",
+            "title": "Critical central sections of the cube",
+            "verdict": "mismatch",
+            "why": [
+              "lit:000003：断言的实词与《Critical central sections of the cube》没有交集 ⇒ 引文可能跑题"
+            ],
+            "words_in_claim": [
+              "direction",
+              "k-diagonal",
+              "section"
+            ],
+            "note": "这条命题的正文与被引文献的题名 / 摘要没有交集 ⇒ 按收工门那条判据，这条出处被写进断言时会判「引文可能跑题」。改法二选一：① 把该文献的题名级主题词写进命题正文（下游引 `lit:` 时核得上）；② 下游引它时改用这条命题的 `rel:` / `stmt:` 行 —— 逐字回验过的那一条就是它的凭据，篇名只是出处。不许拿一篇泛论给整批命题当万能凭据。"
+          }
+        },
+        "error": "",
+        "meta": {
+          "statement_tier": {
+            "tier": "",
+            "label": "",
+            "nontriviality": null,
+            "nontriviality_tri": "unjudged",
+            "matched_by": "",
+            "downgraded": false,
+            "decision": "",
+            "reason": "kind='concept' 没有证明正文 ⇒ 判档这一格不适用（不是「判不了」：它是结构上不需要判，不是该判而没判）",
+            "judged_by": "secretary",
+            "judge": "statement_aesthetic"
+          }
+        },
+        "tier": {
+          "tier": "",
+          "label": "",
+          "nontriviality": null,
+          "nontriviality_tri": "unjudged",
+          "matched_by": "",
+          "downgraded": false,
+          "decision": "",
+          "reason": "kind='concept' 没有证明正文 ⇒ 判档这一格不适用（不是「判不了」：它是结构上不需要判，不是该判而没判）",
+          "judged_by": "secretary",
+          "judge": "statement_aesthetic"
+        },
+        "参数表": "【参数表】被拒的是参数形状/取值，不是这件事不能做。照下面这张声明表重写一次（键名与类型都要对；表里没列的键一律不许传）：\n- own.register_statement 的参数表：statement_full: string，含完整假设的命题正文。**只给 `proof_manuscript` 时这一格可以不传**（命题从手稿 `## 命题` 取）；正文与手稿都不给 ⇒ 动作层受控拒 `empty_statement_text`（空正文不能登；source_lit_id: string，origin='external_lit' 必需：论文那一行的 lit_id（必须是 literature 表里真实存在的行，写库前会核）；proof_text: string，文献侧（origin='external_lit'）的逐字证明摘录，`quote_verified` 的比对对象。**自产命题（origin='own_result'）的正文不走这一格**：它由手稿 `proof_man；proofs: array；kind: string，英文词表：theorem / lemma / proposition / corollary / conjecture / concept / definition（中文 kind 如「定理」「引理」不是取值）。它由证据；label: string，这条命题的定理名（例如「第一同构定理」）。只写名字：证明走哪条路线（路线一/二/三、McKay、Wielandt）、是不是自证草稿、要不要 V 审签，都不是定理名的一部分 —— 路线写进证明那一层（那条证明自己的正文说明；statement_text: string；origin: string，枚举 [external_lit/own_result]，来源。**它决定还要给哪些字段**（写库前逐条硬校验）：external_lit（论文里的）⇒ 必须给 source_lit_id + page_range；own_result（我们自己的）⇒ 必须给 doc_id 或；self_authored: boolean，只在 `kind=\"concept\"` + `origin=\"own_result\"` 时有意义：声明这是我们自己定义的新概念（不是从文献里摘的术语）。默认不传 = 不声明 ⇒ 整笔受控拒 `concept_origin；page_range: object，origin='external_lit' 必需：出处页码（start，或 label —— 如「全文未分页」；只给空的 start/end 等于没给）；evidence_kind: string，枚举 [proof/proof_review/cross_check/heuristic]，历史列（写盘时由等级反算，判定面不读它）。等级是唯一的轴：`conjecture` < `strong_conjecture` < `pre_theorem` < `theorem`；判定只看**可观察状态**：**V ；quote_verified: boolean，引文回验是否通过；不传 = 还没查（None）。2026-10-14 起“通过”分两档，方式写进 quote_mode：逐字命中 / 语义相同；quote_mode: string，枚举 [verbatim/semantic]，这条引文是**怎么**通过的（业主 2026-10-14：「回验不应该是十分呆板的逐字验证，而是保持语义相同即可」）：verbatim＝逐字命中（`quoteverify.check_quote` 那一档，不花模型钱，先；quote_reason: string，quote_verified 不是 true 时必需：写清哪里不一致、或者为什么还没查；quote_span: string，引文在来源里命中哪一段。逐字档的口径是 `p{页}:norm[起:止]`：页号从 1 起，起止是该页经 `textutil.normalize_for_quote` 归一化之后的字符偏移（含头不含尾）；语义档这一栏是 H；quote_call_sha256: string，**只有 `quote_mode=semantic` 这一档填**：H 的 `judge_quote_semantics` 回执里 `call.prompt_sha256`（那次语义判定的调用指纹）。逐字档不填 —— 它；derived_from: array；proof_manuscript: string，`proof_manuscript` 是**证明正文的载体**（自产命题在册与否都交它）：F/E 的稿，或 B 自己改写后的 `manuscripts/…（落档截断，原 2258 字）",
+        "warn": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.register_statement 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 18,
+          "call_index": 0,
+          "calls": 1,
+          "step_index": 18,
+          "summary": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.register_statement 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 18,
+            "calls": 1,
+            "items": 1,
+            "steps": [
+              18
+            ],
+            "executed": 1,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 93440,
+        "prompt_cache_miss_tokens": 2212,
+        "tokens_in": 95652,
+        "tokens_out": 1328,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000253"
+    },
+    {
+      "index": 19,
+      "shape": "tool",
+      "payload": {
+        "name": "table.create",
+        "args": {
+          "table": "relations",
+          "row": {
+            "concept_ids": [
+              "000011",
+              "000015"
+            ],
+            "description": "极大中心超平面截面与主对角线的关系（Ball [B86]）：体积极大的中心超平面截面垂直于 Q_n 某个二维面的主对角线 —— 即球面 S^{n−1} 上体积函数的最大值点在 2-对角方向上；这与 Theorem 1 里「临界方向要么平行于某二维面主对角线、要么满足 µ 型等式」的第一个分支相通。",
+            "lit_id": "000003",
+            "page_range": {
+              "start": 1,
+              "end": 1,
+              "label": "p. 1"
+            },
+            "quote": "Ball [B86] proved that maximal hyperplane sections are orthogonal to a main diagonal of a 2-dimensional face of Qn, hence, their volume is",
+            "quote_mode": "verbatim",
+            "quote_verified": true,
+            "statement": "Maximal central hyperplane sections of the cube are orthogonal to a main diagonal of a 2-dimensional face of Qn (Ball [B86])."
+          }
+        },
+        "why": "补一条 §1 引言里带逐字引文的关系行（Ball 极大截面 ↔ 主对角线），引文逐字取自 library/000003.txt 第 1 页"
+      },
+      "result": {
+        "tool": "table.create",
+        "ok": true,
+        "data": "000079",
+        "error": "",
+        "meta": {
+          "table": "relations",
+          "id": "000079",
+          "id_field": "relation_id",
+          "row": {
+            "relation_id": "000079",
+            "concept_ids": [
+              "000011",
+              "000015"
+            ],
+            "description": "极大中心超平面截面与主对角线的关系（Ball [B86]）：体积极大的中心超平面截面垂直于 Q_n 某个二维面的主对角线 —— 即球面 S^{n−1} 上体积函数的最大值点在 2-对角方向上；这与 Theorem 1 里「临界方向要么平行于某二维面主对角线、要么满足 µ 型等式」的第一个分支相通。",
+            "lit_id": "000003",
+            "page_range": {
+              "start": 1,
+              "end": 1,
+              "label": "p. 1"
+            },
+            "quote": "Ball [B86] proved that maximal hyperplane sections are orthogonal to a main diagonal of a 2-dimensional face of Qn, hence, their volume is",
+            "quote_normalized": "ball [b86] proved that maximal hyperplane sections are orthogonal to a main diagonal of a 2-dimensional face of qn, hence, their volume is",
+            "quote_verified": true,
+            "quote_mode": "verbatim",
+            "quote_reason": "命中区间 p1:norm[1550:1688]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+            "quote_span": "p1:norm[1550:1688]",
+            "quote_call_sha256": "",
+            "statement": "Maximal central hyperplane sections of the cube are orthogonal to a main diagonal of a 2-dimensional face of Qn (Ball [B86]).",
+            "concept_group_key": "000011|000015",
+            "dedup_key": "000011|000015::3e5b1cfdb9c47eb2",
+            "status": "active",
+            "duplicate_of": null,
+            "created_at": "2026-11-25T00:06:46+08:00",
+            "merged_at": "",
+            "supporting_lit_ids": []
+          },
+          "normalized": [],
+          "quote_evidence": {
+            "ok": true,
+            "action": "keep",
+            "why": "落了区间 p1:norm[1550:1688]",
+            "where": "relations.quote（lit:000003）"
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 94848,
+        "prompt_cache_miss_tokens": 4701,
+        "tokens_in": 99549,
+        "tokens_out": 2190,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000253"
+    },
+    {
+      "index": 20,
+      "shape": "tool",
+      "payload": {
+        "name": "table.create",
+        "args": {
+          "table": "relations",
+          "row": {
+            "concept_ids": [
+              "000113",
+              "000015"
+            ],
+            "description": "k-对角方向 / k-对角截面与主对角线的关系（§1 术语层）：一个方向若垂直于 Q_n 某个 k 维面的主对角线，就称为 k-对角方向（k-diagonal direction），相应的超平面截面称为 k-对角截面；k=2 时 k-对角方向即二维面主对角线方向，也就是 Theorem 1 第一个分支里与临界方向对齐的那一族方向。",
+            "lit_id": "000003",
+            "page_range": {
+              "start": 2,
+              "end": 2,
+              "label": "p. 2"
+            },
+            "quote": "One is tempted to believe that local extremizers are perpendicular to a main diagonal of a k-dimensional face of Qn – we are going to call these k-diagonal directions and the corresponding hyperplane sections as k-diagonal sections.",
+            "quote_mode": "verbatim",
+            "quote_verified": true,
+            "statement": "A direction perpendicular to a main diagonal of a k-dimensional face of Qn is called a k-diagonal direction, and the corresponding section a k-diagonal section."
+          }
+        },
+        "why": "把 §1 的 k-diagonal directions 术语与已有的 main diagonal 概念连起来，quote 逐字取自第 2 页，由写口当场回验"
+      },
+      "result": {
+        "tool": "table.create",
+        "ok": true,
+        "data": "000080",
+        "error": "",
+        "meta": {
+          "table": "relations",
+          "id": "000080",
+          "id_field": "relation_id",
+          "row": {
+            "relation_id": "000080",
+            "concept_ids": [
+              "000015",
+              "000113"
+            ],
+            "description": "k-对角方向 / k-对角截面与主对角线的关系（§1 术语层）：一个方向若垂直于 Q_n 某个 k 维面的主对角线，就称为 k-对角方向（k-diagonal direction），相应的超平面截面称为 k-对角截面；k=2 时 k-对角方向即二维面主对角线方向，也就是 Theorem 1 第一个分支里与临界方向对齐的那一族方向。",
+            "lit_id": "000003",
+            "page_range": {
+              "start": 2,
+              "end": 2,
+              "label": "p. 2"
+            },
+            "quote": "One is tempted to believe that local extremizers are perpendicular to a main diagonal of a k-dimensional face of Qn – we are going to call these k-diagonal directions and the corresponding hyperplane sections as k-diagonal sections.",
+            "quote_normalized": "one is tempted to believe that local extremizers are perpendicular to a main diagonal of a k-dimensional face of qn - we are going to call these k-diagonal directions and the corresponding hyperplane sections as k-diagonal sections.",
+            "quote_verified": true,
+            "quote_mode": "verbatim",
+            "quote_reason": "命中区间 p2:norm[208:440]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+            "quote_span": "p2:norm[208:440]",
+            "quote_call_sha256": "",
+            "statement": "A direction perpendicular to a main diagonal of a k-dimensional face of Qn is called a k-diagonal direction, and the corresponding section a k-diagonal section.",
+            "concept_group_key": "000015|000113",
+            "dedup_key": "000015|000113::5d5822e43e2dd548",
+            "status": "active",
+            "duplicate_of": null,
+            "created_at": "2026-11-25T00:07:01+08:00",
+            "merged_at": "",
+            "supporting_lit_ids": []
+          },
+          "normalized": [
+            "concept_ids"
+          ],
+          "quote_evidence": {
+            "ok": true,
+            "action": "keep",
+            "why": "落了区间 p2:norm[208:440]",
+            "where": "relations.quote（lit:000003）"
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 98688,
+        "prompt_cache_miss_tokens": 2209,
+        "tokens_in": 100897,
+        "tokens_out": 2334,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000253"
+    },
+    {
+      "index": 21,
+      "shape": "summon",
+      "payload": {
+        "role": "V",
+        "action": "",
+        "params": {
+          "statement_id": "000112",
+          "proof_manuscript": "manuscripts/B/b-proof-000005.md"
+        },
+        "why": "文献侧定理已按「先落稿、再派 V 签」那条路登记，稿上没有现行的 V 签时收工门会拦；签到位后由收方秘书落回稿里。",
+        "brief": "审 b-proof-000005（stmt:000112）",
+        "name": "V1",
+        "task": "审一份文献侧登记落成的证明手稿：manuscripts/B/b-proof-000005.md（对应命题 stmt:000112「临界方向的充要条件」，正文是 Ambrus《Critical central sections of the cube》Theorem 1 的证明开头逐字摘录）。请用 verify_proof 逐行走查：statement_id=000112，proof_manuscript=manuscripts/B/b-proof-000005.md；给两态结论（成立 ⇒ findings 空；有毛病 ⇒ 每条带步号与 defect_step）。"
+      },
+      "result": {
+        "summoned": "V",
+        "action": "",
+        "ok": true,
+        "task_id": "t-000254",
+        "status": "done",
+        "outcome": "ok",
+        "refusal_reason": null,
+        "detail": "执行完成",
+        "children": [],
+        "llm_run_path": "D:\\Incubator\\projects\\lp-ball-22\\runs\\V-20261125-000805-001.json",
+        "final": "审毕：stmt:000112 的证明手稿 manuscripts/B/b-proof-000005.md —— 结论「有毛病」，defect_step=3，findings 3 条，已落台账 verifications/000112.jsonl#v-000001（proof_sha256=1bfbe80eedd58d4adac78d33db9917eb8b82cf2722d29aab38ee7f70e3141e06），这一签不签发。\n\n逐行核对（正文只有两步，到 (2.10) 即止）：\n1. 第 1 步（Lagrange，(2.9)）：约束 a_1^2+…+a_n^2=1 正则、σ 可微，得 λa_k=∂σ/∂a_k —— 这一步本身无碍。\n2. 第 3 步（(2.10)，指到的缺陷步）：三条问题——(a) 证明在引用 (2.8) 并作 Leibniz 积分号下求导后即结束，既未从 (2.10) 推出 µ 关系或二维面主对角线情形，也完全未证反向（右边 ⇒ critical），命题的「当且仅当」两端均未完成；(b) (2.8) 与积分号下求导的合法性在稿内没有陈述、`## 依赖` 段为空 ⇒ 无依据步骤；(c) 导数公式只对 a_k≠0 给出，a_k=0 的坐标未处理。\n补法：补全两个方向与结论；(2.8) 要么在依赖段登记、要么在稿内给出陈述与求导合法性；对 a_k=0 单独补证…（原文 791 字，已截断）",
+        "payload": "{\"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\lp-ball-22\\\\runs\\\\V-20261125-000805-001.json\", \"final\": \"审毕：stmt:000112 的证明手稿 manuscripts/B/b-proof-000005.md —— 结论「有毛病」，defect_step=3，findings 3 条，已落台账 verifications/000112.jsonl#v-000001（proof_sha256=1bfbe80eedd58d4adac78d33db9917eb8b82cf2722d29aab38ee7f70e3141e06），这一签不签发。\\n\\n逐行核对（正文只有两步，到 (2.10) 即止）：\\n1. 第 1 步（Lagrange，(2.9)）：约束 a_1^2+…+a_n^2=1 正则、σ 可微…（原文 1027 字，已截断）",
+        "roster_name": "V1",
+        "秘书": {
+          "alarms": [
+            "'V1' 不是注册表里的真名"
+          ],
+          "fail_open": false,
+          "problem": "'V1' 不是注册表里的真名",
+          "wash": {
+            "checked": true,
+            "washed": false,
+            "refused": "",
+            "reason": ""
+          },
+          "changes": [],
+          "surface_fit": {
+            "checked": false,
+            "fits": null,
+            "paths": [],
+            "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+            "shape": "summon",
+            "reach": {
+              "checked": true,
+              "verdict": "unknown",
+              "hops": [],
+              "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+            }
+          },
+          "reach_fit": {
+            "checked": true,
+            "verdict": "unknown",
+            "hops": [],
+            "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+          },
+          "assessment": {
+            "decision": "可派",
+            "reason": "这一条没点名具体动作（role 级派活）⇒ 不拿动作表去卡它；角色存在性由预筛管",
+            "basis": [
+              "specs/<role>.py 的动作表",
+              "tasks: 同 key 的既有终态行",
+              "没点名动作 ⇒ 动作表那一格不适用"
+            ],
+            "duplicates": [],
+            "alarms": [],
+            "novel": false,
+            "surface": {
+              "checked": false,
+              "fits": null,
+              "paths": [],
+              "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+              "shape": "summon",
+              "reach": {
+                "checked": true,
+                "verdict": "unknown",
+                "hops": [],
+                "reason": "角色 '' 不在能力表里（['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'L', 'M', 'V']）⇒ 判不了"
+              }
+            },
+            "judge": {
+              "checked": false,
+              "reason": "预筛没有报警、也没有重复候选 ⇒ 不必判断"
+            },
+            "engaged": false,
+            "seq": 3
+          }
+        },
+        "可退役": [
+          {
+            "task_id": "t-000254",
+            "role": "V",
+            "branch": "waiting_no_children",
+            "reading": {
+              "items_open": 0,
+              "items_open_ids": [],
+              "items_open_expects": {},
+              "items_open_states": {}
+            }
+          }
+        ],
+        "新消息": [
+          {
+            "板": "- （已读）[t-000248] notice·要一个回执 来自 M：沿链 t-000001->t-000241 传来的指导（M 发出）：别再试 `table.update` 往 literature 上写 `unprocessed_reason` —— 那一列不存在（读数是台账的字段清单，不是猜的）。你要做的是把 6 行（lit:000019–lit:000024）的 `processed` 位弄成真：用你的 `run_once` 逐篇消化（一篇一次调用，共 6 次），每篇回执写清「抽到几条概念 / 几条关系 / 若 0 条，卡在哪一档（配额封顶还是缺正文）」。某一篇的 processed 位若在写盘时被受控拒，把拒码原话贴出来，不要自己下结论说「做不到」就停。回执最后给一行：`literature.unprocessed` 现在是几（用你自己读到的 `table.count(processed=false)` 口径）。\n- （新）[t-000255] notice·要一个回执 来自 agent-V-V1：V 的审阅报告：`verifications/reviews/v-review-000014.md`\n- 被审稿：`manuscripts/B/b-proof-000005.md`\n- 结论：有毛病（V 的秘书语义判定：fault）\n- 台账锚点：`verifications/000112.jsonl#v-000001`\nV 的原文不转达；这份报告就是给你的审阅意见。改完把同一份稿重新送 V。\n- （新）[t-000256] notice·要一件活 来自 V：这是一条必须重送的义务，不是通知：000112#p1 被 V 判过缺陷（最近一签 v-000001，错在第 3 步，这一签盖的是 sha 1bfbe80eedd5…）。\n收口条件只有一条：同一条命题（同一份证明）出现更新的、干净的「成立」行 ——届时这一项由框架自动收口（completed），不靠 ack；退回一句「知道了」不会让它消失。\n两条出路：① 补齐之后把这一份重新送 V（`verify.verify_proof`）重签；② 确实做不下去就明确放弃原命题（B 侧：`table.update` 该命题 `status=abandoned` + 放弃标记，理由与时间缺一不可）——放弃时这一项同时作废。\n- （新）[t-000257] notice·要一个回执 来自 V：审毕：stmt:000112 的证明手稿 manuscripts/B/b-proof-000005.md —— 结论「有毛病」，defect_step=3，findings 3 条，已落台账 verifications/000112.jsonl#v-000001（proof_sha256=1bfbe80eedd58d4adac78…（原文 1537 字，已截断）"
+          }
+        ],
+        "秘书加工": {
+          "reworked": [
+            {
+              "item": {
+                "板": "- （已读）[t-000248] notice·要一个回执 来自 M：沿链 t-000001->t-000241 传来的指导（M 发出）：别再试 `table.update` 往 literature 上写 `unprocessed_reason` —— 那一列不存在（读数是台账的字段清单，不是猜的）。你要做的是把 6 行（lit:000019–lit:000024）的 `processed` 位弄成真：用你的 `run_once` 逐篇消化（一篇一次调用，共 6 次），每篇回执写清「抽到几条概念 / 几条关系 / 若 0 条，卡在哪一档（配额封顶还是缺正文）」。某一篇的 processed 位若在写盘时被受控拒，把拒码原话贴出来，不要自己下结论说「做不到」就停。回执最后给一行：`literature.unprocessed` 现在是几（用你自己读到的 `table.count(processed=false)` 口径）。\n- （新）[t-000255] notice·要一个回执 来自 agent-V-V1：V 的审阅报告：`verifications/reviews/v-review-000014.md`\n- 被审稿：`manuscripts/B/b-proof-000005.md`\n- 结论：有毛病（V 的秘书语义判定：fault）\n- 台账锚点：`verifications/000112.jsonl#v-000001`\nV 的原文不转达；这份报告就是给你的审阅意见。改完把同一份稿重新送 V。\n- （新）[t-000256] notice·要一件活 来自 V：这是一条必须重送的义务，不是通知：000112#p1 被 V 判过缺陷（最近一签 v-000001，错在第 3 步，这一签盖的是 sha 1bfbe80eedd5…）。\n收口条件只有一条：同一条命题（同一份证明）出现更新的、干净的「成立」行 ——届时这一项由框架自动收口（completed），不靠 ack；退回一句「知道了」不会让它消失。\n两条出路：① 补齐之后把这一份重新送 V（`verify.verify_proof`）重签；② 确实做不下去就明确放弃原命题（B 侧：`table.update` 该命题 `status=abandoned` + 放弃标记，理由与时间缺一不可）——放弃时这一项同时作废。\n- （新）[t-000257] notice·要一个回执 来自 V：审毕：stmt:000112 的证明手稿 manuscripts/B/b-proof-000005.md —— 结论「有毛病」，defect_step=3，findings 3 条，已落台账 verifications/000112.jsonl#v-000001（proof_sha256=1bfbe80eedd58d4adac78…（原文 1537 字，已截断）"
+              },
+              "addendum": "我的产出物口径：交付状态 —— 交给谁：派你这趟活的那一方（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名）+ 送稿方（F / E / A 的回执随这一趟的返回值带回）；形态：`statements` 行（第一阶段・快录：概念行与命题行）+ `relations` 行 + `manuscripts/B/b-proof-<B稿号>.md` 副本（第二阶段・逐个优化）；可核字段：`statements.stmt_id` / `statements.kind` / `statements.quote_verified` / `statements.proof_text` / `relations.quote` / `relations.page_range` / `relations.quote_verified`；算做完：每一份送来的证明都有处置结论 —— 洗过的给副本、盖在新正文上的 V 签，没洗完的逐份点名还剩哪几份、卡在哪；每条关系的 `quote_verified` 有值（true / false / 未核到，不许空）。\n我在本条线上的位置：文献整理：第一阶段是快录 —— E/F 侧交来的成果几乎自动录入（机械录入：证明原文 ＋ 那一份已有的 V 签；只有「自己分析引文落稿」那一档要花力气）；第二阶段（逐个优化）是你的主职，**自驱、不必等 M 派** —— 洗稿 → 重拿 V 签 → 精准替换（每一步的入口、判据与自驱入口写在 policy 那一节）。",
+              "problem": "",
+              "fail_open": false
+            }
+          ],
+          "handoffs_digest": "- 000034 B→D：stmt:000030 放弃未落成：秘书受控拒 abandon_difficulty_not_genuine，盘上零写入；另报 proof_no 2 误指已污染等级（theorem 抬档）\n- 000035 M→D：派活：D（派活：这是收工唯一的 blocker（acceptance 的 R6 = plan_progress_rows 记 unknown）。事实你上一轮已核死：`data/attack_plans.json` 的 plan 000002 第 2 轮 history 里 `statement_id=\"000030\"`，而真正被那份稿证明的是 `stmt:000042`（`manuscripts/F/f-proof-000003.md` 的「## 命题」逐字 = 000042 的 statement_full；`verifications/000042.jsonl` 有 8 行、含「成立」；`verifications/000030.jsonl` 根本不存在）。本轮要做的只有一件事：**让 attack_plans 里那一格不再指向一条无签的命题**。走 F 那一侧（attack_plans 是 F 的写口，D 自己改不动）：让 F 用它的 step / 更正入口做下面任一种，哪种真能落盘就用哪种，并在回执里贴改后 `fs.search` 的逐字结果：(1) 把 plan 000002 第 2 轮的 `statement_id` 就地更正为 `000042`（归属更正，不重写整条 history）；(2) 若不能就地改，就 append 一条新的 round（如 round 3），在 `notes`/`cites` 里逐字写明「更正第 2 轮归属：该稿的命题是 stmt:000042，000030 是旧号」，且这一轮的 `statement_id` 只填 `000042`；(3) 若 F 的写口两种都做不到，就让它明确回「做不到 + 拒在哪一格」，不要硬写。回执必须给三样：① 改后 `data/attack_plans.json` 里 plan 000002 全部 history 的 `round` / `statement_id` / `cites` 逐条；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 你认为改完之后收工门 plan_progress_rows 会不会转 pass，判据是什么。不要再开新方向、不要动 statements 的正文。）\n- 000036 M→D：派活：D（派活：这是收工门最后一格（acceptance 的 R6 = plan_progress_rows 记 unknown），你上一轮（t-000227）得出的结论是「F 的两条写口都改不动那一格」。本轮换两个具体做法，仍然只让 F 去改它自己名下的 `attack_plans`（那是它的产出面，不是框架账本区）：(1) 首选：让 F 用 `table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 的完整数组>})` —— 你自己先把 `data/attack_plans.json` 里 plan 000002 的 `history` 逐字读出来，只把第 2 条（`round=2`，`manuscript_path=manuscripts/F/f-proof-000003.md`，`proof_sha256=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db`）里的 `\"statement_id\": \"000030\"` 改成 `\"000042\"`，并在该条加一句 `\"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"`，其余字段与其余轮次一个字节不动，整份数组原样回写（这是 F 对自己产出的更正，不是改别人台账）。(2) 若 (1) 仍被拒，让 F 用它的 `step` 追加一条 `round=3` 的新 history，`statement_id` 只填 `000042`、`cites` 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」。回执必须给三样逐字读数：① 改后 `fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\")` 在 `data/attack_plans.json` 的全部命中行（行号 + 内容）；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 若两条都做不到，逐条贴拒信原文（拒码 + 那句话），不要自己下结论说「做不到」就停。）\n- 000037 M→B：派 B 把 literature 剩 6 条未消化文献处理完，让 unprocessed 归 0\n- 000038 M→G：派活：G（派活：写论文正文并编出 PDF（这是用户插话明确要求的交付物：最终产出论文）。要你做什么：\n1) **正文由你自己写**到 `out/package/main.tex`（用 fs.write，一段段写，不要只给骨架：每一节 body 都要非空）。论文题：三维 l^p 球 B_p^3 的最大面积中心截面。内容必须覆盖：问题与背景、三个候选方向族（坐标向 (1,0,0)、体对角向 (1,1,1)/√3、面对角向 (1,1,0)/√2）的截面面积表达式（A_coord(p)=4Γ(1+1/p)²/Γ(1+2/p)；A_diag(p)=(3/4)∫_0^{2π}(|cos(θ−π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p)^{−2/p}dθ；A_face(p) 为平面 x+y=0 上的二重积分、p→∞ 时 →4√2）、三段结构与两个临界点（p=2 处 r(p) 过 1；p*=4.998215596862 处 A_diag=A_face 换向）、数值证据（12 个 p 的球面扫描 + 6 轮局部加密 + 两临界点二分 + 求积核解析自检 1e-15 级）、已签证明（V 判「成立」的命题）、与文献的关系（引 lit: 行）、局限与未解问题。\n2) 每条承重断言带 `\\\\cite` 或台账引用：引文献用 lit:000000–lit:000024 里直接对口的几篇（plane sections of the unit ball of l_p、on maximal hyperplane sections of the unit ball of l_p^n for p<2、cube slicing in r^n、critical central sections of the cube、on extremal sections of subspaces of l_p）；引实验用 exp:000003（求积核自检）、exp:000004（12 个 p 扫描）、exp:000006（临界 p）、exp:000007（边界弧端点性）。**结论强度不许超过证据**：三段结构里「p<2 坐标向占优」「2<p<p* 体对角向占优」这两条目前只有数值支持（strong_conjecture 级），必须写明「数值支持的强猜想，未证明」；只有已拿 V「成立」签的那几条（体对角向截面积表达式、Δ 连续性与尾段符号）可以写「定理/证明」并注明「逐行审阅过的证明，未经机器检查」。\n3) 编 PDF：自己调 `doc.paper_compile` 编出 `out/package/main.pdf` 并确认回执里的 tex_sha256 等于盘上这份 main.tex。\n4) 落论文对应表：自己调 `doc.write_mapping` 一次落 MAPPING.json / MAPPING.md / 正文附录。\n5) 回执请给：main.tex 的 sha256 与字节数、回执里的 tex_sha256 / pages / pdf_bytes、MAPPING 的落点、每节标题清单、以及你引了哪些 lit:/exp:/stmt:。若某一步做不出来，逐条写清卡在哪（拒码 + 原话），不要自己宣布通过。）"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 100096,
+        "prompt_cache_miss_tokens": 2180,
+        "tokens_in": 102276,
+        "tokens_out": 1202,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000253"
+    },
+    {
+      "index": 23,
+      "shape": "final",
+      "payload": {
+        "final": "【收编 lit:000003（Ambrus《Critical central sections of the cube》，arXiv:2107.14778v3）的结论】\n\n先说清一件事：literature 行在此之前已经是 processed=true，但 statements 与此前对该文献的关系行里只有 1 条旧关系（rel:000018，quote 已逐字核过 / p.1），因此这一趟是「补录」而不是「重洗」。\n\n一、本趟落成的行（全部由我这一趟现写）\n1) 概念行 2 条：\n- stmt:000111「临界方向（critical direction）与临界中心超平面截面」——kind=concept，origin=external_lit，出处 p.2；正文是消化过的完整句（含 Q_n、S^{n−1}、S_k 的定义）。quote_verified=null，quote_reason 里写明「定义原句已逐字摘出，逐字回验落在关系行上」。\n- stmt:000113「k-对角方向与对角截面（k-diagonal directions / diagonal sections）」——kind=concept，出处 p.2；这一条的 citation_fit 判成 mismatch（正文实词与题名没有交集），这是如实读数，不是通过；下游引用它时请改用逐字核过的 rel:000077–000080 当凭据，或把它正文里的题名级主题词补上。\n2) 命题行 1 条：\n- stmt:000112「临界方向的充要条件」（即原文 Theorem 1）——origin=external_lit，出处 p.2，秘书判形态合规、kind 自动抬到 theorem，档位 T3；proof_text 是 p.4 起的证明开头逐字摘录，框架同时落成了 manuscripts/B/b-proof-000005.md。\n3) 关系行 4 条（quote 全部逐字取自 library/000003.txt，由写口当场把区间算实，quote_verified 全为 true）：\n- rel:000077 临界方向 ↔ central hyperplane sections（000111|000018），p.2，区间 p2:norm[1527:1820]；\n- rel:000078 临界方向 ↔ 主对角线（000111|000015），Theorem 1 的「当且仅当平行于某二维面主对角线」那一支，p.2，p2:norm[2499:2744]；\n- rel:000079 极大中心超平面截面 ↔ 主对角线（000011|000015），Ball [B86] 那句，p.1，p1:norm[1550:1688]；\n- rel:000080 k-对角方向 ↔ 主对角线（000113|000015），§1 术语定义那句，p.2，p2:norm[208:440]。\n合计：概念 2 行、命题 1 行、关系 4 行（加上此前已有的 rel:000018，lit:000003 名下现有关系 5 行，全部 quote_verified=true）。\n\n二、卡点（逐条点名，不掩饰）\n- stmt:000112 的证明手稿 b-proof-000005.md 被判「有毛病」：V 已经落台账 verifications/000112.jsonl#v-000001，defect_step=3，三条 findings 分别是：(a) 稿里的正文只到 (2.10) 就断了，既没有从 (2.10) 推出 µ 型等式或二维面主对角线情形，也完全没有证明反向，而定理两端都需要证明；(b) (2.8) 与积分号下求导的合法性在稿内没有陈述、## 依赖 段为空 ⇒ 无依据步骤；(c) 导数公式只对 a_k≠0 给出，a_k=0 的坐标没有处理。根因在我这一侧：我把 Theorem 1 证明的「开头两段」当成 proof_text 交了，没有把 §2–3 的完整论证摘完。这不是 V 判错了，是我交得不全。\n- 处置：要修法只能重摘 §2–3 的完整证明→重落 b-proof-000005→重送 V（版面义务 t-000256 届时自动收口），或在确实做不下去时明确放弃 stmt:000112。这一趟没做完这一步（本回合是监控回合，只许补派或收口；且剩余预算不足以再走「读全证明→落稿→送审→等签」一轮）。下一趟接手的人请从这里开始。\n- 第二阶段：stmt:000112 的证明是文献侧第一遍机械摘录（quote_carrier=first，V 签位按文献编号占位，不欠真签）；它尚未进「洗稿→重拿签→精准替换」那一轮 —— 本轮没有跑 run_once，所以没有 stage_two 读数，我不把它报成已洗。\n\n三、逐条回报（任务 ④ 要求）\n- 概念行：2 条（stmt:000111、stmt:000113）。\n- 关系行：本趟新增 4 条（rel:000077–000080），全部 quote_verified=true；此前已有 1 条（rel:000018），因此该文献名下共 5 条。\n- 命题行：1 条（stmt:000112，Theorem 1）。它引到的两处（§1 的 critical direction 定义、Theorem 1 陈述）现在都已是可溯源的行。",
+        "evidence": [
+          "lit:000003",
+          "stmt:000111",
+          "stmt:000112",
+          "stmt:000113",
+          "rel:000018",
+          "rel:000077",
+          "rel:000078",
+          "rel:000079",
+          "rel:000080",
+          "manuscripts/B/b-proof-000005.md",
+          "verifications/000112.jsonl#v-000001"
+        ],
+        "notify": {
+          "to": "t-000252",
+          "summary": "lit:000003 收编回执：概念 2 行 / 命题 1 行（Theorem 1）/ 关系新增 4 条且逐字核过；Theorem 1 的证明稿被 V 判「有毛病」，卡在只摘了证明开头。",
+          "body": "## 这一趟做了什么\n\n收编 lit:000003（Ambrus《Critical central sections of the cube》）——它此前已 processed=true，但名下只有 1 条关系（rel:000018）、没有命题。本趟补录：\n\n- **概念 2 行**：stmt:000111 临界方向（critical direction，p.2）、stmt:000113 k-对角方向/对角截面（p.2）。\n- **命题 1 行**：stmt:000112「临界方向的充要条件」= 原文 Theorem 1（p.2），kind 自动抬到 theorem，档位 T3；框架落稿 manuscripts/B/b-proof-000005.md。\n- **关系 4 行**（quote 逐字取自 library/000003.txt，写口当场算实区间，quote_verified 全 true）：rel:000077（临界方向↔中心超平面截面，p2:norm[1527:1820]）、rel:000078（临界方向↔主对角线，p2:norm[2499:2744]）、rel:000079（极大截面↔主对角线 Ball[B86]，p1:norm[1550:1688]）、rel:000080（k-对角方向↔主对角线，p2:norm[208:440]）。\n\n计数：概念 2 行 / 命题 1 行 / 关系新增 4 条（该文献名下共 5 条，全部 quote_verified=true）。\n\n## 我卡在哪（请下一趟从这里接手）\n\n1. **b-proof-000005.md 被 V 判「有毛病」**（verifications/000112.jsonl#v-000001，defect_step=3）：我交进去的 proof_text 只是 Theorem 1 证明的**开头两段**（到 (2.10) 为止），既没推出 µ 型等式 / 二维面主对角线情形，也没证反向；(2.8) 与积分号下求导的合法性没在本稿里陈述，## 依赖 段为空；a_k=0 的坐标没处理。根因是我摘得不全，不是 V 判错。\n2. **修法**：把 §2–3 的完整证明逐字摘全 → 重落 b-proof-000005 → 重送 V（`verify_proof`，statement_id=000112、proof_manuscript=manuscripts/B/b-proof-000005.md）。版面上的义务项 t-000256 会在出现干净「成立」行时自动收口。若确实做不下去，就明确放弃 stmt:000112（`table.update` status=abandoned + 放弃标记）。本趟没做完这一步（监控回合只许补派或收口，且预算不够再走一轮读全→落稿→送审→等签）。\n3. **stmt:000113 的 citation_fit = mismatch**（正文实词与题名无交集）：下游引它时请改引逐字核过的 rel:000077–000080，或补上题名级主题词。\n4. **第二阶段**：stmt:000112 的证明属于文献侧第一遍机械摘录（quote_carrier=first，V 签位用文献编号占位，不欠真签），尚未进 洗稿→重签→精准替换 那一轮；本轮没跑 run_once，所以没有 stage_two 读数，我不把它报成已洗。\n",
+          "refs": [
+            "lit:000003",
+            "stmt:000111",
+            "stmt:000112",
+            "stmt:000113",
+            "rel:000077",
+            "rel:000078",
+            "rel:000079",
+            "rel:000080",
+            "verifications/000112.jsonl#v-000001"
+          ]
+        }
+      },
+      "result": {
+        "notify_problem": "notify.refs 里的 'verifications/000112.jsonl#v-000001' 立不住：引用的前序手稿 'verifications/000112.jsonl#v-000001' 不在盘上 ⇒ 不许凭空引用（溯源链断了）"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 101504,
+        "prompt_cache_miss_tokens": 5522,
+        "tokens_in": 107026,
+        "tokens_out": 2919,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000253"
+    }
+  ],
+  "final": "【收编 lit:000003（Ambrus《Critical central sections of the cube》，arXiv:2107.14778v3）的结论】\n\n先说清一件事：literature 行在此之前已经是 processed=true，但 statements 与此前对该文献的关系行里只有 1 条旧关系（rel:000018，quote 已逐字核过 / p.1），因此这一趟是「补录」而不是「重洗」。\n\n一、本趟落成的行（全部由我这一趟现写）\n1) 概念行 2 条：\n- stmt:000111「临界方向（critical direction）与临界中心超平面截面」——kind=concept，origin=external_lit，出处 p.2；正文是消化过的完整句（含 Q_n、S^{n−1}、S_k 的定义）。quote_verified=null，quote_reason 里写明「定义原句已逐字摘出，逐字回验落在关系行上」。\n- stmt:000113「k-对角方向与对角截面（k-diagonal directions / diagonal sections）」——kind=concept，出处 p.2；这一条的 citation_fit 判成 mismatch（正文实词与题名没有交集），这是如实读数，不是通过；下游引用它时请改用逐字核过的 rel:000077–000080 当凭据，或把它正文里的题名级主题词补上。\n2) 命题行 1 条：\n- stmt:000112「临界方向的充要条件」（即原文 Theorem 1）——origin=external_lit，出处 p.2，秘书判形态合规、kind 自动抬到 theorem，档位 T3；proof_text 是 p.4 起的证明开头逐字摘录，框架同时落成了 manuscripts/B/b-proof-000005.md。\n3) 关系行 4 条（quote 全部逐字取自 library/000003.txt，由写口当场把区间算实，quote_verified 全为 true）：\n- rel:000077 临界方向 ↔ central hyperplane sections（000111|000018），p.2，区间 p2:norm[1527:1820]；\n- rel:000078 临界方向 ↔ 主对角线（000111|000015），Theorem 1 的「当且仅当平行于某二维面主对角线」那一支，p.2，p2:norm[2499:2744]；\n- rel:000079 极大中心超平面截面 ↔ 主对角线（000011|000015），Ball [B86] 那句，p.1，p1:norm[1550:1688]；\n- rel:000080 k-对角方向 ↔ 主对角线（000113|000015），§1 术语定义那句，p.2，p2:norm[208:440]。\n合计：概念 2 行、命题 1 行、关系 4 行（加上此前已有的 rel:000018，lit:000003 名下现有关系 5 行，全部 quote_verified=true）。\n\n二、卡点（逐条点名，不掩饰）\n- stmt:000112 的证明手稿 b-proof-000005.md 被判「有毛病」：V 已经落台账 verifications/000112.jsonl#v-000001，defect_step=3，三条 findings 分别是：(a) 稿里的正文只到 (2.10) 就断了，既没有从 (2.10) 推出 µ 型等式或二维面主对角线情形，也完全没有证明反向，而定理两端都需要证明；(b) (2.8) 与积分号下求导的合法性在稿内没有陈述、## 依赖 段为空 ⇒ 无依据步骤；(c) 导数公式只对 a_k≠0 给出，a_k=0 的坐标没有处理。根因在我这一侧：我把 Theorem 1 证明的「开头两段」当成 proof_text 交了，没有把 §2–3 的完整论证摘完。这不是 V 判错了，是我交得不全。\n- 处置：要修法只能重摘 §2–3 的完整证明→重落 b-proof-000005→重送 V（版面义务 t-000256 届时自动收口），或在确实做不下去时明确放弃 stmt:000112。这一趟没做完这一步（本回合是监控回合，只许补派或收口；且剩余预算不足以再走「读全证明→落稿→送审→等签」一轮）。下一趟接手的人请从这里开始。\n- 第二阶段：stmt:000112 的证明是文献侧第一遍机械摘录（quote_carrier=first，V 签位按文献编号占位，不欠真签）；它尚未进「洗稿→重拿签→精准替换」那一轮 —— 本轮没有跑 run_once，所以没有 stage_two 读数，我不把它报成已洗。\n\n三、逐条回报（任务 ④ 要求）\n- 概念行：2 条（stmt:000111、stmt:000113）。\n- 关系行：本趟新增 4 条（rel:000077–000080），全部 quote_verified=true；此前已有 1 条（rel:000018），因此该文献名下共 5 条。\n- 命题行：1 条（stmt:000112，Theorem 1）。它引到的两处（§1 的 critical direction 定义、Theorem 1 陈述）现在都已是可溯源的行。",
+  "evidence": [
+    "lit:000003",
+    "stmt:000111",
+    "stmt:000112",
+    "stmt:000113",
+    "rel:000018",
+    "rel:000077",
+    "rel:000078",
+    "rel:000079",
+    "rel:000080",
+    "manuscripts/B/b-proof-000005.md",
+    "verifications/000112.jsonl#v-000001"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 1,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 23,
+  "compactions": 0,
+  "mailbox_items": [
+    "t-000255",
+    "t-000256",
+    "t-000257",
+    "t-000258"
+  ],
+  "mailbox_msgs": [],
+  "mailbox_delivered": 4,
+  "monitor_turns": 1,
+  "wakes": 1,
+  "wake_ids": [
+    "wk-000079"
+  ],
+  "wake_events": [
+    {
+      "wake_id": "wk-000079",
+      "task_id": "t-000253",
+      "role": "B",
+      "timer_id": "tm-000263",
+      "kind": "timer",
+      "reason": "审一份文献侧登记落成的证明手稿：manuscripts/B/b-proof-000005.md（对应命题 stmt:000112「临界方向的充要条件」，正文是 Ambrus《Critical central sections of the cube》Theorem 1 的证明开头逐字摘录）。请用 verify_proof 逐行走查：statement_id=000112，proof_manuscr",
+      "purpose": "审一份文献侧登记落成的证明手稿：manuscripts/B/b-proof-000005.md（对应命题 stmt:000112「临界方向的充要条件」，正文是 Ambrus《Critical central sections of the cube》Theorem 1 的证明开头逐字摘录）。请用 verify_proof 逐行走查：statement_id=000112，proof_manuscr",
+      "purpose_missing": false,
+      "message": "时间到：审一份文献侧登记落成的证明手稿：manuscripts/B/b-proof-000005.md（对应命题 stmt:000112「临界方向的充要条件」，正文是 Ambrus《Critical central sections of the cube》Theorem 1 的证明开头逐字摘录）。请用 verify_proof 逐行走查：statement_id=000112，proof_manuscr｜等了 54 秒（起于 00:07:14，到于 00:08:08）。它交的是：ok：执行完成",
+      "waited_sec": 54.934677,
+      "triggered_by": "target_event",
+      "wait_for": "task:t-000254",
+      "due_at": "",
+      "fired_at": "2026-11-24T16:08:09.139972+00:00",
+      "mailbox_item_id": "t-000258",
+      "state": "pending"
+    }
+  ],
+  "clock_pumps": 45,
+  "clock_fired": 2,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "名下没有「已登记、V 签还没到」的稿（正文本目录下 10 份 f-proof/b-proof/e-proof 的稿里有 10 份「已登记」（b-proof×6、f-proof×4））；另有 2 份已登记稿没有实例归属（不计入任何实例）：manuscripts/B/b-proof-000004.md、manuscripts/B/b-proof-000005.md",
+      "problems": [],
+      "producer": "B",
+      "owner_instance": "B1",
+      "owner_source": "roster",
+      "unattributed": [
+        {
+          "manuscript_id": "000004",
+          "manuscript": "manuscripts/B/b-proof-000004.md",
+          "text": "# F 的证明手稿：证明四段叙述的严格骨架：(i) Δ(2)=A_face(2)−A_diag(2)=0 且两者都等于 π；(ii) Δ(…\n\n- 计划：000002 · 子目标：n1\n- 依赖面洗稿：已洗=true；执行者=secretary-F\n- 稿族：f-proof\n- 产出者：agent-F-F1\n- 正文sha：3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db\n- 命题指纹：da831b7b4a3dc1a603c2df16234b02d42fd9d3d56471081b702d31adc9ea8c7e\n- 命题类型：conjecture\n- 登记时间：2026-11-24T20:51:08+08:00\n- 标签：F 攻坚 000002 子目标 n1\n- 版本：2026-11-24T20:51:08+08:00@3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db\n\n## 命题\n\n设 1 ≤ p < ∞，B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积，并记 A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。则：(i) A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，且 A_diag(2) = π、A_diag(1) = 3√3/4、lim_{p→∞}A_diag(p) = 3√3；(ii) A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，且 A_face(2) = π、A_face(1) = √2、lim_{p→∞}A_face(p) = 4√2；(iii) Δ 在 [1,∞) 上连续，Δ(2) = 0，Δ(1) = √2 − 3√3/4 > 0，lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0，因而存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 A_face(p) > A_diag(p)。\n\n## 证明\n\n1. 【前提】固定 1 ≤ p < ∞；B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。（前提）（前提）\n2. 【推导】由 stmt:000034 的 (i)，对每个单位法向 n 与 n^⊥ 的任意单位正交基 (u,v) 有 A_p(n) = (1/2)∫_0^{2π}‖cosθ·u+sinθ·v‖_p^{-2}dθ。取 n = (1,1,1)/√3、u = (1,-1,0)/√2、v = (1,1,-2)/√6（直接验算 ‖u‖=‖v‖=1、u·v=0、u·n=v·n=0，故 {u,v} 是 H := {x+y+z=0} 的单位正交基）；另一路参数化 Φ(x,y) := (x,y,−x−y) 是 R²→H 的双射，∂_xΦ=(1,0,−1) 与 ∂_yΦ=(0,1,−1) 的叉积为 (1,1,1)、模为 √3，故 A_diag(p) = √3∫∫_D dxdy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。（依据：stmt:000034）\n3. 【推导】对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)（r ≥ 0、θ ∈ [0,2π)）：由 |r cosθ|^p+|r sinθ|^p+|r(cosθ+sinθ)|^p = r^p g(θ)（记 g(θ) := |cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p）得 (x,y) ∈ D ⟺ r ≤ g(θ)^{-1/p}；由面积元 r dr dθ 得 ∫∫_D = ∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ，与第 2 步合并即 A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，这给出 (i) 的积分式。（依据：stmt:000034）\n4. 【推导】一致控制：g ≥ max(|cosθ|,|sinθ|)^p ≥ (1/√2)^p（因为 max(|cosθ|,|sinθ|) ≥ 1/√2），故对一切 p ∈ [1,∞) 与一切 θ 有 0 < g(θ)^{-2/p} ≤ (1/√2)^{-2} = 2；又 (p,θ) ↦ g(θ) 连续且在每个局部 p-区间上 g 有与 p 无关的正下界，故 θ ↦ g(θ)^{-2/p} 关于 p 逐点连续。（依据：stmt:000034）\n5. 【推导】p = 2 时 g(θ) = cos²θ+sin²θ+(cosθ+sinθ)² = 2+sin2θ；代换 u = 2θ 后用 ∫_0^{2π}du/(a+b sin u) = 2π/√(a²−b²)（取 a=2、b=1）得 ∫_0^{2π} dθ/(2+sin2θ) = ∫_0^{2π} du/(2+sin u) = 2π/√3，此处 p=2 使 g^{-2/p} 化为 g^{-1}，故 A_diag(2) = (√3/2)·(2π/√3) = π。（依据：stmt:000034）\n6. 【推导】由 stmt:000034 的 (ii)(iii)(iv) 的闭式 A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，在 p = 2 处得 A_face(2) = 2^0·4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π；与第 5 步合并得 Δ(2) = π − π = 0。（依据：stmt:000034）\n7. 【推导】Δ(1) 的计算：A_face(1) = 2^{-1/2}·4Γ(2)²/Γ(3) = 2^{-1/2}·4·1/2 = √2（Γ(2)=1、Γ(3)=2）；A_diag(1)：p = 1 时 g = |cosθ|+|sinθ|+|cosθ+sinθ| 满足 g(θ+π) = g(θ)，且在 [0,π/2] 上 g = 2(cosθ+sinθ)（故 g^{-2} = (1/4)(cosθ+sinθ)^{-2}）、在 [π/2,3π/4] 上 g = 2sinθ（g^{-2} = (1/4)sin^{-2}θ）、在 [3π/4,π] 上 g = −2cosθ（g^{-2} = (1/4)cos^{-2}θ）；三段对 ∫g^{-2} 的贡献各为 1/4（分别用 ∫_0^{π/2}dθ/(cosθ+sinθ)² = 1、[−cotθ] 与 [tanθ] 在两个端点区间上的取值各得 1），故 ∫_0^{2π}g^{-2}dθ = 2·(1/4+1/4+1/4) = 3/2，A_diag(1) = (√3/2)·(3/2) = 3√3/4；于是 Δ(1) = √2 − 3√3/4 > 0，因为 4√2 > 3√3 ⟺ 32 > 27。（依据：stmt:000034）\n8. 【推导】Δ 的连续性：Γ 在 (0,∞) 上连续且取正值，p ↦ 1/p、1+1/p、1+2/p 在 [1,∞) 上连续，故 A_face 在 [1,∞) 上连续；由第 4 步与 p 无关的控制 g^{-2/p} ≤ 2 与逐点连续性，有界收敛定理给出 p ↦ ∫_0^{2π}g(θ)^{-2/p}dθ 在 [1,∞) 上连续，故 A_diag 连续；两者相减得 Δ 在 [1,∞) 上连续。（依据：stmt:000034）\n9. 【推导】p→∞ 时 A_diag 的极限：记 m(θ) := max(|cosθ|,|sinθ|,|cosθ+sinθ|)，则 m(θ)^p ≤ g(θ) ≤ 3m(θ)^p，故对每个 θ 有 g(θ)^{-2/p} → m(θ)^{-2}；又 g ≥ m^p 给出 g^{-2/p} ≤ m^{-2} ≤ 2（因 m ≥ 1/√2），有界收敛定理给出 A_diag(p) → (√3/2)∫_0^{2π}m(θ)^{-2}dθ。按符号分段：在 [0,π/2] 上 m = cosθ+sinθ、在 [π/2,3π/4] 上 m = sinθ、在 [3π/4,π] 上 m = −cosθ，且 m(θ+π) = m(θ)，三段各贡献 1（同上一步的三段积分），故 ∫_0^{2π}m^{-2}dθ = 2·3 = 6，于是 lim_{p→∞}A_diag(p) = (√3/2)·6 = 3√3。（依据：stmt:000034）\n10. 【推导】p→∞ 时 A_face 的极限：C_p := 4Γ(1+1/p)²/Γ(1+2/p) → 4Γ(1)²/Γ(1) = 4（Γ 连续、Γ(1)=1），又 2^{1/2−1/p} → √2，故 A_face(p) → 4√2；与第 9 步合并得 lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0（同样由 32 > 27）。（依据：stmt:000034）\n11. 【推导】收尾：记 L := 4√2 − 3√3 > 0；由第 8 步 Δ 的连续性与第 10 步 lim Δ = L，取 ε := L/2 > 0，则存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 |Δ(p) − L| < ε，从而 Δ(p) > L/2 > 0，即 A_face(p) > A_diag(p) 对一切 p ≥ P0 成立，这给出 (iii) 的最后一句。（依据：stmt:000034）\n\n## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |\n|---|---|---|\n| 【推导】由 stmt:000034 的 (i)，对每个单位法向 n 与 n^⊥ 的任意单位正交基 (u,v) 有 A_p(n) = (1/2)∫_0^{2π}… | stmt:000034 | 第 2、3、4、5、6、7、8、9、10、11 步 |\n",
+          "entry": {
+            "statement_id": "",
+            "plan_id": "000002",
+            "sid": "n1",
+            "label": "F 攻坚 000002 子目标 n1",
+            "proof_no": 0,
+            "sha256": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+            "fingerprint": "da831b7b4a3dc1a603c2df16234b02d42fd9d3d56471081b702d31adc9ea8c7e",
+            "kind": "conjecture",
+            "kind_label": "命题类型",
+            "registered_at": "2026-11-24T20:51:08+08:00",
+            "versions": [
+              {
+                "raw": "2026-11-24T20:51:08+08:00@3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+                "proof_no": 0,
+                "at": "2026-11-24T20:51:08+08:00",
+                "sha256": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db"
+              }
+            ],
+            "checked": true,
+            "problems": [],
+            "family": "f-proof",
+            "producer": "agent-F-F1"
+          },
+          "label": "F 攻坚 000002 子目标 n1",
+          "family": "b-proof",
+          "producer_role": "B",
+          "producer_source": "manuscript_family",
+          "producer_instance": "",
+          "producer_actor": "agent-B",
+          "instance_source": "",
+          "producer_checked": true,
+          "registered_at": "2026-11-24T20:51:08+08:00",
+          "why": ""
+        },
+        {
+          "manuscript_id": "000005",
+          "manuscript": "manuscripts/B/b-proof-000005.md",
+          "text": "# B 的证明手稿：临界方向的充要条件\n\n- 标签：临界方向的充要条件\n\n## 命题\n\n设 Q_n = [−1,1]^n 为标准 n 维立方体（ℓ∞ 范数的单位球），S^{n−1} 为 R^n 的单位球面；对 k = 1,…,n 记 S_k = {x = (x_1,…,x_n) ∈ Q_n : x_k = 1} 为 Q_n 中第 k 个坐标为 1 的侧面；对单位向量 a ∈ S^{n−1}，a^⊥ 为过原点、以 a 为法向的超平面，Vol_{n−1}(Q_n ∩ a^⊥) 为对应的中心超平面截面体积函数（a 是它的临界点即称 a 为 critical direction）。则：单位向量 a = (a_1,…,a_n) ∈ S^{n−1} 是临界方向，当且仅当 a 平行于 Q_n 某个二维面的主对角线，或者存在某个常数 µ > 0，使得 Vol_{n−1}(conv(0 ∪ (S_k ∩ a^⊥))) = µ(1 − a_k^2) 对每个 k = 1,…,n 都成立。\n\n## 证明\n\nProof of Theorem 1. Assume that a ∈Sn−1 is a critical direction. Since the constraint on a is expressed by the equation a2 1 + . . . + a2 n = 1, and σ(a) is differentiable, the method of Lagrange multipliers implies that there exists a constant λ ∈R so that for each k = 1, . . . , n, (2.9) λak = ∂ ∂ak σ(a). Referring to (2.8), the Leibniz integral rule shows that for each k with ak̸ = 0, (2.10) ∂ ∂ak σ(a) = Z ∞ −∞ Y i̸=k sin ait ait · cos akt ak −sin akt a2 kt dt.\n\n## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |\n|---|---|---|\n\n（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n",
+          "entry": {
+            "statement_id": "",
+            "plan_id": "",
+            "sid": "",
+            "label": "临界方向的充要条件",
+            "proof_no": 0,
+            "sha256": "",
+            "fingerprint": "",
+            "kind": "",
+            "kind_label": "",
+            "registered_at": "",
+            "versions": [],
+            "checked": false,
+            "problems": [],
+            "family": "",
+            "producer": ""
+          },
+          "label": "临界方向的充要条件",
+          "family": "b-proof",
+          "producer_role": "B",
+          "producer_source": "artifacts",
+          "producer_instance": "",
+          "producer_actor": "B",
+          "instance_source": "",
+          "producer_checked": true,
+          "registered_at": "2026-11-25T00:05:23+08:00",
+          "why": ""
+        }
+      ]
+    },
+    "woke_turns": 1,
+    "skip_calls": 1,
+    "woke_reasons": [
+      "event"
+    ]
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [],
+  "summons": [
+    "V"
+  ],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [
+    {
+      "kind": "summon",
+      "counted": true,
+      "task_id": "t-000254",
+      "role": "V",
+      "step": 21,
+      "status": "done",
+      "outcome": "ok",
+      "handoff_id": "",
+      "outputs": [
+        "t-000254",
+        "proof-000005",
+        "manuscripts/B/b-proof-000005.md",
+        "verifications/000112.json"
+      ],
+      "disposition": ""
+    }
+  ],
+  "summons_total": 1,
+  "summons_consumed": 1,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 1,
+    "summons_consumed": 1,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [
+      {
+        "kind": "summon",
+        "counted": true,
+        "task_id": "t-000254",
+        "role": "V",
+        "step": 21,
+        "status": "done",
+        "outcome": "ok",
+        "handoff_id": "",
+        "outputs": [
+          "t-000254",
+          "proof-000005",
+          "manuscripts/B/b-proof-000005.md",
+          "verifications/000112.json"
+        ],
+        "disposition": "consumed",
+        "evidence": {
+          "step": 23,
+          "shape": "final",
+          "effect": "收工结论里的具体产物指涉",
+          "refs": [
+            "proof-000005",
+            "manuscripts/B/b-proof-000005.md",
+            "verifications/000112.json"
+          ]
+        }
+      }
+    ],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p328",
+    "role": "B",
+    "prompt_sha256": "3b2cc9b3ca436e61701bb141d29affa3e3b7492fbf794c03e312fd08f32eb93c",
+    "prompt_chars": 81606,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "TOOL_29",
+      "TOOL_30",
+      "TOOL_31",
+      "TOOL_32",
+      "TOOL_33",
+      "TOOL_34",
+      "TOOL_35",
+      "TOOL_36",
+      "TOOL_37",
+      "TOOL_38",
+      "TOOL_39",
+      "TOOL_40",
+      "TOOL_41",
+      "TOOL_42",
+      "TOOL_43",
+      "TOOL_44",
+      "TOOL_45",
+      "TOOL_46",
+      "TOOL_47",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_LIMITS",
+      "COLLAB_NAMES",
+      "PARENT_STOP",
+      "PARENT_ROSTER",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 23,
+    "tokens_in": 1838435,
+    "tokens_out": 38577,
+    "usd": 0.037444,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 22,
+    "no_request_calls": 0,
+    "hit": 1778688,
+    "miss": 59530,
+    "unknown_calls": 0,
+    "tokens_in": 1838218,
+    "hit_rate": 0.9676,
+    "mismatched_calls": 0,
+    "saved_usd": 0.261468,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 390.282,
+  "end_ts": "2026-11-25T00:08:27+08:00",
+  "notes": [
+    "收工没有可用 notify 表（notify.refs 里的 'verifications/000112.jsonl#v-000001' 立不住：引用的前序手稿 'verifications/000112.jsonl#v-000001' 不在盘上 ⇒ 不许凭空引用（溯源链断了））⇒ 这一趟没有交接手稿（不打回、不代填）",
+    "收工时名下还有 1 条证明没有 V 的签字（读数，不拦收工；明细：000112）",
+    "缓存读数：命中 1778688 / 未命中 59530 token，命中率 96.8%（22 次调用）；按 modelcost 口径估算可省 约 0.261468 美元",
+    "子产出处理读数：summons_total=1，consumed=1，waived=0，unknown=0，unconsumed=0",
+    "终态回报已落板：t-000259（框架通报；模型没填 notify）"
+  ],
+  "final_payload": {
+    "final": "【收编 lit:000003（Ambrus《Critical central sections of the cube》，arXiv:2107.14778v3）的结论】\n\n先说清一件事：literature 行在此之前已经是 processed=true，但 statements 与此前对该文献的关系行里只有 1 条旧关系（rel:000018，quote 已逐字核过 / p.1），因此这一趟是「补录」而不是「重洗」。\n\n一、本趟落成的行（全部由我这一趟现写）\n1) 概念行 2 条：\n- stmt:000111「临界方向（critical direction）与临界中心超平面截面」——kind=concept，origin=external_lit，出处 p.2；正文是消化过的完整句（含 Q_n、S^{n−1}、S_k 的定义）。quote_verified=null，quote_reason 里写明「定义原句已逐字摘出，逐字回验落在关系行上」。\n- stmt:000113「k-对角方向与对角截面（k-diagonal directions / diagonal sections）」——kind=concept，出处 p.2；这一条的 citation_fit 判成 mismatch（正文实词与题名没有交集），这是如实读数，不是通过；下游引用它时请改用逐字核过的 rel:000077–000080 当凭据，或把它正文里的题名级主题词补上。\n2) 命题行 1 条：\n- stmt:000112「临界方向的充要条件」（即原文 Theorem 1）——origin=external_lit，出处 p.2，秘书判形态合规、kind 自动抬到 theorem，档位 T3；proof_text 是 p.4 起的证明开头逐字摘录，框架同时落成了 manuscripts/B/b-proof-000005.md。\n3) 关系行 4 条（quote 全部逐字取自 library/000003.txt，由写口当场把区间算实，quote_verified 全为 true）：\n- rel:000077 临界方向 ↔ central hyperplane sections（000111|000018），p.2，区间 p2:norm[1527:1820]；\n- rel:000078 临界方向 ↔ 主对角线（000111|000015），Theorem 1 的「当且仅当平行于某二维面主对角线」那一支，p.2，p2:norm[2499:2744]；\n- rel:000079 极大中心超平面截面 ↔ 主对角线（000011|000015），Ball [B86] 那句，p.1，p1:norm[1550:1688]；\n- rel:000080 k-对角方向 ↔ 主对角线（000113|000015），§1 术语定义那句，p.2，p2:norm[208:440]。\n合计：概念 2 行、命题 1 行、关系 4 行（加上此前已有的 rel:000018，lit:000003 名下现有关系 5 行，全部 quote_verified=true）。\n\n二、卡点（逐条点名，不掩饰）\n- stmt:000112 的证明手稿 b-proof-000005.md 被判「有毛病」：V 已经落台账 verifications/000112.jsonl#v-000001，defect_step=3，三条 findings 分别是：(a) 稿里的正文只到 (2.10) 就断了，既没有从 (2.10) 推出 µ 型等式或二维面主对角线情形，也完全没有证明反向，而定理两端都需要证明；(b) (2.8) 与积分号下求导的合法性在稿内没有陈述、## 依赖 段为空 ⇒ 无依据步骤；(c) 导数公式只对 a_k≠0 给出，a_k=0 的坐标没有处理。根因在我这一侧：我把 Theorem 1 证明的「开头两段」当成 proof_text 交了，没有把 §2–3 的完整论证摘完。这不是 V 判错了，是我交得不全。\n- 处置：要修法只能重摘 §2–3 的完整证明→重落 b-proof-000005→重送 V（版面义务 t-000256 届时自动收口），或在确实做不下去时明确放弃 stmt:000112。这一趟没做完这一步（本回合是监控回合，只许补派或收口；且剩余预算不足以再走「读全证明→落稿→送审→等签」一轮）。下一趟接手的人请从这里开始。\n- 第二阶段：stmt:000112 的证明是文献侧第一遍机械摘录（quote_carrier=first，V 签位按文献编号占位，不欠真签）；它尚未进「洗稿→重拿签→精准替换」那一轮 —— 本轮没有跑 run_once，所以没有 stage_two 读数，我不把它报成已洗…（落档截断，原 2238 字）",
+    "evidence": [
+      "lit:000003",
+      "stmt:000111",
+      "stmt:000112",
+      "stmt:000113",
+      "rel:000018",
+      "rel:000077",
+      "rel:000078",
+      "rel:000079",
+      "rel:000080",
+      "manuscripts/B/b-proof-000005.md",
+      "verifications/000112.jsonl#v-000001"
+    ],
+    "notify": {
+      "to": "t-000252",
+      "summary": "lit:000003 收编回执：概念 2 行 / 命题 1 行（Theorem 1）/ 关系新增 4 条且逐字核过；Theorem 1 的证明稿被 V 判「有毛病」，卡在只摘了证明开头。",
+      "body": "## 这一趟做了什么\n\n收编 lit:000003（Ambrus《Critical central sections of the cube》）——它此前已 processed=true，但名下只有 1 条关系（rel:000018）、没有命题。本趟补录：\n\n- **概念 2 行**：stmt:000111 临界方向（critical direction，p.2）、stmt:000113 k-对角方向/对角截面（p.2）。\n- **命题 1 行**：stmt:000112「临界方向的充要条件」= 原文 Theorem 1（p.2），kind 自动抬到 theorem，档位 T3；框架落稿 manuscripts/B/b-proof-000005.md。\n- **关系 4 行**（quote 逐字取自 library/000003.txt，写口当场算实区间，quote_verified 全 true）：rel:000077（临界方向↔中心超平面截面，p2:norm[1527:1820]）、rel:000078（临界方向↔主对角线，p2:norm[2499:2744]）、rel:000079（极大截面↔主对角线 Ball[B86]，p1:norm[1550:1688]）、rel:000080（k-对角方向↔主对角线，p2:norm[208:440]）。\n\n计数：概念 2 行 / 命题 1 行 / 关系新增 4 条（该文献名下共 5 条，全部 quote_verified=true）。\n\n## 我卡在哪（请下一趟从这里接手）\n\n1. **b-proof-000005.md 被 V 判「有毛病」**（verifications/000112.jsonl#v-000001，defect_step=3）：我交进去的 proof_text 只是 Theorem 1 证明的**开头两段**（到 (2.10) 为止），既没推出 µ 型等式 / 二维面主对角线情形，也没证反向；(2.8) 与积分号下求导的合法性没在本稿里陈述，## 依赖 段为空；a_k=0 的坐标没处理。根因是我摘得不全，不是 V 判错。\n2. **修法**：把 §2–3 的完整证明逐字摘全 → 重落 b-proof-000005 → 重送 V（`verify_proof`，statement_id=000112、proof_manuscript=manuscripts/B/b-proof-000005.md）。版面上的义务项 t-000256 会在出现干净「成立」行时自动收口。若确实做不下去，就明确放弃 stmt:000112（`table.update` status=abandoned + 放弃标记）。本趟没做完这一步（监控回合只许补派或收口，且预算不够再走一轮读全→落稿→送审→等签）。\n3. **stmt:000113 的 citation_fit = mismatch**（正文实词与题名无交集）：下游引它时请改引逐字核过的 rel:000077–000080，或补上题名级主题词。\n4. **第二阶段**：stmt:000112 的证明属于文献侧第一遍机械摘录（quote_carrier=first，V 签位用文献编号占位，不欠真签），尚未进 洗稿→重签→精准替换 那一轮；本轮没跑 run_once，所以没有 stage_two 读数，我不把它报成已洗。\n",
+      "refs": [
+        "lit:000003",
+        "stmt:000111",
+        "stmt:000112",
+        "stmt:000113",
+        "rel:000077",
+        "rel:000078",
+        "rel:000079",
+        "rel:000080",
+        "verifications/000112.jsonl#v-000001"
+      ]
+    }
+  },
+  "task_id": "t-000253"
+}

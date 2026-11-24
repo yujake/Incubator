@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T21:58:42+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 4004,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"11 篇逐篇处置（回执）：消化 1 篇、未消化 10 篇，卡点是抽取配额（不是缺正文）。\\n\\n【已消化】lit:000014《The geometry of Minkowski spaces: a survey, part I》：30 条概念（stmt 000043–000072，page_range p.35–36，概念行按抽取口径 quote_verified=null）+ 25 条关系（rel 000021–000045，quote_verified 全 true，page_range p.35–43）。注意：这是 own.run_once 的机械抽取产出，且被概念配额截断——本轮受控拒绝 56 条概念（Self-circumference / rotors / convex sets / Mixed areas / difference body / girth / spheres / orthogonality / proportional norms / metric betweenness / triangle orthocenters / Minkowski planes 等逐条在回执里点名）、relations_deferred 12 条；所以这一篇不是「抽全了」，是「配额用尽处停下的那一版」。\\n\\n【被标已消化但零产出，已改回】lit:000015《Szarek and Ball made simple》：第 2 次 run_once 把它标成 processed=true，但 concepts_created=0、relations_added=0（concepts_reused=9，concepts_refused=173，relations_deferred=35）⇒ 我已 table.update 把 processed 改回 false，不让「已消化」这句话盖住零行。\\n\\n【未消化 9 篇】lit:000016、000020、000021、000022（这四篇是 A 点名的优先项）、lit:000017、000018、000019、000023、000024：第 3 次 run_once 仍是 0 概念 0 关系（concepts_refused=117→173，relations_deferred=35）。读数说明概念配额 30 条是**累计于这一趟抽取会话**的：写完 lit:000014 的 30 条之后，后续任何一篇都写不进新概念，关系跟着被 deferred。已连三次同形同结论（第 1 次 30 概念/25 关系、第 2、3 次 0/0），按纪律不再重试同一调用。缺正文这一路可以排除：11 篇的 download 全是 status=ok / fulltext=ok（候选期已抽读字数：000014 122719、000015 41754、000016 46184、000017 32001、000018 25800、000019 369088、000020 7616、000021 45025、000022 57732、000023 373415、000024 199643 字），所以没有一篇是「没有可读正文」，卡在抽取配额与预算。\\n\\n【二阶段·逐个优化】欠账 1 份：stmt:000030 的 #p2（全表 4/5 份已洗）。经过：① V 判 manuscripts/B/b-proof-000003.md「有毛病」（手稿 000027，defect_step=1：稿内命题挂的是 stmt:000042 的字面 + 三处残留序数；数学正文未查出缺陷；此前 000024/000025 也判有毛病），那一份已签（sha 43f4c2ab…）、fs.delete 被 manuscript_frozen 拒，属只读；② 我按正确的源稿 manuscripts/F/f-proof-000003.md（path 2 在册稿，正文 sha 3f9c71fc…，V 签成立）用 open_polish_copy 新开副本 manuscripts/B/b-proof-000004.md（清签成功，cleared=1）；③ 洗稿的落稿被拒两次：own.land_manuscript 先因未声明键 reason 被参数门拒，再因 if_match_sha256=3f9c71fc… 与实际目标正文不符被判 stale_target ⇒ **洗后的正文没有落盘**，b-proof-000004.md 现在仍是 F 正文的逐字副本、无 V 签，不能当洗稿，也不能收录。结论：stmt:000030 #p2 仍算未洗，卡在「副本落稿被 stal",
+ "payload_sha256": "f70d66f166f88a598ca2156bb14680c3fa346be4c53a5b01bf8947c0e3b2a690",
+ "readings": {},
+ "role": "B",
+ "status": "done",
+ "task_id": "t-000188"
+}

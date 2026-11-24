@@ -1,0 +1,2823 @@
+{
+  "role": "D",
+  "task": "D：这一趟派给你的活是 —— 这是收工门最后一格（acceptance 的 R6 = plan_progress_rows 记 unknown），你上一轮（t-000227）得出的结论是「F 的两条写口都改不动那一格」。本轮换两个具体做法，仍然只让 F 去改它自己名下的 `attack_plans`（那是它的产出面，不是框架账本区）：(1) 首选：让 F 用 `table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 的完整数组>})` —— 你自己先把 `data/attack_plans.json` 里 plan 000002 的 `history` 逐字读出来，只把第 2 条（`round=2`，`manuscript_path=manuscripts/F/f-proof-000003.md`，`proof_sha256=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db`）里的 `\"statement_id\": \"000030\"` 改成 `\"000042\"`，并在该条加一句 `\"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"`，其余字段与其余轮次一个字节不动，整份数组原样回写（这是 F 对自己产出的更正，不是改别人台账）。(2) 若 (1) 仍被拒，让 F 用它的 `step` 追加一条 `round=3` 的新 history，`statement_id` 只填 `000042`、`cites` 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」。回执必须给三样逐字读数：① 改后 `fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\")` 在 `data/attack_plans.json` 的全部命中行（行号 + 内容）；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 若两条都做不到，逐条贴拒信原文（拒码 + 那句话），不要自己下结论说「做不到」就停。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "attack_plans",
+          "id": "000002"
+        },
+        "why": "先逐字读出 plan 000002 的 history，取第 2 条原文，供 F 原样回写"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "plan_id": "000002",
+          "problem": "把 B_p^3 中心截面最大方向分段结构里最后一环（体对角向 A_diag 与面对角向 A_face 的比较大 p 段）拼成可判定的四段叙述：(1) 证明 Δ:=A_face−A_diag 在 p=1 为正、p=2 为零、p→∞ 极限为 4√2−3√3>0（从而存在 P0 使 p≥P0 时 A_face>A_diag）、且 Δ 在 [1,∞) 上连续；(2) 把 p<2 / p=2 / 2<p<p* / p>p* 四段逐条落到在册 stmt 号或 exp 号，未证部分明确标 strong_conjecture；(3) 把证明稿交父 D 携带给 B 收录，并把缺的那条引理写成一句话。引依赖只许用 pre_theorem 级的 stmt:000034、stmt:000035（A_diag 的极坐标/闭式与本稿自足的极限推导），数值段只引 exp:000016/exp:000023。",
+          "problem_key": "lp3-diag-vs-face-narrative",
+          "for_question_id": null,
+          "status": "abandoned",
+          "rounds": 2,
+          "budget": {
+            "max_rounds": 3,
+            "max_parallel_subgoals": 3,
+            "max_persist_attempts": 3,
+            "max_depth": 1
+          },
+          "subgoals": [
+            {
+              "sid": "n1",
+              "text": "证明四段叙述的严格骨架：(i) Δ(2)=A_face(2)−A_diag(2)=0 且两者都等于 π；(ii) Δ(1)=√2−3√3/4>0（因 4√2>3√3 ⟺ 32>27）；(iii) lim_{p→∞}A_face=4√2、lim_{p→∞}A_diag=3√3，故 lim Δ=4√2−3√3>0，从而存在 P0 使 p≥P0 时 A_face(p)>A_diag(p)；(iv) Δ 在 [1,∞) 上连续。证法：A_face 用 stmt:000034 的闭式 2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p) 直接算；A_diag 用 stmt:000034(i) 的极坐标表示 + √3 面积因子 + 控制收敛（g^{-2/p} 单调夹在 3^{-2/p}m^{-2} 与 m^{-2} 之间，m=max(|cosθ|,|sinθ|,|cosθ+sinθ|)，∫m^{-2}=6）。",
+              "owner": "F",
+              "status": "blocked",
+              "evidence_ids": [],
+              "experiment_ids": [],
+              "proof_experiment_ids": [],
+              "blocked_reason": "这一份已经拿签（签 sha=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db），只读；要改就开 B 的优化副本（`B.open_polish_copy(statement_id=…)` → 复制成新的 B 号稿 → 改正文 → 重新送 V）",
+              "attempts": 1,
+              "negation_kind": null,
+              "testable": "V 对 manuscripts/F/f-proof-<新稿号>.md 判「成立」且 findings 为空；数值侧由 exp:000014/exp:000015 在 p∈{1,2,3,5,10,100} 上复核到 1e-12 相对差。",
+              "in_flight": false,
+              "tried_strategies": [
+                "极值与双重计数"
+              ]
+            },
+            {
+              "sid": "n2",
+              "text": "把四段叙述写成可判形式：p<2 段（坐标向最大）指 stmt:000034 的 1≤p<2 条款与 stmt:000035(ii)；p=2 段指 stmt:000034(iv) 的 A_2(n)=π；2<p<p* 段与 p>p* 段以 Δ 的唯一内部零点 p*=4.998215596840938（夹逼宽 <1e-9）为界，其中 p≥P0 与 p=1、p=2 三处是定理级，其余标 strong_conjecture 并点 exp:000016/exp:000023。",
+              "owner": "F",
+              "status": "todo",
+              "evidence_ids": [],
+              "experiment_ids": [],
+              "proof_experiment_ids": [],
+              "blocked_reason": "",
+              "attempts": 0,
+              "negation_kind": null,
+              "testable": "四段里每一条不等号都能指到一个在册 stmt 号或一个 exp 号；没有一条「无落点」的断言。"
+            },
+            {
+              "sid": "n3",
+              "text": "把 n1 的签稿交父 D（F→D，不直接派 B），由 D 携带给 B 按正文 sha 收录；同时把缺口写成一句话交给 D：缺的是「ρ=A_face/A_diag 在 (2,∞) 上先降后升（单谷）」这一条引理，或等价地「Δ 在 (2,P0) 上存在一个严格负值见证」。",
+              "owner": "D",
+              "status": "todo",
+              "evidence_ids": [],
+              "experiment_ids": [],
+              "proof_experiment_ids": [],
+              "blocked_reason": "",
+              "attempts": 0,
+              "negation_kind": null,
+              "testable": "D 的回执点名收录结果（新 stmt 号）或明确说未收录；缺口那句话在交接正文里逐字可查。"
+            }
+          ],
+          "history": [
+            {
+              "round": 1,
+              "sid": "n1",
+              "action": "proof",
+              "outcome": "progress",
+              "detail": "论证（极值与双重计数）：11 步；这一轮是论证不是机器核验 ⇒ 子目标不关闭（FC-22）；手稿登记：`manuscripts/F/f-proof-000003.md`（一稿一份，正文 sha 3f9c71fc243d…）；这一条还没有 statements 行 —— 等 B 在 V 签之后收录（既有认领路径）；登记那一刻手上的稿：`manuscript_source=param`、4138 字、依赖段 1 行、正文引用 1 条；V 签：待签（这一份正文还没有一份能算数的签（state=unsigned）：这一版（3f9c71fc243d…）没有任何台账行 ⇒ 一次都没送过 V（真的没审） ⇒ 派 V 审这一份、拿到签才算交差） —— 没签 ⇒ 这一趟不算交差；下一步：派 V 审这一份（`framework_summon` 形状：`role=\"V\"`，`task` 写清「审这一份证明稿 manuscripts/F/f-proof-000003.md」与要审什么）—— 拿到 V 签才算交差；派不出去（深度 / 边）就照实写进回报；秘书洗稿（secretary-F）：依赖面本来就合规（未改动） —— 交出去的是这一份；台账 `work/F/attack-000002.md`；交差（逐条）：已签 0/1（待签 1 条、未签 0 条） —— 不是「有一条签了」就算交差；还没签的成果（逐条）：mss:000003（手稿 manuscripts/F/f-proof-000003.md）[待签（还没 V 签，不算证明）] 共 1 条；怎么办由你定（举例：换一条证明路线重做那一步、把这条命题拆成几条更弱的引理、去补原证明里缺的工具/引理、减弱自己的断言（定理→条件性结论/猜想）），并把选择与理由写进 self_assessment.next_move / why。这一轮用的是你通过 `attack.step(product=…)` 交进来的那一份（label=F 攻坚 000002：Δ=A_face−A_diag 的连续性与两端符号（p=2 相等、p→∞ 为正，进而尾段 A_face>A_diag））",
+              "evidence": [],
+              "at": "2026-11-24T20:51:08+08:00",
+              "product_detail": {
+                "product": "proof",
+                "label": "F 攻坚 000002：Δ=A_face−A_diag 的连续性与两端符号（p=2 相等、p→∞ 为正，进而尾段 A_face>A_diag）",
+                "strategy": "极值与双重计数",
+                "why_strategy": "把 A_diag 化成单参数积分后用有界收敛定理取两端极限，与 A_face 的 Γ-闭式逐点相减，行为完全由端点与连续性定下",
+                "self_assessment": {
+                  "comprehensive": "partial",
+                  "enough_output": "some_output",
+                  "partial_output": "partial_output",
+                  "next_move": "拿到这一份的 V 签后：把 2<p<p* 的中间负区间如实标成 strong_conjecture（exp:000016 p*≈4.9982、exp:000023 ρ 极小 0.98856@3.024 后升向 1.0887，两者合起来给「两端为正、中间有一段为负」的数值图景），并把两份签稿（f-proof-000002 s1 + 本份）一起交父 D 携带给 B 收录；仍缺的引理一句话：A_p((1,1,t)/√(2+t²)) 对 t∈[0,1] 的单调性（等价 A_face(p) ≥ A_diag(p) 对一切 p>2）没有证明。",
+                  "why": "这一段（连续 + p=1/2/∞ 三点符号 + 尾部存在 P0）是本趟唯一能严格闭合的比较结论，其余段落只能作数值级旁证；先把它做成签稿，比把「两零点」写成定理干净。"
+                },
+                "proposition": "设 1 ≤ p < ∞，B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积，并记 A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。则：(i) A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，且 A_diag(2) = π、A_diag(1) = 3√3/4、lim_{p→∞}A_diag(p) = 3√3；(ii) A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，且 A_face(2) = π、A_face(1) = √2、lim_{p→∞}A_face(p) = 4√2；(iii) Δ 在 [1,∞) 上连续，Δ(2) = 0，Δ(1) = √2 − 3√3/4 > 0，lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0，因而存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 A_face(p) > A_diag(p)。",
+                "steps": [
+                  {
+                    "n": 1,
+                    "text": "【前提】固定 1 ≤ p < ∞；B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。（前提）",
+                    "cites": [],
+                    "assumption": true,
+                    "role": "前提步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 2,
+                    "text": "【推导】由 stmt:000034 的 (i)，对每个单位法向 n 与 n^⊥ 的任意单位正交基 (u,v) 有 A_p(n) = (1/2)∫_0^{2π}‖cosθ·u+sinθ·v‖_p^{-2}dθ。取 n = (1,1,1)/√3、u = (1,-1,0)/√2、v = (1,1,-2)/√6（直接验算 ‖u‖=‖v‖=1、u·v=0、u·n=v·n=0，故 {u,v} 是 H := {x+y+z=0} 的单位正交基）；另一路参数化 Φ(x,y) := (x,y,−x−y) 是 R²→H 的双射，∂_xΦ=(1,0,−1) 与 ∂_yΦ=(0,1,−1) 的叉积为 (1,1,1)、模为 √3，故 A_diag(p) = √3∫∫_D dxdy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。",
+                    "cites": [
+                      "stmt:000034"
+                    ],
+                    "assumption": false,
+                    "role": "推导步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 3,
+                    "text": "【推导】对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)（r ≥ 0、θ ∈ [0,2π)）：由 |r cosθ|^p+|r sinθ|^p+|r(cosθ+sinθ)|^p = r^p g(θ)（记 g(θ) := |cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p）得 (x,y) ∈ D ⟺ r ≤ g(θ)^{-1/p}；由面积元 r dr dθ 得 ∫∫_D = ∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ，与第 2 步合并即 A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，这给出 (i) 的积分式。",
+                    "cites": [
+                      "stmt:000034"
+                    ],
+                    "assumption": false,
+                    "role": "推导步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 4,
+                    "text": "【推导】一致控制：g ≥ max(|cosθ|,|sinθ|)^p ≥ (1/√2)^p（因为 max(|cosθ|,|sinθ|) ≥ 1/√2），故对一切 p ∈ [1,∞) 与一切 θ 有 0 < g(θ)^{-2/p} ≤ (1/√2)^{-2} = 2；又 (p,θ) ↦ g(θ) 连续且在每个局部 p-区间上 g 有与 p 无关的正下界，故 θ ↦ g(θ)^{-2/p} 关于 p 逐点连续。",
+                    "cites": [
+                      "stmt:000034"
+                    ],
+                    "assumption": false,
+                    "role": "推导步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 5,
+                    "text": "【推导】p = 2 时 g(θ) = cos²θ+sin²θ+(cosθ+sinθ)² = 2+sin2θ；代换 u = 2θ 后用 ∫_0^{2π}du/(a+b sin u) = 2π/√(a²−b²)（取 a=2、b=1）得 ∫_0^{2π} dθ/(2+sin2θ) = ∫_0^{2π} du/(2+sin u) = 2π/√3，此处 p=2 使 g^{-2/p} 化为 g^{-1}，故 A_diag(2) = (√3/2)·(2π/√3) = π。",
+                    "cites": [
+                      "stmt:000034"
+                    ],
+                    "assumption": false,
+                    "role": "推导步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 6,
+                    "text": "【推导】由 stmt:000034 的 (ii)(iii)(iv) 的闭式 A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，在 p = 2 处得 A_face(2) = 2^0·4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π；与第 5 步合并得 Δ(2) = π − π = 0。",
+                    "cites": [
+                      "stmt:000034"
+                    ],
+                    "assumption": false,
+                    "role": "推导步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 7,
+                    "text": "【推导】Δ(1) 的计算：A_face(1) = 2^{-1/2}·4Γ(2)²/Γ(3) = 2^{-1/2}·4·1/2 = √2（Γ(2)=1、Γ(3)=2）；A_diag(1)：p = 1 时 g = |cosθ|+|sinθ|+|cosθ+sinθ| 满足 g(θ+π) = g(θ)，且在 [0,π/2] 上 g = 2(cosθ+sinθ)（故 g^{-2} = (1/4)(cosθ+sinθ)^{-2}）、在 [π/2,3π/4] 上 g = 2sinθ（g^{-2} = (1/4)sin^{-2}θ）、在 [3π/4,π] 上 g = −2cosθ（g^{-2} = (1/4)cos^{-2}θ）；三段对 ∫g^{-2} 的贡献各为 1/4（分别用 ∫_0^{π/2}dθ/(cosθ+sinθ)² = 1、[−cotθ] 与 [tanθ] 在两个端点区间上的取值各得 1），故 ∫_0^{2π}g^{-2}dθ = 2·(1/4+1/4+1/4) = 3/2，A_diag(1) = (√3/2)·(3/2) = 3√3/4；于是 Δ(1) = √2 − 3√3/4 > 0，因为 4√2 > 3√3 ⟺ 32 > 27。",
+                    "cites": [
+                      "stmt:000034"
+                    ],
+                    "assumption": false,
+                    "role": "推导步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 8,
+                    "text": "【推导】Δ 的连续性：Γ 在 (0,∞) 上连续且取正值，p ↦ 1/p、1+1/p、1+2/p 在 [1,∞) 上连续，故 A_face 在 [1,∞) 上连续；由第 4 步与 p 无关的控制 g^{-2/p} ≤ 2 与逐点连续性，有界收敛定理给出 p ↦ ∫_0^{2π}g(θ)^{-2/p}dθ 在 [1,∞) 上连续，故 A_diag 连续；两者相减得 Δ 在 [1,∞) 上连续。",
+                    "cites": [
+                      "stmt:000034"
+                    ],
+                    "assumption": false,
+                    "role": "推导步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 9,
+                    "text": "【推导】p→∞ 时 A_diag 的极限：记 m(θ) := max(|cosθ|,|sinθ|,|cosθ+sinθ|)，则 m(θ)^p ≤ g(θ) ≤ 3m(θ)^p，故对每个 θ 有 g(θ)^{-2/p} → m(θ)^{-2}；又 g ≥ m^p 给出 g^{-2/p} ≤ m^{-2} ≤ 2（因 m ≥ 1/√2），有界收敛定理给出 A_diag(p) → (√3/2)∫_0^{2π}m(θ)^{-2}dθ。按符号分段：在 [0,π/2] 上 m = cosθ+sinθ、在 [π/2,3π/4] 上 m = sinθ、在 [3π/4,π] 上 m = −cosθ，且 m(θ+π) = m(θ)，三段各贡献 1（同上一步的三段积分），故 ∫_0^{2π}m^{-2}dθ = 2·3 = 6，于是 lim_{p→∞}A_diag(p) = (√3/2)·6 = 3√3。",
+                    "cites": [
+                      "stmt:000034"
+                    ],
+                    "assumption": false,
+                    "role": "推导步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 10,
+                    "text": "【推导】p→∞ 时 A_face 的极限：C_p := 4Γ(1+1/p)²/Γ(1+2/p) → 4Γ(1)²/Γ(1) = 4（Γ 连续、Γ(1)=1），又 2^{1/2−1/p} → √2，故 A_face(p) → 4√2；与第 9 步合并得 lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0（同样由 32 > 27）。",
+                    "cites": [
+                      "stmt:000034"
+                    ],
+                    "assumption": false,
+                    "role": "推导步",
+                    "problem": ""
+                  },
+                  {
+                    "n": 11,
+                    "text": "【推导】收尾：记 L := 4√2 − 3√3 > 0；由第 8 步 Δ 的连续性与第 10 步 lim Δ = L，取 ε := L/2 > 0，则存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 |Δ(p) − L| < ε，从而 Δ(p) > L/2 > 0，即 A_face(p) > A_diag(p) 对一切 p ≥ P0 成立，这给出 (iii) 的最后一句。",
+                    "cites": [
+                      "stmt:000034"
+                    ],
+                    "assumption": false,
+                    "role": "推导步",
+                    "problem": ""
+                  }
+                ],
+                "problems": []
+              },
+              "product": "proof",
+              "strategy": "极值与双重计数",
+              "best_partial": [],
+              "v_sign": {
+                "state": "waiting",
+                "label": "待签",
+                "delivered": false,
+                "channel": "",
+                "ledger": "",
+                "submitted": false,
+                "skipped": false,
+                "why": "这一份正文还没有一份能算数的签（state=unsigned）：这一版（3f9c71fc243d…）没有任何台账行 ⇒ 一次都没送过 V（真的没审） ⇒ 派 V 审这一份、拿到签才算交差"
+              },
+              "delivery": {
+                "checked": true,
+                "total": 1,
+                "signed_count": 0,
+                "pending_count": 1,
+                "unsigned_count": 0,
+                "proof_count": 0,
+                "abandoned_count": 0,
+                "unfinished_count": 1,
+                "coverage": "0/1",
+                "state": "outputs_unsigned",
+                "legal_stop": false,
+                "delivered": false
+              },
+              "delivered": false,
+              "self_assessment": {
+                "comprehensive": "partial",
+                "enough_output": "some_output",
+                "partial_output": "partial_output",
+                "next_move": "拿到这一份的 V 签后：把 2<p<p* 的中间负区间如实标成 strong_conjecture（exp:000016 p*≈4.9982、exp:000023 ρ 极小 0.98856@3.024 后升向 1.0887，两者合起来给「两端为正、中间有一段为负」的数值图景），并把两份签稿（f-proof-000002 s1 + 本份）一起交父 D 携带给 B 收录；仍缺的引理一句话：A_p((1,1,t)/√(2+t²)) 对 t∈[0,1] 的单调性（等价 A_face(p) ≥ A_diag(p) 对一切 p>2）没有证明。",
+                "why": "这一段（连续 + p=1/2/∞ 三点符号 + 尾部存在 P0）是本趟唯一能严格闭合的比较结论，其余段落只能作数值级旁证；先把它做成签稿，比把「两零点」写成定理干净。"
+              },
+              "report_path": "work/F/attack-000002.md",
+              "proof_mode": "registered",
+              "proof_registered": true,
+              "proof_rewritten": false,
+              "proof_sha256": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+              "proof_label": "F 攻坚 000002 子目标 n1",
+              "proof_section_hashes": {
+                "## 命题": "da831b7b4a3dc1a603c2df16234b02d42fd9d3d56471081b702d31adc9ea8c7e",
+                "## 证明": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+                "## 依赖": "9134a9bc71260b8e23447b38e5461aa7c89616263c59e365b9615adee70545ea"
+              },
+              "manuscript_migrated": false,
+              "manuscript_path": "manuscripts/F/f-proof-000003.md",
+              "manuscript_id": "000003",
+              "manuscript_id_source": "given"
+            },
+            {
+              "round": 2,
+              "sid": "n1",
+              "action": "no_change",
+              "outcome": "no_change",
+              "detail": "这一份已经拿签（签 sha=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db），只读；要改就开 B 的优化副本（`B.open_polish_copy(statement_id=…)` → 复制成新的 B 号稿 → 改正文 → 重新送 V）；这一轮没有落稿、没有登记、没有送审；V 签：已签（out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json 复算通过：凭据 `out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json` 复算通过：3/3 转同源、每行签得住 ⇒ 这一份签了（3/3 才算签））；交差（逐条）：已签 1/1（待签 0 条、未签 0 条）。这一轮用的是你通过 `attack.step(product=…)` 交进来的那一份（label=F 攻坚 000002 子目标 n1（按 V 的 v-review 三处稿面 finding 定点改：第 2 步只用 Φ、第 4 步改成 (p,θ) 联合连续、第 5 步补 dθ=du/2 与两周期折算及 |b|<a））",
+              "evidence": [],
+              "at": "2026-11-24T21:01:11+08:00",
+              "statement_id": "000030",
+              "v_sign": {
+                "state": "signed",
+                "label": "已签",
+                "delivered": true,
+                "channel": "pending",
+                "ledger": "out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json",
+                "submitted": false,
+                "skipped": false,
+                "why": "out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json 复算通过：凭据 `out/vsigns/3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db.json` 复算通过：3/3 转同源、每行签得住 ⇒ 这一份签了（3/3 才算签）"
+              },
+              "delivery": {
+                "checked": true,
+                "total": 1,
+                "signed_count": 1,
+                "pending_count": 0,
+                "unsigned_count": 0,
+                "proof_count": 1,
+                "abandoned_count": 0,
+                "unfinished_count": 0,
+                "coverage": "1/1",
+                "state": "signed_all",
+                "legal_stop": true,
+                "delivered": true
+              },
+              "delivered": true,
+              "refusal": {
+                "kind": "manuscript_frozen",
+                "problems": [
+                  "这一份已经拿签（签 sha=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db），只读；要改就开 B 的优化副本（`B.open_polish_copy(statement_id=…)` → 复制成新的 B 号稿 → 改正文 → 重新送 V）"
+                ],
+                "next_step": "这一份已经拿签 ⇒ 先 `B.open_polish_copy(statement_id=…)` 复制成新的 B 号稿，在副本上改",
+                "manuscript_id": "000003",
+                "manuscript_path": "manuscripts/F/f-proof-000003.md"
+              },
+              "manuscript_path": "manuscripts/F/f-proof-000003.md",
+              "manuscript_id": "000003"
+            },
+            {
+              "round": 2,
+              "sid": "",
+              "action": "abandon",
+              "abandon_kind": "不再需要",
+              "detail": "不再需要：本计划要办的事已经办到它能办到的边上：可证核心已闭环并以签稿交付 —— f-proof-000003（在册 stmt:000030）证 Δ:=A_face−A_diag 在 [1,∞) 上连续、Δ(1)=√2−3√3/4>0、Δ(2)=0、lim_{p→∞}Δ=4√2−3√3>0，从而存在尾门槛 P0 使 p≥P0 时 A_face(p)>A_diag(p)。剩下的 n2/n3（2<p<p* 一段谁大）不是可判的证明对象：E 已按只递指针口径把确定性数值入库（stmt:000036–000040：p*≈4.998215596840938、ρ=A_face/A_diag 在 p≈3.02439 取极小 0.98856 后单调升向 1.088662、Δ 在 (2,∞) 上有两个零点），这些是 strong_conjecture 级旁证，不能写成定理。这一环真正缺的是一条独立引理『对固定 p>2，A_p((1,1,t)/√(2+t²)) 在 t∈[0,1] 上严格递减』，它该另立一条新计划去攻，不在本计划名下把数值结论硬凑成证明。相关口径与缺口已由 handoff 000020 与 message m000021 交回 D。",
+              "evidence": [],
+              "at": "2026-11-24T21:01:40+08:00"
+            }
+          ],
+          "depth": 0,
+          "parent_plan_id": null,
+          "best_partial": "已进行 2 轮。子目标进展（按'离终结有多近'排序）：\n- n2（owner=F，status=todo）: 把四段叙述写成可判形式：p<2 段（坐标向最大）指 stmt:000034 的 1≤p<2 条款与 stmt:000035(ii)；p=2 段指 stmt:000034(iv) 的 A_2(n)=π；2<p<p* 段与 p>p* 段以 Δ 的唯一内部零点 p*=4.998215596840938（夹逼宽 <1e-9）为界，其中 p≥P0 与 p=1、p=2 三处是定理级，其余标 strong_conjecture 并点 exp:000016/exp:000023。\n- n3（owner=D，status=todo）: 把 n1 的签稿交父 D（F→D，不直接派 B），由 D 携带给 B 按正文 sha 收录；同时把缺口写成一句话交给 D：缺的是「ρ=A_face/A_diag 在 (2,∞) 上先降后升（单谷）」这一条引理，或等价地「Δ 在 (2,P0) 上存在一个严格负值见证」。\n- n1（owner=F，status=blocked）: 证明四段叙述的严格骨架：(i) Δ(2)=A_face(2)−A_diag(2)=0 且两者都等于 π；(ii) Δ(1)=√2−3√3/4>0（因 4√2>3√3 ⟺ 32>27）；(iii) lim_{p→∞}A_face=4√2、lim_{p→∞}A_diag=3√3，故 lim Δ=4√2−3√3>0，从而存在 P0 使 p≥P0 时 A_face(p)>A_diag(p)；(iv) Δ 在 [1,∞) 上连续。证法：A_face 用 stmt:000034 的闭式 2^{1/2-1/p}·4Γ(1+1/p)²/Γ(1+2/p) 直接算；A_diag 用 stmt:000034(i) 的极坐标表示 + √3 面积因子 + 控制收敛（g^{-2/p} 单调夹在 3^{-2/p}m^{-2} 与 m^{-2} 之间，m=max(|cosθ|,|sinθ|,|cosθ+sinθ|)，∫m^{-2}=6）。；卡点：这一份已经拿签（签 sha=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db），只读；要改就开 B 的优化副本（`B.open_polish_copy(statement_id=…)` → 复制成新的 B 号稿 → 改正文 → 重新送 V）\n**以上均为过程记录**：标了 supported_not_proved 或只有 experiment_ids 的条目都还不是证明。",
+          "created_at": "2026-11-24T20:50:13+08:00",
+          "updated_at": "2026-11-24T22:56:52+08:00",
+          "created_by": "agent-F",
+          "report_path": "work/F/attack-000002.md"
+        },
+        "error": "",
+        "meta": {
+          "table": "attack_plans",
+          "id": "000002",
+          "id_field": "plan_id",
+          "found": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 63872,
+        "prompt_cache_miss_tokens": 1978,
+        "tokens_in": 65850,
+        "tokens_out": 313,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000235"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "table.schema",
+        "args": {
+          "table": "attack_plans"
+        },
+        "why": "确认 history 这一格在 table.update 里是不是可写、字段类型是什么（字符串还是数组），给 F 准确的回写口径"
+      },
+      "result": {
+        "tool": "table.schema",
+        "ok": true,
+        "data": {
+          "tables": {
+            "attack_plans": {
+              "file": "attack_plans.json",
+              "primary_key": "plan_id",
+              "id_kind": "plan",
+              "uses_id_counter": true,
+              "fields": [
+                {
+                  "name": "plan_id",
+                  "type": "str",
+                  "required": true,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "problem",
+                  "type": "str",
+                  "required": true,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "problem_key",
+                  "type": "str",
+                  "required": true,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "for_question_id",
+                  "type": "str | null",
+                  "required": false,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "status",
+                  "type": "str",
+                  "required": false,
+                  "default": "open",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "rounds",
+                  "type": "int",
+                  "required": false,
+                  "default": 0,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "budget",
+                  "type": "dict",
+                  "required": false,
+                  "default": {},
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "subgoals",
+                  "type": "list[dict]",
+                  "required": false,
+                  "default": [],
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "history",
+                  "type": "list[dict]",
+                  "required": false,
+                  "default": [],
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "depth",
+                  "type": "int",
+                  "required": false,
+                  "default": 0,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "parent_plan_id",
+                  "type": "str | null",
+                  "required": false,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "best_partial",
+                  "type": "str",
+                  "required": false,
+                  "default": "",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "created_at",
+                  "type": "str",
+                  "required": false,
+                  "default": "",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "updated_at",
+                  "type": "str",
+                  "required": false,
+                  "default": "",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "created_by",
+                  "type": "str",
+                  "required": false,
+                  "default": "agent-F",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "report_path",
+                  "type": "str | null",
+                  "required": false,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                }
+              ],
+              "required": [
+                "plan_id",
+                "problem",
+                "problem_key"
+              ],
+              "vocabularies": {}
+            }
+          },
+          "vocabularies": {
+            "SEARCH_MODES": [
+              "broad",
+              "topical",
+              "precise"
+            ],
+            "PRIORITIES": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "LIT_TYPES": [
+              "J",
+              "M",
+              "C",
+              "D",
+              "R",
+              "S",
+              "P",
+              "N",
+              "EB",
+              "Z"
+            ],
+            "RELATION_STATUS": [
+              "active",
+              "suspect",
+              "rejected"
+            ],
+            "SEARCH_OUTCOMES": [
+              "ok",
+              "no_results",
+              "search_failed",
+              "gave_up"
+            ],
+            "DOWNLOAD_STATUSES": [
+              "ok",
+              "content_mismatch",
+              "failed",
+              "skipped"
+            ],
+            "CANDIDATE_STATUSES": [
+              "pending",
+              "withdrawn",
+              "rejected",
+              "qualified",
+              "admitted",
+              "cleared"
+            ],
+            "CANDIDATE_REASON_CODES": [
+              "withdrawn_by_reviewer",
+              "rejected_off_topic",
+              "rejected_low_quality",
+              "duplicate_doi",
+              "overlap_without_new_content",
+              "overlap_ok_false",
+              "registration_failed",
+              "over_cap",
+              "not_screened"
+            ],
+            "LIT_MATCH_STATUSES": [
+              "exact",
+              "partial",
+              "mismatch"
+            ],
+            "QUOTE_MODES": [
+              "verbatim",
+              "semantic"
+            ],
+            "REPORT_KINDS": [
+              "hottest",
+              "paths",
+              "cold",
+              "gaps",
+              "proof_chain"
+            ],
+            "QUESTION_STATUSES": [
+              "open",
+              "needs_evidence",
+              "researching",
+              "answered",
+              "dropped"
+            ],
+            "CONTRADICTION_VERDICTS": [
+              "resolved",
+              "unresolved",
+              "new_contradiction",
+              "persistent"
+            ],
+            "QUESTION_KINDS": [
+              "gap",
+              "contradiction"
+            ],
+            "CONJECTURE_STATUSES": [
+              "proposed",
+              "needs_evidence",
+              "testing",
+              "supported_not_proved",
+              "refuted",
+              "proved",
+              "promoted",
+              "known_in_literature",
+              "withdrawn"
+            ],
+            "CONJECTURE_FORMS": [
+              "universal",
+              "existential",
+              "identity",
+              "bound",
+              "structural"
+            ],
+            "CONJECTURE_QUESTION_MARKS": [
+              "?",
+              "？",
+              "是否",
+              "吗"
+            ],
+            "CONJECTURE_QUESTION_PATTERNS": [
+              "^\\s*(谁|什么|哪些|哪类|如何|怎么|为什么)",
+              "(?i)^\\s*(which|what|whether|who|whom|whose|when|where|why|how)\\b",
+              "(?i)^\\s*(is|are|does|do|can|could|should|would|will|has|have)\\b"
+            ],
+            "REPROCESS_REASONS": [
+              "quote_unverifiable",
+              "low_information",
+              "need_context",
+              "structural_duplicate"
+            ],
+            "REPROCESS_STATUSES": [
+              "pending",
+              "done",
+              "rejected"
+            ],
+            "EXPERIMENT_METHODS": [
+              "numeric",
+              "symbolic",
+              "exhaustive_search",
+              "formal"
+            ],
+            "EVIDENCE_KINDS": [
+              "proof",
+              "proof_review",
+              "cross_check",
+              "heuristic"
+            ],
+            "EXPERIMENT_EVIDENCE_KINDS": [
+              "proof",
+              "cross_check",
+              "heuristic"
+            ],
+            "EXPERIMENT_RESULTS": [
+              "supports",
+              "refutes",
+              "inconclusive"
+            ],
+            "EXPERIMENT_STATUSES": [
+              "active",
+              "voided"
+            ],
+            "VOID_REASON_CODES": [
+              "code_changed"
+            ],
+            "NEGATION_KINDS": [
+              "disproved",
+              "not_proved",
+              "not_searched_here",
+              "no_local_evidence"
+            ],
+            "ATTACK_STATUSES": [
+              "open",
+              "attacking",
+              "supported_not_proved",
+              "stalled",
+              "resolved",
+              "abandoned"
+            ],
+            "ATTACK_TERMINAL_STATUSES": [
+              "resolved",
+              "abandoned",
+              "stalled",
+              "supported_not_proved"
+            ],
+            "SUBGOAL_STATUSES": [
+              "todo",
+              "in_progress",
+              "supported_not_proved",
+              "closed",
+              "blocked",
+              "dropped"
+            ],
+            "SUBGOAL_OWNERS": [
+              "F",
+              "A",
+              "B",
+              "C",
+              "D",
+              "E",
+              "G"
+            ],
+            "DOC_KINDS": [
+              "survey",
+              "paper",
+              "note",
+              "research"
+            ],
+            "DOC_STATUSES": [
+              "draft",
+              "in_review",
+              "revised",
+              "accepted",
+              "rejected",
+              "unresolved_review"
+            ],
+            "REVIEW_VERDICTS": [
+              "",
+              "成立",
+              "有毛病"
+            ],
+            "REVIEW_LEGACY_VERDICTS": [
+              "看不出来"
+            ],
+            "DEP_KINDS": [
+              "theorem",
+              "definition",
+              "lemma",
+              "proposition",
+              "experiment",
+              "prior_art"
+            ],
+            "DEP_STATUSES": [
+              "closed",
+              "dangling",
+              "external_unavailable",
+              "refuted",
+              "disputed"
+            ],
+            "STATEMENT_ORIGINS": [
+              "external_lit",
+              "own_result"
+            ],
+            "STATEMENT_STATUSES": [
+              "active",
+              "disputed",
+              "refuted",
+              "superseded",
+              "pending_definition",
+              "abandoned"
+            ],
+            "STATEMENT_UNUSABLE_STATUSES": [
+              "disputed",
+              "refuted",
+              "superseded",
+              "pending_definition",
+              "abandoned"
+            ],
+            "STATEMENT_PROPOSITION_KINDS": [
+              "theorem",
+              "lemma",
+              "proposition",
+              "corollary",
+              "conjecture",
+              "example"
+            ],
+            "STATEMENT_NON_PROPOSITION_KINDS": [
+              "concept",
+              "definition"
+            ],
+            "STATEMENT_KINDS": [
+              "theorem",
+              "lemma",
+              "proposition",
+              "corollary",
+              "conjecture",
+              "example",
+              "concept",
+              "definition"
+            ],
+            "CLAIM_KINDS": [
+              "定义",
+              "定理",
+              "命题",
+              "引理",
+              "推论",
+              "例",
+              "注",
+              "反例"
+            ],
+            "CLAIM_STATUSES": [
+              "证",
+              "验",
+              "待精化",
+              "作废"
+            ],
+            "ALLOWED_USE_KINDS": [
+              "主结果",
+              "Remark only",
+              "移入 open"
+            ],
+            "NUMERIC_EVIDENCE_KEYS": [
+              "script",
+              "range",
+              "n_cases",
+              "n_counterexamples"
+            ],
+            "CLAIM_SOURCE_KINDS": [
+              "文献"
+            ],
+            "CLAIM_CHECK_KINDS": [
+              "证明",
+              "数值",
+              "只读了陈述"
+            ],
+            "FINDING_KINDS": [
+              "unsupported_claim",
+              "dangling_dep",
+              "overclaim",
+              "missing_negation_kind",
+              "scope_drift",
+              "garbled",
+              "inconsistent_number"
+            ],
+            "FINDING_LEVELS": [
+              "error",
+              "warning",
+              "info"
+            ],
+            "FINDING_STATUSES": [
+              "open",
+              "fixed",
+              "wontfix",
+              "disputed",
+              "superseded"
+            ],
+            "FINDING_MATHS_VALUES": [
+              "yes",
+              "no"
+            ],
+            "ROLES": [
+              "A",
+              "B",
+              "C",
+              "D",
+              "E",
+              "F",
+              "G",
+              "H",
+              "V",
+              "L"
+            ],
+            "ITEM_KINDS": [
+              "delegation",
+              "message",
+              "report",
+              "notice"
+            ],
+            "ITEM_EXPECTS": [
+              "ack",
+              "work"
+            ],
+            "ITEM_STATES": [
+              "queued",
+              "claimed",
+              "seen",
+              "done",
+              "block"
+            ],
+            "ITEM_CLOSES": [
+              "acked",
+              "completed",
+              "expired"
+            ],
+            "TASK_STATUSES": [
+              "pending",
+              "running",
+              "done",
+              "cancelled",
+              "failed",
+              "block"
+            ],
+            "TASK_OUTCOMES": [
+              "ok",
+              "no_result",
+              "not_applicable",
+              "refused",
+              "failed",
+              "cancelled",
+              "cut_off_by_parent"
+            ],
+            "CHILD_ENDINGS": [
+              "delivered",
+              "cut_off_by_parent",
+              "stopped"
+            ],
+            "FRAMEWORK_ONLY_OUTCOMES": [
+              "cut_off_by_parent"
+            ],
+            "REFUSAL_REASONS": [
+              "unknown_role",
+              "unknown_action",
+              "forbidden_edge",
+              "invalid_params",
+              "depth_exceeded",
+              "fanout_exceeded",
+              "concurrency_exceeded",
+              "budget_exceeded",
+              "deadline_exceeded",
+              "cycle_detected",
+              "not_wired"
+            ],
+            "USAGE_SCOPES": [
+              "summon",
+              "experiment",
+              "search",
+              "extract",
+              "review",
+              "reason"
+            ],
+            "EVAL_REQUIRED_FIELDS": [
+              "benchmark",
+              "benchmark_version",
+              "split",
+              "k",
+              "decontamination",
+              "date",
+              "source"
+            ]
+          }
+        },
+        "error": "",
+        "meta": {
+          "table_count": 1,
+          "vocabulary_count": 65
+        },
+        "multi_call": {
+          "turn_index": 1,
+          "call_index": 0,
+          "calls": 2,
+          "step_index": 1
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 65024,
+        "prompt_cache_miss_tokens": 4295,
+        "tokens_in": 69319,
+        "tokens_out": 1600,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000235"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.search",
+        "args": {
+          "pattern": "\"statement_id\": \"0000(30|42)\"",
+          "path": "data/attack_plans.json"
+        },
+        "why": "先取改前的基线：data/attack_plans.json 里 statement_id 现在逐字是什么、在第几行"
+      },
+      "result": {
+        "tool": "fs.search",
+        "ok": true,
+        "data": {
+          "pattern": "\"statement_id\": \"0000(30|42)\"",
+          "path": "data/attack_plans.json",
+          "matches": [
+            {
+              "path": "data/attack_plans.json",
+              "line": 2593,
+              "text": "\"statement_id\": \"000030\","
+            }
+          ],
+          "lines": [
+            "data/attack_plans.json:2593: \"statement_id\": \"000030\","
+          ],
+          "total": 1,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        },
+        "error": "",
+        "meta": {
+          "total": 1,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        },
+        "warn": "这一步给了 2 条调用，已按顺序逐条：第 1 条 table.schema 成功；第 2 条 fs.search 成功：1。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 1,
+          "call_index": 1,
+          "calls": 2,
+          "step_index": 2,
+          "summary": "这一步给了 2 条调用，已按顺序逐条：第 1 条 table.schema 成功；第 2 条 fs.search 成功：1。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 1,
+            "calls": 2,
+            "items": 2,
+            "steps": [
+              1,
+              2
+            ],
+            "executed": 2,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000235"
+    },
+    {
+      "index": 3,
+      "shape": "summon",
+      "payload": {
+        "role": "F",
+        "action": "",
+        "params": {
+          "table": "attack_plans",
+          "plan_id": "000002",
+          "target_statement_id": "000042",
+          "old_statement_id": "000030",
+          "manuscript_path": "manuscripts/F/f-proof-000003.md",
+          "manuscript_sha256": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+          "baseline_search": "data/attack_plans.json:2593: \"statement_id\": \"000030\",",
+          "receipt_required": [
+            "fs.search 命中行（行号+内容）",
+            "verifications/000042.jsonl 末行 verdict 与 proof_sha256",
+            "被拒则逐条贴拒码与拒信原文"
+          ],
+          "fallback": "step 追加 round=3，statement_id=000042，cites 逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」"
+        },
+        "why": "attack_plans 是 F 的产出面、不在我的写集里；收工门 R6（plan_progress_rows）卡在 history 里 statement_id 仍指 000030 这个旧号上，只有 F 能改它自己的行",
+        "brief": "让 F 把计划 000002 history 里 statement_id 000030 更正为 000042",
+        "task": "更正你自己名下 attack_plans 计划 000002 的 history 里一处 statement_id 归属错误（这是对你自身产出的更正，不是改别人台账）。做法按顺序试两条：\n\n【做法 (1) 首选】先逐字读出 data/attack_plans.json 里 plan 000002 的 history（用 table.get(table=\"attack_plans\", id=\"000002\") 取 history，或用 fs.read 读 data/attack_plans.json 的对应行段），然后调用 table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 的完整数组>})，只对 round=2 那一条做两处改动：\n  a) 把该条里的 \"statement_id\": \"000030\" 改成 \"statement_id\": \"000042\"；\n  b) 在该条里新增一句 \"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"。\n其余字段与其余轮次一个字节不动，整份数组原样回写（不要重整 JSON 键序、不要删任何字段、不要动其它 plan）。\n\n【做法 (2) 仅在 (1) 被拒时】用你自己的 step 动作追加一条 round=3 的新 history：statement_id 只填 \"000042\"，cites 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」，并说明这是对第 2 轮 statement_id=000030 的更正。\n\n【回执硬要求】必须给三样逐字读数，不许只下结论：\n ① 改后 fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\", path=\"data/attack_plans.json\") 的全部命中行（行号 + 内容逐字）；\n ② verifications/000042.jsonl 最近一行的 verdict 与 proof_sha256（逐字读数；读不出就如实报三态码）；\n ③ 若两条做法都做不到，逐条贴拒信原文（拒码 + 那句话），不要自己下结论说「做不到」就停。\n\n基线读数（我这一步查到的，供你对照）：改前 fs.search 在 data/attack_plans.json 只有一处命中 —— 第 2593 行：\"statement_id\": \"000030\",。该条对应的稿件是 manuscripts/F/f-proof-000003.md（sha 3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db）。"
+      },
+      "result": {
+        "ok": false,
+        "outcome": "refused",
+        "refused": "dispatch_names_a_conjecture_id",
+        "refusal_reason": "invalid_params",
+        "error": "这一条派活没有出去：派活文本点名了 D 自己登记的猜想号 000002、000003。业主 2026-11-08：那条猜想只是**参考意见**，D 不能命令 E / F 必须把它做出来。改法：只写研究方向（要弄清什么、可以试哪条路），不写 `conjecture_id`（`conj:NNNNNN` 或裸 6 位号都不写）。",
+        "detail": "这一条派活没有出去：派活文本点名了 D 自己登记的猜想号 000002、000003。业主 2026-11-08：那条猜想只是**参考意见**，D 不能命令 E / F 必须把它做出来。改法：只写研究方向（要弄清什么、可以试哪条路），不写 `conjecture_id`（`conj:NNNNNN` 或裸 6 位号都不写）。",
+        "executed": false,
+        "violations": [
+          {
+            "kind": "dispatch",
+            "conjecture_id": "000002",
+            "token": "000002",
+            "sid": "2026-11-22n",
+            "index": 0,
+            "role": "F",
+            "task": "更正你自己名下 attack_plans 计划 000002 的 history 里一处 statement_id 归属错误（这是对你自身产出的更正，不是改别人台账）。做法按顺序试两条：\n\n【做法 (1) 首选】先逐字读出 data/attack_plans.json 里 plan 000002 的 history（用 table.get(table=\"attack_plans\", id=\"000002\") 取 history，或用 fs.read 读 data/attack_plans.json 的对应行段），然后调用 table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 的完整数组>})，只对 round=2 那一条做两处改动：\n  a) 把该条里的 \"statement_id\": \"000030\" 改成 \"statement_id\": \"000042\"；\n  b) 在该条里新增一句 \"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"。\n其余字段与其余轮次一个字节不动，整份数组原样回写（不要重整 JSON 键序、不要删任何字段、不要动其它 plan）。\n\n【做法 (2) 仅在 (1) 被拒时】用你自己的 step 动作追加一条 round=3 的新 history：statement_id 只填 \"000042\"，cites 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」，并说明这是对第 2 轮 statement_id=000030 的更正。\n\n【回执硬要求】必须给三样逐字读数，不许只下结论：\n ① 改后 fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\", path=\"data/attack_plans.json\") 的全部命中行（行号 + 内容逐字）；\n ② verifications/000042.jsonl 最近一行的 verdict 与 proof_sha256（逐字读数；读不出就如实报三态码）；\n ③ 若两条做法都做不到，逐条贴拒信原文（拒码 + 那句话），不要自己下结论说「做不到」就停。\n\n基线读数（我这一步查到的，供你对照）：改前 fs.search 在 data/attack_plans.json 只有一处命中 —— 第 2593 行：\"statement_id\": \"000030\",。该条对应的稿件是 manuscripts/F/f-proof-000003.md（sha 3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db）。",
+            "plan_id": "",
+            "problem": ""
+          },
+          {
+            "kind": "dispatch",
+            "conjecture_id": "000003",
+            "token": "000003",
+            "sid": "2026-11-22n",
+            "index": 0,
+            "role": "F",
+            "task": "更正你自己名下 attack_plans 计划 000002 的 history 里一处 statement_id 归属错误（这是对你自身产出的更正，不是改别人台账）。做法按顺序试两条：\n\n【做法 (1) 首选】先逐字读出 data/attack_plans.json 里 plan 000002 的 history（用 table.get(table=\"attack_plans\", id=\"000002\") 取 history，或用 fs.read 读 data/attack_plans.json 的对应行段），然后调用 table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 的完整数组>})，只对 round=2 那一条做两处改动：\n  a) 把该条里的 \"statement_id\": \"000030\" 改成 \"statement_id\": \"000042\"；\n  b) 在该条里新增一句 \"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"。\n其余字段与其余轮次一个字节不动，整份数组原样回写（不要重整 JSON 键序、不要删任何字段、不要动其它 plan）。\n\n【做法 (2) 仅在 (1) 被拒时】用你自己的 step 动作追加一条 round=3 的新 history：statement_id 只填 \"000042\"，cites 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」，并说明这是对第 2 轮 statement_id=000030 的更正。\n\n【回执硬要求】必须给三样逐字读数，不许只下结论：\n ① 改后 fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\", path=\"data/attack_plans.json\") 的全部命中行（行号 + 内容逐字）；\n ② verifications/000042.jsonl 最近一行的 verdict 与 proof_sha256（逐字读数；读不出就如实报三态码）；\n ③ 若两条做法都做不到，逐条贴拒信原文（拒码 + 那句话），不要自己下结论说「做不到」就停。\n\n基线读数（我这一步查到的，供你对照）：改前 fs.search 在 data/attack_plans.json 只有一处命中 —— 第 2593 行：\"statement_id\": \"000030\",。该条对应的稿件是 manuscripts/F/f-proof-000003.md（sha 3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db）。",
+            "plan_id": "",
+            "problem": ""
+          }
+        ],
+        "dispatch_policy": {
+          "checked": true,
+          "dispatches": 1,
+          "violations": [
+            {
+              "kind": "dispatch",
+              "conjecture_id": "000002",
+              "token": "000002",
+              "sid": "2026-11-22n",
+              "index": 0,
+              "role": "F",
+              "task": "更正你自己名下 attack_plans 计划 000002 的 history 里一处 statement_id 归属错误（这是对你自身产出的更正，不是改别人台账）。做法按顺序试两条：\n\n【做法 (1) 首选】先逐字读出 data/attack_plans.json 里 plan 000002 的 history（用 table.get(table=\"attack_plans\", id=\"000002\") 取 history，或用 fs.read 读 data/attack_plans.json 的对应行段），然后调用 table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 的完整数组>})，只对 round=2 那一条做两处改动：\n  a) 把该条里的 \"statement_id\": \"000030\" 改成 \"statement_id\": \"000042\"；\n  b) 在该条里新增一句 \"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"。\n其余字段与其余轮次一个字节不动，整份数组原样回写（不要重整 JSON 键序、不要删任何字段、不要动其它 plan）。\n\n【做法 (2) 仅在 (1) 被拒时】用你自己的 step 动作追加一条 round=3 的新 history：statement_id 只填 \"000042\"，cites 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」，并说明这是对第 2 轮 statement_id=000030 的更正。\n\n【回执硬要求】必须给三样逐字读数，不许只下结论：\n ① 改后 fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\", path=\"data/attack_plans.json\") 的全部命中行（行号 + 内容逐字）；\n ② verifications/000042.jsonl 最近一行的 verdict 与 proof_sha256（逐字读数；读不出就如实报三态码）；\n ③ 若两条做法都做不到，逐条贴拒信原文（拒码 + 那句话），不要自己下结论说「做不到」就停。\n\n基线读数（我这一步查到的，供你对照）：改前 fs.search 在 data/attack_plans.json 只有一处命中 —— 第 2593 行：\"statement_id\": \"000030\",。该条对应的稿件是 manuscripts/F/f-proof-000003.md（sha 3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db）。",
+              "plan_id": "",
+              "problem": ""
+            },
+            {
+              "kind": "dispatch",
+              "conjecture_id": "000003",
+              "token": "000003",
+              "sid": "2026-11-22n",
+              "index": 0,
+              "role": "F",
+              "task": "更正你自己名下 attack_plans 计划 000002 的 history 里一处 statement_id 归属错误（这是对你自身产出的更正，不是改别人台账）。做法按顺序试两条：\n\n【做法 (1) 首选】先逐字读出 data/attack_plans.json 里 plan 000002 的 history（用 table.get(table=\"attack_plans\", id=\"000002\") 取 history，或用 fs.read 读 data/attack_plans.json 的对应行段），然后调用 table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 的完整数组>})，只对 round=2 那一条做两处改动：\n  a) 把该条里的 \"statement_id\": \"000030\" 改成 \"statement_id\": \"000042\"；\n  b) 在该条里新增一句 \"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"。\n其余字段与其余轮次一个字节不动，整份数组原样回写（不要重整 JSON 键序、不要删任何字段、不要动其它 plan）。\n\n【做法 (2) 仅在 (1) 被拒时】用你自己的 step 动作追加一条 round=3 的新 history：statement_id 只填 \"000042\"，cites 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」，并说明这是对第 2 轮 statement_id=000030 的更正。\n\n【回执硬要求】必须给三样逐字读数，不许只下结论：\n ① 改后 fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\", path=\"data/attack_plans.json\") 的全部命中行（行号 + 内容逐字）；\n ② verifications/000042.jsonl 最近一行的 verdict 与 proof_sha256（逐字读数；读不出就如实报三态码）；\n ③ 若两条做法都做不到，逐条贴拒信原文（拒码 + 那句话），不要自己下结论说「做不到」就停。\n\n基线读数（我这一步查到的，供你对照）：改前 fs.search 在 data/attack_plans.json 只有一处命中 —— 第 2593 行：\"statement_id\": \"000030\",。该条对应的稿件是 manuscripts/F/f-proof-000003.md（sha 3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db）。",
+              "plan_id": "",
+              "problem": ""
+            }
+          ],
+          "self_authored_plans": 3,
+          "named_plans": [],
+          "conjectures": [
+            "000000",
+            "000001",
+            "000002",
+            "000003",
+            "000004",
+            "000005",
+            "000006",
+            "000007",
+            "000008",
+            "000009",
+            "000010",
+            "000011",
+            "000012",
+            "000013",
+            "000014",
+            "000015",
+            "000016",
+            "000017",
+            "000018",
+            "000019",
+            "000020",
+            "000021",
+            "000022",
+            "000023",
+            "000024",
+            "000025",
+            "000026"
+          ],
+          "reason": "",
+          "events_error": ""
+        },
+        "秘书": {
+          "alarms": [],
+          "fail_open": false,
+          "wash": {
+            "checked": true,
+            "washed": false,
+            "refused": "",
+            "reason": ""
+          },
+          "changes": [],
+          "surface_fit": {
+            "checked": false,
+            "fits": null,
+            "paths": [],
+            "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+            "shape": "summon",
+            "reach": {
+              "checked": true,
+              "verdict": "unknown",
+              "hops": [],
+              "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+            }
+          },
+          "reach_fit": {
+            "checked": true,
+            "verdict": "unknown",
+            "hops": [],
+            "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+          },
+          "assessment": {
+            "decision": "可派",
+            "reason": "这一条没点名具体动作（role 级派活）⇒ 不拿动作表去卡它；角色存在性由预筛管",
+            "basis": [
+              "specs/<role>.py 的动作表",
+              "tasks: 同 key 的既有终态行",
+              "没点名动作 ⇒ 动作表那一格不适用"
+            ],
+            "duplicates": [],
+            "alarms": [],
+            "novel": false,
+            "surface": {
+              "checked": false,
+              "fits": null,
+              "paths": [],
+              "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+              "shape": "summon",
+              "reach": {
+                "checked": true,
+                "verdict": "unknown",
+                "hops": [],
+                "reason": "角色 '' 不在能力表里（['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'L', 'M', 'V']）⇒ 判不了"
+              }
+            },
+            "judge": {
+              "checked": false,
+              "reason": "预筛没有报警、也没有重复候选 ⇒ 不必判断"
+            },
+            "engaged": false,
+            "seq": 2
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 68480,
+        "prompt_cache_miss_tokens": 3955,
+        "tokens_in": 72435,
+        "tokens_out": 1491,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000235"
+    },
+    {
+      "index": 4,
+      "shape": "summon",
+      "payload": {
+        "role": "F",
+        "action": "",
+        "params": {
+          "problem_key": "lp3-diag-vs-face-narrative",
+          "manuscript_sha256": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+          "old_statement_id": "000030",
+          "new_statement_id": "000042",
+          "notes_correction": "归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号",
+          "baseline_search": "data/attack_plans.json:2593: \"statement_id\": \"000030\",",
+          "fallback": "step 追加 round=3，statement_id 只填 000042，cites 逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」",
+          "receipt_required": [
+            "fs.search 在 data/attack_plans.json 上的全部命中行（行号+内容）",
+            "verifications/000042.jsonl 末行 verdict 与 proof_sha256",
+            "两条都做不到则逐条贴拒码与拒信原文"
+          ]
+        },
+        "why": "attack_plans 是 F 自己的产出面、不在我 D 的写入面里，只能由它改；且这一条更正本身有 V 台账作为归属依据（V 的判词全挂 000042）",
+        "brief": "让 F 更正自己攻坚计划 history 里一处 statement_id 归属错误",
+        "name": "probe-f-history-fix",
+        "task": "请更正你自己名下那条「lp3 对角 vs 面对叙事」攻坚计划的 history 里一处 statement_id 归属错误（这是对你自己产出的更正，不是改别人台账）。\n\n【定位】先用 `attack.list_plans(problem_key=\"lp3-diag-vs-face-narrative\", include_terminal=True)` 找到那条计划（本轮只有这一条，problem_key 逐字如上），读它的 plan_id；再 `table.get(table=\"attack_plans\", id=<取到的 plan_id>)` 把 history 逐字读出来（history 里的长字段请分段读全，不要用被观测层截断的版本回写）。\n\n【做法 (1) 首选】调用 `table.update(table=\"attack_plans\", id=<同一个 plan_id>, patch={\"history\": <整条 history 的完整数组>})`，只对 round=2 那一条（特征：manuscript_path 形如 manuscripts/F/f-proof-<六位数>.md，proof_sha256=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db）做两处改动：\n  a) 把该条里的 \"statement_id\": \"000030\" 改成 \"statement_id\": \"000042\"；\n  b) 在该条里新增一格 \"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"。\n其余字段、其余轮次、其它计划一个字节都不动（不要重整键序、不要删字段）。\n\n【做法 (2) 仅在 (1) 被拒时】用你自己的 step 动作追加一条 round=3 的新 history 条目：statement_id 只填 \"000042\"，cites 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」，并写明这是对 round=2 里旧号 000030 的更正。\n\n【回执硬要求，三样逐字读数，不许只下结论】\n ① 改后 `fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\", path=\"data/attack_plans.json\")` 的全部命中行（行号 + 内容逐字，一条不漏）；\n ② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256（逐字读数；读不出就如实报三态码，不要折成「没问题」）；\n ③ 若两条做法都做不到，逐条贴拒信原文（拒码 + 那句话原样），不要自己下结论说「做不到」就停。\n\n【基线读数（我这一步查到的，供你对照）】改前 fs.search 在 data/attack_plans.json 只有一处命中 —— 第 2593 行：\"statement_id\": \"000030\",。该计划当前 status=abandoned、rounds=2。"
+      },
+      "result": {
+        "ok": false,
+        "outcome": "refused",
+        "refused": "dispatch_names_a_conjecture_id",
+        "refusal_reason": "invalid_params",
+        "error": "这一条派活没有出去：派活文本点名了 D 自己登记的猜想号 000016、000023。业主 2026-11-08：那条猜想只是**参考意见**，D 不能命令 E / F 必须把它做出来。改法：只写研究方向（要弄清什么、可以试哪条路），不写 `conjecture_id`（`conj:NNNNNN` 或裸 6 位号都不写）。",
+        "detail": "这一条派活没有出去：派活文本点名了 D 自己登记的猜想号 000016、000023。业主 2026-11-08：那条猜想只是**参考意见**，D 不能命令 E / F 必须把它做出来。改法：只写研究方向（要弄清什么、可以试哪条路），不写 `conjecture_id`（`conj:NNNNNN` 或裸 6 位号都不写）。",
+        "executed": false,
+        "violations": [
+          {
+            "kind": "plan",
+            "conjecture_id": "000016",
+            "token": "000016",
+            "sid": "2026-11-22n",
+            "index": 0,
+            "role": "F",
+            "task": "请更正你自己名下那条「lp3 对角 vs 面对叙事」攻坚计划的 history 里一处 statement_id 归属错误（这是对你自己产出的更正，不是改别人台账）。\n\n【定位】先用 `attack.list_plans(problem_key=\"lp3-diag-vs-face-narrative\", include_terminal=True)` 找到那条计划（本轮只有这一条，problem_key 逐字如上），读它的 plan_id；再 `table.get(table=\"attack_plans\", id=<取到的 plan_id>)` 把 history 逐字读出来（history 里的长字段请分段读全，不要用被观测层截断的版本回写）。\n\n【做法 (1) 首选】调用 `table.update(table=\"attack_plans\", id=<同一个 plan_id>, patch={\"history\": <整条 history 的完整数组>})`，只对 round=2 那一条（特征：manuscript_path 形如 manuscripts/F/f-proof-<六位数>.md，proof_sha256=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db）做两处改动：\n  a) 把该条里的 \"statement_id\": \"000030\" 改成 \"statement_id\": \"000042\"；\n  b) 在该条里新增一格 \"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"。\n其余字段、其余轮次、其它计划一个字节都不动（不要重整键序、不要删字段）。\n\n【做法 (2) 仅在 (1) 被拒时】用你自己的 step 动作追加一条 round=3 的新 history 条目：statement_id 只填 \"000042\"，cites 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」，并写明这是对 round=2 里旧号 000030 的更正。\n\n【回执硬要求，三样逐字读数，不许只下结论】\n ① 改后 `fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\", path=\"data/attack_plans.json\")` 的全部命中行（行号 + 内容逐字，一条不漏）；\n ② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256（逐字读数；读不出就如实报三态码，不要折成「没问题」）；\n ③ 若两条做法都做不到，逐条贴拒信原文（拒码 + 那句话原样），不要自己下结论说「做不到」就停。\n\n【基线读数（我这一步查到的，供你对照）】改前 fs.search 在 data/attack_plans.json 只有一处命中 —— 第 2593 行：\"statement_id\": \"000030\",。该计划当前 status=abandoned、rounds=2。",
+            "plan_id": "000002",
+            "problem": "把 B_p^3 中心截面最大方向分段结构里最后一环（体对角向 A_diag 与面对角向 A_face 的比较大 p 段）拼成可判定的四段叙述：(1) 证明 Δ:=A_face−A_diag 在 p=1 为正、p=2 为零、p→∞ 极限为 4√2−3√3>0（从而存在 P0 使 p≥P0 时 A_face>A_diag）、且 Δ 在 [1,∞) 上连续；(2) 把 p<2 / p=2 / 2<p<p* / p>p* 四段逐条落到在册 stmt 号或 exp 号，未证部分明确标 strong_conjecture；(3) 把证明稿交父 D 携带给 B 收录，并把缺的那条引理写成一句话。引依赖只许用 pre_theorem 级的 stmt:000034、stmt:000035（A_diag 的极坐标/闭式与本稿自足的极限推导），数值段只引 exp:000016/exp:000023。"
+          },
+          {
+            "kind": "plan",
+            "conjecture_id": "000023",
+            "token": "000023",
+            "sid": "2026-11-22n",
+            "index": 0,
+            "role": "F",
+            "task": "请更正你自己名下那条「lp3 对角 vs 面对叙事」攻坚计划的 history 里一处 statement_id 归属错误（这是对你自己产出的更正，不是改别人台账）。\n\n【定位】先用 `attack.list_plans(problem_key=\"lp3-diag-vs-face-narrative\", include_terminal=True)` 找到那条计划（本轮只有这一条，problem_key 逐字如上），读它的 plan_id；再 `table.get(table=\"attack_plans\", id=<取到的 plan_id>)` 把 history 逐字读出来（history 里的长字段请分段读全，不要用被观测层截断的版本回写）。\n\n【做法 (1) 首选】调用 `table.update(table=\"attack_plans\", id=<同一个 plan_id>, patch={\"history\": <整条 history 的完整数组>})`，只对 round=2 那一条（特征：manuscript_path 形如 manuscripts/F/f-proof-<六位数>.md，proof_sha256=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db）做两处改动：\n  a) 把该条里的 \"statement_id\": \"000030\" 改成 \"statement_id\": \"000042\"；\n  b) 在该条里新增一格 \"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"。\n其余字段、其余轮次、其它计划一个字节都不动（不要重整键序、不要删字段）。\n\n【做法 (2) 仅在 (1) 被拒时】用你自己的 step 动作追加一条 round=3 的新 history 条目：statement_id 只填 \"000042\"，cites 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」，并写明这是对 round=2 里旧号 000030 的更正。\n\n【回执硬要求，三样逐字读数，不许只下结论】\n ① 改后 `fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\", path=\"data/attack_plans.json\")` 的全部命中行（行号 + 内容逐字，一条不漏）；\n ② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256（逐字读数；读不出就如实报三态码，不要折成「没问题」）；\n ③ 若两条做法都做不到，逐条贴拒信原文（拒码 + 那句话原样），不要自己下结论说「做不到」就停。\n\n【基线读数（我这一步查到的，供你对照）】改前 fs.search 在 data/attack_plans.json 只有一处命中 —— 第 2593 行：\"statement_id\": \"000030\",。该计划当前 status=abandoned、rounds=2。",
+            "plan_id": "000002",
+            "problem": "把 B_p^3 中心截面最大方向分段结构里最后一环（体对角向 A_diag 与面对角向 A_face 的比较大 p 段）拼成可判定的四段叙述：(1) 证明 Δ:=A_face−A_diag 在 p=1 为正、p=2 为零、p→∞ 极限为 4√2−3√3>0（从而存在 P0 使 p≥P0 时 A_face>A_diag）、且 Δ 在 [1,∞) 上连续；(2) 把 p<2 / p=2 / 2<p<p* / p>p* 四段逐条落到在册 stmt 号或 exp 号，未证部分明确标 strong_conjecture；(3) 把证明稿交父 D 携带给 B 收录，并把缺的那条引理写成一句话。引依赖只许用 pre_theorem 级的 stmt:000034、stmt:000035（A_diag 的极坐标/闭式与本稿自足的极限推导），数值段只引 exp:000016/exp:000023。"
+          }
+        ],
+        "dispatch_policy": {
+          "checked": true,
+          "dispatches": 1,
+          "violations": [
+            {
+              "kind": "plan",
+              "conjecture_id": "000016",
+              "token": "000016",
+              "sid": "2026-11-22n",
+              "index": 0,
+              "role": "F",
+              "task": "请更正你自己名下那条「lp3 对角 vs 面对叙事」攻坚计划的 history 里一处 statement_id 归属错误（这是对你自己产出的更正，不是改别人台账）。\n\n【定位】先用 `attack.list_plans(problem_key=\"lp3-diag-vs-face-narrative\", include_terminal=True)` 找到那条计划（本轮只有这一条，problem_key 逐字如上），读它的 plan_id；再 `table.get(table=\"attack_plans\", id=<取到的 plan_id>)` 把 history 逐字读出来（history 里的长字段请分段读全，不要用被观测层截断的版本回写）。\n\n【做法 (1) 首选】调用 `table.update(table=\"attack_plans\", id=<同一个 plan_id>, patch={\"history\": <整条 history 的完整数组>})`，只对 round=2 那一条（特征：manuscript_path 形如 manuscripts/F/f-proof-<六位数>.md，proof_sha256=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db）做两处改动：\n  a) 把该条里的 \"statement_id\": \"000030\" 改成 \"statement_id\": \"000042\"；\n  b) 在该条里新增一格 \"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"。\n其余字段、其余轮次、其它计划一个字节都不动（不要重整键序、不要删字段）。\n\n【做法 (2) 仅在 (1) 被拒时】用你自己的 step 动作追加一条 round=3 的新 history 条目：statement_id 只填 \"000042\"，cites 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」，并写明这是对 round=2 里旧号 000030 的更正。\n\n【回执硬要求，三样逐字读数，不许只下结论】\n ① 改后 `fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\", path=\"data/attack_plans.json\")` 的全部命中行（行号 + 内容逐字，一条不漏）；\n ② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256（逐字读数；读不出就如实报三态码，不要折成「没问题」）；\n ③ 若两条做法都做不到，逐条贴拒信原文（拒码 + 那句话原样），不要自己下结论说「做不到」就停。\n\n【基线读数（我这一步查到的，供你对照）】改前 fs.search 在 data/attack_plans.json 只有一处命中 —— 第 2593 行：\"statement_id\": \"000030\",。该计划当前 status=abandoned、rounds=2。",
+              "plan_id": "000002",
+              "problem": "把 B_p^3 中心截面最大方向分段结构里最后一环（体对角向 A_diag 与面对角向 A_face 的比较大 p 段）拼成可判定的四段叙述：(1) 证明 Δ:=A_face−A_diag 在 p=1 为正、p=2 为零、p→∞ 极限为 4√2−3√3>0（从而存在 P0 使 p≥P0 时 A_face>A_diag）、且 Δ 在 [1,∞) 上连续；(2) 把 p<2 / p=2 / 2<p<p* / p>p* 四段逐条落到在册 stmt 号或 exp 号，未证部分明确标 strong_conjecture；(3) 把证明稿交父 D 携带给 B 收录，并把缺的那条引理写成一句话。引依赖只许用 pre_theorem 级的 stmt:000034、stmt:000035（A_diag 的极坐标/闭式与本稿自足的极限推导），数值段只引 exp:000016/exp:000023。"
+            },
+            {
+              "kind": "plan",
+              "conjecture_id": "000023",
+              "token": "000023",
+              "sid": "2026-11-22n",
+              "index": 0,
+              "role": "F",
+              "task": "请更正你自己名下那条「lp3 对角 vs 面对叙事」攻坚计划的 history 里一处 statement_id 归属错误（这是对你自己产出的更正，不是改别人台账）。\n\n【定位】先用 `attack.list_plans(problem_key=\"lp3-diag-vs-face-narrative\", include_terminal=True)` 找到那条计划（本轮只有这一条，problem_key 逐字如上），读它的 plan_id；再 `table.get(table=\"attack_plans\", id=<取到的 plan_id>)` 把 history 逐字读出来（history 里的长字段请分段读全，不要用被观测层截断的版本回写）。\n\n【做法 (1) 首选】调用 `table.update(table=\"attack_plans\", id=<同一个 plan_id>, patch={\"history\": <整条 history 的完整数组>})`，只对 round=2 那一条（特征：manuscript_path 形如 manuscripts/F/f-proof-<六位数>.md，proof_sha256=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db）做两处改动：\n  a) 把该条里的 \"statement_id\": \"000030\" 改成 \"statement_id\": \"000042\"；\n  b) 在该条里新增一格 \"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"。\n其余字段、其余轮次、其它计划一个字节都不动（不要重整键序、不要删字段）。\n\n【做法 (2) 仅在 (1) 被拒时】用你自己的 step 动作追加一条 round=3 的新 history 条目：statement_id 只填 \"000042\"，cites 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」，并写明这是对 round=2 里旧号 000030 的更正。\n\n【回执硬要求，三样逐字读数，不许只下结论】\n ① 改后 `fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\", path=\"data/attack_plans.json\")` 的全部命中行（行号 + 内容逐字，一条不漏）；\n ② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256（逐字读数；读不出就如实报三态码，不要折成「没问题」）；\n ③ 若两条做法都做不到，逐条贴拒信原文（拒码 + 那句话原样），不要自己下结论说「做不到」就停。\n\n【基线读数（我这一步查到的，供你对照）】改前 fs.search 在 data/attack_plans.json 只有一处命中 —— 第 2593 行：\"statement_id\": \"000030\",。该计划当前 status=abandoned、rounds=2。",
+              "plan_id": "000002",
+              "problem": "把 B_p^3 中心截面最大方向分段结构里最后一环（体对角向 A_diag 与面对角向 A_face 的比较大 p 段）拼成可判定的四段叙述：(1) 证明 Δ:=A_face−A_diag 在 p=1 为正、p=2 为零、p→∞ 极限为 4√2−3√3>0（从而存在 P0 使 p≥P0 时 A_face>A_diag）、且 Δ 在 [1,∞) 上连续；(2) 把 p<2 / p=2 / 2<p<p* / p>p* 四段逐条落到在册 stmt 号或 exp 号，未证部分明确标 strong_conjecture；(3) 把证明稿交父 D 携带给 B 收录，并把缺的那条引理写成一句话。引依赖只许用 pre_theorem 级的 stmt:000034、stmt:000035（A_diag 的极坐标/闭式与本稿自足的极限推导），数值段只引 exp:000016/exp:000023。"
+            }
+          ],
+          "self_authored_plans": 2,
+          "named_plans": [
+            {
+              "plan_id": "000002",
+              "problem": "把 B_p^3 中心截面最大方向分段结构里最后一环（体对角向 A_diag 与面对角向 A_face 的比较大 p 段）拼成可判定的四段叙述：(1) 证明 Δ:=A_face−A_diag 在 p=1 为正、p=2 为零、p→∞ 极限为 4√2−3√3>0（从而存在 P0 使 p≥P0 时 A_face>A_diag）、且 Δ 在 [1,∞) 上连续；(2) 把 p<2 / p=2 / 2<p<p* / p>p* 四段逐条落到在册 stmt 号或 exp 号，未证部分明确标 strong_conjecture；(3) 把证明稿交父 D 携带给 B 收录，并把缺的那条引理写成一句话。引依赖只许用 pre_theorem 级的 stmt:000034、stmt:000035（A_diag 的极坐标/闭式与本稿自足的极限推导），数值段只引 exp:000016/exp:000023。",
+              "problem_key": "lp3-diag-vs-face-narrative",
+              "sid": "2026-11-22n",
+              "index": 0,
+              "role": "F"
+            }
+          ],
+          "conjectures": [
+            "000000",
+            "000001",
+            "000002",
+            "000003",
+            "000004",
+            "000005",
+            "000006",
+            "000007",
+            "000008",
+            "000009",
+            "000010",
+            "000011",
+            "000012",
+            "000013",
+            "000014",
+            "000015",
+            "000016",
+            "000017",
+            "000018",
+            "000019",
+            "000020",
+            "000021",
+            "000022",
+            "000023",
+            "000024",
+            "000025",
+            "000026"
+          ],
+          "reason": "",
+          "events_error": ""
+        },
+        "秘书": {
+          "alarms": [
+            "'probe-f-history-fix' 不是注册表里的真名"
+          ],
+          "fail_open": false,
+          "problem": "'probe-f-history-fix' 不是注册表里的真名",
+          "wash": {
+            "checked": true,
+            "washed": false,
+            "refused": "",
+            "reason": ""
+          },
+          "changes": [],
+          "surface_fit": {
+            "checked": false,
+            "fits": null,
+            "paths": [],
+            "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+            "shape": "summon",
+            "reach": {
+              "checked": true,
+              "verdict": "unknown",
+              "hops": [],
+              "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+            }
+          },
+          "reach_fit": {
+            "checked": true,
+            "verdict": "unknown",
+            "hops": [],
+            "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+          },
+          "assessment": {
+            "decision": "可派",
+            "reason": "这一条没点名具体动作（role 级派活）⇒ 不拿动作表去卡它；角色存在性由预筛管",
+            "basis": [
+              "specs/<role>.py 的动作表",
+              "tasks: 同 key 的既有终态行",
+              "没点名动作 ⇒ 动作表那一格不适用"
+            ],
+            "duplicates": [],
+            "alarms": [],
+            "novel": false,
+            "surface": {
+              "checked": false,
+              "fits": null,
+              "paths": [],
+              "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+              "shape": "summon",
+              "reach": {
+                "checked": true,
+                "verdict": "unknown",
+                "hops": [],
+                "reason": "角色 '' 不在能力表里（['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'L', 'M', 'V']）⇒ 判不了"
+              }
+            },
+            "judge": {
+              "checked": false,
+              "reason": "预筛没有报警、也没有重复候选 ⇒ 不必判断"
+            },
+            "engaged": false,
+            "seq": 5
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 71680,
+        "prompt_cache_miss_tokens": 4734,
+        "tokens_in": 76414,
+        "tokens_out": 2570,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000235"
+    },
+    {
+      "index": 5,
+      "shape": "summon",
+      "payload": {
+        "role": "F",
+        "action": "",
+        "params": {
+          "baseline_search": "data/attack_plans.json:2593: \"statement_id\": \"000030\",",
+          "fallback": "step 追加 round=3，statement_id 只填 000042，cites 逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」",
+          "manuscript_sha256": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+          "new_statement_id": "000042",
+          "notes_correction": "归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号",
+          "old_statement_id": "000030",
+          "receipt_required": [
+            "改后 fs.search 命中的全部行（行号+内容逐字）",
+            "verifications/000042.jsonl 末行 verdict 与 proof_sha256",
+            "两条都做不到则逐条贴拒码与拒信原文"
+          ]
+        },
+        "why": "attack_plans 是 F 的产出面，这一格只有 F 的写口能动；上一轮已确认 D 侧改不动它，本轮试两种具体做法",
+        "brief": "让 F 更正自己攻坚计划 history 里一处 statement_id 归属",
+        "task": "请更正你自己名下一条攻坚计划 history 里一处 statement_id 的归属错误：这是对你自己产出的更正，不是改别人的台账。\n\n【怎么定位】先 `attack.list_plans(include_terminal=True)` 列出你自己名下的全部计划，找出 history 里唯一一处 `\"statement_id\": \"000030\"` 的那一条。命中位置在 history 第 2 轮（round=2）的条目：它的 manuscript_path 是你自己落的那份 f-proof 稿，proof_sha256 = 3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db。拿到 plan_id 后，用 `table.get(table=\"attack_plans\", id=<你的 plan_id>)` 把 history 逐字读全（长字段分段读，别用被观测层截断的版本回写）。\n\n【做法 (1)，首选】调用 `table.update(table=\"attack_plans\", id=<同一个 plan_id>, patch={\"history\": <整条 history 的完整数组>})`，只对 round=2 那一条改两处：\n a) 把该条的 `\"statement_id\": \"000030\"` 改成 `\"statement_id\": \"000042\"`；\n b) 在该条新增一格 `\"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"`。\n其余字段、其余轮次一个字节都不动（不要重排键序、不要删字段、不要碰其它计划）。\n\n【做法 (2)，只在 (1) 被拒时做】用你自己的 step 动作追加一条 round=3 的新 history：statement_id 只填 \"000042\"，cites 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」，并写明这是对 round=2 里旧号 000030 的更正。\n\n【回执硬要求：三样逐字读数，不许只下结论】\n ① 改后 `fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\", path=\"data/attack_plans.json\")` 的全部命中行（行号 + 内容逐字，一条不漏）；\n ② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256（逐字读数；读不出就如实报三态码，不要折成「没问题」）；\n ③ 若两条做法都做不到，逐条贴拒信原文（拒码 + 那句话原样），不要自己下结论说「做不到」就停。\n\n【基线读数（我这一步查到的，供你对照）】改前 fs.search 在 data/attack_plans.json 只有一处命中 —— 第 2593 行：`\"statement_id\": \"000030\",`。"
+      },
+      "result": {
+        "summoned": "F",
+        "action": "",
+        "ok": true,
+        "task_id": "t-000236",
+        "status": "running",
+        "outcome": null,
+        "refusal_reason": null,
+        "preemptible": true,
+        "dispatched": [
+          "t-000236"
+        ],
+        "running": [
+          "t-000236"
+        ],
+        "detail": "还在跑：本步先不等（可抢占）。它回来之后结论会在你下一次被问之前以【子代理返场】投给你 —— 不要因为 status=running 就重派；收工会被拒到它回齐",
+        "roster_considered": true,
+        "roster_name": "F1",
+        "dispatch_policy": {
+          "checked": true,
+          "dispatches": 1,
+          "violations": [],
+          "self_authored_plans": 3,
+          "named_plans": [],
+          "conjectures": [
+            "000000",
+            "000001",
+            "000002",
+            "000003",
+            "000004",
+            "000005",
+            "000006",
+            "000007",
+            "000008",
+            "000009",
+            "000010",
+            "000011",
+            "000012",
+            "000013",
+            "000014",
+            "000015",
+            "000016",
+            "000017",
+            "000018",
+            "000019",
+            "000020",
+            "000021",
+            "000022",
+            "000023",
+            "000024",
+            "000025",
+            "000026"
+          ],
+          "reason": "D 的派活文本里没有点名任何一条它自己登记的猜想号（方向由文本给，号不作为命令）",
+          "events_error": ""
+        },
+        "秘书": {
+          "alarms": [],
+          "fail_open": false,
+          "wash": {
+            "checked": true,
+            "washed": false,
+            "refused": "",
+            "reason": ""
+          },
+          "changes": [],
+          "surface_fit": {
+            "checked": false,
+            "fits": null,
+            "paths": [],
+            "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+            "shape": "summon",
+            "reach": {
+              "checked": true,
+              "verdict": "unknown",
+              "hops": [],
+              "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+            }
+          },
+          "reach_fit": {
+            "checked": true,
+            "verdict": "unknown",
+            "hops": [],
+            "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+          },
+          "assessment": {
+            "decision": "建议重排",
+            "reason": "这一条没点名具体动作（role 级派活）⇒ 不拿动作表去卡它；角色存在性由预筛管；派活审阅：这不是研究方向，而是一件台账更正加回执核验的流程活；若派 F，应拆成 2 件分别派：①仅更正 attack_plans history 第 2 轮 statement_id 000030→000042 并加 notes_correction，②单独核验并回传 fs.search 命中行与 verifications/000042.jsonl 末行，不要把回执要求写成攻坚方向。",
+            "basis": [
+              "specs/<role>.py 的动作表",
+              "tasks: 同 key 的既有终态行",
+              "没点名动作 ⇒ 动作表那一格不适用",
+              "task 原文：『请更正你自己名下一条攻坚计划 history 里一处 statement_id 的归属错误』——这是单点台账更正，不是要弄清某个研究问题。",
+              "task 原文：『做法 (1)，首选』/『做法 (2)，只在 (1) 被拒时做』——同一更正动作的主/备路径，不是一条可探索的研究路线。",
+              "task 原文：『回执硬要求：三样逐字读数，不许只下结论』——这是流程/验收要求，不是研究方向。",
+              "params 里 old_statement_id=000030、new_statement_id=000042 也表明目标只是归属更正。"
+            ],
+            "duplicates": [],
+            "alarms": [],
+            "novel": false,
+            "surface": {
+              "checked": false,
+              "fits": null,
+              "paths": [],
+              "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+              "shape": "summon",
+              "reach": {
+                "checked": true,
+                "verdict": "unknown",
+                "hops": [],
+                "reason": "角色 '' 不在能力表里（['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'L', 'M', 'V']）⇒ 判不了"
+              }
+            },
+            "judge": {
+              "checked": false,
+              "reason": "预筛没有报警、也没有重复候选 ⇒ 不必判断"
+            },
+            "engaged": false,
+            "seq": 7
+          },
+          "negotiation": {
+            "round": 1,
+            "with": "secretary/F",
+            "point": "F.（input_key=@61e922b08517）",
+            "outcome": "待回应",
+            "escalate_to_body": false
+          }
+        },
+        "新消息": [
+          {
+            "id": "m000029",
+            "from": "M",
+            "channel": "private",
+            "subject": "手稿 000036：派活：D（派活：这是收工门最后一格（acceptance 的 R6 = plan_progress_rows 记 unknown），你上一轮（t-000227）得出的结论是「F 的两条写口都改不动那一格」。本轮换两个具体做法，仍然只让 F 去改它自己名下的 `attack_plans`（那是它的产出面，不是框架账本区）：(1) 首选：让 F 用 `table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 的完整数组>})` —— 你自己先把 `data/attack_plans.json` 里 plan 000002 的 `history` 逐字读出来，只把第 2 条（`round=2`，`manuscript_path=manuscripts/F/f-proof-000003.md`，`proof_sha256=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db`）里的 `\"statement_id\": \"000030\"` 改成 `\"000042\"`，并在该条加一句 `\"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"`，其余字段与其余轮次一个字节不动，整份数组原样回写（这是 F 对自己产出的更正，不是改别人台账）。(2) 若 (1) 仍被拒，让 F 用它的 `step` 追加一条 `round=3` 的新 history，`statement_id` 只填 `000042`、`cites` 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」。回执必须给三样逐字读数：① 改后 `fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\")` 在 `data/attack_plans.json` 的全部命中行（行号 + 内容）；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 若两条都做不到，逐条贴拒信原文（拒码 + 那句话），不要自己下结论说「做不到」就停。）",
+            "body": "[手稿 000036] 派活：D（派活：这是收工门最后一格（acceptance 的 R6 = plan_progress_rows 记 unknown），你上一轮（t-000227）得出的结论是「F 的两条写口都改不动那一格」。本轮换两个具体做法，仍然只让 F 去改它自己名下的 `attack_plans`（那是它的产出面，不是框架账本区）：(1) 首选：让 F 用 `table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 的完整数组>})` —— 你自己先把 `data/attack_plans.json` 里 plan 000002 的 `history` 逐字读出来，只把第 2 条（`round=2`，`manuscript_path=manuscripts/F/f-proof-00…（原文 1189 字，已截断）",
+            "source": {
+              "kind": "message",
+              "form": "notice",
+              "summary": "手稿 000036：派活：D（派活：这是收工门最后一格（acceptance 的 R6 = plan_progress_rows 记 unknown），你上一轮（t-000227）得出的结论是「F 的两条写口都改不动那一格」。本轮换两个具体做法，仍然只让 F 去改它自己名下的 `attack_plans`（那是它的产出面，不是框架账本区）：(1) 首选：让 F 用 `table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 的完整数组>})` —— 你自己先把 `data/attack_plans.json` 里 plan 000002 的 `history` 逐字读出来，只把第 2 条（`round=2`，`manuscript_path=manuscripts/F/f-proof-000003.md`，`proof_sha256=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db`）里的 `\"statement_id\": \"000030\"` 改成 `\"000042\"`，并在该条加一句 `\"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"`，其余字段与其余轮次一个字节不动，整份数组原样回写（这是 F 对自己产出的更正，不是改别人台账）。(2) 若 (1) 仍被拒，让 F 用它的 `step` 追加一条 `round=3` 的新 history，`statement_id` 只填 `000042`、`cites` 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」。回执必须给三样逐字读数：① 改后 `fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\")` 在 `data/attack_plans.json` 的全部命中行（行号 + 内容）；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 若两条都做不到，逐条贴拒信原文（拒码 + 那句话），不要自己下结论说「做不到」就停。）"
+            }
+          }
+        ],
+        "秘书加工": {
+          "reworked": [
+            {
+              "item": {
+                "id": "m000029",
+                "from": "M",
+                "channel": "private",
+                "subject": "手稿 000036：派活：D（派活：这是收工门最后一格（acceptance 的 R6 = plan_progress_rows 记 unknown），你上一轮（t-000227）得出的结论是「F 的两条写口都改不动那一格」。本轮换两个具体做法，仍然只让 F 去改它自己名下的 `attack_plans`（那是它的产出面，不是框架账本区）：(1) 首选：让 F 用 `table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 的完整数组>})` —— 你自己先把 `data/attack_plans.json` 里 plan 000002 的 `history` 逐字读出来，只把第 2 条（`round=2`，`manuscript_path=manuscripts/F/f-proof-000003.md`，`proof_sha256=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db`）里的 `\"statement_id\": \"000030\"` 改成 `\"000042\"`，并在该条加一句 `\"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"`，其余字段与其余轮次一个字节不动，整份数组原样回写（这是 F 对自己产出的更正，不是改别人台账）。(2) 若 (1) 仍被拒，让 F 用它的 `step` 追加一条 `round=3` 的新 history，`statement_id` 只填 `000042`、`cites` 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」。回执必须给三样逐字读数：① 改后 `fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\")` 在 `data/attack_plans.json` 的全部命中行（行号 + 内容）；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 若两条都做不到，逐条贴拒信原文（拒码 + 那句话），不要自己下结论说「做不到」就停。）",
+                "body": "[手稿 000036] 派活：D（派活：这是收工门最后一格（acceptance 的 R6 = plan_progress_rows 记 unknown），你上一轮（t-000227）得出的结论是「F 的两条写口都改不动那一格」。本轮换两个具体做法，仍然只让 F 去改它自己名下的 `attack_plans`（那是它的产出面，不是框架账本区）：(1) 首选：让 F 用 `table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 的完整数组>})` —— 你自己先把 `data/attack_plans.json` 里 plan 000002 的 `history` 逐字读出来，只把第 2 条（`round=2`，`manuscript_path=manuscripts/F/f-proof-00…（原文 1189 字，已截断）",
+                "source": {
+                  "kind": "message",
+                  "form": "notice",
+                  "summary": "手稿 000036：派活：D（派活：这是收工门最后一格（acceptance 的 R6 = plan_progress_rows 记 unknown），你上一轮（t-000227）得出的结论是「F 的两条写口都改不动那一格」。本轮换两个具体做法，仍然只让 F 去改它自己名下的 `attack_plans`（那是它的产出面，不是框架账本区）：(1) 首选：让 F 用 `table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 的完整数组>})` —— 你自己先把 `data/attack_plans.json` 里 plan 000002 的 `history` 逐字读出来，只把第 2 条（`round=2`，`manuscript_path=manuscripts/F/f-proof-000003.md`，`proof_sha256=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db`）里的 `\"statement_id\": \"000030\"` 改成 `\"000042\"`，并在该条加一句 `\"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"`，其余字段与其余轮次一个字节不动，整份数组原样回写（这是 F 对自己产出的更正，不是改别人台账）。(2) 若 (1) 仍被拒，让 F 用它的 `step` 追加一条 `round=3` 的新 history，`statement_id` 只填 `000042`、`cites` 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」。回执必须给三样逐字读数：① 改后 `fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\")` 在 `data/attack_plans.json` 的全部命中行（行号 + 内容）；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 若两条都做不到，逐条贴拒信原文（拒码 + 那句话），不要自己下结论说「做不到」就停。）"
+                }
+              },
+              "addendum": "我的产出物口径：交付状态 —— 交给谁：派你这趟活的父（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名）+ 收方 B（入库）；形态：`manuscripts/D/RESEARCH.md` + `manuscripts/D/<qid>-research.md` 工作稿+ `research_questions` / `search_requests` 行（报告本体落成盘上文件；台账那一行 `kind=research` 由 `write_report` 同一笔事务落 —— 见 `policy`，**不是本角色手写的表**）；可核字段：`research_questions.question_id` / `research_questions.status` / `research_questions.waiting_request_ids` / 每个结论目录行上的四格 `evidence_kind` / `evidence_path` / `evidence_sha256` / `v_signature`；算做完：这一趟的每条结论在 `manuscripts/D/RESEARCH.md` 的「已确定的结论」有一行、四格都指得到盘上对象（`report_landing_reading` 可核），且 `research_questions.status` 与现场一致。**跨趟的那一份交付是研究手稿 `manuscripts/D/RESEARCH.md`**（业主 2026-10-14 第 1 条）：成果概述 / 定义与已知 / 已确定的结论 / 尝试与失败 / 例子与反例 / 未解问题 / 下一步七节 —— 下一趟接手的人先读它，而不是去翻这一趟的会话记录。\n我在本条线上的位置：研究循环：把一个研究方向收敛成一个有证据支撑的结论，或如实说证据不足",
+              "problem": "",
+              "fail_open": false
+            }
+          ],
+          "handoffs_digest": "- 000032 M→D：派活：D（派活：收工门点名一条：「攻」那一环的 `plan 000002` 第 2 轮 history 里指向 `stmt:000030`，而 `verifications` 两路都没有认领给它的、签得住的行 ⇒ 那一行只能记 unknown。请把这一条处置掉，二选一并在回执里写明选了哪条、落在哪张台账行：(1) 补签 —— 若这条命题真有证明稿在盘（F 族 `manuscripts/F/f-proof-*.md`），让产出者自己把那一份送 V（`proof_manuscript` 指稿，别传命题号），拿到干净的「成立」后由 B 收录、签落在现行正文上；(2) 明确放弃 —— 让 B 用通用写口把 `status=abandoned`，并按四档给全 `abandon_kind` + `abandon_basis`（math_error 要 `defect_ref`、difficulty 要写清难在哪、counterexample 要 `experiment_id`、space_too_large 要 `space`）。两条都不许只写状态不写理由。回执里同时给：`verifications/000030.jsonl` 有没有一行「成立」，或 `statements` 那一行 `status` 与 `abandon_kind` 是什么。）\n- 000033 A→M：R8 收口：search_requests 两条未闭环请求已给终局并置 done=true，unfinished=0（逐条 topic / outcome / result_lit_ids 见正文）\n- 000034 B→D：stmt:000030 放弃未落成：秘书受控拒 abandon_difficulty_not_genuine，盘上零写入；另报 proof_no 2 误指已污染等级（theorem 抬档）\n- 000035 M→D：派活：D（派活：这是收工唯一的 blocker（acceptance 的 R6 = plan_progress_rows 记 unknown）。事实你上一轮已核死：`data/attack_plans.json` 的 plan 000002 第 2 轮 history 里 `statement_id=\"000030\"`，而真正被那份稿证明的是 `stmt:000042`（`manuscripts/F/f-proof-000003.md` 的「## 命题」逐字 = 000042 的 statement_full；`verifications/000042.jsonl` 有 8 行、含「成立」；`verifications/000030.jsonl` 根本不存在）。本轮要做的只有一件事：**让 attack_plans 里那一格不再指向一条无签的命题**。走 F 那一侧（attack_plans 是 F 的写口，D 自己改不动）：让 F 用它的 step / 更正入口做下面任一种，哪种真能落盘就用哪种，并在回执里贴改后 `fs.search` 的逐字结果：(1) 把 plan 000002 第 2 轮的 `statement_id` 就地更正为 `000042`（归属更正，不重写整条 history）；(2) 若不能就地改，就 append 一条新的 round（如 round 3），在 `notes`/`cites` 里逐字写明「更正第 2 轮归属：该稿的命题是 stmt:000042，000030 是旧号」，且这一轮的 `statement_id` 只填 `000042`；(3) 若 F 的写口两种都做不到，就让它明确回「做不到 + 拒在哪一格」，不要硬写。回执必须给三样：① 改后 `data/attack_plans.json` 里 plan 000002 全部 history 的 `round` / `statement_id` / `cites` 逐条；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 你认为改完之后收工门 plan_progress_rows 会不会转 pass，判据是什么。不要再开新方向、不要动 statements 的正文。）\n- 000036 M→D：派活：D（派活：这是收工门最后一格（acceptance 的 R6 = plan_progress_rows 记 unknown），你上一轮（t-000227）得出的结论是「F 的两条写口都改不动那一格」。本轮换两个具体做法，仍然只让 F 去改它自己名下的 `attack_plans`（那是它的产出面，不是框架账本区）：(1) 首选：让 F 用 `table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 的完整数组>})` —— 你自己先把 `data/attack_plans.json` 里 plan 000002 的 `history` 逐字读出来，只把第 2 条（`round=2`，`manuscript_path=manuscripts/F/f-proof-000003.md`，`proof_sha256=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db`）里的 `\"statement_id\": \"000030\"` 改成 `\"000042\"`，并在该条加一句 `\"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"`，其余字段与其余轮次一个字节不动，整份数组原样回写（这是 F 对自己产出的更正，不是改别人台账）。(2) 若 (1) 仍被拒，让 F 用它的 `step` 追加一条 `round=3` 的新 history，`statement_id` 只填 `000042`、`cites` 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」。回执必须给三样逐字读数：① 改后 `fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\")` 在 `data/attack_plans.json` 的全部命中行（行号 + 内容）；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 若两条都做不到，逐条贴拒信原文（拒码 + 那句话），不要自己下结论说「做不到」就停。）"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 75648,
+        "prompt_cache_miss_tokens": 5002,
+        "tokens_in": 80650,
+        "tokens_out": 3655,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000235"
+    },
+    {
+      "index": 6,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "verifications/000042.jsonl",
+          "max_lines": 0,
+          "max_bytes": 20000,
+          "why": "先把回执第 ② 项读数自己取到手：verifications/000042.jsonl 全文（8 行），逐字核 verdict 与 proof_sha256"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "{\"at\": \"2026-11-24T21:11:12+08:00\", \"citation_checks\": [], \"defect_step\": 1, \"findings\": [{\"detail\": \"`stmt:000034`（在哪一步：证明正文（未标步号的行））· 类别：等级读不出来（判不了）（`citation_level_unreadable`） · 期望：盘上有一份这一条命题的手稿（`manuscripts/F/f-proof-<号>.md`；V 只读手稿：正文与签都在稿上） · 实得：盘上没有这一条命题的手稿（找过：（没记））⇒ 读不到它的正文，也读不到它的签 · 怎么改：先把这一条命题的证明落成一份手稿（`manuscripts/F/f-proof-<号>.md`，`## 命题` / `## 证明` / `## 依赖` 三节），再引它；V 不从台账读正文\", \"kind\": \"citation_level_unreadable\", \"level\": \"error\", \"step\": null}, {\"detail\": \"`stmt:000034`（在哪一步：证明正文（未标步号的行））· 类别：表述错误·表与正文的引用集合不一致（`deps_table_disagrees_with_proof`） · 期望：手稿的 `## 依赖` 表里有一行 `stmt:000034`（写明它用在哪一步） · 实得：表里没有这一行 · 怎么改：把表里那一行补上（号与用在哪一步都写对）；正文是 F 的署名作品，表按它补齐 —— 两处必须说的是同一件事\", \"kind\": \"deps_table_disagrees_with_proof\", \"level\": \"error\", \"step\": null}], \"manuscript\": \"manuscripts/B/b-proof-000003.md\", \"object_path\": \"manuscripts/B/b-proof-000003.md\", \"object_sha256\": \"d5b16c8825d876e7b1c6b8c2c0d63777efd2be242986b6081ed8f6b3d5b0cb1c\", \"producer_code\": \"B1\", \"producer_role\": \"B\", \"proof_chars\": 3576, \"proof_sha256\": \"c41c0cfc4384f4c61ebd8f6c28a51c5ed92800bf7cd03fbd7d8a272a46eb291c\", \"quote\": \"\", \"review_call\": \"e0c2d1882da3\", \"review_pass\": 1, \"round\": 1, \"secretary_judge\": {\"axis\": \"clean\", \"checked\": true, \"decision\": \"\", \"defect_scope\": \"\", \"fault_cause\": \"report_gap\", \"fault_kind\": \"\", \"reason\": \"这段回复声称已逐段核对，并给出了具体核对点（参数化与极坐标换元、p=1/p=2 常数、连续性统一界、p→∞ 极限与 Γ 常数收尾），且未指出任何缺陷，属于「逐条走查、未发现问题」的一档。\", \"report_gap\": \"未记录反例构造尝试的位置；findings 与 citation_checks 均为空，没有逐关核对的可查明细。\"}, \"statement_id\": \"000042\", \"stmt_id\": \"000042\", \"submission_id\": \"\", \"unresolved_errors\": 2, \"used_faces\": [], \"verdict\": \"有毛病\", \"verification_id\": \"v-000001\", \"verifier\": \"agent-V-V2\", \"why\": \"逐段核对：A_diag 的参数化与极坐标换元正确；p=1、p=2 特例常数一致；连续性有统一界 2 与有界收敛依据；p→∞ 时 m(θ) 极限、分段积分、Γ 常数与收尾均无断点，未发现可指到步号的缺陷。；`stmt:000034`（在哪一步：证明正文（未标步号的行））· 类别：等级读不出来（判不了）（`citation_level_unreadable`） · 期望：盘上有一份这一条命题的手稿（`manuscripts/F/f-proof-<号>.md`；V 只读手稿：正文与签都在稿上） · 实得：盘上没有这一条命题的手稿（找过：（没记））⇒ 读不到它的正文，也读不到它的签 · 怎么改：先把这一条命题的证明落成一份手稿（`m…（落档截断，原 10518 字）",
+        "error": "",
+        "meta": {
+          "path": "verifications/000042.jsonl",
+          "encoding": "utf-8",
+          "bytes_read": 14835,
+          "total_bytes": 14835,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 8,
+          "total_lines": 8,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 8 行",
+          "sha256": "5e5432ffc69246c056358813328602633d90a3f7e169384d6c0251a6a5b9d779"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 79872,
+        "prompt_cache_miss_tokens": 4826,
+        "tokens_in": 84698,
+        "tokens_out": 334,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000235"
+    },
+    {
+      "index": 7,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.search",
+        "args": {
+          "pattern": "\"statement_id\": \"0000(30|42)\"",
+          "path": "data/attack_plans.json"
+        },
+        "why": "自己独立核一遍回执第 ① 项：改后 data/attack_plans.json 里 statement_id 的全部命中行（行号 + 内容），确认不再是 000030"
+      },
+      "result": {
+        "tool": "fs.search",
+        "ok": true,
+        "data": {
+          "pattern": "\"statement_id\": \"0000(30|42)\"",
+          "path": "data/attack_plans.json",
+          "matches": [
+            {
+              "path": "data/attack_plans.json",
+              "line": 2593,
+              "text": "\"statement_id\": \"000042\","
+            }
+          ],
+          "lines": [
+            "data/attack_plans.json:2593: \"statement_id\": \"000042\","
+          ],
+          "total": 1,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        },
+        "error": "",
+        "meta": {
+          "total": 1,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        },
+        "可退役": [
+          {
+            "task_id": "t-000236",
+            "role": "F",
+            "branch": "waiting_no_children",
+            "reading": {
+              "items_open": 0,
+              "items_open_ids": [],
+              "items_open_expects": {},
+              "items_open_states": {}
+            }
+          }
+        ],
+        "新消息": [
+          {
+            "板": "- （新）[t-000238] notice·要一个回执 来自 clock：时间到：请更正你自己名下一条攻坚计划 history 里一处 statement_id 的归属错误：这是对你自己产出的更正，不是改别人的台账。 【怎么定位】先 `attack.list_plans(include_terminal=True)` 列出你自己名下的全部计划，找出 history 里唯一一处 `\"statement_id\": \"000030\"` 的那一条。命中位置在 history 第 2 轮｜等了 5 分钟 51 秒（起于 23:06:12，到于 23:12:03）。它交的是：ok：执行完成"
+          }
+        ],
+        "秘书加工": {
+          "reworked": [
+            {
+              "item": {
+                "板": "- （新）[t-000238] notice·要一个回执 来自 clock：时间到：请更正你自己名下一条攻坚计划 history 里一处 statement_id 的归属错误：这是对你自己产出的更正，不是改别人的台账。 【怎么定位】先 `attack.list_plans(include_terminal=True)` 列出你自己名下的全部计划，找出 history 里唯一一处 `\"statement_id\": \"000030\"` 的那一条。命中位置在 history 第 2 轮｜等了 5 分钟 51 秒（起于 23:06:12，到于 23:12:03）。它交的是：ok：执行完成"
+              },
+              "addendum": "我的产出物口径：交付状态 —— 交给谁：派你这趟活的父（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名）+ 收方 B（入库）；形态：`manuscripts/D/RESEARCH.md` + `manuscripts/D/<qid>-research.md` 工作稿+ `research_questions` / `search_requests` 行（报告本体落成盘上文件；台账那一行 `kind=research` 由 `write_report` 同一笔事务落 —— 见 `policy`，**不是本角色手写的表**）；可核字段：`research_questions.question_id` / `research_questions.status` / `research_questions.waiting_request_ids` / 每个结论目录行上的四格 `evidence_kind` / `evidence_path` / `evidence_sha256` / `v_signature`；算做完：这一趟的每条结论在 `manuscripts/D/RESEARCH.md` 的「已确定的结论」有一行、四格都指得到盘上对象（`report_landing_reading` 可核），且 `research_questions.status` 与现场一致。**跨趟的那一份交付是研究手稿 `manuscripts/D/RESEARCH.md`**（业主 2026-10-14 第 1 条）：成果概述 / 定义与已知 / 已确定的结论 / 尝试与失败 / 例子与反例 / 未解问题 / 下一步七节 —— 下一趟接手的人先读它，而不是去翻这一趟的会话记录。\n我在本条线上的位置：研究循环：把一个研究方向收敛成一个有证据支撑的结论，或如实说证据不足",
+              "problem": "",
+              "fail_open": false
+            }
+          ],
+          "handoffs_digest": "- 000032 M→D：派活：D（派活：收工门点名一条：「攻」那一环的 `plan 000002` 第 2 轮 history 里指向 `stmt:000030`，而 `verifications` 两路都没有认领给它的、签得住的行 ⇒ 那一行只能记 unknown。请把这一条处置掉，二选一并在回执里写明选了哪条、落在哪张台账行：(1) 补签 —— 若这条命题真有证明稿在盘（F 族 `manuscripts/F/f-proof-*.md`），让产出者自己把那一份送 V（`proof_manuscript` 指稿，别传命题号），拿到干净的「成立」后由 B 收录、签落在现行正文上；(2) 明确放弃 —— 让 B 用通用写口把 `status=abandoned`，并按四档给全 `abandon_kind` + `abandon_basis`（math_error 要 `defect_ref`、difficulty 要写清难在哪、counterexample 要 `experiment_id`、space_too_large 要 `space`）。两条都不许只写状态不写理由。回执里同时给：`verifications/000030.jsonl` 有没有一行「成立」，或 `statements` 那一行 `status` 与 `abandon_kind` 是什么。）\n- 000033 A→M：R8 收口：search_requests 两条未闭环请求已给终局并置 done=true，unfinished=0（逐条 topic / outcome / result_lit_ids 见正文）\n- 000034 B→D：stmt:000030 放弃未落成：秘书受控拒 abandon_difficulty_not_genuine，盘上零写入；另报 proof_no 2 误指已污染等级（theorem 抬档）\n- 000035 M→D：派活：D（派活：这是收工唯一的 blocker（acceptance 的 R6 = plan_progress_rows 记 unknown）。事实你上一轮已核死：`data/attack_plans.json` 的 plan 000002 第 2 轮 history 里 `statement_id=\"000030\"`，而真正被那份稿证明的是 `stmt:000042`（`manuscripts/F/f-proof-000003.md` 的「## 命题」逐字 = 000042 的 statement_full；`verifications/000042.jsonl` 有 8 行、含「成立」；`verifications/000030.jsonl` 根本不存在）。本轮要做的只有一件事：**让 attack_plans 里那一格不再指向一条无签的命题**。走 F 那一侧（attack_plans 是 F 的写口，D 自己改不动）：让 F 用它的 step / 更正入口做下面任一种，哪种真能落盘就用哪种，并在回执里贴改后 `fs.search` 的逐字结果：(1) 把 plan 000002 第 2 轮的 `statement_id` 就地更正为 `000042`（归属更正，不重写整条 history）；(2) 若不能就地改，就 append 一条新的 round（如 round 3），在 `notes`/`cites` 里逐字写明「更正第 2 轮归属：该稿的命题是 stmt:000042，000030 是旧号」，且这一轮的 `statement_id` 只填 `000042`；(3) 若 F 的写口两种都做不到，就让它明确回「做不到 + 拒在哪一格」，不要硬写。回执必须给三样：① 改后 `data/attack_plans.json` 里 plan 000002 全部 history 的 `round` / `statement_id` / `cites` 逐条；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 你认为改完之后收工门 plan_progress_rows 会不会转 pass，判据是什么。不要再开新方向、不要动 statements 的正文。）\n- 000036 M→D：派活：D（派活：这是收工门最后一格（acceptance 的 R6 = plan_progress_rows 记 unknown），你上一轮（t-000227）得出的结论是「F 的两条写口都改不动那一格」。本轮换两个具体做法，仍然只让 F 去改它自己名下的 `attack_plans`（那是它的产出面，不是框架账本区）：(1) 首选：让 F 用 `table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 的完整数组>})` —— 你自己先把 `data/attack_plans.json` 里 plan 000002 的 `history` 逐字读出来，只把第 2 条（`round=2`，`manuscript_path=manuscripts/F/f-proof-000003.md`，`proof_sha256=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db`）里的 `\"statement_id\": \"000030\"` 改成 `\"000042\"`，并在该条加一句 `\"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"`，其余字段与其余轮次一个字节不动，整份数组原样回写（这是 F 对自己产出的更正，不是改别人台账）。(2) 若 (1) 仍被拒，让 F 用它的 `step` 追加一条 `round=3` 的新 history，`statement_id` 只填 `000042`、`cites` 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」。回执必须给三样逐字读数：① 改后 `fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\")` 在 `data/attack_plans.json` 的全部命中行（行号 + 内容）；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 若两条都做不到，逐条贴拒信原文（拒码 + 那句话），不要自己下结论说「做不到」就停。）"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 83840,
+        "prompt_cache_miss_tokens": 5062,
+        "tokens_in": 88902,
+        "tokens_out": 648,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000235"
+    },
+    {
+      "index": 9,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "verifications/000042.jsonl",
+          "start_line": 8,
+          "max_lines": 1,
+          "max_bytes": 4000
+        },
+        "why": "取回执第 ② 项：verifications/000042.jsonl 末行的 verdict 与 proof_sha256 逐字读数"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "",
+        "error": "",
+        "meta": {
+          "path": "verifications/000042.jsonl",
+          "encoding": "utf-8/replace",
+          "bytes_read": 4000,
+          "total_bytes": 14835,
+          "truncated": true,
+          "start_line": 8,
+          "lines_read": 0,
+          "total_lines": 2,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": true,
+          "note": "只读了前 4000 字节（共 14835 字节）；本次给第 8 行起是空的（共 2 行）",
+          "sha256": "5e5432ffc69246c056358813328602633d90a3f7e169384d6c0251a6a5b9d779"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 88064,
+        "prompt_cache_miss_tokens": 4223,
+        "tokens_in": 92287,
+        "tokens_out": 758,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000235"
+    },
+    {
+      "index": 10,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "verifications/000042.jsonl",
+          "start_line": 6,
+          "max_lines": 3,
+          "max_bytes": 20000
+        },
+        "why": "取回执第 ② 项：verifications/000042.jsonl 末几行的 verdict 与 proof_sha256 逐字读数"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "{\"at\": \"2026-11-24T21:25:58+08:00\", \"citation_checks\": [], \"defect_step\": null, \"findings\": [], \"manuscript\": \"manuscripts/B/b-proof-000003.md\", \"object_path\": \"manuscripts/B/b-proof-000003.md\", \"object_sha256\": \"de208c1407c51dea9dcc227b7d62669930b8707ebca3280555d7c4a3331a47f8\", \"producer_code\": \"B1\", \"producer_role\": \"B\", \"proof_chars\": 5312, \"proof_sha256\": \"43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6\", \"quote\": \"\", \"review_call\": \"2f34a642b3d7\", \"review_pass\": 1, \"round\": 6, \"secretary_judge\": {\"axis\": \"clean\", \"checked\": true, \"decision\": \"\", \"defect_scope\": \"\", \"fault_cause\": \"report_gap\", \"fault_kind\": \"\", \"reason\": \"这份回复逐段核对了证明的关键环节，并明确称未发现缺前提、无依据步骤、跳步措辞、不当引用或常数不符，且没有指出任何缺陷。\", \"report_gap\": \"未记录反例尝试的位置或构造\"}, \"statement_id\": \"000042\", \"stmt_id\": \"000042\", \"submission_id\": \"\", \"unresolved_errors\": 0, \"used_faces\": [], \"verdict\": \"成立\", \"verification_id\": \"v-000006\", \"verifier\": \"agent-V-V1\", \"why\": \"逐段核对了 A_diag 的两种参数化、A_face 的 Beta 积分、p=1,2 的特例、p→∞ 的逐点控制与单调收敛以及连续性所用的有界收敛控制；未发现缺前提、无依据步骤、跳步措辞或不当引用，常数与命题逐项吻合。\"}\n{\"at\": \"2026-11-24T21:28:05+08:00\", \"citation_checks\": [], \"defect_step\": null, \"findings\": [], \"manuscript\": \"manuscripts/B/b-proof-000003.md\", \"object_path\": \"manuscripts/B/b-proof-000003.md\", \"object_sha256\": \"53856842dcfc47a7ec452d6ed28f72ab62ea45f144183d2d9d3a1dc9c4c8ab63\", \"producer_code\": \"B1\", \"producer_role\": \"B\", \"proof_chars\": 5312, \"proof_sha256\": \"43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6\", \"quote\": \"\", \"review_call\": \"2f34a642b3d7\", \"review_pass\": 2, \"round\": 7, \"secretary_judge\": {\"axis\": \"clean\", \"checked\": true, \"decision\": \"\", \"defect_scope\": \"\", \"fault_cause\": \"report_gap\", \"fault_kind\": \"\", \"reason\": \"V 明确逐段核对了步骤1–8，并声明未发现数学缺陷，且没有指出任何缺陷。\", \"report_gap\": \"未记录反例尝试的位置\"}, \"statement_id\": \"000042\", \"stmt_id\": \"000042\", \"submission_id\": \"\", \"unresolved_errors\": 0, \"used_faces\": [], \"verdict\": \"成立\", \"verification_id\": \"v-000007\", \"verifier\": \"agent-V-V1\", \"why\": \"逐段核对步骤1–8：斜截面参数化与面积因子、A_face 的 Beta 积分…（落档截断，原 3140 字）",
+        "error": "",
+        "meta": {
+          "path": "verifications/000042.jsonl",
+          "encoding": "utf-8",
+          "bytes_read": 14835,
+          "total_bytes": 14835,
+          "truncated": false,
+          "start_line": 6,
+          "lines_read": 3,
+          "total_lines": 8,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 6–8 行（共 8 行）",
+          "sha256": "5e5432ffc69246c056358813328602633d90a3f7e169384d6c0251a6a5b9d779"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 91520,
+        "prompt_cache_miss_tokens": 1605,
+        "tokens_in": 93125,
+        "tokens_out": 620,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000235"
+    },
+    {
+      "index": 11,
+      "shape": "tool",
+      "payload": {
+        "name": "conductor.ack",
+        "args": {
+          "item_ids": [
+            "t-000237",
+            "t-000238"
+          ],
+          "close": "acked",
+          "note": "F1 的更正经已独立复核：data/attack_plans.json 第 2593 行现为 statement_id=000042，000030 已无残留；verifications/000042.jsonl 末行 v-000008 判「成立」"
+        },
+        "why": "把 F 的回执项与时钟提醒项一起消掉，收工前清板"
+      },
+      "result": {
+        "tool": "conductor.ack",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "ok": true,
+          "state": "acked",
+          "acked": [
+            "t-000237",
+            "t-000238"
+          ],
+          "already_done": [
+            "t-000237",
+            "t-000238"
+          ],
+          "refused": [],
+          "unknown": [],
+          "missing": [],
+          "not_yours": [],
+          "refusal_codes": [],
+          "results": [
+            {
+              "item_id": "t-000237",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000238",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            }
+          ],
+          "count": 2,
+          "requested": 2,
+          "by_task_id": "t-000235",
+          "note": "F1 的更正经已独立复核：data/attack_plans.json 第 2593 行现为 statement_id=000042，000030 已无残留；verifications/000042.jsonl 末行 v-000008 判「成立」",
+          "close": "acked",
+          "reason": "确认了 2 条"
+        },
+        "error": "",
+        "meta": {
+          "checked": true,
+          "ok": true,
+          "state": "acked",
+          "acked": [
+            "t-000237",
+            "t-000238"
+          ],
+          "already_done": [
+            "t-000237",
+            "t-000238"
+          ],
+          "refused": [],
+          "unknown": [],
+          "missing": [],
+          "not_yours": [],
+          "refusal_codes": [],
+          "results": [
+            {
+              "item_id": "t-000237",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000238",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            }
+          ],
+          "count": 2,
+          "requested": 2,
+          "by_task_id": "t-000235",
+          "note": "F1 的更正经已独立复核：data/attack_plans.json 第 2593 行现为 statement_id=000042，000030 已无残留；verifications/000042.jsonl 末行 v-000008 判「成立」",
+          "close": "acked",
+          "reason": "确认了 2 条"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 92288,
+        "prompt_cache_miss_tokens": 3073,
+        "tokens_in": 95361,
+        "tokens_out": 682,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000235"
+    },
+    {
+      "index": 12,
+      "shape": "tool",
+      "payload": {
+        "name": "conductor.retire_child",
+        "args": {
+          "child_name": "F1",
+          "reason": "更正已落盘并经我独立复核（attack_plans 第 2593 行 statement_id=000042、verifications/000042 末行判成立），不再需要它接活"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "conductor.retire_child",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "state": "retired",
+          "retired": true,
+          "task_id": "t-000236",
+          "name": "F1",
+          "parent_task_id": "t-000235",
+          "branch": "waiting_no_children",
+          "open_items": [],
+          "missing": [],
+          "reason": "F1 退役：waiting_no_children（子已停 + 它名下无活跃子代理）；面 S01 已归还池里",
+          "note": "更正已落盘并经我独立复核（attack_plans 第 2593 行 statement_id=000042、verifications/000042 末行判成立），不再需要它接活",
+          "retired_path": "D:\\Incubator\\projects\\lp-ball-22\\out\\roster\\t-000235-retired.jsonl",
+          "roster_retired": true,
+          "task_id_compat": false,
+          "addressed_by": "child_name",
+          "subtree": [
+            "t-000236"
+          ],
+          "subtree_size": 1,
+          "order": [
+            "t-000236"
+          ],
+          "cascade": [
+            {
+              "task_id": "t-000236",
+              "parent": "t-000235",
+              "depth": 0,
+              "role": "F",
+              "name": "F1",
+              "branch": "waiting_no_children",
+              "state": "retired",
+              "why": "F1 退役：waiting_no_children（子已停 + 它名下无活跃子代理）；面 S01 已归还池里"
+            }
+          ],
+          "retired_count": 1,
+          "unrostered": [],
+          "active_nodes": [],
+          "busy_task_ids": [],
+          "readings": {
+            "child_counts_before": {
+              "checked": true,
+              "reason": "",
+              "owner": "t-000235",
+              "children_unretired": 1,
+              "active_child_count": 0,
+              "labels": {
+                "children_unretired": "子代理数",
+                "active_child_count": "活跃子代理数"
+              },
+              "waiting_only": [],
+              "unjudged": [],
+              "states": {
+                "flying": 0,
+                "standby": 0,
+                "silent": 1,
+                "unknown": 0,
+                "active": 0,
+                "total": 1
+              },
+              "state_labels": {
+                "flying": "在飞",
+                "standby": "待机",
+                "silent": "静默",
+                "unknown": "未读到"
+              },
+              "complete": true,
+              "by_owner": {
+                "t-000235": {
+                  "children_unretired": 1,
+                  "active_child_count": 0,
+                  "flying": 0,
+                  "standby": 0,
+                  "silent": 1,
+                  "unknown": 0
+                }
+              },
+              "bad_roster_lines": [],
+              "note": "子代理数=1，活跃子代理数=0（在飞 0 · 待机 0 · 静默 1）"
+            },
+            "depth_of": {
+              "t-000236": 0
+            },
+            "subtree_size": 1,
+            "active_count": 0,
+            "busy_task_ids": [],
+            "labels": {
+              "children_unretired": "子代理数",
+              "active_child_count": "活跃子代理数"
+            },
+            "target_state": "silent",
+            "child_counts_after": {
+              "checked": true,
+              "reason": "",
+              "owner": "t-000235",
+              "children_unretired": 0,
+              "active_child_count": 0,
+              "labels": {
+                "children_unretired": "子代理数",
+                "active_child_count": "活跃子代理数"
+              },
+              "waiting_only": [],
+              "unjudged": [],
+              "states": {
+                "flying": 0,
+                "standby": 0,
+                "silent": 0,
+                "unknown": 0,
+                "active": 0,
+                "total": 0
+              },
+              "state_labels": {
+                "flying": "在飞",
+                "standby": "待机",
+                "silent": "静默",
+                "unknown": "未读到"
+              },
+              "complete": true,
+              "by_owner": {},
+              "bad_roster_lines": [],
+              "note": "子代理数=0，活跃子代理数=0（在飞 0 · 待机 0 · 静默 0）"
+            },
+            "written": [
+              "t-000236"
+            ]
+          },
+          "kept": [],
+          "cascade_reading": {
+            "count": 1,
+            "ids": [
+              "t-000236"
+            ],
+            "levels": [
+              0
+            ],
+            "kept": []
+          },
+          "children_unretired": 0,
+          "active_child_count": 0,
+          "target_state": "silent",
+          "target_state_label": "静默",
+          "blocking": [],
+          "refusal_code": ""
+        },
+        "error": "",
+        "meta": {
+          "checked": true,
+          "state": "retired",
+          "retired": true,
+          "task_id": "t-000236",
+          "name": "F1",
+          "parent_task_id": "t-000235",
+          "branch": "waiting_no_children",
+          "open_items": [],
+          "missing": [],
+          "reason": "F1 退役：waiting_no_children（子已停 + 它名下无活跃子代理）；面 S01 已归还池里",
+          "note": "更正已落盘并经我独立复核（attack_plans 第 2593 行 statement_id=000042、verifications/000042 末行判成立），不再需要它接活",
+          "retired_path": "D:\\Incubator\\projects\\lp-ball-22\\out\\roster\\t-000235-retired.jsonl",
+          "roster_retired": true,
+          "task_id_compat": false,
+          "addressed_by": "child_name",
+          "subtree": [
+            "t-000236"
+          ],
+          "subtree_size": 1,
+          "order": [
+            "t-000236"
+          ],
+          "cascade": [
+            {
+              "task_id": "t-000236",
+              "parent": "t-000235",
+              "depth": 0,
+              "role": "F",
+              "name": "F1",
+              "branch": "waiting_no_children",
+              "state": "retired",
+              "why": "F1 退役：waiting_no_children（子已停 + 它名下无活跃子代理）；面 S01 已归还池里"
+            }
+          ],
+          "retired_count": 1,
+          "unrostered": [],
+          "active_nodes": [],
+          "busy_task_ids": [],
+          "readings": {
+            "child_counts_before": {
+              "checked": true,
+              "reason": "",
+              "owner": "t-000235",
+              "children_unretired": 1,
+              "active_child_count": 0,
+              "labels": {
+                "children_unretired": "子代理数",
+                "active_child_count": "活跃子代理数"
+              },
+              "waiting_only": [],
+              "unjudged": [],
+              "states": {
+                "flying": 0,
+                "standby": 0,
+                "silent": 1,
+                "unknown": 0,
+                "active": 0,
+                "total": 1
+              },
+              "state_labels": {
+                "flying": "在飞",
+                "standby": "待机",
+                "silent": "静默",
+                "unknown": "未读到"
+              },
+              "complete": true,
+              "by_owner": {
+                "t-000235": {
+                  "children_unretired": 1,
+                  "active_child_count": 0,
+                  "flying": 0,
+                  "standby": 0,
+                  "silent": 1,
+                  "unknown": 0
+                }
+              },
+              "bad_roster_lines": [],
+              "note": "子代理数=1，活跃子代理数=0（在飞 0 · 待机 0 · 静默 1）"
+            },
+            "depth_of": {
+              "t-000236": 0
+            },
+            "subtree_size": 1,
+            "active_count": 0,
+            "busy_task_ids": [],
+            "labels": {
+              "children_unretired": "子代理数",
+              "active_child_count": "活跃子代理数"
+            },
+            "target_state": "silent",
+            "child_counts_after": {
+              "checked": true,
+              "reason": "",
+              "owner": "t-000235",
+              "children_unretired": 0,
+              "active_child_count": 0,
+              "labels": {
+                "children_unretired": "子代理数",
+                "active_child_count": "活跃子代理数"
+              },
+              "waiting_only": [],
+              "unjudged": [],
+              "states": {
+                "flying": 0,
+                "standby": 0,
+                "silent": 0,
+                "unknown": 0,
+                "active": 0,
+                "total": 0
+              },
+              "state_labels": {
+                "flying": "在飞",
+                "standby": "待机",
+                "silent": "静默",
+                "unknown": "未读到"
+              },
+              "complete": true,
+              "by_owner": {},
+              "bad_roster_lines": [],
+              "note": "子代理数=0，活跃子代理数=0（在飞 0 · 待机 0 · 静默 0）"
+            },
+            "written": [
+              "t-000236"
+            ]
+          },
+          "kept": [],
+          "cascade_reading": {
+            "count": 1,
+            "ids": [
+              "t-000236"
+            ],
+            "levels": [
+              0
+            ],
+            "kept": []
+          },
+          "children_unretired": 0,
+          "active_child_count": 0,
+          "target_state": "silent",
+          "target_state_label": "静默",
+          "blocking": [],
+          "refusal_code": ""
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 94592,
+        "prompt_cache_miss_tokens": 2115,
+        "tokens_in": 96707,
+        "tokens_out": 516,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000235"
+    },
+    {
+      "index": 13,
+      "shape": "final",
+      "payload": {
+        "final": "更正经已落盘并经我独立复核，R6 那一格不再指向无签命题。① 做法 (1) 成功（table.update 整条 history 回写，一次成功，无拒信）；(2) 未启用。逐字读数：① fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\", path=\"data/attack_plans.json\") 改后唯一命中 —— data/attack_plans.json:2593: \"statement_id\": \"000042\",（改前同一行是 \"000030\"，000030 已无残留）；② verifications/000042.jsonl 末行（第 8 行，v-000008，round=8，at 2026-11-24T21:29:17+08:00）：verdict=\"成立\"、proof_sha256=\"43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6\"、object_sha256=\"802a85e9853b5fe2d772ef53fdef51048df3eca7ca2a72ebe84071ee9434e313\"、unresolved_errors=0；③ 无拒信可贴。改动的另外一格：第 2 轮条目新增 notes_correction（逐字：归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号），其余字段与其余轮次一个字节未动。收工门 R6 的判断依据：plan 000002 第 2 轮 history 现在指向 000042，而 statements/verifications 里 000042 有 8 行判词、末行「成立」（另 v-000003 亦为「成立」），故那一条 plan_progress 行应当从 unknown 转成有签的一档；我没有亲自跑收工门读数，这一格仍以 M 侧读数为准。板项 t-000237 / t-000238 已 ack（already_done），子代理 F1（t-000236）已销号（静默、无未消项、面 S01 已归还），我名下子代理 0。",
+        "evidence": [
+          "t-000236",
+          "t-000237",
+          "t-000238",
+          "v-000008",
+          "v-000003",
+          "data/attack_plans.json:2593",
+          "verifications/000042.jsonl",
+          "manuscripts/F/f-proof-000003.md"
+        ],
+        "notify": {
+          "to": "M",
+          "summary": "R6 已处置：plan 000002 第 2 轮 statement_id 就地更正为 000042（F 侧 table.update 回写），附三样逐字读数",
+          "body": "## 做了什么\n让 F（F1 / t-000236）用 `table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 完整数组>})` 就地更正 plan 000002 第 2 轮 history 的归属：`\"statement_id\": \"000030\"` → `\"000042\"`，并新增一格 `notes_correction`（逐字：归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号）。其余字段、其余轮次一个字节未动。做法 (1) 一次成功，**没有启用做法 (2)**，也没有拒信。\n\n## 三样逐字读数（回执）\n① 改后 `fs.search(pattern=\"\\\\\\\"statement_id\\\\\\\": \\\\\\\"0000(30|42)\\\\\\\"\", path=\"data/attack_plans.json\")` 全部命中（共 1 条，一条不漏）：\n```\ndata/attack_plans.json:2593: \"statement_id\": \"000042\",\n```\n改前同一行逐字为 `data/attack_plans.json:2593: \"statement_id\": \"000030\",` ⇒ 000030 已无残留。\n\n② `verifications/000042.jsonl` 末行（第 8 行 / 共 8 行，`round=8`，`at=2026-11-24T21:29:17+08:00`）：\n- `verification_id`: `v-000008`，`verifier`: `agent-V-V1`\n- `verdict`: **成立**\n- `proof_sha256`: `43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6`\n- `object_sha256`: `802a85e9853b5fe2d772ef53fdef51048df3eca7ca2a72ebe84071ee9434e313`\n- `unresolved_errors`: 0，`findings`: []\n（同族另有 v-000003 亦判「成立」，statement_id 全为 000042。）\n\n③ 两条做法都做不到时的拒信：**不适用** —— 做法 (1) 已落盘，无拒码、无拒信原文可贴。\n\n## R6 会不会转 pass（我的判断与判据）\n判据是那一条 plan_progress 行从 history 取 `statement_id`、再去 statements/verifications 找认领给它的签。现在那一格读出来是 000042，而 000042 有 8 行判词、末行「成立」（sha 43f4c2ab… 与现行正文同），所以该行应当不再是 unknown。**但我没有亲自跑收工门读数**，这一格以你侧 `plan_progress_rows` 的现读为准。\n\n## 收尾状态\n- 板项 `t-000237`（F 的回执项）、`t-000238`（时钟提醒项）已 ack（读数为 already_done）。\n- 子代理 `F1`（t-000236）已销号：静默、无未消项、面 S01 已归还池里；我名下子代理 0、未消板项 0。\n- 我这一趟没有开新研究方向（这条委托本身就是单点台账更正，不是研究问题），也没有动 `statements` 正文。",
+          "refs": [
+            "t-000236",
+            "v-000008",
+            "v-000003"
+          ]
+        }
+      },
+      "result": {
+        "notify_problem": "notify.refs 里的 't-000236' 立不住：引用的前序手稿 't-000236' 不在盘上 ⇒ 不许凭空引用（溯源链断了）"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 95872,
+        "prompt_cache_miss_tokens": 3371,
+        "tokens_in": 99243,
+        "tokens_out": 1643,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000235"
+    }
+  ],
+  "final": "更正经已落盘并经我独立复核，R6 那一格不再指向无签命题。① 做法 (1) 成功（table.update 整条 history 回写，一次成功，无拒信）；(2) 未启用。逐字读数：① fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\", path=\"data/attack_plans.json\") 改后唯一命中 —— data/attack_plans.json:2593: \"statement_id\": \"000042\",（改前同一行是 \"000030\"，000030 已无残留）；② verifications/000042.jsonl 末行（第 8 行，v-000008，round=8，at 2026-11-24T21:29:17+08:00）：verdict=\"成立\"、proof_sha256=\"43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6\"、object_sha256=\"802a85e9853b5fe2d772ef53fdef51048df3eca7ca2a72ebe84071ee9434e313\"、unresolved_errors=0；③ 无拒信可贴。改动的另外一格：第 2 轮条目新增 notes_correction（逐字：归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号），其余字段与其余轮次一个字节未动。收工门 R6 的判断依据：plan 000002 第 2 轮 history 现在指向 000042，而 statements/verifications 里 000042 有 8 行判词、末行「成立」（另 v-000003 亦为「成立」），故那一条 plan_progress 行应当从 unknown 转成有签的一档；我没有亲自跑收工门读数，这一格仍以 M 侧读数为准。板项 t-000237 / t-000238 已 ack（already_done），子代理 F1（t-000236）已销号（静默、无未消项、面 S01 已归还），我名下子代理 0。",
+  "evidence": [
+    "t-000236",
+    "t-000237",
+    "t-000238",
+    "v-000008",
+    "v-000003",
+    "data/attack_plans.json:2593",
+    "verifications/000042.jsonl",
+    "manuscripts/F/f-proof-000003.md"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 2,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 13,
+  "compactions": 0,
+  "mailbox_items": [
+    "t-000237",
+    "t-000238"
+  ],
+  "mailbox_msgs": [
+    "m000029"
+  ],
+  "mailbox_delivered": 3,
+  "monitor_turns": 1,
+  "wakes": 1,
+  "wake_ids": [
+    "wk-000074"
+  ],
+  "wake_events": [
+    {
+      "wake_id": "wk-000074",
+      "task_id": "t-000235",
+      "role": "D",
+      "timer_id": "tm-000229",
+      "kind": "timer",
+      "reason": "请更正你自己名下一条攻坚计划 history 里一处 statement_id 的归属错误：这是对你自己产出的更正，不是改别人的台账。 【怎么定位】先 `attack.list_plans(include_terminal=True)` 列出你自己名下的全部计划，找出 history 里唯一一处 `\"statement_id\": \"000030\"` 的那一条。命中位置在 history 第 2 轮",
+      "purpose": "请更正你自己名下一条攻坚计划 history 里一处 statement_id 的归属错误：这是对你自己产出的更正，不是改别人的台账。 【怎么定位】先 `attack.list_plans(include_terminal=True)` 列出你自己名下的全部计划，找出 history 里唯一一处 `\"statement_id\": \"000030\"` 的那一条。命中位置在 history 第 2 轮",
+      "purpose_missing": false,
+      "message": "时间到：请更正你自己名下一条攻坚计划 history 里一处 statement_id 的归属错误：这是对你自己产出的更正，不是改别人的台账。 【怎么定位】先 `attack.list_plans(include_terminal=True)` 列出你自己名下的全部计划，找出 history 里唯一一处 `\"statement_id\": \"000030\"` 的那一条。命中位置在 history 第 2 轮｜等了 5 分钟 51 秒（起于 23:06:12，到于 23:12:03）。它交的是：ok：执行完成",
+      "waited_sec": 350.955289,
+      "triggered_by": "target_event",
+      "wait_for": "task:t-000236",
+      "due_at": "",
+      "fired_at": "2026-11-24T15:12:03.493740+00:00",
+      "mailbox_item_id": "t-000238",
+      "state": "pending"
+    }
+  ],
+  "clock_pumps": 25,
+  "clock_fired": 2,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "D 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "D",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    },
+    "own_children": [
+      "t-000236"
+    ],
+    "return_given": [
+      "t-000236"
+    ],
+    "reentry_turns": 2,
+    "reentry_reasons": [
+      "派活之后还没给过模型回合：这一批 1 项还在跑（t-000236），这一拍的 waiter 全是在等它们 ⇒ 这一拍返场问模型一次，下一拍起才按挂机口径走",
+      "上一拍是等谁的唤醒（t-000236 回来）—— 那一拍按 ③ 跳过，那一批的产出现在就在上下文里 ⇒ 这一拍返场问模型（不许再睡一拍）"
+    ],
+    "woke_turns": 1,
+    "skip_calls": 1,
+    "woke_reasons": [
+      "event"
+    ]
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [],
+  "summons": [
+    "F"
+  ],
+  "summons_refused": [
+    {
+      "to": "F",
+      "refused": "dispatch_names_a_conjecture_id",
+      "outcome": "refused",
+      "error": "这一条派活没有出去：派活文本点名了 D 自己登记的猜想号 000002、000003。业主 2026-11-08：那条猜想只是**参考意见**，D 不能命令 E / F 必须把它做出来。改法：只写研究方向（要弄清什么、可以试哪条路），不写 `conjecture_id`（`conj:NNNNNN` 或裸 6 位号都不写）。"
+    },
+    {
+      "to": "F",
+      "refused": "dispatch_names_a_conjecture_id",
+      "outcome": "refused",
+      "error": "这一条派活没有出去：派活文本点名了 D 自己登记的猜想号 000016、000023。业主 2026-11-08：那条猜想只是**参考意见**，D 不能命令 E / F 必须把它做出来。改法：只写研究方向（要弄清什么、可以试哪条路），不写 `conjecture_id`（`conj:NNNNNN` 或裸 6 位号都不写）。"
+    }
+  ],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [
+    {
+      "kind": "summon",
+      "counted": true,
+      "task_id": "t-000236",
+      "role": "F",
+      "step": 5,
+      "status": "running",
+      "outcome": "",
+      "handoff_id": "",
+      "outputs": [
+        "t-000236"
+      ],
+      "disposition": ""
+    }
+  ],
+  "summons_total": 1,
+  "summons_consumed": 1,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 1,
+    "summons_consumed": 1,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [
+      {
+        "kind": "summon",
+        "counted": true,
+        "task_id": "t-000236",
+        "role": "F",
+        "step": 5,
+        "status": "running",
+        "outcome": "",
+        "handoff_id": "",
+        "outputs": [
+          "t-000236"
+        ],
+        "disposition": "consumed",
+        "evidence": {
+          "step": 13,
+          "shape": "final",
+          "effect": "收工结论里的具体产物指涉",
+          "refs": [
+            "t-000236"
+          ]
+        }
+      }
+    ],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p328",
+    "role": "D",
+    "prompt_sha256": "3b7b330e13bbea61fe2c7e2776e555b393cf48d7ed9445504148d038a60cb0e9",
+    "prompt_chars": 81720,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "TOOL_29",
+      "TOOL_30",
+      "TOOL_31",
+      "TOOL_32",
+      "TOOL_33",
+      "TOOL_34",
+      "TOOL_35",
+      "TOOL_36",
+      "TOOL_37",
+      "TOOL_38",
+      "TOOL_39",
+      "TOOL_40",
+      "TOOL_41",
+      "TOOL_42",
+      "TOOL_43",
+      "TOOL_44",
+      "TOOL_45",
+      "TOOL_46",
+      "TOOL_47",
+      "TOOL_48",
+      "TOOL_49",
+      "TOOL_50",
+      "TOOL_51",
+      "TOOL_52",
+      "TOOL_53",
+      "TOOL_54",
+      "TOOL_55",
+      "TOOL_56",
+      "TOOL_57",
+      "TOOL_58",
+      "TOOL_59",
+      "TOOL_60",
+      "TOOL_61",
+      "TOOL_62",
+      "TOOL_63",
+      "TOOL_64",
+      "TOOL_65",
+      "TOOL_66",
+      "TOOL_67",
+      "TOOL_68",
+      "TOOL_69",
+      "TOOL_70",
+      "TOOL_71",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_LIMITS",
+      "COLLAB_NAMES",
+      "PARENT_STOP",
+      "PARENT_ROSTER",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 16,
+    "tokens_in": 1019513,
+    "tokens_out": 18995,
+    "usd": 0.021454,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 12,
+    "no_request_calls": 0,
+    "hit": 970752,
+    "miss": 44239,
+    "unknown_calls": 0,
+    "tokens_in": 1014991,
+    "hit_rate": 0.9564,
+    "mismatched_calls": 0,
+    "saved_usd": 0.142701,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 479.125,
+  "end_ts": "2026-11-24T23:12:45+08:00",
+  "notes": [
+    "派活文本点名了自己登记的猜想号（000002、000003）⇒ 受控拒",
+    "派活文本点名了自己登记的猜想号（000016、000023）⇒ 受控拒",
+    "第 6 步返场：子代理回来 0 条，还在跑 1 条（这一拍为了返场没等子：返场判据给过之后才等）",
+    "返场（Q22）：派活之后还没给过模型回合：这一批 1 项还在跑（t-000236），这一拍的 waiter 全是在等它们 ⇒ 这一拍返场问模型一次，下一拍起才按挂机口径走",
+    "第 7 步返场：子代理回来 1 条，还在跑 0 条（等待 158.4s，原因 settled）",
+    "返场（Q22）：上一拍是等谁的唤醒（t-000236 回来）—— 那一拍按 ③ 跳过，那一批的产出现在就在上下文里 ⇒ 这一拍返场问模型（不许再睡一拍）",
+    "收工没有可用 notify 表（notify.refs 里的 't-000236' 立不住：引用的前序手稿 't-000236' 不在盘上 ⇒ 不许凭空引用（溯源链断了））⇒ 这一趟没有交接手稿（不打回、不代填）",
+    "缓存读数：命中 970752 / 未命中 44239 token，命中率 95.6%（12 次调用）；按 modelcost 口径估算可省 约 0.142701 美元",
+    "子产出处理读数：summons_total=1，consumed=1，waived=0，unknown=0，unconsumed=0",
+    "终态回报已落板：t-000239（框架通报；模型没填 notify）"
+  ],
+  "final_payload": {
+    "final": "更正经已落盘并经我独立复核，R6 那一格不再指向无签命题。① 做法 (1) 成功（table.update 整条 history 回写，一次成功，无拒信）；(2) 未启用。逐字读数：① fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\", path=\"data/attack_plans.json\") 改后唯一命中 —— data/attack_plans.json:2593: \"statement_id\": \"000042\",（改前同一行是 \"000030\"，000030 已无残留）；② verifications/000042.jsonl 末行（第 8 行，v-000008，round=8，at 2026-11-24T21:29:17+08:00）：verdict=\"成立\"、proof_sha256=\"43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6\"、object_sha256=\"802a85e9853b5fe2d772ef53fdef51048df3eca7ca2a72ebe84071ee9434e313\"、unresolved_errors=0；③ 无拒信可贴。改动的另外一格：第 2 轮条目新增 notes_correction（逐字：归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号），其余字段与其余轮次一个字节未动。收工门 R6 的判断依据：plan 000002 第 2 轮 history 现在指向 000042，而 statements/verifications 里 000042 有 8 行判词、末行「成立」（另 v-000003 亦为「成立」），故那一条 plan_progress 行应当从 unknown 转成有签的一档；我没有亲自跑收工门读数，这一格仍以 M 侧读数为准。板项 t-000237 / t-000238 已 ack（already_done），子代理 F1（t-000236）已销号（静默、无未消项、面 S01 已归还），我名下子代理 0。",
+    "evidence": [
+      "t-000236",
+      "t-000237",
+      "t-000238",
+      "v-000008",
+      "v-000003",
+      "data/attack_plans.json:2593",
+      "verifications/000042.jsonl",
+      "manuscripts/F/f-proof-000003.md"
+    ],
+    "notify": {
+      "to": "M",
+      "summary": "R6 已处置：plan 000002 第 2 轮 statement_id 就地更正为 000042（F 侧 table.update 回写），附三样逐字读数",
+      "body": "## 做了什么\n让 F（F1 / t-000236）用 `table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 完整数组>})` 就地更正 plan 000002 第 2 轮 history 的归属：`\"statement_id\": \"000030\"` → `\"000042\"`，并新增一格 `notes_correction`（逐字：归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号）。其余字段、其余轮次一个字节未动。做法 (1) 一次成功，**没有启用做法 (2)**，也没有拒信。\n\n## 三样逐字读数（回执）\n① 改后 `fs.search(pattern=\"\\\\\\\"statement_id\\\\\\\": \\\\\\\"0000(30|42)\\\\\\\"\", path=\"data/attack_plans.json\")` 全部命中（共 1 条，一条不漏）：\n```\ndata/attack_plans.json:2593: \"statement_id\": \"000042\",\n```\n改前同一行逐字为 `data/attack_plans.json:2593: \"statement_id\": \"000030\",` ⇒ 000030 已无残留。\n\n② `verifications/000042.jsonl` 末行（第 8 行 / 共 8 行，`round=8`，`at=2026-11-24T21:29:17+08:00`）：\n- `verification_id`: `v-000008`，`verifier`: `agent-V-V1`\n- `verdict`: **成立**\n- `proof_sha256`: `43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6`\n- `object_sha256`: `802a85e9853b5fe2d772ef53fdef51048df3eca7ca2a72ebe84071ee9434e313`\n- `unresolved_errors`: 0，`findings`: []\n（同族另有 v-000003 亦判「成立」，statement_id 全为 000042。）\n\n③ 两条做法都做不到时的拒信：**不适用** —— 做法 (1) 已落盘，无拒码、无拒信原文可贴。\n\n## R6 会不会转 pass（我的判断与判据）\n判据是那一条 plan_progress 行从 history 取 `statement_id`、再去 statements/verifications 找认领给它的签。现在那一格读出来是 000042，而 000042 有 8 行判词、末行「成立」（sha 43f4c2ab… 与现行正文同），所以该行应当不再是 unknown。**但我没有亲自跑收工门读数**，这一格以你侧 `plan_progress_rows` 的现读为准。\n\n## 收尾状态\n- 板项 `t-000237`（F 的回执项）、`t-000238`（时钟提醒项）已 ack（读数为 already_done）。\n- 子代理 `F1`（t-000236）已销号：静默、无未消项、面 S01 已归还池里；我名下子代理 0、未消板项 0。\n- 我这一趟没有开新研究方向（这条委托本身就是单点台账更正，不是研究问题），也没有动 `statements` 正文。",
+      "refs": [
+        "t-000236",
+        "v-000008",
+        "v-000003"
+      ]
+    }
+  },
+  "task_id": "t-000235"
+}

@@ -1,0 +1,902 @@
+{
+  "role": "B",
+  "task": "B：这一趟派给你的活是 —— 把命题 stmt:000030 明确放弃（D→B 派活，研究侧已判：这条只能走放弃这一档）。请用通用表写口 table.update(table=\"statements\", id=\"000030\", patch={\"status\": \"abandoned\"})，并按四档给全 abandon_kind 与 abandon_basis —— 本条的档是 difficulty（不是 math_error：命题没有被证伪，也没有 V 判「有毛病」的行；不是 counterexample：盘上没有反驳它的实验；不是 space_too_large：它不是枚举命题），abandon_basis 请逐字用我 params 给的那一段（我已经把「难在哪」写清：要一条 V 签得住的证明必须有带区间算术的 certified computation 通道，本会话形式化关闭、E 侧只有浮点读数；且它现行 proof_no 2 误指向 manuscripts/F/f-proof-000003.md，那份稿的命题逐字等于 stmt:000042，V 三行判词 statement_id 也全是 000042 —— 构不成对 000030 的证明）。不要改任何命题正文，不要动 stmt:000042（它已由 f-proof-000003 签住、是另一条命题）。完成后回执里请给三样：① stmt:000030 改后的 status 与 abandon_kind；② 系统拼出的 quote_reason 原文；③ 有没有受控拒信（abandon_reason_missing / abandon_difficulty_not_genuine 之类），有就原样贴理由码。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "statements",
+          "id": "000030"
+        },
+        "why": "先把 stmt:000030 的现行行读出来（status / kind / proof 路线 / label），再按四档给凭据写放弃理由"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "stmt_id": "000030",
+          "origin": "own_result",
+          "kind": "theorem",
+          "label": "截面面积计算核自检通过：极坐标 tanh-sinh 求积（断点取 A cosψ+B sinψ=0 与 |w_i|=|w_j| 在 [0,2π) 上的全部根）在",
+          "statement_text": "lp3-section-validate-v3",
+          "statement_full": "截面面积计算核自检通过：极坐标 tanh-sinh 求积（断点取 A cosψ+B sinψ=0 与 |w_i|=|w_j| 在 [0,2π) 上的全部根）在 p=2 上给任意中心截面面积 π（偏差 ≤1e-15）；在 p=1 上与八面体边缘裁剪精确值一致（≤1e-15）；p=1000 上坐标/体对角/面对角截面与立方体精确值 4、3√3、4√2 的偏差随 p 增大而缩小且落在 O(1/p) 以内；每个 p 的坐标截面等于 4Γ(1+1/p)^2/Γ(1+2/p)（相对偏差 ≤1e-13）；面积对平面基的旋转不变（≤1e-12）；粗嵌套 Simpson 法随加密收敛到极坐标值。",
+          "proof_text": "",
+          "source_lit_id": null,
+          "page_range": {
+            "start": null,
+            "end": null,
+            "label": ""
+          },
+          "quote_verified": null,
+          "quote_mode": "",
+          "quote_reason": "手稿收录（D 只递指针）：普通数值手稿 `work/E/e-num-000003.md` —— 命题逐字取自 `## 命题`，证明栏空着（业主 2026-11-08：普通数值档不写证明正文），程序在实验行的 `code_path`，引文面不适用",
+          "quote_span": "",
+          "quote_call_sha256": "",
+          "evidence_kind": "cross_check",
+          "bits": {
+            "numeric": "verified",
+            "proof": true,
+            "reviewed": false,
+            "formal": "pending",
+            "audited": false,
+            "origin": "own_result",
+            "evidence": {
+              "numeric": {
+                "entries": [
+                  {
+                    "script": "code/exp/lpsec_validate.py",
+                    "range": "",
+                    "n_cases": 0,
+                    "n_counterexamples": 0,
+                    "code_hash": "226a5da3ceebc6ed",
+                    "exp": "exp:000003"
+                  }
+                ],
+                "experiments": [
+                  "000003"
+                ],
+                "experiment_id": "000003",
+                "script": "code/exp/lpsec_validate.py",
+                "code_hash": "226a5da3ceebc6ed",
+                "manuscript": "work/E/e-num-000003.md",
+                "manuscript_sha256": "6b67487691efdd67657db5a075a5cc19c0b9168229f248f08ee8eea8d8b731c3",
+                "certificate": false
+              },
+              "numeric_reason": "",
+              "proof_process": "1. 【前提】固定 1 ≤ p < ∞；B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。（前提）（前提）\n2. 【推导】由 stmt:000034 的 (i)，对每个单位法向 n 与 n^⊥ 的任意单位正交基 (u,v) 有 A_p(n) = (1/2)∫_0^{2π}‖cosθ·u+sinθ·v‖_p^{-2}dθ。取 n = (1,1,1)/√3、u = (1,-1,0)/√2、v = (1,1,-2)/√6（直接验算 ‖u‖=‖v‖=1、u·v=0、u·n=v·n=0，故 {u,v} 是 H := {x+y+z=0} 的单位正交基）；另一路参数化 Φ(x,y) := (x,y,−x−y) 是 R²→H 的双射，∂_xΦ=(1,0,−1) 与 ∂_yΦ=(0,1,−1) 的叉积为 (1,1,1)、模为 √3，故 A_diag(p) = √3∫∫_D dxdy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。（依据：stmt:000034）\n3. 【推导】对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)（r ≥ 0、θ ∈ [0,2π)）：由 |r cosθ|^p+|r sinθ|^p+|r(cosθ+sinθ)|^p = r^p g(θ)（记 g(θ) := |cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p）得 (x,y) ∈ D ⟺ r ≤ g(θ)^{-1/p}；由面积元 r dr dθ 得 ∫∫_D = ∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ，与第 2 步合并即 A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，这给出 (i) 的积分式。（依据：stmt:000034）\n4. 【推导】一致控制：g ≥ max(|cosθ|,|sinθ|)^p ≥ (1/√2)^p（因为 max(|cosθ|,|sinθ|) ≥ 1/√2），故对一切 p ∈ [1,∞) 与一切 θ 有 0 < g(θ)^{-2/p} ≤ (1/√2)^{-2} = 2；又 (p,θ) ↦ g(θ) 连续且在每个局部 p-区间上 g 有与 p 无关的正下界，故 θ ↦ g(θ)^{-2/p} 关于 p 逐点连续。（依据：stmt:000034）\n5. 【推导】p = 2 时 g(θ) = cos²θ+sin²θ+(cosθ+sinθ)² = 2+sin2θ；代换 u = 2θ 后用 ∫_0^{2π}du/(a+b sin u) = 2π/√(a²−b²)（取 a=2、b=1）得 ∫_0^{2π} dθ/(2+sin2θ) = ∫_0^{2π} du/(2+sin u) = 2π/√3，此处 p=2 使 g^{-2/p} 化为 g^{-1}，故 A_diag(2) = (√3/2)·(2π/√3) = π。（依据：stmt:000034）\n6. 【推导】由 stmt:000034 的 (ii)(iii)(iv) 的闭式 A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，在 p = 2 处得 A_face(2) = 2^0·4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π；与第 5 步合并得 Δ(2) = π − π = 0。（依据：stmt:000034）\n7. 【推导】Δ(1) 的计算：A_face(1) = 2^{-1/2}·4Γ(2)²/Γ(3) = 2^{-1/2}·4·1/2 = √2（Γ(2)=1、Γ(3)=2）；A_diag(1)：p = 1 时 g = |cosθ|+|sinθ|+|cosθ+sinθ| 满足 g(θ+π) = g(θ)，且在 [0,π/2] 上 g = 2(cosθ+sinθ)（故 g^{-2} = (1/4)(cosθ+sinθ)^{-2}）、在 [π/2,3π/4] 上 g = 2sinθ（g^{-2} = (1/4)sin^{-2}θ）、在 [3π/4,π] 上 g = −2cosθ（g^{-2} = (1/4)cos^{-2}θ）；三段对 ∫g^{-2} 的贡献各为 1/4（分别用 ∫_0^{π/2}dθ/(cosθ+sinθ)² = 1、[−cotθ] 与 [tanθ] 在两个端点区间上的取值各得 1），故 ∫_0^{2π}g^{-2}dθ = 2·(1/4+1/4+1/4) = 3/2，A_diag(1) = (√3/2)·(3/2) = 3√3/4；于是 Δ(1) = √2 − 3√3/4 > 0，因为 4√2 > 3√3 ⟺ 32 > 27。（依据：stmt:000034）\n8. 【推导】Δ 的连续性：Γ 在 (0,∞) 上连续且取正值，p ↦ 1/p、1+1/p、1+2/p 在 [1,∞) 上连续，故 A_face 在 [1,∞) 上连续；由第 4 步与 p 无关的控制 g^{-2/p} ≤ 2 与逐点连续性，有界收敛定理给出 p ↦ ∫_0^{2π}g(θ)^{-2/p}dθ 在 [1,∞) 上连续，故 A_diag 连续；两者相减得 Δ 在 [1,∞) 上连续。（依据：stmt:000034）\n9. 【推导】p→∞ 时 A_diag 的极限：记 m(θ) := max(|cosθ|,|sinθ|,|cosθ+sinθ|)，则 m(θ)^p ≤ g(θ) ≤ 3m(θ)^p，故对每个 θ 有 g(θ)^{-2/p} → m(θ)^{-2}；又 g ≥ m^p 给出 g^{-2/p} ≤ m^{-2} ≤ 2（因 m ≥ 1/√2），有界收敛定理给出 A_diag(p) → (√3/2)∫_0^{2π}m(θ)^{-2}dθ。按符号分段：在 [0,π/2] 上 m = cosθ+sinθ、在 [π/2,3π/4] 上 m = sinθ、在 [3π/4,π] 上 m = −cosθ，且 m(θ+π) = m(θ)，三段各贡献 1（同上一步的三段积分），故 ∫_0^{2π}m^{-2}dθ = 2·3 = 6，于是 lim_{p→∞}A_diag(p) = (√3/2)·6 = 3√3。（依据：stmt:000034）\n10. 【推导】p→∞ 时 A_face 的极限：C_p := 4Γ(1+1/p)²/Γ(1+2/p) → 4Γ(1)²/Γ(1) = 4（Γ 连续、Γ(1)=1），又 2^{1/2−1/p} → √2，故 A_face(p) → 4√2；与第 9 步合并得 lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0（同样由 32 > 27）。（依据：stmt:000034）\n11. 【推导】收尾：记 L := 4√2 − 3√3 > 0；由第 8 步 Δ 的连续性与第 10 步 lim Δ = L，取 ε := L/2 > 0，则存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 |Δ(p) − L| < ε，从而 Δ(p) > L/2 > 0，即 A_face(p) > A_diag(p) 对一切 p ≥ P0 成立，这给出 (iii) 的最后一句。（依据：stmt:000034）",
+              "proof_source": "own",
+              "reviewed_by": {},
+              "reviewed_source": "",
+              "formal": {},
+              "formal_reason": "",
+              "audited_by": {},
+              "optimized_by_proof": {
+                "2": false
+              }
+            },
+            "voided_by": {},
+            "grade": "strong_conjecture",
+            "audited_badge": false
+          },
+          "status": "active",
+          "derived_from": [],
+          "aliases": [],
+          "doc_id": null,
+          "line_range": {
+            "start": null,
+            "end": null,
+            "label": "exp:000003"
+          },
+          "created_at": "2026-11-24T18:25:33+08:00",
+          "created_by": "secretary-B",
+          "_proposition_adjudication": {
+            "checked": true,
+            "attempted": false,
+            "verdict": "different",
+            "canonical_name": "",
+            "same_as": "",
+            "basis": "查过：没有可比的候选 ⇒ 不同",
+            "reason": "查过：命题台账里没有可检索的 active 命题（候选 0 条）⇒ 注册新的",
+            "reused": false,
+            "seam_source": "agent_b.register_statement:same_statement",
+            "seam_attempted": false,
+            "at": "2026-11-24T18:25:33+08:00"
+          },
+          "manuscripts": {
+            "1": "work/E/e-num-000003.md",
+            "2": "manuscripts/F/f-proof-000003.md"
+          },
+          "manuscript_id": "000003",
+          "manuscript_family": "e-num",
+          "_kind_upgrade": {
+            "from": "conjecture",
+            "to": "theorem",
+            "basis": "手稿签块（连续 3/3 成立、正文 sha 相符）",
+            "grade": "strong_conjecture",
+            "by": "secretary-B",
+            "at": "2026-11-24T21:32:49+08:00"
+          },
+          "proofs": [
+            {
+              "proof_no": 2,
+              "text": "1. 【前提】固定 1 ≤ p < ∞；B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。（前提）（前提）\n2. 【推导】由 stmt:000034 的 (i)，对每个单位法向 n 与 n^⊥ 的任意单位正交基 (u,v) 有 A_p(n) = (1/2)∫_0^{2π}‖cosθ·u+sinθ·v‖_p^{-2}dθ。取 n = (1,1,1)/√3、u = (1,-1,0)/√2、v = (1,1,-2)/√6（直接验算 ‖u‖=‖v‖=1、u·v=0、u·n=v·n=0，故 {u,v} 是 H := {x+y+z=0} 的单位正交基）；另一路参数化 Φ(x,y) := (x,y,−x−y) 是 R²→H 的双射，∂_xΦ=(1,0,−1) 与 ∂_yΦ=(0,1,−1) 的叉积为 (1,1,1)、模为 √3，故 A_diag(p) = √3∫∫_D dxdy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。（依据：stmt:000034）\n3. 【推导】对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)（r ≥ 0、θ ∈ [0,2π)）：由 |r cosθ|^p+|r sinθ|^p+|r(cosθ+sinθ)|^p = r^p g(θ)（记 g(θ) := |cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p）得 (x,y) ∈ D ⟺ r ≤ g(θ)^{-1/p}；由面积元 r dr dθ 得 ∫∫_D = ∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ，与第 2 步合并即 A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，这给出 (i) 的积分式。（依据：stmt:000034）\n4. 【推导】一致控制：g ≥ max(|cosθ|,|sinθ|)^p ≥ (1/√2)^p（因为 max(|cosθ|,|sinθ|) ≥ 1/√2），故对一切 p ∈ [1,∞) 与一切 θ 有 0 < g(θ)^{-2/p} ≤ (1/√2)^{-2} = 2；又 (p,θ) ↦ g(θ) 连续且在每个局部 p-区间上 g 有与 p 无关的正下界，故 θ ↦ g(θ)^{-2/p} 关于 p 逐点连续。（依据：stmt:000034）\n5. 【推导】p = 2 时 g(θ) = cos²θ+sin²θ+(cosθ+sinθ)² = 2+sin2θ；代换 u = 2θ 后用 ∫_0^{2π}du/(a+b sin u) = 2π/√(a²−b²)（取 a=2、b=1）得 ∫_0^{2π} dθ/(2+sin2θ) = ∫_0^{2π} du/(2+sin u) = 2π/√3，此处 p=2 使 g^{-2/p} 化为 g^{-1}，故 A_diag(2) = (√3/2)·(2π/√3) = π。（依据：stmt:000034）\n6. 【推导】由 stmt:000034 的 (ii)(iii)(iv) 的闭式 A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，在 p = 2 处得 A_face(2) = 2^0·4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π；与第 5 步合并得 Δ(2) = π − π = 0。（依据：stmt:000034）\n7. 【推导】Δ(1) 的计算：A_face(1) = 2^{-1/2}·4Γ(2)²/Γ(3) = 2^{-1/2}·4·1/2 = √2（Γ(2)=1、Γ(3)=2）；A_diag(1)：p = 1 时 g = |cosθ|+|sinθ|+|cosθ+sinθ| 满足 g(θ+π) = g(θ)，且在 [0,π/2] 上 g = 2(cosθ+sinθ)（故 g^{-2} = (1/4)(cosθ+sinθ)^{-2}）、在 [π/2,3π/4] 上 g = 2sinθ（g^{-2} = (1/4)sin^{-2}θ）、在 [3π/4,π] 上 g = −2cosθ（g^{-2} = (1/4)cos^{-2}θ）；三段对 ∫g^{-2} 的贡献各为 1/4（分别用 ∫_0^{π/2}dθ/(cosθ+sinθ)² = 1、[−cotθ] 与 [tanθ] 在两个端点区间上的取值各得 1），故 ∫_0^{2π}g^{-2}dθ = 2·(1/4+1/4+1/4) = 3/2，A_diag(1) = (√3/2)·(3/2) = 3√3/4；于是 Δ(1) = √2 − 3√3/4 > 0，因为 4√2 > 3√3 ⟺ 32 > 27。（依据：stmt:000034）\n8. 【推导】Δ 的连续性：Γ 在 (0,∞) 上连续且取正值，p ↦ 1/p、1+1/p、1+2/p 在 [1,∞) 上连续，故 A_face 在 [1,∞) 上连续；由第 4 步与 p 无关的控制 g^{-2/p} ≤ 2 与逐点连续性，有界收敛定理给出 p ↦ ∫_0^{2π}g(θ)^{-2/p}dθ 在 [1,∞) 上连续，故 A_diag 连续；两者相减得 Δ 在 [1,∞) 上连续。（依据：stmt:000034）\n9. 【推导】p→∞ 时 A_diag 的极限：记 m(θ) := max(|cosθ|,|sinθ|,|cosθ+sinθ|)，则 m(θ)^p ≤ g(θ) ≤ 3m(θ)^p，故对每个 θ 有 g(θ)^{-2/p} → m(θ)^{-2}；又 g ≥ m^p 给出 g^{-2/p} ≤ m^{-2} ≤ 2（因 m ≥ 1/√2），有界收敛定理给出 A_diag(p) → (√3/2)∫_0^{2π}m(θ)^{-2}dθ。按符号分段：在 [0,π/2] 上 m = cosθ+sinθ、在 [π/2,3π/4] 上 m = sinθ、在 [3π/4,π] 上 m = −cosθ，且 m(θ+π) = m(θ)，三段各贡献 1（同上一步的三段积分），故 ∫_0^{2π}m^{-2}dθ = 2·3 = 6，于是 lim_{p→∞}A_diag(p) = (√3/2)·6 = 3√3。（依据：stmt:000034）\n10. 【推导】p→∞ 时 A_face 的极限：C_p := 4Γ(1+1/p)²/Γ(1+2/p) → 4Γ(1)²/Γ(1) = 4（Γ 连续、Γ(1)=1），又 2^{1/2−1/p} → √2，故 A_face(p) → 4√2；与第 9 步合并得 lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0（同样由 32 > 27）。（依据：stmt:000034）\n11. 【推导】收尾：记 L := 4√2 − 3√3 > 0；由第 8 步 Δ 的连续性与第 10 步 lim Δ = L，取 ε := L/2 > 0，则存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 |Δ(p) − L| < ε，从而 Δ(p) > L/2 > 0，即 A_face(p) > A_diag(p) 对一切 p ≥ P0 成立，这给出 (iii) 的最后一句。（依据：stmt:000034）",
+              "proof_sha256": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+              "created_at": "2026-11-24T21:32:50+08:00"
+            }
+          ],
+          "proof_no": 2,
+          "proof_sha256": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+          "proof_routes": {},
+          "route": ""
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "id": "000030",
+          "id_field": "stmt_id",
+          "found": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 64384,
+        "prompt_cache_miss_tokens": 2234,
+        "tokens_in": 66618,
+        "tokens_out": 338,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000212"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/F/f-proof-000003.md",
+          "max_lines": 25
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# F 的证明手稿：证明四段叙述的严格骨架：(i) Δ(2)=A_face(2)−A_diag(2)=0 且两者都等于 π；(ii) Δ(…\n\n- 计划：000002 · 子目标：n1\n- V 签：已签=true；判词=成立；连续=3/3；正文sha=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db；时间=2026-11-24T20:57:20+08:00；签名者=secretary:F；台账=verifications/pending/202ee4208a4ce6d75677880f11e5e6aa9aec87f24a3e6bf0384977e1899759b8.jsonl#u-000024；手稿号=000003\n- 依赖面洗稿：已洗=true；执行者=secretary-F\n- 稿族：f-proof\n- 产出者：agent-F-F1\n- 正文sha：3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db\n- 命题指纹：da831b7b4a3dc1a603c2df16234b02d42fd9d3d56471081b702d31adc9ea8c7e\n- 命题类型：conjecture\n- 登记时间：2026-11-24T20:51:08+08:00\n- 标签：F 攻坚 000002 子目标 n1\n- 版本：2026-11-24T20:51:08+08:00@3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db\n\n## 命题\n\n设 1 ≤ p < ∞，B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积，并记 A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。则：(i) A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，且 A_diag(2) = π、A_diag(1) = 3√3/4、lim_{p→∞}A_diag(p) = 3√3；(ii) A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，且 A_face(2) = π、A_face(1) = √2、lim_{p→∞}A_face(p) = 4√2；(iii) Δ 在 [1,∞) 上连续，Δ(2) = 0，Δ(1) = √2 − 3√3/4 > 0，lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0，因而存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 A_face(p) > A_diag(p)。\n\n## 证明\n\n1. 【前提】固定 1 ≤ p < ∞；B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。（前提）（前提）\n2. 【推导】由 stmt:000034 的 (i)，对每个单位法向 n 与 n^⊥ 的任意单位正交基 (u,v) 有 A_p(n) = (1/2)∫_0^{2π}‖cosθ·u+sinθ·v‖_p^{-2}dθ。取 n = (1,1,1)/√3、u = (1,-1,0)/√2、v = (1,1,-2)/√6（直接验算 ‖u‖=‖v‖=1、u·v=0、u·n=v·n=0，故 {u,v} 是 H := {x+y+z=0} 的单位正交基）；另一路参数化 Φ(x,y) := (x,y,−x−y) 是 R²→H 的双射，∂_xΦ=(1,0,−1) 与 ∂_yΦ=(0,1,−1) 的叉积为 (1,1,1)、模为 √3，故 A_diag(p) = √3∫∫_D dxdy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。（依据：stmt:000034）\n3. 【推导】对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)（r ≥ 0、θ ∈ [0,2π)）：由 |r cosθ|…（落档截断，原 2787 字）",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/F/f-proof-000003.md",
+          "encoding": "utf-8",
+          "bytes_read": 6917,
+          "total_bytes": 6917,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 25,
+          "total_lines": 37,
+          "next_line": 26,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 1–25 行（共 37 行）；续读 start_line=26",
+          "sha256": "c27385ce6f3e19c94b59fc509ca2a3cda373e38b4d2942397a827da37a145e97"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 65408,
+        "prompt_cache_miss_tokens": 5591,
+        "tokens_in": 70999,
+        "tokens_out": 681,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000212"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "table.update",
+        "args": {
+          "table": "statements",
+          "id": "000030",
+          "patch": {
+            "status": "abandoned"
+          },
+          "abandon_kind": "difficulty",
+          "abandon_basis": "要一条 V 签得住的证明必须有带区间算术的 certified computation 通道，本会话形式化关闭、E 侧只有浮点读数；且它现行 proof_no 2 误指向 manuscripts/F/f-proof-000003.md，那份稿的命题逐字等于 stmt:000042，V 三行判词 statement_id 也全是 000042 —— 构不成对 000030 的证明",
+          "difficulty": "要一条 V 签得住的证明必须有带区间算术的 certified computation 通道，本会话形式化关闭、E 侧只有浮点读数；且它现行 proof_no 2 误指向 manuscripts/F/f-proof-000003.md，那份稿的命题逐字等于 stmt:000042，V 三行判词 statement_id 也全是 000042 —— 构不成对 000030 的证明"
+        },
+        "why": "按 D 的派活把 stmt:000030 以 difficulty 档放弃：理由原样带入，命题正文与 stmt:000042 一个字节不动"
+      },
+      "result": {
+        "tool": "table.update",
+        "ok": false,
+        "data": null,
+        "error": "abandon_difficulty_not_genuine：秘书判定：这不是「难以逾越的困难」/没指出难在哪（难度判定：不是真困难；salvaged 不是从原证明拆出来的） ⇒ 受控拒",
+        "meta": {
+          "table": "statements",
+          "id": "000030",
+          "kind": "abandon_difficulty_not_genuine",
+          "detail": {
+            "checked": false,
+            "amended": false,
+            "stmt_id": "000030",
+            "changes": [],
+            "before": {},
+            "row": {},
+            "tables": [],
+            "refused": "abandon_difficulty_not_genuine",
+            "reason": "秘书判定：这不是「难以逾越的困难」/没指出难在哪（难度判定：不是真困难；salvaged 不是从原证明拆出来的） ⇒ 受控拒",
+            "form": {
+              "checked": false,
+              "refused": "abandon_difficulty_not_genuine",
+              "why": "秘书判定：这不是「难以逾越的困难」/没指出难在哪（难度判定：不是真困难；salvaged 不是从原证明拆出来的） ⇒ 受控拒",
+              "problems": [],
+              "abandon_kind": "difficulty",
+              "abandon_basis": "要一条 V 签得住的证明必须有带区间算术的 certified computation 通道，本会话形式化关闭、E 侧只有浮点读数；且它现行 proof_no 2 误指向 manuscripts/F/f-proof-000003.md，那份稿的命题逐字等于 stmt:000042，V 三行判词 statement_id 也全是 000042 —— 构不成对 000030 的证明",
+              "defect_ref": "",
+              "difficulty": "要一条 V 签得住的证明必须有带区间算术的 certified computation 通道，本会话形式化关闭、E 侧只有浮点读数；且它现行 proof_no 2 误指向 manuscripts/F/f-proof-000003.md，那份稿的命题逐字等于 stmt:000042，V 三行判词 statement_id 也全是 000042 —— 构不成对 000030 的证明",
+              "experiment_id": "",
+              "space": {},
+              "salvaged": [],
+              "detail": {
+                "statement_id": "000030",
+                "salvaged_readings": [],
+                "difficulty_judgment": {
+                  "checked": true,
+                  "genuine": false,
+                  "where": "该段没有指出任何引理、推导步骤或假设上的障碍：它只指出①缺少带区间算术的 certified computation 通道、②本会话的形式化通道已关闭、③E 侧只有浮点读数、④现行 proof_no 2 误指向 manuscripts/F/f-proof-000003.md（该稿命题逐字等于 stmt:000042，V 三行判词的 statement_id 亦全为 000042）。因此，这段所说的「难」在于证据标准和归档指针，即缺少可签字的证书以及命题指错，并不在于面积恒等式或 tanh-sinh 求积公式的数学结构。",
+                  "salvaged_from_proof": false,
+                  "problems": [
+                    "difficulty 段与 abandon_basis 逐字重复，可读出的内容全是流程与基础设施理由（工具通道缺失、会话已关、仅有浮点读数）和档案错位（proof_no 2 指向 stmt:000042 的稿件），没有落到任何一条引理、任何一步或任何一条假设上，属于没有数学内容的『做不动了』式陈述。",
+                    "唯一有数学意味的一点是『浮点读数不足以支撑需由 V 签字认可的证明』，这属于证据等级不足，并非数学困难；而命题本身是一条数值自检断言（偏差 ≤1e-15、O(1/p)、相对偏差 ≤1e-13 等），该段也没有说明是哪一步估计或哪条误差界卡住。",
+                    "salvaged 为空数组，且 proof_text 为空串，因此既不存在『原证明』可供拆分，也无任何条目能作为可取之处；空列表不能被算作从这条命题的证明里拆出的引理，同样也无从与在册引理或命题自身区分。",
+                    "命题自身（stmt:000030）与 proof_no 2 指向的稿件命题（stmt:000042）混在同一段里陈述，进一步表明该段讲的是命题归属与归档问题，而不是这条命题的数学难度。"
+                  ],
+                  "decision": "这不是数学困难，而是『缺 certified computation 通道与浮点证据』加『proof_no 指错到 stmt:000042』的流程与证据问题；salvaged 空且无 proof_text，无物可称从原证明拆出。",
+                  "refused": "abandon_difficulty_not_genuine",
+                  "reason": "难度判定：不是真困难；salvaged 不是从原证明拆出来的",
+                  "cost": {},
+                  "statement_sha256": "213ef1247365e37b169250d9581199ea729e3dff7fd2f7264aaf2c4658f0d611"
+                }
+              }
+            }
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 69760,
+        "prompt_cache_miss_tokens": 3914,
+        "tokens_in": 73674,
+        "tokens_out": 850,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000212"
+    },
+    {
+      "index": 3,
+      "shape": "note",
+      "payload": {
+        "text": "【放弃 stmt:000030 被受控拒，留给下一趟】D 派的 abandon_kind=difficulty + 那段「缺 certified computation 通道 / 形式化关闭 / E 只有浮点读数 / proof_no 2 误指 f-proof-000003」的理由，秘书判 abandon_difficulty_not_genuine（零字节改写，status 仍 active）：难度档要的是落到某条引理 / 某一步 / 某条假设上的数学困难，我这段全是基础设施与归档理由。自查确认：① f-proof-000003.md 的 ## 命题 是 Δ(p)/A_face/A_diag 那一条（= stmt:000042），与 000030 的「截面面积计算核自检」不是同一条；② 000030 的 proof_text 为空、proof_no 2 指那份错稿，而它 21:32 的 _kind_upgrade 却拿这份「连续 3/3 成立」的签从 conjecture 抬到 theorem —— 误指已经污染了等级现算，这一条比放弃本身更该先修。下次：要么 D 给一条真数学难点（哪一步的界对不上），要么把 proof 指针修正 / 把 000030 按 E 的普通数值档处置，别再用「缺通道」当 difficulty。"
+      },
+      "result": {
+        "note_written": "D:\\Incubator\\projects\\lp-ball-22\\notes\\B.md",
+        "ok": true
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 72448,
+        "prompt_cache_miss_tokens": 3125,
+        "tokens_in": 75573,
+        "tokens_out": 4071,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000212"
+    },
+    {
+      "index": 4,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "statements",
+          "id": "000030"
+        },
+        "why": "受控拒后回读一行，确认 status 与 quote_reason 一个字节没改（拒信说零写入，回读坐实）"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "stmt_id": "000030",
+          "origin": "own_result",
+          "kind": "theorem",
+          "label": "截面面积计算核自检通过：极坐标 tanh-sinh 求积（断点取 A cosψ+B sinψ=0 与 |w_i|=|w_j| 在 [0,2π) 上的全部根）在",
+          "statement_text": "lp3-section-validate-v3",
+          "statement_full": "截面面积计算核自检通过：极坐标 tanh-sinh 求积（断点取 A cosψ+B sinψ=0 与 |w_i|=|w_j| 在 [0,2π) 上的全部根）在 p=2 上给任意中心截面面积 π（偏差 ≤1e-15）；在 p=1 上与八面体边缘裁剪精确值一致（≤1e-15）；p=1000 上坐标/体对角/面对角截面与立方体精确值 4、3√3、4√2 的偏差随 p 增大而缩小且落在 O(1/p) 以内；每个 p 的坐标截面等于 4Γ(1+1/p)^2/Γ(1+2/p)（相对偏差 ≤1e-13）；面积对平面基的旋转不变（≤1e-12）；粗嵌套 Simpson 法随加密收敛到极坐标值。",
+          "proof_text": "",
+          "source_lit_id": null,
+          "page_range": {
+            "start": null,
+            "end": null,
+            "label": ""
+          },
+          "quote_verified": null,
+          "quote_mode": "",
+          "quote_reason": "手稿收录（D 只递指针）：普通数值手稿 `work/E/e-num-000003.md` —— 命题逐字取自 `## 命题`，证明栏空着（业主 2026-11-08：普通数值档不写证明正文），程序在实验行的 `code_path`，引文面不适用",
+          "quote_span": "",
+          "quote_call_sha256": "",
+          "evidence_kind": "cross_check",
+          "bits": {
+            "numeric": "verified",
+            "proof": true,
+            "reviewed": false,
+            "formal": "pending",
+            "audited": false,
+            "origin": "own_result",
+            "evidence": {
+              "numeric": {
+                "entries": [
+                  {
+                    "script": "code/exp/lpsec_validate.py",
+                    "range": "",
+                    "n_cases": 0,
+                    "n_counterexamples": 0,
+                    "code_hash": "226a5da3ceebc6ed",
+                    "exp": "exp:000003"
+                  }
+                ],
+                "experiments": [
+                  "000003"
+                ],
+                "experiment_id": "000003",
+                "script": "code/exp/lpsec_validate.py",
+                "code_hash": "226a5da3ceebc6ed",
+                "manuscript": "work/E/e-num-000003.md",
+                "manuscript_sha256": "6b67487691efdd67657db5a075a5cc19c0b9168229f248f08ee8eea8d8b731c3",
+                "certificate": false
+              },
+              "numeric_reason": "",
+              "proof_process": "1. 【前提】固定 1 ≤ p < ∞；B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。（前提）（前提）\n2. 【推导】由 stmt:000034 的 (i)，对每个单位法向 n 与 n^⊥ 的任意单位正交基 (u,v) 有 A_p(n) = (1/2)∫_0^{2π}‖cosθ·u+sinθ·v‖_p^{-2}dθ。取 n = (1,1,1)/√3、u = (1,-1,0)/√2、v = (1,1,-2)/√6（直接验算 ‖u‖=‖v‖=1、u·v=0、u·n=v·n=0，故 {u,v} 是 H := {x+y+z=0} 的单位正交基）；另一路参数化 Φ(x,y) := (x,y,−x−y) 是 R²→H 的双射，∂_xΦ=(1,0,−1) 与 ∂_yΦ=(0,1,−1) 的叉积为 (1,1,1)、模为 √3，故 A_diag(p) = √3∫∫_D dxdy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。（依据：stmt:000034）\n3. 【推导】对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)（r ≥ 0、θ ∈ [0,2π)）：由 |r cosθ|^p+|r sinθ|^p+|r(cosθ+sinθ)|^p = r^p g(θ)（记 g(θ) := |cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p）得 (x,y) ∈ D ⟺ r ≤ g(θ)^{-1/p}；由面积元 r dr dθ 得 ∫∫_D = ∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ，与第 2 步合并即 A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，这给出 (i) 的积分式。（依据：stmt:000034）\n4. 【推导】一致控制：g ≥ max(|cosθ|,|sinθ|)^p ≥ (1/√2)^p（因为 max(|cosθ|,|sinθ|) ≥ 1/√2），故对一切 p ∈ [1,∞) 与一切 θ 有 0 < g(θ)^{-2/p} ≤ (1/√2)^{-2} = 2；又 (p,θ) ↦ g(θ) 连续且在每个局部 p-区间上 g 有与 p 无关的正下界，故 θ ↦ g(θ)^{-2/p} 关于 p 逐点连续。（依据：stmt:000034）\n5. 【推导】p = 2 时 g(θ) = cos²θ+sin²θ+(cosθ+sinθ)² = 2+sin2θ；代换 u = 2θ 后用 ∫_0^{2π}du/(a+b sin u) = 2π/√(a²−b²)（取 a=2、b=1）得 ∫_0^{2π} dθ/(2+sin2θ) = ∫_0^{2π} du/(2+sin u) = 2π/√3，此处 p=2 使 g^{-2/p} 化为 g^{-1}，故 A_diag(2) = (√3/2)·(2π/√3) = π。（依据：stmt:000034）\n6. 【推导】由 stmt:000034 的 (ii)(iii)(iv) 的闭式 A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，在 p = 2 处得 A_face(2) = 2^0·4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π；与第 5 步合并得 Δ(2) = π − π = 0。（依据：stmt:000034）\n7. 【推导】Δ(1) 的计算：A_face(1) = 2^{-1/2}·4Γ(2)²/Γ(3) = 2^{-1/2}·4·1/2 = √2（Γ(2)=1、Γ(3)=2）；A_diag(1)：p = 1 时 g = |cosθ|+|sinθ|+|cosθ+sinθ| 满足 g(θ+π) = g(θ)，且在 [0,π/2] 上 g = 2(cosθ+sinθ)（故 g^{-2} = (1/4)(cosθ+sinθ)^{-2}）、在 [π/2,3π/4] 上 g = 2sinθ（g^{-2} = (1/4)sin^{-2}θ）、在 [3π/4,π] 上 g = −2cosθ（g^{-2} = (1/4)cos^{-2}θ）；三段对 ∫g^{-2} 的贡献各为 1/4（分别用 ∫_0^{π/2}dθ/(cosθ+sinθ)² = 1、[−cotθ] 与 [tanθ] 在两个端点区间上的取值各得 1），故 ∫_0^{2π}g^{-2}dθ = 2·(1/4+1/4+1/4) = 3/2，A_diag(1) = (√3/2)·(3/2) = 3√3/4；于是 Δ(1) = √2 − 3√3/4 > 0，因为 4√2 > 3√3 ⟺ 32 > 27。（依据：stmt:000034）\n8. 【推导】Δ 的连续性：Γ 在 (0,∞) 上连续且取正值，p ↦ 1/p、1+1/p、1+2/p 在 [1,∞) 上连续，故 A_face 在 [1,∞) 上连续；由第 4 步与 p 无关的控制 g^{-2/p} ≤ 2 与逐点连续性，有界收敛定理给出 p ↦ ∫_0^{2π}g(θ)^{-2/p}dθ 在 [1,∞) 上连续，故 A_diag 连续；两者相减得 Δ 在 [1,∞) 上连续。（依据：stmt:000034）\n9. 【推导】p→∞ 时 A_diag 的极限：记 m(θ) := max(|cosθ|,|sinθ|,|cosθ+sinθ|)，则 m(θ)^p ≤ g(θ) ≤ 3m(θ)^p，故对每个 θ 有 g(θ)^{-2/p} → m(θ)^{-2}；又 g ≥ m^p 给出 g^{-2/p} ≤ m^{-2} ≤ 2（因 m ≥ 1/√2），有界收敛定理给出 A_diag(p) → (√3/2)∫_0^{2π}m(θ)^{-2}dθ。按符号分段：在 [0,π/2] 上 m = cosθ+sinθ、在 [π/2,3π/4] 上 m = sinθ、在 [3π/4,π] 上 m = −cosθ，且 m(θ+π) = m(θ)，三段各贡献 1（同上一步的三段积分），故 ∫_0^{2π}m^{-2}dθ = 2·3 = 6，于是 lim_{p→∞}A_diag(p) = (√3/2)·6 = 3√3。（依据：stmt:000034）\n10. 【推导】p→∞ 时 A_face 的极限：C_p := 4Γ(1+1/p)²/Γ(1+2/p) → 4Γ(1)²/Γ(1) = 4（Γ 连续、Γ(1)=1），又 2^{1/2−1/p} → √2，故 A_face(p) → 4√2；与第 9 步合并得 lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0（同样由 32 > 27）。（依据：stmt:000034）\n11. 【推导】收尾：记 L := 4√2 − 3√3 > 0；由第 8 步 Δ 的连续性与第 10 步 lim Δ = L，取 ε := L/2 > 0，则存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 |Δ(p) − L| < ε，从而 Δ(p) > L/2 > 0，即 A_face(p) > A_diag(p) 对一切 p ≥ P0 成立，这给出 (iii) 的最后一句。（依据：stmt:000034）",
+              "proof_source": "own",
+              "reviewed_by": {},
+              "reviewed_source": "",
+              "formal": {},
+              "formal_reason": "",
+              "audited_by": {},
+              "optimized_by_proof": {
+                "2": false
+              }
+            },
+            "voided_by": {},
+            "grade": "strong_conjecture",
+            "audited_badge": false
+          },
+          "status": "active",
+          "derived_from": [],
+          "aliases": [],
+          "doc_id": null,
+          "line_range": {
+            "start": null,
+            "end": null,
+            "label": "exp:000003"
+          },
+          "created_at": "2026-11-24T18:25:33+08:00",
+          "created_by": "secretary-B",
+          "_proposition_adjudication": {
+            "checked": true,
+            "attempted": false,
+            "verdict": "different",
+            "canonical_name": "",
+            "same_as": "",
+            "basis": "查过：没有可比的候选 ⇒ 不同",
+            "reason": "查过：命题台账里没有可检索的 active 命题（候选 0 条）⇒ 注册新的",
+            "reused": false,
+            "seam_source": "agent_b.register_statement:same_statement",
+            "seam_attempted": false,
+            "at": "2026-11-24T18:25:33+08:00"
+          },
+          "manuscripts": {
+            "1": "work/E/e-num-000003.md",
+            "2": "manuscripts/F/f-proof-000003.md"
+          },
+          "manuscript_id": "000003",
+          "manuscript_family": "e-num",
+          "_kind_upgrade": {
+            "from": "conjecture",
+            "to": "theorem",
+            "basis": "手稿签块（连续 3/3 成立、正文 sha 相符）",
+            "grade": "strong_conjecture",
+            "by": "secretary-B",
+            "at": "2026-11-24T21:32:49+08:00"
+          },
+          "proofs": [
+            {
+              "proof_no": 2,
+              "text": "1. 【前提】固定 1 ≤ p < ∞；B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。（前提）（前提）\n2. 【推导】由 stmt:000034 的 (i)，对每个单位法向 n 与 n^⊥ 的任意单位正交基 (u,v) 有 A_p(n) = (1/2)∫_0^{2π}‖cosθ·u+sinθ·v‖_p^{-2}dθ。取 n = (1,1,1)/√3、u = (1,-1,0)/√2、v = (1,1,-2)/√6（直接验算 ‖u‖=‖v‖=1、u·v=0、u·n=v·n=0，故 {u,v} 是 H := {x+y+z=0} 的单位正交基）；另一路参数化 Φ(x,y) := (x,y,−x−y) 是 R²→H 的双射，∂_xΦ=(1,0,−1) 与 ∂_yΦ=(0,1,−1) 的叉积为 (1,1,1)、模为 √3，故 A_diag(p) = √3∫∫_D dxdy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。（依据：stmt:000034）\n3. 【推导】对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)（r ≥ 0、θ ∈ [0,2π)）：由 |r cosθ|^p+|r sinθ|^p+|r(cosθ+sinθ)|^p = r^p g(θ)（记 g(θ) := |cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p）得 (x,y) ∈ D ⟺ r ≤ g(θ)^{-1/p}；由面积元 r dr dθ 得 ∫∫_D = ∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ，与第 2 步合并即 A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，这给出 (i) 的积分式。（依据：stmt:000034）\n4. 【推导】一致控制：g ≥ max(|cosθ|,|sinθ|)^p ≥ (1/√2)^p（因为 max(|cosθ|,|sinθ|) ≥ 1/√2），故对一切 p ∈ [1,∞) 与一切 θ 有 0 < g(θ)^{-2/p} ≤ (1/√2)^{-2} = 2；又 (p,θ) ↦ g(θ) 连续且在每个局部 p-区间上 g 有与 p 无关的正下界，故 θ ↦ g(θ)^{-2/p} 关于 p 逐点连续。（依据：stmt:000034）\n5. 【推导】p = 2 时 g(θ) = cos²θ+sin²θ+(cosθ+sinθ)² = 2+sin2θ；代换 u = 2θ 后用 ∫_0^{2π}du/(a+b sin u) = 2π/√(a²−b²)（取 a=2、b=1）得 ∫_0^{2π} dθ/(2+sin2θ) = ∫_0^{2π} du/(2+sin u) = 2π/√3，此处 p=2 使 g^{-2/p} 化为 g^{-1}，故 A_diag(2) = (√3/2)·(2π/√3) = π。（依据：stmt:000034）\n6. 【推导】由 stmt:000034 的 (ii)(iii)(iv) 的闭式 A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，在 p = 2 处得 A_face(2) = 2^0·4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π；与第 5 步合并得 Δ(2) = π − π = 0。（依据：stmt:000034）\n7. 【推导】Δ(1) 的计算：A_face(1) = 2^{-1/2}·4Γ(2)²/Γ(3) = 2^{-1/2}·4·1/2 = √2（Γ(2)=1、Γ(3)=2）；A_diag(1)：p = 1 时 g = |cosθ|+|sinθ|+|cosθ+sinθ| 满足 g(θ+π) = g(θ)，且在 [0,π/2] 上 g = 2(cosθ+sinθ)（故 g^{-2} = (1/4)(cosθ+sinθ)^{-2}）、在 [π/2,3π/4] 上 g = 2sinθ（g^{-2} = (1/4)sin^{-2}θ）、在 [3π/4,π] 上 g = −2cosθ（g^{-2} = (1/4)cos^{-2}θ）；三段对 ∫g^{-2} 的贡献各为 1/4（分别用 ∫_0^{π/2}dθ/(cosθ+sinθ)² = 1、[−cotθ] 与 [tanθ] 在两个端点区间上的取值各得 1），故 ∫_0^{2π}g^{-2}dθ = 2·(1/4+1/4+1/4) = 3/2，A_diag(1) = (√3/2)·(3/2) = 3√3/4；于是 Δ(1) = √2 − 3√3/4 > 0，因为 4√2 > 3√3 ⟺ 32 > 27。（依据：stmt:000034）\n8. 【推导】Δ 的连续性：Γ 在 (0,∞) 上连续且取正值，p ↦ 1/p、1+1/p、1+2/p 在 [1,∞) 上连续，故 A_face 在 [1,∞) 上连续；由第 4 步与 p 无关的控制 g^{-2/p} ≤ 2 与逐点连续性，有界收敛定理给出 p ↦ ∫_0^{2π}g(θ)^{-2/p}dθ 在 [1,∞) 上连续，故 A_diag 连续；两者相减得 Δ 在 [1,∞) 上连续。（依据：stmt:000034）\n9. 【推导】p→∞ 时 A_diag 的极限：记 m(θ) := max(|cosθ|,|sinθ|,|cosθ+sinθ|)，则 m(θ)^p ≤ g(θ) ≤ 3m(θ)^p，故对每个 θ 有 g(θ)^{-2/p} → m(θ)^{-2}；又 g ≥ m^p 给出 g^{-2/p} ≤ m^{-2} ≤ 2（因 m ≥ 1/√2），有界收敛定理给出 A_diag(p) → (√3/2)∫_0^{2π}m(θ)^{-2}dθ。按符号分段：在 [0,π/2] 上 m = cosθ+sinθ、在 [π/2,3π/4] 上 m = sinθ、在 [3π/4,π] 上 m = −cosθ，且 m(θ+π) = m(θ)，三段各贡献 1（同上一步的三段积分），故 ∫_0^{2π}m^{-2}dθ = 2·3 = 6，于是 lim_{p→∞}A_diag(p) = (√3/2)·6 = 3√3。（依据：stmt:000034）\n10. 【推导】p→∞ 时 A_face 的极限：C_p := 4Γ(1+1/p)²/Γ(1+2/p) → 4Γ(1)²/Γ(1) = 4（Γ 连续、Γ(1)=1），又 2^{1/2−1/p} → √2，故 A_face(p) → 4√2；与第 9 步合并得 lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0（同样由 32 > 27）。（依据：stmt:000034）\n11. 【推导】收尾：记 L := 4√2 − 3√3 > 0；由第 8 步 Δ 的连续性与第 10 步 lim Δ = L，取 ε := L/2 > 0，则存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 |Δ(p) − L| < ε，从而 Δ(p) > L/2 > 0，即 A_face(p) > A_diag(p) 对一切 p ≥ P0 成立，这给出 (iii) 的最后一句。（依据：stmt:000034）",
+              "proof_sha256": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+              "created_at": "2026-11-24T21:32:50+08:00"
+            }
+          ],
+          "proof_no": 2,
+          "proof_sha256": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+          "proof_routes": {},
+          "route": ""
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "id": "000030",
+          "id_field": "stmt_id",
+          "found": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 74240,
+        "prompt_cache_miss_tokens": 2469,
+        "tokens_in": 76709,
+        "tokens_out": 1641,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000212"
+    },
+    {
+      "index": 5,
+      "shape": "final",
+      "payload": {
+        "final": "stmt:000030 的放弃**没有落成**：table.update 被秘书受控拒，盘上零字节改写（回读坐实 status 仍 active、quote_reason 未变）。① 改后的 status 与 abandon_kind：status 仍是 `active`（未被改成 abandoned），提交的 abandon_kind 是 `difficulty`（未落盘）；② 系统拼出的 quote_reason 原文——本次拒收一笔未写，所以 quote_reason 仍是登记时那一句：「手稿收录（D 只递指针）：普通数值手稿 `work/E/e-num-000003.md` —— 命题逐字取自 `## 命题`，证明栏空着（业主 2026-11-08：普通数值档不写证明正文），程序在实验行的 `code_path`，引文面不适用」；③ 受控拒信（原样）：`abandon_difficulty_not_genuine` —— 秘书原话「这不是「难以逾越的困难」/没指出难在哪（难度判定：不是真困难；salvaged 不是从原证明拆出来的）」，并逐条点名：那段 difficulty 与 abandon_basis 逐字重复、内容全是流程与基础设施理由（缺 certified computation 通道、形式化会话已关、E 侧只有浮点读数）加档案错位（proof_no 2 指向 stmt:000042 的稿），没有落到任何引理 / 任何一步 / 任何假设上；唯一有数学意味的一点（浮点读数不足以支撑 V 签）属证据等级不足，不是数学困难；salvaged 空、proof_text 空 ⇒ 无「原证明」可拆。\n\n我做的核对（两件都已确认）：\n- `manuscripts/F/f-proof-000003.md` 的 `## 命题` 是 Δ(p)/A_face/A_diag 那一条（= stmt:000042），与 stmt:000030 的「截面面积计算核自检」不是同一条 ⇒ D 说的 proof_no 2 误指属实；\n- 更该先修的：stmt:000030 的 proof_text 为空、proof_no 2 指那份错稿，但 2026-11-24T21:32:49 有一条 `_kind_upgrade` 拿 f-proof-000003 的「连续 3/3 成立、正文 sha 相符」把 000030 从 conjecture 抬到 theorem —— 误指已经污染了等级现算（而该签块的 statement_id 是 000042）。这一条不是放弃动作能修的。\n\n没做的事与理由：D 明确要求 abandon_basis 逐字用 params 那一段，而秘书判它不是真困难；按「执行者不替派活人圆场、不自己改口径凑过去」的口径，我没有另编一条数学难点去凑难度档（那会是把没核到的困难写成困难）。需 D 定的两条路：① 给一条落到某条引理 / 某一步 / 某条假设上的真困难（例如命题里「每个 p 的偏差 ≤1e-15 / O(1/p)」要成立，缺的是哪一步误差估计、哪条界对不上）；② 或改处置：不放弃，改为修正 proof_no 2 的误指 / 把 stmt:000030 按 E 的普通数值档（e-num，cross_check、strong_conjecture）重新处置，并让秘书撤掉那条被污染的 theorem 抬档。",
+        "evidence": [
+          "stmt:000030",
+          "stmt:000042",
+          "manuscripts/F/f-proof-000003.md",
+          "exp:000003"
+        ],
+        "notify": {
+          "to": "t-000209",
+          "summary": "stmt:000030 放弃未落成：秘书受控拒 abandon_difficulty_not_genuine，盘上零写入；另报 proof_no 2 误指已污染等级（theorem 抬档）",
+          "body": "## 派活回执：stmt:000030 以 difficulty 档放弃 —— 受控拒，未落成\n\n### 三样回执\n1. **改后的 status 与 abandon_kind**：status 仍 `active`（未改成 abandoned）；提交的 `abandon_kind=difficulty` 未落盘。\n2. **系统拼出的 quote_reason 原文**：本次拒收一笔未写 ⇒ 仍是登记时那一句：「手稿收录（D 只递指针）：普通数值手稿 `work/E/e-num-000003.md` —— 命题逐字取自 `## 命题`，证明栏空着（业主 2026-11-08：普通数值档不写证明正文），程序在实验行的 `code_path`，引文面不适用」。\n3. **受控拒信（原样）**：`abandon_difficulty_not_genuine` —— 秘书原话「这不是「难以逾越的困难」/没指出难在哪（难度判定：不是真困难；salvaged 不是从原证明拆出来的）」。\n\n### 秘书的理由（逐条）\n- difficulty 段与 abandon_basis 逐字重复，可读出的内容全是**流程与基础设施**（缺带区间算术的 certified computation 通道、本会话形式化已关、E 侧只有浮点读数）与**档案错位**（proof_no 2 指向 stmt:000042 的稿），没有落到任何一条引理、任何一步或任何一条假设上；\n- 唯一有数学意味的一点（浮点读数不足以支撑 V 签）属**证据等级不足**，不是数学困难；\n- `salvaged` 为空数组、`proof_text` 为空串 ⇒ 既无「原证明」可拆，也无条目可作可取之处；\n- 该段把 stmt:000030 与稿件的 stmt:000042 混在一起讲，进一步说明讲的是归属与归档，不是这条命题的数学难度。\n\n### 我核对到的（两件，都已坐实）\n- `manuscripts/F/f-proof-000003.md` 的 `## 命题` 是 Δ(p)/A_face/A_diag 那一条（= stmt:000042），与 000030 的「截面面积计算核自检」**不是同一条** ⇒ 你说的 proof_no 2 误指属实；\n- **比放弃更该先修的一条**：stmt:000030 的 `proof_text` 为空、`proof_no 2` 指那份错稿，但 2026-11-24T21:32:49 有一条 `_kind_upgrade` 拿 f-proof-000003 的「连续 3/3 成立、正文 sha 相符」把它从 `conjecture` 抬到 `theorem`，而那份签块的 `statement_id` 是 000042 —— 误指已经污染了等级现算。\n\n### 要你定（二选一，我不替你裁）\n1. **给一条真困难**：落到某条引理 / 某一步 / 某条假设上（例如命题里「每个 p 的坐标截面 = 4Γ(1+1/p)²/Γ(1+2/p)，相对偏差 ≤1e-13」与「p=1000 上偏差落在 O(1/p) 以内」要作为证明成立，缺的是哪一步误差估计、哪条一致界对不上），我原样带进 `difficulty` 重交；\n2. **或改处置**：不放弃 —— 修 proof_no 2 的误指，把 stmt:000030 按 E 的普通数值档（`e-num` / `cross_check` / `strong_conjecture`）重新处置，并撤掉那条被污染的 `theorem` 抬档。\n\n### 我为什么没有自己另编一条\n你明确要求 abandon_basis 逐字用你给的那段；秘书判它不是数学困难。作为执行者我不替派活人圆场、不自己改口径凑过去 —— 编一条我并未核到的数学难点去凑难度档，正是把没核到写成核到了。\n\n### 未改动的\n命题正文一个字没改；stmt:000042 与 `manuscripts/F/f-proof-000003.md` 一个字节没动（只读了两处用于核对）。",
+          "refs": [
+            "stmt:000030",
+            "stmt:000042",
+            "exp:000003"
+          ]
+        },
+        "blocked": {
+          "what": "把 stmt:000030 以 abandon_kind=difficulty 标成 abandoned 并写入 D 给的那段 abandon_basis",
+          "why": "秘书受控拒 abandon_difficulty_not_genuine：那段理由全是「缺 certified computation 通道 / 形式化会话已关 / E 侧只有浮点读数 / proof_no 2 误指 f-proof-000003」——属基础设施、证据等级与归档问题，没有落到任何引理、步骤或假设上的数学困难；salvaged 空且 proof_text 为空，无可拆可取之处。盘上一字节未改",
+          "needs": "D 定二选一：① 一条真正的数学难点（落到某条引理 / 某一步 / 某条假设上，说明哪一步的估计或界卡住），我原样带进 difficulty 重交；② 或改处置——不放弃，改为修 proof_no 2 的误指，并把 stmt:000030 按 E 的普通数值档（e-num / cross_check / strong_conjecture）重新处置，同时撤掉 21:32 那条由 f-proof-000003（statement_id=000042）抬起来的 theorem 档"
+        }
+      },
+      "result": {
+        "notify_handoff": {
+          "handoff": "000034",
+          "ok": true,
+          "id": "000034",
+          "path": "work/handoffs.jsonl#000034",
+          "to": "D",
+          "brief": "stmt:000030 放弃未落成：秘书受控拒 abandon_difficulty_not_genuine，盘上零写入；另报 proof_no 2 误指已污染等级（theorem 抬档）",
+          "addressing": {
+            "checked": true,
+            "how": "parent",
+            "to": "t-000209",
+            "kind": "parent",
+            "name": "D1",
+            "task_id": "t-000209",
+            "role": "D",
+            "brief": "",
+            "candidates": [],
+            "callable": "父 D1（t-000209）",
+            "why": "名册成员（parent）⇒ 手稿写角色 D，通知投实例 t-000209",
+            "delivery": "roster",
+            "manuscript_to": "D",
+            "addressed_by": "task_id"
+          },
+          "notify_channel": "roster",
+          "revises": "",
+          "existing_same_summary": {
+            "count": 0,
+            "ids": [],
+            "note": "查过了：没有同一句话的既有交接"
+          },
+          "notified": "t-000213",
+          "error": "",
+          "note": "收件人下次运行时（或本步之后）会在收件箱/板上看到编号；它用 `manuscripts.read` 读全文"
+        },
+        "blocked": {
+          "declared": true,
+          "recorded": true,
+          "what": "把 stmt:000030 以 abandon_kind=difficulty 标成 abandoned 并写入 D 给的那段 abandon_basis",
+          "why": "秘书受控拒 abandon_difficulty_not_genuine：那段理由全是「缺 certified computation 通道 / 形式化会话已关 / E 侧只有浮点读数 / proof_no 2 误指 f-proof-000003」——属基础设施、证据等级与归档问题，没有落到任何引理、步骤或假设上的数学困难；salvaged 空且 proof_text 为空，无可拆可取之处。盘上一字节未改",
+          "needs": "D 定二选一：① 一条真正的数学难点（落到某条引理 / 某一步 / 某条假设上，说明哪一步的估计或界卡住），我原样带进 difficulty 重交；② 或改处置——不放弃，改为修 proof_no 2 的误指，并把 stmt:000030 按 E 的普通数值档（e-num / cross_check / strong_conjecture）重新处置，同时撤掉 21:32 那条由 f-proof-000003（statement_id=000042）抬起来的 theorem 档"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 75136,
+        "prompt_cache_miss_tokens": 6197,
+        "tokens_in": 81333,
+        "tokens_out": 3879,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000212"
+    }
+  ],
+  "final": "stmt:000030 的放弃**没有落成**：table.update 被秘书受控拒，盘上零字节改写（回读坐实 status 仍 active、quote_reason 未变）。① 改后的 status 与 abandon_kind：status 仍是 `active`（未被改成 abandoned），提交的 abandon_kind 是 `difficulty`（未落盘）；② 系统拼出的 quote_reason 原文——本次拒收一笔未写，所以 quote_reason 仍是登记时那一句：「手稿收录（D 只递指针）：普通数值手稿 `work/E/e-num-000003.md` —— 命题逐字取自 `## 命题`，证明栏空着（业主 2026-11-08：普通数值档不写证明正文），程序在实验行的 `code_path`，引文面不适用」；③ 受控拒信（原样）：`abandon_difficulty_not_genuine` —— 秘书原话「这不是「难以逾越的困难」/没指出难在哪（难度判定：不是真困难；salvaged 不是从原证明拆出来的）」，并逐条点名：那段 difficulty 与 abandon_basis 逐字重复、内容全是流程与基础设施理由（缺 certified computation 通道、形式化会话已关、E 侧只有浮点读数）加档案错位（proof_no 2 指向 stmt:000042 的稿），没有落到任何引理 / 任何一步 / 任何假设上；唯一有数学意味的一点（浮点读数不足以支撑 V 签）属证据等级不足，不是数学困难；salvaged 空、proof_text 空 ⇒ 无「原证明」可拆。\n\n我做的核对（两件都已确认）：\n- `manuscripts/F/f-proof-000003.md` 的 `## 命题` 是 Δ(p)/A_face/A_diag 那一条（= stmt:000042），与 stmt:000030 的「截面面积计算核自检」不是同一条 ⇒ D 说的 proof_no 2 误指属实；\n- 更该先修的：stmt:000030 的 proof_text 为空、proof_no 2 指那份错稿，但 2026-11-24T21:32:49 有一条 `_kind_upgrade` 拿 f-proof-000003 的「连续 3/3 成立、正文 sha 相符」把 000030 从 conjecture 抬到 theorem —— 误指已经污染了等级现算（而该签块的 statement_id 是 000042）。这一条不是放弃动作能修的。\n\n没做的事与理由：D 明确要求 abandon_basis 逐字用 params 那一段，而秘书判它不是真困难；按「执行者不替派活人圆场、不自己改口径凑过去」的口径，我没有另编一条数学难点去凑难度档（那会是把没核到的困难写成困难）。需 D 定的两条路：① 给一条落到某条引理 / 某一步 / 某条假设上的真困难（例如命题里「每个 p 的偏差 ≤1e-15 / O(1/p)」要成立，缺的是哪一步误差估计、哪条界对不上）；② 或改处置：不放弃，改为修正 proof_no 2 的误指 / 把 stmt:000030 按 E 的普通数值档（e-num，cross_check、strong_conjecture）重新处置，并让秘书撤掉那条被污染的 theorem 抬档。",
+  "evidence": [
+    "stmt:000030",
+    "stmt:000042",
+    "manuscripts/F/f-proof-000003.md",
+    "exp:000003"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 0,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 6,
+  "compactions": 0,
+  "mailbox_items": [],
+  "mailbox_msgs": [],
+  "mailbox_delivered": 0,
+  "monitor_turns": 0,
+  "wakes": 0,
+  "wake_ids": [],
+  "wake_events": [],
+  "clock_pumps": 11,
+  "clock_fired": 0,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "名下没有「已登记、V 签还没到」的稿（正文本目录下 9 份 f-proof/b-proof/e-proof 的稿里有 9 份「已登记」（b-proof×5、f-proof×4））；另有 1 份已登记稿没有实例归属（不计入任何实例）：manuscripts/B/b-proof-000004.md",
+      "problems": [],
+      "producer": "B",
+      "owner_instance": "B1",
+      "owner_source": "roster",
+      "unattributed": [
+        {
+          "manuscript_id": "000004",
+          "manuscript": "manuscripts/B/b-proof-000004.md",
+          "text": "# F 的证明手稿：证明四段叙述的严格骨架：(i) Δ(2)=A_face(2)−A_diag(2)=0 且两者都等于 π；(ii) Δ(…\n\n- 计划：000002 · 子目标：n1\n- 依赖面洗稿：已洗=true；执行者=secretary-F\n- 稿族：f-proof\n- 产出者：agent-F-F1\n- 正文sha：3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db\n- 命题指纹：da831b7b4a3dc1a603c2df16234b02d42fd9d3d56471081b702d31adc9ea8c7e\n- 命题类型：conjecture\n- 登记时间：2026-11-24T20:51:08+08:00\n- 标签：F 攻坚 000002 子目标 n1\n- 版本：2026-11-24T20:51:08+08:00@3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db\n\n## 命题\n\n设 1 ≤ p < ∞，B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积，并记 A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。则：(i) A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，且 A_diag(2) = π、A_diag(1) = 3√3/4、lim_{p→∞}A_diag(p) = 3√3；(ii) A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，且 A_face(2) = π、A_face(1) = √2、lim_{p→∞}A_face(p) = 4√2；(iii) Δ 在 [1,∞) 上连续，Δ(2) = 0，Δ(1) = √2 − 3√3/4 > 0，lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0，因而存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 A_face(p) > A_diag(p)。\n\n## 证明\n\n1. 【前提】固定 1 ≤ p < ∞；B_p^3 := {(x,y,z) : |x|^p+|y|^p+|z|^p ≤ 1}；对单位向量 n 记 A_p(n) 为 B_p^3 ∩ n^⊥ 在平面 n^⊥ 上的二维 Lebesgue 面积；A_face(p) := A_p((1,1,0)/√2)、A_diag(p) := A_p((1,1,1)/√3)、Δ(p) := A_face(p) − A_diag(p)。（前提）（前提）\n2. 【推导】由 stmt:000034 的 (i)，对每个单位法向 n 与 n^⊥ 的任意单位正交基 (u,v) 有 A_p(n) = (1/2)∫_0^{2π}‖cosθ·u+sinθ·v‖_p^{-2}dθ。取 n = (1,1,1)/√3、u = (1,-1,0)/√2、v = (1,1,-2)/√6（直接验算 ‖u‖=‖v‖=1、u·v=0、u·n=v·n=0，故 {u,v} 是 H := {x+y+z=0} 的单位正交基）；另一路参数化 Φ(x,y) := (x,y,−x−y) 是 R²→H 的双射，∂_xΦ=(1,0,−1) 与 ∂_yΦ=(0,1,−1) 的叉积为 (1,1,1)、模为 √3，故 A_diag(p) = √3∫∫_D dxdy，其中 D := {(x,y) : |x|^p+|y|^p+|x+y|^p ≤ 1}。（依据：stmt:000034）\n3. 【推导】对 D 用平面极坐标 (x,y) = r(cosθ, sinθ)（r ≥ 0、θ ∈ [0,2π)）：由 |r cosθ|^p+|r sinθ|^p+|r(cosθ+sinθ)|^p = r^p g(θ)（记 g(θ) := |cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p）得 (x,y) ∈ D ⟺ r ≤ g(θ)^{-1/p}；由面积元 r dr dθ 得 ∫∫_D = ∫_0^{2π}∫_0^{g(θ)^{-1/p}} r dr dθ = (1/2)∫_0^{2π} g(θ)^{-2/p} dθ，与第 2 步合并即 A_diag(p) = (√3/2)∫_0^{2π} (|cosθ|^p+|sinθ|^p+|cosθ+sinθ|^p)^{-2/p} dθ，这给出 (i) 的积分式。（依据：stmt:000034）\n4. 【推导】一致控制：g ≥ max(|cosθ|,|sinθ|)^p ≥ (1/√2)^p（因为 max(|cosθ|,|sinθ|) ≥ 1/√2），故对一切 p ∈ [1,∞) 与一切 θ 有 0 < g(θ)^{-2/p} ≤ (1/√2)^{-2} = 2；又 (p,θ) ↦ g(θ) 连续且在每个局部 p-区间上 g 有与 p 无关的正下界，故 θ ↦ g(θ)^{-2/p} 关于 p 逐点连续。（依据：stmt:000034）\n5. 【推导】p = 2 时 g(θ) = cos²θ+sin²θ+(cosθ+sinθ)² = 2+sin2θ；代换 u = 2θ 后用 ∫_0^{2π}du/(a+b sin u) = 2π/√(a²−b²)（取 a=2、b=1）得 ∫_0^{2π} dθ/(2+sin2θ) = ∫_0^{2π} du/(2+sin u) = 2π/√3，此处 p=2 使 g^{-2/p} 化为 g^{-1}，故 A_diag(2) = (√3/2)·(2π/√3) = π。（依据：stmt:000034）\n6. 【推导】由 stmt:000034 的 (ii)(iii)(iv) 的闭式 A_face(p) = 2^{1/2−1/p}·4Γ(1+1/p)²/Γ(1+2/p)，在 p = 2 处得 A_face(2) = 2^0·4Γ(3/2)²/Γ(2) = 4·(√π/2)²/1 = π；与第 5 步合并得 Δ(2) = π − π = 0。（依据：stmt:000034）\n7. 【推导】Δ(1) 的计算：A_face(1) = 2^{-1/2}·4Γ(2)²/Γ(3) = 2^{-1/2}·4·1/2 = √2（Γ(2)=1、Γ(3)=2）；A_diag(1)：p = 1 时 g = |cosθ|+|sinθ|+|cosθ+sinθ| 满足 g(θ+π) = g(θ)，且在 [0,π/2] 上 g = 2(cosθ+sinθ)（故 g^{-2} = (1/4)(cosθ+sinθ)^{-2}）、在 [π/2,3π/4] 上 g = 2sinθ（g^{-2} = (1/4)sin^{-2}θ）、在 [3π/4,π] 上 g = −2cosθ（g^{-2} = (1/4)cos^{-2}θ）；三段对 ∫g^{-2} 的贡献各为 1/4（分别用 ∫_0^{π/2}dθ/(cosθ+sinθ)² = 1、[−cotθ] 与 [tanθ] 在两个端点区间上的取值各得 1），故 ∫_0^{2π}g^{-2}dθ = 2·(1/4+1/4+1/4) = 3/2，A_diag(1) = (√3/2)·(3/2) = 3√3/4；于是 Δ(1) = √2 − 3√3/4 > 0，因为 4√2 > 3√3 ⟺ 32 > 27。（依据：stmt:000034）\n8. 【推导】Δ 的连续性：Γ 在 (0,∞) 上连续且取正值，p ↦ 1/p、1+1/p、1+2/p 在 [1,∞) 上连续，故 A_face 在 [1,∞) 上连续；由第 4 步与 p 无关的控制 g^{-2/p} ≤ 2 与逐点连续性，有界收敛定理给出 p ↦ ∫_0^{2π}g(θ)^{-2/p}dθ 在 [1,∞) 上连续，故 A_diag 连续；两者相减得 Δ 在 [1,∞) 上连续。（依据：stmt:000034）\n9. 【推导】p→∞ 时 A_diag 的极限：记 m(θ) := max(|cosθ|,|sinθ|,|cosθ+sinθ|)，则 m(θ)^p ≤ g(θ) ≤ 3m(θ)^p，故对每个 θ 有 g(θ)^{-2/p} → m(θ)^{-2}；又 g ≥ m^p 给出 g^{-2/p} ≤ m^{-2} ≤ 2（因 m ≥ 1/√2），有界收敛定理给出 A_diag(p) → (√3/2)∫_0^{2π}m(θ)^{-2}dθ。按符号分段：在 [0,π/2] 上 m = cosθ+sinθ、在 [π/2,3π/4] 上 m = sinθ、在 [3π/4,π] 上 m = −cosθ，且 m(θ+π) = m(θ)，三段各贡献 1（同上一步的三段积分），故 ∫_0^{2π}m^{-2}dθ = 2·3 = 6，于是 lim_{p→∞}A_diag(p) = (√3/2)·6 = 3√3。（依据：stmt:000034）\n10. 【推导】p→∞ 时 A_face 的极限：C_p := 4Γ(1+1/p)²/Γ(1+2/p) → 4Γ(1)²/Γ(1) = 4（Γ 连续、Γ(1)=1），又 2^{1/2−1/p} → √2，故 A_face(p) → 4√2；与第 9 步合并得 lim_{p→∞}Δ(p) = 4√2 − 3√3 > 0（同样由 32 > 27）。（依据：stmt:000034）\n11. 【推导】收尾：记 L := 4√2 − 3√3 > 0；由第 8 步 Δ 的连续性与第 10 步 lim Δ = L，取 ε := L/2 > 0，则存在 P0 ∈ [1,∞) 使一切 p ≥ P0 满足 |Δ(p) − L| < ε，从而 Δ(p) > L/2 > 0，即 A_face(p) > A_diag(p) 对一切 p ≥ P0 成立，这给出 (iii) 的最后一句。（依据：stmt:000034）\n\n## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |\n|---|---|---|\n| 【推导】由 stmt:000034 的 (i)，对每个单位法向 n 与 n^⊥ 的任意单位正交基 (u,v) 有 A_p(n) = (1/2)∫_0^{2π}… | stmt:000034 | 第 2、3、4、5、6、7、8、9、10、11 步 |\n",
+          "entry": {
+            "statement_id": "",
+            "plan_id": "000002",
+            "sid": "n1",
+            "label": "F 攻坚 000002 子目标 n1",
+            "proof_no": 0,
+            "sha256": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+            "fingerprint": "da831b7b4a3dc1a603c2df16234b02d42fd9d3d56471081b702d31adc9ea8c7e",
+            "kind": "conjecture",
+            "kind_label": "命题类型",
+            "registered_at": "2026-11-24T20:51:08+08:00",
+            "versions": [
+              {
+                "raw": "2026-11-24T20:51:08+08:00@3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+                "proof_no": 0,
+                "at": "2026-11-24T20:51:08+08:00",
+                "sha256": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db"
+              }
+            ],
+            "checked": true,
+            "problems": [],
+            "family": "f-proof",
+            "producer": "agent-F-F1"
+          },
+          "label": "F 攻坚 000002 子目标 n1",
+          "family": "b-proof",
+          "producer_role": "B",
+          "producer_source": "manuscript_family",
+          "producer_instance": "",
+          "producer_actor": "agent-B",
+          "instance_source": "",
+          "producer_checked": true,
+          "registered_at": "2026-11-24T20:51:08+08:00",
+          "why": ""
+        }
+      ]
+    }
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [
+    "000034"
+  ],
+  "summons": [],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [],
+  "summons_total": 0,
+  "summons_consumed": 0,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 0,
+    "summons_consumed": 0,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p328",
+    "role": "B",
+    "prompt_sha256": "3b2cc9b3ca436e61701bb141d29affa3e3b7492fbf794c03e312fd08f32eb93c",
+    "prompt_chars": 81606,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "TOOL_29",
+      "TOOL_30",
+      "TOOL_31",
+      "TOOL_32",
+      "TOOL_33",
+      "TOOL_34",
+      "TOOL_35",
+      "TOOL_36",
+      "TOOL_37",
+      "TOOL_38",
+      "TOOL_39",
+      "TOOL_40",
+      "TOOL_41",
+      "TOOL_42",
+      "TOOL_43",
+      "TOOL_44",
+      "TOOL_45",
+      "TOOL_46",
+      "TOOL_47",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_LIMITS",
+      "COLLAB_NAMES",
+      "PARENT_STOP",
+      "PARENT_ROSTER",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 6,
+    "tokens_in": 444906,
+    "tokens_out": 11460,
+    "usd": 0.011669,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 6,
+    "no_request_calls": 0,
+    "hit": 421376,
+    "miss": 23530,
+    "unknown_calls": 0,
+    "tokens_in": 444906,
+    "hit_rate": 0.9471,
+    "mismatched_calls": 0,
+    "saved_usd": 0.061942,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 117.703,
+  "end_ts": "2026-11-24T22:33:46+08:00",
+  "notes": [
+    "缓存读数：命中 421376 / 未命中 23530 token，命中率 94.7%（6 次调用）；按 modelcost 口径估算可省 约 0.061942 美元",
+    "子产出处理读数：summons_total=0（这一趟没派过子代理 ⇒ 没有要处理的子产出；判据没有对象，不红）"
+  ],
+  "final_payload": {
+    "final": "stmt:000030 的放弃**没有落成**：table.update 被秘书受控拒，盘上零字节改写（回读坐实 status 仍 active、quote_reason 未变）。① 改后的 status 与 abandon_kind：status 仍是 `active`（未被改成 abandoned），提交的 abandon_kind 是 `difficulty`（未落盘）；② 系统拼出的 quote_reason 原文——本次拒收一笔未写，所以 quote_reason 仍是登记时那一句：「手稿收录（D 只递指针）：普通数值手稿 `work/E/e-num-000003.md` —— 命题逐字取自 `## 命题`，证明栏空着（业主 2026-11-08：普通数值档不写证明正文），程序在实验行的 `code_path`，引文面不适用」；③ 受控拒信（原样）：`abandon_difficulty_not_genuine` —— 秘书原话「这不是「难以逾越的困难」/没指出难在哪（难度判定：不是真困难；salvaged 不是从原证明拆出来的）」，并逐条点名：那段 difficulty 与 abandon_basis 逐字重复、内容全是流程与基础设施理由（缺 certified computation 通道、形式化会话已关、E 侧只有浮点读数）加档案错位（proof_no 2 指向 stmt:000042 的稿），没有落到任何引理 / 任何一步 / 任何假设上；唯一有数学意味的一点（浮点读数不足以支撑 V 签）属证据等级不足，不是数学困难；salvaged 空、proof_text 空 ⇒ 无「原证明」可拆。\n\n我做的核对（两件都已确认）：\n- `manuscripts/F/f-proof-000003.md` 的 `## 命题` 是 Δ(p)/A_face/A_diag 那一条（= stmt:000042），与 stmt:000030 的「截面面积计算核自检」不是同一条 ⇒ D 说的 proof_no 2 误指属实；\n- 更该先修的：stmt:000030 的 proof_text 为空、proof_no 2 指那份错稿，但 2026-11-24T21:32:49 有一条 `_kind_upgrade` 拿 f-proof-000003 的「连续 3/3 成立、正文 sha 相符」把 000030 从 conjecture 抬到 theorem —— 误指已经污染了等级现算（而该签块的 statement_id 是 000042）。这一条不是放弃动作能修的。\n\n没做的事与理由：D 明确要求 abandon_basis 逐字用 params 那一段，而秘书判它不是真困难；按「执行者不替派活人圆场、不自己改口径凑过去」的口径，我没有另编一条数学难点去凑难度档（那会是把没核到的困难写成困难）。需 D 定的两条路：① 给一条落到某条引理 / 某一步 / 某条假设上的真困难（例如命题里「每个 p 的偏差 ≤1e-15 / O(1/p)」要成立，缺的是哪一步误差估计、哪条界对不上）；② 或改处置：不放弃，改为修正 proof_no 2 的误指 / 把 stmt:000030 按 E 的普通数值档（e-num，cross_check、strong_conjecture）重新处置，并让秘书撤掉那条被污染的 theorem 抬档。",
+    "evidence": [
+      "stmt:000030",
+      "stmt:000042",
+      "manuscripts/F/f-proof-000003.md",
+      "exp:000003"
+    ],
+    "notify": {
+      "to": "t-000209",
+      "summary": "stmt:000030 放弃未落成：秘书受控拒 abandon_difficulty_not_genuine，盘上零写入；另报 proof_no 2 误指已污染等级（theorem 抬档）",
+      "body": "## 派活回执：stmt:000030 以 difficulty 档放弃 —— 受控拒，未落成\n\n### 三样回执\n1. **改后的 status 与 abandon_kind**：status 仍 `active`（未改成 abandoned）；提交的 `abandon_kind=difficulty` 未落盘。\n2. **系统拼出的 quote_reason 原文**：本次拒收一笔未写 ⇒ 仍是登记时那一句：「手稿收录（D 只递指针）：普通数值手稿 `work/E/e-num-000003.md` —— 命题逐字取自 `## 命题`，证明栏空着（业主 2026-11-08：普通数值档不写证明正文），程序在实验行的 `code_path`，引文面不适用」。\n3. **受控拒信（原样）**：`abandon_difficulty_not_genuine` —— 秘书原话「这不是「难以逾越的困难」/没指出难在哪（难度判定：不是真困难；salvaged 不是从原证明拆出来的）」。\n\n### 秘书的理由（逐条）\n- difficulty 段与 abandon_basis 逐字重复，可读出的内容全是**流程与基础设施**（缺带区间算术的 certified computation 通道、本会话形式化已关、E 侧只有浮点读数）与**档案错位**（proof_no 2 指向 stmt:000042 的稿），没有落到任何一条引理、任何一步或任何一条假设上；\n- 唯一有数学意味的一点（浮点读数不足以支撑 V 签）属**证据等级不足**，不是数学困难；\n- `salvaged` 为空数组、`proof_text` 为空串 ⇒ 既无「原证明」可拆，也无条目可作可取之处；\n- 该段把 stmt:000030 与稿件的 stmt:000042 混在一起讲，进一步说明讲的是归属与归档，不是这条命题的数学难度。\n\n### 我核对到的（两件，都已坐实）\n- `manuscripts/F/f-proof-000003.md` 的 `## 命题` 是 Δ(p)/A_face/A_diag 那一条（= stmt:000042），与 000030 的「截面面积计算核自检」**不是同一条** ⇒ 你说的 proof_no 2 误指属实；\n- **比放弃更该先修的一条**：stmt:000030 的 `proof_text` 为空、`proof_no 2` 指那份错稿，但 2026-11-24T21:32:49 有一条 `_kind_upgrade` 拿 f-proof-000003 的「连续 3/3 成立、正文 sha 相符」把它从 `conjecture` 抬到 `theorem`，而那份签块的 `statement_id` 是 000042 —— 误指已经污染了等级现算。\n\n### 要你定（二选一，我不替你裁）\n1. **给一条真困难**：落到某条引理 / 某一步 / 某条假设上（例如命题里「每个 p 的坐标截面 = 4Γ(1+1/p)²/Γ(1+2/p)，相对偏差 ≤1e-13」与「p=1000 上偏差落在 O(1/p) 以内」要作为证明成立，缺的是哪一步误差估计、哪条一致界对不上），我原样带进 `difficulty` 重交；\n2. **或改处置**：不放弃 —— 修 proof_no 2 的误指，把 stmt:000030 按 E 的普通数值档（`e-num` / `cross_check` / `strong_conjecture`）重新处置，并撤掉那条被污染的 `theorem` 抬档。\n\n### 我为什么没有自己另编一条\n你明确要求 abandon_basis 逐字用你给的那段；秘书判它不是数学困难。作为执行者我不替派活人圆场、不自己改口径凑过去 —— 编一条我并未核到的数学难点去凑难度档，正是把没核到写成核到了。\n\n### 未改动的\n命题正文一个字没改；stmt:000042 与 `manuscripts/F/f-proof-000003.md` 一个字节没动（只读了两处用于核对）。",
+      "refs": [
+        "stmt:000030",
+        "stmt:000042",
+        "exp:000003"
+      ]
+    },
+    "blocked": {
+      "what": "把 stmt:000030 以 abandon_kind=difficulty 标成 abandoned 并写入 D 给的那段 abandon_basis",
+      "why": "秘书受控拒 abandon_difficulty_not_genuine：那段理由全是「缺 certified computation 通道 / 形式化会话已关 / E 侧只有浮点读数 / proof_no 2 误指 f-proof-000003」——属基础设施、证据等级与归档问题，没有落到任何引理、步骤或假设上的数学困难；salvaged 空且 proof_text 为空，无可拆可取之处。盘上一字节未改",
+      "needs": "D 定二选一：① 一条真正的数学难点（落到某条引理 / 某一步 / 某条假设上，说明哪一步的估计或界卡住），我原样带进 difficulty 重交；② 或改处置——不放弃，改为修 proof_no 2 的误指，并把 stmt:000030 按 E 的普通数值档（e-num / cross_check / strong_conjecture）重新处置，同时撤掉 21:32 那条由 f-proof-000003（statement_id=000042）抬起来的 theorem 档"
+    }
+  },
+  "task_id": "t-000212"
+}

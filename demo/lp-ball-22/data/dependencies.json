@@ -1,0 +1,93 @@
+{
+  "schema_version": 2,
+  "rows": [
+    {
+      "dep_id": "000000",
+      "used_by": "stmt:000040",
+      "kind": "experiment",
+      "label": "exp:000014",
+      "status": "closed",
+      "source_lit_id": null,
+      "source_experiment_id": "000014",
+      "page_range": {
+        "start": null,
+        "end": null,
+        "label": ""
+      },
+      "quote": "",
+      "status_reason": "",
+      "created_at": "2026-11-24T20:46:01+08:00",
+      "source_doc_id": null,
+      "source_claim_id": null,
+      "path_group": 1,
+      "source_stmt_id": null,
+      "created_by": "secretary-B"
+    },
+    {
+      "dep_id": "000001",
+      "used_by": "stmt:000041",
+      "kind": "theorem",
+      "label": "手稿依赖段（第 36 行）：【推导】n := (1,1,1)/√3 是 H 的单位法向量，H = n^⊥。由 stmt:000034 的 (i)（该条在册、kind=theorem、st…",
+      "status": "closed",
+      "source_lit_id": null,
+      "source_experiment_id": null,
+      "page_range": {
+        "start": null,
+        "end": null,
+        "label": ""
+      },
+      "quote": "【推导】n := (1,1,1)/√3 是 H 的单位法向量，H = n^⊥。由 stmt:000034 的 (i)（该条在册、kind=theorem、st…",
+      "status_reason": "",
+      "created_at": "2026-11-24T20:59:49+08:00",
+      "source_doc_id": null,
+      "source_claim_id": null,
+      "path_group": 1,
+      "source_stmt_id": "000034",
+      "created_by": "secretary-B"
+    },
+    {
+      "dep_id": "000002",
+      "used_by": "stmt:000042",
+      "kind": "theorem",
+      "label": "手稿依赖段（第 37 行）：【推导】由 stmt:000034 的 (i)，对每个单位法向 n 与 n^⊥ 的任意单位正交基 (u,v) 有 A_p(n) = (1/2)∫_0^{2π}…",
+      "status": "closed",
+      "source_lit_id": null,
+      "source_experiment_id": null,
+      "page_range": {
+        "start": null,
+        "end": null,
+        "label": ""
+      },
+      "quote": "【推导】由 stmt:000034 的 (i)，对每个单位法向 n 与 n^⊥ 的任意单位正交基 (u,v) 有 A_p(n) = (1/2)∫_0^{2π}…",
+      "status_reason": "",
+      "created_at": "2026-11-24T21:01:15+08:00",
+      "source_doc_id": null,
+      "source_claim_id": null,
+      "path_group": 1,
+      "source_stmt_id": "000034",
+      "created_by": "secretary-B"
+    },
+    {
+      "dep_id": "000003",
+      "used_by": "stmt:000030#p2",
+      "kind": "theorem",
+      "label": "手稿依赖段（第 37 行）：【推导】由 stmt:000034 的 (i)，对每个单位法向 n 与 n^⊥ 的任意单位正交基 (u,v) 有 A_p(n) = (1/2)∫_0^{2π}…",
+      "status": "closed",
+      "source_lit_id": null,
+      "source_experiment_id": null,
+      "page_range": {
+        "start": null,
+        "end": null,
+        "label": ""
+      },
+      "quote": "【推导】由 stmt:000034 的 (i)，对每个单位法向 n 与 n^⊥ 的任意单位正交基 (u,v) 有 A_p(n) = (1/2)∫_0^{2π}…",
+      "status_reason": "",
+      "created_at": "2026-11-24T21:32:50+08:00",
+      "source_doc_id": null,
+      "source_claim_id": null,
+      "path_group": 2,
+      "source_stmt_id": "000034",
+      "created_by": "secretary-B"
+    }
+  ]
+}

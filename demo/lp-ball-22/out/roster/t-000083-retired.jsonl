@@ -1,0 +1,10 @@
+{"at": "2026-11-24T23:04:23+08:00", "branch": "waiting_no_children", "name": "E1", "owner": "t-000083", "reason": "研究主线已交差（RESEARCH.md 七节、三段结构与两临界点、statements/签处置回执），名下子代理与板项均已收口，不再派新活；级联销号：随 D1（t-000011） 一起退场", "role": "E", "seq": 1, "task_id": "t-000086"}
+{"at": "2026-11-24T23:04:23+08:00", "branch": "waiting_no_children", "name": "E1", "owner": "t-000083", "reason": "研究主线已交差（RESEARCH.md 七节、三段结构与两临界点、statements/签处置回执），名下子代理与板项均已收口，不再派新活；级联销号：随 D1（t-000011） 一起退场", "role": "E", "seq": 2, "task_id": "t-000119"}
+{"at": "2026-11-25T03:02:29+08:00", "branch": "waiting_no_children", "name": "V1", "owner": "t-000083", "reason": "收工前自动收尾：静默且无未消项（R9FIX-D5）", "role": "V", "seq": 3, "task_id": "t-000085"}
+{"at": "2026-11-25T03:02:29+08:00", "branch": "waiting_no_children", "name": "V1", "owner": "t-000083", "reason": "收工前自动收尾：静默且无未消项（R9FIX-D5）", "role": "V", "seq": 4, "task_id": "t-000092"}
+{"at": "2026-11-25T03:02:29+08:00", "branch": "waiting_no_children", "name": "V1", "owner": "t-000083", "reason": "收工前自动收尾：静默且无未消项（R9FIX-D5）", "role": "V", "seq": 5, "task_id": "t-000099"}
+{"at": "2026-11-25T03:02:29+08:00", "branch": "waiting_no_children", "name": "V1", "owner": "t-000083", "reason": "收工前自动收尾：静默且无未消项（R9FIX-D5）", "role": "V", "seq": 6, "task_id": "t-000110"}
+{"at": "2026-11-25T03:02:29+08:00", "branch": "waiting_no_children", "name": "V1", "owner": "t-000083", "reason": "收工前自动收尾：静默且无未消项（R9FIX-D5）", "role": "V", "seq": 7, "task_id": "t-000118"}
+{"at": "2026-11-25T03:02:29+08:00", "branch": "waiting_no_children", "name": "V1", "owner": "t-000083", "reason": "收工前自动收尾：静默且无未消项（R9FIX-D5）", "role": "V", "seq": 8, "task_id": "t-000124"}
+{"at": "2026-11-25T03:02:29+08:00", "branch": "waiting_no_children", "name": "V1", "owner": "t-000083", "reason": "收工前自动收尾：静默且无未消项（R9FIX-D5）", "role": "V", "seq": 9, "task_id": "t-000136"}
+{"at": "2026-11-25T03:02:29+08:00", "branch": "waiting_no_children", "name": "V1", "owner": "t-000083", "reason": "收工前自动收尾：静默且无未消项（R9FIX-D5）", "role": "V", "seq": 10, "task_id": "t-000148"}

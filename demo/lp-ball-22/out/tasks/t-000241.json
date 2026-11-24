@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-25T02:27:00+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 2642,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"B 的收尾回执（照 M 的 t-000283 停手，未再开 run_once）：\\n\\n① `literature.unprocessed` 现在是 **1**（我自己的 `table.count(table=\\\"literature\\\", filter={\\\"processed\\\": false})` 读数；literature 共 25 行）。\\n\\n② 剩下没消化的只有 **lit:000024**（Measure theory and integration by and for the learner）。卡在哪一档：**不是缺正文、不是写盘被拒**，而是 **run_once 的单拍抽取预算没跑完**——这份 PDF 2.9 MB、候选期已抽读 199643 字（`download.status=ok`、`fulltext=ok`），走的是分块抽取（`extract_resume`：每拍推进约 4–5 个 chunk），收尾时 `processed` 仍是 false。要翻真就还得再连跑几拍 run_once。另：本轮唯一一次写盘尝试是 `table.update(literature 000020, {processed:true})`，被 schema 校验受控拒，拒信原话「literature 没有字段 ['unprocessed_reason']；可用字段：added_at / authors / checked_by / … / processed / …」——拒的是那一行携带的附加字段（`unprocessed_reason` / `extract_resume`），不是 `processed` 这一格本身；此后该位一律由 run_once 的领取路径翻真，我没有再手写。\\n\\n③ 已消化成功 **5 条**（逐条 processed 前后值：000019 false→true、000020 false→true、000021 false→true、000022 false→true、000023 false→true；000024 false→false）。本轮抽到的概念 / 关系：**concepts_created = 0（6 篇都为 0）、relations_added = 1（只有 000022 那一拍加了 1 条），其余关系全部 relations_deferred（每拍 9–52 条，因端点概念未登记）**。0 条概念的原因逐篇一律是**配额封顶**：`concept_quota = {limit:30, written:30}` 已满，每拍把 98–175 条候选概念拒掉（`concepts_refused`），不是缺正文、也不是抽取失败（`unreadable=0, failed=0, skipped_no_extractor=0`）。台账存量按 `source_lit_id` 数：000019=0、000020=3、000021=2、000022=1、000023=0、000024=0（共 6 条 concept 行，是前几趟留下的，不是本趟产出；relations 我未逐篇复核，只报了本趟 run_once 回执里的读数）。\\n\\n另有一条我名下未清的口子，如实报：板项 **t-000256**（V 判 000112#p1「有毛病」，错在第 3 步，签盖 sha 1bfbe80e…）仍在，收口只有两条路——改稿后重送 V，或明确放弃该命题；本轮没动它，它会挡销号。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\lp-ball-22\\\\runs\\\\B-20261125-022700-001.json\", \"messages\": [], \"outcome\": \"ok\", \"status\": \"done\", \"steps\": 66, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "c0928da53747cdd9c5e6716368cae4080d076bd9fb8441798ef85ea16759f80c",
+ "readings": {},
+ "role": "B",
+ "status": "done",
+ "task_id": "t-000241"
+}

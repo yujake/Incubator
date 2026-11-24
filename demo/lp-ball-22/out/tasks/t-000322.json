@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-25T03:54:19+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 2800,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"收口完成：doc:000001 的结果章节 claims 已按章节归属改到「3 Main results」并在该章节带上本轮台账引用（stmt:/exp:），未改任何数学内容或结论强度；H 已复审现行版并置 accepted。\\n\\n① 改动的那几条 claim（本轮共 7 条，只改 section 归属，text 与 citations 一字未动，集合上已覆盖要求的三类引用：stmt:000034 / stmt:000042 / exp:000004 及 exp:000003 / exp:000006 / exp:000007）：\\n- claim-5 ｜ section=3 Main results ｜ citations: stmt:000034, exp:000003\\n- claim-6 ｜ section=3 Main results ｜ citations: stmt:000034, stmt:000042, lit:000002, lit:000006\\n- claim-7 ｜ section=3 Main results ｜ citations: stmt:000035, exp:000003\\n- claim-8 ｜ section=3 Main results ｜ citations: stmt:000041, exp:000003\\n- claim-9 ｜ section=3 Main results ｜ citations: stmt:000042, stmt:000041\\n- claim-10｜ section=3 Main results ｜ citations: exp:000004, exp:000006, exp:000007\\n- claim-11｜ section=3 Main results ｜ citations: exp:000006, exp:000007\\n（原 section 是裸号 \\\"3\\\"，与 documents.sections 的 heading「3 Main results」不逐字一致；现改为与 heading 逐字一致。claim-10 仍写明「Numerically supported strong conjecture, not established here」，claim-5/6/7/10/11 仍为 cross_check 且带「数值交叉验证，不构成证明」，claim-8/9 仍为 proof_review 且带「逐行审阅过的证明，未经机器检查」——强度一格未抬。）\\n\\n② doc:000001 改后 content_sha256（前 12 位）= 7b558cb640bb（全文 7b558cb640bb2517fbd561b3c7fe4a58e282e8e00650452be98bde79148a4809，claim_count=14，落盘 manuscripts/G/000001.md）；H1 复审已把签名钉在这一版：documents.status=accepted，签名凭据 doc-signatures/000001-7b558cb640bb2517-003.json（round=14）。\\n\\n③ main.tex：**未动，无需重编**（本轮只调 own.revise 改 claims 台账与 manuscripts/G/000001.md，未触碰 out/package/main.tex）。盘上 main.tex 仍为上一轮改完第 189 行后重编的那一版：sha256=a4174b2f0733b7fac2698c4b88ce9d01f204ab5d88d98ec1ecdb328b26dca365，32529 字节；对应编译回执 tex_sha256 与该 sha 一致、pages=10、pdf_bytes=316925、exit_codes [0,0]。\\n\\n④ 无受控拒（own.revise 一次成功，replaced_claim_ids=claim-5…claim-11；未出现 row_not_yours / unknown_claim_id / paper_not_registered 等拒码）。另：名下 H1 已交差（t-000323 done），板项 t-000325 是唤醒通知；若需销号由父代理处置——本趟不代为宣布名册清理完成。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\lp-ball-22\\\\runs\\\\G-20261125-035419-001.json\", \"messages\": [], \"ou",
+ "payload_sha256": "2bde6fefff4737bdc747d7af775076eefff750f21d25427d8fb94575e01c29b0",
+ "readings": {},
+ "role": "G",
+ "status": "done",
+ "task_id": "t-000322"
+}

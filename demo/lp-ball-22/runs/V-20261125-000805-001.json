@@ -1,0 +1,816 @@
+{
+  "role": "V",
+  "task": "V：这一趟派给你的活是 —— 审一份文献侧登记落成的证明手稿：manuscripts/B/b-proof-000005.md（对应命题 stmt:000112「临界方向的充要条件」，正文是 Ambrus《Critical central sections of the cube》Theorem 1 的证明开头逐字摘录）。请用 verify_proof 逐行走查：statement_id=000112，proof_manuscript=manuscripts/B/b-proof-000005.md；给两态结论（成立 ⇒ findings 空；有毛病 ⇒ 每条带步号与 defect_step）。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/B/b-proof-000005.md"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# B 的证明手稿：临界方向的充要条件\n\n- 标签：临界方向的充要条件\n\n## 命题\n\n设 Q_n = [−1,1]^n 为标准 n 维立方体（ℓ∞ 范数的单位球），S^{n−1} 为 R^n 的单位球面；对 k = 1,…,n 记 S_k = {x = (x_1,…,x_n) ∈ Q_n : x_k = 1} 为 Q_n 中第 k 个坐标为 1 的侧面；对单位向量 a ∈ S^{n−1}，a^⊥ 为过原点、以 a 为法向的超平面，Vol_{n−1}(Q_n ∩ a^⊥) 为对应的中心超平面截面体积函数（a 是它的临界点即称 a 为 critical direction）。则：单位向量 a = (a_1,…,a_n) ∈ S^{n−1} 是临界方向，当且仅当 a 平行于 Q_n 某个二维面的主对角线，或者存在某个常数 µ > 0，使得 Vol_{n−1}(conv(0 ∪ (S_k ∩ a^⊥))) = µ(1 − a_k^2) 对每个 k = 1,…,n 都成立。\n\n## 证明\n\nProof of Theorem 1. Assume that a ∈Sn−1 is a critical direction. Since the constraint on a is expressed by the equation a2 1 + . . . + a2 n = 1, and σ(a) is differentiable, the method of Lagrange multipliers implies that there exists a constant λ ∈R so that for each k = 1, . . . , n, (2.9) λak = ∂ ∂ak σ(a). Referring to (2.8), the Leibniz integral rule shows that for each k with ak̸ = 0, (2.10) ∂ ∂ak σ(a) = Z ∞ −∞ Y i̸=k sin ait ait · cos akt ak −sin akt a2 kt dt.\n\n## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |\n|---|---|---|\n\n（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/B/b-proof-000005.md",
+          "encoding": "utf-8",
+          "bytes_read": 1502,
+          "total_bytes": 1502,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 18,
+          "total_lines": 18,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 18 行",
+          "sha256": "87e2d5f6584cd021e3593b8243e65067d2e3844df157cec11e9bead5c2907afd"
+        },
+        "multi_call": {
+          "turn_index": 0,
+          "call_index": 0,
+          "calls": 2,
+          "step_index": 0
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 36608,
+        "prompt_cache_miss_tokens": 1237,
+        "tokens_in": 37845,
+        "tokens_out": 108,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000254"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "statements",
+          "id": "000112"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "stmt_id": "000112",
+          "origin": "external_lit",
+          "kind": "theorem",
+          "label": "临界方向的充要条件",
+          "statement_text": "设 Q_n = [−1,1]^n 为标准 n 维立方体（ℓ∞ 范数的单位球），S^{n−1} 为 R^n 的单位球面；对 k = 1,…,n 记 S_k = {x = (x_1,…,x_n) ∈ Q_n : x_k = 1} 为 Q_n 中第 k 个坐标为 1 的侧面；对单位向量 a ∈ S^{n−1}，a^⊥ 为过原点、以 a 为法向的超平面，Vol_{n−1}(Q_n ∩ a^⊥) 为对应的中心超平面截面体积函数（a 是它的临界点即称 a 为 critical direction）。则：单位向量 a = (a_1,…,a_n) ∈ S^{n−1} 是临界方向，当且仅当 a 平行于 Q_n 某个二维面的主对角线，或者存在某个常数 µ > 0，使得 Vol_{n−1}(conv(0 ∪ (S_k ∩ a^⊥))) = µ(1 − a_k^2) 对每个 k = 1,…,n 都成立。",
+          "statement_full": "设 Q_n = [−1,1]^n 为标准 n 维立方体（ℓ∞ 范数的单位球），S^{n−1} 为 R^n 的单位球面；对 k = 1,…,n 记 S_k = {x = (x_1,…,x_n) ∈ Q_n : x_k = 1} 为 Q_n 中第 k 个坐标为 1 的侧面；对单位向量 a ∈ S^{n−1}，a^⊥ 为过原点、以 a 为法向的超平面，Vol_{n−1}(Q_n ∩ a^⊥) 为对应的中心超平面截面体积函数（a 是它的临界点即称 a 为 critical direction）。则：单位向量 a = (a_1,…,a_n) ∈ S^{n−1} 是临界方向，当且仅当 a 平行于 Q_n 某个二维面的主对角线，或者存在某个常数 µ > 0，使得 Vol_{n−1}(conv(0 ∪ (S_k ∩ a^⊥))) = µ(1 − a_k^2) 对每个 k = 1,…,n 都成立。",
+          "proof_text": "Proof of Theorem 1. Assume that a ∈Sn−1 is a critical direction. Since the constraint on a is expressed by the equation a2 1 + . . . + a2 n = 1, and σ(a) is differentiable, the method of Lagrange multipliers implies that there exists a constant λ ∈R so that for each k = 1, . . . , n, (2.9) λak = ∂ ∂ak σ(a). Referring to (2.8), the Leibniz integral rule shows that for each k with ak̸ = 0, (2.10) ∂ ∂ak σ(a) = Z ∞ −∞ Y i̸=k sin ait ait · cos akt ak −sin akt a2 kt dt.",
+          "source_lit_id": "000003",
+          "page_range": {
+            "start": 2,
+            "end": 2,
+            "label": "p. 2"
+          },
+          "quote_verified": null,
+          "quote_mode": "",
+          "quote_reason": "本行 statement_full 是消化后的中文重构（非逐字串）；proof_text 是第 4 页 Theorem 1 证明开头的逐字摘录（对应 library/000003.txt 第 228–240 行），但本笔未跑逐字回验（框架按来源重算 p:norm 区间那一档），故 quote_verified 记「未查」（null），不记 true；逐字回验落在此后由关系写口当场 substring 回验的 relations 行上。",
+          "quote_span": "",
+          "quote_call_sha256": "",
+          "evidence_kind": "cross_check",
+          "bits": {
+            "numeric": "pending",
+            "proof": true,
+            "reviewed": false,
+            "formal": "pending",
+            "audited": false,
+            "origin": "external_lit",
+            "evidence": {
+              "numeric": {},
+              "numeric_reason": "",
+              "proof_process": "Proof of Theorem 1. Assume that a ∈Sn−1 is a critical direction. Since the constraint on a is expressed by the equation a2 1 + . . . + a2 n = 1, and σ(a) is differentiable, the method of Lagrange multipliers implies that there exists a constant λ ∈R so that for each k = 1, . . . , n, (2.9) λak = ∂ ∂ak σ(a). Referring to (2.8), the Leibniz integral rule shows that for each k with ak̸ = 0, (2.10) ∂ ∂ak σ(a) = Z ∞ −∞ Y i̸=k sin ait ait · cos akt ak −sin akt a2 kt dt.",
+              "proof_source": "own",
+              "reviewed_by": {},
+              "reviewed_source": "",
+              "formal": {},
+              "formal_reason": "",
+              "audited_by": {},
+              "optimized_by_proof": {
+                "1": false
+              }
+            },
+            "voided_by": {},
+            "grade": "conjecture",
+            "audited_badge": false
+          },
+          "status": "active",
+          "derived_from": [],
+          "aliases": [],
+          "doc_id": null,
+          "line_range": {
+            "start": null,
+            "end": null,
+            "label": ""
+          },
+          "created_at": "2026-11-25T00:05:46+08:00",
+          "created_by": "secretary-B",
+          "_proposition_adjudication": {
+            "checked": true,
+            "attempted": true,
+            "verdict": "different",
+            "canonical_name": "临界方向的充要条件",
+            "same_as": "",
+            "basis": "条件：目标是 Q_n 的侧面 S_k、单位向量 a 与超平面截面体积，候选是 1≤p<∞ 下的 B_p^3 及对角/面对角截面面积，条件不一致。；结论：目标结论是临界方向当且仅当平行于某二维面主对角线或满足 µ(1−a_k^2) 恒等式，候选结论是 A_diag、A_face 的公式和 Δ(p) 最终正性，结论不一致。；目标命题讨论立方体中心超平面截面的临界方向充要条件，候选命题讨论 B_p^3 的截面面积公式及 Δ(p) 的正性，条件与结论均不同。",
+            "reason": "目标命题讨论立方体中心超平面截面的临界方向充要条件，候选命题讨论 B_p^3 的截面面积公式及 Δ(p) 的正性，条件与结论均不同。",
+            "reused": false,
+            "seam_source": "secretary（LlmSeam.for_secretary）",
+            "seam_attempted": true,
+            "at": "2026-11-25T00:05:46+08:00"
+          },
+          "quote_carrier": {
+            "pass": "first",
+            "manuscript_id": "000005",
+            "manuscript": "manuscripts/B/b-proof-000005.md",
+            "body_sha256": "1bfbe80eedd58d4adac78d33db9917eb8b82cf2722d29aab38ee7f70e3141e06",
+            "at": "2026-11-25T00:05:46+08:00"
+          },
+          "proof_no": 1,
+          "proof_sha256": "1bfbe80eedd58d4adac78d33db9917eb8b82cf2722d29aab38ee7f70e3141e06",
+          "manuscript_id": "000005",
+          "manuscripts": {
+            "1": "manuscripts/B/b-proof-000005.md"
+          },
+          "proof_routes": {},
+          "route": ""
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "id": "000112",
+          "id_field": "stmt_id",
+          "found": true
+        },
+        "warn": "这一步给了 2 条调用，已按顺序逐条：第 1 条 fs.read 成功；第 2 条 table.get 成功。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 0,
+          "call_index": 1,
+          "calls": 2,
+          "step_index": 1,
+          "summary": "这一步给了 2 条调用，已按顺序逐条：第 1 条 fs.read 成功；第 2 条 table.get 成功。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 0,
+            "calls": 2,
+            "items": 2,
+            "steps": [
+              0,
+              1
+            ],
+            "executed": 2,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000254"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "verify.verify_proof",
+        "args": {
+          "statement_id": "000112",
+          "proof_manuscript": "manuscripts/B/b-proof-000005.md"
+        },
+        "why": "按任务要求对被审手稿 manuscripts/B/b-proof-000005.md 做逐行走查：正文只到 (2.9)(2.10) 两步即止，需指到步号。"
+      },
+      "result": {
+        "tool": "verify.verify_proof",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "kind": "",
+          "statement_id": "000112",
+          "verification_id": "v-000001",
+          "verdict": "有毛病",
+          "defect_step": 3,
+          "findings": [
+            {
+              "level": "error",
+              "step": 3,
+              "kind": "证明不完整/未证当且仅当",
+              "detail": "位置 step 3（原文“Referring to (2.8), the Leibniz integral rule shows that...”）之后证明即结束；命题要求“临界方向 ⇔ 平行于某二维面主对角线或存在 µ>0 使...”。当前只写出 critical ⇒ Lagrange 方程和导数公式，没有从 (2.10) 推出 µ 关系或对角线情形，也没有证明充分性（右边 ⇒ critical）。需补全两方向及结论。"
+            },
+            {
+              "level": "error",
+              "step": 3,
+              "kind": "无依据引用",
+              "detail": "位置 step 3：原文引用 (2.8) 与 Leibniz 积分号下求导，但本稿 `## 依赖` 为空，且证明内没有给出 (2.8) 的陈述或推导；这是无依据步骤。需在依赖中登记或在稿内给出 (2.8) 及求导合法性。"
+            },
+            {
+              "level": "warning",
+              "step": 3,
+              "kind": "遗漏 ak=0",
+              "detail": "位置 step 3：导数公式只对 ak≠0 给出；命题对每个 k 要求 µ 条件或对角线结论，未处理 ak=0 的坐标，需单独补证。"
+            }
+          ],
+          "unresolved_errors": 2,
+          "proof_sha256": "1bfbe80eedd58d4adac78d33db9917eb8b82cf2722d29aab38ee7f70e3141e06",
+          "proof_chars": 468,
+          "signed_bit3": false,
+          "reviewed_by": {},
+          "bits": {
+            "numeric": "pending",
+            "proof": true,
+            "reviewed": false,
+            "formal": "pending",
+            "audited": false,
+            "origin": "own_result",
+            "evidence": {
+              "numeric": {},
+              "numeric_reason": "",
+              "proof_process": "Proof of Theorem 1. Assume that a ∈Sn−1 is a critical direction. Since the constraint on a is expressed by the equation a2 1 + . . . + a2 n = 1, and σ(a) is differentiable, the method of Lagrange multipliers implies that there exists a constant λ ∈R so that for each k = 1, . . . , n, (2.9) λak = ∂ ∂ak σ(a). Referring to (2.8), the Leibniz integral rule shows that for each k with ak̸ = 0, (2.10) ∂ ∂ak σ(a) = Z ∞ −∞ Y i̸=k sin ait ait · cos akt ak −sin akt a2 kt dt.",
+              "proof_source": "own",
+              "reviewed_by": {},
+              "reviewed_source": "",
+              "formal": {},
+              "formal_reason": "",
+              "audited_by": {}
+            },
+            "voided_by": {},
+            "grade": "conjecture",
+            "audited_badge": false
+          },
+          "review_write": {
+            "written": false,
+            "rolled_back": false,
+            "append_state": "appended",
+            "re_sign_required": false,
+            "grade": "",
+            "statement_id": "000112",
+            "proof_no": 1,
+            "proof_sha256": "1bfbe80eedd58d4adac78d33db9917eb8b82cf2722d29aab38ee7f70e3141e06",
+            "kind_upgrade": {},
+            "upgrade_note": "",
+            "grade_recomputed": {},
+            "streak": 0,
+            "need": 3,
+            "streak_ok": false,
+            "deferred_to": "secretary",
+            "reason": "发签这一步不在这一支：在册档由 V 的秘书判定并发（业主 2026-10-29），未在册档由 V 自己颁发签信封。台账那一行已落（v-000001）",
+            "manuscript_signed": false,
+            "filed": "not_read_by_v",
+            "v_review": {
+              "checked": true,
+              "review_id": "v-review-000014",
+              "written": true,
+              "idempotent": false,
+              "path": "verifications/reviews/v-review-000014.md",
+              "delivery": {
+                "checked": true,
+                "state": "dispatched",
+                "item_id": "t-000255",
+                "key": "v-review@v-review-000014",
+                "role": "B",
+                "parent_task_id": "t-000253",
+                "reason": "已投给 t-000253 的板项 t-000255",
+                "detail_path": "V 的审阅报告：`verifications/reviews/v-review-000014.md`\n- 被审稿：`manuscripts/B/b-proof-000005.md`\n- 结论：有毛病（V 的秘书语义判定：fault）\n- 台账锚点：`verifications/000112.jsonl#v-000001`\nV 的原文不转达；这份报告就是给你的审阅意见。改完把同一份稿重新送 V。\n",
+                "existing": false
+              },
+              "reason": "V 稿已落盘：verifications/reviews/v-review-000014.md"
+            },
+            "signed_delivery": {}
+          },
+          "ledger": "verifications/000112.jsonl#v-000001",
+          "reason": "v-000001：有毛病（不签：签没落成）",
+          "detail": "",
+          "exhaustion_review": {},
+          "signer": "",
+          "proof_authors": [],
+          "report_path": "",
+          "checks": [],
+          "missing": [],
+          "citations": [],
+          "citation_checks": [],
+          "citation_gate": {
+            "ok": true,
+            "blocking": [],
+            "weaker": [],
+            "problem": "",
+            "why": ""
+          },
+          "secretary_judge": {
+            "checked": true,
+            "answer": "有缺陷要指出",
+            "axis": "fault",
+            "unwired": false,
+            "reason": "V 明确指出证明在第 3 步后即结束，未证当且仅当的两个方向，并指出无依据引用与 ak=0 遗漏，属于证明链缺陷。",
+            "basis": [
+              "证明只从临界性推出含 λ 的积分恒等式，既未完成到命题右端的推导，也完全未证逆方向，故当且仅当命题未获证明。",
+              "没有从 (2.10) 推出 µ 关系或对角线情形，也没有证明充分性（右边 ⇒ critical）。需补全两方向及结论。",
+              "位置 step 3：原文引用 (2.8) 与 Leibniz 积分号下求导，但本稿 `## 依赖` 为空"
+            ],
+            "refused": "",
+            "cost": {
+              "ledger": "001449",
+              "charged": true,
+              "ledger_reason": "charged",
+              "call_index": 1247,
+              "prompt_sha256": "ec7cce8e678341351b9d6461330992d6a03ded096e90ee3aac91caa546559ff8",
+              "tokens": 2065,
+              "usd": 0.000424
+            },
+            "verdict": "有毛病",
+            "defect_step": 3,
+            "fault_kind": "math",
+            "fault_cause": "",
+            "report_gap": "",
+            "statement_id": "000112",
+            "proof_no": 1,
+            "material": {
+              "v_reply": "{\"verdict\": \"有毛病\", \"defect_step\": 3, \"quote\": \"Referring to (2.8), the Leibniz integral rule shows that\", \"why\": \"证明只从临界性推出含 λ 的积分恒等式，既未完成到命题右端的推导，也完全未证逆方向，故当且仅当命题未获证明。\", \"findings\": [{\"level\": \"error\", \"step\": 3, \"kind\": \"证明不完整/未证当且仅当\", \"detail\": \"位置 step 3（原文“Referring to (2.8), the Leibniz integral rule shows that...”）之后证明即结束；命题要求“临界方向 ⇔ 平行于某二维面主对角线或存在 µ>0 使...”。当前只写出 critical ⇒ Lagrange 方程和导数公式，没有从 (2.10) 推出 µ 关系或对角线情形，也没有证明充分性（右边 ⇒ critical）。需补全两方向及结论。\"}, {\"level\": \"error\", \"step\": 3, \"kind\": \"无依据引用\", \"detail\": \"位置 step 3：原文引用 (2.8) 与 Leibniz 积分号下求导，但本稿 `## 依赖` 为空，且证明内没有给出 (2.8) 的陈述或推导；这是无依据步骤。需在依赖中登记或在稿内给出 (2.8) 及求导合法性。\"}, {\"level\": \"warning\", \"step\": 3, \"kind\": \"遗漏 ak=0\", \"detail\": \"位置 step 3：导数公式只对 ak≠0 给出；命题对每个 k 要求 µ 条件或对角线结论，未处理 ak=0 的坐标，需单独补证。\"}], \"citation_checks\": []}",
+              "ledger_row": {
+                "verdict": "有毛病",
+                "defect_step": 3
+              }
+            },
+            "defect_scope": "proof",
+            "defect_step_basis": ""
+          },
+          "sign_issuance": {
+            "checked": true,
+            "issue": false,
+            "issued": false,
+            "landed": false,
+            "decision": "不签发",
+            "streak": 0,
+            "need": 3,
+            "streak_ok": false,
+            "projected": 0,
+            "same_sha": true,
+            "state": "rejected",
+            "fault_kind": "math",
+            "reason": "这一转秘书语义判定说「有毛病」（fault）⇒ 不发签；这一转就是终局：已按 fault 打回 F（错在第几步见洗过的转达与 findings）",
+            "basis": [
+              "秘书判定 checked=True axis=fault",
+              "continuous=0/3",
+              "row=v-000001"
+            ],
+            "reading": {
+              "checked": true,
+              "state": "rejected",
+              "ok": false,
+              "in_sync": true,
+              "ledger_present": true,
+              "statement_id": "000112",
+              "proof_no": 1,
+              "sha": "1bfbe80eedd58d4adac78d33db9917eb8b82cf2722d29aab38ee7f70e3141e06",
+              "verification_id": "v-000001",
+              "verdict": "有毛病",
+              "round": 1,
+              "unresolved_errors": 2,
+              "rows": 1,
+              "proof_rows": 1,
+              "problems": [],
+              "superseded": [],
+              "superseded_total": 0,
+              "streak": 0,
+              "need": 3,
+              "streak_ok": false,
+              "legacy_rows": 0,
+              "counted_by": "legacy:ledger_tail",
+              "ledger": "verifications/000112.jsonl",
+              "why": "000112#p1 的现行正文（sha 1bfbe80eedd5…）最近一签是 v-000001：秘书语义判定轴=fault ⇒ 这一份要打回，按缺陷处理（V 写下的陈述：'有毛病'；unresolved_errors=2；why：证明只从临界性推出含 λ 的积分恒等式，既未完成到命题右端的推导，也完全未证逆方向，故当且仅当命题未获证明。）",
+              "hard_ban_markers": [],
+              "secretary_axis": "fault",
+              "secretary_fault": true,
+              "secretary_judged": true,
+              "secretary_unjudged": false
+            },
+            "cost": {},
+            "material": {},
+            "writeback": {},
+            "statement_id": "000112"
+          },
+          "review_passes": [
+            {
+              "pass": 1,
+              "axis": "fault",
+              "fault_kind": "math",
+              "fault_cause": "",
+              "decision": "不签发",
+              "streak": 0,
+              "need": 3,
+              "streak_ok": false,
+              "issue": false,
+              "issued": false,
+              "verdict": "有毛病",
+              "verification_id": "v-000001",
+              "review_call": "efdda4a14821",
+              "terminal": "rejected"
+            }
+          ],
+          "manuscript_identity": {
+            "checked": true,
+            "statement_id": "000112",
+            "manuscript_id": "000005",
+            "row_manuscript_id": "000005",
+            "matched_by": "manuscript_id",
+            "fallback": false,
+            "row_checked": true,
+            "found": true,
+            "problem": "",
+            "path_checked": true,
+            "path_count": 1,
+            "path_group": 1,
+            "path_problem": "",
+            "why": "稿号 000005 == stmt:000112 行上的 `manuscript_id`，也在第 1 条逐路径记录上 ⇒ 这是这一条命题的稿"
+          },
+          "issued_sign": {},
+          "statement_scope_gate": {
+            "checked": true,
+            "blocked": false,
+            "refused": "",
+            "why": "台账里没有「判 fault 且 defect_scope=statement」的行 ⇒ 这道闸不适用（判的是证明层 / 老行没这一格）",
+            "statement_id": "000112",
+            "rows": 0,
+            "problems": [],
+            "trigger": {},
+            "retraction": {},
+            "amend": {}
+          },
+          "wash_v_reply": {
+            "checked": true,
+            "washed": true,
+            "text": "指到第 3 步。该步证明在引用 (2.8) 并作 Leibniz 积分号下求导后即结束。问题有三：(1) 只写出临界方向给出的 Lagrange 方程与导数公式，未从 (2.10) 推出 µ 关系或二维面主对角线情形，也未证反向（右边 ⇒ critical），命题的「当且仅当」两端均未补全；(2) 依赖登记为空，稿内亦未给出 (2.8) 的陈述或推导、未说明积分号下求导的合法性，属无依据步骤；(3) 导数公式只对 ak≠0 给出，ak=0 的坐标未处理。下一步补什么：补全两个方向及结论；在依赖中登记 (2.8)，或在稿内给出 (2.8) 及求导合法性；对 ak=0 单独补证。",
+            "findings": [
+              {
+                "quote": "Referring to (2.8), the Leibniz integral rule shows that",
+                "why": "定位缺陷所在：此句之后证明即结束，命题未获完成。"
+              },
+              {
+                "quote": "证明只从临界性推出含 λ 的积分恒等式，既未完成到命题右端的推导，也完全未证逆方向，故当且仅当命题未获证明。",
+                "why": "命题为当且仅当，当前只做了临界方向的部分推导，正向未推到底、逆向完全未证。"
+              },
+              {
+                "quote": "位置 step 3：原文引用 (2.8) 与 Leibniz 积分号下求导，但本稿 `## 依赖` 为空，且证明内没有给出 (2.8) 的陈述或推导；这是无依据步骤。",
+                "why": "所引 (2.8) 未在依赖中登记、稿内也无陈述或推导，求导合法性未交代，属无依据步骤。"
+              },
+              {
+                "quote": "位置 step 3：导数公式只对 ak≠0 给出；命题对每个 k 要求 µ 条件或对角线结论，未处理 ak=0 的坐标，需单独补证。",
+                "why": "覆盖不全：ak=0 的坐标未纳入，需单独补证。"
+              }
+            ],
+            "dropped": [],
+            "refused": "",
+            "reason": "洗过：4 条 findings 逐字落回原文",
+            "actor": "secretary-V",
+            "changes": [
+              {
+                "field": "text",
+                "from": "（V 的原文，不转达）",
+                "to": "指到第 3 步。该步证明在引用 (2.8) 并作 Leibniz 积分号下求导后即结束。问题有三：(1) 只写出临界方向给出的 Lagrange 方程与导数公式，未从 (2.10) 推出 µ 关系或二维面主对角线情形，也未证反向（右边 ⇒ critical），命题的「当且仅当」两端均未补全；(2) 依赖登记为空，稿内亦未给出 (2.8) 的陈述或推导、未说明积分号下求导的合法性，属无依据步骤；(3) 导数公式只对 ak≠0 给出，ak=0 的坐标未处理。下一步补什么：补全两个方向及结论；在依赖中登记 (2.8)，或在稿内给出 (2.8) 及求导合法性；对 ak=0 单独补证。",
+                "why": "洗稿转达：原文不外发（业主 2026-10-29 的 C 段）"
+              }
+            ],
+            "cost": {},
+            "material": {
+              "v_reply": "{\"verdict\": \"有毛病\", \"defect_step\": 3, \"quote\": \"Referring to (2.8), the Leibniz integral rule shows that\", \"why\": \"证明只从临界性推出含 λ 的积分恒等式，既未完成到命题右端的推导，也完全未证逆方向，故当且仅当命题未获证明。\", \"findings\": [{\"level\": \"error\", \"step\": 3, \"kind\": \"证明不完整/未证当且仅当\", \"detail\": \"位置 step 3（原文“Referring to (2.8), the Leibniz integral rule shows that...”）之后证明即结束；命题要求“临界方向 ⇔ 平行于某二维面主对角线或存在 µ>0 使...”。当前只写出 critical ⇒ Lagrange 方程和导数公式，没有从 (2.10) 推出 µ 关系或对角线情形，也没有证明充分性（右边 ⇒ critical）。需补全两方向及结论。\"}, {\"level\": \"error\", \"step\": 3, \"kind\": \"无依据引用\", \"detail\": \"位置 step 3：原文引用 (2.8) 与 Leibniz 积分号下求导，但本稿 `## 依赖` 为空，且证明内没有给出 (2.8) 的陈述或推导；这是无依据步骤。需在依赖中登记或在稿内给出 (2.8) 及求导合法性。\"}, {\"level\": \"warning\", \"step\": 3, \"kind\": \"遗漏 ak=0\", \"detail\": \"位置 step 3：导数公式只对 ak≠0 给出；命题对每个 k 要求 µ 条件或对角线结论，未处理 ak=0 的坐标，需单独补证。\"}], \"citation_checks\": []}",
+              "ledger_row": {
+                "verdict": "有毛病",
+                "defect_step": 3
+              },
+              "label": ""
+            },
+            "statement_id": "000112",
+            "proof_no": 1
+          }
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 36992,
+        "prompt_cache_miss_tokens": 3811,
+        "tokens_in": 40803,
+        "tokens_out": 1087,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000254"
+    },
+    {
+      "index": 3,
+      "shape": "final",
+      "payload": {
+        "final": "审毕：stmt:000112 的证明手稿 manuscripts/B/b-proof-000005.md —— 结论「有毛病」，defect_step=3，findings 3 条，已落台账 verifications/000112.jsonl#v-000001（proof_sha256=1bfbe80eedd58d4adac78d33db9917eb8b82cf2722d29aab38ee7f70e3141e06），这一签不签发。\n\n逐行核对（正文只有两步，到 (2.10) 即止）：\n1. 第 1 步（Lagrange，(2.9)）：约束 a_1^2+…+a_n^2=1 正则、σ 可微，得 λa_k=∂σ/∂a_k —— 这一步本身无碍。\n2. 第 3 步（(2.10)，指到的缺陷步）：三条问题——(a) 证明在引用 (2.8) 并作 Leibniz 积分号下求导后即结束，既未从 (2.10) 推出 µ 关系或二维面主对角线情形，也完全未证反向（右边 ⇒ critical），命题的「当且仅当」两端均未完成；(b) (2.8) 与积分号下求导的合法性在稿内没有陈述、`## 依赖` 段为空 ⇒ 无依据步骤；(c) 导数公式只对 a_k≠0 给出，a_k=0 的坐标未处理。\n补法：补全两个方向与结论；(2.8) 要么在依赖段登记、要么在稿内给出陈述与求导合法性；对 a_k=0 单独补证。改完用同一份稿重新送 V。\n\n另：本稿只是 Theorem 1 证明开头的逐字摘录（quote_reason 亦已注明本笔未跑逐字回验，quote_verified=null），以现在的样子不足以支撑在册命题的当且仅当结论。审阅报告已按框架流程投给被审者（verifications/reviews/v-review-000014.md，板项 t-000255），本趟不另发手稿。",
+        "evidence": [
+          "stmt:000112",
+          "manuscripts/B/b-proof-000005.md",
+          "verifications/000112.jsonl#v-000001",
+          "v-000001"
+        ]
+      },
+      "result": {
+        "notify_problem": "没有 notify 表（`final` 要给一个 notify 对象，字段：['to', 'summary', 'body', 'refs', 'why']）—— 除主控外每个角色收工都要留一份交接手稿，这是用户点名的强制项"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 39936,
+        "prompt_cache_miss_tokens": 4590,
+        "tokens_in": 44526,
+        "tokens_out": 842,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000254"
+    }
+  ],
+  "final": "审毕：stmt:000112 的证明手稿 manuscripts/B/b-proof-000005.md —— 结论「有毛病」，defect_step=3，findings 3 条，已落台账 verifications/000112.jsonl#v-000001（proof_sha256=1bfbe80eedd58d4adac78d33db9917eb8b82cf2722d29aab38ee7f70e3141e06），这一签不签发。\n\n逐行核对（正文只有两步，到 (2.10) 即止）：\n1. 第 1 步（Lagrange，(2.9)）：约束 a_1^2+…+a_n^2=1 正则、σ 可微，得 λa_k=∂σ/∂a_k —— 这一步本身无碍。\n2. 第 3 步（(2.10)，指到的缺陷步）：三条问题——(a) 证明在引用 (2.8) 并作 Leibniz 积分号下求导后即结束，既未从 (2.10) 推出 µ 关系或二维面主对角线情形，也完全未证反向（右边 ⇒ critical），命题的「当且仅当」两端均未完成；(b) (2.8) 与积分号下求导的合法性在稿内没有陈述、`## 依赖` 段为空 ⇒ 无依据步骤；(c) 导数公式只对 a_k≠0 给出，a_k=0 的坐标未处理。\n补法：补全两个方向与结论；(2.8) 要么在依赖段登记、要么在稿内给出陈述与求导合法性；对 a_k=0 单独补证。改完用同一份稿重新送 V。\n\n另：本稿只是 Theorem 1 证明开头的逐字摘录（quote_reason 亦已注明本笔未跑逐字回验，quote_verified=null），以现在的样子不足以支撑在册命题的当且仅当结论。审阅报告已按框架流程投给被审者（verifications/reviews/v-review-000014.md，板项 t-000255），本趟不另发手稿。",
+  "evidence": [
+    "stmt:000112",
+    "manuscripts/B/b-proof-000005.md",
+    "verifications/000112.jsonl#v-000001",
+    "v-000001"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 0,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 4,
+  "compactions": 0,
+  "mailbox_items": [],
+  "mailbox_msgs": [],
+  "mailbox_delivered": 0,
+  "monitor_turns": 0,
+  "wakes": 0,
+  "wake_ids": [],
+  "wake_events": [],
+  "clock_pumps": 6,
+  "clock_fired": 0,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "V 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "V",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    }
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [],
+  "summons": [],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [],
+  "summons_total": 0,
+  "summons_consumed": 0,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 0,
+    "summons_consumed": 0,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p328",
+    "role": "V",
+    "prompt_sha256": "171b42af018313bbcc69a25b1530f2ab9412256a4419f69333b5f3b963dad68e",
+    "prompt_chars": 46343,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "FACULTIES_07",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_STOP",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 3,
+    "tokens_in": 123174,
+    "tokens_out": 2037,
+    "usd": 0.003009,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 3,
+    "no_request_calls": 0,
+    "hit": 113536,
+    "miss": 9638,
+    "unknown_calls": 0,
+    "tokens_in": 123174,
+    "hit_rate": 0.9218,
+    "mismatched_calls": 0,
+    "saved_usd": 0.01669,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 50.422,
+  "end_ts": "2026-11-25T00:08:04+08:00",
+  "notes": [
+    "收工没有可用 notify 表（没有 notify 表（`final` 要给一个 notify 对象，字段：['to', 'summary', 'body', 'refs', 'why']）—— 除主控外每个角色收工都要留一份交接手稿，这是用户点名的强制项）⇒ 这一趟没有交接手稿（不打回、不代填）",
+    "收工时名下还有 1 条证明没有 V 的签字（读数，不拦收工；明细：000112）",
+    "缓存读数：命中 113536 / 未命中 9638 token，命中率 92.2%（3 次调用）；按 modelcost 口径估算可省 约 0.016690 美元",
+    "子产出处理读数：summons_total=0（这一趟没派过子代理 ⇒ 没有要处理的子产出；判据没有对象，不红）",
+    "终态回报已落板：t-000257（框架通报；模型没填 notify）"
+  ],
+  "final_payload": {
+    "final": "审毕：stmt:000112 的证明手稿 manuscripts/B/b-proof-000005.md —— 结论「有毛病」，defect_step=3，findings 3 条，已落台账 verifications/000112.jsonl#v-000001（proof_sha256=1bfbe80eedd58d4adac78d33db9917eb8b82cf2722d29aab38ee7f70e3141e06），这一签不签发。\n\n逐行核对（正文只有两步，到 (2.10) 即止）：\n1. 第 1 步（Lagrange，(2.9)）：约束 a_1^2+…+a_n^2=1 正则、σ 可微，得 λa_k=∂σ/∂a_k —— 这一步本身无碍。\n2. 第 3 步（(2.10)，指到的缺陷步）：三条问题——(a) 证明在引用 (2.8) 并作 Leibniz 积分号下求导后即结束，既未从 (2.10) 推出 µ 关系或二维面主对角线情形，也完全未证反向（右边 ⇒ critical），命题的「当且仅当」两端均未完成；(b) (2.8) 与积分号下求导的合法性在稿内没有陈述、`## 依赖` 段为空 ⇒ 无依据步骤；(c) 导数公式只对 a_k≠0 给出，a_k=0 的坐标未处理。\n补法：补全两个方向与结论；(2.8) 要么在依赖段登记、要么在稿内给出陈述与求导合法性；对 a_k=0 单独补证。改完用同一份稿重新送 V。\n\n另：本稿只是 Theorem 1 证明开头的逐字摘录（quote_reason 亦已注明本笔未跑逐字回验，quote_verified=null），以现在的样子不足以支撑在册命题的当且仅当结论。审阅报告已按框架流程投给被审者（verifications/reviews/v-review-000014.md，板项 t-000255），本趟不另发手稿。",
+    "evidence": [
+      "stmt:000112",
+      "manuscripts/B/b-proof-000005.md",
+      "verifications/000112.jsonl#v-000001",
+      "v-000001"
+    ]
+  },
+  "task_id": "t-000254"
+}

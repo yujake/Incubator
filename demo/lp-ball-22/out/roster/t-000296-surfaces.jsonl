@@ -1,0 +1,10 @@
+{"at": "2026-11-25T03:24:41+08:00", "kind": "alloc", "name": "H2", "owner": "t-000296", "seq": 1, "slot": "S01"}
+{"at": "2026-11-25T03:24:41+08:00", "kind": "alloc", "name": "G1", "owner": "t-000296", "seq": 2, "slot": "S02"}
+{"at": "2026-11-25T03:31:04+08:00", "kind": "release", "name": "G1", "owner": "t-000296", "seq": 3, "slot": "S02"}
+{"at": "2026-11-25T03:31:13+08:00", "kind": "release", "name": "H2", "owner": "t-000296", "seq": 4, "slot": "S01"}
+{"at": "2026-11-25T03:31:47+08:00", "kind": "alloc", "name": "E2", "owner": "t-000296", "seq": 5, "slot": "S01"}
+{"at": "2026-11-25T03:36:34+08:00", "kind": "alloc", "name": "E1", "owner": "t-000296", "seq": 6, "slot": "S02"}
+{"at": "2026-11-25T03:56:05+08:00", "kind": "alloc", "name": "G2", "owner": "t-000296", "seq": 7, "slot": "S03"}
+{"at": "2026-11-25T03:56:05+08:00", "kind": "release", "name": "E2", "owner": "t-000296", "seq": 8, "slot": "S01"}
+{"at": "2026-11-25T03:56:06+08:00", "kind": "release", "name": "E1", "owner": "t-000296", "seq": 9, "slot": "S02"}
+{"at": "2026-11-25T03:56:06+08:00", "kind": "release", "name": "G2", "owner": "t-000296", "seq": 10, "slot": "S03"}

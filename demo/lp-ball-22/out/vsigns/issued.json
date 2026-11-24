@@ -1,0 +1,94 @@
+{
+  "schema": "vsigns-issued/1",
+  "signs": [
+    {
+      "archived_at": "2026-11-24T18:41:01+08:00",
+      "archived_by": "agentflow.vsigns.archive",
+      "artifact_path": "manuscripts/F/f-proof-000000.md",
+      "artifact_sha": "4cb054c6745ec737591bd41c456ea83a22efa7fa072fbd8f529843d22bfa3c9f",
+      "at": "2026-11-24T18:41:01+08:00",
+      "need": 3,
+      "statement_id": "",
+      "streak": 3,
+      "verdict": "成立"
+    },
+    {
+      "archived_at": "2026-11-24T19:12:21+08:00",
+      "archived_by": "agentflow.vsigns.archive",
+      "artifact_path": "manuscripts/F/f-proof-000001.md",
+      "artifact_sha": "6c6accee9f0db73f1db0526a3bbbdeda9cc2f1dc61d376e5cc36439d35874625",
+      "at": "2026-11-24T19:12:21+08:00",
+      "need": 3,
+      "statement_id": "",
+      "streak": 3,
+      "verdict": "成立"
+    },
+    {
+      "archived_at": "2026-11-24T19:13:21+08:00",
+      "archived_by": "agentflow.vsigns.archive",
+      "artifact_path": "manuscripts/B/b-proof-000000.md",
+      "artifact_sha": "e8f5eec99ab03a9036ddbe36a376f073aa03e50665d3d3f3af32e15f5d908fb8",
+      "at": "2026-11-24T19:13:21+08:00",
+      "need": 3,
+      "statement_id": "000034",
+      "streak": 3,
+      "verdict": "成立"
+    },
+    {
+      "archived_at": "2026-11-24T19:24:08+08:00",
+      "archived_by": "agentflow.vsigns.archive",
+      "artifact_path": "manuscripts/B/b-proof-000001.md",
+      "artifact_sha": "11164aee4f1b379663f59e8155dfd0f949925ac6c88d270f06af6871054c904a",
+      "at": "2026-11-24T19:24:08+08:00",
+      "need": 3,
+      "statement_id": "000035",
+      "streak": 3,
+      "verdict": "成立"
+    },
+    {
+      "archived_at": "2026-11-24T20:47:16+08:00",
+      "archived_by": "agentflow.vsigns.archive",
+      "artifact_path": "manuscripts/F/f-proof-000002.md",
+      "artifact_sha": "099eb36449cf134dd531f1a7d7e34e4d13e987904a2738315c60f28220cd1148",
+      "at": "2026-11-24T20:47:16+08:00",
+      "need": 3,
+      "statement_id": "",
+      "streak": 3,
+      "verdict": "成立"
+    },
+    {
+      "archived_at": "2026-11-24T20:57:20+08:00",
+      "archived_by": "agentflow.vsigns.archive",
+      "artifact_path": "manuscripts/F/f-proof-000003.md",
+      "artifact_sha": "3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db",
+      "at": "2026-11-24T20:57:20+08:00",
+      "need": 3,
+      "statement_id": "",
+      "streak": 3,
+      "verdict": "成立"
+    },
+    {
+      "archived_at": "2026-11-24T21:08:15+08:00",
+      "archived_by": "agentflow.vsigns.archive",
+      "artifact_path": "manuscripts/B/b-proof-000002.md",
+      "artifact_sha": "12847fcc3abb631b4429c457172eb56b1e3d7b23899025ca93bac7a6a9cb9345",
+      "at": "2026-11-24T21:08:15+08:00",
+      "need": 3,
+      "statement_id": "000041",
+      "streak": 3,
+      "verdict": "成立"
+    },
+    {
+      "archived_at": "2026-11-24T21:25:17+08:00",
+      "archived_by": "agentflow.vsigns.archive",
+      "artifact_path": "manuscripts/B/b-proof-000003.md",
+      "artifact_sha": "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6",
+      "at": "2026-11-24T21:25:17+08:00",
+      "need": 3,
+      "statement_id": "000042",
+      "streak": 3,
+      "verdict": "成立"
+    }
+  ],
+  "updated_at": "2026-11-24T21:25:17+08:00"
+}

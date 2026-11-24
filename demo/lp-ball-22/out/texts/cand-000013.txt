@@ -1,0 +1,1395 @@
+===== page 1 =====
+ISRAEL JOURNAL OF MATHEMATICS 220 (2017), 763–790
+DOI: 10.1007/s11856-017-1532-9
+NON-CENTRAL SECTIONS OF CONVEX BODIES
+BY
+Vladyslav Yaskin and Ning Zhang∗
+Department of Mathematical and Statistical Sciences, University of Alberta,
+Edmonton, Alberta, T6G 2G1, Canada
+e-mail: yaskin@ualberta.ca, nzhang2@ualberta.ca
+ABSTRACT
+Let K be a convex body in Rn. Is K uniquely determined by the areas of
+its sections? There are classical results that explain what happens in the
+case of sections passing through the origin. However, much less is known
+about sections that do not contain the origin. We discuss several problems
+of this type and establish the corresponding uniqueness results.
+1. Introduction
+Geometric Tomography is an area of Mathematics that deals with the study of
+properties of objects (such as convex bodies or star bodies) based on information
+about the size of their sections, projections, etc. It is a well-known result, which
+goes back to Minkowski and Funk (see [4]), that an origin-symmetric star body
+in Rn is uniquely determined by the areas of its central sections. More precisely,
+if K and L are origin-symmetric star bodies in Rn such that
+voln−1(K ∩H) = voln−1(L ∩H)
+for every hyperplane H passing through the origin, then K = L. On the other
+hand, in the class of general (not necessarily symmetric) star bodies the latter
+result is not true.
+In view of this, it is natural to ask what information is needed to determine
+non-symmetric bodies. Falconer [2] and Gardner [3] have shown that if K and
+∗Both authors are partially supported by a grant from NSERC.
+Received January 21, 2016 and in revised form April 30, 2016
+763
+===== page 2 =====
+764
+V. YASKIN AND N. ZHANG
+Isr. J. Math.
+L are convex bodies in Rn that contain two points p and q in their interiors
+and such that voln−1(K ∩H) = voln−1(L ∩H) for every hyperplane H that
+passes through either p or q, then K = L. In this context, let us also mention
+the problem of Klee about the inner section function of convex bodies, which is
+given by mK(u) = maxt∈R voln−1(K ∩{u⊥+ tu}). In 1969 Klee asked whether
+the knowledge of mK is suﬃcient to determine the body K uniquely. In [5] the
+problem was solved in the negative, and a little later a nonspherical body with
+a constant inner section function was constructed in [12].
+Recently, a lot of attention has been attracted to the following problem, posed
+by Barker and Larman in [1]. Note that a similar question on the sphere was
+considered earlier by Santal´o [13].
+Problem 1.1: Let K and L be convex bodies in Rn (n ≥2) that contain a
+Euclidean ball B in their interiors. If voln−1(K ∩H) = voln−1(L ∩H) for every
+hyperplane H that supports B, does it follow that K = L?
+The problem is open even in R2. Some particular cases are known to be true.
+In particular, a body K in R2 all of whose sections by lines supporting a disk
+have the same length, must itself be a disk; see [1]. The problem also has a
+positive answer in the class of convex polytopes in Rn; see [15].
+Barker and Larman also suggested a more general version of Problem 1.1.
+Problem 1.2: Let K and L be convex bodies in Rn (n ≥2) that contain a
+convex body D in their interiors. If voln−1(K ∩H) = voln−1(L ∩H) for every
+hyperplane H that supports D, does it follow that K = L?
+Closely related is the following open problem.
+Problem 1.3: Let K and L be convex bodies in Rn and let D be a convex body
+in the interior of K∩L. If voln(K∩H+) = voln(L∩H+) for every hyperplane H
+supporting D, does it follow that K = L? Here, H+ is the half-space bounded
+by the hyperplane H that does not intersect the interior of D.
+It is interesting to see what happens if the hypotheses of Problems 1.2 and
+1.3 hold for two distinct bodies D1 and D2 simultaneously (i.e. if we double
+the amount of information). We show that in this case the answer in R2 is
+aﬃrmative under some mild assumptions on D1 and D2. After this paper was
+written, it was brought to our attention that Theorem 3.1 (see Section 3 below)
+was known to Barker and Larman, as they mention it can be found in Barker’s
+===== page 3 =====
+Vol. 220, 2017
+NON-CENTRAL SECTIONS OF CONVEX BODIES
+765
+thesis. We include it here anyway, because it is a simple consequence of Theorem
+3.4.
+In Section 4 we discuss some higher-dimensional analogues. In particular,
+Groemer [7] has shown that convex bodies are uniquely determined by the areas
+of “half-sections”. More precisely, consider half-planes of the form H(u, w) =
+{x ∈Rn : x ∈u⊥, ⟨x, w⟩≥0}, where u ∈Sn−1 and w ∈Sn−1 ∩u⊥. Then
+the equality voln−1(K ∩H(u, w)) = voln−1(L∩H(u, w)) for all such half-planes
+implies that K = L. We give a version of this result for half-planes that do not
+pass through the origin. Some other types of sections are also discussed.
+2. Deﬁnitions and preliminaries
+In this section we collect some basic concepts and deﬁnitions that we use in the
+paper. For further facts in Convex Geometry and Geometric Tomography the
+reader is referred to the books by Schneider [14] and Gardner [4].
+A set in Rn is called convex if it contains the closed line segment joining
+any two of its points. A convex set is a convex body if it is compact and has
+non-empty interior. A convex body is strictly convex if its boundary contains
+no line segments.
+A hyperplane H supports a set E at a point x if x ∈E ∩H and E is contained
+in one of the two closed half-spaces bounded by H. We say H is a supporting
+hyperplane of E if H supports E at some point.
+The support function of K is deﬁned by
+hK(x) = max{⟨x, y⟩: y ∈K},
+for x ∈Rn. If hK is of class Ck on Rn\{O}, we will simply say that K has
+a Ck support function. For a convex body K ⊂R2 it is often convenient to
+write hK as a function of the polar angle θ. So, abusing notation, we will use
+hK(θ) to denote hK((cos θ, sin θ)). If H is the supporting line to K ⊂R2 with
+the outer normal vector (cos θ, sin θ), and K has a C1 support function, then
+K has a unique point of contact with H, and |h
+′
+K(θ)| is the distance from this
+point to the foot of the perpendicular from the origin O to H; see [4, p. 24].
+A compact set L is called a star body if the origin O is an interior point of L,
+every line through O meets L in a line segment, and its Minkowski functional
+deﬁned by
+∥x∥L = min{a ≥0 : x ∈aL}
+===== page 4 =====
+766
+V. YASKIN AND N. ZHANG
+Isr. J. Math.
+is a continuous function on Rn.
+The radial function of L is given by ρL(x) = ∥x∥−1
+L , for x ∈Rn\{O}. If
+x ∈Sn−1, then ρL(x) is just the radius of L in the direction of x. If p is a point
+in the interior of L, and L −p is a star body, then we will use ρL,p to denote
+ρL−p.
+Let K be a convex body in Rn, and D be a strictly convex body in the interior
+of K. Let H be a supporting plane to D with outer unit normal vector ξ, and
+p = D ∩H be the corresponding point of contact. If u ∈Sn−1 ∩ξ⊥, we denote
+by ρK,D(u, ξ) = ρK,p(u) the radial function of K ∩H with respect to p.
+Let S(Rn) be the Schwartz space of inﬁnitely diﬀerentiable rapidly decreasing
+functions on Rn. Functions from this space are called test functions. For a
+function ψ ∈S(Rn), its Fourier transform is deﬁned by
+ˆψ(ξ) =
+
+Rn ψ(x)e−i⟨x,ξ⟩dx, ξ ∈Rn.
+By S′(Rn) we denote the space of continuous linear functionals on S(Rn). Ele-
+ments of this space are referred to as distributions. By ⟨f, ψ⟩we denote the
+action of the distribution f on the test function ψ. Note that ˆψ is also a test
+function, which allows to introduce the following deﬁnition. We say that the
+distribution ˆf is the Fourier transform of the distribution f if
+⟨ˆf, ψ⟩= ⟨f, ˆψ⟩,
+for every test function ψ. The reader is referred to the book [8] for applications
+of Fourier transforms to the study of convex bodies.
+3. Main results: 2-dimensional cases
+We will start with the following deﬁnition. We say that convex bodies D1 and
+D2 in R2 are admissible if they have C2 support functions, D1 ∪D2 is not
+convex, and there are only two lines that support both D1 and D2 and do not
+separate D1 and D2. The last condition is satisﬁed, when, for example, the
+bodies D1 and D2 are disjoint, or they touch each other, or they overlap, but
+their boundaries have only two common points.
+===== page 5 =====
+Vol. 220, 2017
+NON-CENTRAL SECTIONS OF CONVEX BODIES
+767
+Figure 1
+Figure 2
+Figures 1 and 2 show two examples of admissible convex bodies. For simpli-
+city, the reader could just think of two disks (not necessarily of the same radius)
+such that none of them is contained in the other.
+We will now prove the following two results.
+Theorem 3.1: Let K and L be convex bodies in R2 and let D1 and D2 be
+two admissible convex bodies in the interior of K ∩L. If the chords K ∩H and
+L ∩H have equal length for all H supporting either D1 or D2, then K = L.
+If H is a supporting line to a body D ⊂R2, we will denote by H+ the
+half-plane bounded by H and disjoint from the interior of D.
+Theorem 3.2: Let K and L be convex bodies in R2 and let D1 and D2 be two
+admissible convex bodies in the interior of K∩L. If vol2(K∩H+) = vol2(L∩H+)
+for every H supporting D1 or D2, then K = L.
+===== page 6 =====
+768
+V. YASKIN AND N. ZHANG
+Isr. J. Math.
+We will obtain these theorems as particular cases of a more general statement,
+Theorem 3.4 below. First, we will need the following lemma.
+Lemma 3.3: Let D ⊂R2 be a convex body with a C2 support function. Let
+Q ∈∂D and l be the supporting line to D at Q. Suppose the origin O is located
+on the line perpendicular to l and passing through Q, and O̸ = Q. Consider
+a polar coordinate system centered at O with the polar axis −−→
+OQ. Then, for θ
+small enough, we have
+(1)
+h′
+D(θ) sin θ + hD(0) −hD(θ) cos θ ≈sin2 θ,
+where f ≈g means that C1g ≤f ≤C2g, for some constants C1 and C2, which
+depend on f and g.
+Proof. Since Q is both the point where l supports D and the foot of the per-
+pendicular from O to l, it follows that h′
+D(0) = 0. Thus,
+hD(θ) = hD(0) + h′′
+D(0)
+2
+θ2 + o(θ2).
+Therefore, for θ small enough, we have
+hD(0) −hD(θ) cos θ = hD(0) −
+
+hD(0) + h′′
+D(0)
+2
+θ2 + o(θ2)
+ 
+1 −1
+2θ2 + o(θ2)
+
+= hD(0) −h′′
+D(0)
+2
+θ2 + o(θ2)
+≈θ2 ≈sin2 θ.
+Also, h′
+D(θ) = h′′
+D(0)θ + o(θ) ≈θ ≈sin θ, and thus h′
+D(θ) sin θ ≈sin2 θ.
+Theorem 3.4: Let K and L be convex bodies in R2 and let D1 and D2 be two
+admissible convex bodies in the interior of K ∩L. Assume that for some i > 0
+one of the following two conditions holds:
+(I) ρi
+K,Dj(u, ξ) + ρi
+K,Dj(−u, ξ) = ρi
+L,Dj(u, ξ) + ρi
+L,Dj(−u, ξ), for j = 1, 2,
+(II) ∂K∩∂L̸ = ∅and ρi
+K,Dj(u, ξ)−ρi
+K,Dj(−u, ξ) = ρi
+L,Dj(u, ξ)−ρi
+L,Dj(−u, ξ),
+for j = 1, 2,
+for all ξ, u ∈S1 such that u ⊥ξ.
+Then K = L.
+Proof. We will present the proof of the theorem only using condition (I). The
+other case is similar and we will just make a brief comment on how the proof
+should be adjusted.
+===== page 7 =====
+Vol. 220, 2017
+NON-CENTRAL SECTIONS OF CONVEX BODIES
+769
+For the reader’s convenience let us ﬁrst outline the idea of the proof. The
+proof consists of four steps. In Step 1 we ﬁx a common supporting line to D1
+and D2 that has a certain property. Denoting this line by l, in Step 2 we show
+that K ∩l = L ∩l. In Step 3 we prove that the boundaries of K and L coincide
+in some neighborhood of the line l. This allows to conclude in Step 4 that the
+boundaries of K and L coincide everywhere.
+Step 1. Since there are two common supporting lines to D1 and D2 (that do
+not separate D1 and D2), we will denote them by l and λ, and let p1 = D1 ∩l,
+q1 = D1 ∩λ, p2 = D2 ∩l, q2 = D2 ∩λ; see Figures 1 and 2. We claim that at
+least one of the (possibly degenerate) segments [p1, p2] or [q1, q2] is not entirely
+contained in D1∪D2. We will prove this claim in a slightly more general setting,
+i.e. without the assumption that D1 and D2 are strictly convex. In that case,
+instead of single points of contact we may have intervals, and [p1, p2] or [q1, q2]
+will just stand for the convex hulls of the corresponding support sets. To prove
+the claim, we will argue by contradiction. Assume that [p1, p2] and [q1, q2] are
+contained in D1 ∪D2. Then there are points p ∈[p1, p2] and q ∈[q1, q2] that
+both belong to D1 ∩D2. We can assume that the origin is an interior point of
+the interval [p, q]. Since there are only two common supporting lines to D1 and
+D2, we have exactly two directions u1 and u2, such that hD1(u1) = hD2(u1) and
+hD1(u2) = hD2(u2). These directions divide the circle S1 into two open arcs
+U1 and U2, satisfying hD1(u) > hD2(u) for all u ∈U1, and hD1(u) < hD2(u)
+for all u ∈U2. Thus the line l(p, q) through the points p and q cuts each of the
+bodies D1 and D2 into two convex parts: D1 = D11 ∪D12 and D2 = D21 ∪D22,
+such that D11 ⊃D21 and D12 ⊂D22. In other words, D1 ∪D2 = D11 ∪D22,
+where D11 and D22 are separated by l(p, q). Now, if we take two points X,
+Y ∈D1 ∪D2, then we have two cases: either they lie on one side of l(p, q), or
+on diﬀerent sides. In the ﬁrst case, either X, Y ∈D11, or X, Y ∈D22, which
+means that [X, Y ] ⊂D1 ∪D2. In the second case, the segment [X, Y ] intersects
+[p, q] (since p and q belong to the supporting lines l and λ correspondingly), and
+thus one part of [X, Y ] lies in D11, and the other in D22, which again implies
+that [X, Y ] ⊂D1 ∪D2, meaning that D1 ∪D2 is convex. Contradiction. Thus,
+we have proved that at least one of the segments [p1, p2] or [q1, q2] is not entirely
+contained in D1 ∪D2. We will assume it is the segment [p1, p2] and will ﬁx the
+corresponding supporting line l.
+===== page 8 =====
+770
+V. YASKIN AND N. ZHANG
+Isr. J. Math.
+Figure 3
+Step 2. Here we will show that ∂K ∩l = ∂L ∩l. To this end, we deﬁne
+two mappings ϕ1 and ϕ2 (see Figure 3). We will start with ϕ1; the other is
+similar. Let Q be a point outside of D1. There are two unique supporting lines
+to D1 passing through Q. Choose the one that lies on the left of the body D1,
+when viewing from the point Q. Let T be the point of contact of the chosen
+supporting line and the body D1. On this line we take a point ϕ1(Q), such that
+T is inside the segment [Q, ϕ1(Q)] and
+|QT |i + |ϕ1(Q)T |i = ρi
+K,D1(u, ξ) + ρi
+K,D1(−u, ξ),
+where u is a unit vector parallel to −→
+T Q and ξ is the outward unit normal vector
+to D1 at T (which is perpendicular to u). The deﬁnition for ϕ2 is similar; one
+only needs to replace D1 by D2. Note that the domains of ϕ1 and ϕ2 include
+the symmetric diﬀerence K△L. An important observation is that if Q is on the
+boundary of K (resp. L), then ϕ1(Q), ϕ−1
+1 (Q), ϕ2(Q), and ϕ−1
+2 (Q) are also on
+the boundary of K (resp. L).
+Note that there exists at least one point Q ∈∂K ∩∂L. Otherwise, one of ∂K
+or ∂L would be strictly contained inside the other, thus violating condition (1)
+of the proposition. The line l divides the plane into two closed half-planes l+
+and l−, where l+ is the one that contains D1 and D2. If Q ∈l+, then applying
+ϕ1 ﬁnitely many times, we will get a point in l−(since ϕ1 cannot miss the whole
+half-plane), which is also a common point of the boundaries of K and L. Thus
+from now on we will assume that Q ∈l−. If Q ∈l, then the proof of Step 2 is
+ﬁnished. If Q is strictly below l, we will apply the following procedure.
+===== page 9 =====
+Vol. 220, 2017
+NON-CENTRAL SECTIONS OF CONVEX BODIES
+771
+Without loss of generality, we can assume that, if the line λ intersects l,
+then the point of intersection lies to the left of the point p1, as in Figure 2.
+Let us also denote by X0 and Y0 the points of intersection of the boundary
+of K with the line l, as in Figure 3. Let Q0 = ϕ−1
+2 (Q). The line l(Q, Q0)
+through Q and Q0 is tangent to D2 and therefore cannot have common points
+with D1 (otherwise rolling this line along the boundary of D2 we would ﬁnd
+a third common supporting line to both D1 and D2). Now consider ϕ1(Q0)
+and the line l(ϕ1(Q0), Q0) through ϕ1(Q0) and Q0. Note that ϕ1(Q0) is below
+l.
+Since l(Q, Q0) and l(ϕ1(Q0), Q0) are diﬀerent, the points Q and ϕ1(Q0)
+are also diﬀerent.
+Moreover, we have ∠(−−−−−−−→
+ϕ1(Q0)Q0, −−−→
+p1X0) < ∠(−−→
+QQ0, −−−→
+p1X0).
+Repeating this procedure, we construct Q1 = ϕ−1
+2 (ϕ1(Q0)) and observe that
+∠(−−−−−−−→
+ϕ1(Q0)Q1, −−−→
+p1X0) < ∠(−−−−−−−→
+ϕ1(Q0)Q0, −−−→
+p1X0); see Figure 4.
+Figure 4
+Continuing in this manner, we obtain a sequence of points {Qj}∞
+j=0 and a
+corresponding sequence of angles {θj}∞
+j=0, deﬁned by Qj+1 = ϕ−1
+2 (ϕ1(Qj)) and
+θj = ∠(−−−−−−→
+ϕ1(Qj)Qj, −−−→
+p1X0). We note that Qj ∈l+ ∩∂K ∩∂L, and θj > θj+1, for
+all j. Thus, the sequence {θj} is strictly decreasing and positive, and therefore
+convergent. To reach a contradiction, let us assume that the limit is not zero.
+Then there is a point ˜Q = limj→∞Qj that lies above the line l and satisﬁes
+ϕ1( ˜Q) = ϕ2( ˜Q). Thus, we have a third line that supports both D1 and D2.
+Contradiction. Hence, limj→∞θj = 0, and we conclude that ∂K ∩l = ∂L ∩l =
+{X0, Y0}.
+===== page 10 =====
+772
+V. YASKIN AND N. ZHANG
+Isr. J. Math.
+Step 3. We will prove that ∂K and ∂L coincide in some one-sided neighbor-
+hood of the point X0. Since
+|Y0p1||X0p2|
+|X0p1||Y0p2| < 1,
+we can choose positive numbers a, b, c, d such that
+0 < a < |X0p1|, |Y0p1| < b, 0 < c < |Y0p2|, |X0p2| < d, and bd
+ac < 1.
+By the continuity of the boundaries of K, L, D1, and D2, there exist neig-
+hborhoods, N(X0), N(Y0), of X0 and Y0 respectively, such that
+(2)
+⎧
+⎨
+⎩
+|XT1| > a and |XT2| < d,
+if X ∈N(X0),
+|Y T3| > c and |Y T4| < b,
+if Y ∈N(Y0),
+where T1 is the point of intersection of l and the line through X supporting D1
+(if X is itself on the line l, then we let T1 = p1). Similarly, T2 is the point of
+intersection of l and the line through X supporting D2 (again, if X is on the
+line l, then we let T2 = p2). Here and below, by the supporting lines we mean
+those that are closest to l. There is no ambiguity, since X is suﬃciently close
+to l. (The points T3 and T4 are deﬁned similarly, if we replace X by Y .)
+Next we claim that there are points of ∂K ∩∂L in the set N(X0)∩l+. Indeed,
+if in Step 2 there was a point Q ∈∂K ∩∂L strictly below the line l, then the
+points from the corresponding sequence {Qi} all lie in ∂K ∩∂L ∩N(X0) ∩l+
+for i large enough. If in Step 2 the point Q was on the line l, then we can take
+ϕ1(ϕ−1
+2 (X0)), which will be strictly below l, and repeat the same procedure.
+Our goal is to show that ∂K and ∂L coincide in N(X0)∩l+. Taking a smaller
+neighborhood N(X0) if needed, we can assume that ϕ1(N(X0) ∩l+) ⊂N(Y0).
+Discarding ﬁnitely many terms of the sequence {Qj}, we can also assume that
+Qj ∈N(X0) ∩l+ for all j ≥0. Now consider the segments of the boundaries of
+∂K and ∂L between the points Q0 and Q1. If they coincide, then we are done,
+since the boundaries of ∂K and ∂L would have to coincide between Qj and
+Qj+1 for all j. So, we will next assume that ∂K and ∂L are not identically the
+same between Q0 and Q1. Let E0 be the component of K△L with endpoints
+Q0 and Q1, i.e.
+E0 is the subset of (K△L) ∩l+ located between the lines
+l(Q0, ϕ1(Q0)) and l(Q1, ϕ1(Q0)). We will deﬁne a sequence of sets {Ej}∞
+j=0,
+===== page 11 =====
+Vol. 220, 2017
+NON-CENTRAL SECTIONS OF CONVEX BODIES
+773
+where Ej+1 = ϕ−1
+2 (ϕ1(Ej)). Each Ej is a component of K△L with endpoints
+Qj and Qj+1.
+Now consider a Cartesian coordinate system with l being the x-axis, and the
+y-axis perpendicular to l. We will be using ideas similar to those in [4, Section
+5.2]. For a measurable set E deﬁne
+(3)
+νi(E) =
+
+E
+|y|i−2 dx dy.
+Note that νi(E) is invariant under shifts parallel to the x-axis. This allows us
+to associate with each D1 and D2 their own Cartesian systems. In both systems
+l is the x-axis, but in the coordinate system associated with D1 the origin is at
+p1, while in the system associated with D2 the origin is at p2.
+Our goal is to estimate νi(Ej). Fix the Cartesian system associated with D1,
+with p1 being the origin. For a point (x, y) ∈N(X0) ∪N(Y0) we will introduce
+new coordinates (r, θ) as follows. Let θ = ∠(lθ,1, l), where lθ,1 is the line passing
+through (x, y) and supporting D1. Deﬁne r to be the signed distance between
+(x, y) and the foot of the perpendicular from the point (0, 1) to the line lθ,1.
+(The word “signed” means that r > 0 in the neighborhood of X0 and r < 0 in
+the neighborhood of Y0.) Let hD1(θ) be the support function of D1 measured
+from the point (0, 1) in the direction of (sin θ, −cos θ). Using that
+(x, y) = hD1(0) · (0, 1) + r(cos θ, sin θ) + hD1(θ) · (sin θ, −cos θ),
+we will write the integral (3) in the (r, θ)-coordinates associated with D1. Since
+the Jacobian is |r −h′
+D1(θ)|, and r = h′
+D1(θ) corresponds to the point of contact
+of lθ,1 and D1, we get
+νi(Ej) =
+
+Ej
+|y|i−2 dx dy
+=
+θj
+
+θj+1
+
+ρL,D1 (u,ξ)−h′
+D1(θ)
+
+ρK,D1 (u,ξ)−h′
+D1 (θ)
+|r sin θ + hD1(0) −hD1(θ) cos θ|i−2|r −h′
+D1(θ)| dr
+
+dθ
+=
+θj
+
+θj+1
+
+ρL,D1 (u,ξ)
+
+ρK,D1 (u,ξ)
+|r sin θ + h′
+D1(θ) sin θ + hD1(0) −hD1(θ) cos θ|i−2r dr
+
+dθ,
+===== page 12 =====
+774
+V. YASKIN AND N. ZHANG
+Isr. J. Math.
+where u = (cos θ, sin θ), and ξ = (sin θ, −cosθ). Here the absolute value of the
+integral with respect to r is needed, since we do not know which of ρK or ρL is
+greater.
+For small θ, Lemma 3.3 yields that
+h′
+D1(θ) sin θ + hD1(0) −hD1(θ) cos θ ≈sin2 θ.
+Since Ej is inside N(X0), there exists a constant C > 0 such that
+(1 −C sin θ)r sin θ ≤r sin θ + h′
+D1(θ) sin θ + hD1(0) −hD1(θ) cos θ
+≤(1 + C sin θ)r sin θ,
+where we assume that θ is small enough so that 1 −C sin θ > 0.
+If i ≥2, for small θ > 0 we have
+1 −C sin θ
+1 + C sin θ
+
+i−2(r sin θ)i−2 ≤(1 −C sin θ)i−2 (r sin θ)i−2
+≤|r sin θ + h′
+D1(θ) sin θ + hD1(0) −hD1(θ) cos θ|i−2
+≤(1 + C sin θ)i−2 (r sin θ)i−2 ≤
+1 + C sin θ
+1 −C sin θ
+i−2
+(r sin θ)i−2.
+On the other hand, for i < 2,
+1 + C sin θ
+1 −C sin θ
+
+i−2(r sin θ)i−2 ≤(1 + C sin θ)i−2 (r sin θ)i−2
+≤|r sin θ + h′
+D1(θ) sin θ + hD1(0) −hD1(θ) cos θ|i−2
+≤(1 −C sin θ)i−2 (r sin θ)i−2 ≤
+1 −C sin θ
+1 + C sin θ
+i−2
+(r sin θ)i−2.
+Thus, for both i ≥2 and i < 2, we have
+1
+i
+ θj
+θj+1
+1 −C sin θ
+1 + C sin θ
+|i−2|
+(sin θ)i−2 ρi
+K,D1(u, ξ) −ρi
+L,D1(u, ξ)
+ dθ ≤νi(Ej)
+≤1
+i
+ θj
+θj+1
+1 + C sin θ
+1 −C sin θ
+|i−2|
+(sin θ)i−2 ρi
+K,D1(u, ξ) −ρi
+L,D1(u, ξ)
+ dθ.
+(4)
+Now apply the same estimates to νi(ϕ1(Ej)). Since ϕ1(Ej) ⊂N(Y0), and
+assuming that the constant C chosen above works for both N(X0) and N(Y0),
+we get
+===== page 13 =====
+Vol. 220, 2017
+NON-CENTRAL SECTIONS OF CONVEX BODIES
+775
+νi(ϕ1(Ej)) ≥1
+i
+ θj
+θj+1
+1 −C sin θ
+1 + C sin θ
+|i−2|
+× (sin θ)i−2 ρi
+K,D1(−u, ξ) −ρi
+L,D1(−u, ξ)
+ dθ
+= 1
+i
+ θj
+θj+1
+1 −C sin θ
+1 + C sin θ
+|i−2|
+× (sin θ)i−2 ρi
+K,D1(u, ξ) −ρi
+L,D1(u, ξ)
+ dθ
+= 1
+i
+ θj
+θj+1
+1 −C sin θ
+1 + C sin θ
+2|i−2| 1 + C sin θ
+1 −C sin θ
+|i−2|
+× (sin θ)i−2 ρi
+K,D1(u, ξ) −ρi
+L,D1(u, ξ)
+ dθ
+≥
+1 −C sin θj
+1 + C sin θj
+2|i−2|
+νi(Ej),
+since 1 −C sin θ
+1 + C sin θ is decreasing.
+Deﬁne another sequence of angles ηj = ∠(−−−−−−−−→
+ϕ1(Qj)Qj+1, −−−→
+p1X0). Then calcula-
+tions similar to those above give
+νi(Ej+1) ≥
+1 −C sin ηj
+1 + C sin ηj
+2|i−2|
+νi(ϕ1(Ej)).
+Thus,
+(5)
+νi(Ej+1) ≥
+1 −C sin ηj
+1 + C sin ηj
+2|i−2| 1 −C sin θj
+1 + C sin θj
+2|i−2|
+νi(Ej).
+Observe that (2) implies, for all j,
+sin θj+1
+sin θj
+= sin θj+1
+sin ηj
+sin ηj
+sin θj
+≤db
+ac < 1,
+and, similarly,
+sin ηj+1
+sin ηj
+≤db
+ac.
+===== page 14 =====
+776
+V. YASKIN AND N. ZHANG
+Isr. J. Math.
+Set σ
+=
+db
+ac, where σ
+∈(0, 1).
+Then sin θj
+≤σj sin θ0
+≤σj and
+sin ηj ≤σj sin η0 ≤σj.
+For suﬃciently small x > 0, we have the following inequalities: 1 + x ≤ex
+and 1 −x ≥e−2x. Let N > 0 be large enough so that x = Cσj satisﬁes the
+latter two inequalities for all j ≥N. Then for all j ≥N, we have
+νi(Ej+1) ≥
+1 −Cσj
+1 + Cσj
+4|i−2|
+νi(Ej)
+≥
+	
+e−2Cσj
+eCσj
+
+4|i−2|
+νi(Ej) = e−12C|i−2|σjνi(Ej).
+Using the latter estimate inductively, we get
+νi(Ej+1) ≥
+j
+m=N
+e−12C|i−2|σmνi(EN) = exp
+
+−12C|i −2|
+j
+
+m=N
+σm
+
+νi(EN)
+≥γνi(EN),
+where
+γ = exp
+
+−12C|i −2|
+∞
+
+m=N
+σm
+
+> 0.
+Since all Ej are disjoint, and since νi(EN) ≥˜Cνi(E0) > 0, for some constant ˜C
+(by virtue of (5)), we conclude that
+νi
+⎛
+⎝
+∞
+
+j=N+1
+Ej
+⎞
+⎠=
+∞
+
+j=N+1
+νi(Ej) ≥γ
+∞
+
+j=N+1
+νi(EN) = ∞.
+Since l ∩(K△L) = {X0, Y0}, there exists a triangle T with one vertex at X0
+satisfying T ∩l = X0 and ∞
+j=N+1 Ej ⊂T , implying
+νi(T ) ≥νi
+⎛
+⎝
+∞
+
+j=N+1
+Ej
+⎞
+⎠= ∞.
+However, by [4, Lemma 5.2.4], any triangle of the form
+T = {(x, y) : a|x −x0| ≤y ≤b},
+for a, b > 0, has ﬁnite νi-measure. We get a contradiction. Thus, ∂K = ∂L in
+N(X0) ∩l+.
+Step 4. To ﬁnish the proof, we take any point A ∈∂K. Applying ϕ1 to A
+ﬁnitely many times, we can get a point A′ in l−∩∂K. As in Step 2, produce
+===== page 15 =====
+Vol. 220, 2017
+NON-CENTRAL SECTIONS OF CONVEX BODIES
+777
+a sequence of points Aj+1 = ϕ−1
+2 (ϕ1(Aj)) with A0 = ϕ−1
+2 (A′). As we have
+seen above, there is a number M large enough such that AM ∈N(X0) ∩l+.
+Applying the conclusion of Step 3, we get AM ∈∂K ∩∂L. Tracing the sequence
+{Ai} backwards, we conclude that A ∈∂K ∩∂L. Therefore, K = L.
+We now brieﬂy comment on how to proceed if we use condition (II) of the
+theorem. Note that here we require that there is a point Q ∈∂K ∩∂L. We
+deﬁne ϕ1 and ϕ2 in a similar way as above, with the only diﬀerence that
+|QT |i −|ϕj(Q)T |i = ρi
+K,Dj(u, ξ) −ρi
+K,Dj(−u, ξ),
+for j = 1, 2. The rest of the proof goes without any changes.
+Remark 3.5: The C2-smoothness assumption for the support functions of the
+bodies D1 and D2 can be relaxed. As we saw above, we only need the C2 condi-
+tion in some neighborhoods of the points p1 and p2 correspondingly. Moreover,
+D1 or D2 can also be polygons. In the latter case, ρK,Dj is not well deﬁned for
+ﬁnitely many supporting lines, but this is not an issue. Step 1 of the proof does
+not need any changes, since it was proved for bodies that are not necessarily
+strictly convex. In Step 2, we consider small one-sided neighborhoods of X0
+and Y0, where ρK,Dj is well-deﬁned. As for Step 3, the proof will be similar
+to [4, Section 5.2], since all supporting lines to a polygon Dj passing through
+points X ∈N(X0) ∩l+ will contain the same vertex of Dj. Thus, as in [4], the
+measure νi would be invariant under ϕj. So, whenever we speak about admis-
+sible bodies, one can consider a larger class of admissible bodies by including
+the bodies described in this remark.
+Theorem 3.1 (with admissible bodies as in the above remark) is now a conse-
+quence of Theorem 3.4 (use part (I) with i = 1). The following is an immediate
+corollary of Theorem 3.1.
+Corollary 3.6: Let K and L be origin-symmetric convex bodies in R2 and
+let D be a convex body in the interior of K ∩L,
+such that D and −D are
+admissible bodies. If the chords K ∩H and L ∩H have equal length for all H
+supporting D, then K = L. In particular, D can be a disk not centered at the
+origin.
+Using the same ideas, one can prove the following.
+===== page 16 =====
+778
+V. YASKIN AND N. ZHANG
+Isr. J. Math.
+Corollary 3.7: Let K and L be origin-symmetric convex bodies in R2 and
+let D be a convex body outside of K ∪L (either a polygon or a body with a C2
+support function). If the chords K ∩H and L ∩H have equal length for all H
+supporting D, then K = L.
+We will now prove Theorem 3.2 using the class of admissible bodies described
+in Remark 3.5.
+Proof. First we will prove the following claim. Let K and L be convex bodies
+in R2, D be a convex body in the interior of K ∩L, where D is either a body
+with C2 support function or a polygon. If vol2(K ∩H+) = vol2(L ∩H+) for
+every H supporting D, then
+ρ2
+K,D(u, ξ) −ρ2
+K,D(−u, ξ) = ρ2
+L,D(u, ξ) −ρ2
+L,D(−u, ξ),
+for every ξ ∈S1 and u ∈S1 ∩ξ⊥, whenever well-deﬁned. (Note that in the case
+when D is a polygon, the radial functions above are not well-deﬁned for ﬁnitely
+many directions ξ that are orthogonal to the edges of D.)
+We will treat simultaneously both the case of smooth bodies and polygons.
+To prove the claim, let ξ be any unit vector (and ξ is not orthogonal to an edge
+of D, if D is a polygon). Let Hξ be the supporting line orthogonal to ξ. Let
+ζ ∈S1 ∩ξ⊥. For a small angle φ > 0 let η = cos φ ξ + sin φ ζ, and denote by Hη
+the supporting line orthogonal to η. Deﬁne the following sets: E1 = H+
+ξ \H+
+η ,
+E2 = H+
+ξ ∩H+
+η , E3 = H+
+η \H+
+ξ , and E4 is the curvilinear triangle enclosed by
+Hξ, Hη, and the boundary of D; see Figure 5.
+Figure 5
+===== page 17 =====
+Vol. 220, 2017
+NON-CENTRAL SECTIONS OF CONVEX BODIES
+779
+Note that when η and ξ are close enough, we have E4 ⊂K ∩L, and E4 is
+empty if D is a polygon. By the assumption of the theorem,
+vol2((E1 ∪E2) ∩K) −vol2((E3 ∪E2) ∩K)
+= vol2((E1 ∪E2) ∩L) −vol2((E3 ∪E2) ∩L),
+implying
+(6)
+vol2((E1 ∪E4) ∩K) −vol2((E3 ∪E4) ∩K)
+= vol2((E1 ∪E4) ∩L) −vol2((E3 ∪E4) ∩L).
+Now we will consider the following coordinate system (r, θ) associated with
+D. For a point (x, y) outside of D, we let (x, y) = hD(θ) (cos θ ξ + sin θ ζ) +
+r(sin θ ξ −cos θ ζ), where hD(θ) is the support function of D in the direction
+of v = cos θ ξ + sin θ ζ. Setting w = sin θ ξ −cos θ ζ, and observing that the
+Jacobian is |r + h′
+D(θ)|, we get
+φ
+
+0
+ρK,D(w,v)+h′
+D(θ)
+
+h′
+D(θ)
+|r + h′
+D(θ)| dr dθ −
+φ
+
+0
+ρK,D(−w,v)+h′
+D(θ)
+
+h′
+D(θ)
+|r + h′
+D(θ)| dr dθ
+=
+φ
+
+0
+ρL,D(w,v)+h′
+D(θ)
+
+h′
+D(θ)
+|r + h′
+D(θ)| dr dθ −
+φ
+
+0
+ρL,D(−w,v)+h′
+D(θ)
+
+h′
+D(θ)
+|r + h′
+D(θ)| dr dθ,
+which after a variable change becomes
+ φ
+0
+ ρK,D(w,v)
+0
+r dr dθ −
+ φ
+0
+ ρK,D(−w,v)
+0
+r dr dθ
+=
+ φ
+0
+ ρL,D(w,v)
+0
+r dr dθ −
+ φ
+0
+ ρL,D(−w,v)
+0
+r dr dθ.
+Diﬀerentiating both sides with respect to φ, and setting φ = 0, we get
+ρ2
+K,D(u, ξ) −ρ2
+K,D(−u, ξ) = ρ2
+L,D(u, ξ) −ρ2
+L,D(−u, ξ),
+as claimed.
+To ﬁnish the proof of the theorem, note that ∂K ∩∂L ∩l−̸ = ∅, where l is
+the common supporting line to D1 and D2 as in Theorem 3.4; otherwise we
+would have vol2(K ∩l−) < vol2(L ∩l−) or vol2(K ∩l−) > vol2(L ∩l−), which
+contradicts the hypotheses.
+Now the conclusion follows from Theorem 3.4.
+===== page 18 =====
+780
+V. YASKIN AND N. ZHANG
+Isr. J. Math.
+Corollary 3.8: Let K be a convex body in R2 and let D be a disk in the
+interior of K. If vol2(K ∩H+) = const for every H supporting D, then K is
+also a disk.
+After this paper was written, it was kindly pointed out to us by A. Kurusa
+that the latter result has also been obtained in his paper with T. ´Odor; see [10].
+Thus we omit the proof and refer the reader to their paper.
+4. Main results: Higher-dimensional cases
+Theorem 4.1: Let K and L be convex bodies in Rn (where n is even) and let
+D be a cube in the interior of K ∩L. If voln−1(K ∩H) = voln−1(L ∩H) for
+any hyperplane passing through a vertex of D and an interior point of D, then
+K = L.
+For ϵ > 0 and ξ ∈Sn−1, denote by
+Uϵ(ξ) = {η ∈Sn−1 : ⟨η, ξ⟩>
+
+1 −ϵ2}
+the spherical cap centered at ξ, and by
+Eϵ(ξ) = {η ∈Sn−1 : |⟨η, ξ⟩| < ϵ}
+the neighborhood of the equator Sn−1 ∩ξ⊥.
+Lemma 4.2: Let K and L be convex bodies in Rn (where n is even) containing
+the origin in their interiors. Let ξ ∈Sn−1 and ϵ > 0. If voln−1(K ∩u⊥) =
+voln−1(L ∩u⊥) for every u ∈Eϵ(ξ), then
+ρn−1
+K
+(η) + ρn−1
+K
+(−η) = ρn−1
+L
+(η) + ρn−1
+L
+(−η)
+for every η ∈Uϵ(ξ).
+Proof. For every even function ψ ∈C∞(Sn−1) with support in Uϵ(ξ) ∪Uϵ(−ξ),
+we have
+
+Sn−1(∥x∥−n+1
+K
++ ∥−x∥−n+1
+K
+)ψ(x) dx
+= (2π)−n
+
+Sn−1(∥x∥−n+1
+K
++ ∥−x∥−n+1
+K
+)∧(u)(ψ(x/|x|)|x|−1)∧(u) du,
+where we used Parseval’s formula on the sphere; see [8, Section 3.4].
+===== page 19 =====
+Vol. 220, 2017
+NON-CENTRAL SECTIONS OF CONVEX BODIES
+781
+Since (∥x∥−n+1
+K
++ ∥−x∥−n+1
+K
+)∧(u) = 2π(n −1)voln−1(K ∩u⊥) by [8, Lemma
+3.7], the assumption of the lemma yields
+(∥x∥−n+1
+K
++ ∥−x∥−n+1
+K
+)∧(u) = (∥x∥−n+1
+L
++ ∥−x∥−n+1
+L
+)∧(u)
+for every u ∈Eϵ(ξ). On the other hand, by formula (3.6) from [6] or [11, Lemma
+5.1], we see that (ψ(x/|x|)|x|−1)∧
+Sn−1 is supported in Eϵ(ξ).
+Therefore,
+
+Sn−1(∥x∥−n+1
+K
++ ∥−x∥−n+1
+K
+)ψ(x) dx
+= (2π)−n
+
+Sn−1(∥x∥−n+1
+L
++ ∥−x∥−n+1
+L
+)∧(u)(ψ(x/|x|)|x|−1)∧(u) du
+=
+
+Sn−1(∥x∥−n+1
+L
++ ∥−x∥−n+1
+L
+)ψ(x) dx.
+Since this true for any ψ ∈C∞(Sn−1) with support in Uϵ(ξ) ∪Uϵ(−ξ), the
+conclusion follows.
+Deﬁnition 4.3: Let D be a convex polytope and vk one of its vertices. Deﬁne
+CD(vk) to be the double cone centered at vk with the property that every
+point in CD(vk) lies on a line through vk that has non-empty intersection with
+D \ {vk}.
+Note that when D is a cube, ∪kCD(vk) = Rn.
+Remark 4.4: For simplicity, we stated Theorem 4.1 only in the case when D is
+a cube, but, in fact, it remains valid for a larger class of polytopes. In particular,
+any centrally symmetric polytope D satisfying the following condition will work:
+
+k CD(vk) = Rn.
+Let us say a few words about the condition 
+k CD(vk) = Rn.
+It is easy
+to see that it is true for any polygon in R2. However, the situation in higher
+dimensions is diﬀerent. There is an origin-symmetric convex polytope D ⊂Rn
+for which this condition does not hold. Consider the cube in {xn = 0} with the
+vertices (±1, ±1, . . ., ±1, 0). Deﬁne D to be the convex hull of this cube and
+the points (2, 0, . . . , 0, 1), (−2, 0, . . ., 0, −1). Then (0, . . . , 0, a) /∈
+k CD(vk) for
+suﬃciently large a.
+===== page 20 =====
+782
+V. YASKIN AND N. ZHANG
+Isr. J. Math.
+Proof of Theorem 4.1. We will prove the theorem for the class of polytopes
+described in Remark 4.4. Assume that D is such a polytope and its center of
+symmetry is at the origin O.
+By Lemma 4.2, if vi is a vertex of D, then
+ρn−1
+K,vi(ξ) + ρn−1
+K,vi(−ξ) = ρn−1
+L,vi(ξ) + ρn−1
+L,vi(−ξ),
+for every ξ ∈Sn−1∩(CD(vi)−vi). Here, ρK,vi and ρL,vi are the radial functions
+of K and L with respect to the point vi.
+For a point Q ∈CD(vi) deﬁne a mapping ϕi as follows. Let ϕi(Q) be the
+point on the line through Q and vi, such that vi lies between Q and ϕi(Q), and
+|Qvi|n−1 + |ϕi(Q)vi|n−1 = ρn−1
+K,vi(ξ) + ρn−1
+K,vi(−ξ) = ρn−1
+L,vi(ξ) + ρn−1
+L,vi(−ξ),
+where ξ is the unit vector in the direction of −−→
+viQ. Note that the domain of ϕi
+is not the entire set CD(vi), but it will be enough that ϕi is deﬁned in some
+neighborhood of (K△L) ∩CD(vi).
+Note that ∂K ∩∂L̸ = ∅. Otherwise one of the bodies K or L would be strictly
+contained inside the other body, thus violating the condition voln−1(K ∩H) =
+voln−1(L ∩H) from the statement of the theorem.
+Consider a point Q ∈
+∂K ∩∂L. There exists a vertex vi of D, such that Q ∈CD(vi). Since D
+is origin-symmetric, there is a vertex vj = −vi. Our ﬁrst goal is to show that
+l(vi, vj) ∩∂K = l(vi, vj) ∩∂L, where l(vi, vj) is the line through vi and vj. If
+Q belongs to this line, we are done. If not, we will argue as follows.
+Since Q ∈CD(vi) ∩∂K ∩∂L, then ϕi(Q) is also in CD(vi) ∩∂K ∩∂L. Let
+{Fm} be the collection of the facets of D that contain the vertex vi, and let
+{nm} be the collection of the corresponding outward unit normal vectors. Note
+that the condition Q ∈CD(vi) means that either ⟨−−→
+viQ, nm⟩≥0 for all m,
+or ⟨−−→
+viQ, nm⟩≤0 for all m. Without loss of generality we can assume that
+⟨−−→
+viQ, nm⟩≥0 for all m (otherwise, take ϕi(Q) instead of Q).
+We claim that Q ∈CD(vi)∩CD(vj). Indeed, the outward unit normal vectors
+to the facets that contain vj are {−nm}. Thus,
+⟨−−→
+vjQ, nm⟩= ⟨−−→
+viQ, nm⟩+ ⟨−−→
+vjvi, nm⟩= ⟨−−→
+viQ, nm⟩+ 2⟨−−→
+Ovi, nm⟩≥0.
+Next we claim that ϕj(Q) ∈CD(vi) ∩CD(vj). It is clear that ϕj(Q) ∈CD(vj).
+Thus, it is enough to show that ⟨−−−−−→
+viϕj(Q), nm⟩≤0 for all m. We have
+−−−−−→
+viϕj(Q) = −−→
+OQ + −−−−−→
+Qϕj(Q) −−−→
+Ovi = −−→
+OQ + α−−→
+Qvj −−−→
+Ovi,
+===== page 21 =====
+Vol. 220, 2017
+NON-CENTRAL SECTIONS OF CONVEX BODIES
+783
+where α = |Qϕj(Q)|
+|Qvj|
+> 1. So
+−−−−−→
+viϕj(Q) = −−→
+OQ + α−−→
+Ovj −α−−→
+OQ −−−→
+Ovi = (1 −α)−−→
+OQ −(1 + α)−−→
+Ovi
+= (1 −α)−−→
+viQ −2α−−→
+Ovi.
+Thus, for every m,
+⟨−−−−−→
+viϕj(Q), nm⟩= (1 −α)⟨−−→
+viQ, nm⟩−2α⟨−−→
+Ovi, nm⟩≤0.
+In a similar fashion one can show that ϕi(ϕj(Q)) ∈CD(vi) ∩CD(vj). Thus
+we can produce a sequence of points {Qk}∞
+k=0, where Q0 = Q and Qk =
+ϕi(ϕj(Qk−1)), and such that Qk ∈CD(vi) ∩CD(vj) ∩∂K ∩∂L for all k ≥0.
+Moreover, all these points belong to the 2-dimensional plane spanned by the
+points Q, vi, and vj. As in Proposition 3.4 we have the corresponding sequence
+of angles θk = ∠(−−→
+viQk, −−→
+vivj), with θk < θk−1. One can see that limk→∞θk = 0.
+Since Qk ∈∂K ∩∂L for all k, we have proved that l(vi, vj)∩∂K = l(vi, vj)∩∂L.
+Denote the points of intersection of the latter line with the boundaries of K
+and L by X0 and Y0, and consider any 2-dimensional plane H through X0 and
+Y0. Using [2, Lemma 7], we see that there are neighborhoods N(X0) and N(Y0)
+of X0 and Y0 correspondingly, such that
+H ∩N(X0) ∩∂K = H ∩N(X0) ∩∂L and H ∩N(Y0) ∩∂K = H ∩N(Y0) ∩∂L.
+If P is a point in CD(vi)∩H that does not belong to N(X0) or N(Y0), then we
+apply ϕj and ϕi to produce a sequence of points Pk, which after ﬁnitely many
+steps will belong to N(X0) or N(Y0). Thus, PN ∈∂K ∩∂L for some large N.
+Applying inverse maps ϕ−1
+i
+and ϕ−1
+j , we conclude that P ∈∂K ∩∂L. Thus, we
+have shown that
+H ∩CD(vi) ∩∂K = H ∩CD(vi) ∩∂L.
+Since this is true for every H, we have CD(vi) ∩∂K = CD(vi) ∩∂L.
+Now consider any other vertex of D, say vm, that is connected to vi by an
+edge. One can see that
+CD(vi) ∩CD(vm) ∩∂K ∩∂L̸ = ∅.
+Repeating the same process as above, we get
+CD(vm) ∩∂K = CD(vm) ∩∂L.
+===== page 22 =====
+784
+V. YASKIN AND N. ZHANG
+Isr. J. Math.
+Since we can do this for every vertex, it follows that CD(vk)∩∂K = CD(vk)∩∂L
+for every k, and thus K = L.
+Problem 4.5: Does the result of Theorem 4.1 hold in odd dimensions?
+Since some of the methods in the proof above come from the paper [11], the
+answer may be diﬀerent for even and odd dimensions. One can also ask if there
+is a diﬀerent condition that guarantees a positive answer in odd dimensions? If
+we replace the equality of sections by the equality of derivatives of the parallel
+section functions, then, for example, in R3 ﬁrst derivatives are not enough; cf.
+[9, Remark 1].
+The next theorem is an analogue of Groemer’s result for half-sections. The
+diﬀerence is that we look at half-sections that do not pass through the origin.
+We will adopt the following notation. For a point p ∈Rn and a vector v ∈Sn−1,
+deﬁne v⊥
+p = {x ∈Rn : ⟨x −p, v⟩= 0} and v+
+p = {x ∈Rn : ⟨x −p, v⟩≥0}.
+Theorem 4.6: Let K and L be convex bodies in Rn, n ≥3, that contain a
+strictly convex body D in their interiors. Assume that
+voln−1(K ∩H ∩v+
+p ) = voln−1(L ∩H ∩v+
+p ),
+for every hyperplane H supporting D and every unit vector v ∈H −p, where
+p = D ∩H. Then K = L.
+Proof. Let us ﬁx a supporting plane H and consider the equality
+voln−1(K ∩H ∩v+
+p ) = voln−1(L ∩H ∩v+
+p ),
+for every unit vector v ∈H −p. Then [7] implies that
+ρn−1
+K,p (u) −ρn−1
+K,p (−u) = ρn−1
+L,p (u) −ρn−1
+L,p (−u),
+for every vector u ∈Sn−1 ∩(H −p), where p = D ∩H.
+Now observe that ∂K ∩∂L̸ = ∅; otherwise the condition voln−1(K ∩H ∩v+
+p ) =
+voln−1(L ∩H ∩v+
+p ) would be violated. Moreover, if Q ∈∂K ∩∂L, then by [1,
+Lemma 3] there exists a neighborhood N(Q) of Q, such that N(Q) ∩∂K ⊂
+∂K ∩∂L. Hence, ∂K ∩∂L is open in ∂K. On the other hand, by the continuity
+of the boundaries of K and L, ∂K ∩∂L is closed in ∂K. Therefore,
+∂K ∩∂L = ∂K = ∂L.
+===== page 23 =====
+Vol. 220, 2017
+NON-CENTRAL SECTIONS OF CONVEX BODIES
+785
+Corollary 4.7: Let K be a convex body in Rn, n ≥3, that contains a ball
+D of radius t in its interior. If
+voln−1(K ∩{ξ⊥+ tξ} ∩v+) = const,
+for every ξ ∈Sn−1 and every vector v ∈Sn−1 ∩ξ⊥, then K is a Euclidean ball.
+In the next theorem we will consider a diﬀerent type of half-sections.
+Theorem 4.8: Let K and L be convex bodies in Rn, n ≥3, that contain a
+ball D in their interiors. Assume that
+voln−1(K ∩H+ ∩v⊥) = voln−1(L ∩H+ ∩v⊥)
+for every hyperplane H supporting D and every unit vector v ∈H −p, where
+p = D ∩H. Then K = L.
+Proof. Let us ﬁx a unit vector v, and consider ξ, ζ ∈Sn−1 ∩v⊥such that
+ξ ⊥ζ. For a small φ let η = cos φ ξ + sin φ ζ. Without loss of generality we will
+assume that D has radius 1 and is centered at the origin. Consider the aﬃne
+hyperplanes Hξ = {x ∈Rn : ⟨x, ξ⟩= 1} and Hη = {x ∈Rn : ⟨x, η⟩= 1}. Let
+the (n−3)-dimensional subspace W be the orthogonal compliment of span{ξ, ζ}
+in v⊥. Consider the orthogonal projection of the convex body K ∩v⊥onto the
+2-dimensional subspace spanned by ξ and ζ. The picture is identical to Figure
+5, with E1, E2, E3, and E4 deﬁned similarly. If n = 3, we repeat the argument
+from the proof of Theorem 3.2. If n ≥4, we will use the following modiﬁcation
+of this argument.
+Let ¯Ei = Ei × W, for i = 1, 2, 3, 4. Then the equality
+voln−1(K ∩v⊥∩H+
+ξ ) −voln−1(K ∩v⊥∩H+
+η )
+= voln−1(L ∩v⊥∩H+
+ξ ) −voln−1(L ∩v⊥∩H+
+η )
+implies
+(7)
+voln−1(K ∩v⊥∩( ¯E1 ∪¯E4)) −voln−1(K ∩v⊥∩( ¯E3 ∪¯E4))
+= voln−1(L ∩v⊥∩( ¯E1 ∪¯E4)) −voln−1(L ∩v⊥∩( ¯E3 ∪¯E4)).
+For x ∈span{ξ, ζ}, consider the following parallel section function:
+AK∩v⊥,W (x) = voln−3(K ∩v⊥∩{W + x}).
+===== page 24 =====
+786
+V. YASKIN AND N. ZHANG
+Isr. J. Math.
+Then equation (7) and the Fubini theorem imply
+
+E1∪E4
+AK∩v⊥,W (x)dx −
+
+E3∪E4
+AK∩v⊥,W (x)dx
+=
+
+E1∪E4
+AL∩v⊥,W (x)dx −
+
+E3∪E4
+AL∩v⊥,W (x)dx.
+Now we will pass to new coordinates (r, θ) as in the proof of Theorem 3.2, by
+letting x(r, θ) = cos θ ξ + sin θ ζ + r(sin θ ξ −cos θ ζ). Then
+ φ
+0
+ ∞
+0
+|r|AK∩v⊥,W (x(r, θ))drdθ −
+ φ
+0
+ 0
+−∞
+|r|AK∩v⊥,W (x(r, θ))drdθ
+=
+ φ
+0
+ ∞
+0
+|r|AL∩v⊥,W (x(r, θ))drdθ −
+ φ
+0
+ 0
+−∞
+|r|AL∩v⊥,W (x(r, θ))drdθ.
+Diﬀerentiating with respect to φ and letting φ = 0, we get
+(8)
+ ∞
+−∞
+rAK∩v⊥,W (x(r, 0))dr =
+ ∞
+−∞
+rAL∩v⊥,W (x(r, 0))dr.
+Note that
+AK∩v⊥,W (x(r, 0)) = AK∩v⊥,W (ξ −rζ) = A(K−ξ)∩v⊥,W (−rζ)
+=
+
+x∈ξ⊥∩v⊥∩{⟨x,ζ⟩=−r}
+χ(∥x∥K−ξ)dx.
+Therefore, (8) and the Fubini theorem give
+
+ξ⊥∩v⊥⟨x, ζ⟩χ(∥x∥K−ξ)dx =
+
+ξ⊥∩v⊥⟨x, ζ⟩χ(∥x∥L−ξ)dx.
+Passing to polar coordinates in ξ⊥∩v⊥, we get
+
+Sn−1∩ξ⊥∩v⊥⟨w, ζ⟩∥w∥−n+1
+K−ξ dw =
+
+Sn−1∩ξ⊥∩v⊥⟨w, ζ⟩∥w∥−n+1
+L−ξ dw.
+Observe that this is true for any ζ ∈ξ⊥∩v⊥. Furthermore, for any vector
+ϑ ∈ξ⊥there is a vector ζ ∈ξ⊥∩v⊥and a number β such that ϑ = ζ + βv.
+Therefore, for every ϑ ∈ξ⊥we have
+
+Sn−1∩ξ⊥∩v⊥⟨w, ϑ⟩∥w∥−n+1
+K−ξ dw =
+
+Sn−1∩ξ⊥∩v⊥⟨w, ϑ⟩∥w∥−n+1
+L−ξ dw.
+Fixing ξ and ϑ, and looking at all v ∈Sn−1 ∩ξ⊥, we can consider the latter
+equality as the equality of the spherical Radon transforms on Sn−1 ∩ξ⊥. Since
+===== page 25 =====
+Vol. 220, 2017
+NON-CENTRAL SECTIONS OF CONVEX BODIES
+787
+the spherical Radon transform only allows to reconstruct even parts, we get
+⟨w, ϑ⟩∥w∥−n+1
+K−ξ + ⟨−w, ϑ⟩∥−w∥−n+1
+K−ξ = ⟨w, ϑ⟩∥w∥−n+1
+L−ξ
++ ⟨−w, ϑ⟩∥−w∥−n+1
+L−ξ ,
+for all w, ϑ ∈Sn−1 ∩ξ⊥. That is,
+∥w∥−n+1
+K−ξ −∥−w∥−n+1
+K−ξ = ∥w∥−n+1
+L−ξ
+−∥−w∥−n+1
+L−ξ ,
+for all w ∈Sn−1 ∩ξ⊥.
+We ﬁnish the proof as in Theorem 4.6.
+Below we will prove an analogue of the result of Falconer [2] and Gardner [4]
+for halfspaces. We will need the following lemma.
+Lemma 4.9: Suppose i > 0. Let K and L be convex bodies in Rn, p1 and p2
+be distinct points in the interior of K ∩L. If for all ξ ∈Sn−1,
+(9)
+ρi
+K,pj(ξ) −ρi
+K,pj(−ξ) = ρi
+L,pj(ξ) −ρi
+L,pj(−ξ),
+for j = 1, 2,
+and ∂K ∩∂L̸ = ∅, then K = L.
+Proof. Let l be the line passing through p1 and p2. Our ﬁrst goal is to prove
+that ∂K ∩l = ∂L ∩l. Let Q0 ∈∂K ∩∂L. If Q0 ∈l, we are done. Otherwise, we
+deﬁne two maps ϕ1, ϕ2 as follows. If Q is a point distinct from p1, then ϕ1(Q)
+is deﬁned to be the point on the line passing through Q and p1, such that p1
+lies between Q and ϕ1(Q) and
+|Qp1|i −|p1ϕ1(Q)|i = ρi
+K,p1(ξ) −ρi
+K,p1(−ξ),
+where ξ =
+−−→
+p1Q
+|p1Q|.
+Note that the domain of ϕ1 contains the set K△L. The map ϕ2 is deﬁned
+similarly with p1 replaced by p2.
+For the chosen point Q0 ∈∂K ∩∂L consider the 2-dimensional plane H
+passing through Q0, p1, and p2.
+Construct a sequence of points {Qj} ⊂
+∂K ∩∂L ∩H, satisfying Qj+1 = ϕ−1
+2 (ϕ1(Qj)), and a sequence of angles {θj} =
+{∠(−−−−−−→
+Qjϕ1(Qj), l)}. One can see that limj→∞θj = 0, and therefore the limit
+X0 = lim
+j→∞Qj
+is a point on l ∩∂K ∩∂L. The claim that ∂K ∩l = ∂L ∩l is now proved.
+Let V be any 2-dimensional aﬃne subspace of Rn that contains the line l.
+Consider the bodies K ∩V and L∩V in V . The line l cuts both these bodies in
+two parts, K ∩V = K1 ∪K2 and L∩V = L1 ∪L2, so that K1 and L1 are on the
+===== page 26 =====
+788
+V. YASKIN AND N. ZHANG
+Isr. J. Math.
+same side of l. Since K ∩l = L ∩l, the following star bodies are well-deﬁned:
+˜K = K1 ∪L2 and ˜L = K2 ∪L1. Condition (9) now implies
+ρi
+˜
+K,pj(ξ) + ρi
+˜
+K,pj(−ξ) = ρi
+˜L,pj(ξ) + ρi
+˜L,pj(−ξ),
+for j = 1, 2.
+Now we can use [4, Theorem 6.2.3] to show that ˜K = ˜L, implying that K ∩V =
+L ∩V . Since V was an arbitrary aﬃne subspace containing l, it follows that
+K = L.
+Remark 4.10: A version of this lemma for a smaller set of values of i (but
+without the assumption ∂K ∩∂L̸ = ∅) was proved by Koldobsky and Shane, [9,
+Lemma 6]. They also showed (see [9, Remark 1]) that one can take two balls
+that satisfy condition (9) with i = 1, but whose boundaries do not intersect.
+With the help of Lemma 4.9 we obtain the following result.
+Theorem 4.11: Let K and L be convex bodies in Rn containing two distinct
+points p1 and p2 in their interiors. If, for every v ∈Sn−1, we have
+voln(K ∩v+
+pj) = voln(L ∩v+
+pj)
+for j = 1, 2,
+then K = L.
+Proof. By [7], we have ρn
+K,pj(ξ)−ρn
+K,pj(−ξ) = ρn
+L,pj(ξ)−ρn
+L,pj(−ξ), for j = 1, 2,
+and every ξ ∈Sn−1. Also observe that ∂K ∩∂L̸ = ∅. Otherwise one of K
+or L would be strictly contained inside the other, which would contradict the
+hypothesis of the theorem. Now the result follows from Lemma 4.9.
+Note that Problem 1.1 is open even in the case of bodies of revolution when
+the center of the ball lies on the axis of revolution. However, if we consider
+a ball that does not intersect the axis of revolution, then the problem has a
+positive answer.
+Theorem 4.12: Let K and L be convex bodies of revolution in Rn with the
+same axis of revolution. Let D be a convex body in the interior of both K and
+L such that D does not intersect the axis of revolution. If for every hyperplane
+H supporting D we have
+voln−1(K ∩H) = voln−1(L ∩H),
+then K = L.
+===== page 27 =====
+Vol. 220, 2017
+NON-CENTRAL SECTIONS OF CONVEX BODIES
+789
+Proof. Consider the two supporting hyperplanes of D that are perpendicular
+to the axis of revolution. Let p and q be the points where these hyperplanes
+intersect the axis of revolution.
+Note that every plane passing through p (or q) can be rotated around the
+axis of revolution until it touches the body D. Due to the rotational symmetry
+of the bodies K and L we obtain that
+voln−1(K ∩(p + ξ⊥)) = voln−1(L ∩(p + ξ⊥))
+and
+voln−1(K ∩(q + ξ⊥)) = voln−1(L ∩(q + ξ⊥)),
+for every ξ ∈Sn−1.
+The conclusion now follows from the corresponding result of Falconer [2] and
+Gardner [4], described in the introduction.
+References
+[1] J. A. Barker and D. G. Larman, Determination of convex bodies by certain sets of
+sectional volumes, Discrete Math. 241 (2001), 79–96, Selected papers in honor of Helge
+Tverberg.
+[2] K. J. Falconer, X-ray problems for point sources, Proc. London Math. Soc. (3) 46 (1983),
+241–262.
+[3] R. J. Gardner, Symmetrals and X-rays of planar convex bodies, Arch. Math. (Basel) 41
+(1983), 183–189.
+[4] R. J. Gardner, Geometric tomography, second ed., Encyclopedia of Mathematics and its
+Applications, Vol. 58, Cambridge University Press, New York, 2006.
+[5] R. J. Gardner, D. Ryabogin, V. Yaskin and A. Zvavitch, A problem of Klee on inner
+section functions of convex bodies, J. Diﬀerential Geom. 91 (2012), 261–279.
+[6] P. Goodey, V. Yaskin and M. Yaskina, Fourier transforms and the Funk-Hecke theorem
+in convex geometry, J. Lond. Math. Soc. (2) 80 (2009), 388–404.
+[7] H. Groemer, On a spherical integral transformation and sections of star bodies, Monatsh.
+Math. 126 (1998), 117–124.
+[8] A. Koldobsky, Fourier analysis in convex geometry, Mathematical Surveys and Mono-
+graphs, Vol. 116, American Mathematical Society, Providence, RI, 2005.
+[9] A. Koldobsky and C. Shane, The determination of convex bodies from derivatives of
+section functions, Arch. Math. (Basel) 88 (2007), 279–288.
+[10] A. Kurusa and T. ´Odor, Characterizations of balls by sections and caps, Beitr. Algebra
+Geom. 56 (2015), 459–471.
+[11] F. Nazarov, D. Ryabogin and A. Zvavitch, On the local equatorial characterization of
+zonoids and intersection bodies, Adv. Math. 217 (2008), 1368–1380.
+[12] F. Nazarov, D. Ryabogin and A. Zvavitch, An asymmetric convex body with maximal
+sections of constant volume, J. Amer. Math. Soc. 27 (2014), 43–68.
+===== page 28 =====
+790
+V. YASKIN AND N. ZHANG
+Isr. J. Math.
+[13] L. A. Santal´o, Two characteristic properties of circles on a spherical surface, Math. Notae
+11 (1951), 73–78.
+[14] R. Schneider, Convex bodies: the Brunn-Minkowski theory, Encyclopedia of Mathema-
+tics and its Applications, Vol. 44, Cambridge University Press, Cambridge, 1993.
+[15] V. Yaskin, Unique determination of convex polytopes by non-central sections, Math.
+Ann. 349 (2011), 647–655.

@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-25T03:54:01+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 3139,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"doc:000001 第 13 轮复审完成：裁决 accepted，documents.status 已置 accepted，签名钉在 content_sha256=7b558cb640bb2517fbd561b3c7fe4a58e282e8e00650452be98bde79148a4809（签名凭据 doc-signatures/000001-7b558cb640bb2517-003.json，sha256=255e85ee53029e6b4aaf5553f712fa5b08d71745799f23689a4c78f2a527af91，round=14）。逐条读数：(1) §3 结果章节的 claim-5…claim-11 的 section 均为 “3 Main results”，与 documents.sections 的 heading 逐字一致；citations 合起来确实是 stmt:000034 / stmt:000041 / stmt:000042 / exp:000003 / exp:000004 / exp:000006 / exp:000007，且每个号都在台账里有行（statements：000034/000041/000042 均为 theorem；experiments：000003/000004/000006/000007 均 method=numeric、result=supports、exit_code=0、带 code_hash）。(2) 强度未被抬高：claim-5/6/7/10/11/12/13/14 仍带 disclaimer「数值交叉验证，不构成证明」，claim-8/9 仍带「逐行审阅过的证明，未经机器检查」，claim-10 原文仍写 “Numerically supported strong conjecture, not established here”；断言原文一字未改（我逐行读了 data/documents.json 第 125–255 行的 claim-5…claim-14）。(3) main.tex 盘上 sha256=a4174b2f0733b7fac2698c4b88ce9d01f204ab5d88d98ec1ecdb328b26dca365、32529 字节、232 行，与派活所述一致；第 189 行一带的 Third 段已按 thm:zero 的真实范围改写为「within the class of normals having a vanishing coordinate … Theorem thm:zero says nothing about that class」，同节 Limitations/Open problems 也明写 numerical only ⇒ findings 000006/000007 指的 overclaim 在本版不再成立（该两条现为 fixed，open findings 计数 0）。(4) 机械七类读数：cites / inputs / refs / proofs / duplicates / ledger_match 全部 checked=true、findings=0（proof_envs=4、statement_envs=4、statement_surplus=[]、mapping_rows=4、bibitem_keys=5=cite_keys=5）；text_integrity 首轮因 paths 为空报没查成，补扫后 200 条 CJK 全部落在 out/package/MAPPING.md 与 manuscripts/G/000001.md（内部文件），main.tex 本体无 CJK（fs.search 定位：main.tex 只在第 220/222/224/226 行出现 exp:，均在 appendix（第 215 行）之后，正文内部编号 0 处）。(5) PDF 回执（G 的读数，我自己读了回执文件）：tex_sha256=a4174b2f… 与盘上正文一致、pages=10、exit_codes [0,0]、pdf_fresh=true。必须写明的两处缺口：① 语义级判据未接线（claims_semantically_judged=0）⇒ 「结论是否强于引文」这一格是**没查**，我以自己逐条读 claim 原文补了这一档，不是机器判的；② 依赖闭合为 checked=true、4 条依赖全 closed（dep 000000/000001/000002/000003 分别对应 exp:000014、stmt:000034",
+ "payload_sha256": "8ffc1d4686c45cdd35399c66e19228afde888343258c9115e399f21f4bbbbde5",
+ "readings": {},
+ "role": "H",
+ "status": "done",
+ "task_id": "t-000323"
+}

@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T21:29:25+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 3884,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"按「只递指针」口径把 F 那份体对角截面面积表达式证明稿收进 statements，并连同同批另一份必须收录的稿一起做完第二阶段（洗→重签→替换）。\\n\\n【本题（f-proof-000002）】\\n- stmt 号：000041（label 经秘书洗名后为「B_p^3 中心截面 A_diag(p) 的积分表示、特殊值与连续性」；kind 现算 theorem，等级现算 pre_theorem，档位 T1）。命题取稿的 ## 命题、证明取 ## 证明、依赖面取 ## 依赖，D 未内联任何正文，我未改写措辞后再登记（改写在第二阶段做，见下）。\\n- 三项核对（逐项给结论，不折成通过）：\\n ① 稿的字节 sha 与 V 签那一版：**不是同一把文件字节 sha** —— 盘上 manuscripts/F/f-proof-000002.md 现文件 sha256=3316d8e6…（签块已写回，bytes=7923），而 V 那一转记的 object_sha256=c3799ef6…；但**被签正文 sha（artifact_sha=proof_sha256）=099eb364…** 与稿上第 4 行签块的「正文sha」逐字相同，签文件里 body_mismatch=false、artifact 重登记读数 why=「签块落盘后重登记」。所以按正文 sha 口径是同一份，按文件字节口径差在签块写回这一步。\\n ② 判词：**核到，成立、零 finding**。out/vsigns/099eb364….json：verdict=成立、objections=[]、streak=3/3（三转 u-000019/20/21 都判成立，同一 review_call 74fc5249bcfd）；台账 verifications/pending/c3799ef6….jsonl#u-000021：verdict=成立、findings=[]、secretary_judge.axis=clean、checked=true。\\n ③ 依赖：**核到**。稿的 ## 依赖 表只有一行 stmt:000034；table.get 回读：在册、kind=theorem、status=active、现算等级 pre_theorem ⇒ 存在且站到可引用档。（附带如实说：V 那一转的 citation_checks 为空，报告里有 report_gap「依赖面未登记被引命题」，这是 V 侧的读数，不是我把未核到折成通过。）\\n- 第二阶段（自驱，已做完）：000041 的 optimized_by_proof[1] 原为 false ⇒ open_polish_copy 开 B 副本 manuscripts/B/b-proof-000002.md → 洗成自然语言（完整句、段间衔接、难点展开）→ 派 V 重签（正文 sha 12847fcc…，verifications/000041.jsonl#v-000003，成立零 finding，签已落回稿）→ own.ingest_manuscript(apply, target=000041, cells=[proof_text], overwrite) 精准替换成功，旧正文进 proof_history，稿已置 via=ingested_to_ledger。\\n\\n【同批另一份（板项 t-000149 的必须收录义务，我名下）】\\n- f-proof-000003.md → stmt:000042（「B_p^3 对角与面对角截面面积公式及 Δ(p) 的最终正性」，现算 theorem / pre_theorem / T1），三项核对同样做过（签块正文 sha 3f9c71fc… 与 out/vsigns/3f9c71fc….json、台账 202ee420….jsonl#u-000024 三转都成立零 finding；依赖 stmt:000034 在册达标）。\\n- 第二阶段：洗成 B 副本后 V 判过两轮「有毛病」——第一轮依赖表与正文矛盾（我洗稿时把 F 表里 stmt:000034 那一行清掉了，是我的错），第二轮第 6 步把并集面积与 (0,1)² 搞混（应改 (−1,1)²、面积 4）。两条都按 V 的定点改法改了稿；最终 43f4c2ab… 上 v-000005/v-000006/v-000007 连判成立、findings 空 ⇒ ingest apply 替换成功、已提交（t-000175 由框架自动收口）。\\n\\n【处置结论】两份送来的证明都洗过、都有盖在现行正文上的 V 签、都已入库；没有留下未洗的（batch 内 opt",
+ "payload_sha256": "f5a4ae127adb99d13ab3b9ed6c944dee49aa7d03c32637f4439c5c4000322594",
+ "readings": {},
+ "role": "B",
+ "status": "done",
+ "task_id": "t-000151"
+}

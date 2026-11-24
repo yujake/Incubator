@@ -1,0 +1,119 @@
+{
+  "schema_version": 2,
+  "rows": [
+    {
+      "request_id": "r-000001",
+      "timestamp": "2026-11-24T14:12:00+08:00",
+      "topic": "local reference/ batch 1 (13 user-declared PDFs): maximal hyperplane sections of l_p balls / cube slicing",
+      "mode": "topical",
+      "content_description": "用户逐字声明 reference/ 全部 25 份 PDF 为可靠参考文献；本委托为第 1 批 13 份的收编判定（发现→候选→抽读→判收→提交）",
+      "done": true,
+      "submitted_by": "agent-A",
+      "claimed_by": null,
+      "lease_until": null,
+      "attempts": 0,
+      "result_lit_ids": [
+        "000000",
+        "000001",
+        "000002",
+        "000003",
+        "000004",
+        "000005",
+        "000006",
+        "000007",
+        "000008",
+        "000009"
+      ],
+      "last_error": null,
+      "outcome": "ok",
+      "priority": "medium",
+      "for_question_id": null,
+      "submit_note": "本地已声明文献收编，不出网",
+      "providers": [],
+      "submitted_instance": ""
+    },
+    {
+      "request_id": "r-000002",
+      "timestamp": "2026-11-24T14:13:00+08:00",
+      "topic": "local reference/ batch 2 (12 user-declared PDFs): cube sections, Brunn-Minkowski, measure theory background",
+      "mode": "topical",
+      "content_description": "用户逐字声明 reference/ 全部 25 份 PDF 为可靠参考文献；本委托为第 2 批 12 份的收编判定（发现→候选→抽读→判收→提交）",
+      "done": true,
+      "submitted_by": "agent-A",
+      "claimed_by": null,
+      "lease_until": "2026-11-24T14:13:50+00:00",
+      "attempts": 1,
+      "result_lit_ids": [
+        "000010",
+        "000011",
+        "000012",
+        "000013",
+        "000014",
+        "000015",
+        "000016",
+        "000017",
+        "000018",
+        "000019"
+      ],
+      "last_error": "openalex: ProviderError: OpenAlex 每一路都失败（foundational: HTTP 429 for https://api.openalex.org/works?search=%22local+reference%2F+batch+2+%2812+user-declared+PDFs%29%3A+cube+sections%2C+Brunn-Minkowski%2C+measure+theory+background%22&per-page=15&page=1&sort=cited_by_count%3Adesc&select=id%2Cdoi%2Ctitle%2Cdisplay_name%2Ctype%2Ctype_crossref%2Cpublication_year%2Cpublication_date%2Clanguage%2Cauthorships%2Cprimary_location%2Cbest_oa_location%2Clocations%2Copen_access%2Ccited_by_count%2Creferenced_works%2Creferenced_works_count%2Cabstract_inverted_index%2Cids；frontier: HTTP 429 for https://api.openalex.org/works?search=%22local+reference%2F+batch+2+%2812+user-declared+PDFs%29%3A+cube+sections%2C+Brunn-Minkowski%2C+measure+theory+background%22&per-page=15&page=1&sort=publication_year%3Adesc&select=id%2Cdoi%2Ctitle%2Cdisplay_name%2Ctype%2Ctype_crossref%2Cpublication_year%2Cpublication_date%2Clanguage%2Cauthorships%2Cprimary_location%2Cbest_oa_location%2Clocations%2Copen_access%2Ccited_by_count%2Creferenced_works%2Creferenced_works_count%2Cabstract_inverted_index%2Cids）⇒ 这一次没有查成（不是「没有结果」）",
+      "outcome": "ok",
+      "priority": "medium",
+      "for_question_id": null,
+      "submit_note": "本地已声明文献收编（不出网）。本委托的 10 篇（000010-000019，source_request_ids 逐号核实为 r-000002）已在 literature 表且 download.status=ok / 正文已抽读；因单委托 lit.admit 累计上限 10，batch 2 的余量改挂 r-000003。上一轮 attempts=1 的 last_error（OpenAlex HTTP 429）来自一次对本委托 topic 的网络检索 —— 该 topic 是本地批次描述符（local reference/ batch 2 …），不是可检的规范术语，那一路与收编无关，不作为本委托的终局依据。",
+      "providers": [],
+      "submitted_instance": ""
+    },
+    {
+      "request_id": "r-000003",
+      "timestamp": "2026-11-24T14:20:00+08:00",
+      "topic": "local reference/ batch 3 (overflow 5): d-cube hyperplane section volume, polytope section perimeters, cross-section body, measure-theory background",
+      "mode": "topical",
+      "content_description": "lit.admit 单委托累计上限为 10，25 份分三批：r-000001 取前 10 槽、r-000002 取 10 槽，余下 5 份（Aliev / Stephen / Makai-Martini / Axler / Lo）改挂本委托收编；仍全部来自用户逐字声明的 reference/",
+      "done": true,
+      "submitted_by": "agent-A",
+      "claimed_by": null,
+      "lease_until": null,
+      "attempts": 0,
+      "result_lit_ids": [
+        "000020",
+        "000021",
+        "000022",
+        "000023",
+        "000024"
+      ],
+      "last_error": null,
+      "outcome": "ok",
+      "priority": "medium",
+      "for_question_id": null,
+      "submit_note": "本地已声明文献收编（不出网）。溢出的 5 篇（000020-000024）已在 literature 表且 source_request_ids 逐号核实为 r-000003、download.status=ok、正文已抽读；全表待裁候选 0 条（lit.stage_list request_id=* status=pending → 0），本委托已清表。该 5 篇连同 r-000001/r-000002 的 20 篇已派 B 收编（B 回执见手稿 000028/000029/000030：lit:000014 收 30 条概念+25 条关系，其余逐篇卡在概念配额 30 条跨趟累计封顶）。",
+      "providers": [],
+      "submitted_instance": ""
+    },
+    {
+      "request_id": "r-000004",
+      "timestamp": "2026-11-24T19:27:40+08:00",
+      "topic": "三维 l^p 球 B_p^3（1≤p≤∞）的中心截面最大面积：求 A_max(…",
+      "mode": "topical",
+      "content_description": "[q:000000] origin=agent-D-D1；研究问题：三维 l^p 球 B_p^3（1≤p≤∞）的中心截面最大面积：求 A_max(p)=max{area(B_p^3∩H): H 过原点的平面}，并给出取到最大的平面法向等价类与 A_max(p) 的分段表达式。可判定形式：(i) 面积只依赖法向在带符号坐标置换群（48 阶超八面体群）下的等价类 ⇒ 基本域 0≤a≤b≤c，三类候选方向为坐标向 (1,0,0)、面对角向 (1,1,0)/√2、体对角…；需要检索的是：能补充该问题证据的文献（现有相关关系 0 条，其中 quote_verified=True 的 0 条）；触发的可核实判据：a_no_keyword_hit: 关键词 40 个，在 0 条相关关系的 quote/description 中命中数为 0（逐词命中：{'三维': 0, '1≤p≤∞': 0, '的中心截面最大面积': 0, 'max': 0, 'max{area': 0, '3∩H': 0, '过原点的平面}': 0, '并给出取到最大的平面法向等价类与': 0, '的分段表达式': 0, '可判定形式': 0, '面积只依赖法向在带符号坐标置换群': 0, '48': 0, '阶超八面体群': 0, '下的等价类': 0, '基本域': 0, '0≤a≤b≤c': 0, '三类候选方向为坐标向': 0, '面对角向': 0, '√2': 0, '体对角向': 0, '√3': 0, 'ii': 0, '最大方向按': 0, '三段': 0, '坐标向': 0, '时全方向面积均为': 0, '退化不唯一': 0, 'iii': 0, 'diag': 0, 'face': 0, '上的唯一解': 0, '数值读数': 0, '998215596841106': 0, '的二分': 0, '区间': 0, '内唯一变号': 0, 'iv': 0, '分段表达式': 0, 'coord': 0, '4Γ': 0}）；b_low_degree_unverified: 相关概念度数 0 < 阈值 2，且 0 条关系里没有一条 quote_verified=True（连一条有原文支撑的关系都没有）",
+      "done": true,
+      "submitted_by": "agent-D",
+      "claimed_by": null,
+      "lease_until": null,
+      "attempts": 1,
+      "result_lit_ids": [
+        "000001",
+        "000003",
+        "000004"
+      ],
+      "last_error": "openalex: HTTP 429（冷却）⇒ 这一路未查成，不等于「没有结果」；已换源 crossref 并成功",
+      "outcome": "ok",
+      "priority": "medium",
+      "for_question_id": "000000",
+      "submit_note": "以英文规范检索式执行：topic='maximal hyperplane sections of l_p balls'，mode=topical，provider=crossref（10 条 / 1.0s）。result_lit_ids 是本题相关且已在库的三行（复用它，不是新注册）：000001 König《On maximal hyperplane sections of the unit ball of l_p^n for p>2》、000003 Ambrus《Critical central sections of the cube》、000004《Non-diagonal critical central sections of the cube》。crossref 另给 7 条新候选（Maximal hyperplane sections of convex bodies / Meyer 1999、Hyperplane Sections of the n-Dimensional Cube、On the maximal perimeter of sections of the cube、Local Extrema of Central Hyperplane Sections of the Five-Dimensional Cube 等），本趟未入库：未取全文、未逐条判收（M 指导不再新开收编，且无正文不许判收），如实记在此，不折成「不存在」。",
+      "providers": [
+        "crossref"
+      ],
+      "submitted_instance": ""
+    }
+  ]
+}

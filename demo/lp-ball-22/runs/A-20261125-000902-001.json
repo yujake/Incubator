@@ -1,0 +1,1767 @@
+{
+  "role": "A",
+  "task": "A：这一趟派给你的活是 —— 核实并把在册文献 lit:000003 的首部元数据补齐，三样逐字读数：① 作者全名（按文中出现顺序，逐字照抄）；② 期刊名或 arXiv 编号 + 年份 + 卷期页（能取到几样给几样，取不到的如实写「PDF 上取不到」，不许与 PDF 不符）；③ 摘要或引言里与「cube 的中心截面随方向变化时的临界点」这一主题直接相关的一句话（逐字英文原文，不要改写、不要缩写）。PDF 已在本地：reference/5d236efcb7ea-critical-central-sections-of-the-cube.pdf（955094 字节，sha256 5d236efcb7ea803dd7b7641b3d6f0f8fe5d8a2c9a6d0b2825c0becb5c7351611），不需要联网检索、也不需要新建文献行。请把这三样写进 literature 表 lit:000003 那一行的 authors / venue / year / pages 四格（作者按文中出现顺序逐字，取不到就留空并在回执里如实说取不到），③ 那一句逐字原文随你的回执交回给我（我要用它判断正文引这篇做背景站不站得住）。之后按你自己的流程派 B 收编。回执里请给：改前→改后的四格、③ 的逐字原文及其所在位置（摘要 / 引言第几段 / 页码口径按框架分页标记）。如果 PDF 取不出文字层或首部缺页，如实报「取不到」，不要按题名猜作者与期刊。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "literature",
+          "id": "000003"
+        },
+        "why": "核对 lit:000003 现行四格（authors/venue/year/pages）改前值"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "lit_id": "000003",
+          "title": "Critical central sections of the cube",
+          "type": "J",
+          "summary": "",
+          "path": "5d236efcb7ea-critical-central-sections-of-the-cube.pdf",
+          "processed": true,
+          "source_request_ids": [
+            "r-000001"
+          ],
+          "dedup_key": "title:critical central sections of the cube|*",
+          "doi": null,
+          "year": null,
+          "authors": [],
+          "venue": null,
+          "language": null,
+          "added_at": "2026-11-24T18:05:13+08:00",
+          "download": {
+            "status": "ok",
+            "http_status": null,
+            "bytes": 955094,
+            "sha256": "5d236efcb7ea803dd7b7641b3d6f0f8fe5d8a2c9a6d0b2825c0becb5c7351611",
+            "error": null,
+            "fulltext": "ok",
+            "note": "候选期已抽读：27933 字（指纹 7f80d6808d55）"
+          },
+          "pages": "",
+          "matched": "",
+          "claimed_by": null,
+          "lease_until": null,
+          "mine_attempts": 1,
+          "last_mine_error": null,
+          "_keys": [
+            "title:critical central sections of the cube|*"
+          ]
+        },
+        "error": "",
+        "meta": {
+          "table": "literature",
+          "id": "000003",
+          "id_field": "lit_id",
+          "found": true
+        },
+        "multi_call": {
+          "turn_index": 0,
+          "call_index": 0,
+          "calls": 2,
+          "step_index": 0
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 55808,
+        "prompt_cache_miss_tokens": 1773,
+        "tokens_in": 57581,
+        "tokens_out": 344,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000252"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.stat",
+        "args": {
+          "path": "reference/5d236efcb7ea-critical-central-sections-of-the-cube.pdf"
+        },
+        "why": "确认 PDF 在盘、大小与 sha256 与派活时点名的一致"
+      },
+      "result": {
+        "tool": "fs.stat",
+        "ok": true,
+        "data": {
+          "path": "reference/5d236efcb7ea-critical-central-sections-of-the-cube.pdf",
+          "exists": true,
+          "is_dir": false,
+          "is_file": true,
+          "is_symlink": false,
+          "size": 955094,
+          "mtime": "2026-11-21T12:33:26+08:00",
+          "mtime_epoch": 1795235606.652,
+          "link_target": null,
+          "sha256": "5d236efcb7ea803dd7b7641b3d6f0f8fe5d8a2c9a6d0b2825c0becb5c7351611"
+        },
+        "error": "",
+        "meta": {
+          "path": "reference/5d236efcb7ea-critical-central-sections-of-the-cube.pdf",
+          "size": 955094,
+          "sha256": "5d236efcb7ea803dd7b7641b3d6f0f8fe5d8a2c9a6d0b2825c0becb5c7351611"
+        },
+        "warn": "这一步给了 2 条调用，已按顺序逐条：第 1 条 table.get 成功；第 2 条 fs.stat 成功。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 0,
+          "call_index": 1,
+          "calls": 2,
+          "step_index": 1,
+          "summary": "这一步给了 2 条调用，已按顺序逐条：第 1 条 table.get 成功；第 2 条 fs.stat 成功。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 0,
+            "calls": 2,
+            "items": 2,
+            "steps": [
+              0,
+              1
+            ],
+            "executed": 2,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000252"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.list",
+        "args": {
+          "path": "library",
+          "limit": 50
+        },
+        "why": "找这份 PDF 抽出来的 .txt（候选期已抽读过 27933 字），避免重复抽取"
+      },
+      "result": {
+        "tool": "fs.list",
+        "ok": true,
+        "data": {
+          "path": "library",
+          "entries": [
+            {
+              "name": "000001.txt",
+              "path": "library/000001.txt",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 78488,
+              "mtime": "2026-11-24T19:31:36+08:00"
+            },
+            {
+              "name": "000002.txt",
+              "path": "library/000002.txt",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 15540,
+              "mtime": "2026-11-24T19:28:26+08:00"
+            },
+            {
+              "name": "000006.txt",
+              "path": "library/000006.txt",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 44265,
+              "mtime": "2026-11-24T19:28:54+08:00"
+            },
+            {
+              "name": "08359e313da3-on-the-volume-of-hyperplane-sections-of-a-d-cube.pdf",
+              "path": "library/08359e313da3-on-the-volume-of-hyperplane-sections-of-a-d-cube.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 227622,
+              "mtime": "2026-11-21T12:33:26+08:00"
+            },
+            {
+              "name": "290c7eb63abe-resilience-of-cube-slicing-in-lp.pdf",
+              "path": "library/290c7eb63abe-resilience-of-cube-slicing-in-lp.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 710811,
+              "mtime": "2026-11-21T12:33:26+08:00"
+            },
+            {
+              "name": "52375fd6b18c-estimates-on-the-decay-of-the-laplacepolya-integral.pdf",
+              "path": "library/52375fd6b18c-estimates-on-the-decay-of-the-laplacepolya-integral.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 473586,
+              "mtime": "2026-11-21T12:33:26+08:00"
+            },
+            {
+              "name": "5d236efcb7ea-critical-central-sections-of-the-cube.pdf",
+              "path": "library/5d236efcb7ea-critical-central-sections-of-the-cube.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 955094,
+              "mtime": "2026-11-21T12:33:26+08:00"
+            },
+            {
+              "name": "64498329b65e-an-introduction-to-measure-theory.pdf",
+              "path": "library/64498329b65e-an-introduction-to-measure-theory.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 1338765,
+              "mtime": "2026-11-21T12:33:26+08:00"
+            },
+            {
+              "name": "66cf70c235d2-maximal-perimeters-of-polytope-sections-and-origin-symmetry.pdf",
+              "path": "library/66cf70c235d2-maximal-perimeters-of-polytope-sections-and-origin-symmetry.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 398399,
+              "mtime": "2026-11-21T12:33:26+08:00"
+            },
+            {
+              "name": "6c8afb33fc1a-the-geometry-of-minkowski-spaces-a-survey-part-i.pdf",
+              "path": "library/6c8afb33fc1a-the-geometry-of-minkowski-spaces-a-survey-part-i.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 580480,
+              "mtime": "2026-11-21T12:33:26+08:00"
+            },
+            {
+              "name": "7a7ab07fb74f-measure-integration-real-analysis.pdf",
+              "path": "library/7a7ab07fb74f-measure-integration-real-analysis.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 3539121,
+              "mtime": "2026-11-21T12:33:26+08:00"
+            },
+            {
+              "name": "92378bba55bc-the-cross-section-body-plane-sections-of-convex-bodies-and-a.pdf",
+              "path": "library/92378bba55bc-the-cross-section-body-plane-sections-of-convex-bodies-and-a.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 1365231,
+              "mtime": "2026-11-21T12:33:26+08:00"
+            },
+            {
+              "name": "929d246e1f5b-cube-slicing-in-r-n.pdf",
+              "path": "library/929d246e1f5b-cube-slicing-in-r-n.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 520776,
+              "mtime": "2026-11-21T12:33:26+08:00"
+            },
+            {
+              "name": "9ec6189b98ee-on-extremal-sections-of-subspaces-of-l-p.pdf",
+              "path": "library/9ec6189b98ee-on-extremal-sections-of-subspaces-of-l-p.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 490751,
+              "mtime": "2026-11-21T12:33:26+08:00"
+            },
+            {
+              "name": "a7344ad13416-plane-sections-of-the-unit-ball-of-l-p.pdf",
+              "path": "library/a7344ad13416-plane-sections-of-the-unit-ball-of-l-p.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 385104,
+              "mtime": "2026-11-21T12:33:26+08:00"
+            },
+            {
+              "name": "acb5dd61859c-generalized-integrals-and-convergence-theorems.pdf",
+              "path": "library/acb5dd61859c-generalized-integrals-and-convergence-theorems.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 313454,
+              "mtime": "2026-11-21T12:33:26+08:00"
+            },
+            {
+              "name": "b53daf49eb45-hyperplane-projections-of-the-unit-ball-of-l-p-n.pdf",
+              "path": "library/b53daf49eb45-hyperplane-projections-of-the-unit-ball-of-l-p-n.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 119759,
+              "mtime": "2026-11-21T12:33:26+08:00"
+            },
+            {
+              "name": "bd62474e88b1-non-central-sections-of-the-regular-n-simplex.pdf",
+              "path": "library/bd62474e88b1-non-central-sections-of-the-regular-n-simplex.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 396062,
+              "mtime": "2026-11-21T12:33:26+08:00"
+            },
+            {
+              "name": "c2398a987031-paraconsistent-dominated-convergence.pdf",
+              "path": "library/c2398a987031-paraconsistent-dominated-convergence.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 263234,
+              "mtime": "2026-11-21T12:33:26+08:00"
+            },
+            {
+              "name": "d0a9f661eb23-plane-sections-of-convex-bodies-of-maximal-volume.pdf",
+              "path": "library/d0a9f661eb23-plane-sections-of-convex-bodies-of-maximal-volume.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 135362,
+              "mtime": "2026-11-21T12:33:26+08:00"
+            },
+            {
+              "name": "daac9fe7d2e3-on-maximal-hyperplane-sections-of-the-unit-ball-of-l-p-n-for.pdf",
+              "path": "library/daac9fe7d2e3-on-maximal-hyperplane-sections-of-the-unit-ball-of-l-p-n-for.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 890285,
+              "mtime": "2026-11-21T12:33:26+08:00"
+            },
+            {
+              "name": "dc44da69df46-non-central-sections-of-convex-bodies.pdf",
+              "path": "library/dc44da69df46-non-central-sections-of-convex-bodies.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 389032,
+              "mtime": "2026-11-21T12:33:26+08:00"
+            },
+            {
+              "name": "de5d051e7e09-measure-theory-and-integration-by-and-for-the-learner.pdf",
+              "path": "library/de5d051e7e09-measure-theory-and-integration-by-and-for-the-learner.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 2958073,
+              "mtime": "2026-11-21T12:33:26+08:00"
+            },
+            {
+              "name": "e370bf2a2c26-on-a-reverse-form-of-the-brascamp-lieb-inequality.pdf",
+              "path": "library/e370bf2a2c26-on-a-reverse-form-of-the-brascamp-lieb-inequality.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 333946,
+              "mtime": "2026-11-21T12:33:26+08:00"
+            },
+            {
+              "name": "e52716c8c83e-a-cube-slice-that-is-not-a-zonoid.pdf",
+              "path": "library/e52716c8c83e-a-cube-slice-that-is-not-a-zonoid.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 141767,
+              "mtime": "2026-11-21T12:33:26+08:00"
+            },
+            {
+              "name": "e835f5f27173-an-isoperimetric-inequality-for-hyperplane-sections-of-a-con.pdf",
+              "path": "library/e835f5f27173-an-isoperimetric-inequality-for-hyperplane-sections-of-a-con.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 63316,
+              "mtime": "2026-11-21T12:33:26+08:00"
+            },
+            {
+              "name": "f69890810ecb-szarek-and-ball-made-simple.pdf",
+              "path": "library/f69890810ecb-szarek-and-ball-made-simple.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 401803,
+              "mtime": "2026-11-21T12:33:26+08:00"
+            },
+            {
+              "name": "f79129be94de-non-diagonal-critical-central-sections-of-the-cube.pdf",
+              "path": "library/f79129be94de-non-diagonal-critical-central-sections-of-the-cube.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 453619,
+              "mtime": "2026-11-21T12:33:26+08:00"
+            }
+          ],
+          "total": 28,
+          "returned": 28,
+          "truncated": false
+        },
+        "error": "",
+        "meta": {
+          "total": 28,
+          "returned": 28,
+          "truncated": false
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 56832,
+        "prompt_cache_miss_tokens": 1990,
+        "tokens_in": 58822,
+        "tokens_out": 434,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000252"
+    },
+    {
+      "index": 3,
+      "shape": "tool",
+      "payload": {
+        "name": "text.extract",
+        "args": {
+          "path": "5d236efcb7ea-critical-central-sections-of-the-cube.pdf",
+          "lit_id": "000003"
+        },
+        "why": "抽 lit:000003 的正文文字层，读出首部作者/期刊/卷期页与摘要原句"
+      },
+      "result": {
+        "tool": "text.extract",
+        "ok": true,
+        "data": {
+          "path": "library/000003.txt",
+          "abs_path": "D:\\Incubator\\projects\\lp-ball-22\\library\\000003.txt",
+          "lit_id": "000003",
+          "pages": 12,
+          "chars": 27933,
+          "sha256": "7f80d6808d557f09ad03516437b27c7b47878a0e41cba6a73711f564a7979820",
+          "quality": {
+            "state": "readable",
+            "why": "",
+            "chars": 27933,
+            "nonspace_chars": 22645,
+            "nul_bytes": 0,
+            "nul_ratio": 0.0,
+            "replacement_chars": 0,
+            "control_chars": 0,
+            "control_ratio": 0.0,
+            "words": 3457,
+            "long_words": 2038,
+            "alpha_ratio": 0.7993
+          },
+          "max_pages": 200,
+          "truncated": false,
+          "note": "纯文字稿已入库（与 PDF 同层）；页间插了 `===== page N =====`；`sha256` 是这次写下的**正文**的指纹（下游可拿它核「读到的是不是同一份」）"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 57984,
+        "prompt_cache_miss_tokens": 3694,
+        "tokens_in": 61678,
+        "tokens_out": 333,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000252"
+    },
+    {
+      "index": 4,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "library/000003.txt",
+          "start_line": 1,
+          "max_lines": 120
+        },
+        "why": "读首部：作者、期刊/arXiv、年份卷期页，以及摘要/引言里与「cube 中心截面随方向变化的临界点」直接相关的那一句"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "===== page 1 =====\nCRITICAL CENTRAL SECTIONS OF THE CUBE\nGERGELY AMBRUS\nAbstract. We study the volume of central hyperplane sections of the cube. Using Fourier\nanalytic and variational methods, we retrieve a geometric condition characterizing critical\nsections which, by entirely different methods, was recently proven by Ivanov and Tsi-\nutsiurupa. Using this characterization result, we prove that critical central hyperplane\nsections in the 3-dimensional case are all diagonal to a (possibly lower dimensional) face\nof the cube, while in the 4-dimensional case, they are either diagonal to a face, or, up to\npermuting the coordinates and sign changes, perpendicular to the vector (1, 1, 2, 2). This\nshows the existence of non-diagonal critical central sections.\n1. History and results\nLet Qn = [−1, 1]n denote the standard n-dimensional cube, which is the unit ball of\nthe ℓ∞-norm on Rn. It is a classical question to study the (n −1)-dimensional volume of\nsections of Qn with hyperplanes containing 0. Determining which central sections are of\nminimal and maximal volume had been at the center of attention for over a century, as\nthis question was already rooted in the works of Laplace [L1812] and P´olya [P1913]. Yet,\nit was not before the 1970’s that Hadwiger [H71] proved that minimal hyperplane sections\nare parallel to facets of Qn and thus they are of volume 2n−1. A few years later, Hens-\nley [H79] independently re-proved this result using probabilistic methods and also gave\nan upper bound on the volume of central hyperplane sections.\nIn his celebrated work,\nBall [B86] proved that maximal hyperplane sections are orthogonal to a main diagonal of a\n2-dimensional face of Qn, hence, their volume is\n√\n2·2n−1. Extensions of these estimates to\nlower dimensional sections were proven by Vaaler [V79], Ball [B89], and Ivanov and Tsiut-\nsiurupa [IT21], while alternate proofs were given by Nazarov and Podkorytov [NP00], and\nAkopyan, Hubard and Karasev [AHK19]. Non-central sections were esti…（落档截断，原 7042 字）",
+        "error": "",
+        "meta": {
+          "path": "library/000003.txt",
+          "encoding": "utf-8",
+          "bytes_read": 28833,
+          "total_bytes": 28833,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 120,
+          "total_lines": 900,
+          "next_line": 121,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 1–120 行（共 900 行）；续读 start_line=121",
+          "sha256": "7f80d6808d557f09ad03516437b27c7b47878a0e41cba6a73711f564a7979820"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 60928,
+        "prompt_cache_miss_tokens": 1380,
+        "tokens_in": 62308,
+        "tokens_out": 173,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000252"
+    },
+    {
+      "index": 5,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.search",
+        "args": {
+          "pattern": "(?i)journal|doi|©|published|volume|Vol\\.\\s*\\d",
+          "path": "library/000003.txt",
+          "limit": 20
+        },
+        "why": "查正文里有没有期刊名 / 卷期页 / DOI 的逐字字样（不许凭记忆补）"
+      },
+      "result": {
+        "tool": "fs.search",
+        "ok": true,
+        "data": {
+          "pattern": "(?i)journal|doi|©|published|volume|Vol\\.\\s*\\d",
+          "path": "library/000003.txt",
+          "matches": [
+            {
+              "path": "library/000003.txt",
+              "line": 4,
+              "text": "Abstract. We study the volume of central hyperplane sections of the cube. Using Fourier"
+            },
+            {
+              "path": "library/000003.txt",
+              "line": 14,
+              "text": "the ℓ∞-norm on Rn. It is a classical question to study the (n −1)-dimensional volume of"
+            },
+            {
+              "path": "library/000003.txt",
+              "line": 16,
+              "text": "minimal and maximal volume had been at the center of attention for over a century, as"
+            },
+            {
+              "path": "library/000003.txt",
+              "line": 19,
+              "text": "are parallel to facets of Qn and thus they are of volume 2n−1. A few years later, Hens-"
+            },
+            {
+              "path": "library/000003.txt",
+              "line": 21,
+              "text": "an upper bound on the volume of central hyperplane sections."
+            },
+            {
+              "path": "library/000003.txt",
+              "line": 24,
+              "text": "2-dimensional face of Qn, hence, their volume is"
+            },
+            {
+              "path": "library/000003.txt",
+              "line": 36,
+              "text": "lem of estimating volumes of central slabs was discussed by Barthe and Koldobsky [BK03]"
+            },
+            {
+              "path": "library/000003.txt",
+              "line": 41,
+              "text": "Key words and phrases. Cube sections, volume, variational methods, Fourier analytic tools."
+            },
+            {
+              "path": "library/000003.txt",
+              "line": 64,
+              "text": "As a first step in the analysis, it is essential to compare the volumes of diagonal sections."
+            },
+            {
+              "path": "library/000003.txt",
+              "line": 65,
+              "text": "By probabilistic methods, the Central Limit Theorem implies that the volume of k-diagonal"
+            },
+            {
+              "path": "library/000003.txt",
+              "line": 68,
+              "text": "6/π · 2n−1, which is slightly less than the volume of 2-"
+            },
+            {
+              "path": "library/000003.txt",
+              "line": 72,
+              "text": "Merino [BFGM21] proved that for each fixed n ⩾3 the volume of k-diagonal sections form"
+            },
+            {
+              "path": "library/000003.txt",
+              "line": 78,
+              "text": "maximal volume."
+            },
+            {
+              "path": "library/000003.txt",
+              "line": 81,
+              "text": "respect to the volume of the central section of Qn. Such normal vectors will be referred to"
+            },
+            {
+              "path": "library/000003.txt",
+              "line": 92,
+              "text": "the central section volume function Voln−1(Qn ∩a⊥) if and only if it is parallel to a main"
+            },
+            {
+              "path": "library/000003.txt",
+              "line": 134,
+              "text": "Note that sa(r) is the (n−1)-dimensional volume of the hyperplane section of Qn orthogonal"
+            },
+            {
+              "path": "library/000003.txt",
+              "line": 366,
+              "text": "satisfied. Summing over k = 1, . . . , n we obtain half the volume of the section a⊥∩Qn"
+            },
+            {
+              "path": "library/000003.txt",
+              "line": 394,
+              "text": "Yet, the two problems behave quite differently: for the question regarding the volume of"
+            },
+            {
+              "path": "library/000003.txt",
+              "line": 773,
+              "text": "Merino [BFGM21] who proved that volumes of central k-diagonal sections of Qn form an"
+            },
+            {
+              "path": "library/000003.txt",
+              "line": 809,
+              "text": "volumes or perimeters of sections."
+            }
+          ],
+          "lines": [
+            "library/000003.txt:4: Abstract. We study the volume of central hyperplane sections of the cube. Using Fourier",
+            "library/000003.txt:14: the ℓ∞-norm on Rn. It is a classical question to study the (n −1)-dimensional volume of",
+            "library/000003.txt:16: minimal and maximal volume had been at the center of attention for over a century, as",
+            "library/000003.txt:19: are parallel to facets of Qn and thus they are of volume 2n−1. A few years later, Hens-",
+            "library/000003.txt:21: an upper bound on the volume of central hyperplane sections.",
+            "library/000003.txt:24: 2-dimensional face of Qn, hence, their volume is",
+            "library/000003.txt:36: lem of estimating volumes of central slabs was discussed by Barthe and Koldobsky [BK03]",
+            "library/000003.txt:41: Key words and phrases. Cube sections, volume, variational methods, Fourier analytic tools.",
+            "library/000003.txt:64: As a first step in the analysis, it is essential to compare the volumes of diagonal sections.",
+            "library/000003.txt:65: By probabilistic methods, the Central Limit Theorem implies that the volume of k-diagonal",
+            "library/000003.txt:68: 6/π · 2n−1, which is slightly less than the volume of 2-",
+            "library/000003.txt:72: Merino [BFGM21] proved that for each fixed n ⩾3 the volume of k-diagonal sections form",
+            "library/000003.txt:78: maximal volume.",
+            "library/000003.txt:81: respect to the volume of the central section of Qn. Such normal vectors will be referred to",
+            "library/000003.txt:92: the central section volume function Voln−1(Qn ∩a⊥) if and only if it is parallel to a main",
+            "library/000003.txt:134: Note that sa(r) is the (n−1)-dimensional volume of the hyperplane section of Qn orthogonal",
+            "library/000003.txt:366: satisfied. Summing over k = 1, . . . , n we obtain half the volume of the section a⊥∩Qn",
+            "library/000003.txt:394: Yet, the two problems behave quite differently: for the question regarding the volume of",
+            "library/000003.txt:773: Merino [BFGM21] who proved that volumes of central k-diagonal sections of Qn form an",
+            "library/000003.txt:809: volumes or perimeters of sections."
+          ],
+          "total": 20,
+          "truncated": true,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        },
+        "error": "",
+        "meta": {
+          "total": 20,
+          "truncated": true,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 61440,
+        "prompt_cache_miss_tokens": 2898,
+        "tokens_in": 64338,
+        "tokens_out": 1349,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000252"
+    },
+    {
+      "index": 6,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "library/000003.txt",
+          "start_line": 76,
+          "max_lines": 22
+        },
+        "why": "取「In this note we apply Fourier analytic methods…」那一段的逐字原文（含 ⊥ ∩ − 等字符），确保回执引文与抽读件逐字一致"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "methods, analyzing local modifications, and studying the relationship with frames, Ivanov\nand Tsiutsiurupa [IT21] established necessary conditions for sections in order to have locally\nmaximal volume.\nIn this note we apply Fourier analytic methods to study critical central hyperplane\nsections: these are the sections a⊥∩Qn whose normal vector a is a critical point on Sn−1 with\nrespect to the volume of the central section of Qn. Such normal vectors will be referred to\nas critical directions. We retrieve the main condition of Ivanov and Tsiutsiurupa [IT21] (see\nTheorem 1.1, Condition 4 therein) for (n −1)-dimensional sections being locally maximal.\nYet, the Fourier analytic approach yields a more transparent proof for the statement. Our\nargument is reminiscent of the work of Koldobsky and K¨onig [KK11] – for that connection,\nsee the remark following the proof of Theorem 1.\nBelow and later on, Si denotes the facet of Qn corresponding to the ith coordinate\nbeing 1. That is, Si = {x = (x1, . . . , xn) ∈Qn : xi = 1}. The vectors a, x ∈Rn will always\nhave coordinates a = (a1, . . . , an) and x = (x1, . . . , xn). As mentioned before, Sn−1 is the\nunit sphere of Rn.\nTheorem 1. The unit vector a = (a1, . . . , an) ∈Sn−1 is a critical direction with respect to\nthe central section volume function Voln−1(Qn ∩a⊥) if and only if it is parallel to a main\ndiagonal of a 2-dimensional face of Qn, or there exists some µ > 0 for which\n(1.1)\nVoln−1(conv (0 ∪(Sk ∩a⊥)) = µ(1 −a2\nk)\nholds true for each k = 1, . . . , n.\n",
+        "error": "",
+        "meta": {
+          "path": "library/000003.txt",
+          "encoding": "utf-8",
+          "bytes_read": 28833,
+          "total_bytes": 28833,
+          "truncated": false,
+          "start_line": 76,
+          "lines_read": 22,
+          "total_lines": 900,
+          "next_line": 98,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 76–97 行（共 900 行）；续读 start_line=98",
+          "sha256": "7f80d6808d557f09ad03516437b27c7b47878a0e41cba6a73711f564a7979820"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 63488,
+        "prompt_cache_miss_tokens": 3081,
+        "tokens_in": 66569,
+        "tokens_out": 2562,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000252"
+    },
+    {
+      "index": 7,
+      "shape": "tool",
+      "payload": {
+        "name": "table.update",
+        "args": {
+          "table": "literature",
+          "id": "000003",
+          "patch": {
+            "authors": [
+              "GERGELY AMBRUS"
+            ],
+            "venue": "arXiv:2107.14778",
+            "year": 2023,
+            "pages": "PDF 共 12 页；期刊卷期页 PDF 上取不到"
+          },
+          "why": "按 PDF 首部逐字读数补齐 lit:000003 的 authors/venue/year/pages（作者照原文全大写形式，期刊名与卷期页 PDF 上确实没有，如实登记不猜）"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "table.update",
+        "ok": false,
+        "data": null,
+        "error": "table.update 不改 `literature` 的身份格：['authors', 'venue', 'year']。这些格由收编口从文件或 provider 记录写，而本口的 `title` / `year` / `doi` 一改，行上的 `dedup_key` / `_keys`（`sysresidue.literature_dedup_cells` 算的）不会跟着重算 ⇒ 同一篇文献会有两个主键，且改写之后这一行还是同一个 `lit_id` 却是另一篇文献。本行一个字节都没写。处置：这一行的身份格不是通用写口能改的。二选一：① 这一行指错了文献（题名/DOI/作者/年份不是这一篇）⇒ `table.delete` 之后按用户点名的文件重新登记（`search.register(path=…)`），或走候选链 `lit.stage_add` → `lit.admit`（登记器按 provider 记录写身份格）；② 缺全文想补 `path` ⇒ 走 `search.retry_pending` / `search.download`（它们自己写 `path` 与 `download`）。状态格（`processed` / `download` / `matched` / `pages` / `summary`）照旧可写。",
+        "meta": {
+          "table": "literature",
+          "kind": "identity_cell_refused",
+          "recorded": false,
+          "fields": [
+            "authors",
+            "venue",
+            "year"
+          ],
+          "how_to_fix": "这一行的身份格不是通用写口能改的。二选一：① 这一行指错了文献（题名/DOI/作者/年份不是这一篇）⇒ `table.delete` 之后按用户点名的文件重新登记（`search.register(path=…)`），或走候选链 `lit.stage_add` → `lit.admit`（登记器按 provider 记录写身份格）；② 缺全文想补 `path` ⇒ 走 `search.retry_pending` / `search.download`（它们自己写 `path` 与 `download`）。状态格（`processed` / `download` / `matched` / `pages` / `summary`）照旧可写。"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 65792,
+        "prompt_cache_miss_tokens": 2210,
+        "tokens_in": 68002,
+        "tokens_out": 3099,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000252"
+    },
+    {
+      "index": 8,
+      "shape": "tool",
+      "payload": {
+        "name": "search.register",
+        "args": {
+          "title": "Critical central sections of the cube",
+          "type_code": "J",
+          "summary": "题录（按本地 PDF 首部逐字读数，非推测）：作者 GERGELY AMBRUS（PDF 首部全大写，单作者）；arXiv:2107.14778v3 [math.MG]，22 Jun 2023；PDF 共 12 页；PDF 上无期刊名、无卷期页号（取不到）。",
+          "path": "reference/5d236efcb7ea-critical-central-sections-of-the-cube.pdf",
+          "year": 2023
+        },
+        "why": "按 table.update 的 how_to_fix 走收编口：由登记器按文件记录写身份格（authors/venue/year），避免自己拼身份格造成两个主键"
+      },
+      "result": {
+        "tool": "search.register",
+        "ok": true,
+        "data": {
+          "created": false,
+          "reason": "duplicate",
+          "lit_id": "000003",
+          "matched_key": "title:critical central sections of the cube|*",
+          "existing": {
+            "lit_id": "000003",
+            "title": "Critical central sections of the cube",
+            "year": null,
+            "doi": null,
+            "type": "J",
+            "path": "5d236efcb7ea-critical-central-sections-of-the-cube.pdf",
+            "processed": true,
+            "source_request_ids": [
+              "r-000001"
+            ]
+          },
+          "keys": [
+            "title:critical central sections of the cube|2023",
+            "title:critical central sections of the cube|*"
+          ],
+          "request_linked": false,
+          "path": null,
+          "dedup_key": "title:critical central sections of the cube|*",
+          "type_code": "J",
+          "processed": true,
+          "download": null,
+          "warnings": [
+            "判重命中：复用既有 lit_id，未新建行（同一篇文献两个代号会污染下游溯源）。"
+          ]
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 67200,
+        "prompt_cache_miss_tokens": 2057,
+        "tokens_in": 69257,
+        "tokens_out": 2869,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000252"
+    },
+    {
+      "index": 9,
+      "shape": "tool",
+      "payload": {
+        "name": "table.update",
+        "args": {
+          "table": "literature",
+          "id": "000003",
+          "patch": {
+            "pages": "12 pp.（PDF 共 12 页；期刊卷期页 PDF 上取不到）",
+            "summary": "题录（按本地 PDF 首部逐字读数，非推测）：作者 GERGELY AMBRUS（首部全大写，单作者）；arXiv:2107.14778v3 [math.MG]，22 Jun 2023；PDF 共 12 页；期刊名与卷期页 PDF 上取不到。身份格 authors/venue/year 由收编口写，通用写口拒改（identity_cell_refused），逐字读数另见本趟回执。"
+          }
+        },
+        "why": "把可写的状态格（pages/summary）按 PDF 首部逐字读数补齐；authors/venue/year 是身份格，上一笔 table.update 已被受控拒绝，改由本格如实载明"
+      },
+      "result": {
+        "tool": "table.update",
+        "ok": true,
+        "data": "000003",
+        "error": "",
+        "meta": {
+          "table": "literature",
+          "id": "000003",
+          "id_field": "lit_id",
+          "row": {
+            "_keys": [
+              "title:critical central sections of the cube|*"
+            ],
+            "lit_id": "000003",
+            "title": "Critical central sections of the cube",
+            "type": "J",
+            "summary": "题录（按本地 PDF 首部逐字读数，非推测）：作者 GERGELY AMBRUS（首部全大写，单作者）；arXiv:2107.14778v3 [math.MG]，22 Jun 2023；PDF 共 12 页；期刊名与卷期页 PDF 上取不到。身份格 authors/venue/year 由收编口写，通用写口拒改（identity_cell_refused），逐字读数另见本趟回执。",
+            "path": "5d236efcb7ea-critical-central-sections-of-the-cube.pdf",
+            "processed": true,
+            "source_request_ids": [
+              "r-000001"
+            ],
+            "dedup_key": "title:critical central sections of the cube|*",
+            "doi": null,
+            "year": null,
+            "authors": [],
+            "venue": null,
+            "language": null,
+            "added_at": "2026-11-24T18:05:13+08:00",
+            "download": {
+              "status": "ok",
+              "http_status": null,
+              "bytes": 955094,
+              "sha256": "5d236efcb7ea803dd7b7641b3d6f0f8fe5d8a2c9a6d0b2825c0becb5c7351611",
+              "error": null,
+              "fulltext": "ok",
+              "note": "text.extract: 抽出的文本可读"
+            },
+            "pages": "12 pp.（PDF 共 12 页；期刊卷期页 PDF 上取不到）",
+            "matched": "",
+            "claimed_by": null,
+            "lease_until": null,
+            "mine_attempts": 1,
+            "last_mine_error": null
+          },
+          "normalized": []
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 68480,
+        "prompt_cache_miss_tokens": 1749,
+        "tokens_in": 70229,
+        "tokens_out": 3753,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000252"
+    },
+    {
+      "index": 10,
+      "shape": "summon",
+      "payload": {
+        "role": "B",
+        "action": "",
+        "params": {
+          "lit_id": "000003",
+          "text_path": "library/000003.txt",
+          "pdf_path": "library/5d236efcb7ea-critical-central-sections-of-the-cube.pdf",
+          "page_marker": "===== page N =====",
+          "topic": "critical central hyperplane sections of the cube",
+          "key_locations": "page 2, §1 引言：critical direction 的定义（a⊥∩Qn，a 是 Sn−1 上截面体积函数的临界点）；page 2, Theorem 1（a 为 critical direction ⟺ 平行于某个 2 维面的主对角线，或存在 µ>0 使 (1.1) 对每个 k 成立）"
+        },
+        "why": "",
+        "brief": "收编 lit:000003（Ambrus, critical central sections of the cube）",
+        "name": "B1",
+        "task": "收编在册文献 lit:000003（Critical central sections of the cube，单作者 GERGELY AMBRUS，arXiv:2107.14778v3 [math.MG]，22 Jun 2023，12 页）——抽概念、建关系、落命题线索。全文抽读件已在盘：library/000003.txt（27933 字，sha256 7f80d6808d55…，页间有 `===== page N =====` 标记），PDF 在 library/5d236efcb7ea-critical-central-sections-of-the-cube.pdf。本趟给它的主题口径是「立方体的中心超平面截面随法向 a∈S^{n−1} 变化时的临界点（critical central hyperplane sections）」。要求：① 关系行的 quote 必须逐字取自 library/000003.txt（含 ⊥ ∩ − 等原字符，不许改写/缩写），页码按框架 ===== page N ===== 标记给；② 这一篇是 §1 引言里给出 critical direction 定义与 Theorem 1（临界方向的充要条件）的那篇，优先把这两处落成可溯源的行；③ 若 lit:000003 此前已被收编（literature 行 processed=true），先查已有的 statements/relations 行，回报已有行号与本趟补了什么，不必重复洗稿；④ 逐条回报概念行与关系行的条数。"
+      },
+      "result": {
+        "summoned": "B",
+        "action": "",
+        "ok": true,
+        "task_id": "t-000253",
+        "status": "running",
+        "outcome": null,
+        "refusal_reason": null,
+        "preemptible": true,
+        "dispatched": [
+          "t-000253"
+        ],
+        "running": [
+          "t-000253"
+        ],
+        "detail": "还在跑：本步先不等（可抢占）。它回来之后结论会在你下一次被问之前以【子代理返场】投给你 —— 不要因为 status=running 就重派；收工会被拒到它回齐",
+        "roster_considered": true,
+        "roster_name": "B1",
+        "秘书": {
+          "alarms": [
+            "'B1' 不是注册表里的真名"
+          ],
+          "fail_open": false,
+          "problem": "'B1' 不是注册表里的真名",
+          "wash": {
+            "checked": true,
+            "washed": false,
+            "refused": "",
+            "reason": ""
+          },
+          "changes": [],
+          "surface_fit": {
+            "checked": false,
+            "fits": null,
+            "paths": [],
+            "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+            "shape": "summon",
+            "reach": {
+              "checked": true,
+              "verdict": "unknown",
+              "hops": [],
+              "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+            }
+          },
+          "reach_fit": {
+            "checked": true,
+            "verdict": "unknown",
+            "hops": [],
+            "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+          },
+          "assessment": {
+            "decision": "可派",
+            "reason": "这一条没点名具体动作（role 级派活）⇒ 不拿动作表去卡它；角色存在性由预筛管",
+            "basis": [
+              "specs/<role>.py 的动作表",
+              "tasks: 同 key 的既有终态行",
+              "没点名动作 ⇒ 动作表那一格不适用"
+            ],
+            "duplicates": [],
+            "alarms": [],
+            "novel": false,
+            "surface": {
+              "checked": false,
+              "fits": null,
+              "paths": [],
+              "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+              "shape": "summon",
+              "reach": {
+                "checked": true,
+                "verdict": "unknown",
+                "hops": [],
+                "reason": "角色 '' 不在能力表里（['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'L', 'M', 'V']）⇒ 判不了"
+              }
+            },
+            "judge": {
+              "checked": false,
+              "reason": "预筛没有报警、也没有重复候选 ⇒ 不必判断"
+            },
+            "engaged": false,
+            "seq": 3
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 69376,
+        "prompt_cache_miss_tokens": 2030,
+        "tokens_in": 71406,
+        "tokens_out": 2150,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000252"
+    },
+    {
+      "index": 11,
+      "shape": "note",
+      "payload": {
+        "text": "lit:000003 元数据核实：PDF 首部逐字读数 = 单作者 GERGELY AMBRUS（首部全大写）／arXiv:2107.14778v3 [math.MG] 22 Jun 2023／PDF 12 页；PDF 上确无期刊名、无卷期页号（首部只有 2020 MSC、Key words、致谢与 arXiv 戳），故按纪律写「取不到」不猜。table.update 对 authors/venue/year 三格受控拒（identity_cell_refused：身份格只由收编口/provider 记录写，改它会造出第二个 dedup 主键）；search.register 判重命中（duplicate）只复用 lit_id、不更新身份格；lit.stage_add/lit.admit 的 items 也不收 authors。结论：本会话没有写口能改这三格 —— 已把可写状态格 pages/summary 按逐字读数补齐，authors/venue/year 未写入（保持空），如实上报，不自己拼。③ 引文候选（page 2，框架分页标记，§1 第二段）：「In this note we apply Fourier analytic methods to study critical central hyperplane sections: these are the sections a⊥∩Qn whose normal vector a is a critical point on Sn−1 with respect to the volume of the central section of Qn.」"
+      },
+      "result": {
+        "note_written": "D:\\Incubator\\projects\\lp-ball-22\\notes\\A-probe-a-1.md",
+        "ok": true
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 70656,
+        "prompt_cache_miss_tokens": 2199,
+        "tokens_in": 72855,
+        "tokens_out": 1054,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000252"
+    },
+    {
+      "index": 12,
+      "shape": "tool",
+      "payload": {
+        "name": "lit.stage_list",
+        "args": {
+          "request_id": "*",
+          "status": "pending"
+        },
+        "why": "收工前自查：全表还有没有待裁候选（这一趟没新检索，但要给回执一个可核读数）"
+      },
+      "result": {
+        "tool": "lit.stage_list",
+        "ok": true,
+        "data": {
+          "request_id": "*",
+          "current_request_id": "",
+          "batch": null,
+          "status": "admitted",
+          "count": 0,
+          "counts": {
+            "pending": 0,
+            "withdrawn": 0,
+            "rejected": 5,
+            "qualified": 0,
+            "admitted": 25,
+            "cleared": 0
+          },
+          "duplicate_rows": 8,
+          "duplicate_groups": [
+            {
+              "key": "title:on the volume of hyperplane sections of a d cube",
+              "slots": [
+                "000010",
+                "000025"
+              ]
+            },
+            {
+              "key": "title:maximal perimeters of polytope sections and origin symmetry",
+              "slots": [
+                "000011",
+                "000026"
+              ]
+            },
+            {
+              "key": "title:measure integration real analysis",
+              "slots": [
+                "000023",
+                "000028"
+              ]
+            },
+            {
+              "key": "title:measure theory and integration by and for the learner",
+              "slots": [
+                "000024",
+                "000029"
+              ]
+            }
+          ],
+          "gaps": [],
+          "rows": [],
+          "total_all_delegations": 30,
+          "note": "默认只返回当前委托的行（`request_id` = 最近一次暂存的那次委托）；查历史请显式给 request_id（`*` = 全部）。状态四档：`pending` 待裁 / `qualified` 判收未注册（无号） / `admitted` 已注册（带 lit_id） / `rejected` 拒收；历史的 `cleared` 读成 rejected+over_cap、`withdrawn` 读成 rejected+withdrawn_by_reviewer（撤掉的槽位仍在，序号不复用）。本委托还有 0 条没判：只要还大于 0，`lit.admit_all` 就整批拒绝（`lit.admit` 逐条判收不受它拦）。判收（`lit.admit`）**不发号**：正式文献号由 `lit.admit_all` 在提交那一刻批量注册并回填，随后清表（`cleared_at` 打上、整份行归档在 data/archive/lit_candidates/archive-<request_id>.jsonl）。A 的 `done=True` 只表示「这一条检索请求跑完了」，不等于「清表」；收工闸数的是**全表**，不是当前委托、也不是那一条检索请求。**没有正文就不许判收**（业主 2026-11-20）：「通过」的每一条都必须真的读到正文。标 `readable` 之前先 `text.extract(path=<全文路径>, lit_id=\"cand:<槽位>\")` 抽出正文、再用 `fs.read` 读那份 `.txt`，`lit.admit` 才认；`content_read` 那一格是机器现算的（抽读回执 + 版本 + `fs.read` + 不只摘要），不是自报。仅题录（`metadata_only`）、抽取失败（`extract_failed`）、没下载 / 只有摘要的候选：**不许判收、不许入库** —— 只能把题录留在候选记录里并写清为什么没读到（`lit.stage_reject` + 受控理由码：没下到 / 抽不出 / 只有题录或摘要）。摘要最多用于初排与去重，它不是正文：只抽到摘要的，按 `abstract_only` 拒。全表（跨委托）没有待裁的行（30 行候选里 0 条 pending）。"
+        },
+        "error": "",
+        "meta": {},
+        "可退役": [
+          {
+            "task_id": "t-000253",
+            "role": "B",
+            "branch": "waiting_no_children",
+            "reading": {
+              "items_open": 1,
+              "items_open_ids": [
+                "t-000256"
+              ],
+              "items_open_expects": {
+                "t-000256": "work"
+              },
+              "items_open_states": {
+                "t-000256": "seen"
+              }
+            }
+          }
+        ],
+        "新消息": [
+          {
+            "板": "- （新）[t-000260] notice·要一个回执 来自 clock：时间到：收编在册文献 lit:000003（Critical central sections of the cube，单作者 GERGELY AMBRUS，arXiv:2107.14778v3 [math.MG]，22 Jun 2023，12 页）——抽概念、建关系、落命题线索。全文抽读件已在盘：library/000003.txt（27933 字，sha256 7f80d6808d55…，页间有 `=｜等了 6 分钟 43 秒（起于 00:01:57，到于 00:08:40）。它交的是：ok：执行完成"
+          }
+        ],
+        "秘书加工": {
+          "reworked": [
+            {
+              "item": {
+                "板": "- （新）[t-000260] notice·要一个回执 来自 clock：时间到：收编在册文献 lit:000003（Critical central sections of the cube，单作者 GERGELY AMBRUS，arXiv:2107.14778v3 [math.MG]，22 Jun 2023，12 页）——抽概念、建关系、落命题线索。全文抽读件已在盘：library/000003.txt（27933 字，sha256 7f80d6808d55…，页间有 `=｜等了 6 分钟 43 秒（起于 00:01:57，到于 00:08:40）。它交的是：ok：执行完成"
+              },
+              "addendum": "我的产出物口径：交付状态 —— 交给谁：派你这趟活的那一方（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名，它是主控就写 M）与收方 B；形态：`search_requests` 行 + `literature` 行；可核字段：`search_requests.outcome` / `search_requests.result_lit_ids` / `search_requests.done` / `literature.lit_id`；算做完：本条请求的 `outcome` 已终局（不是 pending）、`result_lit_ids` 里每个号都 能在 `literature` 里读到，且这批已派 B 收编、B 回执给出概念行与关系行的条数。\n我在本条线上的位置：文献检索：把搜索请求变成已登记的文献行，并如实报告每一次失败",
+              "problem": "",
+              "fail_open": false
+            }
+          ],
+          "handoffs_digest": "- 000034 B→D：stmt:000030 放弃未落成：秘书受控拒 abandon_difficulty_not_genuine，盘上零写入；另报 proof_no 2 误指已污染等级（theorem 抬档）\n- 000035 M→D：派活：D（派活：这是收工唯一的 blocker（acceptance 的 R6 = plan_progress_rows 记 unknown）。事实你上一轮已核死：`data/attack_plans.json` 的 plan 000002 第 2 轮 history 里 `statement_id=\"000030\"`，而真正被那份稿证明的是 `stmt:000042`（`manuscripts/F/f-proof-000003.md` 的「## 命题」逐字 = 000042 的 statement_full；`verifications/000042.jsonl` 有 8 行、含「成立」；`verifications/000030.jsonl` 根本不存在）。本轮要做的只有一件事：**让 attack_plans 里那一格不再指向一条无签的命题**。走 F 那一侧（attack_plans 是 F 的写口，D 自己改不动）：让 F 用它的 step / 更正入口做下面任一种，哪种真能落盘就用哪种，并在回执里贴改后 `fs.search` 的逐字结果：(1) 把 plan 000002 第 2 轮的 `statement_id` 就地更正为 `000042`（归属更正，不重写整条 history）；(2) 若不能就地改，就 append 一条新的 round（如 round 3），在 `notes`/`cites` 里逐字写明「更正第 2 轮归属：该稿的命题是 stmt:000042，000030 是旧号」，且这一轮的 `statement_id` 只填 `000042`；(3) 若 F 的写口两种都做不到，就让它明确回「做不到 + 拒在哪一格」，不要硬写。回执必须给三样：① 改后 `data/attack_plans.json` 里 plan 000002 全部 history 的 `round` / `statement_id` / `cites` 逐条；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 你认为改完之后收工门 plan_progress_rows 会不会转 pass，判据是什么。不要再开新方向、不要动 statements 的正文。）\n- 000036 M→D：派活：D（派活：这是收工门最后一格（acceptance 的 R6 = plan_progress_rows 记 unknown），你上一轮（t-000227）得出的结论是「F 的两条写口都改不动那一格」。本轮换两个具体做法，仍然只让 F 去改它自己名下的 `attack_plans`（那是它的产出面，不是框架账本区）：(1) 首选：让 F 用 `table.update(table=\"attack_plans\", id=\"000002\", patch={\"history\": <整条 history 的完整数组>})` —— 你自己先把 `data/attack_plans.json` 里 plan 000002 的 `history` 逐字读出来，只把第 2 条（`round=2`，`manuscript_path=manuscripts/F/f-proof-000003.md`，`proof_sha256=3f9c71fc243d8c4fd071f3be10d5cc477976b131cad1e547b1d122a486d481db`）里的 `\"statement_id\": \"000030\"` 改成 `\"000042\"`，并在该条加一句 `\"notes_correction\": \"归属更正：该稿的「## 命题」逐字等于 stmt:000042 的原文，V 的三行判词全挂 statement_id=000042；000030 是旧号\"`，其余字段与其余轮次一个字节不动，整份数组原样回写（这是 F 对自己产出的更正，不是改别人台账）。(2) 若 (1) 仍被拒，让 F 用它的 `step` 追加一条 `round=3` 的新 history，`statement_id` 只填 `000042`、`cites` 里逐字写「更正第 2 轮归属：该稿命题是 stmt:000042」。回执必须给三样逐字读数：① 改后 `fs.search(pattern=\"\\\"statement_id\\\": \\\"0000(30|42)\\\"\")` 在 `data/attack_plans.json` 的全部命中行（行号 + 内容）；② `verifications/000042.jsonl` 最近一行的 verdict 与 proof_sha256；③ 若两条都做不到，逐条贴拒信原文（拒码 + 那句话），不要自己下结论说「做不到」就停。）\n- 000037 M→B：派 B 把 literature 剩 6 条未消化文献处理完，让 unprocessed 归 0\n- 000038 M→G：派活：G（派活：写论文正文并编出 PDF（这是用户插话明确要求的交付物：最终产出论文）。要你做什么：\n1) **正文由你自己写**到 `out/package/main.tex`（用 fs.write，一段段写，不要只给骨架：每一节 body 都要非空）。论文题：三维 l^p 球 B_p^3 的最大面积中心截面。内容必须覆盖：问题与背景、三个候选方向族（坐标向 (1,0,0)、体对角向 (1,1,1)/√3、面对角向 (1,1,0)/√2）的截面面积表达式（A_coord(p)=4Γ(1+1/p)²/Γ(1+2/p)；A_diag(p)=(3/4)∫_0^{2π}(|cos(θ−π/6)|^p+|cos(θ+π/6)|^p+|sinθ|^p)^{−2/p}dθ；A_face(p) 为平面 x+y=0 上的二重积分、p→∞ 时 →4√2）、三段结构与两个临界点（p=2 处 r(p) 过 1；p*=4.998215596862 处 A_diag=A_face 换向）、数值证据（12 个 p 的球面扫描 + 6 轮局部加密 + 两临界点二分 + 求积核解析自检 1e-15 级）、已签证明（V 判「成立」的命题）、与文献的关系（引 lit: 行）、局限与未解问题。\n2) 每条承重断言带 `\\\\cite` 或台账引用：引文献用 lit:000000–lit:000024 里直接对口的几篇（plane sections of the unit ball of l_p、on maximal hyperplane sections of the unit ball of l_p^n for p<2、cube slicing in r^n、critical central sections of the cube、on extremal sections of subspaces of l_p）；引实验用 exp:000003（求积核自检）、exp:000004（12 个 p 扫描）、exp:000006（临界 p）、exp:000007（边界弧端点性）。**结论强度不许超过证据**：三段结构里「p<2 坐标向占优」「2<p<p* 体对角向占优」这两条目前只有数值支持（strong_conjecture 级），必须写明「数值支持的强猜想，未证明」；只有已拿 V「成立」签的那几条（体对角向截面积表达式、Δ 连续性与尾段符号）可以写「定理/证明」并注明「逐行审阅过的证明，未经机器检查」。\n3) 编 PDF：自己调 `doc.paper_compile` 编出 `out/package/main.pdf` 并确认回执里的 tex_sha256 等于盘上这份 main.tex。\n4) 落论文对应表：自己调 `doc.write_mapping` 一次落 MAPPING.json / MAPPING.md / 正文附录。\n5) 回执请给：main.tex 的 sha256 与字节数、回执里的 tex_sha256 / pages / pdf_bytes、MAPPING 的落点、每节标题清单、以及你引了哪些 lit:/exp:/stmt:。若某一步做不出来，逐条写清卡在哪（拒码 + 原话），不要自己宣布通过。）"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 72064,
+        "prompt_cache_miss_tokens": 2525,
+        "tokens_in": 74589,
+        "tokens_out": 1872,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000252"
+    },
+    {
+      "index": 14,
+      "shape": "final",
+      "payload": {
+        "final": "lit:000003 首部元数据核实完毕（② ③ 有逐字读数；① 的作者与期刊格被结构挡住，如实报「未写入」，不猜）。\n\n【② 四格改前→改后（table.get lit:000003 读数）】\n- authors: [] → []（**未写入**：table.update 受控拒 `identity_cell_refused`，身份格 authors/venue/year 只由收编口/provider 记录写，通用写口改它会造成第二个 dedup 主键，本行一字节未写）；已试过 search.register 复登（判重命中 duplicate，只复用 lit_id 不更新身份格）、lit.stage_add/lit.admit 的 items 不收 authors ⇒ 本会话无写口可写这三格。逐字读数交回：**GERGELY AMBRUS**（PDF 首部全大写，单作者，无其他作者）。\n- venue: null → null（**未写入**，同上；逐字读数：**arXiv:2107.14778v3**，无期刊名 —— 首部只有 2020 MSC 52A40/52A38/49Q20、Key words、致谢与 arXiv 戳，PDF 上取不到期刊名）。\n- year: null → null（**未写入**，同上；逐字读数：**22 Jun 2023**，即 arXiv v3 日期）。\n- pages: \"\" → \"12 pp.（PDF 共 12 页；期刊卷期页 PDF 上取不到）\"（**已写入**，这是唯一写成功的一格；PDF 上确无卷期页 —— 只有正文内部页码 1,2,…，没有期刊页区间）。\n- 附带把 summary 写成同一份逐字题录（可写状态格），并把 download.note 由 text.extract 回填为「抽出的文本可读」。\n\n【③ 逐字原文（不要改写，直接可引）】位置：`===== page 2 =====`（框架分页标记，即 PDF 第 2 页），§1 «History and results» 第二段（该段落起首于 \"In this note we apply Fourier analytic methods\"，止于 \"…see the remark following the proof of Theorem 1.\"）；抽读件 library/000003.txt 第 79–83 行，sha256 7f80d6808d557f09ad03516437b27c7b47878a0e41cba6a73711f564a7979820：\n\"In this note we apply Fourier analytic methods to study critical central hyperplane sections: these are the sections a⊥∩Qn whose normal vector a is a critical point on Sn−1 with respect to the volume of the central section of Qn. Such normal vectors will be referred to as critical directions.\"\n（若你要摘要口径的备选，Abstract 里对应的一句是 page 1：\"Using Fourier analytic and variational methods, we retrieve a geometric condition characterizing critical sections which, by entirely different methods, was recently proven by Ivanov and Tsiutsiurupa.\"）\n\n【文字层】可读：text.extract 成功（library/000003.txt，12 页、27933 字、alpha_ratio 0.7993、无乱码），首部没有缺页。\n\n【B 收编】已派 B（t-000253，done/ok）并回齐：本趟落成概念行 2 条 —— stmt:000111（临界方向与临界中心超平面截面，出处 p.2）、stmt:000113（k-对角方向与对角截面）；关系行在该文献侧原有 rel:000018（quote 已逐字核过 / p.1），本趟按补录口径新增关系（条数以 B 台账为准，我这一步的回执只读到 B 摘要的截断部分）。\n\n【待裁表】lit.stage_list(request_id=\"*\", status=\"pending\") = 0 条全表待裁（30 行候选：admitted 25 / rejected 5），本趟未新检索、未新建文献行。\n\n【卡在哪】唯一的缺口是 authors/venue/year 三个身份格写不进去（受控拒绝、非故障）；逐字读数已在上文与 summary 格，需框架侧收编口/provider 记录才能落到那三格。",
+        "evidence": [
+          "lit:000003",
+          "library/000003.txt",
+          "stmt:000111",
+          "stmt:000113",
+          "rel:000018"
+        ],
+        "notify": {
+          "to": "D",
+          "summary": "lit:000003 首部核实：作者 GERGELY AMBRUS／arXiv:2107.14778v3 22 Jun 2023／12 页，无期刊卷期页；authors·venue·year 三个身份格受 identity_cell_refused 挡住未写入，pages 已补，③ 逐字原句见正文",
+          "body": "## 做了什么\n按你点名的文件 `reference/5d236efcb7ea-critical-central-sections-of-the-cube.pdf`（sha256 与 955094 字节与派活一致）核 lit:000003 的首部元数据。抽读链：`text.extract(path=\"5d236efcb7ea-…pdf\", lit_id=\"000003\")` → `library/000003.txt`（12 页 / 27933 字 / 可读）→ `fs.read` 读了首部与 §1。\n\n## 四格的改前 → 改后\n| 格 | 改前 | 改后 | 依据 |\n|---|---|---|---|\n| authors | `[]` | `[]`（**未写入**） | 逐字读数 **GERGELY AMBRUS**（首部全大写、单作者）。`table.update` 受控拒 `identity_cell_refused`（身份格只由收编口/provider 记录写）；`search.register` 判重命中只复用 lit_id；`lit.stage_*` items 不收 authors ⇒ 无写口 |\n| venue | `null` | `null`（**未写入**） | 逐字读数 **arXiv:2107.14778v3**；PDF 上**取不到期刊名**（首部只有 2020 MSC 52A40/52A38/49Q20、Key words、致谢、arXiv 戳） |\n| year | `null` | `null`（**未写入**） | 逐字读数 **22 Jun 2023**（arXiv v3 日期） |\n| pages | `\"\"` | `\"12 pp.（PDF 共 12 页；期刊卷期页 PDF 上取不到）\"` | 12 页是 PDF 页数；**期刊卷期页 PDF 上取不到**（正文只有内部页码） |\n附带把 `summary` 写成同一份逐字题录（可写状态格）。**没有按题名猜作者或期刊**；不存在的格留空并在此如实说明。\n\n## ③ 你要的那一句（逐字，未改写未缩写）\n**位置**：`===== page 2 =====`（框架分页标记，PDF 第 2 页），§1 «History and results» 第二段（段首 \"In this note we apply…\"，段末 \"…see the remark following the proof of Theorem 1.\"）；`library/000003.txt` 第 79–83 行，正文 sha256 `7f80d6808d557f09ad03516437b27c7b47878a0e41cba6a73711f564a7979820`。\n\n> In this note we apply Fourier analytic methods to study critical central hyperplane sections: these are the sections a⊥∩Qn whose normal vector a is a critical point on Sn−1 with respect to the volume of the central section of Qn. Such normal vectors will be referred to as critical directions.\n\n摘要口径的备选（page 1）：「Using Fourier analytic and variational methods, we retrieve a geometric condition characterizing critical sections which, by entirely different methods, was recently proven by Ivanov and Tsiutsiurupa.」\n两处都直接落在「cube 中心截面体积作为方向函数的临界点」这个主题上，且都点名了 Ivanov–Tsiutsiurupa [IT21] 的既有特征刻画 —— 拿它做背景站得住（它把 IT21 的必要条件换了 Fourier 解析与变分方法重证，并把临界截面在 n=3,4 情形分类，含非对角临界截面）。\n\n## B 收编\n已派 B 收编（t-000253，outcome=ok）：概念行 **stmt:000111**（临界方向与临界中心超平面截面，出处 p.2）、**stmt:000113**（k-对角方向与对角截面）；关系行该文献侧原有 **rel:000018**（quote 逐字核过 / p.1），本趟按「补录」口径新增关系（我这一步只读到 B 摘要的截断段，条数以 B 台账为准）。\n\n## 卡在哪 / 要你做什么\n唯一缺口：**authors / venue / year 三个身份格本会话无写口**（受控拒绝，不是查不到）。要落进那三格，需要走收编口（provider 记录 / 重新登记），或由你在结论里直接引用本回执的逐字读数。待裁表：`lit.stage_list(request_id=\"*\")` = 0 条 pending（25 admitted / 5 rejected），本趟无新检索、无新文献行。",
+          "refs": [
+            "lit:000003",
+            "stmt:000111",
+            "stmt:000113",
+            "rel:000018"
+          ],
+          "why": "派我这趟活的是 D，元数据核实回执 + ③ 逐字原句交回，并附 B 收编读数"
+        }
+      },
+      "result": {
+        "notify_handoff": {
+          "handoff": "000039",
+          "ok": true,
+          "id": "000039",
+          "path": "work/handoffs.jsonl#000039",
+          "to": "D",
+          "brief": "lit:000003 首部核实：作者 GERGELY AMBRUS／arXiv:2107.14778v3 22 Jun 2023／12 页，无期刊卷期页；authors·venue·year 三个身份格受 identity_cell_refused 挡住未写入，pages 已补，③ 逐字原句见正文",
+          "addressing": {
+            "checked": true,
+            "how": "parent",
+            "to": "D",
+            "kind": "parent",
+            "name": "D1",
+            "task_id": "t-000251",
+            "role": "D",
+            "brief": "",
+            "candidates": [],
+            "callable": "父 D1（t-000251）、子 B1（t-000253）",
+            "why": "名册成员（parent）⇒ 手稿写角色 D，通知投实例 D",
+            "delivery": "roster",
+            "manuscript_to": "D",
+            "addressed_by": "role_fallback"
+          },
+          "notify_channel": "roster",
+          "revises": "",
+          "existing_same_summary": {
+            "count": 0,
+            "ids": [],
+            "note": "查过了：没有同一句话的既有交接"
+          },
+          "notified": "t-000261",
+          "error": "",
+          "note": "收件人下次运行时（或本步之后）会在收件箱/板上看到编号；它用 `manuscripts.read` 读全文"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 73472,
+        "prompt_cache_miss_tokens": 4464,
+        "tokens_in": 77936,
+        "tokens_out": 3280,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000252"
+    }
+  ],
+  "final": "lit:000003 首部元数据核实完毕（② ③ 有逐字读数；① 的作者与期刊格被结构挡住，如实报「未写入」，不猜）。\n\n【② 四格改前→改后（table.get lit:000003 读数）】\n- authors: [] → []（**未写入**：table.update 受控拒 `identity_cell_refused`，身份格 authors/venue/year 只由收编口/provider 记录写，通用写口改它会造成第二个 dedup 主键，本行一字节未写）；已试过 search.register 复登（判重命中 duplicate，只复用 lit_id 不更新身份格）、lit.stage_add/lit.admit 的 items 不收 authors ⇒ 本会话无写口可写这三格。逐字读数交回：**GERGELY AMBRUS**（PDF 首部全大写，单作者，无其他作者）。\n- venue: null → null（**未写入**，同上；逐字读数：**arXiv:2107.14778v3**，无期刊名 —— 首部只有 2020 MSC 52A40/52A38/49Q20、Key words、致谢与 arXiv 戳，PDF 上取不到期刊名）。\n- year: null → null（**未写入**，同上；逐字读数：**22 Jun 2023**，即 arXiv v3 日期）。\n- pages: \"\" → \"12 pp.（PDF 共 12 页；期刊卷期页 PDF 上取不到）\"（**已写入**，这是唯一写成功的一格；PDF 上确无卷期页 —— 只有正文内部页码 1,2,…，没有期刊页区间）。\n- 附带把 summary 写成同一份逐字题录（可写状态格），并把 download.note 由 text.extract 回填为「抽出的文本可读」。\n\n【③ 逐字原文（不要改写，直接可引）】位置：`===== page 2 =====`（框架分页标记，即 PDF 第 2 页），§1 «History and results» 第二段（该段落起首于 \"In this note we apply Fourier analytic methods\"，止于 \"…see the remark following the proof of Theorem 1.\"）；抽读件 library/000003.txt 第 79–83 行，sha256 7f80d6808d557f09ad03516437b27c7b47878a0e41cba6a73711f564a7979820：\n\"In this note we apply Fourier analytic methods to study critical central hyperplane sections: these are the sections a⊥∩Qn whose normal vector a is a critical point on Sn−1 with respect to the volume of the central section of Qn. Such normal vectors will be referred to as critical directions.\"\n（若你要摘要口径的备选，Abstract 里对应的一句是 page 1：\"Using Fourier analytic and variational methods, we retrieve a geometric condition characterizing critical sections which, by entirely different methods, was recently proven by Ivanov and Tsiutsiurupa.\"）\n\n【文字层】可读：text.extract 成功（library/000003.txt，12 页、27933 字、alpha_ratio 0.7993、无乱码），首部没有缺页。\n\n【B 收编】已派 B（t-000253，done/ok）并回齐：本趟落成概念行 2 条 —— stmt:000111（临界方向与临界中心超平面截面，出处 p.2）、stmt:000113（k-对角方向与对角截面）；关系行在该文献侧原有 rel:000018（quote 已逐字核过 / p.1），本趟按补录口径新增关系（条数以 B 台账为准，我这一步的回执只读到 B 摘要的截断部分）。\n\n【待裁表】lit.stage_list(request_id=\"*\", status=\"pending\") = 0 条全表待裁（30 行候选：admitted 25 / rejected 5），本趟未新检索、未新建文献行。\n\n【卡在哪】唯一的缺口是 authors/venue/year 三个身份格写不进去（受控拒绝、非故障）；逐字读数已在上文与 summary 格，需框架侧收编口/provider 记录才能落到那三格。",
+  "evidence": [
+    "lit:000003",
+    "library/000003.txt",
+    "stmt:000111",
+    "stmt:000113",
+    "rel:000018"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 1,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 14,
+  "compactions": 0,
+  "mailbox_items": [
+    "t-000259",
+    "t-000260"
+  ],
+  "mailbox_msgs": [],
+  "mailbox_delivered": 2,
+  "monitor_turns": 1,
+  "wakes": 1,
+  "wake_ids": [
+    "wk-000080"
+  ],
+  "wake_events": [
+    {
+      "wake_id": "wk-000080",
+      "task_id": "t-000252",
+      "role": "A",
+      "timer_id": "tm-000261",
+      "kind": "timer",
+      "reason": "收编在册文献 lit:000003（Critical central sections of the cube，单作者 GERGELY AMBRUS，arXiv:2107.14778v3 [math.MG]，22 Jun 2023，12 页）——抽概念、建关系、落命题线索。全文抽读件已在盘：library/000003.txt（27933 字，sha256 7f80d6808d55…，页间有 `=",
+      "purpose": "收编在册文献 lit:000003（Critical central sections of the cube，单作者 GERGELY AMBRUS，arXiv:2107.14778v3 [math.MG]，22 Jun 2023，12 页）——抽概念、建关系、落命题线索。全文抽读件已在盘：library/000003.txt（27933 字，sha256 7f80d6808d55…，页间有 `=",
+      "purpose_missing": false,
+      "message": "时间到：收编在册文献 lit:000003（Critical central sections of the cube，单作者 GERGELY AMBRUS，arXiv:2107.14778v3 [math.MG]，22 Jun 2023，12 页）——抽概念、建关系、落命题线索。全文抽读件已在盘：library/000003.txt（27933 字，sha256 7f80d6808d55…，页间有 `=｜等了 6 分钟 43 秒（起于 00:01:57，到于 00:08:40）。它交的是：ok：执行完成",
+      "waited_sec": 404.029443,
+      "triggered_by": "target_event",
+      "wait_for": "task:t-000253",
+      "due_at": "",
+      "fired_at": "2026-11-24T16:08:41.482883+00:00",
+      "mailbox_item_id": "t-000260",
+      "state": "pending"
+    }
+  ],
+  "clock_pumps": 27,
+  "clock_fired": 2,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "A 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "A",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    },
+    "own_children": [
+      "t-000253"
+    ],
+    "return_given": [
+      "t-000253"
+    ],
+    "reentry_turns": 2,
+    "reentry_reasons": [
+      "派活之后还没给过模型回合：这一批 1 项还在跑（t-000253），这一拍的 waiter 全是在等它们 ⇒ 这一拍返场问模型一次，下一拍起才按挂机口径走",
+      "上一拍是等谁的唤醒（t-000253 回来）—— 那一拍按 ③ 跳过，那一批的产出现在就在上下文里 ⇒ 这一拍返场问模型（不许再睡一拍）"
+    ],
+    "woke_turns": 1,
+    "skip_calls": 1,
+    "woke_reasons": [
+      "event"
+    ]
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {
+    "checked": true,
+    "enabled": true,
+    "in_task": true,
+    "in_task_why": "",
+    "delegations": 3,
+    "settled": [
+      "r-000001",
+      "r-000002",
+      "r-000003"
+    ],
+    "cleared": [],
+    "pending": [],
+    "refused": [],
+    "why": "全表 3 个委托都已清表（每一行都有 cleared_at），这一拍没有要提交的",
+    "note": "全表 3 个委托都已清表（每一行都有 cleared_at），这一拍没有要提交的"
+  },
+  "unprocessed_reasons": {
+    "checked": true,
+    "enabled": true,
+    "unprocessed": 6,
+    "written": [],
+    "kept": [
+      {
+        "lit_id": "000020",
+        "title": "On the volume of hyperplane sections of a d-cube",
+        "reason": "B 已经把这一篇登记成 3 条 statements（概念/命题，source_lit_id=000020）与 3 条 relations（lit_id=000020），只是 `processed` 位仍为假：该位只由 B.run_once 的领取路径翻，B 用 table.create / own.register_statement 手工登记不会翻它。⇒ 这一条已经消化过（证据就是上面那两行条数），可以带着这一格收工。"
+      },
+      {
+        "lit_id": "000021",
+        "title": "Maximal perimeters of polytope sections and origin-symmetry",
+        "reason": "B 已经把这一篇登记成 2 条 statements（概念/命题，source_lit_id=000021）与 1 条 relations（lit_id=000021），只是 `processed` 位仍为假：该位只由 B.run_once 的领取路径翻，B 用 table.create / own.register_statement 手工登记不会翻它。⇒ 这一条已经消化过（证据就是上面那两行条数），可以带着这一格收工。"
+      },
+      {
+        "lit_id": "000022",
+        "title": "The cross-section body, plane sections of convex bodies and approximation of convex bodies",
+        "reason": "B 已经把这一篇登记成 1 条 statements（概念/命题，source_lit_id=000022）与 1 条 relations（lit_id=000022），只是 `processed` 位仍为假：该位只由 B.run_once 的领取路径翻，B 用 table.create / own.register_statement 手工登记不会翻它。⇒ 这一条已经消化过（证据就是上面那两行条数），可以带着这一格收工。"
+      }
+    ],
+    "undigested": [
+      {
+        "lit_id": "000019",
+        "title": "An introduction to measure theory",
+        "why": "B 的领取租约还没到期（holder=agent-B）⇒ 这一拍不写理由：它正在被消化，下一秒可能就翻真"
+      },
+      {
+        "lit_id": "000023",
+        "title": "Measure, integration & real analysis",
+        "why": "statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化）"
+      },
+      {
+        "lit_id": "000024",
+        "title": "Measure theory and integration by and for the learner",
+        "why": "statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化）"
+      }
+    ],
+    "why": "已经有理由的 3 条保持原样：lit:000020、lit:000021、lit:000022；没有写理由的：lit:000019（B 的领取租约还没到期（holder=agent-B）⇒ 这一拍不写理由：它正在被消化，下一秒可能就翻真）、lit:000023（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000024（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））。",
+    "note": "已经有理由的 3 条保持原样：lit:000020、lit:000021、lit:000022；没有写理由的：lit:000019（B 的领取租约还没到期（holder=agent-B）⇒ 这一拍不写理由：它正在被消化，下一秒可能就翻真）、lit:000023（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000024（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））。"
+  },
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [
+    "000039"
+  ],
+  "summons": [
+    "B"
+  ],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [
+    {
+      "kind": "summon",
+      "counted": true,
+      "task_id": "t-000253",
+      "role": "B",
+      "step": 10,
+      "status": "running",
+      "outcome": "",
+      "handoff_id": "",
+      "outputs": [
+        "t-000253"
+      ],
+      "disposition": ""
+    }
+  ],
+  "summons_total": 1,
+  "summons_consumed": 1,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 1,
+    "summons_consumed": 1,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [
+      {
+        "kind": "summon",
+        "counted": true,
+        "task_id": "t-000253",
+        "role": "B",
+        "step": 10,
+        "status": "running",
+        "outcome": "",
+        "handoff_id": "",
+        "outputs": [
+          "t-000253"
+        ],
+        "disposition": "consumed",
+        "evidence": {
+          "step": 14,
+          "shape": "final",
+          "effect": "收工结论里的具体产物指涉",
+          "refs": [
+            "t-000253"
+          ]
+        }
+      }
+    ],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p328",
+    "role": "A",
+    "prompt_sha256": "ac48d2e04cd93e0637ee181d2dab00b0a10d146f6f75db0b047a1e63881dd801",
+    "prompt_chars": 66608,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "FACULTIES_07",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "TOOL_29",
+      "TOOL_30",
+      "TOOL_31",
+      "TOOL_32",
+      "TOOL_33",
+      "TOOL_34",
+      "TOOL_35",
+      "TOOL_36",
+      "TOOL_37",
+      "TOOL_38",
+      "TOOL_39",
+      "TOOL_40",
+      "TOOL_41",
+      "TOOL_42",
+      "TOOL_43",
+      "TOOL_44",
+      "TOOL_45",
+      "TOOL_46",
+      "TOOL_47",
+      "TOOL_48",
+      "TOOL_49",
+      "TOOL_50",
+      "TOOL_51",
+      "TOOL_52",
+      "TOOL_53",
+      "TOOL_54",
+      "TOOL_55",
+      "TOOL_56",
+      "TOOL_57",
+      "A_SEARCH_STYLE",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_LIMITS",
+      "COLLAB_NAMES",
+      "PARENT_STOP",
+      "PARENT_ROSTER",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 14,
+    "tokens_in": 875787,
+    "tokens_out": 23435,
+    "usd": 0.021432,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 13,
+    "no_request_calls": 0,
+    "hit": 843520,
+    "miss": 32050,
+    "unknown_calls": 0,
+    "tokens_in": 875570,
+    "hit_rate": 0.9634,
+    "mismatched_calls": 0,
+    "saved_usd": 0.123998,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 553.969,
+  "end_ts": "2026-11-25T00:09:02+08:00",
+  "notes": [
+    "第 11 步返场：子代理回来 0 条，还在跑 1 条（这一拍为了返场没等子：返场判据给过之后才等）",
+    "返场（Q22）：派活之后还没给过模型回合：这一批 1 项还在跑（t-000253），这一拍的 waiter 全是在等它们 ⇒ 这一拍返场问模型一次，下一拍起才按挂机口径走",
+    "第 12 步返场：子代理回来 1 条，还在跑 0 条（等待 201.3s，原因 settled）",
+    "返场（Q22）：上一拍是等谁的唤醒（t-000253 回来）—— 那一拍按 ③ 跳过，那一批的产出现在就在上下文里 ⇒ 这一拍返场问模型（不许再睡一拍）",
+    "收工时名下还有 1 条证明没有 V 的签字（读数，不拦收工；明细：000112）",
+    "缓存读数：命中 843520 / 未命中 32050 token，命中率 96.3%（13 次调用）；按 modelcost 口径估算可省 约 0.123998 美元",
+    "子产出处理读数：summons_total=1，consumed=1，waived=0，unknown=0，unconsumed=0"
+  ],
+  "final_payload": {
+    "final": "lit:000003 首部元数据核实完毕（② ③ 有逐字读数；① 的作者与期刊格被结构挡住，如实报「未写入」，不猜）。\n\n【② 四格改前→改后（table.get lit:000003 读数）】\n- authors: [] → []（**未写入**：table.update 受控拒 `identity_cell_refused`，身份格 authors/venue/year 只由收编口/provider 记录写，通用写口改它会造成第二个 dedup 主键，本行一字节未写）；已试过 search.register 复登（判重命中 duplicate，只复用 lit_id 不更新身份格）、lit.stage_add/lit.admit 的 items 不收 authors ⇒ 本会话无写口可写这三格。逐字读数交回：**GERGELY AMBRUS**（PDF 首部全大写，单作者，无其他作者）。\n- venue: null → null（**未写入**，同上；逐字读数：**arXiv:2107.14778v3**，无期刊名 —— 首部只有 2020 MSC 52A40/52A38/49Q20、Key words、致谢与 arXiv 戳，PDF 上取不到期刊名）。\n- year: null → null（**未写入**，同上；逐字读数：**22 Jun 2023**，即 arXiv v3 日期）。\n- pages: \"\" → \"12 pp.（PDF 共 12 页；期刊卷期页 PDF 上取不到）\"（**已写入**，这是唯一写成功的一格；PDF 上确无卷期页 —— 只有正文内部页码 1,2,…，没有期刊页区间）。\n- 附带把 summary 写成同一份逐字题录（可写状态格），并把 download.note 由 text.extract 回填为「抽出的文本可读」。\n\n【③ 逐字原文（不要改写，直接可引）】位置：`===== page 2 =====`（框架分页标记，即 PDF 第 2 页），§1 «History and results» 第二段（该段落起首于 \"In this note we apply Fourier analytic methods\"，止于 \"…see the remark following the proof of Theorem 1.\"）；抽读件 library/000003.txt 第 79–83 行，sha256 7f80d6808d557f09ad03516437b27c7b47878a0e41cba6a73711f564a7979820：\n\"In this note we apply Fourier analytic methods to study critical central hyperplane sections: these are the sections a⊥∩Qn whose normal vector a is a critical point on Sn−1 with respect to the volume of the central section of Qn. Such normal vectors will be referred to as critical directions.\"\n（若你要摘要口径的备选，Abstract 里对应的一句是 page 1：\"Using Fourier analytic and variational methods, we retrieve a geometric condition characterizing critical sections which, by entirely different methods, was recently proven by Ivanov and Tsiutsiurupa.\"）\n\n【文字层】可读：text.extract 成功（library/000003.txt，12 页、27933 字、alpha_ratio 0.7993、无乱码），首部没有缺页。\n\n【B 收编】已派 B（t-000253，done/ok）并回齐：本趟落成概念行 2 条 —— stmt:000111（临界方向与临界中心超平面截面，出处 p.2）、stmt:000113（k-对角方向与对角截面）；关系行在该文献侧原有 rel:000018（quote 已逐字核过 / p.1），本趟按补录口径新增关系（条数以 B 台账为准，我这一步的回执只读到 B 摘要的截断部分）。\n\n【待裁表】lit.stage_list(request_id=\"*\", status=\"pending\") = 0 条全表待裁（30 行候选：admitte…（落档截断，原 2133 字）",
+    "evidence": [
+      "lit:000003",
+      "library/000003.txt",
+      "stmt:000111",
+      "stmt:000113",
+      "rel:000018"
+    ],
+    "notify": {
+      "to": "D",
+      "summary": "lit:000003 首部核实：作者 GERGELY AMBRUS／arXiv:2107.14778v3 22 Jun 2023／12 页，无期刊卷期页；authors·venue·year 三个身份格受 identity_cell_refused 挡住未写入，pages 已补，③ 逐字原句见正文",
+      "body": "## 做了什么\n按你点名的文件 `reference/5d236efcb7ea-critical-central-sections-of-the-cube.pdf`（sha256 与 955094 字节与派活一致）核 lit:000003 的首部元数据。抽读链：`text.extract(path=\"5d236efcb7ea-…pdf\", lit_id=\"000003\")` → `library/000003.txt`（12 页 / 27933 字 / 可读）→ `fs.read` 读了首部与 §1。\n\n## 四格的改前 → 改后\n| 格 | 改前 | 改后 | 依据 |\n|---|---|---|---|\n| authors | `[]` | `[]`（**未写入**） | 逐字读数 **GERGELY AMBRUS**（首部全大写、单作者）。`table.update` 受控拒 `identity_cell_refused`（身份格只由收编口/provider 记录写）；`search.register` 判重命中只复用 lit_id；`lit.stage_*` items 不收 authors ⇒ 无写口 |\n| venue | `null` | `null`（**未写入**） | 逐字读数 **arXiv:2107.14778v3**；PDF 上**取不到期刊名**（首部只有 2020 MSC 52A40/52A38/49Q20、Key words、致谢、arXiv 戳） |\n| year | `null` | `null`（**未写入**） | 逐字读数 **22 Jun 2023**（arXiv v3 日期） |\n| pages | `\"\"` | `\"12 pp.（PDF 共 12 页；期刊卷期页 PDF 上取不到）\"` | 12 页是 PDF 页数；**期刊卷期页 PDF 上取不到**（正文只有内部页码） |\n附带把 `summary` 写成同一份逐字题录（可写状态格）。**没有按题名猜作者或期刊**；不存在的格留空并在此如实说明。\n\n## ③ 你要的那一句（逐字，未改写未缩写）\n**位置**：`===== page 2 =====`（框架分页标记，PDF 第 2 页），§1 «History and results» 第二段（段首 \"In this note we apply…\"，段末 \"…see the remark following the proof of Theorem 1.\"）；`library/000003.txt` 第 79–83 行，正文 sha256 `7f80d6808d557f09ad03516437b27c7b47878a0e41cba6a73711f564a7979820`。\n\n> In this note we apply Fourier analytic methods to study critical central hyperplane sections: these are the sections a⊥∩Qn whose normal vector a is a critical point on Sn−1 with respect to the volume of the central section of Qn. Such normal vectors will be referred to as critical directions.\n\n摘要口径的备选（page 1）：「Using Fourier analytic and variational methods, we retrieve a geometric condition characterizing critical sections which, by entirely different methods, was recently proven by Ivanov and Tsiutsiurupa.」\n两处都直接落在「cube 中心截面体积作为方向函数的临界点」这个主题上，且都点名了 Ivanov–Tsiutsiurupa [IT21] 的既有特征刻画 —— 拿它做背景站得住（它把 IT21 的必要条件换了 Fourier 解析与变分方法重证，并把临界截面在 n=3,4 情形分类，含非对角临界截面）。\n\n## B 收编\n已派 B 收编（t-000253，outcome=ok）：概念行 **stmt:000111**（临界方向与临界中心超平面截面，出处 p.2）、**stmt:000113**（k-对角方向与对角截面）；关系行该文献侧原有 **rel:000018**（quote 逐字核过 / p.1），本趟按「补录」口径新增关系（我这一步只读到 B 摘要的截断段，条数以 B 台账为准）。\n\n## 卡在哪 / 要你做什么\n唯一缺口：**authors / venue / year 三个身份格本会话无写口**（受控拒绝，不是查不到）。要落进那三格，需要走收编口（provider 记录 / 重新登记），或由你在结论里直接引用本回执的逐字读数。待裁表：`lit.stage_list(request_id=\"*\")` = 0 条 pending（25 admitted / 5 rejected），本趟无新检索、无新文献行。",
+      "refs": [
+        "lit:000003",
+        "stmt:000111",
+        "stmt:000113",
+        "rel:000018"
+      ],
+      "why": "派我这趟活的是 D，元数据核实回执 + ③ 逐字原句交回，并附 B 收编读数"
+    }
+  },
+  "task_id": "t-000252"
+}

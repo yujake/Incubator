@@ -1,0 +1,24 @@
+{
+ "action": "run_once",
+ "at": "2026-11-24T22:28:51+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 3575,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"A.run_once 收工（台账号 t-000202，第 11 步）。\\n\\n一、本趟执行的动作\\n1) own.run_once（无参数）领取 r-000002，结果：processed=1，但 **OpenAlex 两路（foundational / frontier）都 HTTP 429 rate_limited** ⇒ registered=0、downloaded=0、outcome 仍为 null。这是「没查成」，不是「没有这篇文献」，也不是「这个方向没文献」。\\n2) search.providers 实测：openalex probed_fail(429)、europepmc 超时、fixture 缺文件；只有 crossref / doaj 可用。\\n3) 判收/清表读数：pending_total=0，pending_by_delegation=[]；全表 3 个委托（r-000001/r-000002/r-000003）每一行都有 cleared_at，clear_stage.pending=[] ⇒ 待裁表已清，这一趟按收尾三步走完了（②③无事可做是读数，不是我跳过了）。\\n4) 派 B（名册名 B-digest2，台账号 t-000204）收编 5 篇已入库但无消化痕迹的文献：lit:000017 / 000018 / 000019 / 000023 / 000024。\\n\\n二、B 的回执（t-000204，done/ok，手稿 000030）\\n五篇逐篇结论：**消化 0 篇 / 5 篇，落 statements 0 条、relations 0 条**。卡点不是缺正文（lit:000017 已读 12 页全文、37 条引文回验通过），而是**框架侧概念配额按会话累计已满（limit 30 / written 30，被 lit:000016 一次用满）**⇒ 159 个概念候选全部受控拒绝、37 条关系 deferred。lit:000016 / 000020 / 000021 / 000022 四篇前一趟已消化（各有 statements 与 relations 行），已核实。\\n\\n三、我没有做的两件事及理由（留痕在 notes/A.md 与 steps 读数）\\n- **没有原样重试 r-000002、也没有换源重发**：r-000002 的 topic 是本地批次描述符（\\\"local reference/ batch 2 (12 user-declared PDFs): …\\\"）而非可检的规范术语，原样重发只会再撞 429 或换回跑题候选；且 B 的概念配额已满，此刻再往 literature 搬新文献只会增加未收编欠账。\\n- **没有对 B 原样再派一遍**：t-000204 是 done/ok 且结论明确（配额满，非读不到），原样重派只会换回同一读数。\\n\\n四、交付状态（按本岗可核字段如实报）\\n- r-000003：outcome=ok 已终局；result_lit_ids = 000020–000024，五个号在 literature 表逐条可读 ✓\\n- r-000002：**outcome=null，未终局**（done=false，attempts=1，last_error 已由 run_once 写入 OpenAlex 429 原话）。`done` 旗不是我能写的字段，不擅自改，如实交回。\\n- 本批「已派 B 收编、B 回执给出概念行与关系行条数」这一项：B 已回，条数是 **0 / 0**，原因是框架侧概念配额按会话累计封顶（非正文缺失、非检索失败）。这 5 篇留在 literature 里是「已入库未收编」的欠账，下一趟配额重置后应优先补收编。\\n\\n五、给主控的判断依据（缺什么、下一步换什么）\\n- 若仍需推进 r-000002：正确做法不是原样重发，而是先把 topic 换成规范术语（如 `cube slicing` / `hyperplane sections of the cube` / `Brunn-Minkowski`），并把该行 providers 改成 crossref / doaj 再领跑；这需要改请求行字段，是否改由主控定。\\n- 概念配额是会话级累计限制，超出我这一岗能解决的范围：五篇 measure-theory / 广义积分背景文献的收编需要一次配额重置后的 B 窗口，请主控安排。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\lp-ball-22\\\\runs\\\\A-20261124-222851-001.json\", \"me",
+ "payload_sha256": "70cc14fdff84842deb5af73b0dff01eb590bccd5257ed4a04efbb4386038a73d",
+ "readings": {},
+ "role": "A",
+ "status": "done",
+ "task_id": "t-000202"
+}

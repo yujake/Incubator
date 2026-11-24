@@ -1,0 +1,1695 @@
+{
+  "role": "A",
+  "task": "A.run_once：这次没有带参数（调用方只要求你按职责做这件事）。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "search_requests",
+          "fields": [
+            "request_id",
+            "topic",
+            "mode",
+            "done",
+            "outcome",
+            "result_lit_ids",
+            "created_at"
+          ],
+          "limit": 50
+        },
+        "why": "先看还有没有待领的检索请求，以及上几趟委托的终局状态"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": false,
+        "data": null,
+        "error": "search_requests 没有字段 ['created_at']；可投影的字段：['attempts', 'claimed_by', 'content_description', 'done', 'for_question_id', 'last_error', 'lease_until', 'mode', 'outcome', 'priority', 'providers', 'request_id', 'result_lit_ids', 'submit_note', 'submitted_by', 'submitted_instance', 'timestamp', 'topic']（投影只回你点的键，写错一个字就会少一格，所以这里直接拒）",
+        "meta": {
+          "table": "search_requests",
+          "kind": "param_error"
+        },
+        "参数表": "【参数表】被拒的是参数形状/取值，不是这件事不能做。照下面这张声明表重写一次（键名与类型都要对；表里没列的键一律不许传）：\n- table.list 的参数表：table: string，必填，枚举 [search_requests/literature/relations/research_questions/conjectures/analysis_reports/reprocess_requests/experiments]，16 张表之一；limit: integer，返回条数上限（1-500）；offset: integer，跳过的行数；filter: object，等值过滤：{字段: 期望值}；模糊匹配请用 table.search；fields: array，字段投影：只回这几个键（例如 statements 的 stmt_id / label / kind / evidence_kind）；省略=整行（与改前逐字相同，含 proof_text 全文）（参数表是封闭集合：多传一个键会被拒）"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 55680,
+        "prompt_cache_miss_tokens": 1027,
+        "tokens_in": 56707,
+        "tokens_out": 731,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000202"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "own.run_once",
+        "args": {},
+        "why": "按派活 A.run_once 执行：领取队列里可领的检索请求（无参数 ⇒ 认领全部有 pending 的委托）"
+      },
+      "result": {
+        "tool": "own.run_once",
+        "ok": true,
+        "data": "ARunResult(processed=1, registered=0, duplicated=0, downloaded=0, download_failed=0, download_suspect=0, gave_up=0, skipped_reason=None, outcome=None, request_id='r-000002', priority='medium', priority_rank=1, submitted_by='agent-A', queue_pending=2, skipped_lease_active=0, skipped_lease_backoff=0, providers_requested=[], role_providers=['openalex'], sources=[{'name': 'openalex', 'status': 'failed', 'count': 0, 'error_kind': 'rate_limited', 'error': 'OpenAlex 每一路都失败（foundational: HTTP 429 for https://api.openalex.org/works?search=%22local+reference%2F+batch+2+%2812+user-declared+PDFs%29%3A+cube+sections%2C+Brunn-Minkowski%2C+measure+theory+background%22&per-page=15&page=1&sort=cited_by_count%3Adesc&select=id%2Cdoi%2Ctitle%2Cdisplay_name%2Ctype%2Ctype_crossref%2Cpublication_year%2Cpublication_date%2Clanguage%2Cauthorships%2Cprimary_location%2Cbest_oa_location%2Clocations%2Copen_access%2Ccited_by_count%2Creferenced_works%2Creferenced_works_count%2Cabstract_inverted_index%2Cids；frontier: HTTP 429 for https://api.openalex.org/works?search=%22local+reference%2F+batch+2+%2812+user-declared+PDFs%29%3A+cube+sections%2C+Brunn-Minkowski%2C+measure+theory+background%22&per-page=15&page=1&sort=publication_year%3Adesc&select=id%2Cdoi%2Ctitle%2Cdisplay_name%2Ctype%2Ctype_crossref%2Cpublication_year%2Cpublication_date%2Clanguage%2Cauthorships%2Cprimary_location%2Cbest_oa_location%2Clocations%2Copen_access%2Ccited_by_count%2Creferenced_works%2Creferenced_works_count%2Cabstract_inverted_index%2Cids）⇒ 这一次没有查成（不是「没有结果」）', 'delivered': False, 'refused': False}], cost={'provider_calls': 1, 'elapsed_s': 1.875}, report_path='', report_admitted=0, report_not_admitted=0, report_error='', pending_total=0, pending_by_delegation=[], claimed_delegations=[], claim_note='', pending_note='全表待裁 0 条：候选已逐条判完、逐委托提交清表。', clear_stage={'checked': True, 'enabled': True, 'in_task': True, 'in_task_why': '', 'delegations': 3, 'settled': ['r-000001', 'r-000002', 'r-000003'], 'cleared': [], 'pending': [], 'refused': [], 'why': '全表 3 个委托都已清表（每一行都有 cleared_at），这一拍没有要提交的', 'note': '全表 3 个委托都已清表（每一行都有 cleared_at），这一拍没有要提交的'}, unprocessed_reasons={'checked': True, 'enabled': True, 'unprocessed': 9, 'written': [], 'kept': [{'lit_id': '000016', 'title': 'Estimates on the decay of the Laplace-Polya integral', 'reason': 'B 已经把这一篇登记成 1 条 statements（概念/命题，source_lit_id=000016）与 1 条 relations（lit_id=000016），只是 `processed` 位仍为假：该位只由 B.run_once 的领取路径翻，B 用 table.create / own.register_statement 手工登记不会翻它。⇒ 这一条已经消化过（证据就是上面那两行条数），可以带着这一格收工。'}, {'lit_id': '000020', 'title': 'On the volume of hyperplane sections of a d-cube', 'reason': 'B 已经把这一篇登记成 3 条 statements（概念/命题，source_lit_id=000020）与 3 条 relations（lit_id=000020），只是 `processed` 位仍为假：该位只由 B.run_once 的领取路径翻，B 用 table.create / own.register_statement 手工登记不会翻它。⇒ 这一条已经消化过（证据就是上面那两行条数），可以带着这一格收工。'}, {'lit_id': '000021', 'title': 'Maximal perimeters of polytope sections and origin-symmetry', 'reason': 'B 已经把这一篇登记成 2 条 statements（概念/命题，source_lit_id=000021）与 1 条 relations（lit_id=000021），只是 `processed` 位仍为假：该位只由 B.run_once 的领取路径翻，B 用 table.create / own.register_statement 手工登记不会翻它。⇒ 这一条已经消化过（证据就是上面那两行条数），可以带着这一格收工。'}, {'lit_id': '000022', 'title': 'The cross-section body, plane sections of convex bodies and approximation of convex bodies', 'reason': 'B 已经把这一篇登记成 1 条 statements（概念/命题，source_lit_id=000022）与 1 条 relations（lit_id=000022），只是 `processed` 位仍为假：该位只由 B.run_once 的领取路径翻，B 用 table.create / own.register_statement 手工登记不会翻它。⇒ 这一条已经消化过（证据就是上面那两行条数），可以带着这一格收工。'}], 'undigested': [{'lit_id': '000017', 'title': 'Paraconsistent dominated convergence', 'why': 'statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化）'}, {'lit_id': '000018', 'title': 'Generalized integrals and convergence theorems', 'why': 'statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化）'}, {'lit_id': '000019', 'title': 'An introduction to measure theory', 'why': 'statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化）'}, {'lit_id': '000023', 'title': 'Measure, integration & real analysis', 'why': 'statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化）'}, {'lit_id': '000024', 'title': 'Measure theory and integration by and for the learner', 'why': 'statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化）'}], 'why': '已经有理由的 4 条保持原样：lit:000016、lit:000020、lit:000021、lit:000022；没有写理由的：lit:000017（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000018（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000019（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000023（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000024（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））。', 'note': '已经有理由的 4 条保持原样：lit:000016、lit:000020、lit:000021、lit:000022；没有写理由的：lit:000017（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000018（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000019（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000023（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000024（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））。'})",
+        "error": "",
+        "meta": {},
+        "warn": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.run_once 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 1,
+          "call_index": 0,
+          "calls": 1,
+          "step_index": 1,
+          "summary": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.run_once 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 1,
+            "calls": 1,
+            "items": 1,
+            "steps": [
+              1
+            ],
+            "executed": 1,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 55680,
+        "prompt_cache_miss_tokens": 1999,
+        "tokens_in": 57679,
+        "tokens_out": 510,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000202"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "search_requests",
+          "filter": {
+            "done": false
+          },
+          "limit": 20,
+          "fields": [
+            "request_id",
+            "topic",
+            "mode",
+            "done",
+            "outcome",
+            "result_lit_ids",
+            "attempts",
+            "last_error",
+            "submitted_by"
+          ]
+        },
+        "why": "看清还没收口的委托（含刚被 429 挡下的 r-000002 与队列里另外 2 条）各自的 topic 与错误，才好决定重试还是如实记为没查成"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "search_requests",
+          "rows": [
+            {
+              "request_id": "r-000002",
+              "topic": "local reference/ batch 2 (12 user-declared PDFs): cube sections, Brunn-Minkowski, measure theory background",
+              "mode": "topical",
+              "done": false,
+              "outcome": null,
+              "result_lit_ids": [],
+              "attempts": 1,
+              "last_error": "openalex: ProviderError: OpenAlex 每一路都失败（foundational: HTTP 429 for https://api.openalex.org/works?search=%22local+reference%2F+batch+2+%2812+user-declared+PDFs%29%3A+cube+sections%2C+Brunn-Minkowski%2C+measure+theory+background%22&per-page=15&page=1&sort=cited_by_count%3Adesc&select=id%2Cdoi%2Ctitle%2Cdisplay_name%2Ctype%2Ctype_crossref%2Cpublication_year%2Cpublication_date%2Clanguage%2Cauthorships%2Cprimary_location%2Cbest_oa_location%2Clocations%2Copen_access%2Ccited_by_count%2Creferenced_works%2Creferenced_works_count%2Cabstract_inverted_index%2Cids；frontier: HTTP 429 for https://api.openalex.org/works?search=%22local+reference%2F+batch+2+%2812+user-declared+PDFs%29%3A+cube+sections%2C+Brunn-Minkowski%2C+measure+theory+background%22&per-page=15&page=1&sort=publication_year%3Adesc&select=id%2Cdoi%2Ctitle%2Cdisplay_name%2Ctype%2Ctype_crossref%2Cpublication_year%2Cpublication_date%2Clanguage%2Cauthorships%2Cprimary_location%2Cbest_oa_location%2Clocations%2Copen_access%2Ccited_by_count%2Creferenced_works%2Creferenced_works_count%2Cabstract_inverted_index%2Cids）⇒ 这一次没有查成（不是「没有结果」）",
+              "submitted_by": "agent-A"
+            },
+            {
+              "request_id": "r-000003",
+              "topic": "local reference/ batch 3 (overflow 5): d-cube hyperplane section volume, polytope section perimeters, cross-section body, measure-theory background",
+              "mode": "topical",
+              "done": false,
+              "outcome": "ok",
+              "result_lit_ids": [
+                "000020",
+                "000021",
+                "000022",
+                "000023",
+                "000024"
+              ],
+              "attempts": 0,
+              "last_error": null,
+              "submitted_by": "agent-A"
+            }
+          ],
+          "total": 2,
+          "returned": 2,
+          "limit": 20,
+          "offset": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "search_requests",
+          "total": 2,
+          "returned": 2,
+          "offset": 0,
+          "limit": 20,
+          "fields": [
+            "request_id",
+            "topic",
+            "mode",
+            "done",
+            "outcome",
+            "result_lit_ids",
+            "attempts",
+            "last_error",
+            "submitted_by"
+          ]
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 56704,
+        "prompt_cache_miss_tokens": 3840,
+        "tokens_in": 60544,
+        "tokens_out": 7550,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000202"
+    },
+    {
+      "index": 3,
+      "shape": "summon",
+      "payload": {
+        "role": "B",
+        "action": "",
+        "params": {
+          "lit_ids": [
+            "000017",
+            "000018",
+            "000019",
+            "000023",
+            "000024"
+          ],
+          "note": "这五篇的 processed 位仍为假且 statements/relations 都没挂上去；lit:000016/000020/000021/000022 已由前一趟 B 消化过，不必重做"
+        },
+        "why": "run_once 的 unprocessed_reasons 点名这 5 篇「没有任何消化痕迹」；文献入库后派 B 收编是我的收尾项，不能带着未收编的文献交差",
+        "brief": "收编 lit:000017/18/19/23/24 五篇背景文献",
+        "name": "B-digest2",
+        "task": "收编（第二阶段）这批已入库但尚无消化痕迹的文献：literature 行 lit:000017《Paraconsistent dominated convergence》、lit:000018《Generalized integrals and convergence theorems》、lit:000019《An introduction to measure theory》、lit:000023《Measure, integration & real analysis》、lit:000024《Measure theory and integration by and for the learner》。请用你自己的 run_once 领取路径逐篇读全文，落概念/命题行与关系行（关系必须带逐字 quote 与 page_range，quote_verified 不许空），并在回执里逐篇点名：哪几篇消化了（statements 条数 / relations 条数）、哪几篇没消化及卡在哪（例如没有可读全文）。这五篇是 measure theory / 广义积分 背景文献，与立方体超平面截面体积（Brunn-Minkowski、截面体积界）这一方向相关，收编时请把「迁移什么、不迁移什么」写清楚，不要把背景工具当成结论。"
+      },
+      "result": {
+        "summoned": "B",
+        "action": "",
+        "ok": true,
+        "task_id": "t-000204",
+        "status": "running",
+        "outcome": null,
+        "refusal_reason": null,
+        "preemptible": true,
+        "dispatched": [
+          "t-000204"
+        ],
+        "running": [
+          "t-000204"
+        ],
+        "detail": "还在跑：本步先不等（可抢占）。它回来之后结论会在你下一次被问之前以【子代理返场】投给你 —— 不要因为 status=running 就重派；收工会被拒到它回齐",
+        "roster_considered": true,
+        "roster_name": "B-digest2",
+        "秘书": {
+          "alarms": [
+            "'B-digest2' 不是注册表里的真名"
+          ],
+          "fail_open": false,
+          "problem": "'B-digest2' 不是注册表里的真名",
+          "wash": {
+            "checked": true,
+            "washed": false,
+            "refused": "",
+            "reason": ""
+          },
+          "changes": [],
+          "surface_fit": {
+            "checked": false,
+            "fits": null,
+            "paths": [],
+            "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+            "shape": "summon",
+            "reach": {
+              "checked": true,
+              "verdict": "unknown",
+              "hops": [],
+              "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+            }
+          },
+          "reach_fit": {
+            "checked": true,
+            "verdict": "unknown",
+            "hops": [],
+            "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+          },
+          "assessment": {
+            "decision": "可派",
+            "reason": "这一条没点名具体动作（role 级派活）⇒ 不拿动作表去卡它；角色存在性由预筛管",
+            "basis": [
+              "specs/<role>.py 的动作表",
+              "tasks: 同 key 的既有终态行",
+              "没点名动作 ⇒ 动作表那一格不适用"
+            ],
+            "duplicates": [],
+            "alarms": [],
+            "novel": false,
+            "surface": {
+              "checked": false,
+              "fits": null,
+              "paths": [],
+              "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+              "shape": "summon",
+              "reach": {
+                "checked": true,
+                "verdict": "unknown",
+                "hops": [],
+                "reason": "角色 '' 不在能力表里（['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'L', 'M', 'V']）⇒ 判不了"
+              }
+            },
+            "judge": {
+              "checked": false,
+              "reason": "预筛没有报警、也没有重复候选 ⇒ 不必判断"
+            },
+            "engaged": false,
+            "seq": 3
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 59520,
+        "prompt_cache_miss_tokens": 2489,
+        "tokens_in": 62009,
+        "tokens_out": 1282,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000202"
+    },
+    {
+      "index": 4,
+      "shape": "tool",
+      "payload": {
+        "name": "search.providers",
+        "args": {},
+        "why": "r-000002 上一拍被 OpenAlex HTTP 429 挡下（attempts=1、outcome=null）；先真实探测各源现在可用不可用，再决定是重试一次还是如实记为「没查成」"
+      },
+      "result": {
+        "tool": "search.providers",
+        "ok": true,
+        "data": {
+          "skip_network": false,
+          "providers": [
+            {
+              "name": "openalex",
+              "note": "主力源：标题/年份/DOI/类型/摘要/OA 的 PDF 链接，支持被引降序（找奠基性文献）",
+              "requires_network": true,
+              "available": false,
+              "status": "probed_fail",
+              "reason": "HttpError: HTTP 429 for https://api.openalex.org/works?search=abelian+group&per-page=1&select=id",
+              "latency_s": 0.485,
+              "evidence": "GET /works?search=…&per-page=1"
+            },
+            {
+              "name": "crossref",
+              "note": "补充源：页码、container-title、publisher 等元数据补齐；摘要覆盖不如 OpenAlex",
+              "requires_network": true,
+              "available": true,
+              "status": "probed_ok",
+              "reason": "真实请求成功并返回可解析 JSON（GET /works?query.bibliographic=…&rows=1）",
+              "latency_s": 1.328,
+              "evidence": "GET /works?query.bibliographic=…&rows=1"
+            },
+            {
+              "name": "doaj",
+              "note": "开放获取期刊文章（类型固定 J）；只覆盖 OA 期刊，范围窄",
+              "requires_network": true,
+              "available": true,
+              "status": "probed_ok",
+              "reason": "真实请求成功并返回可解析 JSON（GET /api/search/articles/bibjson.title:…）",
+              "latency_s": 0.812,
+              "evidence": "GET /api/search/articles/bibjson.title:…"
+            },
+            {
+              "name": "europepmc",
+              "note": "生命科学领域覆盖好，其它领域仅作补充",
+              "requires_network": true,
+              "available": false,
+              "status": "probed_fail",
+              "reason": "HttpError: network error for https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=abelian+group&format=json&pageSize=1: timed out",
+              "latency_s": 8.047,
+              "evidence": "GET /search?query=…&pageSize=1"
+            },
+            {
+              "name": "fixture",
+              "note": "离线 fixture（读调用方给的候选清单，缺省 `<工作区>/fixtures/candidates.json`）：不联网、确定性，供离线跑通与测试",
+              "requires_network": false,
+              "available": false,
+              "status": "probed_fail",
+              "reason": "离线 fixture 文件不存在（依次找过 ['D:\\\\Incubator\\\\projects\\\\lp-ball-22\\\\fixtures\\\\candidates.json']）；它是纯本地源，不联网，无法退化为网络检索",
+              "latency_s": null,
+              "evidence": "D:\\Incubator\\projects\\lp-ball-22\\fixtures\\candidates.json"
+            }
+          ],
+          "available": [
+            "crossref",
+            "doaj"
+          ],
+          "unavailable": [
+            "openalex",
+            "europepmc",
+            "fixture"
+          ],
+          "unverified": [],
+          "summary": "2 个已探测可用、3 个已探测不可用、0 个未探测。",
+          "default_provider": "openalex"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 60928,
+        "prompt_cache_miss_tokens": 2629,
+        "tokens_in": 63557,
+        "tokens_out": 311,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000202"
+    },
+    {
+      "index": 7,
+      "shape": "tool",
+      "payload": {
+        "name": "table.schema",
+        "args": {
+          "table": "search_requests"
+        },
+        "why": "r-000002 被 OpenAlex 429 挡下（outcome=null 仍未终局），而刚探测到 crossref/doaj 可用；先确认 providers 与 outcome 两格的受控取值，再决定给它换源重试一次还是如实记成没查成"
+      },
+      "result": {
+        "tool": "table.schema",
+        "ok": true,
+        "data": {
+          "tables": {
+            "search_requests": {
+              "file": "search_requests.json",
+              "primary_key": "request_id",
+              "id_kind": "request",
+              "uses_id_counter": false,
+              "fields": [
+                {
+                  "name": "request_id",
+                  "type": "str",
+                  "required": true,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "timestamp",
+                  "type": "str",
+                  "required": true,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "topic",
+                  "type": "str",
+                  "required": true,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "mode",
+                  "type": "str(literal)",
+                  "required": true,
+                  "default": null,
+                  "literal_values": [
+                    "broad",
+                    "topical",
+                    "precise"
+                  ],
+                  "vocabulary": "SEARCH_MODES",
+                  "enum": [
+                    "broad",
+                    "topical",
+                    "precise"
+                  ]
+                },
+                {
+                  "name": "content_description",
+                  "type": "str",
+                  "required": false,
+                  "default": "",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "done",
+                  "type": "bool",
+                  "required": false,
+                  "default": false,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "submitted_by",
+                  "type": "str",
+                  "required": false,
+                  "default": "unknown",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "claimed_by",
+                  "type": "str | null",
+                  "required": false,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "lease_until",
+                  "type": "str | null",
+                  "required": false,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "attempts",
+                  "type": "int",
+                  "required": false,
+                  "default": 0,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "result_lit_ids",
+                  "type": "list[str]",
+                  "required": false,
+                  "default": [],
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "last_error",
+                  "type": "str | null",
+                  "required": false,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "outcome",
+                  "type": "str | null",
+                  "required": false,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": "SEARCH_OUTCOMES",
+                  "enum": [
+                    "ok",
+                    "no_results",
+                    "search_failed",
+                    "gave_up"
+                  ]
+                },
+                {
+                  "name": "priority",
+                  "type": "str",
+                  "required": false,
+                  "default": "medium",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "for_question_id",
+                  "type": "str | null",
+                  "required": false,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "submit_note",
+                  "type": "str",
+                  "required": false,
+                  "default": "",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "providers",
+                  "type": "list[str]",
+                  "required": false,
+                  "default": [],
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "submitted_instance",
+                  "type": "str",
+                  "required": false,
+                  "default": "",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                }
+              ],
+              "required": [
+                "request_id",
+                "timestamp",
+                "topic",
+                "mode"
+              ],
+              "vocabularies": {
+                "mode": {
+                  "vocabulary": "SEARCH_MODES",
+                  "values": [
+                    "broad",
+                    "topical",
+                    "precise"
+                  ]
+                },
+                "outcome": {
+                  "vocabulary": "SEARCH_OUTCOMES",
+                  "values": [
+                    "ok",
+                    "no_results",
+                    "search_failed",
+                    "gave_up"
+                  ]
+                }
+              }
+            }
+          },
+          "vocabularies": {
+            "SEARCH_MODES": [
+              "broad",
+              "topical",
+              "precise"
+            ],
+            "PRIORITIES": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "LIT_TYPES": [
+              "J",
+              "M",
+              "C",
+              "D",
+              "R",
+              "S",
+              "P",
+              "N",
+              "EB",
+              "Z"
+            ],
+            "RELATION_STATUS": [
+              "active",
+              "suspect",
+              "rejected"
+            ],
+            "SEARCH_OUTCOMES": [
+              "ok",
+              "no_results",
+              "search_failed",
+              "gave_up"
+            ],
+            "DOWNLOAD_STATUSES": [
+              "ok",
+              "content_mismatch",
+              "failed",
+              "skipped"
+            ],
+            "CANDIDATE_STATUSES": [
+              "pending",
+              "withdrawn",
+              "rejected",
+              "qualified",
+              "admitted",
+              "cleared"
+            ],
+            "CANDIDATE_REASON_CODES": [
+              "withdrawn_by_reviewer",
+              "rejected_off_topic",
+              "rejected_low_quality",
+              "duplicate_doi",
+              "overlap_without_new_content",
+              "overlap_ok_false",
+              "registration_failed",
+              "over_cap",
+              "not_screened"
+            ],
+            "LIT_MATCH_STATUSES": [
+              "exact",
+              "partial",
+              "mismatch"
+            ],
+            "QUOTE_MODES": [
+              "verbatim",
+              "semantic"
+            ],
+            "REPORT_KINDS": [
+              "hottest",
+              "paths",
+              "cold",
+              "gaps",
+              "proof_chain"
+            ],
+            "QUESTION_STATUSES": [
+              "open",
+              "needs_evidence",
+              "researching",
+              "answered",
+              "dropped"
+            ],
+            "CONTRADICTION_VERDICTS": [
+              "resolved",
+              "unresolved",
+              "new_contradiction",
+              "persistent"
+            ],
+            "QUESTION_KINDS": [
+              "gap",
+              "contradiction"
+            ],
+            "CONJECTURE_STATUSES": [
+              "proposed",
+              "needs_evidence",
+              "testing",
+              "supported_not_proved",
+              "refuted",
+              "proved",
+              "promoted",
+              "known_in_literature",
+              "withdrawn"
+            ],
+            "CONJECTURE_FORMS": [
+              "universal",
+              "existential",
+              "identity",
+              "bound",
+              "structural"
+            ],
+            "CONJECTURE_QUESTION_MARKS": [
+              "?",
+              "？",
+              "是否",
+              "吗"
+            ],
+            "CONJECTURE_QUESTION_PATTERNS": [
+              "^\\s*(谁|什么|哪些|哪类|如何|怎么|为什么)",
+              "(?i)^\\s*(which|what|whether|who|whom|whose|when|where|why|how)\\b",
+              "(?i)^\\s*(is|are|does|do|can|could|should|would|will|has|have)\\b"
+            ],
+            "REPROCESS_REASONS": [
+              "quote_unverifiable",
+              "low_information",
+              "need_context",
+              "structural_duplicate"
+            ],
+            "REPROCESS_STATUSES": [
+              "pending",
+              "done",
+              "rejected"
+            ],
+            "EXPERIMENT_METHODS": [
+              "numeric",
+              "symbolic",
+              "exhaustive_search",
+              "formal"
+            ],
+            "EVIDENCE_KINDS": [
+              "proof",
+              "proof_review",
+              "cross_check",
+              "heuristic"
+            ],
+            "EXPERIMENT_EVIDENCE_KINDS": [
+              "proof",
+              "cross_check",
+              "heuristic"
+            ],
+            "EXPERIMENT_RESULTS": [
+              "supports",
+              "refutes",
+              "inconclusive"
+            ],
+            "EXPERIMENT_STATUSES": [
+              "active",
+              "voided"
+            ],
+            "VOID_REASON_CODES": [
+              "code_changed"
+            ],
+            "NEGATION_KINDS": [
+              "disproved",
+              "not_proved",
+              "not_searched_here",
+              "no_local_evidence"
+            ],
+            "ATTACK_STATUSES": [
+              "open",
+              "attacking",
+              "supported_not_proved",
+              "stalled",
+              "resolved",
+              "abandoned"
+            ],
+            "ATTACK_TERMINAL_STATUSES": [
+              "resolved",
+              "abandoned",
+              "stalled",
+              "supported_not_proved"
+            ],
+            "SUBGOAL_STATUSES": [
+              "todo",
+              "in_progress",
+              "supported_not_proved",
+              "closed",
+              "blocked",
+              "dropped"
+            ],
+            "SUBGOAL_OWNERS": [
+              "F",
+              "A",
+              "B",
+              "C",
+              "D",
+              "E",
+              "G"
+            ],
+            "DOC_KINDS": [
+              "survey",
+              "paper",
+              "note",
+              "research"
+            ],
+            "DOC_STATUSES": [
+              "draft",
+              "in_review",
+              "revised",
+              "accepted",
+              "rejected",
+              "unresolved_review"
+            ],
+            "REVIEW_VERDICTS": [
+              "",
+              "成立",
+              "有毛病"
+            ],
+            "REVIEW_LEGACY_VERDICTS": [
+              "看不出来"
+            ],
+            "DEP_KINDS": [
+              "theorem",
+              "definition",
+              "lemma",
+              "proposition",
+              "experiment",
+              "prior_art"
+            ],
+            "DEP_STATUSES": [
+              "closed",
+              "dangling",
+              "external_unavailable",
+              "refuted",
+              "disputed"
+            ],
+            "STATEMENT_ORIGINS": [
+              "external_lit",
+              "own_result"
+            ],
+            "STATEMENT_STATUSES": [
+              "active",
+              "disputed",
+              "refuted",
+              "superseded",
+              "pending_definition",
+              "abandoned"
+            ],
+            "STATEMENT_UNUSABLE_STATUSES": [
+              "disputed",
+              "refuted",
+              "superseded",
+              "pending_definition",
+              "abandoned"
+            ],
+            "STATEMENT_PROPOSITION_KINDS": [
+              "theorem",
+              "lemma",
+              "proposition",
+              "corollary",
+              "conjecture",
+              "example"
+            ],
+            "STATEMENT_NON_PROPOSITION_KINDS": [
+              "concept",
+              "definition"
+            ],
+            "STATEMENT_KINDS": [
+              "theorem",
+              "lemma",
+              "proposition",
+              "corollary",
+              "conjecture",
+              "example",
+              "concept",
+              "definition"
+            ],
+            "CLAIM_KINDS": [
+              "定义",
+              "定理",
+              "命题",
+              "引理",
+              "推论",
+              "例",
+              "注",
+              "反例"
+            ],
+            "CLAIM_STATUSES": [
+              "证",
+              "验",
+              "待精化",
+              "作废"
+            ],
+            "ALLOWED_USE_KINDS": [
+              "主结果",
+              "Remark only",
+              "移入 open"
+            ],
+            "NUMERIC_EVIDENCE_KEYS": [
+              "script",
+              "range",
+              "n_cases",
+              "n_counterexamples"
+            ],
+            "CLAIM_SOURCE_KINDS": [
+              "文献"
+            ],
+            "CLAIM_CHECK_KINDS": [
+              "证明",
+              "数值",
+              "只读了陈述"
+            ],
+            "FINDING_KINDS": [
+              "unsupported_claim",
+              "dangling_dep",
+              "overclaim",
+              "missing_negation_kind",
+              "scope_drift",
+              "garbled",
+              "inconsistent_number"
+            ],
+            "FINDING_LEVELS": [
+              "error",
+              "warning",
+              "info"
+            ],
+            "FINDING_STATUSES": [
+              "open",
+              "fixed",
+              "wontfix",
+              "disputed",
+              "superseded"
+            ],
+            "FINDING_MATHS_VALUES": [
+              "yes",
+              "no"
+            ],
+            "ROLES": [
+              "A",
+              "B",
+              "C",
+              "D",
+              "E",
+              "F",
+              "G",
+              "H",
+              "V",
+              "L"
+            ],
+            "ITEM_KINDS": [
+              "delegation",
+              "message",
+              "report",
+              "notice"
+            ],
+            "ITEM_EXPECTS": [
+              "ack",
+              "work"
+            ],
+            "ITEM_STATES": [
+              "queued",
+              "claimed",
+              "seen",
+              "done",
+              "block"
+            ],
+            "ITEM_CLOSES": [
+              "acked",
+              "completed",
+              "expired"
+            ],
+            "TASK_STATUSES": [
+              "pending",
+              "running",
+              "done",
+              "cancelled",
+              "failed",
+              "block"
+            ],
+            "TASK_OUTCOMES": [
+              "ok",
+              "no_result",
+              "not_applicable",
+              "refused",
+              "failed",
+              "cancelled",
+              "cut_off_by_parent"
+            ],
+            "CHILD_ENDINGS": [
+              "delivered",
+              "cut_off_by_parent",
+              "stopped"
+            ],
+            "FRAMEWORK_ONLY_OUTCOMES": [
+              "cut_off_by_parent"
+            ],
+            "REFUSAL_REASONS": [
+              "unknown_role",
+              "unknown_action",
+              "forbidden_edge",
+              "invalid_params",
+              "depth_exceeded",
+              "fanout_exceeded",
+              "concurrency_exceeded",
+              "budget_exceeded",
+              "deadline_exceeded",
+              "cycle_detected",
+              "not_wired"
+            ],
+            "USAGE_SCOPES": [
+              "summon",
+              "experiment",
+              "search",
+              "extract",
+              "review",
+              "reason"
+            ],
+            "EVAL_REQUIRED_FIELDS": [
+              "benchmark",
+              "benchmark_version",
+              "split",
+              "k",
+              "decontamination",
+              "date",
+              "source"
+            ]
+          }
+        },
+        "error": "",
+        "meta": {
+          "table_count": 1,
+          "vocabulary_count": 65
+        },
+        "可退役": [
+          {
+            "task_id": "t-000204",
+            "role": "B",
+            "branch": "waiting_no_children",
+            "reading": {
+              "items_open": 0,
+              "items_open_ids": [],
+              "items_open_expects": {},
+              "items_open_states": {}
+            }
+          }
+        ],
+        "新消息": [
+          {
+            "板": "- （新）[t-000206] notice·要一个回执 来自 clock：时间到：收编（第二阶段）这批已入库但尚无消化痕迹的文献：literature 行 lit:000017《Paraconsistent dominated convergence》、lit:000018《Generalized integrals and convergence theorems》、lit:000019《An introduction to measure theory》、lit:00002｜等了 14 分钟 25 秒（起于 22:13:39，到于 22:28:04）。它交的是：ok：执行完成"
+          }
+        ],
+        "秘书加工": {
+          "reworked": [
+            {
+              "item": {
+                "板": "- （新）[t-000206] notice·要一个回执 来自 clock：时间到：收编（第二阶段）这批已入库但尚无消化痕迹的文献：literature 行 lit:000017《Paraconsistent dominated convergence》、lit:000018《Generalized integrals and convergence theorems》、lit:000019《An introduction to measure theory》、lit:00002｜等了 14 分钟 25 秒（起于 22:13:39，到于 22:28:04）。它交的是：ok：执行完成"
+              },
+              "addendum": "我的产出物口径：交付状态 —— 交给谁：派你这趟活的那一方（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名，它是主控就写 M）与收方 B；形态：`search_requests` 行 + `literature` 行；可核字段：`search_requests.outcome` / `search_requests.result_lit_ids` / `search_requests.done` / `literature.lit_id`；算做完：本条请求的 `outcome` 已终局（不是 pending）、`result_lit_ids` 里每个号都 能在 `literature` 里读到，且这批已派 B 收编、B 回执给出概念行与关系行的条数。\n我在本条线上的位置：文献检索：把搜索请求变成已登记的文献行，并如实报告每一次失败",
+              "problem": "",
+              "fail_open": false
+            }
+          ],
+          "handoffs_digest": "- 000026 D→M：D 收口：RESEARCH.md 七节齐（6 条目录行四格可核）、三段结构与两临界点写成显式表述、两份改主意留痕、缺口与未签 9 条处置已写清\n- 000027 V→B：V 审 manuscripts/B/b-proof-000003.md：判「有毛病」（defect_step=1）—— 命题身份挂错号（稿内命题是 stmt:000042 的字面）+ 三处残留序数；数学内容未查出错误\n- 000028 B→A：11 篇回执：lit:000014 收 30 条概念+25 条关系；其余 10 篇 0/0（概念配额 30 条/趟累计封顶，非缺正文）；二阶段 stmt:000030 #p2 仍未洗，落稿被 stale_target 挡住\n- 000029 B→A：5 篇截面主线文献首轮手工收编完成：8 条概念 + 7 条关系（quote_verified 全 true）；机械抽取器 30 条配额跨趟累计不重置，是这一批只能手工做的原因\n- 000030 B→A：五篇 measure-theory/广义积分文献：已读 2 篇、落行 0 条（概念配额被 lit:000016 一次用满），逐篇卡点与迁移口径见正文"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 62464,
+        "prompt_cache_miss_tokens": 2683,
+        "tokens_in": 65147,
+        "tokens_out": 2277,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000202"
+    },
+    {
+      "index": 9,
+      "shape": "note",
+      "payload": {
+        "text": "本趟（t-000202）判断留痕：① run_once 领到 r-000002，OpenAlex HTTP 429（rate_limited），registered=0、outcome 仍为 null；本拍 search.providers 实测 openalex 仍 429、europepmc 超时、fixture 缺文件，只有 crossref / doaj 可用。② 我**没有**再发一次检索，理由两条：r-000002 的 topic 是本地批次描述符（\"local reference/ batch 2 (12 user-declared PDFs): …\"）而不是可检的规范术语，原样重发只会再撞 429 或换回一堆跑题候选；更关键的是 B 的概念配额按会话累计已满（limit 30 / written 30），此刻再往 literature 里搬新文献只会增加未收编欠账，正是「只检索不收编」。③ 丢掉的那条线（未重试 r-000002 / 未换源）留给复核人的线索就是这两条读数：openalex probed_fail(429) 与 t-000204 的 concepts_created=0。"
+      },
+      "result": {
+        "note_written": "D:\\Incubator\\projects\\lp-ball-22\\notes\\A.md",
+        "ok": true
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 64128,
+        "prompt_cache_miss_tokens": 4176,
+        "tokens_in": 68304,
+        "tokens_out": 5047,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000202"
+    },
+    {
+      "index": 10,
+      "shape": "final",
+      "payload": {
+        "final": "A.run_once 收工（台账号 t-000202，第 11 步）。\n\n一、本趟执行的动作\n1) own.run_once（无参数）领取 r-000002，结果：processed=1，但 **OpenAlex 两路（foundational / frontier）都 HTTP 429 rate_limited** ⇒ registered=0、downloaded=0、outcome 仍为 null。这是「没查成」，不是「没有这篇文献」，也不是「这个方向没文献」。\n2) search.providers 实测：openalex probed_fail(429)、europepmc 超时、fixture 缺文件；只有 crossref / doaj 可用。\n3) 判收/清表读数：pending_total=0，pending_by_delegation=[]；全表 3 个委托（r-000001/r-000002/r-000003）每一行都有 cleared_at，clear_stage.pending=[] ⇒ 待裁表已清，这一趟按收尾三步走完了（②③无事可做是读数，不是我跳过了）。\n4) 派 B（名册名 B-digest2，台账号 t-000204）收编 5 篇已入库但无消化痕迹的文献：lit:000017 / 000018 / 000019 / 000023 / 000024。\n\n二、B 的回执（t-000204，done/ok，手稿 000030）\n五篇逐篇结论：**消化 0 篇 / 5 篇，落 statements 0 条、relations 0 条**。卡点不是缺正文（lit:000017 已读 12 页全文、37 条引文回验通过），而是**框架侧概念配额按会话累计已满（limit 30 / written 30，被 lit:000016 一次用满）**⇒ 159 个概念候选全部受控拒绝、37 条关系 deferred。lit:000016 / 000020 / 000021 / 000022 四篇前一趟已消化（各有 statements 与 relations 行），已核实。\n\n三、我没有做的两件事及理由（留痕在 notes/A.md 与 steps 读数）\n- **没有原样重试 r-000002、也没有换源重发**：r-000002 的 topic 是本地批次描述符（\"local reference/ batch 2 (12 user-declared PDFs): …\"）而非可检的规范术语，原样重发只会再撞 429 或换回跑题候选；且 B 的概念配额已满，此刻再往 literature 搬新文献只会增加未收编欠账。\n- **没有对 B 原样再派一遍**：t-000204 是 done/ok 且结论明确（配额满，非读不到），原样重派只会换回同一读数。\n\n四、交付状态（按本岗可核字段如实报）\n- r-000003：outcome=ok 已终局；result_lit_ids = 000020–000024，五个号在 literature 表逐条可读 ✓\n- r-000002：**outcome=null，未终局**（done=false，attempts=1，last_error 已由 run_once 写入 OpenAlex 429 原话）。`done` 旗不是我能写的字段，不擅自改，如实交回。\n- 本批「已派 B 收编、B 回执给出概念行与关系行条数」这一项：B 已回，条数是 **0 / 0**，原因是框架侧概念配额按会话累计封顶（非正文缺失、非检索失败）。这 5 篇留在 literature 里是「已入库未收编」的欠账，下一趟配额重置后应优先补收编。\n\n五、给主控的判断依据（缺什么、下一步换什么）\n- 若仍需推进 r-000002：正确做法不是原样重发，而是先把 topic 换成规范术语（如 `cube slicing` / `hyperplane sections of the cube` / `Brunn-Minkowski`），并把该行 providers 改成 crossref / doaj 再领跑；这需要改请求行字段，是否改由主控定。\n- 概念配额是会话级累计限制，超出我这一岗能解决的范围：五篇 measure-theory / 广义积分背景文献的收编需要一次配额重置后的 B 窗口，请主控安排。",
+        "evidence": [
+          "r-000002",
+          "r-000003",
+          "lit:000016",
+          "lit:000017",
+          "lit:000018",
+          "lit:000019",
+          "lit:000020",
+          "lit:000021",
+          "lit:000022",
+          "lit:000023",
+          "lit:000024",
+          "t-000204",
+          "handoff:000030"
+        ],
+        "notify": {
+          "to": "M",
+          "summary": "A 本趟 run_once：r-000002 被 OpenAlex 429 挡下（outcome 未终局，如实报）；待裁表 0 条、3 个委托全清；B 收编 5 篇回 0/0，卡在会话级概念配额封顶",
+          "body": "## 做了什么\n\n**1. own.run_once（无参数）** 领取 **r-000002**：processed=1，但 OpenAlex 两路（foundational / frontier）都 **HTTP 429 rate_limited** ⇒ registered=0 / downloaded=0 / **outcome 仍为 null**。这是「没查成」，不是「没有这篇文献」。\n\n**2. search.providers 实测**：openalex probed_fail(429)、europepmc 超时、fixture 缺文件；仅 crossref / doaj 可用。\n\n**3. 清表读数**：`pending_total=0`、`pending_by_delegation=[]`；全表 3 个委托（r-000001 / r-000002 / r-000003）每行都有 `cleared_at`，`clear_stage.pending=[]` ⇒ 待裁表已清。\n\n**4. 派 B 收编**（名册名 B-digest2 / t-000204）lit:000017、000018、000019、000023、000024。\n\n## B 的回执（t-000204，done/ok，手稿 000030）\n\n五篇**消化 0 / 5，落 statements 0 条、relations 0 条**。卡点不是缺正文（lit:000017 已读 12 页、37 条引文回验通过），而是**框架侧概念配额按会话累计已满（limit 30 / written 30，被 lit:000016 一次用满）**。lit:000016 / 000020 / 000021 / 000022 前一趟已消化（有 statements 与 relations 行），已核实。\n\n## 交付状态（可核字段）\n\n- **r-000003**：outcome=ok 已终局；result_lit_ids = 000020–000024，五个号在 literature 表逐条可读 ✓\n- **r-000002**：**outcome=null，未终局**（done=false、attempts=1，last_error 已写入 429 原话）。`done` 旗不是我可写字段，不擅自改。\n- **B 收编条数**：已回，0 / 0（原因如上，非检索失败、非正文缺失）。\n\n## 我没做的两件事与理由\n\n- 未原样重试 / 换源重发 r-000002：其 topic 是本地批次描述符而非规范术语，重发只会再撞 429 或换回跑题候选；且配额已满，再搬新文献只增「只检索不收编」的欠账。\n- 未对 B 原样再派：t-000204 done/ok 且结论明确（配额满），重派只会换回同一读数。\n\n## 要主控定的事\n\n1. **r-000002 怎么收口**：若要推进，正确做法是先把 topic 换成规范术语（`cube slicing` / `hyperplane sections of the cube` / `Brunn-Minkowski`），并把该行 providers 改为 crossref / doaj 再领跑 —— 改请求行字段是否放行，请定。\n2. **概念配额**（会话级累计，已 30/30）超出我这一岗能解决的范围：lit:000017 / 000018 / 000019 / 000023 / 000024 的收编需一次配额重置后的 B 窗口，请安排。",
+          "refs": [
+            "r-000002",
+            "r-000003",
+            "lit:000017",
+            "lit:000018",
+            "lit:000019",
+            "lit:000023",
+            "lit:000024",
+            "lit:000016",
+            "lit:000020",
+            "lit:000021",
+            "lit:000022",
+            "000030"
+          ]
+        }
+      },
+      "result": {
+        "notify_problem": "notify.refs 里的 'r-000002' 立不住：引用的前序手稿 'r-000002' 不在盘上 ⇒ 不许凭空引用（溯源链断了）"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 67328,
+        "prompt_cache_miss_tokens": 2138,
+        "tokens_in": 69466,
+        "tokens_out": 2669,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000202"
+    }
+  ],
+  "final": "A.run_once 收工（台账号 t-000202，第 11 步）。\n\n一、本趟执行的动作\n1) own.run_once（无参数）领取 r-000002，结果：processed=1，但 **OpenAlex 两路（foundational / frontier）都 HTTP 429 rate_limited** ⇒ registered=0、downloaded=0、outcome 仍为 null。这是「没查成」，不是「没有这篇文献」，也不是「这个方向没文献」。\n2) search.providers 实测：openalex probed_fail(429)、europepmc 超时、fixture 缺文件；只有 crossref / doaj 可用。\n3) 判收/清表读数：pending_total=0，pending_by_delegation=[]；全表 3 个委托（r-000001/r-000002/r-000003）每一行都有 cleared_at，clear_stage.pending=[] ⇒ 待裁表已清，这一趟按收尾三步走完了（②③无事可做是读数，不是我跳过了）。\n4) 派 B（名册名 B-digest2，台账号 t-000204）收编 5 篇已入库但无消化痕迹的文献：lit:000017 / 000018 / 000019 / 000023 / 000024。\n\n二、B 的回执（t-000204，done/ok，手稿 000030）\n五篇逐篇结论：**消化 0 篇 / 5 篇，落 statements 0 条、relations 0 条**。卡点不是缺正文（lit:000017 已读 12 页全文、37 条引文回验通过），而是**框架侧概念配额按会话累计已满（limit 30 / written 30，被 lit:000016 一次用满）**⇒ 159 个概念候选全部受控拒绝、37 条关系 deferred。lit:000016 / 000020 / 000021 / 000022 四篇前一趟已消化（各有 statements 与 relations 行），已核实。\n\n三、我没有做的两件事及理由（留痕在 notes/A.md 与 steps 读数）\n- **没有原样重试 r-000002、也没有换源重发**：r-000002 的 topic 是本地批次描述符（\"local reference/ batch 2 (12 user-declared PDFs): …\"）而非可检的规范术语，原样重发只会再撞 429 或换回跑题候选；且 B 的概念配额已满，此刻再往 literature 搬新文献只会增加未收编欠账。\n- **没有对 B 原样再派一遍**：t-000204 是 done/ok 且结论明确（配额满，非读不到），原样重派只会换回同一读数。\n\n四、交付状态（按本岗可核字段如实报）\n- r-000003：outcome=ok 已终局；result_lit_ids = 000020–000024，五个号在 literature 表逐条可读 ✓\n- r-000002：**outcome=null，未终局**（done=false，attempts=1，last_error 已由 run_once 写入 OpenAlex 429 原话）。`done` 旗不是我能写的字段，不擅自改，如实交回。\n- 本批「已派 B 收编、B 回执给出概念行与关系行条数」这一项：B 已回，条数是 **0 / 0**，原因是框架侧概念配额按会话累计封顶（非正文缺失、非检索失败）。这 5 篇留在 literature 里是「已入库未收编」的欠账，下一趟配额重置后应优先补收编。\n\n五、给主控的判断依据（缺什么、下一步换什么）\n- 若仍需推进 r-000002：正确做法不是原样重发，而是先把 topic 换成规范术语（如 `cube slicing` / `hyperplane sections of the cube` / `Brunn-Minkowski`），并把该行 providers 改成 crossref / doaj 再领跑；这需要改请求行字段，是否改由主控定。\n- 概念配额是会话级累计限制，超出我这一岗能解决的范围：五篇 measure-theory / 广义积分背景文献的收编需要一次配额重置后的 B 窗口，请主控安排。",
+  "evidence": [
+    "r-000002",
+    "r-000003",
+    "lit:000016",
+    "lit:000017",
+    "lit:000018",
+    "lit:000019",
+    "lit:000020",
+    "lit:000021",
+    "lit:000022",
+    "lit:000023",
+    "lit:000024",
+    "t-000204",
+    "handoff:000030"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 1,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 8,
+  "compactions": 0,
+  "mailbox_items": [
+    "t-000205",
+    "t-000206"
+  ],
+  "mailbox_msgs": [],
+  "mailbox_delivered": 2,
+  "monitor_turns": 1,
+  "wakes": 1,
+  "wake_ids": [
+    "wk-000061"
+  ],
+  "wake_events": [
+    {
+      "wake_id": "wk-000061",
+      "task_id": "t-000202",
+      "role": "A",
+      "timer_id": "tm-000182",
+      "kind": "timer",
+      "reason": "收编（第二阶段）这批已入库但尚无消化痕迹的文献：literature 行 lit:000017《Paraconsistent dominated convergence》、lit:000018《Generalized integrals and convergence theorems》、lit:000019《An introduction to measure theory》、lit:00002",
+      "purpose": "收编（第二阶段）这批已入库但尚无消化痕迹的文献：literature 行 lit:000017《Paraconsistent dominated convergence》、lit:000018《Generalized integrals and convergence theorems》、lit:000019《An introduction to measure theory》、lit:00002",
+      "purpose_missing": false,
+      "message": "时间到：收编（第二阶段）这批已入库但尚无消化痕迹的文献：literature 行 lit:000017《Paraconsistent dominated convergence》、lit:000018《Generalized integrals and convergence theorems》、lit:000019《An introduction to measure theory》、lit:00002｜等了 14 分钟 25 秒（起于 22:13:39，到于 22:28:04）。它交的是：ok：执行完成",
+      "waited_sec": 865.612852,
+      "triggered_by": "target_event",
+      "wait_for": "task:t-000204",
+      "due_at": "",
+      "fired_at": "2026-11-24T14:28:05.111879+00:00",
+      "mailbox_item_id": "t-000206",
+      "state": "pending"
+    }
+  ],
+  "clock_pumps": 18,
+  "clock_fired": 3,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "A 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "A",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    },
+    "own_children": [
+      "t-000204"
+    ],
+    "return_given": [
+      "t-000204"
+    ],
+    "reentry_turns": 2,
+    "reentry_reasons": [
+      "派活之后还没给过模型回合：这一批 1 项还在跑（t-000204），这一拍的 waiter 全是在等它们 ⇒ 这一拍返场问模型一次，下一拍起才按挂机口径走",
+      "上一拍是等谁的唤醒（t-000204 回来）—— 那一拍按 ③ 跳过，那一批的产出现在就在上下文里 ⇒ 这一拍返场问模型（不许再睡一拍）"
+    ],
+    "research_fp": "",
+    "patrol": {
+      "checked": true,
+      "mounted": false,
+      "skipped": "role",
+      "timer_id": "",
+      "interval_sec": 1200.0,
+      "remaining_sec": null,
+      "reason": "轮查计时器只挂给主控（M）：这一趟是 A ⇒ 不挂"
+    },
+    "asked_sec": 1.5,
+    "slice_sec": 2.0,
+    "parked_turns": 2,
+    "skip_calls": 3,
+    "woke_turns": 1,
+    "woke_reasons": [
+      "event"
+    ]
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {
+    "checked": true,
+    "enabled": true,
+    "in_task": true,
+    "in_task_why": "",
+    "delegations": 3,
+    "settled": [
+      "r-000001",
+      "r-000002",
+      "r-000003"
+    ],
+    "cleared": [],
+    "pending": [],
+    "refused": [],
+    "why": "全表 3 个委托都已清表（每一行都有 cleared_at），这一拍没有要提交的",
+    "note": "全表 3 个委托都已清表（每一行都有 cleared_at），这一拍没有要提交的"
+  },
+  "unprocessed_reasons": {
+    "checked": true,
+    "enabled": true,
+    "unprocessed": 6,
+    "written": [],
+    "kept": [
+      {
+        "lit_id": "000020",
+        "title": "On the volume of hyperplane sections of a d-cube",
+        "reason": "B 已经把这一篇登记成 3 条 statements（概念/命题，source_lit_id=000020）与 3 条 relations（lit_id=000020），只是 `processed` 位仍为假：该位只由 B.run_once 的领取路径翻，B 用 table.create / own.register_statement 手工登记不会翻它。⇒ 这一条已经消化过（证据就是上面那两行条数），可以带着这一格收工。"
+      },
+      {
+        "lit_id": "000021",
+        "title": "Maximal perimeters of polytope sections and origin-symmetry",
+        "reason": "B 已经把这一篇登记成 2 条 statements（概念/命题，source_lit_id=000021）与 1 条 relations（lit_id=000021），只是 `processed` 位仍为假：该位只由 B.run_once 的领取路径翻，B 用 table.create / own.register_statement 手工登记不会翻它。⇒ 这一条已经消化过（证据就是上面那两行条数），可以带着这一格收工。"
+      },
+      {
+        "lit_id": "000022",
+        "title": "The cross-section body, plane sections of convex bodies and approximation of convex bodies",
+        "reason": "B 已经把这一篇登记成 1 条 statements（概念/命题，source_lit_id=000022）与 1 条 relations（lit_id=000022），只是 `processed` 位仍为假：该位只由 B.run_once 的领取路径翻，B 用 table.create / own.register_statement 手工登记不会翻它。⇒ 这一条已经消化过（证据就是上面那两行条数），可以带着这一格收工。"
+      }
+    ],
+    "undigested": [
+      {
+        "lit_id": "000019",
+        "title": "An introduction to measure theory",
+        "why": "statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化）"
+      },
+      {
+        "lit_id": "000023",
+        "title": "Measure, integration & real analysis",
+        "why": "statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化）"
+      },
+      {
+        "lit_id": "000024",
+        "title": "Measure theory and integration by and for the learner",
+        "why": "statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化）"
+      }
+    ],
+    "why": "已经有理由的 3 条保持原样：lit:000020、lit:000021、lit:000022；没有写理由的：lit:000019（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000023（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000024（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））。",
+    "note": "已经有理由的 3 条保持原样：lit:000020、lit:000021、lit:000022；没有写理由的：lit:000019（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000023（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））、lit:000024（statements 与 relations 都没有挂在这一篇上 ⇒ 没有消化痕迹，不写字面理由（那会是把未消化说成已消化））。"
+  },
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [],
+  "summons": [
+    "B"
+  ],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [
+    {
+      "kind": "summon",
+      "counted": true,
+      "task_id": "t-000204",
+      "role": "B",
+      "step": 3,
+      "status": "running",
+      "outcome": "",
+      "handoff_id": "",
+      "outputs": [
+        "t-000204"
+      ],
+      "disposition": ""
+    }
+  ],
+  "summons_total": 1,
+  "summons_consumed": 1,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 1,
+    "summons_consumed": 1,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [
+      {
+        "kind": "summon",
+        "counted": true,
+        "task_id": "t-000204",
+        "role": "B",
+        "step": 3,
+        "status": "running",
+        "outcome": "",
+        "handoff_id": "",
+        "outputs": [
+          "t-000204"
+        ],
+        "disposition": "consumed",
+        "evidence": {
+          "step": 9,
+          "shape": "note",
+          "effect": "笔记",
+          "refs": [
+            "t-000204"
+          ]
+        }
+      }
+    ],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p328",
+    "role": "A",
+    "prompt_sha256": "3b118b3b5143061cd95090fcc8dc49314db65d0dce7dd285b6613ff426466c7a",
+    "prompt_chars": 66088,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "FACULTIES_07",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "TOOL_29",
+      "TOOL_30",
+      "TOOL_31",
+      "TOOL_32",
+      "TOOL_33",
+      "TOOL_34",
+      "TOOL_35",
+      "TOOL_36",
+      "TOOL_37",
+      "TOOL_38",
+      "TOOL_39",
+      "TOOL_40",
+      "TOOL_41",
+      "TOOL_42",
+      "TOOL_43",
+      "TOOL_44",
+      "TOOL_45",
+      "TOOL_46",
+      "TOOL_47",
+      "TOOL_48",
+      "TOOL_49",
+      "TOOL_50",
+      "TOOL_51",
+      "TOOL_52",
+      "TOOL_53",
+      "TOOL_54",
+      "A_SEARCH_STYLE",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_LIMITS",
+      "COLLAB_NAMES",
+      "PARENT_STOP",
+      "PARENT_ROSTER",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 9,
+    "tokens_in": 503632,
+    "tokens_out": 20659,
+    "usd": 0.017023,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 8,
+    "no_request_calls": 0,
+    "hit": 482432,
+    "miss": 20981,
+    "unknown_calls": 0,
+    "tokens_in": 503413,
+    "hit_rate": 0.9583,
+    "mismatched_calls": 0,
+    "saved_usd": 0.070918,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 973.984,
+  "end_ts": "2026-11-24T22:28:50+08:00",
+  "notes": [
+    "第 4 步返场：子代理回来 0 条，还在跑 1 条（这一拍为了返场没等子：返场判据给过之后才等）",
+    "返场（Q22）：派活之后还没给过模型回合：这一批 1 项还在跑（t-000204），这一拍的 waiter 全是在等它们 ⇒ 这一拍返场问模型一次，下一拍起才按挂机口径走",
+    "第 5 步返场：子代理回来 0 条，还在跑 1 条（等待 300.2s，原因 slice）",
+    "第 6 步返场：子代理回来 0 条，还在跑 1 条（等待 300.0s，原因 slice）",
+    "第 7 步返场：子代理回来 1 条，还在跑 0 条（等待 54.3s，原因 settled）",
+    "返场（Q22）：上一拍是等谁的唤醒（t-000204 回来）—— 那一拍按 ③ 跳过，那一批的产出现在就在上下文里 ⇒ 这一拍返场问模型（不许再睡一拍）",
+    "收工没有可用 notify 表（notify.refs 里的 'r-000002' 立不住：引用的前序手稿 'r-000002' 不在盘上 ⇒ 不许凭空引用（溯源链断了））⇒ 这一趟没有交接手稿（不打回、不代填）",
+    "缓存读数：命中 482432 / 未命中 20981 token，命中率 95.8%（8 次调用）；按 modelcost 口径估算可省 约 0.070918 美元",
+    "子产出处理读数：summons_total=1，consumed=1，waived=0，unknown=0，unconsumed=0",
+    "终态回报已落板：t-000207（框架通报；模型没填 notify）"
+  ],
+  "final_payload": {
+    "final": "A.run_once 收工（台账号 t-000202，第 11 步）。\n\n一、本趟执行的动作\n1) own.run_once（无参数）领取 r-000002，结果：processed=1，但 **OpenAlex 两路（foundational / frontier）都 HTTP 429 rate_limited** ⇒ registered=0、downloaded=0、outcome 仍为 null。这是「没查成」，不是「没有这篇文献」，也不是「这个方向没文献」。\n2) search.providers 实测：openalex probed_fail(429)、europepmc 超时、fixture 缺文件；只有 crossref / doaj 可用。\n3) 判收/清表读数：pending_total=0，pending_by_delegation=[]；全表 3 个委托（r-000001/r-000002/r-000003）每一行都有 cleared_at，clear_stage.pending=[] ⇒ 待裁表已清，这一趟按收尾三步走完了（②③无事可做是读数，不是我跳过了）。\n4) 派 B（名册名 B-digest2，台账号 t-000204）收编 5 篇已入库但无消化痕迹的文献：lit:000017 / 000018 / 000019 / 000023 / 000024。\n\n二、B 的回执（t-000204，done/ok，手稿 000030）\n五篇逐篇结论：**消化 0 篇 / 5 篇，落 statements 0 条、relations 0 条**。卡点不是缺正文（lit:000017 已读 12 页全文、37 条引文回验通过），而是**框架侧概念配额按会话累计已满（limit 30 / written 30，被 lit:000016 一次用满）**⇒ 159 个概念候选全部受控拒绝、37 条关系 deferred。lit:000016 / 000020 / 000021 / 000022 四篇前一趟已消化（各有 statements 与 relations 行），已核实。\n\n三、我没有做的两件事及理由（留痕在 notes/A.md 与 steps 读数）\n- **没有原样重试 r-000002、也没有换源重发**：r-000002 的 topic 是本地批次描述符（\"local reference/ batch 2 (12 user-declared PDFs): …\"）而非可检的规范术语，原样重发只会再撞 429 或换回跑题候选；且 B 的概念配额已满，此刻再往 literature 搬新文献只会增加未收编欠账。\n- **没有对 B 原样再派一遍**：t-000204 是 done/ok 且结论明确（配额满，非读不到），原样重派只会换回同一读数。\n\n四、交付状态（按本岗可核字段如实报）\n- r-000003：outcome=ok 已终局；result_lit_ids = 000020–000024，五个号在 literature 表逐条可读 ✓\n- r-000002：**outcome=null，未终局**（done=false，attempts=1，last_error 已由 run_once 写入 OpenAlex 429 原话）。`done` 旗不是我能写的字段，不擅自改，如实交回。\n- 本批「已派 B 收编、B 回执给出概念行与关系行条数」这一项：B 已回，条数是 **0 / 0**，原因是框架侧概念配额按会话累计封顶（非正文缺失、非检索失败）。这 5 篇留在 literature 里是「已入库未收编」的欠账，下一趟配额重置后应优先补收编。\n\n五、给主控的判断依据（缺什么、下一步换什么）\n- 若仍需推进 r-000002：正确做法不是原样重发，而是先把 topic 换成规范术语（如 `cube slicing` / `hyperplane sections of the cube` / `Brunn-Minkowski`），并把该行 providers 改成 crossref / doaj 再领跑；这需要改请求行字段，是否改由主控定。\n- 概念配额是会话级累计限制，超出我这一岗能解决的范围：五篇 measure-theory / 广义积分背景文献的收编需要一次配额重置后的 B 窗口，请主控安排。",
+    "evidence": [
+      "r-000002",
+      "r-000003",
+      "lit:000016",
+      "lit:000017",
+      "lit:000018",
+      "lit:000019",
+      "lit:000020",
+      "lit:000021",
+      "lit:000022",
+      "lit:000023",
+      "lit:000024",
+      "t-000204",
+      "handoff:000030"
+    ],
+    "notify": {
+      "to": "M",
+      "summary": "A 本趟 run_once：r-000002 被 OpenAlex 429 挡下（outcome 未终局，如实报）；待裁表 0 条、3 个委托全清；B 收编 5 篇回 0/0，卡在会话级概念配额封顶",
+      "body": "## 做了什么\n\n**1. own.run_once（无参数）** 领取 **r-000002**：processed=1，但 OpenAlex 两路（foundational / frontier）都 **HTTP 429 rate_limited** ⇒ registered=0 / downloaded=0 / **outcome 仍为 null**。这是「没查成」，不是「没有这篇文献」。\n\n**2. search.providers 实测**：openalex probed_fail(429)、europepmc 超时、fixture 缺文件；仅 crossref / doaj 可用。\n\n**3. 清表读数**：`pending_total=0`、`pending_by_delegation=[]`；全表 3 个委托（r-000001 / r-000002 / r-000003）每行都有 `cleared_at`，`clear_stage.pending=[]` ⇒ 待裁表已清。\n\n**4. 派 B 收编**（名册名 B-digest2 / t-000204）lit:000017、000018、000019、000023、000024。\n\n## B 的回执（t-000204，done/ok，手稿 000030）\n\n五篇**消化 0 / 5，落 statements 0 条、relations 0 条**。卡点不是缺正文（lit:000017 已读 12 页、37 条引文回验通过），而是**框架侧概念配额按会话累计已满（limit 30 / written 30，被 lit:000016 一次用满）**。lit:000016 / 000020 / 000021 / 000022 前一趟已消化（有 statements 与 relations 行），已核实。\n\n## 交付状态（可核字段）\n\n- **r-000003**：outcome=ok 已终局；result_lit_ids = 000020–000024，五个号在 literature 表逐条可读 ✓\n- **r-000002**：**outcome=null，未终局**（done=false、attempts=1，last_error 已写入 429 原话）。`done` 旗不是我可写字段，不擅自改。\n- **B 收编条数**：已回，0 / 0（原因如上，非检索失败、非正文缺失）。\n\n## 我没做的两件事与理由\n\n- 未原样重试 / 换源重发 r-000002：其 topic 是本地批次描述符而非规范术语，重发只会再撞 429 或换回跑题候选；且配额已满，再搬新文献只增「只检索不收编」的欠账。\n- 未对 B 原样再派：t-000204 done/ok 且结论明确（配额满），重派只会换回同一读数。\n\n## 要主控定的事\n\n1. **r-000002 怎么收口**：若要推进，正确做法是先把 topic 换成规范术语（`cube slicing` / `hyperplane sections of the cube` / `Brunn-Minkowski`），并把该行 providers 改为 crossref / doaj 再领跑 —— 改请求行字段是否放行，请定。\n2. **概念配额**（会话级累计，已 30/30）超出我这一岗能解决的范围：lit:000017 / 000018 / 000019 / 000023 / 000024 的收编需一次配额重置后的 B 窗口，请安排。",
+      "refs": [
+        "r-000002",
+        "r-000003",
+        "lit:000017",
+        "lit:000018",
+        "lit:000019",
+        "lit:000023",
+        "lit:000024",
+        "lit:000016",
+        "lit:000020",
+        "lit:000021",
+        "lit:000022",
+        "000030"
+      ]
+    }
+  },
+  "task_id": "t-000202"
+}

@@ -1,0 +1,1 @@
+{"args": {"max_lines": 14, "path": "library/000002.txt", "start_line": 1}, "name": "fs.read", "why": "取 lit:000002 的作者/期刊元数据，bibitem 不编造"}}

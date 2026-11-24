@@ -1,0 +1,3 @@
+2026-11-24 23:51:54,660+0800 INFO  miktex-fc-cache - this process (15304) started by miktex in directory D:\Incubator\projects\lp-ball-22\out\package with command line: miktex-fc-cache --miktex-disable-maintenance --miktex-disable-diagnose
+2026-11-24 23:51:54,660+0800 INFO  miktex-fc-cache - running on Windows 10.0.26200
+2026-11-24 23:51:58,680+0800 INFO  miktex-fc-cache - this process (15304) finishes with exit code 0

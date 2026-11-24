@@ -1,0 +1,2 @@
+{"at": "2026-11-24T22:55:55+08:00", "first": true, "kind": "bind", "name": "F1", "owner": "t-000227", "role": "F", "seq": 1, "task_id": "t-000228", "task_text": "只做一件事：把 `data/attack_plans.json` 里『第 2 号计划』（`plan_id` = 数字 2 左补零到六位；该行从文件第 2343 行开始）第 2 轮 history 里的 `statement_id` 归属改对，让那一格不再指向一条没有 V 签的命题。 【已核死的事实，不要重新论证，也不要重新证明任何东西】该计划第 2 轮 history 里写的是 `\"stateme"}
+{"at": "2026-11-25T03:02:29+08:00", "kind": "retire", "name": "F1", "owner": "t-000227", "reason": "收工前自动收尾：静默且无未消项（R9FIX-D5）", "seq": 2, "task_id": "t-000228", "task_ids": ["t-000228"]}
