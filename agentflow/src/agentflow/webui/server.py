@@ -1416,6 +1416,8 @@ def run(argv: Sequence[str] | None = None) -> int:
     if args.list_routes:
         for row in routes.endpoint_inventory():
             print(f"{row['method']:<5} {row['path']:<30} {row['kind']:<7} {row['handler']}")
+        # 流那几条单独再说一遍：读的人常常只想知道"哪几条不是读完即返"。
+        print("stream: " + ", ".join(routes.stream_paths()))
         return 0
     root = Path(args.root).resolve() if args.root else Path(DEFAULT_ROOT).resolve()
     token = args.token or os.environ.get("AGENTFLOW_WEB_TOKEN", "")

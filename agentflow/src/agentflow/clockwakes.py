@@ -417,11 +417,6 @@ def sweep_lifelines(workspace: str | Path, *, unread: Mapping[str, Any]) -> dict
         tid = str(timer.task_id or "")
         if tid not in owners:
             continue
-        if loop_is_live(tid):
-            # 它自己在跑：那条板项它下一步会读到，这里不续也不叫（见 docstring）。
-            out["skipped"].append({"task_id": tid, "timer_id": str(timer.timer_id or ""),
-                                   "reason": "它自己的循环在跑 ⇒ 不另起一个同号循环"})
-            continue
         knocked = _knock_lifeline(bucket, timer)
         out["knocked"].append(knocked)
         dirty = True

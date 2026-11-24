@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-24T20:55:47+08:00",
+  "generated_at": "2026-11-24T23:43:32+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -97,10 +97,10 @@
       "path": "src/agentflow/agent_loop.py",
       "glob": "src/agentflow/agent_loop.py",
       "category": "auth-audit",
-      "sha256": "12bddbbb65ed2947b0256e84fcd87a5dda47c9fb0eb9a582c374d166ca5d9bc9",
+      "sha256": "ce69f55bda91f18ccc1713c3b0a03a74ef4af6efdc1bc77f58a938cc8116afee",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "LIFELINE-ARM 第三轮：sweep 口径收窄+每步去重/早退；_renew_lifeline 两条路分流（到点/自有事件只续，来信才叫）",
+      "change_note": "（未提供变更说明：内容 hash 从 12bddbbb65ed 变为 ce69f55bda91，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

@@ -1883,7 +1883,53 @@ def send_interjection(session_root: Path, *, sender: str, subject: str, body: st
     path, problem = SS.append(session_root, payload, sid=sid)
     if problem:
         return "", problem
+    # 除了会话里那一条（审计与"下一步开头单列一段【插话】"用），还要**照收件箱那条路**
+    # 落一条板项（业主 2026-11-24：「插话和智能体间通信几乎一致，一样走收件箱」）。
+    # 于是三件事一次成立：页面上看得到它绑在谁的收件箱里、兜底表把它当"来信"扫得到、
+    # 主控在步首读收件箱时与普通留言走同一个渲染口。
+    inbox, inbox_problem = _deliver_interjection_to_inbox(
+        Path(session_root), subject=subject, body=body, iid=iid)
+    if inbox_problem:
+        # 板项没落成不等于插话没落：如实回一句，但**不**把已写的事件说成失败。
+        return iid, f"插话已落会话（{iid}），但收件箱那一份没落成：{inbox_problem}"
+    payload["inbox_item_id"] = inbox
     return iid, ""
+
+
+def _deliver_interjection_to_inbox(root: Path, *, subject: str, body: str,
+                                   iid: str) -> tuple[str, str]:
+    """把一条插话落成主控名下的 `message` 板项（与 `_deliver_to_instance` 同一形状）。
+
+    返回 `(板项编号, 问题)`：问题非空即"这一份没收进收件箱"，由调用方如实转述。
+    """
+    from .conductor import Conductor
+    from .store import Store
+
+    try:
+        store = Store(root)
+        rows = store.rows("tasks")
+    except Exception as exc:  # noqa: BLE001 - 读不成台账 ⇒ 收件箱那一份落不了
+        return "", f"台账读不成（{type(exc).__name__}: {exc}）"
+    owner = ""
+    for row in rows:
+        if str(row.get("role") or "") != S.CONDUCTOR_ROLE:
+            continue
+        if str(row.get("status") or "") != "running":
+            continue
+        owner = str(row.get("task_id") or "")
+    if not owner:
+        return "", ("台账里没有正在跑的主控 ⇒ 这条插话只落在会话里，"
+                    "没有收件箱可投（下次起跑不会读到它）")
+    try:
+        cond = Conductor(store)
+        item_id = cond.open_item(
+            kind="message", role=S.CONDUCTOR_ROLE, expects="ack", action="message",
+            summary=f"用户插话：{subject or '（无主题）'}", called_by=str(U.USER),
+            parent_task_id=owner, input_key=f"message@{U.USER}:{iid}->{owner}")
+        cond.set_item_detail(item_id, (str(subject) + "\n" + str(body)).strip()[:400])
+    except Exception as exc:  # noqa: BLE001 - 开板项失败要如实说，不许当"已送达"
+        return "", f"{type(exc).__name__}: {exc}"
+    return item_id, ""
 
 
 def read_interjections(session_root: Path, role: str, *, sid: str | None = None,

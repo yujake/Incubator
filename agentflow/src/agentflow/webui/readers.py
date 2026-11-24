@@ -2693,7 +2693,6 @@ ROWS_FIELDS_COMPACT = "compact"
 #: `compact` 档里长字段的缺省截断长度。截断不静默：行上另给
 #: `<字段>_truncated=true` 与 `<字段>_chars=<原长>`，顶层 `rows_clipped` 点名是哪几栏。
 #: 400 与 `Artifacts.tsx` / `state.CLIP` 的页面截断同一口径。
-COMPACT_CLIP_CHARS = 400
 #: 任务 `detail` 的截断长度（比 400 更短：真机 84 行 × 400 仍是 34 KB，占默认响应
 #: 的大头；页面那一列本来就只当一句话读）。`rows_clipped` 会点名它，`detail_chars`
 #: 给原文长度 —— 不把"截了"读成"就这些"。
@@ -2945,7 +2944,7 @@ def evidence_chain(root: str | Path, store: Any = None, *,
     ## 字段档（`compact`）：默认读模型给全字段，HTTP 默认给 compact
 
     `compact=True` 是给页面的那一档：每栏只留 `Evidence.tsx` 真的会画的列与归属
-    读数，`statement_full` / `proof_text` 截到 :data:`COMPACT_CLIP_CHARS`，
+    读数，`statement_full` / `proof_text` 按 `_EVIDENCE_CLIP_FIELDS` 的逐栏上限截断，
     `quote_reason` / `_quote_check` / `_conflict_check` / `bits` / `proof_history`
     等长字段整格省掉。省了哪些、截了哪些写在 `rows_omitted` / `rows_clipped` /
     `rows_nested` 三格；`?full=1` 走的是同一条读模型（`compact=False`），
@@ -3432,7 +3431,7 @@ def artifacts_face(root: str | Path, store: Any = None, *,
     ## 字段档（`compact`）：与 `/api/evidence` 同一套
 
     `compact=True` 按 `Artifacts.tsx` 真的会画的列投影：`handoffs.body` 与
-    `tasks.detail` 截到 :data:`COMPACT_CLIP_CHARS`，`ledger_verify` 的两份 sha 与
+    `tasks.detail` 按 `_ARTIFACTS_CLIP_FIELDS` 的逐栏上限截断，`ledger_verify` 的两份 sha 与
     行级归属读数省掉（页面只画路径 / 一致吗 / 结论 / 谁产出），`secretary` 那一栏
     页面根本不画、只留最基本的几格。省了哪些、截了哪些写在 `rows_omitted` /
     `rows_clipped` / `rows_nested`；`?full=1` 走同一条读模型（`compact=False`），
@@ -6749,7 +6748,12 @@ def _chat_line(index: int, event: Mapping[str, Any]) -> dict[str, Any] | None:
         if str(event.get("from") or "") != U.USER:
             return None
         who = "user"
-        title = str(event.get("subject") or "插话")
+        # 这一条是"用户对主控说的话"，页面必须看得到它写给谁（业主 2026-11-24：
+        # 「从网页看用户插话似乎未直接绑定发送给M」）。事件的 `to` 就是收件人；
+        # 它没有 `task_id`（那是"谁在跑"，插话不是谁跑的），所以编号那格留空是如实。
+        role = str(event.get("to") or role)
+        role_source = "to" if role else role_source
+        title = f"插话 → {role}" if role else "插话"
         text = str(event.get("body") or "")
     elif kind == U.ASK_KIND:
         who = "conductor"
@@ -8505,7 +8509,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # （`_annotate_ledger_row`），不是 `schema.Statement` 的字段。
       ("by_role", "string"), ("by_role_source", "string"),
       ("by_task_id", "string"), ("by_task_id_tri", "string"),
-      # compact 档把 `statement_full` / `proof_text` 截到 `COMPACT_CLIP_CHARS` 时，
+      # compact 档把 `statement_full` / `proof_text` 按逐栏上限截断时，
       # 这两个说明"截了、原文多长"。可选：`?full=1` 那一档没有它们。
       ("statement_full_truncated?", "boolean"), ("statement_full_chars?", "number"),
       ("proof_text_truncated?", "boolean"), ("proof_text_chars?", "number"))),
@@ -8677,7 +8681,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("by_role", "string"), ("by_role_source", "string"),
       ("by_task_id", "string"),
       ("by_task_id_tri", "string"),
-      # compact 档把 `body` 截到 `COMPACT_CLIP_CHARS` 时，这两格说明"截了、原文多长"。
+      # compact 档把 `body` 按逐栏上限截断时，这两格说明"截了、原文多长"。
       # 可选：`?full=1`（全字段）那一档没有它们 —— 不截就不该多一个 `false` 噪声。
       ("body_truncated?", "boolean"), ("body_chars?", "number"))),
     ("SecretaryDecision",
@@ -8753,7 +8757,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # 它不在 `schema.Task` 里 —— 是这一面现算的投影，与 `.md` 报告同一处口径。
       # 盘上的 `status` 一个字都不改（板项行那一格恒为 `pending`，那是类型标记）。
       ("status_reading", "string"),
-      # compact 档把 `detail` 截到 `COMPACT_CLIP_CHARS` 时，这两格说明"截了、原文多长"。
+      # compact 档把 `detail` 按逐栏上限截断时，这两格说明"截了、原文多长"。
       ("detail_truncated?", "boolean"), ("detail_chars?", "number"))),
     ("ConjectureRow",
      "store.rows(\"conjectures\")（真机 p9b/data/conjectures.json；无样本时以 "
