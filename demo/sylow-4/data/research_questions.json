@@ -1,0 +1,28 @@
+{
+  "schema_version": 2,
+  "rows": [
+    {
+      "question_id": "000000",
+      "question": "设 G 为有限群，|G| = p^a·m（p 素数，(p,m)=1）。断言：(E) G 存在阶为 p^a 的子群（p-Sylow 子群）；(C) G 的任两个 p-Sylow 子群共轭；(N) p-Sylow 子群的个数 n_p 满足 n_p ≡ 1 (mod p) 且 n_p | m。这三条是否全部成立？",
+      "origin": "agent-D-sylow-proof",
+      "related_concept_ids": [],
+      "related_relation_ids": [],
+      "status": "answered",
+      "priority": "high",
+      "evidence_lit_ids": [],
+      "waiting_request_ids": [
+        "r-000002"
+      ],
+      "gap_reason": "本项目核心目标命题，需一条命题 + 一份 F 证明稿 + V 的「成立」签；当前 statements / attack_plans 均为空。\n[q:000000] origin=agent-D-sylow-proof；研究问题：设 G 为有限群，|G| = p^a·m（p 素数，(p,m)=1）。断言：(E) G 存在阶为 p^a 的子群（p-Sylow 子群）；(C) G 的任两个 p-Sylow 子群共轭；(N) p-Sylow 子群的个数 n_p 满足 n_p ≡ 1 (mod p) 且 n_p | m。这三条是否全部成立？；需要检索的是：能补充该问题证据的文献（现有相关关系 0 条，其中 quote_verified=True 的 0 条）；触发的可核实判据：a_no_keyword_hit: 关键词 25 个，在 0 条相关关系的 quote/description 中命中数为 0（逐词命中：{'为有限群': 0, 'a·m': 0, '素数': 0, '断言': 0, '存在阶为': 0, '的子群': 0, 'Sylow': 0, '子群': 0, '的任两个': 0, '子群共轭': 0, '子群的个数': 0, '满足': 0, 'mod': 0, '这三条是否全部成立': 0, '群的': 0, '的个': 0, '个数': 0, '这三': 0, '三条': 0, '条是': 0, '是否': 0, '否全': 0, '全部': 0, '部成': 0, '成立': 0}）；b_low_degree_unverified: 相关概念度数 0 < 阈值 2，且 0 条关系里没有一条 quote_verified=True（连一条有原文支撑的关系都没有）",
+      "notes": "候选路线：(a) 群作用在 p^a 元子集上（Wielandt，直接给存在性 + n_p ≡ 1 mod p）；(b) 对 |G| 归纳 + 类方程（Conrad），用中心/商群降阶。两条的取舍与理由写进 manuscripts/D/RESEARCH.md 的「已确定的结论 / 尝试与失败」。\n[2026-11-24T05:17:47+08:00] [submit_gap] 证据不足（触发判据 a_no_keyword_hit/b_low_degree_unverified），已向 A 提交查询请求 r-000002（topic=设 G 为有限群，|G| = p^a·m（p 素数，(p,m)=1）。断言：(…，mode=topical）\n证据已就绪，不采信 consider 的机械判据（a_no_keyword_hit / b_low_degree_unverified 是自动判据对『已有 F 稿 + V 成立签 + B 登记 stmt:000065』的漏判）：manuscripts/F/f-proof-000000.md（盘上字节 sha 36be2374…，正文 sha add7f62c4…，V 判成立零 finding，台账 verifications/pending/a7bcc2c9….jsonl#u-000007），B 登记 stmt:000065（等级 pre_theorem、kind=theorem）。因此把问题从 needs_evidence 拉回 researching 以便按证据收口；r-000002 这条检索请求是被机械判据自动开出的，不作数。\n[research] 置信度=low（判据：a_no_keyword_hit/b_low_degree_unverified；证据 0 条，quote_verified=True 0 条；C 查询成功 1/1；LLM=yes）\n收口依据（不是我自己的措辞，是盘上的对象）：① manuscripts/F/f-proof-000000.md —— 44 行、15338 字节，含 ## 命题 / ## 证明 / ## 依赖 三节，## 证明 第 1–17 步就地自足，覆盖 (E) 存在性 / (C) 共轭 / (N1) n_p ≡ 1 (mod p) / (N2) n_p | m；盘上字节 sha256=36be2374f66fd8bc5960e186388dff7729a5839ab1b51948617cbaf51350f390，正文 sha=add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a。② V 逐行走查判「成立」、零 finding、defect_step=null，签时 2026-11-24T05:10:00+08:00，签块在稿第 4 行，台账 verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007（manuscripts.submission_reading 读数：signed=true、signed_sha=add7f62c4…）。③ B 按指针登记成命题 stmt:000065（kind=theorem、现算等级 pre_theorem、path_group=1，回执板项 t-000154）。④ 研究稿 manuscripts/D/RESEARCH.md 七节已落盘（8326 字节，sha256=73389eda57b42133703ca889d7dcb9f7994da84fd0a3df6d2fc927d5accfeff8），工作稿 manuscripts/D/000000-research.md 由 D.write_report 渲染（documents 一行 kind=research 同一笔事务）。如实记录一条缺口：D.research 的关系侧读数（关键词命中 0、quote_verified 0 条）是空包，它的 LLM 侧结论写成『证据不足』—— 那是『B 消化 PDF 后没落出与题面关键词对齐的 relations』这一个事实，不是『这道题没有证据』；证明级证据见上三行。因此本条按现场推 answered。",
+      "created_at": "2026-11-24T03:41:10+08:00",
+      "updated_at": "2026-11-24T05:18:04+08:00",
+      "kind": "gap",
+      "contradiction_relation_ids": [],
+      "contradiction_rounds": 0,
+      "contradiction_verdict": null,
+      "contradiction_request_ids": [],
+      "relation_chain": []
+    }
+  ]
+}

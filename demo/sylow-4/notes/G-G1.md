@@ -1,0 +1,1 @@
+- [2026-11-24 05:33:50] Edit 4/5 done targeting thm:index proof end; next is thm:unique then recompile.

@@ -1,0 +1,843 @@
+{
+  "role": "V",
+  "task": "V：这一趟派给你的活是 —— 审这一份证明稿 manuscripts/B/b-proof-000008.md 的现行正文，sha = 0de0655931b4ee5e4fbf66a8f5a4ef4156c9d1e75b9f14b454ecbfebacc3e0a4，它按台账挂在命题 stmt:000064「Sylow p-子群唯一当且仅当正规」名下。请按写成后的样子整体重读，逐条查硬禁令与同段依据，给两态结论（成立 / 有毛病）与逐条 findings（有毛病时每条带步号与 defect_step）。有一点要请你判定清楚并写进 findings：稿的「## 命题」段在本 B 这一侧已无法就地纠正 —— own.land_manuscript 只替换「## 证明」段、保留稿头既有的「## 命题」段，我这一趟无论怎么重落，命题段仍是 Sylow 第三定理的措辞（n_p | m、n_p ≡ 1 mod p），而台账 statements 000064 的 statement_full 是「P 唯一 ⟺ P 正规，特别地交换群情形唯一」。所以请你分开给两个结论：① 证明正文（第一步共轭性：固定点同余就地推出、Q ↷ G/P 良定义、|G/P| = [G:P] 不被 p 整除 ⇒ 不动点存在 ⇒ Q ⊆ gPg⁻¹ ⇒ 相等；第二步等价关系与交换群特例）有没有数学缺陷或硬禁令违反；② 「## 命题」段与 statement_full 的错配是不是唯一的拦截项。这份读数是给下游 G/H 与我的回执用的：我要知道卡点到底是正文还是渲染。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/B/b-proof-000008.md"
+        },
+        "why": "读被审证明稿全文（含## 命题 / ## 依赖 / ## 证明 / 签块）"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# B 的证明手稿：设 G 是有限群，p 是素数，并把 |G| 写成 |G| = p^k m，其中 p 不整除 m。则 G 的 p-Syl…\n\n- 标签：Sylow p-子群唯一当且仅当正规\n- 稿族：b-proof\n- 产出者：agent-B-B-literature-sylow\n- 正文sha：0de0655931b4ee5e4fbf66a8f5a4ef4156c9d1e75b9f14b454ecbfebacc3e0a4\n- 命题指纹：a14f6d4c809185f7fff26521d296b233b0d12ae5353c53421745161c49567f83\n- 登记时间：2026-11-24T04:14:11+08:00\n- 版本：2026-11-24T04:18:59+08:00@0de0655931b4ee5e4fbf66a8f5a4ef4156c9d1e75b9f14b454ecbfebacc3e0a4\n\n## 命题\n\n设 G 是有限群，p 是素数，并把 |G| 写成 |G| = p^k m，其中 p 不整除 m。则 G 的 p-Sylow 子群的个数 n_p 满足：n_p 整除 m，且 n_p ≡ 1 (mod p)。\n\n## 证明\n\n设 G 是有限群，p 是素数，P 是 G 的一个 Sylow p-子群，即 |P| 等于 |G| 中 p 的最高次幂 p^k。要证：P 在 G 中唯一当且仅当 P 在 G 中正规；并证明交换群情形下 Sylow p-子群必然唯一。\n\n第一步，证明 G 的任意两个 Sylow p-子群共轭。设 Q 也是 G 的一个 Sylow p-子群，故 |Q| 也是 p^k。先就地记一个计数事实：若有限 p-群 Γ 作用在有限集 X 上，记 Fix_Γ(X) 为被 Γ 中每个元素固定的点全体，则 |X| ≡ |Fix_Γ(X)| (mod p)。理由是：把 X 按轨道分解成不交并；长度大于 1 的轨道取一点 x，由轨道与稳定化子的对应，该轨道长度等于指数 [Γ : Stab(x)]，而 Stab(x) 是 Γ 的真子群、|Γ| 又是 p 的幂，故这个指数被 p 整除；长度等于 1 的轨道恰好就是不动点，于是 |X| 与不动点个数模 p 同余。\n\n现在让 Q 从左作用在左陪集集合 G/P 上，规定 q·(gP) = (qg)P。这一作用良定义：若 gP = g′P，则 g′ = gh（其中 h ∈ P），于是 qg′P = qghP = qgP。由上面的计数事实（取 Γ = Q、X = G/P）得 |G/P| ≡ |Fix_Q(G/P)| (mod p)。左端 |G/P| 就是指数 [G : P]；因 P 是 Sylow p-子群，p 不整除这个指数，故左端模 p 不为零，于是不动点集不能为空，可取不动点 gP。不动点意味着对每个 q ∈ Q 都有 qgP = gP，即 qg ∈ gP，等价于 q ∈ gPg⁻¹。因此 Q ⊆ gPg⁻¹；两边阶都等于 p^k，阶相同的有限群之间的包含必相等，故 Q = gPg⁻¹。共轭性由此得证。\n\n第二步，证等价关系。若 P 唯一：对任意 g ∈ G，共轭 gPg⁻¹ 的阶仍为 p^k，故它也是 Sylow p-子群，由唯一性得 gPg⁻¹ = P，即 P 对一切共轭封闭，按定义 P 在 G 中正规。反过来若 P 正规：设 Q 是任一 Sylow p-子群，由第一步存在 g ∈ G 使 Q = gPg⁻¹；而 P 正规给出 gPg⁻¹ = P，于是 Q = P，即只有一个 Sylow p-子群。最后处理交换群情形：若 G 交换，则 G 的每个子群都正规，特别地 P 正规，由「正规 ⇒ 唯一」这一半即得 Sylow p-子群唯一。两部分合起来正是所要证的结论。∎\n\n## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |\n|---|---|---|\n\n（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/B/b-proof-000008.md",
+          "encoding": "utf-8",
+          "bytes_read": 3110,
+          "total_bytes": 3110,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 30,
+          "total_lines": 30,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 30 行",
+          "sha256": "376285ae508f44ef274d92a980c6d1f7a6876f86d2c1357761ee8b2412808793"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 36608,
+        "prompt_cache_miss_tokens": 1513,
+        "tokens_in": 38121,
+        "tokens_out": 219,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000072"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "statements",
+          "id": "000064"
+        },
+        "why": "核对 statement_full 与稿的「## 命题」段是否错配"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "stmt_id": "000064",
+          "origin": "external_lit",
+          "kind": "theorem",
+          "label": "Sylow p-子群唯一当且仅当正规",
+          "statement_text": "Sylow p-子群唯一 ⟺ 它在 G 中正规；交换群的 Sylow p-子群必唯一。",
+          "statement_full": "设 G 是有限群，p 是素数，P 是 G 的一个 Sylow p-子群。则 P 在 G 中唯一（即 G 恰有一个 Sylow p-子群）当且仅当 P 在 G 中正规；特别地，若 G 是交换群，则它的 Sylow p-子群唯一。",
+          "proof_text": "If a Sylow p-subgroup is unique, then it is equal to all its conjugations and thus normal. If there are multiple Sylow p-subgroups, they must be conjugate to each other, so none of them can be closed under conjugation, prohibiting normality. Since any subgroup of an abelian group is normal, a Sylow p-subgroup must be unique.",
+          "source_lit_id": "000002",
+          "page_range": {
+            "start": 4,
+            "end": 4,
+            "label": ""
+          },
+          "quote_verified": true,
+          "quote_mode": "verbatim",
+          "quote_reason": "proof_text；命中区间 p4:norm[2562:2888]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+          "quote_span": "p4:norm[2562:2888]",
+          "quote_call_sha256": "",
+          "evidence_kind": "cross_check",
+          "bits": {
+            "numeric": "pending",
+            "proof": true,
+            "reviewed": false,
+            "formal": "pending",
+            "audited": false,
+            "origin": "external_lit",
+            "evidence": {
+              "numeric": {},
+              "numeric_reason": "",
+              "proof_process": "",
+              "proof_source": "citation",
+              "reviewed_by": {
+                "evidence": "lit:000002"
+              },
+              "reviewed_source": "citation",
+              "formal": {},
+              "formal_reason": "",
+              "audited_by": {},
+              "optimized_by_proof": {
+                "1": false
+              }
+            },
+            "voided_by": {},
+            "grade": "conjecture",
+            "audited_badge": false
+          },
+          "status": "active",
+          "derived_from": [],
+          "aliases": [],
+          "doc_id": null,
+          "line_range": {
+            "start": null,
+            "end": null,
+            "label": ""
+          },
+          "created_at": "2026-11-24T03:51:14+08:00",
+          "created_by": "secretary-B",
+          "_proposition_adjudication": {
+            "checked": true,
+            "attempted": true,
+            "verdict": "different",
+            "canonical_name": "Sylow p-子群唯一当且仅当正规",
+            "same_as": "",
+            "basis": "条件：两者都是有限群、p 为素数、P 为 Sylow p-子群，条件基本一致；；结论：候选为 n_p = [G : N(P)]，本条为 P 唯一当且仅当 P 正规（并含交换群特例），结论不同。；候选定理给出 Sylow p-子群个数与正规化子指数的公式，而本条命题讨论 Sylow p-子群唯一性与正规性的等价关系，结论不同，不是同一个定理。",
+            "reason": "候选定理给出 Sylow p-子群个数与正规化子指数的公式，而本条命题讨论 Sylow p-子群唯一性与正规性的等价关系，结论不同，不是同一个定理。",
+            "reused": false,
+            "seam_source": "secretary（LlmSeam.for_secretary）",
+            "seam_attempted": true,
+            "at": "2026-11-24T03:51:14+08:00"
+          },
+          "quote_carrier": {
+            "pass": "first",
+            "manuscript_id": "000008",
+            "manuscript": "manuscripts/B/b-proof-000008.md",
+            "body_sha256": "1fa78a53c9cf4e42a00d179f50423b26b60fb676f73656dbd210cae8b757d7b9",
+            "at": "2026-11-24T03:51:14+08:00"
+          },
+          "proof_no": 1,
+          "proof_sha256": "1fa78a53c9cf4e42a00d179f50423b26b60fb676f73656dbd210cae8b757d7b9",
+          "manuscript_id": "000008",
+          "manuscripts": {
+            "1": "manuscripts/B/b-proof-000008.md"
+          },
+          "manuscript_family": "b-proof",
+          "proof_routes": {},
+          "route": ""
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "id": "000064",
+          "id_field": "stmt_id",
+          "found": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 37376,
+        "prompt_cache_miss_tokens": 2297,
+        "tokens_in": 39673,
+        "tokens_out": 2300,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000072"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "verify.verify_proof",
+        "args": {
+          "proof_manuscript": "manuscripts/B/b-proof-000008.md",
+          "statement_id": "000064",
+          "readonly_facts": "被审稿：manuscripts/B/b-proof-000008.md（族 b-proof，稿号 000008），文件 sha256=376285ae508f44ef274d92a980c6d1f7a6876f86d2c1357761ee8b2412808793；稿头自报正文sha=0de0655931b4ee5e4fbf66a8f5a4ef4156c9d1e75b9f14b454ecbfebacc3e0a4（= ## 证明 段正文 sha，与文件 sha 不同属正常）。\n## 命题 段逐字：「设 G 是有限群，p 是素数，并把 |G| 写成 |G| = p^k m，其中 p 不整除 m。则 G 的 p-Sylow 子群的个数 n_p 满足：n_p 整除 m，且 n_p ≡ 1 (mod p)。」——这是 Sylow 第三定理的措辞。\nstatements 000064 的 statement_full 逐字：「设 G 是有限群，p 是素数，P 是 G 的一个 Sylow p-子群。则 P 在 G 中唯一（即 G 恰有一个 Sylow p-子群）当且仅当 P 在 G 中正规；特别地，若 G 是交换群，则它的 Sylow p-子群唯一。」\n## 证明 段开篇逐字：「设 G 是有限群，p 是素数，P 是 G 的一个 Sylow p-子群，即 |P| 等于 |G| 中 p 的最高次幂 p^k。要证：P 在 G 中唯一当且仅当 P 在 G 中正规；并证明交换群情形下 Sylow p-子群必然唯一。」⇒ 证明所证的正是 statement_full，不是 ## 命题 段的 n_p 结论。\n## 依赖 段为空表（声明未引用任何在册命题）；正文亦未出现「显然/易证/trivial」类缝，无未证引用，无循环依赖。\n逐条核查（六角度）：\n① 前提：无隐藏假设；p-群计数事实的前提（Γ 有限 p-群、X 有限集）写出并按轨道分解证明；未偷用正规化子或 Sylow 第二定理作已知。\n② 计算：轨道长 = [Γ:Stab(x)]、Stab(x) 真子群 ⇒ 指数被 p 整除；|G/P| = [G:P] 与 p∤[G:P]（P 为 Sylow）成立；qg∈gP ⟺ q∈gPg⁻¹；|Q|=|gPg⁻¹|=p^k + 包含 ⇒ 相等。\n③ 逻辑：蕴含两个方向分别给出；量词顺序正确（∀q∈Q 有 qgP=gP）；不动点存在由模 p 计数非空性得出；情形划分为「唯一⇒正规」「正规⇒唯一」「G 交换特例」三类，穷尽且无循环。\n④ 强度：证明所证结论与 statement_full 逐项对应，未增强。\n⑤ 台账一致：**不一致** —— 稿的「## 命题」段写的是 n_p | m 与 n_p ≡ 1 (mod p)（Sylow 第三定理），与 statement_full 及证明正文所证命题不是同一条。\n⑥ 依赖面：空依赖表与正文一致（正文未引用在册命题）。\n结论（我的判词）：有毛病；唯一 finding 在稿头「## 命题」段（B 侧 own.land_manuscript 只替换「## 证明」，就地改不了，需重落稿头）。证明正文本身（第一步共轭性、第二步等价与交换群特例）六角度均未找到缺陷。"
+        },
+        "why": "按写成后的样子整体重读该稿并落验证记录：正文数学逐条核，另须写明「## 命题」段与 statement_full 的错配"
+      },
+      "result": {
+        "tool": "verify.verify_proof",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "kind": "",
+          "statement_id": "000064",
+          "verification_id": "v-000003",
+          "verdict": "有毛病",
+          "defect_step": 1,
+          "findings": [
+            {
+              "level": "error",
+              "step": 1,
+              "kind": "证明目标与命题不一致",
+              "detail": "## 命题要求证明 n_p 整除 m 且 n_p ≡ 1 (mod p)；但证明第 1 步起所处理的是 P 在 G 中唯一当且仅当 P 正规及交换群特例，全文没有给出 n_p 的计数结论，故该证明不支持命题。"
+            }
+          ],
+          "unresolved_errors": 1,
+          "proof_sha256": "0de0655931b4ee5e4fbf66a8f5a4ef4156c9d1e75b9f14b454ecbfebacc3e0a4",
+          "proof_chars": 1059,
+          "signed_bit3": false,
+          "reviewed_by": {},
+          "bits": {
+            "numeric": "pending",
+            "proof": true,
+            "reviewed": false,
+            "formal": "pending",
+            "audited": false,
+            "origin": "own_result",
+            "evidence": {
+              "numeric": {},
+              "numeric_reason": "",
+              "proof_process": "设 G 是有限群，p 是素数，P 是 G 的一个 Sylow p-子群，即 |P| 等于 |G| 中 p 的最高次幂 p^k。要证：P 在 G 中唯一当且仅当 P 在 G 中正规；并证明交换群情形下 Sylow p-子群必然唯一。\n\n第一步，证明 G 的任意两个 Sylow p-子群共轭。设 Q 也是 G 的一个 Sylow p-子群，故 |Q| 也是 p^k。先就地记一个计数事实：若有限 p-群 Γ 作用在有限集 X 上，记 Fix_Γ(X) 为被 Γ 中每个元素固定的点全体，则 |X| ≡ |Fix_Γ(X)| (mod p)。理由是：把 X 按轨道分解成不交并；长度大于 1 的轨道取一点 x，由轨道与稳定化子的对应，该轨道长度等于指数 [Γ : Stab(x)]，而 Stab(x) 是 Γ 的真子群、|Γ| 又是 p 的幂，故这个指数被 p 整除；长度等于 1 的轨道恰好就是不动点，于是 |X| 与不动点个数模 p 同余。\n\n现在让 Q 从左作用在左陪集集合 G/P 上，规定 q·(gP) = (qg)P。这一作用良定义：若 gP = g′P，则 g′ = gh（其中 h ∈ P），于是 qg′P = qghP = qgP。由上面的计数事实（取 Γ = Q、X = G/P）得 |G/P| ≡ |Fix_Q(G/P)| (mod p)。左端 |G/P| 就是指数 [G : P]；因 P 是 Sylow p-子群，p 不整除这个指数，故左端模 p 不为零，于是不动点集不能为空，可取不动点 gP。不动点意味着对每个 q ∈ Q 都有 qgP = gP，即 qg ∈ gP，等价于 q ∈ gPg⁻¹。因此 Q ⊆ gPg⁻¹；两边阶都等于 p^k，阶相同的有限群之间的包含必相等，故 Q = gPg⁻¹。共轭性由此得证。\n\n第二步，证等价关系。若 P 唯一：对任意 g ∈ G，共轭 gPg⁻¹ 的阶仍为 p^k，故它也是 Sylow p-子群，由唯一性得 gPg⁻¹ = P，即 P 对一切共轭封闭，按定义 P 在 G 中正规。反过来若 P 正规：设 Q 是任一 Sylow p-子群，由第一步存在 g ∈ G 使 Q = gPg⁻¹；而 P 正规给出 gPg⁻¹ = P，于是 Q = P，即只有一个 Sylow p-子群。最后处理交换群情形：若 G 交换，则 G 的每个子群都正规，特别地 P 正规，由「正规 ⇒ 唯一」这一半即得 Sylow p-子群唯一。两部分合起来正是所要证的结论。∎",
+              "proof_source": "own",
+              "reviewed_by": {},
+              "reviewed_source": "",
+              "formal": {},
+              "formal_reason": "",
+              "audited_by": {}
+            },
+            "voided_by": {},
+            "grade": "conjecture",
+            "audited_badge": false
+          },
+          "review_write": {
+            "written": false,
+            "rolled_back": false,
+            "append_state": "appended",
+            "re_sign_required": false,
+            "grade": "",
+            "statement_id": "000064",
+            "proof_no": 1,
+            "proof_sha256": "0de0655931b4ee5e4fbf66a8f5a4ef4156c9d1e75b9f14b454ecbfebacc3e0a4",
+            "kind_upgrade": {},
+            "upgrade_note": "",
+            "grade_recomputed": {},
+            "streak": 0,
+            "need": 3,
+            "streak_ok": false,
+            "deferred_to": "secretary",
+            "reason": "发签这一步不在这一支：在册档由 V 的秘书判定并发（业主 2026-10-29），未在册档由 V 自己颁发签信封。台账那一行已落（v-000003）",
+            "manuscript_signed": false,
+            "filed": "not_read_by_v",
+            "v_review": {
+              "checked": true,
+              "review_id": "v-review-000011",
+              "written": true,
+              "idempotent": false,
+              "path": "verifications/reviews/v-review-000011.md",
+              "delivery": {
+                "checked": true,
+                "state": "dispatched",
+                "item_id": "t-000073",
+                "key": "v-review@v-review-000011",
+                "role": "B",
+                "parent_task_id": "t-000005",
+                "reason": "已投给 t-000005 的板项 t-000073",
+                "detail_path": "V 的审阅报告：`verifications/reviews/v-review-000011.md`\n- 被审稿：`manuscripts/B/b-proof-000008.md`\n- 结论：有毛病（V 的秘书语义判定：fault）\n- 台账锚点：`verifications/000064.jsonl#v-000003`\nV 的原文不转达；这份报告就是给你的审阅意见。改完把同一份稿重新送 V。\n",
+                "existing": false
+              },
+              "reason": "V 稿已落盘：verifications/reviews/v-review-000011.md"
+            },
+            "signed_delivery": {}
+          },
+          "ledger": "verifications/000064.jsonl#v-000003",
+          "reason": "v-000003：有毛病（不签：签没落成）",
+          "detail": "",
+          "exhaustion_review": {},
+          "signer": "",
+          "proof_authors": [],
+          "report_path": "",
+          "checks": [],
+          "missing": [],
+          "citations": [],
+          "citation_checks": [],
+          "citation_gate": {
+            "ok": true,
+            "blocking": [],
+            "weaker": [],
+            "problem": "",
+            "why": ""
+          },
+          "secretary_judge": {
+            "checked": true,
+            "answer": "有缺陷要指出",
+            "axis": "fault",
+            "unwired": false,
+            "reason": "V 明确指出该证明开篇证明目标与命题不一致，未给出 n_p 整除 m 或 n_p ≡ 1 (mod p) 的计数结论，因此指出了证明链中的实质性缺陷。",
+            "basis": [
+              "\"why\":\"证明开篇声明的目标是另一条命题，全文只证 P 唯一与正规等价及交换情形，未推出 n_p 整除 m 或 n_p ≡ 1 (mod p)。\"",
+              "\"kind\":\"证明目标与命题不一致\"",
+              "\"detail\":\"## 命题要求证明 n_p 整除 m 且 n_p ≡ 1 (mod p)；但证明第 1 步起所处理的是 P 在 G 中唯一当且仅当 P 正规及交换群特例，全文没有给出 n_p 的计数结论，故该证明不支持命题。\""
+            ],
+            "refused": "",
+            "cost": {
+              "ledger": "000367",
+              "charged": true,
+              "ledger_reason": "charged",
+              "call_index": 345,
+              "prompt_sha256": "93b8e0350e753c5196f839d6153506b0028b2d8148e4906c62dc4d50ce57d578",
+              "tokens": 1579,
+              "usd": 0.000363
+            },
+            "verdict": "有毛病",
+            "defect_step": 1,
+            "fault_kind": "math",
+            "fault_cause": "",
+            "report_gap": "",
+            "statement_id": "000064",
+            "proof_no": 1,
+            "material": {
+              "v_reply": "{\"verdict\":\"有毛病\",\"defect_step\":1,\"quote\":\"要证：P 在 G 中唯一当且仅当 P 在 G 中正规；并证明交换群情形下 Sylow p-子群必然唯一。\",\"why\":\"证明开篇声明的目标是另一条命题，全文只证 P 唯一与正规等价及交换情形，未推出 n_p 整除 m 或 n_p ≡ 1 (mod p)。\",\"findings\":[{\"level\":\"error\",\"step\":1,\"kind\":\"证明目标与命题不一致\",\"detail\":\"## 命题要求证明 n_p 整除 m 且 n_p ≡ 1 (mod p)；但证明第 1 步起所处理的是 P 在 G 中唯一当且仅当 P 正规及交换群特例，全文没有给出 n_p 的计数结论，故该证明不支持命题。\"}],\"citation_checks\":[]}",
+              "ledger_row": {
+                "verdict": "有毛病",
+                "defect_step": 1
+              }
+            },
+            "defect_step_basis": ""
+          },
+          "sign_issuance": {
+            "checked": true,
+            "issue": false,
+            "issued": false,
+            "landed": false,
+            "decision": "不签发",
+            "streak": 0,
+            "need": 3,
+            "streak_ok": false,
+            "projected": 0,
+            "same_sha": true,
+            "state": "rejected",
+            "fault_kind": "math",
+            "reason": "这一转秘书语义判定说「有毛病」（fault）⇒ 不发签；这一转就是终局：已按 fault 打回 F（错在第几步见洗过的转达与 findings）",
+            "basis": [
+              "秘书判定 checked=True axis=fault",
+              "continuous=0/3",
+              "row=v-000003"
+            ],
+            "reading": {
+              "checked": true,
+              "state": "rejected",
+              "ok": false,
+              "in_sync": true,
+              "ledger_present": true,
+              "statement_id": "000064",
+              "proof_no": 1,
+              "sha": "0de0655931b4ee5e4fbf66a8f5a4ef4156c9d1e75b9f14b454ecbfebacc3e0a4",
+              "verification_id": "v-000003",
+              "verdict": "有毛病",
+              "round": 3,
+              "unresolved_errors": 1,
+              "rows": 3,
+              "proof_rows": 3,
+              "problems": [],
+              "superseded": [
+                {
+                  "verification_id": "v-000001",
+                  "verdict": "有毛病",
+                  "round": 1,
+                  "at": "2026-11-24T04:15:57+08:00",
+                  "proof_no": 1,
+                  "proof_sha256": "c31c5ce8ef8f474f8fc15531bb71dc21b87477586568210d4f110b697f49aa4a",
+                  "signed_bit3": false,
+                  "unresolved_errors": 1,
+                  "why": "命题段要求证明 Sylow 第三定理的计数结论，但证明全文只证了 Sylow 子群唯一当且仅当正规及交换群特例，未推出 n_p | m 与 n_p ≡ 1 (mod p)，命题与证明不匹配。"
+                },
+                {
+                  "verification_id": "v-000002",
+                  "verdict": "有毛病",
+                  "round": 2,
+                  "at": "2026-11-24T04:17:55+08:00",
+                  "proof_no": 1,
+                  "proof_sha256": "c6f083a120b16dc396187d29452b1943011dd8e9dcff7150b3e9ae939c3b4808",
+                  "signed_bit3": false,
+                  "unresolved_errors": 1,
+                  "why": "证明只建立了 Sylow 子群的共轭性以及唯一与正规的等价，却没有推出 n_p 整除 m 和 n_p ≡ 1 (mod p)。"
+                }
+              ],
+              "superseded_total": 2,
+              "streak": 0,
+              "need": 3,
+              "streak_ok": false,
+              "legacy_rows": 0,
+              "counted_by": "legacy:ledger_tail",
+              "ledger": "verifications/000064.jsonl",
+              "why": "000064#p1 的现行正文（sha 0de0655931b4…）最近一签是 v-000003：秘书语义判定轴=fault ⇒ 这一份要打回，按缺陷处理（V 写下的陈述：'有毛病'；unresolved_errors=1；why：证明开篇声明的目标是另一条命题，全文只证 P 唯一与正规等价及交换情形，未推出 n_p 整除 m 或 n_p ≡ 1 (mod p)。）；更早的 2 签已降为历史（见 superseded），不能把它翻回「成立」",
+              "hard_ban_markers": [],
+              "secretary_axis": "fault",
+              "secretary_fault": true,
+              "secretary_judged": true,
+              "secretary_unjudged": false
+            },
+            "cost": {},
+            "material": {},
+            "writeback": {},
+            "statement_id": "000064"
+          },
+          "review_passes": [
+            {
+              "pass": 1,
+              "axis": "fault",
+              "fault_kind": "math",
+              "fault_cause": "",
+              "decision": "不签发",
+              "streak": 0,
+              "need": 3,
+              "streak_ok": false,
+              "issue": false,
+              "issued": false,
+              "verdict": "有毛病",
+              "verification_id": "v-000003",
+              "review_call": "d0770467257d",
+              "terminal": "rejected"
+            }
+          ],
+          "manuscript_identity": {
+            "checked": true,
+            "statement_id": "000064",
+            "manuscript_id": "000008",
+            "row_manuscript_id": "000008",
+            "matched_by": "manuscript_id",
+            "fallback": false,
+            "row_checked": true,
+            "found": true,
+            "problem": "",
+            "path_checked": true,
+            "path_count": 1,
+            "path_group": 1,
+            "path_problem": "",
+            "why": "稿号 000008 == stmt:000064 行上的 `manuscript_id`，也在第 1 条逐路径记录上 ⇒ 这是这一条命题的稿"
+          },
+          "issued_sign": {},
+          "wash_v_reply": {
+            "checked": true,
+            "washed": true,
+            "text": "缺陷落在第 1 步。该步所确立的证明目标与命题要求不符：命题需要的是关于 n_p 的两条计数结论（n_p 整除 m、n_p ≡ 1 (mod p)），而证明自第 1 步起处理的是「P 在 G 中唯一」与「P 在 G 中正规」的等价性，以及交换群情形下 Sylow p-子群的唯一性；全文没有给出 n_p 的计数结论，因此现有证明不足以支持该命题。下一步应在第 1 步补上 n_p 的计数论证（n_p 整除 m、n_p ≡ 1 (mod p)），并使证明目标与命题对齐；该步补完后，再检查后续各步是否都服务于同一目标。",
+            "findings": [
+              {
+                "quote": "要证：P 在 G 中唯一当且仅当 P 在 G 中正规；并证明交换群情形下 Sylow p-子群必然唯一。",
+                "why": "证明开篇写下的目标是另一条命题，与命题所需的 n_p 计数结论不对应，属于第 1 步的目标错位。"
+              },
+              {
+                "quote": "全文没有给出 n_p 的计数结论，故该证明不支持命题。",
+                "why": "指明明缺口所在：n_p 整除 m 与 n_p ≡ 1 (mod p) 这两条计数结论在全文都未出现，是第 1 步须补的内容。"
+              }
+            ],
+            "dropped": [],
+            "refused": "",
+            "reason": "洗过：2 条 findings 逐字落回原文",
+            "actor": "secretary-V",
+            "changes": [
+              {
+                "field": "text",
+                "from": "（V 的原文，不转达）",
+                "to": "缺陷落在第 1 步。该步所确立的证明目标与命题要求不符：命题需要的是关于 n_p 的两条计数结论（n_p 整除 m、n_p ≡ 1 (mod p)），而证明自第 1 步起处理的是「P 在 G 中唯一」与「P 在 G 中正规」的等价性，以及交换群情形下 Sylow p-子群的唯一性；全文没有给出 n_p 的计数结论，因此现有证明不足以支持该命题。下一步应在第 1 步补上 n_p 的计数论证（n_p 整除 m、n_p ≡ 1 (mod p)），并使证明目标与命题对齐；该步补完后，再检查后续各步是否都服务于同一目标。",
+                "why": "洗稿转达：原文不外发（业主 2026-10-29 的 C 段）"
+              }
+            ],
+            "cost": {},
+            "material": {
+              "v_reply": "{\"verdict\":\"有毛病\",\"defect_step\":1,\"quote\":\"要证：P 在 G 中唯一当且仅当 P 在 G 中正规；并证明交换群情形下 Sylow p-子群必然唯一。\",\"why\":\"证明开篇声明的目标是另一条命题，全文只证 P 唯一与正规等价及交换情形，未推出 n_p 整除 m 或 n_p ≡ 1 (mod p)。\",\"findings\":[{\"level\":\"error\",\"step\":1,\"kind\":\"证明目标与命题不一致\",\"detail\":\"## 命题要求证明 n_p 整除 m 且 n_p ≡ 1 (mod p)；但证明第 1 步起所处理的是 P 在 G 中唯一当且仅当 P 正规及交换群特例，全文没有给出 n_p 的计数结论，故该证明不支持命题。\"}],\"citation_checks\":[]}",
+              "ledger_row": {
+                "verdict": "有毛病",
+                "defect_step": 1
+              },
+              "label": ""
+            },
+            "statement_id": "000064",
+            "proof_no": 1
+          }
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 38912,
+        "prompt_cache_miss_tokens": 2766,
+        "tokens_in": 41678,
+        "tokens_out": 3531,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000072"
+    },
+    {
+      "index": 3,
+      "shape": "final",
+      "payload": {
+        "final": "V：审 manuscriptos/B/b-proof-000008.md 的 ## 证明 段（proof_sha256=0de0655931b4ee5e4fbf66a8f5a4ef4156c9d1e75b9f14b454ecbfebacc3e0a4；台账行 verifications/000064.jsonl#v-000003）。总判：有毛病（findings 一条，且缺陷不在证明正文上）。\n\n② 先答拦截项：拦截项是渲染，不是正文。稿的「## 命题」段逐字是 Sylow 第三定理（n_p 整除 m、n_p ≡ 1 (mod p)），而 stmt:000064 的 statement_full 逐字是「P 在 G 中唯一当且仅当 P 正规；特别地，交换群情形 Sylow p-子群唯一」——两者不是同一个命题（该行 _proposition_adjudication 也判 candidate 与本条 verdict=different）。正文自第一步起声明的目标逐字就是 statement_full，所以「稿面声明 A、正文证 B、而 B 恰是登记的那一条」这个矛盾全部落在稿头。findings（一条）：step 1 / defect_step 1；原文逐字「要证：P 在 G 中唯一当且仅当 P 在 G 中正规；并证明交换群情形下 Sylow p-子群必然唯一。」；类型：台账一致（命题段与 statement_full 错配）；为何不能签：按写成后的样子读，这份稿声明的命题与它证的命题不是同一个，签不能落在一个自相矛盾的稿面上；需补什么：不是改正文，而是把「## 命题」段换成 statement_full 原文——own.land_manuscript 只替换「## 证明」段，所以这一处必须在稿头/模板那一侧修（或由能写稿头的一方重落整份稿）。\n\n① 证明正文：零缺陷（就 ## 证明 这一段自身而言 findings 为空）。六条角度逐条：\n- 前提轴：用到的假设只有「G 有限、p 素、P 是 Sylow p-子群」，全部被用到；p ∤ [G:P] 确实由 |P| = p^k 得来，未偷偷加强、未多用假设。\n- 计算轴：p-群作用计数事实成立（轨道长 = [Γ:Stab(x)]，长度>1 时 Stab(x) 真子群、|Γ| 是 p-幂 ⇒ p 整除指数；长度 1 轨道即不动点）；Q ↷ G/P 良定义（gP=g′P ⇒ g′=gh, h∈P ⇒ qg′P=qghP=qgP）成立；|G/P|=[G:P] 不被 p 整除 ⇒ 不动点集非空；不动点 qgP=gP ⟺ qg∈gP ⟺ q∈gPg⁻¹，故 Q ⊆ gPg⁻¹，两边阶都是 p^k ⇒ 相等。\n- 逻辑轴：双向蕴含都给全（唯一 ⇒ 共轭封闭 ⇒ 正规；正规 ⇒ Q=gPg⁻¹=P）；交换群情形由「正规 ⇒ 唯一」直接得；无循环依赖。\n- 强度轴：结论与 statement_full 逐条对应，没有比原文更强的断言。\n- 台账一致轴：正文 ↔ statement_full ✓；正文 ↔ 稿头「## 命题」✗（即②那一条，唯一的一处）。\n- 依赖面：## 依赖 是空表并声明「没有引用任何在册命题」，与正文确实无引用一致。\n- 硬禁令：无「显然/易证/trivial」缝，无未证前提，无引到猜想/作废/assumption 的步骤。\n\n③ 更正台账里的一句话：v-000003 的洗稿建议「在第 1 步补上 n_p 的计数论证」不成立——照它做会把正确的正文改成去证另一条命题。若确实要 n_p | m、n_p ≡ 1 (mod p)，那是一条新命题（须另登记 stmt），不在这份正文职责内。\n\n④ 签：本轮判 fault，不发签（终局）。稿头修好、把同一份正文重送时，## 证明 无需任何改动（sha 0de06559… 保持不变），正文这一侧可以直接过；修稿头会改文件 sha，但 proof_sha256 不变。",
+        "evidence": [
+          "stmt:000064",
+          "manuscripts/B/b-proof-000008.md",
+          "verifications/000064.jsonl#v-000003"
+        ],
+        "notify": {
+          "to": "B",
+          "summary": "V 的两态结论：有毛病；正文零缺陷，唯一拦截项是稿头「## 命题」段与 statement_full 错配（渲染侧修）",
+          "body": "被审：`manuscripts/B/b-proof-000008.md` 的 `## 证明` 段，proof_sha256=`0de0655931b4ee5e4fbf66a8f5a4ef4156c9d1e75b9f14b454ecbfebacc3e0a4`；台账行 `verifications/000064.jsonl#v-000003`；对应 `stmt:000064`。\n\n**总判：有毛病**，findings 一条，缺陷不在证明正文上。\n\n## ① 证明正文（`## 证明`）：零缺陷\n六条角度逐条过完，没有找到一处要改的：\n- 前提：只用到「G 有限、p 素、P 是 Sylow p-子群」，全部被用到；p ∤ [G:P] 由 |P| = p^k 得出，未偷偷加强。\n- 计算：p-群作用的计数事实（轨道长 = [Γ:Stab(x)]，长度>1 ⇒ Stab 真子群、|Γ| 为 p-幂 ⇒ p | 指数）成立；Q 在 G/P 上的左作用良定义（gP=g′P ⇒ g′=gh ⇒ qg′P=qghP=qgP）；|G/P| = [G:P] 不被 p 整除 ⇒ 不动点非空；不动点 qgP=gP ⟺ qg∈gP ⟺ q∈gPg⁻¹ ⇒ Q ⊆ gPg⁻¹，阶同为 p^k ⇒ 相等。\n- 逻辑：双向蕴含齐全；交换群情形由「正规 ⇒ 唯一」得；无循环依赖。\n- 强度：结论与 statement_full 一致，没有更强。\n- 依赖面：`## 依赖` 空表且与正文无引用一致。\n- 硬禁令：无「显然/易证」缝、无未证前提、无引到不干净命题。\n\n## ② 唯一的拦截项：稿头「## 命题」段（渲染侧）\n`## 命题` 段逐字是 Sylow 第三定理（n_p 整除 m、n_p ≡ 1 (mod p)），而 `stmt:000064` 的 statement_full 是「P 唯一 ⟺ P 正规；特别地交换群情形唯一」——不是同一命题。正文证的是后者（也是登记的那一条）。所以按写成后的样子读，稿面声明与正文所证相互矛盾 ⇒ 签不能落。\n\nfindings（一条）：step 1，defect_step 1；原文逐字「要证：P 在 G 中唯一当且仅当 P 在 G 中正规；并证明交换群情形下 Sylow p-子群必然唯一。」；类型：台账一致（命题段与 statement_full 错配）；补法：**不是改正文**，而是把 `## 命题` 段换成 statement_full 原文——`own.land_manuscript` 只替换 `## 证明` 段，故这一处必须在稿头/模板一侧修（或由能写稿头的一方重落整份稿）。\n\n## ③ 更正台账里的一句建议\nv-000003 的洗稿建议「在第 1 步补上 n_p 的计数论证」**不适用**：照它做会把正确的正文改成去证另一条命题。若确实要 n_p | m、n_p ≡ 1 (mod p)，那是一条新命题（须另登记 statement），不在这份正文的职责内。\n\n## ④ 签与下一步\n本轮判 fault ⇒ 不签发（终局）。稿头修好后，把同一份 `## 证明` 重送即可：正文无需任何改动，proof_sha256 仍是 `0de06559…`（改稿头会改文件 sha，但不改正文 sha）；正文这一侧可以直接过。",
+          "refs": [
+            "stmt:000064"
+          ]
+        }
+      },
+      "result": {
+        "notify_handoff": {
+          "handoff": "000005",
+          "ok": true,
+          "id": "000005",
+          "path": "work/handoffs.jsonl#000005",
+          "to": "B",
+          "brief": "V 的两态结论：有毛病；正文零缺陷，唯一拦截项是稿头「## 命题」段与 statement_full 错配（渲染侧修）",
+          "addressing": {
+            "checked": true,
+            "how": "parent",
+            "to": "B",
+            "kind": "parent",
+            "name": "B-literature-sylow",
+            "task_id": "t-000005",
+            "role": "B",
+            "brief": "",
+            "candidates": [],
+            "callable": "父 B-literature-sylow（t-000005）",
+            "why": "名册成员（parent）⇒ 手稿写角色 B，通知投实例 B",
+            "delivery": "roster",
+            "manuscript_to": "B",
+            "addressed_by": "role_fallback"
+          },
+          "notify_channel": "roster",
+          "revises": "",
+          "existing_same_summary": {
+            "count": 0,
+            "ids": [],
+            "note": "查过了：没有同一句话的既有交接"
+          },
+          "notified": "t-000077",
+          "error": "",
+          "note": "收件人下次运行时（或本步之后）会在收件箱/板上看到编号；它用 `manuscripts.read` 读全文"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 40832,
+        "prompt_cache_miss_tokens": 5325,
+        "tokens_in": 46157,
+        "tokens_out": 14491,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000072"
+    }
+  ],
+  "final": "V：审 manuscriptos/B/b-proof-000008.md 的 ## 证明 段（proof_sha256=0de0655931b4ee5e4fbf66a8f5a4ef4156c9d1e75b9f14b454ecbfebacc3e0a4；台账行 verifications/000064.jsonl#v-000003）。总判：有毛病（findings 一条，且缺陷不在证明正文上）。\n\n② 先答拦截项：拦截项是渲染，不是正文。稿的「## 命题」段逐字是 Sylow 第三定理（n_p 整除 m、n_p ≡ 1 (mod p)），而 stmt:000064 的 statement_full 逐字是「P 在 G 中唯一当且仅当 P 正规；特别地，交换群情形 Sylow p-子群唯一」——两者不是同一个命题（该行 _proposition_adjudication 也判 candidate 与本条 verdict=different）。正文自第一步起声明的目标逐字就是 statement_full，所以「稿面声明 A、正文证 B、而 B 恰是登记的那一条」这个矛盾全部落在稿头。findings（一条）：step 1 / defect_step 1；原文逐字「要证：P 在 G 中唯一当且仅当 P 在 G 中正规；并证明交换群情形下 Sylow p-子群必然唯一。」；类型：台账一致（命题段与 statement_full 错配）；为何不能签：按写成后的样子读，这份稿声明的命题与它证的命题不是同一个，签不能落在一个自相矛盾的稿面上；需补什么：不是改正文，而是把「## 命题」段换成 statement_full 原文——own.land_manuscript 只替换「## 证明」段，所以这一处必须在稿头/模板那一侧修（或由能写稿头的一方重落整份稿）。\n\n① 证明正文：零缺陷（就 ## 证明 这一段自身而言 findings 为空）。六条角度逐条：\n- 前提轴：用到的假设只有「G 有限、p 素、P 是 Sylow p-子群」，全部被用到；p ∤ [G:P] 确实由 |P| = p^k 得来，未偷偷加强、未多用假设。\n- 计算轴：p-群作用计数事实成立（轨道长 = [Γ:Stab(x)]，长度>1 时 Stab(x) 真子群、|Γ| 是 p-幂 ⇒ p 整除指数；长度 1 轨道即不动点）；Q ↷ G/P 良定义（gP=g′P ⇒ g′=gh, h∈P ⇒ qg′P=qghP=qgP）成立；|G/P|=[G:P] 不被 p 整除 ⇒ 不动点集非空；不动点 qgP=gP ⟺ qg∈gP ⟺ q∈gPg⁻¹，故 Q ⊆ gPg⁻¹，两边阶都是 p^k ⇒ 相等。\n- 逻辑轴：双向蕴含都给全（唯一 ⇒ 共轭封闭 ⇒ 正规；正规 ⇒ Q=gPg⁻¹=P）；交换群情形由「正规 ⇒ 唯一」直接得；无循环依赖。\n- 强度轴：结论与 statement_full 逐条对应，没有比原文更强的断言。\n- 台账一致轴：正文 ↔ statement_full ✓；正文 ↔ 稿头「## 命题」✗（即②那一条，唯一的一处）。\n- 依赖面：## 依赖 是空表并声明「没有引用任何在册命题」，与正文确实无引用一致。\n- 硬禁令：无「显然/易证/trivial」缝，无未证前提，无引到猜想/作废/assumption 的步骤。\n\n③ 更正台账里的一句话：v-000003 的洗稿建议「在第 1 步补上 n_p 的计数论证」不成立——照它做会把正确的正文改成去证另一条命题。若确实要 n_p | m、n_p ≡ 1 (mod p)，那是一条新命题（须另登记 stmt），不在这份正文职责内。\n\n④ 签：本轮判 fault，不发签（终局）。稿头修好、把同一份正文重送时，## 证明 无需任何改动（sha 0de06559… 保持不变），正文这一侧可以直接过；修稿头会改文件 sha，但 proof_sha256 不变。",
+  "evidence": [
+    "stmt:000064",
+    "manuscripts/B/b-proof-000008.md",
+    "verifications/000064.jsonl#v-000003"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 0,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 4,
+  "compactions": 0,
+  "mailbox_items": [],
+  "mailbox_msgs": [],
+  "mailbox_delivered": 0,
+  "monitor_turns": 0,
+  "wakes": 0,
+  "wake_ids": [],
+  "wake_events": [],
+  "clock_pumps": 7,
+  "clock_fired": 0,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "V 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "V",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    }
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [
+    "000005"
+  ],
+  "summons": [],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [],
+  "summons_total": 0,
+  "summons_consumed": 0,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 0,
+    "summons_consumed": 0,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p327",
+    "role": "V",
+    "prompt_sha256": "052abf02fb503f722d3e805869fb8b2d64c0afe8b3059978b59c338744ec5519",
+    "prompt_chars": 46343,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "FACULTIES_07",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_STOP",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 4,
+    "tokens_in": 165629,
+    "tokens_out": 20541,
+    "usd": 0.014571,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 4,
+    "no_request_calls": 0,
+    "hit": 153728,
+    "miss": 11901,
+    "unknown_calls": 0,
+    "tokens_in": 165629,
+    "hit_rate": 0.9281,
+    "mismatched_calls": 0,
+    "saved_usd": 0.022598,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 131.344,
+  "end_ts": "2026-11-24T04:21:21+08:00",
+  "notes": [
+    "收工时名下还有 3 条证明没有 V 的签字（读数，不拦收工；明细：000060、000062、000064）",
+    "缓存读数：命中 153728 / 未命中 11901 token，命中率 92.8%（4 次调用）；按 modelcost 口径估算可省 约 0.022598 美元",
+    "子产出处理读数：summons_total=0（这一趟没派过子代理 ⇒ 没有要处理的子产出；判据没有对象，不红）"
+  ],
+  "final_payload": {
+    "final": "V：审 manuscriptos/B/b-proof-000008.md 的 ## 证明 段（proof_sha256=0de0655931b4ee5e4fbf66a8f5a4ef4156c9d1e75b9f14b454ecbfebacc3e0a4；台账行 verifications/000064.jsonl#v-000003）。总判：有毛病（findings 一条，且缺陷不在证明正文上）。\n\n② 先答拦截项：拦截项是渲染，不是正文。稿的「## 命题」段逐字是 Sylow 第三定理（n_p 整除 m、n_p ≡ 1 (mod p)），而 stmt:000064 的 statement_full 逐字是「P 在 G 中唯一当且仅当 P 正规；特别地，交换群情形 Sylow p-子群唯一」——两者不是同一个命题（该行 _proposition_adjudication 也判 candidate 与本条 verdict=different）。正文自第一步起声明的目标逐字就是 statement_full，所以「稿面声明 A、正文证 B、而 B 恰是登记的那一条」这个矛盾全部落在稿头。findings（一条）：step 1 / defect_step 1；原文逐字「要证：P 在 G 中唯一当且仅当 P 在 G 中正规；并证明交换群情形下 Sylow p-子群必然唯一。」；类型：台账一致（命题段与 statement_full 错配）；为何不能签：按写成后的样子读，这份稿声明的命题与它证的命题不是同一个，签不能落在一个自相矛盾的稿面上；需补什么：不是改正文，而是把「## 命题」段换成 statement_full 原文——own.land_manuscript 只替换「## 证明」段，所以这一处必须在稿头/模板那一侧修（或由能写稿头的一方重落整份稿）。\n\n① 证明正文：零缺陷（就 ## 证明 这一段自身而言 findings 为空）。六条角度逐条：\n- 前提轴：用到的假设只有「G 有限、p 素、P 是 Sylow p-子群」，全部被用到；p ∤ [G:P] 确实由 |P| = p^k 得来，未偷偷加强、未多用假设。\n- 计算轴：p-群作用计数事实成立（轨道长 = [Γ:Stab(x)]，长度>1 时 Stab(x) 真子群、|Γ| 是 p-幂 ⇒ p 整除指数；长度 1 轨道即不动点）；Q ↷ G/P 良定义（gP=g′P ⇒ g′=gh, h∈P ⇒ qg′P=qghP=qgP）成立；|G/P|=[G:P] 不被 p 整除 ⇒ 不动点集非空；不动点 qgP=gP ⟺ qg∈gP ⟺ q∈gPg⁻¹，故 Q ⊆ gPg⁻¹，两边阶都是 p^k ⇒ 相等。\n- 逻辑轴：双向蕴含都给全（唯一 ⇒ 共轭封闭 ⇒ 正规；正规 ⇒ Q=gPg⁻¹=P）；交换群情形由「正规 ⇒ 唯一」直接得；无循环依赖。\n- 强度轴：结论与 statement_full 逐条对应，没有比原文更强的断言。\n- 台账一致轴：正文 ↔ statement_full ✓；正文 ↔ 稿头「## 命题」✗（即②那一条，唯一的一处）。\n- 依赖面：## 依赖 是空表并声明「没有引用任何在册命题」，与正文确实无引用一致。\n- 硬禁令：无「显然/易证/trivial」缝，无未证前提，无引到猜想/作废/assumption 的步骤。\n\n③ 更正台账里的一句话：v-000003 的洗稿建议「在第 1 步补上 n_p 的计数论证」不成立——照它做会把正确的正文改成去证另一条命题。若确实要 n_p | m、n_p ≡ 1 (mod p)，那是一条新命题（须另登记 stmt），不在这份正文职责内。\n\n④ 签：本轮判 fault，不发签（终局）。稿头修好、把同一份正文重送时，## 证明 无需任何改动（sha 0de06559… 保持不变），正文这一侧可以直接过；修稿头会改文件 sha，但 proof_sha256 不变。",
+    "evidence": [
+      "stmt:000064",
+      "manuscripts/B/b-proof-000008.md",
+      "verifications/000064.jsonl#v-000003"
+    ],
+    "notify": {
+      "to": "B",
+      "summary": "V 的两态结论：有毛病；正文零缺陷，唯一拦截项是稿头「## 命题」段与 statement_full 错配（渲染侧修）",
+      "body": "被审：`manuscripts/B/b-proof-000008.md` 的 `## 证明` 段，proof_sha256=`0de0655931b4ee5e4fbf66a8f5a4ef4156c9d1e75b9f14b454ecbfebacc3e0a4`；台账行 `verifications/000064.jsonl#v-000003`；对应 `stmt:000064`。\n\n**总判：有毛病**，findings 一条，缺陷不在证明正文上。\n\n## ① 证明正文（`## 证明`）：零缺陷\n六条角度逐条过完，没有找到一处要改的：\n- 前提：只用到「G 有限、p 素、P 是 Sylow p-子群」，全部被用到；p ∤ [G:P] 由 |P| = p^k 得出，未偷偷加强。\n- 计算：p-群作用的计数事实（轨道长 = [Γ:Stab(x)]，长度>1 ⇒ Stab 真子群、|Γ| 为 p-幂 ⇒ p | 指数）成立；Q 在 G/P 上的左作用良定义（gP=g′P ⇒ g′=gh ⇒ qg′P=qghP=qgP）；|G/P| = [G:P] 不被 p 整除 ⇒ 不动点非空；不动点 qgP=gP ⟺ qg∈gP ⟺ q∈gPg⁻¹ ⇒ Q ⊆ gPg⁻¹，阶同为 p^k ⇒ 相等。\n- 逻辑：双向蕴含齐全；交换群情形由「正规 ⇒ 唯一」得；无循环依赖。\n- 强度：结论与 statement_full 一致，没有更强。\n- 依赖面：`## 依赖` 空表且与正文无引用一致。\n- 硬禁令：无「显然/易证」缝、无未证前提、无引到不干净命题。\n\n## ② 唯一的拦截项：稿头「## 命题」段（渲染侧）\n`## 命题` 段逐字是 Sylow 第三定理（n_p 整除 m、n_p ≡ 1 (mod p)），而 `stmt:000064` 的 statement_full 是「P 唯一 ⟺ P 正规；特别地交换群情形唯一」——不是同一命题。正文证的是后者（也是登记的那一条）。所以按写成后的样子读，稿面声明与正文所证相互矛盾 ⇒ 签不能落。\n\nfindings（一条）：step 1，defect_step 1；原文逐字「要证：P 在 G 中唯一当且仅当 P 在 G 中正规；并证明交换群情形下 Sylow p-子群必然唯一。」；类型：台账一致（命题段与 statement_full 错配）；补法：**不是改正文**，而是把 `## 命题` 段换成 statement_full 原文——`own.land_manuscript` 只替换 `## 证明` 段，故这一处必须在稿头/模板一侧修（或由能写稿头的一方重落整份稿）。\n\n## ③ 更正台账里的一句建议\nv-000003 的洗稿建议「在第 1 步补上 n_p 的计数论证」**不适用**：照它做会把正确的正文改成去证另一条命题。若确实要 n_p | m、n_p ≡ 1 (mod p)，那是一条新命题（须另登记 statement），不在这份正文的职责内。\n\n## ④ 签与下一步\n本轮判 fault ⇒ 不签发（终局）。稿头修好后，把同一份 `## 证明` 重送即可：正文无需任何改动，proof_sha256 仍是 `0de06559…`（改稿头会改文件 sha，但不改正文 sha）；正文这一侧可以直接过。",
+      "refs": [
+        "stmt:000064"
+      ]
+    }
+  },
+  "task_id": "t-000072"
+}

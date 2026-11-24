@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T05:34:26+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 1828,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"派活（手稿 000026 / t-000001）已完成。回执三样：① 改动处：只改了 out/package/main.tex 一处文件、五个位置，均在 Section 3 内各定理证明的 ( \\\\end{proof} ) 前就地加一行英文出处标记（未改定义、定理陈述、证明推理、label、环境数量与导言区）：thm:sylow1 → `stmt:000060`（现第 114 行）、thm:sylow2 → `stmt:000061`（第 126 行）、thm:sylow3 → `stmt:000062`（第 142 行）、thm:index → `stmt:000063`（第 154 行）、thm:unique → `stmt:000064`（第 168 行），全部位于 `\\\\appendix`（现第 200 行之后）之前。措辞说明：派活原文举例为中文「台账出处：」，我按本岗「全文英文、CJK 字符数为 0」的硬线写成等价英文 `\\\\emph{Ledger record:} \\\\texttt{stmt:00006x}.`，所指 stmt 号逐字照指令。② tex_sha256 前 12 位：51d7314817cb（全值 51d7314817cb01cf28ecd363af4ed3b718e5728fd27764081196ee2965dfc744，与盘上现行 main.tex 一致，pdf_fresh=true）。③ pages：7（pdf_bytes=232993，engine=pdflatex，runs=2，exit_codes=[0,0]）。附带读数：正文段 Overfull \\\\hbox 最大 9.80pt（<20pt 阈值，合规）；文档 5 条 claim 的 citations 已是 stmt:000060–000064（content_sha256=2d0a330993fc…，documents.status=accepted、review_rounds=14），故手稿 000025 那条 claim 引文修正在上一轮已完成，本轮无需再动 documents 行、也未改 manuscripts/G/000000.md；环境数与 label 未变，故 MAPPING.json 与新正文仍逐行对应，无需重写。MAPPING 与 mapping-appendix 未手改。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\sylow-4\\\\runs\\\\G-20261124-053426-001.json\", \"messages\": [], \"outcome\": \"ok\", \"status\": \"done\", \"steps\": 20, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "84f59c41ccef8693fad4d681bd837a6b2484cb6e2ccc023b439ed3d6f7734182",
+ "readings": {},
+ "role": "G",
+ "status": "done",
+ "task_id": "t-000174"
+}

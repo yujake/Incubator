@@ -1,0 +1,4 @@
+{"actor": "agent-A-seed-ingest", "at": "2026-11-24T03:41:09+08:00", "count": 0, "instance": "seed-ingest", "invalidated": true, "request_id": "r-000001", "slots": []}
+{"actor": "agent-A-seed-ingest", "at": "2026-11-24T03:41:33+08:00", "count": 4, "instance": "seed-ingest", "request_id": "r-000001", "slots": ["000000", "000001", "000002", "000003"]}
+{"actor": "agent-A-seed-ingest", "at": "2026-11-24T03:41:47+08:00", "count": 4, "instance": "seed-ingest", "request_id": "r-000001", "slots": ["000000", "000001", "000002", "000003"]}
+{"actor": "agent-A", "at": "2026-11-24T03:41:48+08:00", "count": 4, "instance": "", "request_id": "r-000001", "slots": ["000000", "000001", "000002", "000003"]}

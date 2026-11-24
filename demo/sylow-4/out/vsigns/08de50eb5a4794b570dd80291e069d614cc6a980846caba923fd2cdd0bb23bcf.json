@@ -1,0 +1,111 @@
+{
+  "artifact_path": "manuscripts/B/b-proof-000000.md",
+  "artifact_sha": "08de50eb5a4794b570dd80291e069d614cc6a980846caba923fd2cdd0bb23bcf",
+  "artifact_sha_rule": "`artifact_sha` = `proofregistry.proof_sha(proof_text)`，与台账行的 `proof_sha256`、连续计数的清零键同一个值；不是盘上那份 `.md` 的字节 sha",
+  "at": "2026-11-24T04:10:52+08:00",
+  "count": 3,
+  "counted_by": "sign_counting",
+  "envelope": {
+    "at": "2026-11-24T04:10:52+08:00",
+    "issued_by": "agent-V-V1",
+    "kind": "v-sign-issued",
+    "to": "secretary:B"
+  },
+  "ledger": "verifications/000060.jsonl#v-000009",
+  "legacy": false,
+  "manuscript_write": {
+    "artifact": {
+      "bytes": 7601,
+      "checked": true,
+      "path": "manuscripts/B/b-proof-000000.md",
+      "producer": "agent-B-B-literature-sylow",
+      "registered": true,
+      "sha256": "a6b51695e6cd16ecbe5d071107aca4bc2a533730d9e4b510cc3633930bb6058a",
+      "why": "签块落盘后重登记：sha256=a6b51695e6cd… bytes=7601"
+    },
+    "body_mismatch": false,
+    "body_sha256": "08de50eb5a4794b570dd80291e069d614cc6a980846caba923fd2cdd0bb23bcf",
+    "code": "",
+    "idempotent": false,
+    "line": 3,
+    "missing": false,
+    "path": "manuscripts/B/b-proof-000000.md",
+    "reading": {
+      "at": "2026-11-24T04:10:52+08:00",
+      "found": true,
+      "identity_state": "resolved",
+      "identity_why": "签块的手稿号 000000 与这一份稿相同",
+      "ledger": "verifications/000060.jsonl#v-000009",
+      "manuscript_id": "000000",
+      "manuscript_key": "000000",
+      "mark": "- V 签：已签=true；判词=成立；连续=3/3；正文sha=08de50eb5a4794b570dd80291e069d614cc6a980846caba923fd2cdd0bb23bcf；时间=2026-11-24T04:10:52+08:00；签名者=secretary:B；台账=verifications/000060.jsonl#v-000009；手稿号=000000",
+      "need": 3,
+      "problem": "",
+      "proof_sha256": "08de50eb5a4794b570dd80291e069d614cc6a980846caba923fd2cdd0bb23bcf",
+      "signed": true,
+      "signer": "secretary:B",
+      "statement_id": "",
+      "streak": 3,
+      "verdict": "成立"
+    },
+    "signed_sha256": "08de50eb5a4794b570dd80291e069d614cc6a980846caba923fd2cdd0bb23bcf",
+    "state": "written",
+    "why": "签块写进 `manuscripts/B/b-proof-000000.md` 第 3 行（连续 3/3）",
+    "written": true
+  },
+  "need": 3,
+  "objections": [
+    {
+      "at": "2026-11-24T04:10:40+08:00",
+      "axis": "verdict",
+      "defect_steps": [
+        1
+      ],
+      "verification_id": "v-000008"
+    }
+  ],
+  "passes": [
+    {
+      "at": "2026-11-24T04:09:05+08:00",
+      "axis": "clean",
+      "object_path": "manuscripts/B/b-proof-000000.md",
+      "object_sha256": "5fdf37c9cff06f438f2f3323081ab248ebc6823fa5bff9cb0250f15b7c6a8a99",
+      "proof_sha256": "08de50eb5a4794b570dd80291e069d614cc6a980846caba923fd2cdd0bb23bcf",
+      "review_call": "384b5e2a9cc3",
+      "review_pass": 1,
+      "round": 6,
+      "verdict": "成立",
+      "verification_id": "v-000006"
+    },
+    {
+      "at": "2026-11-24T04:10:04+08:00",
+      "axis": "clean",
+      "object_path": "manuscripts/B/b-proof-000000.md",
+      "object_sha256": "5fdf37c9cff06f438f2f3323081ab248ebc6823fa5bff9cb0250f15b7c6a8a99",
+      "proof_sha256": "08de50eb5a4794b570dd80291e069d614cc6a980846caba923fd2cdd0bb23bcf",
+      "review_call": "384b5e2a9cc3",
+      "review_pass": 2,
+      "round": 7,
+      "verdict": "成立",
+      "verification_id": "v-000007"
+    },
+    {
+      "at": "2026-11-24T04:10:52+08:00",
+      "axis": "clean",
+      "object_path": "manuscripts/B/b-proof-000000.md",
+      "object_sha256": "5fdf37c9cff06f438f2f3323081ab248ebc6823fa5bff9cb0250f15b7c6a8a99",
+      "proof_sha256": "08de50eb5a4794b570dd80291e069d614cc6a980846caba923fd2cdd0bb23bcf",
+      "review_call": "384b5e2a9cc3",
+      "review_pass": 3,
+      "round": 9,
+      "verdict": "成立",
+      "verification_id": "v-000009"
+    }
+  ],
+  "schema": "vsign/1",
+  "source_note": "passes 是逐转的读数（verification_id / at / proof_sha256 / why，另带 review_call 与 review_pass：同一 review_call 才是同一次送审的那几转，跨趟不拼票）；V 的回复全文不在本文件里 —— 去 verifications/<命题号>.jsonl#<verification_id> 读",
+  "statement_id": "000060",
+  "streak": 3,
+  "verdict": "成立",
+  "written_by": "secretary:B"
+}

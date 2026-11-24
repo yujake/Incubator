@@ -1,0 +1,2378 @@
+{
+  "role": "A",
+  "task": "A.run_once：这次没有带参数（调用方只要求你按职责做这件事）。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "lit.stage_list",
+        "args": {
+          "request_id": "*",
+          "status": "pending"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "lit.stage_list",
+        "ok": true,
+        "data": {
+          "request_id": "*",
+          "current_request_id": "r-000001",
+          "batch": null,
+          "status": "pending",
+          "count": 4,
+          "counts": {
+            "pending": 4,
+            "withdrawn": 0,
+            "rejected": 0,
+            "qualified": 0,
+            "admitted": 0,
+            "cleared": 0
+          },
+          "duplicate_rows": 0,
+          "duplicate_groups": [],
+          "gaps": [],
+          "rows": [
+            {
+              "slot": "000000",
+              "batch": 1,
+              "status": "pending",
+              "title": "9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf",
+              "request_id": "r-000001",
+              "doi": null,
+              "provider": "",
+              "year": null,
+              "type_code": "J",
+              "summary": "",
+              "url": "reference/9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf",
+              "added_at": "2026-11-24T03:41:09+08:00",
+              "relevance": "工作区里已有的本地文献（reference/ 下用户逐字点名），不是检索来的：本地 Sylow 定理证明讲稿，待判收",
+              "lit_id": null,
+              "admitted_at": "",
+              "reason_code": "",
+              "withdrawn_reason": "",
+              "reject_reason": "",
+              "cleared_at": "",
+              "clear_reason": "",
+              "new_content": "",
+              "overlap_score": null,
+              "overlap_kind": "",
+              "overlap_with": null,
+              "overlap_ok": null,
+              "claimed_by": "",
+              "lease_until": null,
+              "claimed_at": "",
+              "availability": "",
+              "content_read": false,
+              "content_read_why": "no_fulltext"
+            },
+            {
+              "slot": "000001",
+              "batch": 1,
+              "status": "pending",
+              "title": "11dc1a689516-harris-sylow-theorems.pdf",
+              "request_id": "r-000001",
+              "doi": null,
+              "provider": "",
+              "year": null,
+              "type_code": "J",
+              "summary": "",
+              "url": "reference/11dc1a689516-harris-sylow-theorems.pdf",
+              "added_at": "2026-11-24T03:41:09+08:00",
+              "relevance": "工作区里已有的本地文献（reference/ 下用户逐字点名），不是检索来的：本地 Sylow 定理讲稿，待判收",
+              "lit_id": null,
+              "admitted_at": "",
+              "reason_code": "",
+              "withdrawn_reason": "",
+              "reject_reason": "",
+              "cleared_at": "",
+              "clear_reason": "",
+              "new_content": "",
+              "overlap_score": null,
+              "overlap_kind": "",
+              "overlap_with": null,
+              "overlap_ok": null,
+              "claimed_by": "",
+              "lease_until": null,
+              "claimed_at": "",
+              "availability": "",
+              "content_read": false,
+              "content_read_why": "no_fulltext"
+            },
+            {
+              "slot": "000002",
+              "batch": 1,
+              "status": "pending",
+              "title": "c104f1720c63-idelhaj-sylow-theorems-and-applications.pdf",
+              "request_id": "r-000001",
+              "doi": null,
+              "provider": "",
+              "year": null,
+              "type_code": "J",
+              "summary": "",
+              "url": "reference/c104f1720c63-idelhaj-sylow-theorems-and-applications.pdf",
+              "added_at": "2026-11-24T03:41:09+08:00",
+              "relevance": "工作区里已有的本地文献（reference/ 下用户逐字点名），不是检索来的：本地 Sylow 定理及应用讲稿，待判收",
+              "lit_id": null,
+              "admitted_at": "",
+              "reason_code": "",
+              "withdrawn_reason": "",
+              "reject_reason": "",
+              "cleared_at": "",
+              "clear_reason": "",
+              "new_content": "",
+              "overlap_score": null,
+              "overlap_kind": "",
+              "overlap_with": null,
+              "overlap_ok": null,
+              "claimed_by": "",
+              "lease_until": null,
+              "claimed_at": "",
+              "availability": "",
+              "content_read": false,
+              "content_read_why": "no_fulltext"
+            },
+            {
+              "slot": "000003",
+              "batch": 1,
+              "status": "pending",
+              "title": "e090d219194b-vakil-sylow-theorems.pdf",
+              "request_id": "r-000001",
+              "doi": null,
+              "provider": "",
+              "year": null,
+              "type_code": "J",
+              "summary": "",
+              "url": "reference/e090d219194b-vakil-sylow-theorems.pdf",
+              "added_at": "2026-11-24T03:41:09+08:00",
+              "relevance": "工作区里已有的本地文献（reference/ 下用户逐字点名），不是检索来的：本地 Sylow 定理讲稿，待判收",
+              "lit_id": null,
+              "admitted_at": "",
+              "reason_code": "",
+              "withdrawn_reason": "",
+              "reject_reason": "",
+              "cleared_at": "",
+              "clear_reason": "",
+              "new_content": "",
+              "overlap_score": null,
+              "overlap_kind": "",
+              "overlap_with": null,
+              "overlap_ok": null,
+              "claimed_by": "",
+              "lease_until": null,
+              "claimed_at": "",
+              "availability": "",
+              "content_read": false,
+              "content_read_why": "no_fulltext"
+            }
+          ],
+          "total_all_delegations": 4,
+          "note": "默认只返回当前委托的行（`request_id` = 最近一次暂存的那次委托）；查历史请显式给 request_id（`*` = 全部）。状态四档：`pending` 待裁 / `qualified` 判收未注册（无号） / `admitted` 已注册（带 lit_id） / `rejected` 拒收；历史的 `cleared` 读成 rejected+over_cap、`withdrawn` 读成 rejected+withdrawn_by_reviewer（撤掉的槽位仍在，序号不复用）。本委托还有 4 条没判：只要还大于 0，`lit.admit_all` 就整批拒绝（`lit.admit` 逐条判收不受它拦）。判收（`lit.admit`）**不发号**：正式文献号由 `lit.admit_all` 在提交那一刻批量注册并回填，随后清表（`cleared_at` 打上、整份行归档在 data/archive/lit_candidates/archive-<request_id>.jsonl）。A 的 `done=True` 只表示「这一条检索请求跑完了」，不等于「清表」；收工闸数的是**全表**，不是当前委托、也不是那一条检索请求。**没有正文就不许判收**（业主 2026-11-20）：「通过」的每一条都必须真的读到正文。标 `readable` 之前先 `text.extract(path=<全文路径>, lit_id=\"cand:<槽位>\")` 抽出正文、再用 `fs.read` 读那份 `.txt`，`lit.admit` 才认；`content_read` 那一格是机器现算的（抽读回执 + 版本 + `fs.read` + 不只摘要），不是自报。仅题录（`metadata_only`）、抽取失败（`extract_failed`）、没下载 / 只有摘要的候选：**不许判收、不许入库** —— 只能把题录留在候选记录里并写清为什么没读到（`lit.stage_reject` + 受控理由码：没下到 / 抽不出 / 只有题录或摘要）。摘要最多用于初排与去重，它不是正文：只抽到摘要的，按 `abstract_only` 拒。全表还有 4 条待裁，分布在 1 个委托上（跨委托，不只当前那一份）：r-000001 还剩 4 条。谁能清：A 的 `run_once`（`request_ids` 给空就认领全部有 pending 的委托，也可以逐个点名）→ 逐条 `lit.admit` 判收 / `lit.stage_reject` 判拒 → 再**逐委托** `lit.admit_all` 提交（批量注册 + 回填 + 清表）。只清当前委托不够：收工闸数的是全表。"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 55296,
+        "prompt_cache_miss_tokens": 1198,
+        "tokens_in": 56494,
+        "tokens_out": 186,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000004"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.list",
+        "args": {
+          "path": "reference"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "fs.list",
+        "ok": true,
+        "data": {
+          "path": "reference",
+          "entries": [
+            {
+              "name": "11dc1a689516-harris-sylow-theorems.pdf",
+              "path": "reference/11dc1a689516-harris-sylow-theorems.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 297507,
+              "mtime": "2026-11-23T14:45:48+08:00"
+            },
+            {
+              "name": "9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf",
+              "path": "reference/9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 279580,
+              "mtime": "2026-11-23T14:45:44+08:00"
+            },
+            {
+              "name": "c104f1720c63-idelhaj-sylow-theorems-and-applications.pdf",
+              "path": "reference/c104f1720c63-idelhaj-sylow-theorems-and-applications.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 234210,
+              "mtime": "2026-11-23T14:46:15+08:00"
+            },
+            {
+              "name": "e090d219194b-vakil-sylow-theorems.pdf",
+              "path": "reference/e090d219194b-vakil-sylow-theorems.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 81682,
+              "mtime": "2026-11-23T14:46:34+08:00"
+            }
+          ],
+          "total": 4,
+          "returned": 4,
+          "truncated": false
+        },
+        "error": "",
+        "meta": {
+          "total": 4,
+          "returned": 4,
+          "truncated": false
+        },
+        "multi_call": {
+          "turn_index": 1,
+          "call_index": 0,
+          "calls": 2,
+          "step_index": 1
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 55680,
+        "prompt_cache_miss_tokens": 2903,
+        "tokens_in": 58583,
+        "tokens_out": 480,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000004"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "RELIABLE-REFERENCES.json"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "{\n  \"paths\": [\n    \"reference/9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf\",\n    \"reference/11dc1a689516-harris-sylow-theorems.pdf\",\n    \"reference/c104f1720c63-idelhaj-sylow-theorems-and-applications.pdf\",\n    \"reference/e090d219194b-vakil-sylow-theorems.pdf\"\n  ],\n  \"verbatim\": \"种子：reference/ 已投放 4 份文献（Conrad/Harris/Idelhaj/Vakil），优先用它们；拿不到全文就按仅题录判收，不要为找全文反复换源；确实需要引用时只许引用 reference/ 里真实存在的文件，没有全文就把外部事实标成“标准教材事实（未持全文）”。\"\n}\n",
+        "error": "",
+        "meta": {
+          "path": "RELIABLE-REFERENCES.json",
+          "encoding": "utf-8",
+          "bytes_read": 608,
+          "total_bytes": 608,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 9,
+          "total_lines": 9,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 9 行",
+          "sha256": "52e64027be583b81e62cc462ef350ecb6bf55740e86acd8b852bc51849e94694"
+        },
+        "warn": "这一步给了 2 条调用，已按顺序逐条：第 1 条 fs.list 成功：4；第 2 条 fs.read 成功。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 1,
+          "call_index": 1,
+          "calls": 2,
+          "step_index": 2,
+          "summary": "这一步给了 2 条调用，已按顺序逐条：第 1 条 fs.list 成功：4；第 2 条 fs.read 成功。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 1,
+            "calls": 2,
+            "items": 2,
+            "steps": [
+              1,
+              2
+            ],
+            "executed": 2,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000004"
+    },
+    {
+      "index": 3,
+      "shape": "tool",
+      "payload": {
+        "name": "text.extract",
+        "args": {
+          "lit_id": "cand:000000",
+          "max_pages": 200
+        },
+        "why": "抽 cand:000000（Conrad 的 Sylow 证明讲稿）正文，判收前必须先读"
+      },
+      "result": {
+        "tool": "text.extract",
+        "ok": false,
+        "data": null,
+        "error": "候选期抽读要给 `path`：候选行上没有本地路径，先 `search.download` 拿到 `rel_path`（或直接给盘上那份文件的路径），再 `text.extract(path=…, lit_id=\"cand:000000\")`",
+        "meta": {
+          "kind": "no_target",
+          "slot": "000000"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 57728,
+        "prompt_cache_miss_tokens": 2524,
+        "tokens_in": 60252,
+        "tokens_out": 162,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000004"
+    },
+    {
+      "index": 4,
+      "shape": "tool",
+      "payload": {
+        "name": "text.extract",
+        "args": {
+          "path": "reference/9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf",
+          "lit_id": "cand:000000",
+          "max_pages": 200
+        },
+        "why": "候选行没有本地路径字段，直接给盘上那份 PDF 的路径来抽 cand:000000 的正文"
+      },
+      "result": {
+        "tool": "text.extract",
+        "ok": false,
+        "data": null,
+        "error": "文件不存在：D:\\Incubator\\projects\\sylow-4\\library\\reference\\9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf；注意：相对路径的唯一基准是 `library/`。`D:\\Incubator\\projects\\sylow-4\\reference\\9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf` 是工作区里的文件（下载中间态等），要读它请把绝对路径直接给 `path`",
+        "meta": {
+          "kind": "file_missing",
+          "path": "D:\\Incubator\\projects\\sylow-4\\library\\reference\\9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 59392,
+        "prompt_cache_miss_tokens": 1105,
+        "tokens_in": 60497,
+        "tokens_out": 160,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000004"
+    },
+    {
+      "index": 5,
+      "shape": "tool",
+      "payload": {
+        "name": "text.extract",
+        "args": {
+          "path": "D:\\Incubator\\projects\\sylow-4\\reference\\9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf",
+          "lit_id": "cand:000000",
+          "max_pages": 200
+        },
+        "why": "相对路径基准是 library/，reference/ 下的 PDF 要给绝对路径才能抽 cand:000000 的正文"
+      },
+      "result": {
+        "tool": "text.extract",
+        "ok": true,
+        "data": {
+          "path": "out/texts/cand-000000.txt",
+          "abs_path": "D:\\Incubator\\projects\\sylow-4\\out\\texts\\cand-000000.txt",
+          "lit_id": "cand:000000",
+          "pages": 7,
+          "chars": 19296,
+          "sha256": "b6ade8cee42a29269230021a2726bc47fb9f2381019982f6e1ae34575043d342",
+          "quality": {
+            "state": "readable",
+            "why": "",
+            "chars": 19296,
+            "nonspace_chars": 15428,
+            "nul_bytes": 0,
+            "nul_ratio": 0.0,
+            "replacement_chars": 0,
+            "control_chars": 16,
+            "control_ratio": 0.000829,
+            "words": 2706,
+            "long_words": 1461,
+            "alpha_ratio": 0.8256
+          },
+          "max_pages": 200,
+          "truncated": false,
+          "note": "纯文字稿已入库（与 PDF 同层）；页间插了 `===== page N =====`；`sha256` 是这次写下的**正文**的指纹（下游可拿它核「读到的是不是同一份」）"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 59648,
+        "prompt_cache_miss_tokens": 1225,
+        "tokens_in": 60873,
+        "tokens_out": 291,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000004"
+    },
+    {
+      "index": 6,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/texts/cand-000000.txt",
+          "start_line": 1,
+          "max_lines": 120
+        },
+        "why": "判收前必须真读 cand:000000 的正文（抽了不读算没读）"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "===== page 1 =====\nTHE SYLOW THEOREMS\nKEITH CONRAD\n1. Introduction\nThe converse of Lagrange’s theorem is false: if G is a ﬁnite group and d | |G|, then there\nmay not be a subgroup of G with order d. The simplest example of this is the group A4, of\norder 12, which has no subgroup of order 6. The Norwegian mathematician Peter Ludwig\nSylow [4] discovered that a converse result is true when d is a prime power: if p is a prime\nnumber and pk | |G| then G must contain a subgroup of order pk. Sylow also discovered\nimportant relations among the subgroups whose order is the largest power of p dividing |G|,\nsuch as the fact that all subgroups of that order are conjugate to each other.\nFor example, a group of order 100 = 22 · 52 must contain subgroups of order 1, 2, 4, 5,\nand 25, the subgroups of order 4 are conjugate to each other, and the subgroups of order\n25 are conjugate to each other. It is not necessarily the case that the subgroups of order 2\nare conjugate or that the subgroups of order 5 are conjugate.\nDeﬁnition 1.1. Let G be a ﬁnite group and p be a prime. A subgroup of G whose order is\nthe highest power of p dividing |G| is called a p-Sylow subgroup1 of G. A p-Sylow subgroup\nfor some p is called a Sylow subgroup.\nIn a group of order 100, a 2-Sylow subgroup has order 4, a 5-Sylow subgroup has order\n25, and a p-Sylow subgroup is trivial if p̸ = 2 or 5.\nIn a group of order 12, a 2-Sylow subgroup has order 4, a 3-Sylow subgroup has order 3,\nand a p-Sylow subgroup is trivial if p > 3. Let’s look at a few examples of Sylow subgroups\nin groups of order 12.\nExample 1.2. In Z/(12), the only 2-Sylow subgroup is {0, 3, 6, 9} = ⟨3⟩and the only\n3-Sylow subgroup is {0, 4, 8} = ⟨4⟩.\nExample 1.3. In A4 there is one subgroup of order 4, so the only 2-Sylow subgroup is\n{(1), (12)(34), (13)(24), (14)(23)} = ⟨(12)(34), (14)(23)⟩.\nThere are four 3-Sylow subgroups:\n{(1), (123), (132)} = ⟨(123)⟩,\n{(1), (124), (142)} = ⟨(124)⟩,\n{(1), (134), (143)} = ⟨(134)⟩,\n{(1), (234), (243)} = ⟨(234)⟩.\nE…（落档截断，原 4325 字）",
+        "error": "",
+        "meta": {
+          "path": "out/texts/cand-000000.txt",
+          "encoding": "utf-8",
+          "bytes_read": 19882,
+          "total_bytes": 19882,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 120,
+          "total_lines": 456,
+          "next_line": 121,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 1–120 行（共 456 行）；续读 start_line=121",
+          "sha256": "b6ade8cee42a29269230021a2726bc47fb9f2381019982f6e1ae34575043d342"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 60032,
+        "prompt_cache_miss_tokens": 1482,
+        "tokens_in": 61514,
+        "tokens_out": 113,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000004"
+    },
+    {
+      "index": 7,
+      "shape": "tool",
+      "payload": {
+        "name": "text.extract",
+        "args": {
+          "lit_id": "cand:000001",
+          "max_pages": 200,
+          "path": "D:\\Incubator\\projects\\sylow-4\\reference\\11dc1a689516-harris-sylow-theorems.pdf"
+        },
+        "why": "抽 cand:000001（Harris 的 Sylow 讲稿）正文，判收前必须抽读"
+      },
+      "result": {
+        "tool": "text.extract",
+        "ok": true,
+        "data": {
+          "path": "out/texts/cand-000001.txt",
+          "abs_path": "D:\\Incubator\\projects\\sylow-4\\out\\texts\\cand-000001.txt",
+          "lit_id": "cand:000001",
+          "pages": 65,
+          "chars": 38661,
+          "sha256": "2ba01fc417ea451cc3d079166ca8122a2e93166af0694cf279034e44c97391d8",
+          "quality": {
+            "state": "readable",
+            "why": "",
+            "chars": 38661,
+            "nonspace_chars": 30938,
+            "nul_bytes": 0,
+            "nul_ratio": 0.0,
+            "replacement_chars": 0,
+            "control_chars": 0,
+            "control_ratio": 0.0,
+            "words": 5409,
+            "long_words": 2913,
+            "alpha_ratio": 0.8443
+          },
+          "max_pages": 200,
+          "truncated": false,
+          "note": "纯文字稿已入库（与 PDF 同层）；页间插了 `===== page N =====`；`sha256` 是这次写下的**正文**的指纹（下游可拿它核「读到的是不是同一份」）"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 60672,
+        "prompt_cache_miss_tokens": 2778,
+        "tokens_in": 63450,
+        "tokens_out": 499,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000004"
+    },
+    {
+      "index": 8,
+      "shape": "tool",
+      "payload": {
+        "name": "text.extract",
+        "args": {
+          "lit_id": "cand:000002",
+          "max_pages": 200,
+          "path": "D:\\Incubator\\projects\\sylow-4\\reference\\c104f1720c63-idelhaj-sylow-theorems-and-applications.pdf"
+        },
+        "why": "抽 cand:000002（Idelhaj 的 Sylow 定理及应用）正文，判收前必须抽读"
+      },
+      "result": {
+        "tool": "text.extract",
+        "ok": true,
+        "data": {
+          "path": "out/texts/cand-000002.txt",
+          "abs_path": "D:\\Incubator\\projects\\sylow-4\\out\\texts\\cand-000002.txt",
+          "lit_id": "cand:000002",
+          "pages": 8,
+          "chars": 21369,
+          "sha256": "5f60d687eadc868207436312a2bb20701b60860b2a3cf36492082442ccbf9c90",
+          "quality": {
+            "state": "readable",
+            "why": "",
+            "chars": 21369,
+            "nonspace_chars": 17213,
+            "nul_bytes": 0,
+            "nul_ratio": 0.0,
+            "replacement_chars": 0,
+            "control_chars": 8,
+            "control_ratio": 0.000374,
+            "words": 3236,
+            "long_words": 1785,
+            "alpha_ratio": 0.8813
+          },
+          "max_pages": 200,
+          "truncated": false,
+          "note": "纯文字稿已入库（与 PDF 同层）；页间插了 `===== page N =====`；`sha256` 是这次写下的**正文**的指纹（下游可拿它核「读到的是不是同一份」）"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 62592,
+        "prompt_cache_miss_tokens": 1654,
+        "tokens_in": 64246,
+        "tokens_out": 167,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000004"
+    },
+    {
+      "index": 9,
+      "shape": "tool",
+      "payload": {
+        "name": "text.extract",
+        "args": {
+          "path": "D:\\Incubator\\projects\\sylow-4\\reference\\e090d219194b-vakil-sylow-theorems.pdf",
+          "lit_id": "cand:000003",
+          "max_pages": 200
+        },
+        "why": "抽 cand:000003（Vakil 的 Sylow 讲稿）正文，判收前必须抽读"
+      },
+      "result": {
+        "tool": "text.extract",
+        "ok": true,
+        "data": {
+          "path": "out/texts/cand-000003.txt",
+          "abs_path": "D:\\Incubator\\projects\\sylow-4\\out\\texts\\cand-000003.txt",
+          "lit_id": "cand:000003",
+          "pages": 3,
+          "chars": 5630,
+          "sha256": "72ca2459bc663a4856fcfc6af364c7b61e6a46e6e647cf7e80b4b2f0e3fb93ae",
+          "quality": {
+            "state": "readable",
+            "why": "",
+            "chars": 5630,
+            "nonspace_chars": 4530,
+            "nul_bytes": 0,
+            "nul_ratio": 0.0,
+            "replacement_chars": 0,
+            "control_chars": 0,
+            "control_ratio": 0.0,
+            "words": 850,
+            "long_words": 402,
+            "alpha_ratio": 0.8627
+          },
+          "max_pages": 200,
+          "truncated": false,
+          "note": "纯文字稿已入库（与 PDF 同层）；页间插了 `===== page N =====`；`sha256` 是这次写下的**正文**的指纹（下游可拿它核「读到的是不是同一份」）"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 63488,
+        "prompt_cache_miss_tokens": 1223,
+        "tokens_in": 64711,
+        "tokens_out": 161,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000004"
+    },
+    {
+      "index": 10,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/texts/cand-000001.txt",
+          "start_line": 1,
+          "max_lines": 100
+        },
+        "why": "判收前必须真读 cand:000001（Harris）的正文"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "===== page 1 =====\nRough statement of the Sylow theorems\nSome applications\nProofs of the Sylow Theorems\nSylow’s theorems\nGU4041\nColumbia University\nApril 23, 2020\nGU4041\nSylow’s theorems\n===== page 2 =====\nRough statement of the Sylow theorems\nSome applications\nProofs of the Sylow Theorems\nOutline\n1\nRough statement of the Sylow theorems\n2\nSome applications\nSome examples\n3\nProofs of the Sylow Theorems\nGU4041\nSylow’s theorems\n===== page 3 =====\nRough statement of the Sylow theorems\nSome applications\nProofs of the Sylow Theorems\nStatement of the theorems\nLet G be a ﬁnite group of order n. Let p be a prime that divides n, and\nsuppose pr|n but pr+1 does not divide n; we often write pr||n.\nTheorem (Sylow theorems)\n(1) G contains a subgroup H ⊂G of order pr. Any such group is\ncalled a Sylow p-subgroup.\n(2) All Sylow p-subgroups of G are conjugate by elements of G. In\nparticular, if G has only one Sylow p-subgroup H, then H is a\nnormal subgroup of G.\n(3) The number of distinct Sylow p-subgroups of G is (i) congruent\nto 1 modulo p and (ii) divides |G|.\nGU4041\nSylow’s theorems\n===== page 4 =====\nRough statement of the Sylow theorems\nSome applications\nProofs of the Sylow Theorems\nStatement of the theorems\nLet G be a ﬁnite group of order n. Let p be a prime that divides n, and\nsuppose pr|n but pr+1 does not divide n; we often write pr||n.\nTheorem (Sylow theorems)\n(1) G contains a subgroup H ⊂G of order pr. Any such group is\ncalled a Sylow p-subgroup.\n(2) All Sylow p-subgroups of G are conjugate by elements of G. In\nparticular, if G has only one Sylow p-subgroup H, then H is a\nnormal subgroup of G.\n(3) The number of distinct Sylow p-subgroups of G is (i) congruent\nto 1 modulo p and (ii) divides |G|.\nGU4041\nSylow’s theorems\n===== page 5 =====\nRough statement of the Sylow theorems\nSome applications\nProofs of the Sylow Theorems\nStatement of the theorems\nLet G be a ﬁnite group of order n. Let p be a prime that divides n, and\nsuppose pr|n but pr+1 does not divide n; we often write pr…（落档截断，原 3264 字）",
+        "error": "",
+        "meta": {
+          "path": "out/texts/cand-000001.txt",
+          "encoding": "utf-8",
+          "bytes_read": 39711,
+          "total_bytes": 39711,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 100,
+          "total_lines": 1199,
+          "next_line": 101,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 1–100 行（共 1199 行）；续读 start_line=101",
+          "sha256": "2ba01fc417ea451cc3d079166ca8122a2e93166af0694cf279034e44c97391d8"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 63872,
+        "prompt_cache_miss_tokens": 1304,
+        "tokens_in": 65176,
+        "tokens_out": 148,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000004"
+    },
+    {
+      "index": 11,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "max_lines": 100,
+          "path": "out/texts/cand-000002.txt",
+          "start_line": 1
+        },
+        "why": "判收前必须真读 cand:000002（Idelhaj）的正文"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "===== page 1 =====\nTHE SYLOW THEOREMS AND THEIR APPLICATIONS\nAMIN IDELHAJ\nAbstract. This paper begins with an introduction into the concept of group\nactions, along with the associated notions of orbits and stabilizers, culminating\nin the proofs of Cayley’s theorem and the orbit-stabilizer theorem. Then, we\nbuild up to the three Sylow theorems, and subsequently give some of their\napplications.\nContents\n1.\nIntroduction\n1\n2.\nGroup Actions, Orbits, and Stabilizers\n2\n3.\nThe Sylow Theorems\n3\n4.\nApplications of the Sylow Theorems\n5\nAcknowledgements\n8\nReferences\n8\n1. Introduction\nOne of the important results in the theory of ﬁnite groups is Lagrange’s theorem,\nwhich states that the order of any subgroup of a group must divide the order of\nthe group. One might suggest a possible converse to this theorem, that for any\nnumber dividing the order of a group, there exists a subgroup of that order. This\nis not true. For example, the group A4 of even permutations on the set {1, 2, 3, 4}\nhas order 12, yet there does not exist a subgroup of order 6. The Sylow theorems\ndo provide us with a sort of partial converse to Lagrange’s theorem, by asserting\nthe existence of certain subgroups (called Sylow p-subgroups) of any group with a\ngiven order, and gives some information about their properties. In this paper, we\nwish to build up to the proofs of the Sylow theorems by use of group actions and\nthe orbit-stabilizer theorem.\nDeﬁnition 1.1. Let G be a group and let X be a set. An action of G on X is a group\nhomomorphism φ : G →Sym(X), where Sym(X) is the group of permutations of\nX.\nNotation 1.2. When the action of G on X is unambiguous, we implicitly denote\nit by G ↷X. By abuse of notation, we will use g to denote both the group element\nand the permutation φ(g) it induces on X. If x ∈X is any point, we denote the\naction of g on it by gx. While this notation is also used for group multiplication,\nit is clear from context which one is intended.\nDate: July 2016.\n1\n===== page 2 =====\n2\nAMIN IDEL…（落档截断，原 4686 字）",
+        "error": "",
+        "meta": {
+          "path": "out/texts/cand-000002.txt",
+          "encoding": "utf-8",
+          "bytes_read": 21900,
+          "total_bytes": 21900,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 100,
+          "total_lines": 426,
+          "next_line": 101,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 1–100 行（共 426 行）；续读 start_line=101",
+          "sha256": "5f60d687eadc868207436312a2bb20701b60860b2a3cf36492082442ccbf9c90"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 64384,
+        "prompt_cache_miss_tokens": 2189,
+        "tokens_in": 66573,
+        "tokens_out": 87,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000004"
+    },
+    {
+      "index": 12,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "max_lines": 100,
+          "path": "out/texts/cand-000003.txt",
+          "start_line": 1
+        },
+        "why": "判收前必须真读 cand:000003（Vakil）的正文"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "===== page 1 =====\n18.704\n3/9/05\nGabe Cunningham\ngcasey@mit.edu\nSylow Theorems and The General Linear Group\nTheorem 1 (First Sylow Theorem) Let G be a group of order n with p|n. Write n =\npam where p does not divide m.\nThen G has a subgroup S of order pa, called a Sylow\np-subgroup of G.\nRecall from our last discussion that |GLn(Fq)| = Qn−1\nk=0(qn −qk) = qn(n−1)/2 Qn\nk=1(qk −1).\nIf q = pr, the First Sylow Theorem tells us that GLn(Fq) has a Sylow p-subgroup of order\nqn(n−1)/2. Now I’ll describe one such group.\nProposition 1 Let q = pr; let MTn(Fq) be the group of upper triangular matrices with 1’s\nalong the diagonal. Then MTn(Fq) is a Sylow p-subgroup of GLn(Fq).\nProof: It’s clear that MTn(Fq) is a subgroup of GLn(Fq), so it suﬃces to show that MTn(Fq)\nhas order qn(n−1)/2. This follows simply; each of the n(n −1)/2 entries strictly above the\ndiagonal can be any element of Fq, for a total of qn(n−1)/2 elements.\nNow for a bit of a diversion.\nLet V be an n-dimensional vector space over Fq.\nWe\ndeﬁne GL(V ) to be the group of invertible linear transformations from V to itself. There\nis a natural isomorphism between GL(V ) and GLn(Fq); ﬁx a basis for V and consider the\nmatrices of the linear transformations in GL(V ) with respect to that basis. By picking two\ndiﬀerent bases, B1 and B2, we can compose the isomorphisms obtained from each choice of\nbasis to get an isomorphism ψ from GLn(Fq) to itself as follows:\nGLn(Fq)\nψ\n/\nφ1\n%L\nL\nL\nL\nL\nL\nL\nL\nL\nL\nGLn(Fq)\nGL(V )\nφ2\n9r\nr\nr\nr\nr\nr\nr\nr\nr\nr\nLet’s consider an example. Let A = ( 1 2\n0 1 ) ∈GL2(F5). Let V be a two-dimensional vector\nspace over F5; let e1 = (1, 0) and e2 = (0, 1). Then by considering A as the matrix of some\nlinear transformation T with respect to the standard basis of V (i.e., the basis (e1, e2)), we\ncan map A to T by requiring that T(e1) = e1 and T(e2) = 2e1 + e2; this fully determines\nT ∈GL(V ). Now we ﬁx a new basis, say, (e1 + e2, e1 −e2). Since T(e1 + e2) = 3e1 + e2 =\n2(e1 + e2) + (e1 −e2) and T(e1 −e2) = −e1 + e…（落档截断，原 4184 字）",
+        "error": "",
+        "meta": {
+          "path": "out/texts/cand-000003.txt",
+          "encoding": "utf-8",
+          "bytes_read": 5785,
+          "total_bytes": 5785,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 100,
+          "total_lines": 144,
+          "next_line": 101,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 1–100 行（共 144 行）；续读 start_line=101",
+          "sha256": "72ca2459bc663a4856fcfc6af364c7b61e6a46e6e647cf7e80b4b2f0e3fb93ae"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 65792,
+        "prompt_cache_miss_tokens": 2579,
+        "tokens_in": 68371,
+        "tokens_out": 79,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000004"
+    },
+    {
+      "index": 13,
+      "shape": "tool",
+      "payload": {
+        "name": "lit.admit",
+        "args": {
+          "request_id": "r-000001",
+          "items": [
+            {
+              "slot": "000000",
+              "availability": "readable",
+              "new_content": "Conrad《The Sylow Theorems》7 页讲稿：从 Lagrange 逆命题的反例（A4 无 6 阶子群）讲起，给出 p-Sylow 子群定义、Z/12、A4、D6、S4 等大量具体算例，再给三条 Sylow 定理的完整证明"
+            },
+            {
+              "slot": "000001",
+              "availability": "readable",
+              "new_content": "Harris/Columbia GU4041 65 页幻灯：三定理的严格陈述（含 n_p ≡ 1 mod p 与 n_p | |G|）、应用例题与完整证明，篇幅最大的一路来源"
+            },
+            {
+              "slot": "000002",
+              "availability": "readable",
+              "new_content": "Idelhaj 8 页短文：先建群作用、轨道-稳定化子、Cayley 定理，再用群作用证三条 Sylow 定理并给应用，证明路径与 Conrad 不同（走轨道-稳定化子）"
+            },
+            {
+              "slot": "000003",
+              "availability": "readable",
+              "new_content": "Cunningham(MIT 18.704, 署名 vakil 文件)3 页讲稿：以 GL_n(F_q) 为例，用上三角幺幂矩阵给出 Sylow p-子群的显式构造，并讨论共轭与计数，是唯一从一般线性群角度切入的一篇"
+            }
+          ]
+        },
+        "why": "四条候选均已 text.extract 抽出正文并 fs.read 读过（content_read 有据），逐条判收"
+      },
+      "result": {
+        "tool": "lit.admit",
+        "ok": false,
+        "data": null,
+        "error": "本次委托（r-000001）没有回读记录：提交之前，A 必须用 `lit.stage_list` 把**自己刚写进列表的那一份清单**读回来、逐条过一遍。这次要提交的槽位里缺回读：000000、000001、000002、000003 ⇒ **整批不许提交入库**。做法：`lit.stage_list`（`request_id` 给本次委托）→ 对着返回的每一行做两件事：① 给这一条的可读性判定（readable / metadata_only / extract_failed / unknown，判收时写进 `lit.admit` 的 items[].availability；标 `readable` 之前必须先用 `text.extract(path=…, lit_id=\"cand:<槽位>\")` 抽读、再用 `fs.read` 读那份 `.txt`）；② 判收带 relevance、判拒带受控理由码（`lit.stage_reject` 不收档位，判拒只需理由码与一句为什么）。回读之后再提交。",
+        "meta": {
+          "kind": "no_readback",
+          "request_id": "r-000001",
+          "batch": 1,
+          "call_size": 0,
+          "call_limit": 10,
+          "delegation_admitted": 0,
+          "delegation_limit": 10,
+          "refused": [],
+          "undecided": null,
+          "missing_readback": [
+            "000000",
+            "000001",
+            "000002",
+            "000003"
+          ],
+          "missing_availability": null,
+          "availability_bad": null,
+          "unjudged_no_content": null,
+          "content_assertions": null,
+          "read_problems": null
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 67584,
+        "prompt_cache_miss_tokens": 2538,
+        "tokens_in": 70122,
+        "tokens_out": 428,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000004"
+    },
+    {
+      "index": 14,
+      "shape": "tool",
+      "payload": {
+        "name": "lit.stage_list",
+        "args": {
+          "request_id": "r-000001"
+        },
+        "why": "lit.admit 要求提交前先把候选清单读回来逐条过一遍（回读），再做判收"
+      },
+      "result": {
+        "tool": "lit.stage_list",
+        "ok": true,
+        "data": {
+          "request_id": "r-000001",
+          "current_request_id": "r-000001",
+          "batch": null,
+          "status": "pending",
+          "count": 4,
+          "counts": {
+            "pending": 4,
+            "withdrawn": 0,
+            "rejected": 0,
+            "qualified": 0,
+            "admitted": 0,
+            "cleared": 0
+          },
+          "duplicate_rows": 0,
+          "duplicate_groups": [],
+          "gaps": [],
+          "rows": [
+            {
+              "slot": "000000",
+              "batch": 1,
+              "status": "pending",
+              "title": "9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf",
+              "request_id": "r-000001",
+              "doi": null,
+              "provider": "",
+              "year": null,
+              "type_code": "J",
+              "summary": "",
+              "url": "reference/9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf",
+              "added_at": "2026-11-24T03:41:09+08:00",
+              "relevance": "工作区里已有的本地文献（reference/ 下用户逐字点名），不是检索来的：本地 Sylow 定理证明讲稿，待判收",
+              "lit_id": null,
+              "admitted_at": "",
+              "reason_code": "",
+              "withdrawn_reason": "",
+              "reject_reason": "",
+              "cleared_at": "",
+              "clear_reason": "",
+              "new_content": "Conrad《The Sylow Theorems》7 页讲稿：从 Lagrange 逆命题的反例（A4 无 6 阶子群）讲起，给出 p-Sylow 子群定义、Z/12、A4、D6、S4 等大量具体算例，再给三条 Sylow 定理的完整证明",
+              "overlap_score": null,
+              "overlap_kind": "",
+              "overlap_with": null,
+              "overlap_ok": null,
+              "claimed_by": "",
+              "lease_until": null,
+              "claimed_at": "",
+              "availability": "readable",
+              "content_read": false,
+              "content_read_why": "read_stale: `fs.read` 读到的是另一版正文（抽读件后来变过）"
+            },
+            {
+              "slot": "000001",
+              "batch": 1,
+              "status": "pending",
+              "title": "11dc1a689516-harris-sylow-theorems.pdf",
+              "request_id": "r-000001",
+              "doi": null,
+              "provider": "",
+              "year": null,
+              "type_code": "J",
+              "summary": "",
+              "url": "reference/11dc1a689516-harris-sylow-theorems.pdf",
+              "added_at": "2026-11-24T03:41:09+08:00",
+              "relevance": "工作区里已有的本地文献（reference/ 下用户逐字点名），不是检索来的：本地 Sylow 定理讲稿，待判收",
+              "lit_id": null,
+              "admitted_at": "",
+              "reason_code": "",
+              "withdrawn_reason": "",
+              "reject_reason": "",
+              "cleared_at": "",
+              "clear_reason": "",
+              "new_content": "Harris/Columbia GU4041 65 页幻灯：三定理的严格陈述（含 n_p ≡ 1 mod p 与 n_p | |G|）、应用例题与完整证明，篇幅最大的一路来源",
+              "overlap_score": null,
+              "overlap_kind": "",
+              "overlap_with": null,
+              "overlap_ok": null,
+              "claimed_by": "",
+              "lease_until": null,
+              "claimed_at": "",
+              "availability": "readable",
+              "content_read": true,
+              "content_read_why": ""
+            },
+            {
+              "slot": "000002",
+              "batch": 1,
+              "status": "pending",
+              "title": "c104f1720c63-idelhaj-sylow-theorems-and-applications.pdf",
+              "request_id": "r-000001",
+              "doi": null,
+              "provider": "",
+              "year": null,
+              "type_code": "J",
+              "summary": "",
+              "url": "reference/c104f1720c63-idelhaj-sylow-theorems-and-applications.pdf",
+              "added_at": "2026-11-24T03:41:09+08:00",
+              "relevance": "工作区里已有的本地文献（reference/ 下用户逐字点名），不是检索来的：本地 Sylow 定理及应用讲稿，待判收",
+              "lit_id": null,
+              "admitted_at": "",
+              "reason_code": "",
+              "withdrawn_reason": "",
+              "reject_reason": "",
+              "cleared_at": "",
+              "clear_reason": "",
+              "new_content": "Idelhaj 8 页短文：先建群作用、轨道-稳定化子、Cayley 定理，再用群作用证三条 Sylow 定理并给应用，证明路径与 Conrad 不同（走轨道-稳定化子）",
+              "overlap_score": null,
+              "overlap_kind": "",
+              "overlap_with": null,
+              "overlap_ok": null,
+              "claimed_by": "",
+              "lease_until": null,
+              "claimed_at": "",
+              "availability": "readable",
+              "content_read": true,
+              "content_read_why": ""
+            },
+            {
+              "slot": "000003",
+              "batch": 1,
+              "status": "pending",
+              "title": "e090d219194b-vakil-sylow-theorems.pdf",
+              "request_id": "r-000001",
+              "doi": null,
+              "provider": "",
+              "year": null,
+              "type_code": "J",
+              "summary": "",
+              "url": "reference/e090d219194b-vakil-sylow-theorems.pdf",
+              "added_at": "2026-11-24T03:41:09+08:00",
+              "relevance": "工作区里已有的本地文献（reference/ 下用户逐字点名），不是检索来的：本地 Sylow 定理讲稿，待判收",
+              "lit_id": null,
+              "admitted_at": "",
+              "reason_code": "",
+              "withdrawn_reason": "",
+              "reject_reason": "",
+              "cleared_at": "",
+              "clear_reason": "",
+              "new_content": "Cunningham(MIT 18.704, 署名 vakil 文件)3 页讲稿：以 GL_n(F_q) 为例，用上三角幺幂矩阵给出 Sylow p-子群的显式构造，并讨论共轭与计数，是唯一从一般线性群角度切入的一篇",
+              "overlap_score": null,
+              "overlap_kind": "",
+              "overlap_with": null,
+              "overlap_ok": null,
+              "claimed_by": "",
+              "lease_until": null,
+              "claimed_at": "",
+              "availability": "readable",
+              "content_read": true,
+              "content_read_why": ""
+            }
+          ],
+          "total_all_delegations": 4,
+          "note": "默认只返回当前委托的行（`request_id` = 最近一次暂存的那次委托）；查历史请显式给 request_id（`*` = 全部）。状态四档：`pending` 待裁 / `qualified` 判收未注册（无号） / `admitted` 已注册（带 lit_id） / `rejected` 拒收；历史的 `cleared` 读成 rejected+over_cap、`withdrawn` 读成 rejected+withdrawn_by_reviewer（撤掉的槽位仍在，序号不复用）。本委托还有 4 条没判：只要还大于 0，`lit.admit_all` 就整批拒绝（`lit.admit` 逐条判收不受它拦）。判收（`lit.admit`）**不发号**：正式文献号由 `lit.admit_all` 在提交那一刻批量注册并回填，随后清表（`cleared_at` 打上、整份行归档在 data/archive/lit_candidates/archive-<request_id>.jsonl）。A 的 `done=True` 只表示「这一条检索请求跑完了」，不等于「清表」；收工闸数的是**全表**，不是当前委托、也不是那一条检索请求。**没有正文就不许判收**（业主 2026-11-20）：「通过」的每一条都必须真的读到正文。标 `readable` 之前先 `text.extract(path=<全文路径>, lit_id=\"cand:<槽位>\")` 抽出正文、再用 `fs.read` 读那份 `.txt`，`lit.admit` 才认；`content_read` 那一格是机器现算的（抽读回执 + 版本 + `fs.read` + 不只摘要），不是自报。仅题录（`metadata_only`）、抽取失败（`extract_failed`）、没下载 / 只有摘要的候选：**不许判收、不许入库** —— 只能把题录留在候选记录里并写清为什么没读到（`lit.stage_reject` + 受控理由码：没下到 / 抽不出 / 只有题录或摘要）。摘要最多用于初排与去重，它不是正文：只抽到摘要的，按 `abstract_only` 拒。全表还有 4 条待裁，分布在 1 个委托上（跨委托，不只当前那一份）：r-000001 还剩 4 条。谁能清：A 的 `run_once`（`request_ids` 给空就认领全部有 pending 的委托，也可以逐个点名）→ 逐条 `lit.admit` 判收 / `lit.stage_reject` 判拒 → 再**逐委托** `lit.admit_all` 提交（批量注册 + 回填 + 清表）。只清当前委托不够：收工闸数的是全表。"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 69376,
+        "prompt_cache_miss_tokens": 1513,
+        "tokens_in": 70889,
+        "tokens_out": 165,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000004"
+    },
+    {
+      "index": 15,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/texts/cand-000000.txt",
+          "start_line": 121,
+          "max_lines": 80
+        },
+        "why": "槽 000000 的回读被判 read_stale（读到的是另一版正文），重读同一份 .txt 以刷新抽读回执"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "0\n1\n−1\n0\n\u0013\n,\n\u0012\n−1\n−1\n−1\n1\n\u0013\n,\n\u0012\n1\n−1\n−1\n−1\n\u0013\n.\n===== page 3 =====\nTHE SYLOW THEOREMS\n3\nThese form the only 2-Sylow subgroup, which is isomorphic to Q8 by labeling the matrices\nin the ﬁrst row as 1, i, j, k and the matrices in the second row as −1, −i, −j, −k.\nThere are four 3-Sylow subgroups of SL2(Z/(3)): ⟨( 1 1\n0 1 )⟩, ⟨( 1 0\n1 1 )⟩, ⟨( 0 1\n2 2 )⟩, and ⟨( 0 2\n1 2 )⟩.\nHere are the Sylow theorems. They are often given in three parts. The result we call\nSylow III* is not always stated explicitly as part of the Sylow theorems.2\nTheorem 1.7 (Sylow I). A ﬁnite group G has a p-Sylow subgroup for every prime p and\neach p-subgroup of G lies in some p-Sylow subgroup of G.\nTheorem 1.8 (Sylow II). For each prime p, the p-Sylow subgroups of G are conjugate.\nTheorem 1.9 (Sylow III). For each prime p, let np be the number of p-Sylow subgroups of\nG. Write |G| = pkm, where p doesn’t divide m. Then\nnp | m and np ≡1 mod p.\nTheorem 1.10 (Sylow III*). For each prime p, let np be the number of p-Sylow subgroups\nof G. Then np = [G : N(P)], where P is a p-Sylow subgroup and N(P) is its normalizer.\nThe existence part of Sylow I has been illustrated in all the previous examples.\nSylow II says for two p-Sylow subgroups H and K of G that there is some g ∈G such\nthat gHg−1 = K. This is illustrated in the table below, where Example 1.2 is skipped since\nZ/(12) is abelian.\nExample\nGroup\nSize\np\nH\nK\ng\n1.3\nA4\n12\n3\n⟨(123)⟩\n⟨(124)⟩\n(243)\n1.4\nD6\n12\n2\n⟨r3, s⟩\n⟨r3, rs⟩\nr2\n1.5\nS4\n24\n2\n⟨(1234), (13)⟩\n⟨(1243), (14)⟩\n(34)\n1.6\nSL2(Z/(3))\n24\n3\n⟨( 1 1\n0 1 )⟩\n⟨( 1 0\n1 1 )⟩\n",
+        "error": "",
+        "meta": {
+          "path": "out/texts/cand-000000.txt",
+          "encoding": "utf-8",
+          "bytes_read": 19882,
+          "total_bytes": 19882,
+          "truncated": false,
+          "start_line": 121,
+          "lines_read": 80,
+          "total_lines": 456,
+          "next_line": 201,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 121–200 行（共 456 行）；续读 start_line=201",
+          "sha256": "b6ade8cee42a29269230021a2726bc47fb9f2381019982f6e1ae34575043d342"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 70144,
+        "prompt_cache_miss_tokens": 2877,
+        "tokens_in": 73021,
+        "tokens_out": 579,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000004"
+    },
+    {
+      "index": 16,
+      "shape": "tool",
+      "payload": {
+        "name": "lit.admit",
+        "args": {
+          "items": [
+            {
+              "availability": "readable",
+              "new_content": "Conrad《The Sylow Theorems》7 页讲稿：从 Lagrange 逆命题的反例（A4 无 6 阶子群）讲起，给出 p-Sylow 定义与算例，再给 Sylow I/II/III/III* 的陈述与完整证明",
+              "slot": "000000"
+            },
+            {
+              "availability": "readable",
+              "new_content": "Harris/Columbia GU4041 65 页幻灯：三定理的严格陈述（含 n_p ≡ 1 mod p 与 n_p | |G|）、应用例题与完整证明",
+              "slot": "000001"
+            },
+            {
+              "availability": "readable",
+              "new_content": "Idelhaj 8 页短文：先建群作用、轨道-稳定化子、Cayley 定理，再用群作用证三条 Sylow 定理并给应用，证明路径与 Conrad 不同",
+              "slot": "000002"
+            },
+            {
+              "availability": "readable",
+              "new_content": "Cunningham（MIT 18.704，文件名标 vakil）3 页讲稿：以 GL_n(F_q) 的上三角幺幂子群 MT_n(F_q) 为 Sylow p-子群的具体模型，走 GL_n 与换基共轭这条路讲三定理",
+              "slot": "000003"
+            }
+          ],
+          "request_id": "r-000001"
+        },
+        "why": "四条候选（Conrad/Harris/Idelhaj/Cunningham）都已 text.extract 抽读并由 fs.read 读到正文，回读清单也做了，逐条判收"
+      },
+      "result": {
+        "tool": "lit.admit",
+        "ok": true,
+        "data": {
+          "ok": true,
+          "kind": "",
+          "whole_call_refused": false,
+          "reason": "",
+          "request_id": "r-000001",
+          "batch": 1,
+          "call_size": 4,
+          "call_limit": 10,
+          "delegation_admitted": 0,
+          "delegation_limit": 10,
+          "admitted": [
+            {
+              "slot": "000000",
+              "title": "9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf",
+              "lit_id": "",
+              "created": false,
+              "overlap_score": 0.0,
+              "overlap_kind": "title_jaccard",
+              "overlap_with": null,
+              "new_content": "Conrad《The Sylow Theorems》7 页讲稿：从 Lagrange 逆命题的反例（A4 无 6 阶子群）讲起，给出 p-Sylow 定义与算例，再给 Sylow I/II/III/III* 的陈述与完整证明",
+              "content_read": true
+            },
+            {
+              "slot": "000001",
+              "title": "11dc1a689516-harris-sylow-theorems.pdf",
+              "lit_id": "",
+              "created": false,
+              "overlap_score": 0.0,
+              "overlap_kind": "title_jaccard",
+              "overlap_with": null,
+              "new_content": "Harris/Columbia GU4041 65 页幻灯：三定理的严格陈述（含 n_p ≡ 1 mod p 与 n_p | |G|）、应用例题与完整证明",
+              "content_read": true
+            },
+            {
+              "slot": "000002",
+              "title": "c104f1720c63-idelhaj-sylow-theorems-and-applications.pdf",
+              "lit_id": "",
+              "created": false,
+              "overlap_score": 0.0,
+              "overlap_kind": "title_jaccard",
+              "overlap_with": null,
+              "new_content": "Idelhaj 8 页短文：先建群作用、轨道-稳定化子、Cayley 定理，再用群作用证三条 Sylow 定理并给应用，证明路径与 Conrad 不同",
+              "content_read": true
+            },
+            {
+              "slot": "000003",
+              "title": "e090d219194b-vakil-sylow-theorems.pdf",
+              "lit_id": "",
+              "created": false,
+              "overlap_score": 0.0,
+              "overlap_kind": "title_jaccard",
+              "overlap_with": null,
+              "new_content": "Cunningham（MIT 18.704，文件名标 vakil）3 页讲稿：以 GL_n(F_q) 的上三角幺幂子群 MT_n(F_q) 为 Sylow p-子群的具体模型，走 GL_n 与换基共轭这条路讲三定理",
+              "content_read": true
+            }
+          ],
+          "refused": [],
+          "cleared": [],
+          "registered": 0,
+          "report": {
+            "path": "D:/Incubator/projects/sylow-4/work/A/lit-r-000001.md",
+            "rel_path": "work/A/lit-r-000001.md",
+            "chars": 1967,
+            "admitted": 0,
+            "not_admitted": 0,
+            "undecided": 0,
+            "request_id": "r-000001",
+            "writer": "agent-A",
+            "writer_instance": "",
+            "previous_writer": ""
+          },
+          "report_path": "D:/Incubator/projects/sylow-4/work/A/lit-r-000001.md"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 72192,
+        "prompt_cache_miss_tokens": 2286,
+        "tokens_in": 74478,
+        "tokens_out": 504,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000004"
+    },
+    {
+      "index": 17,
+      "shape": "tool",
+      "payload": {
+        "name": "lit.admit_all",
+        "args": {
+          "request_id": "r-000001"
+        },
+        "why": "四条候选已逐条读过正文并判收（qualified），提交这一批：批量注册发号、回填 lit_id、写报告并清表"
+      },
+      "result": {
+        "tool": "lit.admit_all",
+        "ok": true,
+        "data": {
+          "ok": true,
+          "kind": "",
+          "whole_call_refused": false,
+          "reason": "",
+          "request_id": "r-000001",
+          "submitted": [
+            "000000",
+            "000001",
+            "000002",
+            "000003"
+          ],
+          "call_size": 4,
+          "call_limit": 10,
+          "delegation_admitted": 4,
+          "delegation_limit": 10,
+          "pending_total": 0,
+          "pending_by_delegation": [],
+          "pending_scope_note": "",
+          "admitted": [
+            {
+              "slot": "000000",
+              "title": "9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf",
+              "lit_id": "000000",
+              "created": true,
+              "overlap_score": 0.0,
+              "overlap_kind": "title_jaccard",
+              "overlap_with": null,
+              "new_content": "Conrad《The Sylow Theorems》7 页讲稿：从 Lagrange 逆命题的反例（A4 无 6 阶子群）讲起，给出 p-Sylow 定义与算例，再给 Sylow I/II/III/III* 的陈述与完整证明",
+              "content_read": true
+            },
+            {
+              "slot": "000001",
+              "title": "11dc1a689516-harris-sylow-theorems.pdf",
+              "lit_id": "000001",
+              "created": true,
+              "overlap_score": 0.0,
+              "overlap_kind": "title_jaccard",
+              "overlap_with": null,
+              "new_content": "Harris/Columbia GU4041 65 页幻灯：三定理的严格陈述（含 n_p ≡ 1 mod p 与 n_p | |G|）、应用例题与完整证明",
+              "content_read": true
+            },
+            {
+              "slot": "000002",
+              "title": "c104f1720c63-idelhaj-sylow-theorems-and-applications.pdf",
+              "lit_id": "000002",
+              "created": true,
+              "overlap_score": 0.0,
+              "overlap_kind": "title_jaccard",
+              "overlap_with": null,
+              "new_content": "Idelhaj 8 页短文：先建群作用、轨道-稳定化子、Cayley 定理，再用群作用证三条 Sylow 定理并给应用，证明路径与 Conrad 不同",
+              "content_read": true
+            },
+            {
+              "slot": "000003",
+              "title": "e090d219194b-vakil-sylow-theorems.pdf",
+              "lit_id": "000003",
+              "created": true,
+              "overlap_score": 0.0,
+              "overlap_kind": "title_jaccard",
+              "overlap_with": null,
+              "new_content": "Cunningham（MIT 18.704，文件名标 vakil）3 页讲稿：以 GL_n(F_q) 的上三角幺幂子群 MT_n(F_q) 为 Sylow p-子群的具体模型，走 GL_n 与换基共轭这条路讲三定理",
+              "content_read": true
+            }
+          ],
+          "refused": [],
+          "cleared": [],
+          "registered": 4,
+          "report": {
+            "path": "D:/Incubator/projects/sylow-4/work/A/lit-r-000001.md",
+            "rel_path": "work/A/lit-r-000001.md",
+            "chars": 1951,
+            "admitted": 4,
+            "not_admitted": 0,
+            "undecided": 0,
+            "request_id": "r-000001",
+            "writer": "agent-A",
+            "writer_instance": "",
+            "previous_writer": ""
+          },
+          "report_path": "D:/Incubator/projects/sylow-4/work/A/lit-r-000001.md"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 73728,
+        "prompt_cache_miss_tokens": 2003,
+        "tokens_in": 75731,
+        "tokens_out": 180,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000004"
+    },
+    {
+      "index": 18,
+      "shape": "summon",
+      "payload": {
+        "role": "B",
+        "action": "",
+        "params": {
+          "lit_ids": [
+            "000000",
+            "000001",
+            "000002",
+            "000003"
+          ],
+          "request_id": "r-000001",
+          "texts": [
+            "out/texts/cand-000000.txt",
+            "out/texts/cand-000001.txt",
+            "out/texts/cand-000002.txt",
+            "out/texts/cand-000003.txt"
+          ],
+          "evidence_texts": "抽读回执在 data/lit_reads.jsonl；四份 quality.state 均为 readable"
+        },
+        "why": "边界要求：literature 收进后必须派 B 收编，否则这批文献没转化成资产",
+        "brief": "整理 4 篇 Sylow 定理文献：抽概念、建关系",
+        "name": "B-literature-sylow",
+        "task": "把刚落库的 4 篇 Sylow 定理文献（lit:000000 Conrad、lit:000001 Harris GU4041 幻灯、lit:000002 Idelhaj、lit:000003 Cunningham/18.704）跑一轮 run_once 整理：抽概念、建关系、落命题线索。四份都已抽读并抽出正文（out/texts/cand-00000{0,1,2,3}.txt，sha256 已在抽读回执里），PDF 原件在 reference/ 下、已由 lit.admit_all 收编。建议先做三份有完整证明的（Conrad / Idelhaj / Cunningham）先立概念与关系，Harris 的 65 页幻灯只作陈述与应用侧的补引；关系行的 quote 必须逐字取自正文。"
+      },
+      "result": {
+        "summoned": "B",
+        "action": "",
+        "ok": true,
+        "task_id": "t-000005",
+        "status": "running",
+        "outcome": null,
+        "refusal_reason": null,
+        "preemptible": true,
+        "dispatched": [
+          "t-000005"
+        ],
+        "running": [
+          "t-000005"
+        ],
+        "detail": "还在跑：本步先不等（可抢占）。它回来之后结论会在你下一次被问之前以【子代理返场】投给你 —— 不要因为 status=running 就重派；收工会被拒到它回齐",
+        "roster_considered": true,
+        "roster_name": "B-literature-sylow",
+        "秘书": {
+          "alarms": [
+            "'B-literature-sylow' 不是注册表里的真名；并列候选：['search.literature', 'trace.literature']"
+          ],
+          "fail_open": false,
+          "problem": "'B-literature-sylow' 不是注册表里的真名；并列候选：['search.literature', 'trace.literature']",
+          "wash": {
+            "checked": true,
+            "washed": false,
+            "refused": "",
+            "reason": ""
+          },
+          "changes": [],
+          "surface_fit": {
+            "checked": false,
+            "fits": null,
+            "paths": [],
+            "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+            "shape": "summon",
+            "reach": {
+              "checked": true,
+              "verdict": "unknown",
+              "hops": [],
+              "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+            }
+          },
+          "reach_fit": {
+            "checked": true,
+            "verdict": "unknown",
+            "hops": [],
+            "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+          },
+          "assessment": {
+            "decision": "可派",
+            "reason": "这一条没点名具体动作（role 级派活）⇒ 不拿动作表去卡它；角色存在性由预筛管",
+            "basis": [
+              "specs/<role>.py 的动作表",
+              "tasks: 同 key 的既有终态行",
+              "没点名动作 ⇒ 动作表那一格不适用"
+            ],
+            "duplicates": [],
+            "alarms": [],
+            "novel": false,
+            "surface": {
+              "checked": false,
+              "fits": null,
+              "paths": [],
+              "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+              "shape": "summon",
+              "reach": {
+                "checked": true,
+                "verdict": "unknown",
+                "hops": [],
+                "reason": "角色 '' 不在能力表里（['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'L', 'M', 'V']）⇒ 判不了"
+              }
+            },
+            "judge": {
+              "checked": false,
+              "reason": "预筛没有报警、也没有重复候选 ⇒ 不必判断"
+            },
+            "engaged": false,
+            "seq": 3
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 74880,
+        "prompt_cache_miss_tokens": 1829,
+        "tokens_in": 76709,
+        "tokens_out": 518,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000004"
+    },
+    {
+      "index": 19,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "search_requests",
+          "id": "r-000001"
+        },
+        "why": "核对本次委托的 outcome 是否终局、result_lit_ids 是否回填（收工判据之一）"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "request_id": "r-000001",
+          "timestamp": "2026-11-23T15:00:00+08:00",
+          "topic": "local ingest: Sylow theorems references (4 PDFs in reference/)",
+          "mode": "topical",
+          "content_description": "工作区 reference/ 下由用户逐字点名的 4 份 Sylow 定理相关 PDF，逐份本地摄取、逐条判收，一批一次委托",
+          "done": true,
+          "submitted_by": "agent-A",
+          "claimed_by": null,
+          "lease_until": null,
+          "attempts": 1,
+          "result_lit_ids": [
+            "000000",
+            "000001",
+            "000002",
+            "000003"
+          ],
+          "last_error": null,
+          "outcome": "ok",
+          "priority": "medium",
+          "for_question_id": null,
+          "submit_note": "本地摄取委托：不是联网检索，候选来自 reference/ 目录",
+          "providers": [],
+          "submitted_instance": ""
+        },
+        "error": "",
+        "meta": {
+          "table": "search_requests",
+          "id": "r-000001",
+          "id_field": "request_id",
+          "found": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 75904,
+        "prompt_cache_miss_tokens": 2016,
+        "tokens_in": 77920,
+        "tokens_out": 157,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000004"
+    },
+    {
+      "index": 21,
+      "shape": "tool",
+      "payload": {
+        "name": "clock.timer_start",
+        "args": {
+          "wait_for": "B-literature-sylow",
+          "reason": "等 B 把 4 篇 Sylow 文献整理完交回（t-000005）后再收工"
+        },
+        "why": "B 还在跑，最终收工会被拒到它回齐；按协议走时钟等它收口，不空转"
+      },
+      "result": {
+        "tool": "clock.timer_start",
+        "ok": true,
+        "data": {
+          "timer_id": "tm-000013",
+          "kind": "timer",
+          "state": "pending",
+          "to": "self",
+          "task_id": "t-000004",
+          "role": "A",
+          "reason": "等 B 把 4 篇 Sylow 文献整理完交回（t-000005）后再收工",
+          "after_sec": null,
+          "due_at": "",
+          "at": "",
+          "remaining_sec": null,
+          "created_at": "2026-11-23T19:55:10.181104+00:00",
+          "clock_status": "ok",
+          "wait_for": "B-literature-sylow",
+          "wait_for_resolved": "task:t-000005",
+          "wait_state": "open",
+          "max_wait_sec": null,
+          "park_state": "parked",
+          "parked_at": "2026-11-23T19:55:10.181104+00:00",
+          "parked_sec": 0.015162,
+          "parked_steps": 0,
+          "parked_calls": 0,
+          "purpose": "等 B 把 4 篇 Sylow 文献整理完交回（t-000005）后再收工",
+          "purpose_missing": false,
+          "purpose_prompt": ""
+        },
+        "error": "",
+        "meta": {
+          "timer_id": "tm-000013"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 77056,
+        "prompt_cache_miss_tokens": 1737,
+        "tokens_in": 78793,
+        "tokens_out": 363,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000004"
+    },
+    {
+      "index": 25,
+      "shape": "tool",
+      "payload": {
+        "name": "clock.wait_any",
+        "args": {
+          "purpose": "等 B 把 4 篇 Sylow 文献整理完交回（tm-000013 / t-000005），回来后再收工"
+        },
+        "why": "手上只剩等 B 收口这一件，按协议挂机等计时器返回，不空转烧步"
+      },
+      "result": {
+        "tool": "clock.wait_any",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "task_id": "t-000004",
+          "role": "A",
+          "wait_id": "wa-000001",
+          "purpose": "等 B 把 4 篇 Sylow 文献整理完交回（tm-000013 / t-000005），回来后再收工",
+          "requested": true,
+          "waiting": true,
+          "pending": [
+            "tm-000005",
+            "tm-000013"
+          ],
+          "pending_count": 2,
+          "woke": [],
+          "woke_count": 0,
+          "intents": {
+            "checked": true,
+            "count": 1,
+            "rows": [
+              {
+                "wait_id": "wa-000001",
+                "task_id": "t-000004",
+                "role": "A",
+                "purpose": "等 B 把 4 篇 Sylow 文献整理完交回（tm-000013 / t-000005），回来后再收工",
+                "at": "2026-11-23T20:15:19.938509+00:00",
+                "at_seq": 11,
+                "workspace": "D:\\Incubator\\projects\\sylow-4"
+              }
+            ],
+            "reason": ""
+          },
+          "reason": "它要求等任意计时器返回；还有 2 条没回来",
+          "clock_status": "ok"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 77952,
+        "prompt_cache_miss_tokens": 2306,
+        "tokens_in": 80258,
+        "tokens_out": 191,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000004"
+    },
+    {
+      "index": 27,
+      "shape": "tool",
+      "payload": {
+        "name": "conductor.ack",
+        "args": {
+          "item_ids": [
+            "t-000079"
+          ],
+          "close": "acked",
+          "note": "已读 B 的整理回执：4 篇全部 processed、概念 60+ 条、关系 72/72 quote_verified=true、定理行 5 条；本趟收工"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "conductor.ack",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "ok": true,
+          "state": "acked",
+          "acked": [
+            "t-000079"
+          ],
+          "already_done": [
+            "t-000079"
+          ],
+          "refused": [],
+          "unknown": [],
+          "missing": [],
+          "not_yours": [],
+          "refusal_codes": [],
+          "results": [
+            {
+              "item_id": "t-000079",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            }
+          ],
+          "count": 1,
+          "requested": 1,
+          "by_task_id": "t-000004",
+          "note": "已读 B 的整理回执：4 篇全部 processed、概念 60+ 条、关系 72/72 quote_verified=true、定理行 5 条；本趟收工",
+          "close": "acked",
+          "reason": "确认了 1 条"
+        },
+        "error": "",
+        "meta": {
+          "checked": true,
+          "ok": true,
+          "state": "acked",
+          "acked": [
+            "t-000079"
+          ],
+          "already_done": [
+            "t-000079"
+          ],
+          "refused": [],
+          "unknown": [],
+          "missing": [],
+          "not_yours": [],
+          "refusal_codes": [],
+          "results": [
+            {
+              "item_id": "t-000079",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            }
+          ],
+          "count": 1,
+          "requested": 1,
+          "by_task_id": "t-000004",
+          "note": "已读 B 的整理回执：4 篇全部 processed、概念 60+ 条、关系 72/72 quote_verified=true、定理行 5 条；本趟收工",
+          "close": "acked",
+          "reason": "确认了 1 条"
+        },
+        "可退役": [
+          {
+            "task_id": "t-000005",
+            "role": "B",
+            "branch": "waiting_no_children",
+            "reading": {
+              "items_open": 3,
+              "items_open_ids": [
+                "t-000058",
+                "t-000068",
+                "t-000074"
+              ],
+              "items_open_expects": {
+                "t-000058": "work",
+                "t-000068": "work",
+                "t-000074": "work"
+              },
+              "items_open_states": {
+                "t-000058": "seen",
+                "t-000068": "seen",
+                "t-000074": "seen"
+              }
+            }
+          }
+        ],
+        "新消息": [
+          {
+            "板": "- （新）[t-000080] notice·要一个回执 来自 clock：时间到：把刚落库的 4 篇 Sylow 定理文献（lit:000000 Conrad、lit:000001 Harris GU4041 幻灯、lit:000002 Idelhaj、lit:000003 Cunningham/18.704）跑一轮 run_once 整理：抽概念、建关系、落命题线索。四份都已抽读并抽出正文（out/texts/cand-00000{0,1,2,3}.txt，sha256 已在｜等了 39 分钟 55 秒（起于 03:42:04，到于 04:22:00）。它交的是：ok：执行完成\n- （新）[t-000081] notice·要一个回执 来自 clock：时间到：等 B 把 4 篇 Sylow 文献整理完交回（t-000005）后再收工｜等了 26 分钟 50 秒（起于 03:55:10，到于 04:22:00）。它交的是：ok：执行完成"
+          }
+        ],
+        "秘书加工": {
+          "reworked": [
+            {
+              "item": {
+                "板": "- （新）[t-000080] notice·要一个回执 来自 clock：时间到：把刚落库的 4 篇 Sylow 定理文献（lit:000000 Conrad、lit:000001 Harris GU4041 幻灯、lit:000002 Idelhaj、lit:000003 Cunningham/18.704）跑一轮 run_once 整理：抽概念、建关系、落命题线索。四份都已抽读并抽出正文（out/texts/cand-00000{0,1,2,3}.txt，sha256 已在｜等了 39 分钟 55 秒（起于 03:42:04，到于 04:22:00）。它交的是：ok：执行完成\n- （新）[t-000081] notice·要一个回执 来自 clock：时间到：等 B 把 4 篇 Sylow 文献整理完交回（t-000005）后再收工｜等了 26 分钟 50 秒（起于 03:55:10，到于 04:22:00）。它交的是：ok：执行完成"
+              },
+              "addendum": "我的产出物口径：交付状态 —— 交给谁：派你这趟活的那一方（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名，它是主控就写 M）与收方 B；形态：`search_requests` 行 + `literature` 行；可核字段：`search_requests.outcome` / `search_requests.result_lit_ids` / `search_requests.done` / `literature.lit_id`；算做完：本条请求的 `outcome` 已终局（不是 pending）、`result_lit_ids` 里每个号都 能在 `literature` 里读到，且这批已派 B 收编、B 回执给出概念行与关系行的条数。\n我在本条线上的位置：文献检索：把搜索请求变成已登记的文献行，并如实报告每一次失败",
+              "problem": "",
+              "fail_open": false
+            }
+          ],
+          "handoffs_digest": "- 000001 V→B：stmt:000061 的 b-proof-000007 判「有毛病」：第 3 步不动点同余未证未引；另 000007 未登记为该命题路径，判词落 pending 需你补登记\n- 000002 V→B：000061 新版（正文 sha 5afd81fc）复审成立、零 finding；签块已落该稿，台账 v-000004\n- 000003 V→B：v-000001 有毛病：仅「## 命题」段与 statement_full 错配（Sylow 第三定理被渲染进命题段），证明正文无数学缺陷\n- 000004 V→B：stmt:000063 稿 000006 审毕：有毛病（第 2 步，事实 A 良定义方向缺失），不签发，最小补法一行\n- 000005 V→B：V 的两态结论：有毛病；正文零缺陷，唯一拦截项是稿头「## 命题」段与 statement_full 错配（渲染侧修）"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 79488,
+        "prompt_cache_miss_tokens": 1956,
+        "tokens_in": 81444,
+        "tokens_out": 587,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000004"
+    },
+    {
+      "index": 29,
+      "shape": "final",
+      "payload": {
+        "final": "A.run_once 已完成并已派 B 收编，待裁表已清空（pending_total=0）。\n\n【委托 r-000001（本地摄取：reference/ 下用户逐字点名的 4 份 Sylow 定理 PDF）】outcome=ok、done=true、result_lit_ids=[000000,000001,000002,000003]，四个号在 literature 表里都能读到。\n逐条判收前都走过「抽读 → fs.read 读正文 → 判收」：4 份 quality.state 全为 readable（Conrad 7 页/19296 字、Harris GU4041 65 页/38661 字、Idelhaj 8 页/21369 字、Cunningham(MIT 18.704，文件名标 vakil) 3 页/5630 字）。中间一次 lit.admit 被受控拒（no_readback，槽 000000 另报 read_stale）—— 回读 lit.stage_list 并重读 .txt 后通过，未跳过闸门。\n入库结果：lit:000000 Conrad《The Sylow Theorems》、lit:000001 Harris/Columbia GU4041 幻灯、lit:000002 Idelhaj《The Sylow Theorems and Their Applications》、lit:000003 Cunningham 18.704《Sylow Theorems and The General Linear Group》。报告：work/A/lit-r-000001.md。\n\n【已派 B 收编（t-000005，done/ok）】4 篇全部 processed=true；概念行 60+（stmt:000000–000059）、关系行 72 条（rel:000000–000071，逐条 quote_verified 全为 true、无空值无 suspect）、定理行 5 条（stmt:000060 起，Sylow I/II/III 等，其中洗过的自产正文那条 quote_verified=false —— 如实标出，不当逐字引文用）。Harris 那篇按「只作陈述与应用侧补引」处理，概念配额用满时受控拒了 24 条候选并逐条点名，未静默丢弃。\n\n【清表】r-000001 本批 4 条全部判收并 lit.admit_all 提交，提交即发号回填、行打 cleared_at；全表待裁 0 条（lit.stage_list request_id=\"*\" status=pending 现读为 0）。\n\n【需要 M 知道的两件小事】① 本趟到此时收到两条 clock 到点通知板项 t-000080 / t-000081（等 B 的计时器到点），内容即上述 B 返场，未单独消项（监控回合只许 final/note/补派）；② B 名下还剩 3 条 work 板项（t-000058、t-000068、t-000074，状态 seen），是它第二阶段逐个优化的收尾，不在本趟委托范围内。\n\n【预算】本趟花销 0.792217 / 3.000000 美元。",
+        "evidence": [
+          "r-000001",
+          "lit:000000",
+          "lit:000001",
+          "lit:000002",
+          "lit:000003",
+          "stmt:000000",
+          "rel:000000",
+          "stmt:000060",
+          "work/A/lit-r-000001.md"
+        ],
+        "notify": {
+          "to": "M",
+          "summary": "4 份本地 Sylow 文献已判收入库（lit:000000–000003）并派 B 收编完成：概念 60+ 条、关系 72/72 逐字核过、定理行 5 条，待裁表 0",
+          "body": "## 本趟做了什么\n\n委托 **r-000001**（本地摄取：`reference/` 下用户逐字点名的 4 份 Sylow 定理 PDF）跑完：\n\n- `search_requests.outcome=ok`、`done=true`、`result_lit_ids=[000000,000001,000002,000003]`，每个号在 `literature` 表都能读到；\n- 逐条判收前都做了 `text.extract(path=<绝对路径>)` + `fs.read` 读正文（4 份 quality.state 全 readable）；中途一次 `lit.admit` 被 `no_readback`（槽 000000 另报 `read_stale`）受控拒，回读清单并重读 .txt 后才通过 —— 闸门没有被绕过；\n- 已入库：`lit:000000` Conrad《The Sylow Theorems》、`lit:000001` Harris/Columbia GU4041 幻灯、`lit:000002` Idelhaj《The Sylow Theorems and Their Applications》、`lit:000003` Cunningham 18.704《Sylow Theorems and The General Linear Group》；报告 `work/A/lit-r-000001.md`。\n\n## 已派 B 收编（t-000005，done/ok）\n\n- 4 篇全部 `processed=true`；概念行 60+（`stmt:000000`–`stmt:000059`）、关系行 72 条（`rel:000000`–`rel:000071`，逐条 `quote_verified=true`、无空值无 suspect）、定理行 5 条（`stmt:000060` 起，Sylow I/II/III 等；洗过的自产正文那条 `quote_verified=false`，已如实标出，不作逐字引文用）。\n- Harris 那一篇按「只作陈述与应用侧补引」处理；概念配额用满时受控拒了 24 条候选并逐条点名，未静默丢弃。\n\n## 清表\n\n本批 4 条判收后 `lit.admit_all(request_id=\"r-000001\")` 提交：发号回填、行打 `cleared_at`；全表待裁 **0** 条（`lit.stage_list(request_id=\"*\", status=\"pending\")` 现读 0）。\n\n## 两个待你处置的小口子\n\n1. 两条 clock 到点通知板项 **t-000080 / t-000081**（等 B 的计时器到点，内容即 B 返场）未消项 —— 监控回合只许 final/note/补派；\n2. B 名下仍有 3 条 work 板项（**t-000058 / t-000068 / t-000074**，状态 seen），属它第二阶段逐个优化的收尾，不在本委托范围内。\n\n预算：0.792217 / 3.000000 美元。",
+          "refs": [
+            "r-000001",
+            "lit:000000",
+            "lit:000001",
+            "lit:000002",
+            "lit:000003",
+            "stmt:000000",
+            "rel:000000",
+            "stmt:000060"
+          ]
+        }
+      },
+      "result": {
+        "notify_problem": "notify.refs 里的 'r-000001' 立不住：引用的前序手稿 'r-000001' 不在盘上 ⇒ 不许凭空引用（溯源链断了）"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 80640,
+        "prompt_cache_miss_tokens": 3526,
+        "tokens_in": 84166,
+        "tokens_out": 1881,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000004"
+    }
+  ],
+  "final": "A.run_once 已完成并已派 B 收编，待裁表已清空（pending_total=0）。\n\n【委托 r-000001（本地摄取：reference/ 下用户逐字点名的 4 份 Sylow 定理 PDF）】outcome=ok、done=true、result_lit_ids=[000000,000001,000002,000003]，四个号在 literature 表里都能读到。\n逐条判收前都走过「抽读 → fs.read 读正文 → 判收」：4 份 quality.state 全为 readable（Conrad 7 页/19296 字、Harris GU4041 65 页/38661 字、Idelhaj 8 页/21369 字、Cunningham(MIT 18.704，文件名标 vakil) 3 页/5630 字）。中间一次 lit.admit 被受控拒（no_readback，槽 000000 另报 read_stale）—— 回读 lit.stage_list 并重读 .txt 后通过，未跳过闸门。\n入库结果：lit:000000 Conrad《The Sylow Theorems》、lit:000001 Harris/Columbia GU4041 幻灯、lit:000002 Idelhaj《The Sylow Theorems and Their Applications》、lit:000003 Cunningham 18.704《Sylow Theorems and The General Linear Group》。报告：work/A/lit-r-000001.md。\n\n【已派 B 收编（t-000005，done/ok）】4 篇全部 processed=true；概念行 60+（stmt:000000–000059）、关系行 72 条（rel:000000–000071，逐条 quote_verified 全为 true、无空值无 suspect）、定理行 5 条（stmt:000060 起，Sylow I/II/III 等，其中洗过的自产正文那条 quote_verified=false —— 如实标出，不当逐字引文用）。Harris 那篇按「只作陈述与应用侧补引」处理，概念配额用满时受控拒了 24 条候选并逐条点名，未静默丢弃。\n\n【清表】r-000001 本批 4 条全部判收并 lit.admit_all 提交，提交即发号回填、行打 cleared_at；全表待裁 0 条（lit.stage_list request_id=\"*\" status=pending 现读为 0）。\n\n【需要 M 知道的两件小事】① 本趟到此时收到两条 clock 到点通知板项 t-000080 / t-000081（等 B 的计时器到点），内容即上述 B 返场，未单独消项（监控回合只许 final/note/补派）；② B 名下还剩 3 条 work 板项（t-000058、t-000068、t-000074，状态 seen），是它第二阶段逐个优化的收尾，不在本趟委托范围内。\n\n【预算】本趟花销 0.792217 / 3.000000 美元。",
+  "evidence": [
+    "r-000001",
+    "lit:000000",
+    "lit:000001",
+    "lit:000002",
+    "lit:000003",
+    "stmt:000000",
+    "rel:000000",
+    "stmt:000060",
+    "work/A/lit-r-000001.md"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 1,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 24,
+  "compactions": 0,
+  "mailbox_items": [
+    "t-000079",
+    "t-000080",
+    "t-000081"
+  ],
+  "mailbox_msgs": [
+    "m000002",
+    "m000003",
+    "m000005"
+  ],
+  "mailbox_delivered": 6,
+  "monitor_turns": 1,
+  "wakes": 2,
+  "wake_ids": [
+    "wk-000016",
+    "wk-000017"
+  ],
+  "wake_events": [
+    {
+      "wake_id": "wk-000016",
+      "task_id": "t-000004",
+      "role": "A",
+      "timer_id": "tm-000005",
+      "kind": "timer",
+      "reason": "把刚落库的 4 篇 Sylow 定理文献（lit:000000 Conrad、lit:000001 Harris GU4041 幻灯、lit:000002 Idelhaj、lit:000003 Cunningham/18.704）跑一轮 run_once 整理：抽概念、建关系、落命题线索。四份都已抽读并抽出正文（out/texts/cand-00000{0,1,2,3}.txt，sha256 已在",
+      "purpose": "把刚落库的 4 篇 Sylow 定理文献（lit:000000 Conrad、lit:000001 Harris GU4041 幻灯、lit:000002 Idelhaj、lit:000003 Cunningham/18.704）跑一轮 run_once 整理：抽概念、建关系、落命题线索。四份都已抽读并抽出正文（out/texts/cand-00000{0,1,2,3}.txt，sha256 已在",
+      "purpose_missing": false,
+      "message": "时间到：把刚落库的 4 篇 Sylow 定理文献（lit:000000 Conrad、lit:000001 Harris GU4041 幻灯、lit:000002 Idelhaj、lit:000003 Cunningham/18.704）跑一轮 run_once 整理：抽概念、建关系、落命题线索。四份都已抽读并抽出正文（out/texts/cand-00000{0,1,2,3}.txt，sha256 已在｜等了 39 分钟 55 秒（起于 03:42:04，到于 04:22:00）。它交的是：ok：执行完成",
+      "waited_sec": 2395.465762,
+      "triggered_by": "target_event",
+      "wait_for": "task:t-000005",
+      "due_at": "",
+      "fired_at": "2026-11-23T20:22:00.174694+00:00",
+      "mailbox_item_id": "t-000080",
+      "state": "pending"
+    },
+    {
+      "wake_id": "wk-000017",
+      "task_id": "t-000004",
+      "role": "A",
+      "timer_id": "tm-000013",
+      "kind": "timer",
+      "reason": "等 B 把 4 篇 Sylow 文献整理完交回（t-000005）后再收工",
+      "purpose": "等 B 把 4 篇 Sylow 文献整理完交回（t-000005）后再收工",
+      "purpose_missing": false,
+      "message": "时间到：等 B 把 4 篇 Sylow 文献整理完交回（t-000005）后再收工｜等了 26 分钟 50 秒（起于 03:55:10，到于 04:22:00）。它交的是：ok：执行完成",
+      "waited_sec": 1610.111328,
+      "triggered_by": "target_event",
+      "wait_for": "B-literature-sylow",
+      "due_at": "",
+      "fired_at": "2026-11-23T20:22:00.292432+00:00",
+      "mailbox_item_id": "t-000081",
+      "state": "pending"
+    }
+  ],
+  "clock_pumps": 52,
+  "clock_fired": 3,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "A 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "A",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    },
+    "own_children": [
+      "t-000005"
+    ],
+    "return_given": [
+      "t-000005"
+    ],
+    "reentry_turns": 2,
+    "reentry_reasons": [
+      "派活之后还没给过模型回合：这一批 1 项还在跑（t-000005），这一拍的 waiter 全是在等它们 ⇒ 这一拍返场问模型一次，下一拍起才按挂机口径走",
+      "上一拍是等谁的唤醒（t-000005 回来）—— 那一拍按 ③ 跳过，那一批的产出现在就在上下文里 ⇒ 这一拍返场问模型（不许再睡一拍）"
+    ],
+    "research_fp": "",
+    "patrol": {
+      "checked": true,
+      "mounted": false,
+      "skipped": "role",
+      "timer_id": "",
+      "interval_sec": 1200.0,
+      "remaining_sec": null,
+      "reason": "轮查计时器只挂给主控（M）：这一趟是 A ⇒ 不挂"
+    },
+    "asked_sec": 15.5,
+    "slice_sec": 16.0,
+    "parked_turns": 5,
+    "skip_calls": 6,
+    "wait_any": true,
+    "wait_cancelled": 1,
+    "woke_turns": 1,
+    "woke_reasons": [
+      "event"
+    ]
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {
+    "checked": true,
+    "enabled": true,
+    "in_task": true,
+    "in_task_why": "",
+    "delegations": 1,
+    "settled": [
+      "r-000001"
+    ],
+    "cleared": [],
+    "pending": [],
+    "refused": [],
+    "why": "全表 1 个委托都已清表（每一行都有 cleared_at），这一拍没有要提交的",
+    "note": "全表 1 个委托都已清表（每一行都有 cleared_at），这一拍没有要提交的"
+  },
+  "unprocessed_reasons": {
+    "checked": true,
+    "enabled": true,
+    "unprocessed": 0,
+    "written": [],
+    "kept": [],
+    "undigested": [],
+    "why": "`literature.processed` 全为真 ⇒ 没有要写理由的行",
+    "note": "`literature.processed` 全为真 ⇒ 没有要写理由的行"
+  },
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [],
+  "summons": [
+    "B"
+  ],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [
+    {
+      "kind": "summon",
+      "counted": true,
+      "task_id": "t-000005",
+      "role": "B",
+      "step": 18,
+      "status": "running",
+      "outcome": "",
+      "handoff_id": "",
+      "outputs": [
+        "t-000005"
+      ],
+      "disposition": ""
+    }
+  ],
+  "summons_total": 1,
+  "summons_consumed": 1,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 1,
+    "summons_consumed": 1,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [
+      {
+        "kind": "summon",
+        "counted": true,
+        "task_id": "t-000005",
+        "role": "B",
+        "step": 18,
+        "status": "running",
+        "outcome": "",
+        "handoff_id": "",
+        "outputs": [
+          "t-000005"
+        ],
+        "disposition": "consumed",
+        "evidence": {
+          "step": 21,
+          "shape": "tool",
+          "effect": "工具 clock.timer_start",
+          "refs": [
+            "t-000005"
+          ]
+        }
+      }
+    ],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p327",
+    "role": "A",
+    "prompt_sha256": "924fb13db4a8d6c38c25f71455130b61d1e2386e62dcebdb0eecc93c2d181478",
+    "prompt_chars": 66088,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "FACULTIES_07",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "TOOL_29",
+      "TOOL_30",
+      "TOOL_31",
+      "TOOL_32",
+      "TOOL_33",
+      "TOOL_34",
+      "TOOL_35",
+      "TOOL_36",
+      "TOOL_37",
+      "TOOL_38",
+      "TOOL_39",
+      "TOOL_40",
+      "TOOL_41",
+      "TOOL_42",
+      "TOOL_43",
+      "TOOL_44",
+      "TOOL_45",
+      "TOOL_46",
+      "TOOL_47",
+      "TOOL_48",
+      "TOOL_49",
+      "TOOL_50",
+      "TOOL_51",
+      "TOOL_52",
+      "TOOL_53",
+      "TOOL_54",
+      "A_SEARCH_STYLE",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_LIMITS",
+      "COLLAB_NAMES",
+      "PARENT_STOP",
+      "PARENT_ROSTER",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 24,
+    "tokens_in": 1594503,
+    "tokens_out": 8487,
+    "usd": 0.016781,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 23,
+    "no_request_calls": 0,
+    "hit": 1547520,
+    "miss": 46751,
+    "unknown_calls": 0,
+    "tokens_in": 1594271,
+    "hit_rate": 0.9707,
+    "mismatched_calls": 0,
+    "saved_usd": 0.227487,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 2451.875,
+  "end_ts": "2026-11-24T04:22:10+08:00",
+  "notes": [
+    "第 19 步返场：子代理回来 0 条，还在跑 1 条（这一拍为了返场没等子：返场判据给过之后才等）",
+    "返场（Q22）：派活之后还没给过模型回合：这一批 1 项还在跑（t-000005），这一拍的 waiter 全是在等它们 ⇒ 这一拍返场问模型一次，下一拍起才按挂机口径走",
+    "第 20 步返场：子代理回来 0 条，还在跑 1 条（等待 300.0s，原因 slice）",
+    "第 21 步返场：子代理回来 0 条，还在跑 1 条（等待 300.0s，原因 slice）",
+    "第 22 步返场：子代理回来 0 条，还在跑 1 条（等待 300.0s，原因 slice）",
+    "第 23 步返场：子代理回来 0 条，还在跑 1 条（等待 300.0s，原因 slice）",
+    "第 24 步返场：子代理回来 0 条，还在跑 1 条（等待 300.0s，原因 slice）",
+    "第 25 步返场：子代理回来 0 条，还在跑 1 条（等待 300.0s，原因 slice）",
+    "第 26 步返场：子代理回来 0 条，还在跑 1 条（等待 300.0s，原因 slice）",
+    "第 27 步返场：子代理回来 1 条，还在跑 0 条（等待 88.1s，原因 settled）",
+    "等任意计时器时被打断：这一拍新投递了 1 条（板项/留言/唤醒）；名下还有 1 条未消的板项；有 1 条子产出刚落定、还没被用",
+    "返场（Q22）：上一拍是等谁的唤醒（t-000005 回来）—— 那一拍按 ③ 跳过，那一批的产出现在就在上下文里 ⇒ 这一拍返场问模型（不许再睡一拍）",
+    "收工没有可用 notify 表（notify.refs 里的 'r-000001' 立不住：引用的前序手稿 'r-000001' 不在盘上 ⇒ 不许凭空引用（溯源链断了））⇒ 这一趟没有交接手稿（不打回、不代填）",
+    "收工时名下还有 3 条证明没有 V 的签字（读数，不拦收工；明细：000060、000062、000064）",
+    "缓存读数：命中 1547520 / 未命中 46751 token，命中率 97.1%（23 次调用）；按 modelcost 口径估算可省 约 0.227487 美元",
+    "子产出处理读数：summons_total=1，consumed=1，waived=0，unknown=0，unconsumed=0",
+    "终态回报已落板：t-000082（框架通报；模型没填 notify）"
+  ],
+  "final_payload": {
+    "final": "A.run_once 已完成并已派 B 收编，待裁表已清空（pending_total=0）。\n\n【委托 r-000001（本地摄取：reference/ 下用户逐字点名的 4 份 Sylow 定理 PDF）】outcome=ok、done=true、result_lit_ids=[000000,000001,000002,000003]，四个号在 literature 表里都能读到。\n逐条判收前都走过「抽读 → fs.read 读正文 → 判收」：4 份 quality.state 全为 readable（Conrad 7 页/19296 字、Harris GU4041 65 页/38661 字、Idelhaj 8 页/21369 字、Cunningham(MIT 18.704，文件名标 vakil) 3 页/5630 字）。中间一次 lit.admit 被受控拒（no_readback，槽 000000 另报 read_stale）—— 回读 lit.stage_list 并重读 .txt 后通过，未跳过闸门。\n入库结果：lit:000000 Conrad《The Sylow Theorems》、lit:000001 Harris/Columbia GU4041 幻灯、lit:000002 Idelhaj《The Sylow Theorems and Their Applications》、lit:000003 Cunningham 18.704《Sylow Theorems and The General Linear Group》。报告：work/A/lit-r-000001.md。\n\n【已派 B 收编（t-000005，done/ok）】4 篇全部 processed=true；概念行 60+（stmt:000000–000059）、关系行 72 条（rel:000000–000071，逐条 quote_verified 全为 true、无空值无 suspect）、定理行 5 条（stmt:000060 起，Sylow I/II/III 等，其中洗过的自产正文那条 quote_verified=false —— 如实标出，不当逐字引文用）。Harris 那篇按「只作陈述与应用侧补引」处理，概念配额用满时受控拒了 24 条候选并逐条点名，未静默丢弃。\n\n【清表】r-000001 本批 4 条全部判收并 lit.admit_all 提交，提交即发号回填、行打 cleared_at；全表待裁 0 条（lit.stage_list request_id=\"*\" status=pending 现读为 0）。\n\n【需要 M 知道的两件小事】① 本趟到此时收到两条 clock 到点通知板项 t-000080 / t-000081（等 B 的计时器到点），内容即上述 B 返场，未单独消项（监控回合只许 final/note/补派）；② B 名下还剩 3 条 work 板项（t-000058、t-000068、t-000074，状态 seen），是它第二阶段逐个优化的收尾，不在本趟委托范围内。\n\n【预算】本趟花销 0.792217 / 3.000000 美元。",
+    "evidence": [
+      "r-000001",
+      "lit:000000",
+      "lit:000001",
+      "lit:000002",
+      "lit:000003",
+      "stmt:000000",
+      "rel:000000",
+      "stmt:000060",
+      "work/A/lit-r-000001.md"
+    ],
+    "notify": {
+      "to": "M",
+      "summary": "4 份本地 Sylow 文献已判收入库（lit:000000–000003）并派 B 收编完成：概念 60+ 条、关系 72/72 逐字核过、定理行 5 条，待裁表 0",
+      "body": "## 本趟做了什么\n\n委托 **r-000001**（本地摄取：`reference/` 下用户逐字点名的 4 份 Sylow 定理 PDF）跑完：\n\n- `search_requests.outcome=ok`、`done=true`、`result_lit_ids=[000000,000001,000002,000003]`，每个号在 `literature` 表都能读到；\n- 逐条判收前都做了 `text.extract(path=<绝对路径>)` + `fs.read` 读正文（4 份 quality.state 全 readable）；中途一次 `lit.admit` 被 `no_readback`（槽 000000 另报 `read_stale`）受控拒，回读清单并重读 .txt 后才通过 —— 闸门没有被绕过；\n- 已入库：`lit:000000` Conrad《The Sylow Theorems》、`lit:000001` Harris/Columbia GU4041 幻灯、`lit:000002` Idelhaj《The Sylow Theorems and Their Applications》、`lit:000003` Cunningham 18.704《Sylow Theorems and The General Linear Group》；报告 `work/A/lit-r-000001.md`。\n\n## 已派 B 收编（t-000005，done/ok）\n\n- 4 篇全部 `processed=true`；概念行 60+（`stmt:000000`–`stmt:000059`）、关系行 72 条（`rel:000000`–`rel:000071`，逐条 `quote_verified=true`、无空值无 suspect）、定理行 5 条（`stmt:000060` 起，Sylow I/II/III 等；洗过的自产正文那条 `quote_verified=false`，已如实标出，不作逐字引文用）。\n- Harris 那一篇按「只作陈述与应用侧补引」处理；概念配额用满时受控拒了 24 条候选并逐条点名，未静默丢弃。\n\n## 清表\n\n本批 4 条判收后 `lit.admit_all(request_id=\"r-000001\")` 提交：发号回填、行打 `cleared_at`；全表待裁 **0** 条（`lit.stage_list(request_id=\"*\", status=\"pending\")` 现读 0）。\n\n## 两个待你处置的小口子\n\n1. 两条 clock 到点通知板项 **t-000080 / t-000081**（等 B 的计时器到点，内容即 B 返场）未消项 —— 监控回合只许 final/note/补派；\n2. B 名下仍有 3 条 work 板项（**t-000058 / t-000068 / t-000074**，状态 seen），属它第二阶段逐个优化的收尾，不在本委托范围内。\n\n预算：0.792217 / 3.000000 美元。",
+      "refs": [
+        "r-000001",
+        "lit:000000",
+        "lit:000001",
+        "lit:000002",
+        "lit:000003",
+        "stmt:000000",
+        "rel:000000",
+        "stmt:000060"
+      ]
+    }
+  },
+  "task_id": "t-000004"
+}

@@ -1,0 +1,1099 @@
+{
+  "role": "G",
+  "task": "G：这一趟派给你的活是 —— 收工门只剩一条 acceptance 未过：doc:000000 的五条 claim 因为引了 lit:000000 / lit:000002（其题名是文件名，实词与本条断言无交集）被判「断言与它引的证据对不上」。修法（只改引文格，不改数学内容、不动 main.tex）：用 own.revise 把这五条 claim 的 citations 各自改成只引对应的那一条在册命题（claim-1→stmt:000060，claim-2→stmt:000061，claim-3→stmt:000062，claim-4→stmt:000063，claim-5→stmt:000064），去掉 lit: 引用；文献引用留在正文与 Introduction 的 \\cite 里即可。改完回执给：改了哪几条、documents.content_sha256 前 12 位、是否需要重编（本次不改 main.tex 就不必调 paper_compile）。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "doc.list_documents",
+        "args": {},
+        "why": ""
+      },
+      "result": {
+        "tool": "doc.list_documents",
+        "ok": true,
+        "data": {
+          "count": 2,
+          "documents": [
+            {
+              "doc_id": "000000",
+              "kind": "paper",
+              "title": "The Sylow Theorems: Existence, Conjugacy and Counting",
+              "status": "accepted",
+              "review_rounds": 13,
+              "claim_count": 5,
+              "markdown_path": "manuscripts/G/000000.md"
+            },
+            {
+              "doc_id": "000001",
+              "kind": "research",
+              "title": "D 初步研究报告（1 个研究问题）",
+              "status": "draft",
+              "review_rounds": 0,
+              "claim_count": 0,
+              "markdown_path": "manuscripts/D/000000-research.md"
+            }
+          ]
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 64768,
+        "prompt_cache_miss_tokens": 1608,
+        "tokens_in": 66376,
+        "tokens_out": 77,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000168"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "documents",
+          "id": "000000"
+        },
+        "why": "读 doc:000000 的五条 claim 与各自的 claim_id，才能用 own.revise 同号替换引用"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "doc_id": "000000",
+          "kind": "paper",
+          "title": "The Sylow Theorems: Existence, Conjugacy and Counting",
+          "markdown_path": "manuscripts/G/000000.md",
+          "sections": [
+            {
+              "heading": "Introduction and notation",
+              "body": "The Sylow theorems are the first structural results about finite groups beyond Lagrange's theorem. We give self-contained proofs of existence (Sylow I), conjugacy (Sylow II) and the counting conditions (Sylow III), together with the index formula for the normalizer and the uniqueness criterion. Notation is fixed in Section 2; all results are stated and proved in Section 3; examples and references follow."
+            },
+            {
+              "heading": "Definitions and notation",
+              "body": "|G| order; p-Sylow subgroup = subgroup of order p^k where p^k is the full p-part of |G|; N_G(H) normalizer; orbit-stabilizer; class equation; fixed-point congruence for p-groups."
+            },
+            {
+              "heading": "Main results",
+              "body": "Theorem 3.1 (Sylow I): existence and containment. Theorem 3.2 (Sylow II): conjugacy. Theorem 3.3 (Sylow III): n_p | m and n_p = 1 (mod p). Theorem 3.4: n_p = [G : N_G(P)]. Theorem 3.5: uniqueness iff normality."
+            },
+            {
+              "heading": "Examples and comparison with the literature",
+              "body": "S_3, S_4, A_5 and groups of order pq illustrate the counting conditions; the treatment follows the expository accounts of the reference list."
+            }
+          ],
+          "claims": [
+            {
+              "claim_id": "claim-1",
+              "text": "Let G be a finite group and p a prime with |G| = p^k m, where p does not divide m. Then G contains a Sylow p-subgroup of order p^k, and every p-subgroup of G is contained in some Sylow p-subgroup of G.",
+              "citations": [
+                "stmt:000060",
+                "lit:000000"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "section": "3",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "Any two Sylow p-subgroups of a finite group G are conjugate: if H and K both have order p^k then K = gHg^{-1} for some g in G.",
+              "citations": [
+                "stmt:000061",
+                "lit:000000"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "section": "3",
+              "claim_id": "claim-2",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "Let |G| = p^k m with p not dividing m and let n_p be the number of Sylow p-subgroups of G. Then n_p divides m and n_p is congruent to 1 modulo p.",
+              "citations": [
+                "stmt:000062",
+                "lit:000000"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "section": "3",
+              "claim_id": "claim-3",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "For every Sylow p-subgroup P of a finite group G, the number of Sylow p-subgroups equals the index of the normalizer, n_p = [G : N_G(P)].",
+              "citations": [
+                "stmt:000063",
+                "lit:000000"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "section": "3",
+              "claim_id": "claim-4",
+              "is_negative": false,
+              "negation_kind": null
+            },
+            {
+              "text": "A Sylow p-subgroup P of a finite group G is the unique Sylow p-subgroup if and only if P is normal in G; in particular, if G is abelian then each of its Sylow subgroups is unique.",
+              "citations": [
+                "stmt:000064",
+                "lit:000002"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "section": "3",
+              "claim_id": "claim-5",
+              "is_negative": false,
+              "negation_kind": null
+            }
+          ],
+          "open_problems": [],
+          "status": "accepted",
+          "review_rounds": 13,
+          "review_verdict": "成立",
+          "reviewed_at": "2026-11-24T05:29:15+08:00",
+          "reviewed_by": "agent-H",
+          "created_at": "2026-11-24T04:39:34+08:00",
+          "updated_at": "2026-11-24T05:21:52+08:00",
+          "revision": 2,
+          "content_sha256": "549200690ff0e170b09e45f2b547c1ad4d9a7d1d81fe0381608e9a14d3a338ff",
+          "owner_task": "t-000109",
+          "owner_instance": "G1",
+          "created_by": "agent-G-G1"
+        },
+        "error": "",
+        "meta": {
+          "table": "documents",
+          "id": "000000",
+          "id_field": "doc_id",
+          "found": true,
+          "row_scope": "own-instance（G1 这一支笔的行 + 角色级老行）"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 65536,
+        "prompt_cache_miss_tokens": 1116,
+        "tokens_in": 66652,
+        "tokens_out": 122,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000168"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "own.revise",
+        "args": {
+          "doc_id": "000000",
+          "fixed_findings": [],
+          "new_claims": [
+            {
+              "claim_id": "claim-1",
+              "text": "Let G be a finite group and p a prime with |G| = p^k m, where p does not divide m. Then G contains a Sylow p-subgroup of order p^k, and every p-subgroup of G is contained in some Sylow p-subgroup of G.",
+              "citations": [
+                "stmt:000060"
+              ],
+              "evidence_kind": "cross_check",
+              "section": "3",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "is_negative": false
+            },
+            {
+              "claim_id": "claim-2",
+              "text": "Any two Sylow p-subgroups of a finite group G are conjugate: if H and K both have order p^k then K = gHg^{-1} for some g in G.",
+              "citations": [
+                "stmt:000061"
+              ],
+              "evidence_kind": "cross_check",
+              "section": "3",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "is_negative": false
+            },
+            {
+              "claim_id": "claim-3",
+              "text": "Let |G| = p^k m with p not dividing m and let n_p be the number of Sylow p-subgroups of G. Then n_p divides m and n_p is congruent to 1 modulo p.",
+              "citations": [
+                "stmt:000062"
+              ],
+              "evidence_kind": "cross_check",
+              "section": "3",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "is_negative": false
+            },
+            {
+              "claim_id": "claim-4",
+              "text": "For every Sylow p-subgroup P of a finite group G, the number of Sylow p-subgroups equals the index of the normalizer, n_p = [G : N_G(P)].",
+              "citations": [
+                "stmt:000063"
+              ],
+              "evidence_kind": "cross_check",
+              "section": "3",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "is_negative": false
+            },
+            {
+              "claim_id": "claim-5",
+              "text": "A Sylow p-subgroup P of a finite group G is the unique Sylow p-subgroup if and only if P is normal in G; in particular, if G is abelian then each of its Sylow subgroups is unique.",
+              "citations": [
+                "stmt:000064"
+              ],
+              "evidence_kind": "cross_check",
+              "section": "3",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "is_negative": false
+            }
+          ],
+          "note": "按派活要求只改引文格：五条 claim 各自只引对应的在册命题 stmt:000060–000064，去掉与断言实词无交集的 lit:000000 / lit:000002；数学内容与正文 main.tex 一字未动（文献引用仍留在正文 \\cite 中）。"
+        },
+        "why": "收工门 acceptance 只剩「断言与所引证据对不上」一条，修法是同号替换五条 claim 的 citations 为对应命题号"
+      },
+      "result": {
+        "tool": "own.revise",
+        "ok": true,
+        "data": {
+          "doc_id": "000000",
+          "review_rounds": 13,
+          "status": "revised",
+          "claim_count": 5,
+          "replaced_claim_ids": [
+            "claim-1",
+            "claim-2",
+            "claim-3",
+            "claim-4",
+            "claim-5"
+          ],
+          "appended_claim_ids": [],
+          "fixed_findings": [],
+          "markdown_path": "manuscripts/G/000000.md",
+          "rendered_path": "D:\\Incubator\\projects\\sylow-4\\manuscripts\\G\\000000.md",
+          "body_path": "out/package/main.tex",
+          "body_sha256": "08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72",
+          "body_bytes": 22490,
+          "body_problem": "",
+          "content_sha256": "2d0a330993fc31247634af0a1fcb34e7fd9f915be9f1dcdb502f3217cf7e6dec",
+          "next_step": "改完之后要再复核：派 `H.verify_fixes`（它按 `round_no` 复核这一版）或 `H.review`，让签名钉到现行版上；改完不复核的稿子不许当成交付。",
+          "citation_coverage": {
+            "own": {
+              "lit": [],
+              "rel": [],
+              "exp": [],
+              "stmt": [
+                "stmt:000060",
+                "stmt:000061",
+                "stmt:000062",
+                "stmt:000063",
+                "stmt:000064"
+              ],
+              "doc": [],
+              "eval": []
+            },
+            "counts": {
+              "lit": 0,
+              "rel": 0,
+              "exp": 0,
+              "stmt": 5,
+              "doc": 0,
+              "eval": 0
+            },
+            "available": {
+              "literature_total": 4,
+              "literature_processed": 4,
+              "literature_with_fulltext": 4,
+              "relations": 72,
+              "experiments": 0,
+              "statements": 66,
+              "eval_results": 0,
+              "research_questions": -1
+            },
+            "readable": true,
+            "gaps": [
+              "这份稿子 0 条 `lit:` 引用，而库里已有 **4 篇已消化的文献**（例：000000《9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf》、000001《11dc1a689516-harris-sylow-theorems.pdf》、000002《c104f1720c63-idelhaj-sylow-theorems-and-applications.pdf》） —— 研究型手稿要引它据以立论的那几篇；`lit:` 只指真实论文",
+              "这份稿子 0 条 `rel:` 引用，而库里有 **72 条关系**（例：000000、000001、000002） —— C 的关系读数要能被交付物引到（用户点名过「重点考察 C」）"
+            ],
+            "fit": {
+              "fit": 0,
+              "mismatch": 0,
+              "unjudged": 5
+            },
+            "fit_rows": [
+              {
+                "claim_id": "claim-1",
+                "citations": [
+                  "stmt:000060"
+                ],
+                "verdict": "unjudged",
+                "why": []
+              },
+              {
+                "claim_id": "claim-2",
+                "citations": [
+                  "stmt:000061"
+                ],
+                "verdict": "unjudged",
+                "why": []
+              },
+              {
+                "claim_id": "claim-3",
+                "citations": [
+                  "stmt:000062"
+                ],
+                "verdict": "unjudged",
+                "why": []
+              },
+              {
+                "claim_id": "claim-4",
+                "citations": [
+                  "stmt:000063"
+                ],
+                "verdict": "unjudged",
+                "why": []
+              },
+              {
+                "claim_id": "claim-5",
+                "citations": [
+                  "stmt:000064"
+                ],
+                "verdict": "unjudged",
+                "why": []
+              }
+            ],
+            "misfit": [],
+            "questions_vs_claims": {
+              "research_questions": -1,
+              "claims_with_citations": 5,
+              "short": -1
+            },
+            "suggest_lit": [
+              {
+                "lit_id": "000000",
+                "title": "9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf"
+              },
+              {
+                "lit_id": "000001",
+                "title": "11dc1a689516-harris-sylow-theorems.pdf"
+              },
+              {
+                "lit_id": "000002",
+                "title": "c104f1720c63-idelhaj-sylow-theorems-and-applications.pdf"
+              },
+              {
+                "lit_id": "000003",
+                "title": "e090d219194b-vakil-sylow-theorems.pdf"
+              }
+            ],
+            "suggest_rel": [
+              {
+                "relation_id": "000000",
+                "description": "p-Sylow subgroup 的定义依赖于一个素数 p，并取 p 整除 |G| 的最高幂次。"
+              },
+              {
+                "relation_id": "000001",
+                "description": "对每个素数 p，G 的 p-Sylow subgroups 彼此共轭。"
+              },
+              {
+                "relation_id": "000002",
+                "description": "每个 p-subgroup 都包含在某个 p-Sylow subgroup 中。"
+              },
+              {
+                "relation_id": "000003",
+                "description": "若 P 是 p-Sylow subgroup，则 N(P) 是它的 normalizer。"
+              },
+              {
+                "relation_id": "000004",
+                "description": "p-Sylow subgroups 的个数 np 等于 G 对 N(P) 的指数。"
+              }
+            ],
+            "note": "只报数、不拦：引用的**存在性**由 `check_citations` 判（fail-closed）；这一格是把「引了什么 / 库里有什么」放到写稿那一刻看得见。`own` 里的号都是这份稿子真的写了的前缀引用（`doc:` 收在 `doc` 那一格）；`library_root` 没给 ⇒ 「有全文」那一格只按 `download.status` 算（没看盘）"
+          },
+          "hard_to_prove": {
+            "checked": true,
+            "why": "",
+            "rows": [],
+            "held_back": [],
+            "attributed": [],
+            "report": {
+              "checked": true,
+              "sent": false,
+              "to": "",
+              "msg_id": "",
+              "why": "这一趟没有承重条目需要上报"
+            }
+          }
+        },
+        "error": "",
+        "meta": {},
+        "warn": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.revise 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 2,
+          "call_index": 0,
+          "calls": 1,
+          "step_index": 2,
+          "summary": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.revise 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 2,
+            "calls": 1,
+            "items": 1,
+            "steps": [
+              2
+            ],
+            "executed": 1,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 65792,
+        "prompt_cache_miss_tokens": 2216,
+        "tokens_in": 68008,
+        "tokens_out": 856,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000168"
+    },
+    {
+      "index": 3,
+      "shape": "summon",
+      "payload": {
+        "role": "H",
+        "action": "",
+        "params": {
+          "doc_id": "000000",
+          "expect_review_round": 14,
+          "changed": "claims[0..4].citations only",
+          "old_sha256_prefix": "549200690ff0",
+          "new_sha256_prefix": "2d0a330993fc",
+          "note": "正文 main.tex 未改，无需重编；文献引用仍在正文 \\cite 里，claim 层不再有 lit: 引用（这是本次修法与原有 finding 的取舍，若认为断言层必须有 lit: 支撑请落成 finding 说明缺哪一条）"
+        },
+        "why": "revise 把稿子推成 revised，H 的签名还钉在改之前那一版；框架规定改完必须送回 H 复审才能算交付",
+        "brief": "复审 doc:000000 现行版（只改了五条 claim 的 citations）",
+        "task": "复审稿件 doc:000000（当前 status=revised、revision 已推进、五条 claim 刚改过引文格）。这一版只有一处改动：claim-1..claim-5 的 `citations` 各自从 [\"stmt:0000xx\",\"lit:000000\"/\"lit:000002\"] 改成只引对应的那一条在册命题（claim-1→stmt:000060、claim-2→stmt:000061、claim-3→stmt:000062、claim-4→stmt:000063、claim-5→stmt:000064）；text / evidence_kind / section / disclaimer 一字未动，数学内容与 out/package/main.tex 也未动。请按现行版落一次审校结论（review.verify_fixes 或 review.review_document，按 round_no 复核这一版），把签名钉在现行版上，并把结论告诉我：通过 ⇒ accepted；不通过 ⇒ 逐条 finding 写清 target 与理由。"
+      },
+      "result": {
+        "summoned": "H",
+        "action": "",
+        "ok": true,
+        "task_id": "t-000169",
+        "status": "running",
+        "outcome": null,
+        "refusal_reason": null,
+        "preemptible": true,
+        "dispatched": [
+          "t-000169"
+        ],
+        "running": [
+          "t-000169"
+        ],
+        "detail": "还在跑：本步先不等（可抢占）。它回来之后结论会在你下一次被问之前以【子代理返场】投给你 —— 不要因为 status=running 就重派；收工会被拒到它回齐",
+        "roster_considered": true,
+        "roster_name": "H1",
+        "秘书": {
+          "alarms": [],
+          "fail_open": false,
+          "wash": {
+            "checked": true,
+            "washed": false,
+            "refused": "",
+            "reason": ""
+          },
+          "changes": [],
+          "surface_fit": {
+            "checked": false,
+            "fits": null,
+            "paths": [],
+            "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+            "shape": "summon",
+            "reach": {
+              "checked": true,
+              "verdict": "unknown",
+              "hops": [],
+              "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+            }
+          },
+          "reach_fit": {
+            "checked": true,
+            "verdict": "unknown",
+            "hops": [],
+            "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+          },
+          "assessment": {
+            "decision": "可派",
+            "reason": "这一条没点名具体动作（role 级派活）⇒ 不拿动作表去卡它；角色存在性由预筛管",
+            "basis": [
+              "specs/<role>.py 的动作表",
+              "tasks: 同 key 的既有终态行",
+              "没点名动作 ⇒ 动作表那一格不适用"
+            ],
+            "duplicates": [],
+            "alarms": [],
+            "novel": false,
+            "surface": {
+              "checked": false,
+              "fits": null,
+              "paths": [],
+              "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+              "shape": "summon",
+              "reach": {
+                "checked": true,
+                "verdict": "unknown",
+                "hops": [],
+                "reason": "角色 '' 不在能力表里（['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'L', 'M', 'V']）⇒ 判不了"
+              }
+            },
+            "judge": {
+              "checked": false,
+              "reason": "预筛没有报警、也没有重复候选 ⇒ 不必判断"
+            },
+            "engaged": false,
+            "seq": 2
+          }
+        },
+        "可退役": [
+          {
+            "task_id": "t-000169",
+            "role": "H",
+            "branch": "active",
+            "reading": {
+              "items_open": 0,
+              "items_open_ids": [],
+              "items_open_expects": {},
+              "items_open_states": {}
+            }
+          }
+        ],
+        "新消息": [
+          {
+            "板": "- （新）[t-000170] notice·要一个回执 来自 clock：时间到：复审稿件 doc:000000（当前 status=revised、revision 已推进、五条 claim 刚改过引文格）。这一版只有一处改动：claim-1..claim-5 的 `citations` 各自从 [\"stmt:0000xx\",\"lit:000000\"/\"lit:000002\"] 改成只引对应的那一条在册命题（claim-1→stmt:000060、claim-2→stmt:0｜等了 2 分钟 11 秒（起于 05:30:06，到于 05:32:16）。它说的是：回执：doc:000000 第 14 轮复审（签名已钉现行版；两条读数必须同时看）：**回执（按手稿 000023 / m000020 的三条要求逐项给读数）**\n\n1) **现行版已审、签名已钉住现行版**：`review.review_document(doc_id=\"000000\", round_no=14)` → `verdict=accepted`、`status=accepted`、`status_updated=true`；签名落盘 `doc-s…（正文截断过，完整内容在台账 detail）"
+          }
+        ],
+        "秘书加工": {
+          "reworked": [
+            {
+              "item": {
+                "板": "- （新）[t-000170] notice·要一个回执 来自 clock：时间到：复审稿件 doc:000000（当前 status=revised、revision 已推进、五条 claim 刚改过引文格）。这一版只有一处改动：claim-1..claim-5 的 `citations` 各自从 [\"stmt:0000xx\",\"lit:000000\"/\"lit:000002\"] 改成只引对应的那一条在册命题（claim-1→stmt:000060、claim-2→stmt:0｜等了 2 分钟 11 秒（起于 05:30:06，到于 05:32:16）。它说的是：回执：doc:000000 第 14 轮复审（签名已钉现行版；两条读数必须同时看）：**回执（按手稿 000023 / m000020 的三条要求逐项给读数）**\n\n1) **现行版已审、签名已钉住现行版**：`review.review_document(doc_id=\"000000\", round_no=14)` → `verdict=accepted`、`status=accepted`、`status_updated=true`；签名落盘 `doc-s…（正文截断过，完整内容在台账 detail）"
+              },
+              "addendum": "我的产出物口径：交付状态 —— 交给谁：H（送审）+ 派你这趟活的父（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名）+ M（打包）；形态：`documents` 行 + `manuscripts/G/<doc_id>.md` + 成文阶段的 `out/package/main.tex` / `out/package/main.pdf` + `out/package/MAPPING.json`；可核字段：`documents.doc_id` / `documents.kind` / `documents.markdown_path` / `documents.content_sha256` / `documents.claims` / `documents.status`；算做完：`build_document` 回了 `doc_id`、每条 claim 的 `citations` 都指得到台账已有的号（`stmt:` / `lit:` / `exp:`），且 H 审到 `documents.status=accepted`（不通过就按 findings 改）。\n我在本条线上的位置：论文撰写：把台账里的结论汇编成可审校的稿件，附带每条断言的来路",
+              "problem": "",
+              "fail_open": false
+            }
+          ],
+          "handoffs_digest": "- 000019 M→G：最后一处机器口径修订：claim 与所引命题词面对齐，重落 MAPPING\n- 000020 H→G：doc:000000 第 9 轮复审：claim-1 新措辞与 stmt:000060 对得上；机械读数全绿；但三条证据链 warning 未收口 ⇒ status=in_review、签名未钉\n- 000021 G→M：claim-1 已按 stmt:000060 原词重写；MAPPING pass；PDF 未过期（tex 08c6cc0a5673 / 7 页）；H 复审留在 in_review（三条证据链 warning）\n- 000022 H→M：doc:000000 已复核到 accepted，签名钉住现行版 549200690ff0（round 13，open findings 0）\n- 000023 M→H：派活：H（派活：只做一件事：把 doc:000000 的现行版（revision 2，claim-1 已按 stmt:000060 原词重写，正文 main.tex 未改、tex 08c6cc0a5673、PDF 7 页）复核到 accepted。要求：(1) 对现行版做一次审校（review_document 或 verify_fixes 都行），使签名的 content_sha256 钉住现行版（现在是 549200690ff0…，旧签名钉的是 a19e4ab06788…，这正是收工门 acceptance 报的那一条）；(2) 把还开着的两条 warning（000009@claim-5、000010）逐条复核并置 fixed 或 wontfix，不留 open；(3) 回执里给：documents.status、复审轮次、现行 content_sha256 前 12 位、open findings 剩余条数。不要改正文、不要动 main.tex、不要重编。）"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 67200,
+        "prompt_cache_miss_tokens": 2809,
+        "tokens_in": 70009,
+        "tokens_out": 1081,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000168"
+    },
+    {
+      "index": 5,
+      "shape": "final",
+      "payload": {
+        "final": "doc:000000 的五条 claim 引文格已改完，并经 H 第 14 轮复审到 accepted（签名钉住现行版），数学内容与 main.tex 一个字未动。",
+        "evidence": [
+          "doc:000000",
+          "stmt:000060",
+          "stmt:000061",
+          "stmt:000062",
+          "stmt:000063",
+          "stmt:000064"
+        ],
+        "notify": {
+          "to": "t-000001",
+          "summary": "doc:000000 五条 claim 引文格已改（claim-N→stmt:00006x），content_sha256 前 12 位 2d0a330993fc，H 复审 accepted；main.tex 未改、无需重编",
+          "body": "## 改了什么（只动 citations 一栏）\n\n`own.revise(doc_id=\"000000\")` 一次同号替换五条，回执 `replaced_claim_ids = [claim-1, claim-2, claim-3, claim-4, claim-5]`（原位替换，条数不变 5）：\n\n| claim | 旧 citations | 新 citations |\n|---|---|---|\n| claim-1（Sylow I：存在与包含） | `[\"stmt:000060\", \"lit:000000\"]` | `[\"stmt:000060\"]` |\n| claim-2（Sylow II：共轭） | `[\"stmt:000061\", \"lit:000000\"]` | `[\"stmt:000061\"]` |\n| claim-3（Sylow III：计数） | `[\"stmt:000062\", \"lit:000000\"]` | `[\"stmt:000062\"]` |\n| claim-4（n_p = [G:N_G(P)]） | `[\"stmt:000063\", \"lit:000000\"]` | `[\"stmt:000063\"]` |\n| claim-5（唯一 ⇔ 正规） | `[\"stmt:000064\", \"lit:000002\"]` | `[\"stmt:000064\"]` |\n\n`text` / `evidence_kind=cross_check` / `disclaimer` / `section` 全部原样保留，只删掉 `lit:` 那一格。\n\n## 两个指纹\n\n- 改前 `documents.content_sha256` = `549200690ff0e170…` → **前 12 位 `549200690ff0`**\n- 改后 `documents.content_sha256` = `2d0a330993fc31247634af0a1fcb34e7fd9f915be9f1dcdb502f3217cf7e6dec` → **前 12 位 `2d0a330993fc`**\n\n## 复审（改完必须送 H，否则签名钉在旧版）\n\nH1 复核：`review.review_document(doc_id=\"000000\", round_no=14)` → `verdict=accepted`、`documents.status=accepted`，签名的 content_sha256 钉住现行版（改后那一份），open findings 剩余 0 条。\n\n## 是否需要重编：**不需要**\n\n`own.revise` 的回执里正文读数 `body_path=out/package/main.tex`、`body_sha256=08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72` —— 与上一版逐字相同（本次改的是 `documents.claims`，不改正文），所以盘上 `main.pdf` 没有过期，`doc.paper_compile` 本次未调（按派活要求）。收工门的 `readings[\"paper\"]` 应仍为一致，不是 drifted。\n\n## 一个要你知道的读数（不是我没做的事，是这次修法的必然后果）\n\n改后这份稿子的断言层 `lit:` 引用计数 = **0**（`citation_coverage.counts = {stmt:5, lit:0}`）。文献引用按你的指示留在正文与 Introduction 的 `\\cite` 里；但收工门的 `document_literature_citations` 一档数的是**台账层**引用，它会把这 5/5 条「零文献引用」报出来。若那一档在 closing 里判 fail，两条路：① 认这是「断言压在本方命题上、文献在正文」的口径（需要在交付说明里写明）；② 再要我给某几条 claim 补回一条**词面确实对得上**的 `lit:`（那就得先有能对上的证据，不能回到旧那种对不上的引法）。我不擅自做②。\n\n## 我这边的状态\n\n无未消板项；H1 名下的复审件已回、无 open findings（销号留给你这支线的收口处理）。",
+          "refs": [
+            "stmt:000060",
+            "stmt:000061",
+            "stmt:000062",
+            "stmt:000063",
+            "stmt:000064"
+          ]
+        }
+      },
+      "result": {
+        "notify_handoff": {
+          "handoff": "000024",
+          "ok": true,
+          "id": "000024",
+          "path": "work/handoffs.jsonl#000024",
+          "to": "M",
+          "brief": "doc:000000 五条 claim 引文格已改（claim-N→stmt:00006x），content_sha256 前 12 位 2d0a330993fc，H 复审 accepted；main.tex 未改、无需重编",
+          "addressing": {
+            "checked": true,
+            "how": "parent",
+            "to": "t-000001",
+            "kind": "parent",
+            "name": "",
+            "task_id": "t-000001",
+            "role": "M",
+            "brief": "",
+            "candidates": [],
+            "callable": "父 （无名）（t-000001）、子 H1（t-000169）",
+            "why": "名册成员（parent）⇒ 手稿写角色 M，通知投实例 t-000001",
+            "delivery": "roster",
+            "manuscript_to": "M",
+            "addressed_by": "task_id"
+          },
+          "notify_channel": "roster",
+          "revises": "",
+          "existing_same_summary": {
+            "count": 0,
+            "ids": [],
+            "note": "查过了：没有同一句话的既有交接"
+          },
+          "notified": "t-000172",
+          "error": "",
+          "note": "收件人下次运行时（或本步之后）会在收件箱/板上看到编号；它用 `manuscripts.read` 读全文"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 69248,
+        "prompt_cache_miss_tokens": 4203,
+        "tokens_in": 73451,
+        "tokens_out": 2261,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000168"
+    }
+  ],
+  "final": "doc:000000 的五条 claim 引文格已改完，并经 H 第 14 轮复审到 accepted（签名钉住现行版），数学内容与 main.tex 一个字未动。",
+  "evidence": [
+    "doc:000000",
+    "stmt:000060",
+    "stmt:000061",
+    "stmt:000062",
+    "stmt:000063",
+    "stmt:000064"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 1,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 5,
+  "compactions": 0,
+  "mailbox_items": [
+    "t-000170"
+  ],
+  "mailbox_msgs": [],
+  "mailbox_delivered": 1,
+  "monitor_turns": 1,
+  "wakes": 1,
+  "wake_ids": [
+    "wk-000051"
+  ],
+  "wake_events": [
+    {
+      "wake_id": "wk-000051",
+      "task_id": "t-000168",
+      "role": "G",
+      "timer_id": "tm-000068",
+      "kind": "timer",
+      "reason": "复审稿件 doc:000000（当前 status=revised、revision 已推进、五条 claim 刚改过引文格）。这一版只有一处改动：claim-1..claim-5 的 `citations` 各自从 [\"stmt:0000xx\",\"lit:000000\"/\"lit:000002\"] 改成只引对应的那一条在册命题（claim-1→stmt:000060、claim-2→stmt:0",
+      "purpose": "复审稿件 doc:000000（当前 status=revised、revision 已推进、五条 claim 刚改过引文格）。这一版只有一处改动：claim-1..claim-5 的 `citations` 各自从 [\"stmt:0000xx\",\"lit:000000\"/\"lit:000002\"] 改成只引对应的那一条在册命题（claim-1→stmt:000060、claim-2→stmt:0",
+      "purpose_missing": false,
+      "message": "时间到：复审稿件 doc:000000（当前 status=revised、revision 已推进、五条 claim 刚改过引文格）。这一版只有一处改动：claim-1..claim-5 的 `citations` 各自从 [\"stmt:0000xx\",\"lit:000000\"/\"lit:000002\"] 改成只引对应的那一条在册命题（claim-1→stmt:000060、claim-2→stmt:0｜等了 2 分钟 11 秒（起于 05:30:06，到于 05:32:16）。它说的是：回执：doc:000000 第 14 轮复审（签名已钉现行版；两条读数必须同时看）：**回执（按手稿 000023 / m000020 的三条要求逐项给读数）**\n\n1) **现行版已审、签名已钉住现行版**：`review.review_document(doc_id=\"000000\", round_no=14)` → `verdict=accepted`、`status=accepted`、`status_updated=true`；签名落盘 `doc-signatures/000000-2d0a330993fc3124-003.json`，其 `content_sha256 = 2d0a",
+      "waited_sec": 130.941449,
+      "triggered_by": "target_event",
+      "wait_for": "task:t-000169",
+      "due_at": "",
+      "fired_at": "2026-11-23T21:32:16.954732+00:00",
+      "mailbox_item_id": "t-000170",
+      "state": "pending"
+    }
+  ],
+  "clock_pumps": 10,
+  "clock_fired": 0,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "G 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "G",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    },
+    "woke_turns": 1,
+    "skip_calls": 1,
+    "woke_reasons": [
+      "event"
+    ],
+    "own_children": [
+      "t-000169"
+    ],
+    "return_given": [
+      "t-000169"
+    ],
+    "reentry_turns": 1,
+    "reentry_reasons": [
+      "上一拍是等谁的唤醒（t-000169 回来）—— 那一拍按 ③ 跳过，那一批的产出现在就在上下文里 ⇒ 这一拍返场问模型（不许再睡一拍）"
+    ]
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [
+    "000024"
+  ],
+  "summons": [
+    "H"
+  ],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [
+    {
+      "kind": "summon",
+      "counted": true,
+      "task_id": "t-000169",
+      "role": "H",
+      "step": 3,
+      "status": "running",
+      "outcome": "",
+      "handoff_id": "",
+      "outputs": [
+        "t-000169"
+      ],
+      "disposition": ""
+    }
+  ],
+  "summons_total": 1,
+  "summons_consumed": 0,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 1,
+  "summon_consumption": {
+    "summons_total": 1,
+    "summons_consumed": 0,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 1,
+    "productions": [
+      {
+        "kind": "summon",
+        "counted": true,
+        "task_id": "t-000169",
+        "role": "H",
+        "step": 3,
+        "status": "running",
+        "outcome": "",
+        "handoff_id": "",
+        "outputs": [
+          "t-000169"
+        ],
+        "disposition": "unconsumed"
+      }
+    ],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p327",
+    "role": "G",
+    "prompt_sha256": "5d560051773c3ed111fab8d18dc95874df2121546d6ca8c8aa629fc2e459cfc3",
+    "prompt_chars": 81778,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "FACULTIES_07",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "TOOL_29",
+      "TOOL_30",
+      "TOOL_31",
+      "TOOL_32",
+      "TOOL_33",
+      "TOOL_34",
+      "TOOL_35",
+      "TOOL_36",
+      "TOOL_37",
+      "TOOL_38",
+      "TOOL_39",
+      "TOOL_40",
+      "TOOL_41",
+      "TOOL_42",
+      "TOOL_43",
+      "TOOL_44",
+      "TOOL_45",
+      "TOOL_46",
+      "TOOL_47",
+      "TOOL_48",
+      "TOOL_49",
+      "TOOL_50",
+      "TOOL_51",
+      "TOOL_52",
+      "TOOL_53",
+      "TOOL_54",
+      "TOOL_55",
+      "TOOL_56",
+      "TOOL_57",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "PAPER_PACK",
+      "PAPER_01",
+      "PAPER_02",
+      "PAPER_03",
+      "PAPER_04",
+      "PAPER_05",
+      "PAPER_06",
+      "PAPER_07",
+      "PAPER_07_BODY",
+      "PAPER_08",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_LIMITS",
+      "COLLAB_NAMES",
+      "PARENT_STOP",
+      "PARENT_ROSTER",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 5,
+    "tokens_in": 344496,
+    "tokens_out": 4397,
+    "usd": 0.005429,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 5,
+    "no_request_calls": 0,
+    "hit": 332544,
+    "miss": 11952,
+    "unknown_calls": 0,
+    "tokens_in": 344496,
+    "hit_rate": 0.9653,
+    "mismatched_calls": 0,
+    "saved_usd": 0.048884,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 160.079,
+  "end_ts": "2026-11-24T05:32:30+08:00",
+  "notes": [
+    "第 4 步返场：子代理回来 0 条，还在跑 1 条（等待 0.0s，原因 wake）",
+    "第 5 步返场：子代理回来 0 条，还在跑 1 条（这一拍为了返场没等子：返场判据给过之后才等）",
+    "返场（Q22）：上一拍是等谁的唤醒（t-000169 回来）—— 那一拍按 ③ 跳过，那一批的产出现在就在上下文里 ⇒ 这一拍返场问模型（不许再睡一拍）",
+    "收工时名下还有 2 条证明没有 V 的签字（读数，不拦收工；明细：000060、000064）",
+    "缓存读数：命中 332544 / 未命中 11952 token，命中率 96.5%（5 次调用）；按 modelcost 口径估算可省 约 0.048884 美元",
+    "子产出处理读数：summons_total=1，consumed=0，waived=0，unknown=0，unconsumed=1；**没处理**的是 ['t-000169'] —— 拿到结果不等于处理了：在它之后留下任何指到它的效应（写台账 / 改计划 / 改猜想 / 写报告 / 再派活 / 折进结论 …），或者写 `not_consumed`（受控码 + 一句理由）如实声明不处理"
+  ],
+  "final_payload": {
+    "final": "doc:000000 的五条 claim 引文格已改完，并经 H 第 14 轮复审到 accepted（签名钉住现行版），数学内容与 main.tex 一个字未动。",
+    "evidence": [
+      "doc:000000",
+      "stmt:000060",
+      "stmt:000061",
+      "stmt:000062",
+      "stmt:000063",
+      "stmt:000064"
+    ],
+    "notify": {
+      "to": "t-000001",
+      "summary": "doc:000000 五条 claim 引文格已改（claim-N→stmt:00006x），content_sha256 前 12 位 2d0a330993fc，H 复审 accepted；main.tex 未改、无需重编",
+      "body": "## 改了什么（只动 citations 一栏）\n\n`own.revise(doc_id=\"000000\")` 一次同号替换五条，回执 `replaced_claim_ids = [claim-1, claim-2, claim-3, claim-4, claim-5]`（原位替换，条数不变 5）：\n\n| claim | 旧 citations | 新 citations |\n|---|---|---|\n| claim-1（Sylow I：存在与包含） | `[\"stmt:000060\", \"lit:000000\"]` | `[\"stmt:000060\"]` |\n| claim-2（Sylow II：共轭） | `[\"stmt:000061\", \"lit:000000\"]` | `[\"stmt:000061\"]` |\n| claim-3（Sylow III：计数） | `[\"stmt:000062\", \"lit:000000\"]` | `[\"stmt:000062\"]` |\n| claim-4（n_p = [G:N_G(P)]） | `[\"stmt:000063\", \"lit:000000\"]` | `[\"stmt:000063\"]` |\n| claim-5（唯一 ⇔ 正规） | `[\"stmt:000064\", \"lit:000002\"]` | `[\"stmt:000064\"]` |\n\n`text` / `evidence_kind=cross_check` / `disclaimer` / `section` 全部原样保留，只删掉 `lit:` 那一格。\n\n## 两个指纹\n\n- 改前 `documents.content_sha256` = `549200690ff0e170…` → **前 12 位 `549200690ff0`**\n- 改后 `documents.content_sha256` = `2d0a330993fc31247634af0a1fcb34e7fd9f915be9f1dcdb502f3217cf7e6dec` → **前 12 位 `2d0a330993fc`**\n\n## 复审（改完必须送 H，否则签名钉在旧版）\n\nH1 复核：`review.review_document(doc_id=\"000000\", round_no=14)` → `verdict=accepted`、`documents.status=accepted`，签名的 content_sha256 钉住现行版（改后那一份），open findings 剩余 0 条。\n\n## 是否需要重编：**不需要**\n\n`own.revise` 的回执里正文读数 `body_path=out/package/main.tex`、`body_sha256=08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72` —— 与上一版逐字相同（本次改的是 `documents.claims`，不改正文），所以盘上 `main.pdf` 没有过期，`doc.paper_compile` 本次未调（按派活要求）。收工门的 `readings[\"paper\"]` 应仍为一致，不是 drifted。\n\n## 一个要你知道的读数（不是我没做的事，是这次修法的必然后果）\n\n改后这份稿子的断言层 `lit:` 引用计数 = **0**（`citation_coverage.counts = {stmt:5, lit:0}`）。文献引用按你的指示留在正文与 Introduction 的 `\\cite` 里；但收工门的 `document_literature_citations` 一档数的是**台账层**引用，它会把这 5/5 条「零文献引用」报出来。若那一档在 closing 里判 fail，两条路：① 认这是「断言压在本方命题上、文献在正文」的口径（需要在交付说明里写明）；② 再要我给某几条 claim 补回一条**词面确实对得上**的 `lit:`（那就得先有能对上的证据，不能回到旧那种对不上的引法）。我不擅自做②。\n\n## 我这边的状态\n\n无未消板项；H1 名下的复审件已回、无 open findings（销号留给你这支线的收口处理）。",
+      "refs": [
+        "stmt:000060",
+        "stmt:000061",
+        "stmt:000062",
+        "stmt:000063",
+        "stmt:000064"
+      ]
+    }
+  },
+  "task_id": "t-000168"
+}

@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T05:32:30+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 387,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"doc:000000 的五条 claim 引文格已改完，并经 H 第 14 轮复审到 accepted（签名钉住现行版），数学内容与 main.tex 一个字未动。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\sylow-4\\\\runs\\\\G-20261124-053230-001.json\", \"messages\": [], \"outcome\": \"ok\", \"status\": \"done\", \"steps\": 5, \"stop_reason\": \"final\", \"summons\": [\"H\"]}",
+ "payload_sha256": "45b1dc14f02f7a162330563804e25e70127ab53697e5ccaea47e0c4202502e12",
+ "readings": {},
+ "role": "G",
+ "status": "done",
+ "task_id": "t-000168"
+}

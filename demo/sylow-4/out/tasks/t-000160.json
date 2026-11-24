@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T05:26:17+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 3361,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"收口完成（按 M 给的外科手术口径，只改 claim 措辞、未动 main.tex）。\\n\\n一、改了哪几条 claim\\n只改了 1 条：claim-1（`own.revise` 回执 `replaced_claim_ids=[\\\"claim-1\\\"]`，条数仍 5，其余 4 条一字未动）。claim-2/3/4/5 逐条做过词面比对：它们已含所引命题的原词（Sylow p-subgroups / conjugate / n_p / [G : N(P)] / normal），与 stmt:000061–000064 有实词交集，无需改。\\n\\n对照（一行）：\\n- 前：「Let G be a finite group with |G| = p^k m and p not dividing m. Then G has a subgroup of order p^k, and every p-subgroup of G is contained in some subgroup of order p^k.」\\n- 后：「Let G be a finite group and p a prime with |G| = p^k m, where p does not divide m. Then G contains a Sylow p-subgroup of order p^k, and every p-subgroup of G is contained in some Sylow p-subgroup of G.」\\n数学内容未变（存在阶 p^k 的子群、每个 p-子群含于某个这样的子群），只把「subgroup of order p^k」换成 stmt:000060 的原词 Sylow p-subgroup。\\n\\n二、MAPPING\\n`doc.write_mapping(project=\\\".\\\")` → state=pass，5 行与正文 5 个定理类环境逐一对上，`ledger_id`/`proof_no` 均可解析，`problems=[]`，`mapping-appendix.tex` 已 present。首调用 `project=\\\"projects/sylow-4\\\"` 被拒（bad_project：路径被拼成 …\\\\sylow-4\\\\projects\\\\sylow-4），改 `project=\\\".\\\"` 通过。\\n\\n三、编译\\nmain.tex 一个字节未改：`fs.stat` 得 sha256=08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72、22490 字节，与 COMPILE-RECEIPT.json 的 `tex_sha256` 逐字相同 ⇒ 未重编（回执 `pages`=7、`pdf_bytes`=232739、exit_codes [0,0]、`pdf_fresh`=true、compiled_at 2026-11-24T05:04:42）。回执 tex_sha256 前 12 位：08c6cc0a5673。\\n\\n四、H 复审（改完即送，未复审不算交付）\\nH1 已复审现行版：核到 main.tex 的 sha/字节/行数与我所报一致，且明说 claim-1 新措辞与 stmt:000060「对得上、没有差词」、机械读数全绿。但它没有签 accepted：以三条证据链 warning 未收口为由把 `documents.status` 留在 in_review、签名未钉（手稿 000020）。那三条属证据链层（含论文里排成定理而 V 未签的 thm:unique → stmt:000064 一类），不是措辞能修的，且超出 M 这次限定的手术范围与预算 ⇒ 原样上报，是否再派 D/V 收口由 M 定。\\n\\n五、一条口径读数（供 M 判门时用）\\n`revise` 的 `citation_coverage.fit` 现在只在 **lit:** 一侧报 mismatch（claim-1…5 全部，why 只点 lit:000000/000002），**stmt 一侧 claim-1 已对上**。lit 那一侧对五条都不可能有交集（文献行的可比较文本只有哈希文件名一类），改措辞改不动它；若收工门按「一条 claim 的任一引用有交集」判，则已通过；若按逐条 lit 引用判，则需换引文或去掉 lit: 引用 —— 那是证据取舍，不是我能在 chirurg 范围内自行决定的。\\n\\n未做：重编 PDF（不需要，tex 未变）、改 main.tex 的",
+ "payload_sha256": "3146bf4a2593245b0ee057b27db23c5430110a66468b483b42e86191de864906",
+ "readings": {},
+ "role": "G",
+ "status": "done",
+ "task_id": "t-000160"
+}

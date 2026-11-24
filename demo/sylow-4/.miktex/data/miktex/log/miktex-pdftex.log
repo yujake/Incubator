@@ -1,0 +1,5 @@
+2026-11-24 04:41:26,325+0800 INFO  miktex-pdftex - this process (2836) started by miktex-makefmt in directory C:\Users\ysc20\AppData\Local\Temp\mik16591 with command line: miktex-pdftex.exe --miktex-enable-installer --miktex-disable-maintenance --miktex-disable-diagnose --interaction=nonstopmode --initialize --halt-on-error --alias=pdflatex --job-name=pdflatex -tcx=cp227.tcx --enable-etex pdflatex.ini
+2026-11-24 04:41:26,325+0800 INFO  miktex-pdftex - running on Windows 10.0.26200
+2026-11-24 04:41:26,325+0800 INFO  miktex-pdftex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-24 04:41:26,330+0800 INFO  miktex-pdftex - allowing known shell commands
+2026-11-24 04:41:36,236+0800 INFO  miktex-pdftex - this process (2836) finishes with exit code 0

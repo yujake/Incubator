@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T04:00:34+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 2880,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"「有毛病」——对 `manuscripts/B/b-proof-000007.md` 的「## 证明」逐行审完，缺陷在第 3 步。\\n\\n**判词**：有毛病（verdict=有毛病, defect_step=3, findings 1 条 error, unresolved_errors 1）。V 稿 `verifications/reviews/v-review-000003.md` 已由秘书落盘并投给 B（板项 t-000023）。\\n\\n**findings（逐字）**：第 3 步「因为 Q 是有限 p-群而 G/P 是有限集，这个作用满足不动点同余 |G/P| ≡ |Fix_Q(G/P)| (mod p)」—— 无依据步骤：不动点同余是非平凡引理，此处只断言它成立，既未引用在册 id，也未给出推导。**最小补法**：补一句轨道分解（每个非固定轨道大小 = |Q|/|Q_x| 是 p 的正幂 ⇒ 被 p 整除，故 |G/P| ≡ |Fix_Q(G/P)| mod p），或引用在册命题；本册 65 行里没有这条引理可引（只有 000060–000064 五条定理 + 概念行，000009「finite p-group」是概念不是命题），所以实际只能补推导。\\n\\n**其余各步我逐条核过、判没问题**：第 2 步作用 q·(gP)=(qg)P 良定义（gP=g′P ⇒ qg′=qgp ∈ qgP）；第 4 步 p ∤ [G:P] 落在 p-Sylow 子群的定义里（stmt:000000：「order is the largest power of p dividing |G|」），不是偷偷多用的假设；第 5 步 qg ∈ gP ⇒ q = gpg⁻¹ ∈ gPg⁻¹；第 6 步 Q 与 gPg⁻¹ 同阶（都由定义同为 p^a）＋有限群同阶包含 ⇒ 相等。六条角度（前提/计算/逻辑/强度/台账一致/依赖面）过下来，只有第 3 步这一处要改，但这一处要改 ⇒ 只能判「有毛病」，因此**不签发**（负判不写签块、不落第 3 位）。\\n\\n**必须报的一件事（登记面）**：`stmt:000061` 那一行登记的稿是 **000002**（`manuscripts/B/b-proof-000002.md`，citation 占位，其「## 证明」只有一行 `For each prime p, the p-Sylow subgroups of G are conjugate.`），`proof_routes={}`、1 条路径；**000007 不在该命题行上、也不在任何逐路径记录里**（`data/tasks.json` 只有 `mss:000007#kind=polish#source=000002#source_sign=unsigned`）。所以我带 `statement_id=000061` 的送审被 `bad_manuscript_name` 受控拒绝（未审、未落签），已改走按正文 sha 的未在册档：判词落 `verifications/pending/da08943acb7c0c04b5399834aa19fccc3a41312bc875e3e8b43b5ca323d06f30.jsonl#u-000001`。**B 把 000007 登记成 stmt:000061 的一条路径后，这份记录可按 sha 认领进 `verifications/000061.jsonl`；在那之前它只是 pending 记录，不是该命题的台账行。**改稿后请把同一份稿重新送审（正文改一个字就是新 sha、这一版记录不再适用）。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\sylow-4\\\\runs\\\\V-20261124-040034-001.json\", \"messages\": [\"B\"], \"outcome\": \"ok\", \"status\": \"done\", \"steps\": 16, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "397e4526b1fcdae8e2243995bcc2d86a97595d381dee17993e1adc59c4378a44",
+ "readings": {},
+ "role": "V",
+ "status": "done",
+ "task_id": "t-000007"
+}

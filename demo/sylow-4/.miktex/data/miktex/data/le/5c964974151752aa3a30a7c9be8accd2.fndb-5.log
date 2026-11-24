@@ -1,0 +1,14 @@
++kanjix.map;fonts/map/dvipdfmx;
++builtin35.map;fonts/map/dvips;
++download35.map;fonts/map/dvips;
++ps2pk.map;fonts/map/dvips;
++psfonts_pk.map;fonts/map/dvips;
++psfonts_t1.map;fonts/map/dvips;
++pdftex_dl14.map;fonts/map/pdftex;
++pdftex_ndl14.map;fonts/map/pdftex;
++psfonts.map;fonts/map/dvips;
++pdftex.map;fonts/map/pdftex;
++2026-11-24-04-41-25.log;miktex/log/makefmt/pdflatex;
++pdflatex.fmt;miktex/data/le/pdftex;
++mf.base;miktex/data/le;
++tcrm1000.pk;fonts/pk/ljfour/jknappen/ec/dpi600;

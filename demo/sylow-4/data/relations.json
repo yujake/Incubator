@@ -1,0 +1,3476 @@
+{
+  "schema_version": 2,
+  "rows": [
+    {
+      "relation_id": "000000",
+      "concept_ids": [
+        "000000",
+        "000002"
+      ],
+      "description": "p-Sylow subgroup 的定义依赖于一个素数 p，并取 p 整除 |G| 的最高幂次。",
+      "lit_id": "000000",
+      "page_range": {
+        "start": 1,
+        "end": 1,
+        "label": "p. 1"
+      },
+      "quote": "the highest power of p dividing |G| is called a p-Sylow subgroup1 of G.",
+      "quote_normalized": "the highest power of p dividing |g| is called a p-sylow subgroup1 of g.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:1-1，试过 未记）；命中区间 p1:norm[1086:1157]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p1:norm[1086:1157]",
+      "quote_call_sha256": "",
+      "statement": "p-Sylow subgroup 的定义依赖于一个素数 p，并取 p 整除 |G| 的最高幂次。",
+      "concept_group_key": "000000|000002",
+      "dedup_key": "000000|000002::d56e567e74f06d79",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:44:02+08:00",
+      "merged_at": "2026-11-24T03:44:02+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 1,
+        "window": "declared:1-1",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000001",
+      "concept_ids": [
+        "000000",
+        "000003"
+      ],
+      "description": "对每个素数 p，G 的 p-Sylow subgroups 彼此共轭。",
+      "lit_id": "000000",
+      "page_range": {
+        "start": 3,
+        "end": 3,
+        "label": "p. 3"
+      },
+      "quote": "For each prime p, the p-Sylow subgroups of G are conjugate.",
+      "quote_normalized": "for each prime p, the p-sylow subgroups of g are conjugate.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:3-3，试过 未记）；命中区间 p3:norm[625:684]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p3:norm[625:684]",
+      "quote_call_sha256": "",
+      "statement": "对每个素数 p，G 的 p-Sylow subgroups 彼此共轭。",
+      "concept_group_key": "000000|000003",
+      "dedup_key": "000000|000003::5bf5929df7e34475",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:44:02+08:00",
+      "merged_at": "2026-11-24T03:44:02+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 3,
+        "window": "declared:3-3",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000002",
+      "concept_ids": [
+        "000000",
+        "000004"
+      ],
+      "description": "每个 p-subgroup 都包含在某个 p-Sylow subgroup 中。",
+      "lit_id": "000000",
+      "page_range": {
+        "start": 3,
+        "end": 3,
+        "label": "p. 3"
+      },
+      "quote": "each p-subgroup of G lies in some p-Sylow subgroup of G.",
+      "quote_normalized": "each p-subgroup of g lies in some p-sylow subgroup of g.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:3-3，试过 未记）；命中区间 p3:norm[544:600]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p3:norm[544:600]",
+      "quote_call_sha256": "",
+      "statement": "每个 p-subgroup 都包含在某个 p-Sylow subgroup 中。",
+      "concept_group_key": "000000|000004",
+      "dedup_key": "000000|000004::0c7c38c288fbb7ab",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:44:02+08:00",
+      "merged_at": "2026-11-24T03:44:02+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 3,
+        "window": "declared:3-3",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000003",
+      "concept_ids": [
+        "000000",
+        "000005"
+      ],
+      "description": "若 P 是 p-Sylow subgroup，则 N(P) 是它的 normalizer。",
+      "lit_id": "000000",
+      "page_range": {
+        "start": 3,
+        "end": 3,
+        "label": "p. 3"
+      },
+      "quote": "where P is a p-Sylow subgroup and N(P) is its normalizer.",
+      "quote_normalized": "where p is a p-sylow subgroup and n(p) is its normalizer.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:3-3，试过 未记）；命中区间 p3:norm[962:1019]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p3:norm[962:1019]",
+      "quote_call_sha256": "",
+      "statement": "若 P 是 p-Sylow subgroup，则 N(P) 是它的 normalizer。",
+      "concept_group_key": "000000|000005",
+      "dedup_key": "000000|000005::47f22720e299ffb8",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:44:02+08:00",
+      "merged_at": "2026-11-24T03:44:02+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 3,
+        "window": "declared:3-3",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000004",
+      "concept_ids": [
+        "000005",
+        "000006"
+      ],
+      "description": "p-Sylow subgroups 的个数 np 等于 G 对 N(P) 的指数。",
+      "lit_id": "000000",
+      "page_range": {
+        "start": 3,
+        "end": 3,
+        "label": "p. 3"
+      },
+      "quote": "Then np = [G : N(P)], where P is a p-Sylow subgroup and N(P) is its normalizer.",
+      "quote_normalized": "then np = [g: n(p)], where p is a p-sylow subgroup and n(p) is its normalizer.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:3-3，试过 未记）；命中区间 p3:norm[941:1019]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p3:norm[941:1019]",
+      "quote_call_sha256": "",
+      "statement": "p-Sylow subgroups 的个数 np 等于 G 对 N(P) 的指数。",
+      "concept_group_key": "000005|000006",
+      "dedup_key": "000005|000006::24c029c530e82a19",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:44:02+08:00",
+      "merged_at": "2026-11-24T03:44:02+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 3,
+        "window": "declared:3-3",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000005",
+      "concept_ids": [
+        "000000",
+        "000006"
+      ],
+      "description": "np 是 p-Sylow subgroup 集合 Sylp(G) 的基数。",
+      "lit_id": "000000",
+      "page_range": {
+        "start": 4,
+        "end": 4,
+        "label": "p. 4"
+      },
+      "quote": "the set of p-Sylow subgroups of G, so np = | Sylp(G)|.",
+      "quote_normalized": "the set of p-sylow subgroups of g, so np = | sylp(g)|.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:4-4，试过 未记）；命中区间 p4:norm[330:384]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p4:norm[330:384]",
+      "quote_call_sha256": "",
+      "statement": "np 是 p-Sylow subgroup 集合 Sylp(G) 的基数。",
+      "concept_group_key": "000000|000006",
+      "dedup_key": "000000|000006::ab21af5d57d0ca07",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:44:02+08:00",
+      "merged_at": "2026-11-24T03:44:02+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 4,
+        "window": "declared:4-4",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000006",
+      "concept_ids": [
+        "000007",
+        "000008"
+      ],
+      "description": "Sylow theorems 的证明将使用 group actions。",
+      "lit_id": "000000",
+      "page_range": {
+        "start": 4,
+        "end": 4,
+        "label": "p. 4"
+      },
+      "quote": "Our proof of the Sylow theorems will use group actions.",
+      "quote_normalized": "our proof of the sylow theorems will use group actions.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:4-4，试过 未记）；命中区间 p4:norm[153:208]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p4:norm[153:208]",
+      "quote_call_sha256": "",
+      "statement": "Sylow theorems 的证明将使用 group actions。",
+      "concept_group_key": "000007|000008",
+      "dedup_key": "000007|000008::d8bed418be7f3a17",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:44:02+08:00",
+      "merged_at": "2026-11-24T03:44:02+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 4,
+        "window": "declared:4-4",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000007",
+      "concept_ids": [
+        "000000",
+        "000005"
+      ],
+      "description": "For a p-Sylow subgroup P of a finite group G, the normalizer of P is its own normalizer: N(N(P)) = N(P).",
+      "lit_id": "000000",
+      "page_range": {
+        "start": 6,
+        "end": 6,
+        "label": "p. 6"
+      },
+      "quote": "Theorem 2.1. Let P be a p-Sylow subgroup of a ﬁnite group G. Then N(N(P)) = N(P).",
+      "quote_normalized": "theorem 2.1. let p be a p-sylow subgroup of a finite group g. then n(n(p)) = n(p).",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:6-6，试过 未记）；命中区间 p6:norm[326:408]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p6:norm[326:408]",
+      "quote_call_sha256": "",
+      "statement": "For a p-Sylow subgroup P of a finite group G, the normalizer of P is its own normalizer: N(N(P)) = N(P).",
+      "concept_group_key": "000000|000005",
+      "dedup_key": "000000|000005::ebdc698ff289e4a6",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:44:02+08:00",
+      "merged_at": "2026-11-24T03:44:02+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 6,
+        "window": "declared:6-6",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 1 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 1,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000008",
+      "concept_ids": [
+        "000000",
+        "000004",
+        "000005"
+      ],
+      "description": "A p-subgroup H that is not a p-Sylow subgroup has normalizer strictly larger than H.",
+      "lit_id": "000000",
+      "page_range": {
+        "start": 6,
+        "end": 6,
+        "label": "p. 6"
+      },
+      "quote": "In the proof of Sylow I, we saw that if H is a p-subgroup of G that is not a p-Sylow\nsubgroup then N(H) is strictly larger than H.",
+      "quote_normalized": "in the proof of sylow i, we saw that if h is a p-subgroup of g that is not a p-sylow subgroup then n(h) is strictly larger than h.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:6-6，试过 未记）；命中区间 p6:norm[15:145]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p6:norm[15:145]",
+      "quote_call_sha256": "",
+      "statement": "A p-subgroup H that is not a p-Sylow subgroup has normalizer strictly larger than H.",
+      "concept_group_key": "000000|000004|000005",
+      "dedup_key": "000000|000004|000005::b3ba2d07a41af1a4",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:44:02+08:00",
+      "merged_at": "2026-11-24T03:44:02+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 6,
+        "window": "declared:6-6",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000009",
+      "concept_ids": [
+        "000000",
+        "000005",
+        "000006"
+      ],
+      "description": "The number of p-Sylow subgroups of G equals the index [G : N(P)], and all p-Sylow subgroups are conjugate.",
+      "lit_id": "000000",
+      "page_range": {
+        "start": 6,
+        "end": 6,
+        "label": "p. 6"
+      },
+      "quote": "The number of p-Sylow subgroups of G is\n[G : N(P)]. All p-Sylow subgroups of G are conjugate.",
+      "quote_normalized": "the number of p-sylow subgroups of g is [g: n(p)]. all p-sylow subgroups of g are conjugate.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:6-6，试过 未记）；命中区间 p6:norm[1139:1231]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p6:norm[1139:1231]",
+      "quote_call_sha256": "",
+      "statement": "The number of p-Sylow subgroups of G equals the index [G : N(P)], and all p-Sylow subgroups are conjugate.",
+      "concept_group_key": "000000|000005|000006",
+      "dedup_key": "000000|000005|000006::fa13a1f981ca531d",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:44:02+08:00",
+      "merged_at": "2026-11-24T03:44:02+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 6,
+        "window": "declared:6-6",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000010",
+      "concept_ids": [
+        "000000",
+        "000005"
+      ],
+      "description": "For each p-Sylow subgroup P, the index of its normalizer in G is congruent to 1 modulo p.",
+      "lit_id": "000000",
+      "page_range": {
+        "start": 6,
+        "end": 6,
+        "label": "p. 6"
+      },
+      "quote": "(1) There is a p-Sylow subgroup of G. Moreover, [G : N(P)] ≡1 mod p for each p-Sylow\nsubgroup P.",
+      "quote_normalized": "(1) there is a p-sylow subgroup of g. moreover, [g: n(p)] ≡1 mod p for each p-sylow subgroup p.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:6-6，试过 未记）；命中区间 p6:norm[1005:1100]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p6:norm[1005:1100]",
+      "quote_call_sha256": "",
+      "statement": "For each p-Sylow subgroup P, the index of its normalizer in G is congruent to 1 modulo p.",
+      "concept_group_key": "000000|000005",
+      "dedup_key": "000000|000005::cb22ad2c381526f9",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:44:02+08:00",
+      "merged_at": "2026-11-24T03:44:02+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 6,
+        "window": "declared:6-6",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 2 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 2,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000011",
+      "concept_ids": [
+        "000000",
+        "000004",
+        "000010"
+      ],
+      "description": "Every Sylow subgroup is a Hall subgroup, and among p-subgroups, being a Hall subgroup is equivalent to being a Sylow subgroup.",
+      "lit_id": "000000",
+      "page_range": {
+        "start": 7,
+        "end": 7,
+        "label": "p. 7"
+      },
+      "quote": "Every Sylow subgroup is a Hall subgroup, and\na p-subgroup is a Hall subgroup if and only if it is a Sylow subgroup.",
+      "quote_normalized": "every sylow subgroup is a hall subgroup, and a p-subgroup is a hall subgroup if and only if it is a sylow subgroup.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:7-7，试过 未记）；命中区间 p7:norm[958:1073]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p7:norm[958:1073]",
+      "quote_call_sha256": "",
+      "statement": "Every Sylow subgroup is a Hall subgroup, and among p-subgroups, being a Hall subgroup is equivalent to being a Sylow subgroup.",
+      "concept_group_key": "000000|000004|000010",
+      "dedup_key": "000000|000004|000010::ae67e7f6ead70fca",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:44:02+08:00",
+      "merged_at": "2026-11-24T03:44:02+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 7,
+        "window": "declared:7-7",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000012",
+      "concept_ids": [
+        "000010",
+        "000011"
+      ],
+      "description": "In a solvable group of order n, for every divisor d with (d, n/d) = 1 there exists a Hall subgroup of order d.",
+      "lit_id": "000000",
+      "page_range": {
+        "start": 7,
+        "end": 7,
+        "label": "p. 7"
+      },
+      "quote": "He proved that for each solvable group of\norder n and each d dividing n such that (d, n/d) = 1, there is a Hall subgroup of\norder d",
+      "quote_normalized": "he proved that for each solvable group of order n and each d dividing n such that (d, n/d) = 1, there is a hall subgroup of order d",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:7-7，试过 未记）；命中区间 p7:norm[1208:1339]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p7:norm[1208:1339]",
+      "quote_call_sha256": "",
+      "statement": "In a solvable group of order n, for every divisor d with (d, n/d) = 1 there exists a Hall subgroup of order d.",
+      "concept_group_key": "000010|000011",
+      "dedup_key": "000010|000011::f3ce6834b407b314",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:44:02+08:00",
+      "merged_at": "2026-11-24T03:44:02+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 7,
+        "window": "declared:7-7",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000013",
+      "concept_ids": [
+        "000005",
+        "000010",
+        "000011"
+      ],
+      "description": "The normalizer of a Hall subgroup of a solvable group is its own normalizer.",
+      "lit_id": "000000",
+      "page_range": {
+        "start": 7,
+        "end": 7,
+        "label": "p. 7"
+      },
+      "quote": "the normalizer of\na Hall subgroup of a solvable group is its own normalizer.",
+      "quote_normalized": "the normalizer of a hall subgroup of a solvable group is its own normalizer.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:7-7，试过 未记）；命中区间 p7:norm[1399:1475]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p7:norm[1399:1475]",
+      "quote_call_sha256": "",
+      "statement": "The normalizer of a Hall subgroup of a solvable group is its own normalizer.",
+      "concept_group_key": "000005|000010|000011",
+      "dedup_key": "000005|000010|000011::86f25e7c8c01e3c5",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:44:02+08:00",
+      "merged_at": "2026-11-24T03:44:02+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 7,
+        "window": "declared:7-7",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000014",
+      "concept_ids": [
+        "000000",
+        "000012"
+      ],
+      "description": "Maximal tori in a compact connected Lie group satisfy properties analogous to those of Sylow subgroups.",
+      "lit_id": "000000",
+      "page_range": {
+        "start": 7,
+        "end": 7,
+        "label": "p. 7"
+      },
+      "quote": "In a compact connected Lie group G, maximal tori (maximal connected abelian\nsubgroups of G) satisfy properties analogous to those of Sylow subgroups",
+      "quote_normalized": "in a compact connected lie group g, maximal tori (maximal connected abelian subgroups of g) satisfy properties analogous to those of sylow subgroups",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:7-7，试过 未记）；命中区间 p7:norm[1723:1871]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p7:norm[1723:1871]",
+      "quote_call_sha256": "",
+      "statement": "Maximal tori in a compact connected Lie group satisfy properties analogous to those of Sylow subgroups.",
+      "concept_group_key": "000000|000012",
+      "dedup_key": "000000|000012::55b7989b7807d362",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:44:02+08:00",
+      "merged_at": "2026-11-24T03:44:02+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 7,
+        "window": "declared:7-7",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000015",
+      "concept_ids": [
+        "000005",
+        "000012"
+      ],
+      "description": "The normalizer of a maximal torus is its own normalizer.",
+      "lit_id": "000000",
+      "page_range": {
+        "start": 7,
+        "end": 7,
+        "label": "p. 7"
+      },
+      "quote": "Like normalizers\nof Sylow subgroups, the normalizer of a maximal torus is its own normalizer.",
+      "quote_normalized": "like normalizers of sylow subgroups, the normalizer of a maximal torus is its own normalizer.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:7-7，试过 未记）；命中区间 p7:norm[2121:2214]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p7:norm[2121:2214]",
+      "quote_call_sha256": "",
+      "statement": "The normalizer of a maximal torus is its own normalizer.",
+      "concept_group_key": "000005|000012",
+      "dedup_key": "000005|000012::c68d32d991c7009e",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:44:02+08:00",
+      "merged_at": "2026-11-24T03:44:02+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 7,
+        "window": "declared:7-7",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000016",
+      "concept_ids": [
+        "000005",
+        "000013",
+        "000014"
+      ],
+      "description": "A Borel subgroup is defined as the normalizer of a maximal connected unipotent subgroup.",
+      "lit_id": "000000",
+      "page_range": {
+        "start": 7,
+        "end": 7,
+        "label": "p. 7"
+      },
+      "quote": "The nor-\nmalizer of a maximal connected unipotent subgroup is called a Borel subgroup",
+      "quote_normalized": "the normalizer of a maximal connected unipotent subgroup is called a borel subgroup",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:7-7，试过 未记）；命中区间 p7:norm[2663:2746]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p7:norm[2663:2746]",
+      "quote_call_sha256": "",
+      "statement": "A Borel subgroup is defined as the normalizer of a maximal connected unipotent subgroup.",
+      "concept_group_key": "000005|000013|000014",
+      "dedup_key": "000005|000013|000014::0f42b0d3500e9484",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:44:02+08:00",
+      "merged_at": "2026-11-24T03:44:02+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 7,
+        "window": "declared:7-7",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000017",
+      "concept_ids": [
+        "000000",
+        "000014"
+      ],
+      "description": "Maximal connected unipotent subgroups in a connected linear algebraic group are analogous to Sylow subgroups: they exist, contain every connected unipotent subgroup, and are all conjugate.",
+      "lit_id": "000000",
+      "page_range": {
+        "start": 7,
+        "end": 7,
+        "label": "p. 7"
+      },
+      "quote": "In a connected linear algebraic group, maximal connected unipotent subgroups are\nlike Sylow subgroups: they exist, every connected unipotent subgroup is in a maxi-\nmal connected unipotent subgroup, and all maximal connected unipotent subgroups\nare conjugate.",
+      "quote_normalized": "in a connected linear algebraic group, maximal connected unipotent subgroups are like sylow subgroups: they exist, every connected unipotent subgroup is in a maximal connected unipotent subgroup, and all maximal connected unipotent subgroups are conjugate.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:7-7，试过 未记）；命中区间 p7:norm[2347:2603]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p7:norm[2347:2603]",
+      "quote_call_sha256": "",
+      "statement": "Maximal connected unipotent subgroups in a connected linear algebraic group are analogous to Sylow subgroups: they exist, contain every connected unipotent subgroup, and are all conjugate.",
+      "concept_group_key": "000000|000014",
+      "dedup_key": "000000|000014::9eb1cf493dbbe752",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:44:02+08:00",
+      "merged_at": "2026-11-24T03:44:02+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 7,
+        "window": "declared:7-7",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000018",
+      "concept_ids": [
+        "000000",
+        "000016"
+      ],
+      "description": "Sylow p-子群是 G 的阶为 pr 的子群 H。",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 3,
+        "end": 3,
+        "label": "p. 3"
+      },
+      "quote": "G contains a subgroup H ⊂G of order pr. Any such group is\ncalled a Sylow p-subgroup.",
+      "quote_normalized": "g contains a subgroup h ⊂g of order pr. any such group is called a sylow p-subgroup.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:3-3，试过 未记）；命中区间 p3:norm[276:360]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p3:norm[276:360]",
+      "quote_call_sha256": "",
+      "statement": "Sylow p-子群是 G 的阶为 pr 的子群 H。",
+      "concept_group_key": "000000|000016",
+      "dedup_key": "000000|000016::9f958d37ce87acd6",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 3,
+        "window": "declared:3-3",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000019",
+      "concept_ids": [
+        "000000",
+        "000003"
+      ],
+      "description": "G 的所有 Sylow p-子群通过 G 中元素相互共轭。",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 3,
+        "end": 3,
+        "label": "p. 3"
+      },
+      "quote": "All Sylow p-subgroups of G are conjugate by elements of G.",
+      "quote_normalized": "all sylow p-subgroups of g are conjugate by elements of g.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:3-3，试过 未记）；命中区间 p3:norm[365:423]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p3:norm[365:423]",
+      "quote_call_sha256": "",
+      "statement": "G 的所有 Sylow p-子群通过 G 中元素相互共轭。",
+      "concept_group_key": "000000|000003",
+      "dedup_key": "000000|000003::27a2690711ca8b35",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 3,
+        "window": "declared:3-3",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 1 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 1,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000020",
+      "concept_ids": [
+        "000000",
+        "000017"
+      ],
+      "description": "若 G 只有一个 Sylow p-子群 H，则 H 是 G 的正规子群。",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 3,
+        "end": 3,
+        "label": "p. 3"
+      },
+      "quote": "if G has only one Sylow p-subgroup H, then H is a\nnormal subgroup of G.",
+      "quote_normalized": "if g has only one sylow p-subgroup h, then h is a normal subgroup of g.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:3-3，试过 未记）；命中区间 p3:norm[439:510]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p3:norm[439:510]",
+      "quote_call_sha256": "",
+      "statement": "若 G 只有一个 Sylow p-子群 H，则 H 是 G 的正规子群。",
+      "concept_group_key": "000000|000017",
+      "dedup_key": "000000|000017::385b54dbb2600e04",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 3,
+        "window": "declared:3-3",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000021",
+      "concept_ids": [
+        "000000",
+        "000015"
+      ],
+      "description": "不同 Sylow p-子群的个数同余于 1 modulo p，并且整除 |G|。",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 3,
+        "end": 3,
+        "label": "p. 3"
+      },
+      "quote": "The number of distinct Sylow p-subgroups of G is (i) congruent\nto 1 modulo p and (ii) divides |G|.",
+      "quote_normalized": "the number of distinct sylow p-subgroups of g is (i) congruent to 1 modulo p and (ii) divides |g|.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:3-3，试过 未记）；命中区间 p3:norm[515:613]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p3:norm[515:613]",
+      "quote_call_sha256": "",
+      "statement": "不同 Sylow p-子群的个数同余于 1 modulo p，并且整除 |G|。",
+      "concept_group_key": "000000|000015",
+      "dedup_key": "000000|000015::bfa736cea25b2256",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 3,
+        "window": "declared:3-3",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000022",
+      "concept_ids": [
+        "000017",
+        "000020",
+        "000021"
+      ],
+      "description": "阶为 pq 的群 G 有唯一的 Sylow q-子群 H，且 H 是正规子群。",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 7,
+        "end": 7,
+        "label": "p. 7"
+      },
+      "quote": "Let G be a group of order pq, where p and q are distinct primes,\nq > p. Then G has a unique Sylow q-subgroup H and H is normal.",
+      "quote_normalized": "let g be a group of order pq, where p and q are distinct primes, q> p. then g has a unique sylow q-subgroup h and h is normal.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:7-7，试过 未记）；命中区间 p7:norm[412:538]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p7:norm[412:538]",
+      "quote_call_sha256": "",
+      "statement": "阶为 pq 的群 G 有唯一的 Sylow q-子群 H，且 H 是正规子群。",
+      "concept_group_key": "000017|000020|000021",
+      "dedup_key": "000017|000020|000021::0e3a47fa7972193b",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 7,
+        "window": "declared:7-7",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000023",
+      "concept_ids": [
+        "000021",
+        "000022"
+      ],
+      "description": "阶为 pq 的群中唯一的 Sylow q-子群 H 是循环的。",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 7,
+        "end": 7,
+        "label": "p. 7"
+      },
+      "quote": "Moreover H is cyclic and if p does not divide q −1 then G is abelian.",
+      "quote_normalized": "moreover h is cyclic and if p does not divide q -1 then g is abelian.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:7-7，试过 未记）；命中区间 p7:norm[539:608]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p7:norm[539:608]",
+      "quote_call_sha256": "",
+      "statement": "阶为 pq 的群中唯一的 Sylow q-子群 H 是循环的。",
+      "concept_group_key": "000021|000022",
+      "dedup_key": "000021|000022::177b81565cccd915",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 7,
+        "window": "declared:7-7",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000024",
+      "concept_ids": [
+        "000017",
+        "000021",
+        "000024"
+      ],
+      "description": "由 Sylow 第二定理，唯一的 Sylow q-子群 H 是正规子群。",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 11,
+        "end": 11,
+        "label": "p. 11"
+      },
+      "quote": "By the Second Sylow Theorem, the unique Sylow q-subgroup H is\nnormal.",
+      "quote_normalized": "by the second sylow theorem, the unique sylow q-subgroup h is normal.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:11-11，试过 未记）；命中区间 p11:norm[297:366]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p11:norm[297:366]",
+      "quote_call_sha256": "",
+      "statement": "由 Sylow 第二定理，唯一的 Sylow q-子群 H 是正规子群。",
+      "concept_group_key": "000017|000021|000024",
+      "dedup_key": "000017|000021|000024::a8b3fca03fadb292",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 11,
+        "window": "declared:11-11",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000025",
+      "concept_ids": [
+        "000021",
+        "000023"
+      ],
+      "description": "阶为 q 的 Sylow q-子群 H 是交换的。",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 11,
+        "end": 11,
+        "label": "p. 11"
+      },
+      "quote": "Since H is of order q it is abelian.",
+      "quote_normalized": "since h is of order q it is abelian.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:11-11，试过 未记）；命中区间 p11:norm[367:403]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p11:norm[367:403]",
+      "quote_call_sha256": "",
+      "statement": "阶为 q 的 Sylow q-子群 H 是交换的。",
+      "concept_group_key": "000021|000023",
+      "dedup_key": "000021|000023::9a51419f407ea92d",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 11,
+        "window": "declared:11-11",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000026",
+      "concept_ids": [
+        "000018",
+        "000019"
+      ],
+      "description": "Sylow 第三定理用于确定 Sylow 7-子群个数 a：a ≡1 mod 7 且 a 整除 21。",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 7,
+        "end": 7,
+        "label": "p. 7"
+      },
+      "quote": "let a be the number of its\ndistinct Sylow 7-subgroups. By the Third Sylow Theorem a ≡1\n(mod 7) and a divides 21.",
+      "quote_normalized": "let a be the number of its distinct sylow 7-subgroups. by the third sylow theorem a ≡1 (mod 7) and a divides 21.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:7-7，试过 未记）；命中区间 p7:norm[166:278]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p7:norm[166:278]",
+      "quote_call_sha256": "",
+      "statement": "Sylow 第三定理用于确定 Sylow 7-子群个数 a：a ≡1 mod 7 且 a 整除 21。",
+      "concept_group_key": "000018|000019",
+      "dedup_key": "000018|000019::af1a023a69e94a55",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 7,
+        "window": "declared:7-7",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000027",
+      "concept_ids": [
+        "000017",
+        "000019"
+      ],
+      "description": "该群唯一的 Sylow 7-子群是正规子群。",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 7,
+        "end": 7,
+        "label": "p. 7"
+      },
+      "quote": "So a = 1 and its unique Sylow 7-subgroup is normal.",
+      "quote_normalized": "so a = 1 and its unique sylow 7-subgroup is normal.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:7-7，试过 未记）；命中区间 p7:norm[332:383]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p7:norm[332:383]",
+      "quote_call_sha256": "",
+      "statement": "该群唯一的 Sylow 7-子群是正规子群。",
+      "concept_group_key": "000017|000019",
+      "dedup_key": "000017|000019::f7e8e2ecb9e5dede",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 7,
+        "window": "declared:7-7",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000028",
+      "concept_ids": [
+        "000020",
+        "000021"
+      ],
+      "description": "Sylow q-子群的个数 a 整除 pq，且 a ≡1 mod q。",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 11,
+        "end": 11,
+        "label": "p. 11"
+      },
+      "quote": "If a is the number of Sylow q-subgroups of G, then a divides pq and\na ≡1 (mod q).",
+      "quote_normalized": "if a is the number of sylow q-subgroups of g, then a divides pq and a ≡1 (mod q).",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:11-11，试过 未记）；命中区间 p11:norm[124:205]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p11:norm[124:205]",
+      "quote_call_sha256": "",
+      "statement": "Sylow q-子群的个数 a 整除 pq，且 a ≡1 mod q。",
+      "concept_group_key": "000020|000021",
+      "dedup_key": "000020|000021::2faf14af281e21d1",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 11,
+        "window": "declared:11-11",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000029",
+      "concept_ids": [
+        "000017",
+        "000021"
+      ],
+      "description": "By the Second Sylow Theorem, the unique Sylow q-subgroup H is normal.",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 15,
+        "end": 15,
+        "label": "p. 15"
+      },
+      "quote": "By the Second Sylow Theorem, the unique Sylow q-subgroup H is\nnormal.",
+      "quote_normalized": "by the second sylow theorem, the unique sylow q-subgroup h is normal.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:15-15，试过 未记）；命中区间 p15:norm[297:366]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p15:norm[297:366]",
+      "quote_call_sha256": "",
+      "statement": "By the Second Sylow Theorem, the unique Sylow q-subgroup H is normal.",
+      "concept_group_key": "000017|000021",
+      "dedup_key": "000017|000021::a8b3fca03fadb292",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 15,
+        "window": "declared:15-15",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000030",
+      "concept_ids": [
+        "000017",
+        "000025"
+      ],
+      "description": "G has a conjugation action on the normal subgroup H.",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 15,
+        "end": 15,
+        "label": "p. 15"
+      },
+      "quote": "conjugation action of G on the normal subgroup H",
+      "quote_normalized": "conjugation action of g on the normal subgroup h",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:15-15，试过 未记）；命中区间 p15:norm[421:469]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p15:norm[421:469]",
+      "quote_call_sha256": "",
+      "statement": "G has a conjugation action on the normal subgroup H.",
+      "concept_group_key": "000017|000025",
+      "dedup_key": "000017|000025::43194ad2d0cb1dff",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 15,
+        "window": "declared:15-15",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000031",
+      "concept_ids": [
+        "000017",
+        "000026",
+        "000027"
+      ],
+      "description": "K4 is invariant under conjugation by S4, so K4 is a normal subgroup of S4.",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 18,
+        "end": 18,
+        "label": "p. 18"
+      },
+      "quote": "This set is\ninvariant under conjugation by S4, so K4 is a normal subgroup of S4.",
+      "quote_normalized": "this set is invariant under conjugation by s4, so k4 is a normal subgroup of s4.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:18-18，试过 未记）；命中区间 p18:norm[372:452]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p18:norm[372:452]",
+      "quote_call_sha256": "",
+      "statement": "K4 is invariant under conjugation by S4, so K4 is a normal subgroup of S4.",
+      "concept_group_key": "000017|000026|000027",
+      "dedup_key": "000017|000026|000027::a36ee5f87656a425",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 18,
+        "window": "declared:18-18",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000032",
+      "concept_ids": [
+        "000017",
+        "000028"
+      ],
+      "description": "P = H · K4 is a Sylow 2-subgroup of order 8 with a normal subgroup of index 2.",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 18,
+        "end": 18,
+        "label": "p. 18"
+      },
+      "quote": "Then P = H · K4 is a Sylow 2-subgroup of order 8 with a normal\nsubgroup of index 2.",
+      "quote_normalized": "then p = h · k4 is a sylow 2-subgroup of order 8 with a normal subgroup of index 2.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:18-18，试过 未记）；命中区间 p18:norm[519:602]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p18:norm[519:602]",
+      "quote_call_sha256": "",
+      "statement": "P = H · K4 is a Sylow 2-subgroup of order 8 with a normal subgroup of index 2.",
+      "concept_group_key": "000017|000028",
+      "dedup_key": "000017|000028::ee81528cf23bed08",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 18,
+        "window": "declared:18-18",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000033",
+      "concept_ids": [
+        "000028",
+        "000029"
+      ],
+      "description": "The constructed Sylow 2-subgroup P is isomorphic to D8, not Q8.",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 20,
+        "end": 20,
+        "label": "p. 20"
+      },
+      "quote": "This shows that P is isomorphic to D8 (and not Q8).",
+      "quote_normalized": "this shows that p is isomorphic to d8 (and not q8).",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:20-20，试过 未记）；命中区间 p20:norm[500:551]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p20:norm[500:551]",
+      "quote_call_sha256": "",
+      "statement": "The constructed Sylow 2-subgroup P is isomorphic to D8, not Q8.",
+      "concept_group_key": "000028|000029",
+      "dedup_key": "000028|000029::1237248f8735b4c9",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 20,
+        "window": "declared:20-20",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000034",
+      "concept_ids": [
+        "000027",
+        "000028",
+        "000030"
+      ],
+      "description": "For A5, a Sylow 2-subgroup is just K4 again.",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 25,
+        "end": 25,
+        "label": "p. 25"
+      },
+      "quote": "On the other hand, |A5| = 60 = 22 · 3 · 5. So a Sylow 2-subgroup is\njust K4 again.",
+      "quote_normalized": "on the other hand, |a5| = 60 = 22 · 3 · 5. so a sylow 2-subgroup is just k4 again.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:25-25，试过 未记）；命中区间 p25:norm[121:203]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p25:norm[121:203]",
+      "quote_call_sha256": "",
+      "statement": "For A5, a Sylow 2-subgroup is just K4 again.",
+      "concept_group_key": "000027|000028|000030",
+      "dedup_key": "000027|000028|000030::17530f577dabfdad",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 25,
+        "window": "declared:25-25",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000035",
+      "concept_ids": [
+        "000030",
+        "000031"
+      ],
+      "description": "Counting in A5 gives six Sylow 5-subgroups, each with four generators.",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 25,
+        "end": 25,
+        "label": "p. 25"
+      },
+      "quote": "There are 24 5-cycles, and each Sylow 5-subgroup has 4 generators,\nso there are 6 Sylow 5-subgroups.",
+      "quote_normalized": "there are 24 5-cycles, and each sylow 5-subgroup has 4 generators, so there are 6 sylow 5-subgroups.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:25-25，试过 未记）；命中区间 p25:norm[447:547]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p25:norm[447:547]",
+      "quote_call_sha256": "",
+      "statement": "Counting in A5 gives six Sylow 5-subgroups, each with four generators.",
+      "concept_group_key": "000030|000031",
+      "dedup_key": "000030|000031::ead1dbc9e5da6a83",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 25,
+        "window": "declared:25-25",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000036",
+      "concept_ids": [
+        "000032",
+        "000033"
+      ],
+      "description": "The proof of Cauchy’s theorem uses the Class Equation.",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 27,
+        "end": 27,
+        "label": "p. 27"
+      },
+      "quote": "We use the Class Equation, where the xi are representatives of\nconjugacy classes not in the center:",
+      "quote_normalized": "we use the class equation, where the xi are representatives of conjugacy classes not in the center:",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:27-27，试过 未记）；命中区间 p27:norm[222:321]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p27:norm[222:321]",
+      "quote_call_sha256": "",
+      "statement": "The proof of Cauchy’s theorem uses the Class Equation.",
+      "concept_group_key": "000032|000033",
+      "dedup_key": "000032|000033::4f932077a619e683",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 27,
+        "window": "declared:27-27",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000037",
+      "concept_ids": [
+        "000034",
+        "000039"
+      ],
+      "description": "The classification of finite abelian groups is used to conclude that |Z(G)| has an element of order p.",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 30,
+        "end": 30,
+        "label": "p. 30"
+      },
+      "quote": "But then |Z(G)| has an element of order p, by the\nclassiﬁcation of ﬁnite abelian groups.",
+      "quote_normalized": "but then |z(g)| has an element of order p, by the classification of finite abelian groups.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:30-30，试过 未记）；命中区间 p30:norm[316:406]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p30:norm[316:406]",
+      "quote_call_sha256": "",
+      "statement": "The classification of finite abelian groups is used to conclude that |Z(G)| has an element of order p.",
+      "concept_group_key": "000034|000039",
+      "dedup_key": "000034|000039::bf79cf01b0412697",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 30,
+        "window": "declared:30-30",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000038",
+      "concept_ids": [
+        "000033",
+        "000038"
+      ],
+      "description": "The proof of the First Sylow Theorem uses the Class Equation in the opposite way.",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 32,
+        "end": 32,
+        "label": "p. 32"
+      },
+      "quote": "Proof of the First Sylow Theorem\nOf courser the proof is by induction on |G|. Say n = |G| = prm with\np ∤m. We use the Class Equation in the opposite way.",
+      "quote_normalized": "proof of the first sylow theorem of courser the proof is by induction on |g|. say n = |g| = prm with p ∤m. we use the class equation in the opposite way.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:32-32，试过 未记）；命中区间 p32:norm[85:238]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p32:norm[85:238]",
+      "quote_call_sha256": "",
+      "statement": "The proof of the First Sylow Theorem uses the Class Equation in the opposite way.",
+      "concept_group_key": "000033|000038",
+      "dedup_key": "000033|000038::8fff8c8d394dfcad",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 32,
+        "window": "declared:32-32",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000039",
+      "concept_ids": [
+        "000016",
+        "000035"
+      ],
+      "description": "The normalizer of a subgroup H is defined as the set of g such that gHg−1 ⊆ H.",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 39,
+        "end": 39,
+        "label": "p. 39"
+      },
+      "quote": "Let H ⊆G be a subgroup. The normalizer NG(H) of H in G is the\nset of g ∈G such that\ngHg−1 ⊆H.",
+      "quote_normalized": "let h ⊆g be a subgroup. the normalizer ng(h) of h in g is the set of g ∈g such that ghg-1 ⊆h.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:39-39，试过 未记）；命中区间 p39:norm[108:201]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p39:norm[108:201]",
+      "quote_call_sha256": "",
+      "statement": "The normalizer of a subgroup H is defined as the set of g such that gHg−1 ⊆ H.",
+      "concept_group_key": "000016|000035",
+      "dedup_key": "000016|000035::5f77256b24a053a8",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 39,
+        "window": "declared:39-39",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000040",
+      "concept_ids": [
+        "000016",
+        "000035"
+      ],
+      "description": "The normalizer NG(H) of a subgroup H is itself a subgroup of G.",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 42,
+        "end": 42,
+        "label": "p. 42"
+      },
+      "quote": "Let H ⊆G be a subgroup. Then NG(H) is a subgroup of G.",
+      "quote_normalized": "let h ⊆g be a subgroup. then ng(h) is a subgroup of g.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:42-42，试过 未记）；命中区间 p42:norm[99:153]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p42:norm[99:153]",
+      "quote_call_sha256": "",
+      "statement": "The normalizer NG(H) of a subgroup H is itself a subgroup of G.",
+      "concept_group_key": "000016|000035",
+      "dedup_key": "000016|000035::de23e0448efa4a50",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 42,
+        "window": "declared:42-42",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 1 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 1,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000041",
+      "concept_ids": [
+        "000017",
+        "000035"
+      ],
+      "description": "H is contained in its normalizer NG(H) and is even a normal subgroup there.",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 42,
+        "end": 42,
+        "label": "p. 42"
+      },
+      "quote": "Of course H ⊂NG(H) (and is even a normal subgroup).",
+      "quote_normalized": "of course h ⊂ng(h) (and is even a normal subgroup).",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:42-42，试过 未记）；命中区间 p42:norm[226:277]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p42:norm[226:277]",
+      "quote_call_sha256": "",
+      "statement": "H is contained in its normalizer NG(H) and is even a normal subgroup there.",
+      "concept_group_key": "000017|000035",
+      "dedup_key": "000017|000035::6ba4b51c296f11de",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 42,
+        "window": "declared:42-42",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000042",
+      "concept_ids": [
+        "000016",
+        "000036"
+      ],
+      "description": "Conjugation by g gives a bijection between gHg−1 and H, preserving cardinality.",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 39,
+        "end": 39,
+        "label": "p. 39"
+      },
+      "quote": "Conjugation by g is a bijection between gHg−1 and H, so it preserves\nthe cardinality.",
+      "quote_normalized": "conjugation by g is a bijection between ghg-1 and h, so it preserves the cardinality.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:39-39，试过 未记）；命中区间 p39:norm[294:379]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p39:norm[294:379]",
+      "quote_call_sha256": "",
+      "statement": "Conjugation by g gives a bijection between gHg−1 and H, preserving cardinality.",
+      "concept_group_key": "000016|000036",
+      "dedup_key": "000016|000036::da84ecf4ebcd6c6f",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 39,
+        "window": "declared:39-39",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000043",
+      "concept_ids": [
+        "000000",
+        "000035"
+      ],
+      "description": "A p-power order element in the normalizer of a p-Sylow subgroup must lie in that subgroup.",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 45,
+        "end": 45,
+        "label": "p. 45"
+      },
+      "quote": "Suppose P ⊆G is a p-Sylow subgroup. Let g ∈NG(P) and assume g\nhas order pr for some r ≥1. Then g ∈P.",
+      "quote_normalized": "suppose p ⊆g is a p-sylow subgroup. let g ∈ng(p) and assume g has order pr for some r ≥1. then g ∈p.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:45-45，试过 未记）；命中区间 p45:norm[105:205]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p45:norm[105:205]",
+      "quote_call_sha256": "",
+      "statement": "A p-power order element in the normalizer of a p-Sylow subgroup must lie in that subgroup.",
+      "concept_group_key": "000000|000035",
+      "dedup_key": "000000|000035::dda99e2e4f699863",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 45,
+        "window": "declared:45-45",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000044",
+      "concept_ids": [
+        "000000",
+        "000040"
+      ],
+      "description": "A p-Sylow subgroup has order the largest power of p dividing |G|.",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 45,
+        "end": 45,
+        "label": "p. 45"
+      },
+      "quote": "But |P| is the largest power of p dividing |G|.",
+      "quote_normalized": "but |p| is the largest power of p dividing |g|.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:45-45，试过 未记）；命中区间 p45:norm[508:555]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p45:norm[508:555]",
+      "quote_call_sha256": "",
+      "statement": "A p-Sylow subgroup has order the largest power of p dividing |G|.",
+      "concept_group_key": "000000|000040",
+      "dedup_key": "000000|000040::ccc1e243d3689c41",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 45,
+        "window": "declared:45-45",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000045",
+      "concept_ids": [
+        "000016",
+        "000032"
+      ],
+      "description": "Cauchy’s theorem (or classification) is used to obtain a subgroup N of order p.",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 35,
+        "end": 35,
+        "label": "p. 35"
+      },
+      "quote": "Then Z(G) contains a subgroup N of order p (by classiﬁcation, or by\nCauchy’s theorem).",
+      "quote_normalized": "then z(g) contains a subgroup n of order p (by classification, or by cauchy's theorem).",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:35-35，试过 未记）；命中区间 p35:norm[359:446]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p35:norm[359:446]",
+      "quote_call_sha256": "",
+      "statement": "Cauchy’s theorem (or classification) is used to obtain a subgroup N of order p.",
+      "concept_group_key": "000016|000032",
+      "dedup_key": "000016|000032::788a65d551d661d2",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 35,
+        "window": "declared:35-35",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000046",
+      "concept_ids": [
+        "000016",
+        "000037"
+      ],
+      "description": "K is described as the preimage of a subgroup under the quotient map.",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 35,
+        "end": 35,
+        "label": "p. 35"
+      },
+      "quote": "Let K ⊂G be the corresponding subgroup\ncontaining N (the preimage of ¯K under the quotient map).",
+      "quote_normalized": "let k ⊂g be the corresponding subgroup containing n (the preimage of ̄k under the quotient map).",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:35-35，试过 未记）；命中区间 p35:norm[586:682]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p35:norm[586:682]",
+      "quote_call_sha256": "",
+      "statement": "K is described as the preimage of a subgroup under the quotient map.",
+      "concept_group_key": "000016|000037",
+      "dedup_key": "000016|000037::5330079f7a4c675b",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 35,
+        "window": "declared:35-35",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000047",
+      "concept_ids": [
+        "000016",
+        "000017"
+      ],
+      "description": "Any subgroup of Z(G) is normal in G.",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 35,
+        "end": 35,
+        "label": "p. 35"
+      },
+      "quote": "But any subgroup of Z(G)| is normal in G\n(exercise).",
+      "quote_normalized": "but any subgroup of z(g)| is normal in g (exercise).",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:35-35，试过 未记）；命中区间 p35:norm[447:499]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p35:norm[447:499]",
+      "quote_call_sha256": "",
+      "statement": "Any subgroup of Z(G) is normal in G.",
+      "concept_group_key": "000016|000017",
+      "dedup_key": "000016|000017::6bbb4f7ce90db09d",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 35,
+        "window": "declared:35-35",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000048",
+      "concept_ids": [
+        "000040",
+        "000044"
+      ],
+      "description": "The number k of distinct Sylow p-subgroups of G is congruent to 1 modulo p and divides the order of G.",
+      "lit_id": "000001",
+      "page_range": {
+        "start": 55,
+        "end": 55,
+        "label": "p. 55"
+      },
+      "quote": "The number k of distinct Sylow p-subgroups of G is (i) congruent to 1\nmodulo p and (ii) divides the order of G.",
+      "quote_normalized": "the number k of distinct sylow p-subgroups of g is (i) congruent to 1 modulo p and (ii) divides the order of g.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:55-55，试过 未记）；命中区间 p55:norm[155:266]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p55:norm[155:266]",
+      "quote_call_sha256": "",
+      "statement": "The number k of distinct Sylow p-subgroups of G is congruent to 1 modulo p and divides the order of G.",
+      "concept_group_key": "000040|000044",
+      "dedup_key": "000040|000044::753dac62c40e4e32",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:45:40+08:00",
+      "merged_at": "2026-11-24T03:45:40+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 55,
+        "window": "declared:55-55",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000049",
+      "concept_ids": [
+        "000045",
+        "000046"
+      ],
+      "description": "The orbit of a point is the set of points to which it is transported by the action of the group.",
+      "lit_id": "000002",
+      "page_range": {
+        "start": 2,
+        "end": 2,
+        "label": "p. 2"
+      },
+      "quote": "transported by the action of G: Orb(x) = {gx : g ∈G}.",
+      "quote_normalized": "transported by the action of g: orb(x) = {gx: g ∈g}.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:2-2，试过 未记）；命中区间 p2:norm[373:425]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p2:norm[373:425]",
+      "quote_call_sha256": "",
+      "statement": "The orbit of a point is the set of points to which it is transported by the action of the group.",
+      "concept_group_key": "000045|000046",
+      "dedup_key": "000045|000046::c572f2dfdcf98f9c",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:46:22+08:00",
+      "merged_at": "2026-11-24T03:46:22+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 2,
+        "window": "declared:2-2",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000050",
+      "concept_ids": [
+        "000046",
+        "000047",
+        "000051"
+      ],
+      "description": "The orbit-stabilizer theorem states that the orbit length equals the index of the stabilizer.",
+      "lit_id": "000002",
+      "page_range": {
+        "start": 2,
+        "end": 2,
+        "label": "p. 2"
+      },
+      "quote": "When a group G acts on a set X, the length of\nthe orbit of any point is equal to the index of its stabilizer in G:",
+      "quote_normalized": "when a group g acts on a set x, the length of the orbit of any point is equal to the index of its stabilizer in g:",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:2-2，试过 未记）；命中区间 p2:norm[2110:2224]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p2:norm[2110:2224]",
+      "quote_call_sha256": "",
+      "statement": "The orbit-stabilizer theorem states that the orbit length equals the index of the stabilizer.",
+      "concept_group_key": "000046|000047|000051",
+      "dedup_key": "000046|000047|000051::d9625982d3e2b033",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:46:22+08:00",
+      "merged_at": "2026-11-24T03:46:22+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 2,
+        "window": "declared:2-2",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000051",
+      "concept_ids": [
+        "000045",
+        "000048"
+      ],
+      "description": "An action is faithful if the kernel of its associated homomorphism is trivial.",
+      "lit_id": "000002",
+      "page_range": {
+        "start": 2,
+        "end": 2,
+        "label": "p. 2"
+      },
+      "quote": "An action is:\n(1) Faithful if the kernel of the associated homomorphism φ : G →Sym(X) is\ntrivial.",
+      "quote_normalized": "an action is: (1) faithful if the kernel of the associated homomorphism φ: g →sym(x) is trivial.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:2-2，试过 未记）；命中区间 p2:norm[1516:1612]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p2:norm[1516:1612]",
+      "quote_call_sha256": "",
+      "statement": "An action is faithful if the kernel of its associated homomorphism is trivial.",
+      "concept_group_key": "000045|000048",
+      "dedup_key": "000045|000048::d16ad56ec7bea9ea",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:46:22+08:00",
+      "merged_at": "2026-11-24T03:46:22+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 2,
+        "window": "declared:2-2",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000052",
+      "concept_ids": [
+        "000046",
+        "000049"
+      ],
+      "description": "An action is transitive if there is only one orbit.",
+      "lit_id": "000002",
+      "page_range": {
+        "start": 2,
+        "end": 2,
+        "label": "p. 2"
+      },
+      "quote": "Transitive if there is only one orbit.",
+      "quote_normalized": "transitive if there is only one orbit.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:2-2，试过 未记）；命中区间 p2:norm[1617:1655]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p2:norm[1617:1655]",
+      "quote_call_sha256": "",
+      "statement": "An action is transitive if there is only one orbit.",
+      "concept_group_key": "000046|000049",
+      "dedup_key": "000046|000049::ef390891710c9528",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:46:22+08:00",
+      "merged_at": "2026-11-24T03:46:22+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 2,
+        "window": "declared:2-2",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000053",
+      "concept_ids": [
+        "000045",
+        "000048",
+        "000050"
+      ],
+      "description": "Cayley’s theorem is proved by considering the faithful action of G on itself by left multiplication.",
+      "lit_id": "000002",
+      "page_range": {
+        "start": 2,
+        "end": 2,
+        "label": "p. 2"
+      },
+      "quote": "We consider the action of G on itself by left multiplication. Because this\naction is faithful, G embeds as a subgroup of Sym(G)",
+      "quote_normalized": "we consider the action of g on itself by left multiplication. because this action is faithful, g embeds as a subgroup of sym(g)",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:2-2，试过 未记）；命中区间 p2:norm[1884:2011]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p2:norm[1884:2011]",
+      "quote_call_sha256": "",
+      "statement": "Cayley’s theorem is proved by considering the faithful action of G on itself by left multiplication.",
+      "concept_group_key": "000045|000048|000050",
+      "dedup_key": "000045|000048|000050::b2a465eb0d86e0d4",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:46:22+08:00",
+      "merged_at": "2026-11-24T03:46:22+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 2,
+        "window": "declared:2-2",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000054",
+      "concept_ids": [
+        "000000",
+        "000052"
+      ],
+      "description": "Sylow’s first theorem asserts the existence of a Sylow p-subgroup when p divides the group order.",
+      "lit_id": "000002",
+      "page_range": {
+        "start": 3,
+        "end": 3,
+        "label": "p. 3"
+      },
+      "quote": "Theorem 3.3 (Sylow’s ﬁrst theorem). If p is a prime number and p | |G|, then\nthere exists a Sylow p-subgroup of G.",
+      "quote_normalized": "theorem 3.3 (sylow's first theorem). if p is a prime number and p | |g|, then there exists a sylow p-subgroup of g.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:3-3，试过 未记）；命中区间 p3:norm[985:1100]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p3:norm[985:1100]",
+      "quote_call_sha256": "",
+      "statement": "Sylow’s first theorem asserts the existence of a Sylow p-subgroup when p divides the group order.",
+      "concept_group_key": "000000|000052",
+      "dedup_key": "000000|000052::5205b15e5b6e3c98",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:46:22+08:00",
+      "merged_at": "2026-11-24T03:46:22+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 3,
+        "window": "declared:3-3",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000055",
+      "concept_ids": [
+        "000000",
+        "000024"
+      ],
+      "description": "Sylow’s second theorem states that all Sylow p-subgroups are conjugate to each other.",
+      "lit_id": "000002",
+      "page_range": {
+        "start": 3,
+        "end": 3,
+        "label": "p. 3"
+      },
+      "quote": "Theorem 3.4 (Sylow’s second theorem). For a given prime p, all Sylow p-subgroups\nof G are conjugate to each other.",
+      "quote_normalized": "theorem 3.4 (sylow's second theorem). for a given prime p, all sylow p-subgroups of g are conjugate to each other.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:3-3，试过 未记）；命中区间 p3:norm[1101:1215]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p3:norm[1101:1215]",
+      "quote_call_sha256": "",
+      "statement": "Sylow’s second theorem states that all Sylow p-subgroups are conjugate to each other.",
+      "concept_group_key": "000000|000024",
+      "dedup_key": "000000|000024::041ceee85b642aa7",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:46:22+08:00",
+      "merged_at": "2026-11-24T03:46:22+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 3,
+        "window": "declared:3-3",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000056",
+      "concept_ids": [
+        "000000",
+        "000053"
+      ],
+      "description": "Sylow’s third theorem concerns the number np of Sylow p-subgroups.",
+      "lit_id": "000002",
+      "page_range": {
+        "start": 3,
+        "end": 3,
+        "label": "p. 3"
+      },
+      "quote": "Theorem 3.5 (Sylow’s third theorem). We denote the number of Sylow p-subgroups\nof G by np.",
+      "quote_normalized": "theorem 3.5 (sylow's third theorem). we denote the number of sylow p-subgroups of g by np.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:3-3，试过 未记）；命中区间 p3:norm[1216:1306]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p3:norm[1216:1306]",
+      "quote_call_sha256": "",
+      "statement": "Sylow’s third theorem concerns the number np of Sylow p-subgroups.",
+      "concept_group_key": "000000|000053",
+      "dedup_key": "000000|000053::8cc13a7b8c9ca7fd",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:46:22+08:00",
+      "merged_at": "2026-11-24T03:46:22+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 3,
+        "window": "declared:3-3",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000057",
+      "concept_ids": [
+        "000000",
+        "000005",
+        "000053"
+      ],
+      "description": "For any Sylow p-subgroup P, the number np equals the index of the normalizer N(P) in G.",
+      "lit_id": "000002",
+      "page_range": {
+        "start": 3,
+        "end": 3,
+        "label": "p. 3"
+      },
+      "quote": "(3) If P is any Sylow p-subgroup of G, then np = [G : N(P)], where N(P) is\nthe normalizer of P in G.",
+      "quote_normalized": "(3) if p is any sylow p-subgroup of g, then np = [g: n(p)], where n(p) is the normalizer of p in g.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:3-3，试过 未记）；命中区间 p3:norm[1395:1494]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p3:norm[1395:1494]",
+      "quote_call_sha256": "",
+      "statement": "For any Sylow p-subgroup P, the number np equals the index of the normalizer N(P) in G.",
+      "concept_group_key": "000000|000005|000053",
+      "dedup_key": "000000|000005|000053::57b0cf2c0e03a068",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:46:22+08:00",
+      "merged_at": "2026-11-24T03:46:22+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 3,
+        "window": "declared:3-3",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000058",
+      "concept_ids": [
+        "000000",
+        "000024"
+      ],
+      "description": "If P and Q are Sylow p-subgroups of a normalizer, Sylow’s second theorem says they are conjugate in that normalizer.",
+      "lit_id": "000002",
+      "page_range": {
+        "start": 5,
+        "end": 5,
+        "label": "p. 5"
+      },
+      "quote": "Therefore, P and Q are Sylow p-subgroups of N(Q), and by\nSylow’s second theorem, they are conjugate in N(Q).",
+      "quote_normalized": "therefore, p and q are sylow p-subgroups of n(q), and by sylow's second theorem, they are conjugate in n(q).",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:5-5，试过 未记）；命中区间 p5:norm[702:810]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p5:norm[702:810]",
+      "quote_call_sha256": "",
+      "statement": "If P and Q are Sylow p-subgroups of a normalizer, Sylow’s second theorem says they are conjugate in that normalizer.",
+      "concept_group_key": "000000|000024",
+      "dedup_key": "000000|000024::e1e9207ecb1e7998",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:46:22+08:00",
+      "merged_at": "2026-11-24T03:46:22+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 5,
+        "window": "declared:5-5",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 1 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 1,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000059",
+      "concept_ids": [
+        "000000",
+        "000051"
+      ],
+      "description": "The conjugation action on the Sylow p-subgroups has one orbit, and the orbit-stabilizer theorem gives a divisibility condition on np.",
+      "lit_id": "000002",
+      "page_range": {
+        "start": 5,
+        "end": 5,
+        "label": "p. 5"
+      },
+      "quote": "Because Sylow p-subgroups of G are conjugate, there is only\none orbit, whose length is np. Using the orbit-stabilizer theorem, it follows that\nnp | |G| = pnm.",
+      "quote_normalized": "because sylow p-subgroups of g are conjugate, there is only one orbit, whose length is np. using the orbit-stabilizer theorem, it follows that np | |g| = pnm.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:5-5，试过 未记）；命中区间 p5:norm[1071:1229]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p5:norm[1071:1229]",
+      "quote_call_sha256": "",
+      "statement": "The conjugation action on the Sylow p-subgroups has one orbit, and the orbit-stabilizer theorem gives a divisibility condition on np.",
+      "concept_group_key": "000000|000051",
+      "dedup_key": "000000|000051::c0c4646f63a5c12a",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:46:22+08:00",
+      "merged_at": "2026-11-24T03:46:22+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 5,
+        "window": "declared:5-5",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000060",
+      "concept_ids": [
+        "000000",
+        "000004"
+      ],
+      "description": "Every p-subgroup of G is contained in some Sylow p-subgroup of G.",
+      "lit_id": "000002",
+      "page_range": {
+        "start": 5,
+        "end": 5,
+        "label": "p. 5"
+      },
+      "quote": "Every p-subgroup of G is contained in some Sylow p-subgroup of\nG",
+      "quote_normalized": "every p-subgroup of g is contained in some sylow p-subgroup of g",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:5-5，试过 未记）；命中区间 p5:norm[1653:1717]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p5:norm[1653:1717]",
+      "quote_call_sha256": "",
+      "statement": "Every p-subgroup of G is contained in some Sylow p-subgroup of G.",
+      "concept_group_key": "000000|000004",
+      "dedup_key": "000000|000004::e90692585c093aff",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:46:22+08:00",
+      "merged_at": "2026-11-24T03:46:22+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 5,
+        "window": "declared:5-5",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 1 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 1,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000061",
+      "concept_ids": [
+        "000022",
+        "000054"
+      ],
+      "description": "Every group whose order is prime is cyclic.",
+      "lit_id": "000002",
+      "page_range": {
+        "start": 5,
+        "end": 5,
+        "label": "p. 5"
+      },
+      "quote": "Every group of prime order is cyclic.",
+      "quote_normalized": "every group of prime order is cyclic.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:5-5，试过 未记）；命中区间 p5:norm[2532:2569]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p5:norm[2532:2569]",
+      "quote_call_sha256": "",
+      "statement": "Every group whose order is prime is cyclic.",
+      "concept_group_key": "000022|000054",
+      "dedup_key": "000022|000054::8edb475041f86310",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:46:22+08:00",
+      "merged_at": "2026-11-24T03:46:22+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 5,
+        "window": "declared:5-5",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000062",
+      "concept_ids": [
+        "000000",
+        "000022"
+      ],
+      "description": "For prime p, the Sylow p-subgroups of Sp are cyclic groups of order p.",
+      "lit_id": "000002",
+      "page_range": {
+        "start": 6,
+        "end": 6,
+        "label": "p. 6"
+      },
+      "quote": "Since p | p! and\np2 ∤p!, we have that the Sylow p-subgroups are cyclic groups of order p.",
+      "quote_normalized": "since p | p! and p2 ∤p!, we have that the sylow p-subgroups are cyclic groups of order p.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:6-6，试过 未记）；命中区间 p6:norm[158:247]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p6:norm[158:247]",
+      "quote_call_sha256": "",
+      "statement": "For prime p, the Sylow p-subgroups of Sp are cyclic groups of order p.",
+      "concept_group_key": "000000|000022",
+      "dedup_key": "000000|000022::7b96769e6f49307f",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:46:22+08:00",
+      "merged_at": "2026-11-24T03:46:22+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 6,
+        "window": "declared:6-6",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000063",
+      "concept_ids": [
+        "000022",
+        "000055"
+      ],
+      "description": "Every group of order 15 is cyclic.",
+      "lit_id": "000002",
+      "page_range": {
+        "start": 6,
+        "end": 6,
+        "label": "p. 6"
+      },
+      "quote": "Every group of order 15 is cyclic.",
+      "quote_normalized": "every group of order 15 is cyclic.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:6-6，试过 未记）；命中区间 p6:norm[567:601]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p6:norm[567:601]",
+      "quote_call_sha256": "",
+      "statement": "Every group of order 15 is cyclic.",
+      "concept_group_key": "000022|000055",
+      "dedup_key": "000022|000055::7facf3f03a2cf21b",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:46:22+08:00",
+      "merged_at": "2026-11-24T03:46:22+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 6,
+        "window": "declared:6-6",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000064",
+      "concept_ids": [
+        "000030",
+        "000056"
+      ],
+      "description": "The smallest non-abelian simple group is A5, unique up to isomorphism.",
+      "lit_id": "000002",
+      "page_range": {
+        "start": 7,
+        "end": 7,
+        "label": "p. 7"
+      },
+      "quote": "The smallest non-abelian simple group is A5, and is unique up to\nisomorphism.",
+      "quote_normalized": "the smallest non-abelian simple group is a5, and is unique up to isomorphism.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:7-7，试过 未记）；命中区间 p7:norm[171:248]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p7:norm[171:248]",
+      "quote_call_sha256": "",
+      "statement": "The smallest non-abelian simple group is A5, unique up to isomorphism.",
+      "concept_group_key": "000030|000056",
+      "dedup_key": "000030|000056::efe20e2255784d9d",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:46:22+08:00",
+      "merged_at": "2026-11-24T03:46:22+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 7,
+        "window": "declared:7-7",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000065",
+      "concept_ids": [
+        "000056",
+        "000057"
+      ],
+      "description": "The order of a non-abelian simple group divides the factorial of the index of every proper subgroup.",
+      "lit_id": "000002",
+      "page_range": {
+        "start": 6,
+        "end": 6,
+        "label": "p. 6"
+      },
+      "quote": "The order of a non-abelian simple group divides the factorial of the\nindex of every proper subgroup.",
+      "quote_normalized": "the order of a non-abelian simple group divides the factorial of the index of every proper subgroup.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:6-6，试过 未记）；命中区间 p6:norm[2980:3080]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p6:norm[2980:3080]",
+      "quote_call_sha256": "",
+      "statement": "The order of a non-abelian simple group divides the factorial of the index of every proper subgroup.",
+      "concept_group_key": "000056|000057",
+      "dedup_key": "000056|000057::cdcb3b0e6dbd2174",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:46:22+08:00",
+      "merged_at": "2026-11-24T03:46:22+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 6,
+        "window": "declared:6-6",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000066",
+      "concept_ids": [
+        "000000",
+        "000058",
+        "000059"
+      ],
+      "description": "Over a prime field, the unitriangular group is a Sylow p-subgroup of the general linear group.",
+      "lit_id": "000002",
+      "page_range": {
+        "start": 6,
+        "end": 6,
+        "label": "p. 6"
+      },
+      "quote": "Thus, over a prime ﬁeld, the\nunitriangular group is a Sylow p-subgroup of the general linear group.",
+      "quote_normalized": "thus, over a prime field, the unitriangular group is a sylow p-subgroup of the general linear group.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:6-6，试过 未记）；命中区间 p6:norm[1869:1969]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p6:norm[1869:1969]",
+      "quote_call_sha256": "",
+      "statement": "Over a prime field, the unitriangular group is a Sylow p-subgroup of the general linear group.",
+      "concept_group_key": "000000|000058|000059",
+      "dedup_key": "000000|000058|000059::a08b826af62f66f6",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:46:22+08:00",
+      "merged_at": "2026-11-24T03:46:22+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 6,
+        "window": "declared:6-6",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000067",
+      "concept_ids": [
+        "000000",
+        "000004",
+        "000059"
+      ],
+      "description": "A p-subgroup G of GL(n, p) is contained in some Sylow p-subgroup H by Theorem 3.10.",
+      "lit_id": "000002",
+      "page_range": {
+        "start": 6,
+        "end": 6,
+        "label": "p. 6"
+      },
+      "quote": "Thus, G is a p-subgroup of GL(n, p).\nBy Theorem\n3.10, G is contained in some Sylow p-subgroup H of GL(n, p).",
+      "quote_normalized": "thus, g is a p-subgroup of gl(n, p). by theorem 3.10, g is contained in some sylow p-subgroup h of gl(n, p).",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:6-6，试过 未记）；命中区间 p6:norm[2073:2181]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p6:norm[2073:2181]",
+      "quote_call_sha256": "",
+      "statement": "A p-subgroup G of GL(n, p) is contained in some Sylow p-subgroup H by Theorem 3.10.",
+      "concept_group_key": "000000|000004|000059",
+      "dedup_key": "000000|000004|000059::f2a6f085e79a4257",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:46:22+08:00",
+      "merged_at": "2026-11-24T03:46:22+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 6,
+        "window": "declared:6-6",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000068",
+      "concept_ids": [
+        "000024",
+        "000058"
+      ],
+      "description": "Sylow’s second theorem makes H conjugate to the unitriangular group, so the unitriangular group has a subgroup isomorphic to G.",
+      "lit_id": "000002",
+      "page_range": {
+        "start": 6,
+        "end": 6,
+        "label": "p. 6"
+      },
+      "quote": "By Sylow’s second\ntheorem, H is conjugate to the unitriangular group, which implies that the latter\nhas a subgroup isomorphic to G.",
+      "quote_normalized": "by sylow's second theorem, h is conjugate to the unitriangular group, which implies that the latter has a subgroup isomorphic to g.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:6-6，试过 未记）；命中区间 p6:norm[2182:2313]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p6:norm[2182:2313]",
+      "quote_call_sha256": "",
+      "statement": "Sylow’s second theorem makes H conjugate to the unitriangular group, so the unitriangular group has a subgroup isomorphic to G.",
+      "concept_group_key": "000024|000058",
+      "dedup_key": "000024|000058::9c68dfbd97bc388d",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:46:22+08:00",
+      "merged_at": "2026-11-24T03:46:22+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 6,
+        "window": "declared:6-6",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000069",
+      "concept_ids": [
+        "000000",
+        "000038"
+      ],
+      "description": "The First Sylow Theorem guarantees that G has a subgroup S of order p^a, called a Sylow p-subgroup of G.",
+      "lit_id": "000003",
+      "page_range": {
+        "start": 1,
+        "end": 1,
+        "label": "p. 1"
+      },
+      "quote": "Then G has a subgroup S of order pa, called a Sylow\np-subgroup of G.",
+      "quote_normalized": "then g has a subgroup s of order pa, called a sylow p-subgroup of g.",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:1-1，试过 未记）；命中区间 p1:norm[200:268]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p1:norm[200:268]",
+      "quote_call_sha256": "",
+      "statement": "The First Sylow Theorem guarantees that G has a subgroup S of order p^a, called a Sylow p-subgroup of G.",
+      "concept_group_key": "000000|000038",
+      "dedup_key": "000000|000038::cdb6778682bfa03b",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:46:26+08:00",
+      "merged_at": "2026-11-24T03:46:26+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 1,
+        "window": "declared:1-1",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000070",
+      "concept_ids": [
+        "000000",
+        "000003",
+        "000024"
+      ],
+      "description": "The Second Sylow Theorem states that all Sylow p-subgroups of a group G are conjugate.",
+      "lit_id": "000003",
+      "page_range": {
+        "start": 2,
+        "end": 2,
+        "label": "p. 2"
+      },
+      "quote": "all of the Sylow p-subgroups of a group G are conjugate",
+      "quote_normalized": "all of the sylow p-subgroups of a group g are conjugate",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:2-2，试过 未记）；命中区间 p2:norm[668:723]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p2:norm[668:723]",
+      "quote_call_sha256": "",
+      "statement": "The Second Sylow Theorem states that all Sylow p-subgroups of a group G are conjugate.",
+      "concept_group_key": "000000|000003|000024",
+      "dedup_key": "000000|000003|000024::d435ab635452657f",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:46:26+08:00",
+      "merged_at": "2026-11-24T03:46:26+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 2,
+        "window": "declared:2-2",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    },
+    {
+      "relation_id": "000071",
+      "concept_ids": [
+        "000000",
+        "000018"
+      ],
+      "description": "The Third Sylow Theorem constrains the number s of Sylow p-subgroups: s divides m and s is congruent to 1 mod p.",
+      "lit_id": "000003",
+      "page_range": {
+        "start": 2,
+        "end": 2,
+        "label": "p. 2"
+      },
+      "quote": "Then s divides m and s is congruent to 1 (mod p).",
+      "quote_normalized": "then s divides m and s is congruent to 1 (mod p).",
+      "quote_verified": true,
+      "quote_mode": "verbatim",
+      "quote_reason": "逐字命中（substring_match，窗口 declared:2-2，试过 未记）；命中区间 p2:norm[1009:1058]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+      "quote_span": "p2:norm[1009:1058]",
+      "quote_call_sha256": "",
+      "statement": "The Third Sylow Theorem constrains the number s of Sylow p-subgroups: s divides m and s is congruent to 1 mod p.",
+      "concept_group_key": "000000|000018",
+      "dedup_key": "000000|000018::418508a504539c4d",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-11-24T03:46:26+08:00",
+      "merged_at": "2026-11-24T03:46:26+08:00",
+      "supporting_lit_ids": [],
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 2,
+        "window": "declared:2-2",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      }
+    }
+  ]
+}

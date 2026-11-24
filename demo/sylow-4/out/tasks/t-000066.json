@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T04:22:23+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 3702,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"复核结论：成立（零 finding，即六条角度上都没有一处需要改）。\\n\\n被审对象（以盘上现在这一份正文为准）：manuscripts/B/b-proof-000006.md 的 `## 证明` 整节，正文 sha = 2544876623fbabb17638110309d585e0e355f3d19a250991d071965e27826736（文件 sha256 = a782d741b7cb39b846aa83b00454563cee182766cd6a660e5736d139e09c2d80，3601 字节，共 35 行）。台账：verifications/000063.jsonl#v-000005；签块已按这一份证明的正文 sha 落回该稿第 3 行。\\n\\n逐条核对：\\n1. 上一轮唯一的缺陷（事实 A 的良定义方向）已经补全：现在文中写「若 g·Stab(x)=h·Stab(x)，即 h⁻¹g ∈ Stab(x)，则 h⁻¹g·x = x，两边左乘 h 得 g·x = h·x，故换代表不改变像」。这是对的：对左陪集，g·Stab(x)=h·Stab(x) 与 h⁻¹g ∈ Stab(x) 等价；左乘那一步用的是作用公理 h·(h⁻¹g·x)=(hh⁻¹g)·x=g·x。单射方向（g·x=h·x ⇒ h⁻¹g ∈ Stab(x) ⇒ 左陪集相等）与满射（按轨道定义直接成立）都在，双射的三个方向已经齐备。\\n2. 事实 B：把 X 按轨道分解成不交并；长度大于 1 的轨道由事实 A 长度为 [Γ:Stab(x)]，Stab(x) 是 Γ 的真子群 ⇒ 指数是 p 的正幂（这里用了「子群指数整除群阶」，即 Lagrange；对 p-群 Γ 就是：指数整除 |Γ|=p^n），因而被 p 整除；长度为 1 的轨道恰是不动点。模 p 同余成立。\\n3. 事实 C：q·(gP)=(qg)P 的良定义（g′=gh ⇒ qg′P=qghP=qgP）与左作用性都成立；对 p-群 Q 用事实 B 得 |G/P| ≡ |Fix_Q(G/P)| (mod p)，而 |G/P|=[G:P] 不被 p 整除 ⇒ 不动点集不空；不动点 gP 满足对全部 q ∈ Q，qgP=gP，即 q ∈ gPg⁻¹ ⇒ Q ⊆ gPg⁻¹，再与两者同阶 p^k 合并得 Q=gPg⁻¹。量词方向正确（不动点是对每个 q 成立），包含关系的推论正确。\\n4. 主链：把 G 的共轭作用放在 Syl_p(G)（有限集，作用良定义，且至少含 P）上；由事实 A，点 P 的轨道大小为 [G:Stab]，Stab={g: gPg⁻¹=P}=N(P)；由事实 C，这一轨道就是整个 Syl_p(G)，大小为 n_p。两组结果合起来：n_p=[G:N(P)]。\\n5. 台账一致：手稿 `## 命题` 与 statements.stmt_id=000063 的 `statement_full` 逐字一致（含「对任意一个 p-Sylow 子群 P」这一量词）；结论强度与原文一字不差，没有多证，也没有偷偷多用的假设（只用到 G 有限与 p 素数；退化情形 Syl_p 单点、P=G 都退化成轨道长度为 1，等式仍成立）。\\n6. 依赖面：`## 依赖` 是空表，与正文「没有引用任何在册命题」一致；没有引用等级低于 pre_theorem 的命题。\\n\\n未采纳的反例尝试：曾试「Syl_p(G) 不空」是否需要 Sylow I 另行证明 —— 不需要，命题以给定 p-Sylow 子群 P 为前提，Syl_p(G) 按定义含 P；又试事实 B 在 Γ 非 p-群时是否会被误用 —— 两处调用（事实 C 中以 Γ=Q、终段以 Γ=G）都不走事实 B 的 p-群假设，事实 A 只要求 Γ 有限，G 有限已给。\\n\\n材料侧读数（不是证明缺陷，属登记簿记）：收录时请按签块第 3 行里的正文 sha 25448766…认领；手稿 frontmatter 的「正文sha/版本」两行仍是旧的 31fa9452…（那是登记字段，不是被审的证明正文）。\\n\\n交给 B：这一条在本趟是按「连续 3/3 且成立」签发的，签块与台账已就位；无需再送审，收录时认领 v-000005 即可。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\sylow-4\\\\runs\\\\V-20261124-042223-001.json\", \"messages\": [], \"outcome\": \"ok\", \"status\": \"done\", \"steps\": 7, \"stop_reason\": \"final\", \"sum",
+ "payload_sha256": "83bb24db722118d206867662f317528809801c55578fb462dea19124602e8592",
+ "readings": {},
+ "role": "V",
+ "status": "done",
+ "task_id": "t-000066"
+}

@@ -1,0 +1,13 @@
+{
+  "total_usd": 3.0,
+  "updated_at": "2026-11-24T03:40:28+08:00",
+  "added": [
+    {
+      "kind": "set",
+      "usd": 3.0,
+      "by": "cli",
+      "at": "2026-11-24T03:40:28+08:00",
+      "note": "agentflow start --budget-usd"
+    }
+  ]
+}

@@ -1,0 +1,1199 @@
+===== page 1 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Sylow’s theorems
+GU4041
+Columbia University
+April 23, 2020
+GU4041
+Sylow’s theorems
+===== page 2 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Outline
+1
+Rough statement of the Sylow theorems
+2
+Some applications
+Some examples
+3
+Proofs of the Sylow Theorems
+GU4041
+Sylow’s theorems
+===== page 3 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Statement of the theorems
+Let G be a ﬁnite group of order n. Let p be a prime that divides n, and
+suppose pr|n but pr+1 does not divide n; we often write pr||n.
+Theorem (Sylow theorems)
+(1) G contains a subgroup H ⊂G of order pr. Any such group is
+called a Sylow p-subgroup.
+(2) All Sylow p-subgroups of G are conjugate by elements of G. In
+particular, if G has only one Sylow p-subgroup H, then H is a
+normal subgroup of G.
+(3) The number of distinct Sylow p-subgroups of G is (i) congruent
+to 1 modulo p and (ii) divides |G|.
+GU4041
+Sylow’s theorems
+===== page 4 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Statement of the theorems
+Let G be a ﬁnite group of order n. Let p be a prime that divides n, and
+suppose pr|n but pr+1 does not divide n; we often write pr||n.
+Theorem (Sylow theorems)
+(1) G contains a subgroup H ⊂G of order pr. Any such group is
+called a Sylow p-subgroup.
+(2) All Sylow p-subgroups of G are conjugate by elements of G. In
+particular, if G has only one Sylow p-subgroup H, then H is a
+normal subgroup of G.
+(3) The number of distinct Sylow p-subgroups of G is (i) congruent
+to 1 modulo p and (ii) divides |G|.
+GU4041
+Sylow’s theorems
+===== page 5 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Statement of the theorems
+Let G be a ﬁnite group of order n. Let p be a prime that divides n, and
+suppose pr|n but pr+1 does not divide n; we often write pr||n.
+Theorem (Sylow theorems)
+(1) G contains a subgroup H ⊂G of order pr. Any such group is
+called a Sylow p-subgroup.
+(2) All Sylow p-subgroups of G are conjugate by elements of G. In
+particular, if G has only one Sylow p-subgroup H, then H is a
+normal subgroup of G.
+(3) The number of distinct Sylow p-subgroups of G is (i) congruent
+to 1 modulo p and (ii) divides |G|.
+GU4041
+Sylow’s theorems
+===== page 6 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Statement of the theorems
+Let G be a ﬁnite group of order n. Let p be a prime that divides n, and
+suppose pr|n but pr+1 does not divide n; we often write pr||n.
+Theorem (Sylow theorems)
+(1) G contains a subgroup H ⊂G of order pr. Any such group is
+called a Sylow p-subgroup.
+(2) All Sylow p-subgroups of G are conjugate by elements of G. In
+particular, if G has only one Sylow p-subgroup H, then H is a
+normal subgroup of G.
+(3) The number of distinct Sylow p-subgroups of G is (i) congruent
+to 1 modulo p and (ii) divides |G|.
+GU4041
+Sylow’s theorems
+===== page 7 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Some examples
+Some applications
+Example
+Let G be a group of order 21 = 3 · 7 and let a be the number of its
+distinct Sylow 7-subgroups. By the Third Sylow Theorem a ≡1
+(mod 7) and a divides 21. The only divisor of 21 congruent to 1
+modulo 7 is 1. So a = 1 and its unique Sylow 7-subgroup is normal.
+More generally,
+Proposition
+Let G be a group of order pq, where p and q are distinct primes,
+q > p. Then G has a unique Sylow q-subgroup H and H is normal.
+Moreover H is cyclic and if p does not divide q −1 then G is abelian.
+GU4041
+Sylow’s theorems
+===== page 8 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Some examples
+Some applications
+Example
+Let G be a group of order 21 = 3 · 7 and let a be the number of its
+distinct Sylow 7-subgroups. By the Third Sylow Theorem a ≡1
+(mod 7) and a divides 21. The only divisor of 21 congruent to 1
+modulo 7 is 1. So a = 1 and its unique Sylow 7-subgroup is normal.
+More generally,
+Proposition
+Let G be a group of order pq, where p and q are distinct primes,
+q > p. Then G has a unique Sylow q-subgroup H and H is normal.
+Moreover H is cyclic and if p does not divide q −1 then G is abelian.
+GU4041
+Sylow’s theorems
+===== page 9 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Some examples
+Some applications
+Example
+Let G be a group of order 21 = 3 · 7 and let a be the number of its
+distinct Sylow 7-subgroups. By the Third Sylow Theorem a ≡1
+(mod 7) and a divides 21. The only divisor of 21 congruent to 1
+modulo 7 is 1. So a = 1 and its unique Sylow 7-subgroup is normal.
+More generally,
+Proposition
+Let G be a group of order pq, where p and q are distinct primes,
+q > p. Then G has a unique Sylow q-subgroup H and H is normal.
+Moreover H is cyclic and if p does not divide q −1 then G is abelian.
+GU4041
+Sylow’s theorems
+===== page 10 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Some examples
+Some applications
+Example
+Let G be a group of order 21 = 3 · 7 and let a be the number of its
+distinct Sylow 7-subgroups. By the Third Sylow Theorem a ≡1
+(mod 7) and a divides 21. The only divisor of 21 congruent to 1
+modulo 7 is 1. So a = 1 and its unique Sylow 7-subgroup is normal.
+More generally,
+Proposition
+Let G be a group of order pq, where p and q are distinct primes,
+q > p. Then G has a unique Sylow q-subgroup H and H is normal.
+Moreover H is cyclic and if p does not divide q −1 then G is abelian.
+GU4041
+Sylow’s theorems
+===== page 11 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Some examples
+Some applications
+Proof.
+If a is the number of Sylow q-subgroups of G, then a divides pq and
+a ≡1 (mod q). The only divisors of pq are 1, p, q, and pq, and of
+those only 1 ≡1 (mod q), because p < q.
+By the Second Sylow Theorem, the unique Sylow q-subgroup H is
+normal. Since H is of order q it is abelian. Now consider the
+conjugation action of G on the normal subgroup H: it deﬁnes a
+homomorphism c : G →Aut(H) = Z×
+q .
+The image J is a divisor of q −1, but J
+∼
+−→
+|G|
+| ker c| by the First
+Isomorphism Theorem. So |J| divides
+gcd(|G|, q −1) = gcd(pq, q −1) = gcd(p, q −1), since q is
+relatively prime to q −1. (Anyway, H is abelian, so its conjugation
+action on itself is trivial.) . Thus if p does not divide q −1, then
+|J| = 1, which means that G is abelian.
+GU4041
+Sylow’s theorems
+===== page 12 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Some examples
+Some applications
+Proof.
+If a is the number of Sylow q-subgroups of G, then a divides pq and
+a ≡1 (mod q). The only divisors of pq are 1, p, q, and pq, and of
+those only 1 ≡1 (mod q), because p < q.
+By the Second Sylow Theorem, the unique Sylow q-subgroup H is
+normal. Since H is of order q it is abelian. Now consider the
+conjugation action of G on the normal subgroup H: it deﬁnes a
+homomorphism c : G →Aut(H) = Z×
+q .
+The image J is a divisor of q −1, but J
+∼
+−→
+|G|
+| ker c| by the First
+Isomorphism Theorem. So |J| divides
+gcd(|G|, q −1) = gcd(pq, q −1) = gcd(p, q −1), since q is
+relatively prime to q −1. (Anyway, H is abelian, so its conjugation
+action on itself is trivial.) . Thus if p does not divide q −1, then
+|J| = 1, which means that G is abelian.
+GU4041
+Sylow’s theorems
+===== page 13 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Some examples
+Some applications
+Proof.
+If a is the number of Sylow q-subgroups of G, then a divides pq and
+a ≡1 (mod q). The only divisors of pq are 1, p, q, and pq, and of
+those only 1 ≡1 (mod q), because p < q.
+By the Second Sylow Theorem, the unique Sylow q-subgroup H is
+normal. Since H is of order q it is abelian. Now consider the
+conjugation action of G on the normal subgroup H: it deﬁnes a
+homomorphism c : G →Aut(H) = Z×
+q .
+The image J is a divisor of q −1, but J
+∼
+−→
+|G|
+| ker c| by the First
+Isomorphism Theorem. So |J| divides
+gcd(|G|, q −1) = gcd(pq, q −1) = gcd(p, q −1), since q is
+relatively prime to q −1. (Anyway, H is abelian, so its conjugation
+action on itself is trivial.) . Thus if p does not divide q −1, then
+|J| = 1, which means that G is abelian.
+GU4041
+Sylow’s theorems
+===== page 14 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Some examples
+Some applications
+Proof.
+If a is the number of Sylow q-subgroups of G, then a divides pq and
+a ≡1 (mod q). The only divisors of pq are 1, p, q, and pq, and of
+those only 1 ≡1 (mod q), because p < q.
+By the Second Sylow Theorem, the unique Sylow q-subgroup H is
+normal. Since H is of order q it is abelian. Now consider the
+conjugation action of G on the normal subgroup H: it deﬁnes a
+homomorphism c : G →Aut(H) = Z×
+q .
+The image J is a divisor of q −1, but J
+∼
+−→
+|G|
+| ker c| by the First
+Isomorphism Theorem. So |J| divides
+gcd(|G|, q −1) = gcd(pq, q −1) = gcd(p, q −1), since q is
+relatively prime to q −1. (Anyway, H is abelian, so its conjugation
+action on itself is trivial.) . Thus if p does not divide q −1, then
+|J| = 1, which means that G is abelian.
+GU4041
+Sylow’s theorems
+===== page 15 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Some examples
+Some applications
+Proof.
+If a is the number of Sylow q-subgroups of G, then a divides pq and
+a ≡1 (mod q). The only divisors of pq are 1, p, q, and pq, and of
+those only 1 ≡1 (mod q), because p < q.
+By the Second Sylow Theorem, the unique Sylow q-subgroup H is
+normal. Since H is of order q it is abelian. Now consider the
+conjugation action of G on the normal subgroup H: it deﬁnes a
+homomorphism c : G →Aut(H) = Z×
+q .
+The image J is a divisor of q −1, but J
+∼
+−→
+|G|
+| ker c| by the First
+Isomorphism Theorem. So |J| divides
+gcd(|G|, q −1) = gcd(pq, q −1) = gcd(p, q −1), since q is
+relatively prime to q −1. (Anyway, H is abelian, so its conjugation
+action on itself is trivial.) . Thus if p does not divide q −1, then
+|J| = 1, which means that G is abelian.
+GU4041
+Sylow’s theorems
+===== page 16 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Some examples
+Some applications
+Proof.
+If a is the number of Sylow q-subgroups of G, then a divides pq and
+a ≡1 (mod q). The only divisors of pq are 1, p, q, and pq, and of
+those only 1 ≡1 (mod q), because p < q.
+By the Second Sylow Theorem, the unique Sylow q-subgroup H is
+normal. Since H is of order q it is abelian. Now consider the
+conjugation action of G on the normal subgroup H: it deﬁnes a
+homomorphism c : G →Aut(H) = Z×
+q .
+The image J is a divisor of q −1, but J
+∼
+−→
+|G|
+| ker c| by the First
+Isomorphism Theorem. So |J| divides
+gcd(|G|, q −1) = gcd(pq, q −1) = gcd(p, q −1), since q is
+relatively prime to q −1. (Anyway, H is abelian, so its conjugation
+action on itself is trivial.) . Thus if p does not divide q −1, then
+|J| = 1, which means that G is abelian.
+GU4041
+Sylow’s theorems
+===== page 17 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Some examples
+Some applications
+Proof.
+If a is the number of Sylow q-subgroups of G, then a divides pq and
+a ≡1 (mod q). The only divisors of pq are 1, p, q, and pq, and of
+those only 1 ≡1 (mod q), because p < q.
+By the Second Sylow Theorem, the unique Sylow q-subgroup H is
+normal. Since H is of order q it is abelian. Now consider the
+conjugation action of G on the normal subgroup H: it deﬁnes a
+homomorphism c : G →Aut(H) = Z×
+q .
+The image J is a divisor of q −1, but J
+∼
+−→
+|G|
+| ker c| by the First
+Isomorphism Theorem. So |J| divides
+gcd(|G|, q −1) = gcd(pq, q −1) = gcd(p, q −1), since q is
+relatively prime to q −1. (Anyway, H is abelian, so its conjugation
+action on itself is trivial.) . Thus if p does not divide q −1, then
+|J| = 1, which means that G is abelian.
+GU4041
+Sylow’s theorems
+===== page 18 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Some examples
+The case of S4
+If G = S4 then |G| = 24 = 23 × 3. We know that any 3 cycle
+generates a Sylow 3-subgroup. What is the structure of a Sylow
+2-subgroup?
+A Sylow 2-subgroup of A4 is isomorphic to the Klein group K4, and
+contains all the elements with cycle decomposition 2 + 2. This set is
+invariant under conjugation by S4, so K4 is a normal subgroup of S4.
+Let s = (12) ∈S4 (or any 2 cycle), H the subgroup generated by s.
+Then P = H · K4 is a Sylow 2-subgroup of order 8 with a normal
+subgroup of index 2.
+GU4041
+Sylow’s theorems
+===== page 19 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Some examples
+The case of S4
+If G = S4 then |G| = 24 = 23 × 3. We know that any 3 cycle
+generates a Sylow 3-subgroup. What is the structure of a Sylow
+2-subgroup?
+A Sylow 2-subgroup of A4 is isomorphic to the Klein group K4, and
+contains all the elements with cycle decomposition 2 + 2. This set is
+invariant under conjugation by S4, so K4 is a normal subgroup of S4.
+Let s = (12) ∈S4 (or any 2 cycle), H the subgroup generated by s.
+Then P = H · K4 is a Sylow 2-subgroup of order 8 with a normal
+subgroup of index 2.
+GU4041
+Sylow’s theorems
+===== page 20 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Some examples
+S4, continued
+Note that s commutes with (12)(34) but not with x = (13)(24) or
+y = (14)(23). In fact, we compute easily:
+sxs−1 = y; sys−1 = x.
+So P is not abelian, and its center is of order 2. Note that
+s · x = s · (13)(24) = (1324); x · s = (1423) = (1324)−1.
+So s normalizes the subgroup generated by the 4-cycle (1324) and
+takes it to its inverse:
+s · (1324)s−1 = s · s · x · s = x · s = (1324)−1.
+This shows that P is isomorphic to D8 (and not Q8).
+GU4041
+Sylow’s theorems
+===== page 21 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Some examples
+S4, continued
+Note that s commutes with (12)(34) but not with x = (13)(24) or
+y = (14)(23). In fact, we compute easily:
+sxs−1 = y; sys−1 = x.
+So P is not abelian, and its center is of order 2. Note that
+s · x = s · (13)(24) = (1324); x · s = (1423) = (1324)−1.
+So s normalizes the subgroup generated by the 4-cycle (1324) and
+takes it to its inverse:
+s · (1324)s−1 = s · s · x · s = x · s = (1324)−1.
+This shows that P is isomorphic to D8 (and not Q8).
+GU4041
+Sylow’s theorems
+===== page 22 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Some examples
+S4, continued
+Note that s commutes with (12)(34) but not with x = (13)(24) or
+y = (14)(23). In fact, we compute easily:
+sxs−1 = y; sys−1 = x.
+So P is not abelian, and its center is of order 2. Note that
+s · x = s · (13)(24) = (1324); x · s = (1423) = (1324)−1.
+So s normalizes the subgroup generated by the 4-cycle (1324) and
+takes it to its inverse:
+s · (1324)s−1 = s · s · x · s = x · s = (1324)−1.
+This shows that P is isomorphic to D8 (and not Q8).
+GU4041
+Sylow’s theorems
+===== page 23 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Some examples
+S4, continued
+Note that s commutes with (12)(34) but not with x = (13)(24) or
+y = (14)(23). In fact, we compute easily:
+sxs−1 = y; sys−1 = x.
+So P is not abelian, and its center is of order 2. Note that
+s · x = s · (13)(24) = (1324); x · s = (1423) = (1324)−1.
+So s normalizes the subgroup generated by the 4-cycle (1324) and
+takes it to its inverse:
+s · (1324)s−1 = s · s · x · s = x · s = (1324)−1.
+This shows that P is isomorphic to D8 (and not Q8).
+GU4041
+Sylow’s theorems
+===== page 24 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Some examples
+S4, continued
+Note that s commutes with (12)(34) but not with x = (13)(24) or
+y = (14)(23). In fact, we compute easily:
+sxs−1 = y; sys−1 = x.
+So P is not abelian, and its center is of order 2. Note that
+s · x = s · (13)(24) = (1324); x · s = (1423) = (1324)−1.
+So s normalizes the subgroup generated by the 4-cycle (1324) and
+takes it to its inverse:
+s · (1324)s−1 = s · s · x · s = x · s = (1324)−1.
+This shows that P is isomorphic to D8 (and not Q8).
+GU4041
+Sylow’s theorems
+===== page 25 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Some examples
+Sylow subgroups of A5
+On the other hand, |A5| = 60 = 22 · 3 · 5. So a Sylow 2-subgroup is
+just K4 again. but it’s no longer normal, because there are 15 elements
+with cycle decomposition 2 + 2, and they don’t form a subgroup; for
+example, (13)(25), (15)(24), etc. The Sylow 3 and 5-subgroups are
+generated by a 3-cycle and a 5-cycle, respectively.
+There are 24 5-cycles, and each Sylow 5-subgroup has 4 generators,
+so there are 6 Sylow 5-subgroups. And 6|60, 6 ≡1 (mod 5).
+GU4041
+Sylow’s theorems
+===== page 26 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Some examples
+Sylow subgroups of A5
+On the other hand, |A5| = 60 = 22 · 3 · 5. So a Sylow 2-subgroup is
+just K4 again. but it’s no longer normal, because there are 15 elements
+with cycle decomposition 2 + 2, and they don’t form a subgroup; for
+example, (13)(25), (15)(24), etc. The Sylow 3 and 5-subgroups are
+generated by a 3-cycle and a 5-cycle, respectively.
+There are 24 5-cycles, and each Sylow 5-subgroup has 4 generators,
+so there are 6 Sylow 5-subgroups. And 6|60, 6 ≡1 (mod 5).
+GU4041
+Sylow’s theorems
+===== page 27 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+A theorem of Cauchy
+Theorem
+Let G be a ﬁnite group of order n and let p be a prime dividing n.
+Then G has an element of order p.
+Proof.
+We use the Class Equation, where the xi are representatives of
+conjugacy classes not in the center:
+|G| = |Z(G)| +
+X
+i
+[G : Cxi]
+Assume the theorem is true for groups of order less than n. If p divides
+the order of one of the Cxi, then by induction Cxi has an element g of
+order p, because |Cxi| < |G| = n. But g ∈Cxi ⊆G, so we are done.
+GU4041
+Sylow’s theorems
+===== page 28 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+A theorem of Cauchy
+Theorem
+Let G be a ﬁnite group of order n and let p be a prime dividing n.
+Then G has an element of order p.
+Proof.
+We use the Class Equation, where the xi are representatives of
+conjugacy classes not in the center:
+|G| = |Z(G)| +
+X
+i
+[G : Cxi]
+Assume the theorem is true for groups of order less than n. If p divides
+the order of one of the Cxi, then by induction Cxi has an element g of
+order p, because |Cxi| < |G| = n. But g ∈Cxi ⊆G, so we are done.
+GU4041
+Sylow’s theorems
+===== page 29 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Proof of Cauchy’s theorem, continued
+Proof.
+So we assume p divides no Cxi. Then p|[G : Cxi] = |G|/|Cxi| for all i.
+Now p divides
+|G| −
+X
+i
+[G : Cxi] = |Z(G)|
+because it divides each term on the left-hand side. Thus p divides
+|Z(G)|. But then |Z(G)| has an element of order p, by the
+classiﬁcation of ﬁnite abelian groups.
+GU4041
+Sylow’s theorems
+===== page 30 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Proof of Cauchy’s theorem, continued
+Proof.
+So we assume p divides no Cxi. Then p|[G : Cxi] = |G|/|Cxi| for all i.
+Now p divides
+|G| −
+X
+i
+[G : Cxi] = |Z(G)|
+because it divides each term on the left-hand side. Thus p divides
+|Z(G)|. But then |Z(G)| has an element of order p, by the
+classiﬁcation of ﬁnite abelian groups.
+GU4041
+Sylow’s theorems
+===== page 31 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Proof of Cauchy’s theorem, continued
+Proof.
+So we assume p divides no Cxi. Then p|[G : Cxi] = |G|/|Cxi| for all i.
+Now p divides
+|G| −
+X
+i
+[G : Cxi] = |Z(G)|
+because it divides each term on the left-hand side. Thus p divides
+|Z(G)|. But then |Z(G)| has an element of order p, by the
+classiﬁcation of ﬁnite abelian groups.
+GU4041
+Sylow’s theorems
+===== page 32 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Proof of the First Sylow Theorem
+Of courser the proof is by induction on |G|. Say n = |G| = prm with
+p ∤m. We use the Class Equation in the opposite way.
+|G| = |Z(G)| +
+X
+i
+[G : Cxi]
+If G is abelian then we know the result by the classiﬁcation of ﬁnite
+abelian groups. So we assume G is not abelian. . Then the set of xi is
+not empty, and for each i |Cxi| < n.
+GU4041
+Sylow’s theorems
+===== page 33 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Proof of the First Sylow Theorem
+Of courser the proof is by induction on |G|. Say n = |G| = prm with
+p ∤m. We use the Class Equation in the opposite way.
+|G| = |Z(G)| +
+X
+i
+[G : Cxi]
+If G is abelian then we know the result by the classiﬁcation of ﬁnite
+abelian groups. So we assume G is not abelian. . Then the set of xi is
+not empty, and for each i |Cxi| < n.
+GU4041
+Sylow’s theorems
+===== page 34 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Proof of the First Sylow Theorem
+Of courser the proof is by induction on |G|. Say n = |G| = prm with
+p ∤m. We use the Class Equation in the opposite way.
+|G| = |Z(G)| +
+X
+i
+[G : Cxi]
+If G is abelian then we know the result by the classiﬁcation of ﬁnite
+abelian groups. So we assume G is not abelian. . Then the set of xi is
+not empty, and for each i |Cxi| < n.
+GU4041
+Sylow’s theorems
+===== page 35 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Proof of the First Sylow Theorem, continued
+First suppose p does not divide [G : Cxi] for at least one i, hence pr
+divides Cxi, which is of smaller order than G. By induction Cxi has a
+subgroup of order pr.
+So we may suppose p divides every [G : Cxi], hence p divides |Z(G)|.
+Then Z(G) contains a subgroup N of order p (by classiﬁcation, or by
+Cauchy’s theorem). But any subgroup of Z(G)| is normal in G
+(exercise). So G/N is of order less than n and by induction contains a
+subgroup ¯K of order pr−1. Let K ⊂G be the corresponding subgroup
+containing N (the preimage of ¯K under the quotient map). Then
+|K| = |N|¯K = p · pr−1 = pr.
+and we are done.
+GU4041
+Sylow’s theorems
+===== page 36 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Proof of the First Sylow Theorem, continued
+First suppose p does not divide [G : Cxi] for at least one i, hence pr
+divides Cxi, which is of smaller order than G. By induction Cxi has a
+subgroup of order pr.
+So we may suppose p divides every [G : Cxi], hence p divides |Z(G)|.
+Then Z(G) contains a subgroup N of order p (by classiﬁcation, or by
+Cauchy’s theorem). But any subgroup of Z(G)| is normal in G
+(exercise). So G/N is of order less than n and by induction contains a
+subgroup ¯K of order pr−1. Let K ⊂G be the corresponding subgroup
+containing N (the preimage of ¯K under the quotient map). Then
+|K| = |N|¯K = p · pr−1 = pr.
+and we are done.
+GU4041
+Sylow’s theorems
+===== page 37 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Proof of the First Sylow Theorem, continued
+First suppose p does not divide [G : Cxi] for at least one i, hence pr
+divides Cxi, which is of smaller order than G. By induction Cxi has a
+subgroup of order pr.
+So we may suppose p divides every [G : Cxi], hence p divides |Z(G)|.
+Then Z(G) contains a subgroup N of order p (by classiﬁcation, or by
+Cauchy’s theorem). But any subgroup of Z(G)| is normal in G
+(exercise). So G/N is of order less than n and by induction contains a
+subgroup ¯K of order pr−1. Let K ⊂G be the corresponding subgroup
+containing N (the preimage of ¯K under the quotient map). Then
+|K| = |N|¯K = p · pr−1 = pr.
+and we are done.
+GU4041
+Sylow’s theorems
+===== page 38 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Proof of the First Sylow Theorem, continued
+First suppose p does not divide [G : Cxi] for at least one i, hence pr
+divides Cxi, which is of smaller order than G. By induction Cxi has a
+subgroup of order pr.
+So we may suppose p divides every [G : Cxi], hence p divides |Z(G)|.
+Then Z(G) contains a subgroup N of order p (by classiﬁcation, or by
+Cauchy’s theorem). But any subgroup of Z(G)| is normal in G
+(exercise). So G/N is of order less than n and by induction contains a
+subgroup ¯K of order pr−1. Let K ⊂G be the corresponding subgroup
+containing N (the preimage of ¯K under the quotient map). Then
+|K| = |N|¯K = p · pr−1 = pr.
+and we are done.
+GU4041
+Sylow’s theorems
+===== page 39 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Normalizers
+Deﬁnition
+Let H ⊆G be a subgroup. The normalizer NG(H) of H in G is the
+set of g ∈G such that
+gHg−1 ⊆H.
+Lemma
+If G is ﬁnite then |gHg−1| = |H| for any g ∈G. So gHg−1 ⊆H
+implies gHg−1 = H.
+Proof.
+Conjugation by g is a bijection between gHg−1 and H, so it preserves
+the cardinality.
+GU4041
+Sylow’s theorems
+===== page 40 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Normalizers
+Deﬁnition
+Let H ⊆G be a subgroup. The normalizer NG(H) of H in G is the
+set of g ∈G such that
+gHg−1 ⊆H.
+Lemma
+If G is ﬁnite then |gHg−1| = |H| for any g ∈G. So gHg−1 ⊆H
+implies gHg−1 = H.
+Proof.
+Conjugation by g is a bijection between gHg−1 and H, so it preserves
+the cardinality.
+GU4041
+Sylow’s theorems
+===== page 41 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Normalizers
+Deﬁnition
+Let H ⊆G be a subgroup. The normalizer NG(H) of H in G is the
+set of g ∈G such that
+gHg−1 ⊆H.
+Lemma
+If G is ﬁnite then |gHg−1| = |H| for any g ∈G. So gHg−1 ⊆H
+implies gHg−1 = H.
+Proof.
+Conjugation by g is a bijection between gHg−1 and H, so it preserves
+the cardinality.
+GU4041
+Sylow’s theorems
+===== page 42 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+A lemma
+Lemma
+Let H ⊆G be a subgroup. Then NG(H) is a subgroup of G.
+Proof.
+Obvious: if g1, g2 ∈NG(H), then
+g1g2(H)g−1
+2 g−1
+1
+⊂g1Hg−1
+1
+⊂H.
+Of course H ⊂NG(H) (and is even a normal subgroup).
+GU4041
+Sylow’s theorems
+===== page 43 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+A lemma
+Lemma
+Let H ⊆G be a subgroup. Then NG(H) is a subgroup of G.
+Proof.
+Obvious: if g1, g2 ∈NG(H), then
+g1g2(H)g−1
+2 g−1
+1
+⊂g1Hg−1
+1
+⊂H.
+Of course H ⊂NG(H) (and is even a normal subgroup).
+GU4041
+Sylow’s theorems
+===== page 44 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+A lemma
+Lemma
+Let H ⊆G be a subgroup. Then NG(H) is a subgroup of G.
+Proof.
+Obvious: if g1, g2 ∈NG(H), then
+g1g2(H)g−1
+2 g−1
+1
+⊂g1Hg−1
+1
+⊂H.
+Of course H ⊂NG(H) (and is even a normal subgroup).
+GU4041
+Sylow’s theorems
+===== page 45 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Another lemma
+Lemma
+Suppose P ⊆G is a p-Sylow subgroup. Let g ∈NG(P) and assume g
+has order pr for some r ≥1. Then g ∈P.
+Proof.
+Consider the subgroup ⟨gP⟩⊂NG(P)/P. If g /∈P then ⟨gP⟩has order
+p. Let J ⊂NG(P) be the subgroup generated by g and P; so that
+J/P = ⟨gP⟩.
+On the other hand, the coset gP is the image of g under the map
+J 7→J/P, and is thus of order pa for some a ≤r. If g /∈P it follows
+that |J| = p · |P| > |P|. But |P| is the largest power of p dividing |G|.
+Thus we must have J = P.
+GU4041
+Sylow’s theorems
+===== page 46 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Another lemma
+Lemma
+Suppose P ⊆G is a p-Sylow subgroup. Let g ∈NG(P) and assume g
+has order pr for some r ≥1. Then g ∈P.
+Proof.
+Consider the subgroup ⟨gP⟩⊂NG(P)/P. If g /∈P then ⟨gP⟩has order
+p. Let J ⊂NG(P) be the subgroup generated by g and P; so that
+J/P = ⟨gP⟩.
+On the other hand, the coset gP is the image of g under the map
+J 7→J/P, and is thus of order pa for some a ≤r. If g /∈P it follows
+that |J| = p · |P| > |P|. But |P| is the largest power of p dividing |G|.
+Thus we must have J = P.
+GU4041
+Sylow’s theorems
+===== page 47 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Another lemma
+Lemma
+Suppose P ⊆G is a p-Sylow subgroup. Let g ∈NG(P) and assume g
+has order pr for some r ≥1. Then g ∈P.
+Proof.
+Consider the subgroup ⟨gP⟩⊂NG(P)/P. If g /∈P then ⟨gP⟩has order
+p. Let J ⊂NG(P) be the subgroup generated by g and P; so that
+J/P = ⟨gP⟩.
+On the other hand, the coset gP is the image of g under the map
+J 7→J/P, and is thus of order pa for some a ≤r. If g /∈P it follows
+that |J| = p · |P| > |P|. But |P| is the largest power of p dividing |G|.
+Thus we must have J = P.
+GU4041
+Sylow’s theorems
+===== page 48 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Another lemma
+Lemma
+Suppose P ⊆G is a p-Sylow subgroup. Let g ∈NG(P) and assume g
+has order pr for some r ≥1. Then g ∈P.
+Proof.
+Consider the subgroup ⟨gP⟩⊂NG(P)/P. If g /∈P then ⟨gP⟩has order
+p. Let J ⊂NG(P) be the subgroup generated by g and P; so that
+J/P = ⟨gP⟩.
+On the other hand, the coset gP is the image of g under the map
+J 7→J/P, and is thus of order pa for some a ≤r. If g /∈P it follows
+that |J| = p · |P| > |P|. But |P| is the largest power of p dividing |G|.
+Thus we must have J = P.
+GU4041
+Sylow’s theorems
+===== page 49 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+One more lemma
+Lemma
+Suppose H, K ⊆G are subgroups. The number of distinct subgroups
+hKh−1, with h ∈H, is [H : NG(K) ∩H].
+Proof.
+Omitted: see Judson book, p. 191, Lemma 15.6.
+This is easy but it is another one of those proofs that is best read
+rather than seen on the (virtual) blackboard. The idea is clear:
+h1Kh−1
+1
+= h2Kh−1
+2
+⇔(h2h−1
+1 )K(h2h−1
+1 )−1 = K ⇔h2 ∈h1NG(K).
+So the set of H-conjugates of K is in bijection with H/(NG(K) ∩H).
+GU4041
+Sylow’s theorems
+===== page 50 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+One more lemma
+Lemma
+Suppose H, K ⊆G are subgroups. The number of distinct subgroups
+hKh−1, with h ∈H, is [H : NG(K) ∩H].
+Proof.
+Omitted: see Judson book, p. 191, Lemma 15.6.
+This is easy but it is another one of those proofs that is best read
+rather than seen on the (virtual) blackboard. The idea is clear:
+h1Kh−1
+1
+= h2Kh−1
+2
+⇔(h2h−1
+1 )K(h2h−1
+1 )−1 = K ⇔h2 ∈h1NG(K).
+So the set of H-conjugates of K is in bijection with H/(NG(K) ∩H).
+GU4041
+Sylow’s theorems
+===== page 51 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+One more lemma
+Lemma
+Suppose H, K ⊆G are subgroups. The number of distinct subgroups
+hKh−1, with h ∈H, is [H : NG(K) ∩H].
+Proof.
+Omitted: see Judson book, p. 191, Lemma 15.6.
+This is easy but it is another one of those proofs that is best read
+rather than seen on the (virtual) blackboard. The idea is clear:
+h1Kh−1
+1
+= h2Kh−1
+2
+⇔(h2h−1
+1 )K(h2h−1
+1 )−1 = K ⇔h2 ∈h1NG(K).
+So the set of H-conjugates of K is in bijection with H/(NG(K) ∩H).
+GU4041
+Sylow’s theorems
+===== page 52 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Proof of the Second Sylow Theorem
+Here is the statement again:
+Theorem
+All Sylow p-subgroups of G are conjugate by elements of G.
+Proof.
+Let |G| = n = prm as before, and let S = {P = P1, . . . , Pk} be the set
+of distinct conjugates of P. By the last Lemma, k = [G : NG(P)].
+Since P ⊆NG(P), k divides m and thus is not divisible by p.
+Let Q̸ = P be a p-Sylow subgroup. We need to show that Q = Pi for
+some i̸ = 1. We consider the set of Q-conjugates of Pi ∈S, which is a
+partition of S. Then
+k =
+X
+i
+[Q : Q ∩NG(Pi)] =
+X
+i
+|Q|/|Q ∩NG(Pi)|.
+GU4041
+Sylow’s theorems
+===== page 53 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Proof of the Second Sylow Theorem
+Here is the statement again:
+Theorem
+All Sylow p-subgroups of G are conjugate by elements of G.
+Proof.
+Let |G| = n = prm as before, and let S = {P = P1, . . . , Pk} be the set
+of distinct conjugates of P. By the last Lemma, k = [G : NG(P)].
+Since P ⊆NG(P), k divides m and thus is not divisible by p.
+Let Q̸ = P be a p-Sylow subgroup. We need to show that Q = Pi for
+some i̸ = 1. We consider the set of Q-conjugates of Pi ∈S, which is a
+partition of S. Then
+k =
+X
+i
+[Q : Q ∩NG(Pi)] =
+X
+i
+|Q|/|Q ∩NG(Pi)|.
+GU4041
+Sylow’s theorems
+===== page 54 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Proof of the Second Sylow Theorem
+Proof.
+k =
+X
+i
+[Q : Q ∩NG(Pi)] =
+X
+i
+|Q|/|Q ∩NG(Pi)|.
+Since p does not divide k it cannot divide |Q|/|Q ∩NG(Pi)| for some
+i. But the quotient |Q|/|Q ∩NG(Pi)| is a power of p, because |Q| is, so
+Q ∩NG(Pj) = Q for some j. In other words, Q ⊂NG(Pj), which by
+the previous lemma implies that Q ⊂Pj. Since |Q| = |Pj|, we are
+done.
+GU4041
+Sylow’s theorems
+===== page 55 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Proof of the Third Sylow Theorem
+Here is the statement again:
+Theorem
+The number k of distinct Sylow p-subgroups of G is (i) congruent to 1
+modulo p and (ii) divides the order of G.
+Proof.
+We know that k = [G : NG(P)] if P = P1 is a Sylow p-subgroup. This
+implies (ii).
+GU4041
+Sylow’s theorems
+===== page 56 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Proof of the Third Sylow Theorem
+Proof.
+On the other hand, we partition the set S of Sylow p-subgroups into
+P-conjugacy classes, as before:
+k =
+X
+i
+[P : P ∩NG(Pi)] = 1 +
+X
+i>1
+|P|/|P ∩NG(Pi)|.
+If P ∩NG(Pi) = P then P ⊂NG(Pi), and thus P = Pi. So for i > 1,
+|P ∩NG(Pi)| is a proper subgroup of |P|, so |P|/|P ∩NG(Pi)| ≡0
+(mod p). Thus k ≡1 (mod p), which completes the proof of (i).
+GU4041
+Sylow’s theorems
+===== page 57 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Proof of the Third Sylow Theorem
+Proof.
+On the other hand, we partition the set S of Sylow p-subgroups into
+P-conjugacy classes, as before:
+k =
+X
+i
+[P : P ∩NG(Pi)] = 1 +
+X
+i>1
+|P|/|P ∩NG(Pi)|.
+If P ∩NG(Pi) = P then P ⊂NG(Pi), and thus P = Pi. So for i > 1,
+|P ∩NG(Pi)| is a proper subgroup of |P|, so |P|/|P ∩NG(Pi)| ≡0
+(mod p). Thus k ≡1 (mod p), which completes the proof of (i).
+GU4041
+Sylow’s theorems
+===== page 58 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Groups of order 20
+Theorem
+There are no simple groups of order 20, 72, 48.
+Proof.
+If |G| = 20, then G has a Sylow 2-subgroup P of order 5. Since 1 is
+the only divisor of 20 that is congruent to 1 mod 5, P is normal, so G
+is not simple.
+GU4041
+Sylow’s theorems
+===== page 59 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Groups of order 72
+If |G| = 72, we consider a 3-Sylow subgroup P of order 9. The
+number k of conjugates of H is congruent to 1 mod 3 and divides 72.
+The divisors of 72 are 1, 2, 3, 4, 6, 8, 9, 12, 18, 24, 36, 72. The only
+ones congruent to 1 mod 3 are 1 and 4. We have to eliminate k = 4. If
+k = [G : NG(P)] = 4 then by an in-class “challenge” G contains a
+normal subgroup N, contained in NG(P), of index ≤4! = 24. Since
+24 < 72 and N ⊆NG(P), which is not equal to G (since we are
+assuming P is not normal), |N| > 1 and N̸ = G. Thus N is a proper
+normal subgroup of G.
+GU4041
+Sylow’s theorems
+===== page 60 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Groups of order 72
+If |G| = 72, we consider a 3-Sylow subgroup P of order 9. The
+number k of conjugates of H is congruent to 1 mod 3 and divides 72.
+The divisors of 72 are 1, 2, 3, 4, 6, 8, 9, 12, 18, 24, 36, 72. The only
+ones congruent to 1 mod 3 are 1 and 4. We have to eliminate k = 4. If
+k = [G : NG(P)] = 4 then by an in-class “challenge” G contains a
+normal subgroup N, contained in NG(P), of index ≤4! = 24. Since
+24 < 72 and N ⊆NG(P), which is not equal to G (since we are
+assuming P is not normal), |N| > 1 and N̸ = G. Thus N is a proper
+normal subgroup of G.
+GU4041
+Sylow’s theorems
+===== page 61 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Groups of order 72
+If |G| = 72, we consider a 3-Sylow subgroup P of order 9. The
+number k of conjugates of H is congruent to 1 mod 3 and divides 72.
+The divisors of 72 are 1, 2, 3, 4, 6, 8, 9, 12, 18, 24, 36, 72. The only
+ones congruent to 1 mod 3 are 1 and 4. We have to eliminate k = 4. If
+k = [G : NG(P)] = 4 then by an in-class “challenge” G contains a
+normal subgroup N, contained in NG(P), of index ≤4! = 24. Since
+24 < 72 and N ⊆NG(P), which is not equal to G (since we are
+assuming P is not normal), |N| > 1 and N̸ = G. Thus N is a proper
+normal subgroup of G.
+GU4041
+Sylow’s theorems
+===== page 62 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Groups of order 48
+Finally, if |G| = 48, let P be a 2-Sylow subgroup, of order 16, thus of
+index 3. Again, G contains a normal subgroup of index ≤3! = 6,
+which is less than 48.
+GU4041
+Sylow’s theorems
+===== page 63 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Groups of order 48
+Finally, if |G| = 48, let P be a 2-Sylow subgroup, of order 16, thus of
+index 3. Again, G contains a normal subgroup of index ≤3! = 6,
+which is less than 48.
+GU4041
+Sylow’s theorems
+===== page 64 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Proof of the “challenge”
+Challenge
+If G contains a subgroup H of index n then G contains a proper
+normal subgroup N of index at most n!; in fact, N ⊆H, so in
+particular N̸ = G.
+Proof.
+Consider the set X of left cosets G/H. Multiplication on the left by G
+deﬁnes a permutation of the n elements of X (in fact, a transitive
+action). Thus there is a homomorphism s : G →Sn, and
+G/ ker(s)
+∼
+−→Image(s) ⊆Sn.
+It follows that ker(s) is of index |Image(s)| ≤|Sn| = n!. And ker(s) is
+a normal subgroup.
+GU4041
+Sylow’s theorems
+===== page 65 =====
+Rough statement of the Sylow theorems
+Some applications
+Proofs of the Sylow Theorems
+Proof of the “challenge”
+Challenge
+If G contains a subgroup H of index n then G contains a proper
+normal subgroup N of index at most n!; in fact, N ⊆H, so in
+particular N̸ = G.
+Proof.
+Consider the set X of left cosets G/H. Multiplication on the left by G
+deﬁnes a permutation of the n elements of X (in fact, a transitive
+action). Thus there is a homomorphism s : G →Sn, and
+G/ ker(s)
+∼
+−→Image(s) ⊆Sn.
+It follows that ker(s) is of index |Image(s)| ≤|Sn| = n!. And ker(s) is
+a normal subgroup.
+GU4041
+Sylow’s theorems

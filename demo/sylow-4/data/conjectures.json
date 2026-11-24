@@ -1,0 +1,29 @@
+{
+  "schema_version": 2,
+  "rows": [
+    {
+      "conjecture_id": "000000",
+      "statement": "设 G 为有限群，|G| = p^a·m，其中 p 是素数，a ≥ 0、m ≥ 1 是整数，且 p 不整除 m。记 n = p^a。则 (E) G 存在阶为 n 的子群；(C) 若 P、Q 是 G 的两个阶为 n 的子群，则存在 g ∈ G 使 Q = gPg⁻¹；(N) 若 n_p 表示 G 的阶为 n 的子群个数，则 n_p ≡ 1 (mod p) 且 n_p 整除 m。",
+      "negation_statement": "",
+      "form": "universal",
+      "testable": {},
+      "origin": "f-manuscript:manuscripts/F/f-proof-000000.md",
+      "status": "needs_evidence",
+      "experiment_ids": [],
+      "proof_experiment_id": "",
+      "counterexample_experiment_id": "",
+      "refusal_ref": "",
+      "promoted_to": {},
+      "known_lit_id": "",
+      "withdraw_reason": "",
+      "notes": "F 的稿命题（manuscripts/F/f-proof-000000.md）开稿时自动记账：这一条还没有可检验形式（缺 testable）—— 等 E 的实验或 B 的收录。\n[landed] stmt:000065（B 已收录进命题台账；猜想行状态不变 —— 2026-11-13 裁定 ①）",
+      "created_at": "2026-11-24T04:41:31+08:00",
+      "updated_at": "2026-11-24T05:17:43+08:00",
+      "created_by": "agent-F-sylow-prover-1",
+      "updated_by": "agent-B",
+      "registered_stmt_id": "000065",
+      "duplicate": true,
+      "duplicate_of": "000000"
+    }
+  ]
+}

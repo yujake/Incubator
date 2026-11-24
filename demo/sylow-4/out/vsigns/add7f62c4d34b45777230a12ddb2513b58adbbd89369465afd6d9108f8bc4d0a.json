@@ -1,0 +1,102 @@
+{
+  "artifact_path": "manuscripts/F/f-proof-000000.md",
+  "artifact_sha": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a",
+  "artifact_sha_rule": "`artifact_sha` = `proofregistry.proof_sha(proof_text)`，与台账行的 `proof_sha256`、连续计数的清零键同一个值；不是盘上那份 `.md` 的字节 sha",
+  "at": "2026-11-24T05:10:00+08:00",
+  "count": 3,
+  "counted_by": "sign_counting",
+  "envelope": {
+    "at": "2026-11-24T05:10:00+08:00",
+    "issued_by": "agent-V-V1",
+    "kind": "v-sign-issued",
+    "to": "secretary:F"
+  },
+  "ledger": "verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007",
+  "legacy": false,
+  "manuscript_write": {
+    "artifact": {
+      "bytes": 15338,
+      "checked": true,
+      "path": "manuscripts/F/f-proof-000000.md",
+      "producer": "agent-F-sylow-prover-1",
+      "registered": true,
+      "sha256": "36be2374f66fd8bc5960e186388dff7729a5839ab1b51948617cbaf51350f390",
+      "why": "签块落盘后重登记：sha256=36be2374f66f… bytes=15338"
+    },
+    "body_mismatch": false,
+    "body_sha256": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a",
+    "code": "",
+    "idempotent": false,
+    "line": 4,
+    "missing": false,
+    "path": "manuscripts/F/f-proof-000000.md",
+    "reading": {
+      "at": "2026-11-24T05:10:00+08:00",
+      "found": true,
+      "identity_state": "resolved",
+      "identity_why": "签块的手稿号 000000 与这一份稿相同",
+      "ledger": "verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007",
+      "manuscript_id": "000000",
+      "manuscript_key": "000000",
+      "mark": "- V 签：已签=true；判词=成立；连续=3/3；正文sha=add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a；时间=2026-11-24T05:10:00+08:00；签名者=secretary:F；台账=verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007；手稿号=000000",
+      "need": 3,
+      "problem": "",
+      "proof_sha256": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a",
+      "signed": true,
+      "signer": "secretary:F",
+      "statement_id": "",
+      "streak": 3,
+      "verdict": "成立"
+    },
+    "signed_sha256": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a",
+    "state": "written",
+    "why": "签块写进 `manuscripts/F/f-proof-000000.md` 第 4 行（连续 3/3）",
+    "written": true
+  },
+  "need": 3,
+  "objections": [],
+  "passes": [
+    {
+      "at": "2026-11-24T05:06:19+08:00",
+      "axis": "clean",
+      "object_path": "manuscripts/F/f-proof-000000.md",
+      "object_sha256": "a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9",
+      "proof_sha256": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a",
+      "review_call": "6a9465b92b66",
+      "review_pass": 1,
+      "round": 1,
+      "verdict": "成立",
+      "verification_id": "u-000005"
+    },
+    {
+      "at": "2026-11-24T05:07:56+08:00",
+      "axis": "clean",
+      "object_path": "manuscripts/F/f-proof-000000.md",
+      "object_sha256": "a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9",
+      "proof_sha256": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a",
+      "review_call": "6a9465b92b66",
+      "review_pass": 2,
+      "round": 2,
+      "verdict": "成立",
+      "verification_id": "u-000006"
+    },
+    {
+      "at": "2026-11-24T05:10:00+08:00",
+      "axis": "clean",
+      "object_path": "manuscripts/F/f-proof-000000.md",
+      "object_sha256": "a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9",
+      "proof_sha256": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a",
+      "review_call": "6a9465b92b66",
+      "review_pass": 3,
+      "round": 3,
+      "verdict": "成立",
+      "verification_id": "u-000007"
+    }
+  ],
+  "schema": "vsign/1",
+  "source_note": "passes 是逐转的读数（verification_id / at / proof_sha256 / why，另带 review_call 与 review_pass：同一 review_call 才是同一次送审的那几转，跨趟不拼票）；V 的回复全文不在本文件里 —— 去 verifications/<命题号>.jsonl#<verification_id> 读",
+  "statement_id": "",
+  "streak": 3,
+  "verdict": "成立",
+  "written_by": "secretary:F"
+}

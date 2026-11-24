@@ -1,0 +1,2 @@
+{"at": "2026-11-24T05:30:05+08:00", "first": true, "kind": "bind", "name": "H1", "owner": "t-000168", "role": "H", "seq": 1, "task_id": "t-000169", "task_text": "复审稿件 doc:000000（当前 status=revised、revision 已推进、五条 claim 刚改过引文格）。这一版只有一处改动：claim-1..claim-5 的 `citations` 各自从 [\"stmt:0000xx\",\"lit:000000\"/\"lit:000002\"] 改成只引对应的那一条在册命题（claim-1→stmt:000060、claim-2→stmt:0"}
+{"at": "2026-11-24T05:34:46+08:00", "kind": "retire", "name": "H1", "owner": "t-000168", "reason": "收工前自动收尾：静默且无未消项（R9FIX-D5）", "seq": 2, "task_id": "t-000169", "task_ids": ["t-000169"]}

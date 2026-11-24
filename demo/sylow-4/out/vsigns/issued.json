@@ -1,0 +1,61 @@
+{
+  "schema": "vsigns-issued/1",
+  "signs": [
+    {
+      "archived_at": "2026-11-24T04:02:11+08:00",
+      "archived_by": "agentflow.vsigns.archive",
+      "artifact_path": "manuscripts/B/b-proof-000002.md",
+      "artifact_sha": "5afd81fcbbfa6d6a176836d92bab296e17f37356899499235b7be5e7a3388de5",
+      "at": "2026-11-24T04:02:11+08:00",
+      "need": 3,
+      "statement_id": "000061",
+      "streak": 3,
+      "verdict": "成立"
+    },
+    {
+      "archived_at": "2026-11-24T04:10:52+08:00",
+      "archived_by": "agentflow.vsigns.archive",
+      "artifact_path": "manuscripts/B/b-proof-000000.md",
+      "artifact_sha": "08de50eb5a4794b570dd80291e069d614cc6a980846caba923fd2cdd0bb23bcf",
+      "at": "2026-11-24T04:10:52+08:00",
+      "need": 3,
+      "statement_id": "000060",
+      "streak": 3,
+      "verdict": "成立"
+    },
+    {
+      "archived_at": "2026-11-24T04:20:35+08:00",
+      "archived_by": "agentflow.vsigns.archive",
+      "artifact_path": "manuscripts/B/b-proof-000006.md",
+      "artifact_sha": "2544876623fbabb17638110309d585e0e355f3d19a250991d071965e27826736",
+      "at": "2026-11-24T04:20:35+08:00",
+      "need": 3,
+      "statement_id": "000063",
+      "streak": 3,
+      "verdict": "成立"
+    },
+    {
+      "archived_at": "2026-11-24T04:35:03+08:00",
+      "archived_by": "agentflow.vsigns.archive",
+      "artifact_path": "manuscripts/B/b-proof-000003.md",
+      "artifact_sha": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+      "at": "2026-11-24T04:35:03+08:00",
+      "need": 3,
+      "statement_id": "000062",
+      "streak": 3,
+      "verdict": "成立"
+    },
+    {
+      "archived_at": "2026-11-24T05:10:00+08:00",
+      "archived_by": "agentflow.vsigns.archive",
+      "artifact_path": "manuscripts/F/f-proof-000000.md",
+      "artifact_sha": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a",
+      "at": "2026-11-24T05:10:00+08:00",
+      "need": 3,
+      "statement_id": "",
+      "streak": 3,
+      "verdict": "成立"
+    }
+  ],
+  "updated_at": "2026-11-24T05:10:00+08:00"
+}

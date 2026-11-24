@@ -1,0 +1,52 @@
+{
+  "schema_version": 2,
+  "rows": [
+    {
+      "request_id": "r-000001",
+      "timestamp": "2026-11-23T15:00:00+08:00",
+      "topic": "local ingest: Sylow theorems references (4 PDFs in reference/)",
+      "mode": "topical",
+      "content_description": "工作区 reference/ 下由用户逐字点名的 4 份 Sylow 定理相关 PDF，逐份本地摄取、逐条判收，一批一次委托",
+      "done": true,
+      "submitted_by": "agent-A",
+      "claimed_by": null,
+      "lease_until": null,
+      "attempts": 1,
+      "result_lit_ids": [
+        "000000",
+        "000001",
+        "000002",
+        "000003"
+      ],
+      "last_error": null,
+      "outcome": "ok",
+      "priority": "medium",
+      "for_question_id": null,
+      "submit_note": "本地摄取委托：不是联网检索，候选来自 reference/ 目录",
+      "providers": [],
+      "submitted_instance": ""
+    },
+    {
+      "request_id": "r-000002",
+      "timestamp": "2026-11-24T05:17:46+08:00",
+      "topic": "设 G 为有限群，|G| = p^a·m（p 素数，(p,m)=1）。断言：(…",
+      "mode": "topical",
+      "content_description": "[q:000000] origin=agent-D-sylow-proof；研究问题：设 G 为有限群，|G| = p^a·m（p 素数，(p,m)=1）。断言：(E) G 存在阶为 p^a 的子群（p-Sylow 子群）；(C) G 的任两个 p-Sylow 子群共轭；(N) p-Sylow 子群的个数 n_p 满足 n_p ≡ 1 (mod p) 且 n_p | m。这三条是否全部成立？；需要检索的是：能补充该问题证据的文献（现有相关关系 0 条，其中 quote_verified=True 的 0 条）；触发的可核实判据：a_no_keyword_hit: 关键词 25 个，在 0 条相关关系的 quote/description 中命中数为 0（逐词命中：{'为有限群': 0, 'a·m': 0, '素数': 0, '断言': 0, '存在阶为': 0, '的子群': 0, 'Sylow': 0, '子群': 0, '的任两个': 0, '子群共轭': 0, '子群的个数': 0, '满足': 0, 'mod': 0, '这三条是否全部成立': 0, '群的': 0, '的个': 0, '个数': 0, '这三': 0, '三条': 0, '条是': 0, '是否': 0, '否全': 0, '全部': 0, '部成': 0, '成立': 0}）；b_low_degree_unverified: 相关概念度数 0 < 阈值 2，且 0 条关系里没有一条 quote_verified=True（连一条有原文支撑的关系都没有）",
+      "done": true,
+      "submitted_by": "agent-D",
+      "claimed_by": "agent-A",
+      "lease_until": null,
+      "attempts": 1,
+      "result_lit_ids": [],
+      "last_error": null,
+      "outcome": "no_results",
+      "priority": "medium",
+      "for_question_id": "000000",
+      "submit_note": "终局=no_results，意思是「本次没有收进新文献」，不是「这个方向没有文献」。原 topic 是中文题面（设 G 为有限群…断言 (E)(C)(N) 是否全部成立），按纪律换规范英文术语重查一次：topic=\"Sylow theorems conjugacy number of Sylow p-subgroups\", mode=topical, provider=openalex, description 里写明 existence / conjugacy / n_p ≡ 1 mod p 且 n_p | m 与 Hall-Gorenstein-Dummit-Foote-Wielandt。这一问真的发出去了（sources[0]=openalex status=ok，返回 15 条候选，新 15 / 库内已有 0），所以不是未查成。逐条看题名后没有一条属于要找的那一类经典 Sylow 文献：命中主要是 Character Theory of Finite Groups、Homotopy properties of the poset of nontrivial p-subgroups、Prime graph components、Characters of the Finite General Linear Groups、G-Algebras and Modular Representation Theory、Non-commuting graph——是表示论/子群偏序/素图方向，不是 Sylow 存在性-共轭-计数的自足出处；因此一条也没有 stage、没有判收，literature 仍为 lit:000000-000003 四行不变（本趟不开新委托、不收编新文件）。另按任务口径逐字记一句判断：r-000002 这条请求本就不该由关键词命中率自动开出——研究问题 q:000000 的三条断言已有自足证明与 V 签，缺的不是新文献而是关系行，机械判据 a_no_keyword_hit 用 25 个中文分词去匹配 quote，命中为 0 是分词口径的产物，不代表证据缺口。附带说明：这条判据的下游若仍需要逐字引文，本地已有 4 份 Sylow 文献可走 search.local 取页级摘录，不必出网。",
+      "providers": [
+        "openalex"
+      ],
+      "submitted_instance": ""
+    }
+  ]
+}

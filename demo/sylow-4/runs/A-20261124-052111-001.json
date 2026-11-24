@@ -1,0 +1,1994 @@
+{
+  "role": "A",
+  "task": "A：这一趟派给你的活是 —— 把唯一一条未闭环的检索请求 r-000002（由 D.consider 的机械判据自动开出）在这一趟里收口：用规范英文术语做一次检索（例如 \"Sylow theorems conjugacy number of Sylow p-subgroups\"），把结果落成该请求的终局 outcome（ok 或 no_results，都算合法终局），并在回执里给 request id、outcome 与一句话理由。**不要**开新委托、不要收编新文件、不要重做已经入库的 lit:000000–000003。这一条收口的意义只是让 search_requests 的未闭环计数归零；若你判断这条请求本就不该存在（Sylow 定理已有自足证明与 V 签），就在 outcome 的说明里逐字写清这一点，并把它标成终局即可。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "search_requests",
+          "limit": 20
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "search_requests",
+          "rows": [
+            {
+              "request_id": "r-000001",
+              "timestamp": "2026-11-23T15:00:00+08:00",
+              "topic": "local ingest: Sylow theorems references (4 PDFs in reference/)",
+              "mode": "topical",
+              "content_description": "工作区 reference/ 下由用户逐字点名的 4 份 Sylow 定理相关 PDF，逐份本地摄取、逐条判收，一批一次委托",
+              "done": true,
+              "submitted_by": "agent-A",
+              "claimed_by": null,
+              "lease_until": null,
+              "attempts": 1,
+              "result_lit_ids": [
+                "000000",
+                "000001",
+                "000002",
+                "000003"
+              ],
+              "last_error": null,
+              "outcome": "ok",
+              "priority": "medium",
+              "for_question_id": null,
+              "submit_note": "本地摄取委托：不是联网检索，候选来自 reference/ 目录",
+              "providers": [],
+              "submitted_instance": ""
+            },
+            {
+              "request_id": "r-000002",
+              "timestamp": "2026-11-24T05:17:46+08:00",
+              "topic": "设 G 为有限群，|G| = p^a·m（p 素数，(p,m)=1）。断言：(…",
+              "mode": "topical",
+              "content_description": "[q:000000] origin=agent-D-sylow-proof；研究问题：设 G 为有限群，|G| = p^a·m（p 素数，(p,m)=1）。断言：(E) G 存在阶为 p^a 的子群（p-Sylow 子群）；(C) G 的任两个 p-Sylow 子群共轭；(N) p-Sylow 子群的个数 n_p 满足 n_p ≡ 1 (mod p) 且 n_p | m。这三条是否全部成立？；需要检索的是：能补充该问题证据的文献（现有相关关系 0 条，其中 quote_verified=True 的 0 条）；触发的可核实判据：a_no_keyword_hit: 关键词 25 个，在 0 条相关关系的 quote/description 中命中数为 0（逐词命中：{'为有限群': 0, 'a·m': 0, '素数': 0, '断言': 0, '存在阶为': 0, '的子群': 0, 'Sylow': 0, '子群': 0, '的任两个': 0, '子群共轭': 0, '子群的个数': 0, '满足': 0, 'mod': 0, '这三条是否全部成立': 0, '群的': 0, '的个': 0, '个数': 0, '这三': 0, '三条': 0, '条是': 0, '是否': 0, '否全': 0, '全部': 0, '部成': 0, '成立': 0}）；b_low_degree_unverified: 相关概念度数 0 < 阈值 2，且 0 条关系里没有一条 quote_verified=True（连一条有原文支撑的关系都没有）",
+              "done": false,
+              "submitted_by": "agent-D",
+              "claimed_by": null,
+              "lease_until": null,
+              "attempts": 0,
+              "result_lit_ids": [],
+              "last_error": null,
+              "outcome": null,
+              "priority": "medium",
+              "for_question_id": "000000",
+              "submit_note": "",
+              "providers": [],
+              "submitted_instance": ""
+            }
+          ],
+          "total": 2,
+          "returned": 2,
+          "limit": 20,
+          "offset": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "search_requests",
+          "total": 2,
+          "returned": 2,
+          "offset": 0,
+          "limit": 20
+        },
+        "multi_call": {
+          "turn_index": 0,
+          "call_index": 0,
+          "calls": 2,
+          "step_index": 0
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 55808,
+        "prompt_cache_miss_tokens": 1608,
+        "tokens_in": 57416,
+        "tokens_out": 165,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000158"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "lit.stage_list",
+        "args": {
+          "request_id": "*",
+          "status": "pending"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "lit.stage_list",
+        "ok": true,
+        "data": {
+          "request_id": "*",
+          "current_request_id": "",
+          "batch": null,
+          "status": "admitted",
+          "count": 0,
+          "counts": {
+            "pending": 0,
+            "withdrawn": 0,
+            "rejected": 0,
+            "qualified": 0,
+            "admitted": 4,
+            "cleared": 0
+          },
+          "duplicate_rows": 0,
+          "duplicate_groups": [],
+          "gaps": [],
+          "rows": [],
+          "total_all_delegations": 4,
+          "note": "默认只返回当前委托的行（`request_id` = 最近一次暂存的那次委托）；查历史请显式给 request_id（`*` = 全部）。状态四档：`pending` 待裁 / `qualified` 判收未注册（无号） / `admitted` 已注册（带 lit_id） / `rejected` 拒收；历史的 `cleared` 读成 rejected+over_cap、`withdrawn` 读成 rejected+withdrawn_by_reviewer（撤掉的槽位仍在，序号不复用）。本委托还有 0 条没判：只要还大于 0，`lit.admit_all` 就整批拒绝（`lit.admit` 逐条判收不受它拦）。判收（`lit.admit`）**不发号**：正式文献号由 `lit.admit_all` 在提交那一刻批量注册并回填，随后清表（`cleared_at` 打上、整份行归档在 data/archive/lit_candidates/archive-<request_id>.jsonl）。A 的 `done=True` 只表示「这一条检索请求跑完了」，不等于「清表」；收工闸数的是**全表**，不是当前委托、也不是那一条检索请求。**没有正文就不许判收**（业主 2026-11-20）：「通过」的每一条都必须真的读到正文。标 `readable` 之前先 `text.extract(path=<全文路径>, lit_id=\"cand:<槽位>\")` 抽出正文、再用 `fs.read` 读那份 `.txt`，`lit.admit` 才认；`content_read` 那一格是机器现算的（抽读回执 + 版本 + `fs.read` + 不只摘要），不是自报。仅题录（`metadata_only`）、抽取失败（`extract_failed`）、没下载 / 只有摘要的候选：**不许判收、不许入库** —— 只能把题录留在候选记录里并写清为什么没读到（`lit.stage_reject` + 受控理由码：没下到 / 抽不出 / 只有题录或摘要）。摘要最多用于初排与去重，它不是正文：只抽到摘要的，按 `abstract_only` 拒。全表（跨委托）没有待裁的行（4 行候选里 0 条 pending）。"
+        },
+        "error": "",
+        "meta": {},
+        "warn": "这一步给了 2 条调用，已按顺序逐条：第 1 条 table.list 成功：2；第 2 条 lit.stage_list 成功。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 0,
+          "call_index": 1,
+          "calls": 2,
+          "step_index": 1,
+          "summary": "这一步给了 2 条调用，已按顺序逐条：第 1 条 table.list 成功：2；第 2 条 lit.stage_list 成功。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 0,
+            "calls": 2,
+            "items": 2,
+            "steps": [
+              0,
+              1
+            ],
+            "executed": 2,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000158"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "search.literature",
+        "args": {
+          "topic": "Sylow theorems conjugacy number of Sylow p-subgroups",
+          "mode": "topical",
+          "limit": 10,
+          "description": "Sylow existence, conjugacy of Sylow p-subgroups, and the congruence n_p ≡ 1 mod p with n_p | m, for finite groups; classical references (Hall, Gorenstein, Dummit-Foote, Wielandt)"
+        },
+        "why": "r-000002 原 topic 是中文题面，按纪律改用规范英文术语查一次"
+      },
+      "result": {
+        "tool": "search.literature",
+        "ok": true,
+        "data": {
+          "provider": "openalex",
+          "mode": "topical",
+          "topic": "Sylow theorems conjugacy number of Sylow p-subgroups",
+          "description": "Sylow existence, conjugacy of Sylow p-subgroups, and the congruence n_p ≡ 1 mod p with n_p | m, for finite groups; classical references (Hall, Gorenstein, Dummit-Foote, Wielandt)",
+          "limit": 10,
+          "count": 15,
+          "new_count": 15,
+          "existing_count": 0,
+          "unknown_count": 0,
+          "batch_duplicate_count": 0,
+          "store_checked": true,
+          "store_read_error": null,
+          "existing_table_size": 4,
+          "candidates": [
+            {
+              "title": "Character Theory of Finite Groups",
+              "year": 1976,
+              "doi": "10.1016/s0079-8169(08)x6037-4",
+              "type_code": "M",
+              "authors": [],
+              "venue": "Pure and applied mathematics",
+              "language": "en",
+              "summary": "",
+              "pdf_url": "https://www.sciencedirect.com/science/article/pii/S0079816908605243/pdfft?md5=e81db7817ef41060bb0db5f57cb0268f&pid=1-s2.0-S0079816908605243-main.pdf",
+              "landing_url": "https://doi.org/10.1016/s0079-8169(08)x6037-4",
+              "provider": "openalex",
+              "dedup_key": "doi:10.1016/s0079-8169(08)x6037-4",
+              "dedup_keys": [
+                "doi:10.1016/s0079-8169(08)x6037-4",
+                "title:character theory of finite groups|1976",
+                "title:character theory of finite groups|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [],
+              "channel": "foundational",
+              "cited_by_count": 1506,
+              "topic_selfcheck": null
+            },
+            {
+              "title": "Homotopy properties of the poset of nontrivial p-subgroups of a group",
+              "year": 1978,
+              "doi": "10.1016/0001-8708(78)90058-0",
+              "type_code": "J",
+              "authors": [
+                "Daniel G. Quillen"
+              ],
+              "venue": "Advances in Mathematics",
+              "language": "en",
+              "summary": "",
+              "pdf_url": "https://www.sciencedirect.com/science/article/pii/0001870878900580/pdf",
+              "landing_url": "https://doi.org/10.1016/0001-8708(78)90058-0",
+              "provider": "openalex",
+              "dedup_key": "doi:10.1016/0001-8708(78)90058-0",
+              "dedup_keys": [
+                "doi:10.1016/0001-8708(78)90058-0",
+                "title:homotopy properties of the poset of nontrivial p subgroups of a group|1978",
+                "title:homotopy properties of the poset of nontrivial p subgroups of a group|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [],
+              "channel": "foundational",
+              "cited_by_count": 638,
+              "topic_selfcheck": null
+            },
+            {
+              "title": "Prime graph components of finite groups",
+              "year": 1981,
+              "doi": "10.1016/0021-8693(81)90218-0",
+              "type_code": "J",
+              "authors": [
+                "Julian Scott Williams"
+              ],
+              "venue": "Journal of Algebra",
+              "language": "en",
+              "summary": "",
+              "pdf_url": "https://www.sciencedirect.com/science/article/pii/0021869381902180/pdf",
+              "landing_url": "https://doi.org/10.1016/0021-8693(81)90218-0",
+              "provider": "openalex",
+              "dedup_key": "doi:10.1016/0021-8693(81)90218-0",
+              "dedup_keys": [
+                "doi:10.1016/0021-8693(81)90218-0",
+                "title:prime graph components of finite groups|1981",
+                "title:prime graph components of finite groups|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [],
+              "channel": "foundational",
+              "cited_by_count": 634,
+              "topic_selfcheck": null
+            },
+            {
+              "title": "The Characters of the Finite General Linear Groups",
+              "year": 1955,
+              "doi": "10.1090/s0002-9947-1955-0072878-2",
+              "type_code": "J",
+              "authors": [
+                "J. A. Green"
+              ],
+              "venue": "Transactions of the American Mathematical Society",
+              "language": "en",
+              "summary": "Introduction. In this paper we show how to calculate the irreducible characters of the group GL(n, q) of all nonsingular matrices of degree n with coefficients in the finite field of q elements. These characters have been given for n = 2 by H. Jordan [8], Schur [10], and others, and for n =3 and n =4 by Steinberg [12], who has also [13] done important work in the general case. We are concerned here with characters, that is, characters of representations by matrices with complex coefficients. Let Xi, * * *, XA be the distinct absolutely irreducible ordinary characters of a group 5 of order g. By a of 6 (often called a generalised character or difference character) we mean a class-function 4 on 5 of the form",
+              "pdf_url": "https://www.ams.org/tran/1955-080-02/S0002-9947-1955-0072878-2/S0002-9947-1955-0072878-2.pdf",
+              "landing_url": "https://doi.org/10.1090/s0002-9947-1955-0072878-2",
+              "provider": "openalex",
+              "dedup_key": "doi:10.1090/s0002-9947-1955-0072878-2",
+              "dedup_keys": [
+                "doi:10.1090/s0002-9947-1955-0072878-2",
+                "title:the characters of the finite general linear groups|1955",
+                "title:the characters of the finite general linear groups|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [],
+              "channel": "foundational",
+              "cited_by_count": 610,
+              "topic_selfcheck": null
+            },
+            {
+              "title": "Nonsolvable finite groups all of whose local subgroups are solvable",
+              "year": 1968,
+              "doi": "10.1090/s0002-9904-1968-11953-6",
+              "type_code": "J",
+              "authors": [
+                "John G. Thompson"
+              ],
+              "venue": "Bulletin of the American Mathematical Society",
+              "language": "en",
+              "summary": "NONSOLVABLE FINITE GROUPS 385tinct involutions is a dihedral group.A four-group is a dihedral group of order 4.The techniques and results of 0 are used freely here.The terminology and notation of this paper extend that of 0.Artin's notation [4] for simple groups is used.In addition, Sz(q) is the group of order q 2 (q 2 + l)(q -l) discovered by Suzuki [37], Mu is the Mathieu group of order 7920, and S w , A n denote the symmetric group and alternating group on n letters.The group of inner automorphisms of the group X is I(X).The number of conjugacy classes of involutions of X is i(%).If 2Ï, 93 are permutation groups, 2t 3 93 is the wreath product of 21 and 93, and if 2Ï, 93 have not been presented as permutation groups, 21 3 93 is the wreath product of the regular representations of 21, 93.This is the regularity convention [24] and will be used on occasion.Let © = $/8 be a section of the group X.There is thus a homomorphism of N(^)C\\N(2) into Aut(@) induced by conjugation.The image of N(®)C\\N(%) in Aut(@) is denoted 4*03).More generally, if Tl is a subgroup of @, A m (<g>) denotes the image of %Jir\\N(®)r\\N(%) in Ae(©).H X is in iV($)niV(S) and S = %K is in ©, then [Z, S] denotes…",
+              "pdf_url": "https://www.ams.org/bull/1968-74-03/S0002-9904-1968-11953-6/S0002-9904-1968-11953-6.pdf",
+              "landing_url": "https://doi.org/10.1090/s0002-9904-1968-11953-6",
+              "provider": "openalex",
+              "dedup_key": "doi:10.1090/s0002-9904-1968-11953-6",
+              "dedup_keys": [
+                "doi:10.1090/s0002-9904-1968-11953-6",
+                "title:nonsolvable finite groups all of whose local subgroups are solvable|1968",
+                "title:nonsolvable finite groups all of whose local subgroups are solvable|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [],
+              "channel": "foundational",
+              "cited_by_count": 582,
+              "topic_selfcheck": null
+            },
+            {
+              "title": "Character Theory of Finite Groups",
+              "year": 1998,
+              "doi": "10.1515/9783110809237",
+              "type_code": "M",
+              "authors": [
+                "Bertram Huppert"
+              ],
+              "venue": "De Gruyter eBooks",
+              "language": "en",
+              "summary": "Notations and results from group theory representations and representation-modules simple and semisimple modules orthogonality relations the group algebra characters of abelian groups degrees of irreducible representations characters of some small groups products of representation and characters on the number of solutions gm =1 in a group a theorem of A. Hurwitz on multiplicative sums of squares permutation representations and characters the class number real characters and real representations Coprime action groups pa qb Fronebius groups induced characters Brauer's permutation lemma and Glauberman's character correspondence Clifford theory 1 projective representations Clifford theory 2 extension of characters Degree pattern and group structure monomial groups representation of wreath products characters of p-groups groups with a small number of character degrees linear groups the degree graph groups all of whose character degrees are primes two special degree problems lengths of conjugacy classes R. Brauer's theorem on the character ring applications of Brauer's theorems Artin's induction theorem splitting fields the Schur index integral representations three arithmetical…",
+              "pdf_url": null,
+              "landing_url": "https://doi.org/10.1515/9783110809237",
+              "provider": "openalex",
+              "dedup_key": "doi:10.1515/9783110809237",
+              "dedup_keys": [
+                "doi:10.1515/9783110809237",
+                "title:character theory of finite groups|1998",
+                "title:character theory of finite groups|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [],
+              "channel": "foundational",
+              "cited_by_count": 480,
+              "topic_selfcheck": null
+            },
+            {
+              "title": "G-Algebras and Modular Representation Theory",
+              "year": 1995,
+              "doi": null,
+              "type_code": "M",
+              "authors": [
+                "Jacques Thévenaz"
+              ],
+              "venue": "Infoscience (Ecole Polytechnique Fédérale de Lausanne)",
+              "language": "en",
+              "summary": "This book presents a new approach to the modular representation theory of a finite group G. Its aim is to provide a comprehensive treatment of the theory of G-algebras and to show how this theory is used to solve various problems in representation theory. Significant results have been obtained by means of this approach, which also sheds new light on modular representation theory. So it appears that a need has arisen for an expository book on the subject. I hope to meet this need and to introduce a wider audience to these new ideas.",
+              "pdf_url": "https://infoscience.epfl.ch/bitstreams/403da7d5-c09b-40a9-9fd3-609d43f67517/download",
+              "landing_url": "https://infoscience.epfl.ch/handle/20.500.14299/32761",
+              "provider": "openalex",
+              "dedup_key": "title:g algebras and modular representation theory|1995",
+              "dedup_keys": [
+                "title:g algebras and modular representation theory|1995",
+                "title:g algebras and modular representation theory|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [],
+              "channel": "foundational",
+              "cited_by_count": 432,
+              "topic_selfcheck": null
+            },
+            {
+              "title": "Twisted Bundles and Admissible Covers",
+              "year": 2003,
+              "doi": "10.1081/agb-120022434",
+              "type_code": "J",
+              "authors": [
+                "Dan Abramovich",
+                "Alessio Corti",
+                "Angelo Vistoli"
+              ],
+              "venue": "Communications in Algebra",
+              "language": "en",
+              "summary": "We study the structure of the stacks of twisted stable maps to the classifying stack of a finite group G—which we call the stack of twisted G-covers, or twisted G-bundles. For a suitable group Gwe show that the substack corresponding to admissible G-covers is a smooth projective fine moduli space.",
+              "pdf_url": "https://arxiv.org/pdf/math/0106211",
+              "landing_url": "https://doi.org/10.1081/agb-120022434",
+              "provider": "openalex",
+              "dedup_key": "doi:10.1081/agb-120022434",
+              "dedup_keys": [
+                "doi:10.1081/agb-120022434",
+                "title:twisted bundles and admissible covers|2003",
+                "title:twisted bundles and admissible covers|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [],
+              "channel": "foundational",
+              "cited_by_count": 419,
+              "topic_selfcheck": null
+            },
+            {
+              "title": "Non-commuting graph of a group",
+              "year": 2006,
+              "doi": "10.1016/j.jalgebra.2006.02.015",
+              "type_code": "J",
+              "authors": [
+                "Aliréza Abdollahi",
+                "Saieed Akbari",
+                "Hamid Reza Maimani"
+              ],
+              "venue": "Journal of Algebra",
+              "language": "en",
+              "summary": "",
+              "pdf_url": "https://www.sciencedirect.com/science/article/pii/S002186930600113X/pdf",
+              "landing_url": "https://doi.org/10.1016/j.jalgebra.2006.02.015",
+              "provider": "openalex",
+              "dedup_key": "doi:10.1016/j.jalgebra.2006.02.015",
+              "dedup_keys": [
+                "doi:10.1016/j.jalgebra.2006.02.015",
+                "title:non commuting graph of a group|2006",
+                "title:non commuting graph of a group|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [],
+              "channel": "foundational",
+              "cited_by_count": 399,
+              "topic_selfcheck": null
+            },
+            {
+              "title": "The Markov chain Monte Carlo revolution",
+              "year": 2008,
+              "doi": "10.1090/s0273-0979-08-01238-x",
+              "type_code": "J",
+              "authors": [
+                "Persi W. Diaconis"
+              ],
+              "venue": "Bulletin of the American Mathematical Society",
+              "language": "en",
+              "summary": "The use of simulation for high-dimensional intractable computations has revolutionized applied mathematics. Designing, improving and understanding the new tools leads to (and leans on) fascinating mathematics, from representation theory through micro-local analysis.",
+              "pdf_url": "https://www.ams.org/bull/2009-46-02/S0273-0979-08-01238-X/S0273-0979-08-01238-X.pdf",
+              "landing_url": "https://doi.org/10.1090/s0273-0979-08-01238-x",
+              "provider": "openalex",
+              "dedup_key": "doi:10.1090/s0273-0979-08-01238-x",
+              "dedup_keys": [
+                "doi:10.1090/s0273-0979-08-01238-x",
+                "title:the markov chain monte carlo revolution|2008",
+                "title:the markov chain monte carlo revolution|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [],
+              "channel": "foundational",
+              "cited_by_count": 380,
+              "topic_selfcheck": null
+            },
+            {
+              "title": "Permutation groups of prime power degree and $p$-complements",
+              "year": 2026,
+              "doi": "10.21538/0134-4889-2026-32-4-fon-02",
+              "type_code": "J",
+              "authors": [
+                "Gareth Aneurin Jones",
+                "Sezgin Sezer"
+              ],
+              "venue": "Trudy Instituta Matematiki i Mekhaniki UrO RAN",
+              "language": "en",
+              "summary": "First Online 2026 MSC: Primary 20B05, secondary 11N32, 20B10, 20B15, 20D20 https://doi.org/10.21538/0134-4889-2026-32-4-fon-02 Full Text Gareth A. Jones and Sezgin Sezer. Permutation groups of prime power degree and $p$-complements. Extending earlier work of Guralnick and of Cai and Zhang, we classify the almost simple groups which have transitive permutation representations",
+              "pdf_url": "http://journal.imm.uran.ru/sites/default/files/content/32_4/TrIMMUrORAN_2026-32-4-fon-02.pdf",
+              "landing_url": "https://doi.org/10.21538/0134-4889-2026-32-4-fon-02",
+              "provider": "openalex",
+              "dedup_key": "doi:10.21538/0134-4889-2026-32-4-fon-02",
+              "dedup_keys": [
+                "doi:10.21538/0134-4889-2026-32-4-fon-02",
+                "title:permutation groups of prime power degree and p complements|2026",
+                "title:permutation groups of prime power degree and p complements|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [],
+              "channel": "frontier",
+              "cited_by_count": 2,
+              "topic_selfcheck": null
+            },
+            {
+              "title": "Nonsolvable critical groups with the spectrum of $S_{10}$",
+              "year": 2026,
+              "doi": "10.48550/arxiv.2611.25766",
+              "type_code": "EB",
+              "authors": [
+                "D. V. Lytkina",
+                "V. D. Mazurov"
+              ],
+              "venue": "arXiv (Cornell University)",
+              "language": "en",
+              "summary": "We classify the nonsolvable finite groups that are critical with respect to the spectrum of the symmetric group $S_{10}$. Up to isomorphism, there are exactly two such groups: $S_{10}$ and $(A_9\\times C_3)\\rtimes C_2$, where the involution acts on $A_9$ by conjugation by a transposition and on $C_3$ by inversion. The quotient of any nonsolvable group with this spectrum by its solvable radical is almost simple. All possible simple socles are treated without assuming that the radical is nilpotent. The final cases, $L_3(4)$ and $A_6$, are excluded using the canonical subgroup $K=[R(G)\\cap G^\\infty,G^\\infty]$, actions on chief factors, and the required element orders $9,20,30$. In the $A_6$ case, the final contradiction is the existence of an element of order $16$. Reproducible certificates accompany the character-table and matrix calculations.",
+              "pdf_url": "https://arxiv.org/pdf/2611.25766",
+              "landing_url": "https://doi.org/10.48550/arxiv.2611.25766",
+              "provider": "openalex",
+              "dedup_key": "doi:10.48550/arxiv.2611.25766",
+              "dedup_keys": [
+                "doi:10.48550/arxiv.2611.25766",
+                "title:nonsolvable critical groups with the spectrum of s 10|2026",
+                "title:nonsolvable critical groups with the spectrum of s 10|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [],
+              "channel": "frontier",
+              "cited_by_count": 0,
+              "topic_selfcheck": null
+            },
+            {
+              "title": "Subgroups with all finite preimages isomorphic are conjugate",
+              "year": 2026,
+              "doi": "10.1112/blms.70544",
+              "type_code": "J",
+              "authors": [
+                "Ido Karshon",
+                "Alexander Lubotzky",
+                "D. B. McReynolds",
+                "Alan W. Reid",
+                "Mark Shusterman"
+              ],
+              "venue": "Bulletin of the London Mathematical Society",
+              "language": "en",
+              "summary": "We show that for nonconjugate subgroups and of a finite group , there exists an extension of (by a finite group) in which the preimages of and are not isomorphic. This allows us to show that ‐coset equivalent subgroups of a finite group are not necessarily isomorphic, answering a question of Dipendra Prasad. We also indicate connections to profinite rigidity, anabelian geometry, mapping class groups, and nonarithmetic lattices in Lie groups.",
+              "pdf_url": "https://arxiv.org/pdf/2602.15463",
+              "landing_url": "https://doi.org/10.1112/blms.70544",
+              "provider": "openalex",
+              "dedup_key": "doi:10.1112/blms.70544",
+              "dedup_keys": [
+                "doi:10.1112/blms.70544",
+                "title:subgroups with all finite preimages isomorphic are conjugate|2026",
+                "title:subgroups with all finite preimages isomorphic are conjugate|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [],
+              "channel": "frontier",
+              "cited_by_count": 0,
+              "topic_selfcheck": null
+            },
+            {
+              "title": "On primes not adjacent to $2$ in the prime graphs of almost simple groups",
+              "year": 2026,
+              "doi": "10.48550/arxiv.2611.23766",
+              "type_code": "EB",
+              "authors": [
+                "M. A. Grechkoseeva",
+                "Anatoly S. Kondrat'ev",
+                "Nanying Yang"
+              ],
+              "venue": "arXiv (Cornell University)",
+              "language": "en",
+              "summary": "The prime graph $GK(G)$ of a finite group $G$ is the graph whose vertices are primes dividing the order of $G$ and in which two distinct primes $r$ and $s$ are adjacent if and only if $G$ has an element of order $rs$. The $2$-independence number of $GK(G)$ is the maximal size of independent vertex subsets in $GK(G)$ containing the vertex~$2$. We determine all almost simple groups whose prime graph has a vertex $r$ not adjacent to $2$ and find the $2$-independence numbers of all almost simple groups.",
+              "pdf_url": "https://arxiv.org/pdf/2611.23766",
+              "landing_url": "https://doi.org/10.48550/arxiv.2611.23766",
+              "provider": "openalex",
+              "dedup_key": "doi:10.48550/arxiv.2611.23766",
+              "dedup_keys": [
+                "doi:10.48550/arxiv.2611.23766",
+                "title:on primes not adjacent to 2 in the prime graphs of almost simple groups|2026",
+                "title:on primes not adjacent to 2 in the prime graphs of almost simple groups|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [],
+              "channel": "frontier",
+              "cited_by_count": 0,
+              "topic_selfcheck": null
+            },
+            {
+              "title": "Dyson's Tenfold Way, Revisited",
+              "year": 2026,
+              "doi": "10.48550/arxiv.2611.24427",
+              "type_code": "EB",
+              "authors": [
+                "Dmitriy Rumynin",
+                "James Taylor"
+              ],
+              "venue": "arXiv (Cornell University)",
+              "language": "en",
+              "summary": "In this work, we study semilinear representations of groups acting on degree two Galois extensions. Our results include a classification of irreducible semilinear representations, which generalises Dyson's Tenfold Way. Using this, we completely describe the semilinear representation theory of certain groups, such as symmetric groups, and of finite groups over cyclotomic fields. We also prove many results concerning semilinear representations over $\\mathbb{C}$, which includes an induction theorem which simultaneously generalises Brauer's Induction Theorem and Serre's Induction Theorem. We are also interested in applications of our classification theorem to crystallography, and include a detailed study of the semilinear representation theory of magnetic wallpaper groups.",
+              "pdf_url": "https://arxiv.org/pdf/2611.24427",
+              "landing_url": "https://doi.org/10.48550/arxiv.2611.24427",
+              "provider": "openalex",
+              "dedup_key": "doi:10.48550/arxiv.2611.24427",
+              "dedup_keys": [
+                "doi:10.48550/arxiv.2611.24427",
+                "title:dyson s tenfold way revisited|2026",
+                "title:dyson s tenfold way revisited|*"
+              ],
+              "existing": false,
+              "existing_lit_id": null,
+              "dedup_hit_key": null,
+              "batch_duplicate": false,
+              "is_new": true,
+              "sources": [],
+              "channel": "frontier",
+              "cited_by_count": 0,
+              "topic_selfcheck": null
+            }
+          ],
+          "elapsed_s": 3.532,
+          "diagnostics": {
+            "stats": {
+              "requests": 3,
+              "items": 20,
+              "parse_errors": 0,
+              "filtered_out": 0,
+              "phrase_fallbacks": 2,
+              "phrase_fallbacks_deduped": 1,
+              "channel_errors": 0,
+              "last_resort_fetches": 0
+            },
+            "last_query_text": {
+              "foundational": "Sylow theorems conjugacy number Sylow p-subgroups",
+              "frontier": "Sylow theorems conjugacy number Sylow p-subgroups"
+            },
+            "last_filter_notes": {
+              "no_note": 20
+            },
+            "last_filtered_out": 0,
+            "last_phrase_fallbacks": {
+              "foundational": {
+                "phrase": "\"Sylow theorems conjugacy number of Sylow p-subgroups\"",
+                "terms": "Sylow theorems conjugacy number Sylow p-subgroups",
+                "count": 10
+              },
+              "frontier": {
+                "phrase": "\"Sylow theorems conjugacy number of Sylow p-subgroups\"",
+                "terms": "Sylow theorems conjugacy number Sylow p-subgroups",
+                "count": 10,
+                "deduped": true
+              }
+            },
+            "last_channel_errors": {},
+            "last_topicality": "TopicalityReport(provider='openalex', mode='topical', state='not_precise', detail=(TopicalityVerdict(title='Character Theory of Finite Groups', filter_note='', verdict=None), TopicalityVerdict(title='Homotopy properties of the poset of nontrivial p-subgroups of a group', filter_note='', verdict=None), TopicalityVerdict(title='Prime graph components of finite groups', filter_note='', verdict=None), TopicalityVerdict(title='The Characters of the Finite General Linear Groups', filter_note='', verdict=None), TopicalityVerdict(title='Nonsolvable finite groups all of whose local subgroups are solvable', filter_note='', verdict=None), TopicalityVerdict(title='Character Theory of Finite Groups', filter_note='', verdict=None), TopicalityVerdict(title='G-Algebras and Modular Representation Theory', filter_note='', verdict=None), TopicalityVerdict(title='Twisted Bundles and Admissible Covers', filter_note='', verdict=None), TopicalityVerdict(title='Non-commuting graph of a group', filter_note='', verdict=None), TopicalityVerdict(title='The Markov chain Monte Carlo revolution', filter_note='', verdict=None), TopicalityVerdict(title='Permutation groups of prime power degree and $p$-complements', filter_note='', verdict=None), TopicalityVerdict(title='Nonsolvable critical groups with the spectrum of $S_{10}$', filter_note='', verdict=None), TopicalityVerdict(title='Subgroups with all finite preimages isomorphic are conjugate', filter_note='', verdict=None), TopicalityVerdict(title='On primes not adjacent to $2$ in the prime graphs of almost simple groups', filter_note='', verdict=None), TopicalityVerdict(title=\"Dyson's Tenfold Way, Revisited\", filter_note='', verdict=None), TopicalityVerdict(title='Almost all vertex-transitive graphs and digraphs are Cayley', filter_note='', verdict=None), TopicalityVerdict(title='Open Homomorphisms between $m$-step Solvable Galois Groups of Number Fields', filter_note='', verdict=None), TopicalityVerdict(title='Self-adjoint skew quartics, symplectic monodromy, and zeta functions', filter_note='', verdict=None), TopicalityVerdict(title='Semisimplicity of Brauer algebras associated with finite Coxeter types', filter_note='', verdict=None), TopicalityVerdict(title='A Normal Form for Invertible Semilinear Maps and the Category of Isocrystals Over a Finite Field', filter_note='', verdict=None)), refusal_reason='', query_notes=('phrase_zero_recall_fallback[foundational]：整串短语零召回 ⇒ 改词项检索（10 条）', 'phrase_zero_recall_fallback[frontier]：整串短语零召回 ⇒ 改词项检索（10 条）'))",
+            "last_query_provenance": [
+              {
+                "provider": "openalex",
+                "mode": "topical",
+                "query_text": "Sylow theorems conjugacy number of Sylow p-subgroups Sylow existence, conjugacy of Sylow p-subgroups, and the congruence n_p ≡ 1 mod p with n_p | m, for finite groups; classical references (Hall, Gorenstein, Dummit-Foote, Wielandt)",
+                "state": "applicable_as_is",
+                "dispatched": true,
+                "reason": ""
+              }
+            ]
+          },
+          "providers_requested": null,
+          "sources": [
+            {
+              "name": "openalex",
+              "status": "ok",
+              "count": 15,
+              "error_kind": "",
+              "error": "",
+              "delivered": true,
+              "refused": false
+            }
+          ],
+          "source_count": 1,
+          "source_failures": [],
+          "source_refusals": [],
+          "cost": {
+            "provider_calls": 1,
+            "elapsed_s": 3.532
+          },
+          "warnings": []
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 56576,
+        "prompt_cache_miss_tokens": 2868,
+        "tokens_in": 59444,
+        "tokens_out": 1118,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000158"
+    },
+    {
+      "index": 3,
+      "shape": "tool",
+      "payload": {
+        "name": "table.update",
+        "args": {
+          "table": "search_requests",
+          "id": "r-000002",
+          "patch": {
+            "outcome": "ok",
+            "done": true,
+            "attempts": 1,
+            "result_lit_ids": [],
+            "submit_note": "终局：ok（这一问发出去了、上游有回应，15 条候选）。原 topic 是中文题面「设 G 为有限群…断言 (E)(C)(N) 是否全部成立」，按纪律换成规范英文术语再查一次：topic=\"Sylow theorems conjugacy number of Sylow p-subgroups\"，mode=topical，provider=openalex，15 条 / 新 15 条 / 库内已有 0 条重复。逐条看题名与主题：命中的是 Character Theory of Finite Groups、Homotopy properties of the poset of nontrivial p-subgroups、Prime graph components、The Characters of the Finite General Linear Groups、G-Algebras and Modular Representation Theory、Non-commuting graph of a group 等 —— 属于特征标理论 / p-子群偏序集同伦型 / 素图 / 模表示论，不是「Sylow 存在·共轭·n_p ≡ 1 mod p 且 n_p | m」这一类的直接文献，判为与本次检索无关（是「这一条没进结果」，不是「这篇文献不存在」）。故本轮未收编任何新文件、未开新候选槽、未改动 lit:000000–000003。另附一句判断：这一条请求本就不该以这个形状存在 —— Sylow 三条定理在已入库的 lit:000000–000003 之外本身即自足可证（教科书级标准证明，无需外部证据支撑），D 侧机械判据 a_no_keyword_hit / b_low_degree_unverified 的触发原因正是「该问题的关系图尚未由 B 收编落行」，那是收编侧的事，不是缺文献；因此把它标成终局 ok 并说明这一点，未闭环计数归零。",
+            "last_error": null
+          }
+        },
+        "why": "把 r-000002 落成终局：一次规范英文术语检索已发出且上游有回应，结果说明写清未收编的理由与「这条请求本不该以这个形状存在」的判断"
+      },
+      "result": {
+        "tool": "table.update",
+        "ok": false,
+        "data": null,
+        "error": "search_requests 行校验失败：outcome=ok 时 result_lit_ids 不能为空",
+        "meta": {
+          "table": "search_requests",
+          "id": "r-000002",
+          "kind": "validation"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 58624,
+        "prompt_cache_miss_tokens": 3718,
+        "tokens_in": 62342,
+        "tokens_out": 1203,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000158"
+    },
+    {
+      "index": 4,
+      "shape": "tool",
+      "payload": {
+        "name": "table.schema",
+        "args": {
+          "table": "search_requests"
+        },
+        "why": "上一次 table.update 被行校验拒（outcome=ok 时 result_lit_ids 不能为空），先读该表受控词表再定终局档"
+      },
+      "result": {
+        "tool": "table.schema",
+        "ok": true,
+        "data": {
+          "tables": {
+            "search_requests": {
+              "file": "search_requests.json",
+              "primary_key": "request_id",
+              "id_kind": "request",
+              "uses_id_counter": false,
+              "fields": [
+                {
+                  "name": "request_id",
+                  "type": "str",
+                  "required": true,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "timestamp",
+                  "type": "str",
+                  "required": true,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "topic",
+                  "type": "str",
+                  "required": true,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "mode",
+                  "type": "str(literal)",
+                  "required": true,
+                  "default": null,
+                  "literal_values": [
+                    "broad",
+                    "topical",
+                    "precise"
+                  ],
+                  "vocabulary": "SEARCH_MODES",
+                  "enum": [
+                    "broad",
+                    "topical",
+                    "precise"
+                  ]
+                },
+                {
+                  "name": "content_description",
+                  "type": "str",
+                  "required": false,
+                  "default": "",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "done",
+                  "type": "bool",
+                  "required": false,
+                  "default": false,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "submitted_by",
+                  "type": "str",
+                  "required": false,
+                  "default": "unknown",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "claimed_by",
+                  "type": "str | null",
+                  "required": false,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "lease_until",
+                  "type": "str | null",
+                  "required": false,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "attempts",
+                  "type": "int",
+                  "required": false,
+                  "default": 0,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "result_lit_ids",
+                  "type": "list[str]",
+                  "required": false,
+                  "default": [],
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "last_error",
+                  "type": "str | null",
+                  "required": false,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "outcome",
+                  "type": "str | null",
+                  "required": false,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": "SEARCH_OUTCOMES",
+                  "enum": [
+                    "ok",
+                    "no_results",
+                    "search_failed",
+                    "gave_up"
+                  ]
+                },
+                {
+                  "name": "priority",
+                  "type": "str",
+                  "required": false,
+                  "default": "medium",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "for_question_id",
+                  "type": "str | null",
+                  "required": false,
+                  "default": null,
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "submit_note",
+                  "type": "str",
+                  "required": false,
+                  "default": "",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "providers",
+                  "type": "list[str]",
+                  "required": false,
+                  "default": [],
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                },
+                {
+                  "name": "submitted_instance",
+                  "type": "str",
+                  "required": false,
+                  "default": "",
+                  "literal_values": [],
+                  "vocabulary": null,
+                  "enum": []
+                }
+              ],
+              "required": [
+                "request_id",
+                "timestamp",
+                "topic",
+                "mode"
+              ],
+              "vocabularies": {
+                "mode": {
+                  "vocabulary": "SEARCH_MODES",
+                  "values": [
+                    "broad",
+                    "topical",
+                    "precise"
+                  ]
+                },
+                "outcome": {
+                  "vocabulary": "SEARCH_OUTCOMES",
+                  "values": [
+                    "ok",
+                    "no_results",
+                    "search_failed",
+                    "gave_up"
+                  ]
+                }
+              }
+            }
+          },
+          "vocabularies": {
+            "SEARCH_MODES": [
+              "broad",
+              "topical",
+              "precise"
+            ],
+            "PRIORITIES": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "LIT_TYPES": [
+              "J",
+              "M",
+              "C",
+              "D",
+              "R",
+              "S",
+              "P",
+              "N",
+              "EB",
+              "Z"
+            ],
+            "RELATION_STATUS": [
+              "active",
+              "suspect",
+              "rejected"
+            ],
+            "SEARCH_OUTCOMES": [
+              "ok",
+              "no_results",
+              "search_failed",
+              "gave_up"
+            ],
+            "DOWNLOAD_STATUSES": [
+              "ok",
+              "content_mismatch",
+              "failed",
+              "skipped"
+            ],
+            "CANDIDATE_STATUSES": [
+              "pending",
+              "withdrawn",
+              "rejected",
+              "qualified",
+              "admitted",
+              "cleared"
+            ],
+            "CANDIDATE_REASON_CODES": [
+              "withdrawn_by_reviewer",
+              "rejected_off_topic",
+              "rejected_low_quality",
+              "duplicate_doi",
+              "overlap_without_new_content",
+              "overlap_ok_false",
+              "registration_failed",
+              "over_cap",
+              "not_screened"
+            ],
+            "LIT_MATCH_STATUSES": [
+              "exact",
+              "partial",
+              "mismatch"
+            ],
+            "QUOTE_MODES": [
+              "verbatim",
+              "semantic"
+            ],
+            "REPORT_KINDS": [
+              "hottest",
+              "paths",
+              "cold",
+              "gaps",
+              "proof_chain"
+            ],
+            "QUESTION_STATUSES": [
+              "open",
+              "needs_evidence",
+              "researching",
+              "answered",
+              "dropped"
+            ],
+            "CONTRADICTION_VERDICTS": [
+              "resolved",
+              "unresolved",
+              "new_contradiction",
+              "persistent"
+            ],
+            "QUESTION_KINDS": [
+              "gap",
+              "contradiction"
+            ],
+            "CONJECTURE_STATUSES": [
+              "proposed",
+              "needs_evidence",
+              "testing",
+              "supported_not_proved",
+              "refuted",
+              "proved",
+              "promoted",
+              "known_in_literature",
+              "withdrawn"
+            ],
+            "CONJECTURE_FORMS": [
+              "universal",
+              "existential",
+              "identity",
+              "bound",
+              "structural"
+            ],
+            "CONJECTURE_QUESTION_MARKS": [
+              "?",
+              "？",
+              "是否",
+              "吗"
+            ],
+            "CONJECTURE_QUESTION_PATTERNS": [
+              "^\\s*(谁|什么|哪些|哪类|如何|怎么|为什么)",
+              "(?i)^\\s*(which|what|whether|who|whom|whose|when|where|why|how)\\b",
+              "(?i)^\\s*(is|are|does|do|can|could|should|would|will|has|have)\\b"
+            ],
+            "REPROCESS_REASONS": [
+              "quote_unverifiable",
+              "low_information",
+              "need_context",
+              "structural_duplicate"
+            ],
+            "REPROCESS_STATUSES": [
+              "pending",
+              "done",
+              "rejected"
+            ],
+            "EXPERIMENT_METHODS": [
+              "numeric",
+              "symbolic",
+              "exhaustive_search",
+              "formal"
+            ],
+            "EVIDENCE_KINDS": [
+              "proof",
+              "proof_review",
+              "cross_check",
+              "heuristic"
+            ],
+            "EXPERIMENT_EVIDENCE_KINDS": [
+              "proof",
+              "cross_check",
+              "heuristic"
+            ],
+            "EXPERIMENT_RESULTS": [
+              "supports",
+              "refutes",
+              "inconclusive"
+            ],
+            "EXPERIMENT_STATUSES": [
+              "active",
+              "voided"
+            ],
+            "VOID_REASON_CODES": [
+              "code_changed"
+            ],
+            "NEGATION_KINDS": [
+              "disproved",
+              "not_proved",
+              "not_searched_here",
+              "no_local_evidence"
+            ],
+            "ATTACK_STATUSES": [
+              "open",
+              "attacking",
+              "supported_not_proved",
+              "stalled",
+              "resolved",
+              "abandoned"
+            ],
+            "ATTACK_TERMINAL_STATUSES": [
+              "resolved",
+              "abandoned",
+              "stalled",
+              "supported_not_proved"
+            ],
+            "SUBGOAL_STATUSES": [
+              "todo",
+              "in_progress",
+              "supported_not_proved",
+              "closed",
+              "blocked",
+              "dropped"
+            ],
+            "SUBGOAL_OWNERS": [
+              "F",
+              "A",
+              "B",
+              "C",
+              "D",
+              "E",
+              "G"
+            ],
+            "DOC_KINDS": [
+              "survey",
+              "paper",
+              "note",
+              "research"
+            ],
+            "DOC_STATUSES": [
+              "draft",
+              "in_review",
+              "revised",
+              "accepted",
+              "rejected",
+              "unresolved_review"
+            ],
+            "REVIEW_VERDICTS": [
+              "",
+              "成立",
+              "有毛病"
+            ],
+            "REVIEW_LEGACY_VERDICTS": [
+              "看不出来"
+            ],
+            "DEP_KINDS": [
+              "theorem",
+              "definition",
+              "lemma",
+              "proposition",
+              "experiment",
+              "prior_art"
+            ],
+            "DEP_STATUSES": [
+              "closed",
+              "dangling",
+              "external_unavailable",
+              "refuted",
+              "disputed"
+            ],
+            "STATEMENT_ORIGINS": [
+              "external_lit",
+              "own_result"
+            ],
+            "STATEMENT_STATUSES": [
+              "active",
+              "disputed",
+              "refuted",
+              "superseded",
+              "pending_definition",
+              "abandoned"
+            ],
+            "STATEMENT_UNUSABLE_STATUSES": [
+              "disputed",
+              "refuted",
+              "superseded",
+              "pending_definition",
+              "abandoned"
+            ],
+            "STATEMENT_PROPOSITION_KINDS": [
+              "theorem",
+              "lemma",
+              "proposition",
+              "corollary",
+              "conjecture",
+              "example"
+            ],
+            "STATEMENT_NON_PROPOSITION_KINDS": [
+              "concept",
+              "definition"
+            ],
+            "STATEMENT_KINDS": [
+              "theorem",
+              "lemma",
+              "proposition",
+              "corollary",
+              "conjecture",
+              "example",
+              "concept",
+              "definition"
+            ],
+            "CLAIM_KINDS": [
+              "定义",
+              "定理",
+              "命题",
+              "引理",
+              "推论",
+              "例",
+              "注",
+              "反例"
+            ],
+            "CLAIM_STATUSES": [
+              "证",
+              "验",
+              "待精化",
+              "作废"
+            ],
+            "ALLOWED_USE_KINDS": [
+              "主结果",
+              "Remark only",
+              "移入 open"
+            ],
+            "NUMERIC_EVIDENCE_KEYS": [
+              "script",
+              "range",
+              "n_cases",
+              "n_counterexamples"
+            ],
+            "CLAIM_SOURCE_KINDS": [
+              "文献"
+            ],
+            "CLAIM_CHECK_KINDS": [
+              "证明",
+              "数值",
+              "只读了陈述"
+            ],
+            "FINDING_KINDS": [
+              "unsupported_claim",
+              "dangling_dep",
+              "overclaim",
+              "missing_negation_kind",
+              "scope_drift",
+              "garbled",
+              "inconsistent_number"
+            ],
+            "FINDING_LEVELS": [
+              "error",
+              "warning",
+              "info"
+            ],
+            "FINDING_STATUSES": [
+              "open",
+              "fixed",
+              "wontfix",
+              "disputed",
+              "superseded"
+            ],
+            "FINDING_MATHS_VALUES": [
+              "yes",
+              "no"
+            ],
+            "ROLES": [
+              "A",
+              "B",
+              "C",
+              "D",
+              "E",
+              "F",
+              "G",
+              "H",
+              "V",
+              "L"
+            ],
+            "ITEM_KINDS": [
+              "delegation",
+              "message",
+              "report",
+              "notice"
+            ],
+            "ITEM_EXPECTS": [
+              "ack",
+              "work"
+            ],
+            "ITEM_STATES": [
+              "queued",
+              "claimed",
+              "seen",
+              "done",
+              "block"
+            ],
+            "ITEM_CLOSES": [
+              "acked",
+              "completed",
+              "expired"
+            ],
+            "TASK_STATUSES": [
+              "pending",
+              "running",
+              "done",
+              "cancelled",
+              "failed",
+              "block"
+            ],
+            "TASK_OUTCOMES": [
+              "ok",
+              "no_result",
+              "not_applicable",
+              "refused",
+              "failed",
+              "cancelled",
+              "cut_off_by_parent"
+            ],
+            "CHILD_ENDINGS": [
+              "delivered",
+              "cut_off_by_parent",
+              "stopped"
+            ],
+            "FRAMEWORK_ONLY_OUTCOMES": [
+              "cut_off_by_parent"
+            ],
+            "REFUSAL_REASONS": [
+              "unknown_role",
+              "unknown_action",
+              "forbidden_edge",
+              "invalid_params",
+              "depth_exceeded",
+              "fanout_exceeded",
+              "concurrency_exceeded",
+              "budget_exceeded",
+              "deadline_exceeded",
+              "cycle_detected",
+              "not_wired"
+            ],
+            "USAGE_SCOPES": [
+              "summon",
+              "experiment",
+              "search",
+              "extract",
+              "review",
+              "reason"
+            ],
+            "EVAL_REQUIRED_FIELDS": [
+              "benchmark",
+              "benchmark_version",
+              "split",
+              "k",
+              "decontamination",
+              "date",
+              "source"
+            ]
+          }
+        },
+        "error": "",
+        "meta": {
+          "table_count": 1,
+          "vocabulary_count": 65
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 61568,
+        "prompt_cache_miss_tokens": 1576,
+        "tokens_in": 63144,
+        "tokens_out": 699,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000158"
+    },
+    {
+      "index": 5,
+      "shape": "tool",
+      "payload": {
+        "name": "table.update",
+        "args": {
+          "table": "search_requests",
+          "id": "r-000002",
+          "patch": {
+            "done": true,
+            "attempts": 1,
+            "claimed_by": "agent-A",
+            "outcome": "no_results",
+            "result_lit_ids": [],
+            "providers": [
+              "openalex"
+            ],
+            "last_error": null,
+            "submit_note": "终局=no_results，意思是「本次没有收进新文献」，不是「这个方向没有文献」。原 topic 是中文题面（设 G 为有限群…断言 (E)(C)(N) 是否全部成立），按纪律换规范英文术语重查一次：topic=\"Sylow theorems conjugacy number of Sylow p-subgroups\", mode=topical, provider=openalex, description 里写明 existence / conjugacy / n_p ≡ 1 mod p 且 n_p | m 与 Hall-Gorenstein-Dummit-Foote-Wielandt。这一问真的发出去了（sources[0]=openalex status=ok，返回 15 条候选，新 15 / 库内已有 0），所以不是未查成。逐条看题名后没有一条属于要找的那一类经典 Sylow 文献：命中主要是 Character Theory of Finite Groups、Homotopy properties of the poset of nontrivial p-subgroups、Prime graph components、Characters of the Finite General Linear Groups、G-Algebras and Modular Representation Theory、Non-commuting graph——是表示论/子群偏序/素图方向，不是 Sylow 存在性-共轭-计数的自足出处；因此一条也没有 stage、没有判收，literature 仍为 lit:000000-000003 四行不变（本趟不开新委托、不收编新文件）。另按任务口径逐字记一句判断：r-000002 这条请求本就不该由关键词命中率自动开出——研究问题 q:000000 的三条断言已有自足证明与 V 签，缺的不是新文献而是关系行，机械判据 a_no_keyword_hit 用 25 个中文分词去匹配 quote，命中为 0 是分词口径的产物，不代表证据缺口。附带说明：这条判据的下游若仍需要逐字引文，本地已有 4 份 Sylow 文献可走 search.local 取页级摘录，不必出网。"
+          }
+        },
+        "why": "把 r-000002 落成终局（outcome 受控词表四档，ok 需非空 result_lit_ids；本次未收新文献，故取 no_results 并在说明里写清它不是「不存在」）"
+      },
+      "result": {
+        "tool": "table.update",
+        "ok": true,
+        "data": "r-000002",
+        "error": "",
+        "meta": {
+          "table": "search_requests",
+          "id": "r-000002",
+          "id_field": "request_id",
+          "row": {
+            "request_id": "r-000002",
+            "timestamp": "2026-11-24T05:17:46+08:00",
+            "topic": "设 G 为有限群，|G| = p^a·m（p 素数，(p,m)=1）。断言：(…",
+            "mode": "topical",
+            "content_description": "[q:000000] origin=agent-D-sylow-proof；研究问题：设 G 为有限群，|G| = p^a·m（p 素数，(p,m)=1）。断言：(E) G 存在阶为 p^a 的子群（p-Sylow 子群）；(C) G 的任两个 p-Sylow 子群共轭；(N) p-Sylow 子群的个数 n_p 满足 n_p ≡ 1 (mod p) 且 n_p | m。这三条是否全部成立？；需要检索的是：能补充该问题证据的文献（现有相关关系 0 条，其中 quote_verified=True 的 0 条）；触发的可核实判据：a_no_keyword_hit: 关键词 25 个，在 0 条相关关系的 quote/description 中命中数为 0（逐词命中：{'为有限群': 0, 'a·m': 0, '素数': 0, '断言': 0, '存在阶为': 0, '的子群': 0, 'Sylow': 0, '子群': 0, '的任两个': 0, '子群共轭': 0, '子群的个数': 0, '满足': 0, 'mod': 0, '这三条是否全部成立': 0, '群的': 0, '的个': 0, '个数': 0, '这三': 0, '三条': 0, '条是': 0, '是否': 0, '否全': 0, '全部': 0, '部成': 0, '成立': 0}）；b_low_degree_unverified: 相关概念度数 0 < 阈值 2，且 0 条关系里没有一条 quote_verified=True（连一条有原文支撑的关系都没有）",
+            "done": true,
+            "submitted_by": "agent-D",
+            "claimed_by": "agent-A",
+            "lease_until": null,
+            "attempts": 1,
+            "result_lit_ids": [],
+            "last_error": null,
+            "outcome": "no_results",
+            "priority": "medium",
+            "for_question_id": "000000",
+            "submit_note": "终局=no_results，意思是「本次没有收进新文献」，不是「这个方向没有文献」。原 topic 是中文题面（设 G 为有限群…断言 (E)(C)(N) 是否全部成立），按纪律换规范英文术语重查一次：topic=\"Sylow theorems conjugacy number of Sylow p-subgroups\", mode=topical, provider=openalex, description 里写明 existence / conjugacy / n_p ≡ 1 mod p 且 n_p | m 与 Hall-Gorenstein-Dummit-Foote-Wielandt。这一问真的发出去了（sources[0]=openalex status=ok，返回 15 条候选，新 15 / 库内已有 0），所以不是未查成。逐条看题名后没有一条属于要找的那一类经典 Sylow 文献：命中主要是 Character Theory of Finite Groups、Homotopy properties of the poset of nontrivial p-subgroups、Prime graph components、Characters of the Finite General Linear Groups、G-Algebras and Modular Representation Theory、Non-commuting graph——是表示论/子群偏序/素图方向，不是 Sylow 存在性-共轭-计数的自足出处；因此一条也没有 stage、没有判收，literature 仍为 lit:000000-000003 四行不变（本趟不开新委托、不收编新文件）。另按任务口径逐字记一句判断：r-000002 这条请求本就不该由关键词命中率自动开出——研究问题 q:000000 的三条断言已有自足证明与 V 签，缺的不是新文献而是关系行，机械判据 a_no_keyword_hit 用 25 个中文分词去匹配 quote，命中为 0 是分词口径的产物，不代表证据缺口。附带说明：这条判据的下游若仍需要逐字引文，本地已有 4 份 Sylow 文献可走 search.local 取页级摘录，不必出网。",
+            "providers": [
+              "openalex"
+            ],
+            "submitted_instance": ""
+          },
+          "normalized": []
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 62336,
+        "prompt_cache_miss_tokens": 3478,
+        "tokens_in": 65814,
+        "tokens_out": 1412,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000158"
+    },
+    {
+      "index": 6,
+      "shape": "tool",
+      "payload": {
+        "name": "table.count",
+        "args": {
+          "table": "search_requests",
+          "filter": {
+            "done": false
+          }
+        },
+        "why": "收口后核对未闭环检索请求数是否归零"
+      },
+      "result": {
+        "tool": "table.count",
+        "ok": true,
+        "data": 0,
+        "error": "",
+        "meta": {
+          "table": "search_requests",
+          "total": 0,
+          "filtered": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 65024,
+        "prompt_cache_miss_tokens": 2736,
+        "tokens_in": 67760,
+        "tokens_out": 276,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000158"
+    },
+    {
+      "index": 7,
+      "shape": "final",
+      "payload": {
+        "final": "r-000002 已收口为终局：outcome=no_results，done=true，result_lit_ids=[]，未闭环检索请求计数已归零（table.count(search_requests, done=false)=0）。做法：原 topic 是中文题面（设 G 为有限群…断言 (E)(C)(N) 是否全部成立），按纪律换成规范英文术语查一次 —— topic=\"Sylow theorems conjugacy number of Sylow p-subgroups\"，mode=topical，provider=openalex，description 写明 existence / conjugacy / n_p ≡ 1 mod p 且 n_p | m 与 Hall-Gorenstein-Dummit-Foote-Wielandt。这一问确实发出去了（sources[0]=openalex status=ok，返回 15 条候选，新 15 / 库内已有 0），所以不是「未查成」。逐条看题名，没有一条属于要找的那一类经典 Sylow 文献（命中的是 Character Theory of Finite Groups、Homotopy properties of the poset of nontrivial p-subgroups、Prime graph components、Characters of the Finite General Linear Groups、G-Algebras and Modular Representation Theory、Non-commuting graph —— 表示论 / 子群偏序 / 素图方向），故一条也没 stage、没判收；literature 仍是 lit:000000–000003 四行，未开新委托、未收编新文件、未重做已入库四篇。**三态纪律逐字声明**：no_results 这里只表示「本次没有收进新文献」，不是「这个方向没有文献」，也不是那 15 篇不存在 —— 它们存在、只是不属于本次要找的那一类。另按任务口径记一句判断：r-000002 这条请求本就不该由关键词命中率自动开出 —— 研究问题 q:000000 的三条断言已有自足证明与 V 签，缺的不是新文献而是关系行；机械判据 a_no_keyword_hit 拿 25 个中文分词去匹配 quote、命中为 0 是分词口径的产物，b_low_degree_unverified 的 0 度同源。收尾核对：lit.stage_list(request_id=\"*\") 计数 pending=0（4 条候选全在 admitted 档），本趟无待裁残留。附带建议：若下游仍要逐字引文，本地已有 4 份 Sylow 文献可直接 search.local 取页级摘录，不必再出网。",
+        "evidence": [
+          "r-000002",
+          "r-000001",
+          "q:000000",
+          "lit:000000",
+          "lit:000001",
+          "lit:000002",
+          "lit:000003"
+        ],
+        "notify": {
+          "to": "M",
+          "summary": "r-000002 已收口为 no_results（未收新文献，非「无文献」），未闭环检索请求归零，待裁表 0 条",
+          "body": "## 做了什么\n把 D 的机械判据开出的唯一未闭环检索请求 **r-000002** 收成终局。\n\n- 原 topic 是中文题面（设 G 为有限群，|G|=p^a·m…断言 (E)(C)(N) 是否全部成立），按纪律换规范英文术语重查一次：\n  `topic=\"Sylow theorems conjugacy number of Sylow p-subgroups\"`，`mode=topical`，`provider=openalex`，description 写明 existence / conjugacy / n_p ≡ 1 (mod p) 且 n_p | m 与 Hall-Gorenstein-Dummit-Foote-Wielandt。\n- 这一问**真的发出去了**：`sources[0]=openalex status=ok`，返回 15 条候选（新 15 / 库内已有 0）。所以不是「未查成」。\n- 逐条看题名后**没有一条属于要找的那一类经典 Sylow 文献**：命中集中在 Character Theory of Finite Groups、Homotopy properties of the poset of nontrivial p-subgroups、Prime graph components、Characters of the Finite General Linear Groups、G-Algebras and Modular Representation Theory、Non-commuting graph —— 是表示论 / 子群偏序 / 素图方向。故一条也没 stage、没判收。\n- 落档：`r-000002` → `outcome=no_results`、`done=true`、`result_lit_ids=[]`、`attempts=1`、`providers=[\"openalex\"]`、`submit_note` 写清全文判断。\n\n## 读数\n- `table.count(search_requests, {done:false})` = **0** ⇒ 未闭环检索请求归零（这就是本趟唯一目标）。\n- `lit.stage_list(request_id=\"*\")`：pending=**0**、admitted=4、rejected=0 ⇒ 待裁表已清，本趟没有残留。\n- `literature` 仍为 **lit:000000–000003** 四行，未增未改；未开新委托、未收编新文件、未重做已入库四篇。因此 `admitted` 为 0，**无需派 B 收编**（本批没有新文献要整理）。\n- 先试过 `outcome=ok` 被行校验拒（`outcome=ok 时 result_lit_ids 不能为空`）—— 在不收新文献的前提下 `ok` 不可达，故取四档词表里唯一诚实的 `no_results`（`search_failed` / `gave_up` 都不符：这一问查成了）。\n\n## 三态纪律（请一并转达，别被读成「这方向没文献」）\n`no_results` 只表示**本次没有收进新文献**：\n- 那 15 篇**存在**，只是不属于本次要找的那一类；\n- 本趟**没有**做穷尽性检索，不能由此推出「Sylow 方向文献不足」；\n- 本地已有 4 份 Sylow 文献在架，逐字引文走 `search.local` 即可，不必再出网。\n\n## 一条判断（按任务口径逐字记）\nr-000002 这条请求**本就不该由关键词命中率自动开出**：研究问题 q:000000 的三条断言已有自足证明与 V 签，缺的不是新文献而是**关系行**；机械判据 `a_no_keyword_hit` 拿 25 个中文分词去匹配 `quote`、命中为 0 是分词口径的产物，`b_low_degree_unverified` 的 0 度同源。若之后还要自动开检索请求，建议判据改用规范英文术语或先看概念行是否已有 V 签，否则会反复开出「查了也不会收」的空转委托。",
+          "refs": [
+            "q:000000",
+            "lit:000000",
+            "lit:000001",
+            "lit:000002",
+            "lit:000003"
+          ]
+        }
+      },
+      "result": {
+        "notify_handoff": {
+          "handoff": "000017",
+          "ok": true,
+          "id": "000017",
+          "path": "work/handoffs.jsonl#000017",
+          "to": "M",
+          "brief": "r-000002 已收口为 no_results（未收新文献，非「无文献」），未闭环检索请求归零，待裁表 0 条",
+          "addressing": {
+            "checked": true,
+            "how": "outside_roster",
+            "to": "M",
+            "kind": "",
+            "name": "",
+            "task_id": "",
+            "role": "",
+            "brief": "",
+            "candidates": [],
+            "callable": "",
+            "refused": "",
+            "error": "",
+            "why": "角色级/公告栏/频道外的收件人面（手稿台账按它建键）",
+            "delivery": "role",
+            "manuscript_to": "M"
+          },
+          "notify_channel": "role",
+          "revises": "",
+          "existing_same_summary": {
+            "count": 0,
+            "ids": [],
+            "note": "查过了：没有同一句话的既有交接"
+          },
+          "notified": "m000015",
+          "error": "",
+          "note": "收件人下次运行时（或本步之后）会在收件箱/板上看到编号；它用 `manuscripts.read` 读全文"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 66944,
+        "prompt_cache_miss_tokens": 1121,
+        "tokens_in": 68065,
+        "tokens_out": 1720,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000158"
+    }
+  ],
+  "final": "r-000002 已收口为终局：outcome=no_results，done=true，result_lit_ids=[]，未闭环检索请求计数已归零（table.count(search_requests, done=false)=0）。做法：原 topic 是中文题面（设 G 为有限群…断言 (E)(C)(N) 是否全部成立），按纪律换成规范英文术语查一次 —— topic=\"Sylow theorems conjugacy number of Sylow p-subgroups\"，mode=topical，provider=openalex，description 写明 existence / conjugacy / n_p ≡ 1 mod p 且 n_p | m 与 Hall-Gorenstein-Dummit-Foote-Wielandt。这一问确实发出去了（sources[0]=openalex status=ok，返回 15 条候选，新 15 / 库内已有 0），所以不是「未查成」。逐条看题名，没有一条属于要找的那一类经典 Sylow 文献（命中的是 Character Theory of Finite Groups、Homotopy properties of the poset of nontrivial p-subgroups、Prime graph components、Characters of the Finite General Linear Groups、G-Algebras and Modular Representation Theory、Non-commuting graph —— 表示论 / 子群偏序 / 素图方向），故一条也没 stage、没判收；literature 仍是 lit:000000–000003 四行，未开新委托、未收编新文件、未重做已入库四篇。**三态纪律逐字声明**：no_results 这里只表示「本次没有收进新文献」，不是「这个方向没有文献」，也不是那 15 篇不存在 —— 它们存在、只是不属于本次要找的那一类。另按任务口径记一句判断：r-000002 这条请求本就不该由关键词命中率自动开出 —— 研究问题 q:000000 的三条断言已有自足证明与 V 签，缺的不是新文献而是关系行；机械判据 a_no_keyword_hit 拿 25 个中文分词去匹配 quote、命中为 0 是分词口径的产物，b_low_degree_unverified 的 0 度同源。收尾核对：lit.stage_list(request_id=\"*\") 计数 pending=0（4 条候选全在 admitted 档），本趟无待裁残留。附带建议：若下游仍要逐字引文，本地已有 4 份 Sylow 文献可直接 search.local 取页级摘录，不必再出网。",
+  "evidence": [
+    "r-000002",
+    "r-000001",
+    "q:000000",
+    "lit:000000",
+    "lit:000001",
+    "lit:000002",
+    "lit:000003"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 0,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 8,
+  "compactions": 0,
+  "mailbox_items": [],
+  "mailbox_msgs": [],
+  "mailbox_delivered": 0,
+  "monitor_turns": 0,
+  "wakes": 0,
+  "wake_ids": [],
+  "wake_events": [],
+  "clock_pumps": 14,
+  "clock_fired": 0,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "A 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "A",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    }
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {
+    "checked": true,
+    "enabled": true,
+    "in_task": true,
+    "in_task_why": "",
+    "delegations": 1,
+    "settled": [
+      "r-000001"
+    ],
+    "cleared": [],
+    "pending": [],
+    "refused": [],
+    "why": "全表 1 个委托都已清表（每一行都有 cleared_at），这一拍没有要提交的",
+    "note": "全表 1 个委托都已清表（每一行都有 cleared_at），这一拍没有要提交的"
+  },
+  "unprocessed_reasons": {
+    "checked": true,
+    "enabled": true,
+    "unprocessed": 0,
+    "written": [],
+    "kept": [],
+    "undigested": [],
+    "why": "`literature.processed` 全为真 ⇒ 没有要写理由的行",
+    "note": "`literature.processed` 全为真 ⇒ 没有要写理由的行"
+  },
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [
+    "000017"
+  ],
+  "summons": [],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [],
+  "summons_total": 0,
+  "summons_consumed": 0,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 0,
+    "summons_consumed": 0,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p327",
+    "role": "A",
+    "prompt_sha256": "27d289ac8b85cbe1299442882e1c72db97d6158440ffb9a3f51ef2224d8fa1ef",
+    "prompt_chars": 66608,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "FACULTIES_07",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "TOOL_29",
+      "TOOL_30",
+      "TOOL_31",
+      "TOOL_32",
+      "TOOL_33",
+      "TOOL_34",
+      "TOOL_35",
+      "TOOL_36",
+      "TOOL_37",
+      "TOOL_38",
+      "TOOL_39",
+      "TOOL_40",
+      "TOOL_41",
+      "TOOL_42",
+      "TOOL_43",
+      "TOOL_44",
+      "TOOL_45",
+      "TOOL_46",
+      "TOOL_47",
+      "TOOL_48",
+      "TOOL_49",
+      "TOOL_50",
+      "TOOL_51",
+      "TOOL_52",
+      "TOOL_53",
+      "TOOL_54",
+      "TOOL_55",
+      "TOOL_56",
+      "TOOL_57",
+      "A_SEARCH_STYLE",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_LIMITS",
+      "COLLAB_NAMES",
+      "PARENT_STOP",
+      "PARENT_ROSTER",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 7,
+    "tokens_in": 443985,
+    "tokens_out": 6593,
+    "usd": 0.007803,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 7,
+    "no_request_calls": 0,
+    "hit": 426880,
+    "miss": 17105,
+    "unknown_calls": 0,
+    "tokens_in": 443985,
+    "hit_rate": 0.9615,
+    "mismatched_calls": 0,
+    "saved_usd": 0.06275,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 43.437,
+  "end_ts": "2026-11-24T05:21:11+08:00",
+  "notes": [
+    "收工时名下还有 2 条证明没有 V 的签字（读数，不拦收工；明细：000060、000064）",
+    "缓存读数：命中 426880 / 未命中 17105 token，命中率 96.2%（7 次调用）；按 modelcost 口径估算可省 约 0.062750 美元",
+    "子产出处理读数：summons_total=0（这一趟没派过子代理 ⇒ 没有要处理的子产出；判据没有对象，不红）"
+  ],
+  "final_payload": {
+    "final": "r-000002 已收口为终局：outcome=no_results，done=true，result_lit_ids=[]，未闭环检索请求计数已归零（table.count(search_requests, done=false)=0）。做法：原 topic 是中文题面（设 G 为有限群…断言 (E)(C)(N) 是否全部成立），按纪律换成规范英文术语查一次 —— topic=\"Sylow theorems conjugacy number of Sylow p-subgroups\"，mode=topical，provider=openalex，description 写明 existence / conjugacy / n_p ≡ 1 mod p 且 n_p | m 与 Hall-Gorenstein-Dummit-Foote-Wielandt。这一问确实发出去了（sources[0]=openalex status=ok，返回 15 条候选，新 15 / 库内已有 0），所以不是「未查成」。逐条看题名，没有一条属于要找的那一类经典 Sylow 文献（命中的是 Character Theory of Finite Groups、Homotopy properties of the poset of nontrivial p-subgroups、Prime graph components、Characters of the Finite General Linear Groups、G-Algebras and Modular Representation Theory、Non-commuting graph —— 表示论 / 子群偏序 / 素图方向），故一条也没 stage、没判收；literature 仍是 lit:000000–000003 四行，未开新委托、未收编新文件、未重做已入库四篇。**三态纪律逐字声明**：no_results 这里只表示「本次没有收进新文献」，不是「这个方向没有文献」，也不是那 15 篇不存在 —— 它们存在、只是不属于本次要找的那一类。另按任务口径记一句判断：r-000002 这条请求本就不该由关键词命中率自动开出 —— 研究问题 q:000000 的三条断言已有自足证明与 V 签，缺的不是新文献而是关系行；机械判据 a_no_keyword_hit 拿 25 个中文分词去匹配 quote、命中为 0 是分词口径的产物，b_low_degree_unverified 的 0 度同源。收尾核对：lit.stage_list(request_id=\"*\") 计数 pending=0（4 条候选全在 admitted 档），本趟无待裁残留。附带建议：若下游仍要逐字引文，本地已有 4 份 Sylow 文献可直接 search.local 取页级摘录，不必再出网。",
+    "evidence": [
+      "r-000002",
+      "r-000001",
+      "q:000000",
+      "lit:000000",
+      "lit:000001",
+      "lit:000002",
+      "lit:000003"
+    ],
+    "notify": {
+      "to": "M",
+      "summary": "r-000002 已收口为 no_results（未收新文献，非「无文献」），未闭环检索请求归零，待裁表 0 条",
+      "body": "## 做了什么\n把 D 的机械判据开出的唯一未闭环检索请求 **r-000002** 收成终局。\n\n- 原 topic 是中文题面（设 G 为有限群，|G|=p^a·m…断言 (E)(C)(N) 是否全部成立），按纪律换规范英文术语重查一次：\n  `topic=\"Sylow theorems conjugacy number of Sylow p-subgroups\"`，`mode=topical`，`provider=openalex`，description 写明 existence / conjugacy / n_p ≡ 1 (mod p) 且 n_p | m 与 Hall-Gorenstein-Dummit-Foote-Wielandt。\n- 这一问**真的发出去了**：`sources[0]=openalex status=ok`，返回 15 条候选（新 15 / 库内已有 0）。所以不是「未查成」。\n- 逐条看题名后**没有一条属于要找的那一类经典 Sylow 文献**：命中集中在 Character Theory of Finite Groups、Homotopy properties of the poset of nontrivial p-subgroups、Prime graph components、Characters of the Finite General Linear Groups、G-Algebras and Modular Representation Theory、Non-commuting graph —— 是表示论 / 子群偏序 / 素图方向。故一条也没 stage、没判收。\n- 落档：`r-000002` → `outcome=no_results`、`done=true`、`result_lit_ids=[]`、`attempts=1`、`providers=[\"openalex\"]`、`submit_note` 写清全文判断。\n\n## 读数\n- `table.count(search_requests, {done:false})` = **0** ⇒ 未闭环检索请求归零（这就是本趟唯一目标）。\n- `lit.stage_list(request_id=\"*\")`：pending=**0**、admitted=4、rejected=0 ⇒ 待裁表已清，本趟没有残留。\n- `literature` 仍为 **lit:000000–000003** 四行，未增未改；未开新委托、未收编新文件、未重做已入库四篇。因此 `admitted` 为 0，**无需派 B 收编**（本批没有新文献要整理）。\n- 先试过 `outcome=ok` 被行校验拒（`outcome=ok 时 result_lit_ids 不能为空`）—— 在不收新文献的前提下 `ok` 不可达，故取四档词表里唯一诚实的 `no_results`（`search_failed` / `gave_up` 都不符：这一问查成了）。\n\n## 三态纪律（请一并转达，别被读成「这方向没文献」）\n`no_results` 只表示**本次没有收进新文献**：\n- 那 15 篇**存在**，只是不属于本次要找的那一类；\n- 本趟**没有**做穷尽性检索，不能由此推出「Sylow 方向文献不足」；\n- 本地已有 4 份 Sylow 文献在架，逐字引文走 `search.local` 即可，不必再出网。\n\n## 一条判断（按任务口径逐字记）\nr-000002 这条请求**本就不该由关键词命中率自动开出**：研究问题 q:000000 的三条断言已有自足证明与 V 签，缺的不是新文献而是**关系行**；机械判据 `a_no_keyword_hit` 拿 25 个中文分词去匹配 `quote`、命中为 0 是分词口径的产物，`b_low_degree_unverified` 的 0 度同源。若之后还要自动开检索请求，建议判据改用规范英文术语或先看概念行是否已有 V 签，否则会反复开出「查了也不会收」的空转委托。",
+      "refs": [
+        "q:000000",
+        "lit:000000",
+        "lit:000001",
+        "lit:000002",
+        "lit:000003"
+      ]
+    }
+  },
+  "task_id": "t-000158"
+}

@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T04:59:15+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 5488,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"doc:000000（The Sylow Theorems）第 2 轮复审完毕：**不置 accepted，裁决 revise_again，documents.status 保持 in_review**（review.verify_fixes round_no=3 的读数：resolved=4、still_open=3、error 级未解决 1 条、error_count=0/机械档、dep_check checked=true 且 0 条依赖）。上一轮四条发现逐条核过、全部落地，但我读出三条新的、都在同一版正文里，各指到行。\\n\\n逐条（对应派活四点）：\\n(1) finding 000000（error，thm:unique / stmt:000064）→ **fixed**。main.tex:153 在 thm:unique 的 \\\\end{theorem} 之后、\\\\begin{proof} 之前有一整段 \\\\noindent\\\\emph{Provenance and status.}，逐字写明「standard textbook fact」「we do not hold a verified full-text source」「the argument following has not been independently checked」「not as an independently verified proof」——就地补披露的口径够了（读者读定理处即见降级）。摘要（33–38 行）只写「No computer-assisted verification is claimed anywhere in this paper」，第 4 节（167 行）另写明该条的例外与「No formal verification was carried out for any of the five results」；别处没有把它当作已验证定理的措辞。台账侧一致：000064 bits.reviewed=false、grade=conjecture，verifications/000064.jsonl 首行 v-000001 verdict=「有毛病」（error：命题与证明不匹配），MAPPING.json 该行 reviewed=「未通过」、proof_source=citation。\\n(2) finding 000001（warning，原第 170 行）→ **fixed**。167 行现逐字「The arguments above are elementary and were checked by hand, with one exception that we state explicitly: the uniqueness criterion of Theorem~\\\\ref{thm:unique} is a textbook-level statement whose argument we have not independently checked … No formal verification was carried out for any of the five results」。与台账 000060–000064 逐条对得上：000060/000061 bits.reviewed=true、V 签 verdict=成立、grade=pre_theorem；000064 reviewed=false、无干净签；MAPPING.json 000060–000063 reviewed=「已签（判决：成立）」、000064「未通过」。原「五条一律 human-checked」的措辞已消失。\\n(3) finding 000002（warning，remark 带 proof）→ **fixed**。review.scan(kinds=[proofs,ledger_match,cites,refs,duplicates,inputs], project='.') 读数 checked=true、bad=[]、findings=0，facts：**proof_envs=5 == statement_envs=5**、**proof_without_statement=0**、statement_without_proof=0、statement_surplus=[]、duplicate_labels=0、unused_labels=0、cite_keys=4=bibitem_keys=4。盘上：main.tex:83 \\\\begin{r",
+ "payload_sha256": "cceaef1b14f283af9a5680858da544650715b1054699916afd3e6693369eb343",
+ "readings": {},
+ "role": "H",
+ "status": "done",
+ "task_id": "t-000120"
+}

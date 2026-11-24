@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T05:17:37+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 3232,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"已按 D 的委托把 F 的 f-proof-000000 登记成命题行（只递指针，正文与等级从稿里读，未补写一个字）。\\n\\n【结果】stmt_id = **000065**（register.new_row=false：落到已有的 000065 行；conjecture_ledger.landing.matches=[\\\"000065\\\"]、promoted_to_statement=000065）。现算等级 = **pre_theorem**（_grade_recomputed：conjecture→pre_theorem，heuristic→proof_review，依据 verifications/pending/a7bcc2c9…jsonl#u-000007）；kind = **theorem**（V 签落位后由 conjecture 升档，_kind_upgrade.from=conjecture,to=theorem）。秘书档位 = T3（nontriviality_record.label=T3，path_group=1）。标签被洗：F 攻坚 000001 子目标 s1 → Sylow 定理（存在性、共轭性、计数）。\\n\\n【正文/证明】statement_full 与 proof_text 都逐字取自稿的 ## 命题 / ## 证明（proof_vs_source.matched=proof_body、same=true、7757 字，只归一了换行）。依赖面：稿的 ## 依赖 是空表 ⇒ 依赖边 0 条（deps_state=none_in_proof，diff.requested_not_filled=[dependencies]，自足证明合法）。\\n\\n【V 签那一格：认领得上】三处证据：① sign_filing.filed=true；② v_sign.applied=true、artifact_sha=add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a 与你给的正文 sha 逐字相符；③ registration_settled 原话「000065#p1 已经入库（有正文、reviewed=true）⇒ 义务已清」，板上 t-000145 由框架自动 completed（不需要也不能靠 ack）。\\n\\n【对不上的格子，逐格点名（没有一格要补正文）】① data.manuscript.sign={found:false,signed:false,state:\\\"\\\"} —— register 这一格没从稿里读出签块（它按 V 的签发信封/pending 台账认的），与稿头 - V 签：已签=true；判词=成立 字面不一致；② pending_claim={already:false,bound:false,why:\\\"这一笔没有认到 pending 台账上的签\\\"}，而同一笔 sign_filing.filed=true —— 两格口径不同（领取 vs 落位），读数不一致；③ kind_crosscheck=mismatch：稿头「命题类型：conjecture」vs 台账 kind=theorem，按规则以台账为准，我没有手改；④ 两个 sha 不是一回事（口径说明，不是毛病）：V 签的正文 sha=add7f62c…（= 稿头「正文sha」），盘上字节 sha256=36be2374…（整份文件含页头元信息）。\\n\\n【二阶段欠账，逐条点名】**000065#p1，bits.evidence.optimized_by_proof[\\\"1\\\"]=false** —— 这一份是 F 原版的逐字机械录入，还没洗。我这一趟没开副本，卡点说清：剩余预算 1.30 美元，而洗一份 7757 字正文要走 open_polish_copy → 重写正文 → 派 V 重签 → 精准替换 四步；本侧改正文只有 land_manuscript 能渲染 b-proof（该族不许我手写），一旦起手而没盖上这一版的签，就会留下一份未签的 b-proof 稿，按收工门反而挡收工。所以停在这里如实交回：请排一次专门的优化委托（或续预算），我按同一入口接着洗。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\sylow-4\\\\runs\\\\B-20261124-051737-001.json\", \"messages\": [], \"outcome\": \"ok\", \"status\": \"done\", \"steps\": 4, \"stop_reason",
+ "payload_sha256": "d99fb105e44b243086ca2f4bf0ebfd31874a47b0c7bed00ea280133b0d352384",
+ "readings": {},
+ "role": "B",
+ "status": "done",
+ "task_id": "t-000153"
+}

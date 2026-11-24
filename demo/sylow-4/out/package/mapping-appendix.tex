@@ -1,0 +1,28 @@
+% ==== MAPPING-APPENDIX BEGIN (rendered from out/package/MAPPING.json; do not edit by hand) ====
+\section*{Appendix: Output Mapping}
+
+This table is rendered from \texttt{MAPPING.json} by \texttt{agentflow.papermapping.render\_appendix}, so there is no second copy to keep by hand. The \texttt{file} column is a path relative to the paper package and therefore names the same file on another machine; for a theorem proved by an exhaustive numerical experiment, \texttt{file} is the path of that program relative to the repository root. The column headed ``Lean (file / declaration)'' is the machine-checked credential slot: it holds the program by which this statement is known to be true. For a statement whose proof goes through formalization it holds the Lean source and the declaration that source checks; for a statement proved by an exhaustive numerical experiment it holds that numerical proof program (a ``.py`` path, the same one named as the proof program) and the declaration half stays empty. What belongs in that slot follows the proof channel of that statement -- an entry of the other kind is refused -- and an empty cell means that statement has no machine-checked credential: an empty cell never means checked, and with the switch off the cell reads ``(Lean off)''. The last two columns belong to theorems proved by numerical experiment: the reading of E's exhaustive run (\texttt{exp:NNNNNN}) and where E's two written blocks (design note and exhaustion argument) live; when absent they read ``(not a numeric proof)''. The two columns after the ledger row are the ledger's own kind for that row and what V did with it; the V column is one of four: ``signed (verdict: ...)'' (the per-proof signature table says this very proof is signed), ``not passed'' (the review ledger exists, but this proof has no signature), ``unreviewed'' (the review ledger does not exist at all: never sent), or ``(unread)'' (the cell could not be read: no statement row, a broken ledger file). ``(unread)'' is never folded into ``not passed'' or ``unreviewed''. This paragraph itself is written by the renderer in the language of the paper: do not hand-copy it and do not mix languages.
+
+\begingroup
+\small
+\setlength{\tabcolsep}{2pt}
+\begin{tabular}{@{}p{0.07\textwidth}p{0.09\textwidth}p{0.09\textwidth}p{0.07\textwidth}p{0.09\textwidth}p{0.05\textwidth}p{0.08\textwidth}p{0.10\textwidth}p{0.11\textwidth}p{0.06\textwidth}p{0.09\textwidth}@{}}
+\hline
+Env & Label & Ledger row & Ledger kind & V sign-off & Proof & File & Lean (file / declaration) & Citation location & E reading & Exhaustion note \\
+\hline
+% MAPPING-ROW theorem|1|thm:sylow1|stmt:000060|1|main.tex|||||theorem|signed (verdict: holds)
+{\raggedright theorem\- 1\par} & {\raggedright \texttt{thm:\allowbreak{}sylow1}\par} & {\raggedright \texttt{stmt:\allowbreak{}000060}\par} & {\raggedright \texttt{theorem\-}\par} & {\raggedright signed (verdict\-:\allowbreak{} holds)\par} & 1 & {\raggedright \texttt{main.\allowbreak{}tex}\par} & {\raggedright (Lean off)\par} & {\raggedright main.\allowbreak{}tex · line\_\allowbreak{}range 104-107\par} & {\raggedright (not a numeric\- proof)\par} & {\raggedright \texttt{(not a numeric\- proof)}\par} \\
+% MAPPING-ROW theorem|2|thm:sylow2|stmt:000061|1|main.tex|||||theorem|signed (verdict: holds)
+{\raggedright theorem\- 2\par} & {\raggedright \texttt{thm:\allowbreak{}sylow2}\par} & {\raggedright \texttt{stmt:\allowbreak{}000061}\par} & {\raggedright \texttt{theorem\-}\par} & {\raggedright signed (verdict\-:\allowbreak{} holds)\par} & 1 & {\raggedright \texttt{main.\allowbreak{}tex}\par} & {\raggedright (Lean off)\par} & {\raggedright main.\allowbreak{}tex · line\_\allowbreak{}range 118-121\par} & {\raggedright (not a numeric\- proof)\par} & {\raggedright \texttt{(not a numeric\- proof)}\par} \\
+% MAPPING-ROW theorem|3|thm:sylow3|stmt:000062|1|main.tex|||||theorem|signed (verdict: holds)
+{\raggedright theorem\- 3\par} & {\raggedright \texttt{thm:\allowbreak{}sylow3}\par} & {\raggedright \texttt{stmt:\allowbreak{}000062}\par} & {\raggedright \texttt{theorem\-}\par} & {\raggedright signed (verdict\-:\allowbreak{} holds)\par} & 1 & {\raggedright \texttt{main.\allowbreak{}tex}\par} & {\raggedright (Lean off)\par} & {\raggedright main.\allowbreak{}tex · line\_\allowbreak{}range 128-131\par} & {\raggedright (not a numeric\- proof)\par} & {\raggedright \texttt{(not a numeric\- proof)}\par} \\
+% MAPPING-ROW theorem|4|thm:index|stmt:000063|1|main.tex|||||theorem|signed (verdict: holds)
+{\raggedright theorem\- 4\par} & {\raggedright \texttt{thm:\allowbreak{}index}\par} & {\raggedright \texttt{stmt:\allowbreak{}000063}\par} & {\raggedright \texttt{theorem\-}\par} & {\raggedright signed (verdict\-:\allowbreak{} holds)\par} & 1 & {\raggedright \texttt{main.\allowbreak{}tex}\par} & {\raggedright (Lean off)\par} & {\raggedright main.\allowbreak{}tex · line\_\allowbreak{}range 142-145\par} & {\raggedright (not a numeric\- proof)\par} & {\raggedright \texttt{(not a numeric\- proof)}\par} \\
+% MAPPING-ROW theorem|5|thm:unique|stmt:000064|1|main.tex|||||theorem|not passed
+{\raggedright theorem\- 5\par} & {\raggedright \texttt{thm:\allowbreak{}unique}\par} & {\raggedright \texttt{stmt:\allowbreak{}000064}\par} & {\raggedright \texttt{theorem\-}\par} & {\raggedright not passed\par} & 1 & {\raggedright \texttt{main.\allowbreak{}tex}\par} & {\raggedright (Lean off)\par} & {\raggedright main.\allowbreak{}tex · line\_\allowbreak{}range 152-155\par} & {\raggedright (not a numeric\- proof)\par} & {\raggedright \texttt{(not a numeric\- proof)}\par} \\
+\hline
+\end{tabular}
+\endgroup
+
+% ==== MAPPING-APPENDIX END ====
+

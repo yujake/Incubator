@@ -1,0 +1,843 @@
+{
+  "role": "V",
+  "task": "V：这一趟派给你的活是 —— 审这一份已经洗过的证明稿 manuscripts/B/b-proof-000000.md（命题 stmt:000060「Sylow 第一定理」）：按写成后的样子整体重读，逐条查硬禁令与同段依据，给出两态结论（成立 / 有毛病）与逐条 findings；结论落 verifications/000060.jsonl，签块由收方秘书落回稿里。这份稿是第二阶段洗过的版本（正文 sha fa83974f31e23f407e4a83db55fccb4feefe03bfbf64b78f548926e2b136c4a2），B 要用它做精准替换，所以签必须盖在这一版正文上。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/B/b-proof-000000.md"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# B 的证明手稿：设 G 是有限群，p 是素数。则 G 必有 p-Sylow 子群；并且 G 的每个 p-子群都包含在 G 的某个 p-…\n\n- 标签：Sylow 第一定理\n- 稿族：b-proof\n- 产出者：agent-B-B-literature-sylow\n- 正文sha：fa83974f31e23f407e4a83db55fccb4feefe03bfbf64b78f548926e2b136c4a2\n- 命题指纹：a2e6eacbae6fdfa8bc371c93539990c6f6de1dc6ef4ea46b50b87bd46d929337\n- 登记时间：2026-11-24T03:51:39+08:00\n- 版本：2026-11-24T03:51:39+08:00@fa83974f31e23f407e4a83db55fccb4feefe03bfbf64b78f548926e2b136c4a2\n\n## 命题\n\n设 G 是有限群，p 是素数。则 G 必有 p-Sylow 子群；并且 G 的每个 p-子群都包含在 G 的某个 p-Sylow 子群之中。\n\n## 证明\n\n设 |G| = p^k·m，其中 p ∤ m。若 k = 0，则平凡子群已经是 p-Sylow 子群，结论成立；以下设 k ≥ 1。\n\n我们证明一个更强的结论：对每个 0 ≤ i ≤ k，G 都有阶为 p^i 的子群，并且这些子群能排成一条链 {e} = H₀ ⊂ H₁ ⊂ … ⊂ H_k，其中每步的指数 [H_{i+1} : H_i] = p。\n\n关键的一步是：只要 H ≤ G 满足 |H| = p^i 且 i < k，就存在包含 H 的 p-子群 H′ 使 [H′ : H] = p。为此让 H 通过左乘作用在左陪集集合 G/H 上。H 是有限 p-群，而有限 p-群 Γ 作用在有限集 X 上时有固定点同余式 |X| ≡ |Fix_Γ(X)| (mod p)，于是 |G/H| ≡ |Fix_H(G/H)| (mod p)。一个陪集 gH 被 H 固定，当且仅当对每个 h ∈ H 都有 hgH = gH，即 g⁻¹hg ∈ H，亦即 g⁻¹Hg ⊆ H；又 |g⁻¹Hg| = |H|，故 g⁻¹Hg = H，这等价于 g ∈ N(H)。因此 Fix_H(G/H) = N(H)/H，代回同余式得 [G : H] ≡ [N(H) : H] (mod p)。因为 i < k，指数 [G : H] = p^{k−i}·m 被 p 整除，所以 [N(H) : H] 也被 p 整除。由 Cauchy 定理，商群 N(H)/H 含有阶为 p 的子群，设它由陪集 gH 生成。沿商映射 N(H) → N(H)/H 取原像，就得到 G 中一个包含 H 的子群，其阶为 p·|H| = p^{i+1}，这就是所需的 H′。\n\n从 H₀ = {e} 出发反复使用这一步，就得到阶依次为 p^i 的链，特别地 H_k 的阶为 p^k，它是 G 的一个 p-Sylow 子群。反之，若一开始取 H 为 G 的任一 p-子群，同样地反复扩张，可把 H 扩到一个阶为 p^k 的 p-子群，故 H 含于某个 p-Sylow 子群之中。两条结论合起来即 Sylow 第一定理。\n\n## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |\n|---|---|---|\n\n（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/B/b-proof-000000.md",
+          "encoding": "utf-8",
+          "bytes_read": 2528,
+          "total_bytes": 2528,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 30,
+          "total_lines": 30,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 30 行",
+          "sha256": "e0004b10d3504527d86e350ccf4514eddaaee831c30fc0117d231b28d5920b5f"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 36608,
+        "prompt_cache_miss_tokens": 1286,
+        "tokens_in": 37894,
+        "tokens_out": 55,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000008"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "statements",
+          "id": "000060"
+        },
+        "why": "核对在册命题 000060 的字面与手稿「## 命题」一节是否一致（台账一致这一轴）"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "_proposition_adjudication": {
+            "checked": true,
+            "attempted": true,
+            "verdict": "different",
+            "canonical_name": "Sylow 第一定理",
+            "same_as": "",
+            "basis": "条件：本条为『G 是有限群，p 是素数』；候选表为空，无可比对候选条件，故不能判 same。；结论：本条为『G 必有 p-Sylow 子群，且每个 p-子群都包含在某个 p-Sylow 子群中』；候选表为空，无可比对候选结论，故不能判 same。；依据 how_to_judge：候选表为空 ⇒ different（没有可并的对象）。；候选表为空，没有可比对的条件—结论对象，无法并成同一个定理。",
+            "reason": "候选表为空，没有可比对的条件—结论对象，无法并成同一个定理。",
+            "reused": false,
+            "seam_source": "secretary（LlmSeam.for_secretary）",
+            "seam_attempted": true,
+            "at": "2026-11-24T03:47:33+08:00"
+          },
+          "quote_carrier": {
+            "pass": "first",
+            "manuscript_id": "000000",
+            "manuscript": "manuscripts/B/b-proof-000000.md",
+            "body_sha256": "9f2a052d0174cc8620b99b3777d41656ad22dbffeb1180c028463b1e46b4f623",
+            "at": "2026-11-24T03:47:33+08:00"
+          },
+          "proof_no": 1,
+          "proof_sha256": "9f2a052d0174cc8620b99b3777d41656ad22dbffeb1180c028463b1e46b4f623",
+          "manuscript_id": "000000",
+          "manuscripts": {
+            "1": "manuscripts/B/b-proof-000000.md"
+          },
+          "_statement_amend_history": [
+            {
+              "at": "2026-11-24T03:49:48+08:00",
+              "by": "secretary-B",
+              "task_id": "t-000006",
+              "changes": {
+                "quote_reason": {
+                  "from": "逐字没命中（not_found）：这一份全文共 7 页，逐页归一化之后都没有出现要比对的那一段（声明窗口：第 3-3 页；比对对象：statements.proof_text）；这一笔核的是quote_span 本身（认不出定位格式，按原文片段核） ⇒ 要么它指的不是这一份来源（页码或 source_lit_id 给错了），要么这一句被改写过（改写要按语义档走：H 判 + quote_call_sha256）。按 quote_verified=False 记 —— 不是 unknown：这份全文我读到了。没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+                  "to": "逐字回验判不一致（quote_verified=false）：原 quote「A ﬁnite group G has a p-Sylow subgroup for every prime p and each p-subgroup of G lies in some p-Sylow subgroup of G.」在来源全文里未能逐字命中（疑与跨行及连字 ﬁ 的归一有关）；同页 Sylow II/III 的引文逐字回验通过（p3:norm[625:684] / p3:norm[710:847]）。本条命题正文本身有 Conrad p.3 Theorem 1.7 依据，待重取一条逐字单句引文后替换。"
+                }
+              }
+            }
+          ],
+          "stmt_id": "000060",
+          "origin": "external_lit",
+          "kind": "theorem",
+          "label": "Sylow 第一定理",
+          "statement_text": "Sylow I：有限群对每个素数 p 都有 p-Sylow 子群，且每个 p-子群都落在某个 p-Sylow 子群里。",
+          "statement_full": "设 G 是有限群，p 是素数。则 G 必有 p-Sylow 子群；并且 G 的每个 p-子群都包含在 G 的某个 p-Sylow 子群之中。",
+          "proof_text": "A ﬁnite group G has a p-Sylow subgroup for every prime p and each p-subgroup of G lies in some p-Sylow subgroup of G.",
+          "source_lit_id": "000000",
+          "page_range": {
+            "start": 3,
+            "end": 3,
+            "label": "p. 3"
+          },
+          "quote_verified": false,
+          "quote_mode": "",
+          "quote_reason": "逐字回验判不一致（quote_verified=false）：原 quote「A ﬁnite group G has a p-Sylow subgroup for every prime p and each p-subgroup of G lies in some p-Sylow subgroup of G.」在来源全文里未能逐字命中（疑与跨行及连字 ﬁ 的归一有关）；同页 Sylow II/III 的引文逐字回验通过（p3:norm[625:684] / p3:norm[710:847]）。本条命题正文本身有 Conrad p.3 Theorem 1.7 依据，待重取一条逐字单句引文后替换。",
+          "quote_span": "",
+          "quote_call_sha256": "",
+          "evidence_kind": "cross_check",
+          "bits": {
+            "numeric": "pending",
+            "proof": true,
+            "reviewed": false,
+            "formal": "pending",
+            "audited": false,
+            "origin": "external_lit",
+            "evidence": {
+              "numeric": {},
+              "numeric_reason": "",
+              "proof_process": "A ﬁnite group G has a p-Sylow subgroup for every prime p and each p-subgroup of G lies in some p-Sylow subgroup of G.",
+              "proof_source": "own",
+              "reviewed_by": {},
+              "reviewed_source": "",
+              "formal": {},
+              "formal_reason": "",
+              "audited_by": {},
+              "optimized_by_proof": {
+                "1": false
+              }
+            },
+            "voided_by": {},
+            "grade": "conjecture",
+            "audited_badge": false
+          },
+          "status": "active",
+          "derived_from": [],
+          "aliases": [],
+          "doc_id": null,
+          "line_range": {
+            "start": null,
+            "end": null,
+            "label": ""
+          },
+          "created_at": "2026-11-24T03:47:33+08:00",
+          "created_by": "secretary-B",
+          "manuscript_family": "b-proof",
+          "proof_routes": {},
+          "route": ""
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "id": "000060",
+          "id_field": "stmt_id",
+          "found": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 37120,
+        "prompt_cache_miss_tokens": 2035,
+        "tokens_in": 39155,
+        "tokens_out": 5419,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000008"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "verify.verify_proof",
+        "args": {
+          "statement_id": "000060",
+          "proof_manuscript": "manuscripts/B/b-proof-000000.md"
+        },
+        "why": "按写成后的样子整体重读 b-proof-000000.md 的 ## 证明 一节（命题 stmt:000060），核对正文 sha 并落两态结论"
+      },
+      "result": {
+        "tool": "verify.verify_proof",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "kind": "",
+          "statement_id": "000060",
+          "verification_id": "v-000001",
+          "verdict": "有毛病",
+          "defect_step": 5,
+          "findings": [
+            {
+              "level": "error",
+              "step": 5,
+              "kind": "无依据的步骤",
+              "detail": "证明直接使用有限 p-群作用固定点同余式，但 `## 依赖` 为空，未登记在册 id，也未在同段内证明该同余式。"
+            },
+            {
+              "level": "error",
+              "step": 8,
+              "kind": "无依据的步骤",
+              "detail": "证明直接引用 Cauchy 定理，但未在 `## 依赖` 登记任何在册 id，也未给出本情形推导。"
+            }
+          ],
+          "unresolved_errors": 2,
+          "proof_sha256": "fa83974f31e23f407e4a83db55fccb4feefe03bfbf64b78f548926e2b136c4a2",
+          "proof_chars": 882,
+          "signed_bit3": false,
+          "reviewed_by": {},
+          "bits": {
+            "numeric": "pending",
+            "proof": true,
+            "reviewed": false,
+            "formal": "pending",
+            "audited": false,
+            "origin": "own_result",
+            "evidence": {
+              "numeric": {},
+              "numeric_reason": "",
+              "proof_process": "设 |G| = p^k·m，其中 p ∤ m。若 k = 0，则平凡子群已经是 p-Sylow 子群，结论成立；以下设 k ≥ 1。\n\n我们证明一个更强的结论：对每个 0 ≤ i ≤ k，G 都有阶为 p^i 的子群，并且这些子群能排成一条链 {e} = H₀ ⊂ H₁ ⊂ … ⊂ H_k，其中每步的指数 [H_{i+1} : H_i] = p。\n\n关键的一步是：只要 H ≤ G 满足 |H| = p^i 且 i < k，就存在包含 H 的 p-子群 H′ 使 [H′ : H] = p。为此让 H 通过左乘作用在左陪集集合 G/H 上。H 是有限 p-群，而有限 p-群 Γ 作用在有限集 X 上时有固定点同余式 |X| ≡ |Fix_Γ(X)| (mod p)，于是 |G/H| ≡ |Fix_H(G/H)| (mod p)。一个陪集 gH 被 H 固定，当且仅当对每个 h ∈ H 都有 hgH = gH，即 g⁻¹hg ∈ H，亦即 g⁻¹Hg ⊆ H；又 |g⁻¹Hg| = |H|，故 g⁻¹Hg = H，这等价于 g ∈ N(H)。因此 Fix_H(G/H) = N(H)/H，代回同余式得 [G : H] ≡ [N(H) : H] (mod p)。因为 i < k，指数 [G : H] = p^{k−i}·m 被 p 整除，所以 [N(H) : H] 也被 p 整除。由 Cauchy 定理，商群 N(H)/H 含有阶为 p 的子群，设它由陪集 gH 生成。沿商映射 N(H) → N(H)/H 取原像，就得到 G 中一个包含 H 的子群，其阶为 p·|H| = p^{i+1}，这就是所需的 H′。\n\n从 H₀ = {e} 出发反复使用这一步，就得到阶依次为 p^i 的链，特别地 H_k 的阶为 p^k，它是 G 的一个 p-Sylow 子群。反之，若一开始取 H 为 G 的任一 p-子群，同样地反复扩张，可把 H 扩到一个阶为 p^k 的 p-子群，故 H 含于某个 p-Sylow 子群之中。两条结论合起来即 Sylow 第一定理。",
+              "proof_source": "own",
+              "reviewed_by": {},
+              "reviewed_source": "",
+              "formal": {},
+              "formal_reason": "",
+              "audited_by": {}
+            },
+            "voided_by": {},
+            "grade": "conjecture",
+            "audited_badge": false
+          },
+          "review_write": {
+            "written": false,
+            "rolled_back": false,
+            "append_state": "appended",
+            "re_sign_required": false,
+            "grade": "",
+            "statement_id": "000060",
+            "proof_no": 1,
+            "proof_sha256": "fa83974f31e23f407e4a83db55fccb4feefe03bfbf64b78f548926e2b136c4a2",
+            "kind_upgrade": {},
+            "upgrade_note": "",
+            "grade_recomputed": {},
+            "streak": 0,
+            "need": 3,
+            "streak_ok": false,
+            "deferred_to": "secretary",
+            "reason": "发签这一步不在这一支：在册档由 V 的秘书判定并发（业主 2026-10-29），未在册档由 V 自己颁发签信封。台账那一行已落（v-000001）",
+            "manuscript_signed": false,
+            "filed": "not_read_by_v",
+            "v_review": {
+              "checked": true,
+              "review_id": "v-review-000001",
+              "written": true,
+              "idempotent": false,
+              "path": "verifications/reviews/v-review-000001.md",
+              "delivery": {
+                "checked": true,
+                "state": "dispatched",
+                "item_id": "t-000009",
+                "key": "v-review@v-review-000001",
+                "role": "B",
+                "parent_task_id": "t-000005",
+                "reason": "已投给 t-000005 的板项 t-000009",
+                "detail_path": "V 的审阅报告：`verifications/reviews/v-review-000001.md`\n- 被审稿：`manuscripts/B/b-proof-000000.md`\n- 结论：有毛病（V 的秘书语义判定：fault）\n- 台账锚点：`verifications/000060.jsonl#v-000001`\nV 的原文不转达；这份报告就是给你的审阅意见。改完把同一份稿重新送 V。\n",
+                "existing": false
+              },
+              "reason": "V 稿已落盘：verifications/reviews/v-review-000001.md"
+            },
+            "signed_delivery": {}
+          },
+          "ledger": "verifications/000060.jsonl#v-000001",
+          "reason": "v-000001：有毛病（不签：签没落成）",
+          "detail": "",
+          "exhaustion_review": {},
+          "signer": "",
+          "proof_authors": [],
+          "report_path": "",
+          "checks": [],
+          "missing": [],
+          "citations": [],
+          "citation_checks": [],
+          "citation_gate": {
+            "ok": true,
+            "blocking": [],
+            "weaker": [],
+            "problem": "",
+            "why": ""
+          },
+          "secretary_judge": {
+            "checked": true,
+            "answer": "有缺陷要指出",
+            "axis": "fault",
+            "unwired": false,
+            "reason": "V 指出第5步和第8步直接使用未登记、未证明的外部定理（固定点同余式、Cauchy 定理），属于证明链缺少依据的实质缺陷。",
+            "basis": [
+              "\"why\": \"第5步与第8步使用了未登记、未证明的外部定理，违反无依据步骤禁令。\"",
+              "\"detail\": \"证明直接使用有限 p-群作用固定点同余式，但 `## 依赖` 为空，未登记在册 id，也未在同段内证明该同余式。\"",
+              "\"detail\": \"证明直接引用 Cauchy 定理，但未在 `## 依赖` 登记任何在册 id，也未给出本情形推导。\""
+            ],
+            "refused": "",
+            "cost": {
+              "ledger": "000174",
+              "charged": true,
+              "ledger_reason": "charged",
+              "call_index": 164,
+              "prompt_sha256": "92c8a43324575b9c2903372b8bebcbc0ac2dc3411b8e114c13c8bbfd0595f083",
+              "tokens": 1514,
+              "usd": 0.000322
+            },
+            "verdict": "有毛病",
+            "defect_step": 5,
+            "fault_kind": "math",
+            "fault_cause": "",
+            "report_gap": "",
+            "statement_id": "000060",
+            "proof_no": 1,
+            "material": {
+              "v_reply": "{\"verdict\": \"有毛病\", \"defect_step\": 5, \"quote\": \"有限 p-群 Γ 作用在有限集 X 上时有固定点同余式 |X| ≡ |Fix_Γ(X)| (mod p)\", \"why\": \"第5步与第8步使用了未登记、未证明的外部定理，违反无依据步骤禁令。\", \"findings\": [{\"level\": \"error\", \"step\": 5, \"kind\": \"无依据的步骤\", \"detail\": \"证明直接使用有限 p-群作用固定点同余式，但 `## 依赖` 为空，未登记在册 id，也未在同段内证明该同余式。\"}, {\"level\": \"error\", \"step\": 8, \"kind\": \"无依据的步骤\", \"detail\": \"证明直接引用 Cauchy 定理，但未在 `## 依赖` 登记任何在册 id，也未给出本情形推导。\"}], \"citation_checks\": []}",
+              "ledger_row": {
+                "verdict": "有毛病",
+                "defect_step": 5
+              }
+            },
+            "defect_step_basis": "回复明确写 \"defect_step\": 5，并在 findings 中把第5步列为 error；第8步虽也在问题之列，但按回复点出的步号取 5。"
+          },
+          "sign_issuance": {
+            "checked": true,
+            "issue": false,
+            "issued": false,
+            "landed": false,
+            "decision": "不签发",
+            "streak": 0,
+            "need": 3,
+            "streak_ok": false,
+            "projected": 0,
+            "same_sha": true,
+            "state": "rejected",
+            "fault_kind": "math",
+            "reason": "这一转秘书语义判定说「有毛病」（fault）⇒ 不发签；这一转就是终局：已按 fault 打回 F（错在第几步见洗过的转达与 findings）",
+            "basis": [
+              "秘书判定 checked=True axis=fault",
+              "continuous=0/3",
+              "row=v-000001"
+            ],
+            "reading": {
+              "checked": true,
+              "state": "rejected",
+              "ok": false,
+              "in_sync": true,
+              "ledger_present": true,
+              "statement_id": "000060",
+              "proof_no": 1,
+              "sha": "fa83974f31e23f407e4a83db55fccb4feefe03bfbf64b78f548926e2b136c4a2",
+              "verification_id": "v-000001",
+              "verdict": "有毛病",
+              "round": 1,
+              "unresolved_errors": 2,
+              "rows": 1,
+              "proof_rows": 1,
+              "problems": [],
+              "superseded": [],
+              "superseded_total": 0,
+              "streak": 0,
+              "need": 3,
+              "streak_ok": false,
+              "legacy_rows": 0,
+              "counted_by": "legacy:ledger_tail",
+              "ledger": "verifications/000060.jsonl",
+              "why": "000060#p1 的现行正文（sha fa83974f31e2…）最近一签是 v-000001：秘书语义判定轴=fault ⇒ 这一份要打回，按缺陷处理（V 写下的陈述：'有毛病'；unresolved_errors=2；why：第5步与第8步使用了未登记、未证明的外部定理，违反无依据步骤禁令。）",
+              "hard_ban_markers": [],
+              "secretary_axis": "fault",
+              "secretary_fault": true,
+              "secretary_judged": true,
+              "secretary_unjudged": false
+            },
+            "cost": {},
+            "material": {},
+            "writeback": {},
+            "statement_id": "000060"
+          },
+          "review_passes": [
+            {
+              "pass": 1,
+              "axis": "fault",
+              "fault_kind": "math",
+              "fault_cause": "",
+              "decision": "不签发",
+              "streak": 0,
+              "need": 3,
+              "streak_ok": false,
+              "issue": false,
+              "issued": false,
+              "verdict": "有毛病",
+              "verification_id": "v-000001",
+              "review_call": "91df8de293c1",
+              "terminal": "rejected"
+            }
+          ],
+          "manuscript_identity": {
+            "checked": true,
+            "statement_id": "000060",
+            "manuscript_id": "000000",
+            "row_manuscript_id": "000000",
+            "matched_by": "manuscript_id",
+            "fallback": false,
+            "row_checked": true,
+            "found": true,
+            "problem": "",
+            "path_checked": true,
+            "path_count": 1,
+            "path_group": 1,
+            "path_problem": "",
+            "why": "稿号 000000 == stmt:000060 行上的 `manuscript_id`，也在第 1 条逐路径记录上 ⇒ 这是这一条命题的稿"
+          },
+          "issued_sign": {},
+          "wash_v_reply": {
+            "checked": true,
+            "washed": true,
+            "text": "结论：有毛病，缺陷落在第 5 步，第 8 步另有一处同类问题。\n\n第 5 步——问题：证明把「有限 p-群作用于有限集时，集合大小与固定点集大小模 p 同余」当作已知结论直接使用；`## 依赖` 一项为空，既没有登记任何在册 id，也没有在同一段内给出该同余式的证明。下一步：把该结论登记为在册依赖，或在同段内补出它的推导。\n\n第 8 步——问题：证明直接引用 Cauchy 定理，`## 依赖` 中同样没有登记任何在册 id，也没有针对本情形给出推导。下一步：补登该定理的在册 id，或补出本情形下的推导。\n\n引文核对：本轮没有提出检查项。",
+            "findings": [
+              {
+                "quote": "有限 p-群 Γ 作用在有限集 X 上时有固定点同余式 |X| ≡ |Fix_Γ(X)| (mod p)",
+                "why": "这是第 5 步直接拿来使用的外部结论，属于未登记、未证明即引用的情形。"
+              },
+              {
+                "quote": "证明直接使用有限 p-群作用固定点同余式，但 `## 依赖` 为空，未登记在册 id，也未在同段内证明该同余式。",
+                "why": "第 5 步的缺陷性质是无依据的步骤：依赖登记为空，且段内没有给出该同余式的证明。"
+              },
+              {
+                "quote": "证明直接引用 Cauchy 定理，但未在 `## 依赖` 登记任何在册 id，也未给出本情形推导。",
+                "why": "第 8 步存在同类缺陷：引用外部定理但未登记在册 id，也未补出本情形的推导。"
+              }
+            ],
+            "dropped": [],
+            "refused": "",
+            "reason": "洗过：3 条 findings 逐字落回原文",
+            "actor": "secretary-V",
+            "changes": [
+              {
+                "field": "text",
+                "from": "（V 的原文，不转达）",
+                "to": "结论：有毛病，缺陷落在第 5 步，第 8 步另有一处同类问题。\n\n第 5 步——问题：证明把「有限 p-群作用于有限集时，集合大小与固定点集大小模 p 同余」当作已知结论直接使用；`## 依赖` 一项为空，既没有登记任何在册 id，也没有在同一段内给出该同余式的证明。下一步：把该结论登记为在册依赖，或在同段内补出它的推导。\n\n第 8 步——问题：证明直接引用 Cauchy 定理，`## 依赖` 中同样没有登记任何在册 id，也没有针对本情形给出推导。下一步：补登该定理的在册 id，或补出本情形下的推导。\n\n引文核对：本轮没有提出检查项。",
+                "why": "洗稿转达：原文不外发（业主 2026-10-29 的 C 段）"
+              }
+            ],
+            "cost": {},
+            "material": {
+              "v_reply": "{\"verdict\": \"有毛病\", \"defect_step\": 5, \"quote\": \"有限 p-群 Γ 作用在有限集 X 上时有固定点同余式 |X| ≡ |Fix_Γ(X)| (mod p)\", \"why\": \"第5步与第8步使用了未登记、未证明的外部定理，违反无依据步骤禁令。\", \"findings\": [{\"level\": \"error\", \"step\": 5, \"kind\": \"无依据的步骤\", \"detail\": \"证明直接使用有限 p-群作用固定点同余式，但 `## 依赖` 为空，未登记在册 id，也未在同段内证明该同余式。\"}, {\"level\": \"error\", \"step\": 8, \"kind\": \"无依据的步骤\", \"detail\": \"证明直接引用 Cauchy 定理，但未在 `## 依赖` 登记任何在册 id，也未给出本情形推导。\"}], \"citation_checks\": []}",
+              "ledger_row": {
+                "verdict": "有毛病",
+                "defect_step": 5
+              },
+              "label": ""
+            },
+            "statement_id": "000060",
+            "proof_no": 1
+          }
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 38400,
+        "prompt_cache_miss_tokens": 3107,
+        "tokens_in": 41507,
+        "tokens_out": 7511,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000008"
+    },
+    {
+      "index": 3,
+      "shape": "final",
+      "payload": {
+        "final": "两态结论：有毛病（不签发 —— 这一转判末即终局，v-000001 已落 verifications/000060.jsonl）。被审正文 `manuscripts/B/b-proof-000000.md` 的 `## 证明` sha = fa83974f31e23f407e4a83db55fccb4feefe03bfbf64b78f548926e2b136c4a2，与送审声明的那一版逐字一致（核过，签如若有就落在这一版上）；`table.get statements 000060` 的 statement_full 与稿的「## 命题」一字不差，依赖面 `## 依赖` 为空表且明确规定「没有引用任何在册命题」。证明的数学骨架我逐段核过、没有算错：①k=0 的退化情形已单独处理；②H 左乘作用在 G/H 上良定义（gH=g′H ⇒ g′=gh ⇒ h₀g′H=h₀gH）；③固定点集等式 Fix_H(G/H)=N(H)/H 的等价链（hgH=gH ⇔ g⁻¹hg∈H ⇔ g⁻¹Hg⊆H，再由 |g⁻¹Hg|=|H| 得 =，⇔ g∈N(H)）成立；④[N(H):H] 被 p 整除后取商群阶 p 子群的原像，阶为 p·|H|=p^{i+1}，正确；⑤链式扩张到 H_k 与「任一 p-子群可扩到 p^k」两半都收得住，结论强度与命题字面一致（未超出）。findings 落在硬禁令「无依据的步骤」上（2 条，均 error）：第 5 步 —— 证明直接使用「有限 p-群 Γ 作用于有限集 X ⇒ |X| ≡ |Fix_Γ(X)| (mod p)」（原句：「H 是有限 p-群，而有限 p-群 Γ 作用在有限集 X 上时有固定点同余式 |X| ≡ |Fix_Γ(X)| (mod p)」），该事实既未在 `## 依赖` 登记在册 id，也未在同段内给出推导（本可两步写出：轨道长整除 |Γ| ⇒ 非单点轨道长被 p 整除）；第 8 步 —— 证明直接引用 Cauchy 定理（原句：「由 Cauchy 定理，商群 N(H)/H 含有阶为 p 的子群，设它由陪集 gH 生成」），同样未登记在册 id、未给本情形推导，而 `## 依赖` 又明文声明「没有引用任何在册命题」，两条外部定理因此无账可对。最小补法（二选一，不必重写全篇）：把这两条作为 lemma 登记成在册命题并在 `## 依赖` 表里各补一行「用在哪一步」；或在原段内就地补出推导（固定点同余式两行；Cauchy 定理可给 McKay 的 ℤ_p 作用版本或用 p-群中心/类方程那一路的简证）。补完把同一份稿重送一次，数学主体无需改动即可望通过。引文轴：本轮稿未引用在册命题，不涉及；形式化本会话关着 ⇒ 这一签的性质是「逐行审阅」，不是机器核验。",
+        "evidence": [
+          "stmt:000060",
+          "manuscripts/B/b-proof-000000.md",
+          "sha256:fa83974f31e23f407e4a83db55fccb4feefe03bfbf64b78f548926e2b136c4a2",
+          "verifications/000060.jsonl#v-000001"
+        ],
+        "notify": {
+          "to": "B",
+          "summary": "stmt:000060（Sylow I）这一版正文 fa8397… 判「有毛病」：第 5、8 步的无依据步骤（未登记也未证明的固定点同余式与 Cauchy 定理），签不落；补登依赖或就地补推导后重送。",
+          "body": "## 被审对象\n- 稿：`manuscripts/B/b-proof-000000.md`（稿族 b-proof，稿号 000000）\n- 命题：stmt:000060「Sylow 第一定理」，statement_full 与稿的「## 命题」一字不差\n- 被审正文 sha256：`fa83974f31e23f407e4a83db55fccb4feefe03bfbf64b78f548926e2b136c4a2`（与你送审声明的这一版一致；这一签如若有就只会落到这一版上）\n- 台账：`verifications/000060.jsonl#v-000001`，verdict=`有毛病`，defect_step=5，unresolved_errors=2\n\n## 结论：有毛病（不签发）\n数学骨架是站得住的：k=0 退化已单列；H 在 G/H 上的左乘作用良定义；Fix_H(G/H)=N(H)/H 的等价链完整；由 [G:H]=p^{k−i}m 被 p 整除得 p | [N(H):H]、再取商群阶 p 子群原像得阶 p·|H| 的子群，这一步没有错；把链推到 H_k、以及「任一 p-子群可扩张到 p^k」两半都收得住，结论没有超出命题字面。\n\n缺陷只在硬禁令「无依据的步骤」上，两处：\n1. **第 5 步** — 原句：「H 是有限 p-群，而有限 p-群 Γ 作用在有限集 X 上时有固定点同余式 |X| ≡ |Fix_Γ(X)| (mod p)」。问题：该结论直接拿来用，`## 依赖` 未登记任何在册 id，同段内也没有推导。需补：登记成在册 lemma 并在依赖表写明用在哪一步，或在原段补两行推导（轨道长整除 |Γ| ⇒ 非单点轨道长被 p 整除 ⇒ |X| ≡ |Fix| mod p）。\n2. **第 8 步** — 原句：「由 Cauchy 定理，商群 N(H)/H 含有阶为 p 的子群，设它由陪集 gH 生成」。问题：同样是未登记、未给本情形推导的外部定理；而 `## 依赖` 又明文写「这一份证明没有引用任何在册命题」，两处引用因此无账可对。需补：补登该定理的在册 id，或给出本情形推导（例如 ℤ_p 在 N(H)/H 上的 McKay 作用，或 p-群类方程那一路）。\n\n## 要你做什么\n把上面两条各自「登记在册 + 依赖表补一行」或「段内补推导」二选一补齐 —— 数学主体不用重写。改完后稿的正文 sha 会变，请**按新版重送**（旧 sha 的签不作数），我再走一次两态复核；这一版没有签、签块位置保持空白。\n\n## 说明\n- 有毛病这一转即为终局，不再追加中间轮次；上面的 `verifications/reviews/v-review-*.md` 是给你改稿用的信息型板项，读到即收讫，不需要 ack。\n- 形式化本会话关着，所以本结论的性质是「逐行审阅」（pre_theorem 上限），不是机器核验。\n- 引文轴不涉及：稿未引用任何在册命题。",
+          "refs": [
+            "stmt:000060"
+          ]
+        }
+      },
+      "result": {
+        "notify_handoff": {
+          "handoff": "000000",
+          "ok": true,
+          "id": "000000",
+          "path": "work/handoffs.jsonl#000000",
+          "to": "B",
+          "brief": "stmt:000060（Sylow I）这一版正文 fa8397… 判「有毛病」：第 5、8 步的无依据步骤（未登记也未证明的固定点同余式与 Cauchy 定理），签不落；补登依赖或就地补推导后重送。",
+          "addressing": {
+            "checked": true,
+            "how": "parent",
+            "to": "B",
+            "kind": "parent",
+            "name": "B-literature-sylow",
+            "task_id": "t-000005",
+            "role": "B",
+            "brief": "",
+            "candidates": [],
+            "callable": "父 B-literature-sylow（t-000005）",
+            "why": "名册成员（parent）⇒ 手稿写角色 B，通知投实例 B",
+            "delivery": "roster",
+            "manuscript_to": "B",
+            "addressed_by": "role_fallback"
+          },
+          "notify_channel": "roster",
+          "revises": "",
+          "existing_same_summary": {
+            "count": 0,
+            "ids": [],
+            "note": "查过了：没有同一句话的既有交接"
+          },
+          "notified": "t-000011",
+          "error": "",
+          "note": "收件人下次运行时（或本步之后）会在收件箱/板上看到编号；它用 `manuscripts.read` 读全文"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 40704,
+        "prompt_cache_miss_tokens": 5051,
+        "tokens_in": 45755,
+        "tokens_out": 5772,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000008"
+    }
+  ],
+  "final": "两态结论：有毛病（不签发 —— 这一转判末即终局，v-000001 已落 verifications/000060.jsonl）。被审正文 `manuscripts/B/b-proof-000000.md` 的 `## 证明` sha = fa83974f31e23f407e4a83db55fccb4feefe03bfbf64b78f548926e2b136c4a2，与送审声明的那一版逐字一致（核过，签如若有就落在这一版上）；`table.get statements 000060` 的 statement_full 与稿的「## 命题」一字不差，依赖面 `## 依赖` 为空表且明确规定「没有引用任何在册命题」。证明的数学骨架我逐段核过、没有算错：①k=0 的退化情形已单独处理；②H 左乘作用在 G/H 上良定义（gH=g′H ⇒ g′=gh ⇒ h₀g′H=h₀gH）；③固定点集等式 Fix_H(G/H)=N(H)/H 的等价链（hgH=gH ⇔ g⁻¹hg∈H ⇔ g⁻¹Hg⊆H，再由 |g⁻¹Hg|=|H| 得 =，⇔ g∈N(H)）成立；④[N(H):H] 被 p 整除后取商群阶 p 子群的原像，阶为 p·|H|=p^{i+1}，正确；⑤链式扩张到 H_k 与「任一 p-子群可扩到 p^k」两半都收得住，结论强度与命题字面一致（未超出）。findings 落在硬禁令「无依据的步骤」上（2 条，均 error）：第 5 步 —— 证明直接使用「有限 p-群 Γ 作用于有限集 X ⇒ |X| ≡ |Fix_Γ(X)| (mod p)」（原句：「H 是有限 p-群，而有限 p-群 Γ 作用在有限集 X 上时有固定点同余式 |X| ≡ |Fix_Γ(X)| (mod p)」），该事实既未在 `## 依赖` 登记在册 id，也未在同段内给出推导（本可两步写出：轨道长整除 |Γ| ⇒ 非单点轨道长被 p 整除）；第 8 步 —— 证明直接引用 Cauchy 定理（原句：「由 Cauchy 定理，商群 N(H)/H 含有阶为 p 的子群，设它由陪集 gH 生成」），同样未登记在册 id、未给本情形推导，而 `## 依赖` 又明文声明「没有引用任何在册命题」，两条外部定理因此无账可对。最小补法（二选一，不必重写全篇）：把这两条作为 lemma 登记成在册命题并在 `## 依赖` 表里各补一行「用在哪一步」；或在原段内就地补出推导（固定点同余式两行；Cauchy 定理可给 McKay 的 ℤ_p 作用版本或用 p-群中心/类方程那一路的简证）。补完把同一份稿重送一次，数学主体无需改动即可望通过。引文轴：本轮稿未引用在册命题，不涉及；形式化本会话关着 ⇒ 这一签的性质是「逐行审阅」，不是机器核验。",
+  "evidence": [
+    "stmt:000060",
+    "manuscripts/B/b-proof-000000.md",
+    "sha256:fa83974f31e23f407e4a83db55fccb4feefe03bfbf64b78f548926e2b136c4a2",
+    "verifications/000060.jsonl#v-000001"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 0,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 4,
+  "compactions": 0,
+  "mailbox_items": [],
+  "mailbox_msgs": [],
+  "mailbox_delivered": 0,
+  "monitor_turns": 0,
+  "wakes": 0,
+  "wake_ids": [],
+  "wake_events": [],
+  "clock_pumps": 7,
+  "clock_fired": 0,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "V 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "V",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    }
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [
+    "000000"
+  ],
+  "summons": [],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [],
+  "summons_total": 0,
+  "summons_consumed": 0,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 0,
+    "summons_consumed": 0,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p327",
+    "role": "V",
+    "prompt_sha256": "052abf02fb503f722d3e805869fb8b2d64c0afe8b3059978b59c338744ec5519",
+    "prompt_chars": 46343,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "FACULTIES_07",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_STOP",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 4,
+    "tokens_in": 164311,
+    "tokens_out": 18757,
+    "usd": 0.013435,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 4,
+    "no_request_calls": 0,
+    "hit": 152832,
+    "miss": 11479,
+    "unknown_calls": 0,
+    "tokens_in": 164311,
+    "hit_rate": 0.9301,
+    "mismatched_calls": 0,
+    "saved_usd": 0.022466,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 128.391,
+  "end_ts": "2026-11-24T03:53:50+08:00",
+  "notes": [
+    "收工时名下还有 5 条证明没有 V 的签字（读数，不拦收工；明细：000060、000061、000062、000063、000064）",
+    "缓存读数：命中 152832 / 未命中 11479 token，命中率 93.0%（4 次调用）；按 modelcost 口径估算可省 约 0.022466 美元",
+    "子产出处理读数：summons_total=0（这一趟没派过子代理 ⇒ 没有要处理的子产出；判据没有对象，不红）"
+  ],
+  "final_payload": {
+    "final": "两态结论：有毛病（不签发 —— 这一转判末即终局，v-000001 已落 verifications/000060.jsonl）。被审正文 `manuscripts/B/b-proof-000000.md` 的 `## 证明` sha = fa83974f31e23f407e4a83db55fccb4feefe03bfbf64b78f548926e2b136c4a2，与送审声明的那一版逐字一致（核过，签如若有就落在这一版上）；`table.get statements 000060` 的 statement_full 与稿的「## 命题」一字不差，依赖面 `## 依赖` 为空表且明确规定「没有引用任何在册命题」。证明的数学骨架我逐段核过、没有算错：①k=0 的退化情形已单独处理；②H 左乘作用在 G/H 上良定义（gH=g′H ⇒ g′=gh ⇒ h₀g′H=h₀gH）；③固定点集等式 Fix_H(G/H)=N(H)/H 的等价链（hgH=gH ⇔ g⁻¹hg∈H ⇔ g⁻¹Hg⊆H，再由 |g⁻¹Hg|=|H| 得 =，⇔ g∈N(H)）成立；④[N(H):H] 被 p 整除后取商群阶 p 子群的原像，阶为 p·|H|=p^{i+1}，正确；⑤链式扩张到 H_k 与「任一 p-子群可扩到 p^k」两半都收得住，结论强度与命题字面一致（未超出）。findings 落在硬禁令「无依据的步骤」上（2 条，均 error）：第 5 步 —— 证明直接使用「有限 p-群 Γ 作用于有限集 X ⇒ |X| ≡ |Fix_Γ(X)| (mod p)」（原句：「H 是有限 p-群，而有限 p-群 Γ 作用在有限集 X 上时有固定点同余式 |X| ≡ |Fix_Γ(X)| (mod p)」），该事实既未在 `## 依赖` 登记在册 id，也未在同段内给出推导（本可两步写出：轨道长整除 |Γ| ⇒ 非单点轨道长被 p 整除）；第 8 步 —— 证明直接引用 Cauchy 定理（原句：「由 Cauchy 定理，商群 N(H)/H 含有阶为 p 的子群，设它由陪集 gH 生成」），同样未登记在册 id、未给本情形推导，而 `## 依赖` 又明文声明「没有引用任何在册命题」，两条外部定理因此无账可对。最小补法（二选一，不必重写全篇）：把这两条作为 lemma 登记成在册命题并在 `## 依赖` 表里各补一行「用在哪一步」；或在原段内就地补出推导（固定点同余式两行；Cauchy 定理可给 McKay 的 ℤ_p 作用版本或用 p-群中心/类方程那一路的简证）。补完把同一份稿重送一次，数学主体无需改动即可望通过。引文轴：本轮稿未引用在册命题，不涉及；形式化本会话关着 ⇒ 这一签的性质是「逐行审阅」，不是机器核验。",
+    "evidence": [
+      "stmt:000060",
+      "manuscripts/B/b-proof-000000.md",
+      "sha256:fa83974f31e23f407e4a83db55fccb4feefe03bfbf64b78f548926e2b136c4a2",
+      "verifications/000060.jsonl#v-000001"
+    ],
+    "notify": {
+      "to": "B",
+      "summary": "stmt:000060（Sylow I）这一版正文 fa8397… 判「有毛病」：第 5、8 步的无依据步骤（未登记也未证明的固定点同余式与 Cauchy 定理），签不落；补登依赖或就地补推导后重送。",
+      "body": "## 被审对象\n- 稿：`manuscripts/B/b-proof-000000.md`（稿族 b-proof，稿号 000000）\n- 命题：stmt:000060「Sylow 第一定理」，statement_full 与稿的「## 命题」一字不差\n- 被审正文 sha256：`fa83974f31e23f407e4a83db55fccb4feefe03bfbf64b78f548926e2b136c4a2`（与你送审声明的这一版一致；这一签如若有就只会落到这一版上）\n- 台账：`verifications/000060.jsonl#v-000001`，verdict=`有毛病`，defect_step=5，unresolved_errors=2\n\n## 结论：有毛病（不签发）\n数学骨架是站得住的：k=0 退化已单列；H 在 G/H 上的左乘作用良定义；Fix_H(G/H)=N(H)/H 的等价链完整；由 [G:H]=p^{k−i}m 被 p 整除得 p | [N(H):H]、再取商群阶 p 子群原像得阶 p·|H| 的子群，这一步没有错；把链推到 H_k、以及「任一 p-子群可扩张到 p^k」两半都收得住，结论没有超出命题字面。\n\n缺陷只在硬禁令「无依据的步骤」上，两处：\n1. **第 5 步** — 原句：「H 是有限 p-群，而有限 p-群 Γ 作用在有限集 X 上时有固定点同余式 |X| ≡ |Fix_Γ(X)| (mod p)」。问题：该结论直接拿来用，`## 依赖` 未登记任何在册 id，同段内也没有推导。需补：登记成在册 lemma 并在依赖表写明用在哪一步，或在原段补两行推导（轨道长整除 |Γ| ⇒ 非单点轨道长被 p 整除 ⇒ |X| ≡ |Fix| mod p）。\n2. **第 8 步** — 原句：「由 Cauchy 定理，商群 N(H)/H 含有阶为 p 的子群，设它由陪集 gH 生成」。问题：同样是未登记、未给本情形推导的外部定理；而 `## 依赖` 又明文写「这一份证明没有引用任何在册命题」，两处引用因此无账可对。需补：补登该定理的在册 id，或给出本情形推导（例如 ℤ_p 在 N(H)/H 上的 McKay 作用，或 p-群类方程那一路）。\n\n## 要你做什么\n把上面两条各自「登记在册 + 依赖表补一行」或「段内补推导」二选一补齐 —— 数学主体不用重写。改完后稿的正文 sha 会变，请**按新版重送**（旧 sha 的签不作数），我再走一次两态复核；这一版没有签、签块位置保持空白。\n\n## 说明\n- 有毛病这一转即为终局，不再追加中间轮次；上面的 `verifications/reviews/v-review-*.md` 是给你改稿用的信息型板项，读到即收讫，不需要 ack。\n- 形式化本会话关着，所以本结论的性质是「逐行审阅」（pre_theorem 上限），不是机器核验。\n- 引文轴不涉及：稿未引用任何在册命题。",
+      "refs": [
+        "stmt:000060"
+      ]
+    }
+  },
+  "task_id": "t-000008"
+}

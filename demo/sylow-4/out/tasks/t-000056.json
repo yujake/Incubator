@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T04:17:21+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 2574,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"结论：有毛病（不签发）。被审稿 manuscripts/B/b-proof-000006.md（正文 sha 31fa9452af01a69d4f13fc135135276b0433b386fd2ae22aedae9959da606e19，stmt:000063 的 1 号证明路径），台账行 verifications/000063.jsonl#v-000002，缺陷步 defect_step=2。\\n\\n【缺陷，唯一一处，第 2 步（事实 A 那一段）】\\n原文逐字：「良定义与单射：若 g·x = h·x，则 h⁻¹g·x = x，即 h⁻¹g ∈ Stab(x)，两个左陪集相等；满射按轨道的定义直接成立。」\\n问题：这一段自报「良定义与单射」，但写出来的只有一个方向 —— 由像相同（g·x = h·x）推出两个左陪集相同，这是单射。要让规则 g·Stab(x) ↦ g·x 真的给出一个函数，还需反方向：换代表时像不变，即若 g·Stab(x) = h·Stab(x)（等价于 h⁻¹g ∈ Stab(x)），则 g·x = h·x。这一步没有写，所以「良定义」是声明而不是论证（kind：无依据的步骤/良定义未证，level=error）。\\n最小补法（一行，不必重写整篇）：在「满射按轨道的定义直接成立」之前加一句「反之，若 g·Stab(x) = h·Stab(x)，即 h⁻¹g ∈ Stab(x)，则 h⁻¹g·x = x，故 g·x = h·x，规则与代表选取无关」，并把现有那句显式标成「单射」。改完把同一份稿重新送审即可。\\n\\n【其余各处核过、均未发现要改的】事实 A 的满射与双射推出 |Γ·x|=[Γ:Stab(x)]；事实 B（轨道长度 >1 ⇒ Stab(x) 真子群 ⇒ 指数 p 的正幂 ⇒ 被 p 整除；长度 1 轨道恰为不动点）成立；事实 C（Q 左作用于 G/P 良定义已给、[G:P] 不被 p 整除 ⇒ 不动点集非空、不动点 ⇒ q ∈ gPg⁻¹ ⇒ Q ⊆ gPg⁻¹ 且同阶 ⇒ 相等）成立，且不循环（只用到事实 B，未用 Sylow III）；主论证（共轭作用 g·Q = gQg⁻¹ 是左作用，轨道大小 = [G:N(P)]，由事实 C 轨道遍及 Syl_p(G) 且 |Syl_p(G)| = n_p）成立，且 Syl_p(G) 非空已由「至少含 P」就地给出。依赖段为空表，正文确实没有引用任何在册命题，与「空表即声明」一致。\\n\\n【签】按政策：任一转判 fault 即终局，这一份不签发（data.sign_issuance.decision=不签发，signed_bit3=false）；签块未落回该稿，收方秘书已按 V 稿 v-review-000009 投给 B（板项 t-000061）。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\sylow-4\\\\runs\\\\V-20261124-041721-001.json\", \"messages\": [], \"outcome\": \"ok\", \"status\": \"done\", \"steps\": 4, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "1c833d5e91e703788d95fa5cd89469a49ab03df85026e8aa7479e25985233dde",
+ "readings": {},
+ "role": "V",
+ "status": "done",
+ "task_id": "t-000056"
+}

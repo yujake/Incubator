@@ -1,55 +1,95 @@
-# demo — four research runs, exported end to end
+# demo — real runs, exported file by file
 
-Four runs produced by the `agentflow` system (this repository's [`agentflow/`](../agentflow/README-PRODUCT.md)).
-Each directory is a self-contained showcase: the paper (LaTeX source and PDF), the compile
-receipt, the acceptance table, the delivery report, the research manuscripts, and the scripts that
-produced the numbers.
+Two **real-machine runs** produced by the `agentflow` system (product source: [`agentflow/`](../agentflow/README-PRODUCT.md)).
+Each case directory is a complete export of one run: the paper (LaTeX + PDF), the compile receipt,
+the mapping table, the acceptance table, the closing report, the manuscripts, the ledger snapshots,
+the session/step traces, and the code behind every number.
 
-**Who reads it**: someone who wants to see what the system actually produces before installing it.
+**Who reads it**: someone who wants to see what the system actually produces — and to open the same
+web UI the operators used — before installing anything.
 
-| dir | open problem | paper |
-|---|---|---|
-| [`mp1`](mp1/README.md) | Pyjama covering problem — how many rotated copies of the pyjama set cover the plane? | `mp1/out/paper/main.pdf` |
-| [`mp2`](mp2/README.md) | Equichordal point problem — can a curve have two distinct equichordal points? | `mp2/out/paper/main.pdf` |
-| [`mp3`](mp3/README.md) | If `U(g)` is Noetherian, must the Lie algebra `g` be finite-dimensional? | `mp3/out/paper/main.pdf` |
-| [`mp4`](mp4/README.md) | Are the free group factors `W*(F_k)` pairwise non-isomorphic? | `mp4/out/paper/main.pdf` |
+| dir | problem | paper | closing gate | spend / wall clock |
+|---|---|---|---|---|
+| [`sylow-4`](sylow-4/) | Prove Sylow I/II/III for a finite group: existence, conjugacy, counting | `sylow-4/out/package/main.pdf` (7 pages) | **8/8 pass · can_close=true · exit 0** | $1.93 / 114 min |
+| [`lp-ball-22`](lp-ball-22/) | Largest-area central section of the 3-D ℓ^p ball: direction and A_max(p) | `lp-ball-22/out/package/main.pdf` | 待加入 — 大真机跑完后放进来 | — |
 
-## What is in each directory
+> `lp-ball-22/` will appear next to `sylow-4/` with the same layout once that run closes.
+
+## Open the web UI for a demo
+
+There is nothing special to install or launch: it is the normal command, with **the workspace root set
+to the case directory inside `demo/`** (not to `demo/` itself).
+
+```bash
+# Sylow demo — pick a free port and print the URL as one JSON line
+python -m agentflow --root D:\Incubator\demo\sylow-4 web --port 0 --json --allow-writes
+
+# same case, let the tool choose and open the browser
+python -m agentflow --root D:\Incubator\demo\sylow-4 web --open
+
+# ℓ^p ball demo (same command, different workspace)
+python -m agentflow --root D:\Incubator\demo\lp-ball-22 web --port 0 --json --allow-writes
+```
+
+On Linux/macOS the only difference is the path:
+
+```bash
+python -m agentflow --root ./demo/sylow-4 web --port 0 --json --allow-writes
+python -m agentflow --root ./demo/lp-ball-22 web --port 0 --json --allow-writes
+```
+
+Notes:
+
+- `--allow-writes` turns on the write surfaces (start a run, interject, answer, stop, edit settings).
+  Omit it for a read-only UI: every panel still renders.
+- `--port 0` asks the OS for a free port and prints the exact URL.
+- **Do not use `demo/` as the root** — each case is an independent workspace with its own `data/`,
+  `sessions/`, `out/`, …; `demo/` is only the container.
+- To read the artifacts you need no server at all: `out/package/main.pdf` is the paper,
+  `out/report/REPORT.md` is the closing report, and `out/package/MAPPING.json` links every theorem in
+  the paper to its ledger row, proof manuscript, body sha, and verifier verdict.
+
+## What is in each case
 
 ```
-README.md                    one page: the problem, the deliverables, where to read further
-out/paper/main.tex           the paper, English, theorems with proofs in section 3
-out/paper/main.pdf           compiled paper
-out/paper/COMPILE-RECEIPT.json   tex_sha256 of the source that produced the PDF
-out/paper/ACCEPTANCE.md      the acceptance table, cell by cell, including what was not done
-out/paper/ACCEPTANCE-CHECKS.json  the same cells as machine-readable data
-out/review/REPORT.md         the delivery report written by the conductor
-documents/                   research manuscripts produced during the run
-reports/RESEARCH.md          the researcher's own research note
-code/                        the scripts behind every number in the paper
+out/package/main.tex | main.pdf        the paper (theorems with proofs; Appendix A holds numerical evidence)
+out/package/MAPPING.json               paper theorem ↔ ledger statement ↔ proof manuscript ↔ body sha ↔ V verdict
+out/package/ACCEPTANCE-TARGETS.json    machine-checkable acceptance targets (one row per claim)
+out/package/COMPILE-RECEIPT.json       tex_sha256 of the source that produced the PDF (byte-exact)
+out/report/REPORT.md                   closing report written by the conductor role
+manuscripts/<role>/…                   proofs and research notes, numbered per role
+work/<role>/…                          drafts and experiment notes (e.g. e-num-000002.md)
+data/                                  ledger snapshots (statements, experiments, literature, tasks …) + events.jsonl
+sessions/ · runs/ · out/steps/         step-by-step traces (who did what, when, at what cost)
+verifications/ · out/vsigns/           per-statement verdicts and the signed envelopes
+code/                                  scripts that produced every number in the paper
+reference/                             seed literature actually used (present only in cases that ship it)
 ```
 
-`scripts/` and `verifications/` exist in some runs and not others — each `mpN/README.md` lists what
-that run actually contains. `out/invalid/`, `out/roster/`, `out/secretary/`, and `out/tasks/` are
-**run by-products** kept for fidelity (step-level traces and board rows), not deliverables.
+## What is in the export (in full)
 
-## What is not here
+Each case is a **complete copy** of the run's workspace — nothing was cherry-picked:
 
-- **No `data/`.** The ledger snapshots were not exported, so the prose readings cannot be
-  recomputed from this directory. The authoritative readings are the two acceptance files and
-  `out/review/REPORT.md`, which are themselves exports.
-- **No way to re-run them from the repo.** These came from real-machine runs in `projects/`
-  (git-ignored). They are *exported artifacts*: treat them as evidence, not as a reproducible build.
+- `data/`, `sessions/`, `runs/`, `out/` (every subdirectory, including `out/clock/`, `out/steps/`,
+  `out/roster/`), `manuscripts/`, `work/`, `verifications/`, `notes/`, `reference/`, plus the
+  workspace-root files (`RELIABLE-REFERENCES.json`, `ARTIFACTS.jsonl`, `AGENT-PROFILES.md`,
+  `DOC-SIGNATURES.jsonl`, `budget.json`, …).
+- `library/` and toolchain caches (`.miktex/`, `__pycache__/`, `.locks/`) are included as-is too, so the
+  directory can be opened and inspected without re-fetching anything. If this repository is ever made
+  public, revisit `library/` first: it holds third-party PDFs.
+- `demo/** -text` in the root `.gitattributes` keeps every byte as-is on checkout, so
+  `COMPILE-RECEIPT.json:tex_sha256` still matches `main.tex` after a clone.
 
-## Reading the papers
+Verification: the export was checked file by file against the source workspace — same file count
+(380), same sizes, and identical sha256 for the paper, the PDF, the mapping table, the compile
+receipt, the closing report, and the ledger snapshots.
 
-Section 3 of each paper is the mathematical content: theorems, lemmas, propositions, each with a
-step-by-step proof. **Computational evidence lives only in `Appendix A`**, together with the
-internal identifiers of the run that produced it. The body of the paper contains no internal
-identifiers at all.
+## Evidence strength (read this before quoting a paper)
 
-## Evidence strength
-
-These runs had **no Lean toolchain**, so nothing here is machine-checked. Claims are at most
-`proof_review` (a proof reviewed line by line), `cross_check` (numerical cross-validation) or
-`heuristic`. The papers say so explicitly, and the acceptance tables record what was left open.
+- No Lean toolchain was attached to these runs, so nothing is machine-checked. Claims are at most
+  `proof_review` (a proof reviewed line by line by the verifier role), `cross_check` (numerical
+  cross-validation) or `heuristic`; each paper states its own levels.
+- `sylow-4` closes with **8/8** gate cells and `can_close=true`. One theorem (`stmt:000064`) is marked
+  in the paper as having **no independent review** — the export keeps that sentence rather than hiding it.
+- The ℓ^p case is a numerical + proof mixture: its experiments include claims that were **refuted**
+  (counterexamples kept in `data/experiments.json`), not only the ones that held.

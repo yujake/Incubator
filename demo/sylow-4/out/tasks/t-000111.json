@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T04:46:35+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 3367,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"复核结论：有毛病（defect_step = 8），本趟不签发。\\n\\n被审对象：manuscripts/F/f-proof-000000.md（稿号 000000，正文 sha e7bc144b572eace32d78ae41974c45972535d87a2e2c1d817d9a80c05a93e227）。已由 verify.verify_proof 整体重读并落台账 verifications/pending/7fc6c0f7…04bfb.jsonl#u-000002；V 稿 verifications/reviews/v-review-000013.md 已投给 F（板项 t-000116）。\\n\\n缺陷步（第 8 步，原文逐字）：「取 P ≤ G。……又 P ≤ N_G(P)（对 p_0 ∈ P 有 p_0Pp_0⁻¹ = P），故 p^a 整除 |N_G(P)|；」\\n- 为什么不成立：事实 7 只假定 P ≤ G，而 P ≤ N_G(P) 只能推出 |P| 整除 |N_G(P)|；要从这里得到「p^a 整除 |N_G(P)」以及「p^a 恰为 |N_G(P)| 的 p-部分」，必须先有 p^a | |P|（例如 |P| = p^a）。对任意子群该断言为假：G = S_3、p = 3、a = 1，取 P 为 2 阶子群，则 N_G(P) = P，3 ∤ |N_G(P)|。\\n- 最小补法：在事实 7 的陈述里补上前提「|P| = p^a」（或 p^a | |P|），并在推出 p^a 是 |N_G(P)| 的 p-部分那一步写明这条前提被用在哪里；补上之后第 8 步其余论证（P ≤ N_G(P)、|N_G(P)| 整除 |G|、p ∤ m 定出 p-部分）成立。\\n\\n受影响的下游（供 F 定位，不另立 finding）：第 15 步用事实 7 的 |N_G(P)| = p^a·m'' 算 n_p = m/m''；第 16 步用「P 是 N_G(P) 的 p-Sylow 子群，且 |g⁻¹Pg| = p^a 恰为 |N_G(P)| 的 p-部分」。这两步都依赖第 8 步那条被修的断言，改第 8 步时请一并核它们的引用是否仍逐字对上。\\n\\n其余六条角度的核对记录（均未另立 finding）：① 前提：第 1 步记号与定义齐备，a = 0 在第 9 步基础情形另处理、第 10 步显式声明 a ≥ 1，未偷用假设；② 计算：事实 1 的等价关系/双射、事实 2 的双射与 [Γ:Stab(x)]、事实 3 的轨道基数、事实 4 的 |X| = |A|^{q-1} 与 q | |X|、事实 5 的类方程、事实 6 的 |π⁻¹(K̄)| = |K̄|·|N|、第 12 步 p | |Z(G)|、第 13 步 |G/⟨z⟩| = p^{a-1}m、第 14 步 |G/P| = m 与 Fix_Q(G/P) 非空、第 15 步 n_p = m/m''、第 16 步唯一不动陪集是 N_G(P)，逐处代入核过；③ 逻辑：情形 1/情形 2 的划分（存在真子群被 p^a 整除 / 每个真子群都不被 p^a 整除）穷尽，强归纳的阶严格下降（第 11 步 [G:H] ≥ 2、第 13 步 |G/⟨z⟩| = |G|/p < |G|）成立，无循环依赖；④ 强度：结论 (E)(C)(N) 与命题行逐字一致，未加强；⑤ 台账一致：与派活所述的 Sylow (E)(C)(N) 合一陈述一致；⑥ 依赖面：稿的 ## 依赖 段为空表，正文无在册命题引用，故引文轴无 stronger/unrelated/inadmissible 项；文中 lit:000000 只作「同一事实的表述出处」出现，已核该文献行存在（Conrad, proof of Sylow theorems），未当作已证结果使用。\\n\\n材料与流程无缺：程序栏不是穷举型，未被要求走 exhaustion_review；这一份按文字证明路径审（本会话该路最高 pre_theorem）。因为判「有毛病」，按规则负判不写手稿签块，也不动第 3 位；改完把同一份稿重新送审。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\sylow-4\\\\runs\\\\V-20261124-044635-001.json\", \"messages\": [], \"outcome\": \"ok\", \"status\": \"done\", \"steps\": 8, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "1e28f9dd173c18f20e20e0a87cd8e4db3deecb149fd068b5106b09574f2c4896",
+ "readings": {},
+ "role": "V",
+ "status": "done",
+ "task_id": "t-000111"
+}

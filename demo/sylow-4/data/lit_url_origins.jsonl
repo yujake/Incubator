@@ -1,0 +1,33 @@
+{"actor": "agent-A-A1", "at": "2026-11-24T03:41:09+08:00", "declared": "", "kind": "staged_url", "request_id": "r-000001", "url": "reference/9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf", "url_origin": "self_constructed"}
+{"actor": "agent-A-A1", "at": "2026-11-24T03:41:09+08:00", "declared": "", "kind": "staged_url", "request_id": "r-000001", "url": "reference/11dc1a689516-harris-sylow-theorems.pdf", "url_origin": "self_constructed"}
+{"actor": "agent-A-A1", "at": "2026-11-24T03:41:09+08:00", "declared": "", "kind": "staged_url", "request_id": "r-000001", "url": "reference/c104f1720c63-idelhaj-sylow-theorems-and-applications.pdf", "url_origin": "self_constructed"}
+{"actor": "agent-A-A1", "at": "2026-11-24T03:41:09+08:00", "declared": "", "kind": "staged_url", "request_id": "r-000001", "url": "reference/e090d219194b-vakil-sylow-theorems.pdf", "url_origin": "self_constructed"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "https://www.sciencedirect.com/science/article/pii/S0079816908605243/pdfft?md5=e81db7817ef41060bb0db5f57cb0268f&pid=1-s2.0-S0079816908605243-main.pdf"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "https://doi.org/10.1016/s0079-8169(08)x6037-4"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "https://www.sciencedirect.com/science/article/pii/0001870878900580/pdf"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "https://doi.org/10.1016/0001-8708(78)90058-0"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "https://www.sciencedirect.com/science/article/pii/0021869381902180/pdf"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "https://doi.org/10.1016/0021-8693(81)90218-0"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "https://www.ams.org/tran/1955-080-02/S0002-9947-1955-0072878-2/S0002-9947-1955-0072878-2.pdf"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "https://doi.org/10.1090/s0002-9947-1955-0072878-2"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "https://www.ams.org/bull/1968-74-03/S0002-9904-1968-11953-6/S0002-9904-1968-11953-6.pdf"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "https://doi.org/10.1090/s0002-9904-1968-11953-6"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "https://doi.org/10.1515/9783110809237"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "https://infoscience.epfl.ch/bitstreams/403da7d5-c09b-40a9-9fd3-609d43f67517/download"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "https://infoscience.epfl.ch/handle/20.500.14299/32761"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "https://arxiv.org/pdf/math/0106211"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "https://doi.org/10.1081/agb-120022434"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "https://www.sciencedirect.com/science/article/pii/S002186930600113X/pdf"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "https://doi.org/10.1016/j.jalgebra.2006.02.015"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "https://www.ams.org/bull/2009-46-02/S0273-0979-08-01238-X/S0273-0979-08-01238-X.pdf"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "https://doi.org/10.1090/s0273-0979-08-01238-x"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "http://journal.imm.uran.ru/sites/default/files/content/32_4/TrIMMUrORAN_2026-32-4-fon-02.pdf"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "https://doi.org/10.21538/0134-4889-2026-32-4-fon-02"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "https://arxiv.org/pdf/2611.25766"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "https://doi.org/10.48550/arxiv.2611.25766"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "https://arxiv.org/pdf/2602.15463"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "https://doi.org/10.1112/blms.70544"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "https://arxiv.org/pdf/2611.23766"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "https://doi.org/10.48550/arxiv.2611.23766"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "https://arxiv.org/pdf/2611.24427"}
+{"at": "2026-11-24T05:20:40+08:00", "kind": "provider_url", "provider": "openalex", "url": "https://doi.org/10.48550/arxiv.2611.24427"}

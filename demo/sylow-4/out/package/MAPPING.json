@@ -1,0 +1,104 @@
+{
+  "rows": [
+    {
+      "kind": "theorem",
+      "label": "thm:sylow1",
+      "env_no": 1,
+      "ledger_id": "stmt:000060",
+      "proof_no": 1,
+      "file": "main.tex",
+      "ledger_kind": "theorem",
+      "reviewed": "已签（判决：成立）",
+      "optimized": "已优化",
+      "proof_source": "own",
+      "page_or_section": "3",
+      "citation_loc": {
+        "file": "main.tex",
+        "line_range": [
+          104,
+          107
+        ]
+      }
+    },
+    {
+      "kind": "theorem",
+      "label": "thm:sylow2",
+      "env_no": 2,
+      "ledger_id": "stmt:000061",
+      "proof_no": 1,
+      "file": "main.tex",
+      "ledger_kind": "theorem",
+      "reviewed": "已签（判决：成立）",
+      "optimized": "已优化",
+      "proof_source": "own",
+      "page_or_section": "3",
+      "citation_loc": {
+        "file": "main.tex",
+        "line_range": [
+          118,
+          121
+        ]
+      }
+    },
+    {
+      "kind": "theorem",
+      "label": "thm:sylow3",
+      "env_no": 3,
+      "ledger_id": "stmt:000062",
+      "proof_no": 1,
+      "file": "main.tex",
+      "ledger_kind": "theorem",
+      "reviewed": "已签（判决：成立）",
+      "optimized": "已优化",
+      "proof_source": "own",
+      "page_or_section": "3",
+      "citation_loc": {
+        "file": "main.tex",
+        "line_range": [
+          128,
+          131
+        ]
+      }
+    },
+    {
+      "kind": "theorem",
+      "label": "thm:index",
+      "env_no": 4,
+      "ledger_id": "stmt:000063",
+      "proof_no": 1,
+      "file": "main.tex",
+      "ledger_kind": "theorem",
+      "reviewed": "已签（判决：成立）",
+      "optimized": "已优化",
+      "proof_source": "own",
+      "page_or_section": "3",
+      "citation_loc": {
+        "file": "main.tex",
+        "line_range": [
+          142,
+          145
+        ]
+      }
+    },
+    {
+      "kind": "theorem",
+      "label": "thm:unique",
+      "env_no": 5,
+      "ledger_id": "stmt:000064",
+      "proof_no": 1,
+      "file": "main.tex",
+      "ledger_kind": "theorem",
+      "reviewed": "未通过",
+      "optimized": "未优化",
+      "proof_source": "citation",
+      "page_or_section": "3",
+      "citation_loc": {
+        "file": "main.tex",
+        "line_range": [
+          152,
+          155
+        ]
+      }
+    }
+  ]
+}

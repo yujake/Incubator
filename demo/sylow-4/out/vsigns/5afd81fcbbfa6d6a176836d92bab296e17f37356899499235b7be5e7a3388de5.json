@@ -1,0 +1,102 @@
+{
+  "artifact_path": "manuscripts/B/b-proof-000002.md",
+  "artifact_sha": "5afd81fcbbfa6d6a176836d92bab296e17f37356899499235b7be5e7a3388de5",
+  "artifact_sha_rule": "`artifact_sha` = `proofregistry.proof_sha(proof_text)`，与台账行的 `proof_sha256`、连续计数的清零键同一个值；不是盘上那份 `.md` 的字节 sha",
+  "at": "2026-11-24T04:02:11+08:00",
+  "count": 3,
+  "counted_by": "sign_counting",
+  "envelope": {
+    "at": "2026-11-24T04:02:11+08:00",
+    "issued_by": "agent-V-Vsign1",
+    "kind": "v-sign-issued",
+    "to": "secretary:B"
+  },
+  "ledger": "verifications/000061.jsonl#v-000004",
+  "legacy": false,
+  "manuscript_write": {
+    "artifact": {
+      "bytes": 2561,
+      "checked": true,
+      "path": "manuscripts/B/b-proof-000002.md",
+      "producer": "agent-B-B1",
+      "registered": true,
+      "sha256": "98472faa8cecc5c5f604c21da1c33dc23060d19c0f303444605694d588e1d36e",
+      "why": "签块落盘后重登记：sha256=98472faa8cec… bytes=2561"
+    },
+    "body_mismatch": false,
+    "body_sha256": "5afd81fcbbfa6d6a176836d92bab296e17f37356899499235b7be5e7a3388de5",
+    "code": "",
+    "idempotent": false,
+    "line": 3,
+    "missing": false,
+    "path": "manuscripts/B/b-proof-000002.md",
+    "reading": {
+      "at": "2026-11-24T04:02:11+08:00",
+      "found": true,
+      "identity_state": "resolved",
+      "identity_why": "签块的手稿号 000002 与这一份稿相同",
+      "ledger": "verifications/000061.jsonl#v-000004",
+      "manuscript_id": "000002",
+      "manuscript_key": "000002",
+      "mark": "- V 签：已签=true；判词=成立；连续=3/3；正文sha=5afd81fcbbfa6d6a176836d92bab296e17f37356899499235b7be5e7a3388de5；时间=2026-11-24T04:02:11+08:00；签名者=secretary:B；台账=verifications/000061.jsonl#v-000004；手稿号=000002",
+      "need": 3,
+      "problem": "",
+      "proof_sha256": "5afd81fcbbfa6d6a176836d92bab296e17f37356899499235b7be5e7a3388de5",
+      "signed": true,
+      "signer": "secretary:B",
+      "statement_id": "",
+      "streak": 3,
+      "verdict": "成立"
+    },
+    "signed_sha256": "5afd81fcbbfa6d6a176836d92bab296e17f37356899499235b7be5e7a3388de5",
+    "state": "written",
+    "why": "签块写进 `manuscripts/B/b-proof-000002.md` 第 3 行（连续 3/3）",
+    "written": true
+  },
+  "need": 3,
+  "objections": [],
+  "passes": [
+    {
+      "at": "2026-11-24T04:01:40+08:00",
+      "axis": "clean",
+      "object_path": "manuscripts/B/b-proof-000002.md",
+      "object_sha256": "dfacbc1225c17b42b3face1dcfe96892c17af75e215ce4d1a96cfaf3ed9cefde",
+      "proof_sha256": "5afd81fcbbfa6d6a176836d92bab296e17f37356899499235b7be5e7a3388de5",
+      "review_call": "534db7611fad",
+      "review_pass": 1,
+      "round": 2,
+      "verdict": "成立",
+      "verification_id": "v-000002"
+    },
+    {
+      "at": "2026-11-24T04:01:58+08:00",
+      "axis": "clean",
+      "object_path": "manuscripts/B/b-proof-000002.md",
+      "object_sha256": "dfacbc1225c17b42b3face1dcfe96892c17af75e215ce4d1a96cfaf3ed9cefde",
+      "proof_sha256": "5afd81fcbbfa6d6a176836d92bab296e17f37356899499235b7be5e7a3388de5",
+      "review_call": "534db7611fad",
+      "review_pass": 2,
+      "round": 3,
+      "verdict": "成立",
+      "verification_id": "v-000003"
+    },
+    {
+      "at": "2026-11-24T04:02:11+08:00",
+      "axis": "clean",
+      "object_path": "manuscripts/B/b-proof-000002.md",
+      "object_sha256": "dfacbc1225c17b42b3face1dcfe96892c17af75e215ce4d1a96cfaf3ed9cefde",
+      "proof_sha256": "5afd81fcbbfa6d6a176836d92bab296e17f37356899499235b7be5e7a3388de5",
+      "review_call": "534db7611fad",
+      "review_pass": 3,
+      "round": 4,
+      "verdict": "成立",
+      "verification_id": "v-000004"
+    }
+  ],
+  "schema": "vsign/1",
+  "source_note": "passes 是逐转的读数（verification_id / at / proof_sha256 / why，另带 review_call 与 review_pass：同一 review_call 才是同一次送审的那几转，跨趟不拼票）；V 的回复全文不在本文件里 —— 去 verifications/<命题号>.jsonl#<verification_id> 读",
+  "statement_id": "000061",
+  "streak": 3,
+  "verdict": "成立",
+  "written_by": "secretary:B"
+}

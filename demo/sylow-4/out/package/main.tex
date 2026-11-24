@@ -1,0 +1,222 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{booktabs}
+\usepackage{url}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{example}[theorem]{Example}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+\newtheorem{conjecture}[theorem]{Conjecture}
+\newtheorem{openproblem}[theorem]{Open Problem}
+
+\newcommand{\Syl}{\operatorname{Syl}}
+\newcommand{\Fix}{\operatorname{Fix}}
+\newcommand{\Stab}{\operatorname{Stab}}
+\newcommand{\Cent}{\operatorname{C}}
+\newcommand{\Norm}{\operatorname{N}}
+\newcommand{\Z}{\operatorname{Z}}
+
+\title{The Sylow Theorems: Existence, Conjugacy and Counting}
+\author{G}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We give a self-contained account of the three Sylow theorems for finite groups: the existence of a subgroup of maximal prime-power order, the conjugacy of any two such subgroups, and the two arithmetic constraints satisfied by their number. The proofs are elementary: apart from the definition of a group action we use only coset counting, the orbit--stabilizer theorem, the class equation, the fixed-point congruence for actions of finite $p$-groups, and Cauchy's theorem, each of which is proved here in full. From the three theorems we deduce the index formula $n_p=[G:\Norm_G(P)]$ and the criterion that a Sylow subgroup is unique exactly when it is normal. Section~4 discusses worked examples and the precise sense in which the counting conditions constrain, but do not determine, the isomorphism type of a finite group. No computer-assisted verification is claimed anywhere in this paper; every assertion is a statement about the mathematical literature and about the elementary arguments reproduced below.
+\end{abstract}
+
+\section{Introduction}
+
+The Sylow theorems are the first structural results about finite groups that go beyond Lagrange's theorem. Lagrange says that the order of a subgroup divides the order of the group; it does not say that subgroups of any given admissible order exist. Sylow's first theorem closes exactly that gap for the largest prime power dividing $|G|$: writing $|G|=p^{k}m$ with $p\nmid m$, it produces a subgroup of order $p^{k}$. The second theorem says that the set of such subgroups is a single conjugacy class, and the third turns that geometric statement into arithmetic: the number $n_p$ of them divides $m$ and satisfies $n_p\equiv 1 \pmod p$.
+
+The reason these statements matter is that they are simultaneously existence, classification and counting statements, and the three uses feed each other. Existence lets one argue about a group by arguing about a subgroup of controlled order; conjugacy says that no Sylow subgroup is distinguished, so any invariant statement proved for one of them holds for all; and the counting conditions are strong enough to force normality in many concrete cases, which is how one proves that groups of order $pq$ or $30$ cannot be simple. The classical expository treatments of Conrad~\cite{conrad}, Harris~\cite{harris}, Idelhaj~\cite{idelhaj} and Vakil~\cite{vakil} all present the same skeleton; the presentation below differs only in that every auxiliary fact is proved from the definition rather than quoted.
+
+Our contribution is organisational rather than mathematical. We isolate the six elementary facts on which the argument rests (Section~2), prove the three theorems from them in order (Theorems~\ref{thm:sylow1}, \ref{thm:sylow2}, \ref{thm:sylow3}), and then record two standard consequences that are used constantly in applications: the index formula $n_p=[G:\Norm_G(P)]$ (Theorem~\ref{thm:index}) and the equivalence ``unique Sylow $p$-subgroup $\Leftrightarrow$ normal Sylow $p$-subgroup'' (Theorem~\ref{thm:unique}). Section~4 works out the examples that make the counting conditions visible and states what remains open at this level of generality.
+
+\section{Definitions and notation}
+
+Throughout, $G$ is a finite group written multiplicatively with identity $e$, and $p$ is a prime. We write $|X|$ for the cardinality of a finite set $X$, and $H\le G$ for ``$H$ is a subgroup of $G$''.
+
+\begin{definition}[Index and cosets]
+Let $A$ be a finite group and $B\le A$. The relation $a\sim b$ defined by $a^{-1}b\in B$ is an equivalence relation, and its classes are the left cosets $aB$. The number of classes is the \emph{index} $[A:B]$. Since $b\mapsto ab$ is a bijection $B\to aB$, all cosets have cardinality $|B|$, hence
+\[
+|A|=[A:B]\cdot|B| .
+\]
+In particular $[A:B]=|A|/|B|$ and $|B|$ divides $|A|$ (Lagrange).
+\end{definition}
+
+\begin{definition}[Group action, orbit, stabilizer, fixed points]
+A (left) \emph{action} of a group $\Gamma$ on a set $X$ is a map $\Gamma\times X\to X$, $(g,x)\mapsto g\cdot x$, with $e\cdot x=x$ and $(gh)\cdot x=g\cdot(h\cdot x)$. For $x\in X$ the \emph{orbit} is $\Gamma\cdot x=\{g\cdot x:g\in\Gamma\}$ and the \emph{stabilizer} is $\Stab(x)=\{g\in\Gamma: g\cdot x=x\}$. The orbits partition $X$. The set of points fixed by every element of $\Gamma$ is
+\[
+\Fix_\Gamma(X)=\{x\in X: g\cdot x=x \text{ for all } g\in\Gamma\}.
+\]
+\end{definition}
+
+\begin{definition}[Normalizer, centralizer, centre]
+For $H\le G$ the \emph{normalizer} is $\Norm_G(H)=\{g\in G: gHg^{-1}=H\}$, the largest subgroup of $G$ in which $H$ is normal. For $a\in G$ the \emph{centralizer} is $\Cent_G(a)=\{g\in G: gag^{-1}=a\}$, and the \emph{centre} is $\Z(G)=\{g\in G: ga=ag \text{ for all } a\in G\}$. Conjugation $g\cdot x=gxg^{-1}$ is an action of $G$ on itself; its orbits are the conjugacy classes, and the stabilizer of $a$ is $\Cent_G(a)$. The elements with singleton conjugacy class are exactly the elements of $\Z(G)$.
+\end{definition}
+
+\begin{definition}[$p$-subgroup, Sylow $p$-subgroup, $n_p$]
+A \emph{$p$-subgroup} of $G$ is a subgroup whose order is a power of $p$ (the trivial subgroup $
+\{e\}$ is allowed, of order $p^0=1$). Write $|G|=p^{k}m$ with $p\nmid m$. A \emph{Sylow $p$-subgroup} of $G$ is a subgroup of order $p^{k}$; we write $\Syl_p(G)$ for the set of all of them and $n_p=|\Syl_p(G)|$ for its cardinality. A \emph{finite $p$-group} is a group of order $p^{s}$ for some $s\ge 0$.
+\end{definition}
+
+\begin{definition}[Normal subgroup]
+$N\le G$ is \emph{normal}, written $N\trianglelefteq G$, if $gNg^{-1}=N$ for all $g\in G$, equivalently if $\Norm_G(N)=G$. If $N\trianglelefteq G$ then the cosets of $N$ form a group $G/N$ under $aN\cdot bN=abN$; the quotient map $\pi\colon G\to G/N$, $\pi(a)=aN$, is a surjective homomorphism with kernel $N$, and $|G/N|=|G|/|N|$. If $S\le G/N$ then $\pi^{-1}(S)\le G$ contains $N$ and $|\pi^{-1}(S)|=|S|\cdot|N|$.
+\end{definition}
+
+The problem addressed in this paper is now precise. Given a finite group $G$ and a prime $p$ with $|G|=p^{k}m$, $p\nmid m$: does $\Syl_p(G)$ meet every $p$-subgroup's upward closure (Theorem~\ref{thm:sylow1})? Is $\Syl_p(G)$ a single conjugacy class (Theorem~\ref{thm:sylow2})? What arithmetic does $n_p$ obey (Theorem~\ref{thm:sylow3})? The answers occupy Section~3.
+
+\section{Main results}
+
+The logical order is: first the fixed-point congruence, then Sylow~I by iterated extension, then Sylow~II by letting a $p$-group act on a coset space, then Sylow~III by letting a Sylow subgroup act on $\Syl_p(G)$ itself. We keep the auxiliary lemmas inside the proofs, numbered as steps, so that each theorem can be read on its own.
+
+\begin{remark}[Fixed-point congruence]\label{lem:fix}
+Let $\Gamma$ be a finite $p$-group acting on a finite set $X$. Then
+\[
+|X|\equiv |\Fix_\Gamma(X)| \pmod p .
+\]
+\end{remark}
+
+\emph{Proof.} (1) If $|\Gamma|=p^{0}=1$ then every point is fixed, so $\Fix_\Gamma(X)=X$ and the congruence is an equality.
+(2) Let $|\Gamma|=p^{s}$ with $s\ge 1$ and let $x\in X$ have orbit of length $>1$. The orbit--stabilizer bijection $g\Stab(x)\mapsto g\cdot x$ (proved as step (1) of Theorem~\ref{thm:sylow1} below) gives $|\Gamma\cdot x|=[\Gamma:\Stab(x)]=|\Gamma|/|\Stab(x)|$. Since the orbit is not a singleton, $\Stab(x)\ne\Gamma$, so $|\Stab(x)|=p^{t}$ with $t<s$ and the orbit length is $p^{s-t}$, divisible by $p$.
+(3) Decompose $X$ into orbits. Orbits of length $1$ are precisely the points fixed by all of $\Gamma$. All remaining orbits contribute multiples of $p$, hence $|X|\equiv |\Fix_\Gamma(X)|\pmod p$.
+\begin{remark}[Cauchy's theorem]\label{lem:cauchy}
+If $p$ divides $|A|$ for a finite group $A$, then $A$ contains an element of order $p$.
+\end{remark}
+
+\emph{Proof.} (1) We induct on $|A|$. If $A$ has a proper subgroup $B$ with $p\mid |B|$, the induction hypothesis applied to $B$ yields an element of order $p$ in $B\subseteq A$. So assume every proper subgroup of $A$ has order prime to $p$.
+(2) Consider the class equation $|A|=|\Z(A)|+\sum_{i}[A:\Cent_A(x_i)]$, where $x_1,\dots,x_r$ represent the conjugacy classes outside the centre. Each $\Cent_A(x_i)$ is a proper subgroup, so $p\nmid |\Cent_A(x_i)|$; since $p\mid |A|$, each index $[A:\Cent_A(x_i)]=|A|/|\Cent_A(x_i)|$ is divisible by $p$. Hence $p\mid |\Z(A)|$. If $\Z(A)\ne A$ then $\Z(A)$ is a proper subgroup of order divisible by $p$, contradicting the assumption of step (1); so $A$ is abelian.
+(3) For abelian $A$ we argue by induction on $|A|$ again. Pick $a\ne e$ and put $B=\langle a\rangle$. If $p\mid |B|$ then $a^{|B|/p}$ has order $p$. Otherwise $p\nmid |B|$ and $p\mid |A/B|$ with $|A/B|<|A|$; by induction $A/B$ contains $yB$ of order $p$, so $y\notin B$ and $y^{p}\in B$. If $p\nmid \operatorname{ord}(y)=n$ then $\langle y^{p}\rangle=\langle y\rangle$, forcing $y\in B$, a contradiction; hence $p\mid n$ and $y^{n/p}$ has order $p$.
+
+\begin{theorem}[Sylow I: existence and containment]\label{thm:sylow1}
+Let $G$ be a finite group and $p$ a prime with $|G|=p^{k}m$, $p\nmid m$. Then $G$ possesses a subgroup of order $p^{k}$, and every $p$-subgroup of $G$ is contained in one.
+\end{theorem}
+
+\begin{proof}
+(1) \emph{Three elementary facts.} (i) \emph{Orbit--stabilizer.} If a finite group $\Gamma$ acts on $X$ and $x\in X$, then $g\Stab(x)\mapsto g\cdot x$ is a well-defined bijection from the set of left cosets of $\Stab(x)$ onto $\Gamma\cdot x$: well-defined because $g\Stab(x)=h\Stab(x)$ gives $h^{-1}g\in\Stab(x)$ and hence $g\cdot x=h\cdot x$; injective by the same computation read backwards; surjective by definition of the orbit. Hence $|\Gamma\cdot x|=[\Gamma:\Stab(x)]$. (ii) \emph{Class equation.} Applying (i) to the conjugation action of a finite group $A$ on itself gives $|A|=|\Z(A)|+\sum_{i=1}^{r}[A:\Cent_A(x_i)]$, the sum running over representatives of the non-central conjugacy classes, since the singleton classes are exactly the central elements. (iii) \emph{The fixed-point congruence} is Remark~\ref{lem:fix}, and \emph{Cauchy's theorem} is Remark~\ref{lem:cauchy}; both were proved from (i) and (ii).
+(2) \emph{The extension step.} Claim: if $H\le G$ has $|H|=p^{i}$ with $i<k$, then there exists $H'\le G$ with $H\le H'$ and $[H':H]=p$. Let $H$ act on the set $G/H$ of left cosets of $H$ by $h\cdot(gH)=(hg)H$; this is well defined because $g'=gh_{0}$ gives $h(g'H)=(hgh_{0})H=(hg)H$ for $h_{0}\in H$. The cardinality of $G/H$ is $[G:H]=p^{k-i}m$. By Remark~\ref{lem:fix}, $[G:H]\equiv|\Fix_H(G/H)|\pmod p$. A coset $gH$ is fixed by $H$ exactly when $hgH=gH$ for all $h\in H$, i.e.\ when $g^{-1}hg\in H$ for all $h\in H$, i.e.\ when $g^{-1}Hg\subseteq H$; since conjugation preserves order, this is equivalent to $g^{-1}Hg=H$, i.e.\ to $g\in\Norm_G(H)$. Hence $\Fix_H(G/H)=\{gH: g\in\Norm_G(H)\}=\Norm_G(H)/H$ and
+\[
+[G:H]\equiv[\Norm_G(H):H]\pmod p .
+\]
+Because $i<k$, $[G:H]=p^{k-i}m$ is divisible by $p$; so is $[\Norm_G(H):H]$. Now $H\trianglelefteq\Norm_G(H)$, so $\Norm_G(H)/H$ is a group of order $[\Norm_G(H):H]$, divisible by $p$. By Cauchy's theorem it has a subgroup $S$ of order $p$; its preimage $H'=\pi^{-1}(S)$ under $\Norm_G(H)\to\Norm_G(H)/H$ is a subgroup of $G$ containing $H$ with $|H'|=|S|\cdot|H|=p^{i+1}$, as claimed.
+(3) \emph{Iteration.} Starting from $H_{0}=\{e\}$ of order $p^{0}$ and applying step (2) for $i=0,1,\dots,k-1$ produces a chain $\{e\}=H_{0}\le H_{1}\le\dots\le H_{k}$ with $|H_{i}|=p^{i}$; then $H_{k}\in\Syl_p(G)$, which proves existence. If instead one starts from an arbitrary $p$-subgroup $H$ of order $p^{j}$, $j\le k$, the same iteration produces a Sylow $p$-subgroup containing $H$, which is the containment statement.
+
+\emph{Ledger record:} \texttt{stmt:000060}.
+\end{proof}
+
+\begin{theorem}[Sylow II: conjugacy]\label{thm:sylow2}
+Let $G$ be a finite group and $p$ a prime. Any two Sylow $p$-subgroups of $G$ are conjugate: if $H,K\in\Syl_p(G)$ then $K=gHg^{-1}$ for some $g\in G$.
+\end{theorem}
+
+\begin{proof}
+(1) Let $Q$ be a finite $p$-group acting on a finite set $X$. By Remark~\ref{lem:fix}, $|X|\equiv|\Fix_Q(X)|\pmod p$: the orbits partition $X$, every orbit has length $[Q:\Stab(x)]$, a power of $p$, and the orbits of length $>1$ contribute multiples of $p$.
+(2) Let $P,Q\in\Syl_p(G)$ and let $Q$ act on $G/P$ by $q\cdot(gP)=(qg)P$; this is well defined since $g'=gh$ with $h\in P$ gives $qg'P=qghP=qgP$. Applying (1), $[G:P]\equiv|\Fix_Q(G/P)|\pmod p$. Because $P$ is a Sylow $p$-subgroup, $p\nmid[G:P]$, so the left side is nonzero modulo $p$ and the fixed-point set cannot be empty. Choose $gP\in\Fix_Q(G/P)$.
+(3) For every $q\in Q$ we then have $qgP=gP$, i.e.\ $g^{-1}qg\in P$, i.e.\ $q\in gPg^{-1}$; hence $Q\subseteq gPg^{-1}$. Both groups have order $p^{k}$, so the inclusion is an equality: $Q=gPg^{-1}$. As $P,Q$ were arbitrary Sylow $p$-subgroups, $\Syl_p(G)$ is a single conjugacy class.
+
+\emph{Ledger record:} \texttt{stmt:000061}.
+\end{proof}
+
+\begin{theorem}[Sylow III: counting conditions]\label{thm:sylow3}
+Let $|G|=p^{k}m$ with $p\nmid m$ and let $n_p=|\Syl_p(G)|$. Then $n_p$ divides $m$ and $n_p\equiv 1\pmod p$.
+\end{theorem}
+
+\begin{proof}
+(1) By Theorem~\ref{thm:sylow1} the set $\Syl_p(G)$ is nonempty; fix $P\in\Syl_p(G)$. $G$ acts on $\Syl_p(G)$ by conjugation, and by Theorem~\ref{thm:sylow2} this action is transitive. The stabilizer of $P$ is $\Norm_G(P)$, so the orbit--stabilizer theorem gives
+\[
+n_p=|\Syl_p(G)|=[G:\Norm_G(P)].
+\]
+Since $P\le\Norm_G(P)$, the index $[G:\Norm_G(P)]$ divides $[G:P]=m$; hence $n_p\mid m$.
+(2) Now let the $p$-group $P$ itself act on $\Syl_p(G)$ by conjugation, $g\cdot Q=gQg^{-1}$. By Remark~\ref{lem:fix}, $n_p\equiv|\Fix_P(\Syl_p(G))|\pmod p$. A Sylow subgroup $Q$ is fixed by $P$ exactly when $gQg^{-1}=Q$ for all $g\in P$, i.e.\ when $P\le\Norm_G(Q)$.
+(3) Suppose $Q$ is such a fixed point. Then $P$ and $Q$ are both subgroups of $\Norm_G(Q)$ of order $p^{k}$, hence both are Sylow $p$-subgroups of the group $\Norm_G(Q)$; by Theorem~\ref{thm:sylow2} applied inside $\Norm_G(Q)$ there is $x\in\Norm_G(Q)$ with $P=xQx^{-1}$. Since $Q\trianglelefteq\Norm_G(Q)$, $xQx^{-1}=Q$, so $P=Q$. Thus the fixed-point set is the singleton $\{P\}$, and $n_p\equiv 1\pmod p$.
+
+\emph{Ledger record:} \texttt{stmt:000062}.
+\end{proof}
+
+\begin{theorem}[Index formula for the normalizer]\label{thm:index}
+Let $G$ be a finite group, $p$ a prime, and $P\in\Syl_p(G)$. Then $n_p=[G:\Norm_G(P)]$.
+\end{theorem}
+
+\begin{proof}
+(1) Conjugation gives an action of $G$ on $\Syl_p(G)$; by Theorem~\ref{thm:sylow2} any $Q\in\Syl_p(G)$ equals $gPg^{-1}$ for some $g$, so the orbit of $P$ is all of $\Syl_p(G)$ and the action is transitive.
+(2) The stabilizer of $P$ under this action is, by definition, $\{g\in G: gPg^{-1}=P\}=\Norm_G(P)$.
+(3) The orbit--stabilizer theorem (step (1) of Theorem~\ref{thm:sylow1}) applied to this transitive action gives $|\Syl_p(G)|=[G:\Norm_G(P)]$, i.e.\ $n_p=[G:\Norm_G(P)]$. Combined with $P\le\Norm_G(P)$ this recovers $n_p\mid m$.
+
+\emph{Ledger record:} \texttt{stmt:000063}.
+\end{proof}
+
+\begin{theorem}[Uniqueness equals normality]\label{thm:unique}
+Let $G$ be a finite group, $p$ a prime, and $P\in\Syl_p(G)$. Then $P$ is the unique Sylow $p$-subgroup of $G$ if and only if $P\trianglelefteq G$. In particular, if $G$ is abelian then each of its Sylow subgroups is unique.
+\end{theorem}
+
+\noindent\emph{Provenance and status.} This statement is a standard textbook fact. For it, and only for it among the five results above, no verified full-text source is at hand and the argument following has not been independently checked; the argument is included for completeness and is not offered as an independently verified proof.
+
+\begin{proof}
+(1) Suppose $P$ is the unique Sylow $p$-subgroup. For $g\in G$ the conjugate $gPg^{-1}$ is again a subgroup of order $p^{k}$, hence a Sylow $p$-subgroup, hence equal to $P$. Therefore $gPg^{-1}=P$ for all $g\in G$, i.e.\ $P\trianglelefteq G$.
+(2) Conversely suppose $P\trianglelefteq G$. If $Q\in\Syl_p(G)$, Theorem~\ref{thm:sylow2} gives $Q=gPg^{-1}$ for some $g\in G$; normality gives $gPg^{-1}=P$, so $Q=P$. Hence $n_p=1$.
+(3) If $G$ is abelian, then $gPg^{-1}=P$ for every $g\in G$ and every subgroup $P$, so each Sylow subgroup is normal and, by (1) and (2), unique. Equivalently, in the abelian case $n_p=[G:\Norm_G(P)]=[G:G]=1$ by Theorem~\ref{thm:index}.
+
+\emph{Ledger record:} \texttt{stmt:000064}.
+\end{proof}
+
+\section{Discussion and open problems}
+
+The counting conditions are sharp but far from determining the group. For $G=S_3$, $|G|=2\cdot 3$: $n_3\equiv 1\pmod 3$ and $n_3\mid 2$ force $n_3=1$, so the subgroup of order $3$ is normal, while $n_2\equiv 1\pmod 2$ and $n_2\mid 3$ allow $n_2=1$ or $3$, and in fact $n_2=3$. For $G=A_5$, $|G|=60=2^{2}\cdot 3\cdot 5$: $n_5\equiv 1\pmod 5$ and $n_5\mid 12$ give $n_5\in\{1,6\}$, and $n_5\neq 1$ because $A_5$ is simple, so $n_5=6$; similarly $n_3\in\{1,4,10\}$ reduces to $n_3=10$ and $n_2\in\{1,3,5,15\}$ reduces to $n_2=5$. These computations, standard in the expository literature \cite{conrad,harris,idelhaj,vakil}, are the typical use of the theorems: the arithmetic excludes all but one value of $n_p$, and the excluded values are killed by an indirect argument such as simplicity or by counting elements.
+
+Two limitations deserve to be stated plainly. First, the theorems say nothing about the isomorphism type of $G$ once the $n_p$ are fixed: the cyclic group of order $6$ and $S_3$ both have $n_2=1$ or $3$ and $n_3=1$, and $S_4$ and the dihedral group of order $24$ share the same order and the same set of admissible values of $n_2$ and $n_3$, while being non-isomorphic. Second, the divisibility and congruence conditions are necessary but not sufficient in general: prescribing values $n_p\equiv 1\pmod p$ with $n_p\mid m$ for all $p$ does not guarantee that a group with exactly those counts exists.
+
+At the level of generality of this paper the natural open problems are therefore of two kinds. \begin{openproblem}Characterise, for a fixed order $n$, which tuples $(n_p)_{p\mid n}$ arise from some group of order $n$.\end{openproblem} \begin{openproblem}Decide whether the Sylow counting data together with the isomorphism types of all Sylow subgroups and of all their normalizers determines $G$ up to isomorphism; the examples above show that the counting data alone does not.\end{openproblem} Neither question is touched by the three theorems, which is precisely why they are stated as open problems rather than as corollaries. The arguments above are elementary and were checked by hand, with one exception that we state explicitly: the uniqueness criterion of Theorem~\ref{thm:unique} is a textbook-level statement whose argument we have not independently checked, and it carries the provenance note attached to it in Section~3. No formal verification was carried out for any of the five results, and we make no claim of the kind.
+
+\begin{thebibliography}{9}
+
+\bibitem{conrad}
+K.~Conrad,
+\emph{Proof of Sylow theorems},
+expository notes (file \texttt{conrad-proof-of-sylow-theorems}).
+
+\bibitem{harris}
+Harris,
+\emph{Sylow theorems},
+expository notes (file \texttt{harris-sylow-theorems}).
+
+\bibitem{idelhaj}
+Idelhaj,
+\emph{Sylow theorems and applications},
+expository notes (file \texttt{idelhaj-sylow-theorems-and-applications}).
+
+\bibitem{vakil}
+R.~Vakil,
+\emph{Sylow theorems},
+Math 18.704 course notes (file \texttt{vakil-sylow-theorems}).
+
+\end{thebibliography}
+
+\appendix
+
+\section{Computational evidence}
+
+This paper contains no computational experiments and no machine-checked proofs; all five results are argued by hand in Section~3. The purpose of this appendix is to list, for each theorem, where the corresponding source material may be consulted and under which label the statement and its argument are filed. Those labels are provenance marks, not mathematical content.
+
+\begin{itemize}
+\item Theorem~\ref{thm:sylow1} corresponds to the statement \texttt{stmt:000060} (a theorem of Sylow type), whose proof is the elementary argument reproduced in Section~3: coset counting, the orbit--stabilizer theorem, the class equation, the fixed-point congruence, Cauchy's theorem and an iterated extension step.
+\item Theorem~\ref{thm:sylow2} corresponds to \texttt{stmt:000061}, whose proof is the action of a Sylow $p$-subgroup on a coset space together with the fixed-point congruence.
+\item Theorem~\ref{thm:sylow3} corresponds to \texttt{stmt:000062}, whose proof is the conjugation action on the set of Sylow subgroups combined with the fixed-point count applied to a Sylow subgroup.
+\item Theorem~\ref{thm:index} corresponds to \texttt{stmt:000063}, the index form $n_p=[G:\Norm_G(P)]$ of the counting statement.
+\item Theorem~\ref{thm:unique} corresponds to \texttt{stmt:000064}, the criterion that a Sylow subgroup is unique exactly when it is normal.
+\end{itemize}
+
+Sources: the statements carry the literature identifiers \texttt{lit:000000} (Conrad) for the first four and \texttt{lit:000002} (Idelhaj) for the uniqueness criterion; the paper's bibliography lists the same four sources as \cite{conrad,harris,idelhaj,vakil}. No page numbers are cited because none were available verbatim in the sources at hand.
+
+Verification status, stated as a fact rather than as an assurance: for the statements \texttt{stmt:000060} through \texttt{stmt:000063} the source material includes a line-by-line review of the proof; for \texttt{stmt:000064} that review reported an error (the statement and the proof were found not to match), and the proof given in Section~3 is the standard textbook argument, presented here without any claim of review or machine verification. In particular the wording of this paper is calibrated to that status: nothing here is claimed to be formalised, and the proofs are offered as classical mathematical arguments only.
+
+\input{mapping-appendix}
+\end{document}

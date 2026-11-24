@@ -1,0 +1,456 @@
+===== page 1 =====
+THE SYLOW THEOREMS
+KEITH CONRAD
+1. Introduction
+The converse of Lagrange’s theorem is false: if G is a ﬁnite group and d | |G|, then there
+may not be a subgroup of G with order d. The simplest example of this is the group A4, of
+order 12, which has no subgroup of order 6. The Norwegian mathematician Peter Ludwig
+Sylow [4] discovered that a converse result is true when d is a prime power: if p is a prime
+number and pk | |G| then G must contain a subgroup of order pk. Sylow also discovered
+important relations among the subgroups whose order is the largest power of p dividing |G|,
+such as the fact that all subgroups of that order are conjugate to each other.
+For example, a group of order 100 = 22 · 52 must contain subgroups of order 1, 2, 4, 5,
+and 25, the subgroups of order 4 are conjugate to each other, and the subgroups of order
+25 are conjugate to each other. It is not necessarily the case that the subgroups of order 2
+are conjugate or that the subgroups of order 5 are conjugate.
+Deﬁnition 1.1. Let G be a ﬁnite group and p be a prime. A subgroup of G whose order is
+the highest power of p dividing |G| is called a p-Sylow subgroup1 of G. A p-Sylow subgroup
+for some p is called a Sylow subgroup.
+In a group of order 100, a 2-Sylow subgroup has order 4, a 5-Sylow subgroup has order
+25, and a p-Sylow subgroup is trivial if p̸ = 2 or 5.
+In a group of order 12, a 2-Sylow subgroup has order 4, a 3-Sylow subgroup has order 3,
+and a p-Sylow subgroup is trivial if p > 3. Let’s look at a few examples of Sylow subgroups
+in groups of order 12.
+Example 1.2. In Z/(12), the only 2-Sylow subgroup is {0, 3, 6, 9} = ⟨3⟩and the only
+3-Sylow subgroup is {0, 4, 8} = ⟨4⟩.
+Example 1.3. In A4 there is one subgroup of order 4, so the only 2-Sylow subgroup is
+{(1), (12)(34), (13)(24), (14)(23)} = ⟨(12)(34), (14)(23)⟩.
+There are four 3-Sylow subgroups:
+{(1), (123), (132)} = ⟨(123)⟩,
+{(1), (124), (142)} = ⟨(124)⟩,
+{(1), (134), (143)} = ⟨(134)⟩,
+{(1), (234), (243)} = ⟨(234)⟩.
+Example 1.4. In D6 there are three 2-Sylow subgroups:
+{1, r3, s, r3s} = ⟨r3, s⟩,
+{1, r3, rs, r4s} = ⟨r3, rs⟩,
+{1, r3, r2s, r5s} = ⟨r3, r2s⟩.
+The only 3-Sylow subgroup of D6 is {1, r2, r4} = ⟨r2⟩.
+1Also called a Sylow p-subgroup. The term “p-Sylow subgroup” is used in Herstein’s Topics in Algebra (2nd
+ed.), which is where I ﬁrst learned group theory.
+1
+===== page 2 =====
+2
+KEITH CONRAD
+In a group of order 24, a 2-Sylow subgroup has order 8 and a 3-Sylow subgroup has order
+3. Let’s look at two examples.
+Example 1.5. In S4, the 3-Sylow subgroups are the 3-Sylow subgroups of A4 (an element
+of 3-power order in S4 must be a 3-cycle, and they all lie in A4). We determined the 3-Sylow
+subgroups of A4 in Example 1.3; there are four of them.
+There are three 2-Sylow subgroups of S4, and they are interesting to work out since they
+can be understood as copies of D4 inside S4. The number of ways to label the four vertices
+of a square as 1, 2, 3, and 4 is 4! = 24, but up to rotations and reﬂections of the square
+there are really just three diﬀerent ways of carrying out the labeling, as follows.
+1
+2
+3
+4
+1
+2
+4
+3
+1
+3
+2
+4
+Every other labeling of the square is a rotated or reﬂected version of one of these three
+squares.
+For example, the square below is obtained from the middle square above by
+reﬂecting across a horizontal line through the middle of the square.
+2
+1
+3
+4
+When D4 acts on a square with labeled vertices, each motion of D4 creates a permutation
+of the four vertices, and this permutation is an element of S4. For example, a 90-degree
+rotation of the square is a 4-cycle on the vertices. In this way we obtain a copy of D4 inside
+S4. The three essentially diﬀerent labelings of the vertices of the square above embed D4
+into S4 as three diﬀerent subgroups of order 8:
+{1, (1234), (1432), (12)(34), (13)(24), (14)(23), (13), (24)} = ⟨(1234), (13)⟩,
+{1, (1243), (1342), (12)(34), (13)(24), (14)(23), (14), (23)} = ⟨(1243), (14)⟩,
+{1, (1324), (1423), (12)(34), (13)(24), (14)(23), (12), (34)} = ⟨(1324), (12)⟩.
+These are the 2-Sylow subgroups of S4.
+Example 1.6. The group SL2(Z/(3)) has order 24. It is not isomorphic to S4 since its
+center {±I2} is nontrivial. By explicit calculation, SL2(Z/(3)) has only 8 elements with
+2-power order:
+
+1
+0
+0
+1
+
+,
+
+0
+−1
+1
+0
+
+,
+
+1
+1
+1
+−1
+
+,
+
+−1
+1
+1
+1
+
+,
+
+−1
+0
+0
+−1
+
+,
+
+0
+1
+−1
+0
+
+,
+
+−1
+−1
+−1
+1
+
+,
+
+1
+−1
+−1
+−1
+
+.
+===== page 3 =====
+THE SYLOW THEOREMS
+3
+These form the only 2-Sylow subgroup, which is isomorphic to Q8 by labeling the matrices
+in the ﬁrst row as 1, i, j, k and the matrices in the second row as −1, −i, −j, −k.
+There are four 3-Sylow subgroups of SL2(Z/(3)): ⟨( 1 1
+0 1 )⟩, ⟨( 1 0
+1 1 )⟩, ⟨( 0 1
+2 2 )⟩, and ⟨( 0 2
+1 2 )⟩.
+Here are the Sylow theorems. They are often given in three parts. The result we call
+Sylow III* is not always stated explicitly as part of the Sylow theorems.2
+Theorem 1.7 (Sylow I). A ﬁnite group G has a p-Sylow subgroup for every prime p and
+each p-subgroup of G lies in some p-Sylow subgroup of G.
+Theorem 1.8 (Sylow II). For each prime p, the p-Sylow subgroups of G are conjugate.
+Theorem 1.9 (Sylow III). For each prime p, let np be the number of p-Sylow subgroups of
+G. Write |G| = pkm, where p doesn’t divide m. Then
+np | m and np ≡1 mod p.
+Theorem 1.10 (Sylow III*). For each prime p, let np be the number of p-Sylow subgroups
+of G. Then np = [G : N(P)], where P is a p-Sylow subgroup and N(P) is its normalizer.
+The existence part of Sylow I has been illustrated in all the previous examples.
+Sylow II says for two p-Sylow subgroups H and K of G that there is some g ∈G such
+that gHg−1 = K. This is illustrated in the table below, where Example 1.2 is skipped since
+Z/(12) is abelian.
+Example
+Group
+Size
+p
+H
+K
+g
+1.3
+A4
+12
+3
+⟨(123)⟩
+⟨(124)⟩
+(243)
+1.4
+D6
+12
+2
+⟨r3, s⟩
+⟨r3, rs⟩
+r2
+1.5
+S4
+24
+2
+⟨(1234), (13)⟩
+⟨(1243), (14)⟩
+(34)
+1.6
+SL2(Z/(3))
+24
+3
+⟨( 1 1
+0 1 )⟩
+⟨( 1 0
+1 1 )⟩
+( 0 1
+2 1 )
+When trying to conjugate one cyclic subgroup to another cyclic subgroup, be careful: not
+all generators of the two groups have to be conjugate. For example, in A4 the subgroups
+⟨(123)⟩= {(1), (123), (132)} and ⟨(124)⟩= {(1), (124), (142)} are conjugate, but the
+conjugacy class of (123) in A4 is {(123), (142), (134), (243)}, so there’s no way to conjugate
+(123) to (124) by an element of A4; we must conjugate (123) to (142). The 3-cycles (123)
+and (124) are conjugate in S4, but not in A4. Similarly, ( 1 1
+0 1 ) and ( 1 0
+1 1 ) are conjugate in
+GL2(Z/(3)) but not in SL2(Z/(3)), so when Sylow II says the subgroups ⟨( 1 1
+0 1 )⟩and ⟨( 1 0
+1 1 )⟩
+are conjugate in SL2(Z/(3)) a conjugating matrix must send ( 1 1
+0 1 ) to ( 1 0
+1 1 )2 = ( 1 0
+2 1 ).
+Let’s see what Sylow III tells us about the number of 2-Sylow and 3-Sylow subgroups
+of a group of order 12. For p = 2 and p = 3 in Sylow III, the divisibility conditions are
+n2 | 3 and n3 | 4 and the congruence conditions are n2 ≡1 mod 2 and n3 ≡1 mod 3. The
+divisibility conditions imply n2 is 1 or 3 and n3 is 1, 2, or 4. The congruence n2 ≡1 mod 2
+tells us nothing new (1 and 3 are both odd), but the congruence n3 ≡1 mod 3 rules out
+the option n3 = 2. Therefore n2 is 1 or 3 and n3 is 1 or 4 when |G| = 12.
+If |G| = 24 we again ﬁnd n2 is 1 or 3 while n3 is 1 or 4. (For instance, from n3 | 8 and
+n3 ≡1 mod 3 the only choices are n3 = 1 and n3 = 4.) Therefore as soon as we ﬁnd more
+than one 2-Sylow subgroup there must be three of them, and as soon as we ﬁnd more than
+one 3-Sylow subgroup there must be four of them. The table below shows the values of n2
+and n3 in the examples above.
+2In Sylow’s paper, parts I and III* are in [4, Th´eor`eme I] while parts II and III are in [4, Th´eor`eme II].
+===== page 4 =====
+4
+KEITH CONRAD
+Example
+Group
+Size
+n2
+n3
+1.2
+Z/(12)
+12
+1
+1
+1.3
+A4
+12
+1
+4
+1.4
+D6
+12
+3
+1
+1.5
+S4
+24
+3
+4
+1.6
+SL2(Z/(3))
+24
+1
+4
+2. Proof of the Sylow Theorems
+Our proof of the Sylow theorems will use group actions. The table below is a summary.
+For each theorem the table lists a group, a set it acts on, and the action. Let Sylp(G) be
+the set of p-Sylow subgroups of G, so np = | Sylp(G)|.
+Theorem
+Group
+Set
+Action
+Sylow I
+p-subgroup H
+G/H
+left mult.
+Sylow II
+p-Sylow subgroup Q
+G/P
+left mult.
+Sylow III (np | m)
+G
+Sylp(G)
+conjugation
+Sylow III (np ≡1 mod p)
+P ∈Sylp(G)
+Sylp(G)
+conjugation
+Sylow III∗
+G
+Sylp(G)
+conjugation
+Note the two conclusions of Sylow III are proved using diﬀerent group actions.
+Our proofs will usually involve the action of a p-group on a set and use the ﬁxed-point
+congruence for such actions: when X is a ﬁnite set being acted on by a ﬁnite p-group Γ,
+(2.1)
+|X| ≡| FixΓ(X)| mod p,
+where FixΓ(X) is the set of ﬁxed points of Γ in X.
+Proof of Sylow I: Let pk be the highest power of p in |G|. The result is obvious if k = 0,
+since the trivial subgroup is a p-Sylow subgroup, so we can take k ≥1, hence p | |G|.
+Our strategy for proving Sylow I is to prove a stronger result: G has a subgroup of
+order pi for 0 ≤i ≤k. More precisely, if |H| = pi and i < k, we will show there is a
+p-subgroup H′ ⊃H with [H′ : H] = p, so |H′| = pi+1. Then, starting with H as the trivial
+subgroup, repeat this process with H′ in place of H to create larger subgroups
+{e} = H0 ⊂H1 ⊂H2 ⊂· · ·
+with |Hi| = pi, and after k steps we reach Hk, of order pk, which is a p-Sylow subgroup.
+Starting with H as a p-subgroup, we will have shown H is contained in a p-Sylow subgroup.
+Consider the left multiplication action of H on the left cosets G/H (note G/H might not
+be a group). This is an action of a ﬁnite p-group H on the set G/H, so by the ﬁxed-point
+congruence (2.1) for actions of nontrivial p-groups,
+(2.2)
+|G/H| ≡| FixH(G/H)| mod p.
+Here is what it means for gH in G/H to be ﬁxed by the group H acting by left multiplication:
+hgH = gH for all h ∈H ⇐⇒hg ∈gH for all h ∈H
+⇐⇒g−1hg ∈H for all h ∈H
+⇐⇒g−1Hg ⊂H
+⇐⇒g−1Hg = H because |g−1Hg| = |H|
+⇐⇒g ∈N(H).
+===== page 5 =====
+THE SYLOW THEOREMS
+5
+Thus FixH(G/H) = {gH : g ∈N(H)} = N(H)/H, so (2.2) becomes
+(2.3)
+[G : H] ≡[N(H) : H] mod p.
+Because H ◁N(H), N(H)/H is a group.
+When |H| = pi and i < k, the index [G : H] is divisible by p, so the congruence (2.3)
+implies [N(H) : H] is divisible by p. Therefore the group N(H)/H has order divisible by
+p. By Cauchy’s theorem, N(H)/H has a subgroup ⟨g⟩of order p (necessarily cyclic). The
+reduction homomorphism N(H) →N(H)/H has kernel H, so the inverse image of ⟨g⟩in
+N(H) is a subgroup that contains H and has order p|H| = pi+1.3 We have shown each
+subgroup of G with order pi for i < k is contained in a subgroup of G with order pi+1. This
+can be repeated until we reach a subgroup of order pk.
+Proof of Sylow II: For p-Sylow subgroups P and Q, we want to show they are conjugate.
+Let Q act on G/P by left multiplication. Since Q is a ﬁnite p-group, (2.1) says
+|G/P| ≡| FixQ(G/P)| mod p.
+The left side is [G : P], which is nonzero modulo p since P is a p-Sylow subgroup. Thus
+| FixQ(G/P)| can’t be 0, so there is a ﬁxed point in G/P. Call it gP. That is, qgP = gP
+for all q ∈Q. Equivalently, qg ∈gP for all q ∈Q, so Q ⊂gPg−1. Therefore Q = gPg−1,
+since Q and gPg−1 have the same size and we’re done.
+Proof of Sylow III: We will prove np ≡1 mod p and then np | m.
+To show np ≡1 mod p, let P act on Sylp(G) by conjugation. The size of Sylp(G) is np.
+Since P is a ﬁnite p-group, (2.1) says
+np ≡|{ﬁxed points}| mod p.
+Fixed points for P acting by conjugation on Sylp(G) are Q ∈Sylp(G) such that gQg−1 = Q
+for all g ∈P. One choice for Q is P. For all such Q, P ⊂N(Q). Also Q ⊂N(Q), so P
+and Q are p-Sylow subgroups in N(Q). Applying Sylow II to the group N(Q), P and Q are
+conjugate in N(Q). Since Q ◁N(Q), the only subgroup of N(Q) conjugate to Q is Q, so
+P = Q. Thus P is the only ﬁxed point when P acts on Sylp(G), so np ≡1 mod p.
+To show np | m, consider the action of G by conjugation on Sylp(G). Since the p-Sylow
+subgroups are conjugate to each other (Sylow II), there is one orbit. A set on which a group
+acts with one orbit has size dividing the size of the group, so np | |G|. From np ≡1 mod p,
+the number np is relatively prime to p, so np | m and we’re done.
+Proof of Sylow III∗: Let P be a p-Sylow subgroup of G and let G act on Sylp(G) by
+conjugation. By the orbit-stabilizer formula,
+np = | Sylp(G)| = [G : Stab{P}].
+The stabilizer Stab{P} of the “point” P in Sylp(G) (viewing P as a point is why we write
+{P}) is
+Stab{P} = {g : gPg−1 = P} = N(P).
+Thus np = [G : N(P)] and we’re done.
+3If f : G →eG is a surjective homomorphism of ﬁnite groups with kernel K and M is a subgroup of eG, then
+the inverse image f −1(M) = {g ∈G : f(g) ∈M} is a subgroup of G and |f −1(M)| = |M||K|. The reason
+|f −1(M)| = |M||K| is that K ⊂f −1(M) so the restriction of f to a function f −1(M) →M is a surjective
+homomorphism with kernel K, so f −1(M)/K ∼= M. Thus |f −1(M)|/|K| = |M|, so |f −1(M)| = |M||K|.
+===== page 6 =====
+6
+KEITH CONRAD
+In the proof of Sylow I, we saw that if H is a p-subgroup of G that is not a p-Sylow
+subgroup then N(H) is strictly larger than H. What can be said about N(P) when P is a
+p-Sylow subgroup? It may or may not be larger than P, but we will show that taking the
+normalizer a second time will not give anything new.
+Theorem 2.1. Let P be a p-Sylow subgroup of a ﬁnite group G. Then N(N(P)) = N(P).
+More generally, if H is a subgroup of G that contains N(P) then N(H) = H.
+Proof. We will prove H ⊂N(H) and N(H) ⊂H. The containment H ⊂N(H) is easy,
+To prove N(H) ⊂H let x ∈N(H), so xHx−1 = H. Since P ⊂N(P) ⊂H we have
+xPx−1 ⊂xHx−1 = H, so P and xPx−1 are both p-Sylow subgroups of H. By Sylow II
+for the group H, there is y ∈H such that xPx−1 = yPy−1. Thus y−1xP(y−1x)−1 = P, so
+y−1x ∈N(P) ⊂H, so x ∈yH = H.
+□
+3. Historical Remarks
+Sylow’s proof of his theorems appeared in [4]. Here is what he showed about every prime
+p and ﬁnite group G (of course, without using the label “Sylow subgroup”).
+(1) There is a p-Sylow subgroup of G. Moreover, [G : N(P)] ≡1 mod p for each p-Sylow
+subgroup P.
+(2) Let P be a p-Sylow subgroup of G.
+The number of p-Sylow subgroups of G is
+[G : N(P)]. All p-Sylow subgroups of G are conjugate.
+(3) Each ﬁnite p-group H with size pk contains an increasing chain of subgroups
+{e} = H0 ⊂H1 ⊂H2 ⊂· · · ⊂Hk = H,
+where each subgroup has index p in the next one. In particular, |Hi| = pi for all i.
+To prove part (3), which is [4, Th´eor`eme III], Sylow proved every nontrivial p-group has
+a nontrivial center [4, p. 588]. While that property of ﬁnite p-groups appears in all books on
+group theory, that it is due to Sylow has been forgotten. If in (3) we take for H a p-Sylow
+subgroup of G then (3) shows G has a subgroup of order pi for each p-power pi dividing
+|G|, a result that is the second sentence of Sylow’s paper.
+Here is how Sylow [4, Th´eor`eme I] wrote item (1) above:4
+Si pα d´esigne la plus grande puissance du nombre premier p qui divise l’ordre
+du groupe G, ce groupe contient un autre H de l’ordre pα; si de plus pαν
+d´esigne l’ordre du plus grand groupe contenu dans G dont les substitutions
+sont permutables `a H, l’ordre de G sera de la forme pαν(pm + 1).
+In English, using current terminology, this says
+If pα is the largest power of the prime p which divides the size of the group
+G, this group contains a subgroup H of order pα; if moreover pαν is the size
+of the largest subgroup of G that normalizes H, the size of G is of the form
+pαν(pm + 1).
+Sylow did not have the abstract concept of a group: all groups for him arose as subgroups
+of symmetric groups, so groups were always “groupes de substitutions.” The condition that
+an element x ∈G is “permutable” with a subgroup H means xH = Hx, or in other words
+x ∈N(H). The end of the ﬁrst part of his theorem says the normalizer of a Sylow subgroup
+has index pm + 1 for some m, which means the index is ≡1 mod p.
+4We modify some of his notation: he wrote the subgroup as g, not H, and the prime as n, not p.
+===== page 7 =====
+THE SYLOW THEOREMS
+7
+Sylow’s approach to proving the existence of Sylow subgroups of G was to start with a
+p-subgroup H in G of maximal order and prove p ∤[G : H], so |H| is the largest power of p
+dividing |G|. (A version of his proof in modern language is in [1, Sect. 2] and [5, Sect. 2], or
+Section 2 in https://kconrad.math.uconn.edu/blurbs/grouptheory/sylowmore.pdf.)
+In some accounts of the Sylow theorems, a p-Sylow subgroup of G is not deﬁned as a
+subgroup of G whose order is the biggest power of p dividing |G|, but as a p-subgroup of G
+with maximal order. That point of view goes right back to Sylow’s own work.
+4. Analogues of the Sylow Theorems
+There are analogues of the ﬁrst two Sylow theorems and Theorem 2.1 for certain types
+of subgroups.
+(1) A Hall subgroup of a ﬁnite group G is a subgroup H whose order and index are
+relatively prime. For example, in a group of order 60 a subgroup of order 12 has
+index 5 and thus is a Hall subgroup. Every Sylow subgroup is a Hall subgroup, and
+a p-subgroup is a Hall subgroup if and only if it is a Sylow subgroup. Hall subgroups
+were introduced in 1928 by the group theorist Philip Hall [2], who called them S
+subgroups rather than Hall subgroups. He proved that for each solvable group of
+order n and each d dividing n such that (d, n/d) = 1, there is a Hall subgroup of
+order d, all Hall subgroups with the same order are conjugate, and the normalizer of
+a Hall subgroup of a solvable group is its own normalizer. About 10 years later, Hall
+[3] proved a converse result showing the solvability hypothesis on G is necessary: if
+a ﬁnite group G of order n contains a Hall subgroup of order d for each d dividing
+n such that (d, n/d) = 1, then G is solvable.
+(2) In a compact connected Lie group G, maximal tori (maximal connected abelian
+subgroups of G) satisfy properties analogous to those of Sylow subgroups: they exist,
+every torus is in a maximal torus, and all maximal tori are conjugate. The proof of
+conjugacy uses the Lefschetz ﬁxed point theorem. (This plays a role analogous to the
+ﬁxed-point congruence (2.1) in the proof of the Sylow theorems.) Like normalizers
+of Sylow subgroups, the normalizer of a maximal torus is its own normalizer. Unlike
+Sylow subgroups in a general ﬁnite group, maximal tori are always abelian and every
+element of G is in a maximal torus.
+(3) In a connected linear algebraic group, maximal connected unipotent subgroups are
+like Sylow subgroups: they exist, every connected unipotent subgroup is in a maxi-
+mal connected unipotent subgroup, and all maximal connected unipotent subgroups
+are conjugate. The proof of conjugacy uses the Borel ﬁxed point theorem. The nor-
+malizer of a maximal connected unipotent subgroup is called a Borel subgroup, and
+like normalizers of Sylow subgroups each Borel subgroup is its own normalizer.
+References
+[1] R. Gow, Sylow’s proof of Sylow’s theorem, Irish Math. Soc. Bull. (1994), 55–63. URL https://www.irish
+mathsoc.org/bull33/bull33 55-63.pdf.
+[2] P. Hall, A note on soluble groups, J. London Math. Soc. (1928), 98–105.
+[3] P. Hall, A characteristic property of soluble groups, J. London Math. Soc. (1937), 198–200.
+[4] L. Sylow, Th´eor`emes sur les groupes de substitutions, Mathematische Annalen 5 (1872), 584–594. URL
+https://eudml.org/doc/156588. English translation by Robert Wilson, URL http://www.maths.qmul.
+ac.uk/~raw/pubs_files/Sylow.pdf.
+[5] W. C. Waterhouse, The early proofs of Sylow’s theorem, Arch. Hist. Exact Sci. 21 (1979/80), 279–290.

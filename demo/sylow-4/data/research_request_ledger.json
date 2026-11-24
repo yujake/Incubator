@@ -1,0 +1,17 @@
+{
+  "schema_version": 2,
+  "rows": [
+    {
+      "question_id": "000000",
+      "origin": "agent-D-sylow-proof",
+      "requests": [
+        {
+          "request_id": "r-000002",
+          "topic": "设 G 为有限群，|G| = p^a·m（p 素数，(p,m)=1）。断言：(…",
+          "mode": "topical",
+          "at": "2026-11-24T05:17:46+08:00"
+        }
+      ]
+    }
+  ]
+}

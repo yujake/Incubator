@@ -1,0 +1,1665 @@
+{
+  "role": "B",
+  "task": "B：这一趟派给你的活是 —— 把 F 的这份证明稿登记成一条命题（register_statement），只递指针、正文与等级由你从稿里读：proof_manuscript = manuscripts/F/f-proof-000000.md（稿号 000000）。稿内已有 ## 命题 / ## 证明 / ## 依赖 三节，声明自足（依赖表为空表）。该稿已由 V 逐行走查并判「成立」、零 finding：签时 2026-11-24T05:10:00+08:00，正文 sha（V 签的那一份）= add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a，盘上字节 sha256 = 36be2374f66fd8bc5960e186388dff7729a5839ab1b51948617cbaf51350f390，审阅台账 verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007。命题内容（照稿里那一节，不要照我这段转述）：设 G 有限群，|G| = p^a·m，(p,m)=1，则 (E) G 存在阶 p^a 的子群；(C) 任两个阶 p^a 的子群共轭；(N) 其个数 n_p ≡ 1 (mod p) 且 n_p | m。登记后请把 stmt_id 与算出来的等级回给我，并说明 V 签那一格是否认领得上（若哪一格对不上就逐格点名，别自己补写正文）。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/F/f-proof-000000.md"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# F 的证明手稿：就地证出四条预备事实：事实1 左陪集与 Lagrange（|A|=|B|·[A:B]）、事实2 轨道分解与轨道-稳定化…\n\n- 计划：000001 · 子目标：s1\n- V 签：已签=true；判词=成立；连续=3/3；正文sha=add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a；时间=2026-11-24T05:10:00+08:00；签名者=secretary:F；台账=verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007；手稿号=000000\n- 依赖面洗稿：已洗=true；执行者=secretary-F\n- 稿族：f-proof\n- 产出者：agent-F-sylow-prover-1\n- 正文sha：add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a\n- 命题指纹：ee0b2a06257685d6974f2808dbd0c1b92bb1334af7f93d9687004d6dc118d5ac\n- 命题类型：conjecture\n- 登记时间：2026-11-24T04:41:31+08:00\n- 标签：F 攻坚 000001 子目标 s1\n- 版本：2026-11-24T04:59:45+08:00@add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a\n\n## 命题\n\n设 G 为有限群，|G| = p^a·m，其中 p 是素数，a ≥ 0、m ≥ 1 是整数，且 p 不整除 m。记 n = p^a。则 (E) G 存在阶为 n 的子群；(C) 若 P、Q 是 G 的两个阶为 n 的子群，则存在 g ∈ G 使 Q = gPg⁻¹；(N) 若 n_p 表示 G 的阶为 n 的子群个数，则 n_p ≡ 1 (mod p) 且 n_p 整除 m。\n\n## 证明\n\n1. 前提与记号。设 G 是有限群，|G| = p^a·m，其中 p 是素数，a ≥ 0 与 m ≥ 1 是整数，且 p 不整除 m。记 n = p^a，称 G 的阶为 n 的子群为 p-Sylow 子群，记其个数为 n_p。本步把下列约定声明为全篇前提：群的定义、子群的定义、有限集基数的基本性质、以及 |G| = p^a·m 与 p ∤ m。除此之外不使用任何未在本稿内证明的事实：下文事实 1 至事实 8 各自带完整推导，且每一步只引用它之前已经写出的句子。（前提）\n2. 事实 1（左陪集分解与 Lagrange 定理）。设 A 是有限群，B ≤ A。在 A 上定义 a ~ b 当且仅当 a⁻¹b ∈ B。这是等价关系：自反性是 a⁻¹a = e ∈ B；对称性由 a⁻¹b ∈ B 推出 b⁻¹a = (a⁻¹b)⁻¹ ∈ B（B 对取逆封闭）；传递性由 a⁻¹b ∈ B 与 b⁻¹c ∈ B 推出 a⁻¹c = (a⁻¹b)(b⁻¹c) ∈ B（B 对乘法封闭）。含 a 的等价类恰是左陪集 aB：b ~ a 当且仅当 a⁻¹b ∈ B 当且仅当 b ∈ aB。左乘给出从 B 到 aB 的双射 b ↦ ab（逆映射为 x ↦ a⁻¹x），故 |aB| = |B|。A 是两两不交的左陪集之并，设左陪集个数为 [A:B]，则 |A| = |B|·[A:B]。特别地 |B| 整除 |A|，且 [A:B] = |A|/|B|。又若 B ≤ C ≤ A，则把 A 按右陪集分成 C 的陪集、再把每个 C 陪集按 B 的陪集分块，得 [A:B] = [A:C]·[C:B]。（前提）\n3. 事实 2（轨道分解与轨道-稳定化子）。设有限群 Γ 作用在集合 X 上。对 x ∈ X 记轨道 Γ·x = {g·x : g ∈ Γ}，稳定化子 Stab(x) = {g ∈ Γ : g·x = x}。Stab(x) 是 Γ 的子群：e·x = x；若 g·x = x 与 h·x = x 则 (gh)·x = g·(h·x) = g·x = x；若 g·x = x 则 g⁻¹·x = g⁻¹·(g·x) = (g⁻¹g)·x = x。两个轨道若相交则相等：若 z = g·x = h·y，则对任意 g' 有 g'·x = (g'g⁻¹h)·y ∈ Γ·y。故 X 是轨道的不交并。映射 φ 把左陪集 g·Stab(x) 送到 g·x 是良定义的双射：若 g·Stab(x) = h·Stab(x) 则…（落档截断，原 8799 字）",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/F/f-proof-000000.md",
+          "encoding": "utf-8",
+          "bytes_read": 15338,
+          "total_bytes": 15338,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 44,
+          "total_lines": 44,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 44 行",
+          "sha256": "36be2374f66fd8bc5960e186388dff7729a5839ab1b51948617cbaf51350f390"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 64384,
+        "prompt_cache_miss_tokens": 2160,
+        "tokens_in": 66544,
+        "tokens_out": 54,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000153"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "own.register_statement",
+        "args": {
+          "proof_manuscript": "manuscripts/F/f-proof-000000.md",
+          "origin": "own_result",
+          "kind": "conjecture",
+          "label": "Sylow 定理（存在性、共轭性、计数）",
+          "quote_reason": "自产命题（F 的证明手稿），无外部文献引文可比对，quote 这一格不适用；凭据是稿上的 V 签（正文sha add7f62c…，判词成立，台账 verifications/pending/a7bcc2c9…jsonl#u-000007）",
+          "why": "按 D 的派遣，只递手稿指针把 F 的这份已签证明登记成一条命题；命题取稿的 ## 命题、证明取 ## 证明、依赖面取 ## 依赖"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "own.register_statement",
+        "ok": true,
+        "data": {
+          "ok": true,
+          "stmt_id": "000065",
+          "source_lit_id": null,
+          "self_authored_review": {
+            "needs_v": false,
+            "signed": false,
+            "in_ledger": false,
+            "checked": true,
+            "verification_id": "",
+            "why": "kind='conjecture' 不在这一条闸的射程里：按最弱那一档注册不受阻（V 审的是手稿、签落在稿上，在册是 B 在签之后的收录）⇒ 从猜想升成 theorem/lemma 的那一步才要 V 的签"
+          },
+          "proposition_form": {
+            "judged": false,
+            "released": true,
+            "family": "f-proof",
+            "checked": false,
+            "model_calls": 0,
+            "ledger_appended": false,
+            "release_basis": "producer_gate",
+            "reason": "这一族由产出侧闸负责，B 侧放行：F 在写稿之前（`AgentF._proposition_form_precheck`，真机 `octahedron-20261113` 判过并落了形态台账）已经用同一道判据（`Secretary.judge_proposition_form`）判过 ⇒ 按稿收录这一路不判、不写形态台账、零次模型调用"
+          },
+          "quote_verified": null,
+          "origin": "own_result",
+          "quote_mode": "",
+          "quote_span": "",
+          "quote_evidence": {
+            "ok": true,
+            "action": "keep",
+            "why": "",
+            "where": "statements.proof_text"
+          },
+          "evidence_kind": "heuristic",
+          "row": {
+            "stmt_id": "000065",
+            "origin": "own_result",
+            "kind": "theorem",
+            "label": "Sylow 定理（存在性、共轭性、计数）",
+            "statement_text": "设 G 为有限群，|G| = p^a·m，其中 p 是素数，a ≥ 0、m ≥ 1 是整数，且 p 不整除 m。记 n = p^a。则 (E) G 存在阶为 n 的子群；(C) 若 P、Q 是 G 的两个阶为 n 的子群，则存在 g ∈ G 使 Q = gPg⁻¹；(N) 若 n_p 表示 G 的阶为 n 的子群个数，则 n_p ≡ 1 (mod p) 且 n_p 整除 m。",
+            "statement_full": "设 G 为有限群，|G| = p^a·m，其中 p 是素数，a ≥ 0、m ≥ 1 是整数，且 p 不整除 m。记 n = p^a。则 (E) G 存在阶为 n 的子群；(C) 若 P、Q 是 G 的两个阶为 n 的子群，则存在 g ∈ G 使 Q = gPg⁻¹；(N) 若 n_p 表示 G 的阶为 n 的子群个数，则 n_p ≡ 1 (mod p) 且 n_p 整除 m。",
+            "proof_text": "1. 前提与记号。设 G 是有限群，|G| = p^a·m，其中 p 是素数，a ≥ 0 与 m ≥ 1 是整数，且 p 不整除 m。记 n = p^a，称 G 的阶为 n 的子群为 p-Sylow 子群，记其个数为 n_p。本步把下列约定声明为全篇前提：群的定义、子群的定义、有限集基数的基本性质、以及 |G| = p^a·m 与 p ∤ m。除此之外不使用任何未在本稿内证明的事实：下文事实 1 至事实 8 各自带完整推导，且每一步只引用它之前已经写出的句子。（前提）\n2. 事实 1（左陪集分解与 Lagrange 定理）。设 A 是有限群，B ≤ A。在 A 上定义 a ~ b 当且仅当 a⁻¹b ∈ B。这是等价关系：自反性是 a⁻¹a = e ∈ B；对称性由 a⁻¹b ∈ B 推出 b⁻¹a = (a⁻¹b)⁻¹ ∈ B（B 对取逆封闭）；传递性由 a⁻¹b ∈ B 与 b⁻¹c ∈ B 推出 a⁻¹c = (a⁻¹b)(b⁻¹c) ∈ B（B 对乘法封闭）。含 a 的等价类恰是左陪集 aB：b ~ a 当且仅当 a⁻¹b ∈ B 当且仅当 b ∈ aB。左乘给出从 B 到 aB 的双射 b ↦ ab（逆映射为 x ↦ a⁻¹x），故 |aB| = |B|。A 是两两不交的左陪集之并，设左陪集个数为 [A:B]，则 |A| = |B|·[A:B]。特别地 |B| 整除 |A|，且 [A:B] = |A|/|B|。又若 B ≤ C ≤ A，则把 A 按右陪集分成 C 的陪集、再把每个 C 陪集按 B 的陪集分块，得 [A:B] = [A:C]·[C:B]。（前提）\n3. 事实 2（轨道分解与轨道-稳定化子）。设有限群 Γ 作用在集合 X 上。对 x ∈ X 记轨道 Γ·x = {g·x : g ∈ Γ}，稳定化子 Stab(x) = {g ∈ Γ : g·x = x}。Stab(x) 是 Γ 的子群：e·x = x；若 g·x = x 与 h·x = x 则 (gh)·x = g·(h·x) = g·x = x；若 g·x = x 则 g⁻¹·x = g⁻¹·(g·x) = (g⁻¹g)·x = x。两个轨道若相交则相等：若 z = g·x = h·y，则对任意 g' 有 g'·x = (g'g⁻¹h)·y ∈ Γ·y。故 X 是轨道的不交并。映射 φ 把左陪集 g·Stab(x) 送到 g·x 是良定义的双射：若 g·Stab(x) = h·Stab(x) 则 h⁻¹g ∈ Stab(x)，故 g·x = h·x；反之若 g·x = h·x 则 h⁻¹g·x = x，故 h⁻¹g ∈ Stab(x)，两个左陪集相等；满射按轨道定义成立。由事实 1，|Γ·x| = [Γ:Stab(x)] = |Γ|/|Stab(x)|，特别地轨道长整除 |Γ|。（前提）\n4. 事实 3（p-群作用的固定点同余）。设 Γ 是有限 p-群，即 |Γ| = p^s（允许 s = 0，此时 Γ 是平凡群），Γ 作用在有限集 X 上。记 Fix_Γ(X) = {x ∈ X : 对每个 g ∈ Γ 都有 g·x = x}。断言 |X| ≡ |Fix_Γ(X)| (mod p)。证明：由事实 2，X 是轨道的不交并。长度等于 1 的轨道恰由固定点组成，即 Fix_Γ(X)。设某轨道长度大于 1 并取其中一点 x，则 Stab(x) ≠ Γ（否则该轨道长度为 1），由事实 1 与事实 2 得该轨道长度 = |Γ|/|Stab(x)| = p^t 且 t ≥ 1（Stab(x) 是 Γ 的真子群，其阶与指数都是 p 的正幂），从而该轨道长度被 p 整除。于是 |X| 等于 |Fix_Γ(X)| 加上若干被 p 整除的整数，同余式成立。s = 0 时 Γ 只有单位元，Fix_Γ(X) = X，同余式以等号成立。（前提）\n5. 事实 4（Cauchy 定理，McKay 计数证明）。设 A 是有限群，p 是素数且 p 整除 |A|。断言 A 含有阶为 p 的元素。证明：令 X = {(a_1,…,a_p) ∈ A^p : a_1a_2⋯a_p = e}。给定前 p−1 个坐标，最后一个坐标被唯一确定为 (a_1⋯a_(p−1))⁻¹，故 |X| = |A|^(p−1)；因 p 整除 |A| 且 p−1 ≥ 1，故 p 整除 |X|。让 p 阶循环群 C_p = ⟨σ⟩ 作用在 X 上：σ·(a_1,…,a_p) = (a_2,…,a_p,a_1)。先验这是良定义的作用。① X 对移位封闭：设 a_1a_2⋯a_p = e，令 b = a_2⋯a_p，则 a_1b = e，两边左乘 a_1⁻¹ 得 b = a_1⁻¹；于是移位后的乘积 a_2⋯a_p a_1 = b·a_1 = a_1⁻¹a_1 = e，故 (a_2,…,a_p,a_1) ∈ X（这一步只用到结合律与逆元的定义，没有用到交换性）。② σ^p 是恒等映射：连续移位 p 次把每个坐标送回原位。③ 幂作用相容：σ^i·(σ^j·x) 与 σ^(i+j)·x 都把 x 的第 k 个坐标移到第 k+i+j 个位置（下标模 p），故相等。于是 C_p 作用在 X 上。X 的不动点满足 (a_1,…,a_p) = (a_2,…,a_p,a_1)，即坐标全相等的元素 (a,…,a)，而条件 a_1⋯a_p = e 此时变为 a^p = e；故 Fix_(C_p)(X) 与 {a ∈ A : a^p = e} 基数相同。由事实 3（|C_p| = p 是 p-群）得 |{a ∈ A : a^p = e}| ≡ |X| ≡ 0 (mod p)。单位元满足 a^p = e，故该集合非空，其基数被 p 整除，于是至少含 p 个元素，从而存在 a ≠ e 且 a^p = e；a 的阶整除 p 且不为 1，故为 p。（前提）\n6. 事实 5（共轭类与类方程）。设 A 是有限群，Z(A) 记中心。对 a ∈ A 记中心化子 C_A(a) = {g ∈ A : gag⁻¹ = a}。关系「a 与 b 共轭」（存在 g 使 b = gag⁻¹）是等价关系：自反性取 g = e；对称性由 b = gag⁻¹ 得 a = g⁻¹bg；传递性由 b = gag⁻¹ 与 c = hbh⁻¹ 得 c = (hg)a(hg)⁻¹。A 经共轭作用在自身上（g·a = gag⁻¹），共轭类就是轨道，a 的稳定化子正是 C_A(a)（g·a = a 等价于 gag⁻¹ = a）。由事实 2，a 的共轭类长度等于 [A:C_A(a)]。a 属于 Z(A) 当且仅当它的共轭类只含 a 自身。取全部非中心共轭类的代表元 x_1,…,x_r，则 A 是 Z(A) 与这些共轭类的不交并，于是 |A| = |Z(A)| + Σ_(i=1..r) [A:C_A(x_i)]。又每个 x_i 不在中心，故 C_A(x_i) 是 A 的真子群，由事实 1 得 [A:C_A(x_i)] > 1 且整除 |A|。（前提）\n7. 事实 6（强归纳假设）。本稿对有限群的阶做强归纳，所断言的命题是：对任意有限群 A 与素数 q，若 q^b 是 |A| 的 q-部分（即 |A| = q^b·m' 且 q 不整除 m'），则 A 有阶为 q^b 的子群。本步把「该断言对所有满足 |A| < |G| 的有限群 A 成立」声明为归纳前提；下文 (E) 的证明将以它为依据，并且总在比 G 更小的群（真子群或真商群）上使用它。（前提）\n8. 事实 7（p-Sylow 子群的正规化子）。设 P ≤ G 且 |P| = p^a —— 本步的前提是 |P| = p^a（P 是 G 的 p-Sylow 子群），而不是「P 是任意子群」。记 N_G(P) = {g ∈ G : gPg⁻¹ = P}。它是 G 的子群：e ∈ N_G(P)；若 g, h ∈ N_G(P) 则 (gh)P(gh)⁻¹ = g(hPh⁻¹)g⁻¹ = gPg⁻¹ = P；若 g ∈ N_G(P) 则 g⁻¹Pg = g⁻¹(gPg⁻¹)g = P。又对每个 p_0 ∈ P 有 p_0Pp_0⁻¹ = P（左乘 p_0 把 P 双射到自身），故 P ≤ N_G(P)。由事实 1，|P| 整除 |N_G(P)|，且 |N_G(P)| 整除 |G|。代入 |P| = p^a 与 |G| = p^a·m 得 |N_G(P)| = p^a·d，其中 d 是正整数且 d 整除 m；由于 p ∤ m 且 d | m，得 p ∤ d，于是 p^a 整除 |N_G(P)| 且恰是 |N_G(P)| 的 p-部分。又由事实 1，[N_G(P):P] = |N_G(P)|/|P| = d，故 [N_G(P):P] 整除 m 且与 p 互素。（前提）\n9. (E) 的证明，情形一：a = 0。此时 n = p^0 = 1。平凡子群 {e} 是 G 的子群且阶为 1 = n，故 (E) 成立。附带说明此情形下的唯一性：若 H ≤ G 且 |H| = 1，则 H = {e}，故阶为 1 的子群只有平凡子群一个。（前提）\n10. (E) 的证明，情形二：a ≥ 1 且存在真子群 H < G 使 p^a 整除 |H|。此时 |H| < |G|；又由事实 1，|H| 整除 |G| = p^a·m，故 |H| = p^a·m_1 且 m_1 整除 m，于是 p^a 恰是 |H| 的 p-部分（因 p ∤ m 从而 p ∤ m_1）。由事实 6（归纳假设，|H| < |G|）H 有阶为 p^a 的子群 K；子群的子群仍是 G 的子群，故 K 是 G 的阶为 p^a 的子群，(E) 成立。（前提）\n11. (E) 的证明，情形三的先导计算：a ≥ 1 且每个真子群 K < G 都满足 p^a 不整除 |K|。先证 p 整除 |Z(G)|。由事实 5 的类方程 |G| = |Z(G)| + Σ_(i=1..r) [G:C_G(x_i)]，其中 x_i 取遍非中心共轭类的代表元。对每个 i，x_i 不在中心，故 C_G(x_i) 是 G 的真子群，由本情形的假设 p^a 不整除 |C_G(x_i)|；又由事实 1，|C_G(x_i)| 整除 |G| = p^a·m，故 |C_G(x_i)| 的 p-部分为 p^(b_i) 且 b_i ≤ a−1，于是 [G:C_G(x_i)] = |G|/|C_G(x_i)| 的 p-部分为 p^(a−b_i) 且 a−b_i ≥ 1，即 p 整除 [G:C_G(x_i)]。又 a ≥ 1，故 p 整除 |G| = p^a·m。于是把类方程两边模 p 得 0 ≡ |Z(G)| (mod p)，即 p 整除 |Z(G)|。（前提）\n12. (E) 的证明，情形三的主论证（续情形三）。由上一步：若 G 非交换，则 p 整除 |Z(G)|，对有限群 Z(G) 用事实 4（Cauchy 定理）得存在 z ∈ Z(G) 其阶为 p；若 G 交换，则 Z(G) = G 且 p 整除 |G| = p^a·m，由事实 4 得存在 z ∈ G = Z(G) 其阶为 p。两种情形都得到阶为 p 的中心元 z。令 N_0 = ⟨z⟩ = {z^j : 0 ≤ j ≤ p−1}，由 z 的阶为 p 得 |N_0| = p。因 z ∈ Z(G)，对任意 g ∈ G 有 gN_0g⁻¹ = ⟨gzg⁻¹⟩ = ⟨z⟩ = N_0，故 N_0 是 G 的正规子群。下面就地推出商群与纤维计数，只用到事实 1 与群的定义，不引用第一同构定理。(a) 商群：在左陪集集合 G/N_0 = {gN_0 : g ∈ G} 上定义乘法 (gN_0)(hN_0) := ghN_0。良定义：若 gN_0 = g'N_0 且 hN_0 = h'N_0，则 g' = gn_1、h' = hn_2，其中 n_1, n_2 ∈ N_0；由 N_0 正规，h⁻¹n_1h ∈ N_0，于是 g'h' = gn_1hn_2 = gh(h⁻¹n_1h)n_2 ∈ ghN_0，故 g'h'N_0 = ghN_0。结合律由 G 的结合律得到；单位元是 N_0 = eN_0；gN_0 的逆元是 g⁻¹N_0。故 G/N_0 是群。由事实 1，|G/N_0| = [G:N_0] = |G|/|N_0| = p^a·m/p = p^(a−1)·m。(b) 商映射 π: G → G/N_0，π(g) = gN_0 是同态：π(gh) = ghN_0 = (gN_0)(hN_0) = π(g)π(h)，且 π(e) = N_0 是 G/N_0 的单位元。(c) 因 a ≥ 1 得 |G/N_0| = p^(a−1)·m < p^a·m = |G|，且 p 不整除 m，故 p^(a−1) 是 G/N_0 的 p-部分；由事实 6（归纳假设）存在 G/N_0 的阶为 p^(a−1) 的子群 H̄。令 H = π⁻¹(H̄) = {x ∈ G : π(x) ∈ H̄}。H 是 G 的子群：由 π(e) = N_0 ∈ H̄ 得 e ∈ H；若 x, y ∈ H 则 π(xy) = π(x)π(y) ∈ H̄，故 xy ∈ H；若 x ∈ H 则 π(x⁻¹) = π(x)⁻¹ ∈ H̄，故 x⁻¹ ∈ H。又 N_0 ≤ H：对 n ∈ N_0 有 π(n) = nN_0 = N_0 ∈ H̄，故 n ∈ H。(d) 对每个 ḡ ∈ H̄ 取 g ∈ H 使 π(g) = ḡ（由 H 的定义这样的 g 存在），断言 H 中满足 π(x) = ḡ 的 x 全体恰为 gN_0：若 x ∈ H 且 π(x) = π(g)，则 π(g⁻¹x) = π(g)⁻¹π(x) = N_0，即 g⁻¹x ∈ N_0，故 x ∈ gN_0；反之若 x = gn 而 n ∈ N_0，则由 g ∈ H 与 N_0 ≤ H 得 x ∈ H，且 π(x) = π(g)π(n) = ḡ·N_0 = ḡ。不同的 ḡ 对应的这些集合两两不交，并集为 H（每个 x ∈ H 落在 ḡ = π(x) 那一块），且每一块与 N_0 基数相同（左乘 g 给出从 N_0 到 gN_0 的双射，见事实 1 的证明）。于是 |H| = |H̄|·|N_0| = p^(a−1)·p = p^a。故 (E) 成立。（前提）\n13. (E) 的小结。对 |G| 作强归纳：a = 0 由情形一处理；a ≥ 1 时，要么存在真子群 H < G 且 p^a 整除 |H|，由情形二并借助归纳假设处理；要么每个真子群 K < G 都满足 p^a 不整除 |K|，由情形三处理（类方程给出 p 整除 |Z(G)|，Cauchy 定理给出中心里阶 p 的元素 z，商去正规子群 ⟨z⟩ 后由归纳假设得到阶 p^(a−1) 的子群，其原像阶为 p^a，原像的阶按第 12 步 (d) 的纤维计数得出）。这三种情形穷尽了所有可能，故 G 存在阶为 n = p^a 的子群，(E) 成立。（前提）\n14. 事实 8（p-Sylow 子群在陪集上的固定点计数）。设 P ≤ G 且 |P| = p^a（同样以 |P| = p^a 为前提）。让 P 通过左乘作用在左陪集集合 G/P 上：x·(gP) = (xg)P。这是作用：e·(gP) = gP；x·(y·(gP)) = (xy)·(gP)；且 (xg)P 只依赖 gP（若 gP = g'P 则 g' = gb，b ∈ P，于是 xg'P = xgbP = xgP）。由事实 1，|G/P| = [G:P] = |G|/|P| = m。计算不动点：gP ∈ Fix_P(G/P) 当且仅当对每个 x ∈ P 有 xgP = gP 当且仅当对每个 x ∈ P 有 g⁻¹xg ∈ P 当且仅当 g⁻¹Pg ⊆ P；由于 g⁻¹Pg 与 P 是基数相同的有限集，「g⁻¹Pg ⊆ P」等价于 g⁻¹Pg = P，即 g ∈ N_G(P)。故 Fix_P(G/P) = {gP : g ∈ N_G(P)}，把 N_G(P) 按 P 的右陪集分块即知它的基数等于 [N_G(P):P]。由事实 3（|P| = p^a 是 p 的幂）得 m = |G/P| ≡ [N_G(P):P] (mod p)。（前提）\n15. (C) 的证明。设 P 与 Q 是 G 的任意两个 p-Sylow 子群，即 |P| = |Q| = p^a（这类子群存在已由 (E) 给出）。让 Q 通过左乘作用在 G/P 上，如事实 8 的做法。由事实 3，|Fix_Q(G/P)| ≡ |G/P| = m (mod p)。因 p 不整除 m，故 |Fix_Q(G/P)| 不被 p 整除，特别地 Fix_Q(G/P) 非空。取 gP ∈ Fix_Q(G/P)，则对每个 x ∈ Q 有 xgP = gP，即 g⁻¹xg ∈ P，故 g⁻¹Qg ⊆ P；又 |g⁻¹Qg| = |Q| = p^a = |P| 且两者都是有限集，故 g⁻¹Qg = P，等价地 Q = gPg⁻¹。因此任两个 p-Sylow 子群共轭，(C) 成立。（前提）\n16. (N) 的证明，第一部分：n_p 整除 m。G 经共轭作用在自身的子群集合上：g·H = gHg⁻¹。这是作用（e·H = H；(gh)·H = (gh)H(gh)⁻¹ = g(hHh⁻¹)g⁻¹）。P 的轨道是 {gPg⁻¹ : g ∈ G}，由 (C) 它恰是 G 的全体 p-Sylow 子群，故轨道长度等于 n_p；P 的稳定化子是 {g : gPg⁻¹ = P} = N_G(P)。由事实 2，n_p = [G:N_G(P)] = |G|/|N_G(P)|。由事实 7，|N_G(P)| = p^a·d 且 d 整除 m，故 n_p = (p^a·m)/(p^a·d) = m/d，特别地 n_p 整除 m。（前提）\n17. (N) 的证明，第二部分：n_p ≡ 1 (mod p)。沿用事实 7 与事实 8 的记号 d = [N_G(P):P] = |N_G(P)|/p^a。由事实 8 有 m ≡ d (mod p)；由上一步有 m = n_p·d。两式合并得 n_p·d ≡ d (mod p)，即 (n_p − 1)·d ≡ 0 (mod p)。由事实 7，d 整除 m 且 p ∤ m，故 p ∤ d，于是 n_p ≡ 1 (mod p)。结合 (E)（情形一至情形三及小结）、(C) 与 (N) 的两部分，(E)(C)(N) 三条断言全部得证。（前提）",
+            "source_lit_id": null,
+            "page_range": {
+              "start": null,
+              "end": null,
+              "label": ""
+            },
+            "quote_verified": null,
+            "quote_mode": "",
+            "quote_reason": "手稿收录（D 只递指针）：命题正文、证明正文与档位全部逐字取自 `manuscripts/F/f-proof-000000.md` —— 引文面不适用（这份稿是我们自己产出的成果，不是文献里摘的）；V 的签（若有）在手稿块上",
+            "quote_span": "",
+            "quote_call_sha256": "",
+            "evidence_kind": "heuristic",
+            "bits": {
+              "numeric": "pending",
+              "proof": true,
+              "reviewed": true,
+              "formal": "pending",
+              "audited": false,
+              "origin": "own_result",
+              "evidence": {
+                "numeric": {},
+                "numeric_reason": "",
+                "proof_process": "1. 前提与记号。设 G 是有限群，|G| = p^a·m，其中 p 是素数，a ≥ 0 与 m ≥ 1 是整数，且 p 不整除 m。记 n = p^a，称 G 的阶为 n 的子群为 p-Sylow 子群，记其个数为 n_p。本步把下列约定声明为全篇前提：群的定义、子群的定义、有限集基数的基本性质、以及 |G| = p^a·m 与 p ∤ m。除此之外不使用任何未在本稿内证明的事实：下文事实 1 至事实 8 各自带完整推导，且每一步只引用它之前已经写出的句子。（前提）\n2. 事实 1（左陪集分解与 Lagrange 定理）。设 A 是有限群，B ≤ A。在 A 上定义 a ~ b 当且仅当 a⁻¹b ∈ B。这是等价关系：自反性是 a⁻¹a = e ∈ B；对称性由 a⁻¹b ∈ B 推出 b⁻¹a = (a⁻¹b)⁻¹ ∈ B（B 对取逆封闭）；传递性由 a⁻¹b ∈ B 与 b⁻¹c ∈ B 推出 a⁻¹c = (a⁻¹b)(b⁻¹c) ∈ B（B 对乘法封闭）。含 a 的等价类恰是左陪集 aB：b ~ a 当且仅当 a⁻¹b ∈ B 当且仅当 b ∈ aB。左乘给出从 B 到 aB 的双射 b ↦ ab（逆映射为 x ↦ a⁻¹x），故 |aB| = |B|。A 是两两不交的左陪集之并，设左陪集个数为 [A:B]，则 |A| = |B|·[A:B]。特别地 |B| 整除 |A|，且 [A:B] = |A|/|B|。又若 B ≤ C ≤ A，则把 A 按右陪集分成 C 的陪集、再把每个 C 陪集按 B 的陪集分块，得 [A:B] = [A:C]·[C:B]。（前提）\n3. 事实 2（轨道分解与轨道-稳定化子）。设有限群 Γ 作用在集合 X 上。对 x ∈ X 记轨道 Γ·x = {g·x : g ∈ Γ}，稳定化子 Stab(x) = {g ∈ Γ : g·x = x}。Stab(x) 是 Γ 的子群：e·x = x；若 g·x = x 与 h·x = x 则 (gh)·x = g·(h·x) = g·x = x；若 g·x = x 则 g⁻¹·x = g⁻¹·(g·x) = (g⁻¹g)·x = x。两个轨道若相交则相等：若 z = g·x = h·y，则对任意 g' 有 g'·x = (g'g⁻¹h)·y ∈ Γ·y。故 X 是轨道的不交并。映射 φ 把左陪集 g·Stab(x) 送到 g·x 是良定义的双射：若 g·Stab(x) = h·Stab(x) 则 h⁻¹g ∈ Stab(x)，故 g·x = h·x；反之若 g·x = h·x 则 h⁻¹g·x = x，故 h⁻¹g ∈ Stab(x)，两个左陪集相等；满射按轨道定义成立。由事实 1，|Γ·x| = [Γ:Stab(x)] = |Γ|/|Stab(x)|，特别地轨道长整除 |Γ|。（前提）\n4. 事实 3（p-群作用的固定点同余）。设 Γ 是有限 p-群，即 |Γ| = p^s（允许 s = 0，此时 Γ 是平凡群），Γ 作用在有限集 X 上。记 Fix_Γ(X) = {x ∈ X : 对每个 g ∈ Γ 都有 g·x = x}。断言 |X| ≡ |Fix_Γ(X)| (mod p)。证明：由事实 2，X 是轨道的不交并。长度等于 1 的轨道恰由固定点组成，即 Fix_Γ(X)。设某轨道长度大于 1 并取其中一点 x，则 Stab(x) ≠ Γ（否则该轨道长度为 1），由事实 1 与事实 2 得该轨道长度 = |Γ|/|Stab(x)| = p^t 且 t ≥ 1（Stab(x) 是 Γ 的真子群，其阶与指数都是 p 的正幂），从而该轨道长度被 p 整除。于是 |X| 等于 |Fix_Γ(X)| 加上若干被 p 整除的整数，同余式成立。s = 0 时 Γ 只有单位元，Fix_Γ(X) = X，同余式以等号成立。（前提）\n5. 事实 4（Cauchy 定理，McKay 计数证明）。设 A 是有限群，p 是素数且 p 整除 |A|。断言 A 含有阶为 p 的元素。证明：令 X = {(a_1,…,a_p) ∈ A^p : a_1a_2⋯a_p = e}。给定前 p−1 个坐标，最后一个坐标被唯一确定为 (a_1⋯a_(p−1))⁻¹，故 |X| = |A|^(p−1)；因 p 整除 |A| 且 p−1 ≥ 1，故 p 整除 |X|。让 p 阶循环群 C_p = ⟨σ⟩ 作用在 X 上：σ·(a_1,…,a_p) = (a_2,…,a_p,a_1)。先验这是良定义的作用。① X 对移位封闭：设 a_1a_2⋯a_p = e，令 b = a_2⋯a_p，则 a_1b = e，两边左乘 a_1⁻¹ 得 b = a_1⁻¹；于是移位后的乘积 a_2⋯a_p a_1 = b·a_1 = a_1⁻¹a_1 = e，故 (a_2,…,a_p,a_1) ∈ X（这一步只用到结合律与逆元的定义，没有用到交换性）。② σ^p 是恒等映射：连续移位 p 次把每个坐标送回原位。③ 幂作用相容：σ^i·(σ^j·x) 与 σ^(i+j)·x 都把 x 的第 k 个坐标移到第 k+i+j 个位置（下标模 p），故相等。于是 C_p 作用在 X 上。X 的不动点满足 (a_1,…,a_p) = (a_2,…,a_p,a_1)，即坐标全相等的元素 (a,…,a)，而条件 a_1⋯a_p = e 此时变为 a^p = e；故 Fix_(C_p)(X) 与 {a ∈ A : a^p = e} 基数相同。由事实 3（|C_p| = p 是 p-群）得 |{a ∈ A : a^p = e}| ≡ |X| ≡ 0 (mod p)。单位元满足 a^p = e，故该集合非空，其基数被 p 整除，于是至少含 p 个元素，从而存在 a ≠ e 且 a^p = e；a 的阶整除 p 且不为 1，故为 p。（前提）\n6. 事实 5（共轭类与类方程）。设 A 是有限群，Z(A) 记中心。对 a ∈ A 记中心化子 C_A(a) = {g ∈ A : gag⁻¹ = a}。关系「a 与 b 共轭」（存在 g 使 b = gag⁻¹）是等价关系：自反性取 g = e；对称性由 b = gag⁻¹ 得 a = g⁻¹bg；传递性由 b = gag⁻¹ 与 c = hbh⁻¹ 得 c = (hg)a(hg)⁻¹。A 经共轭作用在自身上（g·a = gag⁻¹），共轭类就是轨道，a 的稳定化子正是 C_A(a)（g·a = a 等价于 gag⁻¹ = a）。由事实 2，a 的共轭类长度等于 [A:C_A(a)]。a 属于 Z(A) 当且仅当它的共轭类只含 a 自身。取全部非中心共轭类的代表元 x_1,…,x_r，则 A 是 Z(A) 与这些共轭类的不交并，于是 |A| = |Z(A)| + Σ_(i=1..r) [A:C_A(x_i)]。又每个 x_i 不在中心，故 C_A(x_i) 是 A 的真子群，由事实 1 得 [A:C_A(x_i)] > 1 且整除 |A|。（前提）\n7. 事实 6（强归纳假设）。本稿对有限群的阶做强归纳，所断言的命题是：对任意有限群 A 与素数 q，若 q^b 是 |A| 的 q-部分（即 |A| = q^b·m' 且 q 不整除 m'），则 A 有阶为 q^b 的子群。本步把「该断言对所有满足 |A| < |G| 的有限群 A 成立」声明为归纳前提；下文 (E) 的证明将以它为依据，并且总在比 G 更小的群（真子群或真商群）上使用它。（前提）\n8. 事实 7（p-Sylow 子群的正规化子）。设 P ≤ G 且 |P| = p^a —— 本步的前提是 |P| = p^a（P 是 G 的 p-Sylow 子群），而不是「P 是任意子群」。记 N_G(P) = {g ∈ G : gPg⁻¹ = P}。它是 G 的子群：e ∈ N_G(P)；若 g, h ∈ N_G(P) 则 (gh)P(gh)⁻¹ = g(hPh⁻¹)g⁻¹ = gPg⁻¹ = P；若 g ∈ N_G(P) 则 g⁻¹Pg = g⁻¹(gPg⁻¹)g = P。又对每个 p_0 ∈ P 有 p_0Pp_0⁻¹ = P（左乘 p_0 把 P 双射到自身），故 P ≤ N_G(P)。由事实 1，|P| 整除 |N_G(P)|，且 |N_G(P)| 整除 |G|。代入 |P| = p^a 与 |G| = p^a·m 得 |N_G(P)| = p^a·d，其中 d 是正整数且 d 整除 m；由于 p ∤ m 且 d | m，得 p ∤ d，于是 p^a 整除 |N_G(P)| 且恰是 |N_G(P)| 的 p-部分。又由事实 1，[N_G(P):P] = |N_G(P)|/|P| = d，故 [N_G(P):P] 整除 m 且与 p 互素。（前提）\n9. (E) 的证明，情形一：a = 0。此时 n = p^0 = 1。平凡子群 {e} 是 G 的子群且阶为 1 = n，故 (E) 成立。附带说明此情形下的唯一性：若 H ≤ G 且 |H| = 1，则 H = {e}，故阶为 1 的子群只有平凡子群一个。（前提）\n10. (E) 的证明，情形二：a ≥ 1 且存在真子群 H < G 使 p^a 整除 |H|。此时 |H| < |G|；又由事实 1，|H| 整除 |G| = p^a·m，故 |H| = p^a·m_1 且 m_1 整除 m，于是 p^a 恰是 |H| 的 p-部分（因 p ∤ m 从而 p ∤ m_1）。由事实 6（归纳假设，|H| < |G|）H 有阶为 p^a 的子群 K；子群的子群仍是 G 的子群，故 K 是 G 的阶为 p^a 的子群，(E) 成立。（前提）\n11. (E) 的证明，情形三的先导计算：a ≥ 1 且每个真子群 K < G 都满足 p^a 不整除 |K|。先证 p 整除 |Z(G)|。由事实 5 的类方程 |G| = |Z(G)| + Σ_(i=1..r) [G:C_G(x_i)]，其中 x_i 取遍非中心共轭类的代表元。对每个 i，x_i 不在中心，故 C_G(x_i) 是 G 的真子群，由本情形的假设 p^a 不整除 |C_G(x_i)|；又由事实 1，|C_G(x_i)| 整除 |G| = p^a·m，故 |C_G(x_i)| 的 p-部分为 p^(b_i) 且 b_i ≤ a−1，于是 [G:C_G(x_i)] = |G|/|C_G(x_i)| 的 p-部分为 p^(a−b_i) 且 a−b_i ≥ 1，即 p 整除 [G:C_G(x_i)]。又 a ≥ 1，故 p 整除 |G| = p^a·m。于是把类方程两边模 p 得 0 ≡ |Z(G)| (mod p)，即 p 整除 |Z(G)|。（前提）\n12. (E) 的证明，情形三的主论证（续情形三）。由上一步：若 G 非交换，则 p 整除 |Z(G)|，对有限群 Z(G) 用事实 4（Cauchy 定理）得存在 z ∈ Z(G) 其阶为 p；若 G 交换，则 Z(G) = G 且 p 整除 |G| = p^a·m，由事实 4 得存在 z ∈ G = Z(G) 其阶为 p。两种情形都得到阶为 p 的中心元 z。令 N_0 = ⟨z⟩ = {z^j : 0 ≤ j ≤ p−1}，由 z 的阶为 p 得 |N_0| = p。因 z ∈ Z(G)，对任意 g ∈ G 有 gN_0g⁻¹ = ⟨gzg⁻¹⟩ = ⟨z⟩ = N_0，故 N_0 是 G 的正规子群。下面就地推出商群与纤维计数，只用到事实 1 与群的定义，不引用第一同构定理。(a) 商群：在左陪集集合 G/N_0 = {gN_0 : g ∈ G} 上定义乘法 (gN_0)(hN_0) := ghN_0。良定义：若 gN_0 = g'N_0 且 hN_0 = h'N_0，则 g' = gn_1、h' = hn_2，其中 n_1, n_2 ∈ N_0；由 N_0 正规，h⁻¹n_1h ∈ N_0，于是 g'h' = gn_1hn_2 = gh(h⁻¹n_1h)n_2 ∈ ghN_0，故 g'h'N_0 = ghN_0。结合律由 G 的结合律得到；单位元是 N_0 = eN_0；gN_0 的逆元是 g⁻¹N_0。故 G/N_0 是群。由事实 1，|G/N_0| = [G:N_0] = |G|/|N_0| = p^a·m/p = p^(a−1)·m。(b) 商映射 π: G → G/N_0，π(g) = gN_0 是同态：π(gh) = ghN_0 = (gN_0)(hN_0) = π(g)π(h)，且 π(e) = N_0 是 G/N_0 的单位元。(c) 因 a ≥ 1 得 |G/N_0| = p^(a−1)·m < p^a·m = |G|，且 p 不整除 m，故 p^(a−1) 是 G/N_0 的 p-部分；由事实 6（归纳假设）存在 G/N_0 的阶为 p^(a−1) 的子群 H̄。令 H = π⁻¹(H̄) = {x ∈ G : π(x) ∈ H̄}。H 是 G 的子群：由 π(e) = N_0 ∈ H̄ 得 e ∈ H；若 x, y ∈ H 则 π(xy) = π(x)π(y) ∈ H̄，故 xy ∈ H；若 x ∈ H 则 π(x⁻¹) = π(x)⁻¹ ∈ H̄，故 x⁻¹ ∈ H。又 N_0 ≤ H：对 n ∈ N_0 有 π(n) = nN_0 = N_0 ∈ H̄，故 n ∈ H。(d) 对每个 ḡ ∈ H̄ 取 g ∈ H 使 π(g) = ḡ（由 H 的定义这样的 g 存在），断言 H 中满足 π(x) = ḡ 的 x 全体恰为 gN_0：若 x ∈ H 且 π(x) = π(g)，则 π(g⁻¹x) = π(g)⁻¹π(x) = N_0，即 g⁻¹x ∈ N_0，故 x ∈ gN_0；反之若 x = gn 而 n ∈ N_0，则由 g ∈ H 与 N_0 ≤ H 得 x ∈ H，且 π(x) = π(g)π(n) = ḡ·N_0 = ḡ。不同的 ḡ 对应的这些集合两两不交，并集为 H（每个 x ∈ H 落在 ḡ = π(x) 那一块），且每一块与 N_0 基数相同（左乘 g 给出从 N_0 到 gN_0 的双射，见事实 1 的证明）。于是 |H| = |H̄|·|N_0| = p^(a−1)·p = p^a。故 (E) 成立。（前提）\n13. (E) 的小结。对 |G| 作强归纳：a = 0 由情形一处理；a ≥ 1 时，要么存在真子群 H < G 且 p^a 整除 |H|，由情形二并借助归纳假设处理；要么每个真子群 K < G 都满足 p^a 不整除 |K|，由情形三处理（类方程给出 p 整除 |Z(G)|，Cauchy 定理给出中心里阶 p 的元素 z，商去正规子群 ⟨z⟩ 后由归纳假设得到阶 p^(a−1) 的子群，其原像阶为 p^a，原像的阶按第 12 步 (d) 的纤维计数得出）。这三种情形穷尽了所有可能，故 G 存在阶为 n = p^a 的子群，(E) 成立。（前提）\n14. 事实 8（p-Sylow 子群在陪集上的固定点计数）。设 P ≤ G 且 |P| = p^a（同样以 |P| = p^a 为前提）。让 P 通过左乘作用在左陪集集合 G/P 上：x·(gP) = (xg)P。这是作用：e·(gP) = gP；x·(y·(gP)) = (xy)·(gP)；且 (xg)P 只依赖 gP（若 gP = g'P 则 g' = gb，b ∈ P，于是 xg'P = xgbP = xgP）。由事实 1，|G/P| = [G:P] = |G|/|P| = m。计算不动点：gP ∈ Fix_P(G/P) 当且仅当对每个 x ∈ P 有 xgP = gP 当且仅当对每个 x ∈ P 有 g⁻¹xg ∈ P 当且仅当 g⁻¹Pg ⊆ P；由于 g⁻¹Pg 与 P 是基数相同的有限集，「g⁻¹Pg ⊆ P」等价于 g⁻¹Pg = P，即 g ∈ N_G(P)。故 Fix_P(G/P) = {gP : g ∈ N_G(P)}，把 N_G(P) 按 P 的右陪集分块即知它的基数等于 [N_G(P):P]。由事实 3（|P| = p^a 是 p 的幂）得 m = |G/P| ≡ [N_G(P):P] (mod p)。（前提）\n15. (C) 的证明。设 P 与 Q 是 G 的任意两个 p-Sylow 子群，即 |P| = |Q| = p^a（这类子群存在已由 (E) 给出）。让 Q 通过左乘作用在 G/P 上，如事实 8 的做法。由事实 3，|Fix_Q(G/P)| ≡ |G/P| = m (mod p)。因 p 不整除 m，故 |Fix_Q(G/P)| 不被 p 整除，特别地 Fix_Q(G/P) 非空。取 gP ∈ Fix_Q(G/P)，则对每个 x ∈ Q 有 xgP = gP，即 g⁻¹xg ∈ P，故 g⁻¹Qg ⊆ P；又 |g⁻¹Qg| = |Q| = p^a = |P| 且两者都是有限集，故 g⁻¹Qg = P，等价地 Q = gPg⁻¹。因此任两个 p-Sylow 子群共轭，(C) 成立。（前提）\n16. (N) 的证明，第一部分：n_p 整除 m。G 经共轭作用在自身的子群集合上：g·H = gHg⁻¹。这是作用（e·H = H；(gh)·H = (gh)H(gh)⁻¹ = g(hHh⁻¹)g⁻¹）。P 的轨道是 {gPg⁻¹ : g ∈ G}，由 (C) 它恰是 G 的全体 p-Sylow 子群，故轨道长度等于 n_p；P 的稳定化子是 {g : gPg⁻¹ = P} = N_G(P)。由事实 2，n_p = [G:N_G(P)] = |G|/|N_G(P)|。由事实 7，|N_G(P)| = p^a·d 且 d 整除 m，故 n_p = (p^a·m)/(p^a·d) = m/d，特别地 n_p 整除 m。（前提）\n17. (N) 的证明，第二部分：n_p ≡ 1 (mod p)。沿用事实 7 与事实 8 的记号 d = [N_G(P):P] = |N_G(P)|/p^a。由事实 8 有 m ≡ d (mod p)；由上一步有 m = n_p·d。两式合并得 n_p·d ≡ d (mod p)，即 (n_p − 1)·d ≡ 0 (mod p)。由事实 7，d 整除 m 且 p ∤ m，故 p ∤ d，于是 n_p ≡ 1 (mod p)。结合 (E)（情形一至情形三及小结）、(C) 与 (N) 的两部分，(E)(C)(N) 三条断言全部得证。（前提）",
+                "proof_source": "own",
+                "reviewed_by": {
+                  "verifier": "V",
+                  "verification_id": "u-000007",
+                  "round": null,
+                  "verdict": "成立",
+                  "evidence": "verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007",
+                  "findings": [],
+                  "proof_no": 1,
+                  "proof_sha256": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a"
+                },
+                "reviewed_source": "",
+                "formal": {},
+                "formal_reason": "",
+                "audited_by": {},
+                "optimized_by_proof": {
+                  "1": false
+                },
+                "reviewed_by_proof": {
+                  "1": true
+                },
+                "reviewed_sha_by_proof": {
+                  "1": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a"
+                }
+              },
+              "voided_by": {},
+              "grade": "pre_theorem",
+              "audited_badge": false
+            },
+            "status": "active",
+            "derived_from": [],
+            "aliases": [],
+            "doc_id": null,
+            "line_range": {
+              "start": null,
+              "end": null,
+              "label": "manuscripts/F/f-proof-000000.md"
+            },
+            "created_at": "2026-11-24T05:16:35+08:00",
+            "created_by": "secretary-B",
+            "_proposition_adjudication": {
+              "checked": true,
+              "attempted": true,
+              "verdict": "different",
+              "canonical_name": "Sylow 定理（存在性、共轭性、计数）",
+              "same_as": "",
+              "basis": "条件：本命题为有限群 G 且 |G|=p^a·m、p 素数、p∤m、n=p^a；候选 000064 为有限群、p 素数、给定 P 是 G 的一个 Sylow p-子群，条件强弱与焦点不同。；结论：本命题结论是存在阶 n 子群、任两阶 n 子群共轭、n_p≡1 (mod p) 且 n_p|m；候选 000064 结论是 P 唯一当且仅当 P 正规，并附交换群特例，结论不同。；候选 stmt_id 000064 只覆盖 Sylow 子群唯一性/正规性这一侧面，不覆盖本命题的存在、共轭、计数三组结论。；候选定理讲的是给定 Sylow p-子群时唯一性与正规性的等价，而本命题讲 Sylow 子群的存在、共轭与计数，条件与结论均不一致。",
+              "reason": "候选定理讲的是给定 Sylow p-子群时唯一性与正规性的等价，而本命题讲 Sylow 子群的存在、共轭与计数，条件与结论均不一致。",
+              "reused": false,
+              "seam_source": "secretary（LlmSeam.for_secretary）",
+              "seam_attempted": true,
+              "at": "2026-11-24T05:16:35+08:00"
+            },
+            "proof_authors": [
+              "F"
+            ],
+            "proof_no": 1,
+            "proof_sha256": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a",
+            "manuscript_id": "000000",
+            "manuscripts": {
+              "1": "manuscripts/F/f-proof-000000.md"
+            },
+            "_grade_recomputed": {
+              "checked": true,
+              "from": "conjecture",
+              "to": "pre_theorem",
+              "from_kind": "heuristic",
+              "to_kind": "proof_review",
+              "channel": "text",
+              "why": "V 的签刚落位：这一行有证明正文，且台账里那一签盖住的就是现行这一版 ⇒ 按五元位现算等级（只算等级，不写档位）；历史列 `evidence_kind`=heuristic 只是读数，判定面读 `pre_theorem`",
+              "basis": "verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007",
+              "proof_no": 1,
+              "at": "2026-11-24T05:16:35+08:00"
+            },
+            "_kind_upgrade": {
+              "from": "conjecture",
+              "to": "theorem",
+              "basis": "out/vsigns/add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a.json#u-000007 · 台账 verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007",
+              "grade": "pre_theorem",
+              "by": "agent-B",
+              "at": "2026-11-24T05:16:35+08:00"
+            }
+          },
+          "kind_upgraded": {
+            "from": "conjecture",
+            "to": "theorem",
+            "basis": "out/vsigns/add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a.json#u-000007 · 台账 verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007",
+            "grade": "pre_theorem",
+            "by": "agent-B",
+            "at": "2026-11-24T05:16:35+08:00"
+          },
+          "sign_filing": {
+            "checked": true,
+            "manuscript_signed": true,
+            "filed": true,
+            "state": "filed",
+            "abandoned": false,
+            "manuscript": {
+              "found": true,
+              "signed": true,
+              "verdict": "成立",
+              "streak": 3,
+              "need": 3,
+              "proof_sha256": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a",
+              "at": "2026-11-24T05:10:00+08:00",
+              "signer": "secretary:F",
+              "ledger": "verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007",
+              "statement_id": "",
+              "mark": "- V 签：已签=true；判词=成立；连续=3/3；正文sha=add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a；时间=2026-11-24T05:10:00+08:00；签名者=secretary:F；台账=verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007；手稿号=000000",
+              "problem": "",
+              "manuscript_id": "000000",
+              "manuscript_key": "000000",
+              "identity_state": "resolved",
+              "identity_why": "签块的手稿号 000000 与这一份稿相同",
+              "state": "signed",
+              "checked": true,
+              "sha_matches": true,
+              "body_mismatch": false,
+              "body_sha256": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a",
+              "why": "手稿里的签块：连续 3/3 成立、正文 sha 相符（签于 2026-11-24T05:10:00+08:00）"
+            },
+            "statement": {
+              "found": true,
+              "stmt_id": "000065",
+              "reviewed": true,
+              "proof_no": 1,
+              "grade": "pre_theorem",
+              "proof_sha256": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a",
+              "status": "active",
+              "proof_rows": 1,
+              "current_proof_no": 1,
+              "current_proof_sha256": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a"
+            },
+            "why": "000065#p1 已入台账：正文 sha 与签块相符、第 3 位为真",
+            "sign": {
+              "checked": true,
+              "state": "signed",
+              "body_state": "present",
+              "votes": 3,
+              "need": 3,
+              "votes_source": "call",
+              "sha": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a",
+              "statement_id": "000065",
+              "proof_no": 1,
+              "credential": {
+                "path": "out/vsigns/add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a.json",
+                "artifact_sha": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a",
+                "at": "2026-11-24T05:10:00+08:00",
+                "verification_id": "u-000007",
+                "review_call": "6a9465b92b66",
+                "recomputable": true,
+                "problem": "",
+                "found": true,
+                "tier": "call",
+                "got": 3,
+                "why": "复算通过：3/3 份同源、每行签得住（call=6a9465b92b66）",
+                "anchor": {
+                  "used": false,
+                  "checked": false,
+                  "owned": false,
+                  "path": "",
+                  "manuscript_id": "",
+                  "why": ""
+                },
+                "body_backing": {
+                  "checked": true,
+                  "state": "matched",
+                  "row_found": true,
+                  "row_kind": "theorem",
+                  "row_shas": [
+                    "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a"
+                  ],
+                  "artifact_sha": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a",
+                  "enforced": false,
+                  "why": "对上了：这一行（kind=theorem）的正文指纹里有 add7f62c4d34…"
+                }
+              },
+              "evidence": {
+                "rows": 3,
+                "covering": 3,
+                "last_row": {},
+                "axis": "",
+                "verdict": "",
+                "fault_kind": "",
+                "kind_source": "",
+                "fault_at": "",
+                "void_rows": 0,
+                "last_call": "6a9465b92b66",
+                "secretary_unjudged": false,
+                "secretary_fault": false
+              },
+              "filed": true,
+              "abandoned": false,
+              "filed_why": "000065#p1 在册；第 3 位=True（命题没有被放弃）",
+              "body_why": "正文取自调用方给的那一段（7757 字）",
+              "why": "凭据 `out/vsigns/add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a.json` 复算通过：3/3 转同源、每行签得住 ⇒ 这一份签了（3/3 才算签）"
+            }
+          },
+          "searched": {
+            "checked": true,
+            "keyword_checked": true,
+            "keywords": [
+              "有限群",
+              "素数",
+              "阶",
+              "子群",
+              "共轭",
+              "子群个数",
+              "同余",
+              "整除"
+            ],
+            "hits_total": 5,
+            "hits_named": [
+              {
+                "stmt_id": "000061",
+                "hit_words": [
+                  "有限群",
+                  "素数",
+                  "子群",
+                  "共轭"
+                ]
+              },
+              {
+                "stmt_id": "000062",
+                "hit_words": [
+                  "有限群",
+                  "素数",
+                  "子群",
+                  "整除"
+                ]
+              },
+              {
+                "stmt_id": "000060",
+                "hit_words": [
+                  "有限群",
+                  "素数",
+                  "子群"
+                ]
+              },
+              {
+                "stmt_id": "000063",
+                "hit_words": [
+                  "有限群",
+                  "素数",
+                  "子群"
+                ]
+              },
+              {
+                "stmt_id": "000064",
+                "hit_words": [
+                  "有限群",
+                  "素数",
+                  "子群"
+                ]
+              }
+            ],
+            "found": "",
+            "why": "候选定理讲的是给定 Sylow p-子群时唯一性与正规性的等价，而本命题讲 Sylow 子群的存在、共轭与计数，条件与结论均不一致。",
+            "judged": true,
+            "model_calls": 3,
+            "problems": [],
+            "refused": "",
+            "candidates_total": 5,
+            "pages_total": 2,
+            "pages_judged": 2,
+            "page_exhausted": true,
+            "judge_ledger": {
+              "at": "2026-11-24T05:16:35+08:00",
+              "stage": "judge",
+              "statement_sha256": "ee0b2a06257685d6974f2808dbd0c1b92bb1334af7f93d9687004d6dc118d5ac",
+              "statement_chars": 189,
+              "checked": true,
+              "keywords": [
+                "有限群",
+                "素数",
+                "阶",
+                "子群",
+                "共轭",
+                "子群个数",
+                "同余",
+                "整除"
+              ],
+              "hits_total": 5,
+              "candidates": [
+                "000061",
+                "000062",
+                "000060",
+                "000063",
+                "000064"
+              ],
+              "found": "",
+              "why": "候选定理讲的是给定 Sylow p-子群时唯一性与正规性的等价，而本命题讲 Sylow 子群的存在、共轭与计数，条件与结论均不一致。",
+              "seam_source": "",
+              "label": "F 攻坚 000001 子目标 s1",
+              "kind": "conjecture",
+              "role": "B",
+              "task_id": ""
+            }
+          },
+          "found": "",
+          "why": "",
+          "same_statement": {
+            "checked": true,
+            "keyword_checked": true,
+            "keywords": [
+              "有限群",
+              "素数",
+              "阶",
+              "子群",
+              "共轭",
+              "子群个数",
+              "同余",
+              "整除"
+            ],
+            "hits_total": 5,
+            "hits_named": [
+              {
+                "stmt_id": "000061",
+                "hit_words": [
+                  "有限群",
+                  "素数",
+                  "子群",
+                  "共轭"
+                ]
+              },
+              {
+                "stmt_id": "000062",
+                "hit_words": [
+                  "有限群",
+                  "素数",
+                  "子群",
+                  "整除"
+                ]
+              },
+              {
+                "stmt_id": "000060",
+                "hit_words": [
+                  "有限群",
+                  "素数",
+                  "子群"
+                ]
+              },
+              {
+                "stmt_id": "000063",
+                "hit_words": [
+                  "有限群",
+                  "素数",
+                  "子群"
+                ]
+              },
+              {
+                "stmt_id": "000064",
+                "hit_words": [
+                  "有限群",
+                  "素数",
+                  "子群"
+                ]
+              }
+            ],
+            "found": "",
+            "why": "候选定理讲的是给定 Sylow p-子群时唯一性与正规性的等价，而本命题讲 Sylow 子群的存在、共轭与计数，条件与结论均不一致。",
+            "judged": true,
+            "model_calls": 3,
+            "problems": [],
+            "refused": "",
+            "candidates_total": 5,
+            "pages_total": 2,
+            "pages_judged": 2,
+            "page_exhausted": true,
+            "judge_ledger": {
+              "at": "2026-11-24T05:16:35+08:00",
+              "stage": "judge",
+              "statement_sha256": "ee0b2a06257685d6974f2808dbd0c1b92bb1334af7f93d9687004d6dc118d5ac",
+              "statement_chars": 189,
+              "checked": true,
+              "keywords": [
+                "有限群",
+                "素数",
+                "阶",
+                "子群",
+                "共轭",
+                "子群个数",
+                "同余",
+                "整除"
+              ],
+              "hits_total": 5,
+              "candidates": [
+                "000061",
+                "000062",
+                "000060",
+                "000063",
+                "000064"
+              ],
+              "found": "",
+              "why": "候选定理讲的是给定 Sylow p-子群时唯一性与正规性的等价，而本命题讲 Sylow 子群的存在、共轭与计数，条件与结论均不一致。",
+              "seam_source": "",
+              "label": "F 攻坚 000001 子目标 s1",
+              "kind": "conjecture",
+              "role": "B",
+              "task_id": ""
+            }
+          },
+          "adjudication": {
+            "checked": true,
+            "attempted": true,
+            "verdict": "different",
+            "canonical_name": "Sylow 定理（存在性、共轭性、计数）",
+            "same_as": "",
+            "route": "",
+            "condition": "G 是有限群，|G|=p^a·m，p 是素数，a≥0、m≥1，且 p 不整除 m，n=p^a。",
+            "conclusion": "G 存在阶 n 的子群；任意两个阶 n 的子群共轭；阶 n 的子群个数 n_p 满足 n_p≡1 (mod p) 且 n_p 整除 m。",
+            "basis": "条件：本命题为有限群 G 且 |G|=p^a·m、p 素数、p∤m、n=p^a；候选 000064 为有限群、p 素数、给定 P 是 G 的一个 Sylow p-子群，条件强弱与焦点不同。；结论：本命题结论是存在阶 n 子群、任两阶 n 子群共轭、n_p≡1 (mod p) 且 n_p|m；候选 000064 结论是 P 唯一当且仅当 P 正规，并附交换群特例，结论不同。；候选 stmt_id 000064 只覆盖 Sylow 子群唯一性/正规性这一侧面，不覆盖本命题的存在、共轭、计数三组结论。；候选定理讲的是给定 Sylow p-子群时唯一性与正规性的等价，而本命题讲 Sylow 子群的存在、共轭与计数，条件与结论均不一致。",
+            "reason": "候选定理讲的是给定 Sylow p-子群时唯一性与正规性的等价，而本命题讲 Sylow 子群的存在、共轭与计数，条件与结论均不一致。",
+            "reused": false,
+            "cached": true,
+            "seam_source": "secretary（LlmSeam.for_secretary）",
+            "candidates": [
+              "000061",
+              "000062",
+              "000060",
+              "000063",
+              "000064"
+            ],
+            "keywords": [
+              "有限群",
+              "素数",
+              "阶",
+              "子群",
+              "共轭",
+              "子群个数",
+              "同余",
+              "整除"
+            ],
+            "hits_total": 5,
+            "hits_named": [
+              {
+                "stmt_id": "000061",
+                "hit_words": [
+                  "有限群",
+                  "素数",
+                  "子群",
+                  "共轭"
+                ]
+              },
+              {
+                "stmt_id": "000062",
+                "hit_words": [
+                  "有限群",
+                  "素数",
+                  "子群",
+                  "整除"
+                ]
+              },
+              {
+                "stmt_id": "000060",
+                "hit_words": [
+                  "有限群",
+                  "素数",
+                  "子群"
+                ]
+              },
+              {
+                "stmt_id": "000063",
+                "hit_words": [
+                  "有限群",
+                  "素数",
+                  "子群"
+                ]
+              },
+              {
+                "stmt_id": "000064",
+                "hit_words": [
+                  "有限群",
+                  "素数",
+                  "子群"
+                ]
+              }
+            ],
+            "judged": true,
+            "why": "",
+            "cost": {
+              "ledger": "000157",
+              "charged": true,
+              "ledger_reason": "charged",
+              "call_index": 673,
+              "prompt_sha256": "5b18e12136f68b1314b8d2e7d35171af68bd19f6a68a5656481545c5f14a5f4d",
+              "tokens": 1576,
+              "usd": 0.000464
+            },
+            "keyword_checked": false,
+            "candidates_total": 5,
+            "pages_total": 2,
+            "pages_judged": 2,
+            "candidates_seen": 0,
+            "page_exhausted": true
+          },
+          "canonical_name": "Sylow 定理（存在性、共轭性、计数）",
+          "label_washed": {
+            "from": "F 攻坚 000001 子目标 s1",
+            "to": "Sylow 定理（存在性、共轭性、计数）",
+            "class": "路线/自证草稿/待审签",
+            "why": "标签里的路线 / 自证草稿 / 待 V 审签那一类修饰被洗掉了（秘书判同一性那趟给的名字）；被洗掉的路线落进证明那一层，不丢"
+          },
+          "proof_route": "",
+          "deps_state": "none_in_proof",
+          "deps_written": 0,
+          "deps_stmt_edges": 0,
+          "deps_dangling": [],
+          "deps_unmappable": [],
+          "deps_missing": {
+            "state": "not_applicable",
+            "stmt_id": "000065",
+            "proof_no": 1,
+            "proof_chars": 7757,
+            "deps_written": 0,
+            "scanned_refs": 0,
+            "derived_from": [],
+            "why": "这一份有 7757 字正文、0 条依赖边，作者在手稿里交了一张空的 `## 依赖` 表（声明自足）⇒ 依赖面这一格不适用（自足的证明合法：既不拒收，也不记成「缺依赖」）；一旦正文引用了在册命题，手稿就必须有那一节",
+            "next_step": "",
+            "manuscript": {
+              "present": true,
+              "heading_line": 39,
+              "rows": 0,
+              "problems": 0,
+              "refs_in_proof": 0
+            },
+            "manuscript_source": "param",
+            "manuscript_proof": {
+              "checked": true,
+              "state": "present",
+              "present": true,
+              "heading_line": 19,
+              "body": "\n1. 前提与记号。设 G 是有限群，|G| = p^a·m，其中 p 是素数，a ≥ 0 与 m ≥ 1 是整数，且 p 不整除 m。记 n = p^a，称 G 的阶为 n 的子群为 p-Sylow 子群，记其个数为 n_p。本步把下列约定声明为全篇前提：群的定义、子群的定义、有限集基数的基本性质、以及 |G| = p^a·m 与 p ∤ m。除此之外不使用任何未在本稿内证明的事实：下文事实 1 至事实 8 各自带完整推导，且每一步只引用它之前已经写出的句子。（前提）\n2. 事实 1（左陪集分解与 Lagrange 定理）。设 A 是有限群，B ≤ A。在 A 上定义 a ~ b 当且仅当 a⁻¹b ∈ B。这是等价关系：自反性是 a⁻¹a = e ∈ B；对称性由 a⁻¹b ∈ B 推出 b⁻¹a = (a⁻¹b)⁻¹ ∈ B（B 对取逆封闭）；传递性由 a⁻¹b ∈ B 与 b⁻¹c ∈ B 推出 a⁻¹c = (a⁻¹b)(b⁻¹c) ∈ B（B 对乘法封闭）。含 a 的等价类恰是左陪集 aB：b ~ a 当且仅当 a⁻¹b ∈ B 当且仅当 b ∈ aB。左乘给出从 B 到 aB 的双射 b ↦ ab（逆映射为 x ↦ a⁻¹x），故 |aB| = |B|。A 是两两不交的左陪集之并，设左陪集个数为 [A:B]，则 |A| = |B|·[A:B]。特别地 |B| 整除 |A|，且 [A:B] = |A|/|B|。又若 B ≤ C ≤ A，则把 A 按右陪集分成 C 的陪集、再把每个 C 陪集按 B 的陪集分块，得 [A:B] = [A:C]·[C:B]。（前提）\n3. 事实 2（轨道分解与轨道-稳定化子）。设有限群 Γ 作用在集合 X 上。对 x ∈ X 记轨道 Γ·x = {g·x : g ∈ Γ}，稳定化子 Stab(x) = {g ∈ Γ : g·x = x}。Stab(x) 是 Γ 的子群：e·x = x；若 g·x = x 与 h·x = x 则 (gh)·x = g·(h·x) = g·x = x；若 g·x = x 则 g⁻¹·x = g⁻¹·(g·x) = (g⁻¹g)·x = x。两个轨道若相交则相等：若 z = g·x = h·y，则对任意 g' 有 g'·x = (g'g⁻¹h)·y ∈ Γ·y。故 X 是轨道的不交并。映射 φ 把左陪集 g·Stab(x) 送到 g·x 是良定义的双射：若 g·Stab(x) = h·Stab(x) 则 h⁻¹g ∈ Stab(x)，故 g·x = h·x；反之若 g·x = h·x 则 h⁻¹g·x = x，故 h⁻¹g ∈ Stab(x)，两个左陪集相等；满射按轨道定义成立。由事实 1，|Γ·x| = [Γ:Stab(x)] = |Γ|/|Stab(x)|，特别地轨道长整除 |Γ|。（前提）\n4. 事实 3（p-群作用的固定点同余）。设 Γ 是有限 p-群，即 |Γ| = p^s（允许 s = 0，此时 Γ 是平凡群），Γ 作用在有限集 X 上。记 Fix_Γ(X) = {x ∈ X : 对每个 g ∈ Γ 都有 g·x = x}。断言 |X| ≡ |Fix_Γ(X)| (mod p)。证明：由事实 2，X 是轨道的不交并。长度等于 1 的轨道恰由固定点组成，即 Fix_Γ(X)。设某轨道长度大于 1 并取其中一点 x，则 Stab(x) ≠ Γ（否则该轨道长度为 1），由事实 1 与事实 2 得该轨道长度 = |Γ|/|Stab(x)| = p^t 且 t ≥ 1（Stab(x) 是 Γ 的真子群，其阶与指数都是 p 的正幂），从而该轨道长度被 p 整除。于是 |X| 等于 |Fix_Γ(X)| 加上若干被 p 整除的整数，同余式成立。s = 0 时 Γ 只有单位元，Fix_Γ(X) = X，同余式以等号成立。（前提）\n5. 事实 4（Cauchy 定理，McKay 计数证明）。设 A 是有限群，p 是素数且 p 整除 |A|。断言 A 含有阶为 p 的元素。证明：令 X = {(a_1,…,a_p) ∈ A^p : a_1a_2⋯a_p = e}。给定前 p−1 个坐标，最后一个坐标被唯一确定为 (a_1⋯a_(p−1))⁻¹，故 |X| = |A|^(p−1)；因 p 整除 |A| 且 p−1 ≥ 1，故 p 整除 |X|。让 p 阶循环群 C_p = ⟨σ⟩ 作用在 X 上：σ·(a_1,…,a_p) = (a_2,…,a_p,a_1)。先验这是良定义的作用。① X 对移位封闭：设 a_1a_2⋯a_p = e，令 b = a_2⋯a_p，则 a_1b = e，两边左乘 a_1⁻¹ 得 b = a_1⁻¹；于是移位后的乘积 a_2⋯a_p a_1 = b·a_1 = a_1⁻¹a_1 = e，故 (a_2,…,a_p,a_1) ∈ X（这一步只用到结合律与逆元的定义，没有用到交换性）。② σ^p 是恒等映射：连续移位 p 次把每个坐标送回原位。③ 幂作用相容：σ^i·(σ^j·x) 与 σ^(i+j)·x 都把 x 的第 k 个坐标移到第 k+i+j 个位置（下标模 p），故相等。于是 C_p 作用在 X 上。X 的不动点满足 (a_1,…,a_p) = (a_2,…,a_p,a_1)，即坐标全相等的元素 (a,…,a)，而条件 a_1⋯a_p = e 此时变为 a^p = e；故 Fix_(C_p)(X) 与 {a ∈ A : a^p = e} 基数相同。由事实 3（|C_p| = p 是 p-群）得 |{a ∈ A : a^p = e}| ≡ |X| ≡ 0 (mod p)。单位元满足 a^p = e，故该集合非空，其基数被 p 整除，于是至少含 p 个元素，从而存在 a ≠ e 且 a^p = e；a 的阶整除 p 且不为 1，故为 p。（前提）\n6. 事实 5（共轭类与类方程）。设 A 是有限群，Z(A) 记中心。对 a ∈ A 记中心化子 C_A(a) = {g ∈ A : gag⁻¹ = a}。关系「a 与 b 共轭」（存在 g 使 b = gag⁻¹）是等价关系：自反性取 g = e；对称性由 b = gag⁻¹ 得 a = g⁻¹bg；传递性由 b = gag⁻¹ 与 c = hbh⁻¹ 得 c = (hg)a(hg)⁻¹。A 经共轭作用在自身上（g·a = gag⁻¹），共轭类就是轨道，a 的稳定化子正是 C_A(a)（g·a = a 等价于 gag⁻¹ = a）。由事实 2，a 的共轭类长度等于 [A:C_A(a)]。a 属于 Z(A) 当且仅当它的共轭类只含 a 自身。取全部非中心共轭类的代表元 x_1,…,x_r，则 A 是 Z(A) 与这些共轭类的不交并，于是 |A| = |Z(A)| + Σ_(i=1..r) [A:C_A(x_i)]。又每个 x_i 不在中心，故 C_A(x_i) 是 A 的真子群，由事实 1 得 [A:C_A(x_i)] > 1 且整除 |A|。（前提）\n7. 事实 6（强归纳假设）。本稿对有限群的阶做强归纳，所断言的命题是：对任意有限群 A 与素数 q，若 q^b 是 |A| 的 q-部分（即 |A| = q^b·m' 且 q 不整除 m'），则 A 有阶为 q^b 的子群。本步把「该断言对所有满足 |A| < |G| 的有限群 A 成立」声明为归纳前提；下文 (E) 的证明将以它为依据，并且总在比 G 更小的群（真子群或真商群）上使用它。（前提）\n8. 事实 7（p-Sylow 子群的正规化子）。设 P ≤ G 且 |P| = p^a —— 本步的前提是 |P| = p^a（P 是 G 的 p-Sylow 子群），而不是「P 是任意子群」。记 N_G(P) = {g ∈ G : gPg⁻¹ = P}。它是 G 的子群：e ∈ N_G(P)；若 g, h ∈ N_G(P) 则 (gh)P(gh)⁻¹ = g(hPh⁻¹)g⁻¹ = gPg⁻¹ = P；若 g ∈ N_G(P) 则 g⁻¹Pg = g⁻¹(gPg⁻¹)g = P。又对每个 p_0 ∈ P 有 p_0Pp_0⁻¹ = P（左乘 p_0 把 P 双射到自身），故 P ≤ N_G(P)。由事实 1，|P| 整除 |N_G(P)|，且 |N_G(P)| 整除 |G|。代入 |P| = p^a 与 |G| = p^a·m 得 |N_G(P)| = p^a·d，其中 d 是正整数且 d 整除 m；由于 p ∤ m 且 d | m，得 p ∤ d，于是 p^a 整除 |N_G(P)| 且恰是 |N_G(P)| 的 p-部分。又由事实 1，[N_G(P):P] = |N_G(P)|/|P| = d，故 [N_G(P):P] 整除 m 且与 p 互素。（前提）\n9. (E) 的证明，情形一：a = 0。此时 n = p^0 = 1。平凡子群 {e} 是 G 的子群且阶为 1 = n，故 (E) 成立。附带说明此情形下的唯一性：若 H ≤ G 且 |H| = 1，则 H = {e}，故阶为 1 的子群只有平凡子群一个。（前提）\n10. (E) 的证明，情形二：a ≥ 1 且存在真子群 H < G 使 p^a 整除 |H|。此时 |H| < |G|；又由事实 1，|H| 整除 |G| = p^a·m，故 |H| = p^a·m_1 且 m_1 整除 m，于是 p^a 恰是 |H| 的 p-部分（因 p ∤ m 从而 p ∤ m_1）。由事实 6（归纳假设，|H| < |G|）H 有阶为 p^a 的子群 K；子群的子群仍是 G 的子群，故 K 是 G 的阶为 p^a 的子群，(E) 成立。（前提）\n11. (E) 的证明，情形三的先导计算：a ≥ 1 且每个真子群 K < G 都满足 p^a 不整除 |K|。先证 p 整除 |Z(G)|。由事实 5 的类方程 |G| = |Z(G)| + Σ_(i=1..r) [G:C_G(x_i)]，其中 x_i 取遍非中心共轭类的代表元。对每个 i，x_i 不在中心，故 C_G(x_i) 是 G 的真子群，由本情形的假设 p^a 不整除 |C_G(x_i)|；又由事实 1，|C_G(x_i)| 整除 |G| = p^a·m，故 |C_G(x_i)| 的 p-部分为 p^(b_i) 且 b_i ≤ a−1，于是 [G:C_G(x_i)] = |G|/|C_G(x_i)| 的 p-部分为 p^(a−b_i) 且 a−b_i ≥ 1，即 p 整除 [G:C_G(x_i)]。又 a ≥ 1，故 p 整除 |G| = p^a·m。于是把类方程两边模 p 得 0 ≡ |Z(G)| (mod p)，即 p 整除 |Z(G)|。（前提）\n12. (E) 的证明，情形三的主论证（续情形三）。由上一步：若 G 非交换，则 p 整除 |Z(G)|，对有限群 Z(G) 用事实 4（Cauchy 定理）得存在 z ∈ Z(G) 其阶为 p；若 G 交换，则 Z(G) = G 且 p 整除 |G| = p^a·m，由事实 4 得存在 z ∈ G = Z(G) 其阶为 p。两种情形都得到阶为 p 的中心元 z。令 N_0 = ⟨z⟩ = {z^j : 0 ≤ j ≤ p−1}，由 z 的阶为 p 得 |N_0| = p。因 z ∈ Z(G)，对任意 g ∈ G 有 gN_0g⁻¹ = ⟨gzg⁻¹⟩ = ⟨z⟩ = N_0，故 N_0 是 G 的正规子群。下面就地推出商群与纤维计数，只用到事实 1 与群的定义，不引用第一同构定理。(a) 商群：在左陪集集合 G/N_0 = {gN_0 : g ∈ G} 上定义乘法 (gN_0)(hN_0) := ghN_0。良定义：若 gN_0 = g'N_0 且 hN_0 = h'N_0，则 g' = gn_1、h' = hn_2，其中 n_1, n_2 ∈ N_0；由 N_0 正规，h⁻¹n_1h ∈ N_0，于是 g'h' = gn_1hn_2 = gh(h⁻¹n_1h)n_2 ∈ ghN_0，故 g'h'N_0 = ghN_0。结合律由 G 的结合律得到；单位元是 N_0 = eN_0；gN_0 的逆元是 g⁻¹N_0。故 G/N_0 是群。由事实 1，|G/N_0| = [G:N_0] = |G|/|N_0| = p^a·m/p = p^(a−1)·m。(b) 商映射 π: G → G/N_0，π(g) = gN_0 是同态：π(gh) = ghN_0 = (gN_0)(hN_0) = π(g)π(h)，且 π(e) = N_0 是 G/N_0 的单位元。(c) 因 a ≥ 1 得 |G/N_0| = p^(a−1)·m < p^a·m = |G|，且 p 不整除 m，故 p^(a−1) 是 G/N_0 的 p-部分；由事实 6（归纳假设）存在 G/N_0 的阶为 p^(a−1) 的子群 H̄。令 H = π⁻¹(H̄) = {x ∈ G : π(x) ∈ H̄}。H 是 G 的子群：由 π(e) = N_0 ∈ H̄ 得 e ∈ H；若 x, y ∈ H 则 π(xy) = π(x)π(y) ∈ H̄，故 xy ∈ H；若 x ∈ H 则 π(x⁻¹) = π(x)⁻¹ ∈ H̄，故 x⁻¹ ∈ H。又 N_0 ≤ H：对 n ∈ N_0 有 π(n) = nN_0 = N_0 ∈ H̄，故 n ∈ H。(d) 对每个 ḡ ∈ H̄ 取 g ∈ H 使 π(g) = ḡ（由 H 的定义这样的 g 存在），断言 H 中满足 π(x) = ḡ 的 x 全体恰为 gN_0：若 x ∈ H 且 π(x) = π(g)，则 π(g⁻¹x) = π(g)⁻¹π(x) = N_0，即 g⁻¹x ∈ N_0，故 x ∈ gN_0；反之若 x = gn 而 n ∈ N_0，则由 g ∈ H 与 N_0 ≤ H 得 x ∈ H，且 π(x) = π(g)π(n) = ḡ·N_0 = ḡ。不同的 ḡ 对应的这些集合两两不交，并集为 H（每个 x ∈ H 落在 ḡ = π(x) 那一块），且每一块与 N_0 基数相同（左乘 g 给出从 N_0 到 gN_0 的双射，见事实 1 的证明）。于是 |H| = |H̄|·|N_0| = p^(a−1)·p = p^a。故 (E) 成立。（前提）\n13. (E) 的小结。对 |G| 作强归纳：a = 0 由情形一处理；a ≥ 1 时，要么存在真子群 H < G 且 p^a 整除 |H|，由情形二并借助归纳假设处理；要么每个真子群 K < G 都满足 p^a 不整除 |K|，由情形三处理（类方程给出 p 整除 |Z(G)|，Cauchy 定理给出中心里阶 p 的元素 z，商去正规子群 ⟨z⟩ 后由归纳假设得到阶 p^(a−1) 的子群，其原像阶为 p^a，原像的阶按第 12 步 (d) 的纤维计数得出）。这三种情形穷尽了所有可能，故 G 存在阶为 n = p^a 的子群，(E) 成立。（前提）\n14. 事实 8（p-Sylow 子群在陪集上的固定点计数）。设 P ≤ G 且 |P| = p^a（同样以 |P| = p^a 为前提）。让 P 通过左乘作用在左陪集集合 G/P 上：x·(gP) = (xg)P。这是作用：e·(gP) = gP；x·(y·(gP)) = (xy)·(gP)；且 (xg)P 只依赖 gP（若 gP = g'P 则 g' = gb，b ∈ P，于是 xg'P = xgbP = xgP）。由事实 1，|G/P| = [G:P] = |G|/|P| = m。计算不动点：gP ∈ Fix_P(G/P) 当且仅当对每个 x ∈ P 有 xgP = gP 当且仅当对每个 x ∈ P 有 g⁻¹xg ∈ P 当且仅当 g⁻¹Pg ⊆ P；由于 g⁻¹Pg 与 P 是基数相同的有限集，「g⁻¹Pg ⊆ P」等价于 g⁻¹Pg = P，即 g ∈ N_G(P)。故 Fix_P(G/P) = {gP : g ∈ N_G(P)}，把 N_G(P) 按 P 的右陪集分块即知它的基数等于 [N_G(P):P]。由事实 3（|P| = p^a 是 p 的幂）得 m = |G/P| ≡ [N_G(P):P] (mod p)。（前提）\n15. (C) 的证明。设 P 与 Q 是 G 的任意两个 p-Sylow 子群，即 |P| = |Q| = p^a（这类子群存在已由 (E) 给出）。让 Q 通过左乘作用在 G/P 上，如事实 8 的做法。由事实 3，|Fix_Q(G/P)| ≡ |G/P| = m (mod p)。因 p 不整除 m，故 |Fix_Q(G/P)| 不被 p 整除，特别地 Fix_Q(G/P) 非空。取 gP ∈ Fix_Q(G/P)，则对每个 x ∈ Q 有 xgP = gP，即 g⁻¹xg ∈ P，故 g⁻¹Qg ⊆ P；又 |g⁻¹Qg| = |Q| = p^a = |P| 且两者都是有限集，故 g⁻¹Qg = P，等价地 Q = gPg⁻¹。因此任两个 p-Sylow 子群共轭，(C) 成立。（前提）\n16. (N) 的证明，第一部分：n_p 整除 m。G 经共轭作用在自身的子群集合上：g·H = gHg⁻¹。这是作用（e·H = H；(gh)·H = (gh)H(gh)⁻¹ = g(hHh⁻¹)g⁻¹）。P 的轨道是 {gPg⁻¹ : g ∈ G}，由 (C) 它恰是 G 的全体 p-Sylow 子群，故轨道长度等于 n_p；P 的稳定化子是 {g : gPg⁻¹ = P} = N_G(P)。由事实 2，n_p = [G:N_G(P)] = |G|/|N_G(P)|。由事实 7，|N_G(P)| = p^a·d 且 d 整除 m，故 n_p = (p^a·m)/(p^a·d) = m/d，特别地 n_p 整除 m。（前提）\n17. (N) 的证明，第二部分：n_p ≡ 1 (mod p)。沿用事实 7 与事实 8 的记号 d = [N_G(P):P] = |N_G(P)|/p^a。由事实 8 有 m ≡ d (mod p)；由上一步有 m = n_p·d。两式合并得 n_p·d ≡ d (mod p)，即 (n_p − 1)·d ≡ 0 (mod p)。由事实 7，d 整除 m 且 p ∤ m，故 p ∤ d，于是 n_p ≡ 1 (mod p)。结合 (E)（情形一至情形三及小结）、(C) 与 (N) 的两部分，(E)(C)(N) 三条断言全部得证。（前提）\n",
+              "chars": 7757,
+              "why": "稿里有 `## 证明` 那一节（第 19 行起，正文 7757 字）"
+            },
+            "proof_body_state": "present",
+            "manuscript_washed": true,
+            "manuscript_owner": "000000",
+            "manuscript_owner_ok": true,
+            "deps_receipt": "依赖边 0 条（其中命题→命题 0 条）",
+            "deps_stmt_edges": 0
+          },
+          "v_sign": {
+            "checked": true,
+            "found": true,
+            "applied": true,
+            "artifact_sha": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a",
+            "state": "",
+            "why": "verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007 是命题还没在册时 V 审的那一签（verdict='成立'）⇒ 按这一份正文的 sha 认领、第 3 位按签写；登记拿到号之后回写 statement_id（同一份正文只认领一次）；并已把 statement_id 回写到 pending 台账行（同一份正文只认领一次）",
+            "block": {
+              "found": true,
+              "signed": true,
+              "verdict": "成立",
+              "streak": 3,
+              "need": 3,
+              "proof_sha256": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a",
+              "at": "2026-11-24T05:10:00+08:00",
+              "signer": "secretary:F",
+              "ledger": "verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007",
+              "statement_id": "",
+              "mark": "- V 签：已签=true；判词=成立；连续=3/3；正文sha=add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a；时间=2026-11-24T05:10:00+08:00；签名者=secretary:F；台账=verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007；手稿号=000000",
+              "problem": "",
+              "manuscript_id": "000000",
+              "manuscript_key": "000000",
+              "identity_state": "resolved",
+              "identity_why": "签块的手稿号 000000 与这一份稿相同",
+              "state": "signed",
+              "checked": true,
+              "sha_matches": true,
+              "body_mismatch": false,
+              "body_sha256": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a",
+              "why": "手稿里的签块：连续 3/3 成立、正文 sha 相符（签于 2026-11-24T05:10:00+08:00）"
+            },
+            "carrier": "manuscripts/F/f-proof-000000.md",
+            "claim": {
+              "ledger": "verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007",
+              "verification_id": "u-000007",
+              "proof_sha256": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a",
+              "object_sha256": "a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9",
+              "bound_id": "000065",
+              "bound": true,
+              "bind": {
+                "checked": true,
+                "bound": true,
+                "already": false,
+                "statement_id": "000065",
+                "ledger": "verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007",
+                "bound_files": [
+                  "a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl"
+                ],
+                "why": "这一签认给 stmt:000065：pending 台账行回写了 statement_id（同一份正文只认领一次；同一份正文的几叠一起绑）"
+              }
+            }
+          },
+          "manuscript_source": "param",
+          "proof_text_source": "param",
+          "addressing": {
+            "checked": true,
+            "mode": "auto",
+            "source": "param",
+            "hit": true,
+            "address": "manuscripts/F/f-proof-000000.md",
+            "list_report": "",
+            "list_item": 0,
+            "list_line": 0,
+            "list_sha256": "",
+            "refusal": "",
+            "reason": "",
+            "suggestion": ""
+          },
+          "manuscript_washed": true,
+          "manuscript_wash": {
+            "washed": true,
+            "actor": "secretary-F",
+            "filled": "",
+            "mark": "- 依赖面洗稿：已洗=true；执行者=secretary-F"
+          },
+          "proof_vs_source": {
+            "checked": true,
+            "same": true,
+            "matched": "proof_body",
+            "source": "param",
+            "chars": 7757,
+            "source_chars": 7759,
+            "why": "与来源手稿逐字相同（只把换行归一，别的一字不改；对上的是 证明正文那一节）",
+            "source_state": "present"
+          },
+          "has_proof": true,
+          "proof_no": 1,
+          "proof_sha256": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a",
+          "proof_no_source": "path_group",
+          "pending_definitions": [],
+          "proof_text_dropped": "",
+          "proofs_dropped": [],
+          "pending": [],
+          "note": "登记 ≠ 核对：quote_verified 是三态（True/False/None），它不是 True 时下游必须按 `quote_reason` 读，不许当成通过。五元位已随这一行落库（现算等级 pre_theorem；第 2 位来源 own）——等级不许自报，判据永远现算。这一笔由秘书落盘（洗格式 / 拿编号 / 查重 / 改表四件一起做完），表格 ['statements', 'dependencies']、路径组 0。；依赖边 0 条（其中命题→命题 0 条）",
+          "pointer": {
+            "path": "manuscripts/F/f-proof-000000.md",
+            "statement_id": "",
+            "proposition_source": "manuscript",
+            "proposition_matches_manuscript": true,
+            "d_gave_only_pointers": true
+          },
+          "kind_crosscheck": {
+            "checked": true,
+            "agree": false,
+            "ledger": "theorem",
+            "declared": "conjecture",
+            "outcome": "mismatch",
+            "code": "kind_crosscheck_mismatch",
+            "why": "台账 kind='theorem' 与稿头「命题类型」'conjecture' 不一致 ⇒ 以台账为准；要改类型走已签的升档那一格，不拿稿头静默改写"
+          },
+          "mode": "register",
+          "manuscript": {
+            "path": "manuscripts/F/f-proof-000000.md",
+            "family": "f-proof",
+            "tier": "family",
+            "manuscript_id": "000000",
+            "proof_no": 1,
+            "sha256": "36be2374f66fd8bc5960e186388dff7729a5839ab1b51948617cbaf51350f390",
+            "proof_sha256": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a",
+            "proof_state": "present",
+            "sign": {
+              "found": false,
+              "signed": false,
+              "state": ""
+            },
+            "canonical": ""
+          },
+          "target": {
+            "stmt_id": "000065",
+            "before": {}
+          },
+          "requested_cells": [
+            "statement_full",
+            "proof_text",
+            "dependencies"
+          ],
+          "cells": {
+            "statement_full": {
+              "requested": true,
+              "writable": true,
+              "outcome": "filled",
+              "reason": "登记这一笔按稿回填",
+              "source": {
+                "section": "## 命题",
+                "lines": [
+                  15,
+                  18
+                ],
+                "sha": "ee0b2a06257685d6974f2808dbd0c1b92bb1334af7f93d9687004d6dc118d5ac"
+              },
+              "value": "设 G 为有限群，|G| = p^a·m，其中 p 是素数，a ≥ 0、m ≥ 1 是整数，且 p 不整除 m。记 n = p^a。则 (E) G 存在阶为 n 的子群；(C) 若 P、Q 是 G 的两个阶为 n 的子群，则存在 g ∈ G 使 Q = gPg⁻¹；(N) 若 n_p 表示 G 的阶为 n 的子群个数，则 n_p ≡ 1 (mod p) 且 n_p 整除 m。"
+            },
+            "proof_text": {
+              "requested": true,
+              "writable": true,
+              "outcome": "filled",
+              "reason": "登记这一笔按稿回填",
+              "source": {
+                "section": "## 证明",
+                "lines": [
+                  19,
+                  38
+                ],
+                "sha": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a"
+              },
+              "value": "1. 前提与记号。设 G 是有限群，|G| = p^a·m，其中 p 是素数，a ≥ 0 与 m ≥ 1 是整数，且 p 不整除 m。记 n = p^a，称 G 的阶为 n 的子群为 p-Sylow 子群，记其个数为 n_p。本步把下列约定声明为全篇前提：群的定义、子群的定义、有限集基数的基本性质、以及 |G| = p^a·m 与 p ∤ m。除此之外不使用任何未在本稿内证明的事实：下文事实 1 至事实 8 各自带完整推导，且每一步只引用它之前已经写出的句子。（前提）\n2. 事实 1（左陪集分解与 Lagrange 定理）。设 A 是有限群，B ≤ A。在 A 上定义 a ~ b 当且仅当 a⁻¹b ∈ B。这是等价关系：自反性是 a⁻¹a = e ∈ B；对称性由 a⁻¹b ∈ B 推出 b⁻¹a = (a⁻¹b)⁻¹ ∈ B（B 对取逆封闭）；传递性由 a⁻¹b ∈ B 与 b⁻¹c ∈ B 推出 a⁻¹c = (a⁻¹b)(b⁻¹c) ∈ B（B 对乘法封闭）。含 a 的等价类恰是左陪集 aB：b ~ a 当且仅当 a⁻¹b ∈ B 当且仅当 b ∈ aB。左乘给出从 B 到 aB 的双射 b ↦ ab（逆映射为 x ↦ a⁻¹x），故 |aB| = |B|。A 是两两不交的左陪集之并，设左陪集个数为 [A:B]，则 |A| = |B|·[A:B]。特别地 |B| 整除 |A|，且 [A:B] = |A|/|B|。又若 B ≤ C ≤ A，则把 A 按右陪集分成 C 的陪集、再把每个 C 陪集按 B 的陪集分块，得 [A:B] = [A:C]·[C:B]。（前提）\n3. 事实 2（轨道分解与轨道-稳定化子）。设有限群 Γ 作用在集合 X 上。对 x ∈ X 记轨道 Γ·x = {g·x : g ∈ Γ}，稳定化子 Stab(x) = {g ∈ Γ : g·x = x}。Stab(x) 是 Γ 的子群：e·x = x；若 g·x = x 与 h·x = x 则 (gh)·x = g·(h·x) = g·x = x；若 g·x = x 则 g⁻¹·x = g⁻¹·(g·x) = (g⁻¹g)·x = x。两个轨道若相交则相等：若 z = g·x = h·y，则对任意 g' 有 g'·x = (g'g⁻¹h)·y ∈ Γ·y。故 X 是轨道的不交并。映射 φ 把左陪集 g·Stab(x) 送到 g·x 是良定义的双射：若 g·Stab(x) = h·Stab(x) 则 h⁻¹g ∈ Stab(x)，故 g·x = h·x；反之若 g·x = h·x 则 h⁻¹g·x = x，故 h⁻¹g ∈ Stab(x)，两个左陪集相等；满射按轨道定义成立。由事实 1，|Γ·x| = [Γ:Stab(x)] = |Γ|/|Stab(x)|，特别地轨道长整除 |Γ|。（前提）\n4. 事实 3（p-群作用的固定点同余）。设 Γ 是有限 p-群，即 |Γ| = p^s（允许 s = 0，此时 Γ 是平凡群），Γ 作用在有限集 X 上。记 Fix_Γ(X) = {x ∈ X : 对每个 g ∈ Γ 都有 g·x = x}。断言 |X| ≡ |Fix_Γ(X)| (mod p)。证明：由事实 2，X 是轨道的不交并。长度等于 1 的轨道恰由固定点组成，即 Fix_Γ(X)。设某轨道长度大于 1 并取其中一点 x，则 Stab(x) ≠ Γ（否则该轨道长度为 1），由事实 1 与事实 2 得该轨道长度 = |Γ|/|Stab(x)| = p^t 且 t ≥ 1（Stab(x) 是 Γ 的真子群，其阶与指数都是 p 的正幂），从而该轨道长度被 p 整除。于是 |X| 等于 |Fix_Γ(X)| 加上若干被 p 整除的整数，同余式成立。s = 0 时 Γ 只有单位元，Fix_Γ(X) = X，同余式以等号成立。（前提）\n5. 事实 4（Cauchy 定理，McKay 计数证明）。设 A 是有限群，p 是素数且 p 整除 |A|。断言 A 含有阶为 p 的元素。证明：令 X = {(a_1,…,a_p) ∈ A^p : a_1a_2⋯a_p = e}。给定前 p−1 个坐标，最后一个坐标被唯一确定为 (a_1⋯a_(p−1))⁻¹，故 |X| = |A|^(p−1)；因 p 整除 |A| 且 p−1 ≥ 1，故 p 整除 |X|。让 p 阶循环群 C_p = ⟨σ⟩ 作用在 X 上：σ·(a_1,…,a_p) = (a_2,…,a_p,a_1)。先验这是良定义的作用。① X 对移位封闭：设 a_1a_2⋯a_p = e，令 b = a_2⋯a_p，则 a_1b = e，两边左乘 a_1⁻¹ 得 b = a_1⁻¹；于是移位后的乘积 a_2⋯a_p a_1 = b·a_1 = a_1⁻¹a_1 = e，故 (a_2,…,a_p,a_1) ∈ X（这一步只用到结合律与逆元的定义，没有用到交换性）。② σ^p 是恒等映射：连续移位 p 次把每个坐标送回原位。③ 幂作用相容：σ^i·(σ^j·x) 与 σ^(i+j)·x 都把 x 的第 k 个坐标移到第 k+i+j 个位置（下标模 p），故相等。于是 C_p 作用在 X 上。X 的不动点满足 (a_1,…,a_p) = (a_2,…,a_p,a_1)，即坐标全相等的元素 (a,…,a)，而条件 a_1⋯a_p = e 此时变为 a^p = e；故 Fix_(C_p)(X) 与 {a ∈ A : a^p = e} 基数相同。由事实 3（|C_p| = p 是 p-群）得 |{a ∈ A : a^p = e}| ≡ |X| ≡ 0 (mod p)。单位元满足 a^p = e，故该集合非空，其基数被 p 整除，于是至少含 p 个元素，从而存在 a ≠ e 且 a^p = e；a 的阶整除 p 且不为 1，故为 p。（前提）\n6. 事实 5（共轭类与类方程）。设 A 是有限群，Z(A) 记中心。对 a ∈ A 记中心化子 C_A(a) = {g ∈ A : gag⁻¹ = a}。关系「a 与 b 共轭」（存在 g 使 b = gag⁻¹）是等价关系：自反性取 g = e；对称性由 b = gag⁻¹ 得 a = g⁻¹bg；传递性由 b = gag⁻¹ 与 c = hbh⁻¹ 得 c = (hg)a(hg)⁻¹。A 经共轭作用在自身上（g·a = gag⁻¹），共轭类就是轨道，a 的稳定化子正是 C_A(a)（g·a = a 等价于 gag⁻¹ = a）。由事实 2，a 的共轭类长度等于 [A:C_A(a)]。a 属于 Z(A) 当且仅当它的共轭类只含 a 自身。取全部非中心共轭类的代表元 x_1,…,x_r，则 A 是 Z(A) 与这些共轭类的不交并，于是 |A| = |Z(A)| + Σ_(i=1..r) [A:C_A(x_i)]。又每个 x_i 不在中心，故 C_A(x_i) 是 A 的真子群，由事实 1 得 [A:C_A(x_i)] > 1 且整除 |A|。（前提）\n7. 事实 6（强归纳假设）。本稿对有限群的阶做强归纳，所断言的命题是：对任意有限群 A 与素数 q，若 q^b 是 |A| 的 q-部分（即 |A| = q^b·m' 且 q 不整除 m'），则 A 有阶为 q^b 的子群。本步把「该断言对所有满足 |A| < |G| 的有限群 A 成立」声明为归纳前提；下文 (E) 的证明将以它为依据，并且总在比 G 更小的群（真子群或真商群）上使用它。（前提）\n8. 事实 7（p-Sylow 子群的正规化子）。设 P ≤ G 且 |P| = p^a —— 本步的前提是 |P| = p^a（P 是 G 的 p-Sylow 子群），而不是「P 是任意子群」。记 N_G(P) = {g ∈ G : gPg⁻¹ = P}。它是 G 的子群：e ∈ N_G(P)；若 g, h ∈ N_G(P) 则 (gh)P(gh)⁻¹ = g(hPh⁻¹)g⁻¹ = gPg⁻¹ = P；若 g ∈ N_G(P) 则 g⁻¹Pg = g⁻¹(gPg⁻¹)g = P。又对每个 p_0 ∈ P 有 p_0Pp_0⁻¹ = P（左乘 p_0 把 P 双射到自身），故 P ≤ N_G(P)。由事实 1，|P| 整除 |N_G(P)|，且 |N_G(P)| 整除 |G|。代入 |P| = p^a 与 |G| = p^a·m 得 |N_G(P)| = p^a·d，其中 d 是正整数且 d 整除 m；由于 p ∤ m 且 d | m，得 p ∤ d，于是 p^a 整除 |N_G(P)| 且恰是 |N_G(P)| 的 p-部分。又由事实 1，[N_G(P):P] = |N_G(P)|/|P| = d，故 [N_G(P):P] 整除 m 且与 p 互素。（前提）\n9. (E) 的证明，情形一：a = 0。此时 n = p^0 = 1。平凡子群 {e} 是 G 的子群且阶为 1 = n，故 (E) 成立。附带说明此情形下的唯一性：若 H ≤ G 且 |H| = 1，则 H = {e}，故阶为 1 的子群只有平凡子群一个。（前提）\n10. (E) 的证明，情形二：a ≥ 1 且存在真子群 H < G 使 p^a 整除 |H|。此时 |H| < |G|；又由事实 1，|H| 整除 |G| = p^a·m，故 |H| = p^a·m_1 且 m_1 整除 m，于是 p^a 恰是 |H| 的 p-部分（因 p ∤ m 从而 p ∤ m_1）。由事实 6（归纳假设，|H| < |G|）H 有阶为 p^a 的子群 K；子群的子群仍是 G 的子群，故 K 是 G 的阶为 p^a 的子群，(E) 成立。（前提）\n11. (E) 的证明，情形三的先导计算：a ≥ 1 且每个真子群 K < G 都满足 p^a 不整除 |K|。先证 p 整除 |Z(G)|。由事实 5 的类方程 |G| = |Z(G)| + Σ_(i=1..r) [G:C_G(x_i)]，其中 x_i 取遍非中心共轭类的代表元。对每个 i，x_i 不在中心，故 C_G(x_i) 是 G 的真子群，由本情形的假设 p^a 不整除 |C_G(x_i)|；又由事实 1，|C_G(x_i)| 整除 |G| = p^a·m，故 |C_G(x_i)| 的 p-部分为 p^(b_i) 且 b_i ≤ a−1，于是 [G:C_G(x_i)] = |G|/|C_G(x_i)| 的 p-部分为 p^(a−b_i) 且 a−b_i ≥ 1，即 p 整除 [G:C_G(x_i)]。又 a ≥ 1，故 p 整除 |G| = p^a·m。于是把类方程两边模 p 得 0 ≡ |Z(G)| (mod p)，即 p 整除 |Z(G)|。（前提）\n12. (E) 的证明，情形三的主论证（续情形三）。由上一步：若 G 非交换，则 p 整除 |Z(G)|，对有限群 Z(G) 用事实 4（Cauchy 定理）得存在 z ∈ Z(G) 其阶为 p；若 G 交换，则 Z(G) = G 且 p 整除 |G| = p^a·m，由事实 4 得存在 z ∈ G = Z(G) 其阶为 p。两种情形都得到阶为 p 的中心元 z。令 N_0 = ⟨z⟩ = {z^j : 0 ≤ j ≤ p−1}，由 z 的阶为 p 得 |N_0| = p。因 z ∈ Z(G)，对任意 g ∈ G 有 gN_0g⁻¹ = ⟨gzg⁻¹⟩ = ⟨z⟩ = N_0，故 N_0 是 G 的正规子群。下面就地推出商群与纤维计数，只用到事实 1 与群的定义，不引用第一同构定理。(a) 商群：在左陪集集合 G/N_0 = {gN_0 : g ∈ G} 上定义乘法 (gN_0)(hN_0) := ghN_0。良定义：若 gN_0 = g'N_0 且 hN_0 = h'N_0，则 g' = gn_1、h' = hn_2，其中 n_1, n_2 ∈ N_0；由 N_0 正规，h⁻¹n_1h ∈ N_0，于是 g'h' = gn_1hn_2 = gh(h⁻¹n_1h)n_2 ∈ ghN_0，故 g'h'N_0 = ghN_0。结合律由 G 的结合律得到；单位元是 N_0 = eN_0；gN_0 的逆元是 g⁻¹N_0。故 G/N_0 是群。由事实 1，|G/N_0| = [G:N_0] = |G|/|N_0| = p^a·m/p = p^(a−1)·m。(b) 商映射 π: G → G/N_0，π(g) = gN_0 是同态：π(gh) = ghN_0 = (gN_0)(hN_0) = π(g)π(h)，且 π(e) = N_0 是 G/N_0 的单位元。(c) 因 a ≥ 1 得 |G/N_0| = p^(a−1)·m < p^a·m = |G|，且 p 不整除 m，故 p^(a−1) 是 G/N_0 的 p-部分；由事实 6（归纳假设）存在 G/N_0 的阶为 p^(a−1) 的子群 H̄。令 H = π⁻¹(H̄) = {x ∈ G : π(x) ∈ H̄}。H 是 G 的子群：由 π(e) = N_0 ∈ H̄ 得 e ∈ H；若 x, y ∈ H 则 π(xy) = π(x)π(y) ∈ H̄，故 xy ∈ H；若 x ∈ H 则 π(x⁻¹) = π(x)⁻¹ ∈ H̄，故 x⁻¹ ∈ H。又 N_0 ≤ H：对 n ∈ N_0 有 π(n) = nN_0 = N_0 ∈ H̄，故 n ∈ H。(d) 对每个 ḡ ∈ H̄ 取 g ∈ H 使 π(g) = ḡ（由 H 的定义这样的 g 存在），断言 H 中满足 π(x) = ḡ 的 x 全体恰为 gN_0：若 x ∈ H 且 π(x) = π(g)，则 π(g⁻¹x) = π(g)⁻¹π(x) = N_0，即 g⁻¹x ∈ N_0，故 x ∈ gN_0；反之若 x = gn 而 n ∈ N_0，则由 g ∈ H 与 N_0 ≤ H 得 x ∈ H，且 π(x) = π(g)π(n) = ḡ·N_0 = ḡ。不同的 ḡ 对应的这些集合两两不交，并集为 H（每个 x ∈ H 落在 ḡ = π(x) 那一块），且每一块与 N_0 基数相同（左乘 g 给出从 N_0 到 gN_0 的双射，见事实 1 的证明）。于是 |H| = |H̄|·|N_0| = p^(a−1)·p = p^a。故 (E) 成立。（前提）\n13. (E) 的小结。对 |G| 作强归纳：a = 0 由情形一处理；a ≥ 1 时，要么存在真子群 H < G 且 p^a 整除 |H|，由情形二并借助归纳假设处理；要么每个真子群 K < G 都满足 p^a 不整除 |K|，由情形三处理（类方程给出 p 整除 |Z(G)|，Cauchy 定理给出中心里阶 p 的元素 z，商去正规子群 ⟨z⟩ 后由归纳假设得到阶 p^(a−1) 的子群，其原像阶为 p^a，原像的阶按第 12 步 (d) 的纤维计数得出）。这三种情形穷尽了所有可能，故 G 存在阶为 n = p^a 的子群，(E) 成立。（前提）\n14. 事实 8（p-Sylow 子群在陪集上的固定点计数）。设 P ≤ G 且 |P| = p^a（同样以 |P| = p^a 为前提）。让 P 通过左乘作用在左陪集集合 G/P 上：x·(gP) = (xg)P。这是作用：e·(gP) = gP；x·(y·(gP)) = (xy)·(gP)；且 (xg)P 只依赖 gP（若 gP = g'P 则 g' = gb，b ∈ P，于是 xg'P = xgbP = xgP）。由事实 1，|G/P| = [G:P] = |G|/|P| = m。计算不动点：gP ∈ Fix_P(G/P) 当且仅当对每个 x ∈ P 有 xgP = gP 当且仅当对每个 x ∈ P 有 g⁻¹xg ∈ P 当且仅当 g⁻¹Pg ⊆ P；由于 g⁻¹Pg 与 P 是基数相同的有限集，「g⁻¹Pg ⊆ P」等价于 g⁻¹Pg = P，即 g ∈ N_G(P)。故 Fix_P(G/P) = {gP : g ∈ N_G(P)}，把 N_G(P) 按 P 的右陪集分块即知它的基数等于 [N_G(P):P]。由事实 3（|P| = p^a 是 p 的幂）得 m = |G/P| ≡ [N_G(P):P] (mod p)。（前提）\n15. (C) 的证明。设 P 与 Q 是 G 的任意两个 p-Sylow 子群，即 |P| = |Q| = p^a（这类子群存在已由 (E) 给出）。让 Q 通过左乘作用在 G/P 上，如事实 8 的做法。由事实 3，|Fix_Q(G/P)| ≡ |G/P| = m (mod p)。因 p 不整除 m，故 |Fix_Q(G/P)| 不被 p 整除，特别地 Fix_Q(G/P) 非空。取 gP ∈ Fix_Q(G/P)，则对每个 x ∈ Q 有 xgP = gP，即 g⁻¹xg ∈ P，故 g⁻¹Qg ⊆ P；又 |g⁻¹Qg| = |Q| = p^a = |P| 且两者都是有限集，故 g⁻¹Qg = P，等价地 Q = gPg⁻¹。因此任两个 p-Sylow 子群共轭，(C) 成立。（前提）\n16. (N) 的证明，第一部分：n_p 整除 m。G 经共轭作用在自身的子群集合上：g·H = gHg⁻¹。这是作用（e·H = H；(gh)·H = (gh)H(gh)⁻¹ = g(hHh⁻¹)g⁻¹）。P 的轨道是 {gPg⁻¹ : g ∈ G}，由 (C) 它恰是 G 的全体 p-Sylow 子群，故轨道长度等于 n_p；P 的稳定化子是 {g : gPg⁻¹ = P} = N_G(P)。由事实 2，n_p = [G:N_G(P)] = |G|/|N_G(P)|。由事实 7，|N_G(P)| = p^a·d 且 d 整除 m，故 n_p = (p^a·m)/(p^a·d) = m/d，特别地 n_p 整除 m。（前提）\n17. (N) 的证明，第二部分：n_p ≡ 1 (mod p)。沿用事实 7 与事实 8 的记号 d = [N_G(P):P] = |N_G(P)|/p^a。由事实 8 有 m ≡ d (mod p)；由上一步有 m = n_p·d。两式合并得 n_p·d ≡ d (mod p)，即 (n_p − 1)·d ≡ 0 (mod p)。由事实 7，d 整除 m 且 p ∤ m，故 p ∤ d，于是 n_p ≡ 1 (mod p)。结合 (E)（情形一至情形三及小结）、(C) 与 (N) 的两部分，(E)(C)(N) 三条断言全部得证。（前提）"
+            },
+            "dependencies": {
+              "requested": true,
+              "writable": false,
+              "outcome": "not_applicable",
+              "reason": "稿里没有依赖行（自足证明合法）",
+              "source": {
+                "section": "## 依赖",
+                "lines": [
+                  39,
+                  45
+                ],
+                "sha": "ec5675dbb498a34298bc092532e96c07ee572f62123ca3ed2c44da9ef8b743be"
+              },
+              "value": []
+            },
+            "kind": {
+              "requested": false,
+              "writable": false,
+              "outcome": "not_requested",
+              "source": {
+                "section": "head: - 命题类型：",
+                "lines": [],
+                "sha": ""
+              }
+            },
+            "numeric_evidence": {
+              "requested": false,
+              "writable": false,
+              "outcome": "not_requested",
+              "source": {
+                "section": "## 数值结果",
+                "lines": [],
+                "sha": ""
+              }
+            }
+          },
+          "diff": {
+            "requested_not_filled": [
+              "dependencies"
+            ],
+            "filled_not_requested": []
+          },
+          "derived_write": [
+            "bits",
+            "proof_no",
+            "proof_sha256",
+            "kind",
+            "proofs"
+          ],
+          "write": {
+            "statements": true,
+            "dependencies": false,
+            "deps_written": 0,
+            "written": true,
+            "sink": "record_statement（登记新命题）"
+          },
+          "refused": "",
+          "reason": "",
+          "caller_reason": "按手稿路径收录（D 只递指针）",
+          "intake_claim": {
+            "checked": true,
+            "state": "free",
+            "rel": "manuscripts/F/f-proof-000000.md",
+            "holder": {
+              "owner": "agent-B-reg-sylow-stmt",
+              "role": "B",
+              "task_id": "t-000153",
+              "instance": "reg-sylow-stmt",
+              "attributed": true,
+              "identity_conflict": "",
+              "purpose": "intake",
+              "sha256": "36be2374f66fd8bc5960e186388dff7729a5839ab1b51948617cbaf51350f390",
+              "family": "f-proof",
+              "target": "",
+              "previous": {},
+              "at": "2026-11-24T05:16:04+08:00"
+            },
+            "why": "",
+            "identity": {
+              "checked": true,
+              "role": "B",
+              "task_id": "t-000153",
+              "instance": "reg-sylow-stmt",
+              "actor": "agent-B-reg-sylow-stmt",
+              "source": "roster",
+              "attributed": true,
+              "conflict": "",
+              "tasks_instance": "reg-sylow-stmt",
+              "roster_name": "reg-sylow-stmt",
+              "roster_checked": true,
+              "roster_why": ""
+            }
+          },
+          "register": {
+            "stmt_id": "000065",
+            "new_row": false,
+            "origin": "own_result",
+            "kind": "conjecture",
+            "pointer": {
+              "path": "manuscripts/F/f-proof-000000.md",
+              "statement_id": "",
+              "proposition_source": "manuscript",
+              "proposition_matches_manuscript": true,
+              "d_gave_only_pointers": true
+            },
+            "kind_upgraded_from_manuscript": {}
+          },
+          "pending_claim": {
+            "checked": true,
+            "bound": false,
+            "already": false,
+            "statement_id": "",
+            "ledger": "",
+            "bound_files": [],
+            "bound_elsewhere": "",
+            "why": "这一笔没有认到 pending 台账上的签（`evidence.sign_claim.claim` 空）⇒ 没有要回写的行"
+          },
+          "b_submission": {
+            "checked": true,
+            "written": false,
+            "already": false,
+            "manuscript_id": "",
+            "family": "",
+            "token": "",
+            "via": "ingested_to_ledger",
+            "path_group": 0,
+            "why": "`manuscripts/F/f-proof-000000.md` 不是 B 的稿（产出方 F）⇒ 这一笔不写 B 的提交记号"
+          },
+          "conjecture_ledger": {
+            "ok": true,
+            "promoted_to_statement": "000065",
+            "landing": {
+              "checked": true,
+              "statement": "设 G 为有限群，|G| = p^a·m，其中 p 是素数，a ≥ 0、m ≥ 1 是整数，且 p 不整除 m。记 n = p^a。则 (E) G 存在阶为 n 的子群；(C) 若 P、Q 是 G 的两个阶为 n 的子群，则存在 g ∈ G 使 Q = gPg⁻¹；(N) 若 n_p 表示 G 的阶为 n 的子群个数，则 n_p ≡ 1 (mod p) 且 n_p 整除 m。",
+              "reason": "台账里有同一条命题",
+              "matches": [
+                "000065"
+              ],
+              "stmt_id": "000065"
+            }
+          },
+          "registration_settled": {
+            "checked": true,
+            "settled": [
+              {
+                "item_id": "t-000145",
+                "key": "b-register@000000@add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a",
+                "adopted_key": "b-register@000065@add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a",
+                "close": "completed",
+                "matched_by": "manuscript_id",
+                "why": "000065#p1 已经入库（有正文、reviewed=true）⇒ 义务已清（按稿 manuscripts/F/f-proof-000000.md 认的）"
+              }
+            ],
+            "left": [],
+            "problems": [],
+            "reason": "收录落成：收口 1 条"
+          },
+          "nontriviality_record": {
+            "recorded": true,
+            "tri": "computed",
+            "level": 3,
+            "label": "T3",
+            "stmt_id": "000065",
+            "path_group": 1,
+            "reason": ""
+          },
+          "kind_judgement": {
+            "checked": true,
+            "kind": "conjecture",
+            "declared": "conjecture",
+            "changed": false,
+            "row_kind": "theorem",
+            "basis": "`origin=own_result` ⇒ 这一行是我们自己的：kind 是作者写下的判断，这一格不改（无签的定理级声明由 B-2 那道闸管）",
+            "why": ""
+          },
+          "grade": "pre_theorem",
+          "grade_why": "",
+          "grade_reading": {
+            "checked": true,
+            "grade": "pre_theorem",
+            "stored_grade": "pre_theorem",
+            "mismatch": false,
+            "why": ""
+          },
+          "citation_fit": {
+            "checked": true,
+            "lit_id": "",
+            "verdict": "not_applicable",
+            "why": [],
+            "words_in_claim": [],
+            "note": "这一行没有 `source_lit_id`（自产 / 手稿侧命题的出处不是文献）⇒ 这一格不适用；它不是「对上了」。"
+          }
+        },
+        "error": "",
+        "meta": {},
+        "warn": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.register_statement 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 1,
+          "call_index": 0,
+          "calls": 1,
+          "step_index": 1,
+          "summary": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.register_statement 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 1,
+            "calls": 1,
+            "items": 1,
+            "steps": [
+              1
+            ],
+            "executed": 1,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 65792,
+        "prompt_cache_miss_tokens": 5110,
+        "tokens_in": 70902,
+        "tokens_out": 762,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000153"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "statements",
+          "id": "000065"
+        },
+        "why": "回读刚落的那一行，核对 kind / grade / reviewed / optimized_by_proof / quote_verified 各格"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "stmt_id": "000065",
+          "origin": "own_result",
+          "kind": "theorem",
+          "label": "Sylow 定理（存在性、共轭性、计数）",
+          "statement_text": "设 G 为有限群，|G| = p^a·m，其中 p 是素数，a ≥ 0、m ≥ 1 是整数，且 p 不整除 m。记 n = p^a。则 (E) G 存在阶为 n 的子群；(C) 若 P、Q 是 G 的两个阶为 n 的子群，则存在 g ∈ G 使 Q = gPg⁻¹；(N) 若 n_p 表示 G 的阶为 n 的子群个数，则 n_p ≡ 1 (mod p) 且 n_p 整除 m。",
+          "statement_full": "设 G 为有限群，|G| = p^a·m，其中 p 是素数，a ≥ 0、m ≥ 1 是整数，且 p 不整除 m。记 n = p^a。则 (E) G 存在阶为 n 的子群；(C) 若 P、Q 是 G 的两个阶为 n 的子群，则存在 g ∈ G 使 Q = gPg⁻¹；(N) 若 n_p 表示 G 的阶为 n 的子群个数，则 n_p ≡ 1 (mod p) 且 n_p 整除 m。",
+          "proof_text": "1. 前提与记号。设 G 是有限群，|G| = p^a·m，其中 p 是素数，a ≥ 0 与 m ≥ 1 是整数，且 p 不整除 m。记 n = p^a，称 G 的阶为 n 的子群为 p-Sylow 子群，记其个数为 n_p。本步把下列约定声明为全篇前提：群的定义、子群的定义、有限集基数的基本性质、以及 |G| = p^a·m 与 p ∤ m。除此之外不使用任何未在本稿内证明的事实：下文事实 1 至事实 8 各自带完整推导，且每一步只引用它之前已经写出的句子。（前提）\n2. 事实 1（左陪集分解与 Lagrange 定理）。设 A 是有限群，B ≤ A。在 A 上定义 a ~ b 当且仅当 a⁻¹b ∈ B。这是等价关系：自反性是 a⁻¹a = e ∈ B；对称性由 a⁻¹b ∈ B 推出 b⁻¹a = (a⁻¹b)⁻¹ ∈ B（B 对取逆封闭）；传递性由 a⁻¹b ∈ B 与 b⁻¹c ∈ B 推出 a⁻¹c = (a⁻¹b)(b⁻¹c) ∈ B（B 对乘法封闭）。含 a 的等价类恰是左陪集 aB：b ~ a 当且仅当 a⁻¹b ∈ B 当且仅当 b ∈ aB。左乘给出从 B 到 aB 的双射 b ↦ ab（逆映射为 x ↦ a⁻¹x），故 |aB| = |B|。A 是两两不交的左陪集之并，设左陪集个数为 [A:B]，则 |A| = |B|·[A:B]。特别地 |B| 整除 |A|，且 [A:B] = |A|/|B|。又若 B ≤ C ≤ A，则把 A 按右陪集分成 C 的陪集、再把每个 C 陪集按 B 的陪集分块，得 [A:B] = [A:C]·[C:B]。（前提）\n3. 事实 2（轨道分解与轨道-稳定化子）。设有限群 Γ 作用在集合 X 上。对 x ∈ X 记轨道 Γ·x = {g·x : g ∈ Γ}，稳定化子 Stab(x) = {g ∈ Γ : g·x = x}。Stab(x) 是 Γ 的子群：e·x = x；若 g·x = x 与 h·x = x 则 (gh)·x = g·(h·x) = g·x = x；若 g·x = x 则 g⁻¹·x = g⁻¹·(g·x) = (g⁻¹g)·x = x。两个轨道若相交则相等：若 z = g·x = h·y，则对任意 g' 有 g'·x = (g'g⁻¹h)·y ∈ Γ·y。故 X 是轨道的不交并。映射 φ 把左陪集 g·Stab(x) 送到 g·x 是良定义的双射：若 g·Stab(x) = h·Stab(x) 则 h⁻¹g ∈ Stab(x)，故 g·x = h·x；反之若 g·x = h·x 则 h⁻¹g·x = x，故 h⁻¹g ∈ Stab(x)，两个左陪集相等；满射按轨道定义成立。由事实 1，|Γ·x| = [Γ:Stab(x)] = |Γ|/|Stab(x)|，特别地轨道长整除 |Γ|。（前提）\n4. 事实 3（p-群作用的固定点同余）。设 Γ 是有限 p-群，即 |Γ| = p^s（允许 s = 0，此时 Γ 是平凡群），Γ 作用在有限集 X 上。记 Fix_Γ(X) = {x ∈ X : 对每个 g ∈ Γ 都有 g·x = x}。断言 |X| ≡ |Fix_Γ(X)| (mod p)。证明：由事实 2，X 是轨道的不交并。长度等于 1 的轨道恰由固定点组成，即 Fix_Γ(X)。设某轨道长度大于 1 并取其中一点 x，则 Stab(x) ≠ Γ（否则该轨道长度为 1），由事实 1 与事实 2 得该轨道长度 = |Γ|/|Stab(x)| = p^t 且 t ≥ 1（Stab(x) 是 Γ 的真子群，其阶与指数都是 p 的正幂），从而该轨道长度被 p 整除。于是 |X| 等于 |Fix_Γ(X)| 加上若干被 p 整除的整数，同余式成立。s = 0 时 Γ 只有单位元，Fix_Γ(X) = X，同余式以等号成立。（前提）\n5. 事实 4（Cauchy 定理，McKay 计数证明）。设 A 是有限群，p 是素数且 p 整除 |A|。断言 A 含有阶为 p 的元素。证明：令 X = {(a_1,…,a_p) ∈ A^p : a_1a_2⋯a_p = e}。给定前 p−1 个坐标，最后一个坐标被唯一确定为 (a_1⋯a_(p−1))⁻¹，故 |X| = |A|^(p−1)；因 p 整除 |A| 且 p−1 ≥ 1，故 p 整除 |X|。让 p 阶循环群 C_p = ⟨σ⟩ 作用在 X 上：σ·(a_1,…,a_p) = (a_2,…,a_p,a_1)。先验这是良定义的作用。① X 对移位封闭：设 a_1a_2⋯a_p = e，令 b = a_2⋯a_p，则 a_1b = e，两边左乘 a_1⁻¹ 得 b = a_1⁻¹；于是移位后的乘积 a_2⋯a_p a_1 = b·a_1 = a_1⁻¹a_1 = e，故 (a_2,…,a_p,a_1) ∈ X（这一步只用到结合律与逆元的定义，没有用到交换性）。② σ^p 是恒等映射：连续移位 p 次把每个坐标送回原位。③ 幂作用相容：σ^i·(σ^j·x) 与 σ^(i+j)·x 都把 x 的第 k 个坐标移到第 k+i+j 个位置（下标模 p），故相等。于是 C_p 作用在 X 上。X 的不动点满足 (a_1,…,a_p) = (a_2,…,a_p,a_1)，即坐标全相等的元素 (a,…,a)，而条件 a_1⋯a_p = e 此时变为 a^p = e；故 Fix_(C_p)(X) 与 {a ∈ A : a^p = e} 基数相同。由事实 3（|C_p| = p 是 p-群）得 |{a ∈ A : a^p = e}| ≡ |X| ≡ 0 (mod p)。单位元满足 a^p = e，故该集合非空，其基数被 p 整除，于是至少含 p 个元素，从而存在 a ≠ e 且 a^p = e；a 的阶整除 p 且不为 1，故为 p。（前提）\n6. 事实 5（共轭类与类方程）。设 A 是有限群，Z(A) 记中心。对 a ∈ A 记中心化子 C_A(a) = {g ∈ A : gag⁻¹ = a}。关系「a 与 b 共轭」（存在 g 使 b = gag⁻¹）是等价关系：自反性取 g = e；对称性由 b = gag⁻¹ 得 a = g⁻¹bg；传递性由 b = gag⁻¹ 与 c = hbh⁻¹ 得 c = (hg)a(hg)⁻¹。A 经共轭作用在自身上（g·a = gag⁻¹），共轭类就是轨道，a 的稳定化子正是 C_A(a)（g·a = a 等价于 gag⁻¹ = a）。由事实 2，a 的共轭类长度等于 [A:C_A(a)]。a 属于 Z(A) 当且仅当它的共轭类只含 a 自身。取全部非中心共轭类的代表元 x_1,…,x_r，则 A 是 Z(A) 与这些共轭类的不交并，于是 |A| = |Z(A)| + Σ_(i=1..r) [A:C_A(x_i)]。又每个 x_i 不在中心，故 C_A(x_i) 是 A 的真子群，由事实 1 得 [A:C_A(x_i)] > 1 且整除 |A|。（前提）\n7. 事实 6（强归纳假设）。本稿对有限群的阶做强归纳，所断言的命题是：对任意有限群 A 与素数 q，若 q^b 是 |A| 的 q-部分（即 |A| = q^b·m' 且 q 不整除 m'），则 A 有阶为 q^b 的子群。本步把「该断言对所有满足 |A| < |G| 的有限群 A 成立」声明为归纳前提；下文 (E) 的证明将以它为依据，并且总在比 G 更小的群（真子群或真商群）上使用它。（前提）\n8. 事实 7（p-Sylow 子群的正规化子）。设 P ≤ G 且 |P| = p^a —— 本步的前提是 |P| = p^a（P 是 G 的 p-Sylow 子群），而不是「P 是任意子群」。记 N_G(P) = {g ∈ G : gPg⁻¹ = P}。它是 G 的子群：e ∈ N_G(P)；若 g, h ∈ N_G(P) 则 (gh)P(gh)⁻¹ = g(hPh⁻¹)g⁻¹ = gPg⁻¹ = P；若 g ∈ N_G(P) 则 g⁻¹Pg = g⁻¹(gPg⁻¹)g = P。又对每个 p_0 ∈ P 有 p_0Pp_0⁻¹ = P（左乘 p_0 把 P 双射到自身），故 P ≤ N_G(P)。由事实 1，|P| 整除 |N_G(P)|，且 |N_G(P)| 整除 |G|。代入 |P| = p^a 与 |G| = p^a·m 得 |N_G(P)| = p^a·d，其中 d 是正整数且 d 整除 m；由于 p ∤ m 且 d | m，得 p ∤ d，于是 p^a 整除 |N_G(P)| 且恰是 |N_G(P)| 的 p-部分。又由事实 1，[N_G(P):P] = |N_G(P)|/|P| = d，故 [N_G(P):P] 整除 m 且与 p 互素。（前提）\n9. (E) 的证明，情形一：a = 0。此时 n = p^0 = 1。平凡子群 {e} 是 G 的子群且阶为 1 = n，故 (E) 成立。附带说明此情形下的唯一性：若 H ≤ G 且 |H| = 1，则 H = {e}，故阶为 1 的子群只有平凡子群一个。（前提）\n10. (E) 的证明，情形二：a ≥ 1 且存在真子群 H < G 使 p^a 整除 |H|。此时 |H| < |G|；又由事实 1，|H| 整除 |G| = p^a·m，故 |H| = p^a·m_1 且 m_1 整除 m，于是 p^a 恰是 |H| 的 p-部分（因 p ∤ m 从而 p ∤ m_1）。由事实 6（归纳假设，|H| < |G|）H 有阶为 p^a 的子群 K；子群的子群仍是 G 的子群，故 K 是 G 的阶为 p^a 的子群，(E) 成立。（前提）\n11. (E) 的证明，情形三的先导计算：a ≥ 1 且每个真子群 K < G 都满足 p^a 不整除 |K|。先证 p 整除 |Z(G)|。由事实 5 的类方程 |G| = |Z(G)| + Σ_(i=1..r) [G:C_G(x_i)]，其中 x_i 取遍非中心共轭类的代表元。对每个 i，x_i 不在中心，故 C_G(x_i) 是 G 的真子群，由本情形的假设 p^a 不整除 |C_G(x_i)|；又由事实 1，|C_G(x_i)| 整除 |G| = p^a·m，故 |C_G(x_i)| 的 p-部分为 p^(b_i) 且 b_i ≤ a−1，于是 [G:C_G(x_i)] = |G|/|C_G(x_i)| 的 p-部分为 p^(a−b_i) 且 a−b_i ≥ 1，即 p 整除 [G:C_G(x_i)]。又 a ≥ 1，故 p 整除 |G| = p^a·m。于是把类方程两边模 p 得 0 ≡ |Z(G)| (mod p)，即 p 整除 |Z(G)|。（前提）\n12. (E) 的证明，情形三的主论证（续情形三）。由上一步：若 G 非交换，则 p 整除 |Z(G)|，对有限群 Z(G) 用事实 4（Cauchy 定理）得存在 z ∈ Z(G) 其阶为 p；若 G 交换，则 Z(G) = G 且 p 整除 |G| = p^a·m，由事实 4 得存在 z ∈ G = Z(G) 其阶为 p。两种情形都得到阶为 p 的中心元 z。令 N_0 = ⟨z⟩ = {z^j : 0 ≤ j ≤ p−1}，由 z 的阶为 p 得 |N_0| = p。因 z ∈ Z(G)，对任意 g ∈ G 有 gN_0g⁻¹ = ⟨gzg⁻¹⟩ = ⟨z⟩ = N_0，故 N_0 是 G 的正规子群。下面就地推出商群与纤维计数，只用到事实 1 与群的定义，不引用第一同构定理。(a) 商群：在左陪集集合 G/N_0 = {gN_0 : g ∈ G} 上定义乘法 (gN_0)(hN_0) := ghN_0。良定义：若 gN_0 = g'N_0 且 hN_0 = h'N_0，则 g' = gn_1、h' = hn_2，其中 n_1, n_2 ∈ N_0；由 N_0 正规，h⁻¹n_1h ∈ N_0，于是 g'h' = gn_1hn_2 = gh(h⁻¹n_1h)n_2 ∈ ghN_0，故 g'h'N_0 = ghN_0。结合律由 G 的结合律得到；单位元是 N_0 = eN_0；gN_0 的逆元是 g⁻¹N_0。故 G/N_0 是群。由事实 1，|G/N_0| = [G:N_0] = |G|/|N_0| = p^a·m/p = p^(a−1)·m。(b) 商映射 π: G → G/N_0，π(g) = gN_0 是同态：π(gh) = ghN_0 = (gN_0)(hN_0) = π(g)π(h)，且 π(e) = N_0 是 G/N_0 的单位元。(c) 因 a ≥ 1 得 |G/N_0| = p^(a−1)·m < p^a·m = |G|，且 p 不整除 m，故 p^(a−1) 是 G/N_0 的 p-部分；由事实 6（归纳假设）存在 G/N_0 的阶为 p^(a−1) 的子群 H̄。令 H = π⁻¹(H̄) = {x ∈ G : π(x) ∈ H̄}。H 是 G 的子群：由 π(e) = N_0 ∈ H̄ 得 e ∈ H；若 x, y ∈ H 则 π(xy) = π(x)π(y) ∈ H̄，故 xy ∈ H；若 x ∈ H 则 π(x⁻¹) = π(x)⁻¹ ∈ H̄，故 x⁻¹ ∈ H。又 N_0 ≤ H：对 n ∈ N_0 有 π(n) = nN_0 = N_0 ∈ H̄，故 n ∈ H。(d) 对每个 ḡ ∈ H̄ 取 g ∈ H 使 π(g) = ḡ（由 H 的定义这样的 g 存在），断言 H 中满足 π(x) = ḡ 的 x 全体恰为 gN_0：若 x ∈ H 且 π(x) = π(g)，则 π(g⁻¹x) = π(g)⁻¹π(x) = N_0，即 g⁻¹x ∈ N_0，故 x ∈ gN_0；反之若 x = gn 而 n ∈ N_0，则由 g ∈ H 与 N_0 ≤ H 得 x ∈ H，且 π(x) = π(g)π(n) = ḡ·N_0 = ḡ。不同的 ḡ 对应的这些集合两两不交，并集为 H（每个 x ∈ H 落在 ḡ = π(x) 那一块），且每一块与 N_0 基数相同（左乘 g 给出从 N_0 到 gN_0 的双射，见事实 1 的证明）。于是 |H| = |H̄|·|N_0| = p^(a−1)·p = p^a。故 (E) 成立。（前提）\n13. (E) 的小结。对 |G| 作强归纳：a = 0 由情形一处理；a ≥ 1 时，要么存在真子群 H < G 且 p^a 整除 |H|，由情形二并借助归纳假设处理；要么每个真子群 K < G 都满足 p^a 不整除 |K|，由情形三处理（类方程给出 p 整除 |Z(G)|，Cauchy 定理给出中心里阶 p 的元素 z，商去正规子群 ⟨z⟩ 后由归纳假设得到阶 p^(a−1) 的子群，其原像阶为 p^a，原像的阶按第 12 步 (d) 的纤维计数得出）。这三种情形穷尽了所有可能，故 G 存在阶为 n = p^a 的子群，(E) 成立。（前提）\n14. 事实 8（p-Sylow 子群在陪集上的固定点计数）。设 P ≤ G 且 |P| = p^a（同样以 |P| = p^a 为前提）。让 P 通过左乘作用在左陪集集合 G/P 上：x·(gP) = (xg)P。这是作用：e·(gP) = gP；x·(y·(gP)) = (xy)·(gP)；且 (xg)P 只依赖 gP（若 gP = g'P 则 g' = gb，b ∈ P，于是 xg'P = xgbP = xgP）。由事实 1，|G/P| = [G:P] = |G|/|P| = m。计算不动点：gP ∈ Fix_P(G/P) 当且仅当对每个 x ∈ P 有 xgP = gP 当且仅当对每个 x ∈ P 有 g⁻¹xg ∈ P 当且仅当 g⁻¹Pg ⊆ P；由于 g⁻¹Pg 与 P 是基数相同的有限集，「g⁻¹Pg ⊆ P」等价于 g⁻¹Pg = P，即 g ∈ N_G(P)。故 Fix_P(G/P) = {gP : g ∈ N_G(P)}，把 N_G(P) 按 P 的右陪集分块即知它的基数等于 [N_G(P):P]。由事实 3（|P| = p^a 是 p 的幂）得 m = |G/P| ≡ [N_G(P):P] (mod p)。（前提）\n15. (C) 的证明。设 P 与 Q 是 G 的任意两个 p-Sylow 子群，即 |P| = |Q| = p^a（这类子群存在已由 (E) 给出）。让 Q 通过左乘作用在 G/P 上，如事实 8 的做法。由事实 3，|Fix_Q(G/P)| ≡ |G/P| = m (mod p)。因 p 不整除 m，故 |Fix_Q(G/P)| 不被 p 整除，特别地 Fix_Q(G/P) 非空。取 gP ∈ Fix_Q(G/P)，则对每个 x ∈ Q 有 xgP = gP，即 g⁻¹xg ∈ P，故 g⁻¹Qg ⊆ P；又 |g⁻¹Qg| = |Q| = p^a = |P| 且两者都是有限集，故 g⁻¹Qg = P，等价地 Q = gPg⁻¹。因此任两个 p-Sylow 子群共轭，(C) 成立。（前提）\n16. (N) 的证明，第一部分：n_p 整除 m。G 经共轭作用在自身的子群集合上：g·H = gHg⁻¹。这是作用（e·H = H；(gh)·H = (gh)H(gh)⁻¹ = g(hHh⁻¹)g⁻¹）。P 的轨道是 {gPg⁻¹ : g ∈ G}，由 (C) 它恰是 G 的全体 p-Sylow 子群，故轨道长度等于 n_p；P 的稳定化子是 {g : gPg⁻¹ = P} = N_G(P)。由事实 2，n_p = [G:N_G(P)] = |G|/|N_G(P)|。由事实 7，|N_G(P)| = p^a·d 且 d 整除 m，故 n_p = (p^a·m)/(p^a·d) = m/d，特别地 n_p 整除 m。（前提）\n17. (N) 的证明，第二部分：n_p ≡ 1 (mod p)。沿用事实 7 与事实 8 的记号 d = [N_G(P):P] = |N_G(P)|/p^a。由事实 8 有 m ≡ d (mod p)；由上一步有 m = n_p·d。两式合并得 n_p·d ≡ d (mod p)，即 (n_p − 1)·d ≡ 0 (mod p)。由事实 7，d 整除 m 且 p ∤ m，故 p ∤ d，于是 n_p ≡ 1 (mod p)。结合 (E)（情形一至情形三及小结）、(C) 与 (N) 的两部分，(E)(C)(N) 三条断言全部得证。（前提）",
+          "source_lit_id": null,
+          "page_range": {
+            "start": null,
+            "end": null,
+            "label": ""
+          },
+          "quote_verified": null,
+          "quote_mode": "",
+          "quote_reason": "手稿收录（D 只递指针）：命题正文、证明正文与档位全部逐字取自 `manuscripts/F/f-proof-000000.md` —— 引文面不适用（这份稿是我们自己产出的成果，不是文献里摘的）；V 的签（若有）在手稿块上",
+          "quote_span": "",
+          "quote_call_sha256": "",
+          "evidence_kind": "heuristic",
+          "bits": {
+            "numeric": "pending",
+            "proof": true,
+            "reviewed": true,
+            "formal": "pending",
+            "audited": false,
+            "origin": "own_result",
+            "evidence": {
+              "numeric": {},
+              "numeric_reason": "",
+              "proof_process": "1. 前提与记号。设 G 是有限群，|G| = p^a·m，其中 p 是素数，a ≥ 0 与 m ≥ 1 是整数，且 p 不整除 m。记 n = p^a，称 G 的阶为 n 的子群为 p-Sylow 子群，记其个数为 n_p。本步把下列约定声明为全篇前提：群的定义、子群的定义、有限集基数的基本性质、以及 |G| = p^a·m 与 p ∤ m。除此之外不使用任何未在本稿内证明的事实：下文事实 1 至事实 8 各自带完整推导，且每一步只引用它之前已经写出的句子。（前提）\n2. 事实 1（左陪集分解与 Lagrange 定理）。设 A 是有限群，B ≤ A。在 A 上定义 a ~ b 当且仅当 a⁻¹b ∈ B。这是等价关系：自反性是 a⁻¹a = e ∈ B；对称性由 a⁻¹b ∈ B 推出 b⁻¹a = (a⁻¹b)⁻¹ ∈ B（B 对取逆封闭）；传递性由 a⁻¹b ∈ B 与 b⁻¹c ∈ B 推出 a⁻¹c = (a⁻¹b)(b⁻¹c) ∈ B（B 对乘法封闭）。含 a 的等价类恰是左陪集 aB：b ~ a 当且仅当 a⁻¹b ∈ B 当且仅当 b ∈ aB。左乘给出从 B 到 aB 的双射 b ↦ ab（逆映射为 x ↦ a⁻¹x），故 |aB| = |B|。A 是两两不交的左陪集之并，设左陪集个数为 [A:B]，则 |A| = |B|·[A:B]。特别地 |B| 整除 |A|，且 [A:B] = |A|/|B|。又若 B ≤ C ≤ A，则把 A 按右陪集分成 C 的陪集、再把每个 C 陪集按 B 的陪集分块，得 [A:B] = [A:C]·[C:B]。（前提）\n3. 事实 2（轨道分解与轨道-稳定化子）。设有限群 Γ 作用在集合 X 上。对 x ∈ X 记轨道 Γ·x = {g·x : g ∈ Γ}，稳定化子 Stab(x) = {g ∈ Γ : g·x = x}。Stab(x) 是 Γ 的子群：e·x = x；若 g·x = x 与 h·x = x 则 (gh)·x = g·(h·x) = g·x = x；若 g·x = x 则 g⁻¹·x = g⁻¹·(g·x) = (g⁻¹g)·x = x。两个轨道若相交则相等：若 z = g·x = h·y，则对任意 g' 有 g'·x = (g'g⁻¹h)·y ∈ Γ·y。故 X 是轨道的不交并。映射 φ 把左陪集 g·Stab(x) 送到 g·x 是良定义的双射：若 g·Stab(x) = h·Stab(x) 则 h⁻¹g ∈ Stab(x)，故 g·x = h·x；反之若 g·x = h·x 则 h⁻¹g·x = x，故 h⁻¹g ∈ Stab(x)，两个左陪集相等；满射按轨道定义成立。由事实 1，|Γ·x| = [Γ:Stab(x)] = |Γ|/|Stab(x)|，特别地轨道长整除 |Γ|。（前提）\n4. 事实 3（p-群作用的固定点同余）。设 Γ 是有限 p-群，即 |Γ| = p^s（允许 s = 0，此时 Γ 是平凡群），Γ 作用在有限集 X 上。记 Fix_Γ(X) = {x ∈ X : 对每个 g ∈ Γ 都有 g·x = x}。断言 |X| ≡ |Fix_Γ(X)| (mod p)。证明：由事实 2，X 是轨道的不交并。长度等于 1 的轨道恰由固定点组成，即 Fix_Γ(X)。设某轨道长度大于 1 并取其中一点 x，则 Stab(x) ≠ Γ（否则该轨道长度为 1），由事实 1 与事实 2 得该轨道长度 = |Γ|/|Stab(x)| = p^t 且 t ≥ 1（Stab(x) 是 Γ 的真子群，其阶与指数都是 p 的正幂），从而该轨道长度被 p 整除。于是 |X| 等于 |Fix_Γ(X)| 加上若干被 p 整除的整数，同余式成立。s = 0 时 Γ 只有单位元，Fix_Γ(X) = X，同余式以等号成立。（前提）\n5. 事实 4（Cauchy 定理，McKay 计数证明）。设 A 是有限群，p 是素数且 p 整除 |A|。断言 A 含有阶为 p 的元素。证明：令 X = {(a_1,…,a_p) ∈ A^p : a_1a_2⋯a_p = e}。给定前 p−1 个坐标，最后一个坐标被唯一确定为 (a_1⋯a_(p−1))⁻¹，故 |X| = |A|^(p−1)；因 p 整除 |A| 且 p−1 ≥ 1，故 p 整除 |X|。让 p 阶循环群 C_p = ⟨σ⟩ 作用在 X 上：σ·(a_1,…,a_p) = (a_2,…,a_p,a_1)。先验这是良定义的作用。① X 对移位封闭：设 a_1a_2⋯a_p = e，令 b = a_2⋯a_p，则 a_1b = e，两边左乘 a_1⁻¹ 得 b = a_1⁻¹；于是移位后的乘积 a_2⋯a_p a_1 = b·a_1 = a_1⁻¹a_1 = e，故 (a_2,…,a_p,a_1) ∈ X（这一步只用到结合律与逆元的定义，没有用到交换性）。② σ^p 是恒等映射：连续移位 p 次把每个坐标送回原位。③ 幂作用相容：σ^i·(σ^j·x) 与 σ^(i+j)·x 都把 x 的第 k 个坐标移到第 k+i+j 个位置（下标模 p），故相等。于是 C_p 作用在 X 上。X 的不动点满足 (a_1,…,a_p) = (a_2,…,a_p,a_1)，即坐标全相等的元素 (a,…,a)，而条件 a_1⋯a_p = e 此时变为 a^p = e；故 Fix_(C_p)(X) 与 {a ∈ A : a^p = e} 基数相同。由事实 3（|C_p| = p 是 p-群）得 |{a ∈ A : a^p = e}| ≡ |X| ≡ 0 (mod p)。单位元满足 a^p = e，故该集合非空，其基数被 p 整除，于是至少含 p 个元素，从而存在 a ≠ e 且 a^p = e；a 的阶整除 p 且不为 1，故为 p。（前提）\n6. 事实 5（共轭类与类方程）。设 A 是有限群，Z(A) 记中心。对 a ∈ A 记中心化子 C_A(a) = {g ∈ A : gag⁻¹ = a}。关系「a 与 b 共轭」（存在 g 使 b = gag⁻¹）是等价关系：自反性取 g = e；对称性由 b = gag⁻¹ 得 a = g⁻¹bg；传递性由 b = gag⁻¹ 与 c = hbh⁻¹ 得 c = (hg)a(hg)⁻¹。A 经共轭作用在自身上（g·a = gag⁻¹），共轭类就是轨道，a 的稳定化子正是 C_A(a)（g·a = a 等价于 gag⁻¹ = a）。由事实 2，a 的共轭类长度等于 [A:C_A(a)]。a 属于 Z(A) 当且仅当它的共轭类只含 a 自身。取全部非中心共轭类的代表元 x_1,…,x_r，则 A 是 Z(A) 与这些共轭类的不交并，于是 |A| = |Z(A)| + Σ_(i=1..r) [A:C_A(x_i)]。又每个 x_i 不在中心，故 C_A(x_i) 是 A 的真子群，由事实 1 得 [A:C_A(x_i)] > 1 且整除 |A|。（前提）\n7. 事实 6（强归纳假设）。本稿对有限群的阶做强归纳，所断言的命题是：对任意有限群 A 与素数 q，若 q^b 是 |A| 的 q-部分（即 |A| = q^b·m' 且 q 不整除 m'），则 A 有阶为 q^b 的子群。本步把「该断言对所有满足 |A| < |G| 的有限群 A 成立」声明为归纳前提；下文 (E) 的证明将以它为依据，并且总在比 G 更小的群（真子群或真商群）上使用它。（前提）\n8. 事实 7（p-Sylow 子群的正规化子）。设 P ≤ G 且 |P| = p^a —— 本步的前提是 |P| = p^a（P 是 G 的 p-Sylow 子群），而不是「P 是任意子群」。记 N_G(P) = {g ∈ G : gPg⁻¹ = P}。它是 G 的子群：e ∈ N_G(P)；若 g, h ∈ N_G(P) 则 (gh)P(gh)⁻¹ = g(hPh⁻¹)g⁻¹ = gPg⁻¹ = P；若 g ∈ N_G(P) 则 g⁻¹Pg = g⁻¹(gPg⁻¹)g = P。又对每个 p_0 ∈ P 有 p_0Pp_0⁻¹ = P（左乘 p_0 把 P 双射到自身），故 P ≤ N_G(P)。由事实 1，|P| 整除 |N_G(P)|，且 |N_G(P)| 整除 |G|。代入 |P| = p^a 与 |G| = p^a·m 得 |N_G(P)| = p^a·d，其中 d 是正整数且 d 整除 m；由于 p ∤ m 且 d | m，得 p ∤ d，于是 p^a 整除 |N_G(P)| 且恰是 |N_G(P)| 的 p-部分。又由事实 1，[N_G(P):P] = |N_G(P)|/|P| = d，故 [N_G(P):P] 整除 m 且与 p 互素。（前提）\n9. (E) 的证明，情形一：a = 0。此时 n = p^0 = 1。平凡子群 {e} 是 G 的子群且阶为 1 = n，故 (E) 成立。附带说明此情形下的唯一性：若 H ≤ G 且 |H| = 1，则 H = {e}，故阶为 1 的子群只有平凡子群一个。（前提）\n10. (E) 的证明，情形二：a ≥ 1 且存在真子群 H < G 使 p^a 整除 |H|。此时 |H| < |G|；又由事实 1，|H| 整除 |G| = p^a·m，故 |H| = p^a·m_1 且 m_1 整除 m，于是 p^a 恰是 |H| 的 p-部分（因 p ∤ m 从而 p ∤ m_1）。由事实 6（归纳假设，|H| < |G|）H 有阶为 p^a 的子群 K；子群的子群仍是 G 的子群，故 K 是 G 的阶为 p^a 的子群，(E) 成立。（前提）\n11. (E) 的证明，情形三的先导计算：a ≥ 1 且每个真子群 K < G 都满足 p^a 不整除 |K|。先证 p 整除 |Z(G)|。由事实 5 的类方程 |G| = |Z(G)| + Σ_(i=1..r) [G:C_G(x_i)]，其中 x_i 取遍非中心共轭类的代表元。对每个 i，x_i 不在中心，故 C_G(x_i) 是 G 的真子群，由本情形的假设 p^a 不整除 |C_G(x_i)|；又由事实 1，|C_G(x_i)| 整除 |G| = p^a·m，故 |C_G(x_i)| 的 p-部分为 p^(b_i) 且 b_i ≤ a−1，于是 [G:C_G(x_i)] = |G|/|C_G(x_i)| 的 p-部分为 p^(a−b_i) 且 a−b_i ≥ 1，即 p 整除 [G:C_G(x_i)]。又 a ≥ 1，故 p 整除 |G| = p^a·m。于是把类方程两边模 p 得 0 ≡ |Z(G)| (mod p)，即 p 整除 |Z(G)|。（前提）\n12. (E) 的证明，情形三的主论证（续情形三）。由上一步：若 G 非交换，则 p 整除 |Z(G)|，对有限群 Z(G) 用事实 4（Cauchy 定理）得存在 z ∈ Z(G) 其阶为 p；若 G 交换，则 Z(G) = G 且 p 整除 |G| = p^a·m，由事实 4 得存在 z ∈ G = Z(G) 其阶为 p。两种情形都得到阶为 p 的中心元 z。令 N_0 = ⟨z⟩ = {z^j : 0 ≤ j ≤ p−1}，由 z 的阶为 p 得 |N_0| = p。因 z ∈ Z(G)，对任意 g ∈ G 有 gN_0g⁻¹ = ⟨gzg⁻¹⟩ = ⟨z⟩ = N_0，故 N_0 是 G 的正规子群。下面就地推出商群与纤维计数，只用到事实 1 与群的定义，不引用第一同构定理。(a) 商群：在左陪集集合 G/N_0 = {gN_0 : g ∈ G} 上定义乘法 (gN_0)(hN_0) := ghN_0。良定义：若 gN_0 = g'N_0 且 hN_0 = h'N_0，则 g' = gn_1、h' = hn_2，其中 n_1, n_2 ∈ N_0；由 N_0 正规，h⁻¹n_1h ∈ N_0，于是 g'h' = gn_1hn_2 = gh(h⁻¹n_1h)n_2 ∈ ghN_0，故 g'h'N_0 = ghN_0。结合律由 G 的结合律得到；单位元是 N_0 = eN_0；gN_0 的逆元是 g⁻¹N_0。故 G/N_0 是群。由事实 1，|G/N_0| = [G:N_0] = |G|/|N_0| = p^a·m/p = p^(a−1)·m。(b) 商映射 π: G → G/N_0，π(g) = gN_0 是同态：π(gh) = ghN_0 = (gN_0)(hN_0) = π(g)π(h)，且 π(e) = N_0 是 G/N_0 的单位元。(c) 因 a ≥ 1 得 |G/N_0| = p^(a−1)·m < p^a·m = |G|，且 p 不整除 m，故 p^(a−1) 是 G/N_0 的 p-部分；由事实 6（归纳假设）存在 G/N_0 的阶为 p^(a−1) 的子群 H̄。令 H = π⁻¹(H̄) = {x ∈ G : π(x) ∈ H̄}。H 是 G 的子群：由 π(e) = N_0 ∈ H̄ 得 e ∈ H；若 x, y ∈ H 则 π(xy) = π(x)π(y) ∈ H̄，故 xy ∈ H；若 x ∈ H 则 π(x⁻¹) = π(x)⁻¹ ∈ H̄，故 x⁻¹ ∈ H。又 N_0 ≤ H：对 n ∈ N_0 有 π(n) = nN_0 = N_0 ∈ H̄，故 n ∈ H。(d) 对每个 ḡ ∈ H̄ 取 g ∈ H 使 π(g) = ḡ（由 H 的定义这样的 g 存在），断言 H 中满足 π(x) = ḡ 的 x 全体恰为 gN_0：若 x ∈ H 且 π(x) = π(g)，则 π(g⁻¹x) = π(g)⁻¹π(x) = N_0，即 g⁻¹x ∈ N_0，故 x ∈ gN_0；反之若 x = gn 而 n ∈ N_0，则由 g ∈ H 与 N_0 ≤ H 得 x ∈ H，且 π(x) = π(g)π(n) = ḡ·N_0 = ḡ。不同的 ḡ 对应的这些集合两两不交，并集为 H（每个 x ∈ H 落在 ḡ = π(x) 那一块），且每一块与 N_0 基数相同（左乘 g 给出从 N_0 到 gN_0 的双射，见事实 1 的证明）。于是 |H| = |H̄|·|N_0| = p^(a−1)·p = p^a。故 (E) 成立。（前提）\n13. (E) 的小结。对 |G| 作强归纳：a = 0 由情形一处理；a ≥ 1 时，要么存在真子群 H < G 且 p^a 整除 |H|，由情形二并借助归纳假设处理；要么每个真子群 K < G 都满足 p^a 不整除 |K|，由情形三处理（类方程给出 p 整除 |Z(G)|，Cauchy 定理给出中心里阶 p 的元素 z，商去正规子群 ⟨z⟩ 后由归纳假设得到阶 p^(a−1) 的子群，其原像阶为 p^a，原像的阶按第 12 步 (d) 的纤维计数得出）。这三种情形穷尽了所有可能，故 G 存在阶为 n = p^a 的子群，(E) 成立。（前提）\n14. 事实 8（p-Sylow 子群在陪集上的固定点计数）。设 P ≤ G 且 |P| = p^a（同样以 |P| = p^a 为前提）。让 P 通过左乘作用在左陪集集合 G/P 上：x·(gP) = (xg)P。这是作用：e·(gP) = gP；x·(y·(gP)) = (xy)·(gP)；且 (xg)P 只依赖 gP（若 gP = g'P 则 g' = gb，b ∈ P，于是 xg'P = xgbP = xgP）。由事实 1，|G/P| = [G:P] = |G|/|P| = m。计算不动点：gP ∈ Fix_P(G/P) 当且仅当对每个 x ∈ P 有 xgP = gP 当且仅当对每个 x ∈ P 有 g⁻¹xg ∈ P 当且仅当 g⁻¹Pg ⊆ P；由于 g⁻¹Pg 与 P 是基数相同的有限集，「g⁻¹Pg ⊆ P」等价于 g⁻¹Pg = P，即 g ∈ N_G(P)。故 Fix_P(G/P) = {gP : g ∈ N_G(P)}，把 N_G(P) 按 P 的右陪集分块即知它的基数等于 [N_G(P):P]。由事实 3（|P| = p^a 是 p 的幂）得 m = |G/P| ≡ [N_G(P):P] (mod p)。（前提）\n15. (C) 的证明。设 P 与 Q 是 G 的任意两个 p-Sylow 子群，即 |P| = |Q| = p^a（这类子群存在已由 (E) 给出）。让 Q 通过左乘作用在 G/P 上，如事实 8 的做法。由事实 3，|Fix_Q(G/P)| ≡ |G/P| = m (mod p)。因 p 不整除 m，故 |Fix_Q(G/P)| 不被 p 整除，特别地 Fix_Q(G/P) 非空。取 gP ∈ Fix_Q(G/P)，则对每个 x ∈ Q 有 xgP = gP，即 g⁻¹xg ∈ P，故 g⁻¹Qg ⊆ P；又 |g⁻¹Qg| = |Q| = p^a = |P| 且两者都是有限集，故 g⁻¹Qg = P，等价地 Q = gPg⁻¹。因此任两个 p-Sylow 子群共轭，(C) 成立。（前提）\n16. (N) 的证明，第一部分：n_p 整除 m。G 经共轭作用在自身的子群集合上：g·H = gHg⁻¹。这是作用（e·H = H；(gh)·H = (gh)H(gh)⁻¹ = g(hHh⁻¹)g⁻¹）。P 的轨道是 {gPg⁻¹ : g ∈ G}，由 (C) 它恰是 G 的全体 p-Sylow 子群，故轨道长度等于 n_p；P 的稳定化子是 {g : gPg⁻¹ = P} = N_G(P)。由事实 2，n_p = [G:N_G(P)] = |G|/|N_G(P)|。由事实 7，|N_G(P)| = p^a·d 且 d 整除 m，故 n_p = (p^a·m)/(p^a·d) = m/d，特别地 n_p 整除 m。（前提）\n17. (N) 的证明，第二部分：n_p ≡ 1 (mod p)。沿用事实 7 与事实 8 的记号 d = [N_G(P):P] = |N_G(P)|/p^a。由事实 8 有 m ≡ d (mod p)；由上一步有 m = n_p·d。两式合并得 n_p·d ≡ d (mod p)，即 (n_p − 1)·d ≡ 0 (mod p)。由事实 7，d 整除 m 且 p ∤ m，故 p ∤ d，于是 n_p ≡ 1 (mod p)。结合 (E)（情形一至情形三及小结）、(C) 与 (N) 的两部分，(E)(C)(N) 三条断言全部得证。（前提）",
+              "proof_source": "own",
+              "reviewed_by": {
+                "verifier": "V",
+                "verification_id": "u-000007",
+                "round": null,
+                "verdict": "成立",
+                "evidence": "verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007",
+                "findings": [],
+                "proof_no": 1,
+                "proof_sha256": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a"
+              },
+              "reviewed_source": "",
+              "formal": {},
+              "formal_reason": "",
+              "audited_by": {},
+              "optimized_by_proof": {
+                "1": false
+              },
+              "reviewed_by_proof": {
+                "1": true
+              },
+              "reviewed_sha_by_proof": {
+                "1": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a"
+              }
+            },
+            "voided_by": {},
+            "grade": "pre_theorem",
+            "audited_badge": false
+          },
+          "status": "active",
+          "derived_from": [],
+          "aliases": [],
+          "doc_id": null,
+          "line_range": {
+            "start": null,
+            "end": null,
+            "label": "manuscripts/F/f-proof-000000.md"
+          },
+          "created_at": "2026-11-24T05:16:35+08:00",
+          "created_by": "secretary-B",
+          "_proposition_adjudication": {
+            "checked": true,
+            "attempted": true,
+            "verdict": "different",
+            "canonical_name": "Sylow 定理（存在性、共轭性、计数）",
+            "same_as": "",
+            "basis": "条件：本命题为有限群 G 且 |G|=p^a·m、p 素数、p∤m、n=p^a；候选 000064 为有限群、p 素数、给定 P 是 G 的一个 Sylow p-子群，条件强弱与焦点不同。；结论：本命题结论是存在阶 n 子群、任两阶 n 子群共轭、n_p≡1 (mod p) 且 n_p|m；候选 000064 结论是 P 唯一当且仅当 P 正规，并附交换群特例，结论不同。；候选 stmt_id 000064 只覆盖 Sylow 子群唯一性/正规性这一侧面，不覆盖本命题的存在、共轭、计数三组结论。；候选定理讲的是给定 Sylow p-子群时唯一性与正规性的等价，而本命题讲 Sylow 子群的存在、共轭与计数，条件与结论均不一致。",
+            "reason": "候选定理讲的是给定 Sylow p-子群时唯一性与正规性的等价，而本命题讲 Sylow 子群的存在、共轭与计数，条件与结论均不一致。",
+            "reused": false,
+            "seam_source": "secretary（LlmSeam.for_secretary）",
+            "seam_attempted": true,
+            "at": "2026-11-24T05:16:35+08:00"
+          },
+          "proof_authors": [
+            "F"
+          ],
+          "proof_no": 1,
+          "proof_sha256": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a",
+          "manuscript_id": "000000",
+          "manuscripts": {
+            "1": "manuscripts/F/f-proof-000000.md"
+          },
+          "_grade_recomputed": {
+            "checked": true,
+            "from": "conjecture",
+            "to": "pre_theorem",
+            "from_kind": "heuristic",
+            "to_kind": "proof_review",
+            "channel": "text",
+            "why": "V 的签刚落位：这一行有证明正文，且台账里那一签盖住的就是现行这一版 ⇒ 按五元位现算等级（只算等级，不写档位）；历史列 `evidence_kind`=heuristic 只是读数，判定面读 `pre_theorem`",
+            "basis": "verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007",
+            "proof_no": 1,
+            "at": "2026-11-24T05:16:35+08:00"
+          },
+          "_kind_upgrade": {
+            "from": "conjecture",
+            "to": "theorem",
+            "basis": "out/vsigns/add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a.json#u-000007 · 台账 verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007",
+            "grade": "pre_theorem",
+            "by": "agent-B",
+            "at": "2026-11-24T05:16:35+08:00"
+          },
+          "proof_routes": {},
+          "route": ""
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "id": "000065",
+          "id_field": "stmt_id",
+          "found": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 70144,
+        "prompt_cache_miss_tokens": 5642,
+        "tokens_in": 75786,
+        "tokens_out": 1270,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000153"
+    },
+    {
+      "index": 3,
+      "shape": "final",
+      "payload": {
+        "final": "已按 D 的委托把 F 的 f-proof-000000 登记成命题行（只递指针，正文与等级从稿里读，未补写一个字）。\n\n【结果】stmt_id = **000065**（register.new_row=false：落到已有的 000065 行；conjecture_ledger.landing.matches=[\"000065\"]、promoted_to_statement=000065）。现算等级 = **pre_theorem**（_grade_recomputed：conjecture→pre_theorem，heuristic→proof_review，依据 verifications/pending/a7bcc2c9…jsonl#u-000007）；kind = **theorem**（V 签落位后由 conjecture 升档，_kind_upgrade.from=conjecture,to=theorem）。秘书档位 = T3（nontriviality_record.label=T3，path_group=1）。标签被洗：F 攻坚 000001 子目标 s1 → Sylow 定理（存在性、共轭性、计数）。\n\n【正文/证明】statement_full 与 proof_text 都逐字取自稿的 ## 命题 / ## 证明（proof_vs_source.matched=proof_body、same=true、7757 字，只归一了换行）。依赖面：稿的 ## 依赖 是空表 ⇒ 依赖边 0 条（deps_state=none_in_proof，diff.requested_not_filled=[dependencies]，自足证明合法）。\n\n【V 签那一格：认领得上】三处证据：① sign_filing.filed=true；② v_sign.applied=true、artifact_sha=add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a 与你给的正文 sha 逐字相符；③ registration_settled 原话「000065#p1 已经入库（有正文、reviewed=true）⇒ 义务已清」，板上 t-000145 由框架自动 completed（不需要也不能靠 ack）。\n\n【对不上的格子，逐格点名（没有一格要补正文）】① data.manuscript.sign={found:false,signed:false,state:\"\"} —— register 这一格没从稿里读出签块（它按 V 的签发信封/pending 台账认的），与稿头 - V 签：已签=true；判词=成立 字面不一致；② pending_claim={already:false,bound:false,why:\"这一笔没有认到 pending 台账上的签\"}，而同一笔 sign_filing.filed=true —— 两格口径不同（领取 vs 落位），读数不一致；③ kind_crosscheck=mismatch：稿头「命题类型：conjecture」vs 台账 kind=theorem，按规则以台账为准，我没有手改；④ 两个 sha 不是一回事（口径说明，不是毛病）：V 签的正文 sha=add7f62c…（= 稿头「正文sha」），盘上字节 sha256=36be2374…（整份文件含页头元信息）。\n\n【二阶段欠账，逐条点名】**000065#p1，bits.evidence.optimized_by_proof[\"1\"]=false** —— 这一份是 F 原版的逐字机械录入，还没洗。我这一趟没开副本，卡点说清：剩余预算 1.30 美元，而洗一份 7757 字正文要走 open_polish_copy → 重写正文 → 派 V 重签 → 精准替换 四步；本侧改正文只有 land_manuscript 能渲染 b-proof（该族不许我手写），一旦起手而没盖上这一版的签，就会留下一份未签的 b-proof 稿，按收工门反而挡收工。所以停在这里如实交回：请排一次专门的优化委托（或续预算），我按同一入口接着洗。",
+        "evidence": [
+          "stmt:000065",
+          "manuscripts/F/f-proof-000000.md",
+          "lit:none",
+          "verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007",
+          "task:t-000145"
+        ],
+        "notify": {
+          "to": "D",
+          "summary": "F 的 f-proof-000000 已登记为 stmt:000065（等级 pre_theorem、kind theorem、V 签认领得上）；000065#p1 二阶段未洗，卡点与逐格对账一并交回",
+          "body": "## 做了什么\n按你的委托，只递指针把 F 的 `manuscripts/F/f-proof-000000.md` 登记成命题（`own.register_statement`，`proof_manuscript` 指路、未传 `statement_full` / `proof_text`，未补写任何正文）。\n\n- **stmt_id = 000065**（`register.new_row=false`：落到已有的 000065 行；`conjecture_ledger.landing.matches=[\"000065\"]`、`promoted_to_statement=000065`）\n- **等级 = pre_theorem**（现算：`_grade_recomputed` conjecture→pre_theorem、heuristic→proof_review，依据 `verifications/pending/a7bcc2c9…jsonl#u-000007`）。`evidence_kind=heuristic` 只是历史列读数。\n- **kind = theorem**（V 签落位后由 conjecture 升档：`_kind_upgrade.from=conjecture,to=theorem`）；秘书档位 **T3**（`nontriviality_record.label=T3`，path_group=1）。\n- 标签被洗：`F 攻坚 000001 子目标 s1` → `Sylow 定理（存在性、共轭性、计数）`（留痕 `label_washed`）。\n- 正文面：`statement_full` / `proof_text` 逐字取自稿的 `## 命题` / `## 证明`（`proof_vs_source.matched=proof_body`、`same=true`、7757 字）；`## 依赖` 是空表 ⇒ 依赖边 0 条（`deps_state=none_in_proof`，`diff.requested_not_filled=[dependencies]`，自足证明合法）。\n\n## V 签那一格：认领得上\n① `sign_filing.filed=true`；② `v_sign.applied=true`，`artifact_sha=add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a` 与你给的正文 sha 逐字相符；③ `registration_settled` 原话「000065#p1 已经入库（有正文、reviewed=true）⇒ 义务已清」，板上 `t-000145` 由框架自动 completed（ack 不必要）。\n\n## 对不上的格子（逐格点名，均不需要补正文）\n1. `data.manuscript.sign={found:false,signed:false,state:\"\"}`：register 这一格没从稿里读出签块（按 V 的签发信封 / pending 台账认的），与稿头 `- V 签：已签=true；判词=成立…` 字面不一致；\n2. `pending_claim={already:false,bound:false,why=\"这一笔没有认到 pending 台账上的签\"}` 与同一笔的 `sign_filing.filed=true` 口径不同（领取 vs 落位），读数不一致；\n3. `kind_crosscheck=mismatch`：稿头「命题类型：conjecture」vs 台账 `kind=theorem`，以台账为准，我没有手改；\n4. 两个 sha 的分工（口径说明）：V 签的**正文** sha=`add7f62c…`；盘上**字节** sha256=`36be2374…`（整份文件含页头元信息）—— 收录比的是正文，`matched=proof_body`。\n\n## 二阶段（逐个优化）欠账，逐条点名\n- **000065#p1**，`bits.evidence.optimized_by_proof[\"1\"]=false` ⇒ 这一份是 F 原版的逐字机械录入，**还没洗**。\n- 卡在哪：剩余预算 1.30 美元；洗稿四步（`open_polish_copy` → 重写正文 → 派 V 重签 → 精准替换）里，正文的落稿只有 `land_manuscript` 能渲染 `b-proof` 族（该族不许我手写）。一旦起手而没盖上这一版的签，就会留下一份**未签的 b-proof 稿**，按收工门反而挡收工 —— 所以我没有起手，把它如实交回。\n\n## 要你做什么\n请把 000065#p1 的二阶段排成一次专门的优化委托（或续预算）。入口我这边已经清楚：`open_polish_copy(000065)` → 洗 → `V.verify_proof`（带 `proof_manuscript`）→ `ingest_manuscript(mode=apply,target_stmt_id=000065,cells=[proof_text],conflict=overwrite)`。",
+          "refs": [
+            "stmt:000065",
+            "task:t-000145"
+          ]
+        }
+      },
+      "result": {
+        "notify_problem": "notify.refs 里的 'task:t-000145' 立不住：引用 'task:t-000145' 的前缀不认识：认 c/exp/lit/q/rel/stmt: 这几种，或者四位手稿编号"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 75008,
+        "prompt_cache_miss_tokens": 5516,
+        "tokens_in": 80524,
+        "tokens_out": 11040,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000153"
+    }
+  ],
+  "final": "已按 D 的委托把 F 的 f-proof-000000 登记成命题行（只递指针，正文与等级从稿里读，未补写一个字）。\n\n【结果】stmt_id = **000065**（register.new_row=false：落到已有的 000065 行；conjecture_ledger.landing.matches=[\"000065\"]、promoted_to_statement=000065）。现算等级 = **pre_theorem**（_grade_recomputed：conjecture→pre_theorem，heuristic→proof_review，依据 verifications/pending/a7bcc2c9…jsonl#u-000007）；kind = **theorem**（V 签落位后由 conjecture 升档，_kind_upgrade.from=conjecture,to=theorem）。秘书档位 = T3（nontriviality_record.label=T3，path_group=1）。标签被洗：F 攻坚 000001 子目标 s1 → Sylow 定理（存在性、共轭性、计数）。\n\n【正文/证明】statement_full 与 proof_text 都逐字取自稿的 ## 命题 / ## 证明（proof_vs_source.matched=proof_body、same=true、7757 字，只归一了换行）。依赖面：稿的 ## 依赖 是空表 ⇒ 依赖边 0 条（deps_state=none_in_proof，diff.requested_not_filled=[dependencies]，自足证明合法）。\n\n【V 签那一格：认领得上】三处证据：① sign_filing.filed=true；② v_sign.applied=true、artifact_sha=add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a 与你给的正文 sha 逐字相符；③ registration_settled 原话「000065#p1 已经入库（有正文、reviewed=true）⇒ 义务已清」，板上 t-000145 由框架自动 completed（不需要也不能靠 ack）。\n\n【对不上的格子，逐格点名（没有一格要补正文）】① data.manuscript.sign={found:false,signed:false,state:\"\"} —— register 这一格没从稿里读出签块（它按 V 的签发信封/pending 台账认的），与稿头 - V 签：已签=true；判词=成立 字面不一致；② pending_claim={already:false,bound:false,why:\"这一笔没有认到 pending 台账上的签\"}，而同一笔 sign_filing.filed=true —— 两格口径不同（领取 vs 落位），读数不一致；③ kind_crosscheck=mismatch：稿头「命题类型：conjecture」vs 台账 kind=theorem，按规则以台账为准，我没有手改；④ 两个 sha 不是一回事（口径说明，不是毛病）：V 签的正文 sha=add7f62c…（= 稿头「正文sha」），盘上字节 sha256=36be2374…（整份文件含页头元信息）。\n\n【二阶段欠账，逐条点名】**000065#p1，bits.evidence.optimized_by_proof[\"1\"]=false** —— 这一份是 F 原版的逐字机械录入，还没洗。我这一趟没开副本，卡点说清：剩余预算 1.30 美元，而洗一份 7757 字正文要走 open_polish_copy → 重写正文 → 派 V 重签 → 精准替换 四步；本侧改正文只有 land_manuscript 能渲染 b-proof（该族不许我手写），一旦起手而没盖上这一版的签，就会留下一份未签的 b-proof 稿，按收工门反而挡收工。所以停在这里如实交回：请排一次专门的优化委托（或续预算），我按同一入口接着洗。",
+  "evidence": [
+    "stmt:000065",
+    "manuscripts/F/f-proof-000000.md",
+    "lit:none",
+    "verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007",
+    "task:t-000145"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 0,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 4,
+  "compactions": 0,
+  "mailbox_items": [
+    "t-000145"
+  ],
+  "mailbox_msgs": [],
+  "mailbox_delivered": 1,
+  "monitor_turns": 0,
+  "wakes": 0,
+  "wake_ids": [],
+  "wake_events": [],
+  "clock_pumps": 7,
+  "clock_fired": 0,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "名下没有「已登记、V 签还没到」的稿（正文本目录下 13 份 f-proof/b-proof/e-proof 的稿里有 9 份「已登记」（b-proof×8、f-proof×1））；另有 3 份已登记稿没有实例归属（不计入任何实例）：manuscripts/B/b-proof-000001.md、manuscripts/B/b-proof-000004.md、manuscripts/B/b-proof-000005.md",
+      "problems": [],
+      "producer": "B",
+      "owner_instance": "reg-sylow-stmt",
+      "owner_source": "roster",
+      "unattributed": [
+        {
+          "manuscript_id": "000001",
+          "manuscript": "manuscripts/B/b-proof-000001.md",
+          "text": "# B 的证明手稿：Sylow 第一定理\n\n- 标签：Sylow 第一定理\n\n## 命题\n\n设 G 是有限群，p 是素数。则 G 存在 p-Sylow 子群，即阶为 |G| 中 p 的最高次幂的子群；并且 G 的每个 p-子群都包含在某个 p-Sylow 子群之中。\n\n## 证明\n\nProof of Sylow I: Let pk be the highest power of p in |G|. The result is obvious if k = 0, since the trivial subgroup is a p-Sylow subgroup, so we can take k ≥1, hence p | |G|.\n\n## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |\n|---|---|---|\n\n（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n",
+          "entry": {
+            "statement_id": "",
+            "plan_id": "",
+            "sid": "",
+            "label": "Sylow 第一定理",
+            "proof_no": 0,
+            "sha256": "",
+            "fingerprint": "",
+            "kind": "",
+            "kind_label": "",
+            "registered_at": "",
+            "versions": [],
+            "checked": false,
+            "problems": [],
+            "family": "",
+            "producer": ""
+          },
+          "label": "Sylow 第一定理",
+          "family": "b-proof",
+          "producer_role": "B",
+          "producer_source": "artifacts",
+          "producer_instance": "",
+          "producer_actor": "B",
+          "instance_source": "",
+          "producer_checked": true,
+          "registered_at": "2026-11-24T03:47:38+08:00",
+          "why": ""
+        },
+        {
+          "manuscript_id": "000004",
+          "manuscript": "manuscripts/B/b-proof-000004.md",
+          "text": "# B 的证明手稿：Sylow 第二定理\n\n- 标签：Sylow 第二定理\n\n## 命题\n\n设 G 是有限群，p 是素数，P 与 Q 是 G 的两个 p-Sylow 子群（即阶为 |G| 中 p 的最高次幂的子群）。则 P 与 Q 在 G 中共轭：存在 g ∈ G 使 Q = gPg^{-1}。\n\n## 证明\n\nProof of Sylow II: For p-Sylow subgroups P and Q, we want to show they are conjugate. Let Q act on G/P by left multiplication. Since Q is a ﬁnite p-group, (2.1) says |G/P| ≡| FixQ(G/P)| mod p. The left side is [G : P], which is nonzero modulo p since P is a p-Sylow subgroup. Thus | FixQ(G/P)| can’t be 0, so there is a ﬁxed point in G/P. Call it gP. That is, qgP = gP for all q ∈Q. Equivalently, qg ∈gP for all q ∈Q, so Q ⊂gPg−1. Therefore Q = gPg−1, since Q and gPg−1 have the same size and we’re done.\n\n## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |\n|---|---|---|\n\n（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n",
+          "entry": {
+            "statement_id": "",
+            "plan_id": "",
+            "sid": "",
+            "label": "Sylow 第二定理",
+            "proof_no": 0,
+            "sha256": "",
+            "fingerprint": "",
+            "kind": "",
+            "kind_label": "",
+            "registered_at": "",
+            "versions": [],
+            "checked": false,
+            "problems": [],
+            "family": "",
+            "producer": ""
+          },
+          "label": "Sylow 第二定理",
+          "family": "b-proof",
+          "producer_role": "B",
+          "producer_source": "artifacts",
+          "producer_instance": "",
+          "producer_actor": "B",
+          "instance_source": "",
+          "producer_checked": true,
+          "registered_at": "2026-11-24T03:49:07+08:00",
+          "why": ""
+        },
+        {
+          "manuscript_id": "000005",
+          "manuscript": "manuscripts/B/b-proof-000005.md",
+          "text": "# B 的证明手稿：Sylow 第一定理\n\n- 标签：Sylow 第一定理\n\n## 命题\n\n设 G 是有限群，p 是素数。则 G 必有 p-Sylow 子群（Sylow p-subgroup）；并且 G 的每个 p-子群都包含在 G 的某个 p-Sylow 子群之中。\n\n## 证明\n\neach p-subgroup of G lies in some p-Sylow subgroup of G.\n\n## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |\n|---|---|---|\n\n（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n",
+          "entry": {
+            "statement_id": "",
+            "plan_id": "",
+            "sid": "",
+            "label": "Sylow 第一定理",
+            "proof_no": 0,
+            "sha256": "",
+            "fingerprint": "",
+            "kind": "",
+            "kind_label": "",
+            "registered_at": "",
+            "versions": [],
+            "checked": false,
+            "problems": [],
+            "family": "",
+            "producer": ""
+          },
+          "label": "Sylow 第一定理",
+          "family": "b-proof",
+          "producer_role": "B",
+          "producer_source": "artifacts",
+          "producer_instance": "",
+          "producer_actor": "B",
+          "instance_source": "",
+          "producer_checked": true,
+          "registered_at": "2026-11-24T03:49:31+08:00",
+          "why": ""
+        }
+      ]
+    }
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [],
+  "summons": [],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [],
+  "summons_total": 0,
+  "summons_consumed": 0,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 0,
+    "summons_consumed": 0,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p327",
+    "role": "B",
+    "prompt_sha256": "c619c3e9b751043603af5d337da2e7db059dda9dfe22ddb672b0fe4d45fd0feb",
+    "prompt_chars": 81606,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "TOOL_29",
+      "TOOL_30",
+      "TOOL_31",
+      "TOOL_32",
+      "TOOL_33",
+      "TOOL_34",
+      "TOOL_35",
+      "TOOL_36",
+      "TOOL_37",
+      "TOOL_38",
+      "TOOL_39",
+      "TOOL_40",
+      "TOOL_41",
+      "TOOL_42",
+      "TOOL_43",
+      "TOOL_44",
+      "TOOL_45",
+      "TOOL_46",
+      "TOOL_47",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_LIMITS",
+      "COLLAB_NAMES",
+      "PARENT_STOP",
+      "PARENT_ROSTER",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 4,
+    "tokens_in": 293756,
+    "tokens_out": 13126,
+    "usd": 0.011466,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 4,
+    "no_request_calls": 0,
+    "hit": 275328,
+    "miss": 18428,
+    "unknown_calls": 0,
+    "tokens_in": 293756,
+    "hit_rate": 0.9373,
+    "mismatched_calls": 0,
+    "saved_usd": 0.040473,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 100.485,
+  "end_ts": "2026-11-24T05:17:37+08:00",
+  "notes": [
+    "收工没有可用 notify 表（notify.refs 里的 'task:t-000145' 立不住：引用 'task:t-000145' 的前缀不认识：认 c/exp/lit/q/rel/stmt: 这几种，或者四位手稿编号）⇒ 这一趟没有交接手稿（不打回、不代填）",
+    "收工时名下还有 2 条证明没有 V 的签字（读数，不拦收工；明细：000060、000064）",
+    "缓存读数：命中 275328 / 未命中 18428 token，命中率 93.7%（4 次调用）；按 modelcost 口径估算可省 约 0.040473 美元",
+    "子产出处理读数：summons_total=0（这一趟没派过子代理 ⇒ 没有要处理的子产出；判据没有对象，不红）",
+    "终态回报已落板：t-000154（框架通报；模型没填 notify）"
+  ],
+  "final_payload": {
+    "final": "已按 D 的委托把 F 的 f-proof-000000 登记成命题行（只递指针，正文与等级从稿里读，未补写一个字）。\n\n【结果】stmt_id = **000065**（register.new_row=false：落到已有的 000065 行；conjecture_ledger.landing.matches=[\"000065\"]、promoted_to_statement=000065）。现算等级 = **pre_theorem**（_grade_recomputed：conjecture→pre_theorem，heuristic→proof_review，依据 verifications/pending/a7bcc2c9…jsonl#u-000007）；kind = **theorem**（V 签落位后由 conjecture 升档，_kind_upgrade.from=conjecture,to=theorem）。秘书档位 = T3（nontriviality_record.label=T3，path_group=1）。标签被洗：F 攻坚 000001 子目标 s1 → Sylow 定理（存在性、共轭性、计数）。\n\n【正文/证明】statement_full 与 proof_text 都逐字取自稿的 ## 命题 / ## 证明（proof_vs_source.matched=proof_body、same=true、7757 字，只归一了换行）。依赖面：稿的 ## 依赖 是空表 ⇒ 依赖边 0 条（deps_state=none_in_proof，diff.requested_not_filled=[dependencies]，自足证明合法）。\n\n【V 签那一格：认领得上】三处证据：① sign_filing.filed=true；② v_sign.applied=true、artifact_sha=add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a 与你给的正文 sha 逐字相符；③ registration_settled 原话「000065#p1 已经入库（有正文、reviewed=true）⇒ 义务已清」，板上 t-000145 由框架自动 completed（不需要也不能靠 ack）。\n\n【对不上的格子，逐格点名（没有一格要补正文）】① data.manuscript.sign={found:false,signed:false,state:\"\"} —— register 这一格没从稿里读出签块（它按 V 的签发信封/pending 台账认的），与稿头 - V 签：已签=true；判词=成立 字面不一致；② pending_claim={already:false,bound:false,why:\"这一笔没有认到 pending 台账上的签\"}，而同一笔 sign_filing.filed=true —— 两格口径不同（领取 vs 落位），读数不一致；③ kind_crosscheck=mismatch：稿头「命题类型：conjecture」vs 台账 kind=theorem，按规则以台账为准，我没有手改；④ 两个 sha 不是一回事（口径说明，不是毛病）：V 签的正文 sha=add7f62c…（= 稿头「正文sha」），盘上字节 sha256=36be2374…（整份文件含页头元信息）。\n\n【二阶段欠账，逐条点名】**000065#p1，bits.evidence.optimized_by_proof[\"1\"]=false** —— 这一份是 F 原版的逐字机械录入，还没洗。我这一趟没开副本，卡点说清：剩余预算 1.30 美元，而洗一份 7757 字正文要走 open_polish_copy → 重写正文 → 派 V 重签 → 精准替换 四步；本侧改正文只有 land_manuscript 能渲染 b-proof（该族不许我手写），一旦起手而没盖上这一版的签，就会留下一份未签的 b-proof 稿，按收工门反而挡收工。所以停在这里如实交回：请排一次专门的优化委托（或续预算），我按同一入口接着洗。",
+    "evidence": [
+      "stmt:000065",
+      "manuscripts/F/f-proof-000000.md",
+      "lit:none",
+      "verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007",
+      "task:t-000145"
+    ],
+    "notify": {
+      "to": "D",
+      "summary": "F 的 f-proof-000000 已登记为 stmt:000065（等级 pre_theorem、kind theorem、V 签认领得上）；000065#p1 二阶段未洗，卡点与逐格对账一并交回",
+      "body": "## 做了什么\n按你的委托，只递指针把 F 的 `manuscripts/F/f-proof-000000.md` 登记成命题（`own.register_statement`，`proof_manuscript` 指路、未传 `statement_full` / `proof_text`，未补写任何正文）。\n\n- **stmt_id = 000065**（`register.new_row=false`：落到已有的 000065 行；`conjecture_ledger.landing.matches=[\"000065\"]`、`promoted_to_statement=000065`）\n- **等级 = pre_theorem**（现算：`_grade_recomputed` conjecture→pre_theorem、heuristic→proof_review，依据 `verifications/pending/a7bcc2c9…jsonl#u-000007`）。`evidence_kind=heuristic` 只是历史列读数。\n- **kind = theorem**（V 签落位后由 conjecture 升档：`_kind_upgrade.from=conjecture,to=theorem`）；秘书档位 **T3**（`nontriviality_record.label=T3`，path_group=1）。\n- 标签被洗：`F 攻坚 000001 子目标 s1` → `Sylow 定理（存在性、共轭性、计数）`（留痕 `label_washed`）。\n- 正文面：`statement_full` / `proof_text` 逐字取自稿的 `## 命题` / `## 证明`（`proof_vs_source.matched=proof_body`、`same=true`、7757 字）；`## 依赖` 是空表 ⇒ 依赖边 0 条（`deps_state=none_in_proof`，`diff.requested_not_filled=[dependencies]`，自足证明合法）。\n\n## V 签那一格：认领得上\n① `sign_filing.filed=true`；② `v_sign.applied=true`，`artifact_sha=add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a` 与你给的正文 sha 逐字相符；③ `registration_settled` 原话「000065#p1 已经入库（有正文、reviewed=true）⇒ 义务已清」，板上 `t-000145` 由框架自动 completed（ack 不必要）。\n\n## 对不上的格子（逐格点名，均不需要补正文）\n1. `data.manuscript.sign={found:false,signed:false,state:\"\"}`：register 这一格没从稿里读出签块（按 V 的签发信封 / pending 台账认的），与稿头 `- V 签：已签=true；判词=成立…` 字面不一致；\n2. `pending_claim={already:false,bound:false,why=\"这一笔没有认到 pending 台账上的签\"}` 与同一笔的 `sign_filing.filed=true` 口径不同（领取 vs 落位），读数不一致；\n3. `kind_crosscheck=mismatch`：稿头「命题类型：conjecture」vs 台账 `kind=theorem`，以台账为准，我没有手改；\n4. 两个 sha 的分工（口径说明）：V 签的**正文** sha=`add7f62c…`；盘上**字节** sha256=`36be2374…`（整份文件含页头元信息）—— 收录比的是正文，`matched=proof_body`。\n\n## 二阶段（逐个优化）欠账，逐条点名\n- **000065#p1**，`bits.evidence.optimized_by_proof[\"1\"]=false` ⇒ 这一份是 F 原版的逐字机械录入，**还没洗**。\n- 卡在哪：剩余预算 1.30 美元；洗稿四步（`open_polish_copy` → 重写正文 → 派 V 重签 → 精准替换）里，正文的落稿只有 `land_manuscript` 能渲染 `b-proof` 族（该族不许我手写）。一旦起手而没盖上这一版的签，就会留下一份**未签的 b-proof 稿**，按收工门反而挡收工 —— 所以我没有起手，把它如实交回。\n\n## 要你做什么\n请把 000065#p1 的二阶段排成一次专门的优化委托（或续预算）。入口我这边已经清楚：`open_polish_copy(000065)` → 洗 → `V.verify_proof`（带 `proof_manuscript`）→ `ingest_manuscript(mode=apply,target_stmt_id=000065,cells=[proof_text],conflict=overwrite)`。",
+      "refs": [
+        "stmt:000065",
+        "task:t-000145"
+      ]
+    }
+  },
+  "task_id": "t-000153"
+}

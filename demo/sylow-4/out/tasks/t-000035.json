@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T04:06:47+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 2635,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"对 stmt:000062（Sylow 第三定理）的 1 号证明路径 manuscropts/B/b-proof-000003.md（正文 sha 44ca53f1ae324ffed52f40b47ee80ce45a7163450c63a6fea2df7f9b358e554f）逐行走查完毕，结论：**有毛病**（不签发）。\\n\\n台账已落：verifications/000062.jsonl#v-000001（verdict=有毛病，defect_step=5，unresolved_errors=1）；秘书语义判定轴=fault ⇒ 未发签，签块未落回该稿；审阅报告已由秘书投给 B 的板项 t-000040（verifications/reviews/v-review-000006.md）。\\n\\n**缺陷（第 5 步）**：原文逐字「让 P 经共轭作用在 Syl_p(G)（G 的 p-Sylow 子群全体）上，这个集合的基数就是 n_p。」该步取定 P 并对 Syl_p(G) 定义共轭作用，但全文既没有证明、也没有引用 p-Sylow 子群的存在性（Sylow I）；依赖段是空表，在册的 stmt:000060（Sylow I）现算等级为 conjecture（< pre_theorem）⇒ 不够格被引。前提缺失时该作用无法定义；且若 k>0 而 Syl_p(G) 为空，则 n_p=0，两条结论（0 | m、0 ≡ 1 mod p）都不成立。\\n\\n**最小补法**：在同一份稿里就地补出存在性（或在 stmt:000060 自身立起 pre_theorem 级证明后再引它），再取 P 定义共轭作用；补这一处即可，其余各步不必重写。\\n\\n**其余角度（已核，未另立 finding）**：① 事实 A（轨道-稳定化子）的双射与 |Γ·x|=[Γ:Stab(x)] 成立；② 事实 B 的推导成立（Γ 为有限 p-群、Stab(x) 真子群 ⇒ 指数是 p 的正幂被 p 整除，长度 1 轨道即不动点）；③ 就地 Sylow II：Q 在 G/P 上左乘作用良定义、[G:P]=m 不被 p 整除 ⇒ 不动点集非空，qgP=gP ⇒ q∈gPg⁻¹ ⇒ Q⊆gPg⁻¹ 且同阶 ⇒ 相等，成立；④「P⊆N(Q) 时 P、Q 同为 N(Q) 的 p-Sylow 子群」成立（Q≤N(Q) 给 p^k | |N(Q)|，而 |N(Q)| | p^k m ⇒ p 部分正是 p^k）；⑤ 由 Sylow II 在 N(Q) 中互共轭 + Q 在 N(Q) 正规 ⇒ P=Q ⇒ |Fix_P|=1 ⇒ n_p≡1 mod p，成立；⑥ n_p=[G:Stab(P)] | p^k m 且 p∤n_p ⇒ n_p | m，成立；⑦ 与被审 statements 行字面一致，无「更强于原文」的结论。未引用任何在册命题，故无引文轴/admissible 问题，只余存在性这一处无条件前提。\\n\\n没记录反例尝试（report_gap 读数，不挡签）；本次审校的结论止于上列 defect_step=5 这一处，补上后同一份稿可重新送审。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\sylow-4\\\\runs\\\\V-20261124-040647-001.json\", \"messages\": [], \"outcome\": \"ok\", \"status\": \"done\", \"steps\": 6, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "62dbfc99182a76e181d18817e2ce9514fb9b23ec3282338627896bcdd8ec4504",
+ "readings": {},
+ "role": "V",
+ "status": "done",
+ "task_id": "t-000035"
+}

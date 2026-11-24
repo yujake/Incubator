@@ -1,0 +1,17 @@
+{
+  "schema_version": 2,
+  "counters": {
+    "usage": 848,
+    "candidate": 4,
+    "question": 1,
+    "lit": 4,
+    "relation": 72,
+    "stmt": 66,
+    "bmanuscript": 12,
+    "plan": 2,
+    "doc": 2,
+    "manuscript": 1,
+    "conjecture": 1,
+    "finding": 12
+  }
+}

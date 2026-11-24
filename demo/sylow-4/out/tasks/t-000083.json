@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T04:22:59+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 3178,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"4 份 PDF 都已在 `literature` 里，逐份给出 lit_id（任务要求入库，不做检索）：\\n\\n| 用户点名的文件 | lit_id | 行上的题名（= 文件名） | 正文里核到的真题名 | 本地路径 |\\n|---|---|---|---|---|\\n| reference/9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf | 000000 | 9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf | THE SYLOW THEOREMS（Keith Conrad）—— 与任务里写的「Proof of the Sylow Theorems」措辞不同 | library/9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf（7 页） |\\n| reference/11dc1a689516-harris-sylow-theorems.pdf | 000001 | 11dc1a689516-harris-sylow-theorems.pdf | Sylow's theorems（GU4041, Columbia University, April 23 2020） | library/11dc1a689516-harris-sylow-theorems.pdf（65 页） |\\n| reference/c104f1720c63-idelhaj-sylow-theorems-and-applications.pdf | 000002 | c104f1720c63-idelhaj-sylow-theorems-and-applications.pdf | THE SYLOW THEOREMS AND THEIR APPLICATIONS | library/c104f1720c63-idelhaj-sylow-theorems-and-applications.pdf（8 页） |\\n| reference/e090d219194b-vakil-sylow-theorems.pdf | 000003 | e090d219194b-vakil-sylow-theorems.pdf | Sylow Theorems and The General Linear Group | library/e090d219194b-vakil-sylow-theorems.pdf（3 页） |\\n\\n**4 个 lit_id 原样点名：`lit:000000` / `lit:000001` / `lit:000002` / `lit:000003`。**\\n\\n文本层：**没有 no_text_layer**。`search.ingest_local(dry_run=True)` 那一栏显示的 `has_text_layer:false`、`pages:0` 是 dry-run 未算文本层的读数，**不是**「读不出」；真读数在下两处，且两处一致：① `literature` 行 `download.fulltext=ok`，候选期已抽读 19296 / 38661 / 21369 / 5630 字；② `search.local(query=\\\"Sylow theorem\\\")` 四本各回一段**逐字原文**（带页码：000000→p1/7页、000001→p1/65页、000002→p3/8页、000003→p1/3页），`no_text_layer[]` 为空、`skipped_no_file[]` 为空。没有从别处补全文。\\n\\n待裁表：`lit.stage_list(request_id=\\\"*\\\", status=\\\"pending\\\")` → **全表 0 条 pending**（counts: admitted 4 / pending 0 / qualified 0 / rejected 0）。\\n\\nB 侧：这 4 行 `processed=true`，`relations` 表已有 72 行，抽查前 5 行都是逐字回验通过（`quote_verified=true`）且 `lit_id=000000` 的关系行（例：rel:000001 `For each prime p, the p-Sylow subgroups of G are conjugate.`，p3 逐字命中）。\\n\\n两处如实写明的限制：① 行上的 `title` 是登记器从文件名写的（`9fade5bcc35a-...pdf` 这种），我试过 `ta",
+ "payload_sha256": "80d29464212571f373a10a195b5e45d480de0e16d8d58ca3f417f319d20fdf3e",
+ "readings": {},
+ "role": "A",
+ "status": "done",
+ "task_id": "t-000083"
+}

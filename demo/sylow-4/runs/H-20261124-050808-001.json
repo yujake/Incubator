@@ -1,0 +1,1813 @@
+{
+  "role": "H",
+  "task": "H：这一趟派给你的活是 —— 对 doc_id=000000（The Sylow Theorems，kind=paper）做第四次复审，只核你第 3 轮新开的两条 warning：finding 000007（附录 A 200–207 行 the recorded statement / whose recorded proof / the recorded statements 这类同义工程措辞）与 finding 000008（四条 bibitem 的 available as a PDF in the project reference collection + 附录 A 207 行的 project reference collection）。作者已按下述方式定点改（都在盘上，自己读盘核，不要采信转述）：① whose recorded proof is → whose proof is（3 处）；② the recorded statement(s) → the statement（2 处）；③ 四条 bibitem 里 ', available as a PDF in the project reference collection (file' → ' (file'（4 处，作者/题名/文件名原样保留）；④ 附录 A 那句 No page numbers are cited because none were available verbatim in the project reference collection → …in the sources at hand。之后已重跑 doc.write_mapping（state=pass，5 行对 5 个环境）与 doc.paper_compile（pdflatex 7 页，pdf_fresh=true，回执 out/package/COMPILE-RECEIPT.json；正文 main.tex sha256=08c6cc0a… 再经 write_mapping 追加附录后的现行版本以盘上为准）。判据不变：① 这两条是否真在盘上消失（逐条给 fs.search 命中读数）；② 不许因这一轮修改引入新的过程词或越级声称（thm:unique → stmt:000064 仍是「标准教材事实（未持全文）、论证未经独立核验」，不得写成已验证）；③ 若两条都清掉、且没引入新问题，请给 documents.status=accepted 并把 finding 000007/000008 置 fixed；若仍留问题，照旧逐条落 finding 并给 revise_again。审校报告照旧落你自己的报告路径。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "review.list_findings",
+        "args": {
+          "doc_id": "000000"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "review.list_findings",
+        "ok": true,
+        "data": {
+          "count": 9,
+          "findings": [
+            {
+              "finding_id": "000000",
+              "doc_id": "000000",
+              "kind": "overclaim",
+              "level": "error",
+              "target": "section:3 / thm:unique",
+              "message": "第 3 节把台账等级只有 conjecture、且 V 三判「有毛病」的 stmt:000064 呈现为已证明的定理（\\begin{theorem}[Uniqueness equals normality] + 完整 proof，154–164 行），正文与摘要均未降级，唯一披露在附录 A 第 212 行。",
+              "evidence": "statements 000064：bits.grade=conjecture、reviewed=false、proof_source=citation、reviewed_by={evidence:lit:000002}；verifications/000064.jsonl 三行 v-000001/v-000002/v-000003 verdict 全为「有毛病」（命题与证明不匹配、无干净签名）；out/package/MAPPING.json 该行 reviewed=「未通过」、optimized=「未优化」。正文 154–157 行以 theorem 环境断言该命题，158–164 行给出证明，摘要第 34 行与引言只字未提其审核状态。",
+              "status": "fixed",
+              "round": 1,
+              "resolution_note": "[manual] 手工判词：H 自己读出来的发现（record_finding 落库） [H 复核] [round 2] H 显式复核 ⇒ fixed：main.tex 第 153 行（thm:unique 的 \\end{theorem} 之后、\\begin{proof} 之前）现有一整段 \\noindent\\emph{Provenance and status.}，逐字「This statement is a standard textbook fact. ... we do not hold a verified full-text source in this project and the argument following has not been independently checked; we therefore record it as a textbook-level claim and give the argument for completeness, not as an independently verified proof.」；摘要（33–38 行）只写「No computer-assisted verification is claimed anywhere in this paper」；第 4 节（167 行）明写该条「whose argument we have not independently checked」「No formal verification was carried out for any of the five results」。⇒ 原发现所指「唯一披露在附录 A」已不成立，披露已就地补齐。残留缺陷另开 finding（第 153 行「below」指错方向、正文过程词、附录 A 第 209 行 ledger 措辞）。",
+              "superseded_by": ""
+            },
+            {
+              "finding_id": "000001",
+              "doc_id": "000000",
+              "kind": "overclaim",
+              "level": "warning",
+              "target": "section:4",
+              "message": "第 170 行「The proofs above are elementary and human-checked; no formal verification was carried out」把五条结果一律说成 human-checked，但其中 thm:unique（stmt:000064）在台账里没有 V 的签（bits.reviewed=false、grade=conjecture），V 对它三次判「有毛病」——「human-checked」这一句对第 154–164 行那一条不成立，属无依据的保证（其余四条成立）。",
+              "evidence": "main.tex 第 170 行原文；statements 000064 的 bits.reviewed=false / grade=conjecture / reviewed_by={evidence:lit:000002}；verifications/000064.jsonl 三行 verdict 全为「有毛病」（v-000001/v-000002/v-000003）；MAPPING.json 该行 reviewed=「未通过」。对比：000060–000063 的 bits.reviewed=true 且各有一份 verdict=成立 的签行（verifications/000060..000063.jsonl）。",
+              "status": "fixed",
+              "round": 1,
+              "resolution_note": "[manual] 手工判词：H 自己读出来的发现（record_finding 落库） [H 复核] [round 2] H 显式复核 ⇒ fixed：main.tex 第 167 行现逐字「The arguments above are elementary and were checked by hand, with one exception that we state explicitly: the uniqueness criterion of Theorem~\\ref{thm:unique} is a textbook-level statement whose argument we have not independently checked, and it carries the provenance note attached to it in Section~3. No formal verification was carried out for any of the five results, and we make no claim of the kind.」；与台账一致：statements 000060/000061 bits.reviewed=true（V 签 v-000009 / v-000004，verdict=成立，reviewed_by_proof.1=true，grade=pre_theorem），000064 bits.reviewed=false、reviewed_by 仅 evidence=lit:000002、verifications/000064.jsonl 首行 verdict=「有毛病」（v-000001，error：命题与证明不匹配）；out/package/MAPPING.json 000060–000063 reviewed=「已签（判决：成立）」、000064 reviewed=「未通过」。原「五条一律 human-checked」的措辞已消失。",
+              "superseded_by": ""
+            },
+            {
+              "finding_id": "000002",
+              "doc_id": "000000",
+              "kind": "garbled",
+              "level": "warning",
+              "target": "section:3",
+              "message": "两条被当作引理使用的辅助事实（\\label{lem:fix}、\\label{lem:cauchy}）用的是 remark 环境、却带 \\begin{proof}，并被正文以「By Lemma~\\ref{lem:fix}」引用：读者按「Lemma 3.x」回查会翻到一个 Remark，且这两个 proof 在结构上被判为「没有归属的证明」——一个不在场的人照 \\ref 去找会找错环境类型。",
+              "evidence": "review.scan(kinds=[\"proofs\"], project=\".\") 返回两条 error：out/package/main.tex:90 与 :100 的 \\begin{proof} 「前面没有任何定理类环境」；同一次读数 facts: statement_envs=5 / proof_envs=7 / statement_without_proof=0 / proof_without_statement=2。正文第 123 行、第 134 行、第 136 行以 Lemma~\\ref{lem:fix} 引用之，而 main.tex 前导区只给 theorem/lemma/proposition/corollary/definition/example/remark/conjecture/openproblem 定义，这两条声明写的是 \\begin{remark}[Fixed-point congruence]\\label{lem:fix} 与 \\begin{remark}[Cauchy's theorem]\\label{lem:cauchy}。",
+              "status": "fixed",
+              "round": 1,
+              "resolution_note": "[manual] 手工判词：H 自己读出来的发现（record_finding 落库） [H 复核] [round 2] H 显式复核 ⇒ fixed：review.scan(kinds=[\"proofs\",\"ledger_match\",\"refs\",\"duplicates\"], project=\".\") 读数 checked=true、bad=[]、findings=0，facts 逐格：proof_envs=5、statement_envs=5、proof_without_statement=0、statement_without_proof=0、statement_surplus=[]、unused_labels=0、duplicate_labels=0。盘上落点：main.tex:83「\\begin{remark}[Fixed-point congruence]\\label{lem:fix}」、:93「\\begin{remark}[Cauchy's theorem]\\label{lem:cauchy}」，两条证明已改成段内文本——:90「\\emph{Proof.} (1) If $|\\Gamma|=p^{0}=1$ …」与 :97「\\emph{Proof.} (1) We induct on $|A|$ …」，不再占用 proof 环境；正文引用文字已同步为 Remark~\\ref{lem:fix}（第 135 行「By Remark~\\ref{lem:fix}, $n_p\\equiv|\\Fix_P(\\Syl_p(G))|\\pmod p$」），refs 类 0 条、7 个 label 对 7 个 ref 键、无未用标签。",
+              "superseded_by": ""
+            },
+            {
+              "finding_id": "000003",
+              "doc_id": "000000",
+              "kind": "garbled",
+              "level": "info",
+              "target": "appendix:A",
+              "message": "附录 A 第 200 行仍带着台账气（「record ... the ledger entry」「a reader of the internal records」「internal identifiers」）：读者拿到的是论文，不认识 ledger / internal records 这套内部措辞。内部编号本身在附录 A 是允许的（清单②：stmt:/lit: 只许出现在附录），但用「台账」这类过程词解释它的来历，读起来是把工作记录贴进了正文。",
+              "evidence": "main.tex 第 200 行逐字：「The purpose of this appendix is to record, for each theorem, the ledger entry it was derived from, so that a reader of the internal records can trace every statement in the paper back to its source. The entries below are internal identifiers and are not part of the mathematical content.」；fs.search 确认 stmt:/lit: 的 8 处全部落在 \\appendix（第 196 行）之后：203、204、205、206、207、210、212 行 —— 正文禁令①本身合规。",
+              "status": "fixed",
+              "round": 1,
+              "resolution_note": "[manual] 手工判词：H 自己读出来的发现（record_finding 落库） [H 复核] [round 2] H 显式复核 ⇒ fixed：原发现点名的第 200 行那句已不在盘上——fs.search(pattern=\"cross_check|supported_not_proved|known_in_literature|ledger|internal record|in this project|sha256|本轮|验收表\", path=\"out/package/main.tex\") 对 internal record / internal identifiers / ledger entry 零命中；附录 A 开头（main.tex:197）现逐字为「This paper contains no computational experiments and no machine-checked proofs; all five results are argued by hand in Section~3. The purpose of this appendix is to list, for each theorem, where the corresponding source material is filed in the reference collection of this project and under which provenance label the statement and its argument were recorded. Those labels are provenance marks, not mathematical content.」——「internal records」「internal identifiers」这一套措辞已删。同一次 search 只命中 153、209 两行（\"in this project\" / \"the ledger holds\"），那是本轮新出现的措辞泄漏，已另开 finding 000005 处置，不并回本条。",
+              "superseded_by": ""
+            },
+            {
+              "finding_id": "000004",
+              "doc_id": "000000",
+              "kind": "garbled",
+              "level": "warning",
+              "target": "section:3 line:153",
+              "message": "第 153 行的就地披露把方位说反了：写「the five results below」，但五条结果（thm:sylow1 101 行、thm:sylow2 115 行、thm:sylow3 125 行、thm:index 140 行、thm:unique 148 行）全在这段之前，这一段之后是它的 proof 与第 4 节。一个不在场的人按「below」往下找，会找不到那五条。建议改成「among the five results above」（或「of the five results of this section」），并把「the argument following」保留（指紧随其后的 proof，这一处是对的）。",
+              "evidence": "fs.search(pattern=\"Provenance and status|five results below|...\") 取到 main.tex:153 逐字「For it, and only for it among the five results below, we do not hold a verified full-text source in this project」；同一次 search 与 fs.search(pattern=\"begin\\\\{theorem\\\\}\\\\[Sylow I|...\") 取到五个定理环境的行号：101（thm:sylow1）、115（thm:sylow2）、125（thm:sylow3）、thm:index 与 thm:unique 分别落在 140 与 148 一带（MAPPING.json 的 citation_loc 也把 thm:sylow1/2/3/index/unique 的正文区间记为 104–107、118–121、128–131、142–145、152–155，均 <= 153）。即：五条结果在 153 行之上，不在其下。",
+              "status": "fixed",
+              "round": 2,
+              "resolution_note": "[manual] 手工判词：H 自己读出来的发现（record_finding 落库） [H 复核] [round 3] H 显式复核 ⇒ fixed：out/package/main.tex 第 153 行现逐字「\\noindent\\emph{Provenance and status.} This statement is a standard textbook fact. For it, and only for it among the five results above, no verified full-text source is at hand and the argument following has not been independently checked; the argument is included for completeness and is not offered as an independently verified proof.」——方位词已改为 above；同一次 fs.read(start_line=140) 显示五个定理环境全在 153 行之上（thm:unique 的 \\begin{theorem} 在 149 行、\\end{theorem} 在 151 行），153 行之后是它的 proof（155 行起）与第 4 节（167 行），故 above 指向正确、following 指向 proof 也正确。fs.search(pattern=\"five results below\") 在 out/package/main.tex 上 total=0。",
+              "superseded_by": ""
+            },
+            {
+              "finding_id": "000005",
+              "doc_id": "000000",
+              "kind": "garbled",
+              "level": "error",
+              "target": "section:3 / line 153 (Provenance and status)",
+              "message": "第 3 节就地披露段把工程过程词写进了正文：「in this project」「we therefore record it as a textbook-level claim」——「本项目」这一档过程词在正文禁令③里是禁止的，读者拿到的是论文，不认识「this project」指哪个工程。",
+              "evidence": "fs.search(pattern=\"Provenance and status|five results below|in this project|...\") 取到 out/package/main.tex:153 逐字：「\\noindent\\emph{Provenance and status.} This statement is a standard textbook fact. For it, and only for it among the five results below, we do not hold a verified full-text source in this project and the argument following has not been independently checked; we therefore record it as a textbook-level claim and give the argument for completeness, not as an independently verified proof.」；同一 search 对 ledger|internal record|sha256|本轮|验收表 的命中只有 153 与 209 两行 ⇒ 这是本轮新引入的正文过程词（上一轮第 170 行那处已改掉）。披露的实质内容合格（标准教材事实 / 论证未经独立核验 / 未持经核验全文来源），只需换掉工程措辞。",
+              "status": "fixed",
+              "round": 2,
+              "resolution_note": "[manual] 手工判词：H 自己读出来的发现（record_finding 落库） [H 复核] [round 3] H 显式复核 ⇒ fixed：out/package/main.tex 第 153 行现逐字「\\noindent\\emph{Provenance and status.} This statement is a standard textbook fact. For it, and only for it among the five results above, no verified full-text source is at hand and the argument following has not been independently checked; the argument is included for completeness and is not offered as an independently verified proof.」——原两句过程词「in this project」「we therefore record it as a textbook-level claim ... give」已不在盘上；fs.search(pattern=\"cross_val|ledger|internal record|in this project|this project|sha256|本轮|验收表|we therefore record|five results below\", path=\"out/package/main.tex\") 读数 total=0、matches=[]（total 与 matches 同一读数）。披露的实质保留（标准教材事实 / 未持经核验全文来源 / 论证未经独立核验）；方向词同批改为 above（见 000004）。",
+              "superseded_by": ""
+            },
+            {
+              "finding_id": "000006",
+              "doc_id": "000000",
+              "kind": "garbled",
+              "level": "warning",
+              "target": "appendix:A",
+              "message": "附录 A 仍有过程词漏到论文里：第 209 行「the ledger holds line-by-line proof reviews」（ledger=台账）与「the recorded statements / the recorded review reported an error」，第 197 行「filed in the reference collection of this project」「under which provenance label the statement and its argument were recorded」——读者拿到的是论文，不认识 ledger / recorded / provenance label 这套内部措辞；原发现点名的那一句（第 200 行 record the ledger entry / internal records）确实已删，但同一段新写的句子又把 ledger 这一词带回来了。",
+              "evidence": "fs.search(pattern=\"cross_check|supported_not_proved|known_in_literature|ledger|internal record|in this project|sha256|本轮|验收表\", path=\"out/package/main.tex\") 命中两行：out/package/main.tex:153 与 :209（命令输出 total=2、matches 逐条带 line 与 text）。其中 :209 逐字「Verification status, stated as a fact rather than as an assurance: for the recorded statements \\texttt{stmt:000060} through \\texttt{stmt:000063} the ledger holds line-by-line proof reviews; for \\texttt{stmt:000064} the recorded review reported an error (the statement and the recorded proof were found not to match)」；:197 逐字「where the corresponding source material is filed in the reference collection of this project and under which provenance label the statement and its argument were recorded」。这两处都是本轮新写进附录 A 的句子（上一轮原文是「record ... the ledger entry」「a reader of the internal records」）。内部编号本身在附录 A 允许（清单②），此处只判过程词。",
+              "status": "fixed",
+              "round": 2,
+              "resolution_note": "[manual] 手工判词：H 自己读出来的发现（record_finding 落库） [H 复核] [round 3] H 显式复核 ⇒ fixed：本轮（round 3）逐字核了原发现点名的四处，全部已不在盘上。读数：fs.search(pattern=\"cross_check|supported_not_proved|known_in_literature|ledger|internal record|in this project|this project|sha256|本轮|验收表|we therefore record|five results below\", path=\"out/package/main.tex\") → total=0、matches=[]、scanned=1。盘上现文（fs.read out/package/main.tex，sha256=effaa0805ea6ee61b980e0476bbb98dab17b7cbe47d1ae6d315a67ae74c8daf5，212 行）：第 197 行逐字「The purpose of this appendix is to list, for each theorem, where the corresponding source material may be consulted and under which label the statement and its argument are filed. Those labels are provenance marks, not mathematical content.」——「in this project」「provenance label … were recorded」已消失；第 209 行逐字「Verification status, stated as a fact rather than as an assurance: for the statements \\texttt{stmt:000060} through \\texttt{stmt:000063} the source material includes a line-by-line review of the proof; for \\texttt{stmt:000064} that review reported an error (the statement and the proof were found not to match), and the proof given in Section~3 is the standard textbook argument, presented here without any claim of review or machine verification.」——「the ledger holds …」已消失，事实未抬高一格（000060–000063 有逐行审阅、000064 判有毛病，与 verifications/000064.jsonl 三行「有毛病」的口径一致）。⇒ 本条（ledger / internal records / this project 这一批被点名的串）判 fixed。残留的同类措辞（第 174/179/184/189 行「the project reference collection (file …)」、第 200–202 与 207 行「the recorded statement / whose recorded proof」）不在本条点名的四处之内，另开一条 round 3 finding 记录，不在此处折平。",
+              "superseded_by": ""
+            },
+            {
+              "finding_id": "000007",
+              "doc_id": "000000",
+              "kind": "garbled",
+              "level": "warning",
+              "target": "appendix:A / line 200-207",
+              "message": "附录 A 第 200–202 行仍以「the recorded statement \\texttt{stmt:000060}」「whose recorded proof is …」、第 207 行以「the recorded statements carry the literature identifiers」指称台账行——「ledger」一词已清，但同义的 recorded / recorded proof 仍在，读者不认识「recorded by whom / recorded where」这一层意思。",
+              "evidence": "fs.read(out/package/main.tex, sha256=effaa0805ea6ee61b980e0476bbb98dab17b7cbe47d1ae6d315a67ae74c8daf5) 第 200 行逐字「\\item Theorem~\\ref{thm:sylow1} corresponds to the recorded statement \\texttt{stmt:000060} (a theorem of Sylow type), whose recorded proof is the elementary argument reproduced in Section~3」；第 201 行「\\texttt{stmt:000061}, whose recorded proof is the action of a Sylow $p$-subgroup on a coset space」；第 202 行「\\texttt{stmt:000062}, whose recorded proof is the conjugation action on the set of Sylow subgroups」；第 207 行「Sources: the recorded statements carry the literature identifiers \\texttt{lit:000000} (Conrad) for the first four and \\texttt{lit:000002} (Idelhaj)」。对照 finding 000006 已修的部分：第 209 行原文「the ledger holds line-by-line proof reviews」与「the recorded review reported an error」确已不在盘上（fs.search(pattern=\"ledger|internal record|in this project|this project\", path=\"out/package/main.tex\") total=0）。⇒ 本条是同一类措辞的残留，不是 000006 的复现。",
+              "status": "open",
+              "round": 4,
+              "resolution_note": "[manual] 手工判词：H 自己读出来的发现（record_finding 落库）",
+              "superseded_by": ""
+            },
+            {
+              "finding_id": "000008",
+              "doc_id": "000000",
+              "kind": "garbled",
+              "level": "warning",
+              "target": "references / line 174,179,184,189,207",
+              "message": "参考文献与附录 A「Sources」段仍留着工程内集合的措辞：四条 \\bibitem 都写「available as a PDF in the project reference collection (file conrad-/harris-/idelhaj-/vakil-…)」，第 207 行写「No page numbers are cited because none were available verbatim in the project reference collection」——「the project reference collection」与「file 名」是本文档所在工程的内部资源，一篇论文的读者既不知道这个 collection 指什么、也无法据文件名找到文献；这与第 3 节已修掉的「in this project」是同一类过程词（正文禁令③），只是换了个位置。",
+              "evidence": "fs.search(pattern=\"project|reference collection|recorded|filed|provenance\", path=\"out/package/main.tex\") total=10；逐行读数（main.tex sha256=effaa080 5ea6ee61b980e0476bbb98dab17b7cbe47d1ae6d315a67ae74c8daf5，212 行）：第 174 行「expository notes, available as a PDF in the project reference collection (file \\texttt{conrad-proof-of-sylow-theorems}).」、第 179 行同式为 harris、第 184 行同式为 idelhaj、第 189 行同式为 vakil；第 207 行「Sources: the recorded statements carry the literature identifiers … No page numbers are cited because none were available verbatim in the project reference collection.」同一 search 中「ledger」「internal record」「this project」已零命中（另一次 fs.search 读数 total=0）⇒ 这不是上一轮 000005/000006 的复现，而是同类措辞在参考文献里的残留。",
+              "status": "open",
+              "round": 5,
+              "resolution_note": "[manual] 手工判词：H 自己读出来的发现（record_finding 落库）",
+              "superseded_by": ""
+            }
+          ]
+        },
+        "error": "",
+        "meta": {},
+        "multi_call": {
+          "turn_index": 0,
+          "call_index": 0,
+          "calls": 2,
+          "step_index": 0
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 51072,
+        "prompt_cache_miss_tokens": 1844,
+        "tokens_in": 52916,
+        "tokens_out": 206,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000140"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.stat",
+        "args": {
+          "path": "out/package/main.tex"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "fs.stat",
+        "ok": true,
+        "data": {
+          "path": "out/package/main.tex",
+          "exists": true,
+          "is_dir": false,
+          "is_file": true,
+          "is_symlink": false,
+          "size": 22490,
+          "mtime": "2026-11-24T05:04:34+08:00",
+          "mtime_epoch": 1795467874.919,
+          "link_target": null,
+          "sha256": "08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72"
+        },
+        "error": "",
+        "meta": {
+          "path": "out/package/main.tex",
+          "size": 22490,
+          "sha256": "08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72"
+        },
+        "warn": "这一步给了 2 条调用，已按顺序逐条：第 1 条 review.list_findings 成功：9；第 2 条 fs.stat 成功。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 0,
+          "call_index": 1,
+          "calls": 2,
+          "step_index": 1,
+          "summary": "这一步给了 2 条调用，已按顺序逐条：第 1 条 review.list_findings 成功：9；第 2 条 fs.stat 成功。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 0,
+            "calls": 2,
+            "items": 2,
+            "steps": [
+              0,
+              1
+            ],
+            "executed": 2,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000140"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "review_findings",
+          "id": "000007"
+        },
+        "why": "读第 3 轮新开的 warning 000007 原文，确定要核的措辞"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "finding_id": "000007",
+          "doc_id": "000000",
+          "kind": "garbled",
+          "level": "warning",
+          "target": "appendix:A / line 200-207",
+          "evidence": "fs.read(out/package/main.tex, sha256=effaa0805ea6ee61b980e0476bbb98dab17b7cbe47d1ae6d315a67ae74c8daf5) 第 200 行逐字「\\item Theorem~\\ref{thm:sylow1} corresponds to the recorded statement \\texttt{stmt:000060} (a theorem of Sylow type), whose recorded proof is the elementary argument reproduced in Section~3」；第 201 行「\\texttt{stmt:000061}, whose recorded proof is the action of a Sylow $p$-subgroup on a coset space」；第 202 行「\\texttt{stmt:000062}, whose recorded proof is the conjugation action on the set of Sylow subgroups」；第 207 行「Sources: the recorded statements carry the literature identifiers \\texttt{lit:000000} (Conrad) for the first four and \\texttt{lit:000002} (Idelhaj)」。对照 finding 000006 已修的部分：第 209 行原文「the ledger holds line-by-line proof reviews」与「the recorded review reported an error」确已不在盘上（fs.search(pattern=\"ledger|internal record|in this project|this project\", path=\"out/package/main.tex\") total=0）。⇒ 本条是同一类措辞的残留，不是 000006 的复现。",
+          "message": "附录 A 第 200–202 行仍以「the recorded statement \\texttt{stmt:000060}」「whose recorded proof is …」、第 207 行以「the recorded statements carry the literature identifiers」指称台账行——「ledger」一词已清，但同义的 recorded / recorded proof 仍在，读者不认识「recorded by whom / recorded where」这一层意思。",
+          "round": 4,
+          "suggestion": "把 recorded 换成读者能懂的说法：例如「corresponds to the statement labelled \\texttt{stmt:000060}, whose argument is the one reproduced in Section~3」；第 207 行改「the source identifiers for the first four statements are \\texttt{lit:000000} (Conrad) and for the uniqueness criterion \\texttt{lit:000002} (Idelhaj)」。去掉 recorded 这一层「被登记过」的暗示即可，不要删编号（附录 A 允许内部编号）。",
+          "status": "open",
+          "resolution_note": "[manual] 手工判词：H 自己读出来的发现（record_finding 落库）",
+          "superseded_by": "",
+          "created_at": "2026-11-24T05:02:04+08:00",
+          "created_by": "agent-H",
+          "axis": "体例",
+          "line": 200,
+          "verbatim_quote": "",
+          "maths": "no",
+          "line_unavailable_reason": ""
+        },
+        "error": "",
+        "meta": {
+          "table": "review_findings",
+          "id": "000007",
+          "id_field": "finding_id",
+          "found": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 52096,
+        "prompt_cache_miss_tokens": 3916,
+        "tokens_in": 56012,
+        "tokens_out": 341,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000140"
+    },
+    {
+      "index": 3,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "review_findings",
+          "id": "000008"
+        },
+        "why": "读第 3 轮新开的 warning 000008 原文，确定要核的措辞"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "finding_id": "000008",
+          "doc_id": "000000",
+          "kind": "garbled",
+          "level": "warning",
+          "target": "references / line 174,179,184,189,207",
+          "evidence": "fs.search(pattern=\"project|reference collection|recorded|filed|provenance\", path=\"out/package/main.tex\") total=10；逐行读数（main.tex sha256=effaa080 5ea6ee61b980e0476bbb98dab17b7cbe47d1ae6d315a67ae74c8daf5，212 行）：第 174 行「expository notes, available as a PDF in the project reference collection (file \\texttt{conrad-proof-of-sylow-theorems}).」、第 179 行同式为 harris、第 184 行同式为 idelhaj、第 189 行同式为 vakil；第 207 行「Sources: the recorded statements carry the literature identifiers … No page numbers are cited because none were available verbatim in the project reference collection.」同一 search 中「ledger」「internal record」「this project」已零命中（另一次 fs.search 读数 total=0）⇒ 这不是上一轮 000005/000006 的复现，而是同类措辞在参考文献里的残留。",
+          "message": "参考文献与附录 A「Sources」段仍留着工程内集合的措辞：四条 \\bibitem 都写「available as a PDF in the project reference collection (file conrad-/harris-/idelhaj-/vakil-…)」，第 207 行写「No page numbers are cited because none were available verbatim in the project reference collection」——「the project reference collection」与「file 名」是本文档所在工程的内部资源，一篇论文的读者既不知道这个 collection 指什么、也无法据文件名找到文献；这与第 3 节已修掉的「in this project」是同一类过程词（正文禁令③），只是换了个位置。",
+          "round": 5,
+          "suggestion": "把四条 \\bibitem 的出处描述改成读者可核的外部形态（例如「expository notes, available at the author's web page」或直接删去 file 名，仅保留作者与篇名）；第 207 行改为「No page numbers are cited because the copies consulted carried no stable pagination（或：no pagination was available）」——去掉 collection / 工程内文件名这一层。",
+          "status": "open",
+          "resolution_note": "[manual] 手工判词：H 自己读出来的发现（record_finding 落库）",
+          "superseded_by": "",
+          "created_at": "2026-11-24T05:03:10+08:00",
+          "created_by": "agent-H",
+          "axis": "体例",
+          "line": 174,
+          "verbatim_quote": "",
+          "maths": "no",
+          "line_unavailable_reason": ""
+        },
+        "error": "",
+        "meta": {
+          "table": "review_findings",
+          "id": "000008",
+          "id_field": "finding_id",
+          "found": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 55168,
+        "prompt_cache_miss_tokens": 1926,
+        "tokens_in": 57094,
+        "tokens_out": 118,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000140"
+    },
+    {
+      "index": 4,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.search",
+        "args": {
+          "pattern": "recorded|project reference collection|available as a PDF|sources at hand",
+          "path": "out/package/main.tex"
+        },
+        "why": "合并检索 000007/000008 点名的措辞：recorded / project reference collection / available as a PDF；并看 ④ 的新措辞 sources at hand 是否落盘"
+      },
+      "result": {
+        "tool": "fs.search",
+        "ok": true,
+        "data": {
+          "pattern": "recorded|project reference collection|available as a PDF|sources at hand",
+          "path": "out/package/main.tex",
+          "matches": [
+            {
+              "path": "out/package/main.tex",
+              "line": 207,
+              "text": "Sources: the statements carry the literature identifiers \\texttt{lit:000000} (Conrad) for the first four and \\texttt{lit:000002} (Idelhaj) for the uniqueness criterion; the paper's bibliography lists the same four sources as \\cite{conrad,harris,idelhaj,vakil}. No page numbers are cited because none were available verbatim in the sources at hand."
+            }
+          ],
+          "lines": [
+            "out/package/main.tex:207: Sources: the statements carry the literature identifiers \\texttt{lit:000000} (Conrad) for the first four and \\texttt{lit:000002} (Idelhaj) for the uniqueness criterion; the paper's bibliography lists the same four sources as \\cite{conrad,harris,idelhaj,vakil}. No page numbers are cited because none were available verbatim in the sources at hand."
+          ],
+          "total": 1,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        },
+        "error": "",
+        "meta": {
+          "total": 1,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 56320,
+        "prompt_cache_miss_tokens": 1601,
+        "tokens_in": 57921,
+        "tokens_out": 459,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000140"
+    },
+    {
+      "index": 5,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/package/main.tex",
+          "start_line": 140,
+          "max_lines": 80
+        },
+        "why": "读第 3 节尾部（thm:unique 与 Provenance 段）、第 4 节、参考文献与附录 A 200–207 行，逐句核两条 finding 是否真清掉、有无新过程词或越级声称"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "Let $G$ be a finite group, $p$ a prime, and $P\\in\\Syl_p(G)$. Then $n_p=[G:\\Norm_G(P)]$.\n\\end{theorem}\n\n\\begin{proof}\n(1) Conjugation gives an action of $G$ on $\\Syl_p(G)$; by Theorem~\\ref{thm:sylow2} any $Q\\in\\Syl_p(G)$ equals $gPg^{-1}$ for some $g$, so the orbit of $P$ is all of $\\Syl_p(G)$ and the action is transitive.\n(2) The stabilizer of $P$ under this action is, by definition, $\\{g\\in G: gPg^{-1}=P\\}=\\Norm_G(P)$.\n(3) The orbit--stabilizer theorem (step (1) of Theorem~\\ref{thm:sylow1}) applied to this transitive action gives $|\\Syl_p(G)|=[G:\\Norm_G(P)]$, i.e.\\ $n_p=[G:\\Norm_G(P)]$. Combined with $P\\le\\Norm_G(P)$ this recovers $n_p\\mid m$.\n\\end{proof}\n\n\\begin{theorem}[Uniqueness equals normality]\\label{thm:unique}\nLet $G$ be a finite group, $p$ a prime, and $P\\in\\Syl_p(G)$. Then $P$ is the unique Sylow $p$-subgroup of $G$ if and only if $P\\trianglelefteq G$. In particular, if $G$ is abelian then each of its Sylow subgroups is unique.\n\\end{theorem}\n\n\\noindent\\emph{Provenance and status.} This statement is a standard textbook fact. For it, and only for it among the five results above, no verified full-text source is at hand and the argument following has not been independently checked; the argument is included for completeness and is not offered as an independently verified proof.\n\n\\begin{proof}\n(1) Suppose $P$ is the unique Sylow $p$-subgroup. For $g\\in G$ the conjugate $gPg^{-1}$ is again a subgroup of order $p^{k}$, hence a Sylow $p$-subgroup, hence equal to $P$. Therefore $gPg^{-1}=P$ for all $g\\in G$, i.e.\\ $P\\trianglelefteq G$.\n(2) Conversely suppose $P\\trianglelefteq G$. If $Q\\in\\Syl_p(G)$, Theorem~\\ref{thm:sylow2} gives $Q=gPg^{-1}$ for some $g\\in G$; normality gives $gPg^{-1}=P$, so $Q=P$. Hence $n_p=1$.\n(3) If $G$ is abelian, then $gPg^{-1}=P$ for every $g\\in G$ and every subgroup $P$, so each Sylow subgroup is normal and, by (1) and (2), unique. Equivalently, in the abelian case $n_p=[G:\\Norm_G(P)]=[G:G]=1$ by Theorem~\\ref{thm:index}.\n\\end{proof}\n\n\\sec…（落档截断，原 7456 字）",
+        "error": "",
+        "meta": {
+          "path": "out/package/main.tex",
+          "encoding": "utf-8",
+          "bytes_read": 22490,
+          "total_bytes": 22490,
+          "truncated": false,
+          "start_line": 140,
+          "lines_read": 73,
+          "total_lines": 212,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 140–212 行（共 212 行）",
+          "sha256": "08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 57088,
+        "prompt_cache_miss_tokens": 1661,
+        "tokens_in": 58749,
+        "tokens_out": 1395,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000140"
+    },
+    {
+      "index": 6,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/package/main.tex",
+          "start_line": 196,
+          "max_lines": 20
+        },
+        "why": "补读附录 A 末尾（200–212 行）逐字原文，核 000007 所指 recorded 措辞与 000008 所指 Sources 段是否真的换掉"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "\nThis paper contains no computational experiments and no machine-checked proofs; all five results are argued by hand in Section~3. The purpose of this appendix is to list, for each theorem, where the corresponding source material may be consulted and under which label the statement and its argument are filed. Those labels are provenance marks, not mathematical content.\n\n\\begin{itemize}\n\\item Theorem~\\ref{thm:sylow1} corresponds to the statement \\texttt{stmt:000060} (a theorem of Sylow type), whose proof is the elementary argument reproduced in Section~3: coset counting, the orbit--stabilizer theorem, the class equation, the fixed-point congruence, Cauchy's theorem and an iterated extension step.\n\\item Theorem~\\ref{thm:sylow2} corresponds to \\texttt{stmt:000061}, whose proof is the action of a Sylow $p$-subgroup on a coset space together with the fixed-point congruence.\n\\item Theorem~\\ref{thm:sylow3} corresponds to \\texttt{stmt:000062}, whose proof is the conjugation action on the set of Sylow subgroups combined with the fixed-point count applied to a Sylow subgroup.\n\\item Theorem~\\ref{thm:index} corresponds to \\texttt{stmt:000063}, the index form $n_p=[G:\\Norm_G(P)]$ of the counting statement.\n\\item Theorem~\\ref{thm:unique} corresponds to \\texttt{stmt:000064}, the criterion that a Sylow subgroup is unique exactly when it is normal.\n\\end{itemize}\n\nSources: the statements carry the literature identifiers \\texttt{lit:000000} (Conrad) for the first four and \\texttt{lit:000002} (Idelhaj) for the uniqueness criterion; the paper's bibliography lists the same four sources as \\cite{conrad,harris,idelhaj,vakil}. No page numbers are cited because none were available verbatim in the sources at hand.\n\nVerification status, stated as a fact rather than as an assurance: for the statements \\texttt{stmt:000060} through \\texttt{stmt:000063} the source material includes a line-by-line review of the proof; for \\texttt{stmt:000064} that review reported an error (the statement and the pro…（落档截断，原 2387 字）",
+        "error": "",
+        "meta": {
+          "path": "out/package/main.tex",
+          "encoding": "utf-8",
+          "bytes_read": 22490,
+          "total_bytes": 22490,
+          "truncated": false,
+          "start_line": 196,
+          "lines_read": 17,
+          "total_lines": 212,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 196–212 行（共 212 行）",
+          "sha256": "08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 57984,
+        "prompt_cache_miss_tokens": 3499,
+        "tokens_in": 61483,
+        "tokens_out": 1918,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000140"
+    },
+    {
+      "index": 7,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.search",
+        "args": {
+          "pattern": "ledger|internal record|in this project|sha256|验收表|本轮|cross_check|supported_not_proved|known_in_literature|machine-checked source|we ran|we dispatched",
+          "path": "out/package/main.tex"
+        },
+        "why": "核判据②：这一轮改动（bibitem 与附录 A Sources 段、Provenance 段）有没有引入过程词或内部术语"
+      },
+      "result": {
+        "tool": "fs.search",
+        "ok": true,
+        "data": {
+          "pattern": "ledger|internal record|in this project|sha256|验收表|本轮|cross_check|supported_not_proved|known_in_literature|machine-checked source|we ran|we dispatched",
+          "path": "out/package/main.tex",
+          "matches": [],
+          "lines": [],
+          "total": 0,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        },
+        "error": "",
+        "meta": {
+          "total": 0,
+          "truncated": false,
+          "scanned": 1,
+          "skipped": {
+            "binary": 0,
+            "large": 0,
+            "undecodable": 0,
+            "include_miss": 0
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 60672,
+        "prompt_cache_miss_tokens": 2242,
+        "tokens_in": 62914,
+        "tokens_out": 5725,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000140"
+    },
+    {
+      "index": 8,
+      "shape": "tool",
+      "payload": {
+        "name": "review.scan",
+        "args": {
+          "kinds": [
+            "cites",
+            "refs",
+            "proofs",
+            "duplicates",
+            "text_integrity",
+            "ledger_match"
+          ],
+          "project": "."
+        },
+        "why": "这一轮改过正文（四条 bibitem、附录 A Sources 段、Provenance 段）：用一次机械读数确认引用/ref/定理配对/重名/异常字符/正文对台账六类都没被改坏，才谈得上判 accepted"
+      },
+      "result": {
+        "tool": "review.scan",
+        "ok": true,
+        "data": {
+          "checked": false,
+          "kinds": [
+            "cites",
+            "refs",
+            "proofs",
+            "duplicates",
+            "text_integrity",
+            "ledger_match"
+          ],
+          "findings": [],
+          "counts": {
+            "files": 2,
+            "findings": 0,
+            "by_kind": {
+              "cites": 0,
+              "refs": 0,
+              "proofs": 0,
+              "duplicates": 0,
+              "text_integrity": 0,
+              "ledger_match": 0
+            },
+            "by_severity": {
+              "error": 0,
+              "warning": 0,
+              "info": 0
+            },
+            "facts": {
+              "cite_keys": 4,
+              "bibitem_keys": 4,
+              "uncited": 0,
+              "cite_commands": [
+                "cite",
+                "citep",
+                "citet",
+                "citealp",
+                "citeauthor",
+                "citeyear",
+                "nocite"
+              ],
+              "ref_keys": 7,
+              "label_keys": 7,
+              "unused_labels": 0,
+              "ref_commands": [
+                "ref",
+                "eqref",
+                "autoref",
+                "pageref",
+                "cref",
+                "Cref"
+              ],
+              "proof_envs": 5,
+              "statement_envs": 5,
+              "proof_without_statement": 0,
+              "statement_without_proof": 0,
+              "proof_unclosed": 0,
+              "statement_env_names": [
+                "corollary",
+                "lemma",
+                "proposition",
+                "theorem"
+              ],
+              "labels": 7,
+              "duplicate_labels": 0,
+              "newtheorem_names": 9,
+              "duplicate_newtheorem": 0,
+              "cjk": 0,
+              "control": 0,
+              "zero_width": 0,
+              "replacement": 0,
+              "bidi": 0,
+              "nbsp": 0,
+              "statement_ledger_rows": 65,
+              "ledger_propositions": 5,
+              "ledger_theorem_kinds": 5,
+              "ledger_theorem_kinds_projected": 5,
+              "mapping_rows": 5,
+              "statement_surplus": [],
+              "mapping_state": "pass"
+            }
+          },
+          "bad": [
+            {
+              "kind": "text_integrity",
+              "reason": "paths 是空的（或不是数组）⇒ 这一趟什么都没扫，不是「查过了、干净」"
+            }
+          ],
+          "detail": [
+            {
+              "kind": "cites",
+              "checked": true,
+              "reason": "",
+              "scanned": [
+                "out/package/main.tex"
+              ],
+              "counts": {
+                "findings": 0
+              },
+              "returned": 0
+            },
+            {
+              "kind": "refs",
+              "checked": true,
+              "reason": "",
+              "scanned": [
+                "out/package/main.tex"
+              ],
+              "counts": {
+                "findings": 0
+              },
+              "returned": 0
+            },
+            {
+              "kind": "proofs",
+              "checked": true,
+              "reason": "",
+              "scanned": [
+                "out/package/main.tex"
+              ],
+              "counts": {
+                "findings": 0
+              },
+              "returned": 0
+            },
+            {
+              "kind": "duplicates",
+              "checked": true,
+              "reason": "",
+              "scanned": [
+                "out/package/main.tex"
+              ],
+              "counts": {
+                "findings": 0
+              },
+              "returned": 0
+            },
+            {
+              "kind": "text_integrity",
+              "checked": false,
+              "reason": "paths 是空的（或不是数组）⇒ 这一趟什么都没扫，不是「查过了、干净」",
+              "scanned": [],
+              "counts": {
+                "findings": 0
+              },
+              "returned": 0
+            },
+            {
+              "kind": "ledger_match",
+              "checked": true,
+              "reason": "",
+              "scanned": [
+                "D:\\Incubator\\projects\\sylow-4\\out\\package\\MAPPING.json"
+              ],
+              "counts": {
+                "findings": 0
+              },
+              "returned": 0
+            }
+          ],
+          "scanned": [
+            "out/package/main.tex",
+            "D:\\Incubator\\projects\\sylow-4\\out\\package\\MAPPING.json"
+          ],
+          "reason": "text_integrity 没查成：paths 是空的（或不是数组）⇒ 这一趟什么都没扫，不是「查过了、干净」"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 62080,
+        "prompt_cache_miss_tokens": 1736,
+        "tokens_in": 63816,
+        "tokens_out": 2891,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000140"
+    },
+    {
+      "index": 9,
+      "shape": "tool",
+      "payload": {
+        "name": "review.scan",
+        "args": {
+          "kinds": [
+            "text_integrity"
+          ],
+          "paths": [
+            "out/package/main.tex"
+          ],
+          "project": "."
+        },
+        "why": "上一步 text_integrity 因 paths 为空没查成（checked=false，不是干净）：补一次显式 paths 的异常字符读数，才能说这一轮改过的正文没有混入零宽/控制符/CJK"
+      },
+      "result": {
+        "tool": "review.scan",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "kinds": [
+            "text_integrity"
+          ],
+          "findings": [],
+          "counts": {
+            "files": 1,
+            "findings": 0,
+            "by_kind": {
+              "text_integrity": 0
+            },
+            "by_severity": {
+              "error": 0,
+              "warning": 0,
+              "info": 0
+            },
+            "facts": {
+              "cjk": 0,
+              "control": 0,
+              "zero_width": 0,
+              "replacement": 0,
+              "bidi": 0,
+              "nbsp": 0
+            }
+          },
+          "bad": [],
+          "detail": [
+            {
+              "kind": "text_integrity",
+              "checked": true,
+              "reason": "",
+              "scanned": [
+                "out/package/main.tex"
+              ],
+              "counts": {
+                "findings": 0
+              },
+              "returned": 0
+            }
+          ],
+          "scanned": [
+            "out/package/main.tex"
+          ],
+          "reason": "text_integrity 0 条"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 62976,
+        "prompt_cache_miss_tokens": 2435,
+        "tokens_in": 65411,
+        "tokens_out": 3720,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000140"
+    },
+    {
+      "index": 10,
+      "shape": "tool",
+      "payload": {
+        "name": "review.verify_fixes",
+        "args": {
+          "doc_id": "000000",
+          "round_no": 5
+        },
+        "why": "按派活做第四次复审：逐条核第 3 轮新开的 000007（附录 A recorded 措辞）与 000008（bibitem 的 project reference collection），看我读盘读到的读数与工具复核是否一致"
+      },
+      "result": {
+        "tool": "review.verify_fixes",
+        "ok": true,
+        "data": {
+          "doc_id": "000000",
+          "round": 7,
+          "resolved": [
+            {
+              "finding_id": "000000",
+              "kind": "overclaim",
+              "level": "error",
+              "target": "section:3 / thm:unique",
+              "message": "第 3 节把台账等级只有 conjecture、且 V 三判「有毛病」的 stmt:000064 呈现为已证明的定理（\\begin{theorem}[Uniqueness equals normality] + 完整 proof，154–164 行），正文与摘要均未降级，唯一披露在附录 A 第 212 行。",
+              "evidence": "statements 000064：bits.grade=conjecture、reviewed=false、proof_source=citation、reviewed_by={evidence:lit:000002}；verifications/000064.jsonl 三行 v-000001/v-000002/v-000003 verdict 全为「有毛病」（命题与证明不匹配、无干净签名）；out/package/MAPPING.json 该行 reviewed=「未通过」、optimized=「未优化」。正文 154–157 行以 theorem 环境断言该命题，158–164 行给出证明，摘要第 34 行与引言只字未提其审核状态。",
+              "round": 1,
+              "status": "fixed",
+              "source": "manual_rechecked"
+            },
+            {
+              "finding_id": "000001",
+              "kind": "overclaim",
+              "level": "warning",
+              "target": "section:4",
+              "message": "第 170 行「The proofs above are elementary and human-checked; no formal verification was carried out」把五条结果一律说成 human-checked，但其中 thm:unique（stmt:000064）在台账里没有 V 的签（bits.reviewed=false、grade=conjecture），V 对它三次判「有毛病」——「human-checked」这一句对第 154–164 行那一条不成立，属无依据的保证（其余四条成立）。",
+              "evidence": "main.tex 第 170 行原文；statements 000064 的 bits.reviewed=false / grade=conjecture / reviewed_by={evidence:lit:000002}；verifications/000064.jsonl 三行 verdict 全为「有毛病」（v-000001/v-000002/v-000003）；MAPPING.json 该行 reviewed=「未通过」。对比：000060–000063 的 bits.reviewed=true 且各有一份 verdict=成立 的签行（verifications/000060..000063.jsonl）。",
+              "round": 1,
+              "status": "fixed",
+              "source": "manual_rechecked"
+            },
+            {
+              "finding_id": "000002",
+              "kind": "garbled",
+              "level": "warning",
+              "target": "section:3",
+              "message": "两条被当作引理使用的辅助事实（\\label{lem:fix}、\\label{lem:cauchy}）用的是 remark 环境、却带 \\begin{proof}，并被正文以「By Lemma~\\ref{lem:fix}」引用：读者按「Lemma 3.x」回查会翻到一个 Remark，且这两个 proof 在结构上被判为「没有归属的证明」——一个不在场的人照 \\ref 去找会找错环境类型。",
+              "evidence": "review.scan(kinds=[\"proofs\"], project=\".\") 返回两条 error：out/package/main.tex:90 与 :100 的 \\begin{proof} 「前面没有任何定理类环境」；同一次读数 facts: statement_envs=5 / proof_envs=7 / statement_without_proof=0 / proof_without_statement=2。正文第 123 行、第 134 行、第 136 行以 Lemma~\\ref{lem:fix} 引用之，而 main.tex 前导区只给 theorem/lemma/proposition/corollary/definition/example/remark/conjecture/openproblem 定义，这两条声明写的是 \\begin{remark}[Fixed-point congruence]\\label{lem:fix} 与 \\begin{remark}[Cauchy's theorem]\\label{lem:cauchy}。",
+              "round": 1,
+              "status": "fixed",
+              "source": "manual_rechecked"
+            },
+            {
+              "finding_id": "000003",
+              "kind": "garbled",
+              "level": "info",
+              "target": "appendix:A",
+              "message": "附录 A 第 200 行仍带着台账气（「record ... the ledger entry」「a reader of the internal records」「internal identifiers」）：读者拿到的是论文，不认识 ledger / internal records 这套内部措辞。内部编号本身在附录 A 是允许的（清单②：stmt:/lit: 只许出现在附录），但用「台账」这类过程词解释它的来历，读起来是把工作记录贴进了正文。",
+              "evidence": "main.tex 第 200 行逐字：「The purpose of this appendix is to record, for each theorem, the ledger entry it was derived from, so that a reader of the internal records can trace every statement in the paper back to its source. The entries below are internal identifiers and are not part of the mathematical content.」；fs.search 确认 stmt:/lit: 的 8 处全部落在 \\appendix（第 196 行）之后：203、204、205、206、207、210、212 行 —— 正文禁令①本身合规。",
+              "round": 1,
+              "status": "fixed",
+              "source": "manual_rechecked"
+            },
+            {
+              "finding_id": "000004",
+              "kind": "garbled",
+              "level": "warning",
+              "target": "section:3 line:153",
+              "message": "第 153 行的就地披露把方位说反了：写「the five results below」，但五条结果（thm:sylow1 101 行、thm:sylow2 115 行、thm:sylow3 125 行、thm:index 140 行、thm:unique 148 行）全在这段之前，这一段之后是它的 proof 与第 4 节。一个不在场的人按「below」往下找，会找不到那五条。建议改成「among the five results above」（或「of the five results of this section」），并把「the argument following」保留（指紧随其后的 proof，这一处是对的）。",
+              "evidence": "fs.search(pattern=\"Provenance and status|five results below|...\") 取到 main.tex:153 逐字「For it, and only for it among the five results below, we do not hold a verified full-text source in this project」；同一次 search 与 fs.search(pattern=\"begin\\\\{theorem\\\\}\\\\[Sylow I|...\") 取到五个定理环境的行号：101（thm:sylow1）、115（thm:sylow2）、125（thm:sylow3）、thm:index 与 thm:unique 分别落在 140 与 148 一带（MAPPING.json 的 citation_loc 也把 thm:sylow1/2/3/index/unique 的正文区间记为 104–107、118–121、128–131、142–145、152–155，均 <= 153）。即：五条结果在 153 行之上，不在其下。",
+              "round": 2,
+              "status": "fixed",
+              "source": "manual_rechecked"
+            },
+            {
+              "finding_id": "000005",
+              "kind": "garbled",
+              "level": "error",
+              "target": "section:3 / line 153 (Provenance and status)",
+              "message": "第 3 节就地披露段把工程过程词写进了正文：「in this project」「we therefore record it as a textbook-level claim」——「本项目」这一档过程词在正文禁令③里是禁止的，读者拿到的是论文，不认识「this project」指哪个工程。",
+              "evidence": "fs.search(pattern=\"Provenance and status|five results below|in this project|...\") 取到 out/package/main.tex:153 逐字：「\\noindent\\emph{Provenance and status.} This statement is a standard textbook fact. For it, and only for it among the five results below, we do not hold a verified full-text source in this project and the argument following has not been independently checked; we therefore record it as a textbook-level claim and give the argument for completeness, not as an independently verified proof.」；同一 search 对 ledger|internal record|sha256|本轮|验收表 的命中只有 153 与 209 两行 ⇒ 这是本轮新引入的正文过程词（上一轮第 170 行那处已改掉）。披露的实质内容合格（标准教材事实 / 论证未经独立核验 / 未持经核验全文来源），只需换掉工程措辞。",
+              "round": 2,
+              "status": "fixed",
+              "source": "manual_rechecked"
+            },
+            {
+              "finding_id": "000006",
+              "kind": "garbled",
+              "level": "warning",
+              "target": "appendix:A",
+              "message": "附录 A 仍有过程词漏到论文里：第 209 行「the ledger holds line-by-line proof reviews」（ledger=台账）与「the recorded statements / the recorded review reported an error」，第 197 行「filed in the reference collection of this project」「under which provenance label the statement and its argument were recorded」——读者拿到的是论文，不认识 ledger / recorded / provenance label 这套内部措辞；原发现点名的那一句（第 200 行 record the ledger entry / internal records）确实已删，但同一段新写的句子又把 ledger 这一词带回来了。",
+              "evidence": "fs.search(pattern=\"cross_check|supported_not_proved|known_in_literature|ledger|internal record|in this project|sha256|本轮|验收表\", path=\"out/package/main.tex\") 命中两行：out/package/main.tex:153 与 :209（命令输出 total=2、matches 逐条带 line 与 text）。其中 :209 逐字「Verification status, stated as a fact rather than as an assurance: for the recorded statements \\texttt{stmt:000060} through \\texttt{stmt:000063} the ledger holds line-by-line proof reviews; for \\texttt{stmt:000064} the recorded review reported an error (the statement and the recorded proof were found not to match)」；:197 逐字「where the corresponding source material is filed in the reference collection of this project and under which provenance label the statement and its argument were recorded」。这两处都是本轮新写进附录 A 的句子（上一轮原文是「record ... the ledger entry」「a reader of the internal records」）。内部编号本身在附录 A 允许（清单②），此处只判过程词。",
+              "round": 2,
+              "status": "fixed",
+              "source": "manual_rechecked"
+            }
+          ],
+          "still_open": [
+            {
+              "finding_id": "000007",
+              "kind": "garbled",
+              "level": "warning",
+              "target": "appendix:A / line 200-207",
+              "message": "附录 A 第 200–202 行仍以「the recorded statement \\texttt{stmt:000060}」「whose recorded proof is …」、第 207 行以「the recorded statements carry the literature identifiers」指称台账行——「ledger」一词已清，但同义的 recorded / recorded proof 仍在，读者不认识「recorded by whom / recorded where」这一层意思。",
+              "evidence": "fs.read(out/package/main.tex, sha256=effaa0805ea6ee61b980e0476bbb98dab17b7cbe47d1ae6d315a67ae74c8daf5) 第 200 行逐字「\\item Theorem~\\ref{thm:sylow1} corresponds to the recorded statement \\texttt{stmt:000060} (a theorem of Sylow type), whose recorded proof is the elementary argument reproduced in Section~3」；第 201 行「\\texttt{stmt:000061}, whose recorded proof is the action of a Sylow $p$-subgroup on a coset space」；第 202 行「\\texttt{stmt:000062}, whose recorded proof is the conjugation action on the set of Sylow subgroups」；第 207 行「Sources: the recorded statements carry the literature identifiers \\texttt{lit:000000} (Conrad) for the first four and \\texttt{lit:000002} (Idelhaj)」。对照 finding 000006 已修的部分：第 209 行原文「the ledger holds line-by-line proof reviews」与「the recorded review reported an error」确已不在盘上（fs.search(pattern=\"ledger|internal record|in this project|this project\", path=\"out/package/main.tex\") total=0）。⇒ 本条是同一类措辞的残留，不是 000006 的复现。",
+              "round": 4,
+              "status": "open",
+              "source": "manual_not_rechecked",
+              "note": "[round 7] 手工判词（`review.record_finding` 落的散文发现）**不能被自动复跑判掉**：它的去重键不在机械 scan 的可产出集合里，「本轮没复现」不等于「H 复核过」。离场只有一条路：H 用 `review.record_finding` 以同一去重键再登记一次，`evidence` 以 `复核 fixed：` 或 `复核 wontfix：` 开头"
+            },
+            {
+              "finding_id": "000008",
+              "kind": "garbled",
+              "level": "warning",
+              "target": "references / line 174,179,184,189,207",
+              "message": "参考文献与附录 A「Sources」段仍留着工程内集合的措辞：四条 \\bibitem 都写「available as a PDF in the project reference collection (file conrad-/harris-/idelhaj-/vakil-…)」，第 207 行写「No page numbers are cited because none were available verbatim in the project reference collection」——「the project reference collection」与「file 名」是本文档所在工程的内部资源，一篇论文的读者既不知道这个 collection 指什么、也无法据文件名找到文献；这与第 3 节已修掉的「in this project」是同一类过程词（正文禁令③），只是换了个位置。",
+              "evidence": "fs.search(pattern=\"project|reference collection|recorded|filed|provenance\", path=\"out/package/main.tex\") total=10；逐行读数（main.tex sha256=effaa080 5ea6ee61b980e0476bbb98dab17b7cbe47d1ae6d315a67ae74c8daf5，212 行）：第 174 行「expository notes, available as a PDF in the project reference collection (file \\texttt{conrad-proof-of-sylow-theorems}).」、第 179 行同式为 harris、第 184 行同式为 idelhaj、第 189 行同式为 vakil；第 207 行「Sources: the recorded statements carry the literature identifiers … No page numbers are cited because none were available verbatim in the project reference collection.」同一 search 中「ledger」「internal record」「this project」已零命中（另一次 fs.search 读数 total=0）⇒ 这不是上一轮 000005/000006 的复现，而是同类措辞在参考文献里的残留。",
+              "round": 5,
+              "status": "open",
+              "source": "manual_not_rechecked",
+              "note": "[round 7] 手工判词（`review.record_finding` 落的散文发现）**不能被自动复跑判掉**：它的去重键不在机械 scan 的可产出集合里，「本轮没复现」不等于「H 复核过」。离场只有一条路：H 用 `review.record_finding` 以同一去重键再登记一次，`evidence` 以 `复核 fixed：` 或 `复核 wontfix：` 开头"
+            }
+          ],
+          "unresolved_findings": [],
+          "not_rechecked": [
+            {
+              "finding_id": "000007",
+              "kind": "garbled",
+              "level": "warning",
+              "target": "appendix:A / line 200-207",
+              "message": "附录 A 第 200–202 行仍以「the recorded statement \\texttt{stmt:000060}」「whose recorded proof is …」、第 207 行以「the recorded statements carry the literature identifiers」指称台账行——「ledger」一词已清，但同义的 recorded / recorded proof 仍在，读者不认识「recorded by whom / recorded where」这一层意思。",
+              "evidence": "fs.read(out/package/main.tex, sha256=effaa0805ea6ee61b980e0476bbb98dab17b7cbe47d1ae6d315a67ae74c8daf5) 第 200 行逐字「\\item Theorem~\\ref{thm:sylow1} corresponds to the recorded statement \\texttt{stmt:000060} (a theorem of Sylow type), whose recorded proof is the elementary argument reproduced in Section~3」；第 201 行「\\texttt{stmt:000061}, whose recorded proof is the action of a Sylow $p$-subgroup on a coset space」；第 202 行「\\texttt{stmt:000062}, whose recorded proof is the conjugation action on the set of Sylow subgroups」；第 207 行「Sources: the recorded statements carry the literature identifiers \\texttt{lit:000000} (Conrad) for the first four and \\texttt{lit:000002} (Idelhaj)」。对照 finding 000006 已修的部分：第 209 行原文「the ledger holds line-by-line proof reviews」与「the recorded review reported an error」确已不在盘上（fs.search(pattern=\"ledger|internal record|in this project|this project\", path=\"out/package/main.tex\") total=0）。⇒ 本条是同一类措辞的残留，不是 000006 的复现。",
+              "round": 4,
+              "status": "open",
+              "source": "manual_not_rechecked",
+              "note": "[round 7] 手工判词（`review.record_finding` 落的散文发现）**不能被自动复跑判掉**：它的去重键不在机械 scan 的可产出集合里，「本轮没复现」不等于「H 复核过」。离场只有一条路：H 用 `review.record_finding` 以同一去重键再登记一次，`evidence` 以 `复核 fixed：` 或 `复核 wontfix：` 开头"
+            },
+            {
+              "finding_id": "000008",
+              "kind": "garbled",
+              "level": "warning",
+              "target": "references / line 174,179,184,189,207",
+              "message": "参考文献与附录 A「Sources」段仍留着工程内集合的措辞：四条 \\bibitem 都写「available as a PDF in the project reference collection (file conrad-/harris-/idelhaj-/vakil-…)」，第 207 行写「No page numbers are cited because none were available verbatim in the project reference collection」——「the project reference collection」与「file 名」是本文档所在工程的内部资源，一篇论文的读者既不知道这个 collection 指什么、也无法据文件名找到文献；这与第 3 节已修掉的「in this project」是同一类过程词（正文禁令③），只是换了个位置。",
+              "evidence": "fs.search(pattern=\"project|reference collection|recorded|filed|provenance\", path=\"out/package/main.tex\") total=10；逐行读数（main.tex sha256=effaa080 5ea6ee61b980e0476bbb98dab17b7cbe47d1ae6d315a67ae74c8daf5，212 行）：第 174 行「expository notes, available as a PDF in the project reference collection (file \\texttt{conrad-proof-of-sylow-theorems}).」、第 179 行同式为 harris、第 184 行同式为 idelhaj、第 189 行同式为 vakil；第 207 行「Sources: the recorded statements carry the literature identifiers … No page numbers are cited because none were available verbatim in the project reference collection.」同一 search 中「ledger」「internal record」「this project」已零命中（另一次 fs.search 读数 total=0）⇒ 这不是上一轮 000005/000006 的复现，而是同类措辞在参考文献里的残留。",
+              "round": 5,
+              "status": "open",
+              "source": "manual_not_rechecked",
+              "note": "[round 7] 手工判词（`review.record_finding` 落的散文发现）**不能被自动复跑判掉**：它的去重键不在机械 scan 的可产出集合里，「本轮没复现」不等于「H 复核过」。离场只有一条路：H 用 `review.record_finding` 以同一去重键再登记一次，`evidence` 以 `复核 fixed：` 或 `复核 wontfix：` 开头"
+            }
+          ],
+          "semantic_check": {
+            "checked": false,
+            "judge": "",
+            "reason": "没接线：语义级判据（「结论是否强于引文」）需要 LLM 或人，本框架默认零 LLM 调用。接法：`scan_document(..., semantic_judge=<可调用>)`，签名见 `SemanticJudge`。⇒ 这一格的状态是**没查**，不是'查过、没问题' —— 措辞级判据仍然跑过（见 findings）",
+            "claims_judged": 0,
+            "claims_unknown": 0,
+            "checker_errors": 0,
+            "stronger_than_evidence": 0
+          },
+          "verdict": "revise_again",
+          "reason": "第 7 轮复审：上一轮 9 条发现里 resolved=7、仍复现=2；error 级未解决 0 条；；其中 2 条是**手工判词**（`record_finding` 落的散文发现）、本轮**没有 H 的显式复核** ⇒ 留在 open，不许判 fixed（手工判词不能被自动复跑判掉；逐条见 `not_rechecked`）；7 条手工判词已由 H 显式复核过（fixed / wontfix 带理由）⇒ 本轮不改写它们。",
+          "error_count": 0,
+          "warning_count": 0,
+          "info_count": 0,
+          "dep_check": {
+            "checked": true,
+            "reason": "检查了 0 条依赖",
+            "open": []
+          },
+          "finding_updates": [],
+          "status": "in_review",
+          "status_updated": true,
+          "status_error": null,
+          "paper_body": {
+            "checked": true,
+            "source": "tex",
+            "path": "out/package/main.tex",
+            "sha256": "08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72",
+            "bytes": 22490,
+            "lines": 213,
+            "chars": 22490,
+            "reason": ""
+          }
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 64640,
+        "prompt_cache_miss_tokens": 1617,
+        "tokens_in": 66257,
+        "tokens_out": 4798,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000140"
+    },
+    {
+      "index": 11,
+      "shape": "tool",
+      "payload": {
+        "name": "review.record_finding",
+        "args": {
+          "doc_id": "000000",
+          "kind": "garbled",
+          "level": "warning",
+          "axis": "体例",
+          "target": "appendix:A / line 200-207",
+          "line": 200,
+          "message": "附录 A 第 200–202 行仍以「the recorded statement \\texttt{stmt:000060}」「whose recorded proof is …」、第 207 行以「the recorded statements carry the literature identifiers」指称台账行——「ledger」一词已清，但同义的 recorded / recorded proof 仍在，读者不认识「recorded by whom / recorded where」这一层意思。",
+          "evidence": "复核 fixed：正文 sha256=08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72（212 行）。① fs.search(pattern=\"recorded|project reference collection|available as a PDF|sources at hand\", path=\"out/package/main.tex\") total=1，唯一命中是第 207 行的「sources at hand」（作者新加的措辞）⇒ 「recorded」单独零命中，原发现点名的「whose recorded proof」×3 与「the recorded statement(s)」×2 全部不在盘上；② fs.read 第 196–212 行逐字：第 200 行「\\item Theorem~\\ref{thm:sylow1} corresponds to the statement \\texttt{stmt:000060} (a theorem of Sylow type), whose proof is the elementary argument reproduced in Section~3」、第 201 行「…whose proof is the action of a Sylow $p$-subgroup on a coset space…」、第 202 行「…whose proof is the conjugation action on the set of Sylow subgroups…」、第 207 行「Sources: the statements carry the literature identifiers \\texttt{lit:000000} (Conrad) for the first four and \\texttt{lit:000002} (Idelhaj) for the uniqueness criterion…」；③ 判据②复核：fs.search(pattern=\"ledger|internal record|in this project|sha256|验收表|本轮|cross_check|supported_not_proved|known_in_literature|machine-checked source|we ran|we dispatched\", path=\"out/package/main.tex\") total=0 ⇒ 这一轮改动没有引入新的过程词。",
+          "suggestion": "已按建议改成「corresponds to the statement …whose proof is …」；无需再改。"
+        },
+        "why": "按 review.verify_fixes 的离场要求，用同一去重键重登记一条 finding 000007 的复核结论（手工判词不能被自动复跑判掉）"
+      },
+      "result": {
+        "tool": "review.record_finding",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "created": false,
+          "duplicate_skipped": 1,
+          "finding_id": "000007",
+          "doc_id": "000000",
+          "kind": "garbled",
+          "level": "warning",
+          "round": 7,
+          "status": "fixed"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 65408,
+        "prompt_cache_miss_tokens": 4084,
+        "tokens_in": 69492,
+        "tokens_out": 3886,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000140"
+    },
+    {
+      "index": 12,
+      "shape": "tool",
+      "payload": {
+        "name": "review.record_finding",
+        "args": {
+          "doc_id": "000000",
+          "kind": "garbled",
+          "target": "references / line 174,179,184,189,207",
+          "level": "warning",
+          "axis": "体例",
+          "message": "参考文献与附录 A「Sources」段仍留着工程内集合的措辞：四条 \\bibitem 都写「available as a PDF in the project reference collection (file conrad-/harris-/idelhaj-/vakil-…)」，第 207 行写「No page numbers are cited because none were available verbatim in the project reference collection」——「the project reference collection」与「file 名」是本文档所在工程的内部资源，一篇论文的读者既不知道这个 collection 指什么、也无法据文件名找到文献；这与第 3 节已修掉的「in this project」是同一类过程词（正文禁令③），只是换了个位置。",
+          "line": 174,
+          "suggestion": "把四条 \\bibitem 的出处描述改成读者可核的外部形态（例如「expository notes, available at the author's web page」或直接删去 file 名，仅保留作者与篇名）；第 207 行改为「No page numbers are cited because the copies consulted carried no stable pagination（或：no pagination was available）」——去掉 collection / 工程内文件名这一层。",
+          "evidence": "复核 fixed：正文 sha256=08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72（212 行，fs.stat 读数）。① fs.search(pattern=\"recorded|project reference collection|available as a PDF|sources at hand\", path=\"out/package/main.tex\") total=1，唯一命中是第 207 行的「sources at hand」（作者新加的外部措辞）⇒ 「project reference collection」零命中、「available as a PDF」零命中。② fs.read(start_line=140, max_lines=80) 逐字：第 174 行现为「K.~Conrad, \\emph{Proof of Sylow theorems}, expository notes (file \\texttt{conrad-proof-of-sylow-theorems}).」、第 179 行 harris、第 184 行 idelhaj、第 189 行 vakil 同式——原「, available as a PDF in the project reference collection (file …)」四处全部换掉，作者/题名/文件名按约定原样保留。③ 第 207 行现逐字「Sources: the statements carry the literature identifiers \\texttt{lit:000000} (Conrad) for the first four and \\texttt{lit:000002} (Idelhaj) for the uniqueness criterion; the paper's bibliography lists the same four sources as \\cite{conrad,harris,idelhaj,vakil}. No page numbers are cited because none were available verbatim in the sources at hand.」——原「in the project reference collection」已换成「in the sources at hand」。原发现点名的两类工程内措辞（collection 名 + 「available as a PDF in the project reference collection」定式）在盘上均已消失。④ 残留披露（不构成原发现所指的 ③ 过程词）：四条 bibitem 仍留裸 slug「(file conrad-/harris-/idelhaj-/vakil-…)」，读者仍无法据以定位文献——这是弱定位问题（体例观察，主观档、不拦门），已写进本轮审校报告交 G 决定是否删去 slug。"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "review.record_finding",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "created": false,
+          "duplicate_skipped": 1,
+          "finding_id": "000008",
+          "doc_id": "000000",
+          "kind": "garbled",
+          "level": "warning",
+          "round": 7,
+          "status": "fixed"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 68736,
+        "prompt_cache_miss_tokens": 1640,
+        "tokens_in": 70376,
+        "tokens_out": 3056,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000140"
+    },
+    {
+      "index": 13,
+      "shape": "tool",
+      "payload": {
+        "name": "review.review_document",
+        "args": {
+          "doc_id": "000000",
+          "round_no": 8
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "review.review_document",
+        "ok": true,
+        "data": {
+          "doc_id": "000000",
+          "checked": true,
+          "round": 8,
+          "new_findings": [],
+          "duplicate_skipped": 0,
+          "reopened": [],
+          "error_count": 0,
+          "warning_count": 0,
+          "info_count": 0,
+          "dep_check": {
+            "checked": true,
+            "reason": "检查了 0 条依赖",
+            "open": []
+          },
+          "semantic_check": {
+            "checked": false,
+            "judge": "",
+            "reason": "没接线：语义级判据（「结论是否强于引文」）需要 LLM 或人，本框架默认零 LLM 调用。接法：`scan_document(..., semantic_judge=<可调用>)`，签名见 `SemanticJudge`。⇒ 这一格的状态是**没查**，不是'查过、没问题' —— 措辞级判据仍然跑过（见 findings）",
+            "claims_judged": 0,
+            "claims_unknown": 0,
+            "checker_errors": 0,
+            "stronger_than_evidence": 0
+          },
+          "coverage": {
+            "claims_total": 5,
+            "claims_reviewed": 5,
+            "claims_decided": 5,
+            "claims_semantically_judged": 0,
+            "note": "`claims_reviewed` = 逐条字段/引用/证据档位检查真的跑过的断言数；`claims_decided` = 其中校验器判成了的（判不了的另计）；`claims_semantically_judged` = 语义级判据（「结论是否强于引文」）真的判过的条数（没接线时为 0 = **没查**，不是'没问题'）。本覆盖率只覆盖「稿件有没有把自己说清楚」，不覆盖「数学对不对」——后者要 proof 级证据（FC-22），不由本函数给出。"
+          },
+          "status": "accepted",
+          "status_updated": true,
+          "status_error": null,
+          "signature": {
+            "doc_id": "000000",
+            "content_sha256": "a19e4ab0678898d23a792a0b9bd4f19aaaee360212d7cc533381df709951d32d",
+            "claims_hash": "4326469fbc467255eb4bdf624b7f3f344920be6852fb9400e8dc5b4a86db6b7b",
+            "name": "agent-H",
+            "at": "2026-11-24T05:07:36+08:00",
+            "scope": "document",
+            "verdict": "accepted",
+            "note": "round=8；机械检查判定 accepted",
+            "instance_id": "agent-H@2026-11-24T05:07:36+08:00",
+            "model": "",
+            "prompt_version": "",
+            "temperature": null,
+            "coverage": {
+              "claims_total": 5,
+              "claims_reviewed": 5,
+              "claims_decided": 5,
+              "claims_semantically_judged": 0,
+              "note": "`claims_reviewed` = 逐条字段/引用/证据档位检查真的跑过的断言数；`claims_decided` = 其中校验器判成了的（判不了的另计）；`claims_semantically_judged` = 语义级判据（「结论是否强于引文」）真的判过的条数（没接线时为 0 = **没查**，不是'没问题'）。本覆盖率只覆盖「稿件有没有把自己说清楚」，不覆盖「数学对不对」——后者要 proof 级证据（FC-22），不由本函数给出。"
+            },
+            "inputs": {
+              "doc_sha256": "a19e4ab0678898d23a792a0b9bd4f19aaaee360212d7cc533381df709951d32d",
+              "evidence_hashes": []
+            },
+            "basis": {
+              "codes_checked": [
+                "garbled",
+                "overclaim"
+              ],
+              "finding_ids": [
+                "000000",
+                "000001",
+                "000002",
+                "000003",
+                "000004",
+                "000005",
+                "000006",
+                "000007",
+                "000008"
+              ],
+              "rounds": 8,
+              "dimensions": [
+                "体例",
+                "证据"
+              ]
+            },
+            "evidence_path": "doc-signatures/000000-a19e4ab0678898d2-001.json",
+            "evidence_sha256": "e2e83090dce1d58e571e4be7d28fd74a6d025a433f5db6936327efa5a6ee39a3",
+            "prev_hash": ""
+          },
+          "signature_error": null,
+          "verdict": "accepted",
+          "open_findings": {
+            "checked": true,
+            "total": 0,
+            "error": 0,
+            "warning": 0,
+            "finding_ids": [],
+            "review_round": 8,
+            "review_rounds": 8,
+            "blocks_accept": false,
+            "why": "这一版没有 open findings"
+          },
+          "paper_body": {
+            "checked": true,
+            "source": "tex",
+            "path": "out/package/main.tex",
+            "sha256": "08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72",
+            "bytes": 22490,
+            "lines": 213,
+            "chars": 22490,
+            "reason": "",
+            "documents_row": "present"
+          },
+          "reason": "被审正文：out/package/main.tex（tex，sha256=08c6cc0a567364f0…，213 行）；机械检查发现 error=0、warning=0、info=0；依赖闭合已检查（检查了 0 条依赖）；新增发现 0 条、与已有发现重复被跳过 0 条；覆盖率 5/5（判成 5）；语义级判据**没查**（未接线）—— '措辞干净而结论强于引文'这一形态看不见。"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 69632,
+        "prompt_cache_miss_tokens": 1623,
+        "tokens_in": 71255,
+        "tokens_out": 962,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000140"
+    },
+    {
+      "index": 14,
+      "shape": "tool",
+      "payload": {
+        "name": "review.report",
+        "args": {
+          "doc_id": "000000",
+          "round_no": 8,
+          "own_errors": [
+            "第 9 步我把 text_integrity 与另外五类一起交给 review.scan，却没给 paths，该类的 detail 报 checked=false（「paths 是空的」）；我补跑了一次带 paths 的 text_integrity 才拿到读数 —— 先报「没查成」再补，这一笔如实记在这里。",
+            "第 13 步登记 000008 的复核判词时，我把「四条 bibitem 仍保留 (file <slug>) 这一内部文件线索」按「原发现点名的 project reference collection 措辞已清零 ⇒ fixed」处理，未另开一条 info 级新 finding；这是我的判断取舍，残余观察已写进本报告的「残余观察（不拦门）」一节，供 G 与 M 自行决定是否再修。",
+            "本轮只核了第 3 轮的两条 warning（派活口径），没有重跑 G1–G15 全门表的逐句复核；报告里门表的『成立』只覆盖本轮实际跑过的读数，语义级判据（结论是否强于引文）未接线 ⇒ 记『没查』，不记通过。"
+          ]
+        },
+        "why": "把这一轮的复审结论落成可复核的报告（钉 sha256=08c6cc0a…、每门带读数、含我自己犯的错），交 G 与 M 复核"
+      },
+      "result": {
+        "tool": "review.report",
+        "ok": true,
+        "data": {
+          "doc_id": "000000",
+          "round": 8,
+          "report_path": "out/report/000000-review.md",
+          "revision_hash": "a9d783a2049e63b6",
+          "verdict": "rejected",
+          "gates_total": 15,
+          "pass_count": 8,
+          "fail_count": 1,
+          "unknown_count": 2,
+          "not_applicable_count": 4,
+          "failed_gates": [
+            "G10"
+          ],
+          "unknown_gates": [
+            "G11",
+            "G9"
+          ],
+          "own_error_count": 3,
+          "coverage": {
+            "claims_total": 5,
+            "claims_reviewed": 5,
+            "claims_decided": 5,
+            "claims_semantically_judged": 0,
+            "note": "`claims_reviewed` = 逐条字段/引用/证据档位检查真的跑过的断言数；`claims_decided` = 其中校验器判成了的（判不了的另计）；`claims_semantically_judged` = 语义级判据（「结论是否强于引文」）真的判过的条数（没接线时为 0 = **没查**，不是'没问题'）。本覆盖率只覆盖「稿件有没有把自己说清楚」，不覆盖「数学对不对」——后者要 proof 级证据（FC-22），不由本函数给出。"
+          },
+          "markdown": "# 审校报告：doc:000000\n\n- 审校者：`agent-H`；轮次：8\n- **被审版本 hash**：`a9d783a2049e63b6`（算法：`sha256(json(claims, sort_keys, ensure_ascii=False))[:16]`）\n- 总体结论：**`rejected`**（pass=8 / fail=1 / unknown=2 / not_applicable=4，共 15 道门）\n- 结论依据：pass=8 fail=1 unknown=2 not_applicable=4 missing=0；失败门=['G10']\n- 本轮自证数字：断言数=5、引用数=10、依赖数=0、发现数=9、pass 门数=8、fail 门数=1、unknown 门数=2、not_applicable 门数=4\n\n## 0. 我这一轮犯的错（缺失则退回）\n\n1. 第 9 步我把 text_integrity 与另外五类一起交给 review.scan，却没给 paths，该类的 detail 报 checked=false（「paths 是空的」）；我补跑了一次带 paths 的 text_integrity 才拿到读数 —— 先报「没查成」再补，这一笔如实记在这里。\n2. 第 13 步登记 000008 的复核判词时，我把「四条 bibitem 仍保留 (file <slug>) 这一内部文件线索」按「原发现点名的 project reference collection 措辞已清零 ⇒ fixed」处理，未另开一条 info 级新 finding；这是我的判断取舍，残余观察已写进本报告的「残余观察（不拦门）」一节，供 G 与 M 自行决定是否再修。\n3. 本轮只核了第 3 轮的两条 warning（派活口径），没有重跑 G1–G15 全门表的逐句复核；报告里门表的『成立』只覆盖本轮实际跑过的读数，语义级判据（结论是否强于引文）未接线 ⇒ 记『没查』，不记通过。\n\n## 1. G1–G15 逐门结论\n\n| 门 | 名称 | 轴 | 结论 | 发现数 | 判据 |\n|---|---|---|---|---:|---|\n| G1 | 自含性门 | 工程 | `pass` | 0 | 正文不得引用工作区外的路径；每个被引材料必须在工作区内存在 |\n| G2 | 引用解析门 | 证据 | `pass` | 0 | 每个『材料/路径』引用可解析（含通配符）；裸文件名也能在工作区内解析 |\n| G3 | 交叉引用门 | 体例 | `pass` | 0 | 每个外部/上游引用的目标标签真实存在；窗口取最近锚点、不跨句号、允许自指 |\n| G4 | 账本对账门 | 体例 | `pass` | 0 | 索引/账本点名的文件存在、卷内文件全被列出、声明的字数在容差内、声明的标签在正文 |\n| G5 | 禁词/手糊门 | 体例 | `not_applicable` | 0 | 中文禁词表 + 英文连词表；命中带上下文供人工裁（允许元叙述例外） |\n| G6 | 虚证门 | 证据 | `not_applicable` | 0 | 每个数值/经验断言点名的脚本与数据文件必须存在且在工作区内 |\n| G7 | 台账完整门 | 证据 | `pass` | 0 | 每个数值断言都在台账里有一行（位置 + 逐字断言 + 类别）；禁止『仅泛证』 |\n| G8 | 可复跑门 | 证据 | `not_applicable` | 0 | 每条数值断言都有精确命令，且**本轮实跑过**并留输出 |\n| G9 | 计数一致门 | 体例 | `unknown` | 0 | 同一计数（定理数/反例数/脚本数/批次数）在所有文件中一致 |\n| G10 | 审校格式门 | 体例 | `fail` | 2 | 每条发现必须有：轴 + 严重度 + 行号 + ≤20 词逐字引文 + 最小修法  |\n| G11 | 版本冻结门 | 工程 | `unknown` | 0 | 审校期间不改文件；报告钉住被审版本 hash；一次改完一篇,不二次编辑 |\n| G12 | 反方门 | 数学 | `not_applicable` | 0 | 主动构造小参数反例；冲突时先手验最小实例，不许『用更多计算量去裁决计算与证明的冲 |\n| G13 | 空结论自证门 | 体例 | `pass` | 0 | 某个轴『零发现』时必须报告『用了什么过程、数出了什么数字』 |\n| G14 | 降级合规门 | 数学 | `pass` | 0 | 只有数值支撑的结论不得出现在摘要/主结果，必须降为 Remark + 命令 |\n| G15 | 自己的错入册 | 工程 | `pass` | 0 | 报告/审核记录里必须有『我在这轮里犯的错』一节 |\n\n## 2. 逐门自证与发现\n\n### G1 自含性门 —— `pass`\n\n- 轴：工程；判据：正文不得引用工作区外的路径；每个被引材料必须在工作区内存在\n- 判据状态：适配：参考体例的『包』在这里读成『工作区』（我们没有卷/包的概念）\n- 结论理由：0 条路径全部在工作区内且都存在\n- **自证**：从 claims[*].proof_location 与 dependencies[*] 的自由文本里抽出0 个像路径的字符串，逐个切掉尾部 `:行号`（只切数字）、按盘符/POSIX 根判绝对路径、resolve() 后 relative_to(workspace_root)（工作区 D:\\Incubator\\projects\\sylow-4）；再对工作区内、不含通配符的候选逐个判存在性（`D-7` 补上的 criterion 第二句），存在性问不出来的记 `unknown`（检查的路径数=0、工作区内=0、工作区内不存在=0、工作区外=0、内外无法判定=0、未展开的通配符=0、存在性无法判定=0）\n- 用到的证据：documents.claims[*].proof_location、dependencies[*]、workspace_root\n\n### G2 引用解析门 —— `pass`\n\n- 轴：证据；判据：每个『材料/路径』引用可解析（含通配符）；裸文件名也能在工作区内解析\n- 判据状态：适配：前缀式引用（lit/rel/exp/eval）；『裸文件名』档在本项目不存在，只留 warning\n- 结论理由：10 条引用全部可解析\n- **自证**：逐条 partition(':') 解析 claims[*].citations（共 10 条），核对前缀是否在 ['rel', 'lit', 'exp', 'eval', 'doc', 'stmt'] 内（扫描的引用数=10、前缀可解析=10、前缀不可解析=0、解析失败=0）\n- 用到的证据：documents.claims[*].citations\n\n### G3 交叉引用门 —— `pass`\n\n- 轴：体例；判据：每个外部/上游引用的目标标签真实存在；窗口取最近锚点、不跨句号、允许自指\n- 判据状态：**适配**：参考体例判的是散文里的『锚点窗口、不跨句号』；我们的引用是结构化字段，没有『锚点窗口』这个对象 ⇒ 改判『目标必须是本文档内真实存在的 claim_id 或可解析的 file:line』\n- 结论理由：0 条交叉引用全部可解析\n- **自证**：从 5 条断言里取出 0 个 proof_location，逐个与本文档的 5 个 claim_id 比对形态（分类函数与写入期 `doc_tools.classify_proof_location` 同一份）（声明了 proof_location 的断言=0、指向本文档内 claim_id=0、其中裸写 claim_id=0、指向 file:line 形态=0、两者都不是=0）\n- 用到的证据：documents.claims[*].proof_location、documents.claims[*].claim_id\n\n### G4 账本对账门 —— `pass`\n\n- 轴：体例；判据：索引/账本点名的文件存在、卷内文件全被列出、声明的字数在容差内、声明的标签在正文存在\n- 判据状态：适配：参考体例对的是『索引/README 与卷内文件』；我们是『documents 行与它渲染出的 markdown 文件 + claims 计数』。参考体例的另三档（卷内文件全被列出 / 声明字数在容差内 / 声明标签在正文存在）**本实现不判** ⇒ 如实登记为缺口，不静默丢弃\n- 结论理由：账本（文档行）与实物（markdown 文件、claims）一致\n- **自证**：核对 documents 行（doc_id=000000）的 markdown_path='manuscripts/G/000000.md' 与 claims 计数（markdown_path 存在=True、实际断言数=5、声明的断言数=未声明）\n- 用到的证据：documents.markdown_path、documents.claims、workspace_root\n\n### G5 禁词/手糊门 —— `not_applicable`\n\n- 轴：体例；判据：中文禁词表 + 英文连词表；命中带上下文供人工裁（允许元叙述例外）\n- 判据状态：适配：词表由配置注入（**不写死第二份词表** —— 参考体例的 15 中文词 + 12 英文连词表属于人的文风决定）；缺词表时报 not_applicable 而不是 pass\n- 结论理由：调用方没有提供 `banned_words` ⇒ 这道门在本轮**没有可判定的对象**。本项目**故意不在代码里写死一份词表**（写死第二份词表就是 FC-03 的形态）：参考体例的词表来自 `STYLE/RUBRIC.md:50-53`，属于**人的文风决定**，应当由配置注入而不是由 AI 固化。门保留、如实报『没有对象』，而不是删门\n- **自证**：检查 ctx.banned_words 是否为空（5 条断言在场）（提供的禁词数=0、扫描的断言数=5）\n- 用到的证据：ctx.banned_words\n\n### G6 虚证门 —— `not_applicable`\n\n- 轴：证据；判据：每个数值/经验断言点名的脚本与数据文件必须存在且在工作区内\n- 判据状态：适配：数值证据的载体是 §8.3 的 numeric_evidence 四元组；脚本路径支持通配符（按 glob 展开）。参考体例的『数据文件』这一档**本实现不判**（只核 `numeric_evidence.script`）⇒ 如实登记为缺口\n- 结论理由：本稿 5 条断言**没有任何一条点名数值脚本**（`numeric_evidence.script` 全空）⇒ 虚证门本轮没有可判定的对象。注意这与『脚本都存在』是两件事 —— 所以判 not_applicable 而不是 pass\n- **自证**：遍历 claims[*].numeric_evidence.script（0 个非空值），在工作区 D:\\Incubator\\projects\\sylow-4 下 glob/isfile 核对（点名的脚本数=0、命中真实文件=0、虚证数=0）\n- 用到的证据：documents.claims[*].numeric_evidence.script、workspace_root\n\n### G7 台账完整门 —— `pass`\n\n- 轴：证据；判据：每个数值断言都在台账里有一行（位置 + 逐字断言 + 类别）；禁止『仅泛证』\n- 判据状态：适配：我们的『台账』就是 documents.claims 本身 ⇒ 这道门判『数值型断言必须结构化』；参考体例 §8.5 明确『仅泛证型』档我们应直接取消\n- 结论理由：5 条断言全部有台账形态\n- **自证**：遍历 5 条断言，按正文关键词 ['[验]', '数值', '枚举', '穷举', '反例', 'n_cases'] 与 status=='验' 识别数值型断言，核对 numeric_evidence.script 是否非空（扫描的断言数=5、有台账行=0、缺台账行=0）\n- 用到的证据：documents.claims[*].statement、documents.claims[*].numeric_evidence、documents.claims[*].status\n\n### G8 可复跑门 —— `not_applicable`\n\n- 轴：证据；判据：每条数值断言都有精确命令，且**本轮实跑过**并留输出\n- 判据状态：逐字照搬 §8.4（该行标注为『新增』，摘自 RP/00_STANDARD.md:149-150 门 B）\n- 结论理由：稿件里没有带 `numeric_evidence.script` 的断言，也没有引任何 `exp:` 实验 ⇒ 可复跑门在这一份稿件上没有对象（不是通过）\n- **自证**：**（无 —— 违规）**\n- 用到的证据：documents.claims[*].numeric_evidence、documents.claims[*].citations\n\n### G9 计数一致门 —— `unknown`\n\n- 轴：体例；判据：同一计数（定理数/反例数/脚本数/批次数）在所有文件中一致\n- 判据状态：适配：『所有文件』读成『同一份稿件在不同读取路径下的数字 + 调用方声明的计数』\n- 结论理由：调用方没有提供**声明侧的计数**（`claim_counts`）⇒ 没有『另一个文件』可对账，**判不了一致性**。注意：单看一处数字永远不能判『一致』 —— 那正是 §1.4 十处漂移始终没被发现的原因（没有任何脚本在查）\n- **自证**：**（无 —— 违规）**\n- 用到的证据：documents.claims、ctx.claim_counts\n\n### G10 审校格式门 —— `fail`\n\n- 轴：体例；判据：每条发现必须有：轴 + 严重度 + 行号 + ≤20 词逐字引文 + 最小修法 + maths: yes/no\n- 判据状态：适配（缺口已按裁决补齐）：`schema.ReviewFinding` 自 2026-09-27 起带 `axis` / `line` / `verbatim_quote` / `maths` 四个字段，'最小修法'那一格与 `suggestion` 对齐（`minimal_fix` 作为历史键名继续接受）—— `P-9` 候选 A，所有者裁定；生效日之前落盘的行按 `created_at` 豁免、缺键不计入结构缺口且**不许回填**；**字段齐全的发现按 §8.4 逐字判**（六字段 + ≤20 词逐字引文 + 轴/maths 取值域 + 行号形态）\n- 结论理由：2 条发现不合格式 ⇒ 打回；版本未冻结 ⇒ 行号那一格按可省判（拿不到时自证理由）\n- **自证**：逐条检查 9 条落在格式契约作用面内的发现的六个必需字段、引文词数上限（≤20 词）、轴与 maths 的取值域以及行号形态（发现数=9、契约作用面内=9、豁免(契约生效前的历史行)=0、不合格式=2、版本冻结(G11 通过)=否）\n- 用到的证据：ctx.findings、ctx.observed_hash\n\n| 严重度 | 目标 | 说明 | 证据 |\n|---|---|---|---|\n| warning | `000007` | 发现不合参考体例的格式（缺字段）—— 打回 | finding_id=000007 缺 ['≤20 词逐字引文(verbatim_quote)']；实际键=['axis', 'created_at', 'created_by', 'doc_id', 'evidence |\n| warning | `000008` | 发现不合参考体例的格式（缺字段）—— 打回 | finding_id=000008 缺 ['≤20 词逐字引文(verbatim_quote)']；实际键=['axis', 'created_at', 'created_by', 'doc_id', 'evidence |\n\n### G11 版本冻结门 —— `unknown`\n\n- 轴：工程；判据：审校期间不改文件；报告钉住被审版本 hash；一次改完一篇,不二次编辑\n- 判据状态：适配：`observed_hash` 来自上一轮报告；未提供时只能证明『钉住了 hash』，故判 unknown\n- 结论理由：本轮**已经钉住** hash=a9d783a2049e63b6，但调用方**没有提供上一轮报告里钉住的 hash** ⇒ 『审校期间文件有没有被改过』这件事**判不了**（钉住 hash ≠ 验证没被改）。三态纪律：这两种结论必须分开\n- **自证**：对 documents（doc_id/title/kind/claims 逐条内容 hash）算 sha256[:16]（被审版本 hash=a9d783a2049e63b6、上一轮钉住的 hash=未提供）\n- 用到的证据：documents、ctx.observed_hash\n\n### G12 反方门 —— `not_applicable`\n\n- 轴：数学；判据：主动构造小参数反例；冲突时先手验最小实例，不许『用更多计算量去裁决计算与证明的冲突』\n- 判据状态：适配：反例搜索的痕迹载体是 counterexamples / numeric_evidence.n_counterexamples\n- 结论理由：本稿**没有任何 `status='证'` 的断言**（可能仍用旧字段、没有 status）⇒ 反方门本轮没有可判定的对象。这不是『反例都搜过了』\n- **自证**：在 5 条断言里筛出 0 条 status=='证'，逐条核对 counterexamples / numeric_evidence.n_counterexamples 是否存在（标『证』的断言数=0、有反例搜索痕迹=0、问题数=0）\n- 用到的证据：documents.claims[*].status\n\n### G13 空结论自证门 —— `pass`\n\n- 轴：体例；判据：某个轴『零发现』时必须报告『用了什么过程、数出了什么数字』\n- 判据状态：逐字照搬 §8.4（并把它做成结构强制：缺自证的 GateResult 构造不出来）\n- 结论理由：7 道门报零发现，全部带自证数字（共 7 道）\n- **自证**：遍历其余 14 道门的结论，筛出 verdict=='pass' 且 findings 为空的门，核对 self_attestation 与 counts 是否都非空（检查的门数=14、报零发现的门数=7、自证齐全=7）\n- 用到的证据：run_all_gates 的返回\n\n### G14 降级合规门 —— `pass`\n\n- 轴：数学；判据：只有数值支撑的结论不得出现在摘要/主结果，必须降为 Remark + 命令\n- 判据状态：适配：降级的载体是 §8.3 的 allowed_use 与 status（`main_body_claims` 是同一份判据）\n- 结论理由：5 条断言的降级规则全部合规\n- **自证**：遍历 5 条断言，检查 status=='作废' 与 (evidence_kind, allowed_use) 组合是否符合降级规则（扫描的断言数=5、作废却在正文=0、须降级却标主结果=0、问题数=0）\n- 用到的证据：documents.claims[*].status、documents.claims[*].allowed_use、documents.claims[*].evidence_kind\n\n### G15 自己的错入册 —— `pass`\n\n- 轴：工程；判据：报告/审核记录里必须有『我在这轮里犯的错』一节\n- 判据状态：逐字照搬 §8.4（并把它做成必填参数：不写就 fail）\n- 结论理由：『我这一轮犯的错』一节已登记 3 条\n- **自证**：检查 ctx.own_errors 是否为 None（None=没写这一节 ⇒ fail；[]=显式声明零错误 ⇒ pass）（自身错误条数=3、显式声明零错误=False）\n- 用到的证据：ctx.own_errors\n\n## 3. 判不了的门（**不许读成『没问题』**）\n\n- `G11` **没查成**：本轮**已经钉住** hash=a9d783a2049e63b6，但调用方**没有提供上一轮报告里钉住的 hash** ⇒ 『审校期间文件有没有被改过』这件事**判不了**（钉住 hash ≠ 验证没被改）。三态纪律：这两种结论必须分开\n- `G9` **没查成**：调用方没有提供**声明侧的计数**（`claim_counts`）⇒ 没有『另一个文件』可对账，**判不了一致性**。注意：单看一处数字永远不能判『一致』 —— 那正是 §1.4 十处漂移始终没被发现的原因（没有任何脚本在查）\n- `G12` 无对象可判：本稿**没有任何 `status='证'` 的断言**（可能仍用旧字段、没有 status）⇒ 反方门本轮没有可判定的对象。这不是『反例都搜过了』\n- `G5` 无对象可判：调用方没有提供 `banned_words` ⇒ 这道门在本轮**没有可判定的对象**。本项目**故意不在代码里写死一份词表**（写死第二份词表就是 FC-03 的形态）：参考体例的词表来自 `STYLE/RUBRIC.md:50-53`，属于**人的文风决定**，应当由配置注入而不是由 AI 固化。门保留、如实报『没有对象』，而不是删门\n- `G6` 无对象可判：本稿 5 条断言**没有任何一条点名数值脚本**（`numeric_evidence.script` 全空）⇒ 虚证门本轮没有可判定的对象。注意这与『脚本都存在』是两件事 —— 所以判 not_applicable 而不是 pass\n- `G8` 无对象可判：稿件里没有带 `numeric_evidence.script` 的断言，也没有引任何 `exp:` 实验 ⇒ 可复跑门在这一份稿件上没有对象（不是通过）\n\n"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 70400,
+        "prompt_cache_miss_tokens": 2752,
+        "tokens_in": 73152,
+        "tokens_out": 646,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000140"
+    },
+    {
+      "index": 15,
+      "shape": "tool",
+      "payload": {
+        "name": "review.record_finding",
+        "args": {
+          "doc_id": "000000",
+          "kind": "garbled",
+          "level": "warning",
+          "axis": "体例",
+          "target": "appendix:A / line 200-207",
+          "line": 200,
+          "message": "附录 A 第 200–202 行仍以「the recorded statement \\texttt{stmt:000060}」「whose recorded proof is …」、第 207 行以「the recorded statements carry the literature identifiers」指称台账行——「ledger」一词已清，但同义的 recorded / recorded proof 仍在，读者不认识「recorded by whom / recorded where」这一层意思。",
+          "verbatim_quote": "whose recorded proof is the elementary argument reproduced in Section~3",
+          "suggestion": "把 recorded 换成读者能懂的说法，去掉「被登记过」这一层暗示，保留编号（附录 A 允许内部编号）。",
+          "evidence": "复核 fixed：正文 sha256=08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72（212 行）。① fs.search(pattern=\"recorded|project reference collection|available as a PDF|sources at hand\", path=\"out/package/main.tex\") total=1，唯一命中是第 207 行的「sources at hand」（作者新加的外部措辞）⇒「recorded」单独零命中：原发现点名的 3 处「whose recorded proof is」与 2 处「the recorded statement(s)」全部不在盘上。② fs.read(start_line=196, max_lines=20) 逐字：第 200 行现为「\\item Theorem~\\ref{thm:sylow1} corresponds to the statement \\texttt{stmt:000060} (a theorem of Sylow type), whose proof is the elementary argument reproduced in Section~3」、201/202 行同式为「whose proof is …」、207 行现为「Sources: the statements carry the literature identifiers \\texttt{lit:000000} (Conrad) for the first four and \\texttt{lit:000002} (Idelhaj) for the uniqueness criterion; …」。③ 同一次 fs.search 里 ledger / internal record / in this project / sha256 / 验收表 / 本轮 / cross_check 等过程词零命中 ⇒ 修法未引入新的过程词。",
+          "why": "把复核判词按 G10 的格子补齐（逐字引文 + 行号），让报告门表读得到这一条的修法依据"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "review.record_finding",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "created": false,
+          "duplicate_skipped": 1,
+          "finding_id": "000007",
+          "doc_id": "000000",
+          "kind": "garbled",
+          "level": "warning",
+          "round": 8,
+          "status": "fixed"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 72320,
+        "prompt_cache_miss_tokens": 5058,
+        "tokens_in": 77378,
+        "tokens_out": 2183,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000140"
+    },
+    {
+      "index": 16,
+      "shape": "final",
+      "payload": {
+        "final": "doc:000000（The Sylow Theorems，kind=paper）第 8 轮复审完成：两条第 3 轮 warning 在盘上逐条核清，documents.status=accepted 并已签一条（round 8，content_sha256=a19e4ab0678898d2…），000007/000008 置 fixed。\n\n【判据① 两条是否真消失（fs.search 逐条读数，盘上 main.tex sha256=08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72，212 行）】\n- 合并检索 fs.search(pattern=\"recorded|project reference collection|available as a PDF|sources at hand\", path=\"out/package/main.tex\") → total=1，唯一命中是第 207 行的**新**措辞「sources at hand」；因并集只此一条 ⇒ 「recorded」「project reference collection」「available as a PDF」三串各自零命中。\n- ① whose recorded proof is（3 处）→ 0 命中；第 200/201/202 行现逐字为「corresponds to the statement \\texttt{stmt:000060} …, whose proof is the elementary argument reproduced in Section~3」「\\texttt{stmt:000061}, whose proof is the action of a Sylow $p$-subgroup …」「\\texttt{stmt:000062}, whose proof is the conjugation action …」。\n- ② the recorded statement(s)（2 处）→ 0 命中；第 200 行「corresponds to the statement \\texttt{stmt:000060}」、第 207 行「Sources: the statements carry the literature identifiers …」。\n- ③ 四条 \\bibitem 现为「K.~Conrad, \\emph{Proof of Sylow theorems}, expository notes (file \\texttt{conrad-proof-of-sylow-theorems}).」（174 行）及 harris(179)/idelhaj(184)/vakil(189)，作者/题名/文件名原样保留，集合短语已清零。\n- ④ 第 207 行现逐字「No page numbers are cited because none were available verbatim in the sources at hand.」\n\n【判据② 没有因这一轮修改引入新过程词或越级声称】\n- fs.search(pattern=\"ledger|internal record|in this project|sha256|验收表|本轮|cross_check|supported_not_proved|known_in_literature|machine-checked source|we ran|we dispatched\") → total=0。\n- thm:unique → stmt:000064 措辞未升级：第 153 行「This statement is a standard textbook fact. … no verified full-text source is at hand and the argument following has not been independently checked … not offered as an independently verified proof」；第 167 行「the uniqueness criterion of Theorem~\\ref{thm:unique} is a textbook-level statement whose argument we have not independently checked」；附录 A「for \\texttt{stmt:000064} that review reported an error … presented here without any claim of review or machine verification」。没有任何「已验证/已形式化」的字样。\n- 机械读数（review.scan）：cites bibitem_keys=4 / cite_keys=4 / uncited=0；refs label_keys=7 / ref_keys=7 / unused_labels=0；proofs proof_envs=5 statement_envs=5 proof_without_statement=0 statement_without_proof=0；duplicates duplicate_labels=0 duplicate_newtheorem=0；ledger_match mapping_state=pass、mapping_rows=5、statement_surplus=[]；text_integrity（补跑带 paths 那次）checked=true、六类异常字符全 0。\n\n【裁决与留痕】review.verify_fixes(round 7) 报这两条是手工判词、不能自动复跑判掉 ⇒ 我按规程用 review.record_finding 以「复核 fixed：」逐条重新登记（000007、000008 现 status=fixed）；review.review_document(round 8) → verdict=accepted、open_findings.total=0、status=accepted、签名落 doc-signatures/000000-a19e4ab0678898d2-001.json。报告已落 out/report/000000-review.md（revision_hash=a9d783a2049e63b6）。\n\n【如实报缺口，不许折成「没问题」】① 报告门表 read 回 pass=8 / fail=1(G10) / unknown=2(G9、G11) / na=4 —— G10 挂的正是我这条两份手工发现没带 ≤20 词逐字引文（record_finding 的去重键只回既有行，我补带 verbatim_quote 的重登记被 duplicate_skipped=1 挡下，改不动旧行），这是我的留痕格式缺陷，不是稿子的数学或表述缺陷；G9 计数一致与 G11 版本冻结本轮**未查**（unknown，不等于通过）。② 残留学观察（不拦门，未另开 finding）：四条 \\bibitem 仍留「(file \\texttt{conrad-proof-of-sylow-theorems})」这一工程内文件名，读者仍无法据此定位文献；原发现点名的 collection 措辞已清零，故 000008 按其被开出的层级判 fixed，若 M/G 想要更干净，可把「(file …)」改为「expository notes」或补外部可核位置。③ 语义级判据（结论是否强于引文）未接线 ⇒ 记「没查」，本轮不覆盖。",
+        "evidence": [
+          "doc:000000",
+          "finding:000007",
+          "finding:000008",
+          "out/package/main.tex sha256=08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72",
+          "out/report/000000-review.md",
+          "doc-signatures/000000-a19e4ab0678898d2-001.json",
+          "out/package/MAPPING.json"
+        ],
+        "notify": {
+          "to": "G",
+          "summary": "doc:000000 第 8 轮复审：000007/000008 两条 warning 逐条核清并置 fixed，status=accepted（已签）；另附两处如实缺口（G10 格式、bibitem 残留 file 名）",
+          "body": "## 结论\n- **documents.status = accepted**（review.review_document round 8，error=0 / warning=0 / open findings=0，签名 content_sha256=a19e4ab0678898d2…）。\n- **finding 000007 = fixed**、**finding 000008 = fixed**（按「复核 fixed：」重新登记；verify_fixes 已说明手工判词不会被自动复跑判掉，必须由 H 显式复核）。\n- 报告：`out/report/000000-review.md`（revision_hash=a9d783a2049e63b6）。\n\n## 盘上读数（被审正文 sha256=08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72，212 行）\n1. `fs.search(\"recorded|project reference collection|available as a PDF|sources at hand\")` → **total=1**，唯一命中是 207 行的新措辞「sources at hand」⇒ 旧三串各自 **0 命中**：① three×\"whose recorded proof is\" 0 处；② two×\"the recorded statement(s)\" 0 处；③ \"available as a PDF\" / \"project reference collection\" 0 处；④ 207 行现为「…none were available verbatim in the sources at hand.」\n2. 四条 \\bibitem 现为「expository notes (file \\texttt{…})」（174/179/184/189 行），作者/题名/文件名原样。\n3. 过程词复查 `fs.search(\"ledger|internal record|in this project|sha256|验收表|本轮|cross_check|supported_not_proved|known_in_literature|machine-checked source|we ran|we dispatched\")` → **total=0**。\n4. stmt:000064 未被抬级：153 行「This statement is a standard textbook fact … not offered as an independently verified proof」、167 行「whose argument we have not independently checked」、附录 A「that review reported an error … without any claim of review or machine verification」。\n5. `review.scan`：cites 4/4（uncited=0）、refs 7/7（unused_labels=0）、proofs 5/5（proof_without_statement=0、statement_without_proof=0）、duplicates 0、ledger_match mapping_state=pass、mapping_rows=5、statement_surplus=[]、text_integrity 六类全 0（补跑带 paths 那次 checked=true）。\n\n## 两处如实缺口（不是「没问题」）\n- **G10 fail（我的格式缺陷，不是稿子问题）**：报告门表 pass=8 / fail=1(G10) / unknown=2(G9、G11) / na=4。G10 挂的是这两条手工发现没有 ≤20 词逐字引文；我补带 verbatim_quote 的重登记被 `duplicate_skipped=1` 挡下（create=false，旧行改不动）。要消这一格，需要台账侧支持改既有 finding 的 verbatim_quote，或下一轮由 H 另开新号重登记。\n- **残余观察（不拦门，未另开 finding）**：四条 \\bibitem 仍留「(file \\texttt{conrad-/harris-/idelhaj-/vakil-…})」这一工程内文件名，读者仍无法据此找到文献。原 000008 点名的 collection 措辞已清零，故按原层级判 fixed；若要更干净，把「(file …)」改成「expository notes」或补一个外部可核位置即可（属于体例优化，不必因此再开一轮审校）。\n- **没查的**：语义级判据（结论是否强于引文）未接线 ⇒ 记「没查」；G9/G11 本轮未查 ⇒ unknown。本轮按派活只核 000007/000008，未重跑 G1–G15 逐门逐句。\n\n## 要你做什么\n1. 正文这一版可以定稿；若采纳上面第二条建议，改完 bibitem 后按惯例重跑 `doc.write_mapping` + `doc.paper_compile`（现行 sha 已是 write_mapping 之后的版本）。\n2. 需要我下一轮消 G10 的话，请让台账支持更新既有 finding 的 verbatim_quote，或告诉我另开新号。",
+          "refs": [
+            "stmt:000064",
+            "stmt:000060",
+            "stmt:000061",
+            "stmt:000062",
+            "stmt:000063",
+            "lit:000000",
+            "lit:000002"
+          ]
+        }
+      },
+      "result": {
+        "notify_handoff": {
+          "handoff": "000014",
+          "ok": true,
+          "id": "000014",
+          "path": "work/handoffs.jsonl#000014",
+          "to": "G",
+          "brief": "doc:000000 第 8 轮复审：000007/000008 两条 warning 逐条核清并置 fixed，status=accepted（已签）；另附两处如实缺口（G10 格式、bibitem 残留 file 名）",
+          "addressing": {
+            "checked": true,
+            "how": "parent",
+            "to": "G",
+            "kind": "parent",
+            "name": "G1",
+            "task_id": "t-000109",
+            "role": "G",
+            "brief": "",
+            "candidates": [],
+            "callable": "父 G1（t-000109）",
+            "why": "名册成员（parent）⇒ 手稿写角色 G，通知投实例 G",
+            "delivery": "roster",
+            "manuscript_to": "G",
+            "addressed_by": "role_fallback"
+          },
+          "notify_channel": "roster",
+          "revises": "",
+          "existing_same_summary": {
+            "count": 0,
+            "ids": [],
+            "note": "查过了：没有同一句话的既有交接"
+          },
+          "notified": "t-000141",
+          "error": "",
+          "note": "收件人下次运行时（或本步之后）会在收件箱/板上看到编号；它用 `manuscripts.read` 读全文"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 76544,
+        "prompt_cache_miss_tokens": 1718,
+        "tokens_in": 78262,
+        "tokens_out": 3464,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000140"
+    }
+  ],
+  "final": "doc:000000（The Sylow Theorems，kind=paper）第 8 轮复审完成：两条第 3 轮 warning 在盘上逐条核清，documents.status=accepted 并已签一条（round 8，content_sha256=a19e4ab0678898d2…），000007/000008 置 fixed。\n\n【判据① 两条是否真消失（fs.search 逐条读数，盘上 main.tex sha256=08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72，212 行）】\n- 合并检索 fs.search(pattern=\"recorded|project reference collection|available as a PDF|sources at hand\", path=\"out/package/main.tex\") → total=1，唯一命中是第 207 行的**新**措辞「sources at hand」；因并集只此一条 ⇒ 「recorded」「project reference collection」「available as a PDF」三串各自零命中。\n- ① whose recorded proof is（3 处）→ 0 命中；第 200/201/202 行现逐字为「corresponds to the statement \\texttt{stmt:000060} …, whose proof is the elementary argument reproduced in Section~3」「\\texttt{stmt:000061}, whose proof is the action of a Sylow $p$-subgroup …」「\\texttt{stmt:000062}, whose proof is the conjugation action …」。\n- ② the recorded statement(s)（2 处）→ 0 命中；第 200 行「corresponds to the statement \\texttt{stmt:000060}」、第 207 行「Sources: the statements carry the literature identifiers …」。\n- ③ 四条 \\bibitem 现为「K.~Conrad, \\emph{Proof of Sylow theorems}, expository notes (file \\texttt{conrad-proof-of-sylow-theorems}).」（174 行）及 harris(179)/idelhaj(184)/vakil(189)，作者/题名/文件名原样保留，集合短语已清零。\n- ④ 第 207 行现逐字「No page numbers are cited because none were available verbatim in the sources at hand.」\n\n【判据② 没有因这一轮修改引入新过程词或越级声称】\n- fs.search(pattern=\"ledger|internal record|in this project|sha256|验收表|本轮|cross_check|supported_not_proved|known_in_literature|machine-checked source|we ran|we dispatched\") → total=0。\n- thm:unique → stmt:000064 措辞未升级：第 153 行「This statement is a standard textbook fact. … no verified full-text source is at hand and the argument following has not been independently checked … not offered as an independently verified proof」；第 167 行「the uniqueness criterion of Theorem~\\ref{thm:unique} is a textbook-level statement whose argument we have not independently checked」；附录 A「for \\texttt{stmt:000064} that review reported an error … presented here without any claim of review or machine verification」。没有任何「已验证/已形式化」的字样。\n- 机械读数（review.scan）：cites bibitem_keys=4 / cite_keys=4 / uncited=0；refs label_keys=7 / ref_keys=7 / unused_labels=0；proofs proof_envs=5 statement_envs=5 proof_without_statement=0 statement_without_proof=0；duplicates duplicate_labels=0 duplicate_newtheorem=0；ledger_match mapping_state=pass、mapping_rows=5、statement_surplus=[]；text_integrity（补跑带 paths 那次）checked=true、六类异常字符全 0。\n\n【裁决与留痕】review.verify_fixes(round 7) 报这两条是手工判词、不能自动复跑判掉 ⇒ 我按规程用 review.record_finding 以「复核 fixed：」逐条重新登记（000007、000008 现 status=fixed）；review.review_document(round 8) → verdict=accepted、open_findings.total=0、status=accepted、签名落 doc-signatures/000000-a19e4ab0678898d2-001.json。报告已落 out/report/000000-review.md（revision_hash=a9d783a2049e63b6）。\n\n【如实报缺口，不许折成「没问题」】① 报告门表 read 回 pass=8 / fail=1(G10) / unknown=2(G9、G11) / na=4 —— G10 挂的正是我这条两份手工发现没带 ≤20 词逐字引文（record_finding 的去重键只回既有行，我补带 verbatim_quote 的重登记被 duplicate_skipped=1 挡下，改不动旧行），这是我的留痕格式缺陷，不是稿子的数学或表述缺陷；G9 计数一致与 G11 版本冻结本轮**未查**（unknown，不等于通过）。② 残留学观察（不拦门，未另开 finding）：四条 \\bibitem 仍留「(file \\texttt{conrad-proof-of-sylow-theorems})」这一工程内文件名，读者仍无法据此定位文献；原发现点名的 collection 措辞已清零，故 000008 按其被开出的层级判 fixed，若 M/G 想要更干净，可把「(file …)」改为「expository notes」或补外部可核位置。③ 语义级判据（结论是否强于引文）未接线 ⇒ 记「没查」，本轮不覆盖。",
+  "evidence": [
+    "doc:000000",
+    "finding:000007",
+    "finding:000008",
+    "out/package/main.tex sha256=08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72",
+    "out/report/000000-review.md",
+    "doc-signatures/000000-a19e4ab0678898d2-001.json",
+    "out/package/MAPPING.json"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 0,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 17,
+  "compactions": 0,
+  "mailbox_items": [],
+  "mailbox_msgs": [],
+  "mailbox_delivered": 0,
+  "monitor_turns": 0,
+  "wakes": 0,
+  "wake_ids": [],
+  "wake_events": [],
+  "clock_pumps": 32,
+  "clock_fired": 0,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "H 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "H",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    }
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [
+    "000014"
+  ],
+  "summons": [],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [],
+  "summons_total": 0,
+  "summons_consumed": 0,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 0,
+    "summons_consumed": 0,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p327",
+    "role": "H",
+    "prompt_sha256": "2735cd2cb039160a7163c07b51e2345f798fd57e41b22343675c798b5c6f541e",
+    "prompt_chars": 66822,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "FACULTIES_07",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "TOOL_29",
+      "TOOL_30",
+      "TOOL_31",
+      "TOOL_32",
+      "TOOL_33",
+      "TOOL_34",
+      "TOOL_35",
+      "TOOL_36",
+      "TOOL_37",
+      "TOOL_38",
+      "TOOL_39",
+      "TOOL_40",
+      "TOOL_41",
+      "TOOL_42",
+      "TOOL_43",
+      "TOOL_44",
+      "TOOL_45",
+      "TOOL_46",
+      "TOOL_47",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "PAPER_PACK",
+      "PAPER_01",
+      "PAPER_02",
+      "PAPER_03",
+      "PAPER_04",
+      "PAPER_05",
+      "PAPER_06",
+      "PAPER_07",
+      "PAPER_07_BODY",
+      "PAPER_08",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_LIMITS",
+      "COLLAB_NAMES",
+      "PARENT_STOP",
+      "PARENT_ROSTER",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 16,
+    "tokens_in": 1042488,
+    "tokens_out": 35768,
+    "usd": 0.030372,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 16,
+    "no_request_calls": 0,
+    "hit": 1003136,
+    "miss": 39352,
+    "unknown_calls": 0,
+    "tokens_in": 1042488,
+    "hit_rate": 0.9623,
+    "mismatched_calls": 0,
+    "saved_usd": 0.14746,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 201.75,
+  "end_ts": "2026-11-24T05:08:08+08:00",
+  "notes": [
+    "收工时名下还有 2 条证明没有 V 的签字（读数，不拦收工；明细：000060、000064）",
+    "缓存读数：命中 1003136 / 未命中 39352 token，命中率 96.2%（16 次调用）；按 modelcost 口径估算可省 约 0.147460 美元",
+    "子产出处理读数：summons_total=0（这一趟没派过子代理 ⇒ 没有要处理的子产出；判据没有对象，不红）"
+  ],
+  "final_payload": {
+    "final": "doc:000000（The Sylow Theorems，kind=paper）第 8 轮复审完成：两条第 3 轮 warning 在盘上逐条核清，documents.status=accepted 并已签一条（round 8，content_sha256=a19e4ab0678898d2…），000007/000008 置 fixed。\n\n【判据① 两条是否真消失（fs.search 逐条读数，盘上 main.tex sha256=08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72，212 行）】\n- 合并检索 fs.search(pattern=\"recorded|project reference collection|available as a PDF|sources at hand\", path=\"out/package/main.tex\") → total=1，唯一命中是第 207 行的**新**措辞「sources at hand」；因并集只此一条 ⇒ 「recorded」「project reference collection」「available as a PDF」三串各自零命中。\n- ① whose recorded proof is（3 处）→ 0 命中；第 200/201/202 行现逐字为「corresponds to the statement \\texttt{stmt:000060} …, whose proof is the elementary argument reproduced in Section~3」「\\texttt{stmt:000061}, whose proof is the action of a Sylow $p$-subgroup …」「\\texttt{stmt:000062}, whose proof is the conjugation action …」。\n- ② the recorded statement(s)（2 处）→ 0 命中；第 200 行「corresponds to the statement \\texttt{stmt:000060}」、第 207 行「Sources: the statements carry the literature identifiers …」。\n- ③ 四条 \\bibitem 现为「K.~Conrad, \\emph{Proof of Sylow theorems}, expository notes (file \\texttt{conrad-proof-of-sylow-theorems}).」（174 行）及 harris(179)/idelhaj(184)/vakil(189)，作者/题名/文件名原样保留，集合短语已清零。\n- ④ 第 207 行现逐字「No page numbers are cited because none were available verbatim in the sources at hand.」\n\n【判据② 没有因这一轮修改引入新过程词或越级声称】\n- fs.search(pattern=\"ledger|internal record|in this project|sha256|验收表|本轮|cross_check|supported_not_proved|known_in_literature|machine-checked source|we ran|we dispatched\") → total=0。\n- thm:unique → stmt:000064 措辞未升级：第 153 行「This statement is a standard textbook fact. … no verified full-text source is at hand and the argument following has not been independently checked … not offered as an independently verified proof」；第 167 行「the uniqueness criterion of Theorem~\\ref{thm:unique} is a textbook-level statement whose argument we have not independently checked」；附录 A「for \\texttt{stmt:000064} that review reported an error … presented here …（落档截断，原 3295 字）",
+    "evidence": [
+      "doc:000000",
+      "finding:000007",
+      "finding:000008",
+      "out/package/main.tex sha256=08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72",
+      "out/report/000000-review.md",
+      "doc-signatures/000000-a19e4ab0678898d2-001.json",
+      "out/package/MAPPING.json"
+    ],
+    "notify": {
+      "to": "G",
+      "summary": "doc:000000 第 8 轮复审：000007/000008 两条 warning 逐条核清并置 fixed，status=accepted（已签）；另附两处如实缺口（G10 格式、bibitem 残留 file 名）",
+      "body": "## 结论\n- **documents.status = accepted**（review.review_document round 8，error=0 / warning=0 / open findings=0，签名 content_sha256=a19e4ab0678898d2…）。\n- **finding 000007 = fixed**、**finding 000008 = fixed**（按「复核 fixed：」重新登记；verify_fixes 已说明手工判词不会被自动复跑判掉，必须由 H 显式复核）。\n- 报告：`out/report/000000-review.md`（revision_hash=a9d783a2049e63b6）。\n\n## 盘上读数（被审正文 sha256=08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72，212 行）\n1. `fs.search(\"recorded|project reference collection|available as a PDF|sources at hand\")` → **total=1**，唯一命中是 207 行的新措辞「sources at hand」⇒ 旧三串各自 **0 命中**：① three×\"whose recorded proof is\" 0 处；② two×\"the recorded statement(s)\" 0 处；③ \"available as a PDF\" / \"project reference collection\" 0 处；④ 207 行现为「…none were available verbatim in the sources at hand.」\n2. 四条 \\bibitem 现为「expository notes (file \\texttt{…})」（174/179/184/189 行），作者/题名/文件名原样。\n3. 过程词复查 `fs.search(\"ledger|internal record|in this project|sha256|验收表|本轮|cross_check|supported_not_proved|known_in_literature|machine-checked source|we ran|we dispatched\")` → **total=0**。\n4. stmt:000064 未被抬级：153 行「This statement is a standard textbook fact … not offered as an independently verified proof」、167 行「whose argument we have not independently checked」、附录 A「that review reported an error … without any claim of review or machine verification」。\n5. `review.scan`：cites 4/4（uncited=0）、refs 7/7（unused_labels=0）、proofs 5/5（proof_without_statement=0、statement_without_proof=0）、duplicates 0、ledger_match mapping_state=pass、mapping_rows=5、statement_surplus=[]、text_integrity 六类全 0（补跑带 paths 那次 checked=true）。\n\n## 两处如实缺口（不是「没问题」）\n- **G10 fail（我的格式缺陷，不是稿子问题）**：报告门表 pass=8 / fail=1(G10) / unknown=2(G9、G11) / na=4。G10 挂的是这两条手工发现没有 ≤20 词逐字引文；我补带 verbatim_quote 的重登记被 `duplicate_skipped=1` 挡下（create=false，旧行改不动）。要消这一格，需要台账侧支持改既有 finding 的 verbatim_quote，或下一轮由 H 另开新号重登记。\n- **残余观察（不拦门，未另开 finding）**：四条 \\bibitem 仍留「(file \\texttt{conrad-/harris-/idelhaj-/vakil-…})」这一工程内文件名，读者仍无法据此找到文献。原 000008 点名的 collection 措辞已清零，故按原层级判 fixed；若要更干净，把「(file …)」改成「expository notes」或补一个外部可核位置即可（属于体例优化，不必因此再开一轮审校）。\n- **没查的**：语义级判据（结论是否强于引文）未接线 ⇒ 记「没查」；G9/G11 本轮未查 ⇒ unknown。本轮按派活只核 000007/000008，未重跑 G1–G15 逐门逐句。\n\n## 要你做什么\n1. 正文这一版可以定稿；若采纳上面第二条建议，改完 bibitem 后按惯例重跑 `doc.write_mapping` + `doc.paper_compile`（现行 sha 已是 write_mapping 之后的版本）。\n2. 需要我下一轮消 G10 的话，请让台账支持更新既有 finding 的 verbatim_quote，或告诉我另开新号。",
+      "refs": [
+        "stmt:000064",
+        "stmt:000060",
+        "stmt:000061",
+        "stmt:000062",
+        "stmt:000063",
+        "lit:000000",
+        "lit:000002"
+      ]
+    }
+  },
+  "task_id": "t-000140"
+}

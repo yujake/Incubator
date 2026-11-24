@@ -1,0 +1,149 @@
+{
+  "schema_version": 2,
+  "rows": [
+    {
+      "lit_id": "000000",
+      "title": "9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf",
+      "type": "J",
+      "summary": "",
+      "path": "9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000001"
+      ],
+      "dedup_key": "title:9fade5bcc35a conrad proof of sylow theorems pdf|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T03:41:58+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 279580,
+        "sha256": "9fade5bcc35a2297e0b70b8e3f244da91b337143134cbfde6ff9ff2e735277b0",
+        "error": null,
+        "fulltext": "ok",
+        "note": "候选期已抽读：19296 字（指纹 b6ade8cee42a）"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null,
+      "_keys": [
+        "title:9fade5bcc35a conrad proof of sylow theorems pdf|*"
+      ]
+    },
+    {
+      "lit_id": "000001",
+      "title": "11dc1a689516-harris-sylow-theorems.pdf",
+      "type": "J",
+      "summary": "",
+      "path": "11dc1a689516-harris-sylow-theorems.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000001"
+      ],
+      "dedup_key": "title:11dc1a689516 harris sylow theorems pdf|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T03:41:58+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 297507,
+        "sha256": "11dc1a689516c03fb4c1523b61695c6c773a5da65fafcbeff9740484bbde23a0",
+        "error": null,
+        "fulltext": "ok",
+        "note": "候选期已抽读：38661 字（指纹 2ba01fc417ea）"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null,
+      "_keys": [
+        "title:11dc1a689516 harris sylow theorems pdf|*"
+      ]
+    },
+    {
+      "lit_id": "000002",
+      "title": "c104f1720c63-idelhaj-sylow-theorems-and-applications.pdf",
+      "type": "J",
+      "summary": "",
+      "path": "c104f1720c63-idelhaj-sylow-theorems-and-applications.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000001"
+      ],
+      "dedup_key": "title:c104f1720c63 idelhaj sylow theorems and applications pdf|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T03:41:58+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 234210,
+        "sha256": "c104f1720c63c5f0241d0a272d350039c76af527b29fb80eacf2723a992e083e",
+        "error": null,
+        "fulltext": "ok",
+        "note": "候选期已抽读：21369 字（指纹 5f60d687eadc）"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null,
+      "_keys": [
+        "title:c104f1720c63 idelhaj sylow theorems and applications pdf|*"
+      ]
+    },
+    {
+      "lit_id": "000003",
+      "title": "e090d219194b-vakil-sylow-theorems.pdf",
+      "type": "J",
+      "summary": "",
+      "path": "e090d219194b-vakil-sylow-theorems.pdf",
+      "processed": true,
+      "source_request_ids": [
+        "r-000001"
+      ],
+      "dedup_key": "title:e090d219194b vakil sylow theorems pdf|*",
+      "doi": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "language": null,
+      "added_at": "2026-11-24T03:41:58+08:00",
+      "download": {
+        "status": "ok",
+        "http_status": null,
+        "bytes": 81682,
+        "sha256": "e090d219194b96bb4850f68f3a91382c08d72f6a4492961532658efd61031888",
+        "error": null,
+        "fulltext": "ok",
+        "note": "候选期已抽读：5630 字（指纹 72ca2459bc66）"
+      },
+      "pages": "",
+      "matched": "",
+      "claimed_by": null,
+      "lease_until": null,
+      "mine_attempts": 1,
+      "last_mine_error": null,
+      "_keys": [
+        "title:e090d219194b vakil sylow theorems pdf|*"
+      ]
+    }
+  ]
+}

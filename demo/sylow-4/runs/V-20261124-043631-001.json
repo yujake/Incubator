@@ -1,0 +1,2175 @@
+{
+  "role": "V",
+  "task": "V：这一趟派给你的活是 —— 请对命题 stmt:000062（Sylow 第三定理：n_p | m 且 n_p ≡ 1 mod p）的证明手稿 manuscripts/B/b-proof-000003.md 重新逐行走查并给两态结论。这一份的正文已重新落稿、稿头与正文 sha 同步为 e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00（此前你判过「正文层面成立、只是入口按同一正文 sha 已被打回而拒开新一轮」）。本版在你核过的那份正文末尾加了一句收束（点明外部依据只有 Sylow 第一定理的存在性部分、其余在文内就地推出），「## 依赖」表里已登记 stmt:000060 那一行。请以盘上现在这一份正文为准重新读稿审：成立就把签块落回该稿、结论落 verifications/000062.jsonl；还有缺陷就按步号给最小补法。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/B/b-proof-000003.md"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# B 的证明手稿：Sylow 第三定理\n\n- 标签：Sylow 第三定理\n- 稿族：b-proof\n- 产出者：agent-B-B1\n- 正文sha：e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00\n- 命题指纹：5c4a8480aff618cc4bf51d9e2dd39679b5abde951cd2e1cf2172374b90e16dbc\n- 登记时间：2026-11-24T04:03:54+08:00\n- 版本：2026-11-24T04:30:17+08:00@e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00\n\n## 命题\n\n设 G 是有限群，p 是素数，并把 |G| 写成 |G| = p^k m，其中 p 不整除 m。则 G 的 p-Sylow 子群的个数 n_p 满足：n_p 整除 m，且 n_p ≡ 1 (mod p)。\n\n## 证明\n\n设 |G| = p^k·m，其中 p ∤ m，并记 n_p 为 G 的 p-Sylow 子群的个数。我们要证 n_p ≡ 1 (mod p) 且 n_p | m。\n\n先记下两条后面要用的事实，都在这里就地推出。事实 A（轨道-稳定化子）：若有限群 Γ 作用在集合 X 上，取 x ∈ X，则轨道 Γ·x 与稳定化子 Stab(x) 的左陪集一一对应（g·Stab(x) ↦ g·x 是良定义的双射），于是 |Γ·x| = [Γ : Stab(x)]，特别地轨道长度整除 |Γ|。事实 B（p-群作用的固定点同余）：若有限 p-群 Γ 作用在有限集 X 上，则 |X| ≡ |Fix_Γ(X)| (mod p)。理由是：按轨道把 X 分解成不交并，长度大于 1 的轨道取一点 x，由事实 A 其长度为 [Γ : Stab(x)]，而 Stab(x) 是 Γ 的真子群，故该指数是 p 的正幂、被 p 整除；长度等于 1 的轨道恰是不动点，于是 |X| 等于 |Fix_Γ(X)| 加上若干被 p 整除的项。\n\n再记下 Sylow II（共轭性），同样就地推出：若 P、Q 是两个 p-Sylow 子群，让 Q 从左作用在左陪集集合 G/P 上，由事实 B 得 |G/P| ≡ |Fix_Q(G/P)| (mod p)；左边 [G : P] 不被 p 整除，故不动点集非空，取一个不动点 gP，则对每个 q ∈ Q 都有 qgP = gP，即 q ∈ gPg⁻¹，于是 Q ⊆ gPg⁻¹，而两者阶相同，故 Q = gPg⁻¹。\n\n现在证 n_p ≡ 1 (mod p)。先说明 Syl_p(G)（G 的 p-Sylow 子群全体）非空：由 Sylow 第一定理（在册命题 stmt:000060，现算等级 pre_theorem；见文末「## 依赖」），有限群 G 对每个素数 p 都有 p-Sylow 子群，故可以取定一个 P ∈ Syl_p(G)。让 P 经共轭作用在 Syl_p(G) 上，这个集合的基数就是 n_p。P 是有限 p-群，由事实 B 得 n_p ≡ |Fix_P| (mod p)。一个 Q ∈ Syl_p(G) 被 P 固定，意思是每个 g ∈ P 都满足 gQg⁻¹ = Q，等价于 P ⊆ N(Q)。此时 P 与 Q 都是 N(Q) 的 p-Sylow 子群（两者阶都等于 p^k 且都含于 N(Q)），由上面的 Sylow II 在群 N(Q) 中它们互相共轭；而 Q 在 N(Q) 中正规，N(Q) 中与 Q 共轭的子群只有 Q 自己，故 P = Q。因此被 P 固定的 p-Sylow 子群只有 P 一个，即 |Fix_P| = 1，于是 n_p ≡ 1 (mod p)。\n\n再证 n_p | m。让 G 经共轭作用在 Syl_p(G) 上；由 Sylow II，任意两个 p-Sylow 子群互相共轭，故这个作用只有一个轨道。取该轨道为 G·P，由事实 A 得 n_p = |G·P| = [G : Stab(P)]，它整除 |G| = p^k·m。另一方面由前一段 n_p ≡ 1 (mod p)，故 n_p 与 p 互素；结合 n_p | p^k·m 便得到 n_p | m。\n\n两条结论合起来正是 Sylow 第三定理。就本证明用到的外部依据而言，只有 Sylow 第一定理的存在性部分（在册命题 stmt:000060），其余全部在文内就地推出。\n\n## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |\n|---|---|---|\n| 由 Sylow 第一定理，有限群 G 对每个素数 p 都有…（落档截断，原 2088 字）",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/B/b-proof-000003.md",
+          "encoding": "utf-8",
+          "bytes_read": 3657,
+          "total_bytes": 3657,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 33,
+          "total_lines": 33,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 33 行",
+          "sha256": "e00af57b573afab72c88f876fc367d694fa97cfd753966be65361e8222a8f402"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 36608,
+        "prompt_cache_miss_tokens": 1364,
+        "tokens_in": 37972,
+        "tokens_out": 57,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000099"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "statements",
+          "id": "000060"
+        },
+        "why": "核被引命题 stmt:000060 的等级与陈述是否够格被引（pre_theorem 门槛）"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "_proposition_adjudication": {
+            "checked": true,
+            "attempted": true,
+            "verdict": "different",
+            "canonical_name": "Sylow 第一定理",
+            "same_as": "",
+            "basis": "条件：本条为『G 是有限群，p 是素数』；候选表为空，无可比对候选条件，故不能判 same。；结论：本条为『G 必有 p-Sylow 子群，且每个 p-子群都包含在某个 p-Sylow 子群中』；候选表为空，无可比对候选结论，故不能判 same。；依据 how_to_judge：候选表为空 ⇒ different（没有可并的对象）。；候选表为空，没有可比对的条件—结论对象，无法并成同一个定理。",
+            "reason": "候选表为空，没有可比对的条件—结论对象，无法并成同一个定理。",
+            "reused": false,
+            "seam_source": "secretary（LlmSeam.for_secretary）",
+            "seam_attempted": true,
+            "at": "2026-11-24T03:47:33+08:00"
+          },
+          "quote_carrier": {
+            "pass": "second",
+            "manuscript_id": "000000",
+            "manuscript": "manuscripts/B/b-proof-000000.md",
+            "body_sha256": "08de50eb5a4794b570dd80291e069d614cc6a980846caba923fd2cdd0bb23bcf",
+            "at": "2026-11-24T04:12:09+08:00"
+          },
+          "proof_no": 1,
+          "proof_sha256": "08de50eb5a4794b570dd80291e069d614cc6a980846caba923fd2cdd0bb23bcf",
+          "manuscript_id": "000000",
+          "manuscripts": {
+            "1": "manuscripts/B/b-proof-000000.md"
+          },
+          "_statement_amend_history": [
+            {
+              "at": "2026-11-24T03:49:48+08:00",
+              "by": "secretary-B",
+              "task_id": "t-000006",
+              "changes": {
+                "quote_reason": {
+                  "from": "逐字没命中（not_found）：这一份全文共 7 页，逐页归一化之后都没有出现要比对的那一段（声明窗口：第 3-3 页；比对对象：statements.proof_text）；这一笔核的是quote_span 本身（认不出定位格式，按原文片段核） ⇒ 要么它指的不是这一份来源（页码或 source_lit_id 给错了），要么这一句被改写过（改写要按语义档走：H 判 + quote_call_sha256）。按 quote_verified=False 记 —— 不是 unknown：这份全文我读到了。没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+                  "to": "逐字回验判不一致（quote_verified=false）：原 quote「A ﬁnite group G has a p-Sylow subgroup for every prime p and each p-subgroup of G lies in some p-Sylow subgroup of G.」在来源全文里未能逐字命中（疑与跨行及连字 ﬁ 的归一有关）；同页 Sylow II/III 的引文逐字回验通过（p3:norm[625:684] / p3:norm[710:847]）。本条命题正文本身有 Conrad p.3 Theorem 1.7 依据，待重取一条逐字单句引文后替换。"
+                }
+              }
+            }
+          ],
+          "stmt_id": "000060",
+          "origin": "external_lit",
+          "kind": "theorem",
+          "label": "Sylow 第一定理",
+          "statement_text": "Sylow I：有限群对每个素数 p 都有 p-Sylow 子群，且每个 p-子群都落在某个 p-Sylow 子群里。",
+          "statement_full": "设 G 是有限群，p 是素数。则 G 必有 p-Sylow 子群；并且 G 的每个 p-子群都包含在 G 的某个 p-Sylow 子群之中。",
+          "proof_text": "设 |G| = p^k·m，其中 p ∤ m。若 k = 0，则平凡子群本身就是 G 的 p-Sylow 子群，结论成立；以下设 k ≥ 1。\n\n本证明只用群的定义与最基本的计数事实：凡是后面用到的结论，都在这里就地推出，不依赖任何未登记的定理。\n\n事实 1（陪集与指数）。设 A 是有限群，B ≤ A。规定 a ~ b 当且仅当 a⁻¹b ∈ B，这是等价关系，且每个等价类恰是一个左陪集 aB，于是 A 是若干互不相交的左陪集之并。又左乘给出从 B 到 aB 的双射 b ↦ ab，故 |aB| = |B|。于是 |A| 等于 |B| 乘以左陪集的个数，把这个个数记作 [A : B]。特别地，若 A 有限且 B ≤ A，则 [A : B] = |A| / |B|。\n\n事实 2（轨道-稳定化子）。设有限群 Γ 作用在集合 X 上，取 x ∈ X，记 Stab(x) = {g ∈ Γ : g·x = x}，轨道 Γ·x = {g·x : g ∈ Γ}，则 |Γ·x| = [Γ : Stab(x)]。证明：定义 φ 把左陪集 g·Stab(x) 送到 g·x。先看良定义：若 g·Stab(x) = h·Stab(x)，则 h⁻¹g ∈ Stab(x)，于是 h⁻¹g·x = x，两边同乘 h 得 g·x = h·x。再看单射：若 g·x = h·x，则 h⁻¹g·x = x，故 h⁻¹g ∈ Stab(x)，两个左陪集相等。满射按轨道的定义直接成立。所以轨道与 Stab(x) 的左陪集一一对应，由事实 1 得 |Γ·x| = [Γ : Stab(x)]。\n\n事实 3（共轭类与类方程）。设 A 是有限群。对 a ∈ A，中心化子 C_A(a) = {g ∈ A : gag⁻¹ = a} 是子群。「a 与 b 共轭」（即存在 g 使 b = gag⁻¹）是等价关系，等价类称共轭类；a 的共轭类正是 A 经共轭作用在自身上的轨道，而该作用的稳定化子就是 C_A(a)。a 在中心 Z(A) 中当且仅当它的共轭类只有它自己。把 A 按共轭类分解，取所有非中心共轭类的代表元 x₁,…,x_r，由事实 2 得\n|A| = |Z(A)| + Σ_{i=1}^{r} [A : C_A(x_i)]。\n这就是类方程。\n\n事实 4（p-群作用的固定点同余式）。设 Γ 是有限 p-群，即 |Γ| = p^s（允许 s = 0，此时 Γ 是平凡群），Γ 作用在有限集 X 上，记 Fix_Γ(X) = {x ∈ X : 对每个 g ∈ Γ 都有 g·x = x}，则 |X| ≡ |Fix_Γ(X)| (mod p)。证明：若 s = 0，则 Γ 只有单位元，每个点都被固定，于是 Fix_Γ(X) = X，同余式以等号成立。以下设 s ≥ 1。把 X 按轨道分解成不交并。长度大于 1 的轨道取一点 x，则 Stab(x) 是 Γ 的真子群，由事实 1 与事实 2，其长度 [Γ : Stab(x)] = |Γ| / |Stab(x)| = p^t 且 t ≥ 1（因为 Stab(x) 真包含于 Γ 而 |Γ| = p^s），从而被 p 整除。长度等于 1 的轨道恰是被 Γ 中每个元素固定的点，即不动点。于是 |X| 等于 |Fix_Γ(X)| 加上若干被 p 整除的项，即 |X| ≡ |Fix_Γ(X)| (mod p)。\n\n事实 5（Cauchy 定理）。设 A 是有限群，p 整除 |A|，则 A 含有阶为 p 的元素。证明：对 |A| 归纳。若 A 有真子群 B 使 p 整除 |B|，由归纳假设 B 已含阶 p 的元素，结论成立。以下设 A 的每个真子群的阶都与 p 互素。由事实 3 的类方程 |A| = |Z(A)| + Σ [A : C_A(x_i)]，其中 x_i 不在中心，故 C_A(x_i) 是 A 的真子群，其阶与 p 互素；又 p 整除 |A|，由事实 1 每个 [A : C_A(x_i)] = |A| / |C_A(x_i)| 都被 p 整除。于是 p 整除 |Z(A)|。若 Z(A) ≠ A，则 Z(A) 是 A 的真子群，与「每个真子群的阶都与 p 互素」矛盾；所以 Z(A) = A，即 A 交换。下面处理交换情形，仍对 |A| 作归纳。取 a ≠ e，记 B = ⟨a⟩。若 p 整除 |B|，则 a^{|B|/p} 在 B 中的阶恰为 p，结论成立。若 p 与 |B| 互素，看商群 A/B：它的阶 |A|/|B| 小于 |A| 且被 p 整除，由归纳假设 A/B 含阶 p 的元素 yB，这里 y ∉ B 且 y^p ∈ B。记 n 为 y 在 A 中的阶。若 p 与 n 互素，则 ⟨y^p⟩ 的阶为 n / gcd(n,p) = n，与 ⟨y⟩ 同阶，故 ⟨y^p⟩ = ⟨y⟩，于是 y ∈ ⟨y^p⟩ ⊆ B（用 A 交换，⟨y⟩ 是循环群），与 y ∉ B 矛盾；所以 p 整除 n，写 n = p·s，则 (y^s)^p = y^n = e 而 y^s ≠ e，故 y^s 的阶为 p。归纳完成。∎\n\n事实 6（商群与原像的阶）。设 A 是有限群，K ◁ A。把 A/K 的每个元素取成陪集形式 aK：由 K 正规，陪集乘法良定义，A/K 成群，商映射 π(a) = aK 是满同态且核为 K，由事实 1 得 |A/K| = [A : K] = |A|/|K|。又若 S ≤ A/K，则原像 π⁻¹(S) = {a ∈ A : aK ∈ S} 是 A 的子群且包含 K；π 限制在 π⁻¹(S) 上仍是满同态、核仍为 K，于是 π⁻¹(S)/K 与 S 之间有良定义的群同构，由事实 1 得 |π⁻¹(S)| = |S|·|K|。\n\n有了这六条事实，主证明如下。关键一步是：只要 H ≤ G 满足 |H| = p^i 且 i < k，就存在包含 H 的 p-子群 H′ 使 [H′ : H] = p。为此让 H 从左作用在左陪集集合 G/H 上（G/H 未必成群，但它是一个带 H-作用的集合，这一作用良定义：若 g′ ∈ gH，则 g′ = gh，于是 h₀g′H = h₀ghH = h₀gH）。H 是有限 p-群，阶为 p^i（i 可以是 0，此时 H = {e}，事实 4 已把 s = 0 的情形包含在内），由事实 4 得 |G/H| ≡ |Fix_H(G/H)| (mod p)。一个陪集 gH 被 H 固定，意思是每个 h ∈ H 都满足 hgH = gH；把它整理成 g⁻¹hg ∈ H 对每个 h 成立，也就是 g⁻¹Hg ⊆ H，而共轭不改变阶，|g⁻¹Hg| = |H|，故 g⁻¹Hg = H，即 g ∈ N(H)。上述推理步步可逆，所以 Fix_H(G/H) = {gH : g ∈ N(H)} = N(H)/H，同余式因此写成 [G : H] ≡ [N(H) : H] (mod p)。\n\n因为 i < k，由事实 1 指数 [G : H] = p^{k−i}·m 被 p 整除，所以 [N(H) : H] 也被 p 整除。H 在 N(H) 中正规，商群 N(H)/H 有意义，由事实 6 其阶为 [N(H) : H]，被 p 整除；由事实 5，N(H)/H 含一个阶为 p 的元素，设对应的子群为 S。沿商映射 N(H) → N(H)/H 取原像 H′ = π⁻¹(S)：由事实 6，H′ 是 G 的子群且包含 H，并且 |H′| = |S|·|H| = p·|H| = p^{i+1}，这正是所需的扩张。\n\n从 H₀ = {e} 出发反复使用这一步（i = 0, 1, …, k−1），得到一条子群链 {e} = H₀ ⊂ H₁ ⊂ … ⊂ H_k，其中 |H_i| = p^i；特别地 H_k 的阶为 p^k，它是 G 的一个 p-Sylow 子群，存在性得证。另一方面，若一开始把 H 取成 G 的任一 p-子群（|H| = p^j，j ≤ k），同样反复扩张，就得到包含 H 的阶为 p^k 的子群，故 H 落在某个 p-Sylow 子群之中。两条结论合起来正是 Sylow 第一定理。∎",
+          "source_lit_id": "000000",
+          "page_range": {
+            "start": 3,
+            "end": 3,
+            "label": "p. 3"
+          },
+          "quote_verified": false,
+          "quote_mode": "",
+          "quote_reason": "逐字回验判不一致（quote_verified=false）：原 quote「A ﬁnite group G has a p-Sylow subgroup for every prime p and each p-subgroup of G lies in some p-Sylow subgroup of G.」在来源全文里未能逐字命中（疑与跨行及连字 ﬁ 的归一有关）；同页 Sylow II/III 的引文逐字回验通过（p3:norm[625:684] / p3:norm[710:847]）。本条命题正文本身有 Conrad p.3 Theorem 1.7 依据，待重取一条逐字单句引文后替换。",
+          "quote_span": "",
+          "quote_call_sha256": "",
+          "evidence_kind": "cross_check",
+          "bits": {
+            "numeric": "pending",
+            "proof": true,
+            "reviewed": true,
+            "formal": "pending",
+            "audited": false,
+            "origin": "external_lit",
+            "evidence": {
+              "numeric": {},
+              "numeric_reason": "",
+              "proof_process": "设 |G| = p^k·m，其中 p ∤ m。若 k = 0，则平凡子群本身就是 G 的 p-Sylow 子群，结论成立；以下设 k ≥ 1。\n\n本证明只用群的定义与最基本的计数事实：凡是后面用到的结论，都在这里就地推出，不依赖任何未登记的定理。\n\n事实 1（陪集与指数）。设 A 是有限群，B ≤ A。规定 a ~ b 当且仅当 a⁻¹b ∈ B，这是等价关系，且每个等价类恰是一个左陪集 aB，于是 A 是若干互不相交的左陪集之并。又左乘给出从 B 到 aB 的双射 b ↦ ab，故 |aB| = |B|。于是 |A| 等于 |B| 乘以左陪集的个数，把这个个数记作 [A : B]。特别地，若 A 有限且 B ≤ A，则 [A : B] = |A| / |B|。\n\n事实 2（轨道-稳定化子）。设有限群 Γ 作用在集合 X 上，取 x ∈ X，记 Stab(x) = {g ∈ Γ : g·x = x}，轨道 Γ·x = {g·x : g ∈ Γ}，则 |Γ·x| = [Γ : Stab(x)]。证明：定义 φ 把左陪集 g·Stab(x) 送到 g·x。先看良定义：若 g·Stab(x) = h·Stab(x)，则 h⁻¹g ∈ Stab(x)，于是 h⁻¹g·x = x，两边同乘 h 得 g·x = h·x。再看单射：若 g·x = h·x，则 h⁻¹g·x = x，故 h⁻¹g ∈ Stab(x)，两个左陪集相等。满射按轨道的定义直接成立。所以轨道与 Stab(x) 的左陪集一一对应，由事实 1 得 |Γ·x| = [Γ : Stab(x)]。\n\n事实 3（共轭类与类方程）。设 A 是有限群。对 a ∈ A，中心化子 C_A(a) = {g ∈ A : gag⁻¹ = a} 是子群。「a 与 b 共轭」（即存在 g 使 b = gag⁻¹）是等价关系，等价类称共轭类；a 的共轭类正是 A 经共轭作用在自身上的轨道，而该作用的稳定化子就是 C_A(a)。a 在中心 Z(A) 中当且仅当它的共轭类只有它自己。把 A 按共轭类分解，取所有非中心共轭类的代表元 x₁,…,x_r，由事实 2 得\n|A| = |Z(A)| + Σ_{i=1}^{r} [A : C_A(x_i)]。\n这就是类方程。\n\n事实 4（p-群作用的固定点同余式）。设 Γ 是有限 p-群，即 |Γ| = p^s（允许 s = 0，此时 Γ 是平凡群），Γ 作用在有限集 X 上，记 Fix_Γ(X) = {x ∈ X : 对每个 g ∈ Γ 都有 g·x = x}，则 |X| ≡ |Fix_Γ(X)| (mod p)。证明：若 s = 0，则 Γ 只有单位元，每个点都被固定，于是 Fix_Γ(X) = X，同余式以等号成立。以下设 s ≥ 1。把 X 按轨道分解成不交并。长度大于 1 的轨道取一点 x，则 Stab(x) 是 Γ 的真子群，由事实 1 与事实 2，其长度 [Γ : Stab(x)] = |Γ| / |Stab(x)| = p^t 且 t ≥ 1（因为 Stab(x) 真包含于 Γ 而 |Γ| = p^s），从而被 p 整除。长度等于 1 的轨道恰是被 Γ 中每个元素固定的点，即不动点。于是 |X| 等于 |Fix_Γ(X)| 加上若干被 p 整除的项，即 |X| ≡ |Fix_Γ(X)| (mod p)。\n\n事实 5（Cauchy 定理）。设 A 是有限群，p 整除 |A|，则 A 含有阶为 p 的元素。证明：对 |A| 归纳。若 A 有真子群 B 使 p 整除 |B|，由归纳假设 B 已含阶 p 的元素，结论成立。以下设 A 的每个真子群的阶都与 p 互素。由事实 3 的类方程 |A| = |Z(A)| + Σ [A : C_A(x_i)]，其中 x_i 不在中心，故 C_A(x_i) 是 A 的真子群，其阶与 p 互素；又 p 整除 |A|，由事实 1 每个 [A : C_A(x_i)] = |A| / |C_A(x_i)| 都被 p 整除。于是 p 整除 |Z(A)|。若 Z(A) ≠ A，则 Z(A) 是 A 的真子群，与「每个真子群的阶都与 p 互素」矛盾；所以 Z(A) = A，即 A 交换。下面处理交换情形，仍对 |A| 作归纳。取 a ≠ e，记 B = ⟨a⟩。若 p 整除 |B|，则 a^{|B|/p} 在 B 中的阶恰为 p，结论成立。若 p 与 |B| 互素，看商群 A/B：它的阶 |A|/|B| 小于 |A| 且被 p 整除，由归纳假设 A/B 含阶 p 的元素 yB，这里 y ∉ B 且 y^p ∈ B。记 n 为 y 在 A 中的阶。若 p 与 n 互素，则 ⟨y^p⟩ 的阶为 n / gcd(n,p) = n，与 ⟨y⟩ 同阶，故 ⟨y^p⟩ = ⟨y⟩，于是 y ∈ ⟨y^p⟩ ⊆ B（用 A 交换，⟨y⟩ 是循环群），与 y ∉ B 矛盾；所以 p 整除 n，写 n = p·s，则 (y^s)^p = y^n = e 而 y^s ≠ e，故 y^s 的阶为 p。归纳完成。∎\n\n事实 6（商群与原像的阶）。设 A 是有限群，K ◁ A。把 A/K 的每个元素取成陪集形式 aK：由 K 正规，陪集乘法良定义，A/K 成群，商映射 π(a) = aK 是满同态且核为 K，由事实 1 得 |A/K| = [A : K] = |A|/|K|。又若 S ≤ A/K，则原像 π⁻¹(S) = {a ∈ A : aK ∈ S} 是 A 的子群且包含 K；π 限制在 π⁻¹(S) 上仍是满同态、核仍为 K，于是 π⁻¹(S)/K 与 S 之间有良定义的群同构，由事实 1 得 |π⁻¹(S)| = |S|·|K|。\n\n有了这六条事实，主证明如下。关键一步是：只要 H ≤ G 满足 |H| = p^i 且 i < k，就存在包含 H 的 p-子群 H′ 使 [H′ : H] = p。为此让 H 从左作用在左陪集集合 G/H 上（G/H 未必成群，但它是一个带 H-作用的集合，这一作用良定义：若 g′ ∈ gH，则 g′ = gh，于是 h₀g′H = h₀ghH = h₀gH）。H 是有限 p-群，阶为 p^i（i 可以是 0，此时 H = {e}，事实 4 已把 s = 0 的情形包含在内），由事实 4 得 |G/H| ≡ |Fix_H(G/H)| (mod p)。一个陪集 gH 被 H 固定，意思是每个 h ∈ H 都满足 hgH = gH；把它整理成 g⁻¹hg ∈ H 对每个 h 成立，也就是 g⁻¹Hg ⊆ H，而共轭不改变阶，|g⁻¹Hg| = |H|，故 g⁻¹Hg = H，即 g ∈ N(H)。上述推理步步可逆，所以 Fix_H(G/H) = {gH : g ∈ N(H)} = N(H)/H，同余式因此写成 [G : H] ≡ [N(H) : H] (mod p)。\n\n因为 i < k，由事实 1 指数 [G : H] = p^{k−i}·m 被 p 整除，所以 [N(H) : H] 也被 p 整除。H 在 N(H) 中正规，商群 N(H)/H 有意义，由事实 6 其阶为 [N(H) : H]，被 p 整除；由事实 5，N(H)/H 含一个阶为 p 的元素，设对应的子群为 S。沿商映射 N(H) → N(H)/H 取原像 H′ = π⁻¹(S)：由事实 6，H′ 是 G 的子群且包含 H，并且 |H′| = |S|·|H| = p·|H| = p^{i+1}，这正是所需的扩张。\n\n从 H₀ = {e} 出发反复使用这一步（i = 0, 1, …, k−1），得到一条子群链 {e} = H₀ ⊂ H₁ ⊂ … ⊂ H_k，其中 |H_i| = p^i；特别地 H_k 的阶为 p^k，它是 G 的一个 p-Sylow 子群，存在性得证。另一方面，若一开始把 H 取成 G 的任一 p-子群（|H| = p^j，j ≤ k），同样反复扩张，就得到包含 H 的阶为 p^k 的子群，故 H 落在某个 p-Sylow 子群之中。两条结论合起来正是 Sylow 第一定理。∎",
+              "proof_source": "own",
+              "reviewed_by": {
+                "verifier": "V",
+                "verification_id": "v-000009",
+                "round": null,
+                "verdict": "成立",
+                "evidence": "verifications/000060.jsonl#v-000009",
+                "findings": [],
+                "proof_no": 1,
+                "proof_sha256": "08de50eb5a4794b570dd80291e069d614cc6a980846caba923fd2cdd0bb23bcf"
+              },
+              "reviewed_source": "v",
+              "formal": {},
+              "formal_reason": "",
+              "audited_by": {},
+              "optimized_by_proof": {
+                "1": true
+              },
+              "reviewed_by_proof": {
+                "1": true
+              },
+              "reviewed_sha_by_proof": {
+                "1": "08de50eb5a4794b570dd80291e069d614cc6a980846caba923fd2cdd0bb23bcf"
+              }
+            },
+            "voided_by": {},
+            "grade": "pre_theorem",
+            "audited_badge": false
+          },
+          "status": "active",
+          "derived_from": [],
+          "aliases": [],
+          "doc_id": null,
+          "line_range": {
+            "start": null,
+            "end": null,
+            "label": ""
+          },
+          "created_at": "2026-11-24T03:47:33+08:00",
+          "created_by": "secretary-B",
+          "manuscript_family": "b-proof",
+          "proof_history": [
+            {
+              "text": "A ﬁnite group G has a p-Sylow subgroup for every prime p and each p-subgroup of G lies in some p-Sylow subgroup of G.",
+              "sha": "9f2a052d0174cc8620b99b3777d41656ad22dbffeb1180c028463b1e46b4f623",
+              "at": "2026-11-24T04:12:09+08:00",
+              "replaced_by": "08de50eb5a4794b570dd80291e069d614cc6a980846caba923fd2cdd0bb23bcf",
+              "proof_no": 1
+            }
+          ],
+          "proof_routes": {},
+          "route": ""
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "id": "000060",
+          "id_field": "stmt_id",
+          "found": true
+        },
+        "multi_call": {
+          "turn_index": 1,
+          "call_index": 0,
+          "calls": 2,
+          "step_index": 1
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 37120,
+        "prompt_cache_miss_tokens": 2470,
+        "tokens_in": 39590,
+        "tokens_out": 4289,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000099"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "verify.list_verifications",
+        "args": {
+          "statement_id": "000062",
+          "limit": 10
+        },
+        "why": "看这一条此前审过几次、结论分别是什么（跨趟不累计，但要知道前账）"
+      },
+      "result": {
+        "tool": "verify.list_verifications",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "total": 2,
+          "items": [
+            {
+              "at": "2026-11-24T04:06:34+08:00",
+              "citation_checks": [],
+              "defect_step": 5,
+              "findings": [
+                {
+                  "detail": "第 5 步直接取 P ∈ Syl_p(G) 并让 P 作用在 Syl_p(G) 上，但全文没有证明或引用 Sylow 第一定理来保证 Syl_p(G) 非空；若 k>0 而该集合为空，则 n_p=0，命题结论不成立，且该共轭作用无法定义。需先补出 p-Sylow 子群存在性（或引用在册的 Sylow I）再取 P。",
+                  "kind": "无条件前提（存在性未证）",
+                  "level": "error",
+                  "step": 5
+                }
+              ],
+              "manuscript": "manuscripts/B/b-proof-000003.md",
+              "object_path": "manuscripts/B/b-proof-000003.md",
+              "object_sha256": "7a42d80562648c94521a35b3d85d144d5b18ed127ea6bb8e984e26d711581f7b",
+              "producer_code": "B1",
+              "producer_role": "B",
+              "proof_chars": 1256,
+              "proof_sha256": "44ca53f1ae324ffed52f40b47ee80ce45a7163450c63a6fea2df7f9b358e554f",
+              "quote": "让 P 经共轭作用在 Syl_p(G)（G 的 p-Sylow 子群全体）上，这个集合的基数就是 n_p。",
+              "review_call": "bd62cefe1d94",
+              "review_pass": 1,
+              "round": 1,
+              "secretary_judge": {
+                "axis": "fault",
+                "checked": true,
+                "decision": "",
+                "fault_cause": "",
+                "fault_kind": "math",
+                "reason": "V 指出第 5 步在未证明 Syl_p(G) 非空时直接取 P 并定义共轭作用，属于证明链上的数学缺口。",
+                "report_gap": ""
+              },
+              "statement_id": "000062",
+              "stmt_id": "000062",
+              "submission_id": "",
+              "unresolved_errors": 1,
+              "used_faces": [],
+              "verdict": "有毛病",
+              "verification_id": "v-000001",
+              "verifier": "agent-V-Vsign1",
+              "washed_relay": {
+                "dropped": [],
+                "findings": [
+                  {
+                    "quote": "让 P 经共轭作用在 Syl_p(G)（G 的 p-Sylow 子群全体）上，这个集合的基数就是 n_p。",
+                    "why": "这是缺陷所在第 5 步的原文：在该处取 P 并对 Syl_p(G) 作共轭作用，却没有先建立 Syl_p(G) 非空。"
+                  },
+                  {
+                    "quote": "第 5 步直接取 P ∈ Syl_p(G) 并让 P 作用在 Syl_p(G) 上，但全文没有证明或引用 Sylow 第一定理来保证 Syl_p(G) 非空",
+                    "why": "明确指出缺失的是 p-Sylow 子群存在性这一必要前提；要么补出证明，要么引用 Sylow I。"
+                  },
+                  {
+                    "quote": "若 k>0 而该集合为空，则 n_p=0，命题结论不成立，且该共轭作用无法定义",
+                    "why": "说明前提缺失会造成的直接后果：作用无法定义、命题结论失效。"
+                  }
+                ],
+                "text": "审阅意见指向第 5 步，判定为该处有毛病。\n\n指向哪一步：第 5 步。\n\n问题是什么：这一步取定 P，并把共轭作用定义到全体 p-Sylow 子群组成的集合上，但前文既没有证明，也没有引用 Sylow 第一定理，来交代该集合非空这一必要前提。前提缺失时，这个共轭作用无法定义；并且当 k>0 而集合为空时，n_p 会等于 0，命题结论不成立。\n\n下一步补什么：先补出 p-Sylow 子群的存在性，或引用在册的 Sylow I，然后再取 P 并定义该共轭作用。"
+              },
+              "why": "证明在未建立 Syl_p(G) 非空的情况下取 P 并定义共轭作用，缺少 p-Sylow 子群存在性这一必要前提。"
+            },
+            {
+              "at": "2026-11-24T04:26:25+08:00",
+              "citation_checks": [],
+              "defect_step": 1,
+              "findings": [
+                {
+                  "detail": "第 5 步正文写“在册命题 stmt:000060，现算等级 pre_theorem；见文末「## 依赖」”，但 `## 依赖` 实为 0 行、未登记该 stmt 引用；需补登依赖或删去“见文末依赖”，否则该引用无法按依赖面核对。",
+                  "kind": "依赖面缺登记",
+                  "level": "warning",
+                  "step": 5
+                },
+                {
+                  "detail": "`stmt:000060`（在哪一步：证明正文（未标步号的行））· 类别：等级读不出来（判不了）（`citation_level_unreadable`） · 期望：盘上有一份这一条命题的手稿（`manuscripts/F/f-proof-<号>.md`；V 只读手稿：正文与签都在稿上） · 实得：盘上没有这一条命题的手稿（找过：（没记））⇒ 读不到它的正文，也读不到它的签 · 怎么改：先把这一条命题的证明落成一份手稿（`manuscripts/F/f-proof-<号>.md`，`## 命题` / `## 证明` / `## 依赖` 三节），再引它；V 不从台账读正文",
+                  "kind": "citation_level_unreadable",
+                  "level": "error",
+                  "step": null
+                },
+                {
+                  "detail": "`stmt:000060`（在哪一步：证明正文（未标步号的行））· 类别：表述错误·表与正文的引用集合不一致（`deps_table_disagrees_with_proof`） · 期望：手稿的 `## 依赖` 表里有一行 `stmt:000060`（写明它用在哪一步） · 实得：表里没有这一行 · 怎么改：把表里那一行补上（号与用在哪一步都写对）；正文是 F 的署名作品，表按它补齐 —— 两处必须说的是同一件事",
+                  "kind": "deps_table_disagrees_with_proof",
+                  "level": "error",
+                  "step": null
+                }
+              ],
+              "manuscript": "manuscripts/B/b-proof-000003.md",
+              "object_path": "manuscripts/B/b-proof-000003.md",
+              "object_sha256": "375c9d7c12f12749305e5a88b71823193e6e49fc29a8075f89242da11e732802",
+              "producer_code": "B1",
+              "producer_role": "B",
+              "proof_chars": 1380,
+              "proof_sha256": "b78c1dd3d87629c6551a3574590494d93a0b170741ae05c832826f35dcf15687",
+              "quote": "由 Sylow 第一定理（在册命题 stmt:000060，现算等级 pre_theorem；见文末「## 依赖」），有限群 G 对每个素数 p 都有 p-Sylow 子群，故可以取定一个 P ∈ Syl_p(G)。",
+              "review_call": "ffadd0fe885e",
+              "review_pass": 1,
+              "round": 2,
+              "secretary_judge": {
+                "axis": "fault",
+                "checked": true,
+                "decision": "",
+                "fault_cause": "",
+                "fault_kind": "contract",
+                "reason": "V 指出第 5 步引用的 stmt:000060 未在 `## 依赖` 登记，导致引用无法按依赖面核实，属于引用不可核的契约缺陷。",
+                "report_gap": ""
+              },
+              "statement_id": "000062",
+              "stmt_id": "000062",
+              "submission_id": "",
+              "unresolved_errors": 2,
+              "used_faces": [],
+              "verdict": "有毛病",
+              "verification_id": "v-000002",
+              "verifier": "agent-V-Vsign1",
+              "washed_relay": {
+                "dropped": [],
+                "findings": [
+                  {
+                    "quote": "由 Sylow 第一定理（在册命题 stmt:000060，现算等级 pre_theorem；见文末「## 依赖」），有限群 G 对每个素数 p 都有 p-Sylow 子群，故可以取定一个 P ∈ Syl_p(G)。",
+                    "why": "第 5 步引用了在册命题 stmt:000060，并指向文末「## 依赖」一节，但该节为空，引用未被登记，无法按依赖面核实。"
+                  },
+                  {
+                    "quote": "`## 依赖` 实为 0 行、未登记该 stmt 引用",
+                    "why": "问题就是依赖面缺登记；要么补登该引用，要么删去正文中指向文末依赖的指引。"
+                  }
+                ],
+                "text": "第 5 步。该步正文把 Sylow 第一定理作为在册命题 stmt:000060 引用（现算等级 pre_theorem），并注明见文末「## 依赖」；但文末 `## 依赖` 一节实为 0 行，该 stmt 引用并未登记，因此这项引用无法按依赖面核对。下一步二选一：把该 stmt 引用补登进 `## 依赖`，或删去正文中「见文末『## 依赖』」这一指引。"
+              },
+              "why": "第 5 步引用 stmt:000060 并称见文末依赖，但 `## 依赖` 为 0 行，未登记该引用，引用无法按依赖面核实。；`stmt:000060`（在哪一步：证明正文（未标步号的行））· 类别：等级读不出来（判不了）（`citation_level_unreadable`） · 期望：盘上有一份这一条命题的手稿（`manuscripts/F/f-proof-<号>.md`；V 只读手稿：正文与签都在稿上） · 实得：盘上没有这一条命题的手稿（找过：（没记））⇒ 读不到它的正文，也读不到它的签 · 怎么改：先把这一条命题的证明落成一份手稿（`manuscripts/F/f-proof-<号>.md`，`## 命题` / `## 证明` / `## 依赖` 三节），再引它；V 不从台账读正文；`stmt:000060`（在哪一步：证明正文（未标步号的行））· 类别：表述错误·表与正文的引用集合不一致（`deps_table_disagrees_with_proof`） · 期望：手稿的 `## 依赖` 表里有一行 `stmt:000060`（写明它用在哪一步） · 实得：表里没有这一行 · 怎么改：把表里那一行补上（号与用在哪一步都写对）；正文是 F 的署名作品，表按它补齐 —— 两处必须说的是同一件事"
+            }
+          ],
+          "problems": [],
+          "truncated": false,
+          "reason": "共 2 行验证台账"
+        },
+        "error": "",
+        "meta": {},
+        "warn": "这一步给了 2 条调用，已按顺序逐条：第 1 条 table.get 成功；第 2 条 verify.list_verifications 成功：2。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 1,
+          "call_index": 1,
+          "calls": 2,
+          "step_index": 2,
+          "summary": "这一步给了 2 条调用，已按顺序逐条：第 1 条 table.get 成功；第 2 条 verify.list_verifications 成功：2。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 1,
+            "calls": 2,
+            "items": 2,
+            "steps": [
+              1,
+              2
+            ],
+            "executed": 2,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000099"
+    },
+    {
+      "index": 3,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "statements",
+          "filter": {
+            "stmt_id": "000062"
+          },
+          "fields": [
+            "stmt_id",
+            "label",
+            "statement_full",
+            "kind",
+            "status",
+            "evidence_kind",
+            "origin",
+            "proof_sha256",
+            "manuscripts",
+            "proof_text"
+          ],
+          "limit": 5
+        },
+        "why": "核命题 000062 的台账字面与被审手稿「## 命题」是否一致（审查角度⑤）"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": false,
+        "data": null,
+        "error": "statements 没有字段 ['manuscripts', 'proof_sha256']；可投影的字段：['aliases', 'bits', 'created_at', 'created_by', 'derived_from', 'doc_id', 'evidence_kind', 'kind', 'label', 'line_range', 'origin', 'page_range', 'proof_routes', 'proof_routes_problem', 'proof_text', 'quote_call_sha256', 'quote_mode', 'quote_reason', 'quote_span', 'quote_verified', 'route', 'source_lit_id', 'statement_full', 'statement_text', 'status', 'stmt_id']（投影只回你点的键，写错一个字就会少一格，所以这里直接拒）",
+        "meta": {
+          "table": "statements",
+          "kind": "param_error"
+        },
+        "参数表": "【参数表】被拒的是参数形状/取值，不是这件事不能做。照下面这张声明表重写一次（键名与类型都要对；表里没列的键一律不许传）：\n- table.list 的参数表：table: string，必填，枚举 [search_requests/literature/relations/research_questions/conjectures/analysis_reports/reprocess_requests/experiments]，16 张表之一；limit: integer，返回条数上限（1-500）；offset: integer，跳过的行数；filter: object，等值过滤：{字段: 期望值}；模糊匹配请用 table.search；fields: array，字段投影：只回这几个键（例如 statements 的 stmt_id / label / kind / evidence_kind）；省略=整行（与改前逐字相同，含 proof_text 全文）（参数表是封闭集合：多传一个键会被拒）"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 38784,
+        "prompt_cache_miss_tokens": 8435,
+        "tokens_in": 47219,
+        "tokens_out": 9720,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000099"
+    },
+    {
+      "index": 4,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "statements",
+          "filter": {
+            "stmt_id": "000062"
+          },
+          "fields": [
+            "stmt_id",
+            "label",
+            "statement_full",
+            "kind",
+            "status",
+            "evidence_kind",
+            "origin",
+            "proof_text"
+          ],
+          "limit": 3
+        },
+        "why": "核命题 000062 的台账字面与被审手稿「## 命题」是否一致（审查角度⑤）"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "statements",
+          "rows": [
+            {
+              "stmt_id": "000062",
+              "label": "Sylow 第三定理",
+              "statement_full": "设 G 是有限群，p 是素数，并把 |G| 写成 |G| = p^k m，其中 p 不整除 m。则 G 的 p-Sylow 子群的个数 n_p 满足：n_p 整除 m，且 n_p ≡ 1 (mod p)。",
+              "kind": "theorem",
+              "status": "active",
+              "evidence_kind": "cross_check",
+              "origin": "external_lit",
+              "proof_text": "For each prime p, let np be the number of p-Sylow subgroups of G. Write |G| = pkm, where p doesn’t divide m. Then\nnp | m and np ≡1 mod p."
+            }
+          ],
+          "total": 1,
+          "returned": 1,
+          "limit": 3,
+          "offset": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "total": 1,
+          "returned": 1,
+          "offset": 0,
+          "limit": 3,
+          "fields": [
+            "stmt_id",
+            "label",
+            "statement_full",
+            "kind",
+            "status",
+            "evidence_kind",
+            "origin",
+            "proof_text"
+          ]
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 46464,
+        "prompt_cache_miss_tokens": 2388,
+        "tokens_in": 48852,
+        "tokens_out": 4356,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000099"
+    },
+    {
+      "index": 5,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/B/b-proof-000000.md"
+        },
+        "why": "核被引命题 stmt:000060 的依赖面：那份手稿是否存在、是否经 V 签（够不够格被引）、其命题是否确为 Sylow 第一定理的存在性部分（审查角度⑥）"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# B 的证明手稿：设 G 是有限群，p 是素数。则 G 必有 p-Sylow 子群；并且 G 的每个 p-子群都包含在 G 的某个 p-…\n\n- V 签：已签=true；判词=成立；连续=3/3；正文sha=08de50eb5a4794b570dd80291e069d614cc6a980846caba923fd2cdd0bb23bcf；时间=2026-11-24T04:10:52+08:00；签名者=secretary:B；台账=verifications/000060.jsonl#v-000009；手稿号=000000\n- 标签：Sylow 第一定理\n- 稿族：b-proof\n- 产出者：agent-B-B-literature-sylow\n- 正文sha：08de50eb5a4794b570dd80291e069d614cc6a980846caba923fd2cdd0bb23bcf\n- 命题指纹：a2e6eacbae6fdfa8bc371c93539990c6f6de1dc6ef4ea46b50b87bd46d929337\n- 登记时间：2026-11-24T03:51:39+08:00\n- 版本：2026-11-24T04:06:35+08:00@08de50eb5a4794b570dd80291e069d614cc6a980846caba923fd2cdd0bb23bcf\n\n## 命题\n\n设 G 是有限群，p 是素数。则 G 必有 p-Sylow 子群；并且 G 的每个 p-子群都包含在 G 的某个 p-Sylow 子群之中。\n\n## 证明\n\n设 |G| = p^k·m，其中 p ∤ m。若 k = 0，则平凡子群本身就是 G 的 p-Sylow 子群，结论成立；以下设 k ≥ 1。\n\n本证明只用群的定义与最基本的计数事实：凡是后面用到的结论，都在这里就地推出，不依赖任何未登记的定理。\n\n事实 1（陪集与指数）。设 A 是有限群，B ≤ A。规定 a ~ b 当且仅当 a⁻¹b ∈ B，这是等价关系，且每个等价类恰是一个左陪集 aB，于是 A 是若干互不相交的左陪集之并。又左乘给出从 B 到 aB 的双射 b ↦ ab，故 |aB| = |B|。于是 |A| 等于 |B| 乘以左陪集的个数，把这个个数记作 [A : B]。特别地，若 A 有限且 B ≤ A，则 [A : B] = |A| / |B|。\n\n事实 2（轨道-稳定化子）。设有限群 Γ 作用在集合 X 上，取 x ∈ X，记 Stab(x) = {g ∈ Γ : g·x = x}，轨道 Γ·x = {g·x : g ∈ Γ}，则 |Γ·x| = [Γ : Stab(x)]。证明：定义 φ 把左陪集 g·Stab(x) 送到 g·x。先看良定义：若 g·Stab(x) = h·Stab(x)，则 h⁻¹g ∈ Stab(x)，于是 h⁻¹g·x = x，两边同乘 h 得 g·x = h·x。再看单射：若 g·x = h·x，则 h⁻¹g·x = x，故 h⁻¹g ∈ Stab(x)，两个左陪集相等。满射按轨道的定义直接成立。所以轨道与 Stab(x) 的左陪集一一对应，由事实 1 得 |Γ·x| = [Γ : Stab(x)]。\n\n事实 3（共轭类与类方程）。设 A 是有限群。对 a ∈ A，中心化子 C_A(a) = {g ∈ A : gag⁻¹ = a} 是子群。「a 与 b 共轭」（即存在 g 使 b = gag⁻¹）是等价关系，等价类称共轭类；a 的共轭类正是 A 经共轭作用在自身上的轨道，而该作用的稳定化子就是 C_A(a)。a 在中心 Z(A) 中当且仅当它的共轭类只有它自己。把 A 按共轭类分解，取所有非中心共轭类的代表元 x₁,…,x_r，由事实 2 得\n|A| = |Z(A)| + Σ_{i=1}^{r} [A : C_A(x_i)]。\n这就是类方程。\n\n事实 4（p-群作用的固定点同余式）。设 Γ 是有限 p-群，即 |Γ| = p^s（允许 s = 0，此时 Γ 是平凡群），Γ 作用在有限集 X 上，记 Fix_Γ(X) = {x ∈ X : 对每个 g ∈ Γ 都有 g·x = x}，则 |X| ≡ |Fix_Γ(X)| (mod p)。证明：若 s = 0，则 Γ 只有单位元，每个点都被固定，于是 Fix_Γ(X) = X，同余式以等号成立。以下设 s ≥ 1。把 X 按轨道分解成不交并。长度大于 1 的轨道取一点 x，则 Stab(x) 是 Γ 的真子群，由事实 1 与事实 2，其长度 [Γ : Stab(x)] = |Γ| / |Stab(x)| = p^t 且 t ≥ 1（因为 Stab(x) 真包含于 Γ 而 |Γ| = p^…（落档截断，原 4178 字）",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/B/b-proof-000000.md",
+          "encoding": "utf-8",
+          "bytes_read": 7601,
+          "total_bytes": 7601,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 47,
+          "total_lines": 47,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 47 行",
+          "sha256": "a6b51695e6cd16ecbe5d071107aca4bc2a533730d9e4b510cc3633930bb6058a"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 48000,
+        "prompt_cache_miss_tokens": 2059,
+        "tokens_in": 50059,
+        "tokens_out": 13128,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000099"
+    },
+    {
+      "index": 6,
+      "shape": "tool",
+      "payload": {
+        "name": "verify.verify_proof",
+        "args": {
+          "statement_id": "000062",
+          "proof_manuscript": "manuscripts/B/b-proof-000003.md",
+          "readonly_facts": "被审稿：manuscripts/B/b-proof-000003.md（全文件 sha256=e00af57b573afab72c88f876fc367d694fa97cfd753966be65361e8222a8f402；稿头声明 正文sha=e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00，已含「## 证明」节）。\n命题字面核对：稿「## 命题」与 statements.stmt_id=000062 的 statement_full 逐字一致（「设 G 是有限群，p 是素数，并把 |G| 写成 |G| = p^k m，其中 p 不整除 m。则 G 的 p-Sylow 子群的个数 n_p 满足：n_p 整除 m，且 n_p ≡ 1 (mod p)。」），无更强结论。\n依赖面：稿「## 依赖」表有一行 stmt:000060，写明用于第 5 步（取定 P ∈ Syl_p(G)）；正文对 stmt:000060 只用其存在性部分（「G 必有 p-Sylow 子群」），与该命题 statement_full 一致，属 weaker 用法（只用到弱形式，条件与结论未被换掉）。\n被引命题可引性：stmt:000060 的手稿 manuscripts/B/b-proof-000000.md 在盘上，V 签块显示 已签=true、判词=成立、连续=3/3、正文sha=08de50eb…、台账 verifications/000060.jsonl#v-000009；等级不低于 pre_theorem ⇒ 可引。\n逐段核对记录（四处承重推导均在文内自足）：①事实 A 轨道-稳定化子（g·Stab(x)↦g·x 的良定义与双射）成立；②事实 B 固定点同余的论证（长于一轨道长=|Γ|/|Stab| 为 p 的正幂；t=0 时无长大于 1 的轨道，不空转）成立；③Sylow II 就地推出（Q 作用在 G/P 上，[G:P]=m 不被 p 整除 ⇒ 不动点非空 ⇒ gP 不动 ⇒ q∈gPg⁻¹ ⇒ Q=gPg⁻¹）成立；④n_p≡1 mod p（Q 被 P 固定 ⇔ P⊆N(Q)；P、Q 同阶 p^k 且含于 N(Q)，故皆为 N(Q) 的 Sylow，Sylow II 在 N(Q) 内使二者共轭，Q◁N(Q) 故 P=Q ⇒ |Fix_P|=1）成立；⑤n_p|m（单轨道 ⇒ n_p=[G:Stab(P)]||G|，配合 gcd(n_p,p)=1 得 n_p|m）成立。边界 k=0 亦通：Syl_p(G)={1}，P 为平凡 p-群，事实 B 以等号成立，P、Q 同阶 1 故 P=Q。\n末尾收束句（外部依据只有 Sylow 第一定理存在性部分、其余文内推出）与正文实际用法相符。\n六条审查角度（前提/计算/逻辑/强度/台账一致/依赖面）逐条过：无一处需要改（含措辞）。"
+        },
+        "why": "按盘上现稿对 stmt:000062 的证明整体逐段重读，两态结论落台账"
+      },
+      "result": {
+        "tool": "verify.verify_proof",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "kind": "",
+          "statement_id": "000062",
+          "verification_id": "v-000005",
+          "verdict": "成立",
+          "defect_step": null,
+          "findings": [
+            {
+              "level": "info",
+              "step": null,
+              "kind": "citation_weaker",
+              "detail": "引用核实：这一步只用到了被引命题 000060 的弱形式（F 只使用该命题的存在性部分，结论与所引存在性一致；未使用其包含性部分。）；不等于错，但读的人要知道它没有被用满"
+            }
+          ],
+          "unresolved_errors": 0,
+          "proof_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+          "proof_chars": 1444,
+          "signed_bit3": false,
+          "reviewed_by": {},
+          "bits": {
+            "numeric": "pending",
+            "proof": true,
+            "reviewed": false,
+            "formal": "pending",
+            "audited": false,
+            "origin": "own_result",
+            "evidence": {
+              "numeric": {},
+              "numeric_reason": "",
+              "proof_process": "设 |G| = p^k·m，其中 p ∤ m，并记 n_p 为 G 的 p-Sylow 子群的个数。我们要证 n_p ≡ 1 (mod p) 且 n_p | m。\n\n先记下两条后面要用的事实，都在这里就地推出。事实 A（轨道-稳定化子）：若有限群 Γ 作用在集合 X 上，取 x ∈ X，则轨道 Γ·x 与稳定化子 Stab(x) 的左陪集一一对应（g·Stab(x) ↦ g·x 是良定义的双射），于是 |Γ·x| = [Γ : Stab(x)]，特别地轨道长度整除 |Γ|。事实 B（p-群作用的固定点同余）：若有限 p-群 Γ 作用在有限集 X 上，则 |X| ≡ |Fix_Γ(X)| (mod p)。理由是：按轨道把 X 分解成不交并，长度大于 1 的轨道取一点 x，由事实 A 其长度为 [Γ : Stab(x)]，而 Stab(x) 是 Γ 的真子群，故该指数是 p 的正幂、被 p 整除；长度等于 1 的轨道恰是不动点，于是 |X| 等于 |Fix_Γ(X)| 加上若干被 p 整除的项。\n\n再记下 Sylow II（共轭性），同样就地推出：若 P、Q 是两个 p-Sylow 子群，让 Q 从左作用在左陪集集合 G/P 上，由事实 B 得 |G/P| ≡ |Fix_Q(G/P)| (mod p)；左边 [G : P] 不被 p 整除，故不动点集非空，取一个不动点 gP，则对每个 q ∈ Q 都有 qgP = gP，即 q ∈ gPg⁻¹，于是 Q ⊆ gPg⁻¹，而两者阶相同，故 Q = gPg⁻¹。\n\n现在证 n_p ≡ 1 (mod p)。先说明 Syl_p(G)（G 的 p-Sylow 子群全体）非空：由 Sylow 第一定理（在册命题 stmt:000060，现算等级 pre_theorem；见文末「## 依赖」），有限群 G 对每个素数 p 都有 p-Sylow 子群，故可以取定一个 P ∈ Syl_p(G)。让 P 经共轭作用在 Syl_p(G) 上，这个集合的基数就是 n_p。P 是有限 p-群，由事实 B 得 n_p ≡ |Fix_P| (mod p)。一个 Q ∈ Syl_p(G) 被 P 固定，意思是每个 g ∈ P 都满足 gQg⁻¹ = Q，等价于 P ⊆ N(Q)。此时 P 与 Q 都是 N(Q) 的 p-Sylow 子群（两者阶都等于 p^k 且都含于 N(Q)），由上面的 Sylow II 在群 N(Q) 中它们互相共轭；而 Q 在 N(Q) 中正规，N(Q) 中与 Q 共轭的子群只有 Q 自己，故 P = Q。因此被 P 固定的 p-Sylow 子群只有 P 一个，即 |Fix_P| = 1，于是 n_p ≡ 1 (mod p)。\n\n再证 n_p | m。让 G 经共轭作用在 Syl_p(G) 上；由 Sylow II，任意两个 p-Sylow 子群互相共轭，故这个作用只有一个轨道。取该轨道为 G·P，由事实 A 得 n_p = |G·P| = [G : Stab(P)]，它整除 |G| = p^k·m。另一方面由前一段 n_p ≡ 1 (mod p)，故 n_p 与 p 互素；结合 n_p | p^k·m 便得到 n_p | m。\n\n两条结论合起来正是 Sylow 第三定理。就本证明用到的外部依据而言，只有 Sylow 第一定理的存在性部分（在册命题 stmt:000060），其余全部在文内就地推出。",
+              "proof_source": "own",
+              "reviewed_by": {},
+              "reviewed_source": "",
+              "formal": {},
+              "formal_reason": "",
+              "audited_by": {}
+            },
+            "voided_by": {},
+            "grade": "conjecture",
+            "audited_badge": false
+          },
+          "review_write": {
+            "written": false,
+            "rolled_back": false,
+            "deferred_to": "filing:B",
+            "sign_issued": true,
+            "append_state": "appended_by_caller",
+            "vsign": {
+              "written": true,
+              "idempotent": false,
+              "conflict": false,
+              "path": "out/vsigns/e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00.json",
+              "archive_error": "",
+              "reason": "签已落盘",
+              "sign": {
+                "schema": "vsign/1",
+                "artifact_sha": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                "artifact_path": "manuscripts/B/b-proof-000003.md",
+                "artifact_sha_rule": "`artifact_sha` = `proofregistry.proof_sha(proof_text)`，与台账行的 `proof_sha256`、连续计数的清零键同一个值；不是盘上那份 `.md` 的字节 sha",
+                "ledger": "verifications/000062.jsonl#v-000005",
+                "statement_id": "000062",
+                "verdict": "成立",
+                "streak": 3,
+                "need": 3,
+                "counted_by": "sign_counting",
+                "count": 3,
+                "legacy": false,
+                "passes": [
+                  {
+                    "verification_id": "v-000003",
+                    "at": "2026-11-24T04:34:03+08:00",
+                    "proof_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                    "review_call": "d8e3dda8faba",
+                    "review_pass": 1,
+                    "object_sha256": "e00af57b573afab72c88f876fc367d694fa97cfd753966be65361e8222a8f402",
+                    "object_path": "manuscripts/B/b-proof-000003.md",
+                    "round": 3,
+                    "verdict": "成立",
+                    "axis": "clean"
+                  },
+                  {
+                    "verification_id": "v-000004",
+                    "at": "2026-11-24T04:34:40+08:00",
+                    "proof_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                    "review_call": "d8e3dda8faba",
+                    "review_pass": 2,
+                    "object_sha256": "e00af57b573afab72c88f876fc367d694fa97cfd753966be65361e8222a8f402",
+                    "object_path": "manuscripts/B/b-proof-000003.md",
+                    "round": 4,
+                    "verdict": "成立",
+                    "axis": "clean"
+                  },
+                  {
+                    "verification_id": "v-000005",
+                    "at": "2026-11-24T04:35:03+08:00",
+                    "proof_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                    "review_call": "d8e3dda8faba",
+                    "review_pass": 3,
+                    "object_sha256": "e00af57b573afab72c88f876fc367d694fa97cfd753966be65361e8222a8f402",
+                    "object_path": "manuscripts/B/b-proof-000003.md",
+                    "round": 5,
+                    "verdict": "成立",
+                    "axis": "clean"
+                  }
+                ],
+                "objections": [],
+                "source_note": "passes 是逐转的读数（verification_id / at / proof_sha256 / why，另带 review_call 与 review_pass：同一 review_call 才是同一次送审的那几转，跨趟不拼票）；V 的回复全文不在本文件里 —— 去 verifications/<命题号>.jsonl#<verification_id> 读",
+                "at": "2026-11-24T04:35:03+08:00",
+                "written_by": "secretary:B",
+                "envelope": {
+                  "kind": "v-sign-issued",
+                  "to": "secretary:B",
+                  "at": "2026-11-24T04:35:03+08:00",
+                  "issued_by": "agent-V-Vsign1"
+                }
+              },
+              "payload_problem": "",
+              "envelope": {
+                "kind": "v-sign-issued",
+                "to": "secretary:B",
+                "at": "2026-11-24T04:35:03+08:00",
+                "issued_by": "agent-V-Vsign1"
+              },
+              "land": {
+                "checked": true,
+                "landed": true,
+                "state": "landed",
+                "code": "",
+                "by": "secretary:B",
+                "artifact_sha": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                "manuscript_id": "000003",
+                "body_mismatch": false,
+                "manuscript_write": {
+                  "state": "written",
+                  "written": true,
+                  "idempotent": false,
+                  "missing": false,
+                  "path": "manuscripts/B/b-proof-000003.md",
+                  "line": 3,
+                  "why": "签块写进 `manuscripts/B/b-proof-000003.md` 第 3 行（连续 3/3）",
+                  "reading": {
+                    "found": true,
+                    "signed": true,
+                    "verdict": "成立",
+                    "streak": 3,
+                    "need": 3,
+                    "proof_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                    "at": "2026-11-24T04:35:03+08:00",
+                    "signer": "secretary:B",
+                    "ledger": "verifications/000062.jsonl#v-000005",
+                    "statement_id": "",
+                    "mark": "- V 签：已签=true；判词=成立；连续=3/3；正文sha=e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00；时间=2026-11-24T04:35:03+08:00；签名者=secretary:B；台账=verifications/000062.jsonl#v-000005；手稿号=000003",
+                    "problem": "",
+                    "manuscript_id": "000003",
+                    "manuscript_key": "000003",
+                    "identity_state": "resolved",
+                    "identity_why": "签块的手稿号 000003 与这一份稿相同"
+                  },
+                  "code": "",
+                  "body_mismatch": false,
+                  "body_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                  "signed_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                  "artifact": {
+                    "checked": true,
+                    "registered": true,
+                    "path": "manuscripts/B/b-proof-000003.md",
+                    "sha256": "f0c87258bd14a151dbf848bc737627732540b8b76b4d135326ab9e498b2d4073",
+                    "bytes": 3908,
+                    "producer": "agent-B-B1",
+                    "why": "签块落盘后重登记：sha256=f0c87258bd14… bytes=3908"
+                  }
+                },
+                "ledger_bit": "not_attempted",
+                "ledger_why": "调用方说这一笔的台账位由外层事务落（`ledger_bit=False`）",
+                "sign_recorded": true,
+                "anchor": {
+                  "checked": true,
+                  "found": true,
+                  "ledger": "verifications/000062.jsonl#v-000005",
+                  "verification_id": "v-000005",
+                  "at": "2026-11-24T04:35:03+08:00",
+                  "verdict": "成立",
+                  "clean": true,
+                  "defect_steps": [],
+                  "why": "台账上最后一行盖着这个 sha 的是 v-000005（成立，2026-11-24T04:35:03+08:00）"
+                },
+                "anchor_source": "ledger",
+                "reason": "签块落进 `manuscripts/B/b-proof-000003.md` 第 3 行（手稿号 000003）"
+              },
+              "manuscript_write": {
+                "state": "written",
+                "written": true,
+                "idempotent": false,
+                "missing": false,
+                "path": "manuscripts/B/b-proof-000003.md",
+                "line": 3,
+                "why": "签块写进 `manuscripts/B/b-proof-000003.md` 第 3 行（连续 3/3）",
+                "reading": {
+                  "found": true,
+                  "signed": true,
+                  "verdict": "成立",
+                  "streak": 3,
+                  "need": 3,
+                  "proof_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                  "at": "2026-11-24T04:35:03+08:00",
+                  "signer": "secretary:B",
+                  "ledger": "verifications/000062.jsonl#v-000005",
+                  "statement_id": "",
+                  "mark": "- V 签：已签=true；判词=成立；连续=3/3；正文sha=e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00；时间=2026-11-24T04:35:03+08:00；签名者=secretary:B；台账=verifications/000062.jsonl#v-000005；手稿号=000003",
+                  "problem": "",
+                  "manuscript_id": "000003",
+                  "manuscript_key": "000003",
+                  "identity_state": "resolved",
+                  "identity_why": "签块的手稿号 000003 与这一份稿相同"
+                },
+                "code": "",
+                "body_mismatch": false,
+                "body_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                "signed_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                "artifact": {
+                  "checked": true,
+                  "registered": true,
+                  "path": "manuscripts/B/b-proof-000003.md",
+                  "sha256": "f0c87258bd14a151dbf848bc737627732540b8b76b4d135326ab9e498b2d4073",
+                  "bytes": 3908,
+                  "producer": "agent-B-B1",
+                  "why": "签块落盘后重登记：sha256=f0c87258bd14… bytes=3908"
+                }
+              },
+              "submission": {
+                "checked": false,
+                "written": false,
+                "already": false,
+                "via": "",
+                "why": "调用方没给可写的 `store`（要 `rows` + `tx`）⇒ 签触发提交这一格没查（不是「没签」，也不是「已提交」）"
+              },
+              "refused_below_need": false,
+              "code": ""
+            },
+            "land": {
+              "checked": true,
+              "landed": true,
+              "state": "landed",
+              "code": "",
+              "by": "secretary:B",
+              "artifact_sha": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+              "manuscript_id": "000003",
+              "body_mismatch": false,
+              "manuscript_write": {
+                "state": "written",
+                "written": true,
+                "idempotent": false,
+                "missing": false,
+                "path": "manuscripts/B/b-proof-000003.md",
+                "line": 3,
+                "why": "签块写进 `manuscripts/B/b-proof-000003.md` 第 3 行（连续 3/3）",
+                "reading": {
+                  "found": true,
+                  "signed": true,
+                  "verdict": "成立",
+                  "streak": 3,
+                  "need": 3,
+                  "proof_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                  "at": "2026-11-24T04:35:03+08:00",
+                  "signer": "secretary:B",
+                  "ledger": "verifications/000062.jsonl#v-000005",
+                  "statement_id": "",
+                  "mark": "- V 签：已签=true；判词=成立；连续=3/3；正文sha=e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00；时间=2026-11-24T04:35:03+08:00；签名者=secretary:B；台账=verifications/000062.jsonl#v-000005；手稿号=000003",
+                  "problem": "",
+                  "manuscript_id": "000003",
+                  "manuscript_key": "000003",
+                  "identity_state": "resolved",
+                  "identity_why": "签块的手稿号 000003 与这一份稿相同"
+                },
+                "code": "",
+                "body_mismatch": false,
+                "body_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                "signed_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                "artifact": {
+                  "checked": true,
+                  "registered": true,
+                  "path": "manuscripts/B/b-proof-000003.md",
+                  "sha256": "f0c87258bd14a151dbf848bc737627732540b8b76b4d135326ab9e498b2d4073",
+                  "bytes": 3908,
+                  "producer": "agent-B-B1",
+                  "why": "签块落盘后重登记：sha256=f0c87258bd14… bytes=3908"
+                }
+              },
+              "ledger_bit": "not_attempted",
+              "ledger_why": "调用方说这一笔的台账位由外层事务落（`ledger_bit=False`）",
+              "sign_recorded": true,
+              "anchor": {
+                "checked": true,
+                "found": true,
+                "ledger": "verifications/000062.jsonl#v-000005",
+                "verification_id": "v-000005",
+                "at": "2026-11-24T04:35:03+08:00",
+                "verdict": "成立",
+                "clean": true,
+                "defect_steps": [],
+                "why": "台账上最后一行盖着这个 sha 的是 v-000005（成立，2026-11-24T04:35:03+08:00）"
+              },
+              "anchor_source": "ledger",
+              "reason": "签块落进 `manuscripts/B/b-proof-000003.md` 第 3 行（手稿号 000003）"
+            },
+            "manuscript_write": {
+              "state": "written",
+              "written": true,
+              "idempotent": false,
+              "missing": false,
+              "path": "manuscripts/B/b-proof-000003.md",
+              "line": 3,
+              "why": "签块写进 `manuscripts/B/b-proof-000003.md` 第 3 行（连续 3/3）",
+              "reading": {
+                "found": true,
+                "signed": true,
+                "verdict": "成立",
+                "streak": 3,
+                "need": 3,
+                "proof_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                "at": "2026-11-24T04:35:03+08:00",
+                "signer": "secretary:B",
+                "ledger": "verifications/000062.jsonl#v-000005",
+                "statement_id": "",
+                "mark": "- V 签：已签=true；判词=成立；连续=3/3；正文sha=e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00；时间=2026-11-24T04:35:03+08:00；签名者=secretary:B；台账=verifications/000062.jsonl#v-000005；手稿号=000003",
+                "problem": "",
+                "manuscript_id": "000003",
+                "manuscript_key": "000003",
+                "identity_state": "resolved",
+                "identity_why": "签块的手稿号 000003 与这一份稿相同"
+              },
+              "code": "",
+              "body_mismatch": false,
+              "body_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+              "signed_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+              "artifact": {
+                "checked": true,
+                "registered": true,
+                "path": "manuscripts/B/b-proof-000003.md",
+                "sha256": "f0c87258bd14a151dbf848bc737627732540b8b76b4d135326ab9e498b2d4073",
+                "bytes": 3908,
+                "producer": "agent-B-B1",
+                "why": "签块落盘后重登记：sha256=f0c87258bd14… bytes=3908"
+              }
+            },
+            "registration": {
+              "checked": true,
+              "state": "opened",
+              "key": "b-register@000062@e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+              "item_id": "t-000100",
+              "owner": "",
+              "owner_known": false,
+              "code": "",
+              "reason": "新开「必须收录」义务 t-000100（没有可判定的收件实例 ⇒ 按角色地址，由该角色的实例领取）",
+              "wake": {
+                "checked": true,
+                "state": "role_addressed",
+                "task_id": "",
+                "at": "",
+                "key": "b-awake@000062@e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                "instance": "",
+                "reason": "这一条按角色地址落在板上（b-awake@000062@e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00）：盘上有 2 趟 B 的台账号，而没有点名收件实例 ⇒ 不按「唯一在飞 / 最近开始」挑一趟（该角色任一实例都能领，见 `Conductor.open_items_for`）"
+              },
+              "owner_instance": "",
+              "owner_source": "role",
+              "owner_why": "没有可判定的收件实例 ⇒ 这一条按角色地址落在板上（不按「唯一在飞 / 最近开始」挑一趟）",
+              "problems": []
+            },
+            "statement_id": "000062",
+            "proof_no": 1,
+            "proof_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+            "grade": "",
+            "kind_upgrade": {},
+            "upgrade_note": "",
+            "grade_recomputed": {},
+            "streak": 3,
+            "need": 3,
+            "streak_ok": true,
+            "reason": "签已颁发并落回手稿；命题行的第 3 位与等级由 B 收录时按正文 sha 认领/现算（V 不写 statements）",
+            "manuscript_signed": true,
+            "filed": "not_read_by_v",
+            "v_review": {},
+            "signed_delivery": {
+              "checked": true,
+              "state": "dispatched",
+              "item_id": "t-000101",
+              "key": "v-signed@d8e3dda8faba",
+              "role": "B",
+              "parent_task_id": "t-000006",
+              "reason": "已投给 t-000006 的板项 t-000101",
+              "detail_path": "V 已经把签签进稿里：`manuscripts/B/b-proof-000003.md`\n- 正文 sha256：`e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00`\n- 签文件：`out/vsigns/e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00.json`\n- 门槛：由框架按这一趟送审自己数（这一签已到位）\n- 落签者：secretary:B\n- 台账：`verifications/000062.jsonl#v-000005`\n这一份稿已经签好，可以直接交给 B 收录（按正文 sha 认领）。\n",
+              "existing": false
+            }
+          },
+          "ledger": "verifications/000062.jsonl#v-000005",
+          "reason": "v-000005：成立（签在稿上；命题行由 B 收录时认领）",
+          "detail": "引用核实通过，但有 1 条只用到了弱形式：000060（F 只使用该命题的存在性部分，结论与所引存在性一致；未使用其包含性部分。） —— 弱形式不是错，记下来给读的人一句情报",
+          "exhaustion_review": {},
+          "signer": "",
+          "proof_authors": [],
+          "report_path": "",
+          "checks": [],
+          "missing": [],
+          "citations": [
+            {
+              "stmt_id": "000060",
+              "paths": [
+                {
+                  "dep_id": "manuscripts/B/b-proof-000003.md#L33",
+                  "used_by": "stmt:000060#p1",
+                  "path_group": 1,
+                  "note": "由 Sylow 第一定理，有限群 G 对每个素数 p 都有 p-Sylow 子群，故 Syl_p(G) 非空",
+                  "note_source": "## 依赖·引用",
+                  "status": "",
+                  "label": "",
+                  "quote": "由 Sylow 第一定理，有限群 G 对每个素数 p 都有 p-Sylow 子群，故 Syl_p(G) 非空"
+                }
+              ],
+              "path_groups": [
+                1
+              ],
+              "dep_ids": [
+                "manuscripts/B/b-proof-000003.md#L33"
+              ],
+              "statement_full": "设 G 是有限群，p 是素数。则 G 必有 p-Sylow 子群；并且 G 的每个 p-子群都包含在 G 的某个 p-Sylow 子群之中。",
+              "statement_digest": "设 G 是有限群，p 是素数。则 G 必有 p-Sylow 子群；并且 G 的每个 p-子群都包含在 G 的某个 p-Sylow 子群之中。",
+              "statement_missing": false,
+              "statement_label": "",
+              "evidence_kind": "proof_review",
+              "admissible": true,
+              "grade": "pre_theorem",
+              "manuscript": "manuscripts/B/b-proof-000000.md",
+              "manuscript_missing": false
+            }
+          ],
+          "citation_checks": [
+            {
+              "stmt_id": "000060",
+              "verdict": "weaker",
+              "quote_verbatim": false,
+              "note": "F 只使用该命题的存在性部分，结论与所引存在性一致；未使用其包含性部分。",
+              "in_material": true
+            }
+          ],
+          "citation_gate": {
+            "ok": true,
+            "blocking": [],
+            "weaker": [
+              {
+                "stmt_id": "000060",
+                "verdict": "weaker",
+                "note": "F 只使用该命题的存在性部分，结论与所引存在性一致；未使用其包含性部分。"
+              }
+            ],
+            "problem": "",
+            "why": "引用核实通过，但有 1 条只用到了弱形式：000060（F 只使用该命题的存在性部分，结论与所引存在性一致；未使用其包含性部分。） —— 弱形式不是错，记下来给读的人一句情报"
+          },
+          "secretary_judge": {
+            "checked": true,
+            "answer": "没问题",
+            "axis": "clean",
+            "unwired": false,
+            "reason": "该回复称已逐条核对假设、计算、逻辑、强度、台账一致与依赖面，并明确未发现缺陷；它只把引用 000060 记为 weaker 但可引，没有指出证明缺陷。",
+            "basis": [
+              "\"why\":\"逐条核对假设、计算、逻辑、强度、台账一致与依赖面，未发现缺陷；引用 000060 只用到存在性，属 weaker 但可引。\"",
+              "\"findings\":[]",
+              "\"defect_step\":null"
+            ],
+            "refused": "",
+            "cost": {
+              "ledger": "000452",
+              "charged": true,
+              "ledger_reason": "charged",
+              "call_index": 423,
+              "prompt_sha256": "4dd70b32009ba98fbe8a6443351120bb48058877b9b28a4c79b00cd8b451492f",
+              "tokens": 2853,
+              "usd": 0.001147
+            },
+            "verdict": "成立",
+            "defect_step": null,
+            "fault_kind": "",
+            "fault_cause": "report_gap",
+            "report_gap": "未记录反例尝试的具体位置或构造结果（未写反例尝试不是判据，仅作报告质量读数）。",
+            "statement_id": "000062",
+            "proof_no": 1,
+            "material": {
+              "v_reply": "{\"verdict\":\"成立\",\"defect_step\":null,\"quote\":\"\",\"why\":\"逐条核对假设、计算、逻辑、强度、台账一致与依赖面，未发现缺陷；引用 000060 只用到存在性，属 weaker 但可引。\",\"findings\":[],\"citation_checks\":[{\"stmt_id\":\"000060\",\"verdict\":\"weaker\",\"quote_verbatim\":false,\"note\":\"F 只使用该命题的存在性部分，结论与所引存在性一致；未使用其包含性部分。\"}]}",
+              "ledger_row": {
+                "verdict": "成立",
+                "defect_step": null
+              }
+            },
+            "defect_step_basis": ""
+          },
+          "sign_issuance": {
+            "checked": true,
+            "issue": true,
+            "issued": true,
+            "decision": "签发",
+            "landed": true,
+            "writeback": {
+              "written": false,
+              "rolled_back": false,
+              "deferred_to": "filing:B",
+              "sign_issued": true,
+              "append_state": "appended_by_caller",
+              "vsign": {
+                "written": true,
+                "idempotent": false,
+                "conflict": false,
+                "path": "out/vsigns/e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00.json",
+                "archive_error": "",
+                "reason": "签已落盘",
+                "sign": {
+                  "schema": "vsign/1",
+                  "artifact_sha": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                  "artifact_path": "manuscripts/B/b-proof-000003.md",
+                  "artifact_sha_rule": "`artifact_sha` = `proofregistry.proof_sha(proof_text)`，与台账行的 `proof_sha256`、连续计数的清零键同一个值；不是盘上那份 `.md` 的字节 sha",
+                  "ledger": "verifications/000062.jsonl#v-000005",
+                  "statement_id": "000062",
+                  "verdict": "成立",
+                  "streak": 3,
+                  "need": 3,
+                  "counted_by": "sign_counting",
+                  "count": 3,
+                  "legacy": false,
+                  "passes": [
+                    {
+                      "verification_id": "v-000003",
+                      "at": "2026-11-24T04:34:03+08:00",
+                      "proof_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                      "review_call": "d8e3dda8faba",
+                      "review_pass": 1,
+                      "object_sha256": "e00af57b573afab72c88f876fc367d694fa97cfd753966be65361e8222a8f402",
+                      "object_path": "manuscripts/B/b-proof-000003.md",
+                      "round": 3,
+                      "verdict": "成立",
+                      "axis": "clean"
+                    },
+                    {
+                      "verification_id": "v-000004",
+                      "at": "2026-11-24T04:34:40+08:00",
+                      "proof_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                      "review_call": "d8e3dda8faba",
+                      "review_pass": 2,
+                      "object_sha256": "e00af57b573afab72c88f876fc367d694fa97cfd753966be65361e8222a8f402",
+                      "object_path": "manuscripts/B/b-proof-000003.md",
+                      "round": 4,
+                      "verdict": "成立",
+                      "axis": "clean"
+                    },
+                    {
+                      "verification_id": "v-000005",
+                      "at": "2026-11-24T04:35:03+08:00",
+                      "proof_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                      "review_call": "d8e3dda8faba",
+                      "review_pass": 3,
+                      "object_sha256": "e00af57b573afab72c88f876fc367d694fa97cfd753966be65361e8222a8f402",
+                      "object_path": "manuscripts/B/b-proof-000003.md",
+                      "round": 5,
+                      "verdict": "成立",
+                      "axis": "clean"
+                    }
+                  ],
+                  "objections": [],
+                  "source_note": "passes 是逐转的读数（verification_id / at / proof_sha256 / why，另带 review_call 与 review_pass：同一 review_call 才是同一次送审的那几转，跨趟不拼票）；V 的回复全文不在本文件里 —— 去 verifications/<命题号>.jsonl#<verification_id> 读",
+                  "at": "2026-11-24T04:35:03+08:00",
+                  "written_by": "secretary:B",
+                  "envelope": {
+                    "kind": "v-sign-issued",
+                    "to": "secretary:B",
+                    "at": "2026-11-24T04:35:03+08:00",
+                    "issued_by": "agent-V-Vsign1"
+                  }
+                },
+                "payload_problem": "",
+                "envelope": {
+                  "kind": "v-sign-issued",
+                  "to": "secretary:B",
+                  "at": "2026-11-24T04:35:03+08:00",
+                  "issued_by": "agent-V-Vsign1"
+                },
+                "land": {
+                  "checked": true,
+                  "landed": true,
+                  "state": "landed",
+                  "code": "",
+                  "by": "secretary:B",
+                  "artifact_sha": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                  "manuscript_id": "000003",
+                  "body_mismatch": false,
+                  "manuscript_write": {
+                    "state": "written",
+                    "written": true,
+                    "idempotent": false,
+                    "missing": false,
+                    "path": "manuscripts/B/b-proof-000003.md",
+                    "line": 3,
+                    "why": "签块写进 `manuscripts/B/b-proof-000003.md` 第 3 行（连续 3/3）",
+                    "reading": {
+                      "found": true,
+                      "signed": true,
+                      "verdict": "成立",
+                      "streak": 3,
+                      "need": 3,
+                      "proof_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                      "at": "2026-11-24T04:35:03+08:00",
+                      "signer": "secretary:B",
+                      "ledger": "verifications/000062.jsonl#v-000005",
+                      "statement_id": "",
+                      "mark": "- V 签：已签=true；判词=成立；连续=3/3；正文sha=e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00；时间=2026-11-24T04:35:03+08:00；签名者=secretary:B；台账=verifications/000062.jsonl#v-000005；手稿号=000003",
+                      "problem": "",
+                      "manuscript_id": "000003",
+                      "manuscript_key": "000003",
+                      "identity_state": "resolved",
+                      "identity_why": "签块的手稿号 000003 与这一份稿相同"
+                    },
+                    "code": "",
+                    "body_mismatch": false,
+                    "body_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                    "signed_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                    "artifact": {
+                      "checked": true,
+                      "registered": true,
+                      "path": "manuscripts/B/b-proof-000003.md",
+                      "sha256": "f0c87258bd14a151dbf848bc737627732540b8b76b4d135326ab9e498b2d4073",
+                      "bytes": 3908,
+                      "producer": "agent-B-B1",
+                      "why": "签块落盘后重登记：sha256=f0c87258bd14… bytes=3908"
+                    }
+                  },
+                  "ledger_bit": "not_attempted",
+                  "ledger_why": "调用方说这一笔的台账位由外层事务落（`ledger_bit=False`）",
+                  "sign_recorded": true,
+                  "anchor": {
+                    "checked": true,
+                    "found": true,
+                    "ledger": "verifications/000062.jsonl#v-000005",
+                    "verification_id": "v-000005",
+                    "at": "2026-11-24T04:35:03+08:00",
+                    "verdict": "成立",
+                    "clean": true,
+                    "defect_steps": [],
+                    "why": "台账上最后一行盖着这个 sha 的是 v-000005（成立，2026-11-24T04:35:03+08:00）"
+                  },
+                  "anchor_source": "ledger",
+                  "reason": "签块落进 `manuscripts/B/b-proof-000003.md` 第 3 行（手稿号 000003）"
+                },
+                "manuscript_write": {
+                  "state": "written",
+                  "written": true,
+                  "idempotent": false,
+                  "missing": false,
+                  "path": "manuscripts/B/b-proof-000003.md",
+                  "line": 3,
+                  "why": "签块写进 `manuscripts/B/b-proof-000003.md` 第 3 行（连续 3/3）",
+                  "reading": {
+                    "found": true,
+                    "signed": true,
+                    "verdict": "成立",
+                    "streak": 3,
+                    "need": 3,
+                    "proof_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                    "at": "2026-11-24T04:35:03+08:00",
+                    "signer": "secretary:B",
+                    "ledger": "verifications/000062.jsonl#v-000005",
+                    "statement_id": "",
+                    "mark": "- V 签：已签=true；判词=成立；连续=3/3；正文sha=e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00；时间=2026-11-24T04:35:03+08:00；签名者=secretary:B；台账=verifications/000062.jsonl#v-000005；手稿号=000003",
+                    "problem": "",
+                    "manuscript_id": "000003",
+                    "manuscript_key": "000003",
+                    "identity_state": "resolved",
+                    "identity_why": "签块的手稿号 000003 与这一份稿相同"
+                  },
+                  "code": "",
+                  "body_mismatch": false,
+                  "body_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                  "signed_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                  "artifact": {
+                    "checked": true,
+                    "registered": true,
+                    "path": "manuscripts/B/b-proof-000003.md",
+                    "sha256": "f0c87258bd14a151dbf848bc737627732540b8b76b4d135326ab9e498b2d4073",
+                    "bytes": 3908,
+                    "producer": "agent-B-B1",
+                    "why": "签块落盘后重登记：sha256=f0c87258bd14… bytes=3908"
+                  }
+                },
+                "submission": {
+                  "checked": false,
+                  "written": false,
+                  "already": false,
+                  "via": "",
+                  "why": "调用方没给可写的 `store`（要 `rows` + `tx`）⇒ 签触发提交这一格没查（不是「没签」，也不是「已提交」）"
+                },
+                "refused_below_need": false,
+                "code": ""
+              },
+              "land": {
+                "checked": true,
+                "landed": true,
+                "state": "landed",
+                "code": "",
+                "by": "secretary:B",
+                "artifact_sha": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                "manuscript_id": "000003",
+                "body_mismatch": false,
+                "manuscript_write": {
+                  "state": "written",
+                  "written": true,
+                  "idempotent": false,
+                  "missing": false,
+                  "path": "manuscripts/B/b-proof-000003.md",
+                  "line": 3,
+                  "why": "签块写进 `manuscripts/B/b-proof-000003.md` 第 3 行（连续 3/3）",
+                  "reading": {
+                    "found": true,
+                    "signed": true,
+                    "verdict": "成立",
+                    "streak": 3,
+                    "need": 3,
+                    "proof_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                    "at": "2026-11-24T04:35:03+08:00",
+                    "signer": "secretary:B",
+                    "ledger": "verifications/000062.jsonl#v-000005",
+                    "statement_id": "",
+                    "mark": "- V 签：已签=true；判词=成立；连续=3/3；正文sha=e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00；时间=2026-11-24T04:35:03+08:00；签名者=secretary:B；台账=verifications/000062.jsonl#v-000005；手稿号=000003",
+                    "problem": "",
+                    "manuscript_id": "000003",
+                    "manuscript_key": "000003",
+                    "identity_state": "resolved",
+                    "identity_why": "签块的手稿号 000003 与这一份稿相同"
+                  },
+                  "code": "",
+                  "body_mismatch": false,
+                  "body_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                  "signed_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                  "artifact": {
+                    "checked": true,
+                    "registered": true,
+                    "path": "manuscripts/B/b-proof-000003.md",
+                    "sha256": "f0c87258bd14a151dbf848bc737627732540b8b76b4d135326ab9e498b2d4073",
+                    "bytes": 3908,
+                    "producer": "agent-B-B1",
+                    "why": "签块落盘后重登记：sha256=f0c87258bd14… bytes=3908"
+                  }
+                },
+                "ledger_bit": "not_attempted",
+                "ledger_why": "调用方说这一笔的台账位由外层事务落（`ledger_bit=False`）",
+                "sign_recorded": true,
+                "anchor": {
+                  "checked": true,
+                  "found": true,
+                  "ledger": "verifications/000062.jsonl#v-000005",
+                  "verification_id": "v-000005",
+                  "at": "2026-11-24T04:35:03+08:00",
+                  "verdict": "成立",
+                  "clean": true,
+                  "defect_steps": [],
+                  "why": "台账上最后一行盖着这个 sha 的是 v-000005（成立，2026-11-24T04:35:03+08:00）"
+                },
+                "anchor_source": "ledger",
+                "reason": "签块落进 `manuscripts/B/b-proof-000003.md` 第 3 行（手稿号 000003）"
+              },
+              "manuscript_write": {
+                "state": "written",
+                "written": true,
+                "idempotent": false,
+                "missing": false,
+                "path": "manuscripts/B/b-proof-000003.md",
+                "line": 3,
+                "why": "签块写进 `manuscripts/B/b-proof-000003.md` 第 3 行（连续 3/3）",
+                "reading": {
+                  "found": true,
+                  "signed": true,
+                  "verdict": "成立",
+                  "streak": 3,
+                  "need": 3,
+                  "proof_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                  "at": "2026-11-24T04:35:03+08:00",
+                  "signer": "secretary:B",
+                  "ledger": "verifications/000062.jsonl#v-000005",
+                  "statement_id": "",
+                  "mark": "- V 签：已签=true；判词=成立；连续=3/3；正文sha=e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00；时间=2026-11-24T04:35:03+08:00；签名者=secretary:B；台账=verifications/000062.jsonl#v-000005；手稿号=000003",
+                  "problem": "",
+                  "manuscript_id": "000003",
+                  "manuscript_key": "000003",
+                  "identity_state": "resolved",
+                  "identity_why": "签块的手稿号 000003 与这一份稿相同"
+                },
+                "code": "",
+                "body_mismatch": false,
+                "body_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                "signed_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                "artifact": {
+                  "checked": true,
+                  "registered": true,
+                  "path": "manuscripts/B/b-proof-000003.md",
+                  "sha256": "f0c87258bd14a151dbf848bc737627732540b8b76b4d135326ab9e498b2d4073",
+                  "bytes": 3908,
+                  "producer": "agent-B-B1",
+                  "why": "签块落盘后重登记：sha256=f0c87258bd14… bytes=3908"
+                }
+              },
+              "registration": {
+                "checked": true,
+                "state": "opened",
+                "key": "b-register@000062@e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                "item_id": "t-000100",
+                "owner": "",
+                "owner_known": false,
+                "code": "",
+                "reason": "新开「必须收录」义务 t-000100（没有可判定的收件实例 ⇒ 按角色地址，由该角色的实例领取）",
+                "wake": {
+                  "checked": true,
+                  "state": "role_addressed",
+                  "task_id": "",
+                  "at": "",
+                  "key": "b-awake@000062@e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                  "instance": "",
+                  "reason": "这一条按角色地址落在板上（b-awake@000062@e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00）：盘上有 2 趟 B 的台账号，而没有点名收件实例 ⇒ 不按「唯一在飞 / 最近开始」挑一趟（该角色任一实例都能领，见 `Conductor.open_items_for`）"
+                },
+                "owner_instance": "",
+                "owner_source": "role",
+                "owner_why": "没有可判定的收件实例 ⇒ 这一条按角色地址落在板上（不按「唯一在飞 / 最近开始」挑一趟）",
+                "problems": []
+              },
+              "statement_id": "000062",
+              "proof_no": 1,
+              "proof_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+              "grade": "",
+              "kind_upgrade": {},
+              "upgrade_note": "",
+              "grade_recomputed": {},
+              "streak": 3,
+              "need": 3,
+              "streak_ok": true,
+              "reason": "签已颁发并落回手稿；命题行的第 3 位与等级由 B 收录时按正文 sha 认领/现算（V 不写 statements）"
+            },
+            "streak": 3,
+            "need": 3,
+            "streak_ok": true,
+            "projected": 3,
+            "same_sha": true,
+            "state": "signed",
+            "reason": "系统计数 3/3（sign_counting）⇒ 地板已过：由 V 的秘书自动发签（不问模型）；签已颁发并由收方秘书落回手稿（命题行由 B 收录时按正文 sha 认领）",
+            "within_call": 3,
+            "review_call": "d8e3dda8faba",
+            "ledger_streak": 3,
+            "counted_by": "sign_counting",
+            "sign_count": {
+              "checked": true,
+              "ok": true,
+              "count": 3,
+              "need": 3,
+              "review_call": "d8e3dda8faba",
+              "proof_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+              "passes": [
+                {
+                  "verification_id": "v-000003",
+                  "at": "2026-11-24T04:34:03+08:00",
+                  "proof_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                  "review_call": "d8e3dda8faba",
+                  "review_pass": 1,
+                  "object_sha256": "e00af57b573afab72c88f876fc367d694fa97cfd753966be65361e8222a8f402",
+                  "object_path": "manuscripts/B/b-proof-000003.md",
+                  "round": 3,
+                  "verdict": "成立",
+                  "axis": "clean"
+                },
+                {
+                  "verification_id": "v-000004",
+                  "at": "2026-11-24T04:34:40+08:00",
+                  "proof_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                  "review_call": "d8e3dda8faba",
+                  "review_pass": 2,
+                  "object_sha256": "e00af57b573afab72c88f876fc367d694fa97cfd753966be65361e8222a8f402",
+                  "object_path": "manuscripts/B/b-proof-000003.md",
+                  "round": 4,
+                  "verdict": "成立",
+                  "axis": "clean"
+                },
+                {
+                  "verification_id": "v-000005",
+                  "at": "2026-11-24T04:35:03+08:00",
+                  "proof_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                  "review_call": "d8e3dda8faba",
+                  "review_pass": 3,
+                  "object_sha256": "e00af57b573afab72c88f876fc367d694fa97cfd753966be65361e8222a8f402",
+                  "object_path": "manuscripts/B/b-proof-000003.md",
+                  "round": 5,
+                  "verdict": "成立",
+                  "axis": "clean"
+                }
+              ],
+              "legacy": false,
+              "counted_by": "sign_counting",
+              "legacy_rows": 0,
+              "mechanical_rows": 0,
+              "replayed": 0,
+              "terminated": "",
+              "why": "系统计数：`d8e3dda8faba` 这一趟连续 clean 3/3 轮（同号重放 0 条不计；老行 0 条不进这一组）"
+            },
+            "basis": [
+              "system_count=3",
+              "need=3",
+              "within_call=3（调用方自称，只作读数）",
+              "counted_by=sign_counting",
+              "auto_issue:floor_passed"
+            ],
+            "reading": {
+              "checked": true,
+              "state": "signed",
+              "ok": true,
+              "in_sync": true,
+              "ledger_present": true,
+              "statement_id": "000062",
+              "proof_no": 1,
+              "sha": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+              "verification_id": "v-000005",
+              "verdict": "成立",
+              "round": 5,
+              "unresolved_errors": 0,
+              "rows": 5,
+              "proof_rows": 5,
+              "problems": [],
+              "superseded": [
+                {
+                  "verification_id": "v-000001",
+                  "verdict": "有毛病",
+                  "round": 1,
+                  "at": "2026-11-24T04:06:34+08:00",
+                  "proof_no": 1,
+                  "proof_sha256": "44ca53f1ae324ffed52f40b47ee80ce45a7163450c63a6fea2df7f9b358e554f",
+                  "signed_bit3": false,
+                  "unresolved_errors": 1,
+                  "why": "证明在未建立 Syl_p(G) 非空的情况下取 P 并定义共轭作用，缺少 p-Sylow 子群存在性这一必要前提。"
+                },
+                {
+                  "verification_id": "v-000002",
+                  "verdict": "有毛病",
+                  "round": 2,
+                  "at": "2026-11-24T04:26:25+08:00",
+                  "proof_no": 1,
+                  "proof_sha256": "b78c1dd3d87629c6551a3574590494d93a0b170741ae05c832826f35dcf15687",
+                  "signed_bit3": false,
+                  "unresolved_errors": 2,
+                  "why": "第 5 步引用 stmt:000060 并称见文末依赖，但 `## 依赖` 为 0 行，未登记该引用，引用无法按依赖面核实。；`stmt:000060`（在哪一步：证明正文（未标步号的行））· 类别：等级读不出来（判不了）（`citation_level_unreadable`） · 期望：盘上有一份这一条命题的手稿（`manuscripts/F/f-proof-<号>.md`；V 只读手稿：正文"
+                },
+                {
+                  "verification_id": "v-000003",
+                  "verdict": "成立",
+                  "round": 3,
+                  "at": "2026-11-24T04:34:03+08:00",
+                  "proof_no": 1,
+                  "proof_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                  "signed_bit3": false,
+                  "unresolved_errors": 0,
+                  "why": "逐段核对假设、计算（轨道-稳定化子、固定点同余、Sylow II、n_p≡1 mod p、n_p|m，含 k=0 边界）、逻辑、强度、台账一致与依赖面，未发现需改缺陷；000060 只用到存在性部分。"
+                },
+                {
+                  "verification_id": "v-000004",
+                  "verdict": "成立",
+                  "round": 4,
+                  "at": "2026-11-24T04:34:40+08:00",
+                  "proof_no": 1,
+                  "proof_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                  "signed_bit3": false,
+                  "unresolved_errors": 0,
+                  "why": "逐条重读假设、定理链、记号、条件性措辞、台账一致与依赖面：事实 A/B、就地 Sylow II、n_p≡1 (mod p)、n_p|m 以及 k=0 边界均文内自足，未发现跳步、循环或不合规引用；000060 仅用 Sylow 第一定理存在性，属 weaker 且可引。"
+                }
+              ],
+              "superseded_total": 4,
+              "streak": 3,
+              "need": 3,
+              "streak_ok": true,
+              "legacy_rows": 0,
+              "counted_by": "legacy:ledger_tail",
+              "ledger": "verifications/000062.jsonl",
+              "why": "000062#p1 的现行正文（sha e4881c4b8cff…）连续 3/3 签「成立」，最近一签是v-000005（verifications/000062.jsonl）；更早的 4 签已降为历史（见 superseded，不参与判定）",
+              "hard_ban_markers": [],
+              "secretary_axis": "clean",
+              "secretary_fault": false,
+              "secretary_judged": true,
+              "secretary_unjudged": false
+            },
+            "cost": {},
+            "material": {
+              "statement_id": "000062",
+              "proof_no": 1,
+              "within_call": 3,
+              "counted_by": "sign_counting",
+              "count": 3,
+              "streak": 3,
+              "need": 3,
+              "projected": 3,
+              "streak_ok": true,
+              "same_sha": true,
+              "candidate_verdict": "成立",
+              "candidate_axis": "clean",
+              "candidate_defect_step": null,
+              "reading_why": "这一签的门槛由框架按这一趟送审自己数（跨趟不累计、同号重放不增加）；调用方递进来的轮数只作读数"
+            },
+            "statement_id": "000062",
+            "manuscript_write": {
+              "state": "written",
+              "written": true,
+              "idempotent": false,
+              "missing": false,
+              "path": "manuscripts/B/b-proof-000003.md",
+              "line": 3,
+              "why": "签块写进 `manuscripts/B/b-proof-000003.md` 第 3 行（连续 3/3）",
+              "reading": {
+                "found": true,
+                "signed": true,
+                "verdict": "成立",
+                "streak": 3,
+                "need": 3,
+                "proof_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+                "at": "2026-11-24T04:35:03+08:00",
+                "signer": "secretary:B",
+                "ledger": "verifications/000062.jsonl#v-000005",
+                "statement_id": "",
+                "mark": "- V 签：已签=true；判词=成立；连续=3/3；正文sha=e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00；时间=2026-11-24T04:35:03+08:00；签名者=secretary:B；台账=verifications/000062.jsonl#v-000005；手稿号=000003",
+                "problem": "",
+                "manuscript_id": "000003",
+                "manuscript_key": "000003",
+                "identity_state": "resolved",
+                "identity_why": "签块的手稿号 000003 与这一份稿相同"
+              },
+              "code": "",
+              "body_mismatch": false,
+              "body_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+              "signed_sha256": "e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00",
+              "artifact": {
+                "checked": true,
+                "registered": true,
+                "path": "manuscripts/B/b-proof-000003.md",
+                "sha256": "f0c87258bd14a151dbf848bc737627732540b8b76b4d135326ab9e498b2d4073",
+                "bytes": 3908,
+                "producer": "agent-B-B1",
+                "why": "签块落盘后重登记：sha256=f0c87258bd14… bytes=3908"
+              }
+            }
+          },
+          "review_passes": [
+            {
+              "pass": 1,
+              "axis": "clean",
+              "fault_kind": "",
+              "fault_cause": "report_gap",
+              "decision": "不签发",
+              "streak": 1,
+              "need": 3,
+              "streak_ok": false,
+              "issue": false,
+              "issued": false,
+              "verdict": "成立",
+              "verification_id": "v-000003",
+              "review_call": "d8e3dda8faba",
+              "terminal": ""
+            },
+            {
+              "pass": 2,
+              "axis": "clean",
+              "fault_kind": "",
+              "fault_cause": "report_gap",
+              "decision": "不签发",
+              "streak": 2,
+              "need": 3,
+              "streak_ok": false,
+              "issue": false,
+              "issued": false,
+              "verdict": "成立",
+              "verification_id": "v-000004",
+              "review_call": "d8e3dda8faba",
+              "terminal": ""
+            },
+            {
+              "pass": 3,
+              "axis": "clean",
+              "fault_kind": "",
+              "fault_cause": "report_gap",
+              "decision": "签发",
+              "streak": 3,
+              "need": 3,
+              "streak_ok": true,
+              "issue": true,
+              "issued": true,
+              "verdict": "成立",
+              "verification_id": "v-000005",
+              "review_call": "d8e3dda8faba",
+              "terminal": "signed"
+            }
+          ],
+          "manuscript_identity": {
+            "checked": true,
+            "statement_id": "000062",
+            "manuscript_id": "000003",
+            "row_manuscript_id": "000003",
+            "matched_by": "manuscript_id",
+            "fallback": false,
+            "row_checked": true,
+            "found": true,
+            "problem": "",
+            "path_checked": true,
+            "path_count": 1,
+            "path_group": 1,
+            "path_problem": "",
+            "why": "稿号 000003 == stmt:000062 行上的 `manuscript_id`，也在第 1 条逐路径记录上 ⇒ 这是这一条命题的稿"
+          },
+          "issued_sign": {}
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 49280,
+        "prompt_cache_miss_tokens": 4541,
+        "tokens_in": 53821,
+        "tokens_out": 6824,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000099"
+    },
+    {
+      "index": 7,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/B/b-proof-000003.md",
+          "start_line": 1,
+          "max_lines": 12
+        },
+        "why": "核签块与稿头：确认 V 签是否已落在该稿、正文 sha 是否为 e4881c…（上一步 verify_proof 称已签发并落盘，必须对盘核实）"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# B 的证明手稿：Sylow 第三定理\n\n- V 签：已签=true；判词=成立；连续=3/3；正文sha=e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00；时间=2026-11-24T04:35:03+08:00；签名者=secretary:B；台账=verifications/000062.jsonl#v-000005；手稿号=000003\n- 标签：Sylow 第三定理\n- 稿族：b-proof\n- 产出者：agent-B-B1\n- 正文sha：e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00\n- 命题指纹：5c4a8480aff618cc4bf51d9e2dd39679b5abde951cd2e1cf2172374b90e16dbc\n- 登记时间：2026-11-24T04:03:54+08:00\n- 版本：2026-11-24T04:30:17+08:00@e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00\n\n## 命题\n",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/B/b-proof-000003.md",
+          "encoding": "utf-8",
+          "bytes_read": 3908,
+          "total_bytes": 3908,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 12,
+          "total_lines": 34,
+          "next_line": 13,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 1–12 行（共 34 行）；续读 start_line=13",
+          "sha256": "f0c87258bd14a151dbf848bc737627732540b8b76b4d135326ab9e498b2d4073"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 52992,
+        "prompt_cache_miss_tokens": 5118,
+        "tokens_in": 58110,
+        "tokens_out": 6094,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000099"
+    },
+    {
+      "index": 8,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.stat",
+        "args": {
+          "path": "out/vsigns/e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00.json"
+        },
+        "why": "核签的侧文件是否按被审正文 sha 落盘"
+      },
+      "result": {
+        "tool": "fs.stat",
+        "ok": true,
+        "data": {
+          "path": "out/vsigns/e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00.json",
+          "exists": true,
+          "is_dir": false,
+          "is_file": true,
+          "is_symlink": false,
+          "size": 4146,
+          "mtime": "2026-11-24T04:35:03+08:00",
+          "mtime_epoch": 1795466103.161,
+          "link_target": null,
+          "sha256": "b04040cba15cfb5f634815f5098079331f0862f4f8232f01c5293b925c78af3b"
+        },
+        "error": "",
+        "meta": {
+          "path": "out/vsigns/e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00.json",
+          "size": 4146,
+          "sha256": "b04040cba15cfb5f634815f5098079331f0862f4f8232f01c5293b925c78af3b"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 57344,
+        "prompt_cache_miss_tokens": 2007,
+        "tokens_in": 59351,
+        "tokens_out": 4397,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000099"
+    },
+    {
+      "index": 9,
+      "shape": "final",
+      "payload": {
+        "final": "命题 stmt:000062（Sylow 第三定理）证明手稿 manuscripts/B/b-proof-000003.md（被审正文 sha=e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00）的结论为：成立（findings 为空）。\n\n六条角度逐条过完：\n① 前提：|G|=p^k·m 且 p∤m、G 有限、p 素数，全部被用到；k=0 的退化情形无需单列分支（此时 P={e}，事实 B 的空真形式与 |Fix_P|=1 的论证同样成立，n_p=1≡1 且整除 m）。Syl_p(G) 非空不再是无条件前提，第 5 段已引在册命题 stmt:000060 说明。\n② 计算：事实 A（|Γ·x|=[Γ:Stab(x)]，轨道长整除 |Γ|）、事实 B（把 X 按轨道分解，长度大于 1 的轨道指数为 p 的正幂，故 |X|≡|Fix| mod p）两处计数无误；Sylow II 中 [G:P]=m 不被 p 整除、故 Fix_Q(G/P) 非空；末段 n_p|p^k m 且 gcd(n_p,p)=1 ⇒ n_p|m，用的是 Euclid 引理，方向正确。\n③ 逻辑：Sylow II 的推导只用陪集集合上的 Q-作用，没有预设 G 的额外条件，故在第 5 段对 N(Q) 复用合法；Q 被 P 固定 ⇔ gQg⁻¹=Q ∀g∈P ⇔ P⊆N(Q)，此时 P、Q 阶均为 p^k 且都含于 N(Q)（p^k 是 |N(Q)| 的满 p-部），Sylow II 在 N(Q) 中给出共轭，Q 在 N(Q) 正规 ⇒ P=Q，得 |Fix_P|=1；段间跳跃都接得上，没有循环依赖。\n④ 强度：主结论与 statements.stmt_id=000062 的 statement_full 逐字一致，没有更强。\n⑤ 台账一致：稿「## 命题」与 statements 行逐字相同（已用 table.list 核过 statement_full）。\n⑥ 依赖面：`## 依赖` 表已登记 stmt:000060 一行（用在哪一步写明），正文只使用它的存在性部分（weaker，可引）；被引命题现算等级 pre_theorem，手稿 manuscripts/B/b-proof-000000.md 上已有 V 签（3/3，正文 sha=08de50eb…），够格被引，引用关系为 weaker（不是 stronger/unrelated/inadmissible）。\n\n本轮为冷启动重读，未沿用上一轮的任何结论：前两轮判「有毛病」的两点（Syl_p(G) 非空无依据、`## 依赖` 未登记）在本版均已修好（前者引 stmt:000060，后者表里有那一行），其余各步逐句核过无缺陷，故本轮判成立、findings 为空。\n\n落盘核对（都是盘上现读，不是转述）：稿头已有 V 签块——已签=true；判词=成立；连续=3/3；正文sha=e4881c4b…；台账=verifications/000062.jsonl#v-000005；out/vsigns/e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00.json 存在（size=4146，mtime=2026-11-24T04:35:03）。本趟的 verify.verify_proof（带 proof_manuscript=manuscripts/B/b-proof-000003.md）返回 verdict=成立、defect_step=null、unresolved_errors=0，并已锚定到该正文 sha 的 v-000005 那一行；citation_gate ok=true（000060 记 weaker，仅情报不挡签）。\n\n给 B 的一句：这一份可以按正文 sha e4881c4b… 收录；命题行认领时对上 v-000005 即可，不需要再送一轮审。",
+        "evidence": [
+          "stmt:000062",
+          "manuscripts/B/b-proof-000003.md",
+          "verifications/000062.jsonl#v-000005",
+          "out/vsigns/e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00.json",
+          "stmt:000060",
+          "manuscripts/B/b-proof-000000.md"
+        ],
+        "notify": {
+          "to": "B",
+          "summary": "命题 000062 复审结论：成立（findings 为空）；正文 sha e4881c4b…，签块已在该稿，台账 v-000005",
+          "body": "## 审的是什么\n\n- 对象：`manuscripts/B/b-proof-000003.md`\n- 被审正文 sha256：`e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00`（全文件 sha=`f0c87258bd14…`，含签块）\n- 命题：`stmt:000062`（Sylow 第三定理）\n\n## 结论\n\n**成立，findings 为空。** 六条角度（前提 / 计算 / 逻辑 / 强度 / 台账一致 / 依赖面）逐条核过，没有一处要改：\n\n- Syl_p(G) 非空已引在册 `stmt:000060`（本版新增，修掉了 v-000001 那条缺口）；\n- `## 依赖` 表已登记 `stmt:000060` 一行并写明用在哪一步（修掉了 v-000002 那条缺口），且正文只用其**存在性**部分 ⇒ 引用关系 weaker（可引，不够格的三档 stronger/unrelated/inadmissible 都没有）；被引命题现算等级 `pre_theorem`，其手稿 `manuscripts/B/b-proof-000000.md` 上 V 签 3/3；\n- 事实 A、事实 B、就地推出的 Sylow II 三处推导无误；末段 n_p | p^k m 与 gcd(n_p,p)=1 ⇒ n_p | m 正确；k=0 退化情形不构成缺口；结论与 `statement_full` 逐字一致，没有更强。\n\n## 盘上现状（我现读到的）\n\n- 稿头签块：已签=true；判词=成立；连续=3/3；正文sha=`e4881c4b…`；台账 `verifications/000062.jsonl#v-000005`。\n- 签的侧文件：`out/vsigns/e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00.json` 存在（size=4146）。\n\n## 要你做什么\n\n按正文 sha `e4881c4b…` 收录这一份即可；命题行认领时对上 `v-000005` 那一行，**不需要再送一轮审**。我没有改任何人的文件，也没动稿上的签块。",
+          "refs": [
+            "stmt:000062",
+            "stmt:000060"
+          ]
+        }
+      },
+      "result": {
+        "notify_handoff": {
+          "handoff": "000010",
+          "ok": true,
+          "id": "000010",
+          "path": "work/handoffs.jsonl#000010",
+          "to": "B",
+          "brief": "命题 000062 复审结论：成立（findings 为空）；正文 sha e4881c4b…，签块已在该稿，台账 v-000005",
+          "addressing": {
+            "checked": true,
+            "how": "parent",
+            "to": "B",
+            "kind": "parent",
+            "name": "B1",
+            "task_id": "t-000006",
+            "role": "B",
+            "brief": "",
+            "candidates": [],
+            "callable": "父 B1（t-000006）",
+            "why": "名册成员（parent）⇒ 手稿写角色 B，通知投实例 B",
+            "delivery": "roster",
+            "manuscript_to": "B",
+            "addressed_by": "role_fallback"
+          },
+          "notify_channel": "roster",
+          "revises": "",
+          "existing_same_summary": {
+            "count": 0,
+            "ids": [],
+            "note": "查过了：没有同一句话的既有交接"
+          },
+          "notified": "t-000102",
+          "error": "",
+          "note": "收件人下次运行时（或本步之后）会在收件箱/板上看到编号；它用 `manuscripts.read` 读全文"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 58496,
+        "prompt_cache_miss_tokens": 2016,
+        "tokens_in": 60512,
+        "tokens_out": 7597,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000099"
+    }
+  ],
+  "final": "命题 stmt:000062（Sylow 第三定理）证明手稿 manuscripts/B/b-proof-000003.md（被审正文 sha=e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00）的结论为：成立（findings 为空）。\n\n六条角度逐条过完：\n① 前提：|G|=p^k·m 且 p∤m、G 有限、p 素数，全部被用到；k=0 的退化情形无需单列分支（此时 P={e}，事实 B 的空真形式与 |Fix_P|=1 的论证同样成立，n_p=1≡1 且整除 m）。Syl_p(G) 非空不再是无条件前提，第 5 段已引在册命题 stmt:000060 说明。\n② 计算：事实 A（|Γ·x|=[Γ:Stab(x)]，轨道长整除 |Γ|）、事实 B（把 X 按轨道分解，长度大于 1 的轨道指数为 p 的正幂，故 |X|≡|Fix| mod p）两处计数无误；Sylow II 中 [G:P]=m 不被 p 整除、故 Fix_Q(G/P) 非空；末段 n_p|p^k m 且 gcd(n_p,p)=1 ⇒ n_p|m，用的是 Euclid 引理，方向正确。\n③ 逻辑：Sylow II 的推导只用陪集集合上的 Q-作用，没有预设 G 的额外条件，故在第 5 段对 N(Q) 复用合法；Q 被 P 固定 ⇔ gQg⁻¹=Q ∀g∈P ⇔ P⊆N(Q)，此时 P、Q 阶均为 p^k 且都含于 N(Q)（p^k 是 |N(Q)| 的满 p-部），Sylow II 在 N(Q) 中给出共轭，Q 在 N(Q) 正规 ⇒ P=Q，得 |Fix_P|=1；段间跳跃都接得上，没有循环依赖。\n④ 强度：主结论与 statements.stmt_id=000062 的 statement_full 逐字一致，没有更强。\n⑤ 台账一致：稿「## 命题」与 statements 行逐字相同（已用 table.list 核过 statement_full）。\n⑥ 依赖面：`## 依赖` 表已登记 stmt:000060 一行（用在哪一步写明），正文只使用它的存在性部分（weaker，可引）；被引命题现算等级 pre_theorem，手稿 manuscripts/B/b-proof-000000.md 上已有 V 签（3/3，正文 sha=08de50eb…），够格被引，引用关系为 weaker（不是 stronger/unrelated/inadmissible）。\n\n本轮为冷启动重读，未沿用上一轮的任何结论：前两轮判「有毛病」的两点（Syl_p(G) 非空无依据、`## 依赖` 未登记）在本版均已修好（前者引 stmt:000060，后者表里有那一行），其余各步逐句核过无缺陷，故本轮判成立、findings 为空。\n\n落盘核对（都是盘上现读，不是转述）：稿头已有 V 签块——已签=true；判词=成立；连续=3/3；正文sha=e4881c4b…；台账=verifications/000062.jsonl#v-000005；out/vsigns/e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00.json 存在（size=4146，mtime=2026-11-24T04:35:03）。本趟的 verify.verify_proof（带 proof_manuscript=manuscripts/B/b-proof-000003.md）返回 verdict=成立、defect_step=null、unresolved_errors=0，并已锚定到该正文 sha 的 v-000005 那一行；citation_gate ok=true（000060 记 weaker，仅情报不挡签）。\n\n给 B 的一句：这一份可以按正文 sha e4881c4b… 收录；命题行认领时对上 v-000005 即可，不需要再送一轮审。",
+  "evidence": [
+    "stmt:000062",
+    "manuscripts/B/b-proof-000003.md",
+    "verifications/000062.jsonl#v-000005",
+    "out/vsigns/e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00.json",
+    "stmt:000060",
+    "manuscripts/B/b-proof-000000.md"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 0,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 10,
+  "compactions": 0,
+  "mailbox_items": [],
+  "mailbox_msgs": [],
+  "mailbox_delivered": 0,
+  "monitor_turns": 0,
+  "wakes": 0,
+  "wake_ids": [],
+  "wake_events": [],
+  "clock_pumps": 18,
+  "clock_fired": 0,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "V 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "V",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    }
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [
+    "000010"
+  ],
+  "summons": [],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [],
+  "summons_total": 0,
+  "summons_consumed": 0,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 0,
+    "summons_consumed": 0,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p327",
+    "role": "V",
+    "prompt_sha256": "052abf02fb503f722d3e805869fb8b2d64c0afe8b3059978b59c338744ec5519",
+    "prompt_chars": 46343,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "FACULTIES_07",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_STOP",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 9,
+    "tokens_in": 455486,
+    "tokens_out": 56462,
+    "usd": 0.039712,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 9,
+    "no_request_calls": 0,
+    "hit": 425088,
+    "miss": 30398,
+    "unknown_calls": 0,
+    "tokens_in": 455486,
+    "hit_rate": 0.9333,
+    "mismatched_calls": 0,
+    "saved_usd": 0.062489,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 370.313,
+  "end_ts": "2026-11-24T04:36:31+08:00",
+  "notes": [
+    "收工时名下还有 3 条证明没有 V 的签字（读数，不拦收工；明细：000060、000062、000064）",
+    "缓存读数：命中 425088 / 未命中 30398 token，命中率 93.3%（9 次调用）；按 modelcost 口径估算可省 约 0.062489 美元",
+    "子产出处理读数：summons_total=0（这一趟没派过子代理 ⇒ 没有要处理的子产出；判据没有对象，不红）"
+  ],
+  "final_payload": {
+    "final": "命题 stmt:000062（Sylow 第三定理）证明手稿 manuscripts/B/b-proof-000003.md（被审正文 sha=e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00）的结论为：成立（findings 为空）。\n\n六条角度逐条过完：\n① 前提：|G|=p^k·m 且 p∤m、G 有限、p 素数，全部被用到；k=0 的退化情形无需单列分支（此时 P={e}，事实 B 的空真形式与 |Fix_P|=1 的论证同样成立，n_p=1≡1 且整除 m）。Syl_p(G) 非空不再是无条件前提，第 5 段已引在册命题 stmt:000060 说明。\n② 计算：事实 A（|Γ·x|=[Γ:Stab(x)]，轨道长整除 |Γ|）、事实 B（把 X 按轨道分解，长度大于 1 的轨道指数为 p 的正幂，故 |X|≡|Fix| mod p）两处计数无误；Sylow II 中 [G:P]=m 不被 p 整除、故 Fix_Q(G/P) 非空；末段 n_p|p^k m 且 gcd(n_p,p)=1 ⇒ n_p|m，用的是 Euclid 引理，方向正确。\n③ 逻辑：Sylow II 的推导只用陪集集合上的 Q-作用，没有预设 G 的额外条件，故在第 5 段对 N(Q) 复用合法；Q 被 P 固定 ⇔ gQg⁻¹=Q ∀g∈P ⇔ P⊆N(Q)，此时 P、Q 阶均为 p^k 且都含于 N(Q)（p^k 是 |N(Q)| 的满 p-部），Sylow II 在 N(Q) 中给出共轭，Q 在 N(Q) 正规 ⇒ P=Q，得 |Fix_P|=1；段间跳跃都接得上，没有循环依赖。\n④ 强度：主结论与 statements.stmt_id=000062 的 statement_full 逐字一致，没有更强。\n⑤ 台账一致：稿「## 命题」与 statements 行逐字相同（已用 table.list 核过 statement_full）。\n⑥ 依赖面：`## 依赖` 表已登记 stmt:000060 一行（用在哪一步写明），正文只使用它的存在性部分（weaker，可引）；被引命题现算等级 pre_theorem，手稿 manuscripts/B/b-proof-000000.md 上已有 V 签（3/3，正文 sha=08de50eb…），够格被引，引用关系为 weaker（不是 stronger/unrelated/inadmissible）。\n\n本轮为冷启动重读，未沿用上一轮的任何结论：前两轮判「有毛病」的两点（Syl_p(G) 非空无依据、`## 依赖` 未登记）在本版均已修好（前者引 stmt:000060，后者表里有那一行），其余各步逐句核过无缺陷，故本轮判成立、findings 为空。\n\n落盘核对（都是盘上现读，不是转述）：稿头已有 V 签块——已签=true；判词=成立；连续=3/3；正文sha=e4881c4b…；台账=verifications/000062.jsonl#v-000005；out/vsigns/e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00.json 存在（size=4146，mtime=2026-11-24T04:35:03）。本趟的 verify.verify_proof（带 proof_manuscript=manuscripts/B/b-proof-000003.md）返回 verdict=成立、defect_step=null、unresolved_errors=0，并已锚定到该正文 sha 的 v-000005 那一行；citation_gate ok=true（000060 记 weaker，仅情报不挡签）。\n\n给 B 的一句：这一份可以按正文 sha e4881c4b… 收录；命题行认领时对上 v-000005 即可，不需要再送一轮审。",
+    "evidence": [
+      "stmt:000062",
+      "manuscripts/B/b-proof-000003.md",
+      "verifications/000062.jsonl#v-000005",
+      "out/vsigns/e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00.json",
+      "stmt:000060",
+      "manuscripts/B/b-proof-000000.md"
+    ],
+    "notify": {
+      "to": "B",
+      "summary": "命题 000062 复审结论：成立（findings 为空）；正文 sha e4881c4b…，签块已在该稿，台账 v-000005",
+      "body": "## 审的是什么\n\n- 对象：`manuscripts/B/b-proof-000003.md`\n- 被审正文 sha256：`e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00`（全文件 sha=`f0c87258bd14…`，含签块）\n- 命题：`stmt:000062`（Sylow 第三定理）\n\n## 结论\n\n**成立，findings 为空。** 六条角度（前提 / 计算 / 逻辑 / 强度 / 台账一致 / 依赖面）逐条核过，没有一处要改：\n\n- Syl_p(G) 非空已引在册 `stmt:000060`（本版新增，修掉了 v-000001 那条缺口）；\n- `## 依赖` 表已登记 `stmt:000060` 一行并写明用在哪一步（修掉了 v-000002 那条缺口），且正文只用其**存在性**部分 ⇒ 引用关系 weaker（可引，不够格的三档 stronger/unrelated/inadmissible 都没有）；被引命题现算等级 `pre_theorem`，其手稿 `manuscripts/B/b-proof-000000.md` 上 V 签 3/3；\n- 事实 A、事实 B、就地推出的 Sylow II 三处推导无误；末段 n_p | p^k m 与 gcd(n_p,p)=1 ⇒ n_p | m 正确；k=0 退化情形不构成缺口；结论与 `statement_full` 逐字一致，没有更强。\n\n## 盘上现状（我现读到的）\n\n- 稿头签块：已签=true；判词=成立；连续=3/3；正文sha=`e4881c4b…`；台账 `verifications/000062.jsonl#v-000005`。\n- 签的侧文件：`out/vsigns/e4881c4b8cffabbaedb2e579bd7f25588a3062a1fcae615ccfe4710927ed1d00.json` 存在（size=4146）。\n\n## 要你做什么\n\n按正文 sha `e4881c4b…` 收录这一份即可；命题行认领时对上 `v-000005` 那一行，**不需要再送一轮审**。我没有改任何人的文件，也没动稿上的签块。",
+      "refs": [
+        "stmt:000062",
+        "stmt:000060"
+      ]
+    }
+  },
+  "task_id": "t-000099"
+}

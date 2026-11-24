@@ -1,0 +1,242 @@
+# agentflow.papercompile 单次编译日志（一次编译一份；不追加、不拼接）
+# engine: pdflatex
+# tex_sha256: 71a074beee1e0e9121e21ddeafb9d024ea91cde0c622fc7406a53409b6e2cea1
+===== pdflatex pass 1 =====
+This is pdfTeX, Version 3.141592653-2.6-1.40.29 (MiKTeX 26.2) (preloaded format=pdflatex.fmt)
+ restricted \write18 enabled.
+entering extended mode
+(main.tex
+LaTeX2e <2025-11-01>
+L3 programming layer <2026-01-19>
+(C:\CTEX\MiKTeX\tex/latex/base\article.cls
+Document Class: article 2025/01/22 v1.4n Standard LaTeX document class
+(C:\CTEX\MiKTeX\tex/latex/base\size11.clo))
+(C:\CTEX\MiKTeX\tex/latex/amsmath\amsmath.sty
+For additional information on amsmath, use the `?' option.
+(C:\CTEX\MiKTeX\tex/latex/amsmath\amstext.sty
+(C:\CTEX\MiKTeX\tex/latex/amsmath\amsgen.sty))
+(C:\CTEX\MiKTeX\tex/latex/amsmath\amsbsy.sty)
+(C:\CTEX\MiKTeX\tex/latex/amsmath\amsopn.sty))
+(C:\CTEX\MiKTeX\tex/latex/amsfonts\amssymb.sty
+(C:\CTEX\MiKTeX\tex/latex/amsfonts\amsfonts.sty))
+(C:\CTEX\MiKTeX\tex/latex/amscls\amsthm.sty)
+(C:\CTEX\MiKTeX\tex/latex/geometry\geometry.sty
+(C:\CTEX\MiKTeX\tex/latex/graphics\keyval.sty)
+(C:\CTEX\MiKTeX\tex/generic/iftex\ifvtex.sty
+(C:\CTEX\MiKTeX\tex/generic/iftex\iftex.sty))
+(C:\CTEX\MiKTeX\tex/latex/geometry\geometry.cfg))
+(C:\CTEX\MiKTeX\tex/latex/booktabs\booktabs.sty)
+(C:\CTEX\MiKTeX\tex/latex/url\url.sty)
+(C:\CTEX\MiKTeX\tex/latex/l3backend\l3backend-pdftex.def) (main.aux)
+*geometry* driver: auto-detecting
+*geometry* detected driver: pdftex
+(C:\CTEX\MiKTeX\tex/latex/amsfonts\umsa.fd)
+(C:\CTEX\MiKTeX\tex/latex/amsfonts\umsb.fd) [1{D:/Incubator/projects/sylow-4/.m
+iktex/data/fonts/map/pdftex/pdftex.map{Unicode.sfd}{UGBK.sfd}}] [2] [3]
+[4] [5] (mapping-appendix.tex [6]
+Underfull \hbox (badness 10000) in paragraph at lines 11--11
+[]\OT1/cmr/m/n/10 Ledger
+
+Underfull \hbox (badness 10000) in paragraph at lines 11--11
+[]\OT1/cmr/m/n/10 Ledger
+
+Underfull \hbox (badness 4556) in paragraph at lines 11--11
+[]\OT1/cmr/m/n/10 Lean (file
+
+Underfull \hbox (badness 1838) in paragraph at lines 11--11
+\OT1/cmr/m/n/10 / dec-la-ra-
+
+Underfull \hbox (badness 10000) in paragraph at lines 11--11
+[]\OT1/cmr/m/n/10 E
+
+Underfull \hbox (badness 10000) in paragraph at lines 11--11
+\OT1/cmr/m/n/10 read-
+
+Overfull \hbox (6.88017pt too wide) in paragraph at lines 11--12
+[]\OT1/cmr/m/n/10 Exhaustion
+
+Overfull \hbox (5.8711pt too wide) in paragraph at lines 14--14
+[]\OT1/cmr/m/n/10 theorem- 
+
+Overfull \hbox (8.954pt too wide) in paragraph at lines 14--14
+[]\OT1/cmtt/m/n/10 theorem- 
+
+Overfull \hbox (9.76268pt too wide) in paragraph at lines 14--14
+\OT1/cmr/m/n/10 numeric- 
+
+Overfull \hbox (5.8711pt too wide) in paragraph at lines 16--16
+[]\OT1/cmr/m/n/10 theorem- 
+
+Overfull \hbox (8.954pt too wide) in paragraph at lines 16--16
+[]\OT1/cmtt/m/n/10 theorem- 
+
+Overfull \hbox (9.76268pt too wide) in paragraph at lines 16--16
+\OT1/cmr/m/n/10 numeric- 
+
+Overfull \hbox (5.8711pt too wide) in paragraph at lines 18--18
+[]\OT1/cmr/m/n/10 theorem- 
+
+Overfull \hbox (8.954pt too wide) in paragraph at lines 18--18
+[]\OT1/cmtt/m/n/10 theorem- 
+
+Overfull \hbox (9.76268pt too wide) in paragraph at lines 18--18
+\OT1/cmr/m/n/10 numeric- 
+
+Overfull \hbox (5.8711pt too wide) in paragraph at lines 20--20
+[]\OT1/cmr/m/n/10 theorem- 
+
+Overfull \hbox (8.954pt too wide) in paragraph at lines 20--20
+[]\OT1/cmtt/m/n/10 theorem- 
+
+Overfull \hbox (9.76268pt too wide) in paragraph at lines 20--20
+\OT1/cmr/m/n/10 numeric- 
+
+Overfull \hbox (5.8711pt too wide) in paragraph at lines 22--22
+[]\OT1/cmr/m/n/10 theorem- 
+
+Overfull \hbox (8.954pt too wide) in paragraph at lines 22--22
+[]\OT1/cmtt/m/n/10 theorem- 
+
+Overfull \hbox (9.76268pt too wide) in paragraph at lines 22--22
+\OT1/cmr/m/n/10 numeric- 
+
+Overfull \hbox (9.80113pt too wide) in paragraph at lines 9--26
+[][] 
+) [7] (main.aux) )
+(see the transcript file for additional information) <D:\Incubator\projects\syl
+ow-4\.miktex\data\fonts/pk/ljfour/jknappen/ec/dpi600\tcrm1000.pk> <C:\CTEX\User
+Data\fonts/pk/ljfour/jknappen/ec/dpi600\tcrm1095.pk><C:/CTEX/MiKTeX/fonts/type1
+/public/amsfonts/cm/cmbx10.pfb><C:/CTEX/MiKTeX/fonts/type1/public/amsfonts/cm/c
+mbx12.pfb><C:/CTEX/MiKTeX/fonts/type1/public/amsfonts/cm/cmex10.pfb><C:/CTEX/Mi
+KTeX/fonts/type1/public/amsfonts/cm/cmmi10.pfb><C:/CTEX/MiKTeX/fonts/type1/publ
+ic/amsfonts/cm/cmmi7.pfb><C:/CTEX/MiKTeX/fonts/type1/public/amsfonts/cm/cmmi8.p
+fb><C:/CTEX/MiKTeX/fonts/type1/public/amsfonts/cm/cmr10.pfb><C:/CTEX/MiKTeX/fon
+ts/type1/public/amsfonts/cm/cmr12.pfb><C:/CTEX/MiKTeX/fonts/type1/public/amsfon
+ts/cm/cmr17.pfb><C:/CTEX/MiKTeX/fonts/type1/public/amsfonts/cm/cmr8.pfb><C:/CTE
+X/MiKTeX/fonts/type1/public/amsfonts/cm/cmsy10.pfb><C:/CTEX/MiKTeX/fonts/type1/
+public/amsfonts/cm/cmsy8.pfb><C:/CTEX/MiKTeX/fonts/type1/public/amsfonts/cm/cmt
+i10.pfb><C:/CTEX/MiKTeX/fonts/type1/public/amsfonts/cm/cmtt10.pfb><C:/CTEX/MiKT
+eX/fonts/type1/public/amsfonts/symbols/msam10.pfb><C:/CTEX/MiKTeX/fonts/type1/p
+ublic/amsfonts/symbols/msbm10.pfb>
+Output written on main.pdf (7 pages, 233087 bytes).
+Transcript written on main.log.
+===== pdflatex pass 2 =====
+This is pdfTeX, Version 3.141592653-2.6-1.40.29 (MiKTeX 26.2) (preloaded format=pdflatex.fmt)
+ restricted \write18 enabled.
+entering extended mode
+(main.tex
+LaTeX2e <2025-11-01>
+L3 programming layer <2026-01-19>
+(C:\CTEX\MiKTeX\tex/latex/base\article.cls
+Document Class: article 2025/01/22 v1.4n Standard LaTeX document class
+(C:\CTEX\MiKTeX\tex/latex/base\size11.clo))
+(C:\CTEX\MiKTeX\tex/latex/amsmath\amsmath.sty
+For additional information on amsmath, use the `?' option.
+(C:\CTEX\MiKTeX\tex/latex/amsmath\amstext.sty
+(C:\CTEX\MiKTeX\tex/latex/amsmath\amsgen.sty))
+(C:\CTEX\MiKTeX\tex/latex/amsmath\amsbsy.sty)
+(C:\CTEX\MiKTeX\tex/latex/amsmath\amsopn.sty))
+(C:\CTEX\MiKTeX\tex/latex/amsfonts\amssymb.sty
+(C:\CTEX\MiKTeX\tex/latex/amsfonts\amsfonts.sty))
+(C:\CTEX\MiKTeX\tex/latex/amscls\amsthm.sty)
+(C:\CTEX\MiKTeX\tex/latex/geometry\geometry.sty
+(C:\CTEX\MiKTeX\tex/latex/graphics\keyval.sty)
+(C:\CTEX\MiKTeX\tex/generic/iftex\ifvtex.sty
+(C:\CTEX\MiKTeX\tex/generic/iftex\iftex.sty))
+(C:\CTEX\MiKTeX\tex/latex/geometry\geometry.cfg))
+(C:\CTEX\MiKTeX\tex/latex/booktabs\booktabs.sty)
+(C:\CTEX\MiKTeX\tex/latex/url\url.sty)
+(C:\CTEX\MiKTeX\tex/latex/l3backend\l3backend-pdftex.def) (main.aux)
+*geometry* driver: auto-detecting
+*geometry* detected driver: pdftex
+(C:\CTEX\MiKTeX\tex/latex/amsfonts\umsa.fd)
+(C:\CTEX\MiKTeX\tex/latex/amsfonts\umsb.fd) [1{D:/Incubator/projects/sylow-4/.m
+iktex/data/fonts/map/pdftex/pdftex.map{Unicode.sfd}{UGBK.sfd}}] [2] [3]
+[4] [5] (mapping-appendix.tex [6]
+Underfull \hbox (badness 10000) in paragraph at lines 11--11
+[]\OT1/cmr/m/n/10 Ledger
+
+Underfull \hbox (badness 10000) in paragraph at lines 11--11
+[]\OT1/cmr/m/n/10 Ledger
+
+Underfull \hbox (badness 4556) in paragraph at lines 11--11
+[]\OT1/cmr/m/n/10 Lean (file
+
+Underfull \hbox (badness 1838) in paragraph at lines 11--11
+\OT1/cmr/m/n/10 / dec-la-ra-
+
+Underfull \hbox (badness 10000) in paragraph at lines 11--11
+[]\OT1/cmr/m/n/10 E
+
+Underfull \hbox (badness 10000) in paragraph at lines 11--11
+\OT1/cmr/m/n/10 read-
+
+Overfull \hbox (6.88017pt too wide) in paragraph at lines 11--12
+[]\OT1/cmr/m/n/10 Exhaustion
+
+Overfull \hbox (5.8711pt too wide) in paragraph at lines 14--14
+[]\OT1/cmr/m/n/10 theorem- 
+
+Overfull \hbox (8.954pt too wide) in paragraph at lines 14--14
+[]\OT1/cmtt/m/n/10 theorem- 
+
+Overfull \hbox (9.76268pt too wide) in paragraph at lines 14--14
+\OT1/cmr/m/n/10 numeric- 
+
+Overfull \hbox (5.8711pt too wide) in paragraph at lines 16--16
+[]\OT1/cmr/m/n/10 theorem- 
+
+Overfull \hbox (8.954pt too wide) in paragraph at lines 16--16
+[]\OT1/cmtt/m/n/10 theorem- 
+
+Overfull \hbox (9.76268pt too wide) in paragraph at lines 16--16
+\OT1/cmr/m/n/10 numeric- 
+
+Overfull \hbox (5.8711pt too wide) in paragraph at lines 18--18
+[]\OT1/cmr/m/n/10 theorem- 
+
+Overfull \hbox (8.954pt too wide) in paragraph at lines 18--18
+[]\OT1/cmtt/m/n/10 theorem- 
+
+Overfull \hbox (9.76268pt too wide) in paragraph at lines 18--18
+\OT1/cmr/m/n/10 numeric- 
+
+Overfull \hbox (5.8711pt too wide) in paragraph at lines 20--20
+[]\OT1/cmr/m/n/10 theorem- 
+
+Overfull \hbox (8.954pt too wide) in paragraph at lines 20--20
+[]\OT1/cmtt/m/n/10 theorem- 
+
+Overfull \hbox (9.76268pt too wide) in paragraph at lines 20--20
+\OT1/cmr/m/n/10 numeric- 
+
+Overfull \hbox (5.8711pt too wide) in paragraph at lines 22--22
+[]\OT1/cmr/m/n/10 theorem- 
+
+Overfull \hbox (8.954pt too wide) in paragraph at lines 22--22
+[]\OT1/cmtt/m/n/10 theorem- 
+
+Overfull \hbox (9.76268pt too wide) in paragraph at lines 22--22
+\OT1/cmr/m/n/10 numeric- 
+
+Overfull \hbox (9.80113pt too wide) in paragraph at lines 9--26
+[][] 
+) [7] (main.aux) )
+(see the transcript file for additional information) <D:\Incubator\projects\syl
+ow-4\.miktex\data\fonts/pk/ljfour/jknappen/ec/dpi600\tcrm1000.pk> <C:\CTEX\User
+Data\fonts/pk/ljfour/jknappen/ec/dpi600\tcrm1095.pk><C:/CTEX/MiKTeX/fonts/type1
+/public/amsfonts/cm/cmbx10.pfb><C:/CTEX/MiKTeX/fonts/type1/public/amsfonts/cm/c
+mbx12.pfb><C:/CTEX/MiKTeX/fonts/type1/public/amsfonts/cm/cmex10.pfb><C:/CTEX/Mi
+KTeX/fonts/type1/public/amsfonts/cm/cmmi10.pfb><C:/CTEX/MiKTeX/fonts/type1/publ
+ic/amsfonts/cm/cmmi7.pfb><C:/CTEX/MiKTeX/fonts/type1/public/amsfonts/cm/cmmi8.p
+fb><C:/CTEX/MiKTeX/fonts/type1/public/amsfonts/cm/cmr10.pfb><C:/CTEX/MiKTeX/fon
+ts/type1/public/amsfonts/cm/cmr12.pfb><C:/CTEX/MiKTeX/fonts/type1/public/amsfon
+ts/cm/cmr17.pfb><C:/CTEX/MiKTeX/fonts/type1/public/amsfonts/cm/cmr8.pfb><C:/CTE
+X/MiKTeX/fonts/type1/public/amsfonts/cm/cmsy10.pfb><C:/CTEX/MiKTeX/fonts/type1/
+public/amsfonts/cm/cmsy8.pfb><C:/CTEX/MiKTeX/fonts/type1/public/amsfonts/cm/cmt
+i10.pfb><C:/CTEX/MiKTeX/fonts/type1/public/amsfonts/cm/cmtt10.pfb><C:/CTEX/MiKT
+eX/fonts/type1/public/amsfonts/symbols/msam10.pfb><C:/CTEX/MiKTeX/fonts/type1/p
+ublic/amsfonts/symbols/msbm10.pfb>
+Output written on main.pdf (7 pages, 233087 bytes).
+Transcript written on main.log.
+result: {"engine": "pdflatex", "exit_codes": [0, 0], "pages": 7, "pdf": "main.pdf", "pdf_bytes": 233087, "pdf_fresh": true, "reason": "由本次源码编出（pdflatex，7 页）", "runs": 2, "tri": "computed"}

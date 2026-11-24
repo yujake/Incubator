@@ -1,0 +1,3767 @@
+{
+  "role": "D",
+  "task": "D：这一趟派给你的活是 —— 立一条研究问题并推进到「命题 + 证明 + V 签」：证明 Sylow 第一定理 —— 设有限群 G，|G| = p^a·m，p 素数且 (p,m)=1，则 G 存在阶为 p^a 的 p-Sylow 子群；并给出推论：(i) 任两个 p-Sylow 子群共轭（故共轭意义下唯一），(ii) p-Sylow 子群个数 n_p 满足 n_p ≡ 1 (mod p) 且 n_p | m。\n\n产出要求（落点逐条给）：\n- research_questions 一行（status 与现场一致）；\n- manuscripts/D/RESEARCH.md 研究手稿（七节：成果概述 / 定义与已知 / 已确定的结论 / 尝试与失败 / 例子与反例 / 未解问题 / 下一步）；\n- 至少一份 F 的证明稿 manuscripts/F/f-proof-<稿号>.md，内容自足、逐步给依据，覆盖上面四条断言；并由 F 把该稿送 V 逐行走查，拿到「成立」的签（这是本次交付的硬要求：无签的证明不算交差）。落稿当天就立项拿计划号，不要先写长草稿后补手续。\n\n候选路线（你自己定，并在 RESEACH.md 的「已确定的结论/尝试」里写清为什么选它）：(a) 群作用在 p^a 元子集上（Wielandt 路线）；(b) 对 |G| 作归纳 + 类方程（Conrad 路线）。若两条都可行就说明取舍理由。\n\n引用纪律：只许引用 reference/ 里真实存在的那 4 份文献（Conrad / Harris / Idelhaj / Vakil，lit_id 由 A 登记后给出，可向我或向 A 的回执要）；没有全文的外部事实一律标成「标准教材事实（未持全文）」，不许编引文或页码。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.list",
+        "args": {
+          "path": ".",
+          "recursive": false,
+          "limit": 100
+        },
+        "why": "先看工作区布局：reference/、manuscripts/、台账在哪"
+      },
+      "result": {
+        "tool": "fs.list",
+        "ok": true,
+        "data": {
+          "path": ".",
+          "entries": [
+            {
+              "name": "AGENT-PROFILES.md",
+              "path": "AGENT-PROFILES.md",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 42218,
+              "mtime": "2026-11-24T03:40:28+08:00"
+            },
+            {
+              "name": "budget.json",
+              "path": "budget.json",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 242,
+              "mtime": "2026-11-24T03:40:28+08:00"
+            },
+            {
+              "name": "data",
+              "path": "data",
+              "is_dir": true,
+              "is_file": false,
+              "is_symlink": false,
+              "size": 4096,
+              "mtime": "2026-11-24T03:40:58+08:00"
+            },
+            {
+              "name": "library",
+              "path": "library",
+              "is_dir": true,
+              "is_file": false,
+              "is_symlink": false,
+              "size": 0,
+              "mtime": "2026-11-24T03:33:56+08:00"
+            },
+            {
+              "name": "out",
+              "path": "out",
+              "is_dir": true,
+              "is_file": false,
+              "is_symlink": false,
+              "size": 0,
+              "mtime": "2026-11-24T03:40:55+08:00"
+            },
+            {
+              "name": "reference",
+              "path": "reference",
+              "is_dir": true,
+              "is_file": false,
+              "is_symlink": false,
+              "size": 4096,
+              "mtime": "2026-11-24T03:33:56+08:00"
+            },
+            {
+              "name": "RELIABLE-REFERENCES.json",
+              "path": "RELIABLE-REFERENCES.json",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 608,
+              "mtime": "2026-11-24T03:40:39+08:00"
+            },
+            {
+              "name": "runs",
+              "path": "runs",
+              "is_dir": true,
+              "is_file": false,
+              "is_symlink": false,
+              "size": 0,
+              "mtime": "2026-11-24T03:40:55+08:00"
+            },
+            {
+              "name": "sessions",
+              "path": "sessions",
+              "is_dir": true,
+              "is_file": false,
+              "is_symlink": false,
+              "size": 0,
+              "mtime": "2026-11-24T03:40:58+08:00"
+            },
+            {
+              "name": "work",
+              "path": "work",
+              "is_dir": true,
+              "is_file": false,
+              "is_symlink": false,
+              "size": 0,
+              "mtime": "2026-11-24T03:33:56+08:00"
+            }
+          ],
+          "total": 10,
+          "returned": 10,
+          "truncated": false
+        },
+        "error": "",
+        "meta": {
+          "total": 10,
+          "returned": 10,
+          "truncated": false
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 63872,
+        "prompt_cache_miss_tokens": 1912,
+        "tokens_in": 65784,
+        "tokens_out": 309,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.list",
+        "args": {
+          "path": "reference",
+          "recursive": true,
+          "limit": 50
+        },
+        "why": "看 4 份文献的真实落点，引用纪律要求只引这里存在的"
+      },
+      "result": {
+        "tool": "fs.list",
+        "ok": true,
+        "data": {
+          "path": "reference",
+          "entries": [
+            {
+              "name": "11dc1a689516-harris-sylow-theorems.pdf",
+              "path": "reference/11dc1a689516-harris-sylow-theorems.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 297507,
+              "mtime": "2026-11-23T14:45:48+08:00"
+            },
+            {
+              "name": "9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf",
+              "path": "reference/9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 279580,
+              "mtime": "2026-11-23T14:45:44+08:00"
+            },
+            {
+              "name": "c104f1720c63-idelhaj-sylow-theorems-and-applications.pdf",
+              "path": "reference/c104f1720c63-idelhaj-sylow-theorems-and-applications.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 234210,
+              "mtime": "2026-11-23T14:46:15+08:00"
+            },
+            {
+              "name": "e090d219194b-vakil-sylow-theorems.pdf",
+              "path": "reference/e090d219194b-vakil-sylow-theorems.pdf",
+              "is_dir": false,
+              "is_file": true,
+              "is_symlink": false,
+              "size": 81682,
+              "mtime": "2026-11-23T14:46:34+08:00"
+            }
+          ],
+          "total": 4,
+          "returned": 4,
+          "truncated": false
+        },
+        "error": "",
+        "meta": {
+          "total": 4,
+          "returned": 4,
+          "truncated": false
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 65024,
+        "prompt_cache_miss_tokens": 1753,
+        "tokens_in": 66777,
+        "tokens_out": 208,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "research_questions",
+          "limit": 50
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "research_questions",
+          "rows": [],
+          "total": 0,
+          "returned": 0,
+          "limit": 50,
+          "offset": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "research_questions",
+          "total": 0,
+          "returned": 0,
+          "offset": 0,
+          "limit": 50
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 65920,
+        "prompt_cache_miss_tokens": 1505,
+        "tokens_in": 67425,
+        "tokens_out": 143,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    },
+    {
+      "index": 3,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "literature",
+          "limit": 20
+        },
+        "why": "看 4 份参考文献是否已登记、lit_id 是多少"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "literature",
+          "rows": [],
+          "total": 0,
+          "returned": 0,
+          "limit": 20,
+          "offset": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "literature",
+          "total": 0,
+          "returned": 0,
+          "offset": 0,
+          "limit": 20
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 66560,
+        "prompt_cache_miss_tokens": 1069,
+        "tokens_in": 67629,
+        "tokens_out": 146,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    },
+    {
+      "index": 4,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "RELIABLE-REFERENCES.json"
+        },
+        "why": "看这 4 份文献是否带了预设的 lit_id / 元数据，决定要不要先派 A 登记"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "{\n  \"paths\": [\n    \"reference/9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf\",\n    \"reference/11dc1a689516-harris-sylow-theorems.pdf\",\n    \"reference/c104f1720c63-idelhaj-sylow-theorems-and-applications.pdf\",\n    \"reference/e090d219194b-vakil-sylow-theorems.pdf\"\n  ],\n  \"verbatim\": \"种子：reference/ 已投放 4 份文献（Conrad/Harris/Idelhaj/Vakil），优先用它们；拿不到全文就按仅题录判收，不要为找全文反复换源；确实需要引用时只许引用 reference/ 里真实存在的文件，没有全文就把外部事实标成“标准教材事实（未持全文）”。\"\n}\n",
+        "error": "",
+        "meta": {
+          "path": "RELIABLE-REFERENCES.json",
+          "encoding": "utf-8",
+          "bytes_read": 608,
+          "total_bytes": 608,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 9,
+          "total_lines": 9,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 9 行",
+          "sha256": "52e64027be583b81e62cc462ef350ecb6bf55740e86acd8b852bc51849e94694"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 66816,
+        "prompt_cache_miss_tokens": 1004,
+        "tokens_in": 67820,
+        "tokens_out": 150,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    },
+    {
+      "index": 5,
+      "shape": "tool",
+      "payload": {
+        "name": "own.propose_question",
+        "args": {
+          "question": "设 G 为有限群，|G| = p^a·m（p 素数，(p,m)=1）。断言：(E) G 存在阶为 p^a 的子群（p-Sylow 子群）；(C) G 的任两个 p-Sylow 子群共轭；(N) p-Sylow 子群的个数 n_p 满足 n_p ≡ 1 (mod p) 且 n_p | m。这三条是否全部成立？",
+          "kind": "gap",
+          "priority": "high",
+          "gap_reason": "本项目核心目标命题，需一条命题 + 一份 F 证明稿 + V 的「成立」签；当前 statements / attack_plans 均为空。",
+          "notes": "候选路线：(a) 群作用在 p^a 元子集上（Wielandt，直接给存在性 + n_p ≡ 1 mod p）；(b) 对 |G| 归纳 + 类方程（Conrad），用中心/商群降阶。两条的取舍与理由写进 manuscripts/D/RESEARCH.md 的「已确定的结论 / 尝试与失败」。"
+        },
+        "why": "D 的其余动作都要求 qid 存在，从零起手第一步只能是立问题"
+      },
+      "result": {
+        "tool": "own.propose_question",
+        "ok": true,
+        "data": {
+          "ok": true,
+          "question_id": "000000",
+          "row": {
+            "question_id": "000000",
+            "question": "设 G 为有限群，|G| = p^a·m（p 素数，(p,m)=1）。断言：(E) G 存在阶为 p^a 的子群（p-Sylow 子群）；(C) G 的任两个 p-Sylow 子群共轭；(N) p-Sylow 子群的个数 n_p 满足 n_p ≡ 1 (mod p) 且 n_p | m。这三条是否全部成立？",
+            "origin": "agent-D-sylow-proof",
+            "related_concept_ids": [],
+            "related_relation_ids": [],
+            "status": "open",
+            "priority": "high",
+            "evidence_lit_ids": [],
+            "waiting_request_ids": [],
+            "gap_reason": "本项目核心目标命题，需一条命题 + 一份 F 证明稿 + V 的「成立」签；当前 statements / attack_plans 均为空。",
+            "notes": "候选路线：(a) 群作用在 p^a 元子集上（Wielandt，直接给存在性 + n_p ≡ 1 mod p）；(b) 对 |G| 归纳 + 类方程（Conrad），用中心/商群降阶。两条的取舍与理由写进 manuscripts/D/RESEARCH.md 的「已确定的结论 / 尝试与失败」。",
+            "created_at": "2026-11-24T03:41:10+08:00",
+            "updated_at": "2026-11-24T03:41:10+08:00",
+            "kind": "gap",
+            "contradiction_relation_ids": [],
+            "contradiction_rounds": 0,
+            "contradiction_verdict": null,
+            "contradiction_request_ids": [],
+            "relation_chain": []
+          },
+          "note": "立起来 ≠ 有进展：status=open 是「要研究」这一档，后续的 assess / consider / adjudicate 才推进它"
+        },
+        "error": "",
+        "meta": {},
+        "warn": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.propose_question 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 5,
+          "call_index": 0,
+          "calls": 1,
+          "step_index": 5,
+          "summary": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.propose_question 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 5,
+            "calls": 1,
+            "items": 1,
+            "steps": [
+              5
+            ],
+            "executed": 1,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 67072,
+        "prompt_cache_miss_tokens": 1313,
+        "tokens_in": 68385,
+        "tokens_out": 843,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    },
+    {
+      "index": 6,
+      "shape": "summon_many",
+      "payload": {
+        "targets": [
+          {
+            "role": "A",
+            "action": "",
+            "params": {},
+            "instance": "",
+            "input_key": "",
+            "brief": "登记 reference/ 里 4 份 PDF 并回 lit_id",
+            "name": "reg-refs-1",
+            "task": "把 reference/ 下已有的 4 份 PDF 登记成 literature 行并回给我 lit_id（这一步是入库不是检索，别再换源找全文）：\n1) reference/9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf（Conrad, Proof of the Sylow Theorems）\n2) reference/11dc1a689516-harris-sylow-theorems.pdf（Harris, Sylow Theorems）\n3) reference/c104f1720c63-idelhaj-sylow-theorems-and-applications.pdf（Idelhaj, Sylow Theorems and Applications）\n4) reference/e090d219194b-vakil-sylow-theorems.pdf（Vakil, Sylow Theorems）\n交付：`literature` 里 4 行，逐份给出 lit_id / 题名 / 本地路径；若某份 PDF 读不出文本层，如实写 no_text_layer，不要用别处补全文。回执里把 4 个 lit_id 原样点名给我（我要拿它们做引用纪律的唯一来源）。"
+          },
+          {
+            "role": "F",
+            "action": "",
+            "params": {},
+            "instance": "",
+            "input_key": "",
+            "brief": "证 Sylow 定理及两条推论，落稿并拿 V 签",
+            "name": "sylow-prover-1",
+            "task": "攻坚目标：证明下面的算术-群论命题，落成一份自足、逐步给依据的证明手稿，并送 V 逐行走查拿到「成立」的签。\n\n命题：设 G 为有限群，|G| = p^a·m，p 素数且 (p,m)=1。则\n(E) G 存在阶为 p^a 的子群（p-Sylow 子群）；\n(C) G 的任两个 p-Sylow 子群共轭（故共轭意义下唯一）；\n(N) p-Sylow 子群的个数 n_p 满足 n_p ≡ 1 (mod p) 且 n_p | m。\n\n落稿要求（硬）：\n- 手稿落 `manuscripts/F/f-proof-<稿号>.md`，必须含 `## 命题` / `## 证明` / `## 依赖` 三节，自足（读者不需要另找文献就能跟下来），每一步给依据（引理名或已证事实）。\n- (E)(C)(N) 三条断言逐条覆盖，不许只证存在性。\n- 然后把该稿送 V 逐行走查；拿到 verdict 为「成立」的签才算交差。V 判「有毛病」时按它点出的缺陷步重写再送，不要换个说法绕过。\n\n依赖面参考（只是建议，最终怎么拆计划由你定）：\n路线 (a) Wielandt：令 G 作用在 p^a 元子集族 X = {S ⊆ G : |S| = p^a} 上；证 |X| 不被 p 整除（这一步是整条路线的承重点，需要一条 p-进赋值的小引理）；取 x ∈ X 使轨道长不被 p 整除 ⇒ 稳定化子阶含 p^a ⇒ 得 (E)。再把这套作用用于 G/P 的陪集作用得 n_p ≡ 1 (mod p)。\n路线 (b) Conrad：对 |G| 归纳 + 类方程，|G| 的 p 部分为 1 或 G 的中心有非平凡 p 部分 ⇒ 降阶用商群；中心 p 部分情形用 Cauchy 定理取中心元造阶 p^a 子群。\n两条都可行时择优（或写清哪一条更短、哪一条依赖更少），取舍理由回报给我，我写进研究手稿。\n\n子目标建议（每个可判定，你可以重排）：\n s1: 证明 p-进赋值引理 |X| ≢ 0 (mod p)（或你在 (b) 里需要的对应引理）；\n s2: 由轨道长推出 (E)；\n s3: 由共轭作用推出 (C) 与 n_p ≡ 1 (mod p)；\n s4: 由共轭类大小推出 n_p = [G : N_G(P)] | m；\n s5: 三条合起来写进手稿并送 V。\n\n请在收工时回报：手稿路径、V 签的读数（verdict 与签的那一份 sha）、以及你选的那条路线与理由。"
+          }
+        ],
+        "why": "文献登记（拿 lit_id 满足引用纪律）与证明攻坚（硬交付：稿 + V 签）互不依赖，一次并派以省墙钟"
+      },
+      "result": {
+        "summoned": [
+          "A.",
+          "F."
+        ],
+        "count": 2,
+        "ok_count": 0,
+        "refused_count": 0,
+        "failed_count": 0,
+        "running_count": 1,
+        "waves": [
+          1,
+          1
+        ],
+        "concurrent_peak": 1,
+        "results": [
+          {
+            "role": "A",
+            "action": "",
+            "instance": "",
+            "task_id": "t-000083",
+            "status": "running",
+            "outcome": null,
+            "refusal_reason": null,
+            "detail": "还在跑：本步先不等（可抢占）；它回来之后结局会在下一次返场时投给你（不要重派：同名实例的二次派活会被受控拒）"
+          },
+          {
+            "role": "F",
+            "action": "",
+            "instance": "",
+            "task_id": null,
+            "status": "pending",
+            "outcome": null,
+            "refusal_reason": null,
+            "queued": true,
+            "queued_behind": [
+              "t-000083"
+            ],
+            "expected_start": "等 t-000083 落定后自动开跑",
+            "detail": "还在排队（分波：前一波还没落定）⇒ 还没派出去；等 t-000083 落定后自动开跑。它不是没落地，不要重派（同名实例的二次派活会被受控拒），结局会在返场时投给你"
+          }
+        ],
+        "ok": true,
+        "preempted": true,
+        "dispatched": [
+          "t-000083"
+        ],
+        "running": [
+          "t-000083"
+        ],
+        "queued": [
+          {
+            "role": "F",
+            "instance": "",
+            "queued_behind": [
+              "t-000083"
+            ],
+            "expected_start": "等 t-000083 落定后自动开跑"
+          }
+        ],
+        "how_to_get_the_rest": "这一批还没跑完，所以 `results` 里状态为 running 的那几项还没有结局。它们回来之后，框架会在你下一次被问之前以【子代理返场】投给你（不必再派一次，也不要因为 status=running 就重试）。`queued=true` 的那几项是分波排队（还没轮到，不是没落地）：它们会在`expected_start` 说的那一波落定后自动开跑，同样不要重派 —— 用同名 instance 再派一次会被受控拒（`dispatch_names_an_active_instance`）。在那之前你仍拿得到回合：可以 watch 全树、guide 给指导、补派新活；收工（final）会被拒到它们回齐。",
+        "dispatch_policy": {
+          "checked": true,
+          "dispatches": 2,
+          "violations": [],
+          "self_authored_plans": 0,
+          "named_plans": [],
+          "conjectures": [],
+          "reason": "D 的派活文本里没有点名任何一条它自己登记的猜想号（方向由文本给，号不作为命令）",
+          "events_error": ""
+        },
+        "秘书": {
+          "alarms": [],
+          "fail_open": false,
+          "wash": {
+            "checked": true,
+            "washed": false,
+            "refused": "",
+            "reason": ""
+          },
+          "changes": [],
+          "surface_fit": {
+            "shape": "summon_many",
+            "checked": true,
+            "fits": null,
+            "items": [
+              {
+                "index": 0,
+                "checked": false,
+                "fits": null,
+                "paths": [],
+                "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+                "reach": {
+                  "checked": true,
+                  "verdict": "unknown",
+                  "hops": [],
+                  "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+                }
+              },
+              {
+                "index": 1,
+                "checked": false,
+                "fits": null,
+                "paths": [],
+                "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+                "reach": {
+                  "checked": true,
+                  "verdict": "unknown",
+                  "hops": [],
+                  "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+                }
+              }
+            ],
+            "reach_bad": [],
+            "reason": "",
+            "reach_reason": ""
+          },
+          "reach_fit": {}
+        },
+        "可退役": [
+          {
+            "task_id": "t-000004",
+            "role": "A",
+            "branch": "waiting_no_children",
+            "reading": {
+              "items_open": 0,
+              "items_open_ids": [],
+              "items_open_expects": {},
+              "items_open_states": {}
+            }
+          },
+          {
+            "task_id": "t-000083",
+            "role": "A",
+            "branch": "active",
+            "reading": {
+              "items_open": 0,
+              "items_open_ids": [],
+              "items_open_expects": {},
+              "items_open_states": {}
+            }
+          }
+        ],
+        "新消息": [
+          {
+            "板": "- （新）[t-000021] notice·要一个回执 来自 M：沿链 t-000001->t-000003 传来的指导（M 发出）：证明线只保留一条：不要再派 A 检索（M 的 A 线已把 reference/ 4 份 Sylow 文献入库、B 已消化出概念行）。你的唯一交付是把 Sylow 第一定理＋三条推论（共轭、n_p≡1 mod p、n_p|m）证完：派 F 立项、产出自足证明稿 f-proof-<稿号>.md（关键引理写清：轨道-稳定化子、类方程、正规化子 N_G(P) 的作用），稿交 V 审拿到「成立」签；再把结论与四格证据（evidence_kind / evidence_path / evidence_sha256 / v_signature）写进 manuscripts/D/RESEARCH.md 的携带单供 B 收录。预算紧张（余约 $2.6），不要再开第二条支线，也不要重复检索文献。\n- （新）[t-000082] notice·要一个回执 来自 A：A.run_once 已完成并已派 B 收编，待裁表已清空（pending_total=0）。\n\n【委托 r-000001（本地摄取：reference/ 下用户逐字点名的 4 份 Sylow 定理 PDF）】outcome=ok、done=true、result_lit_ids=[000000,000001,000002,000003]，四个号在 literature 表里都能读到。\n逐条判收前都走过「抽读 → fs.read 读正文 → 判收」：4 份 quality.state 全为 readable（Conrad 7 页/19296 字、Harris GU4041 65 页/38661 字、Idelhaj 8 页/21369 字、Cunningham(MIT 18.704，文件名标 vakil) 3 页/5630 字）。中间一次 lit.admit 被受控拒（no_readback，槽 000000 另报 read_stale）—— 回读 lit.stage_list 并重读 .txt 后通过，未跳过闸门。\n入库结果：lit:000000…（正文截断过，完整内容在台账 detail）\n- （新）[t-000086] notice·要一个回执 来自 clock：时间到：认领检索请求 r-000001｜等了 41 分钟 13 秒（起于 03:41:18，到于 04:22:31）"
+          }
+        ],
+        "秘书加工": {
+          "reworked": [
+            {
+              "item": {
+                "板": "- （新）[t-000021] notice·要一个回执 来自 M：沿链 t-000001->t-000003 传来的指导（M 发出）：证明线只保留一条：不要再派 A 检索（M 的 A 线已把 reference/ 4 份 Sylow 文献入库、B 已消化出概念行）。你的唯一交付是把 Sylow 第一定理＋三条推论（共轭、n_p≡1 mod p、n_p|m）证完：派 F 立项、产出自足证明稿 f-proof-<稿号>.md（关键引理写清：轨道-稳定化子、类方程、正规化子 N_G(P) 的作用），稿交 V 审拿到「成立」签；再把结论与四格证据（evidence_kind / evidence_path / evidence_sha256 / v_signature）写进 manuscripts/D/RESEARCH.md 的携带单供 B 收录。预算紧张（余约 $2.6），不要再开第二条支线，也不要重复检索文献。\n- （新）[t-000082] notice·要一个回执 来自 A：A.run_once 已完成并已派 B 收编，待裁表已清空（pending_total=0）。\n\n【委托 r-000001（本地摄取：reference/ 下用户逐字点名的 4 份 Sylow 定理 PDF）】outcome=ok、done=true、result_lit_ids=[000000,000001,000002,000003]，四个号在 literature 表里都能读到。\n逐条判收前都走过「抽读 → fs.read 读正文 → 判收」：4 份 quality.state 全为 readable（Conrad 7 页/19296 字、Harris GU4041 65 页/38661 字、Idelhaj 8 页/21369 字、Cunningham(MIT 18.704，文件名标 vakil) 3 页/5630 字）。中间一次 lit.admit 被受控拒（no_readback，槽 000000 另报 read_stale）—— 回读 lit.stage_list 并重读 .txt 后通过，未跳过闸门。\n入库结果：lit:000000…（正文截断过，完整内容在台账 detail）\n- （新）[t-000086] notice·要一个回执 来自 clock：时间到：认领检索请求 r-000001｜等了 41 分钟 13 秒（起于 03:41:18，到于 04:22:31）"
+              },
+              "addendum": "我的产出物口径：交付状态 —— 交给谁：派你这趟活的父（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名）+ 收方 B（入库）；形态：`manuscripts/D/RESEARCH.md` + `manuscripts/D/<qid>-research.md` 工作稿+ `research_questions` / `search_requests` 行（报告本体落成盘上文件；台账那一行 `kind=research` 由 `write_report` 同一笔事务落 —— 见 `policy`，**不是本角色手写的表**）；可核字段：`research_questions.question_id` / `research_questions.status` / `research_questions.waiting_request_ids` / 每个结论目录行上的四格 `evidence_kind` / `evidence_path` / `evidence_sha256` / `v_signature`；算做完：这一趟的每条结论在 `manuscripts/D/RESEARCH.md` 的「已确定的结论」有一行、四格都指得到盘上对象（`report_landing_reading` 可核），且 `research_questions.status` 与现场一致。**跨趟的那一份交付是研究手稿 `manuscripts/D/RESEARCH.md`**（业主 2026-10-14 第 1 条）：成果概述 / 定义与已知 / 已确定的结论 / 尝试与失败 / 例子与反例 / 未解问题 / 下一步七节 —— 下一趟接手的人先读它，而不是去翻这一趟的会话记录。\n我在本条线上的位置：研究循环：把一个研究方向收敛成一个有证据支撑的结论，或如实说证据不足",
+              "problem": "",
+              "fail_open": false
+            }
+          ],
+          "handoffs_digest": "- 000002 V→B：000061 新版（正文 sha 5afd81fc）复审成立、零 finding；签块已落该稿，台账 v-000004\n- 000003 V→B：v-000001 有毛病：仅「## 命题」段与 statement_full 错配（Sylow 第三定理被渲染进命题段），证明正文无数学缺陷\n- 000004 V→B：stmt:000063 稿 000006 审毕：有毛病（第 2 步，事实 A 良定义方向缺失），不签发，最小补法一行\n- 000005 V→B：V 的两态结论：有毛病；正文零缺陷，唯一拦截项是稿头「## 命题」段与 statement_full 错配（渲染侧修）\n- 000006 V→B：stmt:000063 复核通过（成立，零 finding）：新稿已补全良定义方向，签块在 manuscripts/B/b-proof-000006.md（正文 sha 25448766…），收录认领 v-000005"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 67584,
+        "prompt_cache_miss_tokens": 2371,
+        "tokens_in": 69955,
+        "tokens_out": 1284,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    },
+    {
+      "index": 8,
+      "shape": "note",
+      "payload": {
+        "text": "第 9 步（监控回合）：M 沿链的指导（板项 t-000021）已收到 —— 证明线只留一条，不要再派 A 检索；reference/ 4 份已由 M 的 A 线入库为 lit:000000（Conrad）/000001（Harris）/000002（Idelhaj）/000003（Vakil，文件名标 vakil、实为 MIT 18.704），B 已消化出概念行。我这一趟自己派给 A 的 t-000083（任务正是登记这 4 份 PDF）因此是重复动作，但已在本轮在飞、无法在监控回合撤；等它返场后按『重复劳动』如实记一笔并销号，不顺延它的成果。F 的派活已排在 t-000083 之后的分波里（queued，不要重派，重派会被 dispatch_names_an_active_instance 拒）：它的任务 = 证 (E) 存在性 / (C) 共轭 / (N1) n_p≡1 (mod p) / (N2) n_p|m，落 manuscripts/F/f-proof-<稿号>.md（## 命题 / ## 证明 / ## 依赖 三节，关键引理点名轨道-稳定化子、类方程、N_G(P) 的作用），并送 V 逐行走查拿「成立」签。下一批我要做的三件事（按序）：① 读回 F 的 plan_id/history 与稿路径；② 若 V 签未到就让 F 去补签（D 不到 V 的边，不许自己派 V）；③ 把四格（evidence_kind=proof / evidence_path=manuscripts/F/f-proof-<稿号>.md / evidence_sha256=盘上字节 sha / v_signature）写进 manuscripts/D/RESEARCH.md 的「已确定的结论」并把 RESEARCH.md 七节补全，然后派 B 登记这条命题。research_questions 目前 000000 = open，收口时按现场推。预算余 ~2.19 美元，不再开第二条支线。"
+      },
+      "result": {
+        "note_written": "D:\\Incubator\\projects\\sylow-4\\notes\\D-sylow-proof.md",
+        "ok": true
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 69120,
+        "prompt_cache_miss_tokens": 4741,
+        "tokens_in": 73861,
+        "tokens_out": 898,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    },
+    {
+      "index": 9,
+      "shape": "roster",
+      "payload": {
+        "of": "self"
+      },
+      "result": {
+        "checked": true,
+        "rows": [
+          {
+            "name": "A1",
+            "role": "A",
+            "brief": "认领检索请求 r-000001",
+            "state": "已停",
+            "state_checked": true,
+            "state_reason": "",
+            "brief_source": "secretary",
+            "retirable": true,
+            "items_open": 0,
+            "task_id": "t-000004",
+            "status": "idle",
+            "in_flight": 0,
+            "last_reading": "",
+            "active": false,
+            "waiting_only": false,
+            "waiting_note": "它自己不忙，名下也没有活跃的下级",
+            "agent_state": "silent"
+          },
+          {
+            "name": "reg-refs-1",
+            "role": "A",
+            "brief": "登记 reference/ 里 4 份 PDF 并回 lit_id",
+            "state": "已停",
+            "state_checked": true,
+            "state_reason": "",
+            "brief_source": "parent",
+            "retirable": true,
+            "items_open": 0,
+            "task_id": "t-000083",
+            "status": "idle",
+            "in_flight": 0,
+            "last_reading": "reference/ 4 份 PDF 已入库：lit:000000–000003，全文可读（无 no_text_layer），待裁表 0 条",
+            "active": false,
+            "waiting_only": false,
+            "waiting_note": "它自己不忙，名下也没有活跃的下级",
+            "agent_state": "silent"
+          },
+          {
+            "name": "sylow-prover-1",
+            "role": "F",
+            "brief": "证 Sylow 定理及两条推论，落稿并拿 V 签",
+            "state": "活跃",
+            "state_checked": true,
+            "state_reason": "",
+            "brief_source": "parent",
+            "retirable": false,
+            "items_open": 1,
+            "task_id": "t-000089",
+            "status": "running",
+            "in_flight": 1,
+            "last_reading": "",
+            "active": true,
+            "waiting_only": false,
+            "waiting_note": "它自己在跑（status=running）",
+            "agent_state": "flying"
+          }
+        ],
+        "more": 0,
+        "scope": "self",
+        "diagnostics": [],
+        "parent": {
+          "checked": true,
+          "task_id": "t-000001",
+          "role": "M",
+          "name": "",
+          "why": "父的名册名读不到（它记在祖父的名册里）"
+        },
+        "reason": "",
+        "counts": {
+          "checked": true,
+          "reason": "",
+          "owner": "t-000003",
+          "children_unretired": 3,
+          "active_child_count": 1,
+          "labels": {
+            "children_unretired": "子代理数",
+            "active_child_count": "活跃子代理数"
+          },
+          "waiting_only": [],
+          "unjudged": [],
+          "states": {
+            "flying": 1,
+            "standby": 0,
+            "silent": 2,
+            "unknown": 0,
+            "active": 1,
+            "total": 3
+          },
+          "state_labels": {
+            "flying": "在飞",
+            "standby": "待机",
+            "silent": "静默",
+            "unknown": "未读到"
+          },
+          "complete": true,
+          "by_owner": {
+            "t-000003": {
+              "children_unretired": 3,
+              "active_child_count": 1,
+              "flying": 1,
+              "standby": 0,
+              "silent": 2,
+              "unknown": 0
+            }
+          },
+          "bad_roster_lines": [],
+          "note": "子代理数=3，活跃子代理数=1（在飞 1 · 待机 0 · 静默 2）"
+        },
+        "states": {
+          "flying": 1,
+          "standby": 0,
+          "silent": 2,
+          "unknown": 0,
+          "active": 1,
+          "total": 3
+        },
+        "children_unretired": 3,
+        "active_child_count": 1,
+        "可退役": [
+          {
+            "task_id": "t-000004",
+            "role": "A",
+            "branch": "waiting_no_children",
+            "reading": {
+              "items_open": 0,
+              "items_open_ids": [],
+              "items_open_expects": {},
+              "items_open_states": {}
+            }
+          },
+          {
+            "task_id": "t-000083",
+            "role": "A",
+            "branch": "waiting_no_children",
+            "reading": {
+              "items_open": 0,
+              "items_open_ids": [],
+              "items_open_expects": {},
+              "items_open_states": {}
+            }
+          },
+          {
+            "task_id": "t-000089",
+            "role": "F",
+            "branch": "active",
+            "reading": {
+              "items_open": 1,
+              "items_open_ids": [
+                "t-000090"
+              ],
+              "items_open_expects": {
+                "t-000090": "ack"
+              },
+              "items_open_states": {
+                "t-000090": "queued"
+              }
+            }
+          }
+        ],
+        "新消息": [
+          {
+            "板": "- （已读）[t-000021] notice·要一个回执 来自 M：沿链 t-000001->t-000003 传来的指导（M 发出）：证明线只保留一条：不要再派 A 检索（M 的 A 线已把 reference/ 4 份 Sylow 文献入库、B 已消化出概念行）。你的唯一交付是把 Sylow 第一定理＋三条推论（共轭、n_p≡1 mod p、n_p|m）证完：派 F 立项、产出自足证明稿 f-proof-<稿号>.md（关键引理写清：轨道-稳定化子、类方程、正规化子 N_G(P) 的作用），稿交 V 审拿到「成立」签；再把结论与四格证据（evidence_kind / evidence_path / evidence_sha256 / v_signature）写进 manuscripts/D/RESEARCH.md 的携带单供 B 收录。预算紧张（余约 $2.6），不要再开第二条支线，也不要重复检索文献。\n- （新）[t-000091] notice·要一个回执 来自 clock：时间到：把 reference/ 下已有的 4 份 PDF 登记成 literature 行并回给我 lit_id（这一步是入库不是检索，别再换源找全文）： 1) reference/9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf（Conrad, Proof of the Sylow Theorems） 2) reference/11dc1a689516-h｜等了 50 秒（起于 04:22:10，到于 04:23:00）。它交的是：ok：执行完成"
+          }
+        ],
+        "秘书加工": {
+          "reworked": [
+            {
+              "item": {
+                "板": "- （已读）[t-000021] notice·要一个回执 来自 M：沿链 t-000001->t-000003 传来的指导（M 发出）：证明线只保留一条：不要再派 A 检索（M 的 A 线已把 reference/ 4 份 Sylow 文献入库、B 已消化出概念行）。你的唯一交付是把 Sylow 第一定理＋三条推论（共轭、n_p≡1 mod p、n_p|m）证完：派 F 立项、产出自足证明稿 f-proof-<稿号>.md（关键引理写清：轨道-稳定化子、类方程、正规化子 N_G(P) 的作用），稿交 V 审拿到「成立」签；再把结论与四格证据（evidence_kind / evidence_path / evidence_sha256 / v_signature）写进 manuscripts/D/RESEARCH.md 的携带单供 B 收录。预算紧张（余约 $2.6），不要再开第二条支线，也不要重复检索文献。\n- （新）[t-000091] notice·要一个回执 来自 clock：时间到：把 reference/ 下已有的 4 份 PDF 登记成 literature 行并回给我 lit_id（这一步是入库不是检索，别再换源找全文）： 1) reference/9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf（Conrad, Proof of the Sylow Theorems） 2) reference/11dc1a689516-h｜等了 50 秒（起于 04:22:10，到于 04:23:00）。它交的是：ok：执行完成"
+              },
+              "addendum": "我的产出物口径：交付状态 —— 交给谁：派你这趟活的父（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名）+ 收方 B（入库）；形态：`manuscripts/D/RESEARCH.md` + `manuscripts/D/<qid>-research.md` 工作稿+ `research_questions` / `search_requests` 行（报告本体落成盘上文件；台账那一行 `kind=research` 由 `write_report` 同一笔事务落 —— 见 `policy`，**不是本角色手写的表**）；可核字段：`research_questions.question_id` / `research_questions.status` / `research_questions.waiting_request_ids` / 每个结论目录行上的四格 `evidence_kind` / `evidence_path` / `evidence_sha256` / `v_signature`；算做完：这一趟的每条结论在 `manuscripts/D/RESEARCH.md` 的「已确定的结论」有一行、四格都指得到盘上对象（`report_landing_reading` 可核），且 `research_questions.status` 与现场一致。**跨趟的那一份交付是研究手稿 `manuscripts/D/RESEARCH.md`**（业主 2026-10-14 第 1 条）：成果概述 / 定义与已知 / 已确定的结论 / 尝试与失败 / 例子与反例 / 未解问题 / 下一步七节 —— 下一趟接手的人先读它，而不是去翻这一趟的会话记录。\n我在本条线上的位置：研究循环：把一个研究方向收敛成一个有证据支撑的结论，或如实说证据不足",
+              "problem": "",
+              "fail_open": false
+            }
+          ],
+          "handoffs_digest": "- 000003 V→B：v-000001 有毛病：仅「## 命题」段与 statement_full 错配（Sylow 第三定理被渲染进命题段），证明正文无数学缺陷\n- 000004 V→B：stmt:000063 稿 000006 审毕：有毛病（第 2 步，事实 A 良定义方向缺失），不签发，最小补法一行\n- 000005 V→B：V 的两态结论：有毛病；正文零缺陷，唯一拦截项是稿头「## 命题」段与 statement_full 错配（渲染侧修）\n- 000006 V→B：stmt:000063 复核通过（成立，零 finding）：新稿已补全良定义方向，签块在 manuscripts/B/b-proof-000006.md（正文 sha 25448766…），收录认领 v-000005\n- 000007 A→D：reference/ 4 份 PDF 已入库：lit:000000–000003，全文可读（无 no_text_layer），待裁表 0 条"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 73088,
+        "prompt_cache_miss_tokens": 2503,
+        "tokens_in": 75591,
+        "tokens_out": 185,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    },
+    {
+      "index": 11,
+      "shape": "note",
+      "payload": {
+        "text": "第 12 步（监控回合）：F 的实例 sylow-prover-1（t-000089）状态为「在飞」，名下还有 1 个未消项 t-000090，不能重派、不能 interrupt。把 t-000086、t-000088、t-000091 三个 notice 先留着不 ack，等 F 返场后一起用 conductor.ack 消掉。A 侧的 t-000083 已 done、lit:000000–000003 可读；A1 与 reg-refs-1 现在都是静默，但它们名下还有待办事宜，所以要到下一回合，再按『重复劳动』的理由把它们销号。这一步不另开研究支线，也不碰台账写入，只等 F 把命交上来。需要核对的三个点按顺序：① 稿 manuscripts/F/f-proof-<稿号>.md 是否包含 ## 命题 / ## 证明 / ## 依赖 三节，并覆盖 (E)、(C)、(N1)、(N2) 四条；② V 签是否已经读到「成立」；若未拿到，就让 F 去补签，D 不能直接到 V 的边；③ 四格证据（evidence_kind=proof / evidence_path / evidence_sha256=盘上字节 sha / v_signature）照抄进 manuscripts/D/RESEARCH.md 的「已确定的结论」，再调 write_report 和派 B 登记 stmt。research_questions 000000 到收工时按现场推。预算余约 2.18 美元。"
+      },
+      "result": {
+        "note_written": "D:\\Incubator\\projects\\sylow-4\\notes\\D-sylow-proof.md",
+        "ok": true
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 74368,
+        "prompt_cache_miss_tokens": 4702,
+        "tokens_in": 79070,
+        "tokens_out": 433,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    },
+    {
+      "index": 12,
+      "shape": "note",
+      "payload": {
+        "text": "第 13 步（监控回合）：F（sylow-prover-1 / t-000089）仍在飞，没有新消息，不改动。本回合允许的动作只有补派、收口、note 三类，而 F 在跑，无法重派或 interrupt；A 侧已交付 lit:000000–000003。下一步计划不变：等 F 返场后，① 读回 plan_id、history 与稿路径 manuscripts/F/f-proof-<号>.md，核对 ## 命题、## 证明、## 依赖 三节是否齐全以及 (E)/(C)/(N1)/(N2) 四条；② 核对 V 的「成立」签是否已经读到；若未读到，让 F 去补签，D 不能对 V 发边；③ 把四格 evidence_kind=proof / evidence_path / evidence_sha256 / v_signature 照抄进 manuscripts/D/RESEARCH.md 七节，run D.write_report，再派 B register_statement（只递 pointer：proof_manuscript + 命题号 + 出处）；④ 用 ack 消掉 t-000021/t-000086/t-000088/t-000089/t-000091 等板项，并按「重复劳动」销号 A1 / reg-refs-1；⑤ research_questions 000000 按现场推 answered。预算余约 2.09 美元，不开第二条支线。"
+      },
+      "result": {
+        "note_written": "D:\\Incubator\\projects\\sylow-4\\notes\\D-sylow-proof.md",
+        "ok": true
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 77824,
+        "prompt_cache_miss_tokens": 2172,
+        "tokens_in": 79996,
+        "tokens_out": 376,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    },
+    {
+      "index": 13,
+      "shape": "note",
+      "payload": {
+        "text": "第 14 步（监控回合）：F（sylow-prover-1 / t-000089）仍在跑，没有新消息。本回合按允许的出口只能写 note，因此不改动现场。等 F 返场后按顺序做：① 读回 plan_id、history 与稿路径 manuscripts/F/f-proof-<号>.md；② 核对稿中 ## 命题、## 证明、## 依赖 三节是否齐全，以及 (E)/(C)/(N1)/(N2) 四条是否覆盖，并核对 V 的「成立」签是否读到，若未读到就让 F 补签；③ 把 evidence_kind=proof、evidence_path、evidence_sha256（以盘上字节为准）、v_signature 四格写入 manuscripts/D/RESEARCH.md 的七节，再运行 write_report 并派 B register_statement（只递 pointer）；④ 用 ack 消掉 t-000021、t-000086、t-000088、t-000089、t-000090、t-000091，并按『重复劳动』销号 A1 与 reg-refs-1；⑤ 按现场情况推进 research_questions 000000。预算余 ~2.0 美元，不开第二条支线。"
+      },
+      "result": {
+        "note_written": "D:\\Incubator\\projects\\sylow-4\\notes\\D-sylow-proof.md",
+        "ok": true
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 78336,
+        "prompt_cache_miss_tokens": 2503,
+        "tokens_in": 80839,
+        "tokens_out": 360,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    },
+    {
+      "index": 14,
+      "shape": "tool",
+      "payload": {
+        "name": "conductor.ack",
+        "args": {
+          "item_ids": [
+            "t-000021",
+            "t-000082",
+            "t-000086",
+            "t-000088",
+            "t-000091"
+          ],
+          "close": "acked",
+          "note": "读到：M 的指导（只做证明线、不派 A 检索）；A 已入库 lit:000000–000003；时钟唤醒只是提示"
+        },
+        "why": "把已读的通知型板项消掉，免得它们挡收工与销号"
+      },
+      "result": {
+        "tool": "conductor.ack",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "ok": true,
+          "state": "acked",
+          "acked": [
+            "t-000021",
+            "t-000082",
+            "t-000086",
+            "t-000088",
+            "t-000091"
+          ],
+          "already_done": [
+            "t-000082",
+            "t-000086",
+            "t-000088",
+            "t-000091"
+          ],
+          "refused": [],
+          "unknown": [],
+          "missing": [],
+          "not_yours": [],
+          "refusal_codes": [],
+          "results": [
+            {
+              "item_id": "t-000021",
+              "ok": true,
+              "code": "",
+              "state_before": "seen",
+              "state_after": "done",
+              "step": 6,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000082",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000086",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000088",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000091",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            }
+          ],
+          "count": 5,
+          "requested": 5,
+          "by_task_id": "t-000003",
+          "note": "读到：M 的指导（只做证明线、不派 A 检索）；A 已入库 lit:000000–000003；时钟唤醒只是提示",
+          "close": "acked",
+          "reason": "确认了 5 条"
+        },
+        "error": "",
+        "meta": {
+          "checked": true,
+          "ok": true,
+          "state": "acked",
+          "acked": [
+            "t-000021",
+            "t-000082",
+            "t-000086",
+            "t-000088",
+            "t-000091"
+          ],
+          "already_done": [
+            "t-000082",
+            "t-000086",
+            "t-000088",
+            "t-000091"
+          ],
+          "refused": [],
+          "unknown": [],
+          "missing": [],
+          "not_yours": [],
+          "refusal_codes": [],
+          "results": [
+            {
+              "item_id": "t-000021",
+              "ok": true,
+              "code": "",
+              "state_before": "seen",
+              "state_after": "done",
+              "step": 6,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000082",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000086",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000088",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000091",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            }
+          ],
+          "count": 5,
+          "requested": 5,
+          "by_task_id": "t-000003",
+          "note": "读到：M 的指导（只做证明线、不派 A 检索）；A 已入库 lit:000000–000003；时钟唤醒只是提示",
+          "close": "acked",
+          "reason": "确认了 5 条"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 78848,
+        "prompt_cache_miss_tokens": 2794,
+        "tokens_in": 81642,
+        "tokens_out": 642,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    },
+    {
+      "index": 19,
+      "shape": "tool",
+      "payload": {
+        "name": "attack.list_plans",
+        "args": {
+          "include_terminal": true
+        },
+        "why": "F 已跑 30 步并报账，读一眼它的计划与子目标状态，判断是本趟能收口还是要继续放行"
+      },
+      "result": {
+        "tool": "attack.list_plans",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "total": 0,
+          "plans": [],
+          "reason": "共 0 个计划（include_terminal=True；只列你名下，过滤前 2 条）"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 79360,
+        "prompt_cache_miss_tokens": 4502,
+        "tokens_in": 83862,
+        "tokens_out": 114,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    },
+    {
+      "index": 22,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.stat",
+        "args": {
+          "path": "manuscripts/F/f-proof-000000.md"
+        },
+        "why": "拿证明稿在盘上字节的 sha256 —— 四格里的 evidence_sha256 必须照抄它"
+      },
+      "result": {
+        "tool": "fs.stat",
+        "ok": true,
+        "data": {
+          "path": "manuscripts/F/f-proof-000000.md",
+          "exists": true,
+          "is_dir": false,
+          "is_file": true,
+          "is_symlink": false,
+          "size": 15338,
+          "mtime": "2026-11-24T05:10:00+08:00",
+          "mtime_epoch": 1795468200.47,
+          "link_target": null,
+          "sha256": "36be2374f66fd8bc5960e186388dff7729a5839ab1b51948617cbaf51350f390"
+        },
+        "error": "",
+        "meta": {
+          "path": "manuscripts/F/f-proof-000000.md",
+          "size": 15338,
+          "sha256": "36be2374f66fd8bc5960e186388dff7729a5839ab1b51948617cbaf51350f390"
+        },
+        "可退役": [
+          {
+            "task_id": "t-000004",
+            "role": "A",
+            "branch": "waiting_no_children",
+            "reading": {
+              "items_open": 0,
+              "items_open_ids": [],
+              "items_open_expects": {},
+              "items_open_states": {}
+            }
+          },
+          {
+            "task_id": "t-000083",
+            "role": "A",
+            "branch": "waiting_no_children",
+            "reading": {
+              "items_open": 0,
+              "items_open_ids": [],
+              "items_open_expects": {},
+              "items_open_states": {}
+            }
+          },
+          {
+            "task_id": "t-000089",
+            "role": "F",
+            "branch": "waiting_no_children",
+            "reading": {
+              "items_open": 0,
+              "items_open_ids": [],
+              "items_open_expects": {},
+              "items_open_states": {}
+            }
+          }
+        ],
+        "新消息": [
+          {
+            "板": "- （新）[t-000152] notice·要一个回执 来自 clock：时间到：攻坚目标：证明下面的算术-群论命题，落成一份自足、逐步给依据的证明手稿，并送 V 逐行走查拿到「成立」的签。 命题：设 G 为有限群，|G| = p^a·m，p 素数且 (p,m)=1。则 (E) G 存在阶为 p^a 的子群（p-Sylow 子群）； (C) G 的任两个 p-Sylow 子群共轭（故共轭意义下唯一）； (N) p-Sylow 子群的个数 n_p 满足 n_p ≡ 1 (mod｜等了 52 分钟 14 秒（起于 04:22:59，到于 05:15:14）。它交的是：no_result：执行完成"
+          }
+        ],
+        "秘书加工": {
+          "reworked": [
+            {
+              "item": {
+                "板": "- （新）[t-000152] notice·要一个回执 来自 clock：时间到：攻坚目标：证明下面的算术-群论命题，落成一份自足、逐步给依据的证明手稿，并送 V 逐行走查拿到「成立」的签。 命题：设 G 为有限群，|G| = p^a·m，p 素数且 (p,m)=1。则 (E) G 存在阶为 p^a 的子群（p-Sylow 子群）； (C) G 的任两个 p-Sylow 子群共轭（故共轭意义下唯一）； (N) p-Sylow 子群的个数 n_p 满足 n_p ≡ 1 (mod｜等了 52 分钟 14 秒（起于 04:22:59，到于 05:15:14）。它交的是：no_result：执行完成"
+              },
+              "addendum": "我的产出物口径：交付状态 —— 交给谁：派你这趟活的父（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名）+ 收方 B（入库）；形态：`manuscripts/D/RESEARCH.md` + `manuscripts/D/<qid>-research.md` 工作稿+ `research_questions` / `search_requests` 行（报告本体落成盘上文件；台账那一行 `kind=research` 由 `write_report` 同一笔事务落 —— 见 `policy`，**不是本角色手写的表**）；可核字段：`research_questions.question_id` / `research_questions.status` / `research_questions.waiting_request_ids` / 每个结论目录行上的四格 `evidence_kind` / `evidence_path` / `evidence_sha256` / `v_signature`；算做完：这一趟的每条结论在 `manuscripts/D/RESEARCH.md` 的「已确定的结论」有一行、四格都指得到盘上对象（`report_landing_reading` 可核），且 `research_questions.status` 与现场一致。**跨趟的那一份交付是研究手稿 `manuscripts/D/RESEARCH.md`**（业主 2026-10-14 第 1 条）：成果概述 / 定义与已知 / 已确定的结论 / 尝试与失败 / 例子与反例 / 未解问题 / 下一步七节 —— 下一趟接手的人先读它，而不是去翻这一趟的会话记录。\n我在本条线上的位置：研究循环：把一个研究方向收敛成一个有证据支撑的结论，或如实说证据不足",
+              "problem": "",
+              "fail_open": false
+            }
+          ],
+          "handoffs_digest": "- 000012 H→G：doc:000000 本轮审校不通过（1 error + 2 warning + 1 info），状态置 in_review；154 行 thm:unique 需降级或就地补披露\n- 000013 H→G：doc:000000 第 2 轮复审：旧四条全部 fixed，但新开 3 条（1 error：153 行过程词；2 warning：below 指反、附录 A 过程词），裁决 revise_again、status 保持 in_review\n- 000014 H→G：doc:000000 第 8 轮复审：000007/000008 两条 warning 逐条核清并置 fixed，status=accepted（已签）；另附两处如实缺口（G10 格式、bibitem 残留 file 名）\n- 000015 G→M：Sylow 定理论文成文交付：doc:000000 已被 H 置 accepted，论文包 main.tex/main.pdf(7 页)/MAPPING.json 齐全\n- 000016 V→F：f-proof-000000 整体重读结论：成立（零 finding），重写的第 12 步已就地自足，签块已在稿第 4 行、正文 sha 对齐"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 81536,
+        "prompt_cache_miss_tokens": 3739,
+        "tokens_in": 85275,
+        "tokens_out": 864,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    },
+    {
+      "index": 24,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/F/f-proof-000000.md"
+        },
+        "why": "读 F 的证明稿全文：核对 ## 命题 / ## 证明 / ## 依赖 三节与 (E)(C)(N) 覆盖，并摘出要在 RESEARCH.md 引用的行"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# F 的证明手稿：就地证出四条预备事实：事实1 左陪集与 Lagrange（|A|=|B|·[A:B]）、事实2 轨道分解与轨道-稳定化…\n\n- 计划：000001 · 子目标：s1\n- V 签：已签=true；判词=成立；连续=3/3；正文sha=add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a；时间=2026-11-24T05:10:00+08:00；签名者=secretary:F；台账=verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007；手稿号=000000\n- 依赖面洗稿：已洗=true；执行者=secretary-F\n- 稿族：f-proof\n- 产出者：agent-F-sylow-prover-1\n- 正文sha：add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a\n- 命题指纹：ee0b2a06257685d6974f2808dbd0c1b92bb1334af7f93d9687004d6dc118d5ac\n- 命题类型：conjecture\n- 登记时间：2026-11-24T04:41:31+08:00\n- 标签：F 攻坚 000001 子目标 s1\n- 版本：2026-11-24T04:59:45+08:00@add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a\n\n## 命题\n\n设 G 为有限群，|G| = p^a·m，其中 p 是素数，a ≥ 0、m ≥ 1 是整数，且 p 不整除 m。记 n = p^a。则 (E) G 存在阶为 n 的子群；(C) 若 P、Q 是 G 的两个阶为 n 的子群，则存在 g ∈ G 使 Q = gPg⁻¹；(N) 若 n_p 表示 G 的阶为 n 的子群个数，则 n_p ≡ 1 (mod p) 且 n_p 整除 m。\n\n## 证明\n\n1. 前提与记号。设 G 是有限群，|G| = p^a·m，其中 p 是素数，a ≥ 0 与 m ≥ 1 是整数，且 p 不整除 m。记 n = p^a，称 G 的阶为 n 的子群为 p-Sylow 子群，记其个数为 n_p。本步把下列约定声明为全篇前提：群的定义、子群的定义、有限集基数的基本性质、以及 |G| = p^a·m 与 p ∤ m。除此之外不使用任何未在本稿内证明的事实：下文事实 1 至事实 8 各自带完整推导，且每一步只引用它之前已经写出的句子。（前提）\n2. 事实 1（左陪集分解与 Lagrange 定理）。设 A 是有限群，B ≤ A。在 A 上定义 a ~ b 当且仅当 a⁻¹b ∈ B。这是等价关系：自反性是 a⁻¹a = e ∈ B；对称性由 a⁻¹b ∈ B 推出 b⁻¹a = (a⁻¹b)⁻¹ ∈ B（B 对取逆封闭）；传递性由 a⁻¹b ∈ B 与 b⁻¹c ∈ B 推出 a⁻¹c = (a⁻¹b)(b⁻¹c) ∈ B（B 对乘法封闭）。含 a 的等价类恰是左陪集 aB：b ~ a 当且仅当 a⁻¹b ∈ B 当且仅当 b ∈ aB。左乘给出从 B 到 aB 的双射 b ↦ ab（逆映射为 x ↦ a⁻¹x），故 |aB| = |B|。A 是两两不交的左陪集之并，设左陪集个数为 [A:B]，则 |A| = |B|·[A:B]。特别地 |B| 整除 |A|，且 [A:B] = |A|/|B|。又若 B ≤ C ≤ A，则把 A 按右陪集分成 C 的陪集、再把每个 C 陪集按 B 的陪集分块，得 [A:B] = [A:C]·[C:B]。（前提）\n3. 事实 2（轨道分解与轨道-稳定化子）。设有限群 Γ 作用在集合 X 上。对 x ∈ X 记轨道 Γ·x = {g·x : g ∈ Γ}，稳定化子 Stab(x) = {g ∈ Γ : g·x = x}。Stab(x) 是 Γ 的子群：e·x = x；若 g·x = x 与 h·x = x 则 (gh)·x = g·(h·x) = g·x = x；若 g·x = x 则 g⁻¹·x = g⁻¹·(g·x) = (g⁻¹g)·x = x。两个轨道若相交则相等：若 z = g·x = h·y，则对任意 g' 有 g'·x = (g'g⁻¹h)·y ∈ Γ·y。故 X 是轨道的不交并。映射 φ 把左陪集 g·Stab(x) 送到 g·x 是良定义的双射：若 g·Stab(x) = h·Stab(x) 则…（落档截断，原 8799 字）",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/F/f-proof-000000.md",
+          "encoding": "utf-8",
+          "bytes_read": 15338,
+          "total_bytes": 15338,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 44,
+          "total_lines": 44,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 44 行",
+          "sha256": "36be2374f66fd8bc5960e186388dff7729a5839ab1b51948617cbaf51350f390"
+        },
+        "multi_call": {
+          "turn_index": 24,
+          "call_index": 0,
+          "calls": 2,
+          "step_index": 24
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 83072,
+        "prompt_cache_miss_tokens": 5204,
+        "tokens_in": 88276,
+        "tokens_out": 1000,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    },
+    {
+      "index": 25,
+      "shape": "tool",
+      "payload": {
+        "name": "manuscripts.submission_reading",
+        "args": {
+          "manuscript": "manuscripts/F/f-proof-000000.md"
+        },
+        "why": "核 V 的签是否真的落在这份稿上（产出方/已签/已提交三档分开读）"
+      },
+      "result": {
+        "tool": "manuscripts.submission_reading",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "manuscript": "manuscripts/F/f-proof-000000.md",
+          "manuscript_id": "000000",
+          "producer_role": "F",
+          "producer_code": "",
+          "state": "unsubmitted",
+          "submitted_at": "",
+          "via": "",
+          "signed": true,
+          "signed_sha": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a",
+          "sign_sha": "d9f22f3fe25ea51b81b62cea138aec187c15012bb4d6f614bbb0805b23fa26ad",
+          "sign_at": "2026-11-24T05:10:00+08:00",
+          "token": "",
+          "task_id": "",
+          "task_role": "",
+          "problems": [],
+          "why": "`tasks.artifacts` 里没有 f-proof 稿号 000000 的 `mss:` 记号 ⇒ 未提交（via 没有来源）"
+        },
+        "error": "",
+        "meta": {
+          "checked": true,
+          "manuscript": "manuscripts/F/f-proof-000000.md",
+          "manuscript_id": "000000",
+          "producer_role": "F",
+          "producer_code": "",
+          "state": "unsubmitted",
+          "submitted_at": "",
+          "via": "",
+          "signed": true,
+          "signed_sha": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a",
+          "sign_sha": "d9f22f3fe25ea51b81b62cea138aec187c15012bb4d6f614bbb0805b23fa26ad",
+          "sign_at": "2026-11-24T05:10:00+08:00",
+          "token": "",
+          "task_id": "",
+          "task_role": "",
+          "problems": [],
+          "why": "`tasks.artifacts` 里没有 f-proof 稿号 000000 的 `mss:` 记号 ⇒ 未提交（via 没有来源）"
+        },
+        "warn": "这一步给了 2 条调用，已按顺序逐条：第 1 条 fs.read 成功；第 2 条 manuscripts.submission_reading 成功：unsubmitted。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 24,
+          "call_index": 1,
+          "calls": 2,
+          "step_index": 25,
+          "summary": "这一步给了 2 条调用，已按顺序逐条：第 1 条 fs.read 成功；第 2 条 manuscripts.submission_reading 成功：unsubmitted。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 24,
+            "calls": 2,
+            "items": 2,
+            "steps": [
+              24,
+              25
+            ],
+            "executed": 2,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000003"
+    },
+    {
+      "index": 26,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.write",
+        "args": {
+          "path": "manuscripts/D/RESEARCH.md",
+          "content": "# D 的研究手稿 —— Sylow 定理（research_questions 000000）\n\n> 本文件是跨趟交付：下一趟接手的人先读它。七节次序固定。所有声称都带落点；没有落点的声称标「未核到」。\n\n## 成果概述\n\n- **证明了 Sylow 第一定理及两条推论**（(E) 存在性 / (C) 共轭 / (N) n_p ≡ 1 mod p 且 n_p | m）。证明正文是 F 落的那一份：`manuscripts/F/f-proof-000000.md`（44 行、15338 字节；盘上字节 sha256 `36be2374f66fd8bc5960e186388dff7729a5839ab1b51948617cbaf51350f390`；正文 sha（V 签的那一份）`add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a`）。**V 判「成立」、零 finding**，签时 2026-11-24T05:10:00+08:00，签块在稿第 4 行，台账 `verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007`（读数来自 `manuscripts.submission_reading`：`signed=true`、`signed_sha=add7f62c4…`）。\n- **证伪的猜想**：无。\n- **数值实验 / 样例**：本趟**没有做**数值实验（这是纯群论命题，E 侧未派活）；下面「例子与反例」里只列手算例子，并标明「本文自核（未入库）」。\n- **经验**：① 落稿时稿头「## 命题」段必须与登记的 `statement_full` 逐字一致，否则 V 会以「命题段错配」打回（见 `work/handoffs.jsonl` 000003 / 000005 两轮，正文零数学缺陷而被拦）；② 一条命题只立一条计划 —— 同一命题重复立项会留下一条 stalled、零手稿的旧计划，收口时它按「未签未放弃」计数，谁都清不掉（见「尝试与失败」）。\n\n## 定义与已知\n\n- **p-Sylow 子群**：有限群 G 的阶为 p^a 的子群，其中 |G| = p^a·m、p 素数、p ∤ m。**n_p** 记其个数。\n- 已入库的文献（本趟可引的全部 4 份，均由 A 登记、全文可读）：`lit:000000` Conrad《The Sylow Theorems》；`lit:000001` Harris《Sylow Theorems》(GU4041)；`lit:000002` Idelhaj《Sylow Theorems and Applications》；`lit:000003` 文件名标 vakil（正文核到为 MIT 18.704 讲义，3 页/5630 字）。\n- 证明稿自足，**不引用任何外部命题**（`## 依赖` 为空表）：稿内就地推出事实 1–8，包括 Lagrange（事实 1）、轨道-稳定化子（事实 2）、p-群作用的固定点同余（事实 3）、Cauchy 定理的 McKay 计数证明（事实 4）、类方程（事实 5）、对 |G| 的强归纳假设（事实 6）、正规化子 N_G(P)（事实 7）。\n- **标准教材事实（未持全文）**：Sylow 定理通常的教科书写法（Wielandt 的 p^a 元子集作用、或归纳 + 类方程）在上述 4 份文献中都有，但本趟没有从全文里逐字取引文，因此本手稿**不给页码、不给引文**，只把它们标为「本文选定的两条候选路线」。\n\n## 已确定的结论\n\n**结论行（目录行，四格照抄）**：Sylow 定理 —— 设 G 有限、|G| = p^a·m、p 素数且 (p,m)=1，则 (E) G 有阶 p^a 的子群；(C) 任两个 p^a 阶子群共轭；(N) n_p ≡ 1 (mod p) 且 n_p | m。\n\n| 结论 | evidence_kind | evidence_path | evidence_sha256 | v_signature |\n|---|---|---|---|---|\n| (E)+(C)+(N) Sylow 定理与两条推论（一条命题，一份证明） | `proof` | `manuscripts/F/f-proof-000000.md` | `36be2374f66fd8bc5960e186388dff7729a5839ab1b51948617cbaf51350f390` | `{\"verdict\": \"成立\", \"sha256\": \"add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a\"}` |\n\n注：`evidence_sha256` 是**盘上文件字节**的 sha256（`fs.stat` 读数）；`v_signature.sha256` 是 V 签的那一份的**正文 sha**（稿头「正文sha」与 `submission_reading.signed_sha` 同一个值），两者本就不是同一个量，照抄不作换算。\n\n**路线取舍（为什么选 (b) 而不是 (a)）**：\n\n- 采用 **(b) 对 |G| 作强归纳 + 类方程**（Conrad 路线的骨架，配 McKay 计数的 Cauchy 定理、以及 N_G(P) 在 Sylow 集合上的共轭作用）。理由：它把四条断言串在一条自足链上 —— 归纳三情形（a=0 / 有真子群含满 p-部分 / 否则中心含阶 p 元）直接给 (E)，再让 N_G(P) 作用在「全部 p^a 阶子群」的集合上，一次同时给 (C)、(N1)、(N2)，不需要第二套组合工具。\n- 不采用 **(a) 群作用在 p^a 元子集上（Wielandt）**：这条路线更短、且 (E)+(N1) 一步到手，但它要额外引入「p^a 元子集的轨道计数 + |X| 不被 p 整除」这一套，而在 (C) 与 n_p | m 那一侧仍得回到正规化子的作用上。**两条都可行**，本趟按「自足、逐步给依据、一次覆盖四条」的标准选了 (b)；代价是要在稿内就地证 Cauchy 定理与类方程（稿中事实 4、5，已补齐）。\n- 若日后要补第二条证明路径（Wielandt）：**另派一个 F 落新的一份稿、同一条命题**，不把同一条定理拆成两条命题。\n\n## 尝试与失败\n\n- **计划 000000（旧）作废不了 —— 结构性卡点**：F 侧先立了计划 000000，同题又立 000001，000000 落到 `stalled`、零手稿。F 请我把它标 `abandoned`（理由档「不再需要」），但 F 自己的 `abandon_plan` 报 `plan_already_terminal`；而 `attack_plans` **不在 D 的写集**（D 只写 research_questions / search_requests / documents）⇒ 我没有合法入口改它。**如实记：未做，交回召唤者 M 处置**（这是「技术性」而非数学失败）。\n- **V 的前两轮打回 —— 结构性（渲染侧）**：稿头「## 命题」段与登记命题错配（Sylow 第三定理被渲染进命题段），正文数学零缺陷（`work/handoffs.jsonl` 000003、000005）。修正后本稿成立（000016）。教训：命题段是机械比对项，不是散文。\n- **本趟的一次重复劳动（技术性）**：我在拿到 M 的指导（t-000021：reference/ 4 份已由 M 的 A 线入库）之前，已派 A 重新登记这 4 份 PDF（t-000083）。它把同样的事做成了（lit:000000–000003，全文可读），但**与已在库的结果重复**；功能上无害（A 的入库是幂等的），预算上是浪费。记为失败档「技术性」，不顺延它的成果。\n\n## 例子与反例\n\n- **没有 E 侧实验**，因此本趟没有 `experiments` 行、没有 `result=refutes` 的读数。\n- 手算例子（**本文自核，未入库，无落点**）：G = S_3，|G| = 6 = 2·3。p = 3：n_3 = 1 ≡ 1 (mod 3)，1 | 2；p = 2：三个二阶子群两两共轭，n_2 = 3 ≡ 1 (mod 2)，3 | 3。这两个读数与 (C)(N) 一致，但**它不是证据**（「我检查了三个例子」不是定理），只作 sanity check。\n- 反例：无（Sylow 定理是定理，不存在反例；若有人报反例，先查它的「有限群」与「p ∤ m」两条前提是否真的满足）。\n\n## 未解问题\n\n1. `attack_plans` 里那条 **stalled 的 000000**（零手稿、未签未放弃）需要有人处置 —— 不在 D 的写集内，**已交回 M**。\n2. 稿的提交状态读数是 `unsubmitted`（`tasks.artifacts` 里没有该稿号的 `mss:` 记号）：这是「进论文包」那一档，不是「签没拿到」。归 G/H 线；本趟不改。\n3. 本手稿**没有从 reference/ 4 份文献里取逐字引文**（只标了题录与内容概述）：若论文侧需要文献级引文，要另派 A/B 做「抽读 → 逐字引文 → 入库关系」那一步。\n\n## 下一步\n\n1. 派 **B** 登记这条命题（只递指针：`manuscripts/F/f-proof-000000.md`）。\n2. G/H 线若要进论文包，把该稿号纳入（`submission_reading` 现读为 `unsubmitted`）。\n3. 若要补 Wielandt 第二条证明路径：**另派一个 F、新的一份稿、同一条命题**，不新增命题行。\n4. 旧计划 000000 的 `abandoned` 标记：由有 `attack_plans` 写权的一侧处置（F 侧已报 `plan_already_terminal`，D 侧无写集）。\n\n## 携带的证明手稿\n\n| 稿 | 路径 | 盘上字节 sha256 | 正文 sha（V 签的那一份） | 判词 |\n|---|---|---|---|---|\n| F 稿 000000 | `manuscripts/F/f-proof-000000.md` | `36be2374f66fd8bc5960e186388dff7729a5839ab1b51948617cbaf51350f390` | `add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a` | 成立（零 finding） |\n\n本手稿**不含**任何我自己写的 `## 证明` 节：证明正文一律指上表那一份 F 的稿。\n",
+          "why": "这一趟的主交付：七节研究手稿，把 F 的已签证明按四格证据收进来"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "fs.write",
+        "ok": true,
+        "data": {
+          "path": "manuscripts/D/RESEARCH.md",
+          "bytes": 8326,
+          "sha256": "73389eda57b42133703ca889d7dcb9f7994da84fd0a3df6d2fc927d5accfeff8",
+          "created": true
+        },
+        "error": "",
+        "meta": {
+          "path": "manuscripts/D/RESEARCH.md",
+          "bytes": 8326,
+          "created": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 86016,
+        "prompt_cache_miss_tokens": 8171,
+        "tokens_in": 94187,
+        "tokens_out": 5777,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    },
+    {
+      "index": 27,
+      "shape": "summon",
+      "payload": {
+        "role": "B",
+        "action": "",
+        "params": {
+          "proof_manuscript": "manuscripts/F/f-proof-000000.md",
+          "manuscript_id": "000000",
+          "v_sign_sha": "add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a",
+          "file_sha256": "36be2374f66fd8bc5960e186388dff7729a5839ab1b51948617cbaf51350f390",
+          "verification_ref": "verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007"
+        },
+        "why": "命题台账只有 B 的收录口能写；我只递稿路径与签的指针，不内联正文",
+        "brief": "按指针登记 f-proof-000000 为命题并回 stmt_id",
+        "name": "reg-sylow-stmt",
+        "task": "把 F 的这份证明稿登记成一条命题（register_statement），只递指针、正文与等级由你从稿里读：proof_manuscript = manuscripts/F/f-proof-000000.md（稿号 000000）。稿内已有 ## 命题 / ## 证明 / ## 依赖 三节，声明自足（依赖表为空表）。该稿已由 V 逐行走查并判「成立」、零 finding：签时 2026-11-24T05:10:00+08:00，正文 sha（V 签的那一份）= add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a，盘上字节 sha256 = 36be2374f66fd8bc5960e186388dff7729a5839ab1b51948617cbaf51350f390，审阅台账 verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007。命题内容（照稿里那一节，不要照我这段转述）：设 G 有限群，|G| = p^a·m，(p,m)=1，则 (E) G 存在阶 p^a 的子群；(C) 任两个阶 p^a 的子群共轭；(N) 其个数 n_p ≡ 1 (mod p) 且 n_p | m。登记后请把 stmt_id 与算出来的等级回给我，并说明 V 签那一格是否认领得上（若哪一格对不上就逐格点名，别自己补写正文）。"
+      },
+      "result": {
+        "summoned": "B",
+        "action": "",
+        "ok": true,
+        "task_id": "t-000153",
+        "status": "done",
+        "outcome": "ok",
+        "refusal_reason": null,
+        "detail": "执行完成",
+        "children": [],
+        "llm_run_path": "D:\\Incubator\\projects\\sylow-4\\runs\\B-20261124-051737-001.json",
+        "final": "已按 D 的委托把 F 的 f-proof-000000 登记成命题行（只递指针，正文与等级从稿里读，未补写一个字）。\n\n【结果】stmt_id = **000065**（register.new_row=false：落到已有的 000065 行；conjecture_ledger.landing.matches=[\"000065\"]、promoted_to_statement=000065）。现算等级 = **pre_theorem**（_grade_recomputed：conjecture→pre_theorem，heuristic→proof_review，依据 verifications/pending/a7bcc2c9…jsonl#u-000007）；kind = **theorem**（V 签落位后由 conjecture 升档，_kind_upgrade.from=conjecture,to=theorem）。秘书档位 = T3（nontriviality_record.label=T3，path_group=1）。标签被洗：F 攻坚 000001 子目标 s1 → Sylow 定理（存在性、共轭性、计数）。\n\n【正文/证明】statement_full 与 proof_text 都逐字取自稿的 ## 命题 / ## 证明（proof_vs_source.match…（原文 1782 字，已截断）",
+        "payload": "{\"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\sylow-4\\\\runs\\\\B-20261124-051737-001.json\", \"final\": \"已按 D 的委托把 F 的 f-proof-000000 登记成命题行（只递指针，正文与等级从稿里读，未补写一个字）。\\n\\n【结果】stmt_id = **000065**（register.new_row=false：落到已有的 000065 行；conjecture_ledger.landing.matches=[\\\"000065\\\"]、promoted_to_statement=000065）。现算等级 = **pre_theorem**（_grade_recomputed：conjecture→pre_theorem，heuristic→proof_review，依据 verificati…（原文 2026 字，已截断）",
+        "roster_name": "reg-sylow-stmt",
+        "dispatch_policy": {
+          "checked": true,
+          "dispatches": 1,
+          "violations": [],
+          "self_authored_plans": 2,
+          "named_plans": [],
+          "conjectures": [
+            "000000"
+          ],
+          "reason": "D 的派活文本里没有点名任何一条它自己登记的猜想号（方向由文本给，号不作为命令）",
+          "events_error": ""
+        },
+        "秘书": {
+          "alarms": [
+            "'reg-sylow-stmt' 不是注册表里的真名"
+          ],
+          "fail_open": false,
+          "problem": "'reg-sylow-stmt' 不是注册表里的真名",
+          "wash": {
+            "checked": true,
+            "washed": false,
+            "refused": "",
+            "reason": ""
+          },
+          "changes": [],
+          "surface_fit": {
+            "checked": false,
+            "fits": null,
+            "paths": [],
+            "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+            "shape": "summon",
+            "reach": {
+              "checked": true,
+              "verdict": "unknown",
+              "hops": [],
+              "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+            }
+          },
+          "reach_fit": {
+            "checked": true,
+            "verdict": "unknown",
+            "hops": [],
+            "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+          },
+          "assessment": {
+            "decision": "可派",
+            "reason": "这一条没点名具体动作（role 级派活）⇒ 不拿动作表去卡它；角色存在性由预筛管",
+            "basis": [
+              "specs/<role>.py 的动作表",
+              "tasks: 同 key 的既有终态行",
+              "没点名动作 ⇒ 动作表那一格不适用"
+            ],
+            "duplicates": [],
+            "alarms": [],
+            "novel": false,
+            "surface": {
+              "checked": false,
+              "fits": null,
+              "paths": [],
+              "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+              "shape": "summon",
+              "reach": {
+                "checked": true,
+                "verdict": "unknown",
+                "hops": [],
+                "reason": "角色 '' 不在能力表里（['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'L', 'M', 'V']）⇒ 判不了"
+              }
+            },
+            "judge": {
+              "checked": false,
+              "reason": "预筛没有报警、也没有重复候选 ⇒ 不必判断"
+            },
+            "engaged": false,
+            "seq": 7
+          }
+        },
+        "可退役": [
+          {
+            "task_id": "t-000004",
+            "role": "A",
+            "branch": "waiting_no_children",
+            "reading": {
+              "items_open": 0,
+              "items_open_ids": [],
+              "items_open_expects": {},
+              "items_open_states": {}
+            }
+          },
+          {
+            "task_id": "t-000083",
+            "role": "A",
+            "branch": "waiting_no_children",
+            "reading": {
+              "items_open": 0,
+              "items_open_ids": [],
+              "items_open_expects": {},
+              "items_open_states": {}
+            }
+          },
+          {
+            "task_id": "t-000089",
+            "role": "F",
+            "branch": "waiting_no_children",
+            "reading": {
+              "items_open": 0,
+              "items_open_ids": [],
+              "items_open_expects": {},
+              "items_open_states": {}
+            }
+          },
+          {
+            "task_id": "t-000153",
+            "role": "B",
+            "branch": "waiting_no_children",
+            "reading": {
+              "items_open": 0,
+              "items_open_ids": [],
+              "items_open_expects": {},
+              "items_open_states": {}
+            }
+          }
+        ],
+        "新消息": [
+          {
+            "板": "- （新）[t-000154] notice·要一个回执 来自 B：已按 D 的委托把 F 的 f-proof-000000 登记成命题行（只递指针，正文与等级从稿里读，未补写一个字）。\n\n【结果】stmt_id = **000065**（register.new_row=false：落到已有的 000065 行；conjecture_ledger.landing.matches=[\"000065\"]、promoted_to_statement=000065）。现算等级 = **pre_theorem**（_grade_recomputed：conjecture→pre_theorem，heuristic→proof_review，依据 verifications/pending/a7bcc2c9…jsonl#u-000007）；kind = **theorem**（V 签落位后由 conjecture 升档，_kind_upgrade.from=conjecture,to=theorem）。秘书档位 = T3（nontriviality_record.label=T3，path_group=1）。标签被洗：F …（正文截断过，完整内容在台账 detail）"
+          }
+        ],
+        "秘书加工": {
+          "reworked": [
+            {
+              "item": {
+                "板": "- （新）[t-000154] notice·要一个回执 来自 B：已按 D 的委托把 F 的 f-proof-000000 登记成命题行（只递指针，正文与等级从稿里读，未补写一个字）。\n\n【结果】stmt_id = **000065**（register.new_row=false：落到已有的 000065 行；conjecture_ledger.landing.matches=[\"000065\"]、promoted_to_statement=000065）。现算等级 = **pre_theorem**（_grade_recomputed：conjecture→pre_theorem，heuristic→proof_review，依据 verifications/pending/a7bcc2c9…jsonl#u-000007）；kind = **theorem**（V 签落位后由 conjecture 升档，_kind_upgrade.from=conjecture,to=theorem）。秘书档位 = T3（nontriviality_record.label=T3，path_group=1）。标签被洗：F …（正文截断过，完整内容在台账 detail）"
+              },
+              "addendum": "我的产出物口径：交付状态 —— 交给谁：派你这趟活的父（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名）+ 收方 B（入库）；形态：`manuscripts/D/RESEARCH.md` + `manuscripts/D/<qid>-research.md` 工作稿+ `research_questions` / `search_requests` 行（报告本体落成盘上文件；台账那一行 `kind=research` 由 `write_report` 同一笔事务落 —— 见 `policy`，**不是本角色手写的表**）；可核字段：`research_questions.question_id` / `research_questions.status` / `research_questions.waiting_request_ids` / 每个结论目录行上的四格 `evidence_kind` / `evidence_path` / `evidence_sha256` / `v_signature`；算做完：这一趟的每条结论在 `manuscripts/D/RESEARCH.md` 的「已确定的结论」有一行、四格都指得到盘上对象（`report_landing_reading` 可核），且 `research_questions.status` 与现场一致。**跨趟的那一份交付是研究手稿 `manuscripts/D/RESEARCH.md`**（业主 2026-10-14 第 1 条）：成果概述 / 定义与已知 / 已确定的结论 / 尝试与失败 / 例子与反例 / 未解问题 / 下一步七节 —— 下一趟接手的人先读它，而不是去翻这一趟的会话记录。\n我在本条线上的位置：研究循环：把一个研究方向收敛成一个有证据支撑的结论，或如实说证据不足",
+              "problem": "",
+              "fail_open": false
+            }
+          ],
+          "handoffs_digest": "- 000012 H→G：doc:000000 本轮审校不通过（1 error + 2 warning + 1 info），状态置 in_review；154 行 thm:unique 需降级或就地补披露\n- 000013 H→G：doc:000000 第 2 轮复审：旧四条全部 fixed，但新开 3 条（1 error：153 行过程词；2 warning：below 指反、附录 A 过程词），裁决 revise_again、status 保持 in_review\n- 000014 H→G：doc:000000 第 8 轮复审：000007/000008 两条 warning 逐条核清并置 fixed，status=accepted（已签）；另附两处如实缺口（G10 格式、bibitem 残留 file 名）\n- 000015 G→M：Sylow 定理论文成文交付：doc:000000 已被 H 置 accepted，论文包 main.tex/main.pdf(7 页)/MAPPING.json 齐全\n- 000016 V→F：f-proof-000000 整体重读结论：成立（零 finding），重写的第 12 步已就地自足，签块已在稿第 4 行、正文 sha 对齐"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 91904,
+        "prompt_cache_miss_tokens": 3497,
+        "tokens_in": 95401,
+        "tokens_out": 1206,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    },
+    {
+      "index": 29,
+      "shape": "tool",
+      "payload": {
+        "name": "own.write_report",
+        "args": {
+          "why": "把这一趟的研究结果渲染成 manuscripts/D/000000-research.md（同一笔事务落 documents 一行 kind=research）"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "own.write_report",
+        "ok": true,
+        "data": "D:\\Incubator\\projects\\sylow-4\\manuscripts\\D\\000000-research.md",
+        "error": "",
+        "meta": {},
+        "warn": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.write_report 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 29,
+          "call_index": 0,
+          "calls": 1,
+          "step_index": 29,
+          "summary": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.write_report 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 29,
+            "calls": 1,
+            "items": 1,
+            "steps": [
+              29
+            ],
+            "executed": 1,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 93184,
+        "prompt_cache_miss_tokens": 6599,
+        "tokens_in": 99783,
+        "tokens_out": 450,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    },
+    {
+      "index": 30,
+      "shape": "tool",
+      "payload": {
+        "name": "own.consider",
+        "args": {
+          "qid": "000000",
+          "why": "证据已就绪（F 稿 + V 成立签 + B 登记 stmt:000065），把问题推进到 researching 以便收口"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "own.consider",
+        "ok": true,
+        "data": {
+          "question_id": "000000",
+          "sufficient": false,
+          "criteria": [
+            "a_no_keyword_hit",
+            "b_low_degree_unverified"
+          ],
+          "priority": "high",
+          "confidence": "low",
+          "promoted": false,
+          "submitted": [
+            "r-000002"
+          ]
+        },
+        "error": "",
+        "meta": {},
+        "warn": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.consider 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 30,
+          "call_index": 0,
+          "calls": 1,
+          "step_index": 30,
+          "summary": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.consider 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 30,
+            "calls": 1,
+            "items": 1,
+            "steps": [
+              30
+            ],
+            "executed": 1,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 97536,
+        "prompt_cache_miss_tokens": 2998,
+        "tokens_in": 100534,
+        "tokens_out": 344,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    },
+    {
+      "index": 31,
+      "shape": "tool",
+      "payload": {
+        "name": "research.set_status",
+        "args": {
+          "question_id": "000000",
+          "status": "researching",
+          "notes": "证据已就绪，不采信 consider 的机械判据（a_no_keyword_hit / b_low_degree_unverified 是自动判据对『已有 F 稿 + V 成立签 + B 登记 stmt:000065』的漏判）：manuscripts/F/f-proof-000000.md（盘上字节 sha 36be2374…，正文 sha add7f62c4…，V 判成立零 finding，台账 verifications/pending/a7bcc2c9….jsonl#u-000007），B 登记 stmt:000065（等级 pre_theorem、kind=theorem）。因此把问题从 needs_evidence 拉回 researching 以便按证据收口；r-000002 这条检索请求是被机械判据自动开出的，不作数。",
+          "why": "现场证据已达证明级，把问题拉回 researching 才能收口"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "research.set_status",
+        "ok": true,
+        "data": {
+          "question_id": "000000",
+          "from": "needs_evidence",
+          "to": "researching",
+          "waiting_request_ids": [
+            "r-000002"
+          ]
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 98304,
+        "prompt_cache_miss_tokens": 2918,
+        "tokens_in": 101222,
+        "tokens_out": 552,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    },
+    {
+      "index": 32,
+      "shape": "tool",
+      "payload": {
+        "name": "own.research",
+        "args": {
+          "qid": "000000",
+          "why": "问题已处于 researching 且证据达证明级（F 稿 + V 成立签 + B 登记 stmt:000065），按现场收口"
+        },
+        "why": "收口这条问题"
+      },
+      "result": {
+        "tool": "own.research",
+        "ok": true,
+        "data": {
+          "question_id": "000000",
+          "question": "设 G 为有限群，|G| = p^a·m（p 素数，(p,m)=1）。断言：(E) G 存在阶为 p^a 的子群（p-Sylow 子群）；(C) G 的任两个 p-Sylow 子群共轭；(N) p-Sylow 子群的个数 n_p 满足 n_p ≡ 1 (mod p) 且 n_p | m。这三条是否全部成立？",
+          "origin": "agent-D-sylow-proof",
+          "priority": "high",
+          "confidence": "low",
+          "criteria": [
+            "a_no_keyword_hit",
+            "b_low_degree_unverified"
+          ],
+          "criteria_detail": [
+            {
+              "id": "a_no_keyword_hit",
+              "ok": true,
+              "priority": "high",
+              "detail": "关键词 25 个，在 0 条相关关系的 quote/description 中命中数为 0（逐词命中：{'为有限群': 0, 'a·m': 0, '素数': 0, '断言': 0, '存在阶为': 0, '的子群': 0, 'Sylow': 0, '子群': 0, '的任两个': 0, '子群共轭': 0, '子群的个数': 0, '满足': 0, 'mod': 0, '这三条是否全部成立': 0, '群的': 0, '的个': 0, '个数': 0, '这三': 0, '三条': 0, '条是': 0, '是否': 0, '否全': 0, '全部': 0, '部成': 0, '成立': 0}）"
+            },
+            {
+              "id": "b_low_degree_unverified",
+              "ok": true,
+              "priority": "medium",
+              "detail": "相关概念度数 0 < 阈值 2，且 0 条关系里没有一条 quote_verified=True（连一条有原文支撑的关系都没有）"
+            }
+          ],
+          "hits": {
+            "per_keyword": {
+              "为有限群": 0,
+              "a·m": 0,
+              "素数": 0,
+              "断言": 0,
+              "存在阶为": 0,
+              "的子群": 0,
+              "Sylow": 0,
+              "子群": 0,
+              "的任两个": 0,
+              "子群共轭": 0,
+              "子群的个数": 0,
+              "满足": 0,
+              "mod": 0,
+              "这三条是否全部成立": 0,
+              "群的": 0,
+              "的个": 0,
+              "个数": 0,
+              "这三": 0,
+              "三条": 0,
+              "条是": 0,
+              "是否": 0,
+              "否全": 0,
+              "全部": 0,
+              "部成": 0,
+              "成立": 0
+            },
+            "samples": {},
+            "total": 0,
+            "hit_keywords": [],
+            "distinct_hit_keywords": 0,
+            "keyword_count": 25
+          },
+          "contradictions": [],
+          "analysis": "证据包为空，未提供任何可引用的 relation_id 与 quote。因此，无法基于给定证据验证断言 (E)、(C)、(N) 是否全部成立；按照任务约束，也不能引入外部事实来补足判断。",
+          "conclusion": "证据不足，无法判定这三条断言是否全部成立；当前不能作出肯定结论。",
+          "suggestions": [
+            "补充与 p-Sylow 子群存在性、共轭性及个数计数相关的、带 relation_id 与 quote 的证据。",
+            "对 (E)、(C)、(N) 三条断言分别建立可追溯的证据对应关系。",
+            "在证据缺失时保持低置信度，并将结论标记为未验证或无法判定。"
+          ],
+          "conclusion_consistency": {
+            "checked": true,
+            "verdict": "consistent",
+            "reason": "",
+            "confidence": 0.3,
+            "overclaim": [],
+            "hedge": [],
+            "note": "判据只钉措辞与数字的**方向**（夸大/保守），不判研究内容对不对 ——内容对错归 V。"
+          },
+          "evidence": {
+            "question_id": "000000",
+            "question": "设 G 为有限群，|G| = p^a·m（p 素数，(p,m)=1）。断言：(E) G 存在阶为 p^a 的子群（p-Sylow 子群）；(C) G 的任两个 p-Sylow 子群共轭；(N) p-Sylow 子群的个数 n_p 满足 n_p ≡ 1 (mod p) 且 n_p | m。这三条是否全部成立？",
+            "origin": "agent-D-sylow-proof",
+            "status": "researching",
+            "priority": "high",
+            "related_concept_ids": [],
+            "related_relation_ids": [],
+            "chain_ids": [],
+            "chain_concept_path": [],
+            "claims": [],
+            "l2": [],
+            "l3": [],
+            "path_chains": [],
+            "traces": [],
+            "trace_mode": "external",
+            "warnings": [],
+            "c_queries": [
+              {
+                "api": "contradictions",
+                "params": {
+                  "relation_ids": null,
+                  "limit": 20
+                },
+                "checked": true,
+                "truncated": false,
+                "digest": {
+                  "scope": "all_relations",
+                  "scanned": 72,
+                  "contradiction_count": 0,
+                  "relation_pairs": [],
+                  "method": "literal"
+                },
+                "reason": "范围=all_relations，扫描 72 条关系，命中 0 对字面候选（strong 0 对、weak 0 对）。注意这个结论的强度：它只说明'在可逐字核实的形态下没有发现矛盾'，**不等于'文献之间没有分歧'**（一般语义矛盾本方法判定不了）"
+              }
+            ]
+          },
+          "llm_used": true,
+          "llm_reading": {
+            "kind": "seam",
+            "state": "used",
+            "reason": "",
+            "model": "deepseek-flash",
+            "calls": 1,
+            "task_id": "t-000003",
+            "spend": {
+              "attached": true,
+              "usd": 0.026338,
+              "entries": 24,
+              "tokens": 1813280,
+              "reason": "挂上了",
+              "checked": true
+            },
+            "confidence_clamped": false
+          },
+          "trace_mode": "external",
+          "c_queries": [
+            {
+              "api": "contradictions",
+              "params": {
+                "relation_ids": null,
+                "limit": 20
+              },
+              "checked": true,
+              "truncated": false,
+              "digest": {
+                "scope": "all_relations",
+                "scanned": 72,
+                "contradiction_count": 0,
+                "relation_pairs": [],
+                "method": "literal"
+              },
+              "reason": "范围=all_relations，扫描 72 条关系，命中 0 对字面候选（strong 0 对、weak 0 对）。注意这个结论的强度：它只说明'在可逐字核实的形态下没有发现矛盾'，**不等于'文献之间没有分歧'**（一般语义矛盾本方法判定不了）"
+            }
+          ],
+          "c_evidence": {
+            "attempted": 1,
+            "ok": 1,
+            "failed": 0,
+            "any_success": true,
+            "apis": [
+              "contradictions"
+            ],
+            "failures": []
+          }
+        },
+        "error": "",
+        "meta": {},
+        "warn": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.research 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 32,
+          "call_index": 0,
+          "calls": 1,
+          "step_index": 32,
+          "summary": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.research 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 32,
+            "calls": 1,
+            "items": 1,
+            "steps": [
+              32
+            ],
+            "executed": 1,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 98944,
+        "prompt_cache_miss_tokens": 2921,
+        "tokens_in": 101865,
+        "tokens_out": 418,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    },
+    {
+      "index": 33,
+      "shape": "tool",
+      "payload": {
+        "name": "research.set_status",
+        "args": {
+          "question_id": "000000",
+          "status": "answered",
+          "notes": "收口依据（不是我自己的措辞，是盘上的对象）：① manuscripts/F/f-proof-000000.md —— 44 行、15338 字节，含 ## 命题 / ## 证明 / ## 依赖 三节，## 证明 第 1–17 步就地自足，覆盖 (E) 存在性 / (C) 共轭 / (N1) n_p ≡ 1 (mod p) / (N2) n_p | m；盘上字节 sha256=36be2374f66fd8bc5960e186388dff7729a5839ab1b51948617cbaf51350f390，正文 sha=add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a。② V 逐行走查判「成立」、零 finding、defect_step=null，签时 2026-11-24T05:10:00+08:00，签块在稿第 4 行，台账 verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007（manuscripts.submission_reading 读数：signed=true、signed_sha=add7f62c4…）。③ B 按指针登记成命题 stmt:000065（kind=theorem、现算等级 pre_theorem、path_group=1，回执板项 t-000154）。④ 研究稿 manuscripts/D/RESEARCH.md 七节已落盘（8326 字节，sha256=73389eda57b42133703ca889d7dcb9f7994da84fd0a3df6d2fc927d5accfeff8），工作稿 manuscripts/D/000000-research.md 由 D.write_report 渲染（documents 一行 kind=research 同一笔事务）。如实记录一条缺口：D.research 的关系侧读数（关键词命中 0、quote_verified 0 条）是空包，它的 LLM 侧结论写成『证据不足』—— 那是『B 消化 PDF 后没落出与题面关键词对齐的 relations』这一个事实，不是『这道题没有证据』；证明级证据见上三行。因此本条按现场推 answered。",
+          "why": "证据已达证明级并拿到 V 的「成立」签与 B 的登记；关系侧空包只够记成缺口，不足以让这条问题停在 researching"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "research.set_status",
+        "ok": true,
+        "data": {
+          "question_id": "000000",
+          "from": "researching",
+          "to": "answered",
+          "waiting_request_ids": [
+            "r-000002"
+          ]
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 99584,
+        "prompt_cache_miss_tokens": 4321,
+        "tokens_in": 103905,
+        "tokens_out": 1042,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    },
+    {
+      "index": 34,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "max_bytes": 6000,
+          "max_lines": 40,
+          "path": "manuscripts/D/RESEARCH.md",
+          "start_line": 1
+        },
+        "why": "核我写下的七节里「已确定的结论」四格是否齐全（evidence_kind / evidence_path / evidence_sha256 / v_signature），以及要不要补一行 stmt:000065"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# D 的研究手稿 —— Sylow 定理（research_questions 000000）\n\n> 本文件是跨趟交付：下一趟接手的人先读它。七节次序固定。所有声称都带落点；没有落点的声称标「未核到」。\n\n## 成果概述\n\n- **证明了 Sylow 第一定理及两条推论**（(E) 存在性 / (C) 共轭 / (N) n_p ≡ 1 mod p 且 n_p | m）。证明正文是 F 落的那一份：`manuscripts/F/f-proof-000000.md`（44 行、15338 字节；盘上字节 sha256 `36be2374f66fd8bc5960e186388dff7729a5839ab1b51948617cbaf51350f390`；正文 sha（V 签的那一份）`add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a`）。**V 判「成立」、零 finding**，签时 2026-11-24T05:10:00+08:00，签块在稿第 4 行，台账 `verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007`（读数来自 `manuscripts.submission_reading`：`signed=true`、`signed_sha=add7f62c4…`）。\n- **证伪的猜想**：无。\n- **数值实验 / 样例**：本趟**没有做**数值实验（这是纯群论命题，E 侧未派活）；下面「例子与反例」里只列手算例子，并标明「本文自核（未入库）」。\n- **经验**：① 落稿时稿头「## 命题」段必须与登记的 `statement_full` 逐字一致，否则 V 会以「命题段错配」打回（见 `work/handoffs.jsonl` 000003 / 000005 两轮，正文零数学缺陷而被拦）；② 一条命题只立一条计划 —— 同一命题重复立项会留下一条 stalled、零手稿的旧计划，收口时它按「未签未放弃」计数，谁都清不掉（见「尝试与失败」）。\n\n## 定义与已知\n\n- **p-Sylow 子群**：有限群 G 的阶为 p^a 的子群，其中 |G| = p^a·m、p 素数、p ∤ m。**n_p** 记其个数。\n- 已入库的文献（本趟可引的全部 4 份，均由 A 登记、全文可读）：`lit:000000` Conrad《The Sylow Theorems》；`lit:000001` Harris《Sylow Theorems》(GU4041)；`lit:000002` Idelhaj《Sylow Theorems and Applications》；`lit:000003` 文件名标 vakil（正文核到为 MIT 18.704 讲义，3 页/5630 字）。\n- 证明稿自足，**不引用任何外部命题**（`## 依赖` 为空表）：稿内就地推出事实 1–8，包括 Lagrange（事实 1）、轨道-稳定化子（事实 2）、p-群作用的固定点同余（事实 3）、Cauchy 定理的 McKay 计数证明（事实 4）、类方程（事实 5）、对 |G| 的强归纳假设（事实 6）、正规化子 N_G(P)（事实 7）。\n- **标准教材事实（未持全文）**：Sylow 定理通常的教科书写法（Wielandt 的 p^a 元子集作用、或归纳 + 类方程）在上述 4 份文献中都有，但本趟没有从全文里逐字取引文，因此本手稿**不给页码、不给引文**，只把它们标为「本文选定的两条候选路线」。\n\n## 已确定的结论\n\n**结论行（目录行，四格照抄）**：Sylow 定理 —— 设 G 有限、|G| = p^a·m、p 素数且 (p,m)=1，则 (E) G 有阶 p^a 的子群；(C) 任两个 p^a 阶子群共轭；(N) n_p ≡ 1 (mod p) 且 n_p | m。\n\n| 结论 | evidence_kind | evidence_path | evidence_sha256 | v_signature |\n|---|---|---|---|---|\n| (E)+(C)+(N) Sylow 定理与两条推论（一条命题，一份证明） | `proof` | `manuscripts/F/f-proof-000000.md` | `36be2374f66fd8bc5960e186388dff7729a5839ab1b51948617cbaf51350f390` | `{\"verdict\": \"成立\", \"sha256\":…（落档截断，原 3346 字）",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/D/RESEARCH.md",
+          "encoding": "utf-8",
+          "bytes_read": 6000,
+          "total_bytes": 8326,
+          "truncated": true,
+          "start_line": 1,
+          "lines_read": 39,
+          "total_lines": 39,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "只读了前 6000 字节（共 8326 字节）；本次给第 1–39 行（共 39 行）",
+          "sha256": "73389eda57b42133703ca889d7dcb9f7994da84fd0a3df6d2fc927d5accfeff8"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 101632,
+        "prompt_cache_miss_tokens": 3128,
+        "tokens_in": 104760,
+        "tokens_out": 860,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    },
+    {
+      "index": 35,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.edit",
+        "args": {
+          "path": "manuscripts/D/RESEARCH.md",
+          "old_string": "注：`evidence_sha256` 是**盘上文件字节**的 sha256（`fs.stat` 读数）；",
+          "new_string": "**入库去向**：这条命题已由收方 B 按指针登记为 `stmt:000065`（现算等级 `pre_theorem`、`kind=theorem`、`path_group=1`、T3 档；B 的登记回执见板项 t-000154）。**它的等级与正文都不是我写的** —— 我这一趟只递了指针 `manuscripts/F/f-proof-000000.md`。\n\n注：`evidence_sha256` 是**盘上文件字节**的 sha256（`fs.stat` 读数）；",
+          "sha256": "73389eda57b42133703ca889d7dcb9f7994da84fd0a3df6d2fc927d5accfeff8",
+          "note": "把 B 登记的 stmt:000065 补进「已确定的结论」，让下一趟能从手稿直接跳到台账行"
+        },
+        "why": "手稿的结论行要指得到 B 的登记行，否则下一趟只看到一份稿、看不到台账去向"
+      },
+      "result": {
+        "tool": "fs.edit",
+        "ok": true,
+        "data": {
+          "path": "manuscripts/D/RESEARCH.md",
+          "sha256_before": "73389eda57b42133703ca889d7dcb9f7994da84fd0a3df6d2fc927d5accfeff8",
+          "sha256_after": "14025aa4d525630ac1e0f6c499090368cd09104af73884f1c83858679c366d30",
+          "replacements": 1,
+          "bytes_before": 8326,
+          "bytes_after": 8637,
+          "note": "把 B 登记的 stmt:000065 补进「已确定的结论」，让下一趟能从手稿直接跳到台账行"
+        },
+        "error": "",
+        "meta": {
+          "path": "manuscripts/D/RESEARCH.md",
+          "replacements": 1,
+          "note": "把 B 登记的 stmt:000065 补进「已确定的结论」，让下一趟能从手稿直接跳到台账行"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 102528,
+        "prompt_cache_miss_tokens": 5170,
+        "tokens_in": 107698,
+        "tokens_out": 614,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    },
+    {
+      "index": 36,
+      "shape": "tool",
+      "payload": {
+        "name": "conductor.ack",
+        "args": {
+          "close": "acked",
+          "item_ids": [
+            "t-000150",
+            "t-000151",
+            "t-000152",
+            "t-000154",
+            "t-000155"
+          ],
+          "note": "读到：F 的稿 + V 成立签、F 的旧计划 000000 abandon 请求（D 写集不含 attack_plans，如实交回 M）、B 已登记 stmt:000065、两条时钟唤醒只是提示"
+        },
+        "why": "把已办完/已知悉的通知型板项消掉，免得它们挡收工与销号"
+      },
+      "result": {
+        "tool": "conductor.ack",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "ok": true,
+          "state": "acked",
+          "acked": [
+            "t-000150",
+            "t-000151",
+            "t-000152",
+            "t-000154",
+            "t-000155"
+          ],
+          "already_done": [
+            "t-000150",
+            "t-000151",
+            "t-000152",
+            "t-000154",
+            "t-000155"
+          ],
+          "refused": [],
+          "unknown": [],
+          "missing": [],
+          "not_yours": [],
+          "refusal_codes": [],
+          "results": [
+            {
+              "item_id": "t-000150",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000151",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000152",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000154",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000155",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            }
+          ],
+          "count": 5,
+          "requested": 5,
+          "by_task_id": "t-000003",
+          "note": "读到：F 的稿 + V 成立签、F 的旧计划 000000 abandon 请求（D 写集不含 attack_plans，如实交回 M）、B 已登记 stmt:000065、两条时钟唤醒只是提示",
+          "close": "acked",
+          "reason": "确认了 5 条"
+        },
+        "error": "",
+        "meta": {
+          "checked": true,
+          "ok": true,
+          "state": "acked",
+          "acked": [
+            "t-000150",
+            "t-000151",
+            "t-000152",
+            "t-000154",
+            "t-000155"
+          ],
+          "already_done": [
+            "t-000150",
+            "t-000151",
+            "t-000152",
+            "t-000154",
+            "t-000155"
+          ],
+          "refused": [],
+          "unknown": [],
+          "missing": [],
+          "not_yours": [],
+          "refusal_codes": [],
+          "results": [
+            {
+              "item_id": "t-000150",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000151",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000152",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000154",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            },
+            {
+              "item_id": "t-000155",
+              "ok": true,
+              "code": "already_done",
+              "state_before": "done",
+              "state_after": "done",
+              "step": null,
+              "seen_backfilled": false
+            }
+          ],
+          "count": 5,
+          "requested": 5,
+          "by_task_id": "t-000003",
+          "note": "读到：F 的稿 + V 成立签、F 的旧计划 000000 abandon 请求（D 写集不含 attack_plans，如实交回 M）、B 已登记 stmt:000065、两条时钟唤醒只是提示",
+          "close": "acked",
+          "reason": "确认了 5 条"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 105472,
+        "prompt_cache_miss_tokens": 3105,
+        "tokens_in": 108577,
+        "tokens_out": 321,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    },
+    {
+      "index": 37,
+      "shape": "tool",
+      "payload": {
+        "name": "conductor.retire_child",
+        "args": {
+          "child_name": "A1",
+          "reason": "已交差、名下板项已清、不再用到（它那趟本地摄取被 M 的 A 线覆盖，成果不重复引用）"
+        },
+        "why": "静默且无未消项，按纪律销号，别让名册虚长"
+      },
+      "result": {
+        "tool": "conductor.retire_child",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "state": "refused",
+          "retired": false,
+          "task_id": "t-000004",
+          "name": "A1",
+          "parent_task_id": "t-000003",
+          "branch": "waiting_no_children",
+          "open_items": [],
+          "missing": [
+            "t-000005 名下还有 3 条未消的板项（['t-000058', 't-000068', 't-000074']）—— block 那一档先由主控 `conductor.wake_blocked` 唤醒（ack 对 block 行必被状态机拒），其余等收件人自己 `conductor.ack` 收口"
+          ],
+          "reason": "t-000004 这一支里还有 1 项不让销 ⇒ 整笔不销、一处都不动：t-000005 名下还有 3 条未消的板项（['t-000058', 't-000068', 't-000074']）—— block 那一档先由主控 `conductor.wake_blocked` 唤醒（ack 对 block 行必被状态机拒），其余等收件人自己 `conductor.ack` 收口",
+          "note": "已交差、名下板项已清、不再用到（它那趟本地摄取被 M 的 A 线覆盖，成果不重复引用）",
+          "retired_path": "",
+          "roster_retired": false,
+          "task_id_compat": false,
+          "addressed_by": "child_name",
+          "subtree": [
+            "t-000008",
+            "t-000013",
+            "t-000032",
+            "t-000042",
+            "t-000053",
+            "t-000063",
+            "t-000072",
+            "t-000005",
+            "t-000004"
+          ],
+          "subtree_size": 9,
+          "order": [
+            "t-000008",
+            "t-000013",
+            "t-000032",
+            "t-000042",
+            "t-000053",
+            "t-000063",
+            "t-000072",
+            "t-000005",
+            "t-000004"
+          ],
+          "cascade": [],
+          "retired_count": 0,
+          "unrostered": [],
+          "active_nodes": [],
+          "busy_task_ids": [],
+          "readings": {
+            "child_counts_before": {
+              "checked": true,
+              "reason": "",
+              "owner": "t-000003",
+              "children_unretired": 4,
+              "active_child_count": 0,
+              "labels": {
+                "children_unretired": "子代理数",
+                "active_child_count": "活跃子代理数"
+              },
+              "waiting_only": [],
+              "unjudged": [],
+              "states": {
+                "flying": 0,
+                "standby": 0,
+                "silent": 4,
+                "unknown": 0,
+                "active": 0,
+                "total": 4
+              },
+              "state_labels": {
+                "flying": "在飞",
+                "standby": "待机",
+                "silent": "静默",
+                "unknown": "未读到"
+              },
+              "complete": true,
+              "by_owner": {
+                "t-000003": {
+                  "children_unretired": 4,
+                  "active_child_count": 0,
+                  "flying": 0,
+                  "standby": 0,
+                  "silent": 4,
+                  "unknown": 0
+                }
+              },
+              "bad_roster_lines": [],
+              "note": "子代理数=4，活跃子代理数=0（在飞 0 · 待机 0 · 静默 4）"
+            },
+            "depth_of": {
+              "t-000004": 0,
+              "t-000005": 1,
+              "t-000008": 2,
+              "t-000013": 2,
+              "t-000032": 2,
+              "t-000042": 2,
+              "t-000053": 2,
+              "t-000063": 2,
+              "t-000072": 2
+            },
+            "subtree_size": 9,
+            "active_count": 0,
+            "busy_task_ids": [],
+            "labels": {
+              "children_unretired": "子代理数",
+              "active_child_count": "活跃子代理数"
+            },
+            "target_state": "silent"
+          },
+          "kept": [
+            {
+              "id": "t-000008",
+              "name": "V1",
+              "depth": 2,
+              "why": "这一笔没销它（整笔受控拒绝 ⇒ 一处都没动）"
+            },
+            {
+              "id": "t-000005",
+              "name": "B-literature-sylow",
+              "depth": 1,
+              "why": "t-000005 名下还有 3 条未消的板项（['t-000058', 't-000068', 't-000074']）—— block 那一档先由主控 `conductor.wake_blocked` 唤醒（ack 对 block 行必被状态机拒），其余等收件人自己 `conductor.ack` 收口"
+            },
+            {
+              "id": "t-000004",
+              "name": "A1",
+              "depth": 0,
+              "why": "这一笔没销它（整笔受控拒绝 ⇒ 一处都没动）"
+            }
+          ],
+          "cascade_reading": {
+            "count": 0,
+            "ids": [],
+            "levels": [],
+            "kept": [
+              {
+                "id": "t-000008",
+                "name": "V1",
+                "depth": 2,
+                "why": "这一笔没销它（整笔受控拒绝 ⇒ 一处都没动）"
+              },
+              {
+                "id": "t-000005",
+                "name": "B-literature-sylow",
+                "depth": 1,
+                "why": "t-000005 名下还有 3 条未消的板项（['t-000058', 't-000068', 't-000074']）—— block 那一档先由主控 `conductor.wake_blocked` 唤醒（ack 对 block 行必被状态机拒），其余等收件人自己 `conductor.ack` 收口"
+              },
+              {
+                "id": "t-000004",
+                "name": "A1",
+                "depth": 0,
+                "why": "这一笔没销它（整笔受控拒绝 ⇒ 一处都没动）"
+              }
+            ]
+          },
+          "children_unretired": 4,
+          "active_child_count": 0,
+          "target_state": "silent",
+          "target_state_label": "静默",
+          "blocking": [],
+          "refusal_code": ""
+        },
+        "error": "",
+        "meta": {
+          "checked": true,
+          "state": "refused",
+          "retired": false,
+          "task_id": "t-000004",
+          "name": "A1",
+          "parent_task_id": "t-000003",
+          "branch": "waiting_no_children",
+          "open_items": [],
+          "missing": [
+            "t-000005 名下还有 3 条未消的板项（['t-000058', 't-000068', 't-000074']）—— block 那一档先由主控 `conductor.wake_blocked` 唤醒（ack 对 block 行必被状态机拒），其余等收件人自己 `conductor.ack` 收口"
+          ],
+          "reason": "t-000004 这一支里还有 1 项不让销 ⇒ 整笔不销、一处都不动：t-000005 名下还有 3 条未消的板项（['t-000058', 't-000068', 't-000074']）—— block 那一档先由主控 `conductor.wake_blocked` 唤醒（ack 对 block 行必被状态机拒），其余等收件人自己 `conductor.ack` 收口",
+          "note": "已交差、名下板项已清、不再用到（它那趟本地摄取被 M 的 A 线覆盖，成果不重复引用）",
+          "retired_path": "",
+          "roster_retired": false,
+          "task_id_compat": false,
+          "addressed_by": "child_name",
+          "subtree": [
+            "t-000008",
+            "t-000013",
+            "t-000032",
+            "t-000042",
+            "t-000053",
+            "t-000063",
+            "t-000072",
+            "t-000005",
+            "t-000004"
+          ],
+          "subtree_size": 9,
+          "order": [
+            "t-000008",
+            "t-000013",
+            "t-000032",
+            "t-000042",
+            "t-000053",
+            "t-000063",
+            "t-000072",
+            "t-000005",
+            "t-000004"
+          ],
+          "cascade": [],
+          "retired_count": 0,
+          "unrostered": [],
+          "active_nodes": [],
+          "busy_task_ids": [],
+          "readings": {
+            "child_counts_before": {
+              "checked": true,
+              "reason": "",
+              "owner": "t-000003",
+              "children_unretired": 4,
+              "active_child_count": 0,
+              "labels": {
+                "children_unretired": "子代理数",
+                "active_child_count": "活跃子代理数"
+              },
+              "waiting_only": [],
+              "unjudged": [],
+              "states": {
+                "flying": 0,
+                "standby": 0,
+                "silent": 4,
+                "unknown": 0,
+                "active": 0,
+                "total": 4
+              },
+              "state_labels": {
+                "flying": "在飞",
+                "standby": "待机",
+                "silent": "静默",
+                "unknown": "未读到"
+              },
+              "complete": true,
+              "by_owner": {
+                "t-000003": {
+                  "children_unretired": 4,
+                  "active_child_count": 0,
+                  "flying": 0,
+                  "standby": 0,
+                  "silent": 4,
+                  "unknown": 0
+                }
+              },
+              "bad_roster_lines": [],
+              "note": "子代理数=4，活跃子代理数=0（在飞 0 · 待机 0 · 静默 4）"
+            },
+            "depth_of": {
+              "t-000004": 0,
+              "t-000005": 1,
+              "t-000008": 2,
+              "t-000013": 2,
+              "t-000032": 2,
+              "t-000042": 2,
+              "t-000053": 2,
+              "t-000063": 2,
+              "t-000072": 2
+            },
+            "subtree_size": 9,
+            "active_count": 0,
+            "busy_task_ids": [],
+            "labels": {
+              "children_unretired": "子代理数",
+              "active_child_count": "活跃子代理数"
+            },
+            "target_state": "silent"
+          },
+          "kept": [
+            {
+              "id": "t-000008",
+              "name": "V1",
+              "depth": 2,
+              "why": "这一笔没销它（整笔受控拒绝 ⇒ 一处都没动）"
+            },
+            {
+              "id": "t-000005",
+              "name": "B-literature-sylow",
+              "depth": 1,
+              "why": "t-000005 名下还有 3 条未消的板项（['t-000058', 't-000068', 't-000074']）—— block 那一档先由主控 `conductor.wake_blocked` 唤醒（ack 对 block 行必被状态机拒），其余等收件人自己 `conductor.ack` 收口"
+            },
+            {
+              "id": "t-000004",
+              "name": "A1",
+              "depth": 0,
+              "why": "这一笔没销它（整笔受控拒绝 ⇒ 一处都没动）"
+            }
+          ],
+          "cascade_reading": {
+            "count": 0,
+            "ids": [],
+            "levels": [],
+            "kept": [
+              {
+                "id": "t-000008",
+                "name": "V1",
+                "depth": 2,
+                "why": "这一笔没销它（整笔受控拒绝 ⇒ 一处都没动）"
+              },
+              {
+                "id": "t-000005",
+                "name": "B-literature-sylow",
+                "depth": 1,
+                "why": "t-000005 名下还有 3 条未消的板项（['t-000058', 't-000068', 't-000074']）—— block 那一档先由主控 `conductor.wake_blocked` 唤醒（ack 对 block 行必被状态机拒），其余等收件人自己 `conductor.ack` 收口"
+              },
+              {
+                "id": "t-000004",
+                "name": "A1",
+                "depth": 0,
+                "why": "这一笔没销它（整笔受控拒绝 ⇒ 一处都没动）"
+              }
+            ]
+          },
+          "children_unretired": 4,
+          "active_child_count": 0,
+          "target_state": "silent",
+          "target_state_label": "静默",
+          "blocking": [],
+          "refusal_code": ""
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 106368,
+        "prompt_cache_miss_tokens": 3566,
+        "tokens_in": 109934,
+        "tokens_out": 279,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    },
+    {
+      "index": 38,
+      "shape": "tool",
+      "payload": {
+        "name": "conductor.retire_child",
+        "args": {
+          "child_name": "sylow-prover-1",
+          "reason": "已交差：f-proof-000000 已落稿、V 判成立、B 已登记 stmt:000065；不再用到"
+        },
+        "why": "F 已交差且静默，按纪律销号，别让名册虚长"
+      },
+      "result": {
+        "tool": "conductor.retire_child",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "state": "retired",
+          "retired": true,
+          "task_id": "t-000089",
+          "name": "sylow-prover-1",
+          "parent_task_id": "t-000003",
+          "branch": "waiting_no_children",
+          "open_items": [],
+          "missing": [],
+          "reason": "sylow-prover-1 退役：waiting_no_children（子已停 + 它名下无活跃子代理）；面 S03 已归还池里；级联销号 2 项（从最深到最浅）：V1（t-000111）、sylow-prover-1（t-000089）",
+          "note": "已交差：f-proof-000000 已落稿、V 判成立、B 已登记 stmt:000065；不再用到",
+          "retired_path": "D:\\Incubator\\projects\\sylow-4\\out\\roster\\t-000003-retired.jsonl",
+          "roster_retired": true,
+          "task_id_compat": false,
+          "addressed_by": "child_name",
+          "subtree": [
+            "t-000111",
+            "t-000121",
+            "t-000127",
+            "t-000135",
+            "t-000089"
+          ],
+          "subtree_size": 5,
+          "order": [
+            "t-000111",
+            "t-000121",
+            "t-000127",
+            "t-000135",
+            "t-000089"
+          ],
+          "cascade": [
+            {
+              "task_id": "t-000111",
+              "parent": "t-000089",
+              "depth": 1,
+              "role": "V",
+              "name": "V1",
+              "branch": "waiting_no_children",
+              "state": "retired",
+              "why": "V1 退役：waiting_no_children（子已停 + 它名下无活跃子代理）；面 S01 已归还池里"
+            },
+            {
+              "task_id": "t-000121",
+              "parent": "t-000089",
+              "depth": 1,
+              "role": "V",
+              "name": "",
+              "branch": "waiting_no_children",
+              "state": "already",
+              "why": "V1 这一项在本笔里已经按它的另一个号销过了（一个名字只有一个名册项，不重复销）"
+            },
+            {
+              "task_id": "t-000127",
+              "parent": "t-000089",
+              "depth": 1,
+              "role": "V",
+              "name": "",
+              "branch": "waiting_no_children",
+              "state": "already",
+              "why": "V1 这一项在本笔里已经按它的另一个号销过了（一个名字只有一个名册项，不重复销）"
+            },
+            {
+              "task_id": "t-000135",
+              "parent": "t-000089",
+              "depth": 1,
+              "role": "V",
+              "name": "",
+              "branch": "waiting_no_children",
+              "state": "already",
+              "why": "V1 这一项在本笔里已经按它的另一个号销过了（一个名字只有一个名册项，不重复销）"
+            },
+            {
+              "task_id": "t-000089",
+              "parent": "t-000003",
+              "depth": 0,
+              "role": "F",
+              "name": "sylow-prover-1",
+              "branch": "waiting_no_children",
+              "state": "retired",
+              "why": "sylow-prover-1 退役：waiting_no_children（子已停 + 它名下无活跃子代理）；面 S03 已归还池里"
+            }
+          ],
+          "retired_count": 2,
+          "unrostered": [],
+          "active_nodes": [],
+          "busy_task_ids": [],
+          "readings": {
+            "child_counts_before": {
+              "checked": true,
+              "reason": "",
+              "owner": "t-000003",
+              "children_unretired": 4,
+              "active_child_count": 0,
+              "labels": {
+                "children_unretired": "子代理数",
+                "active_child_count": "活跃子代理数"
+              },
+              "waiting_only": [],
+              "unjudged": [],
+              "states": {
+                "flying": 0,
+                "standby": 0,
+                "silent": 4,
+                "unknown": 0,
+                "active": 0,
+                "total": 4
+              },
+              "state_labels": {
+                "flying": "在飞",
+                "standby": "待机",
+                "silent": "静默",
+                "unknown": "未读到"
+              },
+              "complete": true,
+              "by_owner": {
+                "t-000003": {
+                  "children_unretired": 4,
+                  "active_child_count": 0,
+                  "flying": 0,
+                  "standby": 0,
+                  "silent": 4,
+                  "unknown": 0
+                }
+              },
+              "bad_roster_lines": [],
+              "note": "子代理数=4，活跃子代理数=0（在飞 0 · 待机 0 · 静默 4）"
+            },
+            "depth_of": {
+              "t-000089": 0,
+              "t-000111": 1,
+              "t-000121": 1,
+              "t-000127": 1,
+              "t-000135": 1
+            },
+            "subtree_size": 5,
+            "active_count": 0,
+            "busy_task_ids": [],
+            "labels": {
+              "children_unretired": "子代理数",
+              "active_child_count": "活跃子代理数"
+            },
+            "target_state": "silent",
+            "child_counts_after": {
+              "checked": true,
+              "reason": "",
+              "owner": "t-000003",
+              "children_unretired": 3,
+              "active_child_count": 0,
+              "labels": {
+                "children_unretired": "子代理数",
+                "active_child_count": "活跃子代理数"
+              },
+              "waiting_only": [],
+              "unjudged": [],
+              "states": {
+                "flying": 0,
+                "standby": 0,
+                "silent": 3,
+                "unknown": 0,
+                "active": 0,
+                "total": 3
+              },
+              "state_labels": {
+                "flying": "在飞",
+                "standby": "待机",
+                "silent": "静默",
+                "unknown": "未读到"
+              },
+              "complete": true,
+              "by_owner": {
+                "t-000003": {
+                  "children_unretired": 3,
+                  "active_child_count": 0,
+                  "flying": 0,
+                  "standby": 0,
+                  "silent": 3,
+                  "unknown": 0
+                }
+              },
+              "bad_roster_lines": [],
+              "note": "子代理数=3，活跃子代理数=0（在飞 0 · 待机 0 · 静默 3）"
+            },
+            "written": [
+              "t-000111",
+              "t-000089"
+            ]
+          },
+          "kept": [],
+          "cascade_reading": {
+            "count": 2,
+            "ids": [
+              "t-000111",
+              "t-000089"
+            ],
+            "levels": [
+              1,
+              0
+            ],
+            "kept": []
+          },
+          "children_unretired": 3,
+          "active_child_count": 0,
+          "target_state": "silent",
+          "target_state_label": "静默",
+          "blocking": [],
+          "refusal_code": ""
+        },
+        "error": "",
+        "meta": {
+          "checked": true,
+          "state": "retired",
+          "retired": true,
+          "task_id": "t-000089",
+          "name": "sylow-prover-1",
+          "parent_task_id": "t-000003",
+          "branch": "waiting_no_children",
+          "open_items": [],
+          "missing": [],
+          "reason": "sylow-prover-1 退役：waiting_no_children（子已停 + 它名下无活跃子代理）；面 S03 已归还池里；级联销号 2 项（从最深到最浅）：V1（t-000111）、sylow-prover-1（t-000089）",
+          "note": "已交差：f-proof-000000 已落稿、V 判成立、B 已登记 stmt:000065；不再用到",
+          "retired_path": "D:\\Incubator\\projects\\sylow-4\\out\\roster\\t-000003-retired.jsonl",
+          "roster_retired": true,
+          "task_id_compat": false,
+          "addressed_by": "child_name",
+          "subtree": [
+            "t-000111",
+            "t-000121",
+            "t-000127",
+            "t-000135",
+            "t-000089"
+          ],
+          "subtree_size": 5,
+          "order": [
+            "t-000111",
+            "t-000121",
+            "t-000127",
+            "t-000135",
+            "t-000089"
+          ],
+          "cascade": [
+            {
+              "task_id": "t-000111",
+              "parent": "t-000089",
+              "depth": 1,
+              "role": "V",
+              "name": "V1",
+              "branch": "waiting_no_children",
+              "state": "retired",
+              "why": "V1 退役：waiting_no_children（子已停 + 它名下无活跃子代理）；面 S01 已归还池里"
+            },
+            {
+              "task_id": "t-000121",
+              "parent": "t-000089",
+              "depth": 1,
+              "role": "V",
+              "name": "",
+              "branch": "waiting_no_children",
+              "state": "already",
+              "why": "V1 这一项在本笔里已经按它的另一个号销过了（一个名字只有一个名册项，不重复销）"
+            },
+            {
+              "task_id": "t-000127",
+              "parent": "t-000089",
+              "depth": 1,
+              "role": "V",
+              "name": "",
+              "branch": "waiting_no_children",
+              "state": "already",
+              "why": "V1 这一项在本笔里已经按它的另一个号销过了（一个名字只有一个名册项，不重复销）"
+            },
+            {
+              "task_id": "t-000135",
+              "parent": "t-000089",
+              "depth": 1,
+              "role": "V",
+              "name": "",
+              "branch": "waiting_no_children",
+              "state": "already",
+              "why": "V1 这一项在本笔里已经按它的另一个号销过了（一个名字只有一个名册项，不重复销）"
+            },
+            {
+              "task_id": "t-000089",
+              "parent": "t-000003",
+              "depth": 0,
+              "role": "F",
+              "name": "sylow-prover-1",
+              "branch": "waiting_no_children",
+              "state": "retired",
+              "why": "sylow-prover-1 退役：waiting_no_children（子已停 + 它名下无活跃子代理）；面 S03 已归还池里"
+            }
+          ],
+          "retired_count": 2,
+          "unrostered": [],
+          "active_nodes": [],
+          "busy_task_ids": [],
+          "readings": {
+            "child_counts_before": {
+              "checked": true,
+              "reason": "",
+              "owner": "t-000003",
+              "children_unretired": 4,
+              "active_child_count": 0,
+              "labels": {
+                "children_unretired": "子代理数",
+                "active_child_count": "活跃子代理数"
+              },
+              "waiting_only": [],
+              "unjudged": [],
+              "states": {
+                "flying": 0,
+                "standby": 0,
+                "silent": 4,
+                "unknown": 0,
+                "active": 0,
+                "total": 4
+              },
+              "state_labels": {
+                "flying": "在飞",
+                "standby": "待机",
+                "silent": "静默",
+                "unknown": "未读到"
+              },
+              "complete": true,
+              "by_owner": {
+                "t-000003": {
+                  "children_unretired": 4,
+                  "active_child_count": 0,
+                  "flying": 0,
+                  "standby": 0,
+                  "silent": 4,
+                  "unknown": 0
+                }
+              },
+              "bad_roster_lines": [],
+              "note": "子代理数=4，活跃子代理数=0（在飞 0 · 待机 0 · 静默 4）"
+            },
+            "depth_of": {
+              "t-000089": 0,
+              "t-000111": 1,
+              "t-000121": 1,
+              "t-000127": 1,
+              "t-000135": 1
+            },
+            "subtree_size": 5,
+            "active_count": 0,
+            "busy_task_ids": [],
+            "labels": {
+              "children_unretired": "子代理数",
+              "active_child_count": "活跃子代理数"
+            },
+            "target_state": "silent",
+            "child_counts_after": {
+              "checked": true,
+              "reason": "",
+              "owner": "t-000003",
+              "children_unretired": 3,
+              "active_child_count": 0,
+              "labels": {
+                "children_unretired": "子代理数",
+                "active_child_count": "活跃子代理数"
+              },
+              "waiting_only": [],
+              "unjudged": [],
+              "states": {
+                "flying": 0,
+                "standby": 0,
+                "silent": 3,
+                "unknown": 0,
+                "active": 0,
+                "total": 3
+              },
+              "state_labels": {
+                "flying": "在飞",
+                "standby": "待机",
+                "silent": "静默",
+                "unknown": "未读到"
+              },
+              "complete": true,
+              "by_owner": {
+                "t-000003": {
+                  "children_unretired": 3,
+                  "active_child_count": 0,
+                  "flying": 0,
+                  "standby": 0,
+                  "silent": 3,
+                  "unknown": 0
+                }
+              },
+              "bad_roster_lines": [],
+              "note": "子代理数=3，活跃子代理数=0（在飞 0 · 待机 0 · 静默 3）"
+            },
+            "written": [
+              "t-000111",
+              "t-000089"
+            ]
+          },
+          "kept": [],
+          "cascade_reading": {
+            "count": 2,
+            "ids": [
+              "t-000111",
+              "t-000089"
+            ],
+            "levels": [
+              1,
+              0
+            ],
+            "kept": []
+          },
+          "children_unretired": 3,
+          "active_child_count": 0,
+          "target_state": "silent",
+          "target_state_label": "静默",
+          "blocking": [],
+          "refusal_code": ""
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 107648,
+        "prompt_cache_miss_tokens": 5437,
+        "tokens_in": 113085,
+        "tokens_out": 573,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    },
+    {
+      "index": 39,
+      "shape": "final",
+      "payload": {
+        "final": "研究问题 000000（Sylow 定理及其推论）已完成收尾：status=answered，七节研究手稿与四格目录行已写入文件，F 的证明稿已通过 V 审核，B 已按指针完成登记。\n\n一、交付物（每条都能追溯到文件里的对象）\n1) research_questions 000000 = answered（waiting_request_ids 里那条 r-000002 是被 consider 的机械判据自动开出的，我在 notes 里逐条说明不采信它：判据 a_no_keyword_hit / b_low_degree_unverified 只读关系引文，读不到『F 稿 + V 成立签』这种证明级证据）。\n2) manuscripts/D/RESEARCH.md（七节齐全）：成果概述 / 定义与已知 / 已确定的结论 / 尝试与失败 / 例子与反例 / 未解问题 / 下一步；「已确定的结论」里的目录行四格照抄：evidence_kind=proof、evidence_path=manuscripts/F/f-proof-000000.md、evidence_sha256=36be2374f66fd8bc5960e186388dff7729a5839ab1b51948617cbaf51350f390（fs.stat 盘上字节）、v_signature={\"verdict\":\"成立\",\"sha256\":\"add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a\"}（V 签的那一份的正文 sha，与 submission_reading.signed_sha 同值）。已把 B 的登记去向 stmt:000065 补进同一节。\n3) manuscripts/D/000000-research.md（write_report 渲染，同一笔事务落 documents 一行 kind=research）。\n4) 证明稿 manuscripts/F/f-proof-000000.md：44 行 / 15338 字节，## 命题 / ## 证明 / ## 依赖 三节齐，## 依赖 为空表（自足）；## 证明 第 1–17 步就地推出事实 1–8（Lagrange、轨道-稳定化子、p-群固定点同余、Cauchy 的 McKay 计数证明、类方程、对 |G| 的强归纳假设、正规化子 N_G(P)），覆盖 (E)(C)(N1)(N2)。V 逐行走查判「成立」、零 finding、defect_step=null，签块在稿第 4 行，台账 verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007。\n5) B 按指针登记：stmt:000065（现算等级 pre_theorem、kind=theorem、path_group=1、T3；落到已有 000065 行，未新增行）。\n6) 文献侧：lit:000000 Conrad / 000001 Harris / 000002 Idelhaj / 000003（文件名标 vakil，正文核到为 MIT 18.704 讲义），全文可读、无 no_text_layer。手稿里没有从这些全文逐字取引文，因此按引用纪律一律标「标准教材事实（未持全文）」，不给页码。\n\n二、路线取舍（写进手稿「已确定的结论」）：选 (b) 对 |G| 强归纳 + 类方程（Conrad 骨架，配 McKay 版 Cauchy 与 N_G(P) 在 Sylow 集合上的共轭作用）—— 一条自足链同时给 (E)(C)(N1)(N2)；(a) Wielandt 的 p^a 元子集作用更短，但在 (C) 与 n_p|m 一侧仍要回到正规化子。两条都可行，按「自足 + 一次覆盖四条」选 (b)。\n\n三、如实记的卡点（不是数学失败）\n- F 的旧计划 000000 请求标 abandoned（理由档「不再需要」），但 F 侧 abandon_plan 报 plan_already_terminal，而 attack_plans 不在 D 的写集（D 只写 research_questions / search_requests / documents）⇒ 我没有合法入口改它，如实交回 M 处置。\n- 我派给 A 的 t-000083（重新登记 reference/ 4 份 PDF）与 M 的 A 线是重复劳动，已按此记录，不顺延它的成果。\n- 销号：sylow-prover-1（含级联 V1）已退役；A1 的退役被受控拒绝，因为它的子树里 t-000005（B）名下还有 3 条未消板项，不属于我这一支能清的范围；reg-refs-1 与 reg-sylow-stmt 静默但未销。",
+        "evidence": [
+          "q:000000",
+          "stmt:000065",
+          "manuscripts/F/f-proof-000000.md",
+          "verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007",
+          "manuscripts/D/RESEARCH.md",
+          "manuscripts/D/000000-research.md",
+          "lit:000000",
+          "lit:000001",
+          "lit:000002",
+          "lit:000003",
+          "r-000002"
+        ],
+        "notify": {
+          "to": "M",
+          "summary": "Sylow 定理及两条推论已证完：F 稿 f-proof-000000 + V「成立」签 + B 登记 stmt:000065，RESEARCH.md 七节与四格目录行已落；一条旧计划 000000 的 abandoned 请求超出 D 写集，交你处置",
+          "body": "## 交付（每条都指得到盘上对象）\n- `research_questions` **q:000000 = answered**。\n- `manuscripts/D/RESEARCH.md` 七节齐全；「已确定的结论」目录行四格：`evidence_kind=proof` / `evidence_path=manuscripts/F/f-proof-000000.md` / `evidence_sha256=36be2374f66fd8bc5960e186388dff7729a5839ab1b51948617cbaf51350f390`（盘上字节）/ `v_signature={\"verdict\":\"成立\",\"sha256\":\"add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a\"}`（V 签那一份的正文 sha）。\n- `manuscripts/D/000000-research.md`（write_report 渲染，documents 行 kind=research）。\n- 证明稿 `manuscripts/F/f-proof-000000.md`：44 行 / 15338 字节，## 命题 / ## 证明 / ## 依赖 三节齐、依赖表为空（自足）；## 证明 第 1–17 步就地推出事实 1–8（Lagrange、轨道-稳定化子、p-群固定点同余、Cauchy 的 McKay 证明、类方程、强归纳假设、正规化子 N_G(P)），覆盖 (E) 存在性 / (C) 共轭 / (N1) n_p≡1 (mod p) / (N2) n_p|m。**V 判「成立」零 finding**，台账 `verifications/pending/a7bcc2c9….jsonl#u-000007`。\n- 收方 B 已按指针登记 **stmt:000065**（`pre_theorem`、`kind=theorem`、`path_group=1`、T3）。\n- 文献：`lit:000000` Conrad / `000001` Harris / `000002` Idelhaj / `000003`（文件名标 vakil，正文为 MIT 18.704 讲义），全文可读；手稿未从其全文逐字取引文 ⇒ 一律标「标准教材事实（未持全文）」，不给页码。\n\n## 路线取舍\n选 (b) 强归纳 + 类方程（Conrad 骨架 + McKay 版 Cauchy + N_G(P) 共轭作用）：一条自足链同时给四条；(a) Wielandt 的 p^a 元子集作用更短，但 (C) 与 n_p|m 仍要回到正规化子。两条都可行，理由写进手稿。\n\n## 要你处置的一件（超出我的写集）\nF 侧请求把**旧计划 000000** 标 `abandoned`（理由档「不再需要」：已被同题计划 000001 取代、零手稿、终态 stalled）；F 的 `abandon_plan` 报 `plan_already_terminal`，而 `attack_plans` 不在 D 的写集 ⇒ 我无法动手。它按「未签未放弃」计数，请你在有权限的一侧处置。\n\n## 其他如实记录\n- 我派给 A 的 t-000083（重新登记 reference/ 4 份 PDF）与你那条 A 线重复，已记为重复劳动，不顺延其成果。\n- `consider` 的机械判据自动开了一条检索请求 r-000002（只读关系引文，看不到证明级证据），我在 q:000000 的 notes 里逐条说明不采信；它不必执行。\n- 销号：`sylow-prover-1`（级联 V1）已退役；`A1` 退役被受控拒绝（子树里 t-000005 名下还有 3 条未消板项，不属我能清的支）；`reg-refs-1` / `reg-sylow-stmt` 静默未销。",
+          "refs": [
+            "q:000000",
+            "stmt:000065",
+            "lit:000000",
+            "lit:000001",
+            "lit:000002",
+            "lit:000003",
+            "r-000002"
+          ],
+          "why": "把这一趟的研究结论、四格证据与一处越权的卡点交给召唤者 M"
+        }
+      },
+      "result": {
+        "notify_problem": "notify.refs 里的 'r-000002' 立不住：引用的前序手稿 'r-000002' 不在盘上 ⇒ 不许凭空引用（溯源链断了）"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 110848,
+        "prompt_cache_miss_tokens": 5838,
+        "tokens_in": 116686,
+        "tokens_out": 2690,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000003"
+    }
+  ],
+  "final": "研究问题 000000（Sylow 定理及其推论）已完成收尾：status=answered，七节研究手稿与四格目录行已写入文件，F 的证明稿已通过 V 审核，B 已按指针完成登记。\n\n一、交付物（每条都能追溯到文件里的对象）\n1) research_questions 000000 = answered（waiting_request_ids 里那条 r-000002 是被 consider 的机械判据自动开出的，我在 notes 里逐条说明不采信它：判据 a_no_keyword_hit / b_low_degree_unverified 只读关系引文，读不到『F 稿 + V 成立签』这种证明级证据）。\n2) manuscripts/D/RESEARCH.md（七节齐全）：成果概述 / 定义与已知 / 已确定的结论 / 尝试与失败 / 例子与反例 / 未解问题 / 下一步；「已确定的结论」里的目录行四格照抄：evidence_kind=proof、evidence_path=manuscripts/F/f-proof-000000.md、evidence_sha256=36be2374f66fd8bc5960e186388dff7729a5839ab1b51948617cbaf51350f390（fs.stat 盘上字节）、v_signature={\"verdict\":\"成立\",\"sha256\":\"add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a\"}（V 签的那一份的正文 sha，与 submission_reading.signed_sha 同值）。已把 B 的登记去向 stmt:000065 补进同一节。\n3) manuscripts/D/000000-research.md（write_report 渲染，同一笔事务落 documents 一行 kind=research）。\n4) 证明稿 manuscripts/F/f-proof-000000.md：44 行 / 15338 字节，## 命题 / ## 证明 / ## 依赖 三节齐，## 依赖 为空表（自足）；## 证明 第 1–17 步就地推出事实 1–8（Lagrange、轨道-稳定化子、p-群固定点同余、Cauchy 的 McKay 计数证明、类方程、对 |G| 的强归纳假设、正规化子 N_G(P)），覆盖 (E)(C)(N1)(N2)。V 逐行走查判「成立」、零 finding、defect_step=null，签块在稿第 4 行，台账 verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007。\n5) B 按指针登记：stmt:000065（现算等级 pre_theorem、kind=theorem、path_group=1、T3；落到已有 000065 行，未新增行）。\n6) 文献侧：lit:000000 Conrad / 000001 Harris / 000002 Idelhaj / 000003（文件名标 vakil，正文核到为 MIT 18.704 讲义），全文可读、无 no_text_layer。手稿里没有从这些全文逐字取引文，因此按引用纪律一律标「标准教材事实（未持全文）」，不给页码。\n\n二、路线取舍（写进手稿「已确定的结论」）：选 (b) 对 |G| 强归纳 + 类方程（Conrad 骨架，配 McKay 版 Cauchy 与 N_G(P) 在 Sylow 集合上的共轭作用）—— 一条自足链同时给 (E)(C)(N1)(N2)；(a) Wielandt 的 p^a 元子集作用更短，但在 (C) 与 n_p|m 一侧仍要回到正规化子。两条都可行，按「自足 + 一次覆盖四条」选 (b)。\n\n三、如实记的卡点（不是数学失败）\n- F 的旧计划 000000 请求标 abandoned（理由档「不再需要」），但 F 侧 abandon_plan 报 plan_already_terminal，而 attack_plans 不在 D 的写集（D 只写 research_questions / search_requests / documents）⇒ 我没有合法入口改它，如实交回 M 处置。\n- 我派给 A 的 t-000083（重新登记 reference/ 4 份 PDF）与 M 的 A 线是重复劳动，已按此记录，不顺延它的成果。\n- 销号：sylow-prover-1（含级联 V1）已退役；A1 的退役被受控拒绝，因为它的子树里 t-000005（B）名下还有 3 条未消板项，不属于我这一支能清的范围；reg-refs-1 与 reg-sylow-stmt 静默但未销。",
+  "evidence": [
+    "q:000000",
+    "stmt:000065",
+    "manuscripts/F/f-proof-000000.md",
+    "verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007",
+    "manuscripts/D/RESEARCH.md",
+    "manuscripts/D/000000-research.md",
+    "lit:000000",
+    "lit:000001",
+    "lit:000002",
+    "lit:000003",
+    "r-000002"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 1,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 30,
+  "compactions": 0,
+  "mailbox_items": [
+    "t-000021",
+    "t-000082",
+    "t-000086",
+    "t-000088",
+    "t-000091",
+    "t-000150",
+    "t-000151",
+    "t-000152",
+    "t-000154",
+    "t-000155"
+  ],
+  "mailbox_msgs": [
+    "m000010",
+    "m000013"
+  ],
+  "mailbox_delivered": 12,
+  "monitor_turns": 4,
+  "wakes": 4,
+  "wake_ids": [
+    "wk-000019",
+    "wk-000020",
+    "wk-000043",
+    "wk-000044"
+  ],
+  "wake_events": [
+    {
+      "wake_id": "wk-000019",
+      "task_id": "t-000003",
+      "role": "D",
+      "timer_id": "tm-000004",
+      "kind": "timer",
+      "reason": "认领检索请求 r-000001",
+      "purpose": "认领检索请求 r-000001",
+      "purpose_missing": false,
+      "message": "时间到：认领检索请求 r-000001｜等了 41 分钟 13 秒（起于 03:41:18，到于 04:22:31）",
+      "waited_sec": 2473.273698,
+      "triggered_by": "target_closed",
+      "wait_for": "task:t-000004",
+      "due_at": "",
+      "fired_at": "2026-11-23T20:22:31.514556+00:00",
+      "mailbox_item_id": "t-000086",
+      "state": "pending"
+    },
+    {
+      "wake_id": "wk-000020",
+      "task_id": "t-000003",
+      "role": "D",
+      "timer_id": "tm-000026",
+      "kind": "timer",
+      "reason": "把 reference/ 下已有的 4 份 PDF 登记成 literature 行并回给我 lit_id（这一步是入库不是检索，别再换源找全文）： 1) reference/9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf（Conrad, Proof of the Sylow Theorems） 2) reference/11dc1a689516-h",
+      "purpose": "把 reference/ 下已有的 4 份 PDF 登记成 literature 行并回给我 lit_id（这一步是入库不是检索，别再换源找全文）： 1) reference/9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf（Conrad, Proof of the Sylow Theorems） 2) reference/11dc1a689516-h",
+      "purpose_missing": false,
+      "message": "时间到：把 reference/ 下已有的 4 份 PDF 登记成 literature 行并回给我 lit_id（这一步是入库不是检索，别再换源找全文）： 1) reference/9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf（Conrad, Proof of the Sylow Theorems） 2) reference/11dc1a689516-h｜等了 50 秒（起于 04:22:10，到于 04:23:00）。它交的是：ok：执行完成",
+      "waited_sec": 49.895845,
+      "triggered_by": "target_event",
+      "wait_for": "task:t-000083",
+      "due_at": "",
+      "fired_at": "2026-11-23T20:23:00.474031+00:00",
+      "mailbox_item_id": "t-000091",
+      "state": "pending"
+    },
+    {
+      "wake_id": "wk-000043",
+      "task_id": "t-000003",
+      "role": "D",
+      "timer_id": "tm-000028",
+      "kind": "timer",
+      "reason": "攻坚目标：证明下面的算术-群论命题，落成一份自足、逐步给依据的证明手稿，并送 V 逐行走查拿到「成立」的签。 命题：设 G 为有限群，|G| = p^a·m，p 素数且 (p,m)=1。则 (E) G 存在阶为 p^a 的子群（p-Sylow 子群）； (C) G 的任两个 p-Sylow 子群共轭（故共轭意义下唯一）； (N) p-Sylow 子群的个数 n_p 满足 n_p ≡ 1 (mod",
+      "purpose": "攻坚目标：证明下面的算术-群论命题，落成一份自足、逐步给依据的证明手稿，并送 V 逐行走查拿到「成立」的签。 命题：设 G 为有限群，|G| = p^a·m，p 素数且 (p,m)=1。则 (E) G 存在阶为 p^a 的子群（p-Sylow 子群）； (C) G 的任两个 p-Sylow 子群共轭（故共轭意义下唯一）； (N) p-Sylow 子群的个数 n_p 满足 n_p ≡ 1 (mod",
+      "purpose_missing": false,
+      "message": "时间到：攻坚目标：证明下面的算术-群论命题，落成一份自足、逐步给依据的证明手稿，并送 V 逐行走查拿到「成立」的签。 命题：设 G 为有限群，|G| = p^a·m，p 素数且 (p,m)=1。则 (E) G 存在阶为 p^a 的子群（p-Sylow 子群）； (C) G 的任两个 p-Sylow 子群共轭（故共轭意义下唯一）； (N) p-Sylow 子群的个数 n_p 满足 n_p ≡ 1 (mod｜等了 52 分钟 14 秒（起于 04:22:59，到于 05:15:14）。它交的是：no_result：执行完成",
+      "waited_sec": 3134.368453,
+      "triggered_by": "target_event",
+      "wait_for": "task:t-000089",
+      "due_at": "",
+      "fired_at": "2026-11-23T21:15:14.341541+00:00",
+      "mailbox_item_id": "t-000152",
+      "state": "pending"
+    },
+    {
+      "wake_id": "wk-000044",
+      "task_id": "t-000003",
+      "role": "D",
+      "timer_id": "tm-000057",
+      "kind": "timer",
+      "reason": "把 F 的这份证明稿登记成一条命题（register_statement），只递指针、正文与等级由你从稿里读：proof_manuscript = manuscripts/F/f-proof-000000.md（稿号 000000）。稿内已有 ## 命题 / ## 证明 / ## 依赖 三节，声明自足（依赖表为空表）。该稿已由 V 逐行走查并判「成立」、零 finding：签时 2026-11-2",
+      "purpose": "把 F 的这份证明稿登记成一条命题（register_statement），只递指针、正文与等级由你从稿里读：proof_manuscript = manuscripts/F/f-proof-000000.md（稿号 000000）。稿内已有 ## 命题 / ## 证明 / ## 依赖 三节，声明自足（依赖表为空表）。该稿已由 V 逐行走查并判「成立」、零 finding：签时 2026-11-2",
+      "purpose_missing": false,
+      "message": "时间到：把 F 的这份证明稿登记成一条命题（register_statement），只递指针、正文与等级由你从稿里读：proof_manuscript = manuscripts/F/f-proof-000000.md（稿号 000000）。稿内已有 ## 命题 / ## 证明 / ## 依赖 三节，声明自足（依赖表为空表）。该稿已由 V 逐行走查并判「成立」、零 finding：签时 2026-11-2｜等了 1 分钟 42 秒（起于 05:15:57，到于 05:17:38）。它交的是：ok：执行完成",
+      "waited_sec": 101.705333,
+      "triggered_by": "target_event",
+      "wait_for": "task:t-000153",
+      "due_at": "",
+      "fired_at": "2026-11-23T21:17:38.873502+00:00",
+      "mailbox_item_id": "t-000155",
+      "state": "pending"
+    }
+  ],
+  "clock_pumps": 68,
+  "clock_fired": 2,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "D 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "D",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    },
+    "woke_turns": 4,
+    "skip_calls": 10,
+    "woke_reasons": [
+      "closed",
+      "event",
+      "event",
+      "event"
+    ],
+    "own_children": [
+      "t-000083",
+      "t-000089"
+    ],
+    "return_given": [
+      "t-000083",
+      "t-000089"
+    ],
+    "reentry_turns": 3,
+    "reentry_reasons": [
+      "派活之后还没给过模型回合：这一批 1 项还在跑（t-000083），这一拍的 waiter 全是在等它们 ⇒ 这一拍返场问模型一次，下一拍起才按挂机口径走",
+      "上一拍是等谁的唤醒（t-000083 回来）—— 那一拍按 ③ 跳过，那一批的产出现在就在上下文里 ⇒ 这一拍返场问模型（不许再睡一拍）",
+      "上一拍是等谁的唤醒（t-000089 回来）—— 那一拍按 ③ 跳过，那一批的产出现在就在上下文里 ⇒ 这一拍返场问模型（不许再睡一拍）"
+    ],
+    "research_fp": "",
+    "patrol": {
+      "checked": true,
+      "mounted": false,
+      "skipped": "role",
+      "timer_id": "",
+      "interval_sec": 1200.0,
+      "remaining_sec": null,
+      "reason": "轮查计时器只挂给主控（M）：这一趟是 D ⇒ 不挂"
+    },
+    "asked_sec": 31.5,
+    "slice_sec": 32.0,
+    "parked_turns": 6
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [],
+  "summons": [
+    "B"
+  ],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [
+    {
+      "kind": "summon",
+      "counted": true,
+      "task_id": "t-000083",
+      "role": "A",
+      "step": 6,
+      "status": "running",
+      "outcome": "",
+      "handoff_id": "",
+      "outputs": [
+        "t-000083"
+      ],
+      "disposition": ""
+    },
+    {
+      "kind": "summon",
+      "counted": true,
+      "task_id": "t-000153",
+      "role": "B",
+      "step": 27,
+      "status": "done",
+      "outcome": "ok",
+      "handoff_id": "",
+      "outputs": [
+        "t-000153",
+        "proof-000000"
+      ],
+      "disposition": ""
+    }
+  ],
+  "summons_total": 2,
+  "summons_consumed": 2,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 2,
+    "summons_consumed": 2,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [
+      {
+        "kind": "summon",
+        "counted": true,
+        "task_id": "t-000083",
+        "role": "A",
+        "step": 6,
+        "status": "running",
+        "outcome": "",
+        "handoff_id": "",
+        "outputs": [
+          "t-000083"
+        ],
+        "disposition": "consumed",
+        "evidence": {
+          "step": 8,
+          "shape": "note",
+          "effect": "笔记",
+          "refs": [
+            "t-000083"
+          ]
+        }
+      },
+      {
+        "kind": "summon",
+        "counted": true,
+        "task_id": "t-000153",
+        "role": "B",
+        "step": 27,
+        "status": "done",
+        "outcome": "ok",
+        "handoff_id": "",
+        "outputs": [
+          "t-000153",
+          "proof-000000"
+        ],
+        "disposition": "consumed",
+        "evidence": {
+          "step": 31,
+          "shape": "tool",
+          "effect": "工具 research.set_status",
+          "refs": [
+            "proof-000000"
+          ]
+        }
+      }
+    ],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p327",
+    "role": "D",
+    "prompt_sha256": "ba14f1972d11bfbb05f0e6cbd867c62bd62441f7dd5178450a36140373575660",
+    "prompt_chars": 81720,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "TOOL_29",
+      "TOOL_30",
+      "TOOL_31",
+      "TOOL_32",
+      "TOOL_33",
+      "TOOL_34",
+      "TOOL_35",
+      "TOOL_36",
+      "TOOL_37",
+      "TOOL_38",
+      "TOOL_39",
+      "TOOL_40",
+      "TOOL_41",
+      "TOOL_42",
+      "TOOL_43",
+      "TOOL_44",
+      "TOOL_45",
+      "TOOL_46",
+      "TOOL_47",
+      "TOOL_48",
+      "TOOL_49",
+      "TOOL_50",
+      "TOOL_51",
+      "TOOL_52",
+      "TOOL_53",
+      "TOOL_54",
+      "TOOL_55",
+      "TOOL_56",
+      "TOOL_57",
+      "TOOL_58",
+      "TOOL_59",
+      "TOOL_60",
+      "TOOL_61",
+      "TOOL_62",
+      "TOOL_63",
+      "TOOL_64",
+      "TOOL_65",
+      "TOOL_66",
+      "TOOL_67",
+      "TOOL_68",
+      "TOOL_69",
+      "TOOL_70",
+      "TOOL_71",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_LIMITS",
+      "COLLAB_NAMES",
+      "PARENT_STOP",
+      "PARENT_ROSTER",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 30,
+    "tokens_in": 2560045,
+    "tokens_out": 23266,
+    "usd": 0.036586,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 29,
+    "no_request_calls": 0,
+    "hit": 2458368,
+    "miss": 101456,
+    "unknown_calls": 0,
+    "tokens_in": 2559824,
+    "hit_rate": 0.9604,
+    "mismatched_calls": 0,
+    "saved_usd": 0.361382,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 5865.031,
+  "end_ts": "2026-11-24T05:18:40+08:00",
+  "notes": [
+    "第 7 步返场：子代理回来 0 条，还在跑 1 条（这一拍为了返场没等子：返场判据给过之后才等）",
+    "第 8 步返场：子代理回来 0 条，还在跑 1 条（这一拍为了返场没等子：返场判据给过之后才等）",
+    "第 9 步返场：子代理回来 1 条，还在跑 0 条（等待 21.0s，原因 settled）",
+    "第 10 步返场：子代理回来 0 条，还在跑 1 条（等待 0.0s，原因 wake）",
+    "第 11 步返场：子代理回来 0 条，还在跑 1 条（这一拍为了返场没等子：返场判据给过之后才等）",
+    "第 12 步返场：子代理回来 0 条，还在跑 1 条（等待 300.0s，原因 slice）",
+    "第 13 步返场：子代理回来 0 条，还在跑 1 条（等待 300.0s，原因 slice）",
+    "第 14 步返场：子代理回来 0 条，还在跑 1 条（等待 300.0s，原因 slice）",
+    "第 15 步返场：子代理回来 0 条，还在跑 1 条（等待 300.0s，原因 slice）",
+    "第 16 步返场：子代理回来 0 条，还在跑 1 条（等待 300.0s，原因 slice）",
+    "第 17 步返场：子代理回来 0 条，还在跑 1 条（等待 300.0s，原因 slice）",
+    "第 18 步返场：子代理回来 0 条，还在跑 1 条（等待 300.0s，原因 slice）",
+    "第 19 步返场：子代理回来 0 条，还在跑 1 条（等待 300.0s，原因 slice）",
+    "第 20 步返场：子代理回来 0 条，还在跑 1 条（等待 300.0s，原因 slice）",
+    "第 21 步返场：子代理回来 0 条，还在跑 1 条（等待 300.0s，原因 slice）",
+    "第 22 步返场：子代理回来 1 条，还在跑 0 条（等待 76.2s，原因 settled）",
+    "返场（Q22）：上一拍是等谁的唤醒（t-000089 回来）—— 那一拍按 ③ 跳过，那一批的产出现在就在上下文里 ⇒ 这一拍返场问模型（不许再睡一拍）",
+    "收工没有可用 notify 表（notify.refs 里的 'r-000002' 立不住：引用的前序手稿 'r-000002' 不在盘上 ⇒ 不许凭空引用（溯源链断了））⇒ 这一趟没有交接手稿（不打回、不代填）",
+    "收工时名下还有 2 条证明没有 V 的签字（读数，不拦收工；明细：000060、000064）",
+    "缓存读数：命中 2458368 / 未命中 101456 token，命中率 96.0%（29 次调用）；按 modelcost 口径估算可省 约 0.361382 美元",
+    "子产出处理读数：summons_total=2，consumed=2，waived=0，unknown=0，unconsumed=0",
+    "终态回报已落板：t-000156（框架通报；模型没填 notify）"
+  ],
+  "final_payload": {
+    "final": "研究问题 000000（Sylow 定理及其推论）已完成收尾：status=answered，七节研究手稿与四格目录行已写入文件，F 的证明稿已通过 V 审核，B 已按指针完成登记。\n\n一、交付物（每条都能追溯到文件里的对象）\n1) research_questions 000000 = answered（waiting_request_ids 里那条 r-000002 是被 consider 的机械判据自动开出的，我在 notes 里逐条说明不采信它：判据 a_no_keyword_hit / b_low_degree_unverified 只读关系引文，读不到『F 稿 + V 成立签』这种证明级证据）。\n2) manuscripts/D/RESEARCH.md（七节齐全）：成果概述 / 定义与已知 / 已确定的结论 / 尝试与失败 / 例子与反例 / 未解问题 / 下一步；「已确定的结论」里的目录行四格照抄：evidence_kind=proof、evidence_path=manuscripts/F/f-proof-000000.md、evidence_sha256=36be2374f66fd8bc5960e186388dff7729a5839ab1b51948617cbaf51350f390（fs.stat 盘上字节）、v_signature={\"verdict\":\"成立\",\"sha256\":\"add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a\"}（V 签的那一份的正文 sha，与 submission_reading.signed_sha 同值）。已把 B 的登记去向 stmt:000065 补进同一节。\n3) manuscripts/D/000000-research.md（write_report 渲染，同一笔事务落 documents 一行 kind=research）。\n4) 证明稿 manuscripts/F/f-proof-000000.md：44 行 / 15338 字节，## 命题 / ## 证明 / ## 依赖 三节齐，## 依赖 为空表（自足）；## 证明 第 1–17 步就地推出事实 1–8（Lagrange、轨道-稳定化子、p-群固定点同余、Cauchy 的 McKay 计数证明、类方程、对 |G| 的强归纳假设、正规化子 N_G(P)），覆盖 (E)(C)(N1)(N2)。V 逐行走查判「成立」、零 finding、defect_step=null，签块在稿第 4 行，台账 verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007。\n5) B 按指针登记：stmt:000065（现算等级 pre_theorem、kind=theorem、path_group=1、T3；落到已有 000065 行，未新增行）。\n6) 文献侧：lit:000000 Conrad / 000001 Harris / 000002 Idelhaj / 000003（文件名标 vakil，正文核到为 MIT 18.704 讲义），全文可读、无 no_text_layer。手稿里没有从这些全文逐字取引文，因此按引用纪律一律标「标准教材事实（未持全文）」，不给页码。\n\n二、路线取舍（写进手稿「已确定的结论」）：选 (b) 对 |G| 强归纳 + 类方程（Conrad 骨架，配 McKay 版 Cauchy 与 N_G(P) 在 Sylow 集合上的共轭作用）—— 一条自足链同时给 (E)(C)(N1)(N2)；(a) Wielandt 的 p^a 元子集作用更短，但在 (C) 与 n_p|m 一侧仍要回到正规化子。两条都可行，按「自足 + 一次覆盖四条」选 (b)。\n\n三、如实记的卡点（不是数学失败）\n- F 的旧计划 000000 请求标 abandoned（理由档「不再需要」），但 F 侧 abandon_plan 报 plan_already_terminal，而 attack_plans 不在 D 的写集（D 只写 research_questions / search_requests / documents）⇒ 我没有合法入口改它，如实交回 M 处置。\n- 我派给 A 的 t-000083（重新登记 reference/ 4 份 PDF）与 M 的 A 线是重复劳动，已按此记录，不顺延它的成果。\n- 销号：sylow-prover-1（含级联 V1）已退役；A1 的退役被受控拒绝，因为它的…（落档截断，原 2075 字）",
+    "evidence": [
+      "q:000000",
+      "stmt:000065",
+      "manuscripts/F/f-proof-000000.md",
+      "verifications/pending/a7bcc2c97a4262f81ceb14b05de9339bbadcd479d1ad5291d1dbca0b179482d9.jsonl#u-000007",
+      "manuscripts/D/RESEARCH.md",
+      "manuscripts/D/000000-research.md",
+      "lit:000000",
+      "lit:000001",
+      "lit:000002",
+      "lit:000003",
+      "r-000002"
+    ],
+    "notify": {
+      "to": "M",
+      "summary": "Sylow 定理及两条推论已证完：F 稿 f-proof-000000 + V「成立」签 + B 登记 stmt:000065，RESEARCH.md 七节与四格目录行已落；一条旧计划 000000 的 abandoned 请求超出 D 写集，交你处置",
+      "body": "## 交付（每条都指得到盘上对象）\n- `research_questions` **q:000000 = answered**。\n- `manuscripts/D/RESEARCH.md` 七节齐全；「已确定的结论」目录行四格：`evidence_kind=proof` / `evidence_path=manuscripts/F/f-proof-000000.md` / `evidence_sha256=36be2374f66fd8bc5960e186388dff7729a5839ab1b51948617cbaf51350f390`（盘上字节）/ `v_signature={\"verdict\":\"成立\",\"sha256\":\"add7f62c4d34b45777230a12ddb2513b58adbbd89369465afd6d9108f8bc4d0a\"}`（V 签那一份的正文 sha）。\n- `manuscripts/D/000000-research.md`（write_report 渲染，documents 行 kind=research）。\n- 证明稿 `manuscripts/F/f-proof-000000.md`：44 行 / 15338 字节，## 命题 / ## 证明 / ## 依赖 三节齐、依赖表为空（自足）；## 证明 第 1–17 步就地推出事实 1–8（Lagrange、轨道-稳定化子、p-群固定点同余、Cauchy 的 McKay 证明、类方程、强归纳假设、正规化子 N_G(P)），覆盖 (E) 存在性 / (C) 共轭 / (N1) n_p≡1 (mod p) / (N2) n_p|m。**V 判「成立」零 finding**，台账 `verifications/pending/a7bcc2c9….jsonl#u-000007`。\n- 收方 B 已按指针登记 **stmt:000065**（`pre_theorem`、`kind=theorem`、`path_group=1`、T3）。\n- 文献：`lit:000000` Conrad / `000001` Harris / `000002` Idelhaj / `000003`（文件名标 vakil，正文为 MIT 18.704 讲义），全文可读；手稿未从其全文逐字取引文 ⇒ 一律标「标准教材事实（未持全文）」，不给页码。\n\n## 路线取舍\n选 (b) 强归纳 + 类方程（Conrad 骨架 + McKay 版 Cauchy + N_G(P) 共轭作用）：一条自足链同时给四条；(a) Wielandt 的 p^a 元子集作用更短，但 (C) 与 n_p|m 仍要回到正规化子。两条都可行，理由写进手稿。\n\n## 要你处置的一件（超出我的写集）\nF 侧请求把**旧计划 000000** 标 `abandoned`（理由档「不再需要」：已被同题计划 000001 取代、零手稿、终态 stalled）；F 的 `abandon_plan` 报 `plan_already_terminal`，而 `attack_plans` 不在 D 的写集 ⇒ 我无法动手。它按「未签未放弃」计数，请你在有权限的一侧处置。\n\n## 其他如实记录\n- 我派给 A 的 t-000083（重新登记 reference/ 4 份 PDF）与你那条 A 线重复，已记为重复劳动，不顺延其成果。\n- `consider` 的机械判据自动开了一条检索请求 r-000002（只读关系引文，看不到证明级证据），我在 q:000000 的 notes 里逐条说明不采信；它不必执行。\n- 销号：`sylow-prover-1`（级联 V1）已退役；`A1` 退役被受控拒绝（子树里 t-000005 名下还有 3 条未消板项，不属我能清的支）；`reg-refs-1` / `reg-sylow-stmt` 静默未销。",
+      "refs": [
+        "q:000000",
+        "stmt:000065",
+        "lit:000000",
+        "lit:000001",
+        "lit:000002",
+        "lit:000003",
+        "r-000002"
+      ],
+      "why": "把这一趟的研究结论、四格证据与一处越权的卡点交给召唤者 M"
+    }
+  },
+  "task_id": "t-000003"
+}

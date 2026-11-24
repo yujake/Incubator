@@ -1,0 +1,858 @@
+{
+  "role": "V",
+  "task": "V：这一趟派给你的活是 —— 请对命题 stmt:000063（Sylow III*：p-Sylow 子群个数 n_p = [G : N(P)]）的证明手稿 manuscripts/B/b-proof-000006.md 逐行走查并给两态结论。这是第二阶段洗后的新版正文（稿号 000006，正文 sha 31fa9452af01a69d4f13fc135135276b0433b386fd2ae22aedae9959da606e19，是 stmt:000063 的 1 号证明路径）。本版已把两处依据就地补出：事实 A（轨道-稳定化子，含良定义双射）、事实 B（有限 p-群作用的固定点同余，含非不动点轨道长度被 p 整除的推导）、事实 C（Sylow II 共轭性就地证明）；正文也明写了「Syl_p(G) 至少含 P」所以作用有定义，不再依赖 Sylow I 的存在性定理。请审这一份正文：成立就把签块落回该稿、结论落 verifications/000063.jsonl；判「有毛病」请把缺陷指到步号并给最小补法。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/B/b-proof-000006.md"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# B 的证明手稿：Sylow 第三定理（计数形式）\n\n- 标签：Sylow 第三定理\n- 稿族：b-proof\n- 产出者：agent-B-B1\n- 正文sha：31fa9452af01a69d4f13fc135135276b0433b386fd2ae22aedae9959da606e19\n- 命题指纹：9a74f930130d909cb5c71c9cdc3e7547d890f7c901d6aa6e24ef6a6c1d4748e3\n- 登记时间：2026-11-24T04:10:27+08:00\n- 版本：2026-11-24T04:10:27+08:00@31fa9452af01a69d4f13fc135135276b0433b386fd2ae22aedae9959da606e19\n\n## 命题\n\n设 G 是有限群，p 是素数，n_p 表示 G 的 p-Sylow 子群的个数。则对任意一个 p-Sylow 子群 P，都有 n_p = [G : N(P)]，其中 N(P) 是 P 在 G 中的正规化子。\n\n## 证明\n\n设 G 是有限群，p 是素数，P 是 G 的一个 p-Sylow 子群，n_p 是 G 的 p-Sylow 子群的个数，N(P) 是 P 在 G 中的正规化子。我们要证 n_p = [G : N(P)]。\n\n先记下两条后面要用的事实，都在这里就地推出。事实 A（轨道-稳定化子）：若有限群 Γ 作用在集合 X 上，取 x ∈ X，记 Stab(x) = {g ∈ Γ : g·x = x}，则映射 g·Stab(x) ↦ g·x 是左陪集集合 Γ/Stab(x) 到轨道 Γ·x 的良定义双射，于是 |Γ·x| = [Γ : Stab(x)]。良定义与单射：若 g·x = h·x，则 h⁻¹g·x = x，即 h⁻¹g ∈ Stab(x)，两个左陪集相等；满射按轨道的定义直接成立。\n\n事实 B（p-群作用的固定点同余）：若有限 p-群 Γ 作用在有限集 X 上，则 |X| ≡ |Fix_Γ(X)| (mod p)。证明：把 X 按轨道分解成不交并；长度大于 1 的轨道取一点 x，由事实 A 其长度为 [Γ : Stab(x)]，而 Stab(x) 是 Γ 的真子群，故该指数是 p 的正幂、被 p 整除；长度等于 1 的轨道恰是不动点。于是 |X| 等于 |Fix_Γ(X)| 加上若干被 p 整除的项，两边模 p 相等。\n\n事实 C（Sylow II 的共轭性，就地推出）：若 P、Q 是两个 p-Sylow 子群，让 Q 从左作用在左陪集集合 G/P 上，规定 q·(gP) = (qg)P；这确实良定义，因为若 g′ ∈ gP 则 g′ = gh（h ∈ P），于是 qg′P = qghP = qgP。由事实 B 得 |G/P| ≡ |Fix_Q(G/P)| (mod p)；左边就是指数 [G : P]，它不被 p 整除，故不动点集不能为空，可取一个不动点 gP。不动点意味着对每个 q ∈ Q 都有 qgP = gP，即 q ∈ gPg⁻¹，所以 Q ⊆ gPg⁻¹；两者阶同为 p^k，包含关系在等阶有限群之间只能是相等，故 Q = gPg⁻¹。\n\n现在取 P 为 G 的一个 p-Sylow 子群，让 G 经共轭作用在 Syl_p(G)（G 的 p-Sylow 子群全体，它至少含 P）上，即 g·Q = gQg⁻¹。把 P 看作这个集合里的一个点 {P}，由事实 A，它的轨道大小为 [G : Stab]，其中 Stab = {g ∈ G : gPg⁻¹ = P}；这恰是正规化子 N(P) 的定义，故轨道大小等于 [G : N(P)]。\n\n另一方面，由事实 C，Syl_p(G) 中任取一个 Q 都与 P 共轭，即 Q 落在 P 的轨道里；因此 P 的轨道就是整个 Syl_p(G)，其大小正是 n_p。两边合起来就得到 n_p = [G : N(P)]，按轨道-稳定化子公式这正是所要的等式。\n\n## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |\n|---|---|---|\n\n（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/B/b-proof-000006.md",
+          "encoding": "utf-8",
+          "bytes_read": 3201,
+          "total_bytes": 3201,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 34,
+          "total_lines": 34,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 34 行",
+          "sha256": "d4b02950f6b39211a551c243d70add80754efd69f996f6de4f9190c41e438f4b"
+        },
+        "multi_call": {
+          "turn_index": 0,
+          "call_index": 0,
+          "calls": 2,
+          "step_index": 0
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 36608,
+        "prompt_cache_miss_tokens": 1394,
+        "tokens_in": 38002,
+        "tokens_out": 104,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000056"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "statements",
+          "id": "000063"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "stmt_id": "000063",
+          "origin": "external_lit",
+          "kind": "theorem",
+          "label": "Sylow 第三定理",
+          "statement_text": "Sylow III*：p-Sylow 子群个数 n_p 等于 P 的正规化子在 G 中的指数 [G : N(P)]。",
+          "statement_full": "设 G 是有限群，p 是素数，n_p 表示 G 的 p-Sylow 子群的个数。则对任意一个 p-Sylow 子群 P，都有 n_p = [G : N(P)]，其中 N(P) 是 P 在 G 中的正规化子。",
+          "proof_text": "For each prime p, let np be the number of p-Sylow subgroups of G. Then np = [G : N(P)], where P is a p-Sylow subgroup and N(P) is its normalizer.",
+          "source_lit_id": "000000",
+          "page_range": {
+            "start": 3,
+            "end": 3,
+            "label": "p. 3"
+          },
+          "quote_verified": true,
+          "quote_mode": "verbatim",
+          "quote_reason": "proof_text；命中区间 p3:norm[875:1019]（页号从 1 起；起止是该页归一化文本的字符偏移，含头不含尾，归一化函数 textutil.normalize_for_quote）；没有模型调用（逐字档是纯文本比对）⇒ quote_call_sha256 留空",
+          "quote_span": "p3:norm[875:1019]",
+          "quote_call_sha256": "",
+          "evidence_kind": "cross_check",
+          "bits": {
+            "numeric": "pending",
+            "proof": true,
+            "reviewed": false,
+            "formal": "pending",
+            "audited": false,
+            "origin": "external_lit",
+            "evidence": {
+              "numeric": {},
+              "numeric_reason": "",
+              "proof_process": "",
+              "proof_source": "citation",
+              "reviewed_by": {
+                "evidence": "lit:000000"
+              },
+              "reviewed_source": "citation",
+              "formal": {},
+              "formal_reason": "",
+              "audited_by": {},
+              "optimized_by_proof": {
+                "1": false
+              }
+            },
+            "voided_by": {},
+            "grade": "conjecture",
+            "audited_badge": false
+          },
+          "status": "active",
+          "derived_from": [],
+          "aliases": [],
+          "doc_id": null,
+          "line_range": {
+            "start": null,
+            "end": null,
+            "label": ""
+          },
+          "created_at": "2026-11-24T03:50:29+08:00",
+          "created_by": "secretary-B",
+          "_proposition_adjudication": {
+            "checked": true,
+            "attempted": true,
+            "verdict": "different",
+            "canonical_name": "Sylow 第三定理",
+            "same_as": "",
+            "basis": "候选 000062 条件：G 有限、p 素数，候选另写 |G|=p^k m 且 p∤m，只是标准分解，与本条“G 有限、p 素数”等价改写，条件一致。；候选 000062 结论：n_p 整除 m 且 n_p≡1 (mod p)，与本条 n_p=[G:N(P)] 不是同一结论，前者是数论约束，后者是正规化子指数公式；故判 different。；候选 000060 条件：G 有限、p 素数，一致；结论：p-Sylow 子群存在且每个 p-子群含于某个 p-Sylow 子群，与本条结论不同。；候选 000061 条件：G 有限、p 素数，一致；结论：任意两个 p-Sylow 子群共轭，与本条结论不同。；候选 000062 的结论是 n_p 整除 m 且 n_p≡1 (mod p)，本条结论是 n_p=[G:N(P)]，结论组不一致；其余候选的结论分别是存在/包含与共轭，也不同。",
+            "reason": "候选 000062 的结论是 n_p 整除 m 且 n_p≡1 (mod p)，本条结论是 n_p=[G:N(P)]，结论组不一致；其余候选的结论分别是存在/包含与共轭，也不同。",
+            "reused": false,
+            "seam_source": "secretary（LlmSeam.for_secretary）",
+            "seam_attempted": true,
+            "at": "2026-11-24T03:50:29+08:00"
+          },
+          "quote_carrier": {
+            "pass": "first",
+            "manuscript_id": "000006",
+            "manuscript": "manuscripts/B/b-proof-000006.md",
+            "body_sha256": "b12861bcfff622e7439c63f86f8d03633a5b90bc9722b119c1b1a6cbe779af35",
+            "at": "2026-11-24T03:50:29+08:00"
+          },
+          "proof_no": 1,
+          "proof_sha256": "b12861bcfff622e7439c63f86f8d03633a5b90bc9722b119c1b1a6cbe779af35",
+          "manuscript_id": "000006",
+          "manuscripts": {
+            "1": "manuscripts/B/b-proof-000006.md"
+          },
+          "manuscript_family": "b-proof",
+          "proof_routes": {},
+          "route": ""
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "id": "000063",
+          "id_field": "stmt_id",
+          "found": true
+        },
+        "warn": "这一步给了 2 条调用，已按顺序逐条：第 1 条 fs.read 成功；第 2 条 table.get 成功。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 0,
+          "call_index": 1,
+          "calls": 2,
+          "step_index": 1,
+          "summary": "这一步给了 2 条调用，已按顺序逐条：第 1 条 fs.read 成功；第 2 条 table.get 成功。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 0,
+            "calls": 2,
+            "items": 2,
+            "steps": [
+              0,
+              1
+            ],
+            "executed": 2,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000056"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "verify.verify_proof",
+        "args": {
+          "statement_id": "000063",
+          "proof_manuscript": "manuscripts/B/b-proof-000006.md"
+        },
+        "why": "对 stmt:000063 的 1 号证明路径（稿 000006，正文 sha 31fa9452…）逐行走查并落两态结论"
+      },
+      "result": {
+        "tool": "verify.verify_proof",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "kind": "",
+          "statement_id": "000063",
+          "verification_id": "v-000002",
+          "verdict": "有毛病",
+          "defect_step": 2,
+          "findings": [
+            {
+              "level": "error",
+              "step": 2,
+              "kind": "无依据的步骤/良定义未证",
+              "detail": "事实 A 中映射 g·Stab(x) ↦ g·x 的良定义需补：若 g·Stab(x)=h·Stab(x)，则 h⁻¹g∈Stab(x)，故 g·x=h·x；现文只给出了反向蕴含（g·x=h·x ⇒ 同一左陪集），不足以保证该规则给出函数。"
+            }
+          ],
+          "unresolved_errors": 1,
+          "proof_sha256": "31fa9452af01a69d4f13fc135135276b0433b386fd2ae22aedae9959da606e19",
+          "proof_chars": 1211,
+          "signed_bit3": false,
+          "reviewed_by": {},
+          "bits": {
+            "numeric": "pending",
+            "proof": true,
+            "reviewed": false,
+            "formal": "pending",
+            "audited": false,
+            "origin": "own_result",
+            "evidence": {
+              "numeric": {},
+              "numeric_reason": "",
+              "proof_process": "设 G 是有限群，p 是素数，P 是 G 的一个 p-Sylow 子群，n_p 是 G 的 p-Sylow 子群的个数，N(P) 是 P 在 G 中的正规化子。我们要证 n_p = [G : N(P)]。\n\n先记下两条后面要用的事实，都在这里就地推出。事实 A（轨道-稳定化子）：若有限群 Γ 作用在集合 X 上，取 x ∈ X，记 Stab(x) = {g ∈ Γ : g·x = x}，则映射 g·Stab(x) ↦ g·x 是左陪集集合 Γ/Stab(x) 到轨道 Γ·x 的良定义双射，于是 |Γ·x| = [Γ : Stab(x)]。良定义与单射：若 g·x = h·x，则 h⁻¹g·x = x，即 h⁻¹g ∈ Stab(x)，两个左陪集相等；满射按轨道的定义直接成立。\n\n事实 B（p-群作用的固定点同余）：若有限 p-群 Γ 作用在有限集 X 上，则 |X| ≡ |Fix_Γ(X)| (mod p)。证明：把 X 按轨道分解成不交并；长度大于 1 的轨道取一点 x，由事实 A 其长度为 [Γ : Stab(x)]，而 Stab(x) 是 Γ 的真子群，故该指数是 p 的正幂、被 p 整除；长度等于 1 的轨道恰是不动点。于是 |X| 等于 |Fix_Γ(X)| 加上若干被 p 整除的项，两边模 p 相等。\n\n事实 C（Sylow II 的共轭性，就地推出）：若 P、Q 是两个 p-Sylow 子群，让 Q 从左作用在左陪集集合 G/P 上，规定 q·(gP) = (qg)P；这确实良定义，因为若 g′ ∈ gP 则 g′ = gh（h ∈ P），于是 qg′P = qghP = qgP。由事实 B 得 |G/P| ≡ |Fix_Q(G/P)| (mod p)；左边就是指数 [G : P]，它不被 p 整除，故不动点集不能为空，可取一个不动点 gP。不动点意味着对每个 q ∈ Q 都有 qgP = gP，即 q ∈ gPg⁻¹，所以 Q ⊆ gPg⁻¹；两者阶同为 p^k，包含关系在等阶有限群之间只能是相等，故 Q = gPg⁻¹。\n\n现在取 P 为 G 的一个 p-Sylow 子群，让 G 经共轭作用在 Syl_p(G)（G 的 p-Sylow 子群全体，它至少含 P）上，即 g·Q = gQg⁻¹。把 P 看作这个集合里的一个点 {P}，由事实 A，它的轨道大小为 [G : Stab]，其中 Stab = {g ∈ G : gPg⁻¹ = P}；这恰是正规化子 N(P) 的定义，故轨道大小等于 [G : N(P)]。\n\n另一方面，由事实 C，Syl_p(G) 中任取一个 Q 都与 P 共轭，即 Q 落在 P 的轨道里；因此 P 的轨道就是整个 Syl_p(G)，其大小正是 n_p。两边合起来就得到 n_p = [G : N(P)]，按轨道-稳定化子公式这正是所要的等式。",
+              "proof_source": "own",
+              "reviewed_by": {},
+              "reviewed_source": "",
+              "formal": {},
+              "formal_reason": "",
+              "audited_by": {}
+            },
+            "voided_by": {},
+            "grade": "conjecture",
+            "audited_badge": false
+          },
+          "review_write": {
+            "written": false,
+            "rolled_back": false,
+            "append_state": "appended",
+            "re_sign_required": false,
+            "grade": "",
+            "statement_id": "000063",
+            "proof_no": 1,
+            "proof_sha256": "31fa9452af01a69d4f13fc135135276b0433b386fd2ae22aedae9959da606e19",
+            "kind_upgrade": {},
+            "upgrade_note": "",
+            "grade_recomputed": {},
+            "streak": 0,
+            "need": 3,
+            "streak_ok": false,
+            "deferred_to": "secretary",
+            "reason": "发签这一步不在这一支：在册档由 V 的秘书判定并发（业主 2026-10-29），未在册档由 V 自己颁发签信封。台账那一行已落（v-000002）",
+            "manuscript_signed": false,
+            "filed": "not_read_by_v",
+            "v_review": {
+              "checked": true,
+              "review_id": "v-review-000009",
+              "written": true,
+              "idempotent": false,
+              "path": "verifications/reviews/v-review-000009.md",
+              "delivery": {
+                "checked": true,
+                "state": "dispatched",
+                "item_id": "t-000061",
+                "key": "v-review@v-review-000009",
+                "role": "B",
+                "parent_task_id": "t-000006",
+                "reason": "已投给 t-000006 的板项 t-000061",
+                "detail_path": "V 的审阅报告：`verifications/reviews/v-review-000009.md`\n- 被审稿：`manuscripts/B/b-proof-000006.md`\n- 结论：有毛病（V 的秘书语义判定：fault）\n- 台账锚点：`verifications/000063.jsonl#v-000002`\nV 的原文不转达；这份报告就是给你的审阅意见。改完把同一份稿重新送 V。\n",
+                "existing": false
+              },
+              "reason": "V 稿已落盘：verifications/reviews/v-review-000009.md"
+            },
+            "signed_delivery": {}
+          },
+          "ledger": "verifications/000063.jsonl#v-000002",
+          "reason": "v-000002：有毛病（不签：签没落成）",
+          "detail": "",
+          "exhaustion_review": {},
+          "signer": "",
+          "proof_authors": [],
+          "report_path": "",
+          "checks": [],
+          "missing": [],
+          "citations": [],
+          "citation_checks": [],
+          "citation_gate": {
+            "ok": true,
+            "blocking": [],
+            "weaker": [],
+            "problem": "",
+            "why": ""
+          },
+          "secretary_judge": {
+            "checked": true,
+            "answer": "有缺陷要指出",
+            "axis": "fault",
+            "unwired": false,
+            "reason": "它明确指出第2步中映射 g·Stab(x) ↦ g·x 的良定义未证、只给出了反向蕴含，属于证明链漏洞。",
+            "basis": [
+              "\"why\": \"该句只验证了像相同推出左陪集相同（单射），未验证映射在左陪集换代表时良定义。\"",
+              "\"detail\": \"事实 A 中映射 g·Stab(x) ↦ g·x 的良定义需补：若 g·Stab(x)=h·Stab(x)，则 h⁻¹g∈Stab(x)，故 g·x=h·x；现文只给出了反向蕴含（g·x=h·x ⇒ 同一左陪集），不足以保证该规则给出函数。\""
+            ],
+            "refused": "",
+            "cost": {
+              "ledger": "000336",
+              "charged": true,
+              "ledger_reason": "charged",
+              "call_index": 316,
+              "prompt_sha256": "af23b8a621142ac3077cb350972efaef45188701edf98067748f1de6055707f2",
+              "tokens": 2120,
+              "usd": 0.000679
+            },
+            "verdict": "有毛病",
+            "defect_step": 2,
+            "fault_kind": "math",
+            "fault_cause": "",
+            "report_gap": "",
+            "statement_id": "000063",
+            "proof_no": 1,
+            "material": {
+              "v_reply": "{\"verdict\": \"有毛病\", \"defect_step\": 2, \"quote\": \"良定义与单射：若 g·x = h·x，则 h⁻¹g·x = x，即 h⁻¹g ∈ Stab(x)，两个左陪集相等；满射按轨道的定义直接成立。\", \"why\": \"该句只验证了像相同推出左陪集相同（单射），未验证映射在左陪集换代表时良定义。\", \"findings\": [{\"level\": \"error\", \"step\": 2, \"kind\": \"无依据的步骤/良定义未证\", \"detail\": \"事实 A 中映射 g·Stab(x) ↦ g·x 的良定义需补：若 g·Stab(x)=h·Stab(x)，则 h⁻¹g∈Stab(x)，故 g·x=h·x；现文只给出了反向蕴含（g·x=h·x ⇒ 同一左陪集），不足以保证该规则给出函数。\"}], \"citation_checks\": []}",
+              "ledger_row": {
+                "verdict": "有毛病",
+                "defect_step": 2
+              }
+            },
+            "defect_step_basis": "回复原文明确写有 \"defect_step\": 2，且 findings[0].step 为 2，缺陷定位在第2步。"
+          },
+          "sign_issuance": {
+            "checked": true,
+            "issue": false,
+            "issued": false,
+            "landed": false,
+            "decision": "不签发",
+            "streak": 0,
+            "need": 3,
+            "streak_ok": false,
+            "projected": 0,
+            "same_sha": true,
+            "state": "rejected",
+            "fault_kind": "math",
+            "reason": "这一转秘书语义判定说「有毛病」（fault）⇒ 不发签；这一转就是终局：已按 fault 打回 F（错在第几步见洗过的转达与 findings）",
+            "basis": [
+              "秘书判定 checked=True axis=fault",
+              "continuous=0/3",
+              "row=v-000002"
+            ],
+            "reading": {
+              "checked": true,
+              "state": "rejected",
+              "ok": false,
+              "in_sync": true,
+              "ledger_present": true,
+              "statement_id": "000063",
+              "proof_no": 1,
+              "sha": "31fa9452af01a69d4f13fc135135276b0433b386fd2ae22aedae9959da606e19",
+              "verification_id": "v-000002",
+              "verdict": "有毛病",
+              "round": 2,
+              "unresolved_errors": 1,
+              "rows": 2,
+              "proof_rows": 2,
+              "problems": [],
+              "superseded": [
+                {
+                  "verification_id": "v-000001",
+                  "verdict": "成立",
+                  "round": 1,
+                  "at": "2026-11-24T04:16:12+08:00",
+                  "proof_no": 1,
+                  "proof_sha256": "31fa9452af01a69d4f13fc135135276b0433b386fd2ae22aedae9959da606e19",
+                  "signed_bit3": false,
+                  "unresolved_errors": 0,
+                  "why": "沿假设、定理链、记号、条件性措辞与引用面逐段核对，事实 A-C 均就地证明，共轭轨道与正规化子对应无误，未发现缺陷。"
+                }
+              ],
+              "superseded_total": 1,
+              "streak": 0,
+              "need": 3,
+              "streak_ok": false,
+              "legacy_rows": 0,
+              "counted_by": "legacy:ledger_tail",
+              "ledger": "verifications/000063.jsonl",
+              "why": "000063#p1 的现行正文（sha 31fa9452af01…）最近一签是 v-000002：秘书语义判定轴=fault ⇒ 这一份要打回，按缺陷处理（V 写下的陈述：'有毛病'；unresolved_errors=1；why：该句只验证了像相同推出左陪集相同（单射），未验证映射在左陪集换代表时良定义。）；更早的 1 签已降为历史（见 superseded），不能把它翻回「成立」",
+              "hard_ban_markers": [],
+              "secretary_axis": "fault",
+              "secretary_fault": true,
+              "secretary_judged": true,
+              "secretary_unjudged": false
+            },
+            "cost": {},
+            "material": {},
+            "writeback": {},
+            "statement_id": "000063"
+          },
+          "review_passes": [
+            {
+              "pass": 1,
+              "axis": "clean",
+              "fault_kind": "",
+              "fault_cause": "report_gap",
+              "decision": "不签发",
+              "streak": 1,
+              "need": 3,
+              "streak_ok": false,
+              "issue": false,
+              "issued": false,
+              "verdict": "成立",
+              "verification_id": "v-000001",
+              "review_call": "b7bcc2adf081",
+              "terminal": ""
+            },
+            {
+              "pass": 2,
+              "axis": "fault",
+              "fault_kind": "math",
+              "fault_cause": "",
+              "decision": "不签发",
+              "streak": 0,
+              "need": 3,
+              "streak_ok": false,
+              "issue": false,
+              "issued": false,
+              "verdict": "有毛病",
+              "verification_id": "v-000002",
+              "review_call": "b7bcc2adf081",
+              "terminal": "rejected"
+            }
+          ],
+          "manuscript_identity": {
+            "checked": true,
+            "statement_id": "000063",
+            "manuscript_id": "000006",
+            "row_manuscript_id": "000006",
+            "matched_by": "manuscript_id",
+            "fallback": false,
+            "row_checked": true,
+            "found": true,
+            "problem": "",
+            "path_checked": true,
+            "path_count": 1,
+            "path_group": 1,
+            "path_problem": "",
+            "why": "稿号 000006 == stmt:000063 行上的 `manuscript_id`，也在第 1 条逐路径记录上 ⇒ 这是这一条命题的稿"
+          },
+          "issued_sign": {},
+          "wash_v_reply": {
+            "checked": true,
+            "washed": true,
+            "text": "指向第 2 步。问题：这一步只处理了一个方向，即由像相同推出两个左陪集相同（单射方向）；对于映射 g·Stab(x) ↦ g·x，在左陪集换代表时像是否不变，也就是这条对应规则是否良定义、是否确实给出函数，原文没有交代。下一步：补上良定义的验证，设 g·Stab(x)=h·Stab(x)，由 h⁻¹g∈Stab(x) 推出 g·x=h·x；现有文字只给出反向蕴含，不足以保证该规则构成一个函数。",
+            "findings": [
+              {
+                "quote": "良定义与单射：若 g·x = h·x，则 h⁻¹g·x = x，即 h⁻¹g ∈ Stab(x)，两个左陪集相等；满射按轨道的定义直接成立。",
+                "why": "该句只覆盖了「像相同 ⇒ 同一左陪集」这一个方向，未覆盖换代表时规则是否给出同一个元素，即映射的良定义没有验证；缺了这一步，就不能保证所写规则确实定义了一个函数。"
+              }
+            ],
+            "dropped": [],
+            "refused": "",
+            "reason": "洗过：1 条 findings 逐字落回原文",
+            "actor": "secretary-V",
+            "changes": [
+              {
+                "field": "text",
+                "from": "（V 的原文，不转达）",
+                "to": "指向第 2 步。问题：这一步只处理了一个方向，即由像相同推出两个左陪集相同（单射方向）；对于映射 g·Stab(x) ↦ g·x，在左陪集换代表时像是否不变，也就是这条对应规则是否良定义、是否确实给出函数，原文没有交代。下一步：补上良定义的验证，设 g·Stab(x)=h·Stab(x)，由 h⁻¹g∈Stab(x) 推出 g·x=h·x；现有文字只给出反向蕴含，不足以保证该规则构成一个函数。",
+                "why": "洗稿转达：原文不外发（业主 2026-10-29 的 C 段）"
+              }
+            ],
+            "cost": {},
+            "material": {
+              "v_reply": "{\"verdict\": \"有毛病\", \"defect_step\": 2, \"quote\": \"良定义与单射：若 g·x = h·x，则 h⁻¹g·x = x，即 h⁻¹g ∈ Stab(x)，两个左陪集相等；满射按轨道的定义直接成立。\", \"why\": \"该句只验证了像相同推出左陪集相同（单射），未验证映射在左陪集换代表时良定义。\", \"findings\": [{\"level\": \"error\", \"step\": 2, \"kind\": \"无依据的步骤/良定义未证\", \"detail\": \"事实 A 中映射 g·Stab(x) ↦ g·x 的良定义需补：若 g·Stab(x)=h·Stab(x)，则 h⁻¹g∈Stab(x)，故 g·x=h·x；现文只给出了反向蕴含（g·x=h·x ⇒ 同一左陪集），不足以保证该规则给出函数。\"}], \"citation_checks\": []}",
+              "ledger_row": {
+                "verdict": "有毛病",
+                "defect_step": 2
+              },
+              "label": ""
+            },
+            "statement_id": "000063",
+            "proof_no": 1
+          }
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 37248,
+        "prompt_cache_miss_tokens": 3822,
+        "tokens_in": 41070,
+        "tokens_out": 5228,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000056"
+    },
+    {
+      "index": 3,
+      "shape": "final",
+      "payload": {
+        "final": "结论：有毛病（不签发）。被审稿 manuscripts/B/b-proof-000006.md（正文 sha 31fa9452af01a69d4f13fc135135276b0433b386fd2ae22aedae9959da606e19，stmt:000063 的 1 号证明路径），台账行 verifications/000063.jsonl#v-000002，缺陷步 defect_step=2。\n\n【缺陷，唯一一处，第 2 步（事实 A 那一段）】\n原文逐字：「良定义与单射：若 g·x = h·x，则 h⁻¹g·x = x，即 h⁻¹g ∈ Stab(x)，两个左陪集相等；满射按轨道的定义直接成立。」\n问题：这一段自报「良定义与单射」，但写出来的只有一个方向 —— 由像相同（g·x = h·x）推出两个左陪集相同，这是单射。要让规则 g·Stab(x) ↦ g·x 真的给出一个函数，还需反方向：换代表时像不变，即若 g·Stab(x) = h·Stab(x)（等价于 h⁻¹g ∈ Stab(x)），则 g·x = h·x。这一步没有写，所以「良定义」是声明而不是论证（kind：无依据的步骤/良定义未证，level=error）。\n最小补法（一行，不必重写整篇）：在「满射按轨道的定义直接成立」之前加一句「反之，若 g·Stab(x) = h·Stab(x)，即 h⁻¹g ∈ Stab(x)，则 h⁻¹g·x = x，故 g·x = h·x，规则与代表选取无关」，并把现有那句显式标成「单射」。改完把同一份稿重新送审即可。\n\n【其余各处核过、均未发现要改的】事实 A 的满射与双射推出 |Γ·x|=[Γ:Stab(x)]；事实 B（轨道长度 >1 ⇒ Stab(x) 真子群 ⇒ 指数 p 的正幂 ⇒ 被 p 整除；长度 1 轨道恰为不动点）成立；事实 C（Q 左作用于 G/P 良定义已给、[G:P] 不被 p 整除 ⇒ 不动点集非空、不动点 ⇒ q ∈ gPg⁻¹ ⇒ Q ⊆ gPg⁻¹ 且同阶 ⇒ 相等）成立，且不循环（只用到事实 B，未用 Sylow III）；主论证（共轭作用 g·Q = gQg⁻¹ 是左作用，轨道大小 = [G:N(P)]，由事实 C 轨道遍及 Syl_p(G) 且 |Syl_p(G)| = n_p）成立，且 Syl_p(G) 非空已由「至少含 P」就地给出。依赖段为空表，正文确实没有引用任何在册命题，与「空表即声明」一致。\n\n【签】按政策：任一转判 fault 即终局，这一份不签发（data.sign_issuance.decision=不签发，signed_bit3=false）；签块未落回该稿，收方秘书已按 V 稿 v-review-000009 投给 B（板项 t-000061）。",
+        "evidence": [
+          "stmt:000063",
+          "manuscripts/B/b-proof-000006.md",
+          "verifications/000063.jsonl#v-000002",
+          "verifications/reviews/v-review-000009.md"
+        ],
+        "notify": {
+          "to": "B",
+          "summary": "stmt:000063 稿 000006 审毕：有毛病（第 2 步，事实 A 良定义方向缺失），不签发，最小补法一行",
+          "body": "## 结论：有毛病（不签发）\n\n- 被审稿：`manuscripts/B/b-proof-000006.md`，正文 sha `31fa9452af01a69d4f13fc135135276b0433b386fd2ae22aedae9959da606e19`（stmt:000063 的 1 号证明路径）\n- 台账：`verifications/000063.jsonl#v-000002`；V 稿：`verifications/reviews/v-review-000009.md`（权威意见以那份为准）\n- 缺陷步：`defect_step = 2`（事实 A 那一段），唯一一处\n\n### 缺陷（第 2 步）\n原文逐字：「良定义与单射：若 g·x = h·x，则 h⁻¹g·x = x，即 h⁻¹g ∈ Stab(x)，两个左陪集相等；满射按轨道的定义直接成立。」\n这一段自报「良定义与单射」，但只写了「像相同 ⇒ 同一左陪集」（单射方向）。要让 `g·Stab(x) ↦ g·x` 确实是函数，还需「同一左陪集 ⇒ 像相同」，即换代表时像不变。缺这一句，则「良定义」是声明而非论证。\n\n### 最小补法\n在「满射按轨道的定义直接成立」之前加一句：若 `g·Stab(x) = h·Stab(x)`，即 `h⁻¹g ∈ Stab(x)`，则 `h⁻¹g·x = x`，故 `g·x = h·x`；并把现有那句显式标注为「单射」。改完把同一份稿重新送审。\n\n### 其余各处\n事实 A（满射/双射/指数公式）、事实 B（轨道长度 >1 ⇒ 指数为 p 的正幂；长度 1 轨道 = 不动点）、事实 C（Q 左作用良定义、指数不被 p 整除 ⇒ 不动点集非空 ⇒ Q = gPg⁻¹，且只依赖事实 B、不循环）、主论证（共轭作用是左作用、轨道 = Syl_p(G) 故大小 = n_p、轨道大小 = [G:N(P)]）均逐处核过，未发现要改的。依赖段空表与正文一致（确实没有引用在册命题）。",
+          "refs": [
+            "stmt:000063"
+          ]
+        }
+      },
+      "result": {
+        "notify_handoff": {
+          "handoff": "000004",
+          "ok": true,
+          "id": "000004",
+          "path": "work/handoffs.jsonl#000004",
+          "to": "B",
+          "brief": "stmt:000063 稿 000006 审毕：有毛病（第 2 步，事实 A 良定义方向缺失），不签发，最小补法一行",
+          "addressing": {
+            "checked": true,
+            "how": "parent",
+            "to": "B",
+            "kind": "parent",
+            "name": "B1",
+            "task_id": "t-000006",
+            "role": "B",
+            "brief": "",
+            "candidates": [],
+            "callable": "父 B1（t-000006）",
+            "why": "名册成员（parent）⇒ 手稿写角色 B，通知投实例 B",
+            "delivery": "roster",
+            "manuscript_to": "B",
+            "addressed_by": "role_fallback"
+          },
+          "notify_channel": "roster",
+          "revises": "",
+          "existing_same_summary": {
+            "count": 0,
+            "ids": [],
+            "note": "查过了：没有同一句话的既有交接"
+          },
+          "notified": "t-000064",
+          "error": "",
+          "note": "收件人下次运行时（或本步之后）会在收件箱/板上看到编号；它用 `manuscripts.read` 读全文"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 40320,
+        "prompt_cache_miss_tokens": 5033,
+        "tokens_in": 45353,
+        "tokens_out": 4634,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000056"
+    }
+  ],
+  "final": "结论：有毛病（不签发）。被审稿 manuscripts/B/b-proof-000006.md（正文 sha 31fa9452af01a69d4f13fc135135276b0433b386fd2ae22aedae9959da606e19，stmt:000063 的 1 号证明路径），台账行 verifications/000063.jsonl#v-000002，缺陷步 defect_step=2。\n\n【缺陷，唯一一处，第 2 步（事实 A 那一段）】\n原文逐字：「良定义与单射：若 g·x = h·x，则 h⁻¹g·x = x，即 h⁻¹g ∈ Stab(x)，两个左陪集相等；满射按轨道的定义直接成立。」\n问题：这一段自报「良定义与单射」，但写出来的只有一个方向 —— 由像相同（g·x = h·x）推出两个左陪集相同，这是单射。要让规则 g·Stab(x) ↦ g·x 真的给出一个函数，还需反方向：换代表时像不变，即若 g·Stab(x) = h·Stab(x)（等价于 h⁻¹g ∈ Stab(x)），则 g·x = h·x。这一步没有写，所以「良定义」是声明而不是论证（kind：无依据的步骤/良定义未证，level=error）。\n最小补法（一行，不必重写整篇）：在「满射按轨道的定义直接成立」之前加一句「反之，若 g·Stab(x) = h·Stab(x)，即 h⁻¹g ∈ Stab(x)，则 h⁻¹g·x = x，故 g·x = h·x，规则与代表选取无关」，并把现有那句显式标成「单射」。改完把同一份稿重新送审即可。\n\n【其余各处核过、均未发现要改的】事实 A 的满射与双射推出 |Γ·x|=[Γ:Stab(x)]；事实 B（轨道长度 >1 ⇒ Stab(x) 真子群 ⇒ 指数 p 的正幂 ⇒ 被 p 整除；长度 1 轨道恰为不动点）成立；事实 C（Q 左作用于 G/P 良定义已给、[G:P] 不被 p 整除 ⇒ 不动点集非空、不动点 ⇒ q ∈ gPg⁻¹ ⇒ Q ⊆ gPg⁻¹ 且同阶 ⇒ 相等）成立，且不循环（只用到事实 B，未用 Sylow III）；主论证（共轭作用 g·Q = gQg⁻¹ 是左作用，轨道大小 = [G:N(P)]，由事实 C 轨道遍及 Syl_p(G) 且 |Syl_p(G)| = n_p）成立，且 Syl_p(G) 非空已由「至少含 P」就地给出。依赖段为空表，正文确实没有引用任何在册命题，与「空表即声明」一致。\n\n【签】按政策：任一转判 fault 即终局，这一份不签发（data.sign_issuance.decision=不签发，signed_bit3=false）；签块未落回该稿，收方秘书已按 V 稿 v-review-000009 投给 B（板项 t-000061）。",
+  "evidence": [
+    "stmt:000063",
+    "manuscripts/B/b-proof-000006.md",
+    "verifications/000063.jsonl#v-000002",
+    "verifications/reviews/v-review-000009.md"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 0,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 4,
+  "compactions": 0,
+  "mailbox_items": [],
+  "mailbox_msgs": [],
+  "mailbox_delivered": 0,
+  "monitor_turns": 0,
+  "wakes": 0,
+  "wake_ids": [],
+  "wake_events": [],
+  "clock_pumps": 6,
+  "clock_fired": 0,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "V 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "V",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    }
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [
+    "000004"
+  ],
+  "summons": [],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [],
+  "summons_total": 0,
+  "summons_consumed": 0,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 0,
+    "summons_consumed": 0,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p327",
+    "role": "V",
+    "prompt_sha256": "052abf02fb503f722d3e805869fb8b2d64c0afe8b3059978b59c338744ec5519",
+    "prompt_chars": 46343,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "FACULTIES_07",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_STOP",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 3,
+    "tokens_in": 124425,
+    "tokens_out": 9966,
+    "usd": 0.007859,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 3,
+    "no_request_calls": 0,
+    "hit": 114176,
+    "miss": 10249,
+    "unknown_calls": 0,
+    "tokens_in": 124425,
+    "hit_rate": 0.9176,
+    "mismatched_calls": 0,
+    "saved_usd": 0.016784,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 114.656,
+  "end_ts": "2026-11-24T04:17:21+08:00",
+  "notes": [
+    "收工时名下还有 4 条证明没有 V 的签字（读数，不拦收工；明细：000060、000062、000063、000064）",
+    "缓存读数：命中 114176 / 未命中 10249 token，命中率 91.8%（3 次调用）；按 modelcost 口径估算可省 约 0.016784 美元",
+    "子产出处理读数：summons_total=0（这一趟没派过子代理 ⇒ 没有要处理的子产出；判据没有对象，不红）"
+  ],
+  "final_payload": {
+    "final": "结论：有毛病（不签发）。被审稿 manuscripts/B/b-proof-000006.md（正文 sha 31fa9452af01a69d4f13fc135135276b0433b386fd2ae22aedae9959da606e19，stmt:000063 的 1 号证明路径），台账行 verifications/000063.jsonl#v-000002，缺陷步 defect_step=2。\n\n【缺陷，唯一一处，第 2 步（事实 A 那一段）】\n原文逐字：「良定义与单射：若 g·x = h·x，则 h⁻¹g·x = x，即 h⁻¹g ∈ Stab(x)，两个左陪集相等；满射按轨道的定义直接成立。」\n问题：这一段自报「良定义与单射」，但写出来的只有一个方向 —— 由像相同（g·x = h·x）推出两个左陪集相同，这是单射。要让规则 g·Stab(x) ↦ g·x 真的给出一个函数，还需反方向：换代表时像不变，即若 g·Stab(x) = h·Stab(x)（等价于 h⁻¹g ∈ Stab(x)），则 g·x = h·x。这一步没有写，所以「良定义」是声明而不是论证（kind：无依据的步骤/良定义未证，level=error）。\n最小补法（一行，不必重写整篇）：在「满射按轨道的定义直接成立」之前加一句「反之，若 g·Stab(x) = h·Stab(x)，即 h⁻¹g ∈ Stab(x)，则 h⁻¹g·x = x，故 g·x = h·x，规则与代表选取无关」，并把现有那句显式标成「单射」。改完把同一份稿重新送审即可。\n\n【其余各处核过、均未发现要改的】事实 A 的满射与双射推出 |Γ·x|=[Γ:Stab(x)]；事实 B（轨道长度 >1 ⇒ Stab(x) 真子群 ⇒ 指数 p 的正幂 ⇒ 被 p 整除；长度 1 轨道恰为不动点）成立；事实 C（Q 左作用于 G/P 良定义已给、[G:P] 不被 p 整除 ⇒ 不动点集非空、不动点 ⇒ q ∈ gPg⁻¹ ⇒ Q ⊆ gPg⁻¹ 且同阶 ⇒ 相等）成立，且不循环（只用到事实 B，未用 Sylow III）；主论证（共轭作用 g·Q = gQg⁻¹ 是左作用，轨道大小 = [G:N(P)]，由事实 C 轨道遍及 Syl_p(G) 且 |Syl_p(G)| = n_p）成立，且 Syl_p(G) 非空已由「至少含 P」就地给出。依赖段为空表，正文确实没有引用任何在册命题，与「空表即声明」一致。\n\n【签】按政策：任一转判 fault 即终局，这一份不签发（data.sign_issuance.decision=不签发，signed_bit3=false）；签块未落回该稿，收方秘书已按 V 稿 v-review-000009 投给 B（板项 t-000061）。",
+    "evidence": [
+      "stmt:000063",
+      "manuscripts/B/b-proof-000006.md",
+      "verifications/000063.jsonl#v-000002",
+      "verifications/reviews/v-review-000009.md"
+    ],
+    "notify": {
+      "to": "B",
+      "summary": "stmt:000063 稿 000006 审毕：有毛病（第 2 步，事实 A 良定义方向缺失），不签发，最小补法一行",
+      "body": "## 结论：有毛病（不签发）\n\n- 被审稿：`manuscripts/B/b-proof-000006.md`，正文 sha `31fa9452af01a69d4f13fc135135276b0433b386fd2ae22aedae9959da606e19`（stmt:000063 的 1 号证明路径）\n- 台账：`verifications/000063.jsonl#v-000002`；V 稿：`verifications/reviews/v-review-000009.md`（权威意见以那份为准）\n- 缺陷步：`defect_step = 2`（事实 A 那一段），唯一一处\n\n### 缺陷（第 2 步）\n原文逐字：「良定义与单射：若 g·x = h·x，则 h⁻¹g·x = x，即 h⁻¹g ∈ Stab(x)，两个左陪集相等；满射按轨道的定义直接成立。」\n这一段自报「良定义与单射」，但只写了「像相同 ⇒ 同一左陪集」（单射方向）。要让 `g·Stab(x) ↦ g·x` 确实是函数，还需「同一左陪集 ⇒ 像相同」，即换代表时像不变。缺这一句，则「良定义」是声明而非论证。\n\n### 最小补法\n在「满射按轨道的定义直接成立」之前加一句：若 `g·Stab(x) = h·Stab(x)`，即 `h⁻¹g ∈ Stab(x)`，则 `h⁻¹g·x = x`，故 `g·x = h·x`；并把现有那句显式标注为「单射」。改完把同一份稿重新送审。\n\n### 其余各处\n事实 A（满射/双射/指数公式）、事实 B（轨道长度 >1 ⇒ 指数为 p 的正幂；长度 1 轨道 = 不动点）、事实 C（Q 左作用良定义、指数不被 p 整除 ⇒ 不动点集非空 ⇒ Q = gPg⁻¹，且只依赖事实 B、不循环）、主论证（共轭作用是左作用、轨道 = Syl_p(G) 故大小 = n_p、轨道大小 = [G:N(P)]）均逐处核过，未发现要改的。依赖段空表与正文一致（确实没有引用在册命题）。",
+      "refs": [
+        "stmt:000063"
+      ]
+    }
+  },
+  "task_id": "t-000056"
+}

@@ -1,0 +1,2231 @@
+{
+  "role": "G",
+  "task": "G：这一趟派给你的活是 —— 收口 acceptance 最后一处机器口径不匹配：doc:000000 的 claims 里 claim-1（引 stmt:000060 与 lit:000000）被收工门的确定性判据判为「断言与它引的证据对不上（数字特征/实词特征无交集）」。请做一次外科手术式修订：(1) 用 fs.read 读 data/documents.json 里 doc:000000 那一行的 5 条 claims，逐条把它与所引 stmt/lit 的题名或命题正文做词面比对，凡与所引对象无实词/数字交集的 claim，改写 claim 的表述使它明确只是转述所引命题的结论（用 stmt 里的术语原词，例如 Sylow p-subgroup / normalizer / conjugation / orbit-stabilizer / congruence），不要改任何数学内容、不要新增断言、不要动 main.tex 的定理与证明；(2) 改完用 doc.write_mapping 重落 MAPPING.json（保证每行仍回溯到 stmt 号与 V 签）；(3) 若 main.tex 未被改动就不必重编；若动了 main.tex 必须再调 doc.paper_compile 让回执 tex_sha256 对上盘上这一版。回执里给：改了哪几条 claim、改动前后的一行对照、MAPPING 是否 pass、回执 tex_sha256 前 12 位与 pages。预算紧张（全案余约 $1.2），一次做完不要反复重写整篇。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "data/documents.json",
+          "max_lines": 200
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "{\n  \"schema_version\": 2,\n  \"rows\": [\n    {\n      \"doc_id\": \"000000\",\n      \"kind\": \"paper\",\n      \"title\": \"The Sylow Theorems: Existence, Conjugacy and Counting\",\n      \"markdown_path\": \"manuscripts/G/000000.md\",\n      \"sections\": [\n        {\n          \"heading\": \"Introduction and notation\",\n          \"body\": \"The Sylow theorems are the first structural results about finite groups beyond Lagrange's theorem. We give self-contained proofs of existence (Sylow I), conjugacy (Sylow II) and the counting conditions (Sylow III), together with the index formula for the normalizer and the uniqueness criterion. Notation is fixed in Section 2; all results are stated and proved in Section 3; examples and references follow.\"\n        },\n        {\n          \"heading\": \"Definitions and notation\",\n          \"body\": \"|G| order; p-Sylow subgroup = subgroup of order p^k where p^k is the full p-part of |G|; N_G(H) normalizer; orbit-stabilizer; class equation; fixed-point congruence for p-groups.\"\n        },\n        {\n          \"heading\": \"Main results\",\n          \"body\": \"Theorem 3.1 (Sylow I): existence and containment. Theorem 3.2 (Sylow II): conjugacy. Theorem 3.3 (Sylow III): n_p | m and n_p = 1 (mod p). Theorem 3.4: n_p = [G : N_G(P)]. Theorem 3.5: uniqueness iff normality.\"\n        },\n        {\n          \"heading\": \"Examples and comparison with the literature\",\n          \"body\": \"S_3, S_4, A_5 and groups of order pq illustrate the counting conditions; the treatment follows the expository accounts of the reference list.\"\n        }\n      ],\n      \"claims\": [\n        {\n          \"text\": \"Let G be a finite group with |G| = p^k m and p not dividing m. Then G has a subgroup of order p^k, and every p-subgroup of G is contained in some subgroup of order p^k.\",\n          \"citations\": [\n            \"stmt:000060\",\n            \"lit:000000\"\n          ],\n          \"evidence_kind\": \"cross_check\",\n          \"disclaimer\": \"数值交叉验证，不构成证明\",\n          \"section\": \"3\",\n          \"claim_id\": \"claim-1\",\n …（落档截断，原 5551 字）",
+        "error": "",
+        "meta": {
+          "path": "data/documents.json",
+          "encoding": "utf-8",
+          "bytes_read": 5958,
+          "total_bytes": 5958,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 137,
+          "total_lines": 137,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 1–137 行（共 137 行）",
+          "sha256": "722719cf8eaa7823632afb78ab61b9fe2f5da5dac6f935ca16dd451db6e0cca5"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 64768,
+        "prompt_cache_miss_tokens": 1742,
+        "tokens_in": 66510,
+        "tokens_out": 68,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000160"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "statements",
+          "fields": [
+            "stmt_id",
+            "label",
+            "statement_full",
+            "kind",
+            "status"
+          ],
+          "limit": 50
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "statements",
+          "rows": [
+            {
+              "stmt_id": "000000",
+              "label": "p-Sylow subgroup",
+              "statement_full": "A subgroup of a finite group G whose order is the highest power of a prime p dividing |G|.；A p-subgroup of a finite group G whose order is the largest power of p dividing |G|, equivalently a p-subgroup of maximal order.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000001",
+              "label": "ﬁnite group",
+              "statement_full": "A group G whose order |G| is finite.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000002",
+              "label": "prime",
+              "statement_full": "A prime number p.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000003",
+              "label": "conjugate",
+              "statement_full": "Subgroups H and K of G are conjugate if there is some g in G such that gHg^{-1} = K.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000004",
+              "label": "p-subgroup",
+              "statement_full": "A subgroup of G whose order is a power of p.；A subgroup whose order is a power of the prime p.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000005",
+              "label": "normalizer",
+              "statement_full": "N(P), the normalizer of the subgroup P.；The subgroup N(H) of elements g in G such that gH = Hg, equivalently gHg^{-1} = H.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000006",
+              "label": "number of p-Sylow subgroups",
+              "statement_full": "np, the number of p-Sylow subgroups of G.；The cardinality of the set Sylp(G) of p-Sylow subgroups, denoted np.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000007",
+              "label": "Sylow theorems",
+              "statement_full": "Theorems 1.7–1.10 about existence, conjugacy, and counting of p-Sylow subgroups.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000008",
+              "label": "group actions",
+              "statement_full": "Actions of a group on a set, used in the proof of the Sylow theorems.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000009",
+              "label": "finite p-group",
+              "statement_full": "A finite group whose order is a power of the prime p.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000010",
+              "label": "Hall subgroup",
+              "statement_full": "A subgroup H of a finite group G whose order and index are relatively prime.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000011",
+              "label": "solvable group",
+              "statement_full": "A finite group for which Hall subgroups exist for each divisor d of |G| with (d, |G|/d) = 1, and Hall subgroups of the same order are conjugate.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000012",
+              "label": "maximal tori",
+              "statement_full": "Maximal connected abelian subgroups of a compact connected Lie group.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000013",
+              "label": "Borel subgroup",
+              "statement_full": "The normalizer of a maximal connected unipotent subgroup.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000014",
+              "label": "maximal connected unipotent subgroup",
+              "statement_full": "A maximal connected unipotent subgroup of a connected linear algebraic group, analogous to a Sylow subgroup.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000015",
+              "label": "finite group of order n",
+              "statement_full": "阶为 n 的有限群 G。",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000016",
+              "label": "subgroup",
+              "statement_full": "群 G 的子群 H。；A subset H ⊆ G considered as a subgroup in the group-theoretic arguments.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000017",
+              "label": "normal subgroup",
+              "statement_full": "在 G 的共轭作用下保持不变的子群 H。；A subgroup invariant under conjugation; the text uses this for H and for K4 in S4.；A subgroup that is normal in the ambient group; the text notes H is even a normal subgroup of NG(H).",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000018",
+              "label": "Third Sylow Theorem",
+              "statement_full": "Sylow 第三定理，给出 Sylow p-子群个数的同余与整除限制。",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000019",
+              "label": "Sylow 7-subgroup",
+              "statement_full": "阶为 7 的 Sylow 7-子群。",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000020",
+              "label": "group of order pq",
+              "statement_full": "阶为 pq 的群，其中 p 和 q 为不同素数且 q > p。",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000021",
+              "label": "Sylow q-subgroup",
+              "statement_full": "G 的阶为 q 的 Sylow q-子群。；A Sylow q-subgroup of G; in the proof the unique Sylow q-subgroup H is normal and has order q.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000022",
+              "label": "cyclic",
+              "statement_full": "可由一个元素生成的群。",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000023",
+              "label": "abelian",
+              "statement_full": "满足交换律的群。；A group whose elements commute; the text states that a subgroup H of order q is abelian.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000024",
+              "label": "Second Sylow Theorem",
+              "statement_full": "Sylow 第二定理，断言所有 Sylow p-子群由 G 中元素共轭。",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000025",
+              "label": "conjugation action",
+              "statement_full": "The action of G on a normal subgroup H by conjugation.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000026",
+              "label": "S4",
+              "statement_full": "The symmetric group S4, for which the text states |G| = 24 = 23 × 3.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000027",
+              "label": "Klein group K4",
+              "statement_full": "The Klein four-group K4; a Sylow 2-subgroup of A4 is isomorphic to it.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000028",
+              "label": "Sylow 2-subgroup",
+              "statement_full": "A Sylow 2-subgroup of a finite group; in S4, P = H · K4 is a Sylow 2-subgroup of order 8.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000029",
+              "label": "D8",
+              "statement_full": "The dihedral group D8, to which the constructed Sylow 2-subgroup P is isomorphic, and not Q8.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000030",
+              "label": "A5",
+              "statement_full": "The alternating group A5, with |A5| = 60 = 22 · 3 · 5.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000031",
+              "label": "Sylow 5-subgroup",
+              "statement_full": "A Sylow 5-subgroup; in A5 each Sylow 5-subgroup has 4 generators and there are 6 Sylow 5-subgroups.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000032",
+              "label": "Cauchy’s theorem",
+              "statement_full": "If G is a finite group of order n and p is a prime dividing n, then G has an element of order p.；A theorem invoked in the proof to obtain a subgroup of order p.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000033",
+              "label": "Class Equation",
+              "statement_full": "The class equation used in the proof, involving |G|, |Z(G)|, and indices of centralizers of representatives of conjugacy classes outside the center.；The equation |G| = |Z(G)| + ∑i [G : Cxi], used in the proof of the First Sylow Theorem.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000034",
+              "label": "classification of finite abelian groups",
+              "statement_full": "A classification result invoked to deduce elements or subgroups of order p and to handle the abelian case.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000035",
+              "label": "normalizer NG(H)",
+              "statement_full": "For a subgroup H ⊆ G, the set of g ∈ G such that gHg−1 ⊆ H.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000036",
+              "label": "conjugation",
+              "statement_full": "The map sending H to gHg−1; it is a bijection preserving cardinality.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000037",
+              "label": "quotient map",
+              "statement_full": "The map used to take preimages of subgroups, as in the preimage of ¯K under the quotient map.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000038",
+              "label": "First Sylow Theorem",
+              "statement_full": "The theorem proved by induction using the Class Equation in the text.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000039",
+              "label": "element of order p",
+              "statement_full": "An element whose order is p.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000040",
+              "label": "order",
+              "statement_full": "The order of a group or element, denoted by |P| or pr in the text.；the order |G| of a group G",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000041",
+              "label": "subgroups",
+              "statement_full": "subsets H, K ⊆ G that are subgroups",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000042",
+              "label": "H-conjugates of K",
+              "statement_full": "the distinct subgroups hKh−1, with h ∈ H",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000043",
+              "label": "distinct conjugates of P",
+              "statement_full": "the set S = {P = P1, . . . , Pk} of distinct conjugates of P",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000044",
+              "label": "number k of distinct Sylow p-subgroups of G",
+              "statement_full": "the number of distinct Sylow p-subgroups of G, denoted k",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000045",
+              "label": "action",
+              "statement_full": "A group homomorphism φ : G → Sym(X), where Sym(X) is the group of permutations of X, defining an action of G on X.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000046",
+              "label": "orbit",
+              "statement_full": "The orbit of a point x ∈ X is the set of points to which x is transported by the action of G: Orb(x) = {gx : g ∈ G}.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000047",
+              "label": "stabilizer",
+              "statement_full": "The stabilizer of a point x ∈ X, denoted Stab(x), is the set {g ∈ G : gx = x} ⊆ G.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000048",
+              "label": "Faithful action",
+              "statement_full": "An action whose associated homomorphism φ : G → Sym(X) has trivial kernel.",
+              "kind": "concept",
+              "status": "active"
+            },
+            {
+              "stmt_id": "000049",
+              "label": "Transitive action",
+              "statement_full": "An action with only one orbit.",
+              "kind": "concept",
+              "status": "active"
+            }
+          ],
+          "total": 66,
+          "returned": 50,
+          "limit": 50,
+          "offset": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "total": 66,
+          "returned": 50,
+          "offset": 0,
+          "limit": 50,
+          "fields": [
+            "stmt_id",
+            "label",
+            "statement_full",
+            "kind",
+            "status"
+          ]
+        },
+        "multi_call": {
+          "turn_index": 1,
+          "call_index": 0,
+          "calls": 2,
+          "step_index": 1
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 65664,
+        "prompt_cache_miss_tokens": 3034,
+        "tokens_in": 68698,
+        "tokens_out": 463,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000160"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "literature",
+          "fields": [
+            "lit_id",
+            "title",
+            "authors",
+            "year"
+          ],
+          "limit": 20
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "literature",
+          "rows": [
+            {
+              "lit_id": "000000",
+              "title": "9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf",
+              "authors": [],
+              "year": null
+            },
+            {
+              "lit_id": "000001",
+              "title": "11dc1a689516-harris-sylow-theorems.pdf",
+              "authors": [],
+              "year": null
+            },
+            {
+              "lit_id": "000002",
+              "title": "c104f1720c63-idelhaj-sylow-theorems-and-applications.pdf",
+              "authors": [],
+              "year": null
+            },
+            {
+              "lit_id": "000003",
+              "title": "e090d219194b-vakil-sylow-theorems.pdf",
+              "authors": [],
+              "year": null
+            }
+          ],
+          "total": 4,
+          "returned": 4,
+          "limit": 20,
+          "offset": 0
+        },
+        "error": "",
+        "meta": {
+          "table": "literature",
+          "total": 4,
+          "returned": 4,
+          "offset": 0,
+          "limit": 20,
+          "fields": [
+            "lit_id",
+            "title",
+            "authors",
+            "year"
+          ]
+        },
+        "warn": "这一步给了 2 条调用，已按顺序逐条：第 1 条 table.list 成功：66；第 2 条 table.list 成功：4。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 1,
+          "call_index": 1,
+          "calls": 2,
+          "step_index": 2,
+          "summary": "这一步给了 2 条调用，已按顺序逐条：第 1 条 table.list 成功：66；第 2 条 table.list 成功：4。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 1,
+            "calls": 2,
+            "items": 2,
+            "steps": [
+              1,
+              2
+            ],
+            "executed": 2,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000160"
+    },
+    {
+      "index": 3,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "statements",
+          "fields": [
+            "stmt_id",
+            "label",
+            "statement_full",
+            "kind",
+            "proof_text"
+          ],
+          "limit": 20,
+          "offset": 45
+        },
+        "why": "读 000060–000064 这几条命题正文（词面比对所需）"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "statements",
+          "rows": [
+            {
+              "stmt_id": "000045",
+              "label": "action",
+              "statement_full": "A group homomorphism φ : G → Sym(X), where Sym(X) is the group of permutations of X, defining an action of G on X.",
+              "kind": "concept",
+              "proof_text": ""
+            },
+            {
+              "stmt_id": "000046",
+              "label": "orbit",
+              "statement_full": "The orbit of a point x ∈ X is the set of points to which x is transported by the action of G: Orb(x) = {gx : g ∈ G}.",
+              "kind": "concept",
+              "proof_text": ""
+            },
+            {
+              "stmt_id": "000047",
+              "label": "stabilizer",
+              "statement_full": "The stabilizer of a point x ∈ X, denoted Stab(x), is the set {g ∈ G : gx = x} ⊆ G.",
+              "kind": "concept",
+              "proof_text": ""
+            },
+            {
+              "stmt_id": "000048",
+              "label": "Faithful action",
+              "statement_full": "An action whose associated homomorphism φ : G → Sym(X) has trivial kernel.",
+              "kind": "concept",
+              "proof_text": ""
+            },
+            {
+              "stmt_id": "000049",
+              "label": "Transitive action",
+              "statement_full": "An action with only one orbit.",
+              "kind": "concept",
+              "proof_text": ""
+            },
+            {
+              "stmt_id": "000050",
+              "label": "Cayley’s theorem",
+              "statement_full": "Every group of order n is isomorphic to some subgroup of Sn.",
+              "kind": "concept",
+              "proof_text": ""
+            },
+            {
+              "stmt_id": "000051",
+              "label": "orbit-stabilizer theorem",
+              "statement_full": "When a group G acts on a set X, the length of the orbit of any point equals the index of its stabilizer in G: |Orb(x)| = [G : Stab(x)].；the theorem relating the size of an orbit to the index of its stabilizer",
+              "kind": "concept",
+              "proof_text": ""
+            },
+            {
+              "stmt_id": "000052",
+              "label": "Sylow’s ﬁrst theorem",
+              "statement_full": "If p is a prime number and p divides |G|, then there exists a Sylow p-subgroup of G.",
+              "kind": "concept",
+              "proof_text": ""
+            },
+            {
+              "stmt_id": "000053",
+              "label": "Sylow’s third theorem",
+              "statement_full": "For the number np of Sylow p-subgroups of G, np ≡p 1; if |G| = pnm with p ∤ m then np | m; and if P is any Sylow p-subgroup then np = [G : N(P)].",
+              "kind": "concept",
+              "proof_text": ""
+            },
+            {
+              "stmt_id": "000054",
+              "label": "group of prime order",
+              "statement_full": "a group whose order is a prime number",
+              "kind": "concept",
+              "proof_text": ""
+            },
+            {
+              "stmt_id": "000055",
+              "label": "group of order 15",
+              "statement_full": "a group whose order is 15",
+              "kind": "concept",
+              "proof_text": ""
+            },
+            {
+              "stmt_id": "000056",
+              "label": "non-abelian simple group",
+              "statement_full": "a simple group that is non-abelian",
+              "kind": "concept",
+              "proof_text": ""
+            },
+            {
+              "stmt_id": "000057",
+              "label": "index of every proper subgroup",
+              "statement_full": "the index [G : H] for each proper subgroup H",
+              "kind": "concept",
+              "proof_text": ""
+            },
+            {
+              "stmt_id": "000058",
+              "label": "upper unitriangular group",
+              "statement_full": "the group of upper unitriangular matrices, also called the unitriangular group",
+              "kind": "concept",
+              "proof_text": ""
+            },
+            {
+              "stmt_id": "000059",
+              "label": "general linear group",
+              "statement_full": "the general linear group GL(n, p) of invertible matrices over Fp",
+              "kind": "concept",
+              "proof_text": ""
+            },
+            {
+              "stmt_id": "000060",
+              "label": "Sylow 第一定理",
+              "statement_full": "设 G 是有限群，p 是素数。则 G 必有 p-Sylow 子群；并且 G 的每个 p-子群都包含在 G 的某个 p-Sylow 子群之中。",
+              "kind": "theorem",
+              "proof_text": "设 |G| = p^k·m，其中 p ∤ m。若 k = 0，则平凡子群本身就是 G 的 p-Sylow 子群，结论成立；以下设 k ≥ 1。\n\n本证明只用群的定义与最基本的计数事实：凡是后面用到的结论，都在这里就地推出，不依赖任何未登记的定理。\n\n事实 1（陪集与指数）。设 A 是有限群，B ≤ A。规定 a ~ b 当且仅当 a⁻¹b ∈ B，这是等价关系，且每个等价类恰是一个左陪集 aB，于是 A 是若干互不相交的左陪集之并。又左乘给出从 B 到 aB 的双射 b ↦ ab，故 |aB| = |B|。于是 |A| 等于 |B| 乘以左陪集的个数，把这个个数记作 [A : B]。特别地，若 A 有限且 B ≤ A，则 [A : B] = |A| / |B|。\n\n事实 2（轨道-稳定化子）。设有限群 Γ 作用在集合 X 上，取 x ∈ X，记 Stab(x) = {g ∈ Γ : g·x = x}，轨道 Γ·x = {g·x : g ∈ Γ}，则 |Γ·x| = [Γ : Stab(x)]。证明：定义 φ 把左陪集 g·Stab(x) 送到 g·x。先看良定义：若 g·Stab(x) = h·Stab(x)，则 h⁻¹g ∈ Stab(x)，于是 h⁻¹g·x = x，两边同乘 h 得 g·x = h·x。再看单射：若 g·x = h·x，则 h⁻¹g·x = x，故 h⁻¹g ∈ Stab(x)，两个左陪集相等。满射按轨道的定义直接成立。所以轨道与 Stab(x) 的左陪集一一对应，由事实 1 得 |Γ·x| = [Γ : Stab(x)]。\n\n事实 3（共轭类与类方程）。设 A 是有限群。对 a ∈ A，中心化子 C_A(a) = {g ∈ A : gag⁻¹ = a} 是子群。「a 与 b 共轭」（即存在 g 使 b = gag⁻¹）是等价关系，等价类称共轭类；a 的共轭类正是 A 经共轭作用在自身上的轨道，而该作用的稳定化子就是 C_A(a)。a 在中心 Z(A) 中当且仅当它的共轭类只有它自己。把 A 按共轭类分解，取所有非中心共轭类的代表元 x₁,…,x_r，由事实 2 得\n|A| = |Z(A)| + Σ_{i=1}^{r} [A : C_A(x_i)]。\n这就是类方程。\n\n事实 4（p-群作用的固定点同余式）。设 Γ 是有限 p-群，即 |Γ| = p^s（允许 s = 0，此时 Γ 是平凡群），Γ 作用在有限集 X 上，记 Fix_Γ(X) = {x ∈ X : 对每个 g ∈ Γ 都有 g·x = x}，则 |X| ≡ |Fix_Γ(X)| (mod p)。证明：若 s = 0，则 Γ 只有单位元，每个点都被固定，于是 Fix_Γ(X) = X，同余式以等号成立。以下设 s ≥ 1。把 X 按轨道分解成不交并。长度大于 1 的轨道取一点 x，则 Stab(x) 是 Γ 的真子群，由事实 1 与事实 2，其长度 [Γ : Stab(x)] = |Γ| / |Stab(x)| = p^t 且 t ≥ 1（因为 Stab(x) 真包含于 Γ 而 |Γ| = p^s），从而被 p 整除。长度等于 1 的轨道恰是被 Γ 中每个元素固定的点，即不动点。于是 |X| 等于 |Fix_Γ(X)| 加上若干被 p 整除的项，即 |X| ≡ |Fix_Γ(X)| (mod p)。\n\n事实 5（Cauchy 定理）。设 A 是有限群，p 整除 |A|，则 A 含有阶为 p 的元素。证明：对 |A| 归纳。若 A 有真子群 B 使 p 整除 |B|，由归纳假设 B 已含阶 p 的元素，结论成立。以下设 A 的每个真子群的阶都与 p 互素。由事实 3 的类方程 |A| = |Z(A)| + Σ [A : C_A(x_i)]，其中 x_i 不在中心，故 C_A(x_i) 是 A 的真子群，其阶与 p 互素；又 p 整除 |A|，由事实 1 每个 [A : C_A(x_i)] = |A| / |C_A(x_i)| 都被 p 整除。于是 p 整除 |Z(A)|。若 Z(A) ≠ A，则 Z(A) 是 A 的真子群，与「每个真子群的阶都与 p 互素」矛盾；所以 Z(A) = A，即 A 交换。下面处理交换情形，仍对 |A| 作归纳。取 a ≠ e，记 B = ⟨a⟩。若 p 整除 |B|，则 a^{|B|/p} 在 B 中的阶恰为 p，结论成立。若 p 与 |B| 互素，看商群 A/B：它的阶 |A|/|B| 小于 |A| 且被 p 整除，由归纳假设 A/B 含阶 p 的元素 yB，这里 y ∉ B 且 y^p ∈ B。记 n 为 y 在 A 中的阶。若 p 与 n 互素，则 ⟨y^p⟩ 的阶为 n / gcd(n,p) = n，与 ⟨y⟩ 同阶，故 ⟨y^p⟩ = ⟨y⟩，于是 y ∈ ⟨y^p⟩ ⊆ B（用 A 交换，⟨y⟩ 是循环群），与 y ∉ B 矛盾；所以 p 整除 n，写 n = p·s，则 (y^s)^p = y^n = e 而 y^s ≠ e，故 y^s 的阶为 p。归纳完成。∎\n\n事实 6（商群与原像的阶）。设 A 是有限群，K ◁ A。把 A/K 的每个元素取成陪集形式 aK：由 K 正规，陪集乘法良定义，A/K 成群，商映射 π(a) = aK 是满同态且核为 K，由事实 1 得 |A/K| = [A : K] = |A|/|K|。又若 S ≤ A/K，则原像 π⁻¹(S) = {a ∈ A : aK ∈ S} 是 A 的子群且包含 K；π 限制在 π⁻¹(S) 上仍是满同态、核仍为 K，于是 π⁻¹(S)/K 与 S 之间有良定义的群同构，由事实 1 得 |π⁻¹(S)| = |S|·|K|。\n\n有了这六条事实，主证明如下。关键一步是：只要 H ≤ G 满足 |H| = p^i 且 i < k，就存在包含 H 的 p-子群 H′ 使 [H′ : H] = p。为此让 H 从左作用在左陪集集合 G/H 上（G/H 未必成群，但它是一个带 H-作用的集合，这一作用良定义：若 g′ ∈ gH，则 g′ = gh，于是 h₀g′H = h₀ghH = h₀gH）。H 是有限 p-群，阶为 p^i（i 可以是 0，此时 H = {e}，事实 4 已把 s = 0 的情形包含在内），由事实 4 得 |G/H| ≡ |Fix_H(G/H)| (mod p)。一个陪集 gH 被 H 固定，意思是每个 h ∈ H 都满足 hgH = gH；把它整理成 g⁻¹hg ∈ H 对每个 h 成立，也就是 g⁻¹Hg ⊆ H，而共轭不改变阶，|g⁻¹Hg| = |H|，故 g⁻¹Hg = H，即 g ∈ N(H)。上述推理步步可逆，所以 Fix_H(G/H) = {gH : g ∈ N(H)} = N(H)/H，同余式因此写成 [G : H] ≡ [N(H) : H] (mod p)。\n\n因为 i < k，由事实 1 指数 [G : H] = p^{k−i}·m 被 p 整除，所以 [N(H) : H] 也被 p 整除。H 在 N(H) 中正规，商群 N(H)/H 有意义，由事实 6 其阶为 [N(H) : H]，被 p 整除；由事实 5，N(H)/H 含一个阶为 p 的元素，设对应的子群为 S。沿商映射 N(H) → N(H)/H 取原像 H′ = π⁻¹(S)：由事实 6，H′ 是 G 的子群且包含 H，并且 |H′| = |S|·|H| = p·|H| = p^{i+1}，这正是所需的扩张。\n\n从 H₀ = {e} 出发反复使用这一步（i = 0, 1, …, k−1），得到一条子群链 {e} = H₀ ⊂ H₁ ⊂ … ⊂ H_k，其中 |H_i| = p^i；特别地 H_k 的阶为 p^k，它是 G 的一个 p-Sylow 子群，存在性得证。另一方面，若一开始把 H 取成 G 的任一 p-子群（|H| = p^j，j ≤ k），同样反复扩张，就得到包含 H 的阶为 p^k 的子群，故 H 落在某个 p-Sylow 子群之中。两条结论合起来正是 Sylow 第一定理。∎"
+            },
+            {
+              "stmt_id": "000061",
+              "label": "Sylow 第二定理",
+              "statement_full": "设 G 是有限群，p 是素数。则 G 的任意两个 p-Sylow 子群（Sylow p-subgroup）互相共轭：若 H 与 K 都是 G 的 p-Sylow 子群，则存在 g ∈ G 使得 K = gHg⁻¹。",
+              "kind": "theorem",
+              "proof_text": "设 G 是有限群，P 与 Q 是 G 的两个 p-Sylow 子群，我们要证它们互相共轭。\n\n先记下一个后面要用的事实：若有限 p-群 Γ 作用在有限集 X 上，则 |X| ≡ |Fix_Γ(X)| (mod p)，其中 Fix_Γ(X) 是被 Γ 中每个元素固定的点全体。理由是把 X 按轨道分解：每个轨道的大小等于 Γ 中某个稳定化子的指数，因而是一个 p 的幂；除不动点轨道（长度为 1）之外，轨道长度都形如 p^r（r ≥ 1），于是都被 p 整除。所有非不动点轨道的长度之和模 p 为零，只剩下不动点，故 |X| ≡ |Fix_Γ(X)| (mod p)。\n\n现在考察 Q 在左陪集空间 G/P 上的左乘作用：对 q ∈ Q 与 gP ∈ G/P，令 q·(gP) = (qg)P。先确认它是良定义的：若 gP = g′P，则 g′ = gh（其中 h ∈ P），于是 qg′P = qghP = qgP。因为 Q 是有限 p-群而 G/P 是有限集，由上面的事实得到不动点同余 |G/P| ≡ |Fix_Q(G/P)| (mod p)。\n\n左边 |G/P| 就是指数 [G : P]。由于 P 是 p-Sylow 子群，p 不整除 [G : P]，所以左边模 p 不为零；而右边是非负整数，故不动点集不能为空，可以取一个不动点 gP。\n\ngP 被 Q 固定，意味着对每个 q ∈ Q 都有 qgP = gP，即 qg ∈ gP，等价于 q ∈ gPg⁻¹。因此 Q ⊆ gPg⁻¹。另一方面 Q 与 gPg⁻¹ 的阶都等于 |P|，阶相同的有限群之间的包含关系只能是相等，故 Q = gPg⁻¹。\n\n因此 G 的任意两个 p-Sylow 子群互相共轭。"
+            },
+            {
+              "stmt_id": "000062",
+              "label": "Sylow 第三定理",
+              "statement_full": "设 G 是有限群，p 是素数，并把 |G| 写成 |G| = p^k m，其中 p 不整除 m。则 G 的 p-Sylow 子群的个数 n_p 满足：n_p 整除 m，且 n_p ≡ 1 (mod p)。",
+              "kind": "theorem",
+              "proof_text": "设 |G| = p^k·m，其中 p ∤ m，并记 n_p 为 G 的 p-Sylow 子群的个数。我们要证 n_p ≡ 1 (mod p) 且 n_p | m。\n\n先记下两条后面要用的事实，都在这里就地推出。事实 A（轨道-稳定化子）：若有限群 Γ 作用在集合 X 上，取 x ∈ X，则轨道 Γ·x 与稳定化子 Stab(x) 的左陪集一一对应（g·Stab(x) ↦ g·x 是良定义的双射），于是 |Γ·x| = [Γ : Stab(x)]，特别地轨道长度整除 |Γ|。事实 B（p-群作用的固定点同余）：若有限 p-群 Γ 作用在有限集 X 上，则 |X| ≡ |Fix_Γ(X)| (mod p)。理由是：按轨道把 X 分解成不交并，长度大于 1 的轨道取一点 x，由事实 A 其长度为 [Γ : Stab(x)]，而 Stab(x) 是 Γ 的真子群，故该指数是 p 的正幂、被 p 整除；长度等于 1 的轨道恰是不动点，于是 |X| 等于 |Fix_Γ(X)| 加上若干被 p 整除的项。\n\n再记下 Sylow II（共轭性），同样就地推出：若 P、Q 是两个 p-Sylow 子群，让 Q 从左作用在左陪集集合 G/P 上，由事实 B 得 |G/P| ≡ |Fix_Q(G/P)| (mod p)；左边 [G : P] 不被 p 整除，故不动点集非空，取一个不动点 gP，则对每个 q ∈ Q 都有 qgP = gP，即 q ∈ gPg⁻¹，于是 Q ⊆ gPg⁻¹，而两者阶相同，故 Q = gPg⁻¹。\n\n现在证 n_p ≡ 1 (mod p)。先说明 Syl_p(G)（G 的 p-Sylow 子群全体）非空：由 Sylow 第一定理（在册命题 stmt:000060，现算等级 pre_theorem；见文末「## 依赖」），有限群 G 对每个素数 p 都有 p-Sylow 子群，故可以取定一个 P ∈ Syl_p(G)。让 P 经共轭作用在 Syl_p(G) 上，这个集合的基数就是 n_p。P 是有限 p-群，由事实 B 得 n_p ≡ |Fix_P| (mod p)。一个 Q ∈ Syl_p(G) 被 P 固定，意思是每个 g ∈ P 都满足 gQg⁻¹ = Q，等价于 P ⊆ N(Q)。此时 P 与 Q 都是 N(Q) 的 p-Sylow 子群（两者阶都等于 p^k 且都含于 N(Q)），由上面的 Sylow II 在群 N(Q) 中它们互相共轭；而 Q 在 N(Q) 中正规，N(Q) 中与 Q 共轭的子群只有 Q 自己，故 P = Q。因此被 P 固定的 p-Sylow 子群只有 P 一个，即 |Fix_P| = 1，于是 n_p ≡ 1 (mod p)。\n\n再证 n_p | m。让 G 经共轭作用在 Syl_p(G) 上；由 Sylow II，任意两个 p-Sylow 子群互相共轭，故这个作用只有一个轨道。取该轨道为 G·P，由事实 A 得 n_p = |G·P| = [G : Stab(P)]，它整除 |G| = p^k·m。另一方面由前一段 n_p ≡ 1 (mod p)，故 n_p 与 p 互素；结合 n_p | p^k·m 便得到 n_p | m。\n\n两条结论合起来正是 Sylow 第三定理。就本证明用到的外部依据而言，只有 Sylow 第一定理的存在性部分（在册命题 stmt:000060），其余全部在文内就地推出。"
+            },
+            {
+              "stmt_id": "000063",
+              "label": "Sylow 第三定理",
+              "statement_full": "设 G 是有限群，p 是素数，n_p 表示 G 的 p-Sylow 子群的个数。则对任意一个 p-Sylow 子群 P，都有 n_p = [G : N(P)]，其中 N(P) 是 P 在 G 中的正规化子。",
+              "kind": "theorem",
+              "proof_text": "设 G 是有限群，p 是素数，P 是 G 的一个 p-Sylow 子群，n_p 是 G 的 p-Sylow 子群的个数，N(P) 是 P 在 G 中的正规化子。我们要证 n_p = [G : N(P)]。\n\n先记下两条后面要用的事实，都在这里就地推出。事实 A（轨道-稳定化子）：若有限群 Γ 作用在集合 X 上，取 x ∈ X，记 Stab(x) = {g ∈ Γ : g·x = x}，则映射 g·Stab(x) ↦ g·x 是左陪集集合 Γ/Stab(x) 到轨道 Γ·x 的良定义双射，于是 |Γ·x| = [Γ : Stab(x)]。先看良定义：若 g·Stab(x) = h·Stab(x)，即 h⁻¹g ∈ Stab(x)，则 h⁻¹g·x = x，两边左乘 h 得 g·x = h·x，故换代表不改变像。再看单射：若 g·x = h·x，则 h⁻¹g·x = x，即 h⁻¹g ∈ Stab(x)，两个左陪集相等；满射按轨道的定义直接成立。\n\n事实 B（p-群作用的固定点同余）：若有限 p-群 Γ 作用在有限集 X 上，则 |X| ≡ |Fix_Γ(X)| (mod p)。证明：把 X 按轨道分解成不交并；长度大于 1 的轨道取一点 x，由事实 A 其长度为 [Γ : Stab(x)]，而 Stab(x) 是 Γ 的真子群，故该指数是 p 的正幂、被 p 整除；长度等于 1 的轨道恰是不动点。于是 |X| 等于 |Fix_Γ(X)| 加上若干被 p 整除的项，两边模 p 相等。\n\n事实 C（Sylow II 的共轭性，就地推出）：若 P、Q 是两个 p-Sylow 子群，让 Q 从左作用在左陪集集合 G/P 上，规定 q·(gP) = (qg)P；这确实良定义，因为若 g′ ∈ gP 则 g′ = gh（h ∈ P），于是 qg′P = qghP = qgP。由事实 B 得 |G/P| ≡ |Fix_Q(G/P)| (mod p)；左边就是指数 [G : P]，它不被 p 整除，故不动点集不能为空，可取一个不动点 gP。不动点意味着对每个 q ∈ Q 都有 qgP = gP，即 q ∈ gPg⁻¹，所以 Q ⊆ gPg⁻¹；两者阶同为 p^k，包含关系在等阶有限群之间只能是相等，故 Q = gPg⁻¹。\n\n现在取 P 为 G 的一个 p-Sylow 子群，让 G 经共轭作用在 Syl_p(G)（G 的 p-Sylow 子群全体，它至少含 P）上，即 g·Q = gQg⁻¹。把 P 看作这个集合里的一个点 {P}，由事实 A，它的轨道大小为 [G : Stab]，其中 Stab = {g ∈ G : gPg⁻¹ = P}；这恰是正规化子 N(P) 的定义，故轨道大小等于 [G : N(P)]。\n\n另一方面，由事实 C，Syl_p(G) 中任取一个 Q 都与 P 共轭，即 Q 落在 P 的轨道里；因此 P 的轨道就是整个 Syl_p(G)，其大小正是 n_p。两边合起来就得到 n_p = [G : N(P)]，按轨道-稳定化子公式这正是所要的等式。"
+            },
+            {
+              "stmt_id": "000064",
+              "label": "Sylow p-子群唯一当且仅当正规",
+              "statement_full": "设 G 是有限群，p 是素数，P 是 G 的一个 Sylow p-子群。则 P 在 G 中唯一（即 G 恰有一个 Sylow p-子群）当且仅当 P 在 G 中正规；特别地，若 G 是交换群，则它的 Sylow p-子群唯一。",
+              "kind": "theorem",
+              "proof_text": "If a Sylow p-subgroup is unique, then it is equal to all its conjugations and thus normal. If there are multiple Sylow p-subgroups, they must be conjugate to each other, so none of them can be closed under conjugation, prohibiting normality. Since any subgroup of an abelian group is normal, a Sylow p-subgroup must be unique."
+            }
+          ],
+          "total": 66,
+          "returned": 20,
+          "limit": 20,
+          "offset": 45
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "total": 66,
+          "returned": 20,
+          "offset": 45,
+          "limit": 20,
+          "fields": [
+            "stmt_id",
+            "label",
+            "statement_full",
+            "kind",
+            "proof_text"
+          ]
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 67840,
+        "prompt_cache_miss_tokens": 3962,
+        "tokens_in": 71802,
+        "tokens_out": 305,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000160"
+    },
+    {
+      "index": 4,
+      "shape": "tool",
+      "payload": {
+        "name": "table.list",
+        "args": {
+          "table": "statements",
+          "offset": 59,
+          "limit": 7,
+          "fields": [
+            "stmt_id",
+            "label",
+            "statement_full",
+            "kind"
+          ]
+        },
+        "why": "读 000060–000064 的题名与命题正文（词面比对所需，不取 proof_text 以免截断）"
+      },
+      "result": {
+        "tool": "table.list",
+        "ok": true,
+        "data": {
+          "table": "statements",
+          "rows": [
+            {
+              "stmt_id": "000059",
+              "label": "general linear group",
+              "statement_full": "the general linear group GL(n, p) of invertible matrices over Fp",
+              "kind": "concept"
+            },
+            {
+              "stmt_id": "000060",
+              "label": "Sylow 第一定理",
+              "statement_full": "设 G 是有限群，p 是素数。则 G 必有 p-Sylow 子群；并且 G 的每个 p-子群都包含在 G 的某个 p-Sylow 子群之中。",
+              "kind": "theorem"
+            },
+            {
+              "stmt_id": "000061",
+              "label": "Sylow 第二定理",
+              "statement_full": "设 G 是有限群，p 是素数。则 G 的任意两个 p-Sylow 子群（Sylow p-subgroup）互相共轭：若 H 与 K 都是 G 的 p-Sylow 子群，则存在 g ∈ G 使得 K = gHg⁻¹。",
+              "kind": "theorem"
+            },
+            {
+              "stmt_id": "000062",
+              "label": "Sylow 第三定理",
+              "statement_full": "设 G 是有限群，p 是素数，并把 |G| 写成 |G| = p^k m，其中 p 不整除 m。则 G 的 p-Sylow 子群的个数 n_p 满足：n_p 整除 m，且 n_p ≡ 1 (mod p)。",
+              "kind": "theorem"
+            },
+            {
+              "stmt_id": "000063",
+              "label": "Sylow 第三定理",
+              "statement_full": "设 G 是有限群，p 是素数，n_p 表示 G 的 p-Sylow 子群的个数。则对任意一个 p-Sylow 子群 P，都有 n_p = [G : N(P)]，其中 N(P) 是 P 在 G 中的正规化子。",
+              "kind": "theorem"
+            },
+            {
+              "stmt_id": "000064",
+              "label": "Sylow p-子群唯一当且仅当正规",
+              "statement_full": "设 G 是有限群，p 是素数，P 是 G 的一个 Sylow p-子群。则 P 在 G 中唯一（即 G 恰有一个 Sylow p-子群）当且仅当 P 在 G 中正规；特别地，若 G 是交换群，则它的 Sylow p-子群唯一。",
+              "kind": "theorem"
+            },
+            {
+              "stmt_id": "000065",
+              "label": "Sylow 定理（存在性、共轭性、计数）",
+              "statement_full": "设 G 为有限群，|G| = p^a·m，其中 p 是素数，a ≥ 0、m ≥ 1 是整数，且 p 不整除 m。记 n = p^a。则 (E) G 存在阶为 n 的子群；(C) 若 P、Q 是 G 的两个阶为 n 的子群，则存在 g ∈ G 使 Q = gPg⁻¹；(N) 若 n_p 表示 G 的阶为 n 的子群个数，则 n_p ≡ 1 (mod p) 且 n_p 整除 m。",
+              "kind": "theorem"
+            }
+          ],
+          "total": 66,
+          "returned": 7,
+          "limit": 7,
+          "offset": 59
+        },
+        "error": "",
+        "meta": {
+          "table": "statements",
+          "total": 66,
+          "returned": 7,
+          "offset": 59,
+          "limit": 7,
+          "fields": [
+            "stmt_id",
+            "label",
+            "statement_full",
+            "kind"
+          ]
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 71040,
+        "prompt_cache_miss_tokens": 4082,
+        "tokens_in": 75122,
+        "tokens_out": 337,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000160"
+    },
+    {
+      "index": 5,
+      "shape": "tool",
+      "payload": {
+        "name": "own.revise",
+        "args": {
+          "doc_id": "000000",
+          "new_claims": [
+            {
+              "claim_id": "claim-1",
+              "text": "Let G be a finite group and p a prime with |G| = p^k m, where p does not divide m. Then G contains a Sylow p-subgroup of order p^k, and every p-subgroup of G is contained in some Sylow p-subgroup of G.",
+              "citations": [
+                "stmt:000060",
+                "lit:000000"
+              ],
+              "evidence_kind": "cross_check",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "section": "3",
+              "is_negative": false,
+              "negation_kind": null
+            }
+          ],
+          "note": "只改 claim-1 的表述，使其以所引命题 stmt:000060（Sylow 第一定理）的原词 Sylow p-subgroup / p-subgroup 转述结论；数学内容不变（存在阶 p^k 的子群、每个 p-子群含于某个 p-Sylow 子群），其余 4 条 claim（claim-2..5）与所引 stmt/lit 词面已对齐（Sylow p-subgroup / n_p / normalizer 等原词），不动。",
+          "fixed_findings": [],
+          "why": "收工门判 claim-1 与所引 stmt:000060/lit:000000 无实词交集：原文只说 subgroup of order p^k，未用台账原词 Sylow p-subgroup"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "own.revise",
+        "ok": true,
+        "data": {
+          "doc_id": "000000",
+          "review_rounds": 8,
+          "status": "revised",
+          "claim_count": 5,
+          "replaced_claim_ids": [
+            "claim-1"
+          ],
+          "appended_claim_ids": [],
+          "fixed_findings": [],
+          "markdown_path": "manuscripts/G/000000.md",
+          "rendered_path": "D:\\Incubator\\projects\\sylow-4\\manuscripts\\G\\000000.md",
+          "body_path": "out/package/main.tex",
+          "body_sha256": "08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72",
+          "body_bytes": 22490,
+          "body_problem": "",
+          "content_sha256": "549200690ff0e170b09e45f2b547c1ad4d9a7d1d81fe0381608e9a14d3a338ff",
+          "next_step": "改完之后要再复核：派 `H.verify_fixes`（它按 `round_no` 复核这一版）或 `H.review`，让签名钉到现行版上；改完不复核的稿子不许当成交付。",
+          "citation_coverage": {
+            "own": {
+              "lit": [
+                "lit:000000",
+                "lit:000002"
+              ],
+              "rel": [],
+              "exp": [],
+              "stmt": [
+                "stmt:000060",
+                "stmt:000061",
+                "stmt:000062",
+                "stmt:000063",
+                "stmt:000064"
+              ],
+              "doc": [],
+              "eval": []
+            },
+            "counts": {
+              "lit": 2,
+              "rel": 0,
+              "exp": 0,
+              "stmt": 5,
+              "doc": 0,
+              "eval": 0
+            },
+            "available": {
+              "literature_total": 4,
+              "literature_processed": 4,
+              "literature_with_fulltext": 4,
+              "relations": 72,
+              "experiments": 0,
+              "statements": 66,
+              "eval_results": 0,
+              "research_questions": -1
+            },
+            "readable": true,
+            "gaps": [
+              "这份稿子 0 条 `rel:` 引用，而库里有 **72 条关系**（例：000000、000001、000002） —— C 的关系读数要能被交付物引到（用户点名过「重点考察 C」）",
+              "这份稿子有 5 条断言的引文与原文对不上（逐条见 `misfit`：断言的实词/数字与被引来源没有交集） —— 把引文换成真的支持这条断言的那一条（或把断言改成与证据相符），别让『引了一条不相关的』冒充『有出处』"
+            ],
+            "fit": {
+              "fit": 0,
+              "mismatch": 5,
+              "unjudged": 0
+            },
+            "fit_rows": [
+              {
+                "claim_id": "claim-1",
+                "citations": [
+                  "stmt:000060",
+                  "lit:000000"
+                ],
+                "verdict": "mismatch",
+                "why": [
+                  "lit:000000：断言的实词与《9fade5bcc35a-conrad-proof-of-sylow-theor》没有交集 ⇒ 引文可能跑题"
+                ]
+              },
+              {
+                "claim_id": "claim-2",
+                "citations": [
+                  "stmt:000061",
+                  "lit:000000"
+                ],
+                "verdict": "mismatch",
+                "why": [
+                  "lit:000000：断言的实词与《9fade5bcc35a-conrad-proof-of-sylow-theor》没有交集 ⇒ 引文可能跑题"
+                ]
+              },
+              {
+                "claim_id": "claim-3",
+                "citations": [
+                  "stmt:000062",
+                  "lit:000000"
+                ],
+                "verdict": "mismatch",
+                "why": [
+                  "lit:000000：断言的实词与《9fade5bcc35a-conrad-proof-of-sylow-theor》没有交集 ⇒ 引文可能跑题"
+                ]
+              },
+              {
+                "claim_id": "claim-4",
+                "citations": [
+                  "stmt:000063",
+                  "lit:000000"
+                ],
+                "verdict": "mismatch",
+                "why": [
+                  "lit:000000：断言的实词与《9fade5bcc35a-conrad-proof-of-sylow-theor》没有交集 ⇒ 引文可能跑题"
+                ]
+              },
+              {
+                "claim_id": "claim-5",
+                "citations": [
+                  "stmt:000064",
+                  "lit:000002"
+                ],
+                "verdict": "mismatch",
+                "why": [
+                  "lit:000002：断言的实词与《c104f1720c63-idelhaj-sylow-theorems-and-》没有交集 ⇒ 引文可能跑题"
+                ]
+              }
+            ],
+            "misfit": [
+              {
+                "claim_id": "claim-1",
+                "citations": [
+                  "stmt:000060",
+                  "lit:000000"
+                ],
+                "verdict": "mismatch",
+                "why": [
+                  "lit:000000：断言的实词与《9fade5bcc35a-conrad-proof-of-sylow-theor》没有交集 ⇒ 引文可能跑题"
+                ]
+              },
+              {
+                "claim_id": "claim-2",
+                "citations": [
+                  "stmt:000061",
+                  "lit:000000"
+                ],
+                "verdict": "mismatch",
+                "why": [
+                  "lit:000000：断言的实词与《9fade5bcc35a-conrad-proof-of-sylow-theor》没有交集 ⇒ 引文可能跑题"
+                ]
+              },
+              {
+                "claim_id": "claim-3",
+                "citations": [
+                  "stmt:000062",
+                  "lit:000000"
+                ],
+                "verdict": "mismatch",
+                "why": [
+                  "lit:000000：断言的实词与《9fade5bcc35a-conrad-proof-of-sylow-theor》没有交集 ⇒ 引文可能跑题"
+                ]
+              },
+              {
+                "claim_id": "claim-4",
+                "citations": [
+                  "stmt:000063",
+                  "lit:000000"
+                ],
+                "verdict": "mismatch",
+                "why": [
+                  "lit:000000：断言的实词与《9fade5bcc35a-conrad-proof-of-sylow-theor》没有交集 ⇒ 引文可能跑题"
+                ]
+              },
+              {
+                "claim_id": "claim-5",
+                "citations": [
+                  "stmt:000064",
+                  "lit:000002"
+                ],
+                "verdict": "mismatch",
+                "why": [
+                  "lit:000002：断言的实词与《c104f1720c63-idelhaj-sylow-theorems-and-》没有交集 ⇒ 引文可能跑题"
+                ]
+              }
+            ],
+            "questions_vs_claims": {
+              "research_questions": -1,
+              "claims_with_citations": 5,
+              "short": -1
+            },
+            "suggest_lit": [
+              {
+                "lit_id": "000000",
+                "title": "9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf"
+              },
+              {
+                "lit_id": "000001",
+                "title": "11dc1a689516-harris-sylow-theorems.pdf"
+              },
+              {
+                "lit_id": "000002",
+                "title": "c104f1720c63-idelhaj-sylow-theorems-and-applications.pdf"
+              },
+              {
+                "lit_id": "000003",
+                "title": "e090d219194b-vakil-sylow-theorems.pdf"
+              }
+            ],
+            "suggest_rel": [
+              {
+                "relation_id": "000000",
+                "description": "p-Sylow subgroup 的定义依赖于一个素数 p，并取 p 整除 |G| 的最高幂次。"
+              },
+              {
+                "relation_id": "000001",
+                "description": "对每个素数 p，G 的 p-Sylow subgroups 彼此共轭。"
+              },
+              {
+                "relation_id": "000002",
+                "description": "每个 p-subgroup 都包含在某个 p-Sylow subgroup 中。"
+              },
+              {
+                "relation_id": "000003",
+                "description": "若 P 是 p-Sylow subgroup，则 N(P) 是它的 normalizer。"
+              },
+              {
+                "relation_id": "000004",
+                "description": "p-Sylow subgroups 的个数 np 等于 G 对 N(P) 的指数。"
+              }
+            ],
+            "note": "只报数、不拦：引用的**存在性**由 `check_citations` 判（fail-closed）；这一格是把「引了什么 / 库里有什么」放到写稿那一刻看得见。`own` 里的号都是这份稿子真的写了的前缀引用（`doc:` 收在 `doc` 那一格）；`library_root` 没给 ⇒ 「有全文」那一格只按 `download.status` 算（没看盘）"
+          },
+          "hard_to_prove": {
+            "checked": true,
+            "why": "",
+            "rows": [],
+            "held_back": [],
+            "attributed": [],
+            "report": {
+              "checked": true,
+              "sent": false,
+              "to": "",
+              "msg_id": "",
+              "why": "这一趟没有承重条目需要上报"
+            }
+          }
+        },
+        "error": "",
+        "meta": {},
+        "warn": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.revise 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 5,
+          "call_index": 0,
+          "calls": 1,
+          "step_index": 5,
+          "summary": "这一步给了 1 条调用，已按顺序逐条：第 1 条 own.revise 成功。（真的执行 1 / 1 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 5,
+            "calls": 1,
+            "items": 1,
+            "steps": [
+              5
+            ],
+            "executed": 1,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 74368,
+        "prompt_cache_miss_tokens": 1895,
+        "tokens_in": 76263,
+        "tokens_out": 2655,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000160"
+    },
+    {
+      "index": 6,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/package/MAPPING.json"
+        },
+        "why": "取现行对应表的行，改写 claim 后按同一批行重落 MAPPING"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "{\n  \"rows\": [\n    {\n      \"kind\": \"theorem\",\n      \"label\": \"thm:sylow1\",\n      \"env_no\": 1,\n      \"ledger_id\": \"stmt:000060\",\n      \"proof_no\": 1,\n      \"file\": \"main.tex\",\n      \"ledger_kind\": \"theorem\",\n      \"reviewed\": \"已签（判决：成立）\",\n      \"optimized\": \"已优化\",\n      \"proof_source\": \"own\",\n      \"page_or_section\": \"3\",\n      \"citation_loc\": {\n        \"file\": \"main.tex\",\n        \"line_range\": [\n          104,\n          107\n        ]\n      }\n    },\n    {\n      \"kind\": \"theorem\",\n      \"label\": \"thm:sylow2\",\n      \"env_no\": 2,\n      \"ledger_id\": \"stmt:000061\",\n      \"proof_no\": 1,\n      \"file\": \"main.tex\",\n      \"ledger_kind\": \"theorem\",\n      \"reviewed\": \"已签（判决：成立）\",\n      \"optimized\": \"已优化\",\n      \"proof_source\": \"own\",\n      \"page_or_section\": \"3\",\n      \"citation_loc\": {\n        \"file\": \"main.tex\",\n        \"line_range\": [\n          118,\n          121\n        ]\n      }\n    },\n    {\n      \"kind\": \"theorem\",\n      \"label\": \"thm:sylow3\",\n      \"env_no\": 3,\n      \"ledger_id\": \"stmt:000062\",\n      \"proof_no\": 1,\n      \"file\": \"main.tex\",\n      \"ledger_kind\": \"theorem\",\n      \"reviewed\": \"已签（判决：成立）\",\n      \"optimized\": \"已优化\",\n      \"proof_source\": \"own\",\n      \"page_or_section\": \"3\",\n      \"citation_loc\": {\n        \"file\": \"main.tex\",\n        \"line_range\": [\n          128,\n          131\n        ]\n      }\n    },\n    {\n      \"kind\": \"theorem\",\n      \"label\": \"thm:index\",\n      \"env_no\": 4,\n      \"ledger_id\": \"stmt:000063\",\n      \"proof_no\": 1,\n      \"file\": \"main.tex\",\n      \"ledger_kind\": \"theorem\",\n      \"reviewed\": \"已签（判决：成立）\",\n      \"optimized\": \"已优化\",\n      \"proof_source\": \"own\",\n      \"page_or_section\": \"3\",\n      \"citation_loc\": {\n        \"file\": \"main.tex\",\n        \"line_range\": [\n          142,\n          145\n        ]\n      }\n    },\n    {\n      \"kind\": \"theorem\",\n      \"label\": \"thm:unique\",\n      \"env_no\": 5,\n      \"ledger_id\": \"stmt:000064\",\n      \"proof_no\": 1,\n      \"file\": \"main.tex\",\n      \"ledger_kind\": \"theorem\",\n      \"reviewed\": \"未通过\",\n      \"optimized\":…（落档截断，原 2207 字）",
+        "error": "",
+        "meta": {
+          "path": "out/package/MAPPING.json",
+          "encoding": "utf-8",
+          "bytes_read": 2315,
+          "total_bytes": 2315,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 104,
+          "total_lines": 104,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 104 行",
+          "sha256": "563da22ba9f04ce4994c89a4a314da2077fe5b0d49d32cb29447e8f7759c306d"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 75520,
+        "prompt_cache_miss_tokens": 3833,
+        "tokens_in": 79353,
+        "tokens_out": 3537,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000160"
+    },
+    {
+      "index": 7,
+      "shape": "tool",
+      "payload": {
+        "name": "doc.write_mapping",
+        "args": {
+          "project": "projects/sylow-4",
+          "rows": [
+            {
+              "kind": "theorem",
+              "label": "thm:sylow1",
+              "env_no": 1,
+              "ledger_id": "stmt:000060",
+              "proof_no": 1,
+              "file": "main.tex",
+              "page_or_section": "3",
+              "citation_loc": {
+                "file": "main.tex",
+                "line_range": [
+                  104,
+                  107
+                ]
+              }
+            },
+            {
+              "kind": "theorem",
+              "label": "thm:sylow2",
+              "env_no": 2,
+              "ledger_id": "stmt:000061",
+              "proof_no": 1,
+              "file": "main.tex",
+              "page_or_section": "3",
+              "citation_loc": {
+                "file": "main.tex",
+                "line_range": [
+                  118,
+                  121
+                ]
+              }
+            },
+            {
+              "kind": "theorem",
+              "label": "thm:sylow3",
+              "env_no": 3,
+              "ledger_id": "stmt:000062",
+              "proof_no": 1,
+              "file": "main.tex",
+              "page_or_section": "3",
+              "citation_loc": {
+                "file": "main.tex",
+                "line_range": [
+                  128,
+                  131
+                ]
+              }
+            },
+            {
+              "kind": "theorem",
+              "label": "thm:index",
+              "env_no": 4,
+              "ledger_id": "stmt:000063",
+              "proof_no": 1,
+              "file": "main.tex",
+              "page_or_section": "3",
+              "citation_loc": {
+                "file": "main.tex",
+                "line_range": [
+                  142,
+                  145
+                ]
+              }
+            },
+            {
+              "kind": "theorem",
+              "label": "thm:unique",
+              "env_no": 5,
+              "ledger_id": "stmt:000064",
+              "proof_no": 1,
+              "file": "main.tex",
+              "page_or_section": "3",
+              "citation_loc": {
+                "file": "main.tex",
+                "line_range": [
+                  152,
+                  155
+                ]
+              }
+            }
+          ]
+        },
+        "why": "改完 claim-1 后按同一批命题行重落对应表三份（json/MD/附录），确保每行仍回溯 stmt 号与 V 签"
+      },
+      "result": {
+        "tool": "doc.write_mapping",
+        "ok": false,
+        "data": null,
+        "error": "论文包：项目目录不在盘上：D:\\Incubator\\projects\\sylow-4\\projects\\sylow-4",
+        "meta": {
+          "kind": "bad_project",
+          "project": "projects/sylow-4"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 78592,
+        "prompt_cache_miss_tokens": 2494,
+        "tokens_in": 81086,
+        "tokens_out": 2466,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000160"
+    },
+    {
+      "index": 8,
+      "shape": "tool",
+      "payload": {
+        "name": "doc.write_mapping",
+        "args": {
+          "project": ".",
+          "rows": [
+            {
+              "kind": "theorem",
+              "label": "thm:sylow1",
+              "env_no": 1,
+              "ledger_id": "stmt:000060",
+              "proof_no": 1,
+              "file": "main.tex",
+              "page_or_section": "3",
+              "citation_loc": {
+                "file": "main.tex",
+                "line_range": [
+                  104,
+                  107
+                ]
+              }
+            },
+            {
+              "kind": "theorem",
+              "label": "thm:sylow2",
+              "env_no": 2,
+              "ledger_id": "stmt:000061",
+              "proof_no": 1,
+              "file": "main.tex",
+              "page_or_section": "3",
+              "citation_loc": {
+                "file": "main.tex",
+                "line_range": [
+                  118,
+                  121
+                ]
+              }
+            },
+            {
+              "kind": "theorem",
+              "label": "thm:sylow3",
+              "env_no": 3,
+              "ledger_id": "stmt:000062",
+              "proof_no": 1,
+              "file": "main.tex",
+              "page_or_section": "3",
+              "citation_loc": {
+                "file": "main.tex",
+                "line_range": [
+                  128,
+                  131
+                ]
+              }
+            },
+            {
+              "kind": "theorem",
+              "label": "thm:index",
+              "env_no": 4,
+              "ledger_id": "stmt:000063",
+              "proof_no": 1,
+              "file": "main.tex",
+              "page_or_section": "3",
+              "citation_loc": {
+                "file": "main.tex",
+                "line_range": [
+                  142,
+                  145
+                ]
+              }
+            },
+            {
+              "kind": "theorem",
+              "label": "thm:unique",
+              "env_no": 5,
+              "ledger_id": "stmt:000064",
+              "proof_no": 1,
+              "file": "main.tex",
+              "page_or_section": "3",
+              "citation_loc": {
+                "file": "main.tex",
+                "line_range": [
+                  152,
+                  155
+                ]
+              }
+            }
+          ]
+        },
+        "why": "project 应是工作区根（相对仓库根即 `.`），上一笔把 projects/sylow-4 又拼了一层；用同一批行重落 MAPPING"
+      },
+      "result": {
+        "tool": "doc.write_mapping",
+        "ok": true,
+        "data": {
+          "project": "D:\\Incubator\\projects\\sylow-4",
+          "json": "D:\\Incubator\\projects\\sylow-4\\out\\package\\MAPPING.json",
+          "md": "D:\\Incubator\\projects\\sylow-4\\out\\package\\MAPPING.md",
+          "appendix": "D:\\Incubator\\projects\\sylow-4\\out\\package\\mapping-appendix.tex",
+          "rows": 5,
+          "state": "pass",
+          "md_state": "present",
+          "appendix_state": "present",
+          "lean_state": "off",
+          "lean": {
+            "enabled": false,
+            "source": "env",
+            "state": "off",
+            "artifacts": [],
+            "artifact_count": 0,
+            "target_kinds": [
+              "theorem",
+              "lemma",
+              "proposition",
+              "corollary"
+            ],
+            "reason": "未开 Lean（`toolchain.lean_enabled` 为假，来源：env）⇒ 没有证明通道的行，`lean_file` / `lean_target` 允许为空；空不等于验过 —— 这一趟的证明走 `proof_text` 与 V 的逐行审校。凭据那一格按每条命题的证明通道判（形式化通道仍要 `.lean`，数值证明通道仍要那份程序）"
+          },
+          "warnings": [],
+          "problems": [],
+          "reason": "5 行与正文 5 个环境逐一对上，附录逐字一致，`ledger_id` 与 `proof_no` 都能在台账里解析到，`file` 都在包里；正文 5 个定理类环境对着 6 条台账命题，一条命题对一个环境；Lean：未开 Lean（`toolchain.lean_enabled` 为假，来源：env）⇒ 没有证明通道的行，`lean_file` / `lean_target` 允许为空；空不等于验过 —— 这一趟的证明走 `proof_text` 与 V 的逐行审校。凭据那一格按每条命题的证明通道判（形式化通道仍要 `.lean`，数值证明通道仍要那份程序）；落差读数（不拦门）：论文里排成定理但 V 没签的行：1 条（thm:unique → stmt:000064）；另有 5 行的台账那两格与台账现在的读数不一致（表写完之后台账又动过，或者表被手改过）—— 重跑一次 `doc.write_mapping`"
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 80256,
+        "prompt_cache_miss_tokens": 1675,
+        "tokens_in": 81931,
+        "tokens_out": 3480,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000160"
+    },
+    {
+      "index": 9,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "out/package/COMPILE-RECEIPT.json"
+        },
+        "why": "取上一轮回执的 tex_sha256 与 pages，判断 write_mapping 之后 PDF 是否已过期"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "{\n  \"tex_sha256\": \"08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72\",\n  \"pdf_sha256\": \"ce6529dfc7dc180da7580a2928356d96680783b3fc8518992ec21f6a36b87407\",\n  \"engine\": \"pdflatex\",\n  \"runs\": 2,\n  \"exit_codes\": [\n    0,\n    0\n  ],\n  \"pages\": 7,\n  \"pdf_bytes\": 232739,\n  \"pdf_fresh\": true,\n  \"compiled_at\": \"2026-11-24T05:04:42+08:00\",\n  \"written_by\": \"agentflow.papercompile（框架内置编译）\",\n  \"stderr_tail\": \"\",\n  \"compile_log\": \"compile-20261124-050442.log\",\n  \"compile_stderr_log\": \"\"\n}\n",
+        "error": "",
+        "meta": {
+          "path": "out/package/COMPILE-RECEIPT.json",
+          "encoding": "utf-8",
+          "bytes_read": 511,
+          "total_bytes": 511,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 18,
+          "total_lines": 18,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 18 行",
+          "sha256": "fbf027be92d0c26e98fbedc01b38a470ed70246d010fa92838a10c034a5bc350"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 81152,
+        "prompt_cache_miss_tokens": 2186,
+        "tokens_in": 83338,
+        "tokens_out": 2015,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000160"
+    },
+    {
+      "index": 10,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.stat",
+        "args": {
+          "path": "out/package/main.tex"
+        },
+        "why": "核 write_mapping 之后 main.tex 的 sha256 是否仍等于回执里的 tex_sha256（08c6cc0a…），据此判断要不要重编"
+      },
+      "result": {
+        "tool": "fs.stat",
+        "ok": true,
+        "data": {
+          "path": "out/package/main.tex",
+          "exists": true,
+          "is_dir": false,
+          "is_file": true,
+          "is_symlink": false,
+          "size": 22490,
+          "mtime": "2026-11-24T05:04:34+08:00",
+          "mtime_epoch": 1795467874.919,
+          "link_target": null,
+          "sha256": "08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72"
+        },
+        "error": "",
+        "meta": {
+          "path": "out/package/main.tex",
+          "size": 22490,
+          "sha256": "08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 82560,
+        "prompt_cache_miss_tokens": 1974,
+        "tokens_in": 84534,
+        "tokens_out": 1266,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000160"
+    },
+    {
+      "index": 11,
+      "shape": "summon",
+      "payload": {
+        "role": "H",
+        "action": "",
+        "params": {
+          "doc_id": "000000",
+          "note": "只改 claim-1 措辞；不改 main.tex；不改数学内容",
+          "changed_claims": [
+            "claim-1"
+          ],
+          "expected": "签一条到现行版；找出仍存在的表述级问题（若有）"
+        },
+        "why": "revise 把稿件推成 revised，H 的签名仍钉在改之前那一版 —— 按规矩改完必须送回 H 复核，未复审不许当交付",
+        "brief": "复审 G 改过 claim-1 的 doc:000000 现行版",
+        "name": "H1",
+        "task": "复审 doc:000000（现行版）：我只做了一处外科手术式修订 —— claim-1 的措辞改为以所引命题 stmt:000060 的原词转述（加入 Sylow p-subgroup / p-subgroup 等术语），数学内容未变；main.tex 一个字节未改（sha256 仍为 08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72），对应表已用 doc.write_mapping 重落（state=pass、5 行）。请对现行版做一次审校（review/verify_fixes 皆可），把签名钉到这一版上，并把发现逐条落 review_findings；若认为 claim-1 新表述仍与所引命题对不上，请指名是哪一条、差在哪个术语，不要改动任何文件。"
+      },
+      "result": {
+        "summoned": "H",
+        "action": "",
+        "ok": true,
+        "task_id": "t-000161",
+        "status": "done",
+        "outcome": "ok",
+        "refusal_reason": null,
+        "detail": "执行完成",
+        "children": [],
+        "llm_run_path": "D:\\Incubator\\projects\\sylow-4\\runs\\H-20261124-052556-001.json",
+        "final": "复审完成，但这一版我签不了 accepted：正文本身干净，卡在证据链与我自己三条 open 发现上。\n\n一、G 的手术式修订核过了（肯定答复）\n- 盘上 out/package/main.tex：sha256=08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72、22490 字节、212 行 —— 与 G 声称的逐字一致，main.tex 一个字节未改属实。\n- claim-1 新措辞与 stmt:000060 **对得上，没有差词**：所引命题 statement_full「设 G 是有限群，p 是素数。则 G 必有 p-Sylow 子群；并且 G 的每个 p-子群都包含在 G 的某个 p-Sylow 子群之中。」对应 claim-1 的「G contains a Sylow p-subgroup … every p-subgroup of G is contained in some Sylow p-subgroup of G」；新增的「|G| = p^k m, p does not divide m」「of order p^k」是第 2 节 Definition 已给的定义（p-Sylow = 阶为 |G| 的满 p-部分的子群），是把术语补齐、不是把结论加强。术语层面无缺口。\n\n二、机械读数（re…（原文 2788 字，已截断）",
+        "payload": "{\"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\sylow-4\\\\runs\\\\H-20261124-052556-001.json\", \"final\": \"复审完成，但这一版我签不了 accepted：正文本身干净，卡在证据链与我自己三条 open 发现上。\\n\\n一、G 的手术式修订核过了（肯定答复）\\n- 盘上 out/package/main.tex：sha256=08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72、22490 字节、212 行 —— 与 G 声称的逐字一致，main.tex 一个字节未改属实。\\n- claim-1 新措辞与 stmt:000060 **对得上，没有差词**：所引命题 statement_full「设 G 是有限群，p 是素数。则 G …（原文 3043 字，已截断）",
+        "roster_name": "H1",
+        "秘书": {
+          "alarms": [
+            "'H1' 不是注册表里的真名"
+          ],
+          "fail_open": false,
+          "problem": "'H1' 不是注册表里的真名",
+          "wash": {
+            "checked": true,
+            "washed": false,
+            "refused": "",
+            "reason": ""
+          },
+          "changes": [],
+          "surface_fit": {
+            "checked": false,
+            "fits": null,
+            "paths": [],
+            "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+            "shape": "summon",
+            "reach": {
+              "checked": true,
+              "verdict": "unknown",
+              "hops": [],
+              "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+            }
+          },
+          "reach_fit": {
+            "checked": true,
+            "verdict": "unknown",
+            "hops": [],
+            "reason": "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+          },
+          "assessment": {
+            "decision": "可派",
+            "reason": "这一条没点名具体动作（role 级派活）⇒ 不拿动作表去卡它；角色存在性由预筛管",
+            "basis": [
+              "specs/<role>.py 的动作表",
+              "tasks: 同 key 的既有终态行",
+              "没点名动作 ⇒ 动作表那一格不适用"
+            ],
+            "duplicates": [],
+            "alarms": [],
+            "novel": false,
+            "surface": {
+              "checked": false,
+              "fits": null,
+              "paths": [],
+              "reason": "（没给动作） 不是 fs 动作 ⇒ 面这一维不适用（不适用不是通过）",
+              "shape": "summon",
+              "reach": {
+                "checked": true,
+                "verdict": "unknown",
+                "hops": [],
+                "reason": "角色 '' 不在能力表里（['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'L', 'M', 'V']）⇒ 判不了"
+              }
+            },
+            "judge": {
+              "checked": false,
+              "reason": "预筛没有报警、也没有重复候选 ⇒ 不必判断"
+            },
+            "engaged": false,
+            "seq": 3
+          }
+        },
+        "可退役": [
+          {
+            "task_id": "t-000161",
+            "role": "H",
+            "branch": "waiting_no_children",
+            "reading": {
+              "items_open": 0,
+              "items_open_ids": [],
+              "items_open_expects": {},
+              "items_open_states": {}
+            }
+          }
+        ],
+        "新消息": [
+          {
+            "id": "m000017",
+            "from": "M",
+            "channel": "private",
+            "subject": "手稿 000019：最后一处机器口径修订：claim 与所引命题词面对齐，重落 MAPPING",
+            "body": "[手稿 000019] 最后一处机器口径修订：claim 与所引命题词面对齐，重落 MAPPING\n全文：`manuscripts.read(id=\"000019\")`（盘上 work/handoffs.jsonl#000019）",
+            "source": {
+              "kind": "message",
+              "form": "notice",
+              "summary": "手稿 000019：最后一处机器口径修订：claim 与所引命题词面对齐，重落 MAPPING"
+            }
+          },
+          {
+            "板": "- （新）[t-000162] message·要一个回执 来自 H：手稿 000020：doc:000000 第 9 轮复审：claim-1 新措辞与 stmt:000060 对得上；机械读数全绿；但三条证据链 warning 未收口 ⇒ status=in_review、签名未钉\n[手稿 000020] doc:000000 第 9 轮复审：claim-1 新措辞与 stmt:000060 对得上；机械读数全绿；但三条证据链 warning 未收口 ⇒ status=in_review、签名未钉\n全文：`manuscripts.read(id=\"000020\")`（盘上 work/handoffs.jsonl#000020）"
+          }
+        ],
+        "秘书加工": {
+          "reworked": [
+            {
+              "item": {
+                "id": "m000017",
+                "from": "M",
+                "channel": "private",
+                "subject": "手稿 000019：最后一处机器口径修订：claim 与所引命题词面对齐，重落 MAPPING",
+                "body": "[手稿 000019] 最后一处机器口径修订：claim 与所引命题词面对齐，重落 MAPPING\n全文：`manuscripts.read(id=\"000019\")`（盘上 work/handoffs.jsonl#000019）",
+                "source": {
+                  "kind": "message",
+                  "form": "notice",
+                  "summary": "手稿 000019：最后一处机器口径修订：claim 与所引命题词面对齐，重落 MAPPING"
+                }
+              },
+              "addendum": "我的产出物口径：交付状态 —— 交给谁：H（送审）+ 派你这趟活的父（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名）+ M（打包）；形态：`documents` 行 + `manuscripts/G/<doc_id>.md` + 成文阶段的 `out/package/main.tex` / `out/package/main.pdf` + `out/package/MAPPING.json`；可核字段：`documents.doc_id` / `documents.kind` / `documents.markdown_path` / `documents.content_sha256` / `documents.claims` / `documents.status`；算做完：`build_document` 回了 `doc_id`、每条 claim 的 `citations` 都指得到台账已有的号（`stmt:` / `lit:` / `exp:`），且 H 审到 `documents.status=accepted`（不通过就按 findings 改）。\n我在本条线上的位置：论文撰写：把台账里的结论汇编成可审校的稿件，附带每条断言的来路",
+              "problem": "",
+              "fail_open": false
+            },
+            {
+              "item": {
+                "板": "- （新）[t-000162] message·要一个回执 来自 H：手稿 000020：doc:000000 第 9 轮复审：claim-1 新措辞与 stmt:000060 对得上；机械读数全绿；但三条证据链 warning 未收口 ⇒ status=in_review、签名未钉\n[手稿 000020] doc:000000 第 9 轮复审：claim-1 新措辞与 stmt:000060 对得上；机械读数全绿；但三条证据链 warning 未收口 ⇒ status=in_review、签名未钉\n全文：`manuscripts.read(id=\"000020\")`（盘上 work/handoffs.jsonl#000020）"
+              },
+              "addendum": "我的产出物口径：交付状态 —— 交给谁：H（送审）+ 派你这趟活的父（收工 `final` 的 `notify` 的 `to` 格写它的名册名 / 绝对编号 / 角色名）+ M（打包）；形态：`documents` 行 + `manuscripts/G/<doc_id>.md` + 成文阶段的 `out/package/main.tex` / `out/package/main.pdf` + `out/package/MAPPING.json`；可核字段：`documents.doc_id` / `documents.kind` / `documents.markdown_path` / `documents.content_sha256` / `documents.claims` / `documents.status`；算做完：`build_document` 回了 `doc_id`、每条 claim 的 `citations` 都指得到台账已有的号（`stmt:` / `lit:` / `exp:`），且 H 审到 `documents.status=accepted`（不通过就按 findings 改）。\n我在本条线上的位置：论文撰写：把台账里的结论汇编成可审校的稿件，附带每条断言的来路",
+              "problem": "",
+              "fail_open": false
+            }
+          ],
+          "handoffs_digest": "- 000016 V→F：f-proof-000000 整体重读结论：成立（零 finding），重写的第 12 步已就地自足，签块已在稿第 4 行、正文 sha 对齐\n- 000017 A→M：r-000002 已收口为 no_results（未收新文献，非「无文献」），未闭环检索请求归零，待裁表 0 条\n- 000018 M→A：派活：A（派活：把唯一一条未闭环的检索请求 r-000002（由 D.consider 的机械判据自动开出）在这一趟里收口：用规范英文术语做一次检索（例如 \"Sylow theorems conjugacy number of Sylow p-subgroups\"），把结果落成该请求的终局 outcome（ok 或 no_results，都算合法终局），并在回执里给 request id、outcome 与一句话理由。**不要**开新委托、不要收编新文件、不要重做已经入库的 lit:000000–000003。这一条收口的意义只是让 search_requests 的未闭环计数归零；若你判断这条请求本就不该存在（Sylow 定理已有自足证明与 V 签），就在 outcome 的说明里逐字写清这一点，并把它标成终局即可。）\n- 000019 M→G：最后一处机器口径修订：claim 与所引命题词面对齐，重落 MAPPING\n- 000020 H→G：doc:000000 第 9 轮复审：claim-1 新措辞与 stmt:000060 对得上；机械读数全绿；但三条证据链 warning 未收口 ⇒ status=in_review、签名未钉"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 83712,
+        "prompt_cache_miss_tokens": 1727,
+        "tokens_in": 85439,
+        "tokens_out": 2227,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000160"
+    },
+    {
+      "index": 13,
+      "shape": "final",
+      "payload": {
+        "final": "收口完成（按 M 给的外科手术口径，只改 claim 措辞、未动 main.tex）。\n\n一、改了哪几条 claim\n只改了 1 条：claim-1（`own.revise` 回执 `replaced_claim_ids=[\"claim-1\"]`，条数仍 5，其余 4 条一字未动）。claim-2/3/4/5 逐条做过词面比对：它们已含所引命题的原词（Sylow p-subgroups / conjugate / n_p / [G : N(P)] / normal），与 stmt:000061–000064 有实词交集，无需改。\n\n对照（一行）：\n- 前：「Let G be a finite group with |G| = p^k m and p not dividing m. Then G has a subgroup of order p^k, and every p-subgroup of G is contained in some subgroup of order p^k.」\n- 后：「Let G be a finite group and p a prime with |G| = p^k m, where p does not divide m. Then G contains a Sylow p-subgroup of order p^k, and every p-subgroup of G is contained in some Sylow p-subgroup of G.」\n数学内容未变（存在阶 p^k 的子群、每个 p-子群含于某个这样的子群），只把「subgroup of order p^k」换成 stmt:000060 的原词 Sylow p-subgroup。\n\n二、MAPPING\n`doc.write_mapping(project=\".\")` → state=pass，5 行与正文 5 个定理类环境逐一对上，`ledger_id`/`proof_no` 均可解析，`problems=[]`，`mapping-appendix.tex` 已 present。首调用 `project=\"projects/sylow-4\"` 被拒（bad_project：路径被拼成 …\\sylow-4\\projects\\sylow-4），改 `project=\".\"` 通过。\n\n三、编译\nmain.tex 一个字节未改：`fs.stat` 得 sha256=08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72、22490 字节，与 COMPILE-RECEIPT.json 的 `tex_sha256` 逐字相同 ⇒ 未重编（回执 `pages`=7、`pdf_bytes`=232739、exit_codes [0,0]、`pdf_fresh`=true、compiled_at 2026-11-24T05:04:42）。回执 tex_sha256 前 12 位：08c6cc0a5673。\n\n四、H 复审（改完即送，未复审不算交付）\nH1 已复审现行版：核到 main.tex 的 sha/字节/行数与我所报一致，且明说 claim-1 新措辞与 stmt:000060「对得上、没有差词」、机械读数全绿。但它没有签 accepted：以三条证据链 warning 未收口为由把 `documents.status` 留在 in_review、签名未钉（手稿 000020）。那三条属证据链层（含论文里排成定理而 V 未签的 thm:unique → stmt:000064 一类），不是措辞能修的，且超出 M 这次限定的手术范围与预算 ⇒ 原样上报，是否再派 D/V 收口由 M 定。\n\n五、一条口径读数（供 M 判门时用）\n`revise` 的 `citation_coverage.fit` 现在只在 **lit:** 一侧报 mismatch（claim-1…5 全部，why 只点 lit:000000/000002），**stmt 一侧 claim-1 已对上**。lit 那一侧对五条都不可能有交集（文献行的可比较文本只有哈希文件名一类），改措辞改不动它；若收工门按「一条 claim 的任一引用有交集」判，则已通过；若按逐条 lit 引用判，则需换引文或去掉 lit: 引用 —— 那是证据取舍，不是我能在 chirurg 范围内自行决定的。\n\n未做：重编 PDF（不需要，tex 未变）、改 main.tex 的定理与证明（M 明确禁止）、新增断言（一条未加）。",
+        "evidence": [
+          "doc:000000",
+          "stmt:000060",
+          "stmt:000061",
+          "stmt:000062",
+          "stmt:000063",
+          "stmt:000064",
+          "lit:000000",
+          "lit:000002"
+        ],
+        "notify": {
+          "to": "M",
+          "summary": "claim-1 已按 stmt:000060 原词重写；MAPPING pass；PDF 未过期（tex 08c6cc0a5673 / 7 页）；H 复审留在 in_review（三条证据链 warning）",
+          "body": "## 做了什么\n- 只改 claim-1（`own.revise` → `replaced_claim_ids=[\\\"claim-1\\\"]`，条数 5 不变）：把「a subgroup of order p^k」换成所引命题 stmt:000060 的原词 **Sylow p-subgroup**，并补上「p a prime」「of order p^k」，数学内容未变、未新增断言。\n- claim-2…5 逐条词面核过：已含 stmt:000061–000064 的原词（Sylow p-subgroups / conjugate / n_p / [G : N(P)] / normal），未改。\n\n## 对照（一行）\n- 前：Let G be a finite group with |G| = p^k m and p not dividing m. Then G has **a subgroup of order p^k**, and every p-subgroup of G is contained in some **subgroup of order p^k**.\n- 后：Let G be a finite group and p a prime with |G| = p^k m, where p does not divide m. Then G contains **a Sylow p-subgroup of order p^k**, and every p-subgroup of G is contained in some **Sylow p-subgroup of G**.\n\n## MAPPING\n- `doc.write_mapping(project=\".\")` → **state=pass**，5 行、`problems=[]`、`mapping-appendix.tex` present；首调用 `project=\"projects/sylow-4\"` 被拒 `bad_project`（路径重复拼接），改 `.` 后通过。\n\n## 编译\n- main.tex 未动：`fs.stat` sha256=08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72（22490 B）= 回执 `tex_sha256` ⇒ 不必重编。回执：前 12 位 **08c6cc0a5673**、**pages=7**、pdf_bytes=232739、exit_codes [0,0]、pdf_fresh=true。\n\n## 卡在哪 / 要你定\n1. H1 复审现行版：claim-1 与 stmt:000060「对得上、没有差词」、机械读数全绿，但以**三条证据链 warning** 未收口为由 `status=in_review`、签名未钉（手稿 000020）。三条都在证据链层（例如论文里排成定理而 V 未签的 thm:unique → stmt:000064），不是改措辞能修的，也超出本次手术范围；要不要再派 D/V 收口请你定。\n2. `citation_coverage.fit` 现只在 **lit:** 一侧报 mismatch（五条全报，why 仅点 lit:000000/000002）；stmt 一侧 claim-1 已对上。lit 行没有可与英文断言交集的文本，改措辞改不动 —— 若收工门按「任一引用有交集」判即已过，若按逐条 lit 判则需换/去 lit 引用，属证据取舍，待你裁。",
+          "refs": [
+            "stmt:000060",
+            "stmt:000061",
+            "stmt:000062",
+            "stmt:000063",
+            "stmt:000064",
+            "lit:000000",
+            "lit:000002",
+            "000020"
+          ]
+        }
+      },
+      "result": {
+        "notify_handoff": {
+          "handoff": "000021",
+          "ok": true,
+          "id": "000021",
+          "path": "work/handoffs.jsonl#000021",
+          "to": "M",
+          "brief": "claim-1 已按 stmt:000060 原词重写；MAPPING pass；PDF 未过期（tex 08c6cc0a5673 / 7 页）；H 复审留在 in_review（三条证据链 warning）",
+          "addressing": {
+            "checked": true,
+            "how": "outside_roster",
+            "to": "M",
+            "kind": "",
+            "name": "",
+            "task_id": "",
+            "role": "",
+            "brief": "",
+            "candidates": [],
+            "callable": "",
+            "refused": "",
+            "error": "",
+            "why": "角色级/公告栏/频道外的收件人面（手稿台账按它建键）",
+            "delivery": "role",
+            "manuscript_to": "M"
+          },
+          "notify_channel": "role",
+          "revises": "",
+          "existing_same_summary": {
+            "count": 0,
+            "ids": [],
+            "note": "查过了：没有同一句话的既有交接"
+          },
+          "notified": "m000018",
+          "error": "",
+          "note": "收件人下次运行时（或本步之后）会在收件箱/板上看到编号；它用 `manuscripts.read` 读全文"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 84608,
+        "prompt_cache_miss_tokens": 5203,
+        "tokens_in": 89811,
+        "tokens_out": 3857,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000160"
+    }
+  ],
+  "final": "收口完成（按 M 给的外科手术口径，只改 claim 措辞、未动 main.tex）。\n\n一、改了哪几条 claim\n只改了 1 条：claim-1（`own.revise` 回执 `replaced_claim_ids=[\"claim-1\"]`，条数仍 5，其余 4 条一字未动）。claim-2/3/4/5 逐条做过词面比对：它们已含所引命题的原词（Sylow p-subgroups / conjugate / n_p / [G : N(P)] / normal），与 stmt:000061–000064 有实词交集，无需改。\n\n对照（一行）：\n- 前：「Let G be a finite group with |G| = p^k m and p not dividing m. Then G has a subgroup of order p^k, and every p-subgroup of G is contained in some subgroup of order p^k.」\n- 后：「Let G be a finite group and p a prime with |G| = p^k m, where p does not divide m. Then G contains a Sylow p-subgroup of order p^k, and every p-subgroup of G is contained in some Sylow p-subgroup of G.」\n数学内容未变（存在阶 p^k 的子群、每个 p-子群含于某个这样的子群），只把「subgroup of order p^k」换成 stmt:000060 的原词 Sylow p-subgroup。\n\n二、MAPPING\n`doc.write_mapping(project=\".\")` → state=pass，5 行与正文 5 个定理类环境逐一对上，`ledger_id`/`proof_no` 均可解析，`problems=[]`，`mapping-appendix.tex` 已 present。首调用 `project=\"projects/sylow-4\"` 被拒（bad_project：路径被拼成 …\\sylow-4\\projects\\sylow-4），改 `project=\".\"` 通过。\n\n三、编译\nmain.tex 一个字节未改：`fs.stat` 得 sha256=08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72、22490 字节，与 COMPILE-RECEIPT.json 的 `tex_sha256` 逐字相同 ⇒ 未重编（回执 `pages`=7、`pdf_bytes`=232739、exit_codes [0,0]、`pdf_fresh`=true、compiled_at 2026-11-24T05:04:42）。回执 tex_sha256 前 12 位：08c6cc0a5673。\n\n四、H 复审（改完即送，未复审不算交付）\nH1 已复审现行版：核到 main.tex 的 sha/字节/行数与我所报一致，且明说 claim-1 新措辞与 stmt:000060「对得上、没有差词」、机械读数全绿。但它没有签 accepted：以三条证据链 warning 未收口为由把 `documents.status` 留在 in_review、签名未钉（手稿 000020）。那三条属证据链层（含论文里排成定理而 V 未签的 thm:unique → stmt:000064 一类），不是措辞能修的，且超出 M 这次限定的手术范围与预算 ⇒ 原样上报，是否再派 D/V 收口由 M 定。\n\n五、一条口径读数（供 M 判门时用）\n`revise` 的 `citation_coverage.fit` 现在只在 **lit:** 一侧报 mismatch（claim-1…5 全部，why 只点 lit:000000/000002），**stmt 一侧 claim-1 已对上**。lit 那一侧对五条都不可能有交集（文献行的可比较文本只有哈希文件名一类），改措辞改不动它；若收工门按「一条 claim 的任一引用有交集」判，则已通过；若按逐条 lit 引用判，则需换引文或去掉 lit: 引用 —— 那是证据取舍，不是我能在 chirurg 范围内自行决定的。\n\n未做：重编 PDF（不需要，tex 未变）、改 main.tex 的定理与证明（M 明确禁止）、新增断言（一条未加）。",
+  "evidence": [
+    "doc:000000",
+    "stmt:000060",
+    "stmt:000061",
+    "stmt:000062",
+    "stmt:000063",
+    "stmt:000064",
+    "lit:000000",
+    "lit:000002"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 1,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 13,
+  "compactions": 0,
+  "mailbox_items": [
+    "t-000162",
+    "t-000163"
+  ],
+  "mailbox_msgs": [
+    "m000017"
+  ],
+  "mailbox_delivered": 3,
+  "monitor_turns": 1,
+  "wakes": 1,
+  "wake_ids": [
+    "wk-000047"
+  ],
+  "wake_events": [
+    {
+      "wake_id": "wk-000047",
+      "task_id": "t-000160",
+      "role": "G",
+      "timer_id": "tm-000064",
+      "kind": "timer",
+      "reason": "复审 doc:000000（现行版）：我只做了一处外科手术式修订 —— claim-1 的措辞改为以所引命题 stmt:000060 的原词转述（加入 Sylow p-subgroup / p-subgroup 等术语），数学内容未变；main.tex 一个字节未改（sha256 仍为 08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef4",
+      "purpose": "复审 doc:000000（现行版）：我只做了一处外科手术式修订 —— claim-1 的措辞改为以所引命题 stmt:000060 的原词转述（加入 Sylow p-subgroup / p-subgroup 等术语），数学内容未变；main.tex 一个字节未改（sha256 仍为 08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef4",
+      "purpose_missing": false,
+      "message": "时间到：复审 doc:000000（现行版）：我只做了一处外科手术式修订 —— claim-1 的措辞改为以所引命题 stmt:000060 的原词转述（加入 Sylow p-subgroup / p-subgroup 等术语），数学内容未变；main.tex 一个字节未改（sha256 仍为 08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef4｜等了 2 分钟 41 秒（起于 05:23:16，到于 05:25:57）。它交的是：ok：执行完成",
+      "waited_sec": 161.265786,
+      "triggered_by": "target_event",
+      "wait_for": "task:t-000161",
+      "due_at": "",
+      "fired_at": "2026-11-23T21:25:57.780617+00:00",
+      "mailbox_item_id": "t-000163",
+      "state": "pending"
+    }
+  ],
+  "clock_pumps": 25,
+  "clock_fired": 1,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "G 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "G",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    },
+    "woke_turns": 1,
+    "skip_calls": 1,
+    "woke_reasons": [
+      "event"
+    ]
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [
+    "000021"
+  ],
+  "summons": [
+    "H"
+  ],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [
+    {
+      "kind": "summon",
+      "counted": true,
+      "task_id": "t-000161",
+      "role": "H",
+      "step": 11,
+      "status": "done",
+      "outcome": "ok",
+      "handoff_id": "",
+      "outputs": [
+        "t-000161",
+        "out/package/main.tex"
+      ],
+      "disposition": ""
+    }
+  ],
+  "summons_total": 1,
+  "summons_consumed": 0,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 1,
+  "summon_consumption": {
+    "summons_total": 1,
+    "summons_consumed": 0,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 1,
+    "productions": [
+      {
+        "kind": "summon",
+        "counted": true,
+        "task_id": "t-000161",
+        "role": "H",
+        "step": 11,
+        "status": "done",
+        "outcome": "ok",
+        "handoff_id": "",
+        "outputs": [
+          "t-000161",
+          "out/package/main.tex"
+        ],
+        "disposition": "unconsumed"
+      }
+    ],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p327",
+    "role": "G",
+    "prompt_sha256": "5d560051773c3ed111fab8d18dc95874df2121546d6ca8c8aa629fc2e459cfc3",
+    "prompt_chars": 81778,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "FACULTIES_07",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "TOOL_29",
+      "TOOL_30",
+      "TOOL_31",
+      "TOOL_32",
+      "TOOL_33",
+      "TOOL_34",
+      "TOOL_35",
+      "TOOL_36",
+      "TOOL_37",
+      "TOOL_38",
+      "TOOL_39",
+      "TOOL_40",
+      "TOOL_41",
+      "TOOL_42",
+      "TOOL_43",
+      "TOOL_44",
+      "TOOL_45",
+      "TOOL_46",
+      "TOOL_47",
+      "TOOL_48",
+      "TOOL_49",
+      "TOOL_50",
+      "TOOL_51",
+      "TOOL_52",
+      "TOOL_53",
+      "TOOL_54",
+      "TOOL_55",
+      "TOOL_56",
+      "TOOL_57",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "PAPER_PACK",
+      "PAPER_01",
+      "PAPER_02",
+      "PAPER_03",
+      "PAPER_04",
+      "PAPER_05",
+      "PAPER_06",
+      "PAPER_07",
+      "PAPER_07_BODY",
+      "PAPER_08",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_LIMITS",
+      "COLLAB_NAMES",
+      "PARENT_STOP",
+      "PARENT_ROSTER",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 13,
+    "tokens_in": 944104,
+    "tokens_out": 22866,
+    "usd": 0.021552,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 12,
+    "no_request_calls": 0,
+    "hit": 910080,
+    "miss": 33807,
+    "unknown_calls": 0,
+    "tokens_in": 943887,
+    "hit_rate": 0.9642,
+    "mismatched_calls": 0,
+    "saved_usd": 0.133783,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 288.891,
+  "end_ts": "2026-11-24T05:26:17+08:00",
+  "notes": [
+    "收工时名下还有 2 条证明没有 V 的签字（读数，不拦收工；明细：000060、000064）",
+    "缓存读数：命中 910080 / 未命中 33807 token，命中率 96.4%（12 次调用）；按 modelcost 口径估算可省 约 0.133783 美元",
+    "子产出处理读数：summons_total=1，consumed=0，waived=0，unknown=0，unconsumed=1；**没处理**的是 ['t-000161'] —— 拿到结果不等于处理了：在它之后留下任何指到它的效应（写台账 / 改计划 / 改猜想 / 写报告 / 再派活 / 折进结论 …），或者写 `not_consumed`（受控码 + 一句理由）如实声明不处理"
+  ],
+  "final_payload": {
+    "final": "收口完成（按 M 给的外科手术口径，只改 claim 措辞、未动 main.tex）。\n\n一、改了哪几条 claim\n只改了 1 条：claim-1（`own.revise` 回执 `replaced_claim_ids=[\"claim-1\"]`，条数仍 5，其余 4 条一字未动）。claim-2/3/4/5 逐条做过词面比对：它们已含所引命题的原词（Sylow p-subgroups / conjugate / n_p / [G : N(P)] / normal），与 stmt:000061–000064 有实词交集，无需改。\n\n对照（一行）：\n- 前：「Let G be a finite group with |G| = p^k m and p not dividing m. Then G has a subgroup of order p^k, and every p-subgroup of G is contained in some subgroup of order p^k.」\n- 后：「Let G be a finite group and p a prime with |G| = p^k m, where p does not divide m. Then G contains a Sylow p-subgroup of order p^k, and every p-subgroup of G is contained in some Sylow p-subgroup of G.」\n数学内容未变（存在阶 p^k 的子群、每个 p-子群含于某个这样的子群），只把「subgroup of order p^k」换成 stmt:000060 的原词 Sylow p-subgroup。\n\n二、MAPPING\n`doc.write_mapping(project=\".\")` → state=pass，5 行与正文 5 个定理类环境逐一对上，`ledger_id`/`proof_no` 均可解析，`problems=[]`，`mapping-appendix.tex` 已 present。首调用 `project=\"projects/sylow-4\"` 被拒（bad_project：路径被拼成 …\\sylow-4\\projects\\sylow-4），改 `project=\".\"` 通过。\n\n三、编译\nmain.tex 一个字节未改：`fs.stat` 得 sha256=08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72、22490 字节，与 COMPILE-RECEIPT.json 的 `tex_sha256` 逐字相同 ⇒ 未重编（回执 `pages`=7、`pdf_bytes`=232739、exit_codes [0,0]、`pdf_fresh`=true、compiled_at 2026-11-24T05:04:42）。回执 tex_sha256 前 12 位：08c6cc0a5673。\n\n四、H 复审（改完即送，未复审不算交付）\nH1 已复审现行版：核到 main.tex 的 sha/字节/行数与我所报一致，且明说 claim-1 新措辞与 stmt:000060「对得上、没有差词」、机械读数全绿。但它没有签 accepted：以三条证据链 warning 未收口为由把 `documents.status` 留在 in_review、签名未钉（手稿 000020）。那三条属证据链层（含论文里排成定理而 V 未签的 thm:unique → stmt:000064 一类），不是措辞能修的，且超出 M 这次限定的手术范围与预算 ⇒ 原样上报，是否再派 D/V 收口由 M 定。\n\n五、一条口径读数（供 M 判门时用）\n`revise` 的 `citation_coverage.fit` 现在只在 **lit:** 一侧报 mismatch（claim-1…5 全部，why 只点 lit:000000/000002），**stmt 一侧 claim-1 已对上**。lit 那一侧对五条都不可能有交集（文献行的可比较文本只有哈希文件名一类），改措辞改不动它；若收工门按「一条 claim 的任一引用有交集」判，则已通过；若按逐条 lit 引用判，则需换引文或去掉 lit: 引用 —— 那是证据取舍，不是我能在 chirurg 范围内自行决定的。\n\n未做：重编 PDF（不需要，tex 未变）、改 main.tex 的定理与证明（M 明确禁止）、新增断言（一条未加）。",
+    "evidence": [
+      "doc:000000",
+      "stmt:000060",
+      "stmt:000061",
+      "stmt:000062",
+      "stmt:000063",
+      "stmt:000064",
+      "lit:000000",
+      "lit:000002"
+    ],
+    "notify": {
+      "to": "M",
+      "summary": "claim-1 已按 stmt:000060 原词重写；MAPPING pass；PDF 未过期（tex 08c6cc0a5673 / 7 页）；H 复审留在 in_review（三条证据链 warning）",
+      "body": "## 做了什么\n- 只改 claim-1（`own.revise` → `replaced_claim_ids=[\\\"claim-1\\\"]`，条数 5 不变）：把「a subgroup of order p^k」换成所引命题 stmt:000060 的原词 **Sylow p-subgroup**，并补上「p a prime」「of order p^k」，数学内容未变、未新增断言。\n- claim-2…5 逐条词面核过：已含 stmt:000061–000064 的原词（Sylow p-subgroups / conjugate / n_p / [G : N(P)] / normal），未改。\n\n## 对照（一行）\n- 前：Let G be a finite group with |G| = p^k m and p not dividing m. Then G has **a subgroup of order p^k**, and every p-subgroup of G is contained in some **subgroup of order p^k**.\n- 后：Let G be a finite group and p a prime with |G| = p^k m, where p does not divide m. Then G contains **a Sylow p-subgroup of order p^k**, and every p-subgroup of G is contained in some **Sylow p-subgroup of G**.\n\n## MAPPING\n- `doc.write_mapping(project=\".\")` → **state=pass**，5 行、`problems=[]`、`mapping-appendix.tex` present；首调用 `project=\"projects/sylow-4\"` 被拒 `bad_project`（路径重复拼接），改 `.` 后通过。\n\n## 编译\n- main.tex 未动：`fs.stat` sha256=08c6cc0a567364f04aace4c7e45fc2c81f2509054daf31d3796c9ef42b05da72（22490 B）= 回执 `tex_sha256` ⇒ 不必重编。回执：前 12 位 **08c6cc0a5673**、**pages=7**、pdf_bytes=232739、exit_codes [0,0]、pdf_fresh=true。\n\n## 卡在哪 / 要你定\n1. H1 复审现行版：claim-1 与 stmt:000060「对得上、没有差词」、机械读数全绿，但以**三条证据链 warning** 未收口为由 `status=in_review`、签名未钉（手稿 000020）。三条都在证据链层（例如论文里排成定理而 V 未签的 thm:unique → stmt:000064），不是改措辞能修的，也超出本次手术范围；要不要再派 D/V 收口请你定。\n2. `citation_coverage.fit` 现只在 **lit:** 一侧报 mismatch（五条全报，why 仅点 lit:000000/000002）；stmt 一侧 claim-1 已对上。lit 行没有可与英文断言交集的文本，改措辞改不动 —— 若收工门按「任一引用有交集」判即已过，若按逐条 lit 判则需换/去 lit 引用，属证据取舍，待你裁。",
+      "refs": [
+        "stmt:000060",
+        "stmt:000061",
+        "stmt:000062",
+        "stmt:000063",
+        "stmt:000064",
+        "lit:000000",
+        "lit:000002",
+        "000020"
+      ]
+    }
+  },
+  "task_id": "t-000160"
+}

@@ -1,0 +1,144 @@
+===== page 1 =====
+18.704
+3/9/05
+Gabe Cunningham
+gcasey@mit.edu
+Sylow Theorems and The General Linear Group
+Theorem 1 (First Sylow Theorem) Let G be a group of order n with p|n. Write n =
+pam where p does not divide m.
+Then G has a subgroup S of order pa, called a Sylow
+p-subgroup of G.
+Recall from our last discussion that |GLn(Fq)| = Qn−1
+k=0(qn −qk) = qn(n−1)/2 Qn
+k=1(qk −1).
+If q = pr, the First Sylow Theorem tells us that GLn(Fq) has a Sylow p-subgroup of order
+qn(n−1)/2. Now I’ll describe one such group.
+Proposition 1 Let q = pr; let MTn(Fq) be the group of upper triangular matrices with 1’s
+along the diagonal. Then MTn(Fq) is a Sylow p-subgroup of GLn(Fq).
+Proof: It’s clear that MTn(Fq) is a subgroup of GLn(Fq), so it suﬃces to show that MTn(Fq)
+has order qn(n−1)/2. This follows simply; each of the n(n −1)/2 entries strictly above the
+diagonal can be any element of Fq, for a total of qn(n−1)/2 elements.
+Now for a bit of a diversion.
+Let V be an n-dimensional vector space over Fq.
+We
+deﬁne GL(V ) to be the group of invertible linear transformations from V to itself. There
+is a natural isomorphism between GL(V ) and GLn(Fq); ﬁx a basis for V and consider the
+matrices of the linear transformations in GL(V ) with respect to that basis. By picking two
+diﬀerent bases, B1 and B2, we can compose the isomorphisms obtained from each choice of
+basis to get an isomorphism ψ from GLn(Fq) to itself as follows:
+GLn(Fq)
+ψ
+/
+φ1
+%L
+L
+L
+L
+L
+L
+L
+L
+L
+L
+GLn(Fq)
+GL(V )
+φ2
+9r
+r
+r
+r
+r
+r
+r
+r
+r
+r
+Let’s consider an example. Let A = ( 1 2
+0 1 ) ∈GL2(F5). Let V be a two-dimensional vector
+space over F5; let e1 = (1, 0) and e2 = (0, 1). Then by considering A as the matrix of some
+linear transformation T with respect to the standard basis of V (i.e., the basis (e1, e2)), we
+can map A to T by requiring that T(e1) = e1 and T(e2) = 2e1 + e2; this fully determines
+T ∈GL(V ). Now we ﬁx a new basis, say, (e1 + e2, e1 −e2). Since T(e1 + e2) = 3e1 + e2 =
+2(e1 + e2) + (e1 −e2) and T(e1 −e2) = −e1 + e2 = −(e1 −e2), the matrix of T with respect
+to this new basis is ( 2 −1
+1
+0 ). So in our isomorphism ψ, the matrix ( 1 2
+0 1 ) is mapped to ( 3 −1
+1
+1 ).
+Now, let’s consider the subgroup H = ψ(MTn(Fq)) of GLn(Fq). H is, of course, also a
+Sylow p-subgroup of GLn(Fq). By considering several changes of basis, we can ﬁnd several
+subgroups H1, H2, etc., all isomorphic to MTn(Fq). Two natural questions arise. The ﬁrst
+is whether all Sylow p-subgroups are isomorphic by a change-of-basis isomorphism. The
+second is whether there’s an easier way to describe the relationship between these Sylow
+p-subgroups. Thankfully, the answer to both questions is yes.
+===== page 2 =====
+18.704
+3/9/05
+Gabe Cunningham
+gcasey@mit.edu
+Proposition 2 Let T be a linear transformation from V to itself, and let A be the matrix
+of T with respect to a particular basis B. Then the matrices A′ that represent T with respect
+to diﬀerent bases are of the form
+A′ = PAP −1
+for P ∈GLn(Fq).
+I’m not going to prove this proposition, but you can ﬁnd a proof in Artin’s Algebra on
+pages 115 and 116, or in many other places, I’m sure. This proposition tells us that A and
+ψ(A) are conjugate (or in the language of linear algebra, similar), for any change-of-basis
+isomorphism ψ. Thus, the Sylow p-subgroups MTn(Fq) and ψ(MTn(Fq)) are conjugate as
+well. As it turns out, all of the Sylow p-subgroups of a group G are conjugate; this is Sylow’s
+second theorem.
+Theorem 2 (Second Sylow Theorem) The Sylow p-subgroups of a group G are conju-
+gate.
+Finally, let us turn to the third Sylow theorem.
+Theorem 3 (Third Sylow Theorem) Let s be the number of Sylow p-subgroups of G; let
+|G| = pam where p does not divide m. Then s divides m and s is congruent to 1 (mod p).
+We’ve seen already that we get one Sylow p-subgroup of GLn(Fq) by taking the group of
+upper triangular matrices with 1’s along the diagonal. In similar fashion, the group of lower
+triangular matrices with 1’s along the diagonal is a Sylow p-subgroup. Since for n ≥2 these
+two groups aren’t the same (and when n = 1, p doesn’t divide the order of GLn(Fq)), the
+number of Sylow p-subgroups of GLn(Fq) is greater than 1, so it is at least p + 1. We notice
+that p + 1 divides q2 −1, so it is an allowable number of Sylow p-subgroups. Unfortunately,
+even for small q and n, GLn(Fq) is large and there are a lot of choices of s that fulﬁll the
+requirements of the third Sylow theorem. In principle, it shouldn’t be diﬃcult to ﬁnd s; we
+know one easily described Sylow p-subgroup, and we just need to conjugate it to ﬁnd all
+the others. This is tedious, but I don’t know of a better way to count the Sylow p-subgroups.
+Addendum:
+We discussed in class how to count the number of Sylow p-subgroups of
+GLn(Fq). Let X be the set of Sylow p-subgroups. The second Sylow theorem tells us that
+if we let GLn(Fq) act on X by conjugation, the action is transitive. Let H = MTn(Fq); let
+N be the normalizer of H (that is, the set of g ∈GLn(Fq) such that gHg−1 = H). Then, by
+the counting formula,
+|GLn(Fq)| = |N| · |X|
+So if we can ﬁnd the normalizer of H and count the elements of it, we can ﬁnd the number
+of Sylow p-subgroups, s. (Note that this argument holds for any ﬁnite group G; indeed,
+it is the basis on which the third Sylow theorem is proved.) Without getting into details,
+===== page 3 =====
+18.704
+3/9/05
+Gabe Cunningham
+gcasey@mit.edu
+it turns out that the normalizer of H is the group of upper triangular matrices, which has
+(q −1)nqn(n−1)/2 elements. Therefore,
+s = qn(n−1)/2 Qn
+k=1(qk −1)
+qn(n−1)/2(q −1)n
+=
+1
+(q −1)n
+n
+Y
+k=1
+(qk −1)
+=
+n
+Y
+k=1
+qk −1
+q −1
+=
+n
+Y
+k=1
+(qk−1 + qk−1 + · · · + 1)
+= [n!]q

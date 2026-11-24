@@ -1,0 +1,24 @@
+{
+ "action": "run_once",
+ "at": "2026-11-24T04:22:10+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 2424,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"A.run_once 已完成并已派 B 收编，待裁表已清空（pending_total=0）。\\n\\n【委托 r-000001（本地摄取：reference/ 下用户逐字点名的 4 份 Sylow 定理 PDF）】outcome=ok、done=true、result_lit_ids=[000000,000001,000002,000003]，四个号在 literature 表里都能读到。\\n逐条判收前都走过「抽读 → fs.read 读正文 → 判收」：4 份 quality.state 全为 readable（Conrad 7 页/19296 字、Harris GU4041 65 页/38661 字、Idelhaj 8 页/21369 字、Cunningham(MIT 18.704，文件名标 vakil) 3 页/5630 字）。中间一次 lit.admit 被受控拒（no_readback，槽 000000 另报 read_stale）—— 回读 lit.stage_list 并重读 .txt 后通过，未跳过闸门。\\n入库结果：lit:000000 Conrad《The Sylow Theorems》、lit:000001 Harris/Columbia GU4041 幻灯、lit:000002 Idelhaj《The Sylow Theorems and Their Applications》、lit:000003 Cunningham 18.704《Sylow Theorems and The General Linear Group》。报告：work/A/lit-r-000001.md。\\n\\n【已派 B 收编（t-000005，done/ok）】4 篇全部 processed=true；概念行 60+（stmt:000000–000059）、关系行 72 条（rel:000000–000071，逐条 quote_verified 全为 true、无空值无 suspect）、定理行 5 条（stmt:000060 起，Sylow I/II/III 等，其中洗过的自产正文那条 quote_verified=false —— 如实标出，不当逐字引文用）。Harris 那篇按「只作陈述与应用侧补引」处理，概念配额用满时受控拒了 24 条候选并逐条点名，未静默丢弃。\\n\\n【清表】r-000001 本批 4 条全部判收并 lit.admit_all 提交，提交即发号回填、行打 cleared_at；全表待裁 0 条（lit.stage_list request_id=\\\"*\\\" status=pending 现读为 0）。\\n\\n【需要 M 知道的两件小事】① 本趟到此时收到两条 clock 到点通知板项 t-000080 / t-000081（等 B 的计时器到点），内容即上述 B 返场，未单独消项（监控回合只许 final/note/补派）；② B 名下还剩 3 条 work 板项（t-000058、t-000068、t-000074，状态 seen），是它第二阶段逐个优化的收尾，不在本趟委托范围内。\\n\\n【预算】本趟花销 0.792217 / 3.000000 美元。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\sylow-4\\\\runs\\\\A-20261124-042210-001.json\", \"messages\": [], \"outcome\": \"ok\", \"status\": \"done\", \"steps\": 24, \"stop_reason\": \"final\", \"summons\": [\"B\"]}",
+ "payload_sha256": "438be2f5f20eee5267b2398b1239cd8174bc3a4e8c19257a97384f45ba34bad4",
+ "readings": {},
+ "role": "A",
+ "status": "done",
+ "task_id": "t-000004"
+}

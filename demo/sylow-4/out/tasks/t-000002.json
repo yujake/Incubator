@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T04:37:35+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 2230,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"本地摄取这批已办完：4 份 PDF 逐份抽读正文（都 readable、非仅题录）→ 判收 → 提交注册，待裁表全表清零，并已派 B 收编。\\n\\n**入库结果（r-000001，outcome=ok，done=true）**\\n| lit_id | 题名（正文首页题名） | 状态 |\\n|---|---|---|\\n| 000000 | Keith Conrad, *The Sylow Theorems*（7 页；A4 反例、p-Sylow 定义、Z/12 与 D6/S4 算例、三定理完整证明） | 收（readable） |\\n| 000001 | Columbia GU4041, *Sylow's theorems*（65 页；陈述、应用、证明三部分） | 收（readable） |\\n| 000002 | Amin Idelhaj, *The Sylow Theorems and Their Applications*（8 页；群作用/轨道-稳定化子路线） | 收（readable） |\\n| 000003 | 18.704 笔记 *Sylow Theorems and The General Linear Group*（3 页；第一 Sylow 定理与 GL_n(F_q) 的上三角幺幂 Sylow p-子群） | 收（readable） |\\n\\n四条全部 `admitted`、`download.status=ok`、`source_request_ids=[\\\"r-000001\\\"]`，`search_requests.result_lit_ids` 已回填这四个号，每个号都能在 `literature` 里读到。\\n\\n**一处元数据差异（如实报，不静默）**：第 4 份文件名写 `vakil`，但正文首页题名与作者是 `18.704 / 3/9/05 / Gabe Cunningham`，题为 *Sylow Theorems and The General Linear Group* —— 文件名与正文作者不一致，我采信正文（作者/题名以首页为准），登记行 title 仍保留盘上文件名以便溯源。\\n\\n**B 收编回执（手稿 000011）**：概念行 60 条（stmt:000000–000059，origin=external_lit）、关系行 72 条（quote_verified 全 true）、命题行 4 条；第二阶段 4/5 洗签完成，剩 stmt:000064 卡在他人稿面（不是本批失败，是稿面归属问题）。\\n\\n**待裁表**：全表（跨委托）pending = 0，本委托已清表归档 `data/archive/lit_candidates/archive-r-000001.jsonl`。\\n\\n另：两条时钟到点通知（t-000105 / t-000106）本轮监控回合受限无法消项，留待下一正常回合 ack。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\sylow-4\\\\runs\\\\A-20261124-043735-001.json\", \"messages\": [], \"outcome\": \"ok\", \"status\": \"done\", \"steps\": 32, \"stop_reason\": \"final\", \"summons\": [\"B\"]}",
+ "payload_sha256": "44f4c2fb5685a0ff3c68bf3c60424bdf859fba668f8f48949d0cbd128e0323ca",
+ "readings": {},
+ "role": "A",
+ "status": "done",
+ "task_id": "t-000002"
+}

@@ -1,0 +1,426 @@
+===== page 1 =====
+THE SYLOW THEOREMS AND THEIR APPLICATIONS
+AMIN IDELHAJ
+Abstract. This paper begins with an introduction into the concept of group
+actions, along with the associated notions of orbits and stabilizers, culminating
+in the proofs of Cayley’s theorem and the orbit-stabilizer theorem. Then, we
+build up to the three Sylow theorems, and subsequently give some of their
+applications.
+Contents
+1.
+Introduction
+1
+2.
+Group Actions, Orbits, and Stabilizers
+2
+3.
+The Sylow Theorems
+3
+4.
+Applications of the Sylow Theorems
+5
+Acknowledgements
+8
+References
+8
+1. Introduction
+One of the important results in the theory of ﬁnite groups is Lagrange’s theorem,
+which states that the order of any subgroup of a group must divide the order of
+the group. One might suggest a possible converse to this theorem, that for any
+number dividing the order of a group, there exists a subgroup of that order. This
+is not true. For example, the group A4 of even permutations on the set {1, 2, 3, 4}
+has order 12, yet there does not exist a subgroup of order 6. The Sylow theorems
+do provide us with a sort of partial converse to Lagrange’s theorem, by asserting
+the existence of certain subgroups (called Sylow p-subgroups) of any group with a
+given order, and gives some information about their properties. In this paper, we
+wish to build up to the proofs of the Sylow theorems by use of group actions and
+the orbit-stabilizer theorem.
+Deﬁnition 1.1. Let G be a group and let X be a set. An action of G on X is a group
+homomorphism φ : G →Sym(X), where Sym(X) is the group of permutations of
+X.
+Notation 1.2. When the action of G on X is unambiguous, we implicitly denote
+it by G ↷X. By abuse of notation, we will use g to denote both the group element
+and the permutation φ(g) it induces on X. If x ∈X is any point, we denote the
+action of g on it by gx. While this notation is also used for group multiplication,
+it is clear from context which one is intended.
+Date: July 2016.
+1
+===== page 2 =====
+2
+AMIN IDELHAJ
+2. Group Actions, Orbits, and Stabilizers
+In this section, we discuss two important concepts regarding group actions: orbits
+and stabilizers. Using these concepts, we prove Cayley’s theorem and the orbit-
+stabilizer theorem. Throughout, we let the general action be that of G on X.
+Deﬁnition 2.1. : The orbit of a point x ∈X is the set of points to which x is
+transported by the action of G: Orb(x) = {gx : g ∈G}. The cardinality of the
+orbit is called its length.
+Deﬁnition 2.2. The stabilizer of a point x ∈X, denoted Stab(x), is the set
+{g ∈G : gx = x} ⊆G.
+Deﬁnition 2.3. The transporter from x to y is the set of elements that send x to
+y: Trans(x, y) = {g ∈G : gx = y} ⊆G.
+Theorem 2.4. The stabilizer of any element in X is a subgroup of G.
+Proof. If g and h are in Stab(x), (gh)x = g(hx) = gx = x, implying that Stab(x) is
+closed under multiplication. In addition, x = (g−1g)x = g−1(gx) = g−1x, implying
+that the inverse of every element in Stab(x) also lies in Stab(x). The identity is
+in Stab(x) as it is in the kernel of the associated homomorphism, and ﬁxes every
+point in X. Thus, Stab(x) ≤G.
+□
+Theorem 2.5. The orbits of X form a partition.
+Proof. It is clear that every point in X is in its own orbit.
+Now, we wish to
+prove that if two orbits overlap, they coincide. Consider x ∈Orb(y) ∩Orb(z).
+Then x = gy = hz for some g, h ∈G. Thus, if w = mz for some m ∈G, then
+w = mh−1gy. Thus, Orb(z) ⊂Orb(y). By an analogous argument, Orb(y) ⊂
+Orb(z), implying that they coincide.
+□
+Deﬁnition 2.6. An action is:
+(1) Faithful if the kernel of the associated homomorphism φ : G →Sym(X) is
+trivial.
+(2) Transitive if there is only one orbit.
+(3) Regular if it is both faithful and transitive.
+With this, we are now able to prove Cayley’s theorem and the orbit-stabilizer
+theorem.
+Theorem 2.7 (Cayley). Every group of order n is isomorphic to some subgroup
+of Sn.
+Proof. We consider the action of G on itself by left multiplication. Because this
+action is faithful, G embeds as a subgroup of Sym(G), and because Sym(G) ∼= Sn,
+G is isomorphic to a subgroup of Sn.
+□
+Theorem 2.8 (Orbit-Stabilizer). When a group G acts on a set X, the length of
+the orbit of any point is equal to the index of its stabilizer in G:
+|Orb(x)| = [G : Stab(x)]
+Proof. The ﬁrst thing we wish to prove is that for any two group elements g and
+g′, gx = g′x if and only if g and g′ are in the same left coset of Stab(x). We know
+===== page 3 =====
+THE SYLOW THEOREMS AND THEIR APPLICATIONS
+3
+this because if gx = g′x, then g−1g′ ﬁxes x. Thus, g′ ∈gStab(x), and since g′ also
+lies in its own left coset of Stab(x), g Stab(x) = g′ Stab(x).
+Now deﬁne a mapping φ : G/Stab(x) →Orb(x) by φ(gStab(x)) = gx. This map
+is surjective because for y ∈Orb(x), we can choose a g ∈Trans(x, y), for which g
+Stab(x) maps to y under φ. Our previous result proves that this map is injective,
+and thus, we have a bijection. |Orb(x)| = |G/Stab(x)| = [G : Stab(x)].
+□
+3. The Sylow Theorems
+Deﬁnition 3.1. Let G be a ﬁnite group of order pnm where p ∤m. A Sylow p-
+subgroup of G is one of order pn. By Lagrange’s theorem, such a subgroup would
+be a maximal p-subgroup of G.
+Example 3.2. If we consider the group Z100 under addition, it has order 100 =
+22∗52. Thus, a Sylow 2-subgroup is a subgroup of order 4, while a Sylow 5-subgroup
+is a subgroup of order 25.
+We now state the three Sylow theorems, and dedicate the rest of this section to
+their proofs.
+Theorem 3.3 (Sylow’s ﬁrst theorem). If p is a prime number and p | |G|, then
+there exists a Sylow p-subgroup of G.
+Theorem 3.4 (Sylow’s second theorem). For a given prime p, all Sylow p-subgroups
+of G are conjugate to each other.
+Theorem 3.5 (Sylow’s third theorem). We denote the number of Sylow p-subgroups
+of G by np. Then the following results hold:
+(1) np ≡p 1.
+(2) If |G| = pnm so that p ∤m, then np|m.
+(3) If P is any Sylow p-subgroup of G, then np = [G : N(P)], where N(P) is
+the normalizer of P in G.
+We now wish to prove Sylow’s ﬁrst theorem, beginning with a combinatorial
+lemma that will be employed in this proof:
+Lemma 3.6. If p ∤m, then p ∤
+prm
+pr
+
+, where
+n
+k
+
+are the binomial coeﬃcients.
+Proof. If we expand the binomial coeﬃcient, we get:
+prm
+pr
+
+=
+prm−1
+Q
+k=0
+(prm −k)
+pr−1
+Q
+k=0
+(pr −k)
+Now, we wish to prove that if p divides a term pnm −k in the numerator, then
+it divides the corresponding term pn −k in the denominator. If we take k = plq
+where either l < r and p ∤q or l = r, we have that prm−k
+pr−k = pr−lm−q
+pr−l−q , which is not
+divisible by p. Thus, the whole product is not divisible by p.
+□
+Proof of Sylow’s ﬁrst theorem. We denote the set of all subsets of G with order pn
+by Ω. This consists of taking the set of combinations of pn elements out of the pnm
+elements of G, and thus we have |Ω| =
+pnm
+pn
+
+. Now, we let G act on Ωby left
+===== page 4 =====
+4
+AMIN IDELHAJ
+multiplication. Since Ωis partitioned by its orbits, the sum of the lengths of its
+orbits is equal to |Ω|. By Lemma 3.6, we ﬁnd that p ∤|Ω|, and as such, there must
+exist at least one orbit whose length is coprime to p. Choose ω ∈Ωto be a set for
+which p ∤|Orb(ω)|.
+Now, deﬁne H := Stab(ω). We can consider its action on ω by left multiplication,
+since H permutes the elements of ω. The orbits of this action are, by deﬁnition, right
+cosets of H, and thus, the length of each orbit is [G : H]. Thus, |H| | |ω| = pn, and
+thus, H is a p-group. By the orbit-stabilizer theorem, |Orb(ω)||H| = |G| = pnm.
+Since H is a p-group and p ∤|Orb(ω), we have that |H| = pn, implying that H is a
+Sylow p-subgroup of G.
+□
+Example 3.7. Consider a group with order 72, and look at its prime factorization:
+72 = 2332. By Sylow I, we know that there exists a subgroup of order 8 as well as
+a subgroup of order 9, without further information on the group structure.
+In order to prove Sylow II and III, we will need the following lemma, regarding
+the actions of p-groups on ﬁnite sets.
+Lemma 3.8. If G is a p-group and X is ﬁnite, then |X| ≡p |XG|, where XG is
+the set of points x ∈X that are ﬁxed by every g ∈G.
+Proof. Consider a set of representatives x1, ..., xn ∈X for the G-orbits of X. We
+have that |X| = Pn
+i=1 |Orb(xi)| = Pn
+i=1[G : Stab(xi)]. If xi is not a ﬁxed point,
+then [G : Stab(xi)] = pr for some r > 0. If xi is a ﬁxed point, then its orbit is
+the singleton {xi}, and thus, |Orb(xi)| = 1. Thus in modulo p, each ﬁxed point
+contributes 1 to the above sum, and every other term contributes 0, thereby giving
+the desired result.
+□
+Proof of Sylow’s second theorem. Consider two Sylow p-subgroups of G, call them
+R and S. We shall have R act on G/S by left multiplication. By Lemma 3.6, we
+have that the number of ﬁxed points of G/S under the action of R is congruent to
+[G : S] mod p. Suppose |G| = pnm where p ∤m. Since S is a Sylow p-subgroup,
+[G : S] = m̸ = 0 mod p, and thus, there must be some non-zero number of ﬁxed
+points in the action. Denote one of the ﬁxed points by gS. We have rgS = gS for
+any r ∈R. Thus, g−1rgS = S which implies g−1Rg ⊂S. Since g−1Rg and S are
+ﬁnite sets of the same size, the inclusion is an equality and we have that the two
+subgroups are conjugate.
+□
+The following fact, which is used extensively in the next section, is an immediate
+consequence of Sylow’s second theorem.
+Corollary 3.9. A Sylow p-subgroup of G is unique if and only if it is normal in
+G. In particular, it is unique if the group is abelian.
+Proof. If a Sylow p-subgroup is unique, then it is equal to all its conjugations and
+thus normal. If there are multiple Sylow p-subgroups, they must be conjugate to
+each other, so none of them can be closed under conjugation, prohibiting normality.
+Since any subgroup of an abelian group is normal, a Sylow p-subgroup must be
+unique.
+□
+Finally, we turn our attention the third Sylow theorem.
+===== page 5 =====
+THE SYLOW THEOREMS AND THEIR APPLICATIONS
+5
+Proof of part 1 of Sylow’s third theorem. We consider S := Sylp(G) to be the set
+of all Sylow p-subgroups of G. Fix a particular subgroup P, and have it act on S
+by conjugation. Note that S is ﬁnite since G has only ﬁnitely many subsets. Thus,
+Lemma 3.8 applies and we ﬁnd that |S| = np(G) ≡p |SP |. Because P is closed
+under conjugation by one of its elements, it is a ﬁxed point, so now we consider
+any other ﬁxed point, call it Q. Because pQ = Qp for every p ∈P, we know that
+P ⊂N(Q). In addition, Q ⊂N(Q), and thus, P and Q are subgroups of N(Q).
+In particular, by Langrange’s theorem, pn | |N(Q)|, and since pn+1 ∤|G|, it follows
+that pn+1 ∤|N(Q)|. Therefore, P and Q are Sylow p-subgroups of N(Q), and by
+Sylow’s second theorem, they are conjugate in N(Q). But since Q ⊴N(Q), this
+can only be achieved if P = Q. This shows that there is only one ﬁxed point in S,
+whereby we now have that np = |S| ≡p |SP | = 1
+□
+Proof of part 2 of Sylow’s third theorem. We now consider the action of the entire
+group G, on Sylp(G). Because Sylow p-subgroups of G are conjugate, there is only
+one orbit, whose length is np. Using the orbit-stabilizer theorem, it follows that
+np | |G| = pnm. Since np ≡1 mod p, p and np must be relatively prime. Thus,
+np | pnm can occur only if np | m.
+□
+Proof of part 3 of Sylow’s third theorem. We again look at the action of G on Sylp(G).
+By orbit-stabilizer, np = [G : Stab(P)]. Under the conjugation action, Stab(P) =
+N(P), giving us our desired result.
+□
+We conclude this section with a theorem whose proof is similar in form to that
+of the third Sylow theorem.
+Theorem 3.10. Every p-subgroup of G is contained in some Sylow p-subgroup of
+G
+Proof. We consider H to be a p-subgroup of G, and let it act on Sylp(G) by conjuga-
+tion. There must be at least one ﬁxed point under the action since |Sylp(G)| ≡p 1.
+We denote a ﬁxed point by Q and note that H is a subgroup of N(Q). H × Q is a
+subgroup of N(Q) since Q is normal in N(Q). H × Q is a p-subgroup of G since
+its order is |H × Q| = |H|·|Q|
+|H∩Q| . Because Q is not contained properly in any other
+p-subgroup of G, we now have that Q = H × Q, implying that H ≤Q.
+□
+4. Applications of the Sylow Theorems
+In this section, we wish to explore some applications of the Sylow theorems to
+combinatorics, arithmetic, and ﬁnite group theory, in order to demonstrate their
+signiﬁcance. We begin with a lemma that does not invoke any of the Sylow theo-
+rems, but will be useful throughout this section.
+Lemma 4.1. Every group of prime order is cyclic.
+Proof. By Lagrange’s theorem, we know that for any element of G, we have |⟨g⟩| |
+|G|. However, if G has prime order and g is not the identity, then this can only be
+satisﬁed if ⟨g⟩= G, making G cyclic.
+□
+Now, we begin the applications.
+Theorem 4.2 (Wilson). A natural number p is prime if and only if (p −1)! ≡p 1
+===== page 6 =====
+6
+AMIN IDELHAJ
+Proof. We will only prove the ”only if” part of this statement, since it uses the
+Sylow theorems. Consider the symmetric group Sp for p prime. Since p | p! and
+p2 ∤p!, we have that the Sylow p-subgroups are cyclic groups of order p. There
+are (p −1)! many p-cycles in Sp, and every Sylow p-subgroup contains precisely
+(p −1) such cycles, while sharing none. Thus it follows that there are precisely
+(p −2)! distinct Sylow p-subgroups. By the third Sylow theorem, we have that
+np = (p −2)! ≡p 1, thus implying that (p −1)! ≡p p −1 ≡p −1.
+□
+Theorem 4.3. Every group of order 15 is cyclic.
+Proof. A group of order 15 has a subgroup of order 3 and a subgroup of order 5. By
+Sylow III, we have that n3 ≡3 1 and n3 | 5, meaning there is only 1 Sylow 3-subgroup
+⟨a⟩. By an analogous argument, there is only 1 Sylow 5-subgroup ⟨b⟩, which is also
+cyclic. By Sylow II, these two subgroups must be normal. We know that their
+intersection must be trivial, since any element in their intersection has an element
+whose order divides both 3 and 5. We know that |HK| = |H|·|K|
+|H∩K| = 15 = |G|. Thus,
+every element in G is of the form aibj. It follows that G = H × K and therefore
+cyclic by the Chinese Remainder Theorem.
+□
+Theorem 4.4. Every ﬁnite p-group is isomorphic to some subgroup of the upper
+unitriangular group.
+Proof. The order of GL(n, p) is Qn−1
+k=0(pn −pk) = p
+n(n−1)
+2
+Qn−1
+k=0(pn−k −1). Since
+p ∤pn−k −1, a Sylow p-subgroup of GL(n, p) has order p
+n(n−1)
+2
+.
+We know that the unitriangular group is a subgroup of the general linear group,
+since it is closed under multiplication and all of its matrices have determinant 1.
+We note that a unitriangular matrix can take any value in its superdiagonal entries,
+thus it has n(n−1)
+2
+entries that are not ﬁxed to be 0 or 1. Since they are allowed to
+take any value in Fp, there are p
+n(n−1)
+2
+such matrices. Thus, over a prime ﬁeld, the
+unitriangular group is a Sylow p-subgroup of the general linear group.
+If |G| = pk = n, we can embed G in Sn, which is in turn embeded GL(n, p) via
+the permutation matrices.
+Thus, G is a p-subgroup of GL(n, p).
+By Theorem
+3.10, G is contained in some Sylow p-subgroup H of GL(n, p). By Sylow’s second
+theorem, H is conjugate to the unitriangular group, which implies that the latter
+has a subgroup isomorphic to G.
+□
+We now move to one of the more substantial theorems in this section. There
+exists a theorem which says that except for a particular set of 26 groups, called
+the sporadic groups, all ﬁnite simple groups are isomorphic to a cyclic group of
+prime order, an alternating group of degree at least 5, or a simple group of the Lie
+type (the deﬁnition of which is a bit too complicated to go into here). While the
+proof of this theorem is thousands of pages long, we will prove a simpler result that
+demonstrates the power of the Sylow theorems, which are very important in the
+full proof of the classiﬁcation theorem. To begin, we prove the following lemma.
+Lemma 4.5. The order of a non-abelian simple group divides the factorial of the
+index of every proper subgroup.
+Proof. G acts on G/H by left multiplication. This action is clearly transitive, and
+thus, the homomorphism φ : G →Sym(G/H) has a kernel that is not all of G.
+However, since the kernel must be a normal subgroup, it must be trivial. Thus, the
+===== page 7 =====
+THE SYLOW THEOREMS AND THEIR APPLICATIONS
+7
+homomorphism is injective, and G is isomorphic to a subgroup of Sym(G/H), and
+thus, |G| | |Sym(G/H)| = [G : H]!.
+□
+Theorem 4.6. The smallest non-abelian simple group is A5, and is unique up to
+isomorphism.
+Proof. In order to prove this theorem, we ﬁrst eliminate all possibilities of simple
+non-abelian groups with order less than 60.
+• Lemma 4.1 eliminates groups of prime order, for they are cyclic and thus
+abelian.
+• Any group of order pkm where m < p and k̸ = 0 will have a single Sylow p-
+subgroup, since np ≡p 1 and np | m is only satisﬁed by np = 1. Uniqueness
+of a Sylow p-subgroup implies normality by the second Sylow theorem,
+eliminating groups of order 6, 10, 14, 15, 18, 20, 21, 22, 26, 28, 33, 34, 35,
+38, 39, 42, 44, 46, 50, 51, 52, 54, 55, 57, and 58.
+• If p is a prime such that q = 2p −1 is a Mersenne prime, we claim that a
+group of order 2pq also cannot be simple and non-abelian. We know that
+nq ≡q 1 and nq | 2p. Either nq = 1, in which case the q-Sylow subgroup
+is normal, or nq = 2p. In the latter case, assume H1, ..., H2p are the Sylow
+q-subgroups. Since they are all of prime order, the intersection of any two
+of them is trivial. Thus, the total number of non-identity elements of order
+q is 2p(q −1) = |G| −2p. The Sylow 2-subgroups of G must be contained
+entirely within the remaining 2p elements, which means that this subgroup
+is unique and normal. This fact disqualiﬁes groups of order 12 and 56.
+• We know that 45 = 5 ∗32, so n5 | 9 and n5 ≡5 1, only satisﬁed by n = 5.
+Similarly, 40 = 5 ∗23, so n5 | 8 and n5 ≡5 1, implying that n5 = 1. Thus,
+groups of those orders have normal subgroups and are thus disqualiﬁed.
+• If G is simple and non-abelian, its order must divide the factorial of any
+Sylow number np.
+Let P be a Sylow p-subgroup of G.
+By Sylow III,
+[G : N(P)] = np. Note that P̸ = G because it is a p-group and has a
+non-trivial center. Since P is not the trivial group, it cannot be normal
+in G.
+In particular N(P) is a proper subgroup of G.
+By lemma 4.5,
+|G| | [G : N(P)]! = np!. Groups of order 24, 36, and 48 fail to meet this
+condition, and are thus disqualiﬁed.
+• If |G| = 30, we have that n3 = 1 or 10, and n5 = 1 or 6. If G is simple,
+then it has 10 subgroups of order 3 and 6 subgroups of order 5. However,
+since these groups are all cyclic of prime order, any non-trivial element of
+G is contained in at most one of these groups. However, that would require
+that |G| ≥10(3 −1) + 6(5 −1) = 44, which is false. Thus, G is not simple.
+We now wish to prove that A5 is simple, and then that any simple group of order
+60 is isomorphic to it. We note that the conjugacy classes of A5 have sizes 1, 12, 12,
+15, and 20. A non-trivial normal subgroup would contain the identity and at least
+one other conjugacy class, with its order being some sum of one and at least one of
+the other above numbers. However, the only such sum which divides 60 (required
+by Lagrange) is to sum all of them up. Thus, the two normal subgroups have order
+1 (identity) and 60 (whole group), making A5 simple.
+If a simple group of order 60 has a subgroup H of index 5, then we could consider
+the 5 distinct left cosets of H. Now G acts on them transitively by left multipli-
+cation, we see that there is a non-trivial homomorphism φ : G →S5. Clearly,
+===== page 8 =====
+8
+AMIN IDELHAJ
+φ(G)̸ = S5 since the latter is not simple, and if |φ(G)| < 60, the homomorphism’s
+kernel would be non-trivial, violating simplicity of G. Thus, |φ(G)| = 60. Now,
+we apply the signature homomorphism sgn|φ(G) : φ(G) →{1, −1}. Since φ(G) is
+simple and the homomorphism is non-injective, it is trivial and φ(G) ⊂A5. We
+now know that φ(G) = A5 since both have order 60.
+Now, it remains to be shown that every simple group of order 60 has a subgroup
+of index 5. The four possibilities for n2 are 1, 3, 5, and 15. Clearly, n2̸ = 1 by
+simplicity, and we also know that n2̸ = 3 since 60 ∤3!. We know that n5 = 6,
+since the only other possibility by Sylow III would be n5 = 1, violating simplicity
+of G. Similarly, n3 = 10, because n3̸ = 1 by simplicity again, and n3̸ = 4 because
+60 ∤4!. Thus, there are 20 elements of order 3 and 24 elements of order 5 in G.
+Two distinct Sylow 2-subgroups of G would intersect in up to 2 elements, meaning
+that if n2 = 15, the group would need to have at least 75 elements, which it does
+not. Thus, n2 = 5, implying that the normalizer of a Sylow 2-subgroup would have
+index 5. By the previous discussion, G is isomorphic to A5.
+□
+Acknowledgements
+I would like to thank my mentors, Nir Gadish and Oishee Banerjee, for their
+guidance throughout the research process. It is with their support that I was able
+to write a paper on group theory, which I previously had no background in.
+I
+would also like to thank Peter May for organizing this program and giving me the
+opportunity to explore this topic. Finally, I would like to thank my professor, Laci
+Babai, for his guidance and inspiration.
+References
+[1] I. N. Herstein. Topics in Algebra. John Wiley & Sons. 1975
+[2] Keith Conrad. Group Actions. http://www.math.uconn.edu/∼kconrad/blurbs/grouptheory/gpaction.pdf
+[3] Keith Conrad. Consequences of the Sylow Theorems.
+http://www.math.uconn.edu/∼kconrad/blurbs/grouptheory/sylowapp.pdf
+[4] Gabe
+Cunningham.
+Sylow
+Theorems
+and
+The
+General
+Linear
+Group.
+http://www-
+math.mit.edu/∼dav/sylow.pdf

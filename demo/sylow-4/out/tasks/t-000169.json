@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T05:32:28+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 1988,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"复审完成：doc:000000 现行版（revision 3）判 accepted，签名已钉住现行版。读数：documents.status=accepted、review_rounds=14、review_verdict=「成立」、reviewed_by=agent-H、reviewed_at=2026-11-24T05:30:23+08:00；签名落盘 doc-signatures/000000-2d0a330993fc3124-003.json，content_sha256=2d0a330993fc31247634af0a1fcb34e7fd9f915be9f1dcdb502f3217cf7e6dec（前 12 位 2d0a330993fc）。open findings 剩余 0 条（12 条里 000000–000008 fixed，000009/000010/000011 wontfix）。三点必须如实报告：（1）M 派活写的现行哈希 549200690ff0… 与盘上不一致 —— 台账行与本人签名所钉的都是 2d0a33…，我以台账行为准；正文 tex sha256=08c6cc0a567364f0…（213 行）与派活里「tex 08c6cc0a5673」对得上，本轮我一个字节没动 main.tex，也没有重编。（2)000009@claim-5 与 000010 在我接手前已是 wontfix（round 8 落判、round 11 复核），不是 open；我逐条读了它们的理由（读者面已在 main.tex:153/167/198/209 就地披露，台账面差异落在 G 的写面），本轮不改判、也没有它们的 open 残留。（3）语义级判据没接线（semantic_check.checked=false、claims_semantically_judged=0）⇒「措辞干净而结论强于引文」这一形态我这一轮**没查**，不是查过没问题；机械口径（字段/引用/证据档位/否定分类/依赖闭合）查了 5/5、error=0/warning=0。另：我按流程产的 out/report/000000-review.md 第 14 轮门表是 rejected（G10 fail，unknown G11）—— 那是**我自己**的三条历史发现（000007/000008/000010）缺 verbatim_quote 造成的格式门，不是稿件内容缺陷，我手上的工具改不了已有 finding 行，如实留作残留。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\sylow-4\\\\runs\\\\H-20261124-053228-001.json\", \"messages\": [\"M\"], \"outcome\": \"ok\", \"status\": \"done\", \"steps\": 13, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "5d31ba00924fe77dd16f1a246e1a37cdebf85eb768aae2a62ca71cbaa95ef88a",
+ "readings": {},
+ "role": "H",
+ "status": "done",
+ "task_id": "t-000169"
+}

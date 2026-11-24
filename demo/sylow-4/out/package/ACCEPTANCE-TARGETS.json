@@ -1,0 +1,17 @@
+{
+  "checks": [
+    {"id": "Q1", "name": "立题：研究问题已立并收口", "kind": "research_question_rows", "min": 1, "note": "research_questions 000000（Sylow 定理及其推论），status=answered"},
+    {"id": "R1", "name": "检索：真的取回了文献（outcome=ok）", "kind": "retrieval_ok_rows", "min": 1, "note": "本地摄取委托 r-000001 outcome=ok，登记录入 lit:000000–000003（reference/ 下 4 份 PDF，正文可读）"},
+    {"id": "P1", "name": "造：命题级证明（文字证明 + V 签）", "kind": "reviewed_proof_rows", "min": 1, "note": "本会话 Lean 形式化关闭 ⇒ 走 (a) 文字证明 + V 逐行走查这一档；stmt:000060–000064，verifications 里逐份「成立」签"},
+    {"id": "P2", "name": "造（备查）：预备定理级/定理级行数", "kind": "reviewed_proof_rows", "min": 1, "note": "五位现算到 pre_theorem/theorem 的行；statements=6，unsigned=1（stmt:000064）"},
+    {"id": "S1", "name": "想：在册命题/断言行", "kind": "statement_rows", "min": 6, "note": "statements 000060–000065（Sylow 存在性、共轭、n_p≡1、n_p|m、唯一性、概念相关命题）"},
+    {"id": "A1", "name": "看：关系分析（C 的确定性读数）", "kind": "c_analysis_runs", "na": true, "note": "本趟未派 C 的关系分析（预算优先保证明与成文）；关系行由 B 的文献消化产出（relations 行 72 条，quote_verified=true），不做图结构读数"},
+    {"id": "F1", "name": "攻：攻坚推进（plan_progress）", "kind": "plan_progress_rows", "min": 1, "note": "D→F 的攻坚计划至少一轮 outcome=progress（归约/交论证），计划在 attack_plans 台账里"},
+    {"id": "D1", "name": "交：手稿落盘（documents 行）", "kind": "document_rows", "min": 1, "note": "doc:000000 kind=paper（status=accepted）+ 一行 G 的稿件行"},
+    {"id": "D2", "name": "交：正文非空（每节都有正文）", "kind": "document_body_rows", "min": 1, "note": "out/package/main.tex 由 G 用 fs.write 写出，Abstract + 4 节正文 + 5 个定理环境"},
+    {"id": "D3", "name": "交：断言带引文", "kind": "document_claim_rows", "min": 5, "note": "doc:000000 的 claims 有 5 条，citations 指到 stmt:000060–000064 与 lit:000000/000002"},
+    {"id": "D4", "name": "交：论文对应表（MAPPING）", "kind": "paper_mapping_rows", "min": 1, "note": "out/package/MAPPING.json 5 行对正文 5 个定理类环境（thm:sylow1/2/3/index/unique），每行回溯到 stmt 号与 V 签"},
+    {"id": "C1", "name": "闭：请求闭环（未闭环上限 0）", "kind": "unfinished_request_rows", "max": 0, "note": "search_requests / reprocess_requests 未闭环应为 0"},
+    {"id": "C2", "name": "闭：文献消化位（未消化上限 0）", "kind": "literature_unprocessed_rows", "max": 0, "note": "literature 4 行已由 B 消化出概念行 60 / 关系行 72"}
+  ]
+}

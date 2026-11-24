@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T04:44:45+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 5029,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"H 的只读审校结论：doc:000000（kind=paper, The Sylow Theorems）本轮不通过 —— 4 条 findings 已落 review_findings（000000/000001/000002/000003），documents 000000 置 in_review（review.review_document 读数：status=in_review、status_updated=true、open_findings.blocks_accept=true；审校报告落 out/report/000000-review.md，被审版本 hash a9d783a2049e63b6）。\\n\\n【四条清单读数】① 定理那一档先取读数（review.scan(kinds=[proofs,ledger_match,cites,refs,duplicates,text_integrity,inputs], project=\\\".\\\")，不是我自己数）：facts 里 proof_envs=7、statement_envs=5、ledger_propositions=5、ledger_theorem_kinds=5、mapping_rows=5、statement_surplus=[]、statement_without_proof=0、proof_without_statement=2、cites/refs/duplicates/inputs 各 0 条 findings（cite_keys=4、bibitem_keys=4、labels=7、ref_keys=7）。text_integrity 这一类 checked=false（paths 为空、这一趟什么都没扫）—— 我不把它读成「零命中」，这一格是「没核到」。五个定理环境（106/120/130/144/154 行）与台账 000060–000064 一条对一个、不多不少；两个 proofs error 读数在 90、100 行：那两段 proof 前面没有定理类环境（声明写成了 remark[lem:fix] / remark[lem:cauchy]，见 finding 000002）。② 正文内部编号：\\\\appendix 在第 196 行，exp:/stmt:/lit:/rel:/eval:/doc: 在附录之前出现 0 次；8 处全部落在 196 行之后（203、204、205、206、207、210、212 行）—— ①合规。③ 正文无「数值实验 / Numerical experiments」类小节：章节依次 Abstract→1 Introduction→2 Definitions and notation→3 Main results→4 Discussion and open problems→References→Appendix A，无参数扫描表、无读数清单，附录 A 只是「定理↔台账条目」清单 —— 合规。④ 三件齐全：\\\\begin{abstract}（33 行）、4 条 \\\\bibitem（conrad/harris/idelhaj/vakil）、Appendix A: Computational evidence（198 行）。\\n\\n【措辞是否越级（重点②）】全文没有「机器验证」「Lean 已验证」「已形式化验证」一类说法；相反的措辞出现在 34 行、170 行、200 行、212 行（\\\"No computer-assisted verification is claimed\\\"、\\\"no formal verification was carried out\\\"、\\\"no machine-checked proofs\\\"）—— 这一档合规。唯一的越级在 170 行：\\\"The proofs above are elementary and human-checked\\\" 把五条结果一律说成 human-checked，但 thm:unique 对应的 stmt:000064 在台账里 bits.reviewed=false（finding 000001，warning）。\\n\\n【thm:unique ↔ stmt:000064（重点③）】是，正文这一处把台账等级只有 conjecture、且 V 三判「有毛病」的命题写成了已证明的定理：main.tex 154–157 行 \\\\begin{theorem}[Uniqueness equals normality]\\\\label{thm:unique} 断言「P 唯一 ⟺ P 正规，交换群特例」，",
+ "payload_sha256": "649e4c9a3259fe54704c4b200a97446c9da2dd6c6f98a847096ac0033c706e9d",
+ "readings": {},
+ "role": "H",
+ "status": "done",
+ "task_id": "t-000112"
+}

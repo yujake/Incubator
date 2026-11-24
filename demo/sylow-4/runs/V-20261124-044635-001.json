@@ -1,0 +1,837 @@
+{
+  "role": "V",
+  "task": "V：这一趟派给你的活是 —— 审这一份证明稿 manuscripts/F/f-proof-000000.md（稿号 000000，正文 sha e7bc144b572e…），用你的 verify_proof：只传 proof_manuscript=\"manuscripts/F/f-proof-000000.md\"（不传命题号、不传 proof_no），另可参考只读读数 readonly_facts（命题：Sylow (E)(C)(N) 三断言合一的完整陈述；台账：F 计划 000001 子目标 s1 的这一轮成果，尚无 statements 行，命题号由 B 收录时现取）。要审的是它是否自足成立：逐行走查每一步的依据（事实 1–4 是否就地证出、类方程/固定点同余/McKay 计数每一步是否给全），判「成立」或「有毛病」；若有毛病，请按步号 + 原句指出缺陷步（defect_step 非空），不要只给笼统评语。",
+  "steps": [
+    {
+      "index": 0,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/F/f-proof-000000.md"
+        },
+        "why": "通读被审证明稿全文，逐步核依据"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "# F 的证明手稿：就地证出四条预备事实：事实1 左陪集与 Lagrange（|A|=|B|·[A:B]）、事实2 轨道分解与轨道-稳定化…\n\n- 计划：000001 · 子目标：s1\n- 依赖面洗稿：已洗=true；执行者=secretary-F\n- 稿族：f-proof\n- 产出者：agent-F-sylow-prover-1\n- 正文sha：e7bc144b572eace32d78ae41974c45972535d87a2e2c1d817d9a80c05a93e227\n- 命题指纹：ee0b2a06257685d6974f2808dbd0c1b92bb1334af7f93d9687004d6dc118d5ac\n- 命题类型：conjecture\n- 登记时间：2026-11-24T04:41:31+08:00\n- 标签：F 攻坚 000001 子目标 s1\n- 版本：2026-11-24T04:41:31+08:00@e7bc144b572eace32d78ae41974c45972535d87a2e2c1d817d9a80c05a93e227\n\n## 命题\n\n设 G 为有限群，|G| = p^a·m，其中 p 是素数，a ≥ 0、m ≥ 1 是整数，且 p 不整除 m。记 n = p^a。则 (E) G 存在阶为 n 的子群；(C) 若 P、Q 是 G 的两个阶为 n 的子群，则存在 g ∈ G 使 Q = gPg⁻¹；(N) 若 n_p 表示 G 的阶为 n 的子群个数，则 n_p ≡ 1 (mod p) 且 n_p 整除 m。\n\n## 证明\n\n1. 前提与记号。G 为有限群，p 为素数，a ≥ 0、m ≥ 1 为整数，|G| = p^a·m 且 p 不整除 m；记 n = p^a。本证明只使用以下定义：子群；子群 B ≤ A 的左陪集 aB 与指数 [A:B]（左陪集的个数）；有限群 Γ 在集合 X 上的作用（映射 (g,x) ↦ g·x 满足 (gh)·x = g·(h·x) 与 1·x = x）；轨道 Γ·x = {g·x : g ∈ Γ}；稳定化子 Stab(x) = {g ∈ Γ : g·x = x}；正规化子 N_G(P) = {g ∈ G : gPg⁻¹ = P}；中心 Z(A) = {a ∈ A : 对一切 x ∈ A 有 ax = xa}；中心化子 C_A(a) = {g ∈ A : gag⁻¹ = a}；共轭类；正规子群。下面事实 1 至事实 7 全部就地证明，此后每一步只引用这些事实与更早的步骤。（前提）\n2. 事实 1（陪集与计数，拉格朗日定理）。设 A 为有限群、B ≤ A。在 A 上定义关系 a ~ a' 当且仅当 a⁻¹a' ∈ B：由 a⁻¹a = 1 ∈ B 得自反；由 a⁻¹a' ∈ B 得 a'⁻¹a = (a⁻¹a')⁻¹ ∈ B 得对称；由 a⁻¹a' ∈ B、a'⁻¹a'' ∈ B 得 a⁻¹a'' = (a⁻¹a')(a'⁻¹a'') ∈ B 得传递。故这是等价关系，且 a 所在的等价类恰为左陪集 aB（a⁻¹a' ∈ B 等价于 a' ∈ aB）。又左乘 a 给出从 B 到 aB 的双射 b ↦ ab（单射：ab = ab' 时左乘 a⁻¹ 得 b = b'；满射按 aB 的定义），故 |aB| = |B|。于是 A 是若干互不相交的左陪集之并，|A| = |B|·[A:B]，从而 |B| 整除 |A| 且 [A:B] = |A|/|B|。依据：按定义与上述逐条验证就地给出（同一事实的表述见 lit:000000 所载 Sylow 讲义里的基本计数）。（依据：lit:000000）\n3. 事实 2（轨道分解与轨道-稳定化子）。设有限群 Γ 作用在集合 X 上，x ∈ X。轨道给出 X 的一个划分：定义 y ~ z 当且仅当存在 g ∈ Γ 使 z = g·y；由 1·y = y 得自反，由 z = g·y 得 y = g⁻¹·z（因 g⁻¹·(g·y) = (g⁻¹g)·y = 1·y = y）得对称，由 z = g·y、w = h·z 得 w = (hg)·y 得传递；等价类正是轨道，故 X 是轨道的互不相交之并，|X| = Σ_{轨道 O} |O|。其次 Stab(x) = {g : g·x = x} 是 Γ 的子群：1·x = x；若 g·x = h·x = x 则 (gh)·x = g·(h·x) = g·x = x；若 g·x = x，两边作用 g⁻¹ 得 x = g⁻¹·x。再令 φ 把左陪集 g·Stab(x) 送到 g·x：若 g·Stab(x) = g'·Stab(x)，则 g' = g·s（s ∈ Stab(x)），故 g'·x = (gs)·x =…（落档截断，原 8008 字）",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/F/f-proof-000000.md",
+          "encoding": "utf-8",
+          "bytes_read": 14114,
+          "total_bytes": 14114,
+          "truncated": false,
+          "start_line": 1,
+          "lines_read": 43,
+          "total_lines": 43,
+          "next_line": null,
+          "windowed": false,
+          "had_errors": false,
+          "note": "共 43 行",
+          "sha256": "7fc6c0f7af804dee9f9d8dc76a845914e8e9e30f8e615a06dbce55133ff04bfb"
+        },
+        "multi_call": {
+          "turn_index": 0,
+          "call_index": 0,
+          "calls": 2,
+          "step_index": 0
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 36608,
+        "prompt_cache_miss_tokens": 1345,
+        "tokens_in": 37953,
+        "tokens_out": 266,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000111"
+    },
+    {
+      "index": 1,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.stat",
+        "args": {
+          "path": "manuscripts/F/f-proof-000000.md"
+        },
+        "why": "取该稿 sha 与大小，核对送审正文指纹"
+      },
+      "result": {
+        "tool": "fs.stat",
+        "ok": true,
+        "data": {
+          "path": "manuscripts/F/f-proof-000000.md",
+          "exists": true,
+          "is_dir": false,
+          "is_file": true,
+          "is_symlink": false,
+          "size": 14114,
+          "mtime": "2026-11-24T04:41:31+08:00",
+          "mtime_epoch": 1795466491.87,
+          "link_target": null,
+          "sha256": "7fc6c0f7af804dee9f9d8dc76a845914e8e9e30f8e615a06dbce55133ff04bfb"
+        },
+        "error": "",
+        "meta": {
+          "path": "manuscripts/F/f-proof-000000.md",
+          "size": 14114,
+          "sha256": "7fc6c0f7af804dee9f9d8dc76a845914e8e9e30f8e615a06dbce55133ff04bfb"
+        },
+        "warn": "这一步给了 2 条调用，已按顺序逐条：第 1 条 fs.read 成功；第 2 条 fs.stat 成功。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+        "multi_call": {
+          "turn_index": 0,
+          "call_index": 1,
+          "calls": 2,
+          "step_index": 1,
+          "summary": "这一步给了 2 条调用，已按顺序逐条：第 1 条 fs.read 成功；第 2 条 fs.stat 成功。（真的执行 2 / 2 条）下一步请只发一条调用：并列的多条会被拆成多条顺序步逐条执行与记账，不会合并成一步。",
+          "turn": {
+            "turn_index": 0,
+            "calls": 2,
+            "items": 2,
+            "steps": [
+              0,
+              1
+            ],
+            "executed": 2,
+            "not_executed": []
+          }
+        }
+      },
+      "problem": "",
+      "prompt_cache": {},
+      "task_id": "t-000111"
+    },
+    {
+      "index": 2,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/F/f-proof-000000.md",
+          "start_line": 13,
+          "max_lines": 31
+        },
+        "why": "续读第 13 步之后被截断的正文，逐行走查"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "\n## 命题\n\n设 G 为有限群，|G| = p^a·m，其中 p 是素数，a ≥ 0、m ≥ 1 是整数，且 p 不整除 m。记 n = p^a。则 (E) G 存在阶为 n 的子群；(C) 若 P、Q 是 G 的两个阶为 n 的子群，则存在 g ∈ G 使 Q = gPg⁻¹；(N) 若 n_p 表示 G 的阶为 n 的子群个数，则 n_p ≡ 1 (mod p) 且 n_p 整除 m。\n\n## 证明\n\n1. 前提与记号。G 为有限群，p 为素数，a ≥ 0、m ≥ 1 为整数，|G| = p^a·m 且 p 不整除 m；记 n = p^a。本证明只使用以下定义：子群；子群 B ≤ A 的左陪集 aB 与指数 [A:B]（左陪集的个数）；有限群 Γ 在集合 X 上的作用（映射 (g,x) ↦ g·x 满足 (gh)·x = g·(h·x) 与 1·x = x）；轨道 Γ·x = {g·x : g ∈ Γ}；稳定化子 Stab(x) = {g ∈ Γ : g·x = x}；正规化子 N_G(P) = {g ∈ G : gPg⁻¹ = P}；中心 Z(A) = {a ∈ A : 对一切 x ∈ A 有 ax = xa}；中心化子 C_A(a) = {g ∈ A : gag⁻¹ = a}；共轭类；正规子群。下面事实 1 至事实 7 全部就地证明，此后每一步只引用这些事实与更早的步骤。（前提）\n2. 事实 1（陪集与计数，拉格朗日定理）。设 A 为有限群、B ≤ A。在 A 上定义关系 a ~ a' 当且仅当 a⁻¹a' ∈ B：由 a⁻¹a = 1 ∈ B 得自反；由 a⁻¹a' ∈ B 得 a'⁻¹a = (a⁻¹a')⁻¹ ∈ B 得对称；由 a⁻¹a' ∈ B、a'⁻¹a'' ∈ B 得 a⁻¹a'' = (a⁻¹a')(a'⁻¹a'') ∈ B 得传递。故这是等价关系，且 a 所在的等价类恰为左陪集 aB（a⁻¹a' ∈ B 等价于 a' ∈ aB）。又左乘 a 给出从 B 到 aB 的双射 b ↦ ab（单射：ab = ab' 时左乘 a⁻¹ 得 b = b'；满射按 aB 的定义），故 |aB| = |B|。于是 A 是若干互不相交的左陪集之并，|A| = |B|·[A:B]，从而 |B| 整除 |A| 且 [A:B] = |A|/|B|。依据：按定义与上述逐条验证就地给出（同一事实的表述见 lit:000000 所载 Sylow 讲义里的基本计数）。（依据：lit:000000）\n3. 事实 2（轨道分解与轨道-稳定化子）。设有限群 Γ 作用在集合 X 上，x ∈ X。轨道给出 X 的一个划分：定义 y ~ z 当且仅当存在 g ∈ Γ 使 z = g·y；由 1·y = y 得自反，由 z = g·y 得 y = g⁻¹·z（因 g⁻¹·(g·y) = (g⁻¹g)·y = 1·y = y）得对称，由 z = g·y、w = h·z 得 w = (hg)·y 得传递；等价类正是轨道，故 X 是轨道的互不相交之并，|X| = Σ_{轨道 O} |O|。其次 Stab(x) = {g : g·x = x} 是 Γ 的子群：1·x = x；若 g·x = h·x = x 则 (gh)·x = g·(h·x) = g·x = x；若 g·x = x，两边作用 g⁻¹ 得 x = g⁻¹·x。再令 φ 把左陪集 g·Stab(x) 送到 g·x：若 g·Stab(x) = g'·Stab(x)，则 g' = g·s（s ∈ Stab(x)），故 g'·x = (gs)·x = g·(s·x) = g·x，φ 良定义；若 g·x = g'·x，则 g'⁻¹·(g·x) = g'⁻¹·(g'·x) 给出 (g'⁻¹g)·x = x，故 g'⁻¹g ∈ Stab(x)，两个左陪集相等，φ 单射；φ 满射按轨道的定义。于是 φ 是双射，由事实 1 得 |Γ·x| = [Γ : Stab(x)] = |Γ|/|Stab(x)|。依据：事实 1 与上述验证（同一结论的表述见 lit:000000 所载讲义）。（依据：lit:000000）\n4. 事实 3（有限 p-群作用的固定点同余）。设 Γ 为有限 p-群，即 |Γ| = p^s（s ≥ 0；s = 0 时 Γ 是平凡群），Γ 作用在有限集 X 上，记 Fix_Γ(X) = {x ∈ X : 对一切 g ∈ Γ 有 g·x = x}。断言 |X| ≡ |Fix_Γ(X)| (mod p)。证明：若 s = 0 则 Γ = {1}，每个点都被固定，Fix_Γ(X) = X，同余式以等号成立。设 s ≥ 1。由事实 2，X 是轨道的互不相交之并，且每个轨道 O = Γ·x 的基数 [Γ…（落档截断，原 7525 字）",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/F/f-proof-000000.md",
+          "encoding": "utf-8",
+          "bytes_read": 14114,
+          "total_bytes": 14114,
+          "truncated": false,
+          "start_line": 13,
+          "lines_read": 31,
+          "total_lines": 43,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 13–43 行（共 43 行）",
+          "sha256": "7fc6c0f7af804dee9f9d8dc76a845914e8e9e30f8e615a06dbce55133ff04bfb"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 37120,
+        "prompt_cache_miss_tokens": 5916,
+        "tokens_in": 43036,
+        "tokens_out": 409,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000111"
+    },
+    {
+      "index": 3,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/F/f-proof-000000.md",
+          "start_line": 33,
+          "max_lines": 1
+        },
+        "why": "单读第 33 行（第 14 步），取被截断的后半段"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "14. （C）成立。由 (E)，G 存在阶为 p^a 的子群；设 P、Q 是 G 的两个阶为 p^a 的子群。令 Q 由左乘作用在左陪集集合 G/P = {gP : g ∈ G} 上：q·(gP) = (qg)P。良定义：若 gP = g'P 则 g' = g s（s ∈ P），故 qg' = qgs ∈ qgP，即 (qg')P = (qg)P；作用的两个公理：(q_1q_2)·(gP) = (q_1q_2g)P = q_1·((q_2g)P) 与 1·(gP) = gP。由事实 1，|G/P| = [G:P] = |G|/|P| = m，故 p 不整除 |G/P|；而 Q 是 p-群（|Q| = p^a），由事实 3 得 |Fix_Q(G/P)| ≡ |G/P| = m ≢ 0 (mod p)，故 Fix_Q(G/P) 非空：存在 g ∈ G 使对一切 q ∈ Q 有 (qg)P = gP，即 gP = qgP，等价于 g⁻¹qg ∈ P。于是 g⁻¹Qg ⊆ P；又共轭 h ↦ ghg⁻¹ 是双射，故 |g⁻¹Qg| = |Q| = p^a = |P|，从而 g⁻¹Qg = P，即 Q = gPg⁻¹。依据：事实 3、事实 1、左乘作用与上述等号论证。（依据：lit:000000）\n",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/F/f-proof-000000.md",
+          "encoding": "utf-8",
+          "bytes_read": 14114,
+          "total_bytes": 14114,
+          "truncated": false,
+          "start_line": 33,
+          "lines_read": 1,
+          "total_lines": 43,
+          "next_line": 34,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 33–33 行（共 43 行）；续读 start_line=34",
+          "sha256": "7fc6c0f7af804dee9f9d8dc76a845914e8e9e30f8e615a06dbce55133ff04bfb"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 42240,
+        "prompt_cache_miss_tokens": 5502,
+        "tokens_in": 47742,
+        "tokens_out": 1540,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000111"
+    },
+    {
+      "index": 4,
+      "shape": "tool",
+      "payload": {
+        "name": "fs.read",
+        "args": {
+          "path": "manuscripts/F/f-proof-000000.md",
+          "start_line": 34,
+          "max_lines": 10
+        },
+        "why": "续读第 15 步及以后，逐行走查 (C)(N) 与 McKay 计数"
+      },
+      "result": {
+        "tool": "fs.read",
+        "ok": true,
+        "data": "15. （N）第一部分：n_p | m。由 (C)，G 的阶为 p^a 的子群恰是 P 的共轭子群：每个阶 p^a 的子群 Q 都等于某个 gPg⁻¹，反过来每个 gPg⁻¹ 的阶为 p^a（事实 7）。故 n_p 等于事实 7 中 P 的轨道基数，即 n_p = [G : N_G(P)] = |G|/|N_G(P)|。由事实 7，|N_G(P)| = p^a·m''，其中 m'' 整除 m 且 p 不整除 m''；于是 n_p = p^a m/(p^a m'') = m/m''，故 n_p 整除 m。依据：事实 7、(C)。（依据：lit:000000）\n16. （N）第二部分：n_p ≡ 1 (mod p)。令 P 由左乘作用在左陪集集合 G/N_G(P) 上：p_0·(gN_G(P)) = (p_0 g)N_G(P)（良定义与作用公理的验证同上一式，把 Q 换成 P）。由事实 1 与事实 7，|G/N_G(P)| = [G : N_G(P)] = n_p。设 gN_G(P) 是不动点，即对一切 p_0 ∈ P 有 (p_0 g)N_G(P) = gN_G(P)，等价于 g⁻¹p_0 g ∈ N_G(P)，故 g⁻¹Pg ⊆ N_G(P)；而 |g⁻¹Pg| = p^a 恰是 |N_G(P)| 的 p-部分（事实 7），故 g⁻¹Pg 是 N_G(P) 的一个阶为 p^a 的子群。对有限群 N_G(P) 应用已证的 (C)：N_G(P) 的任意两个阶为 p^a 的子群在 N_G(P) 中共轭；而 P 是 N_G(P) 的正规子群（按定义，对一切 n ∈ N_G(P) 有 nPn⁻¹ = P），故 P 在 N_G(P) 内的共轭子群只有 P 本身，于是 g⁻¹Pg = P，即 g ∈ N_G(P)。所以唯一的固定陪集是 N_G(P) 本身，|Fix_P(G/N_G(P))| = 1。由事实 3（P 是 p-群）得 n_p = |G/N_G(P)| ≡ |Fix_P| = 1 (mod p)。依据：事实 3、事实 1、事实 7 与 (C)。（依据：lit:000000）\n17. 结论。由 (E)（基础情形 a = 0 已处理；a ≥ 1 时情形 1 与情形 2 覆盖全部可能）G 存在阶为 p^a 的子群，(E) 得证；由 (C) 任两个阶为 p^a 的子群共轭，故 p-Sylow 子群在共轭意义下唯一，(C) 得证；由 (N) 的两部分，阶为 p^a 的子群个数 n_p 满足 n_p ≡ 1 (mod p) 且 n_p 整除 m = [G:P]，(N) 得证。三条断言全部成立。（依据：lit:000000）\n\n## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |\n|---|---|---|\n\n（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n",
+        "error": "",
+        "meta": {
+          "path": "manuscripts/F/f-proof-000000.md",
+          "encoding": "utf-8",
+          "bytes_read": 14114,
+          "total_bytes": 14114,
+          "truncated": false,
+          "start_line": 34,
+          "lines_read": 10,
+          "total_lines": 43,
+          "next_line": null,
+          "windowed": true,
+          "had_errors": false,
+          "note": "本次给第 34–43 行（共 43 行）",
+          "sha256": "7fc6c0f7af804dee9f9d8dc76a845914e8e9e30f8e615a06dbce55133ff04bfb"
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 46976,
+        "prompt_cache_miss_tokens": 2061,
+        "tokens_in": 49037,
+        "tokens_out": 145,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000111"
+    },
+    {
+      "index": 5,
+      "shape": "tool",
+      "payload": {
+        "name": "table.get",
+        "args": {
+          "table": "literature",
+          "id": "000000"
+        },
+        "why": "核对第 2–16 步反复引用的 lit:000000 是否真在台账里"
+      },
+      "result": {
+        "tool": "table.get",
+        "ok": true,
+        "data": {
+          "lit_id": "000000",
+          "title": "9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf",
+          "type": "J",
+          "summary": "",
+          "path": "9fade5bcc35a-conrad-proof-of-sylow-theorems.pdf",
+          "processed": true,
+          "source_request_ids": [
+            "r-000001"
+          ],
+          "dedup_key": "title:9fade5bcc35a conrad proof of sylow theorems pdf|*",
+          "doi": null,
+          "year": null,
+          "authors": [],
+          "venue": null,
+          "language": null,
+          "added_at": "2026-11-24T03:41:58+08:00",
+          "download": {
+            "status": "ok",
+            "http_status": null,
+            "bytes": 279580,
+            "sha256": "9fade5bcc35a2297e0b70b8e3f244da91b337143134cbfde6ff9ff2e735277b0",
+            "error": null,
+            "fulltext": "ok",
+            "note": "候选期已抽读：19296 字（指纹 b6ade8cee42a）"
+          },
+          "pages": "",
+          "matched": "",
+          "claimed_by": null,
+          "lease_until": null,
+          "mine_attempts": 1,
+          "last_mine_error": null,
+          "_keys": [
+            "title:9fade5bcc35a conrad proof of sylow theorems pdf|*"
+          ]
+        },
+        "error": "",
+        "meta": {
+          "table": "literature",
+          "id": "000000",
+          "id_field": "lit_id",
+          "found": true
+        }
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 48256,
+        "prompt_cache_miss_tokens": 1915,
+        "tokens_in": 50171,
+        "tokens_out": 12067,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000111"
+    },
+    {
+      "index": 6,
+      "shape": "tool",
+      "payload": {
+        "name": "verify.verify_proof",
+        "args": {
+          "proof_manuscript": "manuscripts/F/f-proof-000000.md",
+          "readonly_facts": "手稿：manuscripts/F/f-proof-000000.md（稿号 000000，正文 sha e7bc144b572eace32d78ae41974c45972535d87a2e2c1d817d9a80c05a93e227，盘上文件 sha 7fc6c0f7af804dee9f9d8dc76a845914e8e9e30f8e615a06dbce55133ff04bfb）；命题：Sylow (E)(C)(N) 三断言合一，G 有限，|G|=p^a·m，p 素数，a≥0、m≥1，p∤m，n=p^a；台账：F 计划 000001 子目标 s1 的成果，尚无 statements 行（命题号由 B 收录时现取）；依赖面：空表（未引用任何在册命题）；正文引 lit:000000（Conrad, proof of Sylow theorems，已核该文献行存在，只作同一事实的表述出处，未当作已证结果使用）。",
+          "why": "把这份稿按写成后的样子整体重读，两态结论 + 缺陷步号落台账"
+        },
+        "why": ""
+      },
+      "result": {
+        "tool": "verify.verify_proof",
+        "ok": true,
+        "data": {
+          "checked": true,
+          "kind": "proof_unregistered_rejected",
+          "statement_id": "",
+          "verification_id": "u-000002",
+          "verdict": "有毛病",
+          "defect_step": 8,
+          "findings": [
+            {
+              "level": "error",
+              "step": 8,
+              "kind": "前提缺失/无依据推断",
+              "detail": "第8步在陈述事实7时仅写“取 P ≤ G”，随后由 P≤N_G(P) 断言 p^a 整除 |N_G(P)|。这只有在 |P| 的 p-部分已经是 p^a（例如 |P|=p^a）时才成立；否则只能得到 |P| 整除 |N_G(P)|。反例：G=S_3, p=3, a=1，取 P 为2阶子群，则 N_G(P)=P，3 不整除 |N_G(P)|。需在事实7中补上 |P|=p^a（或等价的 p^a | |P|）后再推出 p^a 是 |N_G(P)| 的 p-部分。"
+            }
+          ],
+          "unresolved_errors": 1,
+          "proof_sha256": "e7bc144b572eace32d78ae41974c45972535d87a2e2c1d817d9a80c05a93e227",
+          "proof_chars": 0,
+          "signed_bit3": false,
+          "reviewed_by": {},
+          "bits": {},
+          "review_write": {
+            "manuscript_signed": false,
+            "manuscript_write": {
+              "written": false,
+              "idempotent": false,
+              "missing": false,
+              "state": "not_attempted",
+              "path": "manuscripts/F/f-proof-000000.md",
+              "line": 0,
+              "reading": {},
+              "code": "",
+              "body_mismatch": false,
+              "body_sha256": "",
+              "signed_sha256": "",
+              "why": "负判不写手稿块（甲：V 只颁发；块只由收方秘书落）"
+            },
+            "sign_issued": false,
+            "written": false,
+            "filed": "not_read_by_v",
+            "already_signed": false,
+            "reason": "负判不写手稿块（甲：V 只颁发；块只由收方秘书落）",
+            "v_review": {
+              "checked": true,
+              "review_id": "v-review-000013",
+              "written": true,
+              "idempotent": false,
+              "path": "verifications/reviews/v-review-000013.md",
+              "delivery": {
+                "checked": true,
+                "state": "dispatched",
+                "item_id": "t-000116",
+                "key": "v-review@v-review-000013",
+                "role": "F",
+                "parent_task_id": "t-000089",
+                "reason": "已投给 t-000089 的板项 t-000116",
+                "detail_path": "V 的审阅报告：`verifications/reviews/v-review-000013.md`\n- 被审稿：`manuscripts/F/f-proof-000000.md`\n- 结论：有毛病（V 的秘书语义判定：fault）\n- 台账锚点：`verifications/pending/7fc6c0f7af804dee9f9d8dc76a845914e8e9e30f8e615a06dbce55133ff04bfb.jsonl#u-000002`\nV 的原文不转达；这份报告就是给你的审阅意见。改完把同一份稿重新送 V。\n",
+                "existing": false
+              },
+              "reason": "V 稿已落盘：verifications/reviews/v-review-000013.md"
+            },
+            "registration": {},
+            "signed_delivery": {}
+          },
+          "ledger": "verifications/pending/7fc6c0f7af804dee9f9d8dc76a845914e8e9e30f8e615a06dbce55133ff04bfb.jsonl#u-000002",
+          "reason": "（未在册）判「有毛病」：负判不写手稿块，判词落 `verifications/pending/`（u-000002）",
+          "detail": "这一份判「有毛病」：负判不写手稿块（甲口径：`draft/178`「V 不写手稿里的签块」，块只由收方秘书落；负判不是签）。判词已落 `verifications/pending/7fc6c0f7af804dee9f9d8dc76a845914e8e9e30f8e615a06dbce55133ff04bfb.jsonl#u-000002`，F 的读数是「未通过」；按缺陷改稿后再送，不签第 3 位、也不写重复块。",
+          "exhaustion_review": {},
+          "signer": "",
+          "proof_authors": [],
+          "report_path": "",
+          "checks": [],
+          "missing": [],
+          "citations": [],
+          "citation_checks": [],
+          "citation_gate": {
+            "ok": true,
+            "blocking": [],
+            "weaker": [],
+            "problem": "",
+            "why": ""
+          },
+          "secretary_judge": {
+            "checked": true,
+            "answer": "有缺陷要指出",
+            "axis": "fault",
+            "unwired": false,
+            "reason": "该回复明确指出第8步缺少 |P|=p^a 前提，导致由 P≤N_G(P) 推出 p^a 整除 |N_G(P)| 不成立，属于证明链中的实质缺陷。",
+            "basis": [
+              "事实7把 P 仅取作任意子群，P≤N_G(P) 只给出 |P| 整除 |N_G(P)|，不能推出 p^a 整除 |N_G(P)|",
+              "缺少 |P|=p^a（或 p^a 整除 |P|）这一前提，该断言对任意子群为假",
+              "\"defect_step\": 8"
+            ],
+            "refused": "",
+            "cost": {
+              "ledger": "000533",
+              "charged": true,
+              "ledger_reason": "charged",
+              "call_index": 500,
+              "prompt_sha256": "7907dfc934698a4e68394a9f5e8e17292d41d634cb6eb7e32901c900b4e5f21f",
+              "tokens": 1789,
+              "usd": 0.000413
+            },
+            "verdict": "有毛病",
+            "defect_step": 8,
+            "fault_kind": "math",
+            "fault_cause": "",
+            "report_gap": "",
+            "statement_id": "",
+            "proof_no": 1,
+            "material": {
+              "v_reply": "{\n  \"verdict\": \"有毛病\",\n  \"defect_step\": 8,\n  \"quote\": \"又 P ≤ N_G(P)（对 p_0 ∈ P 有 p_0Pp_0⁻¹ = P），故 p^a 整除 |N_G(P)|；\",\n  \"why\": \"事实7把 P 仅取作任意子群，P≤N_G(P) 只给出 |P| 整除 |N_G(P)|，不能推出 p^a 整除 |N_G(P)|；缺少 |P|=p^a（或 p^a 整除 |P|）这一前提，该断言对任意子群为假。\",\n  \"findings\": [\n    {\n      \"level\": \"error\",\n      \"step\": 8,\n      \"kind\": \"前提缺失/无依据推断\",\n      \"detail\": \"第8步在陈述事实7时仅写“取 P ≤ G”，随后由 P≤N_G(P) 断言 p^a 整除 |N_G(P)|。这只有在 |P| 的 p-部分已经是 p^a（例如 |P|=p^a）时才成立；否则只能得到 |P| 整除 |N_G(P)|。反例：G=S_3, p=3, a=1，取 P 为2阶子群，则 N_G(P)=P，3 不整除 |N_G(P)|。需在事实7中补上 |P|=p^a（或等价的 p^a | |P|）后再推出 p^a 是 |N_G(P)| 的 p-部分。\"\n    }\n  ],\n  \"citation_checks\": []\n}",
+              "ledger_row": {
+                "verdict": "有毛病",
+                "defect_step": 8
+              }
+            },
+            "defect_step_basis": "回复明确标注 \"defect_step\": 8，并针对第8步的推断缺口给出说明。",
+            "source": "secretary:v_reply_defect"
+          },
+          "sign_issuance": {
+            "checked": false,
+            "issue": false,
+            "issued": false,
+            "landed": false,
+            "decision": "",
+            "writeback": {},
+            "streak": 0,
+            "need": 3,
+            "streak_ok": false,
+            "projected": 0,
+            "same_sha": false,
+            "state": "",
+            "reason": "这一趟没走到签发那一步（早退）⇒ 没有发签：`checked=False` 不是「可以签」，也不是「不签发」这一档",
+            "within_call": null,
+            "review_call": "",
+            "ledger_streak": 0,
+            "basis": [],
+            "reading": {},
+            "cost": {},
+            "material": {},
+            "statement_id": ""
+          },
+          "review_passes": [
+            {
+              "pass": 1,
+              "axis": "fault",
+              "verdict": "有毛病",
+              "fault_kind": "math",
+              "fault_cause": "",
+              "unresolved_errors": 1,
+              "defect_step": 8,
+              "terminal": "rejected"
+            }
+          ],
+          "manuscript_identity": {
+            "checked": false,
+            "statement_id": "",
+            "manuscript_id": "",
+            "row_manuscript_id": "",
+            "matched_by": "",
+            "fallback": false,
+            "row_checked": false,
+            "found": null,
+            "problem": "",
+            "path_checked": false,
+            "path_count": 0,
+            "path_group": 0,
+            "path_problem": "",
+            "why": ""
+          },
+          "issued_sign": {}
+        },
+        "error": "",
+        "meta": {}
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 49408,
+        "prompt_cache_miss_tokens": 2113,
+        "tokens_in": 51521,
+        "tokens_out": 13686,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000111"
+    },
+    {
+      "index": 7,
+      "shape": "final",
+      "payload": {
+        "final": "复核结论：有毛病（defect_step = 8），本趟不签发。\n\n被审对象：manuscripts/F/f-proof-000000.md（稿号 000000，正文 sha e7bc144b572eace32d78ae41974c45972535d87a2e2c1d817d9a80c05a93e227）。已由 verify.verify_proof 整体重读并落台账 verifications/pending/7fc6c0f7…04bfb.jsonl#u-000002；V 稿 verifications/reviews/v-review-000013.md 已投给 F（板项 t-000116）。\n\n缺陷步（第 8 步，原文逐字）：「取 P ≤ G。……又 P ≤ N_G(P)（对 p_0 ∈ P 有 p_0Pp_0⁻¹ = P），故 p^a 整除 |N_G(P)|；」\n- 为什么不成立：事实 7 只假定 P ≤ G，而 P ≤ N_G(P) 只能推出 |P| 整除 |N_G(P)|；要从这里得到「p^a 整除 |N_G(P)」以及「p^a 恰为 |N_G(P)| 的 p-部分」，必须先有 p^a | |P|（例如 |P| = p^a）。对任意子群该断言为假：G = S_3、p = 3、a = 1，取 P 为 2 阶子群，则 N_G(P) = P，3 ∤ |N_G(P)|。\n- 最小补法：在事实 7 的陈述里补上前提「|P| = p^a」（或 p^a | |P|），并在推出 p^a 是 |N_G(P)| 的 p-部分那一步写明这条前提被用在哪里；补上之后第 8 步其余论证（P ≤ N_G(P)、|N_G(P)| 整除 |G|、p ∤ m 定出 p-部分）成立。\n\n受影响的下游（供 F 定位，不另立 finding）：第 15 步用事实 7 的 |N_G(P)| = p^a·m'' 算 n_p = m/m''；第 16 步用「P 是 N_G(P) 的 p-Sylow 子群，且 |g⁻¹Pg| = p^a 恰为 |N_G(P)| 的 p-部分」。这两步都依赖第 8 步那条被修的断言，改第 8 步时请一并核它们的引用是否仍逐字对上。\n\n其余六条角度的核对记录（均未另立 finding）：① 前提：第 1 步记号与定义齐备，a = 0 在第 9 步基础情形另处理、第 10 步显式声明 a ≥ 1，未偷用假设；② 计算：事实 1 的等价关系/双射、事实 2 的双射与 [Γ:Stab(x)]、事实 3 的轨道基数、事实 4 的 |X| = |A|^{q-1} 与 q | |X|、事实 5 的类方程、事实 6 的 |π⁻¹(K̄)| = |K̄|·|N|、第 12 步 p | |Z(G)|、第 13 步 |G/⟨z⟩| = p^{a-1}m、第 14 步 |G/P| = m 与 Fix_Q(G/P) 非空、第 15 步 n_p = m/m''、第 16 步唯一不动陪集是 N_G(P)，逐处代入核过；③ 逻辑：情形 1/情形 2 的划分（存在真子群被 p^a 整除 / 每个真子群都不被 p^a 整除）穷尽，强归纳的阶严格下降（第 11 步 [G:H] ≥ 2、第 13 步 |G/⟨z⟩| = |G|/p < |G|）成立，无循环依赖；④ 强度：结论 (E)(C)(N) 与命题行逐字一致，未加强；⑤ 台账一致：与派活所述的 Sylow (E)(C)(N) 合一陈述一致；⑥ 依赖面：稿的 ## 依赖 段为空表，正文无在册命题引用，故引文轴无 stronger/unrelated/inadmissible 项；文中 lit:000000 只作「同一事实的表述出处」出现，已核该文献行存在（Conrad, proof of Sylow theorems），未当作已证结果使用。\n\n材料与流程无缺：程序栏不是穷举型，未被要求走 exhaustion_review；这一份按文字证明路径审（本会话该路最高 pre_theorem）。因为判「有毛病」，按规则负判不写手稿签块，也不动第 3 位；改完把同一份稿重新送审。",
+        "evidence": [
+          "manuscripts/F/f-proof-000000.md",
+          "verifications/pending/7fc6c0f7af804dee9f9d8dc76a845914e8e9e30f8e615a06dbce55133ff04bfb.jsonl#u-000002",
+          "verifications/reviews/v-review-000013.md",
+          "lit:000000"
+        ]
+      },
+      "result": {
+        "notify_problem": "没有 notify 表（`final` 要给一个 notify 对象，字段：['to', 'summary', 'body', 'refs', 'why']）—— 除主控外每个角色收工都要留一份交接手稿，这是用户点名的强制项"
+      },
+      "problem": "",
+      "prompt_cache": {
+        "called": true,
+        "why": "",
+        "prompt_cache_hit_tokens": 50688,
+        "prompt_cache_miss_tokens": 4289,
+        "tokens_in": 54977,
+        "tokens_out": 1395,
+        "known": true,
+        "cache_tri": "billed",
+        "usd_per_m_in": 0.15,
+        "usd_per_m_in_hit": 0.003,
+        "usd_per_m_out": 0.6
+      },
+      "task_id": "t-000111"
+    }
+  ],
+  "final": "复核结论：有毛病（defect_step = 8），本趟不签发。\n\n被审对象：manuscripts/F/f-proof-000000.md（稿号 000000，正文 sha e7bc144b572eace32d78ae41974c45972535d87a2e2c1d817d9a80c05a93e227）。已由 verify.verify_proof 整体重读并落台账 verifications/pending/7fc6c0f7…04bfb.jsonl#u-000002；V 稿 verifications/reviews/v-review-000013.md 已投给 F（板项 t-000116）。\n\n缺陷步（第 8 步，原文逐字）：「取 P ≤ G。……又 P ≤ N_G(P)（对 p_0 ∈ P 有 p_0Pp_0⁻¹ = P），故 p^a 整除 |N_G(P)|；」\n- 为什么不成立：事实 7 只假定 P ≤ G，而 P ≤ N_G(P) 只能推出 |P| 整除 |N_G(P)|；要从这里得到「p^a 整除 |N_G(P)」以及「p^a 恰为 |N_G(P)| 的 p-部分」，必须先有 p^a | |P|（例如 |P| = p^a）。对任意子群该断言为假：G = S_3、p = 3、a = 1，取 P 为 2 阶子群，则 N_G(P) = P，3 ∤ |N_G(P)|。\n- 最小补法：在事实 7 的陈述里补上前提「|P| = p^a」（或 p^a | |P|），并在推出 p^a 是 |N_G(P)| 的 p-部分那一步写明这条前提被用在哪里；补上之后第 8 步其余论证（P ≤ N_G(P)、|N_G(P)| 整除 |G|、p ∤ m 定出 p-部分）成立。\n\n受影响的下游（供 F 定位，不另立 finding）：第 15 步用事实 7 的 |N_G(P)| = p^a·m'' 算 n_p = m/m''；第 16 步用「P 是 N_G(P) 的 p-Sylow 子群，且 |g⁻¹Pg| = p^a 恰为 |N_G(P)| 的 p-部分」。这两步都依赖第 8 步那条被修的断言，改第 8 步时请一并核它们的引用是否仍逐字对上。\n\n其余六条角度的核对记录（均未另立 finding）：① 前提：第 1 步记号与定义齐备，a = 0 在第 9 步基础情形另处理、第 10 步显式声明 a ≥ 1，未偷用假设；② 计算：事实 1 的等价关系/双射、事实 2 的双射与 [Γ:Stab(x)]、事实 3 的轨道基数、事实 4 的 |X| = |A|^{q-1} 与 q | |X|、事实 5 的类方程、事实 6 的 |π⁻¹(K̄)| = |K̄|·|N|、第 12 步 p | |Z(G)|、第 13 步 |G/⟨z⟩| = p^{a-1}m、第 14 步 |G/P| = m 与 Fix_Q(G/P) 非空、第 15 步 n_p = m/m''、第 16 步唯一不动陪集是 N_G(P)，逐处代入核过；③ 逻辑：情形 1/情形 2 的划分（存在真子群被 p^a 整除 / 每个真子群都不被 p^a 整除）穷尽，强归纳的阶严格下降（第 11 步 [G:H] ≥ 2、第 13 步 |G/⟨z⟩| = |G|/p < |G|）成立，无循环依赖；④ 强度：结论 (E)(C)(N) 与命题行逐字一致，未加强；⑤ 台账一致：与派活所述的 Sylow (E)(C)(N) 合一陈述一致；⑥ 依赖面：稿的 ## 依赖 段为空表，正文无在册命题引用，故引文轴无 stronger/unrelated/inadmissible 项；文中 lit:000000 只作「同一事实的表述出处」出现，已核该文献行存在（Conrad, proof of Sylow theorems），未当作已证结果使用。\n\n材料与流程无缺：程序栏不是穷举型，未被要求走 exhaustion_review；这一份按文字证明路径审（本会话该路最高 pre_theorem）。因为判「有毛病」，按规则负判不写手稿签块，也不动第 3 位；改完把同一份稿重新送审。",
+  "evidence": [
+    "manuscripts/F/f-proof-000000.md",
+    "verifications/pending/7fc6c0f7af804dee9f9d8dc76a845914e8e9e30f8e615a06dbce55133ff04bfb.jsonl#u-000002",
+    "verifications/reviews/v-review-000013.md",
+    "lit:000000"
+  ],
+  "stop_reason": "final",
+  "bad_json": 0,
+  "blocked_remaining": {},
+  "bad_json_streak": 0,
+  "bad_args": 0,
+  "bad_args_streak": 0,
+  "no_reply": 0,
+  "no_reply_streak": 0,
+  "dead_loop_max": 1,
+  "same_call_max": 1,
+  "stalled_max": 0,
+  "dead_loop_nudges": 0,
+  "stalled_nudges": 0,
+  "dead_loop_stopped": false,
+  "refusal_key": "",
+  "refusal_reading": "",
+  "refusal_streak": 0,
+  "counters_reset_at": 8,
+  "compactions": 0,
+  "mailbox_items": [],
+  "mailbox_msgs": [],
+  "mailbox_delivered": 0,
+  "monitor_turns": 0,
+  "wakes": 0,
+  "wake_ids": [],
+  "wake_events": [],
+  "clock_pumps": 14,
+  "clock_fired": 0,
+  "park": {
+    "return_owed": [],
+    "decision": "run",
+    "research": {
+      "checked": true,
+      "pending": false,
+      "fingerprint": "",
+      "counts": {},
+      "next_action": null,
+      "gaps": []
+    },
+    "research_blocked": false,
+    "research_stalled": false,
+    "research_streak": 0,
+    "tree": {
+      "checked": true,
+      "busy": false,
+      "working": [],
+      "unfinished": [],
+      "unfinished_count": 0,
+      "stale_items": [],
+      "stale_count": 0,
+      "unknown": [],
+      "excluded": {
+        "task_id": "",
+        "role": "",
+        "state": ""
+      },
+      "why_text": "非 M：这一档不读",
+      "reason": ""
+    },
+    "tree_busy": false,
+    "tree_checked": true,
+    "waiters": [],
+    "checked": true,
+    "timers": [],
+    "manuscripts": {
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "why": "V 不是手稿产出者（产出者有 B、E、F）：这一条与它无关",
+      "problems": [],
+      "producer": "V",
+      "owner_instance": "",
+      "owner_source": "",
+      "unattributed": []
+    }
+  },
+  "handed_off": {},
+  "silent_children": [],
+  "silent_children_asked": [],
+  "cut_off_children": [],
+  "auto_submitted": [],
+  "auto_submitted_count": null,
+  "still_unsubmitted": [],
+  "clear_stage": {},
+  "unprocessed_reasons": {},
+  "waiting_for": "",
+  "resumed_from": 0,
+  "notify_rejections": 0,
+  "final_refused_beats": 0,
+  "handoffs": [],
+  "summons": [],
+  "summons_refused": [],
+  "messages_sent": [],
+  "messages_refused": [],
+  "productions": [],
+  "summons_total": 0,
+  "summons_consumed": 0,
+  "summons_continued": 0,
+  "summons_waived": 0,
+  "summons_unknown": 0,
+  "summons_unconsumed": 0,
+  "summon_consumption": {
+    "summons_total": 0,
+    "summons_consumed": 0,
+    "summons_continued": 0,
+    "summons_waived": 0,
+    "summons_unknown": 0,
+    "summons_unconsumed": 0,
+    "productions": [],
+    "waiver_problems": []
+  },
+  "prompt_audit": {
+    "prompt_version": "p327",
+    "role": "V",
+    "prompt_sha256": "052abf02fb503f722d3e805869fb8b2d64c0afe8b3059978b59c338744ec5519",
+    "prompt_chars": 46343,
+    "sections": [
+      "AGENT_IDENTITY",
+      "deployment:persona-prefix",
+      "ROLE_BOUNDARY",
+      "SIGNATURE_ERROR",
+      "DELIVERABLE",
+      "FACULTIES",
+      "FACULTIES_02",
+      "FACULTIES_03",
+      "FACULTIES_04",
+      "FACULTIES_05",
+      "FACULTIES_06",
+      "FACULTIES_07",
+      "STANCE",
+      "ROLE_POLICY",
+      "TOOL_00",
+      "TOOL_01",
+      "TOOL_02",
+      "TOOL_03",
+      "TOOL_04",
+      "TOOL_05",
+      "TOOL_06",
+      "TOOL_07",
+      "TOOL_08",
+      "TOOL_09",
+      "TOOL_10",
+      "TOOL_11",
+      "TOOL_12",
+      "TOOL_13",
+      "TOOL_14",
+      "TOOL_15",
+      "TOOL_16",
+      "TOOL_17",
+      "TOOL_18",
+      "TOOL_19",
+      "TOOL_20",
+      "TOOL_21",
+      "TOOL_22",
+      "TOOL_23",
+      "TOOL_24",
+      "TOOL_25",
+      "TOOL_26",
+      "TOOL_27",
+      "TOOL_28",
+      "EVIDENCE_CONTRACT",
+      "EVIDENCE_RULES",
+      "OUTPUT_CONTRACT",
+      "THREE_STATE",
+      "TASK_FRAME",
+      "TASK_USER_REPLIES",
+      "TASK_NOTEBOOK",
+      "TASK_BUDGET",
+      "PARTNERS",
+      "PARTNER_AVAILABILITY",
+      "HANDOFF",
+      "HANDOFF_RULES",
+      "AGENT_TOOLS_SDK",
+      "LOOP_SHAPES_HEAD",
+      "LOOP_SHAPE_01",
+      "LOOP_SHAPE_02",
+      "LOOP_SHAPE_02B",
+      "LOOP_SHAPE_03",
+      "LOOP_SHAPE_04",
+      "LOOP_SHAPE_05",
+      "LOOP_SHAPE_06",
+      "LOOP_SHAPE_07",
+      "LOOP_SHAPE_08",
+      "LOOP_SHAPE_09",
+      "LOOP_SHAPE_10",
+      "LOOP_RULES_HEAD",
+      "LOOP_RULES",
+      "PARENT_STOP",
+      "COLLAB_FIVEBITS",
+      "COLLAB_BOARD",
+      "COLLAB_SHAPES",
+      "SKILLS_INDEX",
+      "TOOLCHAIN_FACTS",
+      "WORKSPACE_FACTS",
+      "LOCAL_MATERIALS",
+      "deployment:persona-suffix"
+    ],
+    "variables": [
+      "availability",
+      "board",
+      "budget_left",
+      "children",
+      "depth",
+      "duty",
+      "inbox",
+      "notebook",
+      "parent_limits",
+      "parent_task_id",
+      "prompt_version",
+      "role",
+      "summoned_by",
+      "task",
+      "task_id",
+      "user_replies",
+      "v_rejections",
+      "workspace_root"
+    ]
+  },
+  "spend": {
+    "calls": 7,
+    "tokens_in": 334437,
+    "tokens_out": 29508,
+    "usd": 0.022109,
+    "unknown_usd_calls": 0
+  },
+  "prompt_cache": {
+    "calls": 7,
+    "no_request_calls": 0,
+    "hit": 311296,
+    "miss": 23141,
+    "unknown_calls": 0,
+    "tokens_in": 334437,
+    "hit_rate": 0.9308,
+    "mismatched_calls": 0,
+    "saved_usd": 0.045763,
+    "saved_unknown_calls": 0,
+    "why": ""
+  },
+  "elapsed_sec": 298.657,
+  "end_ts": "2026-11-24T04:46:35+08:00",
+  "notes": [
+    "收工没有可用 notify 表（没有 notify 表（`final` 要给一个 notify 对象，字段：['to', 'summary', 'body', 'refs', 'why']）—— 除主控外每个角色收工都要留一份交接手稿，这是用户点名的强制项）⇒ 这一趟没有交接手稿（不打回、不代填）",
+    "收工时名下还有 2 条证明没有 V 的签字（读数，不拦收工；明细：000060、000064）",
+    "缓存读数：命中 311296 / 未命中 23141 token，命中率 93.1%（7 次调用）；按 modelcost 口径估算可省 约 0.045763 美元",
+    "子产出处理读数：summons_total=0（这一趟没派过子代理 ⇒ 没有要处理的子产出；判据没有对象，不红）",
+    "终态回报已落板：t-000117（框架通报；模型没填 notify）"
+  ],
+  "final_payload": {
+    "final": "复核结论：有毛病（defect_step = 8），本趟不签发。\n\n被审对象：manuscripts/F/f-proof-000000.md（稿号 000000，正文 sha e7bc144b572eace32d78ae41974c45972535d87a2e2c1d817d9a80c05a93e227）。已由 verify.verify_proof 整体重读并落台账 verifications/pending/7fc6c0f7…04bfb.jsonl#u-000002；V 稿 verifications/reviews/v-review-000013.md 已投给 F（板项 t-000116）。\n\n缺陷步（第 8 步，原文逐字）：「取 P ≤ G。……又 P ≤ N_G(P)（对 p_0 ∈ P 有 p_0Pp_0⁻¹ = P），故 p^a 整除 |N_G(P)|；」\n- 为什么不成立：事实 7 只假定 P ≤ G，而 P ≤ N_G(P) 只能推出 |P| 整除 |N_G(P)|；要从这里得到「p^a 整除 |N_G(P)」以及「p^a 恰为 |N_G(P)| 的 p-部分」，必须先有 p^a | |P|（例如 |P| = p^a）。对任意子群该断言为假：G = S_3、p = 3、a = 1，取 P 为 2 阶子群，则 N_G(P) = P，3 ∤ |N_G(P)|。\n- 最小补法：在事实 7 的陈述里补上前提「|P| = p^a」（或 p^a | |P|），并在推出 p^a 是 |N_G(P)| 的 p-部分那一步写明这条前提被用在哪里；补上之后第 8 步其余论证（P ≤ N_G(P)、|N_G(P)| 整除 |G|、p ∤ m 定出 p-部分）成立。\n\n受影响的下游（供 F 定位，不另立 finding）：第 15 步用事实 7 的 |N_G(P)| = p^a·m'' 算 n_p = m/m''；第 16 步用「P 是 N_G(P) 的 p-Sylow 子群，且 |g⁻¹Pg| = p^a 恰为 |N_G(P)| 的 p-部分」。这两步都依赖第 8 步那条被修的断言，改第 8 步时请一并核它们的引用是否仍逐字对上。\n\n其余六条角度的核对记录（均未另立 finding）：① 前提：第 1 步记号与定义齐备，a = 0 在第 9 步基础情形另处理、第 10 步显式声明 a ≥ 1，未偷用假设；② 计算：事实 1 的等价关系/双射、事实 2 的双射与 [Γ:Stab(x)]、事实 3 的轨道基数、事实 4 的 |X| = |A|^{q-1} 与 q | |X|、事实 5 的类方程、事实 6 的 |π⁻¹(K̄)| = |K̄|·|N|、第 12 步 p | |Z(G)|、第 13 步 |G/⟨z⟩| = p^{a-1}m、第 14 步 |G/P| = m 与 Fix_Q(G/P) 非空、第 15 步 n_p = m/m''、第 16 步唯一不动陪集是 N_G(P)，逐处代入核过；③ 逻辑：情形 1/情形 2 的划分（存在真子群被 p^a 整除 / 每个真子群都不被 p^a 整除）穷尽，强归纳的阶严格下降（第 11 步 [G:H] ≥ 2、第 13 步 |G/⟨z⟩| = |G|/p < |G|）成立，无循环依赖；④ 强度：结论 (E)(C)(N) 与命题行逐字一致，未加强；⑤ 台账一致：与派活所述的 Sylow (E)(C)(N) 合一陈述一致；⑥ 依赖面：稿的 ## 依赖 段为空表，正文无在册命题引用，故引文轴无 stronger/unrelated/inadmissible 项；文中 lit:000000 只作「同一事实的表述出处」出现，已核该文献行存在（Conrad, proof of Sylow theorems），未当作已证结果使用。\n\n材料与流程无缺：程序栏不是穷举型，未被要求走 exhaustion_review；这一份按文字证明路径审（本会话该路最高 pre_theorem）。因为判「有毛病」，按规则负判不写手稿签块，也不动第 3 位；改完把同一份稿重新送审。",
+    "evidence": [
+      "manuscripts/F/f-proof-000000.md",
+      "verifications/pending/7fc6c0f7af804dee9f9d8dc76a845914e8e9e30f8e615a06dbce55133ff04bfb.jsonl#u-000002",
+      "verifications/reviews/v-review-000013.md",
+      "lit:000000"
+    ]
+  },
+  "task_id": "t-000111"
+}

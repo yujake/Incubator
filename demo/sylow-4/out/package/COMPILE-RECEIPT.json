@@ -1,0 +1,18 @@
+{
+  "tex_sha256": "51d7314817cb01cf28ecd363af4ed3b718e5728fd27764081196ee2965dfc744",
+  "pdf_sha256": "11681b6d6ad4c45bb399b5f6cca553185b117a7b73b45507aa0ec2aa0b91dfe0",
+  "engine": "pdflatex",
+  "runs": 2,
+  "exit_codes": [
+    0,
+    0
+  ],
+  "pages": 7,
+  "pdf_bytes": 232993,
+  "pdf_fresh": true,
+  "compiled_at": "2026-11-24T05:34:07+08:00",
+  "written_by": "agentflow.papercompile（框架内置编译）",
+  "stderr_tail": "",
+  "compile_log": "compile-20261124-053407.log",
+  "compile_stderr_log": ""
+}

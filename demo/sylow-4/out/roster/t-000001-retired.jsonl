@@ -1,0 +1,8 @@
+{"at": "2026-11-24T05:34:47+08:00", "branch": "waiting_no_children", "name": "A1", "owner": "t-000001", "reason": "收工前自动收尾：静默且无未消项（R9FIX-D5）", "role": "A", "seq": 1, "task_id": "t-000002"}
+{"at": "2026-11-24T05:34:47+08:00", "branch": "waiting_no_children", "name": "A1", "owner": "t-000001", "reason": "收工前自动收尾：静默且无未消项（R9FIX-D5）", "role": "A", "seq": 2, "task_id": "t-000158"}
+{"at": "2026-11-24T05:34:47+08:00", "branch": "waiting_no_children", "name": "D1", "owner": "t-000001", "reason": "收工前自动收尾：静默且无未消项（R9FIX-D5）", "role": "D", "seq": 3, "task_id": "t-000003"}
+{"at": "2026-11-24T05:34:47+08:00", "branch": "waiting_no_children", "name": "G1", "owner": "t-000001", "reason": "收工前自动收尾：静默且无未消项（R9FIX-D5）", "role": "G", "seq": 4, "task_id": "t-000109"}
+{"at": "2026-11-24T05:34:47+08:00", "branch": "waiting_no_children", "name": "G1", "owner": "t-000001", "reason": "收工前自动收尾：静默且无未消项（R9FIX-D5）", "role": "G", "seq": 5, "task_id": "t-000160"}
+{"at": "2026-11-24T05:34:47+08:00", "branch": "waiting_no_children", "name": "G1", "owner": "t-000001", "reason": "收工前自动收尾：静默且无未消项（R9FIX-D5）", "role": "G", "seq": 6, "task_id": "t-000168"}
+{"at": "2026-11-24T05:34:47+08:00", "branch": "waiting_no_children", "name": "G1", "owner": "t-000001", "reason": "收工前自动收尾：静默且无未消项（R9FIX-D5）", "role": "G", "seq": 7, "task_id": "t-000174"}
+{"at": "2026-11-24T05:34:47+08:00", "branch": "waiting_no_children", "name": "H-final", "owner": "t-000001", "reason": "收工前自动收尾：静默且无未消项（R9FIX-D5）", "role": "H", "seq": 8, "task_id": "t-000166"}

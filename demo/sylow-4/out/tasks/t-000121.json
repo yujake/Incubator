@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T04:55:48+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 1732,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"结论：有毛病（不签发）。被审：manuscripts/F/f-proof-000000.md（正文 sha 06cff4aaccae267ad9da22415547b3dfe547fd05eec7c70b5567f17368d5445d，17 步全篇已逐行读完，## 命题 / ## 证明 / ## 依赖 均在，依赖为空表）。台账：verifications/pending/700e56ae34629e7030add3127925951185af5129e785b1935975977062aefa50086 那一行的 u-000003（verdict=有毛病，defect_step=5）；V 稿 verifications/reviews/v-review-000014.md 已投给 F（t-000123）。缺陷一条：第 5 步（事实 4，McKay 计数证明）原句「循环移位保持乘积 a_1⋯a_p 不变，故 X 对移位封闭」—— 对非交换 A 一般不成立：a_2⋯a_p a_1 = a_1⁻¹(a_1⋯a_p)a_1，并不等于原乘积。缺的是「移位后仍在 X」的正确依据。最小补法（只改这一句，其余不动）：把该句换成「a_2⋯a_p a_1 = a_1⁻¹(a_1⋯a_p)a_1；当 a_1⋯a_p = e 时右端为 e，故移位后仍在 X」（σ^p 与结合律那两句照留）。上一轮 v-000013 指的第 8 步（事实 7）已按 |P| = p^a 前提重写，该步本轮核对通过（|N_G(P)| = p^a·d、d | m、p ∤ d、[N_G(P):P] = d 均成立）。其余各步（事实 1、2、3、5、6；(E) 三种情形与 (C)(N) 两部分）沿前提 / 计算 / 逻辑 / 强度 / 台账一致 / 依赖面六条角度逐条核过，未见要改之处。按政策：任一转判 fault 即终局，这一份改完第 5 步那一句后按同一稿重新送 V 即可（不累计上一次送审的轮数）。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\sylow-4\\\\runs\\\\V-20261124-045548-001.json\", \"messages\": [], \"outcome\": \"ok\", \"status\": \"done\", \"steps\": 7, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "cb8c2bee3b73b55fcb5d10bee97e379e2f91e39902d17cb1d7251b5e548360b7",
+ "readings": {},
+ "role": "V",
+ "status": "done",
+ "task_id": "t-000121"
+}

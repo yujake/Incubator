@@ -1,0 +1,787 @@
+{
+  "action_refusals": {
+    "by_reason": {},
+    "recent": [],
+    "total": 0
+  },
+  "attack_rounds": {
+    "no_product_count": 3,
+    "no_product_rounds": [
+      "000000#1(outcome=no_change)",
+      "000000#2(outcome=no_change)",
+      "000000#3(outcome=no_change)"
+    ],
+    "products": {
+      "proof": 4
+    },
+    "rounds": 7,
+    "strategies": {
+      "极值与双重计数": 1
+    }
+  },
+  "faculty": {
+    "claim_strength": {
+      "checked": true,
+      "criterion_source": "claimanatomy.overclaim",
+      "findings": [],
+      "missing_evidence": [],
+      "overclaimed": [],
+      "problem_count": 0,
+      "total": 5,
+      "verdict": "within_evidence"
+    },
+    "conjecture_hygiene": {
+      "by_kind": {},
+      "checked": true,
+      "conjectures": 1,
+      "findings": [],
+      "problem_count": 0
+    }
+  },
+  "five_bit": {
+    "grades": {
+      "conjecture": 1,
+      "not_applicable": 60,
+      "pre_theorem": 5
+    },
+    "problems": 0
+  },
+  "generated_at": "2026-11-24T05:34:48+08:00",
+  "in_flight": {
+    "active_child_count": 0,
+    "calibers": {
+      "action_refusals": "动作被拒的行：tasks 里 outcome=refused 的那些（按 refusal_reason 分档）。口径：三个『被拒』各是一个量 —— 这里是动作被拒；收工被拒的 final_refused 事件在 clock.patrol_anomalies 的 final_refusals；名册写口拒过的号是 registration_refusals（上一条）。三者不许互相代替",
+      "active_child_count": "上述名册项里『非静默』的数量（业主 2026-10-26 后一句：活跃子代理数 = 非静默子代理数）：非静默 = 在飞 + 待机，三态判定只有 conductor.agent_state 一处；unknown（判不了）既不算活跃也不算静默，它进 states['unknown'] 并让 complete=false。所以『自己收口了但在等活跃的下级』仍算活跃（它在待机），而『名册还挂着、活干完了且没有下级』是静默、不算活跃",
+      "children_unretired": "名册里未销号的名册项（out/roster/<父>.jsonl 折叠后 retired 为假的那几项；口径只有 secretary.Secretary.child_counts 一处）",
+      "pending_questions": "全工作区的待答（`userio.workspace_pending_view`，与「在飞」页同一来源；不是只读默认会话）",
+      "registration_refusals": "名册写口拒过的号（out/roster/refusals/<父>.jsonl 的全部行；口径只有 secretary.registration_refusals 一处）。checked=false 是『这一份流水读不出来』，不是『没人被拒』——两件事折平会把一次有记录的拒绝读成没有发生过",
+      "running_tasks": "tasks 里『活着的代理行』+『还没收工的顶趟行 action=run』（含顶趟行、不含板项行 message/notice/report/delegation；判据只有 secretary.row_axis / secretary.is_live_agent 一处，2026-10-26 Q27）",
+      "top_level_runs": "tasks 里 action==run 的行 = 用户发起的顶趟（不是召唤；召唤看 conductor.stats() 的 started_total）"
+    },
+    "child_counts": {
+      "active_child_count": 0,
+      "bad_roster_lines": [],
+      "by_owner": {},
+      "checked": true,
+      "children_unretired": 0,
+      "complete": true,
+      "labels": {
+        "active_child_count": "活跃子代理数",
+        "children_unretired": "子代理数"
+      },
+      "note": "子代理数=0，活跃子代理数=0（在飞 0 · 待机 0 · 静默 0）",
+      "owner": "",
+      "reason": "",
+      "state_labels": {
+        "flying": "在飞",
+        "silent": "静默",
+        "standby": "待机",
+        "unknown": "未读到"
+      },
+      "states": {
+        "active": 0,
+        "flying": 0,
+        "silent": 0,
+        "standby": 0,
+        "total": 0,
+        "unknown": 0
+      },
+      "unjudged": [],
+      "waiting_only": []
+    },
+    "children_unretired": 0,
+    "last_stop_history": [],
+    "live_pids": [],
+    "registration_refusals": {
+      "bad": [],
+      "checked": true,
+      "count": 0,
+      "items": [],
+      "owner": "",
+      "path": "D:\\Incubator\\projects\\sylow-4\\out\\roster\\refusals"
+    },
+    "running_loops": [
+      {
+        "evidence": "会话面",
+        "role": "M",
+        "sid": "2026-11-22h",
+        "since": "2026-11-24T03:40:29+08:00",
+        "task_id": "t-000001"
+      }
+    ],
+    "running_loops_answer": "有",
+    "running_task_ids": [
+      "t-000001"
+    ],
+    "running_tasks": 1,
+    "stop_switch": false,
+    "top_level_runs": 1,
+    "unreadable_sessions": []
+  },
+  "interjections": {
+    "changed_action": 0,
+    "recent": [],
+    "seen_events": 0,
+    "sent": 0,
+    "unchanged_action": 0
+  },
+  "manuscripts": {
+    "bad_lines": [],
+    "derived": 4,
+    "model_authored": 1,
+    "recent": [
+      {
+        "at": "2026-11-24T05:25:56+08:00",
+        "id": "000020",
+        "sender": "H",
+        "source": "未注明",
+        "summary": "doc:000000 第 9 轮复审：claim-1 新措辞与 stmt:000060 对得上；机械读数全绿；但三条证据链 warning 未收口 ⇒ stat",
+        "to": "G"
+      },
+      {
+        "at": "2026-11-24T05:26:17+08:00",
+        "id": "000021",
+        "sender": "G",
+        "source": "未注明",
+        "summary": "claim-1 已按 stmt:000060 原词重写；MAPPING pass；PDF 未过期（tex 08c6cc0a5673 / 7 页）；H 复审留在 ",
+        "to": "M"
+      },
+      {
+        "at": "2026-11-24T05:29:30+08:00",
+        "id": "000022",
+        "sender": "H",
+        "source": "未注明",
+        "summary": "doc:000000 已复核到 accepted，签名钉住现行版 549200690ff0（round 13，open findings 0）",
+        "to": "M"
+      },
+      {
+        "at": "2026-11-24T05:29:31+08:00",
+        "id": "000023",
+        "sender": "M",
+        "source": "框架派生",
+        "summary": "派活：H（派活：只做一件事：把 doc:000000 的现行版（revision 2，claim-1 已按 stmt:000060 原词重写，正文 main.t",
+        "to": "H"
+      },
+      {
+        "at": "2026-11-24T05:32:30+08:00",
+        "id": "000024",
+        "sender": "G",
+        "source": "未注明",
+        "summary": "doc:000000 五条 claim 引文格已改（claim-N→stmt:00006x），content_sha256 前 12 位 2d0a330993f",
+        "to": "M"
+      },
+      {
+        "at": "2026-11-24T05:32:31+08:00",
+        "id": "000025",
+        "sender": "M",
+        "source": "框架派生",
+        "summary": "派活：G（派活：收工门只剩一条 acceptance 未过：doc:000000 的五条 claim 因为引了 lit:000000 / lit:000002（",
+        "to": "G"
+      },
+      {
+        "at": "2026-11-24T05:33:35+08:00",
+        "id": "000026",
+        "sender": "M",
+        "source": "框架派生",
+        "summary": "派活：G（派活：收工门只剩一条 acceptance 硬缺口：论文正文的**结果章节**里没有就地引本轮台账（stmt:），只出现在核查类章节。修法（只加引用标",
+        "to": "G"
+      },
+      {
+        "at": "2026-11-24T05:34:26+08:00",
+        "id": "000027",
+        "sender": "G",
+        "source": "未注明",
+        "summary": "main.tex 第 3 节五处就地补台账出处已完成并重编：tex_sha256 51d7314817cb…，pages=7",
+        "to": "M"
+      }
+    ],
+    "rows": 28
+  },
+  "next_steps": [
+    "有 1 条任务还在飞 ⇒ 现在别改口径，等它们收工（这份报告本身不打断它们）",
+    "有 66 个动作声明了却一次都没被召唤过（例如 A.ingest_local、A.run、A.search_literature、A.shelf_search）⇒ 该不该派归秘书/主控判断（`44 S-02` 只做读数，不进闸门）；要动它们就派活，别让它们在声明表里挂着",
+    "有 3 轮攻坚**没有产物**（['000000#1(outcome=no_change)', '000000#2(outcome=no_change)', '000000#3(outcome=no_change)']）⇒ §3.16 要求每轮交一件（reduction/proof/counterexample_request/dead_end），先把形态补齐"
+  ],
+  "pending_questions": 0,
+  "pending_questions_sids": [],
+  "quote_evidence": {
+    "checked": true,
+    "checked_from": "statements+relations",
+    "clean": true,
+    "clean_rows": 76,
+    "dirty": [],
+    "reason": "查过了：76 行自称通过，全都带区间",
+    "scanned": 138,
+    "verified_rows": 76
+  },
+  "report_landing": {
+    "caliber": "按 store.rows(\"tasks\") 数（tasks 台账的落盘行，可能只是缓存/最近一次落盘）；权威读数是 sessions/*.jsonl 的 events 重放 —— 两个口径的数不许互相比",
+    "calls": 0,
+    "checked": true,
+    "kind_writable": true,
+    "landed": 1,
+    "landed_rows": 1,
+    "landing_tables": [
+      "documents"
+    ],
+    "note": "D 的 `write_report` 现在有落点：`documents` 里 `kind=research` 的那一行（写侧 `agent_d.write_report` → `doc_tools.record_research_report`，行与那份 markdown 同一笔事务）。这一格数的是台账里的行，不是盘上的文件 ——`report_files` 数文件、这一格数行，两者对不上本身就是一条读数。",
+    "paths": [
+      "manuscripts/D/000000-research.md"
+    ],
+    "reason": "",
+    "task_ids": []
+  },
+  "since": "",
+  "statement_body": {
+    "checked": true,
+    "checked_from": "statements",
+    "gaps": [],
+    "reason": "查过了：每一行的真身与短版都在",
+    "scanned": 66
+  },
+  "tables": {
+    "attack_plans": {
+      "count": 2,
+      "recent": [
+        {
+          "at": "2026-11-24T04:24:21+08:00",
+          "hint": "stalled（history 3 条）",
+          "id": "000000"
+        },
+        {
+          "at": "2026-11-24T04:39:10+08:00",
+          "hint": "attacking（history 4 条）",
+          "id": "000001"
+        }
+      ]
+    },
+    "conjectures": {
+      "count": 1,
+      "recent": [
+        {
+          "at": "2026-11-24T04:41:31+08:00",
+          "hint": "needs_evidence：设 G 为有限群，|G| = p^a·m，其中 p 是素数，a ≥ 0、m ≥ 1 是整数，且 p ",
+          "id": "000000"
+        }
+      ]
+    },
+    "documents": {
+      "count": 2,
+      "recent": [
+        {
+          "at": "2026-11-24T04:39:34+08:00",
+          "hint": "paper The Sylow Theorems: Existence, Conjugacy and Counting（accepted）",
+          "id": "000000"
+        },
+        {
+          "at": "2026-11-24T05:17:43+08:00",
+          "hint": "research D 初步研究报告（1 个研究问题）（draft）",
+          "id": "000001"
+        }
+      ]
+    },
+    "experiments": {
+      "count": 0,
+      "recent": []
+    },
+    "literature": {
+      "count": 4,
+      "recent": [
+        {
+          "at": "2026-11-24T03:41:58+08:00",
+          "hint": "",
+          "id": "000000"
+        },
+        {
+          "at": "2026-11-24T03:41:58+08:00",
+          "hint": "",
+          "id": "000001"
+        },
+        {
+          "at": "2026-11-24T03:41:58+08:00",
+          "hint": "",
+          "id": "000002"
+        },
+        {
+          "at": "2026-11-24T03:41:58+08:00",
+          "hint": "",
+          "id": "000003"
+        }
+      ]
+    },
+    "review_findings": {
+      "count": 12,
+      "recent": [
+        {
+          "at": "2026-11-24T04:57:13+08:00",
+          "hint": "warning/garbled fixed",
+          "id": "000000"
+        },
+        {
+          "at": "2026-11-24T04:58:02+08:00",
+          "hint": "error/garbled fixed",
+          "id": "000000"
+        },
+        {
+          "at": "2026-11-24T04:58:19+08:00",
+          "hint": "warning/garbled fixed",
+          "id": "000000"
+        },
+        {
+          "at": "2026-11-24T05:02:04+08:00",
+          "hint": "warning/garbled fixed",
+          "id": "000000"
+        },
+        {
+          "at": "2026-11-24T05:03:10+08:00",
+          "hint": "warning/garbled fixed",
+          "id": "000000"
+        },
+        {
+          "at": "2026-11-24T05:25:00+08:00",
+          "hint": "warning/unsupported_claim wontfix",
+          "id": "000000"
+        },
+        {
+          "at": "2026-11-24T05:25:00+08:00",
+          "hint": "warning/unsupported_claim wontfix",
+          "id": "000000"
+        },
+        {
+          "at": "2026-11-24T05:25:10+08:00",
+          "hint": "warning/unsupported_claim wontfix",
+          "id": "000000"
+        }
+      ]
+    },
+    "search_requests": {
+      "count": 2,
+      "recent": [
+        {
+          "at": "",
+          "hint": "",
+          "id": "r-000001"
+        },
+        {
+          "at": "",
+          "hint": "",
+          "id": "r-000002"
+        }
+      ]
+    },
+    "statements": {
+      "count": 66,
+      "recent": [
+        {
+          "at": "2026-11-24T03:46:22+08:00",
+          "hint": "external_lit active",
+          "id": "000058"
+        },
+        {
+          "at": "2026-11-24T03:46:22+08:00",
+          "hint": "external_lit active",
+          "id": "000059"
+        },
+        {
+          "at": "2026-11-24T03:47:33+08:00",
+          "hint": "external_lit active",
+          "id": "000060"
+        },
+        {
+          "at": "2026-11-24T03:48:17+08:00",
+          "hint": "external_lit active",
+          "id": "000061"
+        },
+        {
+          "at": "2026-11-24T03:49:08+08:00",
+          "hint": "external_lit active",
+          "id": "000062"
+        },
+        {
+          "at": "2026-11-24T03:50:29+08:00",
+          "hint": "external_lit active",
+          "id": "000063"
+        },
+        {
+          "at": "2026-11-24T03:51:14+08:00",
+          "hint": "external_lit active",
+          "id": "000064"
+        },
+        {
+          "at": "2026-11-24T05:16:35+08:00",
+          "hint": "own_result active",
+          "id": "000065"
+        }
+      ]
+    },
+    "tasks": {
+      "count": 178,
+      "recent": [
+        {
+          "at": "",
+          "hint": "G.notice 板项 done/acked",
+          "id": "t-000171"
+        },
+        {
+          "at": "",
+          "hint": "M.message 板项 done/acked",
+          "id": "t-000172"
+        },
+        {
+          "at": "",
+          "hint": "M.notice 板项 done/acked",
+          "id": "t-000173"
+        },
+        {
+          "at": "2026-11-24T05:32:45+08:00",
+          "hint": "G. done/ok",
+          "id": "t-000174"
+        },
+        {
+          "at": "",
+          "hint": "M.notice 板项 done/acked",
+          "id": "t-000175"
+        },
+        {
+          "at": "",
+          "hint": "M.message 板项 done/acked",
+          "id": "t-000176"
+        },
+        {
+          "at": "",
+          "hint": "M.notice 板项 done/acked",
+          "id": "t-000177"
+        },
+        {
+          "at": "",
+          "hint": "M.notice 板项 done/acked",
+          "id": "t-000178"
+        }
+      ]
+    }
+  },
+  "uncalled_actions": {
+    "caliber": "按 store.rows(\"tasks\") 数（tasks 台账的落盘行，可能只是缓存/最近一次落盘）；权威读数是 sessions/*.jsonl 的 events 重放 —— 两个口径的数不许互相比",
+    "called_total": 1,
+    "checked": true,
+    "count": 66,
+    "declared_total": 67,
+    "note": "这条读数只回答\"声明了但没被召唤过\"：为什么没人派、该不该派，归秘书判断（`J-37`）；本读数不构成任何门的通过条件。",
+    "reason": "",
+    "uncalled": [
+      {
+        "action": "ingest_local",
+        "role": "A"
+      },
+      {
+        "action": "run",
+        "role": "A"
+      },
+      {
+        "action": "search_literature",
+        "role": "A"
+      },
+      {
+        "action": "shelf_search",
+        "role": "A"
+      },
+      {
+        "action": "walk_citations",
+        "role": "A"
+      },
+      {
+        "action": "decide_structural_duplicate",
+        "role": "B"
+      },
+      {
+        "action": "ingest_manuscript",
+        "role": "B"
+      },
+      {
+        "action": "land_manuscript",
+        "role": "B"
+      },
+      {
+        "action": "open_polish_copy",
+        "role": "B"
+      },
+      {
+        "action": "register_statement",
+        "role": "B"
+      },
+      {
+        "action": "reprocess_once",
+        "role": "B"
+      },
+      {
+        "action": "resolve_structural_duplicate",
+        "role": "B"
+      },
+      {
+        "action": "run",
+        "role": "B"
+      },
+      {
+        "action": "run_once",
+        "role": "B"
+      },
+      {
+        "action": "run_reprocess",
+        "role": "B"
+      },
+      {
+        "action": "cold",
+        "role": "C"
+      },
+      {
+        "action": "contradictions",
+        "role": "C"
+      },
+      {
+        "action": "gaps",
+        "role": "C"
+      },
+      {
+        "action": "handle",
+        "role": "C"
+      },
+      {
+        "action": "hottest",
+        "role": "C"
+      },
+      {
+        "action": "neighbors",
+        "role": "C"
+      },
+      {
+        "action": "paths",
+        "role": "C"
+      },
+      {
+        "action": "proof_chain",
+        "role": "C"
+      },
+      {
+        "action": "relations_between",
+        "role": "C"
+      },
+      {
+        "action": "structural_duplicates",
+        "role": "C"
+      },
+      {
+        "action": "adjudicate",
+        "role": "D"
+      },
+      {
+        "action": "assess",
+        "role": "D"
+      },
+      {
+        "action": "consider",
+        "role": "D"
+      },
+      {
+        "action": "ingest",
+        "role": "D"
+      },
+      {
+        "action": "ingest_detailed",
+        "role": "D"
+      },
+      {
+        "action": "poll",
+        "role": "D"
+      },
+      {
+        "action": "probe_c",
+        "role": "D"
+      },
+      {
+        "action": "propose_question",
+        "role": "D"
+      },
+      {
+        "action": "research",
+        "role": "D"
+      },
+      {
+        "action": "run_round",
+        "role": "D"
+      },
+      {
+        "action": "submit_gaps",
+        "role": "D"
+      },
+      {
+        "action": "trace_l3",
+        "role": "D"
+      },
+      {
+        "action": "trace_question",
+        "role": "D"
+      },
+      {
+        "action": "write_report",
+        "role": "D"
+      },
+      {
+        "action": "evidence_for",
+        "role": "E"
+      },
+      {
+        "action": "list_experiments",
+        "role": "E"
+      },
+      {
+        "action": "run_experiment",
+        "role": "E"
+      },
+      {
+        "action": "run_script_experiment",
+        "role": "E"
+      },
+      {
+        "action": "abandon_plan",
+        "role": "F"
+      },
+      {
+        "action": "create_plan",
+        "role": "F"
+      },
+      {
+        "action": "list_plans",
+        "role": "F"
+      },
+      {
+        "action": "status",
+        "role": "F"
+      },
+      {
+        "action": "step",
+        "role": "F"
+      },
+      {
+        "action": "build_document",
+        "role": "G"
+      },
+      {
+        "action": "compose_claim",
+        "role": "G"
+      },
+      {
+        "action": "refresh_markdown",
+        "role": "G"
+      },
+      {
+        "action": "register_dependency",
+        "role": "G"
+      },
+      {
+        "action": "render",
+        "role": "G"
+      },
+      {
+        "action": "revise",
+        "role": "G"
+      },
+      {
+        "action": "write_mapping",
+        "role": "G"
+      },
+      {
+        "action": "judge_quote_semantics",
+        "role": "H"
+      },
+      {
+        "action": "list_findings",
+        "role": "H"
+      },
+      {
+        "action": "review",
+        "role": "H"
+      },
+      {
+        "action": "review_report",
+        "role": "H"
+      },
+      {
+        "action": "verify_fixes",
+        "role": "H"
+      },
+      {
+        "action": "check_formal",
+        "role": "L"
+      },
+      {
+        "action": "formalize",
+        "role": "L"
+      },
+      {
+        "action": "record",
+        "role": "L"
+      },
+      {
+        "action": "list_verifications",
+        "role": "V"
+      },
+      {
+        "action": "read_proof",
+        "role": "V"
+      },
+      {
+        "action": "verify_proof",
+        "role": "V"
+      }
+    ]
+  },
+  "wellformed": {
+    "by_kind": {
+      "acceptance": 0,
+      "artifacts": 0,
+      "layout": 0,
+      "lit_candidates": 0,
+      "literature": 0,
+      "manuscripts": 0,
+      "paper_package": 0,
+      "proof_reports": 0,
+      "relations": 0,
+      "roster_retired": 0,
+      "sessions": 0,
+      "statements": 0,
+      "tasks": 0,
+      "usage_ledger": 0,
+      "vsigns": 0
+    },
+    "by_severity": {
+      "error": 0,
+      "info": 0,
+      "warning": 0
+    },
+    "checked": true,
+    "examples": [],
+    "exit_code": 0,
+    "findings": 0,
+    "kinds": {
+      "acceptance": "ok",
+      "artifacts": "ok",
+      "layout": "ok",
+      "lit_candidates": "ok",
+      "literature": "ok",
+      "manuscripts": "ok",
+      "paper_package": "ok",
+      "proof_reports": "ok",
+      "relations": "ok",
+      "roster_retired": "ok",
+      "sessions": "ok",
+      "statements": "ok",
+      "tasks": "ok",
+      "usage_ledger": "ok",
+      "vsigns": "ok"
+    },
+    "reason": "",
+    "state": "ok",
+    "unchecked": []
+  },
+  "workspace": "D:\\Incubator\\projects\\sylow-4"
+}

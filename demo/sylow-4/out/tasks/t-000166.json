@@ -1,0 +1,24 @@
+{
+ "action": "",
+ "at": "2026-11-24T05:29:31+08:00",
+ "detail": "执行完成",
+ "outcome": "ok",
+ "payload_bytes": 2878,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "outcome",
+  "status",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"doc:000000 复核到 accepted —— 签名已钉住现行版。回执四格：(1) documents.status = \\\"accepted\\\"（本轮由 review.review_document round 13 置位，status_updated=true）；(2) 复审轮次 = 13（documents.review_rounds 也读到 13，prior=9）；(3) 现行 content_sha256 前 12 位 = 549200690ff0（签名里 inputs.doc_sha256 = 549200690ff0e170b09e45f2b547c1ad4d9a7d1d81fe0381608e9a14d3a338ff，与 documents.content_sha256 逐字相同；旧签名 a19e4ab06788… 已被这一条取代，签名落盘 doc-signatures/000000-549200690ff0e170-002.json，prev_hash=bda50f31f6d7…）；(4) open findings 剩余条数 = 0（review.list_findings(status=open) 独立读回 count=0，findings=[]；review_document 的 open_findings 也是 total=0/error=0/warning=0、checked=true）。\\n\\n三条旧 warning 的复核处置（都是显式复核后落库，不是自动复跑判掉的）：000009@claim-5 → wontfix，理由：读者面已就地如实披露（main.tex:153 的 Provenance and status 段、:167 的 one exception、:209 的「that review reported an error」），而 claims.evidence_kind 那一格是 G 的写面，H 只读不改；000010 → wontfix，证据读数 table.count(experiments)=0 仍为 0、五条 disclaimer 仍写「数值交叉验证」，但 main.tex:198 逐字写明「This paper contains no computational experiments and no machine-checked proofs」，读者不会把没有证据读成有较弱证据；000011（claim-1）→ wontfix，措辞那一半已修（claim-1 现文与 stmt:000060.statement_full 逐项同义），引文那一格仍断（stmt:000060.quote_verified=false 是 B 的写面），但证明面采信链是完整的 —— statements 000060.proof_text 非空、proof_sha256=08de50eb…、verifications/000060.jsonl 第 9 行 v-000009（round 9）verdict=「成立」且 proof_sha256 与现行相同 ⇒ 按「形式化已关闭」那一档采信到 pre_theorem（V 逐行走查签），不是 theorem，也不写成已形式化验证。\\n\\n这一轮没做的事，照实说：① 「结论是否强于引文」这一档**没查**（semantic_check.checked=false、claims_semantically_judged=0，reason=没接线/零 LLM 调用）—— 这是没查，不是没问题；② 我只判「说清楚没有」，数学对错不在我这里（proof 级证据要以 V 的签与 B 的台账为准）；③ 按派活要求没动 main.tex（sha256 仍 08c6cc0a5673…、212+1 行 22490 字节，与复核前逐字相同）、没重编（PDF 仍是 7 页那一份，未重生成）、没改任何 claims。本次未落 review_report（派活只要求复核+回执，未要求报告文件）。\", \"llm_run_path\": \"D:\\\\Incubator\\\\projects\\\\sylow-4\\\\runs\\\\H-20261124-052931-001.json\", \"messages\": [], \"outcome\": \"ok\", \"status\": \"done\", \"steps\": 18, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "3f968ffef353109ce854912bbc237e9561d52f54d09b5c9d5e67dccf3abccb48",
+ "readings": {},
+ "role": "H",
+ "status": "done",
+ "task_id": "t-000166"
+}

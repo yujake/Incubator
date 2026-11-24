@@ -1,0 +1,81 @@
+2026-11-24 04:41:15,762+0800 INFO  pdflatex - this process (10508) started by python in directory D:\Incubator\projects\sylow-4\out\package with command line: pdflatex -interaction=nonstopmode -halt-on-error main.tex
+2026-11-24 04:41:15,762+0800 INFO  pdflatex - running on Windows 10.0.26200
+2026-11-24 04:41:15,778+0800 INFO  pdflatex - running One MiKTeX Utility to refresh the file name database
+2026-11-24 04:41:15,785+0800 INFO  pdflatex.core - start process: miktex --enable-installer --quiet fndb refresh
+2026-11-24 04:41:19,780+0800 INFO  pdflatex - running One MiKTeX Utility to create font map files
+2026-11-24 04:41:19,780+0800 INFO  pdflatex.core - start process: miktex --enable-installer --quiet fontmaps configure
+2026-11-24 04:41:24,478+0800 INFO  pdflatex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-24 04:41:24,511+0800 INFO  pdflatex - allowing known shell commands
+2026-11-24 04:41:24,571+0800 INFO  pdflatex - going to create file: pdflatex.fmt
+2026-11-24 04:41:24,571+0800 INFO  pdflatex.core - start process: miktex --enable-installer formats build pdflatex --engine pdftex
+2026-11-24 04:41:36,847+0800 INFO  pdflatex - this process (10508) finishes with exit code 1
+2026-11-24 04:41:36,859+0800 WARN  pdflatex - minor issue: It has been a long time since a MiKTeX administrator has checked for updates.
+2026-11-24 04:41:36,859+0800 WARN  pdflatex.core - still open: main.tex
+2026-11-24 04:41:37,281+0800 INFO  pdflatex - this process (7848) started by python in directory D:\Incubator\projects\sylow-4\out\package with command line: pdflatex -interaction=nonstopmode -halt-on-error main.tex
+2026-11-24 04:41:37,281+0800 INFO  pdflatex - running on Windows 10.0.26200
+2026-11-24 04:41:37,283+0800 INFO  pdflatex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-24 04:41:37,287+0800 INFO  pdflatex - allowing known shell commands
+2026-11-24 04:41:37,576+0800 INFO  pdflatex - this process (7848) finishes with exit code 1
+2026-11-24 04:41:37,579+0800 WARN  pdflatex - minor issue: It has been a long time since a MiKTeX administrator has checked for updates.
+2026-11-24 04:41:37,579+0800 WARN  pdflatex.core - still open: main.tex
+2026-11-24 04:41:43,437+0800 INFO  pdflatex - this process (16116) started by python in directory D:\Incubator\projects\sylow-4\out\package with command line: pdflatex -interaction=nonstopmode -halt-on-error main.tex
+2026-11-24 04:41:43,437+0800 INFO  pdflatex - running on Windows 10.0.26200
+2026-11-24 04:41:43,440+0800 INFO  pdflatex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-24 04:41:43,444+0800 INFO  pdflatex - allowing known shell commands
+2026-11-24 04:41:43,796+0800 INFO  pdflatex.core - start process: miktex-makepk --enable-installer --verbose tcrm1000 600 600 1+0/600
+2026-11-24 04:41:48,307+0800 INFO  pdflatex - this process (16116) finishes with exit code 0
+2026-11-24 04:41:48,310+0800 WARN  pdflatex - minor issue: It has been a long time since a MiKTeX administrator has checked for updates.
+2026-11-24 04:41:48,718+0800 INFO  pdflatex - this process (424) started by python in directory D:\Incubator\projects\sylow-4\out\package with command line: pdflatex -interaction=nonstopmode -halt-on-error main.tex
+2026-11-24 04:41:48,718+0800 INFO  pdflatex - running on Windows 10.0.26200
+2026-11-24 04:41:48,720+0800 INFO  pdflatex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-24 04:41:48,724+0800 INFO  pdflatex - allowing known shell commands
+2026-11-24 04:41:49,112+0800 INFO  pdflatex - this process (424) finishes with exit code 0
+2026-11-24 04:41:49,114+0800 WARN  pdflatex - minor issue: It has been a long time since a MiKTeX administrator has checked for updates.
+2026-11-24 04:46:58,080+0800 INFO  pdflatex - this process (24492) started by python in directory D:\Incubator\projects\sylow-4\out\package with command line: pdflatex -interaction=nonstopmode -halt-on-error main.tex
+2026-11-24 04:46:58,081+0800 INFO  pdflatex - running on Windows 10.0.26200
+2026-11-24 04:46:58,082+0800 INFO  pdflatex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-24 04:46:58,087+0800 INFO  pdflatex - allowing known shell commands
+2026-11-24 04:46:58,482+0800 INFO  pdflatex - this process (24492) finishes with exit code 0
+2026-11-24 04:46:58,483+0800 WARN  pdflatex - minor issue: It has been a long time since a MiKTeX administrator has checked for updates.
+2026-11-24 04:46:58,853+0800 INFO  pdflatex - this process (7044) started by python in directory D:\Incubator\projects\sylow-4\out\package with command line: pdflatex -interaction=nonstopmode -halt-on-error main.tex
+2026-11-24 04:46:58,853+0800 INFO  pdflatex - running on Windows 10.0.26200
+2026-11-24 04:46:58,855+0800 INFO  pdflatex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-24 04:46:58,859+0800 INFO  pdflatex - allowing known shell commands
+2026-11-24 04:46:59,209+0800 INFO  pdflatex - this process (7044) finishes with exit code 0
+2026-11-24 04:46:59,211+0800 WARN  pdflatex - minor issue: It has been a long time since a MiKTeX administrator has checked for updates.
+2026-11-24 05:00:02,790+0800 INFO  pdflatex - this process (8976) started by python in directory D:\Incubator\projects\sylow-4\out\package with command line: pdflatex -interaction=nonstopmode -halt-on-error main.tex
+2026-11-24 05:00:02,791+0800 INFO  pdflatex - running on Windows 10.0.26200
+2026-11-24 05:00:02,793+0800 INFO  pdflatex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-24 05:00:02,797+0800 INFO  pdflatex - allowing known shell commands
+2026-11-24 05:00:03,146+0800 INFO  pdflatex - this process (8976) finishes with exit code 0
+2026-11-24 05:00:03,148+0800 WARN  pdflatex - minor issue: It has been a long time since a MiKTeX administrator has checked for updates.
+2026-11-24 05:00:03,509+0800 INFO  pdflatex - this process (15096) started by python in directory D:\Incubator\projects\sylow-4\out\package with command line: pdflatex -interaction=nonstopmode -halt-on-error main.tex
+2026-11-24 05:00:03,509+0800 INFO  pdflatex - running on Windows 10.0.26200
+2026-11-24 05:00:03,511+0800 INFO  pdflatex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-24 05:00:03,514+0800 INFO  pdflatex - allowing known shell commands
+2026-11-24 05:00:03,854+0800 INFO  pdflatex - this process (15096) finishes with exit code 0
+2026-11-24 05:00:03,855+0800 WARN  pdflatex - minor issue: It has been a long time since a MiKTeX administrator has checked for updates.
+2026-11-24 05:04:41,082+0800 INFO  pdflatex - this process (14312) started by python in directory D:\Incubator\projects\sylow-4\out\package with command line: pdflatex -interaction=nonstopmode -halt-on-error main.tex
+2026-11-24 05:04:41,082+0800 INFO  pdflatex - running on Windows 10.0.26200
+2026-11-24 05:04:41,085+0800 INFO  pdflatex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-24 05:04:41,089+0800 INFO  pdflatex - allowing known shell commands
+2026-11-24 05:04:41,488+0800 INFO  pdflatex - this process (14312) finishes with exit code 0
+2026-11-24 05:04:41,490+0800 WARN  pdflatex - minor issue: It has been a long time since a MiKTeX administrator has checked for updates.
+2026-11-24 05:04:41,844+0800 INFO  pdflatex - this process (24492) started by python in directory D:\Incubator\projects\sylow-4\out\package with command line: pdflatex -interaction=nonstopmode -halt-on-error main.tex
+2026-11-24 05:04:41,844+0800 INFO  pdflatex - running on Windows 10.0.26200
+2026-11-24 05:04:41,846+0800 INFO  pdflatex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-24 05:04:41,850+0800 INFO  pdflatex - allowing known shell commands
+2026-11-24 05:04:42,193+0800 INFO  pdflatex - this process (24492) finishes with exit code 0
+2026-11-24 05:04:42,194+0800 WARN  pdflatex - minor issue: It has been a long time since a MiKTeX administrator has checked for updates.
+2026-11-24 05:34:05,921+0800 INFO  pdflatex - this process (21568) started by python in directory D:\Incubator\projects\sylow-4\out\package with command line: pdflatex -interaction=nonstopmode -halt-on-error main.tex
+2026-11-24 05:34:05,921+0800 INFO  pdflatex - running on Windows 10.0.26200
+2026-11-24 05:34:05,923+0800 INFO  pdflatex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-24 05:34:05,927+0800 INFO  pdflatex - allowing known shell commands
+2026-11-24 05:34:06,288+0800 INFO  pdflatex - this process (21568) finishes with exit code 0
+2026-11-24 05:34:06,290+0800 WARN  pdflatex - minor issue: It has been a long time since a MiKTeX administrator has checked for updates.
+2026-11-24 05:34:06,665+0800 INFO  pdflatex - this process (4832) started by python in directory D:\Incubator\projects\sylow-4\out\package with command line: pdflatex -interaction=nonstopmode -halt-on-error main.tex
+2026-11-24 05:34:06,666+0800 INFO  pdflatex - running on Windows 10.0.26200
+2026-11-24 05:34:06,668+0800 INFO  pdflatex - this is MiKTeX-PDFTEX 4.26.0 (1.40.29) (MiKTeX 26.2)
+2026-11-24 05:34:06,672+0800 INFO  pdflatex - allowing known shell commands
+2026-11-24 05:34:07,024+0800 INFO  pdflatex - this process (4832) finishes with exit code 0
+2026-11-24 05:34:07,026+0800 WARN  pdflatex - minor issue: It has been a long time since a MiKTeX administrator has checked for updates.
