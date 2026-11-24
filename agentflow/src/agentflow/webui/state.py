@@ -899,11 +899,27 @@ def _read_ledger(root: Path, problems: list[str]) -> dict[str, Any]:
     - `events`：保留这个名字（`types.ts` 与既有读者都认它），口径
       与 `upserts` 逐字相同 —— 它不再等于文件总行数。
 
-    守恒：`upserts + commit_markers + corrupt_rows == events.jsonl 的总行数`
-    （一行都不丢，也不重复计数）。读不成 JSON 的坏行（`op="corrupt"` 的占位行）
+    守恒：`upserts + commit_markers + corrupt_rows == rows`（`rows` 是这次读数读到的
+    非空行数；一行都不丢，也不重复计数）。读不成 JSON 的坏行（`op="corrupt"` 的占位行）
     单列在 `corrupt_rows` 里，不再计进 `upserts`：它不是一笔写入。有坏行时
     `events_tri="unreadable"` 并把一句原因写进 `problems`（READFIX-D：改前坏行
     计进 upserts、`tri` 仍 computed，等于把"文件坏了"读成"写完了"）。
+
+    ## `events_note` 的加法必须能被现算（2026-11-24，EVENTSNOTE）
+
+    改前这一句是「台账写入 N 笔（其中 commit 标记 M 行）：每提交一次事务占两行
+    （一行事件 + 一行 commit 标记），所以两数相加 = events.jsonl 的总行数」——
+    两处不成立：
+
+    1. "总行数"不在响应里，读者只能拿之后的文件行数去对；文件在跑的时候一直在长，
+       于是加法看起来永远错（真机 lp-ball-22：抓读数那一刻 2324 + 944 = 3268，
+       几十秒后文件已经 3444 行，差的是新写进去的行，不是算错）；
+    2. "每提交一次事务占两行"只描述了 `op=upsert` 那一档：`op=info`（回写，不重放）
+       也是非 marker 行，被算进 `upserts`，那句故事没有覆盖它。
+
+    现在 `rows`（总行数）/ `ops`（逐 op 行数）/ `read_at`（读数时刻）与
+    `upserts` / `commit_markers` / `corrupt_rows` 在同一个对象里，`events_note`
+    里的每个数字都能拿这几个字段复算；`events` 的口径逐字写成"全部非 marker 行"。
 
     三态（READFIX-D）：
     - `events.jsonl` 不在盘上 ⇒ `upserts` / `commit_markers` 是 `None`、
@@ -916,6 +932,11 @@ def _read_ledger(root: Path, problems: list[str]) -> dict[str, Any]:
     out: dict[str, Any] = {"path": str(root / "data" / "events.jsonl"),
                            "events": None, "upserts": None, "commit_markers": None,
                            "corrupt_rows": None,
+                           # 2026-11-24（EVENTSNOTE）：这一格加三个可复算的读数 ——
+                           # 总行数、逐 op 的行数、读数时刻。改前 `events_note` 写着
+                           # "两数相加 = events.jsonl 的总行数"，而"总行数"不在响应里：
+                           # 读者拿一个之后的文件行数去对，加法看起来是错的。
+                           "rows": None, "ops": {}, "read_at": "",
                            "tables": None, "note": "", "tables_note": "",
                            "events_note": "",
                            "events_tri": None, "tables_tri": None}
@@ -961,8 +982,10 @@ def _read_ledger(root: Path, problems: list[str]) -> dict[str, Any]:
             return out
         rows = st.read_events()
         commits = corrupt = 0
+        op_counts: dict[str, int] = {}
         for one in rows:
             op = str(one.get("op") or "")
+            op_counts[op] = op_counts.get(op, 0) + 1
             if op == "commit":
                 commits += 1
             elif op == "corrupt":
@@ -972,11 +995,27 @@ def _read_ledger(root: Path, problems: list[str]) -> dict[str, Any]:
         out["upserts"] = upserts
         out["commit_markers"] = commits
         out["corrupt_rows"] = corrupt
+        out["rows"] = len(rows)
+        out["ops"] = dict(sorted(op_counts.items()))
+        out["read_at"] = _now_iso()
         # 同一个口径的另一个名字（见 docstring：`events` 不再等于文件总行数）。
         out["events"] = upserts
         out["events_tri"] = "unreadable" if corrupt else "computed"
-        note = (f"台账写入 {upserts} 笔（其中 commit 标记 {commits} 行）：每提交一次事务占两行"
-                "（一行事件 + 一行 commit 标记），所以两数相加 = events.jsonl 的总行数")
+        # 2026-11-24（EVENTSNOTE）：这一句里出现的每个数字都是这次读数自己的字段
+        # （`rows` / `upserts` / `commit_markers` / `corrupt_rows` / `ops`），读者可以
+        # 拿同一刻的文件复算；不再写"每提交一次事务占两行（一行事件 + 一行 commit）"
+        # —— 那只描述了 `op=upsert` 那一档，而 `op=info`（回写，不重放）也是非 marker 行。
+        extra_ops = {op: n for op, n in out["ops"].items()
+                     if op not in ("upsert", "commit", "corrupt")}
+        breakdown = (f"op=upsert {out['ops'].get('upsert', 0)} 行"
+                     + ("" if not extra_ops else
+                        "、另有 " + "、".join(f"op={op} {n} 行"
+                                              for op, n in extra_ops.items())))
+        note = (f"台账共 {len(rows)} 行（读数时刻 {out['read_at']}）：非 marker 行 "
+                f"{upserts} 笔（{breakdown}）、commit 标记 {commits} 行、坏行 {corrupt} 行"
+                f" ⇒ {upserts} + {commits} + {corrupt} = {len(rows)}。"
+                "`events` 数的是全部非 marker 行（含 `op=info` 那类回写），不是「一行事件」；"
+                "文件在跑的时候会继续增长 —— 读数之后再看行数更大是增长，不是这句加不平。")
         if corrupt:
             note += (f"；另有 {corrupt} 行读不成 JSON（坏行：不计进「写入」这一格，"
                      f"单列 `corrupt_rows`，这一格记「没查成」）")
@@ -1152,9 +1191,13 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "snapshot() 的 `ledger` —— 台账（第二个独立读数）。`events` 与 `upserts` 同口径"
      "（`D21`：它不再是 events.jsonl 的总行数），`commit_markers` 是其中提交标记的行数；"
      "坏行单列 `corrupt_rows`（不计进 upserts），`events_tri` / `tables_tri` 是两个"
-     "三态头（READFIX-D：'没写过'与'读不到'都不许折成 0）",
+     "三态头（READFIX-D：'没写过'与'读不到'都不许折成 0）。`rows` / `ops` / `read_at`"
+     "是 2026-11-24 加的：总行数、逐 op 行数、读数时刻 —— `events_note` 里的每个数字"
+     "都要能拿它们复算（守恒式 `upserts + commit_markers + corrupt_rows == rows`）",
      (("path", "string"), ("events", "number | null"), ("upserts", "number | null"),
       ("commit_markers", "number | null"), ("corrupt_rows", "number | null"),
+      ("rows", "number | null"), ("ops", "Record<string, number>"),
+      ("read_at", "string"),
       ("tables", "number | null"),
       ("events_tri", "Tri"), ("tables_tri", "Tri"),
       ("note", "string"), ("tables_note", "string"), ("events_note", "string"))),

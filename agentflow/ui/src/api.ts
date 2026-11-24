@@ -86,7 +86,8 @@ export const ENDPOINTS = {
   // 整棵名册树（父/子/绝对编号/角色/深度/收件箱三格）。
   // 只读一条 —— 这个端点在路由表里没有配对的 POST，前端也不该有写它的函数。
   roster: "/api/roster",
-  // 板上三族义务（b-register / v-resubmit / b-awake）的收件人读数。
+  // 板上义务（族由 `families[]` 现取；今天四族：b-register / v-resubmit / b-awake /
+  // d-handoff）的收件人读数。
   // 只读一条 —— 没有配对的 POST：销号只发生在 conductor 的收口那一路。
   obligations: "/api/obligations",
   // 两档提示词缓存的状态读数（只读）与预热（写，会花钱）。两条的形状与
@@ -239,17 +240,20 @@ export function sourcePath(opts: {
  * 两个"全量行"的面共用的分页参数（AUDIT F12：真机上 `/api/evidence` 2.1 MB /
  * `/api/artifacts` 1.3 MB，一进页面就卡）。
  *
- * 三档，语义都在后端（`readers._page_window`）：
+ * 两根轴，语义都在后端（`readers._page_window` / `readers._query_flag`）：
  *
- * - 什么都不给 ⇒ **全量**（既有行为；判据与命令行读的就是这一档）；
- * - `summary: true` ⇒ 首屏摘要（每栏 `readers.SUMMARY_ROWS` 行）；
- * - `limit` / `offset` ⇒ 显式窗口（`limit: 0` 也是全量）。
+ * - 行那一轴：什么都不给 ⇒ **全量**（既有行为）；`summary: true` ⇒ 首屏摘要
+ *   （每栏 `readers.SUMMARY_ROWS` 行）；`limit` / `offset` ⇒ 显式窗口。
+ * - 字段那一轴：默认 **compact**（只给面板要用的列，长字段省掉/截断）；
+ *   `full: true` ⇒ `?full=1` 给全字段。省了哪些、截了哪些在后端的
+ *   `rows_omitted` / `rows_clipped` / `rows_nested` 里，`rows_fields` 说清是哪一档。
  *
- * 摘要档不删字段：每一栏的**真实**总行数在响应的 `rows_total[栏]` 里，`rows_mode`
+ * 摘要档不删行：每一栏的**真实**总行数在响应的 `rows_total[栏]` 里，`rows_mode`
  * 说清这一份是哪一档 —— 页面因此不会把"首屏只给了 40 行"读成"一共就 40 行"。
  */
 export interface RowPagingOptions {
   summary?: boolean;
+  full?: boolean;
   limit?: number;
   offset?: number;
 }
@@ -259,6 +263,9 @@ function rowPagingQuery(opts: RowPagingOptions): string {
   const q = new URLSearchParams();
   if (opts.summary === true) {
     q.set("summary", "1");
+  }
+  if (opts.full === true) {
+    q.set("full", "1");
   }
   if (typeof opts.limit === "number") {
     q.set("limit", String(opts.limit));
@@ -270,7 +277,7 @@ function rowPagingQuery(opts: RowPagingOptions): string {
   return tail === "" ? "" : `?${tail}`;
 }
 
-/** 证据链那一面的查询串（`?summary=1` / `?limit=` / `?offset=`；不给就是全量）。 */
+/** 证据链那一面的查询串（`?summary=1` / `?full=1` / `?limit=` / `?offset=`）。 */
 export function evidencePath(opts: RowPagingOptions = {}): string {
   return `${ENDPOINTS.evidence}${rowPagingQuery(opts)}`;
 }
@@ -283,6 +290,9 @@ export function artifactsPath(opts: RowPagingOptions & { runDir?: string } = {})
   }
   if (opts.summary === true) {
     q.set("summary", "1");
+  }
+  if (opts.full === true) {
+    q.set("full", "1");
   }
   if (typeof opts.limit === "number") {
     q.set("limit", String(opts.limit));
@@ -681,7 +691,11 @@ export const api = {
    */
   getRoster: (): Promise<RosterView> => getJSON<RosterView>(ENDPOINTS.roster),
   /**
-   * 板上三族义务（`GET /api/obligations`，2026-11-19 的 ⑥）。
+   * 板上义务（`GET /api/obligations`，2026-11-19 的 ⑥）。
+   *
+   * 族名与数量由 payload 的 `families[]` 现取（今天四族：b-register / v-resubmit /
+   * b-awake / d-handoff；产品侧的四个前缀常量在 `obligations`），前端不写死族名 ——
+   * 写死的那一版在 `d-handoff` 落地后仍按旧数目说话（族名列表也是写死的）。
    *
    * 两条轴分开给：`recipient_instance`（收件实例 = 板项行的 `instance` 列，
    * 由 `obligations.recipient_reading` 判）与 `parent_task_id`（父台账号）。

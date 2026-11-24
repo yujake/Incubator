@@ -35,6 +35,22 @@ A 线自有：页面与静态（`/`、`/index.html`、`/run/{sid}`、`/static/{f
 其余全部来自两条子表：`readers.ROUTES`（只读面）与 `writes.ROUTES`（写面）。
 「前端声明了而后端没有」正是 A 条要抓的漂移（反过来也一样：这一张表里有的，
 `api.ts` 就必须有）。
+
+## 响应形态：流（stream）不是一击即返的 JSON
+
+这张表里的端点有两种响应生命周期，不是一种：
+
+- 一击即返（JSON / HTML / 静态）：请求 → 读完 → 连接结束。可以用
+  「`urlopen(...).read()` 在秒级返回」这种断言测它；
+- 流（`GET /api/stream`，SSE `text/event-stream`）：连上就一直推，处理器
+  不返回，直到客户端断开或这一代服务结束。拿普通 GET 的"读完即返"断言去测它
+  必超时 —— 那不是端点坏了，是断言用错了。
+
+判据（写在这里，也写在 `tests/test_webui_batch2_stream_and_projection.py`）：
+拿普通 GET 的断言去测 stream 必超时 ⇒ 清单里它必须被标成 stream。
+所以本模块给每一种响应形态一个词（:data:`ROUTE_KIND_JSON` 等），并在
+:data:`ROUTE_KINDS` 里显式登记 stream。`--list-routes`、文档与判据都读这一格，
+不许各自再维护一份"哪些是流"的名单。
 """
 
 from __future__ import annotations
@@ -45,7 +61,9 @@ from typing import Any, Sequence
 from .readers import ROUTES as READER_ROUTES
 from .writes import ROUTES as WRITE_ROUTES
 
-__all__ = ["ROUTES", "compose", "handler_for", "match"]
+__all__ = ["ROUTE_KINDS", "ROUTE_KIND_HTML", "ROUTE_KIND_JSON", "ROUTE_KIND_STATIC",
+           "ROUTE_KIND_STREAM", "ROUTES", "compose", "endpoint_inventory", "handler_for",
+           "match", "route_kind", "stream_paths"]
 
 
 def compose(own: Sequence[tuple[str, str, str]],
@@ -93,6 +111,72 @@ def handler_for(name: str):
         if fn is not None:
             return fn
     return None
+
+
+# ============================================================== 响应形态（stream 的分类）
+#: 一击即返的 JSON（读面与写面）。绝大多数 `/api/*` 是这一档。
+ROUTE_KIND_JSON = "json"
+#: SPA 外壳 / 错误页（`GET /`、`/index.html`、`/run/{sid}`）。
+ROUTE_KIND_HTML = "html"
+#: 前端构建产物（`/static/{file...}`）。
+ROUTE_KIND_STATIC = "static"
+#: SSE 推送流：连上就一直推，处理器不返回。不许用"读完即返"的断言测它。
+ROUTE_KIND_STREAM = "stream"
+
+#: 显式登记的"响应形态"。只登记非 JSON 的那几条，其余缺省按 :func:`route_kind`
+#: 的规则判（JSON / HTML / 静态三类各有自己的前缀，不靠逐条抄名单）。
+#:
+#: 为什么要有这一格（而不是在注释里写一句"stream 是流"）：端点清单、`--list-routes`
+#: 与判据都要回答"这一条能不能用普通 GET 测"，三处各写一份名单就一定会漂。这里是
+#: 唯一的结构化分类；判据 `tests/test_webui_batch2_stream_and_projection.py` 逐条钉。
+ROUTE_KINDS: dict[str, str] = {
+    "/api/stream": ROUTE_KIND_STREAM,
+}
+
+#: 静态资源前缀（与 `server.STATIC_PREFIX` 逐字一致；本模块不 import server ——
+#: 那会成环，而 `routes` 是 `server` 的依赖方向）。
+_STATIC_PREFIX = "/static/"
+#: 页面外壳那三条（与 `_OWN` 里的模式逐字一致）。静态那条按前缀判，不在这里。
+_HTML_PATHS: frozenset[str] = frozenset({"/", "/index.html", "/run/{sid}"})
+
+
+def route_kind(pattern: str) -> str:
+    """一条路径模式的响应形态：`json` / `html` / `static` / `stream`。
+
+    判定顺序：显式登记（:data:`ROUTE_KINDS`）优先，然后静态前缀、页面外壳，其余
+    一律 JSON。它只回答"这条端点的连接怎么结束"，不回答"哪个处理器实现它"。
+    """
+    got = ROUTE_KINDS.get(pattern)
+    if got:
+        return got
+    if pattern.startswith(_STATIC_PREFIX):
+        return ROUTE_KIND_STATIC
+    if pattern in _HTML_PATHS:
+        return ROUTE_KIND_HTML
+    return ROUTE_KIND_JSON
+
+
+def stream_paths(table: Sequence[tuple[str, str, str]] | None = None) -> tuple[str, ...]:
+    """表里所有被标成 stream 的路径模式（缺省 = 真表）。
+
+    为了"标了却不在表里"也能被抓到，返回的是表里存在的 stream 模式；另一条
+    反向检查（`ROUTE_KINDS` 里的每一条都在表里）由判据做 —— 只查一边会漏掉
+    "登记了一条永远不生效的流"。
+    """
+    return tuple(p for p in patterns(table=table) if route_kind(p) == ROUTE_KIND_STREAM)
+
+
+def endpoint_inventory(
+    table: Sequence[tuple[str, str, str]] | None = None,
+) -> tuple[dict[str, str], ...]:
+    """端点清单：每条一行 `{method, path, handler, kind}`（`--list-routes` 的机器可读面）。
+
+    它把"哪条是流"与"哪条是普通 GET"放在同一张表里，且 `kind` 直接读
+    :func:`route_kind` —— 于是清单与分类不会各说各的。
+    """
+    rows = ROUTES if table is None else tuple(table)
+    return tuple({"method": m, "path": p, "handler": h, "kind": route_kind(p)}
+                 for m, p, h in rows)
 
 
 #: A 线（自有：页面 + 静态资源）那一段子表。

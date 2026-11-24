@@ -140,9 +140,9 @@ export function Acceptance() {
         <span class="readings">{face.problem === "" ? "正在读盘……" : face.problem}</span>
         {face.problem === "" ? null : (
           <div class="readings">
-            若这一条是「没有这个端点」，说明 8720 的 web 服务进程还是改动前那一版
+            若这一条是「没有这个端点」，说明 web 服务进程还是改动前那一版
             （路由表在导入期固化）：刷新只换前端，需要重启 web 服务进程；
-            正在跑的那一趟（82）不要动。
+            正在跑的那一趟不要动。
           </div>
         )}
       </Card>
@@ -252,8 +252,8 @@ export function Acceptance() {
               </tbody>
             </table>
             <div class="readings">
-              口径：`failed` 是真不过，`unchecked` 是没查成 —— 两档不许折平；这一面与
-              下面 C 块的 `content` 同源，两个出口不许对"几条真不过"说两句话。
+              口径：`failed` 是真不过，`unchecked` 是没查成 —— 这两种不许折平；这一面与
+              下面 C 块的 `content` 同源，两处出口不许对"几条真不过"说两句话。
             </div>
           </>
         )}
@@ -621,7 +621,7 @@ export function Acceptance() {
               <Badge
                 kind="badge-pending"
                 text="签不背书这一行（不算签）"
-                title="签在、判决地址对得上，但这一行结构上不可能持有这份正文 ⇒ 不算签；它与「没送过 V」是两档，也不折进 unbacked"
+                title="签在、判决地址对得上，但这一行结构上不可能持有这份正文 ⇒ 不算签；它与「没送过 V」不是同一档，也不折进 unbacked"
               />{" "}
               独立一档（不并进「没送过 V」）：
               {closing.unsigned_signs.count === null ? (

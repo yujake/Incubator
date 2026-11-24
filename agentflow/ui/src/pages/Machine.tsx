@@ -208,6 +208,15 @@ export function Machine() {
 
   const m = face.data;
   const settings = m.settings;
+  // 设置文件的三个顶层段：标题与空态里的「几段」由这张表现数，表的行也从它铺开
+  // —— 加一段时数字与行一起变，不会只剩标题里的那个数。
+  const SETTING_SECTIONS: ReadonlyArray<{ part: string; section: Record<string, unknown> }> = [
+    { part: "toolchain", section: settings.toolchain },
+    { part: "model", section: settings.model as unknown as Record<string, unknown> },
+    { part: "workspace", section: settings.workspace },
+  ];
+  const settingRows = SETTING_SECTIONS.flatMap(({ part, section }) =>
+    pairs(section).map((p) => ({ ...p, part })));
   const provers = m.provers;
   const mathlib = m.mathlib;
   const serving = m.serving;
@@ -497,7 +506,7 @@ export function Machine() {
       </Card>
 
       <Card
-        title="设置三段"
+        title={`设置${SETTING_SECTIONS.length}段`}
         subtitle={`落点在盘上：${String(settings.exists)}`}
         right={<TriState tri={m.settings_tri} label="设置" reason={m.settings_reason} />}
       >
@@ -509,15 +518,8 @@ export function Machine() {
               盘上见过的顶层键：<span class="mono">{cell(settings.raw_keys)}</span>
             </div>
             <Table
-              rows={[
-                ...pairs(settings.toolchain).map((p) => ({ ...p, part: "toolchain" })),
-                ...pairs(settings.model as unknown as Record<string, unknown>).map((p) => ({
-                  ...p,
-                  part: "model",
-                })),
-                ...pairs(settings.workspace).map((p) => ({ ...p, part: "workspace" })),
-              ]}
-              empty="三段里一个键都没有（读到了空对象）。"
+              rows={settingRows}
+              empty={`${SETTING_SECTIONS.length}段里一个键都没有（读到了空对象）。`}
               columns={[
                 { key: "part", title: "段" },
                 { key: "k", title: "键" },
@@ -638,7 +640,9 @@ export function Machine() {
         subtitle={
           actions.data === null
             ? "（还没读到）"
-            : `${actions.data.path === "" ? "落点没读到" : actions.data.path} · 共 ${actions.data.total} 行 · 最新的在最上面`
+            : actions.data.tri === "not_applicable"
+              ? `${actions.data.path === "" ? "落点没读到" : actions.data.path} · 还没建（不是 0 条操作）`
+              : `${actions.data.path === "" ? "落点没读到" : actions.data.path} · 共 ${actions.data.total} 行 · 最新的在最上面`
         }
         tone={actions.data !== null && isUnreadable(actions.data.tri) ? "problem" : "plain"}
         right={
@@ -672,6 +676,10 @@ export function Machine() {
             {isUnreadable(actions.data.tri) ? (
               <span class="empty">
                 台账读不出来（不是「没有操作」）：{actions.data.reason}
+              </span>
+            ) : actions.data.tri === "not_applicable" ? (
+              <span class="empty">
+                台账还没建（不是「0 条操作」）：{actions.data.reason}
               </span>
             ) : (
               <Table

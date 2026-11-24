@@ -67,11 +67,12 @@
  *     不显示 0（0 会被读成"全都收工了"），并把「活跃（非静默）」单列一格。
  * 三态的判定只有后端一处（`conductor.agent_state`）；这一层只负责把它画出来。
  *
- * ## 另一格容易读混的读数：`in_flight` 是**任务面**的
- * `nodes[].in_flight` 数的是台账里 `status ∈ pending/running` 的活（一件活一行），
- * 不是代理三态：一个挂机（待机）的代理名下那件活仍然是 `running`，所以它既不能读成
- * 「在飞 N 个」，也不能并进「活跃（非静默）」。页面把它逐字写成「未收口的活 N 件」，
- * 与三态徽标分开摆。
+ * ## 另一格容易读混的读数：`in_flight` 是**未收口的活**
+ * `nodes[].in_flight` 数的是台账里还没收口的活（一件活一行），唯一口径是
+ * `boardrows.row_is_open`：板项行按 `item_state`（`status` 是类型标记，恒为
+ * `pending`，不能拿它当状态），代理行按 `status`。它不是代理三态：一个挂机（待机）
+ * 的代理名下那件活仍然开着，所以它既不能读成「在飞 N 个」，也不能并进
+ * 「活跃（非静默）」。页面把它逐字写成「未收口的活 N 件」，与三态徽标分开摆。
  *
  * ## 取数不许挨着渲染
  * 父子关系与"缺号怎么办"这些判断全在 `../rosterTree`（纯函数、全函数、可被判据直接
@@ -515,8 +516,8 @@ function NodeDetail(props: { node: RosterNode }) {
       <div class="row">
         台账那一行：{n.task_found ? "在" : "不在（tasks 里没有它这一行）"} ·
         状态 <span class="mono">{n.status === "" ? "unknown" : n.status}</span> ·
-        名下未收口的活（台账 pending/running）{" "}
-        <span class="mono" title="任务面读数：不是代理三态，也不是「活跃（非静默）」">
+        名下未收口的活（板项按 item_state、代理行按 status）{" "}
+        <span class="mono" title="未收口的活：唯一口径是 boardrows.row_is_open；不是代理三态，也不是「活跃（非静默）」">
           {n.in_flight === null ? "未读到" : n.in_flight}
         </span>{" "}
         · 槽位面 <span class="mono">{n.surface === "" ? "（没有分到槽位）" : n.surface}</span>
@@ -638,15 +639,17 @@ function renderBranch(row: TreeRow, ctx: TreeCtx): ComponentChildren {
                 三态说"它属于哪一档"，这一枚说"它最近一步离现在多久"。只加不改：
                 三态那枚不动，所以"它仍然在跑"与"它已经很久没动静"同时看得见。 */}
             {stalledBadge(node)}
-            {/* 这一格是**任务面**读数：台账里 `status ∈ pending/running` 的活有几件。
-                它不是代理三态 —— 挂机（待机）的代理名下那件活仍然是 running，所以
+            {/* 这一格是**未收口的活**读数：口径是产品那一个 `boardrows.row_is_open`
+                —— 板项行按 `item_state`（`done` 才算收口；它的 `status` 是类型标记，
+                恒为 `pending`），代理行按 `status`（`pending`/`running` 算开着）。
+                它不是代理三态 —— 挂机（待机）的代理名下那件活仍然开着，所以
                 它既不是「在飞 N 个」，也不能并进「活跃（非静默）」。 */}
             {node.in_flight === null ? (
               <Badge kind="badge-unknown" text="未收口的活：未读到"
                 title="台账读不到 ⇒ 这一格不是 0 件" />
             ) : node.in_flight > 0 ? (
               <Badge kind="badge-pending" text={`未收口的活 ${node.in_flight} 件`}
-                title="任务面读数：台账里 status ∈ pending/running 的活有几件（不含代理三态）" />
+                title="未收口的活：板项按 item_state（done 才算收口），代理行按 status（pending/running 算开着）；不含代理三态" />
             ) : null}
             {node.retired ? null : inboxBadge(node.inbox)}
             {node.retired ? <Badge kind="badge-na" text="已销号" /> : null}
@@ -805,7 +808,7 @@ function RosterBody(props: {
           {data.reason === "" ? "端点没有给理由" : data.reason}
           {" "}—— 这一档是「这份读数没拿到」，而不是「这个工作区没有子代理」。
           {" "}这一档的计数可能是 null（名册与台账都没有），也可能来自台账回退
-          —— 有数，但那些子不在名册上（真机读数：`answer=unknown` 而 `count=7`）。
+          —— 有数，但那些子不在名册上。
         </div>
       ) : null}
       {nodes === 0 ? (

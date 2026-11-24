@@ -595,7 +595,13 @@ class WebHandler(BaseHTTPRequestHandler):
 
     # ------------------------------------------------------------ GET
     def do_GET(self) -> None:  # noqa: N802 - 基类签名
-        """GET：查 `ROUTES`；未命中走 :meth:`handle_unknown`（裁定 Q1）。"""
+        """GET：查 `ROUTES`；未命中走 :meth:`handle_unknown`（裁定 Q1）。
+
+        响应形态不是一种：`routes.route_kind(path)` 里标成 `stream` 的那条
+        （今天只有 `GET /api/stream`）会在处理器里一直推、不返回。普通 GET 的
+        "读完即返"断言对它必超时 —— 那不是这条端点坏了，是断言用错了；
+        清单（`routes.endpoint_inventory` / `--list-routes`）必须把它标成 stream。
+        """
         path, query = self._parse()
         if not self._token_ok(query):
             self._unauthorized()
@@ -833,8 +839,11 @@ class WebHandler(BaseHTTPRequestHandler):
         """
         del params, query
         from .. import readouts as RD
+        from . import readers as RD_FACES
 
-        self._json(200, RD.errors_readout(self.root))
+        # 2026-11-24：`unclassified_signal` 那条说明改成能照做的一句（只改 detail，
+        # 不改计数 —— 口径与族表在 `errorstats`，这里另算一份就是两个出口两句话）。
+        self._json(200, RD_FACES.annotate_errors_readout(RD.errors_readout(self.root)))
 
     def handle_errors_categories(self, params: Mapping[str, str],
                                  query: Mapping[str, Sequence[str]]) -> None:
@@ -1366,7 +1375,11 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     ap = argparse.ArgumentParser(
         prog="agentflow-webui",
-        description="agentflow 用户端：SPA 外壳（九个页面）+ 十个只读面 + 一趟详情与提交回答")
+        description=("agentflow 用户端：SPA 外壳（九个页面）+ 十个只读面 + 一趟详情与提交回答。"
+                     "端点形态：`GET /api/stream` 是 SSE 流（连上就一直推，不是一击即返的"
+                     " JSON；拿普通 GET 的读完即返断言去测它必超时）；其余 `/api/*` 是一次性"
+                     " JSON。`--list-routes` 打印带 kind 的完整清单（分类真身见 "
+                     "`webui/routes.py` 的 ROUTE_KINDS / route_kind）"))
     ap.add_argument("--root", default="", help="工作区根（不给就用 DEFAULT_ROOT）")
     ap.add_argument("--host", default=DEFAULT_HOST, help=f"监听地址（默认 {DEFAULT_HOST}）")
     # 缺省 None = "调用方没给"（不是"给了 DEFAULT_PORT"）：`ensure_serving` 要靠这个
@@ -1392,7 +1405,18 @@ def run(argv: Sequence[str] | None = None) -> int:
                           "真跑才要本开关）"))
     ap.add_argument("--no-settings-write", action="store_true",
                     help="关掉设置写面（只关 POST /api/settings：那条 403，其余写端点照旧）")
+    # 端点形态的分类真身在 `routes.ROUTE_KINDS` / `routes.route_kind()`：`stream` 与
+    # `json` 是两种连接生命周期，不是一个字段的两种取值 —— 拿普通 GET 的
+    # "读完即返"断言去测 `/api/stream` 必超时。`--list-routes` 把这份分类印出来，
+    # 于是清单、判据与帮助文本读的是同一处，不会各自维护一份"哪些是流"的名单。
+    ap.add_argument("--list-routes", action="store_true",
+                    help="打印端点清单（method / path / handler / kind）后退出；"
+                         "kind=stream 的那条是 SSE 流，不能用读完即返的 GET 断言测")
     args = ap.parse_args(list(argv) if argv is not None else None)
+    if args.list_routes:
+        for row in routes.endpoint_inventory():
+            print(f"{row['method']:<5} {row['path']:<30} {row['kind']:<7} {row['handler']}")
+        return 0
     root = Path(args.root).resolve() if args.root else Path(DEFAULT_ROOT).resolve()
     token = args.token or os.environ.get("AGENTFLOW_WEB_TOKEN", "")
     # ---- 先算"复用还是新起"（业主：为什么开网页还是那么累）。

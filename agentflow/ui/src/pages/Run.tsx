@@ -523,7 +523,7 @@ export function Run(props: RunProps) {
       <EventTimeline sid={props.sid} />
 
       <Card
-        title="花销（同一趟的两个来源并排）"
+        title="花销（检查点累计与事件求和并排）"
         subtitle={
           v.same_run_start_index === null
             ? "这一段会话里没有与检查点同角色的那一趟 ⇒ 第二个读数读不到"

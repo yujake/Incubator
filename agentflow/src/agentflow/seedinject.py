@@ -346,14 +346,26 @@ def _norm_library_rel(raw: Any) -> str:
     return text
 
 
+#: 书架上的"书"只认这一族后缀。`.txt` 不是书：`text.extract` 的声明
+#: （`src/agentflow/tools/text_tools.py` 的 `text.extract`）就写着「把 PDF 自带的
+#: 文字层转成同名 `.txt` 写进 `library/`」—— 那些 `.txt` 是设计产物，不是"没登记"。
+#: 这一格只报"该有 `literature` 行却没有的 PDF"；把抽取产物列成未登记，等于把
+#: "设计允许的东西"读成"结构异常"（真机 lp-ball-22：3 个 `.txt` 被误报）。
+_LIBRARY_BOOK_SUFFIXES: tuple[str, ...] = (".pdf",)
+
+
 def unregistered_library_files(project: Path | str, *,
                                literature_rows: list[dict[str, Any]] | None = None
                                ) -> list[str] | None:
-    """`library/` 里没有任何 `literature` 行引用的文件（工作区相对路径，排序）。
+    """`library/` 里没有任何 `literature` 行引用的 PDF（工作区相对路径，排序）。
 
     这是"已登记书架只放已登记的"这条不变量的唯一实现：`library/` 是 A 侧维护的文献库，
     盘上多出一份没有登记行的 PDF，就等于书架结构异常（2026-11-22 业主指出的那次事故：
     25 份未登记种子直接铺在 `library/` 根）。
+
+    `.txt` 不算：`text.extract` 会把 PDF 文字层转成同名 `.txt` 写进 `library/`
+    （工具声明里逐字写着），那是抽取产物、设计允许，不是"未登记的书"。这一格只报
+    PDF —— 否则「书架干净」永远为假，读数变成噪音。
 
     返回 `None` = 没查成（台账读不出来 / 形状不对）。空列表 = 书架干净。
     瞬态文件不报：`library/agentflow-stage-*` 下的下载暂存（跑完即删，崩溃残留不是
@@ -378,6 +390,10 @@ def unregistered_library_files(project: Path | str, *,
     out: list[str] = []
     for path in library.rglob("*"):
         if not path.is_file():
+            continue
+        # 书架上的"书"只认 PDF：`.txt` 是 `text.extract` 的设计产物（见模块常量
+        # `_LIBRARY_BOOK_SUFFIXES` 的理由），不是"没登记"。
+        if path.suffix.lower() not in _LIBRARY_BOOK_SUFFIXES:
             continue
         rel = path.relative_to(library)
         if rel.parts and rel.parts[0].startswith(_TRANSIENT_LIBRARY_PREFIXES):

@@ -845,7 +845,7 @@ def mathlib_reading(*, root: str | Path | None = None, env: Mapping[str, str] | 
         f"检测到工程根 {out['root']}（来源 {out['source']}；"
         f"{'umbrella 的 .olean 在' if out['umbrella_olean'] else 'umbrella 的 .olean 不在'}；"
         f"{'SimpleGraph 的 .olean 在' if out['graph_olean'] else 'SimpleGraph 的 .olean 不在'}）"
-        "—— 可用与否由第 ⑤ 步的一次真编译决定，盘面这两格里没有「可用」这个结论")
+        "—— 可用与否由第 ⑤ 步的一次真编译决定，盘面这些格子里没有「可用」这个结论")
     return out
 
 

@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-24T16:55:41+08:00",
+  "generated_at": "2026-11-24T20:55:47+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -291,10 +291,10 @@
       "path": "src/agentflow/schema.py",
       "glob": "src/agentflow/schema.py",
       "category": "schema-migration",
-      "sha256": "e1d653e6c8bb31b61d34b68c978aa3c734d6349d59fcf5cb787b360662eac0c9",
-      "authored": "ai-agent",
-      "authored_basis": "attested",
-      "change_note": "A-0c-1（CONTRACT-ATTACKPATH，draft/201）：AttackPlan 加 report_path（str|None，尾插，默认 None）+ validate 四条形状/回指判据（非空则必须是本计划自己的 work/F/attack-<plan_id>.md、相对路径、.md、文件名=attack-<自己的 plan_id>.md）。SCHEMA_VERSION 刻意不抬（2→2）：带默认值的可空列由 row_from_dict 按 __dataclass_fields__ 过滤+默认值兼容老行（与 Literature.pages / experiments.method 两条先例同档）；抬版本会让 store._check_version 的读期 fail-closed 拒读全部 schema_version=2 的 data/*.json（40+ 工作区），而迁移入口 store.py/cli.py 不在本路改动面内。TABLES / EVAL_REQUIRED_FIELDS / EvalResult 一字未动。reviewers=[]，登记≠批准，仍需 2 名人类逐行走查。",
+      "sha256": "9683e2f7cbb282d42d415a5289f6b3be52edba263341d6e8ac34fa7a87ee409c",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "（未提供变更说明：内容 hash 从 e1d653e6c8bb 变为 9683e2f7cbb2，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

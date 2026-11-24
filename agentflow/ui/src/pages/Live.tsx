@@ -87,7 +87,7 @@ export function Live() {
                 循环也被叫成「在飞」。业主的口径：在飞只许用在 tasks 状态上；循环表叫
                 「未收尾的循环」，逐行标它是不是还活着。 */}
             <div class="readings">
-              两个数分开读：「在飞」只数 tasks 里 <span class="mono">status=running</span>{" "}
+              两处读数分开读：「在飞」只数 tasks 里 <span class="mono">status=running</span>{" "}
               的行（与名册三态同源），这里是 <b>{cell(l.tasks_running)}</b>；
               下面那张表读的是 <b>未收尾的循环</b>（有 <span class="mono">agent_run_start</span>、
               没有 <span class="mono">agent_run_end</span> 的循环记录），这里是{" "}
@@ -107,8 +107,8 @@ export function Live() {
               这 {cell(l.unclosed_loops)} 条里：<b>仍在跑 {cell(l.unclosed_running)} 条</b>；
               <b>已不在跑 {cell(l.unclosed_stale)} 条</b>
               （会话记录里登记的进程已经退出、被强杀，或顶趟已收尾）。
-              两档由读数层分开给（`unclosed_running` / `unclosed_stale`），
-              下面那张表把两档都列出来 —— 已不在跑的行写"宿主进程已退出/被叫停，不是活着"。
+              这两种由读数层分开给（`unclosed_running` / `unclosed_stale`），
+              下面那张表把这两种都列出来 —— 已不在跑的行写"宿主进程已退出/被叫停，不是活着"。
             </div>
             {l.unclosed_loops_tri === "computed" ? null : (
               <div class="tri-reason">未收尾循环：{l.unclosed_loops_tri} —— {l.unclosed_loops_why}</div>
@@ -174,13 +174,14 @@ export function Live() {
           紧挨着「在飞」那张卡，因为"谁在跑"与"它是谁的子"是同一个问题。 */}
       <RosterPanel />
 
-      {/* 板上三族义务的收件人读数（b-register / v-resubmit / b-awake）：
+      {/* 板上义务的收件人读数（族由 `/api/obligations` 的 families[] 现取；今天四族：
+          b-register / v-resubmit / b-awake / d-handoff）：
           名册收件箱按父台账号分，父为空的板项只有这一块看得见。 */}
       <ObligationsPanel />
 
       <Card
         title="停机开关与历史"
-        subtitle="叫停就在这里：下面两个按钮"
+        subtitle="叫停就在这里：下面那对按钮"
         right={
           l === null ? null : (
             <Badge
@@ -306,8 +307,7 @@ export function Live() {
               )}
             </div>
             <div class="readings">
-              合计那一栏就是账本（<span class="mono">usage_ledger</span>）的累计；下面两张表是
-              按角色与按归口的拆解 —— 谁花的、为了什么花的。「预算」页看的是额度与剩余。
+              合计那一栏就是账本（<span class="mono">usage_ledger</span>）的累计；下面按角色与按归口拆开 —— 谁花的、为了什么花的。「预算」页看的是额度与剩余。
             </div>
             <Table
               rows={buckets(usage.data.by_role as unknown as Record<string, unknown>)}

@@ -190,21 +190,75 @@ class Budget:
 PROGRESS_KIND: str = "agent_tool_progress"
 
 
+#: 上一次「进度没写进本趟会话」的原因（空串 = 没出过问题）。
+#:
+#: 与 `sessions.append_hook_problem()` 同一条纪律（`sessions.py:118`）：旁路坏掉不许
+#: 把这一趟带坏，但也不许静默 —— "写不成"要在读数上留一格，否则"进度丢了"与
+#: "本来就没有进度"在盘上长得一样。只留最近一条：这是"最近一次写没写成"的读数，
+#: 不是一份日志（日志归会话事件）。
+_LAST_PROBLEM: str = ""
+
+
+def progress_problem() -> str:
+    """上一次进度没写进本趟会话的原因（空串 = 没出过问题，见 `_LAST_PROBLEM`）。"""
+    return _LAST_PROBLEM
+
+
 def task_identity() -> tuple[str, str]:
-    """`(台账号, 会话号)`：两个都从上下文/环境里现取，取不到就是空串（不编）。"""
+    """`(台账号, 会话号)`：两个都从「这一趟 run 的上下文」现取；真的没有 run 才退离线契约。
+
+    ## 2026-11-24 真机 lp-ball-22（sid `2026-11-22n`）：这里取错了会话号那一支
+
+    改前台账号读 `conductor.current_task_id()`（`calling_as` 的挂点），会话号却读
+    `sessions.session_id()`（`sessionnames.py:41`：环境变量 `AGENTFLOW_SESSION` 优先，
+    否则「当天日期」）。同一行里于是"任务号取得到、会话号取不到"：`--sid 2026-11-22n`
+    是命令行参数（`cli.py:3799` / `host.py:512` 只在进程内传，全仓没有一处把它写进
+    环境变量）⇒ 这一支一律读成当天日期。读数：`sessions/2026-11-24.jsonl` 20 行
+    `agent_tool_progress`（每条都带 `task_id=t-000004`），而这一趟真会话
+    `sessions/2026-11-22n.jsonl` 里一条进度都没有；同一批 20 条还带着
+    `sid="2026-11-24"` 写进了 `out/steps/t-000004.jsonl`（见 `stamp_step_beat`）。
+
+    ## 现在的取值链与 `llm_call` 事件同源
+
+    `conductor.current_session()[1]` —— 挂点是 `AgentLoop._do_tool` 的
+    `calling_as(..., sid=self.sid)`（`agent_loop.py:13890`）；`llm_call` 经
+    `llmseam.ambient_sid()` 读的是同一个 ContextVar（`llmseam.py:359`）。
+    所以"进度落在哪一段会话"与"这一趟的模型调用落在哪一段"是同一个答案。
+
+    ## 什么时候才允许退"离线契约"
+
+    只有「真的没有 run」（台账号与会话号都空：直调 `run_once` 的离线工具 / 自检）
+    才退 `sessions.session_id()` —— 那是"没有这一趟"的合法落点（判据 d 的负控）。
+    「有台账号而上下文里没有 sid」 ⇒ 返回空串：这是"这一趟的 sid 没传下来"，
+    不是"这一趟在当天那段会话里"；调用方不许再拿日期档兜底（见 `note_progress`）。
+    """
     tid = ""
-    try:
-        from .conductor import current_task_id as _cur
-        tid = str(_cur() or "")
-    except Exception:  # noqa: BLE001 - 没在台账里跑（单测/自检）⇒ 没有台账号
-        tid = ""
     sid = ""
     try:
-        from . import sessions as _SS
-        sid = str(_SS.session_id() or "")
-    except Exception:  # noqa: BLE001 - 会话号读不到 ⇒ 由 append 自己兜底
+        from .conductor import current_session as _sess
+        from .conductor import current_task_id as _cur
+    except Exception:  # noqa: BLE001 - 没有 conductor ⇒ 没有 run（单测 / 自检）
+        return "", _offline_sid()
+    try:
+        tid = str(_cur() or "")
+    except Exception:  # noqa: BLE001 - 一个挂点坏了不该把另一个也丢掉
+        tid = ""
+    try:
+        sid = str(_sess()[1] or "")
+    except Exception:  # noqa: BLE001 - 同上
         sid = ""
+    if not (tid or sid):
+        return "", _offline_sid()
     return tid, sid
+
+
+def _offline_sid() -> str:
+    """离线工具的会话号（`AGENTFLOW_SESSION` 优先，否则当天日期）。只给"真的没有 run"用。"""
+    try:
+        from . import sessions as _SS
+        return str(_SS.session_id() or "")
+    except Exception:  # noqa: BLE001 - 连这个都读不到 ⇒ 空串（调用方按"没有会话号"办）
+        return ""
 
 
 def stamp_step_beat(root: Any, tid: str, sid: str = "") -> None:
@@ -247,7 +301,21 @@ def stamp_step_beat(root: Any, tid: str, sid: str = "") -> None:
 
 def note_progress(root: Any, lit_id: str, reading: Mapping[str, Any],
                   *, tool: str = "own.run_once", tid: str = "", sid: str = "") -> None:
-    """写一条进度：会话事件（人读）+ 步轨迹（停滞判据读）。两处都是现成的写口。"""
+    """写一条进度：会话事件（人读）+ 步轨迹（停滞判据读）。两处都是现成的写口。
+
+    ## 会话号只认两种来路，这一格不替 `sessions.append` 兜底成日期档
+
+    来路①调用方显式给的 `sid`；来路②这一趟 run 上下文里的（`task_identity`）。
+    在跑的一趟里两个都没有 ⇒ 「不写那条会话事件」，把原因记进
+    :func:`progress_problem`：`sessions.append(sid=None)` 的缺省落点是
+    `sessions/<当天日期>.jsonl`，那不是"反正也能读到"，是"写错了会话"
+    （真机 lp-ball-22 的 20 行就是这么落错的，见 `task_identity` 的 docstring）。
+
+    步轨迹照写：它按台账号分文件（`out/steps/<台账号>.jsonl`），不涉及会话号，
+    停滞判据（`conductor.step_beats`）读的就是它 —— 少写它等于把"在干活"读成"死了"。
+    拿不到 sid 时那里写空串（"这一条没问到会话号"），不写一个借来的日期。
+    """
+    global _LAST_PROBLEM  # noqa: PLW0603 - 一个进程一个槽，与 `sessions` 的钩子读数同族
     payload = {
         "tool": str(tool),
         "lit_id": str(lit_id),
@@ -261,14 +329,28 @@ def note_progress(root: Any, lit_id: str, reading: Mapping[str, Any],
         "stopped": bool(reading.get("stopped")),
     }
     if not (tid and sid):
-        tid, sid = task_identity() if not tid else (tid, sid)
+        got_tid, got_sid = task_identity()
+        tid = tid or got_tid
+        sid = sid or got_sid
+    if tid and not sid:
+        # 在跑、但这一趟的会话号没传下来：宁可少一条叙事，不写进日期档。
+        _LAST_PROBLEM = (
+            f"进度事件没写：这一趟有台账号 {tid!r}，而会话号没传下来"
+            "（`conductor.current_session()[1]` 是空的）⇒ 不写缺省日期档"
+            "（写进去就是写错会话）。要让进度进本趟会话，收这一笔的那一段必须包在 "
+            "`calling_as(..., session_root=..., sid=...)` 里（`AgentLoop._do_tool` 就是）")
+        stamp_step_beat(root, tid, "")
+        return
+    problem = ""
     try:
         from . import sessions as _SS
-        _SS.append(root, {"kind": PROGRESS_KIND, "role": "B", "task_id": tid,
-                          "payload": payload, "stopped": bool(reading.get("stopped"))},
-                   sid=sid or None)
-    except Exception:  # noqa: BLE001 - 旁路：进度写不成不许拦住这一趟
-        pass
+        _path, problem = _SS.append(
+            root, {"kind": PROGRESS_KIND, "role": "B", "task_id": tid,
+                   "payload": payload, "stopped": bool(reading.get("stopped"))},
+            sid=sid or None)
+    except Exception as exc:  # noqa: BLE001 - 旁路：进度写不成不许拦住这一趟
+        problem = f"{type(exc).__name__}: {exc}"
+    _LAST_PROBLEM = "" if not problem else f"进度事件没写成：{problem}"
     stamp_step_beat(root, tid, sid)
 
 

@@ -82,8 +82,8 @@ __all__ = ["KIND", "LEDGER_NAME", "MAX_TEXT", "REDACTED", "actions_path", "diges
 LEDGER_NAME = "web-actions.jsonl"
 #: 这个文件里每一行的 `kind`。
 KIND = "web_action"
-#: 脱敏后占位的那个字符串（与 `ModelSpec.redacted` 的 `***` 同一形态）。
-REDACTED = "***"
+#: 脱敏后占位的那个字符串（与 `ModelSpec.redacted` 的 `*` 同一形态）。
+REDACTED = "*"
 #: 参数摘要里单个字符串值的上限（超出部分截断并标注）。
 MAX_TEXT = 300
 
@@ -196,9 +196,21 @@ def read_actions(root: str | Path) -> list[dict[str, Any]]:
 def read_actions_state(root: str | Path) -> dict[str, Any]:
     """读台账，带三态：`{tri, rows, problems, reason, path}`。
 
-    `tri` 的四态到三态的映射（与全项目同一套词表）：
-    `ok` / `empty` / `absent` ⇒ `computed`（读到了，条数可能是 0 —— 「查到 0 条」是
-    一个算出来的读数）；`unreadable` ⇒ `unreadable`（没查成，不许读成「没有操作」）。
+    ## 四态到三态：`absent` 与 `empty` 必须分开
+
+    `jsonlfile.read_jsonl_state` 的四态不能折成两态。这里的映射是：
+
+    | 盘上 | `tri` | `reason` |
+    |---|---|---|
+    | 文件不在（`absent`） | `not_applicable` | 「还没建」+ 绝对路径（合法初态，不是 0 条动作） |
+    | 文件在、一行都没有（`empty`） | `computed` | 明说「在盘上但是空文件」——与「还没建」是两件事 |
+    | 读到了（`ok`） | `computed` | 空串（条数可以是 0：那是「读到了，里面是 0 行」） |
+    | 读不出来（`unreadable`） | `unreadable` | 坏行说明（没查成，不许读成「没有操作」） |
+
+    为什么 `absent` 必须是 `not_applicable` 而不是 `computed`：这一格面板上曾经
+    永远 0 行、`reason` 空，读的人分不清「这个工作区还没人从网页动过手」与
+    「这台服务根本没建出台账（也可能路径不对）」。文件不在时唯一诚实的说法是
+    「还没建」，并把缺省落点逐字写出来（`<工作区>/web-actions.jsonl`）。
     """
     path = actions_path(root)
     rows, problems, state = read_jsonl_state(path)
@@ -206,5 +218,16 @@ def read_actions_state(root: str | Path) -> dict[str, Any]:
     if state == "unreadable":
         return {"tri": "unreadable", "rows": [], "problems": problems,
                 "reason": joined or "台账读不出来", "path": str(path)}
+    if state == "absent":
+        return {"tri": "not_applicable", "rows": [], "problems": problems,
+                "reason": (f"网页操作台账还没建：{path} 不在盘上"
+                           "（这个工作区一次都没从网页上动过手时它不会存在；"
+                           "这不是「0 条动作」）"),
+                "path": str(path)}
+    if state == "empty":
+        return {"tri": "computed", "rows": [], "problems": problems,
+                "reason": (f"网页操作台账在盘上、但一行都没有：{path} 是空文件"
+                           "（「存在但 0 行」与「还没建」是两件事）"),
+                "path": str(path)}
     return {"tri": "computed", "rows": rows, "problems": problems,
             "reason": joined, "path": str(path)}

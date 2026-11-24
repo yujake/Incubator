@@ -244,17 +244,30 @@ const MISREADS: MisreadRow[] = [
   },
 ];
 
+/** 写端点的授权次序（与 `writes.authorize` 的那几道闸逐道对应）。
+ *
+ * 页面上的「几层」由它现数，不另写一个中文数字：加一道闸时这里加一项，
+ * 正文里那几个「层」的数目一起变。 */
+const AUTH_LAYERS: readonly string[] = [
+  "回环来源",
+  "CSRF 令牌",
+  "--allow-writes",
+  "设置写面（只有改设置才要）",
+];
+
 export function Help() {
   return (
     <>
       <Card title="这是什么">
         <div class="readings">
           面向数学研究的多智能体协同框架：十一个角色（A–H、V、L、M）各有分工，主控 M 决定派谁做什么。
-每一步都由模型决定、由框架执行并落盘；旁边九页读的就是那些盘上事实（加上本页一共十页）。
+        </div>
+        <div class="readings">
+每一步都由模型决定、由框架执行并落盘；旁边 {PAGES.length - 1} 页读的就是那些盘上事实（加上本页一共 {PAGES.length} 页）。
         </div>
         <div class="readings">
           板项（任务板）在哪看：这一版没有单独的 /board 路由 —— 板项在 <b>/live</b> 页的名册卡里
-          （每个节点的收件箱三格 + 每一条旁边的「收口」与「作废」两个按钮），以及 <b>/artifacts</b> 页的任务台账里。
+          （每个节点的收件箱那几格 + 每一条旁边的「收口」与「作废」按钮），以及 <b>/artifacts</b> 页的任务台账里。
         </div>
         <div class="readings">
           停在 <span class="mono">item_state=block</span> 的板项（优雅停止 / 预算叫停留下的）：
@@ -316,13 +329,13 @@ export function Help() {
           <span class="mono">/api/cache/warm</span>（预热提示词缓存）。没有「登记了还没落地」的写端点。
         </div>
         <div class="readings">
-          授权次序是四层：回环来源 ⇒ CSRF 令牌 ⇒ <span class="mono">--allow-writes</span> ⇒
-          （只有改设置才要）设置写面 —— 这四层管的是 <span class="mono">/api/</span>
-          下那十条写端点；<span class="mono">POST /answer</span> 从 2026-11-21（审计 F4）起也走这四层 ——
+          授权次序是 {AUTH_LAYERS.length} 层：回环来源 ⇒ CSRF 令牌 ⇒ <span class="mono">--allow-writes</span> ⇒
+          （只有改设置才要）设置写面 —— 这 {AUTH_LAYERS.length} 层管的是 <span class="mono">/api/</span>
+          下那十条写端点；<span class="mono">POST /answer</span> 从 2026-11-21（审计 F4）起也走这 {AUTH_LAYERS.length} 层 ——
           此前它只靠 <span class="mono">userio</span> 兜底，跨站页面不带令牌也能把一条待答答掉。
           只读档（没开 <span class="mono">--allow-writes</span>）下这十条里除试算档之外都回 403：
           <span class="mono">POST /api/cache/warm</span> 的 <span class="mono">dry_run=1</span> 试算
-          只保留「回环来源」那一层（它不写盘、不花钱、不起进程 ⇒ 200），真跑那一档四层全要。
+          只保留「回环来源」那一层（它不写盘、不花钱、不起进程 ⇒ 200），真跑那一档 {AUTH_LAYERS.length} 层全要。
           每一次到达写端点的尝试（含被拒）都追加一行
           <span class="mono">web-actions.jsonl</span>，那一栏在「本机」页的「网页操作历史」里读
           （<span class="mono">GET /api/actions</span>）；<span class="mono">/api/</span>
@@ -330,7 +343,7 @@ export function Help() {
         </div>
       </Card>
 
-      <Card title="十个页面各看什么">
+      <Card title={`${PAGES.length} 个页面各看什么`}>
         <table class="table">
           <thead>
             <tr>
@@ -354,13 +367,13 @@ export function Help() {
           </tbody>
         </table>
         <div class="readings">
-          全站只订阅一次 <span class="mono">GET /api/stream</span>（SSE），十页共享那份快照与连接态；
+          全站只订阅一次 <span class="mono">GET /api/stream</span>（SSE），{PAGES.length} 页共享那份快照与连接态；
           每一页再各取自己那几条端点，于是「盘上新增 ⇒ 流里出现 ⇒ 页面重取」这条链是通的。
           「一趟详情」要从首页的「会话概览」里点进来，顶部导航里没有它。
         </div>
       </Card>
 
-      <Card title="名册怎么读（树 / 绝对编号 / 深度 / 收件箱三格）">
+      <Card title="名册怎么读（树 / 绝对编号 / 深度 / 收件箱那几格）">
         <div class="readings">
           真身在盘上：<span class="mono">out/roster/&lt;父编号&gt;.jsonl</span> ——
           一个父一份名册，文件里每一行是一个子；文件名就是父的绝对编号。
@@ -382,7 +395,7 @@ export function Help() {
           <b>收件箱</b>：<span class="mono">data/tasks.json</span> 里
           <span class="mono">parent_task_id</span> 指向这个节点、且
           <span class="mono">item_state</span> 不是 <span class="mono">done</span> 的板项。
-          三格分开给：<span class="mono">unread</span>（queued + claimed：还没被读进任何一步）、
+          这几格分开给：<span class="mono">unread</span>（queued + claimed：还没被读进任何一步）、
           <span class="mono">seen_not_acked</span>（seen：读了、还缺一个 ack）、
           <span class="mono">open_total</span>（未消总数 = 未读 + 已读未 ack + 状态读不出来的那些）。
           徽标写「未读 N · 已读未 ack M」——「他还没看」与「他看了但框架没让他 ack」
@@ -405,24 +418,27 @@ export function Help() {
         </div>
         <div class="readings">
           <b>另有一格是任务面的</b>：<span class="mono">in_flight</span> 数的是台账里
-          <span class="mono">status ∈ &#123;pending, running&#125;</span> 的活有几件（一件活一行），
+          未收口的活有几件（一件活一行），口径是 <span class="mono">boardrows.row_is_open</span>：
+          板项行按 <span class="mono">item_state</span>（<span class="mono">done</span> 才算收口；
+          它的 <span class="mono">status</span> 是类型标记，恒为 <span class="mono">pending</span>），
+          代理行按 <span class="mono">status ∈ &#123;pending, running&#125;</span>。
           页面逐字写「未收口的活 N 件」。它不是代理三态 —— 挂机（待机）的代理名下那件活
-          仍然是 <span class="mono">running</span>，所以它不能读成"在飞几个"，也不能并进
+          仍然开着，所以它不能读成"在飞几个"，也不能并进
           「活跃（非静默）」。节点上限 500（<span class="mono">ROSTER_NODES_MAX</span>），
           超了置 <span class="mono">truncated=true</span>。面板底下那一行「对账」把台账里的代理行、
           名册上的节点、以及"有父但不在任何名册里"的行（名册机制上线之前落的）
-          三个数摆在一起。
+          这几处读数摆在一起。
         </div>
       </Card>
 
-      <Card title="容易读混的六格读数（未读 / 板项与在飞 / 待答 / 台账写入 / 会话事件条数 / 宿主进程 pid）">
+      <Card title="容易读混的几格读数（未读 / 板项与在飞 / 待答 / 台账写入 / 会话事件条数 / 宿主进程 pid）">
         <div class="readings">
           <b>收件箱徽标</b>：写 <span class="mono">未读 N · 已读未 ack M</span>
           （没有未消条目时写「收件箱：没有未消的条目」；读不到时写「收件箱：未读到」）。
           <span class="mono">unread</span> 是还没被读进任何一步的（<span class="mono">queued</span> +
           <span class="mono">claimed</span>），<span class="mono">seen_not_acked</span> 是读了、
-          缺的是那个 ack。点开节点另给三格：未读 / 已读未 ack / 未消（<span class="mono">open_total</span>），
-          外加「其中状态读不出来 N 条」（词表外的行单列，不并进前两格）。
+          缺的是那个 ack。点开节点另给这几格：未读 / 已读未 ack / 未消（<span class="mono">open_total</span>），
+          外加「其中状态读不出来 N 条」（词表外的行单列，不并进前几格）。
         </div>
         <div class="readings">
           <b>板项与在飞不能混算</b>：板项行是 <span class="mono">kind</span> 非空、
@@ -444,10 +460,10 @@ export function Help() {
         <div class="readings">
           <b>台账写入笔数 ≠ 事件文件行数</b>：首页那张台账卡写
           <span class="mono">台账写入 N 笔（其中 commit 标记 M 行）</span>。
-          每提交一次事务写两行（一行事件 + 一行 <span class="mono">op=commit</span> 的提交标记），
+          每提交一次事务写一行事件 + 一行 <span class="mono">op=commit</span> 的提交标记，
           所以 <span class="mono">N + M</span> 才是 <span class="mono">data/events.jsonl</span>
           的总行数；<span class="mono">N</span> 回答的是「写了多少笔」。读不成 JSON 的坏行按行计入
-          <span class="mono">N</span>，并在下面那句说明里单独点名；台账文件不在盘上时两格都是
+          <span class="mono">N</span>，并在下面那句说明里单独点名；台账文件不在盘上时这两处都是
           <span class="mono">unknown</span>（不是 0）。
         </div>
         <div class="readings">
@@ -456,7 +472,7 @@ export function Help() {
           （<span class="mono">sessions/&lt;会话号&gt;.jsonl</span> 里的行数，
           <span class="mono">events_seen</span>），每段各从 0 起数，别的段不算；
           下面「台账」那张卡里的「台账写入 N 笔」数的是整个工作区的写入事务
-          （<span class="mono">upserts</span>），commit 标记行另计。两个数并排摆着、
+          （<span class="mono">upserts</span>），commit 标记行另计。两者并排摆着、
           名字又只差一个字，很容易拿一个去核另一个 —— 于是 2026-10-23 起列名写成
           「事件条数（会话）」：它回答「这一段说了多少」，台账那一格回答「整个工作区
           落了多少笔」。两者不相等不是缺陷，是两把尺子。
@@ -515,7 +531,7 @@ export function Help() {
           目录读不出来、有一条读不出来，这些都算），此时 <span class="mono">count</span>
           一行都没读到时是 <span class="mono">null</span>、只读到一部分时是那一部分的真数字
           —— 不是 0。「在飞」面同理：它的
-          <span class="mono">answer</span> 只有「有」/「没有」/「没查成」三档，读不出来时显"没查成"，
+          <span class="mono">answer</span> 只有「有」/「没有」/「没查成」这几种，读不出来时显"没查成"，
           不许显"没有"。
         </div>
         <div class="readings">
@@ -557,7 +573,7 @@ export function Help() {
         <div class="readings">
           口径只有一张表（<span class="mono">cli.EXIT_CODE_BY_STOP</span>）：没登记的
           <span class="mono">stop_reason</span> 一律归 1，不许归 0 —— 把"新增了一档而没人归类"读成"做完了"
-          是最贵的一种错。<span class="mono">--rounds N</span> 那条多轮路径查同一张表，只多两档：
+          是最贵的一种错。<span class="mono">--rounds N</span> 那条多轮路径查同一张表，只多两种：
           轮数用完且最后一轮给了 final ⇒ 0，没给 ⇒ 5；续跑发现这一程已跑完 ⇒ 0。
         </div>
       </Card>
@@ -615,7 +631,7 @@ export function Help() {
           形式化验证需安装 Lean 与 Mathlib，是本机最贵的一段，故设开关。关闭时全员不做形式化，
  论文仍可写到「逐行审阅过的证明，未经机器检查」档；缺省关闭（省钱）。
 <span class="mono">lean_enabled</span>（开关）与 <span class="mono">lean_ready</span>
-（本机是否装好）是两条独立事实，见「本机」页。
+（本机是否装好）是各自独立的事实，见「本机」页。
         </div>
       </Card>
 

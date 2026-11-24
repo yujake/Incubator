@@ -259,7 +259,9 @@ $ python -m agentflow --root $WS-seed status      # 只看 literature 那一行
 **`reference/` 里 25 个 PDF、`library/` 里一个都没有、`literature` 表 0 行** —— 这就是
 "只放文件、不写台账"的读数：种子不是证据，A 仍然要逐篇判收才会有台账行。
 `library/` 是**已登记书架**（`literature.path` 就指向它），种子不往那里放 ——
-未登记的文件占着书架位置会让 A 侧维护的文献库结构异常。
+未登记的 **PDF** 占着书架位置会让 A 侧维护的文献库结构异常。`.txt` 不算：
+`text.extract` 的声明就是"把 PDF 文字层转成同名 `.txt` 写进 `library/`"，
+那是抽取产物、设计允许，不是"未登记"。
 
 **落声明**：用户说"这个文件夹里的都是可靠参考文献"时，把下面这份落成工作区根的
 `RELIABLE-REFERENCES.json`（`verbatim` 用用户原话；没有声明 ⇒ 一份都不许入库，

@@ -1,9 +1,14 @@
 /*
- * 板上三族义务（`GET /api/obligations`，2026-11-19 的 ⑥）。
+ * 板上的义务（`GET /api/obligations`，2026-11-19 的 ⑥）。
+ *
+ * 族名从 payload 的 `families[]` 现取（今天四族：b-register / v-resubmit / b-awake /
+ * d-handoff —— 真身在 `obligations` 的四个前缀常量），**不写死**：产品侧加一族时
+ * 这一页的标题与计数跟着 payload 走，不会再把族数写死。标题与空态的真身在
+ * `obligationsState.ts`（纯函数，可由判据直接喂人造数组）。
  *
  * 名册的收件箱按 `parent_task_id`（父台账号）分，而一条板项可以只带**收件实例**
- * （板项行的 `instance` 列）—— 父为空的项不挂在任何人的收件箱上，页面上就看不见它
- * （真机 lp-ball 的两条 `b-register@` 至今如此）。这一块把两条轴分开摆：
+ * （板项行的 `instance` 列）—— 父为空的项不挂在任何人的收件箱上，页面上就看不见它。
+ * 这一块把两条轴分开摆：
  *
  * - 收件实例 = `recipient_instance`（口径：`obligations.recipient_reading` ——
  *   调用方点名 > 命题登记实例 > 角色地址；`Conductor.open_items_for` 就按它取件）；
@@ -18,13 +23,14 @@ import { PagedTable } from "./PagedTable";
 import { cell } from "./Table";
 import { TriState, isUnreadable } from "./TriState";
 import { useFace } from "../live";
+import { emptyWord, familiesTitle } from "../obligationsState";
 
 export function ObligationsPanel() {
   const face = useFace(() => api.getObligations());
   if (face.data === null) {
     return (
       <Card
-        title="义务（b-register / v-resubmit / b-awake）"
+        title="义务"
         tone={face.problem === "" ? "plain" : "problem"}
         right={face.problem === "" ? null : (
           <TriState tri="unreadable" reason={face.problem} label="义务" />
@@ -37,8 +43,8 @@ export function ObligationsPanel() {
   const ob = face.data;
   return (
     <Card
-      title="义务（b-register / v-resubmit / b-awake）"
-      subtitle="收件实例与父台账号是两条轴；两轴都空 = 没人收"
+      title={familiesTitle(ob.families)}
+      subtitle="族名与数量由 `/api/obligations` 的 families[] 现取；收件实例轴与父台账号轴是两回事，两轴都空 = 没人收"
       tone={isUnreadable(ob.tri) ? "problem" : "plain"}
       right={<TriState tri={ob.tri} label="义务" reason={ob.reason} />}
     >
@@ -56,7 +62,7 @@ export function ObligationsPanel() {
           <div class="readings tri-reason">{ob.recipient_rule}</div>
           <PagedTable
             rows={ob.rows}
-            empty="这三族的板项都收口了（读到了，里面是 0 行）。"
+            empty={emptyWord(ob.families)}
             columns={[
               { key: "family", title: "族" },
               { key: "key", title: "幂等键", render: (r) => <span class="mono">{r.key}</span> },

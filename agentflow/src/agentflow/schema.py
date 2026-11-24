@@ -3900,7 +3900,7 @@ RETIRED_TABLES: dict[str, dict] = {
         "row": EvalResult,
         "id_field": "eval_id",
         "retired_at": "2026-11-22",
-        "why": "全仓 0 个写点 + 51 个工作区全 0 行 ⇒ 从来没有产出方；"
+        "why": "全仓 0 个写点 + 历史工作区里全 0 行 ⇒ 从来没有产出方；"
                "只留读口会让『没有评测』读成『评测 0 行』",
         "how": "历史工作区里这份文件仍在盘上：读侧按 `RETIRED_TABLES` 认它、"
                "返回 `retired=true`（行照旧读得出来），不报畸形、不报未知表；"
@@ -3955,11 +3955,11 @@ NOT_ENABLED_TABLES: dict[str, dict] = {
         #: 谁会写它（登记面，不是实现；实现指针写在下面 `producers` / `consumers`）。
         "producers": ("agent-F:submit_reprocess_request",),
         "consumers": ("agent-B:reprocess_once",),
-        "evidence": "51 个工作区 0 行、`counters.json` 无 `p` 号段；"
-                    "B 侧 skill 已于 2026-11-22 退役（52→50）",
+        "evidence": "历史工作区里 0 行、`counters.json` 无 `p` 号段；"
+                    "B 侧 skill 已于 2026-11-22 退役",
         "to_enable": "恢复 B 的『重抽取』skill（或改由别的角色认领），"
                      "并跑一条真请求把 `unfinished_request_rows` 走到 0；"
-                     "否则整条线一起退役（F 的动作 + I4 闸门 + 两份 role spec 同批摘）",
+                     "否则整条线一起退役（F 的动作 + I4 闸门 + 相关的 role spec 同批摘）",
     },
 }
 

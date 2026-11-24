@@ -229,7 +229,7 @@ function optimizedCell(r: StatementRow) {
   if (r.optimized_paths.length === 0) {
     return (
       <span class="tri-reason">
-        未记录（这一条没有逐证明的记录，说不出是哪一份 —— 与「未优化」是两件事）
+        未记录（这一条没有逐证明的记录，说不出是哪一份 —— 与「未优化」是不同的事）
       </span>
     );
   }
@@ -533,11 +533,12 @@ function statementColumns(rows: StatementRow[]): Array<Column<StatementRow>> {
 
 export function Evidence() {
   // 首屏摘要 vs 整表（AUDIT F12：真机上这一条端点回 2.1 MB / 2.6 s，一进页面就卡）。
-  // `false` ⇒ 首屏只要每栏前 `readers.SUMMARY_ROWS` 行（`?summary=1`）；`true` ⇒ 全量。
-  // 为什么保留"取全部"：摘要会切掉行，而所有字段与三态一个都没删 —— "要读全"必须是
-  // 一次点击就能做到的事，否则这一改就是把"慢"换成"看不全"。
+  // `false` ⇒ 首屏只要每栏前 `readers.SUMMARY_ROWS` 行（`?summary=1`），字段也是
+  // compact 档（长字段省掉/截断，后端 `rows_omitted` / `rows_clipped` 点名）；
+  // `true` ⇒ 全量行 + 全字段（`?full=1`）。两根轴各走各的，"要读全"必须是一次点击
+  // 就能做到的事，否则这一改就是把"慢"换成"看不全"。
   const [full, setFull] = useState(false);
-  const face = useFace(() => api.getEvidence(full ? {} : { summary: true }));
+  const face = useFace(() => api.getEvidence(full ? { full: true } : { summary: true }));
 
   if (face.data === null) {
     return (
@@ -577,7 +578,7 @@ export function Evidence() {
         right={<TriState tri={ev.tri} label="证据面" reason={ev.reason} />}
       >
         <div class="readings">
-          八张表；每一栏各有自己的三态。
+          每张表各有自己的三态。
         </div>
         {/* 首屏摘要（AUDIT F12）：这一格必须说清"这一份是全量还是摘要、一共多少行"，
             否则"命题台账 40 条"会把真实总数读没。四格读数全部来自后端的
@@ -586,6 +587,10 @@ export function Evidence() {
           读数档{" "}
           <span class="mono">{ev.rows_mode}</span>（每栏 {ev.rows_offset} 起，最多{" "}
           <span class="mono">{ev.rows_limit === 0 ? "全部" : ev.rows_limit}</span> 行）·{" "}
+          字段档 <span class="mono">{ev.rows_fields}</span>
+          {ev.rows_fields === "compact"
+            ? "（长字段省掉/截断：省了哪些见 rows_omitted，截了哪些见 rows_clipped；要全文点「取全部」）"
+            : "（全字段）"} ·{" "}
           {cutColumns.length === 0 ? (
             <span>这一份是全量：每一栏给全了。</span>
           ) : (
@@ -806,14 +811,14 @@ export function Evidence() {
       >
         <PartialRows note={rowsNote(ev, "relations", ev.relations.length)} />
         {isUnreadable(ev.relations_tri) ? (
-          <span class="empty">这一栏没查成 —— 那五个数不是 0，是没读到。</span>
+          <span class="empty">这一栏没查成 —— 那几个数不是 0，是没读到。</span>
         ) : ev.relations_tri === "not_applicable" ? (
           <span class="empty">还没有这张表（这个工作区里这一栏一次都没落过盘） —— 不是"读到了、里面是 0 行"。</span>
         ) : (
           <>
             <div class="readings">
               <span class="mono">{ev.relations.length}</span> 条关系；不是「逐字 / 语义」通过的那些
-              须连同理由阅读。五档里「没有可复核的区间」与「未查」是两件事：前者说通过了、
+              须连同理由阅读。五档里「没有可复核的区间」与「未查」是不同的事：前者说通过了、
               却指不出核的是哪一段（欠一次重核），后者是还没人查（欠一次回验）。
             </div>
             {notClean.length === 0 ? (

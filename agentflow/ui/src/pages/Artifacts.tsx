@@ -430,10 +430,11 @@ function libraryBody(view: LibraryView | null, problem: string): ComponentChildr
 }
 
 export function Artifacts() {
-  // 首屏摘要 vs 整表（AUDIT F12）：`false` ⇒ `?summary=1`（每栏前 `readers.SUMMARY_ROWS` 行），
-  // `true` ⇒ 全量。字段与三态一个都没删，"要读全"是一次点击的事。
+  // 首屏摘要 vs 整表（AUDIT F12）：`false` ⇒ `?summary=1`（每栏前
+  // `readers.SUMMARY_ROWS` 行，字段 compact）；`true` ⇒ `?full=1`（全量行 + 全字段）。
+  // 三态一个都没删；省了/截了哪些字段由后端 `rows_omitted` / `rows_clipped` 点名。
   const [full, setFull] = useState(false);
-  const face = useFace(() => api.getArtifacts(full ? {} : { summary: true }));
+  const face = useFace(() => api.getArtifacts(full ? { full: true } : { summary: true }));
   // 文献库是第二条端点：它与产物面是两份盘上的事实，各有各的三态 ——
   // 把它塞进 `ArtifactsView` 会让"产物面读不成"连带把文献库也画成没查成。
   const library = useFace(() => api.getLibrary());
@@ -486,7 +487,7 @@ export function Artifacts() {
         </div>
         <div class="readings">
           张数数的是 <span class="mono">ARTIFACT_CARDS</span> 那张表（标题与数字同一来源）：
-          <span class="mono">draft/74 §3.4</span> 原有的那七栏 + 第八张「台账对账」、
+          <span class="mono">draft/74 §3.4</span> 原有的那些栏目 + 第八张「台账对账」、
           第九张「实验产物的落点」。另有一张「台账（第二个独立读数）」读的是共享快照
           （与首页同一份），不是这一面的栏。
         </div>
@@ -496,6 +497,10 @@ export function Artifacts() {
         <div class="readings">
           读数档 <span class="mono">{art.rows_mode}</span>（每栏 {art.rows_offset} 起，最多{" "}
           <span class="mono">{art.rows_limit === 0 ? "全部" : art.rows_limit}</span> 行）·{" "}
+          字段档 <span class="mono">{art.rows_fields}</span>
+          {art.rows_fields === "compact"
+            ? "（长字段省掉/截断：省了哪些见 rows_omitted，截了哪些见 rows_clipped；要全文点「取全部」）"
+            : "（全字段）"} ·{" "}
           {cutColumns.length === 0 ? (
             <span>这一份是全量：每一栏给全了。</span>
           ) : (
@@ -570,7 +575,21 @@ export function Artifacts() {
                   // 这一格没有时才从字面量 `undefined` 变成 `unknown`。
                   render: (r) => cell(r.bytes),
                 },
-                { key: "task_id", title: "任务" },
+                {
+                  // 归属三档（`by_task_id_tri`）：
+                  // - `row`：台账行自己记了 task_id（写入时落下的，最硬）；
+                  // - `event`：行上没记，按路径反查事件反查到；
+                  // - `not_recorded`：这一档写入方没记归属（框架的笔记 / 手稿骨架那几行）。
+                  // 这一档写「这一档没有归属」，不写「缺任务号」——后者听起来像该有却没有。
+                  key: "task_id",
+                  title: "任务",
+                  render: (r) =>
+                    r.by_task_id_tri === "not_recorded" ? (
+                      <span class="tri-reason">这一档没有归属</span>
+                    ) : (
+                      cell(r.by_task_id === "" ? r.task_id : r.by_task_id)
+                    ),
+                },
                 { key: "at", title: "登记时间", render: (r) => cell(r.at) },
                 // 这里不列「退出码」：台账的格式里有 `exit_code`
                 // 这一栏（`artifacts.FIELDS`），但真机上登记的都是 `out/tasks/` 下那些
@@ -619,7 +638,7 @@ export function Artifacts() {
         )}
       </Card>
 
-      <Card title="台账（第二个独立读数）" subtitle="写入笔数与 commit 标记分两格">
+      <Card title="台账（第二个独立读数）" subtitle="写入笔数与 commit 标记分开摆">
         {ledger === null ? (
           <TriState tri="unreadable" label="台账" reason="共享快照还没读到" />
         ) : (

@@ -126,7 +126,7 @@ webui_routes_post       = 11   # 同上，按 `x[0] == 'POST'` 计数（2026-11-
 webui_routes_reader     = 19   # `len(r.READER_ROUTES)`（同上那条复跑命令的第四个数；只读面子表，2026-11-21：18 → 19，多的是 `/api/actions`）
 webui_routes_writer     = 12   # `len(r.WRITE_ROUTES)`（同上那条复跑命令的第五个数；写面子表，2026-11-21：9 → 11 → 12）
 webui_event_kinds       = 6    # `python -c "...from agentflow.webui import sse;print(len(sse.EVENT_KINDS))"`
-webui_test_files        = 56   # `(Get-ChildItem tests -Filter 'test_webui*.py').Count`（2026-11-23 03:32 复跑 56；A-3-EXEC 同日 03:1x 按现盘追平 54 → 56；再往前 2026-11-21 23:58 是 53 → 54，52 → 53 是 2026-11-20 收口第三批之后，45 → 52 是同日 WEBCLEAN 收口之后，36 → 45 是 2026-11-19，35 → 36 是 2026-11-14 的 +test_webui_cli_landing_alignment.py）。**这一格是活读数**：`tests/test_release_all.py` 的 `webui_readings()` 现算盘上条数、`live_reading_problems()` 逐键比对，写死旧值必红；`tests/` 按业主裁定不入 git（`.gitignore` 忽略、索引清空）⇒ 它跟的是**工作树**，不是索引 —— 2026-11-21 那句"刻意不抬"的旧口径（把它当"入库交付物口径"钉死）已作废，别再照它写
+webui_test_files        = 58   # `(Get-ChildItem tests -Filter 'test_webui*.py').Count`（2026-11-24 20:4x 按工作树复跑 58；BATCH3 路按现盘现数写定。再往前 2026-11-23 03:32 复跑 56；A-3-EXEC 同日 03:1x 按现盘追平 54 → 56；再往前 2026-11-21 23:58 是 53 → 54，52 → 53 是 2026-11-20 收口第三批之后，45 → 52 是同日 WEBCLEAN 收口之后，36 → 45 是 2026-11-19，35 → 36 是 2026-11-14 的 +test_webui_cli_landing_alignment.py）。**这一格是活读数**：`tests/test_release_all.py` 的 `webui_readings()` 现算盘上条数、`live_reading_problems()` 逐键比对，写死旧值必红；`tests/` 按业主裁定不入 git（`.gitignore` 忽略、索引清空）⇒ 它跟的是**工作树**，不是索引 —— 2026-11-21 那句"刻意不抬"的旧口径（把它当"入库交付物口径"钉死）已作废，别再照它写
 LIVE-READINGS:END
 ```
 
@@ -419,12 +419,13 @@ LIVE-READINGS:END
     `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import sse;print(len(sse.EVENT_KINDS))"`，
     键 `webui_event_kinds`；
   - 静态产物在 **`src/agentflow/web/static/`**：外壳 `static/index.html`（1760 B）+
-    `static/assets/index.D_vFOdu4.js`（242065 B）+ `static/assets/index.D8bpVw-o.css`（26775 B）；
-    （2026-11-22 18:3x 实测 —— WEBUI-PATHS-2 路的前端重建：Acceptance 页不再自算
-    `reportPath`（报告缺省归 `cli.DEFAULT_REPORT_REL`）、`types.ts` 重生成之后，
-    `tsc --noEmit` rc=0、`vite build` 一次成功；
-    CSS 与上一版逐字节相同（`index.D8bpVw-o.css` 26775 B），JS 换名是因为页面代码变了。
-    上一支是 16:44 那次（`index.Cmy8M3Nu.js`，242101 B），再上一支是 15:40 那次（`index.Bx--8D_-.js`），
+    `static/assets/index.BPsmjfB6.js`（244044 B）+ `static/assets/index.D8bpVw-o.css`（26775 B）；
+    （2026-11-24 20:4x 实测 —— BATCH3 路的前端重建：NUMCLAIM 那批页面文案改成插值 /
+    中性描述，`types.ts` 重生成（`run_digest.steps_note`）之后 `tsc --noEmit` rc=0、
+    `vite build` 一次成功；CSS 与上一版逐字节相同（`index.D8bpVw-o.css` 26775 B），
+    JS 换名是因为页面代码变了。上一支是 BATCH1/2 那次（`index.Cze56TZI.js`），
+    再上一支才是原先写在这里的 `index.D_vFOdu4.js`（242065 B），再上一支是 16:44 那次
+    （`index.Cmy8M3Nu.js`，242101 B），再上一支是 15:40 那次（`index.Bx--8D_-.js`），
     再上一支是 B3 正名那一版的 `index.DTvFDX4Q.js`（那一版只在 15:23 的产物里，
     已被那次重建清掉 —— 字节数按它当时的盘上事实，本文不另抄一份），再上一版
     FINALBUILD 是 `index.E982ZhKl.js`，WEBFIX3 是 `index.zxqG6--g.js`。复跑
@@ -445,12 +446,13 @@ LIVE-READINGS:END
   - 另外两条形态被单独钉住：**静态路由与目录穿越**（`GET /static/<file>` 只服务
     `web/static/` 之下的文件，穿越一律 404、**不回落 `index.html`**）、
     **`/api/*` 未知路径不许吐 HTML**（给 API 客户端一段 HTML 比 404 更坏）；
-  - 判据文件共 **56** 个（`test_webui*.py`）；复跑
+  - 判据文件共 **58** 个（`test_webui*.py`）；复跑
     `(Get-ChildItem tests -Filter 'test_webui*.py').Count`，键 `webui_test_files`
-    （2026-11-21 23:58 按现盘复跑实测：54（53 → 54；再往前 53 是 2026-11-20 收口第三批之后，
-    WEBCLEAN 收口时是 52，2026-11-19 是 45；这一格随并行施工变 —— 本节第一次量到的是 10，
-    2026-10-23 是 15，之后每落一条 `test_webui*.py` 就加一；所以散文只钉当次数，
-    56 个文件名不逐个抄进来，免得名单本身成为第二份会漂的口径）。
+    （2026-11-24 20:4x 按现盘复跑实测：58（BATCH3 路按工作树现数写定；再往前
+    2026-11-23 03:32 是 56，2026-11-21 23:58 是 54（53 → 54；再往前 53 是 2026-11-20
+    收口第三批之后，WEBCLEAN 收口时是 52，2026-11-19 是 45；这一格随并行施工变 ——
+    本节第一次量到的是 10，2026-10-23 是 15，之后每落一条 `test_webui*.py` 就加一；
+    所以散文只钉当次数，这些文件名不逐个抄进来，免得名单本身成为第二份会漂的口径）。
     **这一格是活读数，不是历史快照**：判据 `tests/test_release_all.py` 的 `webui_readings()`
     现算盘上条数、`live_reading_problems()` 逐键比对，写死旧值必红；`tests/` 按业主裁定
     不入 git（`.gitignore` 忽略、索引清空）⇒ 它跟的是**工作树**而不是索引。2026-11-21 早先那句

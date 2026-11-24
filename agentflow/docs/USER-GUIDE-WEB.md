@@ -314,7 +314,7 @@ DOM 文本级（自上而下）：顶部是品牌 + 「项目 … · 工作区�
 |---|---|
 | URL | `http://127.0.0.1:8893/evidence` |
 | 它回答什么 | 每条命题的五元位（numeric / proof / reviewed / formal / audited）各到哪了；猜想、实验、审校发现、稿件台账、引文回验、证明级验证、秘书决策 |
-| 读哪条端点 | `GET /api/evidence`（页面用 `?summary=1` 只取摘要；不带它时这次实跑 **2.1 MB**） |
+| 读哪条端点 | `GET /api/evidence`（页面用 `?summary=1` 只取摘要；默认是 compact 字段档，`?full=1` 才是全字段） |
 | 关键读数 | 每一栏各自带 `*_tri`；`bit_*` 五格是**按证明/按路径**记的，不是按行 |
 
 实跑（`/api/evidence?summary=1` 的骨架）：
@@ -596,9 +596,12 @@ sha 原文（`sha256` / `sha256_now`）在数据里，**页面只显示一致不
 
 - `种子：reference/ 里 N 份` —— 种子投在 **`reference/`**（不是 `library/`）；
 - `已登记书架 library/：` 后面三档：
-  - 绿色「没有未登记的文件」= `library_unregistered=[]`（干净）；
-  - 黄色「N 份未登记」= 书架上有文件**没有任何 `literature` 行引用** —— 这是结构异常
-    （真机事故：25 份未登记种子直接铺在 `library/` 根），悬停能看到那几份文件名；
+  - 绿色「没有未登记的 PDF」= `library_unregistered=[]`（干净）；
+  - 黄色「N 份未登记的 PDF」= 书架上有 **PDF 没有任何 `literature` 行引用** ——
+    这是结构异常（真机事故：25 份未登记种子直接铺在 `library/` 根），悬停能看到
+    那几份文件名。`.txt` **不算**：`text.extract` 的声明就是"把 PDF 文字层转成
+    同名 `.txt` 写进 `library/`"，那是设计产物，列成"未登记"等于把设计允许的
+    东西读成结构异常；
   - 灰色「没查成」= `null`（`literature` 台账读不出来 ⇒ 没得比），**不是"干净"**。
 - 这一行在「文献库 0 条」时也会显示 —— 那次事故现场页面正好只有"0 条"。
 
@@ -642,7 +645,12 @@ python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import route
 | 表 | 条数 | 路径 |
 |---|---|---|
 | 写面 `writes.ROUTES` | 12 | `POST /answer` · `POST /api/stop` · `POST /api/submit` · `POST /api/settings` · `POST /api/budget` · `POST /api/run` · `POST /api/task` · `POST /api/ack` · `POST /api/void` · `POST /api/stop/clear` · `POST /api/cache/warm` · `GET /api/cache` |
-| 读面 `readers.ROUTES` | 19 | `GET /api/state` · `/api/run/{sid}` · `/api/run/{sid}/events` · `/api/evidence` · `/api/artifacts` · `/api/acceptance` · `/api/package` · `/api/source` · `/api/machine` · `/api/budget` · `/api/live` · `/api/usage` · `/api/status-reports` · `/api/chat` · `/api/roster` · `/api/obligations` · `/api/stream` · `/api/literature` · `/api/actions` |
+| 读面 `readers.ROUTES` | 19 | `GET /api/state` · `/api/run/{sid}` · `/api/run/{sid}/events` · `/api/evidence` · `/api/artifacts` · `/api/acceptance` · `/api/package` · `/api/source` · `/api/machine` · `/api/budget` · `/api/live` · `/api/usage` · `/api/status-reports` · `/api/chat` · `/api/roster` · `/api/obligations` · **`/api/stream`（SSE 流：连上就一直推，不是一击即返的 JSON；拿普通 GET 的「读完即返」断言测它必超时）** · `/api/literature` · `/api/actions` |
+
+> 端点形态的唯一结构化分类在 `webui/routes.py` 的 `ROUTE_KINDS` / `route_kind()`：
+> `stream` / `json` / `html` / `static` 四档。`--list-routes`（`python -m agentflow.webui
+> --list-routes`）打印带 `kind` 的清单；清单、判据与本文都读同一格，不再各自维护
+> 一份「哪些是流」的名单。`/api/stream` 是今天唯一的 `stream`。
 
 **11 条 POST 每一条本文都实跑过**：§3.1–§3.8 是 2026-11-22 00:00 那一轮，
 §3.9–§3.11 是 00:11 复核新增的三条（`/api/ack` · `/api/void` · `/api/stop/clear`，
@@ -1294,7 +1302,7 @@ POST /api/void 没有这个号    -> 409「没有这一项（不是'已经作废
 |---|---|---|---|
 | 17 | `GET /api/state` | 200 | `tri=computed` · `writes_allowed=false` · `writes_reason="本服务未开 --allow-writes…"` · `pending_questions=[]` · `ledger.events=5918` · `problems=[]` · `current.sid=2026-11-21b` |
 | 18 | `GET /api/live` | 200 | `tasks_running=0` · `unclosed_loops=0` · `unclosed_running=0` · `unclosed_stale=0` · `answer="没有"` · `switch_present=false` · `unreadable_sessions=[]` |
-| 19 | `GET /api/evidence` | 200 | 2.1 MB；`tri=computed`（`?summary=1` 时八个 `*_tri` 各自给） |
+| 19 | `GET /api/evidence` | 200 | 默认 compact 字段档（`rows_fields="compact"`，省了哪些见 `rows_omitted`）；`?full=1` 给全字段；`tri=computed`（`?summary=1` 时八个 `*_tri` 各自给） |
 | 20 | `GET /api/acceptance` | 200 | `criteria` 五格 = pass 1 / fail 1 / unknown 3；`failed`/`unchecked` 两张清单 |
 | 21 | `GET /api/package` | 200 | `closing` / `structure` / `proofs` / `cache` / `tri` |
 | 22 | `GET /api/machine` | 200 | `lean_ready=true` · `lean_enabled=false` · `can_do_formal=false` · `formal_mode="prose_review"` · `serving.pinned=true` · `serving.pinned_by="serve()"` · `serving.switch_in_page=false` · `serving.switch_how=…`（换工作区的做法，§1.4） |

@@ -21,7 +21,7 @@ import type { ComponentChildren } from "preact";
 import { useCallback, useContext, useEffect, useRef, useState } from "preact/hooks";
 
 import { api, whyOf } from "./api";
-import { subscribe } from "./sse";
+import { MAX_RETRIES, POLL_INTERVAL_MS, subscribe } from "./sse";
 import type { Connection } from "./sse";
 import type { StateSnapshot } from "./types";
 
@@ -219,7 +219,7 @@ export function ConnectionBanner() {
       <div class="card problem">
         <span class="badge badge-unknown">实时已降级为轮询</span>
         <span class="readings">
-          SSE 三次重连都没接上 ⇒ 每隔 2 秒取一次 <span class="mono">/api/state</span>。
+          SSE {MAX_RETRIES} 次重连都没接上 ⇒ 每隔 {POLL_INTERVAL_MS / 1000} 秒取一次 <span class="mono">/api/state</span>。
           读数照样在动，但它不再是推来的。
         </span>
       </div>

@@ -149,13 +149,16 @@ export interface OrphanRow {
   role: string;
 }
 
-/** 出处：snapshot() 的 `ledger` —— 台账（第二个独立读数）。`events` 与 `upserts` 同口径（`D21`：它不再是 events.jsonl 的总行数），`commit_markers` 是其中提交标记的行数；坏行单列 `corrupt_rows`（不计进 upserts），`events_tri` / `tables_tri` 是两个三态头（READFIX-D：'没写过'与'读不到'都不许折成 0）。 */
+/** 出处：snapshot() 的 `ledger` —— 台账（第二个独立读数）。`events` 与 `upserts` 同口径（`D21`：它不再是 events.jsonl 的总行数），`commit_markers` 是其中提交标记的行数；坏行单列 `corrupt_rows`（不计进 upserts），`events_tri` / `tables_tri` 是两个三态头（READFIX-D：'没写过'与'读不到'都不许折成 0）。`rows` / `ops` / `read_at`是 2026-11-24 加的：总行数、逐 op 行数、读数时刻 —— `events_note` 里的每个数字都要能拿它们复算（守恒式 `upserts + commit_markers + corrupt_rows == rows`）。 */
 export interface LedgerReading {
   path: string;
   events: number | null;
   upserts: number | null;
   commit_markers: number | null;
   corrupt_rows: number | null;
+  rows: number | null;
+  ops: Record<string, number>;
+  read_at: string;
   tables: number | null;
   events_tri: Tri;
   tables_tri: Tri;
@@ -318,12 +321,16 @@ export interface RunDigestView {
   steps_physical: number | null;
   steps_self_reported: number | null;
   steps_self_reported_missing_runs: number | null;
+  steps_note: string;
   usd: number | null;
   unknown_usd_calls: number | null;
   spend_usd: number | null;
   spend_missing_runs: number | null;
   dispatched: number | null;
   dispatched_missing_runs: number | null;
+  dispatched_missing_unfinished: number | null;
+  dispatched_missing_no_summons: number | null;
+  dispatched_note: string;
   verified: number | null;
   signed_proofs: number | null;
   sign_files: number | null;
@@ -370,6 +377,10 @@ export interface EvidenceView {
   rows_limit: number;
   rows_offset: number;
   rows_total: Record<string, number>;
+  rows_fields: string;
+  rows_omitted: Record<string, string[]>;
+  rows_clipped: Record<string, string[]>;
+  rows_nested: Record<string, string[]>;
 }
 
 /** 出处：artifacts_face() —— 产物面（各栏另带 `<栏>_tri`）。 */
@@ -406,6 +417,10 @@ export interface ArtifactsView {
   rows_limit: number;
   rows_offset: number;
   rows_total: Record<string, number>;
+  rows_fields: string;
+  rows_omitted: Record<string, string[]>;
+  rows_clipped: Record<string, string[]>;
+  rows_nested: Record<string, string[]>;
 }
 
 /** 出处：artifacts_face() 的 experiment_spots[] —— 实验产物的一个落点（报告是 `out/experiments/<号>/exhaustion.md`，原始输出日志是另一个目录里的`out/exp-logs/<号>.log`；`kind` 是 exhaustion / log）。 */
@@ -435,6 +450,8 @@ export interface AcceptanceView {
   failed: string[];
   unchecked: string[];
   note: string;
+  cap_usd: number | null;
+  cap_note: string;
   auxiliary_note: string;
 }
 
@@ -582,6 +599,7 @@ export interface BudgetView {
   below_reserve: boolean | null;
   note: string;
   paperwork_first_rule: string;
+  closing_note: string;
   unattributed_usd: number | null;
   unattributed_reason: string;
   unattributed_source: string;
@@ -613,6 +631,7 @@ export interface LiveView {
   running: LiveLoopRow[];
   stale_rows: LiveLoopRow[];
   live: LivePidRow[];
+  live_note: string;
   unreadable_sessions: string[];
   switch: Record<string, unknown>;
   switch_present: boolean;
@@ -631,13 +650,15 @@ export interface LiveLoopRow {
   why?: string;
 }
 
-/** 出处：stopctl.live_pids() 的一行 —— 登记在盘上且真的还活着的一个进程（`path` 是那一份登记文件的落点，`live_pids` 会给）。 */
+/** 出处：stopctl.live_pids() 的一行 —— 登记在盘上且真的还活着的一个进程（`path` 是那一份登记文件的落点，`live_pids` 会给）。`host_process` / `pid_note`是 2026-11-24 补的：那一格是宿主进程的 pid（`register_pid` 写父进程自己），不是这一行自己的 pid —— 同一趟 run 的角色共用同一个号。 */
 export interface LivePidRow {
   pid: number;
   role: string;
   sid: string;
   started_at: string;
   path: string;
+  host_process: boolean;
+  pid_note: string;
 }
 
 /** 出处：usage_face() —— usage_ledger 的汇总（总计 + 两个归口 + 重试开销 + 最近几笔）。 */
@@ -801,6 +822,10 @@ export interface StatementRow {
   by_role_source: string;
   by_task_id: string;
   by_task_id_tri: string;
+  statement_full_truncated?: boolean;
+  statement_full_chars?: number;
+  proof_text_truncated?: boolean;
+  proof_text_chars?: number;
 }
 
 /** 出处：evidencebits.formal_by_proof() 的一行 —— 五元位第 4 位的一条路径（`proof_no` 是证明号，`state` 取 `evidencebits.FORMAL_PATH_STATES` 的五档：pending / na / failed / verified / stale）。折成一条汇总就等于让 `#p2` 借 `#p1` 的光。 */
@@ -990,6 +1015,8 @@ export interface HandoffRow {
   by_role_source: string;
   by_task_id: string;
   by_task_id_tri: string;
+  body_truncated?: boolean;
+  body_chars?: number;
 }
 
 /** 出处：out/secretary/<角色>.jsonl（老文件）与 out/secretary/<角色>-<实例号>.jsonl（S1m 起的分片）的行（`secretary.Secretary.note_decision` 写的；`decision`/`reason`/`basis` 等是「有就带上」的几栏）。`task_id` 是 S1m 补的那一格：分片之后「这一行是哪一个实例写的」必须读得出来。 */
@@ -1036,7 +1063,7 @@ export interface ReportStyle {
   sections: string[];
 }
 
-/** 出处：store.rows("tasks")（真机 p9b/data/tasks.json 19 键 + 工作项板那 7 格；板那 7 格是 S0/S1b 扩列之后补进来的 —— 真机上它们今天全是空值（`draft/94` §4：2276 行里 `kind` 非空 0 行），但列**在**，所以类型必须跟上）。 */
+/** 出处：store.rows("tasks")（真机 p9b/data/tasks.json 19 键 + 工作项板那 7 格；板那 7 格是 S0/S1b 扩列之后补进来的 —— 真机上它们今天全是空值（`draft/94` §4：2276 行里 `kind` 非空 0 行），但列在，所以类型必须跟上）。 */
 export interface TaskRow {
   task_id: string;
   role: string;
@@ -1071,6 +1098,8 @@ export interface TaskRow {
   by_task_id: string;
   by_task_id_tri: string;
   status_reading: string;
+  detail_truncated?: boolean;
+  detail_chars?: number;
 }
 
 /** 出处：store.rows("conjectures")（真机 p9b/data/conjectures.json；无样本时以 `schema.Conjecture` 为准）。 */
@@ -1309,7 +1338,7 @@ export interface RosterCoverage {
   unrostered: number | null;
 }
 
-/** 出处：obligations_face() 的 families[] —— 一族义务（b-register / v-resubmit / b-awake）的计数。`prefix` 逐字来自 `obligations` 的三个常量；`unowned` 是「父台账号与收件实例都空」的那些（没人收）；`summoned` 只对 b-register 有意义。 */
+/** 出处：obligations_face() 的 families[] —— 一族义务（b-register / v-resubmit / b-awake / d-handoff）的计数。`prefix` 逐字来自 `obligations` 的四个常量；`unowned` 是「父台账号与收件实例都空」的那些（没人收）；`summoned` 只对 b-register 有意义（`d-handoff` 没有召唤行，恒为 0）。`tri` / `reason` 是这一族自己的三态：`d-handoff` 的逐条读数（gap/eligible）没跑成时是 `unreadable`，而 `open` / `unowned` 仍是同一块 tasks 板的行数（不是 0）。 */
 export interface ObligationFamily {
   name: string;
   role: string;
@@ -1319,6 +1348,8 @@ export interface ObligationFamily {
   unowned: number;
   summoned: number;
   instances: string[];
+  tri: Tri;
+  reason: string;
 }
 
 /** 出处：obligations_face() 的 rows[] —— 一条还开着的板项（收件实例 / 父台账号 / 项状态 / 叫醒行）。`recipient_instance` 是板项行的 instance 列（`obligations.recipient_reading` 的落点）；`addressed` 是 instance / parent / unowned 三档。 */
@@ -1337,7 +1368,7 @@ export interface ObligationRow {
   detail: string;
 }
 
-/** 出处：obligations_face() —— 板上三族义务的收件人读数（只读；销号不经过网页）。 */
+/** 出处：obligations_face() —— 板上四族义务的收件人读数（只读；销号不经过网页）。 */
 export interface ObligationsView {
   tri: Tri;
   reason: string;
@@ -1375,7 +1406,7 @@ export interface LibraryData {
   seed: LibrarySeed;
 }
 
-/** 出处：library_face() 的 data.seed —— 种子读数（`seedinject.read_seed_reading` 的工作区相对形态）：种子在 `reference/`，`library_unregistered` 是书架上没有`literature` 行引用的文件（`null` = 没查成）。 */
+/** 出处：library_face() 的 data.seed —— 种子读数（`seedinject.read_seed_reading` 的工作区相对形态）：种子在 `reference/`，`library_unregistered` 是书架上没有`literature` 行引用的 PDF（`.txt` 是 `text.extract` 的设计产物，不算；`null` = 没查成）。 */
 export interface LibrarySeed {
   landed: boolean;
   count: number;
@@ -1565,7 +1596,7 @@ export interface ErrorStatsSource {
   records?: number;
   bad_lines?: number;
   unreadable_files?: string[];
-  unclassified?: number;
+  unclassified?: Record<string, number>;
   table?: string;
   reason?: string;
   state?: string;
@@ -1627,7 +1658,7 @@ export interface ErrorClassRow {
   computed?: boolean;
 }
 
-/** 出处：errors_readout() 的 data —— 角色 × 类目的计数（只记出现过的格，缺格就是 0）。`total` 是**角色侧**总数；`system_total` 与 `state_readings_total` 各是另一组数，**三组刻意不相加**（三种单位：谁做错了 / 系统哪里坏了 / 现在积着什么）。 */
+/** 出处：errors_readout() 的 data —— 角色 × 类目的计数（只记出现过的格，缺格就是 0）。`total` 是角色侧总数；`system_total` 与 `state_readings_total` 各是另一组数，三组刻意不相加（三种单位：谁做错了 / 系统哪里坏了 / 现在积着什么）。 */
 export interface ErrorStatsData {
   by_role: Record<string, Record<string, number>>;
   role_total: Record<string, number>;

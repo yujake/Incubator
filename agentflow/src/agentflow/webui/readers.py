@@ -100,6 +100,7 @@ __all__ = [
     "HANDLERS",
     "LEDGER_EVENT_SCAN_BYTES", "LEDGER_EVENT_SCAN_KINDS", "LEDGER_EVENT_SCAN_SESSIONS",
     "LEDGER_ROLE_FIELDS", "LEDGER_TASK_TRI_EVENT", "LEDGER_TASK_TRI_MISSING",
+    "LEDGER_TASK_TRI_NOT_RECORDED", "LEDGER_TASK_TRI_ROW",
     "LIBRARY_NO_LEDGER_REASON", "LIBRARY_STATE_COMPUTED", "LIBRARY_STATE_UNKNOWN",
     "MISSING_TYPES", "NONTRIVIALITY_NOT_APPLICABLE_WORD", "NONTRIVIALITY_UNJUDGED_WORD",
     "PENDING_ENDPOINTS",
@@ -110,7 +111,7 @@ __all__ = [
     "ROSTER_INBOX_ITEMS",
     "ROSTER_NODES_MAX",
     "RUN_ROW_KEYS", "SHA_MATCH", "SHA_MISMATCH", "SHA_UNKNOWN", "UNCHECKED_TYPES",
-    "acceptance_face", "artifacts_face",
+    "acceptance_face", "annotate_errors_readout", "artifacts_face",
     "chat_face", "code_consistency", "evidence_chain", "experiment_spots",
     "handle_acceptance", "handle_artifacts",
     "handle_chat", "handle_evidence",
@@ -171,10 +172,14 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
     # 只读一条：这个端点的消费者是只读面板，写面为零（表里没有与它配对的 POST，
     # 判据 `tests/test_webui_roster_panel.py` 的第三条就钉着这一条）。
     ("GET", "/api/roster", "handle_roster"),
-    # 板上三族义务的收件人读数（b-register / v-resubmit / b-awake）：只读一条，
+    # 板上义务的收件人读数（族由 `families[]` 现取；今天四族：b-register /
+    # v-resubmit / b-awake / d-handoff）：只读一条，
     # 没有配对的 POST（销号只发生在 conductor 的收口那一路）。
     ("GET", "/api/obligations", "handle_obligations"),
-    # 真身在 `webui/sse.py`（`GET /api/stream` 的推送流）。
+    # 真身在 `webui/sse.py`：`GET /api/stream` 是 SSE 流（`text/event-stream`，
+    # 连上就一直推，处理器不返回）。它不能用"普通 GET 读完即返"的断言去测 ——
+    # 必超时。分类真身是 `routes.ROUTE_KINDS["/api/stream"] = "stream"`；
+    # `routes.route_kind()` / `endpoint_inventory()` / `--list-routes` 都读那一格。
     ("GET", "/api/stream", "handle_stream"),
     # 文献库那一面（业主报过「ui侧文献库无法读出，请确认」）。
     # 只收「正式入库」的那一档，每条带「被哪些命题／哪一份证明用过」。只读一条：
@@ -241,8 +246,8 @@ CHECKED_TYPES: tuple[str, ...] = (
     # （名册目录不在 ⇒ `answer=unknown` 也是同一批键，见 `roster_face` 里那张表），
     # 所以它进受核对名单；行一级的五个类型见 `UNCHECKED_TYPES` 的理由。
     "RosterView",
-    # 板上三族义务（b-register / v-resubmit / b-awake）的收件人读数：顶层键在任何
-    # 工作区上都在（表不在 ⇒ not_applicable；families 恒为三族），所以进受核对名单。
+    # 板上义务（族由 `families[]` 现取；今天四族）的收件人读数：顶层键在任何
+    # 工作区上都在（表不在 ⇒ not_applicable；families 恒为四族），所以进受核对名单。
     "ObligationsView", "ObligationFamily",
     # 文献库那一面的五键外壳在每一档上都是同一批键
     # （表不在盘上 / 坏 JSON / 空表都只是 `state` 的另一档，不是"读不出键"），
@@ -291,9 +296,9 @@ UNCHECKED_TYPES: dict[str, str] = {
     # 而"为什么这里没有读数"就写在上面这一句里（三态纪律：不是把接口删掉假装不存在）。
     "RosterNode": "夹具没有 `out/roster/<父编号>.jsonl`（名册只在派人时落）"
                   "⇒ `nodes[]` 是空数组，形状以 `roster_face` 在真工作区上的读数为准",
-    # 义务板项：夹具的 `tasks` 行里没有三族义务（b-register / v-resubmit / b-awake）
-    # 的板项 ⇒ `rows[]` 是空数组；族级形状（`families[]`）夹具上有，所以它进受核对名单。
-    "ObligationRow": "夹具没有三族义务的板项行 ⇒ `rows[]` 是空数组；"
+    # 义务板项：夹具的 `tasks` 行里没有义务（四族）的板项 ⇒ `rows[]` 是空数组；
+    # 族级形状（`families[]`）夹具上有，所以它进受核对名单。
+    "ObligationRow": "夹具没有义务族的板项行 ⇒ `rows[]` 是空数组；"
                      "形状以 `obligations_face` 在真工作区上的读数为准",
     # 错误动作那一页的三组读数：下面四个是 `ErrorStatsData` 的
     # 子形状，夹具（`artifacts_ws`）没有 `verifications/` / `out/roster/refusals/` /
@@ -1018,6 +1023,62 @@ def _digest_groups(root_p: Path, sid: str) -> tuple[
     return groups, problems, None
 
 
+def _dispatched_reading(runs: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """「派了多少活」那一组读数：`dispatched` 与缺格的趟数（两档）+ 一句口径说明。
+
+    口径只有一个来源：`agent_run_end.summons`（`LoopRun.summons` 落的那一份）——
+    它是"落地了 `task_id` 的 `summon` 步"，取值是角色名。板项不在里面：
+    `action=notice` / `kind=notice` 那些非运行任务由 `conductor.open_item` 建行，
+    不是任何一步 `summon`。
+
+    缺格那一格拆成两档，因为读者会把一个数读成两件事：
+    `dispatched_missing_unfinished` 是还没收工的趟（按构造没有 `summons`），
+    `dispatched_missing_no_summons` 是收工行没带这一格。它们都不是"派了没跑"。
+    """
+    n = len(runs)
+    sent = [len(run["summons"]) for run in runs
+            if isinstance(run.get("summons"), list)]
+    dispatched = sum(sent) if sent else (0 if n == 0 else None)
+    missing = [run for run in runs if not isinstance(run.get("summons"), list)]
+    unfinished = sum(1 for run in missing if run.get("end_index") is None)
+    no_field = len(missing) - unfinished
+    missing_runs = 0 if n == 0 else len(missing)
+    if not n:
+        note = ("这个工作区/这一段会话还没有趟 ⇒ `dispatched` 没有对象"
+                "（不是「派了 0 次」）。")
+    else:
+        note = ("`dispatched` 只数收工行 `summons` 里「真的派出去的召唤」"
+                "（`LoopRun.summons`：落地了 `task_id` 的 `summon` 步，取值是角色名）"
+                "—— 不含板项：`action=notice` / `kind=notice` 那些非运行任务"
+                "（板项、到点通知、接力通知）由 `conductor.open_item` 建行，"
+                "不是任何一步 `summon`，不进这个数。"
+                f"`dispatched_missing_runs={missing_runs}` 是「没有 `summons` 这一格」"
+                f"的趟数：其中 {unfinished} 趟是还没收工（没有 `agent_run_end`），"
+                f"{no_field} 趟是收工行没带这一格 —— 它不是「派了 {missing_runs} 次活没跑」。")
+    return {"dispatched": dispatched, "dispatched_missing_runs": missing_runs,
+            "dispatched_missing_unfinished": (0 if n == 0 else unfinished),
+            "dispatched_missing_no_summons": (0 if n == 0 else no_field),
+            "dispatched_note": note}
+
+
+def _steps_note(steps: int, physical: int | None, reported: int | None,
+                missing: int | None, runs: int) -> str:
+    """`steps` 是混合口径时，把「自报 / 物理 / 并起来」这几个数并排写清（NUMCLAIM-②）。
+
+    不另算一遍：传进来的就是返回体上那几格。`runs == 0`（还没有趟）时物理与自报
+    都是"0 趟"的定义值，不是"没查成"；某一格真的没查成，这里就明说没查成，
+    不拿另一个数顶替它。
+    """
+    physical_text = (f"物理逐条合计 {physical}" if physical is not None else
+                     ("物理逐条合计 0" if runs == 0 else "物理那一格没查成"))
+    reported_text = ("自报合计 0（一趟都没有自报）" if runs == 0 else
+                     (f"自报合计 {reported}（缺自报 {missing} 趟）"
+                      if reported is not None else "自报那一格没查成"))
+    return (f"steps 是混合口径：收工行带 steps 的趟用自报值、缺自报的趟按逐条 "
+            f"agent_step 数 —— {reported_text}、{physical_text}，"
+            f"并起来的这一格是 {steps}。")
+
+
 def run_digest(root: str | Path, sid: str = "") -> dict[str, Any]:
     """`GET /api/run-digest` 的读模型：从会话事件流现算的一份"趟次档案"。
 
@@ -1050,12 +1111,20 @@ def run_digest(root: str | Path, sid: str = "") -> dict[str, Any]:
       `steps_self_reported_missing_runs` 点名，不是把它当 0 加进去）。
       `steps_source`（self_report / physical）说 `steps` 这一格取自哪一档 ——
       改前只给 `steps`，页面看不出 348 是自报的（物理 339），拿它对账会差 9；
+    - `steps_note`：把上面几个数并排说清的一句（自报合计 / 缺自报几趟 / 物理逐条合计 /
+      并起来的 `steps` 是几）—— `steps_source` 指出的来源与 `steps` 不相等时，
+      页面读这一句就能复算混合口径，不必猜；
     - `usd` / `unknown_usd_calls`：事件求和（`llm_call.usd` 归到各趟后的合计；
       `unknown_usd_calls` 是算不出价钱的调用次数）。没有一条算得出价钱的调用 ⇒ `None`；
     - `spend_usd` / `spend_missing_runs`：收工行自报账的合计（`agent_run_end.spend.usd`）
       与"没有这一格"的趟数。它不顶替 `usd`：两个来源并排，是同一笔钱的两条独立读数；
     - `dispatched` / `dispatched_missing_runs`：`Σ len(agent_run_end.summons)`（真派出去
-      的活）与"收工行没带 summons"的趟数；
+      的活）与"没有 `summons` 这一格"的趟数。这个数不含板项：`notice` / `message`
+      那些 `action=notice` 的非运行任务由 `conductor.open_item` 建行，不是任何一步
+      `summon`（`LoopRun.summons` 只收落地了 `task_id` 的召唤步）⇒ 不进 `dispatched`。
+      `dispatched_missing_runs` 也不是"派了没跑"：它由两档组成 —— 还没收工的趟
+      （没有 `agent_run_end`，按构造没有 `summons`）与收工行没带这一格的趟，
+      两档各有自己的名字（`dispatched_missing_unfinished` / `dispatched_missing_no_summons`）；
     - `verified` / `signed_proofs` / `gaps_missing_runs`：收工行 `final_gaps_reading` 的
       `total` 合计（这一趟名下带证明、查过 V 签那一栏的命题数）与
       `total - unsigned` 合计（其中签住的证明位数），以及"收工行没带这一格"的趟数。
@@ -1091,8 +1160,15 @@ def run_digest(root: str | Path, sid: str = "") -> dict[str, Any]:
         # READFIX-E：`steps` 的出处与两个分量（同一原型的两个数并排）。
         "steps_source": "", "steps_physical": None, "steps_self_reported": None,
         "steps_self_reported_missing_runs": None,
+        # NUMCLAIM-②：`steps` 是混合口径（自报优先、缺自报的趟按逐条数），
+        # 这一格把它点名的几个数并排写出来 —— 页面不给这一句，读者无法复算。
+        "steps_note": "",
         "spend_usd": None, "spend_missing_runs": None,
         "dispatched": None, "dispatched_missing_runs": None,
+        #: `dispatched_missing_runs` 的两档拆分 + 这个数"含什么 / 不含什么"的一句话。
+        "dispatched_missing_unfinished": None,
+        "dispatched_missing_no_summons": None,
+        "dispatched_note": "",
         "verified": None, "signed_proofs": None,
         "sign_files": _digest_sign_files(root_p),
         "signs": _digest_sign_reading(root_p),
@@ -1151,6 +1227,12 @@ def run_digest(root: str | Path, sid: str = "") -> dict[str, Any]:
                                    else (0 if n == 0 else None))
     face["steps_self_reported_missing_runs"] = 0 if n == 0 else n - len(reported)
     face["steps_source"] = "self_report" if reported else "physical"
+    # NUMCLAIM-② 的判据（`tests/test_numclaim_notes_match_their_numbers.py::
+    # test_run_digest_steps_names_which_number_it_is`）要的两种合格形态之一：
+    # `steps` 不等于它点名的来源时，返回体必须带一句把这几个数都摆出来的说明。
+    face["steps_note"] = _steps_note(
+        int(face["steps"]), face["steps_physical"], face["steps_self_reported"],
+        face["steps_self_reported_missing_runs"], n)
 
     def _num(value: Any) -> bool:
         return isinstance(value, (int, float)) and not isinstance(value, bool)
@@ -1165,9 +1247,7 @@ def run_digest(root: str | Path, sid: str = "") -> dict[str, Any]:
     face["spend_missing_runs"] = 0 if n == 0 else sum(
         1 for run in runs if not _num(run.get("spend_usd")))
 
-    sent = [len(run["summons"]) for run in runs if isinstance(run.get("summons"), list)]
-    face["dispatched"] = sum(sent) if sent else (0 if n == 0 else None)
-    face["dispatched_missing_runs"] = 0 if n == 0 else n - len(sent)
+    face.update(_dispatched_reading(runs))
 
     totals = signeds = seen = 0
     for event in ends:
@@ -1257,6 +1337,15 @@ LEDGER_EVENT_SCAN_KINDS: tuple[str, ...] = (
 #: `not_applicable`，"查过了没找到"就变成"用不着"。
 LEDGER_TASK_TRI_EVENT = "event"
 LEDGER_TASK_TRI_MISSING = "missing"
+#: 台账行自己带了 `task_id`（`ARTIFACTS.jsonl` 的写侧 `artifacts.record(task_id=...)`
+#: 真的落了这一格）。它比"按路径反查事件"强：反查是推断，这一格是写入时记下的归属。
+LEDGER_TASK_TRI_ROW = "row"
+#: 这一行是写入，但写入方没记归属：行的 `task_id` 是空串，按路径反查也没有命中。
+#: 它与 `missing` 不同：`missing` 是"查过了、没找到"（该有却没有），而这一档是
+#: "这一行的写入路径本来就没带归属可记"（真机：`agent_loop.write_note` /
+#: `manuscriptopen.open_manuscript` / `agent_e.run_experiment` 的框架产物行，
+#: 行上 `task_id=""`）。面板据此写"这一档没有归属"，不写"缺任务号"。
+LEDGER_TASK_TRI_NOT_RECORDED = "not_recorded"
 
 #: 每一栏台账行的反查口令：`栏名 -> (行里的编号在哪一格, 引用前缀)`。
 #:
@@ -1478,6 +1567,15 @@ def _annotate_ledger_row(column: str, row: Mapping[str, Any],
     role, role_source = _ledger_role(row)
     got["by_role"] = role
     got["by_role_source"] = role_source
+    # 产物台账（`ledger`）的行自己就带 `task_id`（写侧 `artifacts.record` 的入参）。
+    # 有它就采用它：那是写入时记下的归属，比"按路径反查事件"更硬，也解释了为什么
+    # 真机 60 行里有 40 行明明有台账号、旧读法却全报 `missing`（旧读法只按路径反查，
+    # 从不看行上的这一格）。
+    own = str(row.get("task_id") or "").strip()
+    if column in ("ledger", "ledger_verify") and own:
+        got["by_task_id"] = own
+        got["by_task_id_tri"] = LEDGER_TASK_TRI_ROW
+        return got
     spec = _LEDGER_ROW_TOKENS.get(column)
     if spec is None:
         got["by_task_id"] = ""
@@ -1486,7 +1584,14 @@ def _annotate_ledger_row(column: str, row: Mapping[str, Any],
     token = _ledger_token(spec[0], spec[1], row)
     task_id = str(index.get(token) or "") if token else ""
     got["by_task_id"] = task_id
-    got["by_task_id_tri"] = LEDGER_TASK_TRI_EVENT if task_id else LEDGER_TASK_TRI_MISSING
+    if task_id:
+        got["by_task_id_tri"] = LEDGER_TASK_TRI_EVENT
+    elif column in ("ledger", "ledger_verify"):
+        # 写入方没记归属：行上 `task_id` 空、反查也没有。它不是"缺任务号"
+        # （`missing` 读起来像该有却没有），而是"这一档没有归属"。
+        got["by_task_id_tri"] = LEDGER_TASK_TRI_NOT_RECORDED
+    else:
+        got["by_task_id_tri"] = LEDGER_TASK_TRI_MISSING
     return got
 
 
@@ -1506,6 +1611,11 @@ def _annotate_ledger_rows(root_p: Path,
             continue
         for row in rows:
             if isinstance(row, Mapping):
+                # 行上自己带 task_id 的（产物台账）不必再进反查口令：那一格是写入时
+                # 记下的归属，比推断强，也省掉一次无用的路径扫描。
+                if (column in ("ledger", "ledger_verify")
+                        and str(row.get("task_id") or "").strip()):
+                    continue
                 token = _ledger_token(spec[0], spec[1], row)
                 if token:
                     tokens.append(token)
@@ -2575,8 +2685,233 @@ def page_columns(out: dict[str, Any], keys: Sequence[str], *,
     out["rows_total"] = total
 
 
+#: 字段档的两个取值（与 `rows_mode` 的 `full` / `page` 是两个独立的轴，别混）：
+#: `full` = 读模型的全部字段；`compact` = 只给面板要用的列，长字段留给 `?full=1`。
+ROWS_FIELDS_FULL = "full"
+ROWS_FIELDS_COMPACT = "compact"
+
+#: `compact` 档里长字段的缺省截断长度。截断不静默：行上另给
+#: `<字段>_truncated=true` 与 `<字段>_chars=<原长>`，顶层 `rows_clipped` 点名是哪几栏。
+#: 400 与 `Artifacts.tsx` / `state.CLIP` 的页面截断同一口径。
+COMPACT_CLIP_CHARS = 400
+#: 任务 `detail` 的截断长度（比 400 更短：真机 84 行 × 400 仍是 34 KB，占默认响应
+#: 的大头；页面那一列本来就只当一句话读）。`rows_clipped` 会点名它，`detail_chars`
+#: 给原文长度 —— 不把"截了"读成"就这些"。
+COMPACT_DETAIL_CHARS = 80
+
+#: `/api/evidence` 的 compact 档逐栏保留哪些字段。
+#:
+#: 取舍口径只有一条：面板上真的有这一格（`Evidence.tsx` 的列 / tooltip /
+#: `statementLedger.ts` 的取值器），或三态/归属读数（`*_tri` 在顶层，行上那几格
+#: `by_role` / `by_task_id` 是「谁写的、哪一趟」）。其余一律进 `rows_omitted`，
+#: 要读全文就 `?full=1` —— 那一条与 compact 是同一份读模型，不是第二套读法。
+_EVIDENCE_COMPACT_FIELDS: dict[str, tuple[str, ...]] = {
+    "statements": (
+        "stmt_id", "origin", "kind", "kind_projected", "kind_projection_changed",
+        "label", "statement_text", "statement_full", "proof_text", "source_lit_id",
+        "page_range", "quote_verified", "quote_state", "status", "status_word",
+        "lifecycle_checked", "created_at", "created_by", "nontriviality_label",
+        "nontriviality_meaning", "nontriviality_tri", "nontriviality_word",
+        "formal_paths", "bit_numeric", "bit_proof", "bit_reviewed", "bit_audited",
+        "reviewed_paths", "optimized_paths", "grade", "grade_label", "current_word",
+        "manuscript_state", "manuscript_path", "vsign_state", "vsign_detail",
+        "by_role", "by_role_source", "by_task_id", "by_task_id_tri",
+    ),
+    "conjectures": (
+        "conjecture_id", "status", "status_word", "form", "testable", "statement",
+        "counterexample_experiment_id", "experiment_ids", "by_role", "by_task_id",
+    ),
+    "experiments": (
+        "experiment_id", "status", "status_word", "method", "result",
+        "evidence_kind", "negation_kind", "exit_code", "code_path",
+        "code_sha_consistency", "exhaustion_path", "exhaustion_tri",
+        "artifact_paths", "void_reason", "code_sha_from", "code_sha_to",
+        "created_at", "runtime_sec", "owner_task",
+        "by_role", "by_role_source", "by_task_id", "by_task_id_tri",
+    ),
+    "relations": (
+        "relation_id", "lit_id", "quote", "statement", "quote_state",
+        "quote_verified", "page_range", "status", "status_word",
+        "by_role", "by_task_id",
+    ),
+    "documents": (
+        "doc_id", "kind", "title", "status", "status_word", "review_rounds",
+        "review_verdict", "revision", "updated_at", "created_at", "markdown_path",
+        "content_sha256", "owner_task", "owner_instance", "created_by",
+        "lifecycle_state", "lifecycle_checked",
+        "by_role", "by_role_source", "by_task_id", "by_task_id_tri",
+    ),
+    "review_findings": (
+        "finding_id", "doc_id", "kind", "level", "target", "evidence", "message",
+        "round", "suggestion", "status", "resolution_note", "created_at",
+        "status_word", "lifecycle_state", "lifecycle_checked", "created_by",
+        "axis", "line", "verbatim_quote", "maths", "line_unavailable_reason",
+        "by_role", "by_role_source", "by_task_id", "by_task_id_tri",
+    ),
+    "verifications": (
+        "verification_id", "statement_id", "stmt_id", "verifier", "verdict",
+        "defect_step", "quote", "unresolved_errors", "proof_chars", "round",
+        "proof_sha_consistency", "manuscript", "path_group", "at", "landed",
+        "producer_role", "producer_code", "findings", "citation_checks",
+        "by_role", "by_role_source", "by_task_id", "by_task_id_tri",
+    ),
+    "secretary": (
+        "role", "seq", "duty", "decision", "judge", "reason", "fail_open", "at",
+    ),
+}
+
+#: `/api/artifacts` 的 compact 档逐栏保留哪些字段。口径同上：面板列 + 归属读数。
+#: `ledger_verify` 只留页面那四列（路径 / 一致吗 / 结论 / 谁产出）—— sha 原文本来
+#: 就不上屏（页面自己的说明写着），compact 档不再整段送两份 sha。
+_ARTIFACTS_COMPACT_FIELDS: dict[str, tuple[str, ...]] = {
+    "ledger": (
+        "path", "producer", "kind", "kind_state", "kind_unknown", "sha_consistency",
+        "bytes", "task_id", "at", "by_task_id", "by_task_id_tri",
+    ),
+    "ledger_verify": ("path", "producer", "status", "sha_consistency",
+                      "by_task_id", "by_task_id_tri"),
+    "handoffs": (
+        "id", "sender", "sender_label", "to", "to_label", "summary", "refs", "sid",
+        "task_id", "to_task_id", "format", "sha256", "body",
+        "by_role", "by_role_source", "by_task_id", "by_task_id_tri",
+    ),
+    "checks": (
+        "id", "kind", "kind_reading", "kind_deprecated", "name", "min", "max",
+        "na", "got", "state", "ok", "note", "path", "exists", "lines", "tri",
+        "by_role", "by_role_source", "by_task_id", "by_task_id_tri",
+    ),
+    "secretary": (
+        "role", "seq", "duty", "decision", "judge", "reason", "fail_open", "at",
+    ),
+    "products": (
+        "name", "path", "exists", "bytes", "lines", "sha256", "tri",
+        "by_role", "by_role_source", "by_task_id", "by_task_id_tri",
+    ),
+    "experiment_spots": (
+        "kind", "path", "exists", "bytes", "tri", "reason",
+    ),
+    "code_exp": ("path", "bytes"),
+    "tasks": (
+        "task_id", "role", "instance", "action", "called_by", "seen_step",
+        "status", "status_reading", "outcome", "usd", "detail",
+    ),
+}
+
+#: compact 档要截断的字段（不是删掉）：页面还画这一列，只是不必整段送来。
+#: 截断标记与截断动作都在 `_project_compact_face` 一处做，免得两栏各写一份口径。
+_EVIDENCE_CLIP_FIELDS: dict[str, tuple[tuple[str, int], ...]] = {
+    "statements": (("statement_full", 160), ("proof_text", 160)),
+}
+_ARTIFACTS_CLIP_FIELDS: dict[str, tuple[tuple[str, int], ...]] = {
+    "handoffs": (("body", 200),),
+    "tasks": (("detail", COMPACT_DETAIL_CHARS),),
+}
+
+#: compact 档里做子对象投影的字段（顶层还在，里面只留页面真读的那几格）。
+#: `judge` 在真机上一行最多几百字节（`checked` / `cost` / `decision` / `reason` …），
+#: 页面只用 `checked` 与 `cost.usd`；全文在 `?full=1`。
+_EVIDENCE_NESTED_FIELDS: dict[str, tuple[str, ...]] = {"secretary": ("judge",)}
+_ARTIFACTS_NESTED_FIELDS: dict[str, tuple[str, ...]] = {"secretary": ("judge",)}
+
+
+def _compact_judge(value: Any) -> Any:
+    """`judge` 的 compact 形状：只留 `checked` 与 `cost.usd`（其余在 `?full=1`）。
+
+    形状不是"另一个类型"：还是 `judge` 这个键，还是一个对象；只是里面少了页面
+    从来不读的键。`cost` 不在时返回 `{}`（不是 `null`：`null` 在页面上有专门含义
+    ——「这一行不经判据」）。
+    """
+    if not isinstance(value, Mapping):
+        return value
+    out: dict[str, Any] = {}
+    if "checked" in value:
+        out["checked"] = value.get("checked")
+    cost = value.get("cost")
+    if isinstance(cost, Mapping):
+        out["cost"] = {"usd": cost.get("usd")} if "usd" in cost else {}
+    return out
+
+
+def _project_compact_face(
+    out: dict[str, Any],
+    fields: Mapping[str, Sequence[str]],
+    *,
+    clip_fields: Mapping[str, Sequence[tuple[str, int]]] | None = None,
+    nested_fields: Mapping[str, Sequence[str]] | None = None,
+) -> None:
+    """把一份读模型就地投影成 compact 档，并把"少了什么 / 截了什么"写成机器读数。
+
+    三样读数（都进响应顶层，页面与判据读它们，不用猜）：
+
+    - `rows_fields`：`"full"` / `"compact"`；
+    - `rows_omitted`：`{栏: [被省掉的字段名]}`（compact 档才有内容）；
+    - `rows_clipped`：`{栏: [被截断的字段名]}`（行上另有 `<字段>_truncated` 与
+      `<字段>_chars` 两格，所以"截了"不会被读成"原文就这么长"）；
+    - `rows_nested`：`{栏: [做了子对象投影的字段名]}`（`judge` 那一格）。
+
+    为什么在分页之后做：`rows_total` 由 `page_columns` 在切行之前算好，投影只
+    改"这一页的每一行带哪些字段"，不改"一共多少行"。切行与切字段是两根独立的轴，
+    两根都有机器读数（`rows_mode` / `rows_fields`），页面不会把一根读成另一根。
+    """
+    clip_fields = clip_fields or {}
+    nested_fields = nested_fields or {}
+    omitted: dict[str, list[str]] = {}
+    clipped: dict[str, list[str]] = {}
+    nested_hit: dict[str, list[str]] = {}
+    for col, keep in fields.items():
+        rows = out.get(col)
+        if not isinstance(rows, list):
+            continue
+        keep_set = set(keep)
+        clip_specs = dict(clip_fields.get(col) or ())
+        nested_set = set(nested_fields.get(col) or ())
+        omitted_keys: set[str] = set()
+        clipped_keys: set[str] = set()
+        nested_keys: set[str] = set()
+        projected: list[Any] = []
+        for row in rows:
+            if not isinstance(row, Mapping):
+                projected.append(row)
+                continue
+            new = {k: v for k, v in row.items() if k in keep_set}
+            for name, limit in clip_specs.items():
+                value = new.get(name)
+                if isinstance(value, str) and len(value) > limit:
+                    new[name] = (value[:limit]
+                                 + f"…（截断：全文 {len(value)} 字符；`?full=1` 取全文）")
+                    new[f"{name}_truncated"] = True
+                    new[f"{name}_chars"] = len(value)
+                    clipped_keys.add(name)
+            for name in nested_set:
+                if name in new:
+                    new[name] = _compact_judge(new[name])
+                    nested_keys.add(name)
+            omitted_keys.update(k for k in row if k not in keep_set)
+            projected.append(new)
+        out[col] = projected
+        if omitted_keys:
+            omitted[col] = sorted(omitted_keys)
+        if clipped_keys:
+            clipped[col] = sorted(clipped_keys)
+        if nested_keys:
+            nested_hit[col] = sorted(nested_keys)
+    out["rows_fields"] = ROWS_FIELDS_COMPACT
+    out["rows_omitted"] = omitted
+    out["rows_clipped"] = clipped
+    out["rows_nested"] = nested_hit
+
+
+def _mark_full_fields(out: dict[str, Any]) -> None:
+    """`?full=1` 那一档的四格读数（键恒在，于是两档的顶层键集合一致）。"""
+    out["rows_fields"] = ROWS_FIELDS_FULL
+    out["rows_omitted"] = {}
+    out["rows_clipped"] = {}
+    out["rows_nested"] = {}
+
+
 def evidence_chain(root: str | Path, store: Any = None, *,
-                   limit: int = 0, offset: int = 0) -> dict[str, Any]:
+                   limit: int = 0, offset: int = 0,
+                   compact: bool = False) -> dict[str, Any]:
     """`GET /api/evidence` 的读模型：证据链八栏 + 三态。
 
     `statements` / `conjectures` / `experiments` / `documents` / `review_findings` /
@@ -2606,6 +2941,18 @@ def evidence_chain(root: str | Path, store: Any = None, *,
       撤销老登记 —— 「已撤销」不是红，要能说出从哪一份换到哪一份）；
     - 验证行：`proof_sha_consistency`（V 签的那一份 vs 命题现在那一份，
       按 `proof_no` 逐条比）。
+
+    ## 字段档（`compact`）：默认读模型给全字段，HTTP 默认给 compact
+
+    `compact=True` 是给页面的那一档：每栏只留 `Evidence.tsx` 真的会画的列与归属
+    读数，`statement_full` / `proof_text` 截到 :data:`COMPACT_CLIP_CHARS`，
+    `quote_reason` / `_quote_check` / `_conflict_check` / `bits` / `proof_history`
+    等长字段整格省掉。省了哪些、截了哪些写在 `rows_omitted` / `rows_clipped` /
+    `rows_nested` 三格；`?full=1` 走的是同一条读模型（`compact=False`），
+    字段一个不少。
+
+    缺省 `compact=False`：命令行、`/api/package`、契约判据 C 与既有调用方读的
+    还是全字段读模型 —— 分页与投影都只是「调用方显式开口」才发生的事。
     """
     from ..store import Store
     from ..verifications import list_verifications
@@ -2673,6 +3020,13 @@ def evidence_chain(root: str | Path, store: Any = None, *,
     # 恒在，而各栏的 `tri`、注解、三态判定一个都不动 —— 切行只改"给多少行"。
     # `store_problems` 不切：它是坏行说明（几行到几十行），切了会让"哪几行坏了"缺页。
     page_columns(out, _EVIDENCE_PAGE_COLUMNS, limit=limit, offset=offset)
+    # 字段档在分页之后（`rows_total` 已按切行前的真实行数记好；投影只改这一页的字段）。
+    if compact:
+        _project_compact_face(out, _EVIDENCE_COMPACT_FIELDS,
+                              clip_fields=_EVIDENCE_CLIP_FIELDS,
+                              nested_fields=_EVIDENCE_NESTED_FIELDS)
+    else:
+        _mark_full_fields(out)
     return out
 
 
@@ -2730,8 +3084,9 @@ def run_products(root: str | Path, run_dir: str | Path | None = None) -> dict[st
     显式给（相对工作区或绝对路径都行）；不给时取 `out/` 下编号最大的 `run-N`
     （与 `projects._next_run_index` 的命名对齐 —— 但这里只读，不分配新编号）。
 
-    三态：`out/` 下没有一个 `run-N/`（本机真机读数就是这样：六件产物没有真机样本）
-    ⇒ 整面 `not_applicable` + 理由里明说"这一路（run/project run）本机还没跑过"，
+    三态：`out/` 下没有一个 `run-N/` ⇒ 整面 `not_applicable` + 理由明说"这一档是
+    `start` 流水线、没有 `run-N/` 目录"（它不断言"本机跑没跑过"：真机 lp-ball-22
+    正在跑，走的是 `start` 不走 `run`；把"没有目录"说成"机器没跑过"是两句不同的事实），
     而不是把六件都写成 `exists=false` 让人以为"跑过但文件丢了"。
     """
     from ..artifacts import sha256_of
@@ -2784,8 +3139,8 @@ def _pick_run_dir(root: Path, run_dir: str | Path | None) -> tuple[Path | None, 
         return p, ""
     out = root / "out"
     if not out.is_dir():
-        return None, ("out/ 不在盘上 —— 六件产物（run-manifest.json 那一路）"
-                      "本机还没有跑过（裁定 J2：无真机样本，判据用夹具造）")
+        return None, ("out/ 不在盘上 —— 六件产物只落在 `run` / `project run` 的 "
+                      "`out/run-N/` 里；这一档没有它（与「本机跑没跑过」是两件事）")
     numbered: list[tuple[int, Path]] = []
     for p in out.iterdir():
         if not p.is_dir() or not p.name.startswith("run-"):
@@ -2794,9 +3149,9 @@ def _pick_run_dir(root: Path, run_dir: str | Path | None) -> tuple[Path | None, 
         if tail.isdigit():
             numbered.append((int(tail), p))
     if not numbered:
-        return None, ("out/ 下没有一个 run-N/ 目录 —— 六件产物那一路"
-                      "（agentflow run / project run）本机还没有跑过"
-                      "（裁定 J2：无真机样本，判据用夹具造）")
+        return None, ("out/ 下没有一个 `run-N/` 目录 —— 这一档是 `start` 流水线"
+                      "（不走 `run` / `project run`），六件产物不在这一档；"
+                      "要看产物见「台账 / 交接 / out/package」那几栏")
     return max(numbered)[1], ""
 
 
@@ -3001,10 +3356,50 @@ def _kind_state_reading(rows: Sequence[Any], out: dict[str, Any]) -> list[str]:
     return kind_state_of
 
 
+def _carry_task_attribution(
+    ledger_rows: Sequence[Mapping[str, Any]],
+    verify_rows: Sequence[Mapping[str, Any]],
+) -> list[Any]:
+    """把台账行那一格 `by_task_id` / `by_task_id_tri` 搬到同一行的对账行上。
+
+    `verify_entries` 的行形状里没有 `task_id`；旧读法两栏各自按路径反查，于是两栏
+    一起落在 `missing`。归属只该有一个来源：台账行自己的那一格（`row` / `event` /
+    `not_recorded`），对账行照抄。
+
+    按下标对齐优先（`verify_entries(root, rows)` 就是逐行返回的）；同路径可能有多条
+    台账行（真机：同一份手稿被登记两次），按路径建映射会把两行的归属折成一格。
+    只有长度对不上时才退回路径映射。
+    """
+    if len(verify_rows) == len(ledger_rows):
+        paired: list[Any] = []
+        for lrow, vrow in zip(ledger_rows, verify_rows):
+            if isinstance(lrow, Mapping) and isinstance(vrow, Mapping):
+                paired.append({**dict(vrow),
+                               "by_task_id": str(lrow.get("by_task_id") or ""),
+                               "by_task_id_tri": str(lrow.get("by_task_id_tri") or "")})
+            else:
+                paired.append(vrow)
+        return paired
+    task_by_path: dict[str, tuple[str, str]] = {}
+    for row in ledger_rows:
+        if isinstance(row, Mapping):
+            task_by_path[str(row.get("path") or "")] = (
+                str(row.get("by_task_id") or ""), str(row.get("by_task_id_tri") or ""))
+    return [
+        ({**dict(row),
+          "by_task_id": task_by_path.get(str(row.get("path") or ""), ("", ""))[0] or
+                        str(row.get("by_task_id") or ""),
+          "by_task_id_tri": task_by_path.get(str(row.get("path") or ""), ("", ""))[1] or
+                            str(row.get("by_task_id_tri") or "")})
+        if isinstance(row, Mapping) else row
+        for row in verify_rows]
+
+
 def artifacts_face(root: str | Path, store: Any = None, *,
                    run_dir: str | Path | None = None,
                    project_dir: str = "",
-                   limit: int = 0, offset: int = 0) -> dict[str, Any]:
+                   limit: int = 0, offset: int = 0,
+                   compact: bool = False) -> dict[str, Any]:
     """`GET /api/artifacts` 的读模型：台账 + 交接 + 验收行 + 体例 + 秘书 + 六件产物 + 任务。
 
     - `ledger`：`artifacts.read_ledger`（行键 = `artifacts.FIELDS`：`at/path/sha256/bytes/`
@@ -3033,6 +3428,18 @@ def artifacts_face(root: str | Path, store: Any = None, *,
     与 `out/exp-logs/<号>.log` —— 日志与报告从 2026-11-22 起不在同一个父目录下）
     与 `code_exp`（`code/exp/` 下的脚本）。
     sha 原文仍然留在数据里（`sha256` / `sha256_now` 一个字没动）—— 改的只是渲染。
+
+    ## 字段档（`compact`）：与 `/api/evidence` 同一套
+
+    `compact=True` 按 `Artifacts.tsx` 真的会画的列投影：`handoffs.body` 与
+    `tasks.detail` 截到 :data:`COMPACT_CLIP_CHARS`，`ledger_verify` 的两份 sha 与
+    行级归属读数省掉（页面只画路径 / 一致吗 / 结论 / 谁产出），`secretary` 那一栏
+    页面根本不画、只留最基本的几格。省了哪些、截了哪些写在 `rows_omitted` /
+    `rows_clipped` / `rows_nested`；`?full=1` 走同一条读模型（`compact=False`），
+    字段一个不少。
+
+    缺省 `compact=False`：契约判据 C、`/api/package` 与既有调用方读的仍是全字段
+    读模型。
     """
     from .. import manuscripts as MS
     from ..artifacts import kind_state, read_ledger, verify_entries
@@ -3120,6 +3527,10 @@ def artifacts_face(root: str | Path, store: Any = None, *,
         key: out.get(key) or []
         for key in ("ledger", "ledger_verify", "handoffs", "checks", "secretary",
                     "products", "tasks")}))
+    # 对账行取台账行那一格（同一行在两栏里必须是同一种归属）。拆在
+    # `_carry_task_attribution` 里：这一面已经到 200 行软基线，搬移不改行为。
+    out["ledger_verify"] = _carry_task_attribution(
+        out.get("ledger") or [], out.get("ledger_verify") or [])
     # ---- sha 原文不显示，只显示一致不一致：
     # 台账行的一致性取自同一路径的核对行（`verify_entries` 已经把两份 sha 读出来了），
     # 核对行自己的一致性由 `sha_consistency` 真比一次（见 `_ledger_verify_consistency`）。
@@ -3174,6 +3585,12 @@ def artifacts_face(root: str | Path, store: Any = None, *,
     # 注意切行发生在「一致性 join 之后」（`ledger` 的 `sha_consistency` 取自同一份
     # `ledger_verify`，两份都按同一个窗口切，逐行对得上）。
     page_columns(out, _ARTIFACTS_PAGE_COLUMNS, limit=limit, offset=offset)
+    if compact:
+        _project_compact_face(out, _ARTIFACTS_COMPACT_FIELDS,
+                              clip_fields=_ARTIFACTS_CLIP_FIELDS,
+                              nested_fields=_ARTIFACTS_NESTED_FIELDS)
+    else:
+        _mark_full_fields(out)
     return out
 
 
@@ -3231,6 +3648,15 @@ def acceptance_face(root: str | Path, store: Any = None, *, project_dir: str = "
     - 不给 `sid` ⇒ `triage_branch_recorded` 是 `unknown`（不知道读哪一段会话）；
     - `store` / `reviewaccept` 抛异常 ⇒ 整面 `unreadable` + `reason`。
 
+    ## 「在成本上限内」是收工门的入参，不是预算寄存器（2026-11-24）
+
+    这一格的上限由调用方给（`agentflow closing --cap-usd` / 网页「成本上限」格）。
+    `/api/budget` 的 `spent_usd` / `total_usd` 是预算闸（可随时追加），不是这份交付
+    契约里的成本上限 —— 拿它顶上去会把"没给上限"读成"没超上限"（把没查成折成通过）。
+    所以没给上限时这一格仍是 `unknown`，但 `details.within_cost_cap` 与 `cap_note`
+    把"为什么算不出来、去哪给"写清（改前只有一句"没给成本上限"，读的人会以为是在说
+    预算页那两个数）。
+
     ## `failed` 只装"真不过"，"没查成"单列（2026-11-20，WEBCLEAN）
 
     上游 `reviewaccept.check_review` 的 `acc.failed` 把 `unknown` 与 `fail` 混装在同一
@@ -3268,7 +3694,8 @@ def acceptance_face(root: str | Path, store: Any = None, *, project_dir: str = "
                 "rows": _acceptance_rows({}, {}),
                 "note": ("`failed` 是真不过，`unchecked` 是没查成 —— 两档不许折平"
                          "（与 `/api/package` 的 `closing.content` 同一算式）"),
-                "auxiliary_note": ""}
+                "auxiliary_note": "",
+                "cap_usd": cap_usd, "cap_note": ""}
     criteria = {str(k): str((acc.criteria or {}).get(k, "unknown")) for k, _d in CRITERIA}
     details = {str(k): str((acc.details or {}).get(k, "")) for k, _d in CRITERIA}
     aux = {str(k): _as_text((acc.auxiliary or {}).get(k)) for k, _d in AUXILIARY_SIGNALS}
@@ -3278,6 +3705,17 @@ def acceptance_face(root: str | Path, store: Any = None, *, project_dir: str = "
     # 透传它会让同参数下这里报 3 条、收工面报 1 fail + 2 unchecked。
     failed = sorted(k for k, v in criteria.items() if v == "fail")
     unchecked = sorted(k for k, v in criteria.items() if v == "unknown")
+    if cap_usd is None:
+        cap_note = ("这一格是收工门的入参：只有调用方给了 `--cap-usd`（网页「成本上限」格 / "
+                    "`agentflow closing --cap-usd`）才算。`/api/budget` 的 spent/total 是"
+                    "预算闸（可随时追加），不是这份交付的成本上限 —— 不拿它顶，所以这里"
+                    "记「没查成」，不是「通过」。")
+        details["within_cost_cap"] = (
+            "没给成本上限（收工门入参 `--cap-usd` / 网页「成本上限」格没填）⇒ 这一条"
+            "没查成（不是通过）；预算页的 spent/total 不是这一格的判据")
+    else:
+        cap_note = (f"成本上限取调用方给的 {float(cap_usd):.6f}（收工门入参 / 网页那一格），"
+                    "不是预算寄存器里的 `total_usd`。")
     return {"tri": TRI_COMPUTED,
             "reason": ("这些格子没查成（不是通过）：" + "、".join(unresolved)
                        if unresolved else ""),
@@ -3288,7 +3726,10 @@ def acceptance_face(root: str | Path, store: Any = None, *, project_dir: str = "
             "note": ("`failed` 是真不过，`unchecked` 是没查成 —— 两档不许折平"
                      "（与 `/api/package` 的 `closing.content` 同一算式）"),
             "auxiliary_note": str(
-                (acc.to_dict() or {}).get("auxiliary_note", ""))}
+                (acc.to_dict() or {}).get("auxiliary_note", "")),
+            # 成本上限那两格：`cap_usd` 是调用方给的值（没给就是 null），`cap_note` 说清
+            # 这一格的上限从哪来、以及为什么预算页那两个数不能顶它。
+            "cap_usd": cap_usd, "cap_note": cap_note}
 
 
 # ====================================================================== 7 论文包三块
@@ -3702,7 +4143,7 @@ def _proofs_block(root_p: Path, store: Any, rep: Any,
                       "另：proofs.signed 是 review 状态为 signed 的命题数（阅签台账口径），"
                       "与这里的 `signed`（第 3 位）是两个读数，不许互相顶替。"
                       "`sign_does_not_back_row` = 受控读数 `sign_does_not_back_the_row`"
-                      "（签真、地址真，但这一行不持有这份正文）的份数：它**不算签**，"
+                      "（签真、地址真，但这一行不持有这份正文）的份数：它不算签，"
                       "也不折进 `unbacked`；`null` = 那一格没查成，不是 0。"),
              "source": _src(_newest_sign_file(root_p) or "out/vsigns/",
                             label="签文件（逐份 <sha>.json）")}
@@ -4678,6 +5119,90 @@ def serving_reading(root: str | Path) -> dict[str, Any]:
     }
 
 
+def _unattributed_reason(events: Sequence[Mapping[str, Any]],
+                         runs: Sequence[Mapping[str, Any]],
+                         total: float) -> str:
+    """「无人认领」那笔钱的理由：把 `sessions.unattributed_usd_of` 的差额逐档拆开。
+
+    改前这一格只在"会话读不出来"时才有话；读到、而差额又不是 0 时它是一句空串 ——
+    页面上于是出现"$0.375630 无人认领"却没有一句为什么（有数没理由）。这里不重算那个
+    数，只解释它由哪几档组成（同一批事件、同一套归属规则）：
+
+    - 还没收工的趟：事件求和里有、收工行的自报账没有（按构造全额进差额）；
+    - 已收工、但「事件求和 > 自报账」的趟：两者之差；
+    - 反过来「自报账 > 事件求和」的趟：负项（会把差额抵小）；
+    - 归不到任何一趟的 `llm_call`：两侧都没有它（无台账号 / 在收工行之外）。
+
+    拆出来的四档用盘上的同一批读数复算；它们不改变 `unattributed_usd`。
+    """
+    def _num(value: Any) -> bool:
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+    calls = [e for e in events if str(e.get("kind") or "") == "llm_call"
+             and _num(e.get("usd"))]
+    event_total = round(sum(float(e["usd"]) for e in calls), 6)
+    run_total = round(sum(float(r["usd"]) for r in runs if _num(r.get("usd"))), 6)
+    loose = round(event_total - run_total, 6)
+    unfinished = [r for r in runs if r.get("end_index") is None]
+    unfinished_usd = round(sum(float(r.get("usd") or 0.0) for r in unfinished
+                               if _num(r.get("usd"))), 6)
+    over = [r for r in runs if r.get("end_index") is not None
+            and _num(r.get("usd")) and _num(r.get("spend_usd"))
+            and float(r["usd"]) > float(r["spend_usd"]) + 1e-9]
+    over_usd = round(sum(float(r["usd"]) - float(r["spend_usd"]) for r in over), 6)
+    under = [r for r in runs if r.get("end_index") is not None
+             and _num(r.get("usd")) and _num(r.get("spend_usd"))
+             and float(r["spend_usd"]) > float(r["usd"]) + 1e-9]
+    under_usd = round(sum(float(r["spend_usd"]) - float(r["usd"]) for r in under), 6)
+    bits: list[str] = []
+    if unfinished_usd:
+        bits.append(f"未收工的 {len(unfinished)} 趟 ${unfinished_usd:.6f}"
+                    "（没有收工行 ⇒ 没有自报账，不是花 0）")
+    if over_usd:
+        bits.append(f"已收工、但事件求和大于自报账的 {len(over)} 趟 ${over_usd:.6f}")
+    if loose > 1e-6:
+        bits.append(f"归不到任何一趟的 ${loose:.6f}（在收工行之外 / 无台账号的调用）")
+    if under_usd:
+        bits.append(f"抵减：自报账大于事件求和的 {len(under)} 趟 ${under_usd:.6f}")
+    body = "、".join(bits) or "各档在舍入范围内抵平"
+    spend_total = round(sum(float(r["spend_usd"]) for r in runs
+                            if _num(r.get("spend_usd"))), 6)
+    return (f"事件求和 ${event_total:.6f} − 各趟自报账合计 ${spend_total:.6f} "
+            f"= ${float(total):.6f}：{body}。这是会话口径的差（不是账本行），"
+            "它不进任何一趟的 `usd`。")
+
+
+def _budget_panel_note(snap: Mapping[str, Any]) -> str:
+    """预算面板这一格的人话：只回答钱，不替收工门回答「东西写没写」。
+
+    为什么不再直接印 `budget.paperwork_first_reading()` 的 `note`：那一句是收工门的
+    拒信语境（"这一格缺的是「没写」，不是「写不起」"指收工必需物），而这一页是预算
+    读数页。预算寄存器写没写、上限设没设，与"验收表写没写"是两件事 —— 把它们接在同一
+    句里，读的人会把"寄存器在盘上、预算已写"读成"这一趟缺东西"（真机 2026-11-24 的
+    读数：`exists=true` / `added_count=1`，而 `note` 仍说"缺的是没写"）。
+    收工门那一句仍原样保留在 `closing_note`（只在收工时用）。
+    """
+    spent = snap.get("spent_usd")
+    total = snap.get("total_usd")
+    remaining = snap.get("remaining_usd")
+    reserve = snap.get("reserve_usd")
+
+    def _usd(value: Any) -> str:
+        return f"${float(value):.6f}" if isinstance(value, (int, float)) else "（没读到）"
+
+    head = "预算读数（不是硬闸）："
+    if remaining is None:
+        return (head + f"已花 {_usd(spent)} / 上限 {_usd(total)}；剩余算不出来"
+                "（没设过上限 / 账本读不出）—— 「算不出来」不等于「还剩很多」。"
+                "这一句只回答钱；收工必需物写没写是收工门的问题（那一句在 `closing_note`）。")
+    below = snap.get("below_reserve")
+    line = (head + f"已花 {_usd(spent)} / 上限 {_usd(total)} / 还剩 {_usd(remaining)}；"
+            f"收工储备线 {_usd(reserve)}（")
+    line += ("余量已低于收工储备线" if below else "余量还在收工储备线之上") + "）。"
+    return (line + "这一句只回答钱：收工必需物写没写是收工门的问题"
+            "（那一句收在 `closing_note`，本页不替它下结论）。")
+
+
 def budget_face(root: str | Path) -> dict[str, Any]:
     """`GET /api/budget` 的读模型：总额度 / 已花 / 剩余 / 追加历史 + 两个归口。
 
@@ -4701,8 +5226,13 @@ def budget_face(root: str | Path) -> dict[str, Any]:
     那批键之外多给 `reserve_usd` / `below_reserve` / `note` / `paperwork_first_rule`
     （真实现在 `budget.py`，本层不另写一份阈值）。为什么必须给：M 自己按 $1.00
     收工储备线叫停时（`stopctl` 的口径），页面上只剩"剩余 1.32"这一个数 ——
-    "为什么停"看不见。`note` 是那一句能直接读的人话（预算读数不是硬闸，只用来
-    分辨「没写」与「写得不对」）。
+    "为什么停"看不见。
+
+    但那一份 `note` 是收工门拒信的语境（"这一格缺的是「没写」，不是「写不起」"
+    说的是收工必需物），不是预算页的读数。2026-11-24 的现场：`budget.json` 在盘上、
+    `added_count=1`、上限已设，而面板上的 `note` 仍在说"缺的是没写" —— 模板套错档。
+    所以在这一层分两格：`closing_note` 逐字保留收工门那一句（前缀写明"收工门口径"），
+    `note` 换成只回答钱的那一句（`_budget_panel_note`）。
 
     ## 无人认领那笔钱（会话口径）
 
@@ -4710,6 +5240,9 @@ def budget_face(root: str | Path) -> dict[str, Any]:
     收工面 `closing.cost.unattributed_usd` 是同一个函数算的
     （`sessions.unattributed_usd_of`）：事件流里归不到任何一趟的那些
     `llm_call.usd`。会话读不出来 ⇒ `None` + `unattributed_reason`（不是 0）。
+    读到而差额不是 0 时，`unattributed_reason` 由 `_unattributed_reason` 逐档拆开
+    （未收工的趟 / 事件求和大于自报账的趟 / 归不到任何一趟的调用 / 抵减项）——
+    有数就必须有理由；0 元不需要理由，所以那一档是空串。
 
     ## 账本行不是 llm_call 总数
 
@@ -4766,16 +5299,27 @@ def budget_face(root: str | Path) -> dict[str, Any]:
     # "已花 3.676321" 读成"每一笔都有主"。
     unattributed: float | None = None
     unattributed_problem = ""
+    unattributed_runs: list[dict[str, Any]] = []
+    unattributed_events: list[dict[str, Any]] = []
     try:
         records, info = SS.read_all_sessions(root_p)
         if info.get("checked"):
-            unattributed = SS.unattributed_usd_of(records, SS.runs_in_session(records))
+            unattributed_runs = SS.runs_in_session(records)
+            unattributed_events = records
+            unattributed = SS.unattributed_usd_of(records, unattributed_runs)
         else:
             unattributed_problem = (f"会话读不出来（{info.get('reason') or '没查成'}）"
                                     "⇒ 无人认领那笔钱算不出来（不是 0）")
     except Exception as exc:  # noqa: BLE001 - 读数层：读不到就如实说没查成
         unattributed_problem = (f"会话读不出来（{type(exc).__name__}: {exc}）"
                                 "⇒ 无人认领那笔钱算不出来（不是 0）")
+    if (unattributed is not None and not unattributed_problem
+            and abs(float(unattributed)) > 1e-9):
+        # 有数就必须有理由：0 元不需要理由（0 是"每一分都被认领了"的读数）；
+        # 非 0 时把差额逐档拆开（同一批会话事件，同一套归属规则 —— 这里只解释
+        # `sessions.unattributed_usd_of` 那个数怎么来的）。
+        unattributed_problem = _unattributed_reason(
+            unattributed_events, unattributed_runs, float(unattributed))
     snap.update({
         "spent_tri": spent_tri,
         "spent_reason": spent_problem,
@@ -4800,6 +5344,12 @@ def budget_face(root: str | Path) -> dict[str, Any]:
         snap["tri"] = TRI_UNREADABLE
         snap["reason"] = "；".join(x for x in (str(snap.get("reason") or ""),
                                                spent_problem) if x)
+    # ③ 模板套错档：`paperwork_first_reading` 的 `note` 是收工门拒信那一档
+    # （"缺的是「没写」，不是「写不起」"指收工必需物），不是预算页的读数。原句移到
+    # `closing_note`（只在收工时用），本页 `note` 换成只回答钱的那一句。
+    snap["closing_note"] = ("（收工门口径，只在问「收工必需物该不该先落盘」时用）"
+                            + str(snap.get("note") or ""))
+    snap["note"] = _budget_panel_note(snap)
     return snap
 
 
@@ -4900,6 +5450,14 @@ def live_face(root: str | Path) -> dict[str, Any]:
 
     行一律用 `stopctl` 自己的字典逐字透传（`running` / `stale_rows` / `live` / 历史行）：
     在这一层再抄一份字段表就是第二份形状定义，必然与那边漂移。
+
+    ## 「进程面」说的是哪个进程（2026-11-24）
+
+    `live[]` 的 `pid` 来自 `stopctl.register_pid` —— 它写的是父进程自己（宿主进程），
+    而同一趟 run 里的多个角色是那个进程里的线程（`stopctl` 的 `running_loops` 里那句
+    "子循环跑在父进程里（线程），它们没有各自的 pid 登记"）。所以多行会印同一个号。
+    每一行因此带 `host_process=True` 与 `pid_note`，面级 `live_note` 把这层话写成一句
+    可复算的读数：进程面证明的是"宿主还在"，不是"这一行是独立进程"。
     """
     from .. import stopctl as SC
 
@@ -4944,6 +5502,21 @@ def live_face(root: str | Path) -> dict[str, Any]:
         # 标成 True 才不会在页面上被画成"顶趟还在跑"。
         row["stale_loop"] = True
     live_rows = [dict(r) for r in (loops.get("live") or [])]
+    # 进程面这一档要说清是"哪个进程"的号：`register_pid` 写的是父进程自己，
+    # 同一趟 run 里的角色是同一进程里的线程 ⇒ 多行共用一个号（是事实，不是缺陷）。
+    host_pids = sorted({
+        int(row["pid"]) for row in live_rows
+        if isinstance(row.get("pid"), int) and not isinstance(row.get("pid"), bool)})
+    for row in live_rows:
+        row["host_process"] = True
+        row["pid_note"] = ("宿主进程 pid：登记它的那个 `python -m agentflow` 的进程号，"
+                           "不是这一行自己的 pid（同一趟 run 里的角色是同一进程里的线程）")
+    live_note = ""
+    if live_rows:
+        live_note = (f"进程面 {len(live_rows)} 行共用 {len(host_pids)} 个宿主进程 pid："
+                     "`stopctl.register_pid` 登记的是父进程自己，同一趟 run 里的角色都在"
+                     "同一个 `python -m agentflow` 进程里跑 ⇒ 同一个号出现在多行不代表它们"
+                     "是同一个代理，也不代表每一行是独立进程。判「谁在跑」看 role + sid。")
     tasks_running, tasks_tri, tasks_note = _tasks_running_of(root_p)
     if tasks_note:
         notes.append(tasks_note)
@@ -4985,6 +5558,7 @@ def live_face(root: str | Path) -> dict[str, Any]:
         "running": running,
         "stale_rows": stale_rows,
         "live": live_rows,
+        "live_note": live_note,
         "unreadable_sessions": list(loops.get("unreadable_sessions") or []),
         "switch": switch,
         "switch_present": bool(switch.get("present") or switch.get("path")),
@@ -4994,9 +5568,15 @@ def live_face(root: str | Path) -> dict[str, Any]:
 
 
 # ====================================================================== 8b 义务与板项
-#: 三族义务：`(族名, 幂等键前缀, 负责人角色, 一句话)`。前缀的真身在
-#: `obligations`（`REGISTER_PREFIX` / `RESUBMIT_PREFIX` / `REGISTER_WAKE_PREFIX`），
-#: 本层不另写一份字面量 —— 那一份漂了，页面会显示一族不存在的义务。
+#: 四族义务：`(族名, 幂等键前缀, 负责人角色, 一句话)`。前缀的真身在
+#: `obligations`（`REGISTER_PREFIX` / `RESUBMIT_PREFIX` / `REGISTER_WAKE_PREFIX` /
+#: `HANDOFF_PREFIX`），本层不另写一份字面量 —— 那一份漂了，页面会显示一族不存在的义务。
+#:
+#: 第四族 `d-handoff` 是 2026-11-24 补的：E 把一条「有数值支持、还没证明」的猜想落成
+#: `supported_not_proved` 时，`obligations.ensure_handoff` 为 D 开一条待递交义务
+#: （`d-handoff@<猜想号>`，收口是 B 收录 / 猜想被推翻 / 命题被放弃）。这一族此前不在
+#: 这张表里 ⇒ `/api/obligations` 的 `families` 只有三族，面板上看不见「今天新增的
+#: 待递交」。空的时候也必须列出（0 是读数，「缺族」不是）。
 def _obligation_families() -> tuple[tuple[str, str, str, str], ...]:
     from .. import obligations as OB
 
@@ -5007,11 +5587,53 @@ def _obligation_families() -> tuple[tuple[str, str, str, str], ...]:
          "审稿要求重送（收口：重送那一版落地并拿到新签）"),
         ("b-awake", OB.REGISTER_WAKE_PREFIX, OB.REGISTER_ROLE,
          "签落地后叫醒 B（召唤行；它本身不是义务，是「叫过没有」的读数）"),
+        ("d-handoff", OB.HANDOFF_PREFIX, OB.HANDOFF_ROLE,
+         "猜想要递给 B（收口：B 收录成功 / 猜想被推翻 / 命题被放弃；这一族没有召唤行，"
+         "`summoned` 恒为 0，不是没叫醒）"),
     )
 
 
+def _handoff_reading(store: Any) -> dict[str, Any]:
+    """「待递交」义务（`d-handoff@`）的一眼读数：`obligations.d_handoff_reading` 的读数。
+
+    ## 为什么要在这里借一个只读主控
+
+    `d_handoff_reading` 的口径是"板上"：它先按 `conductor._board_rows()` 取项，再逐条
+    用 `handoff_gap` 对着 `conjectures` / `statements` 判收口。而
+    `obligations._conductor` 只认 `tools.conductor_tools.cached_conductor` —— "绝不顺手
+    建一个"：运行进程里建歪了，会让后来接线的那个运行复用一个空壳。
+
+    `web` 是另一个进程：那里面没有在飞的运行，也就没有已接线的主控。所以这一层
+    借一个只读主控（`conductor_for`），用完把缓存恢复成进来那一档 —— 同进程里别人
+    已经建过的那一个不动它。构造不写盘（判据
+    `test_webui_batch1_readings.py::test_building_the_read_conductor_writes_nothing` 钉着）。
+
+    构造抛 / 读不出来 ⇒ 原样返回 `checked=False` 的读数，由调用方说"没查成"（不许把它
+    折成"板上 0 条"）。
+    """
+    from .. import obligations as OB
+    from ..tools import conductor_tools as CT
+
+    key = str(Path(str(getattr(store, "root", ""))).resolve())
+    held = CT._CONDUCTORS.get(key)
+    try:
+        if held is None:
+            CT.conductor_for(store)
+        got = OB.d_handoff_reading(store)
+    except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不是"没有待递交"
+        return {"checked": False, "open": 0, "unowned": 0, "rows": [], "problems": [],
+                "reason": (f"d_handoff_reading 没跑成（{type(exc).__name__}: {exc}）"
+                           "⇒ 这一族的逐条读数没查成，不是「板上 0 条」")}
+    finally:
+        if held is None:
+            CT._CONDUCTORS.pop(key, None)
+    return dict(got) if isinstance(got, Mapping) else {
+        "checked": False, "open": 0, "unowned": 0, "rows": [], "problems": [],
+        "reason": "d_handoff_reading 没有返回读数（不是「没有待递交义务」）"}
+
+
 def obligations_face(root: str | Path, store: Any = None) -> dict[str, Any]:
-    """`GET /api/obligations` 的读模型：板上三族义务的收件人读数。
+    """`GET /api/obligations` 的读模型：板上四族义务的收件人读数。
 
     为什么要有这一条：名册的收件箱按 `parent_task_id`（父台账号）分，而一条板项
     可以只带收件实例（`Task.instance`，`conductor.open_item(recipient_instance=…)`
@@ -5027,6 +5649,16 @@ def obligations_face(root: str | Path, store: Any = None) -> dict[str, Any]:
       这一列取件（`instance` 相等，或 `instance` 为空且 `role` 相等）。
     - `parent_task_id`：父台账号（`open_items_of` 那一轴，名册收件箱用它）。
     两轴都空 ⇒ `addressed="unowned"`（板上的孤儿项，等主控派人）。
+
+    ## 第四族 `d-handoff` 的计数从哪来
+
+    前三族的 `open` / `unowned` 是这张表扫出来的（板项行按前缀归族）。`d-handoff`
+    那一族另有一份唯一读数 `obligations.d_handoff_reading()`（它逐条对 `conjectures` /
+    `statements` 判 gap / eligible / statement_id），所以这一族的 `open` / `unowned`
+    以那份读数为准；同时拿它和台账扫出来的行数对账 —— 两个读法对不上就点名（同一块板
+    的两个读法不一致，必须先查清差在哪）。那份读数没跑成时，行数照给（同一块
+    `tasks` 板，不是 0），但这一族带 `tri="unreadable"` + `reason`，说明逐条的
+    gap / eligible 没有。
 
     ## 三态
 
@@ -5073,7 +5705,7 @@ def obligations_face(root: str | Path, store: Any = None) -> dict[str, Any]:
     families: dict[str, dict[str, Any]] = {
         name: {"name": name, "role": role, "why": why,
                "prefix": pre, "open": 0, "unowned": 0, "summoned": 0,
-               "instances": []}
+               "instances": [], "tri": TRI_COMPUTED, "reason": ""}
         for name, pre, role, why in _obligation_families()
     }
     detail_rows: list[dict[str, Any]] = []
@@ -5126,10 +5758,45 @@ def obligations_face(root: str | Path, store: Any = None) -> dict[str, Any]:
     counts = {name: {"open": f["open"], "unowned": f["unowned"],
                      "summoned": f["summoned"]} for name, f in families.items()}
     problems: list[str] = []
+    #: 第四族：`open` / `unowned` 以 `obligations.d_handoff_reading()` 为准（那才是这一族
+    #: 的唯一读数；台账扫出来的行数是它的第二读法，只用来对账）。
+    handoff = _handoff_reading(store)
+    fam = families.get("d-handoff")
+    if fam is not None:
+        if handoff.get("checked"):
+            read_open = int(handoff.get("open") or 0)
+            read_unowned = int(handoff.get("unowned") or 0)
+            if (read_open != int(fam["open"])
+                    or read_unowned != int(fam["unowned"])):
+                problems.append(
+                    "d_handoff_reading 与板项行数对不上：读数 "
+                    f"open={read_open}/unowned={read_unowned}，台账扫出来 "
+                    f"open={fam['open']}/unowned={fam['unowned']}"
+                    "（同一块板的两个读法，差在哪要先查清）")
+            fam["open"], fam["unowned"] = read_open, read_unowned
+            fam["instances"] = sorted({
+                str(one.get("owner_instance") or "")
+                for one in (handoff.get("rows") or [])
+                if str(one.get("owner_instance") or "")})
+            fam["tri"], fam["reason"] = TRI_COMPUTED, ""
+        else:
+            # 三态：这份读数没跑成 ≠ 这一族 0 条。行数照给（同一块 tasks 板），
+            # 但逐条的 gap / eligible 没有 —— 理由必须能被读到。
+            fam["tri"] = TRI_UNREADABLE
+            fam["reason"] = (str(handoff.get("reason") or "d_handoff_reading 没跑成")
+                             + "；open/unowned 是 tasks 板项行的行数（同一块板），"
+                               "逐条的 gap / eligible 没有")
+            problems.append(f"d-handoff：{fam['reason']}")
+        problems.extend(str(x) for x in (handoff.get("problems") or []))
+        counts["d-handoff"] = {"open": fam["open"], "unowned": fam["unowned"],
+                               "summoned": fam["summoned"]}
+    fam_reasons = [f"{n}：{f['reason']}" for n, f in families.items() if f["reason"]]
+    counts_text = "；".join(f"{n}：开 {c['open']}（没人收 {c['unowned']}）"
+                           for n, c in counts.items() if c["open"])
+    reason = "；".join(x for x in (counts_text, *fam_reasons) if x)
     return {
         "tri": TRI_COMPUTED,
-        "reason": "；".join(f"{n}：开 {c['open']}（没人收 {c['unowned']}）"
-                           for n, c in counts.items() if c["open"]),
+        "reason": reason,
         "source": _src("data/tasks.json", label="板项"),
         "checked": True,
         "families": [families[name] for name in families],
@@ -5143,6 +5810,48 @@ def obligations_face(root: str | Path, store: Any = None) -> dict[str, Any]:
                        "unowned": unowned},
         "problems": problems,
     }
+
+
+# ====================================================================== 8c 错误面的补注
+def annotate_errors_readout(face: Mapping[str, Any]) -> dict[str, Any]:
+    """`/api/errors` 的补注：把 `unclassified_signal` 那条说明改成读得懂、能照做的一句。
+
+    ## 为什么只改 detail，不改计数
+
+    错误计数的口径与类目真身都在 `errorstats`（CLI 的 `errors` 与 `/api/errors` 读同一个
+    `readouts.errors_readout`）。网页这一层若自己把某条原话映射成类目，`/api/errors`
+    的 `total` 就会与 CLI 说两句话 —— 而两份漂了不会有任何地方报错。所以这里只解释
+    `sources.unclassified` 那一格：改前它说"要收进来就给 errorstats 的族表补一条原话"，
+    读的人会以为补一行就收得完。
+
+    2026-11-24 的现场（`projects/lp-ball-22`，`{'tool': 15}`）：那 15 条不是一族 ——
+    盘上原话至少分成"候选期抽读要给 `path`"、"<表> 没有字段 [...]"、"本次委托没有
+    回读记录"、"超过该委托上限"、"槽位不在本次委托"、"没有编号的手稿"、"派活文本点名
+    了猜想号"等七八族。一族一行地补 `_TOOL_REFUSAL_FAMILIES` 才收得进来，而且每一族
+    归哪个类目要逐族判；本路允许改的面只有 `webui/**`，族表不在这里。
+
+    没读到 `sources.unclassified` 时原样保留 readouts 的那句话（不编一个族数出来）。
+    """
+    out = dict(face)
+    loose = ((face.get("data") or {}).get("sources") or {}).get("unclassified") or {}
+    loose = {str(k): int(v or 0) for k, v in loose.items() if int(v or 0)}
+    problems: list[dict[str, str]] = []
+    for one in (face.get("problems") or []):
+        item = dict(one)
+        if str(item.get("code") or "") == "unclassified_signal" and loose:
+            item["detail"] = (
+                f"结构判据认不出族的 {loose} 条没有猜类目（各自的那一类里没加数）。"
+                "这一条不在网页层收：类目与族表的唯一真身是 `errorstats`"
+                "（`/api/errors` 与 CLI 的 `errors` 读同一个 `errors_readout`），"
+                "网页另加一条「原话 → 类目」的映射会让两个出口的 `total` 说两句话。"
+                "盘上这批原话本身也不是一族（抽读缺 `path` / 投影写了不存在的字段 / "
+                "委托配额与槽位 / 手稿编号不存在 / 派活文本点名猜想号…）——"
+                "一条补不进全部。补法：在 `errorstats._TOOL_REFUSAL_FAMILIES` 里逐族补"
+                "原话（形态照既有条目 `(类目, (\"原话\",))`），并确认那个类目已登记在"
+                "`errorstats.ERROR_CATEGORIES`。")
+        problems.append(item)
+    out["problems"] = problems
+    return out
 
 
 # ====================================================================== 9 用量
@@ -5282,10 +5991,10 @@ def run_index_reason(root: str | Path, doc: Mapping[str, Any]) -> str:
                 "跑过一趟之后（顶趟收工成功会顺手建索引）再回来看这一格。")
     else:
         tail = (
-            " —— 为什么会这样：索引只在**顶趟收工成功**（`stop_reason=final`）、"
+            " —— 为什么会这样：索引只在顶趟收工成功（`stop_reason=final`）、"
             "`agentflow closing` 通关、或显式重建时落盘（`sessions.rebuild_run_index` 没有"
             "别的生产调用者）；工作区没走过这三步就一直没有 `index/run-index.json` ——"
-            "**这是常态，不是出错**，所以这一格在真机上几乎总是 `unreadable`。"
+            "这是常态，不是出错，所以这一格在真机上几乎总是 `unreadable`。"
             "怎么修（两步任选）：① 想现在就建：跑 `"
             + RUN_INDEX_REBUILD_CMD.format(root=root_shown)
             + "`（幂等，只写 `index/run-index.json` 与一行审计）；"
@@ -5314,17 +6023,22 @@ def actions_face(root: str | Path, *, limit: int = ACTIONS_PAGE_DEFAULT,
     成了没有」这个问题在页面上答不出来。写侧自己的文件头（`webui/audit.py` §一行形状）
     就写着那一栏叫「操作历史」，于是这一条端点补的就是它。
 
-    读法只有一份实现：`audit.read_actions_state`（它已经带回三态与坏行说明）。这一层
-    只做两件事 —— 「倒序」与「分页」：
+    读法只有一份实现：`audit.read_actions_state`（它已经带回四态与坏行说明）。这一层
+    只做三件事 —— 「倒序」「分页」「把缺省落点写死」：
 
     - 倒序：台账是追加写的，读的人先要看最近一笔（`order="newest_first"` 明说）；
     - 分页：`limit` / `offset` 由调用方给（HTTP 层已经校验过非法值），`has_more` 说清
       "还有没有下一页" —— 让页面不必自己拿 `total` 与 `offset+len` 去比（比错了就是
-      "看起来能翻页、翻过去是空的"）。
+      "看起来能翻页、翻过去是空的"）；
+    - 落点：`path` 恒给绝对路径，缺省就是 `<工作区>/web-actions.jsonl`
+      （`audit.actions_path(root)` 是唯一口径；读不到时也照样给，于是「路径不对」
+      与「文件还没建」在读数上分得开）。
 
-    三态原样搬：台账读不出来 ⇒ `tri="unreadable"` 且 `rows=[]`（「不是」"没有操作"）；
-    文件不在盘上 ⇒ `computed` + 0 行（"这个工作区还没有人从网页上动过手"是一个算出来的
-    读数，合法初态）。坏行说明在 `problems` 里，不在 `reason` 里被吞掉。
+    三态原样搬，不折：台账读不出来 ⇒ `tri="unreadable"` 且 `rows=[]`
+    （「不是」"没有操作"）；文件不在盘上 ⇒ `tri="not_applicable"`、0 行、`reason`
+    逐字写「还没建」（合法初态，但不是「0 条动作」）；文件在、一行都没有 ⇒
+    `tri="computed"` 且 `reason` 明说「在盘上但是空文件」。坏行说明在 `problems` 里，
+    不在 `reason` 里被吞掉。
     """
     from . import audit as A
 
@@ -5335,7 +6049,7 @@ def actions_face(root: str | Path, *, limit: int = ACTIONS_PAGE_DEFAULT,
     return {
         "tri": str(got.get("tri") or TRI_COMPUTED),
         "reason": str(got.get("reason") or ""),
-        "path": str(got.get("path") or ""),
+        "path": str(got.get("path") or A.actions_path(root)),
         "problems": [str(x) for x in (got.get("problems") or [])],
         "rows": window,
         "total": total,
@@ -5475,6 +6189,18 @@ def _page_window(query: Mapping[str, Sequence[str]]) -> tuple[int, int, str]:
     return limit, offset, "；".join(problems)
 
 
+def _query_flag(query: Mapping[str, Sequence[str]], name: str) -> bool:
+    """读一个布尔开关（`1/true/on/yes` 为真；不给 / 空 / 其余为假）。
+
+    为什么不再回 400：`?full=` 是"要字段全"的开关，拼错一个值最多退回默认的
+    compact 档 —— 而默认档已经把"省了哪些字段"写在 `rows_omitted` 里，读的人
+    看得见；把它判成 400 反而像"这条端点坏了"。分页那两个参数不同：它们决定
+    "哪一页"，错了会静默给出另一页，所以那两个仍走 400。
+    """
+    raw = _query_text(query, name).strip().lower()
+    return raw in {"1", "true", "on", "yes"}
+
+
 def _bad_page(handler: Any, what: str, why: str,
               query: Mapping[str, Sequence[str]]) -> None:
     """分页参数不合法 ⇒ 400（JSON；把两个参数原样回显，读的人一眼看得出被拒的是哪个）。"""
@@ -5489,29 +6215,42 @@ def _bad_page(handler: Any, what: str, why: str,
 
 def handle_evidence(handler: Any, params: Mapping[str, str],
                     query: Mapping[str, Sequence[str]]) -> None:
-    """`GET /api/evidence`：证据链八栏的 JSON（可带 `?summary=1` / `?limit=` / `?offset=`）。
+    """`GET /api/evidence`：证据链八栏的 JSON。
 
-    AUDIT F12：真机上这一条回 2.1 MB / 2.6 s，页面一进来就卡。分页参数只影响
-    "每栏给多少行"（`rows_mode` / `rows_limit` / `rows_offset` / `rows_total` 四格
-    说清是哪一档、一共多少行），三态与字段一个都不删 —— 契约判据 C 读的是
-    `evidence_chain()` 的缺省读数（全量），所以它逐字不变。
+    三组参数各管一根轴，互不顶替：
+
+    - `?limit=` / `?offset=` / `?summary=1`：行那一轴（`rows_mode` / `rows_limit` /
+      `rows_offset` / `rows_total` 四格说清是哪一档、一共多少行）；
+    - `?full=1`：字段那一轴（默认 compact：只给面板会画的列；`full=1` 给全字段，
+      `rows_fields` 说清是哪一档，`rows_omitted` / `rows_clipped` / `rows_nested`
+      点名省了/截了哪些）；
+    - 三态与各栏 `*_tri` 两档都一个不少。
+
+    AUDIT F12：真机这一条曾回 2.1 MB / 2.6 s，页面一进来就卡。现在的缺省是
+    compact（长字段不进首屏），"取全部"才带 `?full=1` —— 内容不丢，只是不在
+    首屏那一次响应里。契约判据 C 读的是 `evidence_chain()` 的缺省读数（全字段
+    读模型），所以它逐字不变。
     """
     del params
     limit, offset, why = _page_window(query)
     if why:
         _bad_page(handler, "/api/evidence 的分页参数不合法", why, query)
         return
-    _json_of(handler, evidence_chain(handler.root, limit=limit, offset=offset))
+    compact = not _query_flag(query, "full")
+    _json_of(handler, evidence_chain(handler.root, limit=limit, offset=offset,
+                                     compact=compact))
 
 
 def handle_artifacts(handler: Any, params: Mapping[str, str],
                      query: Mapping[str, Sequence[str]]) -> None:
-    """`GET /api/artifacts`：产物面的 JSON（可带 `?run_dir=` 与分页三参）。
+    """`GET /api/artifacts`：产物面的 JSON（可带 `?run_dir=`、分页三参与 `?full=1`）。
 
     读数走 `facecache.cached_face`（按盘失效，见 `webui/facecache.py`）：同一份盘、
-    同一组参数（`run_dir` + `limit` + `offset`）直接复用上一份读模型，响应顶层多一格
-    `cache`（`hit` / `key_sha` / `built_at`）。`cache` 刻意不进 `artifacts_face` 的返回值
-    —— 那是读模型，与 `ui/src/types.ts` 的 `ArtifactsView` 逐格对齐。
+    同一组参数（`run_dir` + `limit` + `offset` + `full`）直接复用上一份读模型，
+    响应顶层多一格 `cache`（`hit` / `key_sha` / `built_at`）。`full` 必须进缓存键：
+    compact 与 full 是两份字节不同的读数，共用一个键就会把"取全部"命中成"首屏那
+    一份"（内容少了而 `hit=true`）。`cache` 刻意不进 `artifacts_face` 的返回值 ——
+    那是读模型，与 `ui/src/types.ts` 的 `ArtifactsView` 逐格对齐。
     """
     del params
     limit, offset, why = _page_window(query)
@@ -5520,11 +6259,13 @@ def handle_artifacts(handler: Any, params: Mapping[str, str],
         return
     vals = query.get("run_dir") or []
     run_dir = str(vals[0]) if vals else None
+    compact = not _query_flag(query, "full")
     face, cache = facecache.cached_face(
         "artifacts", handler.root,
         {"run_dir": run_dir if run_dir is not None else "",
-         "limit": int(limit), "offset": int(offset)},
-        lambda: artifacts_face(handler.root, run_dir=run_dir, limit=limit, offset=offset))
+         "limit": int(limit), "offset": int(offset), "full": int(not compact)},
+        lambda: artifacts_face(handler.root, run_dir=run_dir, limit=limit,
+                               offset=offset, compact=compact))
     _json_of(handler, {**face, "cache": cache})
 
 
@@ -6362,6 +7103,31 @@ def _roster_states_of(nodes: Sequence[Mapping[str, Any]], *,
             "labels": dict(AGENT_STATE_LABELS)}
 
 
+def _roster_open_count(task_ids: Sequence[str], *,
+                       agents: Mapping[str, Mapping[str, Any]],
+                       items: Mapping[str, Mapping[str, Any]]) -> int:
+    """这一项名下「还没收口」的活有几件 —— 唯一口径是 `boardrows.row_is_open`。
+
+    ## 为什么不能数 `status ∈ {pending, running}`
+
+    `tasks` 混着两类行：代理行（`kind` 为空，`status` 就是它的真实状态）与板项行
+    （`kind` 非空，`status` 设计上恒为 `pending`，它是类型标记；真正的收口在
+    `item_state` / `item_close`）。直接数 `status` 会把"已经收口的通知"读成
+    "还堆着的待办"（`boardrows.py` 的模块 docstring 与 `row_is_open` 逐字写了这件事）。
+    名册项名下那串编号今天都是代理行，所以旧写法在今天的盘上碰巧不出错；但口径必须是
+    产品那一个 —— 板项行一旦出现在这一串里（板项/委托一类的编号被登记成"接过的活"），
+    旧写法就会把它算成一件未收口的活。
+
+    三态：两个映射都查不到（编号没有台账行）⇒ `row_is_open({})` 是 `False`
+    （"没有这一行"不是"还欠着"；调用方另用 `task_found` 报"这一行不在台账里"）。
+    """
+    from ..boardrows import row_is_open
+
+    return sum(1 for task_id in task_ids
+               if row_is_open(agents.get(str(task_id))
+                              or items.get(str(task_id)) or {}))
+
+
 def _roster_root_identity(role: str, name: str) -> tuple[str, str]:
     """根节点的身份：它不在任何人的名册里，名字固定是主控。
 
@@ -6400,7 +7166,7 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
     | `tasks[]` | 这个子代理接过的每一件活：`task_id` / `role` / `status` / `started_at` / `ended_at` / `task_found` / `brief` / `detail`（调用流水来自 `<父>-index.jsonl`，状态与时间来自 `data/tasks.json`） |
     | `retired` / `retired_branch` | 折叠后的 `retired` / 那一行的 `branch` |
     | `brief` / `brief_source` / `surface` | 这一项的 `brief` / `brief_source` / `surface` |
-    | `status` / `task_found` / `in_flight` | 最近一件活的状态 / 它的活是否都在台账里 / 这一项名下有几件在飞（`pending`+`running`） |
+    | `status` / `task_found` / `in_flight` | 最近一件活的状态 / 它的活是否都在台账里 / 这一项名下有几件未收口（唯一口径 `boardrows.row_is_open`：板项按 `item_state`、代理行按 `status`） |
     | `state` / `state_reason` | 三态（在飞 / 待机 / 静默 / 未读到），判定只有 `conductor.agent_state` 一处；`state_reason` 是"为什么判成这一格"的那句人话（`unknown` 时必有） |
     | `stalled` / `stalled_sec` / `stalled_reason` | 疑似停滞（`conductor.agent_state` 的同一格）：最近一步离现在多少秒。落痕是 `out/steps/<台账号>.jsonl`（NAMEFIX-B1，2026-11-22：一行一步、追加的轨迹，`conductor.step_beats` 取最后一行；改前盘上只有一个"最后一次步号"的指针文件 `.json`，名字叫 steps 而盘上没有步）。`state` 仍是 `flying` —— 停滞不改三态，也绝不许因此销号（停滞不等于静默） |
     | `inbox` | 这一项名下所有活收到的板项行（见 :func:`_roster_inbox`） |
@@ -6763,6 +7529,10 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
     tasks_by_tid: dict[str, dict[str, Any]] = {}
     in_flight_by_tid: dict[str, int] = {}
     board_by_recipient: dict[str, list[dict[str, Any]]] = {}
+    #: 板项行按它自己的编号索引（`board_by_recipient` 是按收件人分的另一半）：
+    #: 名册项名下那串编号里若出现一条板项，`row_is_open` 要读得到它，才不会把
+    #: `status=pending` 这个类型标记当成"还欠着活"。
+    board_by_tid: dict[str, dict[str, Any]] = {}
     try:
         rows, tasks_tri = _table_state(Store(root_p), "tasks")
         out["tasks_tri"] = tasks_tri
@@ -6773,6 +7543,7 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
             if str(row.get("kind") or ""):
                 # 板项行：`parent_task_id` 是收件人（`conductor._children_of` 的
                 # docstring 逐字写了这条"两轴"口径）。`item_state == "done"` 才算消了。
+                board_by_tid[tid] = row
                 if str(row.get("item_state") or "") != "done":
                     board_by_recipient.setdefault(
                         str(row.get("parent_task_id") or ""), []).append(row)
@@ -6863,10 +7634,11 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
                 "detail": _roster_clip(str(trow.get("detail") or ""), 80),
             })
         # 节点上的"当前状态"取最近一次接的活（`tasks` 按落盘行序，最后一条是最近的）；
-        # 在飞则是"这一项名下有几件还在飞"（一个子代理可以同时有好几件在飞）。
+        # 在飞则是"这一项名下有几件还没收口"（一个子代理可以同时有好几件在飞）。
+        # 口径是 `boardrows.row_is_open`（板项按 item_state、代理行按 status），
+        # 不是"status ∈ pending/running" —— 后者会把已收口的板项读成假积压。
         current = task_readings[-1] if task_readings else {}
-        live = sum(1 for tr in task_readings
-                   if str(tr.get("status") or "") in ("pending", "running"))
+        live = _roster_open_count(task_ids, agents=tasks_by_tid, items=board_by_tid)
         kids = [k for k in (children_of.get(tid) or []) if k]
         # 这个节点名下的台账子：节点键本身那一行（顶趟 / 名册项的建项那件活）的
         # 直接子，加上它接的每一件活（`tasks[]`）各自的直接子 —— 并起来。
@@ -7057,7 +7829,7 @@ def handle_roster(handler: Any, params: Mapping[str, str],
 
 def handle_obligations(handler: Any, params: Mapping[str, str],
                        query: Mapping[str, Sequence[str]]) -> None:
-    """`GET /api/obligations`：板上三族义务的收件人读数（只读）。
+    """`GET /api/obligations`：板上四族义务的收件人读数（只读）。
 
     消费者是「在飞」页的义务卡。这个端点没有配对的 POST：收口（销号）只发生在
     `conductor` 的写路径上，网页不替人销号 —— 那样会让"这一条收过了"变成一次点击
@@ -7159,11 +7931,19 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("steps_source", "string"), ("steps_physical", "number | null"),
       ("steps_self_reported", "number | null"),
       ("steps_self_reported_missing_runs", "number | null"),
+      # NUMCLAIM-②：`steps` 是混合口径时，这一句把「自报 / 物理 / 并起来」
+      # 三个数并排说清（页面据此可复算，不靠读者猜 `steps_source` 指哪一个）。
+      ("steps_note", "string"),
       # 两条独立的花销读数：`usd` 是事件求和，`spend_usd` 是收工行自报账；不互相顶替。
       ("usd", "number | null"), ("unknown_usd_calls", "number | null"),
       ("spend_usd", "number | null"), ("spend_missing_runs", "number | null"),
       # 派了多少活 / 验了几条 / 已签证明位 / 签文件几份；`*_missing_runs` 说清"没读到"的范围。
       ("dispatched", "number | null"), ("dispatched_missing_runs", "number | null"),
+      # 2026-11-24：`dispatched_missing_runs` 的两档拆分（未收工 / 收工行没带 summons）
+      # 与那句"这个数含什么、不含什么"（不含 notice 板项；不是"派了没跑"）。
+      ("dispatched_missing_unfinished", "number | null"),
+      ("dispatched_missing_no_summons", "number | null"),
+      ("dispatched_note", "string"),
       ("verified", "number | null"),
       # 两个数、两套口径（84 的现场：signed_proofs=31 而 sign_files=3）：
       # `signed_proofs` 是收工读数里已签的证明位数；`sign_files` 是
@@ -7201,7 +7981,14 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # 于是页面不必猜"这一份是全量还是摘要"：`rows_mode="full"` ⇒ `rows_total` 与
       # 各栏 `length` 相等；`"page"` ⇒ `rows_total[栏]` 才是真实总行数。
       ("rows_mode", "string"), ("rows_limit", "number"),
-      ("rows_offset", "number"), ("rows_total", "Record<string, number>"))),
+      ("rows_offset", "number"), ("rows_total", "Record<string, number>"),
+      # 字段档（与行那一轴独立）：`rows_fields="compact"` 时 `rows_omitted` 点名
+      # 省掉的字段、`rows_clipped` 点名截断的字段（行上另有 `<字段>_truncated` /
+      # `<字段>_chars`）、`rows_nested` 点名做了子对象投影的字段。`?full=1` 三格为空。
+      ("rows_fields", "string"),
+      ("rows_omitted", "Record<string, string[]>"),
+      ("rows_clipped", "Record<string, string[]>"),
+      ("rows_nested", "Record<string, string[]>"))),
     ("ArtifactsView",
      "artifacts_face() —— 产物面（各栏另带 `<栏>_tri`）",
      (("tri", "Tri"), ("reason", "string"),
@@ -7230,7 +8017,12 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("kind_flag_mismatch", "number"),
       # 分页四格（与 `EvidenceView` 同一口径，见那一处）。
       ("rows_mode", "string"), ("rows_limit", "number"),
-      ("rows_offset", "number"), ("rows_total", "Record<string, number>"))),
+      ("rows_offset", "number"), ("rows_total", "Record<string, number>"),
+      # 字段档四格（与 `EvidenceView` 同一口径，见那一处）。
+      ("rows_fields", "string"),
+      ("rows_omitted", "Record<string, string[]>"),
+      ("rows_clipped", "Record<string, string[]>"),
+      ("rows_nested", "Record<string, string[]>"))),
     ("ExperimentSpot",
      "artifacts_face() 的 experiment_spots[] —— 实验产物的一个落点"
      "（报告是 `out/experiments/<号>/exhaustion.md`，原始输出日志是另一个目录里的"
@@ -7252,6 +8044,10 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("auxiliary", "Record<string, string>"), ("failed", "string[]"),
       # `failed` 只装"真不过"；"没查成"单列（两档不许折平；与收工面同一算式）。
       ("unchecked", "string[]"), ("note", "string"),
+      # 2026-11-24：「在成本上限内」那一格的上限是收工门入参（不是预算寄存器）。
+      # `cap_usd` 是调用方给的值（没给 ⇒ null）；`cap_note` 说清它从哪来、为什么
+      # 预算页的 spent/total 不能顶它。
+      ("cap_usd", "number | null"), ("cap_note", "string"),
       ("auxiliary_note", "string"))),
     ("AcceptanceRow",
      "acceptance_face() 的 rows[] —— 一条验收判据一行（键名来自 reviewaccept.CRITERIA；"
@@ -7352,8 +8148,11 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # （没设过预算 / 账本读不成），不是"还剩很多"。
       ("reserve_usd", "number | null"), ("below_reserve", "boolean | null"),
       ("note", "string"), ("paperwork_first_rule", "string"),
+      # 2026-11-24：`note` 是预算页自己的人话（只回答钱）；收工门那一句（"缺的是
+      # 「没写」，不是「写不起」"）原样在 `closing_note` —— 两档不许再接在同一句里。
+      ("closing_note", "string"),
       # 无人认领的钱（会话口径）：会话读不出来 ⇒ `unattributed_usd` 为 null 且
-      # `unattributed_reason` 非空（不是 0）。
+      # `unattributed_reason` 非空（不是 0）；非 0 时 `unattributed_reason` 逐档拆开。
       ("unattributed_usd", "number | null"), ("unattributed_reason", "string"),
       ("unattributed_source", "string"))),
     ("UsageBucket",
@@ -7379,6 +8178,9 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # `stopctl.running_loops().stale_rows` 逐字透传（带 `why`），并标 `stale_loop=true`。
       ("stale_rows", "LiveLoopRow[]"),
       ("live", "LivePidRow[]"),
+      # 2026-11-24：进程面那几行的 pid 是宿主进程的号（`register_pid` 写父进程自己；
+      # 同一趟 run 的多个角色是同一进程里的线程）⇒ 面级一句可复算的话："N 行共用 M 个"。
+      ("live_note", "string"),
       ("unreadable_sessions", "string[]"),
       ("switch", "Record<string, unknown>"), ("switch_present", "boolean"),
       # 这两格没有具名行类型：它们是 `stop-history.jsonl` /
@@ -7401,9 +8203,12 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("why?", "string"))),
     ("LivePidRow",
      "stopctl.live_pids() 的一行 —— 登记在盘上且真的还活着的一个进程"
-     "（`path` 是那一份登记文件的落点，`live_pids` 会给）",
+     "（`path` 是那一份登记文件的落点，`live_pids` 会给）。`host_process` / `pid_note`"
+     "是 2026-11-24 补的：那一格是宿主进程的 pid（`register_pid` 写父进程自己），"
+     "不是这一行自己的 pid —— 同一趟 run 的角色共用同一个号",
      (("pid", "number"), ("role", "string"), ("sid", "string"),
-      ("started_at", "string"), ("path", "string"))),
+      ("started_at", "string"), ("path", "string"),
+      ("host_process", "boolean"), ("pid_note", "string"))),
     ("UsageView",
      "usage_face() —— usage_ledger 的汇总（总计 + 两个归口 + 重试开销 + 最近几笔）",
      (("tri", "Tri"), ("reason", "string"), ("path", "string"),
@@ -7549,7 +8354,11 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # 后三格是读模型的 join
       # （`_annotate_ledger_row`），不是 `schema.Statement` 的字段。
       ("by_role", "string"), ("by_role_source", "string"),
-      ("by_task_id", "string"), ("by_task_id_tri", "string"))),
+      ("by_task_id", "string"), ("by_task_id_tri", "string"),
+      # compact 档把 `statement_full` / `proof_text` 截到 `COMPACT_CLIP_CHARS` 时，
+      # 这两个说明"截了、原文多长"。可选：`?full=1` 那一档没有它们。
+      ("statement_full_truncated?", "boolean"), ("statement_full_chars?", "number"),
+      ("proof_text_truncated?", "boolean"), ("proof_text_chars?", "number"))),
     ("FormalPath",
      "evidencebits.formal_by_proof() 的一行 —— 五元位第 4 位的一条路径"
      "（`proof_no` 是证明号，`state` 取 `evidencebits.FORMAL_PATH_STATES` 的五档："
@@ -7717,7 +8526,10 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # 所以这一栏的 `by_task_id_tri` 是 `not_applicable`（见 `_LEDGER_ROW_TOKENS`）。
       ("by_role", "string"), ("by_role_source", "string"),
       ("by_task_id", "string"),
-      ("by_task_id_tri", "string"))),
+      ("by_task_id_tri", "string"),
+      # compact 档把 `body` 截到 `COMPACT_CLIP_CHARS` 时，这两格说明"截了、原文多长"。
+      # 可选：`?full=1`（全字段）那一档没有它们 —— 不截就不该多一个 `false` 噪声。
+      ("body_truncated?", "boolean"), ("body_chars?", "number"))),
     ("SecretaryDecision",
      "out/secretary/<角色>.jsonl（老文件）与 out/secretary/<角色>-<实例号>.jsonl（S1m 起的分片）"
      "的行（`secretary.Secretary.note_decision` 写的；"
@@ -7762,7 +8574,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
     ("TaskRow",
      "store.rows(\"tasks\")（真机 p9b/data/tasks.json 19 键 + 工作项板那 7 格；"
      "板那 7 格是 S0/S1b 扩列之后补进来的 —— 真机上它们今天全是空值"
-     "（`draft/94` §4：2276 行里 `kind` 非空 0 行），但列**在**，所以类型必须跟上）",
+     "（`draft/94` §4：2276 行里 `kind` 非空 0 行），但列在，所以类型必须跟上）",
      (("task_id", "string"), ("role", "string"), ("action", "string"),
       ("called_by", "string"), ("parent_task_id", "string | null"),
       ("depth", "number"), ("input_key", "string"), ("status", "string"),
@@ -7790,7 +8602,9 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # 投影：`板项 done/acked` / `板项 queued/未收口`；代理行仍是 `<status>/<outcome>`）。
       # 它不在 `schema.Task` 里 —— 是这一面现算的投影，与 `.md` 报告同一处口径。
       # 盘上的 `status` 一个字都不改（板项行那一格恒为 `pending`，那是类型标记）。
-      ("status_reading", "string"))),
+      ("status_reading", "string"),
+      # compact 档把 `detail` 截到 `COMPACT_CLIP_CHARS` 时，这两格说明"截了、原文多长"。
+      ("detail_truncated?", "boolean"), ("detail_chars?", "number"))),
     ("ConjectureRow",
      "store.rows(\"conjectures\")（真机 p9b/data/conjectures.json；无样本时以 "
      "`schema.Conjecture` 为准）",
@@ -7981,11 +8795,15 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
     # （表不在盘上 / 坏 JSON），而 `count` 那一格在那一档是 null —— 不是 0。
     ("ObligationFamily",
      "obligations_face() 的 families[] —— 一族义务（b-register / v-resubmit / "
-     "b-awake）的计数。`prefix` 逐字来自 `obligations` 的三个常量；`unowned` 是"
-     "「父台账号与收件实例都空」的那些（没人收）；`summoned` 只对 b-register 有意义",
+     "b-awake / d-handoff）的计数。`prefix` 逐字来自 `obligations` 的四个常量；"
+     "`unowned` 是「父台账号与收件实例都空」的那些（没人收）；`summoned` 只对 "
+     "b-register 有意义（`d-handoff` 没有召唤行，恒为 0）。`tri` / `reason` 是这一族"
+     "自己的三态：`d-handoff` 的逐条读数（gap/eligible）没跑成时是 `unreadable`，"
+     "而 `open` / `unowned` 仍是同一块 tasks 板的行数（不是 0）",
      (("name", "string"), ("role", "string"), ("why", "string"),
       ("prefix", "string"), ("open", "number"), ("unowned", "number"),
-      ("summoned", "number"), ("instances", "string[]"))),
+      ("summoned", "number"), ("instances", "string[]"),
+      ("tri", "Tri"), ("reason", "string"))),
     ("ObligationRow",
      "obligations_face() 的 rows[] —— 一条还开着的板项（收件实例 / 父台账号 / "
      "项状态 / 叫醒行）。`recipient_instance` 是板项行的 instance 列"
@@ -7997,7 +8815,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("item_close", "string"), ("opened_at", "string"),
       ("wake_task_id", "string"), ("addressed", "string"), ("detail", "string"))),
     ("ObligationsView",
-     "obligations_face() —— 板上三族义务的收件人读数（只读；销号不经过网页）",
+     "obligations_face() —— 板上四族义务的收件人读数（只读；销号不经过网页）",
      (("tri", "Tri"), ("reason", "string"), ("source", "SourceRef"),
       ("checked", "boolean"), ("families", "ObligationFamily[]"),
       ("rows", "ObligationRow[]"),
@@ -8026,7 +8844,8 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
     ("LibrarySeed",
      "library_face() 的 data.seed —— 种子读数（`seedinject.read_seed_reading` 的"
      "工作区相对形态）：种子在 `reference/`，`library_unregistered` 是书架上没有"
-     "`literature` 行引用的文件（`null` = 没查成）",
+     "`literature` 行引用的 PDF（`.txt` 是 `text.extract` 的设计产物，不算；"
+     "`null` = 没查成）",
      (("landed", "boolean"), ("count", "number"), ("bytes", "number"),
       ("destination", "string"), ("marker", "string"),
       ("legacy_root_marker", "boolean"),
@@ -8139,7 +8958,11 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "所以每一格都是可选的：缺格 = 这一源没有这一栏，不是 0）",
      (("checked?", "boolean"), ("events?", "number"), ("files?", "number"),
       ("records?", "number"), ("bad_lines?", "number"),
-      ("unreadable_files?", "string[]"), ("unclassified?", "number"),
+      ("unreadable_files?", "string[]"),
+      # 2026-11-24：这一格是 `{桶名: 条数}`（`tool` / `verdict` / `roster` / `secretary`），
+      # 不是单个数字 —— `readouts.errors_readout` 就是按 `.items()` 读它的；声明成
+      # `number` 会让类型面读不出 `{"tool": N}` 这件事（与 ⑤ 同族的"声明与真读数不符"）。
+      ("unclassified?", "Record<string, number>"),
       ("table?", "string"), ("reason?", "string"), ("state?", "string"),
       ("dir?", "string"), ("path?", "string"), ("by_user?", "number"),
       ("children_unretired?", "number"), ("name_collisions?", "number"),
@@ -8172,8 +8995,8 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("samples", "ErrorSignalSample[]"), ("computed?", "boolean"))),
     ("ErrorStatsData",
      "errors_readout() 的 data —— 角色 × 类目的计数（只记出现过的格，缺格就是 0）。"
-     "`total` 是**角色侧**总数；`system_total` 与 `state_readings_total` 各是另一组数，"
-     "**三组刻意不相加**（三种单位：谁做错了 / 系统哪里坏了 / 现在积着什么）",
+     "`total` 是角色侧总数；`system_total` 与 `state_readings_total` 各是另一组数，"
+     "三组刻意不相加（三种单位：谁做错了 / 系统哪里坏了 / 现在积着什么）",
      (("by_role", "Record<string, Record<string, number>>"),
       ("role_total", "Record<string, number>"), ("total", "number"),
       ("categories", "Record<string, number>"),
@@ -8543,6 +9366,8 @@ def _roster_from_tasks(root_p: Path) -> dict[str, Any]:
     3. `answer` 仍然是 `"unknown"`（名册那一格没读到），但 `reason` 里说清
        "下面这棵树来自台账，不是名册" —— 三态不折平，页面上却看得见人。
     """
+    from ..boardrows import row_is_open
+
     path = root_p / "data" / "tasks.json"
     try:
         rows = list((json.loads(path.read_text(encoding="utf-8")) or {}).get("rows") or [])
@@ -8612,7 +9437,10 @@ def _roster_from_tasks(root_p: Path) -> dict[str, Any]:
                 for k in kid_rows],
             "brief": "", "brief_source": "", "surface": "",
             "status": status, "task_found": True,
-            "in_flight": 1 if status in ("pending", "running") else 0,
+            # 与名册那一侧同一条口径（`boardrows.row_is_open`）：板项按 item_state、
+            # 代理行按 status。这一档的 `agents` 已经滤掉板项行，所以结果与旧写法相同，
+            # 但"读的是哪个口径"只有一个答案。
+            "in_flight": 1 if row_is_open(row) else 0,
             # 三态（判定在 `conductor.agent_state`）：这一档每个节点就是台账那一行。
             "state": str((three.get(tid) or {}).get("state") or AGENT_STATE_UNKNOWN),
             "state_reason": str((three.get(tid) or {}).get("reason") or ""),
@@ -8647,7 +9475,7 @@ def _roster_from_tasks(root_p: Path) -> dict[str, Any]:
                            nodes, reason="名册没读到 ⇒ 这一档的三态来自台账兜底（树也是）")),
             "reason": (f"名册那一格没读到，但台账里有 {len(agents)} 个带父的代理行"
                        f"（头几个：{sorted(ids)[:5]}）⇒ 下面这棵树来自 `data/tasks.json`，"
-                       "它们**存在、但不在名册上**（名册登记没有发生）")}
+                       "它们存在、但不在名册上（名册登记没有发生）")}
 
 
 # ====================================================================== 11 文献库
@@ -8710,8 +9538,10 @@ def _seed_reading(root_p: Path) -> dict[str, Any]:
     "没查成"（`None`）与"干净"（`[]`）分开：
 
     - `landed` / `count` / `bytes` / `marker`：`reference/` 里那批种子；
-    - `library_unregistered`：`library/` 里没有任何 `literature` 行引用的文件
-      （`None` = 台账读不出来，没查成 —— 绝不折成 `[]` "书架干净"）；
+    - `library_unregistered`：`library/` 里没有任何 `literature` 行引用的 PDF
+      （`None` = 台账读不出来，没查成 —— 绝不折成 `[]` "书架干净"）。`.txt` 不算：
+      `text.extract` 的声明就是"把 PDF 文字层转成同名 `.txt` 写进 `library/`"，
+      那是设计产物，列成"未登记"等于把设计允许的东西读成结构异常；
     - `legacy_root_marker`：根上有没有改前形态的 `SEED-README.md`（旧工作区）。
     """
     from .. import seedinject as SI
