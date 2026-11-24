@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Final, Sequence
@@ -176,6 +176,20 @@ class DocumentText:
     #: 此时 `page_status_of()` 一律返回 `"ok"` —— 与旧行为逐字一致，
     #: 所以这个字段是纯增量，不会把历史调用方变成"整篇不可读"。
     page_status: tuple[str, ...] = ()
+    #: 本次抽取在正文出口剥掉的 C0 控制字符个数（`_finalize_controls`）。
+    #:
+    #: 为什么要这一格：剥字符是"改写正文"，改写必须留读数，否则就是静默丢弃。
+    #: 反真空：把 `_finalize_controls` 摘掉再抽同一份 PDF，这一格会回到 0 而正文里
+    #: 重新出现 NUL —— 两个读数一起动，才说明"读数不是硬编码的 0"。
+    #:
+    #: 为什么是个数而不是"剥了哪些码"：逐码读数进日志（一行，带 `NUL×45` 这种
+    #: 分项），契约面上只要一个能对账的标量。历史构造点不传它 ⇒ 默认 0
+    #: （"这一份没有剥过东西"），与旧行为逐字一致。
+    #:
+    #: 谁消费它：抽取层的调用方与判据（`tests/test_extract_control_chars_*`）。
+    #: `text.extract` 的回执今天不转写这一格（`tools/text_tools.py` 在 FC-27
+    #: auth-audit 里，改它要人审）；那一层看到的是 `quality.nul_bytes=0` 这个结果读数。
+    replaced_control_chars: int = 0
 
     @property
     def has_text_layer(self) -> bool:
@@ -719,6 +733,102 @@ def _finish_pdf(pages: Sequence[str], backend: str,
     )
 
 
+# --------------------------------------------------------------------------- #
+# 正文出口：剥 C0 控制字符
+# --------------------------------------------------------------------------- #
+#: 正文出口保留的 C0 控制字符：换行与制表符（版式噪声里只有这两个有语义）。
+_KEEP_CONTROL: Final[frozenset[str]] = frozenset("\n\t")
+
+#: `str.translate` 用的删除表：C0（U+0000–U+001F）除 ``\n`` ``\t`` 一律删。
+_STRIP_CONTROL_TABLE: Final[dict[int, None]] = {
+    code: None for code in range(0x20) if chr(code) not in _KEEP_CONTROL
+}
+
+
+def _strip_control_chars(text: str) -> tuple[str, int]:
+    """剥掉 C0 控制字符（保留 ``\\n`` ``\\t``），返回 ``(正文, 剥掉的个数)``。
+
+    ## 为什么要在抽取出口剥（2026-11-24，真机 lp-ball-21 的 EXTRACT-NUL）
+
+    真机读数：`projects/lp-ball-21/out/texts/cand-000001.txt` 24,002 B / 45 个 NUL，
+    而它正是 `text.extract` 自己的产物。下游 `fs.read` 的二进制判据（
+    `tools/fs_tools.py::_looks_binary`，第 1 条：含 NUL 即判二进制）随后把这份
+    正文拒了 —— A 抽出来的正文，A 自己读不回来，只能重抽。
+
+    溯源（`temp/extractnul/probe_nul_source.py` 的读数）：NUL 不是写盘/编码引入的，
+    抽取后端返回的原文里就有：PyMuPDF 的 `page.get_text("text")`（以及 PyPDF2
+    的同名调用）对"字形没有 Unicode 映射"的符号字体，把字形码原样吐成 U+0000–U+001F
+    （同一份 PDF 用 pdfminer 抽就一个都没有）。所以修在出口：这里是三条后端 +
+    HTML + 纯文本的唯一汇合处，下游拿到的正文从此不再带这些码。
+
+    ## 为什么不是"放宽读取闸"
+
+    另一个候选修法是让 `fs.read` 容忍少量 NUL。那等于让"看起来像文本、按 UTF-8
+    解出来是乱码"的东西合法化（`_looks_binary` 的 docstring 明确说了为什么 NUL
+    是硬规则）。真正烂的是写侧：抽取层把不可打印的码写进了自己的正文产物。
+
+    ## 剥掉的量与可逆性
+
+    这些码没有可读语义（C0 是控制码，不是字形），所以剥掉不损失"正文"；但"剥了
+    多少"必须留读数（`DocumentText.replaced_control_chars` + 一行日志），不许静默。
+    """
+    if not text:
+        return text, 0
+    cleaned = text.translate(_STRIP_CONTROL_TABLE)
+    return cleaned, len(text) - len(cleaned)
+
+
+def _control_breakdown(text: str) -> str:
+    """日志用的逐码读数：``NUL×45, 0x01×46``（没有控制符时返回空串）。
+
+    只在真的要剥东西时调用（`_finalize_controls` 那一支），所以对大正文多扫
+    32 遍的代价只出现在"这一份确实不干净"的时候。
+    """
+    parts = []
+    for code in sorted(_STRIP_CONTROL_TABLE):
+        n = text.count(chr(code))
+        if n:
+            parts.append(("NUL" if code == 0 else f"0x{code:02x}") + f"×{n}")
+    return ", ".join(parts)
+
+
+def _finalize_controls(doc: DocumentText) -> DocumentText:
+    """正文出口（`extract_text` 的每一支都过这里）：剥 C0 控制字符 + 记读数。
+
+    `text` 与 `pages` 两处都剥：`text` 是交给"不关心页码"的消费者的全文，
+    `pages` 是交给引文校验的逐页文本；只剥一处会让两个视图分家（两份实现同理，
+    所以剥法是同一个 `_strip_control_chars`）。
+
+    为什么"逐页先剥、再拼"与"整篇剥"结果一样：`text` 与 `pages` 的关系只有
+    "``text == "\\n".join(pages)``"（PDF）与"``pages == [text]``"（其它）两种，
+    而被剥掉的字符里不含 ``\\n``（保留），所以两种顺序等价 —— 这里不去赌它：
+    `text` 走 `_strip_control_chars(doc.text)`，逐页各走一次，读数取 `text` 那一份。
+
+    没有控制符时原样返回 `doc`（连 `dataclasses.replace` 都不做）：正常文本
+    逐字节不变，是这一改的负控（不许顺手改坏正常抽出的正文）。
+    """
+    pages: list[str] = []
+    for page in doc.pages:
+        cleaned, _ = _strip_control_chars(page)
+        pages.append(cleaned)
+    text, stripped = _strip_control_chars(doc.text)
+    if not stripped and pages == doc.pages:
+        return doc
+    logger.info(
+        "正文出口剥离 C0 控制字符：replaced_control_chars=%d（%s）；"
+        "source_kind=%s 页数=%d。原因：抽取后端对无 Unicode 映射的字形吐出"
+        "字形码（真机 lp-ball-21 的 45 个 NUL 即此形态），而下游 `fs.read` 的"
+        "二进制判据「含 NUL 即判二进制」会把本模块自己的产物拒掉",
+        stripped, _control_breakdown(doc.text) or "无", doc.source_kind, len(pages),
+    )
+    return replace(
+        doc,
+        text=text,
+        pages=pages,
+        replaced_control_chars=doc.replaced_control_chars + stripped,
+    )
+
+
 def extract_text(
     path: Path | str,
     *,
@@ -745,6 +855,13 @@ def extract_text(
     超限抛 :class:`ExtractTooLarge`，不截断（理由见模块 docstring 第 3 条）。
     内容嗅探只读文件头的 :data:`_SNIFF_BYTES` 字节：它只影响原本会被判成
     "不支持的扩展名"的那些文件，已经能成功的路径一字未动。
+
+    ## 每一支的返回都过 `_finalize_controls`（唯一正文出口）
+
+    C0 控制字符（NUL 与其余 C0，保留 ``\\n`` ``\\t``）在出口统一剥掉：
+    三条 PDF 后端、HTML、XML、纯文本六条路都在这里汇合，剥法与读数各只有一份实现
+    （理由与真机读数见 :func:`_strip_control_chars`）。正常文本不经过改写
+    （`_finalize_controls` 在"一个控制符都没有"时原样返回同一个对象）。
     """
     p = Path(path)
     if not p.exists():
@@ -770,8 +887,10 @@ def extract_text(
         # （`'…SocietyR Soc Open Sci…'`）—— 理由见 `_HTMLTextExtractor.__init__`。
         body = _strip_html(text, inline_sep=" ")
         if not body.strip():
-            return DocumentText(text="", pages=[], source_kind="xml", encoding=encoding)
-        return DocumentText(text=body, pages=[body], source_kind="xml", encoding=encoding)
+            return _finalize_controls(
+                DocumentText(text="", pages=[], source_kind="xml", encoding=encoding))
+        return _finalize_controls(
+            DocumentText(text=body, pages=[body], source_kind="xml", encoding=encoding))
 
     # ---- 内容嗅探（扩展名不是内容的证据，见 `_sniff`）
     with open(p, "rb") as fh:
@@ -782,8 +901,10 @@ def extract_text(
         body = _strip_html(text)
         if suffix in _HTML_SUFFIXES:
             if not body.strip():
-                return DocumentText(text="", pages=[], source_kind="html", encoding=encoding)
-            return DocumentText(text=body, pages=[body], source_kind="html", encoding=encoding)
+                return _finalize_controls(
+                    DocumentText(text="", pages=[], source_kind="html", encoding=encoding))
+            return _finalize_controls(
+                DocumentText(text=body, pages=[body], source_kind="html", encoding=encoding))
         raise HtmlNotSupported(
             f"内容按魔数判定为 HTML（开头是 {head[:64]!r}），但扩展名是 {suffix!r}（{p}）。"
             "这不是'格式不认识'：正文就在文件里，把它按 .html/.htm 落盘即可走 HTML 抽取路径"
@@ -791,14 +912,15 @@ def extract_text(
         )
     if sniffed == "pdf" or suffix == ".pdf":
         pages, status, _backend = _pdf_pages(p, max_pages)
-        return _finish_pdf(pages, _backend, status)
+        return _finalize_controls(_finish_pdf(pages, _backend, status))
 
     if suffix in _TEXT_SUFFIXES or suffix == "":
         text, kind, encoding = _extract_plain_text(p, max_bytes=max_bytes)
         if not text.strip():
-            return DocumentText(text="", pages=[], source_kind=kind, encoding=encoding)
-        return DocumentText(
-            text=text, pages=[text], source_kind=kind, encoding=encoding
+            return _finalize_controls(
+                DocumentText(text="", pages=[], source_kind=kind, encoding=encoding))
+        return _finalize_controls(
+            DocumentText(text=text, pages=[text], source_kind=kind, encoding=encoding)
         )
 
     raise UnsupportedFormat(f"不支持的扩展名: {suffix!r} ({p})")
