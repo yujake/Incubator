@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-24T09:38:36+08:00",
+  "generated_at": "2026-11-24T10:15:48+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -233,10 +233,10 @@
       "path": "src/agentflow/policy.py",
       "glob": "src/agentflow/policy.py",
       "category": "auth-audit",
-      "sha256": "eda3d280951a5a9e90037fce501a38993f8c66f6c630540d75446df19c95723f",
+      "sha256": "069314bc35971ec7592910a7a1618f6e4ceb21b0dcec7478d178c65da7601cbd",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 78a842bae089 变为 eda3d280951a，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "（未提供变更说明：内容 hash 从 eda3d280951a 变为 069314bc3597，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

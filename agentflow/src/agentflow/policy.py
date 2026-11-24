@@ -1135,6 +1135,15 @@ def check(policy: Policy, d: Decision, *, registry: Any = None) -> Refusal | Non
 
     # ---- [9] 墙钟（最后判：它是"环境"的限制，前面每一条都是"策略"的限制）
     if d.deadline_hit:
+        # `wall_clock_sec=None` = 这一次不设上限（业主 2026-10-18 口径）。这种装配下
+        # `deadline_hit=True` 只可能是调用方（conductor）自己算错了 —— 那是框架 bug，
+        # 不是用户该看到的一条"截止已过"拒信：照着 None 印一句"wall_clock_sec=None"，
+        # 模型会以为有个它看不见的期限（真机 lp-ball-18 就是被这种假读数带偏的）。
+        if policy.wall_clock_sec is None:
+            raise ValueError(
+                "装配错误：Policy.wall_clock_sec=None（这一次不设墙钟上限）"
+                "却收到 deadline_hit=True —— conductor 在不设上限那一档里不该报截止"
+            )
         return Refusal(
             "deadline_exceeded",
             refusal_detail(
