@@ -84,6 +84,7 @@ from .. import stopctl as SC
 from .. import userio as U
 from ..store import Store, StoreError
 from . import audit
+from . import settingsraw as SRAW
 from . import state as _state
 from .state import _clip, _e, _sid_ok, _text, answer_text_of, snapshot
 
@@ -561,6 +562,109 @@ def handle_submit(handler: Any, params: Mapping[str, str],
     return done(200, f"已入队 {rid}（topic={topic} · mode={mode}）", True, ident=rid)
 
 
+def _split_settings_changes(values: Mapping[str, Any],
+                            raw_cells: Mapping[str, Any]) -> tuple[
+                                dict[str, Any], list[str], list[str]]:
+    """把表单值拆成「真正要写的 / 与盘上相同 / 是掩码占位」三份（SETTINGS-RAW）。
+
+    ## 为什么写侧必须自己判一次"改没改"
+
+    `settings.write_settings` 的口径是"给了值就写"（空串 = 清掉这一格），它不知道
+    盘上原来是什么。而页面过去把生效值（缺省已经填进去）回填进输入框，
+    提交一次就等于把缺省固化成显式配置 —— 文件字节变了、语义也变了，却没人报错。
+    现在页面只回填 `raw`，但那还不够：任何客户端（脚本、旧页面、浏览器自动填充）
+    都可能原样把盘上的值再提交一遍。所以这一层加一条保护：
+
+    - 提交值与盘上原样相同（都去空白）⇒ 视为「没改」，不落盘；
+    - `api_key` 那一格提交的是 `MASKED_KEY`（或一串 `*`）⇒ 视为「这一格不改」，
+      不落盘 —— 页面把已配置的 key 显示成 `***` 之后，提交时最容易发生的就是
+      把 `***` 写成真 key（那会让整台机器再也连不上模型）。
+
+    未知段/未知键不纳入这条保护：它们照旧交给 `write_settings` 当场拒
+    （静默丢掉一条拼错的配置，比拒更坏 —— 用户会以为已经配上了）。
+
+    返回 `(changed, unchanged, masked)`：前一个是仍要写进去的嵌套结构，
+    后两个是进回执的键名清单（`toolchain.lean_bin` / `models.A.api_key` 这种）。
+    """
+    flat_keys = {"toolchain": SET.TOOLCHAIN_KEYS, "model": SET.MODEL_KEYS,
+                 "workspace": SET.WORKSPACE_KEYS,
+                 SET.SECRETARY_SECTION: SET.MODEL_KEYS}
+    changed: dict[str, Any] = {}
+    unchanged: list[str] = []
+    masked: list[str] = []
+    for raw_section, seg in (values or {}).items():
+        section = str(raw_section)
+        if not isinstance(seg, Mapping):
+            changed[section] = seg          # 交给 `write_settings` 拒（形状错）
+            continue
+        if section == SET.MODELS_SECTION:
+            body: dict[str, Any] = {}
+            for raw_slot, cell in seg.items():
+                slot = str(raw_slot)
+                if not isinstance(cell, Mapping):
+                    body[slot] = cell        # 同上：形状错留给写入口拒
+                    continue
+                for raw_key, text in cell.items():
+                    key = str(raw_key)
+                    dotted = f"{section}.{slot}.{key}"
+                    if slot not in SET.ROLE_SLOTS or key not in SET.MODEL_KEYS:
+                        body.setdefault(slot, {})[key] = text
+                        continue
+                    raw_text = ((raw_cells.get(section) or {}).get(slot) or {}).get(key, "")
+                    if key == "api_key" and SRAW.is_masked(text):
+                        masked.append(dotted)
+                        continue
+                    if SRAW.same_text(text, raw_text):
+                        unchanged.append(dotted)
+                        continue
+                    body.setdefault(slot, {})[key] = text
+            if body:
+                changed[section] = body
+            continue
+        known = flat_keys.get(section)
+        body2: dict[str, Any] = {}
+        for raw_key, text in seg.items():
+            key = str(raw_key)
+            if known is None or key not in known:
+                body2[key] = text            # 未知键/未知段：留给写入口拒
+                continue
+            raw_text = (raw_cells.get(section) or {}).get(key, "")
+            if key == "api_key" and SRAW.is_masked(text):
+                masked.append(f"{section}.{key}")
+                continue
+            if SRAW.same_text(text, raw_text):
+                unchanged.append(f"{section}.{key}")
+                continue
+            body2[key] = text
+        if body2:
+            changed[section] = body2
+    return changed, unchanged, masked
+
+
+def _cell_names(values: Mapping[str, Any]) -> list[str]:
+    """嵌套的设置结构 ⇒ 逐格键名清单（`models.A.api_key` 这种，回执里用）。"""
+    out: list[str] = []
+    for section, seg in (values or {}).items():
+        if not isinstance(seg, Mapping):
+            continue
+        if str(section) == SET.MODELS_SECTION:
+            for slot, cell in seg.items():
+                if isinstance(cell, Mapping):
+                    out.extend(f"{section}.{slot}.{k}" for k in cell)
+            continue
+        out.extend(f"{section}.{k}" for k in seg)
+    return sorted(out)
+
+
+def _masked_setting_values() -> dict[str, Any]:
+    """当前盘上那份设置的掩码回显（no-op 回执用；读不出来就是空壳）。"""
+    try:
+        return SRAW.raw_sections(SET.load_settings())
+    except Exception:  # noqa: BLE001 - 回执不许因为读不出来而炸
+        return {name: {} for name in ("toolchain", "model", "workspace",
+                                      SET.MODELS_SECTION, SET.SECRETARY_SECTION)}
+
+
 def handle_settings(handler: Any, params: Mapping[str, str],
                     query: Mapping[str, Sequence[str]]) -> dict[str, Any]:
     """`POST /api/settings`：写机器级设置文件（`settings.write_settings`）。
@@ -597,18 +701,49 @@ def handle_settings(handler: Any, params: Mapping[str, str],
     if not _flag(form, "confirm"):
         return done(400, ("拒绝：写设置要 confirm=1 一次显式确认"
                           "（覆盖 key 是不可逆动作）"), False)
-    got = SET.write_settings(values)
+    # ---- SETTINGS-RAW 的保护：给的值与盘上相同 ⇒ 视为"没改"，不落盘。
+    # 这一次判断用的是真值（`mask_secrets=False`），只在这一层内部用：
+    # `api_key` 与盘上那份相同时也算没改；提交掩码则另走"跳过（掩码）"。
+    try:
+        raw_cells = SRAW.raw_sections(SET.load_settings(), mask_secrets=False)
+    except Exception:  # noqa: BLE001 - 盘上读不出来时不做"改没改"的判断，
+        # 整批交给 `write_settings`：它会以 `unknown` 如实说"那份读不出来，什么都没写"。
+        changed, unchanged, masked = values, [], []
+    else:
+        changed, unchanged, masked = _split_settings_changes(values, raw_cells)
+    if not changed:
+        # 没有一格需要落盘 ⇒ 连 `write_settings` 都不调：它内部会原子重写整份文件
+        # （字节或许不变、mtime 一定变）。"一键写回不改盘"要的是字节与 mtime 都不动。
+        extra = {"settings_tri": "written", "changed": False, "written": [],
+                 "unchanged": sorted(unchanged), "masked": sorted(masked),
+                 "values": _masked_setting_values(), "permissions": {}}
+        return done(200,
+                    (f"没有真正的改动：没有一格需要落盘（与盘上相同 {len(unchanged)} 格、"
+                     f"掩码跳过 {len(masked)} 格）—— 盘上那份没动"
+                     + (f"；跳过（掩码）：{sorted(masked)}" if masked else "")),
+                    True, ident=str(SET.settings_path() or ""),
+                    extra=extra, tri=TRI_COMPUTED)
+    got = SET.write_settings(changed)
     settings_tri = str(got.get("tri") or "unknown")
     mapped = {"written": TRI_COMPUTED, "refused": TRI_NOT_APPLICABLE,
               "unknown": TRI_UNREADABLE}.get(settings_tri, TRI_UNREADABLE)
     http = {"written": 200, "refused": 400, "unknown": 500}[settings_tri]
     # 回执里的三段读数来自 `write_settings`（它保证 `model.api_key` 恒为掩码）；
     # 这里原样带出去，不另拼一份（第二份就是漂移的起点）。
+    written = _cell_names(changed) if settings_tri == "written" else []
     extra = {"settings_tri": settings_tri, "values": got.get("values") or {},
-             "permissions": got.get("permissions") or {}}
+             "permissions": got.get("permissions") or {},
+             # 这一批新增的两栏：这次真正写了哪几格、哪几格被"没改/掩码"挡下来。
+             "written": written, "unchanged": sorted(unchanged),
+             "masked": sorted(masked), "changed": bool(written)}
+    reason = str(got.get("reason") or "")
+    if written:
+        reason += f"；本次真正落盘 {len(written)} 格：{written}"
+    if masked:
+        reason += f"；跳过（掩码）：{sorted(masked)}（不把 *** 写回盘上）"
     # 三态由 `write_settings` 的词表映射而来（不由状态码反推），所以显式传进去 ——
     # 发出去的正文与这里返回的字典必须是同一支。
-    return done(http, str(got.get("reason") or ""), bool(got.get("ok")),
+    return done(http, reason, bool(got.get("ok")),
                 ident=str(got.get("path") or ""), extra=extra, tri=mapped)
 
 

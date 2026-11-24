@@ -173,6 +173,14 @@ function PendingBlock(props: {
   );
 }
 
+/** 会话来源那一格的人话（码表见 `CURRENT_SOURCES`：cli / newest_session / none）。 */
+function sourceWord(source: string): string {
+  if (source === "cli") return "";
+  if (source === "newest_session") return "自动取最近一场";
+  if (source === "none") return "（盘上还没有会话）";
+  return source;
+}
+
 export function Home() {
   const live = useLive();
   const snapshot = live.snapshot;
@@ -392,58 +400,49 @@ export function Home() {
 
   return (
     <>
-      {/* 监视头（2026-11-14）：业主「盯着跑」要的五格 —— 项目 / 工作区 / 当前会话 /
-          当前轮 / 花费。五格全部来自两条既有端点，页面不自己算第二份：
-          `project` / `current` 是 `/api/state` 的两栏（名字来自项目文件夹本身，
-          sid 与轮号与 `start --watch` 印的是同一个号、同一个函数），花费来自
-          `/api/budget`（总额度取盘上的 `budget.json`、已花取 `usage_ledger`）。 */}
+      {/* 工作区与花费（2026-11-24 重写）：业主指这一段「一直感觉莫名其妙」——
+          旧版把「项目 / 工作区 / 裸工作区」三套概念堆在一句里，还给一个「项目：不适用」的
+          三态徽标：读的人不知道它说的是不是自己打开的那个目录。
+          现在只回答三个问题：这个服务在看哪个目录、跑的是哪一场、花了多少。
+          「项目」那两行只在根**真的是**项目文件夹时才画（否则整块不出现，而不是画成"不适用"）。 */}
       <Card
-        title="监视"
-        subtitle="与命令行 `agentflow start --watch` 印的同一批读数（项目 / 工作区 / 会话 / 轮 / 花费）"
+        title="工作区与花费"
+        subtitle="和命令行 `agentflow start` 打印的是同一批数：工作区在哪、跑的是哪一场、花了多少"
         tone={snapshot.project.tri === "unreadable" ? "problem" : "plain"}
         right={
-          <TriState
-            tri={snapshot.project.tri}
-            label="项目"
-            reason={snapshot.project.reason}
-          />
+          snapshot.project.tri === "unreadable" ? (
+            <TriState tri="unreadable" label="工作区" reason={snapshot.project.reason} />
+          ) : null
         }
       >
+        {snapshot.project.is_project ? (
+          <>
+            <div class="readings">
+              项目 <b class="mono">{snapshot.project.name}</b>
+              <span class="tri-reason"> · 名字来源 {snapshot.project.source}</span>
+            </div>
+            <div class="readings">
+              项目落点 <span class="mono">{snapshot.project.path}</span>
+            </div>
+          </>
+        ) : null}
         <div class="readings">
-          项目 <b class="mono">{snapshot.project.is_project ? snapshot.project.name : "（不是项目文件夹）"}</b>
-          {snapshot.project.is_project ? (
-            <span class="tri-reason"> · 名字来源 {snapshot.project.source}</span>
-          ) : null}
-        </div>
-        <div class="readings">
-          落点 <span class="mono">{snapshot.project.path}</span>
-          {snapshot.project.is_project ? null : (
-            <span class="tri-reason"> · {snapshot.project.why}</span>
-          )}
-        </div>
-        <div class="readings">
-          工作区根 <span class="mono">{snapshot.root}</span>
-          {/* AUDIT F8 的裁定：页面上**没有**切换工作区的入口（取证见 temp/webfix3 的报告），
-              而根在 `serve()` 那一刻钉死 —— 所以这里如实说出"要换怎么换"，
-              不留一个点了没反应的假 affordance。 */}
-          <span class="tri-reason">
-            {" "}（这个服务启动时钉死；要换工作区请重启服务并换 <span class="mono">--root</span> ——
-            页面没有切换入口）
-          </span>
-        </div>
-        <div class="readings">
-          当前会话{" "}
+          会话{" "}
           <span class="mono">
             {snapshot.current.sid === "" ? "（还没有会话）" : snapshot.current.sid}
           </span>{" "}
-          · 当前轮 <span class="mono">{snapshot.current.round}</span> · 来源{" "}
-          <span class="mono">{snapshot.current.source}</span>
+          · 第 <span class="mono">{snapshot.current.round}</span> 轮
+          {sourceWord(snapshot.current.source) === "" ? null : (
+            <>
+              {" "}· {sourceWord(snapshot.current.source)}
+            </>
+          )}
           {snapshot.current.sid !== "" && !snapshot.current.found ? (
-            <span class="tri-reason">（这一段会话文件还不在盘上：命令行先起网页、再开跑）</span>
+            <span class="tri-reason">（会话文件还不在盘上：网页先起、还没开跑就是这一档）</span>
           ) : null}
         </div>
         <div class="readings">
-          总预算{" "}
+          预算 总额度{" "}
           <span class="mono">
             {budgetFace.data === null ? "（还没读到）" : formatUsd(budgetFace.data.total_usd)}
           </span>{" "}
@@ -456,8 +455,7 @@ export function Home() {
             {budgetFace.data === null
               ? "（还没读到）"
               : formatUsd(budgetFace.data.remaining_usd)}
-          </span>
-          {" "}
+          </span>{" "}
           <a class="mono" href="/budget">
             去预算窗口追加
           </a>

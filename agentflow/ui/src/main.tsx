@@ -88,28 +88,30 @@ function Top() {
   // （`project` / `current` 两栏），不另取一条端点：顶栏每页都在，多一条请求就是
   // 每页多一份读盘。`current.sid` 与命令行 `start --watch` 印的是同一个号
   // （`serve(sid=…)` 交下来的那个），轮号两边都调 `sessions.round_of()`。
+  // 顶栏只说"工作区 / 会话 / 轮 / 连接"这四件事。根**不是**项目文件夹时不再画一个
+  // 「（不是项目文件夹）」——那是把内部概念（project vs workspace）摆到用户面前，
+  // 而用户要的只是"我现在看的是哪个目录"（业主 2026-11-24）。
   const project =
-    snap === null
-      ? "（还没读到）"
-      : snap.project.is_project
-        ? snap.project.name
-        : "（不是项目文件夹）";
+    snap === null || !snap.project.is_project ? "" : snap.project.name;
   const sid = snap === null || snap.current.sid === "" ? "（还没有会话）" : snap.current.sid;
   const round = snap === null ? "（还没读到）" : String(snap.current.round);
   return (
     <header class="top">
       <div class="brand">agentflow 用户端</div>
       <div class="sub">
-        项目 <b class="mono">{project}</b> · 工作区根{" "}
-        <span class="mono">{root}</span>
+        {project === "" ? null : (
+          <>
+            项目 <b class="mono">{project}</b> ·{" "}
+          </>
+        )}
+        工作区根 <span class="mono">{root}</span>
         {/* AUDIT F8：根在 `serve()` 那一刻钉死，页面**没有**切换入口（裁定：没有入口
             就不新增功能）。所以这里只如实说"怎么换"——停服务、换 `--root` 重启。
             不摆任何按钮/下拉：一个点了没反应的切换控件比没有更坏。 */}
         <span class="tri-reason">（启动时钉死；换工作区要重启服务并换 --root）</span>
       </div>
       <div class="sub">
-        当前会话 <span class="mono">{sid}</span> · 当前轮{" "}
-        <span class="mono">{round}</span> · 连接{" "}
+        会话 <span class="mono">{sid}</span> · 第 <span class="mono">{round}</span> 轮 · 连接{" "}
         <span class="mono">{live.connection}</span>
       </div>
       <nav class="nav">

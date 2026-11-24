@@ -836,10 +836,10 @@ def _active_text(doc: Mapping[str, Any]) -> str:
     """
     source_text = str(doc.get("source_text") or doc.get("source") or "unknown")
     note = str(doc.get("source_note") or "").strip()
-    origin = f"来源={source_text}" + (f"；{note}" if note else "")
+    origin = source_text + (f"；{note}" if note else "")
     if str(doc.get("tri")) != "found":
         why = str(doc.get("why") or "unknown")
-        return f"当前没有可用缓存（{origin}；理由：{why}）—— 去点「试算」看要预热什么"
+        return f"当前没有可用缓存（来源：{origin}；理由：{why}）—— 点「试算」看要预热什么"
     switch = "开" if doc.get("lean") else "关"
     body = f"{doc.get('prompt_version') or ''} · {doc.get('covered') or '0/0'}"
     absent = [str(t) for t in (doc.get("absent") or [])]
@@ -850,12 +850,14 @@ def _active_text(doc: Mapping[str, Any]) -> str:
     # 那一格仍在 `active.run_at` 里，要看的自己取。
     missing = [str(t) for t in (doc.get("missing") or [])]
     if missing:
-        body += "，缺：" + "、".join(missing)
+        body += " · 缺 " + "、".join(missing)
     elif doc.get("fresh") is False:
-        body += "，" + str(doc.get("why") or "不新鲜")
-    body += f"，{origin}"
+        body += " · " + str(doc.get("why") or "不新鲜")
     name = ACTIVE_NAME.get(str(doc.get("tier")), "")
-    return f"当前使用：**{name}**（{body}）｜开关：{switch}"
+    # 一行分三段，每段只回答一件事：用哪一档 / 谁在用它 / 形式化开关。
+    # 旧写法把「来源=…」塞进档名后面的括号里，一段话里同时说档、覆盖、缺席、来源、开关五件事，
+    # 读的人要先拆括号才知道哪句说的是谁（业主 2026-11-24：「这段一直感觉莫名其妙」）。
+    return f"当前缓存：**{name}**（{body}）· 来源：{origin} · 形式化开关：{switch}"
 
 
 def _active_doc(*, tier: str, lean: bool | None, reading: Mapping[str, Any],

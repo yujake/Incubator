@@ -4840,6 +4840,124 @@ def _as_text(value: Any) -> str:
 
 
 # ====================================================================== 6 本机
+def _settings_cells(raw: Mapping[str, Any], red: Mapping[str, Any],
+                    effort_shown: str, temperature_shown: str,
+                    sec_cell: Mapping[str, Any]) -> tuple[
+                        dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """SETTINGS-RAW 的 `raw` / `effective` / `source` 三格（`_settings_reading` 的帮手）。
+
+    为什么单独一个函数：`_settings_reading` 已经在一个 200 行的体量边上，把这三格
+    塞进去会跨过体量门（三格只许降）。这里每一格都走既有梯子，不另造判据：
+
+    - 工具链与 `workspace.projects_dir` 用 `settings.env_or_setting` /
+      `settings.lean_enabled` / `projects` 的既有档位（env > settings > 缺省）；
+    - 模型三档（`model` / `models.<角色>` / `secretary`）走 `modelgw.spec_for` 的
+      既有梯子（`models.<角色>` → `models.default` → `model` → env → 缺省）；
+    - 来源词表只有三个：`settings` / `env` / `default`（空串那一档记成 default）。
+
+    返回 `(raw_cells, effective, source)`，形状与机器面 `settings` 的五段逐字对齐。
+    """
+    from ..formalgw import ENV_MATHLIB_ROOT
+    from ..modelgw import (ENV_BASE, ENV_EFFORT, ENV_KEY, ENV_NAME, ENV_TEMPERATURE,
+                           spec_for)
+    from ..projects import DEFAULT_PROJECTS_DIR, ENV_PROJECTS_DIR
+    from ..settings import (DEFAULT_MODEL_SLOT, LEAN_ENABLED_KEY, MODEL_KEYS,
+                            MODELS_SECTION, ROLE_SLOTS, SECRETARY_SECTION, TOOLCHAIN_KEYS,
+                            WORKSPACE_KEYS, env_or_setting, lean_enabled)
+    from ..toolchain import ENV_COQ_BIN, ENV_ISABELLE_BIN, ENV_LEAN_BIN
+    from . import settingsraw as SRAW
+
+    raw_cells = SRAW.raw_sections(raw)
+    raw_models = raw_cells.get(MODELS_SECTION) or {}
+    raw_model = raw_cells.get("model") or {}
+    raw_sec = raw_cells.get(SECRETARY_SECTION) or {}
+    default_slot_raw = raw_models.get(DEFAULT_MODEL_SLOT) or {}
+    # ---- 工具链 / 工作区：env > settings > 缺省
+    tool_eff: dict[str, str] = dict(raw_cells.get("toolchain") or {})
+    tool_src: dict[str, str] = {}
+    tool_env = {"lean_bin": ENV_LEAN_BIN, "coq_bin": ENV_COQ_BIN,
+                "isabelle_bin": ENV_ISABELLE_BIN, "mathlib_root": ENV_MATHLIB_ROOT}
+    for k in TOOLCHAIN_KEYS:
+        if k == LEAN_ENABLED_KEY:
+            try:
+                on, src = lean_enabled()
+            except Exception:  # noqa: BLE001 - 坏值由工具链一侧报，这一格不炸读数
+                on, src = str(tool_eff.get(k, "")).lower() in (
+                    "1", "true", "yes", "on", "y", "t"), ""
+            tool_eff[k] = "true" if on else "false"
+            tool_src[k] = src or "default"
+            continue
+        env_name = tool_env.get(k, "")
+        if env_name:
+            value, src = env_or_setting(env_name, tool_eff.get(k, ""))
+            tool_eff[k] = value
+            tool_src[k] = src or "default"
+        else:
+            tool_src[k] = "settings" if tool_eff.get(k) else "default"
+    proj_value, proj_src = env_or_setting(
+        ENV_PROJECTS_DIR, (raw_cells.get("workspace") or {}).get("projects_dir", ""))
+    work_eff: dict[str, str] = dict(raw_cells.get("workspace") or {})
+    work_src: dict[str, str] = {}
+    work_eff["projects_dir"] = proj_value or str(DEFAULT_PROJECTS_DIR)
+    work_src["projects_dir"] = proj_src or "default"
+    for k in WORKSPACE_KEYS:
+        if k != "projects_dir":
+            work_eff.setdefault(k, "")
+            work_src[k] = "settings" if work_eff[k] else "default"
+    # ---- 模型三档：来源逐格问答，判据与 `modelgw.key_source` 同一条梯子
+    model_env = {"api_key": ENV_KEY, "base_url": ENV_BASE, "name": ENV_NAME,
+                 "reasoning_effort": ENV_EFFORT, "temperature": ENV_TEMPERATURE}
+
+    def cell_source(own_raw: str, env_name: str,
+                    inherited: tuple[str, ...] = ()) -> str:
+        """这一格从哪来：`env` > 盘上（本格或继承的档）> `default`。"""
+        if env_name:
+            _value, src = env_or_setting(env_name, own_raw)
+            if src:
+                return src
+        if str(own_raw or "").strip():
+            return "settings"
+        if any(str(x or "").strip() for x in inherited):
+            return "settings"
+        return "default"
+
+    model_eff = {"vendor": red["vendor"], "api_key": red["api_key"],
+                 "base_url": red["base_url"], "name": red["model"],
+                 "reasoning_effort": effort_shown, "temperature": temperature_shown}
+    model_src = {k: cell_source(raw_model.get(k, ""), model_env.get(k, ""))
+                 for k in MODEL_KEYS}
+    models_eff: dict[str, dict[str, str]] = {}
+    models_src: dict[str, dict[str, str]] = {}
+    for slot in sorted(set(ROLE_SLOTS) | set(raw_models)):
+        own = raw_models.get(str(slot)) or {}
+        try:
+            slot_spec, _where = spec_for(str(slot))
+            slot_red = slot_spec.redacted()
+            slot_eff = {"api_key": slot_red["api_key"],
+                        "base_url": slot_red["base_url"],
+                        "name": slot_red["model"],
+                        "vendor": slot_red["vendor"],
+                        "reasoning_effort": slot_red["reasoning_effort"],
+                        "temperature": str(slot_red["temperature"])}
+        except Exception:  # noqa: BLE001 - 坏掉一档不带走整份读数
+            slot_eff = {k: "" for k in MODEL_KEYS}
+        models_eff[str(slot)] = slot_eff
+        models_src[str(slot)] = {
+            k: cell_source(own.get(k, ""), model_env.get(k, ""),
+                           (default_slot_raw.get(k, ""), raw_model.get(k, "")))
+            for k in MODEL_KEYS
+        }
+    sec_eff = {k: _as_text(sec_cell.get(k, "")) for k in MODEL_KEYS}
+    sec_src = {k: cell_source(raw_sec.get(k, ""), model_env.get(k, ""),
+                              (default_slot_raw.get(k, ""), raw_model.get(k, "")))
+               for k in MODEL_KEYS}
+    effective = {"toolchain": tool_eff, "model": model_eff, "workspace": work_eff,
+                 MODELS_SECTION: models_eff, SECRETARY_SECTION: sec_eff}
+    source = {"toolchain": tool_src, "model": model_src, "workspace": work_src,
+              MODELS_SECTION: models_src, SECRETARY_SECTION: sec_src}
+    return raw_cells, effective, source
+
+
 def _settings_reading() -> tuple[dict[str, Any], str, str]:
     """设置文件的三段读数（`settings.load_settings` + `settings.settings_path`）。
 
@@ -4865,7 +4983,15 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
     except Exception as exc:  # noqa: BLE001 - 设置文件坏掉 = 没查成，不是"没配"
         return ({"path": str(path) if path else "", "exists": on_disk,
                  "toolchain": {}, "model": {}, "workspace": {},
-                 MODELS_SECTION: {}, SECRETARY_SECTION: {}},
+                 MODELS_SECTION: {}, SECRETARY_SECTION: {},
+                 # 三个新字段与正常档同形（坏文件不是"没有这三格"）：
+                 # 读不出来时它们是空壳，页面据此知道"这一档没读到"。
+                 "raw": {n: {} for n in ("toolchain", "model", "workspace",
+                                         MODELS_SECTION, SECRETARY_SECTION)},
+                 "effective": {n: {} for n in ("toolchain", "model", "workspace",
+                                               MODELS_SECTION, SECRETARY_SECTION)},
+                 "source": {n: {} for n in ("toolchain", "model", "workspace",
+                                            MODELS_SECTION, SECRETARY_SECTION)}},
                 TRI_UNREADABLE, f"settings.load_settings 读不出来："
                                 f"{type(exc).__name__}: {exc}")
     tool = {k: str(v) for k, v in toolchain_settings().items()}
@@ -4947,6 +5073,9 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
         temperature_shown = temperature_raw
         effort_problem = f"{type(exc).__name__}: {exc}"
     red = spec.redacted()
+    # SETTINGS-RAW 的三格：盘上原样 / 生效值 / 每格来源（形状见 `_settings_cells`）。
+    raw_cells, effective_cells, source_cells = _settings_cells(
+        raw, red, effort_shown, temperature_shown, sec_cell)
     reading = {
         "path": str(path) if path is not None else "",
         "exists": on_disk,
@@ -4975,6 +5104,12 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
         # 那份设置文件里 key 的来源，`configured` 是"这一档到底有没有 key"。
         MODELS_SECTION: slots,
         SECRETARY_SECTION: sec_cell,
+        # 三样分开放（缺陷 SETTINGS-RAW）：盘上原样 / 生效值 / 每格来源。
+        # 页面的输入框只许填 `raw`，`effective` 只进 placeholder；写侧拿 `raw`
+        # 判断"这一格到底改没改"。三者同形（段 → 格 → 字符串）。
+        "raw": raw_cells,
+        "effective": effective_cells,
+        "source": source_cells,
         "raw_keys": sorted(raw) if isinstance(raw, dict) else [],
     }
     if effort_problem:
@@ -8072,7 +8207,22 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
                     "reasoning_effort: string; temperature: string; key_source: string; "
                     "configured: boolean; "
                     "source: string; own_slot?: Record<string, string> }"),
-      ("workspace", "Record<string, string>"), ("raw_keys", "string[]"))),
+      ("workspace", "Record<string, string>"),
+      # ---- SETTINGS-RAW：三样分开放（形状直接内联，不再多一个需要在契约 C 里
+      # 登记的接口 —— 这三格的段名与上面五段逐字对齐）。
+      ("raw", "{ toolchain: Record<string, string>; model: Record<string, string>; "
+              "workspace: Record<string, string>; "
+              "models: Record<string, Record<string, string>>; "
+              "secretary: Record<string, string> }"),
+      ("effective", "{ toolchain: Record<string, string>; model: Record<string, string>; "
+                    "workspace: Record<string, string>; "
+                    "models: Record<string, Record<string, string>>; "
+                    "secretary: Record<string, string> }"),
+      ("source", "{ toolchain: Record<string, string>; model: Record<string, string>; "
+                 "workspace: Record<string, string>; "
+                 "models: Record<string, Record<string, string>>; "
+                 "secretary: Record<string, string> }"),
+      ("raw_keys", "string[]"))),
     ("MachineView",
      "machine_face() —— toolchain.toolchain_report() 的键 + 设置三段",
      (("tri", "Tri"), ("reason", "string"), ("model", "Record<string, unknown>"),

@@ -33,6 +33,14 @@ import type { ActionRow, SettingsReading } from "../types";
 /** 网页操作历史一页多少行（AUDIT F11；与 `readers.ACTIONS_PAGE_DEFAULT` 同一个数）。 */
 const ACTIONS_PAGE = 20;
 
+/** 后端 `settings.MASKED_KEY` 在页面上的同一个字面量（`settings.py` 那个常量是唯一真身）。
+ *
+ * 已配置的 `api_key` 输入框要显示它（业主：「填了就不该是空，即使一串星号占位也是好的」）。
+ * 写侧 `handle_settings` 认得"等于它 / 全是 `*`"的值并跳过 —— 所以这个字符串永远
+ * 不会被当成真 key 写回盘上。
+ */
+const MASKED_KEY = "***";
+
 /** 设置窗口里的每一格（`段.键` 形状逐字对应后端 `handle_settings` 读的表单键）。 */
 const FIELDS: ReadonlyArray<{ key: string; hint: string }> = [
   { key: "toolchain.lean_bin", hint: "Lean 可执行文件所在目录（例：_env/lean470/.../bin）" },
@@ -67,7 +75,7 @@ const ROLES: readonly string[] = ["A", "B", "C", "D", "E", "F", "G", "H", "V", "
  */
 const ROLE_FIELDS: ReadonlyArray<{ key: string; hint: string }> = [
   { key: "vendor", hint: "厂商名（例：deepseek；留空 = 沿用）" },
-  { key: "api_key", hint: "这个角色自己的 key（只写不读；留空 = 沿用）" },
+  { key: "api_key", hint: "这个角色自己的 key（已配置显示 ***；输入新值即覆盖；留空 = 沿用）" },
   { key: "base_url", hint: "端点（留空 = 沿用）" },
   { key: "name", hint: "模型名（留空 = 沿用）" },
 ];
@@ -85,15 +93,29 @@ function roleCell(settings: SettingsReading, role: string): Record<string, unkno
   return seg as Record<string, unknown>;
 }
 
-/** 按角色那一档现读的值（`settings.models.<角色>.<键>`）。 */
+/** 按角色那一档**盘上原样**（`settings.raw.models.<角色>`）；没这一档 ⇒ `{}`。 */
+function roleRaw(settings: SettingsReading, role: string): Record<string, unknown> {
+  const models = settings.raw.models as unknown as Record<string, Record<string, unknown>>;
+  const seg = models[role];
+  return seg === undefined || seg === null ? {} : seg;
+}
+
+/** 按角色那一档**生效值**（`settings.effective.models.<角色>`；只进 placeholder）。 */
+function roleEffective(settings: SettingsReading, role: string): Record<string, unknown> {
+  const models = settings.effective.models as unknown as Record<string, Record<string, unknown>>;
+  const seg = models[role];
+  return seg === undefined || seg === null ? {} : seg;
+}
+
+/** 按角色那一档的输入框初值（盘上原样；`api_key` 配置了就给掩码）。 */
 function roleValue(settings: SettingsReading, role: string, key: string): string {
   if (key === "api_key") {
-    // key 那一格不回填：读数里它是掩码（后端 MASKED_KEY），
-    // 回填等于让人在输入框里看到一个假 key —— 动一下它就把掩码当 key 写回去。
-    // 这一条与 `presetOf` 对 `model.api_key` 的例外是同一条纪律（key 只写不读）。
-    return "";
+    // 真 key 从不下发：配置了显示 `MASKED_KEY`（业主「填了就不该是空」），
+    // 没配置才是空串。写侧会把"全是星号"的值判成"这一格不改"。
+    const configured = roleCell(settings, role)["configured"] === true;
+    return configured ? MASKED_KEY : "";
   }
-  const raw = roleCell(settings, role)[key];
+  const raw = roleRaw(settings, role)[key];
   if (raw === undefined || raw === null) {
     return "";
   }
@@ -105,11 +127,13 @@ function field(rec: Record<string, unknown>, key: string): string {
   return cell(rec[key]);
 }
 
-/** 设置文件里某一格现在的值（按 `段.键` 取；取不到 ⇒ 空串 = 盘上没设过）。
+/** 设置文件里某一格**盘上原样**的值（按 `段.键` 取；取不到 ⇒ 空串 = 盘上没设过）。
  *
  * 为什么要它（业主：「设置面板启动后应该同步设置文件里的参数，不然空空的就像
- * 啥都没设置过一样」）：这一格的读数后端早就在给（`GET /api/machine` 的 `settings` 三段），
- * 但输入框初值一直是空串 ⇒ 打开面板看到的永远是"没配"。
+ * 啥都没设置过一样」）：初值必须取盘上真有的那一份 —— 不是后端算出来的生效值。
+ * SETTINGS-RAW 之前这里读的是 `settings.<段>.<键>`（生效值：缺省已经填进去），
+ * 于是 `model.base_url` / `model.name` / `model.reasoning_effort` 这些盘上没设过的
+ * 格子看起来"设过了"，用户点一次「写这些设置」就把缺省固化成了显式配置。
  *
  * ⚠️ 这里有一处**要命的**地方：不许走 `cell()`。`cell("")` 的口径是
  * `unknown`（那一套是给**读数表**用的），可这一格的返回值会直接进输入框的 `value` ——
@@ -124,7 +148,7 @@ function currentOf(settings: SettingsReading, key: string): string {
   const parts = key.split(".");
   const part = parts[0] ?? "";
   const leaf = parts[1] ?? "";
-  const seg = (settings as unknown as Record<string, Record<string, unknown>>)[part];
+  const seg = (settings.raw as unknown as Record<string, Record<string, unknown>>)[part];
   if (seg === undefined || seg === null) {
     return "";
   }
@@ -133,6 +157,35 @@ function currentOf(settings: SettingsReading, key: string): string {
     return "";
   }
   return typeof raw === "string" ? raw : String(raw);
+}
+
+/** 同一格的**生效值**（缺省/继承/环境变量已经算进去；只进 placeholder，绝不进 `value`）。 */
+function effectiveOf(settings: SettingsReading, key: string): string {
+  const parts = key.split(".");
+  const part = parts[0] ?? "";
+  const leaf = parts[1] ?? "";
+  const seg = (settings.effective as unknown as Record<string, Record<string, unknown>>)[part];
+  if (seg === undefined || seg === null) {
+    return "";
+  }
+  const value = seg[leaf];
+  if (value === undefined || value === null) {
+    return "";
+  }
+  return typeof value === "string" ? value : String(value);
+}
+
+/** 这一格的 placeholder：盘上没设时把生效值说出来，别只写一句「盘上没设过」。 */
+function placeholderOf(settings: SettingsReading, key: string, hint: string): string {
+  const raw = currentOf(settings, key);
+  if (raw !== "") {
+    return hint;
+  }
+  const effective = effectiveOf(settings, key);
+  if (effective !== "" && effective !== raw) {
+    return `${hint}（盘上没设；当前生效：${effective}）`;
+  }
+  return `${hint}（盘上没设过）`;
 }
 
 /** 三态布尔：`null` / `undefined` ⇒ `unknown`（不折成 false）。 */
@@ -173,13 +226,22 @@ const SWITCH_SOURCES: Record<string, string> = {
   "": "缺省（设置文件里没写这一格）",
 };
 
-/** 初值：设置文件里的现值；`api_key` 那几格例外（读数是掩码，回填等于写回它）。 */
+/** 初值：设置文件里的现值（`raw`）。
+ *
+ * `api_key` 那几格例外：真 key 从不下发，读数里只有掩码。业主的口径是
+ * 「填了就不该是空，即使一串星号占位也是好的」—— 所以**配置了**就回填
+ * `MASKED_KEY`（`***`），没配置才是空串。写侧认得这个值并跳过（不会把星号写成 key）。
+ */
 function presetOf(settings: SettingsReading, key: string): string {
-  if (key === "model.api_key" || key.endsWith(".api_key")) {
-    // `model.api_key` 之外，`secretary.api_key` 与每个角色那一档的
-    // `api_key` 也是掩码（后端 MASKED_KEY）—— 三处都是同一份读数里的掩码，
-    // 所以按后缀一律不回填。
-    return "";
+  if (key.endsWith(".api_key")) {
+    const modelKey = key === "model.api_key";
+    const configured = modelKey
+      ? settings.model.configured
+      : settings.secretary.configured;
+    if (!configured) {
+      return "";
+    }
+    return MASKED_KEY;
   }
   return currentOf(settings, key);
 }
@@ -210,13 +272,40 @@ export function Machine() {
   const settings = m.settings;
   // 设置文件的三个顶层段：标题与空态里的「几段」由这张表现数，表的行也从它铺开
   // —— 加一段时数字与行一起变，不会只剩标题里的那个数。
-  const SETTING_SECTIONS: ReadonlyArray<{ part: string; section: Record<string, unknown> }> = [
-    { part: "toolchain", section: settings.toolchain },
-    { part: "model", section: settings.model as unknown as Record<string, unknown> },
-    { part: "workspace", section: settings.workspace },
+  // SETTINGS-RAW 之后这张表把「盘上原样」与「生效值 / 来源」分列：读的人不必再猜
+  // 屏幕上那个 `https://api.deepseek.com/v1` 是文件里写的还是内置缺省。
+  const SETTING_SECTIONS: ReadonlyArray<{
+    part: string;
+    raw: Record<string, string>;
+    effective: Record<string, string>;
+    source: Record<string, string>;
+  }> = [
+    {
+      part: "toolchain",
+      raw: settings.raw.toolchain,
+      effective: settings.effective.toolchain,
+      source: settings.source.toolchain,
+    },
+    {
+      part: "model",
+      raw: settings.raw.model,
+      effective: settings.effective.model,
+      source: settings.source.model,
+    },
+    {
+      part: "workspace",
+      raw: settings.raw.workspace,
+      effective: settings.effective.workspace,
+      source: settings.source.workspace,
+    },
   ];
-  const settingRows = SETTING_SECTIONS.flatMap(({ part, section }) =>
-    pairs(section).map((p) => ({ ...p, part })));
+  const settingRows = SETTING_SECTIONS.flatMap(({ part, raw, effective, source }) =>
+    pairs(raw).map((p) => ({
+      ...p,
+      part,
+      effective: effective[p.k] ?? "",
+      source: source[p.k] ?? "",
+    })));
   const provers = m.provers;
   const mathlib = m.mathlib;
   const serving = m.serving;
@@ -473,7 +562,7 @@ export function Machine() {
       </Card>
 
       <Card
-        title="模型 key（只显配没配）"
+        title="模型接线（生效值；key 只显配没配）"
         right={
           <Badge
             kind={settings.model.configured ? "badge-pass" : "badge-na"}
@@ -483,12 +572,12 @@ export function Machine() {
       >
         <div class="readings">
           vendor <span class="mono">{settings.model.vendor === "" ? "unknown（没配）" : settings.model.vendor}</span> ·
-          base_url <span class="mono">{settings.model.base_url === "" ? "unknown（没配）" : settings.model.base_url}</span> ·
-          name <span class="mono">{settings.model.name === "" ? "unknown（没配）" : settings.model.name}</span> ·
+          生效 base_url <span class="mono">{settings.model.base_url === "" ? "（空）" : settings.model.base_url}</span> ·
+          生效 name <span class="mono">{settings.model.name === "" ? "（空）" : settings.model.name}</span> ·
           api_key <span class="mono">{settings.model.api_key === "" ? "（空）" : settings.model.api_key}</span>
         </div>
         <div class="readings">
-          推理强度 <span class="mono">{settings.model.reasoning_effort}</span>（所有智能体都按这一档 thinking；
+          生效推理强度 <span class="mono">{settings.model.reasoning_effort}</span>（所有智能体都按这一档 thinking；
  settings.json 的 model.reasoning_effort 留空 = 内置默认 High）·
           key 来源 <span class="mono">{settings.model.key_source === ""
             ? "没取到（环境变量与设置文件都没有）"
@@ -523,7 +612,19 @@ export function Machine() {
               columns={[
                 { key: "part", title: "段" },
                 { key: "k", title: "键" },
-                { key: "v", title: "值", render: (r) => <span class="mono">{settingsCell(r.raw)}</span> },
+                { key: "v", title: "盘上原样", render: (r) => <span class="mono">{settingsCell(r.raw)}</span> },
+                {
+                  key: "effective",
+                  title: "生效值",
+                  render: (r) => (
+                    <span class="mono">{r.effective === "" ? "（空）" : cell(r.effective)}</span>
+                  ),
+                },
+                {
+                  key: "source",
+                  title: "来源",
+                  render: (r) => <span class="mono">{r.source === "" ? "unknown" : r.source}</span>,
+                },
               ]}
             />
           </>
@@ -532,10 +633,12 @@ export function Machine() {
 
       <Card title="设置窗口（写设置）">
         <div class="readings">
- 写的是机器级设置文件（上面那一格里的路径）。每一格的初值就是设置文件里的现值（打开即可见；model.api_key 只写不读，
- 所以那一格不回填）。逐格改，清空某一格表示"这一格不动"
- （settings.write_settings 的口径是只写给了值的键）。model.api_key 落盘、
- 回执里恒为 ***（key 只写不读）。lean_enabled 那一格是业主的
+ 写的是机器级设置文件（上面那一格里的路径）。每一格的初值就是设置文件里的现值
+ （`raw`：盘上没设过的格子是空的，placeholder 会写出「当前生效」是多少）。
+ model.api_key 只写不读：已配置时那一格显示 ***，改它就直接输入新 key；
+ 提交 *** 会被后端判成「这一格不改」（不会把掩码写成真 key）。逐格改，
+ 清空某一格表示"这一格不动"（settings.write_settings 的口径是只写给了值的键）。
+ 写入回执里会点名"这次真正写了哪几格"。lean_enabled 那一格是业主的
  省钱开关，取值只认 true / false；缺省是关。
         </div>
         <div class="readings">
@@ -544,13 +647,7 @@ export function Machine() {
               <span class="mono">{field.key}</span>
               <input
                 type={field.key === "model.api_key" ? "password" : "text"}
-                placeholder={
-                  field.key === "model.api_key"
-                    ? field.hint
-                    : currentOf(settings, field.key) === ""
-                      ? `${field.hint}（盘上没设过）`
-                      : field.hint
-                }
+                placeholder={placeholderOf(settings, field.key, field.hint)}
                 value={values[field.key] ?? presetOf(settings, field.key)}
                 onInput={(ev) => {
                   const v = ev.currentTarget.value;
@@ -585,10 +682,14 @@ export function Machine() {
                 text={configured ? `配了（${src === "" ? "来源没读到" : src}）` : "沿用下一档"}
               />
               {ROLE_FIELDS.map((rf) => {
-                // 这一格盘上的现值要问两处（placeholder 里那句"盘上没设过"、输入框的初值）。
-                // 改前每处各 roleValue 一次（每次都要 roleCell 一遍），这里算一次、两处共用 ——
-                // 两处的判据都是"现值是不是空串"，所以渲染结果不变。
+                // 这一格盘上的原值进 `value`；生效值只进 placeholder。
+                // 改前 `roleValue` 读的是 `settings.models.<角色>.<键>`（生效值），
+                // 于是"只有 api_key 配过"的那一档会把继承来的 base_url / name 回填进去。
                 const preset = roleValue(settings, role, rf.key);
+                const effective = roleEffective(settings, role)[rf.key];
+                const effectiveText = effective === undefined || effective === null
+                  ? ""
+                  : String(effective);
                 return (
                   <label class="opt" key={rf.key}>
                     <span class="mono">{rf.key}</span>
@@ -596,7 +697,9 @@ export function Machine() {
                       type={rf.key === "api_key" ? "password" : "text"}
                       placeholder={
                         preset === ""
-                          ? `${rf.hint}（盘上没设过）`
+                          ? effectiveText !== ""
+                            ? `${rf.hint}（盘上没设；当前生效：${effectiveText}）`
+                            : `${rf.hint}（盘上没设过）`
                           : rf.hint
                       }
                       value={values[`models.${role}.${rf.key}`] ?? preset}
