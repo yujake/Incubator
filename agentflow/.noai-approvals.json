@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-24T06:27:40+08:00",
+  "generated_at": "2026-11-24T09:38:36+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -233,11 +233,11 @@
       "path": "src/agentflow/policy.py",
       "glob": "src/agentflow/policy.py",
       "category": "auth-audit",
-      "sha256": "78a842bae0891e307c9319cc0768096ff769da20ca01a0a1beb1ec958f92a0ce",
+      "sha256": "eda3d280951a5a9e90037fce501a38993f8c66f6c630540d75446df19c95723f",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "FC27-EXPAND-TOOLS 路：两处清单逐条追加 14 个 tools/*_tools.py 与 policy.py 共 15 条（auth-audit）；登记不等于批准（reviewers 留空）",
-      "changed_this_session": true,
+      "change_note": "（未提供变更说明：内容 hash 从 78a842bae089 变为 eda3d280951a，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "changed_this_session": null,
       "reviewers": [],
       "audits": [],
       "also_hits": []
