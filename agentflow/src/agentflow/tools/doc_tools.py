@@ -3291,12 +3291,15 @@ def _mapping_declaration_texts(
             "与 next_steps（人话清单，含「扩大研究面」与「不许杜撰」）"
         ),
         "mapping_cells_returns": (
-            "{'ok','cells','sources','problems','channel','checked'}；"
+            "{'ok','cells','sources','problems','channel','checked','load_bearing_gaps'}；"
             "cells 的键 = file / lean_file / lean_target / numeric_evidence / "
             "exhaustion_note / evidence_kind / evidence_path / evidence_sha256 / "
             "v_signature（只给拿得到的格；" + empty + "）；"
+            "load_bearing_gaps = 本项目「论文里哪些承重命题没有自己的证明稿 / 签」那张表"
+            "（不给 statement_id 时只交它；取数链是 stmt → statements.manuscripts → "
+            "盘上文件存在性 → reviewed 那一格的签读数，三态 checked/gaps/unreadable）；"
             "sources[格] 指回「哪张表哪一行哪一格」或「现算」（`evidence_sha256` / "
-            "`v_signature.sha256` 都是现算的字节 sha256，不抄表里旧值）；"
+            "`v_signature.sha256` 都是现算的正文 sha256，不抄表里旧值）；"
             "problems = [{'cell','why'}]（cell='*' 是整表/整行那一档，why 是判据原话："
             "读不到 / 没签 / sha 不符 / 表里没有这一行）；"
             "channel ∈ numeric / formal / ''（`numericproof.proof_channel`）；"
@@ -3516,6 +3519,7 @@ def _doc_mapping_cells(workspace: Path | None, project: str, statement_id: str =
         problems=list(got.get("problems") or []),
         channel=str(got.get("channel") or ""),
         checked=bool(got.get("checked")),
+        load_bearing_gaps=dict(got.get("load_bearing_gaps") or {}),
     )
 
 

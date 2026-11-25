@@ -5640,7 +5640,7 @@ class ClosingReport:
            拿它当布尔的人必须走 :attr:`closable`，或者显式判 `is True`。
 
         改前（2026-11-03 裁决 ①=乙）这里只读 `m_says_done ∧ retire.complete ∧
-        programs_ok`，**不读那八格** —— 真机 `lp-ball-11` 八格 6/8 仍 `exit 0` 的根因。
+        programs_ok`，不读那八格 —— 真机 `lp-ball-11` 八格 6/8 仍 `exit 0` 的根因。
         现在它由 :func:`closing_verdict` 一处算出（ROOTGATE-①）。
         """
         return self.verdict.get("can_close")
@@ -6125,7 +6125,9 @@ def mapping_absence_reading(store: Any, project_root: Any) -> dict[str, Any]:
 
 
 def _mapping_row_missing_cells(row: Any, *, channel: str,
-                               numeric_theorem: bool = True) -> list[str]:
+                               numeric_theorem: bool = True,
+                               load_bearing: bool = False,
+                               evidence_required: bool = False) -> list[str]:
     """这一行按它的证明通道还缺哪几格 —— 这一档的唯一判据（反真空用例只打这一处桩）。
 
     口径全部复用现有判据，不在这里另写一套「这一行是不是数值定理」：
@@ -6142,6 +6144,12 @@ def _mapping_row_missing_cells(row: Any, *, channel: str,
       `papermapping.is_numeric_theorem_row` 的结论）：例子 / 实验按
       通道填了 `lean_file` 就齐，不再被 `numeric_evidence` / `exhaustion_note` 判成
       「凭据不够」；它不按 `kind` 在这里重判一次 —— 判据只有 `papermapping` 那一处；
+    - 承重行要 `evidence_path`（2026-11-26 BEARINGDEF）：`load_bearing` 由调用方传
+      `papermapping.is_load_bearing_row(row)`（承重命题的唯一判据），`evidence_required`
+      由 `papermapping.load_bearing_evidence_required(row, ledger)` 说"这一行该有它自己的
+      稿"（三态：没查成的行不进分母 —— 不许把"没查成"数成"齐"）。这一格是本次事故的
+      现场：`prop:block` / `thm:erdos-rado` 两行空通道，旧口径只数 `file` ⇒ `complete=5/5`，
+      而它们的稿格一个都没填；
     - 索引四格不在这里数：它们由 `numerictheorem.evidence_index_problems` 一处判
       （见 :func:`_numeric_row_index_problems`）。
 
@@ -6151,16 +6159,22 @@ def _mapping_row_missing_cells(row: Any, *, channel: str,
     from . import papermapping as PM
     from . import numericproof as NP
 
+    fields: list[str] = []
+    if load_bearing and evidence_required:
+        #: 承重命题自己的证明稿（路径这一格；正文 sha / 字节 sha / 签由
+        #: `papermapping._proof_index_problems` 逐项核 —— 这里只数"该有而没有"）。
+        fields.append(PM.NP.INDEX_PATH_FIELD)
     if not str(getattr(row, "file", "") or "").strip():
-        return ["file"]
+        return ["file"] + fields
     if channel == NP.PROOF_CHANNEL_NUMERIC:
-        fields: tuple[str, ...] = ("file",) + (
-            tuple(PM.NUMERIC_ROW_FIELDS) if numeric_theorem else ()) + ("lean_file",)
+        fields += ["file"] + (
+            list(PM.NUMERIC_ROW_FIELDS) if numeric_theorem else []) + ["lean_file"]
     elif channel == NP.PROOF_CHANNEL_FORMAL:
-        fields = ("file",) + tuple(PM.LEAN_ROW_FIELDS)
+        fields += ["file"] + list(PM.LEAN_ROW_FIELDS)
     else:
-        fields = ("file",)
+        fields.append("file")
     return [name for name in fields if not str(getattr(row, name, "") or "").strip()]
+
 
 
 def _lean_problem_cells(row: Any, channel: str,
@@ -6279,6 +6293,10 @@ def paper_mapping_cell_reading(project_root: Path | str, *,
         "implicit_min": 1,
         "lean": {"enabled": bool(lean_on), "source": lean_source,
                  "artifacts": list(artifacts[:8]), "required": lean_required},
+        #: 承重命题「稿与签」的读数（`papermapping.load_bearing_gaps` 的同一份；
+        #: 收工门只转发，不另判）。
+        "load_bearing": {"checked": False, "rows": 0, "gaps": 0,
+                         "complete": 0, "why": ""},
         "note": "",
     }
     if not out["exists"]:
@@ -6310,6 +6328,17 @@ def paper_mapping_cell_reading(project_root: Path | str, *,
         for one in PM._lean_problems(table_rows, package, project, ledger):
             label = str(one.get("label") or "")
             lean_problems.setdefault(label, []).append(dict(one))
+    # 承重命题的「稿与签」：读的是 G 侧那张表的同一份读数（`load_bearing_gaps`），
+    # 不在这里另判一次。一行只按它的 `stmt_id` 取那一格的读数。
+    gaps = PM.load_bearing_gaps(project, workspace_root=workspace, ledger=ledger)
+    gaps_by_sid: dict[str, dict[str, Any]] = {}
+    for one in (gaps.get("gaps") or ()):
+        gaps_by_sid[str(one.get("stmt_id") or "")] = dict(one)
+    out["load_bearing"] = {"checked": bool(gaps.get("checked")),
+                           "rows": int(gaps.get("rows") or 0),
+                           "gaps": len(gaps.get("gaps") or ()),
+                           "complete": int(gaps.get("complete") or 0),
+                           "why": str(gaps.get("why") or "")}
     for row in table_rows:
         # 通道只在这里算一次：`_credential_slot` → `numericproof.formal_slot` →
         # `numericproof.proof_channel`。`_mapping_row_missing_cells` 只消费它，不另判。
@@ -6318,8 +6347,16 @@ def paper_mapping_cell_reading(project_root: Path | str, *,
         # 附加义务（numeric_evidence / exhaustion_note / 索引四格）只压在数值实验定理
         # 那一档上：判据只有 `papermapping.is_numeric_theorem_row` 一处（2026-11-05 缺陷 1）。
         numeric_theorem = PM.is_numeric_theorem_row(row, ledger, experiments)
+        # 承重命题自己的证明稿（2026-11-26 BEARINGDEF）：承重判据只有
+        # `papermapping.is_load_bearing_row` 一处；"这一行该不该有稿"由
+        # `papermapping.load_bearing_evidence_required` 一处说（三态：没查成的行不进分母）。
+        load_bearing = PM.is_load_bearing_row(row)
+        evidence_required = bool(
+            load_bearing and PM.load_bearing_evidence_required(row, ledger).get("required"))
         missing = _mapping_row_missing_cells(row, channel=channel,
-                                             numeric_theorem=numeric_theorem)
+                                             numeric_theorem=numeric_theorem,
+                                             load_bearing=load_bearing,
+                                             evidence_required=evidence_required)
         row_lean_problems = list(lean_problems.get(str(row.label), []))
         missing += [name for name in _lean_problem_cells(row, channel, row_lean_problems)
                     if name not in missing]
@@ -6327,7 +6364,21 @@ def paper_mapping_cell_reading(project_root: Path | str, *,
         if numeric_theorem and channel == NP.PROOF_CHANNEL_NUMERIC:
             index_missing, index_problems = _numeric_row_index_problems(row, workspace)
             missing += [name for name in index_missing if name not in missing]
-        if not missing and not index_problems and not row_lean_problems:
+        # 承重行的稿 / 签：同一个 `stmt_id` 在 G 侧表里缺什么，这一行就缺对应的格。
+        evidence_problems: list[str] = []
+        evidence_gap: dict[str, Any] = {}
+        if load_bearing and evidence_required:
+            resolved = PM.resolve_ledger_id(row.ledger_id, ledger)
+            if resolved["ok"] and str(resolved.get("table") or "") == "statements":
+                evidence_gap = gaps_by_sid.get(str(resolved["row_id"])) or {}
+            if evidence_gap:
+                gap_missing = [str(x) for x in (evidence_gap.get("missing") or ())]
+                if "签" in gap_missing and "v_signature" not in missing:
+                    missing.append("v_signature")
+                if evidence_gap.get("why"):
+                    evidence_problems.append(str(evidence_gap.get("why")))
+        if not missing and not index_problems and not row_lean_problems \
+                and not evidence_problems:
             continue
         item: dict[str, Any] = {"label": str(row.label), "kind": str(row.kind),
                                 "ledger_id": str(row.ledger_id),
@@ -6336,6 +6387,8 @@ def paper_mapping_cell_reading(project_root: Path | str, *,
             item["problems"] = [str(one.get("detail") or "") for one in row_lean_problems]
         if index_problems:
             item["index_problems"] = list(index_problems)
+        if evidence_problems:
+            item["evidence_problems"] = list(evidence_problems)
         out["incomplete"].append(item)
     out["rows"] = len(table_rows)
     out["complete"] = len(table_rows) - len(out["incomplete"])
@@ -11874,7 +11927,7 @@ def _current_proofs_by_path(root: str | Path, row: Mapping[str, Any]
     | 没有稿、且是路径 1（老行 / 单路径直登） | 命题行的 `proof_text`（`.strip()`） |
     | 没有稿、也不是路径 1 | `None`：读侧没有这一路径的材料 ⇒ 该路径 `unchecked` |
 
-    返回的字典**只覆盖 `manuscripts` 里的路径**。`nontriviality_of` 按路径号查它；
+    返回的字典只覆盖 `manuscripts` 里的路径。`nontriviality_of` 按路径号查它；
     查不到的路径按 `None` 读（"没核过"，不是"核过了"）。
     """
     from . import depsection as _DS
@@ -11942,7 +11995,7 @@ def _gate_entry(row: Mapping[str, Any], got: Mapping[str, Any], *,
     """一条版本闸读数的收工行（`text_drift_tiers[]` / `needs_rejudge_tiers[]` 共用）。
 
     `paths_key` / `detail_key` 由调用方点名（漂移那两格与要重判那两格同名不同义）：
-    `detail[].recorded_level` 是"那一行原来读成第几档"，只在**没沿用**时才有意义；
+    `detail[].recorded_level` 是"那一行原来读成第几档"，只在没沿用时才有意义；
     沿用（`text_drift`）时它是"被沿用的那一档"，不是现档。
     """
     return {"stmt_id": str(row.get("stmt_id") or ""),
@@ -11957,7 +12010,7 @@ def _high_tier_entry(row: Mapping[str, Any], got: Mapping[str, Any],
                      paths: list[dict[str, Any]], min_of: list[int]) -> dict[str, Any]:
     """一条 T3/T4 的收工读数（`high_tier[]` 的一行）。
 
-    `stmt_id` 取**命题行**的号（旧账本按 sha 回退命中时，台账那一行可能没有号）；
+    `stmt_id` 取命题行的号（旧账本按 sha 回退命中时，台账那一行可能没有号）；
     `label` 取自同一份 `_fold_nontriviality` 的返回值（不在这里另算一次档位名）；
     `matched_by` 让读的人能与页面那一栏逐字核对是不是同一个命中方式。
     """

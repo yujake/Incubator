@@ -36,37 +36,183 @@ from .manuscriptproducers import _manuscript_id_of
 #: 事实。旧盘没有这一格 ⇒ 本格不贡献任何路径（退回 `manuscript_id` 那一个旧口径）。
 PER_PATH_KEY = "manuscripts"
 
+#: 逐路径那份稿的字节 sha（与 `manuscripts` 同键、同一批路径号）：`{路径号: sha256}`。
+#:
+#: 这是信息读数，不是身份、不拦门（业主 2026-11-26 更正）：稿号与命题号不同轴
+#: （`b-proof-000000.md` 是 B 自己的稿号），而 B 二阶段会洗正文并重拿 V 签 —— 所以
+#: "这条命题的稿在哪"只能查台账的 `statements.manuscripts[证明号]`，sha 只回答
+#: "收录那一刻那份稿是哪一份字节"（审计用）。与 `manuscripts` 并列存（不改值形状）：
+#: 路径读侧十几处一个字节不用改，读写由 :func:`recorded_manuscript` 一处归一。
+#: 兼容：值也接受 `{"path": …, "sha256": …}`；老盘没 sha ⇒ `sha_known=False`（不当"对得上"）。
+MANUSCRIPT_SHA_KEY = "manuscript_sha256"
 
-def _per_path_manuscripts(row: Any) -> tuple[dict[int, str], list[str]]:
-    """命题行上的逐路径稿记录 ⇒ `({路径号: 稿路径}, 读数问题)`。
+
+def _norm_rel(value: Any) -> str:
+    """稿路径的归一（反斜杠 ⇒ `/`，去首尾空白）；读不出 ⇒ 空串。"""
+    return str(value or "").strip().replace("\\", "/")
+
+
+def manuscript_byte_sha(root: Any, rel: Any) -> str:
+    """盘上那份稿的字节 sha256（读不到 ⇒ 空串，不编一个）。
+
+    与"正文 sha"（`## 证明` 那一节，V 签同一把尺）是两件事：V 的签块是签完之后写回
+    稿里的，写回那一刻整份文件的字节就变了（`numericproof.INDEX_SHA_FIELD` 的注释）。
+    所以这一把尺只回答"文件字节是哪一份"，回答不了"签的是不是这份正文"。
+    """
+    import hashlib
+
+    text = _norm_rel(rel)
+    if not text:
+        return ""
+    try:
+        return hashlib.sha256((Path(str(root)) / text).read_bytes()).hexdigest()
+    except OSError:
+        return ""
+
+
+def _per_path_records(row: Any) -> tuple[dict[int, dict[str, Any]], list[str]]:
+    """命题行上的逐路径稿记录 ⇒ `({路径号: {path, sha256, sha_known}}, 读数问题)`。
 
     三态（与 `path_reading` 同一套纪律）：
     - 这一格不存在 ⇒ `({}, [])`：老盘，退回旧口径（不是"读不出来"）；
-    - 这一格存在而读得出 ⇒ 逐条给出路径号与稿路径；
-    - 这一格存在却读不成（不是映射 / 路径号不是正整数 / 稿是空的）⇒ 问题清单非空。
-      调用方把问题原样带进 `path_reading` 的 `problems`，V 那一侧据此 fail-closed
-      （"没读成"绝不折成"没有这一条路径"）。
+    - 这一格存在而读得出 ⇒ 逐条给出路径号、稿路径与"记录时的字节 sha"（老盘没有 sha
+      那一格 ⇒ `sha_known=False`）；
+    - 这一格存在却读不成（不是映射 / 路径号不是正整数 / 稿是空的 / 值是读不懂的形状）
+      ⇒ 问题清单非空。调用方把问题原样带进 `path_reading` 的 `problems`，V 那一侧据此
+      fail-closed（"没读成"绝不折成"没有这一条路径"）。
     """
     raw = row.get(PER_PATH_KEY) if isinstance(row, Mapping) else None
     if raw is None:
         return {}, []
     if not isinstance(raw, Mapping):
         return {}, [f"`{PER_PATH_KEY}` 不是映射（{type(raw).__name__}）⇒ 逐路径稿记录读不出来"]
-    out: dict[int, str] = {}
+    shas = row.get(MANUSCRIPT_SHA_KEY) if isinstance(row, Mapping) else None
+    if shas is not None and not isinstance(shas, Mapping):
+        return {}, [f"`{MANUSCRIPT_SHA_KEY}` 不是映射（{type(shas).__name__}）"
+                    "⇒ 稿的字节 sha 读不出来"]
+    sha_by = shas if isinstance(shas, Mapping) else {}
+    out: dict[int, dict[str, Any]] = {}
     problems: list[str] = []
-    for group_raw, rel_raw in raw.items():
+    for group_raw, value_raw in raw.items():
         try:
             group = int(group_raw)
         except (TypeError, ValueError):
             problems.append(f"`{PER_PATH_KEY}` 里有一个读不出的路径号 {group_raw!r}")
             continue
-        rel = str(rel_raw or "").strip().replace("\\", "/")
-        if group < 1 or not rel:
+        if group < 1:
             problems.append(f"`{PER_PATH_KEY}.{group_raw}` 不是一条有效记录"
-                            f"（路径号 {group!r}、稿 {rel_raw!r}）")
+                            f"（路径号 {group!r}）")
             continue
-        out[group] = rel
+        # 两种值形状：老盘是裸路径；升级形态是 `{"path": …, "sha256": …}`。
+        embedded = ""
+        if isinstance(value_raw, Mapping):
+            rel_raw = value_raw.get("path")
+            embedded = _norm_rel(value_raw.get("sha256"))
+        else:
+            rel_raw = value_raw
+        rel = _norm_rel(rel_raw)
+        if not rel:
+            problems.append(f"`{PER_PATH_KEY}.{group_raw}` 不是一条有效记录"
+                            f"（路径号 {group!r}、稿 {value_raw!r}）")
+            continue
+        recorded_sha = _norm_rel(sha_by.get(str(group_raw)) or sha_by.get(group) or embedded)
+        out[group] = {"path": rel, "sha256": recorded_sha,
+                      "sha_known": bool(recorded_sha)}
     return out, problems
+
+
+def _per_path_manuscripts(row: Any) -> tuple[dict[int, str], list[str]]:
+    """命题行上的逐路径稿记录 ⇒ `({路径号: 稿路径}, 读数问题)`（路径那一半的旧读口）。
+
+    与 :func:`_per_path_records` 同一次解析：这个函数只交出路径，供"第几条路径是哪份稿"
+    那些老读侧继续用；要"稿路径 + 字节 sha"的地方读 `_per_path_records` /
+    :func:`recorded_manuscript`（判据只在后者一处）。
+    """
+    records, problems = _per_path_records(row)
+    return {group: one["path"] for group, one in records.items()}, problems
+
+
+def record_manuscript(row: dict, group: int, rel: str, *,
+                      root: Any = None, sha256: str = "") -> dict[str, Any]:
+    """写侧唯一入口：把「第几条路径 ⇒ 哪份稿」连同记录时的字节 sha写进这一行。
+
+    写的两格：`manuscripts[组号] = 路径`、`manuscript_sha256[组号] = 字节 sha`。
+    `sha256` 不给就用 `root` 现算（读不到 ⇒ 不写 sha：宁可"没记"也不编一个）。
+    `root` 也不给时只写路径（老调用面的兼容，`sha_known=False`）。
+
+    返回 `{"written", "group", "path", "sha256", "sha_known", "why"}` —— 三态：
+    `written=False` 不是"已经记过"，而是"这一笔没写出可写的记录"。
+    """
+    out: dict[str, Any] = {"written": False, "group": int(group or 0), "path": "",
+                           "sha256": "", "sha_known": False, "why": ""}
+    no = int(group or 0)
+    text = _norm_rel(rel)
+    if no < 1:
+        out["why"] = f"路径号必须是正整数（收到 {group!r}）"
+        return out
+    if not text:
+        out["why"] = "稿路径是空的 ⇒ 这一格不写（不是「已经记过」）"
+        return out
+    digest = _norm_rel(sha256) or manuscript_byte_sha(root, text)
+    per = dict(row.get(PER_PATH_KEY) or {})
+    per[str(no)] = text
+    row[PER_PATH_KEY] = per
+    shas = dict(row.get(MANUSCRIPT_SHA_KEY) or {})
+    if digest:
+        shas[str(no)] = digest
+        row[MANUSCRIPT_SHA_KEY] = shas
+    out.update(written=True, path=text, sha256=digest, sha_known=bool(digest),
+               why=(f"记下 `{text}`（字节 sha {digest[:12]}…）" if digest
+                    else f"记下 `{text}`；字节 sha 没算出来（读不到那份文件）⇒ 不写 sha"))
+    return out
+
+
+def recorded_manuscript(row: Any, group: int, root: Any = None) -> dict[str, Any]:
+    """这一号证明的稿记录：路径 + 记录时的字节 sha（读侧唯一出口；纯读）。
+
+    返回 `{"checked", "recorded", "path", "sha256", "sha_known", "file_sha256",
+    "path_state", "why"}`：`recorded=False` 是"这一行没有这一号路径的稿记录"（查过了）；
+    `checked=False` 是那一格读不成（fail-closed）；`sha_known=False` 是老盘只记了路径、
+    没记 sha（不许读成"sha 对得上"）；`path_state` 是 `present` / `missing` /
+    `outside` / `unreadable` 三态，`file_sha256` 是盘上那份文件现在的字节 sha。
+    """
+    out: dict[str, Any] = {"checked": False, "recorded": False, "path": "",
+                           "sha256": "", "sha_known": False, "file_sha256": "",
+                           "path_state": "outside", "why": ""}
+    if not isinstance(row, Mapping):
+        out["why"] = "命题行读不出来 ⇒ 稿记录这一格没查成"
+        return out
+    records, problems = _per_path_records(row)
+    out["checked"] = not problems
+    if problems:
+        out["why"] = "；".join(problems[:3])
+        return out
+    one = records.get(int(group or 0)) or {}
+    rel = str(one.get("path") or "")
+    out.update(recorded=bool(rel), path=rel,
+               sha256=str(one.get("sha256") or ""),
+               sha_known=bool(one.get("sha_known")))
+    if not rel:
+        out["why"] = f"这一行没有第 {int(group or 0)} 条路径的稿记录"
+        return out
+    from . import numericproof as _NP   # 惰性：路径解析只在这一格用到
+
+    target, why = _NP._resolve_under(root, rel) if root else (None, "没给工作区根")
+    if target is None:
+        out.update(path_state="outside", why=why)
+        return out
+    out["file_sha256"] = manuscript_byte_sha(root, rel)
+    if not target.is_file():
+        out.update(path_state="missing", why=f"盘上没有这份稿：{rel}")
+        return out
+    if not out["file_sha256"]:
+        out.update(path_state="unreadable", why=f"这份稿读不出来：{rel}")
+        return out
+    out.update(path_state="present",
+               why=(f"第 {int(group or 0)} 条路径的稿是 `{rel}`"
+                    + (f"（记录时字节 sha {str(one.get('sha256'))[:12]}…）"
+                       if one.get("sha_known") else "（老盘没记字节 sha）")))
+    return out
 
 
 def path_reading(store: Any, root: Any, *, statement_id: str) -> dict[str, Any]:
@@ -567,38 +713,43 @@ def source_manuscript_rel(root: Any, row: Any) -> dict[str, Any]:
     2. 没有那一格时，才退到行上的 `manuscript_id`：按四族依次拼规范名，只认盘上存在
        且正文对得上的那一份。族由盘上证据回答，不由 `kind` 回答。
 
-    返回 `{found, rel, evidence, why}`；`found=False` + `rel` 非空 = 行上指名的那一份
-    对不上这一行（撞号 / 别族的稿 / 记错了）。
+    返回 `{found, rel, sha256, sha_known, evidence, why}`；`found=False` + `rel` 非空 =
+    行上指名的那一份对不上这一行（撞号 / 别族的稿 / 记错了）。
+    `sha256` 是行上记录时的字节 sha（老盘没有 ⇒ `sha_known=False`）：它回答
+    "这一行收录时那份稿是哪一份字节"，本函数只把它读出来，不与盘上现算比 ——
+    V 的签块是签完之后写回稿里的，字节会合法地变一次（见 `manuscript_byte_sha`）。
     """
     from pathlib import Path
 
-    out: dict[str, Any] = {"found": False, "rel": "", "evidence": "", "why": ""}
-    per = row.get(PER_PATH_KEY) if isinstance(row, Mapping) else None
+    out: dict[str, Any] = {"found": False, "rel": "", "sha256": "", "sha_known": False,
+                           "evidence": "", "why": ""}
+    records, _bad = _per_path_records(row)
     try:
-        group = str(int(row.get("proof_no") or 1)) if isinstance(row, Mapping) else "1"
+        group_no = int(row.get("proof_no") or 1) if isinstance(row, Mapping) else 1
     except (TypeError, ValueError):
-        group = "1"
-    rel = ""
-    if isinstance(per, Mapping):
-        rel = str(per.get(group) or per.get("1") or "").strip().replace("\\", "/")
+        group_no = 1
+    one = records.get(int(group_no)) or records.get(1) or {}
+    rel = str(one.get("path") or "")
+    out["sha256"] = str(one.get("sha256") or "")
+    out["sha_known"] = bool(one.get("sha_known"))
     if rel:
         target = Path(str(root)) / rel
         if not target.is_file():
             out["why"] = (
-                f"行上 `manuscripts[{group}]` 指的 `{rel}` 不在盘上 ⇒ 不拿别的稿顶，"
+                f"行上 `manuscripts[{group_no}]` 指的 `{rel}` 不在盘上 ⇒ 不拿别的稿顶，"
                 "退到行上正文")
             return out
         try:
             text = target.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
-            out["why"] = (f"行上 `manuscripts[{group}]` 指的 `{rel}` 读不出来 ⇒ "
+            out["why"] = (f"行上 `manuscripts[{group_no}]` 指的 `{rel}` 读不出来 ⇒ "
                           "这一份不能当原稿")
             return out
         if manuscript_matches_row(text, row):
             out.update(found=True, rel=rel, evidence="manuscripts")
             return out
         out.update(rel=rel, why=(
-            f"行上 `manuscripts[{group}]` 指的 `{rel}` 正文对不上这一行 ⇒ 不拿它当"
+            f"行上 `manuscripts[{group_no}]` 指的 `{rel}` 正文对不上这一行 ⇒ 不拿它当"
             "原稿（退到行上正文）"))
         return out
     mid = (str(row.get("manuscript_id") or "").strip()

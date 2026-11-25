@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from .. import manuscriptpaths as _MP
 from .. import proofregistry as _PR
 from ._support import _norm_manuscript_rel
 
@@ -51,6 +52,7 @@ def write_proof_receipt(
     proof_no: int,
     manuscript_id: str,
     manuscript: str = "",
+    root: Any = "",
 ) -> None:
     """把这一行现在这一份证明的号 / 正文指纹 / 稿号写到顶层（就地改 `row` 与 `out`）。
 
@@ -61,6 +63,12 @@ def write_proof_receipt(
     逐路径记录用它当键，于是"第几条路径 ⇒ 哪份稿"与依赖行 / 签行同号。
     `manuscript` 是这一份稿的工作区相对路径（收方读稿那一路有；只给正文的
     `register_statement` 调用没有 ⇒ 这一笔只写 `manuscript_id`，逐路径记录不写）。
+
+    `root` 给得出工作区根时，逐路径记录连记录时的字节 sha 一起写
+    （`manuscriptpaths.record_manuscript` 的同一处写口）：名字可复用、可覆盖，
+    只存名字的话"这条命题的稿被换成了别条命题的证明"永远没有东西能判红
+    （2026-11-26 真机 sunflower-digest-2 的现场）。读不到那份文件 ⇒ 不写 sha，
+    绝不编一个（"没记"与"记了、对得上"必须分得开）。
     """
     want_sha = _PR.proof_sha(body_now)
     mid = str(manuscript_id or row.get("manuscript_id") or "")
@@ -89,11 +97,14 @@ def write_proof_receipt(
         if mid:
             row["manuscript_id"] = mid
             out["proof_receipt"]["manuscript_id"] = mid
-        # ---- 逐路径的稿：`{路径号: 稿路径}`（这一行每条路径各一份，不互相覆写）
+        # ---- 逐路径的稿：`{路径号: 稿路径}` + `{路径号: 字节 sha}`（这一行每条路径各一份，不互相覆写）
         #
         # 只写行、不进 `proof_receipt` 的键集合：回执答的是"这一行现在这一份"，
         # 逐路径是"这一行的每一条路径"，读口是 `manuscriptpaths.path_reading`
         # （一个读口，不在这里另开第二份）。
         if add_path:
-            per[str(no)] = rel
-            row["manuscripts"] = per
+            wrote = _MP.record_manuscript(row, no, rel, root=root)
+            row["manuscripts"] = dict(row.get(_MP.PER_PATH_KEY) or {})
+            out["proof_receipt"]["manuscript_bytes"] = {
+                "path": wrote.get("path", ""), "sha256": wrote.get("sha256", ""),
+                "sha_known": bool(wrote.get("sha_known"))}

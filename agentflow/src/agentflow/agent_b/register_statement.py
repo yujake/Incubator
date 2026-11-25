@@ -2722,7 +2722,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             if _body_present:
                 write_proof_receipt(
                     row, out, body_now=_body_now, proof_no=_no_receipt,
-                    manuscript_id=manuscript_id, manuscript=manuscript)
+                    manuscript_id=manuscript_id, manuscript=manuscript,
+                    root=getattr(store, "root", ""))
             # ---- 签成之后就升档，不再等第二条命令 --------------
             #
             # 正文与 bits 已经写进来了，而 `evidence_kind` 若停在 `heuristic`，升档还要
@@ -7444,17 +7445,28 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
             fam = _MID_FAMILY.family_of_rel(rel)
             if group >= 1:
+                #: 稿身份升级（2026-11-26 BEARINGDEF）：路径 + 记录时的字节 sha。
+                #: 只写路径的话，"这条命题的稿后来被换成了别条命题的证明"没有任何东西
+                #: 能判红；写口只有 `manuscriptpaths.record_manuscript` 一处。
+                from .. import manuscriptpaths as _MP_LAND
+
+                wrote = _MP_LAND.record_manuscript(
+                    new, group, str(rel), root=getattr(self.store, "root", ""))
                 per = dict(row.get("manuscripts") or {})
                 same_path = str(per.get(str(group)) or "") == str(rel)
                 same_family = (not fam or str(row.get("manuscript_family") or "") == fam)
-                if same_path and same_family:
+                #: 同一路径再落一次也要看字节：同一份名字换了内容是一次新的落稿，
+                #: 必须把新 sha 记下来（否则"换了内容"永远停在旧 sha 上）。
+                same_bytes = (str((row.get("manuscript_sha256") or {}).get(str(group)) or "")
+                              == str(wrote.get("sha256") or ""))
+                if same_path and same_family and same_bytes:
                     return {"write": False, "result": {"written": False, "preserved": True}}
-                per[str(group)] = str(rel)
-                new["manuscripts"] = per
                 if fam:
                     new["manuscript_family"] = fam
                 return {"write": True, "row": new,
-                        "result": {"written": True, "path_group": group}}
+                        "result": {"written": True, "path_group": group,
+                                   "manuscript_sha256": str(wrote.get("sha256") or ""),
+                                   "sha_known": bool(wrote.get("sha_known"))}}
             if mid and (str(row.get("manuscript_id") or "") != mid
                         or (fam and str(row.get("manuscript_family") or "") != fam)):
                 new["manuscript_id"] = mid

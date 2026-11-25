@@ -567,7 +567,49 @@ CITATION_KINDS: tuple[str, ...] = (
 #: 表照样 `pass`。这一组就是那个缺口的落点。
 PROOF_FILE_MISSING = "mapping_proof_file_missing"
 EXPERIMENT_FILE_MISSING = "mapping_experiment_file_missing"
-EVIDENCE_KINDS: tuple[str, ...] = (PROOF_FILE_MISSING, EXPERIMENT_FILE_MISSING)
+#: 第三、四条（2026-11-26 BEARINGDEF）：论文里的承重命题必须有它自己的证明稿与签。
+#:
+#: 现场（真机 sunflower-digest-2，2026-11-25/26）：MAPPING 5 行，`prop:block` /
+#: `thm:erdos-rado` 两行是正文里带完整证明的命题 / 定理，而它们的索引四格一个都没有；
+#: 这两条命题在台账里 `origin=external_lit` + `proof_source=citation`（只因为"这行引了
+#: 文献"），于是旧的闸（`proof_source == own` 且 `reviewed == 已签`）把它们整行 `continue`
+#: 掉 —— 收工门 8/8、`mapping_reading` 判 pass。两条命题的签是 `未审`。
+#:
+#: 判据只有两问（业主 2026-11-26 更正）：
+#:
+#: 1. 台账里这条命题有没有指向一份证明稿、那份稿在不在盘上
+#:    （`statements.manuscripts[证明号]` → 盘上文件）；
+#: 2. 那一份有没有 V 的签（`reviewed` / `verifications` 的签读数）。
+#:
+#: 不把"稿的正文 sha 变了"判成红：稿号与命题号设计上就不同轴（`b-proof-000000.md`
+#: 是 B 自己的稿号，与命题号无关），而 B 的二阶段会洗证明正文并重拿 V 签 —— 正文变化
+#: 是合法的。sha 只作信息读数（`sha_drift` / `manuscript_sha256`），不拦门。
+#:
+#: - `mapping_load_bearing_evidence_missing`：承重命题没有它自己的证明稿
+#:   （台账没记稿，或记的那份稿在盘上取不到）；
+#: - `mapping_load_bearing_unsigned`：稿在，而这一个承重命题没有 V 的签
+#:   （业主 2026-11-26：「论文里的承重命题必须有它自己的证明稿与签」—— 这也是拦门，
+#:   不是 warning；"还在写、还没送审"由 `reviewed` 那一格逐行说明，不由门装看不见）。
+LOAD_BEARING_EVIDENCE_MISSING = "mapping_load_bearing_evidence_missing"
+LOAD_BEARING_UNSIGNED = "mapping_load_bearing_unsigned"
+EVIDENCE_KINDS: tuple[str, ...] = (
+    PROOF_FILE_MISSING, EXPERIMENT_FILE_MISSING,
+    LOAD_BEARING_EVIDENCE_MISSING, LOAD_BEARING_UNSIGNED,
+)
+
+#: 稿的字节 sha 那一格（与 `evidence_sha256` 的"正文 sha"分家；见 `Row` 的注释）。
+#:
+#: 为什么必须另立一格：`numericproof.INDEX_SHA_FIELD`（`evidence_sha256`）对 proof 档
+#: 存的是那份稿 `## 证明` 正文的 sha（与 V 签同一把尺）—— `numericproof.py:1098` 与
+#: `:1104-1108` 逐字写着"手稿的签块是签后写回稿里的，字节每签一次就变一次"，所以
+#: 字节 sha 回答不了"签的是不是这份正文"。两件事塞进一格，就会出现"看起来对得上、
+#: 其实比的是另一把尺"的静默错。
+#:
+#: 语义：信息读数，不是身份、不拦门（业主 2026-11-26 更正：洗稿合法）。
+#: 它只回答"写表那一刻盘上这一份是谁"，由 `proof_evidence_reading` 的 `file_sha256` /
+#: `sha_drift` 那一档读；判"承重命题有没有稿与签"只看台账映射与签读数。
+PROOF_FILE_SHA_FIELD = "evidence_file_sha256"
+
 
 #: 人读那一份的问题类别（同一张表的第二个落点）。
 #:
@@ -823,6 +865,10 @@ class Row:
     evidence_kind: str = ""
     evidence_path: str = ""
     evidence_sha256: str = ""
+    #: 那份稿的字节 sha256（`PROOF_FILE_SHA_FIELD`；写表那一刻盘上那一份字节）。
+    #: 与 `evidence_sha256` 是两件事：后者是 `## 证明` 正文的 sha（V 签同一把尺），
+    #: 前者是文件字节（签块写回会合法地改它）。两态：稿在就填，与签没签无关。
+    evidence_file_sha256: str = ""
     #: `{"verdict": "成立", "sha256": <被签那一份的 sha256>}`。
     v_signature: Mapping[str, Any] | None = None
     #: ---- 台账那两格（D-69）：不手填，由 `fill_ledger_cells` 现读现填 ------------
@@ -884,6 +930,8 @@ class Row:
             out[NP.INDEX_PATH_FIELD] = self.evidence_path
         if self.evidence_sha256:
             out[NP.INDEX_SHA_FIELD] = self.evidence_sha256
+        if self.evidence_file_sha256:
+            out[PROOF_FILE_SHA_FIELD] = self.evidence_file_sha256
         if self.v_signature is not None:
             out[NP.INDEX_SIGN_FIELD] = dict(self.v_signature)
         # 被引实验行那几格（2026-11-25）：只在该行有值时写出来 —— 旧表 / 定理行不受影响，
@@ -960,6 +1008,53 @@ def is_cited_only_row(row: Row) -> bool:
     「被引未印」这件事对它们不成立。
     """
     return is_experiment_row(row) and int(row.env_no) == EXPERIMENT_ENV_NO
+
+
+def is_load_bearing_row(row: Row | Mapping[str, Any]) -> bool:
+    """承重命题的唯一判据：论文里以 `STATEMENT_ENV_KINDS`（定理类四件套）之一印出来的行。
+
+    2026-11-26 BEARINGDEF 的根因（真机 sunflower-digest-2）：同一个概念"论文里的承重
+    命题"被四处各定义了一次，四个集合互不相同 —— `proof_source == own`（本模块旧
+    `evidence_cells_for_row`, `_proof_index_problems`）、`THEOREM_ENV_KINDS`
+    （`kind_gap_reading` 的 `theorem_unsigned`，只有 theorem/lemma）、
+    `STATEMENT_ENV_KINDS`（正文环境侧）、`documents.claims` 的 `evidence_kind=="proof"`
+    （`closing` 的 load_bearing 那格）。`prop:block`（proposition）与 `thm:erdos-rado`
+    （`origin=external_lit`）恰好落在并集之外：正文里它们带完整证明，而填充 / 门 /
+    落差读数三处都不算它们承重 ⇒ 一条读数都看不见。
+
+    判据只问一件事：这一行在正文里是不是印成了定理类环境（`kind` 就是那个环境名，
+    由 `parse_rows` 从表里读、由 `_orphan_problems` 与正文逐一对上）。所以：
+
+    - 与 `origin` 无关（外部文献来的命题也是论文里的承重命题）；
+    - 与 `proof_source` 无关（"这行引了文献"不是"它没有自己的证明"）；
+    - 与 V 签没签无关（没签是"承重但没签"，不是"不承重" —— 这两件事今天必须分开）；
+    - 与论文里排成 theorem / lemma / proposition / corollary 哪一件无关（四件套同档）；
+    - 例子 / 实验不是"被证明的命题"，不进这一档（`EXPERIMENT_ENV_NO` 的被引实验行同理）。
+
+    四个消费点都读它，不许各写一份：`evidence_cells_for_row`（写侧填充）、
+    `_proof_index_problems`（门）、`kind_gap_reading`（`theorem_unsigned` 读数）、
+    `closing._mapping_row_missing_cells`（收工门 CH8 的"该有格"）。
+    判据的单一性由 `tests/test_bearingdef_load_bearing_evidence.py` 的反真空钉着：
+    把它打桩成恒假 ⇒ 四处同时退回旧形态。
+    """
+    if isinstance(row, Mapping):
+        kind = str(row.get("kind") or "").strip()
+        ledger_id = str(row.get("ledger_id") or "")
+        env_no: Any = row.get("env_no", 1)
+    else:
+        kind = str(getattr(row, "kind", "") or "").strip()
+        ledger_id = str(getattr(row, "ledger_id", "") or "")
+        env_no = getattr(row, "env_no", 1)
+    if ledger_id.strip().startswith(EXPERIMENT_ID_PREFIX):
+        return False
+    try:
+        if int(env_no) == EXPERIMENT_ENV_NO:
+            return False
+    except (TypeError, ValueError):
+        # `env_no` 读不成整数时不当"被引未印"：只按 kind 判（非实验行的正常形态）。
+        pass
+    return kind in STATEMENT_ENV_KINDS
+
 
 
 def package_dir(project_root: str | Path) -> Path:
@@ -1151,7 +1246,7 @@ def environment_titles(rows: Iterable[Row], *, tex: str = "") -> dict[str, Any]:
     环境由文档类直接给），不是"印错了"：三态纪律在这里就是"读不到 ⇒ 不据此判红"。
 
     返回 `{"checked": True, "titles": {kind: title}, "rows": [...], "unknown": [...],
-    "mismatched": [...]}`。它是**读数**（与 `kind_gap` / `theorem_unsigned` 同族），
+    "mismatched": [...]}`。它是「读数」（与 `kind_gap` / `theorem_unsigned` 同族），
     不进 `problems`、不改 `state`；判它红不红是调用方的事（判据见
     `tests/test_example_g_mapping_is_the_example_environment.py` 的 d/e）。
 
@@ -1918,27 +2013,30 @@ NOT_OWN_PROOF_CELLS_NOTE = ("这一行不是「自有 + 已签 + 定理类」的
                             "（空着不冒充已签）")
 def _proof_manuscript_rel(ledger_row: Mapping[str, Any] | None, proof_no: int,
                           workspace_root: Path) -> tuple[str, str]:
-    """这一号证明的载体稿 `(工作区相对路径, 不填的理由)`。
+    """这一号证明的载体稿 `(工作区相对路径, 不填的理由)` —— 台账记的是哪一份（事实）。
 
-    先按台账行上的逐路径稿记录取（`statements.manuscripts[证明号]`；老行的 `manuscript_id`
-    兜底由 `manuscriptpaths.source_manuscript_rel` 判，它要求那一份稿的 `## 证明` 与这一行
-    的某一份正文 sha 对得上）。旧盘的证明对象可能是 body-only 文件（没有 `## 证明`），
-    那时退回行上那一格原文；调用方随后按"文件正文的 sha 必须等于 V 签的 sha"再核一次 ——
-    指到别的稿上过不了那一核，所以这里可以退。对不上就不填，不拿别的稿顶上。
+    读口只有 `manuscriptpaths.recorded_manuscript` 一处（路径 + 记录时的字节 sha +
+    三态）。它回答"台账说这一条的稿在哪"，不回答"这份稿现在装的是不是这一行的
+    证明"：后者是判据（`_manuscript_identity_problems`），填充侧不许顺手把对不上的稿
+    吞掉 —— 那正是 2026-11-26 真机现场（`manuscripts["1"]` 指着的文件已经被改写成
+    000033 的证明，而表 / 门两边都看不见）。
+
+    老盘只记了 `manuscript_id`（没有逐路径记录）时才退到
+    `manuscriptpaths.source_manuscript_rel`：它按四族拼规范名、只认正文对得上的那一份。
     """
     if not isinstance(ledger_row, Mapping):
         return "", "台账里没有这一行"
     from . import manuscriptpaths as MPP   # 惰性：只在这一格用到（避免 import 期牵连）
-    scoped = dict(ledger_row)
-    scoped["proof_no"] = int(proof_no)
-    got = MPP.source_manuscript_rel(workspace_root, scoped)
-    rel = str(got.get("rel") or "").strip().replace("\\", "/") if got.get("found") else ""
+    got = MPP.recorded_manuscript(ledger_row, int(proof_no), workspace_root)
+    rel = str(got.get("path") or "").strip().replace("\\", "/")
+    if not got.get("checked"):
+        return "", str(got.get("why") or "稿记录这一格读不出来")
     if not rel:
-        # 退回行上那一格原文：`source_manuscript_rel` 要求稿带 `## 证明`（手稿形态），
-        # 而旧盘的证明对象可能是 body-only 文件。调用方随后按"文件正文的 sha 必须等于
-        # V 签的 sha"再核一次 —— 指到别的稿上过不了那一核，所以这里可以退。
-        per, _problems = MPP._per_path_manuscripts(ledger_row)
-        rel = str(per.get(int(proof_no)) or "").strip().replace("\\", "/")
+        scoped = dict(ledger_row)
+        scoped["proof_no"] = int(proof_no)
+        legacy = MPP.source_manuscript_rel(workspace_root, scoped)
+        if legacy.get("found"):
+            rel = str(legacy.get("rel") or "").strip().replace("\\", "/")
     if not rel:
         return "", str(got.get("why") or "行上点不出这一号证明的稿")
     if Path(rel).is_absolute() or ":" in rel or ".." in rel.split("/"):
@@ -1946,35 +2044,104 @@ def _proof_manuscript_rel(ledger_row: Mapping[str, Any] | None, proof_no: int,
     return rel, ""
 
 
+def proof_evidence_reading(ledger_row: Mapping[str, Any] | None, proof_no: Any,
+                           workspace_root: str | Path, *, reviewed: str = "") -> dict[str, Any]:
+    """这一号证明的「稿 / 签」两态读数（纯读、不猜；填充、G 表、门共用这一份）。
+
+    业主 2026-11-26 的口径（本函数只回答这两问）：
+
+    1. 稿：台账里这条命题有没有指向一份证明稿（`statements.manuscripts[证明号]`），
+       那份稿在不在盘上；
+    2. 签：这一份有没有 V 的签（按台账的 `reviewed` 四档判）。
+
+    稿号与命题号不同轴：`b-proof-000000.md` 这类名字是 B 自己的稿号，与命题号
+    各自独立编号 —— "这份稿装的是谁那条命题的证明"只能从台账的
+    `statements.manuscripts` 映射回答，不从文件名 / 正文内容 / 字节 sha 推。
+    B 的二阶段还会洗证明正文并重拿 V 签（业主既定流程）⇒ 正文变化是合法的，
+    所以 `file_body_sha256` / `proof_body_sha256` / `file_sha256` 在这里只是信息读数
+    （`sha_drift` 说明"盘上这一版的正文与台账这一版不同"，不是判据）。
+
+    签的判法复用既有那一处：传了 `reviewed`（`fill_ledger_cells` 已经读过的那一格）就用它；
+    没传时按 `bits.evidence.reviewed_by_proof[证明号] is True` 且 V 记的正文 sha 与台账
+    这一号正文相同（与 `reviewed_cell` 同一档，不是第二套口径）。
+
+    三态：`checked=False`（台账行 / 稿记录读不出来）不是"没有稿"，调用方按"没查成"处置。
+    返回 `{checked, recorded, rel, recorded_sha, recorded_sha_known, path_state,
+    file_sha256, file_body_sha256, proof_body_sha256, sha_drift, reviewed, signed,
+    signed_sha, why}`。
+    """
+    out: dict[str, Any] = {
+        "checked": False, "recorded": False, "rel": "", "recorded_sha": "",
+        "recorded_sha_known": False, "path_state": "outside", "file_sha256": "",
+        "file_body_sha256": "", "proof_body_sha256": "", "sha_drift": False,
+        "reviewed": str(reviewed or ""), "signed": False, "signed_sha": "", "why": "",
+    }
+    if not isinstance(ledger_row, Mapping):
+        out["why"] = "台账里没有这一行 ⇒ 稿与签两态都判不了"
+        return out
+    no = _int_or_none(proof_no)
+    if no is None:
+        out["why"] = f"证明号读不出（收到 {proof_no!r}）⇒ 稿与签两态都判不了"
+        return out
+    from . import manuscriptpaths as MPP   # 惰性：只在这一格用到
+
+    root = Path(workspace_root)
+    rec = MPP.recorded_manuscript(ledger_row, int(no), root)
+    out["checked"] = bool(rec.get("checked"))
+    out.update(recorded=bool(rec.get("recorded")), rel=str(rec.get("path") or ""),
+               recorded_sha=str(rec.get("sha256") or ""),
+               recorded_sha_known=bool(rec.get("sha_known")),
+               path_state=str(rec.get("path_state") or "outside"),
+               file_sha256=str(rec.get("file_sha256") or ""),
+               proof_body_sha256=str(_proof_body_sha_of(ledger_row, int(no)) or "").lower(),
+               why=str(rec.get("why") or ""))
+    body = out["proof_body_sha256"]
+    signed_sha = str(EB.reviewed_sha_by_proof(ledger_row).get(int(no)) or "").strip().lower()
+    out["signed_sha"] = signed_sha
+    if str(reviewed or "").strip():
+        out["signed"] = _split_reviewed(reviewed)[0] == "signed"
+    else:
+        out["signed"] = bool(EB.reviewed_by_proof(ledger_row).get(int(no)) is True
+                             and signed_sha and body and signed_sha == body)
+    if out["rel"] and out["path_state"] == "present":
+        try:
+            text = (root / out["rel"]).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            out.update(path_state="unreadable",
+                       why=f"{out['rel']} 读不出来（{type(exc).__name__}: {exc}）")
+        else:
+            out["file_body_sha256"] = str(V._sign_sha(text) or "").strip().lower()
+            out["sha_drift"] = bool(body and out["file_body_sha256"]
+                                    and body != out["file_body_sha256"])
+    return out
+
+
 def evidence_cells_for_row(row: Row,
                            ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None,
                            workspace_root: str | Path) -> dict[str, Any]:
-    """这一行该填的索引四格（空表 = 不填 / 不适用；纯读，不猜）。
+    """这一行该填的证据格（空表 = 不填 / 不适用；纯读，不猜）。
 
-    填哪一档（业主 2026-10-23 夜的四格 + 2026-11-22 真机 sylow-4 的现场）：
+    填哪一档（2026-11-26 BEARINGDEF：两态、按承重判、与来源无关）：
 
-    - 只填"自有证明 + 已签（判决：成立）"的定理类行：`proof_source="own"`、
-      `reviewed` 是「已签（判决：成立）」；
-    - `evidence_kind` = `proof`（受控词表 `numericproof.INDEX_KINDS`）；
-    - `evidence_path` = 台账那一行上这一号证明的稿（`statements.manuscripts[证明号]`）；
-    - `evidence_sha256` = 那一份稿 `## 证明` 的 sha（`bits.evidence.reviewed_sha_by_proof`
-      里 V 签住的那一份；写之前再拿盘上那份稿现算一遍，对不上就不填）；
-    - `v_signature` = `{"verdict": "成立", "sha256": <同一份 sha>}`。
+    - 只填承重行：`is_load_bearing_row(row)`（正文里印成定理类环境的行）；
+      `origin=external_lit` / `proof_source=citation` / 没 V 签 都不再让它空掉
+      —— 这两个字段回答的是"这行是不是自己的证明"，不是"它有没有一份稿"；
+    - `evidence_kind` = `proof`；`evidence_path` = 台账记的那一份稿
+      （`statements.manuscripts[证明号]`，读口 `manuscriptpaths.recorded_manuscript`）；
+    - `evidence_sha256` = 这一号证明正文的 sha（`_proof_body_sha_of`；与 V 签同一
+      把尺）。稿还没签也填 —— 它说的是"这份稿该装哪一段正文"，不是"签过了"；
+    - `evidence_file_sha256` = 写表那一刻盘上那份稿的字节 sha（信息读数：
+      洗稿合法，这一格不承担判据；见 `PROOF_FILE_SHA_FIELD`）；
+    - `v_signature` = `{"verdict": "成立", "sha256": <正文 sha>}` 只在真签上时填。
 
     不填的档（各有理由，空着不等于"已签"）：
-
-    - `citation` 行：没有 V 签（`reviewed` 是「未通过」），四格里的 `v_signature` 无从取；
-    - 数值通道的行：正文是 E 的报告（`exhaustion_note`），索引四格另有口径
-      （`mapping_cells` 那一支按 `exhaustion_note` 填），这里不替它改指一份稿；
-    - 例子 / 实验行：不是"被证明的命题"，没有"正文在哪"这一问；
-    - 台账读不到 / 稿不在盘上 / 稿的正文与 V 签的 sha 对不上：空着，由读侧当缺口报。
+    - 非承重行（例子 / 实验 / 被引实验行）：不是"被证明的命题"，没有"正文在哪"这一问；
+    - 数值 / 形式化通道的行：正文是 E 的报告或 `.lean`，索引四格另有口径
+      （`mapping_cells` 与 `_lean_problems` 那一支），这里不替它改指一份稿；
+    - 台账读不到 / 台账没记这一号稿：`{}`（由门报 `mapping_load_bearing_evidence_missing`，
+      不在这里编一个路径）。
     """
-    if str(row.proof_source or "").strip() != PROOF_SOURCE_OWN:
-        return {}
-    state, verdict = _split_reviewed(row.reviewed)
-    if state != "signed" or verdict != NP.THIRD_PARTY_VERDICT_OK:
-        return {}
-    if str(row.kind or "").strip() not in STATEMENT_ENV_KINDS:
+    if not is_load_bearing_row(row):
         return {}
     resolved = resolve_ledger_id(row.ledger_id, ledger)
     if not resolved["ok"] or str(resolved.get("table") or "") != "statements":
@@ -1990,35 +2157,41 @@ def evidence_cells_for_row(row: Row,
             return {}
     except Exception:  # noqa: BLE001 —— 通道读不出来 ⇒ 不填（不编一个"像是"的值）
         return {}
-    root = Path(workspace_root)
-    rel, _why = _proof_manuscript_rel(target, int(no), root)
+    reading = proof_evidence_reading(target, int(no), workspace_root,
+                                     reviewed=row.reviewed)
+    if not reading.get("checked"):
+        return {}
+    rel = str(reading.get("rel") or "")
     if not rel:
         return {}
-    signed = str(EB.reviewed_sha_by_proof(target).get(int(no)) or "").strip().lower()
-    body = str(_proof_body_sha_of(target, int(no)) or "").strip().lower()
-    if not signed or not body or signed != body:
-        return {}
-    try:
-        text = (root / rel).read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return {}
-    if str(V._sign_sha(text) or "").strip().lower() != signed:
-        return {}
-    return {NP.INDEX_KIND_FIELD: NP.INDEX_KIND_PROOF,
-            NP.INDEX_PATH_FIELD: rel,
-            NP.INDEX_SHA_FIELD: signed,
-            NP.INDEX_SIGN_FIELD: {"verdict": NP.THIRD_PARTY_VERDICT_OK, "sha256": signed}}
+    cells: dict[str, Any] = {NP.INDEX_KIND_FIELD: NP.INDEX_KIND_PROOF,
+                             NP.INDEX_PATH_FIELD: rel}
+    body = str(reading.get("proof_body_sha256") or "")
+    if body:
+        cells[NP.INDEX_SHA_FIELD] = body
+    if reading.get("file_sha256"):
+        cells[PROOF_FILE_SHA_FIELD] = str(reading["file_sha256"])
+    if reading.get("signed"):
+        cells[NP.INDEX_SIGN_FIELD] = {
+            "verdict": NP.THIRD_PARTY_VERDICT_OK,
+            "sha256": str(reading.get("signed_sha") or body),
+        }
+    return cells
 
 
 def fill_evidence_cells(ledger_root: str | Path,
                         rows: Iterable[Row], *,
                         ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None = None
                         ) -> list[Row]:
-    """把自有证明行的索引四格现读现填（纯读、不改盘；`write_mapping` 的唯一填充口）。
+    """把承重行的证据格现读现填（纯读、不改盘；`write_mapping` 的唯一填充口）。
 
-    与 `fill_ledger_cells` 同一条纪律：这两格/四格说的是台账的事实，不是提交方的声称，
-    所以 G 手填的值会被这一次现读盖掉。三态：拿不到就保持原样（不填一个像样的空值）——
-    读侧会把空的当缺口，空着绝不被读成「签过了」。
+    与 `fill_ledger_cells` 同一条纪律：这些格说的是台账的事实，不是提交方的声称，
+    所以 G 手填的值会被这一次现读盖掉。三态：拿不到就保持原样（不填一个像样的空值）。
+
+    2026-11-26 起"稿"与"签"拆成两态：台账记了稿就填 `evidence_path` /
+    `evidence_sha256` / `evidence_file_sha256`，没签也填；`v_signature` 只在真签上
+    时出现。旧行为是"没签 ⇒ 整行空掉"，于是真机 `thm:erdos-rado` / `prop:block`
+    连"稿在哪"都看不见（见 `is_load_bearing_row` 的注释）。
 
     反真空：判据 `tests/test_mapping_evidence_cells.py` 把本函数打桩成恒等 ⇒ 自有证明行
     的四格必须回到空串（"绿"真的靠这一处填充，而不是靠构造里恰好带着值）。
@@ -2037,8 +2210,11 @@ def fill_evidence_cells(ledger_root: str | Path,
         out.append(replace(row,
                            evidence_kind=str(cells[NP.INDEX_KIND_FIELD]),
                            evidence_path=str(cells[NP.INDEX_PATH_FIELD]),
-                           evidence_sha256=str(cells[NP.INDEX_SHA_FIELD]),
-                           v_signature=dict(cells[NP.INDEX_SIGN_FIELD])))
+                           evidence_sha256=str(cells.get(NP.INDEX_SHA_FIELD) or ""),
+                           evidence_file_sha256=str(cells.get(PROOF_FILE_SHA_FIELD) or ""),
+                           v_signature=(dict(cells[NP.INDEX_SIGN_FIELD])
+                                        if isinstance(cells.get(NP.INDEX_SIGN_FIELD), Mapping)
+                                        else None)))
     return out
 
 
@@ -2942,14 +3118,16 @@ def parse_rows(payload: Any) -> tuple[list[Row], list[dict[str, Any]]]:
                 "编号 exp:NNNNNN、`exhaustion_note` 是那块读数在仓库里的相对路径）",
                 label=label))
             continue
-        bad_index = [f for f in (NP.INDEX_KIND_FIELD, NP.INDEX_PATH_FIELD, NP.INDEX_SHA_FIELD)
+        bad_index = [f for f in (NP.INDEX_KIND_FIELD, NP.INDEX_PATH_FIELD, NP.INDEX_SHA_FIELD,
+                                 PROOF_FILE_SHA_FIELD)
                      if (v := item.get(f)) is not None and not isinstance(v, str)]
         bad_sign = item.get(NP.INDEX_SIGN_FIELD)
         if bad_index or (bad_sign is not None and not isinstance(bad_sign, Mapping)):
             problems.append(_problem(
                 "mapping_unresolvable",
                 f"第 {i} 行的索引格形状不对（{bad_index or [NP.INDEX_SIGN_FIELD]}）："
-                "`evidence_kind` / `evidence_path` / `evidence_sha256` 是字符串、"
+                f"`{NP.INDEX_KIND_FIELD}` / `{NP.INDEX_PATH_FIELD}` / `{NP.INDEX_SHA_FIELD}` / "
+                f"`{PROOF_FILE_SHA_FIELD}` 是字符串、"
                 "`v_signature` 是对象（{\"verdict\": …, \"sha256\": …}）",
                 label=label))
             continue
@@ -2992,6 +3170,8 @@ def parse_rows(payload: Any) -> tuple[list[Row], list[dict[str, Any]]]:
                         evidence_kind=str(item.get(NP.INDEX_KIND_FIELD) or "").strip(),
                         evidence_path=str(item.get(NP.INDEX_PATH_FIELD) or "").strip(),
                         evidence_sha256=str(item.get(NP.INDEX_SHA_FIELD) or "").strip(),
+                        evidence_file_sha256=str(
+                            item.get(PROOF_FILE_SHA_FIELD) or "").strip(),
                         v_signature=(dict(bad_sign)
                                      if isinstance(bad_sign, Mapping) else None),
                         # 台账那两格（D-69）：旧表没有这两键 ⇒ 读成空串 ⇒ 渲染印
@@ -4416,57 +4596,200 @@ def _literature_problems(citations: Sequence[Mapping[str, str]],
     return out
 
 
+def statement_by_id(ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None,
+                    statement_id: Any) -> Mapping[str, Any] | None:
+    """按编号取一条 `statements` 行 —— 唯一读口 `statementledger.by_id`。
+
+    G 侧那张表的第一跳必须走这一处（业主 2026-11-26：「需要告知 G 侧那条 lane 要从
+    哪里读命题证明稿的路径」）：编号是确定性事实，命中就是那一行，0 命中就是"没有这一行"；
+    三态（`checked` / `found`）由 `by_id` 给，不在这里折平。`rows` 由调用方现读的台账给，
+    免得每一跳再读一次盘。
+    """
+    from . import statementledger as SL   # 惰性：只在这一跳用到
+
+    rows = [row for row in ((ledger or {}).get("statements") or ())
+            if isinstance(row, Mapping)]
+    got = SL.by_id(rows=rows, stmt_id=statement_id)
+    if not got.get("checked") or not got.get("found"):
+        return None
+    row = got.get("row")
+    return dict(row) if isinstance(row, Mapping) else None
+
+
+
+
+def load_bearing_evidence_required(
+        row: Row,
+        ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None,
+        experiments: Sequence[Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """这一条承重行有没有「它自己的证明稿与签」这项义务（三态读数）。
+
+    判"要不要"只问一件事：`is_load_bearing_row(row)`。这条义务与 `origin` /
+    `proof_source` / V 签没签都无关（业主 2026-11-26：论文里的承重命题必须有它自己的
+    证明稿与签，与来源无关）。
+
+    四道边界（都不是"来源"轴，且每一道都写进读数）：
+
+    1. 非承重行 ⇒ 不适用（例子 / 实验 / 被引未印的实验行）；
+    2. 台账那一行解析不到 ⇒ `checked=False`（"没查成"，由 `mapping_unresolvable` 另一条
+       报红；这里不重复判，也不静默当"不用"）；
+    3. 证明通道非空（数值证明 / 形式化）⇒ 不适用这一档：它的"证明稿"是 E 的报告 /
+       `.lean` 程序，证据义务由凭据格那一族（`_lean_problems` / `_numeric_problems` /
+       收工门的 `_numeric_row_index_problems`）判 —— 两处不许对同一条命题各要一份稿；
+    4. 台账那一行连 `kind` 都没写（`未读到`）⇒ `checked=False`：这一行是不是命题台账
+       自己都没回答，"承重"这一问缺一个前提（读数进 `mapping_reading` 的
+       `load_bearing.unreadable`，不许折成"不用"）。
+    """
+    out: dict[str, Any] = {"required": False, "checked": True, "channel": "", "reason": ""}
+    if not is_load_bearing_row(row):
+        out["reason"] = "这一行不是承重命题（正文里不是定理类环境）⇒ 没有这项义务"
+        return out
+    resolved = resolve_ledger_id(row.ledger_id, ledger)
+    if not resolved["ok"] or str(resolved.get("table") or "") != "statements":
+        out.update(checked=False,
+                   reason=(f"台账那一行解析不到（{resolved.get('reason') or '不是 statements 行'}）"
+                           "⇒ 承重证据这项义务判不了（不是「不用」）"))
+        return out
+    target = statement_by_id(ledger, str(resolved["row_id"]))
+    if not isinstance(target, Mapping):
+        out.update(checked=False, reason="台账里没有这一行 ⇒ 承重证据判不了（不是「不用」）")
+        return out
+    try:
+        if experiments is None:
+            experiments = [dict(item) for item in (ledger or {}).get("experiments") or ()
+                            if isinstance(item, Mapping)]
+        slot = _credential_slot(row, ledger, experiments)
+        channel = str(slot.get("channel") or "")
+    except Exception:  # noqa: BLE001 —— 通道读不出来 ⇒ 按"有没有这些格"的旧口径走
+        channel = ""
+    out["channel"] = channel
+    if channel:
+        out["reason"] = (f"这一行的证明通道是 {channel!r} ⇒ 证据在 E 的报告 / `.lean` 程序上，"
+                         "由凭据格那一族判，不在「手稿稿与签」这一档")
+        return out
+    kind = ledger_kind_cell(target)
+    if not kind or kind == LEDGER_CELL_UNREADABLE:
+        out.update(checked=False,
+                   reason=("台账那一行没有可读的 `kind` ⇒ 这一行算不算命题台账没回答，"
+                           "承重证据这项义务判不了（不是「不用」）"))
+        return out
+    out.update(required=True,
+               reason=(f"论文里印成 {row.kind!r}、台账 `{row.ledger_id}` 的 kind = {kind!r}"
+                       " ⇒ 这一条承重命题必须有属于它自己的证明稿与 V 签"))
+    return out
+
+
 def _proof_index_problems(rows: Sequence[Row],
+                          gaps: Mapping[str, Any],
                           ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None,
-                          workspace: Path,
-                          *, review_states: Mapping[str, str]) -> list[dict[str, Any]]:
-    """自有 + 已签 + 定理类的那几行：索引四格必须真的指到盘上那份证明稿。
+                          workspace: Path) -> list[dict[str, Any]]:
+    """承重行的「稿 / 签」两态必须真的对得上（门那一支）。
 
-    2026-11-25 的缺口：四格由写侧 `fill_evidence_cells` 现读现填（`test_mapping_evidence_cells`
-    七条钉着），但门（`mapping_reading`）从没核过它们 —— 删掉盘上那份稿、或者把
-    `evidence_path` / `evidence_sha256` / `v_signature` 清空，表照样 `pass`（实测）。
-    这里调 B 入库闸已在用的同一个函数（`numerictheorem.evidence_index_problems` →
-    `numericproof.resolve_index`），不另写一套判据。
+    这一支不另判一次：它消费的是 G 侧那张表 `load_bearing_gaps`（同一份读数），
+    把每一行的 `missing`（`稿` / `签`）折成拦门的问题。2026-11-25 / 26 的缺口正是
+    "门与 G 各写一份承重定义"：旧闸只对 `proof_source == own` 且 `reviewed == 已签` 的行
+    核四格，于是真机 sunflower-digest-2 的 `prop:block` / `thm:erdos-rado`
+    （`proof_source=citation`、`reviewed=未审`）被整行跳过 —— `mapping_reading` 判 pass、
+    收工门 8/8。
 
-    三态边界（为什么不是"所有已签行都要"）：台账从没记过这一号证明的稿（老行没有
-    `manuscripts`、表里也没填 `evidence_path`）时这里不报 —— 那是"台账没写这一列"，
-    不是"表写了但读不到"。三种缺法要分开：没记 / 记了没填 / 填了读不到；本条只管后两种。
-    判"有没有记"走 `_proof_manuscript_rel`（与填充侧同一个读法），不在这里猜。
+    判据只有两问（业主 2026-11-26 更正）：
+    ① 台账里这条命题有没有指向一份证明稿、那份稿在不在盘上；② 那一份有没有 V 的签。
+    不把稿的正文 sha 变了判成红（稿号与命题号不同轴；B 二阶段会洗正文并重签）。
+
+    问题类别（都在 `EVIDENCE_KINDS` 里，`agent_h.mapping_judge` 一律按 blocker）：
+
+    - `mapping_proof_file_missing`：台账记了稿而表里没填 / 指到另一份稿（修法不同）；
+    - `mapping_load_bearing_evidence_missing`：连稿都没有（台账没记，或记的那份取不到）；
+    - `mapping_load_bearing_unsigned`：稿在而没有 V 签。
+
+    三态：`gaps["unreadable"]` 的行不在这里折成红（"没查成"不是"缺"），它们在
+    `mapping_reading` 的 `load_bearing.unreadable` 里可见；台账解析不到的行由
+    `_row_checks` 的 `mapping_unresolvable` 报红，不在这一支重复。
     """
     out: list[dict[str, Any]] = []
-    target_reviewed = REVIEWED_SIGNED_TEMPLATE.format(verdict=NP.THIRD_PARTY_VERDICT_OK)
+    by_sid: dict[str, Mapping[str, Any]] = {}
+    for one in gaps.get("gaps") or ():
+        by_sid[str(one.get("stmt_id") or "")] = one
     for row in rows:
-        if is_experiment_row(row) or str(row.kind) not in STATEMENT_ENV_KINDS:
+        if not is_load_bearing_row(row):
             continue
         resolved = resolve_ledger_id(row.ledger_id, ledger)
         if not resolved["ok"] or str(resolved.get("table") or "") != "statements":
             continue
-        target = ledger_row(ledger, "statements", str(resolved["row_id"]))
+        sid = str(resolved["row_id"])
+        one = by_sid.get(sid)
+        if one is not None:
+            missing = [str(x) for x in (one.get("missing") or [])]
+            label = str(row.label)
+            if "稿" in missing:
+                table_path = str(one.get("table_path") or "").strip()
+                rels = {NP.norm_rel(p.get("manuscript")) for p in (one.get("paths") or ())
+                        if str(p.get("manuscript") or "").strip()}
+                if table_path and rels and NP.norm_rel(table_path) not in rels:
+                    out.append(_problem(
+                        PROOF_FILE_MISSING,
+                        f"表里 label={label!r} 的 `{NP.INDEX_PATH_FIELD}` = {table_path!r}，"
+                        "而台账那一行这一条命题的稿是 "
+                        + "、".join(repr(x) for x in sorted(rels))
+                        + " —— 表指到了另一份稿",
+                        label=label, where=MAPPING_JSON_NAME))
+                else:
+                    out.append(_problem(
+                        LOAD_BEARING_EVIDENCE_MISSING,
+                        f"论文里 label={label!r} 是承重命题（正文里印成定理类环境），而它"
+                        f"没有可用的证明稿：{one.get('why') or '台账没有这一条命题的稿记录'}"
+                        " —— 承重命题必须有至少一条路径的证明稿在盘上",
+                        label=label, where=MAPPING_JSON_NAME))
+            if "签" in missing:
+                out.append(_problem(
+                    LOAD_BEARING_UNSIGNED,
+                    f"论文里 label={label!r} 是承重命题，稿在，而这一条没有 V 的签"
+                    f"（`reviewed` = {str(one.get('reviewed') or row.reviewed or '未读到')!r}）"
+                    " —— 承重命题必须有它自己的证明稿与签；签还没下来之前它不许被当成"
+                    "已成立的结论",
+                    label=label, where=MAPPING_JSON_NAME))
+            continue
+        # gaps 里没有这一行：稿与签都齐（或通道非空）。
+        want = load_bearing_evidence_required(row, ledger)
+        if not want.get("checked") or not want.get("required"):
+            # 通道非空的行：数值档沿用 B 入库闸同一个判据（E 的报告 + 程序 + 签）。
+            try:
+                numeric = (str(want.get("channel") or "") == NP.PROOF_CHANNEL_NUMERIC
+                           and is_numeric_theorem_row(row, ledger))
+            except Exception:  # noqa: BLE001 —— 通道读不出来 ⇒ 不重复判
+                numeric = False
+            if numeric:
+                why = NT.evidence_index_problems(row=row.to_dict(), workspace_root=workspace)
+                if why:
+                    out.append(_problem(
+                        PROOF_FILE_MISSING,
+                        f"表里 label={row.label!r}（数值实验定理）的证据索引不过关："
+                        + "；".join(why),
+                        label=row.label, where=MAPPING_JSON_NAME))
+            continue
+        # 稿与签都齐：只剩"表里填的是不是台账那一份"这一格（记了没填 / 指到另一份）。
+        table_path = str(row.evidence_path or "").strip()
+        target = statement_by_id(ledger, sid)
         if not isinstance(target, Mapping):
             continue
-        if ledger_source_cell(target) != PROOF_SOURCE_OWN:
+        reading = manuscript_paths_reading(
+            target, workspace,
+            review_ledger=reviewed_ledger_state(workspace, sid))
+        if not reading.get("checked"):
             continue
-        reviewed = reviewed_cell(target, row.proof_no,
-                                 review_ledger=_review_ledger_of(resolved, review_states))
-        if reviewed != target_reviewed:
+        rels = {NP.norm_rel(p.get("manuscript")) for p in (reading.get("paths") or ())
+                if str(p.get("manuscript") or "").strip()}
+        if not rels:
             continue
-        rel, _why = _proof_manuscript_rel(target, int(row.proof_no), workspace)
-        if not rel and not str(row.evidence_path or "").strip():
-            continue
-        if rel and NP.norm_rel(row.evidence_path) != NP.norm_rel(rel):
+        if not table_path or NP.norm_rel(table_path) not in rels:
             out.append(_problem(
                 PROOF_FILE_MISSING,
-                f"表里 label={row.label!r} 的 `{NP.INDEX_PATH_FIELD}` = "
-                f"{str(row.evidence_path or '')!r}，而台账那一行的这一号证明稿是 {rel!r} —— "
-                "表指到了另一份稿（索引四格必须指台账那一份）",
-                label=row.label, where=MAPPING_JSON_NAME))
-            continue
-        why = NT.evidence_index_problems(row=row.to_dict(), workspace_root=workspace)
-        if why:
-            out.append(_problem(
-                PROOF_FILE_MISSING,
-                f"表里 label={row.label!r}（已签的自有证明）的证明稿索引四格不过关："
-                + "；".join(why),
+                f"表里 label={row.label!r} 的 `{NP.INDEX_PATH_FIELD}` = {table_path!r}，"
+                "而台账那一行这一条命题的稿是 "
+                + "、".join(repr(x) for x in sorted(rels)) + " —— "
+                + ("记了稿却没填（重跑一次 `doc.write_mapping`）" if not table_path
+                   else "表指到了另一份稿"),
                 label=row.label, where=MAPPING_JSON_NAME))
     return out
 
@@ -4773,7 +5096,13 @@ def mapping_cells(project_root: str | Path, *,
     workspace = Path(workspace_root) if workspace_root is not None else project
     package = package_dir(project)
     out: dict[str, Any] = {"ok": False, "cells": {}, "sources": {}, "problems": [],
-                           "channel": "", "checked": False}
+                           "channel": "", "checked": False,
+                           #: G 侧那张「承重命题的稿与签」表（`load_bearing_gaps` 的同一份
+                           #: 读数）：不给 `statement_id` 时这就是全部返回值，G 成文前先读它。
+                           "load_bearing_gaps": {"checked": False, "rows": 0, "gaps": [],
+                                                 "complete": 0, "unreadable": [],
+                                                 "why": ""},
+                           "note": ""}
     problems: list[dict[str, Any]] = out["problems"]
 
     def whole(why: Any) -> None:
@@ -4799,6 +5128,10 @@ def mapping_cells(project_root: str | Path, *,
     ledger = read_ledger_tables(workspace)
     experiments = [dict(r) for r in (ledger.get("experiments") or ())
                    if isinstance(r, Mapping)]
+    # G 侧那张表（业主 2026-11-26）：「这篇论文里哪些承重命题没有自己的证明稿 / 签」。
+    # 它是 `load_bearing_gaps` 的唯一读数的转发 —— 不给 statement_id 时，本工具只交这张表。
+    out["load_bearing_gaps"] = load_bearing_gaps(
+        project, workspace_root=workspace, ledger=ledger, rows=rows)
 
     # ---- 认这一条命题（裸号 / stmt: / claim_key 三种写法）
     raw = str(statement_id or "").strip()
@@ -4817,8 +5150,11 @@ def mapping_cells(project_root: str | Path, *,
             return out
         raw = f"stmt:{sids[0]}"
     if not raw:
-        whole("没给 `statement_id` / `claim_key` ⇒ 不知道要取哪一条命题的格"
-              "（这是「没查成」，不是「这一行齐了」）")
+        # 没给命题号：这一次只取「承重命题的稿与签」那张表（G 成文前的第一读数）。
+        # 它不是"这一行齐了"，也不是"没查成"——`load_bearing_gaps.checked` 自己说查没查成。
+        out.update(checked=True, ok=True,
+                   note=("没给 `statement_id` / `claim_key` ⇒ 只取了本项目的承重缺口表"
+                         "（`load_bearing_gaps`）；要取某一行的格再带命题号"))
         return out
     resolved = resolve_ledger_id(raw, ledger)
     if not resolved["ok"] or str(resolved.get("table") or "") != "statements":
@@ -4898,7 +5234,7 @@ def mapping_cells(project_root: str | Path, *,
                    if exp_row is not None else
                    f"statements#stmt:{sid}#p{want_no} 的 proof_text（旧形态 `程序：` 段）"
                    "（`numericproof.proof_column_script`）")
-            put("file", script, f"{src} —— 数值实验定理这一行的 `file` 是**仓库根相对**的那份程序")
+            put("file", script, f"{src} —— 数值实验定理这一行的 `file` 是「仓库根相对」的那份程序")
         else:
             miss("file", "这一行按 `papermapping.is_numeric_row` 是数值凭据那一档，"
                          "而那条实验的 `code_path` 与证明栏的旧 `程序：` 段都读不出程序路径"
@@ -4908,7 +5244,7 @@ def mapping_cells(project_root: str | Path, *,
         if env is not None:
             put("file", env.file,
                 f"正文 {env.file}:{int(env.line)} 的定理环境（label={row.label!r}）—— "
-                "理论定理这一行的 `file` 是**论文包内相对**的路径")
+                "理论定理这一行的 `file` 是「论文包内相对」的路径")
         elif str(row.file or "").strip():
             put("file", str(row.file).strip(),
                 "表里这一格现有的值（正文里读不到那个环境 ⇒ 没独立复核）")
@@ -5195,12 +5531,16 @@ def kind_gap_reading(rows: Iterable[Row],
                      ) -> tuple[dict[str, Any], dict[str, Any]]:
     """落差读数：论文说定理 / 台账说猜想，以及论文排成定理 / V 没签。
 
-    论文里以 theorem/lemma 环境出现、而台账 kind 仍是 conjecture 的行：
-    N 条（逐条 label → stmt）；同理一条「论文里排成定理但 V 没签的行」。
+    论文里以承重环境（`is_load_bearing_row`：theorem / lemma / proposition /
+    corollary）出现、而台账 kind 仍是 conjecture 的行：N 条（逐条 label → stmt）；
+    同理一条「论文里排成定理类环境但 V 没签的行」。
 
-    两条都只看 `THEOREM_ENV_KINDS`（theorem / lemma）那几行，读数取自台账现读
-    （不读表上那两格：表可能还没填、也可能写完之后台账又动过 —— 落差说的是
-    "论文与台账现在的关系"）。
+    2026-11-26 BEARINGDEF：改前只认 `THEOREM_ENV_KINDS`（theorem / lemma），于是真机
+    `prop:block`（proposition）连"没签"这条读数都不进（`count=1` 而不是 2）。承重判据
+    只有 `is_load_bearing_row` 一处；这一格与 `_proof_index_problems` / 填充 / CH8 同源。
+
+    读数取自台账现读（不读表上那两格：表可能还没填、也可能写完之后台账又动过 ——
+    落差说的是"论文与台账现在的关系"）。
 
     `review_states` 的口径同 `ledger_cells_reading`（命题号 → 审校台账三态）。
 
@@ -5210,14 +5550,15 @@ def kind_gap_reading(rows: Iterable[Row],
     报成没签）。
 
     返回 `(kind_gap, theorem_unsigned)` 两份读数，形状都是
-    `{"count", "items", "unreadable"?, "why"}`。这两条不拦门：业主的边界是
-    "先让它看得见"（拦不拦由 H 与收工门另外判）。
+    `{"count", "items", "unreadable"?, "why"}`。这两条本身不改 `state`：业主的边界是
+    "先让它看得见"；"稿在未签"拦不拦由 `_proof_index_problems` 的
+    `mapping_load_bearing_unsigned` 判（那是另一格，判的是"承重命题有没有签"）。
     """
     gap: list[dict[str, Any]] = []
     unsigned: list[dict[str, Any]] = []
     unreadable: list[dict[str, Any]] = []
     for row in rows:
-        if row.kind not in THEOREM_ENV_KINDS:
+        if not is_load_bearing_row(row):
             continue
         resolved = resolve_ledger_id(row.ledger_id, ledger)
         target = (ledger_row(ledger, str(resolved["table"]), str(resolved["row_id"]))
@@ -5236,23 +5577,429 @@ def kind_gap_reading(rows: Iterable[Row],
             unreadable.append(item)
     gap_why = ""
     if gap:
-        gap_why = ("论文里以 theorem/lemma 环境出现、而台账 kind 仍是 conjecture 的行："
+        gap_why = ("论文里印成定理类环境、而台账 kind 仍是 conjecture 的行："
                    + str(len(gap)) + " 条（"
                    + "、".join(f"{it['label']} → {it['ledger_id']}" for it in gap)
                    + "）")
     unsigned_why = ""
     if unsigned:
-        unsigned_why = ("论文里排成定理但 V 没签的行：" + str(len(unsigned)) + " 条（"
+        unsigned_why = ("论文里排成定理类环境但 V 没签的行：" + str(len(unsigned)) + " 条（"
                         + "、".join(f"{it['label']} → {it['ledger_id']}" for it in unsigned)
                         + "）")
     if unreadable:
-        head = ("论文里排成定理、而 V 签没签读不到的行：" if not unsigned
-                else "；论文里排成定理、而 V 签没签读不到的行：")
+        head = ("论文里排成定理类环境、而 V 签没签读不到的行：" if not unsigned
+                else "；论文里排成定理类环境、而 V 签没签读不到的行：")
         unsigned_why += head + str(len(unreadable)) + " 条（" + "、".join(
             f"{it['label']} → {it['ledger_id']}" for it in unreadable) + "）"
     return ({"count": len(gap), "items": gap, "why": gap_why},
             {"count": len(unsigned), "items": unsigned,
              "unreadable": unreadable, "why": unsigned_why})
+
+
+def manuscript_paths_reading(ledger_row: Mapping[str, Any] | None,
+                             workspace_root: str | Path, *,
+                             review_ledger: str = "") -> dict[str, Any]:
+    """一条命题的逐路径稿读数（业主 2026-11-26 的"有证明"判据的唯一实现）。
+
+    取数链（不许别的走法）：
+
+    1. `statements` 行（`statementledger.by_id` 那一层读出来的行）→
+    2. 这一行的 `manuscripts`（`{路径号: 稿的相对路径}`，可能有任何条数）；
+    3. 盘上存在性：`<工作区根>/<manuscripts[p]>`（相对工作区根，不是 library）；
+    4. 签：按那一份稿判（`verifications` / `reviewed_by_proof` 的同一档；
+       不按稿号与命题号的对应关系判 —— 两套编号不同轴）。
+
+    返回 `{checked, paths: [{path_group, manuscript, on_disk, signed}], has_proof,
+    signed, body_present, why}`：
+
+    - `has_proof = any(path.manuscript 非空且 on_disk)` —— 业主口径：
+      「按照命题任一证明路径有证明稿就判有证明」；
+    - `signed = any(path.signed for 在盘上且有路径的 path)`；
+    - `body_present` 是另一件事（这一行有没有证明正文，`bits.proof` 那条轴）——
+      它只用来报两种不一致（稿在但正文空 / 正文在但稿缺），不参与 `has_proof`；
+    - 三态：`checked=False`（`manuscripts` 坏形状）⇒ 调用方按"没查成"处置。
+    """
+    out: dict[str, Any] = {"checked": False, "paths": [], "has_proof": False,
+                           "signed": False, "body_present": False, "why": ""}
+    if not isinstance(ledger_row, Mapping):
+        out["why"] = "台账里没有这一行 ⇒ 稿读数判不了"
+        return out
+    from . import manuscriptpaths as MPP   # 惰性：稿记录的读口只有那一处
+
+    records, problems = MPP._per_path_records(ledger_row)
+    if problems:
+        out["why"] = "；".join(problems[:3])
+        return out
+    root = Path(workspace_root)
+    paths: list[dict[str, Any]] = []
+    for group in sorted(records):
+        one = records[group]
+        rel = str(one.get("path") or "")
+        state = "outside"
+        if rel:
+            try:
+                target = (root / rel)
+                on_disk = target.is_file()
+                state = "present" if on_disk else "missing"
+            except OSError:
+                on_disk, state = False, "unreadable"
+        else:
+            on_disk = False
+        signed = False
+        if rel and on_disk:
+            cell = reviewed_cell(
+                ledger_row, group,
+                review_ledger=(review_ledger or reviewed_ledger_state(root, str(
+                    ledger_row.get("stmt_id") or ""))))
+            signed = _split_reviewed(cell)[0] == "signed"
+        paths.append({"path_group": int(group), "manuscript": rel,
+                      "on_disk": bool(on_disk), "signed": bool(signed)})
+    body = str(_proof_body_sha_of(ledger_row, 1) or "")
+    if not body:
+        # 多证明时 canonical 可能不是 #p1：只要有任一条非空正文就算"正文在"。
+        body = next((str(_proof_body_sha_of(ledger_row, int(no)) or "")
+                     for no, text in V.proof_list(ledger_row)
+                     if str(text or "").strip()), "")
+    out.update(checked=True, paths=paths,
+               has_proof=any(p["manuscript"] and p["on_disk"] for p in paths),
+               signed=any(p["signed"] for p in paths if p["manuscript"] and p["on_disk"]),
+               body_present=bool(body),
+               why=(f"这条命题有 {len(paths)} 条路径的稿记录，"
+                    + (f"盘上在 {sum(1 for p in paths if p['on_disk'])} 条"
+                       if paths else "一条都没有")))
+    return out
+
+
+
+
+def _judge_load_bearing(cand: Mapping[str, dict[str, Any]],
+                        known: Mapping[str, Sequence[Mapping[str, Any]]] | None,
+                        workspace: Path) -> dict[str, Any]:
+    """逐条判「缺什么」：`manuscripts` 的每一条路径 → 盘上 → 签（`load_bearing_gaps` 的后半）。
+
+    只用台账 + 盘面：不读 `bits.proof` 当"有证明"，不按稿号与命题号对齐。
+    """
+    from . import manuscriptpaths as _MPP_GAPS
+
+    result: dict[str, Any] = {"rows": 0, "gaps": [], "items": [], "complete": 0,
+                             "unreadable": [], "mismatches": [], "checked_rows": 0}
+    # ---- 「同一份稿被几条命题指着」：信息读数（1:1 的核实另有 `statement_of_manuscript`）。
+    from . import manuscriptpaths as _MPP_GAPS
+
+    claims_by_path: dict[str, list[str]] = {}
+    for stmt_row in (known.get("statements") or ()):
+        if not isinstance(stmt_row, Mapping):
+            continue
+        stmt_id = str(stmt_row.get("stmt_id") or "")
+        per, _bad = _MPP_GAPS._per_path_manuscripts(stmt_row)
+        for rel in per.values():
+            normalized = str(rel or "").strip().replace("\\", "/")
+            if normalized and stmt_id:
+                claims_by_path.setdefault(normalized, []).append(stmt_id)
+    # ---- 逐条判「缺什么」（判据：台账里的逐路径稿 + 那一份的签；不看正文 sha）
+    for sid in sorted(cand):
+        one = cand[sid]
+        row = one.get("row")
+        proof_no = int(one.get("proof_no") or 1)
+        resolved = resolve_ledger_id(f"stmt:{sid}", known)
+        target = (statement_by_id(known, sid) if resolved["ok"] else None)
+        base: dict[str, Any] = {
+            "stmt_id": sid, "ledger_id": f"stmt:{sid}",
+            "kind": str(one.get("kind") or ""),
+            "ledger_kind": ledger_kind_cell(target),
+            "label": str(one.get("label") or ""),
+            "proof_no": proof_no, "missing": [], "has_proof": False,
+            "paths": [], "path_count": 0,
+            "mismatch": "",
+            "reviewed": "", "signed": False, "body_present": False,
+            "manuscript": "", "manuscript_exists": False,
+            "shared_with": [],
+            "manuscript_sha256": "", "file_sha256": "", "sha_drift": False,
+            "channel": "", "cited_at": list(one.get("cited_at") or []),
+            "table_row": row is not None,
+            "table_path": str(getattr(row, "evidence_path", "") or ""),
+            "why": "",
+        }
+        if not isinstance(target, Mapping):
+            base["why"] = (f"台账 `statements` 里没有 stmt:{sid} 这一行 ⇒ 它有没有稿与签"
+                           "判不了（没查成，不是「没有缺口」）")
+            result["unreadable"].append(base)
+            continue
+        if not base["label"]:
+            # 论文里没印成环境、只在 claims / 正文里被引的那一条：label 用台账那一行的
+            # 陈述截一段（G 派人时要有东西可指；它不是编号对齐，只是展示用）。
+            base["label"] = str(target.get("statement_text") or "")[:40]
+        # 通道非空（数值 / 形式化）：证据在 E 的报告 / `.lean` 程序上，不在"手稿稿与签"这一档。
+        probe = Row(kind=str(one.get("kind") or "theorem"),
+                    label=str(one.get("label") or f"stmt:{sid}"),
+                    env_no=int((one.get("envs") or [{}])[0].get("env_no") or 1),
+                    ledger_id=f"stmt:{sid}", proof_no=proof_no, file="")
+        want = load_bearing_evidence_required(probe, known)
+        channel = str(want.get("channel") or "")
+        base["channel"] = channel
+        if channel:
+            base["why"] = (f"这一条命题的证明通道是 {channel!r} ⇒ 证据在 E 的报告 / `.lean` "
+                           "程序上，由凭据格那一族判（不在「证明稿与签」这一栏）")
+            result["checked_rows"] += 1
+            result["items"].append(base)
+            continue
+        if not want.get("checked"):
+            # 三态：台账没回答"这一行算不算命题" ⇒ 这一格没查成（不是"没有缺口"）。
+            base["why"] = str(want.get("reason") or "承重证据这一项判不了")
+            result["unreadable"].append(base)
+            result["items"].append(base)
+            continue
+        reviewed = reviewed_cell(
+            target, proof_no,
+            review_ledger=reviewed_ledger_state(workspace, sid))
+        paths = manuscript_paths_reading(target, workspace, review_ledger=(
+            reviewed_ledger_state(workspace, sid)))
+        base["reviewed"] = reviewed
+        if not paths.get("checked"):
+            base["why"] = (f"这一条命题的稿记录读不出来（{paths.get('why') or '坏形状'}）"
+                           "⇒ 缺什么判不了（没查成，不是「没有缺口」）")
+            result["unreadable"].append(base)
+            result["items"].append(base)
+            continue
+        per_path = list(paths.get("paths") or ())
+        on_disk_rels = [str(p.get("manuscript")) for p in per_path
+                        if p.get("manuscript") and p.get("on_disk")]
+        base.update(has_proof=bool(paths.get("has_proof")), paths=per_path,
+                    path_count=len(per_path), signed=bool(paths.get("signed")),
+                    body_present=bool(paths.get("body_present")),
+                    manuscript=(on_disk_rels[0] if on_disk_rels else
+                                (str(per_path[0].get("manuscript")) if per_path else "")),
+                    manuscript_exists=bool(paths.get("has_proof")),
+                    shared_with=sorted({s for rel in
+                                        {str(p.get("manuscript") or "") for p in per_path}
+                                        for s in claims_by_path.get(rel, []) if s != sid}))
+        info = proof_evidence_reading(target, proof_no, workspace, reviewed=reviewed)
+        base.update(manuscript_sha256=str(info.get("recorded_sha") or ""),
+                    file_sha256=str(info.get("file_sha256") or ""),
+                    sha_drift=bool(info.get("sha_drift")))
+        missing: list[str] = []
+        if not paths.get("has_proof"):
+            missing.append("稿")
+        if not paths.get("signed"):
+            # 签那一问独立：连稿都没有时也是"两者都缺"（不是只缺稿）。
+            missing.append("签")
+        base["missing"] = missing
+        # 两种不一致单独报（业主 2026-11-26）：不许折成一个"有 / 没有"。
+        if paths.get("has_proof") and not paths.get("body_present"):
+            base["mismatch"] = "manuscript_without_body"
+            result["mismatches"].append({
+                "stmt_id": sid, "label": base["label"],
+                "kind": "manuscript_without_body",
+                "why": "稿在盘上，而台账这一行没有证明正文（稿在但正文空）"})
+        elif paths.get("body_present") and not paths.get("has_proof"):
+            base["mismatch"] = "body_without_manuscript"
+            result["mismatches"].append({
+                "stmt_id": sid, "label": base["label"],
+                "kind": "body_without_manuscript",
+                "why": "台账这一行有证明正文，而没有任何一条路径的稿在盘上（正文在但稿缺）"})
+        result["rows"] += 1
+        result["checked_rows"] += 1
+        result["items"].append(base)
+        if not missing:
+            result["complete"] += 1
+            continue
+        reasons: list[str] = []
+        if "稿" in missing:
+            if not per_path:
+                reasons.append("台账没有这一条命题的任何稿记录（它没有属于自己的证明稿）")
+            else:
+                reasons.append("台账记了稿，而盘上一条都取不到（"
+                               + "、".join(f"第 {p['path_group']} 条 `{p['manuscript']}`"
+                                          for p in per_path if p.get("manuscript"))
+                               + "）")
+        if "签" in missing:
+            reasons.append(f"稿在盘上，而没有 V 的签（`reviewed` = {reviewed!r}）")
+        if base["mismatch"]:
+            reasons.append("稿与正文两态不一致：" + str(base["mismatch"]))
+        if base["shared_with"]:
+            reasons.append("同一份稿还被 " + "、".join(f"stmt:{x}" for x in base["shared_with"])
+                           + " 指着（一份稿只能是一条命题的证明；见台账这一格）")
+        base["why"] = "；".join(reasons)
+        result["gaps"].append(base)
+    return result
+
+
+def load_bearing_gaps(project_root: str | Path, *,
+                      workspace_root: str | Path | None = None,
+                      ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
+                      tex: str | None = None,
+                      rows: Sequence[Row] | None = None) -> dict[str, Any]:
+    """G 侧的第一张表：这篇论文里哪些承重命题没有它自己的证明稿 / 签（只读、不拦门）。
+
+    业主 2026-11-26 的裁定（逐字）：
+
+    > 「承重命题必须有证明稿应该是 G 侧应该看的，如果没有则要派 D 补材料。」
+
+    所以这张表的主战场在「成文之前」：G 先读它；`gaps` 非空 ⇒ 先派 D 补材料，D 回来再
+    成文。收工门（`mapping_reading` 的 `mapping_load_bearing_*`）读的是「同一份读数」
+    （`mapping_reading` 直接把本函数的返回值放进 `load_bearing`，再由
+    :func:`_proof_index_problems` 折成问题）—— 同一件事只有一个定义、一份读数，
+    门只是最后一道，不在门里另写一套。
+
+    ## 输入（两处取并集，业主口径逐字）
+
+    - 论文正文里出现的承重环境：`STATEMENT_ENV_KINDS`（theorem / lemma / proposition /
+      corollary）—— 判据是 `is_load_bearing_row`（与 MAPPING 那一行的 `kind` 同源）；
+    - `documents.claims[].citations` 里的 `stmt:`（以及正文里写到的 `stmt:`）：论文自己
+      声明它压在这些命题上，哪怕它们没有印成环境（附录段落 / 被 `\ref` 引用）。
+
+    两处都读不到时 `checked=False`（"没查成"绝不折成"没缺口"）。
+
+    ## 每一行给什么（业主 2026-11-26 定死的形状）
+
+    `[{stmt_id, kind, label, paths: [{path_group, manuscript, on_disk, signed}], has_proof,
+    missing, reviewed, shared_with, citation 位置, ...}]`：
+
+    - `paths` 是该命题 `statements.manuscripts` 里的「每一条」路径（`{1: …, 2: …}` 有几条
+      就给几条），`on_disk` 按 `<工作区根>/<路径>` 现查，`signed` 按「那一份稿」的签读数判；
+    - `has_proof = any(path.manuscript 非空且 on_disk)`（业主：「按照命题任一证明路径有
+      证明稿就判有证明」）；「不」读 `bits.proof`（那是"有没有证明正文"，另一件事）；
+    - `missing`（`["稿"]` / `["签"]` / `["稿","签"]`）由 `has_proof` 与"在盘上的那条路径
+      有没有签"两问得出；
+    - `mismatches`（另一份读数，逐条）：`manuscript_without_body`（稿在但正文空）与
+      `body_without_manuscript`（正文在但稿缺）——两种不一致分开报，不折成"有 / 没有"；
+    - `manuscript` / `manuscript_exists` / `reviewed` / `shared_with` / `cited_at` /
+      `manuscript_sha256` / `file_sha256` / `sha_drift` 是展示与信息读数（「sha 不当判据」：
+      洗稿合法）。
+
+    ## 取数链（必须写成台账读法，不许按编号对齐）
+
+    `stmt_id` → `statements` 行（唯一读口 `statementledger.by_id`）→
+    那一行的 `manuscripts`（`{path_group: 稿的相对路径}`，「不要拿 `proof_no` 当身份」）
+    → `<工作区根>/<manuscripts[p]>` 的存在性 → `verifications` / `reviewed` 里「那一份稿」的签。
+    稿号（`b-proof-NNNNNN`）与命题号是两套独立编号：文件名与它服务哪条命题无关，
+    所以只能查台账这一格，不能拿编号拼、不能拿正文内容 / label 字面 / 字节 sha 反推。
+
+    三态：`checked`（整张表查没查成）、`gaps`（缺东西的行）、`unreadable`（这一行查不成：
+    台账解析不到 / 正文有环境而表里没有行 / 稿记录读不出来）—— `unreadable` 不是
+    "没有缺口"，G 与门都必须看得见它。
+
+    这条读数的判据只有一处：`is_load_bearing_row`（承重）+ `proof_evidence_reading`
+    （稿 / 签两态）。四个消费点（G 的 `doc.mapping_cells`、`mapping_reading`、收工门 CH8、
+    `theorem_unsigned`）都读这一处或它的同一份定义，不许各写一份。
+    """
+    project = Path(project_root)
+    workspace = Path(workspace_root) if workspace_root is not None else project
+    known = ledger if ledger is not None else read_ledger_tables(workspace)
+    out: dict[str, Any] = {"checked": False, "project_root": str(project),
+                           "workspace_root": str(workspace), "rows": 0,
+                           "gaps": [], "items": [], "complete": 0, "unreadable": [],
+                           "mismatches": [], "checked_rows": 0, "why": ""}
+    # ---- 正文：定理类环境（第 1 处输入）
+    _statement_envs: list[BodyEnv] = []
+    tex_problems: list[dict[str, Any]] = []
+    text = tex
+    if text is None:
+        package = package_dir(project)
+        tex_path = package / PC.TEX_NAME
+        try:
+            text = tex_path.read_text(encoding="utf-8") if tex_path.is_file() else ""
+        except OSError as exc:
+            out["unreadable"].append({"label": "", "stmt_id": "",
+                                      "why": f"正文读不出来（{type(exc).__name__}: {exc}）"})
+            text = ""
+        if text:
+            _envs, _statement_envs, _files, tex_problems = _body_envs_of_package(
+                package, tex_path, text)
+    if text:
+        if not _statement_envs:
+            # 调用方直接给了正文（`tex=`）：没有文件可跟，但环境与行号仍要读出来
+            # （G 那张表的 `cited_at` 要指到"第几行、哪个环境"）。
+            _statement_envs = [
+                BodyEnv(kind=env.kind, label=env.label, env_no=env.env_no,
+                        line=env.line, file=PC.TEX_NAME)
+                for env in body_envs(text) if env.kind in STATEMENT_ENV_KINDS]
+        else:
+            _statement_envs = [env for env in _statement_envs if env.kind in STATEMENT_ENV_KINDS]
+    # ---- 表那一层（第 1 处输入的另一半：MAPPING 的承重行）
+    table_rows: list[Row] = []
+    if rows is not None:
+        table_rows = [row for row in rows if is_load_bearing_row(row)]
+    else:
+        json_path = package_dir(project) / MAPPING_JSON_NAME
+        if json_path.is_file():
+            try:
+                payload = json.loads(json_path.read_text(encoding="utf-8"))
+                parsed, _problems = parse_rows(payload)
+                table_rows = [row for row in parsed if is_load_bearing_row(row)]
+            except (OSError, json.JSONDecodeError) as exc:
+                out["unreadable"].append({
+                    "label": "", "stmt_id": "",
+                    "why": f"对应表读不出来（{type(exc).__name__}: {exc}）"})
+    for item in tex_problems:
+        out["unreadable"].append({"label": str(item.get("label") or ""), "stmt_id": "",
+                                  "why": str(item.get("detail") or "")})
+    # ---- 候选：stmt_id ⇒ 收集到的线索（表的行 / 正文环境 / 文内引用）
+    cand: dict[str, dict[str, Any]] = {}
+
+    def _one(sid: str) -> dict[str, Any]:
+        return cand.setdefault(sid, {"stmt_id": sid, "row": None, "envs": [],
+                                     "cited_at": [], "proof_no": 1})
+
+    for row in table_rows:
+        resolved = resolve_ledger_id(row.ledger_id, known)
+        if not resolved["ok"] or str(resolved.get("table") or "") != "statements":
+            out["unreadable"].append({
+                "label": str(row.label), "stmt_id": "",
+                "why": (f"对应表里 label={row.label!r} 的 `ledger_id` 解析不到"
+                        f"（{resolved.get('reason') or '不是 statements 行'}）⇒ 查不到它的台账命题")})
+            continue
+        sid = str(resolved["row_id"])
+        one = _one(sid)
+        one["row"] = row
+        one["proof_no"] = int(row.proof_no or 1)
+        one["kind"] = str(row.kind)
+        one["label"] = str(row.label)
+    # 正文环境按 `label` 对回表的行：表里有这一行 ⇒ 记它被引在哪；没有 ⇒ unreadable。
+    row_by_label = {str(row.label): row for row in table_rows}
+    for env in _statement_envs:
+        row = row_by_label.get(str(env.label))
+        if row is None:
+            out["unreadable"].append({
+                "label": str(env.label), "stmt_id": "",
+                "why": (f"正文里 {env.kind} 环境 {env.label!r}（{env.file}:{env.line}）"
+                        "在对应表里没有行 ⇒ 连它是哪条命题都不知道，承重缺口判不了")})
+            continue
+        resolved = resolve_ledger_id(row.ledger_id, known)
+        if not resolved["ok"] or str(resolved.get("table") or "") != "statements":
+            continue
+        one = _one(str(resolved["row_id"]))
+        one["envs"].append({"kind": env.kind, "label": env.label, "env_no": int(env.env_no),
+                            "file": env.file, "line": int(env.line)})
+        one["cited_at"].append({"where": "paper", "file": env.file, "line": int(env.line),
+                                "env": env.kind, "env_no": int(env.env_no)})
+    # 第 2 处输入：论文自己声明的 `stmt:`（claims）与正文里写到的 `stmt:`。
+    for item in paper_citations(project, workspace_root=workspace, tex=text):
+        if item["prefix"] != "stmt":
+            continue
+        sid = str(item["code"]).split("#", 1)[0]
+        one = _one(sid)
+        where = str(item.get("source") or "")
+        if where == "paper source":
+            one["cited_at"].append({"where": "paper", "raw": str(item.get("raw") or "")})
+        else:
+            one["cited_at"].append({"where": "claims", "source": where,
+                                    "raw": str(item.get("raw") or "")})
+    out["checked"] = True
+    judged = _judge_load_bearing(cand, known, workspace)
+    # 前半段（表行解析不到 / 正文有环境而表里没有行）收的 unreadable 不能被后半段盖掉：
+    # 两段都是"这一项没查成"，只是发现的阶段不同。
+    out["unreadable"] = (list(out.get("unreadable") or ())
+                         + list(judged.pop("unreadable", []) or ()))
+    out.update(judged)
+    # ---- 末尾 why（一句话读数）
+    out["why"] = (f"这篇论文的承重命题 {out['rows']} 条：{len(out['gaps'])} 条缺稿或签"
+                  f"（{out['complete']} 条齐）"
+                  + (f"；另有 {len(out['unreadable'])} 条这一项没查成"
+                     "（没查成不是「没有缺口」）" if out["unreadable"] else "")
+                  + (f"；稿与正文两态不一致 {len(out['mismatches'])} 条"
+                     if out["mismatches"] else ""))
+    return out
 
 
 def mapping_reading(project_root: str | Path, *,
@@ -5345,6 +6092,11 @@ def mapping_reading(project_root: str | Path, *,
         "paper_citations": {"checked": False, "items": [], "counts": {}},
         "kind_gap": {"count": 0, "items": [], "why": ""},
         "theorem_unsigned": {"count": 0, "items": [], "unreadable": [], "why": ""},
+        #: 承重行与「它自己的稿与签」的读数（2026-11-26 BEARINGDEF）：这是 G 侧那张
+        #: 表的同一份读数（`load_bearing_gaps`）；其中缺稿 / 缺签的行另由
+        #: `_proof_index_problems` 折成 `mapping_load_bearing_*` 进 `problems`。
+        "load_bearing": {"checked": False, "rows": 0, "gaps": [], "complete": 0,
+                         "unreadable": [], "checked_rows": 0, "why": ""},
         "problems": [],
         "warnings": [],
         "reason": "",
@@ -5459,18 +6211,22 @@ def mapping_reading(project_root: str | Path, *,
                "（引用轴没有对照物，不是「引用都齐了」）")
     reading["paper_citations"] = {"checked": active, "items": citations,
                                   "counts": counts, "why": why}
-    if EVIDENCE_KINDS:
-        # 自有 + 已签 + 定理类行的索引四格：门这一道此前只被工具面/B 入库闸核过。
-        problems += _proof_index_problems(rows, known, workspace,
-                                          review_states=review_states)
     if active:
         problems += _paper_citation_problems(rows, citations, known, workspace, envs)
         problems += _literature_problems(citations, workspace)
     reading["kind_gap"], reading["theorem_unsigned"] = kind_gap_reading(
         rows, known, review_states=review_states)
+    # 承重行「自己的稿与签」：G 侧那张表（`load_bearing_gaps`）是唯一读数，
+    # 收工门读同一份（`_proof_index_problems` 只把它折成问题，不另判一次）。
+    reading["load_bearing"] = load_bearing_gaps(
+        project, workspace_root=workspace, ledger=known, tex=tex_text, rows=rows)
+    if EVIDENCE_KINDS:
+        problems += _proof_index_problems(rows, reading["load_bearing"],
+                                          known, workspace)
     gap_notes = [str(reading["kind_gap"].get("why") or ""),
                  str(reading["theorem_unsigned"].get("why") or "")]
     gap_notes = [text for text in gap_notes if text]
+    load_note = str(reading["load_bearing"].get("why") or "")
     # 数值实验定理那一支要读"定理那一段"：真遇上这种行时才去扫（扫一遍要把 `\input`
     # 跟完，不该为一份全是自然语言证明的稿子付这份成本）。`None` = 还没扫过。
     segments: dict[str, str] | None = None
@@ -5541,6 +6297,8 @@ def mapping_reading(project_root: str | Path, *,
     # 它们是"看得见"的那一半，拦不拦由 H 与收工门另外判（都不进 `problems`）。
     if gap_notes:
         reading["reason"] += "；落差读数（不拦门）：" + "；".join(gap_notes)
+    if load_note:
+        reading["reason"] += "；承重缺口读数：" + load_note
     cells = reading["ledger_cells"]
     if cells.get("missing"):
         reading["reason"] += (

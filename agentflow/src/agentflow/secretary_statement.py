@@ -490,6 +490,11 @@ STATEMENT_LAND_OPS: dict[str, tuple[str, ...]] = {
         # 只有一格、会被第 2 条路径覆写。只由 `agent_b/proof_receipt.write_proof_receipt`
         # 写，读口是 `manuscriptpaths.path_reading`。
         "manuscripts",
+        # 逐路径那份稿的字节 sha（2026-11-26 BEARINGDEF；信息读数，不拦门）：
+        # `{路径号: sha256}`，与 `manuscripts` 同键。写口只有一处
+        # （`manuscriptpaths.record_manuscript`，收录回执 / 落稿 / 补空号三路共用）；
+        # 业主 2026-11-26 更正：稿号与命题号不同轴，洗稿合法 ⇒ 它不当身份、不当判据。
+        "manuscript_sha256",
         # 「引文第几遍载体」的落盘标记（2026-11-18，VPLACE1）：形状由
         # `evidencebits.quote_carrier_mark` 定义、读口只有一个
         # （`evidencebits.quote_carrier_reading`）。只由 B 登记那一笔写：

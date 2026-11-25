@@ -188,9 +188,9 @@ class VacantMixin:
         # ---- ⑤ 证明稿的两格：`manuscripts[n]` + `manuscript_id` -------------------
         rel = str(manuscript or "").strip().replace("\\", "/")
         if rel:
-            per = dict(new_row.get(_MP.PER_PATH_KEY) or {})
-            per[str(int(no))] = rel
-            new_row[_MP.PER_PATH_KEY] = per
+            #: 稿身份升级（2026-11-26 BEARINGDEF）：路径 + 记录时的字节 sha。
+            _MP.record_manuscript(new_row, int(no), rel,
+                                  root=getattr(self.store, "root", ""))
             mid = str(_VS.manuscript_id_of(rel) or "")
             if mid:
                 new_row["manuscript_id"] = mid

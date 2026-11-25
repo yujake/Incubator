@@ -580,7 +580,17 @@ class StatementTxMixin:
                                     "属于一条命题；这一条的稿等收录回执写）")
                 else:
                     if not _is_not_applicable_kind(kind):
-                        data["manuscripts"] = {str(int(_new_path_no)): _rel_ms}
+                        #: 稿身份升级（2026-11-26 BEARINGDEF）：路径 + 记录时的字节 sha
+                        #: （写口只有 `manuscriptpaths.record_manuscript` 一处）。
+                        from . import manuscriptpaths as _MP_MS
+
+                        data[_MP_MS.PER_PATH_KEY] = {
+                            str(int(_new_path_no)): _rel_ms}
+                        _wrote_ms = _MP_MS.record_manuscript(
+                            data, int(_new_path_no), _rel_ms,
+                            root=getattr(self.store, "root", ""))
+                        _link["manuscript_sha256"] = str(_wrote_ms.get("sha256") or "")
+                        _link["sha_known"] = bool(_wrote_ms.get("sha_known"))
                     if _mid_ms:
                         data["manuscript_id"] = _mid_ms
                         _fam_ms = _MID_FAM.family_of_rel(_rel_ms)
