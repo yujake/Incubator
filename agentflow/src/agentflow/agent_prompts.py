@@ -33,7 +33,7 @@ from . import toolface as _TF
 #: 同一条渲染链（位置仍是 `SECTION_ORDERS["A_SEARCH_STYLE"]`，渲染逐字节不变）。
 from .specs.a import SEARCH_STYLE as _A_SEARCH_STYLE
 from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDERS
-PROMPT_VERSION = "p329"
+PROMPT_VERSION = "p330"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：

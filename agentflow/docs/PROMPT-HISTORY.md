@@ -4042,3 +4042,37 @@ ewtheorem / 论文写作只是推荐）一字未动。
 #:   改保护范围）。
 #:   六、口径：**p329 只冻这一次**；之后不再为渲染面冻版。
 #:   本笔 = p329。
+
+#: p329 → p330（2026-11-25，PROMPT-LADDER：高档（T3/T4）⇒「造梯子」的提示词激励）
+#:   一、先核树：`git status --short` 里本 lane 只动 `specs/{m,d,f,b}.py`、`agent_skills.py`、
+#:   `agent_prompts.py`（只改版本行 `p330`）、`tests/**`、`docs/**`、`temp/promptladder/**`；
+#:   LIB-LAYOUT / MAPPING / 非平凡性（312）三路未提交改动一个字节都没碰，
+#:   `closing.py` 也没有动。冻前版本是 p329。
+#:   二、驱动面：**四格漂** —— B / D / F / M（A/C/E/G/H/L/V 逐字同值）。
+#:   **以现盘重算为准**（`scripts/recompute_prompt_digests.py --write`，12 处；重算前 dry-run
+#:   读数就是 B/D/F/M 四格 DRIFT、其余 OK，与预期逐格一致）。
+#:   三、来源（业主 2026-11-25 逐字「自发搭脚手架这块先做提示词激励，其它真问题修」）：
+#:   ① `specs/m.py` 新增一条 policy：方向/命题被判到高档（T3/T4）⇒ 先派「造梯子」
+#:   （承重结果拆成能各自独立签的定义 / 小引理 / 特例 / 工具，F 把结果做成推论），
+#:   **派活理由里写明这一条攻的是梯子的哪一层**；
+#:   ② `specs/d.py` 在「给出研究方向之后由 F 立案推进」那一段旁新增一条：F 攻坚到高档时
+#:   交付必须带「梯子清单」（承重引理 / 工具 / 特例，各自能否独立签、缺哪一层）；
+#:   ③ `specs/f.py` 新增一条：攻坚的产物优先是「可签的中间层」，停手时 `best_partial` 里的
+#:   梯子要逐条对得上 id；
+#:   ④ `specs/b.py` 新增一条：判到高档时 `basis` 里要写「这条要造哪几层梯子」，不是只复述分数；
+#:   ⑤ `agent_skills.py` 的档位手册把「写得长不等于难」从说明变成可执行教法
+#:   （复述 / 注水不算梯子，梯子必须是能独立签的新命题 —— 另立一条引理 / 定义 / 特例）；
+#:   ⑥ 四条 policy 都带**反向纪律**：篇幅不是档位（D/F 写作「篇幅不是梯子」），
+#:   复述与注水既不升档、也不补梯子；末句都写「这条只教…，不改任何读数或判据的强度」。
+#:   四、连带：`PROMPT_VERSION` p329 → p330；`_FROZEN_PROMPT_DIGESTS` 十一格按现值重写
+#:   （只 B/D/F/M 换值）；`_VOLATILE_FACT_SETS` 追加 p330 一格（count=15、
+#:   `keys_sha256=21314a39…` 与 p329 同值）；`tests/fixtures/prompt_cache_warm.json` 两档
+#:   各重落（读数与逐趟 usd 见 `agentflow/temp/promptladder/REPORT.md` §花钱）。
+#:   五、FC-27：本笔动了四份声明面（`specs/{m,d,f,b}.py`），按内容路跑过 `--baseline` 登记
+#:   （`reviewers=0`；**登记 ≠ 批准**：仍需人逐行走查 + 2 reviewer）。`agent_skills.py` /
+#:   `agent_prompts.py` **不在** `.noai-paths` 清单里（如实记，没有为了让它"命中"去改清单 ——
+#:   改清单等于改保护范围）。
+#:   六、射程：只动提示词 / 手册 / 教法。`closing.py` 与判据强度一字未动（判据 e 读
+#:   `closing.py` 源码断言 `high_tier_without_ladder` 仍是 warning）；D 的 `difficulty` /
+#:   `abandon` 与 F 的四键预算 / `best_partial` 必填口径也一字未动。
+#:   本笔 = p330。
