@@ -419,7 +419,7 @@ LIVE-READINGS:END
     `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import sse;print(len(sse.EVENT_KINDS))"`，
     键 `webui_event_kinds`；
   - 静态产物在 **`src/agentflow/web/static/`**：外壳 `static/index.html`（1760 B）+
-    `static/assets/index.DbUnFBxc.js`（245059 B）+ `static/assets/index.D8bpVw-o.css`（26775 B）；
+    `static/assets/index.DUBtJEqs.js`（245196 B）+ `static/assets/index.D8bpVw-o.css`（26775 B）；
     （2026-11-24 20:4x 实测 —— BATCH3 路的前端重建：NUMCLAIM 那批页面文案改成插值 /
     中性描述，`types.ts` 重生成（`run_digest.steps_note`）之后 `tsc --noEmit` rc=0、
     `vite build` 一次成功；CSS 与上一版逐字节相同（`index.D8bpVw-o.css` 26775 B），
