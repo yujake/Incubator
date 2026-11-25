@@ -814,6 +814,22 @@ HANDLERS.update({
 # ---------------------------------------------------------------- 网页上"说话"的两处
 
 
+def _conductor_running(root: Path) -> str:
+    """台账里正在跑的主控台账号（空串 = 没在跑）。"""
+    try:
+        from ..store import Store
+
+        rows = Store(root).rows("tasks")
+    except Exception:  # noqa: BLE001 - 读不成按"没在跑"处理，由调用方如实说
+        return ""
+    owner = ""
+    for row in rows:
+        if (str(row.get("role") or "") == S.CONDUCTOR_ROLE
+                and str(row.get("status") or "") == "running"):
+            owner = str(row.get("task_id") or "")
+    return owner
+
+
 def _run_argv(root: Path, task: str, *, sid: str = "",
               resume: bool = False) -> list[str]:
     """起一趟要跑的那条命令行（判据拿它比对；`dry_run` 也回它）。
@@ -826,7 +842,12 @@ def _run_argv(root: Path, task: str, *, sid: str = "",
     所以新留言正好落在 M 醒来的第一步里。
     """
     argv = [sys.executable, "-B", "-m", "agentflow", "--root", str(root),
-            "run-agent", S.CONDUCTOR_ROLE, "--task", task, "--subagents"]
+            "run-agent", S.CONDUCTOR_ROLE, "--task", task, "--subagents",
+            # 网页自己会在这个目录里写 `web-actions.jsonl`（写面审计）⇒ 对 run-agent 来说
+            # 那就是一个"外来条目"，不认它，空目录上的网页起跑永远失败
+            # （2026-11-25 实测 web-mini-1/2 两次都被 init 拒）。
+            # 这个文件本来就是我们的，所以放行；别的外来条目仍由 init 自己拒。
+            "--allow-foreign-entries"]
     if sid.strip():
         argv += ["--sid", sid.strip()]
     if resume:
@@ -913,6 +934,24 @@ def handle_start_run(handler: Any, params: Mapping[str, str],
                           "「接着哪一段会话跑」，缺了无从选窗口"), False)
     if not _flag(form, "confirm"):
         return done(400, "拒绝：起一趟会真的花预算，必须带 confirm=1 一次显式确认", False)
+    # 用户对 M 说话只有一条通道（业主 2026-11-25：「用户发话起真机，以及用户插话，
+    # 这两件事都是用户对 M 说话，实现上不该有区别」）。M 已经在跑 ⇒ 这句话就是一条插话，
+    # 投进它的收件箱；不许再起第二趟（那会让两个主控抢同一个工作区）。
+    if not resume and not dry:
+        running_owner = _conductor_running(root)
+        if running_owner:
+            from .. import agent_loop as AL
+
+            iid, problem = AL.send_interjection(root, sender="用户", subject="用户指令",
+                                                body=task, sid=sid or None)
+            if problem:
+                return done(400, f"没投进去：{problem}", False)
+            return done(200,
+                        f"主控已经在跑（{running_owner}）：这句话已投进它的收件箱（{iid}），"
+                        "没有另起一趟",
+                        True, ident=iid,
+                        extra={"interjection_id": iid, "sid": sid,
+                               "delivered_to": running_owner})
     argv = _run_argv(root, task, sid=sid, resume=resume)
     if dry:
         return done(200, "试运行：没有起任何进程（argv 见 extra）", True,
@@ -989,6 +1028,15 @@ def handle_interject(handler: Any, params: Mapping[str, str],
         return done(400, f"拒绝：{sid_problem}", False)
     if dry:
         return done(200, "试运行：没有写任何一条插话", True, extra={"dry_run": True})
+    # 反过来也成立：M 没在跑时，"插话"就是"用这句话起一趟"——
+    # 不然用户说了一句话，系统只会回一句"没人会读到"，那等于把两条通道拆成两种命运。
+    if not _conductor_running(root):
+        argv = _run_argv(root, body, sid=sid, resume=False)
+        pid, log = _spawn_detached(root, argv, prefix="web-run")
+        return done(200,
+                    f"主控当时没在跑：已用这句话起一趟（pid {pid}，日志 {log}）",
+                    True, extra={"pid": pid, "log": log, "argv": argv,
+                                 "started": True})
     try:
         iid, problem = AL.send_interjection(root, sender=U.USER, subject=subject,
                                             body=body, sid=sid)

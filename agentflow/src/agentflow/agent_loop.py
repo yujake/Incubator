@@ -1994,10 +1994,25 @@ def _interjection_block(items: list[Mapping[str, Any]]) -> str:
     lines = ["", "=" * 60,
              "【插话】以下是用户/主控发给你的插话，**优先于你自己的计划**（收到它不代表"
              "当前这一步被中断：这一步照常做完，但做之前先按它调整做法）："]
+    stops: list[Mapping[str, Any]] = []
     for it in items:
         mark = "（叫停类）" if it.get("is_stop") else ""
         lines.append(f"- [{it.get('interjection_id')}]{mark} 来自 {it.get('from')}："
                      f"{it.get('subject')} —— {_clip(str(it.get('body') or ''), 400)}")
+        if it.get("is_stop"):
+            stops.append(it)
+    if stops:
+        # 业主 2026-10-17 的裁定（逐字）："优雅停是主控的工具/动作 —— 用户表达出意思，
+        # 主控就会启动 `conductor.stop`"。所以叫停类插话必须把**动作**写进块里：
+        # 只说"叫停"不会让主控去调工具（真机 web-mini-2 实测：它改成
+        # `clock.wait_any` 等孩子回来，等于把叫停读成"再等等"）。
+        lines.append("")
+        lines.append("【这一条是叫停 —— 你必须做的动作，不许用「等孩子」顶替】：")
+        lines.append("① 立刻调 `conductor.stop`（优雅停：框架会把这一趟没做完的任务与委托"
+                     "翻成 block，并把停机开关落盘）；")
+        lines.append("② 然后调 `conductor.guide` 让在跑的子代理收敛（不要强杀）；")
+        lines.append("③ 孩子回来或宽限期到，就按 `final` 收工，把未完成项如实写进交付说明。")
+        lines.append("停机开关已由框架落下（这一条的用户意图不需要你再确认一遍）。")
     lines.append("=" * 60)
     return "\n".join(lines) + "\n"
 
@@ -2150,11 +2165,13 @@ def send_message(session_root: Path, *, sender: str, to: str, subject: str, body
     used = [str(e.get("msg_id") or "") for e in events if e.get("kind") == "agent_message"]
     nums = [int(m[1:]) for m in used if m[:1] == "m" and m[1:].isdigit()]
     msg_id = f"m{S.format_id((max(nums) + 1) if nums else 1)}"
-    to = _legacy_all(to)
     rec: dict[str, Any] = {
         "kind": "agent_message", "msg_id": msg_id, "from": sender, "to": to,
         "subject": subject, "body": body, "reply_to": reply_to,
-        "channel": "public" if to == ALL else "private",
+        # 公共频道已退场（2026-11-20 工具/通道面、2026-11-25 写侧代码删除）：
+        # 这里不再有 `channel="public"` 这一支 —— 读侧仍认历史行（`_legacy_all` /
+        # `message_source`），写侧不再产出它。要给多人，就逐条写给人。
+        "channel": "private",
     }
     if str(from_task_id or ""):
         rec["from_task_id"] = str(from_task_id)

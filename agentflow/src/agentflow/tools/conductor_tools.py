@@ -595,7 +595,7 @@ def conductor_ledger(_conductor, view: str = "tree", root_task_id: str = "") -> 
             "force": {"type": "boolean",
                       "description": "直接停：不等待收尾，并杀掉登记在盘的子进程（连子孙）"},
             "notify": {"type": "boolean",
-                       "description": "是否在公共频道广播叫停（默认 true）"},
+                       "description": "已退役（叫停不再广播：沿边逐层下发 + 停机开关；传什么都不改行为）"},
             "root_task_id": {"type": "string",
                              "description": "只停这一支（S4）：给一个实例号 ⇒ 开关只对"
                                             "它和它的子孙生效；不给 = 全工作区（老行为）"},
@@ -644,26 +644,16 @@ def conductor_stop(_conductor, reason: str = "user", drain_sec: float = 30.0,
     switch = stopctl.request_stop(root, reason=code, by=S.CONDUCTOR_ROLE, force=force, sid=sid,
                                   root_task_id=root_task_id)
     notified = ""
+    # 叫停的"通知"走**沿边逐层下发**（S4-b：`Conductor.notify_children_of_stop`，每个代理
+    # 在自己的步边界读到停机开关后给它还在飞的直接子代理各开一条 notice），不再走
+    # 公共频道那条留言（业主 2026-11-25：广播已退场）。原来这里发的是
+    # `send_message(to=ALL, by_framework=True)` —— 工具面/通道面 2026-11-20 已经退场，
+    # 只有框架内部这条方法还留着（`test_broadcast_reaches_my_children` 钉着），
+    # 而 `conductor.stop` 不该再借它产出 `channel="public"` 的代理留言。
+    notified = ""
     if notify:
-        # 2026-10-08 晚（所有者 T18）：叫停广播改回留言。D07（用户 2026-10-05）当年
-        # 把它改成集体插话，理由是"留言躺在收件箱里等下一次听、打断不了在跑的同伴"——
-        # 那句在今天是过期的事实（步边界的 `_hear()` 会把新留言并进这一步的结果）。
-        # 而插话收窄成"只有用户 → M"之后，M 发的叫停不能再走插话：那是另一条通道。
-        # 留言还有两个插话给不了的东西：它落在公共频道（盘上可读）、且可 ack。
-        #
-        # S6-a：公聊的可见面收窄成"发信人的直接子代理"（业主 T21）之后，叫停这一条
-        # 走框架档（`by_framework=True` ⇒ 所有角色可见）—— 工具层手上没有实例号，
-        # 而"听不到叫停的子孙会继续烧钱跑实验"是安全件。S4 的"沿边逐层下发"落地后
-        # 这一档退休（`draft/86` §14.6 写明了这处冲突与处置）。
-        ij_id, problem = send_message(
-            root, sender=S.CONDUCTOR_ROLE, to=ALL, subject="叫停",
-            body=("用户/主控叫停（" + code + ("，强制" if force else "") + "）：请各自收工，"
-                  "并把你已经起的子进程停掉（实验脚本、检查器进程等）。"
-                  "停机开关已落在 " + str(stopctl.stop_path(root)) + "；"
-                  "你会在**下一步开头**读到这条留言（它不打断当前步）——"
-                  "真正让在飞工作停下的是那个开关。"),
-            sid=sid or None, by_framework=True)
-        notified = ij_id if not problem else f"未发出：{problem}"
+        notified = ("已退役：叫停不再广播（沿边逐层下发由各代理在自己步边界做；"
+                    "真正让在飞工作停下的是停机开关）")
     receipt = c.cancel(code, detail=("强制停止（主控 M）" if force else "优雅停止（主控 M）"),
                        by=S.CONDUCTOR_ROLE)
     # 回报首次生效的那个原因（FC-20 第 2 条：终态先到先得、reason 只许一个答案）。
