@@ -298,7 +298,7 @@ def _rule_lit_fulltext_on_disk(ctx: _Ctx) -> list[Finding]:
       同 stem、`.txt`）不在 ⇒ 报 `warning`，detail 点名缺的是哪一份、两条出路。
 
     为什么是 `warning` 而不是 `error`：这一条不否定"原件在、能抽"，它只否定"已经抽好并
-    可读"这句话；但 `warning` 在 `states._state_of` 里同样把这一类翻成 `malformed` ——
+    可读"这句话；但 `warning` 在 `states.state_of`（`wellformed/states.py`）里同样把这一类翻成 `malformed` ——
     声明与盘面矛盾这件事不许静默。
     """
     out: list[Finding] = []

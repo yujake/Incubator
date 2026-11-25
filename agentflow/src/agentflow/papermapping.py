@@ -2051,7 +2051,7 @@ def _params_summary(params: Any, observations: Any) -> str:
     - 连 strategy 都没有 ⇒ 只剩"未记录"。
     """
     if isinstance(params, Mapping) and params:
-        return json.dumps(dict(params), ensure_ascii=False, sort_keys=True)
+        return json.dumps(dict(params), ensure_ascii=False, sort_keys=True, default=str)
     strategy = ""
     if isinstance(observations, Mapping):
         strategy = " ".join(str(observations.get("strategy") or "").split())

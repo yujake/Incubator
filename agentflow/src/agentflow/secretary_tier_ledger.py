@@ -171,7 +171,7 @@ def deps_sha256(*, derived_from: Sequence[Any] = (),
             deps.add(ident + (no,))
     payload = json.dumps({"derived_from": derived,
                           "deps": [list(x) for x in sorted(deps)]},
-                         ensure_ascii=False, sort_keys=True)
+                         ensure_ascii=False, sort_keys=True, default=str)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
