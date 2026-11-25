@@ -813,16 +813,13 @@ HANDLERS.update({
 
 
 # ---------------------------------------------------------------- 网页上"说话"的两处
-
-
-def _conductor_running(root: Path) -> str:
-    """台账里正在跑的主控台账号（空串 = 没在跑）。
-
-    真身在 `startup.conductor_running`（CLI 与网页同一处判断）。这里保留这个名字是
-    因为本模块的"两条说话入口"一直是按它读的；判据不直接打这个名字，但改名会让
-    这一层的历史读数断档。
-    """
-    return SU.conductor_running(root)
+#
+# 这里原本有一个 `_conductor_running` 的转发壳（`return SU.conductor_running(root)`）。
+# 2026-11-25（CLEAN-AUDIT）：两个 handler 的决策块搬进 `startup.speak` 之后，全仓再没有
+# 一处读那个名字 ⇒ 它成了"零提及的私有函数"（`tests/test_clean_invariant.py` 的第 1 条
+# 当场红）。处置是删，不是登记：保留一个没人读的转发壳，只会让"这里还在自己判断
+# 在不在跑"的错觉活下来，而真身已经在 `startup.conductor_running` 一处。
+# 同族的 `_run_argv` 不删 —— 它还有一个读者（`_launch_detached` 拼的那条命令行）。
 
 
 def _run_argv(root: Path, task: str, *, sid: str = "",

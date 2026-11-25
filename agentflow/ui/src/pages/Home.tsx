@@ -57,6 +57,9 @@ function blockedRun(snapshot: StateSnapshot, q: PendingQuestion): RunRow | null 
  * - `inherited`：老事件没记，从本段同一岗唯一那一趟的 `agent_run_start` 回填的
  *   （`readers._single_run_start_ids`）⇒ 编号照印，另加一个括注当记号，让读的人
  *   知道这一格不是这条事件自己记的；
+ * - `interjection`：插话没有台账号，它有自己的编号 `i-NNNNNN`（`readers._chat_line`
+ *   的 `agent_interjection` 那一支）⇒ 编号照印，括注「（插话编号）」把"这不是台账号"
+ *   说清楚 —— 与 `event` 同形却不加括注，读者会把它当成某一趟的台账号；
  * - `missing`（以及认不出的来源）：明写「（未记录编号）」—— 留空会被读成"这个代理
  *   没有编号"，那是另一句话；也不许替它编一个。
  */

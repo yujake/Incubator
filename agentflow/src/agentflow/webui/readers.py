@@ -6559,9 +6559,13 @@ CHAT_RUN_TASK_CLIP = 40
 #: 说给谁听"，不是"发信人是不是主控"（见 :func:`_chat_message_who`）。
 CHAT_WHO = ("user", "conductor", "team")
 
-#: 公共频道在 `to` 那一格的落库写法（`send_message` 按它把 `channel` 写成 `"public"`）。
-#: 它是唯一的写法：旧行里那个 legacy 字面量由 `channel == "public"` 那一半认出来
-#: （历史行同样带着 `channel`），这一层不产生新写法、也不需要第二份词表。
+#: 公共频道在 `to` 那一格的历史写法（读旧行用）。
+#: 2026-11-25（CLEAN-AUDIT）更正：改前这里写着"`send_message` 按它把 `channel` 写成 `public`"
+#: —— 那句已经过期。写侧自 2026-11-25 起把 `channel` 写死成 `"private"`（`agent_loop.send_message`），
+#: 也不再有代理能产出 `to=ALL`（写入口受控拒绝 `broadcast_retired`）。所以这一格今天是
+#: 纯读侧的字面量：`to == "ALL"` 或 `channel == "public"` 只出现在 2026-11-20 之前的旧行里，
+#: 而旧行里那个 legacy 写法由 `channel == "public"` 那一半认出来 —— 这一层不产生新写法，
+#: 也不需要第二份词表。
 #:
 #: 为什么不 import 写侧那一格：`readers` 读的是盘上的字面量，不是写侧的常量；为了一个
 #: 字符串把整个 `agent_loop` 拉进只读层不值得（同 `_ROSTER_DIR` 的口径）。
@@ -6669,6 +6673,17 @@ def _chat_run_pairs(events: Sequence[Mapping[str, Any]]) -> tuple[dict[int, int]
     - 空跑：`steps == 0` ⇒ `empty=True`。这一格只说"收工那一刻账上是 0 步"，不替它
       解释为什么（叫停、被父切断、起跑就没动作，终态那句话在正文里）。
 
+    ## 已知口径缺口（2026-11-25 CLEAN-AUDIT 登记，本路不改行为）
+
+    父代理退场时替"还在跑的 child"合成的那条 `agent_run_end`
+    （`agent_loop._write_children_cut_off`；盘上带 `synthetic=True` / `settled_by="parent_exit"`）
+    没有 `steps` 这一格。于是它走到上面"缺这一格 ⇒ 在窗口里逐条数"那一档，数出来 0 ⇒
+    被标成"空跑"。真机 `projects/web-mini-3/2026-11-25y` 的 `t-000009`（下标 253）就是这样：
+    它 42 秒后还落了 1 步、写了真交付（下标 269），页面上却先出现一条「E 空跑」。
+    盘上已有区分读数（`synthetic` / `settled_by`），要不要把它从"交付行"里分出去
+    （或标成"父退场结算"）是业主口径，所以这里只登记、不改 —— 详见
+    `temp/cleanaudit/REPORT.md` §7.3。
+
     为什么不用 `sessions.runs_in_session` 的配对：那一处的 `_owner_of` 对同号的多条未收
     趟取"最近开始的那一趟"（为的是让被拒的续跑不吃掉真趟），而空跑那条重复的
     `agent_run_start` 与真趟同号、且排在真趟的收工行之前 —— 按"最近"配会把 5 步记到
@@ -6774,7 +6789,7 @@ def _chat_trip_note(trip: Mapping[str, Any]) -> str:
 def _chat_role(event: Mapping[str, Any]) -> tuple[str, str]:
     """这条事件里"说话的那个角色"，以及这一格是从哪来的（`role_source` 三档）。
 
-    取值口径（三档，与 `task_id_source` 同一套纪律）：
+    取值口径（三档；`task_id_source` 另有 `interjection` 一档，那是插话编号那一格的事）：
 
     - `event`：事件自带 `role`（绝大多数事件都这样，`agent_run_start` / `agent_run_end`
       / `user_question` / `user_answer` 都是）⇒ 原样用；
@@ -6807,7 +6822,9 @@ def _chat_message_who(event: Mapping[str, Any], conductor: str) -> tuple[str, st
 
     - `to == ALL`（或 `channel == "public"`）⇒ `team`：公共频道的语义是"发给树上的人"
       （`agent_loop.public_visibility` 逐条写了可见面：框架通报全树可见，代理自己发的只对
-      直接父/直接子可见），它不是"对用户说的话"。发信人是主控也一样 —— 只按"发信人是
+      直接父/直接子可见），它不是"对用户说的话"。这一档今天只由历史行触发 —— 写侧
+      2026-11-25 起不再产出 `channel="public"` 的代理留言，也不再接受 `to=ALL`
+      （`agent_loop._broadcast_retired_refusal`）。发信人是主控也一样 —— 只按"发信人是
       不是 M"分档，主控的派活通告就会被印成主控对用户的回答，`channel` 只被拼进标题当装饰；
     - 主控发给用户的私聊（`to` 是 `userio.USER` 或另一个写法 `user`）⇒ `conductor`：
       这才是"用户 ↔ 主控"那一档；
@@ -6906,10 +6923,6 @@ def _chat_line(index: int, event: Mapping[str, Any]) -> dict[str, Any] | None:
         # —— 标题再写一遍就是同一个事实印两次，读者还得自己判断两处指的是不是同一个 M。
         title = "插话"
         text = str(event.get("body") or "")
-        # 插话没有台账号（它不是谁"在跑"），但它有自己的编号 i-NNNNNN：
-        # 页面那一格印它，并标清这是"插话编号"而不是台账号（不编一个假台账号）。
-        if str(event.get("interjection_id") or ""):
-            task_id_override = str(event.get("interjection_id"))
     elif kind == U.ASK_KIND:
         who = "conductor"
         qid = str(event.get("qid") or "")
@@ -6934,13 +6947,25 @@ def _chat_line(index: int, event: Mapping[str, Any]) -> dict[str, Any] | None:
     # 绝对编号从事件里取（`task_id`；`agent_message` 那一路写的是 `from_task_id`），
     # 两个都没有就留空串 —— 空串在页面上显示成"（未记录编号）"，比编一个假编号好。
     #
-    # 这一层只认两种来源：`event`（事件里真有）与 `missing`（这条事件没记）。"从同一岗的
+    # 这一层认三种来源：`event`（事件里真有）、`interjection`（这一格印的是插话编号
+    # `i-NNNNNN`，不是台账号）与 `missing`（这条事件没记）。"从同一岗的
     # `agent_run_start` 推出来"的那一档（`inherited`）刻意不在这里做：那是 `chat_face`
     # 的事 —— 它要看整段会话才判得准，而本函数的输入只有一条事件。于是直接调本函数的人
     # 永远读不到 `inherited`；要拿回填后的读数就调 `chat_face`（见 `_single_run_start_ids`）。
     task_id = str(event.get("task_id") or event.get("from_task_id") or "")
+    task_id_source = "event" if task_id else "missing"
     if kind == "agent_interjection":
-        task_id = str(event.get("interjection_id") or "")
+        # 插话没有台账号（它不是谁"在跑"），但它有自己的编号 i-NNNNNN：页面那一格印它，
+        # 并用 `task_id_source="interjection"` 把"这一格的编号不是台账号"变成机器读数
+        # （渲染那一侧见 `ui/src/pages/Home.tsx` 的 `idCell`：「（插话编号）」）。
+        # 改前三件事各错一处：这里先写死成 `event`（于是页面永远分不出插话编号）、
+        # 上面那个分支里另有一个没人读的 `task_id_override`、`idCell` 的 `interjection`
+        # 那一支因此永远走不到。现在一条赋值同时供给两格，三处都对得上。
+        iid = str(event.get("interjection_id") or "")
+        if iid:
+            task_id, task_id_source = iid, "interjection"
+        else:
+            task_id, task_id_source = "", "missing"
     line: dict[str, Any] = {"index": index, "who": who, "role": role, "kind": kind,
                             # 角色那一格的来路（见 `_chat_role`）：`event`（事件自带
                             # `role`）/ `from`（`agent_message` 只有 `from`，读侧用它补）/
@@ -6948,11 +6973,12 @@ def _chat_line(index: int, event: Mapping[str, Any]) -> dict[str, Any] | None:
                             # 要求"不许留空、也不许猜一个"）。
                             "role_source": role_source,
                             "task_id": task_id,
-                            # 三档口径（值域）：`event`（事件里真有）/ `inherited`
-                            # （`chat_face` 从同岗唯一那一趟的 start 回填的，本函数不产它）/
-                            # `missing`（这条事件确实没记 —— 页面显示"（未记录编号）"，
-                            # 判据据此要求"不许悄悄空着不标"）。
-                            "task_id_source": "event" if task_id else "missing",
+                            # 四档口径（值域）：`event`（事件里真有）/ `interjection`
+                            # （这一格是插话编号 `i-NNNNNN` —— 页面括注「（插话编号）」）/
+                            # `inherited`（`chat_face` 从同岗唯一那一趟的 start 回填的，
+                            # 本函数不产它）/ `missing`（这条事件确实没记 —— 页面显示
+                            # "（未记录编号）"，判据据此要求"不许悄悄空着不标"）。
+                            "task_id_source": task_id_source,
                             "ts": str(event.get("ts") or ""), "title": title,
                             "text": body, "clipped": clipped,
                             # 「这是哪一趟」那几格（配对读数见 `_chat_run_pairs`，
@@ -6988,7 +7014,8 @@ def chat_face(root: str | Path, sid: str = "", *,
     - 线是有界的：只给最近 `lines_max` 条，`total`/`shown` 照实报，截断逐条标明。
 
     编号那一格（兼容老事件的那一半）：每条线都有 `task_id` 与
-    `task_id_source`，来源分三档 —— `event`（事件里真有）、`inherited`（老事件没记，但
+    `task_id_source`，来源分四档 —— `event`（事件里真有）、`interjection`（这一格印的是
+    插话编号 `i-NNNNNN`，不是台账号 —— 页面括注「（插话编号）」）、`inherited`（老事件没记，但
     同一岗在这段会话里唯一那一趟的 `agent_run_start` 有编号 ⇒ 用它，判据在
     :func:`_single_run_start_ids`）、`missing`（拿不准或确实没记）。回填只在唯一时发生：
     同一岗跑过两趟以上（或有一条 start 自己没记编号）就照实标 `missing`，不猜。
@@ -8597,7 +8624,8 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
     ("ChatLine",
      "chat_face() —— 一条对话线（`who` 只有 user / conductor / team 三档，见 CHAT_WHO）。"
      "`task_id` 是说话那一方的绝对编号，`task_id_source` 只说这个编号从哪来："
-     "event（事件里真有）/ inherited（老事件没记，同一岗在本段唯一那一趟的 "
+     "event（事件里真有）/ interjection（这一格是插话编号 i-NNNNNN，不是台账号，"
+     "页面括注「（插话编号）」）/ inherited（老事件没记，同一岗在本段唯一那一趟的 "
      "agent_run_start 有编号 ⇒ 回填）/ missing（拿不准或确实没记，页面显示"
      "「（未记录编号）」，绝不编一个假编号）。`role` 是说话那一方的角色，`role_source` "
      "同一条纪律：event（事件自带）/ from（`agent_message` 只记了 `from`，读侧用它补齐，"
@@ -8887,9 +8915,11 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("created_at", "string"), ("revises?", "string"), ("kind?", "string"),
       ("ref_problems?", "Record<string, string>"),
       # 收件人的绝对编码：`to_task_id` = 具体收件人的台账号，
-      # `to_task_ids` = 广播面（`to=ALL`）的编号列表。写侧只在这一行真有编号时才落
-      # 这两个键 ⇒ 读模型把它们归一成"永远给得出"（缺 ⇒ 空串 / 空列表），而
-      # 「旧账无号」那一档由下面两格说清（`handoff_to_label` 按盘上的原样算）。
+      # `to_task_ids` = 广播面（`to=ALL`）的编号列表 —— 2026-11-25 复核：这是纯历史栏，
+      # 写侧自 2026-11-20 起不再产出它（`_do_handoff` 传 `to_task_ids=None`），所以它只可能
+      # 出现在那个日期之前的旧行里。写侧在真有编号时落这两个键 ⇒ 读模型把它们归一成
+      # "永远给得出"（缺 ⇒ 空串 / 空列表），而「旧账无号」那一档由下面两格说清
+      # （`handoff_to_label` 按盘上的原样算）。
       ("to_task_id", "string"), ("to_task_ids", "string[]"),
       ("sender_label", "string"), ("to_label", "string"),
       # 手稿号是裸号（编号空间就是账本行号）⇒ 拿它当事件口令会误命中，

@@ -164,12 +164,19 @@ JSON_TAIL = (
     '{"final": "<结论>", "evidence": ["<你实际用到的 id>"]}'
 )
 
-#: 公共频道（公告栏）的历史写法。写入口已不再接受它（见 :func:`_broadcast_retired_refusal`）：
-#: 2026-11-16 工具面退场（`conductor.broadcast` 全面退场）、2026-11-20 通道面一起退
-#: （业主口径「确认没用的东西就删，不要保留」+「收件人必须是实例」）。
-#: 它今天只剩两件事：① 读旧数据时把历史行（`to=ALL` / legacy `#public`）折成同一个值
-#: （:func:`_legacy_all`，读侧折算不许删）；② 框架自己的通报仍可按这个值落盘
-#: （`send_message(by_framework=True)` 的叫停那一路，不经代理的收件人面）。
+#: 公共频道（公告栏）的历史写法。写入口不再接受它（见 :func:`_broadcast_retired_refusal`）：
+#: 2026-11-16 工具面退场（`conductor.broadcast` 那个工具全面退场）、2026-11-20 通道面一起退
+#: （业主口径「确认没用的东西就删，不要保留」+「收件人必须是实例」）、2026-11-25 连写侧代码
+#: 一起删（业主「删代码，不设闸」）。
+#: 它今天只剩两件事，两件都不是"一条通道"：
+#: ① 读旧数据时把历史行（`to=ALL` / legacy `#public`）折成同一个值（:func:`_legacy_all`，
+#:    读侧折算不许删）；
+#: ② 让写入口那道受控拒绝认得出这个写法（:func:`_is_all_recipient`）—— 认得出才拒得掉。
+#: 2026-11-25 复核（CLEAN-AUDIT）：今天没有任何一条生产写入会以这个值当收件人落盘。
+#: 框架自己的 `send_message(by_framework=True)`（叫停那一路）已随 `conductor.stop` 改成
+#: 沿边逐层下发而没有调用点；`_dispatch_notify` 给"多目标 + 模型没填 to"补的缺省 `"ALL"`
+#: 与 `_derived_dispatch_notify` 的两处兜底都会一路撞到受控拒绝（零落盘）；插话那条通道
+#: 的同名参数两个合法取值最终都落 `to="M"`。
 ALL = "ALL"
 
 #: 广播通道退场的受控拒绝码（写入口 `message` / `handoff` 共用一份）。
@@ -1854,6 +1861,11 @@ def send_interjection(session_root: Path, *, sender: str, subject: str, body: st
     话发送"；T18 收窄它之后 `conductor.stop(notify=True)` 的叫停广播改回留言（见 `conductor_tools`）。插话的
     送达方式（下一步开头单列一段【插话】、不打断当前步）一个字没改。编号由脚本按会话内顺序发（`i-0001`…），
     模型不许自己编号。
+
+    `to` 这一个是历史参数、今天不改变落盘（2026-11-25 复核）：它只被下面那句"只送给主控"的准入
+    判据用到，两个合法取值（`"ALL"` / `S.CONDUCTOR_ROLE`）最终都落 `"to": S.CONDUCTOR_ROLE`。
+    默认值写成 `"ALL"` 是 D07 那一版"集体插话"留下的形状，不是一条公共频道 —— 收件人永远是 M。
+    要删这个参数得连调用方一起改（`cli.py` 显式传 `to=`，`startup.speak` 走缺省），不在本轮写面。
     """
     # 传进来的必须是工作区根：`sessions/` 由本函数自己拼（`sessions.append` 里那段）。
     # 传 `sessions/` 不会报错 —— 它会安安静静写出 `<工作区>/sessions/sessions/<sid>.jsonl`，
@@ -2146,7 +2158,12 @@ def send_message(session_root: Path, *, sender: str, to: str, subject: str, body
                  reply_to: str = "", sid: str | None = None, from_task_id: str = "",
                  by_framework: bool = False,
                  extra: Mapping[str, Any] | None = None) -> tuple[str, str]:
-    """发一条消息（append-only）。`to=ALL` 是公共频道。返回 `(msg_id, 问题)`。
+    """发一条消息（append-only）。返回 `(msg_id, 问题)`。
+
+    收件人这一层不做判据：`to` 原样落盘，能不能发在写入口（:func:`_broadcast_retired_refusal`
+    与寻址那两道）。`to=ALL` 因此不会由这里"变成一条公共频道"—— 写入口在调本函数之前就把它
+    受控拒绝了，`channel` 也在下面写死成 `private`（读旧的 `channel="public"` 行是读侧的事，
+    见 :func:`message_source`）。
 
     编号口径：取现有最大号 + 1（`draft/83` D79）。旧写法"数一数有多少条 `agent_message` 再加一"在正常
     append-only 会话里与 max+1 恰好相等，但只要一条坏行占号、或将来做了删除/搬迁就会撞上已用过的号 ——而
@@ -2158,8 +2175,9 @@ def send_message(session_root: Path, *, sender: str, to: str, subject: str, body
     `escalation{need,kind,evidence}`；不另发一条事件，因为收件箱是按 `agent_message` 收的（:func:
     `read_messages` 只认这一种 kind），"父收到了"与"父拿到细节"必须是同一条。
 
-    `to` 先过 :func:`_legacy_all`：旧调用点若还传着那个 legacy 写法，落盘的仍是 `ALL`
-    —— 盘上只有一种写法（旧行由读侧折算，见 `read_messages`）。
+    `to` 原样落盘（本函数不折算）：盘上的规范写法只有 `ALL` 一种，legacy 那个字面量只在
+    读侧由 :func:`_legacy_all` 折算（见 `read_messages`）—— 写侧没有第二种写法，也就没有
+    "落盘前先归一"这一步。改前这里那句"`to` 先过 `_legacy_all`"是过期的：代码从来是原样写。
     """
     events, _problems = SS.read_session(session_root, sid=sid)
     used = [str(e.get("msg_id") or "") for e in events if e.get("kind") == "agent_message"]
@@ -4126,9 +4144,24 @@ def _is_all_recipient(token: Any) -> bool:
 def _broadcast_retired_refusal(*, to: Any, shape: str) -> dict[str, Any]:
     """写入口对 `to=ALL` 的受控拒绝（`{}` = 放行）。
 
-    这是广播通道退场后唯一一处产生 `broadcast_retired` 的判据：`message` 与 `handoff`
-    两个写入口都先问它，谁也不许自己写一份"收件人是不是广播"的比对（同
-    :func:`_is_all_recipient` 的口径，旧写法 `#public` / 小写 `all` 也算）。
+    这是广播通道退场后唯一一处产生结构化 `broadcast_retired` 拒绝（`refused=...`）的判据：
+    三个发出口都先问它，谁也不许自己写一份"收件人是不是广播"的比对（同
+    :func:`_is_all_recipient` 的口径，旧写法 `#public` / 小写 `all` 也算）。它之前还有一道
+    形状闸（:func:`notify_shape_problem`）会在 `notify.to` 上先点名这个码，但那一处只回一句
+    形状问题（没有 `refused` 结构，也不落盘）—— 两处的分工是"形状不对"与"收件面不存在"。三个调用点（2026-11-25 逐个核过）：
+
+    1. `_do_message`  —— 模型写 `{"message": {"to": "ALL"}}` 时它先撞这道闸；
+    2. `_outbound_hook` —— 同一份载荷在秘书那一道之前先撞它（于是拒因码只有一条，
+       不会因为"正文有没有点名"落到两个码上）；
+    3. `_do_handoff` —— 模型写 `{"handoff": {"to": "ALL"}}`，以及框架自己在
+       `_dispatch_notify` / `_derived_dispatch_notify` 里给多目标 notify 补的缺省 `"ALL"`。
+
+    可达性（2026-11-25 复核，结论是"不可删"）：`_decode_shape` 里 `_known_recipient`
+    刻意仍然认 `ALL`（读旧数据要认得出这个写法），所以模型写出来的 `ALL` 一路到得了上面
+    三个发出口 —— 这道闸就是唯一的拦点。**框架自己也会产出它**：`_dispatch_notify` 给
+    "多目标 + 模型没填 `to`"补的缺省就是 `"ALL"`（判据
+    `tests/test_forced_notify.py::test_a_multi_target_dispatch_defaults_the_handoff_to_the_public_channel`
+    正面钉着它撞闸）。删掉这个函数 ⇒ 那两条路都静默放行。
 
     为什么退：业主 2026-11-16 工具面「广播工具…全面退场」；2026-11-20 通道面一起退
     （「确认没用的东西就删，不要保留」+「收件人必须是实例（按角色桶归属已废）」）。
@@ -4296,8 +4329,10 @@ def roster_addresses(secretary: Any, *, to: str, owner: str = "",
     返回三态（不许折平）：`checked`（名册读成了没有，`False` 不等于"名册里没有这个人"）、`how`（这一条为什么这么投）、
     `kind`/`name`/`task_id`/`role`（解析到的成员）、`candidates`（同名多匹配时全部的候选名册名）、`callable`（「你能通
     话的是：…」，每一张拒信都带它）、`refused`（受控拒绝的理由码，空串 = 没拒）、`error`（给人/给模型读的那句拒信）。
-    `how` 的取值（每一个都由某一行产出，没有死取值）：`outside_roster`（① `ALL` —— 公共频道有自己那一套可
-    见面判据；②用户；③主控 M —— 代唤协议逐字要求任何角色都能把申请发给它；外加主控当发信人时按角色名派活
+    `how` 的取值（每一个都由某一行产出，没有死取值）：`outside_roster`（① `ALL` —— 2026-11-25
+    复核：写入口在寻址之前就受控拒绝它，本判据够不到；这一支留着只为"万一将来有调用方绕过写
+    入口"时的三态读数，以及老管道 `_message_legacy` 的对照；②用户；③主控 M —— 代唤协议逐字
+    要求任何角色都能把申请发给它；外加主控当发信人时按角色名派活
     /通知那一档）、`roster_unavailable`（没有秘书 / 没有台账号 / 名册读不成 ⇒ 私聊「不投递」：
     这一档带 `refused="roster_unavailable"` 与一句拒信，调用方按受控拒绝处理 —— fail-closed：名册读不出来
     就不投递，不退回按角色名照发）、`parent` / `child`
@@ -12980,6 +13015,12 @@ class AgentLoop:
             # 它写的是一段共同的话，可能是刻意的通报；归它决定。判据
             # `tests/test_forced_notify.py::test_a_multi_target_dispatch_defaults_the_handoff_to_the_public_channel`
             # 钉的就是这一格（与"派生支按目标拆条"并存，两支各说各的）。
+            #
+            # 2026-11-25（CLEAN-AUDIT）复核：`"ALL"` 这一格是写侧最后一处"框架自己产出 ALL"
+            # 的地方 —— 它今天唯一的可见效果是下面那条受控拒绝（`broadcast_retired`，零落盘）。
+            # "多目标 + 模型没填 to"到底该逐目标拆条、还是该让框架派生的那一份兜底，是业主
+            # 口径（会改 `test_a_multi_target_dispatch_defaults_the_handoff_to_the_public_channel`
+            # 的断言），所以本轮只把现场钉在注释里，不动行为。
             patched["to"] = targets[0] if len(targets) == 1 else "ALL"
         problem = notify_shape_problem(patched, address_of=self._address_of)
         if problem:
@@ -13043,6 +13084,9 @@ class AgentLoop:
                       "模型这一句派活没有填 `notify` 表 ⇒ 框架据派活本身派生（"
                       "谁派了谁做什么、参数、为什么），内容全部取自这一句派活；"
                       "执笔的是本角色自己的秘书（智能体侧只保留『查』，`draft/55` §3.2）。"]
+            # `role or "ALL"` 这一格是兜底：目标自己连角色都没解析出来时，收件人面只剩那个
+            # 历史写法。它今天的结果与上面那条缺省一样 —— 撞 `_broadcast_retired_refusal`，
+            # 受控拒绝、零落盘（2026-11-25 复核；不改成"不发"是因为那会丢掉一条该留的拒信）。
             out.append({"to": role or "ALL",
                         "summary": f"派活：{_dispatch_label(item)}",
                         "body": "\n".join(lines) + "\n", "refs": [], "why": why,
@@ -13050,6 +13094,7 @@ class AgentLoop:
                                  "执笔=本角色的秘书")})
         if out:
             return out
+        # 一个目标都没解析出来时的最后兜底：同样撞受控拒绝（理由同上一条）。
         return [{"to": (targets[0] if len(targets) == 1 else "ALL"),
                  "summary": "派活：（没有目标）",
                  "body": "## 派了什么活\n\n（这一句派活一个目标都没解析出来）\n",
@@ -14693,6 +14738,9 @@ class AgentLoop:
                                 "manuscript_to": token}
         if (not token or _is_all_recipient(token) or token in ("user", "用户")
                 or token == S.CONDUCTOR_ROLE):
+            # `_is_all_recipient(token)` 这一半今天是纵深不是活路：`_do_handoff` 在调本方法
+            # 之前就把它受控拒绝了（2026-11-20）。留着是因为本方法也服务 `user` / `M` 那两档，
+            # 而"收件人面不认识 ALL"这件事必须由同一个谓词回答 —— 拆成两处，两种写法就会漂。
             return {**base, "how": "outside_roster",
                     "why": "角色级/公告栏/频道外的收件人面（手稿台账按它建键）"}, {}
         addr = self._address_of(token)
@@ -14786,11 +14834,17 @@ class AgentLoop:
         旧行为，因为「回退必须是逐字的老行为」这条纪律仍然成立：判据要能拿它对照
         （`tests/test_roster_registration_holes.py` 直接打它，量 `to="ALL"` 那一支）。
 
-        `to="ALL"` 今天只有一种含义（公共频道），所以它不再是一支"内部直调的广播"
-        —— 改前那条 `broadcast_only` 拒信是"两种写法"的产物：解码层把 `ALL` 归一成
-        另一种写法，于是直调里的 `ALL` 就只剩内部调用。只剩一种写法之后，`ALL` 一律走
-        公共频道（`_message_by_channel`），逐项开板项的广播语义曾只归 `conductor.broadcast`
-        （该工具 2026-11-16 已全面退场；`to="ALL"` 今天只剩公共频道一种含义）。
+        `to="ALL"` 今天只有一种含义，而且是一种历史含义：公共频道（公告栏）的读侧折算。
+        所以它不再是一支"内部直调的广播"—— 改前那条 `broadcast_only` 拒信是"两种写法"的
+        产物：解码层把 `ALL` 归一成另一种写法，于是直调里的 `ALL` 就只剩内部调用。只剩一种
+        写法之后，`ALL` 一律走 `_message_by_channel`；逐项开板项的广播语义曾只归
+        `conductor.broadcast`（那个工具 2026-11-16 已全面退场；`Conductor.broadcast` 这个方法
+        还在，但它是"给名下直接子代理逐条开板项"，不是本函数这条公共频道老路）。
+
+        2026-11-25（CLEAN-AUDIT）复核：**生产侧已经没有调用点** —— `_do_message` 在寻址之前
+        就拒了 `ALL`，`_message_legacy` 只剩判据在读（`test_inbox_delivery` /
+        `test_the_public_channel_is_the_senders_children` / `test_roster_registration_holes`）。
+        保留它是为了让那三条判据有一个"改前行为"的对照物，不是一条活通道。
         """
         if to and not _is_all_recipient(to) and to not in (*S.ROLES, S.CONDUCTOR_ROLE,
                                                            "user", "用户"):
@@ -14882,7 +14936,9 @@ class AgentLoop:
             # 名册成员 ⇒ 落成"挂在收件人名下的板项"（只有它自己读得到，父不代读）
             out = self._message_to_member(payload, addr)
         else:
-            # `ALL`（公共频道）/ 用户：原来的通道逐字不动
+            # 用户 / 主控 M：原来的通道逐字不动。`ALL` 走不到这里 —— 它在上面那两道之前
+            # 就被 `_broadcast_retired_refusal` 拒了；只剩判据用的老管道（`_message_legacy`）
+            # 还能量到那一支。
             out = self._message_by_channel(payload, to, reply_to)
         out["addressing"] = addr
         return out
@@ -14935,9 +14991,10 @@ class AgentLoop:
 
         `_do_message` 不走这里（判据在 `roster_addresses`）；它只有两个调用点：
         `_message_legacy`（判据拿来逐字对照旧行为的那条路）与判据文件对这条实现本身的
-        直接调用（`tests/test_the_name_face_is_wired.py`）。`to="ALL"` 不进这里：它只有
-        一种含义（公共频道，见 `_message_by_channel`）；逐项开板项的广播语义曾归
-        `conductor.broadcast`（该工具 2026-11-16 已全面退场）。
+        直接调用（`tests/test_the_name_face_is_wired.py`）。`to="ALL"` 也不进这里：`ALL`
+        是公共频道的历史写法（读侧折算，见 `_message_by_channel`），不是名册上的名字；
+        逐项开板项的广播语义曾只归 `conductor.broadcast` 那个工具（2026-11-16 已全面退场），
+        `Conductor.broadcast` 这个方法本身是"给名下直接子代理逐条开板项"，与这里无关。
         """
         if self.secretary is None or self.conductor is None:
             return {"message": "未发出", "to": name, "ok": False, "receipt": "unknown",
@@ -14956,13 +15013,18 @@ class AgentLoop:
 
     def _message_by_channel(self, payload: Mapping[str, Any], to: str,
                             reply_to: str) -> dict[str, Any]:
-        """`ALL` / 用户 那一档：留言落 `send_message`（append-only），准入逐字不动。
+        """用户 / 主控 M 那一档（以及判据专用的老管道）：留言落 `send_message`（append-only），准入逐字不动。
 
-        2026-11-20（广播通道退场）：`ALL` 这一支在代理的写入口已经走不到 —— `_do_message`
+        2026-11-20（广播通道退场）之后 `ALL` 在代理的写入口已经走不到 —— `_do_message`
         在寻址之前就以 `broadcast_retired` 受控拒绝（`_broadcast_retired_refusal`）。
-        这一格保留两条读侧/框架路径：① `_message_legacy` 这条老管道（判据直接打它，
-        量的是旧行为逐字不变）；② 用户 / 主控 M 的私聊（`to` 是用户或 `M`，不是广播）。
-        框架自己的叫停通报不走这里（`conductor_tools` 直接调 `send_message`）。
+        这一格保留两条路：① `_message_legacy` 这条老管道（判据直接打它，量的是旧行为逐字
+        不变 —— 它是唯一的 `is_all=True` 入口）；② 用户 / 主控 M 的私聊（`to` 是用户或
+        `M`，`is_all=False`）。框架自己的叫停通报既不在这里也不在 `conductor_tools`：
+        它已改成 `Conductor.notify_children_of_stop` 的沿边逐层下发。
+
+        下面这一整段（可见面 = 发信人的直接子代理、公告栏判据、`board_kind`）描述的是
+        `is_all=True` 那一支 —— 它今天是读侧老管道的行为，不是一条活通道：写侧已经没人能
+        走到。改它要先答"老管道这条判据对照还要不要"，所以 2026-11-25 的清理只改文字。
 
         公共频道的可见面 = 发信人的直接子代理 ⇒ 发公聊必须带发信人的实例号，没有编号就受
         控拒绝（不许退回"全角色可见"—— 那等于随手一条公聊就是全树广播）。谁能走到这一支：只有
@@ -15566,7 +15628,9 @@ class AgentLoop:
         # （判据与理由见 `_handoff_address`：手稿的收件人面是角色，名册给的是实例）。
         # 拒绝发生在写任何东西之前：半份状态（手稿写了、人没收到）比没写更贵。
         _addr, _gate = self._handoff_address(written or to)
-        # 手稿那一行的收件人 = 名册解析出的角色（台账的口径）；`ALL` 走公共频道。
+        # 手稿那一行的收件人 = 名册解析出的角色（台账的口径）。
+        # `ALL` 走不到这一格：本方法开头就把它受控拒绝了（2026-11-20），所以这里不再有
+        # "公共频道"那一档可写 —— 改前那句"`ALL` 走公共频道"是过期文案。
         # 这一格只算一次（改前门口算一遍、写完再算一遍，两处一漂就会出现"回执里的
         # 收件人不是落库那个收件人"）。
         manuscript_to = str(_addr.get("manuscript_to") or to)
