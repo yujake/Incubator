@@ -29,6 +29,7 @@
 | `manuscripts.py` | 稿件与证明稿的稿头 |
 | `paperpackage.py` | 论文包：`appendix.tex` 必须是片段、论文包必须有台账托着（PAPER-PKG-FIX） |
 | `layout.py` | 落点布局：`manuscripts/<角色>/` · `work/<角色>/` · 旧落点（已退役）—— 一份分类，读写两侧共用 |
+| `naming.py` | 目录与文件名的三级规范：A 系统固定 / B 系统生成名 / C 有限自由（规范正文见 `docs/WORKSPACE-LAYOUT.md`） |
 | `proofs.py` | 证明台账 / 实验行 |
 | `relations.py` | 关系行（"说回验通过却给不出区间"这一类） |
 | `roster.py` | 名册与销号行（`out/roster/*-retired.jsonl`） |

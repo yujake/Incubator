@@ -45,7 +45,8 @@
 | ~~`FC27-SIGNING-GUIDE-2026-10-27.md`~~ → 已归档 | **2026-11-22 DOCS-CLEANUP 归档到 `draft/archive-docs/`**（见 §3.2）：它是 2026-10-27 **第二批**这一批的签字操作单，§1「现状」自述"2026-10-27 22:xx 的读数：清单条目 46 条唯一路径"，而现盘 `.noai-paths` 是 **71** 条条目 / **68** 条唯一路径（`python scripts/noai_gate.py --check-consistency` 退出码 0；这里的 45 原是按 `^\S+\.(py|json|toml|md)` 数的另一口径，不算唯一路径数）。现行的门语义读 [`NOAI-GOVERNANCE.md`](NOAI-GOVERNANCE.md)，逐条硬约束读 `../AGENTS.md`，批次签字怎么做以 `scripts/noai_batch_sign.py --help` 为准 |
 | [`NOAI-GOVERNANCE.md`](NOAI-GOVERNANCE.md) | 禁改区治理流程：谁能批、批几个、台账怎么写 |
 | [`KNOWN-UNWIRED.md`](KNOWN-UNWIRED.md) | 已知未接线：`src/agentflow/tools/` 下哪个 `*_tools.py` 没被 `tools/__init__.py` 的 `_MODULES` 装配（现读清单——改了装配就要回来改它） |
-| [`GUARDS.md`](GUARDS.md) | **三件只读护栏的最小说明**（2026-11-21 新增）：`wellformed/`（产物畸形 15 类统一判据）、`sysguard.py` + `sysresidue.py`（系统自动写点的 `refused/derived/unchecked` 读数）、`seedinject.py`（种子投放，只放文件不入库）—— 各自给代码落点、读数入口与判据 |
+| [`GUARDS.md`](GUARDS.md) | **三件只读护栏的最小说明**（2026-11-21 新增）：`wellformed/`（产物畸形 16 类统一判据）、`sysguard.py` + `sysresidue.py`（系统自动写点的 `refused/derived/unchecked` 读数）、`seedinject.py`（种子投放，只放文件不入库）—— 各自给代码落点、读数入口与判据 |
+| [`WORKSPACE-LAYOUT.md`](WORKSPACE-LAYOUT.md) | **工作区目录与文件名的三级规范**（2026-11-25 新增，DIR-SPEC 路）：A 系统固定 / B 系统生成名 / C 有限自由，逐条给模式与层级上限；执行体是 `wellformed/naming.py` 的 `workspace_layout` 一类 |
 
 ### 2.1 角色 / 协作链 / 数据台账（2026-11-22 新增，ROLEDOC / SYSCOMP 路）
 

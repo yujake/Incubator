@@ -86,4 +86,8 @@ _SPECS: Mapping[str, _Spec] = {
     # 论文包（2026-11-22，PAPER-PKG-FIX）：`appendix.tex` 必须是片段且被 `main.tex`
     # `\input`；有台账渲染物而研究台账全空 ⇒ 点名。规则见 `paperpackage.py`。
     "paper_package": _Spec(".", "path-tree", label="论文包"),
+    # 目录与文件名（2026-11-25，DIR-SPEC）：A 系统固定 / B 系统生成名 / C 有限自由
+    # 三级规范。规则自己摊开整棵树（`naming._walk`），见 `naming.py` /
+    # `docs/WORKSPACE-LAYOUT.md`。
+    "workspace_layout": _Spec(".", "path-tree", label="目录与文件名"),
 }

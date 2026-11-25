@@ -6,10 +6,11 @@
 
 ## 1. `wellformed/` —— 产物畸形的统一判据（MALFORM 路）
 
-- **是什么**：把"这个工作区里的产物有没有畸形"收成一处判据 —— 15 类产物
+- **是什么**：把"这个工作区里的产物有没有畸形"收成一处判据 —— 16 类产物
   （`KINDS`：vsigns / literature / relations / statements / lit_candidates / tasks /
   usage_ledger / sessions / manuscripts / proof_reports / acceptance / artifacts /
-  roster_retired / layout / paper_package），每类一根轴：形状 / 词表 / 内部一致性 / 跨表指向 / 落点布局。
+  roster_retired / layout / paper_package / workspace_layout），每类一根轴：
+  形状 / 词表 / 内部一致性 / 跨表指向 / 落点布局 / 目录与文件名。
 - **三态**：`ok` / `malformed`（带 Finding：文件、位置、逐字读数、怎么改）/
   `unchecked`（没查成）。`unchecked` 不折成 `ok`。
 - **落点**：`src/agentflow/wellformed/`（`__init__.py` 收口，规则按类别各一个模块；
