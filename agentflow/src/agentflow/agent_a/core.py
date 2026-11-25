@@ -16,6 +16,21 @@ from .ingest_local import _IngestLocal
 from .shelf_search import _ShelfSearch
 from .walk_citations import _WalkCitations
 
+#: 页类扩展名：下到这些东西不是"拿到了论文"，而是"拿到了对方返回的网页/错误体"。
+#:
+#: 名字由下载器按内容类型给（`fetch.infer_extension`：`text/html → ".html"`），所以
+#: 扩展名是"这份字节是什么"的一个可核读数；真机 2026-11-25 21:23:48 那份 AWS WAF
+#: challenge 页就是 `.html`（2 020 B）。
+EVIDENCE_SUFFIXES = (".html", ".htm", ".xhtml", ".xml", ".json", ".js", ".css")
+
+#: 证据字节（下到了但不是论文）的落点目录，相对工作区根。
+#:
+#: 为什么不落 `library/<文献号>/`：那个目录的规范是"这条文献的原件 + 同 stem 的抽读件"
+#: （`locallib.py` 的落点章节与 `litread.text_rel`）。证据字节住进去会被读侧当成文献
+#: 原件 —— `literature.path` 指它、`text.extract` 抽它、`wellformed` 按 `<stem>.pdf`
+#: 核它；而它恰恰是"这一篇没拿到"的证据。
+EVIDENCE_DIR = "downloads/rejected"
+
 
 class _Core:
     def __init__(
@@ -486,15 +501,30 @@ class _Core:
         """把 staging 里的字节搬进 `library/` 的唯一落点，返回 `(相对路径, 清洗过的 download)`。
 
         一处实现、两处使用（新建行与补下载共用）：搬文件的判据只有一个 ——
-        `status ∈ ("ok", "content_mismatch")` 且有 staged 字节。`content_mismatch`
-        的字节照样落盘：它是证据（能看到对方返回了什么），只是下游不许拿它当文献抽取；
-        丢掉证据会让"为什么下载不到"变成不可查的问题。
+        `status ∈ ("ok", "content_mismatch")` 且有 staged 字节。
+
+        ## 落点身份：内容 sha 优先（2026-11-26 LANDINGIDENT ①）
 
         落点名由 `locallib.library_landing` 一处给（与 `search_tools._adopt_file` /
-        `locallib.ingest_directory` 共用）：`library/<文献号>/<清洗过的名>`
-        （2026-11-25 业主裁定：`<6位号>/<名>` 回归正确形态，推翻 B2a 的扁平落点）。
-        `lit_id` 由调用方在同一事务里先 `tx.alloc_id("lit")` 拿到 —— 目录名就是这一行的号，
-        不落临时名、也不改名。同一内容已在库里 ⇒ 不搬第二份、也不覆盖。
+        `locallib.ingest_directory` 共用）：同一个文献号目录里，
+        同一份字节只能有一个名字。`library_landing` 先按内容 sha 找，找到就复用那一份
+        （`reused=True`），
+        名字参数只是"库里还没有这份字节时"的命名建议。`lit_id` 由调用方在同一事务里先
+        `tx.alloc_id("lit")` 拿到 —— 目录名就是这一行的号，不落临时名、也不改名。
+
+        回执写在返回的 download 里（`landing` 一格，见下面各分支）：`reused` 是
+        "这份字节已经在库里，本次零写入"，`duplicate_in` 是"同一份字节还在别的文献号
+        目录里"（跨号重复：允许，但不许静默 —— 调用方把它记成事件）。
+
+        ## 非文献页不进文献命名空间（2026-11-26 LANDINGIDENT ④）
+
+        `status != "ok"`、或字节是页类扩展名（`.html` / `.xml` / `.json` …，典型来源是
+        WAF challenge 页、cookie 同意页、反爬落地页）⇒ 不落 `library/<文献号>/`：
+        那个目录的规范是"这条文献的原件 + 同 stem 的抽读件"，证据字节住进去会被读侧
+        当成文献原件（`literature.path` 指它、`text.extract` 抽它）。它落
+        `downloads/rejected/`（`EVIDENCE_DIR`）并在 download 里留 `evidence_path` ——
+        "留作证据"与"住进文献目录"是两件事，今天之前被合成了同一件（真机 2026-11-25
+        21:23:48：2 020 B 的 WAF 页住进 `library/000001/`、和论文同 stem）。
 
         搬失败（例如目录不可写）⇒ `status="failed"`、`rel_path=None` ——
         绝不让"没搬成"被下游读成"下到了"。
@@ -504,16 +534,39 @@ class _Core:
         st = dl.get("status")
         if not (staged and Path(staged).exists() and st in ("ok", "content_mismatch")):
             return None, out
+        src = Path(staged)
         try:
-            src = Path(staged)
-            # 落点名由内容决定：hash 从要搬的那份字节现算（不靠 download 记录里的自述）。
             sha = sha256_file(src)
-            landing, target = library_landing(self.store.library, src, sha, lit_id=lit_id)
+        except OSError as e:  # 读不到 staged 字节：不能假装算过 hash
+            out["status"] = "failed"
+            out["error"] = f"staged_unreadable: {type(e).__name__}: {e}"
+            return None, out
+        suffix = src.suffix.casefold()
+        if st != "ok" or suffix in EVIDENCE_SUFFIXES:
+            return self._attach_evidence(src, sha, lit_id, str(st), out)
+        try:
+            # 落点名由内容决定：hash 从要搬的那份字节现算（不靠 download 记录里的自述）。
+            reading: dict = {}
+            landing, target = library_landing(self.store.library, src, sha,
+                                              lit_id=lit_id, reading=reading)
             target.parent.mkdir(parents=True, exist_ok=True)
+            size = src.stat().st_size
             # 同内容复用：这份字节已在库里 ⇒ 不搬第二份、不覆盖既有文件（幂等）。
-            if not (target.exists() and sha256_file(target) == sha):
-                # 同盘 os.replace 原子；跨盘回退到 move
-                shutil.move(str(src), str(target))
+            reused = bool(reading.get("reused"))
+            if not reused:
+                if target.exists() and sha256_file(target) == sha:
+                    # 竞态：两次落点之间另一个写者刚落了同一份字节 —— 与 ① 同一种事实
+                    reused = True
+                else:
+                    # 同盘 os.replace 原子；跨盘回退到 move
+                    shutil.move(str(src), str(target))
+            out["landing"] = {
+                "rel": landing,
+                "reused": reused,
+                "sha256": sha,
+                "bytes": size,
+                "duplicate_in": list(reading.get("duplicate_in") or []),
+            }
         except Exception as e:  # 建目录/搬文件失败 => 降级为"未下载"，但不丢元数据
             # 两个动作放在同一个 try 里是判据逼出来的：只包 move 时，
             # 落点父目录建不出来会让 `mkdir` 抛出并把整轮 A 带崩 ——
@@ -522,6 +575,48 @@ class _Core:
             out["error"] = f"move_failed: {type(e).__name__}: {e}"
             return None, out
         return landing, out
+
+    def _attach_evidence(self, src: Path, sha: str, lit_id: str, st: str,
+                         out: dict) -> tuple[None, dict]:
+        """把"下到了但不是论文"的字节落到 `downloads/rejected/`，返回 `(None, download)`。
+
+        落 `library/` 之外、但不是丢弃：它是"对方到底返回了什么"的唯一证据
+        （`verify` 的 `mismatch_without_evidence` 那条判据要的就是它）。`status` 保持
+        `content_mismatch`（下游 B 靠这个精确字符串跳过），`path` 恒为 None ——
+        `literature.path` 的语义是"这条文献的原件"，证据字节不是原件。
+
+        文件名带文献号与内容短哈希（`<lit_id>-<sha12><扩展名>`）：同一份证据重复落
+        ⇒ 同一个名字（同内容复用），不同文献号的同一份证据也能一眼认出是谁的。
+        """
+        src_path = Path(src)
+        try:
+            size = src_path.stat().st_size
+        except OSError as e:
+            out["status"] = "failed"
+            out["error"] = f"staged_unreadable: {type(e).__name__}: {e}"
+            return None, out
+        suffix = src_path.suffix.casefold() or ".bin"
+        rel = f"{EVIDENCE_DIR}/{lit_id}-{sha[:12]}{suffix}"
+        dest = self.store.root / rel
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if not (dest.exists() and sha256_file(dest) == sha):
+                shutil.move(str(src_path), str(dest))
+        except Exception as e:  # noqa: BLE001 —— 证据也搬不动时如实降级成"没拿到"
+            out["status"] = "failed"
+            out["error"] = f"evidence_move_failed: {type(e).__name__}: {e}"
+            return None, out
+        if st == "ok":
+            # 下载器说 ok、但落点按扩展名判成非文献页：状态必须降级，否则 B 会抽它。
+            out["status"] = "content_mismatch"
+            out["error"] = (f"content_type_mismatch: 扩展名 {suffix!r} 不是文献原件形态，"
+                            f"字节作证据落 {rel}，不进 library/<文献号>/")
+        out["evidence_path"] = rel
+        out["evidence_sha256"] = sha
+        out["evidence_bytes"] = size
+        out["landing"] = {"rel": None, "reused": False, "sha256": sha, "bytes": size,
+                          "duplicate_in": [], "evidence": rel}
+        return None, out
 
 
 class AgentA(_RunOnce, _Run, _SearchLiterature, _IngestLocal, _ShelfSearch, _WalkCitations, _Core):

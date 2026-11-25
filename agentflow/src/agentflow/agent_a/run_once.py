@@ -11,6 +11,15 @@ from typing import Any, Iterable, Sequence
 
 from ._support import ARunResult, D, Path, S, T, X, make_lease, shutil, tempfile
 from .clear_stage import _finish
+# 落点回执的三件（2026-11-26 LANDINGIDENT ②③）住在 `agent_a/landing.py`：本文件贴着
+# `src_files_gt800_lines` 的 800 行软基线，把这三个带长 docstring 的 helper 加在这里会把
+# "三格"顶出去（实测 731 → 887）。名字保持调用点不变，判据仍只有一处实现。
+from .landing import (
+    duplicate_download_receipt as _duplicate_download_receipt,
+    landing_allowed as _landing_allowed,
+    note_landing_receipt as _record_landing_receipt,
+)
+
 from .. import litstage as L
 from .. import sysresidue as _SR    # SYSRESIDUE ④：两个去重格（`_keys` / `dedup_key`）只有一处算
 
@@ -463,12 +472,36 @@ class _RunOnce:
                         # 允许这一次把字节补上。没有这一步，"某篇在库却没有文件"就是个
                         # 死局：候选每次都被判重跳过，而 P1 要求必查的那几篇必须落盘。
                         old_dl = existing.get("download") or {}
-                        needs_file = (not existing.get("path")) or str(old_dl.get("status")) != "ok"
+                        needs_file = _landing_allowed(existing)
                         existing_id = str(existing["lit_id"])
-                        got_path, dl_clean = self._attach_staged(
-                            dict(entry.get("download") or {}), existing_id)
-                        # 这一格下面三处分支都要读，先算一次（`_attach_staged` 之后不再改）。
-                        dl_status = str(dl_clean.get("status"))
+                        staged_dl = dict(entry.get("download") or {})
+                        if not needs_file:
+                            # ---- 短路（2026-11-26 LANDINGIDENT ②）：这一行
+                            # 已经有可用的字节 ⇒ 不落第二份。改前这里无条件 `_attach_staged`，`needs_file`
+                            # 只决定要不要回填 `path`：同一份 arXiv PDF 被两个 hint 各下一次
+                            # 就落成两份，且第二份没有任何 literature 行指到它（真机
+                            # 2026-11-25 21:23:46/48：两份 217352 B 的 PDF + 一份 2 020 B 的
+                            # WAF 页住进 library/000001/，行上 path 一个字没动）。
+                            # 位置在 `_attach_staged` 之前是本条的全部：不是"落了不回填"，
+                            # 是"根本不落"。真要替换字节，那是另一件事（要显式声明 + 改
+                            # path/sha），不是"顺手下第二份"。
+                            receipt = _duplicate_download_receipt(
+                                self.store, request_id=req["request_id"], slot=slot,
+                                existing=existing, dl=staged_dl)
+                            if receipt:
+                                # 不落也要说得出来（③）：一条事件 + 一格计数 ——
+                                # 盘上不动、账上可查（"没下"与"下了没落"处置完全不同）。
+                                tx.info("duplicate_download_refused", **receipt)
+                                result.landing_refused += 1
+                                result.landing_refused_items.append(receipt)
+                            got_path, dl_clean, dl_status = None, {}, ""
+                        else:
+                            got_path, dl_clean = self._attach_staged(staged_dl, existing_id)
+                            # 这一格下面三处分支都要读，先算一次（`_attach_staged` 之后不再改）。
+                            dl_status = str(dl_clean.get("status"))
+                            # 落点回执（③）：同内容复用 / 跨号重复 / 证据字节各留一条事件。
+                            _record_landing_receipt(tx, result, req["request_id"], slot,
+                                                    existing_id, dl_clean)
                         backfilled = bool(needs_file and got_path)
                         # 真的试过（不是"没有 PDF URL"/"预算用尽"那种 skipped）就记账 ——
                         # 与新建行那一支同一个口径：新建行会让失败留在行上，
@@ -550,14 +583,29 @@ class _RunOnce:
                     # 时才建落点目录（`library/<lit_id>/`），判据因此只有一份。
                     dl = entry.get("download") or {}
                     rel_path, dl_clean = self._attach_staged(dict(dl), lit_id)
+                    _record_landing_receipt(tx, result, req["request_id"], slot, lit_id,
+                                            dl_clean)
                     st = dl.get("status")
+                    # 落点判据（不是下载器自述）才是"这一篇到底拿到了什么"的读数：
+                    # 证据字节那一档（网页/错误体落 downloads/rejected/）的 `path` 是 None，
+                    # 状态被 `_attach_staged` 降级成 `content_mismatch` ⇒ 只进 suspect。
+                    clean_st = str(dl_clean.get("status") or st)
                     if rel_path:
                         if st == "ok":
                             result.downloaded += 1
                         else:
                             result.download_suspect += 1
-                    elif st == "failed":
+                    elif clean_st == "failed":
                         result.download_failed += 1
+                    elif clean_st == "content_mismatch":
+                        result.download_suspect += 1
+                    # 落点回执跟着行走（2026-11-26 LANDINGIDENT ③）：改前这一格只写
+                    # pre-landing 的 `dl`，于是"字节已在库里（reused）/ 落到别处（evidence）"
+                    # 这两件事在行上读不出来 —— 盘上多一份而行上不留痕，正是事故形态。
+                    dl_row = {k: v for k, v in dl.items() if not k.startswith("_")}
+                    for key in ("landing", "evidence_path", "evidence_sha256", "evidence_bytes"):
+                        if key in dl_clean:
+                            dl_row[key] = dl_clean[key]
 
                     row = S.Literature(
                         lit_id=lit_id,
@@ -574,7 +622,7 @@ class _RunOnce:
                         venue=entry["venue"],
                         language=entry["language"],
                         added_at=S.now_iso(),
-                        download={k: v for k, v in dl.items() if not k.startswith("_")},
+                        download=dl_row,
                     )
                     row.validate()
                     rowd = row.to_dict()

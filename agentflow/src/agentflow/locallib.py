@@ -66,6 +66,7 @@ __all__ = [
     "DROP_ZONES",
     "IngestReport",
     "LocalHit",
+    "content_duplicates_across_entries",
     "declaration_path",
     "declaration_verdict",
     "excerpt_for",
@@ -160,22 +161,132 @@ def _safe_name(path: Path) -> str:
 _ENTRY_ID_RE = re.compile(r"^\d{4}$|^\d{6}$")
 
 
-def library_landing_name(source: Path | str, lit_id: str) -> str:
-    """新收编的一份字节在 `library/` 下的相对名：`<文献号>/<清洗过的原名>`。
+#: 内容 sha256 的合法形态（64 位小写十六进制）。
+#:
+#: 落点身份的第一判据是内容，所以这个形态必须是判据而不是"调用方大概会传对"：
+#: 传一个 12 位短哈希进来，`_same_content_in_entry` 会拿它去比 64 位全哈希、
+#: 永远不相等 ⇒ "内容优先"静默退化成"按名字落"，而盘上照样成功、没有任何读数报出来。
+_SHA256_RE = re.compile(r"[0-9a-f]{64}")
+
+
+def _size_or_none(path: Path | str) -> int | None:
+    """`path` 的字节数（读不到 ⇒ None）。只用作哈希预筛，不参与任何判定。"""
+    try:
+        return Path(path).stat().st_size
+    except OSError:
+        return None
+
+
+def _same_content_in_entry(entry_dir: Path, want: str, size: int | None = None) -> Path | None:
+    """`entry_dir` 里内容就是 `want` 的那一份（按名字排序取第一份；没有 ⇒ None）。
+
+    "内容 sha 优先"的唯一实现：落点身份先问内容、再问名字。`size` 只是省哈希的预筛
+    —— 同内容必同字节数，所以它不改变判据、只少读盘（`library/` 里一条文献目录通常
+    只有 `<stem>.pdf` + `<stem>.txt` 两份，但历史目录可能有十几份）。
+    """
+    if not entry_dir.is_dir():
+        return None
+    try:
+        files = sorted((p for p in entry_dir.iterdir() if p.is_file()), key=lambda p: p.name)
+    except OSError:  # 目录读不了 ⇒ 当作"没有同内容"，由调用方按名字落（fail-open 只影响去重，不影响写入）
+        return None
+    for p in files:
+        if size is not None and _size_or_none(p) != size:
+            continue
+        try:
+            if sha256_file(p) == want:
+                return p
+        except OSError:
+            continue
+    return None
+
+
+def content_duplicates_across_entries(library: Path | str, sha256_hex: str, *, lit_id: str,
+                                      source_size: int | None = None) -> list[str]:
+    """同一份字节在别的文献号目录里的落点（跨号重复读数；只读，不判错）。
+
+    ## 为什么这是"读数"而不是"拒绝"
+
+    同一份字节落两个文献号，可能是两条真实不同的题录：预印本与期刊版、会议版与
+    期刊版、或者一条按题名收、一条按 DOI 收的同一篇。本路不改"可引/不可引"，也不
+    替人判"这两行该不该并"，所以允许它发生。但允许不等于静默：落点函数把这个
+    读数交给调用方，写者把它记进回执（`agent_a.run_once` 的 `download.same_bytes_other_entry`
+    事件）。没有这条读数时，盘上"同一份字节两份文件"与"两份不同的文献"长得一模一样
+    —— 真机 2026-11-25 21:23 的事故就是从这种同形里长出来的。
+
+    返回相对 `library/` 的名字（排好序）；`lit_id` 自己那一条不算。
+    `source_size` 是哈希预筛（同内容必同字节数）。
+    """
+    want = str(sha256_hex or "").strip().lower()
+    if not _SHA256_RE.fullmatch(want):
+        raise ValueError(
+            f"内容 hash 必须是 64 位小写十六进制（收到 {sha256_hex!r}）—— "
+            "跨号重复的判据要靠它")
+    base = Path(library)
+    own = str(lit_id or "").strip()
+    if not base.is_dir():
+        return []
+    out: list[str] = []
+    try:
+        entries = sorted((p for p in base.iterdir()
+                          if p.is_dir() and _ENTRY_ID_RE.match(p.name)),
+                         key=lambda p: p.name)
+    except OSError:
+        return []
+    for entry in entries:
+        if entry.name == own:
+            continue
+        hit = _same_content_in_entry(entry, want, source_size)
+        if hit is not None:
+            out.append(hit.relative_to(base).as_posix())
+    return out
+
+
+def library_landing_name(source: Path | str, lit_id: str, *,
+                         library: Path | str | None = None,
+                         sha256_hex: str | None = None) -> str:
+    """新收编的一份字节在 `library/` 下的相对名：内容 sha 优先，名字只是第二判据。
+
+    ## 判定顺序（"落点身份"的全部）
+
+    ① 内容（传了 `library` + `sha256_hex` 才判这一档）：`library/<文献号>/` 下已经
+       有同 sha 的一份 ⇒ 返回那一份的名字。⇒ 同一份字节在同一个文献号目录里
+       只能有一个名字；名字差异（两个写者各给一个 `hint`）不得产生第二份文件。
+    ② 名字：没有同内容的 ⇒ `<文献号>/<清洗过的原名>`（`_safe_name`：保留扩展名、
+       把 Windows 非法字符换成 `_`）。
+    ③ 撞名：②那个名字已被另一份不同内容占着 ⇒ 由 `library_landing` 追加内容
+       短哈希（绝不覆盖既有文件）。
+
+    为什么 ①先于②、而不是"按名字找到再看内容"：落点的身份是"这条文献的那一份字节"，
+    不是"谁先给它起了什么名"。同一份 arXiv PDF 会被两个写者用两个 `hint` 各下一次
+    （`search.download` 用模型给的 `hint`、`run_once` 补下载用 `slugify(title)`），
+    按名字判就必然落成两份，且第二份没有任何 `literature` 行指到它（真机 2026-11-25
+    21:23:46 现场：两份 217352 B、sha256 全等 `62DC8BA5…` 的 PDF 同住 `library/000001/`，
+    行上 `path` 只指其中一份）。①落地之后，任何写者、任何名字、任何次数的重复
+    写入都收敛到同一份文件。
 
     `lit_id` 必须是已经分配好的文献号（4 位老号 / 6 位新号）：落点与登记行用同一个号，
     否则盘上会出现「目录叫 A、行上号是 B」的第二套名字。三个写者都在事务里先
     `tx.alloc_id("lit")` 再调本函数。
 
-    文件名只做清洗（`_safe_name`：保留扩展名、把 Windows 非法字符换成 `_`），不再拼内容
-    hash 前缀：同一份字节两次收编由 `lit_id` 的判重复用同一个号（`_known_hashes`），
-    落到同一条目录里；名字撞上而内容不同时由 `library_landing` 追加内容短哈希，绝不覆盖。
+    不给 `library` / `sha256_hex` 的调用（读侧、以及 B 给抽读件起名的那一处
+    `agent_b/core.py`）走 ②，形态与 2026-11-25 裁定逐字相同：`<文献号>/<清洗名>`。
     """
     lid = str(lit_id or "").strip()
     if not _ENTRY_ID_RE.match(lid):
         raise ValueError(
             f"落点目录名必须是文献号（4 位老号 / 6 位新号），收到 {lit_id!r} —— "
             "`library/<文献号>/<名>` 是现行规范（2026-11-25），没有号就没有目录名")
+    want = str(sha256_hex or "").strip().lower()
+    if library is not None and want:
+        if not _SHA256_RE.fullmatch(want):
+            raise ValueError(
+                f"内容 hash 必须是 64 位小写十六进制（收到 {sha256_hex!r}）—— "
+                "内容优先的判据要靠它")
+        base = Path(library)
+        hit = _same_content_in_entry(base / lid, want, _size_or_none(source))
+        if hit is not None:
+            return hit.relative_to(base).as_posix()
     return f"{lid}/{_safe_name(Path(source))}"
 
 
@@ -214,44 +325,68 @@ def strip_landing_hash(landing: str) -> str:
 
 
 def library_landing(library: Path | str, source: Path | str,
-                    sha256_hex: str, *, lit_id: str) -> tuple[str, Path]:
-    """一条新收编的字节的落点：`(library 相对名, 绝对落点)`，同名不同内容绝不覆盖。
+                    sha256_hex: str, *, lit_id: str,
+                    reading: dict | None = None) -> tuple[str, Path]:
+    """一条新收编的字节的落点：`(library 相对名, 绝对落点)`，内容 sha 优先、绝不覆盖。
 
     三个写者共用这一个函数（`search_tools._adopt_file`、`ingest_directory`、
-    `agent_a.core._attach_staged`）：相对名只由 `library_landing_name` 一处给
-    （`<文献号>/<清洗名>`），本函数只多做两件事 ——
-    ① 目标文件已存在且内容相同 ⇒ 直接复用那个名字（同一份字节不搬第二份）；
+    `agent_a.core._attach_staged`）：身份顺序与名字形态由 `library_landing_name` 一处给，
+    本函数只多做两件事 ——
+    ① 目标（无论是"同内容既有的那一份"还是"按名字该落的那一份"）已存在且内容相同
+       ⇒ 直接复用它（同一份字节不搬第二份）。这一条就是"同一份字节、两次不同 `name`、
+       同一个 `lit_id` ⇒ 只有一个文件"的实现：内容先命中时 `library_landing_name`
+       已经把名字换回既有那一份的名字，本函数只把 `reused=True` 记进回执；
     ② 名字撞上而内容不同 ⇒ 追加内容短哈希（8 → 16 → 32 → 64 位），最后带
-    「源文件 + 内容」的短哈希，一个既有文件都不覆盖（覆盖会毁掉已建立的引文定位）。
+       「源文件 + 内容」的短哈希，一个既有文件都不覆盖（覆盖会毁掉已建立的引文定位）。
+
+    ## `reading` 是落点回执（可选出参，不参与判定）
+
+    `{"rel": str, "sha256": str, "reused": bool, "duplicate_in": [<别的文献号>/<名>, …]}`。
+    `reused=True` = "这份字节已经在库里，本次零写入"；`duplicate_in` = 同一份字节在
+    别的文献号目录里的落点（跨号重复读数，判据见 `content_duplicates_across_entries`
+    —— 允许、但不许静默）。写者拿它落事件/回执：真机 2026-11-25 21:23 的事故形态正是
+    "盘上多两份、行上不留痕"，回执要回答"谁、什么 URL、写到哪、为什么"。
 
     它不建目录、也不搬字节：谁写（`copy2` / `move`）谁负责 `dest.parent.mkdir(...)`。
     """
     want = str(sha256_hex or "").strip().lower()
-    if not re.fullmatch(r"[0-9a-f]{64}", want):
+    if not _SHA256_RE.fullmatch(want):
         raise ValueError(
             f"内容 hash 必须是 64 位小写十六进制（收到 {sha256_hex!r}）—— "
             "同名不同内容的判据要靠它")
     base = Path(library)
     src = Path(source)
-    clean = _safe_name(src)
-    rel = library_landing_name(src, lit_id)
-    dest = base / rel
-    if not dest.exists():
-        return rel, dest
-    if dest.is_file() and sha256_file(dest) == want:
-        return rel, dest
-    stem = Path(clean)
     lid = str(lit_id or "").strip()
-    for chars in (8, 16, 32, 64):
-        alt = f"{lid}/{stem.stem}-{want[:chars]}{stem.suffix}"
-        cand = base / alt
-        if not cand.exists():
-            return alt, cand
-        if cand.is_file() and sha256_file(cand) == want:
-            return alt, cand
-    tail = hashlib.sha256(f"{src}|{want}".encode("utf-8")).hexdigest()[:8]
-    alt = f"{lid}/{stem.stem}-{tail}{stem.suffix}"
-    return alt, base / alt
+    size = _size_or_none(src)
+    # ① 内容优先：`library_landing_name` 先看 `<lid>/` 下有没有同 sha 的一份。
+    rel = library_landing_name(src, lid, library=base, sha256_hex=want)
+    dest = base / rel
+    reused = dest.is_file() and sha256_file(dest) == want
+    if not reused and dest.exists():
+        # ② 名字被另一份不同内容占着 ⇒ 追加内容短哈希，既有文件一个字节都不动。
+        stem = Path(_safe_name(src))
+        for chars in (8, 16, 32, 64):
+            alt = f"{lid}/{stem.stem}-{want[:chars]}{stem.suffix}"
+            cand = base / alt
+            if not cand.exists():
+                rel, dest, reused = alt, cand, False
+                break
+            if cand.is_file() and sha256_file(cand) == want:
+                rel, dest, reused = alt, cand, True
+                break
+        else:
+            tail = hashlib.sha256(f"{src}|{want}".encode("utf-8")).hexdigest()[:8]
+            alt = f"{lid}/{stem.stem}-{tail}{stem.suffix}"
+            rel, dest, reused = alt, base / alt, False
+    if reading is not None:
+        reading.update({
+            "rel": rel,
+            "sha256": want,
+            "reused": bool(reused),
+            "duplicate_in": content_duplicates_across_entries(
+                base, want, lit_id=lid, source_size=size),
+        })
+    return rel, dest
 
 
 def _machine_summary(pages: int, *, name: str = "") -> str:

@@ -121,6 +121,18 @@ class ARunResult:
     #: 口径见 `agent_a/clear_stage.py::_unprocessed_reason_self_drive`。
     unprocessed_reasons: dict = field(default_factory=dict)
 
+    # ---- 落点身份（2026-11-26 LANDINGIDENT ②③）
+    #
+    # 为什么这两格在结果上、而不只是事件流里：`run_once` 的返回值是调用方（M / 父角色）
+    # 唯一会读的东西。"没落"与"落了"必须在这一层就分得开 —— 改前的事故形态是
+    # `duplicated=2` 而盘上多两份文件、行上一个字没动，返回值里看不出任何异常。
+    #: 这一次"字节已在库、又下一份"被拦下的条数（0 = 没发生，或这一趟没有字节可谈）。
+    landing_refused: int = 0
+    #: 上面那几笔的逐条回执（谁 / 什么 URL / 现算 sha256 / 既有 path / 为什么没落）。
+    landing_refused_items: list[dict] = field(default_factory=list)
+    #: 这一次"同一份字节已经在这个文献号目录里 ⇒ 零写入"的条数（内容 sha 优先命中）。
+    landing_reused: int = 0
+
     def to_dict(self) -> dict:
         return {
             "processed": self.processed,
@@ -154,6 +166,9 @@ class ARunResult:
             "pending_note": self.pending_note,
             "clear_stage": dict(self.clear_stage),
             "unprocessed_reasons": dict(self.unprocessed_reasons),
+            "landing_refused": self.landing_refused,
+            "landing_refused_items": [dict(it) for it in self.landing_refused_items],
+            "landing_reused": self.landing_reused,
         }
 @dataclass
 class ClaimOutcome:

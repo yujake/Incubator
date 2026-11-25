@@ -518,11 +518,18 @@ def _check_2(rep, lit_by_id, literature, requests, store):
         elif dl.get("status") == "content_mismatch":
             # 缺陷 #8 的契约：检测到内容类型不符时，字节必须留作证据。
             # 丢了文件就再也无法回答"对方到底返回了什么"，而那个答案正是修复的依据。
-            rep.issues.append(
-                Issue("warning", "literature", lid, "mismatch_without_evidence",
-                      "download.status=content_mismatch 但没有 path —— 证据字节没被保留，"
-                      "事后无法核查对方返回了什么（缺陷 #8 的契约要求保留）")
-            )
+            # 2026-11-26 LANDINGIDENT ④：证据字节不再住 `library/<文献号>/`
+            # （那里是文献原件的位置，WAF 页住进去会被当成原件抽取），改落
+            # `downloads/rejected/` ⇒ 本判据要认 `download.evidence_path` 那一格，
+            # 否则"证据留下了"会被报成"没留下"（读数不许撒谎）。
+            kept = str(dl.get("evidence_path")
+                       or (dl.get("landing") or {}).get("evidence") or "")
+            if not kept:
+                rep.issues.append(
+                    Issue("warning", "literature", lid, "mismatch_without_evidence",
+                          "download.status=content_mismatch 但没有 path —— 证据字节没被保留，"
+                          "事后无法核查对方返回了什么（缺陷 #8 的契约要求保留）")
+                )
 
 
 
