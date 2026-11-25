@@ -482,7 +482,7 @@ class _Core:
         if base.get("url_source"):
             out["url_source"] = base["url_source"]
         return out
-    def _attach_staged(self, dl: dict) -> tuple[str | None, dict]:
+    def _attach_staged(self, dl: dict, lit_id: str) -> tuple[str | None, dict]:
         """把 staging 里的字节搬进 `library/` 的唯一落点，返回 `(相对路径, 清洗过的 download)`。
 
         一处实现、两处使用（新建行与补下载共用）：搬文件的判据只有一个 ——
@@ -491,10 +491,10 @@ class _Core:
         丢掉证据会让"为什么下载不到"变成不可查的问题。
 
         落点名由 `locallib.library_landing` 一处给（与 `search_tools._adopt_file` /
-        `locallib.ingest_directory` 共用）：`library/<内容 sha256 前 12 位>-<清洗过的名>`。
-        本函数刻意不接 `lit_id`：落点与号无关，同一份字节两次落库到同一个名字上；
-        同一内容已在库里 ⇒ 不搬第二份、也不覆盖。旧布局 `library/<lit_id>/<名>` 不再由
-        任何写者产出。
+        `locallib.ingest_directory` 共用）：`library/<文献号>/<清洗过的名>`
+        （2026-11-25 业主裁定：`<6位号>/<名>` 回归正确形态，推翻 B2a 的扁平落点）。
+        `lit_id` 由调用方在同一事务里先 `tx.alloc_id("lit")` 拿到 —— 目录名就是这一行的号，
+        不落临时名、也不改名。同一内容已在库里 ⇒ 不搬第二份、也不覆盖。
 
         搬失败（例如目录不可写）⇒ `status="failed"`、`rel_path=None` ——
         绝不让"没搬成"被下游读成"下到了"。
@@ -508,7 +508,7 @@ class _Core:
             src = Path(staged)
             # 落点名由内容决定：hash 从要搬的那份字节现算（不靠 download 记录里的自述）。
             sha = sha256_file(src)
-            landing, target = library_landing(self.store.library, src, sha)
+            landing, target = library_landing(self.store.library, src, sha, lit_id=lit_id)
             target.parent.mkdir(parents=True, exist_ok=True)
             # 同内容复用：这份字节已在库里 ⇒ 不搬第二份、不覆盖既有文件（幂等）。
             if not (target.exists() and sha256_file(target) == sha):

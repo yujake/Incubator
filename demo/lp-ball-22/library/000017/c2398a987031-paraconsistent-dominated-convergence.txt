@@ -1,0 +1,612 @@
+===== page 1 =====
+Paraconsistent Dominated Convergence
+Anggha Nugraha
+Abstract
+The Levi-Civita field R of formal Laurent series is a constructive, non-Archi-
+medean ordered field that supports a full Lebesgue measure and integration theory,
+including a Dominated Convergence Theorem. This paper embeds that integration
+theory into the paraconsistent Chunk and Permeate framework, extending it from
+elementary calculus to genuine measure theory. The source chunk is modelled by
+R with its measure and integral, while the target chunk is the classical real line
+R. A permeability relation exports the standard part of the internal integral, and
+it is shown that the Dominated Convergence Theorem permeates from the source
+chunk to the target chunk, yielding the classical Lebesgue Dominated Convergence
+Theorem without any choice principles and without the ultrafilters required by
+nonstandard measure theory. The construction is entirely explicit and demonstrates
+that paraconsistent logic can provide a rigorous foundation for deep analytical tools
+while keeping inconsistencies safely confined.
+1
+Introduction
+Infinitesimal reasoning has been both a powerful heuristic and a source of logical diffi-
+culty since the origins of calculus. The classic example is the computation of a derivative
+f ′(x) = f(x+h)−f(x)
+h
+where h is treated as non-zero when dividing and then set to zero at
+the end. Taken at face value, this procedure is contradictory. Classical analysis resolved
+the issue by eliminating infinitesimals and replacing them with limits, following Cauchy
+and Weierstrass. Robinson [6] later showed that infinitesimals could be introduced rigor-
+ously using model-theoretic ultrapowers, yielding nonstandard analysis. In that setting a
+transfer principle guarantees that any first-order statement true in the standard reals R
+is also true in the hyperreals ∗R, and conversely. However, the transfer principle relies on
+the existence of free ultrafilters, which are non-constructive objects whose construction
+requires the Axiom of Choice. Moreover, the full transfer machinery is far heavier than
+what is needed for many elementary applications.
+An alternative, constructive approach builds a field containing infinitesimals directly
+from ordinary sequences. The field RZ< of formal Laurent series in a fixed positive in-
+finitesimal ϵ is a concrete, totally ordered field that contains R, infinite numbers, and
+infinitesimals. In [4], this field was studied and used as the source chunk in the Chunk &
+Permeate (C&P) strategy [1]. The C&P strategy splits an inconsistent theory (such as the
+union of the axioms of R with the existence of infinitesimals) into two consistent chunks
+and defines a permeability relation that allows certain formulas to flow from one chunk
+to the other while keeping contradictions localized. In that application to differential
+calculus, the source chunk contains RZ< and a Newton quotient, the target chunk is the
+complete real line R, and the permeability relation exports the standard part of the New-
+ton quotient as the classical derivative. This yields a constructive, choice-free derivation
+1
+arXiv:2607.15723v1  [math.LO]  17 Jul 2026
+===== page 2 =====
+of the basic rules of differentiation. However, Brown and Priest’s original implementation
+of C&P for infinitesimal calculus [1], as well as its subsequent extension [4], left integral
+theory unaddressed. Building on those foundations, the present paper provides a formal,
+non-trivial paraconsistent strategy for integration.
+Our main goal is to obtain a Dominated Convergence Theorem (DCT) inside a para-
+consistent theory and to permeate it to the classical Lebesgue DCT. The DCT is a corner-
+stone of modern analysis, and its paraconsistent derivation demonstrates that the C&P
+framework is robust enough to handle deep measure-theoretic arguments while remaining
+constructive and choice-free. To obtain a DCT we need a genuine measure theory on the
+field RZ<. In earlier work [4], RZ< is constructed as an explicit field of formal Laurent se-
+ries, and it is showed that its concrete sequence representation makes it a natural model
+for the source chunk in a Chunk & Permeate strategy. Mathematically, RZ< coincides
+with the well-studied Levi-Civita field R, so we may freely import the complete Lebesgue
+integration theory developed in [9, 8]. The novelty here is not the field itself, but the
+paraconsistent encapsulation, i.e. we bring this measure theory into the source chunk ΣS,
+equip it with a permeability relation, and thereby obtain the classical DCT on R as a
+permeated consequence, without any appeal to the Axiom of Choice.
+The novelty of this work is threefold. First, it provides the first paraconsistent presen-
+tation of a full Lebesgue integral on a constructive non-Archimedean field. The integral
+is not merely a Riemann-like sum but a genuine measure-theoretic construct that satis-
+fies the standard convergence theorems. Second, it shows that the C&P strategy handles
+measure-theoretic subtleties, not just algebraic contradictions, confirming the robustness
+of the logical architecture. Third, it makes explicit the connection between the Levi-Civita
+measure theory and paraconsistent logic, opening a bridge between two communities that
+have largely worked in isolation. It also highlights the constructive, choice-free nature of
+the whole development, which distinguishes it from nonstandard measure theory (Loeb
+measures) that depends on ultrafilters.
+The paper is organised as follows. Section 2 reviews the field RZ<, microstability, and
+the C&P strategy for derivatives. Section 3 sets up the two chunks and the permeability
+relation for integration. Section 4 summarises Levi-Civita measure theory and proves
+the DCT. Section 5 proves the main permeation theorem.
+Section 6 concludes with
+significance and future work.
+2
+The field RZ< and Chunk & Permeate
+We recall the essentials from [4].
+The non-Archimedean field RZ<. The set RZ< consists of all two-sided real sequences
+with only finitely many non-zero entries on the negative (infinite) side:
+RZ< =
+n
+x = ⟨. . . , x−2, x−1, bx0, x1, x2, . . . ⟩
+ ∃N ∀n < −N : xn = 0
+o
+.
+The hat marks the standard part St(x) = x0. By writing ϵ as ⟨b0, 1, 0, . . . ⟩, every element
+becomes a formal Laurent series x = P∞
+n=−∞xnϵn. Addition is defined componentwise,
+while multiplication is Cauchy convolution. With the lexicographic order, RZ< is a totally
+ordered field. The valuation val(x) = min{n ∈Z : xn̸ = 0} (with val(0) = ∞) is discrete
+and non-Archimedean. Finite elements are those with val(x) ≥0. Let F = {x ∈RZ< :
+x is finite} denote the set of finite elements. The standard part map St : F →R is a
+surjective ring homomorphism whose kernel is the set of infinitesimals (val(x) > 0).
+2
+===== page 3 =====
+Microstability.
+A function f : RZ< →RZ< is microstable if for every x and every
+infinitesimal η,
+St(f(x + η)) = St(f(x)).
+Microstability is preserved by addition, multiplication, composition, and by the absolute
+value. All standard elementary functions are microstable.
+Topologies. The valuation induces the valuation topology τv via the ultrametric d(x, y) =
+2−val(x−y). A sequence (xn) converges in τv (xn
+v−→x) iff val(xn −x) →∞, i.e. every
+coefficient eventually stabilises. The standard part induces the standard topology τSt via
+the pseudometric | St(x) −St(y)|.
+Chunk & Permeate for derivatives. The C&P strategy [1] resolves the inconsistency
+arising from the simultaneous presence of a positive infinitesimal and the completeness of
+R by partitioning the theory into two chunks:
+• Source chunk ΣS: contains the field axioms of RZ< (ordered field, no completeness,
+no Archimedean property) together with a positive infinitesimal ϵ. The intended
+model is RZ< itself.
+• Target chunk ΣT: contains the axioms of a Dedekind-complete Archimedean or-
+dered field. The intended model is the real line R.
+Neither chunk is inconsistent on its own. The union ΣS ∪ΣT is inconsistent because ΣS
+asserts the existence of an element smaller than all positive rationals while ΣT asserts
+that no such element exists. The C&P strategy avoids explosion by never reasoning from
+the union of all axioms. Instead, any proof is carried out entirely within one chunk, and
+a permeability relation ρ specifies which formulas may pass from one chunk to the other.
+In the case of derivatives, the permeability relation allows a formula of the form
+St
+f(x + ϵ) −f(x)
+ϵ
+
+= g(x)
+in ΣS to flow to ΣT as the classical derivative f ′(x) = g(x), provided f is microstable.
+Microstability guarantees that the standard part of the Newton quotient is well-defined
+and that the permeated formula is the correct classical derivative. The contradictions
+involving ϵ remain in ΣS and have no image under ρ, so they cannot infect ΣT. This
+architecture is the blueprint for the integration theory developed in the present paper.
+3
+Chunk and Permeate for Integration
+Consider the first-order theory T obtained by joining the following axioms:
+(i) the axioms of an ordered field,
+(ii) the existence of a positive infinitesimal ϵ, i.e. an element satisfying 0 < ϵ and ϵ < 1
+n
+for every n ∈N,
+(iii) the Dedekind completeness axiom (every non-empty bounded set has a least upper
+bound), and
+(iv) the axioms of the classical Lebesgue integral for measurable functions, including the
+Dominated Convergence Theorem.
+3
+===== page 4 =====
+This theory is inconsistent, e.g. in any model containing a positive infinitesimal, the set
+{x : 0 < x < ϵ} is non-empty and bounded above, yet it cannot have a least upper
+bound without contradicting the fact that ϵ is smaller than every positive rational. A
+direct merger of infinitesimal reasoning with classical analysis therefore leads to logical
+explosion under classical logic.
+3.1
+The Two Chunks
+The Chunk & Permeate strategy [1] resolves this predicament by partitioning the in-
+consistent theory into two consistent chunks, each modelled by a set-theoretic structure.
+Classical logic is retained inside each chunk and a permeability relation ρ controls which
+formulas may pass from one chunk to the other. Contradictions remain confined to the
+chunk where they arise, while the permeability relation exports only the consistent, in-
+formative consequences.
+The source chunk ΣS. The language LS of the source chunk extends the language of
+ordered fields with the following additional symbols: a constant symbol ϵ (the infinitesi-
+mal), a unary function symbol St (the standard part), a binary function symbol I(·, ·) (the
+Levi-Civita integral), and a unary function symbol µ (the Levi-Civita measure, applied
+to sets, but we treat it as part of the integral notation). The axioms of ΣS are:
+(S1) Field axioms. The usual axioms of an ordered field.
+(S2) Infinitesimal. ϵ > 0 and ϵ < 1
+n for every standard n ∈N (where n is the embedding
+of the natural number as the constant sequence (n, n, . . . )).
+(S3) Standard part. The function St is defined only on the set of finite elements F
+and satisfies St(x) = x0 (the 0-th coefficient). Equivalently, St is a surjective ring
+homomorphism F →R whose kernel is the set of infinitesimals.
+(S4) Levi-Civita measure. The axioms of the S-measure on the Levi-Civita field as
+developed in [9, 8] (definition via inner and outer covers by intervals, countable
+additivity under the natural summability condition, and µ([a, b]) = b −a).
+(S5) Levi-Civita integral. The integral I f dµ is defined for measurable functions f
+via the usual limit of integrals of simple functions, and satisfies linearity, mono-
+tonicity, the Monotone Convergence Theorem, Fatou’s Lemma, and the Dominated
+Convergence Theorem (Theorem 4.3).
+The axioms (S4) and (S5) are not repeated here in full. They are the standard basis of
+the measure theory on the Levi-Civita field, which we summarised in Section 4. Crucially,
+ΣS does not include the Dedekind completeness axiom or the Archimedean property. The
+intended model of ΣS is the concrete field RZ< (Section 2) equipped with its Levi-Civita
+measure and integral.
+The target chunk ΣT. The language LT of the target chunk is the usual language of
+real analysis which contains the ordered field symbols and a function symbol
+R
+for the
+classical Lebesgue integral. The axioms are:
+(T1) Dedekind completeness. Every non-empty set that is bounded above has a least
+upper bound.
+(T2) Archimedean property. For every x there exists n ∈N with x < n.
+4
+===== page 5 =====
+(T3) Lebesgue integral. The axioms of the Lebesgue integral for measurable functions
+(linearity, monotonicity, Monotone Convergence Theorem, Fatou’s Lemma, Domi-
+nated Convergence Theorem, etc.).
+The intended model is the real line R with the usual Lebesgue measure. The languages
+LS and LT share only the ordered field symbols. The symbols ϵ, St, I, and µ do not appear
+in LT, and the Lebesgue integral
+R
+does not appear in LS. This separation is essential
+for the permeability relation to function as a controlled channel.
+3.2
+The Permeability Relation
+The permeability relation ρ specifies exactly which sentences of ΣS may be exported to
+ΣT.
+Definition 3.1 (Permeability for integrals). For a microstable function f on a closed
+interval [a, b] ⊆RZ< whose standard part ˇf(x) = St(f(x)) (with St(x) = x) is Lebesgue
+integrable, we put
+St(Ib
+a f dµ) = I ,
+Z St(b)
+St(a)
+ˇf(t) dt = I
+
+∈ρ.
+In plain language, the permeability relation allows us to strip the infinitesimal part of
+an integral equality and obtain a classical equality of Lebesgue integrals. The restriction
+to microstable functions is necessary because otherwise the standard part ˇf would not be
+well-defined (its value would depend on the choice of representative inside a monad). All
+elementary functions are microstable, so this restriction is benign in practice.
+Because the permeability relation already covers equalities of the form St(I f) =
+R ˇf for
+all microstable integrable functions, the Dominated Convergence Theorem proved inside
+ΣS together with this relation entails the classical Lebesgue Dominated Convergence
+Theorem for the standard parts ˇfn, ˇf, ˇg. This permeation is carried out in full detail in
+Section 5.
+3.3
+Managing Inconsistency
+The Chunk & Permeate strategy now works as follows. All reasoning involving infinites-
+imals, the non-Archimedean field RZ<, and the Levi-Civita integral is carried out inside
+ΣS, using classical logic but without invoking completeness. The Dominated Convergence
+Theorem is proved in ΣS (Theorem 4.3). When we want to obtain a classical result, we
+apply the permeability relation: the equality St(I fn) =
+R ˇfn allows us to translate the
+internal DCT into the classical DCT on R. The crucial point is that the contradictions
+inherent in the combined theory are sentences of LS that have no ρ-image in LT. For ex-
+ample, the sentence “ϵ > 0 and ϵ < 1
+n for all n ∈N” cannot be matched with any sentence
+of LT via ρ, because ϵ and the standard part map do not belong to LT. Therefore these
+contradictions remain isolated in ΣS and cannot infect ΣT. Explosion is avoided, and the
+combined theory ΣS ∪ΣT is non-trivial.
+This logical architecture is the engine that powers the remainder of the paper. In
+Section 4 we summarise the relevant parts of the Levi-Civita measure theory that realise
+the axioms (S4) and (S5), and in Section 5 we carry out the permeation of the DCT in
+full detail.
+5
+===== page 6 =====
+4
+Measure and Integration on the Levi-Civita Field
+The Levi-Civita field R coincides with our RZ<. We now present the necessary ingredients
+of the measure theory developed by Shamseddine [9, 8], which we adopt as the internal
+integration theory of ΣS.
+Measurable sets and measure. A set E ⊆RZ< is S-measurable if for every ϵ > 0 in
+RZ< there exist two families of pairwise disjoint intervals {In} and {Jn} such that
+∞
+[
+n=1
+In ⊆E ⊆
+∞
+[
+n=1
+Jn,
+∞
+X
+n=1
+l(Jn) −
+∞
+X
+n=1
+l(In) < ϵ,
+where l([a, b]) = b −a and both series converge in the valuation topology. The S-measure
+of E is then
+µ(E) = lim
+ϵ→0
+∞
+X
+n=1
+l(In) = lim
+ϵ→0
+∞
+X
+n=1
+l(Jn),
+independent of the choice of intervals. Every interval [a, b] is S-measurable with µ([a, b]) =
+b −a. Moreover, if {An} is a sequence of pairwise disjoint S-measurable sets such that
+P∞
+n=1 µ(An) converges, then S∞
+n=1 An is S-measurable and µ(S∞
+n=1 An) = P∞
+n=1 µ(An).
+The collection of S-measurable sets is closed under finite intersections and under countable
+unions of sets whose measures form a null sequence.
+Integration of measurable functions. A function f : RZ< →RZ< is measurable if
+preimages of intervals are measurable. For a measurable set E ⊆RZ<, we write 1E for its
+indicator function, i.e. 1E(x) = 1 if x ∈E and 1E(x) = 0 otherwise. A simple function
+is a finite linear combination of indicator functions of measurable sets. The integral of a
+non-negative simple function ϕ = Pk
+i=1 αi1Ei (with αi ≥0) is I ϕ dµ = P
+i αiµ(Ei). For
+an arbitrary non-negative measurable function f, one defines
+I f dµ = sup
+n
+I ϕ dµ | ϕ simple, 0 ≤ϕ ≤f
+o
+.
+A general measurable function f is integrable if both its positive and negative parts are
+integrable, i.e. their integrals are finite; in that case I f dµ = I f + dµ−I f −dµ. The integral
+so defined is linear, monotone, and coincides with the Riemann integral on continuous
+functions.
+Convergence theorems. The Levi-Civita integral satisfies the same fundamental con-
+vergence theorems as the classical Lebesgue integral. Their proofs follow the classical
+pattern and rely on the fact that RZ< is complete with respect to the valuation topology
+(indeed, it is a spherically complete valued field, see [9]). We state the two that are needed
+for the DCT; both are proved in [9].
+Lemma 4.1 (Monotone Convergence Theorem). Let (hk)k∈N be an increasing sequence of
+non-negative integrable functions on a measurable set E ⊆RZ<, i.e. 0 ≤h1(x) ≤h2(x) ≤
+· · · for almost every x ∈E, and suppose hk(x) ↑h(x) pointwise almost everywhere. Then
+h is measurable, and
+IE h dµ = lim
+k→∞IE hk dµ,
+where the limit is taken in the valuation topology.
+6
+===== page 7 =====
+Lemma 4.2 (Fatou’s Lemma). Let (fn)n∈N be a sequence of non-negative integrable func-
+tions on E. Then
+IE lim inf
+n→∞fn dµ ≤lim inf
+n→∞IE fn dµ,
+where the limits inferior are taken in the valuation topology.
+Theorem 4.3 (Dominated Convergence Theorem in RZ<). Let (fn)n∈N be a sequence of
+integrable functions on a measurable set E ⊆RZ< such that
+(i) fn(x) →f(x) for µ-almost every x ∈E, and
+(ii) there exists an integrable function g with |fn(x)| ≤g(x) for all n and all x ∈E.
+Then f is integrable and
+IE f dµ = lim
+n→∞IE fn dµ,
+where the limit is taken in the valuation topology.
+Proof. By removing a null set we may assume that fn(x) →f(x) for every x ∈E. Define
+hn = 2g−|fn−f|. Because fn, f, g are integrable, so is hn, and hn ≥0. Moreover hn →2g
+pointwise on E. Apply Fatou’s Lemma 4.2 to the sequence (hn):
+IE 2g dµ = IE lim inf
+n→∞hn dµ ≤lim inf
+n→∞IE hn dµ.
+Now compute the right-hand side:
+IE hn dµ = IE(2g −|fn −f|) dµ = 2 IE g dµ −IE |fn −f| dµ.
+Hence
+2 IE g dµ ≤lim inf
+n→∞
+
+2 IE g dµ −IE |fn −f| dµ
+
+= 2 IE g dµ −lim sup
+n→∞IE |fn −f| dµ.
+Since IE g dµ is finite, we obtain
+lim sup
+n→∞IE |fn −f| dµ ≤0.
+The integral of a non-negative function is non-negative, so the lim sup is non-negative,
+forcing
+lim
+n→∞IE |fn −f| dµ = 0
+(in the valuation topology).
+Finally,
+IE fn dµ −IE f dµ
+ ≤IE |fn −f| dµ
+v−→0,
+which gives IE fn dµ
+v−→IE f dµ. Integrability of f follows from |f| ≤g and the integrability
+of g.
+Standard part of the integral. The connection to classical analysis is given by the
+following fact.
+Lemma 4.4. If f is microstable and integrable on [a, b], then the real function ˇf(t) =
+St(f(t)) (where t is any element with standard part t) is Lebesgue integrable on [St(a), St(b)]
+and
+St
+Ib
+a f dµ
+
+=
+Z St(b)
+St(a)
+ˇf(t) dt.
+The projection of an S-measurable set to R is Lebesgue measurable. This follows from
+the definition of the S-measure via interval covers and the fact that the standard part of
+a finite interval is a real interval. Consequently ˇf is measurable as the pointwise limit of
+measurable simple functions. This is a standard result in Levi-Civita integration (see [9]).
+7
+===== page 8 =====
+5
+Permeation of the Dominated Convergence Theo-
+rem
+We have now established that, inside the source chunk ΣS, the Levi-Civita integral on
+RZ< satisfies the Dominated Convergence Theorem (Theorem 4.3) with limits taken in the
+valuation topology. Our goal is to transport this result across the permeability relation
+ρ and thereby obtain the classical Lebesgue Dominated Convergence Theorem on R as
+a permeated consequence. Achieving this would show that the C&P strategy is robust
+enough to recover a fundamental theorem of real analysis, not just elementary calculus,
+and that it does so without any appeal to the Axiom of Choice. This transportation
+involves three main tasks:
+1. lift the pointwise convergence and domination from RZ< to the real standard parts,
+2. relate the Levi-Civita integral of a microstable function to the Lebesgue integral of
+its standard part, and
+3. pass the limit of integrals through the standard part map.
+Each of these tasks corresponds to a component of the permeability relation, and together
+they yield a rigorous derivation of the classical theorem.
+5.1
+Statement of the permeation theorem
+Theorem 5.1 (Permeation of the DCT). Let fn, f, g be microstable functions on [0, 1] ⊆
+RZ< that satisfy the hypotheses of Theorem 4.3 inside ΣS, that is,
+(i) fn(x) →f(x) for µ-almost every x ∈[0, 1],
+(ii) |fn(x)| ≤g(x) for all n and all x, with g integrable.
+Define real functions on the unit interval by
+ˇfn(t) = St(fn(t)),
+ˇf(t) = St(f(t)),
+ˇg(t) = St(g(t)),
+where for each t ∈[0, 1] we choose an arbitrary t ∈[0, 1] ⊂RZ< with St(t) = t (the choice
+is irrelevant by microstability). Then
+(i) ˇfn →ˇf pointwise almost everywhere in the sense of Lebesgue measure;
+(ii) | ˇfn(t)| ≤ˇg(t) for all t ∈[0, 1];
+(iii) ˇf is Lebesgue integrable, and
+Z 1
+0
+ˇf(t) dt = lim
+n→∞
+Z 1
+0
+ˇfn(t) dt.
+In other words, the classical Lebesgue Dominated Convergence Theorem is a permeated
+consequence of the inconsistent chunk ΣS.
+8
+===== page 9 =====
+5.2
+Proof of the permeation theorem
+1.
+From µ-almost everywhere convergence to Lebesgue-almost everywhere
+convergence. Let E ⊆[0, 1] ⊂RZ< be the exceptional set on which fn(x)̸ →f(x). By
+hypothesis, µ(E) = 0. Consider the set of real points
+ˇE = {t ∈[0, 1] | ∃t ∈E with St(t) = t}.
+We claim that ˇE is Lebesgue-measurable and has Lebesgue measure zero. To see this,
+recall that µ(E) = 0 means that for every standard k ∈N there exists a countable
+cover of E by intervals [ai, bi] ⊂RZ< with finite endpoints such that P
+i(bi −ai) < 1/k
+(as an element of RZ<). Because E ⊆[0, 1], we may intersect each interval with [0, 1]
+and he resulting sets are still intervals (or empty), their lengths do not increase, and all
+endpoints lie in [0, 1], hence are finite. Applying the standard part map, the projected
+intervals [St(ai), St(bi)] cover ˇE and the sum of their lengths is exactly St(P
+i(bi −ai)),
+which is < 1/k in R. Thus ˇE can be covered by intervals of arbitrarily small total length,
+so its Lebesgue outer measure (and hence its Lebesgue measure) is zero.
+Now take any t ∈[0, 1] \ ˇE.
+For every t with St(t) = t we have t /∈E, hence
+fn(t) →f(t) in the valuation topology. By definition of ˇfn and microstability (which
+guarantees the standard part is independent of the choice of t), we have St(fn(t)) = ˇfn(t),
+and similarly St(f(t)) = ˇf(t). Since valuation convergence of a sequence of finite elements
+implies convergence of the 0-th coefficients, we obtain ˇfn(t) →ˇf(t).
+Thus ˇfn →ˇf
+pointwise on [0, 1] \ ˇE, which has full Lebesgue measure. This proves statement (i).
+2. Domination of the real functions. From the pointwise inequality |fn(x)| ≤g(x)
+for all x ∈[0, 1] ⊂RZ<, we apply the standard part map, which is order-preserving on
+finite elements. For any t ∈[0, 1], pick t with St(t) = t. Then
+| ˇfn(t)| = | St(fn(t))| = St(|fn(t)|) ≤St(g(t)) = ˇg(t).
+The equality uses microstability, and the inequality uses the fact that |fn(t)| ≤g(t)
+elementwise. This yields statement (ii).
+3. Relationship between the Levi-Civita integral and the Lebesgue integral.
+Lemma 4.4 states that for any microstable integrable function h on [0, 1],
+St
+I1
+0 h dµ
+
+=
+Z 1
+0
+ˇh(t) dt.
+Applying this to h = fn and h = f (the integrability of f follows from the DCT inside
+ΣS, Theorem 4.3), we obtain
+St(I fn) =
+Z
+ˇfn,
+St(I f) =
+Z
+ˇf.
+4. Passing the limit through the standard part. Inside ΣS, Theorem 4.3 yields
+I1
+0 fn dµ
+v−→I1
+0 f dµ.
+All integrals are finite because they are bounded by I g, which is finite. If a sequence of
+finite elements converges in the valuation topology, then their standard parts converge as
+real numbers. Hence
+lim
+n→∞St(I fn) = St(I f).
+9
+===== page 10 =====
+Combining this with the equalities from step 3 gives
+lim
+n→∞
+Z 1
+0
+ˇfn(t) dt =
+Z 1
+0
+ˇf(t) dt.
+5. Integrability of ˇf. From step 2 we have | ˇf| ≤ˇg pointwise. The function ˇg is Lebesgue
+integrable by Lemma 4.4 applied to g. Therefore ˇf is dominated by an integrable function.
+In particular, it is measurable (as a pointwise limit of the measurable functions ˇfn) and
+its integral is finite, so it is Lebesgue integrable. This completes the proof of Theorem 5.1.
+The proof shows exactly how the permeability relation ρ operates.
+The equality
+St(I f) =
+R ˇf connects the internal integral in ΣS to the classical integral in ΣT, and
+the logical structure of the DCT is preserved through this connection. No contradictions
+cross from ΣS to ΣT, because the statements that involve ϵ or the non-Archimedean field
+are never placed in the domain of ρ. Thus the classical Lebesgue Dominated Convergence
+Theorem is rigorously obtained as a permeated consequence of the paraconsistent source
+chunk.
+6
+Discussion
+The successful embedding of the Levi-Civita Dominated Convergence Theorem into a
+Chunk & Permeate framework shows that the paraconsistent strategy is not limited to
+elementary calculus but can accommodate sophisticated measure-theoretic arguments.
+The choice of the Dominated Convergence Theorem is deliberate. It is arguably the single
+most important convergence theorem in Lebesgue integration, underpinning countless
+results in Fourier analysis, probability theory, functional analysis, and partial differential
+equations. A paraconsistent derivation of the DCT therefore demonstrates that the C&P
+strategy can handle the deep analytical machinery that modern mathematics depends
+on. If the C&P framework can recover the DCT, there is no principled reason it could
+not recover the other standard convergence theorems (Monotone Convergence, Fatou’s
+Lemma, Fubini’s Theorem) by similar permeability arguments.
+The present work extends the Chunk & Permeate programme from the elementary
+calculus of derivatives [4] to the much deeper realm of measure theory. This demonstrates
+that paraconsistent logic, far from being a mere logical curiosity, can provide a rigorous
+foundation for substantial parts of modern analysis. The C&P methodology manages
+inconsistency not by eliminating it, but by controlling the flow of information, and the
+success of the DCT permeation shows that this control is precise enough for measure-
+theoretic arguments.
+Our approach is constructive and choice-free.
+The Levi-Civita field is built from
+ordinary real sequences with componentwise operations. No ultrafilter or Axiom of Choice
+is required. This is a significant philosophical and technical advantage over traditional
+nonstandard measure theory (Loeb measures), which relies on an ultrapower construction
+and countable saturation [3]. Moreover, the explicit sequence representation makes the
+whole theory amenable to formalisation in proof assistants such as Coq or Lean, a direction
+that can be pursued in future work.
+The connection with the Levi-Civita field also places our work within a broader math-
+ematical context. Shamseddine’s measure theory on the Levi-Civita field is a fully de-
+veloped Lebesgue integration theory that includes not only the DCT but also Fubini’s
+theorem, the Radon-Nikodym theorem, and other standard results. By embedding this
+10
+===== page 11 =====
+theory into a C&P chunk, we have provided a new logical perspective on Levi-Civita
+integration. The fact that the internal DCT is a theorem of the Levi-Civita field means
+that the paraconsistent chunk is mathematically rich and that the permeability relation
+then acts as a faithful projection onto classical analysis.
+Furthermore, we note that the recently introduced L-measure on the Levi-Civita
+field [5] improves on the measure theory of Shamseddine and Berz by making the fam-
+ily of measurable sets a σ-algebra closed under complements. While the S-measure we
+have used is entirely sufficient for proving the DCT, the stronger closure properties of the
+L-measure would simplify several technical verifications, e.g. showing that the projection
+of a measurable set onto R is Lebesgue measurable becomes immediate. Incorporating
+that measure into the source chunk would therefore further streamline the permeability
+arguments, though it is not required for the current results.
+Several open problems deserve further investigation. First, the proof-theoretic strength
+of the DCT inside ΣS should be calibrated. Does the DCT require any non-constructive
+choice principles, or is it provable in a completely intuitionistic setting? Answering this
+would connect the present work to constructive reverse mathematics [7]. Second, the
+framework should be extended to stochastic integration and to models of mathematical
+physics that use infinitesimal probabilities, such as those in [2, 10]. Finally, the mechani-
+sation of the theory in a proof assistant would provide a fully verified implementation of
+non-Archimedean integration.
+7
+Conclusion
+We have provided a constructive, paraconsistent derivation of the classical Lebesgue Dom-
+inated Convergence Theorem by combining the measure theory on the Levi-Civita field
+with the Chunk & Permeate methodology. The source chunk, modelled by RZ< with
+its integral, allowed us to prove an internal DCT, which was then faithfully exported to
+the real line via a permeability relation. The whole development avoids non-constructive
+choice principles and offers a transparent foundation for analysis with infinitesimals. We
+hope these results encourage further exploration of paraconsistent logic in measure the-
+ory, probability, and mathematical physics, and we expect that the framework can be
+extended to other convergence theorems and to formalisation in proof assistants.
+References
+[1] Bryson Brown and Graham Priest. Chunk and permeate, a paraconsistent inference
+strategy. part i: The infinitesimal calculus. Journal of Philosophical Logic, 33(4):379–
+388, 2004.
+[2] Cristian S Calude and Monica Dumitrescu.
+Infinitesimal probabilities based on
+grossone. SN Computer Science, 1(1):36, 2020.
+[3] Nigel J Cutland. Nonstandard measure theory and its applications. Bulletin of the
+London Mathematical Society, 15(6):529–589, 1983.
+[4] Anggha S. Nugraha.
+A constructive field of infinitesimals: Chunk and Permeate
+approach, 2026. URL: https://arxiv.org/abs/2607.08206, arXiv:2607.08206.
+11
+===== page 12 =====
+[5] Mateo Restrepo Borrero, Vatsal Srivastava, and KHODR Shamseddine. On a new
+measure on the levi-civita field. p-Adic Numbers, Ultrametric Analysis and Applica-
+tions, 15(1):1–22, 2023.
+[6] Abraham Robinson. Non-standard analysis. Princeton University Press, 1974.
+[7] Sam Sanders. On the connection between nonstandard analysis and constructive
+analysis. Logique et Analyse, pages 183–210, 2013.
+[8] Khodr Shamseddine and Martin Berz. Measure theory and integration on the levi-
+civita field. Contemporary Mathematics, 319:369–388, 2003.
+[9] Khodr Mahmoud Shamseddine. New elements of analysis on the Levi-Civita field.
+Michigan State University, 1999.
+[10] Florentin Smarandache.
+Infinitesimal Punctures, 4:
+Infinitesimally Punctured
+Physics used in Extended Nonstandard Analysis. Infinite Study, 2026.
+12

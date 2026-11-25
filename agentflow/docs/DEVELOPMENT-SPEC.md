@@ -69,7 +69,7 @@
 **linter 的当次三栏（日常档）**：`error 0 / warning 36 / info 46`（观测 2026-11-23 05:2x，
 复跑 `python -B scripts/lint_rules.py`；2026-11-22 这一天并行施工的几条路各带进几条
 R002/R003/R009，实测过 22 / 46 —— 其中 **1 条 R009 的 error** 落在
-`tests/test_library_has_one_landing.py`（SEEDFIX 那条路新增的判据文件），不属本笔；
+`tests/test_library_each_entry_has_its_text.py`（LIBRARY-SHAPE 那条路重写的判据文件），不属本笔；
 本笔（B5）改过的文件在 linter 输出里 0 条）；2026-11-23 05:1x 复跑时那 1 条 R009 error 落在 `tests/test_agent_skills.py:717` —— 本路（NUMBERS-FINALIZE）只改 4 份文档、未碰 `tests/`；下面这段 21 / 19 是 2026-11-17 的历史读数 —— 2026-11-17 的 R003 登记 —— `session_ids_with_questions`
 在 `sessions.py` / `userio.py` 各一份属刻意分层，登记进 `SAME_NAME_ALLOWED` ⇒ 那一对不再报
 `warning`（21→19），同一登记让 R003 多出一条 info（44→45）。此后同一天的 SYSCT1（`adc44a8a`）
@@ -126,7 +126,7 @@ webui_routes_post       = 11   # 同上，按 `x[0] == 'POST'` 计数（2026-11-
 webui_routes_reader     = 19   # `len(r.READER_ROUTES)`（同上那条复跑命令的第四个数；只读面子表，2026-11-21：18 → 19，多的是 `/api/actions`）
 webui_routes_writer     = 12   # `len(r.WRITE_ROUTES)`（同上那条复跑命令的第五个数；写面子表，2026-11-21：9 → 11 → 12）
 webui_event_kinds       = 6    # `python -c "...from agentflow.webui import sse;print(len(sse.EVENT_KINDS))"`
-webui_test_files        = 58   # `(Get-ChildItem tests -Filter 'test_webui*.py').Count`（2026-11-24 20:4x 按工作树复跑 58；BATCH3 路按现盘现数写定。再往前 2026-11-23 03:32 复跑 56；A-3-EXEC 同日 03:1x 按现盘追平 54 → 56；再往前 2026-11-21 23:58 是 53 → 54，52 → 53 是 2026-11-20 收口第三批之后，45 → 52 是同日 WEBCLEAN 收口之后，36 → 45 是 2026-11-19，35 → 36 是 2026-11-14 的 +test_webui_cli_landing_alignment.py）。**这一格是活读数**：`tests/test_release_all.py` 的 `webui_readings()` 现算盘上条数、`live_reading_problems()` 逐键比对，写死旧值必红；`tests/` 按业主裁定不入 git（`.gitignore` 忽略、索引清空）⇒ 它跟的是**工作树**，不是索引 —— 2026-11-21 那句"刻意不抬"的旧口径（把它当"入库交付物口径"钉死）已作废，别再照它写
+webui_test_files        = 59   # `(Get-ChildItem tests -Filter 'test_webui*.py').Count`（2026-11-25 18:0x 按工作树复跑 59；BATCH3 路按现盘现数写定。再往前 2026-11-23 03:32 复跑 56；A-3-EXEC 同日 03:1x 按现盘追平 54 → 56；再往前 2026-11-21 23:58 是 53 → 54，52 → 53 是 2026-11-20 收口第三批之后，45 → 52 是同日 WEBCLEAN 收口之后，36 → 45 是 2026-11-19，35 → 36 是 2026-11-14 的 +test_webui_cli_landing_alignment.py）。**这一格是活读数**：`tests/test_release_all.py` 的 `webui_readings()` 现算盘上条数、`live_reading_problems()` 逐键比对，写死旧值必红；`tests/` 按业主裁定不入 git（`.gitignore` 忽略、索引清空）⇒ 它跟的是**工作树**，不是索引 —— 2026-11-21 那句"刻意不抬"的旧口径（把它当"入库交付物口径"钉死）已作废，别再照它写
 LIVE-READINGS:END
 ```
 
@@ -419,7 +419,7 @@ LIVE-READINGS:END
     `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import sse;print(len(sse.EVENT_KINDS))"`，
     键 `webui_event_kinds`；
   - 静态产物在 **`src/agentflow/web/static/`**：外壳 `static/index.html`（1760 B）+
-    `static/assets/index.DUBtJEqs.js`（245196 B）+ `static/assets/index.D8bpVw-o.css`（26775 B）；
+    `static/assets/index.C71D6JPb.js`（245390 B）+ `static/assets/index.B3NiEIHt.css`（26876 B）；
     （2026-11-24 20:4x 实测 —— BATCH3 路的前端重建：NUMCLAIM 那批页面文案改成插值 /
     中性描述，`types.ts` 重生成（`run_digest.steps_note`）之后 `tsc --noEmit` rc=0、
     `vite build` 一次成功；CSS 与上一版逐字节相同（`index.D8bpVw-o.css` 26775 B），
@@ -446,9 +446,9 @@ LIVE-READINGS:END
   - 另外两条形态被单独钉住：**静态路由与目录穿越**（`GET /static/<file>` 只服务
     `web/static/` 之下的文件，穿越一律 404、**不回落 `index.html`**）、
     **`/api/*` 未知路径不许吐 HTML**（给 API 客户端一段 HTML 比 404 更坏）；
-  - 判据文件共 **58** 个（`test_webui*.py`）；复跑
+  - 判据文件共 **59** 个（`test_webui*.py`）；复跑
     `(Get-ChildItem tests -Filter 'test_webui*.py').Count`，键 `webui_test_files`
-    （2026-11-24 20:4x 按现盘复跑实测：58（BATCH3 路按工作树现数写定；再往前
+    （2026-11-25 18:0x 按现盘复跑实测：59（BATCH3 路按工作树现数写定；再往前
     2026-11-23 03:32 是 56，2026-11-21 23:58 是 54（53 → 54；再往前 53 是 2026-11-20
     收口第三批之后，WEBCLEAN 收口时是 52，2026-11-19 是 45；这一格随并行施工变 ——
     本节第一次量到的是 10，2026-10-23 是 15，之后每落一条 `test_webui*.py` 就加一；

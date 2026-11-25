@@ -23,16 +23,14 @@ EXIT_MALFORMED = 1
 EXIT_UNCHECKED = 2
 
 #: Finding 的严重度。`error` 是形状/词表/指向的硬伤；`warning` 是应当看得见但可能
-#: 有正当来由的读数（例如旧工作区把 `path` 存成工作区相对路径）；`info` 是"有读数、
-#: 但已有解释"（例如手稿登记之后才落的签块让 ARTIFACTS 的 sha 落后一格）。
+#: 有正当来由的读数（例如旧工作区把 `path` 存成工作区相对路径）；`legacy` 是"读得通、
+#: 新写不产出"的历史形态（2026-11-25 起只用于 `library/` 的两档历史落点：`<4位号>/<名>`
+#: 与扁平一段）—— 它进读数、不翻三态；`info` 是"有读数、但已有解释"。
 #:
-#: 2026-11-22：这里曾有一档 `LEGACY = "legacy"`（B2a 给"旧布局读得通、不判畸形"立的
-#: 严重度名：进读数、不改三态）。业主 2026-11-22 裁定「旧工作区不必兼容」之后那一档
-#: 连同常量一起删了 —— 旧布局（`reports/` / `documents/` / `manuscripts/handoffs.jsonl`
-#: 与 `library/<lit_id>/` 两种旧落点）现在报 `error`、翻 `malformed`、退出码 1
-#: （严重度只有一个决定点：`layout.UNSUPPORTED_SEVERITY`）。不许把 `legacy` 加回来：
-#: 加回来等于把"旧工作区还能用"这条已撤销的裁定悄悄恢复成默认值。
-SEVERITIES: tuple[str, ...] = ("error", "warning", "info")
+#: 2026-11-22 那次裁定删过一档 `LEGACY = "legacy"`；2026-11-25 业主裁定
+#: 「`<6位号>/<名>` 回归正确形态、旧形态读得通但新写不产出」之后它按新语义回来：
+#: 只管"历史形态可见"，不再管"旧工作区还算可用"（那句 2026-11-22 的话已被推翻）。
+SEVERITIES: tuple[str, ...] = ("error", "warning", "legacy", "info")
 
 #: 本工具覆盖的产物类别。名字就是 CLI 的 `--kind` 取值。
 KINDS: tuple[str, ...] = (
@@ -57,6 +55,11 @@ KINDS: tuple[str, ...] = (
     # `appendix.tex` 必须是片段且被 `main.tex` `\input`；有台账渲染物而研究台账全空
     # ⇒ 点名（`paperpackage.py`）。这一档只报，不进收工门。
     "paper_package",
+    # 2026-11-25（DIR-SPEC）：工作区目录与文件名的三级规范（A 系统固定 / B 系统生成名 /
+    # C 有限自由）。同样是 `path-tree` 读法 —— 命名是整棵树的属性（同一段名字在 `out/`
+    # 下是子系统、在工作区根上是自由发挥）。规则见 `naming.py`，规范见
+    # `docs/WORKSPACE-LAYOUT.md`。它只报、不拦写入，也不进收工门。
+    "workspace_layout",
 )
 
 #: 工作区里"必须有"的表由 `reader.py` 的 `_Spec(required=True)` 逐条声明。

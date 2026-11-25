@@ -35,6 +35,7 @@ from filelock import FileLock, Timeout
 
 from . import migrate_concepts as MC
 from . import schema as S
+from .litread import RETIRED_LAYOUT_NOTE
 
 #: `_atomic_write` 的 `os.replace` 重试次数与退避基数。
 #: 总等待 = 0.02 + 0.04 + 0.08 + 0.16 + 0.32 = 0.62 秒 —— 足够跨过"另一个进程正
@@ -2221,30 +2222,51 @@ class Store:
         这是防路径穿越的最后一道闸：即使有人手工把 `path` 改成 `../../etc/passwd`，
         这里也会拒绝，而不是去读那个文件。
 
-        ## 只认扁平落点（2026-11-22 业主裁定：旧工作区不必兼容）
+        ## 现行形态（2026-11-25 业主裁定：`<6位号>/<名>` 回归正确形态）
 
-        `literature.path` 只有一种合法形态：`<内容 hash 前缀>-<名>` —— 扁平，落在
-        `library/` 下（`locallib.library_landing_name`；`search_tools._adopt_file` 与
-        `search.ingest_local` 共用）。分目录的旧形态（`<lit_id>/<名>`，真机
-        lp-ball-13 的 4 行、lp-ball-15 的 1 行）与多带一层 `library/` 前缀的写法
-        （`table.update` 事故留下的 `library/000001/x.pdf`）**不再读**：遇到就明说
-        「旧布局（不再支持）」，不静默返回、也不折成空 —— 折平会让"路径写旧了"读成
-        "文件不见了"，而两者该有不同的处置。
+        `literature.path` 的规范形态是 `<文献号>/<文件名>`：一条文献一条目录（目录名 =
+        文献号）、恰好一段斜杠。写侧唯一实现是 `locallib.library_landing_name`。
+
+        **读侧宽容两档历史形态**（这是 2026-11-25 与 2026-11-22 两版裁定的分界）：
+
+        * `<4位号>/<名>` —— p9 那批老盘（4 位号时代），`wellformed` 报 `legacy`；
+        * 一位（扁平）`<内容 hash 前缀>-<名>` —— B2a（2026-11-22）的落点，
+          lp-ball-15/22 的历史数据，自 2026-11-25 起退役，`wellformed` 报 `legacy`。
+
+        这两档都**读得通**：它们要被旧工作区的审计、抽取与引文回验读到；拒了会让
+        "盘上有、行上有"变成整片 `file_missing`。宽容的代价只落在读数上（legacy 可见），
+        不落在写入上 —— 新写一律 `<6位号>/<名>`，有判据钉死。
+
+        受控拒的只有两类（与 `litread.resolve_literature_path` 同一句）：
+
+        * 含斜杠而首段不是 2–6 位数字（工作区坐标系 `downloads/x.pdf`、多带一层
+          `library/…` 的事故写法）；
+        * 解析之后越出 `library/`（绝对路径 / `..` 绕出）。
         """
         if not rel:
             return None
         text = str(rel).replace("\\", "/").strip()
         while text.startswith("./"):
             text = text[2:]
-        first = text.split("/", 1)[0]
-        if text.startswith(S.LIT_PATH_PREFIX) or (("/" in text) and first.isdigit()):
-            raise StoreError(
-                f"旧布局（不再支持）：文献路径 {rel!r} 是分目录 / 带 `library/` 前缀的旧写法；"
-                "2026-11-22 起只认扁平落点 `library/<内容 hash 前缀>-<名>`"
-                "（改法：把文件按扁平名放进 `library/`，并把该行 `path` 改成扁平名）")
         if not text:
             return None
-        candidate = (self.library / text).resolve()
+        if text.startswith(S.LIT_PATH_PREFIX):
+            raise StoreError(
+                f"{RETIRED_LAYOUT_NOTE}：文献路径 {rel!r} 带了 `library/` 前缀"
+                "（这一格存的是相对 library/ 的名字）—— 规范写法是 `<6位号>/<文件名>`")
+        parts = [p for p in text.split("/") if p]
+        if len(parts) == 2:
+            head = parts[0]
+            if not (head.isdigit() and 2 <= len(head) <= 6):
+                raise StoreError(
+                    f"扁平落点已退役（2026-11-25 起回归 `<6位号>/<名>`）：文献路径 "
+                    f"{rel!r} 的首段不是文献号；规范写法是 `<6位号>/<文件名>`"
+                    "（旧扁平名与带 `library/` 前缀的写法都不再写；读旧数据请改成 `<号>/<名>`）")
+        elif len(parts) != 1:
+            raise StoreError(
+                f"扁平落点已退役（2026-11-25 起回归 `<6位号>/<名>`）：文献路径 {rel!r} "
+                "既不是「<文献号>/<文件名>」两段式，也不是一位的历史扁平名")
+        candidate = (self.library / "/".join(parts)).resolve()
         try:
             candidate.relative_to(self.library.resolve())
         except ValueError:

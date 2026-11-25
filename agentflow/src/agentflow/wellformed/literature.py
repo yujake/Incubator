@@ -153,76 +153,60 @@ def _rule_lit_download_consistency(ctx: _Ctx) -> list[Finding]:
     return out
 
 
-#: 落点名里内容 hash 前缀的长度下限（与 `locallib.LANDING_HASH_CHARS` 同源：12 位）。
-#: 这里不 import `locallib`：`wellformed` 是被 `statusreport` 拉起的轻入口，而
-#: `locallib` 会连带拉起 extract / store —— 只为认一个下界的耦合不值得。
-_LANDING_HASH_MIN = 12
-
-#: 新落点的形状：`<12 位以上小写十六进制内容 hash>-<名>`（一段、扁平）。
-_NEW_LANDING_RE = re.compile(r"^[0-9a-f]{%d,64}-" % _LANDING_HASH_MIN)
-
-
-def _landing_verdict(rel: str, library: Path) -> str:
-    """`path` 的落点判词：`layout.CANONICAL` / `layout.UNSUPPORTED` / `""`（判不了）。
-
-    这是另一个问题，不是第二份 `layout.layout_of`：那个分类器回答"这一份文件落在
-    哪个受管的一级目录（`reports/` / `documents/` / `manuscripts/` / `work/`）、合不合
-    规范"，`library/` 不在它管的那四个目录里（`layout_of("library/…")` 一律
-    `unrelated`）。这里回答的是"文献的 `path` 是旧落点还是新落点"，而且必须先
-    `is_file()` —— 文件不在是"判不了"，不是"旧布局"。
-
-    共用的只有判词与严重度那三格（`layout.CANONICAL` / `layout.UNSUPPORTED` /
-    `layout.UNSUPPORTED_SEVERITY`）：它们从 `layout.py` 取，不在这里另写一份
-    "旧布局算不算畸形"（业主 2026-11-22 裁定：旧工作区不必兼容）。
-
-    判定只看盘上真有一份文件的那几种形态（`is_file()`）：
-
-    * 一个路径段、且以内容 hash 前缀开头 ⇒ `CANONICAL`（`<hash>-<名>.pdf`，新写唯一形态）；
-    * 一个路径段、没有 hash 前缀 ⇒ `UNSUPPORTED`（`locallib` 2026-09 起的裸扁平落点）；
-    * 两个路径段、首段是六位（或老盘四位）文献号 ⇒ `UNSUPPORTED`（`<lit_id>/<名>`，
-      `_adopt_file` 的旧落点）。
-
-    读不到文件 ⇒ `""`：形态判不了是"文件不在"那件事（`path_on_disk` 的 warning
-    在管），不许在这里折成 `UNSUPPORTED` 或 `CANONICAL` —— 三态纪律：没查成不等于查过
-    没问题。其余形状（`downloads/x.pdf` 这种工作区坐标系、多层的目录）也一律 `""`：
-    这一条只认"相对 library/ 的落点"，别的坐标系归别的判据。
-    """
+def _normalized(rel: str) -> str:
+    """`path` 的形态判据输入：与 `litread._normalized` / `store.library_path` 同一套归一。"""
     text = str(rel or "").replace("\\", "/").strip()
     while text.startswith("./"):
         text = text[2:]
-    if text.startswith(S.LIT_PATH_PREFIX):
-        # 旧工作区里还有"多带一层 library/"的历史写法（读侧 `store.library_path`
-        # 同样剥这一层）：判形态时剥掉，否则整条会被读成 `""` 而永远不进读数。
-        text = text[len(S.LIT_PATH_PREFIX):]
-    parts = [p for p in text.split("/") if p]
-    if not parts or not (library / text).is_file():
+    return text
+
+
+def _landing_verdict(rel: str, library: Path) -> str:
+    """`path` 的落点判词：`layout.CANONICAL` / `layout.LEGACY` / `""`（判不了）。
+
+    这一条回答的是"文献的 `path` 是规范形态、历史形态，还是判不了"，与
+    `layout.layout_of` 不是同一个问题（后者管 `reports/` / `documents/` /
+    `manuscripts/` / `work/` 四个受管目录，`library/` 对它一律 `unrelated`）。
+
+    形态分类只有一份（`litread.path_shape`，与 `store.library_path` 同一套判据）：
+
+    * `<6位号>/<名>` ⇒ `CANONICAL`（2026-11-25 业主裁定的规范形态）；
+    * `<4位号>/<名>` ⇒ `LEGACY`（p9 那批 4 位号时代的老盘）；
+    * 一位扁平名（含 `<内容 hash 前缀>-<名>`）⇒ `LEGACY`（B2a 的落点，已退役）。
+
+    必须先 `is_file()`：文件不在是"判不了"（由 `path_on_disk` 的 warning 管），
+    不是"历史形态" —— 三态纪律：没查成不等于查过没问题。
+    """
+    shape = LR.path_shape(rel)
+    if shape in (LR.SHAPE_UNJUDGED, LR.SHAPE_BAD):
         return ""
-    if len(parts) == 1:
-        return _LAYOUT.CANONICAL if _NEW_LANDING_RE.match(parts[0]) else _LAYOUT.UNSUPPORTED
-    if len(parts) == 2 and _ID6_OR_4.match(parts[0]):
-        return _LAYOUT.UNSUPPORTED
-    return ""
+    text = _normalized(rel)
+    if not text or not (library / text).is_file():
+        return ""
+    return _LAYOUT.CANONICAL if shape == LR.SHAPE_ENTRY else _LAYOUT.LEGACY
 
 
 @_rule("literature", "layout")
 def _rule_lit_layout(ctx: _Ctx) -> list[Finding]:
-    """`literature.path` 的落点形态：旧布局（不再支持）报 `error`。
+    """`literature.path` 的落点形态：规范 `ok` / 历史形态 `legacy` / 判不了不报。
 
-    ## 为什么这条规则存在（`draft/195` #7 / #17 / #18 / #51）
+    ## 三次裁定的叠层（这就是为什么这一条有三态）
 
-    `library/` 曾有三个写者、两套布局（`_adopt_file` 写 `<lit_id>/<名>`、`locallib`
-    写裸扁平 `<名>`、`seedinject` 曾铺根）。读侧 `store.library_path` 只做拼接 ⇒ 两套
-    都读得通，于是盘上两套并存而没有一条判据会报（真机 lp-ball-13 的 4 份 `<id>/`、
-    lp-ball-15 顶层 24 份 `<hash>-名` + 1 个 `<id>/` 子目录；project1/4 一类老工作区
-    则是 `locallib` 的裸扁平名）。B2a 之后写侧只剩一个落点（`<hash>-名` 扁平）。
+    1. 2026-09 的最初设计：`library/<lit_id>/<名>`（每条文献一个目录）；
+    2. 2026-11-22 的 B2a（落地在 commit `b5175d00`，2026-11-23）：扁平
+       `<内容 hash 前缀>-<名>`，把 `<id>/<名>` 报成 `error`；
+    3. 2026-11-25 业主裁定：`<6位号>/<名>` 回归正确形态，推翻 B2a。
 
-    ## 旧布局现在报什么（业主 2026-11-22 裁定「旧工作区不必兼容」）
+    新裁定要求"旧数据读得通、但不许再写"，所以形态读数分三档而不是两档：
 
-    改前这一条给旧布局一档 `severity=legacy`（读得通、不改三态、退出码 0）。裁定之后
-    那一档取消：旧布局（`library/<lit_id>/<名>` 与裸扁平 `<名>`）现在报 `error`、把
-    `literature` 这一类翻成 `malformed`、整份读数退出码 1 —— 与 `layout.py` 对
-    `reports/` 一类的口径同一条（严重度共用 `layout.UNSUPPORTED_SEVERITY`，宽不宽容
-    只有那一格说了算）。逐条列在输出里：不许静默当 ok、不许折成空。
+    * `<6位号>/<名>` ⇒ 不报（`ok`）；
+    * `<4位号>/<名>` ⇒ `legacy`（p9 那批老盘，读得通、新写不产出）；
+    * 一位扁平名 ⇒ `legacy`（B2a 的落点，自 2026-11-25 起退役）；
+    * 其余形状 ⇒ 这里不报（由 `path_on_disk` 的 warning 或 `store.library_path`
+      的受控拒去说），因为"文件不在 / 形状非法"不是"历史形态"。
+
+    `legacy` 不是 `error`：真实盘上有 lp-ball-15/22 这类历史数据，报 error 会让
+    旧工作区整片变红；但 legacy 也不许静默 —— 它逐条进读数，并写明"新写不产出"。
     """
     out: list[Finding] = []
     if ctx.root is None:
@@ -232,41 +216,31 @@ def _rule_lit_layout(ctx: _Ctx) -> list[Finding]:
         raw = str(row.get("path") or "").strip()
         if not raw:
             continue
-        if _landing_verdict(raw, library) != _LAYOUT.UNSUPPORTED:
+        if _landing_verdict(raw, library) != _LAYOUT.LEGACY:
             continue
+        note = LR.legacy_note(raw) or "遗留形态（读得通、新写不产出）"
         out.append(_local_finding(
             ctx, "literature_layout_legacy",
-            f"旧布局（不再支持）：`path` 读到 {_shown(raw)} —— 这是旧落点"
-            "（`library/<lit_id>/<名>` 或裸扁平 `<名>`），业主 2026-11-22 裁定"
-            "「旧工作区不必兼容」⇒ 不再按「读得通的历史形态」放行。新写一律扁平 "
-            "`library/<内容 hash 前缀-名>`（`locallib.library_landing_name`）；"
-            "这一行不在这里搬（搬动会打断已建立的引文定位），下一次被新写替换时"
-            "自然迁移。",
-            row_no=n, field_name="path", severity=_LAYOUT.UNSUPPORTED_SEVERITY))
+            f"{note}：`path` 读到 {_shown(raw)}。规范形态是 `<6位号>/<名>`"
+            "（`locallib.library_landing_name`，2026-11-25 业主裁定）；"
+            "这一行不在这里搬（搬动会打断已建立的引文定位），下一次被新写替换时自然迁移。",
+            row_no=n, field_name="path", severity=_LAYOUT.LEGACY_SEVERITY))
     return out
 
 
 @_rule("literature", "path_on_disk")
 def _rule_lit_path_on_disk(ctx: _Ctx) -> list[Finding]:
-    """登记了 `path` 就要在盘上找得到（唯一基准：`library/`，两基准已删）。
+    """登记了 `path` 就要在盘上找得到（唯一基准：`library/`）。
 
-    ## 改前的两基准（2026-11-22 业主裁定「旧工作区不必兼容」后删掉）
+    只走 `litread.resolve_literature_path`（与 `store.library_path` 同一套形态判据、
+    同一句拒词，见 `tests/test_litread_and_library_path_give_the_same_answer.py`）：
 
-    改前这里是 `tried = [root/library/rel, root/rel]`：两个基准`any(is_file())`，
-    任一个探到就算"在盘上"。它比 `store.library_path` 宽 —— 同一份
-    `literature.path`，写侧/工具面说"旧布局（不再支持）"，`wellformed` 却说
-    "在盘上、没问题"。第二基准只服务过旧前缀/工作区形态，裁定之后整段不要。
-
-    现在只走 `litread.resolve_literature_path`（与 `store.library_path` 同一套形态
-    判据、同一句拒词，见 `tests/test_litread_and_library_path_give_the_same_answer.py`）：
-
-    * 扁平形态、文件在 ⇒ 不报（正控）；
-    * 扁平形态、文件不在 ⇒ `literature_path_missing`（warning）；
-    * 旧布局且旧形态的那一份真在盘上 ⇒ 这里不报 —— 形态归 `_rule_lit_layout`
-      的 `literature_layout_legacy`（`error`）。两边都报会让同一行既有"文件在"的
-      `error`、又有"读不到"的 `warning`，读数自相矛盾；
-    * 旧布局而那一份也不在 ⇒ `literature_path_missing`（形态规则判不了"文件不在"
-      这件事，三态纪律：没查成不许折成"没问题"，否则"文件丢了"会永远藏在"旧形态"后面）；
+    * 规范形态或历史形态、文件在 ⇒ 不报（历史形态由 `_rule_lit_layout` 报 legacy）；
+    * 文件不在 ⇒ `literature_path_missing`（warning）；
+    * 历史形态且文件真在 ⇒ 这里不报（形态归 layout；两边都报会让同一行既有 legacy
+      读数、又有"读不到"的 warning，互相冒充）；
+    * 形状非法（带斜杠而首段不是 2–6 位数字 / 段数不对 / 带 `library/` 前缀）⇒
+      warning，detail 点名"扁平落点已退役、规范是 `<6位号>/<名>`"；
     * 越界（`../` / 绝对路径绕出 `library/`）⇒ 同一档 warning，detail 点名越界。
     """
     out: list[Finding] = []
@@ -281,21 +255,81 @@ def _rule_lit_path_on_disk(ctx: _Ctx) -> list[Finding]:
         res = LR.resolve_literature_path(ctx.root, library, rel)
         if res.found:
             continue
-        if _landing_verdict(rel, library) == _LAYOUT.UNSUPPORTED:
-            # 旧形态、文件真在盘上：形态由 `literature_layout_legacy` 报（error）。
+        if _landing_verdict(rel, library) == _LAYOUT.LEGACY:
+            # 历史形态、文件真在盘上：形态由 `literature_layout_legacy` 报（legacy）。
             continue
         why = ""
-        if LR.OLD_LAYOUT_NOTE in res.reason:
-            why = ("（这一行的 `path` 是旧布局（不再支持），而旧形态的那一份也不在盘上 ⇒ "
-                   "「路径写旧了」与「文件不见了」两件事同时成立）")
+        if LR.RETIRED_LAYOUT_NOTE in res.reason:
+            why = ("（这个写法既不是 `<6位号>/<名>`，也不是可读的历史形态 ⇒ "
+                   "扁平落点自 2026-11-25 起退役、新写回归 `<6位号>/<名>`）")
         elif "越出" in res.reason:
-            why = ("（这个写法越出 `library/`：唯一基准是 `library/<扁平名>`，"
+            why = ("（这个写法越出 `library/`：唯一基准是 `library/<6位号>/<名>`，"
                    "工作区外的文件不算这一行的全文）")
         out.append(_local_finding(
             ctx, "literature_path_missing",
             f"`path` 读到 {_shown(rel)}，而按唯一基准 `library/` 解析不到这一份{why} ⇒ "
             "登记了位置却找不到内容；要么补回文件，要么把 path 置空并写清为什么没有全文",
             row_no=n, field_name="path", severity="warning"))
+    return out
+
+
+#: 二进制原件（正文不在它里面，抽出来的正文是另一份文件）。
+_BINARY_SUFFIXES: tuple[str, ...] = (".pdf", ".html", ".htm")
+
+
+@_rule("literature", "fulltext_on_disk")
+def _rule_lit_fulltext_on_disk(ctx: _Ctx) -> list[Finding]:
+    """`download.fulltext=ok` 就要在盘上找得到那份抽读件（与原件同目录、同 stem）。
+
+    ## 为什么这条规则存在（2026-11-25 LIBRARY-SHAPE）
+
+    真机 `demo/lp-ball-22` 的读数：25 行的 `download.fulltext` 全是 `ok`，而
+    `library/` 里只有 4 份抽读件，其余 21 行的原件是 PDF。于是"这一行有可读正文"
+    这句话在书架上是查不到的：`fs.read` 读 PDF 会拒（二进制），想读正文的人只能再抽一次。
+    这不是路径错（`path` 都在），是声明与盘面不一致。
+
+    ## 判据（三态：判不了不折成 ok）
+
+    * 行上没有 `fulltext`、或不是 `ok` ⇒ 不管（"没抽过"由 `tier_of_literature` 那一档报）；
+    * `path` 解析不到盘上 ⇒ 不管（`path_on_disk` 已经报了；两条同时报会让同一行既有
+      "文件不在"、又有"抽读件不在"，读数互相冒充）；
+    * `path` 指向的本身就是文本（`.txt` / `.md` …）⇒ 不报：那一份就是正文；
+    * `path` 指向二进制原件（PDF / HTML）而它的抽读件（`litread.text_rel`：同目录、
+      同 stem、`.txt`）不在 ⇒ 报 `warning`，detail 点名缺的是哪一份、两条出路。
+
+    为什么是 `warning` 而不是 `error`：这一条不否定"原件在、能抽"，它只否定"已经抽好并
+    可读"这句话；但 `warning` 在 `states._state_of` 里同样把这一类翻成 `malformed` ——
+    声明与盘面矛盾这件事不许静默。
+    """
+    out: list[Finding] = []
+    if ctx.root is None:
+        raise _Unchecked("没有工作区根，`download.fulltext` 与盘上抽读件对不了")
+    library = ctx.root / "library"
+    for n, row in ctx.rows:
+        dl = row.get("download")
+        if not isinstance(dl, Mapping):
+            continue
+        if str(dl.get("fulltext") or "") != LR.FULLTEXT_OK:
+            continue
+        raw = str(row.get("path") or "").strip()
+        if not raw:
+            continue
+        res = LR.resolve_literature_path(ctx.root, library, raw)
+        if not res.found or res.path is None:
+            continue
+        if res.path.suffix.casefold() not in _BINARY_SUFFIXES:
+            continue
+        text_rel = LR.text_rel(raw)
+        if text_rel and (library / text_rel).is_file():
+            continue
+        out.append(_local_finding(
+            ctx, "literature_fulltext_missing",
+            f"`download.fulltext`='ok' 而抽读件 `library/{text_rel}` 不在盘上 ⇒ "
+            f"这一行说「有可读正文」，书架里却只有二进制原件 {_shown(raw)}；"
+            "两条出路：让 A 跑 `text.extract(path=…, lit_id=…)` 把正文写成那份 `.txt`"
+            "（与原件同目录、同 stem），或把 `download.fulltext` 改成实档"
+            "（还没抽就删掉这一格，别写 `ok`）",
+            row_no=n, field_name="download.fulltext", severity="warning"))
     return out
 
 

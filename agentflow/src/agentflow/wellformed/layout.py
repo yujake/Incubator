@@ -97,12 +97,17 @@ ROLE_NAMES: tuple[str, ...] = tuple(S.ROLES) + (S.CONDUCTOR_ROLE,)
 CANONICAL = "canonical"
 #: 旧布局（不再支持）：`reports/` 下的一切、`documents/` 下的一切、`manuscripts/handoffs.jsonl`。
 UNSUPPORTED = "unsupported"
+#: 历史形态（读得通、新写不产出）：2026-11-25 起只用于 `library/` 的两档历史落点
+#: （`<4位号>/<名>` 与扁平一段）。它与 `UNSUPPORTED` 的区别是处置：前者不许再写但
+#: 不翻畸形（真实盘上有 lp-ball-15/22 这类历史数据，报 error 会让旧工作区整片变红），
+#: 后者是"这个目录已经退役、必须搬"。严重度只有 `LEGACY_SEVERITY` 一格说了算。
+LEGACY = "legacy"
 #: 落在受管的目录里而不合规范（新布局才能有的形态）。
 MALFORMED_FORM = "malformed"
 #: 不在本规范管的目录里（`code/` / `out/` / `notes/` / 根上的文件）—— 本层一个字都不判。
 UNRELATED = "unrelated"
 
-FORM_VERDICTS: tuple[str, ...] = (CANONICAL, UNSUPPORTED, MALFORMED_FORM, UNRELATED)
+FORM_VERDICTS: tuple[str, ...] = (CANONICAL, UNSUPPORTED, LEGACY, MALFORMED_FORM, UNRELATED)
 
 #: finding code：`reports/` 下的旧落点（退役目录）。
 CODE_REPORTS_RETIRED = "layout_reports_retired"
@@ -255,6 +260,14 @@ def layout_of(rel: Any) -> Landing:
 #: （`literature` 一类的 `_landing_verdict` 读的是同一格）—— 业主裁定的"旧工作区不必
 #: 兼容"是一条，宽严不在第二个地方另定。
 UNSUPPORTED_SEVERITY = "error"
+
+#: 历史形态那一档的严重度（`legacy` ⇒ 进读数、不翻三态、退出码不变）。
+#:
+#: 这是与 `UNSUPPORTED_SEVERITY` 成对的反真空打桩点：把它改成 `"error"`，旧工作区
+#: （lp-ball-15/22 与 p9 那批 4 位号老盘）立刻整片变红；改成 `"info"` 则"历史形态"
+#: 混进"有解释的读数"里，看不出它"新写不产出"。它只用于 `library/` 的历史落点
+#: （`literature.py` 的 `_landing_verdict` 读的是这一格）。
+LEGACY_SEVERITY = "legacy"
 
 #: 一个受管目录最多逐条列出多少份（`reports/` 真机 690 份；其余按目录分开算）。
 #:

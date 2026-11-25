@@ -1325,21 +1325,17 @@ def _selftest() -> int:
     def _extract(_path) -> _Doc:
         return _Doc()
 
-    def _write_lit(st: Store, name: str) -> str:
-        """按 2026-11-22 的唯一落点写一份文献字节，返回 `literature.path`。
+    def _write_lit(st: Store, name: str, lit_id: str) -> str:
+        """按 2026-11-25 的唯一落点写一份文献字节，返回 `literature.path`。
 
-        落点只有一种形态：`library/<内容 hash 前缀>-<名>`（扁平；`locallib.library_landing_name`）。
-        分目录的旧写法 `library/<lit_id>/<名>` 自 2026-11-22 起被 `store.library_path`
-        受控拒（「旧布局（不再支持）」）—— 自检若还按旧写法造夹具，主路径会在
-        acquire 阶段就被折成 `unreadable=1`，于是"概念/关系一个都没建"却看不出原因
-        （2026-11-23 全量跑里的 2/7 就是这一档）。
+        落点只有一种形态：`library/<文献号>/<清洗名>`（`locallib.library_landing_name`）。
+        扁平落点（`library/<内容 hash 前缀>-<名>`）是 B2a（2026-11-22）的旧裁定，
+        自 2026-11-25 起退役；本自检若还按旧写法造夹具，主路径会在 acquire 阶段
+        就读不到文件，于是"概念/关系一个都没建"却看不出原因。
         """
-        import hashlib
-
         from .. import locallib as _LL
 
-        rel = _LL.library_landing_name(Path(f"{name}.txt"),
-                                       hashlib.sha256(TEXT.encode("utf-8")).hexdigest())
+        rel = _LL.library_landing_name(Path(f"{name}.txt"), lit_id)
         dest = st.library / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(TEXT, encoding="utf-8", newline="\n")
@@ -1386,7 +1382,7 @@ def _selftest() -> int:
         # ---- 1) 主路径：概念复用 + 引文逐字核实 + related_concepts 由关系表派生
         st = Store(root)
         st.init(force=True)
-        rel_0000 = _write_lit(st, "selftest")
+        rel_0000 = _write_lit(st, "selftest", "0000")
         _add_lit(st, "0000", path=rel_0000)
         quote = "An abelian group is a group in which the commutative law holds."
         ext = _Extractor(
@@ -1415,7 +1411,7 @@ def _selftest() -> int:
                   for c in _concepts_now))
 
         # ---- 2) 概念复用而不是重复建：同名概念走 find_concept，只在歧义时建新的
-        rel_0001 = _write_lit(st, "selftest")
+        rel_0001 = _write_lit(st, "selftest", "0001")
         _add_lit(st, "0001", path=rel_0001)
         ext2 = _Extractor(concepts=[_Concept("group", ""), _Concept("交换群", "", ["abelian group"])], relations=[])
         b2 = AgentB(st, extractor=ext2, extract_text=_extract, config={"lease_seconds": 900, "max_attempts": 3})
@@ -1430,7 +1426,7 @@ def _selftest() -> int:
               bool(ext2.seen_meta[0].get("seed_concepts")) and "seed_concepts_error" not in ext2.seen_meta[0])
 
         # ---- 3) 引文回验失败 ⇒ 落库但降级 suspect（不丢弃证据）
-        rel_0002 = _write_lit(st, "selftest")
+        rel_0002 = _write_lit(st, "selftest", "0002")
         _add_lit(st, "0002", path=rel_0002)
         ext3 = _Extractor(relations=[_Relation(["group", "abelian group"], "这句话原文里根本没有。", "幻觉引文")])
         b3 = AgentB(st, extractor=ext3, extract_text=_extract, config={"lease_seconds": 900, "max_attempts": 3})
@@ -1444,7 +1440,7 @@ def _selftest() -> int:
 
         # ---- 3b) `E-11`：引文逐字存在、但页码写错 ⇒ 单独可数（不折进 verified）
         _drain(st)
-        rel_0005 = _write_lit(st, "selftest")
+        rel_0005 = _write_lit(st, "selftest", "0005")
         _add_lit(st, "0005", path=rel_0005)
         ext3b = _Extractor(relations=[
             _Relation(["group", "abelian group"], TEXT, "页码写错",
@@ -1464,7 +1460,7 @@ def _selftest() -> int:
               f"verified={res3b.quotes_verified} out_of_range={res3b.quotes_out_of_declared_range}")
 
         # ---- 4) 抽取失败 ⇒ 不置 processed（留给租约到期重试）
-        rel_0003 = _write_lit(st, "selftest")
+        rel_0003 = _write_lit(st, "selftest", "0003")
         _add_lit(st, "0003", path=rel_0003)
         b4 = AgentB(st, extractor=_FailingExtractor(), extract_text=_extract,
                     config={"lease_seconds": 900, "max_attempts": 3})

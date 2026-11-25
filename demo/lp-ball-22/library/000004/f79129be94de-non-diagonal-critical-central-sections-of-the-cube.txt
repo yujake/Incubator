@@ -1,0 +1,2244 @@
+===== page 1 =====
+NON-DIAGONAL CRITICAL CENTRAL SECTIONS OF THE CUBE
+GERGELY AMBRUS AND BARNABÁS GÁRGYÁN
+ABSTRACT. We study the (n −1)-dimensional volume of central hyperplane sections of the
+n-dimensional cube Qn. Our main goal is two-fold: first, we provide an alternative, simpler
+argument for proving that the volume of the section perpendicular to the main diagonal of the
+cube is strictly locally maximal for every n ≥4, which was shown before by L. Pournin [27].
+Then, we prove that non-diagonal critical central sections of Qn exist in all dimensions at
+least 4. The crux of both proofs is an estimate on the rate of decay of the Laplace-Pólya inte-
+gral Jn(r) =
+R ∞
+−∞sincn t · cos(r t)dt that is achieved by combinatorial means. This also yields
+improved bounds for Eulerian numbers of the first kind.
+1. INTRODUCTION
+Let Qn =
+£
+−1
+2, 1
+2
+¤n denote the centered n-dimensional unit cube. This paper is devoted
+to the study of the (n −1)-dimensional volume of central hyperplane sections of Qn (that is,
+sections of the form Qn ∩v⊥). Accordingly, for a given non-zero vector v ∈Rn, we introduce
+the central section function
+(1.1)
+σ(v) = Voln−1
+³
+Qn ∩v⊥´
+.
+Note that the quantity above is invariant under scalings of v by a non-zero factor, and by
+embeddings of v into Rm with m ≥n and replacing Qn by Qm.
+The function σ(v) has been studied intensively in the last 50 years. According to a natural
+conjecture, which had been popularized by Good [4], minimal central sections are parallel
+to a facet of Qn. This was proved by Hadwiger [14] in 1972, while Hensley [16] gave an al-
+ternative proof a few years later. He also provided an upper bound on the volume of central
+hyperplane sections. Completing the characterization of global extrema, Ball [3] proved that
+the maximal central sections are orthogonal to the main diagonal of a 2-dimensional face
+of Qn.
+Our main goal is to study critical points of the functional σ(v) on the unit sphere Sn−1
+– these will be referred to as critical directions, and the corresponding sections as critical
+sections. The latter were recently characterized by Ivanov and Tsiutsiurupa [17] and, inde-
+pendently, the first named author [2]. Locally extremal sections are also defined via the anal-
+ogous property of their unit normal on Sn−1.
+A central section is called k-diagonal if its normal vector is parallel to the main diagonal
+of a k-dimensional face of Qn, where 1 ≤k ≤n. Let 1n denote the n-dimensional vector
+Date: January 30, 2024.
+2020 Mathematics Subject Classification. 52A40, 52A38,49Q20, 05A20.
+Key words and phrases. Cube sections, extremal sections, Eulerian numbers.
+Research of G. A. was partially supported by ERC Advanced Grant "GeoScape" no. 882971, by the Hungarian
+National Research grants no. NKFIH KKP-133819 and no. NKFIH K-147145, and by project no. TKP2021-NVA-
+09, which has been implemented with the support provided by the Ministry of Innovation and Technology of
+Hungary from the National Research, Development and Innovation Fund, financed under the TKP2021-NVA
+funding scheme.
+1
+arXiv:2307.03792v4  [math.MG]  29 Jan 2024
+===== page 2 =====
+2
+GERGELY AMBRUS AND BARNABÁS GÁRGYÁN
+(1,...,1). The standard k-diagonal unit direction is given by
+(1.2)
+dn,k := 1
+p
+k
+·
+¡
+1k,0n−k
+¢
+for k = 1,...,n, where, naturally, 0n−k is the zero vector of Rn−k. Up to permuting coordinates
+and changing signs, all k-diagonal directions are of the above form. Such normal vectors and
+the corresponding central sections of Qn will simply be called diagonal. For special values of
+k, we simplify the notation by writing
+dn,1 =: e1 and dn,n =: dn.
+In particular, dn =
+1
+pn1n.
+As a special case of a more general result, Pournin [27] proved by local optimization tech-
+niques that all the diagonal sections of Qn are strictly locally extremal whenever n ≥4. Our
+first result provides an alternative proof for this fact for main diagonal sections.
+Theorem 1.1. The main diagonal section Qn ∩1⊥
+n has strictly locally maximal volume among
+central sections of Qn for each n ≥4.
+It has been widely believed that all critical central sections of Qn need to be diagonal. This
+was verified for n = 2,3 but disproved for n = 4 in [2]. Note that appending 0’s to a lower
+dimensional critical direction yields critical directions for Qn. Thus, it is only of interest to
+ask for the existence of non-diagonal critical sections whose normal vector does not have
+any 0 coordinates – equivalently, sections which are not parallel to any of the coordinate
+axes.
+We prove the existence of such non-diagonal critical central sections in all dimensions
+exceeding 3.
+Theorem 1.2. For all n ≥4 there exist non-diagonal critical central sections of Qn whose nor-
+mal vector has only non-zero coordinates.
+Furthermore, in Section 6 we demonstrate that the critical directions constructed for the
+proof of Theorem 1.2 are saddle points of σ(v) on Sd−1. This leaves open the question of exis-
+tence of non-diagonal critical sections which are locally extremal with respect to the central
+section function σ(v). Based on numerical evidence, we suspect that there are no such ex-
+amples.
+Conjecture 1.3. All locally extremal central sections of Qn are diagonal for each n ≥2.
+The protagonist of the subsequent arguments is the Laplace-Pólya integral
+(1.3)
+Jn(r) := 1
+π
+Z ∞
+−∞
+sincn t ·cos(r t)dt,
+where n is a positive integer, r ∈R, and sinc denotes the unnormalized sine cardinal func-
+tion, that is
+sincx :=
+
+
+
+
+
+sinx
+x
+if x̸ = 0,
+1
+if x = 0.
+The integral (1.3) appears in a number of diverse problems. In particular, Laplace [21] stud-
+ied it in connection with probability theory, while Pólya [29] focused on its importance in
+statistical mechanics.
+===== page 3 =====
+NON-DIAGONAL CRITICAL CENTRAL SECTIONS OF THE CUBE
+3
+For n ≥2, or n = 1 and r̸ = ±1, Jn(r) may also be expressed as the density of the following
+Irwin-Hall distribution:
+(1.4)
+Jn(r) = 2· fPn
+i=1 Xi (r)
+where X1,...,Xn are independent random variables uniformly distributed on [−1,1], and
+fX (.) denotes the probability density function of a continuous random variable X . This sto-
+chastic interpretation, which is discussed in detail in Section 2, also implies that Jn(r) = 0 for
+|r| ≥n when n ≥2.
+The crux of the subsequent arguments is a precise estimate on the rate of decay of Jn(r),
+which will be proved by entirely combinatorial means in Section 3.
+Theorem 1.4. Let n ≥4 and r be integers satisfying −1 ≤r ≤n −2. Then
+(1.5)
+Jn(r +2)
+Jn(r)
+≤cn,r ,
+where
+(1.6)
+cn,r = (n −r −2)(n −r)(n −r +2)
+(n +r)(n +r +2)(n +r +4).
+As an immediate corollary we derive the following bound.
+Corollary 1.5. For each n ≥2,
+(1.7)
+(n +3)Jn+2(0) < (n +2)Jn(0).
+We note that for even values of n, Lesieur and Nicolas [22] proved the slightly stronger
+estimate1
+(1.8)
+(n +2)Jn+2(0) < (n +1)Jn(0)
+(also see (3.11)) by an intricate argument involving fine estimates for the power series expan-
+sion of Eulerian numbers of the first kind.
+Further history of the problem and related results, in particular, the study of non-central
+and lower dimensional sections, are excellently surveyed in [25].
+2. PRELIMINARIES
+In this section we review some of the necessary tools along the lines of the articles [2, 3, 19].
+Pólya [29] proved that the central section function σ(v) of a unit vector v = (v1,...,vn) ∈Sn−1
+may be evaluated by the classical integral formula
+(2.1)
+σ(v) = 1
+π
+Z ∞
+−∞
+nY
+i=1
+sinc(vi t)dt.
+One can shortly derive an extension for arbitrary non-zero normal vectors, and non-central
+sections, via the probabilistic interpretation as follows.
+Let now v ∈Rn \{0n} be an arbitrary non-zero vector, and define S(v,r) as the intersection
+of Qn and a hyperplane orthogonal to v at distance r
+|v| from the origin, that is
+(2.2)
+S(v,r) :=
+©
+q ∈Qn :
+­
+q,v
+®
+= r
+ª
+.
+Introduce the parallel section function
+(2.3)
+s(v,r) := Voln−1
+¡
+S(v,r)
+¢
+;
+1We note that this bound and further esimates on the Laplace-Pólya integral can also be obtained by a com-
+binatorial method similar to the present proofs, which is to be published in a subsequent paper.
+===== page 4 =====
+4
+GERGELY AMBRUS AND BARNABÁS GÁRGYÁN
+then σ(v) = s(v,0).
+For a continuous random variable X , let ϕX (.) denote its characteristic function. Let now
+X1,...,Xn be independent random variables distributed uniformly on [−1,1]. The joint dis-
+tribution of (X1,...,Xn) induces the normalized Lebesgue measure on 2Qn = [−1,1]n. Ac-
+cordingly, for arbitrary v = (v1,...,vn) ∈Rn and r ∈R
+P
+Ã¯¯¯¯¯
+nX
+i=1
+vi Xi −r
+¯¯¯¯¯ ≤ε
+!
+= 1
+2n Voln
+µ
+q ∈2Qn :
+¯¯¯
+­
+q,v
+®
+−r
+¯¯¯ ≤ε
+¶
+= ε
+|v|s
+³
+v, r
+2
+´
++o(ε)
+provided that S
+¡
+v, r
+2
+¢
+is not a facet of Qn. Dividing by ε and letting ε →0 leads to
+(2.4)
+2fPn
+i=1 vi Xi (r) = 1
+|v|s
+³
+v, r
+2
+´
+which holds whenever the left hand side exists. As is well known, the characteristic function
+of Pn
+i=1 vi Xi is
+(2.5)
+ϕPn
+i=1 vi Xi (t) =
+nY
+i=1
+sinc(vi t),
+hence by taking the inverse Fourier transform one derives that
+(2.6)
+fPn
+i=1 vi Xi (r) = 1
+2π
+Z ∞
+−∞
+nY
+i=1
+sinc(vi t)·cos(r t)dt.
+Therefore by (2.4) and (2.6) we obtain the following integral formula for s(v,r):
+(2.7)
+s
+³
+v, r
+2
+´
+= |v|
+π
+Z ∞
+−∞
+nY
+i=1
+sinc(vi t)·cos(r t)dt.
+In particular,2
+(2.8)
+σ(v) = |v|
+π
+Z ∞
+−∞
+nY
+i=1
+sinc(vi t)dt
+which implies (2.1).
+As a special case of (2.7) one also obtains that the volume of sections orthogonal to the
+main diagonal can be expressed as
+(2.9)
+s
+³
+1n, r
+2
+´
+=
+p
+nJn(r).
+In particular, central main diagonal sections are given by
+(2.10)
+σ(1n) =
+p
+nJn(0).
+Returning to (2.1), we derive that for unit vectors v
+(2.11)
+∂
+∂vk
+σ(v) = 1
+π
+Z ∞
+−∞
+Y
+i̸=k
+sinc(vi t)· cos(vkt)−sinc(vkt)
+vk
+dt
+(the differentiability property of the function σ(v) is rigorously proven in the works of L.
+Pournin [28, 27]). Based on the Lagrange multiplier method, the following characterization
+was given in [2] for critical points of σ(v) on Sn−1 (note that in the present article we normal-
+ize σ(v) differently):
+2Note that the factor |v| is missing in [2, formula (2.8)].
+===== page 5 =====
+NON-DIAGONAL CRITICAL CENTRAL SECTIONS OF THE CUBE
+5
+Proposition 2.1 ([2], Formula (2.12)). The unit vector v = (v1,...,vn) ∈Sn−1 is a critical direc-
+tion with respect to the central section function σ(v) if and only if up to permuting coordinates
+and changing signs3 v = e1, or
+(2.12)
+σ(v) =
+1
+π(1−v2
+j )
+Z ∞
+−∞
+Y
+i̸=j
+sinc(vi t)·cos(v j t)dt
+holds for each j = 1,...,n.
+The argument also yields that at critical directions v ∈Sn−1,
+(2.13)
+∂
+σvi
+σ(v) = −σ(v)· vi,
+see [2, Proof of Theorem 1]. Accordingly, the Lagrange function
+(2.14)
+Λ(v) = σ(v)+ ˜λ·(|v|2 −1)
+defined on Rn has a stationary point at v with the Lagrange multiplier
+(2.15)
+˜λ = σ(v)
+2
+.
+We remark that, introducing the notation evj = (v1,...,v j−1,v j+1,...,vn) ∈Rn−1 and using
+(2.7), equation (2.12) translates to
+(2.16)
+σ(v) =
+1
+(1−v2
+j )
+3
+2
+s
+³
+evj,
+v j
+2
+´
+.
+3. PROPERTIES OF THE LAPLACE-PÓLYA INTEGRAL
+In this section we study the integral formula Jn(r) defined in (1.2) which is connected to
+various mathematical topics, see [6, 15, 23, 29, 31]. To us, its most prominent feature is the
+connection to diagonal sections provided by (2.10).
+The following explicit formula for Jn(r) is well known, see [21, pp. 165-170]:
+(3.1)
+Jn(r) =
+1
+2n−1(n −1)!
+⌊n+r
+2 ⌋
+X
+i=0
+(−1)i
+Ã
+n
+i
+!
+(n +r −2i)n−1
+which holds for |r| < n. Moreover, Jn(r) can be expressed by the recursion
+(3.2)
+Jn(r) =
+n +r
+2(n −1) Jn−1(r +1)+
+n −r
+2(n −1) Jn−1(r −1)
+which was proved by Thompson [32]. Though this formula is valid for all r ∈R, we will only
+use it for integer values of r. Since Jn(r) is even in r, we specifically derive that
+(3.3)
+Jn(0) =
+n
+n −1 Jn−1(1)
+for n ≥3. Combined with (3.2) this provides a simple way for computing the central values
+Jn(0) for small n’s, see Table 1.
+The sequence (Jn(0))∞
+n=1 possesses several monotonicity properties. Ball [3, Lemma 3]
+proved that Jn(0) is monotone decreasing and converges to zero as n →∞. On the other
+hand, Aliev [1] showed that nJn(0) is monotone increasing. According to (2.10), the value
+3In [2], the trivial case v = e1 was erroneously omitted.
+===== page 6 =====
+6
+GERGELY AMBRUS AND BARNABÁS GÁRGYÁN
+n
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+Jn(0)
+1
+1
+3
+4
+2
+3
+115
+192
+11
+20
+5887
+11520
+151
+315
+259723
+573440
+15619
+36288
+TABLE 1. The value of Jn(0) in the cases 1 ≤n ≤10.
+pnJn(0) is equal to the volume of the main diagonal section of Qn. Therefore, it is essential
+that
+lim
+n→∞
+p
+nJn(0) =
+p
+6π,
+see [21, 29]. Based on Laplace’s method for calculating the asymptotic expansion for Jn(0),
+Bartha, Fodor and González Merino [5] proved that the convergence is strictly monotone
+increasing for n ≥3, and noted that their method also implies that the sequence pnJn(0) is
+eventually concave. The asymptotic expansion up to order 3 reads as
+(3.4)
+Jn(0) =
+r
+6
+πn
+µ
+1−
+3
+20n −
+13
+1120n2 +
+27
+3200n3 +O
+³ 1
+n4
+´¶
+where the correct coefficients had been found (and subsequently corrected) in a series of
+papers [31, 9, 13, 12, 26, 23]). Even finer estimates were proved in [18, 30].
+A combinatorial interpretation of Jn(r) stems from the connection with Eulerian numbers
+of the first kind A(m,l) (which will simply be referred to as Eulerian numbers). These are
+recursively defined [11, pp. 240-243] for integers m,l ≥0 by
+A(0,0) := 1,
+A(m,0) := 0 for m > 0,
+A(0,l) := 0 for l > 0,
+A(m,l) = (m −l +1)A(m −1,l −1)+l A(m −1,l) for m > 0, l > 0.
+(3.5)
+Moreover they may be evaluated explicitly as
+(3.6)
+A(m,l) =
+lX
+i=0
+(−1)i
+Ã
+m +1
+i
+!
+(l −i)m,
+see e.g. [10, 22]. Eulerian numbers can also be defined combinatorially [11] as the number
+of permutations of {1,...,n} in which exactly l −1 elements are greater than the previous
+element. This also shows the symmetry property
+(3.7)
+A(m,l) = A(m,m −l +1).
+According to formulae (3.1) and (3.6), the following connection holds between the Laplace-
+Pólya integral and the Eulerian numbers:
+(3.8)
+Jn(r) =
+1
+(n −1)! A
+³
+n −1, n +r
+2
+´
+where n ≥2 and r is an integer s.t. n +r is even. Due to this relation, Theorem 1.4 leads to an
+estimate on the ratio between consecutive Eulerian numbers.
+Proposition 3.1. For integers l ≥2 and m ≥2l −1
+(3.9)
+A(m,l −1) ≤cm+1,m−2l+1A(m,l),
+where cn,r is defined by formula (1.6).
+===== page 7 =====
+NON-DIAGONAL CRITICAL CENTRAL SECTIONS OF THE CUBE
+7
+This strengthens the bound proved by Lesieur and Nicolas [22, Section 2.3, Theorem 3]
+stating that for every l ≥2 and m ≥2l −1,
+(3.10)
+A(m,l −1) <
+³
+m −l
+m −l +2
+´m−2l+2
+A(m,l).
+The authors also showed that [22, Section 3.5, Theorem 2]
+(3.11)
+m +1
+m +2 <
+m!
+(m +2)! · max1≤l≤m+2 A(m +2,l)
+max1≤l≤m A(m,l)
+< m +2
+m +3
+for any odd m. Notice that
+1
+m! max
+1≤l≤m A(m,l) = 1
+m! A
+³
+m,
+jm
+2
+k
++1
+´
+=
+
+
+
+Jm+1(1),
+if m is even
+Jm+1(0),
+if m is odd.
+Therefore, by introducing n = m +1 and using (3.3), inequality (3.11) takes the form
+(3.12)
+n(n −2)
+(n +2)2 < Jn(2)
+Jn(0) < n(n2 −2)
+(n +2)3
+which holds for any even n greater than 3. Based on numerical calculations we do believe
+that these estimates are valid for every n ≥3. Note that the upper bound is slightly stronger
+than (1.5) for r = 0 and n even — yet, (3.12) provides no estimate for odd values of n, or r̸ = 0,
+in contrast with Theorem 1.4.
+Next, we establish the bound on the rate of decay of Jn(r).
+Proof of Theorem 1.4. Suppose that r is an integer satisfying r ≥−1. We will proceed by in-
+duction on n, with n = 4 being the base case.
+The values of J4(r) for r = −1,...,4 can be calculated by formula (3.1). Based on these, the
+n = 4 case of (1.5) is easy to check, see Table 2.
+r
+−1
+0
+1
+2
+J4(r+2)
+J4(r)
+1
+1
+4
+1
+23
+0
+c4,r
+1
+1
+4
+1
+21
+0
+TABLE 2. Two sides of the inequality (1.5) for n = 4 and r = −1,...,2.
+Suppose now that for some n ≥4, (1.5) holds for each −1 ≤r ≤n−2. We need to show that
+(3.13)
+Jn+1(r +2) ≤cn+1,r Jn+1(r)
+for each r with −1 ≤r ≤n −1.
+For r = −1 or r = n −1, equality holds above: in the former case cn+1,−1 = 1 and Jn+1(−1) =
+Jn+1(1), while in the latter cn+1,n−1 = 0 and Jn+1(n +1) = 0.
+Assume that 0 ≤r ≤n −3. By (3.2),
+Jn+1(r +2) = n +r +3
+2n
+Jn(r +3)+ n −r −1
+2n
+Jn(r +1),
+(3.14)
+Jn+1(r) = n +r +1
+2n
+Jn(r +1)+ n −r +1
+2n
+Jn(r −1).
+===== page 8 =====
+8
+GERGELY AMBRUS AND BARNABÁS GÁRGYÁN
+Applying the induction hypothesis for the pairs (n,r +1) and (n,r −1) shows that
+Jn(r +3) ≤cn,r+1Jn(r +1),
+1
+cn,r−1
+Jn(r +1) ≤Jn(r −1).
+Thus, (3.13) follows from the inequality
+n +r +3
+2n
+cn,r+1 + n −r −1
+2n
+≤cn+1,r
+³n +r +1
+2n
++ n −r +1
+2n
+·
+1
+cn,r−1
+´
+.
+Using (1.6), this simplifies to
+(n −r −3)(n −r −1)(n −r +1)
+(n +r +5)(n +r +1)
++(n −r −1) ≤
+≤(n −r −1)(n −r +1)(n −r +3)
+(n +r +5)(n +r +3)
++ (n −r +1)(n +r −1)
+(n +r +5)
+.
+After combining the fractions, this takes the form
+0 ≤16r 3 +48r 2 +32r
+which clearly holds.
+Finally, when r = n −2, then due to Jn(r +3) being 0, (3.14) reduces to
+Jn+1(n) = 1
+2n Jn(n −1).
+Therefore, using (3.2) for the term Jn+1(n −2), (3.13) is seen to be equivalent to
+(3.15)
+1
+2n Jn(n −1) ≤cn+1,n−2
+³2n −1
+2n
+Jn(n −1)+ 3
+2n Jn(n −3)
+´
+.
+The induction hypothesis for the pair (n,n −3) implies that
+1
+cn,n−3
+Jn(n −1) ≤Jn(n −3).
+Therefore, (3.15) follows from the inequality
+1 ≤cn+1,n−2
+³
+2n −1+
+3
+cn,n−3
+´
+,
+which, after substituting (1.6), simplifies to
+0 ≤8n2 −20n +3.
+As this holds for every n ≥3, the proof is complete.
+□
+Proof of Corollary 1.5. The inequality can be easily confirmed in the cases of n = 2, 3 based
+on Table 1. Henceforth we suppose that n ≥4. Due to (3.3), (3.2) and (1.5) we have
+Jn+2(0) = n +2
+n +1 Jn+1(1) =
+= (n +2)2
+2n(n +1) Jn(2)+
+n +2
+2(n +1) Jn(0) ≤
+≤
+Ã
+(n +2)2
+2n(n +1) ·cn,0 +
+n +2
+2(n +1)
+!
+Jn(0) =
+= (n +2)(n2 +2n −2)
+n(n +1)(n +4)
+Jn(0).
+(3.16)
+===== page 9 =====
+NON-DIAGONAL CRITICAL CENTRAL SECTIONS OF THE CUBE
+9
+Therefore, (1.7) is implied by the inequality
+(n +2)(n2 +2n −2)
+n(n +1)(n +4)
+< n +2
+n +3
+which holds for every n ≥1.
+□
+Finally, we prove the corresponding estimate for Eulerian numbers.
+Proof of Proposition 3.1. Suppose that r is an integer s.t. r ≥−1 and n +r is even. According
+to equation (3.8) and Theorem 1.4 we have
+A
+³
+n −1, n +r
+2
++1
+´
+≤cn,r A
+³
+n −1, n +r
+2
+´
+.
+The symmetry property (3.7) leads to the inequality
+A
+³
+n −1, n −r
+2
+−1
+´
+≤cn,r A
+³
+n −1, n −r
+2
+´
+.
+Letting m = n −1 and l = n −r
+2
+implies (3.9).
+□
+In order to demonstrate that (3.9) is indeed stronger than (3.10) one has to prove that
+(l −1)l(l +1)
+(m −l +1)(m −l +2)(m −l +3) <
+³
+m −l
+m −l +2
+´m−2l+2
+holds for each l ≥2 and m ≥2l −1. By introducing µ = m −l + 2 (note that µ ≥l + 1), this
+transforms to
+(3.17)
+(l −1)l(l +1)
+(µ−1)µ(µ+1) ·
+³µ−2
+µ
+´l
+<
+³µ−2
+µ
+´µ
+.
+Note that the right hand side is strictly monotone increasing in µ.
+We will prove that for any fixed l ≥2, the left hand side of (3.17) is strictly monotone de-
+creasing in µ for µ ≥l +2. Indeed, its derivative in µ is given by
+−
+(l −1)l(l +1)
+(µ−2)(µ−1)2µ2(µ+1)2 ·
+³µ−2
+µ
+´l
+·(3µ3 −2lµ2 −6µ2 −µ+2l +2)
+which is easily checked to be negative in the specified domain.
+Therefore, it suffices to verify (3.17) for the cases µ = l + 1,l + 2. These lead to the trivial
+inequalities l−1
+l+2 < l−1
+l+1 and l−1
+l+3 <
+l
+l+2, respectively.
+4. MAIN DIAGONAL SECTIONS ARE STRICTLY LOCALLY MAXIMAL
+By utilizing our combinatorial estimate on Jn(r) stated in Theorem 1.4, we prove one of
+the core results of the paper stating that main diagonal sections of Qn are strictly locally
+maximal, except for the 3-dimensional case.
+Proof of Theorem 1.1. To start with, note that Proposition 2.1 and (3.3) imply that dn is a crit-
+ical direction, hence we may apply the properties listed after Proposition 2.1.
+We will show that the function σ(v) has a strict local maximum at v = dn subject to the
+constraint |v| = 1. This is a constrained local optimization problem which can be solved by
+studying the bordered Hessian matrix, i.e. the Hessian of the Lagrange function Λ(v) defined
+by (2.14).
+===== page 10 =====
+10
+GERGELY AMBRUS AND BARNABÁS GÁRGYÁN
+Since Λ(v) = σ(v)+ σ(v)
+2 ·(|v|2 −1) because of (2.14) and (2.15), the bordered Hessian matrix
+is given by
+(4.1)
+H(Λ(v)) =
+
+
+0
+2v1
+2v2
+...
+2vn
+2v1
+2v2
+...
+2vn
+∂2σ
+∂v j∂vk
+(v)+σ(v)·
+
+
+
+0,
+if j̸ = k
+1,
+if j = k
+
+
+Based on (2.11), the entries of H(Λ(v)) apart from the first row and column may be calculated
+by
+(4.2) βk(v) = 1
+π
+Z ∞
+−∞
+Y
+i̸=k
+sinc(vi t)·
+µ 2
+v2
+k
+³
+sinc(vkt)−cos(vkt)
+´
+−(vkt)2
+v2
+k
+sinc(vkt)+sinc(vkt)
+¶
+dt
+along the diagonal j = k, and
+(4.3)
+γj,k(v) = 1
+π
+Z ∞
+−∞
+Y
+i̸=j,k
+sinc(vi t)·
+cos(v j t)−sinc(v j t)
+v j
+· cos(vkt)−sinc(vkt)
+vk
+dt
+for the off-diagonal entries, i.e. j̸ = k.
+Consider now the main diagonal direction dn =
+1
+pn1n, and let Hm denote the princi-
+pal minor of H(Λ(dn)) of order m for m = 3,...,n. According to [24, Theorem 3.9.14.]), if
+(−1)m−1Hm > 0 for all m = 3,...,n, then σ(.) has a strict local maximum on the constraint set
+Sn−1 at dn.
+Substituting v = dn in (4.2) and (4.3), integrating by substitution for vkt, applying the iden-
+tity sin2 t = 1−cos(2t)
+2
+and employing (3.2) repeatedly results in the formulae
+βk(dn) =
+pn
+π ·
+Z ∞
+−∞
+³
+sincn−1 t
+´
+·
+³
+2n(sinct −cost)−nt2 sinct +sinct
+´
+dt =
+=
+p
+n ·
+µ
+(2n +1)Jn(0)−2nJn−1(1)−n
+2 Jn−2(0)+ n
+2 Jn−2(2)
+¶
+=
+=
+p
+n ·
+µ
+Jn−2(0)·
+³(2n +1)n
+2(n −1) −n −n
+2
+´
++ Jn−2(2)·
+³
+(2n +1)n2
+2(n −2)(n −1) −
+n2
+(n −2) + n
+2
+´¶
+=
+=
+n
+3
+2
+2(n −1) ·
+³
+(4−n)Jn−2(0)+ n2 +2
+n −2 Jn−2(2)
+´
+===== page 11 =====
+NON-DIAGONAL CRITICAL CENTRAL SECTIONS OF THE CUBE
+11
+for any k = 1,...,n, and
+γj,k(dn) = n
+3
+2
+π ·
+Z ∞
+−∞
+³
+sincn−2 t
+´
+·
+³
+cos2 t −2sinct ·cost +sinc2 t
+´
+dt =
+= n
+3
+2 ·
+³
+Jn(0)−2Jn−1(1)+ 1
+2 Jn−2(0)+ 1
+2 Jn−2(2)
+´
+=
+= n
+3
+2 ·
+µ
+Jn−2(2)·
+³
+n2
+2(n −2)(n −1) −
+n
+n −2 + 1
+2
+´
++ Jn−2(0)·
+³
+n
+2(n −1) −1+ 1
+2
+´¶
+=
+=
+n
+3
+2
+2(n −1) ·
+¡
+Jn−2(0)−Jn−2(2)
+¢
+for j̸ = k, 1 ≤j,k ≤n. Therefore, (4.1) yields that H(Λ(dn)) is of the form
+H(Λ(dn)) =
+
+
+0
+α
+α
+α
+α
+β
+γ
+γ
+α
+γ
+β
+γ
+α
+γ
+γ
+β
+
+
+(n+1)×(n+1)
+where
+(4.4)
+α = 2
+pn ,
+β =
+³
+n
+3
+2
+2(n −1)
+´n−1
+·
+³
+(4−n)Jn−2(0)+ n2 +2
+n −2 Jn−2(2)
+´
+,
+and
+γ =
+³
+n
+3
+2
+2(n −1)
+´n−1
+·
+³
+Jn−2(0)−Jn−2(2)
+´
+.
+Thus, all principal minors Hm of H(Λ(dn)) have the same form, namely
+(4.5)
+Hm =
+¯¯¯¯¯¯¯¯¯¯¯¯
+0
+α
+α
+α
+α
+β
+γ
+γ
+α
+γ
+β
+γ
+α
+γ
+γ
+β
+¯¯¯¯¯¯¯¯¯¯¯¯
+m×m
+.
+Subtracting the second row from the ones below, expanding the resulting determinant along
+the first column, and finally adding the sum of all other columns of the remaining determi-
+nant to the first one results in an upper triangular matrix, hence
+Hm = (−α)·
+¯¯¯¯¯¯¯¯¯¯¯¯
+(m −1)α
+α
+α
+α
+0
+δ
+0
+0
+0
+0
+δ
+0
+0
+0
+0
+δ
+¯¯¯¯¯¯¯¯¯¯¯¯
+(m−1)×(m−1)
+= −(m −1)α2δm−2
+with δ = β−γ. Therefore it suffices to show that δ < 0. For n = 4 and n = 5, a direct calculation
+based on (4.4) yields that δ = −1 and δ = −1
+4, respectively (we also remark that in the n = 3
+case one obtains δ = 0). For n ≥6, note that according to Theorem 1.4,
+Jn−2(2) ≤n −4
+n +2 Jn−2(0),
+===== page 12 =====
+12
+GERGELY AMBRUS AND BARNABÁS GÁRGYÁN
+hence, by (4.4),
+δ = β−γ =
+=
+³
+n
+3
+2
+2(n −1)
+´n−1
+·
+³
+(3−n)Jn−2(0)+ n(n +1)
+n −2
+Jn−2(2)
+´
+≤
+≤
+³
+n
+3
+2
+2(n −1)
+´n−1
+·
+³
+−
+12
+n2 −4 Jn−2(0)
+´
+< 0.
+□
+5. EXISTENCE OF NON-DIAGONAL CRITICAL SECTIONS
+This section is devoted to the proof of Theorem 1.2, for which we present two approaches.
+The first one is only sketched below.
+Consider the function σ(v) on Sn−1. Theorem 1.1 states that σ(v) has a strict local maxi-
+mum at v = dn. On the other hand, the result of Ball [3] shows that σ(v) has a strict global
+maximum at v = dn,2 with σ(dn,2) > σ(dn). Let Γ be the shorter great arc of Sn−1 connecting
+dn and dn,2 – then Γ consists of vectors of the form
+(5.1)
+vn,2(a) := (a,a,b,...,b) ∈Sn−1
+where a ∈
+£ 1
+pn, 1
+p
+2
+¤
+. Let
+(5.2)
+bσ(a) := σ
+¡
+vn,2(a)
+¢
+be the restriction of σ onto Γ. On the interval
+£ 1
+pn, 1
+p
+2
+¤
+, the function bσ(a) has a strict maxi-
+mum at
+1
+p
+2, while at
+1
+pn it has a strict local maximum. Because of (2.11), bσ(a) is differentiable
+on the interval, hence it must have a local minimum at some ξn ∈
+¡ 1
+pn, 1
+p
+2
+¢
+. Using that Qn is
+symmetric with respect to the reflection over the line spanned by dn,2 in Rn, one may show
+that v(ξn) is a critical point of σ on Sn−1.
+We decided to present the second proof below as it provides information about a wider
+class of normal vectors, it allows for the numerical calculation of the value of ξn, moreover,
+it is independent of the proof of maximality of 2-diagonal sections by Ball [3]. The approach
+is based on the characterization result of [2], see Proposition 2.1.
+Proof of Theorem 1.2. As a generalization of (5.1), we are going to study a special class of unit
+vectors which may be written in the form
+vn,k(a) :=
+³
+a,
+a,
+b,
+b
+´
+|
+{z
+}
+k
+|
+{z
+}
+n −k
+∈Sn−1
+where 2 ≤k ≤n −2 and a ∈Ik :=
+£ 1
+pn, 1
+p
+k
+¤
+, furthermore b is defined by
+(5.3)
+b := bn,k(a) =
+s
+1−ka2
+n −k .
+Here and later on we will always interpret b as a function of a, n and k, unless stated other-
+wise.
+===== page 13 =====
+NON-DIAGONAL CRITICAL CENTRAL SECTIONS OF THE CUBE
+13
+Since vn,k(a) has at most two different coordinates, Proposition 2.1. implies that vn,k(a) is
+a critical direction if and only if Fn,k(a) = 0, where
+Fn,k(a) : =
+1
+π(1−a2)
+Z ∞
+−∞
+sincn−k (bt)·sinck−1 (at)·cos(at)dt−
+−
+1
+π(1−b2)
+Z ∞
+−∞
+sincn−k−1 (bt)·sinck (at)·cos(bt)dt,
+(5.4)
+defined on Ik. We will show the existence of ξn ∈
+¡ 1
+pn, 1
+p
+2
+¢
+for which Fn,2(ξn) = 0. This suffices
+as vn,2(ξn) cannot be diagonal, neither can it have any 0 coordinates.
+The argument is divided to the following three lemmata whose proof is postponed to the
+end of the section.
+Lemma 5.1. For each 2 ≤k ≤n −2, 1
+p
+k
+and
+1
+pn are both zeros of Fn,k.
+In the next lemma we will consider the right-hand derivative of Fn,k(.) at
+1
+pn. In order to
+ease notation, this will be denoted by F ′
+n,k
+³
+1
+pn
+´
+. We note that there is no difficulty in extend-
+ing the domain of Fn,k(.) hence this simplification is well justified.
+Lemma 5.2. For each 4 ≤k ≤n −2, Fn,k is differentiable on the interval Ik. In the case of
+k = 2,3, Fn,k is differentiable on every compact subinterval of Ik \
+© 1
+p
+k
+ª
+. Moreover in both cases
+F ′
+n,k
+³ 1
+pn
+´
+< 0.
+Lemma 5.3. For each n ≥4, Fn,2(a) ≥0 for every a ∈
+£
+γn, 1
+p
+2
+¤
+where γn =
+q
+n−2
+2n−3.
+Note that the first two statements hold for arbitrary k, while the third is proven only for k =
+2. This is not merely a technical issue; based on numerical evidence we conjecture that there
+are no non-diagonal critical directions of the form vn,k(a) with 3 ≤k ≤n −2, see Figure 1.
+0.45
+0.50
+0.55
+0.60
+0.65
+0.70
+a
+-0.04
+-0.02
+0.02
+0.04
+0.45
+0.50
+0.55
+a
+-0.04
+-0.02
+0.02
+0.04
+FIGURE 1. Difference between the behavior of F6,2(a) and F6,3(a)
+Once the above lemmata are established, the proof is immediate: Take γn provided by
+Lemma 5.3. Then Fn,2(γn) ≥0, and γn >
+1
+pn as n ≥4. Moreover, acccording to Lemma 5.2,
+Fn,2 is differentiable on the interval
+£ 1
+pn,γn
+¤
+and for its right-hand derivative, F ′
+n,2
+¡ 1
+pn
+¢
+< 0
+holds. Lemma 5.1 yields that Fn,2
+¡ 1
+pn
+¢
+= 0, thus there exists some ε > 0 with Fn,2
+¡ 1
+pn +ε
+¢
+< 0
+and
+1
+pn +ε < γn. Applying the mean value theorem [8] on the interval
+£ 1
+pn +ε,γn
+¤
+yields the
+existence of ξn with the prescribed property Fn,2(ξn) = 0.
+□
+===== page 14 =====
+14
+GERGELY AMBRUS AND BARNABÁS GÁRGYÁN
+Our proof only assures the existence of a nontrivial zero ξn. Based on numerical calcula-
+tions we suspect that there is only one suitable zero in the prescribed interval for each n ≥4.
+Table 3 summarizes the numerical value of ξn for small dimensions. For n = 4, ξ4 =
+q
+2
+5,
+which yields a non-diagonal critical direction parallel to (1,1,2,2) [2]; for larger dimensions,
+these values do not seem to follow such a nice pattern anymore.
+n
+4
+5
+6
+7
+8
+9
+10
+ξn
+0.632455
+0.634265
+0.636071
+0.636935
+0.637520
+0.637921
+0.638219
+TABLE 3. Numerical value of the zero ξn in the dimensions 4 ≤n ≤10.
+Proof of Lemma 5.1. The statement follows from the fact that all diagonal sections are crit-
+ical, which is implied by Proposition 2.1, formula (3.3), and the remark preceding Theo-
+rem 1.2.
+□
+Proof of Lemma 5.2. For the integrand of Fn,k(a) we introduce the notation
+(5.5)
+fn,k(a,t) :=
+1
+1−a2 ·sincn−k (bt)·sinck−1 (at)·cos(at)−
+1
+1−b2 ·sincn−k−1 (bt)·sinck (at)·cos(bt)
+which is defined on Ik ×R. Due to the properties of the sinc function, fn,k(a,t) is continuous
+in both of its variables. Furthermore the function
+(5.6)
+ψn,k(t) :=
+
+
+
+2
+if |t| ≤1,
+2
+tn−1
+if |t| ≥1
+is an integrable majorant of fn,k(a,t) for all a ∈Ik. We need to show that ∂fn,k(a,t)
+∂a
+is also
+continuous and it has an integrable majorant. In order to calculate the derivative of fn,k(a,t)
+with respect to a on Ik we will apply the differentiation rules
+(sincx)′ = 1
+x (cosx −sincx)
+and
+b′ = −kab
+1−ka2 .
+===== page 15 =====
+NON-DIAGONAL CRITICAL CENTRAL SECTIONS OF THE CUBE
+15
+These yield that
+∂fn,k(a,t)
+∂a
+=
+2a
+(1−a2)2 ·sincn−k (bt)·sinck−1 (at)·cos(at)+
++
+ka
+1−a2 ·sincn−k−1 (bt)· sinc(bt)−cos(bt)
+b2
+·sinck−1 (at)·cos(at)+
++ k −1
+1−a2 ·sincn−k (bt)·sinck−2 (at)· cos(at)−sinc(at)
+a
+·cos(at)−
+−
+1
+a(1−a2) ·sincn−k (bt)·sinck−2 (at)·sin2 (at)+
++
+2ka
+(n −k)(1−b2)2 ·sincn−k−1 (bt)·sinck (at)·cos(bt)−
+−(n −k −1)ka
+(n −k)(1−b2) ·sincn−k−2 (bt)· sinc(bt)−cos(bt)
+b2
+·sinck (at)·cos(bt)−
+−
+k
+1−b2 ·sincn−k−1 (bt)·sinck−1 (at)· sinc(at)−cos(at)
+a
+·cos(bt)−
+−
+k
+(n −k)(1−b2)a ·sincn−k−2 (bt)·sinck−2 (at)·sin2 (at).
+Clearly ∂fn,k(a,t)
+∂a
+is continuous on Ik ×R since
+lim
+a→1/
+p
+k
+sinc(bt)−cos(bt)
+b2
+= t2
+3 .
+When 4 ≤k ≤n −2, for each term above an integrable majorant may be given similarly to
+(5.6), which yields that ∂fn,k(a,t)
+∂a
+has an integrable majorant on the whole Ik. However, for
+k = 2,3, this property only holds on any compact subinterval of Ik \
+© 1
+p
+k
+ª
+=
+£ 1
+pn, 1
+p
+k
+¢
+, since in
+these cases the term
+lim
+a→1/
+p
+k
+ka
+1−a2 ·sincn−k−1(bt)· sinc(bt)−cos(bt)
+b2
+·sinck−1(at)·cos(at) =
+=
+k
+3
+2
+3(k −1)t2 ·sinck−1 t
+p
+k
+·cos t
+p
+k
+is not integrable, neither is eliminated by the other summands.
+The Leibniz integral rule (see [20, Theorem 3.2.]) implies that Fn,k(.) is differentiable on Ik
+if k ≥4, and on every compact subinterval of Ik \
+© 1
+p
+k
+ª
+if k = 2,3. The derivative is given by
+(5.7)
+F ′
+n,k(a) = 1
+π · ∂
+∂a
+Z ∞
+−∞
+fn,k(a,t)dt = 1
+π
+Z ∞
+−∞
+∂fn,k(a,t)
+∂a
+dt.
+Moreover F ′
+n,k(.) is continuous from the right at
+1
+pn for every k (see [20, Theorem 3.1.]). Ac-
+cordingly, the value of the right-hand derivative F ′
+n,k
+³
+1
+pn
+´
+may be evaluated by the substitu-
+tion a =
+1
+pn. Note that this leads to b = a, hence products of the sinc terms may be combined
+===== page 16 =====
+16
+GERGELY AMBRUS AND BARNABÁS GÁRGYÁN
+together. Thus each term of the integral F ′
+n,k
+¡ 1
+pn
+¢
+is of the form
+1
+π
+Z ∞
+−∞
+αsincm
+t
+pn ·cos β
+pn dt = α
+p
+nJm(β)
+with some α,β ∈R and some positive integer m (recall that Jm(β) is defined by (1.3)). There-
+fore, from (5.7) we obtain that
+F ′
+n,k
+³ 1
+pn
+´
+= (k −2)n2
+2(n −1) Jn−2(0)+ k(n −k −2)n2
+2(n −k)(n −1) Jn−2(0)−kn2
+n −1 Jn−2(0)+
++ n2(n +1)
+(n −1)2 Jn−1(1)−
+kn2(n +1)
+(n −1)2(n −k) Jn−1(1)−
+−kn2
+n −1 Jn−2(2)−
+kn2
+2(n −1) Jn−2(2)+
+kn2
+2(n −1) Jn−2(2).
+This further simplifies to
+F ′
+n,k
+³ 1
+pn
+´
+=
+n3
+(n −k)(n −1)
+³n +1
+n −1 Jn−1(1)−Jn−2(0)
+´
+=
+=
+n3
+(n −k)(n −1)
+³n +1
+n
+Jn(0)−Jn−2(0)
+´
+,
+where (3.3) is used in the second step. Due to the estimate of Corollary 1.5, this is indeed
+negative for every n ≥4 and 2 ≤k ≤n −2.
+□
+Next, we will apply a geometric argument in order to show the positivity of Fn,2 in a left
+neighborhood of
+1
+p
+2. First we recall a standard useful volume formula. Let Hu and Hv be
+hyperplanes with normal unit vectors u and v, and denote by .|Hu the orthogonal projection
+onto Hu. Then
+(5.8)
+Voln−1
+¡
+A|Hu
+¢
+=
+¯¯〈u,v〉
+¯¯·Voln−1
+¡
+A
+¢
+for any measurable set A ⊂Hv.
+Proof of Lemma 5.3. Throughout the proof, we set k = 2. Accordingly, (5.3) simplifies to
+(5.9)
+b = bn,2(a) =
+s
+1−2a2
+n −2 .
+The constraint a ≥
+q
+n−2
+2n−3 thus yields that
+(5.10)
+a
+b ≥n −2.
+According to (5.4) and (2.7)
+(5.11)
+Fn,2(a) =
+1
+(1−a2)
+3
+2
+s
+³
+u1(a), a
+2
+´
+−
+1
+(1−b2)
+3
+2
+s
+³
+u2(a), b
+2
+´
+,
+where u1(a) = (a,b,...,b) and u2(a) = (a,a,b,...,b) are (n −1)-dimensional non-unit vectors
+obtained from vn,2(a) by deleting the first and third coordinate, respectively. Denote the
+above parallel section functions by
+(5.12)
+s1(a) = s
+³
+u1(a), a
+2
+´
+,
+s2(a) = s
+³
+u2(a), b
+2
+´
+===== page 17 =====
+NON-DIAGONAL CRITICAL CENTRAL SECTIONS OF THE CUBE
+17
+S1(a)
+F
+FIGURE 2. Section S1(a) and facet F of Qn−1.
+which, by (2.2), express the (n −2)-dimensional volume of the intersection of Qn−1 with the
+cross-sections
+(5.13)
+S1(a) = S
+³
+u1(a), a
+2
+´
+,
+S2(a) = S
+³
+u2(a), b
+2
+´
+.
+We may determine the functions s1(a), s2(a) exactly in an appropriate left neighbourhood of
+a =
+1
+p
+2 by using suitably chosen orthogonal projections.
+We first study s1(a), the volume of the section S1(a). Consider the facet F of Qn−1 defined
+by
+F =
+n³1
+2,y
+´
+∈Qn−1 : y ∈Qn−2
+o
+.
+We will determine S1(a)|F, see Figure 2.
+Represent the points of Rn−1 in the form of (x,y), where x ∈R and y ∈Rn−2. Then, accord-
+ing to (2.2) and (5.13), the equation of the hyperplane in Rn−1 corresponding to S1(a) can be
+written as
+x = 1
+2 −b
+a
+­
+y,1n−2
+®
+.
+Note that on this hyperplane, S1(a) is described by the criteria x ∈[−1
+2, 1
+2] and y ∈Qn−2. The
+first condition, by the equation above, transforms to 0 ≤
+­
+y,1n−2
+®
+≤a
+b . Since by (5.10), the
+upper limit is at least n−2, while maxy∈Qn−2
+­
+y,1n−2
+®
+= n−2
+2 , the orthogonal projection of S1(a)
+to F is specified by
+S1(a)|F =
+n³1
+2,y
+´
+∈F :
+­
+y,1n−2
+®
+≥0
+o
+.
+Note that this constitutes half of the facet F, hence
+(5.14)
+Voln−2
+¡
+S1(a)|F
+¢
+= 1
+2 ·Voln−2
+¡
+F
+¢
+= 1
+2.
+On the other hand, according to (5.8),
+(5.15)
+Voln−2
+¡
+S1(a)|F
+¢
+=
+¯¯¯¯¯¯
+*
+u1(a)
+¯¯u1(a)
+¯¯,e1
++¯¯¯¯¯¯
+·Voln−2
+¡
+S1(a)
+¢
+=
+a
+p
+1−a2 ·Voln−2
+¡
+S1(a)
+¢
+,
+thus from equations (5.12), (5.14) and (5.15) we obtain that
+(5.16)
+s1(a) =
+p
+1−a2
+2a
+.
+===== page 18 =====
+18
+GERGELY AMBRUS AND BARNABÁS GÁRGYÁN
+Next, consider the quantity s2(a). Now represent the points of Rn−1 in the form of (x,y),
+where x ∈R2 and y ∈Rn−3. We will determine the orthogonal projection of S2(a) onto the
+central diagonal section of Qn−1 given as
+D =
+©
+(x,y) ∈Qn−1 :
+­
+x,12
+®
+= 0, y ∈Qn−3
+ª
+.
+The equation of the hyperplane corresponding to S2(a) is, by (2.2) and (5.13),
+(5.17)
+­
+x,12
+®
+= b
+a
+³1
+2 −
+­
+y,1n−3
+®´
+,
+and S2(a) is described by x ∈Q2, y ∈Qn−3 in addition to the above equation.
+Consider S2(a)|D. We can calculate its volume as follows. Let L1 be the 2-dimensional lin-
+ear subspace of Rn−1 which consists of vectors of the form (x,0n−3) with x ∈R2. Furthermore
+let L2 = L⊥
+1 in Rn−1, an (n −3)-dimensional linear subspace. Then
+(5.18)
+Voln−2
+¡
+S2(a)|D
+¢
+=
+Z
+L2∩Qn−1
+Vol1
+¡
+S2(a)∩(y+L1)
+¢
+dy,
+since during the projection of S2(a), the length of S2(a) ∩(y + L1) does not change, see Fig-
+ure 3.
+y + L1
+S2(a)
+S2(a) ∩(y + L1)
+D
+L2
+L2
+D
+S2(a) ∩(y + L1)
+S2(a)|D
+FIGURE 3. Sections of S2(a) and y+L1 in Qn−1 and its diagonal section D.
+Note that since by (5.10), b
+a ≤
+1
+n−2, (5.17) yields that for n ≥3, S2(a) ∩(y + L1) is non-empty
+for arbitrary y ∈L2 ∩Qn−1. Moreover, the length of S2(a) ∩(y + L1) may be calculated from
+equation (5.17) using elementary plane geometry, resulting in
+Vol1
+¡
+S2(a)∩(y+L1)
+¢
+=
+p
+2−
+p
+2· b
+a
+¯¯¯¯
+1
+2 −
+­
+y,1n−3
+®¯¯¯¯.
+Substituting this back to (5.18), and considering the fact that L2 ∩Qn−1 = Qn−3, we obtain
+that
+(5.19)
+Voln−2
+¡
+S2(a)|D
+¢
+=
+Z
+Qn−3
+³p
+2−
+p
+2· b
+a ·
+¯¯¯¯
+1
+2 −
+­
+y,1n−3
+®¯¯¯¯
+´
+dy.
+According to formula (5.8),
+Voln−2
+¡
+S2(a)|D
+¢
+=
+¯¯¯¯¯¯
+*
+u2(a)
+¯¯u2(a)
+¯¯,dn−1,2
++¯¯¯¯¯¯
+·Voln−2
+¡
+S2(a)
+¢
+=
+p
+2a
+p
+1−b2 ·Voln−2
+¡
+S2(a)
+¢
+,
+===== page 19 =====
+NON-DIAGONAL CRITICAL CENTRAL SECTIONS OF THE CUBE
+19
+therefore, by (5.19),
+(5.20)
+s2(a) =
+p
+1−b2
+a
+·
+µ
+1−b
+a ·
+Z
+Qn−3
+¯¯¯¯
+1
+2 −
+­
+y,1n−3
+®¯¯¯¯ dy
+¶
+.
+Thus, by substituting (5.16) and (5.20) back to (5.11), we derive that
+Fn,2(a) =
+1
+2a(1−a2) −
+1
+a(1−b2) ·
+µ
+1−b
+a ·
+Z
+Qn−3
+¯¯¯¯
+1
+2 −
+­
+y,1n−3
+®¯¯¯¯ dy
+¶
+≥
+≥
+1
+2a(1−a2) −
+1
+a(1−b2) ·
+µ
+1−b
+a ·
+Z
+Qn−3
+³1
+2 −
+­
+y,1n−3
+®´
+dy
+¶
+=
+=
+1
+2a(1−a2) −
+1
+a(1−b2) ·
+³
+1−b
+a · 1
+2
+´
+=
+=
+p
+1−2a2
+2a2(1−a2)(n −3+2a2) ·
+¡p
+n −2(1−a2)−(n −1)a
+p
+1−2a2¢
+by (5.9). Since n ≥4 and a ≤
+1
+p
+2, this is guaranteed to be non-negative if
+(n −2)
+¡
+1−a2¢2 ≥(n −1)2a2¡
+1−2a2¢
+which holds when a2 ≤1
+n or a2 ≥n−2
+2n−3 = γ2
+n. The latter condition implies that Fn,2(a) ≥0 for
+every a ∈
+£
+γn, 1
+p
+2
+¤
+.
+□
+6. ON THE QUESTION OF LOCAL EXTREMALITY
+Supporting Conjecture 1.3, in the concluding section we demonstrate that for any n ≥4,
+the critical direction constructed for the proof of Theorem 1.2 is not locally extremal on Sn−1
+with respect to the central section function σ(v) on Sd−1. Magically, this will also prove to be
+a consequence of Corollary 1.5.
+More precisely, let ξn be the location of the first (and, as conjectured in Section 5, only)
+local minimum of bσ(a) defined by (5.2) on the interval
+¡ 1
+pn, 1
+p
+2
+¢
+. According to the argument
+at the beginning of Section 5, w = vn,2(ξn) is a non-diagonal critical direction, in fact, this is
+a zero of Fn,2(.) defined by (5.4).
+We will prove that w is not locally extremal. By the choice of w, we only have to exclude
+the possibility of w being a local minimum. According to [7, Proposition 3.2.1], it suffices to
+demonstrate that the Hessian f
+H of the Lagrange function (2.14) at w is not positive definite.
+To that end, let q = (1,−1,0,...,0) and consider the value qf
+HqT . The proof of its negativity,
+by (2.15), (4.1), (4.2) and (4.3), amounts to showing that
+(6.1)
+q·
+
+
+β1(w)
+γ1,2(w)
+γ1,n(w)
+γ2,1(w)
+β2(w)
+γ2,n(w)
+γn,1(w)
+γn,2(w)
+βn(w)
+
+
+·qT < 0,
+equivalently, since β1(w) = β2(w) and γ1,2(w) = γ2,1(w),
+(6.2)
+β1(w)+β2(w)−γ1,2(w)−γ2,1(w) = 2
+¡
+β1(w)−γ1,2(w)
+¢
+< 0.
+===== page 20 =====
+20
+GERGELY AMBRUS AND BARNABÁS GÁRGYÁN
+Based on formulae (4.2) and (4.3),
+β1(w) = 1
+π
+Z ∞
+−∞
+sincn−2(ηnt)·sinc(ξnt)·
+³ 2
+ξ2
+n
+(sinc(ξnt)−cos(ξnt))−t2 sinc(ξnt)+sinc(ξnt)
+´
+dt
+γ1,2(w) = 1
+π
+Z ∞
+−∞
+sincn−2(ηnt)·
+³cos(ξnt)−sinc(ξnt)
+ξn
+´2
+dt,
+where
+ηn =
+s
+1−2ξ2
+n
+n −2 .
+Hence on the left hand side of (6.2),
+β1(w)−γ1,2(w) =
+=
+1
+πξ2
+n
+Z ∞
+−∞
+sincn−2(ηnt)·
+³
+(1+ξ2
+n)sinc2(ξnt)−1
+´
+dt =
+= 1
+ξ2
+n
+³
+(1+ξ2
+n)σ(w)−
+s
+1
+1−2ξ2
+n
+σ(dn−2)
+´
+.
+(6.3)
+By the choice of ξn, Theorem 1.1 implies that σ(w) < σ(dn). Hence (6.3) is bounded from
+above by
+1
+ξ2
+n
+³
+(1+ξ2
+n)σ(w)−
+s
+1
+1−2ξ2
+n
+σ(dn−2)
+´
+<
+< 1
+ξ2
+n
+³
+(1+ξ2
+n)σ(dn)−
+s
+1
+1−2ξ2
+n
+σ(dn−2)
+´
+=
+= 1
+ξ2
+n
+³
+(1+ξ2
+n)
+p
+nJn(0)−
+s
+n −2
+1−2ξ2
+n
+Jn−2(0)
+´
+,
+where (2.10) is used in the last step. Due to Corollary 1.5, this is bounded from above by
+1
+ξ2
+n
+µ
+(1+ξ2
+n)
+p
+n ·
+n
+n +1 −
+s
+n −2
+1−2ξ2
+n
+¶
+Jn−2(0) =
+= 1
+ξ2
+n
+·
+1
+q
+1−2ξ2
+n
+· n3/2
+n +1 · Jn−2(0)·
+µq
+1−2ξ2
+n ·(1+ξ2
+n)−
+p
+n −2·(n +1)
+n3/2
+¶
+.
+(6.4)
+Note that since ξn <
+1
+p
+2, the first terms are positive, while the function
+p
+1−2ξ2 · (1 + ξ2) is
+strictly monotone decreasing on the interval ξ ∈
+£ 1
+pn, 1
+p
+2
+¤
+. Hence, (6.4) is maximal at ξ =
+1
+pn,
+where its value is precisely 0. As ξn >
+1
+pn, this implies that (6.1) indeed holds.
+7. ACKNOWLEDGEMENTS
+We are very grateful to F. Fodor for his help and advice during the preparation of the article,
+to H. König for suspecting the existence of non-diagonal critical sections, to L. Pournin for
+informing us about related works and for stimulating discussions, and to the anonymous
+referee whose suggestions improved the article greatly.
+===== page 21 =====
+NON-DIAGONAL CRITICAL CENTRAL SECTIONS OF THE CUBE
+21
+REFERENCES
+1. I. Aliev, On the volume of hyperplane sections of a d-cube, Acta Math. Hungar. 163 (2021), no. 2, 547–551.
+2. G. Ambrus, Critical central sections of the cube, Proc. Amer. Math. Soc. 150 (2022), no. 10, 4463–4474.
+3. K. Ball, Cube Slicing in Rn, Proc. Amer. Math. Soc. 97 (1986), no. 3, 465–473.
+4.
+, Convex geometry and functional analysis, Handbook of the Geometry of Banach Spaces, Vol. I (W. B.
+Johnson and J. Lindenstrauss, eds.), North-Holland Publishing Co., 2001, pp. 161–194.
+5. F. Á. Bartha, F. Fodor, and B. González Merino, Central diagonal sections of the n-cube, Int. Math. Res. Not.
+IMRN 2021 (2021), no. 4, 2861–2881.
+6. W. R. Bennett, H. E. Curtis, and S. O. Rice, Interchannel interference in FM and PM systems under noise
+loading conditions, The Bell System Technical Journal 34 (1955), no. 3, 601–636.
+7. D. P. Bertsekas, Nonlinear programming, Athena Scientific, 1999.
+8. B. Bolzano, Rein analytischer Beweis des Lehrsatzes, dass zwischen je zwei Werthen, die ein entgegengesetzes
+Resultat gewähren, wenigstens eine reelle Wurzel der Gleichung liege, Ostwald’s Klassiker (1817), no. 153,
+29–60.
+9. R. E. Burgess, Comments on Dr. Silberstein’s Paper in Phil. Mag., June 1944, The London, Edinburgh, and
+Dublin Philosophical Magazine and Journal of Science 36 (1945), no. 253, 143–143.
+10. L. Carlitz, D. C. Kurtz, R. Scoville, and O. P. Stackelberg, Asymptotic properties of Eulerian numbers, Probab.
+Theory Related Fields 23 (1972), no. 1, 47–54.
+11. L. Comtet, Advanced Combinatorics, D. Reidel Publishing Company, 1974.
+12. L. S. Goddard, The accumulation of chance effects and the Gaussian frequency distribution, The London,
+Edinburgh, and Dublin Philosophical Magazine and Journal of Science 36 (1945), no. 257, 428–433.
+13. A. H. R. Grimsey, On the accumulation of chance effects and the Gaussian frequency distribution: to the
+Editors of the Philosophical Magazine, The London, Edinburgh, and Dublin Philosophical Magazine and
+Journal of Science 36 (1945), no. 255, 294–295.
+14. H. Hadwiger, Gitterperiodische Punktmengen und Isoperimetrie, Monatsh. Math. 76 (1972), no. 5, 410–418.
+15. K. Harumi, S. Katsura, and J. W. Wrench, Values of (2/π)
+R ∞
+0 ((sint)/t)ndt, Math. Comp. 14 (1960), no. 72,
+379–379.
+16. D. Hensley, Slicing the Cube in Rn and Probability (Bounds for the Measure of a Central Cube Slice in Rn by
+Probability Methods), Proc. Amer. Math. Soc. 73 (1979), no. 1, 95–100.
+17. G. Ivanov and I. Tsiutsiurupa, On the volume of sections of the cube, Anal. Geom. Metr. Spaces 9 (2021),
+no. 1, 1–18.
+18. R. Kerman, R. Ol’hava, and S. Spektor, An asymptotically sharp form of Ball’s integral inequality, Proc. Amer.
+Math. Soc. 143 (2015), no. 9, 3839–3846.
+19. A. Koldobsky, Fourier analysis in convex geometry, no. 116, Mathematical Surveys and Monographs. Amer.
+Math. Soc., 2005.
+20. S. Lang, Undergraduate Analysis, Springer-Verlag, New York, 1997.
+21. P. S. Laplace, Théorie analytique des probabilités, vol. 7, Courcier, 1812.
+22. L. Lesieur and J.-L. Nicolas, On the Euleran Numbers Mn = max1≤k≤n A(n,k), European J. Combin. 13
+(1992), no. 5, 379–399.
+23. R. G. Medhurst and J. H. Roberts, Evaluation of In(b) = 2
+π
+R ∞
+0
+¡ sinx
+x
+¢n cos(bx)dx, Math. Comp. 19 (1965),
+no. 89, 113–117.
+24. M. A. Moskowitz and F. C. Paliogiannis, Functions Of Several Real Variables, World Scientific, 2011.
+25. P. Nayar and T. Tkocz, Extremal sections and projections of certain convex bodies: a survey, arXiv preprint
+arXiv:2210.00885 (2022).
+26. J. B. Parker, The accumulation of chance effects and the Gaussian frequency distribution: To the editors of
+the Philosophical Magazine, The London, Edinburgh, and Dublin Philosophical Magazine and Journal of
+Science 38 (1947), no. 284, 681–682.
+27. L. Pournin, Local extrema for hypercube sections, J. Anal. Math. (2023).
+28.
+, Shallow sections of the hypercube, Israel J. Math. 255 (2023), no. 2, 685–704.
+29. G. Pólya, Berechnung eines bestimmten Integrals, Math. Ann. 74 (1913), no. 2, 204–212.
+30. J.-C. Schlage-Puchta, Asymptotic evaluation of
+R ∞
+0 ( sinx
+x )n dx, Commun. Korean Math. Soc. 35 (2020), no. 4,
+1193–1202.
+31. L. Silberstein, The accumulation of chance effects and the Gaussian frequency distribution, The London,
+Edinburgh, and Dublin Philosophical Magazine and Journal of Science 35 (1944), no. 245, 395–404.
+===== page 22 =====
+22
+GERGELY AMBRUS AND BARNABÁS GÁRGYÁN
+32. R. Thompson, Evaluation of In(b) = 2π−1 R ∞
+0
+¡ sinx
+x
+¢n cos(bx)dx and of Similar Integrals, Math. Comp. 20
+(1966), no. 94, 330–332.
+GERGELY AMBRUS
+Bolyai Institute, University of Szeged, Hungary,
+and Alfréd Rényi Institute of Mathematics, Budapest, Hungary
+e-mail address: ambrus@renyi.hu
+BARNABÁS GÁRGYÁN
+Bolyai Institute, University of Szeged, Hungary
+e-mail address: gargyan.barnabas@gmail.com

@@ -66,6 +66,9 @@ sessions/ · runs/ · out/steps/         step-by-step traces (who did what, when
 verifications/ · out/vsigns/           per-statement verdicts and the signed envelopes
 code/                                  scripts that produced every number in the paper
 reference/                             seed literature actually used (present only in cases that ship it)
+library/                               registered shelf: one directory per literature entry
+  library/<6-digit id>/<name>.pdf|.html  the original (literature.path points to this relative name)
+  library/<6-digit id>/<name>.txt        the extracted text (same directory, same stem)
 ```
 
 ## What is in the export (in full)
@@ -79,6 +82,15 @@ Each case is a **complete copy** of the run's workspace — nothing was cherry-p
 - `library/` and toolchain caches (`.miktex/`, `__pycache__/`, `.locks/`) are included as-is too, so the
   directory can be opened and inspected without re-fetching anything. If this repository is ever made
   public, revisit `library/` first: it holds third-party PDFs.
+  The shelf is one directory per literature entry: `library/<6-digit lit_id>/<cleaned source name>`,
+  and `literature.path` is exactly that relative name (e.g. `000003/critical-central-sections-…pdf`).
+  The extracted text of the same entry sits next to its original, same stem, `.txt`
+  (`000003/critical-central-sections-….txt`). Flat files at the `library/` root (for example
+  `library/<sha12>-<name>.pdf` or `library/000003.txt`) are the retired 2026-11-22 shape: still
+  readable, reported as `legacy` by `wellformed`, and never written again; 4-digit id directories
+  (`library/0003/…`, the older p9-era disks) are legacy for the same reason. (2026-11-25: the demo
+  was repacked — every original moved into its id directory and the 21 entries that had only a PDF
+  were given their `.txt`; the 4 that already had text kept the same bytes.)
 - `demo/** -text` in the root `.gitattributes` keeps every byte as-is on checkout, so
   `COMPILE-RECEIPT.json:tex_sha256` still matches `main.tex` after a clone.
 

@@ -1,0 +1,1447 @@
+===== page 1 =====
+Discrete & Computational Geometry (2022) 68:349–371
+https://doi.org/10.1007/s00454-022-00401-z
+Maximal Perimeters of Polytope Sections and
+Origin-Symmetry
+Matthew Stephen1
+Received: 5 March 2018 / Revised: 9 January 2022 / Accepted: 17 January 2022 /
+Published online: 20 June 2022
+© The Author(s), under exclusive licence to Springer Science+Business Media, LLC, part of Springer Nature 2022
+Abstract
+Let P ⊂Rn (n ≥3) be a convex polytope containing the origin in its interior. Let
+voln−2(relbd(P ∩{tξ + ξ⊥})) denote the (n −2)-dimensional volume of the relative
+boundary of P ∩{tξ + ξ⊥} for t ∈R, ξ ∈Sn−1. We prove the following: if
+voln−2(relbd(P ∩ξ⊥)) = max
+t∈R voln−2(relbd(P ∩{tξ + ξ⊥}))
+for all ξ ∈Sn−1, then P is origin-symmetric, i.e., P = −P. Our result gives a partial
+afﬁrmative answer to a conjecture by Makai et al. We also characterize the origin-
+symmetry of C2 star bodies in terms of the dual quermassintegrals of their sections;
+this can be seen as a dual version of the conjecture of Makai et al.
+Keywords Convex bodies · Convex polytopes · Origin-symmetry · Sections
+Mathematics Subject Classiﬁcation 52B15 · 52A20 · 52A38
+1 Introduction
+A convex body K ⊂Rn is a convex and compact subset of Rn with non-empty interior.
+Convex bodies are extensively studied objects in convex geometry; see the standard
+references [3, 12] for known results and open problems. We say K is origin-symmetric
+if it is equal to its reﬂection through the origin, i.e., K = −K. Many results for convex
+Editor in Charge: János Pach
+This research was supported in part by NSERC.
+Matthew Stephen
+mastephe@ualberta.ca
+1
+Department of Mathematical and Statistical Sciences, University of Alberta, Edmonton, AB T6G
+2G1, Canada
+123
+===== page 2 =====
+350
+Discrete & Computational Geometry (2022) 68:349–371
+bodies depend on the presence of origin-symmetry. For example, the well-known Funk
+Section Theorem (e.g. [3, Thm. 7.2.6]) states that whenever K1, K2 ⊂Rn are origin-
+symmetric convex bodies such that
+voln−1(K1 ∩ξ⊥) = voln−1(K2 ∩ξ⊥)
+for all ξ ∈Sn−1,
+then necessarily K1 = K2. Here, ξ⊥:= {x ∈Rn : ⟨x, ξ⟩= 0}.
+It is both interesting and useful to ﬁnd properties which are equivalent to origin-
+symmetry. Several such characterizations are already known. For example, a convex
+body K ⊂Rn is origin-symmetric if and only if every hyperplane through the origin
+splits K into two halves of equal n-dimensional volume. This result began with Funk
+[2] for n = 3; see [1, 11] for more information. Schneider [11] established the corre-
+spondingstatementwhenthen-dimensionalvolumeisreplacedby(n−1)-dimensional
+surface area.
+Brunn’s Theorem implies that if K is origin-symmetric, then
+voln−1(K ∩ξ⊥) = max
+t∈R voln−1(K ∩{tξ + ξ⊥})
+for all ξ ∈Sn−1.
+(1)
+Here, {tξ + ξ⊥} denotes the translate of ξ⊥containing tξ. Using a particular integro-
+differential transform, Makai et al. [8] proved the converse statement: a convex body
+K which contains the origin in its interior and satisﬁes (1) must be origin-symmetric.
+In fact, they proved a more general statement for star bodies. Ryabogin and Yaskin
+[10] gave an alternate proof using Fourier analysis, as well as a new characterization
+of origin-symmetry via conical sections. A stability version of the result of Makai et
+al. was established in [13].
+Makai et al. [8] conjectured a further characterization of origin-symmetry in terms
+of the quermassintegrals of sections. Recall that the quermassintegrals Wl(K) of a
+convex body K ⊂Rn arise as coefﬁcients in the expansion
+voln(K + t Bn
+2 (o, 1)) =
+n
+
+l=0
+n
+l
+
+Wl(K)tl,
+t ≥0.
+The addition of sets here is the well-known Minkowski addition
+K + t Bn
+2 (o, 1) := {x + ty : x ∈K, y ∈Bn
+2 (o, 1)}.
+Refer to [12] for a thorough overview of mixed volumes and quermassintegrals. For
+any 0 ≤l ≤n −2 and ξ ∈Sn−1, consider the quermassintegral Wl((K −tξ)∩ξ⊥) of
+the (n −1)-dimensional convex body (K −tξ) ∩ξ⊥in ξ⊥. If K is origin-symmetric,
+then the monotonicity and positive multilinearity of mixed volumes together with the
+Alexandroff–Fenchel inequality imply
+Wl(K ∩ξ⊥) = max
+t∈R Wl((K −tξ) ∩ξ⊥)
+for all ξ ∈Sn−1.
+(2)
+123
+===== page 3 =====
+Discrete & Computational Geometry (2022) 68:349–371
+351
+For l = 0, (2) is equivalent to (1), as W0((K −tξ) ∩ξ⊥) is the (n −1)-dimensional
+volume of (K −tξ) ∩ξ⊥. Makai et al. conjectured that if K contains the origin in its
+interior and satisﬁes (2) for any 1 ≤l ≤n −2, it must be origin-symmetric. Makai
+and Martini [7] proved a local variant of the conjecture for smooth perturbations of
+the Euclidean ball; otherwise, the problem is completely open.
+In this paper, we consider the case of convex polytopes which satisfy (2) for l = 1.
+A convex polytope P ⊂Rn is a convex body which is the convex hull of ﬁnitely
+many points. By a polytope we will always mean a convex polytope, unless explicitly
+stated otherwise. It is a common practice to restrict unsolved problems for general
+convex bodies to the class of polytopes (e.g. [9, 14, 15, 17, 18]) because polytopes have
+additional structure. Up to a constant depending on the dimension, W1((P−tξ)∩ξ⊥) is
+the (n−2)-dimensional surface area of the (n−1)-dimensional polytope (P−tξ)∩ξ⊥
+in ξ⊥. Letting voln−2(relbd(P ∩{tξ + ξ⊥})) denote the (n −2)-dimensional volume
+of the relative boundary of P ∩{tξ + ξ⊥}, we prove the following:
+Theorem 1.1 Let P ⊂Rn, n ≥3, be a convex polytope containing the origin in its
+interior, and such that
+voln−2(relbd(P ∩ξ⊥)) = max
+t∈R voln−2(relbd(P ∩{tξ + ξ⊥}))
+(3)
+for all ξ ∈Sn−1. Then P = −P.
+We introduce some notation and simple lemmas in Sect. 2. The proof of Theorem 1.1
+is presented in Sect. 3. Finally, in Sect. 4, we brieﬂy explain how to characterize the
+origin-symmetry of C2 star bodies using the dual quermassintegrals of sections; this
+is a dual version of the conjecture of Makai et al. [8].
+2 Some Notation & Auxiliary Lemmas
+The origin in Rn is denoted by o. The afﬁne hull and linear span of a set A ⊂
+Rn are respectively denoted by aff(A) and span(A). We let Rx := span(x) be
+the line through x ∈Rn \ {0} and the origin. We use | · |2 for the Euclidean
+norm, Bn
+2 (x,r) for the Euclidean ball of radius r
+> 0 centred at x
+∈Rn,
+and Sn−1 for the unit sphere. For ξ ∈Sn−1, we deﬁne ξ+ := {x ∈Rn : ⟨x, ξ⟩≥0},
+ξ−:= {x ∈Rn : ⟨x, ξ⟩≤0}, and Sn−1(ξ, ε) := Sn−1 ∩Bn
+2 (ξ, ε) for small ε > 0.
+Finally, [ξ1, ξ2] := Sn−1 ∩{αξ1 + βξ2 : α, β ≥0} gives the shorter geodesic segment
+connecting linearly independent ξ1, ξ2 ∈Sn−1.
+For any (n −2)-dimensional polytope G ⊂Rn whose afﬁne hull does not contain
+the origin, deﬁne ηG ∈Sn−1 to be the unique unit vector for which
+• the line RηG and aff(G) intersect orthogonally;
+• G ⊂η−
+G := {x ∈Rn : ⟨x, ηG⟩≤0}.
+For each t > 0,
+reﬂec(G, t) := {x ∈Rn : ⟨x, ηG⟩= t and the line Rx intersects G}
+123
+===== page 4 =====
+352
+Discrete & Computational Geometry (2022) 68:349–371
+G
+reflec(G,t)
+G
+t G
+O
+Fig. 1 The geometric meaning of reﬂec(G, t)
+is an (n −2)-dimensional polytope in Rn; see Fig. 1. In words, reﬂec(G, t) is the
+positive homothetic copy of −G lying in {tηG + η⊥
+G} so that every line connecting a
+vertex of reﬂec(G, t) to the corresponding vertex of G passes through the origin.
+Lemma 2.1 Let Q ⊂Rn be a polytope for which the origin is not a vertex. Let
+Sn−1(θ0, ε) be a spherical cap of radius ε > 0 centred at θ0 ∈Sn−1. There exists
+θ ∈Sn−1(θ0, ε) such that θ⊥does not contain any vertices of Q.
+Proof If u1, . . . , ud are the vertices of Q, choose any θ from the non-empty set
+Sn−1(θ0, ε) \ (u⊥
+1 , . . . , u⊥
+d ).
+⊓⊔
+The proof of the following lemma is trivial.
+Lemma 2.2 Let I ⊂R be an open interval. Let { f j}n
+j=1 be a collection of differen-
+tiable Rn-valued functions on I. Deﬁne F(t) := det ( f1(t), . . . , fn(t)). Then F is
+differentiable on I with
+F′(t) =
+n
+
+j=1
+det ( f1(t), . . . , f j−1(t), f ′
+j(t), f j+1(t), . . . , fn(t)).
+3 Proof of Theorem 1.1
+Let P be a convex polytope containing the origin in its interior and satisfying (3) for
+all ξ ∈Sn−1. Our proof has two distinct parts. We ﬁrst need to prove that
+reﬂec(G, t) is an (n −2)-dimensional face of P for some t > 0
+(4)
+whenever G is an (n −2)-dimensional face of P. To the contrary, we suppose G0 is
+an (n −2)-dimensional face of P for which (4) is false. We ﬁnd a special spherical
+123
+===== page 5 =====
+Discrete & Computational Geometry (2022) 68:349–371
+353
+cap Sn−1(ξ0, ε). For every ξ ∈Sn−1(ξ0, ε), ξ⊥misses all the vertices of P, while
+intersecting G0 and no other (n −2)-dimensional face G of P which is parallel to
+G0. The face G is parallel to G0 if aff(G) = aff(G0) + x for some x ∈Rn. We
+derive a “nice” equation from (3) which is valid for all ξ ∈Sn−1(ξ0, ε). Forgetting
+the geometric meaning, we analytically extend this nice equation to all ξ ∈Sn−1,
+excluding a ﬁnite number of great subspheres. Studying the behaviour near one of
+these subspheres, we arrive at our contradiction.
+We conclude that for every vertex v of P, the line Rv contains another vertexv of P.
+In the second part of our proof, we prove thatv = −v. Hence, P is origin-symmetric.
+3.1 First Part
+Assume that our polytope P has an (n −2)-dimensional face G0 for which (4) is false.
+That is, reﬂec(G0, t) is not identically equal to an (n −2)-dimensional face of P for
+any t > 0. We still allow that, for any given t > 0, reﬂec(G0, t) may have a non-empty
+intersection with another (n −2)-dimensional face of P which may or may not be
+parallel to G0.
+By the convexity of P, the hyperplane aff(o, G0) contains at most one other (n−2)-
+dimensional face of P (besides G0) which is parallel to G0. If such a face exists, it
+must lie in aff(o, G0) ∩{tηG0 + η⊥
+G0} for some t > 0 because P contains the origin in
+its interior. We additionally assume without loss of generality that reﬂec(G0, t) is not
+contained within an (n −2)-dimensional face G of P for any t > 0 (else we replace
+G0 with G).
+Lemma 3.1 There is a ξ0 ∈Sn−1 such that
+(i) the hyperplane ξ⊥
+0 does not contain any vertices of P;
+(ii) ξ⊥
+0 intersects G0 but no other (n −2)-dimensional faces of P parallel to G0;
+(iii) there is exactly one vertex v of G0 contained in ξ+
+0 := {x ∈Rn : ⟨x, ξ0⟩≥0}.
+Proof Choose θ ∈Sn−1 so that θ⊥= aff(o, G0). Let η := ηG0 be the unit vector
+deﬁned as before. There are only two possibilities: either θ⊥does not contain any
+(n −2)-dimensional face of P parallel to G0 (besides G0), or it contains exactly one.
+If the ﬁrst case is true, we can of course choose an afﬁne (n −3)-dimensional
+subspace L lying within aff(G0) which does not pass through any vertices of G0, and
+strictly separates exactly one vertex v ∈G0 from the others.
+Suppose the second case is true, i.e., there is a unique t0 > 0 for which H :=
+{x ∈Rn : ⟨x, η⟩= t0} ∩θ⊥contains an (n −2)-dimensional face G of P. By
+deﬁnition and assumption, reﬂec(G0, t0) lies in H and is not contained in G. We can
+choose L ⊂H to be an (n −3)-dimensional afﬁne subspace which, within H, strictly
+separates exactly one vertexv ∈reﬂec(G0, t0) from both G and the remaining vertices
+of reﬂec(G0, t0). Let v be the vertex of G0 lying on the line Rv.
+Regardless of which case was true, set L := aff(o, L) ⊂θ⊥. The (n −2)-dimen-
+sional subspace L intersects G0 but no other (n −2)-dimensional faces of P parallel
+to G0, and separates v in θ⊥from the remaining vertices of G0. Perturbing L within
+θ⊥if necessary (see Lemma 2.1), L also does not contain any vertices of P. Choose
+φ ∈Sn−1 ∩θ⊥∩L⊥.
+123
+===== page 6 =====
+354
+Discrete & Computational Geometry (2022) 68:349–371
+Deﬁne the slab θ⊥
+α := {x ∈Rn : |⟨x, θ⟩| ≤α}, with α > 0 small enough so that
+θ⊥
+α only contains vertices of P lying in θ⊥. Necessarily, θ⊥
+α also only contains the
+(n −2)-dimensional faces of P parallel to G0 which lie entirely in θ⊥. Choose β > 0
+large enough so that the slab {x ∈Rn : |⟨x, φ⟩| ≤β} contains P. Let ξ0 ∈Sn−1 be
+such that ξ⊥
+0 = aff(o, αθ +βφ + L) and ⟨v, ξ0⟩≥0. We then have ξ⊥
+0 ∩P ⊂θ⊥
+α and
+ξ⊥
+0 ∩θ⊥= L. It follows from the construction of θ⊥
+α and L that ξ0 has the desired
+properties.
+⊓⊔
+Let {Ei}i∈I and {Fj} j∈J respectively be the edges and facets (i.e., (n −1)-
+dimensional faces) of P intersecting ξ⊥
+0 . Consider a spherical cap Sn−1(ξ0, ε) of
+radius ε > 0 centred at ξ0. For ε > 0 small enough, the set
+{x ∈Rn : |⟨x, ξ⟩| ≤ε for some ξ ∈S(ξ0, ε)}
+does not contain any vertices of P. Consequently, the map
+t →voln−2(relbd(P ∩{tξ + ξ⊥})) =
+
+j∈J
+voln−2(Fj ∩{tξ + ξ⊥})
+is differentiable in a neighbourhood of t = 0 for each ξ ∈Sn−1(ξ0, ε). Therefore, (3)
+implies
+
+j∈J
+d
+dt voln−2(Fj ∩{tξ + ξ⊥})
+
+t=0 = 0
+(5)
+for every ξ ∈Sn−1(ξ0, ε). We need to ﬁnd an expression for this derivative.
+For each i ∈I, let ui + lis be the line in Rn containing Ei; ui is a point on the
+line, li is a unit vector parallel to the line, and s is the parameter. Clearly, {tξ + ξ⊥}
+intersects the same edges and facets as ξ⊥
+0 for every ξ ∈Sn−1(ξ0, ε) and |t| ≤ε. The
+intersection point of {tξ + ξ⊥} with the edge Ei is given by
+pi(ξ, t) := ui + li
+t −⟨ui, ξ⟩
+⟨li, ξ⟩
+
+.
+Note that ξ⊥
+0 intersects exactly those edges of G0 which are adjacent to the vertex v.
+Whenever Ei is an edge of G0 adjacent to v, we put ui := v and choose li so that it
+gives the direction from another vertex of G0 to v; this ensures ⟨li, ξ0⟩> 0.
+For each j ∈J, there is a pair of vertices from the facet Fj such that the line
+through them does not lie in a translate of aff(G0), and with one of the vertices on
+either open side of ξ⊥
+0 . Translating this line if necessary, we obtain an auxiliary line
+w j + m js which
+• lies within aff(Fj);
+• does not lie within an (n −2)-dimensional afﬁne subspace parallel to aff(G0);
+• is transversal to ξ⊥for every ξ ∈Sn−1(ξ0, ε);
+123
+===== page 7 =====
+Discrete & Computational Geometry (2022) 68:349–371
+355
+• intersects {tξ +ξ⊥} at a point in the relative interior of Fj for every ξ ∈Sn−1(ξ0, ε)
+and |t| ≤ε.
+Again, w j is a point on the line, m j is a unit vector parallel to the line, and s is the
+parameter. The intersection point of {tξ + ξ⊥} with w j + m js is given by
+q j(ξ, t) := w j + m j
+t −⟨w j, ξ⟩
+⟨m j, ξ⟩
+
+.
+Note that we necessarily have ξ0̸ ⊥m j for all j ∈J. Let us reiterate that q j(ξ, t) lies
+in the relative interior of Fj.
+Consider a facet Fj, and an (n −2)-dimensional face G of P which intersects ξ⊥
+0
+and is adjacent to Fj. Observe that G ∩{tξ + ξ⊥} is an (n −3)-dimensional face
+of the (n −2)-dimensional polytope Fj ∩{tξ + ξ⊥}, for each ξ ∈Sn−1(ξ0, ε) and
+|t| ≤ε. Express G ∩{tξ + ξ⊥} as an up-to-boundaries disjoint union of (n −3)-
+dimensional simplices whose vertices correspond to the vertices of G ∩{tξ + ξ⊥};
+that is, each simplex has vertices pi1(ξ, t), . . . , pin−2(ξ, t) for some i1, . . . , in−2 ∈I.
+Triangulating every such (n −3)-dimensional face G ∩{tξ + ξ⊥} in this way, we
+get a triangulation of Fj ∩{tξ + ξ⊥} by taking the convex hull of the simplices in its
+relative boundary with q j(ξ, t).
+Remark The description and orientation of a simplex 	 in the triangulation of
+Fj ∩{tξ + ξ⊥} in terms of the ordered vertices {pi1(ξ, t), . . . , pin−2(ξ, t), q j(ξ, t)} is
+independent of ξ ∈S(ξ0, ε) and |t| ≤ε.
+Setting n j ∈Sn−1 to be the outer unit normal to Fj, voln−2(Fj ∩{tξ + ξ⊥}) is then
+a sum of terms of the form
+voln−2(	) = det (pi1(ξ, t) −q j(ξ, t), . . . , pin−2(ξ, t) −q j(ξ, t), n j, ξ)
+(n −2)!
+
+1 −⟨n j, ξ⟩2
+;
+(6)
+e.g. see [3, p.14] for the volume formula for a simplex. We assume the column vectors
+in the determinant are ordered so that the determinant is positive. Differentiating (6)
+at t = 0 with the help of Lemma 2.2 gives
+1
+(n −2)!
+
+1 −⟨n j, ξ⟩2
+n−2
+
+γ =1
+det (Xi1(ξ), . . . , Xiγ (ξ), . . . , Xin−2(ξ), n j, ξ),
+(7)
+where for 1 ≤γ ≤n −2,
+Xiγ (ξ) := piγ (ξ, 0) −q j(ξ, 0)
+= uiγ −⟨uiγ , ξ⟩
+⟨liγ , ξ⟩liγ −w j + ⟨w j, ξ⟩
+⟨m j, ξ⟩m j,
+Xiγ (ξ) := d
+dt (piγ (ξ, t) −q j(ξ, t))
+
+t=0 =
+liγ
+⟨liγ , ξ⟩−
+m j
+⟨m j, ξ⟩.
+123
+===== page 8 =====
+356
+Discrete & Computational Geometry (2022) 68:349–371
+The left hand side of (5) is a sum of expressions having the form (7). That is, (5) is
+equivalent to
+
+	
+⎛
+⎝
+
+n−2
+γ =1 det (Xi1(ξ), . . . , Xiγ (ξ), . . . , Xin−2(ξ), n j, ξ)
+(n −2)!
+
+1 −⟨n j, ξ⟩2
+⎞
+⎠= 0
+(8)
+for every ξ ∈Sn−1(ξ0, ε), where the ﬁrst summation is over all appropriately ordered
+indices {i1, . . . , in−2, j} corresponding to vertices of simplices 	 in our triangulation
+of the relative boundary of P ∩ξ⊥
+0 . Forget the geometric meaning of (8). Clearing
+denominators on the left-hand side of (8) gives a function of ξ which we denote by
+(ξ). Because  is a sum of products of scalar products of ξ and terms
+
+1 −⟨n j, ξ⟩2,
+we are able to consider  as a function on all of Sn−1 such that  ≡0 on Sn−1(ξ0, ε).
+Lemma 3.2 (ξ) = 0 for all ξ ∈Sn−1.
+Proof Suppose ζ ∈Sn−1 is such that (ζ)̸ = 0. We have (n j) = 0 for all j ∈J,
+so ζ̸ = n j. There is a ζ1 from the relative interior of Sn−1(ξ0, ε) which is not parallel
+to ζ, and is such that the geodesic segment [ζ1, ζ] connecting ζ1 to ζ contains none
+of the n j. Choose ζ2 ∈Sn−1 which is perpendicular to ζ1, lies in aff([ζ1, ζ]), and is
+such that ⟨ζ2, ζ⟩> 0. Let  be the restriction of  to ξ ∈[ζ1, ζ], and adopt polar
+coordinates ξ = ζ1 cos φ + ζ2 sin φ. As a function of φ ∈[0, arccos ⟨ζ1, ζ⟩],  is
+a sum of products of cos φ, sin φ, and
+
+1 −⟨n j, ζ1 cos φ + ζ2 sin φ⟩2. The radicals
+in the expression for  are never zero because [ζ1, ζ] misses all of the n j, so  is
+analytic. Consequently,  must be identically zero, as it vanishes in a neighbourhood
+of φ = 0. This is a contradiction.
+⊓⊔
+Lemma 3.2 implies that the equality in (8) holds for all ξ ∈Sn−1 \ A, where A is
+the union over i ∈I and j ∈J of the unit spheres in l⊥
+i and m⊥
+j . Of course, we have
+±n j ∈Sn−1 ∩m⊥
+j for each j ∈J, so {±n j} j∈J ⊂A. We will consider the limit of
+the left-hand side of (8) along a certain path in Sn−1 \ A which terminates at a point
+in A.
+The (n −2)-dimensional face G0 is the intersection of two facets of P belonging
+to {Fj} j∈J, say F1 and F2. The normal space G⊥
+0 := (aff(G0) −aff(G0))⊥of G0 is
+two-dimensional and spanned by n1 and n2, the outer unit normals of F1 and F2. For
+s ∈R, deﬁne
+ns :=
+(1 −s)n1 + sn2
+|(1 −s)n1 + sn2|2
+.
+Choose ε > 0 small enough so that ⟨v,ns⟩> 0 for all s ∈[1 −ε, 1 +ε]; this is
+possible because we have ⟨v, n1⟩> 0 and ⟨v, n2⟩> 0. Consider the non-degenerate
+geodesic segments
+A+ := {ns : 1 −ε ≤s ≤1} and
+A−:= {ns : 1 ≤s ≤1 +ε}
+123
+===== page 9 =====
+Discrete & Computational Geometry (2022) 68:349–371
+357
+in Sn−1 ∩G⊥
+0 ∼= S1. The arc A+ is not contained in the normal space of any other
+(n −2)-dimensional face of P intersected by ξ⊥
+0 , because ξ⊥
+0 does not intersect any
+other (n −2)-dimensional faces parallel to G0; neither is A+ contained in m⊥
+j for any
+j ∈J, because m j is not contained in a translate of aff(G0). The same conclusions
+also hold for A−. Therefore, we can choose s+ ∈(1 −ε, 1) and s−∈(1, 1 +ε) so
+that for n ∈{ns+,ns−}
+• n is not a unit normal for any (n −2)-dimensional face of P intersected by ξ⊥
+0 ,
+besides G0;
+• n̸ ⊥m j, hence n̸ = ±n j, for all j ∈J;
+• ⟨v,n⟩> 0.
+For the time being, arbitrarily ﬁx s0 ∈{s+, s−} and set n := ns0. For small δ > 0,
+deﬁne the unit vector
+ξδ :=
+n + δξ0
+|n + δξ0|2
+.
+Clearly,
+lim
+δ→0+ ξδ = n ∈Sn−1 ∩G⊥
+0 ⊂
+
+i∈I
+(Sn−1 ∩l⊥
+i ) ⊂A.
+We have ⟨ξδ,li⟩, ⟨ξδ, m j⟩̸ = 0 for all i ∈I, j ∈J whenever
+0 < δ < min
+ |⟨n,li⟩|
+|⟨ξ0,li⟩|, |⟨n, m j⟩|
+|⟨ξ0, m j⟩| : i ∈I such that ⟨n,li⟩̸ = 0, j ∈J
+
+.
+The previous minimum is well deﬁned and positive, because ξ0̸ ⊥li, m j andn̸ ⊥m j
+for all i ∈I, j ∈J. So ξδ ∈Sn−1 \ A for small enough δ > 0.
+Now, replace ξ with ξδ in (8), multiply both sides of the resulting equation by δn−2,
+and take the limit as δ goes to zero. Consider what happens to the expressions (7)
+multiplied by δn−2 in this limit. We have
+lim
+δ→0+ δXiγ (ξδ)
+= lim
+δ→0+
+
+δuiγ −δ ⟨uiγ ,n + δξ0⟩
+⟨liγ ,n + δξ0⟩liγ −δw j + δ ⟨w j,n + δξ0⟩
+⟨m j,n + δξ0⟩m j
+
+=
+⎧
+⎪⎨
+⎪⎩
+o
+if n̸ ⊥liγ ,
+−⟨uiγ ,n⟩
+⟨liγ , ξ0⟩liγ
+if n ⊥liγ ,
+123
+===== page 10 =====
+358
+Discrete & Computational Geometry (2022) 68:349–371
+and
+lim
+δ→0+ δXiγ (ξδ)
+= lim
+δ→0+
+
+δ|n + δξ0|2
+liγ
+⟨liγ ,n + δξ0⟩−δ|n + δξ0|2
+m j
+⟨m j,n + δξ0⟩
+
+=
+⎧
+⎪⎨
+⎪⎩
+o
+if n̸ ⊥liγ ,
+liγ
+⟨liγ , ξ0⟩
+if n ⊥liγ ,
+because ξ0̸ ⊥li for all i ∈I and n̸ ⊥m j for all j ∈J. Therefore, δn−2 times
+expression (7) vanishes in the limit if at least one index iγ in (7) corresponds to an
+edge direction liγ which is not perpendicular ton. If li1, . . . ,lin−2 are all perpendicular
+to n, then the limit of δn−2 times expression (7) becomes
+(−1)n−3 det (li1, . . . ,lin−2, n j,n)
+(n −2)!
+
+1 −⟨n j,n⟩2
+n−2
+
+ω=1
+⎛
+⎝⟨uiω,n⟩−1
+n−2
+
+γ =1
+⟨uiγ ,n⟩
+⟨liγ , ξ0⟩
+⎞
+⎠.
+(9)
+If the determinant in (9) is non-zero, thenli1, . . . ,lin−2 are linearly independent. There-
+fore, li1, . . . ,lin−2 span an (n −2)-dimensional subspace which is parallel to the
+(n −2)-dimensional face G of P to which the edges Ei1, . . . , Ein−2 belong. Necessar-
+ily,n will be a unit normal for G, so G = G0 by our choice ofn. We conclude that the
+limit of δn−2 times (7) only has a chance of being non-zero if (7) corresponds to an
+(n −2)-dimensional simplex 	 j in our triangulation of Fj ∩ξ⊥
+0 , j = 1 or j = 2, with
+the base of 	 j being an (n −3)-dimensional simplex in the triangulation of G0 ∩ξ⊥
+0 .
+If (7) comes from such a 	1 in the triangulation of F1 ∩ξ⊥
+0 , then the limit of δn−2
+times (7) is given by (9), and simpliﬁes further to the non-zero term
+(−1)n−3⟨v,n⟩n−3s0 det (li1, . . . ,lin−2, n1, n2)
+(n −3)!⟨li1, ξ0⟩· . . . · ⟨lin−2, ξ0⟩|(1 −s0)n1 + s0n2|2
+
+1 −⟨n1,n⟩2̸ = 0.
+(10)
+The distinct indices i1, . . . , in−2 correspond to the vertices of a simplex in the trian-
+gulation of G0 ∩ξ⊥
+0 , ordered so that the expression in (6) for the facet F1 is positive.
+The important fact that (10) is non-zero is clear once we observe that the determinant
+is non-zero. Indeed, the unit vectors li1, . . . ,lin−2 are necessarily linearly independent
+and perpendicular to both n1 and n2, because they give the directions for distinct edges
+of G0 with the common vertex v. Similarly, when (7) comes from such a 	2 in the
+triangulation of F2 ∩ξ⊥
+0 , its product with δn−2 has the non-zero limit
+(−1)n−3⟨v,n⟩n−3(1 −s0) det (lk1, . . . ,lkn−2, n2, n1)
+(n −3)!⟨lk1, ξ0⟩· . . . · ⟨lkn−2, ξ0⟩|(1 −s0)n1 + s0n2|2
+
+1 −⟨n2,n⟩2̸ = 0.
+(11)
+The distinct indices k1, . . . , kn−2 correspond to the vertices of a simplex in the trian-
+gulation of G0 ∩ξ⊥
+0 , ordered so that the expression in (6) for the facet F2 is positive.
+123
+===== page 11 =====
+Discrete & Computational Geometry (2022) 68:349–371
+359
+We will now consider the signs of the determinants in (10) and (11).
+Lemma 3.3 The determinants det (li1, . . . ,lin−2, n1, n2) in (10) have the same sign for
+any collection of indices i1, . . . , in−2 with the previously described properties. The
+determinants in (11) also all have the same sign. However, the signs of the determinants
+in (10) and (11) may differ.
+Proof We will transform the determinant det (li1, . . . ,lin−2, n1, n2) into a determinant
+having the same form as in (6). We will do this with the aid of two linear transforma-
+tions. Before we deﬁne these transformations, we ﬁrst describe several subspaces on
+which they act.
+Let y ∈G0 ∩ξ⊥
+0 . Note that
+o ∈((G0 −y) ∩ξ⊥
+0 ) = ((G0 ∩ξ⊥
+0 ) −y) ⊂((F1 −y) ∩ξ⊥
+0 ) = ((F1 ∩ξ⊥
+0 ) −y).
+Consider the (n −3)-dimensional subspace
+L := span ((G0 ∩ξ⊥
+0 ) −y),
+which is orthogonal to the three-dimensional subspace
+L⊥= span (n1, n2, ξ0).
+Deﬁne the (n −2)-dimensional subspace
+Ln1 := span(n1, L).
+The projections n2|n⊥
+1 and ξ0|n⊥
+1 are non-zero, linearly independent, and orthogonal
+to Ln1. So, the orthogonal complement of Ln1 is the two-dimensional plane
+L⊥
+n1 = span (n2|n⊥
+1 , ξ0|n⊥
+1 ).
+Also consider the (n −2)-dimensional subspace
+M := span ((F1 ∩ξ⊥
+0 ) −y)
+for which
+M⊥= span(n1, ξ0) = span(n1, ξ0|n⊥
+1 ).
+Observe that M ∩Ln1 = L. Let T : Rn →Rn be the special orthogonal matrix which
+acts as the identity on Ln1, and rotates n2|n⊥
+1 through the plane L⊥
+n1 to a vector parallel
+to, and with the same direction as, ξ0|n⊥
+1 . Of course,
+T n1 = n1.
+123
+===== page 12 =====
+360
+Discrete & Computational Geometry (2022) 68:349–371
+Recall that v denotes the unique vertex of G0 which lies in the interior of the half-
+space ξ+
+0 . Note that v −y ∈G0 −y, but v −y /∈L. We have (n2|n⊥
+1 ) ⊥(v −y),
+because n1, n2 ⊥(v −y). Since orthogonal transformations preserve inner products,
+⟨ξ0|n⊥
+1 , T (v −y)⟩= |ξ0|n⊥
+1 |2|T (n2|n⊥
+1 )|−1
+2 ⟨T (n2|n⊥
+1 ), T (v −y)⟩
+= |ξ0|n⊥
+1 |2|T (n2|n⊥
+1 )|−1
+2 ⟨n2|n⊥
+1 , v −y⟩= 0
+and
+⟨n1, T (v −y)⟩= ⟨T (n1), T (v −y)⟩= ⟨n1, v −y⟩= 0.
+It follows that
+T (v −y) ∈(n⊥
+1 ∩(ξ0|n⊥
+1 )⊥) = span(n1, ξ0|n⊥
+1 )⊥= M.
+Furthermore, we know that
+T (v −y) /∈L,
+because v −y /∈L and the invertible map T acts as the identity on L ⊂Ln1.
+The deﬁnition of our second linear transformation depends on the relative position
+of T (v −y) to q1(ξ0, 0) −y. Recall that the vector q1(ξ0, 0) ∈F1 ∩ξ⊥
+0 comes from
+the intersection of ξ⊥
+0 with the auxiliary line w1 + m1s corresponding to the facet F1.
+Therefore,
+q1(ξ0, 0) −y ∈M.
+Furthermore, we have
+q1(ξ0, 0) −y /∈L,
+because q1(ξ0, 0) lies in the relative interior of F1.
+The subspace L splits M into two halves, relatively open within M, which together
+must contain the vectors T (v−y) and q1(ξ0, 0)−y. If these points lie in the same half,
+let T : Rn →Rn be the identity. If T (v −y) and q1(ξ0, 0) −y lie in opposite halves,
+let T be the orthogonal transformation which reﬂects points across the hyperplane
+span(M⊥, L) = span (n1, ξ0|n⊥
+1 , L).
+In either case, observe that
+T n1 = n1
+and
+T (ξ0|n⊥
+1 ) = ξ0|n⊥
+1 ,
+and set u := T T (v −y) + y. We then have
+u, q1(ξ0, 0) ∈M + y = aff(F1 ∩ξ⊥
+0 )
+and
+u, q1(ξ0, 0) /∈L + y = aff(G0 ∩ξ⊥
+0 ).
+123
+===== page 13 =====
+Discrete & Computational Geometry (2022) 68:349–371
+361
+The afﬁne subspace aff(G0 ∩ξ⊥
+0 ) splits aff(F1 ∩ξ⊥
+0 ) into two halves, with u and
+q1(ξ0, 0) contained within the relative interior of the same half.
+Fix a set of ordered indices i1, . . . , in−2 from (10). Each unit vector liγ is parallel
+to an edge Eiγ of G0. Indeed, we have
+liγ =
+v −piγ (ξ0, 0)
+|v −piγ (ξ0, 0)|2
+,
+where piγ (ξ0, 0) is the previously deﬁned intersection of Eiγ with ξ⊥
+0 . Note that
+piγ (ξ0, 0) −y ∈L. As both T and T act as the identity on L, we see
+T T (piγ (ξ0, 0) −y) = piγ (ξ0, 0) −y.
+We then ﬁnd that
+det (li1, . . . ,lin−2, n1, n2)
+= det
+ v −pi1(ξ0, 0)
+|v −pi1(ξ0, 0)|2
+, . . . , v −pin−2(ξ0, 0)
+|v −pin−2(ξ0, 0)|2
+, n1, n2 −⟨n1, n2⟩n1
+
+= C det
+T T (v −y) −T T (pi1(ξ0, 0) −y), . . .
+(12)
+. . . , T T (v −y) −T T (pin−2(ξ0, 0) −y), T T n1, T T (n2|n⊥
+1 )
+
+= C(−1)n−2|T (n2|n⊥
+1 )|2
+|ξ0|n⊥
+1 |2
+det
+
+pi1(ξ0, 0) −u, . . . , pin−2(ξ0, 0) −u, n1, ξ0|n⊥
+1
+
+= C(−1)n−2|T (n2|n⊥
+1 )|2
+|ξ0|n⊥
+1 |2
+det
+
+pi1(ξ0, 0) −u, . . . , pin−2(ξ0, 0) −u, n1, ξ0
+
+,
+where
+C = ±
+⎛
+⎝
+n−2
+
+γ =1
+|v −piγ (ξ0, 0)|2
+⎞
+⎠
+−1
+.
+The sign of C depends on the deﬁnition of T . Importantly, the sign of
+C(−1)n−2|T (n2|n⊥
+1 )|2
+ξ0|n⊥
+1 |2
+is independent of any particular choice of appropriate indices in (10). The function
+t →det
+
+pi1(ξ0, 0) −((1 −t)u + tq1(ξ0, 0)), . . .
+. . . , pin−2(ξ0, 0) −((1 −t)u + tq1(ξ0, 0)), n1, ξ0
+
+123
+===== page 14 =====
+362
+Discrete & Computational Geometry (2022) 68:349–371
+is continuous for t ∈[0, 1]; it is also non-vanishing for such t because the line segment
+connecting u to q1(ξ0, 0) lies in aff(F1 ∩ξ⊥
+0 ) and does not intersect aff(G0 ∩ξ⊥
+0 ). By
+the Intermediate Value Theorem, the determinant in (12) must have the same sign as
+det
+
+pi1(ξ0, 0) −q1(ξ0, 0), . . . , pin−2(ξ0, 0) −q1(ξ0, 0), n1, ξ0
+
+.
+Recalling formula (6), we recognize that the previous determinant is positive. We
+conclude that the sign of det (li1, . . . ,lin−2, n1, n2) is independent of the choice of
+appropriate indices in (10). A similar argument shows that the sign of the determinant
+in (11) is also independent of the choice of appropriate indices k1, . . . , kn−2.
+⊓⊔
+We return to the altered (8), obtained by multiplying both sides of (8) by δn−2 and
+replacing ξ with ξδ. In view of Lemma 3.3 and expressions (10) and (11), the limit of
+the left-hand side of the altered (8) becomes
+lim
+δ→0+ δn−2 
+	
+
+n−2
+γ =1 det (Xi1(ξδ), . . . , Xiγ (ξδ), . . . , Xin−2(ξδ), n j, ξδ)
+(n −2)!
+
+1 −⟨n j, ξδ⟩2
+=
+ 
+(−1)n−3⟨v,n⟩n−3s0 det (li1, . . . ,lin−2, n1, n2)
+(n −3)!⟨li1, ξ0⟩· . . . · ⟨lin−2, ξ0⟩|(1 −s0)n1 + s0n2|2
+
+1 −⟨n1,n⟩2
++
+(−1)n−3⟨v,n⟩n−3(1 −s0) det (lk1, . . . ,lkn−2, n2, n1)
+(n −3)!⟨lk1, ξ0⟩· . . . · ⟨lkn−2, ξ0⟩|(1 −s0)n1 + s0n2|2
+
+1 −⟨n2,n⟩2
+
+=
+(−1)n−3⟨v,n⟩n−3
+(n −3)!|(1 −s0)n1 + s0n2|2
+
+s0
+
+1 −⟨n1,n⟩2 ±
+1 −s0
+
+1 −⟨n2,n⟩2
+
+(13)
+×
+ det (li1, . . . ,lin−2, n1, n2)
+⟨li1, ξ0⟩· . . . · ⟨lin−2, ξ0⟩.
+Thethirdandfourthsummationsaretakenoverindicesi1, . . . , in−2 ∈I corresponding
+to the vertices {pi1(ξ0, 0), . . . , pin−2(ξ0, 0)} of simplices in the triangulation of G0 ∩
+ξ⊥
+0 , ordered so that the expression in (6) is positive for F1. For each set of indices
+i1, . . . , in−2, we wrote k1, . . . , kn−2 for the suitable rearrangement which makes (6)
+positive for F2. The ± in (13) depends on whether or not the determinants
+det (li1, . . . ,lin−2, n1, n2)
+have the same sign as the determinants
+det (lk1, . . . ,lkn−2, n2, n1).
+Whether this ± is a plus or a minus does not depend on our previous arbitrary choice
+of s0 ∈{s+, s−}. Recalling that 0 < s+ < 1 < s−, we also observe that
+s+
+
+1 −⟨n1,n⟩2 +
+1 −s+
+
+1 −⟨n2,n⟩2 > 0 and
+s−
+
+1 −⟨n1,n⟩2 −
+1 −s−
+
+1 −⟨n2,n⟩2 > 0.
+123
+===== page 15 =====
+Discrete & Computational Geometry (2022) 68:349–371
+363
+E( i, i+1)
+E( i, i+1)
+O
+i+1
+i+1
+i
+i
+Fig. 2 The triangle T (o, vi, vi+1) is similar to the triangle T (o,vi,vi+1) for 0 ≤i ≤k −1
+So, if the ± in (13) is a plus, let us have chosen s0 = s+; if the ± is a minus, let us
+have chosen s0 = s−.
+It is now clear that (13) is non-zero for the appropriately selected s0. Indeed, we
+know that ⟨v,n⟩> 0, ⟨li, ξ0⟩> 0 for all edges Ei of G0 intersected by ξ⊥
+0 , and
+the determinants in (13) are all non-zero with the same sign. However, (13) being
+non-zero contradicts the fact that the limit of the right-hand side of the altered (8) is
+zero. This contradiction implies that our starting assumption, “there exists an (n −2)-
+dimensional face G0 of P which does not satisfy (4)", is false. It then follows that
+every (n −2)-dimensional face of P satisﬁes (4).
+3.2 Second Part
+For every (n−2)-dimensional face G of P, reﬂec(G, t) is also an (n−2)-dimensional
+face of P for some t > 0. From this fact, we can immediately conclude the following:
+• If v is a vertex of P, then the line Rv contains exactly one other vertex of P. This
+second vertex, which we will denote by v, necessarily lies on the opposite side of
+the origin as v.
+• If u and v are vertices of P connected by an edge E(u, v), then u and v are
+connected by an edge E(u,v) parallel to E(u, v).
+We prove P = −P by showing v = −v for every vertex v. To the contrary, suppose
+there is a vertex v for which |v|2 < |v|2. Let {vi}k
+i=0 be a sequence of vertices of P such
+that v0 = v, vk = v, and the vertices vi and vi+1 are connected by an edge E(vi, vi+1)
+for each 0 ≤i ≤k −1. It follows from the previous itemized observations that
+the triangle T (o, v, v1) with vertices {o, v, v1} is similar to the triangle T (o,v,v1);
+see Fig. 2. Given that |v|2 < |v|2, we must also have |v1|2 < |v1|2. Continuing
+this argument recursively, the similarity of the triangle T (o, vi, vi+1) to the triangle
+T (o,vi,vi+1) implies |vi+1|2 < |vi+1|2 for 1 ≤i ≤k −1. But then |v|2 = |vk|2 <
+|vk|2 = |v|2, which is a contradiction.
+123
+===== page 16 =====
+364
+Discrete & Computational Geometry (2022) 68:349–371
+4 Dual Quermassintegrals of Sections
+We say a set L ⊂Rn is star-shaped if every one-dimensional subspace intersects L in
+a (possibly degenerate) line segment which includes the origin. The radial function of
+such a star-shaped L is deﬁned by
+ρL(ξ) := max {a ≥0 : aξ ∈L}
+for ξ ∈Sn−1,
+and it completely determines L:
+L = {o} ∪{x ∈Rn \ {o} : |x|2 ≤ρL(x/|x|2)}.
+The radial function naturally extends to a positively homogeneous function on Rn \{0}
+with homogeneity −1. A star body is a star-shaped L ⊂Rn whose radial function
+is positive and continuous. Note that a convex body which contains the origin in its
+interior is also a star body. Finally, note that a star body is C2 if its radial function is
+in C2(Rn \ {0}).
+Dual quermassintegrals (and, more generally, dual mixed volumes) were introduced
+by Lutwak [6]. The dual quermassintegrals 
+Wl(L) of a star body L ⊂Rn arise as
+coefﬁcients in the expansion
+voln(L + t Bn
+2 (o, 1)) =
+n
+
+l=0
+n
+l
+
+
+Wl(L)tl,
+t ≥0.
+Here, L + t Bn
+2 (o, 1) denotes the radial sum of the star bodies L and t Bn
+2 (o, 1). That is,
+L + t Bn
+2 (o, 1) is the star body whose radial function is the sum of the radial functions
+for L and t Bn
+2 (o, 1):
+max {a ≥0 : aξ ∈L + t Bn
+2 (o, 1)} := ρL(ξ) + tρBn
+2 (o,1)(ξ),
+ξ ∈Sn−1.
+There are also explicit expressions for the dual quermassintegrals in terms of the radial
+function (e.g. [3, formula (A.57)]):
+
+Wl(L) = 1
+n
+
+Sn−1 ρn−l
+L
+(ξ) dξ.
+See [3, 12] for further details.
+There are many parallels between quermassintegrals and dual quermassintegrals,
+so it is natural to consider the conjecture of Makai et al. [8] in the dual setting. Given
+a star body L ⊂Rn and any ξ ∈Sn−1, (L −tξ) ∩ξ⊥is an (n −1)-dimensional
+star body in ξ⊥for all t ∈R which are in a small enough neighborhood about zero.
+Therefore, for each integer 0 ≤l ≤n −2, we can deﬁne the function
+
+Wl,ξ(t) := 
+Wl((L −tξ) ∩ξ⊥)
+123
+===== page 17 =====
+Discrete & Computational Geometry (2022) 68:349–371
+365
+on a small neighborhood about zero, where 
+Wl((L −tξ) ∩ξ⊥) is the dual quermass-
+integral of the (n −1)-dimensional star body (L −tξ) ∩ξ⊥in ξ⊥. For all t ∈R at
+which 
+Wl,ξ is well deﬁned, we have
+
+Wl,ξ(t) =
+1
+n −1
+
+Sn−1∩ξ⊥ρn−1−l
+L−tξ (η) dη
+=
+κn−1
+κn−1−l
+
+G(ξ⊥,n−1−l)
+voln−1−l((L −tξ) ∩H) d H,
+(14)
+where the second equality is given by the dual Kubota formula (e.g. [3, Thm. A.7.2]).
+Here, G(ξ⊥, n−1−l) is the Grasmannian of (n−1−l)-dimensional subspaces in ξ⊥,
+andd H is the O(n−1)-invariant regular Borel probabilitymeasureon G(ξ⊥, n−1−l).
+Using (14), we extend the deﬁnition of 
+Wl,ξ(t) to all t ∈R.
+Note that 
+Wl,ξ is twice continuously differentiable in a neighbourhood of zero when
+L is C2. We prove the following theorem.
+Theorem 4.1 Let L ⊂Rn be a C2 star body and 1 ≤l ≤n −2. Then
+d
+dt
+
+Wl,ξ(t)
+
+t=0 = 0
+∀ξ ∈Sn−1
+(15)
+if and only if L = −L.
+The proof of Theorem 4.1 follows from formulas derived in [16]. These formulas
+involve spherical harmonics, and the fractional derivatives of 
+Wl,ξ at t = 0. Recall
+that a spherical harmonic of dimension n and degree m is the restriction to Sn−1 of
+a real-valued harmonic and homogeneous polynomial of degree m in n variables.
+Importantly, there is an orthogonal basis of L2(Sn−1) consisting of spherical harmon-
+ics. Furthermore, any two spherical harmonics of the same dimension and different
+degrees are orthogonal. The standard reference for spherical harmonics in convex
+geometry is [4].
+Let h be a complex-valued L1 function on R which is m times continuously dif-
+ferentiable in a neighbourhood of zero. Let q ∈C \ {0, 1, . . . , m −1} with real part
+−1 < Re(q) < m. The fractional derivative of h of order q at zero is given by
+h(q)(0) =
+1
+(−q)
+ 1
+0
+t−1−q
+
+h(t) −
+m−1
+
+k=0
+dk
+dsk h(s)
+
+s=0
+tk
+k!
+
+dt
++
+1
+(−q)
+ ∞
+1
+t−1−qh(t) dt +
+1
+(−q)
+m−1
+
+k=0
+1
+k!(k −q)
+dk
+dtk h(t)
+
+t=0;
+see, for example, [5]. Deﬁning h(k)(0) by the limit for k = 0, 1, . . . , m −1, we get
+an analytic function q →h(q)(0) for q ∈C with −1 < Re(q) < m. Fractional
+derivatives extend the notion of classical differentiation:
+h(k)(0) = (−1)k dk
+dtk h(t)
+
+t=0
+for k = 0, 1, . . . m.
+123
+===== page 18 =====
+366
+Discrete & Computational Geometry (2022) 68:349–371
+When L is C2 we can consider the fractional derivatives of 
+Wl,ξ at zero of order q,
+for q ∈C with −1 < Re(q) < 2.
+The next lemma was essentially proven in [16], but we reproduce a detailed proof
+here for completeness. Recall that the Legendre polynomials Pn
+m : R →R, of degree
+m ≥0 and ﬁxed dimension n ≥2, are an orthogonal system of polynomials on [−1, 1]
+with respect to the weight function (1 −t2)(n−3)/2, and normalized by the condition
+Pn
+m(1) = 1.
+Lemma 4.1 Let L ⊂Rn be a C2 star body. Let 0 ≤l ≤n −2 be an integer. Let
+Hn
+m ∈L2(Sn−1) be a spherical harmonic of dimension n and degree m ∈N ∪{0}.
+Deﬁne fl,m ∈L1(R) by
+fl,m(t) := (n −1)κn−1Pn
+m(t)(1 −t2)(n−3−l)/2χ[−1,1](t).
+Then
+
+Sn−1
+
+W (q)
+l,ξ (0)Hn
+m(ξ) dξ
+=
+n −1 −l
+(n −1 −l −q)(n −1) f (q)
+l,m (0)
+
+Sn−1 ρn−1−l−q
+L
+(ξ)Hn
+m(ξ) dξ
+(16)
+for all q ∈C \ {n −1 −l} with −1 < Re(q) < 2.
+Proof Fix q ∈R with −1 < q < 0, for the time being. For any integer 1 ≤k ≤n −1
+and any ξ ∈Sn−1, we have
+
+W (q)
+n−1−k,ξ(0) =
+ ∞
+0
+t−1−q 
+Wn−1−k,ξ(t)
+(−q)
+dt =
+
+R
+|t|−1−q(1 + sgn t) 
+Wn−1−k,ξ(t)
+2(−q)
+dt
+=
+
+G(ξ⊥,k)
+
+R
+|t|−1−q(1 + sgn t) volk((L −tξ) ∩H)
+2(−q)κkκ−1
+n−1
+dt d H,
+where the last equality is obtained using [3, formula (A.61), p.412] and Fubini’s
+Theorem. Continuing the computation, we ﬁnd
+=
+
+G(ξ⊥,k)
+
+L∩span(H,ξ)
+|⟨x, ξ⟩|−1−q(1 + sgn ⟨x, ξ⟩)
+2(−q)κkκ−1
+n−1
+dx d H
+=
+
+G(ξ⊥,k)
+
+Sn−1∩span(H,ξ)
+|⟨θ, ξ⟩|−1−q(1 + sgn ⟨θ, ξ⟩)ρk−q
+L
+(θ)
+2(k −q)(−q)κkκ−1
+n−1
+dθ d H
+=
+
+G(ξ⊥,k)
+
+Sn−1∩H
+ 1
+−1
+|t|−1−q(1 + sgn t)(1 −t2)(k−2)/2ρk−q
+L
+
+tξ + η
+√
+1 −t2
+2(k −q)(−q)κkκ−1
+n−1
+dt dη d H
+=
+
+Sn−1∩ξ⊥
+ 1
+−1
+|t|−1−q(1 + sgn t)(1 −t2)(k−2)/2ρk−q
+L
+
+tξ + η
+√
+1 −t2
+2k−1(k −q)(n −1)(−q)
+dt dη,
+123
+===== page 19 =====
+Discrete & Computational Geometry (2022) 68:349–371
+367
+where the last equality is obtained using [5, formula (2.22)]. Finalizing the calculation
+gives
+=
+
+Sn−1
+|⟨θ, ξ⟩|−1−q(1 + sgn ⟨θ, ξ⟩)(1 −⟨θ, ξ⟩2)−(n−1−k)/2ρk−q
+L
+(θ)
+2k−1(k −q)(n −1)(−q)
+dθ.
+That is, for any integer 0 ≤l ≤n −2 and any ξ ∈Sn−1, we have
+
+W (q)
+l,ξ (0) =
+n −1 −l
+(n −1 −l −q)(n −1)
+×
+
+Sn−1
+|⟨θ, ξ⟩|−1−q(1 + sgn ⟨θ, ξ⟩)ρn−1−l−q
+L
+(θ)
+2(−q)(1 −⟨θ, ξ⟩2)l/2
+dθ.
+Now, deﬁne the integral operator Il,q : C(Sn−1) →C(Sn−1) by
+(Il,q f )(ξ) :=
+
+Sn−1 Fl,q(⟨θ, ξ⟩) f (θ) dθ
+for
+f ∈C(Sn−1),
+where
+Fl,q(t) := |t|−1−q(1 + sgn t)
+2(−q)(1 −t2)l/2
+for t ∈[−1, 1].
+Using the previous deﬁnition,
+
+W (q)
+l,ξ (0) =
+n −1 −l
+(n −1 −l −q)(n −1)(Il,qρn−1−l−q
+L
+)(ξ).
+(17)
+Let Hn
+m ∈L2(Sn−1) be any spherical harmonic of dimension n and degree m ∈N∪{0}.
+By the Funk–Hecke Theorem (e.g. [4, Thm. 3.4.1]),
+Il,q Hn
+m = λl,m(q)Hn
+m,
+(18)
+where
+λl,m(q) := (n −1)κn−1
+ 1
+−1
+Fl,q(t)Pn
+m(t)(1 −t2)(n−3)/2 dt
+= (n −1)κn−1
+2(−q)
+ 1
+−1
+|t|−1−q(1 + sgn t)Pn
+m(t)(1 −t2)(n−3−l)/2 dt
+= (n −1)κn−1
+(−q)
+ 1
+0
+t−1−q Pn
+m(t)(1 −t2)(n−3−l)/2 dt.
+Observe that λl,m(q) is the fractional derivative of
+fl,m(t) = (n −1)κn−1Pn
+m(t)(1 −t2)(n−3−l)/2χ[−1,1](t)
+123
+===== page 20 =====
+368
+Discrete & Computational Geometry (2022) 68:349–371
+of order q at t = 0. This fl,m is inﬁnitely smooth in a neighborhood of the origin.
+Remark The Funk–Hecke Theorem as stated in Groemer’s book requires Fl,q to be
+bounded on the interval [−1, 1]. Our Fl,q is not bounded, and it is not integrable
+over [−1, 1] for l > 1. However, both integrals in (18) are ﬁnite for all integers
+1 ≤l ≤n −2. We obtain (18) by applying the Funk–Hecke Theorem to the bounded
+approximating functions Fδ(t) := χ[δ,1−δ](t)Fl,q(t) for small δ > 0, and taking the
+limit.
+Use (17), Fubini’s Theorem, and (18) to obtain
+
+Sn−1
+
+W (q)
+l,ξ (0)Hn
+m(ξ) dξ
+=
+n −1 −l
+(n −1 −l −q)(n −1)
+
+Sn−1(Il,qρn−1−l−q
+L
+)(ξ)Hn
+m(ξ) dξ
+=
+n −1 −l
+(n −1 −l −q)(n −1)
+
+Sn−1 ρn−1−l−q
+L
+(ξ)(Il,q Hn
+m)(ξ) dξ
+=
+(n −1 −l)λl,m(q)
+(n −1 −l −q)(n −1)
+
+Sn−1 ρn−1−l−q
+L
+(ξ)Hn
+m(ξ) dξ.
+Therefore, we have
+
+Sn−1
+
+W (q)
+l,ξ (0)Hn
+m(ξ) dξ
+=
+(n −1 −l) f (q)
+l,m (0)
+(n −1 −l −q)(n −1)
+
+Sn−1 ρn−1−l−q
+L
+(ξ)Hn
+m(ξ) dξ
+(19)
+for all q ∈R with −1 < q < 0, for all integers 0 ≤l ≤n −2, and for every spherical
+harmonic Hn
+m of order m ∈N ∪{0}. We want to extend the validity of (19) to other
+values of q using analytic continuation. It is clear that the right-hand side of (19) is
+an analytic function of q ∈C for Re(q) > −1 and q̸ = n −1 −l; indeed, fl,m is
+inﬁnitely smooth in a neighborhood of the origin, and ρL is bounded from above and
+away from zero.
+To see that the left-hand side of (19) is also analytic, consider the following. Let
+δ > 0 be small enough so that:
+• The star body L contains the closed ball of radius δ centered at the origin.
+• For all ξ ∈Sn−1 and all −δ < t < δ, (L −tξ) ∩ξ⊥is an (n −1)-dimensional
+star body within ξ⊥.
+Then
+
+Wl,ξ(t) =
+1
+n −1
+
+Sn−1∩ξ⊥ρn−1−l
+L−tξ (η) dη
+for all −δ < t < δ and ξ ∈Sn−1. It is not difﬁcult to prove the following facts:
+123
+===== page 21 =====
+Discrete & Computational Geometry (2022) 68:349–371
+369
+• For each ξ ∈Sn−1 and η ∈Sn−1 ∩ξ⊥, the function gξ,η(t) := ρL−tξ(η) is con-
+tinuously differentiable on the open interval (−δ, δ) (recall that L is C1 smooth).
+• The function gξ,η : (−δ, δ) →[0, ∞) and its derivative are bounded, uniformly
+with respect to ξ ∈Sn−1 and η ∈Sn−1 ∩ξ⊥.
+These facts then imply:
+• For every ξ ∈Sn−1, 
+Wl,ξ(t) is continuously differentiable on (−δ, δ).
+• The function 
+Wl,ξ : (−δ, δ) →[0, ∞) and its derivative are bounded, uniformly
+with respect to ξ ∈Sn−1.
+Therefore, it follows that
+q →
+
+Sn−1
+
+W (q)
+l,ξ (0)Hn
+m(ξ) dξ
+is analytic on the domain
+{q ∈C : −1 < Re(q) < 2, q̸ = 0, 1},
+with derivatives passing through the integral. By analytic continuation, (19) is valid
+for q ∈C with −1 < Re(q) < 2, q̸ = n −1 −l, and q̸ = 0, 1. Taking limits
+using Lebesgue’s Dominated Convergence Theorem, we then see (19) is also true for
+q = 0, 1.
+⊓⊔
+Proof of Theorem 4.1 Let Hn
+m be any spherical harmonic of dimension n and odd
+degree m. For q = 1, Lemma 4.1 gives us
+−
+
+Sn−1 Hn
+m(ξ) 
+W ′
+l,ξ(0) dt =
+
+Sn−1 Hn
+m(ξ) 
+W (1)
+l,ξ (0) dt
+=
+(n −1 −l) f (1)
+l,m(0)
+(n −2 −l)(n −1)
+
+Sn−1 Hn
+m(ξ)ρn−2−l
+L
+(ξ) dξ
+(20)
+when l̸ = n −2. The denominator of the right hand side of (16) is 0 when l = n −2,
+and so is the numerator:
+lim
+q→1
+
+Sn−1 Hn
+m(ξ)ρn−1−q−l
+L
+(ξ) dξ =
+
+Sn−1 Hn
+m(ξ) dξ = 0
+because of the orthogonality of spherical harmonics with different degrees. Applying
+de l’Hospital’s rule we ﬁnd that
+−
+
+Sn−1 Hn
+m(ξ) 
+W ′
+l,ξ(0) dt =
+
+Sn−1 Hn
+m(ξ) 
+W (1)
+l,ξ (0) dt
+=
+f (1)
+l,m(0)
+n −1
+
+Sn−1 Hn
+m(ξ) log(ρL(ξ)) dξ
+(21)
+123
+===== page 22 =====
+370
+Discrete & Computational Geometry (2022) 68:349–371
+when l = n −2. Calculating
+f (1)
+l,m(0) = −(n −1)κn−1
+d
+dt Pn
+m(t)(1 −t2)(n−3−l)/2
+t=0
+= −(n −1)κn−1
+d
+dt Pn
+m(t)
+
+t=0,
+it then follows from [4, Lem. 3.3.9 and 3.3.8] that f (1)
+l,m̸ = 0 for odd m.
+If (15) is true, then (20) and (21) respectively show that the spherical harmonic
+expansions of ρn−2−l
+L
+(when l̸ = n −2) and log ρL (when l = n −2) do not have any
+harmonics of odd degree; consequently, ρL must be an even function and L = −L. If
+L = −L, then it is easy to see that (15) is valid.
+⊓⊔
+Restricting L to the class of C2 convex bodies containing the origin in their interiors,
+we see via Brunn’s Theorem that Theorem 4.1 is equivalent to the statement that
+
+Wl,ξ(0) = max
+t∈R
+
+Wl,ξ(t)
+for all ξ ∈Sn−1
+if and only if L is origin symmetric.
+References
+1. Falconer, K.J.: Applications of a result on spherical integration to the theory of convex sets. Am. Math.
+Mon. 90(10), 690–693 (1983)
+2. Funk, P.: Über eine geometrische Anwendung der Abelschen Integralgleichung. Math. Ann. 77(1),
+129–135 (1915)
+3. Gardner, R.J.: Geometric Tomography. Encyclopedia of Mathematics and its Applications, vol. 58.
+Cambridge University Press, New York (2006)
+4. Groemer, H.: Geometric Applications of Fourier Series and Spherical Harmonics. Encyclopedia of
+Mathematics and its Applications, vol. 61. Cambridge University Press, Cambridge (1996)
+5. Koldobsky, A.: Fourier Analysis in Convex Geometry. Mathematical Surveys and Monographs, vol.
+116. American Mathematical Society, Providence (2005)
+6. Lutwak, E.: Dual mixed volumes. Pac. J. Math. 58(2), 531–538 (1975)
+7. Makai, E., Jr., Martini, H.: Centrally symmetric convex bodies and sections having maximal quermass-
+integrals. Studia Sci. Math. Hungar. 49(2), 189–199 (2012)
+8. Makai, E., Jr., Martini, H., Ódor, T.: Maximal sections and centrally symmetric bodies. Mathematika
+47(1–2), 19–30 (2000)
+9. Myroshnychenko, S., Ryabogin, D.: On polytopes with congruent projections or sections. Adv. Math.
+325, 482–504 (2018)
+10. Ryabogin, D., Yaskin, V.: Detecting symmetry in star bodies. J. Math. Anal. Appl. 395(2), 509–514
+(2012)
+11. Schneider, R.: Über eine Integralgleichung in der Theorie der konvexen Körper. Math. Nachr. 44,
+55–75 (1970)
+12. Schneider, R.: Convex Bodies: the Brunn-Minkowski Theory. Encyclopedia of Mathematics and its
+Applications, vol. 151. Cambridge University Press, Cambridge (2014)
+13. Stephen, M., Yaskin, V.: Stability results for sections of convex bodies. Trans. Am. Math. Soc. 369(9),
+6239–6261 (2017)
+14. Yaskin, V.: On perimeters of sections of convex polytopes. J. Math. Anal. Appl. 371(2), 447–453
+(2010)
+15. Yaskin, V.: Unique determination of convex polytopes by non-central sections. Math. Ann. 349(3),
+647–655 (2011)
+123
+===== page 23 =====
+Discrete & Computational Geometry (2022) 68:349–371
+371
+16. Yaskin, V.: An extension of polynomial integrability to dual quermassintegrals. Int. Math. Res. Not.
+2020(13), 3978–3990 (2020)
+17. Yaskin, V., Yaskina, M.: Thick sections of convex bodies. Adv. Appl. Math. 71, 174–189 (2015)
+18. Zhu, G.: The logarithmic Minkowski problem for polytopes. Adv. Math. 262, 909–931 (2014)
+Publisher’s Note Springer Nature remains neutral with regard to jurisdictional claims in published maps
+and institutional afﬁliations.
+123

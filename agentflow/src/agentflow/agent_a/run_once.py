@@ -466,7 +466,7 @@ class _RunOnce:
                         needs_file = (not existing.get("path")) or str(old_dl.get("status")) != "ok"
                         existing_id = str(existing["lit_id"])
                         got_path, dl_clean = self._attach_staged(
-                            dict(entry.get("download") or {}))
+                            dict(entry.get("download") or {}), existing_id)
                         # 这一格下面三处分支都要读，先算一次（`_attach_staged` 之后不再改）。
                         dl_status = str(dl_clean.get("status"))
                         backfilled = bool(needs_file and got_path)
@@ -547,9 +547,9 @@ class _RunOnce:
                     # "下载失败"的行也会留下一个空目录：实测 98 行里留下 60 个空目录，
                     # 目录树看起来有 98 篇文献，实际只有 38 个文件。
                     # 建目录的唯一责任人现在是 `_attach_staged` —— 它只在真的有字节要搬
-                    # 时才建扁平落点的父目录（`library/`），判据因此只有一份。
+                    # 时才建落点目录（`library/<lit_id>/`），判据因此只有一份。
                     dl = entry.get("download") or {}
-                    rel_path, dl_clean = self._attach_staged(dict(dl))
+                    rel_path, dl_clean = self._attach_staged(dict(dl), lit_id)
                     st = dl.get("status")
                     if rel_path:
                         if st == "ok":

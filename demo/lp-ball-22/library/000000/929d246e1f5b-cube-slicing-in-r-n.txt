@@ -1,0 +1,535 @@
+===== page 1 =====
+PROCEEDINGS 
+OF THE
+AMERICAN MATHEMATICAL SOCIETY
+Volume M7. Number 3. July 19K6
+CUBE SLICING IN R
+KEITH BALL
+Abstract. 
+We prove that every (n - l)-dimensional section of the unit cube in R"
+has volume at most \2 . This upper bound is clearly best possible.
+1. Introduction. Hensley [3] showed that if Q„ = [- |, j]" C R" is the central unit
+cube in R", and H is an (n - l)-dimensional 
+subspace of R", then \H n Qn\ lies
+between 1 and 5. (Here and henceforth 
+| • | will denote the usual volume in a
+Euclidean 
+space.) Hensley conjectured 
+that the volume is at most -Jl. Besides
+proving this conjecture, we shall provide a somewhat simpler proof that the volume
+is at least 1.
+The bound 5, obtained by Hensley, can be improved in a more general setting. In
+[1], we show that there is an absolute constant, 
+c, so that for all n, every
+«-dimensional Banach space has a representation on R", with unit ball, B, say, with
+the property that if H and K are (n — l)-dimensional subspaces of R", \H n B\ <
+c\K n B\. We can take c to be \/6 .
+Let H be an (n - l)-dimensional 
+subspace of R" and a = (ax,..., 
+a„) e R" be
+the unit vector normal to H. Assume n > 2 and \a¡\ < 1, for all i. Define / = fH:
+R -» [0, oo) by /(/■) = \(H + ra) n Qn\, so /(/•) is the volume of the intersection of
+Qn with a hyperplane 
+parallel to H, at distance |r| from H. The assumption 
+that
+n > 2, |a,| < 1 for all i ensures that H is not parallel to a face of Qn and hence that
+/ is continuous.
+As in [3] we shall use probabilistic methods to obtain an expression for \H n Q„\
+= /(0). Let Xx,...,Xn 
+be independent random variables, each uniformly distributed
+on [— 2' 2]' with respect to a probability, 
+P. Then the random vector (Xx,..., 
+X„)
+induces the usual measure on Qn, and, since / is continuous,
+/(r)-lim 
+±-f+Sf(t)dt
+s-*0   ZA Jr-s
+lim —
+i^o 2s
+lim — P
+i—0  ¿i
+e„:
+1
+1
+< i
+< s
+Received by the editors July 10, 1985.
+1980 Mathematics Subject Classification. Primary 52A20, 52A40, 60E05.
+£1986 American 
+Mathematical 
+Society
+0002-9939/86 $1.00 + $.25 per page
+465
+===== page 2 =====
+466
+KEITH BALL
+so / is the continuous probability density function of the random variable X =
+Za,Xv
+It was observed by Hensley that / attains its maximum at 0. This is also an
+immediate consequence of the Briinn-Minkowski inequality, namely,
+\hA + \B\>{\\A\l/k 
++ h\B\l/k)k
+for convex sets A and B in Rk. For, taking k — n — 1,
+A = H C\(Q„ + ra)a 
+H = Rk,    and    B = H n(Q„ - ra) = -A,
+the convexity of Q„ gives
+HnQn^\(A+B) 
+= \(A -A);
+so using the Briinn-Minkowski inequality gives
+/(0) - \H Pi Q„\ > \$(A - A) |> \A\ = /(/•).
+The upper bound, ]/2, will thus apply to all sections of Qn by hyperplanes, not
+merely those by subspaces.
+Our principal aim is to prove best possible bounds on \\f\\x =/(0) 
+= \H n Qn\,
+with (a,)'/, (Xt)1 and / as above.
+2. The lower bound. The lower bound will be an immediate consequence of the
+following simple probabilistic inequality, which compares a random variable with a
+uniformly distributed random variable of the same L^-norm.
+Lemma 1. Let Y be a random variable with a probability density function g:
+R — [0, oo). Then for p > 0,
+hUYh>h(p 
++ iy1/p.
+Equality holds in the above if and only if Y is uniformly distributed on some subinterval
+[-t,t]ofR.
+Proof. 
+Without loss of generality, we may assume that X is symmetric. Then
+setting
+G(x) = r g(t)dt    forx > 0,
+•'o
+we have G(0) = 0, G(oo) = 1/2, and G(x) < xWgW^, so
+2"" = 2(G(oo))p + 1 = 2 H (G(x)p + 1)'dx
+/•OO
+= 2(p + l)       g(x)G(x)pdx
+<(p + l)\\g\L-2       g{x)-x"dx
+= (p + Vh\L\\Y\\pP.
+There is equality if and only if g{t) = \\g\\x or 0 almost everywhere.
+===== page 3 =====
+CUBE SLICING IN R"
+467
+Theorem 
+2. Every section of the unit cube, Qn, in R" by an (n — Y)-dimensional
+subspace, H, has volume at least 1. The volume is 1 if and only if H is parallel to a face
+of the cube.
+Proof. 
+Plainly it suffices to show that, with (a,-)", (X¡)" as above (|a,| < 1 for all
+/) and / 
+the continuous 
+probability 
+density function of X =Y.aiXj, 
+we have
+I" n Qn\ = /(0) > 1- Since the X/s are independent and identically distributed,
+EX2 = (Y.af)EX2 = EX2 = 1/12.
+So \\X\\2 = 1/21/3, and the result follows by applying Lemma 1 with p = 2 and
+g-f-
+We should remark that Theorem 2 was conjectured by A. Good, as was the
+following extension to subspaces of arbitrary dimension. Let U be a subspace of R":
+then \U n Qn\ > 1. This extension was proved by Vaaler [4].
+3. The upper bound. The proof of the principal result depends on the following
+lemma, whose proof we postpone until after the theorem itself.
+Lemma 3.
+1 sini
+i   /•=
+7T J _
+dt^1^ 
+   ifp > 2,
+ÍP
+t
+and there is equality if and only ifp = 2.
+Theorem 
+4. Every section of the unit cube, Qn, by an (n — l)-dimensional
+subspace, 
+H, has volume at most y2. This upper bound is attained if and only if H
+contains an (n — 2)-dimensionalface 
+of Qn.
+Proof. 
+Let (a,)" be as above and assume a, 3; 0 for all i. Suppose first that for
+some i, ai > 1/ \/2 ; say ax > 1/ \¡2 . Consider H n C„, where Cn is the "cylinder"
+{x e R": \xt\ < 1/2, 2 « i « «}. Let T: R" -» R" be the orthogonal projection onto
+the subspace [x e R": xx = 0}, and 5 the orthogonal projection onto H. Then
+T(H n C„) is the unit cube in R"^1 and
+\H n c| = \T(H n c„) \^^- 
+= -1^-,
+flraefl    || rse H
+where e is the unit vector (1,0,..., 
+0) and || • || is the usual Eucidean norm in R".
+Since Se = (1 — a2, — axa2,..., 
+— axan) and 
+TSe = (0, — axa2,..., 
+— axan), we
+obtain
+(a¡r2af)1/2
+Hence |// n ß.| « \H n C„\ < &.
+Assume otherwise that a¡ < 1/ v¿ for all /. Since, if some a¡ is zero, the problem
+reduces to that in R"~\ we may assume inductively that a¡ > 0 for all i, and with
+this assumption 
+the case of equality will follow if we show that \H (~\ Q„\ < y2
+unless n = 2 and ax = a2 = l/v2. 
+With (X¡)" independent 
+random variables
+uniformly distributed 
+on [- \, \\ and / the continuous p.d.f. of X = Y.aiXi as
+===== page 4 =====
+468
+KEITH BALL
+above, the random variable alXi has characteristic function
+♦¡,(0- 
+{2%in\alt)/ait,
+and so the characteristic function of X is
+/ \     t-í    < \     Jlí2ún{a¡t 
+     /•<»
++(0-n+i(0-n—77^=/ 
+     cosxtf(x)dx.
+1 
+Ia»' 
+''-00
+By the standard Fourier inversion formula,
+1    roo     "  2 sin iö,r
+l*"ß.l-/(o)-2;Ln-^«*
+-if n^*«i/" 
+n
+T-'-oo 
+     1 
+a,? 
+7r-'-oo 
+     1
+sina.i
+a,?
+a7.
+Set /?, = a,     so that /?, ^ 2 for all ; and Y.p¡   = 1. Then by Holder's inequality
+with n exponents,
+|//n0,i<n±/
+1 /■»
+sin a,?
+<M
+Pi    \ i/p,
+dt
+= n¿/
+1    r00   I sin í
+dt
+By Lemma 3 this gives
+|tfne„i<n
+^2
+i/>,
+ncv^)1^ = ^,
+and there is equality only if p¡ = 2 for all i; i.e., n = 2 and ax = a2 = 1/ v^.
+Proof of Lemma 3. We divide the proof into two cases, p > 4 and 2 < p < 4.
+(a) /> S; 4. Observe that
+,6 
+,8
+sinr _ , _ tj_    J*_
+t 
+~ 6 + 120    7! + 9!
+<1-?+á 
+lf?2<72'
+,2 
+,4 
+,6 
+,8 
+,10
+6      72      1296     64 -4!      65 • 5!
+> 1
+t2       tA
++ 72      1296
+if t2 < 30.
+Since
+36
+72 ~ Ï296 ~ Ï2Ô = Î8Ô _ 1296 > 
+< 5
+and 36/5 < w2, we have
+0< (smt)/t 
+< e-'1/e    if i2< 36/5.
+===== page 5 =====
+CUBE SLICING IN R"
+Let m = 6/ ¿5 . Then
+1   rx   I sin/
+/•OC
+2  /■»
+i   /•=     sin/ 
+' 
+i   r00     _..i« 
+,       z  /-°°   _„
+- /       - 
+  dt < - /      <? '" /6 ¿r + - /     t p
+•n J-^ 
+\    t 
+tt J -^ 
+it J„,
+dt
+S
++
+\¡p ■ -ftt     tt(p — Y)mp  l
+sttm"
+Jp \\fn     3
+)/P
+(b) 2 < p < 4. Setting s - p/2 - 1, we wish to show that
+(1)
+I     ■    1     \l+s
+I rx   l sur/
+,2
+— oo   \     /
+lf
+tt J _
+dt < vTT
+for 0 < s < 1,
+with equality if and only if s = 0.
+For n = 0,1,2,... 
+define
+1  r°°
+1   r00    sin /
+^•'-oo 
+w-/-oo 
+   r
+It is easily checked that
+1 -
+sin2/
+<*.
+1   rx    sin2 /
+i_ r°°    sin
+aV= 1.
+Now
+sin-/
+sin2/
+1-1-
+sin2/
+_ sin2/^ 
+(-l)"j(j-l)---(i-/i 
++ l)(
+■'   ^ 
+«! 
+\
+£KJ-l)---(J-n 
++ l)|/1
+shrV
+•   2 . / 
+oo
+sm / 1
+\        i
+since (-1)"j(í 
+- 1) •••(s - n + 1) « 0 if « > 1.
+Hence by the monotone convergence theorem,
+1   r00   / sur/
+sin2/
+if 
+[fiÇ£|   *-ßo-t*'(-1>~-l'-', 
++ 1)\ß
+t-
+1_£|5(J-l)---(5-l, 
++ l)|
+«!
+Now we may write the right side of (1) as
+/TT7    t-'-oo v       y
+===== page 6 =====
+470
+KEITH BALL
+and analogously to the above argument, we have
+1 
+y \s(s- 
+1) ■■■(s- n + 1)
+Hence it will suffice to show that an < ßn for n e N.
+The first six values of an and ßn (calculated using the residue theorem in the case
+of /?„), correct to two decimal places, are shown in Table 1.
+Table 1
+ßn
+1 
+0.29 
+0.33
+2 
+0.16 
+0.22
+3 
+0.11 
+0.17
+4 
+0.08 
+0.15
+5 
+0.07 
+0.13
+6 
+0.05 
+0.12
+It is easily checked that for n > 7,
+1 
+1
+y/2ït ■ n      2vW« + 1      2en '
+so to complete the proof it suffices to show that
+1
+(2) 
+a„ <
+'27T ■ n
+(3) 
+ft*^br-¿ 
+fM"ï7-
+We obtain these estimates as follows.
+ForO < x < 1,
+| log x | > 1 - x + i(l - xf + \{\ - xf + i(l -x)4
+>2(l-x)2+(l-x)-i(l-x)2 
++ Kl-^)4
+= 2(1 - x)2 + \x2(l -x)(3 
+- x)
+> 2(1 - xf.
+Hence
+1  /■«>
+-.-if  ,-*»(i-,-*'■)"
+"   * - OO
+re-"2(i-e-"2)"^
+dx
+•fit   'q
+v* yo   /| logx | 
+V2w 4>
+=—, 
+  proving (2).
+===== page 7 =====
+CUBE SLICING IN R'
+471
+Now plainly,
+/"»    sin2/ /   _ sin2/ .
+if00 
+   sin
+ir 
+suft
+1 rx 
+sir
+*h t
+2 rx 
+sir
+tr Jx 
+,
+sin2/
+t-
+dt
+1-1)"./.
+Observe that (1//2)(1 - l//2)" 
+is increasing for 1 < / < vw + 1 and decreasing for
+/ > \/n + 1 .
+Hence, if « > 6 so that v7« + 1  > 1 + sr/2,
+./;
+fn~+ï surf
+l+ir/2 
+       Í i-ir*>/
+/n + 1 - »r/2   COS   /
+1\" A
+and
+•'vV+T    í     \        r  / 
+-7^+1+*/2     /     \        /  /
+So
+*   sin^/
+/     Hi
+■'i        /
+7J-/2
+- Jmax(^|:
+1_\"
+,2
+2;0 
+4(« + i)l     « + 1/
+2(2« + 1)1 « / 
+4»\        n + 1
+dt
+>
+Hence
+4v^TT       4e"
+ß„>
+1
+2vV • y/n + 1       2e« '
+which is (3).    D
+The series comparison 
+technique, used in part (b), above, was employed by
+Haagerup in his determination of the best constants in Khintchine's inequality [2].
+We are indebted to J. Lindenstrauss for pointing out the similarity between the
+L/;-integral to be evaluated here and those of Haagerup.
+===== page 8 =====
+472
+KEITH BALL
+Given the identity
+one could proceed with the proof of Lemma 3, part (b), in a number of ways. One
+possibility would be to consider the derivative with respect to 5, as follows.
+Let
+1  /•<»   / sin21\       ,       w  x 
+1
+™-K{9) '* *>vTT
+Then
+/'<*) = ¿(1 
++ £(-i)^-i)"-w!('-" 
++ i)^
+= _tßi 
++ ts.(l-s)...(n-l-s)ßyy:^
+xn        2 
+nl 
+"    k-lk~s
+oon 
+00 
+n — \  1 
+\ 
+n— 1        -.
+--E? 
++ Ef ■ n 1-7 -AX
+1 "      2 w    y-iV      y/    Hk.ik~s
+00   o 
+00 
+1
+í-Z7 
++ Ek'(3 + M»-l))    forO<j<f.
+1   "        2 " 
+L
+A simple computation 
+shows that ßn^l/ 
+\fn~ for all /?, and that the above then
+gives
+*'(*)< 
+-£— 
++ 10i    forO<i<i.
+0   " 
+2
+Substituting 
+the values of ßn for 1 < n < 6 gives
+00 
+«
+-£- 
+< -0.58,
+0   n
+so
+/'(s) < -1/2 *¿J'(s)    forO ^ s < 0.008.
+This gives I(s) < J(s) for 0 < s < 0.008. The fact that / and J are decreasing
+functions enables us to prove that I(s) < J(s) 
+for 0.008 < s < 1, using finitely
+many iterations of the following scheme. Let s0 = 0.008. Using sufficiently accurate
+values for ßn for sufficiently many n, find /0 so that I(s0) < t0 < J(s0). Choose sx
+so that J(sx) > /0 and repeat to obtain tx,s2,t2,s3,_ 
+For some k we obtain
+sk> 1, and the result is proven.
+4. Additional remarks. Despite the similarity of Theorem 4 to the classical
+Khintchine 
+inequality, the two results do not seem to be readily deducible from one
+another. However, Theorem 4 and Lemma 1 together provide a simple analogue of
+Khintchine's 
+inequality for 0 < p < 2 for independent, uuniformly distributed ran-
+dom variables.
+===== page 9 =====
+CUBE SLICING IN R"
+473
+Proposition 
+5. Let Xx,...,Xn 
+be independent random variables, uniformly distrib-
+uted on [— 2~,\] andp > 0. Then
+"      '   '"'      J2{p + lf/p^ 
+"2     2v/2(/p + 1)1/^V       ''
+for any sequence, (a,)", of scalars.
+It is natural to ask what is the maximum volume (in terms of k and n) of the
+intersection of Qn with a /c-dimensional subspace of R". While for k = 1 the answer
+is trivially \fn~ and for k = « — 1 the answer is provided by Theorem 3, it is not clear
+what should be the result for general k.
+This work will form part of a doctoral thesis being written under the supervision
+of Dr. B. Bollobâs, whose constant advice and encouragement have been invaluable.
+References
+1. K. M. Ball, Sections of convex sets in R" (in preparation).
+2. U. Haagerup, The best constant in the Khintchine inequality, Studia Math. 70 (1982), 231-283.
+3. D. Hensley, Slicing the cube in R" and probability, Proc. Amer. Math. Soc. 73 (1979), 95-100.
+4. J. D. Vaaler, 
+A geometric inequality with applications 
+to linear forms. Pacific J. Math. 83 (1979),
+543-553.
+Department 
+of Pure Mathematics and Mathematical 
+Statistics, 
+Mill Lane, Cambridge, CB2
+1SB. England

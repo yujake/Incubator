@@ -34,7 +34,10 @@ from .ocr_tools import (
     _Ctx as _OcrCtx, _pick_workspace, _resolve_target, _target_path,
 )
 
-PAGE_MARKER = "===== page {n} ====="
+PAGE_MARKER = _LR.PAGE_MARKER
+
+#: 文献号目录的形态（4 位老号 / 6 位新号）：`text.extract` 只往这种目录里落抽读件。
+_ID_DIR_RE = re.compile(r"^\d{4}$|^\d{6}$")
 
 
 def _safe_stem(raw: str, fallback: str = "text") -> str:
@@ -57,6 +60,41 @@ class _Ctx:
     workspace: Path
     store: Store | None = None
     actor: str = "agent-A"
+
+
+def _text_name(source: Path, name_hint: str = "") -> str:
+    """抽读件的文件名：与原件同 stem + `.txt`（候选期用槽位号避免同名覆盖）。
+
+    现行规范（2026-11-25）里抽读件与原件住同一条文献目录、同 stem：
+
+        library/000003/paper.pdf  →  library/000003/paper.txt
+
+    候选期（`name_hint="cand-<槽位>"`）还没有文献号、落 `out/texts/`，用槽位号起名，
+    与"已入库的抽读件"分开（写进 `library/` 会把候选冒充成已收编）。
+    `_safe_stem` 在这一层兜底：Windows 非法字符与幽灵文件名（`lit:000000` 的冒号）。
+    """
+    return f"{_safe_stem(name_hint or source.stem, source.stem)}.txt"
+
+
+def _text_dir(ctx: "_Ctx", source: Path, lit_id: str, out_dir: str) -> Path:
+    """抽读件写进哪个目录。
+
+    * 给了 `out_dir`（候选期传 `out/texts`）⇒ 工作区相对的那个目录；
+    * 已登记文献（给了 `lit_id`）⇒ `library/<文献号>/`（2026-11-25 规范：与原件的目录
+      同一条；目录不在就建 —— 这是"下一次写把这个条目搬进规范形态"的唯一入口）；
+    * 其余（裸路径）⇒ `library/` 根（与改前同一条）。
+    """
+    if out_dir:
+        return ctx.workspace / out_dir
+    lid = str(lit_id or "").strip()
+    if lid:
+        body = lid.split(":")[-1].strip() or lid
+        library = (Path(ctx.store.library) if ctx.store is not None
+                   else ctx.workspace / "library")
+        if _ID_DIR_RE.match(body):
+            return Path(library) / body
+        return Path(library)
+    return ctx.workspace / "library"
 
 
 def _pages_of(doc: Any) -> list[Any]:
@@ -204,9 +242,9 @@ def _extract_impl(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = ""
                         + (f"；可读性已记成 `extract_failed`（lit:{landed}）" if landed else ""),
                         kind="garbled_text", path=str(p), lit_id=str(lit_id or ""),
                         quality=q0, availability="extract_failed", landed_on=landed or None)
-        target_dir0 = (ctx.workspace / out_dir) if out_dir else (ctx.workspace / "library")
+        target_dir0 = _text_dir(ctx, p, lit_id, out_dir)
         target_dir0.mkdir(parents=True, exist_ok=True)
-        name0 = f"{_safe_stem(name_hint or lit_id, p.stem)}.txt"
+        name0 = _text_name(p, name_hint)
         out0 = target_dir0 / name0
         out0.write_text(plain, encoding="utf-8", newline="\n")
         _mark_literature_tier(ctx, lit_id, "ok", note="text.extract: 纯文本原样入库")
@@ -240,11 +278,9 @@ def _extract_impl(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = ""
 
     body = _text_of(doc)
     if per_page:
-        blocks = []
-        for i, t in enumerate(per_page, 1):
-            blocks.append(PAGE_MARKER.format(n=i))
-            blocks.append(str(t or "").rstrip("\n"))
-        body = "\n".join(blocks).strip("\n") + "\n"
+        # 页标记的格式只有一处（`litread.marked_pages`）：`locallib.ingest_directory`
+        # 落的那份抽读件用的是同一个函数，两份 `.txt` 的页号必须能互相定位。
+        body = _LR.marked_pages(per_page)
     if not body.strip():
         landed = _mark_literature_tier(ctx, lit_id, "extract_failed",
                                        note="text.extract: 有字节但没有文本层")
@@ -255,8 +291,8 @@ def _extract_impl(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = ""
             kind="no_text_layer", path=str(p), lit_id=str(lit_id or ""),
             availability="extract_failed", landed_on=landed or None)
 
-    # 口径「转成纯文字稿入库」⇒ 直接落在 `library/`（与那份 PDF 同层）：下游 `fs.read
-    # library/<名>.txt` 就能读，不必再碰二进制的 PDF。
+    # 口径「转成纯文字稿入库」⇒ 落在原件所在的那条文献目录（2026-11-25：`<文献号>/<stem>.txt`，
+    # 与原件同目录同 stem）：下游 `fs.read` 读原件时按同名路由就能读到它，不必再碰二进制。
     garbled, q = _quality(body)
     if garbled:
         landed = _mark_literature_tier(ctx, lit_id, "extract_failed",
@@ -268,9 +304,9 @@ def _extract_impl(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = ""
             kind="garbled_text", path=str(p), lit_id=str(lit_id or ""), quality=q,
             availability="extract_failed", landed_on=landed or None)
 
-    target_dir = (ctx.workspace / out_dir) if out_dir else (ctx.workspace / "library")
+    target_dir = _text_dir(ctx, p, lit_id, out_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
-    name = f"{_safe_stem(name_hint or lit_id, p.stem)}.txt"
+    name = _text_name(p, name_hint)
     out_path = target_dir / name
     out_path.write_text(body, encoding="utf-8", newline="\n")
     digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
@@ -285,7 +321,7 @@ def _extract_impl(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = ""
         "quality": q,
         "max_pages": int(max_pages or 0),
         "truncated": truncated,
-        "note": ("纯文字稿已入库（与 PDF 同层）；页间插了 `===== page N =====`；`sha256` 是这次写下的**正文**的指纹"
+        "note": ("纯文字稿已入库（与原件同目录、同 stem）；页间插了 `===== page N =====`；`sha256` 是这次写下的**正文**的指纹"
                  "（下游可拿它核「读到的是不是同一份」）"),
     })
 

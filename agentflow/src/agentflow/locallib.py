@@ -127,88 +127,65 @@ def _safe_name(path: Path) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# 唯一落点：`library/<内容 hash 前缀-名>`（B2a，2026-11-22 业主裁定）
+# 唯一落点：`library/<文献号>/<清洗过的原名>`（2026-11-25 业主裁定；推翻 B2a）
 # --------------------------------------------------------------------------- #
 #
-# ## 为什么需要它（`draft/195` #7 / #17 / #18 / #51）
+# ## 现行规范（业主 2026-11-25 原话：「<6位号>/<名> 回归正确形态」）
 #
-# `library/` 曾有三个写者、两套布局：
-#   * `search_tools._adopt_file` → `library/<lit_id>/<名>`（分目录）
-#   * `locallib.ingest_directory` → `library/<名>`（扁平）
-#   * `seedinject` 曾直接铺 `library/` 根（SEEDFIX 之后落 `reference/`）
-# 改前读侧 `store.library_path` 只做拼接，两套都读得通 ⇒ 盘上两套并存而没有任何判据会报
-# （真机 lp-ball-13 是 `<id>/<名>`、lp-ball-15 是顶层 24 份扁平 + 1 个 `<id>/` 子目录）。
+# 一个文献一条目录，目录名就是文献号；原件与抽出的正文都住在这条目录里：
 #
-# 所以写侧只留一处落点实现（本节的 `library_landing_name` / `library_landing`），
-# 两个写者（`_adopt_file` 与 `ingest_directory`）都调它；旧布局不再支持（2026-11-22
-# 业主裁定「旧工作区不必兼容」：`store.library_path` 受控拒「旧布局（不再支持）」，
-# `wellformed` 的 `literature.layout` 把它报成 `error`，不是 `legacy` 档）。
+#     library/000003/critical-central-sections-of-the-cube.pdf    ← 原件（path 指它）
+#     library/000003/critical-central-sections-of-the-cube.txt    ← 抽出的正文（同 stem）
+#
+# `literature.path` 存的是「相对 `library/` 的相对名」：`<6位号>/<文件名>`（恰好一段斜杠）。
+#
+# ## 被推翻的旧裁定（B2a，2026-11-22：扁平 `<内容 hash 前缀>-<名>`）
+#
+# 旧裁定的理由是「每个 lit_id 一个目录会在库里留下空目录」（`draft/28` R-49：真机 98 行
+# 留下 60 个空目录）。2026-11-25 复核：R-49 判的是「登记时无条件 mkdir」，不是「分目录」
+# 本身 —— 空目录的根因是建目录与搬字节分离（`agent_a.py:516-518` 在还没有字节时就 mkdir）。
+# 新规范里建目录的唯一责仍归「真有字节要落」的那一步（`library_landing` 的调用方），
+# 所以「98 行 60 个空目录」不会随分目录回来。
+#
+# 旧形态的处置（读侧三态，见 `wellformed/literature.py` 的 `literature.layout`）：
+#   * `<6位号>/<名>` ⇒ ok；
+#   * `<4位号>/<名>` ⇒ legacy（p9 那批老盘是 4 位号时代）；
+#   * 扁平一段       ⇒ legacy（lp-ball-15/22 的历史数据；自 2026-11-25 起退役，新写不产出）。
+#
+# 写侧只有一处落点实现（本节的 `library_landing_name` / `library_landing`），三个写者
+# （`search_tools._adopt_file`、`locallib.ingest_directory`、`agent_a.core._attach_staged`）
+# 都调它，且都必须把已经分配好的 `lit_id` 交进来 —— 不许先落一个临时名再改名。
 
-#: 落点名里内容 hash 的位数（`sha256[:12]`）。真机 lp-ball-15 那 24 份扁平文件同形；
-#: 12 位十六进制 = 48 bit，同一目录里两份不同内容撞上前缀可以忽略；真撞上时
-#: `library_landing` 会加长前缀，绝不覆盖既有文件。
-LANDING_HASH_CHARS = 12
-
-#: 落点名里允许的 hash 前缀长度（8..64）。短于 8 位的碰撞概率不再可忽略。
-_LANDING_HASH_MIN_CHARS = 8
+#: 落点目录名：4 位（p9 那批老盘，legacy）或 6 位（新发号）。
+_ENTRY_ID_RE = re.compile(r"^\d{4}$|^\d{6}$")
 
 
-def library_landing_name(source: Path | str, sha256_hex: str, *,
-                         hash_chars: int = LANDING_HASH_CHARS) -> str:
-    """新收编的一份字节在 `library/` 下的落点名（library 相对、扁平、带内容 hash 前缀）。
+def library_landing_name(source: Path | str, lit_id: str) -> str:
+    """新收编的一份字节在 `library/` 下的相对名：`<文献号>/<清洗过的原名>`。
 
-    ## 唯一落点（2026-11-22 B2a）
+    `lit_id` 必须是已经分配好的文献号（4 位老号 / 6 位新号）：落点与登记行用同一个号，
+    否则盘上会出现「目录叫 A、行上号是 B」的第二套名字。三个写者都在事务里先
+    `tx.alloc_id("lit")` 再调本函数。
 
-    `literature.path` 存的是"相对 `library/` 的一段路径"。本函数把它定成
-    一个路径段：`<sha256 前 12 位>-<清洗过的原名>`（例：
-    `08359e313da3-on-the-volume-of-hyperplane-sections-of-a-d-cube.pdf`）。于是
-    "新写的形态唯一"是一条可判的形状（`path` 里不含 `/`），不靠人认。
-
-    为什么名字由内容决定、不由 `lit_id` 决定：
-
-    * `lit_id` 每次登记都会重新分配，而同一份字节两次收编（两个人各下一份、
-      或者本机重灌一次）应当落到同一个名字上 —— 同名即同内容，不用读表去判；
-    * 每个 `lit_id` 一个目录会在库里留下空目录（`draft/28` R-49：真机 98 行里
-      留下 60 个空目录，目录树看起来 98 篇、实际 38 个文件）；
-    * `locallib` 与真机 lp-ball-15 的多数文件本来就是扁平形态 ⇒ 新写跟着多数走，
-      迁移面积最小（旧 `<lit_id>/<名>` 不再支持：不搬、也不读）。
-
-    旧布局 `library/<lit_id>/<名>` 不再由任何写者产出；它也不再读得通：`store.library_path`
-    受控拒「旧布局（不再支持）」，`wellformed` 的 `literature.layout` 规则把它报成 `error`
-    （不是 `legacy` 档，见 `wellformed/literature.py`）。
-
-    `sha256_hex` 必须是 64 位十六进制（写者是刚算过这份字节的，不许"不知道也写个名"）。
+    文件名只做清洗（`_safe_name`：保留扩展名、把 Windows 非法字符换成 `_`），不再拼内容
+    hash 前缀：同一份字节两次收编由 `lit_id` 的判重复用同一个号（`_known_hashes`），
+    落到同一条目录里；名字撞上而内容不同时由 `library_landing` 追加内容短哈希，绝不覆盖。
     """
-    digest = str(sha256_hex or "").strip().lower()
-    if not re.fullmatch(r"[0-9a-f]{64}", digest):
+    lid = str(lit_id or "").strip()
+    if not _ENTRY_ID_RE.match(lid):
         raise ValueError(
-            f"内容 hash 必须是 64 位小写十六进制（收到 {sha256_hex!r}）—— "
-            "落点名由内容决定，没有 hash 就没有落点名")
-    if not _LANDING_HASH_MIN_CHARS <= int(hash_chars) <= 64:
-        raise ValueError(
-            f"hash_chars 必须落在 {_LANDING_HASH_MIN_CHARS}..64（收到 {hash_chars!r}）")
-    want = int(hash_chars)
-    name = _safe_name(Path(source))
-    # 幂等（2026-11-24 SEED-LANDING-FIX ②）：名字里已经带着「这份内容」的 hash 前缀
-    # （`<8..64 位 hex>-<名>`）时不再加第二个。种子包里的文件名本来就是这个形状
-    # （`scripts/seed_corpus.py --build` 按内容 hash 起名），而 `seedinject` 原样搬进
-    # 投放处 ⇒ 收编时再拼一次就得到
-    # `11dc1a689516-11dc1a689516-harris-sylow-theorems.pdf`（真机 sylow-3 现场），
-    # 该名字与投放处那份不同名，读侧"这份材料入编了没有"就对不上。
-    #
-    # 前缀比这次要的短（12 位撞了、要加长到 16/32/64）⇒ 替换那一段，不叠加：
-    # 叠成 `<16 位>-<12 位>-名` 会让名字里出现两段关于同一份内容的 hash。
-    head, sep, rest = name.partition("-")
-    low = head.lower()
-    if sep and rest and _LANDING_PREFIX_RE.match(low) and digest.startswith(low):
-        if len(low) >= want:
-            return name
-        return f"{digest[:want]}-{rest}"
-    return f"{digest[:want]}-{name}"
+            f"落点目录名必须是文献号（4 位老号 / 6 位新号），收到 {lit_id!r} —— "
+            "`library/<文献号>/<名>` 是现行规范（2026-11-25），没有号就没有目录名")
+    return f"{lid}/{_safe_name(Path(source))}"
 
 
-#: 落点名里的内容 hash 前缀（`library_landing_name` 那一截；`strip_landing_hash` 认它）。
-_LANDING_PREFIX_RE = re.compile(r"^[0-9a-f]{%d,64}$" % _LANDING_HASH_MIN_CHARS)
+#: 历史扁平落点里的内容 hash 前缀（8..64 位十六进制；`strip_landing_hash` 认它）。
+#:
+#: 新布局（`<文献号>/<清洗名>`）不再往名字里拼 hash，所以这条正则只服务两件事：
+#: ① 读旧工作区（lp-ball-15/22 那批扁平文件）时把 hash 前缀剥掉，与源文件名对齐；
+#: ② `agent_prompts._local_material_key` 判"这份材料入编了没有"时两边的形态能对上。
+#: 它不再参与任何写侧决定 —— 写侧落点名只有 `library_landing_name` 一处。
+_LANDING_PREFIX_RE = re.compile(r"^[0-9a-f]{8,64}$")
 
 
 def library_name_of(source: Path | str) -> str:
@@ -222,13 +199,12 @@ def library_name_of(source: Path | str) -> str:
 
 
 def strip_landing_hash(landing: str) -> str:
-    """落点名去掉内容 hash 前缀：`<12..64 位 hex>-<名>` ⇒ `<名>`；不是落点名就原样返回。
+    """把历史扁平落点的内容 hash 前缀剥掉：`<8..64 位 hex>-<名>` ⇒ `<名>`；否则原样返回。
 
-    反过来的一件事（`library_landing_name` 加上去、这里剥下来）放在同一模块：
-    前缀有多长、由谁负责加，只有这一处知道。碰上 `library_landing` 最后的"加长前缀 +
-    源文件短哈希"那一档（64 位 hex + `-<8 位>-<名>`）时，这里只剥第一段，于是返回的
-    名字里还带着那段短哈希 —— 那一档本就是"同一目录里撞了极近内容"的罕见形态，
-    读侧认不出它是可接受的（它仍然是一份旧形态读数，不会因此把别的材料读成已入编）。
+    只服务读旧工作区（lp-ball-15/22 那批 B2a 扁平文件）与"这份材料入编了没有"那条读数：
+    新布局 `<文献号>/<清洗名>` 不再往名字里拼 hash，所以本函数对新数据是恒等变换。
+    碰上 `library_landing` 最后"内容短哈希 + 同名"那一档（`<名>-<8 位 hex>` 在后面）
+    时这里不剥 —— 那种名字在磁盘上仍然是一份可读文件，读侧认不出它的"源名"是可接受的。
     """
     text = str(landing or "")
     head, sep, rest = text.partition("-")
@@ -238,32 +214,44 @@ def strip_landing_hash(landing: str) -> str:
 
 
 def library_landing(library: Path | str, source: Path | str,
-                    sha256_hex: str) -> tuple[str, Path]:
-    """一条新收编的字节的落点：`(library 相对落点名, 绝对落点)`，同名不同内容绝不覆盖。
+                    sha256_hex: str, *, lit_id: str) -> tuple[str, Path]:
+    """一条新收编的字节的落点：`(library 相对名, 绝对落点)`，同名不同内容绝不覆盖。
 
-    这是两个写者共用的那一个函数（`search_tools._adopt_file` 与
-    `ingest_directory`）：落点名只由 `library_landing_name` 一处给，本函数只多做两件事 ——
-    ① 既有文件内容相同 ⇒ 直接复用那个名字（幂等：同一份字节不搬第二份）；
-    ② 内容不同而 12 位前缀撞上 ⇒ 16 → 32 → 64 位逐步加长，最后带源文件短哈希，
-    一个既有文件都不覆盖（覆盖会毁掉已经建立的引文定位）。
+    三个写者共用这一个函数（`search_tools._adopt_file`、`ingest_directory`、
+    `agent_a.core._attach_staged`）：相对名只由 `library_landing_name` 一处给
+    （`<文献号>/<清洗名>`），本函数只多做两件事 ——
+    ① 目标文件已存在且内容相同 ⇒ 直接复用那个名字（同一份字节不搬第二份）；
+    ② 名字撞上而内容不同 ⇒ 追加内容短哈希（8 → 16 → 32 → 64 位），最后带
+    「源文件 + 内容」的短哈希，一个既有文件都不覆盖（覆盖会毁掉已建立的引文定位）。
 
-    它不建目录、不搬字节：谁写（`copy2` / `move`）谁负责 `dest.parent.mkdir(...)`。
+    它不建目录、也不搬字节：谁写（`copy2` / `move`）谁负责 `dest.parent.mkdir(...)`。
     """
     want = str(sha256_hex or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", want):
+        raise ValueError(
+            f"内容 hash 必须是 64 位小写十六进制（收到 {sha256_hex!r}）—— "
+            "同名不同内容的判据要靠它")
     base = Path(library)
     src = Path(source)
-    for chars in (LANDING_HASH_CHARS, 16, 32, 64):
-        rel = library_landing_name(src, want, hash_chars=chars)
-        dest = base / rel
-        if not dest.exists():
-            return rel, dest
-        if dest.is_file() and sha256_file(dest) == want:
-            return rel, dest
-    # 连 64 位全 hash + 同名都撞上（同一份目录里有另一份内容极近的文件）：带上
-    # 「源文件 + 内容」的短哈希，仍然不覆盖任何既有字节。
+    clean = _safe_name(src)
+    rel = library_landing_name(src, lit_id)
+    dest = base / rel
+    if not dest.exists():
+        return rel, dest
+    if dest.is_file() and sha256_file(dest) == want:
+        return rel, dest
+    stem = Path(clean)
+    lid = str(lit_id or "").strip()
+    for chars in (8, 16, 32, 64):
+        alt = f"{lid}/{stem.stem}-{want[:chars]}{stem.suffix}"
+        cand = base / alt
+        if not cand.exists():
+            return alt, cand
+        if cand.is_file() and sha256_file(cand) == want:
+            return alt, cand
     tail = hashlib.sha256(f"{src}|{want}".encode("utf-8")).hexdigest()[:8]
-    rel = f"{want}-{tail}-{_safe_name(src)}"
-    return rel, base / rel
+    alt = f"{lid}/{stem.stem}-{tail}{stem.suffix}"
+    return alt, base / alt
 
 
 def _machine_summary(pages: int, *, name: str = "") -> str:
@@ -725,10 +713,10 @@ def ingest_directory(
     for idx, src in enumerate(list_books(root, pattern=pattern)):
         size = src.stat().st_size
         sha = sha256_file(src)
-        # 落点名只有一处实现（`library_landing_name`，与 `search_tools._adopt_file`
-        # 共用）：扁平 `<内容 hash 前缀>-<名>`。计划里报的就是它实际会落到的名字，
-        # 不是另起一个"书名"—— 两个名字并存正是这一批要消掉的那种名实不符。
-        name = library_landing_name(src, sha)
+        # 文件名只清洗、不再带内容 hash 前缀（2026-11-25：落点 `<文献号>/<清洗名>`）。
+        # 这里是"还没有号"的阶段：真落点名（含文献号目录）要等事务里 `alloc_id` 之后
+        # 由 `library_landing` 一处给 —— 先落一个临时名再改名会留下两套名字。
+        name = _safe_name(src)
         plan = BookPlan(source=str(src), library_name=name, bytes=size, sha256=sha,
                         status="ingested")
 
@@ -745,6 +733,7 @@ def ingest_directory(
         if sha in known:
             plan.status = "already_present"
             plan.lit_id = known[sha]
+            plan.library_name = f"{plan.lit_id}/{name}"
             plan.note = "同一内容 hash 已在库里（热启动的判据是内容，不是文件名）"
             report.books.append(plan)
             continue
@@ -767,6 +756,8 @@ def ingest_directory(
         summary, plan.note = _summary_for_row(plan.pages, name, plan.note)
 
         if dry_run:
+            plan.note = (f"{plan.note}；" if plan.note else "") + (
+                "dry_run 不分配号，真落点将是 `<新号>/{name}`")
             report.books.append(plan)
             continue
 
@@ -790,16 +781,18 @@ def ingest_directory(
             continue
 
         lib.mkdir(parents=True, exist_ok=True)
-        # 落点由 `library_landing` 一处给（同名不同内容会加长 hash 前缀，绝不覆盖）：
-        # 本路与 `search_tools._adopt_file` 是同一个落点函数，不是两份实现。
-        landing, dest = library_landing(lib, src, sha)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        if not dest.exists() or sha256_file(dest) != sha:
-            shutil.copy2(src, dest)
 
         with store.tx("search_requests", "literature", "counters",
                       actor=actor, note=note or "ingest local books") as tx:
             lit_id = tx.alloc_id("lit")
+            # 落点由 `library_landing` 一处给（`<lit_id>/<清洗名>`；同名不同内容会追加
+            # 内容短哈希、绝不覆盖）。位置在 `alloc_id` 之后：目录名就是这一行的号，
+            # 不许先落临时名再改名。
+            landing, dest = library_landing(lib, src, sha, lit_id=lit_id)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if not dest.exists() or sha256_file(dest) != sha:
+                shutil.copy2(src, dest)
+            plan.library_name = landing
             req_id = I.next_prefixed_id(tx.rows("search_requests"), "request_id", "r")
             tx.upsert(
                 "search_requests",

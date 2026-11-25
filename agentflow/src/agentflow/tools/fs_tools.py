@@ -2250,9 +2250,13 @@ def fs_read(ctx: FsContext, *, path: str, max_bytes: int = READ_DEFAULT_BYTES,
         is_bin, why = True, f"扩展名 {suffix} 属于二进制格式"
     if is_bin:
         # 「2026-10-17 业主口径」：*"把其它智能体要消费论文的请求「自动路由到同名纯文字稿」，
-        # 其它智能体不必再做 OCR 等操作。"* ⇒ 这里不再一律拒：若这一份旁边有
-        # 「同名纯文字稿」（A 用 `text.extract` 转好的那份，落在同一层），「直接把稿子给它」，
-        # 并在读数里「说清"你要的是 PDF、我改读的是同名稿"」（不许静默替换来源）。
+        # 其它智能体不必再做 OCR 等操作。"* ⇒ 这里不再一律拒：「直接把稿子给它」，
+        # 并在读数里「说清"你要的是 PDF、我改读的是哪一份稿"」（不许静默替换来源）。
+        #
+        # 2026-11-25（LIBRARY-SHAPE）：抽读件与原件同目录、同 stem
+        # （`library/000003/paper.pdf` → `library/000003/paper.txt`），所以这条「同名纯文字稿」
+        # 路由对已登记书架上的 PDF 也命中 —— 改前抽读件是扁平层 `library/<编号>.txt`，
+        # 与本条同名判据对不上，路由永远不命中（真机 lp-ball-22 的读数）。
         sibling = target.with_suffix(".txt")
         if target.suffix.casefold() == ".pdf" and sibling.is_file():
             # 这几个读数在下面几支里各被读两次（相对路径 / 字节数），各算一次。
@@ -2292,7 +2296,7 @@ def fs_read(ctx: FsContext, *, path: str, max_bytes: int = READ_DEFAULT_BYTES,
         return fail(
             f"拒绝按文本读取 {_rel(ctx, target)}：判定为二进制（{why}）。"
             "需要它的内容请走抽取链（extract/OCR），不要当文本读 —— 乱码会被下游当成内容。"
-            "**出路**：让 **A** 跑 `text.extract`（它会把同名纯文字稿写进 library/，"
+            "**出路**：让 **A** 跑 `text.extract`（它会把同名纯文字稿写进原件所在目录，"
             "于是这一件**自动路由**给你，你不必自己做 OCR/抽取）。",
             path=_rel(ctx, target),
             kind="binary",

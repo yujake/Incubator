@@ -1,0 +1,329 @@
+===== page 1 =====
+547
+Acta Math. Hungar.
+DOI: 0
+ON THE VOLUME OF HYPERPLANE
+SECTIONS OF A d-CUBE
+I. ALIEV
+Mathematics Institute, CardiﬀUniversity, Cardiﬀ, Wales, UK
+e-mail: alievi@cardiﬀ.ac.uk
+(Received April 2, 2020; revised April 24, 2020; accepted April 24, 2020)
+Abstract.
+We obtain an optimal upper bound for the normalised volume
+of a hyperplane section of an origin-symmetric d-dimensional cube. This conﬁrms
+a conjecture posed by Imre B´ar´any and P´eter Frankl.
+1. Statement of the results
+Let Cd = [−1/2, 1/2]d be the d-dimensional unit cube. Throughout this
+paper we assume that d ≥2. For a nonzero vector v ∈Rd we will denote by
+v⊥the hyperplane orthogonal to v and consider the section Cd ∩v⊥of the
+cube Cd. Let further ∥· ∥1 and ∥· ∥2 denote ℓ1 and ℓ2 norms, respectively.
+In this paper we will be interested in the quantity
+(1)
+Vd = max
+v∈Rd
+∥v∥1
+∥v∥2
+· vold−1(Cd ∩v⊥) ,
+where vold−1(·) stands for the (d−1)-volume. Imre B´ar´any and P´eter Frankl
+[3] conjectured that the maximum in (1) is given by the vector v = 1d :=
+(1, . . . , 1). Our main result conﬁrms this conjecture.
+Theorem 1. We have
+(2)
+Vd =
+√
+d · vold−1(Cd ∩1⊥
+d ) .
+It is known that
+lim
+d→∞vold−1(Cd ∩1⊥
+d ) =
+
+6
+π
+Key words and phrases: sections of a cube, intersection body, sinc integral.
+Mathematics Subject Classiﬁcation: 52A40, 52A38.
+Acta Math. Hungar. 163
+163 (2) (2021), 547–551
+https://doi.org/10.1007/s10474-020-01057-y
+First published online June 30, 2020
+0236-5294/$20.00 © 2020 Akade´miai Kiado´, Budapest, Hungary
+===== page 2 =====
+Acta Mathematica Hungarica 163, 2021
+2
+I. ALIEV
+(see [9], [11] and e.g. [5]). The expression (2) also allows ﬁnding the exact
+value of Vd in the following way. Let s = (s1,. . . ,sd) ∈Sd−1 be a unit vector.
+Then
+(3)
+vold−1(Cd ∩s⊥) = 2
+π
+ ∞
+0
+d
+
+i=1
+sin sit
+sit
+dt
+(see e.g. [2]). Consider the sinc integral [4]
+σd = 2
+π
+ ∞
+0
+sin t
+t
+d
+dt .
+In view of (2) and (3) we have
+(4)
+Vd = 2
+√
+d
+π
+ ∞
+0
+sin
+t
+√
+d
+t
+√
+d
+d
+dt = d σd .
+Further
+σd =
+d
+2d−1
+	
+0≤r<d/2, r∈Z
+(−1)r(d −2r)d−1
+r!(d −r)!
+(see e.g. [10]). The sequences of numerators and denominators of σd/2 can
+be found in [12].
+Theorem 1 and (3) immediately imply the following lower bound for sinc
+integrals.
+Corollary 2. For any unit vector s = (s1, . . . , sd) ∈Sd−1
+2∥s∥1
+dπ
+ ∞
+0
+d
+
+i=1
+sin sit
+sit
+dt ≤σd .
+It is known that 0 < σd+1/σd < 1 (see e.g. [1, Lemma 1]). Theorem 1 also
+implies the following lower bound for the ratio of consecutive sinc integrals.
+Corollary 3. We have
+d
+d + 1 ≤σd+1
+σd
+.
+2. Intersection body of Cd
+We can associate with each star body L the distance function fL(x) =
+inf{λ > 0 : x ∈λL} . The intersection body IL of a star body L ⊂Rd (recall
+I. ALIEV
+548
+548
+===== page 3 =====
+Acta Mathematica Hungarica 163, 2021
+ON THE VOLUME OF HYPERPLANE SECTIONS OF A d-CUBE
+3
+that we assume d ≥2) is deﬁned as the 0–symmetric star body with distance
+function
+fIL(x) =
+∥x∥2
+vold−1(L ∩x⊥) .
+The Busemann theorem (see e.g. [6, Ch. 8]) states that if L is 0–symmetric
+and convex, then IL is a convex set. For more details on intersection bodies
+we refer the reader to [7,8].
+For convenience, in what follows we will work with normalised cube
+Qd =
+1
+vold−1(Cd ∩1⊥
+d )1/(d−1) · Cd .
+Then, in particular,
+(5)
+vold−1(Qd ∩1⊥
+d ) = 1 .
+Lemma 4. The aﬃne hyperplane
+H =
+
+x ∈Rd : x1 + · · · + xd =
+√
+d
+
+is a supporting hyperplane of IQd.
+Proof. Let f = fIQd denote the distance function of IQd, so that
+IQd = {x ∈Rd : f(x) ≤1} . By (5), for the point
+(6)
+h :=
+1
+√
+d
+1d =
+ 1
+√
+d
+, . . . , 1
+√
+d
+
+we have f(h) = 1. Therefore h is on the boundary of IQd.
+Suppose, to derive a contradiction, that H is not a supporting hyper-
+plane of IQd. Observe that h ∈H ∩IQd. Hence for any ε > 0 there exists
+a point p = (p1, . . . , pd) in the interior of IQd with
+(7)
+∥h −p∥2 < ε
+and p1 + · · · + pd >
+√
+d.
+By (7) we may assume that p ∈Rd
+>0. Further, as the point p is in the in-
+terior of IQd we may assume, for simplicity, that the entries of p are pairwise
+distinct: pi̸ = pj for i̸ = j. Consider d points
+p1 = (p1, . . . , pd−1, pd)
+p2 = (p2, . . . , pd, p1)
+...
+pd = (pd, . . . , pd−2, pd−1) .
+ON THE VOLUME OF HYPERPLANE SECTIONS OF A d-CUBE
+549
+549
+===== page 4 =====
+Acta Mathematica Hungarica 163, 2021
+4
+I. ALIEV
+For each i, the section Qd ∩p⊥
+i is the image of the section Qd ∩p⊥
+1 under
+an orthogonal transformation deﬁned by a permutation matrix. Therefore
+pi ∈IQd. Set
+y = 1
+d (p1 + · · · + pd) =
+d
+i=1 pi
+√
+d
+h .
+By construction, y is a convex combination of the points p1, . . . , pd. Since
+IQd is convex, y = (y1, . . . , yd) ∈IQd. Further
+y1 + · · · + yd =
+d
+	
+i=1
+pi >
+√
+d .
+Therefore the point h must be in the interior of IQd. The derived contra-
+diction completes the proof.
+□
+3. Proof of Theorem 1
+It is suﬃcient to show that for any unit vector v ∈Sd−1 the inequality
+(8)
+∥v∥1 · vold−1(Qd ∩v⊥) ≤
+√
+d · vold−1(Qd ∩1⊥
+d ) =
+√
+d
+holds.
+In view of symmetry of Qd we may assume without loss of generality
+that v ∈Rd
+≥0. Consider the plane P spanned by the vector h, deﬁned by
+(6), and the vector v and let α be the angle between these two vectors with
+cos(α) = h · v (Fig. 1). It is not diﬃcult to see that cos(α) ≥1/
+√
+d and,
+consequently, α < π/2.
+Notice that h is orthogonal to the line H ∩P. Let u denote the inter-
+section point of the line spanned by v and H ∩P. Further, let w be the
+orthogonal projection of v onto the line spanned by h.
+Then we have
+(9)
+cos(α) = ∥w∥2 =
+1
+∥u∥2
+.
+Since h ∈H, all points x on the line passing through the points v and w
+have x1 + · · · + xd =
+√
+d ∥w∥2. Therefore, we have ∥v∥1 =
+√
+d ∥w∥2. In was
+shown in Lemma 4 that H is a supporting hyperplane of IQd. Hence we
+have
+(10)
+vold−1(Qd ∩v⊥) ≤∥u∥2 .
+Finally, using (9) and (10), we have
+∥v∥1 · vold−1(Qd ∩v⊥) ≤
+√
+d ∥w∥2∥u∥2 =
+√
+d ,
+I. ALIEV
+550
+550
+===== page 5 =====
+Acta Mathematica Hungarica 163, 2021
+ON THE VOLUME OF HYPERPLANE SECTIONS OF A d-CUBE
+5
+h
+•0
+Sd−1 ∩P
+α
+v
+w
+u
+H ∩P
+Fig. 1: Geometric argument on the plane P
+that conﬁrms (8).
+□
+Proof of Corollary 3. It was observed in [3] that the sequence
+{Vd}∞
+d=1 is increasing: Vd ≤Vd+1 for all d ≥2. It is now suﬃcient to note
+that, by Theorem 1 (see (4)), we can write Vd = dσd.
+□
+Acknowledgements.
+The author wishes to thank Gergely Ambrus,
+Imre B´ar´any and Martin Henk for valuable comments and suggestions.
+References
+[1] I. Aliev, Siegel’s lemma and sum-distinct sets, Discrete Comput. Geom., 39 (2008),
+59–66.
+[2] K. Ball, Cube slicing in Rn, Proc. Amer. Math. Soc., 97 (1986), 465–472.
+[3] I. B´ar´any and P. Frankl, Cells in the box and a hyperplane, manuscript (2020).
+[4] D. Borwein and J. Borwein, Some remarkable properties of sinc and related integrals,
+Ramanujan J., 5 (2001), 73–89.
+[5] D. Chakerian and D. Logothetti, Cube slices, pictorial triangles, and probability, Math.
+Mag., 64 (1991), 219–241.
+[6] R. J. Gardner, Geometric Tomography, Encyclopedia of Mathematics and its Appli-
+cations, vol. 58, Cambridge University Press (Cambridge, 1995).
+[7] A. Koldobsky, Fourier Analysis in Convex Geometry, Mathematical Surveys and
+Monographs, vol. 116, American Mathematical Society (Providence, 2005).
+[8] E. Lutwak, Intersection bodies and dual mixed volumes, Adv. Math., 71 (1988), 232–
+261.
+[9] P. S. Laplace, Th´eorie Analytique des Probabilit´es (Paris, 1812).
+[10] R.
+G.
+Medhurst
+and
+J.
+H.
+Roberts,
+Evaluation
+of
+the
+integral
+In(b) =
+2
+π
+ ∞
+0 ( sin x
+x )n cos(bx) dx, Math. Comp., 19 (1965), 113–117.
+[11] G. P´olya, Berechnung eines Bestimmten Integrals, Math. Ann., 74 (1913), 204–212.
+[12] N. J. A. Sloane, Sequences A049330 and A049331, The On-Line Encyclopedia of In-
+teger Sequences, oeis.org.
+ON THE VOLUME OF HYPERPLANE SECTIONS OF A d-CUBE
+551
+551

@@ -1,0 +1,584 @@
+===== page 1 =====
+arXiv:2305.18351v2  [math.CO]  26 Jul 2023
+Example of cube slices that are not zonoids
+R.Anantharaman
+March 15, 2018
+To the memories of Som Naimpally and Joe Diestel
+Abstract
+Let Q be the unit cube in Rn centered at the Origin O and H a
+hyperplane through O.The intersection is called a central Cube slice and
+its study was initiated by Hadwiger, Henesley and Vaaler , continued by
+Ball and others. A zonoid is the range of a non atomic vector measure
+into Rn . In this paper, when n = 4 we give examples of non -zonoid cube
+slices. Let H: x + y +z +t =0 ; the slice has triangle faces and is not a
+zonoid. This contrasts with a result inR3,where it follows from a classical
+Theorem due to Herz and Lindenstrauss that every central cube slice is a
+zonoid( zonotope). We also give nontrivial examples in which the slice is
+a zonoid. For ex. let H : ax + y + z+t=0 with a>1. If a≥3 , the slice is
+a zonotope. Otherwise it has faces that are trapeziums or pentagons and
+is not a zonoid.We also give other examples of the like nature.
+Published :Math Japon. SCMJ e-2018 whole number 31, pp 315-
+326
+New Reference Ethan Bolker, at end of paper JULY 2023
+1
+Introduction
+1.1 Slices Zonoids ,Zonotopes
+Let us recall the result from [3]:– Let Qn =Q =unit cube in Rn centered at
+Origin O; ie. Q = ((xk) : |xk| ≤1
+2 .
+Let H be a vector subspace of dimension n-1, ie. a plane thru the Origin
+with equation : H= ( x= ( xk ) with x .a =0 ) for a( non zero) vector a in Rn.
+The intersection of H andQ will be called central slice or, “ slice”. Following [
+3 ] we denote by|A| the appropriate volume /area of the measurable set A ,and
+assume n ≥2. As other examples let us note the papers [7 ], [ 8],[ 13]initial to this
+subject , and the surveys [5], [10] [14] ]that treats many related topicsWenote
+the p th powerof Lp norm of the “sinc “ function in [3] : for (p≥2 ):
+Ip = 1
+π
+Z
+R
+|sint|p
+|t||p dt,
+(1)
+1
+===== page 2 =====
+An upperbound for this is:-
+√
+2
+√p , with equality iﬀp = 2. The lower bound
+is assumed by H: xk= 0 and upper only if n=2 and H: x + y=0 or with x −y=0
+Let us mention that Valler[13] considers concepts of analytic interest; his
+results not only prove lower bound but also apply to Minkowski’s Theorem on
+Linear foirms.
+We note that there are alsoresults on sections by centralplanes of dimension
+k( see [14] TH 1.2, 1.3 p 154), alsodue toBall. We treat only the case k= n-1.
+This estimate is in [3 ]; see also [10, Ch1]. The proof of this estimatein [3,
+p468] is with ” direct ” and uses only elementary methods . The one in [10]
+uses Fourier methods.This integral Ip has found use in wavelets[ 11 ]
+For our needs we use the more precise values also from ( [3] Lemma3) below
+,see eq(9), (10). In [3] this is derived ,ﬁrst using Characteristic functions( =
+Fourier Transform) then the “ standard Inverse Fourier Formula ” .
+As pointed out by an anonymous referee (of another paper)– see Acknowl-
+edgements –this I4 is in the classic, [ 12] ( also in [9]); see [10] for many related
+deeper results However we use the formula from [3] for vol of slice of cube .
+Our interest is more in the sliceitself .With n=4 in Sec 3we give example ofa a
+( central)slice that has a triangle face, and isnot nota zonoid ( ”face” ) deﬁned
+below).On the other hand,in Sec 4 we give examples of slices that are zonoids,
+and othersthat have a pentagon or trapezium face and so are not.
+Notation and preliminaries : We write an element of R4 as (x, y, z, t)
+and use a, b, c, d as coeﬃcients. Below we avoid the case when H is paralll to
+acoordinate hyperplane;inthis case the slice is a Cube of lower dimension and
+so a zonoid
+Let a hyperplane be H : ax + by + cz + dt =0 .As in [ 8 ], we may assume
+that no coeﬃcient is zero, and next they are all positive.
+Further we may
+assumethat a≥b≥c≥d and then by dividing by d, that H: ax + by + cz + t =0
+with a≥b≥c≥1. In all examples of non zonoids we consider the equation [ t=
+-1/2] to get a Face that is atriangle,trapezium or pentagon( disqualifying slice
+fombeig a zonoid : see beginning of Sec 3).
+In ex 3.1 we consider the case when a=b=c(= 1); and as mentioned above
+show that the slice has triangular faces and so not a zonoid(” face” deﬁned
+below).The sections of this sliceby planes[ t= -c] with 0 < c < 1/2 are hexagons
+.These tend to the triangle face as c tends to 1/2 . We may feel that ” cube
+slices in R4 are never nontrivial zonoids”. Hencein ex 4.1 we consider H: a x +
+y + z + t =0 with a > 1 Now the slice is a zonoid if a≥3 and is a paralletope;in
+the contrary cases the slice has pentagon faces and isnot a zonoid . In Ex4.2 we
+consider H:a( x +y)+ z +t=0 ; the slice is not a zonoid onaccount of trapezium
+faces.In Ex 4.3 we have H: a(x + y) +z +t=0and slice has pentagon faces In
+ex4.4 Webrieﬂy indicate special cases of H: ax + by + z +t=0 witha > b >1.
+As the methods in these examples is same asthe one in Ex 3.1 we donot give
+details. In Ex.4.4 we consider the case of H:ax + by + cz + t = 0.Slice is a
+paralleotope in case a≥b + c + 1 and b≥c + 1. If (i) and (ii) both fail then the
+slice has pentagon faces and is not a zonoid
+2
+===== page 3 =====
+We give these as samples ; and do not consider every possible case .Roughly
+, the non zonoids prevail in our list of examples.
+DiagramThey will help.
+Our methods are elementary and can be found for ex in [6]. We do use the
+formula for vol of slices from [3] ( see also [10] ch1) referred to above.
+We notethatthat in al of our examples we use the face [ t= -1/2] of the cube
+, this is also a faceof the slice The ”domain” C of face is found ﬁrst , then an
+aﬃne map T to determine theFace T(C). The points in C are found by checking
+the x and y intercepts of lines involved satisfy theconditions for slice:–|x|, |y| and
+|z| are all≤1/2. This condition must be satisﬁed by all coordinates of points
+in the Face (of slices) that we ﬁnd, and leads tothe conditions imposed on the
+coeﬃcients of H.
+Let us ﬁrst describe the result on slices
+. 1.2Theorem ([3][5] ,[7], [8] [13] ,[14] )In all dimensions the measure
+of cube slice is between 1 and
+√
+2; these arebest.
+1.3Zonoids
+Returning to the title of this paper, about Zonoids:– Our concern is :–“
+When is a slice a zonoid?” We do not have a complete characterization of this
+.Instead let us concentrate in R4, and give examples of non zonoid slices as well
+as those that are zonoids and a consequence( known) for I4 . We recall from
+[ 6] with X=Rn :– . A zonoid is range of a non atomic vector measure and
+above all the classical Liapunov’s Theorem:- A zonoid is compactand convex A
+zonotope is sum of segments( each centered at the Origin) For our purpose we
+need the classic result of Herz and Lindenstrauss from [ 6]:– The closed unit ball
+in every 2dimensional normed space is a zonoid
+2
+Zonoids and Zonotopes
+2.1 Theorem[ 6]
+i)If H is 2 dimensional then every such slice is a zonotope ii) In all dimensions
+every projection of Q is a zonotope
+Proof:
+(i) This follows from the classic result due to Herz and Lindenstrauss quoted
+above and the result from ( [6] ) :- inR2 every centrally symmetric polygon is
+always a sum of segments
+(ii) This is in [ 6] and can also be veriﬁed directly. Hence the Theorem.
+Remark 2.2:
+For much more about projections see, [ 4].
+3
+Example of slice that is not a zonoid
+A notedbefore,in contrast(Th 2.1, part i) to the situation in R3 we oﬀer an
+example of a slice in R4 that is not a zonoid. Reasons to disqualify it from
+being a zonoid are the useful facts, all from [ 6] :–If K is a zonoid then
+3
+===== page 4 =====
+(i) K has center of symmetry c say .In fact by deﬁnition of ” K is a Zonoid
+”(see Introduction)
+K= µ(P) for a ( vector measure) µ then c= 1
+2µ(S) will do For, with Ac =
+complement of set A, we have 1
+2(µ(A) + µ(Ac)) = 1/2µ(S) = c for every A in
+domain P of µ
+item(ii) faces are translates of zonoids of lower dimension and item (iii) Since
+it has no center of symmetry,the triangle is not a zonoid; neither is a trapezium
+(trapezoid) or a pentagon
+item(iv)Hence any compact ,convex, balanced set that has a triangular,( or a
+trapezium face) cannot be a zonoid. Thus, the Octohedron in R3 is nota zonoid,
+for it has triangular faces. There are deeper non zonoids for ex the 1976 result
+due to LE Dor ( for ex[10]):–If 1 < p < 2 and n≥3 then the closed unit Balls
+of the spaces lp
+n are not zonoiids
+We give, in Th3.4, a version of(ii) from [2 ]:– a face ( deﬁned below) is a
+translate of some zonoid of lower dimension . We need this version in the Th
+3.4 to produce non zonoid slices in our examples.
+Let us recall fom [6] theterm ,” Face of acompact convex set K “in a real(
+normed space ) X. Let us use “ H” for any hyperplane ( not necessarily thru O)
+As above a hyperplane is
+H = (xǫX : (x, x∗) = α) ,
+(2)
+where x∗isa non zero functional in X∗and αis a real number .
+The set K is “ on one side” of this H if
+sup[(x, x∗) : xǫK] ≤α,
+(3)
+A similar condition holds with “ inf” replacing “ sup” and by≥replacing
+≤;andH supports K if K is to one side of H as in eq(3,) H ∩K̸ = φ and K is
+not entirely contained in H. Finally the ( compact convex ) set H∩K is called
+“a Face of K” .
+Below we use the fact that an aﬃne map preserves convexity.
+Let X, Y be real Banach spaces . Then a mapT: X →Y is aﬃne if T (ax +
+by) = aT (x) + bT (y) for every x, y in X and a , b ≥0 with a + b = 1.ie; the
+deﬁnition of Linear map is now restricted to line segments in domain.
+Let us recall K = H ∩Q is the slice corresponding to H[t = −1/2] In the
+next ( and other ) examples all we need is that the relevant , y, z coordinates
+of our points are limited by |x| ≤1/2 etc .
+3.1Example with triangle face
+Let us recall H is given in R4 by
+x + y + z + t = 0,
+(4)
+The slice (i) has triangular faces and so is not a zonoid
+(ii) the intersections of slice with t= -c , 0 ≤c < 1
+2
+4
+===== page 5 =====
+are hexagons ;these are sections (iii) These tend to the above triangle as c
+tends to 1/2
+proof(i)
+Substituting t = -1/2 in eq(4) of H , for any x =( x, y, z, t) in this H we
+have
+x = x( 1,0,0 -1) + y (0,1,0,-1) +z( 0,0, 1, -1) is the linear combination x u
++ y v + z w. ( these 3 vectors u, v, w are Linearly independent)
+First consider the 2 dimensional set S in slice,in span of vectors u and v.
+Starting with A ( u/2) on the “ x axis” and going counterclockwise,we see
+that S is a hexagon with vertices A ( u/2), B(v/2), C(( v-u)/2, A’= -A,
+B’= -B , C’= -C. Further it is regular all sides have length 1/
+√
+2 and that
+this = sum of 3 segments , OA , OC and OB’. This set S is in plane z=0 Now we
+consider the 3rd term in above eq for x ; we note that the vector D= w/2 cannot
+be added to A or B as the sum will leave the cube We consider the Hyperplane
+H1 = ( x, y, z, t): t= -1/2 ) or, simply by t = -1/2 and claim that
+( a) this plane supports the slice K and that
+( b)the face F =H1∩K is convex triangle.
+As noted above, ( b) disqualiﬁes the slice from being a zonoid
+Let us verify the claims. Now (a) follows directly from def. of Q.In fact for
+every element in Q we have t≥−1/2 ie., Q is to “ one side “ of H1; so is the slice
+.Further , the elements A , B, are in the slice, and also lie inH1 , hence in Face
+F. The Origin O is in slice K not in H1; ie. the sliceis not entirely contained
+inH1.Hence H1 is a supporting hyperplane of the slice as claimed.
+For claim (b) we may write any element in the Face as
+f (x) = (x, y, z, t)=( x, y, 1/2 - x- y , - 1/2) ,
+since we use t= - 1/2 in eq (4) of H and
+we get z= 1/2 −−x −y.
+As x is in Q we need |x| and |y| and also |z| from above ≤1/2 and so
+|1/2 −x −y| ≤1/2
+(5)
+This last translates to
+0 ≤x + y ≤1
+(6)
+Geometrically, we note that the last inequality gives two boundary lines of
+”domainC” sayL1 := x+y =1 , and L2:= x+ y=0. We sketch these lines; as
+the x-intercept ofL1 exceed the bound 1/2 let us consider its intersection with
+the line x =1/2 toget point (1/2, 1/2).; intersection of L2 with the line y=1/2
+gives ( -1/2, 1/2). This line with y=-1/2 gives (1/2, -1/2)
+These result in a ( convex right angled ) triangle C in x-y plane with above
+vertices P( 1/2, -1/2) , Q( 1/2, 1/2) and R ( - 1/2, 1/2)
+Now let us deﬁne a map Tfrom Cto F by
+T (x, y) = (x, y, 1/2 −x −y, −1/2)
+(7)
+and C is its domain. Then we may verify that, T is aﬃne and that T( C)=F.
+5
+===== page 6 =====
+Further as observed before statement of this example, aﬃne map
+preserves convexity, and so the image T ( C) = convex hull of the 3 points
+(p1,p2 , p3) where p1 = T( P)= ( 1 /2 , -1/2 ,1/2, -1/2) , p2 =
+T( Q)= ( 1 /2, 1/2, -1/2, -1/2) andp3= T( R)= (- 1 /2, ,1/2, 1 /2,-1/2).
+These points are not collinear, form a triangle and we conclude that the face F
+is a triangle , completing Claim ( b) and proof of (i) .
+We need to prove (ii) and (iii) .
+Recall K = slice ; now we let 0 < c < 1/2 and Section Kc = K ∩[t = −c].
+Use t= - c in eq (4) H; any x in Kc is then of
+the form x = ( x, y , -x-y+c, -c) with the conditions
+|x|, |y| and |x + y −c| ≤1/2 .
+Similarly to above ( 6) this last translates to
+−1/2 + c≤x + y≤1/2 + c ,
+(8)
+As in part (i) we draw the ”boundary” lines L1 , L2 from eq (8) . Again , both
+the x and y- intercepts of L1 fail the bounds of 1/2; however L2 passes ( noting
+the limits on c)Then we ﬁnd the vertices of our ”domainC” by intersecting
+L1 and L2 with the lines y=1/2, y= -1/2, x= 1/2 and x= - 1/2. . We get a
+hexagon( domain). Its 6 vertices are shown in a Chart in next Theorem 3.3 and
+as follows:–
+p6 =(c, -1/2) on lines y = -1/2 and L2 , p1 =
+( 1 / 2, -1/2) andp2 =( 1/2 , c) on line x= 1 / 2 andL1 .Next p3 =( c, 1 /
+2) on lines L1 and y=1/2 and p4 =(- 1/2, 1/2) then p5 = ( -1/2, c) on lines L2
+and x= -1/2
+These 6 points (pi) form a hexagon making
+the new domain “C” of map T deﬁned analogous to eq(7) in part (i) above.
+As there we see that the section Kc = T( C ) is also a hexagon.
+Finally let c tend to 1 / 2 ; then we see from above that the
+following vertices coincide:- p2 = p3 =(1/2, 1/2) ,p4 = p5
+=(-1/2, 1 /2) and p6 = (1/2, -1/2) = p1 . Correspondingly ( as in
+case i above) we verify that the section T( C ) becomes the triangle in
+part(i) completing thereby proof of (ii) and the example
+Remark 3.2. Above we used the hyper plane given by the equation,
+t= - 1 /2 and found that the face of slice given by it is triangular
+; we may instead consider t = 1 / 2 Further, the equation deﬁning H is
+symmetric with respect to the four variables x, y, z, t. Hence we may con-
+clude that there are 8 triangular faces. We do not know what are the remaining
+faces and we think there are 4 more but not triangles .
+For the next result, we follow [ 3]Lemma 3 ( see also[10] ch1 ) and recall
+from Introduction eq(1) theintegral Ip :
+1
+π
+R
+R
+|sint|p
+|t|p
+dt .
+Here p is an integer ≥2, and we have from the result in [3] above,
+the formula forthe exact value of slice :-
+6
+===== page 7 =====
+∥H∩Q| = 1
+π
+Z
+R
+g(t)dt,
+(9)
+where g is the ﬁnite product
+g(t) =
+N
+Y
+1
+sinait
+ait
+,
+(10)
+and the sequence ( ai ) ( of coordinates of vector normal to H) is normalized
+in l2 and also each |aj| ≤1/
+√
+2
+To ﬁnd volume of slice S we use Cavaleri ‘s principle = Fubini’s Theorem .
+Let |A(c)|= area of the section of S by plane [ t= -c]. Then the
+vol of slice =2
+R 1/2
+0
+|A(c)|dc .
+We saw in ex 3.1 that A ( c) is a hexagon . We give the details in the
+next result;
+3.3Theorem (i)The volume of the slice in Ex3.1 is 4/3 (ii) I4 = 2/3
+Proof(i) We refer to part (b)in ex3.1 and list the vertices of the hexagons in
+domain C as well as in the range T(C).
+Recall T( x, y)= ( x, y, c-x-y, -c) with 0 < c < 1/2.
+Domain C ............................... rangeT( C)
+p1(1/2, −1/2)................... P1(1/2, −1/2, c, −c)
+p2 (1/2, c) ........................ P2 (1/2, c ,-1/2 , -c)
+p3 ( c , 1/2) .................... P3(c, 1/2, −1/2, −c)
+p4 ( -1/2, 1/2) ................ .. P4(−1/2, 1/2, c, −c)
+p( −1/2, c) ...................... P5(−1/2, c, 1/2, −c)
+p6(c, −1/2) ..........................P6(c, −1/2, 1/2, −c)
+We claim that area of domain C=
+|A(c)| = (3/4 −c2),
+(11)
+In the following we use formula for area of trapezium by rule
+(1 /2) h (a + b) where h is the height and a, b are lengths of parallel sides.
+Let us use the chart for domain C ﬁrst then use it to get the image.
+The domain C = two trapeziumsT1 andT2 ; these are the top and at
+bottom respy. Namely, T1 has vertices, p5, p2, p3 and p4
+and T2 has vertices, p6, p1,p2 andp5.
+Then we have
+|T1|= 1
+2(1 + c + 1/2)(1/2 −c) = 1/2(3/2 + c)(1/2 −c) and
+|T2|= 1/2(1 −c + 1/2)(1/2 + c) = 1/2(3/2 −c)(1/2 + c)
+Adding them we get the eq ( 11) for A(c).
+To get the area of image T( C ) observe that the domain C is the
+projection on plane( z=0) of the wanted T( C) .
+For the factor needed we note that the unit normal to H is
+n=( 1/2 , 1/2 , 1 /2 , 1 /2) and that e3 = ( 0,0,1, 0).
+Using the dot product n.e3 we see that area of Projection
+= 1/2 area of T ( C). Thus the area of T (C) = 2(3/4 −c2) from above.
+7
+===== page 8 =====
+We integrate from c=0 to 1 / 2 to get
+2
+R 1/2
+0
+(3
+4 −c2)dc = 2/3
+Taking into account alsothe part t= 1/2 to 0 we get 2( 2/3) =4/3 as claimed
+Part (ii) :Recalling H: x+ y + z+t =0 and the coeﬃcients, normalized , we
+apply the formula from [ 3] quotedabove in eq (9) , (10) to get vol of slice=
+1
+π
+R
+R
+(sint/2)4
+(t/2)4 dt .
+( as in part (i) we used each ai coeﬃcient is 1/2 due to normalizing them in
+eq of H ) Now a change of variable gives
+2
+π
+R
+R (sint/t)4 dt = 2I4.
+From part (i) we have 2I4 = 4/ 3
+and so part (ii) and the Theorem
+Above,in example of a non zonoid slice we used the important fact about
+faces of a zonoid from [6] ( innext Theorem) The following proof is diﬀerent
+from the one in[6] which uses “ Every Zonoid is a zonoid of moments” .This
+approach is not suitable for our purpose; hence we give a proof ( in[ 2]) in next
+result. We see in the proof that it is more meaningful incase the Face isnot a
+singleton, ie. when the composed measure x∗oµ is not equivalent to µ
+3.4Theorem[6][2]]Let K =µ(P) be a zonoid in X=Rn, and H a supporting
+Hyperplane given by x* in X*.Then the face F=K∩H is a translate of a zonoid
+of lower dimension . In fact there are µ almost disjoint sets S0 and S1 such that
+(i)x∗oµ(S1)=sup{x∗oµ(E) : EǫP} and every set E inS0 is x∗oµ - null
+(ii F= µ(S1) + µS0(P).
+Proof: With β = supx∗µ(P) we have,from deﬁnition of F
+F = {x : x = µ(E)s.t.x∗(x) = β},
+(12)
+Let S+ be such that x∗oµ(S+) = β.
+We will write S+ = S0 ∪S1 as stated in the Theorem.
+To do this let usnote that the signed measure x∗oµ << µ
+;consider those E that are x∗oµ - null but not µ - null.
+(ifthere are no such sets E then S0may be taken to be ∅).
+Othewise consider a maximal pairwise disjoint family ofsuch sets; this family
+is countable, so that theirunion is in P. Call this set S0 and let S1 = S+ −S0
+.Then
+(i) follows from the fact that
+x∗oµ(S0) =0 by the construction of S0 and so
+β = x∗oµ(S+)= x∗oµ(S0) + x∗oµ(S1)
+= x∗o µ(S1) . we see that second part in (i) follows by construction again.
+As for part(ii) we have from Eq (12) if x= µ(E) ǫ F then
+x∗oµ ( E) = β .
+We need to write x =µ ( E) asthe sum, µ ( E)= µ (S1) + µ ( A) for some
+set A⊂S0 To do this,ﬁrst we claim that( ae |x∗oµ| ) this E⊂S+ . If not we can
+argue to contradict to the fact that S = S+ ∪S−is a Hahn decomposition of
+the underlying set S in terms of x∗oµ
+8
+===== page 9 =====
+Again we can argue that S1 - E is µ– null;from it being x∗oµ null, and then
+on ( subsets of ) S1 these two measures are equivalent by construction.
+Hence we have E= E ∩S1 ∪E ∩S0, and so
+µ(E) = µ(E∩)S1) + µ(E∩)S0) =
+µ(S1) + µ(A) with A = (E ∩S0) ⊂S0 as claimed.
+Hence the Theorem
+4
+Examples of non zonoids with pentagon faces
+and some zonoids a >1
+.
+As in Introduction welet H: ax + by+ cz + t=0 be a hyperplane in R4,with
+a ≥b ≥c ≥1.
+We donot consider all cases but hope the following are of interest. There
+are non trivial cases of zonoid slices . As the methods are same as the one in
+the earlier ex 3.1 we only summarise the results It seems the non zonoid slices
+dominate:–
+In the next ex. we donot know if the converse is true in this generality.
+Hencewe give some special cases of the eq of H in the EXs 4.2 and on.In all
+cases for the Face we use as before the support hyperplane of Q [t = −1
+2 ]
+4.1 H: general caseabove
+If a ≥b + c + 1 then the sliceis a zonotope.
+Proceeding as in Ex3.1, we ﬁnd the ” domain” for the face .For this we have
+the boundary lines L1 to be ax + by = c + 1
+2
+and L2 to be ax+by =−c + 1
+2
+Firstwe note bothx andy-intercepts of L2 are always ( regardless ofthis con-
+dition ) ≤1
+2 in absolute value. As forL1 this condition gives the x-intercepttobe
+≤1
+2 in absolute velue. In the following ” domain the vertex p2 depends on this
+condition, ie. its ” |x| satisﬁes the limits ≤1
+2.
+Withthe condition above we have now the chart
+Domain
+p1 (b −c + 1
+2a
+, −1
+2
+)
+p2 (c + 1 + b
+2a
+, −1
+2
+)
+p3 ( c+1−b
+2a
+, 1
+2 )
+p4 (1 −b −c
+2a
+, 1
+2 )
+Next the corresponding points on the Face:–
+FaceT(x,y)= (x, y, 1/2 −ax −by
+c
+, −1
+2 )
+P1 (b −c + 1
+2a
+, −1
+2 , 1
+2, −1
+2 )
+9
+===== page 10 =====
+P2 (c + 1 + b
+2a
+, −1
+2 , −1
+2 , −1
+2 )
+P3 (c + 1 −b
+2a
+, 1
+2, −1
+2
+,−1
+2 )
+P4 ( 1 −b −c
+2a
+, 1
+2, 1
+2,−1
+2
+)
+It is seen that this domain is a parallogram with the parallel sides( so is the
+Face):
+(p1p2 ) = (p4p3) = ( c
+a, 0) and
+(p2p3) = (p1 p4) =( b
+a. −1)
+Likewise, it can be veriﬁed using the map ”T” , that so is the Face.
+Further, the sections of thesliceby planes with eqs t= −c1, with 0 < c1 < 1/2
+are parallograms that are congruent to the one for the Face. Hence it follows
+(using symmetry) thatthe slice is a zonotope.
+4.2 H : a x +y + z+ t=0
+In one direction this is a special caseofEx 4.1 ;however due to limitation of
+eq ofH we can state ” iﬀ” and we give details :–
+In this case if a ≥3 then the slice isa zonoid ; it is a paralleotope if not the
+slice has pentagon faces and is not a zonoid.
+Case a ≥3: Face is a ;paralleogram ; so is every parallel section congruent
+to it
+Letus note that analogously to eq(6) above we replace x by ax there. Thus
+the x-intercept of the line with equation ax+ y = 1 is x= 1/a.The condition x≤
+1/2 now holds (due tothe condition on a ). This forces the ”Domain” to be a
+paralleogram as we now state. As before we use (x,y) forpoints pi and
+T( x,y)= (x, y, 1/2- ( ax +y), -1/2) for points Pi : Domain C(x,y) Face
+T(C)
+p1( 1/2a, -1/2) P1(1/2a, - 1/2, 1/2, -1/2)
+p2(3/2a, -1/2) P2 ( 3/2a, -1/2, -1/2, -1/2)
+p3 (1/2a, 1/2) P3(1/2a, 1/2, - 1/2, -1/2)
+p4 (-1/2a, 1/2) P4(- 1/2a, 1/2, 1/2, -1/2)
+We see that the opposite sides are parallel and have equal length , so that the
+Face is a rhombus .Further so is any section by plane[ t= -c] with 0 < c < 1/2,
+the area does not depend on c and equals
+√
+1 + 2a−2
+case a < 3 in this case we can verify the ” domain” tobe apentagon; so is
+the face and slice is not a zoniod
+4.3 H: a(x +y) +z +t =0 with a≥2
+The Face[t = −1/2] is a trapezium again, slice not a zonoid
+4.4 H:ax +by+ z +t =0 ( compare ex4.1 ) Face is a paralleogram in
+case b + 2≤a . The parallel sections[t = −c] are congruent parallograms, and
+the slice isa parallotope. Otherwise Face is a pentagon, slice is not a zonoid
+4.5 H: ax + by + z +t =0 The slice is a zonotope if (i) a ≥b + c + 1 and
+(ii) b≥c + 1.
+In case (i) and (ii) both fail Face is a pentagon and slice is nota zonoid.
+If (i) fails but(ii) is true then the Face is a hexagon
+10
+===== page 11 =====
+Remark 4.5 In the last case we dont know if the slice is a zonoid
+ADDED REFERENCE JULY 2023 Ethan Bolkerin 2021 Joint Math-
+ematics Meetings(//exhibitions//2021-jointmathematicsmeetings-meetings)
+Acknowledgements:
+The author is thankful to an anonymous referee( of another related paper)
+for the reference [ 12] and the information there about the Sinc Integral I4
+Further ,he is most grateful to Professor Ethan Bolker for the reference above
+in Joint Math Mtgs 2021
+AnnouncementThe abstract of this paper wasannounced in the Proceed-
+ings of Ramanujan Birthday Conference held on Dec 22nd 2017 in IITMadras,
+CHennai, India
+References
+[1] R.Anantharaman,
+Keith Ball’s Cube Slicing Theorem
+unpublished-
+manuscript
+[2] , R.Anantharamanand KM Garg, Properties of a residual set of vector
+measures, Proc. Conf. Shebrooke, Canada,Lecture Notes in Math;Springer-
+Verlag,1033(1982),12-35
+[3] K Ball, Cube slicing in Rn, Proc. AMS 97,3(1986)465-473.
+[4] ......., Shadows of Convex Bodies, Trans. AMS.327 (2)(1991)891-901
+[5] , ........ An Elementary Introduction to modern convex geometry, Math
+Sci.Re. Inst.Publ.31 Cambridge Univ Press , Cambridge ( 1997)
+[6] , E.Bolker, A class of convex bodies, Trans AMS 145 ( 1969),323-345
+[7] , H.Hadwiger, Gutterperiodische Pungtmengen und Isoperimetrie, Monash.
+Math. 76(1972), 410-418
+[8] , D.Henseley, Slicing the cube in Rn and Probability, Proc.AMS.73(
+1979)95-100
+[9] , E.Hewitt, KO Stromberbg Real and Abstract Analysis Springer-Verlag,
+Berlin-Heidelberg-NewYork1965 and later eds
+[10] A.Koldobsky, V.Yaskin, The Interface between Convex Geometry and
+Fourier Analysis, CBMS . AMS . Providence ,(RI)108,(2008) .
+[11] D. Labate, G Weiss and E Wilson, Wavelets , Notices of AMS,60 (1) (2013),
+66-76
+[12] G.Polya, G.Szego, Problems and Thorems in Analysis,English Trans vol I
+,Springer-Verlag(1972) .
+[13] Vaaler, A geometric inequality with application to linear forms, Paciﬁc J.
+Math. 83 ( 1979)543-553
+11
+===== page 12 =====
+[14] C.Zong, What isknown about unit cubes , Bull AMS. textbf42(2)( 2005),181-
+211
+date ﬁrst done : Dec 20th 2016
+Retired from SUNY/College @Old Westbury Old Westbury NY 11568-0210
+e mail rajan.anantharaman@gmail.com
+address: 3032 Briar Oak Dr Duluth GA 30096
+MR Classiﬁcation: Primary 52 A 20, Secondary 42 A38, 52A40
+12

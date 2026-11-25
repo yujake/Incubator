@@ -56,7 +56,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Sequence
 
 from .schema import LIT_PATH_PREFIX
@@ -115,6 +115,22 @@ _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 #: 完整英文词（长度 >= 4 的那一档在 :func:`assess_text` 里再筛）。
 _WORDS = re.compile(r"[A-Za-z][A-Za-z'\-]+")
 _SPACES = re.compile(r"\s+")
+
+#: 抽读件里页与页之间的分隔标记（`text.extract` 与 `locallib.ingest_directory` 共用）。
+#: 为什么收在 `litread`：`locallib` 与 `tools/text_tools.py` 都要写抽读件，两处各拼一份
+#: 标记格式，下一次只改一处就会让两份 `.txt` 的页号对不上（逐字引文按页定位）。
+PAGE_MARKER = "===== page {n} ====="
+
+
+def marked_pages(pages: Sequence[str] | None) -> str:
+    """逐页文本 → 带页标记的正文（写抽读件的唯一格式：页间插标记、每页去尾空行、收尾一个换行）。"""
+    blocks: list[str] = []
+    for i, text in enumerate(pages or (), 1):
+        blocks.append(PAGE_MARKER.format(n=i))
+        blocks.append(str(text or "").rstrip("\n"))
+    if not blocks:
+        return ""
+    return "\n".join(blocks).strip("\n") + "\n"
 
 
 def assess_text(text: str) -> dict:
@@ -207,7 +223,7 @@ def garbled_text(text: str) -> tuple[bool, dict]:
 
 
 #: `path_base` 的取值：这一条 `literature.path` 是按哪个基准解析出来的。
-#: 2026-11-22 起只剩 `library` 一个——唯一的合法基准。
+#: 只有 `library` 一个基准（工作区回退分支已删）。
 BASE_LIBRARY = "library"
 #: 历史读数：改前那条 workspace 回退分支留下的基准名。现在不再产出
 #: （回退只服务过旧前缀形态，而旧形态现在明确"不再支持"）。名字留着有两个理由：
@@ -219,9 +235,45 @@ BASE_WORKSPACE = "workspace"
 #: 读侧要认的正是同一串 —— 两处各写一个 `"library/"` 早晚会漂。
 WORKSPACE_PREFIX = LIT_PATH_PREFIX
 
-#: 旧布局的判词（逐字）。与 `store.Store.library_path` 的拒信同一句：
-#: 同一种形态，两条读路说同一句话 —— 否则"这个写法不合法"与"文件不见了"又会同形。
-OLD_LAYOUT_NOTE = "旧布局（不再支持）"
+#: 受控拒的判词（逐字）。与 `store.Store.library_path` 的拒信同源：
+#: "这个写法不合法"与"文件不见了"必须说成两句话，处置相反。
+RETIRED_LAYOUT_NOTE = "扁平落点已退役（2026-11-25 起回归 `<6位号>/<名>`）"
+
+#: `literature.path` 的四种形态（与 `store.Store.library_path` 同一套判据的读数面）。
+#: 为什么要一个显式的形态分类：读侧要"宽容两档历史形态、只拒非法形状"，
+#: `wellformed` 要"规范报 ok、历史报 legacy、其余报 malformed" —— 两条路必须对同一个
+#: 分类说话，各写一份 `split("/")` 就是下一次漂移的起点。
+SHAPE_ENTRY = "entry"                  # `<6位号>/<名>`（规范）
+SHAPE_LEGACY4 = "legacy4"              # `<4位号>/<名>`（p9 那批老盘）
+SHAPE_LEGACY_FLAT = "legacy_flat"      # 一位扁平 `<内容 hash 前缀>-<名>`（B2a 落点，已退役）
+SHAPE_BAD = "bad"                      # 带斜杠但首段不是 2–6 位数字 / 段数不对
+SHAPE_UNJUDGED = ""                    # 空路径：没有形态可判
+
+
+def path_shape(rel: str | None) -> str:
+    """一条 `literature.path` 的形态（:data:`SHAPE_ENTRY` 等五档之一）。
+
+    * `entry`：`<6位号>/<名>` —— 现行规范（2026-11-25 业主裁定）；
+    * `legacy4`：`<4位号>/<名>` —— p9 那批 4 位号时代的老盘，读得通；
+    * `legacy_flat`：一位的扁平名（含 `<内容 hash 前缀>-<名>`）—— B2a 的落点，已退役，
+      但旧工作区（lp-ball-15/22）还要读得通；
+    * `bad`：带斜杠而首段不是 2–6 位数字、或段数 > 2（含带 `library/` 前缀的事故写法）；
+    * 空路径 ⇒ 空串（没有形态可判，调用方不据此报错）。
+    """
+    text = _normalized(rel)
+    if not text:
+        return SHAPE_UNJUDGED
+    if text.startswith(WORKSPACE_PREFIX):
+        return SHAPE_BAD
+    parts = [p for p in text.split("/") if p]
+    if len(parts) == 1:
+        return SHAPE_LEGACY_FLAT
+    if len(parts) != 2:
+        return SHAPE_BAD
+    head = parts[0]
+    if not (head.isdigit() and 2 <= len(head) <= 6):
+        return SHAPE_BAD
+    return SHAPE_ENTRY if len(head) == 6 else SHAPE_LEGACY4
 
 
 @dataclass(frozen=True)
@@ -229,30 +281,39 @@ class ResolvedLiteraturePath:
     """一条 `literature.path` 的解析结果。
 
     `path is None` 时三个字段是这样分工的：`base` 为空串（没有解析出来），
-    `candidates` 是试过的绝对路径（0 个或 1 个；旧形态与越界给 0 个），
+    `candidates` 是试过的绝对路径（0 个或 1 个；非法形状与越界给 0 个），
     `reason` 是写进 `last_mine_error` / 审计读数的那句话 ——
 
-    * 旧形态 ⇒ 逐字带 :data:`OLD_LAYOUT_NOTE`（不是 `file_missing`：处置相反）；
+    * 非法形状 ⇒ 逐字带 :data:`RETIRED_LAYOUT_NOTE`（不是 `file_missing`：处置相反）；
     * 越界 ⇒ 「文献路径越出 library/」（与 `store.Store.library_path` 同一句）；
-    * 扁平形态但文件不在 ⇒ 以 `file_missing` 开头，候选绝对路径在里面。
+    * 文件不存在 ⇒ 以 `file_missing` 开头，候选绝对路径在里面。
+
+    `shape` 是 :func:`path_shape` 的分类（解析成功时也带着：读侧要能说"读到的是历史
+    形态"而不是把它当规范 —— 三态纪律：读得通不等于形态合规）。
     """
 
     path: Path | None
     base: str
     candidates: tuple[Path, ...]
     reason: str
+    shape: str = SHAPE_UNJUDGED
 
     @property
     def found(self) -> bool:
         """解析到了一份盘上的普通文件。"""
         return self.path is not None
 
+    @property
+    def legacy(self) -> bool:
+        """读到的是一个历史形态（`legacy4` / `legacy_flat`）。"""
+        return self.shape in (SHAPE_LEGACY4, SHAPE_LEGACY_FLAT)
+
 
 def _normalized(rel: str | None) -> str:
     """`literature.path` 的形态判据输入：与 `store.Store.library_path` 逐字同一套归一。
 
     `\\` ⇒ `/`（Windows 上两种写法是同一个路径）、去两端空白、反复剥 `./`。
-    为什么归一化只有这一处：下面 :func:`old_layout_note` 与 store 的判据都吃它的输出，
+    为什么归一化只有这一处：下面 :func:`path_shape` 与 store 的判据都吃它的输出，
     两处各写一遍"剥几层 `./`"必然分家（`././000000/x.pdf` 就是一个例子）。
     """
     text = str(rel or "").replace("\\", "/").strip()
@@ -261,33 +322,40 @@ def _normalized(rel: str | None) -> str:
     return text
 
 
-def old_layout_note(rel: str | None) -> str:
-    """旧形态的拒词（空串 = 不是旧形态）。判据与 `Store.library_path` 同一套。
+def text_rel(rel: str) -> str:
+    """原件的库内相对名 ⇒ 它的抽读件：同目录、同 stem、`.txt`（唯一实现）。
 
-    两种旧形态（2026-11-22 业主裁定「旧工作区不必兼容」，都不再读）：
+    现行规范（2026-11-25）里抽读件与原件住同一条文献目录：
 
-    * `<lit_id>/<名>` —— 分目录（首段是数字）。真机 lp-ball-13 的 4 行、
-      lp-ball-15 的 1 行是这一档；
-    * `library/<…>` —— 多带一层库根（`table.update` 事故留下
-      `library/000001/x.pdf`）。写入闸（`schema.literature_path_problem`）拒的
-      就是这个前缀，读侧不能比写入闸宽。
+        library/000003/paper.pdf  →  library/000003/paper.txt
 
-    为什么首段数字能认"分目录"：`literature.path` 的合法形态是一个路径段
-    （`locallib.library_landing_name` 保证不含 `/`），所以"带 `/` 且首段像编号"
-    只可能是旧分目录；剩下的 `downloads/x.pdf` 一类首段不是数字，仍是合法坐标系
-    （另一件事，不在这里管）。这个判据与 `Store.library_path` 逐字相同，
-    漂了会被 `tests/test_litread_and_library_path_give_the_same_answer.py` 当场抓住。
+    旧的扁平层 `library/000003.txt` 已退役；抽读件的位置不再由文献号单独决定，
+    而是跟着原件走。`text.extract` 写它、`wellformed` 判它、`fs.read` 的路由找它。
     """
-    text = _normalized(rel)
+    text = str(rel or "").replace("\\", "/").strip()
     if not text:
         return ""
-    first = text.split("/", 1)[0]
-    if text.startswith(WORKSPACE_PREFIX) or (("/" in text) and first.isdigit()):
-        return (
-            f"{OLD_LAYOUT_NOTE}：文献路径 {rel!r} 是分目录 / 带 `library/` 前缀的旧写法；"
-            "2026-11-22 起只认扁平落点 `library/<内容 hash 前缀>-<名>`"
-            "（改法：把文件按扁平名放进 `library/`，并把该行 `path` 改成扁平名）"
-        )
+    p = PurePosixPath(text)
+    return str(p.with_suffix(".txt"))
+
+
+def legacy_note(rel: str | None) -> str:
+    """历史形态的说明（空串 = 不是历史形态）。给读数用，不是拒词。
+
+    两档历史形态都读得通，但都不许再写：
+
+    * `<4位号>/<名>` —— p9 那批 4 位号时代的老盘（`wellformed` 报 legacy）；
+    * 一位扁平名（含 `<内容 hash 前缀>-<名>`）—— B2a（2026-11-22）的落点，
+      自 2026-11-25 起退役（lp-ball-15/22 这类历史数据还要读得通，所以不报 error）。
+    """
+    shape = path_shape(rel)
+    if shape == SHAPE_LEGACY4:
+        return ("遗留形态（读得通、新写不产出）：`<4位号>/<名>` —— 4 位号时代的老盘"
+                "（p9 那批）；规范形态是 `<6位号>/<名>`（2026-11-25 业主裁定）")
+    if shape == SHAPE_LEGACY_FLAT:
+        return ("遗留形态（读得通、新写不产出）：扁平 `<内容 hash 前缀>-<名>` —— "
+                "B2a（2026-11-22）的落点，自 2026-11-25 起退役；"
+                "规范形态是 `<6位号>/<名>`")
     return ""
 
 
@@ -317,43 +385,44 @@ def resolve_literature_path(root: Path | str, library: Path | str,
     """把一条 `literature.path` 解析成盘上的文件（唯一基准：`library/`）。
 
     与 `store.Store.library_path` 是同一套形态判据（那是唯一真身）：
-    合法形态只有扁平落点；旧形态（分目录 / `library/` 前缀）⇒ 明确
-    「旧布局（不再支持）」，不静默返回、也不折成 `file_missing`。
+
+    * 规范形态 `<6位号>/<名>` ⇒ 解析；
+    * 历史形态 `<4位号>/<名>`、一位扁平名 ⇒ 照样解析（读得通），
+      结果里 `shape` 标明它是哪一档（`legacy` 为真）—— 读侧不许假装它合规；
+    * 非法形状（带斜杠而首段不是 2–6 位数字 / 段数 > 2 / 带 `library/` 前缀）⇒
+      明确 :data:`RETIRED_LAYOUT_NOTE`，不静默返回、也不折成 `file_missing`；
+    * 越界（绝对路径 / `..`）⇒ 「文献路径越出 library/」。
 
     `root` 形参保留但不再参与解析（工作区基准那条路已删：它只服务过旧前缀形态）。
     留着它是因为三条调用方（`agent_b/run_once`、`verify`、`table_tools`）与
     `litavail.tier_of_literature` 都原样传"工作区根 + 库根"两个位置参数 ——
     改签名会让它们各自再拼一次，而"路径怎么拼"正是本模块要收口的东西。
-
-    返回的三档见 :class:`ResolvedLiteraturePath`。不抛异常：调用方里有几条
-    （审计、引文回验）要把"这一篇读不到"降成一档读数，而不是把写口/审计打挂 ——
-    旧形态的结论由 `reason` 逐字说出来，不是靠调用方去 catch。
     """
     rel_text = str(rel or "").strip()
     if not rel_text:
         return ResolvedLiteraturePath(path=None, base="", candidates=(), reason="")
 
-    # ① 旧形态 ⇒ 明确"不再支持"。放在任何解析之前：它连"文件在不在"都不该问，
-    #    否则那份文件会被读回来，"不再支持"就成了空话。
-    note = old_layout_note(rel_text)
-    if note:
-        return ResolvedLiteraturePath(path=None, base="", candidates=(), reason=note)
-
-    text = _normalized(rel_text)
-    if not text:
-        # `./` / `././` 一类：归一之后没有路径段（`store.library_path` 同样返回 None）。
+    shape = path_shape(rel_text)
+    if shape == SHAPE_BAD:
+        return ResolvedLiteraturePath(
+            path=None, base="", candidates=(), shape=shape,
+            reason=(f"{RETIRED_LAYOUT_NOTE}：文献路径 {rel_text!r} 不是 "
+                    "「<6位号>/<文件名>」两段式（带斜杠而首段不是 2–6 位数字，"
+                    "或段数不对，或带了 `library/` 前缀）"))
+    if shape == SHAPE_UNJUDGED:
         return ResolvedLiteraturePath(path=None, base="", candidates=(), reason="")
 
+    text = _normalized(rel_text)
     library_dir = Path(library)
     cand = _library_candidate(library_dir, text)
     if cand is None:
         # 越界：与 `store.Store.library_path` 的拒信同一句（"路径非法"不是"文件不在"）。
-        return ResolvedLiteraturePath(path=None, base="", candidates=(),
+        return ResolvedLiteraturePath(path=None, base="", candidates=(), shape=shape,
                                       reason=f"文献路径越出 library/：{rel_text!r}")
     if cand.is_file():
         return ResolvedLiteraturePath(path=cand, base=BASE_LIBRARY,
-                                      candidates=(cand,), reason="")
-    return ResolvedLiteraturePath(path=None, base="", candidates=(cand,),
+                                      candidates=(cand,), reason="", shape=shape)
+    return ResolvedLiteraturePath(path=None, base="", candidates=(cand,), shape=shape,
                                   reason=_missing_reason(text, (cand,)))
 
 

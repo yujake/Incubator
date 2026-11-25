@@ -397,7 +397,7 @@ def _resolve(ctx: _Ctx, raw: str) -> Path:
         text = str(exc)
         # 两种拒绝分开报：旧布局（这一行的写法不再支持）与越界（工作区外的文件
         # 不算这一行的全文）处置不同 —— 折成一个 kind 就等于让 B 又得去猜。
-        kind = ("legacy_layout" if LR.OLD_LAYOUT_NOTE in text
+        kind = ("legacy_layout" if LR.RETIRED_LAYOUT_NOTE in text
                 else "path_outside_library")
         raise ToolError(
             f"{text}（OCR 读到这个相对路径时不按第二个基准读回来："

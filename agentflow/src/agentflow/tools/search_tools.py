@@ -279,22 +279,25 @@ def _lit_blocked_note(ctx: _Ctx, rows: Iterable[Mapping[str, Any]]) -> str:
 
     两种"读不到"要分开说，因为处置相反：
 
-    * 旧布局（不再支持）—— 改这一行的 `path`（把文件按扁平名放回 `library/`）；
+    * 形状非法（`library/` 前缀 / 带斜杠而首段不是文献号）—— 改这一行的 `path`；
     * 越界（`../` / 绝对路径绕出 `library/`）—— 这一份根本不是这一行的全文。
+
+    历史形态（`<4位号>/<名>`、扁平一段）不在这里报"读不到"：它们读得通
+    （`store.library_path` 只拒非法形状），形态的 legacy 读数归 `wellformed`。
 
     为什么要有它：`_lit_file` 对这几种形态返回 `None`，于是行落进 `missing_files`。
     那是"读不到"没错，但理由丢了。工具面的 `note` 是已声明的键，逐条点名，
     模型与读报告的人都不必去猜"这一条为什么不在书架上"。
     """
-    legacy: list[str] = []
+    bad_shape: list[str] = []
     outside: list[str] = []
     for row in rows:
         rel = str(row.get("path") or "").strip()
         if not rel:
             continue
         who = f"{row.get('lit_id') or '?'}={rel}"
-        if LR.old_layout_note(rel):
-            legacy.append(who)
+        if LR.path_shape(rel) == LR.SHAPE_BAD:
+            bad_shape.append(who)
             continue
         if ctx.store is not None:
             try:
@@ -302,13 +305,13 @@ def _lit_blocked_note(ctx: _Ctx, rows: Iterable[Mapping[str, Any]]) -> str:
             except StoreError:
                 outside.append(who)
     parts: list[str] = []
-    if legacy:
+    if bad_shape:
         parts.append(
-            f"另有 {len(legacy)} 条 `path` 是旧布局（不再支持）：" + "、".join(legacy)
-            + " —— 旧写法（分目录 `<lit_id>/<名>` 或带 `library/` 前缀）2026-11-22 起不再读"
-            "（业主裁定「旧工作区不必兼容」）。它们被算进 `missing_files`，理由不是"
-            "「文件不在」，而是「这一行的 path 写法不再支持」：要离线引用请把文件按"
-            "扁平名 `library/<内容 hash 前缀>-<名>` 放回、并把这一行的 `path` 改成扁平名。")
+            f"另有 {len(bad_shape)} 条 `path` 形状非法：" + "、".join(bad_shape)
+            + " —— 规范是 `<6位号>/<文件名>`（2026-11-25 业主裁定）；扁平落点已退役"
+            "（2026-11-25 起），带 `library/` 前缀的写法也不读。它们被算进 `missing_files`，"
+            "理由不是「文件不在」，而是「这一行的 path 写法不再支持」：要离线引用请把文件"
+            "放进 `library/<6位号>/` 并把这行的 `path` 改成 `<6位号>/<文件名>`。")
     if outside:
         parts.append(
             f"另有 {len(outside)} 条 `path` 越出 `library/`：" + "、".join(outside)
@@ -1928,7 +1931,7 @@ def _h_retry_pending(ctx: _Ctx, limit: int = RETRY_PENDING_DEFAULT_LIMIT, lit_id
             item["error"] = res.error
             landing_page = bool(res.ok and res.kind == "content_type_mismatch")
             if res.ok and not landing_page:
-                rel_path, size, sha = _adopt_file(ctx, str(res.path or ""), [])
+                rel_path, size, sha = _adopt_file(ctx, str(res.path or ""), [], lit_id=lid)
                 if rel_path:
                     item.update(outcome="got", path=rel_path, bytes=size, sha256=sha,
                                 note="字节已进 library/、path 已写回 ⇒ 现在可离线引用。")
@@ -2093,7 +2096,8 @@ def _h_dedup_check(ctx: _Ctx, title: str, year: int | None = None, doi: str | No
     return ok(data)
 
 
-def _adopt_file(ctx: _Ctx, raw_path: str | None, warnings: list[str]) -> tuple[str | None, int, str | None]:
+def _adopt_file(ctx: _Ctx, raw_path: str | None, warnings: list[str], *,
+                lit_id: str) -> tuple[str | None, int, str | None]:
     """把本地文件收编进 ``library/``，返回 ``(相对路径, 字节数, sha256)``。
 
     三种情形分别处理：
@@ -2116,12 +2120,11 @@ def _adopt_file(ctx: _Ctx, raw_path: str | None, warnings: list[str]) -> tuple[s
     而不是靠把 gate 改宽成"看不到也算过"。兄弟路径 `ingest_directory` 本来就是
     `shutil.copy2`，两条收编路由此同一个语义。
 
-    落点（2026-11-22 B2a，业主裁定：先改写者）：第 2 种的落点名不由本函数决定，走
-    `locallib.library_landing`（与 `locallib.ingest_directory` 共用的同一个函数）⇒
-    新写一律扁平 ``library/<内容 hash 前缀-名>``（名字里已有同一内容 hash 前缀时不再
-    重复加，见 `locallib.library_landing_name` 的幂等规则）。本函数刻意不接 lit_id：
-    落点与号无关，同一份字节两次收编落到同一个名字上。旧布局 ``library/<lit_id>/<名>``
-    只在第 1 种情形里作为存量原样读回（读兼容），不再由这里产出。
+    落点（2026-11-25 业主裁定：`<6位号>/<名>` 回归正确形态，推翻 B2a 的扁平落点）：
+    第 2 种的相对名不由本函数决定，走 `locallib.library_landing`（与
+    `locallib.ingest_directory` / `agent_a.core._attach_staged` 共用的同一个函数）⇒
+    新写一律 `<文献号>/<清洗过的原名>`。`lit_id` 是**已经分配好的**号（调用方在同一事务里
+    先 `tx.alloc_id("lit")`），本函数不再自己取号、也不落临时名。
     """
     if not raw_path:
         return None, 0, None
@@ -2153,12 +2156,12 @@ def _adopt_file(ctx: _Ctx, raw_path: str | None, warnings: list[str]) -> tuple[s
     except ValueError:
         pass  # 不在 library 内 → 需要收编
 
-    # 落点只有一处实现（`locallib.library_landing`，与 `ingest_directory` 共用）：
-    # 扁平 `library/<内容 hash 前缀-名>`；同名不同内容会加长前缀，绝不覆盖。
+    # 落点只有一处实现（`locallib.library_landing`，三个写者共用）：
+    # `<文献号>/<清洗名>`（2026-11-25 业主裁定）；同名不同内容会追加内容短哈希，绝不覆盖。
     from ..locallib import keeps_original, library_landing
     sha = _sha256_of(p)
     try:
-        landing, target = library_landing(lib, p, sha)
+        landing, target = library_landing(lib, p, sha, lit_id=lit_id)
         target.parent.mkdir(parents=True, exist_ok=True)
     except (OSError, ValueError) as exc:
         warnings.append(f"无法确定 library/ 落点（{type(exc).__name__}: {exc}），path 置空")
@@ -2622,7 +2625,7 @@ def _h_register(
             return refused
 
         lit_id = tx.alloc_id("lit")
-        rel_path, size, sha = _adopt_file(ctx, path, warnings)
+        rel_path, size, sha = _adopt_file(ctx, path, warnings, lit_id=lit_id)
 
         dl: dict[str, Any]
         if rel_path:
