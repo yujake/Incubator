@@ -1531,7 +1531,7 @@ def paper_citations(project_root: str | Path, *,
 
     为什么取并集而不是二选一：只读注记，会漏掉"正文写了、claim 没记"的号（那正是要抓的
     "表里不全"）；只读正文，会漏掉注释掉的/结构化注记里的号（那同样是论文侧的事实）。
-    并集只多不少，而"多"的那一侧由 `_experiment_citation_problems` 的双向判据管
+    并集只多不少，而"多"的那一侧由 `_paper_citation_problems` 的双向判据管
     （表里没有 ⇒ 红；表里有而两处都没写 ⇒ 红）。
     """
     workspace = Path(workspace_root) if workspace_root is not None else Path(project_root)
@@ -2181,7 +2181,7 @@ def synthesize_experiment_rows(project_root: str | Path, rows: Iterable[Row], *,
     幂等：`present` 按实验号去重，同一批 `rows` 连跑两次得到的行集合与字段逐字相同；
     已经由 G（或上一次输出）带进来的实验行不重复造，也不改它的 `env_no`。
     台账里没有那条实验的引用不造行（没有文件可指的"行"只会是空壳）；那一档由
-    `_experiment_citation_problems` 报"论文引了、台账里没有这条实验"。
+    `_paper_citation_problems` 报"论文引了、台账里没有这条实验"。
     """
     workspace = Path(workspace_root) if workspace_root is not None else Path(project_root)
     items = list(rows)
