@@ -80,6 +80,7 @@ from .. import interactions as X
 from .. import schema as S
 from .. import sessions as SS
 from .. import settings as SET
+from .. import startup as SU
 from .. import stopctl as SC
 from .. import userio as U
 from ..store import Store, StoreError
@@ -815,44 +816,26 @@ HANDLERS.update({
 
 
 def _conductor_running(root: Path) -> str:
-    """台账里正在跑的主控台账号（空串 = 没在跑）。"""
-    try:
-        from ..store import Store
+    """台账里正在跑的主控台账号（空串 = 没在跑）。
 
-        rows = Store(root).rows("tasks")
-    except Exception:  # noqa: BLE001 - 读不成按"没在跑"处理，由调用方如实说
-        return ""
-    owner = ""
-    for row in rows:
-        if (str(row.get("role") or "") == S.CONDUCTOR_ROLE
-                and str(row.get("status") or "") == "running"):
-            owner = str(row.get("task_id") or "")
-    return owner
+    真身在 `startup.conductor_running`（CLI 与网页同一处判断）。这里保留这个名字是
+    因为本模块的"两条说话入口"一直是按它读的；判据不直接打这个名字，但改名会让
+    这一层的历史读数断档。
+    """
+    return SU.conductor_running(root)
 
 
 def _run_argv(root: Path, task: str, *, sid: str = "",
               resume: bool = False) -> list[str]:
-    """起一趟要跑的那条命令行（判据拿它比对；`dry_run` 也回它）。
+    """起一趟要跑的那条命令行（真身在 `startup.run_argv`；判据仍打这个名字）。
 
     `sid` / `resume`（R91，业主「要能对话」）：对话页在 M 闲着的时候要让那一段
     会话接着说下去 —— 用户的话先落进收件箱（`/api/task`），再按同一句话任务
     唤醒 M（`--sid <那段会话> --resume`）。为什么必须带上原来那句话：`resume_messages`
     按"role 相同 + task 原文相同 + 是全新开始"来定重建窗口，换了任务就是另一趟
-    （`--resume` 会以指纹不符拒掉，那是有意的守卫）。收件箱那一段是现读的，
-    所以新留言正好落在 M 醒来的第一步里。
+    （`--resume` 会以指纹不符拒掉，那是有意的守卫）。
     """
-    argv = [sys.executable, "-B", "-m", "agentflow", "--root", str(root),
-            "run-agent", S.CONDUCTOR_ROLE, "--task", task, "--subagents",
-            # 网页自己会在这个目录里写 `web-actions.jsonl`（写面审计）⇒ 对 run-agent 来说
-            # 那就是一个"外来条目"，不认它，空目录上的网页起跑永远失败
-            # （2026-11-25 实测 web-mini-1/2 两次都被 init 拒）。
-            # 这个文件本来就是我们的，所以放行；别的外来条目仍由 init 自己拒。
-            "--allow-foreign-entries"]
-    if sid.strip():
-        argv += ["--sid", sid.strip()]
-    if resume:
-        argv.append("--resume")
-    return argv
+    return SU.run_argv(root, task, sid=sid, resume=resume)
 
 
 def _spawn_detached(root: Path, argv: Sequence[str], prefix: str) -> tuple[int, str]:
@@ -904,15 +887,28 @@ def _spawn_run(root: Path, task: str, *, sid: str = "",
     return _spawn_detached(root, _run_argv(root, task, sid=sid, resume=resume), "web-run")
 
 
+def _launch_detached(root: Path, argv: list[str]) -> SU.Launch:
+    """把"起一趟"接成 `startup.speak` 要的 `launch` 形状（网页这一侧的唯一差异）。
+
+    为什么只抽这一格：`speak` 里的判断（要不要起、起什么）与网页共用；网页与 CLI
+    真正不同的只有"进程怎么起"—— 网页必须 detached（一趟几十分钟，不能跟着服务
+    进程生灭），CLI 则是同进程跑完再返回退出码。
+    """
+    pid, log = _spawn_detached(root, argv, prefix="web-run")
+    return SU.Launch(code=0, pid=pid, log=log)
+
+
 def handle_start_run(handler: Any, params: Mapping[str, str],
                query: Mapping[str, Sequence[str]]) -> dict[str, Any]:
-    """`POST /api/run`：用一句话起一趟工作流（等价 CLI 的 `run-agent M --task …`）。
+    """`POST /api/run`：用一句话起一趟工作流（等价 CLI 的 `start --task …`）。
 
     请求字段：`task`（要系统做的那件事，一句话）· `confirm=1` · `dry_run?` ·
     `sid?` + `resume?`（R91：让闲着的那段会话接着说下去 —— 对话页在 M 不跑时
     走的就是这一支；`resume` 必须配 `sid`，因为它问的是"接着哪一段跑"）。
     三态：没开写面 / CSRF 不对 ⇒ 403；任务为空 / 缺 confirm / `resume` 没给 `sid`
     ⇒ 400（一个字节都不写）；起不来 ⇒ 500 并原样给错误；起来了 ⇒ 200 + `{pid, log, argv}`。
+    判断"要不要起 / 要不要投"的本体是 `startup.speak`（与 `/api/task`、CLI 的
+    `start --task` 同一个函数，业主 2026-11-25「这两件事都是用户对 M 说话」）。
     """
     del params, query
     form = handler._form()
@@ -935,36 +931,37 @@ def handle_start_run(handler: Any, params: Mapping[str, str],
     if not _flag(form, "confirm"):
         return done(400, "拒绝：起一趟会真的花预算，必须带 confirm=1 一次显式确认", False)
     # 用户对 M 说话只有一条通道（业主 2026-11-25：「用户发话起真机，以及用户插话，
-    # 这两件事都是用户对 M 说话，实现上不该有区别」）。M 已经在跑 ⇒ 这句话就是一条插话，
-    # 投进它的收件箱；不许再起第二趟（那会让两个主控抢同一个工作区）。
-    if not resume and not dry:
-        running_owner = _conductor_running(root)
-        if running_owner:
-            from .. import agent_loop as AL
-
-            iid, problem = AL.send_interjection(root, sender="用户", subject="用户指令",
-                                                body=task, sid=sid or None)
-            if problem:
-                return done(400, f"没投进去：{problem}", False)
-            return done(200,
-                        f"主控已经在跑（{running_owner}）：这句话已投进它的收件箱（{iid}），"
-                        "没有另起一趟",
-                        True, ident=iid,
-                        extra={"interjection_id": iid, "sid": sid,
-                               "delivered_to": running_owner})
-    argv = _run_argv(root, task, sid=sid, resume=resume)
-    if dry:
-        return done(200, "试运行：没有起任何进程（argv 见 extra）", True,
-                    extra={"argv": argv, "dry_run": True})
+    # 这两件事都是用户对 M 说话，实现上不该有区别」）。判断本体在 `startup.speak`
+    # 一处：CLI 的 `start --task` 与这条端点调的是同一个函数；本函数只保留表单校验、
+    # 状态码与审计（`_gate` / `_replier`）。
     try:
-        pid, log = _spawn_run(root, task, sid=sid, resume=resume)
+        speech = SU.speak(
+            root, task, sid=sid, subject="用户指令", resume=resume, dry_run=dry,
+            origin="web",
+            # 网页一直接受"这个目录就是页面自己的工作区"（它起跑 argv 里的同名开关
+            # 也是这个意思）；更严的外来条目那一道留给 CLI 的 start（那里默认不放行）。
+            allow_foreign_entries=True,
+            launch=(None if dry else (lambda argv: _launch_detached(root, argv))))
     except Exception as exc:  # noqa: BLE001 - 起不来要如实报，不许静默
-        return done(500, f"起不来：{type(exc).__name__}: {exc}", False,
-                    extra={"argv": argv})
+        return done(500, f"起不来：{type(exc).__name__}: {exc}", False)
+    if speech.action == "refused":
+        return done(400, f"拒绝：{speech.message}", False)
+    if speech.action == "planned":
+        return done(200, "试运行：没有起任何进程（argv 见 extra）", True,
+                    extra={"argv": list(speech.argv), "dry_run": True})
+    if speech.action == "interjected":
+        return done(200,
+                    (f"主控已经在跑（{speech.owner}）：这句话已投进它的收件箱"
+                     f"（{speech.interjection_id}），没有另起一趟"),
+                    True, ident=speech.interjection_id,
+                    extra={"interjection_id": speech.interjection_id, "sid": sid,
+                           "delivered_to": speech.owner})
     return done(200,
-                (f"已{'续跑' if resume else '起'}一趟（pid={pid}）"
+                (f"已{'续跑' if resume else '起'}一趟（pid={speech.pid}）"
                  f"—— 去「对话」或「在飞」页看它"),
-                True, ident=log, extra={"pid": pid, "log": log, "argv": argv})
+                True, ident=speech.log,
+                extra={"pid": speech.pid, "log": speech.log,
+                       "argv": list(speech.argv)})
 
 
 def _interject_sid_problem(sid: str) -> str:
@@ -1004,8 +1001,6 @@ def handle_interject(handler: Any, params: Mapping[str, str],
     不打断当前步；写进会话事件流（`agent_interjection`），所以盘上可复查。
     """
     del params, query
-    from .. import agent_loop as AL
-    from .. import userio as U
 
     form = handler._form()
     root = Path(handler.root)
@@ -1030,20 +1025,24 @@ def handle_interject(handler: Any, params: Mapping[str, str],
         return done(200, "试运行：没有写任何一条插话", True, extra={"dry_run": True})
     # 反过来也成立：M 没在跑时，"插话"就是"用这句话起一趟"——
     # 不然用户说了一句话，系统只会回一句"没人会读到"，那等于把两条通道拆成两种命运。
-    if not _conductor_running(root):
-        argv = _run_argv(root, body, sid=sid, resume=False)
-        pid, log = _spawn_detached(root, argv, prefix="web-run")
-        return done(200,
-                    f"主控当时没在跑：已用这句话起一趟（pid {pid}，日志 {log}）",
-                    True, extra={"pid": pid, "log": log, "argv": argv,
-                                 "started": True})
+    # 判断本体在 `startup.speak`（与 `/api/run`、CLI 的 `start --task` 同一个函数）；
+    # 这里只保留表单校验、状态码与审计。
     try:
-        iid, problem = AL.send_interjection(root, sender=U.USER, subject=subject,
-                                            body=body, sid=sid)
+        speech = SU.speak(
+            root, body, sid=sid, subject=subject, resume=False, origin="web",
+            allow_foreign_entries=True,
+            launch=lambda argv: _launch_detached(root, argv))
     except Exception as exc:  # noqa: BLE001 - 写失败不许折成 200
         return done(500, f"没写成：{type(exc).__name__}: {exc}", False)
-    if problem:
-        return done(400, f"没写成：{problem}", False)
+    if speech.action == "refused":
+        return done(400, f"没写成：{speech.message}", False)
+    if speech.action == "started":
+        return done(200,
+                    (f"主控当时没在跑：已用这句话起一趟"
+                     f"（pid {speech.pid}，日志 {speech.log}）"),
+                    True, extra={"pid": speech.pid, "log": speech.log,
+                                 "argv": list(speech.argv), "started": True})
+    iid = speech.interjection_id
     # 回执要说清"落到哪一档"：进了主控收件箱 / 主控没在跑（没人会读到）。
     # 旧回执对这两种都说"主控会在下一步开头读到"—— 主控没在跑时那是假话
     #（现场 i-000002/i-000003/i-000005 就是这样：只落了会话，没人收）。

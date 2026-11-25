@@ -325,13 +325,187 @@ $ cd <任意目录>; python -m agentflow start --project cwd-proj --task t --dry
 
 ---
 
-## 2. 起一趟：`start`
+## 2. 起一趟：`start` —— 先进工作区，再对 M 说话
 
-`start` 回答四个问题：**干什么 / 在哪干 / 花多少钱 / Lean 开不开**。它之外的入口
-（`run` / `run-agent` / `project run` / `web`）都是它的子模式。
+`start` 是 CLI 的唯一入口：**给一句话，就是你对主控 M 说的那句话**。它仍然回答
+「干什么 / 在哪干 / 花多少钱 / 开不开 Lean」，但「干什么」这一格的口径是：
 
-`--mode` 不写就按目录状态推断：没给 `--task` 且给了 `--watch` ⇒ 只开网页；
-项目文件夹不存在或为空 ⇒ `cold`；已有台账 ⇒ `research`；存在但没台账 ⇒ `warm`。
+```text
+开真机 = 先进工作区（该 init 就 init），再把这句话投给 M。
+```
+
+业主 2026-11-25 逐字：
+
+> 「用户发话起真机，以及用户插话，这两件事都是用户对 M 说话，实现上不该有区别。」
+> 「将 CLI 侧对齐新口径，即开真机相当于先进工作区，再跟 M 直接说话。」
+
+### 2.0 一句话走哪两支（与网页同一个实现）
+
+| 台账里有没有正在跑的 M | `start --task X` 做什么 | 网页上等价的那一条 |
+|---|---|---|
+| 没有（或读不成） | 用 X 起一趟（`run-agent M --task X --subagents`） | `POST /api/task` 在没人跑时那一支 |
+| 有（`status=running`） | 把 X 投进它的收件箱（会话落 `agent_interjection`，主控名下多一条 `kind=message` 板项），**不另起第二趟** | `POST /api/run` 在有人跑时那一支 |
+
+两支的判断本体只有一个函数：`startup.speak`（`src/agentflow/startup.py`）。CLI 的
+`cmd_start`、网页的 `handle_start_run` / `handle_interject` 都调它；判据
+`tests/test_cli_speaks_to_conductor.py` 里的 `test_d_*` 用打桩记 `origin` 断言两侧
+走的是同一处，`test_b_*` / `test_c_*` 钉「已在跑就不起」那一支与它的反真空。
+两份 if 各写一遍就是没对齐 —— 那会让「网页投递了、CLI 又起一趟」变成两个主控抢同一个
+工作区，而没有任何一层会报错。
+
+「工作区准备好」的判据（`startup.ensure_workspace`）：
+
+1. 空目录 ⇒ 先 `init`（建 `data/` 与各表）；
+2. 根上只有本框架自己写的文件（`web-actions.jsonl` / `budget.json` /
+   `.agentflow-stop`）⇒ 落 `.agentflow-workspace` 后 init —— 网页自己写的审计台账
+   不该被当成「别人的目录」；
+3. 根上还有别的条目（你自己的 `notes.txt`、一篇 PDF…）⇒ **退出码 2**，文案点名
+   那几个条目并教 `--allow-foreign-entries`；给了它才把这些条目算进这个工作区
+   （文件不删、不改）。
+
+`--dry-run` 不写一个字节，所以第 1–3 步一步都不做；它只把「将要投 / 将要起」的计划
+打出来。
+
+### 2.0.1 `start --help` 原文
+
+> 下面这一段与 `python -m agentflow start --help` 是同一份字：判据
+> `tests/test_cli_speaks_to_conductor.py::test_f_the_start_help_and_the_user_guide_are_the_same_words`
+> 逐字对拍（只压掉终端折行；本机绝对路径在比较时换成占位符）。
+> 改了帮助就改这一段 —— 反过来也一样。
+
+<!-- START-HELP:BEGIN -->
+```text
+$ python -m agentflow start --help
+usage: agentflow start [-h] [--task TASK]
+                       [--mode {auto,topic,role,research,project,cold,warm}]
+                       [--role {A,B,C,D,E,F,G,H,V,L,M}] [--project NAME]
+                       [--root ROOT] [--projects-dir PROJECTS_DIR]
+                       [--start {auto,cold,warm}] [--out OUT] [--books BOOKS]
+                       [--books-limit BOOKS_LIMIT]
+                       [--text-store-dir TEXT_STORE_DIR] [--seed-literature]
+                       [--budget-usd BUDGET_USD] [--lean [{on,off,auto}]]
+                       [--watch] [--dry-run] [--json] [--host HOST]
+                       [--port PORT] [--open] [--token TOKEN] [--allow-writes]
+                       [--no-settings-write] [--max-calls MAX_CALLS]
+                       [--prompt-version {v1,v2-lean}] [--fulltext]
+                       [--no-fulltext] [--retrieval-limit RETRIEVAL_LIMIT]
+                       [--extract] [--extract-rounds EXTRACT_ROUNDS]
+                       [--model MODEL] [--drive DRIVE] [--subagents]
+                       [--semantic-review] [--experiment-reasoning]
+                       [--allow-foreign-entries] [--provider PROVIDER]
+                       [--max-steps MAX_STEPS]
+                       [--wall-clock-sec WALL_CLOCK_SEC] [--rounds ROUNDS]
+                       [--report-every REPORT_EVERY] [--sid SID] [--resume]
+                       [--user-wait-sec USER_WAIT_SEC] [--no-ask]
+                       [--stop-file STOP_FILE]
+
+统一入口：给一句话，就是你对主控 M 说的那句话 —— 先把工作区准备好（该 init 就 init），再把它投给 M。`--mode` 不写时：没给 --task 且给了 --watch ⇒ 只开网页；给了 --project 则按该项目推断（没有台账 ⇒ 项目工作区那一趟，有台账 ⇒ 十角色循环）；没给 --project ⇒ 在当前工作区里跟 M 说话。
+
+M 已经在跑（台账里有 status=running 的主控）⇒ 这句话投进它的收件箱，不另起第二趟；M 没在跑 ⇒ 用这句话起一趟（run-agent M --task …）。网页的 /api/run 与 /api/task、CLI 的这条 start 走同一个实现（startup.speak），所以「发话起真机」与「插话」没有区别。
+
+工作区准备好 = 空目录就 init；网页自己写在根上的 web-actions.jsonl / budget.json / .agentflow-stop 这类本框架的文件放行；别的外来条目仍拒，拒绝文案教你加 --allow-foreign-entries。
+
+缺参数时报的是人话并点名该给哪个旗标（不是 argparse 那句 the following arguments are required）。
+
+--dry-run 只打印将要发生的一切：不建目录、不写字节、一次模型都不调、也不起 Lean 自检子进程。
+
+--watch 起网页并打印 URL / 工作区 / sid / 当前轮；不带 --task 时只开网页（一直开着，Ctrl-C 停），带 --task 时先投或起、再边跑边可监督。
+
+--json 的键集合：--dry-run 那一档逐字等于 cli.START_PLAN_KEYS（mode / task / workspace / project / model / budget / lean / summons / writes / spend）；--watch 不带任务那一档是 {url, root, sid, round}；其余档透传给对应那条路自己的 JSON（run 的运行记录 / run-agent 的运行记录）。
+
+options:
+  -h, --help            show this help message and exit
+
+要跑什么:
+  --task TASK           这次要做的事（一句话）—— 就是你这次要对 M 说的那句话。不给就得给 --watch（只开网页）
+  --mode {auto,topic,role,research,project,cold,warm}
+                        auto（缺省：没给 --project ⇒ 在当前工作区里把 --task 投给 M；给了
+                        --project ⇒ 按项目推断）/ research（十角色循环，角色缺省 M）/
+                        topic（端到端主题跑）/ role（只跑一个角色循环）/ project / cold /
+                        warm（项目工作区）
+  --role {A,B,C,D,E,F,G,H,V,L,M}
+                        角色（--mode role 必填；--mode research 缺省 M）
+  --project NAME        项目名（落在 <projects-dir>/<名字>；给了它就把这一趟放进该项目并沿用项目推断；不给就在
+                        --root 这个工作区里跟 M 说话）
+
+在哪干:
+  --root ROOT           工作区根（与顶层 --root 同义：缺省 = 当前工作目录；本进程此刻是
+                        D:\Incubator\agentflow）
+  --projects-dir PROJECTS_DIR
+                        projects 落点。给了 `--root` 而没给本旗标 ⇒
+                        `<root>/projects`；两处都不给 ⇒
+                        D:\Incubator\projects（由本包位置推出的工作区根下的
+                        projects/，不是当前目录）。顺序：显式旗标 > 环境变量
+                        AGENTFLOW_PROJECTS_DIR > 设置文件的 workspace.projects_dir
+                        > 上面那个缺省
+  --start {auto,cold,warm}
+                        项目冷/热启动（--mode cold/warm 也表达同一件事）
+  --out OUT             产物目录（只对 topic 那一档有意义）
+  --books BOOKS         本地书架目录（项目那一档：里面的 PDF 会被登记）
+  --books-limit BOOKS_LIMIT
+                        本次最多登记几本
+  --text-store-dir TEXT_STORE_DIR
+                        逐页正文的内容寻址落点（不给就按各模式的缺省）
+  --seed-literature     新建工作区时把历史真机下载的种子文献投进输入区 reference/（只放文件，不写台账；默认关。只对
+                        project / research 两档有意义）
+
+花多少钱 / 开不开 Lean / 要不要盯:
+  --budget-usd BUDGET_USD
+                        美元上限。显式给了就落盘到 <工作区>/budget.json（C4）；不给就按各模式的缺省（topic
+                        1.0 / project 0.5 / role 不限）
+  --lean [{on,off,auto}]
+                        on / off / auto（裸写 --lean 等于 --lean on）。auto =
+                        先跑一次自检，usable 才开；不是 usable 就照常跑，但一切形式化结论记 unknown
+                        并在读数里点名原因
+  --watch               起网页并打印 URL / 工作区 / sid / 当前轮
+  --dry-run             只说、不做：打印将要发生的一切，不写字节、不调模型
+  --json                机器可读的那一份（见 description）
+  --host HOST           --watch 的监听地址
+  --port PORT           --watch 的端口（0 = 让系统挑）
+  --open                --watch 起来之后用浏览器打开
+  --token TOKEN         --watch 的访问口令
+  --allow-writes        --watch 允许写面（起一趟 / 插话 / 答问 / 叫停 / 改设置 / 改预算）
+  --no-settings-write   --watch 关掉设置写面（只关 POST /api/settings）
+
+透传下去的老旗标（与同名子命令同义）:
+  --max-calls MAX_CALLS
+                        最多调用几次模型（topic / project 两档用）
+  --prompt-version {v1,v2-lean}
+                        prompt 模板版本（缺省 v1，与 run 同口径）
+  --fulltext            取开放全文（topic 那一档）
+  --no-fulltext         不取全文（project 那一档）
+  --retrieval-limit RETRIEVAL_LIMIT
+                        最多取几条本地来源进材料段（project 那一档）
+  --extract             先让模型把库里没抽过的书读一遍
+  --extract-rounds EXTRACT_ROUNDS
+                        模型抽取最多跑几轮（一轮至多一本书）
+  --model MODEL         只覆盖模型名（key/base_url 一律来自环境变量）
+  --drive DRIVE         把某个 (角色.动作) 交给模型驱动（role 那一档，可重复）
+  --subagents           把所有已声明的角色动作都交给模型驱动（research 缺省就是它）
+  --semantic-review     给 H 接上语义判据
+  --experiment-reasoning
+                        给 E 接上写脚本的推理
+  --allow-foreign-entries
+                        这个目录里已经有用户的投料也照样按工作区初始化
+  --provider PROVIDER   A 的检索后端（逗号分隔）
+  --max-steps MAX_STEPS
+                        每满几步向父代理报一次步数账（不是闸；0 = 不上报，闸本来就没有）
+  --wall-clock-sec WALL_CLOCK_SEC
+                        墙钟上限（秒）；不给 = 不设上限
+  --rounds ROUNDS       跑几轮
+  --report-every REPORT_EVERY
+                        每几轮汇报一次
+  --sid SID             会话号（缺省当天；投递那一支就写进这一段）
+  --resume              从检查点续跑（给闲着的那一段用；M 正在跑时不许 resume ——
+                        要说话就不带它再发一次，会投进它的收件箱）
+  --user-wait-sec USER_WAIT_SEC
+                        问用户时等多久（秒）
+  --no-ask              无人值守档：问用户被确定性拒绝
+  --stop-file STOP_FILE
+                        停止开关文件
+EXIT=0
+```
+<!-- START-HELP:END -->
 
 ### 2.1 先看会发生什么：`--dry-run`
 
@@ -364,6 +538,21 @@ EXIT=0
 
 跑完确认一个字节都没写：`Test-Path "$WS\projects"` → `False`。
 
+不给 `--project` 的默认形态也值得先看一次 —— 它落在**当前工作区**（不再自动取下一个
+`projectN`），模式是 `research`，任务那句话就是要投给 M 的那一句：
+
+```powershell
+python -m agentflow --root $WS start --task "验证最小回路" --dry-run
+```
+
+```text
+│ 模式                research（十角色循环）
+│ 会召唤              M 起十角色循环（--subagents）：M 可以召唤 D、C、B、E、A…
+│ 任务：验证最小回路
+  工作区：            D:\Incubator\agentflow\temp\userguide\ws
+EXIT=0
+```
+
 ### 2.2 机器可读的那一份：`--json`
 
 ```powershell
@@ -393,15 +582,20 @@ lean / summons / writes / spend）。
 > `--mode topic|project` 同理。2026-11-21 CLIFIX ③ 之前 JSON 写的是 `"role"`（与横幅
 > 不一致，脚本会读成"只跑一个角色"），现在不会了。
 
-### 2.3 四种模式各是什么
+### 2.3 五种模式各是什么
 
 | `--mode` | 跑什么 | 缺省预算 | 要不要 `--task` |
 |---|---|---|---|
+| `auto`（缺省） | 没给 `--project` ⇒ 进当前工作区把 `--task` 投给 M（第 2/3 支见 §2.0）；给了 `--project` ⇒ 按项目推断（cold / warm / research） | 看推断结果 | 要 |
 | `research` | 十角色循环（M 主控 + `--subagents`） | 不限量 | 要 |
-| `role` | 只跑一个角色循环（必须 `--role A..H,V,L,M`） | 不限量 | 可（`--watch` 时不要） |
+| `role` | 只跑一个角色循环（必须 `--role A..H,V,L,M`；`--role M` 也走 §2.0 的两支） | 不限量 | 可（`--watch` 时不要） |
 | `topic` | 端到端跑一个主题（检索→作答→逐字回验→记账→熔断→六件产物），**不召唤角色** | 1.0 | 要 |
 | `project` | 项目工作区（端到端主题跑） | 0.5 | 要 |
 | `cold` / `warm` | 冷/热启动（`--start cold\|warm` 同义） | — | 要 |
+
+> `auto` 的一个例外：显式给了项目专用旗标（`--books` / `--books-limit` / `--extract` /
+> `--extract-rounds` / `--no-fulltext` / `--retrieval-limit`）又没给 `--project` 时，
+> 仍按项目工作区推断 —— 否则这些旗标会被「这一档用不上」的拒收挡下，而用户明明给了书架。
 
 `topic` 与 `project` 的 `--dry-run` 实测差异（同一句话）：
 
@@ -765,7 +959,8 @@ EXIT=0
 
 ### 4.1 插话：`interject`
 
-给主控 M 插一句话。**这是用户在跑动中的唯一直连通道**；M 在下一步开头会看到它。
+给主控 M 插一句话。**这是纯投递口**：只写会话、不看 M 在不在跑，也不起一趟
+（`start --task` 才是「没人跑就用这句话起一趟」那条统一入口，见 §2.0）。
 
 ```powershell
 python -m agentflow --root $WS interject --text "请优先做最小可验证的例子" --subject "用户插话" --sid guide-s1
@@ -779,6 +974,11 @@ EXIT=0
 写在 `<工作区>/sessions/<sid>.jsonl` 里。**写下去 ≠ 被读到**：`status-report` 会如实报
 "发过 1 条插话而一次都没被读到（`agent_interjection_seen` 0 条）"（见 §3.6 的实测输出）——
 那是因为当时没有循环在跑。
+
+> `interject` 与 `start --task X` 的区别只有一条：`start --task X` 会先确保工作区就绪，
+> 再按「M 在跑就投递 / 没跑就起一趟」分两支（§2.0）；`interject` 是「我已经知道这段会话
+> 存在，就把这句话写进去」的底层口（脚本与调试用）。两者落盘用的是同一份
+> `agent_loop.send_interjection` 投递；「要不要起一趟」的判断只在 `startup.speak` 一处。
 
 ### 4.2 答问：`answer`
 
@@ -840,6 +1040,11 @@ EXIT=0
 **CLI 与网页的差别（如实）**：`start --watch` 起网页时，网页上的"起一趟 / 插话 / 答问 /
 叫停 / 改设置 / 改预算"写面默认是**关着的**（`--allow-writes` 才开）。CLI 这边没有这个
 总开关 —— 上面四条命令在本机直接生效。想边跑边在浏览器里点，就 `start --watch --allow-writes`。
+
+2026-11-25 起，「起一趟 / 插话」这两条**说话**入口在两侧是同一个实现（§2.0 的
+`startup.speak`）：判断「要不要起、要不要投」不分网页与 CLI。两侧真正不同的只剩两件
+宿主差异 —— 写面总开关（本段上文）与进程生命周期（CLI 同进程跑、把退出码带回来；
+网页 detached 起、当场只回 pid 与日志）。
 
 ---
 

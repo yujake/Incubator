@@ -3923,10 +3923,62 @@ class Conductor:
         # 真正把循环跑起来的那一步由 `self.resume_runner` 接（默认没接 ⇒ 读数写清
         # "执行侧未接线"，不许当"它会读到"）。
         self._ensure_consumer(item_id=item_id, kind=kind,
-                              recipient=str(parent_task_id or ""))
+                              recipient=str(parent_task_id or ""),
+                              called_by=called_by, input_key=input_key)
         return item_id
 
-    def _ensure_consumer(self, *, item_id: str, kind: str, recipient: str) -> dict[str, Any]:
+    def _wake_refusal(self, *, kind: str, recipient: str, row: Mapping[str, Any],
+                      called_by: str = "", input_key: str = "") -> str:
+        """这一条板项**不是来信**、不许拿它起一趟消费跑 ⇒ 返回理由；该叫就返回空串。
+
+        两档都来自 2026-11-25 真机 `projects/web-mini-3`（会话 `2026-11-25y`，读数与取证
+        在 `temp/inboxnorun/REPORT.md`）：同一秒里两条 `agent_run_start` / 两条
+        `agent_run_end`，第二条的 `final` 是「第 0 步之后收工」—— 页面上它就是**第二条
+        同名交付**，而这一趟一步没干。
+
+        ## ① 用户插话的收件箱项 = 送达收据
+
+        `_deliver_interjection_to_inbox` 落的那一条：`kind="message"`、`expects="ack"`、
+        `action="message"`、`called_by=用户`、`input_key="message@用户:<i-xxxxx>-><号>"`。
+        它的正文**唯一一份**在会话事件（`agent_interjection`）里，由收件人自己的下一步在
+        步首那段【插话】念到 —— "它该被读"这件事已经由那一趟承担了。拿它再起一趟，
+        只会在同一秒多出第二条同名交付，而那一趟没有活可干（`resume_dispatched` 传给
+        后端的 `task` 是空串，`agent_loop._task_text` 只能填「没有点动作、也没写清是什么活」）。
+
+        为什么不只靠"`_deliver_interjection_to_inbox` 必然投给在跑的主控"：那是**调用方**
+        的不变式，不是板项的属性。收件人的账在 `open_item` 与 `_ensure_consumer` 两次读之间
+        被别的进程收成终态（真机就是 `Conductor.dispose` 在另一个进程里收的），判定就落到 ⑥ 了。
+
+        ## ② 自己刚收工那条通报 = 回声
+
+        `AgentLoop._emit_settlement` 落的 `kind="notice"`：挂在自己名下
+        （`parent_task_id` 就是自己那一行）、`called_by` 就是自己、`input_key` 就是
+        `notice@<角色>:<自己那个号>`。"你跑完了"不是"有人给你来信" ⇒ 叫醒自己等于起一趟
+        空跑。真机上触发那一趟的正是它：`data/events.jsonl` seq=561 的 `resume:notice:t-000034`，
+        而 t-000034 的 `detail` 就是「M 已收工（stop_file）」。
+
+        两档都**不碰**"真有一条该办的板项落到闲着的收件人名下"那条路：那一条的 `called_by`
+        是别的角色 / `clock` / `conductor`，`input_key` 也不以 `message@用户:` 开头。
+        """
+        from . import userio as U
+
+        who = str(called_by or "")
+        key = str(input_key or "")
+        mine = str(row.get("task_id") or "")
+        if str(kind) == "message" and (who == str(U.USER)
+                                       or key.startswith(f"message@{U.USER}:")):
+            return ("这一条是用户插话的**送达收据**（expects=ack；正文在会话事件里，由收件人"
+                    "自己下一步那段【插话】念到）⇒ 不算来信、不起消费跑：拿它叫醒收件人只会"
+                    "多出第二条同名交付，而那一趟没有活可干")
+        if (str(kind) == "notice" and mine and str(recipient) == mine
+                and who and who == str(row.get("role") or "")
+                and key.startswith(f"notice@{who}:{mine}")):
+            return (f"这一条是 {mine} 自己刚收工那份**终态通报**的回声（挂在自己名下、由自己"
+                    "开、键指回自己的号）⇒ 不算来信、不叫醒自己：叫醒它是起一趟一步都干不了的空跑")
+        return ""
+
+    def _ensure_consumer(self, *, item_id: str, kind: str, recipient: str,
+                         called_by: str = "", input_key: str = "") -> dict[str, Any]:
         """板项落盘之后：收件人得有人读它（静默的唤醒 = 接到消息）。
 
         三态读数 `{"attempted","started","reason"}` 写进 `self.last_consumer_reading`
@@ -3938,10 +3990,14 @@ class Conductor:
         ② 收件人空                            ⇒ attempted=False（公共频道/广播）
         ③ 台账读不成 / 没有那一行               ⇒ attempted=True + 理由
         ④ 已销号                              ⇒ 不跑它（"已销号是彻底没有了"；寻址那关已拦，这里双保险）
+        ④' 送达收据 / 自报回声（`_wake_refusal`）⇒ attempted=False（回执不是来信，见那一处）
         ⑤ 还在跑（status ∈ UNFINISHED_STATUSES）⇒ 不动它（下一拍它自己读到）
         ⑥ 终态且未销号                          ⇒ 该跑起来：status 由终态改回 running，
                                                  交给 `self.resume_runner`（同号、不新建行）
         ```
+        ④' 为什么排在 ⑤ 之前：回执**从来不是**"来信"，这不随收件人在不在跑而变。排在 ⑤
+        之前只是让读数说真话（这一格读起来是"这不是叫醒"，不是"它还在跑"）；真正防住
+        真机那一趟的是 ④' 在 ⑥ 之前 —— 那一刻台账已经把收件人收成终态了。
         """
         out: dict[str, Any] = {"attempted": False, "started": False, "reason": "",
                                "item_id": item_id, "recipient": recipient}
@@ -3972,6 +4028,15 @@ class Conductor:
                 out["reason"] = (f"{recipient} 的销号名单读不全（{self._retired_reason()}）⇒ "
                                  "不叫它（fail-closed）；信已经落在它收件箱里，等这一格"
                                  "读得出来再叫")
+                return out
+            # ④' 送达收据 / 自报回声 ⇒ 不是来信，不许拿它起一趟消费跑
+            # （2026-11-25 真机 web-mini-3：`resume:notice:t-000034` 那一趟一步没干，
+            #  页面上成了第二条同名交付。判定与理由在 `_wake_refusal` 一处。）
+            refusal = self._wake_refusal(kind=kind, recipient=recipient, row=row,
+                                         called_by=called_by, input_key=input_key)
+            if refusal:
+                out["attempted"] = False
+                out["reason"] = refusal
                 return out
             status = str(row.get("status") or "")
             if status in UNFINISHED_STATUSES:

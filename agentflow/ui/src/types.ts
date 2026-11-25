@@ -703,7 +703,7 @@ export interface ChatOption {
   description: string;
 }
 
-/** 出处：chat_face() —— 一条对话线（`who` 只有 user / conductor / team 三档，见 CHAT_WHO）。`task_id` 是说话那一方的绝对编号，`task_id_source` 只说这个编号从哪来：event（事件里真有）/ inherited（老事件没记，同一岗在本段唯一那一趟的 agent_run_start 有编号 ⇒ 回填）/ missing（拿不准或确实没记，页面显示「（未记录编号）」，绝不编一个假编号）。`role` 是说话那一方的角色，`role_source` 同一条纪律：event（事件自带）/ from（`agent_message` 只记了 `from`，读侧用它补齐，页面括注「承自发件人」）/ missing（两格都没有，页面显示「（未记录角色）」）。 */
+/** 出处：chat_face() —— 一条对话线（`who` 只有 user / conductor / team 三档，见 CHAT_WHO）。`task_id` 是说话那一方的绝对编号，`task_id_source` 只说这个编号从哪来：event（事件里真有）/ inherited（老事件没记，同一岗在本段唯一那一趟的 agent_run_start 有编号 ⇒ 回填）/ missing（拿不准或确实没记，页面显示「（未记录编号）」，绝不编一个假编号）。`role` 是说话那一方的角色，`role_source` 同一条纪律：event（事件自带）/ from（`agent_message` 只记了 `from`，读侧用它补齐，页面括注「承自发件人」）/ missing（两格都没有，页面显示「（未记录角色）」）。`run_seq` 是这一条属于本段会话里该角色的第几趟（1 起，见 `_chat_run_pairs`），`run_steps` 是这一趟落了几步（收工行自报优先，缺则逐条数），`run_task` 是起跑任务原文的前 40 字，`run_empty` 是「这一趟一步都没落」（`run_steps == 0`），`run_note` 是页面印在正文前的那一句（「这一趟从 … 开始」/「空跑…」）—— 五格都只在起趟 / 交付那两类线上有值，其余是 null / 空串 / 空句（含义是「这条线不属于任何一趟」）；交付行配不上起跑记录时也留 null，页面说「起跑记录不在盘上」而不是猜一个。 */
 export interface ChatLine {
   index: number;
   who: string;
@@ -718,6 +718,11 @@ export interface ChatLine {
   clipped: boolean;
   qid?: string;
   options?: ChatOption[];
+  run_seq: number | null;
+  run_steps: number | null;
+  run_task: string;
+  run_empty: boolean | null;
+  run_note: string;
 }
 
 /** 出处：chat_face() 的 sessions[] —— 供对话页挑会话（`sessions.list_sessions` 的四栏）。 */

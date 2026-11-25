@@ -437,108 +437,13 @@ def _print_lean_selfcheck(sc: Mapping) -> None:
 
 
 # ---------------------------------------------------------------- 工作区初始化（R-32 的第四条出路）
+#
+# 2026-11-25 CLI-ALIGN：实现搬进 `startup.py`（与"用户对 M 说话"同一个模块），
+# 这里保留同名入口给既有调用点（`cmd_init` / `_exec_role` / 判据）。
+# 搬家的理由：网页与 CLI 都要先"进工作区"再对 M 说话，两处各写一份就是没对齐。
 
-#: 工作区标记文件名：`store._foreign_dir_guard_should_refuse` 的白名单出口之一
-#: （`projects.classify` 也认它）。
-WORKSPACE_MARKER = ".agentflow-workspace"
-
-#: 「这个目录里已经有用户的投料，仍然按工作区初始化」那条开关。
-#: 拒绝文案里教的就是它（`init_workspace` 的 except 分支）。
-ALLOW_FOREIGN_FLAG = "--allow-foreign-entries"
-
-
-def _foreign_entries(root: Path) -> list[str]:
-    """root 里不属于本框架的条目名。
-
-    白名单从 `store._WORKSPACE_ROOT_ENTRIES` 读（唯一一份），不在这里再抄一遍 ——
-    两份白名单的漂移形态是"CLI 认为可以、`Store.init()` 认为不可以"，
-    而判据只会照着其中一份红。
-    """
-    from .store import _WORKSPACE_ROOT_ENTRIES
-
-    if not root.is_dir():
-        return []
-    return sorted(p.name for p in root.iterdir() if p.name not in _WORKSPACE_ROOT_ENTRIES)
-
-
-def _marker_text(root: Path, *, by: str) -> str:
-    """标记文件的内容：谁落的、什么时候落的、认了几个外来条目。"""
-    foreign = _foreign_entries(root)
-    lines = ["agentflow workspace",
-             f"created_at={S.now_iso()}",
-             f"created_by={by}",
-             f"accepted_foreign_entries={len(foreign)}"]
-    if foreign:
-        head = ", ".join(foreign[:10]) + (" ..." if len(foreign) > 10 else "")
-        lines.append(f"accepted_entries={head}")
-    return "\n".join(lines) + "\n"
-
-
-def init_workspace(st: Store, root: Path, *, allow_foreign_entries: bool,
-                   cmd: str, force: bool = False,
-                   seed_literature: bool = False) -> int:
-    """`Store.init()` 的 CLI 外壳：把 `R-32` 那一档的拒绝翻成「照着改」的话。
-
-    为什么要有这一层：`R-32` 的判据本身
-    是对的（它挡的是"在别人的目录里凭空建库"），缺的是一条
-    「我认这个目录，里面那些文件是我自己投的料」的出口。`--force` 不是那条出口：
-    它是"清空重建"。所以这里补第四条路 —— 带 `allow_foreign_entries` 时先落
-    `.agentflow-workspace`（`store.init` 自己明写的白名单出口），再照常 init；
-    判据本体一个字没改（它在禁改区 `schema-migration` 里）。
-
-    `seed_literature=True`（默认关）只对"这一次真的是新建"生效：`data/` 已经在了就是
-    热启动，不投。投放只写输入区 `reference/`（含其中的 `SEED-README.md`），不写任何
-    `data/*.json`，也不往已登记书架 `library/` 里放文件 —— 见 :mod:`agentflow.seedinject`。
-
-    返回退出码：0 = 建成了；2 = 拒绝了（文案里教那条开关）或没查成。
-    两个值都有调用方（`main` 的 StoreError 那一档也是 2），所以不许折成布尔。
-    """
-    fresh = not (Path(root) / "data").exists()
-    if allow_foreign_entries:
-        marker = Path(root) / WORKSPACE_MARKER
-        if not marker.exists():
-            marker.parent.mkdir(parents=True, exist_ok=True)
-            marker.write_text(_marker_text(Path(root), by=f"cli {cmd} {ALLOW_FOREIGN_FLAG}"),
-                              encoding="utf-8", newline="\n")
-    try:
-        st.init(force=force)
-    except StoreError as e:
-        # 原样打出判据的话（它是"为什么拒"的唯一出处），再补一句"照着改"。
-        # 那句只在"拒绝的理由确实是外来条目"时才打：root 是个文件、或者写者锁超时
-        # 那些形态教这条开关会把人教错方向。
-        print(f"[{cmd}] {e}", file=sys.stderr)
-        foreign = _foreign_entries(Path(root))
-        if foreign:
-            print(tty.paint(
-                f"[{cmd}] {Path(root)} 里那 {len(foreign)} 个条目要么是用户自己投的料"
-                f"（例如一篇 PDF）、要么是这个目录本来就不干净。若它就是要用的工作区："
-                f"加 {ALLOW_FOREIGN_FLAG} 再跑一次 —— 它会先落 "
-                f"{WORKSPACE_MARKER}（`store` 的白名单出口），再按工作区初始化；"
-                f"那些文件不删、不改，只是从此算这个工作区的条目。",
-                "grey"), file=sys.stderr)
-        return 2
-    if seed_literature:
-        if not fresh:
-            print(tty.paint(
-                f"[{cmd}] 这里已经是工作区（data/ 在盘上）⇒ 不投种子："
-                "种子只在新建工作区时投，热启动不重复投。", "grey"), file=sys.stderr)
-        else:
-            from . import seedinject as SI
-
-            got = SI.seed_workspace(Path(root))
-            _report_seed_landing(cmd, got)
-    return 0
-
-
-def _report_seed_landing(cmd: str, got: dict) -> None:
-    """把一次种子投放的读数印成一行人话（只印读数，不改任何退出码）。"""
-    if got.get("problem"):
-        print(tty.paint(
-            f"[{cmd}] 种子文献没投成：{got['problem']}", "yellow"), file=sys.stderr)
-        return
-    print(tty.paint(
-        f"[{cmd}] 种子文献：{got.get('copied', 0)} 份投到 {got.get('destination')}"
-        f"（输入区，未入库、未判收；见 {got.get('marker')}）", "grey"))
+from .startup import (ALLOW_FOREIGN_FLAG, WORKSPACE_MARKER,  # noqa: E402
+                      init_workspace)
 
 
 # ---------------------------------------------------------------- 子命令
@@ -1488,6 +1393,14 @@ WEB_ONLY_FLAGS: frozenset[str] = frozenset({
     "--host", "--port", "--open", "--token", "--allow-writes", "--no-settings-write",
 })
 
+#: `start` 的 auto 档在"没给 `--project`"时仍要走项目工作区的旗标（`_spec_of_start`）。
+#: 这些旗标只在 project 那一档有读者；若 auto 一律折成"投给 M"，它们会被
+#: `_start_flags_not_in_this_mode` 拒掉。给过它们 ⇒ 用户要的是项目工作区那一趟。
+_PROJECT_ONLY_FLAGS: frozenset[str] = frozenset({
+    "--books", "--books-limit", "--extract", "--extract-rounds",
+    "--no-fulltext", "--retrieval-limit",
+})
+
 #: `start --dry-run --json` 那一份的键集合。
 #:
 #: 写在这里是为了让它只有一个真身：判据
@@ -2143,6 +2056,17 @@ def _with_watch(spec: RunSpec, args) -> int:
             return 0
         thread = threading.Thread(target=srv.serve_forever, daemon=True)
         thread.start()
+        if _is_speak_to_m(spec):
+            # 2026-11-25：带 --task 的 watch 也走"用户对 M 说话"那一条 ——
+            # M 已在跑就投进收件箱（网页留着让人接着看），没在跑才起一趟。
+            from . import startup as SU
+
+            code, speech = _speak_to_conductor(
+                spec, args,
+                launch=lambda argv: SU.Launch(code=_dispatch(spec, args)))
+            if speech.action == "interjected":
+                srv.serve_forever()
+            return code
         return _dispatch(spec, args)
     except KeyboardInterrupt:
         return 0
@@ -2357,6 +2281,21 @@ def _spec_of_start(args) -> tuple[RunSpec | None, str]:
         return _spec_from(args, mode=MODE_PROJECT, origin="start",
                           project_start=start, task=task), ""
     # ---- auto：按目录状态推断（`--project` 给出来的话，`ref` 上面已经解析好了）
+    #
+    # 2026-11-25（业主口径「开真机相当于先进工作区，再跟 M 直接说话」）：
+    # 没给 `--project` 的 auto 不再自动取下一个 projectN —— 它就在 `--root`（缺省 =
+    # 当前目录）这个工作区里把 `--task` 投给 M。`--project` 给出来的那一档仍按项目
+    # 推断（新文件夹 ⇒ 项目工作区；有台账 ⇒ 十角色循环），判据
+    # `tests/test_start_project_flag_lands_the_project.py` 钉着它。
+    #
+    # 例外：显式给了项目专用旗标（`--books` / `--extract` / …）时仍走项目工作区。
+    # 否则这些旗标会在"投给 M"这一档里被 `_start_flags_not_in_this_mode` 拒掉 ——
+    # 那是把"我给了书架"变成"命令不能跑"，比静默换落点更难查。
+    given = getattr(args, "_given_flags", frozenset())
+    if ref is None and start == "auto" and not (given & _PROJECT_ONLY_FLAGS):
+        target = role or S.CONDUCTOR_ROLE
+        return _spec_from(args, mode=MODE_ROLE, origin="start", role=target,
+                          research=(target == S.CONDUCTOR_ROLE)), ""
     base = P.projects_dir(getattr(args, "projects_dir", None))
     if ref is None:
         try:
@@ -2422,16 +2361,90 @@ def _start_flags_not_in_this_mode(spec: RunSpec, args) -> str:
     return "\n".join(lines)
 
 
+def _is_speak_to_m(spec: RunSpec) -> bool:
+    """这一趟是不是"用户对 M 说话"（而不是 topic / project / 另一个角色）。
+
+    `--mode research` 与 `--mode role --role M` 都是 M；`--mode role --role A` 是单跑
+    另一个角色，`--mode topic` / `--mode project` 是另外两条执行体 —— 它们都不走
+    "投递或起一趟"那两支。`--dry-run` 也不走：它只打印计划、一个字节都不写。
+    """
+    role = str(spec.role or S.CONDUCTOR_ROLE)
+    return (spec.mode == MODE_ROLE and role == S.CONDUCTOR_ROLE
+            and not spec.dry_run)
+
+
+def _speak_to_conductor(spec: RunSpec, args, *, launch=None):
+    """CLI 侧的"用户对 M 说话"：进工作区 → 投递或起一趟（与网页同一个函数）。
+
+    返回 `(退出码, startup.Speech)`：0 = 投成 / 起成；2 = 没查成（外来条目、投不进去、
+    resume 与正在跑的 M 冲突）。`--resume` 真正跑起来时，执行体自己的六档原样带回
+    （4 仍是"正常中途停"）。
+    `--json` 那一档的回执走 stderr：stdout 只留执行体那一份 JSON。
+    `launch` 只有"带 --watch"那一档会换（它交给 `_dispatch`，不再重进 `_run_spec`）。
+    """
+    from . import startup as SU
+
+    root, _project = _target_workspace(spec, args)
+    stream = sys.stderr if spec.as_json else sys.stdout
+
+    def _in_process(argv: list[str]) -> SU.Launch:
+        sid = str(getattr(args, "sid", "") or "") or "当天"
+        print(tty.paint(
+            f"[start] 主控没在跑 ⇒ 用这句话起一趟（{S.CONDUCTOR_ROLE} · sid={sid}）",
+            "grey"), file=stream)
+        return SU.Launch(code=_run_spec(spec, args))
+
+    speech = SU.speak(
+        root, spec.task, sid=str(getattr(args, "sid", "") or ""),
+        subject="用户指令", resume=bool(getattr(args, "resume", False)),
+        origin="cli",
+        # 网页一直放行自己写在根上的文件（与它起跑 argv 里的同名开关同义）；
+        # CLI 默认更严：别的外来条目仍然拒，用户显式给了才放行。
+        allow_foreign_entries=bool(getattr(args, "allow_foreign_entries", False)),
+        seed_literature=bool(getattr(args, "seed_literature", False)),
+        launch=(launch or _in_process),
+    )
+    if speech.action == "refused":
+        print(tty.paint(speech.message, "yellow"), file=sys.stderr)
+        return 2, speech
+    if speech.action == "interjected":
+        print(tty.paint(speech.message, "green"), file=stream)
+        return 0, speech
+    return int(speech.start_code), speech
+
+
 def cmd_start(args) -> int:
-    """统一入口：一个入口讲清"干什么 / 在哪干 / 花多少钱 / 开不开 Lean"。
+    """统一入口：给一句话，就是你对主控 M 说的那句话（先进工作区，再投给 M）。
+
+    ## 一句话怎么走（业主 2026-11-25 的口径）
+
+    业主逐字：「用户发话起真机，以及用户插话，这两件事都是用户对 M 说话，实现上不该
+    有区别。」所以 `start --task X` 不再是"把任务交给某个执行体"，而是：
+
+    1. 先确保工作区就绪（`startup.ensure_workspace`）：空目录就 init；网页自己写的
+       `web-actions.jsonl` / `budget.json` / `.agentflow-stop` 这类本框架的文件放行；
+       别的外来条目仍拒，拒绝文案教 `--allow-foreign-entries`；
+    2. 台账里有正在跑的 M ⇒ 把 X 投进它的收件箱，不另起一趟；
+    3. 没有 ⇒ 用 X 起一趟（`run-agent M --task X`）。
+
+    这两支与网页的 `/api/run` / `/api/task` 是同一个实现（`startup.speak`）；判据
+    `tests/test_cli_speaks_to_conductor.py` 用打桩断言两侧调的是同一个函数。
 
     ## `--mode` 怎么推断（不写就是 auto）
 
     1. 没给 `--task`：给了 `--watch` ⇒ 只开网页（`web` 的别名）；没给 ⇒ 人话报错并点名
        `--task`（C3）；
-    2. 项目文件夹不存在或为空 ⇒ cold；
-    3. 项目文件夹已初始化、且 `data/tasks.json` 有行 ⇒ research（十角色循环，角色缺省 M）；
-    4. 项目文件夹已初始化、但没有台账 ⇒ warm。
+    2. 没给 `--project` ⇒ 在 `--root`（缺省 = 当前目录）这个工作区里跟 M 说话（第 2/3
+       支见上）；给了 `--project` ⇒ 按该项目推断：项目文件夹不存在或为空 ⇒ cold；
+       已初始化且 `data/tasks.json` 有行 ⇒ research（十角色循环，角色缺省 M）；
+       已初始化但没有台账 ⇒ warm；
+    3. 显式给了项目专用旗标（`--books` / `--extract` / …）又没给 `--project` 时，仍按
+       项目工作区推断 —— 否则那些旗标会被 `_start_flags_not_in_this_mode` 拒掉。
+
+    ## `--mode topic` / `--mode project` / `--mode role --role A` 不变
+
+    这几档不是"用户对 M 说话"：topic 是端到端跑主题、project 是项目工作区、role A 是
+    单跑另一个角色。它们照旧直接落执行体，不走投递/起一趟那两支。
 
     ## 四条"人话"
 
@@ -2448,10 +2461,13 @@ def cmd_start(args) -> int:
     `--projects-dir` 时是 `<root>/projects/<名字>`）：`--mode research` / `role` / `topic`
     也一样 —— 它们此前只在 auto/project/web 三档读这一格，另外三档收下就丢。
 
-    退出码：0 做成了 / 1 查过了、有问题 / 2 没查成（用法错或前提不满足）。
+    退出码：0 做成了（投成 / 起成） / 1 查过了、有问题 / 2 没查成（用法错或前提不满足）；
+    `--resume` 真跑起来时沿用执行体自己的六档（4 = 正常中途停）。
 
-    读写：按 `--mode` 落到四条执行体之一（topic / role / project / web），读写的就是那一条自己的表；`--dry-run` 一个字节都不写、一次模型都不调。
-    实现方式一句话：`_run_spec` 一个执行体（五条入口只在这一层归一旗标）。
+    读写：投递那一支只追加 `<工作区>/sessions/<sid>.jsonl` 一条 `agent_interjection`
+    并给 M 开一条 `kind=message` 板项；起一趟那一支写的就是那一趟自己的表（`tasks` /
+    `usage_ledger` / `sessions/` / `runs/`）。`--dry-run` 一个字节都不写、一次模型都不调。
+    实现方式一句话：`startup.speak`（投递或起一趟的唯一实现）→ `_run_spec`（起跑）。
     """
     spec, problem = _spec_of_start(args)
     if problem:
@@ -2462,6 +2478,8 @@ def cmd_start(args) -> int:
     if wrong:
         print(tty.paint(wrong, "yellow"), file=sys.stderr)
         return 2
+    if _is_speak_to_m(spec):
+        return _speak_to_conductor(spec, args)[0]
     return _run_spec(spec, args)
 
 
@@ -5740,17 +5758,25 @@ def build_parser() -> argparse.ArgumentParser:
     # 解析层一个字不动、执行层收口（见 `_run_spec`）。
     sp = sub.add_parser(
         "start",
-        help="统一入口：给一句话就开始干（研究循环 / 端到端主题 / 项目工作区 / 只开网页）",
+        help="统一入口：给一句话就是你对 M 说的话（先进工作区，再投给 M；M 已在跑就投进它收件箱）",
         description=(
-            "统一入口。`--mode` 不写就按目录状态推断：没给 --task 且给了 --watch ⇒ 只开网页；"
-            "项目文件夹不存在或为空 ⇒ cold；已有台账（data/tasks.json 有行）⇒ research；"
-            "存在但没有台账 ⇒ warm。`--mode research` 时角色缺省 M，不再要位置参数。\n\n"
+            "统一入口：给一句话，就是你对主控 M 说的那句话 —— 先把工作区准备好（该 init "
+            "就 init），再把它投给 M。`--mode` 不写时：没给 --task 且给了 --watch ⇒ 只开"
+            "网页；给了 --project 则按该项目推断（没有台账 ⇒ 项目工作区那一趟，有台账 ⇒ "
+            "十角色循环）；没给 --project ⇒ 在当前工作区里跟 M 说话。\n\n"
+            "M 已经在跑（台账里有 status=running 的主控）⇒ 这句话投进它的收件箱，不另起"
+            "第二趟；M 没在跑 ⇒ 用这句话起一趟（run-agent M --task …）。网页的 /api/run 与 "
+            "/api/task、CLI 的这条 start 走同一个实现（startup.speak），所以「发话起真机」"
+            "与「插话」没有区别。\n\n"
+            "工作区准备好 = 空目录就 init；网页自己写在根上的 web-actions.jsonl / "
+            "budget.json / .agentflow-stop 这类本框架的文件放行；别的外来条目仍拒，"
+            "拒绝文案教你加 --allow-foreign-entries。\n\n"
             "缺参数时报的是人话并点名该给哪个旗标（不是 argparse 那句 "
             "the following arguments are required）。\n\n"
             "--dry-run 只打印将要发生的一切：不建目录、不写字节、一次模型都不调、"
             "也不起 Lean 自检子进程。\n\n"
             "--watch 起网页并打印 URL / 工作区 / sid / 当前轮；不带 --task 时只开网页"
-            "（一直开着，Ctrl-C 停），带 --task 时边跑边可监督、跑完收工。\n\n"
+            "（一直开着，Ctrl-C 停），带 --task 时先投或起、再边跑边可监督。\n\n"
             "--json 的键集合：--dry-run 那一档逐字等于 cli.START_PLAN_KEYS"
             "（mode / task / workspace / project / model / budget / lean / summons / "
             "writes / spend）；--watch 不带任务那一档是 {url, root, sid, round}；"
@@ -5759,17 +5785,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _what = sp.add_argument_group("要跑什么")
     _what.add_argument("--task", default=None,
-                       help="这次要做的事（一句话）。不给就得给 --watch（只开网页）")
+                       help="这次要做的事（一句话）—— 就是你这次要对 M 说的那句话。"
+                            "不给就得给 --watch（只开网页）")
     _what.add_argument("--mode", default="auto", choices=list(START_MODES),
-                       help="auto（缺省，按目录状态推断）/ research（十角色循环，角色缺省 M）"
+                       help="auto（缺省：没给 --project ⇒ 在当前工作区里把 --task 投给 M；"
+                            "给了 --project ⇒ 按项目推断）/ research（十角色循环，角色缺省 M）"
                             "/ topic（端到端主题跑）/ role（只跑一个角色循环）"
                             "/ project / cold / warm（项目工作区）")
     _what.add_argument("--role", default="",
                        choices=[*S.ROLES, S.CONDUCTOR_ROLE],
                        help="角色（--mode role 必填；--mode research 缺省 M）")
     _what.add_argument("--project", dest="name", default=None,
-                       help="项目名（落在 <projects-dir>/<名字>；任何 --mode 都生效，"
-                            "数据与该项目的运行记录都写进它；不给就自动取下一个 projectN）")
+                       help="项目名（落在 <projects-dir>/<名字>；给了它就把这一趟放进该项目"
+                            "并沿用项目推断；不给就在 --root 这个工作区里跟 M 说话）")
     _where = sp.add_argument_group("在哪干")
     # 顶层已经有 `--root`：这里再给一次，`default=SUPPRESS` 是关键 —— 否则子 parser 的
     # 缺省 None 会把用户写在子命令前面的 `--root` 覆盖掉（argparse 的已知形态）。
@@ -5844,8 +5872,10 @@ def build_parser() -> argparse.ArgumentParser:
     _more.add_argument("--rounds", type=_non_negative_int, default=1, help="跑几轮")
     _more.add_argument("--report-every", type=_non_negative_int, default=1,
                        help="每几轮汇报一次")
-    _more.add_argument("--sid", default=None, help="会话号（缺省当天）")
-    _more.add_argument("--resume", action="store_true", help="从检查点续跑")
+    _more.add_argument("--sid", default=None, help="会话号（缺省当天；投递那一支就写进这一段）")
+    _more.add_argument("--resume", action="store_true",
+                       help="从检查点续跑（给闲着的那一段用；M 正在跑时不许 resume —— "
+                            "要说话就不带它再发一次，会投进它的收件箱）")
     _more.add_argument("--user-wait-sec", type=float, default=None, help="问用户时等多久（秒）")
     _more.add_argument("--no-ask", action="store_true", help="无人值守档：问用户被确定性拒绝")
     _more.add_argument("--stop-file", default=None, help="停止开关文件")

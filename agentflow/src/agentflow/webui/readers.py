@@ -6545,6 +6545,12 @@ CHAT_LINE_CLIP = 4000
 #: 一次最多给多少条对话线（取最近的这么多条，总数照实报）。
 CHAT_LINES_MAX = 300
 
+#: 交付行引用"这一趟从哪句话开始"时，`agent_run_start.task` 原文最多引多少字。
+#:
+#: 为什么要有界：起跑任务动辄上百字，而这一格回答的是"这是哪一趟"（认得出是哪件活），
+#: 不是把任务全文搬到对话页。全文那一份在「一趟详情」里（`run_view` 的 `task`）。
+CHAT_RUN_TASK_CLIP = 40
+
 #: 对话线的三种身份。业主的对话框要的是"用户 ↔ 主控"的来回，所以前两档是主角；
 #: 其余角色在公共频道/私有频道说的话单列 `team` 一档（它们对看的人有用，但不是"对话"，
 #: 页面默认把它们折起来）。
@@ -6622,6 +6628,147 @@ def _single_run_start_ids(events: Sequence[Mapping[str, Any]]) -> dict[str, str]
         if len(distinct) == 1:
             out[role] = distinct[0]
     return out
+
+
+def _chat_run_task_excerpt(task: Any) -> str:
+    """起跑任务原文 → 交付行里引用的那一小截（首尾空白去掉、压成一行、超长带省略号）。"""
+    text = " ".join(str(task or "").split())
+    if len(text) <= CHAT_RUN_TASK_CLIP:
+        return text
+    return text[:CHAT_RUN_TASK_CLIP] + "…"
+
+
+def _chat_run_pairs(events: Sequence[Mapping[str, Any]]) -> tuple[dict[int, int],
+                                                                 dict[int, dict[str, Any]]]:
+    """一段会话里每一趟的起跑与收工配成对；返回 `(起跑下标 → 第几趟, 收工下标 → 读数)`。
+
+    为什么这里必须能回答"这是哪一趟"：真机 `projects/web-mini-3` 的 `2026-11-25y` 一段
+    里，M 在同一秒落了两条 `agent_run_end`（一条 5 步、一条 0 步），两条的 `role` /
+    `task_id` / `ts` 逐字相同 —— 只按这三格印，读者面前就是两条一模一样的"主控交付"。
+    盘上可用的区分读数只有"这一岗在本段的第几趟"和"这一趟的起跑任务"。
+
+    口径（每一条都能从 `sessions/<sid>.jsonl` 现算）：
+
+    - 趟次：`agent_run_start` 按出现顺序、按 `role` 各数一套，第 1 趟起编；
+      带 `resume_refused` 的那条不计（它一步没跑、也不会有配对的收工行，与
+      :func:`_single_run_start_ids` 同一条理由）。
+    - 配对：`(role, task_id)` 相同、起跑下标在收工下标之前、且还没被用掉的那些起跑里挑。
+      怎么挑：收工行自报 `steps` 时，优先挑"窗口里逐条数出来的步数正好等于它"的那一条
+      —— 真机那两趟的 `steps` 是 5 / 0，而 0 步那条的起跑事件就是空跑那一条，只有按步数
+      核才配得对（两条起跑的 `task_id` 完全相同）。核不上 / 收工行没报步数 ⇒ 按出现顺序取
+      最早一条（同一岗的循环是串行的，先起的那趟先收）。
+    - 同一趟被结算两次（真机 E 那一段：父退场先写一条 `cut_off_by_parent`，真收工
+      之后又写一条）：同键已经没有未用的起跑了 ⇒ 认最近那条起跑，趟次照旧 —— 它确实是
+      同一趟，不是新的一趟。
+    - 配不上就不猜：同键一条起跑都没有（老事件 / 编号缺失）⇒ `seq` / `task` 留空，
+      页面据此说"这一趟的起跑记录不在盘上"，绝不按 role 猜一个。
+    - 步数：收工行自报 `steps` 优先（那是这一趟自己写的账，见
+      `sessions.runs_in_session` 同一段注释）；缺这一格 ⇒ 在 `(起跑, 收工]` 窗口里逐条数
+      `agent_step`（带 `task_id` 的按号过滤，没带的按 role 算 —— 老事件里 `agent_step`
+      没有这一格，2026-11-15 起才有）。
+    - 空跑：`steps == 0` ⇒ `empty=True`。这一格只说"收工那一刻账上是 0 步"，不替它
+      解释为什么（叫停、被父切断、起跑就没动作，终态那句话在正文里）。
+
+    为什么不用 `sessions.runs_in_session` 的配对：那一处的 `_owner_of` 对同号的多条未收
+    趟取"最近开始的那一趟"（为的是让被拒的续跑不吃掉真趟），而空跑那条重复的
+    `agent_run_start` 与真趟同号、且排在真趟的收工行之前 —— 按"最近"配会把 5 步记到
+    空跑那一条上。对话页要的是"这一条交付属于哪一趟"，与"这一趟跑了多少步"必须自洽，
+    所以这里按步数核一遍；核不上的情形退回出现顺序，两条口径都写在上面。
+    """
+    starts: list[dict[str, Any]] = []
+    seq_of_role: dict[str, int] = {}
+    step_by_role: dict[str, list[int]] = {}
+    for i, ev in enumerate(events):
+        kind = str(ev.get("kind") or "")
+        role = str(ev.get("role") or "")
+        if kind == "agent_step":
+            step_by_role.setdefault(role, []).append(i)
+        elif kind == "agent_run_start":
+            if str(ev.get("resume_refused") or ""):
+                continue
+            seq_of_role[role] = seq_of_role.get(role, 0) + 1
+            starts.append({"index": i, "role": role,
+                           "task_id": str(ev.get("task_id") or ""),
+                           "task": str(ev.get("task") or ""),
+                           "seq": seq_of_role[role]})
+    by_key: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for one in starts:
+        by_key.setdefault((one["role"], one["task_id"]), []).append(one)
+
+    def _counted(start_index: int, end_index: int, role: str, task_id: str) -> int:
+        total = 0
+        for j in step_by_role.get(role, ()):
+            if not start_index < j <= end_index:
+                continue
+            step_id = str(events[j].get("task_id") or "")
+            if task_id and step_id and step_id != task_id:
+                continue
+            total += 1
+        return total
+
+    by_end: dict[int, dict[str, Any]] = {}
+    used: set[int] = set()
+    for i, ev in enumerate(events):
+        if str(ev.get("kind") or "") != "agent_run_end":
+            continue
+        role = str(ev.get("role") or "")
+        task_id = str(ev.get("task_id") or "")
+        raw = ev.get("steps")
+        steps = (raw if isinstance(raw, int) and not isinstance(raw, bool) and raw >= 0
+                 else None)
+        pool = [one for one in by_key.get((role, task_id), ())
+                if one["index"] < i and one["index"] not in used]
+        chosen: dict[str, Any] | None = None
+        if steps is not None:
+            for one in pool:
+                if _counted(one["index"], i, role, task_id) == steps:
+                    chosen = one
+                    break
+        if chosen is None and pool:
+            chosen = pool[0]
+        if chosen is not None:
+            used.add(int(chosen["index"]))
+        else:
+            # 同一趟被结算两次（没有新的起跑）：认最近那条起跑，趟次不变。
+            prior = [one for one in by_key.get((role, task_id), ()) if one["index"] < i]
+            chosen = prior[-1] if prior else None
+        if steps is None and chosen is not None:
+            steps = _counted(int(chosen["index"]), i, role, task_id)
+        by_end[i] = {
+            "seq": int(chosen["seq"]) if chosen is not None else None,
+            "steps": steps,
+            "task": _chat_run_task_excerpt(chosen["task"]) if chosen is not None else "",
+            "empty": (steps == 0) if steps is not None else None,
+        }
+    return {int(one["index"]): int(one["seq"]) for one in starts}, by_end
+
+
+def _chat_trip_note(trip: Mapping[str, Any]) -> str:
+    """交付行正文前那一句："这一趟从 … 开始"，以及空跑时那句"不是交付"。
+
+    只印盘上读得出来的东西：趟次与起跑任务原文（截到
+    :data:`CHAT_RUN_TASK_CLIP` 字）、收工行自报的步数。读不出来的那几档照实说"读不出来"，
+    不拿一句听起来完整的话把缺口盖掉。
+
+    为什么不把这句话拼进 `text`：`text` 是那一趟交付的原文（模型写的 final，或用户说的话），
+    往里面掺读侧的一句注解会把"谁说的什么"搅成一段。它是单独一格（`run_note`），
+    页面把它印在正文上面；所以这一句在盘上、在结构里都还认得出来是哪一侧写的。
+    """
+    seq = trip.get("seq")
+    steps = trip.get("steps")
+    task = str(trip.get("task") or "")
+    empty = bool(trip.get("empty"))
+    if seq is None:
+        fact = "这一趟的起跑记录不在盘上 ⇒ 第几趟与起跑任务都读不出来"
+    else:
+        fact = f"第 {seq} 趟"
+        fact += (f"，这一趟从「{task}」开始" if task
+                 else "（起跑任务原文没记）")
+    if steps is not None and not empty:
+        fact += f"，共 {steps} 步"
+    if empty:
+        return f"空跑（这一趟没有落任何一步）。{fact}。下面是叫停时的通报，不是交付。"
+    return f"{fact}。"
 
 
 def _chat_role(event: Mapping[str, Any]) -> tuple[str, str]:
@@ -6707,7 +6854,7 @@ def _chat_line(index: int, event: Mapping[str, Any]) -> dict[str, Any] | None:
     |---|---|---|
     | `agent_run_start`（role=M 且不是被别的角色召唤的） | `user` | 那一句话任务（`resumed_from>0` ⇒ 标"接着上一步说"） |
     | `user_answer` | `user` | 用户的回答 |
-    | `agent_interjection`（`from` = 用户） | `user` | 插话正文 |
+    | `agent_interjection`（`from` = 用户） | `user` | 插话正文（标题只说"插话"，收件人在角色格） |
     | `user_question` | `conductor` | 主控问的话 + 选项 + qid |
     | `agent_message`（主控 → 用户，私聊） | `conductor` | 主控对用户的回答 |
     | `agent_message`（公共频道 `ALL`，谁发的都一样） | `team` | 一段广播（标题写"主控广播 → 全树（public）"） |
@@ -6753,7 +6900,11 @@ def _chat_line(index: int, event: Mapping[str, Any]) -> dict[str, Any] | None:
         # 它没有 `task_id`（那是"谁在跑"，插话不是谁跑的），所以编号那格留空是如实。
         role = str(event.get("to") or role)
         role_source = "to" if role else role_source
-        title = f"插话 → {role}" if role else "插话"
+        # 收件人只写一处：从前标题写「插话 → M」、角色格又写「M（收件人）」，
+        # 渲染出来是「插话 → M  M（收件人）」（真机 `2026-11-25y` 的 i-000001 那行）。
+        # 现在标题只说"这是什么"（插话），收件人由角色格那一格说（页面括注「收件人」）
+        # —— 标题再写一遍就是同一个事实印两次，读者还得自己判断两处指的是不是同一个 M。
+        title = "插话"
         text = str(event.get("body") or "")
         # 插话没有台账号（它不是谁"在跑"），但它有自己的编号 i-NNNNNN：
         # 页面那一格印它，并标清这是"插话编号"而不是台账号（不编一个假台账号）。
@@ -6803,7 +6954,14 @@ def _chat_line(index: int, event: Mapping[str, Any]) -> dict[str, Any] | None:
                             # 判据据此要求"不许悄悄空着不标"）。
                             "task_id_source": "event" if task_id else "missing",
                             "ts": str(event.get("ts") or ""), "title": title,
-                            "text": body, "clipped": clipped}
+                            "text": body, "clipped": clipped,
+                            # 「这是哪一趟」那几格（配对读数见 `_chat_run_pairs`，
+                            # `run_note` 那一句在 `chat_face` 里补）：本函数只有一条事件、
+                            # 判不了，先给"不适用"的默认值；`chat_face` 拿到整段会话后填上。
+                            # `run_seq` 空 ⇒ 不是一趟（插话/提问/留言），或收工行配不上
+                            # 起跑事件（页面说"起跑记录不在盘上"，不猜一个趟次）。
+                            "run_seq": None, "run_steps": None,
+                            "run_task": "", "run_empty": None, "run_note": ""}
     if qid:
         line["qid"] = qid
     if options:
@@ -6846,6 +7004,17 @@ def chat_face(root: str | Path, sid: str = "", *,
     谁"。`conductor` 只收说给用户听的那几条（主控私聊回答 / `ask` 反问 / 收工交付）；
     主控的公共频道广播（`to=ALL`）归 `team` —— 它发给的是树上的人，把它摆在
     "主控对你说的话"那一档等于对读者撒谎。`team` 那一档页面默认折叠。
+
+    趟次那几格（`run_seq` / `run_steps` / `run_task` / `run_empty` / `run_note`）：
+    每条线都带这五格，但只有"起一趟"与"交付"那两类真的填得上（其余是 `None` / 空串，含义是"这条线不属于
+    任何一趟"）。判据与配对口径在 :func:`_chat_run_pairs`：同一段会话里第 N 趟由这一岗
+    的 `agent_run_start` 顺序现数；交付行的正文前还会多一句"这一趟从 … 开始"。
+    为什么必须有它：真机一段会话里 M 在同一秒落了两条 `role` / `task_id` / `ts` 完全相同的
+    `agent_run_end`（一条 5 步、一条 0 步），只按那三格印，页面上就是两条一模一样的
+    "主控交付" —— 读者无法回答"这是哪一趟"。0 步那一趟按 :func:`_chat_trip_note` 的
+    口径标成"空跑（这一趟没有落任何一步）"，标题也换成"空跑"，不许和真交付同形。
+    收工行配不上起跑事件时（老数据 / 编号缺失）这几格留空，`run_note` 说"起跑记录不在盘上"，
+    不按角色猜一个趟次。
     """
     root_p = Path(str(root))
     sessions = [{"sid": str(s.get("sid") or ""),
@@ -6925,6 +7094,39 @@ def chat_face(root: str | Path, sid: str = "", *,
                 continue
             line["task_id"] = one
             line["task_id_source"] = "inherited"
+    # 「这是哪一趟」那几格：交付行必须答得出"哪一趟"，同一秒两条同名交付才分得开
+    # （真机读数：M 在 11:59:46 落了两条 `agent_run_end`，一条 5 步一条 0 步）。
+    # 口径与配对判据全在 `_chat_run_pairs` 里；这里只把读数贴到线上、并给正文加那句话。
+    seq_of_start, trip_of_end = _chat_run_pairs(events)
+    from ..schema import CONDUCTOR_ROLE as _M
+    for line in mapped:
+        index = int(line.get("index") or 0)
+        kind = str(line.get("kind") or "")
+        if kind == "agent_run_start":
+            # 起趟那条线自己也标趟次：读者才能把"起一趟"与"交付"对上（真机那一段的
+            # 第二趟起跑被 `summoned_by=user` 挡在对话之外，只有它自己的交付行现身）。
+            seq = seq_of_start.get(index)
+            if seq is not None:
+                line["run_seq"] = seq
+            continue
+        if kind != "agent_run_end":
+            continue
+        trip = trip_of_end.get(index)
+        if trip is None:
+            continue
+        line["run_seq"] = trip["seq"]
+        line["run_steps"] = trip["steps"]
+        line["run_task"] = trip["task"]
+        line["run_empty"] = trip["empty"]
+        role = str(line.get("role") or "")
+        if trip["empty"]:
+            # 0 步那一趟不是交付：标题明写"空跑"，正文前再说一遍并说明下面那段是叫停时的
+            # 通报。标题与正文都不改的话，一句"没有落任何一步"会被读成一趟真的产出。
+            line["title"] = ("主控空跑" if role == _M else
+                             f"{role} 空跑" if role else "空跑")
+        # 这一句单独成一格（`run_note`），不拼进 `text` —— 后者是交付原文，见
+        # `_chat_trip_note` 的 docstring。
+        line["run_note"] = _chat_trip_note(trip)
     total = len(mapped)
     shown = mapped[-int(lines_max):] if int(lines_max) > 0 else mapped
     if total > len(shown):
@@ -8399,12 +8601,20 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "agent_run_start 有编号 ⇒ 回填）/ missing（拿不准或确实没记，页面显示"
      "「（未记录编号）」，绝不编一个假编号）。`role` 是说话那一方的角色，`role_source` "
      "同一条纪律：event（事件自带）/ from（`agent_message` 只记了 `from`，读侧用它补齐，"
-     "页面括注「承自发件人」）/ missing（两格都没有，页面显示「（未记录角色）」）",
+     "页面括注「承自发件人」）/ missing（两格都没有，页面显示「（未记录角色）」）。"
+     "`run_seq` 是这一条属于本段会话里该角色的第几趟（1 起，见 `_chat_run_pairs`），"
+     "`run_steps` 是这一趟落了几步（收工行自报优先，缺则逐条数），`run_task` 是起跑任务"
+     "原文的前 40 字，`run_empty` 是「这一趟一步都没落」（`run_steps == 0`），`run_note` 是页面印在正文前的那一句（「这一趟从 … 开始」/「空跑…」）—— 五格都只在"
+     "起趟 / 交付那两类线上有值，其余是 null / 空串 / 空句（含义是「这条线不属于任何一趟」）；"
+     "交付行配不上起跑记录时也留 null，页面说「起跑记录不在盘上」而不是猜一个",
      (("index", "number"), ("who", "string"), ("role", "string"), ("kind", "string"),
       ("ts", "string"), ("title", "string"), ("text", "string"),
       ("role_source", "string"),
       ("task_id", "string"), ("task_id_source", "string"),
-      ("clipped", "boolean"), ("qid?", "string"), ("options?", "ChatOption[]"))),
+      ("clipped", "boolean"), ("qid?", "string"), ("options?", "ChatOption[]"),
+      ("run_seq", "number | null"), ("run_steps", "number | null"),
+      ("run_task", "string"), ("run_empty", "boolean | null"),
+      ("run_note", "string"))),
     ("ChatSession",
      "chat_face() 的 sessions[] —— 供对话页挑会话（`sessions.list_sessions` 的四栏）",
      (("sid", "string"), ("last_ts", "string"), ("events", "number"),

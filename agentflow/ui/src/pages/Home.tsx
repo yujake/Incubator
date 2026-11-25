@@ -107,10 +107,17 @@ function Line(props: { line: ChatLine }) {
   const who = l.who === "user" ? "你" : l.who === "conductor" ? "主控" : "团队";
   const cls = l.who === "user" ? "chat-user" : l.who === "conductor" ? "chat-m" : "chat-team";
   return (
-    <div class={`chat-line ${cls}`}>
+    <div class={`chat-line ${cls}${l.run_empty === true ? " chat-empty-run" : ""}`}>
       <div class="readings">
         <b>{who}</b>
         <span class="tri-reason"> {l.title}</span>
+        {/* 这一条属于第几趟（`ChatLine.run_seq` 由 `readers._chat_run_pairs` 现算）：
+            同一秒、同一岗、同一个编号的两条交付（一条 5 步、一条 0 步）只靠角色与编号
+            分不开 —— 页面上必须答得出"这是哪一趟"。不适用于"那一趟"的线（插话 / 提问 /
+            留言 / 配不上起跑事件的收工）是 `null`，这时什么都不印，也不替它猜一个趟次。 */}
+        {l.run_seq === null ? null : (
+          <span class="mono"> 第 {l.run_seq} 趟</span>
+        )}
         {" "}
         <span class="mono">{roleCell(l.role, l.role_source)}</span>
         <span class="tri-reason"> · </span>
@@ -119,6 +126,11 @@ function Line(props: { line: ChatLine }) {
         <span class="mono tri-reason">{l.ts}</span>
         {l.clipped ? <span class="tri-reason">（正文截断过）</span> : null}
       </div>
+      {/* 这一趟的来历（`ChatLine.run_note` 由 `readers._chat_trip_note` 现算）：印在正文
+          前面 —— "第 1 趟，这一趟从「…」开始，共 5 步。" 或空跑那句。它是读侧的一句注解，
+          不是交付原文（原文在下面那个 `chat-body` 里，逐字不动）。非交付 / 配不上起跑
+          事件时是空串，这时什么都不印。 */}
+      {l.run_note === "" ? null : <div class="tri-reason">{l.run_note}</div>}
       <div class="chat-body">{l.text === "" ? "（这一条没有正文）" : l.text}</div>
       {l.options === undefined || l.options.length === 0 ? null : (
         <div class="opts">

@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-24T23:43:32+08:00",
+  "generated_at": "2026-11-25T12:53:06+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -149,10 +149,10 @@
       "path": "src/agentflow/conductor.py",
       "glob": "src/agentflow/conductor.py",
       "category": "auth-audit",
-      "sha256": "fbbbb57a040f2cae0edbe33184682bdba9b4940518ffa71e6141ba70f848d3e8",
-      "authored": "ai-agent",
+      "sha256": "0fb80fd0a079c68c85532435038426be8fb223be2aeca0e83b394ff47a8f7adf",
+      "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "p326（2026-11-23）：M 成文预留 policy + state 的墙钟/预算 returns + wall_clock_reading + url_origin/url_source。登记≠批准，仍需 2 名人类 reviewer 逐行走查",
+      "change_note": "（未提供变更说明：内容 hash 从 fbbbb57a040f 变为 0fb80fd0a079，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

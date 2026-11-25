@@ -389,6 +389,14 @@ h3 {
   overflow: auto;
 }
 
+/* 0 步那一趟不是交付（真机 2026-11-25：同一秒两条同名交付，一条 5 步、一条 0 步 ——
+   `ChatLine.run_empty` 为真时挂上这一档）。一条虚线左边框，读的人一眼看得出它
+   不是一趟真的产出；颜色只借令牌，不写字面色值（见本文件头那条纪律）。 */
+.chat-line.chat-empty-run {
+  border-left: 3px dashed var(--dsw-alias-border-l1);
+  padding-left: var(--sp-2);
+}
+
 /* 名册那一棵树（2026-10-24：业主「名册按树展开，不只是简单按层展开」）。
    一个父一条分支：子挂在自己的 `.roster-kids` 里，缩进与连接线都由那个容器的
    `border-left` 给 —— 于是"谁是谁的子"是从结构上看出来的，不是从层号推出来的。
