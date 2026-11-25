@@ -33,7 +33,7 @@ from . import toolface as _TF
 #: 同一条渲染链（位置仍是 `SECTION_ORDERS["A_SEARCH_STYLE"]`，渲染逐字节不变）。
 from .specs.a import SEARCH_STYLE as _A_SEARCH_STYLE
 from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDERS
-PROMPT_VERSION = "p328"
+PROMPT_VERSION = "p329"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：
@@ -524,7 +524,11 @@ PARENT_STOP_TEXT = """\
   **`blocked` 只管「我停下了」，上报只管「有人知道了」—— 两件事都要做**，
   别把这一档读成"blocked 与上报二选一"（`draft/104` §4.10：这一句原来容易被读反）。
   两条路的共同要求：上报要落盘（会话/板项/问题），没有载体的"我说过了"不算上报；
-  任务列表里那几项照实记 `cannot` + `why`。"""
+  任务列表里那几项照实记 `cannot` + `why`。
+**「难」和「做不了」都不能预判**（它是上面「上报」那一条的前置，不是免试通道）：这两句话是**试过具体路径之后**才成立的结论 ——
+说出它们的时候要带上**试过哪几条路、每条卡在哪**；
+**不许替还没试过的人或环节预先断定「做不了 / 太难 / 不适合」** —— 谁的活谁试，判断权在被派的人手上；
+派活的一侧把这一步派出去，接活的一侧试过之后再判。"""
 # ---------------------------------------------------------------- 循环协议按角色渲染
 #
 # `R6` §2-⑥（施工清单 `draft/63`）的结构性搬移：`LOOP_PROTOCOL` 是所有角色共用的
@@ -2951,6 +2955,85 @@ def _filter_toolchain_facts(role: str, registry: Any, text: str) -> str:
     kept = [ln for ln in str(text).splitlines()
             if "已关闭" in ln or not ln.startswith(_TOOLCHAIN_PATH_PREFIXES)]
     return "\n".join(kept)
+#: 每个角色「出边各自擅长什么」那张表：角色 → (专长名, 一句话专长 ＋ 机制)。
+#:
+#: 2026-11-25（业主逐字）：「能力暗示不是特意写给一个人暗示它的伙伴是专项能力大佬，是任何
+#: 角色都知道它的出边的几个角色是哪方面大佬」。所以这张表是伙伴视角的能力描述，
+#: 不写进任何角色的 `specs/*.py` 政策（那里写"我这一岗怎么做"，不写"别人有多强"）。
+#:
+#: 三条纪律（业主同日给的三条约束）：
+#: 1. 一句一机制：每行末尾那句机制必须能指到对方的实现（报告逐条给 file:line）；
+#: 2. 信心落在"交给它去做"，不落在"它一定做成"：措辞是"它擅长把这类活做到 X"；
+#: 3. 不写任务名（规矩 R6）。
+#:
+#: 出边清单不在这张表里：它由 :func:`out_edge_experts_text` 从
+#: `capabilities.ALLOWED_EDGES` 现算 —— 这张表只回答"这个人擅长什么"，
+#: 多一条边 / 少一条边由边表说了算（判据：`test_prompt_difficulty_is_not_prejudged.py` 的 g）。
+OUT_EDGE_SPECIALTIES: dict[str, tuple[str, str]] = {
+    "A": ("检索与出处回验",
+          "能从冷门处挖到文献，也分得清「没搜到」与「不存在」"
+          "（机制：检索分档 ＋ 引文回验 ＋ 取不到全文时如实记 metadata_only）"),
+    "B": ("命题登记与签",
+          "把命题、关系与手稿收得干净 —— 命题登记是唯一写口，签与正文 sha 对得上"
+          "（机制：命题写口 ＋ 签的读数）"),
+    "C": ("图与台账",
+          "看清图的结构、指出哪条链值得下钻"
+          "（机制：图与台账查询都是确定性读数，不过模型）"),
+    "D": ("方向与缺口",
+          "把一个方向探到底 —— 多轮探索、把缺口写成请求、必要时派 C 取候选路径、派 F 攻坚"
+          "（机制：研究方向台账 ＋ 缺口请求 ＋ 出边）"),
+    "E": ("实验与可复算",
+          "把计算做到可复算的规模"
+          "（机制：experiments 台账带 code_hash 与整数 exit_code，result 三态）"),
+    "F": ("多轮攻坚",
+          "对任意指定方向给出强有力的攻坚成果 —— 每一轮拿上一轮的 best_partial 当种子接着打"
+          "（机制：四键预算 ＋ best_partial 必交）"),
+    "G": ("成文与对应表",
+          "把论证写成可读的论文"
+          "（机制：编译回执钉 tex_sha256 ＋ 论文对应表把断言指到台账）"),
+    "H": ("审校三态",
+          "查出引文与逻辑不一致，只报有落点的真问题"
+          "（机制：审稿清单 ＋ finding 三态）"),
+    "L": ("形式化",
+          "把证明搬进 Lean，并把检查器原话带回来"
+          "（机制：形式化三件 ＋ 检查器桥接）"),
+    "V": ("两态判词",
+          "挑出真毛病 —— 指到步号并给 defect_ref，三转会审之后才发签"
+          "（机制：判词台账 ＋ 签的读数）"),
+}
+
+#: 没有出边的角色读到的那一句。不写「你的下级」：它们没有下级（结构事实，不是缺口）。
+_NO_OUT_EDGE_TEXT = (
+    "你没有出边：你唤不起任何角色 —— 这是结构，不是缺口。"
+    "你的产出交给交办你的人（召唤你的父 / 收你产物的那一侧）。"
+)
+
+
+def out_edge_experts_text(role: str) -> str:
+    """这一岗的出边各自擅长什么（出边清单从 `capabilities.ALLOWED_EDGES` 现算）。
+
+    可见性同一处口径：出边先取 `capabilities.ALLOWED_EDGES[role]`，再过
+    `leanscope.visible_roles`（Lean 关着时 L 不在任何人的出边表里 —— 否则关档那句
+    「不要提 L」会被这一段破掉）。不用 `visible_partners`：M 那一档它给的是
+    "看得到全体"，而这张表要的是"唤得起的"（M 的出边里没有 F / V）。
+    """
+    outs = tuple(sorted(C.ALLOWED_EDGES.get(role) or ()))
+    visible = set(_LEANSCOPE.visible_roles(outs))
+    edges = [r for r in outs if r in visible]
+    if not edges:
+        return "你派活的对象（出边）与它们各自擅长什么：\n- " + _NO_OUT_EDGE_TEXT
+    lines = ["你派活的对象（出边）与它们各自擅长什么" \
+             "（这一张表按能力表现算，不是另一份名单）："]
+    for name in edges:
+        expertise = OUT_EDGE_SPECIALTIES.get(name)
+        if expertise is None:   # 边表加了一个还没有专长描述的角色 —— 如实留痕，不编一句。
+            lines.append(f"- {name}：（这一格还没有专长描述 —— 加边时补上 OUT_EDGE_SPECIALTIES）")
+            continue
+        title, sentence = expertise
+        lines.append(f"- {name}：{title} —— {sentence}")
+    return "\n".join(lines)
+
+
 def role_prompt_registry(role: str, *, registry: Any = None,
                         task: str = "", summoned_by: str = "",
                         task_id: str = "", depth: int = 1,
@@ -3083,6 +3166,12 @@ def role_prompt_registry(role: str, *, registry: Any = None,
     # 那几格跳过"（`provided`）；预设退役之后没有第二个来源，五格直接注册。
     for _name, _order, _text in brief_sections(role):
         reg.section(Section(_name, _order, _text))
+    # 2026-11-25（PROMPT-DIFFICULTY）：紧挨职责 / 边界之后的「出边各自擅长什么」表。
+    # 出边清单从 `capabilities.ALLOWED_EDGES` 现算（`out_edge_experts_text`），
+    # 专长描述住在 `OUT_EDGE_SPECIALTIES`（一句一机制，报告逐条给 file:line）。
+    # 判据：`tests/test_prompt_difficulty_is_not_prejudged.py` 的 g / h / i。
+    reg.section(Section("OUT_EDGE_EXPERTS", SECTION_ORDERS["OUT_EDGE_EXPERTS"],
+                        out_edge_experts_text(role)))
     for section in _numbered_sections("TOOL", tools_lines(role, registry),
                                       SECTION_ORDERS["TOOL_GUIDANCE_BASE"]):
         reg.section(section)

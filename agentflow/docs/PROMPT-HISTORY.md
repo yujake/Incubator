@@ -4016,3 +4016,29 @@ ewtheorem / 论文写作只是推荐）一字未动。
 #:   五、FC-27：`tools/doc_tools.py` 已由 288 按 `d14c8f89…` 登记；本笔没有再动它 ⇒ 不重复登记。
 #:   六、口径：**p328 只冻这一次**；之后不再为渲染面冻版。
 #:   本笔 = p328。
+
+#: p328 → p329（2026-11-25，PROMPT-DIFFICULTY：难点必须派下去 / 禁止预判 / 能力暗示）
+#:   一、先核树：`git status --short` 里本 lane 只动 `specs/*.py`、`agent_prompts.py`、
+#:   `tests/**`、`docs/**`；CLEAN-AUDIT 路的 `webui/readers.py` / `ui/src/**` / `agent_loop.py`
+#:   本笔一个字节都没碰。冻前版本仍是 p328。
+#:   二、驱动面：十一格全漂（共用段 `PARENT_STOP` 加了一句一般化规则，每个角色都渲染它；
+#:   M 另有两处 policy 改动，D / F / E / A / B / V / C / G / H / L 各加一句能力暗示）。
+#:   **以现盘重算为准**（`scripts/recompute_prompt_digests.py --write`，12 处）。
+#:   三、来源：① `specs/m.py` 的窄化暗示改成「可判定是一步的性质，不是整题的准入 /
+#:   优先派能把不确定性降低的角色」，并新增「难点必须派下去」「禁止预判」两条；
+#:   ② `agent_prompts.py` 的共用段 `PARENT_STOP` 加一句「「难」和「做不了」都不能预判」；
+#:   ③ `agent_prompts.py` 新增一段 `OUT_EDGE_EXPERTS`（紧挨职责 / 边界之后）：
+#:   每个角色的出边各自擅长什么，**出边清单从 `capabilities.ALLOWED_EDGES` 现算**、
+#:   专长住在 `OUT_EDGE_SPECIALTIES`（一句一机制；业主 2026-11-25：「任何角色都知道
+#:   它的出边的几个角色是哪方面大佬」）；`promptkit.SECTION_ORDERS` 为此分配 170。
+#:   没有出边的角色（C / V）读到「你没有出边」那一句，不写"下级"。
+#:   四、连带：`PROMPT_VERSION` p328 → p329；`_FROZEN_PROMPT_DIGESTS` 十一格按现值重写；
+#:   `_VOLATILE_FACT_SETS` 追加 p329 一格（count=15、`keys_sha256=21314a39…` 与 p328 同值）；
+#:   `tests/fixtures/prompt_cache_warm.json` 两档各重落（读数见
+#:   `agentflow/temp/promptdiff/REPORT.md`）。
+#:   五、FC-27：本笔只动了 `specs/m.py` 一份声明面（按内容路跑过 `--baseline` 登记；
+#:   登记 ≠ 批准：仍需人逐行走查 + 2 reviewer）。`agent_prompts.py` / `promptkit.py`
+#:   不在 `.noai-paths` 清单里（本笔如实记，没有为了让它"命中"去改清单 —— 改清单等于
+#:   改保护范围）。
+#:   六、口径：**p329 只冻这一次**；之后不再为渲染面冻版。
+#:   本笔 = p329。

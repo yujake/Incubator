@@ -54,6 +54,11 @@ from typing import Any, Callable, Iterable, Mapping
 SECTION_ORDERS: dict[str, int] = {
     "AGENT_IDENTITY": 0,
     "ROLE_BOUNDARY": 100,
+    # 2026-11-25（PROMPT-DIFFICULTY）：出边专长表 —— 紧挨职责 / 边界之后（170：
+    # 在边界 100 与官能 200 之间，brief 自己的 SIGNATURE_ERROR 150 / DELIVERABLE 160 之后）。
+    # 正文从 `capabilities.ALLOWED_EDGES` 现算（`agent_prompts.out_edge_experts_text`），
+    # 不在任何角色声明里抄第二份名单。
+    "OUT_EDGE_EXPERTS": 170,
     "FACULTIES": 200,                # 十项官能（不是工具清册：先说"你有什么"，再说"按键在哪"）
     # `FACULTIES` 按空行切成 5~7 块。组数按角色变动 ⇒ 段名用位置编号而不是语义名，
     # 理由见 `agent_prompts._faculty_block_names`（会撒谎的段名比位置段名坏）。
