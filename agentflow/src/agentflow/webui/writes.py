@@ -996,9 +996,36 @@ def handle_interject(handler: Any, params: Mapping[str, str],
         return done(500, f"没写成：{type(exc).__name__}: {exc}", False)
     if problem:
         return done(400, f"没写成：{problem}", False)
+    # 回执要说清"落到哪一档"：进了主控收件箱 / 主控没在跑（没人会读到）。
+    # 旧回执对这两种都说"主控会在下一步开头读到"—— 主控没在跑时那是假话
+    #（现场 i-000002/i-000003/i-000005 就是这样：只落了会话，没人收）。
+    state = _interjection_inbox_state(root, sid, iid)
+    if state == "no_conductor":
+        return done(409,
+                    f"已落会话（{iid}），但主控现在没在跑 ⇒ 这一条没人会读到。"
+                    "要么先起跑（start），要么等它起来再发；发一条没人收的插话不算投递成功。",
+                    False, ident=iid,
+                    extra={"interjection_id": iid, "sid": sid,
+                           "inbox_state": state})
     return done(200,
-                f"已投递（{iid}）：主控会在下一步开头读到，当前这一步不被打断",
-                True, ident=iid, extra={"interjection_id": iid, "sid": sid})
+                f"已投进主控收件箱（{iid}）：它下一次读收件箱就会看到，当前这一步不被打断",
+                True, ident=iid,
+                extra={"interjection_id": iid, "sid": sid, "inbox_state": state or "unknown"})
+
+
+def _interjection_inbox_state(root: Path, sid: str, iid: str) -> str:
+    """这条插话落到哪一档（读会话里那条事件自己记的 `inbox_state`）。"""
+    from .. import sessions as SS
+
+    try:
+        events, _problem = SS.read_session(root, sid=sid)
+    except Exception:  # noqa: BLE001 - 读不成就是"没查成"，交给回执如实说
+        return ""
+    for event in reversed(events):
+        if (event.get("kind") == "agent_interjection"
+                and str(event.get("interjection_id") or "") == iid):
+            return str(event.get("inbox_state") or "")
+    return ""
 
 
 #: 两条"说话"的端点在下面才定义（它们的正文紧邻本段之上）⇒ 注册放在这里，

@@ -1888,6 +1888,9 @@ def send_interjection(session_root: Path, *, sender: str, subject: str, body: st
         payload["inbox_item_id"] = inbox
         payload["inbox_state"] = "delivered"
         failure = ""
+        # 送达语义仍在会话事件那一侧（下一步开头单列【插话】段，E7 判据钉着它，
+        # 还带 `changed_action` 读数）；收件箱那一条是**送达收据**，不重复正文。
+        # 所以这里**不**标 seen：标了就等于把插话从"未读"里摘掉，模型那一段就没了。
     else:
         payload["inbox_state"] = ("no_conductor" if "没有正在跑的主控" in inbox_problem
                                   else "failed")
@@ -1927,9 +1930,14 @@ def _deliver_interjection_to_inbox(root: Path, *, subject: str, body: str,
         cond = Conductor(store)
         item_id = cond.open_item(
             kind="message", role=S.CONDUCTOR_ROLE, expects="ack", action="message",
-            summary=f"用户插话：{subject or '（无主题）'}", called_by=str(U.USER),
+            summary=f"用户插话 {iid}：{subject or '（无主题）'}", called_by=str(U.USER),
             parent_task_id=owner, input_key=f"message@{U.USER}:{iid}->{owner}")
-        cond.set_item_detail(item_id, (str(subject) + "\n" + str(body)).strip()[:400])
+        # 收据不抄正文：正文的唯一一份在会话事件里（下一步开头那段【插话】）。
+        # 两边都写全文 ⇒ 同一句话在提示词里出现两遍，模型会当成两条不同的指示。
+        cond.set_item_detail(
+            item_id,
+            (f"这一条的正文在会话事件 {iid} 里（本趟下一步开头会单列【插话】原样念到）。"
+             "收件箱这条是送达收据：读到即 ack，别把它当第二份指示。"))
     except Exception as exc:  # noqa: BLE001 - 开板项失败要如实说，不许当"已送达"
         return "", f"{type(exc).__name__}: {exc}"
     return item_id, ""

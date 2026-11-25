@@ -67,6 +67,10 @@ function idCell(taskId: string, source: string): string {
   if (source === "inherited") {
     return taskId === "" ? "（未记录编号）" : `${taskId}（承自本趟起跑）`;
   }
+  if (source === "interjection") {
+    // 插话没有台账号，但它有自己的编号：印它，并标清这不是台账号。
+    return taskId === "" ? "（未记录编号）" : `${taskId}（插话编号）`;
+  }
   return "（未记录编号）";
 }
 
@@ -83,6 +87,10 @@ function roleCell(role: string, source: string): string {
   }
   if (source === "from") {
     return role === "" ? "（未记录角色）" : `${role}（承自发件人）`;
+  }
+  if (source === "to") {
+    // 插话是"用户对主控说的话"：角色那一格是**收件人**，不是说话人。
+    return role === "" ? "（未记录角色）" : `${role}（收件人）`;
   }
   return "（未记录角色）";
 }

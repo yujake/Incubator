@@ -6755,6 +6755,10 @@ def _chat_line(index: int, event: Mapping[str, Any]) -> dict[str, Any] | None:
         role_source = "to" if role else role_source
         title = f"插话 → {role}" if role else "插话"
         text = str(event.get("body") or "")
+        # 插话没有台账号（它不是谁"在跑"），但它有自己的编号 i-NNNNNN：
+        # 页面那一格印它，并标清这是"插话编号"而不是台账号（不编一个假台账号）。
+        if str(event.get("interjection_id") or ""):
+            task_id_override = str(event.get("interjection_id"))
     elif kind == U.ASK_KIND:
         who = "conductor"
         qid = str(event.get("qid") or "")
@@ -6784,6 +6788,8 @@ def _chat_line(index: int, event: Mapping[str, Any]) -> dict[str, Any] | None:
     # 的事 —— 它要看整段会话才判得准，而本函数的输入只有一条事件。于是直接调本函数的人
     # 永远读不到 `inherited`；要拿回填后的读数就调 `chat_face`（见 `_single_run_start_ids`）。
     task_id = str(event.get("task_id") or event.get("from_task_id") or "")
+    if kind == "agent_interjection":
+        task_id = str(event.get("interjection_id") or "")
     line: dict[str, Any] = {"index": index, "who": who, "role": role, "kind": kind,
                             # 角色那一格的来路（见 `_chat_role`）：`event`（事件自带
                             # `role`）/ `from`（`agent_message` 只有 `from`，读侧用它补）/
