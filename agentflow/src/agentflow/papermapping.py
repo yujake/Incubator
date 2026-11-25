@@ -261,6 +261,7 @@ from . import proofloc as PL
 from . import numericproof as NP
 from . import numerictheorem as NT
 from . import schema as S
+from . import textutil as T
 from . import verifications as V
 
 
@@ -452,6 +453,31 @@ PROOF_SOURCE_FIELD = "proof_source"
 PROOF_SOURCE_OWN = "own"
 PROOF_SOURCE_CITATION = "citation"
 
+#: ---- 被引实验行（2026-11-25，MAPPING-COMPLETE） ------------------------------------
+#:
+#: 论文里写到的 `exp:NNNNNN` 也必须能在表里指到它自己的程序与读数。它没有对应的
+#: 正文环境（论文往往在附录段落里引它），所以这一行的 `env_no` 记 :data:`EXPERIMENT_ENV_NO`
+#: —— 0 = 被引、未印成环境。正文里真印成 `experiment` 环境的行仍按环境号 ≥ 1 走
+#: 原来的双向孤儿判据；两种行不会互相顶替（同一实验只能有一行）。
+EXPERIMENT_ID_PREFIX = "exp:"
+EXPERIMENT_ENV_NO = 0
+#: 实验行多出来的那几格（只进 `MAPPING.json`；由 `fill_experiment_cells` 从台账现读现填，
+#: G 不写 —— 与索引四格同一条纪律：写侧填，读侧核）。
+EXPERIMENT_LOGS_FIELD = "experiment_logs"
+EXPERIMENT_CODE_HASH_FIELD = "experiment_code_hash"
+EXPERIMENT_RESULT_FIELD = "experiment_result"
+EXPERIMENT_NEGATION_FIELD = "experiment_negation_kind"
+EXPERIMENT_PARAMS_FIELD = "experiment_params"
+EXPERIMENT_EXIT_FIELD = "experiment_exit_code"
+EXPERIMENT_ROW_FIELDS: tuple[str, ...] = (
+    EXPERIMENT_LOGS_FIELD, EXPERIMENT_CODE_HASH_FIELD, EXPERIMENT_RESULT_FIELD,
+    EXPERIMENT_NEGATION_FIELD, EXPERIMENT_PARAMS_FIELD, EXPERIMENT_EXIT_FIELD,
+)
+#: 台账那一格在实验行上的写法（实验表没有 `kind`、也不走 V 的审校链）。
+EXPERIMENT_LEDGER_CELL = "不适用（实验行）"
+#: 参数摘要为空时怎么写（`experiments.params` 这一列在历史行上常见是 `{}`）。
+EXPERIMENT_PARAMS_EMPTY = "未记录（台账 params 为空）"
+
 
 def optimized_cell(ledger_row: Mapping[str, Any] | None, proof_no: Any) -> str:
     """这一份证明洗过没有（优化态那一格的三档 + 读不到那一档）。
@@ -531,6 +557,18 @@ CITATION_KINDS: tuple[str, ...] = (
     "mapping_citation_loc_missing", "mapping_citation_file_missing",
 )
 
+#: 证据对象那两条（2026-11-25，MAPPING-COMPLETE）：这一行在表上声称的「证明稿 / 实验文件」
+#: 与台账那一行对不上、或盘上取不到。
+#:
+#: 它们与 `MAPPING_KINDS` 分开一组，是因为那四类是业主点名的「表与正文对不对得上」，
+#: 而这两条问的是「表与台账/盘上那份对象对不对得上」—— 后者此前只被
+#: `doc.mapping_cells`（工具面）与 B 的入库闸调过，`mapping_reading` 这一道门没调。
+#: 结果就是真机 sylow-4 那种形态：四行「已签」的 `evidence_path` 全空、或者删掉盘上那份稿，
+#: 表照样 `pass`。这一组就是那个缺口的落点。
+PROOF_FILE_MISSING = "mapping_proof_file_missing"
+EXPERIMENT_FILE_MISSING = "mapping_experiment_file_missing"
+EVIDENCE_KINDS: tuple[str, ...] = (PROOF_FILE_MISSING, EXPERIMENT_FILE_MISSING)
+
 #: 人读那一份的问题类别（同一张表的第二个落点）。
 #:
 #: `md_missing`：`MAPPING.md` 不在包里；
@@ -580,6 +618,7 @@ NUMERIC_KINDS: tuple[str, ...] = NT.NUMERIC_KINDS
 #: 只收拦门的那几组：`LEAN_WARN_KINDS` 不进这里（它在 `warnings` 里，不改 `state`）。
 ALL_PROBLEM_KINDS: tuple[str, ...] = (
     MAPPING_KINDS + CITATION_KINDS + MD_KINDS + PAPER_KINDS + LEAN_KINDS + NUMERIC_KINDS
+    + EVIDENCE_KINDS
 )
 
 #: 三态取值。
@@ -797,6 +836,18 @@ class Row:
     optimized: str = ""
     #: 这一份证明的来源（own / citation / 空）：收工门按来源分档的同一格口径。
     proof_source: str = ""
+    #: ---- 被引实验行的那几格（2026-11-25，MAPPING-COMPLETE） ----------------------
+    #:
+    #: 只在 `ledger_id` 是 `exp:NNNNNN` 的行上有值（`env_no=0` 表示"被引、未印成环境"）。
+    #: 全部由 `fill_experiment_cells` 从 `experiments` 那一行现读现填：G 不写，写侧也不猜。
+    #: `file` 就是 `experiments.code_path`（一格一源，不再另立 `experiment_code`）；
+    #: 日志逐份列在 `experiment_logs`（`artifact_paths` 原样，不许只取第一份）。
+    experiment_logs: tuple[str, ...] = ()
+    experiment_code_hash: str = ""
+    experiment_result: str = ""
+    experiment_negation_kind: str = ""
+    experiment_params: str = ""
+    experiment_exit_code: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """写回 json 的形状（字段顺序固定，diff 才读得懂）。"""
@@ -835,6 +886,20 @@ class Row:
             out[NP.INDEX_SHA_FIELD] = self.evidence_sha256
         if self.v_signature is not None:
             out[NP.INDEX_SIGN_FIELD] = dict(self.v_signature)
+        # 被引实验行那几格（2026-11-25）：只在该行有值时写出来 —— 旧表 / 定理行不受影响，
+        # 追加在末尾保证既有键的位置一个都不动（读侧按位置读的那几处不会错位）。
+        if self.experiment_logs:
+            out[EXPERIMENT_LOGS_FIELD] = [str(p) for p in self.experiment_logs]
+        if self.experiment_code_hash:
+            out[EXPERIMENT_CODE_HASH_FIELD] = self.experiment_code_hash
+        if self.experiment_result:
+            out[EXPERIMENT_RESULT_FIELD] = self.experiment_result
+        if self.experiment_negation_kind:
+            out[EXPERIMENT_NEGATION_FIELD] = self.experiment_negation_kind
+        if self.experiment_params:
+            out[EXPERIMENT_PARAMS_FIELD] = self.experiment_params
+        if self.experiment_exit_code is not None:
+            out[EXPERIMENT_EXIT_FIELD] = int(self.experiment_exit_code)
         return out
 
 
@@ -870,6 +935,31 @@ class _RowCheck:
 
     def add(self, kind: str, detail: str, *, label: str = "", where: str = "") -> None:
         self.problems.append(_problem(kind, detail, label=label, where=where))
+
+
+def is_experiment_row(row: Row) -> bool:
+    """这一行是不是「被引实验行」（`ledger_id` 指 `experiments` 表）。
+
+    只按 `ledger_id` 的前缀判，与 `resolve_ledger_id` 认的台账表同一条口径
+    （`schema.CITATION_PREFIXES["exp"] == "experiments"`）；不另立一份"实验行"词表。
+    """
+    return str(getattr(row, "ledger_id", "") or "").strip().startswith(EXPERIMENT_ID_PREFIX)
+
+
+def experiment_id_of_row(row: Row) -> str:
+    """这一行的实验号（`exp:000003` ⇒ `"000003"`）；不是实验行 ⇒ 空串。"""
+    if not is_experiment_row(row):
+        return ""
+    return str(row.ledger_id).strip()[len(EXPERIMENT_ID_PREFIX):].split("#", 1)[0].strip()
+
+
+def is_cited_only_row(row: Row) -> bool:
+    """这一行是不是「被引、未印成环境」（`env_no == EXPERIMENT_ENV_NO`）。
+
+    只有实验行允许 `env_no=0`（由 `parse_rows` 保证）：定理类环境必须真的印在正文里，
+    「被引未印」这件事对它们不成立。
+    """
+    return is_experiment_row(row) and int(row.env_no) == EXPERIMENT_ENV_NO
 
 
 def package_dir(project_root: str | Path) -> Path:
@@ -1343,6 +1433,133 @@ def read_ledger_tables(workspace_root: str | Path) -> dict[str, list[Mapping[str
     return out
 
 
+#: 论文注记里认的引用前缀（`stmt:` / `exp:` / `lit:` / `rel:`）—— 认不认仍由
+#: `schema.CITATION_PREFIXES` 说了算，这里只是"我们要看的这几个"的显式收窄。
+PAPER_CITATION_PREFIXES: tuple[str, ...] = ("stmt", "exp", "lit", "rel")
+
+#: LaTeX 里「标签名 / 交叉引用名」的那几个命令：`\label{exp:scan}` 里的 `exp:scan` 是
+#: 标签名，不是"论文引了 exp:scan 这条实验"。扫引用之前先把这些命令的花括号参数抹掉；
+#: `\texttt{exp:000003}` 不抹 —— 那才是正文里写出来的引用。`%` 注释不抹：
+#: `% evidence: stmt:000034` 这一行是论文源里真实存在的注记（demo 就是靠它登记命题）。
+_TEX_LABEL_COMMAND_RE = re.compile(
+    r"\\(?:label|ref|eqref|autoref|cref|Cref|pageref|nameref)\*?\s*\{[^{}]*\}")
+
+#: 内联进正文的那一段附录（`APPENDIX_BEGIN … APPENDIX_END`）：它不是论文正文，
+#: 是 `MAPPING.json` 的渲染产物 —— 扫引用时整段抹掉（见 `citation_text_of_tex`）。
+_APPENDIX_BLOCK_RE = re.compile(
+    re.escape(APPENDIX_BEGIN) + r".*?" + re.escape(APPENDIX_END), re.S)
+
+
+def citation_text_of_tex(tex: Any) -> str:
+    """正文源里该当引用读的那一段。
+
+    抹掉两样东西，理由各一条：
+
+    - 附录块（`APPENDIX_BEGIN … APPENDIX_END`）：它是 `MAPPING.json` 的渲染产物，里面
+      既有每行的 `MAPPING-ROW` 注释（`exp:scan` 是 label，不是引用），也有那句
+      `exp:NNNNNN` 占位（它说的是"格式"，不是"这一篇引了 NNNNNN"）。不抹掉，
+      一张内联附录的表会把自己表里的 label 读成论文引用；
+    - `\\label{}` / `\\ref{}` 一类命令的参数：标签名不是引用记号。
+    """
+    text = _APPENDIX_BLOCK_RE.sub(" ", str(tex or ""))
+    return _TEX_LABEL_COMMAND_RE.sub(" ", text)
+
+
+def read_document_rows(workspace_root: str | Path) -> list[Mapping[str, Any]]:
+    """`<工作区>/data/documents.json` 的行（按 `(mtime_ns, size)` 缓存，与三张台账同一处）。
+
+    为什么单开一条：`LEDGER_TABLES` 那三张是 `ledger_id` 能指的表（`stmt` / `exp` / `rel`），
+    `documents` 不在其中；但「论文里写了哪些 `stmt:` / `exp:`」只在那张表的 `claims[].citations`
+    里。读不出来的处置与 `read_ledger_tables` 相同：返回空表，由"引用的东西表里没有"报出来
+    （空表不等于"这篇论文没引任何东西"，那由 `mapping_reading` 的 citations 读数说）。
+    """
+    name = str((S.TABLES.get("documents") or {}).get("file") or "")
+    return _ledger_file_rows(Path(workspace_root) / "data" / name) if name else []
+
+
+def paper_documents(rows: Iterable[Mapping[str, Any]] | None) -> list[Mapping[str, Any]]:
+    """`documents` 里 kind=paper 的那几行（多份修订 / 多篇时全部返回，由调用方并集读）。"""
+    return [row for row in (rows or ()) if isinstance(row, Mapping)
+            and str(row.get("kind") or "").strip() == "paper"]
+
+
+def read_literature_rows(workspace_root: str | Path) -> list[Mapping[str, Any]]:
+    """`<工作区>/data/literature.json` 的行（`lit:` 引用能不能解析到一条文献行的唯一来源）。"""
+    name = str((S.TABLES.get("literature") or {}).get("file") or "")
+    return _ledger_file_rows(Path(workspace_root) / "data" / name) if name else []
+
+
+def citations_of_documents(rows: Iterable[Mapping[str, Any]] | None) -> list[dict[str, str]]:
+    """论文注记里声明的全部引用（`[{"raw", "prefix", "code", "source"}]`，按出现次序去重）。
+
+    只读 `claims[].citations`，不读别的键：`doc.build_document` 要求每条 claim 至少一条
+    引用，于是这一格就是"论文自己声明它写了哪些号"的正本。解析走
+    `textutil.citation_ref_parts`（`#锚点` 与 `stmt:000034#p2` 都按同一个号算一次）。
+    """
+    out: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for row in rows or ():
+        if not isinstance(row, Mapping):
+            continue
+        doc_id = str(row.get("doc_id") or "")
+        for claim in row.get("claims") or ():
+            if not isinstance(claim, Mapping):
+                continue
+            for raw in claim.get("citations") or ():
+                prefix, code = T.citation_ref_parts(raw)
+                if prefix not in PAPER_CITATION_PREFIXES or not code:
+                    continue
+                if (prefix, code) in seen:
+                    continue
+                seen.add((prefix, code))
+                out.append({"raw": str(raw), "prefix": prefix, "code": code,
+                            "source": f"documents#{doc_id}" if doc_id else "documents"})
+    return out
+
+
+def paper_citations(project_root: str | Path, *,
+                    workspace_root: str | Path | None = None,
+                    tex: str | None = None) -> list[dict[str, str]]:
+    """论文写到的全部 `stmt:` / `exp:` / `lit:` / `rel:`（两处取并集，按出现次序去重）。
+
+    两处来源，缺一不可：
+
+    - 正文源：`main.tex`（以及它 `\\input` 进来的分节）的原文，用
+      `textutil.find_citations` 扫 —— 论文在正文/注释里真写了什么，这是唯一能回答的地方；
+    - 注记：`documents.claims[].citations` —— `doc.build_document` 要求每条 claim
+      至少一条引用，于是它记的是"论文自己声明写了哪些号"。
+
+    为什么取并集而不是二选一：只读注记，会漏掉"正文写了、claim 没记"的号（那正是要抓的
+    "表里不全"）；只读正文，会漏掉注释掉的/结构化注记里的号（那同样是论文侧的事实）。
+    并集只多不少，而"多"的那一侧由 `_experiment_citation_problems` 的双向判据管
+    （表里没有 ⇒ 红；表里有而两处都没写 ⇒ 红）。
+    """
+    workspace = Path(workspace_root) if workspace_root is not None else Path(project_root)
+    out: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+
+    def take(prefix: str, code: str, raw: str, source: str) -> None:
+        if prefix not in PAPER_CITATION_PREFIXES or not code:
+            return
+        if (prefix, code) in seen:
+            return
+        seen.add((prefix, code))
+        out.append({"raw": raw, "prefix": prefix, "code": code, "source": source})
+
+    for item in citations_of_documents(paper_documents(read_document_rows(workspace))):
+        take(item["prefix"], item["code"], item["raw"], item["source"])
+    text = tex
+    if text is None:
+        tex_path = package_dir(project_root) / PC.TEX_NAME
+        try:
+            text = tex_path.read_text(encoding="utf-8") if tex_path.is_file() else ""
+        except OSError:
+            text = ""
+    for got in T.find_citations(citation_text_of_tex(text), prefixes=PAPER_CITATION_PREFIXES):
+        take(got["prefix"], got["code"], got["raw"], "paper source")
+    return out
+
+
 def ledger_ids(ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None,
                table: str) -> set[str]:
     """某张台账表里已有的全部代号（按 `schema.TABLES` 的 `id_field` 取列）。"""
@@ -1603,8 +1820,18 @@ def reviewed_cell(ledger_row: Mapping[str, Any] | None, proof_no: Any, *,
 
 
 def ledger_cells(ledger_row: Mapping[str, Any] | None, proof_no: Any, *,
-                 review_ledger: str) -> dict[str, str]:
-    """一行的台账格（ledger_kind / reviewed / optimized / proof_source）。"""
+                 review_ledger: str, table: str = "statements") -> dict[str, str]:
+    """一行的台账格（ledger_kind / reviewed / optimized / proof_source）。
+
+    `table` 是这一行的 `ledger_id` 解析到哪张台账表：`experiments` 那几行没有 `kind`、
+    也不走 V 的审校链 ⇒ 四格统一记 :data:`EXPERIMENT_LEDGER_CELL`（"不适用"），
+    不折成「未读到」（那说的是"这一格没查成"，而实验行这一格本来就没有）。
+    """
+    if str(table or "") == "experiments":
+        return {LEDGER_KIND_FIELD: EXPERIMENT_LEDGER_CELL,
+                REVIEWED_FIELD: EXPERIMENT_LEDGER_CELL,
+                OPTIMIZED_FIELD: EXPERIMENT_LEDGER_CELL,
+                PROOF_SOURCE_FIELD: EXPERIMENT_LEDGER_CELL}
     return {LEDGER_KIND_FIELD: ledger_kind_cell(ledger_row),
             REVIEWED_FIELD: reviewed_cell(ledger_row, proof_no,
                                           review_ledger=review_ledger),
@@ -1662,7 +1889,8 @@ def fill_ledger_cells(ledger_root: str | Path,
         target = (ledger_row(known, str(resolved["table"]), str(resolved["row_id"]))
                   if resolved["ok"] else None)
         cells = ledger_cells(target, row.proof_no,
-                             review_ledger=_review_ledger_of(resolved, states))
+                             review_ledger=_review_ledger_of(resolved, states),
+                             table=str(resolved["table"]) if resolved["ok"] else "statements")
         out.append(replace(row, ledger_kind=cells[LEDGER_KIND_FIELD],
                            reviewed=cells[REVIEWED_FIELD],
                            optimized=cells[OPTIMIZED_FIELD],
@@ -1812,6 +2040,182 @@ def fill_evidence_cells(ledger_root: str | Path,
                            evidence_sha256=str(cells[NP.INDEX_SHA_FIELD]),
                            v_signature=dict(cells[NP.INDEX_SIGN_FIELD])))
     return out
+
+
+def _params_summary(params: Any, observations: Any) -> str:
+    """实验行的参数摘要（三态，不编造）。
+
+    - `params` 非空 ⇒ 它的规范化 JSON（键排序，重跑两次逐字相同）；
+    - `params` 空 ⇒ `未记录（台账 params 为空）`，并把 `observations.strategy` 那一句
+      附在后面：那是台账里真实存在的"这一条按什么策略跑的"，不是替 `params` 编一个值；
+    - 连 strategy 都没有 ⇒ 只剩"未记录"。
+    """
+    if isinstance(params, Mapping) and params:
+        return json.dumps(dict(params), ensure_ascii=False, sort_keys=True)
+    strategy = ""
+    if isinstance(observations, Mapping):
+        strategy = " ".join(str(observations.get("strategy") or "").split())
+    if strategy:
+        return f"{EXPERIMENT_PARAMS_EMPTY}；strategy：{strategy}"
+    return EXPERIMENT_PARAMS_EMPTY
+
+
+def _repo_rel_state(workspace_root: str | Path, rel: Any) -> dict[str, Any]:
+    """仓库根相对的一条路径在盘上的状态（`present` / `missing` / `empty` / `outside`）。
+
+    解析器只有一处：`numericproof._resolve_under`（索引四格解析用的同一把尺），这里
+    只补"存在 / 非空"两档，不另写一套路径规则（绝对路径、`..`、越界都按它拒）。
+    """
+    raw = NP.norm_rel(rel)
+    out: dict[str, Any] = {"state": "outside", "file": raw, "abs": "", "size": 0, "reason": ""}
+    target, why = NP._resolve_under(workspace_root, raw)
+    if target is None:
+        out["reason"] = why
+        return out
+    out["abs"] = str(target)
+    if not target.is_file():
+        out["state"] = "missing"
+        out["reason"] = f"盘上没有这份文件：{raw}"
+        return out
+    try:
+        size = int(target.stat().st_size)
+    except OSError as exc:
+        out["state"] = "missing"
+        out["reason"] = f"{raw} 读不出来（{type(exc).__name__}: {exc}）"
+        return out
+    out["size"] = size
+    if size <= 0:
+        out["state"] = "empty"
+        out["reason"] = f"这份文件是空的：{raw}（空文件不等于「这一条跑过」）"
+        return out
+    out["state"] = "present"
+    return out
+
+
+def experiment_cells_for_row(experiment: Mapping[str, Any] | None) -> dict[str, Any]:
+    """一条被引实验行该填的格（空表 = 台账里取不到行；纯读、不猜）。
+
+    每一格的来源都只有一处，全部是 `experiments` 那一行的原值（不拼字符串、不改写）：
+
+    | 格 | 台账列 |
+    |---|---|
+    | `file` | `code_path`（程序，仓库根相对；与数值定理行 `file` 同一坐标系） |
+    | `experiment_logs` | `artifact_paths`（原样逐份列，不取第一份了事） |
+    | `experiment_code_hash` | `code_hash`（`verify_tools.code_hash` = sha256 前 16 位） |
+    | `experiment_result` | `result`（supports / refutes / inconclusive） |
+    | `experiment_negation_kind` | `negation_kind` |
+    | `experiment_params` | `params`（空则"未记录 + strategy"，见 `_params_summary`） |
+    | `experiment_exit_code` | `exit_code` |
+    """
+    if not isinstance(experiment, Mapping):
+        return {}
+    code = NP.norm_rel(experiment.get("code_path"))
+    if not code:
+        return {}
+    logs: list[str] = []
+    for raw in experiment.get("artifact_paths") or ():
+        rel = NP.norm_rel(raw)
+        if rel and rel not in logs:
+            logs.append(rel)
+    exit_code = experiment.get("exit_code")
+    return {
+        "file": code,
+        EXPERIMENT_LOGS_FIELD: tuple(logs),
+        EXPERIMENT_CODE_HASH_FIELD: str(experiment.get("code_hash") or "").strip(),
+        EXPERIMENT_RESULT_FIELD: str(experiment.get("result") or "").strip(),
+        EXPERIMENT_NEGATION_FIELD: str(experiment.get("negation_kind") or "").strip(),
+        EXPERIMENT_PARAMS_FIELD: _params_summary(experiment.get("params"),
+                                                 experiment.get("observations")),
+        EXPERIMENT_EXIT_FIELD: (int(exit_code) if isinstance(exit_code, int)
+                                and not isinstance(exit_code, bool) else None),
+    }
+
+
+def fill_experiment_cells(ledger_root: str | Path,
+                          rows: Iterable[Row], *,
+                          ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None = None
+                          ) -> list[Row]:
+    """把被引实验行的那几格按台账现读现填（纯读、不改盘；`write_mapping` 的第二填充口）。
+
+    只填「被引、未印成环境」的行（`env_no == EXPERIMENT_ENV_NO`）：真印成 `experiment`
+    环境的行，`file` 是论文包内那一份正文（由 G 给、由 `_row_checks` 按包内判），
+    这里不替它改指程序。三态：台账里没有这一行 / 它没有 `code_path` ⇒ 保持空，
+    由读侧当缺口报（空着绝不被读成「这一条有程序」）。
+    """
+    known = ledger if ledger is not None else read_ledger_tables(ledger_root)
+    out: list[Row] = []
+    for row in rows:
+        if not is_cited_only_row(row):
+            out.append(row)
+            continue
+        resolved = resolve_ledger_id(row.ledger_id, known)
+        if not resolved["ok"] or str(resolved.get("table") or "") != "experiments":
+            out.append(row)
+            continue
+        cells = experiment_cells_for_row(ledger_row(known, "experiments",
+                                                    str(resolved["row_id"])))
+        if not cells:
+            out.append(row)
+            continue
+        out.append(replace(row,
+                           file=str(cells["file"]),
+                           experiment_logs=tuple(cells[EXPERIMENT_LOGS_FIELD]),
+                           experiment_code_hash=str(cells[EXPERIMENT_CODE_HASH_FIELD]),
+                           experiment_result=str(cells[EXPERIMENT_RESULT_FIELD]),
+                           experiment_negation_kind=str(cells[EXPERIMENT_NEGATION_FIELD]),
+                           experiment_params=str(cells[EXPERIMENT_PARAMS_FIELD]),
+                           experiment_exit_code=cells[EXPERIMENT_EXIT_FIELD]))
+    return out
+
+
+def synthesize_experiment_rows(project_root: str | Path, rows: Iterable[Row], *,
+                               workspace_root: str | Path | None = None,
+                               tex: str | None = None) -> list[Row]:
+    """把论文写到、而表里还没有的 `exp:NNNNNN` 补成行（幂等；只有 `write_package` 调它）。
+
+    业主 2026-11-25：「论文包里的 MAPPING 信息还是不全，需要从命题台账读到论文中写的
+    stmt 的证明稿的具体文件名、experiment 的具体文件名。」这条决定实验行由框架从
+    论文注记 + 台账现读现造，G 不写、也不许手抄：`exp:` 号只可能来自论文自己写的引用，
+    文件只可能来自 `experiments` 那一行。
+
+    幂等：`present` 按实验号去重，同一批 `rows` 连跑两次得到的行集合与字段逐字相同；
+    已经由 G（或上一次输出）带进来的实验行不重复造，也不改它的 `env_no`。
+    台账里没有那条实验的引用不造行（没有文件可指的"行"只会是空壳）；那一档由
+    `_experiment_citation_problems` 报"论文引了、台账里没有这条实验"。
+    """
+    workspace = Path(workspace_root) if workspace_root is not None else Path(project_root)
+    items = list(rows)
+    # 先问一句"这一趟有论文登记行吗"：`doc.build_document` 是成文四步的第 ⓪ 步，
+    # 所以真论文一定有 `documents(kind="paper")` 那一行。没有它时（判据夹具 / 半成品）
+    # 不合成：此时"论文引了哪些 exp"只有正文源一处可读，合成出来的行会把夹具的
+    # 行数悄悄改掉（`test_mapping_three_known_gaps` 的 `gate["rows"] == 1` 就是这一档）。
+    # 有登记行时按并集造（注记 ∪ 正文），两处都是论文自己写的。
+    if not paper_documents(read_document_rows(workspace)):
+        return items
+    present = {experiment_id_of_row(row) for row in items if is_experiment_row(row)}
+    known = read_ledger_tables(workspace)
+    known_ids = {str(row.get("experiment_id") or "").strip()
+                 for row in known.get("experiments") or () if isinstance(row, Mapping)}
+    extra: list[Row] = []
+    for item in paper_citations(project_root, workspace_root=workspace, tex=tex):
+        if item["prefix"] != "exp":
+            continue
+        eid = str(item["code"]).strip()
+        if not eid or eid in present or eid not in known_ids:
+            continue
+        target = ledger_row(known, "experiments", eid)
+        cells = experiment_cells_for_row(target)
+        if not cells:
+            # 台账那一行没有 `code_path` ⇒ 这一行即使造出来也没有 `file` 可填，
+            # 而 `file` 是每行必填 —— 造出来只会让自己的表读不回来（parse 阶段
+            # 报"缺必填字段"并把 md 一起拖成 drift）。这一档留给读侧报
+            # "论文引了 exp:X、表里没有行"，并点明台账没有程序。
+            continue
+        present.add(eid)
+        extra.append(Row(kind="experiment", label=f"{EXPERIMENT_ID_PREFIX}{eid}",
+                         env_no=EXPERIMENT_ENV_NO,
+                         ledger_id=f"{EXPERIMENT_ID_PREFIX}{eid}", proof_no=1, file=""))
+    return items + extra
 
 
 def file_state(package_root: str | Path, rel: Any) -> dict[str, Any]:
@@ -2483,11 +2887,25 @@ def parse_rows(payload: Any) -> tuple[list[Row], list[dict[str, Any]]]:
                 label=str(item.get("label") or "")))
             continue
         label = str(item.get("label") or "").strip()
-        env_no = _int_or_none(item.get("env_no"))
+        raw_env_no = item.get("env_no")
+        env_no = _int_or_none(raw_env_no)
+        # `env_no = 0` 只对 `exp:` 行合法：0 说的是「被引、未印成环境」（`EXPERIMENT_ENV_NO`）。
+        # 定理类环境必须真的印在正文里，0 对它们是"没写环境号"，不许放行。
+        is_exp_row = str(item.get("ledger_id") or "").strip().startswith(EXPERIMENT_ID_PREFIX)
+        if env_no is None and is_exp_row and str(raw_env_no).strip() in ("0", "0.0"):
+            env_no = EXPERIMENT_ENV_NO
         if env_no is None:
             problems.append(_problem(
                 "mapping_unresolvable",
-                f"第 {i} 行的 `env_no` 必须是 1 起的整数，收到 {item.get('env_no')!r}",
+                f"第 {i} 行的 `env_no` 必须是 1 起的整数（`exp:` 行允许 0 = 被引未印成环境），"
+                f"收到 {item.get('env_no')!r}",
+                label=label))
+            continue
+        if env_no == EXPERIMENT_ENV_NO and not is_exp_row:
+            problems.append(_problem(
+                "mapping_unresolvable",
+                f"第 {i} 行的 `env_no` = 0，而它的 `ledger_id` 不是 `exp:` 行 —— "
+                "0 只表示「被引、未印成环境」，定理/引理/命题/推论必须真的印在正文里",
                 label=label))
             continue
         proof_no = _int_or_none(item.get("proof_no"))
@@ -2535,6 +2953,29 @@ def parse_rows(payload: Any) -> tuple[list[Row], list[dict[str, Any]]]:
                 "`v_signature` 是对象（{\"verdict\": …, \"sha256\": …}）",
                 label=label))
             continue
+        # 被引实验行那几格（框架填，但读侧也要认形状：坏形状不许静默丢）。
+        raw_logs = item.get(EXPERIMENT_LOGS_FIELD)
+        if raw_logs is not None and (not isinstance(raw_logs, (list, tuple))
+                                     or not all(isinstance(x, str) for x in raw_logs)):
+            problems.append(_problem(
+                "mapping_unresolvable",
+                f"第 {i} 行的 `{EXPERIMENT_LOGS_FIELD}` 必须是字符串列表（台账 `artifact_paths`"
+                f" 的原样），收到 {raw_logs!r}",
+                label=label))
+            continue
+        bad_experiment = [f for f in (EXPERIMENT_CODE_HASH_FIELD, EXPERIMENT_RESULT_FIELD,
+                                      EXPERIMENT_NEGATION_FIELD, EXPERIMENT_PARAMS_FIELD)
+                          if (v := item.get(f)) is not None and not isinstance(v, str)]
+        raw_exit = item.get(EXPERIMENT_EXIT_FIELD)
+        if bad_experiment or (raw_exit is not None
+                              and (isinstance(raw_exit, bool) or not isinstance(raw_exit, int))):
+            problems.append(_problem(
+                "mapping_unresolvable",
+                f"第 {i} 行的实验格形状不对（{bad_experiment or [EXPERIMENT_EXIT_FIELD]}）："
+                "`experiment_code_hash` / `experiment_result` / `experiment_negation_kind` / "
+                "`experiment_params` 是字符串，`experiment_exit_code` 是整数",
+                label=label))
+            continue
         rows.append(Row(kind=kind, label=label, env_no=env_no,
                         ledger_id=str(item.get("ledger_id") or "").strip(),
                         proof_no=proof_no,
@@ -2560,7 +3001,15 @@ def parse_rows(payload: Any) -> tuple[list[Row], list[dict[str, Any]]]:
                         # 优化态与来源（2026-11-02）：与前两格同一条读法 —— 缺键读空串，
                         # 渲染印「未记录」（不许折成「未优化」：那是"记过了、是假的"）。
                         optimized=str(item.get(OPTIMIZED_FIELD) or "").strip(),
-                        proof_source=str(item.get(PROOF_SOURCE_FIELD) or "").strip()))
+                        proof_source=str(item.get(PROOF_SOURCE_FIELD) or "").strip(),
+                        experiment_logs=tuple(str(x) for x in (raw_logs or ())),
+                        experiment_code_hash=str(item.get(EXPERIMENT_CODE_HASH_FIELD) or "").strip(),
+                        experiment_result=str(item.get(EXPERIMENT_RESULT_FIELD) or "").strip(),
+                        experiment_negation_kind=str(
+                            item.get(EXPERIMENT_NEGATION_FIELD) or "").strip(),
+                        experiment_params=str(item.get(EXPERIMENT_PARAMS_FIELD) or "").strip(),
+                        experiment_exit_code=(int(raw_exit) if isinstance(raw_exit, int)
+                                              and not isinstance(raw_exit, bool) else None)))
     return rows, problems
 
 
@@ -2659,13 +3108,19 @@ _APPENDIX_TEXT: dict[str, Any] = {
             "signed), ``not passed'' (the review ledger exists, but this proof has no signature), "
             "``unreviewed'' (the review ledger does not exist at all: never sent), or "
             "``(unread)'' (the cell could not be read: no statement row, a broken ledger file). "
-            "``(unread)'' is never folded into ``not passed'' or ``unreviewed''. This paragraph "
+            "``(unread)'' is never folded into ``not passed'' or ``unreviewed''. "
+            "The last column belongs to the experiments the paper cites: it holds the reading "
+            "log(s) recorded for that experiment, each path as it stands in the experiment "
+            "ledger, followed by the experiment's result; a dash means the row is not an "
+            "experiment. An experiment row whose environment number reads a dash is cited by "
+            "the paper without being printed as an environment. This paragraph "
             "itself is written by the renderer in the language of the paper: do not hand-copy it "
             "and do not mix languages."
         ),
         "columns": (
             "Env", "Label", "Ledger row", "Ledger kind", "V sign-off", "Proof", "File",
             "Lean (file / declaration)", "Citation location", "E reading", "Exhaustion note",
+            "Experiment log / result",
         ),
         "lean_off": "(Lean off)",
         "lean_unfilled": "(not filled)",
@@ -2694,6 +3149,9 @@ _APPENDIX_TEXT: dict[str, Any] = {
             + "」（这一格没查成：statements 行读不到 / 台账读不出）——"
             "「" + LEDGER_CELL_UNREADABLE + "」绝不折成「" + REVIEWED_NOT_PASSED
             + "」或「" + REVIEWED_UNREVIEWED + "」。"
+            "最后一列属于论文里写到的实验：它给出那条实验在台账里登记的读数日志（逐份原样）"
+            "与结果；印「—」的行不是实验行。环境号印「—」的实验行表示：论文引了它、但没把它"
+            "印成 `experiment` 环境。"
         ),
         "columns": (
             "环境", "label", "台账序号", "台账 kind", "V 是否签过", "证明号", "真实文件",
@@ -2705,7 +3163,7 @@ _APPENDIX_TEXT: dict[str, Any] = {
     },
 }
 
-#: 附录表的十一列定宽（`\\textwidth` 的比例；十一列合计 0.90，剩下的留给列间距与 `\\tabcolsep`）。
+#: 附录表的十二列定宽（`\\textwidth` 的比例；十二列合计 0.90，剩下的留给列间距与 `\\tabcolsep`）。
 #:
 #: 业主 2026-10-24（D-46）：原先是四列 `l`（自然宽）加六列定宽，引文位置那一格是一整句
 #: 英文，于是整张表宽出 `\\textwidth`、右侧被切到页外，Lean 那两列还互相压字。现在全列
@@ -2714,8 +3172,12 @@ _APPENDIX_TEXT: dict[str, Any] = {
 #: D-69 加了台账那两格（`ledger_kind` / `reviewed`）之后是十一列：新增的两列各 0.07 / 0.09，
 #: 其余九列按同一比例压一点，合计仍然是 0.90 —— 列数变了而总宽不变，否则整张表又会宽出
 #: `\\textwidth`（D-46 的那条判据按"列格式与表头逐格对上"判，不看具体数值）。
+#:
+#: 2026-11-25（MAPPING-COMPLETE）：加最后一列「实验读数 / 结果」占 0.10，其余十一列从
+#: 0.80 总量里各收一点 —— 合计仍是 0.90。理由同上：原来 0.90 已经把 `\tabcolsep` 的
+#: 余量吃满，把新列直接加到 0.90 之上必然宽出 `\\textwidth`。
 APPENDIX_COLUMN_WIDTHS: tuple[float, ...] = (
-    0.07, 0.09, 0.09, 0.07, 0.09, 0.05, 0.08, 0.10, 0.11, 0.06, 0.09,
+    0.06, 0.08, 0.08, 0.06, 0.08, 0.05, 0.07, 0.09, 0.10, 0.05, 0.08, 0.10,
 )
 
 #: 定宽列里"字母数字连写的长串"隔几个字给一个可选断点（`_tex_breakable` 用它）。
@@ -2922,6 +3384,9 @@ _LEDGER_CELL_TEXT: dict[str, Any] = {
         "not_passed": "not passed",
         "unreviewed": "unreviewed",
         "signed": "signed (verdict: {verdict})",
+        #: 实验行：`experiments` 表没有 `kind`、也不走 V 的审校链 ⇒ 这一格是"不适用"，
+        #: 不是"读不到"（后者说的是"没查成"）。
+        "not_applicable": "n/a (experiment row)",
         #: 2026-11-16 裁定 ④：「看不出来」那一档已从判定词表里删除 ⇒ 英文附录也不再
         #: 替它留一个译名。老数据里若真出现那四个字，按"这一格翻不出来"印 `(unread)`
         #: （不是把它印成通过，也不是给它一个 inconclusive 的第三态）。
@@ -2932,6 +3397,8 @@ _LEDGER_CELL_TEXT: dict[str, Any] = {
         "not_passed": REVIEWED_NOT_PASSED,
         "unreviewed": REVIEWED_UNREVIEWED,
         "signed": REVIEWED_SIGNED_TEMPLATE,
+        #: 实验行：台账那一行没有 `kind`、也不在 V 的审校链上（`EXPERIMENT_LEDGER_CELL`）。
+        "not_applicable": EXPERIMENT_LEDGER_CELL,
         "verdicts": {},
     },
 }
@@ -2959,8 +3426,13 @@ def _split_reviewed(cell: Any) -> tuple[str, str]:
 
 
 def _appendix_reviewed(cell: Any, language: str) -> str:
-    """附录里那一格（按论文语言出词；四档原样保留）。"""
+    """附录里那一格（按论文语言出词；四档原样保留）。
+
+    实验行那一格是"不适用"（`EXPERIMENT_LEDGER_CELL`），按语言出词，不折进 `(unread)`。
+    """
     text = _LEDGER_CELL_TEXT[language]
+    if str(cell or "").strip() == EXPERIMENT_LEDGER_CELL:
+        return str(text["not_applicable"])
     state, verdict = _split_reviewed(cell)
     if state in ("not_passed", "unreviewed"):
         return str(text[state])
@@ -2978,6 +3450,8 @@ def _appendix_ledger_kind(cell: Any, language: str) -> str:
     受控词表的取值等于造第二个词表。只有"读不到"那一档按语言出词。
     """
     raw = str(cell or "").strip()
+    if raw == EXPERIMENT_LEDGER_CELL:
+        return str(_LEDGER_CELL_TEXT[language]["not_applicable"])
     if not raw or raw == LEDGER_CELL_UNREADABLE:
         return str(_LEDGER_CELL_TEXT[language]["unread"])
     return raw
@@ -3006,12 +3480,60 @@ def _row_key_text(row: Row, language: str = PAPER_LANGUAGE_ZH) -> str:
     D-69 的两格（`ledger_kind` / `reviewed`）同样追加在末尾（排在数值实验那两格之后）：
     理由与上面那一句相同 —— 位置一旦挪动，读侧按位置读的那几格会静默错位。它们按
     `language` 出词（注释也是附录的一部分，英文论文里同样不许出现 CJK）。
+
+    2026-11-25（MAPPING-COMPLETE）：被引实验行那几格插在 `exhaustion_note` 之后、
+    `ledger_kind` / `reviewed` 之前 —— 那两格必须留在最后两格（读侧按 `parts[-2:]`
+    读它们，`appendix_row_keys` 按前 3 格读 label），插到它们后面会把两格的读法挤错位。
+    日志多份用 `,` 连（注释只占一行），空值写空串 —— 它只是同一份 Row 的渲染，
+    不是第二份数据源（真身仍是 json 里的 `experiment_logs` 列表）。
     """
     return "|".join([row.kind, str(int(row.env_no)), row.label, row.ledger_id,
                      str(int(row.proof_no)), row.file, row.lean_file, row.lean_target,
-                     row.numeric_evidence, row.exhaustion_note,
-                     _appendix_ledger_kind(row.ledger_kind, language),
-                     _appendix_reviewed(row.reviewed, language)])
+                     row.numeric_evidence, row.exhaustion_note]
+                    + _experiment_key_cells(row)
+                    + [_appendix_ledger_kind(row.ledger_kind, language),
+                       _appendix_reviewed(row.reviewed, language)])
+
+
+def _experiment_key_cells(row: Row) -> list[str]:
+    """被引实验行那几格在注释里的写法（非实验行一律空串，保持列数稳定）。
+
+    `experiment_params` 在注释里留空：它的取值可能是中文（"未记录（台账 params 为空）…"），
+    而附录是论文的一部分 —— 英文论文的附录里连注释也不许出现 CJK（D-45）。参数摘要仍在
+    `MAPPING.json` / `MAPPING.md` 里（那两份是中文面），附录不重复它。
+    """
+    if not is_experiment_row(row):
+        return ["" for _ in EXPERIMENT_ROW_FIELDS]
+    return [",".join(str(p) for p in row.experiment_logs),
+            str(row.experiment_code_hash or ""),
+            str(row.experiment_result or ""),
+            str(row.experiment_negation_kind or ""),
+            "",
+            ("" if row.experiment_exit_code is None else str(int(row.experiment_exit_code)))]
+
+
+def _appendix_env_cell(row: Row) -> str:
+    """附录第一格：`experiment 1` / `theorem 2`；被引未印的行写 `experiment —`。
+
+    0 不是"第 0 个环境"：它说的是"这一行没有正文环境"（`EXPERIMENT_ENV_NO`）。
+    印成 `experiment 0` 会让读者以为正文里真有一个编号 0 的环境。
+    """
+    return f"{row.kind} {'—' if is_cited_only_row(row) else int(row.env_no)}"
+
+
+def _appendix_experiment_reading(row: Row, language: str = PAPER_LANGUAGE_ZH) -> str:
+    """附录最后一格：实验行的读数日志（逐份）与结果；非实验行印 `—`。
+
+    日志是 `experiments.artifact_paths` 的原样（`experiment_logs`），多份用 `; ` 连；
+    结果后括注 `negation_kind`（若有）。这一格只是渲染，不改写台账里的任何路径。
+    """
+    if not is_experiment_row(row):
+        return "—"
+    logs = "; ".join(str(p) for p in row.experiment_logs or ()) or "—"
+    result = str(row.experiment_result or "").strip()
+    negation = str(row.experiment_negation_kind or "").strip()
+    tail = result + (f" ({negation})" if negation else "")
+    return f"{logs} — {tail}" if tail else logs
 
 
 def appendix_row_keys(block: str) -> list[tuple[str, str]]:
@@ -3070,7 +3592,7 @@ def render_appendix(rows: Iterable[Row], *, lean_enabled: bool | None = None,
     for row in items:
         lines.append(APPENDIX_ROW_PREFIX + _row_key_text(row, lang))
         lines.append(" & ".join([
-            _cell(f"{row.kind} {int(row.env_no)}"),
+            _cell(_appendix_env_cell(row)),
             _cell(row.label, mono=True),
             _cell(row.ledger_id, mono=True),
             _cell(_appendix_ledger_kind(row.ledger_kind, lang), mono=True),
@@ -3079,8 +3601,10 @@ def render_appendix(rows: Iterable[Row], *, lean_enabled: bool | None = None,
             _cell(row.file, mono=True),
             _cell(_lean_pair(row, lean_on, lang)),
             _cell(_loc_text(row) or row.citation_loc_reason or ""),
-            _cell(_numeric_cell(row.numeric_evidence, lang)),
-            _cell(_numeric_cell(row.exhaustion_note, lang), mono=True),
+            _cell("—" if is_experiment_row(row) else _numeric_cell(row.numeric_evidence, lang)),
+            _cell("—" if is_experiment_row(row)
+                  else _numeric_cell(row.exhaustion_note, lang), mono=True),
+            _cell(_appendix_experiment_reading(row, lang), mono=True),
         ]) + " \\\\")
     lines += ["\\hline", "\\end{tabular}", "\\endgroup", "", APPENDIX_END, ""]
     return "\n".join(lines)
@@ -3119,6 +3643,14 @@ def render_mapping_markdown(rows: Iterable[Row], *, lean_enabled: bool | None = 
         "E 的那条穷举读数编号（`" + NT.EVIDENCE_PREFIX + "NNNNNN`）与 E 写的那两块"
         "（" + NT.BLOCK_DESIGN + " / " + NT.BLOCK_EXHAUSTION + "）落在哪一份读数里；"
         "那一行的 `file` 写的是那份程序的相对路径（相对仓库根），不是论文包内的 tex。",
+        "被引实验行（`kind=experiment`、`ledger_id=exp:NNNNNN`、`env_no=0`）：论文写到、"
+        "但没印成 `experiment` 环境的那些实验由框架从 `experiments` 台账现读现造 —— `file` 是"
+        "`experiments.code_path`（程序，相对仓库根），`" + EXPERIMENT_LOGS_FIELD + "` 是同一行"
+        "`artifact_paths` 的原样（读数日志，多份逐份列），`" + EXPERIMENT_CODE_HASH_FIELD
+        + "` / `" + EXPERIMENT_RESULT_FIELD + "` / `" + EXPERIMENT_NEGATION_FIELD + "` / `"
+        + EXPERIMENT_PARAMS_FIELD + "` / `" + EXPERIMENT_EXIT_FIELD + "` 同样是台账原值；"
+        "这几格 G 不写、写侧会按台账盖掉，读侧逐格核。`env_no=0` 只表示「被引、未印成环境」，"
+        "不是「第 0 个环境」。",
         "`" + LEDGER_KIND_FIELD + "` 与 `" + REVIEWED_FIELD + "`（D-69）：台账那一行自己的 "
         "`kind`，以及 V 拿这一份怎么办（四档：「" + REVIEWED_SIGNED + "（判决：…）」/「"
         + REVIEWED_NOT_PASSED + "」/「" + REVIEWED_UNREVIEWED + "」/「"
@@ -3139,16 +3671,20 @@ def render_mapping_markdown(rows: Iterable[Row], *, lean_enabled: bool | None = 
         + " | " + OPTIMIZED_FIELD + " | " + PROOF_SOURCE_FIELD
         + " | proof_no | file | lean_file | lean_target "
         "| citation_loc | citation_loc_reason | page_or_section | numeric_evidence "
-        "| exhaustion_note |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "| exhaustion_note | " + EXPERIMENT_LOGS_FIELD + " | " + EXPERIMENT_CODE_HASH_FIELD
+        + " | " + EXPERIMENT_RESULT_FIELD + " | " + EXPERIMENT_NEGATION_FIELD
+        + " | " + EXPERIMENT_PARAMS_FIELD + " | " + EXPERIMENT_EXIT_FIELD + " |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for i, row in enumerate(items, start=1):
         lines.append(
             "| {i} | {kind} | {label} | {no} | {ledger} | {lkind} | {reviewed} | {optimized} "
             "| {source} | {proof} "
             "| {file} | {lean_file} "
-            "| {lean_target} | {loc} | {reason} | {where} | {evidence} | {note} |".format(
-                i=i, kind=row.kind, label=row.label or "（没有 label）", no=int(row.env_no),
+            "| {lean_target} | {loc} | {reason} | {where} | {evidence} | {note} "
+            "| {logs} | {code_hash} | {result} | {negation} | {params} | {exit_code} |".format(
+                i=i, kind=row.kind, label=row.label or "（没有 label）",
+                no=("—" if is_cited_only_row(row) else int(row.env_no)),
                 ledger=row.ledger_id, proof=int(row.proof_no),
                 lkind=_ledger_kind_cell(row), reviewed=_reviewed_print_cell(row),
                 optimized=_optimized_print_cell(row),
@@ -3160,7 +3696,14 @@ def render_mapping_markdown(rows: Iterable[Row], *, lean_enabled: bool | None = 
                 reason=row.citation_loc_reason or "",
                 where=row.page_or_section or "",
                 evidence=_numeric_cell(row.numeric_evidence),
-                note=_numeric_cell(row.exhaustion_note)))
+                note=_numeric_cell(row.exhaustion_note),
+                logs="; ".join(row.experiment_logs or ()) or "",
+                code_hash=row.experiment_code_hash or "",
+                result=row.experiment_result or "",
+                negation=row.experiment_negation_kind or "",
+                params=row.experiment_params or "",
+                exit_code=("" if row.experiment_exit_code is None
+                           else int(row.experiment_exit_code))))
     lines.append("")
     counts: dict[str, int] = {}
     for row in items:
@@ -3200,6 +3743,7 @@ def write_mapping(project_root: str | Path, rows: Iterable[Row], *,
     ledger_root = workspace_root if workspace_root is not None else project_root
     items = fill_ledger_cells(ledger_root, list(rows))
     items = fill_evidence_cells(ledger_root, items)
+    items = fill_experiment_cells(ledger_root, items)
     json_path, md_path = mapping_paths(project_root)
     payload = {"rows": [row.to_dict() for row in items]}
     json_path.parent.mkdir(parents=True, exist_ok=True)
@@ -3278,13 +3822,21 @@ def write_appendix(project_root: str | Path) -> Path:
 
 
 def write_package(project_root: str | Path, rows: Iterable[Row], *,
-                  workspace_root: str | Path | None = None) -> tuple[Path, Path, Path]:
+                  workspace_root: str | Path | None = None,
+                  tex: str | None = None) -> tuple[Path, Path, Path]:
     """G 的唯一写口：json + md + 附录（三份都由同一批 `rows` 生成）。
 
     `workspace_root` 只影响台账那两格的现读现填（台账在 `<工作区>/data/` 下）；
     不给就按项目根读（单项目工作区里是同一个目录）。
+
+    2026-11-25（MAPPING-COMPLETE）：落盘之前先把「论文写到、而表里还没有」的
+    `exp:NNNNNN` 补成行（`synthesize_experiment_rows`）。这一步只能在这里做：
+    `write_mapping` 是「给什么写什么」的纯写口（判据夹具直接调它），而"论文引了哪些实验"
+    要读论文注记与正文 —— 那是 `write_package` 这一层的事。幂等：同一批 rows 连跑两次，
+    行集合与字段逐字相同（第二次看到实验行已在，不再补）。
     """
-    items = list(rows)
+    items = synthesize_experiment_rows(project_root, list(rows),
+                                       workspace_root=workspace_root, tex=tex)
     json_path, md_path = write_mapping(project_root, items, workspace_root=workspace_root)
     frag = write_appendix(project_root)
     return json_path, md_path, frag
@@ -3416,6 +3968,12 @@ def _orphan_problems(envs: Sequence[BodyEnv], rows: Sequence[Row]) -> list[dict[
             label=label, where=_env_where(env)))
     for key, got in rows_by_key.items():
         kind, label = key
+        # 「被引、未印成环境」的行（`env_no=0`）不参加"环境↔行"这一轴：它们没有环境，
+        # 由 `_citation_problems` 按「论文引了没有 / 表里有没有」双向判（criterion c）。
+        kept = [row for row in got if not is_cited_only_row(row)]
+        if not kept:
+            continue
+        got = kept
         env = env_by_key.get(key)
         if env is None:
             if not label:
@@ -3601,6 +4159,11 @@ def _row_checks(row: Row, ledger: Mapping[str, Sequence[Mapping[str, Any]]],
                         f"而 `stmt:{row_id}` 的证明清单里只有 {known}（`proofs` 那一条）"
                         "—— 证明号必须能被台账解析到",
                         label=row.label, where=MAPPING_JSON_NAME)
+    if is_cited_only_row(row):
+        # 「被引、未印成环境」的实验行：`file` 是 `experiments.code_path`（仓库根相对），
+        # 其余几格也要与台账同一行逐字一致 —— 走实验那一支，不走论文包内文件那一支。
+        got.problems.extend(_cited_experiment_problems(row, ledger, workspace))
+        return got
     numeric = is_numeric_row(row, ledger)
     if numeric:
         # 数值实验定理那一行的证明栏是程序（相对仓库根），与论文包内那份 tex 是两回事：
@@ -3622,6 +4185,290 @@ def _row_checks(row: Row, ledger: Mapping[str, Sequence[Mapping[str, Any]]],
                     f"表里 label={row.label!r} 的 `file` 不合口径：{state['reason']}",
                     label=row.label, where=MAPPING_JSON_NAME)
     return got
+
+
+def _cited_experiment_problems(row: Row,
+                               ledger: Mapping[str, Sequence[Mapping[str, Any]]],
+                               workspace: Path) -> list[dict[str, Any]]:
+    """「被引、未印成环境」那一行的格：程序 / 读数 / 摘要必须与台账同一行一致且在盘上。
+
+    三态：
+    - `ledger_id` 在 `experiments` 里解析不到 ⇒ `mapping_unresolvable`（这一行指不到实验）；
+    - 台账那一行没有 `code_path` ⇒ `mapping_file_missing`（没程序可指，不许拿别的顶）；
+    - 程序不在 / `code_hash` / `result` / `params` / `artifact_paths` 与台账不一致 ⇒
+      `mapping_file_missing`（表里那几格是 `fill_experiment_cells` 从台账抄的，抄错或被人
+      手改都会在这里露出来）；
+    - 每一份日志不在盘上 ⇒ `mapping_file_missing`（"多份逐份列"之后逐份都要在）。
+    """
+    out: list[dict[str, Any]] = []
+    resolved = resolve_ledger_id(row.ledger_id, ledger)
+    if not resolved["ok"] or str(resolved.get("table") or "") != "experiments":
+        out.append(_problem(
+            "mapping_unresolvable",
+            f"表里实验行 label={row.label!r} 的 `ledger_id` = {row.ledger_id!r} 在台账里"
+            f"解析不到：{resolved.get('reason')}",
+            label=row.label, where=MAPPING_JSON_NAME))
+        return out
+    target = ledger_row(ledger, "experiments", str(resolved["row_id"]))
+    want = experiment_cells_for_row(target)
+    if not want:
+        out.append(_problem(
+            EXPERIMENT_FILE_MISSING,
+            f"表里实验行 label={row.label!r} 指到 experiments#{resolved['row_id']}，"
+            "而台账那一行没有 `code_path` ⇒ 没有程序文件可指（这一行的 `file` 拿不到）",
+            label=row.label, where=MAPPING_JSON_NAME))
+        return out
+    state = NT.program_state(workspace, row.file)
+    if state["state"] != "present":
+        out.append(_problem(
+            EXPERIMENT_FILE_MISSING,
+            f"表里实验行 label={row.label!r} 的 `file`（= `experiments.code_path`）不过关："
+            f"{state['reason']}",
+            label=row.label, where=MAPPING_JSON_NAME))
+    got = {
+        EXPERIMENT_CODE_HASH_FIELD: str(row.experiment_code_hash or "").strip(),
+        EXPERIMENT_RESULT_FIELD: str(row.experiment_result or "").strip(),
+        EXPERIMENT_NEGATION_FIELD: str(row.experiment_negation_kind or "").strip(),
+        EXPERIMENT_PARAMS_FIELD: str(row.experiment_params or "").strip(),
+        EXPERIMENT_EXIT_FIELD: row.experiment_exit_code,
+        EXPERIMENT_LOGS_FIELD: tuple(row.experiment_logs or ()),
+    }
+    for name in (EXPERIMENT_CODE_HASH_FIELD, EXPERIMENT_RESULT_FIELD,
+                 EXPERIMENT_NEGATION_FIELD, EXPERIMENT_PARAMS_FIELD, EXPERIMENT_EXIT_FIELD):
+        if got[name] != want[name]:
+            out.append(_problem(
+                EXPERIMENT_FILE_MISSING,
+                f"表里实验行 label={row.label!r} 的 `{name}` = {got[name]!r}，而台账 "
+                f"experiments#{resolved['row_id']} 那一格是 {want[name]!r} —— "
+                "这几格由 `fill_experiment_cells` 从台账现读现填，对不上就是被手改过；"
+                "重跑 `doc.write_mapping` 会按台账盖回去",
+                label=row.label, where=MAPPING_JSON_NAME))
+    if got[EXPERIMENT_LOGS_FIELD] != want[EXPERIMENT_LOGS_FIELD]:
+        out.append(_problem(
+            EXPERIMENT_FILE_MISSING,
+            f"表里实验行 label={row.label!r} 的 `{EXPERIMENT_LOGS_FIELD}` = "
+            f"{list(got[EXPERIMENT_LOGS_FIELD])!r}，而台账那一行是 "
+            f"{list(want[EXPERIMENT_LOGS_FIELD])!r} —— 读数日志必须逐份照台账原样列",
+            label=row.label, where=MAPPING_JSON_NAME))
+    for rel in row.experiment_logs or ():
+        log_state = _repo_rel_state(workspace, rel)
+        if log_state["state"] != "present":
+            out.append(_problem(
+                EXPERIMENT_FILE_MISSING,
+                f"表里实验行 label={row.label!r} 的读数日志读不到：{log_state['reason']}",
+                label=row.label, where=MAPPING_JSON_NAME))
+    return out
+
+
+def _experiment_coverage(rows: Sequence[Row],
+                         ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None
+                         ) -> set[str]:
+    """表里已经"带上了"哪些实验号（两种带上法，二者都算）。
+
+    - 有一条 `exp:` 行（`experiment_id_of_row`）；
+    - 或者某行的 `numeric_evidence` 就是 `exp:<号>`（数值实验定理那一行，它的程序与读数
+      已经在 `file` / `exhaustion_note` / 索引四格里）。
+
+    第二种是刻意的：`test_numeric_theorem_writing_spec` 那一类论文在正文里写 `exp:000000`
+    压的是数值定理的穷举读数，它不该再被补成一条独立的实验行（那一行本来就有文件）。
+    """
+    out: set[str] = set()
+    experiments = [row for row in ((ledger or {}).get("experiments") or ())
+                   if isinstance(row, Mapping)]
+    by_code: dict[str, str] = {}
+    for experiment in experiments:
+        code = NP.norm_rel(experiment.get("code_path"))
+        eid = str(experiment.get("experiment_id") or "").strip()
+        if code and eid:
+            by_code.setdefault(code, eid)
+    for row in rows:
+        if is_experiment_row(row):
+            out.add(experiment_id_of_row(row))
+        evidence = str(getattr(row, NT.EVIDENCE_FIELD, "") or "").strip()
+        if evidence.startswith(EXPERIMENT_ID_PREFIX):
+            out.add(evidence[len(EXPERIMENT_ID_PREFIX):].split("#", 1)[0].strip())
+        # 第三种带上法：这一行的 `file` 就是那条实验的程序（数值定理行 / 例子行的
+        # 既有约定：证明栏第 ① 段是程序）。此时"实验的文件名"已经在表里了，不再补一行。
+        covered = by_code.get(NP.norm_rel(getattr(row, "file", "")))
+        if covered:
+            out.add(covered)
+    return {eid for eid in out if eid}
+
+
+def _paper_citation_problems(rows: Sequence[Row],
+                       citations: Sequence[Mapping[str, str]],
+                       ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None,
+                       workspace: Path,
+                       envs: Sequence[BodyEnv]) -> list[dict[str, Any]]:
+    """论文写到的 `stmt:` / `exp:` 与表里那几行双向对账（2026-11-25，MAPPING-COMPLETE）。
+
+    这一轴此前完全没有判据：原有的一条只问「正文环境 ↔ 表行」（`_orphan_problems`），
+    于是"论文在附录段落里引了 `exp:000003`、表里一行都没有"这种事一路静默。
+
+    三个方向（与业主 2026-11-25 的口径逐条对应）：
+
+    a. 论文引的每个 `stmt:` 都要有一行（行指到那条命题）；
+    b. 论文引的每个 `exp:` 都要在表里带上（`exp:` 行，或数值定理行的 `numeric_evidence`）；
+    c. 表里的实验行都要被论文写过（或本来就是印在正文里的 `experiment` 环境）。
+
+    三态：`stmt:` 引了而台账里没有这条命题 ⇒ `mapping_unresolvable`（引用的东西不存在，
+    不是"表漏了一行"）；`exp:` 引了而台账里没有这条实验 ⇒ 同样是 `mapping_unresolvable`。
+    """
+    out: list[dict[str, Any]] = []
+    exp_ids = {str(item["code"]).strip() for item in citations if item["prefix"] == "exp"}
+    stmt_ids = {str(item["code"]).strip() for item in citations if item["prefix"] == "stmt"}
+    known_statements = ledger_ids(ledger, "statements")
+    known_experiments = ledger_ids(ledger, "experiments")
+    row_statements: dict[str, Row] = {}
+    for row in rows:
+        resolved = resolve_ledger_id(row.ledger_id, ledger)
+        if resolved["ok"] and str(resolved.get("table") or "") == "statements":
+            row_statements.setdefault(str(resolved["row_id"]), row)
+    covered_experiments = _experiment_coverage(rows, ledger)
+    env_keys = {(str(env.kind), str(env.label)) for env in envs}
+    for sid in sorted(stmt_ids):
+        if sid in row_statements:
+            continue
+        if sid not in known_statements:
+            out.append(_problem(
+                "mapping_unresolvable",
+                f"论文引了 `stmt:{sid}`，而台账 `statements` 里没有这条命题（引用悬空）—— "
+                "表里当然也就没有行可指；先让 B 登记这条命题或改掉正文那个号",
+                label=f"stmt:{sid}", where=MAPPING_JSON_NAME))
+            continue
+        out.append(_problem(
+            "mapping_orphan",
+            f"论文引了 `stmt:{sid}`（`documents.claims[].citations` 或正文源里写着），"
+            "而表里没有一行指到它 —— 论文里写了的命题，表里必须有一行给出它的证明稿文件名",
+            label=f"stmt:{sid}", where=MAPPING_JSON_NAME))
+    for eid in sorted(exp_ids):
+        if eid in covered_experiments:
+            continue
+        if eid not in known_experiments:
+            out.append(_problem(
+                "mapping_unresolvable",
+                f"论文引了 `exp:{eid}`，而台账 `experiments` 里没有这条实验（引用悬空）—— "
+                "表里也就没有文件可指",
+                label=f"exp:{eid}", where=MAPPING_JSON_NAME))
+            continue
+        out.append(_problem(
+            "mapping_orphan",
+            f"论文引了 `exp:{eid}`，而表里没有带上它（既没有 `exp:{eid}` 行，也没有哪一行"
+            "的 `numeric_evidence` 等于它）—— 论文里写了的实验，表里必须给出它的程序与读数"
+            "文件名",
+            label=f"exp:{eid}", where=MAPPING_JSON_NAME))
+    for row in rows:
+        if not is_experiment_row(row):
+            continue
+        eid = experiment_id_of_row(row)
+        if eid in exp_ids or (str(row.kind), str(row.label)) in env_keys:
+            continue
+        out.append(_problem(
+            "mapping_orphan",
+            f"表里实验行 label={row.label!r} 在论文两处（`documents.claims[].citations`、"
+            "正文源）都找不到 `exp:` 引用，也不是正文里印出来的 `experiment` 环境 —— "
+            "表有、论文没写，就是孤儿行",
+            label=row.label, where=MAPPING_JSON_NAME))
+    return out
+
+
+def _literature_problems(citations: Sequence[Mapping[str, str]],
+                         workspace: Path) -> list[dict[str, Any]]:
+    """论文引的每个 `lit:` 都要解析到一条 `literature` 行（并在盘上取得到那份文件）。
+
+    只做"能解析到 lit_id"这一件事：文献号 ↔ `library/<6位号>/<名>` 的对应仍归 A 的文献表
+    （`literature.path`），解析走 `litread.resolve_literature_path` —— 它同时认现行
+    `<6位号>/<名>` 与历史形态，于是 LIB-LAYOUT 迁移中间态不会把这条判据变成假红。
+    """
+    out: list[dict[str, Any]] = []
+    wanted = [item for item in citations if item["prefix"] == "lit"]
+    if not wanted:
+        return out
+    rows = {str(row.get("lit_id") or "").strip(): row
+            for row in read_literature_rows(workspace) if isinstance(row, Mapping)}
+    from . import litread as LR   # 惰性：文献落点解析只在有 lit: 引用时需要
+    library = Path(workspace) / "library"
+    for item in wanted:
+        lid = str(item["code"]).strip()
+        row = rows.get(lid)
+        if row is None:
+            out.append(_problem(
+                "mapping_citation_file_missing",
+                f"论文引了 `lit:{lid}`，而台账 `literature` 里没有这个文献号（引用悬空）",
+                label=f"lit:{lid}", where=MAPPING_JSON_NAME))
+            continue
+        rel = str(row.get("path") or "").strip()
+        if not rel:
+            out.append(_problem(
+                "mapping_citation_file_missing",
+                f"论文引了 `lit:{lid}`，而文献表那一行的 `path` 是空的 ⇒ 落不到 "
+                "`library/<6位号>/<名>` 上（这条文献还没有可读的文件）",
+                label=f"lit:{lid}", where=MAPPING_JSON_NAME))
+            continue
+        resolved = LR.resolve_literature_path(workspace, library, rel)
+        target = getattr(resolved, "path", None)
+        if not target or not Path(target).is_file():
+            out.append(_problem(
+                "mapping_citation_file_missing",
+                f"论文引了 `lit:{lid}`，文献表的 `path` = {rel!r} 解析不到盘上的文件："
+                f"{getattr(resolved, 'reason', '') or '盘上没有这份文件'}",
+                label=f"lit:{lid}", where=MAPPING_JSON_NAME))
+    return out
+
+
+def _proof_index_problems(rows: Sequence[Row],
+                          ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None,
+                          workspace: Path,
+                          *, review_states: Mapping[str, str]) -> list[dict[str, Any]]:
+    """自有 + 已签 + 定理类的那几行：索引四格必须真的指到盘上那份证明稿。
+
+    2026-11-25 的缺口：四格由写侧 `fill_evidence_cells` 现读现填（`test_mapping_evidence_cells`
+    七条钉着），但门（`mapping_reading`）从没核过它们 —— 删掉盘上那份稿、或者把
+    `evidence_path` / `evidence_sha256` / `v_signature` 清空，表照样 `pass`（实测）。
+    这里调 B 入库闸已在用的同一个函数（`numerictheorem.evidence_index_problems` →
+    `numericproof.resolve_index`），不另写一套判据。
+
+    三态边界（为什么不是"所有已签行都要"）：台账从没记过这一号证明的稿（老行没有
+    `manuscripts`、表里也没填 `evidence_path`）时这里不报 —— 那是"台账没写这一列"，
+    不是"表写了但读不到"。三种缺法要分开：没记 / 记了没填 / 填了读不到；本条只管后两种。
+    判"有没有记"走 `_proof_manuscript_rel`（与填充侧同一个读法），不在这里猜。
+    """
+    out: list[dict[str, Any]] = []
+    target_reviewed = REVIEWED_SIGNED_TEMPLATE.format(verdict=NP.THIRD_PARTY_VERDICT_OK)
+    for row in rows:
+        if is_experiment_row(row) or str(row.kind) not in STATEMENT_ENV_KINDS:
+            continue
+        resolved = resolve_ledger_id(row.ledger_id, ledger)
+        if not resolved["ok"] or str(resolved.get("table") or "") != "statements":
+            continue
+        target = ledger_row(ledger, "statements", str(resolved["row_id"]))
+        if not isinstance(target, Mapping):
+            continue
+        if ledger_source_cell(target) != PROOF_SOURCE_OWN:
+            continue
+        reviewed = reviewed_cell(target, row.proof_no,
+                                 review_ledger=_review_ledger_of(resolved, review_states))
+        if reviewed != target_reviewed:
+            continue
+        rel, _why = _proof_manuscript_rel(target, int(row.proof_no), workspace)
+        if not rel and not str(row.evidence_path or "").strip():
+            continue
+        if rel and NP.norm_rel(row.evidence_path) != NP.norm_rel(rel):
+            out.append(_problem(
+                PROOF_FILE_MISSING,
+                f"表里 label={row.label!r} 的 `{NP.INDEX_PATH_FIELD}` = "
+                f"{str(row.evidence_path or '')!r}，而台账那一行的这一号证明稿是 {rel!r} —— "
+                "表指到了另一份稿（索引四格必须指台账那一份）",
+                label=row.label, where=MAPPING_JSON_NAME))
+            continue
+        why = NT.evidence_index_problems(row=row.to_dict(), workspace_root=workspace)
+        if why:
+            out.append(_problem(
+                PROOF_FILE_MISSING,
+                f"表里 label={row.label!r}（已签的自有证明）的证明稿索引四格不过关："
+                + "；".join(why),
+                label=row.label, where=MAPPING_JSON_NAME))
+    return out
 
 
 def is_numeric_row(row: Row,
@@ -4320,8 +5167,15 @@ def ledger_cells_reading(rows: Iterable[Row],
         resolved = resolve_ledger_id(row.ledger_id, ledger)
         target = (ledger_row(ledger, str(resolved["table"]), str(resolved["row_id"]))
                   if resolved["ok"] else None)
-        want = ledger_cells(target, row.proof_no,
-                            review_ledger=_review_ledger_of(resolved, review_states))
+        want_all = ledger_cells(target, row.proof_no,
+                                review_ledger=_review_ledger_of(resolved, review_states),
+                                table=(str(resolved["table"]) if resolved["ok"]
+                                       else "statements"))
+        # 这一档数的是「那两格」（`ledger_kind` / `reviewed`）：`want_all` 还带
+        # `optimized` / `proof_source`，拿四格去比两格会恒不相等 ⇒ 每张填过这两格的表
+        # 都被报成 `stale`（2026-11-25 修）。比之前先收窄到同两格。
+        want = {LEDGER_KIND_FIELD: want_all[LEDGER_KIND_FIELD],
+                REVIEWED_FIELD: want_all[REVIEWED_FIELD]}
         got = {LEDGER_KIND_FIELD: str(row.ledger_kind or "").strip(),
                REVIEWED_FIELD: str(row.reviewed or "").strip()}
         if not got[LEDGER_KIND_FIELD] and not got[REVIEWED_FIELD]:
@@ -4487,6 +5341,8 @@ def mapping_reading(project_root: str | Path, *,
         # 它们都不进 `problems`：业主的边界是"先让它看得见"，不拦门。
         "ledger_cells": {"checked": False, "rows": 0, "filled": 0,
                          "missing": [], "stale": []},
+        # 论文侧写了哪些 stmt/exp/lit（两处来源取并集；§`paper_citations`）。
+        "paper_citations": {"checked": False, "items": [], "counts": {}},
         "kind_gap": {"count": 0, "items": [], "why": ""},
         "theorem_unsigned": {"count": 0, "items": [], "unreadable": [], "why": ""},
         "problems": [],
@@ -4579,6 +5435,37 @@ def mapping_reading(project_root: str | Path, *,
     # `ALL_PROBLEM_KINDS` 里）。
     reading["ledger_cells"] = ledger_cells_reading(rows, known,
                                                    review_states=review_states)
+    # 论文侧引用 ↔ 表行（2026-11-25，MAPPING-COMPLETE）：只有这一趟真的登记过论文行
+    # （`documents(kind="paper")`，`doc.build_document` 是成文四步的第 ⓪ 步）且表里有行
+    # 才查。两个条件缺一不可：
+    #   - 没有论文行 ⇒ 这一轴"没查成"（三态 `checked=False`）；
+    #   - 表是 0 行 ⇒ 这篇论文没有定理类环境 / 被引实验行可对（`write_package(root, [])`
+    #     的合法形态），引用轴没有对照物 —— 报"论文引了 X 而表里没有"会把"这张表本来
+    #     只登记环境"读成"漏登记"（收工门 / 空工作区夹具正是这一档：它们只造论文注记，
+    #     不造任何定理环境）。空表本身由 `_orphan_problems` 的正文侧管：正文里有定理类
+    #     环境而表是 0 行，那一条照样红。
+    paper_rows = paper_documents(read_document_rows(workspace))
+    active = bool(paper_rows) and bool(rows)
+    citations = paper_citations(project, workspace_root=workspace, tex=tex_text)
+    counts: dict[str, int] = {}
+    for item in citations:
+        counts[item["prefix"]] = counts.get(item["prefix"], 0) + 1
+    why = ""
+    if not paper_rows:
+        why = ("台账里没有 `documents(kind=\"paper\")` 那一行 ⇒ 论文侧引用没查成"
+               "（不是「没引」：没登记论文的包不参与这一轴）")
+    elif not rows:
+        why = ("对应表是 0 行 ⇒ 这篇论文没有定理类环境 / 被引实验行可对"
+               "（引用轴没有对照物，不是「引用都齐了」）")
+    reading["paper_citations"] = {"checked": active, "items": citations,
+                                  "counts": counts, "why": why}
+    if EVIDENCE_KINDS:
+        # 自有 + 已签 + 定理类行的索引四格：门这一道此前只被工具面/B 入库闸核过。
+        problems += _proof_index_problems(rows, known, workspace,
+                                          review_states=review_states)
+    if active:
+        problems += _paper_citation_problems(rows, citations, known, workspace, envs)
+        problems += _literature_problems(citations, workspace)
     reading["kind_gap"], reading["theorem_unsigned"] = kind_gap_reading(
         rows, known, review_states=review_states)
     gap_notes = [str(reading["kind_gap"].get("why") or ""),

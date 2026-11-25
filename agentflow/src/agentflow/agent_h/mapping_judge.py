@@ -53,6 +53,13 @@ LEAN_OBJECTIVE_KINDS: tuple[str, ...] = PM.LEAN_KINDS
 #: `papermapping.NUMERIC_KINDS`（再往上是 `numerictheorem`），这里只是别名。
 NUMERIC_OBJECTIVE_KINDS: tuple[str, ...] = PM.NUMERIC_KINDS
 
+#: 客观档的第七组：证据对象那两条（2026-11-25，MAPPING-COMPLETE）。
+#:
+#: 「这一行声称的证明稿 / 实验程序与读数，是不是台账那一行、盘上那份」是可判事实：
+#: 删掉盘上那份稿、清空 `evidence_path`、或把 `experiment_logs` 改掉，都必须拦门。
+#: 判据的真身是 `papermapping.EVIDENCE_KINDS`，这里只是别名。
+EVIDENCE_OBJECTIVE_KINDS: tuple[str, ...] = PM.EVIDENCE_KINDS
+
 #: 只进读数、不拦门的那一档：Lean 开关开着而盘上一个 Lean 产物都没有。
 #:
 #: 它说的不是"表与正文对不上"，而是"这一趟的形式化一个文件都没落"——
@@ -65,6 +72,7 @@ LEAN_WARN_KINDS: tuple[str, ...] = PM.LEAN_WARN_KINDS
 BLOCKING_KINDS: tuple[str, ...] = (
     MAPPING_OBJECTIVE_KINDS + CITATION_OBJECTIVE_KINDS + MD_OBJECTIVE_KINDS
     + PAPER_OBJECTIVE_KINDS + LEAN_OBJECTIVE_KINDS + NUMERIC_OBJECTIVE_KINDS
+    + EVIDENCE_OBJECTIVE_KINDS
 )
 
 #: 主观档：读稿人的判断。只点名、不拦门（业主口径："主观类维持只点名不拦"）。
@@ -168,7 +176,7 @@ def problem_counts(findings: Sequence[Mapping[str, Any]]) -> dict[str, int]:
 
 
 __all__ = [
-    "CITATION_OBJECTIVE_KINDS", "LEAN_OBJECTIVE_KINDS",
+    "CITATION_OBJECTIVE_KINDS", "EVIDENCE_OBJECTIVE_KINDS", "LEAN_OBJECTIVE_KINDS",
     "LEAN_WARN_KINDS", "LEVEL_BLOCKER", "LEVEL_INFO", "LEVEL_WARNING",
     "MAPPING_OBJECTIVE_KINDS", "MD_OBJECTIVE_KINDS", "NUMERIC_OBJECTIVE_KINDS",
     "PAPER_OBJECTIVE_KINDS", "SUBJECTIVE_KINDS", "findings_of",

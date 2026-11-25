@@ -639,8 +639,8 @@ def _literature_fulltext_state(
     于是两种旧写法（分目录 `<号>/<名>`、带 `library/` 前缀）只要盘上有文件，
     就会被算进 `literature_with_fulltext`，而同一份 `path` 在写侧/审计与另外四条读路
     （`search.shelf` / `ocr.*` / `webui` 下载读数 / `wellformed`）已经被
-    `store.library_path` 拒成「旧布局（不再支持）」。这一格是交付物
-    "证据够不够"的读数：宽的那一侧会让旧布局冒充"真有全文"。
+    `store.library_path` 拒成「扁平落点已退役（2026-11-25 起回归 `<6位号>/<名>`）」。
+    这一格是交付物 "证据够不够"的读数：宽的那一侧会让旧布局冒充"真有全文"。
 
     ## 改后：与唯一真身同一套判据
 
@@ -649,7 +649,7 @@ def _literature_fulltext_state(
     所以这里不再自己拼路径：
 
     - 扁平落点 + 文件在 ⇒ `True`；
-    - 旧形态 ⇒ `False`，理由逐字带 :data:`litread.OLD_LAYOUT_NOTE`（「旧布局（不再支持）」）；
+    - 形状非法（扁平落点已退役 / 带 `library/` 前缀）⇒ `False`，理由逐字带 :data:`litread.RETIRED_LAYOUT_NOTE`；
     - 扁平落点但文件不在 ⇒ `False`，理由是 `file_missing`（状态说 ok 而文件没了，
       是另一种"没查成"，同样不许算成"有"）；
     - 没给 `library_root` ⇒ `True`（只按 `download.status` 算），并在 `note` 里说清
@@ -860,17 +860,17 @@ def citation_coverage(
         # （改行 / 改行 / 补字节）。折成一句"没有全文"会让动作分不清 ——
         # 与 `store.library_path` 的两档拒信同一条纪律。
         legacy_rows = [(lid, why) for lid, why in fulltext_refusals
-                       if _LR.OLD_LAYOUT_NOTE in why]
+                       if _LR.RETIRED_LAYOUT_NOTE in why]
         escape_rows = [(lid, why) for lid, why in fulltext_refusals
-                       if _LR.OLD_LAYOUT_NOTE not in why and "越出" in why]
+                       if _LR.RETIRED_LAYOUT_NOTE not in why and "越出" in why]
         gone_rows = [(lid, why) for lid, why in fulltext_refusals
-                     if _LR.OLD_LAYOUT_NOTE not in why and "越出" not in why]
+                     if _LR.RETIRED_LAYOUT_NOTE not in why and "越出" not in why]
         if legacy_rows:
             gaps.append(
-                f"有 {len(legacy_rows)} 篇文献的 `path` 是**旧布局（不再支持）**"
-                f"（例：{('、'.join(lid or '?' for lid, _ in legacy_rows[:3]))}）"
+                f"有 {len(legacy_rows)} 篇文献的 `path` 形状非法（扁平落点自 2026-11-25 起退役，"
+                f"规范是 `<6位号>/<名>`；例：{('、'.join(lid or '?' for lid, _ in legacy_rows[:3]))}）"
                 "⇒ 不计入「有全文」（与唯一真身 `store.library_path` 同一套判据）；"
-                "改法：把文件按扁平名放进 `library/`，并把该行 `path` 改成扁平名"
+                "改法：把文件放进 `library/<6位号>/`，并把该行 `path` 改成 `<6位号>/<文件名>`"
             )
         if escape_rows:
             gaps.append(

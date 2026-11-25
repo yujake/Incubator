@@ -79,6 +79,86 @@
         "verdict": "成立",
         "sha256": "43f4c2ab662e247dfb7976e4e1d2af3f315f83cf3977daaeac1016656c1a7af6"
       }
+    },
+    {
+      "kind": "experiment",
+      "label": "exp:000003",
+      "env_no": 0,
+      "ledger_id": "exp:000003",
+      "proof_no": 1,
+      "file": "code/exp/lpsec_validate.py",
+      "ledger_kind": "不适用（实验行）",
+      "reviewed": "不适用（实验行）",
+      "optimized": "不适用（实验行）",
+      "proof_source": "不适用（实验行）",
+      "experiment_logs": [
+        "out/exp-logs/000003.log"
+      ],
+      "experiment_code_hash": "226a5da3ceebc6ed",
+      "experiment_result": "supports",
+      "experiment_negation_kind": "not_proved",
+      "experiment_params": "未记录（台账 params 为空）；strategy：tanh-sinh panels between closed-form break points; exact polytope clipping; basis-rotation invariance; nested bisection+Simpson",
+      "experiment_exit_code": 0
+    },
+    {
+      "kind": "experiment",
+      "label": "exp:000004",
+      "env_no": 0,
+      "ledger_id": "exp:000004",
+      "proof_no": 1,
+      "file": "code/exp/lpsec_sweep.py",
+      "ledger_kind": "不适用（实验行）",
+      "reviewed": "不适用（实验行）",
+      "optimized": "不适用（实验行）",
+      "proof_source": "不适用（实验行）",
+      "experiment_logs": [
+        "out/exp-logs/000004.log"
+      ],
+      "experiment_code_hash": "cee87cd85e5bfb84",
+      "experiment_result": "supports",
+      "experiment_negation_kind": "not_proved",
+      "experiment_params": "未记录（台账 params 为空）；strategy：signed-permutation reduction to the fundamental domain; 2D grid + nested box refinement (global and interior-restricted); arc scans; polar tanh-sinh quadrature with all closed-form break points; coordinate section against the closed form 4G(1+1/p)^2/G(1+2/p)",
+      "experiment_exit_code": 0
+    },
+    {
+      "kind": "experiment",
+      "label": "exp:000006",
+      "env_no": 0,
+      "ledger_id": "exp:000006",
+      "proof_no": 1,
+      "file": "code/exp/lpsec_critical.py",
+      "ledger_kind": "不适用（实验行）",
+      "reviewed": "不适用（实验行）",
+      "optimized": "不适用（实验行）",
+      "proof_source": "不适用（实验行）",
+      "experiment_logs": [
+        "out/exp-logs/000006.log"
+      ],
+      "experiment_code_hash": "861779663909594d",
+      "experiment_result": "supports",
+      "experiment_negation_kind": "not_proved",
+      "experiment_params": "未记录（台账 params 为空）；strategy：tanh-sinh polar quadrature between closed-form break points (exp:000003 certified it to 7e-16); bisection in p for the crossing points; monotone p-scan; arc scans + interior grid for the boundary-vs-interior comparison",
+      "experiment_exit_code": 0
+    },
+    {
+      "kind": "experiment",
+      "label": "exp:000007",
+      "env_no": 0,
+      "ledger_id": "exp:000007",
+      "proof_no": 1,
+      "file": "code/exp/lpsec_arcs.py",
+      "ledger_kind": "不适用（实验行）",
+      "reviewed": "不适用（实验行）",
+      "optimized": "不适用（实验行）",
+      "proof_source": "不适用（实验行）",
+      "experiment_logs": [
+        "out/exp-logs/000007.log"
+      ],
+      "experiment_code_hash": "b13eb9eb12509023",
+      "experiment_result": "supports",
+      "experiment_negation_kind": "not_proved",
+      "experiment_params": "未记录（台账 params 为空）；strategy：tanh-sinh polar quadrature between closed-form break points (certified in exp:000003 to ~1e-15); full boundary of the fundamental domain scanned, not sampled around one guess",
+      "experiment_exit_code": 0
     }
   ]
 }
