@@ -33,7 +33,7 @@ from . import toolface as _TF
 #: 同一条渲染链（位置仍是 `SECTION_ORDERS["A_SEARCH_STYLE"]`，渲染逐字节不变）。
 from .specs.a import SEARCH_STYLE as _A_SEARCH_STYLE
 from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDERS
-PROMPT_VERSION = "p331"
+PROMPT_VERSION = "p332"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：
@@ -3637,8 +3637,9 @@ def _pending_local_materials(root: str, role: str = "") -> str:
         src_path = str((dl.get("source_path") if isinstance(dl, dict) else "") or "").strip()
         if src_path:
             known.add(_local_material_key(src_path))
-    # 声明与"已入编"是两根轴：声明说"许不许入库"（只有用户点名的才可入库），
-    # 已入编说"进没进 literature"。真身是 `locallib.read_declaration` / `is_declared`。
+    # 声明与"已入编"是两根轴：声明说"许不许入库"（只有用户原话明确授权的才可入库 ——
+    # 点名 ≠ 授权，2026-11-26 业主补正），已入编说"进没进 literature"。
+    # 真身是 `locallib.read_declaration` / `is_declared`。
     from .locallib import is_declared, read_declaration
     declarations, decl_problem = read_declaration(root)
     parts: list[str] = []
@@ -3666,10 +3667,12 @@ def _pending_local_materials(root: str, role: str = "") -> str:
     # 抄一遍工具名，等于在它们的提示词里点名它们调不到的工具（判据
     # `tests/test_the_rendered_prompt_names_only_its_own_tools.py`）；所以非 A 只说
     # "由 A 走判收链"，工具名留给 A 自己那一格（A 的政策里也写着同一条链）。
-    declared_note = ("**只有用户点名的才可入库**：用户声明记在工作区根的 "
-                     "`RELIABLE-REFERENCES.json`（M 逐字抄用户原话），未点名的只能当研究"
-                     "参考、不可进 `literature`；非 dry 档遇到未声明文件会以 "
-                     "`not_declared_reference` 受控拒（零写入），那是 fail-closed，不是故障。")
+    declared_note = ("**点名 ≠ 授权**：只有用户原话里**明确授权**（「可以当参考文献」「可以"
+                     "引用」「收进文献库」这类）的那几份才可入库，只是被点名来消化的材料不是"
+                     "授权；用户声明记在工作区根的 `RELIABLE-REFERENCES.json`（M 逐字抄那句"
+                     "授权原话），未授权的一律只能当研究参考、不可进 `literature`；非 dry 档"
+                     "遇到未声明文件会以 `not_declared_reference` 受控拒（零写入），那是 "
+                     "fail-closed，不是故障。")
     if str(role or "") == "A":
         chain = ("- 未入编的必须先走判收链：`search.ingest_local(books_dir=\"library\" 或 "
                  "\"source\", dry_run=True)` 发现（只算不写）→ `lit.stage_add` 建候选 → "
