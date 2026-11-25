@@ -4076,3 +4076,23 @@ ewtheorem / 论文写作只是推荐）一字未动。
 #:   `closing.py` 源码断言 `high_tier_without_ladder` 仍是 warning）；D 的 `difficulty` /
 #:   `abandon` 与 F 的四键预算 / `best_partial` 必填口径也一字未动。
 #:   本笔 = p330。
+#: p330 → p331（2026-11-25，V 的伙伴表专长句不再点内部机制名 —— B 不该读 V 的机制）
+#:   一、现场：全量 #33（2026-11-25）里 `tests/test_b_proof_review_threshold_is_signed.py`
+#:   红在「B 的提示词仍在教 V 的内部机制：'三转'」；来源是 `agent_prompts.OUT_EDGE_SPECIALTIES["V"]`
+#:   那句「挑出真毛病 —— 指到步号并给 defect_ref，**三转会审**之后才发签」。这一行渲染进
+#:   **每个有 V 出边的角色的伙伴表**（B / E / F），于是 B 读到了 V 的内部机制名。
+#:   二、改法（业主裁定只改这一句）：`OUT_EDGE_SPECIALTIES["V"]` 改成「按会审结论发签」——
+#:   语义不变（发签仍要看会审结论），去掉的是"三转"这个内部计数口径。
+#:   三、驱动面：**三格漂** —— B / E / F（正好是出边里有 V 的三个角色；A/C/D/G/H/L/M/V 逐字同值）。
+#:   **以现盘重算为准**（`scripts/recompute_prompt_digests.py --write`，12 处；重算前 dry-run
+#:   读数就是 `[DRIFT] B/E/F`、其余 OK）。
+#:   四、连带：`PROMPT_VERSION` p330 → p331；`_FROZEN_PROMPT_DIGESTS` 按现值重写（只那三格换值）；
+#:   `_VOLATILE_FACT_SETS` 追加 p331 一格（count=15、`keys_sha256=21314a39…` 与 p330 同值）；
+#:   `tests/fixtures/prompt_cache_warm.json` 两档各重落（逐趟 usd 见
+#:   `agentflow/temp/promptladder/REPORT.md` §花钱）。
+#:   五、FC-27：本笔改的是 `agent_prompts.py`（**不在** `.noai-paths` 清单里）与 `tests/**` /
+#:   `docs/**`；`specs/*.py` 一个字节没动 ⇒ 没有新增登记（p330 的四份声明面登记仍有效）。
+#:   承接上一笔：真机 `projects/sunflower-digest-2` 21:22 起跑时读到"缓存这一档不新鲜"就是
+#:   p330 热身被这一行改动作废造成的（预热只影响成本、不影响正确性）；重落之后同类警告不再出现。
+#:   六、口径：只改一行教法，不动门、不动判据强度。
+#:   本笔 = p331。

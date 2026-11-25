@@ -33,7 +33,7 @@ from . import toolface as _TF
 #: 同一条渲染链（位置仍是 `SECTION_ORDERS["A_SEARCH_STYLE"]`，渲染逐字节不变）。
 from .specs.a import SEARCH_STYLE as _A_SEARCH_STYLE
 from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDERS
-PROMPT_VERSION = "p330"
+PROMPT_VERSION = "p331"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：
@@ -2998,7 +2998,7 @@ OUT_EDGE_SPECIALTIES: dict[str, tuple[str, str]] = {
           "把证明搬进 Lean，并把检查器原话带回来"
           "（机制：形式化三件 ＋ 检查器桥接）"),
     "V": ("两态判词",
-          "挑出真毛病 —— 指到步号并给 defect_ref，三转会审之后才发签"
+          "挑出真毛病 —— 指到步号并给 defect_ref，按会审结论发签"
           "（机制：判词台账 ＋ 签的读数）"),
 }
 
