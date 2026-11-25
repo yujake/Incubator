@@ -3291,7 +3291,8 @@ def _mapping_declaration_texts(
             "与 next_steps（人话清单，含「扩大研究面」与「不许杜撰」）"
         ),
         "mapping_cells_returns": (
-            "{'ok','cells','sources','problems','channel','checked','load_bearing_gaps'}；"
+            "{'ok','cells','sources','problems','channel','checked','load_bearing_gaps','note'}；"
+            "note = 这一次只取承重缺口表时的说明（不给 statement_id / claim_key）；"
             "cells 的键 = file / lean_file / lean_target / numeric_evidence / "
             "exhaustion_note / evidence_kind / evidence_path / evidence_sha256 / "
             "v_signature（只给拿得到的格；" + empty + "）；"

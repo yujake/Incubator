@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-26T05:29:30+08:00",
+  "generated_at": "2026-11-26T06:58:23+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -648,10 +648,10 @@
       "path": "src/agentflow/tools/doc_tools.py",
       "glob": "src/agentflow/tools/doc_tools.py",
       "category": "auth-audit",
-      "sha256": "579e6d7c77940f290b3a6857677bcdab357385552c7cc74f3f2bd187bc45d6c9",
+      "sha256": "6bc85e330384b7ede1f04a8e69988d61032ce9a489c759aef8d1cb050ea55a05",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "BEARINGDEF 2026-11-26：承重命题自证稿/签的读数与 CH8 该有格；登记≠批准（需人逐行走查+2 reviewer）",
+      "change_note": "BEARINGDEF 2026-11-26 收尾：doc.mapping_cells returns 补 note 键（登记≠批准，仍需人逐行走查+2 reviewer）",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
