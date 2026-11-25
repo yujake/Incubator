@@ -86,15 +86,31 @@ def _text_dir(ctx: "_Ctx", source: Path, lit_id: str, out_dir: str) -> Path:
     """
     if out_dir:
         return ctx.workspace / out_dir
+    library = (Path(ctx.store.library) if ctx.store is not None
+               else ctx.workspace / "library")
     lid = str(lit_id or "").strip()
     if lid:
         body = lid.split(":")[-1].strip() or lid
-        library = (Path(ctx.store.library) if ctx.store is not None
-                   else ctx.workspace / "library")
         if _ID_DIR_RE.match(body):
             return Path(library) / body
+    # 没有文献号（候选期 / 裸路径）⇒ 不许写进已登记书架 `library/`：
+    # 2026-11-25 真机 `sunflower-digest-1` 的现场是 A 在登记之前抽了一份，
+    # 落成 `library/<名>.txt` —— 而书架里出现没有 literature 行的文件本身就是结构异常
+    # （`agent_skills.py:2807` 逐字）。两条合法出路：
+    #   ① 原件已经住在 `library/<号>/` 里 ⇒ 与它同目录（这一份就是那一条的抽读件）；
+    #   ② 否则落候选期目录 `out/texts/`，等登记之后再按号归位。
+    try:
+        rel = Path(source).resolve().relative_to(Path(library).resolve())
+    except (ValueError, OSError):
+        rel = None
+    if rel is not None:
+        # 原件就住在书架里（任何合法形态）：抽读件与它同目录。
+        # 扁平形态仍读得通（2026-11-25 起是历史档），历史条目的抽读件也该留在原处。
+        if len(rel.parts) > 1 and _ID_DIR_RE.match(rel.parts[0]):
+            return Path(library) / rel.parts[0]
         return Path(library)
-    return ctx.workspace / "library"
+    # 原件不在书架里（工作区根 / reference/ 投放）：候选期，落 out/texts
+    return ctx.workspace / "out" / "texts"
 
 
 def _pages_of(doc: Any) -> list[Any]:

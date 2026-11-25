@@ -66,7 +66,7 @@
 与它的负控 `test_the_documented_readings_criterion_is_not_vacuous`（把一块读数打回过期值，
 判据必须红 —— 这是"判据本身不是橡皮图章"的证明）。
 
-**linter 的当次三栏（日常档）**：`error 0 / warning 36 / info 46`（观测 2026-11-23 05:2x，
+**linter 的当次三栏（日常档）**：`error 0 / warning 37 / info 46`（观测 2026-11-23 05:2x，
 复跑 `python -B scripts/lint_rules.py`；2026-11-22 这一天并行施工的几条路各带进几条
 R002/R003/R009，实测过 22 / 46 —— 其中 **1 条 R009 的 error** 落在
 `tests/test_library_each_entry_has_its_text.py`（LIBRARY-SHAPE 那条路重写的判据文件），不属本笔；
@@ -96,9 +96,9 @@ LIVE-READINGS:BEGIN
 # 量法说明：前 11 个键与 `tests/test_release_all.py::measured_readings()` 逐键同名同量法。
 # 判据不认的键（拼错）与判据要的键缺失，都会被同一处报出来 —— 所以加键要同时改判据。
 lint_rules_rules        = 12   # `len(RULES)`；复跑 `python -B scripts/lint_rules.py` 摘要行的"规则 N 条"。其中 R004/R006 已退休、编号保留，`RETIRED_RULES` 里逐条给了去向
-lint_rules_warning      = 36   # `python -B scripts/lint_rules.py`（日常档）末行 warning 栏（2026-11-23 04:5x 复跑 28；03:32 那趟是 24；A-3-EXEC 同日 03:08 按现盘追平 22 → 24，此前 2026-11-22 16:0x 是 22 —— B5 收尾时实测；再往前 2026-11-21 复跑 18、2026-11-20 复跑 17、2026-11-17 复跑 21；当次逐条清单以 linter 输出为准，不在这条注释里复述）
+lint_rules_warning      = 37   # `python -B scripts/lint_rules.py`（日常档）末行 warning 栏（2026-11-23 04:5x 复跑 28；03:32 那趟是 24；A-3-EXEC 同日 03:08 按现盘追平 22 → 24，此前 2026-11-22 16:0x 是 22 —— B5 收尾时实测；再往前 2026-11-21 复跑 18、2026-11-20 复跑 17、2026-11-17 复跑 21；当次逐条清单以 linter 输出为准，不在这条注释里复述）
 lint_rules_info         = 46   # 同一档的 info 栏（2026-11-22 16:0x 复跑 46；2026-11-20 复跑 45）
-lint_rules_strict_warning = 115 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（2026-11-23 04:5x 复跑 105；03:33 那趟是 101；A-3-EXEC 同日 03:08 按现盘追平 98 → 101；此前 2026-11-22 16:0x 是 98：B5 收尾时实测（并行路同批落的几条 R002/R003/R009 把 94 抬到 98）；00:5x 那次 94、00:25 那次 97；逐条清单以 `--strict` 输出为准；2026-11-21 复跑 96；2026-11-20 复跑 93；2026-11-17 复跑 89；日常档那条 R007 info 在这一档拆成逐模块 warning，另加 R003 `read_rows` 那一对）
+lint_rules_strict_warning = 116 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（2026-11-23 04:5x 复跑 105；03:33 那趟是 101；A-3-EXEC 同日 03:08 按现盘追平 98 → 101；此前 2026-11-22 16:0x 是 98：B5 收尾时实测（并行路同批落的几条 R002/R003/R009 把 94 抬到 98）；00:5x 那次 94、00:25 那次 97；逐条清单以 `--strict` 输出为准；2026-11-21 复跑 96；2026-11-20 复跑 93；2026-11-17 复跑 89；日常档那条 R007 info 在这一档拆成逐模块 warning，另加 R003 `read_rows` 那一对）
 lint_rules_strict_info  = 45   # 同一档的 info 栏（2026-11-22 16:0x 复跑 45；2026-11-20 复跑 44）
 noai_paths_glob         = 71   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`（2026-11-23 04:5x 复跑 70；00:2x 那趟是 47：`src/agentflow/closing.py` 按 eval-criteria 登记进清单，46 → 47；此前 2026-11-21：tests/golden 四条随 tests 不入 git 一并摘除，50 → 46；2026-11-20 收口后曾是 49 → 50，attack_tools 的 auth-audit 登记行落盘）
 noai_paths_unique       = 68   # 上述条目行按第一栏去重：`(... | ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count`（2026-11-23 04:5x 复跑 67；00:2x 那趟是 44：`closing.py` 是新路径，43 → 44；tests/golden 四条摘除那次是 47 → 43）
