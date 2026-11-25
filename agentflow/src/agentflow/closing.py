@@ -11168,6 +11168,27 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
             "problems）⇒ 读的人会看到两份不一样的账。正本是文件；"
             "派生副本要么重建、要么删掉，不许两边各读一边"))
     _nt = rep.readings["nontriviality"]
+    if _nt.get("needs_rejudge_total"):
+        # 2026-11-25（TIER-VERSION 问题②）：依赖集变了要看得见。这一条只报读数、不拦门
+        # （门强不属于这一批）：那几条在分布里已经不占任何 T 档，`needs_rejudge_tiers`
+        # 逐条点名"行上记的依赖指纹 / 现盘算的 / 原来读成第几档"。
+        _nids = [str(x.get("stmt_id") or "") for x in
+                 (_nt.get("needs_rejudge_tiers") or [])][:8]
+        rep.findings.append(Finding(
+            "nontriviality", "needs_rejudge_tier", "warning",
+            f"本篇有 {_nt['needs_rejudge_total']} 条命题的依赖集在研判之后变了（{_nids}）"
+            "—— 现盘 `derived_from` / 依赖引理与行上 `judged_deps_sha` 对不上 ⇒ 这些档位"
+            "不沿用（收工读数里记在 `counts.needs_rejudge`，不进 T0–T4），要重判一次；"
+            "**这一格不拦门**，它是读数"))
+    if _nt.get("text_drift_total"):
+        # 信息读数（业主 2026-11-25：「非平凡度跟随路径而不跟随稿」）：判过之后正文被
+        # 优化过，档位照旧沿用、不重判 —— 这一条只让"洗过稿"这件事在收工输出上看得见。
+        _dids = [str(x.get("stmt_id") or "") for x in
+                 (_nt.get("text_drift_tiers") or [])][:8]
+        rep.findings.append(Finding(
+            "nontriviality", "tier_text_drift", "warning",
+            f"本篇有 {_nt['text_drift_total']} 条命题判过之后正文被优化过（{_dids}）—— "
+            "档位跟路径不跟稿 ⇒ **照旧沿用**，不重判；这一格只回答'有没有洗过稿'"))
     if _nt.get("high_tier_total"):
         _ids = [f"{x['stmt_id']}(T{x['level']})" for x in _nt["high_tier"]][:6]
         rep.findings.append(Finding(
@@ -11812,9 +11833,15 @@ def paper_proof_scaffolding_problems(root: str | Path) -> list[str]:
                 # 改前这里只传正文：正文被改过一个字之后 sha 对不上，这一栏就退化成"未判"，
                 # 于是"T3/T4 的框架被搬进附录"这一条静默不报，与页面那一栏分家。
                 # 正文同时改回 D2 的唯一读口（`_SB.body_of`，另两处早就是它）。
+                # 2026-11-25（TIER-VERSION 问题②）：再交出"每条路径现在盘上的证明"
+                # 与"现在盘上的依赖集指纹" ⇒ 版本闸与依赖守卫都判得出来；
+                # `needs_rejudge` ⇒ `level=None` ⇒ 这一条不报。
                 tier = _SEC.nontriviality_of(
                     root, _SB.body_of(row), stmt_id=str(row.get("stmt_id") or ""),
-                    path_groups=_path_groups_of(row))["level"]
+                    path_groups=_path_groups_of(row),
+                    proofs_by_path=_current_proofs_by_path(root, row),
+                    current_deps_sha=_current_deps_sha(
+                        row, _ledger_rows(root, "dependencies")))["level"]
             except Exception:  # noqa: BLE001 - 读数取不到不影响这条判据
                 tier = None
         in_body = (body + after).strip()
@@ -11824,6 +11851,69 @@ def paper_proof_scaffolding_problems(root: str | Path) -> list[str]:
                 f"{name}: 档位 T{tier} 的框架被整段移进附录（正文只剩 {len(in_body)} 字符的指针）"
                 " —— T3/T4 的框架与动机必须留在正文")
     return problems
+
+
+def _current_proofs_by_path(root: str | Path, row: Mapping[str, Any]
+                            ) -> dict[int, str | None]:
+    """每条路径现在盘上的证明正文（版本闸的第一根轴）。
+
+    ## 为什么按路径取，而不是取命题行那一格
+
+    业主 2026-11-25 的口径：「非平凡度跟随路径而不跟随稿」。一条命题第 n 条路径的
+    证明正文住在 `manuscripts[n]` 那份稿的 `## 证明` 节里；`statements.proof_text`
+    只装着 canonical 那一份。真机 `demo/lp-ball-22` 的 000030：path 2 的判料是
+    `manuscripts/F/f-proof-000003.md` 的 3230 字证明节（重算与行上的
+    `judged_body_sha256` 逐字相等），而命题行 `proof_text` 是空串 —— 拿命题行那一格
+    去核 path 2，就会把"材料在稿上、一字未动"误读成"正文被洗过"。
+
+    ## 三态（不许折平）
+
+    | 情形 | 返回值 |
+    |---|---|
+    | 该路径的稿在盘上（有 `## 证明` 节） | 那一节的正文（`.strip()`，与判档材料同一形态） |
+    | 没有稿、且是路径 1（老行 / 单路径直登） | 命题行的 `proof_text`（`.strip()`） |
+    | 没有稿、也不是路径 1 | `None`：读侧没有这一路径的材料 ⇒ 该路径 `unchecked` |
+
+    返回的字典**只覆盖 `manuscripts` 里的路径**。`nontriviality_of` 按路径号查它；
+    查不到的路径按 `None` 读（"没核过"，不是"核过了"）。
+    """
+    from . import depsection as _DS
+
+    raw = row.get("manuscripts")
+    books: Mapping[str, Any] = raw if isinstance(raw, Mapping) else {}
+    paths = _path_groups_of(row) or [1]
+    out: dict[int, str | None] = {}
+    for no in paths:
+        rel = str(books.get(str(no)) or "").strip()
+        if rel:
+            path = Path(root) / rel
+            try:
+                if path.is_file():
+                    out[no] = _DS.proof_body(path.read_text(encoding="utf-8")).strip()
+                    continue
+            except (OSError, UnicodeDecodeError):
+                # 稿读不出来 ⇒ 这一路径没有现盘材料（下面落到 None ⇒ `unchecked`），
+                # 不是"核过了"也不是"正文变了"；判档读数照旧沿用旧档。
+                pass
+        has_books = isinstance(raw, Mapping) and bool(books)
+        out[no] = (str(row.get("proof_text") or "").strip()
+                   if no == 1 or not has_books else None)
+    return out
+
+
+def _current_deps_sha(row: Mapping[str, Any],
+                      deps_rows: Sequence[Mapping[str, Any]]) -> str:
+    """这条命题现在盘上的依赖集指纹（版本闸的第二根轴；公式只有 `deps_sha256` 一处）。
+
+    `deps_rows` 是 `data/dependencies.json` 的行（收工读数一次读进来、逐条命题复用）；
+    指纹只认依赖的身份（`:func:`deps_sha256` 的说明），不认台账行的 id / 摘录 / 状态。
+    """
+    from .secretary_tier_ledger import deps_sha256
+
+    return deps_sha256(derived_from=row.get("derived_from"),
+                       dependency_rows=deps_rows,
+                       stmt_id=str(row.get("stmt_id") or ""))
+
 
 def _path_groups_of(row: Mapping[str, Any]) -> list[int]:
     """这条命题应该有哪几条证明路径（`statements.manuscripts` 的键，升序）。
@@ -11847,6 +11937,41 @@ def _path_groups_of(row: Mapping[str, Any]) -> list[int]:
     return sorted(out)
 
 
+def _gate_entry(row: Mapping[str, Any], got: Mapping[str, Any], *,
+                paths_key: str, detail_key: str) -> dict[str, Any]:
+    """一条版本闸读数的收工行（`text_drift_tiers[]` / `needs_rejudge_tiers[]` 共用）。
+
+    `paths_key` / `detail_key` 由调用方点名（漂移那两格与要重判那两格同名不同义）：
+    `detail[].recorded_level` 是"那一行原来读成第几档"，只在**没沿用**时才有意义；
+    沿用（`text_drift`）时它是"被沿用的那一档"，不是现档。
+    """
+    return {"stmt_id": str(row.get("stmt_id") or ""),
+            "paths": [int(x) for x in (got.get(paths_key) or [])],
+            "detail": [dict(x) for x in (got.get(detail_key) or [])
+                       if isinstance(x, Mapping)],
+            "deps_state": str(got.get("deps_state") or ""),
+            "partial": bool(got.get("partial"))}
+
+
+def _high_tier_entry(row: Mapping[str, Any], got: Mapping[str, Any],
+                     paths: list[dict[str, Any]], min_of: list[int]) -> dict[str, Any]:
+    """一条 T3/T4 的收工读数（`high_tier[]` 的一行）。
+
+    `stmt_id` 取**命题行**的号（旧账本按 sha 回退命中时，台账那一行可能没有号）；
+    `label` 取自同一份 `_fold_nontriviality` 的返回值（不在这里另算一次档位名）；
+    `matched_by` 让读的人能与页面那一栏逐字核对是不是同一个命中方式。
+    """
+    return {"stmt_id": str(row.get("stmt_id") or ""),
+            "level": got.get("level"),
+            "label": str(got.get("label") or ""),
+            "basis": str(got.get("basis") or ""),
+            "matched_by": str(got.get("matched_by") or ""),
+            "tri": str(got.get("tri") or "unknown"),
+            "paths": paths, "min_of": min_of,
+            "partial": bool(got.get("partial")),
+            "paths_unjudged": list(got.get("paths_unjudged") or [])}
+
+
 def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
     """收工读数：本篇的非平凡性分布 ＋ T3/T4 清单 ＋ 论文侧的缺铺垫点名。
 
@@ -11863,29 +11988,52 @@ def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
     合法调用形态）在 `Path(None)` 上抛 `TypeError` —— 一格读不到把整份收工报告打掉，
     读的人拿到的是崩溃而不是"这一格没读到"。
 
-    ## 五种结局，各自一栏（FIX186-B，业主 2026-11-19 口径）
+    ## 结局各有一栏（FIX186-B，业主 2026-11-19 口径 + 2026-11-25 版本闸）
 
     | 栏 | 是什么 | 进不进分母 |
     |---|---|---|
-    | `T0`…`T4` | 判出来的五档 | 是（活着的那几条） |
+    | `T0`…`T4` | 判出来的五档（判料 = 盘上现在这一版） | 是（活着的那几条） |
     | `not_applicable` | 「这一问对它不成立」（概念行没有证明正文） | 不进 |
     | `unjudged` | 「该判而没判」（台账里没有 / 判不了） | 是 |
+    | `stale` | 「判过，但判的那一版已经不是盘上这一版」（版本闸） | 是 |
 
     改前 `applicable:false` 一律计进 `unjudged`：lp-ball-11 的 35 条概念行把
     「不适用」压成「未判 36/37」，屏幕上一个真档都看不见。现在两栏分开计。
     `counts` 是全量审计读数（已放弃的行也照实报它当年落在哪个结局）；
     `statements_total` 是分母：可判命题 = 有可判对象且没被放弃的行 —— 不适用与
     已放弃都不进（业主：「放弃态的条目直接踢出，然后监测活跃条目」）。
+
+    ## 版本闸与依赖守卫（2026-11-25，TIER-VERSION 问题②）
+
+    业主口径逐字：「非平凡度跟随路径而不跟随稿」。每一行先过 `nontriviality_of`
+    的闸，两根轴各判各的，结局不许折平：
+
+    | 结局 | 这里怎么计 | 读的人该做什么 |
+    |---|---|---|
+    | 核过（`checked`） | 照旧进 `T0`…`T4` | 不用动 |
+    | 正文漂移（`text_drift`） | 档位照旧进 `T0`…`T4`，另计进 `text_drift_total` + `text_drift_tiers` | 只是信息：判过之后正文被优化过；档位跟路径走，不重判 |
+    | 要重判（`needs_rejudge`） | 进 `counts["needs_rejudge"]` + `needs_rejudge_tiers`，不进 `T0`…`T4` | 依赖集变了（`judged_deps_sha` 对不上）⇒ 重判一次 |
+    | 没判过（`level=None` 且不是 needs_rejudge） | 进 `counts["unjudged"]` | 先判 |
+    | 没核过（`unversioned` / `unchecked`） | 照旧进 `T0`…`T4`，计进 `version_counts` | 存量行（旧行没有 `judged_deps_sha`）/ 读侧没交材料；不许读成"核过了" |
+
+    反真空判据 `tests/test_nontriviality_version_gate.py` 的两条：把 `needs_rejudge`
+    摘掉 ⇒ 依赖变了也沿用旧档（红）；把 `text_drift` 摘掉 ⇒ 第 1 条仍绿，但这一格
+    读数消失（`text_drift_total` 归零）。
     """
     from . import secretary as _SEC
+    from .secretary_tier_ledger import NT_VERSION_NEEDS_REJUDGE as _NT_NEEDS_REJUDGE
     counts = {f"T{level}": 0 for level in _SEC.NONTRIVIALITY_LEVELS}
     counts["not_applicable"] = 0
     counts["unjudged"] = 0
+    counts["needs_rejudge"] = 0
     if not str(root or "").strip():
         return {"checked": False, "statements_total": 0, "rows_total": 0, "counts": counts,
                 "not_applicable_total": 0, "abandoned_total": 0, "unjudged_abandoned": 0,
                 "high_tier": [], "high_tier_total": 0, "paper_scaffolding_problems": [],
                 "t4_ladder_problems": [], "sid": str(sid or ""),
+                "ok_total": 0, "text_drift_total": 0, "text_drift_tiers": [],
+                "needs_rejudge_total": 0, "needs_rejudge_tiers": [],
+                "version_counts": {},
                 "reason": "没有工作区根 ⇒ 非平凡性这一格没读到（不是\"全是 T1\"）"}
     # 全量（审计面：放弃的行也照实报）与论文侧（放弃的不进）分开读 ——
     # `_paper_statement_rows` 是三态过滤的唯一落点，这里不抄第二份名单。
@@ -11903,6 +12051,12 @@ def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
     levels: list[dict[str, Any]] = []
     paths_total = 0
     partial_total = 0
+    text_drift_total = 0
+    text_drift_rows: list[dict[str, Any]] = []
+    needs_rejudge_total = 0
+    needs_rejudge_rows: list[dict[str, Any]] = []
+    version_counts: dict[str, int] = {}
+    deps_rows = _ledger_rows(root, "dependencies")
     for row in rows:
         # D2：正文只有一个读口（`statementbody.body_of`：真身 `statement_full` 优先，
         # 空则退回历史行的 `statement_text`）。
@@ -11912,9 +12066,13 @@ def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
         # T3/T4 清单空，而两栏对同一条命题说两句话。
         # NT2（2026-11-15）：`path_groups` 让读侧知道这一条该有几条路径 ⇒ 部分没判时
         # `partial=true`（不许折成"命题级已算全"）；`level` 是命题级 min（各路径的最小）。
+        # 2026-11-25（问题②）：按路径交出现盘证明与依赖集指纹 —— 不传就核不了
+        # "档位跟的还是不是这一条路径"（见 `_current_proofs_by_path` / `_current_deps_sha`）。
         got = _SEC.nontriviality_of(
             root, text, stmt_id=str(row.get("stmt_id") or ""),
-            path_groups=_path_groups_of(row))
+            path_groups=_path_groups_of(row),
+            proofs_by_path=_current_proofs_by_path(root, row),
+            current_deps_sha=_current_deps_sha(row, deps_rows))
         # 2026-10-23：`level` 是 `None` = 判不了、`0` = T0（真的档位）。
         # 改前这两件事折叠在 0 上，于是"没人判过"与"基础定理"在读数里同形。
         level = got.get("level")
@@ -11923,12 +12081,21 @@ def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
         lifecycle_reading = _L.state_of_statement(row)
         abandoned = lifecycle_reading.get("state") == _L.ABANDONED
         tri = str(got.get("tri") or "")
+        version = str(got.get("version") or "")
+        needs_rejudge = version == _NT_NEEDS_REJUDGE
         not_applicable = tri == "not_applicable" or got.get("applicable") is False
+        if not not_applicable:
+            version_counts[version or "unknown"] = (
+                version_counts.get(version or "unknown", 0) + 1)
         if not_applicable:
             # 「这一问对它不成立」与「该判而没判」分开计 —— 折平就是 lp-ball-11 的
             # 「未判 36/37」那个假读数。
             counts["not_applicable"] += 1
             not_applicable_total += 1
+        elif needs_rejudge:
+            # 依赖集变了 ⇒ 档位不沿用；它既不进 T0–T4，也不进 `unjudged`（判过）。
+            counts["needs_rejudge"] += 1
+            needs_rejudge_total += 1
         elif level is None:
             counts["unjudged"] += 1
             if abandoned:
@@ -11939,6 +12106,15 @@ def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
             # 放弃的不进分母、不进 T0 清单、不进 T3/T4 与造梯子清单（业主口径）。
             abandoned_total += 1
             continue
+        if got.get("text_drift"):
+            # 只收活着的命题；正文漂移是信息读数（档位照旧沿用）。
+            text_drift_total += 1
+            text_drift_rows.append(_gate_entry(row, got, paths_key="paths_text_drift",
+                                               detail_key="text_drift_detail"))
+        if needs_rejudge:
+            needs_rejudge_rows.append(_gate_entry(row, got,
+                                                  paths_key="paths_needs_rejudge",
+                                                  detail_key="needs_rejudge_detail"))
         if not not_applicable:
             judgeable += 1
         paths_total += len(paths)
@@ -11951,17 +12127,7 @@ def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
         if level == 0:
             t0_ids.append(str(row.get("stmt_id") or ""))
         if level is not None and level >= 3:
-            high.append({"stmt_id": str(row.get("stmt_id") or ""), "level": level,
-                         "label": _SEC.nontriviality_label(level),
-                         "basis": str(got.get("basis") or ""),
-                         # 命中方式（按号 / 读旧行的 sha 回退）：读的人要能与页面那一栏
-                         # 逐字核对同一个 `matched_by`（2026-10-26，Q20 判据 b）。
-                         "matched_by": str(got.get("matched_by") or ""),
-                         "tri": str(got.get("tri") or "unknown"),
-                         # ---- 逐路径（NT2）：命题级 min 的每个来源都列出来 ----------
-                         "paths": paths, "min_of": min_of,
-                         "partial": bool(got.get("partial")),
-                         "paths_unjudged": list(got.get("paths_unjudged") or [])})
+            high.append(_high_tier_entry(row, got, paths, min_of))
     return {
         "checked": bool(rows),
         #: 分母 = 可判命题数（不适用与已放弃都不进；业主 2026-11-19 口径）。
@@ -11969,6 +12135,17 @@ def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
         "statements_total": judgeable,
         "rows_total": len(rows),
         "counts": counts,
+        #: 四栏分开报（2026-11-25）：`ok_total` 是 `T0`…`T4` 之和（档位沿用的那些，
+        #: 其中正文漂移的另有 `text_drift_total` 点名）；`needs_rejudge_total` 是依赖集
+        #: 变了、不沿用旧档的那些；`counts["unjudged"]` 是没研判行的那些。
+        #: `version_counts` 是闸的五档逐档计数（`checked` / `text_drift` / `needs_rejudge` /
+        #: `unchecked` / `unversioned`）—— 旧行没有 `judged_deps_sha` 落在 `unchecked`。
+        "ok_total": sum(counts[f"T{level}"] for level in _SEC.NONTRIVIALITY_LEVELS),
+        "text_drift_total": text_drift_total,
+        "text_drift_tiers": text_drift_rows,
+        "needs_rejudge_total": needs_rejudge_total,
+        "needs_rejudge_tiers": needs_rejudge_rows,
+        "version_counts": version_counts,
         "not_applicable_total": not_applicable_total,
         "abandoned_total": abandoned_total,
         #: `counts["unjudged"]` 里有多少条其实是已放弃的行（审计面；它们不进分母）。
@@ -11977,8 +12154,8 @@ def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
         # 而不是只在秘书台账里躺着。
         "downgraded_to_t0": t0_ids,
         "downgraded_to_t0_total": len(t0_ids),
-        "downgraded_note": ("平凡不再拒收：判「太平凡」的命题落 T0（基础定理或初步结论），"
-                            "与 T1–T4 是同一根档位轴上的第一档"),
+        "downgraded_note": ("平凡不再拒收：证明里没有承重步骤的命题落 T0（档位判的是证明的"
+                            "力气，不是命题重不重要），与 T1–T4 是同一根档位轴上的第一档"),
         "high_tier": high,
         "high_tier_total": len(high),
         # 逐路径分布（NT2）：`paths_total` 是这一篇所有命题的路径行数之和，
@@ -12013,12 +12190,15 @@ def t4_ladder_problems(root: str | Path, *,
         from . import secretary as _SEC
 
         items = []
+        deps_rows = _ledger_rows(root, "dependencies")
         for row in _paper_statement_rows(root):
             text = _SB.body_of(row)
             items.append({"stmt_id": str(row.get("stmt_id") or ""), "text": text,
                           "level": _SEC.nontriviality_of(
                               root, text, stmt_id=str(row.get("stmt_id") or ""),
-                              path_groups=_path_groups_of(row)).get("level")})
+                              path_groups=_path_groups_of(row),
+                              proofs_by_path=_current_proofs_by_path(root, row),
+                              current_deps_sha=_current_deps_sha(row, deps_rows)).get("level")})
     else:
         items = levels
     questions = _ledger_rows(root, "research_questions")

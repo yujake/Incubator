@@ -38,6 +38,7 @@ from .secretary_tier_ledger import (  # noqa: F401 — 这些名字由 secretary
     _nontriviality_index,
     _row_path_group,
     append_nontriviality,
+    deps_sha256,
 )
 
 from .secretary_vocab import (  # noqa: F401 — 这些名字由 secretary_vocab 定义
@@ -52,7 +53,8 @@ class TierRecordMixin:
     def record_nontriviality(self, reading: Mapping[str, Any], *, stmt_id: str,
                              path_group: int = 0, statement_full: str = "",
                              landed_body_sha256: str = "",
-                             judged_body_sha256: str = "") -> dict[str, Any]:
+                             judged_body_sha256: str = "",
+                             judged_deps_sha: str = "") -> dict[str, Any]:
         """把判过的读数落进旁支台账（"判/落拆段"的落这一半，NT2）。
 
         ## 落的条件（业主口径的两条，缺一不落）
@@ -71,11 +73,13 @@ class TierRecordMixin:
         不追加一行（重复提交同一份稿不把 append-only 台账撑大）。正文变了才追加：
         逐路径"最后一行胜"（允许该路径降档/升档），命题级由读侧再取 min（永不回升）。
 
-        ## 两枚 sha
+        ## 三枚指纹
 
         - `judged_body_sha256`：判的材料（命题 + 空行 + 证明，见 :func:`_judged_body_sha`）；
+        - `judged_deps_sha`：判的那一刻的依赖集指纹（见 :func:`_judged_deps_sha`）——
+          业主 2026-11-25 的守卫：现盘依赖集变了 ⇒ `needs_rejudge`，不静默沿用旧档；
         - `landed_body_sha256`：落盘那一行的 `statement_full`。
-        判的材料与落盘正文分开记，复核的人才能回答"判的是哪一版"。
+        判的材料、依赖集与落盘正文分开记，复核的人才能回答"判的是哪一版、依赖还是不是那几条"。
         """
         root = getattr(self, "root", None)
         if root is None:
@@ -104,6 +108,9 @@ class TierRecordMixin:
         sha = str(judged_body_sha256 or "")
         if not sha:
             sha = _judged_body_sha(statement_full, str(got.get("proof_text") or ""))
+        #: 研判那一刻的依赖集指纹（业主 2026-11-25 的守卫：现盘依赖集变了 ⇒ needs_rejudge）。
+        #: 这一格必须与行一起落盘 —— 不落，读侧就无从判断"依赖变没变"。
+        deps_sha = str(judged_deps_sha or "") or self._judged_deps_sha(sid)
         prior = self._last_nontriviality_row(sid, no)
         if prior is not None and str(prior.get("judged_body_sha256") or "") == sha:
             return {"recorded": False, "tri": tri_in or "computed",
@@ -124,6 +131,7 @@ class TierRecordMixin:
                         else {}),
                 text_truncated=bool(got.get("text_truncated")),
                 applicable=applicable, path_group=no, judged_body_sha256=sha,
+                judged_deps_sha=deps_sha,
                 landed_body_sha256=str(landed_body_sha256 or ""))
         except Exception as exc:  # noqa: BLE001 - 落盘失败要说出来，不许静默
             return {"recorded": False, "tri": f"unrecorded:{type(exc).__name__}",
@@ -134,6 +142,33 @@ class TierRecordMixin:
                 "tri": ("not_applicable" if not applicable else "computed"),
                 "level": level, "label": nontriviality_label(level),
                 "stmt_id": sid, "path_group": no, "reason": ""}
+
+    def _judged_deps_sha(self, stmt_id: str) -> str:
+        """研判这一刻这条命题的依赖集指纹（`:func:`deps_sha256`` 的唯一写入侧调用）。
+
+        数据从既有读口取：`store.rows("statements")` 的 `derived_from` 与
+        `store.rows("dependencies")`。落行发生在命题与依赖都写完之后
+        （`agent_b.register_statement._finish_filing_nontriviality` 是收尾那一臂；
+        `agent_f.core._judge_nontriviality` 同样在登记之后），所以读到的是判档那一刻
+        的依赖集。
+
+        拿不到（没有 store / 命题行还不在盘上 / 读坏）⇒ 空串：那一行按
+        "依赖没核过"读（`version=unchecked`），不许折成"依赖没变"。
+        """
+        store = getattr(self, "store", None)
+        want = str(stmt_id or "").strip()
+        if store is None or not want:
+            return ""
+        try:
+            rows = list(store.rows("statements") or [])
+            deps = list(store.rows("dependencies") or [])
+        except Exception:  # noqa: BLE001 —— 依赖集读不到不许把判档整笔打掉
+            return ""
+        row = next((r for r in rows if str(r.get("stmt_id") or "") == want), None)
+        if row is None:
+            return ""
+        return deps_sha256(derived_from=row.get("derived_from"),
+                           dependency_rows=deps, stmt_id=want)
 
     def _last_nontriviality_row(self, stmt_id: str, path_group: int) -> dict[str, Any] | None:
         """同一 `(stmt_id, path_group)` 的最后一行（幂等判据读它，不另建索引）。"""
