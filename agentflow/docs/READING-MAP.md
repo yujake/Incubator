@@ -4,7 +4,7 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（2026-11-24 B2R21-BOOKKEEPING 按现盘重算 `scripts/recompute_map_headline.py`；含同日并行路的未提交改动）：**
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **433 个 `.py`、343,052 行**，**72 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，17,115 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **433 个 `.py`、343,038 行**，**72 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，17,115 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > **2026-11-21 COL2 合稿路（p313 一次冻结，观测 19:4x）：三格 418 / 319,694 / 72。**
 > `>800` 的 **73 → 72**：`specs/b.py` 821 → **798**（PA4 的方法学条与「同一条定理多种证明」
 > 条**逐字搬进** `specs/b_ingest_policy.py` 的 `B_METHOD_POLICY` / `MULTI_PROOF_POLICY`，

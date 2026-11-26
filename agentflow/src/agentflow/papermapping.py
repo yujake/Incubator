@@ -1132,13 +1132,6 @@ def is_literature_row(row: Row) -> bool:
     return str(getattr(row, "ledger_id", "") or "").strip().startswith(LITERATURE_ID_PREFIX)
 
 
-def literature_id_of_row(row: Row) -> str:
-    """这一行的文献号（`lit:000003` ⇒ `"000003"`）；不是文献行 ⇒ 空串。"""
-    if not is_literature_row(row):
-        return ""
-    return str(row.ledger_id).strip()[len(LITERATURE_ID_PREFIX):].split("#", 1)[0].strip()
-
-
 def is_cited_only_row(row: Row) -> bool:
     """这一行是不是「被引、未印成环境」（`env_no == EXPERIMENT_ENV_NO`）。
 
