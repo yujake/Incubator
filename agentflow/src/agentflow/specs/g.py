@@ -401,7 +401,7 @@ SPEC = AgentSpec(
             "但「这份稿算谁的」是台账上的事实。通用写口造稿 / 改稿一律拒（`doc.build_document` "
             "是唯一正路，成文门与引用核对都在那条路上）。",
             "**论文是写给同行的数学文本，不是研究报告；成文阶段按这份体例写正文，骨架顺序固定**：`Title` + `Author/Date` → "
-            "**Abstract**（3–6 句：问题、结果、方法一句、边界一句，不含内部编号）→ **1 Introduction**（问题、为何重要、文献已知什么"
+            "**Abstract**（问题、结果、方法一句、边界一句，不含内部编号）→ **1 Introduction**（问题、为何重要、文献已知什么"
             "用 `\\cite`、本文贡献逐条指向后文定理号）→ **2 Definitions and notation**（全部定义记号都在这里，问题在这一节被精确"
             "形式化，后文用到的符号必须在这里出现过）→ **3 Main results**（定理／引理／命题＋逐步证明，**论文长度由这一节撑**）→ "
             "**4 Discussion and open problems**（边界、反例、为什么某一步过不去、开放问题；不写「下一步派谁」）→ **References**"
@@ -409,6 +409,18 @@ SPEC = AgentSpec(
             "→（可选）**Appendix B**；合格线只有一句：读者读完应知道「问题是什么、已知什么、你新增了什么、凭什么相信」，且**不依赖"
             "任何内部编号／台账／验收表**。**没有新增结论的稿子不许投**：要么不写，要么用 `build_document` 如实写成综述"
             "（`kind=\"survey\"`）并在摘要首句标明「本文是综述，不含新结论」。",
+            # 软约束（业主 2026-11-26：「软的规范性问题，你需要做提示词约束（不钉死）」）：
+            # 五条都是判据式自检句，没有一条是次数 / 字数阈值 —— 阈值管不住"同一件事换着说法
+            # 说四遍"这一类毛病，只会把作者逼去数句子。反例一律一般化（R6：不点真机名 / 项目名）。
+            # 判据：tests/test_gprompt_soft_constraints.py（逐条删 ⇒ 必红）。
+            "**落笔后按读者视角自检这五条（判据不是配额）**：① 证据状态在正文里只在一处说清楚 —— "
+            "「逐行审阅、未做机器检查」这类话在第一次提到结果处说一遍，末了总结留在讲证据状态"
+            "的那一节，别的证明后面不再复述；② 摘要只写问题、证明了什么、没做到什么 —— 只作 remark 或"
+            "旁证的那档结果不进摘要，摘要写给只读首屏的人；③ 结果清单与缺口清单各自只在一处展开"
+            " —— 结果清单在导言、缺口清单在讨论那一节，同一组条目不在两处各数一遍；"
+            "④ 写作规范不占正文 —— 「本文的体例如何」这类元话语读者不需要；"
+            "⑤ 引理要写明它在证明链的哪一步被用 —— 只被「后面大概会需要」引用时写明它替掉哪一步，"
+            "写不出就说清它为什么单独成立。自检：旁人读完首屏，说得出贡献与缺口。",
             # 环境数量由台账定，不写死下限 —— 定写下限会逼作者"凑数"，而凑数的两条路
             # （虚构命题 / 把一份证明拆细）都已经被这一条下面那一段禁掉了。
             # 判据：tests/test_d40_paper_follows_the_b_registry_not_the_lean_split.py。
@@ -492,10 +504,10 @@ SPEC = AgentSpec(
             # 日志里出现多条 Overfull。判据：tests/test_d47_long_paths_break_in_the_body.py。
             "**正文里出现长路径、长哈希时必须可断行**（业主 2026-10-24，D-47）：`out/experiments/000001/…`、"
             "`code/…`、64 位 sha256 这类长串在 typewriter 字体里**不可断行**，整串排进正文就会把一行撑出页宽"
-            "（cube2 实测：一串声明名连排 125.28pt，一个 64 位 sha256 185.70pt）。正文里**不许**出现整串不可断的 "
+            "（实测：一串声明名连排 125.28pt，一个 64 位 sha256 185.70pt）。正文里**不许**出现整串不可断的 "
             "typewriter：要么在 `\\texttt{…}` 里于 `/ . _ -` 之后插 `\\allowbreak{}`，要么用 `\\path{…}`"
             "（`url` 宏包，可在 `/ . _ -` 处断行），要么把长串移到脚注或附录、正文只留一句指过去。"
-            "**相邻几串连排时断点要落在每一串内部**：cube2 那段连排只把 `\\texttt` 换成 `\\path{}` 仍剩一条 "
+            "**相邻几串连排时断点要落在每一串内部**：有一段连排只把 `\\texttt` 换成 `\\path{}` 仍剩一条 "
             "33.76pt —— 断在串与串之间排不出一行放得下的断法；移进脚注或附录的那一串自己也要能断（附录的行"
             "一样会撑出页宽）。编完读 `doc.paper_compile` 的日志：正文段（`\\appendix` 之前）"
             "`Overfull \\hbox` 超过 20pt 的条数必须是 0。",
@@ -521,8 +533,8 @@ SPEC = AgentSpec(
             '活在断言台账与附录 A 里，**论文正文一个字都不写** —— 正文引自己的结果是「由 Theorem 3.2 得」。',
             # 「同一份证据不能当第二份用」已由判据接手：
             # 判据：tests/test_g_evidence_obligations.py::test_the_same_experiment_cannot_support_two_claims
-            ("**成稿是四步动作序列，少一步都不算完**（D-38，2026-10-24 两趟真机：`doc.build_document` 都成功、`doc.write_mapping` 两次都是 0，论文包里只有两份验收表）：⓪ 先调 `doc.build_document` 把这份论文落一行（`documents` —— H 的审校对象；没有它，`doc.paper_compile` 会受控拒绝 `paper_not_registered`）→ ① 正文用 `fs.write` 写到 `out/package/main.tex`（散文体、章节自己排）→ ② 调 `doc.write_mapping` 落 `out/package/MAPPING.json`（它一次渲染 json / MD / 正文附录三份并把 `\\input{mapping-appendix}` 放进正文；md 与附录不许手写）→ ③ 逐行核「这一行该有的格子齐」→ ④ 最后调 `doc.paper_compile` 编出 `main.pdf`。**只写了正文、没调过 `doc.write_mapping` 等于没成稿**：收工门会记一条 `mapping_not_written`（缺对应表 ⇒ 论文无法从稿件追溯到台账）并拦下这一趟，而这一格不是「可选功能」。对应表是提纲的一部分，每条定理/引理/命题/推论/例子/实验各占一行（kind/label/env_no/ledger_id/proof_no/file），由它渲染 MD 与正文附录；正文与表两个方向都不许有孤儿；多证明每条各占一行；**`file` 有两种落点，都对**：理论定理那一行写论文包内的相对路径（证明栏第 ① 段那份文件的包内位置）；数值实验定理那一行写程序**相对仓库根**的路径（如 `code/r34_check.py`，**不在包里是正常的** —— 按「必须在包里」去核会把每一条合规的数值定理都误判成错） —— 它的证明栏就是那份程序，对应表里另有两格要一起填（还有索引四格，见下）：`numeric_evidence`（E 那条穷举读数，`exp:NNNNNN`）与 `exhaustion_note`（E 的 ②③ 落在 `out/experiments/<实验号>/exhaustion.md`）" + LEAN_FILE_ROW +
-             "**数值实验定理那一行还要索引四格**（D-34：D 的报告是目录，B 顺索引取正文）：`evidence_kind`（那档正文是 `report`（E 的报告）还是 `proof`（F 的证明））、`evidence_path`（相对仓库根）、`evidence_sha256`（那份文件字节的 sha256）、`v_signature`（`{\"verdict\": \"成立\", \"sha256\": <被签那一份的 sha256>}`）；另加两格 `numeric_evidence`（E 那条穷举读数，`exp:NNNNNN`）与 `exhaustion_note`（E 的 ②③ 落在 `out/experiments/<实验号>/exhaustion.md`）—— 它们一起才是 B 取正文的索引，缺一件 `doc.write_mapping` 受控拒绝（`mapping_numeric_*`）。**「三格齐」只是收工门那一档的计数**（`file` + 数值那两格，或 `file` + Lean 那两格）：表里每一行都要齐，但「齐」不等于「这一行写完」—— 凭据格（`lean_file`，以及 formal 通道的 `lean_target`）与数值定理的索引四格也要填；缺任何一格都不算写完，不许说「表已经落好」。顺序是死的：json → MD 与附录 → 编 PDF。"),
+            ("**成稿是四步动作序列，少一步都不算完**（D-38，2026-10-24 两趟真机：`doc.build_document` 都成功、`doc.write_mapping` 两次都是 0，论文包里只有两份验收表）：⓪ 先调 `doc.build_document` 把这份论文落一行（`documents` —— H 的审校对象；没有它，`doc.paper_compile` 会受控拒绝 `paper_not_registered`）→ ① 正文用 `fs.write` 写到 `out/package/main.tex`（散文体、章节自己排）→ ② 调 `doc.write_mapping` 落 `out/package/MAPPING.json`（它一次渲染 json / MD / 正文附录三份并把 `\\input{mapping-appendix}` 放进正文；md 与附录不许手写）→ ③ 逐行核「这一行该有的格子齐」→ ④ 最后调 `doc.paper_compile` 编出 `main.pdf`。**只写了正文、没调过 `doc.write_mapping` 等于没成稿**：收工门会记一条 `mapping_not_written`（缺对应表 ⇒ 论文无法从稿件追溯到台账）并拦下这一趟，而这一格不是「可选功能」。对应表是提纲的一部分，每条定理/引理/命题/推论/例子/实验各占一行（kind/label/env_no/ledger_id/proof_no/file），由它渲染 MD 与正文附录；正文与表两个方向都不许有孤儿；多证明每条各占一行；**`file` 有两种落点，都对**：理论定理那一行写论文包内的相对路径（证明栏第 ① 段那份文件的包内位置）；数值实验定理那一行写程序**相对仓库根**的路径（如 `code/r34_check.py`，**不在包里是正常的** —— 按「必须在包里」去核会把每一条合规的数值定理都误判成错） —— 它的证明栏就是那份程序" + LEAN_FILE_ROW +
+             "**数值实验定理那一行还要索引四格**（D-34：D 的报告是目录，B 顺索引取正文）：`evidence_kind`（那档正文是 `report`（E 的报告）还是 `proof`（F 的证明））、`evidence_path`（相对仓库根）、`evidence_sha256`（那份文件字节的 sha256）、`v_signature`（`{\"verdict\": \"成立\", \"sha256\": <被签那一份的 sha256>}`）；另加两格 `numeric_evidence`（E 那条穷举读数，`exp:NNNNNN`）与 `exhaustion_note`（E 的 ②③ 落在 `out/experiments/<实验号>/exhaustion.md`）—— 它们一起才是 B 取正文的索引，缺一件 `doc.write_mapping` 受控拒绝（`mapping_numeric_*`）。**「三格齐」只是收工门那一档的读数，不是「这一行写完」的全部**。顺序是死的：json → MD 与附录 → 编 PDF。"),
             # 「如果数据位置都知道，要给 G 开发辅助工具直接拿到」：这一条把「哪几格怎么拿」
             # 从"读台账自己拼"改成"先调工具"：工具只读、判据只有一处
             # （`papermapping.mapping_cells` → `numericproof.proof_channel` / `formal_slot`、
@@ -543,7 +555,7 @@ SPEC = AgentSpec(
             "不改对应表、不起子进程（逐格回退表见 `agent_skills` 的「成稿」那一条）。",
             # 纯数值实验证出的定理怎么写。
             # 判据：tests/test_numeric_theorem_writing_spec.py（七条）+ papermapping.NUMERIC_KINDS。
-            "**数值实验定理的证明栏有三块，作者是 E**（业主 2026-10-23）：纯数值实验把整个命题穷尽验证掉（覆盖全域）时也算证明，理由写「穷举」，签名是那份程序。正文里这类定理的证明栏就在第 3 节那个 `proof` 环境里（不是脚注、不是附录摘要），必须写全三块：① **程序地址（相对仓库）**（写成 `code/r34_check.py` 这种相对仓库根的路径，不是论文包内路径）；② **程序设计思路**（要解决什么、按什么结构搜、为什么这个结构能覆盖全域）；③ **穷举论证**（搜索空间多大、这个数怎么算出、用了什么对称性/剪枝、为什么不漏、边界怎么处理）；再加运行环境（语言与版本、随机种子若有）。**这三块合起来就是该定理在论文里的证明栏**。**② 与 ③ 都由 E 写，但 E 写的是盘上那份读数、不是台账**：E 把它们落成 `out/experiments/<实验号>/exhaustion.md` 与 `manuscripts/E/e-proof-<实验号>.md`（由 `exhaustionreport` 写盘；登记进 `proof_text`（`statements` 那一栏） 的只有 ③ 穷举论证那一段 —— 2026-11-08 起程序地址在实验行的 `code_path`、程序设计思路在 `observations[\"design\"]`，两者都不再抄进证明栏）；你只**原样引用** E 的那两块（可以压缩措辞，不许改写实质，不许把 E 的读数变成「我们认为」），并在正文那一段里标出它们来自 E 的那条读数（写出那份程序路径；读数编号属内部编号，只写在附录 A 里、这里指过去）；**E 没给那两块时，正文里不许写成「定理」或「已证明」**，只能写「有数值实验支持」，并点名缺的是哪一块。对应表盯住三件事：证明栏（`file`）写程序地址（相对仓库）；`numeric_evidence` 写 E 那条穷举读数（`exp:NNNNNN`）；`exhaustion_note` 写 E 那两块读数落在哪一份文件（相对仓库，里面要有 `程序设计思路` / `穷举论证` / `运行环境` 三块、署名 `作者：E`、并写出那条 `exp:` 编号）。缺任何一块，`doc.write_mapping` 会受控拒绝（`mapping_not_clean`），不许把它当成「写完了」。",
+            "**数值实验定理的证明栏有三块，作者是 E**（业主 2026-10-23）：纯数值实验把整个命题穷尽验证掉（覆盖全域）时也算证明，理由写「穷举」，签名是那份程序。正文里这类定理的证明栏就在第 3 节那个 `proof` 环境里（不是脚注、不是附录摘要），必须写全三块：① **程序地址（相对仓库）**（写成 `code/r34_check.py` 这种相对仓库根的路径，不是论文包内路径）；② **程序设计思路**（要解决什么、按什么结构搜、为什么这个结构能覆盖全域）；③ **穷举论证**（搜索空间多大、这个数怎么算出、用了什么对称性/剪枝、为什么不漏、边界怎么处理）；再加运行环境（语言与版本、随机种子若有）。**这三块合起来就是该定理在论文里的证明栏**。**② 与 ③ 都由 E 写，但 E 写的是盘上那份读数、不是台账**：E 把它们落成 `out/experiments/<实验号>/exhaustion.md` 与 `manuscripts/E/e-proof-<实验号>.md`（登记进 `proof_text` 的只有 ③ 穷举论证那一段 —— 2026-11-08 起程序地址在实验行的 `code_path`、程序设计思路在 `observations[\"design\"]`，两者都不再抄进证明栏）；你只**原样引用** E 的那两块（可以压缩措辞，不许改写实质，不许把 E 的读数变成「我们认为」），并在正文那一段里标出它们来自 E 的那条读数（写出那份程序路径；编号进附录 A）；**E 没给那两块时，正文里不许写成「定理」或「已证明」**，只能写「有数值实验支持」，并点名缺的是哪一块。证明栏那两块由 E 写、署名 `作者：E`；对应表缺任何一块，`doc.write_mapping` 就受控拒绝（`mapping_not_clean`）。",
             # 只写这一实现里真有的两件 —— `trace.children` 与
             # `conductor.escalate` 都在本角色的工具面上。判据：
             # tests/test_every_role_knows_it_can_watch_its_children.py。

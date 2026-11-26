@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-26T13:47:06+08:00",
+  "generated_at": "2026-11-26T17:51:52+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -479,10 +479,10 @@
       "path": "src/agentflow/specs/g.py",
       "glob": "src/agentflow/specs/g.py",
       "category": "auth-audit",
-      "sha256": "561491f96b5a840073a6faa0f3cf424202357eed64fd0b620efa0513ac71df8b",
-      "authored": "unknown",
+      "sha256": "d19f456e93f9d71a701c0206a32330485e85386fceed57632261644977b4eb9e",
+      "authored": "ai-agent",
       "authored_basis": "inferred",
-      "change_note": "p322（2026-11-23）：删掉 G 的 policy 里 mp3 那半句（demo/mp3 退场，指称失效）；配方正文一字未动。登记≠批准，仍需 2 名人类 reviewer 逐行走查",
+      "change_note": "GPROMPT-SOFT p334（终版）：五条读者视角自检 + 摘要去句数区间 + 同段精简到 policy 净减 175 字节；权限面一字未动",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
