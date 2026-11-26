@@ -19,12 +19,18 @@ H 的工具面上"扫描/核对"类有 7 件，各回各的形状（六键 / 十
 | `text_integrity` | 六类异常字符（cjk / control / zero_width / replacement / bidi / nbsp） | 复用 `tools/review_tools.scan_text_integrity()`（唯一实现；本模块只做形状归一） |
 | `cites` | 每个 `\\cite` 键都能对上一条 `\\bibitem` | `CITE_COMMANDS` × `_BIBITEM_RE` |
 | `inputs` | 每个 `\\input` / `\\include` 的目标在盘上 | 解析器复用 `papermapping._input_target` |
-| `refs` | 每个引用命令的键都能对上一条 `\\label` | `REF_COMMANDS`（六个，见下） |
+| `refs` | 引用键 ⊆ `\\label` 键；`\\label` 前缀 ↔ 它所在的环境；引用词 ↔ 被引类型；定理类环境要有 `\\label` | `REF_COMMANDS`（六个，见下）；三条结构判据的词表在 `texcorpus`（`LABEL_PREFIX_KINDS` / `REF_NOUN_KINDS`） |
 | `proofs` | 定理类环境带 `proof`；`proof` 不悬空、要闭合 | 环境名复用 `papermapping.statement_env_names`（含印成 Lemma 的自定义宏） |
-| `duplicates` | `\\label` / `\\newtheorem` 重名 | 本模块 |
+| `duplicates` | `\\label` / `\\newtheorem` 重名；同一条固定声明逐字出现 ≥2 次 | 本模块 + `texcorpus.DECLARATION_MARKERS` |
 | `ledger_match` | 正文 vs 台账 vs 对应表的五个数 + `statement_surplus` | 复用 `papermapping.mapping_reading` / `proposition_statement_ids` |
 
 ### `REF_COMMANDS` 为什么是六个，以及"没被引用过的标签"为什么不报
+
+0. 2026-11-26（GTOOL-HARD）另加三条结构判据（都在 `refs` 这一档里，因为它们是
+   "引用/标签自不自洽"的另外三面）：`\label` 前缀说自己是哪一类，就得写在那一类环境里
+   （真论文里 `\label{prop:planar}` 写在 `remark` 里）；`Theorem~\ref{lem:x}` 的名词与
+   对象的类型要对得上；定理类环境不许没有 `\label`。三条的词表在 `texcorpus`
+   （读侧约定），判定在这里；容器认不出（自定义环境）就不判（三态，同下第 1 条）。
 
 1. "没被引用过的 `\\label`"不是发现，是噪音：只认 `\\ref` 时会有大量标签没人引用；
    把 `\\ref` / `\\eqref` / `\\autoref` / `\\pageref` / `\\cref` / `\\Cref` 都算进去，
@@ -69,6 +75,9 @@ from . import papermapping as PM
 # 那一层只管"盘上的正文长什么样"，与"哪一类该怎么判"是两件事。搬的理由见那个模块的
 # docstring（本文件当时顶在 800 行软基线上，业主口径：不许抬体量软基线）。
 from .texcorpus import _Corpus, _read_text, _rel
+# 词表（前缀 → 类别、引用词 → 类别、固定声明标记）与"引用名词/声明块"的解析都在
+# `texcorpus`（读侧约定）；本模块只留判定。按名字导入，判据可以原地替换词表做反真空。
+from .texcorpus import DECLARATION_MARKERS, LABEL_PREFIX_KINDS, REF_NOUN_KINDS
 
 #: 这一层认的七类（工具层 `review.scan` 的 `kinds` 枚举唯一来源）。
 SCAN_KINDS: tuple[str, ...] = (
@@ -216,6 +225,66 @@ def _scan_cites(corpus: _Corpus, cap: int) -> tuple[list[dict], dict, str, list[
     return findings, facts, reason, sorted({rel for rel, _l, _r, _g in cites})
 
 
+def _label_findings(corpus: _Corpus) -> tuple[list[dict], dict]:
+    """label 前缀 ↔ 它所在的环境；引用词 ↔ 被引对象的类型；定理类环境有没有 label。
+
+    `refs` 那一档原来的判据只有一条（引用键 ⊆ label 键，悬空才算错）。这三条是同一件事的
+    另一半：键在不在之外，还有类型对不对。三条都吃 `corpus.structure()` 的事实，
+    一个字符自己都不解析。
+    """
+    structure = corpus.structure()
+    labels = structure["labels"]
+    findings: list[dict] = []
+    kind_mismatch = 0
+    for key, info in sorted(labels.items(), key=lambda kv: (kv[1]["file"], kv[1]["line"])):
+        if ":" not in key:
+            continue
+        prefix = key.split(":", 1)[0].strip().lower()
+        want = LABEL_PREFIX_KINDS.get(prefix)
+        got = str(info.get("kind") or "")
+        if not want or not got or got in want:
+            continue
+        kind_mismatch += 1
+        findings.append(_finding(
+            "refs", "error", file=info["file"], line=info["line"], ref=key,
+            text=f"\\label{{{key}}}",
+            why=(f"label 前缀 {prefix!r} 说这是 {want[0]!r}，而这条 label 写在 {got!r} "
+                 f"环境里 —— 按前缀认类型的人（以及按前缀认行的对应表/附录读者）会把它当成"
+                 f" {want[0]!r}。改法：把 label 改成与 {got!r} 一致的前缀并同步改所有引用，"
+                 f"或者把这一条真的写成 {want[0]!r} 环境")))
+    noun_mismatch = 0
+    for rel, line, noun, key in structure["ref_nouns"]:
+        want = REF_NOUN_KINDS.get(noun)
+        got = str((labels.get(key) or {}).get("kind") or "")
+        if not want or not got or got in want:
+            continue
+        noun_mismatch += 1
+        findings.append(_finding(
+            "refs", "error", file=rel, line=line, ref=key, text=f"{noun}~\\ref{{{key}}}",
+            why=(f"这条引用印出来是「{noun} <编号>」，而 {key!r} 是 {got!r} —— 读者看到的"
+                 f"名词与对象的类型对不上。改法：把引用词改成 {got!r} 对应的那个名词"
+                 f"（或者把对象真的写成 {want[0]!r}）")))
+    must_label = set(corpus.statement_names)
+    unlabelled = 0
+    for env in structure["envs"]:
+        if env["name"] not in must_label or env["labelled"]:
+            continue
+        unlabelled += 1
+        findings.append(_finding(
+            "refs", "error", file=env["file"], line=env["line"],
+            text=f"\\begin{{{env['name']}}}",
+            why=(f"这个定理类环境没有 \\label —— 附录的对应表按 label 认行，`\\ref` 也只能靠 "
+                 f"label 指过来；没有它，读者与机器都点不到这一条。改法：在 \\begin 之后立刻"
+                 f"加一条与类型一致的前缀（如 \\label{{thm:main}}）")))
+    facts = {
+        "label_kind_mismatch": kind_mismatch,
+        "ref_noun_mismatch": noun_mismatch,
+        "statement_without_label": unlabelled,
+        "unprefixed_labels": structure["unprefixed"],
+    }
+    return findings, facts
+
+
 def _scan_refs(corpus: _Corpus, cap: int) -> tuple[list[dict], dict, str, list[str]]:
     refs = corpus.hits(_REF_RE)
     labels = corpus.hits(_LABEL_RE)
@@ -231,14 +300,49 @@ def _scan_refs(corpus: _Corpus, cap: int) -> tuple[list[dict], dict, str, list[s
                       f"交叉引用悬空（读的人看到的是 ??）"))
         for key, (rel, line, raw) in sorted(used.items()) if key not in label_set
     ]
+    extra, extra_facts = _label_findings(corpus)
+    findings.extend(extra)
     facts = {
         "ref_keys": len(used),
         "label_keys": len(label_set),
         "unused_labels": len(label_set - set(used)),
         "ref_commands": list(REF_COMMANDS),
+        **extra_facts,
     }
     reason = "" if corpus.segments else "没有可读的正文 ⇒ 这一档没查成"
     return findings, facts, reason, sorted({rel for rel, _l, _r, _g in refs + labels})
+
+
+def _declaration_findings(corpus: _Corpus) -> tuple[list[dict], dict]:
+    """同一条固定声明逐字出现 ≥2 次 ⇒ 每处多出来的报一条（第一处在 `why` 里点名）。
+
+    单位由 `structure_of` 给（`\\emph` 块优先；含 `\\emph` 块的段落不重复计），这里只判
+    "有没有第二处"。不含 `DECLARATION_MARKERS` 的段落一块都不看：普通的重复措辞是文风。
+    """
+    by_text: dict[str, list[tuple[str, int]]] = {}
+    for rel, line, text in corpus.structure()["declarations"]:
+        by_text.setdefault(text, []).append((rel, line))
+    findings: list[dict] = []
+    duplicated = 0
+    for text, spots in sorted(by_text.items()):
+        seen: list[tuple[str, int]] = []
+        for spot in spots:
+            if spot not in seen:
+                seen.append(spot)
+        if len(seen) < 2:
+            continue
+        duplicated += 1
+        first_rel, first_line = seen[0]
+        for rel, line in seen[1:]:
+            findings.append(_finding(
+                "duplicates", "error", file=rel, line=line, ref="declaration",
+                text=text[:120],
+                why=(f"同一条固定声明逐字出现 {len(seen)} 次（第一次在 "
+                     f"{first_rel}:{first_line}）—— 声明是一条，复制到每处会让同一句话在"
+                     f"不同 scope 里各说一遍；改法：把这一条挪到一处（摘要或一次总声明）"
+                     f"并在需要的地方指过去")))
+    return findings, {"declarations": sum(len(v) for v in by_text.values()),
+                      "duplicate_declarations": duplicated}
 
 
 def _scan_duplicates(corpus: _Corpus, cap: int) -> tuple[list[dict], dict, str, list[str]]:
@@ -276,6 +380,9 @@ def _scan_duplicates(corpus: _Corpus, cap: int) -> tuple[list[dict], dict, str, 
         "newtheorem_names": len(counts),
         "duplicate_newtheorem": sum(1 for n in counts.values() if n > 1),
     }
+    extra, extra_facts = _declaration_findings(corpus)
+    findings.extend(extra)
+    facts.update(extra_facts)
     reason = "" if corpus.segments else "没有可读的正文 ⇒ 这一档没查成"
     return findings, facts, reason, sorted({rel for rel, _l, _r, _g in labels})
 

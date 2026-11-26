@@ -43,14 +43,16 @@ import datetime as _dt
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
 
-__all__ = ["ENGINE_ENV", "ENGINES", "LOG_PREFIX", "LOG_SUFFIX", "PDF_NAME", "RECEIPT_NAME",
-           "STDERR_LOG_SUFFIX", "TEX_NAME", "compile_log_path", "compile_paper", "file_digest",
-           "package_dir", "read_receipt", "receipt_matches_tex"]
+__all__ = ["ENGINE_ENV", "ENGINES", "LOG_PREFIX", "LOG_SUFFIX", "LOG_WARNING_KINDS",
+           "PDF_NAME", "RECEIPT_NAME", "STDERR_LOG_SUFFIX", "TEX_NAME", "compile_log_path",
+           "compile_paper", "file_digest", "package_dir", "read_receipt",
+           "read_tex_warnings", "receipt_matches_tex"]
 
 #: 论文包在项目根下的落点（与旧路的落点一致，习惯不变）。
 PACKAGE_REL = ("out", "package")
@@ -82,6 +84,97 @@ ENGINE_ENV = "AGENTFLOW_LATEX_ENGINE"
 
 #: 单次引擎调用的默认超时（秒）。编译两遍 ⇒ 最坏 2×这个数。
 DEFAULT_TIMEOUT_SEC = 900.0
+
+#: 会被折成读数的 TeX 日志警告（`read_tex_warnings` 的唯一词表）。
+#:
+#: 2026-11-26（GTOOL-HARD）：真论文的 `main.log` 里有 21 处 Overfull（正文 1 处 7.47pt、
+#: 渲染出来的附录表 20 处、最宽 18.93pt），而 `compile_paper` 的 `problems` 是空的 ——
+#: 它只记"框架自己的故障"，一个字都没读过 `main.log`。读者看得见的问题不许只躺在日志里。
+LOG_WARNING_KINDS: tuple[str, ...] = (
+    "overfull", "underfull", "undefined_reference", "undefined_citation",
+    "multiply_defined", "missing_file",
+)
+
+_OVERFULL_RE = re.compile(
+    r"(?P<kind>Overfull|Underfull) \\[hv]box \((?P<detail>[^)]*)\).*?"
+    r"at lines? (?P<line>\d+)")
+_UNDEFINED_RE = re.compile(
+    r"LaTeX Warning: (?P<what>Reference|Citation) `(?P<key>[^']*)' on page \S+ undefined"
+    r" on input line (?P<line>\d+)")
+_MULTI_LABEL_RE = re.compile(r"LaTeX Warning: Label `(?P<key>[^']*)' multiply defined")
+_MISSING_FILE_RE = re.compile(r"^! LaTeX Error: File `(?P<name>[^']*)' not found")
+#: 日志里"当前正在读哪一份 .tex"：TeX 用 `(./main.tex` / `(mapping-appendix.tex` 打开文件。
+_CURRENT_TEX_RE = re.compile(r"\((?P<path>\.?/?[^()\s]*\.tex)")
+
+
+def _width_of(detail: str) -> float:
+    """一条 overfull 的宽度（pt；读不出算 0 —— 只用于"哪一条最宽"的读数）。"""
+    m = re.search(r"([0-9.]+)pt", str(detail or ""))
+    try:
+        return float(m.group(1)) if m else 0.0
+    except ValueError:  # pragma: no cover —— 正则已经限定成数字
+        return 0.0
+
+
+def read_tex_warnings(package: str | Path) -> tuple[list[dict[str, Any]], str]:
+    """读 `<package>/main.log`，折成 `[{kind, file, line, detail}]`；读不成给理由。
+
+    只认 `LOG_WARNING_KINDS` 这六类。`file` 是包内相对名（`main.tex` /
+    `mapping-appendix.tex`），`line` 是日志自己说的那个行号 —— 两者都进 `why`，
+    调用方（`compile_paper`）把它拼成 `out/package/<file>:<line>` 给 G。
+    三态：读不成 ⇒ `([], 理由)`，不是"没有警告"（调用方必须把那句话带回去）。
+    """
+    log = Path(package) / "main.log"
+    try:
+        text = log.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return [], f"{log} 读不出来（{type(exc).__name__}: {exc}）⇒ 编译警告这一档没查成"
+    found: list[dict[str, Any]] = []
+    current = TEX_NAME
+    stack: list[str] = []
+    for raw in text.splitlines():
+        if raw.strip() == ")" and stack:
+            stack.pop()  # 一份 `\input` 进来的正文读完了：TeX 用一行 `)` 收尾
+            current = stack[-1] if stack else TEX_NAME
+        for m in _CURRENT_TEX_RE.finditer(raw):
+            current = m.group("path").lstrip("./")
+            if current != TEX_NAME:
+                stack.append(current)
+        item: dict[str, Any] | None = None
+        m = _OVERFULL_RE.search(raw)
+        if m is not None:
+            item = {"kind": m.group("kind").lower(), "file": current,
+                    "line": int(m.group("line")), "detail": m.group("detail")}
+        else:
+            m = _UNDEFINED_RE.search(raw)
+            if m is not None:
+                kind = "undefined_reference" if m.group("what") == "Reference" else "undefined_citation"
+                item = {"kind": kind, "file": current, "line": int(m.group("line")),
+                        "detail": f"键 {m.group('key')!r}"}
+            else:
+                m = _MULTI_LABEL_RE.search(raw)
+                if m is not None:
+                    item = {"kind": "multiply_defined", "file": current, "line": 0,
+                            "detail": f"键 {m.group('key')!r}"}
+                else:
+                    m = _MISSING_FILE_RE.search(raw)
+                    if m is not None:
+                        item = {"kind": "missing_file", "file": current, "line": 0,
+                                "detail": m.group("name")}
+        if item is not None and item["kind"] in LOG_WARNING_KINDS:
+            found.append(item)
+    return found, ""
+
+
+#: 每一类警告"为什么要改"（`read_tex_warnings` 的消费者 `compile_paper` 用它拼 problems）。
+WARNING_WHY: dict[str, str] = {
+    "overfull": "版心外溢：不可断行的长串 / 表格列宽 —— 渲染出来的文件（如 "
+                "mapping-appendix.tex）要改渲染器，别手改",
+    "undefined_reference": "交叉引用悬空：PDF 里印的是 ??",
+    "undefined_citation": "文献键没有对应的 \\bibitem：PDF 里印的是 [?]",
+    "multiply_defined": "同一个 \\label 定义了两次：\\ref 会指到后一处",
+    "missing_file": "引擎找不到文件：那一支的正文/宏包没进稿",
+}
 
 
 def file_digest(path: str | Path) -> str:
@@ -410,6 +503,34 @@ def compile_paper(project_root: str | Path, *, timeout_sec: float = DEFAULT_TIME
         if _reg_problem:
             problems.append(f"{_reg_problem}；PDF 本身已在盘上（out/package/{PDF_NAME}）")
 
+    # ---- TeX 日志里读者看得见的那几类（GTOOL-HARD：`problems` 原先只记框架自己的故障，
+    # 21 处 Overfull 一个都没进过读数面）。只读这一次真的起过引擎的那一份 `main.log`。
+    if passes:
+        warnings, warn_why = read_tex_warnings(out)
+        if warn_why:
+            problems.append(warn_why)
+        else:
+            for w in warnings:
+                if w["kind"] in ("overfull", "underfull"):
+                    continue  # 这两类按文件聚合（同一张表能出 20 条一模一样的读数）
+                where = f"out/package/{w['file']}:{w['line']}" if w["line"] else (
+                    f"out/package/{w['file']}")
+                problems.append(f"{where} {w['kind']}（{w['detail']}）—— "
+                                f"{WARNING_WHY.get(w['kind'], '')}")
+            by_file: dict[str, list[dict[str, Any]]] = {}
+            for w in warnings:
+                if w["kind"] == "overfull":
+                    by_file.setdefault(w["file"], []).append(w)
+            for rel, items in sorted(by_file.items()):
+                lines = ",".join(str(n) for n in sorted({x["line"] for x in items}))
+                widest = _width_of(max(items, key=lambda x: _width_of(x["detail"]))["detail"])
+                problems.append(
+                    f"out/package/{rel}:{min(x['line'] for x in items)} 起共 {len(items)} 处 "
+                    f"overfull（行 {lines}；最宽 {widest:.2f}pt）—— {WARNING_WHY['overfull']}")
+            underfull = sum(1 for w in warnings if w["kind"] == "underfull")
+            if underfull:
+                problems.append(
+                    f"另有 {underfull} 处 underfull（松排，盒子没出版心；只作读数，不逐条列）")
     base = {"tex": str(tex), "pdf": str(pdf), "engine": chosen,
             "exit_codes": codes, "runs": len(codes), "pdf_fresh": fresh,
             "receipt_path": str(receipt_path),
