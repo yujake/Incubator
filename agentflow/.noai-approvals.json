@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-26T10:03:05+08:00",
+  "generated_at": "2026-11-26T13:47:06+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -674,10 +674,10 @@
       "path": "src/agentflow/tools/fs_tools.py",
       "glob": "src/agentflow/tools/fs_tools.py",
       "category": "auth-audit",
-      "sha256": "9ef37a9886c0ed6d08def1d3ef56be46628985f5ad15e23cb059abac85ca89ec",
+      "sha256": "b942b9f9dd4af002af9e16e275527dc8b58e78a8e2727fa0427ab71976bb85ea",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 13dc71a28b0b 变为 9ef37a9886c0，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "MSRELOC 2026-11-26：候选槽位号不许进书架（原件搬迁 + _adopt_file 收口 + fs 书架闸）。登记 != 批准：仍需人逐行走查 + 2 reviewer。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
@@ -765,10 +765,10 @@
       "path": "src/agentflow/tools/search_tools.py",
       "glob": "src/agentflow/tools/search_tools.py",
       "category": "auth-audit",
-      "sha256": "76258a79780d03690b6864e5442077dd808e145c955d94c958a1f6ab3dbd393e",
+      "sha256": "3f83d5262b5a83c7fe5633b468fa10bc253a2af6a2c2bfd5549656036297189b",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 9cc7a93708c1 变为 76258a79780d，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "MSRELOC 2026-11-26：候选槽位号不许进书架（原件搬迁 + _adopt_file 收口 + fs 书架闸）。登记 != 批准：仍需人逐行走查 + 2 reviewer。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import fnmatch
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -1771,8 +1772,123 @@ def _landing_refusal(rel: str, role: str) -> ToolResult | None:
     )
 
 
+LIBRARY_TOP: str = "library"
+LIBRARY_ENV_KIND = "library_dir_not_a_lit_id"
+LIBRARY_ENV_MESSAGE = (
+    "拒绝往 `library/{entry}/` 写：`{entry}` 不是一条已存在的文献号目录。"
+    "书架 `library/` 下只住 `<文献号>/`（`lit_id` 六位号），候选期的槽位号不是文献号 ——"
+    "把字节放进槽位目录会让 `literature.path` 的首段变成槽位号（真机 "
+    "`sunflower-digest-3`：四行的 path 首段是 000006/000008/000011/000015，"
+    "盘上四本槽位目录，一条正文都对不上号）。"
+)
+LIBRARY_ENV_FIX = (
+    "待入库的字节留在工作区（`downloads/…`）就行：`search.register` 会把它收编进 "
+    "`library/<文献号>/`；要给 `text.extract` 抽读就直接给那份文件的绝对路径"
+    "（候选期正文落 `out/texts/`，登记那一刻由结算点按号归位）。"
+    "`fs.move` 换一个目标（`work/…` / `downloads/…`），别往 `library/` 里塞。"
+)
+
+
+def library_entry_dir(rel: str) -> str:
+    """`library/<X>/…` 里的那个 `X`（不在 `library/` 下 / 没有第二段 ⇒ 空串）。
+
+    判据只有这一处：`fs.write` / `fs.edit` / `fs.delete` / `fs.move` 四个写口都经
+    :func:`_reserved_refusal` 调它，谁也不许自己 `split("/")` 再判一遍。
+    """
+    parts = [p for p in str(rel or "").replace("\\", "/").split("/") if p and p != "."]
+    if len(parts) < 2 or parts[0].lower() != LIBRARY_TOP:
+        return ""
+    return parts[1]
+
+
+def _data_rows(root: Path, table: str) -> list[dict] | None:
+    """`data/<table>.json` 的行（读不到 / 形状不认识 ⇒ `None`）。
+
+    只读，不抢锁：`Store` 的写路径是"临时文件 + `os.replace`"原子替换，读方只会看到
+    旧的或新的完整快照，不会读到半个文件（与 `search_tools._literature_rows` 同一条）。
+    """
+    try:
+        payload = json.loads((Path(root) / "data" / f"{table}.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    rows = payload.get("rows") if isinstance(payload, dict) else payload
+    if not isinstance(rows, list):
+        return None
+    return [r for r in rows if isinstance(r, dict)]
+
+
+def existing_lit_ids(root: Path | None) -> set[str] | None:
+    """工作区里已有的文献号（`data/literature.json` 的 `rows[].lit_id`）；读不到 ⇒ `None`。"""
+    if root is None:
+        return None
+    rows = _data_rows(root, "literature")
+    if rows is None:
+        return None
+    return {str(r.get("lit_id") or "").strip() for r in rows} - {""}
+
+
+def candidate_slots(root: Path | None) -> set[str] | None:
+    """工作区里出现过的候选槽位号（`data/lit_candidates.json` 的 `rows[].slot`）；读不到 ⇒ `None`。"""
+    if root is None:
+        return None
+    rows = _data_rows(root, "lit_candidates")
+    if rows is None:
+        return None
+    return {str(r.get("slot") or "").strip() for r in rows} - {""}
+
+
+def _library_entry_refusal(rel: str, root: Path | None) -> ToolResult | None:
+    """候选槽位号进书架的受控拒（不在 `library/` 下 / 这就是文献号 / 跟槽位无关 ⇒ None）。
+
+    ## 判据为什么是"槽位号"而不是"任何不是文献号的目录名"
+
+    要堵的是**一条具体的坏形态**：候选期的槽位号被当成了文献号目录写进书架。判据因此
+    是三问，缺一不可：
+      ① 这一格的名字在 `lit_candidates` 的槽位里（它是槽位号，不是随手一个目录名）；
+      ② 它不在 `literature` 的文献号里（没有一条文献行认它当目录）；
+      ③ `library/<它>/` 这一级目录**此刻还不在盘上**，即这一次写入会**新建**它。
+
+    为什么 ③ 是判据的一部分：缺陷的形态是"书架里**长出来**一个槽位号目录"。真机那四笔
+    `fs.move` 全是往**尚不存在**的 `library/000006|000008|000011|000015/` 里搬
+    （`fs.move` 自己 `mkdir(parents=True)` 建出来的）。而一个**已经存在**的槽位号目录
+    属于"存量坏形态"：往里写很可能是人在收拾现场（搬走、改名、补一份抽读件），
+    拒它等于把已经坏了的盘锁死，而那件事的正解是 `locallib.relocate_into_entry`
+    按映射搬正 —— 结算点会做，不需要在写口上再拦一刀。
+
+    只问"不是文献号"会误伤：`library/` 里可能有框架自己认得的目录名（种子、staging），
+    它们既不是号也不是槽位，与本缺陷无关 —— 那条更宽的口径会把不相关的东西一起拒掉，
+    而拒信说不清"你犯了哪一条"。
+
+    ## 三态
+
+    `literature` 读不到 ⇒ `None`（判不了哪几个是文献号）；`lit_candidates` 读不到 ⇒
+    `None`。**两表都读得到才判**。这个取舍的理由：本闸的目标是"别让槽位号变成文献目录"，
+    而"读不到槽位表"时我们连"这是不是槽位号"都不知道 —— 此时按拒处理会把每个工作区
+    都锁死。缺读数的那一档由结算点的搬迁读数（`lit.relocate` 的 `status`）与
+    `wellformed` 的 `literature.path` 首段读数兜底（那两处不需要任何注入）。
+    """
+    entry = library_entry_dir(rel)
+    if not entry:
+        return None
+    ids = existing_lit_ids(root)
+    slots = candidate_slots(root)
+    if ids is None or slots is None:
+        return None
+    if entry in ids or entry not in slots:
+        return None
+    if root is not None and (Path(root) / LIBRARY_TOP / entry).is_dir():
+        # ③ 存量目录：不是这一次新建出来的。搬迁在结算点做，写口不锁死它。
+        return None
+    reason = LIBRARY_ENV_MESSAGE.format(entry=entry)
+    return fail(reason + LIBRARY_ENV_FIX, path=str(rel), kind=LIBRARY_ENV_KIND,
+                library_entry=entry,
+                existing_lit_ids=sorted(ids)[:12],
+                candidate_slot=True)
+
+
 def _reserved_refusal(rel: str, role: str, content: Any = None,
-                      root: Path | None = None, *, edit: bool = False) -> ToolResult | None:
+                      root: Path | None = None, *, edit: bool = False,
+                      incoming: bool = True) -> ToolResult | None:
     """保留路径的统一拒绝（不在保留表里 ⇒ None，调用方照旧往下走）。
 
     这一处是"保留"的唯一结论：四个写口（`fs.write` / `fs.edit` / `fs.delete` /
@@ -1786,6 +1902,12 @@ def _reserved_refusal(rel: str, role: str, content: Any = None,
 
     `edit`（2026-11-11，甲）：只有 `fs.edit` 传 `True` —— B 的唯一一格窄豁免
     （`_b_polish_edit_allowed`）只在这一格生效；其余三个写口保持默认 `False`。
+
+    `incoming`（2026-11-26，MSRELOC）：这个路径是**字节要落进去的地方**还是只是
+    **被读/被搬走的来源**。只有前者该过书架闸（`library/<非文献号>/` 拒写）——
+    把一个文件从 `library/000000/` 里**搬走/删掉**是清理，不是往书架里塞坏目录，
+    拒它等于把已经坏了的盘锁死。`fs.move` 的 `src`、`fs.delete` 传 `False`；
+    `fs.write` / `fs.edit` 与 `fs.move` 的 `dst` 保持默认 `True`。
     """
     if _reserved_artifact_path(rel):
         # 路径级的框架渲染产物（论文对应表三份）：全角色生效，拒信指向唯一写口。
@@ -1870,6 +1992,27 @@ def _reserved_refusal(rel: str, role: str, content: Any = None,
     #     它们的措辞与受控码一个字都不变（那一批判据照旧绿）；
     #   · 排在最后而不是各自写口里 ⇒ 四个写口（`fs.write`/`fs.edit`/`fs.delete`/`fs.move`）
     #     依旧只有 `_reserved_refusal` 这一个结论点，不新长第二个名字。
+    # ---- 2026-11-26（MSRELOC）书架闸：候选槽位号不许进 `library/` --------------------
+    #
+    # 位置与 `_landing_refusal` 同理：排在所有既有档之后（更具体的拒信先说话，
+    # 那一批判据的措辞与受控码一个字都不变），但仍然只在 `_reserved_refusal` 这
+    # 一个结论点上 —— 四个写口（`fs.write`/`fs.edit`/`fs.delete`/`fs.move`）都经它，
+    # 不新长第二个名字。
+    #
+    # 为什么这条闸是必要的（不是洁癖）：候选期模型为了让 `text.extract` 抽得到正文，
+    # 会把下载件 `fs.move` 进 `library/<候选槽位号>/`（真机 `sunflower-digest-3` 的四笔：
+    # 06:13:27 / 08:14:59 / 08:16:05 / 08:49:46，dst 全是 `library/0000NN/…pdf`）。
+    # 那一放进去，登记路径 `_adopt_file` 就从"书架里已有的相对名"起算，
+    # `literature.path` 的首段于是变成槽位号 —— 槽位号进了书架，且没有任何一层报错。
+    # 把这条口封住，坏形态的**来源**就没有了；已经存在的坏形态由
+    # `locallib.relocate_into_entry`（结算点 + `_adopt_file` 两处共用）搬正。
+    # 判据是"槽位号 ≠ 文献号"这两问（见 `_library_entry_refusal`），不是"任何目录名
+    # 都得是文献号"—— 后者会把 `library/` 里与本缺陷无关的目录名一起拒掉，
+    # 而拒信也说不清"你犯了哪一条"。
+    if incoming:
+        denied = _library_entry_refusal(rel, root)
+        if denied is not None:
+            return denied
     return _landing_refusal(rel, role)
 
 
@@ -2808,7 +2951,8 @@ def fs_delete(ctx: FsContext, *, path: str, recursive: bool = False) -> ToolResu
             kind="refuse_root",
             deleted=False,
         )
-    denied = _reserved_refusal(_rel(ctx, target), _caller_role(), root=ctx.root)
+    denied = _reserved_refusal(_rel(ctx, target), _caller_role(), root=ctx.root,
+                              incoming=False)
     if denied is not None:
         return denied
     if not target.exists() and not target.is_symlink():
@@ -2867,7 +3011,10 @@ def fs_move(ctx: FsContext, *, src: str, dst: str) -> ToolResult:
     if s == ctx.root or d == ctx.root:
         return fail("拒绝移动工作区根", src=_rel(ctx, s), dst=_rel(ctx, d), kind="refuse_root")
     for target in (s, d):
-        denied = _reserved_refusal(_rel(ctx, target), _caller_role(), root=ctx.root)
+        # `src` 只查账本区/手稿那一半（搬走一份坏落点的字节是清理）；目标才是
+        # "字节要落进去的地方"，书架闸只对它生效（2026-11-26 MSRELOC）。
+        denied = _reserved_refusal(_rel(ctx, target), _caller_role(), root=ctx.root,
+                                   incoming=(target == d))
         if denied is not None:
             return denied
     # ---- 成文门（2026-11-17 DOCGATE2 ②）：只判**目标**。把一个文件搬进 `out/package/` 等于

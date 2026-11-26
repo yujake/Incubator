@@ -536,6 +536,182 @@ def land_read_text(library: Path | str, lit_id: str, *,
     return target_rel, dest
 
 
+# --------------------------------------------------------------------------- #
+# 原件搬迁：`library/<槽位号>/<名>` ⇒ `library/<文献号>/<名>`
+# --------------------------------------------------------------------------- #
+#
+# ## 为什么需要这一环（真机 sunflower-digest-3 的现场）
+#
+# 候选期模型的合法动作里没有"持有一个文献号"，却有"必须让 `text.extract` 抽得到正文"
+# 这条硬约束 —— 而 `text.extract` 的相对路径基准只有 `library/`，且首段要是 6 位号。
+# 于是模型把下载件 `fs.move` 进 `library/<候选槽位号>/`（会话 2026-11-26T06:13:27 /
+# 08:14:59 / 08:16:05 / 08:49:46 四笔，`dst` 分别是 `library/000006|000008|000011|
+# 000015/…pdf`），抽完正文再 `lit.admit` / `lit.admit_all`。登记路径
+# `search_tools._adopt_file` 见"已在 `library/` 内"就把那个相对名原样返回 ⇒
+# `literature.path` 记成了 `000006/…pdf`（`000006` 是候选槽位号，不是文献号），
+# 盘上也就一直是 `library/000006/…pdf`。四行四条，一条都没搬。
+#
+# ## 不变量（一条）
+#
+# `library/` 下只住文献号目录，且一条 `literature` 行的 `path` 首段 == 它的 `lit_id`。
+# 落点的身份仍然只由 `library_landing` 一处给（内容 sha 优先、同名不同内容追加短哈希、
+# 绝不覆盖）—— 本函数只做"从哪个目录搬到哪个文献号"，不自己拼落点名。
+#
+# ## 主人 = 结算点，但搬运动作只有这一处实现
+#
+# 两个调用点共用本函数：
+#   * `litstage.admit_all`（结算点，三样齐：`slot → lit_id`、`store`、行上的
+#     `path`/登记回执）—— 它给得出 `slot`，所以留痕里五格（from/to/slot/lit_id/sha）
+#     都全；
+#   * `search_tools._adopt_file`（登记那一刻就已经在 `library/` 里的那一支）—— 它没有
+#     `slot`，但把"不再把槽位目录当文献目录"这件事就地做掉，坏 `path` 活不过登记。
+# 结算点是兜底的那一道：登记那一刻搬失败的（跨盘/权限/历史行）在这里再搬一次。
+
+#: 原件搬迁的七档结局（`reading["status"]`）。
+RELOCATE_MOVED = "moved"                    # 这次真的搬了（from != to，字节已在新目录）
+RELOCATE_AT_REGISTRATION = "moved_at_registration"  # 登记那一刻已搬，结算点只采用回执
+RELOCATE_ALREADY_IN_ENTRY = "already_in_entry"      # 首段本来就是文献号：一个字节都没动
+RELOCATE_REUSED = "reused"                  # 号目录里已有同内容的一份：源是重复，已清掉
+RELOCATE_NO_PATH = "no_path"                # 行上没有 path：无对象可搬
+RELOCATE_BAD_PATH = "bad_path"              # path 形态非法（带 `library/` 前缀 / 越界）：不猜
+RELOCATE_MISSING = "file_missing"           # path 指的文件不在盘上
+RELOCATE_CONFLICT = "conflict"              # 落点名被另一份不同内容占着且连短哈希都撞了
+RELOCATE_WRITE_FAILED = "write_failed"      # 搬不动（跨盘/权限/占用）：如实记，不静默
+
+
+def _prune_empty_entry_dir(base: Path, directory: Path, lit_id: str) -> None:
+    """搬空之后删掉源目录（`library/` 下只许留文献号目录）。
+
+    只删空的目录，且不碰 `library/` 根本身、也不碰目标文献号目录。删不掉（占用/权限）
+    就算了 —— 这一格的失败不该把已经搬成功的字节判成没搬，留下一个空目录也比谎报好。
+    """
+    try:
+        if directory == base or directory.name == lit_id or not directory.is_dir():
+            return
+        if not any(directory.iterdir()):
+            directory.rmdir()
+    except OSError:
+        return
+
+
+def relocate_into_entry(library: Path | str, lit_id: str, *,
+                        literature_path: str | None,
+                        reading: dict | None = None) -> tuple[str, Path | None]:
+    """把一条文献的原件搬进 `library/<文献号>/`（原件搬迁的唯一实现）。
+
+    ## 签名里每一格回答什么
+
+    * `library`：书架根（`Store.library`）；
+    * `lit_id`：已经发出的文献号 —— 落点目录名只由它决定；不是合法号（4/6 位）就
+      抛 `ValueError`（"没有号就没有目录名"是 `library_landing_name` 的老规矩）；
+    * `literature_path`：那一行上当前的 `path`（`<槽位号>/<名>` / `<文献号>/<名>` /
+      历史扁平名）。目标名不由本函数拼：`library_landing` 按内容 sha 优先给，
+      同名不同内容追加内容短哈希，一个既有文件都不覆盖；
+    * `reading`：可选出参
+      `{"status", "from", "to", "sha256", "bytes", "lit_id", "why"}` ——
+      `from`/`to` 是 `library/` 相对名，`reading["slot"]` 由调用方自己塞（本函数不知道槽位）。
+
+    ## 七档结局（为什么不能折成"搬了 / 没搬"两档）
+
+    `already_in_entry`（本来就在号目录里）与 `moved`（这次搬了）处置相反：前者是正控
+    "别把正常的再搬一次"，后者是修复；`reused`（号目录里已有同内容）说明源是重复，
+    删源不丢信息；`file_missing` / `no_path` / `bad_path` 是"没有可搬的对象"，
+    而 `write_failed` / `conflict` 是"有对象但搬不动"。折成一档就会让"这一条不需要搬"
+    与"这一条该搬但没搬成"在读数上同形 —— 后者才是下一次审计要抓的。
+
+    返回 `(搬迁后的 library 相对名, 绝对落点或 None)`。`None` 表示这一次没有可确认的
+    落点（文件不在 / 搬失败）；`reading["status"]` 说得出是哪一档。
+    """
+    base = Path(library)
+    lid = str(lit_id or "").strip()
+    if not _ENTRY_ID_RE.match(lid):
+        raise ValueError(
+            f"搬迁的目标目录名必须是文献号（4 位老号 / 6 位新号），收到 {lit_id!r} —— "
+            "`library/<文献号>/<名>` 是现行规范（2026-11-25），没有号就没有目录名")
+    text = str(literature_path or "").replace("\\", "/").strip()
+    while text.startswith("./"):
+        text = text[2:]
+    cells: dict[str, Any] = {"lit_id": lid, "from": text, "to": text, "sha256": ""}
+    # 下面每一档都经 `_land_reading(reading, status=…, **cells)` 落出参；`sha256` 与
+    # `bytes` 随档不同 ⇒ 走 `cells` 就地改，不作为关键字重复传（否则 TypeError）。
+    if not text:
+        _land_reading(reading, status=RELOCATE_NO_PATH, **cells)
+        return "", None
+    if LR.path_shape(text) in (LR.SHAPE_BAD, LR.SHAPE_UNJUDGED):
+        _land_reading(reading, status=RELOCATE_BAD_PATH,
+                      why=(f"literature.path={text!r} 的形态非法（{LR.path_shape(text)}）"
+                           "⇒ 不猜它该搬去哪"), **cells)
+        return text, None
+    parts = [p for p in text.split("/") if p]
+    head = parts[0] if len(parts) > 1 else ""
+    src = base / text
+    if head == lid:
+        # 正控：已经在自己的号目录里 —— 一个字节都不动（重跑 `admit_all` 走这一档）。
+        got = sha256_file(src) if src.is_file() else ""
+        cells.update(sha256=got, bytes=_size_or_none(src) or 0)
+        _land_reading(reading, status=RELOCATE_ALREADY_IN_ENTRY, **cells)
+        return text, (src if src.is_file() else None)
+    if not src.is_file():
+        _land_reading(reading, status=RELOCATE_MISSING,
+                      why=f"path 指的文件不在盘上：{src}", **cells)
+        return text, None
+    sha = sha256_file(src)
+    spread = {"sha256": sha, "bytes": _size_or_none(src) or 0}
+    cells.update(spread)
+    try:
+        landing, target = library_landing(base, src, sha, lit_id=lid)
+    except (OSError, ValueError) as exc:
+        _land_reading(reading, status=RELOCATE_WRITE_FAILED,
+                      why=f"{type(exc).__name__}: {exc}", **cells)
+        return text, None
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        _land_reading(reading, status=RELOCATE_WRITE_FAILED,
+                      why=f"{type(exc).__name__}: {exc}", **cells)
+        return text, None
+    rel = landing
+    if target == src:
+        # `library_landing` 的内容优先支把落点判回了源自己（号目录 == 源目录）：
+        # 这一档只可能是 head == lid，上面已经返回过；留着是防御。
+        _land_reading(reading, status=RELOCATE_ALREADY_IN_ENTRY, **cells)
+        return rel, src
+    if target.exists():
+        have = sha256_file(target) if target.is_file() else ""
+        if have != sha:
+            # 名字占着且内容不同，而 `library_landing` 追加短哈希那几档也没找到空位：
+            # 绝不覆盖（覆盖会毁掉已建立的引文定位）。
+            _land_reading(reading, status=RELOCATE_CONFLICT,
+                          why=(f"落点 {rel} 已被另一份不同内容占着"
+                               f"（既有 sha256={have or '读不到'}）⇒ 不覆盖"), **cells)
+            return text, None
+        # 号目录里已经有同内容的一份 ⇒ 源是重复。搬第二份只会让"同一份字节两份文件"
+        # 长回来（`library_landing` 的 ① 就是为这件事）。内容相同，删源不丢信息。
+        # 注意：`to` 走 `cells`（`_land_reading(..., **cells)`），不作为关键字重复传 ——
+        # 重复传是 `TypeError`，而它会在字节已经搬走之后才抛，把成功的登记判成
+        # `registration_failed`（真机读数见 `temp/msreloc/REPORT.md` 的首次跑）。
+        cells["to"] = str(target.relative_to(base).as_posix())
+        try:
+            src.unlink()
+        except OSError as exc:
+            _land_reading(reading, status=RELOCATE_REUSED,
+                          why=f"号目录里已有同内容的一份；源删不掉（{exc}）", **cells)
+            return rel, target
+        _prune_empty_entry_dir(base, src.parent, lid)
+        _land_reading(reading, status=RELOCATE_REUSED, **cells)
+        return rel, target
+    try:
+        shutil.move(str(src), str(target))
+    except OSError as exc:
+        _land_reading(reading, status=RELOCATE_WRITE_FAILED,
+                      why=f"{type(exc).__name__}: {exc}", **cells)
+        return text, None
+    _prune_empty_entry_dir(base, src.parent, lid)
+    cells["to"] = str(target.relative_to(base).as_posix())
+    _land_reading(reading, status=RELOCATE_MOVED, **cells)
+    return rel, target
+
+
 def _machine_summary(pages: int, *, name: str = "") -> str:
     """`ingest_directory` 落进 `literature.summary` 的机器题录。
 

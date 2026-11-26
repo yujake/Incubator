@@ -2097,13 +2097,32 @@ def _h_dedup_check(ctx: _Ctx, title: str, year: int | None = None, doi: str | No
 
 
 def _adopt_file(ctx: _Ctx, raw_path: str | None, warnings: list[str], *,
-                lit_id: str) -> tuple[str | None, int, str | None]:
+                lit_id: str,
+                relocation: dict | None = None) -> tuple[str | None, int, str | None]:
     """把本地文件收编进 ``library/``，返回 ``(相对路径, 字节数, sha256)``。
 
     三种情形分别处理：
-    1. 已在 ``library/`` 内 ⇒ 原地保留（可能已被 B 引用过，移动会打断追溯）；
+    1. 已在 ``library/`` 内 ⇒ **目录名必须是文献号**（见下面 2026-11-26 的裁定）；
     2. 在 library 之外（如 ``reference/`` / ``downloads/``）⇒ 收编进唯一落点；
     3. 文件不存在 ⇒ ``path`` 置 ``None`` 并记 warning，不编造路径。
+
+    ## 情形 1 的裁定（2026-11-26 MSRELOC：不再把槽位目录当文献目录）
+
+    改前这一支是"已在库里 ⇒ 原样返回那个相对名"。真机 `sunflower-digest-3` 上它把
+    `library/000006/…pdf`（`000006` 是**候选槽位号**）原样写成了
+    `literature.path`，四行四条，于是书架上是四个槽位号目录、行上 `path` 首段全是
+    槽位号 —— 而 `text_rel()` 又把抽读件落进同一条槽位目录，`wellformed` 与
+    `fs.read` 从此都在槽位目录里找字节。成因在会话里读得到：候选期模型为了让
+    `text.extract` 能按 `<6位号>/<名>` 抽读，先 `fs.move` 进了 `library/<槽位号>/`
+    （2026-11-26T06:13:27 / 08:14:59 / 08:16:05 / 08:49:46 四笔）。
+
+    所以这一支改成**交给搬迁**：`locallib.relocate_into_entry`（与结算点
+    `litstage.relocate_settled_originals` 同一个实现）。它按内容 sha 优先给出
+    `library/<lit_id>/<名>`，同名不同内容追加内容短哈希、绝不覆盖；搬过之后把
+    `reading` 里的 `from`/`to`/`sha256` 交给调用方落回执/事件（`relocation` 出参）。
+
+    搬不动时**不编造**成功：保留原相对名并记一条 warning（行上的 path 仍是坏的，
+    但它是盘上真实的那一份），结算点会再搬一次；两次都搬不动由收工门兜底。
 
     ## 收编是"复制"还是"搬"（2026-11-24 SEED-LANDING-FIX ① 裁定）
 
@@ -2152,9 +2171,33 @@ def _adopt_file(ctx: _Ctx, raw_path: str | None, warnings: list[str], *,
     lib = ctx.store.library.resolve()
     try:
         rel = p.relative_to(lib).as_posix()
-        return rel, p.stat().st_size, _sha256_of(p)
     except ValueError:
-        pass  # 不在 library 内 → 需要收编
+        rel = None  # 不在 library 内 → 需要收编
+    if rel is not None:
+        # 已在 library/ 内：**不再原样返回**（2026-11-26 MSRELOC 收口）。
+        # 目录名不是文献号 ⇒ 交给搬迁（唯一实现 `locallib.relocate_into_entry`，
+        # 与结算点共用）；目录名本来就是文献号 ⇒ 它原样返回（一个字节都不动）。
+        from ..locallib import relocate_into_entry
+        try:
+            moved, where = relocate_into_entry(
+                lib, lit_id, literature_path=rel, reading=relocation)
+        except (OSError, ValueError) as exc:
+            warnings.append(
+                f"`{rel}` 已在 library/ 内但目录名不是文献号，搬迁失败"
+                f"（{type(exc).__name__}: {exc}）⇒ path 暂按盘上原样记，结算点会再搬一次")
+            return rel, p.stat().st_size, _sha256_of(p)
+        if moved and where is not None and where.is_file():
+            return moved, where.stat().st_size, _sha256_of(where)
+        if moved != rel:
+            warnings.append(
+                f"`{rel}` 搬迁到 `{moved}` 之后盘上读不到那一份 ⇒ path 暂按原样记")
+        elif (relocation or {}).get("status") not in (None, ""):
+            # 没搬成（file_missing / bad_path / conflict / write_failed）：
+            # 如实说"这一行落在哪、为什么搬不动"，别让模型以为 path 已经规范了。
+            warnings.append(
+                f"`{rel}` 在 library/ 内，但目录名不是文献号，且这一次没搬成"
+                f"（{relocation.get('status')}: {relocation.get('why') or '无理由'}）")
+        return rel, p.stat().st_size, _sha256_of(p)
 
     # 落点只有一处实现（`locallib.library_landing`，三个写者共用）：
     # `<文献号>/<清洗名>`（2026-11-25 业主裁定）；同名不同内容会追加内容短哈希，绝不覆盖。
@@ -2188,6 +2231,20 @@ def _adopt_file(ctx: _Ctx, raw_path: str | None, warnings: list[str], *,
         warnings.append(f"收编文件失败（{type(exc).__name__}: {exc}），path 置空；原文件仍在 {p}")
         return None, 0, None
     return landing, target.stat().st_size, sha
+
+
+def _download_receipt(rel_path: str | None, size: int, sha: str | None) -> dict[str, Any]:
+    """登记行上的 `download` 那几格（`_h_register` 里搬出来的，判据一个字没改）。
+
+    有字节 ⇒ `ok`（内容确实在本地、哈希是我们刚算的；http 元数据未知就留 `None`，
+    不编造状态码）；没有字节 ⇒ `skipped` + `no_local_path`（不是「下载失败」，是
+    「这一笔没要文件」—— 两档处置不同）。
+    """
+    if rel_path:
+        return {"status": "ok", "http_status": None, "bytes": size, "sha256": sha,
+                "error": None}
+    return {"status": "skipped", "http_status": None, "bytes": 0, "sha256": None,
+            "error": "no_local_path"}
 
 
 def _h_ingest_local(ctx: _Ctx, books_dir: str, pattern: str = "*.pdf",
@@ -2608,6 +2665,9 @@ def _h_register(
                     "type_code": existing.get("type"),
                     "processed": bool(existing.get("processed")),
                     "download": None,
+                    # 2026-11-26 MSRELOC：判重命中支没有"我收编了一份字节"这件事，
+                    # 所以搬迁回执必然是空的 —— 用 `{}` 说"没发生"，与新建支同键。
+                    "relocation": {},
                     "warnings": warnings + [
                         "判重命中：复用既有 lit_id，未新建行（同一篇文献两个代号会污染下游溯源）。"
                     ],
@@ -2625,21 +2685,14 @@ def _h_register(
             return refused
 
         lit_id = tx.alloc_id("lit")
-        rel_path, size, sha = _adopt_file(ctx, path, warnings, lit_id=lit_id)
-
-        dl: dict[str, Any]
-        if rel_path:
-            # 内容确实在本地（我们刚收编并算了哈希），故记 ok；http 元数据未知就留 None，
-            # 不编造状态码。B 只看 status/path，不会被这里的 None 影响。
-            dl = {"status": "ok", "http_status": None, "bytes": size, "sha256": sha, "error": None}
-        else:
-            dl = {
-                "status": "skipped",
-                "http_status": None,
-                "bytes": 0,
-                "sha256": None,
-                "error": "no_local_path",
-            }
+        # 搬迁回执（MSRELOC）：把 library/<槽位号>/ 的字节搬进 library/<文献号>/ 这一笔留痕。
+        relocation: dict = {}
+        rel_path, size, sha = _adopt_file(ctx, path, warnings, lit_id=lit_id,
+                                         relocation=relocation)
+        if relocation:
+            tx.info("lit.relocate", **{**relocation, "lit_id": lit_id,
+                                       "where": "search.register"})
+        dl = _download_receipt(rel_path, size, sha)
 
         row = S.Literature(
             lit_id=lit_id,
@@ -2694,6 +2747,10 @@ def _h_register(
             "created": True,
             "lit_id": lit_id,
             "path": rel_path,
+            # 搬迁回执（2026-11-26 MSRELOC）：`status`/`from`/`to`/`sha256`/`bytes`。
+            # 目录名本来就是文献号时它是 `already_in_entry`（零写入），空 dict 表示
+            # 这一趟根本没走到"已在 library 内"那一支（字节从库外收编进来）。
+            "relocation": relocation,
             "dedup_key": rowd["dedup_key"],
             "keys": keys,
             "type_code": code,
@@ -3119,10 +3176,11 @@ def _search_ingest_local(ctx, books_dir, pattern="*.pdf", limit=None, max_bytes=
 # 落点与内部形状（模型面只说「library/ 扁平 `<sha 前 12 位>-<名>`」这一句用法）：
 # - 行落在 `literature` 表，`processed=False` 由本工具置、之后由 B 置 true；
 # - 未命中时 `tx.alloc_id("lit")` 发号（同一事务内构造行、`validate()` 不过则整笔回滚）；
-# - 文件收编走 `_adopt_file` → `locallib.library_landing`：新写一律扁平
-#   `library/<sha256[:12]>-<名>`（同名不同内容加长前缀、绝不覆盖）；旧布局
-#   `library/<lit_id>/<名>` 只在"文件已在 library/ 内"时作存量读回，不再产出；
-# - 判重命中支与新建支返回同一套 13 键（`G-23`），调用方不必先判 `created`；
+# - 文件收编走 `_adopt_file` → `locallib.library_landing`：新写一律 `library/<文献号>/<名>`
+#   （同名不同内容追加内容短哈希、绝不覆盖；2026-11-25 起扁平 `<sha12>-<名>` 已退役）；
+#   "文件已在 library/ 内"那一支**不再原样返回**：目录名不是文献号 ⇒ 交给
+#   `locallib.relocate_into_entry` 搬进号目录（2026-11-26 MSRELOC）；
+# - 判重命中支与新建支返回同一套 14 键（`G-23`），调用方不必先判 `created`；
 # - 两道闸：直写路过声明闸（未声明的路径 ⇒ `not_declared_reference`、零写入）、
 #   正文闸（`content_read=false` 时 summary 不许有内容性断言）。
 # 判据：`tests/test_tool_face_three_segments.py`（模型面不含实现名 / 注释里仍在）。
@@ -3153,8 +3211,9 @@ def _search_ingest_local(ctx, books_dir, pattern="*.pdf", limit=None, max_bytes=
     # `created` 才能安全读键（`G-23`）。
     returns=(
             "{'created','reason','lit_id','matched_key','existing','keys','request_linked',"
-            "'path','dedup_key','type_code','processed','download','warnings'}"
-            "（created=false 表示判重命中，复用了既有 lit_id；两支键集合相同）"
+            "'path','dedup_key','type_code','processed','download','warnings','relocation'}"
+            "（created=false 表示判重命中，复用了既有 lit_id；两支键集合相同；"
+            "relocation 是原件搬迁回执，判重支为空对象）"
             ),
     scenario="用户点名的工作区文件入库时用它；检索来的候选走 lit.stage_add → lit.admit。",
     example="带本地文件登记（summary 只写题录）：回 created/lit_id/path 与 download。",
@@ -3879,6 +3938,10 @@ def _h_lit_admit_all(
         "refused": got["refused"],
         "cleared": got["cleared"],
         "registered": got["registered"],
+        # 2026-11-26 MSRELOC：原件搬迁回执（`litstage.relocate_settled_originals` 的逐条读数）。
+        # 与 `lit.relocate` 事件同源：`status` 是 `locallib.RELOCATE_*` 之一，
+        # `from`/`to` 是 `library/` 相对名，`slot`/`lit_id`/`sha256` 五格齐。
+        "relocations": got["relocations"],
         "report": got["report"],
         "report_path": got["report_path"],
     })
@@ -4210,8 +4273,10 @@ def _lit_admit(ctx, slots=None, items=None, request_id=None, batch=None, new_con
         "{'ok','kind','whole_call_refused','reason','request_id','submitted','call_size',"
         "'call_limit','delegation_admitted','delegation_limit','pending_total',"
         "'pending_by_delegation','pending_scope_note','admitted','refused','cleared',"
-        "'registered','report','report_path'}；"
+        "'registered','relocations','report','report_path'}；"
         "submitted[] 是这一次提交覆盖的槽位号；"
+        "relocations[] 是原件搬迁的逐条回执（status 取自 `locallib.RELOCATE_*`；"
+        "from/to 是 library/ 相对名；另有 slot、lit_id、sha256、bytes）；"
         "admitted[] 每项是槽位、题名、lit_id、created、overlap_score、overlap_kind、"
         "overlap_with、new_content 八格（与 lit.admit 同形）；"
         "refused[] 与 cleared[] 每项是槽位、题名、why、code、overlap 五格"

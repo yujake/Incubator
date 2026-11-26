@@ -2818,6 +2818,98 @@ def _register(plan: Mapping[str, Any], registrar: Callable[[Mapping[str, Any]], 
     return lit_ids, failures, got_all
 
 
+def relocate_settled_originals(
+    store: Store,
+    lit_ids: Mapping[str, str],
+    got_all: Mapping[str, Mapping[str, Any]] | None = None,
+    *,
+    literature: Mapping[str, Mapping[str, Any]] | None = None,
+    actor: str = "agent-A",
+) -> list[dict]:
+    """把这一批刚登记成功的原件搬进号目录，并把行上的 `path` 改过来（结算点的唯一入口）。
+
+    ## 为什么主人是结算点而不是 `text.extract` / `_adopt_file`
+
+    ① 这是"候选期资产 → 已登记资产"的那一次状态迁移，和抽读件归位是同一刻、同一批；
+    ② 只有这个时点上三样同时齐：`slot → lit_id`（`_register` 的产出）、`store`
+    （能读能写 `literature` 行）、行上的 `path` 与登记回执（`got_all`）；
+    ③ 搬运动作本身只有 `locallib.relocate_into_entry` 一处实现 —— 本函数只做
+    "取这一条的当前 path、调它、把新 path 写回行上、留一条痕"，不自己拼任何路径。
+
+    ## 为什么不能只靠 `_adopt_file`
+
+    `_adopt_file` 是登记那一刻的第一道：它在 `search.register` 的事务里已经把
+    `library/<槽位>/<名>` 搬进 `library/<文献号>/<名>`（新登记的行不会再出坏 `path`）。
+    但存量行、以及登记那一刻搬失败的行（跨盘/权限/占用）仍然带着 `<槽位号>/…` 的
+    `path` —— 结算点是它们被修好的唯一时机，也是唯一能给出 `slot` 的地方（所以
+    `lit.relocate` 那条痕里的 `slot` 只有这里录得到）。
+
+    ## 与抽读件归位同源（这是本函数存在的第二条理由）
+
+    调用点在 `_promote_created_reads` 之前：抽读件落点由 `litread.text_rel(
+    literature.path)` 现算 ⇒ 行上 `path` 一改成 `<文献号>/<名>`，抽读件就落进同一条
+    号目录、同 stem。反过来（先归位再搬迁）会造出"抽读件在槽位目录、原件在号目录"
+    的分居 —— `wellformed` 会永远报 `literature_fulltext_missing`。
+
+    ## 三态
+
+    `moved` / `moved_at_registration` / `already_in_entry` / `reused` / `file_missing` /
+    `no_path` / `bad_path` / `conflict` / `write_failed` 逐档透传
+    `locallib.RELOCATE_*`；每一条都进 `lit.relocate` 事件（不搬也是结论，不是沉默）。
+
+    `literature` / `got_all` 可注入（判据要用确定的读数跑，不依赖盘上别的东西）。
+    """
+    pairs = {str(s): str(l or "").strip() for s, l in (lit_ids or {}).items()}
+    pairs = {s: lid for s, lid in pairs.items() if lid}
+    if not pairs:
+        return []
+    if literature is not None:
+        rows = {str(k): dict(v) for k, v in literature.items()}
+    else:
+        rows = {str(r.get("lit_id") or ""): dict(r) for r in store.rows("literature")}
+    receipts = {str(k): dict(v) for k, v in (got_all or {}).items()}
+    out: list[dict] = []
+    changed: list[tuple[str, dict]] = []
+    for slot, lit_id in pairs.items():
+        row = rows.get(lit_id) or {}
+        reading: dict[str, Any] = {"slot": slot, "lit_id": lit_id, "actor": actor}
+        # 登记那一刻 `_adopt_file` 已经搬过（同一个搬运函数）⇒ 直接采用那条回执，
+        # 不再搬第二次（否则 `already_in_entry` 会把"搬过"这件事读成"没搬"）。
+        early = dict(receipts.get(slot, {}).get("relocation") or {})
+        if early.get("status") == LL.RELOCATE_MOVED and str(early.get("to") or "").strip():
+            reading.update({
+                "status": LL.RELOCATE_AT_REGISTRATION,
+                "from": str(early.get("from") or ""),
+                "to": str(early.get("to") or ""),
+                "sha256": str(early.get("sha256") or ""),
+                "bytes": int(early.get("bytes") or 0),
+            })
+            out.append(reading)
+            continue
+        try:
+            new_rel, _where = LL.relocate_into_entry(
+                store.library, lit_id,
+                literature_path=str(row.get("path") or ""),
+                reading=reading)
+        except (OSError, ValueError) as exc:
+            # 搬不动 / 号非法：如实记下来，绝不让一次"搬迁"把已经成功的登记结算带崩
+            # （缺的那一格由收工门 `acceptance` 的 `wellformed` 读数兜底）。
+            reading.update({"status": LL.RELOCATE_WRITE_FAILED, "from": str(row.get("path") or ""),
+                            "to": str(row.get("path") or ""),
+                            "why": f"{type(exc).__name__}: {exc}"})
+            out.append(reading)
+            continue
+        if str(new_rel or "").strip() and new_rel != str(row.get("path") or ""):
+            changed.append((lit_id, {**row, "path": new_rel}))
+        out.append(reading)
+    with store.tx("literature", actor=actor, note="lit.relocate") as tx:
+        for _lid, payload in changed:
+            tx.upsert("literature", payload, note="lit.relocate")
+        for one in out:
+            tx.info("lit.relocate", **one)
+    return out
+
+
 def promote_candidate_read_texts(
     store: Store,
     mapping: Iterable[Mapping[str, str]],
@@ -3153,7 +3245,7 @@ def admit_all(
     4. 批量注册：`_register(plan, registrar)` 一次性把这一批送进现有登记路径，
        拿回 `{slot: lit_id}`；再在同一个事务里 `apply_settlement` 把
        `qualified → admitted` 与 `lit_id` 回填到同一行（映射就在行上，
-       不需要单独映射表）；
+       不需要单独映射表）；原件按同一份映射搬进号目录（`relocate_settled_originals`）；
     5. 重渲染带号定稿 `work/A/lit-<rid>.md`：只收"已提交过的行"（这一批 + 更早已清的
        批次），未判的 pending 不进定稿 —— 定稿不允许有待裁块（那是交付物，不是进度）；
     6. 清这一批：归档 `data/archive/lit_candidates/archive-<rid>.jsonl`（整份委托，含未判行）+
@@ -3209,10 +3301,10 @@ def admit_all(
             detail={"violations": bad, "path": snapshot["path"]})
     # ---- ④ 批量注册 + 回填（同一事务） ------------------------------------
     lit_ids, failures, got_all = _register(plan, registrar)
-    # ---- ④' 抽读件归位（登记成功、literature.path 落定之后；唯一落点实现是
-    # `locallib.land_read_text`，见 `promote_candidate_read_texts`）。失败不拦结算：
-    # 结局留在 `read_text_promotions` + 事件流里，缺的 `.txt` 由收工门 `acceptance`
-    # 那一格（读 wellformed 的 `literature_fulltext_missing`）兜底。
+    # ---- ④' 原件搬迁（主人 = 结算点；唯一实现 `locallib.relocate_into_entry`）。
+    # 必须在抽读件归位之前：抽读件落点由 `text_rel(literature.path)` 现算，行上 path
+    # 一改，两样东西就落在同一条号目录里。
+    relocations = relocate_settled_originals(store, lit_ids, got_all, actor=actor)
     promotions = _promote_created_reads(store, lit_ids, got_all, actor=actor)
     decisions = _decisions_from(plan, lit_ids, failures)
     with store.tx("lit_candidates", actor=actor, note="lit.admit_all") as tx:
@@ -3296,6 +3388,7 @@ def admit_all(
         "refused": refused,
         "cleared": list(plan.get("cleared") or []),
         "registered": len(done),
+        "relocations": relocations,
         "read_text_promotions": promotions,
         "report": rep,
         "report_path": (rep or {}).get("path"),
