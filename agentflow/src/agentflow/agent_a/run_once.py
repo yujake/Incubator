@@ -15,9 +15,9 @@ from .clear_stage import _finish
 # `src_files_gt800_lines` 的 800 行软基线，把这三个带长 docstring 的 helper 加在这里会把
 # "三格"顶出去（实测 731 → 887）。名字保持调用点不变，判据仍只有一处实现。
 from .landing import (
-    duplicate_download_receipt as _duplicate_download_receipt,
-    landing_allowed as _landing_allowed,
-    note_landing_receipt as _record_landing_receipt,
+    _duplicate_download_receipt as _duplicate_download_receipt,
+    _landing_allowed as _landing_allowed,
+    _note_landing_receipt as _record_landing_receipt,
 )
 
 from .. import litstage as L

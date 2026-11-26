@@ -520,7 +520,6 @@ REVIEW_LEDGER_STATES: tuple[str, ...] = (
 #: 只收 theorem / lemma：业主点名的是"论文里以 theorem/lemma 环境出现"。
 #: proposition / corollary 不在这一组里 —— 它们也是被证明的命题，但"说成定理"这句话
 #: 指的是这两个环境名，把四件套全收进来会让读数与业主那句话对不上。
-THEOREM_ENV_KINDS: tuple[str, ...] = ("theorem", "lemma")
 
 #: 台账里"还只是猜想"的那一档（落差读数的一半）。
 CONJECTURE_KIND = "conjecture"
@@ -1015,7 +1014,7 @@ def is_load_bearing_row(row: Row | Mapping[str, Any]) -> bool:
 
     2026-11-26 BEARINGDEF 的根因（真机 sunflower-digest-2）：同一个概念"论文里的承重
     命题"被四处各定义了一次，四个集合互不相同 —— `proof_source == own`（本模块旧
-    `evidence_cells_for_row`, `_proof_index_problems`）、`THEOREM_ENV_KINDS`
+    `evidence_cells_for_row`, `_proof_index_problems`）、`STATEMENT_ENV_KINDS`
     （`kind_gap_reading` 的 `theorem_unsigned`，只有 theorem/lemma）、
     `STATEMENT_ENV_KINDS`（正文环境侧）、`documents.claims` 的 `evidence_kind=="proof"`
     （`closing` 的 load_bearing 那格）。`prop:block`（proposition）与 `thm:erdos-rado`
@@ -2011,39 +2010,6 @@ OWN_PROOF_CELLS_NOTE = "自有证明行的索引四格由框架现读现填，�
 #: `doc.mapping_cells` 的 `returns` 口径与判据按这三个字认「这一档没有这一格」。
 NOT_OWN_PROOF_CELLS_NOTE = ("这一行不是「自有 + 已签 + 定理类」的证明 ⇒ 索引四格不适用"
                             "（空着不冒充已签）")
-def _proof_manuscript_rel(ledger_row: Mapping[str, Any] | None, proof_no: int,
-                          workspace_root: Path) -> tuple[str, str]:
-    """这一号证明的载体稿 `(工作区相对路径, 不填的理由)` —— 台账记的是哪一份（事实）。
-
-    读口只有 `manuscriptpaths.recorded_manuscript` 一处（路径 + 记录时的字节 sha +
-    三态）。它回答"台账说这一条的稿在哪"，不回答"这份稿现在装的是不是这一行的
-    证明"：后者是判据（`_manuscript_identity_problems`），填充侧不许顺手把对不上的稿
-    吞掉 —— 那正是 2026-11-26 真机现场（`manuscripts["1"]` 指着的文件已经被改写成
-    000033 的证明，而表 / 门两边都看不见）。
-
-    老盘只记了 `manuscript_id`（没有逐路径记录）时才退到
-    `manuscriptpaths.source_manuscript_rel`：它按四族拼规范名、只认正文对得上的那一份。
-    """
-    if not isinstance(ledger_row, Mapping):
-        return "", "台账里没有这一行"
-    from . import manuscriptpaths as MPP   # 惰性：只在这一格用到（避免 import 期牵连）
-    got = MPP.recorded_manuscript(ledger_row, int(proof_no), workspace_root)
-    rel = str(got.get("path") or "").strip().replace("\\", "/")
-    if not got.get("checked"):
-        return "", str(got.get("why") or "稿记录这一格读不出来")
-    if not rel:
-        scoped = dict(ledger_row)
-        scoped["proof_no"] = int(proof_no)
-        legacy = MPP.source_manuscript_rel(workspace_root, scoped)
-        if legacy.get("found"):
-            rel = str(legacy.get("rel") or "").strip().replace("\\", "/")
-    if not rel:
-        return "", str(got.get("why") or "行上点不出这一号证明的稿")
-    if Path(rel).is_absolute() or ":" in rel or ".." in rel.split("/"):
-        return "", f"稿路径不是工作区相对路径：{rel!r}"
-    return rel, ""
-
-
 def proof_evidence_reading(ledger_row: Mapping[str, Any] | None, proof_no: Any,
                            workspace_root: str | Path, *, reviewed: str = "") -> dict[str, Any]:
     """这一号证明的「稿 / 签」两态读数（纯读、不猜；填充、G 表、门共用这一份）。
@@ -5535,7 +5501,7 @@ def kind_gap_reading(rows: Iterable[Row],
     corollary）出现、而台账 kind 仍是 conjecture 的行：N 条（逐条 label → stmt）；
     同理一条「论文里排成定理类环境但 V 没签的行」。
 
-    2026-11-26 BEARINGDEF：改前只认 `THEOREM_ENV_KINDS`（theorem / lemma），于是真机
+    2026-11-26 BEARINGDEF：改前只认 theorem / lemma 两种环境，于是真机
     `prop:block`（proposition）连"没签"这条读数都不进（`count=1` 而不是 2）。承重判据
     只有 `is_load_bearing_row` 一处；这一格与 `_proof_index_problems` / 填充 / CH8 同源。
 

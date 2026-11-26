@@ -21,7 +21,7 @@ from __future__ import annotations
 from ._support import ARunResult, Any, Path
 
 
-def landing_allowed(existing: dict) -> bool:
+def _landing_allowed(existing: dict) -> bool:
     """这一行还缺字节吗：缺 ⇒ 准落（补下载），不缺 ⇒ 不许落第二份。
 
     判据只有一处（这里），因为它是"能不能落"与"要不要回填 `path`"两个问题共用的同一条
@@ -35,7 +35,7 @@ def landing_allowed(existing: dict) -> bool:
     return (not existing.get("path")) or str(old_dl.get("status")) != "ok"
 
 
-def duplicate_download_receipt(store: Any, *, request_id: str, slot: str,
+def _duplicate_download_receipt(store: Any, *, request_id: str, slot: str,
                                existing: dict, dl: dict) -> dict | None:
     """「字节已在库、又下一份」这条拒绝的留痕：谁、什么 URL、写到哪、为什么。
 
@@ -94,7 +94,7 @@ def duplicate_download_receipt(store: Any, *, request_id: str, slot: str,
     }
 
 
-def note_landing_receipt(tx: Any, result: ARunResult, request_id: str, slot: str,
+def _note_landing_receipt(tx: Any, result: ARunResult, request_id: str, slot: str,
                          lit_id: str, dl: dict) -> None:
     """把 `_attach_staged` 的落点回执转成事件（三种"字节已在库 / 不在文献目录"的事实）。
 

@@ -4,7 +4,7 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（2026-11-24 B2R21-BOOKKEEPING 按现盘重算 `scripts/recompute_map_headline.py`；含同日并行路的未提交改动）：**
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **431 个 `.py`、338,039 行**，**72 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，17,115 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **432 个 `.py`、339,469 行**，**72 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，17,115 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > **2026-11-21 COL2 合稿路（p313 一次冻结，观测 19:4x）：三格 418 / 319,694 / 72。**
 > `>800` 的 **73 → 72**：`specs/b.py` 821 → **798**（PA4 的方法学条与「同一条定理多种证明」
 > 条**逐字搬进** `specs/b_ingest_policy.py` 的 `B_METHOD_POLICY` / `MULTI_PROOF_POLICY`，
@@ -1214,9 +1214,9 @@
 | `secretary_roster_write.py` | 708 | 秘书的名册写口与名字身份（U06+U05） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_session.py` | 292 | 秘书的实例台账读写：一实例一片（U13） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_sign.py` | 796 | 秘书的签：决定 ≠ 落地（U26） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
-| `secretary_statement.py` | 501 | 秘书的登记外壳与形状闸（U22 外壳） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_statement.py` | 506 | 秘书的登记外壳与形状闸（U22 外壳） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_statement_meta.py` | 556 | 秘书的元数据改写与两个新终态（U22 元数据侧） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
-| `secretary_statement_tx.py` | 760 | 秘书的登记事务：一笔全落或一字节不落（U22 事务侧） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_statement_tx.py` | 770 | 秘书的登记事务：一笔全落或一字节不落（U22 事务侧） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_surface.py` | 489 | 秘书的读写面池：一槽一主（U07） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_tier_judge.py` | 607 | 秘书的档位判据：力气读数 + 指路（U25 前半） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_tier_ledger.py` | 800 | 秘书的档位读侧：折叠与三态（U25 中段） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
@@ -1339,7 +1339,7 @@
 | `cli.py` | 6565 | 29 个子命令的入口与打印 | 每个子命令的 `--help`、三态 / 六档退出码（门是三态 `0/1/2`；`run-agent` 是六档 `0/1/2/3/4/5`，见 `cli.EXIT_CODE_BY_STOP`）、卡片式输出 |
 | `claimanatomy.py` | 1885 | 断言解剖学（每条断言的可判定性）；批 R71 加了第 5 族的第二个码 `uncontrolled_disclaimer`（自造免责声明不再过关，见 `draft/116`） | 判据多且互相独立 |
 | `agent_b/core.py` | 1539 | B 的 10 个动作（**拆包**：一个动作一个文件；`agent_b/core.py` 是其余成员（含 core 自身共 1525 行）；`agent_b/_support.py` 是模块级 helper 与常量，273 行）：入库 / 重抽取 / 结构重复裁决 / 登记命题 / 显式落稿 / 按位置与格收录 | 回验是"每条关系都要过"，代码密度高 |
-| `verify.py` | 2239 | 全局不变量审计（`verify_all` 已按 `T-5` 拆成 14 个 `_check_*` + 30 行编排层；批 R19 在 `_check_2` 里加了 I7 在途上限的两条读数） | 40 多条不变量平铺（禁改区，见 T-5） |
+| `verify.py` | 2246 | 全局不变量审计（`verify_all` 已按 `T-5` 拆成 14 个 `_check_*` + 30 行编排层；批 R19 在 `_check_2` 里加了 I7 在途上限的两条读数） | 40 多条不变量平铺（禁改区，见 T-5） |
 | `tools/text_tools.py` | 562 | 文字层抽取 `text.extract`（2026-10-17 新增；业主口径：**A 负责搜索/下载/转纯文字稿入库**，其它角色只读那份纯文字稿；**原 PDF 原样保留**）—— 读 PDF 自带文字层、页间插 `===== page N =====`、写 `library/<编号>.txt`；**写盘前核质量**（NUL/替换字符/控制字符占比超标 ⇒ `garbled_text`，不写盘） | 不读写任何表 |
 | `startup.py` | 353 | 唯一入口 `speak`（用户对 M 说话） | 2026-11-25 新建：CLI 与网页共用同一条投递/起跑路径，两侧差异收在 `launch` 参数里 |
 
