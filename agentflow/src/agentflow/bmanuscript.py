@@ -84,6 +84,32 @@ def relpath(statement_id: Any, proof_no: Any = 1) -> str:
                  strict=False)
 
 
+def _b_entry_is_this_proposition(root: Any, rel: Any, row: Mapping[str, Any]) -> bool:
+    """这份 B 稿的稿头命题指纹，是不是就是这一行的命题（族缺失那一档的退路）。
+
+    只在"行上没记 `manuscript_family`"时用：族不可读 ⇒ 裸号不能直接当 B 号，但稿
+    自己带着 `- 命题指纹：`（`proofregistry.parse_entry` 的既有读数）。指纹对上 ⇒
+    这份稿就是这一行的稿，可以复用；对不上 / 稿头没有指纹 ⇒ 不认（调用方发新号）。
+
+    为什么不是"正文 sha 对上"：B 的改写稿正是"正文要换"的那一份，正文 sha 与行上
+    现值本来就不同；命题指纹才是"这一份稿讲的是不是同一件事"。
+    """
+    from . import proofregistry as _PR
+
+    want = str(row.get("statement_full") or "").strip()
+    if not want or not str(rel or "").strip():
+        return False
+    try:
+        text = (Path(str(root)) / str(rel)).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False
+    entry = _PR.parse_entry(text)
+    if not entry.get("checked"):
+        return False
+    got = str(entry.get("fingerprint") or "").strip().lower()
+    return bool(got) and got == _PR.proposition_fingerprint(want)
+
+
 def manuscript_id_for_statement(root: Any, statement_id: Any, *,
                                 store: Any = None) -> dict[str, Any]:
     """这一条命题「自己那份 B 稿」是哪一份（读 durable 记录，不读稿头）。
@@ -148,8 +174,19 @@ def manuscript_id_for_statement(root: Any, statement_id: Any, *,
     #
     # 路径还没分（首次落稿 / 老调用面）时 `manuscripts` 那一格不写（写了会让
     # `path_reading` 把"还没挂进台账的那一份"算成一条路径）。这一档记在行上的
-    # `manuscript_id`：只有它确实是「本族」的稿（`reports/b-proof-<号>.md` 在盘上）
-    # 才算 —— 否则那一格是 F 的稿号（同一格两个号段），不能当 B 稿。
+    # `manuscript_id`：只有它确实是「本族」的稿才算 —— 否则那一格是 F 的稿号
+    # （同一格两个号段），不能当 B 稿。
+    #
+    # 2026-11-26（MSIDENT）：改前"确实是本族"的判据是「盘上有没有那个名字」
+    # （`manuscripts/B/b-proof-<号>.md` 在不在）。那个判据挡不住"同号属于别的
+    # 命题"：真机 sunflower-digest-3 的 stmt:000027 记着 F 的稿号 000004，
+    # `b-proof-000004.md` 恰是 stmt:000022 的稿 ⇒ 这一格把 000022 的稿认成 000027
+    # 的，下一笔改写就覆盖了别人的正文。稿身份是 `(族, 稿号)`（K6②），所以这里
+    # 先问「族」：只有这一行自己记着族是 b-proof（含老行从逐路径记录现认，见
+    # `statementledger.statement_manuscript_identity`）时，裸号才是 B 号的候选；
+    # 族缺失的老行退一步按「稿头命题指纹」核「这份 B 稿就是这一条命题的」——
+    # 指纹也是既有读数（`proofregistry.read_entry` 的 `fingerprint`），不新开一格。
+    # 两样都对不上 ⇒ `found=False`（调用方发新号），绝不拿别条命题的稿顶上。
     if store is not None:
         try:
             from . import statementledger as _SL
@@ -164,7 +201,16 @@ def manuscript_id_for_statement(root: Any, statement_id: Any, *,
             if _mid_now:
                 _rel_now = f"{MANUSCRIPT_DIR}/{PREFIX}{_mid_now}.md"
                 _path_now = Path(str(root)) / _rel_now
-                if _path_now.is_file():
+                _fam_now = str(_SL.statement_manuscript_identity(_row).get("family") or "")
+                _owns_now = _fam_now == "b-proof"
+                if not _owns_now and not _fam_now:
+                    _owns_now = _b_entry_is_this_proposition(root, _rel_now, _row)
+                if not _owns_now:
+                    out["why"] = (
+                        f"行上的 `manuscript_id={_mid_now}` 不是这一行的 B 稿"
+                        f"（族 {_fam_now or '未记'}，稿头指纹也对不上这一行的命题）⇒ "
+                        "不按裸号拼 B 稿名（同号另一族 / 别条命题的稿都不算）")
+                elif _path_now.is_file():
                     try:
                         _text_now = _path_now.read_text(encoding="utf-8")
                     except (OSError, UnicodeDecodeError):

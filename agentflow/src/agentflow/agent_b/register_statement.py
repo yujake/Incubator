@@ -7444,12 +7444,13 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             from .. import manuscriptids as _MID_FAMILY
 
             fam = _MID_FAMILY.family_of_rel(rel)
+            #: 稿身份三格（族 / 号 / 路径）同写的唯一写口：`record_manuscript`。
+            from .. import manuscriptpaths as _MP_LAND
+
             if group >= 1:
                 #: 稿身份升级（2026-11-26 BEARINGDEF）：路径 + 记录时的字节 sha。
                 #: 只写路径的话，"这条命题的稿后来被换成了别条命题的证明"没有任何东西
                 #: 能判红；写口只有 `manuscriptpaths.record_manuscript` 一处。
-                from .. import manuscriptpaths as _MP_LAND
-
                 wrote = _MP_LAND.record_manuscript(
                     new, group, str(rel), root=getattr(self.store, "root", ""))
                 per = dict(row.get("manuscripts") or {})
@@ -7465,6 +7466,34 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                     new["manuscript_family"] = fam
                 return {"write": True, "row": new,
                         "result": {"written": True, "path_group": group,
+                                   "manuscript_sha256": str(wrote.get("sha256") or ""),
+                                   "sha_known": bool(wrote.get("sha_known"))}}
+            # ---- `path_group=0`（老调用面）：这一笔不知道"第几条路径" ----------------
+            #
+            # 改前这一支只写 `manuscript_id` / `manuscript_family`，「不动」`manuscripts`
+            # ⇒ 真机 sunflower-digest-3 的 stmt:000027 落出「路径是 F 族、族是 B 族」
+            # 那种自相矛盾的行（`seq 6841`）。
+            #
+            # 「不写 `manuscripts`」的理由只对「首次落稿」成立：那一格是"每条路径各一份
+            # 稿"，正文还没挂进台账时写一格会让 `path_reading` 多算一条路径。而这里如果
+            # 这一号路径「已经有」记录（`manuscripts` 非空），这一笔就是给那条路径换载体
+            # —— 再写一格不新增路径，只是把那条路径的稿改成刚落的这一份，三格于是同源。
+            _per_now = row.get(_MP_LAND.PER_PATH_KEY)
+            _no_now = int(row.get("proof_no") or 1) or 1
+            if (mid and fam and isinstance(_per_now, Mapping) and _per_now
+                    and (str(row.get("manuscript_id") or "") != mid
+                         or str(row.get("manuscript_family") or "") != fam
+                         #: 老盘上"号 / 族已经是这一份、路径还是上一份"的形态：这一笔
+                         #: 顺带把那条路径的载体改过来（自愈，不新增路径）。
+                         or str(_per_now.get(str(_no_now)) or "") != str(rel))):
+                wrote = _MP_LAND.record_manuscript(
+                    new, _no_now, str(rel), root=getattr(self.store, "root", ""))
+                new["manuscript_id"] = mid
+                new["manuscript_family"] = fam
+                return {"write": True, "row": new,
+                        "result": {"written": True, "manuscript_id": mid,
+                                   "manuscript_family": fam,
+                                   "path_group": _no_now,
                                    "manuscript_sha256": str(wrote.get("sha256") or ""),
                                    "sha_known": bool(wrote.get("sha_known"))}}
             if mid and (str(row.get("manuscript_id") or "") != mid

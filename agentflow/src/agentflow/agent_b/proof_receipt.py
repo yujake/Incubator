@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from .. import manuscriptids as _MID
 from .. import manuscriptpaths as _MP
 from .. import proofregistry as _PR
 from ._support import _norm_manuscript_rel
@@ -78,10 +79,24 @@ def write_proof_receipt(
     per = _kept_per_path(row)
     #: 逐路径记录这一笔该不该写：有稿、号合法、而且这一号上还不是这一份稿。
     add_path = bool(rel and no >= 1 and per.get(str(no), "") != rel)
+    #: 稿身份第三格（K6④）：族与号必须同一笔写。族只从这一笔的「载体路径」现认
+    #: （`manuscriptids.family_of_rel` 是唯一那把尺），认不出就空着 —— 不猜。
+    #:
+    #: 为什么缺这一格是缺陷（2026-11-26 真机 sunflower-digest-3 的 stmt:000027）：
+    #: 收编一份 F 稿时这一格没写 ⇒ 行上是「`manuscript_id=000004` + `manuscripts[1]=
+    #: F/f-proof-000004.md` + 族缺」。读侧还能从路径现认出 f-proof（`statementledger.
+    #: statement_manuscript_identity`），但「写侧不认」：下一笔落 B 的改写稿时按裸号
+    #: 000004 + B 族拼名，正好撞上另一条命题的 `b-proof-000004.md`。同一件事的另一支
+    #: （`secretary_statement_tx.py` 的新建那一臂、`secretary_vacant.py::fill_vacant_path`）
+    #: 一直是三格同写的 —— 这一处漏了，于是"族"这一格只在一半的写口上有。
+    fam = _MID.family_of_rel(rel) if rel else ""
+    #: 族描述的是"这个号是哪一族的" ⇒ 没有号就不写族（否则又造出一格孤儿）。
+    fam_changed = bool(fam) and bool(mid) and str(
+        row.get("manuscript_family") or "") != fam
     if (str(row.get("proof_sha256") or "") != want_sha
             or int(row.get("proof_no") or 0) != no
             or (bool(mid) and str(row.get("manuscript_id") or "") != mid)
-            or add_path):
+            or add_path or fam_changed):
         row["proof_no"] = no
         row["proof_sha256"] = want_sha
         out["proof_receipt"] = {"proof_no": no,
@@ -97,6 +112,10 @@ def write_proof_receipt(
         if mid:
             row["manuscript_id"] = mid
             out["proof_receipt"]["manuscript_id"] = mid
+        #: 稿身份第三格：族（与号同一笔写；见上面 `fam` 那一段）。
+        if fam_changed:
+            row["manuscript_family"] = fam
+            out["proof_receipt"]["manuscript_family"] = fam
         # ---- 逐路径的稿：`{路径号: 稿路径}` + `{路径号: 字节 sha}`（这一行每条路径各一份，不互相覆写）
         #
         # 只写行、不进 `proof_receipt` 的键集合：回执答的是"这一行现在这一份"，
