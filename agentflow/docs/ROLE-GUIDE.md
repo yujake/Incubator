@@ -335,7 +335,7 @@
 | `contradictions` | 检测互相矛盾的关系对 | `read` | （无） |
 | `structural_duplicates` | 结构重复候选（I5 的输入） | `read` | （无） |
 | `handle` | 自然语言需求 -> 分派到上面某个分析器；**它同时是本角色的产出登记口**：报告 ok 时由它收口落盘（`analysis_reports` 一行 + `work/C/<rid>-<kind>.md`），并把 `report_id` / `markdown_path` 带回来 | `read` | `request_text` |
-| `proof_chain` | 一条成果的最短证明依赖链（按 path_group 分组；根 = 文献 / 无前提自证定理 / 原始概念） | `read` | `target` |
+| `proof_chain` | 一条成果的最短证明依赖链（根 = 文献 / 定义 / 穷举实验 / 无前提自证定理）；给 `targets` 时改为多目标的去重自足路径规划（order / roots / excluded / choices） | `read` | `target` |
 
 ### 协作面
 

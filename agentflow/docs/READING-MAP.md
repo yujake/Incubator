@@ -1194,9 +1194,9 @@
 | `secretary_axis.py` | 235 | 秘书的行轴与活口（唯一判据，U08 尾段） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_concept.py` | 639 | 秘书的概念行：一个概念一行（U24） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_decl.py` | 144 | 秘书的共享声明面：命题 / 档位 / 证明 / 概念几个轴共用的键与形状 | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
-| `secretary_deps.py` | 753 | 秘书的依赖面：不少一环（U23） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_deps.py` | 773 | 秘书的依赖面：不少一环（U23） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_evidence.py` | 701 | 秘书的证据升档与正文签闸（U22 证据侧） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
-| `secretary_handoff.py` | 593 | 秘书的交接稿与稿通道（U11） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_handoff.py` | 682 | 秘书的交接稿与稿通道（U11） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_identity.py` | 683 | 秘书的命题同一性判定：判不了不许新建 / 合并（U21 前半） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_identity_side.py` | 500 | 秘书的挑词、形态闸与修稿同一性（U21 后半） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
 | `secretary_inbox.py` | 482 | 秘书的收件箱与闭环提醒：两栏不混（U10+U28+U29） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
