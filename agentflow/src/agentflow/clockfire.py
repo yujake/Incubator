@@ -320,6 +320,57 @@ def _probe_targets(timers: Iterable[Timer]) -> dict[str, tuple[str, str, str]]:
     return out
 
 
+#: 到点投递的"谁的谁投"闸（REHEARSAL-FLAKE，2026-11-26）。
+#:
+#: ## 为什么要有这一条（一次真红，不是推测）
+#:
+#: `fire_due(workspace)` 按工作区扫全部待发计时器、不区分收件人；每个代理的循环都在推
+#: 它，于是"父在等子、子代理的步进点替父把到点项推响"被当成设计优点（`agent_loop._pump_clock`
+#: 的文档逐字写着）。但投递是一笔写：它落一条 `expects="ack"` 的 notice 板项 + 一条唤醒标
+#: 记。收件人那一拍如果已经走过了 `_take_wakes`（`_deliver_mailbox` 里"先推、再读唤醒"），
+#: 这笔投递就落在它这一拍之外 —— 而它随口就是 `final`：板项停在 `queued`，收件人的号已收工，
+#: 再也没有任何一拍会渲染它（"渲染即 ack"是唯一收口口），父的 `retire_child` / `final`
+#: 于是被"名下还有 1 条未消的板项"永久拒（`max_final_refused=3` ⇒ rc=5）。
+#:
+#: 全量 #43 的现场（`temp/rehearsalflake/REPORT.md`）：F 的等子表 `tm-000009` 被 B 的
+#: `_pump_clock` 投成 `t-000014`（`data/tasks.json` 里 `item_state="queued"`、`instance=""`），
+#: F 的下一拍已经发过 `final` ⇒ M 连拒 3 拍 ⇒ `final_refused`。同一棵树的全量 #44 里，
+#: 同一条表由 F 自己的步进投递、同一拍被 `_take_wakes` 消费掉（`item_state="done"`），
+#: 于是 rc=0。两趟的差别只有"谁先推响了这一拍"。
+#:
+#: ## 判据（只认这一档，别的一律照旧）
+#:
+#: 1. 兜底表（`is_lifeline`）不在此列：它不投件、不记唤醒，谁推都一样（`_renew_lifeline` 那半）；
+#: 2. 只认 `wait_for` 解析后是 `task:<号>` 的那一档（派活时 `arm_child_waiter` 起的那条）——
+#:    它等的对象是另一个代理的号，天然有"收件人"；时间类 / 闹钟 / 程序句柄没有这个问题；
+#: 3. 进程里读不到"正在推时钟的是谁"（判据直接调 `fire_due` / `autonomy` 的轮边界）⇒ 照旧投，
+#:    三态不许折成"都不投"；
+#: 4. 读到的推钟者就是收件人 ⇒ 投（这正是"它自己那一拍"）。
+#:
+#: 被挡下的一律 `DueDeferred`：计时器保持 pending，由收件人自己的下一次 `_pump_clock` 投
+#: —— 那一拍紧跟着 `_take_wakes`，投与消费在同一段里，板项不会停在 `queued`。
+def _deferred_to_its_owner(timer: Timer) -> str:
+    """这条到点项该不该留给收件人自己投？返回理由（空串 = 现在就投）。"""
+    if is_lifeline(timer):
+        return ""
+    wait = str(timer.wait_for_resolved or timer.wait_for or "")
+    if not wait.startswith("task:"):
+        return ""
+    recipient = str(timer.task_id or "")
+    if not recipient:
+        return ""
+    try:
+        # 惰性 import：conductor 在导入期会拉 clock，模块头写死会成环。
+        from .conductor import current_task_id
+        caller = str(current_task_id() or "")
+    except Exception:  # noqa: BLE001 —— 读不到推钟者不是"没有推钟者"
+        return ""
+    if not caller or caller == recipient:
+        return ""
+    return (f"这条计时器等的是 {recipient} 的活；投递留给它自己那一拍"
+            f"（{caller} 只是替它推了时钟）")
+
+
 def _deliver_one(bucket: TimerBook, timer: Timer, reason: str, why: str,
                  reading: Reading, report: dict[str, Any]) -> bool:
     """把一条到点的计时器交给到点动作（投递的唯一实现）。
@@ -334,6 +385,13 @@ def _deliver_one(bucket: TimerBook, timer: Timer, reason: str, why: str,
     `why` 是 `due_reason` 的第二格（"为什么还没到"或"它收口了"）；投递这一段不读它，
     收着是为了让签名与 `due_reason` 的返回形状对得上，读的人不必回去猜。
     """
+    # ---- 谁的谁投：等子代理的那一条只由收件人自己那一拍投（见 `_deferred_to_its_owner`）
+    # 放在锁外：它是纯读（读一个 ContextVar 与计时器的两格），不必占着 `_FIRE_LOCK` 等
+    # store 事务。返回 False 的处置与"没有到点动作"同一条：保持 pending，下一拍再判。
+    deferred = _deferred_to_its_owner(timer)
+    if deferred:
+        report["deferred"].append({"timer_id": timer.timer_id, "reason": deferred})
+        return False
     # ---- D-07：整段串行（读 pending → 调 handler → 标 fired → save）
     # 为什么在函数入口就锁：`_deliver_one` 的两处调用方（全扫路径与事件消账）都会调它，
     # 把锁放在这里就等于"无论谁把它叫起来，同一条计时器只有一个投递者"。
@@ -544,7 +602,11 @@ def fire_due(workspace: str | Path | None = None) -> dict[str, Any]:
                 reason, detail = timer.due_reason(reading, None)
                 if not reason:
                     continue
-                _deliver_one(bucket, timer, reason, detail, reading, report)
+                if not _deliver_one(bucket, timer, reason, detail, reading, report):
+                    # 没投成（被"谁的谁投"挡下 / 到点动作推迟 / 抛了）：堆条目已经被
+                    # `pop_due` 摘走，必须记进热表，否则它要等下一轮全表对账才再被看见
+                    # —— 而收件人自己那一拍可能就在那之前发生（REHEARSAL-FLAKE）。
+                    bucket.mark_hot(timer)
             report["periodic_fired"].extend(
                 _fire_periodics(bucket, reading, report))
             _cost_note(root, source="fire_due", checked=True, reason="",
