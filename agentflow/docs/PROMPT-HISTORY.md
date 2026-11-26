@@ -4235,3 +4235,23 @@ ewtheorem / 论文写作只是推荐）一字未动。
 #: 五、射程：只动 `specs/c.py` 的教法与参数面；C 的工具实现、写口、门、判据强度一字未动。
 #:   FC-27：`specs/c.py` 命中 auth-audit ⇒ `--baseline` 登记（`reviewers=0`；登记 ≠ 批准）。
 #:   本笔 = p335。
+
+#: p335 → p336（2026-11-26，CPATH-GMAP：G 的成文路径义务 —— 落笔前读 C 的 order、章内照路径、交稿前对齐四查）
+#:
+#: 一、起因：彩排（`temp/pathrehearsal/`）跑通「依赖链驱动的成文路径」之后，把其中有用的四个环节装给 G。
+#:   真读数：目标 000024 + 000021 上 C 给 order(15)，按语义分章重编号后机械拼装 18,961 字符、
+#:   对应表 15 行、逐条对齐 0 问题。经验与坑记在 `docs/PAPER-WRITING-PLAYBOOK.md`（散文，不构成判据）。
+#: 二、改了什么：`specs/g.py` 的 policy 加一条（四条义务，判据式自检、无配额）：
+#:   ① 落笔前读 C 报告 `proof_chain` 的 `order`，并原样交给 `doc.write_mapping(path_order=[…])`；
+#:   ② 每个条目落笔前说清它在链里被谁用到、在第几步，`excluded` 里的条目不进正文；
+#:   ③ 章可重排、可合章，**但章内顺序必须守路径**，重排要让对应表跟得上；
+#:   ④ 交稿前对齐四查（表里的文件==台账登记那份 / 在盘上 / 正文 sha 一致 / 正文真出现）。
+#:   `agent_skills.py` 的 G 手册加同一条义务的操作面（读 C 报告 / 先摆根再往上 / 读 excluded /
+#:   章内顺序不许乱 / 四查）。
+#: 三、连带：`PROMPT_VERSION` p335 → p336；`scripts/recompute_prompt_digests.py --write` 只重算 G 一格
+#:   （dry-run 先给 `[DRIFT] G`）；`_VOLATILE_FACT_SETS` 追加 p336 一格（count=15、`keys_sha256=21314a39…`
+#:   与 p335 同值）；`docs/ROLE-GUIDE.md` 重生成（209,089 字符）；agent 面快照重冻；
+#:   `tests/fixtures/prompt_cache_warm.json` 两档各重落（逐趟 usd 见报告）。
+#: 四、射程：只动提示词 / 手册 / 教法。C 的路径算法、对应表的读写口、门、判据强度一字未动。
+#:   FC-27：`specs/g.py` 命中 auth-audit ⇒ `--baseline` 登记（`reviewers=0`；登记 ≠ 批准）。
+#:   本笔 = p336。
