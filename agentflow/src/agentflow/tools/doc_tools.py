@@ -3242,7 +3242,18 @@ def _mapping_declaration_texts(
             "写论文对应表三份（out/package 的 json、md、附录），md 与附录别手写。"
             + credential + "。" + duty + "。" + tiers
         ),
-        "file": "该条完整证明/实验所在的文件。" + tier_lines + "。",
+        "file": ("该条完整证明/实验所在的文件。" + tier_lines
+                 + "。**定义行（`kind=\"definition\"`）没有证明稿**，这一格可以省略"
+                   "（其余行必填）—— 定义正文在台账那一行的 `statement_full` 里，"
+                   "由 `ledger_id` 追"),
+        "path_order": (
+            "这一篇按 C 的哪一条路径行文：把 C 报告里 `payload.order` 那串节点"
+            "（`stmt:…` / `lit:…` / `exp:…`）**原样**抄进来（不重排、不去重）。"
+            "表里写了它 ⇒ 读侧去台账 `analysis_reports` 里找 `order` 逐字相同的那一份"
+            "`proof_chain` 报告，并核「每一行都在那条路径上 / C 的每个节点都有一行 / "
+            "同一章里的先后与路径一致 / 按 `章.序` 编的号确实随正文递增」；"
+            "不给 ⇒ 顺序那一问 `checked=False`（**没查成**，不是「顺序没问题」）。"
+            "章可以自己分、章序可以重排，但章内顺序必须与路径一致"),
         "lean_file": (
             "机器核验凭据（这一格说的是「这条命题是百分百真的」），按证明通道填："
             "numeric（证明栏第 ① 段是程序）以及例子/实验（证明栏第 ① 段是程序，"
@@ -3265,9 +3276,13 @@ def _mapping_declaration_texts(
         ),
         "returns": (
             "{'project','json','md','appendix','rows','state','md_state',"
-            "'appendix_state','lean_state','lean','warnings','problems','reason'}；"
+            "'appendix_state','lean_state','lean','warnings','problems','reason','order'}；"
             "state ∈ pass（三份与正文逐一对上）/ fail（写出了，但逐条 problems）/ "
             "unknown（没有正文，表没有可对的东西）；"
+            "order = 顺序那一轴（2026-11-26）：checked / dag（依赖 DAG 拓扑序：看过几条边）"
+            "/ path（编号按 C 的路径：哪一份报告、几个节点、几章、编号覆盖几行）/ why；"
+            "`checked=False` 是**没查成**（C 的报告没读成、或表里没给 `path_order`）—— "
+            "不是「顺序没问题」；"
             "只定理类行（" + kinds + "，且证明栏是程序）另写 `numeric_evidence` / "
             "`exhaustion_note` 与索引四格：缺程序路径 / 缺 E 的读数编号 / 缺两块读数 / "
             "正文那一段指不回 E，都会进 problems 并让 state 落到 fail"
@@ -3328,20 +3343,30 @@ def _mapping_cells_summary() -> str:
 #: 两层参数对账读不到 `items.type` / `items.required`（`tests/test_two_layer_constraints_*`）。
 _MAPPING_DECLARATION_TEXTS: dict[str, str] = _mapping_declaration_texts()
 
-#: 对应表一行的必填字段（与 `papermapping.ROW_FIELDS` 同源：那边的 schema 也不在这里
-#: 另写一份）。行的解析与校验一律走 `papermapping.parse_rows`。
+#: 对应表一行的必填字段（与 `papermapping.required_fields_for_kind` 同源：那边的 schema 也不
+#: 在这里另写一份）。行的解析与校验一律走 `papermapping.parse_rows`。
 #: 四个描述由 :func:`_mapping_declaration_texts` 从 :data:`MAPPING_DECLARATION_FACTS` 渲染。
+#:
+#: 2026-11-26（GMAP）：`required` 从六格减到五格 —— `file` 变成**按 kind 条件必填**
+#: （`kind="definition"` 的定义行没有证明稿）。为什么不能留在 `required` 里：JSON-Schema
+#: 的 `required` 只认"键在不在"，把定义行逼着写一个空 `file` 等于把"没有稿"和"稿在空串里"
+#: 混成一件事。`papermapping` 的读侧按 `NO_MANUSCRIPT_KINDS` 判，两边同一条口径
+#: （`tests/test_g_mapping_rows_declare_the_papermapping_cells.py` 的 ③ 逐条对拍）。
 _MAPPING_ROW_PARAMS: dict[str, Any] = {
     "type": "object",
     "properties": {
         "kind": {"type": "string", "enum": list(PM.ENV_KINDS),
-                 "description": "正文里的环境种类（与那个 \\begin{...} 一致）"},
+                 "description": "正文里的环境种类（与那个 \\begin{...} 一致）。"
+                                "定义（definition）也占一行：它没有证明稿，但必须有 ledger_id"},
         "label": {"type": "string",
-                  "description": "正文里 \\label{...} 的值（不带花括号）"},
-        "env_no": {"type": "integer", "minimum": 1,
-                   "description": "正文里第几个该环境（按类计数，1 起）"},
+                  "description": "正文里 \\label{...} 的值（不带花括号）。进了正文要按路径"
+                                 "重新编号（如 definition:1.1 / theorem:3.1）"},
+        "env_no": {"type": "integer", "minimum": 0,
+                   "description": "正文里第几个该环境（按类计数，1 起）；"
+                                  "被引、**未印成环境**的 `exp:` / `lit:` 行写 0"
+                                  "（0 只对这一档合法：定理类必须真的印在正文里）"},
         "ledger_id": {"type": "string",
-                      "description": "stmt:NNNNNN / exp:NNNNNN；多证明带 #pN"
+                      "description": "stmt:NNNNNN / exp:NNNNNN / lit:NNNNNN；多证明带 #pN"
                                      "（stmt:000004#p2）"},
         "proof_no": {"type": "integer", "minimum": 1,
                      "description": "第几号证明：1 = canonical（行上的 proof_text）"},
@@ -3381,12 +3406,17 @@ _MAPPING_ROW_PARAMS: dict[str, Any] = {
                         "description": "{verdict, sha256}：V 的结论与它签的那一份的 "
                                        "sha256"},
     },
-    "required": ["kind", "label", "env_no", "ledger_id", "proof_no", "file"],
+    # 五格无条件必填（`papermapping.ROW_FIELDS`）；`file` 按 kind 条件必填 —— 定义行
+    # （`NO_MANUSCRIPT_KINDS`）没有证明稿。字面量是刻意的：`capabilities` 的 AST 解析
+    # 只认字面量（`_MAPPING_ROW_PARAMS` 是嵌套常量），换成一函数调用会让两层对账读不到。
+    "required": ["kind", "label", "env_no", "ledger_id", "proof_no"],
 }
 
 
 def _doc_write_mapping(workspace: Path | None, project: str,
-                       rows: Sequence[Mapping[str, Any]], *, store: Any = None) -> Any:
+                       rows: Sequence[Mapping[str, Any]], *,
+                       path_order: Sequence[Any] | None = None,
+                       store: Any = None) -> Any:
     """`doc.write_mapping`：把对应表交给 `papermapping.write_package`（唯一写口）。
 
     三份产物（`MAPPING.json` / `MAPPING.md` / `mapping-appendix.tex`，外加正文里那一行
@@ -3456,7 +3486,8 @@ def _doc_write_mapping(workspace: Path | None, project: str,
         # 子目录下 —— D-69 那两格（`ledger_kind` / `reviewed`）要按台账现读现填，
         # 指错一层就会全表印成"未读到"。判据读数那一侧用的是同一个 `workspace`
         # （见下面 `mapping_reading(workspace_root=workspace)`）。
-        json_path, md_path, frag = PM.write_package(root, parsed, workspace_root=workspace)
+        json_path, md_path, frag = PM.write_package(root, parsed, workspace_root=workspace,
+                                                    path_order=path_order)
     except OSError as exc:
         return fail(f"写论文包失败：{type(exc).__name__}: {exc}",
                     kind="io_error", written=False)
@@ -3476,6 +3507,8 @@ def _doc_write_mapping(workspace: Path | None, project: str,
         "warnings": list(reading.get("warnings") or []),
         "problems": list(reading.get("problems") or []),
         "reason": str(reading.get("reason") or ""),
+        # 顺序那一轴（2026-11-26 GMAP）：`checked=False` = 没查成（不是"顺序没问题"）。
+        "order": dict(reading.get("order") or {}),
     }
     if state != "pass":
         return fail(f"三份写出了，但这张表现在读不过（{state}）：{body['reason']}",
@@ -3488,6 +3521,7 @@ def _doc_write_mapping(workspace: Path | None, project: str,
         "lean_state": body["lean_state"], "lean": body["lean"],
         "warnings": body["warnings"],
         "problems": body["problems"], "reason": body["reason"],
+        "order": body["order"],
     })
 
 
@@ -3626,22 +3660,27 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None,
                 "properties": {
                     "project": {"type": "string", "minLength": 1, "maxLength": 300},
                     "rows": {"type": "array", "minItems": 1,
-                             "description": "对应表的行：正文里每个定理/引理/命题/推论/例子/实验"
-                                            "各占一行；多证明时每条证明各占一行",
+                             "description": "对应表的行：正文里每个定理/引理/命题/推论/例子/实验/"
+                                            "**定义**各占一行；多证明时每条证明各占一行",
                              "items": _MAPPING_ROW_PARAMS},
+                    "path_order": {
+                        "type": "array", "items": {"type": "string"},
+                        "description": _MAPPING_DECLARATION_TEXTS["path_order"],
+                    },
                 },
                 "required": ["project", "rows"],
                 "additionalProperties": False,
             },
-            handler=lambda project, rows: _doc_write_mapping(workspace, project, rows,
-                                                             store=store),
+            handler=lambda project, rows, path_order=None: _doc_write_mapping(
+                workspace, project, rows, path_order=path_order, store=store),
             side_effect="write_local",
             roles=("G",),
             scenario="论文正文已就绪、要落对应表供读者追溯时",
             example="按行写表；返回三份落点与 state（pass / fail / unknown）",
             example_code=('doc.write_mapping(project="projects/p1", rows=[{"kind": "theorem", '
                           '"label": "thm:main", "env_no": 1, "ledger_id": "stmt:000004", '
-                          '"proof_no": 1, "file": "proofs/thm.tex"}])'),
+                          '"proof_no": 1, "file": "proofs/thm.tex"}], '
+                          'path_order=["lit:000000", "stmt:000004"])'),
             returns=_mapping_declaration_texts()["returns"],
             tags=("document", "paper", "write"),
         )

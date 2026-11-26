@@ -6241,7 +6241,9 @@ def _mapping_row_missing_cells(row: Any, *, channel: str,
       现场：`prop:block` / `thm:erdos-rado` 两行空通道，旧口径只数 `file` ⇒ `complete=5/5`，
       而它们的稿格一个都没填；
     - 索引四格不在这里数：它们由 `numerictheorem.evidence_index_problems` 一处判
-      （见 :func:`_numeric_row_index_problems`）。
+      （见 :func:`_numeric_row_index_problems`）；
+    - 定义行（`kind="definition"`）没有证明稿：`file` 不是必填格（判据只有一处，
+      `papermapping.manuscript_required`）。这一档不数它，`fields` 为空即"这一行齐"。
 
     返回空列表 = 这一行该有的格子都齐了（例子 / 实验只有 `file` 与 `lean_file` 两格，
     没有附加义务）。
@@ -6254,6 +6256,10 @@ def _mapping_row_missing_cells(row: Any, *, channel: str,
         #: 承重命题自己的证明稿（路径这一格；正文 sha / 字节 sha / 签由
         #: `papermapping._proof_index_problems` 逐项核 —— 这里只数"该有而没有"）。
         fields.append(PM.NP.INDEX_PATH_FIELD)
+    if not PM.manuscript_required(row):
+        # 定义行没有证明稿（2026-11-26 GMAP）：`file` 不是必填格，这一行不因此算"不齐"。
+        # 口径只有一处（`papermapping.manuscript_required`），不在这里另抄一份 kind 名单。
+        return fields
     if not str(getattr(row, "file", "") or "").strip():
         return ["file"] + fields
     if channel == NP.PROOF_CHANNEL_NUMERIC:

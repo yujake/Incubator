@@ -94,6 +94,11 @@
 
 - `USER-END-DSH-STYLE.md` —— Web 端样式的来源与三条纪律（DSH 令牌的 MIT 出处登记）
 
+- `PAPER-WRITING-PLAYBOOK.md` —— 2026-11-26 彩排留下的**经验记录**（成文流水线五步 / 分章的
+  自由度与硬边界 / 机械拼装真踩的三层坑 / 对齐四查 / 已知未做）。**不是规范条文**：判据在代码与
+  `tests/` 里，这份只记"彩排里真踩了什么、真读数是多少"；与它同步的产品侧实现见
+  `papermapping.order_reading`（编号按路径 + 依赖 DAG 拓扑序）。
+
 > 2026-11-22 DOCS-CLEANUP：原先列在这里的 `PROPOSALS.md`（提案/缺口登记册，自述"条目正文记的是
 > 登记当时的状态，不是当前状态"）与 `ROLE-SPECS-DRAFT-N-O-Q.md`（N/O/Q 三角色的草案，而现盘
 > `schema.ROLES` = A–H + V + L，没有这三个角色）已归档到 `draft/archive-docs/`（逐条见 §3.2）。

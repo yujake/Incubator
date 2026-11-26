@@ -152,25 +152,36 @@ ACTIONS: tuple[ActionSpec, ...] = (
             # 真身是 `tools/doc_tools.py` 里 `doc.write_mapping` 的 `@tool` 声明 —— 它是
             # `papermapping.parse_rows` 之前真正跑 `validate_params` 的那一份：
             # `project` 有 `minLength=1 / maxLength=300`，`rows` 有 `minItems=1`，
-            # 且每一行必填六格（kind / label / env_no / ledger_id / proof_no / file）。
+            # 且每一行必填五格（kind / label / env_no / ledger_id / proof_no）。
             # 只给 `_S` 与 `_ARR_OBJ` ⇒ 动作门 PASS、工具门 REJECT，
             # 而三层对账返回 `[]`。这里只镜像工具层的那几个约束键，
             # 漂移由 `capabilities.assert_capabilities()` 第 [9c] 条逐键对拍
             # （`_PARAMS_DERIVED_FROM_TOOL`）：改工具层的 `minItems` 而不改这里 ⇒ 导入期当场红。
             "project": {**_S, "minLength": 1, "maxLength": 300},
+            # 2026-11-26（GMAP）：这一篇按 C 的哪一条路径行文（C 报告 `payload.order` 原样）。
+            # 它是"编号按路径"那条口径的**声明面**：表里写了它，读侧才核得了章内顺序与
+            # 路径一致；不给 ⇒ 顺序那一问 `checked=False`（没查成，不是没问题）。
+            # 两层声明形状一致（工具层同名参数），对拍由同一条 [9c] 与
+            # `param_type_divergences` 守着。
+            "path_order": {"type": "array", "items": {"type": "string"}},
             "rows": {
                 "type": "array",
                 "minItems": 1,
-                # 一行一条（正文里每个定理类环境各占一行、多证明每条各占一行）；
-                # 六格与 `doc_tools._MAPPING_ROW_PARAMS["required"]` 同一份口径。
+                # 一行一条（正文里每个定理类环境各占一行、多证明每条各占一行；定义也占一行）；
+                # 五格与 `doc_tools._MAPPING_ROW_PARAMS["required"]` 同一份口径。
                 #
-                # 除这六格之外的格都是条件必填，由 `papermapping` 读侧判（所以不进
+                # `file` 不在 `required` 里（2026-11-26 GMAP）：定义行（`kind="definition"`）
+                # 没有证明稿，那一格按 kind 条件必填，由 `papermapping.required_fields_for_kind`
+                # 一处判 —— 工具层与读侧同源。
+                #
+                # 除这五格之外的格都是条件必填，由 `papermapping` 读侧判（所以不进
                 # `required` —— 一律 required 会把「这一格不适用」读成「这一格没填」）：
-                # `lean_file` / `lean_target` 按这条命题的证明通道（numeric 只要前者、
-                # formal 两格都要、通道为空两格必须空）；`numeric_evidence` /
-                # `exhaustion_note` 按行的种类（数值实验定理那一行必填；通道为空时不许填）；
-                # 索引四格（`evidence_kind` / `evidence_path` / `evidence_sha256` / `v_signature`）
-                # 按正文落在哪（D 是目录、正文在 F 的证明或 E 的报告里时必填）。
+                # `file` 按 kind（定义行可省）；`lean_file` / `lean_target` 按这条命题的证明
+                # 通道（numeric 只要前者、formal 两格都要、通道为空两格必须空）；
+                # `numeric_evidence` / `exhaustion_note` 按行的种类（数值实验定理那一行必填；
+                # 通道为空时不许填）；索引四格（`evidence_kind` / `evidence_path` /
+                # `evidence_sha256` / `v_signature`）按正文落在哪（D 是目录、正文在 F 的证明
+                # 或 E 的报告里时必填）。
                 # 缺了它们分别报 `mapping_numeric_*` / `mapping_exhaustion_note_missing`
                 # 与 `mapping_lean_*`。
                 #
@@ -247,7 +258,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
                               },
                           },
                           "required": ["kind", "label", "env_no", "ledger_id",
-                                       "proof_no", "file"]},
+                                       "proof_no"]},
             },
         }, ("project", "rows")),
         "mapping json", side_effect="write_local", handler_name="write_mapping",

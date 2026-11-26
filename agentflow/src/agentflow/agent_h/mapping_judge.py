@@ -60,6 +60,14 @@ NUMERIC_OBJECTIVE_KINDS: tuple[str, ...] = PM.NUMERIC_KINDS
 #: 判据的真身是 `papermapping.EVIDENCE_KINDS`，这里只是别名。
 EVIDENCE_OBJECTIVE_KINDS: tuple[str, ...] = PM.EVIDENCE_KINDS
 
+#: 客观档的第八组：顺序那三条（2026-11-26，GMAP）。
+#:
+#: 「一条依赖的前提排在用它的人之后」「这一行不在 C 声明的路径上 / 章内顺序与路径不一致」
+#: 「C 的路径上有节点而表里没有它那一行」全是可复算的结构事实（读依赖表、读正文的
+#: `\section`、读 C 的报告），所以照 `level_of` 的既有写法归到拦门那一档 ——
+#: 判据的真身是 `papermapping.ORDER_KINDS`，这里只是别名。
+ORDER_OBJECTIVE_KINDS: tuple[str, ...] = PM.ORDER_KINDS
+
 #: 只进读数、不拦门的那一档：Lean 开关开着而盘上一个 Lean 产物都没有。
 #:
 #: 它说的不是"表与正文对不上"，而是"这一趟的形式化一个文件都没落"——
@@ -72,7 +80,7 @@ LEAN_WARN_KINDS: tuple[str, ...] = PM.LEAN_WARN_KINDS
 BLOCKING_KINDS: tuple[str, ...] = (
     MAPPING_OBJECTIVE_KINDS + CITATION_OBJECTIVE_KINDS + MD_OBJECTIVE_KINDS
     + PAPER_OBJECTIVE_KINDS + LEAN_OBJECTIVE_KINDS + NUMERIC_OBJECTIVE_KINDS
-    + EVIDENCE_OBJECTIVE_KINDS
+    + EVIDENCE_OBJECTIVE_KINDS + ORDER_OBJECTIVE_KINDS
 )
 
 #: 主观档：读稿人的判断。只点名、不拦门（业主口径："主观类维持只点名不拦"）。
@@ -179,6 +187,6 @@ __all__ = [
     "CITATION_OBJECTIVE_KINDS", "EVIDENCE_OBJECTIVE_KINDS", "LEAN_OBJECTIVE_KINDS",
     "LEAN_WARN_KINDS", "LEVEL_BLOCKER", "LEVEL_INFO", "LEVEL_WARNING",
     "MAPPING_OBJECTIVE_KINDS", "MD_OBJECTIVE_KINDS", "NUMERIC_OBJECTIVE_KINDS",
-    "PAPER_OBJECTIVE_KINDS", "SUBJECTIVE_KINDS", "findings_of",
+    "ORDER_OBJECTIVE_KINDS", "PAPER_OBJECTIVE_KINDS", "SUBJECTIVE_KINDS", "findings_of",
     "is_subjective", "is_warning", "level_of", "problem_counts", "warnings_of",
 ]

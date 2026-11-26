@@ -21,12 +21,12 @@ G 产出论文时需附上对应表，说明每条定理、引理、命题、例
 
 | 字段 | 必填 | 口径 |
 |---|---|---|
-| `kind` | 是 | 受控词表 `ENV_KINDS`（theorem / lemma / proposition / corollary / example / experiment） |
+| `kind` | 是 | 受控词表 `ENV_KINDS`（theorem / lemma / proposition / corollary / example / experiment / definition） |
 | `label` | 是 | 正文里那个 `\\label{...}` 的值（不带花括号） |
 | `env_no` | 是 | 正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数；分节 `\\input` 进来的按内联顺序算） |
 | `ledger_id` | 是 | `stmt:NNNNNN` / `exp:NNNNNN` / `rel:NNNNNN`；老行可能带 `#pN` 尾巴（`stmt:000004#p2`） |
 | `proof_no` | 是 | 这条定理名下的稿号（一个稿号 = 一份文件 = 一份证明）：1 = canonical（台账行上的 `proof_text`）；2 及以上 = 该行 `proofs` 清单里那一份 |
-| `file` | 是 | 该条完整证明或实验所在的真实文件，论文包内的相对路径（`proofs/000004-p1.md`） |
+| `file` | 除定义行外是 | 该条完整证明或实验所在的真实文件，论文包内的相对路径（`proofs/000004-p1.md`）。定义行（`kind="definition"`）没有证明稿，这一格允许省略（见 `NO_MANUSCRIPT_KINDS`） |
 | `page_or_section` | 否 | 给人看的定位（`3` / `p.7`） |
 | `citation_loc` | 视来源 | 引文的本地位置：`{"file": 包内相对路径, "page_range"|"line_range"|"char_range": [起点, 终点]}` |
 | `citation_loc_reason` | 视来源 | 不给 `citation_loc` 时那句理由 |
@@ -204,6 +204,40 @@ D 的报告是目录（新成果＋索引），F 的证明 / E 的报告是
 md 与附录都是按列逐字比对的，列变了就是 `md_drifted` / `mapping_paper_mismatch`。
 读侧把这件事写进 `reason`（"另有 N 行没有台账那两格（旧表）"），不静默。
 
+## 顺序：编号由 C 的路径驱动，正文先后必须是依赖 DAG 的拓扑序
+
+业主 2026-11-26 的设计：G 按 C 给的路径行文（`agent_c.proof_path.plan_path` 的 `order`），
+进入正文后重新标号（`概念1.1` / `引理3.1` / `定理3.3`），并维护对应表。G 仍可自由分章
+（章号可跳、章序可重排），但章内顺序必须与路径一致。
+
+这一轴分两问，都只看结构、不设任何阈值：
+
+1. 依赖 DAG 的拓扑序（`order.dag`）：读 `<工作区>/data/dependencies.json`，每条依赖
+   是「前提 → 使用它的人」（`label` / `source_stmt_id` 指前提，`used_by` 指使用者）。
+   两边都在对应表里有行、且都有正文位置时，前提必须排在前面。谁被依赖就排在依赖者
+   之前 —— 这一问不需要 C 的报告，材料在盘上，所以它总能判（读不到台账 ⇒ `checked=False`）。
+2. 编号按路径（`order.path`）：G 在 `doc.write_mapping(path_order=[…])` 里声明它用了
+   哪一条路径（按 C 报告 `payload.order` 原样抄）。读侧拿声明去 `<工作区>/data/
+   analysis_reports.json` 里找 `kind="proof_chain"` 且 `order` 逐字相同的那一份报告：
+   - 找不到 ⇒ 不是通过：`checked=False`，`why` 说清是"没有报告"还是"声明与任何一份
+     都对不上"；对不上（台账读得到、声明是假的）落 `mapping_order_off_path`；
+   - 找得到 ⇒ 逐条核：声明里的每个节点都要有一行（`mapping_order_missing_node` ——
+     C 说这条路径自足，少一条就是证明链断在那儿）；每一行都要在声明的那条路径上
+     （`mapping_order_off_path` —— 表里写了 C 没规划的条目）；
+   - 按正文的 `\section` / `\chapter` 分章（结构事实，不看 label 长什么样），章内按
+     正文出现顺序读路径位次，必须严格递增（`mapping_order_off_path`）；
+   - label 写成 `…:<章>.<序>` 的行：同一章里章号必须一致、序号必须随正文顺序递增，
+     两个不同的章不许共用同一个章号（`mapping_order_off_path`）。没有按这个形态编号
+     的行不进这一问（`order.path.numbering.missing` 如实报几行没编号），但上面那条
+     "章内顺序 == 路径"照样压着它。
+
+`env_no` 这一格本来就由正文位置定（`_orphan_problems` 按 `(kind, label)` 与正文环境
+逐一对上，序号对不上就是孤儿）—— 所以"文中条目依次"这一列是位置驱动的，不靠 G 报数。
+
+三态：`order.checked` = 两问都真的判了；任一问缺材料 ⇒ `checked=False` 并把缺什么写进
+`why`（没查成不是"顺序没问题"），`state` 不会被这一档单独翻成 pass/fail 之外的
+东西 —— 但 `doc.write_mapping` 会把 `order` 整格交回去，读者一眼看见 `checked=False`。
+
 ## 双向都不许有孤儿
 
 正文是"`main.tex` ＋ 它递归 `\\input` / `\\include` 进来的那些文件"（相对路径按被包含
@@ -293,9 +327,19 @@ APPENDIX_END = "% ==== MAPPING-APPENDIX END ===="
 #: （`% MAPPING-ROW kind|env_no|label|ledger_id|proof_no|file|lean_file|lean_target`）。
 APPENDIX_ROW_PREFIX = "% MAPPING-ROW "
 
-#: 正文里要进对应表的六类环境（顺序就是 md 与附录里 kind 的推荐顺序）。
+#: 正文里要进对应表的七类环境（顺序就是 md 与附录里 kind 的推荐顺序）。
+#:
+#: `definition` 是 2026-11-26（GMAP）补的第七类：正文里的定义条目（"Definition 1.1 ↔
+#: 概念1"）此前根本写不进对应表 —— `kind` 词表里没有它、`parse_rows` 一律拒。
+#: 它与定理类的两个区别：
+#:
+#: 1. 它不是被证明的命题：不进 `STATEMENT_ENV_KINDS`，不参与"一条命题对一个环境"、
+#:    不算承重行（`is_load_bearing_row` 返回假）；
+#: 2. 它没有证明稿：`file` 不是必填格（见 `NO_MANUSCRIPT_KINDS`），但 `ledger_id`
+#:    必须有（定义正文在台账那一行的 `statement_full` 里，指得到才追得回来源）。
 ENV_KINDS: tuple[str, ...] = (
     "theorem", "lemma", "proposition", "corollary", "example", "experiment",
+    "definition",
 )
 
 #: 六类环境在正文里"印出来的抬头"（环境识别面的唯一一张表）。
@@ -317,6 +361,7 @@ ENV_TITLES: dict[str, str] = {
     "corollary": "Corollary",
     "example": "Example",
     "experiment": "Experiment",
+    "definition": "Definition",
 }
 
 #: 数值实验定理那一支管哪几类环境（正文"一条命题一个环境"用；`is_numeric_row` 不按它判）。
@@ -461,6 +506,13 @@ PROOF_SOURCE_CITATION = "citation"
 #: 原来的双向孤儿判据；两种行不会互相顶替（同一实验只能有一行）。
 EXPERIMENT_ID_PREFIX = "exp:"
 EXPERIMENT_ENV_NO = 0
+#: 文献行的前缀（2026-11-26，GMAP）：`lit:NNNNNN` 指 `literature` 表。
+#:
+#: 为什么它也要能进对应表：业主的对应表三列是「文中条目 → 库中编号 → 具体文件的相对
+#: 路径」，而"这一条引自某篇文献"的第三列就是那份文献文件（`literature[].path`）。这类
+#: 条目通常不印成环境（写成一句带出处的散文），所以它走「被引、未印成环境」那一档
+#: （`env_no=0`），与 `exp:` 行同一套判法。
+LITERATURE_ID_PREFIX = "lit:"
 #: 实验行多出来的那几格（只进 `MAPPING.json`；由 `fill_experiment_cells` 从台账现读现填，
 #: G 不写 —— 与索引四格同一条纪律：写侧填，读侧核）。
 EXPERIMENT_LOGS_FIELD = "experiment_logs"
@@ -524,10 +576,48 @@ REVIEW_LEDGER_STATES: tuple[str, ...] = (
 #: 台账里"还只是猜想"的那一档（落差读数的一半）。
 CONJECTURE_KIND = "conjecture"
 
-#: 每一行的必填字段。
+#: 每一行无条件必填的字段（与 kind 无关的那几格）。
+#:
+#: `file` 不在这里：它是"证明稿在哪"，而定义行没有证明稿（见 `NO_MANUSCRIPT_KINDS`）。
+#: 一行到底要哪几格由 :func:`required_fields_for_kind` 一处算，`parse_rows` 与
+#: 工具层 `_MAPPING_ROW_PARAMS["required"]` 都读它（工具层写的是字面量：`capabilities`
+#: 的 AST 解析只认字面量，两者逐字一致由 `tests/test_g_mapping_rows_declare_the_papermapping_cells.py`
+#: 的 ③ 守着）。
 ROW_FIELDS: tuple[str, ...] = (
-    "kind", "label", "env_no", "ledger_id", "proof_no", "file",
+    "kind", "label", "env_no", "ledger_id", "proof_no",
 )
+
+#: 证明稿那一格（除 `NO_MANUSCRIPT_KINDS` 之外每行必填）。
+MANUSCRIPT_FIELDS: tuple[str, ...] = ("file",)
+
+#: 没有证明稿的那几类环境（2026-11-26，GMAP）：定义不是被证明的命题，它没有"稿"。
+#:
+#: 这一档只免 `file` 一格 —— `ledger_id` 照样必填（定义正文在台账那一行的
+#: `statement_full` 里）；`proof_no` 也照样必填（`#p1` 恒在，它指的是那一行的正文，
+#: 不是"有一份证明稿"）。
+NO_MANUSCRIPT_KINDS: tuple[str, ...] = ("definition",)
+
+
+def manuscript_required(row: Any) -> bool:
+    """这一行是不是必须给 `file`（证明稿 / 实验程序在哪）。
+
+    参数可以是 :class:`Row`、Mapping 或一个 kind 字符串。三态只有两档：真 / 假 ——
+    "读不出 kind"按要处理（未知 kind 本来就会被 `parse_rows` 拒收，这里不替它猜）。
+    """
+    if isinstance(row, str):
+        kind = row.strip()
+    elif isinstance(row, Mapping):
+        kind = str(row.get("kind") or "").strip()
+    else:
+        kind = str(getattr(row, "kind", "") or "").strip()
+    return kind not in NO_MANUSCRIPT_KINDS
+
+
+def required_fields_for_kind(kind: Any) -> tuple[str, ...]:
+    """这一种 `kind` 的行必须给哪几格（唯一口径；`parse_rows` 与声明面读同一份）。"""
+    if manuscript_required(str(kind or "")):
+        return ROW_FIELDS + MANUSCRIPT_FIELDS
+    return ROW_FIELDS
 
 #: 数值实验定理那两格（业主 2026-10-23，E-1）：口径与判定在 `numerictheorem`，这里只转发。
 NUMERIC_ROW_FIELDS: tuple[str, ...] = NT.NUMERIC_ROW_FIELDS
@@ -536,10 +626,16 @@ NUMERIC_ROW_FIELDS: tuple[str, ...] = NT.NUMERIC_ROW_FIELDS
 RANGE_KEYS: tuple[str, ...] = ("page_range", "line_range", "char_range")
 
 #: 能解析的台账前缀（表名从 `schema.citation_prefix_table` 取，不在这里抄第二份）。
-LEDGER_PREFIXES: tuple[str, ...] = ("stmt", "exp", "rel")
+#:
+#: `lit` 是 2026-11-26（GMAP）加进来的第四档：引文行的第三列要指得到那份文献文件，
+#: 而"那份文件在哪"只有 `literature` 表知道（`literature[].path`，相对工作区根）。
+LEDGER_PREFIXES: tuple[str, ...] = ("stmt", "exp", "rel", "lit")
 
-#: 能承载 `ledger_id` 的三张台账表。
-LEDGER_TABLES: tuple[str, ...] = ("statements", "experiments", "relations")
+#: 能承载 `ledger_id` 的四张台账表。
+#:
+#: 它同时是 `read_ledger_tables` 读哪几张表的口径 —— `lit` 进来之后文献行解析得到，
+#: 代价是 `read_ledger_tables` 多读一份 `literature.json`（同一份按 mtime 缓存）。
+LEDGER_TABLES: tuple[str, ...] = ("statements", "experiments", "relations", "literature")
 
 #: 表 / 正文 / 文件三条轴上的问题类别（业主点名的客观四类，见 `agent_h/mapping_judge.py`）。
 #:
@@ -654,12 +750,35 @@ LEAN_WARN_KINDS: tuple[str, ...] = ("lean_on_but_no_artifact",)
 #: 程序没有 E 签的穷举证明、缺 E 的读数编号、缺块 / 缺署名 / 缺出处、正文那段指不回读数。
 NUMERIC_KINDS: tuple[str, ...] = NT.NUMERIC_KINDS
 
+#: 顺序那一组三条（2026-11-26，GMAP）：编号由 C 的路径驱动、正文先后必须是依赖 DAG 的
+#: 拓扑序（口径见模块 docstring「顺序」那一节）。
+#:
+#: - `mapping_order_not_topological`：一条依赖的前提排在用它的人之后
+#:   （"依赖在前、使用在后"被颠倒 —— 定义挪到定理后面就是这一条）；
+#: - `mapping_order_off_path`：这一行不在 C 声明的那条路径上 / 章内顺序与路径不一致 /
+#:   声明的那条路径在台账里对不上任何一份报告 / 编号与章内顺序打架；
+#: - `mapping_order_missing_node`：C 的路径上有这个节点，而表里没有它那一行
+#:   （C 说这条路径自足，少一条就是证明链断在那儿）。
+ORDER_NOT_TOPOLOGICAL = "mapping_order_not_topological"
+ORDER_OFF_PATH = "mapping_order_off_path"
+ORDER_MISSING_NODE = "mapping_order_missing_node"
+ORDER_KINDS: tuple[str, ...] = (
+    ORDER_NOT_TOPOLOGICAL, ORDER_OFF_PATH, ORDER_MISSING_NODE,
+)
+
+#: `MAPPING.json` 顶层的那个声明格：G 用的是 C 的哪一条路径（C 报告 `payload.order` 的原样）。
+#:
+#: 为什么把它写进表里而不是只留在工具层：读侧（H / 收工门 / 复核者）只有那份 json，
+#: 而"这一篇按哪条路径写的"必须能从交付物本身读出来 —— 否则"编号按路径"这句话就只剩
+#: 一句人话，复核时无从复算。声明与台账报告的比对由 :func:`order_reading` 一处做。
+PATH_ORDER_FIELD = "path_order"
+
 #: 本模块会产出的全部问题类别（判据要逐类覆盖它，见 `tests/test_paper_mapping_table.py`）。
 #:
 #: 只收拦门的那几组：`LEAN_WARN_KINDS` 不进这里（它在 `warnings` 里，不改 `state`）。
 ALL_PROBLEM_KINDS: tuple[str, ...] = (
     MAPPING_KINDS + CITATION_KINDS + MD_KINDS + PAPER_KINDS + LEAN_KINDS + NUMERIC_KINDS
-    + EVIDENCE_KINDS
+    + EVIDENCE_KINDS + ORDER_KINDS
 )
 
 #: 三态取值。
@@ -839,7 +958,9 @@ class Row:
     env_no: int
     ledger_id: str
     proof_no: int
-    file: str
+    #: 这一行的证明稿 / 实验程序在哪（包内相对路径）。定义行没有证明稿，这一格
+    #: 允许空（`NO_MANUSCRIPT_KINDS` / `manuscript_required`）；其余行必填。
+    file: str = ""
     #: ---- 机器核验凭据那一格（字段名不变，语义见 `CREDENTIAL_CELL_NAME`） ----------
     #:
     #: `lean_file`：这一条命题的机器核验凭据（百分百为真）—— 形式化通道是那份 `.lean`
@@ -1000,13 +1121,35 @@ def experiment_id_of_row(row: Row) -> str:
     return str(row.ledger_id).strip()[len(EXPERIMENT_ID_PREFIX):].split("#", 1)[0].strip()
 
 
+def is_literature_row(row: Row) -> bool:
+    """这一行是不是「被引文献行」（`ledger_id` 指 `literature` 表）。
+
+    2026-11-26（GMAP）：正文里引来的成果（"这一条引自 Erdős–Rado 1960"）也是对应表里
+    的一行 —— 第三列要指得到那份具体的文献文件。只按 `ledger_id` 的前缀判，与
+    `resolve_ledger_id` 认的台账表同一条口径（`schema.CITATION_PREFIXES["lit"] ==
+    "literature"`），不另立词表。
+    """
+    return str(getattr(row, "ledger_id", "") or "").strip().startswith(LITERATURE_ID_PREFIX)
+
+
+def literature_id_of_row(row: Row) -> str:
+    """这一行的文献号（`lit:000003` ⇒ `"000003"`）；不是文献行 ⇒ 空串。"""
+    if not is_literature_row(row):
+        return ""
+    return str(row.ledger_id).strip()[len(LITERATURE_ID_PREFIX):].split("#", 1)[0].strip()
+
+
 def is_cited_only_row(row: Row) -> bool:
     """这一行是不是「被引、未印成环境」（`env_no == EXPERIMENT_ENV_NO`）。
 
-    只有实验行允许 `env_no=0`（由 `parse_rows` 保证）：定理类环境必须真的印在正文里，
-    「被引未印」这件事对它们不成立。
+    只有实验行与文献行允许 `env_no=0`（由 `parse_rows` 保证）：定理类环境必须真的印在
+    正文里，「被引未印」这件事对它们不成立。文献行是 2026-11-26（GMAP）补的：引来的
+    成果往往写成一句带出处的散文（`\\paragraph{Source …}`），不占一个定理环境，而它
+    照样要在表里有一行、指得到那份文件。
     """
-    return is_experiment_row(row) and int(row.env_no) == EXPERIMENT_ENV_NO
+    if int(row.env_no) != EXPERIMENT_ENV_NO:
+        return False
+    return is_experiment_row(row) or is_literature_row(row)
 
 
 def is_load_bearing_row(row: Row | Mapping[str, Any]) -> bool:
@@ -1390,26 +1533,60 @@ def _collect_tex_segments(package: Path, main_path: Path, main_text: str
     return segments, files, problems
 
 
+#: 分章的标记（`\section` / `\chapter`，带星号也认）。它只用来回答"这个环境落在第几章"，
+#: 不参与"正文里有哪些环境"—— 章是叙述结构，环境才是条目。
+_SECTION_RE = re.compile(r"\\(?:chapter|section)\*?\s*\{")
+
+
+def _body_envs_with_sections(package: Path, main_path: Path, main_text: str
+                             ) -> tuple[list[BodyEnv], list[BodyEnv], list[int],
+                                        list[str], list[dict[str, Any]]]:
+    """正文那一侧的完整读数 + 每个环境落在第几章（0 = 第一个 `\\section` 之前）。
+
+    章号从正文结构读（`\\section` / `\\chapter` 的先后），不看 label 长什么样 ——
+    所以"章内顺序"这一问与"G 怎么编号"是两件事，可以分开核。
+
+    其余口径与 :func:`_body_envs_of_package` 完全一致（后者只是这里的薄包装）：
+    环境片段按 TeX 的内联顺序切（`_collect_tex_segments`），`env_no` 跨文件连续计数。
+    """
+    segments, files, problems = _collect_tex_segments(package, main_path, main_text)
+    counts: dict[str, int] = {}
+    envs: list[BodyEnv] = []
+    sections: list[int] = []
+    names = statement_env_names(main_text)
+    statement_counts: dict[str, int] = {}
+    statement_envs: list[BodyEnv] = []
+    section = 0
+    for rel, segment, line_offset in segments:
+        # 章标记与"再开一个环境"的标记按位置合并扫一遍：环境按它前面最近的那个章算。
+        marks = sorted([(m.start(), "section") for m in _SECTION_RE.finditer(segment)]
+                       + [(m.start(), "env") for m in _ENV_OPEN_RE.finditer(segment)])
+        section_at: dict[int, int] = {}
+        for at, what in marks:
+            if what == "section":
+                section += 1
+            else:
+                section_at[at] = section
+        for env in _scan_envs(segment, counts, where_file=rel, line_offset=line_offset):
+            envs.append(env)
+            sections.append(section_at.get(int(env.start), section))
+        statement_envs.extend(_scan_envs(segment, statement_counts, where_file=rel,
+                                         line_offset=line_offset, kinds=names))
+    return envs, statement_envs, sections, files, problems
+
+
 def _body_envs_of_package(package: Path, main_path: Path, main_text: str
                           ) -> tuple[list[BodyEnv], list[BodyEnv], list[str],
                                      list[dict[str, Any]]]:
     """正文那一侧的完整读数：环境、定理类环境（含印成 Lemma 的自定义宏）、这次读了
     哪几个文件（读入顺序）、读不完的问题。
 
-    为什么两列分开返回：`envs` 是对应表那六类（表行按它登记），`statement_envs` 多认
+    为什么两列分开返回：`envs` 是对应表那几类（表行按它登记），`statement_envs` 多认
     那些"印出来是 Lemma"的自定义宏 —— 只有"一条命题对一个环境"那一条读第二列。
     把两列合成一列会让每一份用了 `claim` 宏的正文都要求表里多出几行没有 `kind` 可写的行。
     """
-    segments, files, problems = _collect_tex_segments(package, main_path, main_text)
-    counts: dict[str, int] = {}
-    envs: list[BodyEnv] = []
-    names = statement_env_names(main_text)
-    statement_counts: dict[str, int] = {}
-    statement_envs: list[BodyEnv] = []
-    for rel, segment, line_offset in segments:
-        envs.extend(_scan_envs(segment, counts, where_file=rel, line_offset=line_offset))
-        statement_envs.extend(_scan_envs(segment, statement_counts, where_file=rel,
-                                         line_offset=line_offset, kinds=names))
+    envs, statement_envs, _sections, files, problems = _body_envs_with_sections(
+        package, main_path, main_text)
     return envs, statement_envs, files, problems
 
 
@@ -1580,6 +1757,27 @@ def paper_documents(rows: Iterable[Mapping[str, Any]] | None) -> list[Mapping[st
 def read_literature_rows(workspace_root: str | Path) -> list[Mapping[str, Any]]:
     """`<工作区>/data/literature.json` 的行（`lit:` 引用能不能解析到一条文献行的唯一来源）。"""
     name = str((S.TABLES.get("literature") or {}).get("file") or "")
+    return _ledger_file_rows(Path(workspace_root) / "data" / name) if name else []
+
+
+def read_dependency_rows(workspace_root: str | Path) -> list[Mapping[str, Any]]:
+    """`<工作区>/data/dependencies.json` 的行（顺序那一轴的材料：前提 → 使用者）。
+
+    与三张台账同一处读法（`_ledger_file_rows`，按 mtime 缓存）；读不到 ⇒ 空表，由
+    `order_reading` 把它读成"这一轴没查成"（`checked=False`），不是"没有依赖"。
+    """
+    name = str((S.TABLES.get("dependencies") or {}).get("file") or "")
+    return _ledger_file_rows(Path(workspace_root) / "data" / name) if name else []
+
+
+def read_analysis_reports(workspace_root: str | Path) -> list[Mapping[str, Any]]:
+    """`<工作区>/data/analysis_reports.json` 的行（C 报告登记的落点）。
+
+    顺序那一轴只认 `kind="proof_chain"` 且 `payload.order` 非空的那几份（C 的
+    `proof_path.plan_path` ⇒ `plan_report` ⇒ `analysis_reports`）；读不到 ⇒ 空表，
+    由 `order_reading` 读成"没查成"。
+    """
+    name = str((S.TABLES.get("analysis_reports") or {}).get("file") or "")
     return _ledger_file_rows(Path(workspace_root) / "data" / name) if name else []
 
 
@@ -3013,14 +3211,6 @@ def parse_rows(payload: Any) -> tuple[list[Row], list[dict[str, Any]]]:
             problems.append(_problem(
                 "mapping_unresolvable", f"第 {i} 行不是对象（收到 {type(item).__name__}）"))
             continue
-        missing = [f for f in ROW_FIELDS
-                   if not str(v if (v := item.get(f)) is not None else "").strip()]
-        if missing:
-            problems.append(_problem(
-                "mapping_unresolvable",
-                f"第 {i} 行缺必填字段 {missing}（每行必须有 {list(ROW_FIELDS)}）",
-                label=str(item.get("label") or "")))
-            continue
         kind = str(item.get("kind") or "").strip()
         if kind not in ENV_KINDS:
             problems.append(_problem(
@@ -3028,25 +3218,41 @@ def parse_rows(payload: Any) -> tuple[list[Row], list[dict[str, Any]]]:
                 f"第 {i} 行的 `kind` = {kind!r} 不在受控词表 {list(ENV_KINDS)} 里",
                 label=str(item.get("label") or "")))
             continue
+        # 必填格按 kind 分档（2026-11-26 GMAP）：定义行没有证明稿，`file` 不是必填格；
+        # 其余每一行都要它。清单只有一处真身（`required_fields_for_kind`）。
+        required = required_fields_for_kind(kind)
+        missing = [f for f in required
+                   if not str(v if (v := item.get(f)) is not None else "").strip()]
+        if missing:
+            problems.append(_problem(
+                "mapping_unresolvable",
+                f"第 {i} 行缺必填字段 {missing}（{kind} 行必须有 {list(required)}）"
+                + ("—— 定义行没有证明稿，`file` 可以省略；其余行不行"
+                   if not manuscript_required(kind) else ""),
+                label=str(item.get("label") or "")))
+            continue
         label = str(item.get("label") or "").strip()
         raw_env_no = item.get("env_no")
         env_no = _int_or_none(raw_env_no)
-        # `env_no = 0` 只对 `exp:` 行合法：0 说的是「被引、未印成环境」（`EXPERIMENT_ENV_NO`）。
-        # 定理类环境必须真的印在正文里，0 对它们是"没写环境号"，不许放行。
-        is_exp_row = str(item.get("ledger_id") or "").strip().startswith(EXPERIMENT_ID_PREFIX)
-        if env_no is None and is_exp_row and str(raw_env_no).strip() in ("0", "0.0"):
+        # `env_no = 0` 只对 `exp:` / `lit:` 行合法：0 说的是「被引、未印成环境」
+        # （`EXPERIMENT_ENV_NO`）。定理类环境必须真的印在正文里，0 对它们是"没写环境号"。
+        ledger_text = str(item.get("ledger_id") or "").strip()
+        is_exp_row = ledger_text.startswith(EXPERIMENT_ID_PREFIX)
+        cited_kind = is_exp_row or ledger_text.startswith(LITERATURE_ID_PREFIX)
+        if env_no is None and cited_kind and str(raw_env_no).strip() in ("0", "0.0"):
             env_no = EXPERIMENT_ENV_NO
         if env_no is None:
             problems.append(_problem(
                 "mapping_unresolvable",
-                f"第 {i} 行的 `env_no` 必须是 1 起的整数（`exp:` 行允许 0 = 被引未印成环境），"
+                f"第 {i} 行的 `env_no` 必须是 1 起的整数"
+                "（`exp:` / `lit:` 行允许 0 = 被引未印成环境），"
                 f"收到 {item.get('env_no')!r}",
                 label=label))
             continue
-        if env_no == EXPERIMENT_ENV_NO and not is_exp_row:
+        if env_no == EXPERIMENT_ENV_NO and not cited_kind:
             problems.append(_problem(
                 "mapping_unresolvable",
-                f"第 {i} 行的 `env_no` = 0，而它的 `ledger_id` 不是 `exp:` 行 —— "
+                f"第 {i} 行的 `env_no` = 0，而它的 `ledger_id` 不是 `exp:` / `lit:` 行 —— "
                 "0 只表示「被引、未印成环境」，定理/引理/命题/推论必须真的印在正文里",
                 label=label))
             continue
@@ -3867,10 +4073,16 @@ def _norm_text(text: str) -> str:
 
 
 def write_mapping(project_root: str | Path, rows: Iterable[Row], *,
-                  workspace_root: str | Path | None = None) -> tuple[Path, Path]:
+                  workspace_root: str | Path | None = None,
+                  path_order: Sequence[Any] | None = None) -> tuple[Path, Path]:
     """写 json 与 md 两份，返回它们的路径（都在论文包里）。
 
     只走这一个写口：两份由同一次 `rows` 生成，于是"手写第二份"在结构上不可能发生。
+
+    `path_order` 是 G 用的那条 C 的路径（`payload.order` 原样）：给了就写进
+    `MAPPING.json` 顶层（`PATH_ORDER_FIELD`），读侧拿它去台账里比对
+    （`order_reading`）。不给 ⇒ 表里没有这一格 ⇒ 顺序那一问 `checked=False`
+    （没查成，不是"顺序没问题"）。
 
     D-69：落盘之前先按台账把两格现读现填（`fill_ledger_cells`）。所以 G 手填的
     `ledger_kind` / `reviewed` 会被这一次现读盖掉 —— 这两格是"台账说是什么"，
@@ -3891,7 +4103,12 @@ def write_mapping(project_root: str | Path, rows: Iterable[Row], *,
     items = fill_evidence_cells(ledger_root, items)
     items = fill_experiment_cells(ledger_root, items)
     json_path, md_path = mapping_paths(project_root)
-    payload = {"rows": [row.to_dict() for row in items]}
+    payload: dict[str, Any] = {"rows": [row.to_dict() for row in items]}
+    declared = [str(node).strip() for node in (path_order or ()) if str(node or "").strip()]
+    if declared:
+        # 写在 `rows` 之后（顶层多一格，不影响 `parse_rows` 读行）：这一格是"这一篇按哪条
+        # 路径写的"的声明，读侧（`order_reading`）拿它去台账比对。
+        payload[PATH_ORDER_FIELD] = declared
     json_path.parent.mkdir(parents=True, exist_ok=True)
     # `default=str`：载荷里一旦有非 JSON 值（Path / 时间戳 / dataclass 之外的壳对象），
     # 这一行会抛 `TypeError: Object of type … is not JSON serializable` —— 它崩在"写对应表"
@@ -3969,11 +4186,16 @@ def write_appendix(project_root: str | Path) -> Path:
 
 def write_package(project_root: str | Path, rows: Iterable[Row], *,
                   workspace_root: str | Path | None = None,
-                  tex: str | None = None) -> tuple[Path, Path, Path]:
+                  tex: str | None = None,
+                  path_order: Sequence[Any] | None = None) -> tuple[Path, Path, Path]:
     """G 的唯一写口：json + md + 附录（三份都由同一批 `rows` 生成）。
 
     `workspace_root` 只影响台账那两格的现读现填（台账在 `<工作区>/data/` 下）；
     不给就按项目根读（单项目工作区里是同一个目录）。
+
+    `path_order` 原样交给 :func:`write_mapping`（写进 `MAPPING.json` 顶层）：
+    G 声明它按 C 的哪一条路径行文，读侧据此核"编号按路径"。不写这一格不影响三份
+    产物的字节形状之外的任何东西 —— 它只是一个声明格，缺了就是 `checked=False`。
 
     2026-11-25（MAPPING-COMPLETE）：落盘之前先把「论文写到、而表里还没有」的
     `exp:NNNNNN` 补成行（`synthesize_experiment_rows`）。这一步只能在这里做：
@@ -3983,7 +4205,8 @@ def write_package(project_root: str | Path, rows: Iterable[Row], *,
     """
     items = synthesize_experiment_rows(project_root, list(rows),
                                        workspace_root=workspace_root, tex=tex)
-    json_path, md_path = write_mapping(project_root, items, workspace_root=workspace_root)
+    json_path, md_path = write_mapping(project_root, items, workspace_root=workspace_root,
+                                       path_order=path_order)
     frag = write_appendix(project_root)
     return json_path, md_path, frag
 
@@ -4306,9 +4529,12 @@ def _row_checks(row: Row, ledger: Mapping[str, Sequence[Mapping[str, Any]]],
                         "—— 证明号必须能被台账解析到",
                         label=row.label, where=MAPPING_JSON_NAME)
     if is_cited_only_row(row):
-        # 「被引、未印成环境」的实验行：`file` 是 `experiments.code_path`（仓库根相对），
-        # 其余几格也要与台账同一行逐字一致 —— 走实验那一支，不走论文包内文件那一支。
-        got.problems.extend(_cited_experiment_problems(row, ledger, workspace))
+        # 「被引、未印成环境」的行（`exp:` / `lit:`，`env_no=0`）：它们的 `file` 是仓库根
+        # 相对的那个对象（程序 / 文献文件），不走论文包内文件那一支。
+        if is_literature_row(row):
+            got.problems.extend(_cited_literature_problems(row, ledger, workspace))
+        else:
+            got.problems.extend(_cited_experiment_problems(row, ledger, workspace))
         return got
     numeric = is_numeric_row(row, ledger)
     if numeric:
@@ -4320,6 +4546,20 @@ def _row_checks(row: Row, ledger: Mapping[str, Sequence[Mapping[str, Any]]],
                     f"表里 label={row.label!r}（{row.kind} 第 {row.env_no} 个，数值实验定理）"
                     f"的证明栏（`file`）不过关：{state['reason']}",
                     label=row.label, where=MAPPING_JSON_NAME)
+    elif not manuscript_required(row):
+        # 定义行没有证明稿（2026-11-26 GMAP）：`file` 允许空。给了就照样核 ——
+        # "不必填"不等于"填什么都行"，指到包外/读不到的文件仍是红的。
+        if str(row.file or "").strip():
+            state = file_state(package_root, row.file)
+            if state["state"] in ("missing", "directory"):
+                got.add("mapping_file_missing",
+                        f"表里 label={row.label!r}（{row.kind} 第 {row.env_no} 个）的 `file` "
+                        f"读不到：{state['reason']}（定义行不要求填它，填了就要指得到）",
+                        label=row.label, where=MAPPING_JSON_NAME)
+            elif state["state"] == "outside":
+                got.add("mapping_unresolvable",
+                        f"表里 label={row.label!r} 的 `file` 不合口径：{state['reason']}",
+                        label=row.label, where=MAPPING_JSON_NAME)
     else:
         state = file_state(package_root, row.file)
         if state["state"] in ("missing", "directory"):
@@ -4403,6 +4643,62 @@ def _cited_experiment_problems(row: Row,
                 EXPERIMENT_FILE_MISSING,
                 f"表里实验行 label={row.label!r} 的读数日志读不到：{log_state['reason']}",
                 label=row.label, where=MAPPING_JSON_NAME))
+    return out
+
+
+def _cited_literature_problems(row: Row,
+                               ledger: Mapping[str, Sequence[Mapping[str, Any]]],
+                               workspace: Path) -> list[dict[str, Any]]:
+    """「被引、未印成环境」的文献行：`file` 必须就是台账那一行指的那份文献文件。
+
+    判据只有两条（都是可复算的客观事实，不读模型）：
+
+    - `ledger_id` 在 `literature` 里解析不到 ⇒ `mapping_unresolvable`（这一行指不到文献）；
+    - 台账那一行没有 `path` ⇒ `mapping_file_missing`（没文件可指，不许拿别的顶）；
+    - 表里的 `file` 与台账 `path` 不是同一份（`norm_rel` 比），或那份文件不在盘上
+      ⇒ `mapping_file_missing`。
+
+    文献文件相对 `library/`（`literature[].path` 的唯一读侧口径是
+    `litread.resolve_literature_path`，与 `store.library_path` 同一套形状判据）：本函数
+    只借它解析，不另拼一次 `library/` 前缀 —— 两处各拼一次就会在"带不带前缀 / 旧两位号"
+    上漂开，而漂开的那天同一份文献一条读得通、一条判红。
+    """
+    from . import litread as LR
+
+    out: list[dict[str, Any]] = []
+    resolved = resolve_ledger_id(row.ledger_id, ledger)
+    if not resolved["ok"] or str(resolved.get("table") or "") != "literature":
+        out.append(_problem(
+            "mapping_unresolvable",
+            f"表里文献行 label={row.label!r} 的 `ledger_id` = {row.ledger_id!r} 在台账里"
+            f"解析不到：{resolved.get('reason')}",
+            label=row.label, where=MAPPING_JSON_NAME))
+        return out
+    target = ledger_row(ledger, "literature", str(resolved["row_id"]))
+    want = NP.norm_rel((target or {}).get("path"))
+    if not want:
+        out.append(_problem(
+            "mapping_file_missing",
+            f"表里文献行 label={row.label!r} 指到 literature#{resolved['row_id']}，"
+            "而台账那一行没有 `path` ⇒ 没有文献文件可指（这一行的 `file` 拿不到）",
+            label=row.label, where=MAPPING_JSON_NAME))
+        return out
+    given = NP.norm_rel(row.file)
+    if given != want:
+        out.append(_problem(
+            "mapping_file_missing",
+            f"表里文献行 label={row.label!r} 的 `file` = {row.file!r}，而台账 "
+            f"literature#{resolved['row_id']} 那一行指的是 {want!r} —— "
+            "这两处说的必须是同一份文件（第三列要指得到真实的来源）",
+            label=row.label, where=MAPPING_JSON_NAME))
+        return out
+    got = LR.resolve_literature_path(workspace, workspace / "library", given)
+    if got.path is None or not Path(str(got.path)).is_file():
+        out.append(_problem(
+            "mapping_file_missing",
+            f"表里文献行 label={row.label!r} 的 `file`（= 台账 `path`）在 `library/` 下"
+            f"读不到：{got.reason or '没有这个文件'}",
+            label=row.label, where=MAPPING_JSON_NAME))
     return out
 
 
@@ -5207,7 +5503,19 @@ def mapping_cells(project_root: str | Path, *,
                          " ⇒ 这一格拿不到")
     else:
         env, why = _body_env_for_label(project, row.label)
-        if env is not None:
+        if not manuscript_required(row):
+            # 定义行没有证明稿（2026-11-26 GMAP）：`file` 不是必填格，这一格给"不适用"。
+            # 表里自己填了的话，仍把它原样交回（并明说没独立复核）。
+            given = str(row.file or "").strip()
+            if given:
+                put("file", given,
+                    "表里这一格现有的值（定义行不要求填它；填了就要指得到包内那份文件 —— "
+                    "`_row_checks` 会核）")
+            else:
+                put("file", "",
+                    "定义行没有证明稿 ⇒ 这一格不适用（可留空）；定义正文在台账那一行的 "
+                    "`statement_full` 里，来源由 `ledger_id` 追")
+        elif env is not None:
             put("file", env.file,
                 f"正文 {env.file}:{int(env.line)} 的定理环境（label={row.label!r}）—— "
                 "理论定理这一行的 `file` 是「论文包内相对」的路径")
@@ -5968,6 +6276,262 @@ def load_bearing_gaps(project_root: str | Path, *,
     return out
 
 
+#: 编号形态：`…:<章>.<序>`（设计里的 `概念1.1` / `定理3.3`；对应表 label 里写成
+#: `definition:1.1` / `theorem:3.1`）。没按这个形态编号的行不进"编号忠实"那一问。
+_NUMBERED_LABEL_RE = re.compile(r"^(?P<head>[^:]+):(?P<chap>\d+)\.(?P<idx>\d+)$")
+
+
+def path_order_of(payload: Any) -> list[str]:
+    """`MAPPING.json` 顶层声明的路径顺序（`path_order`）—— 缺 / 形状不对 ⇒ 空清单。
+
+    空清单是"G 没声明它用了哪条路径"这一档，由 :func:`order_reading` 读成
+    `checked=False`（没查成，不是"顺序没问题"）。
+    """
+    raw = payload.get(PATH_ORDER_FIELD) if isinstance(payload, Mapping) else None
+    if not isinstance(raw, (list, tuple)):
+        return []
+    return [str(item).strip() for item in raw if str(item or "").strip()]
+
+
+def _node_of_id(raw: Any) -> str:
+    """把一个号归一成路径节点（`stmt:000004#p2` ⇒ `stmt:000004`；`used_by` 的尾巴剥掉）。"""
+    text = str(raw or "").strip()
+    if "#" in text:
+        text = text.split("#", 1)[0].strip()
+    return text
+
+
+def _report_path_orders(reports: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """台账里那几份带路径的 C 报告（`kind="proof_chain"` 且 `payload.order` 非空）。
+
+    倒序（新登记的优先）：同一篇论文可能问过 C 好几次，最近的这一次才是这一趟的规划。
+    """
+    out: list[dict[str, Any]] = []
+    for row in reports or ():
+        if not isinstance(row, Mapping):
+            continue
+        if str(row.get("kind") or "").strip() != "proof_chain":
+            continue
+        payload = row.get("payload") if isinstance(row.get("payload"), Mapping) else {}
+        order = [_node_of_id(item.get("node") if isinstance(item, Mapping) else item)
+                 for item in (payload.get("order") or ())]
+        order = [node for node in order if node]
+        if not order:
+            continue
+        out.append({"report_id": str(row.get("report_id") or ""),
+                    "created_at": str(row.get("created_at") or ""),
+                    "checked": bool(payload.get("checked")),
+                    "targets": [str(t.get("label") or t.get("stmt_id") or "")
+                                for t in (payload.get("targets") or ())
+                                if isinstance(t, Mapping)],
+                    "order": order})
+    out.sort(key=lambda item: (item["created_at"], item["report_id"]), reverse=True)
+    return out
+
+
+def order_reading(rows: Sequence[Row],
+                  env_index: Mapping[tuple[str, str], tuple[int, int]],
+                  ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None,
+                  workspace: Path,
+                  *, payload: Any = None) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """顺序那一轴：依赖 DAG 的拓扑序 + 编号按 C 的路径（口径见模块 docstring）。
+
+    `env_index` 是「`(kind, label)` ⇒ `(正文位次, 章号)`」——由 `mapping_reading` 从
+    `envs` 现读（正文位次 = 环境在全文里的出现次序，0 起；章号 = 它落在第几个
+    `\\section` / `\\chapter` 之下）。两个数都是结构事实，不看 label 长什么样。
+
+    返回 `(reading, problems)`；`problems` 的 `kind` 都在 `ORDER_KINDS` 里。
+    三态：`reading["checked"]` = 两问都真的判了；缺材料的那一问 `checked=False`，并在
+    `why` 里说清缺什么 —— 没查成不是"顺序没问题"。
+    """
+    problems: list[dict[str, Any]] = []
+    reports = _report_path_orders(read_analysis_reports(workspace))
+    declared = path_order_of(payload)
+    deps_present = bool(read_dependency_rows(workspace))
+    # 节点 → 行（`stmt:` / `exp:` / `lit:` / `rel:` 都归一成 `表:号`）
+    by_node: dict[str, Row] = {}
+    for row in rows:
+        resolved = resolve_ledger_id(row.ledger_id, ledger)
+        if not resolved["ok"]:
+            continue
+        node = f"{resolved['prefix']}:{resolved['row_id']}"
+        by_node.setdefault(node, row)
+
+    def pos_of(row: Row) -> tuple[int, int] | None:
+        return env_index.get((str(row.kind), str(row.label)))
+
+    # ---- ① 依赖 DAG 的拓扑序（材料 = 台账 dependencies；不依赖 C 的报告）
+    dag: dict[str, Any] = {"checked": deps_present, "edges": 0, "checked_edges": 0,
+                           "unpositioned": [], "why": ""}
+    # 一条依赖的"被依赖端"有四种来源（source_stmt_id / experiment / lit / doc）：这份
+    # 台账形状的全仓唯一读法是 `agent_c.proof_path._target_of`（C 的规划器就按它建边）。
+    # 这里借它一把，不另写第二份 `if source_stmt_id … elif source_lit_id …` —— 两份迟早
+    # 会在"哪一行算前提"上漂开，而漂开的那天 C 的路径与这一条判据说的不是同一张图。
+    from .agent_c.proof_path import _target_of as _dep_target_of
+
+    def premise_of(dep: Mapping[str, Any]) -> str:
+        node, _kind = _dep_target_of(dep)
+        return _node_of_id(node or dep.get("label"))
+
+    if not deps_present:
+        dag["why"] = ("依赖表读不到（`data/dependencies.json` 不在盘上或是空的）⇒ "
+                      "正文先后是不是依赖的拓扑序**没查成**")
+    else:
+        deps = read_dependency_rows(workspace)
+        dag["edges"] = len(deps)
+        for dep in deps:
+            if not isinstance(dep, Mapping):
+                continue
+            premise = premise_of(dep)
+            user = _node_of_id(dep.get("used_by"))
+            if not premise or not user:
+                continue
+            row_p, row_u = by_node.get(premise), by_node.get(user)
+            if row_p is None or row_u is None:
+                continue
+            at_p, at_u = pos_of(row_p), pos_of(row_u)
+            if at_p is None or at_u is None:
+                for row in (row_p, row_u):
+                    label = str(row.label)
+                    if pos_of(row) is None and label not in dag["unpositioned"]:
+                        dag["unpositioned"].append(label)
+                continue
+            dag["checked_edges"] += 1
+            if at_p[0] > at_u[0]:
+                problems.append(_problem(
+                    ORDER_NOT_TOPOLOGICAL,
+                    f"依赖被颠倒：`{premise}`（label={row_p.label!r}，正文第 {at_p[0] + 1} 条）"
+                    f"是 `{user}`（label={row_u.label!r}，正文第 {at_u[0] + 1} 条）的前提，"
+                    "而它排在使用它的那一条**之后** —— 正文里条目的先后必须是依赖 DAG 的"
+                    "拓扑序：依赖在前、使用在后",
+                    label=row_p.label, where=MAPPING_JSON_NAME))
+        if dag["unpositioned"]:
+            dag["why"] = (f"{len(dag['unpositioned'])} 行没有正文环境（被引未印 / 表里有行正文"
+                          "没有），它们的先后没进这一问")
+
+    # ---- ② 编号按 C 的路径
+    path: dict[str, Any] = {"checked": False, "source_report": "", "declared": len(declared),
+                            "reports": len(reports), "nodes": 0, "rows": 0,
+                            "chapters": 0, "numbering": {"checked": False, "numbered": 0,
+                                                         "missing": []},
+                            "why": ""}
+    if not reports:
+        path["why"] = ("台账里没有带路径的 C 报告（`analysis_reports` 里没有 `kind=\"proof_chain\"`"
+                       " 且 `payload.order` 非空的登记）⇒ 编号是否按 C 的路径**没查成**")
+    elif not declared:
+        path["why"] = ("`MAPPING.json` 没有 `path_order`（G 没声明它用的是 C 的哪一条路径）⇒ "
+                       "编号是否按路径**没查成**（不是「顺序没问题」）")
+    else:
+        hit = next((item for item in reports if item["order"] == declared), None)
+        if hit is None:
+            nearest = reports[0]
+            problems.append(_problem(
+                ORDER_OFF_PATH,
+                "表里声明的 `path_order`（" + str(len(declared)) + " 个节点）在台账里对不上任何"
+                "一份 C 的路径报告 —— 最近的一份是 "
+                f"report:{nearest['report_id']}（{len(nearest['order'])} 个节点："
+                + "、".join(nearest["order"][:6]) + ("…" if len(nearest["order"]) > 6 else "")
+                + "）。声明的顺序必须与 C 报告 `payload.order` 逐字相同（原样抄，不许自己重排）",
+                where=MAPPING_JSON_NAME))
+        else:
+            path["checked"] = True
+            path["source_report"] = hit["report_id"]
+            path["nodes"] = len(hit["order"])
+            index = {node: i for i, node in enumerate(hit["order"])}
+            for node in hit["order"]:
+                if node not in by_node:
+                    problems.append(_problem(
+                        ORDER_MISSING_NODE,
+                        f"C 的路径第 {index[node] + 1} 位是 `{node}`，而对应表里没有它那一行 —— "
+                        "C 说这条路径自足：少一条，正文里就有一个前提没有落点（证明链断在那儿）",
+                        where=MAPPING_JSON_NAME))
+            placed: list[tuple[int, int, Row, int]] = []
+            for node, row in by_node.items():
+                idx = index.get(node)
+                if idx is None:
+                    problems.append(_problem(
+                        ORDER_OFF_PATH,
+                        f"表里 label={row.label!r}（`{node}`）不在声明的这条路径上 —— "
+                        "正文写 C 没规划过的条目，编号就不再是由路径驱动的",
+                        label=row.label, where=MAPPING_JSON_NAME))
+                    continue
+                at = env_index.get((str(row.kind), str(row.label)))
+                if at is None:
+                    continue
+                placed.append((at[1], at[0], row, idx))
+            path["rows"] = len(placed)
+            # 章内顺序：同一节里，正文出现顺序对应的路径位次必须严格递增
+            by_section: dict[int, list[tuple[int, int, Row, int]]] = {}
+            for item in placed:
+                by_section.setdefault(item[0], []).append(item)
+            path["chapters"] = len(by_section)
+            for section, items in sorted(by_section.items()):
+                items.sort(key=lambda x: x[1])
+                for prev, cur in zip(items, items[1:]):
+                    if cur[3] <= prev[3]:
+                        problems.append(_problem(
+                            ORDER_OFF_PATH,
+                            f"第 {section} 节里章内顺序与 C 的路径不一致：正文先出现 "
+                            f"label={prev[2].label!r}（路径第 {prev[3] + 1} 位），再出现 "
+                            f"label={cur[2].label!r}（路径第 {cur[3] + 1} 位）—— "
+                            "章可以自己分、章序可以重排，但**同一章里的先后必须与路径一致**",
+                            label=cur[2].label, where=MAPPING_JSON_NAME))
+                        break
+            # 编号忠实：`…:<章>.<序>` 的行，同章里章号一致、序号随正文递增；两章不共章号。
+            numbering = path["numbering"]
+            numbered: list[tuple[int, int, Row, int, int]] = []
+            for section, at, row, idx in placed:
+                match = _NUMBERED_LABEL_RE.match(str(row.label or ""))
+                if not match:
+                    if str(row.label) not in numbering["missing"]:
+                        numbering["missing"].append(str(row.label))
+                    continue
+                numbered.append((section, at, row, int(match.group("chap")),
+                                 int(match.group("idx"))))
+            numbering["checked"] = bool(numbered)
+            numbering["numbered"] = len(numbered)
+            for section, items in _group_by(numbered, key=lambda x: x[0]).items():
+                items.sort(key=lambda x: x[1])
+                chaps = {item[3] for item in items}
+                if len(chaps) > 1:
+                    problems.append(_problem(
+                        ORDER_OFF_PATH,
+                        f"第 {section} 节里的编号章号不唯一（{sorted(chaps)}）—— 同一章的行必须"
+                        "用同一个章号，否则读者按编号找不到那一段",
+                        where=MAPPING_JSON_NAME))
+                for prev, cur in zip(items, items[1:]):
+                    if cur[4] <= prev[4]:
+                        problems.append(_problem(
+                            ORDER_OFF_PATH,
+                            f"编号与章内顺序打架：label={prev[2].label!r}（第 {prev[4]} 个）"
+                            f"排在 label={cur[2].label!r}（第 {cur[4]} 个）之前 —— "
+                            "同一章里的序号必须随正文递增（编号由路径驱动，不是随手填）",
+                            label=cur[2].label, where=MAPPING_JSON_NAME))
+                        break
+            chaps: list[int] = []
+            for section in sorted({item[0] for item in numbered}):
+                chapter = next(item[3] for item in numbered if item[0] == section)
+                chaps.append(chapter)
+            if len(chaps) != len(set(chaps)):
+                problems.append(_problem(
+                    ORDER_OFF_PATH,
+                    f"两个不同的章共用了同一个章号（{sorted(chaps)}）—— 章号可以在整篇里跳号、"
+                    "也可以重排章序，但两章不能撞号",
+                    where=MAPPING_JSON_NAME))
+    reading = {"checked": bool(dag["checked"] and path["checked"]),
+               "dag": dag, "path": path, "problems": problems,
+               "why": "；".join(text for text in (dag["why"], path["why"]) if text)}
+    return reading, problems
+
+
+def _group_by(items: Iterable[Any], *, key: Any) -> dict[Any, list[Any]]:
+    """按 `key(item)` 分组（保序；小工具，别为一行 `itertools.groupby` 付排序代价）。"""
+    out: dict[Any, list[Any]] = {}
+    for item in items:
+        out.setdefault(key(item), []).append(item)
+    return out
+
+
 def mapping_reading(project_root: str | Path, *,
                     workspace_root: str | Path | None = None,
                     ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
@@ -5997,12 +6561,15 @@ def mapping_reading(project_root: str | Path, *,
     has_paper = bool(str(tex_text or "").strip())
     # 定理类环境（含印成 Lemma 的自定义宏）：只有"一条命题对一个环境"那一条读它。
     statement_envs: list[BodyEnv] = []
+    sections: list[int] = []
     if tex is None and has_paper:
-        envs, statement_envs, tex_files, body_problems = _body_envs_of_package(
-            package, tex_path, tex_text)
+        envs, statement_envs, sections, tex_files, body_problems = (
+            _body_envs_with_sections(package, tex_path, tex_text))
     else:
-        # 调用方直接给了正文文本（没有文件可跟）：只扫这一份，`tex_files` 是空的。
+        # 调用方直接给了正文文本（没有文件可跟）：只扫这一份，`tex_files` 是空的，
+        # 章号也读不出来（整份当一段：`sections` 全 0 —— 章内顺序这一问退化成全文顺序）。
         envs = body_envs(tex_text)
+        sections = [0] * len(envs)
         statement_envs = statement_envs_of_text(tex_text)
     lean_on, lean_source = lean_switch()
     artifacts = lean_artifacts(project)
@@ -6063,6 +6630,16 @@ def mapping_reading(project_root: str | Path, *,
         #: `_proof_index_problems` 折成 `mapping_load_bearing_*` 进 `problems`。
         "load_bearing": {"checked": False, "rows": 0, "gaps": [], "complete": 0,
                          "unreadable": [], "checked_rows": 0, "why": ""},
+        #: 顺序那一轴（2026-11-26 GMAP）：依赖 DAG 的拓扑序 + 编号按 C 的路径。
+        #: `checked` = 两问都真的判了；缺材料的那一问 `checked=False`（没查成，不是通过）。
+        "order": {"checked": False,
+                  "dag": {"checked": False, "edges": 0, "checked_edges": 0,
+                          "unpositioned": [], "why": ""},
+                  "path": {"checked": False, "source_report": "", "declared": 0,
+                           "reports": 0, "nodes": 0, "rows": 0, "chapters": 0,
+                           "numbering": {"checked": False, "numbered": 0, "missing": []},
+                           "why": ""},
+                  "problems": [], "why": ""},
         "problems": [],
         "warnings": [],
         "reason": "",
@@ -6233,6 +6810,15 @@ def mapping_reading(project_root: str | Path, *,
     problems += surplus_problems
     reading["statement_surplus"] = list(surplus_labels)
 
+    # 顺序那一轴（2026-11-26 GMAP）：材料都在盘上（依赖表 + C 的报告），判据只有一份。
+    env_index: dict[tuple[str, str], tuple[int, int]] = {}
+    for i, env in enumerate(envs):
+        env_index.setdefault((str(env.kind), str(env.label)),
+                             (i, sections[i] if i < len(sections) else 0))
+    reading["order"], order_problems = order_reading(
+        rows, env_index, known, workspace, payload=payload)
+    problems += order_problems
+
     reading["problems"] = problems
     if problems:
         reading["state"] = "fail"
@@ -6265,6 +6851,18 @@ def mapping_reading(project_root: str | Path, *,
         reading["reason"] += "；落差读数（不拦门）：" + "；".join(gap_notes)
     if load_note:
         reading["reason"] += "；承重缺口读数：" + load_note
+    # 顺序那一轴：checked=False 必须在这句话里显形 —— `pass` 那句话不能说成"顺序没问题"。
+    order = reading["order"]
+    if order.get("checked"):
+        reading["reason"] += (
+            "；顺序轴（已判）：依赖 DAG 拓扑序看过 "
+            f"{order['dag'].get('checked_edges', 0)} 条边，编号按 C 的路径报告 "
+            f"report:{order['path'].get('source_report') or '?'}"
+            f"（{order['path'].get('nodes', 0)} 个节点 / {order['path'].get('chapters', 0)} 章）")
+    else:
+        reading["reason"] += (
+            "；顺序轴**没查成**（checked=False，不是「顺序没问题」）："
+            + (order.get("why") or "缺材料"))
     cells = reading["ledger_cells"]
     if cells.get("missing"):
         reading["reason"] += (
