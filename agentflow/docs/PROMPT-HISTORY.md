@@ -4215,3 +4215,23 @@ ewtheorem / 论文写作只是推荐）一字未动。
 #:   只有 `cross_check` 那档会被渲染进文档（`doc_tools.py:1468`），`proof_review` 那档
 #:   要求填、却不打印 —— 这是「声明该不该印、印在哪」该由工具管的那一半，清单见报告。
 #:   本笔 = p334。
+
+#: p334 → p335（2026-11-26，CPATH：C 的 policy 加 `targets` 一格与根的四档）
+#:
+#: 一、起因：CPATH 那笔给 `C.proof_chain` 加了"多目标"入口（一组核心定理 → 去重自足路径），
+#:   并把"根"的口径写死成四档（定义 / 引文成果 / 穷举实验 / 自足证明）。这两件事必须让 C 读到，
+#:   否则它只当这是一条单目标链。
+#: 二、改了什么：`specs/c.py` 的 policy 里加 `targets` 一格（工具面参数面同源），
+#:   并补一句根口径：「根不是只有文献 —— 定义是根；穷举实验与自足证明也是根，
+#:   而它们各自又会依赖定义，所以最根源的依赖是定义」。
+#: 三、连带：`PROMPT_VERSION` p334 → p335；`scripts/recompute_prompt_digests.py --write`
+#:   只重算 C 一格（dry-run 先给 `[DRIFT] C`，其余十格同值）；`_VOLATILE_FACT_SETS`
+#:   追加 p335 一格（count=15、`keys_sha256=21314a39…` 与 p334 同值 —— 没有事实换落点）；
+#:   `docs/ROLE-GUIDE.md` 用 `tools/write_system_docs.py` 重生成（208,629 字符）；
+#:   agent 面快照重冻；`tests/fixtures/prompt_cache_warm.json` 两档各重落
+#:   （Lean 关 $0.029846、Lean 开 $0.032482）。
+#: 四、判据：`test_prompt_cache_warm` + `test_agent_prompts` + `test_agent_surface_snapshot`
+#:   + `test_system_docs_are_generated` + `test_prompt_stability` 合跑 120 passed。
+#: 五、射程：只动 `specs/c.py` 的教法与参数面；C 的工具实现、写口、门、判据强度一字未动。
+#:   FC-27：`specs/c.py` 命中 auth-audit ⇒ `--baseline` 登记（`reviewers=0`；登记 ≠ 批准）。
+#:   本笔 = p335。
