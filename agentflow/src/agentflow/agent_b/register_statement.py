@@ -9614,7 +9614,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                    path: str = "", body_sha: str = "",
                                    path_group: int = 0,
                                    proof_text: str = "") -> dict:
-        """`mode=apply` 的 dependencies 那一格：集合语义（追加 + 去重；永不删）。
+        """`mode=apply` 的 dependencies 那一格：按这一份稿的依赖段整段替换。
 
         先把稿里的依赖表过 `depsection` 的闸（等级够不够、能不能引、表与正文是否
         说同一件事），再交给秘书的 `record_manuscript_dependency_face` 落表。
@@ -9626,18 +9626,48 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         `path_group` 不是 B 算的：稿里那一列是产出方写的（新形式干脆没有这一列），
         不是权威。`record_manuscript_dependency_face` 在同一把锁里分配，并把号回传
         给这里 —— 正文 / 证据 / `verifications` 回写都用回执里的那个号。
+
+        ## 两条 2026-11-26 的口径（业主设计）
+
+        1. 窄旁路：`gate_rows(..., definition_face=True)` 与
+           `record_manuscript_dependency_face(..., allow_definition_rows=True)` ——
+           这一格是唯一打开"依赖面可以挂定义类条目"的地方（B 把稿的依赖段落成边
+           那一格）。F 的只读预览与 V 的依赖面审计不传这两个开关，判定逐字不变。
+           证明正文里把概念当定理引（`refs` 那一条）走的仍是
+           `uncitable_statement_finding`，`citation_below_proof_review` 一个字不改。
+        2. 补定义义务：计划层已经把"依赖表 0 行 + 补得出 N 条"变成 `filled`
+           （理由与逐条证据在 `depsection.definition_supplement_reading` 的读数里）；
+           这一格把那些行拼进 `rows` 一起过闸、一起落盘，并把读数写回回执
+           （`definition_supplement`）—— 补的是哪几条、凭什么，回执里逐条可复算。
         """
         from .. import depsection as _DS
 
         one = dict(cells["dependencies"])
         rows = [dict(x) for x in (one.get("value") or [])]
         refs = [str(x) for x in (one.get("refs") or [])]
+        #: 补单那几条拼进同一批行：它们与稿里写明的依赖同一道闸、同一把锁、同一份留痕。
+        #: 计划格给的是整份读数（dict）；给成条数（旧调用面）时按"没有补单"处理。
+        _supp_raw = one.get("definition_supplement")
+        supplement = dict(_supp_raw) if isinstance(_supp_raw, Mapping) else {}
+        for item in (supplement.get("rows") or ()):
+            evidence = dict(dict(item).get("evidence") or {})
+            rows.append({
+                "line": 0,
+                "quote": (f"（B 补定义类依赖：{evidence.get('where') or '正文'}用到了"
+                          f"{evidence.get('term') or '它的号'}）"
+                          f"{evidence.get('snippet') or ''}"),
+                "stmt_id": str(dict(item).get("stmt_id") or ""),
+                "step": str(evidence.get("where") or ""),
+                "path_group": 1,
+                "definition_supplement": True,
+                "why": str(dict(item).get("why") or ""),
+            })
         stmt_rows, problem, error = SL.rows_of(self.store)
         if problem:
             return {"written": False, "code": "ledger_unreadable",
                     "why": (f"`statements` 读不出来（{error.get('type') or '?'}: "
                             f"{error.get('message') or problem}）⇒ 判不了这些依赖能不能引")}
-        gate = _DS.gate_rows(rows, stmt_rows)
+        gate = _DS.gate_rows(rows, stmt_rows, definition_face=True)
         if not gate.get("ok"):
             return {"written": False,
                     "code": str(gate.get("refused") or _DS.REFUSED_LEVEL_TOO_LOW),
@@ -9665,7 +9695,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             target, groups, proof_no=want_no, path_group=int(path_group or 0),
             note=f"own.ingest_manuscript:dependencies:{target}",
             manuscript=_norm_manuscript_rel(path), body_sha=str(body_sha or ""),
-            proof_text=str(proof_text or "")) or {})
+            proof_text=str(proof_text or ""), allow_definition_rows=True) or {})
         if not written.get("checked"):
             return {"written": False,
                     "code": str(written.get("refused") or "dependency_face_not_written"),
@@ -9677,9 +9707,18 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             "duplicates": len(written.get("duplicates") or []),
             "path_groups": int(written.get("path_groups") or 0),
             "path_group": int(written.get("path_group") or 0),
+            #: 补定义那几条与"整段替换"换掉了哪几条：都进回执（读数面，不许只活在返回值里）。
+            "definition_supplement": supplement,
+            "replaced": [dict(x) for x in (written.get("deps_replaced") or [])],
+            "dropped": int(written.get("deps_dropped") or 0),
         }
+        if written.get("deps_replace_skipped"):
+            cells["dependencies"]["replace_skipped"] = dict(
+                written.get("deps_replace_skipped") or {})
         return {"written": deps_written, "code": "", "why": "",
-                "path_group": int(written.get("path_group") or 0)}
+                "path_group": int(written.get("path_group") or 0),
+                "path_groups": int(written.get("path_groups") or 0),
+                "definition_supplement": supplement}
 
     def _preview_b_manuscript(self, *, statement_id: str, statement_full: str,
                               proof_text: str, label: str = "",

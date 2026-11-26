@@ -191,7 +191,8 @@ class DepsMixin:
         return [(no, plan[no]) for no in sorted(plan)]
 
     def _resolve_write_steps(self, tx: Any, body: Mapping[str, Any],
-                             out: dict[str, Any], groups: list[list[dict[str, Any]]]
+                             out: dict[str, Any], groups: list[list[dict[str, Any]]],
+                             *, allow_definition_rows: bool = False,
                              ) -> list[dict[str, Any]] | None:
         """把依赖组解析成可落盘的步骤；判不了就返回 `None`（调用方据此整笔不写）。
 
@@ -210,6 +211,16 @@ class DepsMixin:
 
         三态：`None` = 拒（命题不可引 / 显式给的依赖指着不在册的号）；列表 = 可写
         （"非命题"来源的悬空边落 `dangling` 并点名，扫不动的进 `deps_unmappable`）。
+
+        ## `allow_definition_rows`（2026-11-26，业主的窄旁路；默认关）
+
+        只有"B 把这一份稿的 `## 依赖` 落成依赖边"那一格传 `True`：那一档里，
+        `uncitable` 之前先问 :func:`depsection.definition_rows_ok` —— 在册 ∧ active ∧
+        有定义正文的定义类条目放行（依赖面可以挂定义）。其余写口（登记、合并、补写、
+        空号替换）默认 `False`，判定与改前逐字相同。
+        它放的是"定义可依赖"，不是"概念可当定理引"：后者仍由
+        :func:`depsection.uncitable_statement_problem` 拒（`citation_below_proof_review`），
+        这一支一个字不改。
 
         ## 仍然保留 dangling 的只有"非命题来源"这一档
 
@@ -233,6 +244,13 @@ class DepsMixin:
             sid = str(stp.get("source_stmt_id") or "").strip()
             if not sid:
                 continue
+            #: 2026-11-26（业主的窄旁路）：依赖面可以挂"在册 ∧ active ∧ 有定义正文"的
+            #: 定义类条目（判据只有 `definition_rows_ok` 一处）。这一支只由 B 的依赖面
+            #: 收录格打开（`allow_definition_rows=True`）；其余写口默认关，行为逐字不变。
+            #: 它放的是"定义可依赖"，不是"概念可当定理引" —— 后者仍走下面那一条
+            #: `uncitable_statement_problem`（`citation_below_proof_review`）。
+            if allow_definition_rows and _DS.definition_rows_ok(sid, ledger).get("ok"):
+                continue
             _code, _why = _DS.uncitable_statement_problem(
                 sid, ledger, where="依赖步骤里")
             if _code:
@@ -242,6 +260,8 @@ class DepsMixin:
             _stp = dict(m.get("step") or {})
             _sid = str(_stp.get("stmt_id") or "").strip()
             if not _sid or "表里没有" not in str(m.get("why") or ""):
+                continue
+            if allow_definition_rows and _DS.definition_rows_ok(_sid, ledger).get("ok"):
                 continue
             _code, _why = _DS.uncitable_statement_problem(
                 _sid, ledger, where="依赖步骤里")

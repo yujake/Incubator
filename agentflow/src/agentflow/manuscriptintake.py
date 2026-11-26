@@ -593,8 +593,23 @@ def _plan_proof(reading: Mapping[str, Any], row: Mapping[str, Any],
                             "旧签现算成 stale；签闸仍由接线后的写口判）"))
 
 
-def _plan_dependencies(reading: Mapping[str, Any], row: Mapping[str, Any]) -> dict[str, Any]:
-    """`dependencies`：永远是追加 + 去重（依赖是集合，不是版本）；缺节看有没有引用。"""
+def _plan_dependencies(reading: Mapping[str, Any], row: Mapping[str, Any], *,
+                       definition_supplement: int = 0) -> dict[str, Any]:
+    """`dependencies`：按这一份稿的依赖段整段替换同一路径组；缺节看有没有引用。
+
+    ## 2026-11-26（业主口径）：从「只追加、永不删」改成「整段替换」
+
+    改前的口径逐字是「永远是追加 + 去重（依赖是集合，不是版本）」「依赖永不删」——
+    优化稿换掉正文之后旧正文独有的依赖边会留下来。现在这一份稿的 `## 依赖` 就是
+    那一组边的读音（实现在 `secretary_handoff._stamp_and_replace_group_in_tx`：
+    同一 `(used_by, path_group)` 内旧行里不在这一份的删掉，并逐条留痕）。
+
+    ## `definition_supplement`（B 的补定义义务，2026-11-26）
+
+    稿里的依赖表是 0 行、而 B 已经按业主的口径算出"必要的定义类条目"（读数在
+    `depsection.definition_supplement_reading`，逐条带证据）⇒ 这一格是 `filled`，
+    理由里写明补几条。补不出来（0 条）⇒ 照旧 `unchanged`（不写、不静默改口径）。
+    """
     if reading.get("outcome") == EXTRACT_UNREADABLE:
         return _refused(reading, True, CODE_UNREADABLE,
                         str(reading.get("why") or "依赖段没读到"))
@@ -613,23 +628,28 @@ def _plan_dependencies(reading: Mapping[str, Any], row: Mapping[str, Any]) -> di
                                                   for one in problems))
     rows = list(reading.get("value") or [])
     if not rows:
+        extra = int(definition_supplement or 0)
+        if extra > 0:
+            return _planned(
+                reading, PLAN_FILLED, writable=True,
+                reason=(f"稿里的依赖表 0 行，而 B 按「这一份证明正文实际用到了哪些"
+                        f"在册定义」补出 {extra} 条定义类依赖（逐条证据见回执 "
+                        "`definition_supplement`）⇒ 这一格按整段替换写这一组依赖面"),
+                rows_written=extra, definition_supplement=extra,
+                refs=list(reading.get("refs") or []))
         return _planned(reading, PLAN_UNCHANGED, writable=True,
                         reason="稿里的依赖表是空表 ⇒ 没有要写的行")
-    existing = row.get("dependencies")
-    seen = set()
-    if isinstance(existing, list):
-        for one in existing:
-            if isinstance(one, Mapping):
-                seen.add((str(one.get("stmt_id") or ""),
-                          str(one.get("path_group") or ""),
-                          str(one.get("step") or "")))
-    duplicates = sum(1 for one in rows
-                     if (str(one.get("stmt_id") or ""),
-                         str(one.get("path_group") or ""),
-                         str(one.get("step") or "")) in seen)
     return _planned(reading, PLAN_FILLED, writable=True,
-                    reason=f"追加 {len(rows)} 行（去重 {duplicates} 行；依赖永不删）",
-                    rows_written=len(rows), duplicates=duplicates)
+                    reason=(f"按这一份稿的依赖段整段替换这一条路径的依赖面：写 "
+                            f"{len(rows)} 行（同一路径组内不在这一份里的旧边会被删掉、"
+                            "逐条留痕；不是追加）"),
+                    rows_written=len(rows),
+                    #: 正文点到的号（`refs`）要跟着这一格走：写入侧靠它判"正文把某条
+                    #: 不可引的东西当依据引了没有"（2026-11-26 复核：改前计划格不带这一
+                    #: 格，那条判据在收录路径上一直拿不到材料 —— 依赖面开了窄旁路之后
+                    #: 它正好是"概念仍不能当定理引"的唯一守点，必须把材料交下去）。
+                    refs=list(reading.get("refs") or []))
+
 
 def _plan_numeric(reading: Mapping[str, Any], row: Mapping[str, Any]) -> dict[str, Any]:
     """`numeric_evidence`：同一程序 ⇒ unchanged；否则填（只 e-num 适用）。"""
@@ -661,7 +681,8 @@ def _derived(family: str, got: Mapping[str, Any]) -> list[str]:
 
 def plan_cells(row: Mapping[str, Any] | None, got: Mapping[str, Mapping[str, Any]],
                conflict: str = "refuse", *, family: str = "",
-               proof_no: int = 1, append_new_path: bool = False) -> dict[str, Any]:
+               proof_no: int = 1, append_new_path: bool = False,
+               definition_supplement: int = 0) -> dict[str, Any]:
     """把提取读数对到既有行上 ⇒ 逐格计划。
 
     `row` 是既有台账行（`None` / 空字典 = `mode=register` 的新行），`got` 是
@@ -721,7 +742,8 @@ def plan_cells(row: Mapping[str, Any] | None, got: Mapping[str, Mapping[str, Any
             cells[cell] = _plan_proof(reading, row_now, policy, proof_no_now,
                                       append_new_path=bool(append_new_path))
         elif cell == "dependencies":
-            cells[cell] = _plan_dependencies(reading, row_now)
+            cells[cell] = _plan_dependencies(
+                reading, row_now, definition_supplement=int(definition_supplement or 0))
         elif cell == "kind":
             cells[cell] = _MK.plan_kind(reading, row_now, policy)
         else:

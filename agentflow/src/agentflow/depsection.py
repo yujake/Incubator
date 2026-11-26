@@ -39,6 +39,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -592,6 +593,347 @@ def dep_kind_of(statement_kind: str) -> str:
         "prior_art": "prior_art",
         "experiment": "experiment",
     }.get(got, "theorem")
+
+
+# ------------------------------------------------- 依赖面挂定义类条目（窄旁路）
+#
+# 业主 2026-11-26（逐字）：「如果第一版提交的依赖面为空、且自身不是定义，B 在优化时
+# 应当把必要的定义类条目补进依赖面」「最根源的依赖是定义 —— 引文成果与自足证明
+# 也会依赖几个定义」。
+#
+# 为什么必须是窄旁路：概念行的等级被 `evidencebits.derive_grade` 短路成
+# `not_applicable`，于是它进不了可引池；而依赖面要的从来不是"一条可引的命题"，而是
+# "这一份证明用到的定义"。两件事混成一条判据只有两种结局 —— 要么依赖面永远装不下
+# 定义（今天盘上真实边里 `kind=definition` 的 0 条），要么概念变成可引的命题（政策被
+# 改宽）。所以：「定义可依赖、不可当定理引」；后者的判据
+# （`uncitable_statement_finding` 的 `citation_below_proof_review`）一个字都不动。
+
+#: 英文术语按整词匹配用的探针（术语里有一个 ASCII 字母就按整词走）。
+_ASCII_TERM_RE = re.compile(r"[A-Za-z]")
+#: 证明正文里"编号步骤"的行首（`1.` / `2、` / `3)`）—— 证据落在第几步。
+_STEP_HEAD_RE = re.compile(r"^(\d+)\s*[.、)]")
+
+
+def definition_rows_ok(
+        sid: str, statement_rows: Iterable[Mapping[str, Any]] | None = None, *,
+        index: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """`stmt:<sid>` 能不能算「依赖面里的定义类条目」⇒ 读数；只有 `ok=True` 才是。
+
+    四档不折平（每一档给不同的 `why`，读的人据此知道该改什么）：
+
+    | 档 | 判据 | 读的人该做什么 |
+    |---|---|---|
+    | 不在册 | 台账里没有这个号 | 改号（或先登记） |
+    | 不可用 | `status != active` | 换一条在册的 |
+    | 不是定义类 | `dep_kind_of(kind) != "definition"` | 这一条要走「可引命题」那条路 |
+    | 没有定义正文 | `statement_full` 是空的 | 先补定义正文 |
+
+    它不回答"能不能当定理引"：那一条仍是
+    :func:`uncitable_statement_finding`（`citation_below_proof_review`），一个字不改。
+
+    `statement_rows` 与 `index` 二选一（`index` 是 `SL.index_by_id` 的产物）：调用方
+    已经建过索引就传它，别为了这一问再建一次。
+    """
+    out: dict[str, Any] = {"ok": False, "stmt_id": str(sid or ""), "kind": "",
+                           "dep_kind": "", "label": "", "why": ""}
+    want = str(sid or "").strip()
+    if not want:
+        out["why"] = "没有命题号 ⇒ 依赖面挂不到任何一条定义"
+        return out
+    rows = index if index is not None else SL.index_by_id(statement_rows or ())
+    anchor = rows.get(want)
+    if anchor is None:
+        out["why"] = (f"`stmt:{want}` 不在册（台账里现有 {len(rows)} 条）⇒ "
+                      "依赖面不许挂一个不存在的号")
+        return out
+    kind = str(anchor.get("kind") or "").strip()
+    out.update(kind=kind, dep_kind=dep_kind_of(kind),
+               label=str(anchor.get("label") or ""))
+    status = str(anchor.get("status") or "").strip()
+    if status != "active":
+        out["why"] = (f"`stmt:{want}` 的 `statements.status={status or '（空）'}` ⇒ "
+                      "只有 active 的定义能进依赖面（不可用的行不许当依据）")
+        return out
+    if out["dep_kind"] != "definition":
+        out["why"] = (f"`stmt:{want}` 的 kind={kind or '（空）'} 经 `dep_kind_of` 落 "
+                      f"`{out['dep_kind']}`，不是 definition ⇒ 它不在「定义类依赖」"
+                      "这条窄路上（它要按可引命题那条路走）")
+        return out
+    if not str(anchor.get("statement_full") or "").strip():
+        out["why"] = (f"`stmt:{want}` 在册、也是定义类，但 `statement_full` 是空的 ⇒ "
+                      "没有定义正文可依赖（这一档要「在册 + 有定义」两格都对上）")
+        return out
+    out["ok"] = True
+    return out
+
+
+def _usable_term(term: Any) -> bool:
+    """这个术语能不能当「正文用到了它」的证据（能 ⇒ True）。
+
+    三个条件都可复算，且都不是"挑几条"那种阈值：
+
+    1. 去空白后至少 2 个字符：单字术语（"群" / "环" / "域"）在数学正文里必然作为
+       普通字出现（"群论" / "环状" / "区域"），拿它当证据等于把任意一句话读成"这一份
+       证明依赖那条定义" —— 那是拿措辞巧合当判据（本文件 :func:`wash_dependency_section`
+       的注释记过同一课）；
+    2. 不在 `conceptrows.CONCEPT_GENERIC_TERMS` 里（"概念" / "定义" / "theorem" 这些
+       通用词不是术语，是排版词）；
+    3. 不是纯标点（`_ASCII_TERM_RE` 与 `str.isalnum` 都不认的串）。
+
+    为什么这条规则不叫"机械阈值"：它判的是「这个串能不能指认一个定义项」，不是
+    "要凑够几条依赖"。补单的条数由证据决定（见 :func:`definition_supplement_reading`），
+    不由这个数决定。
+    """
+    text = str(term or "").strip()
+    if len(text) < 2:
+        return False
+    if not (text.isalnum() or _ASCII_TERM_RE.search(text)):
+        return False
+    from . import conceptrows as _CR
+
+    if text.casefold() in {str(x).casefold() for x in _CR.CONCEPT_GENERIC_TERMS}:
+        return False
+    return True
+
+
+def _definition_terms(row: Mapping[str, Any]) -> list[tuple[str, str]]:
+    """一条定义类条目的「术语」⇒ `[(术语, 来源)]`（按可信度排，去重保序）。
+
+    三个来源：`label`（B 登记时写的正名）→ `defined_term(statement_full)`
+    （"概念（X）" / "定义：X" 这两种显式形态，抽不出的那档不猜）→ `aliases`。
+    不可用的（见 :func:`_usable_term`）在这一层就剔掉。
+    """
+    from . import conceptrows as _CR
+
+    found: list[tuple[str, str]] = []
+    seen: set[str] = set()
+
+    def _take(value: Any, source: str) -> None:
+        text = str(value or "").strip()
+        if not _usable_term(text):
+            return
+        key = text.casefold()
+        if key in seen:
+            return
+        seen.add(key)
+        found.append((text, source))
+
+    _take(row.get("label"), "label")
+    _take(_CR.defined_term(str(row.get("statement_full") or "")), "defined_term")
+    aliases = row.get("aliases")
+    if isinstance(aliases, (list, tuple)):
+        for one in aliases:
+            _take(one, "alias")
+    return found
+
+
+def _term_hit(term: str, text: str) -> bool:
+    """`term` 在这段正文里出现过没有（英文按整词，中文按子串）。
+
+    英文按整词是刻意的：`convex` 不该匹配 `convexity`（那是另一个词；放过去等于把
+    "同词根"读成"同一个定义"）。中文没有词边界，只能按子串 —— 单字碰撞由
+    :func:`_usable_term` 那两条挡掉。
+    """
+    if not term or not text:
+        return False
+    if _ASCII_TERM_RE.search(term):
+        return re.search(rf"(?<![A-Za-z0-9]){re.escape(term)}(?![A-Za-z0-9])",
+                         text, re.IGNORECASE) is not None
+    return term in text
+
+
+def _proof_body_for_terms(text: Any) -> tuple[str, str]:
+    """这一份「证明正文」取哪一段 ⇒ `(正文, 来源)`。
+
+    `proof_text` 有两个形状：手稿文件里是整份稿（带 `## 证明` 标题），而收录格读到的
+    是那一节的正文（没有标题）。所以先按节切；切不出来就把整段当正文，但先把
+    `## 依赖` 段截掉 —— 依赖表里本来就写着 `stmt:` 号，拿它当"正文用到了"的证据
+    是把声明读成使用。`body_source` 进读数（`section` / `before_dependencies` /
+    `as_given`），让读的人知道走的是哪一支。
+    """
+    raw = str(text or "")
+    body = proof_body(raw)
+    if body.strip():
+        return body, "section"
+    _lines, heading = section_lines(raw)
+    if heading:
+        return "\n".join(raw.split("\n")[: heading - 1]), "before_dependencies"
+    return raw, "as_given"
+
+
+def _find_evidence(body: str, *, sid: str = "",
+                   terms: Sequence[str] = ()) -> dict[str, Any]:
+    """在证明正文里找"用到了它"的第一处证据 ⇒ 读数；找不到 ⇒ 空字典。
+
+    顺序：先认 `stmt:<号>`（作者自己点的号，最硬），再认术语。命中的那一行是编号步骤
+    （`1.` / `2、` / `3)`）就写"第 N 步"，否则写"正文"。`snippet` 带那一行原文（截断
+    120 字）—— 读数里带着原文，读的人不用回去找，也没法被一句"大概用过"糊过去。
+    """
+    lines = str(body or "").replace("\r\n", "\n").split("\n")
+    probes: list[tuple[str, str]] = []
+    if str(sid or "").strip():
+        probes.append(("stmt_ref", f"stmt:{str(sid).strip()}"))
+    for term in terms:
+        probes.append(("term", str(term or "")))
+    for kind, needle in probes:
+        if not needle:
+            continue
+        for line in lines:
+            hit = (needle in line) if kind == "stmt_ref" else _term_hit(needle, line)
+            if not hit:
+                continue
+            number = _STEP_HEAD_RE.match(line.strip())
+            return {"kind": kind, "term": (needle if kind == "term" else ""),
+                    "where": (f"第 {int(number.group(1))} 步" if number else "正文"),
+                    "snippet": line.strip()[:120]}
+    return {}
+
+
+def definition_supplement_reading(
+        *, proof_text: Any, statement_rows: Iterable[Mapping[str, Any]],
+        dependency_rows: Iterable[Mapping[str, Any]] = (),
+        target_id: str = "", target_kind: str = "",
+        manuscript_rows: int | None = None) -> dict[str, Any]:
+    """这一条命题该不该、能不能补「必要的定义类依赖」⇒ 可整笔复算的读数。
+
+    ## 触发（两条，逐字可复算）
+
+    1. 这一份稿提交的依赖面为空：`## 依赖` 表 0 行（`manuscript_rows=0`；
+       不给这一格时退回读台账里指向 `stmt:<本号>` 的边数 —— 判据只有一处，
+       两种材料同一个问题："这一份提交的依赖面是空的吗"）；
+    2. 这一行自己不是定义：`dep_kind_of(target_kind) != "definition"`。
+
+    为什么触发看"这一份稿提交的表"而不是"台账里现在有几条边"：业主的原话是"第一版
+    提交的依赖面为空"，而台账里的边是上一版的结果。拿台账当触发条件，换版时
+    上一版补出来的定义边会挡住这一版的重算（补单永远停在第一版）。
+
+    ## "必要"的口径（为什么是这几条）
+
+    候选 = 在册 ∧ active ∧ 定义类 ∧ 有定义正文的那批条目。一条候选进补单只有一个
+    理由：这一份证明正文实际用到了它，证据是机器可读的两种之一 ——
+
+    - `stmt:<候选号>` 出现在 `## 证明` 正文里（作者自己点了号）；
+    - 候选的术语出现在证明正文里（术语来源与可用性见 :func:`_definition_terms` /
+      :func:`_usable_term`；英文按整词）。
+
+    每条补单还带 `also_depended_by`：别的在册命题的依赖面也指着它的那些号
+    （业主那句「至少把其中被别的在册命题也依赖的那几条补上」的落点）。它是"更硬"的
+    标记，不是门槛 —— 今天盘上指向定义的边是 0 条，拿它当门槛会让补单恒空（"机械
+    阈值"的另一种形态：门槛一卡，正的也过不去）。
+
+    ## 拿不出依据时
+
+    一条证据都没有 ⇒ `outcome="nothing_found"`、`rows=[]`、一个字节不填；`rejected`
+    逐条说清每条为什么不算（哪一格缺 / 术语拼不出 / 正文一次都没出现），`why` 汇总
+    三个计数 —— 读的人拿这三个数就能复算出同一个结论，不必信这句话。
+
+    ## 返回
+
+    `{checked, triggered, outcome, candidates, rows, rejected, why, face_edges,
+    submitted_rows, target_kind, body_source}`。`outcome ∈ {not_triggered,
+    supplemented, nothing_found}`；补单每条形如
+    `{stmt_id, label, term, term_source, evidence:{kind, where, snippet, term},
+    also_depended_by, mandatory, why}`（按"必补在前、号升序"排，可复算）。
+    """
+    out: dict[str, Any] = {
+        "checked": True, "triggered": False, "outcome": "not_triggered",
+        "candidates": 0, "rows": [], "rejected": [], "why": "", "face_edges": 0,
+        "submitted_rows": 0, "target_kind": str(target_kind or ""),
+        "body_source": "",
+    }
+    sid = str(target_id or "").strip()
+    kind_now = str(target_kind or "").strip()
+    if dep_kind_of(kind_now) == "definition":
+        out["why"] = (f"这一行自己就是定义类（kind={kind_now or '（空）'}）⇒ "
+                      "补定义义务不适用于定义行（定义不需要定义当前提）")
+        return out
+    edges = [dict(one) for one in (dependency_rows or ())
+             if isinstance(one, Mapping)]
+    face = [one for one in edges
+            if sid and str(one.get("used_by") or "").split("#", 1)[0] == f"stmt:{sid}"]
+    out["face_edges"] = len(face)
+    submitted = (int(manuscript_rows) if manuscript_rows is not None else len(face))
+    out["submitted_rows"] = submitted
+    if submitted > 0:
+        out["why"] = (f"这一份稿的 `## 依赖` 表有 {submitted} 行 ⇒ 依赖面这一格由稿"
+                      "说了算，不走「依赖面为空 ⇒ 补定义」那一条（它只给空的依赖面兜底）")
+        return out
+    out["triggered"] = True
+    body, source = _proof_body_for_terms(proof_text)
+    out["body_source"] = source
+    index = SL.index_by_id(statement_rows)
+    keep: list[dict[str, Any]] = []
+    rejected: list[dict[str, Any]] = []
+    scanned = 0
+    no_term = 0
+    absent = 0
+    unusable = 0
+    for cid, row in index.items():
+        if not cid or cid == sid:
+            continue
+        if dep_kind_of(str(row.get("kind") or "")) != "definition":
+            continue
+        scanned += 1
+        why = ""
+        status = str(row.get("status") or "").strip()
+        if status != "active":
+            why = f"`statements.status={status or '（空）'}`（不可用的行不许当依据）"
+            unusable += 1
+        elif not str(row.get("statement_full") or "").strip():
+            why = "`statement_full` 是空的（没有定义正文可依赖）"
+            unusable += 1
+        terms = _definition_terms(row) if not why else []
+        if not why and not terms:
+            why = ("拼不出可用术语（`label` / `defined_term(statement_full)` / `aliases` "
+                   "三处都没有一个能指认定义项的串）")
+            no_term += 1
+        evidence = (_find_evidence(body, sid=cid, terms=[t for t, _s in terms])
+                    if not why else {})
+        if not why and not evidence:
+            shown = "、".join(f"`{t}`" for t, _s in terms)
+            why = f"证明正文一次都没用到它（`stmt:{cid}` 没出现，术语 {shown} 也没出现）"
+            absent += 1
+        if why:
+            rejected.append({"stmt_id": cid, "label": str(row.get("label") or ""),
+                             "why": why})
+            continue
+        term, term_source = next(((t, s) for t, s in terms
+                                  if evidence.get("kind") == "term"
+                                  and t == evidence.get("term")), ("", ""))
+        if evidence.get("kind") == "stmt_ref" and terms:
+            term, term_source = terms[0]
+        users = sorted({str(one.get("used_by") or "").split("#", 1)[0]
+                        for one in edges
+                        if str(one.get("source_stmt_id") or "") == cid
+                        and str(one.get("used_by") or "").startswith("stmt:")
+                        and str(one.get("used_by") or "").split("#", 1)[0] != f"stmt:{sid}"})
+        keep.append({
+            "stmt_id": cid, "label": str(row.get("label") or ""),
+            "term": term, "term_source": term_source, "evidence": dict(evidence),
+            "also_depended_by": users, "mandatory": bool(users),
+            "why": (f"{evidence.get('where') or '正文'}用到了它（"
+                    f"{'点了号' if evidence.get('kind') == 'stmt_ref' else '术语 ' + str(evidence.get('term') or term)}"
+                    f"：{evidence.get('snippet') or ''}）"
+                    + (f"；别的在册命题也依赖它（{len(users)} 处）" if users else "")),
+        })
+    keep.sort(key=lambda one: (not one["mandatory"], one["stmt_id"]))
+    out["candidates"] = scanned
+    out["rows"] = keep
+    out["rejected"] = rejected
+    if not keep:
+        out["outcome"] = "nothing_found"
+        out["why"] = (f"扫过 {scanned} 条定义类条目，一条证据都没找到"
+                      f"（不可用 {unusable} 条 / 拼不出术语 {no_term} 条 / "
+                      f"正文一次都没用到 {absent} 条）⇒ 不填："
+                      "补定义要能说清「为什么是这几条」，说不出就不许瞎填")
+        return out
+    out["outcome"] = "supplemented"
+    mandatory = sum(1 for one in keep if one["mandatory"])
+    out["why"] = (f"补 {len(keep)} 条定义类依赖（其中 {mandatory} 条还被别的在册命题"
+                  "依赖）："
+                  + "；".join(f"`stmt:{one['stmt_id']}`（{one['why']}）"
+                             for one in keep))
+    return out
 
 
 # ------------------------------------------------------------------ 解析
@@ -2036,10 +2378,12 @@ def candidate_statement_ids(*, derived_from: Iterable[Any] = (), proof_text: Any
 
 
 def gate_rows(rows: Iterable[Mapping[str, Any]],
-              statement_rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+              statement_rows: Iterable[Mapping[str, Any]], *,
+              definition_face: bool = False) -> dict[str, Any]:
     """逐条核"来源在册 / 可用 / 档位够不够" ⇒ 一份可整笔拒绝的读数。
 
-    返回 `{"checked", "ok", "refused", "reason", "levels", "finding", "findings"}`。
+    返回 `{"checked", "ok", "refused", "reason", "levels", "finding", "findings",
+    "definition_rows"}`。
     `refused` 是受控码、`reason` 是四元组那句人话（号 + 第几行 / 第几步 + 类别 +
     期望 / 实得 + 怎么改），`finding` / `findings` 是同一句话的六格形态（业主
     2026-11-06：每条异常都要给得出"是哪一条、哪一类、差在哪、怎么改"）。
@@ -2054,14 +2398,29 @@ def gate_rows(rows: Iterable[Mapping[str, Any]],
     （受控拒），拒信逐字点名那个号、说清"它不在册，F 读不到它"；等级不够那一档
     照旧 `REFUSED_LEVEL_TOO_LOW`（`pre_theorem` 以下不可引）。两档都由
     :func:`uncitable_statement_problem` 一处产生，与 F 的可引池同源。
+
+    ## `definition_face`（2026-11-26，业主设计的窄旁路）
+
+    默认 `False` ⇒ 判定与改前逐字相同（F 的只读预览、B 的登记入口都不传它，行为
+    一个字不改）。只有 B 把这一份稿的 `## 依赖` 落成依赖边那一格传 `True`：
+    那一档里每条来源先问 :func:`definition_rows_ok`，是"在册 ∧ active ∧ 有定义正文"
+    的定义类条目就放行（要的是"依赖面可以挂定义"，不是"概念可以当定理引"）；
+    其余行照旧走 :func:`uncitable_statement_finding`，`citation_below_proof_review`
+    一个字不改。放行过的那几条在 `definition_rows` 里逐条点名（读数面，不许静默放行）。
     """
     index = SL.index_by_id(statement_rows)
     ledger = list(index.values())
     levels: dict[str, str] = {}
+    definitions: list[str] = []
     for row in rows:
         sid = str(row.get("stmt_id") or "")
         if sid in index:
             levels[sid] = statement_grade(index[sid])
+        if definition_face and definition_rows_ok(sid, None, index=index).get("ok"):
+            #: 定义类条目：依赖面收它，可引池那一条判据不参与（它是"可依赖"，
+            #: 不是"可引的命题"）。放行过哪几行必须留读数，否则"松了多少"看不见。
+            definitions.append(sid)
+            continue
         #: 四元组里的"哪一步"两样都写：表行号（`line`）与表里自己写的步号。
         got = uncitable_statement_finding(
             sid, ledger, where="依赖段", line=int(row.get("line") or 0),
@@ -2069,9 +2428,10 @@ def gate_rows(rows: Iterable[Mapping[str, Any]],
         if got:
             return {"checked": True, "ok": False, "refused": str(got["kind"]),
                     "levels": levels, "reason": str(got["detail"]),
-                    "finding": got, "findings": [got]}
+                    "finding": got, "findings": [got],
+                    "definition_rows": definitions}
     return {"checked": True, "ok": True, "refused": "", "reason": "", "levels": levels,
-            "finding": {}, "findings": []}
+            "finding": {}, "findings": [], "definition_rows": definitions}
 
 
 def deps_groups(rows: Iterable[Mapping[str, Any]],

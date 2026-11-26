@@ -278,7 +278,9 @@ class HandoffMixin:
                                           manuscript: str = "",
                                           body_sha: str = "",
                                           reserve: bool = False,
-                                          proof_text: str = "") -> dict[str, Any]:
+                                          proof_text: str = "",
+                                          allow_definition_rows: bool = False
+                                          ) -> dict[str, Any]:
         """收方读稿登记：把一份手稿的依赖段落成那条在册命题的 `dependencies` 行。
 
         ## 为什么需要这一格（业主 2026-10-26 晚：「D 到 B 没有路吗？加」）
@@ -423,31 +425,23 @@ class HandoffMixin:
                         out=out, manuscript=manuscript, group=group_no):
                     return out
                 body = {"deps": groups, "proof_no": group_no}
-                steps = self._resolve_write_steps(tx, body, out, groups)
+                steps = self._resolve_write_steps(
+                    tx, body, out, groups,
+                    allow_definition_rows=bool(allow_definition_rows))
                 if steps is None:
                     return out
                 # 号盖在已解析的步骤上：手稿依赖段那一路 `used_by` 尾巴与
                 # `path_group` 同号（一份稿 = 一份证明 = 一条路径）。没有稿身份时
                 # 不盖 —— 材料自己那几格就是这一笔要落的口径（幂等靠它们）。
                 if _has_identity:
-                    steps = _stamp_path_number(steps, path_group=group_no,
-                                               proof_no=group_no)
+                    steps = self._stamp_and_replace_group_in_tx(
+                        tx, steps=steps, sid=sid, group_no=group_no, out=out)
                 existing = set()
                 for row in tx.rows("dependencies"):
                     existing.add(_dep_step_key(dict(row)))
                 keep: list[dict[str, Any]] = []
                 for step in steps:
-                    key = _dep_step_key({
-                        "used_by": _PL.used_by_of(
-                            f"stmt:{sid}", int(step.get("proof_no") or group_no)),
-                        "path_group": int(step.get("path_group") or group_no),
-                        "kind": str(step.get("kind") or "theorem"),
-                        "source_stmt_id": step.get("source_stmt_id"),
-                        "source_lit_id": step.get("source_lit_id"),
-                        "source_experiment_id": step.get("source_experiment_id"),
-                        "source_doc_id": step.get("source_doc_id"),
-                        "label": str(step.get("label") or ""),
-                    })
+                    key = _dep_key_of(step, sid=sid, group_no=group_no)
                     if key in existing:
                         out["duplicates"].append({
                             "path_group": int(step.get("path_group") or group_no),
@@ -468,6 +462,80 @@ class HandoffMixin:
             out.update(checked=False, refused="write_failed",
                        reason=f"依赖面落盘没成（{type(exc).__name__}: {exc}）⇒ 这一笔按'没写成'读")
         return out
+
+    def _stamp_and_replace_group_in_tx(
+            self, tx: Any, *, steps: list[dict[str, Any]], sid: str,
+            group_no: int, out: dict[str, Any]) -> list[dict[str, Any]]:
+        """盖路径号 + 按这一份稿的依赖段整段替换那一组旧边（同一把锁里）。
+
+        ## 为什么改「追加 + 去重」为「整段替换」（业主 2026-11-26）
+
+        改前的口径逐字是「永远是追加 + 去重（依赖是集合，不是版本）」「依赖永不删」。
+        于是优化稿换掉正文之后，旧正文独有的依赖边会留下来：依赖面成了"这一行
+        历史上用过的所有东西"，而不是"这一份证明的依据"。业主这次要的是"优化完替换时
+        也要能更新依赖面" ⇒ 同一 `(used_by, path_group)` 内，这一份稿的依赖段就是那一组
+        边全部的读音：不在这一份里的旧行删掉，在这一份里的照写。
+
+        ## 先例与留痕
+
+        做法与空号替换（`secretary_vacant._fill_vacant_path_in_tx` 的 ⑥）同形：旧行逐条
+        `tx.delete`。删一行经 `Tx.delete` 落一条 `op="delete"` 事件（整行 + actor + ts +
+        note 都在 `events.jsonl` 里，`rebuild` 认得）⇒ "谁在什么时候换掉了哪几条"是可
+        查的，不需要新表、也不动 `schema`。回执里另有 `deps_replaced` / `deps_dropped`
+        两个读数（逐条：号 / 类别 / 摘录 / 路径组 / 为什么被换掉）。
+
+        ## 三态边界（如实说）
+
+        - `steps` 为空 ⇒ 不删，`out["deps_replace_skipped"]` 写明"这一份稿的依赖段是
+          空的，不拿空表清空依赖面"（空表多半是稿没写完；拿它清空等于静默删证据）；
+        - 这一组本来就没有旧行 ⇒ 什么都不删（`deps_dropped=0`），不是"查不了"；
+        - 读不到 `dependencies` ⇒ 异常照旧抛出、整笔回滚（与改前同一条纪律）。
+
+        ## 与非平凡度的联动（不许弄坏）
+
+        `secretary_tier_ledger.deps_sha256` 把依赖身份算进指纹，`_tier_reading` 对它给
+        `needs_rejudge`（依赖集变了就不沿用旧档）。删边 / 加边都改指纹 ⇒ 替换之后那一
+        路径自动进"要重判"，读侧一个字不用改。
+        """
+        stamped = _stamp_path_number(steps, path_group=int(group_no),
+                                     proof_no=int(group_no))
+        keep_keys = {_dep_key_of(step, sid=sid, group_no=int(group_no))
+                     for step in stamped}
+        if not keep_keys:
+            out["deps_replace_skipped"] = {
+                "checked": True, "path_group": int(group_no), "dropped": 0,
+                "why": ("这一份稿的依赖段是空的 ⇒ 不拿空表清空依赖面"
+                        "（旧边留着；要清就交一份写明依赖的稿）"),
+            }
+            return stamped
+        dropped: list[dict[str, Any]] = []
+        base = f"stmt:{sid}"
+        for row in list(tx.rows("dependencies")):
+            old = dict(row)
+            if str(old.get("used_by") or "").split("#", 1)[0] != base:
+                continue
+            if int(old.get("path_group") or 1) != int(group_no):
+                continue
+            if _dep_step_key(old) in keep_keys:
+                continue
+            if tx.delete("dependencies", old.get("dep_id"),
+                         note="record_manuscript_dependency_face:replace",
+                         ) is None:
+                continue
+            dropped.append({
+                "dep_id": str(old.get("dep_id") or ""),
+                "kind": str(old.get("kind") or ""),
+                "label": str(old.get("label") or ""),
+                "source_stmt_id": str(old.get("source_stmt_id") or ""),
+                "source_lit_id": str(old.get("source_lit_id") or ""),
+                "source_experiment_id": str(old.get("source_experiment_id") or ""),
+                "path_group": int(group_no),
+                "why": ("这一条不在这一份稿的依赖段里 ⇒ 按「整段替换」换掉"
+                        "（旧正文独有的边不许留下来）"),
+            })
+        out["deps_replaced"] = dropped
+        out["deps_dropped"] = len(dropped)
+        return stamped
 
     def _reserve_path_only(self, *, sid: str, note: str, manuscript: str,
                            body_sha: str, path_group: int) -> dict[str, Any]:
@@ -571,6 +639,27 @@ class HandoffMixin:
 
 #: 稿头元信息行：`- <键>：<值>`（与 `manuscriptintake._HEAD_FIELD_RE` 同一形状）。
 _MANUSCRIPT_HEAD_FIELD_RE = re.compile(r"^\s*-\s*(?P<key>[^：:]+?)\s*[：:]\s*(?P<value>.*?)\s*$")
+
+
+def _dep_key_of(step: Mapping[str, Any], *, sid: str, group_no: int) -> tuple:
+    """一条依赖步骤的边身份（与 `dependencies` 行同一把尺：`_dep_step_key`）。
+
+    为什么单独一格：这一笔要拿"步骤"与"表里已有的行"比身份，两处各拼一次那个
+    dict 迟早漂（漏一格 `source_*` 就会把两条不同来源的边判成同一条，于是"去重"
+    静默吃掉一条真边）。身份公式仍只有 `secretary_wash._dep_step_key` 一处，这里只
+    负责把步骤上的号翻成行上的 `used_by` / `path_group`。
+    """
+    return _dep_step_key({
+        "used_by": _PL.used_by_of(
+            f"stmt:{sid}", int(step.get("proof_no") or group_no)),
+        "path_group": int(step.get("path_group") or group_no),
+        "kind": str(step.get("kind") or "theorem"),
+        "source_stmt_id": step.get("source_stmt_id"),
+        "source_lit_id": step.get("source_lit_id"),
+        "source_experiment_id": step.get("source_experiment_id"),
+        "source_doc_id": step.get("source_doc_id"),
+        "label": str(step.get("label") or ""),
+    })
 
 
 def _manuscript_head_fields(text: Any) -> dict[str, str]:

@@ -319,12 +319,22 @@ class _IngestManuscript:
         #: 优化线：计划按"覆盖这一格"走（它不分配号、也不比对号）；号由秘书核、
         #: 能不能换由写口按新正文的 V 签判。登记线的冲突矩阵逐字不变。
         plan_conflict = "overwrite" if named_path else str(conflict)
+        #: B 的补定义义务（业主 2026-11-26）：这一笔要不要按「依赖面为空 + 自身非定义」
+        #: 补定义类依赖。判据本体在 `depsection.definition_supplement_reading`；这里
+        #: 只读材料并把读数挂在依赖格上（计划要按它的条数决定 `filled` 还是 `unchanged`，
+        #: 而"补几条、凭哪条证据"必须和回执里那句理由一致 —— 同一个读数，不各算一次）。
+        _supp = self._ingest_definition_supplement(
+            target=target, row=row, got_cells=got_cells)
         plan = _MI.plan_cells(
             row, got_cells, plan_conflict, family=family,
             proof_no=(1 if named_path else int(want_no or 1)),
             append_new_path=(False if named_path else self._ingest_new_proof_path(
-                mode=mode, row=row, target=target, rel=rel, got_cells=got_cells)))
+                mode=mode, row=row, target=target, rel=rel, got_cells=got_cells)),
+            definition_supplement=len(_supp.get("rows") or []))
         cells_out = self._ingest_plan_cells(plan, requested)
+        if "dependencies" in cells_out:
+            cells_out["dependencies"] = {**cells_out["dependencies"],
+                                         "definition_supplement": _supp}
         out.update(requested_cells=list(requested), cells=cells_out,
                    derived_write=list(plan.get("derived_write") or []),
                    refused=str(plan.get("refused") or ""),
@@ -337,6 +347,67 @@ class _IngestManuscript:
         if not out["ok"]:
             return {"fail": out}
         return {"plan": plan}
+
+    def _ingest_definition_supplement(self, *, target: str, row: Mapping | None,
+                                      got_cells: Mapping) -> dict:
+        """B 的补定义义务：这一笔该不该、能不能补「必要的定义类依赖」（只读，不写盘）。
+
+        业主 2026-11-26（逐字）：「如果第一版提交的依赖面为空、且自身不是定义，B 在
+        优化时应当把必要的定义类条目补进依赖面」。判据本体只有一处
+        （`depsection.definition_supplement_reading`：触发两条 + "正文实际用到"的两种
+        机器证据 + 逐条 `why`）；这一格只负责"读材料"：台账、这一份稿提交的依赖表
+        （0 行才触发）、这一份稿的证明正文。
+
+        三态（`outcome`）：`not_triggered`（依赖面不空 / 自身就是定义 / 这一笔没请求
+        依赖格）/ `supplemented` / `nothing_found`（拿不出依据 ⇒ 不填，`rejected`
+        逐条说清为什么）/ `unreadable`（台账或依赖表读不出来 —— 没查成不等于没有
+        可补的，调用方按"没补"写，但读数里留着这一档）。
+
+        只有 `supplemented` 的那几条会被写进依赖面（`_ingest_apply_dependencies`）；
+        其余三档一个字节都不写。
+        """
+        from .. import depsection as _DS
+        from .. import manuscriptintake as _MI
+        from .. import statementledger as _SL
+
+        out: dict[str, Any] = {"checked": False, "triggered": False,
+                               "outcome": "not_triggered", "rows": [],
+                               "rejected": [], "candidates": 0, "why": ""}
+        if not isinstance(got_cells, Mapping) or "dependencies" not in got_cells:
+            out["why"] = "这一笔没请求依赖格 ⇒ 补定义这一问不适用"
+            return out
+        one = dict(got_cells.get("dependencies") or {})
+        if str(one.get("outcome") or "") != _MI.EXTRACT_PRESENT:
+            out["why"] = ("依赖段没读到 / 这一族没有依赖格 ⇒ 补定义这一问不适用"
+                          "（它要读这一份稿的依赖面现状）")
+            return out
+        if not isinstance(row, Mapping):
+            out["why"] = "没有可判的在册行 ⇒ 补定义这一问不适用"
+            return out
+        stmt_rows, problem, error = _SL.rows_of(self.store)
+        if problem:
+            out.update(outcome="unreadable",
+                       why=(f"`statements` 读不出来（{error.get('type') or '?'}: "
+                            f"{error.get('message') or problem}）⇒ 补定义这一问没查成"
+                            "（没查成 ≠ 没有可补的）"))
+            return out
+        try:
+            deps_rows = [dict(x) for x in self.store.rows("dependencies")]
+        except Exception as exc:  # noqa: BLE001 —— 读不到不许当成"依赖面为空"
+            out.update(outcome="unreadable",
+                       why=(f"`dependencies` 读不出来（{type(exc).__name__}: {exc}）⇒ "
+                            "判不了这一行的依赖面空不空（没查成 ≠ 空）"))
+            return out
+        body = str(dict(got_cells.get("proof_text") or {}).get("value") or "")
+        source = "manuscript"
+        if not body.strip():
+            body = str(row.get("proof_text") or "")
+            source = "statement_row"
+        reading = _DS.definition_supplement_reading(
+            proof_text=body, statement_rows=stmt_rows, dependency_rows=deps_rows,
+            target_id=str(target or ""), target_kind=str(row.get("kind") or ""),
+            manuscript_rows=len(one.get("value") or []))
+        return dict(reading, body_input=source)
 
     def _ingest_new_proof_path(self, *, mode: str, row: Mapping, target: str,
                                rel: str, got_cells: Mapping,
