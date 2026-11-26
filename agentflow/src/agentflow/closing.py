@@ -4480,6 +4480,66 @@ def _literature_unprocessed_reasons(store: Any) -> dict[str, Any]:
     return out
 
 
+def literature_fulltext_reading(project_root: Path | str) -> dict[str, Any]:
+    """`download.fulltext=ok` 而号目录里没有抽读件的行（收工门的那一份读数；三态）。
+
+    ## 判据本体在哪里（为什么本函数不自己判）
+
+    这一档的判据只有一处：`wellformed/literature.py` 的 `_rule_lit_fulltext_on_disk`
+    （finding code `literature_fulltext_missing`，2026-11-26 起 severity=`error`）。
+    它问的是"这一行说 `fulltext=ok`，而 `library/<号>/<stem>.txt` 不在盘上"，
+    用的正是写侧同一条名字判据 `litread.text_rel`。收工门若在这里再拼一次
+    "抽读件在哪"，两边迟早漂 —— 所以本函数只调它、数它的结果：
+
+    * 有命中 ⇒ `missing` 逐条给出（`severity` 不参与判定：把那条规则降回 `warning`
+      也不会让门变绿，判据是 `code`）；
+    * `literature` 这一类没查成（表读不出来等）⇒ `checked=False`（不许折成"没有缺"）；
+    * 查成了、一条都没有 ⇒ `checked=True` 且 `missing=[]`。
+
+    ## 它被接进哪一格、为什么是那一格
+
+    `acceptance`（验收表那一格）：它问的是"这一趟的交付口径有没有兑现"，而
+    `literature.download.fulltext=ok` 就是一条声明，抽读件不在盘上就是"声明与
+    盘面矛盾"—— 与 `path_missing` 同类，与 `literature_unprocessed` 同源（都是
+    `literature` 行的现算读数）。放 `artifact_ledger` 会把它读成"`ARTIFACTS.jsonl`
+    与盘上一致"（那份台账不记 `library/` 里的文件）；放 `literature_pending` 会把它
+    读成"待入库候选"（那是 `lit_candidates` 表）。两处都会让照拒信去修的人走错出口。
+
+    真机现场（为什么必须有这一格）：`sunflower-digest-2` 收工那一刻
+    `out/report/STATUS-20261126-0123.json` 的 `wellformed.kinds.literature=malformed`
+    + 5 条 `literature_fulltext_missing`，而八格 8/8 —— 那条读数没有任何门读它。
+    """
+    out: dict[str, Any] = {"checked": False, "state": "", "missing": [], "why": ""}
+    if not str(project_root or "").strip():
+        out["why"] = "没有工作区根 ⇒ 抽读件与 `literature` 行对不了"
+        return out
+    # 表整个不在 ⇒ 这个工作区里一条 `literature` 行都没有，"声明了全文而盘上没有"没有
+    # 可判对象（不是"查过了、一条不缺"，所以带 `note` 说清）；表在而读不懂 ⇒ 走下面的
+    # `checked=False`（没查成，绝不当"没有缺"）。
+    if not (Path(project_root) / "data" / "literature.json").is_file():
+        out.update({"checked": True, "state": "absent",
+                    "note": "没有 `data/literature.json` ⇒ 没有可判的文献行"})
+        return out
+    try:
+        # 函数内 import：`closing` 被几乎所有装配面 import，而 `wellformed` 会拉起
+        # 十几类规则的 import 图 —— 放在模块级会把那条链带进每一次 `import agentflow.closing`。
+        from .wellformed import driver as _WF
+
+        res = _WF.check_kind("literature", project_root)
+    except Exception as exc:  # noqa: BLE001 - 读不成要说出来，不许折成"一条不缺"
+        out["why"] = f"{type(exc).__name__}: {exc}"
+        return out
+    hits = [f for f in res.findings if str(getattr(f, "code", "")) == "literature_fulltext_missing"]
+    out.update({
+        "checked": res.state != "unchecked",
+        "state": str(res.state),
+        "missing": [f.as_dict() for f in hits],
+        "why": ("" if res.state != "unchecked"
+                else ("；".join(str(x) for x in res.reasons) or "literature 这一类没查成")),
+    })
+    return out
+
+
 def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
     """验收表的机器可判行：逐行现算，任一不满足 ⇒ `fail`。
 
@@ -4496,6 +4556,36 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
 - `informational` 那些档（`INFORMATIONAL_KINDS`：`attack_plan_rows` 立项计数）⇒ 照样现算读数，但
   「不参与」阈值判定，也不进研究链覆盖面；逐行都满足 ⇒ `pass`。
     """
+    # ---- 抽读件归位那一档（先于验收表：它不依赖验收表在不在）-------------------
+    # 判据本体在 `wellformed/literature.py` 的 `literature_fulltext_missing`（唯一一处），
+    # 本格只读 `literature_fulltext_reading` 数出来的结果。为什么放在"验收表"这一格、
+    # 为什么读 `code` 而不是 `severity`：见 `literature_fulltext_reading` 的 docstring。
+    _root = getattr(store, "root", None)
+    if _root is not None:
+        _lit = literature_fulltext_reading(_root)
+        rep.readings["literature_fulltext"] = _lit
+        if _lit["missing"]:
+            _where = "、".join(str(x.get("where") or "") for x in _lit["missing"])
+            rep.status["acceptance"] = "fail"
+            rep.findings.append(Finding(
+                "acceptance", "literature_fulltext_missing", "blocker",
+                f"`literature` 里有 {len(_lit['missing'])} 行写着 `download.fulltext=ok`，"
+                f"而号目录里没有抽读件（`library/<号>/<stem>.txt`）：{_where}。"
+                "这一格读的是 `wellformed` 的 `literature_fulltext_missing` 那一份读数"
+                "（同一份判据，门里不另写第二套「有全文」判据）。两条出路：让 A 跑 "
+                "`text.extract(path=…, lit_id=…)` 把正文写进号目录，或把那一行的 "
+                "`download.fulltext` 削成实档（还没抽就删掉这一格）—— 只改盘不改声明、"
+                "只改声明不补盘，两边都算没修。逐行明细见读数 "
+                "`literature_fulltext.missing`（每条 `detail` 里带着缺的那一份 "
+                "`library/...` 与原件 `path`）。"))
+            return
+        if not _lit["checked"]:
+            rep.status["acceptance"] = "unknown"
+            rep.findings.append(Finding(
+                "acceptance", "literature_fulltext_unchecked", "warning",
+                f"`literature` 的抽读件读数没查成（{_lit['why']}）⇒ 这一格不知道"
+                "有没有「声明了全文、盘上却没有」的行（不是「一行不缺」）"))
+            return
     if not str(project_dir or "").strip():
         rep.status["acceptance"] = "unknown"
         rep.findings.append(Finding(

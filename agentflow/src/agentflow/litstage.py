@@ -67,6 +67,7 @@ from . import dedup as D
 from . import identity as IDENT
 from . import litavail as LAV
 from . import litread as LR
+from . import locallib as LL
 from . import schema as S
 from . import sysguard as SG
 from . import textutil as T
@@ -106,6 +107,7 @@ __all__ = [
     "apply_settlement",
     "apply_qualification",
     "decisions_from_plan",
+    "promote_candidate_read_texts",
     "admit",
     "admit_all",
     "report_markdown",
@@ -2816,6 +2818,122 @@ def _register(plan: Mapping[str, Any], registrar: Callable[[Mapping[str, Any]], 
     return lit_ids, failures, got_all
 
 
+def promote_candidate_read_texts(
+    store: Store,
+    mapping: Iterable[Mapping[str, str]],
+    *,
+    receipts: Mapping[str, Mapping[str, Any]] | None = None,
+    literature: Mapping[str, Mapping[str, Any]] | None = None,
+    actor: str = "agent-A",
+) -> list[dict]:
+    """把"这一批刚登记成功"的候选期抽读件落成号目录抽读件（结算点的唯一入口）。
+
+    ## 为什么在这里、而不是在 `text.extract` / `_h_register`
+
+    ① 这是"候选期资产 → 已登记资产"的那一次状态迁移：之前还没有文献号（`out/texts/`
+    是候选期目录），之后有了号与 `literature.path`。迁移只发生一次，主人就该是它。
+    ② 只有这个时点上三样东西同时齐：`slot → lit_id`（`_register` 的产出）、`store`
+    （能读 `literature` 行拿 `path`）、抽读回执（`litavail.receipts_by_slot`）。
+    ③ 落点实现只有 `locallib.land_read_text` 一处；本函数只做"从回执里取源、从行上
+    取目标名"，不自己拼任何路径（目标名由 `litread.text_rel` 现算）。
+
+    ## 三态（六档结局，见 `locallib` 的 `TEXT_LAND_*`）
+
+    * 没有抽读回执 / 回执没记 `text_abs` / 那份 `.txt` 已不在盘上 ⇒ `no_source`：
+    这一条候选期没抽过（或抽读件被删）—— 什么都不做，也不建目录、不造空文件；
+    * 行上没有 `path` ⇒ `no_path`：目标名算不出来，不猜；
+    * 其余四档原样透传 `land_read_text` 的 `written` / `reused` / `conflict` /
+    `text_changed`。
+
+    ## 只归位"新建出来的行"
+
+    调用方（`admit_all`）只传 `created=True` 的那些槽：登记命中判重时这一条候选没有
+    新建 `literature` 行，号目录里的字节归既有那一行管 —— 把候选的正文写进去，会让
+    那一行的抽读件内容与它自己的原件不是同一份（真机 sunflower-digest-2 的
+    `000016/000019` 那两个不同 URL 的候选就是这种形态）。
+
+    `mapping` 是 `[{"slot": …, "lit_id": …}, …]`；`receipts` / `literature` 可注入
+    （判据要用确定的读数跑，不依赖盘上别的东西）；缺省现读。
+    """
+    items = [dict(one) for one in mapping if one]
+    if not items:
+        return []
+    got_receipts = (dict(receipts) if receipts is not None
+                    else LAV.receipts_by_slot(store.root))
+    if literature is not None:
+        rows = {str(k): dict(v) for k, v in literature.items()}
+    else:
+        rows = {str(r.get("lit_id") or ""): dict(r) for r in store.rows("literature")}
+    out: list[dict] = []
+    for one in items:
+        slot = str(one.get("slot") or "").strip()
+        lit_id = str(one.get("lit_id") or "").strip()
+        rec = dict(got_receipts.get(slot) or {})
+        row = rows.get(lit_id) or {}
+        reading: dict[str, Any] = {
+            "slot": slot, "lit_id": lit_id,
+            "request_id": str(rec.get("request_id") or ""),
+            "text_abs": str(rec.get("text_abs") or ""),
+            "sha256": str(rec.get("sha256") or ""),
+        }
+        if not str(reading["text_abs"]).strip():
+            reading.update({"status": LL.TEXT_LAND_NO_SOURCE, "rel": "",
+                            "why": "候选期没有抽读回执（这一条没抽过 ⇒ 不归位）"})
+            out.append(reading)
+            continue
+        if not str(row.get("path") or "").strip():
+            reading.update({"status": LL.TEXT_LAND_NO_PATH, "rel": "",
+                            "why": "这一条 literature 行上没有 path ⇒ 目标名算不出来"})
+            out.append(reading)
+            continue
+        try:
+            LL.land_read_text(
+                store.library, lit_id, literature_path=str(row.get("path") or ""),
+                source=reading["text_abs"], sha256_hex=reading["sha256"],
+                reading=reading)
+        except (OSError, ValueError) as exc:
+            # 写不动 / 回执的 sha 形态非法 / 号非法：都如实记下来，绝不让一次"归位"
+            # 把已经成功的登记结算带崩（`admit_all` 的失败出口只管注册本身）。
+            reading.update({"status": "write_failed", "rel": "",
+                            "why": f"{type(exc).__name__}: {exc}"})
+        if reading.get("dir_matches_lit_id") is False:
+            # 存量形态：`literature.path` 的首段不是文献号（真机 sunflower-digest-3 的
+            # `000000` 行 path=`000006/…pdf`）。抽读件已经跟着原件落了（`text_rel` 的口径），
+            # 但这件事必须读得出来 —— "目录名不是号"是另一条缺陷，不在这里静默改名。
+            reading["why"] = (
+                f"literature.path 的首段 {reading.get('dir')!r} 与文献号 {lit_id!r} 不一致"
+                "（既有形态）：抽读件跟着原件落在那条目录里，不另开号目录")
+        out.append(reading)
+    return out
+
+
+def _log_read_text_promotions(tx: Any,
+                              promotions: Sequence[Mapping[str, Any]]) -> None:
+    """把归位结局落成事件（`op=info`：从哪来 / 落到哪 / sha），在结算事务里留痕。
+
+    为什么单独成函数：`admit_all` 已经贴着 `check_three_cells` 的 fn200 那一格（200 行
+    def 的软基线），把留痕的循环摊在里面会把它顶过线。这一支只写日志、不碰表，
+    抽出来不改变任何行为。
+    """
+    for one in promotions:
+        tx.info("text.land_read_text", **one)
+
+
+def _promote_created_reads(store: Store, lit_ids: Mapping[str, str],
+                           got_all: Mapping[str, Mapping[str, Any]], *,
+                           actor: str = "agent-A") -> list[dict]:
+    """只取"本次新建出来的行"交给 :func:`promote_candidate_read_texts`（`admit_all` 用）。
+
+    为什么按 `created` 筛（理由见 :func:`promote_candidate_read_texts`）：判重命中的
+    槽没有新行，它的号目录归既有那一行；把候选正文写进去会造出"抽读件与原件不是
+    同一份"的目录。`created` 由登记路径给（`search_tools._h_register` 的 13 键回执）。
+    """
+    wanted = [{"slot": slot, "lit_id": lid} for slot, lid in lit_ids.items()
+              if str(lid or "").strip()
+              and bool((got_all.get(slot) or {}).get("created"))]
+    return promote_candidate_read_texts(store, wanted, actor=actor)
+
+
 def admit(
     store: Store | None,
     *,
@@ -3091,9 +3209,15 @@ def admit_all(
             detail={"violations": bad, "path": snapshot["path"]})
     # ---- ④ 批量注册 + 回填（同一事务） ------------------------------------
     lit_ids, failures, got_all = _register(plan, registrar)
+    # ---- ④' 抽读件归位（登记成功、literature.path 落定之后；唯一落点实现是
+    # `locallib.land_read_text`，见 `promote_candidate_read_texts`）。失败不拦结算：
+    # 结局留在 `read_text_promotions` + 事件流里，缺的 `.txt` 由收工门 `acceptance`
+    # 那一格（读 wellformed 的 `literature_fulltext_missing`）兜底。
+    promotions = _promote_created_reads(store, lit_ids, got_all, actor=actor)
     decisions = _decisions_from(plan, lit_ids, failures)
     with store.tx("lit_candidates", actor=actor, note="lit.admit_all") as tx:
         apply_settlement(tx, decisions, root=store.root)
+        _log_read_text_promotions(tx, promotions)
         # FX3·甲：结算之后不再把批外的 pending 折成 rejected(not_screened) ——
         # 它们保持 pending 进下一批（收工闸按全表看，所以"没清完"仍会拦）。
         settled = [dict(r) for r in tx.rows("lit_candidates")
@@ -3172,6 +3296,7 @@ def admit_all(
         "refused": refused,
         "cleared": list(plan.get("cleared") or []),
         "registered": len(done),
+        "read_text_promotions": promotions,
         "report": rep,
         "report_path": (rep or {}).get("path"),
         "snapshot_path": snapshot["path"],

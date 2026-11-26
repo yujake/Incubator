@@ -295,11 +295,20 @@ def _rule_lit_fulltext_on_disk(ctx: _Ctx) -> list[Finding]:
       "文件不在"、又有"抽读件不在"，读数互相冒充）；
     * `path` 指向的本身就是文本（`.txt` / `.md` …）⇒ 不报：那一份就是正文；
     * `path` 指向二进制原件（PDF / HTML）而它的抽读件（`litread.text_rel`：同目录、
-      同 stem、`.txt`）不在 ⇒ 报 `warning`，detail 点名缺的是哪一份、两条出路。
+      同 stem、`.txt`）不在 ⇒ 报 `error`，detail 点名缺的是哪一份、两条出路。
 
-    为什么是 `warning` 而不是 `error`：这一条不否定"原件在、能抽"，它只否定"已经抽好并
-    可读"这句话；但 `warning` 在 `states.state_of`（`wellformed/states.py`）里同样把这一类翻成 `malformed` ——
-    声明与盘面矛盾这件事不许静默。
+    ## 为什么是 `error` 而不是 `warning`（2026-11-26 TEXTPROMOTE）
+
+    `warning` 只进读数、不翻"这一条能不能交"：真机 `sunflower-digest-2` 的
+    `out/report/STATUS-20261126-0123.json` 里这条规则报了 5 条（`literature` 那一类
+    被读成 `malformed`），而收工门八格一格都不读 `wellformed` ⇒ 8/8 收工。这一条问的是
+    "这一行说 `fulltext=ok`，书架里却没有那份正文"—— 声明与盘面矛盾，与
+    `path_missing` 同类，是硬伤不是建议。
+
+    它同时被接进收工门的 `acceptance` 那一格（`closing.literature_fulltext_reading`
+    只数本规则的结果，不另写第二套"有全文"判据）。severity 只决定这一条在
+    `wellformed` 读数里的档位，门的判据读的是 `code` —— 把本行改回 `warning`
+    不会让门变绿（`tests/test_lit_text_promotion.py` 的 h 格钉着这一条）。
     """
     out: list[Finding] = []
     if ctx.root is None:
@@ -329,7 +338,7 @@ def _rule_lit_fulltext_on_disk(ctx: _Ctx) -> list[Finding]:
             "两条出路：让 A 跑 `text.extract(path=…, lit_id=…)` 把正文写成那份 `.txt`"
             "（与原件同目录、同 stem），或把 `download.fulltext` 改成实档"
             "（还没抽就删掉这一格，别写 `ok`）",
-            row_no=n, field_name="download.fulltext", severity="warning"))
+            row_no=n, field_name="download.fulltext", severity="error"))
     return out
 
 

@@ -74,6 +74,7 @@ __all__ = [
     "ingest_directory",
     "is_declared",
     "keeps_original",
+    "land_read_text",
     "library_landing",
     "library_landing_name",
     "library_name_of",
@@ -387,6 +388,152 @@ def library_landing(library: Path | str, source: Path | str,
                 base, want, lit_id=lid, source_size=size),
         })
     return rel, dest
+
+
+# --------------------------------------------------------------------------- #
+# 抽读件归位：候选期 `out/texts/<候选名>.txt` ⇒ `library/<文献号>/<stem>.txt`
+# --------------------------------------------------------------------------- #
+#
+# ## 为什么需要这一环（真机 sunflower-digest-2/3 的现场）
+#
+# `text.extract` 在候选期（`lit_id="cand:<槽位>"`）把正文落进 `out/texts/`：那时还没有
+# 文献号，写进 `library/` 会把候选冒充成已收编。`text_tools._text_dir` 的注释逐字许诺
+# 「等登记之后再按号归位」—— 而在本函数之前，全仓没有这一环：登记只收编原件（PDF），
+# 抽出的正文永远留在 `out/texts/`，于是 `literature.download.fulltext=ok` 在书架上
+# 查不到那一份正文（真机 sunflower-digest-2：5 行全部如此；sunflower-digest-3：
+# 000008/000011 两行如此，000006 那一份在号目录里是后来又一次 `text.extract` 的偶然）。
+#
+# ## 不变量（一条）
+#
+# 一条 `literature` 行的盘上资产 = 原件 + 与它同目录同 stem 的抽读件。
+# 目标名只由 `litread.text_rel` 决定（同一条判据：写侧这一处、`wellformed` 那一处、
+# `fs.read` 的路由那一处都读它），本函数不另拼一份。
+#
+# 规范形态下它们的目录就是文献号（`library/<6位号>/`）；存量里也有 `path` 首段是
+# 候选槽位号的行（真机 sunflower-digest-3：`000000` 的 path 是 `000006/…pdf`）。那一档
+# 抽读件仍跟着原件走，并把 `dir_matches_lit_id=False` 记进回执 —— 目录名不是文献号是
+# 另一条缺陷，不在这里用一次静默改名盖掉（详见 `land_read_text` 的 docstring）。
+
+#: 抽读件归位的七档结局（`land_read_text` 的 `reading["status"]`）。
+#:
+#: 三态纪律：这七档互斥且都能读出来 —— "写成了 / 早就同内容 / 撞了不同内容 /
+#: 源变了 / 没有源 / 行上没有 path / 行上的 path 形态非法"。把后几档折成"没做成"会让
+#: "候选没抽过"（正常）与"抽过但落不进去"（要人看）同形，而这两种的处置相反。
+TEXT_LAND_WRITTEN = "written"            # 这次真的写下了（目标原本不在）
+TEXT_LAND_REUSED = "reused"              # 目标已存在且内容相同：零写入
+TEXT_LAND_CONFLICT = "conflict"          # 目标已有另一份不同内容：不覆盖，报冲突
+TEXT_LAND_TEXT_CHANGED = "text_changed"  # 源文件与抽读回执的 sha 不符：不写
+TEXT_LAND_NO_SOURCE = "no_source"        # 候选期没抽过 / 抽读件已不在盘上：什么都不做
+TEXT_LAND_NO_PATH = "no_path"            # 行上没有 `literature.path`：算不出目标名
+TEXT_LAND_BAD_PATH = "bad_path"          # 行上的 path 形态非法（`library/` 前缀 / 越界）：不猜
+
+
+def _land_reading(reading: dict | None, **cells: Any) -> None:
+    """把一档结局写进可选出参 `reading`（`None` ⇒ 不写；与 `library_landing` 同形）。"""
+    if reading is not None:
+        reading.update(cells)
+
+
+def land_read_text(library: Path | str, lit_id: str, *,
+                   literature_path: str | None, source: Path | str | None,
+                   sha256_hex: str = "",
+                   reading: dict | None = None) -> tuple[str, Path | None]:
+    """候选期抽出的正文 ⇒ 这一条文献号目录下的正式抽读件（唯一实现）。
+
+    ## 签名里每一格回答什么
+
+    * `library`：书架根（`Store.library`）；
+    * `lit_id`：已经发出的文献号（4 位老号 / 6 位新号）—— 它的用处是①校验目标目录名
+      是合法号、②在回执里点明"归位的是哪一条"；目标目录以 `literature_path` 为准
+      （理由见下一条）；
+    * `literature_path`：登记之后那一行上的 `path`（规范形态 `<6位号>/<原件名>`）。
+      目标名由 `litread.text_rel(literature_path)` 现算 = 同目录、同 stem、`.txt`；本函数
+      不接受"调用方自己拼一个抽读件名"，否则写侧与 `wellformed` / `fs.read` 会各判一份。
+
+      为什么目标目录跟 `path` 走、而不是硬拼 `library/<lit_id>/`：抽读件必须与原件
+      同目录（`wellformed` 与 `fs.read` 都只按 `text_rel(path)` 找它）。真机上确实存在
+      `path` 首段 ≠ `lit_id` 的存量行（`sunflower-digest-3`：`000000` 的行 `path` 是
+      `000006/…pdf` —— A 在登记前自己 `fs.move` 到 `library/<候选槽位>/`，登记路径
+      `_adopt_file` 见"已在库里"就直接采用那个相对名）。硬拼 `library/<lit_id>/` 会让
+      抽读件与原件分居两条目录，`wellformed` 永远报 `literature_fulltext_missing`。
+      所以这一档照原件的目录落，并把 `dir_matches_lit_id=False` 如实记进回执 ——
+      "目录名不是文献号"是另一条缺陷（归 layout / `_adopt_file` 那一处），不在这里
+      用一次静默改名把它盖掉；
+    * `source`：候选期那份 `.txt`（抽读回执的 `text_abs`）；它不在盘上就不写、也不建目录
+      （"候选期没抽读过"是正常态，不许造一个空文件把它冒充成"有正文"）；
+    * `sha256_hex`：抽读回执记的正文指纹。给了就核：与 `source` 现算不符 ⇒
+      `text_changed`，不写（三态：不是"没查"也不是"写了"）；
+    * `reading`：可选出参，`{"status", "rel", "sha256", "source", "expected_sha256",
+      "target_sha256", "lit_id", "dir", "dir_matches_lit_id"}`。
+
+    ## 幂等与冲突（这是本函数存在的两条判据）
+
+    * 目标已存在且内容与源相同 ⇒ `reused`，一个字节都不写（重跑 `lit.admit_all`、
+      或后来又一次 `text.extract` 已经在号目录里落过同一份，都走这一档）；
+    * 目标已存在且内容是另一份 ⇒ `conflict`，不覆盖（覆盖会毁掉已建立的引文
+      定位，而且"同一篇文献两份正文"这件事必须被人看见，不许由后到者静默取胜）；
+    * 内容是复制过去的，不是搬走：`out/texts/` 那一份是 `data/lit_reads.jsonl`
+      回执的锚（`litavail` 读侧要用 `text_abs + text_version` 核"读的是不是同一份"），
+      搬走会让回执指向一个不存在的文件。
+
+    返回 `(library 相对名, 绝对落点)`；没有目标名（`literature_path` 空 / 形态非法）时
+    返回 `("", None)` 或 `(算不出的名字, None)`，其它"没写成"的档返回 `(相对名, None)`
+    —— `None` 明确表示"这次没有写出来的那份文件"。
+    """
+    base = Path(library)
+    lid = str(lit_id or "").strip()
+    if not _ENTRY_ID_RE.match(lid):
+        raise ValueError(
+            f"抽读件的目录名必须是文献号（4 位老号 / 6 位新号），收到 {lit_id!r} —— "
+            "`library/<文献号>/<stem>.txt` 是现行规范（2026-11-25）")
+    row_path = str(literature_path or "").replace("\\", "/").strip()
+    target_rel = LR.text_rel(row_path) if row_path else ""
+    if not target_rel:
+        _land_reading(reading, status=TEXT_LAND_NO_PATH, rel="", lit_id=lid,
+                      source=str(source or ""), sha256="")
+        return "", None
+    if LR.path_shape(row_path) in (LR.SHAPE_BAD, LR.SHAPE_UNJUDGED):
+        _land_reading(reading, status=TEXT_LAND_BAD_PATH, rel=target_rel, lit_id=lid,
+                      source=str(source or ""), sha256="",
+                      why=(f"literature.path={row_path!r} 的形态非法（{LR.path_shape(row_path)}）"
+                           "⇒ 不猜目标名"))
+        return target_rel, None
+    head, _sep, tail = target_rel.partition("/")
+    dir_name = head if tail else ""
+    dest = base / target_rel
+    want = str(sha256_hex or "").strip().lower()
+    if want and not _SHA256_RE.fullmatch(want):
+        raise ValueError(
+            f"抽读回执的内容 hash 必须是 64 位小写十六进制（收到 {sha256_hex!r}）—— "
+            "`text_changed` 的判据要靠它")
+    cells: dict[str, Any] = {"dir": dir_name, "dir_matches_lit_id": bool(dir_name == lid)}
+    src_text = str(source or "").strip()
+    src = Path(src_text) if src_text else None
+    if src is None or not src.is_file():
+        _land_reading(reading, status=TEXT_LAND_NO_SOURCE, rel=target_rel, lit_id=lid,
+                      source=src_text, sha256="", expected_sha256=want, **cells)
+        return target_rel, None
+    got = sha256_file(src)
+    if want and got != want:
+        _land_reading(reading, status=TEXT_LAND_TEXT_CHANGED, rel=target_rel, lit_id=lid,
+                      source=src_text, sha256=got, expected_sha256=want, **cells)
+        return target_rel, None
+    if dest.exists():
+        have = sha256_file(dest) if dest.is_file() else ""
+        if have == got:
+            _land_reading(reading, status=TEXT_LAND_REUSED, rel=target_rel, lit_id=lid,
+                          source=src_text, sha256=got, target_sha256=have, **cells)
+            return target_rel, dest
+        _land_reading(reading, status=TEXT_LAND_CONFLICT, rel=target_rel, lit_id=lid,
+                      source=src_text, sha256=got, target_sha256=have, **cells)
+        return target_rel, dest
+    # 谁写谁 mkdir：目录只在"真的有字节要落"这一刻建（历史教训：先建目录再搬字节
+    # 会在库里留下 60 个空目录）。
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dest)
+    _land_reading(reading, status=TEXT_LAND_WRITTEN, rel=target_rel, lit_id=lid,
+                  source=src_text, sha256=got, target_sha256=got, **cells)
+    return target_rel, dest
 
 
 def _machine_summary(pages: int, *, name: str = "") -> str:

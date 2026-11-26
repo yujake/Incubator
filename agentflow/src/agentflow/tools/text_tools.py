@@ -98,7 +98,11 @@ def _text_dir(ctx: "_Ctx", source: Path, lit_id: str, out_dir: str) -> Path:
     # 落成 `library/<名>.txt` —— 而书架里出现没有 literature 行的文件本身就是结构异常
     # （`agent_skills.py:2807` 逐字）。两条合法出路：
     #   ① 原件已经住在 `library/<号>/` 里 ⇒ 与它同目录（这一份就是那一条的抽读件）；
-    #   ② 否则落候选期目录 `out/texts/`，等登记之后再按号归位。
+    #   ② 否则落候选期目录 `out/texts/`；登记那一刻由结算点把它按号归位 ——
+    #      `litstage.admit_all` 调 `litstage.promote_candidate_read_texts` →
+    #      `locallib.land_read_text` 落成 `library/<号>/<stem>.txt`（幂等、冲突不覆盖）。
+    #      2026-11-26 TEXTPROMOTE 之前这里只写了"等登记之后再按号归位"这句承诺，
+    #      全仓没有那一环 ⇒ 真机 `sunflower-digest-2` 5 条正文永远留在 `out/texts/`。
     try:
         rel = Path(source).resolve().relative_to(Path(library).resolve())
     except (ValueError, OSError):
