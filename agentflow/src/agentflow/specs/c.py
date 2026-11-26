@@ -96,11 +96,16 @@ ACTIONS: tuple[ActionSpec, ...] = (
 
     # 只读、零模型调用 ——
     # 读 `statements` + `dependencies`，按 `path_group` 分组（组内 AND / 组间 OR），
-    # 每组走到根（`lit:` / 无前提自证定理 / 原始概念），挑最短那组；`target` 允许给别名。
+    # 每组走到根（四档：文献 / 定义（概念有定义）/ 穷举实验 / 无前提自证定理），
+    # 挑最短那组；`target` 允许给别名。给 `targets`（多目标）时改走"去重自足路径"
+    # 规划：`proof_path.plan_path` 的四格（order / roots / excluded / choices）
+    # 放 payload 顶层，报告仍登记成 `proof_chain`。
     ActionSpec(
         "C", "proof_chain",
-        "一条成果的最短证明依赖链（按 path_group 分组；根 = 文献 / 无前提自证定理 / 原始概念）",
-        _obj({"target": _S, "max_depth": _I, "k": _I, "weights": _OBJ}, ("target",)),
+        "一条成果的最短证明依赖链（根 = 文献 / 定义 / 穷举实验 / 无前提自证定理）；"
+        "给 `targets` 时改为多目标的去重自足路径规划（order / roots / excluded / choices）",
+        _obj({"target": _S, "targets": _ARR_S, "max_depth": _I, "k": _I,
+              "weights": _OBJ}, ("target",)),
         "AnalysisReport", side_effect="read", handler_name="proof_chain",
     ),
 )

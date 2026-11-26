@@ -16,10 +16,17 @@
   （`best_proof_no` / `best_group`）。
 - 长度：`length` 报这条候选路径的最短可行分支（组内取最长的边、分支间取最短的分支）；
   只有全不可行时才报"最深的那条已走前缀"并在 `why` 里写明没有可行分支。
-- 根只有三种：`lit:`（真实论文，正文里可照引）、无前提自证定理（没有边 +
-  `evidence_kind="proof"`）、概念（`kind="concept"` 且有定义 —— 按"定义在不在"判，
-  历史行上的 `concept:primitive` 哨兵照旧是根）。"没有边又没有证明证据" ⇒ 依赖没写
+- 根有四档（2026-11-26 补第四档）：`lit:`（真实论文，正文里可照引）、概念
+  （`kind="concept"` 且有定义 —— 按"定义在不在"判，历史行上的 `concept:primitive`
+  哨兵照旧是根）、穷举实验（`exp:` 在册且行级穷举事实齐，见
+  `proof_path.experiment_root_reading`）、无前提自证定理（没有边 +
+  `evidence_kind="proof"`，或经审核的自证定理）。"没有边又没有证明证据" ⇒ 依赖没写
   （`unknown`），不是根。
+- 选路：长度并列时先比"新增几个本文别处用不到的根"（`path_costs`，例 2 的 C 靠它
+  在补上第四档之后仍选 B 路径），再比证明号 / 组号。每组的这一格落在 payload 的
+  `new_roots` / `new_root_nodes`。
+- 多目标：`targets` 非空时这一条动作改为"去重自足路径"规划（`proof_path.plan_path`
+  的四格：`order` / `roots` / `excluded` / `choices`），报告仍登记成 `proof_chain`。
 - 边界：环 / 超 `max_depth` / 悬空边 / 依赖没写，都按"哪条分支、为什么不可行"逐条进
   那一组的 `failures`（`blocking` 说明它是不是那一组不可行的原因；备选分支断了不影响
   另一条走到根），`cycle` / `truncated` 只描述真正挡住这条路的那些；跨组汇总按节点去重
@@ -38,9 +45,6 @@
   `frontier_checked` 分开。
 """
 from __future__ import annotations
-from pathlib import Path
-
-import json
 
 from ._support import Any, Mapping, Sequence
 # 依赖的 `used_by` 尾巴（`#pN`）只有一个解析点（`proofloc`）：两份解析意味着
@@ -57,29 +61,19 @@ from ..migrate_concepts import PRIMITIVE_PROOF as CONCEPT_PRIMITIVE_MARKER  # no
 # 候选路径的"形状"读数（业主 2026-10-22）：只在这一层之上补形状，改不动
 # 下面任何一个 OR / AND 判据（`_or_holds` / `_and_length` 那一族一个字都不碰）。
 from .path_shape import path_shapes  # noqa: E402
+# 四档根的第四档（穷举实验）与"新增几个根"的并列判据都只有一处实现；
+# 多目标规划的入口也在那一份里（本文件只转发，不长过 800 行）。
+from .proof_path import (  # noqa: E402
+    _split_used_by,
+    experiment_root_reading,
+    path_costs,
+    plan_report,
+    verified_ok,
+)
 
-#: 走到根就算完的两种 `kind`（第三种是 `lit:` 行本身，见 `_DepGraph.is_root`）。
+#: 走到根就算完的两种 `kind`（第三种是 `lit:` 行本身，第四种是 `exp:` 穷举实验，
+#: 两者都在 `_DepGraph.is_root` 里判）。
 _PROOF_KINDS = ("proof",)
-
-
-def _split_used_by(used_by: str) -> tuple[str, int, str]:
-    """把一条依赖的 `used_by` 拆成 `(命题侧键, 证明号, problem)`，先按前缀分流。
-
-    为什么分流必须在调 `proofloc` 之前（2026-10-22 审计的三条硬约束之一）：
-    `doc:` 前缀的 `used_by` 也用 `#`（`doc:0001#claim-3`，见
-    `tools.doc_tools.dependencies_for_doc` 的归属判据）—— 那个尾巴是 claim 号、
-    不是证明号。不分流就把 `#claim-3` 送进 `proofloc`，于是一条正常的 claim 引用
-    被记成"坏尾巴"（`problem` 非空），而坏尾巴的读法是"按 canonical 读" ——
-    读数看着没变，台账里已经悄悄多了一类假缺陷。
-
-    `problem` 非空 = 尾巴是坏的（`#p0` / `#pabc` / 多段 …），此时按 canonical（第 1 条）
-    读，并把坏尾巴原文交回调用方留痕 —— 绝不抛：读侧拿不到答案比"读成 canonical 并留痕"更坏。
-    """
-    text = str(used_by or "")
-    if text.startswith("doc:"):
-        return text, _PL.DEFAULT_PROOF_NO, ""
-    head, number, problem = _PL.parse_used_by_checked(text)
-    return head, number, problem
 
 
 def _bad_tail_warnings(graph: "_DepGraph") -> list[str]:
@@ -243,14 +237,21 @@ class _ProofChain:
         return "\n".join(lines)
 
     def proof_chain(self, target: str, *, max_depth: int = 6, k: int = 1,
-                    weights: Mapping[str, float] | None = None):
+                    weights: Mapping[str, float] | None = None,
+                    targets: Sequence[str] | str = ()):
         """`target` 的最短证明依赖链（按 `path_group` 分组；返回每组一条 + 挑最短那组）。
+
+        `targets` 非空时改走多目标规划（`proof_path.plan_report`：去重自足路径的四格
+        放 payload 顶层），报告仍登记成 `proof_chain`；单目标那一支一个字不改。
 
         三态（本题最要紧的一处）：读不成不是"没有依赖" ——
         `statements` / `dependencies` 读不出来 ⇒ `ok_=False` + 说清读不成什么；
-        没有任何依赖边、而且也不满足"根"的三个条件 ⇒ 那一项进 `unwritten`
+        没有任何依赖边、而且也不满足"根"的四档条件 ⇒ 那一项进 `unwritten`
         （"依赖没写"），不是"到根了"。
         """
+        if targets:
+            return plan_report(self, target, targets=targets, max_depth=max_depth,
+                               k=k, weights=weights)
         max_depth = max(1, int(max_depth))
         k = max(1, int(k))
         warnings: list[str] = []
@@ -313,11 +314,21 @@ class _ProofChain:
                 got = graph.walk(node["stmt_id"], group=group, proof_no=proof_no,
                                  edges=edges, max_depth=max_depth)
                 groups_out.append(got)
-        # 并列（长度相同）按"证明号、组号"升序取前 k 组；`groups_total` 报全部组数
-        # （不假装只有 k 组）。单条证明时顺序与改前逐字相同（证明号恒为 1）。
+        # 候选路径的形状读数（业主 2026-10-22）：每条候选路径一行，摆形状、不打分。
+        # 它只在 `groups_out` 之上算，改不动上面任何一条 AND / OR 判据。
+        shapes = path_shapes(graph, node["stmt_id"], groups_out, max_depth=max_depth)
+        # 并列（长度相同）先比"新增几个本文别处用不到的根"，再按"证明号、组号"升序
+        # （`groups_total` 报全部组数，不假装只有 k 组）。长度不同时长度仍第一 ——
+        # 第四档补上之后，例 2 的 C 两条路径长度相同，全靠新增根这一格分出 B。
+        costs = path_costs(graph, shapes.get("rows") or [], target=node["stmt_id"])
+        for g in groups_out:
+            got = costs.get((g.get("proof_no") or 1, g["group"])) or {}
+            g["new_roots"] = int(got.get("new_roots") or 0)
+            g["new_root_nodes"] = list(got.get("new_root_nodes") or [])
         ranked = sorted(groups_out,
                         key=lambda g: (g["length"] if g["reached"] else 10 ** 6,
-                                       g.get("proof_no") or 1, g["group"]))
+                                       g["new_roots"], g.get("proof_no") or 1,
+                                       g["group"]))
         best = ranked[0] if ranked and ranked[0]["reached"] else None
         cycle_count = unreached_count = 0
         truncated = False
@@ -340,9 +351,6 @@ class _ProofChain:
         target_is_root, target_why = graph.is_root(f"stmt:{node['stmt_id']}")
         bad_used = list(graph.bad_used_by)
         label = node.get("label") or node["stmt_id"]
-        # 候选路径的形状读数（业主 2026-10-22）：每条候选路径一行，摆形状、不打分。
-        # 它只在 `groups_out` 之上算，改不动上面任何一条 AND / OR 判据。
-        shapes = path_shapes(graph, node["stmt_id"], groups_out, max_depth=max_depth)
         # 形状与前沿都走 `.get`：这一层只消费 `path_shapes` 的读数，不许假定它一定
         # 带全那几格 —— 判据里那个"只给最短那条"的替身（反真空）就只交 rows。
         # 没交 `frontier` 那一格时按"没交前沿读数"落（`frontier_checked=False`）：
@@ -493,7 +501,9 @@ class _DepGraph:
     def __init__(self, *, stmts, deps, exps, lits, root: Any = None) -> None:
         self.root = root
         self.stmts = SL.index_by_id(stmts)
-        self.exps = {str(r.get("exp_id") or ""): dict(r) for r in exps}
+        # 主键是 `experiment_id`：旧写法读 `exp_id`（experiments 表里没有这个键 ⇒
+        # 9 行只建出 1 条空键，而且 `is_root` 从来没读过它 —— 第四档补上时一并修好）。
+        self.exps = {str(r.get("experiment_id") or ""): dict(r) for r in exps}
         self.lits = {str(r.get("lit_id") or ""): dict(r) for r in lits}
         #: 边索引：使用点 → 证明号 → `path_group` → 边。两层键都是这台机器的口径：
         #: 第一层是"这条命题的第几条证明"（`#pN`，不带尾巴 = canonical #p1），
@@ -503,6 +513,9 @@ class _DepGraph:
         #: 这些边的索引键是原样串 ⇒ `groups_of(命题号)` 查不到它们（索引口径不变：
         #: 坏尾巴不折成 `#p1`）；留这一格是为了让它们"消失"变成一条可读的读数。
         self.bad_used_by: list[str] = []
+        #: 被依赖端（节点号）→ 引用它的使用点（节点号）。`path_costs` 判「本文别处用得
+        #: 到」只用这一张反向索引（第四档补上后，例 2 的 C 靠它把 A 路径判成多引入根）。
+        self.users: dict[str, list[str]] = {}
         for d in deps:
             used = str(d.get("used_by") or "")
             if not used:
@@ -513,6 +526,10 @@ class _DepGraph:
             if problem and used not in self.bad_used_by:
                 self.bad_used_by.append(used)
             key = head[5:] if head.startswith("stmt:") else head
+            tgt, _kind = self.target_of(d)
+            user_ref = key if key.startswith("doc:") else f"stmt:{key}"
+            if tgt and key and user_ref not in self.users.setdefault(tgt, []):
+                self.users[tgt].append(user_ref)
             try:
                 group = int(d.get("path_group") or 1)
             except (TypeError, ValueError):
@@ -556,35 +573,24 @@ class _DepGraph:
         return "", ""
 
     def _verified_ok(self, stmt_id: str) -> bool:
-        """这条命题的「审核台账」里有没有"成立"。
+        """这条命题的「审核台账」里有没有"成立"（唯一实现在 `proof_path.verified_ok`）。
 
-        台账是 `verifications/<命题号>.jsonl`（V 每次审核追加一行，见
-        `agentflow/verifications.py`）。读不到 ⇒ 「False」（"没读到"不等于"审过了"）；
-        解析不动 ⇒ 也在 False 这一侧 —— 三态纪律：宁可说"没审核"，也不许放一条
-        没审过的命题进定理库当根。
+        台账是 `verifications/<命题号>.jsonl`。读不到 / 解析不动 ⇒ False ——
+        三态纪律：宁可说"没审核"，也不许放一条没审过的命题进定理库当根。
         """
         root = getattr(self, "root", None) or getattr(getattr(self, "store", None), "root", None)
-        if not root:
-            return False
-        path = Path(root) / "verifications" / f"{stmt_id}.jsonl"
-        if not path.is_file():
-            return False
-        try:
-            for line in path.read_text(encoding="utf-8").splitlines():
-                if not line.strip():
-                    continue
-                row = json.loads(line)
-                if "成立" in str(row.get("verdict") or ""):
-                    return True
-        except Exception:  # noqa: BLE001 - 读/解析不动 ⇒ 不当成"审过了"
-            return False
-        return False
+        return verified_ok(root, stmt_id)
 
     def is_root(self, node: str) -> tuple[bool, str]:
-        """是不是根（三种之一）；`(False, why)` 里的 `why` 是没到根的原因。"""
+        """是不是根（四档之一）；`(False, why)` 里的 `why` 是没到根的原因。"""
         kind, _, bare = node.partition(":")
         if kind == "lit":
             return (True, "") if bare in self.lits else (False, "文献不在册")
+        if kind == "exp":
+            # 第四档（2026-11-26）：在册的穷举实验是根。判据只有一处
+            # （`proof_path.experiment_root_reading` 的行级四格），`why` 点名缺哪一格。
+            got = experiment_root_reading(self.exps.get(bare))
+            return bool(got["root"]), str(got["why"])
         if kind != "stmt":
             return False, f"{kind} 不是可走到根的节点（手稿不入链）"
         row = self.stmts.get(bare)

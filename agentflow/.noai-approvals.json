@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-26T17:51:52+08:00",
+  "generated_at": "2026-11-26T20:10:05+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -427,11 +427,11 @@
       "path": "src/agentflow/specs/c.py",
       "glob": "src/agentflow/specs/c.py",
       "category": "auth-audit",
-      "sha256": "dae5c42ea9f9e993b106ffaf0fbf4ad7bdc27ee256d8f947aed8d5b08d061416",
-      "authored": "unknown",
-      "authored_basis": "inferred",
-      "change_note": "p321 最终冻结（2026-11-23）：SPECS-POLICY 十一份 policy 的时钟旧口径 + D-POLICY 写集行面 + 台账分工；只改 policy 正文。登记≠批准，仍需 2 名人类 reviewer 逐行走查",
-      "changed_this_session": null,
+      "sha256": "a5427927c7217dda6b42fe224e5a527b6be3d6abea5de45f8bdaf7f8b9e0a882",
+      "authored": "ai-agent",
+      "authored_basis": "attested",
+      "change_note": "CPATH：proof_chain 的 ActionSpec 加 targets 参数、根口径补第四档（穷举实验）与多目标规划；判据 test_proof_path_*。仍需人审 + 2 reviewer",
+      "changed_this_session": true,
       "reviewers": [],
       "audits": [],
       "also_hits": []
