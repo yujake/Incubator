@@ -325,11 +325,11 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 > 写集登记的口径不变：它是"**角色的 Python 实现**会 `store.tx()` 哪些表"（并发判据的输入），
 > **不是**权限闸；权限错请按本节开头那两条真拦点判。
 
-### 0.7 动作表（`capabilities.CAPABILITIES`，67 个动作）
+### 0.7 动作表（`capabilities.CAPABILITIES`，68 个动作）
 
 | 角色 | 动作数 | 动作名 |
 |---|---:|---|
-| A | 6 | `run_once` `run` `search_literature` `walk_citations` `ingest_local` `shelf_search` |
+| A | 7 | `run_once` `write_report` `run` `search_literature` `walk_citations` `ingest_local` `shelf_search` |
 | B | 10 | `run_once` `reprocess_once` `run_reprocess` `decide_structural_duplicate` `resolve_structural_duplicate` `run` `register_statement` `land_manuscript` `ingest_manuscript` `open_polish_copy` |
 | C | 10 | `hottest` `paths` `cold` `gaps` `neighbors` `relations_between` `contradictions` `structural_duplicates` `handle` `proof_chain` |
 | D | 14 | `probe_c` `ingest` `ingest_detailed` `trace_question` `trace_l3` `assess` `submit_gaps` `consider` `poll` `adjudicate` `research` `run_round` `write_report` `propose_question` |
@@ -341,7 +341,7 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 | L | 3 | `formalize` `check_formal` `record`（逐条契约见 §L.2；**只在 Lean 开关打开时存在**） |
 | M | **0** | `CAPABILITIES["M"] == ()`（可断言的事实） |
 
-> 十一行加起来是 **67**（6+10+10+14+4+5+7+5+3+3+0），与标题那个 67 同源：标题读的是
+> 十一行加起来是 **68**（7+10+10+14+4+5+7+5+3+3+0），与标题那个 67 同源：标题读的是
 > `sum(len(v) for v in CAPABILITIES.values())`，不是"这张表里解析出来几行"。
 > 复跑：`python -c "from agentflow import capabilities as C;print(sum(len(v) for v in C.CAPABILITIES.values()))"` ⇒ `67`。
 > **`L` 那 3 个动作在 Lean 关着时也在这张表里**（`capabilities` 是声明面的派生，它不看开关；
@@ -392,7 +392,7 @@ python -c "import sys;sys.path.insert(0,'src');from agentflow import agent_promp
 
 ---
 
-## R0. 全局工具总表（126 个，逐条；Lean 关着时 123 个 —— 三件 `formal.*` 不装配）
+## R0. 全局工具总表（127 个，逐条；Lean 关着时 124 个 —— 三件 `formal.*` 不装配）
 
 > **本表是 §R0 的权威落点**，`tests/test_role_specs_complete.py` 逐行对账三列
 > （`side_effect` / 审批 / `roles`）与实时注册表是否一致；工具名集合也必须**不重不漏**。
@@ -538,6 +538,7 @@ python -c "import sys;sys.path.insert(0,'src');from agentflow import agent_promp
 | 125 | `review.scan` | 把一份稿件的机械读数一次拿全（七类 `kinds` 任选）：异常字符 / `\cite` 对 `\bibitem` / `\input` 目标 / `\ref` 对 `\label` / theorem 对 proof / 重复声明 / 正文与台账的数。只读、只给读数；七类各自的三态在 `detail[]`，没查成的在 `bad[]` | `read` | 否 | H | `kinds`；paths；project；limit | `{'checked','kinds','findings','counts','bad','detail','scanned','reason'}`；findings[] 每项九键 `{kind,severity,file,line,column,text,why,ref,codepoint}`；detail[] 每项 `{kind,checked,reason,scanned,counts,returned}`；counts 是 `{files,findings,by_kind,by_severity,facts}` | `tests/test_h_scan_is_one_entry.py`、`tests/test_texaudit.py` | 2026-11-01 新增（业主逐字「继续，且将H的所有机械扫描工具统一成一个方便H使用（注意调整工具和提示词）」）：① 它是 H 的**唯一**统一入口，七类的判据与口径全在 `texaudit.py`（同一份正文只数一遍）；② 旧 7 件**一件不删**：`review.scan_text_integrity` 是 `tests/test_paper_language_english.py` 的第二把尺子（动返回形状就拆了那条对拍）、`review.scan_document` 是写路径 `review_document` 的判据实现；③ `findings[]` 九键恒定（不适用给如实空值）—— `test_tools_returns_declaration.py` 的「同一数组元素顶层键不一致」那条会抓；④ 这七类**不落 finding 台账**：`schema.FINDING_KINDS` 里没有它们（实测 7/7 被 `review.record_finding` 的参数门拒），所以读数只进 `review.report` 的 markdown —— 要落库得先扩词表（FC-27，另立项）；⑤ 口径两条实测教训：引用命令是六个（只认 `\ref` 会静默漏报悬空 `\eqref`）、没被引用过的标签只进 `facts.unused_labels`（真稿 703 个标签里 229 个没被引，报出来就是 229 条假阳性）；⑥ `ledger_match` 只回五个数 + `statement_surplus`，不发明「proof 环境数 == 台账定理类数」（真稿上那两个数是 18 与 7，而真问题是 5 个孤儿环境） |
 | 126 | `ledger.resolve` | 按号 / 按标签关键字查命题台账，返回**候选节点**（命题号 / 类别 / 状态 / 等级 / 标签），**不是树**；找不到时明确说「没有这个号 / 没有命中」（空列表会被读成「还没查」）。按号走 `statementledger.by_id`、按标签走 `by_keywords`（既有两条口径，不另写一套）；概念行就是 `statements` 里的一行，同一套口径 | `read` | 否 | C | **query** | `{'query','checked','mode','found','hits_total','scanned','candidates':[{'stmt_id','kind','status','grade','label'}],'why','reason'}` | `tests/test_the_ledger_tree_is_expanded_on_demand.py` | 2026-11-10 新增（`draft/181` 的 B 批，业主「C 的建树不是全建，是选定一个节点……按某层数展开」）：选根与展开是两件事，所以它**不返回树**；候选不含证明正文（与展开节点的七样分开）。`roles=("C",)`；工具体在 `tools/ledger_tools.py`，索引与两条邻接在 `ledgerindex.py` |
 | 127 | `ledger.expand` | 从选定节点起按 `depth` 层上下展开**局部树**：每个节点带七样（相对关系 / 命题号 / **类别** / 内容（不含证明）/ 等级 / 依赖面（**全路径**按证明路径分组、断链标 broken）/ 被引面（**一层**）），另有 `edges` / `frontier` / `truncated` / `budget_used`；同一问第二次只给增量（`added_nodes` / `already_known`）。`depth` **必填、由调用方决定**（不填 ⇒ 缺参数提示 + 可照抄例子，不静默用默认值） | `read` | 否 | C | **node**；depth（必填）、direction | `{'checked','node','depth','direction','nodes':[{'stmt_id','kind','status','grade','label','statement_full','proof_no','proof_nos','relation','dependency_face','cited_face'}],'edges':[{'from','to','dir','dep_id','path_no','path_group','used_at','used_at_known','status','to_is_statement','external_root'}],'frontier':[{'stmt_id','kind','label','distance','directions'}],'truncated','reasons','budget_used':{'nodes','added','edges','chars','node_budget','char_budget','depth_max'},'added_nodes','already_known','why'}` | `tests/test_the_ledger_tree_is_expanded_on_demand.py` | 2026-11-10 新增（同上）：「污染面」是一种查询模式（`direction="down"` 从被判错的命题往下看），**不是一件工具**；`doc:` / `relation:` / `experiment:` 与三种 `source_*` 是外部根、不建节点；概念与命题平权（不读 `relations` 表、不开特例分支）；同一 `node` + 同一 `depth` 的第二次调用只给增量（无句柄） |
+| 129 | `analysis.edit_report` | C 改自己那份分析报告：必须带理由、留痕追加式、别人的报告受控拒，kind 与 report_id 不可改 | `write_local` | 是 | C | **report_id**, **reason**；summary, markdown, payload, params, request | `analysis_reports` |
 | 128 | `attack.abandon_plan` | 明确放弃一条计划（理由三档：`math_error` / `difficulty` / `不再需要`；「需要调整」不是理由，是组合操作）：`status`→`abandoned` ＋ `history` 落一行；`math_error` 要给 `basis` 点出错误，`difficulty` 另给 `difficulty` ＋ `salvaged`；已终态（finish / 已放弃 / stalled / 有支持未证）的不许再放弃。 | `write_local` | **是** | F | **plan_id**,**reason**；basis, difficulty, salvaged | `{'ok','kind','error','refusal_reason','plan_id','status','reason','abandoned','history_len','at'}` | `tests/test_f_plan_abandon.py`、`tests/test_abandon_reason_is_structured.py` | 2026-11-13 新增（业主 Q2）：plan 级放弃口；`roles=("F",)` —— 放弃由 F 动手；拒绝一律 `PlanError` ⇒ 工具层受控 `plan_error`（不在 `returns` 里）；已终态的计划再放弃受控拒绝（不是静默成功） |
 
 ### R0.1 工具面的公共事实（逐格现读见附录 §R0.1）
@@ -838,7 +839,7 @@ B 的"没有结果"逐个列：
 | 决定要不要把缺口变成检索请求 | 候选缺口是**产出**，不是**决定** | **D**（`submit_gaps`）/ 编排层（`gaps(submit_requests=True)`） |
 | 写报告以外的东西 | C 的写集只有 `analysis_reports` | — |
 
-### C.4 工具面（39 个，实测）
+### C.4 工具面（40 个，实测）
 
 **现读**：`python -m agentflow.cli tools --role C`；五格（总数 / `side_effect` / `external` / 需审批）与逐件清单、拿不到什么都见附录 §C.4 —— 那里逐格现算，本节不抄会变的分份数。
 
@@ -1936,7 +1937,7 @@ L 的形式化（第 4 位）**与** V 的逐行走查签字（`evidencebits.BIT
 
 **现读**（`build_registry(...).for_role("M")`：`cli tools --role` 的 choices 里没有 M）⇒ 五格与逐件清单见附录 §M.4 —— 那里逐格现算，本节不抄会变的分份数。
 
-#### M.4.1 M 能召唤的 7 个角色 × 它们的动作（56 个可召唤动作）
+#### M.4.1 M 能召唤的 7 个角色 × 它们的动作（57 个可召唤动作）
 
 > 这张表与 §0.7 是**同一份数据的第二个落点**（都从 `capabilities.CAPABILITIES` 读）。
 > 两处都由 `tests/test_role_specs_action_table.py` 逐角色比对。
@@ -1950,7 +1951,7 @@ L 的形式化（第 4 位）**与** V 的逐行走查签字（`evidencebits.BIT
 
 | 角色 | 可召唤动作数 | 动作名 |
 |---|---:|---|
-| A | 6 | `run_once` `run` `search_literature` `walk_citations` `ingest_local` `shelf_search` |
+| A | 7 | `run_once` `write_report` `run` `search_literature` `walk_citations` `ingest_local` `shelf_search` |
 | B | 10 | `run_once` `reprocess_once` `run_reprocess` `decide_structural_duplicate` `resolve_structural_duplicate` `run` `register_statement` `land_manuscript` `ingest_manuscript` `open_polish_copy` |
 | C | 10 | `hottest` `paths` `cold` `gaps` `neighbors` `relations_between` `contradictions` `structural_duplicates` `handle` `proof_chain` |
 | D | 14 | `probe_c` `ingest` `ingest_detailed` `trace_question` `trace_l3` `assess` `submit_gaps` `consider` `poll` `adjudicate` `research` `run_round` `write_report` `propose_question` |

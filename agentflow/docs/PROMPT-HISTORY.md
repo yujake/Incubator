@@ -4255,3 +4255,68 @@ ewtheorem / 论文写作只是推荐）一字未动。
 #: 四、射程：只动提示词 / 手册 / 教法。C 的路径算法、对应表的读写口、门、判据强度一字未动。
 #:   FC-27：`specs/g.py` 命中 auth-audit ⇒ `--baseline` 登记（`reviewers=0`；登记 ≠ 批准）。
 #:   本笔 = p336。
+
+#: p336 → p337（2026-11-27，CEDT-OWN：C 对自己的报告负责 —— 编辑入口 + 逐节点核 + 四条敲定理由）
+#:
+#: 一、起因（业主口径，逐字）：「口径A错误，口径B不准确。C 需要对自己的分析报告负责，需要核实证明链走通
+#:   且逻辑自然，如遇不合理的地方需要 edit 这个报告。」以及「重要地，C 需要阅读这条证明链所对命题细节，
+#:   确认逻辑通顺性，并按需增改内容或给出需补充证明的命题建议。」
+#:   开工前的读数（复核过）：C 的工具面 35 件里写口只有 `analysis.register_report`（一次性登记），
+#:   `schema.AnalysisReport` 九个字段里没有修订位 ⇒「我发现自己的报告写错了」在工具面上没有出口。
+#: 二、改了什么（提示词这一侧）：
+#:   ① `specs/c.py` 的 boundary 把 `analysis.edit_report` 写进「你可写的是你自己侧的产物」；
+#:   ② `specs/c.py` 的 policy 加四段，全是判据式自检句、无配额：
+#:      a) 你交出去的报告是你自己的责任（核证明链真走通 / 核逻辑自然 / 不合理就 edit 那一份 / 理由写清
+#:         哪一条读数与它矛盾）；b) 逐节点读正文（命题读 `statement_full`、证明稿读 `manuscripts.read`），
+#:         每个节点写「读到的关键内容一句 + 与下一跳怎么接上」；c) 敲定一条路径的四条理由
+#:         （充分且必要 / 认知逻辑 / 高非平凡度证明的接受理由 / 穷举论证的接受理由）；d) 建议补充的命题
+#:         是**台账上还没有的**（绕远 / 太难两类动机，非必要不填，填了必须给原因），且只写进报告；
+#:         e) 建议要**结构化**地放进 payload 的 `suggestions`（kind / proposed_statement / replaces /
+#:         readings / why 五格；没有读数的建议不算建议；为空是正常的）；f) **放过可以，但必须留下判断**
+#:         （不给建议就要在敲定理由第 ③ 条写「接受 + 为什么接受」并引到读数；静默略过不行）。
+#:   ③ `agent_skills.py` 的 C 手册加一条 skill `核自己的报告-逐节点读通顺并改那一份`（六节，第二落点）。
+#: 三、连带（工具面，不是提示词但会进工具目录那几行）：`analysis.edit_report`（C 36 件）与
+#:   `ledger.resolve` / `ledger.expand` 每个节点的 `nontriviality`（逐证明路径的档位；读不到
+#:   `checked=false`）⇒ C 段里「共 N 件」与那两行跟着换。
+#: 四、十一格读数：这一笔的提示词改动分两刀落地 —— 第一刀（boundary + 四段 policy + 手册那条 skill）
+#:   连带**伙伴表里印着 C 的 boundary 全文**的六格（B / D / F / G / L / M）；第二刀（`suggestions`
+#:   那一段与「放过可以，但必须留下判断」那一段）只改 C 自己的段 ⇒ 只有 C 再换一次。
+#:   最终对 p336 的差集是 7 格（C + 那六个伙伴）；A / E / H / V 的伙伴表里没有 C ⇒ 逐字未动。
+#:   逐格哈希见 `tests/test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS`（现算，不是手抄）。
+#: 五、连带机械动作：`_VOLATILE_FACT_SETS` 追加 p337 一格（count=15、`keys_sha256=21314a39…` 与 p336 同值）；
+#:   `docs/ROLE-GUIDE.md` 重生成（210,850 字符）；`tests/golden/tool_surface_snapshot.json` 重冻
+#:   （127 件 / 11 角色 / 13 条 CLI 输出）；`tests/fixtures/tool_declaration_baseline.json` 补
+#:   `analysis.edit_report` 一行 + 两条 `contract_amendments`（两件 `ledger.*` 的 `returns` 加 `nontriviality`）；
+#:   `docs/ROLE-SPECS.md` 的 C 工具面标题 39 → 40（那一节的口径按 `cli tools` 的实测普查）。
+#: 六、射程：只动提示词 / 手册 / 教法 + C 的产出面（同一张 `analysis_reports` 表的修订入口）+
+#:   两件只读台账工具的读数。知识表（statements / dependencies）一个写入点都没多；C 的出边仍为空。
+#:   FC-27：`specs/c.py` / `tools/base.py` / `tools/analysis_tools.py` / `tools/ledger_tools.py` /
+#:   `capabilities.py` 命中 ⇒ `noai_gate --paths --baseline` 登记（`reviewers=0`；登记 ≠ 批准）。
+#:   本笔 = p337。
+
+#: p337 → p338（2026-11-27，MSOWN：一种角色一套稿号 —— A 的汇报稿写口进动作表）
+#:
+#: 一、起因（业主 2026-11-27 逐字）：「A 侧文献搜索入库汇报稿会落在工作区内 manuscripts 下 A 文件夹中
+#:   且命名方式是 A 侧稿号；C 侧各种分析报告稿会落在工作区内 manuscripts 下 C 文件夹中且命名方式是
+#:   C 侧稿号。一种角色一套稿号」「一个角色实例只对自己产出的稿负责，对别的实例产出的稿无写权」。
+#: 二、改了什么：A 的动作表加 `write_report`（落在 `manuscripts/A/a-report-<号>.md`，号源 `amanuscript`，
+#:   稿头写 `产出者`）；C 的 `AnalysisReport.persist` 改落 `manuscripts/C/c-analysis-<号>.md`（号源
+#:   `cmanuscript`，`report_id` 仍是台账身份）；族表加 `a-report` / `c-analysis` 两支；
+#:   归属判据在 `manuscriptown`（新建 / 我的 / 归属不明 ⇒ 拒）。
+#: 三、连带：`PROMPT_VERSION` p337 → p338；`_VOLATILE_FACT_SETS` 追加 p338 一格（count=15、
+#:   `keys_sha256=21314a39…` 与 p337 同值）；`recompute_prompt_digests --write` 只重算 A 一格；
+#:   `docs/ROLE-GUIDE.md` 重生成；agent 面与工具面快照重冻；两档热身（逐趟 usd 见报告）。
+#: 四、射程：只动提示词 / 动作表 / 落点与归属；C 的编辑入口（p337 那只 `analysis.edit_report`）本笔不动。
+#:   本笔 = p338。
+
+#: p338 → p339（2026-11-27，CEDIT：C 的手册措辞对齐 —— 档位按证明花的力气判）
+#:
+#: 一、起因：CEDIT 给 C 加的手册那一段写了"非平凡度档位"，却没写它按什么判 ——
+#:   既有的 `nontrivial-by-effort` 口径（体量 / 步骤数 / 引理层数 / 跨度 / 绕路）在别处
+#:   已经写死，C 这一页漏了。判据 `test_skill_staleness` 当场红（"讲了非平凡度却没按力气判"）。
+#: 二、改了什么：`agent_skills.py` 的 C 手册把那句补成"按证明花的力气判：体量、步骤数、
+#:   引理层数、跨度、绕路；`checked` 为假就是读不到，读不到不等于低档"。
+#: 三、连带：`PROMPT_VERSION` p338 → p339；只重算 C 一格；`_VOLATILE_FACT_SETS` 加 p339 一格
+#:   （count=15、`keys_sha256=21314a39…` 同值）；`ROLE-GUIDE.md` 重生成；agent 面与工具面快照重冻；
+#:   两档热身（逐趟 usd 见报告）。
+#: 四、射程：只动 C 的手册措辞。本笔 = p339。
