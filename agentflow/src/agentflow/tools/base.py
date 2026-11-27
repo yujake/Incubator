@@ -188,6 +188,17 @@ READONLY_CALL_EXCEPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
             "（projects/mp3 末节第 5 条：analysis_reports = 0）。只写这一张表，"
             "不碰 claims / literature / relations",
         ),
+        (
+            "analysis.edit_report",
+            "C 修订自己交过的那一份报告（业主 2026-11-27：「C 需要对自己的分析报告"
+            "负责，需要核实证明链走通且逻辑自然，如遇不合理的地方需要 edit 这个报告」）。"
+            "登记是一次性的，而报告交出去之后 C 还会拿读数回头核它 —— 没有这一件时"
+            "「我发现自己的报告写错了」在工具面上没有出口，只能写进回复，报告照旧错着"
+            "躺在 analysis_reports 里等 D 去读。三条边界把写面钉在同一张表上："
+            "只改 created_by 归一等自己的那一行（别人的报告受控拒）、`reason` 必填"
+            "（没理由不改）、留痕 `analysis_tools.AMENDMENTS_KEY` 那格追加式（改前 / 改后 / 谁 / 何时 "
+            "都在行上，rebuild 后读得回来）。不碰 statements / dependencies / 任何知识表",
+        ),
     ),
     "H": (
         (

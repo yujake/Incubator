@@ -7,9 +7,10 @@
 局部树；不够就按需拼接扩张。
 
 两件工具为什么必须分开（不是两个参数、是两件事）：
-- `ledger.resolve` 只回答"我要展开的根是哪一个"—— 候选节点列表（五格），不是树；按号 /
-  按标签关键字走既有检索实现（`statementledger.by_id` / `by_keywords`），不另写一套；
-- `ledger.expand` 只回答"从这个根往外看，`depth` 层内是什么"—— 局部树。层数必填、由 C
+- `ledger.resolve` 只回答"我要展开的根是哪一个"—— 候选节点列表（五格 + 档位读数），不是树；
+  按号 / 按标签关键字走既有检索实现（`statementledger.by_id` / `by_keywords`），不另写一套；
+- `ledger.expand` 只回答"从这个根往外看，`depth` 层内是什么"—— 局部树，每个节点带一格
+  `nontriviality`（逐证明路径的档位；读不到 ⇒ `checked=False`）。层数必填、由 C
   自己决定：少给就返回"缺参数"提示（写清"层数由你决定、必填"并给可照抄的例子），不静默
   用默认值。
 
@@ -79,7 +80,8 @@ def _index_of(holder: LI.LedgerHolder) -> LI.LedgerIndex:
     roles=_ROLES,
     returns=(
         "{'query','checked','mode','found','hits_total','scanned',"
-        "'candidates':[{'stmt_id','kind','status','grade','label'}],'why','reason'}"
+        "'candidates':[{'stmt_id','kind','status','grade','label','nontriviality'}],"
+        "'why','reason'}"
     ),
 
     scenario="不知道要展开哪一条、手上只有一个标签或关键词时，先选根。",
@@ -132,9 +134,9 @@ def ledger_resolve(holder: LI.LedgerHolder, query: str) -> ToolResult:
     roles=_ROLES,
     returns=(
         "{'checked','node','depth','direction','nodes':[{'stmt_id','kind','status','grade',"
-        "'label','statement_full','proof_no','proof_nos','relation','dependency_face',"
-        "'cited_face'}],'edges':[{'from','to','dir','dep_id','path_no','path_group',"
-        "'used_at','used_at_known','status','to_is_statement','external_root'}],"
+        "'label','statement_full','proof_no','proof_nos','nontriviality','relation',"
+        "'dependency_face','cited_face'}],'edges':[{'from','to','dir','dep_id','path_no',"
+        "'path_group','used_at','used_at_known','status','to_is_statement','external_root'}],"
         "'frontier':[{'stmt_id','kind','label','distance','directions'}],'truncated','reasons',"
         "'budget_used':{'nodes','added','edges','chars','node_budget','char_budget',"
         "'depth_max'},'added_nodes','already_known','why'}"

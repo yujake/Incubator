@@ -23,7 +23,7 @@
 
 上下文成本由 C 的展开决定，而不是由台账规模决定。索引住在进程内存里（一个持有者对象，
 支持外部传入已建好的索引），一次唤醒内只建一次；`ledger.expand` 只把这一次要的那棵
-局部树交回，其余一律不出内存。`ledger.resolve` 只交候选节点（五格），不交树。
+局部树交回，其余一律不出内存。`ledger.resolve` 只交候选节点（五格 + 档位读数），不交树。
 
 ## 概念平权（业主追加口径，逐字）
 
@@ -57,6 +57,7 @@ from typing import Any
 from . import evidencebits as EB
 from . import proofloc as PL
 from . import schema as S
+from . import secretary_tier_ledger as TL
 from . import statementledger as SL
 from . import verifications as VR
 
@@ -182,6 +183,75 @@ def _strip_id_prefix(text: str) -> str:
     return text
 
 
+def _nontriviality_reading(root: str, stmt_id: str,
+                           statement_full: str = "") -> dict[str, Any]:
+    """一个节点的非平凡度档位（逐证明路径；读口只有 `secretary_tier_ledger` 一处）。
+
+    为什么节点读数里要有这一格（业主 2026-11-27）：「C 能读台账，就应该能读到逐命题
+    逐证明路径的非平凡度档位」。C 写"为什么接受这一处高难度证明"这条理由时，手上必须
+    有档位读数可引；而档位不是"每命题一档"，身份是 `(stmt_id, path_group)` —— 所以
+    这一格是 `paths` 字典（键 = 路径号），不是单个 `level`。
+
+    ## 折叠只在这里做一次（`FC-03`：不许有第二份折叠口径）
+
+    档位值一律经 `secretary_tier_ledger.nontriviality_of`（那是唯一折叠实现：
+    路径级 = 该路径最后一行、命题级 = 各路径历史最小值、版本闸 `checked` / `text_drift` /
+    `needs_rejudge`）。本函数只把它折成的 `paths[]` 摊成"键 = 路径号"的字典，并加一格
+    `state` 说明那一条路径现在能不能当读数用 —— 不解析台账、不重算档。
+
+    ## 三态（不许折平）
+
+    - 台账读不成（文件读不出 / 不是 UTF-8）⇒ `checked=False` + `why`、`paths` 空：
+      那是"没查成"；它与"查过了、这条命题还没有档位行"（`checked=True`、`paths` 空）
+      是两件事；
+    - 没有工作区根 ⇒ 同样 `checked=False`（`why` 说清是缺根，不是缺行）；
+    - 某条路径没判 / 要重判 ⇒ 那一条的 `level` 是 `None`、`state` 点明是
+      `unjudged` 还是 `needs_rejudge`；不许读成某档（旧档只在 `nontriviality_of` 的
+      `needs_rejudge_detail` 里可见，这里不复制）。
+
+    只读：不开事务、不写盘、不缓存档位值（每次现读 `nontriviality_rows`，
+    台账一变就读到新值 —— 把档位抄进别处当第二真源，就是两份口径漂开的起点）。
+    """
+    out: dict[str, Any] = {"checked": False, "why": "", "paths": {}}
+    want = str(stmt_id or "").strip()
+    if not str(root or "").strip():
+        out["why"] = "没有工作区根 ⇒ 档位台账读不到（不是「这条命题没有档位」）"
+        return out
+    if not want:
+        out["why"] = "没给命题号 ⇒ 这一问不成立（不是「这条命题没有档位」）"
+        return out
+    try:
+        rows = TL.nontriviality_rows(str(root), stmt_id=want)
+    except Exception as exc:  # noqa: BLE001 — 读口抛了就必须说"读不到"，不许静默空表
+        out["why"] = f"档位台账读口抛了（{type(exc).__name__}: {exc}）"
+        return out
+    if not rows.get("checked"):
+        out["why"] = str(rows.get("why") or "档位台账读不到")
+        return out
+    out["checked"] = True
+    folded = TL.nontriviality_of(str(root), str(statement_full or ""), stmt_id=want)
+    out["why"] = str(folded.get("reason") or "")
+    for one in folded.get("paths") or ():
+        if not isinstance(one, Mapping):
+            continue
+        try:
+            no = str(max(1, int(one.get("path_group") or 1)))
+        except (TypeError, ValueError):
+            no = "1"
+        level = one.get("level")
+        version = str(one.get("version") or "")
+        out["paths"][no] = {
+            "level": None if level is None else int(level),
+            "label": str(one.get("label") or ""),
+            "version": version,
+            # `state` 只做"这一条路径现在能不能当读数用"的分类，不引入新取值：
+            # 要重判 / 没判 / 其余照抄版本闸的原话（checked / text_drift / unchecked…）。
+            "state": ("needs_rejudge" if version == TL.NT_VERSION_NEEDS_REJUDGE
+                      else ("unjudged" if level is None else version)),
+        }
+    return out
+
+
 # ---------------------------------------------------------------- 索引
 
 
@@ -250,6 +320,11 @@ class LedgerIndex:
                 "grade": _grade_of(row),
                 "label": str(row.get("label") or ""),
                 "statement_full": str(row.get("statement_full") or ""),
+                #: 这一条命题的非平凡度档位（逐证明路径，键 = `path_group`）。
+                #: 读不到 ⇒ `{"checked": False, "paths": {}, "why": …}` —— 与"没有档位行"
+                #: （`checked=True`、`paths` 空）分得开。见 `_nontriviality_reading`。
+                "nontriviality": _nontriviality_reading(
+                    str(root or ""), sid, str(row.get("statement_full") or "")),
                 #: 这条命题现在挂着的路径号（`#p1` 恒在；多条路径时升序）。
                 "proof_no": int(proof_nos[0]) if proof_nos else DEFAULT_PROOF_NO,
                 "proof_nos": proof_nos,
@@ -328,8 +403,11 @@ class LedgerIndex:
           不另写一套；
         - 找不到 ⇒ 明白说"没有这个号 / 没有命中"，不返回空列表了事。
 
-        返回的每条候选只有五格：`stmt_id` / `kind` / `status` / `grade` / `label`。
-        不含证明正文（也不含 `statement_full`：选根这一趟不需要命题全文）。
+        返回的每条候选是五格加一格档位读数：`stmt_id` / `kind` / `status` / `grade` /
+        `label` / `nontriviality`。不含证明正文（也不含 `statement_full`：选根这一趟
+        不需要命题全文）。`nontriviality` 与节点读数里那一格同源
+        （`_nontriviality_reading`：逐证明路径、读不到即 `checked=False`）——
+        选根时就该看得出"这一条难不难"。
         """
         raw = str(query or "").strip().strip("`'\"“”《》").strip()
         out: dict[str, Any] = {
@@ -386,15 +464,19 @@ class LedgerIndex:
                         "不是「台账里没有」—— 换一个词或按号查）"))
         return out
 
-    @staticmethod
-    def _candidate(row: Mapping[str, Any]) -> dict[str, Any]:
-        """一条候选（五格；不含证明正文）。"""
+    def _candidate(self, row: Mapping[str, Any]) -> dict[str, Any]:
+        """一条候选（五格 + 档位读数；仍不含证明正文）。"""
+        sid = str(row.get("stmt_id") or "")
         return {
-            "stmt_id": str(row.get("stmt_id") or ""),
+            "stmt_id": sid,
             "kind": str(row.get("kind") or ""),
             "status": str(row.get("status") or ""),
             "grade": _grade_of(row),
             "label": str(row.get("label") or ""),
+            #: 与节点读数同一格（`_nontriviality_reading`）：选根时就能看出"这一条难不难"，
+            #: 不必先展开才知道。三态同源：读不到 ⇒ `checked=False`。
+            "nontriviality": _nontriviality_reading(
+                self.root, sid, str(row.get("statement_full") or "")),
         }
 
     # ------------------------------------------------------------ 依赖面 / 被引面 / 展开（转发）

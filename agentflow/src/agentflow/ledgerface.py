@@ -412,7 +412,7 @@ def _via_text(previous: Mapping[str, Any], edge: Mapping[str, Any]) -> str:
 
 
 def _read_node(index: Any, sid: str, relation: Mapping[str, Any]) -> dict[str, Any]:
-    """一个节点的完整读数（七样）。"""
+    """一个节点的完整读数（八样）。"""
     node = index.nodes.get(sid) or {}
     return {
         "stmt_id": sid,
@@ -423,6 +423,12 @@ def _read_node(index: Any, sid: str, relation: Mapping[str, Any]) -> dict[str, A
         "statement_full": str(node.get("statement_full") or ""),
         "proof_no": int(node.get("proof_no") or DEFAULT_PROOF_NO),
         "proof_nos": list(node.get("proof_nos") or []),
+        #: 4) 非平凡度档位（逐证明路径，键 = `path_group`；读不到 ⇒ `checked=False`）。
+        #: 这一格是"这条证明有多难"的唯一读数来源（`secretary_tier_ledger.nontriviality_paths`
+        #: 折叠，本层只搬运）。C 写"为什么接受这一处高难度证明"时要引它。
+        "nontriviality": dict(node.get("nontriviality")
+                              or {"checked": False, "paths": {},
+                                  "why": "这个节点没有档位读数"}),
         #: 1) 相对选定节点的关系：方向 / 相距几层 / 经由哪条边（链）
         "relation": {"direction": str(relation.get("direction") or ""),
                      "distance": int(relation.get("distance") or 0),
