@@ -3403,14 +3403,71 @@ def admit_all(
 # --------------------------------------------------------------------------- 委托报告
 
 
+#: 报告头里记委托号的那一行（2026-11-27：报告改落 `manuscripts/A/a-report-<号>.md`，
+#: 号要跟着委托号走 —— 同一份委托重渲染时沿用原号，不每次换号）。
+REPORT_REQUEST_LINE = "- 委托号："
+
+
+def report_number_of(store: Store, request_id: str) -> str:
+    """这一份委托的报告稿号：已有同委托号的稿就沿用，否则由 `amanuscript` 发一个新号。"""
+    from . import manuscriptfamily as _MFAM
+    from . import manuscriptids as _MI
+
+    rid = str(request_id or "").strip()
+    base = Path(store.root) / _MFAM.DIR_OF["a-report"]
+    if base.is_dir():
+        for path in sorted(base.glob(f"{_MFAM.FAMILIES['a-report'].prefix}*.md")):
+            try:
+                head = path.read_text(encoding="utf-8")[:600]
+            except OSError:
+                continue
+            if f"{REPORT_REQUEST_LINE}{rid}" in head:
+                shape = _MFAM.classify_manuscript(
+                    path.relative_to(Path(store.root)).as_posix())
+                if shape.get("tier") == _MFAM.TIER_FAMILY:
+                    return str(shape.get("manuscript_id") or "")
+            if f"{REPORT_REQUEST_LINE}{rid}{REPORT_SNAPSHOT_SUFFIX.replace('.md', '')}" in head:
+                shape = _MFAM.classify_manuscript(
+                    path.relative_to(Path(store.root)).as_posix())
+                if shape.get("tier") == _MFAM.TIER_FAMILY:
+                    return str(shape.get("manuscript_id") or "")
+    # 没有现成文件：查 A 自己的号索引（同一份委托只发一次号 —— 否则"取一次路径"就换一次号）。
+    index = Path(store.root) / "out" / "A" / "report_numbers.json"
+    data: dict[str, str] = {}
+    if index.is_file():
+        try:
+            data = json.loads(index.read_text(encoding="utf-8")) or {}
+        except (OSError, ValueError):
+            data = {}
+    if rid in data:
+        return str(data[rid])
+    num = _MI.next_manuscript_id(store.root, family="a-report", role="A")
+    data[rid] = num
+    index.parent.mkdir(parents=True, exist_ok=True)
+    index.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True,
+                                 default=str) + "\n",
+                     encoding="utf-8", newline="\n")
+    return num
+
+
 def report_path(store: Store, request_id: str) -> Path:
-    """报告落点：`<工作区>/work/A/lit-<request_id>.md`（下一次委托的 D/H 直接 `fs.read`）。"""
-    return Path(store.root) / REPORT_DIR / f"lit-{request_id}.md"
+    """报告落点：`<工作区>/manuscripts/A/a-report-<号>.md`（A 的汇报稿，族 `a-report`）。
+
+    2026-11-27（业主口径「A 的报告最终是自动生成的」）：落点与号都由产出链自己给 ——
+    这份正文是代码渲染的，不经模型写。
+    """
+    from . import manuscriptfamily as _MFAM
+
+    num = report_number_of(store, request_id)
+    return Path(store.root) / _MFAM.DIR_OF["a-report"] / f"a-report-{num}.md"
 
 
 def report_snapshot_path(store: Store, request_id: str) -> Path:
-    """「交报告」那一刻的无号原件：`<工作区>/work/A/lit-<rid>.submitted.md`。"""
-    return Path(store.root) / REPORT_DIR / f"lit-{request_id}{REPORT_SNAPSHOT_SUFFIX}"
+    """「交报告」那一刻的原件：同一稿号的 `.submitted.md`（无号原件与定稿同源同号）。"""
+    num = report_number_of(store, request_id)
+    from . import manuscriptfamily as _MFAM
+
+    return Path(store.root) / _MFAM.DIR_OF["a-report"] / f"a-report-{num}{REPORT_SNAPSHOT_SUFFIX}"
 
 
 def _report_context(store: Store) -> tuple[dict, dict]:
@@ -3666,6 +3723,9 @@ def report_markdown(request_id: str, rows: Sequence[Mapping[str, Any]],
         f"# 文献检索委托 {request_id} 的入库报告",
         "",
         f"- 委托：`{request_id}`",
+        # 2026-11-27：报告落 `manuscripts/A/a-report-<号>.md`，号跟着委托号走 ——
+        # 这一行是"同一份委托重渲染时沿用原号"的锚（`report_number_of` 读它）。
+        f"{REPORT_REQUEST_LINE}{request_id}",
         f"- 报告状态：{_PHASE_LABELS[phase]}",
         f"- 生成时间：{stamp}",
         # 这一版的写者（K16 / AL-08）：报告是交付物，"谁渲染的"必须留在报告上 ——

@@ -619,9 +619,6 @@ class _Core:
         return None, out
 
 
-from .write_report import _WriteReport  # noqa: E402  （MSOWN：A 的汇报稿写口）
-
-
 class AgentA(_RunOnce, _Run, _SearchLiterature, _IngestLocal, _ShelfSearch,
-             _WalkCitations, _WriteReport, _Core):
+             _WalkCitations, _Core):
     """文献搜索智能体。providers/downloader 由外部注入，便于离线测试。"""

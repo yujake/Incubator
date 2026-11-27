@@ -2072,6 +2072,13 @@ TOOL_WRITE_SETS: dict[str, frozenset[str]] = {
     "review.report": frozenset(),
     #   ↑ `review_tools.review_report`：只写一个 markdown 报告文件（`draft/17` §8.4），
     #     它对 `review_findings` 只读（`store.rows(...)`），`store.tx` 一次都没出现
+    # 2026-11-27（MSOWN-2）：C 的 `fs.write` / `fs.edit` 是工具级只读例外，但它们是文件写口
+    # —— 一张数据表都不写（写的是工作区里的稿：`fs_tools.fs_write` / `fs_edit` 走
+    # `target.write_text` 与原子替换，`store.tx` 一次都没出现）。空集是据实读数。
+    "analysis.edit_report": frozenset({"analysis_reports"}),
+    #   ↑ `analysis_tools._analysis_edit_report_tool`：改自己那份报告的行（tx.upsert）+ 追加留痕
+    "fs.write": frozenset(),
+    "fs.edit": frozenset(),
     "verify.verify_proof": frozenset(),
     #   ↑ `verify_tools._verify_verify_proof`（2026-11-05，V 的台账例外）：**空集是据实读数**，
     #     不是"没查成"。它把判定交给 `AgentV.verify_proof`：台账那一行由
@@ -2816,6 +2823,13 @@ def assert_capabilities(
     )
     _NO_ACTION_YET = {
         # 工具名 -> 为什么今天解析不到动作（写不出理由的，就应该去补 ActionSpec）
+        # 2026-11-27（MSOWN-2）：C 的 fs 写口是"工具级例外"，不是 C 的动作 —— 动作表里
+        # 没有 `fs.write` 这个名字（它是通用文件工具，声明面在 tools/fs_tools.py）。
+        # 写集已按实登记为空（它只写工作区文件，不碰数据表），由 ②′ 的 AST 比对守着。
+        "fs.write": ("通用文件写口，不是 C 的动作（动作表里没有同名 handler）；"
+                     "它是登记过的工具级例外，闸在写口里按实例稿号清单判，写集据实为空"),
+        "fs.edit": ("同上：通用定点替换口，不是 C 的动作；写集据实为空"),
+
         "review.review_document": (
             "能力表里 H 的 action 只有 review / verify_fixes / list_findings，"
             "没有 `review_document`；它的写集今天只由 `READ_ONLY_WRITE_EXCEPTIONS` 的理由保证"
@@ -3204,9 +3218,6 @@ def assert_capabilities(
 #: 就无可比对 —— 这一栏记录的是"没查成"，不是"查过了没问题"。
 _KNOWN_UNMATCHED_ACTIONS: frozenset[str] = frozenset({
     "A.run_once", "A.run",
-    # 2026-11-27（MSOWN）：A 的汇报稿写口是角色级方法（读号源 + 写 manuscripts/A/），
-    # 工具层没有同名工具 ⇒ 两层无可比对；实现在 `agent_a/write_report.py`。
-    "A.write_report",
     "B.run_once", "B.reprocess_once", "B.run_reprocess",
     "B.decide_structural_duplicate", "B.resolve_structural_duplicate",
     "C.hottest", "C.paths", "C.cold", "C.gaps", "C.contradictions",
