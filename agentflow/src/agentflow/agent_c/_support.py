@@ -228,11 +228,32 @@ class AnalysisReport:
 
         who = actor or self.created_by or "agent-C"
         out_dir = Path(reports_dir) if reports_dir else (Path(st.root) / "work" / "C")
+        # 2026-11-27（MSOWN）：C 的分析报告稿改成落在 `manuscripts/C/`、用 C 自己的稿号
+        # （族 `c-analysis`，号源 `cmanuscript`）—— 与 A 的汇报稿一样"一个角色一套稿号"。
+        # `report_id` 仍是台账身份（`analysis_reports` 的主键），稿号是文件身份，两者并存。
+        # 旧盘上的 `work/C/<rid>-<kind>.md` 读得通（`markdown_path` 逐行记着），不搬数据。
+        use_family_landing = reports_dir is None
+        if use_family_landing:
+            from .. import manuscriptids as _MI  # 惰性：号源只有一处
+
+            cid = _MI.next_manuscript_id(st.root, family="c-analysis",
+                                         owner=str(who or ""), role="C")
+            rel_name = _MI.canonical_rel(cid, family="c-analysis")
+        else:
+            cid = ""
         with st.tx("analysis_reports", actor=who, note=f"analysis_report:{self.kind}") as tx:
             rid = tx.alloc_id("report")
-            rel_name = f"work/C/{rid}-{self.kind}.md"
-            abs_path = out_dir / f"{rid}-{self.kind}.md"
-            _atomic_write_text(abs_path, self.markdown)
+            if not use_family_landing:
+                rel_name = f"work/C/{rid}-{self.kind}.md"
+            abs_path = (Path(st.root) / rel_name) if use_family_landing else (out_dir / f"{rid}-{self.kind}.md")
+            body = self.markdown
+            if use_family_landing:
+                # 稿头：归属与台账身份都写清（`manuscriptown` 只读 `产出者` 这一行判写权）
+                body = (f"# C 的分析报告（{self.kind}）\n\n"
+                        f"- 产出者：{who}\n- 报告号：{rid}\n- 报告种类：{self.kind}\n"
+                        f"- 稿号：{cid}（族 c-analysis）\n\n" + body)
+            abs_path.parent.mkdir(parents=True, exist_ok=True)
+            _atomic_write_text(abs_path, body)
             row = S.AnalysisReport(
                 report_id=rid,
                 kind=self.kind,

@@ -61,6 +61,10 @@ FAMILY_COUNTERS = MappingProxyType({
     "b-proof": "bmanuscript",
     "e-proof": "emanuscript",
     "e-num": "enummanuscript",
+    # 2026-11-27（MSOWN，业主「一种角色一套稿号」）：A 的入库汇报稿、C 的分析报告稿
+    # 各一套号；与证明族互不共用计数器（裸号跨族会撞，族是身份的一半）。
+    "a-report": "amanuscript",
+    "c-analysis": "cmanuscript",
 })
 
 #: 缺省族（老调用方 `next_manuscript_id(root)` 的语义逐字不变：F 的稿）。

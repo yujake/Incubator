@@ -2095,6 +2095,15 @@ TOOL_WRITE_SETS: dict[str, frozenset[str]] = {
     #     登记值 `{analysis_reports}` 同时受两条判据守着：③ 的子集检查（越界即红）
     #     与 `tests/test_readonly_output_channel.py` 的行为读数（调用一次，除
     #     `analysis_reports` 外所有表的行数不变）。
+    "analysis.edit_report": frozenset({"analysis_reports"}),
+    #   ↑ `analysis_tools.edit_report`（2026-11-27，业主口径「C 需要对自己的分析报告负责
+    #     ……如遇不合理的地方需要 edit 这个报告」）：**改自己交过的那一份**。
+    #     写集由 AST 算得出来（同文件顶层函数 `edit_report` 里有
+    #     `tx.upsert("analysis_reports", …)`）⇒ 它走 ② 的逐格相等判据，不在
+    #     `_NO_WRITE_SET_SOURCE` 里。落点与 `register_report` 同一张表：C 的写面没有
+    #     扩大成第二张表，扩大的是「同一张表上能不能改自己那一行」。
+    #     边界由三处共同钉住：`created_by` 归一后必须等于 actor（别人的报告受控拒）、
+    #     `reason` 必填（没理由不改）、`analysis_tools.AMENDMENTS_KEY` 那一格追加式留痕。
 }
 
 
@@ -2828,6 +2837,16 @@ def assert_capabilities(
             "要不要把它写成 C 的 `ActionSpec`（从而被编排层按动作派活）是设计判断，"
             "留给下一次人审"
         ),
+        "analysis.edit_report": (
+            "2026-11-27 新增的修订入口（业主口径：C 要对自己的报告负责，不合理就 edit 那份"
+            "报告）：与 `analysis.register_report` 同一族 —— 它是 C **对自己产出的自服务**，"
+            "不是别人能派给它的活，所以能力表里不该多一格 `ActionSpec`（C 的动作是"
+            "hottest/paths/cold/gaps/handle/proof_chain，全是被召唤来做分析的）。"
+            "没有哪个 `handler_name` 叫 `edit_report` ⇒ ② 走本登记这一支。"
+            "它的写集不靠这一格守着：③ 的子集检查（`analysis_reports` 在 C 的表级例外里）"
+            "与 ②′ 的 AST 比对（`tools/analysis_tools.py` 里有同名顶层函数 `edit_report`，"
+            "算得出来的正是 `{analysis_reports}`）两处都在。"
+        ),
         "review.report": (
             "H.review_report 的 handler_name 与工具名最后一段不同名（工具名 `review.report` "
             "的最后一段是 `report`）⇒ 唯一性约定对不上，它今天仍然落在 unmatched 这一格，"
@@ -3185,6 +3204,9 @@ def assert_capabilities(
 #: 就无可比对 —— 这一栏记录的是"没查成"，不是"查过了没问题"。
 _KNOWN_UNMATCHED_ACTIONS: frozenset[str] = frozenset({
     "A.run_once", "A.run",
+    # 2026-11-27（MSOWN）：A 的汇报稿写口是角色级方法（读号源 + 写 manuscripts/A/），
+    # 工具层没有同名工具 ⇒ 两层无可比对；实现在 `agent_a/write_report.py`。
+    "A.write_report",
     "B.run_once", "B.reprocess_once", "B.run_reprocess",
     "B.decide_structural_duplicate", "B.resolve_structural_duplicate",
     "C.hottest", "C.paths", "C.cold", "C.gaps", "C.contradictions",

@@ -136,9 +136,10 @@ class _Builder:
     #: 角色 → 它的构造签名收不收 `actor=`。
     #: A/D/E/F 有显式 `actor=` 形参；G/H/V 从 config 的 `actor` 键取（V 的
     #: `AgentV.__init__` 读 `cfg["actor"]`，2026-11-19 VJ-03 起装配期把实例标签写进去）；
-    #: B/C 没有 actor 概念（B 的写入走 `claimed_by` 领取，C 只读）。
+    #: B 没有 actor 概念（它的写入走 `claimed_by` 领取）；C 的分析稿要记实例
+    #: （2026-11-27 MSOWN 起，C 走 config 的 `actor` 键）。
     _ACTOR_KWARG: frozenset[str] = frozenset({"A", "D", "E", "F"})
-    _ACTOR_IN_CONFIG: frozenset[str] = frozenset({"G", "H", "V"})
+    _ACTOR_IN_CONFIG: frozenset[str] = frozenset({"C", "G", "H", "V"})
 
     def _actor_for(self, role: str, instance: str) -> str:
         """实例标签 → actor 名（空标签就是默认的那个 actor）。

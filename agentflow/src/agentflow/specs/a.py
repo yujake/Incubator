@@ -78,6 +78,14 @@ ACTIONS: tuple[ActionSpec, ...] = (
     ),
 
     ActionSpec(
+        "A", "write_report",
+        "把这一趟的文献检索/入库汇报写成一份稿（`manuscripts/A/a-report-<号>.md`，A 自己的号源）",
+        _obj({"markdown": _S, "summary": _S, "title": _S, "path": _S}, ("markdown",)),
+        "dict（written / manuscript_id / rel / refused / reason；受控拒带 refused 码）",
+        side_effect="write_local", handler_name="write_report",
+    ),
+
+    ActionSpec(
         "A", "run",
         "连续领跑到没有可领的请求为止（有界：max_requests）",
         _obj({"max_requests": {**_I, "minimum": 1}}),

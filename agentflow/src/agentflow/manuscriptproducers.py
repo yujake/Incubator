@@ -17,6 +17,9 @@ PRODUCER_OF_FAMILY: dict[str, str] = {
     "b-proof": "B",
     "e-proof": "E",
     "e-num": "E",
+    # 2026-11-27（MSOWN）：A 的汇报稿与 C 的分析稿各有产出角色（保留表的族名矩阵要用它们）。
+    "a-report": "A",
+    "c-analysis": "C",
 }
 
 UNKNOWN = "unknown"

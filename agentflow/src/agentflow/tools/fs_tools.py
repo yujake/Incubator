@@ -475,6 +475,20 @@ G_MANUSCRIPT_PATH_RULES: tuple[str, ...] = (f"prefix:{G_MANUSCRIPT_DIR}/",)
 #: 这张表是判据的唯一落点：清空它（判据的反真空那一条就是这么打桩的）⇒
 #: 下面那条闸对任何路径都不再生效，于是"保留路径被拒绝"这件事必须由一条会红
 #: 的判据证明，而不是靠这段注释自证。
+#: 族目录（`manuscripts/A` / `manuscripts/C`）—— 与 `manuscriptfamily.DIR_OF` 同一份真身，
+#: 本模块只在建表时读一次（延迟 import，理由同 `_new_landing_rule`）。
+def _family_dir(family: str) -> str:
+    from ..manuscriptfamily import dir_of
+
+    return dir_of(family)
+
+
+_MFAM_DIR_OF: dict[str, str] = {
+    "a-report": _family_dir("a-report"),
+    "c-analysis": _family_dir("c-analysis"),
+}
+
+
 _BASE_RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = (
     # 框架账本区（路径级；角色 `*` = 无豁免）。顺序在抛错上也有意义：先账本、后手稿。
     ("*", "exact:data"),
@@ -497,6 +511,23 @@ _BASE_RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = (
     ("@", "suffix:MAPPING.json"),
     ("@", "suffix:MAPPING.md"),
     ("@", "suffix:mapping-appendix.tex"),
+    # 2026-11-27（MSOWN）：「一个角色实例只对自己产出的稿负责」——
+    # A 的汇报稿与 C 的分析稿**只能由各自写口**落（号源、稿头 `产出者`、台账身份
+    # 三样都在写口那一笔里；手写等于绕过归属，从此再判不出"谁该负责改它"）。
+    # 逐角色行（不是 `@`）：`@` 走的是"路径级产物"那一句（对应表三份的拒信），
+    # 而这两族的拒信必须指名产出角色（`manuscriptproducers.PRODUCER_OF_FAMILY`）。
+    # 产出角色自己那一行不在这里：A 的 `a-report-` / C 的 `c-analysis-` 由各自写口落，
+    # 而"手写自己那一族"这一档留给写口自己判（A 没有 fs 写口之外的入口；C 一个 fs 工具都没有）。
+    *[(role, f"prefix:{_MFAM_DIR_OF['a-report']}/a-report-")
+      for role in ("A", "B", "C", "D", "E", "F", "G", "H", "L", "M")],
+    *[(role, f"prefix:{_MFAM_DIR_OF['c-analysis']}/c-analysis-")
+      for role in ("A", "B", "C", "D", "E", "F", "G", "H", "L", "M")],
+    # 旧落点（退役的 `reports/`）也照拒同两族：老盘上的稿仍按族级判据拒，
+    # 与四族那几行同一口径（判据 `test_fs_e_anchor_new_landing` 要求每族每角色都有这一行）。
+    *[(role, f"prefix:{_RESERVED_DIR}/a-report-")
+      for role in ("A", "B", "C", "D", "E", "F", "G", "H", "L", "M")],
+    *[(role, f"prefix:{_RESERVED_DIR}/c-analysis-")
+      for role in ("A", "B", "C", "D", "E", "F", "G", "H", "L", "M")],
     # 框架渲染的手稿（文件名级；只对表上角色生效）。
     ("F", "prefix:f-proof-"),
     # 2026-11-04：换名绕过（真机 `notes/F-conj000000-proof.md`，14,376 B）。保留表原先
@@ -2603,6 +2634,9 @@ RESERVED_PATH_HINT = (
     "④ 账本区 `data/`、`locks/`、`events.jsonl` 对任何角色拒（框架自己走 `Store`）。"
     "⑤ G 的论文正文（`manuscripts/G/` 下的 `.md`）G 自己也不许手写"
     "（由 `doc.build_document` 渲染，改稿走 `G.revise`、重画走 `G.refresh_markdown`）。"
+    "⑥ 两族汇报稿（2026-11-27 起）：`a-report-`（A 的入库/检索汇报稿，产出角色 A）与 "
+    "`c-analysis-`（C 的分析报告稿，产出角色 C）—— 它们只由各自写口落，任何角色手写都拒，"
+    "产出角色自己那一族也一样（A 走自己的汇报动作、C 走报告登记那条路）。"
 )
 
 
