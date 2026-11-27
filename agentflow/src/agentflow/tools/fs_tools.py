@@ -2688,7 +2688,7 @@ WRTITE_NUMBER_KIND = "manuscript_number_not_mine"
 #: 只收**正文手稿**族（`e-num` 是 E 的草稿面，不是"稿号"那一档：它的落点是 `work/E/`，
 #: 交稿由 E 自己的产出动作管，不在"一个角色一套稿号"这条政策里）。
 ROLE_FAMILIES: tuple[str, ...] = ("f-proof", "b-proof", "e-proof",
-                                  "a-report", "c-analysis")
+                                  "a-report", "c-analysis", "d-research")
 
 
 def manuscript_write_refusal(ctx: FsContext, rel: str) -> ToolResult | None:
