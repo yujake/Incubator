@@ -3441,7 +3441,11 @@ def report_number_of(store: Store, request_id: str) -> str:
             data = {}
     if rid in data:
         return str(data[rid])
-    num = _MI.next_manuscript_id(store.root, family="a-report", role="A")
+    # 号要登记给这个实例（业主 2026-11-27：「每个实例记录自己拿的稿号列表」）——
+    # owner 传下去，claim_for_write 那份登记才认得出"A 的 000000 是哪个实例拿的"。
+    _inst, _writer = _readback_actor()
+    num = _MI.next_manuscript_id(store.root, family="a-report", role="A",
+                                 owner=str(_writer or ""))
     data[rid] = num
     index.parent.mkdir(parents=True, exist_ok=True)
     index.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True,
