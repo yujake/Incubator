@@ -325,11 +325,11 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 > 写集登记的口径不变：它是"**角色的 Python 实现**会 `store.tx()` 哪些表"（并发判据的输入），
 > **不是**权限闸；权限错请按本节开头那两条真拦点判。
 
-### 0.7 动作表（`capabilities.CAPABILITIES`，68 个动作）
+### 0.7 动作表（`capabilities.CAPABILITIES`，67 个动作）
 
 | 角色 | 动作数 | 动作名 |
 |---|---:|---|
-| A | 7 | `run_once` `write_report` `run` `search_literature` `walk_citations` `ingest_local` `shelf_search` |
+| A | 6 | `run_once` `run` `search_literature` `walk_citations` `ingest_local` `shelf_search` |
 | B | 10 | `run_once` `reprocess_once` `run_reprocess` `decide_structural_duplicate` `resolve_structural_duplicate` `run` `register_statement` `land_manuscript` `ingest_manuscript` `open_polish_copy` |
 | C | 10 | `hottest` `paths` `cold` `gaps` `neighbors` `relations_between` `contradictions` `structural_duplicates` `handle` `proof_chain` |
 | D | 14 | `probe_c` `ingest` `ingest_detailed` `trace_question` `trace_l3` `assess` `submit_gaps` `consider` `poll` `adjudicate` `research` `run_round` `write_report` `propose_question` |
@@ -341,7 +341,7 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 | L | 3 | `formalize` `check_formal` `record`（逐条契约见 §L.2；**只在 Lean 开关打开时存在**） |
 | M | **0** | `CAPABILITIES["M"] == ()`（可断言的事实） |
 
-> 十一行加起来是 **68**（7+10+10+14+4+5+7+5+3+3+0），与标题那个 67 同源：标题读的是
+> 十一行加起来是 **67**（6+10+10+14+4+5+7+5+3+3+0），与标题那个 67 同源：标题读的是
 > `sum(len(v) for v in CAPABILITIES.values())`，不是"这张表里解析出来几行"。
 > 复跑：`python -c "from agentflow import capabilities as C;print(sum(len(v) for v in C.CAPABILITIES.values()))"` ⇒ `67`。
 > **`L` 那 3 个动作在 Lean 关着时也在这张表里**（`capabilities` 是声明面的派生，它不看开关；
@@ -426,13 +426,13 @@ python -c "import sys;sys.path.insert(0,'src');from agentflow import agent_promp
 | 12 | `doc.paper_compile` | 把 `<项目根>/out/paper/main.tex`（**正文由智能体自己写**）编成 `main.pdf`，并写**框架自己产**的编译回执 `COMPILE-RECEIPT.json`；**不跑项目脚本**（LaTeX 引擎由框架直接起） | `write_local` | **是** | G | **project**；timeout_sec | `{tri,ok,reason,tex,pdf,engine,exit_codes,runs,pages,pdf_bytes,receipt_path,pdf_fresh,engine_stderr_tail,engine_stdout_tail,problems}`（`tri` ∈ `not_applicable` / `unknown` / `computed`） | `tests/test_papercompile.py` | **2026-10-13 重写**（业主裁定逐字「paper_package 里那些东西都是古早废案了，我们要智能体写文章」+ `draft/117`）：旧行跑项目里的 `code/compile_paper.py`，那条通道整条退场；`external=exec`（真的起 LaTeX 引擎）⇒ 审批列是；失败 kind ∈ `bad_project` / `paper_no_source` / `paper_compile_failed`；本机 MiKTeX 写完 PDF 却以 0xC0000409 退出 ⇒ 产物与退出码分两栏如实带回 |
 | 13 | `doc.scan_claim` | 对一条断言做机械检查：有无引用、证据等级是否被夸大、否定是否分类 | `none` | 否 | G H F D | **claim** | `{checked,claim_id,ok,findings,error_count,warning_count,checked_fields,decided,revision_hash,status_axis,undecided_reason}` | `test_agent_g.py` | INVENTORY 4.5#10：与 `review.scan_document` 重复检查**且已漂移** |
 | 14 | `fs.delete` | 删除文件；删目录必须显式 `recursive=true`（且不允许删工作区根） | `write_local` | **是** | A B D E F G **L** | **path**；recursive | `data`=是否真的删掉；`meta.found` 区分本来就没有 | `test_tools_table_fs.py` | — |
-| 15 | `fs.edit` | 定点替换文件里的一段文本（`old_string`→`new_string`）：默认要求唯一匹配、可要求前置 `sha256` 一致、`new_string` 有上限 —— 整文件覆盖之外的唯一正路 | `write_local` | **是** | A B D E F G **L** **M**（§57：大文件只能靠它改） | **path**,**old_string**,**new_string**；sha256, allow_multiple, note | `{path,sha256_before,sha256_after,replacements,bytes_before,bytes_after,note}` | `tests/test_tools_fs_edit.py` | — |
+| 15 | `fs.edit` | 定点替换文件里的一段文本（`old_string`→`new_string`）：默认要求唯一匹配、可要求前置 `sha256` 一致、`new_string` 有上限 —— 整文件覆盖之外的唯一正路 | `write_local` | **是** | A B C D E F G **L** **M**（§57：大文件只能靠它改；报告角色只能改自己登记过的那一份稿） | **path**,**old_string**,**new_string**；sha256, allow_multiple, note | `{path,sha256_before,sha256_after,replacements,bytes_before,bytes_after,note}` | `tests/test_tools_fs_edit.py` | — |
 | 16 | `fs.list` | 列出工作区内某目录（或单个文件）的条目；`recursive=true` 时递归 | `read` | 否 | A B C D E F G H **L** **M**（§38） **V** | limit, path, recursive | `{entries:[{name,path,is_dir,is_file,is_symlink,size,mtime}],total,returned,truncated}` | **零提及** | INVENTORY 4.1：`limit`/`truncated` 分页逻辑无断言 |
 | 17 | `fs.move` | 移动或重命名（目标已存在时拒绝，不静默覆盖） | `write_local` | **是** | A B D E F G **L** | **src**,**dst** | `{src,dst}` | `test_tools_table_fs.py` | — |
 | 18 | `fs.read` | 读文本文件；二进制与超限会如实说明（二进制直接拒绝，超限返回截断内容并标注） | `read` | 否 | A B C D E F G H **L** **M**（§38） **V** | **path**；max_bytes | `data`=文本；`meta` 给 `encoding`/`bytes_read`/`total_bytes`/`truncated`/`had_errors` | `test_tools_table_fs.py` | — |
 | 19 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」 | `read` | 否 | A B C D E F G H **L** **M**（§38） **V** | **pattern**；include, limit, path | `{matches:[{path,line,text}],lines,total,truncated,scanned,skipped}` | `test_tools_table_fs.py` | — |
 | 20 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256 | `read` | 否 | A B C D E F G H **L** **M**（§38） **V** | **path** | `{path,exists,is_dir,is_file,is_symlink,size,mtime,sha256,link_target}` | `test_tools_table_fs.py` | — |
-| 21 | `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）；A/B 在 `reports/` 下拒 `f-proof-` / `b-proof-` / `e-proof-` / `e-num-` 四族 | `write_local` | **是** | A B D E F G **L** **M**（§38：主控自己交报告） | **path**,**content**；overwrite | `{path,bytes,sha256,created}` | `test_tools_table_fs.py` | — |
+| 21 | `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）；A/B 在 `reports/` 下拒 `f-proof-` / `b-proof-` / `e-proof-` / `e-num-` 四族 | `write_local` | **是** | A B C D E F G **L** **M**（§38：主控自己交报告；报告角色只能写自己登记过的那一份稿） | **path**,**content**；overwrite | `{path,bytes,sha256,created}` | `test_tools_table_fs.py` | — |
 | 22 | `graph.build` | 从 store 的三张表构建概念图索引，返回图规模摘要 | `read` | 否 | C D | （无） | `{concept_count,relation_count,pair_count,isolated_concepts,degree_top,…}` | `test_tools_graph_trace.py` | INVENTORY 总表：三态位 **无** |
 | 23 | `graph.neighbors` | 返回某概念的邻居概念代号（升序）及其连接的度数信息；**邻居数有上限**，截断时如实报出 | `read` | 否 | C D | **concept_id**；max_neighbors | `{'concept_id','name','degree','total_neighbors','returned_neighbors','truncated','reasons','neighbors':[{'concept_id','name','relation_count','relation_ids'}]}` | `test_tools_graph_trace.py` / `test_tools_attack_graph_fixes.py` | ✅ **已修**（本轮）：原先 `neighbors` 是**不可截断的裸列表**，上下文预算的剪枝在它上面不生效（实测 300 邻居 = 27046 字符、`prune_tool_result` 后一条没少）。现在有界层在**工具层**（`max_neighbors` 默认 200），`RelationGraph.neighbors` **保持裸 list**（4 个调用点按 list 语义用它） |
 | 24 | `graph.relations_between` | 返回同时包含两个概念的全部关系（按 `quote_verified`/`status`/信息量确定性排序） | `read` | 否 | C D | **a**,**b** | `{a,b,count,relations:[{relation_id,description,status,quote_verified,lit_id,page_range}]}` | `test_tools_graph_trace.py` | — |
@@ -839,7 +839,7 @@ B 的"没有结果"逐个列：
 | 决定要不要把缺口变成检索请求 | 候选缺口是**产出**，不是**决定** | **D**（`submit_gaps`）/ 编排层（`gaps(submit_requests=True)`） |
 | 写报告以外的东西 | C 的写集只有 `analysis_reports` | — |
 
-### C.4 工具面（40 个，实测）
+### C.4 工具面（42 个，实测）
 
 **现读**：`python -m agentflow.cli tools --role C`；五格（总数 / `side_effect` / `external` / 需审批）与逐件清单、拿不到什么都见附录 §C.4 —— 那里逐格现算，本节不抄会变的分份数。
 
@@ -1937,7 +1937,7 @@ L 的形式化（第 4 位）**与** V 的逐行走查签字（`evidencebits.BIT
 
 **现读**（`build_registry(...).for_role("M")`：`cli tools --role` 的 choices 里没有 M）⇒ 五格与逐件清单见附录 §M.4 —— 那里逐格现算，本节不抄会变的分份数。
 
-#### M.4.1 M 能召唤的 7 个角色 × 它们的动作（57 个可召唤动作）
+#### M.4.1 M 能召唤的 7 个角色 × 它们的动作（56 个可召唤动作）
 
 > 这张表与 §0.7 是**同一份数据的第二个落点**（都从 `capabilities.CAPABILITIES` 读）。
 > 两处都由 `tests/test_role_specs_action_table.py` 逐角色比对。
@@ -1951,7 +1951,7 @@ L 的形式化（第 4 位）**与** V 的逐行走查签字（`evidencebits.BIT
 
 | 角色 | 可召唤动作数 | 动作名 |
 |---|---:|---|
-| A | 7 | `run_once` `write_report` `run` `search_literature` `walk_citations` `ingest_local` `shelf_search` |
+| A | 6 | `run_once` `run` `search_literature` `walk_citations` `ingest_local` `shelf_search` |
 | B | 10 | `run_once` `reprocess_once` `run_reprocess` `decide_structural_duplicate` `resolve_structural_duplicate` `run` `register_statement` `land_manuscript` `ingest_manuscript` `open_polish_copy` |
 | C | 10 | `hottest` `paths` `cold` `gaps` `neighbors` `relations_between` `contradictions` `structural_duplicates` `handle` `proof_chain` |
 | D | 14 | `probe_c` `ingest` `ingest_detailed` `trace_question` `trace_l3` `assess` `submit_gaps` `consider` `poll` `adjudicate` `research` `run_round` `write_report` `propose_question` |

@@ -11,7 +11,7 @@
 
 角色之间没有直连通路：想叫谁干活就走 conductor.summon（受 ALLOWED_EDGES 约束）；想给谁说句话就沿秘书链逐跳转发（中间各跳不看正文）。
 
-角色数 **11**｜动作总数 **68**｜工具面合计 **495** 件（同一件工具可被多个角色拿到，故合计大于总件数）。
+角色数 **11**｜动作总数 **67**｜工具面合计 **497** 件（同一件工具可被多个角色拿到，故合计大于总件数）。
 
 ## 角色 A
 
@@ -54,7 +54,6 @@
 | 动作 | 做什么 | 副作用 | 必填参数 |
 |---|---|---|---|
 | `run_once` | 领取一条待办检索请求并跑完（搜索 + 登记文献 + 下载） | `write_local` | （无） |
-| `write_report` | 把这一趟的文献检索/入库汇报写成一份稿（`manuscripts/A/a-report-<号>.md`，A 自己的号源） | `write_local` | `markdown` |
 | `run` | 连续领跑到没有可领的请求为止（有界：max_requests） | `write_local` | （无） |
 | `search_literature` | 按主题现查一次：入队（过 I7 准入闸门）→ 领跑 → 把候选与来源交回召唤方；收进 `literature` 的那批接着派 B 的 `run_once` 整理 | `write_local` | `topic` |
 | `walk_citations` | 由一篇已登记的文献出发走一步引文图：回溯=它引了谁，前推=谁引了它 | `read` | `lit_id` |
@@ -370,10 +369,12 @@
 | `conductor.ack` | 把名下已读、已办的板项确认掉（消项），留审计痕迹。只许 ack 自己的项；close 与 expects 必须配对：要回执用 acked，work 项用 completed；block 项要先唤醒 | `write_local` | `item_ids` |
 | `conductor.escalate` | 把「我需要召唤者做什么」写进父代理的收件箱，并让本趟以 escalated 收工；顶层没有召唤者 ⇒ 拒（not_caller），一行不写 | `write_local` | `need`、`kind` |
 | `conductor.post_task` | 给自己落一条『要办的活』板项（收件人只能是自己）；收到的做事要求就此可追踪。办完用 ack（close=completed）收口；让别人办走 summon | `write_local` | `summary` |
+| `fs.edit` | 定点替换：old_string → new_string，默认必须唯一、一次一处；可给 sha256 防改旧版；改前先 fs.read 一次，没读过的文件会被拒。 | `write_local` | `path`、`old_string`、`new_string` |
 | `fs.list` | 列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。 | `read` | （无） |
 | `fs.read` | 读文本文件；二进制拒绝，超限截断并标注。可分段读。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小 / 类型 / 修改时间；文件另给 sha256。 | `read` | `path` |
+| `fs.write` | 写文本文件（UTF-8）；覆盖要显式 overwrite=true。证明稿 / 研究稿的拒写面按你的角色，见 path。 | `write_local` | `path`、`content` |
 | `graph.build` | 把已登记的命题与关系读成概念图，返回规模、完整性与覆盖读数。 | `read` | （无） |
 | `graph.neighbors` | 返回邻居概念代号（升序）与度数。邻居列表**有界**（默认 max_neighbors=200）：超限时 truncated=True 并说明只给前几个，绝不静默截断。 | `read` | `concept_id` |
 | `graph.relations_between` | 返回同时连接两个概念的全部关系（含引文与状态），顺序确定。 | `read` | `a`、`b` |
@@ -397,7 +398,7 @@
 | `trace.literature` | L3 溯源（按需、贵）：文献元数据 + 本地文件是否存在 + 正文片段；无文本层如实报告 | `read` | `lit_id` |
 | `trace.relation` | L1 溯源：由关系代号取回引文 / 陈述 / 页码 / 引文校验三态，概念代号翻成名字并附文献元数据；永不读文献正文 | `read` | `relation_id` |
 
-共 **40** 件（声明在 src/agentflow/tools/；只读角色对其它智能体的产出只读；上表里那些 write_local 全是它自己侧的产物与簿记）。
+共 **42** 件（声明在 src/agentflow/tools/；只读角色对其它智能体的产出只读；上表里那些 write_local 全是它自己侧的产物与簿记）。
 
 ### 主要读写的文档与细节
 

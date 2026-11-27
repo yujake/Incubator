@@ -4320,3 +4320,15 @@ ewtheorem / 论文写作只是推荐）一字未动。
 #:   （count=15、`keys_sha256=21314a39…` 同值）；`ROLE-GUIDE.md` 重生成；agent 面与工具面快照重冻；
 #:   两档热身（逐趟 usd 见报告）。
 #: 四、射程：只动 C 的手册措辞。本笔 = p339。
+
+#: p339 → p340（2026-11-27，MSOWN-3：A 的汇报稿只有"自动生成"一条路）
+#:
+#: 一、业主口径：「A 的报告最终是自动生成的」，以及选 (a)：把 litstage 的自动落点改成
+#:   `manuscripts/A/a-report-<号>.md`，并删掉模型可调用的 `A.write_report`。
+#: 二、改了什么：`litstage` 的 `report_path` / `report_snapshot_path` 改落 a-report 族
+#:   （号按委托号走、同一份委托重渲染沿用原号，索引在 `out/A/report_numbers.json`）；
+#:   报告头加 `- 委托号：<rid>` 锚；`specs/a.py` 与 `capabilities` 删掉 `write_report`。
+#: 三、连带：`PROMPT_VERSION` p339 → p340（A 的动作表少一件）；只重算 A 一格；
+#:   `_VOLATILE_FACT_SETS` 加 p340 一格（count=15、`keys_sha256=21314a39…` 同值）；
+#:   `docs/ROLE-GUIDE.md` 重生成；两份快照重冻；两档热身（逐趟 usd 见报告）。
+#: 四、射程：只动 A 的产出链与动作表；其它角色的写口不在本笔。本笔 = p340。
