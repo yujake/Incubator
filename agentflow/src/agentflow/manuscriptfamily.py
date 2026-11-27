@@ -50,6 +50,8 @@ DIR_OF: Mapping[str, str] = MappingProxyType({
     # 所以 `needs_sign=False`、`allowed=()`：只按族名 + 稿号落在自己的目录里。
     "a-report": f"{MANUSCRIPT_ROOT}/A",
     "c-analysis": f"{MANUSCRIPT_ROOT}/C",
+    # 2026-11-27（业主：「D 用稿号」）：D 的研究稿也进"一个角色一套稿号"。
+    "d-research": f"{MANUSCRIPT_ROOT}/D",
 })
 
 #: 兼容旧读口：正文根的名字（不再是任何一族的落点目录，只是父目录）。
@@ -76,7 +78,7 @@ LEGACY_RESEARCH_DIR = f"{MANUSCRIPT_ROOT}/G"
 
 #: 四族的固定顺序（拼名、遍历、报错都按它，避免"字典序"成为第二份口径）。
 FAMILY_ORDER: tuple[str, ...] = ("f-proof", "b-proof", "e-proof", "e-num",
-                                  "a-report", "c-analysis")
+                                  "a-report", "c-analysis", "d-research")
 
 #: 读档名（不是族）。它出现在 `FAMILIES` 里只为让"表里查一下"对五档都成立。
 LEGACY_FAMILY = "legacy"
@@ -201,6 +203,15 @@ FAMILIES: Mapping[str, FamilySpec] = MappingProxyType({
         kind_default="", kind_default_from_ledger=False,
         line_range_origin="manuscript_path",
     ),
+    "d-research": FamilySpec(
+        family="d-research", prefix="d-research-", directories=(DIR_OF["d-research"],),
+        id_pattern=r"\d{4,6}", needs_sign=False,
+        tier=TIER_FAMILY,
+        allowed=(), default=(), derived=(),
+        evidence_kind="", evidence_kind_from_sign=False,
+        kind_default="", kind_default_from_ledger=False,
+        line_range_origin="manuscript_path",
+    ),
     LEGACY_FAMILY: FamilySpec(
         family=LEGACY_FAMILY, prefix="", directories=(), id_pattern="",
         needs_sign=False, tier=TIER_LEGACY,
@@ -219,6 +230,7 @@ _ID_RE: Mapping[str, re.Pattern[str]] = MappingProxyType({
     "e-num": re.compile(r"^\d{4,6}$"),
     "a-report": re.compile(r"^\d{4,6}$"),
     "c-analysis": re.compile(r"^\d{4,6}$"),
+    "d-research": re.compile(r"^\d{4,6}$"),
 })
 
 #: 规范名的号形（读与写共用）。产出侧一个稿号 = 一份文件 = 一份证明：名字里没有

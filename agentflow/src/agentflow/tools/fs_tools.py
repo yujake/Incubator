@@ -486,6 +486,7 @@ def _family_dir(family: str) -> str:
 _MFAM_DIR_OF: dict[str, str] = {
     "a-report": _family_dir("a-report"),
     "c-analysis": _family_dir("c-analysis"),
+    "d-research": _family_dir("d-research"),
 }
 
 
@@ -527,6 +528,11 @@ _BASE_RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = (
     *[(role, f"prefix:{_RESERVED_DIR}/a-report-")
       for role in ("A", "B", "C", "D", "E", "F", "G", "H", "L", "M")],
     *[(role, f"prefix:{_RESERVED_DIR}/c-analysis-")
+      for role in ("A", "B", "C", "D", "E", "F", "G", "H", "L", "M")],
+    # 2026-11-27（业主「D 用稿号」）：D 的研究稿也进保留表（新落点 + 旧落点各一行/角色）。
+    *[(role, f"prefix:{_MFAM_DIR_OF['d-research']}/d-research-")
+      for role in ("A", "B", "C", "D", "E", "F", "G", "H", "L", "M")],
+    *[(role, f"prefix:{_RESERVED_DIR}/d-research-")
       for role in ("A", "B", "C", "D", "E", "F", "G", "H", "L", "M")],
     # 框架渲染的手稿（文件名级；只对表上角色生效）。
     ("F", "prefix:f-proof-"),
@@ -2662,6 +2668,8 @@ RESERVED_PATH_HINT = (
     "⑥ 两族汇报稿（2026-11-27 起）：`a-report-`（A 的入库/检索汇报稿，产出角色 A）与 "
     "`c-analysis-`（C 的分析报告稿，产出角色 C）—— 它们只由各自写口落，任何角色手写都拒，"
     "产出角色自己那一族也一样（A 走自己的汇报动作、C 走报告登记那条路）。"
+    "⑦ 研究稿的编号族（2026-11-27 起）：`d-research-`（D 的研究稿，产出角色 D）——"
+    "只由 D 自己的产出动作落（发号 + 登记给实例 + 写稿头）；任何角色手写都拒。"
 )
 
 

@@ -47,7 +47,7 @@ INGEST_CELLS: tuple[str, ...] = (
 
 #: 族的名单（与 `manuscriptfamily.FAMILIES` 的键同一份口径；判据钉住两处相等）。
 FAMILY_NAMES: tuple[str, ...] = ("f-proof", "b-proof", "e-proof", "e-num",
-                                "a-report", "c-analysis", "legacy")
+                                "a-report", "c-analysis", "d-research", "legacy")
 
 #: 提取三态。
 EXTRACT_PRESENT = "present"
@@ -101,6 +101,8 @@ _ALLOWED_BY_FAMILY: Mapping[str, tuple[str, ...]] = {
     # 但名字必须在表里（族表与这张镜像必须一一对应）。
     "a-report": (),
     "c-analysis": (),
+    "d-research": (),
+    "d-research": (),
     "legacy": (),
 }
 _DERIVED_BY_FAMILY: Mapping[str, tuple[str, ...]] = {
@@ -110,6 +112,7 @@ _DERIVED_BY_FAMILY: Mapping[str, tuple[str, ...]] = {
     "e-num": ("bits", "grade"),
     "a-report": (),
     "c-analysis": (),
+    "d-research": (),
     "legacy": (),
 }
 

@@ -73,6 +73,30 @@ def _l3_title(t: Any) -> str:
 
 
 class _WriteReport:
+    def _existing_research_number(self) -> str:
+        """本实例在这个工作区里的研究稿号（有就复用 —— 一个稿号 = 一份文件）。
+
+        业主 2026-11-27：「D 用稿号」。同一实例重跑不该每次换号（那会让台账里出现
+        一串"同一份报告的不同号"，判据 `test_d_report_has_a_ledger_row` 的 a2 条当场红）。
+        """
+        from .. import manuscriptfamily as _MFAM
+
+        base = Path(self.store.root) / _MFAM.DIR_OF["d-research"]
+        if not base.is_dir():
+            return ""
+        who = str(self.actor or "").strip()
+        for path in sorted(base.glob("d-research-*.md")):
+            try:
+                head = path.read_text(encoding="utf-8")[:600]
+            except OSError:
+                continue
+            if who and f"- 产出者：{who}" not in head:
+                continue
+            shape = _MFAM.classify_manuscript(path.relative_to(Path(self.store.root)).as_posix())
+            if shape.get("tier") == _MFAM.TIER_FAMILY:
+                return str(shape.get("manuscript_id") or "")
+        return ""
+
     def write_report(self, out_path: str | Path | None = None) -> str:
         """汇总成较详细的初步研究报告（结构照 §4.5），返回写出的路径。
         每个问题一节：``问题 → 为什么值得研究（引用 C 的证据）→ 现有证据（L1/L2 的逐字引用 + 代号链）→ 缺口与已提交的查询 → 初步分析 →结论与置信度 → 后续建议``。
@@ -94,8 +118,18 @@ class _WriteReport:
         run_id = rows[-1]["question_id"] if rows else "0000"
         from ..tools.doc_tools import resolve_out_path
 
+        # 2026-11-27（业主：「D 用稿号」）：D 的研究稿也进"一个角色一套稿号" ——
+        # 缺省落点从 `<qid>-research.md` 改成 `d-research-<号>.md`（号由 D 自己的号源发、
+        # 发号时登记给本实例）；显式给了 `out_path` 的那一档不改（调用方点名落点）。
+        from .. import manuscriptids as _MI
+
+        _num = ""
+        if out_path is None:
+            _num = self._existing_research_number() or _MI.next_manuscript_id(
+                self.store.root, family="d-research", role="D", owner=str(self.actor or ""))
+        _stem = f"d-research-{_num}" if _num else f"{run_id}-research"
         _rel, path = resolve_out_path(Path(self.store.root).resolve(), out_path,
-                                      f"{run_id}-research", self.reports_subdir)
+                                      _stem, self.reports_subdir)
         path.parent.mkdir(parents=True, exist_ok=True)
 
         conf_count = {"high": 0, "medium": 0, "low": 0}
@@ -108,6 +142,10 @@ class _WriteReport:
         lines.append("")
         lines.append(f"- 生成时间：{self._stamp()}")
         lines.append(f"- 智能体：`{self.actor}`；问题总数：{len(rows)}")
+        # 稿头：归属与稿号（与 A/C 的报告同形；`manuscriptown` 只读 `产出者` 这一行）
+        lines.append(f"- 产出者：{self.actor}")
+        if _num:
+            lines.append(f"- 稿号：{_num}（族 d-research）")
         conf_desc = "，".join(
             f"{CONFIDENCE_LABELS.get(k, k)}={v}" for k, v in conf_count.items() if v
         ) or "（本轮尚未形成任何结论）"

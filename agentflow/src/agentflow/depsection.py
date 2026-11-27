@@ -1784,6 +1784,9 @@ def read_manuscript(root: Any, *, statement_ids: Iterable[str] = (),
 #: D 的研究报告候选名：跨趟那一份手稿，以及 `write_report` 渲染的每问题工作稿。
 D_REPORT_NAMES: tuple[str, ...] = ("RESEARCH.md",)
 D_WORKING_SUFFIX = "-research.md"
+#: 2026-11-27（业主「D 用稿号」）：工作稿改名成 `d-research-<号>.md` —— 读侧两种名字都要认
+#: （旧工作区里还有 `<qid>-research.md`，不搬数据）。
+D_NUMBERED_PREFIX = "d-research-"
 #: 携带单最多列几条（超出只报条数，不静默截断）。
 CARRIED_LIMIT = 50
 
@@ -1801,7 +1804,7 @@ def d_report_paths(root: Any) -> list[str]:
         if (d / name).is_file():
             out.append(f"{D_REPORT_DIR}/{name}")
     if d.is_dir():
-        for p in sorted(d.glob(f"*{D_WORKING_SUFFIX}")):
+        for p in sorted(d.glob(f"*{D_WORKING_SUFFIX}")) + sorted(d.glob(f"{D_NUMBERED_PREFIX}*.md")):
             rel = f"{D_REPORT_DIR}/{p.name}"
             if rel not in out:
                 out.append(rel)
@@ -1826,7 +1829,7 @@ def legacy_d_report_paths(root: Any) -> list[str]:
             if (d / name).is_file():
                 out.append(f"{rel_dir}/{name}")
         if d.is_dir():
-            for p in sorted(d.glob(f"*{D_WORKING_SUFFIX}")):
+            for p in sorted(d.glob(f"*{D_WORKING_SUFFIX}")) + sorted(d.glob(f"{D_NUMBERED_PREFIX}*.md")):
                 rel = f"{rel_dir}/{p.name}"
                 if rel not in out:
                     out.append(rel)

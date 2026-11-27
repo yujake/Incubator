@@ -65,6 +65,7 @@ FAMILY_COUNTERS = MappingProxyType({
     # 各一套号；与证明族互不共用计数器（裸号跨族会撞，族是身份的一半）。
     "a-report": "amanuscript",
     "c-analysis": "cmanuscript",
+    "d-research": "dmanuscript",
 })
 
 #: 缺省族（老调用方 `next_manuscript_id(root)` 的语义逐字不变：F 的稿）。
