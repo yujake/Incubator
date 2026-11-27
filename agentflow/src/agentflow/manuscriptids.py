@@ -560,3 +560,32 @@ def peek_manuscript_counter(root: Any, *, family: Any = FAMILY_F) -> int:
         return int((doc.get("counters") or {}).get(key, 0))
     except (TypeError, ValueError):
         return 0
+
+
+def instance_numbers(root: Any, *, owner: Any = "", family: Any = FAMILY_F) -> list[str]:
+    """这个写者在某一族里登记过的号（升序）。空列表 = 它还没拿过这一族的号。
+
+    业主口径（2026-11-27）：「每个实例记录自己拿的稿号列表」—— 清单的唯一真身是
+    `claim_for_write` 那份占用登记（`next_manuscript_id` 发号时把号顺手登记给写者，
+    两条路同一份登记、同一把锁）。这里只按 `holder.owner` 过滤，不另存一份清单：
+    另存一份就是第二个真相源。
+    """
+    who = str(owner or "").strip()
+    fam = str(family or FAMILY_F).strip()
+    if not who:
+        return []
+    claims, ok = _read_claims(root)
+    if not ok:
+        return []
+    out: list[str] = []
+    for key, holder in claims.items():
+        rel = str(holder.get("rel") or key.split(":", 1)[-1])
+        shape = _MFAM.classify_manuscript(rel)
+        if shape.get("family") != fam or shape.get("tier") != _MFAM.TIER_FAMILY:
+            continue
+        if str(holder.get("owner") or "").strip() != who:
+            continue
+        mid = str(shape.get("manuscript_id") or "")
+        if mid:
+            out.append(mid)
+    return sorted(set(out))

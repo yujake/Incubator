@@ -86,3 +86,15 @@ def write_refusal(root: Any, rel: str, *, instance: str) -> dict[str, Any]:
                why=(f"这一份稿的产出者是 {got['owner']!r}，而当前实例是 {who!r} ⇒ "
                     "一个实例只对自己产出的稿负责（写别人的稿无权限）"))
     return out
+
+
+def same_owner(a: str, b: str) -> bool:
+    """两个实例标签是不是同一个（`agent-C` 与 `agent-C-C1` 不算同一个实例）。
+
+    归一只去 `agent-` 前缀与空白：实例粒度必须保留 —— 把"同一个角色"当"同一个实例"
+    会让一个实例的稿号清单被另一个实例继承（那正是这次要堵的那条）。
+    """
+    def _k(v: str) -> str:
+        s = str(v or "").strip()
+        return s[len("agent-"):] if s.startswith("agent-") else s
+    return _k(a) == _k(b) and bool(_k(a))

@@ -189,6 +189,19 @@ READONLY_CALL_EXCEPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
             "不碰 claims / literature / relations",
         ),
         (
+            "fs.write",
+            "C 写自己的分析稿（业主 2026-11-27：「给 C 配 fs 写工具，但是写的对象必须是实例"
+            "自己注册的稿号对应的稿，其余拒，拒信需明确」）。这一件放开的只有一处："
+            "稿路径必须是 `manuscripts/C/c-analysis-<号>.md`，且那个号在 analysis_reports 里"
+            "由 C 登记过（判据在 `fs_tools._c_manuscript_refusal`，三态：不是本族 / 没登记过 / "
+            "产出者不是本实例，逐条给码）。别的路径、别的族、别人的稿一律受控拒",
+        ),
+        (
+            "fs.edit",
+            "C 改自己的分析稿（同一个口子，同一套判据）：只能改自己登记过的 `c-analysis-<号>` "
+            "那一份；路径形状 / 登记关系 / 产出者三样任何一样对不上就受控拒，拒信点名哪一样不对",
+        ),
+        (
             "analysis.edit_report",
             "C 修订自己交过的那一份报告（业主 2026-11-27：「C 需要对自己的分析报告"
             "负责，需要核实证明链走通且逻辑自然，如遇不合理的地方需要 edit 这个报告」）。"

@@ -892,6 +892,8 @@ def build_registry(
     role_registry: Any = None,
     session_root: str | Path | None = None,
     sid: str | None = None,
+    #: 装配期实例身份（`agent-C-<实例>`）：只有 C 的 fs 写口读它（只写自己登记过的稿）。
+    actor: str = "",
 ) -> RegistryBuild:
     """组装工具层。
 
@@ -958,6 +960,12 @@ def build_registry(
         # 而把它俩折叠起来正是第 11 趟那次运行内假绿的病因。
         "session": {"root": str(session_root or root or ""), "sid": str(sid or "")},
     }
+    # 2026-11-27（MSOWN-2）：装配期的实例身份。只有 C 的 fs 写口用它（"只写自己登记过的
+    # 那一份稿"）；别的角色走保留表与产物归属，不读这一格。
+    # **只在给了的时候才放进 deps**：空串会盖掉别的模块对自己的 actor 缺省（H 的
+    # `review.record_finding` 的 created_by 就是这么被写成空串的，判据当场抓住）。
+    if str(actor or "").strip():
+        deps["actor"] = str(actor).strip()
 
     loaded: list[str] = []
     skipped: list[dict] = []

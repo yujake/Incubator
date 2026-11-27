@@ -1019,6 +1019,22 @@ def _caller_role() -> str:
         return ""
 
 
+def _role_of(ctx: "FsContext") -> str:
+    """这一笔写是谁发起的：调用期角色优先，退到装配期身份（`agent-C-C1` ⇒ `C`）。
+
+    为什么要有退档：判据 / 脚本直调时 `conductor.current_caller_role()` 是空串，
+    而 C 的 fs 写口按"装配期身份"判 —— 两条路都要能得出同一个角色名，
+    否则同一次写在产品里与在判据里结论不同。
+    """
+    got = _caller_role()
+    if got:
+        return got
+    who = str(getattr(ctx, "actor", "") or "").strip()
+    if who.startswith("agent-"):
+        return who.split("-")[1] if "-" in who else ""
+    return ""
+
+
 def _rule_matches(rule: str, name: str) -> bool:
     """`RESERVED_ARTIFACT_TABLE` 的一行是否命中文件名 `name`（大小写不敏感）。"""
     text = str(rule or "")
@@ -1940,6 +1956,15 @@ def _reserved_refusal(rel: str, role: str, content: Any = None,
     拒它等于把已经坏了的盘锁死。`fs.move` 的 `src`、`fs.delete` 传 `False`；
     `fs.write` / `fs.edit` 与 `fs.move` 的 `dst` 保持默认 `True`。
     """
+    # 2026-11-27（MSOWN-2）：C 写自己的 `c-analysis-<号>` 时，保留表这一档让给
+    # `c_manuscript_refusal` —— 那一条管的是"这个号是不是你登记过的"，比"这一族不许手写"
+    # 精确（业主：给 C 配 fs 写工具，但只能写自己注册过的稿号对应的稿）。
+    from ..manuscriptfamily import classify_manuscript as _classify
+
+    if str(role or "") == "C":
+        _shape = _classify(rel)
+        if _shape.get("family") == "c-analysis" and _shape.get("tier") == "family":
+            return None
     if _reserved_artifact_path(rel):
         # 路径级的框架渲染产物（论文对应表三份）：全角色生效，拒信指向唯一写口。
         return fail(
@@ -2644,6 +2669,128 @@ RESERVED_PATH_HINT = (
 # 原文（旧 summary）：「写文件（原子落盘）」。落盘手法：先写同目录临时文件、再原子替换；模型只需要知道「写成功 / 被拒」，具体怎么落盘不影响它下一次怎么调。
 # 判据：`tests/test_tool_face_three_segments.py` 钉住这条 needle（'原子落盘'）
 # 仍在注释里、且不在模型可见面上。
+#: 受控码：C 的 fs 写口只对自己登记过的那一份稿开。
+C_OWN_MANUSCRIPT_KIND = "c_may_only_write_its_own_manuscript"
+
+
+#: 写口拦截器统一的受控码（所有会写稿的角色同一句口径）。
+WRTITE_NUMBER_KIND = "manuscript_number_not_mine"
+
+#: 有"自己的一套稿号"的族（会写稿的角色各有一套；别的路径由保留表管）。
+#: 只收**正文手稿**族（`e-num` 是 E 的草稿面，不是"稿号"那一档：它的落点是 `work/E/`，
+#: 交稿由 E 自己的产出动作管，不在"一个角色一套稿号"这条政策里）。
+ROLE_FAMILIES: tuple[str, ...] = ("f-proof", "b-proof", "e-proof",
+                                  "a-report", "c-analysis")
+
+
+def manuscript_write_refusal(ctx: FsContext, rel: str) -> ToolResult | None:
+    """所有会写稿的角色共用的拦截器：**只能动实例自己登记过的稿号**。
+
+    业主口径（2026-11-27）：「至少已有 8 成有已有实现，你所有要改的点就是将 fs 工具里加拦截
+    并接到实例注册的稿号列表」＋「一个角色实例只对自己产出的稿负责」。
+
+    清单的真身是 `manuscriptids.claim_for_write` 那份占用登记（发号时顺手登记给写者）；
+    本函数只读它，不另存一份清单。判据三态：
+    - 不是手稿族的路径 ⇒ 不归本拦截器管（返回 None，交给保留表与各自写口）；
+    - 没有实例身份（`ctx.actor` 空：脚本 / 夹具直调）⇒ 不拦（那时判不出"是不是你的"，
+      而拦下来会让所有直调路径都写不了；这一档由各写口自己的额外约束兜）；
+    - 有身份且号不在清单里 ⇒ 受控拒，拒信把**本实例登记过的同族稿号**列出来。
+    """
+    who = str(getattr(ctx, "actor", "") or "").strip()
+    # 只有"真实例身份"（`agent-<角色>-<实例>`）才拦：探针 / 夹具里的 `probe` 这类标签
+    # 不是实例（也拿不到稿号清单），拦它只会把既有的写口判据一起弄红。
+    if not who.startswith("agent-"):
+        return None
+    want = str(rel or "").strip().replace("\\", "/")
+    from .. import manuscriptfamily as _MFAM
+    from .. import manuscriptids as _MI
+
+    shape = _MFAM.classify_manuscript(want)
+    family = str(shape.get("family") or "")
+    if shape.get("tier") != _MFAM.TIER_FAMILY or family not in ROLE_FAMILIES:
+        return None
+    mid = str(shape.get("manuscript_id") or "")
+    root = getattr(ctx, "root", None)
+    have = _MI.instance_numbers(root, owner=who, family=family) if root is not None else []
+    if mid and mid in have:
+        return None
+    listed = ("、".join(have) if have else "（还没有登记过这一族的稿号）")
+    return fail(
+        f"拒绝 {want}：稿号 {mid} 不在你的登记清单里 —— 本实例（{who}）在 `{family}` 这一族"
+        f"登记过的稿号：{listed}。你只能动自己登记过的稿号对应的那一份稿；"
+        "要开工新稿，走你这个角色自己的产出动作（它发号、登记、写稿头同一笔完成）。",
+        code=WRTITE_NUMBER_KIND, kind=WRTITE_NUMBER_KIND, path=want,
+        family=family, my_numbers=have)
+
+
+def c_manuscript_refusal(ctx: FsContext, rel: str) -> ToolResult | None:
+    """C 用 `fs.write` / `fs.edit` 写一份稿：只许它自己登记过的 `c-analysis-<号>`。
+
+    业主口径（2026-11-27）：「给 C 配 fs 写工具，但是写的对象必须是实例自己注册的稿号
+    对应的稿，其余拒，拒信需明确」；以及（同日纠正）「每个实例记录自己拿的稿号列表」——
+    判据因此是**清单**，不是稿头上那个字符串：
+
+    1. 路径形状：必须是 `manuscripts/C/c-analysis-<号>.md`（族与目录一起判）；
+    2. 实例清单：`analysis_reports` 里 `created_by` 是本实例、且 `markdown_path` 是
+       c-analysis 族的那批稿号 = "本实例登记过的稿号"；请求的号不在清单里 ⇒ 拒
+       （拒信把这份清单列出来）；
+    3. 读不到台账 ⇒ 受控拒（查不出 ≠ 可以写）。
+
+    不是 C 的调用（actor 不是 `agent-C*`）⇒ 返回 None：别的角色的写面由保留表管。
+    """
+    who = str(getattr(ctx, "actor", "") or "").strip()
+    if not who.startswith("agent-C"):
+        return None
+    want = str(rel or "").strip().replace("\\", "/")
+    from .. import manuscriptfamily as _MFAM
+    from .. import manuscriptown as _OWN
+
+    shape = _MFAM.classify_manuscript(want)
+    if shape.get("family") != "c-analysis" or shape.get("tier") != _MFAM.TIER_FAMILY:
+        return fail(
+            f"拒绝 {want}：C 的 fs 写口只能写自己的分析稿（`manuscripts/C/c-analysis-<号>.md`）。"
+            f"这一条是 {shape.get('tier')!r} / 族 {shape.get('family') or '（不是任何族）'!r} —— "
+            "别的路径、别的族、别的角色的稿一律不归你改；要落新报告走 `analysis.register_report`"
+            "（它发号、写稿头、登记同一笔完成）。",
+            code=C_OWN_MANUSCRIPT_KIND, kind=C_OWN_MANUSCRIPT_KIND, path=want,
+            reason="not_my_family")
+    mid = str(shape.get("manuscript_id") or "")
+    st = getattr(ctx, "store", None)
+    if st is None:
+        return fail(
+            f"拒绝 {want}：这一档没有台账可查（装配期没注入 store）⇒ 判不出这个号在不在你的清单里，"
+            "按受控拒处理（不许在查不出的时候写）。",
+            code=C_OWN_MANUSCRIPT_KIND, kind=C_OWN_MANUSCRIPT_KIND, path=want,
+            reason="ledger_unavailable")
+    try:
+        rows = [dict(r) for r in st.rows("analysis_reports")]
+    except Exception as exc:  # noqa: BLE001
+        return fail(
+            f"拒绝 {want}：读 `analysis_reports` 失败（{type(exc).__name__}）⇒ 查不出你的稿号清单，"
+            "按受控拒处理。",
+            code=C_OWN_MANUSCRIPT_KIND, kind=C_OWN_MANUSCRIPT_KIND, path=want,
+            reason="ledger_unreadable")
+    mine: list[str] = []
+    for row in rows:
+        path = str(row.get("markdown_path") or "").replace("\\", "/")
+        if not _OWN.same_owner(str(row.get("created_by") or ""), who):
+            continue
+        got = _MFAM.classify_manuscript(path)
+        if got.get("family") == "c-analysis" and got.get("tier") == _MFAM.TIER_FAMILY:
+            mine.append(str(got.get("manuscript_id") or ""))
+    mine = sorted(set(mine))
+    if mid not in mine:
+        listed = ("、".join(mine) if mine else "（还没有登记过任何稿号）")
+        return fail(
+            f"拒绝 {want}：稿号 {mid} 不在你的登记清单里 —— 本实例（{who}）登记过的稿号：{listed}。"
+            "C 的 fs 写口只写自己登记过的稿号对应的稿；要落新报告走 `analysis.register_report`。",
+            code=C_OWN_MANUSCRIPT_KIND, kind=C_OWN_MANUSCRIPT_KIND, path=want,
+            reason="not_in_my_numbers", my_numbers=mine)
+    return None
+
+
+
+
 @tool(
     "fs.write",
     "写文本文件（UTF-8）；覆盖要显式 overwrite=true。证明稿 / 研究稿的拒写面按你的角色，见 path。",
@@ -2688,7 +2835,7 @@ def fs_write(ctx: FsContext, *, path: str, content: str, overwrite: bool = False
     # 研究稿）都由这一处判 —— 手写会把依赖面 / 携带单 / 账本整条链跳过。
     # `content` / `root` 是 2026-11-04 才传的：D 的证明稿那一档要按"写进去的这一段正文"
     # 判（`## 证明` 节）并按盘上 F 的稿判"是不是引用"。
-    denied = _reserved_refusal(_rel(ctx, target), _caller_role(), content=content, root=ctx.root)
+    denied = _reserved_refusal(_rel(ctx, target), _role_of(ctx), content=content, root=ctx.root)
     if denied is not None:
         return denied
     # ---- 成文门（2026-11-17 DOCGATE2 ②）：`out/package/**` 是成文产物层，`fs.write` 不许再是
@@ -2730,6 +2877,15 @@ def fs_write(ctx: FsContext, *, path: str, content: str, overwrite: bool = False
             bytes=len(payload),
             max_bytes=MAX_WRITE_BYTES,
         )
+    # 2026-11-27（MSOWN-3）：所有会写稿的角色共用一道拦截器 —— 只能动实例自己登记过的稿号
+    # （清单 = `manuscriptids.claim_for_write` 那份占用登记）；C 另有一条"报告必须已登记"的
+    # 额外约束。位置在既有的冻结 / 保留 / 成文闸之后：那些拒信有自己的受控码，不许被这一道抢先。
+    gate = manuscript_write_refusal(ctx, _rel(ctx, target))
+    if gate is not None:
+        return gate
+    gate = c_manuscript_refusal(ctx, _rel(ctx, target))
+    if gate is not None:
+        return gate
     existed = target.exists()
     if existed and not overwrite:
         return fail(
@@ -2822,6 +2978,7 @@ def fs_edit(ctx: FsContext, *, path: str, old_string: str, new_string: str,
     置版本：给了 `sha256` 就必须与盘上现在这一版相等，否则拒（`kind="sha_mismatch"`）；- 改动上限：`new_string` 超过 
     `MAX_EDIT_BYTES` 就拒 —— 那说明这次改动不是"定点"。
     """
+    # 2026-11-27（MSOWN-3）：同一道通用拦截器（只能动自己登记过的稿号）+ C 的额外约束。
     target = _resolve(ctx, path)
     # 相对路径在这一支里被读十一次（每条拒信、成功返回的 data 与 meta），算一次。
     rel = _rel(ctx, target)
@@ -2830,7 +2987,7 @@ def fs_edit(ctx: FsContext, *, path: str, old_string: str, new_string: str,
     # 不是两份表、也不是每个口各判一遍。`root` 供"研究手稿里那一节是不是引用 F"的判据用；
     # `edit=True` 是 2026-11-11（甲）那格窄豁免的唯一开关（只对 B / 自己号段 / 未签 /
     # `manuscripts/B/b-proof-<六位号>.md`；旧落点 `reports/b-proof-*` 不再豁免）。
-    denied = _reserved_refusal(rel, _caller_role(), root=ctx.root, edit=True)
+    denied = _reserved_refusal(rel, _role_of(ctx), root=ctx.root, edit=True)
     if denied is not None:
         return denied
     # 读后写那一闸在最前面（policy 层先于 provider 层，逐字照 DSH `POL:64-70` → `FSL:840`）：
@@ -2859,6 +3016,13 @@ def fs_edit(ctx: FsContext, *, path: str, old_string: str, new_string: str,
         return fail(OBS.remedy_stale(f'不能改 "{rel}"：它在你读过之后变过了'),
                     path=rel, kind=OBS.CODE_STALE_VERSION,
                     observed_version=observed_version, version_now=OBS.stat_version(target))
+    # 2026-11-27（MSOWN-3）：同一道拦截器，位置在冻结 / 保留 / 存在性之后（那些拒信各有自己的码）。
+    gate = manuscript_write_refusal(ctx, rel)
+    if gate is not None:
+        return gate
+    gate = c_manuscript_refusal(ctx, rel)
+    if gate is not None:
+        return gate
     # `before` 的哈希只在"调用方给了 sha256"时算一次：前置核对与失败支的
     # `sha256_now` / 成功返回的 `sha256_before` 要的是同一个值（改前各算一遍，
     # 等于把整份正文哈希两次）；没给 sha256 时仍留到成功返回处现算（失败路径不付这笔钱）。
@@ -3286,6 +3450,11 @@ def _effective_roles(base: ToolSpec, injected: tuple[str, ...]) -> tuple[str, ..
 
     if base.side_effect in SIDE_EFFECTS_WRITE:
         out = tuple(r for r in injected if r not in READ_ONLY_ROLES)
+        # 2026-11-27（MSOWN-2）：C 的 `fs.write` / `fs.edit` 是登记过的例外
+        # （`tools/base.READONLY_CALL_EXCEPTIONS["C"]`），这里把声明面同步放行 ——
+        # 两处必须同源，否则"调用期放行、工具面没有"又是一处自相矛盾。
+        if base.name in ("fs.write", "fs.edit") and "C" in injected:
+            out = (*out, "C")
     else:
         out = tuple(injected)
     # 主控的成员资格逐工具给（见 `CONDUCTOR_FS_TOOLS` 的说明）：
