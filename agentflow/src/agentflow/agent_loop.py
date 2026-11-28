@@ -80,6 +80,8 @@ _OWN_REFUSAL_READING_KEYS: tuple[str, ...] = (
     "searched", "same_statement", "same_as", "seam_source",
     "keywords", "keyword_checked", "hits_total", "hits_named",
     "judged", "model_calls", "proposition_adjudication",
+    # 2026-11-28（空心拒信）：动作侧写在这两格里的受控码与一句话理由
+    "why", "refused",
 )
 
 #: 扁平形态的别名表：`(规范形状, 必须同时出现的键, 留痕标签)`。
@@ -16220,11 +16222,16 @@ class LlmBackend:
                 # 拒绝到了模型眼前都变成两个字「被拒」（实测：`missing_own_source` 的
                 # 完整拒信被吞掉，模型只能猜）—— 那正是"拒信要能把模型指回正路"这条
                 # 要求的反面。`refusal_reason` 也一并带出去（终态映射读它）。
+                # 2026-11-28（真机异常：空心拒信）：B 的 `own.land_manuscript` 把理由写在
+                # `why` / 受控码写在 `refused` 两格，而这条链只读 reason/error/detail
+                # ⇒ 模型 32 次看到 `{"kind":"refused","reason":"被拒","refusal_reason":""}`
+                # （sd2 三分钟连试 12 次、sd3 跨 4 个任务 12 次）。两格都接进理由链与白名单。
                 return {"ok": False,
-                        "kind": str(got.get("kind") or "refused"),
+                        "kind": str(got.get("kind") or got.get("refused") or "refused"),
                         "reason": str(got.get("reason") or got.get("error")
-                                      or got.get("detail") or "被拒"),
-                        "refusal_reason": str(got.get("refusal_reason") or ""),
+                                      or got.get("detail") or got.get("why")
+                                      or got.get("refused") or "被拒"),
+                        "refusal_reason": str(got.get("refusal_reason") or got.get("refused") or ""),
                         **{k: v for k, v in got.items()
                            if k in _OWN_REFUSAL_READING_KEYS}}
             return got

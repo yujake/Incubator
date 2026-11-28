@@ -283,6 +283,34 @@ def rewrite_proposition_head(text: Any, *, new_fp: str) -> str:
     return head_new + raw[len(head_now):]
 
 
+def refresh_head_sha(text: Any) -> str:
+    """把稿头 `- 正文sha：` 那一行刷成"这一份正文现在的 sha"（业主 2026-11-28）。
+
+    「改稿后当然要刷新 sha」—— 稿里那一行的用途只有一个：说明"这份稿自称是哪一版正文"。
+    它与整份稿现算的 sha 必须相等（V 的签块、B 的收录、论文表的 `evidence_sha256`
+    都按同一把尺 `proof_sha` 对拍）。改稿不刷新 ⇒ 三者对不上：
+    签看上去还盖着，而对拍的口径已经换了一版。
+
+    三态：稿里没有 `## 证明` 那一节（或它为空）⇒ 原样返回；
+    稿头没有 `- 正文sha：` 那一行 ⇒ 原样返回（没有就不编一行，否则"未登记"会看起来像"登记过"）；
+    抬头已经是现算值 ⇒ 原样返回（幂等）。
+    """
+    raw = str(text or "")
+    from . import depsection as _DS
+
+    if not str(_DS.proof_body(raw) or "").strip():
+        return raw
+    head_now = _head_of(raw)
+    if SHA_MARK not in head_now:
+        return raw
+    cur = str(parse_entry(raw).get("sha256") or "").strip().lower()
+    new_sha = proof_sha(raw)
+    if cur == new_sha:
+        return raw
+    head_new = _rewrite_head(head_now, {SHA_MARK: new_sha})
+    return head_new + raw[len(head_now):]
+
+
 def _head_of(text: Any) -> str:
     """手稿头部（与 :func:`split_sections` 同一份切节口径，但不构造各节正文）。
 
@@ -768,6 +796,10 @@ def register_or_rewrite(
         text, proof_no=proof_no, new_sha=new_sha, new_fp=new_fp, label=label,
         kind=kind, mode=mode, entry=entry, at_text=at_text, versions_line=versions_line,
         family=_MID_HEAD.family_of_rel(rel) or str(family or ""), author=_who)
+    # 2026-11-28（业主：「改稿后当然要刷新 sha」）：抬头那一行一律按这一份要落盘的正文现算，
+    # 不是按入参 proof_text 算。两者在常规路径上相等；不等的那一次（洗稿 / 基稿替换 /
+    # 小节归一之后字节变了）正是真机上抬头与正文对不上的来路。
+    text = refresh_head_sha(text)
     # ---- 落盘（框架写；原子替换） ------------------------------------------------
     target = Path(str(root or "")) / rel
     try:
